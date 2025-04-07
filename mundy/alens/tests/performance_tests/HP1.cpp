@@ -80,6 +80,7 @@ Interactions:
 #include <stk_mesh/base/Selector.hpp>        // for stk::mesh::Selector
 #include <stk_topology/topology.hpp>         // for stk::topology
 #include <stk_util/parallel/Parallel.hpp>    // for stk::parallel_machine_init, stk::parallel_machine_finalize
+#include <stk_mesh/base/EntitySorterBase.hpp>  // for stk::mesh::EntitySorterBase
 
 // Mundy libs
 #include <mundy_alens/actions_crosslinkers.hpp>                // for mundy::alens::crosslinkers...
@@ -118,6 +119,7 @@ Interactions:
 #include <mundy_meta/utils/MeshGeneration.hpp>  // for mundy::meta::utils::generate_class_instance_and_mesh_from_meta_class_requirements
 #include <mundy_shapes/ComputeAABB.hpp>  // for mundy::shapes::ComputeAABB
 #include <mundy_shapes/Spheres.hpp>      // for mundy::shapes::Spheres
+#include <mundy_math/zmort.hpp> // for mundy::math::zmorton_less(Vector3, Vector3)
 
 namespace mundy {
 
@@ -4473,6 +4475,8 @@ class HP1 {
 
       // IO. If desired, write out the data for time t (STK or mundy)
       if (timestep_index_ % io_frequency_ == 0) {
+        bulk_data_ptr_->sort_entities(z_morton_sorter_);
+
         Kokkos::Profiling::pushRegion("HP1::IO");
         io_broker_ptr_->write_io_broker_timestep(static_cast<int>(timestep_index_), timestep_current_time_);
         Kokkos::Profiling::popRegion();
@@ -4661,6 +4665,41 @@ class HP1 {
   };  // RcbSettings
 
   RcbSettings balance_settings_;
+
+  class EntityLessZMortonCoords {
+   public:
+    EntityLessZMortonCoords(const stk::mesh::BulkData &bulk)
+        : mesh(bulk), coords_base(bulk.mesh_meta_data().coordinate_field()) {
+    }
+
+    bool operator()(stk::mesh::Entity a, stk::mesh::Entity b) {
+      if (mesh.entity_rank(a) != stk::topology::NODE_RANK) {
+        return stk::mesh::EntityLess(mesh)(a, b);
+      }
+      double *a_coords = static_cast<double *>(stk::mesh::field_data(*coords_base, a));
+      double *b_coords = static_cast<double *>(stk::mesh::field_data(*coords_base, b));
+      math::Vector3<double> a_vec(a_coords[0], a_coords[1], a_coords[2]);
+      math::Vector3<double> b_vec(b_coords[0], b_coords[1], b_coords[2]);
+      return math::zmorton_less(a_vec, b_vec);
+    }
+
+   private:
+    const stk::mesh::BulkData &mesh;
+    const stk::mesh::FieldBase *coords_base;
+  };
+
+  class ZMortonSorter : public stk::mesh::EntitySorterBase {
+   public:
+    ZMortonSorter() {
+    }
+    virtual ~ZMortonSorter() {
+    }
+    virtual void sort(stk::mesh::BulkData &bulk, stk::mesh::EntityVector &entity_vector) const {
+      std::sort(entity_vector.begin(), entity_vector.end(), EntityLessZMortonCoords(bulk));
+    }
+  };
+
+  ZMortonSorter z_morton_sorter_;
   //@}
 
   //! \name User parameters
