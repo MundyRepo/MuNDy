@@ -108,9 +108,12 @@ class NgpPoolT {
 
   void reserve(our_size_t requested_capacity) {
     if (requested_capacity > ngp_capacity_.view_host()()) {
+      pool_.sync_to_device();
       pool_.resize(requested_capacity);  // Increase capacity to requested_capacity
       ngp_capacity_.view_host()() = requested_capacity;
       Kokkos::deep_copy(ngp_capacity_.view_device(), ngp_capacity_.view_host());
+
+      pool_.sync_to_host();  // Ensure the host view is updated
     }
   }
 
@@ -123,7 +126,7 @@ class NgpPoolT {
   value_type acquire() const {
     // For those not familiar with atomic_fetch_sub, it returns the value before the subtraction.
     our_size_t old_size = Kokkos::atomic_fetch_sub(&ngp_size_.view_device()(), 1);
-    if (old_size - 1 < 0) {
+    if (old_size == 0) {
       MUNDY_THROW_ASSERT(false, std::runtime_error, "Attempting to acquire an object from an empty pool.");
       return value_type();
     }
@@ -178,25 +181,27 @@ class NgpPoolT {
   /// \brief Acquire N objects from the pool. Returns by move. Modifies on device and marks as modified.
   /// Results are returned in an NgpViewT<ValueType, MemorySpace>.
   pool_view_t batch_acquire(our_size_t n) {
-    our_size_t old_size = Kokkos::atomic_fetch_sub(&ngp_size_.view_device()(), n);
-    MUNDY_THROW_ASSERT(old_size - n >= 0, std::runtime_error,
+    sync_to_device();
+    size_t old_size = ngp_size_.view_host()();
+    ngp_size_.view_host()() -= n;
+    Kokkos::deep_copy(ngp_size_.view_device(), ngp_size_.view_host());
+
+    MUNDY_THROW_ASSERT(old_size >= n, std::runtime_error,
                        "Attempting to acquire more objects than are available in the pool.");
 
     // Eat the last n values in the pool and replace them with a default constructed value.
     pool_view_t out("NgpPoolT::acquire", n);
+    auto local_pool = pool_;
 
     using range_policy = stk::ngp::RangePolicy<execution_space>;
     Kokkos::parallel_for(
         range_policy(0, n), KOKKOS_LAMBDA(const our_size_t i) {
-          if (old_size - i - 1 >= 0) {
-            out.view_device()(i) = std::move(pool_.view_device()(old_size - i - 1));
-            pool_.view_device()(old_size - i - 1) = value_type();
-          } else {
-            out.view_device()(i) = value_type();
-            pool_.view_device()(old_size - i - 1) = value_type();
-          }
+          out.view_device()(i) = local_pool.view_device()(old_size - i - 1);
+          local_pool.view_device()(old_size - i - 1) = value_type();
         });
+    Kokkos::fence();
 
+    out.modify_on_device();
     modify_on_device();
 
     return out;
@@ -212,13 +217,8 @@ class NgpPoolT {
     // Eat the last n values in the pool and replace them with a default constructed value.
     pool_vector_t out(n);
     for (our_size_t i = 0; i < n; ++i) {
-      if (old_size - i - 1 >= 0) {
-        out[i] = std::move(pool_.view_host()(old_size - i - 1));
-        pool_.view_host()(old_size - i - 1) = value_type();
-      } else {
-        out[i] = value_type();
-        pool_.view_host()(old_size - i - 1) = value_type();
-      }
+      out[i] = std::move(pool_.view_host()(old_size - i - 1));
+      pool_.view_host()(old_size - i - 1) = value_type();
     }
 
     modify_on_host();
@@ -228,14 +228,20 @@ class NgpPoolT {
 
   /// \brief Add N objects into the pool. Modifies on device and marks as modified.
   void batch_add(pool_view_t p) {
-    our_size_t old_size = Kokkos::atomic_fetch_add(&ngp_size_.view_device()(), p.extent(0));
-    MUNDY_THROW_ASSERT(old_size + p.extent(0) <= ngp_capacity_.view_device()(), std::runtime_error,
+    sync_to_host();
+    size_t old_size = ngp_size_.view_host()();
+    ngp_size_.view_host()() += p.extent(0);
+    Kokkos::deep_copy(ngp_size_.view_device(), ngp_size_.view_host());
+    MUNDY_THROW_ASSERT(old_size + p.extent(0) <= ngp_capacity_.view_host()(), std::runtime_error,
                        "Released objects would exceed pool capacity.");
+
+    auto local_pool = pool_;
+    p.sync_to_device();  // Ensure the device view is up to date
 
     using range_policy = stk::ngp::RangePolicy<execution_space>;
     Kokkos::parallel_for(
         range_policy(0, p.extent(0)),
-        KOKKOS_LAMBDA(const our_size_t i) { pool_.view_device()(old_size + i) = p.view_device()(i); });
+        KOKKOS_LAMBDA(const our_size_t i) { local_pool.view_device()(old_size + i) = p.view_device()(i); });
 
     modify_on_device();
   }
@@ -246,9 +252,11 @@ class NgpPoolT {
     MUNDY_THROW_ASSERT(old_size + p.size() <= ngp_capacity_.view_host()(), std::runtime_error,
                        "Released objects would exceed pool capacity.");
 
+    auto local_pool = pool_;
+
     using range_policy = stk::ngp::HostRangePolicy;
     Kokkos::parallel_for(
-        range_policy(0, p.size()), KOKKOS_LAMBDA(const our_size_t i) { pool_.view_host()(old_size + i) = p[i]; });
+        range_policy(0, p.size()), KOKKOS_LAMBDA(const our_size_t i) { local_pool.view_host()(old_size + i) = p[i]; });
 
     modify_on_host();
   }
@@ -277,6 +285,14 @@ class NgpPoolT {
     ngp_capacity_.modify_on_device();
   }
 
+  /// \brief Abstract method for marking the pool as modified.
+  template <typename Space>
+  inline void modify_on() {
+    pool_.template modify_on<Space>();
+    ngp_size_.template modify_on<Space>();
+    ngp_capacity_.template modify_on<Space>();
+  }
+
   /// \brief Synchronize the host pool to the device pool if needed.
   ///
   /// If the device pool has been modified more recently than the host pool,
@@ -297,6 +313,14 @@ class NgpPoolT {
     ngp_capacity_.sync_to_device();
   }
 
+  /// \brief Abstract method for synchronizing the pool.
+  template <typename Space>
+  inline void sync_to() {
+    pool_.template sync_to<Space>();
+    ngp_size_.template sync_to<Space>();
+    ngp_capacity_.template sync_to<Space>();
+  }
+
   /// \brief Return if we need to sync to the host.
   inline bool need_sync_to_host() const {
     return pool_.need_sync_to_host() || ngp_size_.need_sync_to_host() || ngp_capacity_.need_sync_to_host();
@@ -305,6 +329,13 @@ class NgpPoolT {
   /// \brief Return if we need to sync to the device.
   inline bool need_sync_to_device() const {
     return pool_.need_sync_to_device() || ngp_size_.need_sync_to_device() || ngp_capacity_.need_sync_to_device();
+  }
+
+  /// \brief Abstract method for checking if we need to sync.
+  template <typename Space>
+  inline bool need_sync_to() const {
+    return pool_.template need_sync_to<Space>() || ngp_size_.template need_sync_to<Space>() ||
+           ngp_capacity_.template need_sync_to<Space>();
   }
   //@}
 };  // NgpPoolT

@@ -23,6 +23,9 @@
 // C++ core libs
 #include <concepts>
 
+// Mundy
+#include <mundy_math/impl/AccessorImpl.hpp>
+
 namespace mundy {
 
 namespace math {
@@ -69,34 +72,6 @@ namespace math {
 // Note that there are no inherent requirements on the types within the accessors, simply requirements on lengths. It's
 // up to Vector3, Matrix3, and Quaternion to enforce their type requirements. As a result, the Data and View classes can
 // all be consistently named as Arrays and Views, respectively and templated by their size.
-
-namespace impl {
-
-// Helper for generating a tuple with T repeated N times
-template <typename T, size_t... Is>
-auto generate_tuple_with_t_repeated_impl(std::index_sequence<Is...>) {
-  return std::tuple<std::conditional_t<true, T, decltype(Is)>...>{};
-}
-
-// Main template to generate a tuple with T repeated N times
-template <typename T, size_t N>
-auto generate_tuple_with_t_repeated_n_times() {
-  return generate_tuple_with_t_repeated_impl<T>(std::make_index_sequence<N>{});
-}
-
-// Helper function to check if Accessor is constructible from unpacked tuple
-template <typename Accessor, typename Tuple, size_t... Is>
-constexpr bool can_construct_from_unpacked_tuple_impl(std::index_sequence<Is...>) {
-  return std::is_constructible_v<Accessor, std::tuple_element_t<Is, Tuple>...>;
-}
-
-template <typename Accessor, typename Tuple>
-constexpr bool can_construct_from_unpacked_tuple() {
-  constexpr auto size = std::tuple_size_v<std::remove_reference_t<Tuple>>;
-  return can_construct_from_unpacked_tuple_impl<Accessor, Tuple>(std::make_index_sequence<size>{});
-}
-
-}  // namespace impl
 
 /// \brief A concept that checks if Accessor has a const [] operator
 template <typename Accessor, typename T>

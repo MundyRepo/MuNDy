@@ -41,15 +41,15 @@ TEST(ThrowAssert, Predicates) {
   // These are all the language features we need to be true for MUNDY_THROW_REQUIRE to operate as expected.
 
   // Check that is_string_literal works as expected
-  static_assert(is_string_literal("string literal"));
-  static_assert(!is_string_literal(42));
+  static_assert(MUNDY_IS_STRING_LITERAL("string literal"));
+  static_assert(!MUNDY_IS_STRING_LITERAL(42));
   constexpr auto a = "a";
-  static_assert(!is_string_literal(a));
+  static_assert(!MUNDY_IS_STRING_LITERAL(a));
 
   // Check that is_mundy_string_literal works as expected
-  static_assert(!is_mundy_string_literal("string literal"));
+  static_assert(!MUNDY_IS_OUR_STRING_LITERAL("string literal"));
   constexpr auto b = make_string_literal("b");
-  static_assert(is_mundy_string_literal(b));
+  static_assert(MUNDY_IS_OUR_STRING_LITERAL(b));
 
   // Check that host code is host code and device code is device code
   std::string space;

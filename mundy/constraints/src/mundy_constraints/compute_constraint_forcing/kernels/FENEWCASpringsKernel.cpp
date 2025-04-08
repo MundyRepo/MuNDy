@@ -148,7 +148,7 @@ void FENEWCASpringsKernel::execute(const stk::mesh::Selector &spring_selector) {
         const double edge_length_adj = std::min(edge_length, element_rmax[0] - epsilon_reg);
 
         // Check if the maximum spring extend is less than the rmax value, otherwise, FENE bonds will be unstable.
-        MUNDY_THROW_REQUIRE(edge_length_adj < element_rmax[0], std::runtime_error,
+        MUNDY_THROW_ASSERT(edge_length_adj < element_rmax[0], std::runtime_error,
                             std::string("FENEWCASpringsKernel: FENEWCA bond is unstable. The current bond length is ") +
                                 std::to_string(edge_length_adj) + std::string(" and the maximum bond length is ") +
                                 std::to_string(element_rmax[0]) + std::string("."));

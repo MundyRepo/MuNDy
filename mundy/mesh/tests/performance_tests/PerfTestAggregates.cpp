@@ -75,7 +75,7 @@ std::pair<TimingResults, TimingResults> run_test_for_fields(const stk::mesh::Bul
   Kokkos::Timer field_force_timer;
   stk::mesh::for_each_entity_run(
       bulk_data, stk::topology::NODE_RANK, sphere_part,
-      [&node_force_field](const stk::mesh::BulkData& bulk_data, const stk::mesh::Entity& node) {
+      [&node_force_field]([[maybe_unused]] const stk::mesh::BulkData& bulk_data, const stk::mesh::Entity& node) {
         double* force = stk::mesh::field_data(node_force_field, node);
         force[0] = 0.1 * (rand() % 10);
         force[1] = 0.1 * (rand() % 10);
@@ -102,7 +102,7 @@ std::pair<TimingResults, TimingResults> run_test_for_fields(const stk::mesh::Bul
   // Move the spheres according to their velocity
   Kokkos::Timer field_move_timer;
   stk::mesh::for_each_entity_run(bulk_data, stk::topology::NODE_RANK, sphere_part,
-                                 [dt, &node_center_field, &node_velocity_field](const stk::mesh::BulkData& bulk_data,
+                                 [dt, &node_center_field, &node_velocity_field]([[maybe_unused]] const stk::mesh::BulkData& bulk_data,
                                                                                 const stk::mesh::Entity& node) {
                                    double* center = stk::mesh::field_data(node_center_field, node);
                                    double* velocity = stk::mesh::field_data(node_velocity_field, node);

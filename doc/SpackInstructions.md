@@ -28,9 +28,37 @@ module load hwloc
 ### Load dependencies. For us, this is 
 ```bash
 module purge
-module load modules/2.3-20240529 
+module load modules/2.3-20240529
 module load slurm openmpi/4.0.7 boost/1.84.0 eigen/3.4.0 hdf5/mpi-1.12.3 hwloc/2.9.1 netcdf-c/4.9.2 gcc cmake
 ```
+
+```bash
+module purge
+module load modules/2.3-20240529
+module load slurm cuda/12.3.2 openmpi/cuda-4.0.7 gcc/11.4.0 cmake/3.27.9 hwloc openblas hdf5 netcdf-c
+
+
+git clone --depth=2 --branch=releases/v0.23 https://github.com/spack/spack.git ~/spack
+. ~/spack/share/spack/setup-env.sh
+spack env create tril16_gpu
+spack env activate tril16_gpu
+spack external find cuda
+spack external find cmake
+spack external find openmpi
+spack external find openblas
+spack external find hdf5
+spack external find hwloc
+
+
+
+spack add kokkos+openmp+cuda+cuda_constexpr+cuda_lambda+cuda_relocatable_device_code~cuda_uvm~shared+wrapper cuda_arch=90 ^cuda@12.3.107
+spack add magma+cuda cuda_arch=90 ^cuda@12.3.107
+spack add trilinos@16.0.0%gcc@11.4.0+belos~boost+exodus+hdf5+kokkos+openmp++cuda+cuda_rdc+stk+zoltan+zoltan2~shared~uvm+wrapper cuda_arch=90 cxxstd=17 ^cuda@12.3.107 ^openblas@0.3.26
+```
+
+
+
+
 
 ### Create an independent spack environment for Trilinos
 ```bash

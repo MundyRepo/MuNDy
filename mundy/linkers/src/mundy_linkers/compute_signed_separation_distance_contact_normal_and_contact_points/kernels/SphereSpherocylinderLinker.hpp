@@ -104,7 +104,7 @@ class SphereSpherocylinderLinker : public mundy::meta::MetaKernel<> {
     for (int i = 0; i < num_linker_parts; i++) {
       const std::string part_name = valid_entity_part_names[i];
       auto part_reqs = std::make_shared<mundy::meta::PartReqs>();
-      part_reqs->set_part_name(part_name);
+      part_reqs->set_part_name(part_name).set_part_rank(stk::topology::CONSTRAINT_RANK);
       part_reqs->add_field_reqs<double>(linker_signed_separation_distance_field_name, stk::topology::CONSTRAINT_RANK, 1,
                                         1);
       part_reqs->add_field_reqs<double>(linker_contact_normal_field_name, stk::topology::CONSTRAINT_RANK, 3, 1);

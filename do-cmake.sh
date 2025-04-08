@@ -13,7 +13,7 @@ echo "Using STK test-app dir: $MUNDY_SOURCE_DIR"
 cmake \
 -DCMAKE_BUILD_TYPE=${BUILD_TYPE:-DEBUG} \
 -DCMAKE_CXX_COMPILER=mpicxx \
--DCMAKE_CXX_FLAGS="-O3 -march=native -Wall -Wextra -Wdouble-promotion -Wconversion" \
+-DCMAKE_CXX_FLAGS="-O3 -march=native" \
 -DCMAKE_INSTALL_PREFIX=${INSTALL_DIR:-$HOME/envs/MundyScratch} \
 -DTPL_ENABLE_MPI=ON \
 -DKokkos_ENABLE_SERIAL=OFF \

@@ -402,9 +402,9 @@ void ciliated_sphere() {
   stk::io::write_mesh_with_fields("ciliated_sphere.exo", bulk_data, step);
 }
 
-double distance_sq_from_point_to_line_segment(const mundy::math::Vector3<double, auto, auto> &x,
-                                              const mundy::math::Vector3<double, auto, auto> &p1,
-                                              const mundy::math::Vector3<double, auto, auto> &p2,
+double distance_sq_from_point_to_line_segment(const mundy::math::Vector3<double> &x,
+                                              const mundy::math::Vector3<double> &p1,
+                                              const mundy::math::Vector3<double> &p2,
                                               mundy::math::Vector3<double> *const closest_point = nullptr,
                                               double *const t = nullptr) {
   // Define some temporary variables

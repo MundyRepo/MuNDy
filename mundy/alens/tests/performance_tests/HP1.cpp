@@ -80,6 +80,7 @@ Interactions:
 #include <stk_mesh/base/Selector.hpp>        // for stk::mesh::Selector
 #include <stk_topology/topology.hpp>         // for stk::topology
 #include <stk_util/parallel/Parallel.hpp>    // for stk::parallel_machine_init, stk::parallel_machine_finalize
+#include <stk_mesh/base/EntitySorterBase.hpp>  // for stk::mesh::EntitySorterBase
 
 // Mundy libs
 #include <mundy_alens/actions_crosslinkers.hpp>                // for mundy::alens::crosslinkers...
@@ -118,6 +119,7 @@ Interactions:
 #include <mundy_meta/utils/MeshGeneration.hpp>  // for mundy::meta::utils::generate_class_instance_and_mesh_from_meta_class_requirements
 #include <mundy_shapes/ComputeAABB.hpp>  // for mundy::shapes::ComputeAABB
 #include <mundy_shapes/Spheres.hpp>      // for mundy::shapes::Spheres
+#include <mundy_math/zmort.hpp> // for mundy::math::zmorton_less(Vector3, Vector3)
 
 namespace mundy {
 
@@ -148,6 +150,7 @@ enum class BOND_TYPE : unsigned { HARMONIC = 0u, FENE, FENEWCA };
 enum class PERIPHERY_BIND_SITES_TYPE : unsigned { RANDOM = 0u, FROM_FILE };
 enum class PERIPHERY_SHAPE : unsigned { SPHERE = 0u, ELLIPSOID };
 enum class PERIPHERY_QUADRATURE : unsigned { GAUSS_LEGENDRE = 0u, FROM_FILE };
+enum class COLLISION_TYPE : unsigned { HERTZIAN = 0u, WCA };
 
 std::ostream &operator<<(std::ostream &os, const BINDING_STATE_CHANGE &state) {
   switch (state) {
@@ -272,6 +275,21 @@ std::ostream &operator<<(std::ostream &os, const PERIPHERY_QUADRATURE &periphery
   return os;
 }
 
+std::ostream &operator<<(std::ostream &os, const COLLISION_TYPE &collision_type) {
+  switch (collision_type) {
+    case COLLISION_TYPE::HERTZIAN:
+      os << "HERTZIAN";
+      break;
+    case COLLISION_TYPE::WCA:
+      os << "WCA";
+      break;
+    default:
+      os << "UNKNOWN";
+      break;
+  }
+  return os;
+}
+
 }  // namespace hp1
 
 }  // namespace alens
@@ -295,6 +313,9 @@ struct fmt::formatter<mundy::alens::hp1::PERIPHERY_SHAPE> : fmt::ostream_formatt
 
 template <>
 struct fmt::formatter<mundy::alens::hp1::PERIPHERY_QUADRATURE> : fmt::ostream_formatter {};
+
+template <>
+struct fmt::formatter<mundy::alens::hp1::COLLISION_TYPE> : fmt::ostream_formatter {};
 
 namespace mundy {
 
@@ -510,9 +531,18 @@ class HP1 {
   }
 
   void set_backbone_collision_params(const Teuchos::ParameterList &param_list) {
+    const std::string backbone_collision_type_string = param_list.get<std::string>("backbone_collision_type");
     backbone_excluded_volume_radius_ = param_list.get<double>("backbone_excluded_volume_radius");
-    backbone_youngs_modulus_ = param_list.get<double>("backbone_youngs_modulus");
-    backbone_poissons_ratio_ = param_list.get<double>("backbone_poissons_ratio");
+    if (backbone_collision_type_string == "HERTZIAN") {
+      backbone_collision_type_ = COLLISION_TYPE::HERTZIAN;
+      backbone_youngs_modulus_ = param_list.get<double>("backbone_youngs_modulus");
+      backbone_poissons_ratio_ = param_list.get<double>("backbone_poissons_ratio");
+    } else if (backbone_collision_type_string == "WCA") {
+      backbone_collision_type_ = COLLISION_TYPE::WCA;
+      backbone_wca_epsilon_ = param_list.get<double>("backbone_wca_epsilon");
+      backbone_wca_sigma_ = param_list.get<double>("backbone_wca_sigma");
+      backbone_wca_cutoff_ = param_list.get<double>("backbone_wca_cutoff");
+    }
   }
 
   void set_crosslinker_params(const Teuchos::ParameterList &param_list) {
@@ -752,8 +782,13 @@ class HP1 {
     valid_parameter_list.sublist("backbone_collision")
         .set("backbone_excluded_volume_radius", default_backbone_excluded_volume_radius_,
              "Backbone excluded volume radius.")
+        .set("backbone_collision_type", std::string(default_backbone_collision_type_string_),
+             "Backbone collision type.")
         .set("backbone_youngs_modulus", default_backbone_youngs_modulus_, "Backbone Young's modulus.")
-        .set("backbone_poissons_ratio", default_backbone_poissons_ratio_, "Backbone Poisson's ratio.");
+        .set("backbone_poissons_ratio", default_backbone_poissons_ratio_, "Backbone Poisson's ratio.")
+        .set("backbone_wca_epsilon", default_backbone_wca_epsilon_, "Backbone WCA epsilon.")
+        .set("backbone_wca_sigma", default_backbone_wca_sigma_, "Backbone WCA sigma.")
+        .set("backbone_wca_cutoff", default_backbone_wca_cutoff_, "Backbone WCA cutoff.");
 
     valid_parameter_list.sublist("crosslinker")
         .set("spring_type", std::string(default_crosslinker_spring_type_string_), "Crosslinker spring type.")
@@ -923,9 +958,16 @@ class HP1 {
       if (enable_backbone_collision_) {
         std::cout << std::endl;
         std::cout << "BACKBONE COLLISION:" << std::endl;
-        std::cout << "  excluded_volume_radius: " << backbone_excluded_volume_radius_ << std::endl;
-        std::cout << "  youngs_modulus: " << backbone_youngs_modulus_ << std::endl;
-        std::cout << "  poissons_ratio: " << backbone_poissons_ratio_ << std::endl;
+        std::cout << "  backbone_collision_type: " << backbone_collision_type_ << std::endl;
+        std::cout << "  excluded_volume_radius (if used): " << backbone_excluded_volume_radius_ << std::endl;
+        if (backbone_collision_type_ == COLLISION_TYPE::HERTZIAN) {
+          std::cout << "  youngs_modulus: " << backbone_youngs_modulus_ << std::endl;
+          std::cout << "  poissons_ratio: " << backbone_poissons_ratio_ << std::endl;
+        } else if (backbone_collision_type_ == COLLISION_TYPE::WCA) {
+          std::cout << "  wca_epsilon: " << backbone_wca_epsilon_ << std::endl;
+          std::cout << "  wca_sigma: " << backbone_wca_sigma_ << std::endl;
+          std::cout << "  wca_cutoff: " << backbone_wca_cutoff_ << std::endl;
+        }
       }
 
       if (enable_crosslinkers_) {
@@ -1320,12 +1362,19 @@ class HP1 {
         .set("valid_source_entity_part_names", mundy::core::make_string_array(std::string("HP1S")))
         .set("valid_target_entity_part_names", mundy::core::make_string_array("BS"));
 
-    // Evaluate the scs-scs hertzian contacts
-    evaluate_linker_potentials_fixed_params_ = Teuchos::ParameterList().set(
-        "enabled_kernel_names",
-        mundy::core::make_string_array("SPHEROCYLINDER_SEGMENT_SPHEROCYLINDER_SEGMENT_HERTZIAN_CONTACT"));
-    evaluate_linker_potentials_fixed_params_.sublist("SPHEROCYLINDER_SEGMENT_SPHEROCYLINDER_SEGMENT_HERTZIAN_CONTACT")
-        .set("valid_spherocylinder_segment_part_names", mundy::core::make_string_array("BACKBONE_SEGMENTS"));
+    // Evaluate the scs-scs contacts (hertzian or WCA)
+    if (backbone_collision_type_ == COLLISION_TYPE::HERTZIAN) {
+      evaluate_linker_potentials_fixed_params_ = Teuchos::ParameterList().set(
+          "enabled_kernel_names",
+          mundy::core::make_string_array("SPHEROCYLINDER_SEGMENT_SPHEROCYLINDER_SEGMENT_HERTZIAN_CONTACT"));
+      evaluate_linker_potentials_fixed_params_.sublist("SPHEROCYLINDER_SEGMENT_SPHEROCYLINDER_SEGMENT_HERTZIAN_CONTACT")
+          .set("valid_spherocylinder_segment_part_names", mundy::core::make_string_array("BACKBONE_SEGMENTS"));
+    } else if (backbone_collision_type_ == COLLISION_TYPE::WCA) {
+      evaluate_linker_potentials_fixed_params_ = Teuchos::ParameterList().set(
+          "enabled_kernel_names", mundy::core::make_string_array("SPHEROCYLINDER_SEGMENT_SPHEROCYLINDER_SEGMENT_WCA"));
+      evaluate_linker_potentials_fixed_params_.sublist("SPHEROCYLINDER_SEGMENT_SPHEROCYLINDER_SEGMENT_WCA")
+          .set("valid_spherocylinder_segment_part_names", mundy::core::make_string_array("BACKBONE_SEGMENTS"));
+    }
 
     // Reduce the forces on the spherocylinder segments
     linker_potential_force_reduction_fixed_params_ =
@@ -1414,8 +1463,10 @@ class HP1 {
     element_spring_constant_field_ptr_ = fetch_field<double>("ELEMENT_SPRING_CONSTANT", element_rank_);
     element_spring_r0_field_ptr_ = fetch_field<double>("ELEMENT_SPRING_R0", element_rank_);
     element_radius_field_ptr_ = fetch_field<double>("ELEMENT_RADIUS", element_rank_);
-    element_youngs_modulus_field_ptr_ = fetch_field<double>("ELEMENT_YOUNGS_MODULUS", element_rank_);
-    element_poissons_ratio_field_ptr_ = fetch_field<double>("ELEMENT_POISSONS_RATIO", element_rank_);
+    if (backbone_collision_type_ == COLLISION_TYPE::HERTZIAN) {
+      element_youngs_modulus_field_ptr_ = fetch_field<double>("ELEMENT_YOUNGS_MODULUS", element_rank_);
+      element_poissons_ratio_field_ptr_ = fetch_field<double>("ELEMENT_POISSONS_RATIO", element_rank_);
+    }
     element_aabb_field_ptr_ = fetch_field<double>("ELEMENT_AABB", element_rank_);
     element_corner_displacement_field_ptr_ = fetch_field<double>("ACCUMULATED_AABB_CORNER_DISPLACEMENT", element_rank_);
     element_binding_rates_field_ptr_ = fetch_field<double>("ELEMENT_REALIZED_BINDING_RATES", element_rank_);
@@ -1511,6 +1562,16 @@ class HP1 {
     auto generate_hp1_bs_genx_mutable_params = Teuchos::ParameterList();
     generate_hp1_bs_genx_mutable_params.sublist("STK_SEARCH").set("enforce_symmetry", false);
     generate_hp1_bs_genx_ptr_->set_mutable_params(generate_hp1_bs_genx_mutable_params);
+
+    // If we are using WCA potentials, set the mutable parameters that are attached to the class here
+    if (backbone_collision_type_ == COLLISION_TYPE::WCA) {
+      auto evaluate_linker_potentials_mutable_params = Teuchos::ParameterList();
+      evaluate_linker_potentials_mutable_params.sublist("SPHEROCYLINDER_SEGMENT_SPHEROCYLINDER_SEGMENT_WCA")
+          .set("epsilon", backbone_wca_epsilon_)
+          .set("sigma", backbone_wca_sigma_)
+          .set("lj_cutoff", backbone_wca_cutoff_);
+      evaluate_linker_potentials_ptr_->set_mutable_params(evaluate_linker_potentials_mutable_params);
+    }
   }
 
   void ghost_linked_entities() {
@@ -2305,10 +2366,12 @@ class HP1 {
     MUNDY_THROW_REQUIRE(node_coord_field_ptr_ != nullptr, std::invalid_argument, "Node coordinate field is null.");
     MUNDY_THROW_REQUIRE(element_chainid_field_ptr_ != nullptr, std::invalid_argument, "Element chainID field is null.");
     MUNDY_THROW_REQUIRE(element_radius_field_ptr_ != nullptr, std::invalid_argument, "Element radius field is null.");
-    MUNDY_THROW_REQUIRE(element_youngs_modulus_field_ptr_ != nullptr, std::invalid_argument,
-                        "Element youngs modulus field is null.");
-    MUNDY_THROW_REQUIRE(element_poissons_ratio_field_ptr_ != nullptr, std::invalid_argument,
-                        "Element poisson's ratio field is null.");
+    if (backbone_collision_type_ == COLLISION_TYPE::HERTZIAN) {
+      MUNDY_THROW_REQUIRE(element_youngs_modulus_field_ptr_ != nullptr, std::invalid_argument,
+                          "Element youngs modulus field is null.");
+      MUNDY_THROW_REQUIRE(element_poissons_ratio_field_ptr_ != nullptr, std::invalid_argument,
+                          "Element poisson's ratio field is null.");
+    }
     MUNDY_THROW_REQUIRE(element_spring_constant_field_ptr_ != nullptr, std::invalid_argument,
                         "Element spring constant field is null.");
     MUNDY_THROW_REQUIRE(element_spring_r0_field_ptr_ != nullptr, std::invalid_argument,
@@ -2325,10 +2388,12 @@ class HP1 {
 
     // Initialize the backbone springs (EE, EH, HH)
     const stk::mesh::Selector backbone_segments = *ee_springs_part_ptr_ | *eh_springs_part_ptr_ | *hh_springs_part_ptr_;
-    mundy::mesh::utils::fill_field_with_value(backbone_segments, *element_youngs_modulus_field_ptr_,
-                                              std::array<double, 1>{backbone_youngs_modulus_});
-    mundy::mesh::utils::fill_field_with_value(backbone_segments, *element_poissons_ratio_field_ptr_,
-                                              std::array<double, 1>{backbone_poissons_ratio_});
+    if (backbone_collision_type_ == COLLISION_TYPE::HERTZIAN) {
+      mundy::mesh::utils::fill_field_with_value(backbone_segments, *element_youngs_modulus_field_ptr_,
+                                                std::array<double, 1>{backbone_youngs_modulus_});
+      mundy::mesh::utils::fill_field_with_value(backbone_segments, *element_poissons_ratio_field_ptr_,
+                                                std::array<double, 1>{backbone_poissons_ratio_});
+    }
     mundy::mesh::utils::fill_field_with_value(backbone_segments, *element_radius_field_ptr_,
                                               std::array<double, 1>{backbone_excluded_volume_radius_});
     mundy::mesh::utils::fill_field_with_value(backbone_segments, *element_spring_constant_field_ptr_,
@@ -2845,7 +2910,8 @@ class HP1 {
                                element_corner_displacement[5] * element_corner_displacement[5];
 
           if (dr2_corner0 >= skin_distance2_over4 || dr2_corner1 >= skin_distance2_over4) {
-            local_update_neighbor_list_int = 1;
+            local_update_neighbor_list_int =
+                1;  // TODO(palmerb4): This is not thread safe. Use a reduction over a logical or
           }
         });
 
@@ -3555,6 +3621,11 @@ class HP1 {
     Kokkos::View<double *, Kokkos::LayoutLeft, DeviceMemorySpace> sphere_velocities("sphere_velocities",
                                                                                     num_spheres * 3);
 
+    auto sphere_positions_host = Kokkos::create_mirror_view(sphere_positions);
+    auto sphere_radii_host = Kokkos::create_mirror_view(sphere_radii);
+    auto sphere_forces_host = Kokkos::create_mirror_view(sphere_forces);
+    auto sphere_velocities_host = Kokkos::create_mirror_view(sphere_velocities);
+
 #pragma omp parallel for
     for (size_t i = 0; i < num_spheres; i++) {
       stk::mesh::Entity sphere_element = sphere_elements[i];
@@ -3565,12 +3636,17 @@ class HP1 {
       const double *sphere_velocity = stk::mesh::field_data(*node_velocity_field_ptr_, sphere_node);
 
       for (size_t j = 0; j < 3; j++) {
-        sphere_positions(i * 3 + j) = sphere_position[j];
-        sphere_forces(i * 3 + j) = sphere_force[j];
-        sphere_velocities(i * 3 + j) = sphere_velocity[j];
+        sphere_positions_host(i * 3 + j) = sphere_position[j];
+        sphere_forces_host(i * 3 + j) = sphere_force[j];
+        sphere_velocities_host(i * 3 + j) = sphere_velocity[j];
       }
-      sphere_radii(i) = *sphere_radius;
+      sphere_radii_host(i) = *sphere_radius;
     }
+
+    Kokkos::deep_copy(sphere_positions, sphere_positions_host);
+    Kokkos::deep_copy(sphere_radii, sphere_radii_host);
+    Kokkos::deep_copy(sphere_forces, sphere_forces_host);
+    Kokkos::deep_copy(sphere_velocities, sphere_velocities_host);
 
     // Apply the RPY kernel from spheres to spheres
     mundy::alens::periphery::apply_rpyc_kernel(DeviceExecutionSpace(), viscosity, sphere_positions, sphere_positions,
@@ -3611,6 +3687,8 @@ class HP1 {
     }
 
     // Copy the sphere forces and velocities back to STK fields
+    Kokkos::deep_copy(sphere_forces_host, sphere_forces);
+    Kokkos::deep_copy(sphere_velocities_host, sphere_velocities);
 #pragma omp parallel for
     for (size_t i = 0; i < num_spheres; i++) {
       stk::mesh::Entity sphere_element = sphere_elements[i];
@@ -3619,8 +3697,8 @@ class HP1 {
       double *sphere_hydro_velocity = stk::mesh::field_data(*node_velocity_hydro_field_ptr_, sphere_node);
 
       for (size_t j = 0; j < 3; j++) {
-        sphere_force[j] = sphere_forces(i * 3 + j);
-        sphere_hydro_velocity[j] = sphere_velocities(i * 3 + j);
+        sphere_force[j] = sphere_forces_host(i * 3 + j);
+        sphere_hydro_velocity[j] = sphere_velocities_host(i * 3 + j);
       }
     }
     Kokkos::Profiling::popRegion();
@@ -3877,7 +3955,7 @@ class HP1 {
         [&euchromatin_state, &node_coord_field, &node_force_field, &active_force_sigma](
             [[maybe_unused]] const stk::mesh::BulkData &bulk_data, const stk::mesh::Entity &euchromatin_spring) {
           // We are not going to increment the elapsed time ourselves, but rely on someone outside of this loop to do
-          // that at the end of a timestpe, in order to keep it consistent with the total elapsed time in the system.
+          // that at the end of a timestep, in order to keep it consistent with the total elapsed time in the system.
           unsigned *current_state = stk::mesh::field_data(euchromatin_state, euchromatin_spring);
 
           if (current_state[0] == 1u) {
@@ -3897,26 +3975,6 @@ class HP1 {
             const double right_node_force[3] = {active_force_sigma / std::sqrt(nsqr) * nvec[0],
                                                 active_force_sigma / std::sqrt(nsqr) * nvec[1],
                                                 active_force_sigma / std::sqrt(nsqr) * nvec[2]};
-
-            // #pragma omp critical
-            //             {
-            //               std::cout << "Rank " << bulk_data.parallel_rank() << " Euchromatin spring "
-            //                         << bulk_data.identifier(euchromatin_spring) << " is active." << std::endl;
-            //               std::cout << "  node1: " << bulk_data.identifier(node1) << " node2: " <<
-            //               bulk_data.identifier(node2)
-            //                         << std::endl;
-            //               std::cout << "  node1 coordinates: " << node1_coord[0] << " " << node1_coord[1] << " " <<
-            //               node1_coord[2]
-            //                         << std::endl;
-            //               std::cout << "  node2 coordinates: " << node2_coord[0] << " " << node2_coord[1] << " " <<
-            //               node2_coord[2]
-            //                         << std::endl;
-            //               std::cout << "  nvec: " << nvec[0] << " " << nvec[1] << " " << nvec[2] << std::endl;
-            //               std::cout << "  nsqr: " << nsqr << std::endl;
-            //               std::cout << "  right_node_force: " << right_node_force[0] << " " << right_node_force[1] <<
-            //               " "
-            //                         << right_node_force[2] << std::endl;
-            //             }
 
             // Add the force dipole to the nodes.
             double *node1_force = stk::mesh::field_data(node_force_field, node1);
@@ -3961,67 +4019,125 @@ class HP1 {
     // chain will not have a segment on one side, so we need to apply a correction force to account for this.
     //
     // Assume hertzian contact force.
-    const double backbone_excluded_volume_radius = backbone_excluded_volume_radius_;
-    const double backbone_youngs_modulus = backbone_youngs_modulus_;
-    const double backbone_poissons_ratio = backbone_poissons_ratio_;
-    const double effective_radius = (backbone_excluded_volume_radius * backbone_excluded_volume_radius) /
-                                    (backbone_excluded_volume_radius + backbone_excluded_volume_radius);
-    const double effective_youngs_modulus =
-        (backbone_youngs_modulus * backbone_youngs_modulus) /
-        (backbone_youngs_modulus - backbone_youngs_modulus * backbone_poissons_ratio * backbone_poissons_ratio +
-         backbone_youngs_modulus - backbone_youngs_modulus * backbone_poissons_ratio * backbone_poissons_ratio);
-    stk::mesh::Field<double> &node_force_field = *node_force_field_ptr_;
-    stk::mesh::Field<double> &node_coord_field = *node_coord_field_ptr_;
-    stk::mesh::Field<double> &element_requires_endpoint_correction_field =
-        *element_requires_endpoint_correction_field_ptr_;
+    if (backbone_collision_type_ == COLLISION_TYPE::HERTZIAN) {
+      const double backbone_excluded_volume_radius = backbone_excluded_volume_radius_;
+      const double backbone_youngs_modulus = backbone_youngs_modulus_;
+      const double backbone_poissons_ratio = backbone_poissons_ratio_;
+      const double effective_radius = (backbone_excluded_volume_radius * backbone_excluded_volume_radius) /
+                                      (backbone_excluded_volume_radius + backbone_excluded_volume_radius);
+      const double effective_youngs_modulus =
+          (backbone_youngs_modulus * backbone_youngs_modulus) /
+          (backbone_youngs_modulus - backbone_youngs_modulus * backbone_poissons_ratio * backbone_poissons_ratio +
+           backbone_youngs_modulus - backbone_youngs_modulus * backbone_poissons_ratio * backbone_poissons_ratio);
+      stk::mesh::Field<double> &node_force_field = *node_force_field_ptr_;
+      stk::mesh::Field<double> &node_coord_field = *node_coord_field_ptr_;
+      stk::mesh::Field<double> &element_requires_endpoint_correction_field =
+          *element_requires_endpoint_correction_field_ptr_;
 
-    mundy::mesh::for_each_entity_run(
-        *bulk_data_ptr_, stk::topology::ELEM_RANK, backbone_selector,
-        [&backbone_excluded_volume_radius, &effective_radius, &effective_youngs_modulus, &node_coord_field,
-         &node_force_field, &element_requires_endpoint_correction_field](
-            [[maybe_unused]] const stk::mesh::BulkData &bulk_data, const stk::mesh::Entity &seg) {
-          if (static_cast<bool>(stk::mesh::field_data(element_requires_endpoint_correction_field, seg)[0])) {
-            // Get the segment length and tangent
-            const stk::mesh::Entity *nodes = bulk_data.begin_nodes(seg);
-            const stk::mesh::Entity &node1 = nodes[0];
-            const stk::mesh::Entity &node2 = nodes[1];
-            const double *node1_coords = stk::mesh::field_data(node_coord_field, node1);
-            const double *node2_coords = stk::mesh::field_data(node_coord_field, node2);
-            const double segment_length =
-                std::sqrt((node2_coords[0] - node1_coords[0]) * (node2_coords[0] - node1_coords[0]) +
-                          (node2_coords[1] - node1_coords[1]) * (node2_coords[1] - node1_coords[1]) +
-                          (node2_coords[2] - node1_coords[2]) * (node2_coords[2] - node1_coords[2]));
-            const double segment_tangent[3] = {(node2_coords[0] - node1_coords[0]) / segment_length,
-                                               (node2_coords[1] - node1_coords[1]) / segment_length,
-                                               (node2_coords[2] - node1_coords[2]) / segment_length};
+      mundy::mesh::for_each_entity_run(
+          *bulk_data_ptr_, stk::topology::ELEM_RANK, backbone_selector,
+          [&backbone_excluded_volume_radius, &effective_radius, &effective_youngs_modulus, &node_coord_field,
+           &node_force_field, &element_requires_endpoint_correction_field](
+              [[maybe_unused]] const stk::mesh::BulkData &bulk_data, const stk::mesh::Entity &seg) {
+            if (static_cast<bool>(stk::mesh::field_data(element_requires_endpoint_correction_field, seg)[0])) {
+              // Get the segment length and tangent
+              const stk::mesh::Entity *nodes = bulk_data.begin_nodes(seg);
+              const stk::mesh::Entity &node1 = nodes[0];
+              const stk::mesh::Entity &node2 = nodes[1];
+              const double *node1_coords = stk::mesh::field_data(node_coord_field, node1);
+              const double *node2_coords = stk::mesh::field_data(node_coord_field, node2);
+              const double segment_length =
+                  std::sqrt((node2_coords[0] - node1_coords[0]) * (node2_coords[0] - node1_coords[0]) +
+                            (node2_coords[1] - node1_coords[1]) * (node2_coords[1] - node1_coords[1]) +
+                            (node2_coords[2] - node1_coords[2]) * (node2_coords[2] - node1_coords[2]));
+              const double segment_tangent[3] = {(node2_coords[0] - node1_coords[0]) / segment_length,
+                                                 (node2_coords[1] - node1_coords[1]) / segment_length,
+                                                 (node2_coords[2] - node1_coords[2]) / segment_length};
 
-            // Get the amount of overlap
-            const double signed_sep = segment_length - 2.0 * backbone_excluded_volume_radius;
-            const bool particles_overlap = signed_sep < 0.0;
-            const double normal_force_magnitude =
-                particles_overlap
-                    ? (4.0 / 3.0) * effective_youngs_modulus * std::sqrt(effective_radius) * std::pow(-signed_sep, 1.5)
-                    : 0.0;
+              // Get the amount of overlap
+              const double signed_sep = segment_length - 2.0 * backbone_excluded_volume_radius;
+              const bool particles_overlap = signed_sep < 0.0;
+              const double normal_force_magnitude = particles_overlap
+                                                        ? (4.0 / 3.0) * effective_youngs_modulus *
+                                                              std::sqrt(effective_radius) * std::pow(-signed_sep, 1.5)
+                                                        : 0.0;
 
-            // Apply the force to the nodes
-            double *node1_force = stk::mesh::field_data(node_force_field, node1);
-            double *node2_force = stk::mesh::field_data(node_force_field, node2);
-
-#pragma omp atomic
-            node1_force[0] -= normal_force_magnitude * segment_tangent[0];
-#pragma omp atomic
-            node1_force[1] -= normal_force_magnitude * segment_tangent[1];
-#pragma omp atomic
-            node1_force[2] -= normal_force_magnitude * segment_tangent[2];
+              // Apply the force to the nodes
+              double *node1_force = stk::mesh::field_data(node_force_field, node1);
+              double *node2_force = stk::mesh::field_data(node_force_field, node2);
 
 #pragma omp atomic
-            node2_force[0] += normal_force_magnitude * segment_tangent[0];
+              node1_force[0] -= normal_force_magnitude * segment_tangent[0];
 #pragma omp atomic
-            node2_force[1] += normal_force_magnitude * segment_tangent[1];
+              node1_force[1] -= normal_force_magnitude * segment_tangent[1];
 #pragma omp atomic
-            node2_force[2] += normal_force_magnitude * segment_tangent[2];
-          }
-        });
+              node1_force[2] -= normal_force_magnitude * segment_tangent[2];
+
+#pragma omp atomic
+              node2_force[0] += normal_force_magnitude * segment_tangent[0];
+#pragma omp atomic
+              node2_force[1] += normal_force_magnitude * segment_tangent[1];
+#pragma omp atomic
+              node2_force[2] += normal_force_magnitude * segment_tangent[2];
+            }
+          });
+    } else if (backbone_collision_type_ == COLLISION_TYPE::WCA) {
+      stk::mesh::Field<double> &node_force_field = *node_force_field_ptr_;
+      stk::mesh::Field<double> &node_coord_field = *node_coord_field_ptr_;
+      stk::mesh::Field<double> &element_requires_endpoint_correction_field =
+          *element_requires_endpoint_correction_field_ptr_;
+      const double wca_epsilon = backbone_wca_epsilon_;
+      const double wca_sigma = backbone_wca_sigma_;
+      const double wca_wca_cutoff = backbone_wca_cutoff_;
+
+      mundy::mesh::for_each_entity_run(
+          *bulk_data_ptr_, stk::topology::ELEM_RANK, backbone_selector,
+          [&node_coord_field, &wca_epsilon, &wca_sigma, &wca_wca_cutoff, &node_force_field,
+           &element_requires_endpoint_correction_field]([[maybe_unused]] const stk::mesh::BulkData &bulk_data,
+                                                        const stk::mesh::Entity &seg) {
+            if (static_cast<bool>(stk::mesh::field_data(element_requires_endpoint_correction_field, seg)[0])) {
+              // Get the segment length and tangent
+              const stk::mesh::Entity *nodes = bulk_data.begin_nodes(seg);
+              const stk::mesh::Entity &node1 = nodes[0];
+              const stk::mesh::Entity &node2 = nodes[1];
+              const double *node1_coords = stk::mesh::field_data(node_coord_field, node1);
+              const double *node2_coords = stk::mesh::field_data(node_coord_field, node2);
+              const double segment_length =
+                  std::sqrt((node2_coords[0] - node1_coords[0]) * (node2_coords[0] - node1_coords[0]) +
+                            (node2_coords[1] - node1_coords[1]) * (node2_coords[1] - node1_coords[1]) +
+                            (node2_coords[2] - node1_coords[2]) * (node2_coords[2] - node1_coords[2]));
+              const double segment_tangent[3] = {(node2_coords[0] - node1_coords[0]) / segment_length,
+                                                 (node2_coords[1] - node1_coords[1]) / segment_length,
+                                                 (node2_coords[2] - node1_coords[2]) / segment_length};
+
+              double lennard_jones_force = 0.0;
+              if (segment_length < wca_wca_cutoff) {
+                const double rho2 = wca_sigma * wca_sigma / (segment_length * segment_length);
+                const double rho6 = rho2 * rho2 * rho2;
+                const double rho12 = rho6 * rho6;
+                lennard_jones_force = 24.0 * wca_epsilon * (2.0 * rho12 - rho6) / (segment_length);
+              }
+
+              // Apply the force to the nodes
+              double *node1_force = stk::mesh::field_data(node_force_field, node1);
+              double *node2_force = stk::mesh::field_data(node_force_field, node2);
+
+#pragma omp atomic
+              node1_force[0] -= lennard_jones_force * segment_tangent[0];
+#pragma omp atomic
+              node1_force[1] -= lennard_jones_force * segment_tangent[1];
+#pragma omp atomic
+              node1_force[2] -= lennard_jones_force * segment_tangent[2];
+
+#pragma omp atomic
+              node2_force[0] += lennard_jones_force * segment_tangent[0];
+#pragma omp atomic
+              node2_force[1] += lennard_jones_force * segment_tangent[1];
+#pragma omp atomic
+              node2_force[2] += lennard_jones_force * segment_tangent[2];
+            }
+          });
+    }
 
     Kokkos::Profiling::popRegion();
   }
@@ -4359,6 +4475,8 @@ class HP1 {
 
       // IO. If desired, write out the data for time t (STK or mundy)
       if (timestep_index_ % io_frequency_ == 0) {
+        bulk_data_ptr_->sort_entities(z_morton_sorter_);
+
         Kokkos::Profiling::pushRegion("HP1::IO");
         io_broker_ptr_->write_io_broker_timestep(static_cast<int>(timestep_index_), timestep_current_time_);
         Kokkos::Profiling::popRegion();
@@ -4547,6 +4665,41 @@ class HP1 {
   };  // RcbSettings
 
   RcbSettings balance_settings_;
+
+  class EntityLessZMortonCoords {
+   public:
+    EntityLessZMortonCoords(const stk::mesh::BulkData &bulk)
+        : mesh(bulk), coords_base(bulk.mesh_meta_data().coordinate_field()) {
+    }
+
+    bool operator()(stk::mesh::Entity a, stk::mesh::Entity b) {
+      if (mesh.entity_rank(a) != stk::topology::NODE_RANK) {
+        return stk::mesh::EntityLess(mesh)(a, b);
+      }
+      double *a_coords = static_cast<double *>(stk::mesh::field_data(*coords_base, a));
+      double *b_coords = static_cast<double *>(stk::mesh::field_data(*coords_base, b));
+      math::Vector3<double> a_vec(a_coords[0], a_coords[1], a_coords[2]);
+      math::Vector3<double> b_vec(b_coords[0], b_coords[1], b_coords[2]);
+      return math::zmorton_less(a_vec, b_vec);
+    }
+
+   private:
+    const stk::mesh::BulkData &mesh;
+    const stk::mesh::FieldBase *coords_base;
+  };
+
+  class ZMortonSorter : public stk::mesh::EntitySorterBase {
+   public:
+    ZMortonSorter() {
+    }
+    virtual ~ZMortonSorter() {
+    }
+    virtual void sort(stk::mesh::BulkData &bulk, stk::mesh::EntityVector &entity_vector) const {
+      std::sort(entity_vector.begin(), entity_vector.end(), EntityLessZMortonCoords(bulk));
+    }
+  };
+
+  ZMortonSorter z_morton_sorter_;
   //@}
 
   //! \name User parameters
@@ -4600,9 +4753,13 @@ class HP1 {
   double backbone_spring_r0_;
 
   // Backbone collisions params
+  COLLISION_TYPE backbone_collision_type_;
   double backbone_excluded_volume_radius_;
   double backbone_youngs_modulus_;
   double backbone_poissons_ratio_;
+  double backbone_wca_epsilon_;
+  double backbone_wca_sigma_;
+  double backbone_wca_cutoff_;
 
   // Crosslinker params
   BOND_TYPE crosslinker_spring_type_;
@@ -4712,9 +4869,13 @@ class HP1 {
   static constexpr double default_backbone_spring_r0_ = 1.0;
 
   // Backbone collisions params
+  static constexpr std::string_view default_backbone_collision_type_string_ = "HERTZIAN";
   static constexpr double default_backbone_excluded_volume_radius_ = 0.5;
   static constexpr double default_backbone_youngs_modulus_ = 1000.0;
   static constexpr double default_backbone_poissons_ratio_ = 0.3;
+  static constexpr double default_backbone_wca_epsilon_ = 1.0;
+  static constexpr double default_backbone_wca_sigma_ = 1.0;
+  static constexpr double default_backbone_wca_cutoff_ = 1.12246204831;  // 2^(1/6)
 
   // Backbone hydrodynamic params
   static constexpr double default_backbone_sphere_hydrodynamic_radius_ = 0.05;

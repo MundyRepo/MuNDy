@@ -172,8 +172,10 @@ DeclareEntitiesHelper& DeclareEntitiesHelper::declare_entities(stk::mesh::BulkDa
 
           // If the current element is owned by a different processor than the node, we (the element's owning process)
           // need to share the node with the node's owning processor.
-          bulk_data.add_node_sharing(node, node_info_map[node_id].owning_proc);
-          node_info_map[node_id].non_owning_shared_procs.push_back(element_info.owning_proc);
+          if (node_info_map[node_id].owning_proc != our_rank) {
+            bulk_data.add_node_sharing(node, node_info_map[node_id].owning_proc);
+            node_info_map[node_id].non_owning_shared_procs.push_back(element_info.owning_proc);
+          }
         }
       }
       for (const auto& field_data : element_info.field_data) {

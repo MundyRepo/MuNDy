@@ -83,6 +83,12 @@ class FieldComponentBase {
   FieldComponentBase(const stk::mesh::FieldBase& field_base) : field_base_(field_base) {
   }
 
+  /// \brief Default copy/move/assign constructors
+  FieldComponentBase(const FieldComponentBase&) = default;
+  FieldComponentBase(FieldComponentBase&&) = default;
+  FieldComponentBase& operator=(const FieldComponentBase&) = default;
+  FieldComponentBase& operator=(FieldComponentBase&&) = default;
+
   void sync_to_device() {
     field_base_.sync_to_device();
   }
@@ -109,32 +115,40 @@ class FieldComponentBase {
 
 class NgpFieldComponentBase {
  public:
+  NgpFieldComponentBase() = default;
+
 #if TRILINOS_MAJOR_MINOR_VERSION >= 160000
-  NgpFieldComponentBase(const stk::mesh::FieldBase& field_base) : host_field_base_(field_base) {
+  NgpFieldComponentBase(const stk::mesh::FieldBase& field_base) : host_field_base_(&field_base) {
   }
 
+  /// \brief Default copy/move/assign constructors
+  NgpFieldComponentBase(const NgpFieldComponentBase&) = default;
+  NgpFieldComponentBase(NgpFieldComponentBase&&) = default;
+  NgpFieldComponentBase& operator=(const NgpFieldComponentBase&) = default;
+  NgpFieldComponentBase& operator=(NgpFieldComponentBase&&) = default;
+
   void sync_to_device() {
-    host_field_base_.sync_to_device();
+    host_field_base_->sync_to_device();
   }
 
   void sync_to_host() {
-    host_field_base_.sync_to_host();
+    host_field_base_->sync_to_host();
   }
 
   void modify_on_device() {
-    host_field_base_.modify_on_device();
+    host_field_base_->modify_on_device();
   }
 
   void modify_on_host() {
-    host_field_base_.modify_on_host();
+    host_field_base_->modify_on_host();
   }
 
   const stk::mesh::FieldBase& host_field_base() {
-    return host_field_base_;
+    return *host_field_base_;
   }
 
  private:
-  const stk::mesh::FieldBase& host_field_base_;
+  const stk::mesh::FieldBase* host_field_base_;
 #endif
 };  // NgpFieldComponentBase
 
@@ -144,8 +158,14 @@ class FieldComponent : public FieldComponentBase {
   FieldComponent(stk::mesh::Field<ValueType>& field) : FieldComponentBase(field), field_(field) {
   }
 
+  /// \brief Default copy/move/assign constructors
+  FieldComponent(const FieldComponent&) = default;
+  FieldComponent(FieldComponent&&) = default;
+  FieldComponent& operator=(const FieldComponent&) = default;
+  FieldComponent& operator=(FieldComponent&&) = default;
+
   inline decltype(auto) operator()(stk::mesh::Entity entity) const {
-    ValueType* data_ptr = stk::mesh::field_data(*field, entity);
+    ValueType* data_ptr = stk::mesh::field_data(*field_, entity);
     MUNDY_THROW_ASSERT(data_ptr, std::runtime_error, "Field data is null");
     unsigned num_scalars = stk::mesh::field_scalars_per_entity(*field_, entity);
     return stk::mesh::EntityFieldData<ValueType>(data_ptr, num_scalars);
@@ -175,6 +195,12 @@ class NgpFieldComponent : public NgpFieldComponentBase {
 #endif
         ngp_field_(ngp_field) {
   }
+
+  /// \brief Default copy/move/assign constructors
+  NgpFieldComponent(const NgpFieldComponent&) = default;
+  NgpFieldComponent(NgpFieldComponent&&) = default;
+  NgpFieldComponent& operator=(const NgpFieldComponent&) = default;
+  NgpFieldComponent& operator=(NgpFieldComponent&&) = default;
 
   KOKKOS_INLINE_FUNCTION
   decltype(auto) operator()(stk::mesh::FastMeshIndex entity_index) const {
@@ -219,6 +245,12 @@ class ScalarFieldComponent : public FieldComponentBase {
   ScalarFieldComponent(stk::mesh::Field<ScalarType>& field) : FieldComponentBase(field), field_(field) {
   }
 
+  /// \brief Default copy/move/assign constructors
+  ScalarFieldComponent(const ScalarFieldComponent&) = default;
+  ScalarFieldComponent(ScalarFieldComponent&&) = default;
+  ScalarFieldComponent& operator=(const ScalarFieldComponent&) = default;
+  ScalarFieldComponent& operator=(ScalarFieldComponent&&) = default;
+
   /// \brief Fetch the value of the field at the given entity
   inline decltype(auto) operator()(stk::mesh::Entity entity) const {
     return scalar_field_data(field_, entity);
@@ -248,6 +280,12 @@ class NgpScalarFieldComponent : public NgpFieldComponentBase {
 #endif
         ngp_field_(ngp_field) {
   }
+
+  /// \brief Default copy/move/assign constructors
+  NgpScalarFieldComponent(const NgpScalarFieldComponent&) = default;
+  NgpScalarFieldComponent(NgpScalarFieldComponent&&) = default;
+  NgpScalarFieldComponent& operator=(const NgpScalarFieldComponent&) = default;
+  NgpScalarFieldComponent& operator=(NgpScalarFieldComponent&&) = default;
 
   /// \brief Fetch the value of the field at the given entity index
   KOKKOS_INLINE_FUNCTION
@@ -293,6 +331,12 @@ class Vector3FieldComponent : public FieldComponentBase {
   Vector3FieldComponent(stk::mesh::Field<ScalarType>& field) : FieldComponentBase(field), field_(field) {
   }
 
+  /// \brief Default copy/move/assign constructors
+  Vector3FieldComponent(const Vector3FieldComponent&) = default;
+  Vector3FieldComponent(Vector3FieldComponent&&) = default;
+  Vector3FieldComponent& operator=(const Vector3FieldComponent&) = default;
+  Vector3FieldComponent& operator=(Vector3FieldComponent&&) = default;
+
   inline decltype(auto) operator()(stk::mesh::Entity entity) const {
     return vector3_field_data(field_, entity);
   }
@@ -321,6 +365,12 @@ class NgpVector3FieldComponent : public NgpFieldComponentBase {
 #endif
         ngp_field_(ngp_field) {
   }
+
+  /// \brief Default copy/move/assign constructors
+  NgpVector3FieldComponent(const NgpVector3FieldComponent&) = default;
+  NgpVector3FieldComponent(NgpVector3FieldComponent&&) = default;
+  NgpVector3FieldComponent& operator=(const NgpVector3FieldComponent&) = default;
+  NgpVector3FieldComponent& operator=(NgpVector3FieldComponent&&) = default;
 
   KOKKOS_INLINE_FUNCTION
   decltype(auto) operator()(stk::mesh::FastMeshIndex entity_index) const {
@@ -365,6 +415,12 @@ class Matrix3FieldComponent : public FieldComponentBase {
   Matrix3FieldComponent(stk::mesh::Field<ScalarType>& field) : FieldComponentBase(field), field_(field) {
   }
 
+  /// \brief Default copy/move/assign constructors
+  Matrix3FieldComponent(const Matrix3FieldComponent&) = default;
+  Matrix3FieldComponent(Matrix3FieldComponent&&) = default;
+  Matrix3FieldComponent& operator=(const Matrix3FieldComponent&) = default;
+  Matrix3FieldComponent& operator=(Matrix3FieldComponent&&) = default;
+
   inline decltype(auto) operator()(stk::mesh::Entity entity) const {
     return matrix3_field_data(field_, entity);
   }
@@ -393,6 +449,12 @@ class NgpMatrix3FieldComponent : public NgpFieldComponentBase {
 #endif
         ngp_field_(ngp_field) {
   }
+
+  /// \brief Default copy/move/assign constructors
+  NgpMatrix3FieldComponent(const NgpMatrix3FieldComponent&) = default;
+  NgpMatrix3FieldComponent(NgpMatrix3FieldComponent&&) = default;
+  NgpMatrix3FieldComponent& operator=(const NgpMatrix3FieldComponent&) = default;
+  NgpMatrix3FieldComponent& operator=(NgpMatrix3FieldComponent&&) = default;
 
   KOKKOS_INLINE_FUNCTION
   decltype(auto) operator()(stk::mesh::FastMeshIndex entity_index) const {
@@ -437,6 +499,12 @@ class QuaternionFieldComponent : public FieldComponentBase {
   QuaternionFieldComponent(stk::mesh::Field<ScalarType>& field) : FieldComponentBase(field), field_(field) {
   }
 
+  /// \brief Default copy/move/assign constructors
+  QuaternionFieldComponent(const QuaternionFieldComponent&) = default;
+  QuaternionFieldComponent(QuaternionFieldComponent&&) = default;
+  QuaternionFieldComponent& operator=(const QuaternionFieldComponent&) = default;
+  QuaternionFieldComponent& operator=(QuaternionFieldComponent&&) = default;
+
   inline decltype(auto) operator()(stk::mesh::Entity entity) const {
     return quaternion_field_data(field_, entity);
   }
@@ -463,9 +531,14 @@ class NgpQuaternionFieldComponent : public NgpFieldComponentBase {
 #else
       : NgpFieldComponentBase(),
 #endif
-
         ngp_field_(ngp_field) {
   }
+
+  /// \brief Default copy/move/assign constructors
+  NgpQuaternionFieldComponent(const NgpQuaternionFieldComponent&) = default;
+  NgpQuaternionFieldComponent(NgpQuaternionFieldComponent&&) = default;
+  NgpQuaternionFieldComponent& operator=(const NgpQuaternionFieldComponent&) = default;
+  NgpQuaternionFieldComponent& operator=(NgpQuaternionFieldComponent&&) = default;
 
   KOKKOS_INLINE_FUNCTION
   decltype(auto) operator()(stk::mesh::FastMeshIndex entity_index) const {
@@ -505,6 +578,12 @@ class AABBFieldComponent : public FieldComponentBase {
   AABBFieldComponent(stk::mesh::Field<ScalarType>& field) : FieldComponentBase(field), field_(field) {
   }
 
+  /// \brief Default copy/move/assign constructors
+  AABBFieldComponent(const AABBFieldComponent&) = default;
+  AABBFieldComponent(AABBFieldComponent&&) = default;
+  AABBFieldComponent& operator=(const AABBFieldComponent&) = default;
+  AABBFieldComponent& operator=(AABBFieldComponent&&) = default;
+
   inline decltype(auto) operator()(stk::mesh::Entity entity) const {
     return aabb_field_data(field_, entity);
   }
@@ -534,6 +613,12 @@ class NgpAABBFieldComponent : public NgpFieldComponentBase {
 
         ngp_field_(ngp_field) {
   }
+
+  /// \brief Default copy/move/assign constructors
+  NgpAABBFieldComponent(const NgpAABBFieldComponent&) = default;
+  NgpAABBFieldComponent(NgpAABBFieldComponent&&) = default;
+  NgpAABBFieldComponent& operator=(const NgpAABBFieldComponent&) = default;
+  NgpAABBFieldComponent& operator=(NgpAABBFieldComponent&&) = default;
 
   KOKKOS_INLINE_FUNCTION
   decltype(auto) operator()(stk::mesh::FastMeshIndex entity_index) const {
@@ -577,6 +662,12 @@ class TaggedComponent {
 
   TaggedComponent(component_type component) : component_(component) {
   }
+
+  /// \brief Default copy/move/assign constructors
+  TaggedComponent(const TaggedComponent&) = default;
+  TaggedComponent(TaggedComponent&&) = default;
+  TaggedComponent& operator=(const TaggedComponent&) = default;
+  TaggedComponent& operator=(TaggedComponent&&) = default;
 
   inline decltype(auto) operator()(stk::mesh::Entity entity) const {
     return component_(entity);
@@ -622,6 +713,12 @@ class NgpTaggedComponent {
   NgpTaggedComponent() = default;
   NgpTaggedComponent(component_type component) : component_(component) {
   }
+
+  /// \brief Default copy/move/assign constructors
+  NgpTaggedComponent(const NgpTaggedComponent&) = default;
+  NgpTaggedComponent(NgpTaggedComponent&&) = default;
+  NgpTaggedComponent& operator=(const NgpTaggedComponent&) = default;
+  NgpTaggedComponent& operator=(NgpTaggedComponent&&) = default;
 
   KOKKOS_INLINE_FUNCTION
   decltype(auto) operator()(stk::mesh::FastMeshIndex entity_index) const {
@@ -776,6 +873,24 @@ KOKKOS_FUNCTION static constexpr bool all_have_rank_impl(const core::tuple<Compo
                                                          std::index_sequence<Is...>) {
   return all_have_rank_recurse_impl<rank>(core::get<Components>(tuple)...);
 }
+
+/// \brief A helper class for wrapping a functor(view) with an operator()(FastMeshIndex)
+template <typename NgpAggregateType, typename FunctorType>
+class NgpFunctorWrapper {
+ public:
+  NgpFunctorWrapper(NgpAggregateType agg, const FunctorType& functor) : agg_(agg), functor_{functor} {
+  }
+
+  KOKKOS_FUNCTION
+  void operator()(stk::mesh::FastMeshIndex entity_index) const {
+    auto view = agg_.get_view(entity_index);
+    functor_(view);
+  }
+
+ private:
+  NgpAggregateType agg_;
+  FunctorType functor_;
+};  // NgpFunctorWrapper
 
 }  // namespace impl
 
@@ -1059,6 +1174,12 @@ class Aggregate {
     requires(sizeof...(Components) > 0)
       : bulk_data_(bulk_data), selector_(std::move(selector)), components_(std::move(components)) {
   }
+
+  /// \brief Default copy/move/assign constructors
+  Aggregate(const Aggregate&) = default;
+  Aggregate(Aggregate&&) = default;
+  Aggregate& operator=(const Aggregate&) = default;
+  Aggregate& operator=(Aggregate&&) = default;
   //@}
 
   //! \name Accessors
@@ -1072,6 +1193,9 @@ class Aggregate {
   }
   const stk::mesh::BulkData& bulk_data() const {
     return bulk_data_;
+  }
+  const stk::mesh::MetaData& mesh_meta_data() const {
+    return bulk_data_.mesh_meta_data();
   }
   const stk::mesh::Selector& selector() const {
     return selector_;
@@ -1195,6 +1319,26 @@ class NgpAggregate {
     requires(sizeof...(NgpComponents) > 0)
       : ngp_mesh_(ngp_mesh), host_selector_(std::move(selector)), ngp_components_(std::move(ngp_components)) {
   }
+
+  /// \brief Default move/copy/assign constructors
+  NgpAggregate(NgpAggregate&& other)
+      : ngp_mesh_(other.ngp_mesh_), host_selector_(other.host_selector_), ngp_components_(other.ngp_components_) {
+  }
+  NgpAggregate(const NgpAggregate& other)
+      : ngp_mesh_(other.ngp_mesh_), host_selector_(other.host_selector_), ngp_components_(other.ngp_components_) {
+  }
+  NgpAggregate& operator=(NgpAggregate&& other) {
+    ngp_mesh_ = other.ngp_mesh_;
+    host_selector_ = other.host_selector_;
+    ngp_components_ = other.ngp_components_;
+    return *this;
+  }
+  NgpAggregate& operator=(const NgpAggregate& other) {
+    ngp_mesh_ = other.ngp_mesh_;
+    host_selector_ = other.host_selector_;
+    ngp_components_ = other.ngp_components_;
+    return *this;
+  }
   //@}
 
   //! \name Accessors
@@ -1213,6 +1357,14 @@ class NgpAggregate {
   KOKKOS_INLINE_FUNCTION
   const stk::mesh::NgpMesh& ngp_mesh() const {
     return ngp_mesh_;
+  }
+
+  const stk::mesh::BulkData& bulk_data() const {
+    return ngp_mesh_.get_bulk_on_host();
+  }
+
+  const stk::mesh::MetaData& mesh_meta_data() const {
+    return ngp_mesh_.get_bulk_on_host().mesh_meta_data();
   }
 
   const stk::mesh::Selector& selector() const {
@@ -1279,26 +1431,26 @@ class NgpAggregate {
   /// \brief Apply a functor on the EntityView of each entity in the current data aggregate that is also in the given
   /// subset selector
   template <typename Functor>
-  void for_each(const stk::mesh::Selector& subset_selector, const Functor& f) const {
+  inline void for_each(const stk::mesh::Selector& subset_selector, const Functor& f) const {
     // Only loop over the set intersection of the agg's selector and the subset selector
-    auto agg = *this;
+    using our_t = NgpAggregate<OurTopology, OurRank, NgpComponents...>;
+    our_t agg = *this;
+
+    auto local_ngp_mesh = agg.ngp_mesh();
+    impl::NgpFunctorWrapper<our_t, Functor> wrapper(agg, f);
     stk::mesh::Selector sel = agg.selector() & subset_selector;
-    stk::mesh::for_each_entity_run(
-        agg.ngp_mesh(), agg.rank(), sel, KOKKOS_LAMBDA(const stk::mesh::FastMeshIndex& sphere_index) {
-          auto view = agg.get_view(sphere_index);
-          f(view);
-        });
+    stk::mesh::for_each_entity_run(local_ngp_mesh, agg.rank(), sel, wrapper);
   }
 
   /// \brief Apply a functor on the EntityView of each entity in the current data aggregate
   template <typename Functor>
-  void for_each(const Functor& f) const {
-    auto agg = *this;
-    stk::mesh::for_each_entity_run(
-        agg.ngp_mesh(), agg.rank(), agg.selector(), KOKKOS_LAMBDA(const stk::mesh::FastMeshIndex& sphere_index) {
-          auto view = agg.get_view(sphere_index);
-          f(view);
-        });
+  inline void for_each(const Functor& f) const {
+    using our_t = NgpAggregate<OurTopology, OurRank, NgpComponents...>;
+    our_t agg = *this;
+
+    auto local_ngp_mesh = agg.ngp_mesh();
+    impl::NgpFunctorWrapper<our_t, Functor> wrapper(agg, f);
+    stk::mesh::for_each_entity_run(local_ngp_mesh, agg.rank(), agg.selector(), wrapper);
   }
 
  private:
@@ -1516,9 +1668,8 @@ class NgpEntityView {
     const auto connected_entities = ngp_mesh_.get_connected_entities(OurRank, entity_index_, comp_rank);
 
     MUNDY_THROW_ASSERT(connected_entities.size() > connectivity_ordinal, std::runtime_error,
-                       fmt::format("EntityView::get() called with connectivity_ordinal {} but entity has only {} "
-                                   "connectivities of rank {}",
-                                   connectivity_ordinal, connected_entities.size(), comp_rank));
+                       "EntityView::get() called with a connectivity ordinal that exceeds the number of connected "
+                       "entities of the tag rank");
 
     const stk::mesh::FastMeshIndex connected_entity_index =
         ngp_mesh_.fast_mesh_index(connected_entities[connectivity_ordinal]);
@@ -1539,9 +1690,8 @@ class NgpEntityView {
     const auto connected_entities = ngp_mesh_.get_connected_entities(OurRank, entity_index_, comp_rank);
 
     MUNDY_THROW_ASSERT(connected_entities.size() > connectivity_ordinal, std::runtime_error,
-                       fmt::format("EntityView::get() called with connectivity_ordinal {} but entity has only {} "
-                                   "connectivities of rank {}",
-                                   connectivity_ordinal, connected_entities.size(), comp_rank));
+                       "EntityView::get() called with a connectivity ordinal that exceeds the number of connected "
+                       "entities of the tag rank");
 
     const stk::mesh::FastMeshIndex connected_entity_index =
         ngp_mesh_.fast_mesh_index(connected_entities[connectivity_ordinal]);

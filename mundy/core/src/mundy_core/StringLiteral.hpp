@@ -103,11 +103,11 @@ struct StringLiteral {
   /// \param rhs The right-hand side of the concatenation
   /// \return A new StringLiteral with the combined content of the two input StringLiterals
   template <size_t OtherStrSize>
-  KOKKOS_INLINE_FUNCTION constexpr StringLiteral<StrSize + OtherStrSize> operator+(
+  KOKKOS_INLINE_FUNCTION constexpr StringLiteral<StrSize + OtherStrSize - 1> operator+(
       const StringLiteral<OtherStrSize>& rhs) const {
-    StringLiteral<StrSize + OtherStrSize> result;
-    copy_char_arrays(std::make_index_sequence<StrSize>(), value, result.value);
-    copy_char_arrays_shift(std::make_index_sequence<OtherStrSize>(), rhs.value, result.value, 0, StrSize);
+    StringLiteral<StrSize + OtherStrSize - 1> result;
+    copy_char_arrays(std::make_index_sequence<StrSize - 1>(), value, result.value);  // Don't copy the null terminator
+    copy_char_arrays_shift(std::make_index_sequence<OtherStrSize>(), rhs.value, result.value, 0, StrSize - 1);
     return result;
   }
 
@@ -115,11 +115,11 @@ struct StringLiteral {
   /// \param rhs The right-hand side of the concatenation
   /// \return A new StringLiteral with the combined content of the input StringLiteral and char array
   template <size_t OtherStrSize>
-  KOKKOS_INLINE_FUNCTION constexpr StringLiteral<StrSize + OtherStrSize> operator+(
+  KOKKOS_INLINE_FUNCTION constexpr StringLiteral<StrSize + OtherStrSize - 1> operator+(
       const char (&rhs)[OtherStrSize]) const {
-    StringLiteral<StrSize + OtherStrSize> result;
-    copy_char_arrays(std::make_index_sequence<StrSize>(), value, result.value);
-    copy_char_arrays_shift(std::make_index_sequence<OtherStrSize>(), rhs, result.value, 0, StrSize);
+    StringLiteral<StrSize + OtherStrSize - 1> result;
+    copy_char_arrays(std::make_index_sequence<StrSize - 1>(), value, result.value);
+    copy_char_arrays_shift(std::make_index_sequence<OtherStrSize>(), rhs, result.value, 0, StrSize - 1);
     return result;
   }
 
@@ -176,43 +176,25 @@ KOKKOS_INLINE_FUNCTION constexpr StringLiteral<N> make_string_literal(const char
   return StringLiteral<N>(str);
 }
 
-//! \name Helpers for determining if an object is a string literal (type traits fails for string literals)
-//@{
-
-template <typename T>
-KOKKOS_INLINE_FUNCTION constexpr bool is_string_literal([[maybe_unused]] T t) {
-  return false;
-}
-
-template <size_t N>
-KOKKOS_INLINE_FUNCTION constexpr bool is_string_literal([[maybe_unused]] const char (&str)[N]) {
-  return true;
-}
-
-template <typename T>
-KOKKOS_INLINE_FUNCTION constexpr bool is_mundy_string_literal([[maybe_unused]] T t) {
-  return false;
-}
-
-template <size_t N>
-KOKKOS_INLINE_FUNCTION constexpr bool is_mundy_string_literal([[maybe_unused]] const StringLiteral<N>& str) {
-  return true;
-}
-
-template <typename T>
-concept ConstexprDefaultConstructible = requires { []() constexpr { T{}; }(); };
-
-template <typename T>
-constexpr bool is_string_literal_v =
-    ConstexprDefaultConstructible<std::remove_cv_t<T>> && is_string_literal(std::remove_cv_t<T>{});
-
-template <typename T>
-constexpr bool is_mundy_string_literal_v =
-    ConstexprDefaultConstructible<std::remove_cv_t<T>> && is_mundy_string_literal(std::remove_cv_t<T>{});
-//@}
-
 }  // namespace core
 
 }  // namespace mundy
+
+//! \name Helpers for determining if an object is a string literal (type traits fails for string literals)
+//@{
+
+#define MUNDY_IS_CHAR_ARRAY(x) ([&]<class __T = char>() constexpr {       \
+    return std::is_same_v<__T const (&)[sizeof(x)], decltype(x)>;    \
+}())
+
+#define MUNDY_IS_STRING_LITERAL(x)                                          \
+  ([&]<class __mundy_T = char>() constexpr {                                \
+    return std::is_same_v<__mundy_T const(&)[sizeof(x)], decltype(x)> &&    \
+           requires { std::type_identity_t<__mundy_T[sizeof(x) + 1]>{x}; }; \
+  }())
+
+#define MUNDY_IS_OUR_STRING_LITERAL(x) \
+  (std::is_same_v<mundy::core::StringLiteral<sizeof(x)>, std::decay_t<decltype(x)>>)
+//@}
 
 #endif  // MUNDY_CORE_STRINGLITERAL_HPP_

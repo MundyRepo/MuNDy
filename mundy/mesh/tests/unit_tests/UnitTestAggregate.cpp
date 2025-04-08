@@ -277,11 +277,18 @@ TEST(UnitTestAggregate, BasicUsage) {
   });
 }
 
-TEST(UnitTestAggregate, CanonicalExample) {
-  if (stk::parallel_machine_size(MPI_COMM_WORLD) != 1) {
-    GTEST_SKIP();
+struct a_non_lambda_functor {
+  KOKKOS_INLINE_FUNCTION
+  int operator()(auto& sphere_view) const {
+    auto c = sphere_view.template get<CENTER>(0);
+    auto r = sphere_view.template get<COLLISION_RADIUS>();
+    c[0] += 1.0;
+    r += 1.0;
+    return 2;
   }
+};
 
+void run_canonical_test() {
   // Setup
   stk::mesh::MeshBuilder builder(MPI_COMM_WORLD);
   builder.set_spatial_dimension(3);
@@ -359,13 +366,17 @@ TEST(UnitTestAggregate, CanonicalExample) {
   EXPECT_TRUE(ngp_sphere_data.ngp_mesh().get_spatial_dimension() == 3)
       << "If this works, we know that the NgpMesh was not default constructed";
 
-  ngp_sphere_data.sync_to_device<CENTER, VELOCITY>();
-  ngp_sphere_data.for_each(KOKKOS_LAMBDA(auto& sphere_view) {
-    auto c = get<CENTER>(sphere_view, 0);
-    auto v = get<VELOCITY>(sphere_view, 0);
-    c += dt * v;
-  });
-  ngp_sphere_data.modify_on_device<CENTER>();
+  ngp_sphere_data.template sync_to_device<CENTER, COLLISION_RADIUS>();
+  ngp_sphere_data.template for_each(a_non_lambda_functor{});
+  ngp_sphere_data.template modify_on_device<CENTER, COLLISION_RADIUS>();
+}
+
+TEST(UnitTestAggregate, CanonicalExample) {
+  if (stk::parallel_machine_size(MPI_COMM_WORLD) != 1) {
+    GTEST_SKIP();
+  }
+
+  run_canonical_test();
 }
 
 }  // namespace

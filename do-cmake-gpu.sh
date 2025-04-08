@@ -19,10 +19,10 @@ export CUDA_MANAGED_FORCE_DEVICE_ALLOC=1
 # will not be run
 
 cmake \
--DCMAKE_BUILD_TYPE=${BUILD_TYPE:-RELEASE} \
+-DCMAKE_BUILD_TYPE=${BUILD_TYPE:-DEBUG} \
 -DCMAKE_CXX_COMPILER=${OMPI_CXX} \
 -DCMAKE_INSTALL_PREFIX=${INSTALL_DIR:-$HOME/envs/MundyScratch} \
--DCMAKE_CXX_FLAGS="-O3 -march=native -Wall -Wextra -Wdouble-promotion -Wconversion -lmpi" \
+-DCMAKE_CXX_FLAGS="-O3 -march=native -Wall -Wextra -Wdouble-promotion -Wconversion -lmpi -lcuda" \
 -DTPL_ENABLE_MPI=ON \
 -DTPL_ENABLE_CUDA=ON \
 -DMPI_BASE_DIR=${OPENMPI_BASE} \
@@ -34,16 +34,17 @@ cmake \
 -DKokkos_ENABLE_CUDA_RELOCATABLE_DEVICE_CODE=OFF \
 -DMundy_ENABLE_MundyCore=ON \
 -DMundy_ENABLE_MundyMath=ON \
+-DMundy_ENABLE_MundyGeom=ON \
 -DMundy_ENABLE_MundyMesh=ON \
--DMundy_ENABLE_MundyMeta=OFF \
--DMundy_ENABLE_MundyAgents=OFF \
--DMundy_ENABLE_MundyShapes=OFF \
--DMundy_ENABLE_MundyLinkers=OFF \
--DMundy_ENABLE_MundyIo=OFF \
--DMundy_ENABLE_MundyConstraints=OFF \
+-DMundy_ENABLE_MundyMeta=ON \
+-DMundy_ENABLE_MundyAgents=ON \
+-DMundy_ENABLE_MundyShapes=ON \
+-DMundy_ENABLE_MundyLinkers=ON \
+-DMundy_ENABLE_MundyIo=ON \
+-DMundy_ENABLE_MundyConstraints=ON \
 -DMundy_ENABLE_MundyBalance=OFF \
 -DMundy_ENABLE_MundyMotion=OFF \
--DMundy_ENABLE_MundyAlens=OFF \
+-DMundy_ENABLE_MundyAlens=ON \
 -DMundy_ENABLE_MundyDriver=OFF \
 -DMundy_ENABLE_TESTS=ON \
 -DMundy_ENABLE_GTest=ON \

@@ -21,7 +21,7 @@ SET(NOINSTALLHEADERS
   src/mundy_mesh/FieldViews.hpp
   src/mundy_mesh/fmt_stk_types.hpp
   src/mundy_mesh/ForEachEntity.hpp
-  src/mundy_mesh/GenerateNeighborLinkers.hpp
+  src/mundy_mesh/GenNeighborLinkers.hpp
   src/mundy_mesh/impl/LinkedBucketConn.hpp
   src/mundy_mesh/impl/NgpFieldBLASImpl.hpp
   src/mundy_mesh/LinkData.hpp

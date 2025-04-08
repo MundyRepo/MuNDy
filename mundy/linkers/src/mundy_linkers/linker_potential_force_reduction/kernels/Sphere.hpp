@@ -114,8 +114,7 @@ class Sphere : public mundy::meta::MetaKernel<> {
     {
       const std::string part_name = name_of_linker_part_to_reduce_over;
       auto part_reqs = std::make_shared<mundy::meta::PartReqs>();
-      part_reqs->set_part_name(part_name);
-      part_reqs->set_part_rank(stk::topology::CONSTRAINT_RANK);
+      part_reqs->set_part_name(part_name).set_part_rank(stk::topology::CONSTRAINT_RANK);
       part_reqs->add_field_reqs<double>(linker_potential_force_field_name, stk::topology::CONSTRAINT_RANK, 3, 1);
 
       if (part_name == NeighborLinkers::get_name()) {

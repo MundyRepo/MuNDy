@@ -170,6 +170,19 @@ struct tuple_impl<std::index_sequence<Idx...>, Elements...> : public tuple_membe
       : tuple_member<Elements, Idx>{vals}... {
   }
 
+  /// \brief Default copy/move/assign constructors
+  KOKKOS_FUNCTION
+  constexpr tuple_impl(const tuple_impl&) = default;
+  
+  KOKKOS_FUNCTION
+  constexpr tuple_impl(tuple_impl&&) = default;
+
+  KOKKOS_FUNCTION
+  constexpr tuple_impl& operator=(const tuple_impl&) = default;
+
+  KOKKOS_FUNCTION
+  constexpr tuple_impl& operator=(tuple_impl&&) = default;
+
   template <size_t N>
   KOKKOS_FUNCTION constexpr auto& get() {
     using base_t = decltype((tuple_idx_matcher<N, Idx, Elements>() | ...));
@@ -199,6 +212,19 @@ struct tuple : public tuple_impl<decltype(std::make_index_sequence<sizeof...(Ele
     requires(sizeof...(Elements) > 0)
       : tuple_impl<decltype(std::make_index_sequence<sizeof...(Elements)>()), Elements...>(vals...) {
   }
+
+  /// \brief Default copy/move/assign constructors
+  KOKKOS_FUNCTION
+  constexpr tuple(const tuple&) = default;
+
+  KOKKOS_FUNCTION
+  constexpr tuple(tuple&&) = default;
+
+  KOKKOS_FUNCTION
+  constexpr tuple& operator=(const tuple&) = default;
+
+  KOKKOS_FUNCTION
+  constexpr tuple& operator=(tuple&&) = default;
 };
 
 template <size_t Idx, class... Args>

@@ -108,25 +108,25 @@ inline auto aabb_field_data(const FieldType& f, stk::mesh::Entity e,
 
 /// \brief A helper function for getting a view of a field's data as a ScalarWrapper.
 template <class FieldType>
-inline auto scalar_field_data(FieldType& f, const stk::mesh::FastMeshIndex& i) {
+KOKKOS_INLINE_FUNCTION auto scalar_field_data(FieldType& f, const stk::mesh::FastMeshIndex& i) {
   return math::get_owning_scalar<typename FieldType::value_type>(f(i));
 }
 
 /// \brief A helper function for getting a view of a field's data as a Vector3
 template <class FieldType>
-inline auto vector3_field_data(FieldType& f, const stk::mesh::FastMeshIndex& i) {
+KOKKOS_INLINE_FUNCTION auto vector3_field_data(FieldType& f, const stk::mesh::FastMeshIndex& i) {
   return math::get_owning_vector3<typename FieldType::value_type>(f(i));
 }
 
 /// \brief A helper function for getting a view of a field's data as a Quaternion
 template <class FieldType>
-inline auto quaternion_field_data(FieldType& f, const stk::mesh::FastMeshIndex& i) {
+KOKKOS_INLINE_FUNCTION auto quaternion_field_data(FieldType& f, const stk::mesh::FastMeshIndex& i) {
   return math::get_owning_quaternion<typename FieldType::value_type>(f(i));
 }
 
 /// \brief A helper function for getting a view of a field's data as a Matrix3
 template <class FieldType>
-inline auto matrix3_field_data(FieldType& f, const stk::mesh::FastMeshIndex& i) {
+KOKKOS_INLINE_FUNCTION auto matrix3_field_data(FieldType& f, const stk::mesh::FastMeshIndex& i) {
   return math::get_owning_matrix3<typename FieldType::value_type>(f(i));
 }
 //@}

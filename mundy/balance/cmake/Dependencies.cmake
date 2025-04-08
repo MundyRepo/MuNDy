@@ -6,5 +6,5 @@ tribits_package_define_dependencies(
   LIB_REQUIRED_TPLS STK Teuchos fmt
   LIB_OPTIONAL_TPLS MPI
   TEST_REQUIRED_TPLS GTest
-  TEST_OPTIONAL_TPLS
+  TEST_OPTIONAL_TPLS CUDA
   )

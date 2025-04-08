@@ -48,6 +48,7 @@ a single GPU.
 #include <sstream>
 #include <string>
 #include <vector>
+#include <numeric>
 
 // Kokkos and Kokkos-Kernels
 #include <KokkosBlas.hpp>
@@ -78,7 +79,6 @@ double quake_inv_sqrt(double number) {
   //      y  = y * ( 1.5 - ( x2 * y * y ) );   // 2nd iteration, this can be removed (left out of respect for Quake)
   return y;
 }
-
 
 /// \brief Get the Gauss Legrandre-based quadrature weights, nodes, and normals for a sphere
 ///
@@ -1867,38 +1867,39 @@ void apply_skfie([[maybe_unused]] const ExecutionSpace &space,          //
                                                    skfie_contribution);
 }
 
-class Periphery {
+template<typename ExecSpace>
+class PeripheryT {
  public:
   //! \name Types
   //@{
 
-  using DeviceExecutionSpace = Kokkos::DefaultExecutionSpace;
-  using DeviceMemorySpace = typename DeviceExecutionSpace::memory_space;
+  using DeviceExecutionSpace = ExecSpace;
+  using DeviceMemorySpace = typename ExecSpace::memory_space;
   //@}
 
   //! \name Constructors and destructor
   //@{
 
   /// \brief No default constructor
-  Periphery() = delete;
+  PeripheryT() = delete;
 
   /// \brief No copy constructor
-  Periphery(const Periphery &) = delete;
+  PeripheryT(const PeripheryT &) = delete;
 
   /// \brief No copy assignment
-  Periphery &operator=(const Periphery &) = delete;
+  PeripheryT &operator=(const PeripheryT &) = delete;
 
   /// \brief Default move constructor
-  Periphery(Periphery &&) = default;
+  PeripheryT(PeripheryT &&) = default;
 
   /// \brief Default move assignment
-  Periphery &operator=(Periphery &&) = default;
+  PeripheryT &operator=(PeripheryT &&) = default;
 
   /// \brief Destructor
-  ~Periphery() = default;
+  ~PeripheryT() = default;
 
   /// \brief Constructor
-  Periphery(const size_t num_surface_nodes, const double viscosity)
+  PeripheryT(const size_t num_surface_nodes, const double viscosity)
       : num_surface_nodes_(num_surface_nodes),
         viscosity_(viscosity),
         is_surface_positions_set_(false),
@@ -1927,7 +1928,7 @@ class Periphery {
   ///
   /// \param surface_positions The surface positions (size num_nodes * 3)
   template <class MemorySpace, class Layout>
-  Periphery &set_surface_positions(const Kokkos::View<double *, Layout, MemorySpace> &surface_positions) {
+  PeripheryT &set_surface_positions(const Kokkos::View<double *, Layout, MemorySpace> &surface_positions) {
     MUNDY_THROW_ASSERT(surface_positions.extent(0) == 3 * num_surface_nodes_, std::invalid_argument,
                        "set_surface_positions: surface_positions must have size 3 * num_surface_nodes.");
     Kokkos::deep_copy(surface_positions_, surface_positions);
@@ -1939,7 +1940,7 @@ class Periphery {
   /// \brief Set the surface positions
   ///
   /// \param surface_positions The surface positions (size num_nodes * 3)
-  Periphery &set_surface_positions(const double *surface_positions) {
+  PeripheryT &set_surface_positions(const double *surface_positions) {
     for (size_t i = 0; i < num_surface_nodes_; ++i) {
       for (size_t j = 0; j < 3; ++j) {
         const size_t idx = 3 * i + j;
@@ -1955,7 +1956,7 @@ class Periphery {
   /// \brief Set the surface positions
   ///
   /// \param surface_positions_filename The filename to read the surface positions from
-  Periphery &set_surface_positions(const std::string &surface_positions_filename) {
+  PeripheryT &set_surface_positions(const std::string &surface_positions_filename) {
     read_vector_from_file(surface_positions_filename, 3 * num_surface_nodes_, surface_positions_host_);
     Kokkos::deep_copy(surface_positions_, surface_positions_host_);
     is_surface_positions_set_ = true;
@@ -1967,7 +1968,7 @@ class Periphery {
   ///
   /// \param surface_normals The surface normals (size num_nodes * 3)
   template <class MemorySpace, class Layout>
-  Periphery &set_surface_normals(const Kokkos::View<double *, Layout, MemorySpace> &surface_normals) {
+  PeripheryT &set_surface_normals(const Kokkos::View<double *, Layout, MemorySpace> &surface_normals) {
     MUNDY_THROW_ASSERT(surface_normals.extent(0) == 3 * num_surface_nodes_, std::invalid_argument,
                        "set_surface_normals: surface_normals must have size 3 * num_surface_nodes.");
     Kokkos::deep_copy(surface_normals_, surface_normals);
@@ -1979,7 +1980,7 @@ class Periphery {
   /// \brief Set the surface normals
   ///
   /// \param surface_normals The surface normals (size num_nodes * 3)
-  Periphery &set_surface_normals(const double *surface_normals) {
+  PeripheryT &set_surface_normals(const double *surface_normals) {
     for (size_t i = 0; i < num_surface_nodes_; ++i) {
       for (size_t j = 0; j < 3; ++j) {
         const size_t idx = 3 * i + j;
@@ -1995,7 +1996,7 @@ class Periphery {
   /// \brief Set the surface normals
   ///
   /// \param surface_normals_filename The filename to read the surface normals from
-  Periphery &set_surface_normals(const std::string &surface_normals_filename) {
+  PeripheryT &set_surface_normals(const std::string &surface_normals_filename) {
     read_vector_from_file(surface_normals_filename, 3 * num_surface_nodes_, surface_normals_host_);
     Kokkos::deep_copy(surface_normals_, surface_normals_host_);
     is_surface_normals_set_ = true;
@@ -2007,7 +2008,7 @@ class Periphery {
   ///
   /// \param quadrature_weights The quadrature weights (size num_nodes)
   template <class MemorySpace, class Layout>
-  Periphery &set_quadrature_weights(const Kokkos::View<double *, Layout, MemorySpace> &quadrature_weights) {
+  PeripheryT &set_quadrature_weights(const Kokkos::View<double *, Layout, MemorySpace> &quadrature_weights) {
     MUNDY_THROW_ASSERT(quadrature_weights.extent(0) == num_surface_nodes_, std::invalid_argument,
                        "set_quadrature_weights: quadrature_weights must have size num_surface_nodes.");
     Kokkos::deep_copy(quadrature_weights_, quadrature_weights);
@@ -2019,7 +2020,7 @@ class Periphery {
   /// \brief Set the quadrature weights
   ///
   /// \param quadrature_weights The quadrature weights (size num_nodes)
-  Periphery &set_quadrature_weights(const double *quadrature_weights) {
+  PeripheryT &set_quadrature_weights(const double *quadrature_weights) {
     for (size_t i = 0; i < num_surface_nodes_; ++i) {
       quadrature_weights_host_(i) = quadrature_weights[i];
     }
@@ -2032,7 +2033,7 @@ class Periphery {
   /// \brief Set the quadrature weights
   ///
   /// \param quadrature_weights_filename The filename to read the quadrature weights from
-  Periphery &set_quadrature_weights(const std::string &quadrature_weights_filename) {
+  PeripheryT &set_quadrature_weights(const std::string &quadrature_weights_filename) {
     read_vector_from_file(quadrature_weights_filename, num_surface_nodes_, quadrature_weights_host_);
     Kokkos::deep_copy(quadrature_weights_, quadrature_weights_host_);
     is_quadrature_weights_set_ = true;
@@ -2044,7 +2045,7 @@ class Periphery {
   ///
   /// \param M_inv The precomputed matrix (size 3 * num_nodes x 3 * num_nodes)
   template <class MemorySpace>
-  Periphery &set_inverse_self_interaction_matrix(
+  PeripheryT &set_inverse_self_interaction_matrix(
       const Kokkos::View<double **, Kokkos::LayoutLeft, MemorySpace> &M_inv) {
     MUNDY_THROW_ASSERT(
         (M_inv.extent(0) == 3 * num_surface_nodes_) && (M_inv.extent(1) == 3 * num_surface_nodes_),
@@ -2059,7 +2060,7 @@ class Periphery {
   /// \brief Set the precomputed matrix
   ///
   /// \param M_inv The precomputed matrix (size 3 * num_nodes x 3 * num_nodes)
-  Periphery &set_inverse_self_interaction_matrix(const double *M_inv_flat) {
+  PeripheryT &set_inverse_self_interaction_matrix(const double *M_inv_flat) {
     for (size_t i = 0; i < 3 * num_surface_nodes_; ++i) {
       for (size_t j = 0; j < 3 * num_surface_nodes_; ++j) {
         const size_t idx = i * num_surface_nodes_ + j;
@@ -2075,7 +2076,7 @@ class Periphery {
   /// \brief Set the precomputed matrix
   ///
   /// \param inverse_self_interaction_matrix_filename The filename to read the precomputed matrix from
-  Periphery &set_inverse_self_interaction_matrix(const std::string &inverse_self_interaction_matrix_filename) {
+  PeripheryT &set_inverse_self_interaction_matrix(const std::string &inverse_self_interaction_matrix_filename) {
     read_matrix_from_file(inverse_self_interaction_matrix_filename, 3 * num_surface_nodes_, 3 * num_surface_nodes_,
                           M_inv_host_);
     Kokkos::deep_copy(M_inv_, M_inv_host_);
@@ -2089,7 +2090,7 @@ class Periphery {
   //@{
 
   // TODO(palmerb4): A better method would be read_from_file and write_to_file, which would be more general
-  Periphery &build_inverse_self_interaction_matrix(
+  PeripheryT &build_inverse_self_interaction_matrix(
       const bool &write_to_file = true,
       const std::string &inverse_self_interaction_matrix_filename = "inverse_self_interaction_matrix.dat") {
     MUNDY_THROW_REQUIRE(is_surface_positions_set_ && is_surface_normals_set_ && is_quadrature_weights_set_,
@@ -2120,7 +2121,7 @@ class Periphery {
   ///
   /// \param[in] external_flow_velocity The external flow velocity (size num_nodes x 3)
   /// \param[out] surface_forces The surface forces induced by enforcing no-slip on the surface (size num_nodes x 3)
-  Periphery &compute_surface_forces(
+  PeripheryT &compute_surface_forces(
       const Kokkos::View<double *, Kokkos::LayoutLeft, DeviceMemorySpace> &external_flow_velocity,
       Kokkos::View<double *, Kokkos::LayoutLeft, DeviceMemorySpace> &surface_forces) {
     // Check if the periphery is in a valid state
@@ -2205,7 +2206,9 @@ class Periphery {
   Kokkos::View<double **, Kokkos::LayoutLeft, DeviceMemorySpace>
       M_inv_;  //!< The inverse of the self-interaction matrix (device)
   //@}
-};  // class Periphery
+};  // class PeripheryT
+
+using Periphery = PeripheryT<Kokkos::DefaultExecutionSpace>;  //!< Default periphery type
 
 }  // namespace periphery
 

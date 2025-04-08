@@ -89,13 +89,16 @@ class LinkedBucketConn {
 
   LinkedBucketConn(unsigned bucket_capacity)
       : bucket_capacity_(bucket_capacity),
-        offsets_(),
+        offsets_(bucket_capacity),
         connectivity_(),
         ordinals_(),
         num_unused_entities_(0),
         compression_threshold_(2) {
     MUNDY_THROW_REQUIRE(bucket_capacity > 0, std::invalid_argument,
                         "LinkedBucketConn must have bucket_capacity strictly greater than 0");
+    for (unsigned i = 0; i < bucket_capacity; ++i) {
+      offsets_[i] = IndexRange{0, 0};
+    }
   }
 
   virtual ~LinkedBucketConn() = default;

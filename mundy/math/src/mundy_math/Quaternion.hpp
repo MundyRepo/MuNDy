@@ -35,51 +35,11 @@
 #include <mundy_math/Matrix3.hpp>       // for mundy::math::Matrix3
 #include <mundy_math/Tolerance.hpp>     // for mundy::math::get_zero_tolerance
 #include <mundy_math/Vector3.hpp>       // for mundy::math::Vector3
+#include <mundy_math/impl/QuaternionImpl.hpp>
 
 namespace mundy {
 
 namespace math {
-
-/// \brief Quaternion class with floating point entries (an integer-valued quaternion doesn't make much sense)
-/// \tparam T The type of the entries.
-/// \tparam Accessor The type of the accessor.
-///
-/// This class is designed to be used with Kokkos. It is a simple quaternion with arithmetic entries. It is templated
-/// on the type of the entries and Accessor type. See Accessor.hpp for more details on the Accessor type requirements.
-///
-/// The goal of Quaternion is to be a lightweight class that can be used with Kokkos to perform mathematical operations
-/// on vectors in R3. It does not own the data, but rather it is templated on an Accessor type that provides access to
-/// the underlying data. This allows us to use Quaternion with Kokkos Views, raw pointers, or any other type that meets
-/// the ValidAccessor requirements without copying the data. This is especially important for GPU-compatable code.
-///
-/// Quaternions can be constructed by passing an accessor to the constructor. However, if the accessor has a 4-argument
-/// constructor, then the Quaternion can also be constructed by passing the elements directly to the constructor.
-/// Similarly, if the accessor has an initializer list constructor, then the Quaternion can be constructed by passing an
-/// initializer list to the constructor. This is a convenience feature which makes working with the default accessor
-/// (Array<T, 4>) easier. For example, the following are all valid ways to construct a Quaternion:
-///
-/// \code{.cpp}
-///   // Constructs a Quaternion with the default accessor (Array<int, 4>)
-///   Quaternion<double> quat1({1.0, 2.0, 3.0, 4.0});
-///   Quaternion<double> quat2(1.0, 2.0, 3.0, 4.0);
-///   Quaternion<double> quat3(Array<int, 3>({1.0, 2.0, 3.0, 4.0}));
-///   Quaternion<double> quat4;
-///   quat4.set(1.0, 2.0, 3.0, 4.0);
-///
-///   // Construct a Quaternion from a double array
-///   double data[4] = {1.0, 2.0, 3.0, 4.0};
-///   Quaternion<double, double*> quat5(data);
-///   Quaternion<double, double*> quat6{1.0, 2.0, 3.0, 4.0};
-///   // Not allowed as double* doesn't have a 4-argument constructor
-///   // Quaternion<double, double*> quat7(1.0, 2.0, 3.0, 4.0);
-/// \endcode
-///
-/// \note Accessors may be owning or non-owning, that is irrelevant to the Quaternion class; however, these accessors
-/// should be lightweight such that they can be copied around without much overhead. Furthermore, the lifetime of the
-/// data underlying the accessor should be as long as the Quaternion that use it.
-template <typename T, ValidAccessor<T> Accessor = Array<T, 4>, typename OwnershipType = Ownership::Owns>
-  requires std::is_floating_point_v<T>
-class Quaternion;
 
 /// \brief (Implementation) Type trait to determine if a type is a Quaternion
 template <typename TypeToCheck>
@@ -126,264 +86,50 @@ concept ValidQuaternionType =
 //! \name Forward declare Quaternion functions that also require Quaternion to be defined
 //@{
 
-/// \brief Get the inverse of a quaternion
-/// \param[in] quat The quaternion.
-template <typename T, ValidAccessor<T> Accessor, typename OwnershipType>
-KOKKOS_INLINE_FUNCTION constexpr Quaternion<std::remove_const_t<T>> inverse(
-    const Quaternion<T, Accessor, OwnershipType> &quat);
-
 /// \brief Get the norm of a quaternion
 /// \param[in] quat The quaternion.
 template <typename T, ValidAccessor<T> Accessor, typename OwnershipType>
 KOKKOS_INLINE_FUNCTION constexpr auto norm(const Quaternion<T, Accessor, OwnershipType> &quat);
 //@}
 
-namespace impl {
-//! \name Helper functions for generic quaternion operators applied to an abstract accessor.
-//@{
 
-/// \brief Deep copy assignment operator with (potentially) different accessor
-/// \details Copies the data from the other quaternion to our data. This is only enabled if T is not const.
-template <size_t... Is, typename T, ValidAccessor<T> Accessor, typename OwnershipType, ValidAccessor<T> OtherAccessor,
-          typename OtherOwnershipType>
-  requires HasNonConstAccessOperator<Accessor, T>
-KOKKOS_INLINE_FUNCTION constexpr void deep_copy_impl(Quaternion<T, Accessor, OwnershipType> &quat,
-                                                     const Quaternion<T, OtherAccessor, OtherOwnershipType> &other) {
-  quat[0] = other[0];
-  quat[1] = other[1];
-  quat[2] = other[2];
-  quat[3] = other[3];
-}
-
-/// \brief Quaternion-quaternion addition
-/// \param[in] other The other quaternion.
-template <typename T, typename U, ValidAccessor<T> Accessor, typename OwnershipType, ValidAccessor<U> OtherAccessor,
-          typename OtherOwnershipType>
-KOKKOS_INLINE_FUNCTION constexpr auto quat_quat_addition_impl(
-    const Quaternion<T, Accessor, OwnershipType> &quat, const Quaternion<U, OtherAccessor, OtherOwnershipType> &other)
-    -> Quaternion<std::common_type_t<T, U>> {
-  using CommonType = std::common_type_t<T, U>;
-  Quaternion<CommonType> result;
-  result[0] = static_cast<CommonType>(quat[0]) + static_cast<CommonType>(other[0]);
-  result[1] = static_cast<CommonType>(quat[1]) + static_cast<CommonType>(other[1]);
-  result[2] = static_cast<CommonType>(quat[2]) + static_cast<CommonType>(other[2]);
-  result[3] = static_cast<CommonType>(quat[3]) + static_cast<CommonType>(other[3]);
-  return result;
-}
-
-/// \brief Self-quaternion addition
-/// \param[in] other The other quaternion.
-template <typename T, typename U, ValidAccessor<T> Accessor, typename OwnershipType, ValidAccessor<U> OtherAccessor,
-          typename OtherOwnershipType>
-  requires HasNonConstAccessOperator<Accessor, T>
-KOKKOS_INLINE_FUNCTION constexpr void self_quat_addition_impl(
-    Quaternion<T, Accessor, OwnershipType> &quat, const Quaternion<U, OtherAccessor, OtherOwnershipType> &other) {
-  quat[0] += static_cast<T>(other[0]);
-  quat[1] += static_cast<T>(other[1]);
-  quat[2] += static_cast<T>(other[2]);
-  quat[3] += static_cast<T>(other[3]);
-}
-
-/// \brief Quaternion-quaternion subtraction
-/// \param[in] other The other quaternion.
-template <typename T, typename U, ValidAccessor<T> Accessor, typename OwnershipType, ValidAccessor<U> OtherAccessor,
-          typename OtherOwnershipType>
-KOKKOS_INLINE_FUNCTION constexpr auto quat_quat_subtraction_impl(
-    const Quaternion<T, Accessor, OwnershipType> &quat, const Quaternion<U, OtherAccessor, OtherOwnershipType> &other)
-    -> Quaternion<std::common_type_t<T, U>> {
-  using CommonType = std::common_type_t<T, U>;
-  Quaternion<CommonType> result;
-  result[0] = static_cast<CommonType>(quat[0]) - static_cast<CommonType>(other[0]);
-  result[1] = static_cast<CommonType>(quat[1]) - static_cast<CommonType>(other[1]);
-  result[2] = static_cast<CommonType>(quat[2]) - static_cast<CommonType>(other[2]);
-  result[3] = static_cast<CommonType>(quat[3]) - static_cast<CommonType>(other[3]);
-  return result;
-}
-
-/// \brief Self-quaternion subtraction
-/// \param[in] other The other quaternion.
-template <typename T, typename U, ValidAccessor<T> Accessor, typename OwnershipType, ValidAccessor<U> OtherAccessor,
-          typename OtherOwnershipType>
-  requires HasNonConstAccessOperator<Accessor, T>
-KOKKOS_INLINE_FUNCTION constexpr void self_quat_subtraction_impl(
-    Quaternion<T, Accessor, OwnershipType> &quat, const Quaternion<U, OtherAccessor, OtherOwnershipType> &other) {
-  quat[0] -= static_cast<T>(other[0]);
-  quat[1] -= static_cast<T>(other[1]);
-  quat[2] -= static_cast<T>(other[2]);
-  quat[3] -= static_cast<T>(other[3]);
-}
-
-/// \brief Quaternion-quaternion multiplication
-/// \param[in] other The other quaternion.
-template <typename T, typename U, ValidAccessor<T> Accessor, typename OwnershipType, ValidAccessor<U> OtherAccessor,
-          typename OtherOwnershipType>
-KOKKOS_INLINE_FUNCTION constexpr auto quat_quat_multiplication_impl(
-    const Quaternion<T, Accessor, OwnershipType> &quat, const Quaternion<U, OtherAccessor, OtherOwnershipType> &other)
-    -> Quaternion<std::common_type_t<T, U>> {
-  using CommonType = std::common_type_t<T, U>;
-  Quaternion<CommonType> result;
-  result[0] = static_cast<CommonType>(quat[0]) * static_cast<CommonType>(other[0]) -
-              static_cast<CommonType>(quat[1]) * static_cast<CommonType>(other[1]) -
-              static_cast<CommonType>(quat[2]) * static_cast<CommonType>(other[2]) -
-              static_cast<CommonType>(quat[3]) * static_cast<CommonType>(other[3]);
-  result[1] = static_cast<CommonType>(quat[0]) * static_cast<CommonType>(other[1]) +
-              static_cast<CommonType>(quat[1]) * static_cast<CommonType>(other[0]) +
-              static_cast<CommonType>(quat[2]) * static_cast<CommonType>(other[3]) -
-              static_cast<CommonType>(quat[3]) * static_cast<CommonType>(other[2]);
-  result[2] = static_cast<CommonType>(quat[0]) * static_cast<CommonType>(other[2]) -
-              static_cast<CommonType>(quat[1]) * static_cast<CommonType>(other[3]) +
-              static_cast<CommonType>(quat[2]) * static_cast<CommonType>(other[0]) +
-              static_cast<CommonType>(quat[3]) * static_cast<CommonType>(other[1]);
-  result[3] = static_cast<CommonType>(quat[0]) * static_cast<CommonType>(other[3]) +
-              static_cast<CommonType>(quat[1]) * static_cast<CommonType>(other[2]) -
-              static_cast<CommonType>(quat[2]) * static_cast<CommonType>(other[1]) +
-              static_cast<CommonType>(quat[3]) * static_cast<CommonType>(other[0]);
-  return result;
-}
-
-/// \brief Self-quaternion multiplication
-/// \param[in] other The other quaternion.
-template <typename T, typename U, ValidAccessor<T> Accessor, typename OwnershipType, ValidAccessor<U> OtherAccessor,
-          typename OtherOwnershipType>
-  requires HasNonConstAccessOperator<Accessor, T>
-KOKKOS_INLINE_FUNCTION constexpr void self_quat_multiplication_impl(
-    Quaternion<T, Accessor, OwnershipType> &quat, const Quaternion<U, OtherAccessor, OtherOwnershipType> &other) {
-  const T w = quat[0] * static_cast<T>(other[0]) - quat[1] * static_cast<T>(other[1]) -
-              quat[2] * static_cast<T>(other[2]) - quat[3] * static_cast<T>(other[3]);
-  const T x = quat[0] * static_cast<T>(other[1]) + quat[1] * static_cast<T>(other[0]) +
-              quat[2] * static_cast<T>(other[3]) - quat[3] * static_cast<T>(other[2]);
-  const T y = quat[0] * static_cast<T>(other[2]) - quat[1] * static_cast<T>(other[3]) +
-              quat[2] * static_cast<T>(other[0]) + quat[3] * static_cast<T>(other[1]);
-  const T z = quat[0] * static_cast<T>(other[3]) + quat[1] * static_cast<T>(other[2]) -
-              quat[2] * static_cast<T>(other[1]) + quat[3] * static_cast<T>(other[0]);
-  quat[0] = w;
-  quat[1] = x;
-  quat[2] = y;
-  quat[3] = z;
-}
-
-/// \brief Quaternion-vector multiplication (same as R * v)
-/// \param[in] vec The vector.
-template <typename T, typename U, ValidAccessor<T> Accessor, typename OwnershipType, ValidAccessor<U> OtherAccessor,
-          typename OtherOwnershipType>
-KOKKOS_INLINE_FUNCTION constexpr auto quat_vec_multiplication_impl(
-    const Quaternion<T, Accessor, OwnershipType> &quat, const Vector3<U, OtherAccessor, OtherOwnershipType> &vec)
-    -> Vector3<std::common_type_t<T, U>> {
-  // Quaternion-vector multiplication consists of three parts:
-  // 1. The vector is converted to a quaternion with a scalar component of 0
-  // 2. The quaternion-quaternion multiplication is performed
-  // 3. The quaternion is converted back to a vector
-  const Quaternion<U> vec_quat(0.0, vec[0], vec[1], vec[2]);
-  const auto quat_inv = inverse(quat);
-  const auto quat_result = quat * vec_quat * quat_inv;
-  return quat_result.vector();
-}
-
-/// \brief Vector-quaternion multiplication (same as v^T * R = transpose(R^T * v))
-/// \param[in] vec The vector.
-template <typename T, typename U, ValidAccessor<T> Accessor, typename OwnershipType, ValidAccessor<U> OtherAccessor,
-          typename OtherOwnershipType>
-KOKKOS_INLINE_FUNCTION constexpr auto vec_quat_multiplication_impl(
-    const Vector3<T, Accessor, OwnershipType> &vec, const Quaternion<U, OtherAccessor, OtherOwnershipType> &quat)
-    -> Vector3<std::common_type_t<T, U>> {
-  // Vector-quaternion multiplication consists of three parts:
-  // 1. The vector is converted to a quaternion with a scalar component of 0
-  // 2. The quaternion-quaternion multiplication is performed
-  // 3. The quaternion is converted back to a vector
-  const Quaternion<T> vec_quat(0.0, vec[0], vec[1], vec[2]);
-  const auto quat_inv = inverse(quat);
-  const auto quat_result = quat_inv * vec_quat * quat;
-  return quat_result.vector();
-}
-
-/// \brief Quaternion-matrix multiplication
-/// \param[in] other The other matrix.
-template <typename T, typename U, ValidAccessor<T> Accessor, typename OwnershipType, ValidAccessor<U> OtherAccessor,
-          typename OtherOwnershipType>
-KOKKOS_INLINE_FUNCTION constexpr auto quat_mat_multiplication_impl(
-    const Quaternion<T, Accessor, OwnershipType> &quat, const Matrix3<U, OtherAccessor, OtherOwnershipType> &mat)
-    -> Matrix3<std::common_type_t<T, U>> {
-  // Quaternion-matrix multiplication consists of applying the quaternion to each column of the matrix
-  using CommonType = std::common_type_t<T, U>;
-  Matrix3<CommonType> result;
-  result.set_column(0, quat * mat.template view_column<0>());
-  result.set_column(1, quat * mat.template view_column<1>());
-  result.set_column(2, quat * mat.template view_column<2>());
-  return result;
-}
-
-/// \brief Matrix-quaternion multiplication
-/// \param[in] other The other matrix.
-template <typename T, typename U, ValidAccessor<T> Accessor, typename OwnershipType, ValidAccessor<U> OtherAccessor,
-          typename OtherOwnershipType>
-KOKKOS_INLINE_FUNCTION constexpr auto mat_quat_multiplication_impl(
-    const Matrix3<T, Accessor, OwnershipType> &mat, const Quaternion<U, OtherAccessor, OtherOwnershipType> &quat)
-    -> Matrix3<std::common_type_t<T, U>> {
-  // Matrix-quaternion multiplication consists of applying the quaternion to each row of the matrix
-  using CommonType = std::common_type_t<T, U>;
-  Matrix3<CommonType> result;
-  result.set_row(0, mat.template view_row<0>() * quat);
-  result.set_row(1, mat.template view_row<1>() * quat);
-  result.set_row(2, mat.template view_row<2>() * quat);
-  return result;
-}
-
-/// \brief Quaternion-scalar multiplication
-/// \param[in] scalar The scalar.
-template <typename T, typename U, ValidAccessor<T> Accessor, typename OwnershipType>
-KOKKOS_INLINE_FUNCTION constexpr auto quat_scalar_multiplication_impl(
-    const Quaternion<T, Accessor, OwnershipType> &quat, const U &scalar) -> Quaternion<std::common_type_t<T, U>> {
-  using CommonType = std::common_type_t<T, U>;
-  Quaternion<CommonType> result;
-  result[0] = static_cast<CommonType>(quat[0]) * static_cast<CommonType>(scalar);
-  result[1] = static_cast<CommonType>(quat[1]) * static_cast<CommonType>(scalar);
-  result[2] = static_cast<CommonType>(quat[2]) * static_cast<CommonType>(scalar);
-  result[3] = static_cast<CommonType>(quat[3]) * static_cast<CommonType>(scalar);
-  return result;
-}
-
-/// \brief Self-scalar multiplication
-/// \param[in] scalar The scalar.
-template <typename T, typename U, ValidAccessor<T> Accessor, typename OwnershipType>
-  requires HasNonConstAccessOperator<Accessor, T>
-KOKKOS_INLINE_FUNCTION constexpr void self_scalar_multiplication_impl(Quaternion<T, Accessor, OwnershipType> &quat,
-                                                                      const U &scalar) {
-  quat[0] *= static_cast<T>(scalar);
-  quat[1] *= static_cast<T>(scalar);
-  quat[2] *= static_cast<T>(scalar);
-  quat[3] *= static_cast<T>(scalar);
-}
-
-/// \brief Quaternion-scalar division
-/// \param[in] scalar The scalar.
-template <typename T, typename U, ValidAccessor<T> Accessor, typename OwnershipType>
-  requires HasNonConstAccessOperator<Accessor, T>
-KOKKOS_INLINE_FUNCTION constexpr auto quat_scalar_division_impl(const Quaternion<T, Accessor, OwnershipType> &quat,
-                                                                const U &scalar)
-    -> Quaternion<std::common_type_t<T, U>> {
-  using CommonType = std::common_type_t<T, U>;
-  Quaternion<CommonType> result;
-  result[0] = static_cast<CommonType>(quat[0]) / static_cast<CommonType>(scalar);
-  result[1] = static_cast<CommonType>(quat[1]) / static_cast<CommonType>(scalar);
-  result[2] = static_cast<CommonType>(quat[2]) / static_cast<CommonType>(scalar);
-  result[3] = static_cast<CommonType>(quat[3]) / static_cast<CommonType>(scalar);
-  return result;
-}
-
-/// \brief Self-scalar division
-/// \param[in] scalar The scalar.
-template <typename T, typename U, ValidAccessor<T> Accessor, typename OwnershipType>
-  requires HasNonConstAccessOperator<Accessor, T>
-KOKKOS_INLINE_FUNCTION constexpr void self_scalar_division_impl(Quaternion<T, Accessor, OwnershipType> &quat,
-                                                                const U &scalar) {
-  quat[0] /= static_cast<T>(scalar);
-  quat[1] /= static_cast<T>(scalar);
-  quat[2] /= static_cast<T>(scalar);
-  quat[3] /= static_cast<T>(scalar);
-}
-//@}
-}  // namespace impl
-
+/// \brief Quaternion class with floating point entries (an integer-valued quaternion doesn't make much sense)
+/// \tparam T The type of the entries.
+/// \tparam Accessor The type of the accessor.
+///
+/// This class is designed to be used with Kokkos. It is a simple quaternion with arithmetic entries. It is templated
+/// on the type of the entries and Accessor type. See Accessor.hpp for more details on the Accessor type requirements.
+///
+/// The goal of Quaternion is to be a lightweight class that can be used with Kokkos to perform mathematical operations
+/// on vectors in R3. It does not own the data, but rather it is templated on an Accessor type that provides access to
+/// the underlying data. This allows us to use Quaternion with Kokkos Views, raw pointers, or any other type that meets
+/// the ValidAccessor requirements without copying the data. This is especially important for GPU-compatable code.
+///
+/// Quaternions can be constructed by passing an accessor to the constructor. However, if the accessor has a 4-argument
+/// constructor, then the Quaternion can also be constructed by passing the elements directly to the constructor.
+/// Similarly, if the accessor has an initializer list constructor, then the Quaternion can be constructed by passing an
+/// initializer list to the constructor. This is a convenience feature which makes working with the default accessor
+/// (Array<T, 4>) easier. For example, the following are all valid ways to construct a Quaternion:
+///
+/// \code{.cpp}
+///   // Constructs a Quaternion with the default accessor (Array<int, 4>)
+///   Quaternion<double> quat1({1.0, 2.0, 3.0, 4.0});
+///   Quaternion<double> quat2(1.0, 2.0, 3.0, 4.0);
+///   Quaternion<double> quat3(Array<int, 3>({1.0, 2.0, 3.0, 4.0}));
+///   Quaternion<double> quat4;
+///   quat4.set(1.0, 2.0, 3.0, 4.0);
+///
+///   // Construct a Quaternion from a double array
+///   double data[4] = {1.0, 2.0, 3.0, 4.0};
+///   Quaternion<double, double*> quat5(data);
+///   Quaternion<double, double*> quat6{1.0, 2.0, 3.0, 4.0};
+///   // Not allowed as double* doesn't have a 4-argument constructor
+///   // Quaternion<double, double*> quat7(1.0, 2.0, 3.0, 4.0);
+/// \endcode
+///
+/// \note Accessors may be owning or non-owning, that is irrelevant to the Quaternion class; however, these accessors
+/// should be lightweight such that they can be copied around without much overhead. Furthermore, the lifetime of the
+/// data underlying the accessor should be as long as the Quaternion that use it.
 template <typename T, ValidAccessor<T> Accessor>
   requires std::is_floating_point_v<T>
 class Quaternion<T, Accessor, Ownership::Views> {
@@ -1737,10 +1483,10 @@ KOKKOS_INLINE_FUNCTION constexpr Quaternion<T> rotation_matrix_to_quaternion(
   Quaternion<T> quat;
 
   // Computing the quaternion components
-  quat.w() = std::sqrt(std::max(T(0), T(1) + rot_mat(0, 0) + rot_mat(1, 1) + rot_mat(2, 2))) / T(2);
-  quat.x() = std::sqrt(std::max(T(0), T(1) + rot_mat(0, 0) - rot_mat(1, 1) - rot_mat(2, 2))) / T(2);
-  quat.y() = std::sqrt(std::max(T(0), T(1) - rot_mat(0, 0) + rot_mat(1, 1) - rot_mat(2, 2))) / T(2);
-  quat.z() = std::sqrt(std::max(T(0), T(1) - rot_mat(0, 0) - rot_mat(1, 1) + rot_mat(2, 2))) / T(2);
+  quat.w() = Kokkos::sqrt(Kokkos::max(T(0), T(1) + rot_mat(0, 0) + rot_mat(1, 1) + rot_mat(2, 2))) / T(2);
+  quat.x() = Kokkos::sqrt(Kokkos::max(T(0), T(1) + rot_mat(0, 0) - rot_mat(1, 1) - rot_mat(2, 2))) / T(2);
+  quat.y() = Kokkos::sqrt(Kokkos::max(T(0), T(1) - rot_mat(0, 0) + rot_mat(1, 1) - rot_mat(2, 2))) / T(2);
+  quat.z() = Kokkos::sqrt(Kokkos::max(T(0), T(1) - rot_mat(0, 0) - rot_mat(1, 1) + rot_mat(2, 2))) / T(2);
 
   // Correcting the signs
   quat.x() = std::copysign(quat[1], rot_mat(2, 1) - rot_mat(1, 2));

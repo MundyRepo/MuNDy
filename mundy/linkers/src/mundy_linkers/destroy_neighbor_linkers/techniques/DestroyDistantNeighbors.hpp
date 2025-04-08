@@ -121,7 +121,7 @@ class DestroyDistantNeighbors : public mundy::meta::MetaMethodSubsetExecutionInt
     for (int i = 0; i < valid_linker_entity_part_names.size(); i++) {
       const std::string part_name = valid_linker_entity_part_names[i];
       auto part_reqs = std::make_shared<mundy::meta::PartReqs>();
-      part_reqs->set_part_name(part_name);
+      part_reqs->set_part_name(part_name).set_part_rank(stk::topology::CONSTRAINT_RANK);
       part_reqs->add_field_reqs<int>(linker_destroy_flag_field_name, stk::topology::CONSTRAINT_RANK, 1, 1);
 
       if (part_name == NeighborLinkers::get_name()) {

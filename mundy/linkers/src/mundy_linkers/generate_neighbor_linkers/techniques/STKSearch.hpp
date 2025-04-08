@@ -175,8 +175,7 @@ class STKSearch : public mundy::meta::MetaMethodPairwiseSubsetExecutionInterface
       } else {
         // Add the associated part as a subset of the sphere sphere linkers agent.
         auto part_reqs = std::make_shared<mundy::meta::PartReqs>();
-        part_reqs->set_part_name(part_name);
-        part_reqs->set_part_rank(stk::topology::CONSTRAINT_RANK);
+        part_reqs->set_part_name(part_name).set_part_rank(stk::topology::CONSTRAINT_RANK);
         NeighborLinkers::add_and_sync_subpart_reqs(part_reqs);
       }
     }

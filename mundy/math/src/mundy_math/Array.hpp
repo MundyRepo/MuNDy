@@ -33,31 +33,11 @@
 // Our libs
 #include <mundy_core/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
 #include <mundy_math/Tolerance.hpp>     // for mundy::math::get_zero_tolerance
+#include <mundy_math/impl/ArrayImpl.hpp> 
 
 namespace mundy {
 
 namespace math {
-
-/// \brief A simplistic array type with a fixed size and type
-template <typename T, size_t N>
-class Array;
-
-namespace impl {
-
-/// \brief Deep copy implementation for Array
-template <size_t... Is, typename T, size_t N>
-KOKKOS_INLINE_FUNCTION constexpr void deep_copy_impl(std::index_sequence<Is...>, Array<T, N>& array,
-                                                     const Array<T, N>& other) {
-  ((array[Is] = other[Is]), ...);
-}
-
-/// \brief Fill implementation for Array
-template <size_t... Is, typename T, size_t N>
-KOKKOS_INLINE_FUNCTION constexpr void fill_impl(std::index_sequence<Is...>, Array<T, N>& array, const T& value) {
-  ((array[Is] = value), ...);
-}
-
-}  // namespace impl
 
 /// \brief A simplistic array type with a fixed size and type
 template <typename T, size_t N>

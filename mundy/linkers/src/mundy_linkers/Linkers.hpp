@@ -129,7 +129,7 @@ class Linkers : public mundy::agents::RankedAssembly<mundy::core::make_string_li
 /// cycle.
 template <typename... Entities>
   requires(std::is_same_v<std::remove_cv_t<std::remove_reference_t<Entities>>, stk::mesh::Entity> && ...)
-void connect_linker_to_entitys_nodes(stk::mesh::BulkData& bulk_data, const stk::mesh::Entity& linker,
+inline void connect_linker_to_entitys_nodes(stk::mesh::BulkData& bulk_data, const stk::mesh::Entity& linker,
                                      const Entities&... to_entities) {
   MUNDY_THROW_ASSERT(bulk_data.in_modifiable_state(), std::logic_error,
                      "declare_relation: The mesh must be in a modification cycle.");
@@ -146,6 +146,33 @@ void connect_linker_to_entitys_nodes(stk::mesh::BulkData& bulk_data, const stk::
     const stk::mesh::Entity* nodes = bulk_data.begin(to_entity, stk::topology::NODE_RANK);
     for (unsigned i = 0; i < num_nodes; ++i) {
       bulk_data.declare_relation(linker, nodes[i], relation_counter);
+      ++relation_counter;
+    }
+  };
+  (declare_relations_to_nodes(to_entities), ...);
+}
+
+template <typename... Entities>
+  requires(std::is_same_v<std::remove_cv_t<std::remove_reference_t<Entities>>, stk::mesh::Entity> && ...)
+inline void connect_linker_to_entitys_nodes(stk::mesh::BulkData& bulk_data, stk::mesh::Permutation permut,
+                                            stk::mesh::OrdinalVector& scratch1, stk::mesh::OrdinalVector& scratch2,
+                                            stk::mesh::OrdinalVector& scratch3, const stk::mesh::Entity& linker,
+                                            const Entities&... to_entities) {
+  MUNDY_THROW_ASSERT(bulk_data.in_modifiable_state(), std::logic_error,
+                     "declare_relation: The mesh must be in a modification cycle.");
+  MUNDY_THROW_ASSERT(bulk_data.entity_rank(linker) == stk::topology::CONSTRAINT_RANK, std::logic_error,
+                     "declare_relation: The from entity must be constraint rank.");
+
+  // For each entity to connect, we will declare a relation between the constraint rank entity and that entity's nodes.
+  // The order of these connections should not matter and do not consider it as fixed.
+  unsigned relation_counter = 0;
+  auto declare_relations_to_nodes = [&](const stk::mesh::Entity& to_entity) {
+    const unsigned num_nodes = bulk_data.num_connectivity(to_entity, stk::topology::NODE_RANK);
+    MUNDY_THROW_ASSERT(num_nodes > 0, std::runtime_error,
+                       "declare_relation: The to entity must have at least one node to connect a linker to it.");
+    const stk::mesh::Entity* nodes = bulk_data.begin(to_entity, stk::topology::NODE_RANK);
+    for (unsigned i = 0; i < num_nodes; ++i) {
+      bulk_data.declare_relation(linker, nodes[i], relation_counter, permut, scratch1, scratch2, scratch3);
       ++relation_counter;
     }
   };

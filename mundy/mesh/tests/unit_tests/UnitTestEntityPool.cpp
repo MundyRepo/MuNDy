@@ -50,7 +50,7 @@ namespace mesh {
 
 namespace {
 
-TEST(UnitTestEntityPool, BasicUsage) {
+void basic_usage_test() {
   // Setup
   stk::mesh::MeshBuilder builder(MPI_COMM_WORLD);
   builder.set_spatial_dimension(3);
@@ -144,11 +144,11 @@ TEST(UnitTestEntityPool, BasicUsage) {
 #endif
 }
 
-TEST(UnitTestEntityPool, ThreadSafety) {
-  if (stk::ngp::ExecSpace::concurrency() == 1) {
-    GTEST_SKIP() << "Test is only valid when multiple threads are available. Otherwise, it could be a false positive.";
-  }
+TEST(UnitTestEntityPool, BasicUsage) {
+  basic_usage_test();
+}
 
+void thread_safety_test() {
   // Setup
   stk::mesh::MeshBuilder builder(MPI_COMM_WORLD);
   builder.set_spatial_dimension(3);
@@ -202,7 +202,7 @@ TEST(UnitTestEntityPool, ThreadSafety) {
   auto perform_fetch = [&node_pool, &ngp_mesh, num_entities]() {
     core::NgpView<bool*> node_exists("node_exists", num_entities);
     Kokkos::deep_copy(node_exists.view_device(), false);
-    
+
     Kokkos::parallel_for(
         "UnitTestEntityPool:ThreadSafety", num_entities, KOKKOS_LAMBDA(const size_t i) {
           stk::mesh::Entity node = node_pool.acquire();
@@ -218,10 +218,8 @@ TEST(UnitTestEntityPool, ThreadSafety) {
     // Sum the node_exists array to ensure that all nodes were acquired
     size_t sum = 0;
     Kokkos::parallel_reduce(
-        "UnitTestEntityPool:ThreadSafety reduce", num_entities, KOKKOS_LAMBDA(const size_t i, size_t& lsum) {
-          lsum += node_exists.view_device()(i);
-        },
-        sum);
+        "UnitTestEntityPool:ThreadSafety reduce", num_entities,
+        KOKKOS_LAMBDA(const size_t i, size_t& lsum) { lsum += node_exists.view_device()(i); }, sum);
     EXPECT_EQ(sum, num_entities) << "If this fails, we have a race condition for inserting the entities into the pool.";
 
 #ifdef STK_ENABLE_GPU
@@ -233,6 +231,14 @@ TEST(UnitTestEntityPool, ThreadSafety) {
     EXPECT_EQ(node_pool.size_host(), 0);
   };
   perform_fetch();
+}
+
+TEST(UnitTestEntityPool, ThreadSafety) {
+  if (stk::ngp::ExecSpace::concurrency() == 1) {
+    GTEST_SKIP() << "Test is only valid when multiple threads are available. Otherwise, it could be a false positive.";
+  }
+
+  thread_safety_test();
 }
 
 }  // namespace

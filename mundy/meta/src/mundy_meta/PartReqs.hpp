@@ -94,6 +94,12 @@ class PartReqs {
   /// \param part_rank [in] Required rank of the part.
   PartReqs &set_part_rank(const stk::topology::rank_t &part_rank);
 
+  /// \brief Disable entity induction for this part.
+  PartReqs &disable_entity_induction();
+
+  /// \brief Enable entity induction for this part.
+  PartReqs &enable_entity_induction();
+
   /// \brief Delete the part name constraint (if it exists).
   PartReqs &delete_part_name();
 
@@ -102,6 +108,9 @@ class PartReqs {
 
   /// \brief Delete the part rank constraint (if it exists).
   PartReqs &delete_part_rank();
+
+  /// \brief Delete the part induction constraint (if it exists).
+  PartReqs &delete_part_induction();
 
   /// \brief Add the provided field to the part, given that it is valid and does not conflict with existing fields.
   /// If the field already exists, we sync their requirements.
@@ -175,6 +184,9 @@ class PartReqs {
   /// \brief Get if the part rank is constrained or not.
   bool constrains_part_rank() const;
 
+  /// \brief Get if the part induction is constrained or not.
+  bool constrains_part_induction() const;
+
   /// \brief Get if the part is fully specified.
   bool is_fully_specified() const;
 
@@ -189,6 +201,9 @@ class PartReqs {
   /// \brief Return the part rank.
   /// Will throw an error if the part rank is not constrained.
   stk::topology::rank_t get_part_rank() const;
+
+  /// \brief Return if the part has entity induction.
+  bool has_entity_induction() const;
 
   /// \brief Return the part field map.
   std::vector<std::map<std::string, std::shared_ptr<FieldReqsBase>>> &get_part_ranked_field_map();
@@ -277,6 +292,12 @@ class PartReqs {
 
   /// \brief If the part is an io-compatible part or not.
   bool is_io_part_ = false;
+
+  /// \brief If the part has entity induction or not.
+  bool has_entity_induction_ = true;
+
+  /// \brief If the part has entity induction is set or not.
+  bool has_entity_induction_is_set_ = false;
 
   /// \brief A set of maps from field name to field params for each rank.
   std::vector<std::map<std::string, std::shared_ptr<FieldReqsBase>>> part_ranked_field_maps_{stk::topology::NUM_RANKS};

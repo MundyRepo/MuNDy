@@ -59,11 +59,7 @@ namespace {
 /// - Validating the links and their connected entities.
 /// - Running parallel operations on links.
 /// - Synchronizing link data between host and device.
-TEST(UnitTestLinkData, BasicUsage) {
-  if (stk::parallel_machine_size(MPI_COMM_WORLD) != 1) {
-    GTEST_SKIP();
-  }
-
+void basic_usage_test() {
   using stk::mesh::Entity;
   using stk::mesh::EntityId;
   using stk::mesh::EntityRank;
@@ -237,7 +233,7 @@ TEST(UnitTestLinkData, BasicUsage) {
           // Check the connected entities
           for (unsigned link_ordinal = 0; link_ordinal < 3; ++link_ordinal) {
             // TODO(palmerb4): Test that these are set via some device-compatable map.
-            [[maybe_unused]] FastMeshIndex linked_entity = ngp_link_data.get_linked_entity(linker_index, link_ordinal);
+            [[maybe_unused]] FastMeshIndex linked_entity = ngp_link_data.get_linked_entity_index(linker_index, link_ordinal);
             [[maybe_unused]] EntityId linked_entity_id = ngp_link_data.get_linked_entity_id(linker_index, link_ordinal);
             [[maybe_unused]] EntityRank linked_entity_rank =
                 ngp_link_data.get_linked_entity_rank(linker_index, link_ordinal);
@@ -249,9 +245,9 @@ TEST(UnitTestLinkData, BasicUsage) {
     for_each_link_run(
         ngp_link_data, link_part_b, KOKKOS_LAMBDA(const FastMeshIndex& linker_index) {
           // Get the linked entities and swap their order
-          FastMeshIndex linked_entity_0 = ngp_link_data.get_linked_entity(linker_index, 0);
-          FastMeshIndex linked_entity_1 = ngp_link_data.get_linked_entity(linker_index, 1);
-          FastMeshIndex linked_entity_2 = ngp_link_data.get_linked_entity(linker_index, 2);
+          FastMeshIndex linked_entity_0 = ngp_link_data.get_linked_entity_index(linker_index, 0);
+          FastMeshIndex linked_entity_1 = ngp_link_data.get_linked_entity_index(linker_index, 1);
+          FastMeshIndex linked_entity_2 = ngp_link_data.get_linked_entity_index(linker_index, 2);
 
           EntityRank entity_0_rank = ngp_link_data.get_linked_entity_rank(linker_index, 0);
           EntityRank entity_1_rank = ngp_link_data.get_linked_entity_rank(linker_index, 1);
@@ -303,11 +299,15 @@ TEST(UnitTestLinkData, BasicUsage) {
                              });
 }
 
-TEST(UnitTestLinkData, Requests) {
+TEST(UnitTestLinkData, BasicUsage) {
   if (stk::parallel_machine_size(MPI_COMM_WORLD) != 1) {
     GTEST_SKIP();
   }
 
+  basic_usage_test();
+}
+
+void requests_test() {
   using stk::mesh::Entity;
   using stk::mesh::EntityId;
   using stk::mesh::EntityRank;
@@ -449,6 +449,14 @@ TEST(UnitTestLinkData, Requests) {
   for (unsigned i = 0; i < a_links.size() / 2; ++i) {
     EXPECT_EQ(a_links[i], a_links_after_destruction[i]);
   }
+}
+
+TEST(UnitTestLinkData, Requests) {
+  if (stk::parallel_machine_size(MPI_COMM_WORLD) != 1) {
+    GTEST_SKIP();
+  }
+
+  requests_test();
 }
 
 }  // namespace

@@ -209,6 +209,8 @@ TEST(IOBroker, WriteInitialConfigAABB) {
 
   // Hit the button on committing the metadata
   std::shared_ptr<mundy::mesh::MetaData> meta_data_ptr = bulk_data_ptr->mesh_meta_data_ptr();
+  meta_data_ptr->use_simple_fields();
+  meta_data_ptr->set_coordinate_field_name("NODE_COORDS");
   meta_data_ptr->commit();
 
   // Get the sphere part

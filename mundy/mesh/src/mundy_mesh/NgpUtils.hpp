@@ -43,7 +43,7 @@ constexpr bool is_host_field = false;
 
 #if TRILINOS_MAJOR_MINOR_VERSION > 160000
 template <typename T, typename NgpMemSpace, template <typename, typename> class NgpDebugger>
-constexpr bool is_device_field<stk::mesh::DeviceField<T, NgpMemSpace, NgpDebugger>> = true
+constexpr bool is_device_field<stk::mesh::DeviceField<T, NgpMemSpace, NgpDebugger>> = true;
 
 template <typename T, typename NgpMemSpace, template <typename, typename> class NgpDebugger>
 constexpr bool is_device_field<const stk::mesh::DeviceField<T, NgpMemSpace, NgpDebugger>> = true;

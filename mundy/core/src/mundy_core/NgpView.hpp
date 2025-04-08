@@ -182,6 +182,12 @@ class NgpViewT : public Kokkos::DualView<DataType, Properties...> {
     t_dv::modify_device();
   }
 
+  /// \brief Abstract method for marking the view as modified.
+  template <typename Space>
+  inline void modify_on() {
+    t_dv::template modify<Space>();
+  }
+
   /// \brief Synchronize the host view to the device view if needed.
   ///
   /// If the device view has been modified more recently than the host view,
@@ -198,6 +204,12 @@ class NgpViewT : public Kokkos::DualView<DataType, Properties...> {
     t_dv::sync_device();
   }
 
+  /// \brief Abstract method for synchronizing the view.
+  template <typename Space>
+  inline void sync_to() {
+    t_dv::template sync<Space>();
+  }
+
   /// \brief Return if we need to sync to the host.
   inline bool need_sync_to_host() const {
     return t_dv::need_sync_host();
@@ -206,6 +218,12 @@ class NgpViewT : public Kokkos::DualView<DataType, Properties...> {
   /// \brief Return if we need to sync to the device.
   inline bool need_sync_to_device() const {
     return t_dv::need_sync_device();
+  }
+
+  /// \brief Abstract method for checking if we need to sync.
+  template <typename Space>
+  inline bool need_sync_to() const {
+    return t_dv::template need_sync<Space>();
   }
 };  // NgpViewT
 

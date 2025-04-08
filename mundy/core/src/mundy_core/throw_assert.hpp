@@ -88,7 +88,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto get_throw_require_device_string(
     const core::StringLiteral<FileStringSize>& file_string = core::make_string_literal(__FILE__),  //
     const core::StringLiteral<LineStringSize>& line_string = core::make_string_literal(MUNDY_LINE_STRING)) {
   return core::make_string_literal("Assertion (") + assertion_string + ") failed.\nFile: " + file_string +
-         "\nLine: " + line_string + "\nMessage: " + message_to_print;
+         "\nLine: " + line_string + "\nMessage: " + core::make_string_literal(message_to_print);
 }
 
 template <size_t AssertionStringSize, size_t MessageStringSize, size_t FileStringSize, size_t LineStringSize>
@@ -137,13 +137,13 @@ KOKKOS_INLINE_FUNCTION void abort_require(
     if constexpr (std::is_same_v<std::remove_const<decltype(message_to_print)>, std::string>) {
       Kokkos::abort(
           get_throw_require_device_string(assertion_string, message_to_print, file_string, line_string).c_str());
-    } else if constexpr (mundy::core::is_string_literal_v<decltype(message_to_print)> ||
-                         mundy::core::is_mundy_string_literal_v<decltype(message_to_print)>) {
+    } else if constexpr (
+      MUNDY_IS_CHAR_ARRAY(message_to_print) || MUNDY_IS_OUR_STRING_LITERAL(message_to_print)) {
       Kokkos::abort(
           get_throw_require_device_string(assertion_string, message_to_print, file_string, line_string).value);
     } else {
-      // Well, until C++23, we can't write something like static_assert(false, "some message");, as that is still
-      // forbidden by the standard. We'll still abort, but we can't print the message.
+      // The message to print is not a string literal or a mundy::core::StringLiteral, but we can still print the
+      // file and line information, which they can use to go read the message in the source code.
       Kokkos::abort(get_throw_require_device_string(assertion_string, "\nUnable to print user-specified message.",
                                                     file_string, line_string)
                         .value);

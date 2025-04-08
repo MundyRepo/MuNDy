@@ -2,7 +2,7 @@
 // **********************************************************************************************************************
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
-//                                           Copyright 2024 Flatiron Institute
+//                                       Copyright 2025 Michigan State University
 //                                                 Author: Bryce Palmer
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
@@ -59,7 +59,7 @@ LinkPartition::LinkPartition(LinkData &link_data, const PartitionKey &key, unsig
       key_(key),
       link_rank_(link_meta_data_.link_rank()),
       dimensionality_(dimensionality),
-      bucket_to_linked_conn_(),
+      bucket_to_linked_conn_ptr_(std::make_shared<BucketToLinkedConn>()),
       link_requests_size_view_("link_requests_size_view"),
       link_requests_capacity_view_("link_requests_capacity_view"),
       requested_links_("requested_links", 0, dimensionality) {
@@ -94,7 +94,7 @@ void LinkPartition::process_link_requests_fully_consistent_single_process() {
     add_parts[i] = &link_meta_data_.mesh_meta_data().get_part(key_[i]);
   }
 
-  size_t num_requested_links = link_requests_size_view_();
+  size_t num_requested_links = request_link_size();
   stk::mesh::EntityIdVector new_link_ids;
   stk::mesh::EntityVector new_link_entities;
   new_link_ids.reserve(num_requested_links);
@@ -145,6 +145,27 @@ LinkMetaData declare_link_meta_data(MetaData &meta_data, const std::string &our_
 LinkData declare_link_data(BulkData &bulk_data, LinkMetaData link_meta_data) {
   return LinkData(bulk_data, link_meta_data);
 }
+
+void LinkData::modify_on_host() {
+  auto ngp_link_data = get_updated_ngp_data(*this);
+  ngp_link_data.modify_on_host();
+}
+
+void LinkData::modify_on_device() {
+  auto ngp_link_data = get_updated_ngp_data(*this);
+  ngp_link_data.modify_on_device();
+}
+
+void LinkData::sync_to_host() {
+  auto ngp_link_data = get_updated_ngp_data(*this);
+  ngp_link_data.sync_to_host();
+}
+
+void LinkData::sync_to_device() {
+  auto ngp_link_data = get_updated_ngp_data(*this);
+  ngp_link_data.sync_to_device();
+}
+
 
 }  // namespace mesh
 

@@ -205,10 +205,10 @@ TEST_F(UnitTestDeclareEntities, DeclareEntities) {
        n2        n4
   */
 
-  const int num_nodes = 4;
-  const int num_edges = num_nodes - 1;
+  const size_t num_nodes = 4;
+  const size_t num_edges = num_nodes - 1;
   DeclareEntitiesHelper builder;
-  for (int i = 0; i < num_nodes; ++i) {
+  for (size_t i = 0; i < num_nodes; ++i) {
     builder.create_node()
         .id(i + 1)
         .owning_proc(0)
@@ -216,7 +216,7 @@ TEST_F(UnitTestDeclareEntities, DeclareEntities) {
         .add_field_data<double>(node_field_ptr_, {2.71 + i});
   }
 
-  for (int i = 0; i < num_edges; ++i) {
+  for (size_t i = 0; i < num_edges; ++i) {
     auto spring = builder.create_element();
     spring.id(i + 1)
         .owning_proc(0)
@@ -226,7 +226,7 @@ TEST_F(UnitTestDeclareEntities, DeclareEntities) {
         .add_field_data<double>(elem_field_ptr_, 3.14 + i);
   }
 
-  for (int i = 0; i < num_nodes; ++i) {
+  for (size_t i = 0; i < num_nodes; ++i) {
     auto particle = builder.create_element();
     particle.id(i + 1 + num_edges)
         .owning_proc(0)

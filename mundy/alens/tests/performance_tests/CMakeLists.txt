@@ -138,6 +138,13 @@ tribits_add_executable(
     CATEGORIES PERFORMANCE
     )
 
+# tribits_add_executable(
+#     PeriodicCollidingOverdampedFrictionalSperm
+#     SOURCES
+#     PeriodicCollidingOverdampedFrictionalSperm.cpp
+#     CATEGORIES PERFORMANCE
+#     )
+
 tribits_add_executable(
     SpheresPerif
     SOURCES
