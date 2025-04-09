@@ -66,21 +66,21 @@ Interactions:
 #include <vector>      // for std::vector
 
 // Trilinos libs
-#include <Kokkos_Core.hpp>                   // for Kokkos::initialize, Kokkos::finalize, Kokkos::Timer
-#include <Teuchos_CommandLineProcessor.hpp>  // for Teuchos::CommandLineProcessor
-#include <Teuchos_ParameterList.hpp>         // for Teuchos::ParameterList
-#include <stk_balance/balance.hpp>           // for stk::balance::balanceStkMesh, stk::balance::BalanceSettings
-#include <stk_io/StkMeshIoBroker.hpp>        // for stk::io::StkMeshIoBroker
-#include <stk_mesh/base/Comm.hpp>            // for stk::mesh::comm_mesh_counts
-#include <stk_mesh/base/DumpMeshInfo.hpp>    // for stk::mesh::impl::dump_all_mesh_info
-#include <stk_mesh/base/Entity.hpp>          // for stk::mesh::Entity
-#include <stk_mesh/base/FieldParallel.hpp>   // for stk::parallel_sum
-#include <stk_mesh/base/ForEachEntity.hpp>   // for mundy::mesh::for_each_entity_run
-#include <stk_mesh/base/Part.hpp>            // for stk::mesh::Part, stk::mesh::intersect
-#include <stk_mesh/base/Selector.hpp>        // for stk::mesh::Selector
-#include <stk_topology/topology.hpp>         // for stk::topology
-#include <stk_util/parallel/Parallel.hpp>    // for stk::parallel_machine_init, stk::parallel_machine_finalize
+#include <Kokkos_Core.hpp>                     // for Kokkos::initialize, Kokkos::finalize, Kokkos::Timer
+#include <Teuchos_CommandLineProcessor.hpp>    // for Teuchos::CommandLineProcessor
+#include <Teuchos_ParameterList.hpp>           // for Teuchos::ParameterList
+#include <stk_balance/balance.hpp>             // for stk::balance::balanceStkMesh, stk::balance::BalanceSettings
+#include <stk_io/StkMeshIoBroker.hpp>          // for stk::io::StkMeshIoBroker
+#include <stk_mesh/base/Comm.hpp>              // for stk::mesh::comm_mesh_counts
+#include <stk_mesh/base/DumpMeshInfo.hpp>      // for stk::mesh::impl::dump_all_mesh_info
+#include <stk_mesh/base/Entity.hpp>            // for stk::mesh::Entity
 #include <stk_mesh/base/EntitySorterBase.hpp>  // for stk::mesh::EntitySorterBase
+#include <stk_mesh/base/FieldParallel.hpp>     // for stk::parallel_sum
+#include <stk_mesh/base/ForEachEntity.hpp>     // for mundy::mesh::for_each_entity_run
+#include <stk_mesh/base/Part.hpp>              // for stk::mesh::Part, stk::mesh::intersect
+#include <stk_mesh/base/Selector.hpp>          // for stk::mesh::Selector
+#include <stk_topology/topology.hpp>           // for stk::topology
+#include <stk_util/parallel/Parallel.hpp>      // for stk::parallel_machine_init, stk::parallel_machine_finalize
 
 // Mundy libs
 #include <mundy_alens/actions_crosslinkers.hpp>                // for mundy::alens::crosslinkers...
@@ -103,6 +103,7 @@ Interactions:
 #include <mundy_math/Hilbert.hpp>                           // for mundy::math::create_hilbert_positions_and_directors
 #include <mundy_math/Vector3.hpp>                           // for mundy::math::Vector3
 #include <mundy_math/distance/EllipsoidEllipsoid.hpp>       // for mundy::math::distance::ellipsoid_ellipsoid
+#include <mundy_math/zmort.hpp>                             // for mundy::math::zmorton_less(Vector3, Vector3)
 #include <mundy_mesh/BulkData.hpp>                          // for mundy::mesh::BulkData
 #include <mundy_mesh/FieldViews.hpp>     // for mundy::mesh::vector3_field_data, mundy::mesh::quaternion_field_data
 #include <mundy_mesh/MetaData.hpp>       // for mundy::mesh::MetaData
@@ -119,7 +120,6 @@ Interactions:
 #include <mundy_meta/utils/MeshGeneration.hpp>  // for mundy::meta::utils::generate_class_instance_and_mesh_from_meta_class_requirements
 #include <mundy_shapes/ComputeAABB.hpp>  // for mundy::shapes::ComputeAABB
 #include <mundy_shapes/Spheres.hpp>      // for mundy::shapes::Spheres
-#include <mundy_math/zmort.hpp> // for mundy::math::zmorton_less(Vector3, Vector3)
 
 namespace mundy {
 
@@ -151,6 +151,7 @@ enum class PERIPHERY_BIND_SITES_TYPE : unsigned { RANDOM = 0u, FROM_FILE };
 enum class PERIPHERY_SHAPE : unsigned { SPHERE = 0u, ELLIPSOID };
 enum class PERIPHERY_QUADRATURE : unsigned { GAUSS_LEGENDRE = 0u, FROM_FILE };
 enum class COLLISION_TYPE : unsigned { HERTZIAN = 0u, WCA };
+enum class HYDRO_TYPE : unsigned { RPYC = 0u, STOKES };
 
 std::ostream &operator<<(std::ostream &os, const BINDING_STATE_CHANGE &state) {
   switch (state) {
@@ -290,6 +291,21 @@ std::ostream &operator<<(std::ostream &os, const COLLISION_TYPE &collision_type)
   return os;
 }
 
+std::ostream &operator<<(std::ostream &os, const HYDRO_TYPE &hydro_type) {
+  switch (hydro_type) {
+    case HYDRO_TYPE::RPYC:
+      os << "RPYC";
+      break;
+    case HYDRO_TYPE::STOKES:
+      os << "STOKES";
+      break;
+    default:
+      os << "UNKNOWN";
+      break;
+  }
+  return os;
+}
+
 }  // namespace hp1
 
 }  // namespace alens
@@ -316,6 +332,9 @@ struct fmt::formatter<mundy::alens::hp1::PERIPHERY_QUADRATURE> : fmt::ostream_fo
 
 template <>
 struct fmt::formatter<mundy::alens::hp1::COLLISION_TYPE> : fmt::ostream_formatter {};
+
+template <>
+struct fmt::formatter<mundy::alens::hp1::HYDRO_TYPE> : fmt::ostream_formatter {};
 
 namespace mundy {
 
@@ -408,6 +427,16 @@ class HP1 {
     num_euchromatin_per_repeat_ = simulation_params.get<size_t>("num_euchromatin_per_repeat");
     num_heterochromatin_per_repeat_ = simulation_params.get<size_t>("num_heterochromatin_per_repeat");
     backbone_sphere_hydrodynamic_radius_ = simulation_params.get<double>("backbone_sphere_hydrodynamic_radius");
+    std::string hydro_type_string = simulation_params.get<std::string>("hydro_type");
+    if (hydro_type_string == "RPYC") {
+      hydro_type_ = HYDRO_TYPE::RPYC;
+    } else if (hydro_type_string == "STOKES") {
+      hydro_type_ = HYDRO_TYPE::STOKES;
+    } else {
+      MUNDY_THROW_REQUIRE(
+          false, std::invalid_argument,
+          std::string("Invalid hydro type. Received '") + hydro_type_string + "' but expected 'RPYC' or 'STOKES'.");
+    }
     initial_chromosome_separation_ = simulation_params.get<double>("initial_chromosome_separation");
     MUNDY_THROW_REQUIRE(timestep_size_ > 0, std::invalid_argument, "timestep_size_ must be greater than 0.");
     MUNDY_THROW_REQUIRE(viscosity_ > 0, std::invalid_argument, "viscosity_ must be greater than 0.");
@@ -725,6 +754,7 @@ class HP1 {
         .set("backbone_sphere_hydrodynamic_radius", default_backbone_sphere_hydrodynamic_radius_,
              "Backbone sphere hydrodynamic radius. Even if n-body hydrodynamics is disabled, we still have "
              "self-interaction.")
+        .set("hydro_type", std::string(default_backbone_hydro_type_), "Hydrodynamic kernel type.")
         .set("initial_chromosome_separation", default_initial_chromosome_separation_, "Initial chromosome separation.")
         .set("initialization_type", std::string(default_initialization_type_string_), "Initialization_type.")
         .set("initialize_from_exo_filename", std::string(default_initialize_from_exo_filename_),
@@ -894,6 +924,7 @@ class HP1 {
       std::cout << "  num_euchromatin_per_repeat: " << num_euchromatin_per_repeat_ << std::endl;
       std::cout << "  num_heterochromatin_per_repeat:  " << num_heterochromatin_per_repeat_ << std::endl;
       std::cout << "  backbone_sphere_hydrodynamic_radius: " << backbone_sphere_hydrodynamic_radius_ << std::endl;
+      std::cout << "  hydro_type: " << hydro_type_ << std::endl;
       std::cout << "  initial_chromosome_separation:   " << initial_chromosome_separation_ << std::endl;
       std::cout << "  initialization_type:             " << initialization_type_ << std::endl;
       if (initialization_type_ == INITIALIZATION_TYPE::FROM_EXO) {
@@ -3649,10 +3680,13 @@ class HP1 {
     Kokkos::deep_copy(sphere_velocities, sphere_velocities_host);
 
     // Apply the RPY kernel from spheres to spheres
-    mundy::alens::periphery::apply_rpyc_kernel(DeviceExecutionSpace(), viscosity, sphere_positions, sphere_positions,
-                                               sphere_radii, sphere_radii, sphere_forces, sphere_velocities);
-    // mundy::alens::periphery::apply_stokes_kernel(DeviceExecutionSpace(), viscosity, sphere_positions,
-    // sphere_positions, sphere_forces, sphere_velocities);
+    if (hydro_type_ == HYDRO_TYPE::RPYC) {
+      mundy::alens::periphery::apply_rpyc_kernel(DeviceExecutionSpace(), viscosity, sphere_positions, sphere_positions,
+                                                 sphere_radii, sphere_radii, sphere_forces, sphere_velocities);
+    } else if (hydro_type_ == HYDRO_TYPE::STOKES) {
+      mundy::alens::periphery::apply_stokes_kernel(DeviceExecutionSpace(), viscosity, sphere_positions,
+                                                   sphere_positions, sphere_forces, sphere_velocities);
+    }
 
     // If enabled, apply the correction for the no-slip boundary condition
     if (enable_periphery_hydrodynamics_) {
@@ -3668,10 +3702,14 @@ class HP1 {
       Kokkos::deep_copy(surface_radii, 0.0);
 
       // Apply the RPY kernel from spheres to periphery
-      mundy::alens::periphery::apply_rpyc_kernel(DeviceExecutionSpace(), viscosity, sphere_positions, surface_positions,
-                                                 sphere_radii, surface_radii, sphere_forces, surface_velocities);
-      // mundy::alens::periphery::apply_stokes_kernel(DeviceExecutionSpace(), viscosity, sphere_positions,
-      //                                              surface_positions, sphere_forces, surface_velocities);
+      if (hydro_type_ == HYDRO_TYPE::RPYC) {
+        mundy::alens::periphery::apply_rpyc_kernel(DeviceExecutionSpace(), viscosity, sphere_positions,
+                                                   surface_positions, sphere_radii, surface_radii, sphere_forces,
+                                                   surface_velocities);
+      } else if (hydro_type_ == HYDRO_TYPE::STOKES) {
+        mundy::alens::periphery::apply_stokes_kernel(DeviceExecutionSpace(), viscosity, sphere_positions,
+                                                     surface_positions, sphere_forces, surface_velocities);
+      }
 
       // Apply no-slip boundary conditions
       // This is done in two steps: first, we compute the forces on the periphery necessary to enforce no-slip
@@ -3682,6 +3720,7 @@ class HP1 {
           surface_normals, surface_weights, surface_forces, sphere_velocities);
 
       // The RPY kernel is only long-range, it doesn't add on self-interaction for the spheres
+      // NOTE do not uncomment this, it is merely for a historical record to prevent people from adding it!
       // mundy::alens::periphery::apply_local_drag(DeviceExecutionSpace(), viscosity, sphere_velocities, sphere_forces,
       //                                           sphere_radii);
     }
@@ -4726,6 +4765,7 @@ class HP1 {
   bool loadbalance_post_initialization_;
   bool check_maximum_speed_pre_position_update_;
   double max_allowable_speed_;
+  HYDRO_TYPE hydro_type_;
 
   // IO params
   size_t io_frequency_;
@@ -4878,6 +4918,7 @@ class HP1 {
   static constexpr double default_backbone_wca_cutoff_ = 1.12246204831;  // 2^(1/6)
 
   // Backbone hydrodynamic params
+  static constexpr std::string_view default_backbone_hydro_type_ = "RPYC";
   static constexpr double default_backbone_sphere_hydrodynamic_radius_ = 0.05;
 
   // Crosslinker params
