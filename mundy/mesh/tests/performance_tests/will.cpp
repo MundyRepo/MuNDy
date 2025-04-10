@@ -136,11 +136,11 @@ class apply_brownian_motion {
     // Slender fiber has 0 rot drag about the long axis, regularize with identity rot mobility
     constexpr double pi = Kokkos::numbers::pi_v<double>;
     const double viscosity = 1;
-    const double p =(length + 2 * radius)/(2*radius) ;
-    const double inv_drag_perp = 4 * pi * viscosity / (Kokkos::log(p) + 0.839 + 0.185/p + 0.233/(p*p)) ;
-    const double inv_drag_para = 2 * pi * viscosity / (Kokkos::log(p) - 0.207 + 0.98/p - 0.133/(p*p)) ;
-    const double inv_drag_rot = (pi * viscosity * p*p/3 )/(Kokkos::log(p) - 0.662 + 0.917/p - 0.053/(p*p));
-    
+    const double p = (length + 2 * radius) / (2 * radius);
+    const double inv_drag_perp = 4 * pi * viscosity / (Kokkos::log(p) + 0.839 + 0.185 / p + 0.233 / (p * p));
+    const double inv_drag_para = 2 * pi * viscosity / (Kokkos::log(p) - 0.207 + 0.98 / p - 0.133 / (p * p));
+    const double inv_drag_rot = (pi * viscosity * p * p / 3) / (Kokkos::log(p) - 0.662 + 0.917 / p - 0.053 / (p * p));
+
     // RFD from Delong, JCP, 2015
     auto tangent = quat * math::Vector3<double>(0.0, 0.0, 1.0);
 
@@ -351,10 +351,10 @@ class eval_mobility {
     // Slender fiber has 0 rot drag about the long axis, regularize with identity rot mobility
     constexpr double pi = Kokkos::numbers::pi_v<double>;
     const double viscosity = 1;
-    const double p =(length + 2 * radius)/(2*radius) ;
-    const double inv_drag_perp = 4 * pi * viscosity / (Kokkos::log(p) + 0.839 + 0.185/p + 0.233/(p*p)) ;
-    const double inv_drag_para = 2 * pi * viscosity / (Kokkos::log(p) - 0.207 + 0.98/p - 0.133/(p*p)) ;
-    const double inv_drag_rot = (pi * viscosity * p*p/3 )/(Kokkos::log(p) - 0.662 + 0.917/p - 0.053/(p*p));
+    const double p = (length + 2 * radius) / (2 * radius);
+    const double inv_drag_perp = 4 * pi * viscosity / (Kokkos::log(p) + 0.839 + 0.185 / p + 0.233 / (p * p));
+    const double inv_drag_para = 2 * pi * viscosity / (Kokkos::log(p) - 0.207 + 0.98 / p - 0.133 / (p * p));
+    const double inv_drag_rot = (pi * viscosity * p * p / 3) / (Kokkos::log(p) - 0.662 + 0.917 / p - 0.053 / (p * p));
 
     // Note, += is safe here without atomic under the assumption that no two particles share a node
     auto force_para = math::dot(force, tangent) * tangent;
@@ -381,6 +381,8 @@ class eval_mobility {
     ngp_rod_agg.template modify_on_device<VELOCITY, OMEGA>();
   }
 };
+
+// TODO: Update configuration for PRC1 that are unbound
 
 class update_configuration {
  public:
@@ -446,9 +448,9 @@ class reconcile_surface_nodes {
     // Go from entity view to the aggregate
     auto rod_view = ngp_rod_agg_.get_view(slink_view.ngp_mesh().fast_mesh_index(rod_entity));
     auto surface_node_view = ngp_surface_node_agg_.get_view(slink_view.ngp_mesh().fast_mesh_index(surface_node_entity));
-    MUNDY_THROW_ASSERT(get<IS_BOUND>(surface_node_view)[0] == 1, std::runtime_error, 
-    "Weird: A surface node is not bound to a rod!");
-    
+    MUNDY_THROW_ASSERT(get<IS_BOUND>(surface_node_view)[0] == 1, std::runtime_error,
+                       "Weird: A surface node is not bound to a rod!");
+
     // Node data:
     auto rod_center = get<COORDS>(rod_view, 0);
     auto rod_tangent = get<TANGENT>(rod_view, 0);
@@ -716,8 +718,9 @@ class kmc_state_change_crosslinks {
       : dt_(dt), kbt_(kbt), link_data_(link_data), slink_part_(slink_part) {
   }
 
-  void bound_to_unbound(auto& ngp_crosslinker_agg, auto& ngp_rod_agg, const indices_view_t& crosslinker_indices,
-                        const indices_view_t& rod_indices, mesh::LinkPartition& link_partition) {
+  void bound_to_unbound(auto& ngp_crosslinker_agg, auto& ngp_crosslinker_head_agg, auto& ngp_rod_agg, auto& ngp_slink_agg,
+                        const indices_view_t& crosslinker_indices, const indices_view_t& rod_indices,
+                        mesh::LinkPartition& link_partition) {
     auto ngp_mesh = ngp_crosslinker_agg.ngp_mesh();
     const size_t num_crosslinkers = crosslinker_indices.extent(0);
     const size_t num_rods = rod_indices.extent(0);
@@ -747,28 +750,41 @@ class kmc_state_change_crosslinks {
 
             double probability_of_unbinding = 1.0 - Kokkos::exp(-z_total);
             if (rand_u01 < probability_of_unbinding) {
-              std::cout << "!!!!Unbinding crosslinker " << crosslinker_id
-                        << " at side " << side << std::endl;
+              std::cout << "!!!!Unbinding crosslinker " << crosslinker_id << " at side " << side << std::endl;
               get<ARCLENGTH>(crosslinker_view, side) = -1;
               get<IS_BOUND_TMP>(crosslinker_view, side) = false;
 
-              auto connected_links = link_partition.get_connected_links(
-                  ngp_mesh.get_nodes(stk::topology::ELEM_RANK, crosslinker_fast_mesh_index)[side]);
-              size_t num_links = connected_links.size();
-              for (size_t i = 0; i < num_links; ++i) {
-                link_partition.request_destruction(connected_links[i]);
-              }
+              // auto connected_links = link_partition.get_connected_links(
+              //     ngp_mesh.get_nodes(stk::topology::ELEM_RANK, crosslinker_fast_mesh_index)[side]);
+              // size_t num_links = connected_links.size();
+              // for (size_t i = 0; i < num_links; ++i) {
+              //   link_partition.request_destruction(connected_links[i]);
+              // }
             }
           }
         });
+
+    // Loop over each link and request its destruction if it links a surface node that is unbound.
+    ngp_slink_agg.template sync_to_device<LINKED_ENTITIES>();
+    ngp_slink_agg.template for_each(KOKKOS_LAMBDA(auto& slink_view) {
+      stk::mesh::Entity surface_node_entity = stk::mesh::Entity(get<LINKED_ENTITIES>(slink_view)[1]);
+      auto surface_node_fast_mesh_index = ngp_mesh.fast_mesh_index(surface_node_entity);
+      auto surface_node_view = ngp_crosslinker_head_agg.get_view(surface_node_fast_mesh_index);
+
+      // Loop over left and right nodes separately
+      if (!get<IS_BOUND_TMP>(surface_node_view)[0]) {
+        link_partition.request_destruction(
+          slink_view.ngp_mesh().get_entity(stk::topology::NODE_RANK, slink_view.entity_index()));
+      }
+    });
   }
 
   template <typename EnergyFunc>
-  void unbound_to_bound(auto& ngp_crosslinker_agg, auto& ngp_rod_agg, const indices_view_t& crosslinker_indices,
-                        const indices_view_t& rod_indices, mesh::LinkPartition& link_partition,
-                        const EnergyFunc& energy_func) {
+  void unbound_to_bound(auto& ngp_crosslinker_agg, auto& ngp_rod_agg,
+                        const indices_view_t& crosslinker_indices, const indices_view_t& rod_indices,
+                        mesh::LinkPartition& link_partition, const EnergyFunc& energy_func) {
     auto ngp_mesh = ngp_crosslinker_agg.ngp_mesh();
-    
+
     const size_t num_crosslinkers = crosslinker_indices.extent(0);
     const size_t num_rods = rod_indices.extent(0);
     using range_policy_t = stk::ngp::DeviceRangePolicy;
@@ -816,6 +832,9 @@ class kmc_state_change_crosslinks {
 
             double probability_of_binding = 1.0 - Kokkos::exp(-z_total);
             if (rand_u01 < probability_of_binding) {
+              // To avoid bias, grab a new random number
+              double rand_u01 = rng.rand<double>();
+
               // Determine who we bind to
               double cumulative_sum = 0.0;
               for (size_t r = 0; r < num_rods; ++r) {
@@ -833,16 +852,14 @@ class kmc_state_change_crosslinks {
                   double delta_energy = new_energy - old_energy;
                   double z_i = dt_ * binding_rate * Kokkos::exp(-delta_energy / kbt_);
                   cumulative_sum += z_i / z_total;
+                  std::cout << "Cumulative sum: " << cumulative_sum << std::endl;
 
                   if (rand_u01 < cumulative_sum) {
-                    std::cout << "!!!!Binding crosslinker " << crosslinker_id
-                              << "'s node " << 
-                              ngp_mesh.identifier(
-                              ngp_mesh.get_nodes(stk::topology::ELEM_RANK, crosslinker_fast_mesh_index)[side])
-                              << " at side " << side 
-                              << " at arclength " << arclength 
-                              << " to rod " << ngp_mesh.identifier(
-                                ngp_mesh.get_entity(stk::topology::ELEM_RANK, rod_fast_mesh_index))
+                    std::cout << "!!!!Binding crosslinker " << crosslinker_id << "'s node "
+                              << ngp_mesh.identifier(
+                                     ngp_mesh.get_nodes(stk::topology::ELEM_RANK, crosslinker_fast_mesh_index)[side])
+                              << " at side " << side << " at arclength " << arclength << " to rod "
+                              << ngp_mesh.identifier(ngp_mesh.get_entity(stk::topology::ELEM_RANK, rod_fast_mesh_index))
                               << std::endl;
 
                     // Bind to this rod at this bind site
@@ -862,10 +879,11 @@ class kmc_state_change_crosslinks {
   }
 
   template <typename EnergyFunc>
-  void apply_to(auto& crosslinker_agg, auto& rod_agg, const EnergyFunc& energy_func) {
+  void apply_to(auto& crosslinker_agg, auto& crosslinker_head_agg, auto& rod_agg, auto& slink_agg, const EnergyFunc& energy_func) {
     auto ngp_crosslinker_agg = mesh::get_updated_ngp_aggregate(crosslinker_agg);
+    auto ngp_crosslinker_head_agg = mesh::get_updated_ngp_aggregate(crosslinker_head_agg);
     auto ngp_rod_agg = mesh::get_updated_ngp_aggregate(rod_agg);
-    link_data_.propagate_updates();  // Make sure the link data's CRS is up-to-date   
+    auto ngp_slink_agg = mesh::get_updated_ngp_aggregate(slink_agg);
 
     using indices_view_t = Kokkos::View<stk::mesh::FastMeshIndex*, stk::ngp::ExecSpace>;
     indices_view_t crosslinker_indices = get_local_entity_indices(
@@ -894,8 +912,10 @@ class kmc_state_change_crosslinks {
         });
 
     // Perform the binding and unbinding (sets the IS_BOUND_TMP to the new value of IS_BOUND)
-    unbound_to_bound(ngp_crosslinker_agg, ngp_rod_agg, crosslinker_indices, rod_indices, link_partition, energy_func);
-    bound_to_unbound(ngp_crosslinker_agg, ngp_rod_agg, crosslinker_indices, rod_indices, link_partition);
+    unbound_to_bound(ngp_crosslinker_agg, ngp_rod_agg, crosslinker_indices, rod_indices,
+                     link_partition, energy_func);
+    bound_to_unbound(ngp_crosslinker_agg, ngp_crosslinker_head_agg, ngp_rod_agg, ngp_slink_agg, crosslinker_indices, rod_indices,
+                     link_partition);
 
     // Copy IS_BOUND_TMP to IS_BOUND
     Kokkos::parallel_for(
@@ -989,8 +1009,8 @@ class apply_hertzian_contact {
           double rod1_contact_point_arc_length, rod2_contact_point_arc_length;
           math::Vector3<double> rod1_to_rod2_centerline_sep;
           const double signed_sep_dist =
-              geom::distance(rod1_centerline, rod2_centerline,                                //
-                             rod1_centerline_contact_point, rod2_centerline_contact_point,    //
+              geom::distance(rod1_centerline, rod2_centerline,                              //
+                             rod1_centerline_contact_point, rod2_centerline_contact_point,  //
                              rod1_contact_point_arc_length, rod2_contact_point_arc_length,  //
                              rod1_to_rod2_centerline_sep) -
               rod1_radius - rod2_radius;
@@ -1291,6 +1311,7 @@ void run_main() {
                            .add_component<FORCE, NODE_RANK>(force_accessor)
                            .add_component<TORQUE, NODE_RANK>(torque_accessor)
                            .add_component<IS_BOUND, NODE_RANK>(is_bound_accessor)
+                           .add_component<SCRATCH_D1, NODE_RANK>(scratch_d1_accessor)
                            .add_component<BINDING_RATE, NODE_RANK>(binding_rate_accessor)
                            .add_component<UNBINDING_RATE, NODE_RANK>(unbinding_rate_accessor);
 
@@ -1329,8 +1350,8 @@ void run_main() {
   double binding_unbinding_kbt = 1.0;
   double binding_rate = 1.0;
   double unbinding_rate = 1.0;
-  double bind_site_spacing = rod_length / 10.0;
-  double screening_length = rest_length;  // Small with respect to rest_length
+  double bind_site_spacing = rod_length / 100.0;
+  double screening_length = rest_length / 5.0;  // Small with respect to rest_length
 
   // Fill the declare entities helper
   DeclareEntitiesHelper dec_helper;
@@ -1387,24 +1408,25 @@ void run_main() {
           .owning_proc(0)     //
           .id(PRC1HeadIndex)  // 1 indexed
           .add_field_data<double>(&node_arclength_field, {0.1 + (MotorPerThisMT + 0.5) / MotorsPerMT * rod_length})  //
-          .add_field_data<double>(&node_force_field, {0.0, 0.0, 0.0})                                          //
-          .add_field_data<double>(&node_torque_field, {0.0, 0.0, 0.0})                                         //
-          .add_field_data<unsigned>(&node_is_bound_field, {1})                                                 //
-          .add_field_data<double>(&node_binding_rate_field, {binding_rate * ((PRC1HeadIndex == 5) || PRC1HeadIndex == 7)})                                    //
-          .add_field_data<double>(&node_unbinding_rate_field, {unbinding_rate  * ((PRC1HeadIndex == 5) || PRC1HeadIndex == 7)});
+          .add_field_data<double>(&node_force_field, {0.0, 0.0, 0.0})                                                //
+          .add_field_data<double>(&node_torque_field, {0.0, 0.0, 0.0})                                               //
+          .add_field_data<unsigned>(&node_is_bound_field, {1})                                                       //
+          .add_field_data<double>(&node_binding_rate_field,
+                                  {binding_rate})  //
+          .add_field_data<double>(&node_unbinding_rate_field,
+                                  {unbinding_rate});
       PRC1HeadIndex++;
 
       dec_helper.create_node()
           .owning_proc(0)     //
           .id(PRC1HeadIndex)  // 1 indexed                                                             // 1 indexed
           .add_field_data<double>(&node_arclength_field, {-0.1 + (MotorPerThisMT + 0.5) / MotorsPerMT * rod_length})  //
-          .add_field_data<double>(&node_force_field, {0.0, 0.0, 0.0})                                          //
-          .add_field_data<double>(&node_torque_field, {0.0, 0.0, 0.0})                                         //
-          .add_field_data<unsigned>(&node_is_bound_field, {1})                                                 //
-          .add_field_data<double>(&node_binding_rate_field, {binding_rate  * (0)})                                    //
-          .add_field_data<double>(&node_unbinding_rate_field, {unbinding_rate  * (0)});
+          .add_field_data<double>(&node_force_field, {0.0, 0.0, 0.0})                                                 //
+          .add_field_data<double>(&node_torque_field, {0.0, 0.0, 0.0})                                                //
+          .add_field_data<unsigned>(&node_is_bound_field, {1})                                                        //
+          .add_field_data<double>(&node_binding_rate_field, {binding_rate})                                     //
+          .add_field_data<double>(&node_unbinding_rate_field, {unbinding_rate});
 
-      
       dec_helper.create_element()
           .owning_proc(0)  //
           .id(MotorIndex)  //
@@ -1471,7 +1493,6 @@ void run_main() {
                             std::runtime_error, "Invalid entities for link creation");
         partition.request_link(e_mt1, e_prc1_head1);
         partition.request_link(e_mt2, e_prc1_head2);
-
       }
       XPosition++;
       if (XPosition > (SquareSize - 1)) {
@@ -1498,7 +1519,7 @@ void run_main() {
     // Binding/unbinding first
     std::cout << "Binding/unbinding" << std::endl;
     kmc_state_change_crosslinks(dt, binding_unbinding_kbt, link_data, slink_part)
-        .apply_to(prc1_agg, rod_agg, AngularCrosslinkerEnergy{screening_length});
+        .apply_to(prc1_agg, prc1_head_agg, rod_agg, slink_agg, AngularCrosslinkerEnergy{screening_length});
     reconcile_surface_nodes(link_data, rod_agg, prc1_head_agg).apply_to(slink_agg);  // Must update the surface
                                                                                      // nodes after binding
 

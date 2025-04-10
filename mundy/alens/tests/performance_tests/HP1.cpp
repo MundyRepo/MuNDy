@@ -75,41 +75,20 @@ Interactions:
 #include <stk_mesh/base/DumpMeshInfo.hpp>      // for stk::mesh::impl::dump_all_mesh_info
 #include <stk_mesh/base/Entity.hpp>            // for stk::mesh::Entity
 #include <stk_mesh/base/EntitySorterBase.hpp>  // for stk::mesh::EntitySorterBase
-#include <stk_mesh/base/FieldParallel.hpp>     // for stk::parallel_sum
-#include <stk_mesh/base/ForEachEntity.hpp>     // for mundy::mesh::for_each_entity_run
-#include <stk_mesh/base/Part.hpp>              // for stk::mesh::Part, stk::mesh::intersect
-#include <stk_mesh/base/Selector.hpp>          // for stk::mesh::Selector
-#include <stk_topology/topology.hpp>           // for stk::topology
-#include <stk_util/parallel/Parallel.hpp>      // for stk::parallel_machine_init, stk::parallel_machine_finalize
 
-// Mundy libs
-#include <mundy_alens/actions_crosslinkers.hpp>                // for mundy::alens::crosslinkers...
-#include <mundy_alens/periphery/Periphery.hpp>                 // for gen_sphere_quadrature
-#include <mundy_constraints/AngularSprings.hpp>                // for mundy::constraints::AngularSprings
-#include <mundy_constraints/ComputeConstraintForcing.hpp>      // for mundy::constraints::ComputeConstraintForcing
-#include <mundy_constraints/DeclareAndInitConstraints.hpp>     // for mundy::constraints::DeclareAndInitConstraints
-#include <mundy_constraints/HookeanSprings.hpp>                // for mundy::constraints::HookeanSprings
+// Mundy core
 #include <mundy_core/MakeStringArray.hpp>                      // for mundy::core::make_string_array
 #include <mundy_core/OurAnyNumberParameterEntryValidator.hpp>  // for mundy::core::OurAnyNumberParameterEntryValidator
 #include <mundy_core/StringLiteral.hpp>  // for mundy::core::StringLiteral and mundy::core::make_string_literal
 #include <mundy_core/throw_assert.hpp>   // for MUNDY_THROW_ASSERT
-#include <mundy_io/IOBroker.hpp>         // for mundy::io::IOBroker
-#include <mundy_linkers/ComputeSignedSeparationDistanceAndContactNormal.hpp>  // for mundy::linkers::ComputeSignedSeparationDistanceAndContactNormal
-#include <mundy_linkers/DestroyNeighborLinkers.hpp>         // for mundy::linkers::DestroyNeighborLinkers
-#include <mundy_linkers/EvaluateLinkerPotentials.hpp>       // for mundy::linkers::EvaluateLinkerPotentials
-#include <mundy_linkers/GenerateNeighborLinkers.hpp>        // for mundy::linkers::GenerateNeighborLinkers
-#include <mundy_linkers/LinkerPotentialForceReduction.hpp>  // for mundy::linkers::LinkerPotentialForceReduction
-#include <mundy_linkers/NeighborLinkers.hpp>                // for mundy::linkers::NeighborLinkers
+
+// Mundy math
 #include <mundy_math/Hilbert.hpp>                           // for mundy::math::create_hilbert_positions_and_directors
 #include <mundy_math/Vector3.hpp>                           // for mundy::math::Vector3
 #include <mundy_math/distance/EllipsoidEllipsoid.hpp>       // for mundy::math::distance::ellipsoid_ellipsoid
-#include <mundy_math/zmort.hpp>                             // for mundy::math::zmorton_less(Vector3, Vector3)
-#include <mundy_mesh/BulkData.hpp>                          // for mundy::mesh::BulkData
-#include <mundy_mesh/FieldViews.hpp>     // for mundy::mesh::vector3_field_data, mundy::mesh::quaternion_field_data
-#include <mundy_mesh/MetaData.hpp>       // for mundy::mesh::MetaData
-#include <mundy_mesh/fmt_stk_types.hpp>  // adds fmt::format for stk types
-#include <mundy_mesh/utils/DestroyFlaggedEntities.hpp>        // for mundy::mesh::utils::destroy_flagged_entities
-#include <mundy_mesh/utils/FillFieldWithValue.hpp>            // for mundy::mesh::utils::fill_field_with_value
+#include <mundy_math/zmort.hpp> // for mundy::math::zmorton_less(Vector3, Vector3)
+
+// Mundy meta
 #include <mundy_meta/MetaFactory.hpp>                         // for mundy::meta::MetaKernelFactory
 #include <mundy_meta/MetaKernel.hpp>                          // for mundy::meta::MetaKernel
 #include <mundy_meta/MetaKernelDispatcher.hpp>                // for mundy::meta::MetaKernelDispatcher
@@ -118,8 +97,39 @@ Interactions:
 #include <mundy_meta/ParameterValidationHelpers.hpp>  // for mundy::meta::check_parameter_and_set_default and mundy::meta::check_required_parameter
 #include <mundy_meta/PartReqs.hpp>  // for mundy::meta::PartReqs
 #include <mundy_meta/utils/MeshGeneration.hpp>  // for mundy::meta::utils::generate_class_instance_and_mesh_from_meta_class_requirements
+
+// Mundy mesh
+#include <mundy_mesh/BulkData.hpp>                          // for mundy::mesh::BulkData
+#include <mundy_mesh/FieldViews.hpp>     // for mundy::mesh::vector3_field_data, mundy::mesh::quaternion_field_data
+#include <mundy_mesh/MetaData.hpp>       // for mundy::mesh::MetaData
+#include <mundy_mesh/fmt_stk_types.hpp>  // adds fmt::format for stk types
+#include <mundy_mesh/utils/DestroyFlaggedEntities.hpp>        // for mundy::mesh::utils::destroy_flagged_entities
+#include <mundy_mesh/utils/FillFieldWithValue.hpp>            // for mundy::mesh::utils::fill_field_with_value
+
+// Mundy shapes
 #include <mundy_shapes/ComputeAABB.hpp>  // for mundy::shapes::ComputeAABB
 #include <mundy_shapes/Spheres.hpp>      // for mundy::shapes::Spheres
+
+// Mundy constraint
+#include <mundy_constraints/HookeanSprings.hpp>                // for mundy::constraints::HookeanSprings
+
+// Mundy linkers
+#include <mundy_linkers/ComputeSignedSeparationDistanceAndContactNormal.hpp>  // for mundy::linkers::ComputeSignedSeparationDistanceAndContactNormal
+#include <mundy_linkers/DestroyNeighborLinkers.hpp>         // for mundy::linkers::DestroyNeighborLinkers
+#include <mundy_linkers/EvaluateLinkerPotentials.hpp>       // for mundy::linkers::EvaluateLinkerPotentials
+#include <mundy_linkers/GenerateNeighborLinkers.hpp>        // for mundy::linkers::GenerateNeighborLinkers
+#include <mundy_linkers/LinkerPotentialForceReduction.hpp>  // for mundy::linkers::LinkerPotentialForceReduction
+#include <mundy_linkers/NeighborLinkers.hpp>                // for mundy::linkers::NeighborLinkers
+
+// Mundy IO
+#include <mundy_io/IOBroker.hpp>         // for mundy::io::IOBroker
+
+// Mundy alens
+#include <mundy_alens/actions_crosslinkers.hpp>                // for mundy::alens::crosslinkers...
+#include <mundy_alens/periphery/Periphery.hpp>                 // for gen_sphere_quadrature
+#include <mundy_constraints/AngularSprings.hpp>                // for mundy::constraints::AngularSprings
+#include <mundy_constraints/ComputeConstraintForcing.hpp>      // for mundy::constraints::ComputeConstraintForcing
+#include <mundy_constraints/DeclareAndInitConstraints.hpp>     // for mundy::constraints::DeclareAndInitConstraints
 
 namespace mundy {
 

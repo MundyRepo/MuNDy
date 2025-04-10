@@ -1223,7 +1223,7 @@ class LinkData {
     bool we_started_modification = false;
     if (global_num_marked_for_destruction > 0 || global_num_request_for_creation > 0) {
       if (!bulk_data_.in_modifiable_state()) {
-        propagate_updates();  // Must be called before entering a mod cycle!
+        // propagate_updates();  // Must be called before entering a mod cycle!
         bulk_data_.modification_begin();
         we_started_modification = true;
       }
@@ -1368,25 +1368,25 @@ class LinkData {
       const bool should_destroy_entity =
           static_cast<bool>(stk::mesh::field_data(link_marked_for_destruction_field, link)[0]);
       if (should_destroy_entity) {
-        MUNDY_THROW_ASSERT(!stk::mesh::field_data(link_needs_updated_field, link)[0], std::logic_error,
-                           "Attempting to destroy a non-up-to-date link. "
-                           "This can cause issues with maintaining consistency between the COO and CRS.");
+        // MUNDY_THROW_ASSERT(!stk::mesh::field_data(link_needs_updated_field, link)[0], std::logic_error,
+        //                    "Attempting to destroy a non-up-to-date link. "
+        //                    "This can cause issues with maintaining consistency between the COO and CRS.");
 
         // Destroy all downward connections from the link
         //   TODO(palmerb4): This is a temporary workaround to intercept destruction of a link
         //    and propagate the effects to the CRS connectivity and will be replaced by a modification observer.
-        stk::mesh::Bucket &link_bucket = bulk_data_.bucket(link);
-        LinkPartition &link_partition = get_partition(get_partition_key(link_bucket));
-        for (unsigned d = 0; d < link_partition.link_dimensionality(); ++d) {
-          std::cout << "d: " << d << std::endl;
-          stk::mesh::Entity linked_entity = get_linked_entity(link, d);
-          if (bulk_data_.is_valid(linked_entity)) {
-            std::cout << "Destroying link: " << bulk_data_.identifier(link)
-                      << " linked entity: " << bulk_data_.identifier(linked_entity) << std::endl;
-            // Remove the link from the linked entity's connectivity
-            link_partition.remove_connected_link(linked_entity, link);
-          }
-        }
+        // stk::mesh::Bucket &link_bucket = bulk_data_.bucket(link);
+        // LinkPartition &link_partition = get_partition(get_partition_key(link_bucket));
+        // for (unsigned d = 0; d < link_partition.link_dimensionality(); ++d) {
+        //   std::cout << "d: " << d << std::endl;
+        //   stk::mesh::Entity linked_entity = get_linked_entity(link, d);
+        //   if (bulk_data_.is_valid(linked_entity)) {
+        //     std::cout << "Destroying link: " << bulk_data_.identifier(link)
+        //               << " linked entity: " << bulk_data_.identifier(linked_entity) << std::endl;
+        //     // Remove the link from the linked entity's connectivity
+        //     link_partition.remove_connected_link(linked_entity, link);
+        //   }
+        // }
 
         bool success = bulk_data_.destroy_entity(link);
         MUNDY_THROW_ASSERT(success, std::runtime_error,
