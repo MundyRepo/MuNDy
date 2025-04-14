@@ -75,6 +75,7 @@ Interactions:
 #include <stk_mesh/base/DumpMeshInfo.hpp>      // for stk::mesh::impl::dump_all_mesh_info
 #include <stk_mesh/base/Entity.hpp>            // for stk::mesh::Entity
 #include <stk_mesh/base/EntitySorterBase.hpp>  // for stk::mesh::EntitySorterBase
+#include <stk_mesh/base/FieldParallel.hpp>     // for stk::mesh::parallel_sum
 
 // Mundy core
 #include <mundy_core/MakeStringArray.hpp>                      // for mundy::core::make_string_array
@@ -83,10 +84,10 @@ Interactions:
 #include <mundy_core/throw_assert.hpp>   // for MUNDY_THROW_ASSERT
 
 // Mundy math
-#include <mundy_math/Hilbert.hpp>                           // for mundy::math::create_hilbert_positions_and_directors
-#include <mundy_math/Vector3.hpp>                           // for mundy::math::Vector3
-#include <mundy_math/distance/EllipsoidEllipsoid.hpp>       // for mundy::math::distance::ellipsoid_ellipsoid
-#include <mundy_math/zmort.hpp> // for mundy::math::zmorton_less(Vector3, Vector3)
+#include <mundy_math/Hilbert.hpp>                      // for mundy::math::create_hilbert_positions_and_directors
+#include <mundy_math/Vector3.hpp>                      // for mundy::math::Vector3
+#include <mundy_math/distance/EllipsoidEllipsoid.hpp>  // for mundy::math::distance::ellipsoid_ellipsoid
+#include <mundy_math/zmort.hpp>                        // for mundy::math::zmorton_less(Vector3, Vector3)
 
 // Mundy meta
 #include <mundy_meta/MetaFactory.hpp>                         // for mundy::meta::MetaKernelFactory
@@ -99,19 +100,19 @@ Interactions:
 #include <mundy_meta/utils/MeshGeneration.hpp>  // for mundy::meta::utils::generate_class_instance_and_mesh_from_meta_class_requirements
 
 // Mundy mesh
-#include <mundy_mesh/BulkData.hpp>                          // for mundy::mesh::BulkData
+#include <mundy_mesh/BulkData.hpp>       // for mundy::mesh::BulkData
 #include <mundy_mesh/FieldViews.hpp>     // for mundy::mesh::vector3_field_data, mundy::mesh::quaternion_field_data
 #include <mundy_mesh/MetaData.hpp>       // for mundy::mesh::MetaData
 #include <mundy_mesh/fmt_stk_types.hpp>  // adds fmt::format for stk types
-#include <mundy_mesh/utils/DestroyFlaggedEntities.hpp>        // for mundy::mesh::utils::destroy_flagged_entities
-#include <mundy_mesh/utils/FillFieldWithValue.hpp>            // for mundy::mesh::utils::fill_field_with_value
+#include <mundy_mesh/utils/DestroyFlaggedEntities.hpp>  // for mundy::mesh::utils::destroy_flagged_entities
+#include <mundy_mesh/utils/FillFieldWithValue.hpp>      // for mundy::mesh::utils::fill_field_with_value
 
 // Mundy shapes
 #include <mundy_shapes/ComputeAABB.hpp>  // for mundy::shapes::ComputeAABB
 #include <mundy_shapes/Spheres.hpp>      // for mundy::shapes::Spheres
 
 // Mundy constraint
-#include <mundy_constraints/HookeanSprings.hpp>                // for mundy::constraints::HookeanSprings
+#include <mundy_constraints/HookeanSprings.hpp>  // for mundy::constraints::HookeanSprings
 
 // Mundy linkers
 #include <mundy_linkers/ComputeSignedSeparationDistanceAndContactNormal.hpp>  // for mundy::linkers::ComputeSignedSeparationDistanceAndContactNormal
@@ -122,14 +123,14 @@ Interactions:
 #include <mundy_linkers/NeighborLinkers.hpp>                // for mundy::linkers::NeighborLinkers
 
 // Mundy IO
-#include <mundy_io/IOBroker.hpp>         // for mundy::io::IOBroker
+#include <mundy_io/IOBroker.hpp>  // for mundy::io::IOBroker
 
 // Mundy alens
-#include <mundy_alens/actions_crosslinkers.hpp>                // for mundy::alens::crosslinkers...
-#include <mundy_alens/periphery/Periphery.hpp>                 // for gen_sphere_quadrature
-#include <mundy_constraints/AngularSprings.hpp>                // for mundy::constraints::AngularSprings
-#include <mundy_constraints/ComputeConstraintForcing.hpp>      // for mundy::constraints::ComputeConstraintForcing
-#include <mundy_constraints/DeclareAndInitConstraints.hpp>     // for mundy::constraints::DeclareAndInitConstraints
+#include <mundy_alens/actions_crosslinkers.hpp>             // for mundy::alens::crosslinkers...
+#include <mundy_alens/periphery/Periphery.hpp>              // for gen_sphere_quadrature
+#include <mundy_constraints/AngularSprings.hpp>             // for mundy::constraints::AngularSprings
+#include <mundy_constraints/ComputeConstraintForcing.hpp>   // for mundy::constraints::ComputeConstraintForcing
+#include <mundy_constraints/DeclareAndInitConstraints.hpp>  // for mundy::constraints::DeclareAndInitConstraints
 
 namespace mundy {
 
