@@ -92,7 +92,6 @@ template <typename T, ValidAccessor<T> Accessor, typename OwnershipType>
 KOKKOS_INLINE_FUNCTION constexpr auto norm(const Quaternion<T, Accessor, OwnershipType> &quat);
 //@}
 
-
 /// \brief Quaternion class with floating point entries (an integer-valued quaternion doesn't make much sense)
 /// \tparam T The type of the entries.
 /// \tparam Accessor The type of the accessor.
@@ -364,11 +363,20 @@ class Quaternion<T, Accessor, Ownership::Views> {
     return accessor_;
   }
 
-  /// \brief Get a copy of the quaternion vector component
-  /// TODO(palmerb4): We should turn this into a view.
+  /// \brief Get a view of the quaternion vector component
   KOKKOS_INLINE_FUNCTION
-  constexpr Vector3<T> vector() const {
-    return Vector3<T>(accessor_[1], accessor_[2], accessor_[3]);
+  constexpr const auto vector() const {
+    // return Vector3<T>(accessor_[1], accessor_[2], accessor_[3]);
+    auto shifted_accessor = get_shifted_view<T, 1>(accessor_);
+    return get_owning_vector<T, 3>(std::move(shifted_accessor));
+  }
+
+  /// \brief Get a view of the quaternion vector component
+  KOKKOS_INLINE_FUNCTION
+  constexpr auto vector() {
+    // return Vector3<T>(accessor_[1], accessor_[2], accessor_[3]);
+    auto shifted_accessor = get_shifted_view<T, 1>(accessor_);
+    return get_owning_vector<T, 3>(std::move(shifted_accessor));
   }
   //@}
 
@@ -916,10 +924,20 @@ class Quaternion {
     return accessor_;
   }
 
-  /// \brief Get a copy of the quaternion vector component
+  /// \brief Get a view of the quaternion vector component
   KOKKOS_INLINE_FUNCTION
-  constexpr Vector3<T> vector() const {
-    return Vector3<T>(accessor_[1], accessor_[2], accessor_[3]);
+  constexpr const auto vector() const {
+    // return Vector3<T>(accessor_[1], accessor_[2], accessor_[3]);
+    auto shifted_accessor = get_shifted_view<T, 1>(accessor_);
+    return get_owning_vector<T, 3>(std::move(shifted_accessor));
+  }
+
+  /// \brief Get a view of the quaternion vector component
+  KOKKOS_INLINE_FUNCTION
+  constexpr auto vector() {
+    // return Vector3<T>(accessor_[1], accessor_[2], accessor_[3]);
+    auto shifted_accessor = get_shifted_view<T, 1>(accessor_);
+    return get_owning_vector<T, 3>(std::move(shifted_accessor));
   }
   //@}
 
@@ -1438,6 +1456,7 @@ template <ValidQuaternionType QuaternionType, ValidVectorType VectorType>
 KOKKOS_INLINE_FUNCTION constexpr void rotate_quaternion(QuaternionType &quat, const VectorType &omega,
                                                         const double &dt) {
   const double w = norm(omega);
+  std::cout << "w: " << w << std::endl;
   if (w < get_zero_tolerance<double>()) {
     // Omega is zero, no rotation
     return;
