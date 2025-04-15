@@ -162,7 +162,7 @@ enum class PERIPHERY_BIND_SITES_TYPE : unsigned { RANDOM = 0u, FROM_FILE };
 enum class PERIPHERY_SHAPE : unsigned { SPHERE = 0u, ELLIPSOID };
 enum class PERIPHERY_QUADRATURE : unsigned { GAUSS_LEGENDRE = 0u, FROM_FILE };
 enum class COLLISION_TYPE : unsigned { HERTZIAN = 0u, WCA };
-enum class HYDRO_TYPE : unsigned { RPYC = 0u, STOKES };
+enum class HYDRO_TYPE : unsigned { RPYC = 0u, RPY, STOKES };
 
 std::ostream &operator<<(std::ostream &os, const BINDING_STATE_CHANGE &state) {
   switch (state) {
@@ -307,6 +307,9 @@ std::ostream &operator<<(std::ostream &os, const HYDRO_TYPE &hydro_type) {
     case HYDRO_TYPE::RPYC:
       os << "RPYC";
       break;
+    case HYDRO_TYPE::RPY:
+      os << "RPY";
+      break;
     case HYDRO_TYPE::STOKES:
       os << "STOKES";
       break;
@@ -441,12 +444,14 @@ class HP1 {
     std::string hydro_type_string = simulation_params.get<std::string>("hydro_type");
     if (hydro_type_string == "RPYC") {
       hydro_type_ = HYDRO_TYPE::RPYC;
+    } else if (hydro_type_string == "RPY") {
+      hydro_type_ = HYDRO_TYPE::RPY;
     } else if (hydro_type_string == "STOKES") {
       hydro_type_ = HYDRO_TYPE::STOKES;
     } else {
-      MUNDY_THROW_REQUIRE(
-          false, std::invalid_argument,
-          std::string("Invalid hydro type. Received '") + hydro_type_string + "' but expected 'RPYC' or 'STOKES'.");
+      MUNDY_THROW_REQUIRE(false, std::invalid_argument,
+                          std::string("Invalid hydro type. Received '") + hydro_type_string +
+                              "' but expected 'RPYC', 'RPY', or 'STOKES'.");
     }
     initial_chromosome_separation_ = simulation_params.get<double>("initial_chromosome_separation");
     MUNDY_THROW_REQUIRE(timestep_size_ > 0, std::invalid_argument, "timestep_size_ must be greater than 0.");
@@ -3694,6 +3699,9 @@ class HP1 {
     if (hydro_type_ == HYDRO_TYPE::RPYC) {
       mundy::alens::periphery::apply_rpyc_kernel(DeviceExecutionSpace(), viscosity, sphere_positions, sphere_positions,
                                                  sphere_radii, sphere_radii, sphere_forces, sphere_velocities);
+    } else if (hydro_type_ == HYDRO_TYPE::RPY) {
+      mundy::alens::periphery::apply_rpy_kernel(DeviceExecutionSpace(), viscosity, sphere_positions, sphere_positions,
+                                                sphere_radii, sphere_radii, sphere_forces, sphere_velocities);
     } else if (hydro_type_ == HYDRO_TYPE::STOKES) {
       mundy::alens::periphery::apply_stokes_kernel(DeviceExecutionSpace(), viscosity, sphere_positions,
                                                    sphere_positions, sphere_forces, sphere_velocities);
@@ -3717,6 +3725,10 @@ class HP1 {
         mundy::alens::periphery::apply_rpyc_kernel(DeviceExecutionSpace(), viscosity, sphere_positions,
                                                    surface_positions, sphere_radii, surface_radii, sphere_forces,
                                                    surface_velocities);
+      } else if (hydro_type_ == HYDRO_TYPE::RPY) {
+        mundy::alens::periphery::apply_rpy_kernel(DeviceExecutionSpace(), viscosity, sphere_positions,
+                                                  surface_positions, sphere_radii, surface_radii, sphere_forces,
+                                                  surface_velocities);
       } else if (hydro_type_ == HYDRO_TYPE::STOKES) {
         mundy::alens::periphery::apply_stokes_kernel(DeviceExecutionSpace(), viscosity, sphere_positions,
                                                      surface_positions, sphere_forces, surface_velocities);
