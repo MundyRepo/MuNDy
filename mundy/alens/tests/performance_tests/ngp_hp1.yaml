@@ -31,7 +31,7 @@ HP1:
 
   brownian_motion:
     kt: 0.1
-  
+
   backbone_springs:
     spring_type: "HOOKEAN"
     spring_constant: 3.0
@@ -39,7 +39,7 @@ HP1:
 
   backbone_collision:
     backbone_sphere_collision_radius: 0.5
- 
+
   crosslinker:
     kt: 0.1
     spring_type: "HOOKEAN"

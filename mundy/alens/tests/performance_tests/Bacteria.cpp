@@ -3,7 +3,7 @@
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
 //                                              Copyright 2024 Bryce Palmer
-// 
+//
 // Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
@@ -890,7 +890,7 @@ class BacteriaSim {
             const mundy::math::Vector3<double> xyz =
                 s * sw * omega * winv + cw * p + sw * winv * (mundy::math::cross(omega, p));
             mundy::mesh::quaternion_field_data(element_orientation_field, element).w() =
-                s * cw - (mundy::math::dot(p, omega))*sw * winv;
+                s * cw - (mundy::math::dot(p, omega)) * sw * winv;
             mundy::mesh::quaternion_field_data(element_orientation_field, element).x() = xyz[0];
             mundy::mesh::quaternion_field_data(element_orientation_field, element).y() = xyz[1];
             mundy::mesh::quaternion_field_data(element_orientation_field, element).z() = xyz[2];

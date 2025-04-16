@@ -3,7 +3,7 @@
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
 //                                              Copyright 2024 Bryce Palmer
-// 
+//
 // Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
@@ -46,8 +46,8 @@ template <class DataType, class... Properties>
 class NgpViewT : public Kokkos::DualView<DataType, Properties...> {
  public:
   // Type aliases for brevity.
-  using t_dv   = Kokkos::DualView<DataType, Properties...>;
-  using t_dev  = typename t_dv::t_dev;
+  using t_dv = Kokkos::DualView<DataType, Properties...>;
+  using t_dev = typename t_dv::t_dev;
   using t_host = typename t_dv::t_host;
 
   //! \name Constructors
@@ -78,17 +78,13 @@ class NgpViewT : public Kokkos::DualView<DataType, Properties...> {
   /// \param n5    (Optional) The size of the sixth dimension.
   /// \param n6    (Optional) The size of the seventh dimension.
   /// \param n7    (Optional) The size of the eighth dimension.
-  NgpViewT(const std::string& label,
-          const size_t n0 = KOKKOS_IMPL_CTOR_DEFAULT_ARG,
-          const size_t n1 = KOKKOS_IMPL_CTOR_DEFAULT_ARG,
-          const size_t n2 = KOKKOS_IMPL_CTOR_DEFAULT_ARG,
-          const size_t n3 = KOKKOS_IMPL_CTOR_DEFAULT_ARG,
-          const size_t n4 = KOKKOS_IMPL_CTOR_DEFAULT_ARG,
-          const size_t n5 = KOKKOS_IMPL_CTOR_DEFAULT_ARG,
-          const size_t n6 = KOKKOS_IMPL_CTOR_DEFAULT_ARG,
-          const size_t n7 = KOKKOS_IMPL_CTOR_DEFAULT_ARG)
-      : t_dv(label, n0, n1, n2, n3, n4, n5, n6, n7)
-  {}
+  NgpViewT(const std::string& label, const size_t n0 = KOKKOS_IMPL_CTOR_DEFAULT_ARG,
+           const size_t n1 = KOKKOS_IMPL_CTOR_DEFAULT_ARG, const size_t n2 = KOKKOS_IMPL_CTOR_DEFAULT_ARG,
+           const size_t n3 = KOKKOS_IMPL_CTOR_DEFAULT_ARG, const size_t n4 = KOKKOS_IMPL_CTOR_DEFAULT_ARG,
+           const size_t n5 = KOKKOS_IMPL_CTOR_DEFAULT_ARG, const size_t n6 = KOKKOS_IMPL_CTOR_DEFAULT_ARG,
+           const size_t n7 = KOKKOS_IMPL_CTOR_DEFAULT_ARG)
+      : t_dv(label, n0, n1, n2, n3, n4, n5, n6, n7) {
+  }
 
   /// \brief Allocates device and host views using a property object.
   ///
@@ -108,17 +104,15 @@ class NgpViewT : public Kokkos::DualView<DataType, Properties...> {
   /// \param n6       (Optional) The size of the seventh dimension.
   /// \param n7       (Optional) The size of the eighth dimension.
   template <class... P>
-  NgpViewT(const Kokkos::Impl::ViewCtorProp<P...>& arg_prop,
-          std::enable_if_t<!Kokkos::Impl::ViewCtorProp<P...>::has_pointer, size_t> const n0 = KOKKOS_IMPL_CTOR_DEFAULT_ARG,
-          const size_t n1 = KOKKOS_IMPL_CTOR_DEFAULT_ARG,
-          const size_t n2 = KOKKOS_IMPL_CTOR_DEFAULT_ARG,
-          const size_t n3 = KOKKOS_IMPL_CTOR_DEFAULT_ARG,
-          const size_t n4 = KOKKOS_IMPL_CTOR_DEFAULT_ARG,
-          const size_t n5 = KOKKOS_IMPL_CTOR_DEFAULT_ARG,
-          const size_t n6 = KOKKOS_IMPL_CTOR_DEFAULT_ARG,
-          const size_t n7 = KOKKOS_IMPL_CTOR_DEFAULT_ARG)
-      : t_dv(arg_prop, n0, n1, n2, n3, n4, n5, n6, n7)
-  {}
+  NgpViewT(
+      const Kokkos::Impl::ViewCtorProp<P...>& arg_prop,
+      std::enable_if_t<!Kokkos::Impl::ViewCtorProp<P...>::has_pointer, size_t> const n0 = KOKKOS_IMPL_CTOR_DEFAULT_ARG,
+      const size_t n1 = KOKKOS_IMPL_CTOR_DEFAULT_ARG, const size_t n2 = KOKKOS_IMPL_CTOR_DEFAULT_ARG,
+      const size_t n3 = KOKKOS_IMPL_CTOR_DEFAULT_ARG, const size_t n4 = KOKKOS_IMPL_CTOR_DEFAULT_ARG,
+      const size_t n5 = KOKKOS_IMPL_CTOR_DEFAULT_ARG, const size_t n6 = KOKKOS_IMPL_CTOR_DEFAULT_ARG,
+      const size_t n7 = KOKKOS_IMPL_CTOR_DEFAULT_ARG)
+      : t_dv(arg_prop, n0, n1, n2, n3, n4, n5, n6, n7) {
+  }
 
   /// \brief Shallow copy constructor.
   ///
@@ -130,9 +124,8 @@ class NgpViewT : public Kokkos::DualView<DataType, Properties...> {
   /// \tparam DP The properties of the source view.
   /// \param src The NgpViewT from which to create a copy.
   template <typename DT, typename... DP>
-  NgpViewT(const NgpViewT<DT, DP...>& src)
-      : t_dv(src)
-  {}
+  NgpViewT(const NgpViewT<DT, DP...>& src) : t_dv(src) {
+  }
 
   /// \brief Constructs a subview of an existing NgpViewT.
   ///
@@ -149,9 +142,8 @@ class NgpViewT : public Kokkos::DualView<DataType, Properties...> {
   /// \param arg0  The first argument for defining the subview.
   /// \param args  Additional arguments for defining the subview.
   template <class DT, class... DP, class Arg0, class... Args>
-  NgpViewT(const NgpViewT<DT, DP...>& src, const Arg0& arg0, Args... args)
-      : t_dv(src, arg0, args...)
-  {}
+  NgpViewT(const NgpViewT<DT, DP...>& src, const Arg0& arg0, Args... args) : t_dv(src, arg0, args...) {
+  }
 
   /// \brief Constructs an NgpViewT from existing device and host views.
   ///
@@ -162,9 +154,8 @@ class NgpViewT : public Kokkos::DualView<DataType, Properties...> {
   ///
   /// \param d_view_ A pre-existing device view.
   /// \param h_view_ A pre-existing host view. This must be the host mirror of the device view.
-  NgpViewT(const t_dev& d_view_, const t_host& h_view_)
-      : t_dv(d_view_, h_view_)
-  {}
+  NgpViewT(const t_dev& d_view_, const t_host& h_view_) : t_dv(d_view_, h_view_) {
+  }
   //@}
 
   /// \brief Mark the host view as modified.

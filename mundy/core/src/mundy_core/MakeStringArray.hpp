@@ -3,7 +3,7 @@
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
 //                                              Copyright 2024 Bryce Palmer
-// 
+//
 // Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
@@ -25,7 +25,7 @@
 /// \brief Declaration of the make_string_array helper function.
 
 // Mundy
-#include <MundyCore_config.hpp>                                     // for HAVE_MUNDYCORE_*
+#include <MundyCore_config.hpp>  // for HAVE_MUNDYCORE_*
 
 #ifdef HAVE_MUNDYCORE_TEUCHOS
 // C++ core
