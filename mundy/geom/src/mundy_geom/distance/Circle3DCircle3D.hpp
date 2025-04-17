@@ -116,18 +116,16 @@ KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const Euclidean distance_type, 
 
   constexpr Scalar pi = Kokkos::numbers::pi_v<Scalar>;
   constexpr Scalar zero = static_cast<Scalar>(0.0);
-  constexpr Scalar half_pi = static_cast<Scalar>(0.5) * pi;
   constexpr Scalar one_third_pi = pi / static_cast<Scalar>(3.0);
   constexpr Scalar five_third_pi = static_cast<Scalar>(5.0) * one_third_pi;
-  constexpr Kokkos::Array<Scalar, 3> theta_guesses{zero, half_pi, pi};
-  constexpr Kokkos::Array<Scalar, 3> phi_guesses{one_third_pi, pi, five_third_pi};
+  constexpr Kokkos::Array<Scalar, 3> theta_guesses{one_third_pi, pi, five_third_pi};
 
   Scalar global_dist = Kokkos::Experimental::infinity_v<Scalar>;
   mundy::math::Vector<Scalar, 2> theta1_theta2_sol{zero, zero};
   mundy::math::Vector<Scalar, 2> global_theta1_theta2_sol{zero, zero};
   for (size_t t_idx = 0; t_idx < 3; ++t_idx) {
     for (size_t p_idx = 0; p_idx < 3; ++p_idx) {
-      theta1_theta2_sol = {theta_guesses[t_idx], phi_guesses[p_idx]};
+      theta1_theta2_sol = {theta_guesses[t_idx], theta_guesses[p_idx]};
       const Scalar dist = find_min_using_approximate_derivatives<lbfgs_max_memory_size>(
           minimize_euclidean_distance, theta1_theta2_sol, min_objective_delta);
       if (dist < global_dist) {
