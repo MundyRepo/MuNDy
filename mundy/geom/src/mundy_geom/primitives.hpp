@@ -36,6 +36,7 @@
 //   - Ellipsoid
 //   - Spherocylinder
 //   - SpherocylinderSegment
+//   - Ring
 #include <mundy_geom/primitives/AABB.hpp>
 #include <mundy_geom/primitives/Ellipsoid.hpp>
 #include <mundy_geom/primitives/Line.hpp>
@@ -45,5 +46,7 @@
 #include <mundy_geom/primitives/Spherocylinder.hpp>
 #include <mundy_geom/primitives/SpherocylinderSegment.hpp>
 #include <mundy_geom/primitives/VSegment.hpp>
+#include <mundy_geom/primitives/Circle3D.hpp>
+#include <mundy_geom/primitives/Ring.hpp>
 
 #endif  // MUNDY_GEOM_PRIMITIVES_HPP_

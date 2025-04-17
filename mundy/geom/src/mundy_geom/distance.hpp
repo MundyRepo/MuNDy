@@ -48,4 +48,7 @@
 // Ellipsoid to <shape> distance headers
 #include <mundy_geom/distance/EllipsoidEllipsoid.hpp>
 
+// Circle3D to <shape> distance headers
+#include <mundy_geom/distance/Circle3DCircle3D.hpp>
+
 #endif  // MUNDY_GEOM_DISTANCE_HPP_
