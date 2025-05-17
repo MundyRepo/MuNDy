@@ -49,6 +49,32 @@ struct BBox {
     p_max.fill(bound);
   }
 
+  BBox(Point const& p_min, Point const& p_max) : p_min(p_min), p_max(p_max) {
+  }
+
+  // Copy constructor
+  BBox(BBox const& other) : p_min(other.p_min), p_max(other.p_max) {
+  }
+  // Copy assignment operator
+  BBox& operator=(BBox const& other) {
+    if (this != &other) {
+      p_min = other.p_min;
+      p_max = other.p_max;
+    }
+    return *this;
+  }
+  // Move constructor
+  BBox(BBox&& other) noexcept : p_min(std::move(other.p_min)), p_max(std::move(other.p_max)) {
+  }
+  // Move assignment operator
+  BBox& operator=(BBox&& other) noexcept {
+    if (this != &other) {
+      p_min = std::move(other.p_min);
+      p_max = std::move(other.p_max);
+    }
+    return *this;
+  }
+
   Point p_min, p_max;
 };
 

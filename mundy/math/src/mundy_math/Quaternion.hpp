@@ -3,7 +3,7 @@
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
 //                                              Copyright 2024 Bryce Palmer
-// 
+//
 // Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
@@ -178,97 +178,48 @@ class Quaternion<T, Accessor, Ownership::Views> {
   KOKKOS_DEFAULTED_FUNCTION
   constexpr ~Quaternion() = default;
 
-  /// \brief Shallow copy constructor. Stores a reference to the accessor in the other matrix.
-  KOKKOS_INLINE_FUNCTION constexpr Quaternion(const Quaternion<T, Accessor, Ownership::Views> &other)
-      : accessor_(other.data()) {
-  }
+  // Default copy/move constructors and assignment operators when interacting with a Quaternion of the same type
 
-  /// \brief Shallow move constructor. Stores and moves the reference to the accessor from the other matrix.
-  KOKKOS_INLINE_FUNCTION constexpr Quaternion(Quaternion<T, Accessor, Ownership::Views> &&other)
-      : accessor_(std::move(other.data())) {
-  }
+  /// \brief Default copy constructor (shallow copy)
+  KOKKOS_DEFAULTED_FUNCTION
+  constexpr Quaternion(const Quaternion<T, Accessor, Ownership::Views> &) = default;
 
-  /// \brief Deep copy assignment operator with different accessor
+  /// \brief Default move constructor (shallow move)
+  KOKKOS_DEFAULTED_FUNCTION
+  constexpr Quaternion(Quaternion<T, Accessor, Ownership::Views> &&) = default;
+
+  /// \brief Default copy assignment operator (shallow copy)
+  KOKKOS_DEFAULTED_FUNCTION
+  constexpr Quaternion<T, Accessor, Ownership::Views> &operator=(const Quaternion<T, Accessor, Ownership::Views> &) =
+      default;
+
+  /// \brief Default move assignment operator (shallow move)
+  KOKKOS_DEFAULTED_FUNCTION
+  constexpr Quaternion<T, Accessor, Ownership::Views> &operator=(Quaternion<T, Accessor, Ownership::Views> &&) =
+      default;
+
+  // Custom copy/move constructors and assignment operators when interacting with a Quaternion of a different type
+  // We do not allow copy/move construction from a Quaternion of a different type. This is undefined behavior.
+
+  /// \brief Deep copy assignment operator with different accessor or ownership
   /// \details Copies the data from the other vector to our data. This is only enabled if T is not const.
-  template <typename OtherAccessor>
-  KOKKOS_INLINE_FUNCTION constexpr Quaternion<T, Accessor, Ownership::Views> &operator=(
-      const Quaternion<T, OtherAccessor, Ownership::Views> &other)
-    requires(!std::is_same_v<Accessor, OtherAccessor>) && HasNonConstAccessOperator<Accessor, T>
+  template <ValidQuaternionType OtherQuaternionType>
+  KOKKOS_INLINE_FUNCTION constexpr Quaternion<T, Accessor, Ownership::Views> &operator=(const OtherQuaternionType &other)
+    requires(!std::is_same_v<OtherQuaternionType, Quaternion<T, Accessor, Ownership::Views>>) &&
+            (std::is_same_v<typename OtherQuaternionType::scalar_t, T>) && HasNonConstAccessOperator<Accessor, T>
   {
     impl::deep_copy_impl(*this, other);
     return *this;
   }
 
-  /// \brief Deep copy assignment operator with different accessor
-  /// \details Copies the data from the other vector to our data. This is only enabled if T is not const.
-  template <typename OtherAccessor>
-  KOKKOS_INLINE_FUNCTION constexpr Quaternion<T, Accessor, Ownership::Views> &operator=(
-      const Quaternion<T, OtherAccessor, Ownership::Owns> &other)
-    requires(!std::is_same_v<Accessor, OtherAccessor>) && HasNonConstAccessOperator<Accessor, T>
-  {
-    impl::deep_copy_impl(*this, other);
-    return *this;
-  }
-
-  /// \brief Deep copy assignment operator with same accessor
-  /// \details Copies the data from the other vector to our data. This is only enabled if T is not const.
-  KOKKOS_INLINE_FUNCTION constexpr Quaternion<T, Accessor, Ownership::Views> &operator=(
-      const Quaternion<T, Accessor, Ownership::Views> &other)
-    requires HasNonConstAccessOperator<Accessor, T>
-  {
-    impl::deep_copy_impl(*this, other);
-    return *this;
-  }
-
-  /// \brief Deep copy assignment operator with same accessor
-  /// \details Copies the data from the other vector to our data. This is only enabled if T is not const.
-  KOKKOS_INLINE_FUNCTION constexpr Quaternion<T, Accessor, Ownership::Views> &operator=(
-      const Quaternion<T, Accessor, Ownership::Owns> &other)
-    requires HasNonConstAccessOperator<Accessor, T>
-  {
-    impl::deep_copy_impl(*this, other);
-    return *this;
-  }
-
-  /// \brief Move assignment operator with different accessor
+  /// \brief Deep move assignment operator with different accessor or ownership
   /// \details Moves the data from the other vector to our data. This is only enabled if T is not const.
-  template <typename OtherAccessor>
-  KOKKOS_INLINE_FUNCTION constexpr Quaternion<T, Accessor, Ownership::Views> &operator=(
-      Quaternion<T, OtherAccessor, Ownership::Views> &&other)
-    requires(!std::is_same_v<Accessor, OtherAccessor>) && HasNonConstAccessOperator<Accessor, T>
+  template <ValidQuaternionType OtherQuaternionType>
+  KOKKOS_INLINE_FUNCTION constexpr Quaternion<T, Accessor, Ownership::Views> &operator=(OtherQuaternionType &&other)
+    requires(!std::is_same_v<OtherQuaternionType, Quaternion<T, Accessor, Ownership::Views>>) &&
+            (std::is_same_v<typename OtherQuaternionType::scalar_t, T>) && HasNonConstAccessOperator<Accessor, T>
   {
-    impl::deep_copy_impl(*this, other);
-    return *this;
-  }
-
-  /// \brief Move assignment operator with different accessor
-  /// \details Moves the data from the other vector to our data. This is only enabled if T is not const.
-  template <typename OtherAccessor>
-  KOKKOS_INLINE_FUNCTION constexpr Quaternion<T, Accessor, Ownership::Views> &operator=(
-      Quaternion<T, OtherAccessor, Ownership::Owns> &&other)
-    requires(!std::is_same_v<Accessor, OtherAccessor>) && HasNonConstAccessOperator<Accessor, T>
-  {
-    impl::deep_copy_impl(*this, other);
-    return *this;
-  }
-
-  /// \brief Move assignment operator with same accessor
-  /// \details Moves the data from the other vector to our data. This is only enabled if T is not const.
-  KOKKOS_INLINE_FUNCTION constexpr Quaternion<T, Accessor, Ownership::Views> &operator=(
-      Quaternion<T, Accessor, Ownership::Views> &&other)
-    requires HasNonConstAccessOperator<Accessor, T>
-  {
-    impl::deep_copy_impl(*this, other);
-    return *this;
-  }
-
-  /// \brief Move assignment operator with same accessor
-  /// \details Moves the data from the other vector to our data. This is only enabled if T is not const.
-  KOKKOS_INLINE_FUNCTION constexpr Quaternion<T, Accessor, Ownership::Views> &operator=(
-      Quaternion<T, Accessor, Ownership::Owns> &&other)
-    requires HasNonConstAccessOperator<Accessor, T>
-  {
-    impl::deep_copy_impl(*this, other);
+    impl::deep_copy_impl(*this, std::move(other));
     return *this;
   }
   //@}
@@ -367,7 +318,6 @@ class Quaternion<T, Accessor, Ownership::Views> {
   /// \brief Get a view of the quaternion vector component
   KOKKOS_INLINE_FUNCTION
   constexpr const auto vector() const {
-    // return Vector3<T>(accessor_[1], accessor_[2], accessor_[3]);
     auto shifted_accessor = get_shifted_view<T, 1>(accessor_);
     return get_owning_vector<T, 3>(std::move(shifted_accessor));
   }
@@ -375,7 +325,6 @@ class Quaternion<T, Accessor, Ownership::Views> {
   /// \brief Get a view of the quaternion vector component
   KOKKOS_INLINE_FUNCTION
   constexpr auto vector() {
-    // return Vector3<T>(accessor_[1], accessor_[2], accessor_[3]);
     auto shifted_accessor = get_shifted_view<T, 1>(accessor_);
     return get_owning_vector<T, 3>(std::move(shifted_accessor));
   }
@@ -613,9 +562,9 @@ class Quaternion<T, Accessor, Ownership::Views> {
   //@}
 };  // Quaternion (non-owning)
 
-template <typename T, ValidAccessor<T> Accessor, typename OwnershipType>
+template <typename T, ValidAccessor<T> Accessor>
   requires std::is_floating_point_v<T>
-class Quaternion {
+class Quaternion<T, Accessor, Ownership::Owns> {
  public:
   //! \name Internal data
   //@{
@@ -634,7 +583,7 @@ class Quaternion {
   using non_const_scalar_t = std::remove_const_t<T>;
 
   /// \brief Our ownership type
-  using ownership_t = OwnershipType;
+  using ownership_t = Ownership::Owns;
   //@}
 
   //! \name Constructors and destructor
@@ -678,156 +627,62 @@ class Quaternion {
   KOKKOS_DEFAULTED_FUNCTION
   constexpr ~Quaternion() = default;
 
-  /// \brief Deep copy constructor
-  KOKKOS_INLINE_FUNCTION constexpr Quaternion(const Quaternion<T, Accessor, Ownership::Owns> &other)
-    requires HasCopyConstructor<Accessor>
-      : accessor_(other.accessor_) {
-  }
+  // Default copy/move constructors and assignment operators when interacting with a Quaternion of the same type
 
-  /// \brief Deep copy constructor
-  KOKKOS_INLINE_FUNCTION constexpr Quaternion(const Quaternion<T, Accessor, Ownership::Views> &other)
-    requires HasCopyConstructor<Accessor>
-      : accessor_(other.accessor_) {
-  }
+  /// \brief Default copy constructor
+  KOKKOS_DEFAULTED_FUNCTION
+  constexpr Quaternion(const Quaternion<T, Accessor, Ownership::Owns> &) = default;
 
-  /// \brief Deep copy constructor
-  KOKKOS_INLINE_FUNCTION constexpr Quaternion(const Quaternion<T, Accessor, Ownership::Owns> &other)
-    requires(!HasCopyConstructor<Accessor>) && HasNonConstAccessOperator<Accessor, T>
+  /// \brief Default move constructor
+  KOKKOS_DEFAULTED_FUNCTION
+  constexpr Quaternion(Quaternion<T, Accessor, Ownership::Owns> &&) = default;
+
+  /// \brief Default copy assignment operator
+  KOKKOS_DEFAULTED_FUNCTION
+  constexpr Quaternion<T, Accessor, Ownership::Owns> &operator=(
+      const Quaternion<T, Accessor, Ownership::Owns> &) = default;
+
+  /// \brief Default move assignment operator
+  KOKKOS_DEFAULTED_FUNCTION
+  constexpr Quaternion<T, Accessor, Ownership::Owns> &operator=(Quaternion<T, Accessor, Ownership::Owns> &&) = default;
+
+  // Custom copy/move constructors and assignment operators when interacting with a Quaternion of a different type
+
+  /// \brief Deep copy constructor with different accessor or ownership
+  template <ValidQuaternionType OtherQuaternionType>
+  KOKKOS_INLINE_FUNCTION constexpr Quaternion(const OtherQuaternionType &other)
+    requires(!std::is_same_v<OtherQuaternionType, Quaternion<T, Accessor, Ownership::Owns>>) &&
+            (std::is_same_v<typename OtherQuaternionType::scalar_t, T>)
       : accessor_() {
     impl::deep_copy_impl(*this, other);
   }
 
-  /// \brief Deep copy constructor
-  template <typename OtherAccessor>
-    requires(!std::is_same_v<Accessor, OtherAccessor>) && HasNonConstAccessOperator<Accessor, T>
-  KOKKOS_INLINE_FUNCTION constexpr Quaternion(const Quaternion<T, OtherAccessor, Ownership::Owns> &other)
+  /// \brief Deep move constructor with different accessor or ownership
+  template <ValidQuaternionType OtherQuaternionType>
+  KOKKOS_INLINE_FUNCTION constexpr Quaternion(OtherQuaternionType &&other)
+    requires(!std::is_same_v<OtherQuaternionType, Quaternion<T, Accessor, Ownership::Owns>>) &&
+            (std::is_same_v<typename OtherQuaternionType::scalar_t, T>)
       : accessor_() {
-    impl::deep_copy_impl(*this, other);
-  }
-
-  /// \brief Deep copy constructor
-  template <typename OtherAccessor>
-    requires(!std::is_same_v<Accessor, OtherAccessor>) && HasNonConstAccessOperator<Accessor, T>
-  KOKKOS_INLINE_FUNCTION constexpr Quaternion(const Quaternion<T, OtherAccessor, Ownership::Views> &other)
-      : accessor_() {
-    impl::deep_copy_impl(*this, other);
-  }
-
-  /// \brief Deep move constructor
-  KOKKOS_INLINE_FUNCTION constexpr Quaternion(Quaternion<T, Accessor, Ownership::Owns> &&other)
-    requires(HasCopyConstructor<Accessor> || HasMoveConstructor<Accessor>)
-      : accessor_(std::move(other.accessor_)) {
-  }
-
-  /// \brief Deep move constructor
-  template <typename OtherAccessor>
-    requires(!std::is_same_v<Accessor, OtherAccessor>) && HasNonConstAccessOperator<Accessor, T>
-  KOKKOS_INLINE_FUNCTION constexpr Quaternion(Quaternion<T, OtherAccessor, Ownership::Owns> &&other) : accessor_() {
-    // Other owns its accessor but that doesn't mean that it owns the data the accessor accesses.
-    // Since the accessor neither has a copy constructor nor a move constructor, we must deep copy.
-    impl::deep_copy_impl(*this, std::move(other));
-  }
-  /// \brief Deep move constructor
-  template <typename OtherAccessor>
-    requires(!std::is_same_v<Accessor, OtherAccessor>) && HasNonConstAccessOperator<Accessor, T>
-  KOKKOS_INLINE_FUNCTION constexpr Quaternion(Quaternion<T, OtherAccessor, Ownership::Views> &&other) : accessor_() {
     impl::deep_copy_impl(*this, std::move(other));
   }
 
-  /// \brief Deep copy assignment operator with different accessor
-  /// \details Copies the data from the other quaternion to our data. This is only enabled if T is not const.
-  template <typename OtherAccessor>
-  KOKKOS_INLINE_FUNCTION constexpr Quaternion<T, Accessor, Ownership::Owns> &operator=(
-      const Quaternion<T, OtherAccessor, Ownership::Owns> &other)
-    requires(!std::is_same_v<Accessor, OtherAccessor>) && HasNonConstAccessOperator<Accessor, T>
+  /// \brief Deep copy assignment operator with different accessor or ownership
+  /// \details Copies the data from the other vector to our data. This is only enabled if T is not const.
+  template <ValidQuaternionType OtherQuaternionType>
+  KOKKOS_INLINE_FUNCTION constexpr Quaternion<T, Accessor, Ownership::Owns> &operator=(const OtherQuaternionType &other)
+    requires(!std::is_same_v<OtherQuaternionType, Quaternion<T, Accessor, Ownership::Owns>>) &&
+            (std::is_same_v<typename OtherQuaternionType::scalar_t, T>) && HasNonConstAccessOperator<Accessor, T>
   {
     impl::deep_copy_impl(*this, other);
     return *this;
   }
 
-  /// \brief Deep copy assignment operator with same accessor
-  /// \details Copies the data from the other quaternion to our data. This is only enabled if T is not const.
-  /// Yes, this function is necessary. If we only use the version for differing accessor, the compiler can get confused.
-  KOKKOS_INLINE_FUNCTION constexpr Quaternion<T, Accessor, Ownership::Owns> &operator=(
-      const Quaternion<T, Accessor, Ownership::Owns> &other)
-    requires HasNonConstAccessOperator<Accessor, T>
-  {
-    impl::deep_copy_impl(*this, other);
-    return *this;
-  }
-
-  /// \brief Deep copy assignment operator with different accessor
-  /// \details Copies the data from the other quaternion to our data. This is only enabled if T is not const.
-  template <typename OtherAccessor>
-  KOKKOS_INLINE_FUNCTION constexpr Quaternion<T, Accessor, Ownership::Owns> &operator=(
-      const Quaternion<T, OtherAccessor, Ownership::Views> &other)
-    requires(!std::is_same_v<Accessor, OtherAccessor>) && HasNonConstAccessOperator<Accessor, T>
-  {
-    impl::deep_copy_impl(*this, other);
-    return *this;
-  }
-
-  /// \brief Deep copy assignment operator with same accessor
-  /// \details Copies the data from the other quaternion to our data. This is only enabled if T is not const.
-  /// Yes, this function is necessary. If we only use the version for differing accessor, the compiler can get confused.
-  KOKKOS_INLINE_FUNCTION constexpr Quaternion<T, Accessor, Ownership::Owns> &operator=(
-      const Quaternion<T, Accessor, Ownership::Views> &other)
-    requires HasNonConstAccessOperator<Accessor, T>
-  {
-    impl::deep_copy_impl(*this, other);
-    return *this;
-  }
-
-  /// \brief Deep copy assignment operator from a single value
-  /// \param[in] value The value to set all elements to.
-  KOKKOS_INLINE_FUNCTION constexpr Quaternion<T, Accessor, Ownership::Owns> &operator=(const T value)
-    requires HasNonConstAccessOperator<Accessor, T>
-  {
-    impl::fill_impl(*this, value);
-    return *this;
-  }
-
-  /// \brief Move assignment operator with different accessor.
-  /// \details Moves the data from the other quaternion to our data. This is only enabled if T is not const.
-  template <typename OtherAccessor>
-  KOKKOS_INLINE_FUNCTION constexpr Quaternion<T, Accessor, Ownership::Owns> &operator=(
-      Quaternion<T, OtherAccessor, Ownership::Owns> &&other)
-    requires(!std::is_same_v<Accessor, OtherAccessor>) && HasNonConstAccessOperator<Accessor, T>
-  {
-    impl::deep_copy_impl(*this, std::move(other));
-    return *this;
-  }
-
-  /// \brief Move assignment operator with same accessor
-  /// \details Moves the data from the other quaternion to our data. This is only enabled if T is not const.
-  /// Yes, this function is necessary. If we only use the version for differing accessor, the compiler can get confused.
-  KOKKOS_INLINE_FUNCTION constexpr Quaternion<T, Accessor, Ownership::Owns> &operator=(
-      Quaternion<T, Accessor, Ownership::Owns> &&other)
-    requires HasNonConstAccessOperator<Accessor, T>
-  {
-    impl::deep_copy_impl(*this, std::move(other));
-    return *this;
-  }
-
-  /// \brief Move assignment operator with different accessor.
-  /// Same as deep copy since a other's data is not owned.
-  /// \details Moves the data from the other quaternion to our data. This is only enabled if T is not const.
-  template <typename OtherAccessor>
-  KOKKOS_INLINE_FUNCTION constexpr Quaternion<T, Accessor, Ownership::Owns> &operator=(
-      Quaternion<T, OtherAccessor, Ownership::Views> &&other)
-    requires(!std::is_same_v<Accessor, OtherAccessor>) && HasNonConstAccessOperator<Accessor, T>
-  {
-    impl::deep_copy_impl(*this, std::move(other));
-    return *this;
-  }
-
-  /// \brief Move assignment operator with same accessor
-  /// Same as deep copy since a other's data is not owned.
-  /// \details Moves the data from the other quaternion to our data. This is only enabled if T is not const.
-  /// Yes, this function is necessary. If we only use the version for differing accessor, the compiler can get confused.
-  KOKKOS_INLINE_FUNCTION constexpr Quaternion<T, Accessor, Ownership::Owns> &operator=(
-      Quaternion<T, Accessor, Ownership::Views> &&other)
-    requires HasNonConstAccessOperator<Accessor, T>
+  /// \brief Deep move assignment operator with different accessor or ownership
+  /// \details Moves the data from the other vector to our data. This is only enabled if T is not const.
+  template <ValidQuaternionType OtherQuaternionType>
+  KOKKOS_INLINE_FUNCTION constexpr Quaternion<T, Accessor, Ownership::Owns> &operator=(OtherQuaternionType &&other)
+    requires(!std::is_same_v<OtherQuaternionType, Quaternion<T, Accessor, Ownership::Owns>>) &&
+            (std::is_same_v<typename OtherQuaternionType::scalar_t, T>) && HasNonConstAccessOperator<Accessor, T>
   {
     impl::deep_copy_impl(*this, std::move(other));
     return *this;
@@ -928,7 +783,6 @@ class Quaternion {
   /// \brief Get a view of the quaternion vector component
   KOKKOS_INLINE_FUNCTION
   constexpr const auto vector() const {
-    // return Vector3<T>(accessor_[1], accessor_[2], accessor_[3]);
     auto shifted_accessor = get_shifted_view<T, 1>(accessor_);
     return get_owning_vector<T, 3>(std::move(shifted_accessor));
   }
@@ -936,7 +790,6 @@ class Quaternion {
   /// \brief Get a view of the quaternion vector component
   KOKKOS_INLINE_FUNCTION
   constexpr auto vector() {
-    // return Vector3<T>(accessor_[1], accessor_[2], accessor_[3]);
     auto shifted_accessor = get_shifted_view<T, 1>(accessor_);
     return get_owning_vector<T, 3>(std::move(shifted_accessor));
   }
@@ -1457,7 +1310,6 @@ template <ValidQuaternionType QuaternionType, ValidVectorType VectorType>
 KOKKOS_INLINE_FUNCTION constexpr void rotate_quaternion(QuaternionType &quat, const VectorType &omega,
                                                         const double &dt) {
   const double w = norm(omega);
-  std::cout << "w: " << w << std::endl;
   if (w < get_zero_tolerance<double>()) {
     // Omega is zero, no rotation
     return;
@@ -1594,6 +1446,36 @@ KOKKOS_INLINE_FUNCTION constexpr auto quat_from_parallel_transport(const Vector3
   quat.z() = vec[2];
   return quat;
 }
+//@}
+
+// Just to double check
+static_assert(std::is_trivially_copyable_v<Quaternion<double>>);
+static_assert(std::is_trivially_destructible_v<Quaternion<double>>);
+static_assert(std::is_copy_constructible_v<Quaternion<double>>);
+static_assert(std::is_move_constructible_v<Quaternion<double>>);
+
+//! \name Type specializations
+//@{
+
+#define MUNDY_MATH_QUATERNION_TYPE_SPECIALIZATION(alias, alias_lower, T)                                       \
+  template <ValidAccessor<T> Accessor = Array<T, 4>, typename OwnershipType = Ownership::Owns> \
+  using alias = Quaternion<T, Accessor, OwnershipType>;                                         \
+  template <ValidAccessor<T> Accessor = Array<T, 4>>                                           \
+  using alias##View = Quaternion<T, Accessor, Ownership::Views>;                                \
+  template <ValidAccessor<T> Accessor = Array<T, 4>>                                           \
+  using Owning##alias = Quaternion<T, Accessor, Ownership::Owns>;                               \
+  template <typename TypeToCheck>                                                              \
+  struct is_##alias_lower##_impl : std::false_type {};                                         \
+  template <typename Accessor, typename OwnershipType>                                         \
+  struct is_##alias_lower##_impl<alias<Accessor, OwnershipType>> : std::true_type {};          \
+  template <typename TypeToCheck>                                                              \
+  struct is_##alias_lower : public is_##alias_lower##_impl<std::decay_t<TypeToCheck>> {};      \
+  template <typename TypeToCheck>                                                              \
+  constexpr bool is_##alias_lower##_v = is_##alias_lower<TypeToCheck>::value;
+
+// Eigen convention.
+MUNDY_MATH_QUATERNION_TYPE_SPECIALIZATION(Quaterniond, quaterniond, double)
+MUNDY_MATH_QUATERNION_TYPE_SPECIALIZATION(Quaternionf, quaternionf, float)
 //@}
 
 //! \name Quaternion<T, Accessor> views

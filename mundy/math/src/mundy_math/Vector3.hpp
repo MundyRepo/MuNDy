@@ -44,35 +44,6 @@ namespace mundy {
 
 namespace math {
 
-/// \brief Class for a 3x1 vector with arithmetic entries
-/// \tparam T The type of the entries.
-/// \tparam Accessor The type of the accessor.
-template <typename T, ValidAccessor<T> Accessor = Array<T, 3>, typename OwnershipType = Ownership::Owns>
-  requires std::is_arithmetic_v<T>
-using Vector3 = Vector<T, 3, Accessor, OwnershipType>;
-
-template <typename T, ValidAccessor<T> Accessor = Array<T, 3>>
-  requires std::is_arithmetic_v<T>
-using Vector3View = Vector<T, 3, Accessor, Ownership::Views>;
-
-template <typename T, ValidAccessor<T> Accessor = Array<T, 3>>
-  requires std::is_arithmetic_v<T>
-using OwningVector3 = Vector<T, 3, Accessor, Ownership::Owns>;
-
-/// \brief (Implementation) Type trait to determine if a type is a Vector3
-template <typename TypeToCheck>
-struct is_vector3_impl : std::false_type {};
-//
-template <typename T, typename Accessor, typename OwnershipType>
-struct is_vector3_impl<Vector3<T, Accessor, OwnershipType>> : std::true_type {};
-
-/// \brief Type trait to determine if a type is a Vector3
-template <typename TypeToCheck>
-struct is_vector3 : public is_vector3_impl<std::decay_t<TypeToCheck>> {};
-//
-template <typename TypeToCheck>
-constexpr bool is_vector3_v = is_vector3<TypeToCheck>::value;
-
 /// \brief A temporary concept to check if a type is a valid Vector3 type
 /// TODO(palmerb4): Extend this concept to contain all shared setters and getters for our vectors.
 template <typename Vector3Type>

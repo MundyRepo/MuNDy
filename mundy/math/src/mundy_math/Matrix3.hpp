@@ -41,19 +41,7 @@ namespace mundy {
 
 namespace math {
 
-/// \brief Class for a 3x3 matrix with arithmetic entries
-/// \tparam T The type of the entries.
-/// \tparam Accessor The type of the accessor.
-template <typename T, ValidAccessor<T> Accessor = Array<T, 9>, typename OwnershipType = Ownership::Owns>
-using Matrix3 = Matrix<T, 3, 3, Accessor, OwnershipType>;
-
-template <typename T, ValidAccessor<T> Accessor = Array<T, 9>>
-using Matrix3View = Matrix<T, 3, 3, Accessor, Ownership::Views>;
-
-template <typename T, ValidAccessor<T> Accessor = Array<T, 9>>
-using OwningMatrix3 = Matrix<T, 3, 3, Accessor, Ownership::Owns>;
-
-/// \brief Get the lower trangular matrix of the Cholesky decomposition of a symmetric positive definite matrix
+/// \brief Get the lower triangular matrix of the Cholesky decomposition of a symmetric positive definite matrix
 /// \param A The symmetric positive definite matrix
 /// \return The lower triangular matrix of the Cholesky decomposition
 template <typename T, ValidAccessor<T> Accessor, typename OwnershipType>
@@ -68,20 +56,6 @@ KOKKOS_INLINE_FUNCTION auto cholesky(const Matrix3<T, Accessor, OwnershipType> &
   const T l33 = Kokkos::sqrt(A(2, 2) - l31 * l31 - l32 * l32);
   return Matrix3<T>(l11, 0.0, 0.0, l21, l22, 0.0, l31, l32, l33);
 }
-
-/// \brief (Implementation) Type trait to determine if a type is a Matrix3
-template <typename TypeToCheck>
-struct is_matrix3_impl : std::false_type {};
-//
-template <typename T, typename Accessor, typename OwnershipType>
-struct is_matrix3_impl<Matrix3<T, Accessor, OwnershipType>> : std::true_type {};
-
-/// \brief Type trait to determine if a type is a Matrix3
-template <typename T>
-struct is_matrix3 : is_matrix3_impl<std::decay_t<T>> {};
-//
-template <typename TypeToCheck>
-constexpr bool is_matrix3_v = is_matrix3<TypeToCheck>::value;
 
 /// \brief A temporary concept to check if a type is a valid Matrix3 type
 /// TODO(palmerb4): Extend this concept to contain all shared setters and getters for our quaternions.

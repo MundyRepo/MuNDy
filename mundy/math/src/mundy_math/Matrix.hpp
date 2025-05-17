@@ -3,7 +3,7 @@
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
 //                                              Copyright 2024 Bryce Palmer
-// 
+//
 // Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
@@ -42,7 +42,7 @@
 #include <mundy_math/Tolerance.hpp>       // for mundy::math::get_zero_tolerance
 #include <mundy_math/TransposedView.hpp>  // for mundy::math::TransposedView
 #include <mundy_math/Vector.hpp>          // for mundy::math::Vector
-#include <mundy_math/impl/MatrixImpl.hpp> 
+#include <mundy_math/impl/MatrixImpl.hpp>
 
 namespace mundy {
 
@@ -168,36 +168,50 @@ class Matrix<T, N, M, Accessor, Ownership::Views> {
   KOKKOS_DEFAULTED_FUNCTION
   constexpr ~Matrix() = default;
 
-  /// \brief Shallow copy constructor. Stores a reference to the accessor in the other matrix.
-  KOKKOS_INLINE_FUNCTION constexpr Matrix(const Matrix<T, N, M, Accessor, Ownership::Views>& other)
-      : accessor_(other.data()) {
-  }
+  // Default copy/move constructors and assignment operators when interacting with a Matrix of the same type
 
-  /// \brief Shallow move constructor. Stores and moves the reference to the accessor from the other matrix.
-  KOKKOS_INLINE_FUNCTION constexpr Matrix(Matrix<T, N, M, Accessor, Ownership::Views>&& other)
-      : accessor_(std::move(other.data())) {
-  }
+  /// \brief Default copy constructor (shallow copy)
+  KOKKOS_DEFAULTED_FUNCTION
+  constexpr Matrix(const Matrix<T, N, M, Accessor, Ownership::Views>&) = default;
 
-  /// \brief Deep copy assignment operator with different accessor
-  /// \details Copies the data from the other matrix to our data. This is only enabled if T is not const.
-  template <typename OtherAccessor, typename OtherOwnershipType>
-  KOKKOS_INLINE_FUNCTION constexpr Matrix<T, N, M, Accessor, Ownership::Views>& operator=(
-      const Matrix<T, N, M, OtherAccessor, OtherOwnershipType>& other)
-    requires(!std::is_same_v<Accessor, OtherAccessor>) && HasNonConstAccessOperator<Accessor, T>
+  /// \brief Default move constructor (shallow move)
+  KOKKOS_DEFAULTED_FUNCTION
+  constexpr Matrix(Matrix<T, N, M, Accessor, Ownership::Views>&&) = default;
+
+  /// \brief Default copy assignment operator (shallow copy)
+  KOKKOS_DEFAULTED_FUNCTION
+  constexpr Matrix<T, N, M, Accessor, Ownership::Views>& operator=(const Matrix<T, N, M, Accessor, Ownership::Views>&) =
+      default;
+
+  /// \brief Default move assignment operator (shallow move)
+  KOKKOS_DEFAULTED_FUNCTION
+  constexpr Matrix<T, N, M, Accessor, Ownership::Views>& operator=(Matrix<T, N, M, Accessor, Ownership::Views>&&) =
+      default;
+
+  // Custom copy/move constructors and assignment operators when interacting with a Matrix of a different type
+  // We do not allow copy/move construction from a Matrix of a different type. This is undefined behavior.
+
+  /// \brief Deep copy assignment operator with different accessor or ownership
+  /// \details Copies the data from the other vector to our data. This is only enabled if T is not const.
+  template <ValidMatrixType OtherMatrixType>
+  KOKKOS_INLINE_FUNCTION constexpr Matrix<T, N, M, Accessor, Ownership::Views>& operator=(const OtherMatrixType& other)
+    requires(!std::is_same_v<OtherMatrixType, Matrix<T, N, M, Accessor, Ownership::Views>>) &&
+            (OtherMatrixType::num_rows == N) && (OtherMatrixType::num_cols == M) &&
+            (std::is_same_v<typename OtherMatrixType::scalar_t, T>) && HasNonConstAccessOperator<Accessor, T>
   {
     impl::deep_copy_impl(std::make_index_sequence<N * M>{}, *this, other);
     return *this;
   }
 
-  /// \brief Deep copy assignment operator with same accessor
-  /// \details Copies the data from the other matrix to our data. This is only enabled if T is not const.
-  /// Yes, this function is necessary. If we only use the version for differing accessor, the compiler can get confused.
-  template <typename OtherOwnershipType>
-  KOKKOS_INLINE_FUNCTION constexpr Matrix<T, N, M, Accessor, Ownership::Views>& operator=(
-      const Matrix<T, N, M, Accessor, OtherOwnershipType>& other)
-    requires HasNonConstAccessOperator<Accessor, T>
+  /// \brief Deep move assignment operator with different accessor or ownership
+  /// \details Moves the data from the other vector to our data. This is only enabled if T is not const.
+  template <ValidMatrixType OtherMatrixType>
+  KOKKOS_INLINE_FUNCTION constexpr Matrix<T, N, M, Accessor, Ownership::Views>& operator=(OtherMatrixType&& other)
+    requires(!std::is_same_v<OtherMatrixType, Matrix<T, N, M, Accessor, Ownership::Views>>) &&
+            (OtherMatrixType::num_rows == N) && (OtherMatrixType::num_cols == M) &&
+            (std::is_same_v<typename OtherMatrixType::scalar_t, T>) && HasNonConstAccessOperator<Accessor, T>
   {
-    impl::deep_copy_impl(std::make_index_sequence<N * M>{}, *this, other);
+    impl::deep_copy_impl(std::make_index_sequence<N * M>{}, *this, std::move(other));
     return *this;
   }
 
@@ -207,50 +221,6 @@ class Matrix<T, N, M, Accessor, Ownership::Views> {
     requires HasNonConstAccessOperator<Accessor, T>
   {
     impl::fill_impl(std::make_index_sequence<N * M>{}, *this, value);
-    return *this;
-  }
-
-  /// \brief Move assignment operator with different accessor.
-  template <typename OtherAccessor>
-  KOKKOS_INLINE_FUNCTION constexpr Matrix<T, N, M, Accessor, Ownership::Views>& operator=(
-      Matrix<T, N, M, OtherAccessor, Ownership::Owns>&& other)
-    requires(!std::is_same_v<Accessor, OtherAccessor>) && HasNonConstAccessOperator<Accessor, T>
-  {
-    impl::deep_copy_impl(std::make_index_sequence<N * M>{}, *this, std::move(other));
-    return *this;
-  }
-
-  /// \brief Move assignment operator with same accessor
-  /// Yes, this function is necessary. If we only use the version for differing accessor, the compiler can get confused.
-  KOKKOS_INLINE_FUNCTION constexpr Matrix<T, N, M, Accessor, Ownership::Views>& operator=(
-      Matrix<T, N, M, Accessor, Ownership::Owns>&& other)
-    requires HasNonConstAccessOperator<Accessor, T>
-  {
-    impl::deep_copy_impl(std::make_index_sequence<N * M>{}, *this, std::move(other));
-    return *this;
-  }
-
-  /// \brief Move assignment operator with different accessor.
-  /// Same as deep copy since a other's data is not owned.
-  /// \details Moves the data from the other matrix to our data. This is only enabled if T is not const.
-  template <typename OtherAccessor>
-  KOKKOS_INLINE_FUNCTION constexpr Matrix<T, N, M, Accessor, Ownership::Views>& operator=(
-      Matrix<T, N, M, OtherAccessor, Ownership::Views>&& other)
-    requires(!std::is_same_v<Accessor, OtherAccessor>) && HasNonConstAccessOperator<Accessor, T>
-  {
-    impl::deep_copy_impl(std::make_index_sequence<N * M>{}, *this, std::move(other));
-    return *this;
-  }
-
-  /// \brief Move assignment operator with same accessor
-  /// Same as deep copy since a other's data is not owned.
-  /// \details Moves the data from the other matrix to our data. This is only enabled if T is not const.
-  /// Yes, this function is necessary. If we only use the version for differing accessor, the compiler can get confused.
-  KOKKOS_INLINE_FUNCTION constexpr Matrix<T, N, M, Accessor, Ownership::Views>& operator=(
-      Matrix<T, N, M, Accessor, Ownership::Views>&& other)
-    requires HasNonConstAccessOperator<Accessor, T>
-  {
-    impl::deep_copy_impl(std::make_index_sequence<N * M>{}, *this, std::move(other));
     return *this;
   }
   //@}
@@ -701,9 +671,9 @@ class Matrix<T, N, M, Accessor, Ownership::Views> {
   //@}
 };  // class Matrix (non-owning)
 
-template <typename T, size_t N, size_t M, ValidAccessor<T> Accessor, typename OwnershipType>
+template <typename T, size_t N, size_t M, ValidAccessor<T> Accessor>
   requires std::is_arithmetic_v<T>
-class Matrix {
+class Matrix<T, N, M, Accessor, Ownership::Owns> {
  public:
   //! \name Internal data
   //@{
@@ -722,7 +692,7 @@ class Matrix {
   using non_const_scalar_t = std::remove_const_t<T>;
 
   /// \brief Our ownership type
-  using ownership_t = OwnershipType;
+  using ownership_t = Ownership::Views;
 
   /// \brief The number of rows
   static constexpr size_t num_rows = N;
@@ -770,101 +740,69 @@ class Matrix {
   KOKKOS_DEFAULTED_FUNCTION
   constexpr ~Matrix() = default;
 
-  /// \brief Deep copy constructor
-  KOKKOS_INLINE_FUNCTION constexpr Matrix(const Matrix<T, N, M, Accessor, Ownership::Owns>& other)
-    requires HasCopyConstructor<Accessor>
-      : accessor_(other.accessor_) {
-  }
+  // Default copy/move constructors and assignment operators when interacting with a Matrix of the same type
 
-  /// \brief Deep copy constructor
-  KOKKOS_INLINE_FUNCTION constexpr Matrix(const Matrix<T, N, M, Accessor, Ownership::Views>& other)
-    requires HasCopyConstructor<Accessor>
-      : accessor_(other.accessor_) {
-  }
+  /// \brief Default copy constructor
+  KOKKOS_DEFAULTED_FUNCTION
+  constexpr Matrix(const Matrix<T, N, M, Accessor, Ownership::Owns>&) = default;
 
-  /// \brief Deep copy constructor
-  KOKKOS_INLINE_FUNCTION constexpr Matrix(const Matrix<T, N, M, Accessor, Ownership::Owns>& other)
-    requires(!HasCopyConstructor<Accessor>) && HasNonConstAccessOperator<Accessor, T>
+  /// \brief Default move constructor
+  KOKKOS_DEFAULTED_FUNCTION
+  constexpr Matrix(Matrix<T, N, M, Accessor, Ownership::Owns>&&) = default;
+
+  /// \brief Default copy assignment operator
+  KOKKOS_DEFAULTED_FUNCTION
+  constexpr Matrix<T, N, M, Accessor, Ownership::Owns>& operator=(const Matrix<T, N, M, Accessor, Ownership::Owns>&) =
+      default;
+
+  /// \brief Default move assignment operator
+  KOKKOS_DEFAULTED_FUNCTION
+  constexpr Matrix<T, N, M, Accessor, Ownership::Owns>& operator=(Matrix<T, N, M, Accessor, Ownership::Owns>&&) =
+      default;
+
+  // Custom copy/move constructors and assignment operators when interacting with a Matrix of a different type
+
+  /// \brief Deep copy constructor with different accessor or ownership
+  template <ValidMatrixType OtherMatrixType>
+  KOKKOS_INLINE_FUNCTION constexpr Matrix(const OtherMatrixType& other)
+    requires(!std::is_same_v<OtherMatrixType, Matrix<T, N, M, Accessor, Ownership::Owns>>) &&
+            (OtherMatrixType::num_rows == N) && (OtherMatrixType::num_cols == M) &&
+            (std::is_same_v<typename OtherMatrixType::scalar_t, T>)
       : accessor_() {
     impl::deep_copy_impl(std::make_index_sequence<N * M>{}, *this, other);
   }
 
-  /// \brief Deep copy constructor
-  template <typename OtherAccessor>
-    requires(!std::is_same_v<Accessor, OtherAccessor>) && HasNonConstAccessOperator<Accessor, T>
-  KOKKOS_INLINE_FUNCTION constexpr Matrix(const Matrix<T, N, M, OtherAccessor, Ownership::Owns>& other) : accessor_() {
-    impl::deep_copy_impl(std::make_index_sequence<N * M>{}, *this, other);
-  }
-
-  /// \brief Deep copy constructor
-  template <typename OtherAccessor>
-    requires(!std::is_same_v<Accessor, OtherAccessor>) && HasNonConstAccessOperator<Accessor, T>
-  KOKKOS_INLINE_FUNCTION constexpr Matrix(const Matrix<T, N, M, OtherAccessor, Ownership::Views>& other) : accessor_() {
-    impl::deep_copy_impl(std::make_index_sequence<N * M>{}, *this, other);
-  }
-
-  /// \brief Deep move constructor
-  KOKKOS_INLINE_FUNCTION constexpr Matrix(Matrix<T, N, M, Accessor, Ownership::Owns>&& other)
-    requires(HasCopyConstructor<Accessor> || HasMoveConstructor<Accessor>)
-      : accessor_(std::move(other.accessor_)) {
-  }
-
-  /// \brief Deep move constructor
-  template <typename OtherAccessor>
-    requires(!std::is_same_v<Accessor, OtherAccessor>) && HasNonConstAccessOperator<Accessor, T>
-  KOKKOS_INLINE_FUNCTION constexpr Matrix(Matrix<T, N, M, OtherAccessor, Ownership::Owns>&& other) : accessor_() {
-    // Other owns its accessor but that doesn't mean that it owns the data the accessor accesses.
-    // Since the accessor neither has a copy constructor nor a move constructor, we must deep copy.
-    impl::deep_copy_impl(std::make_index_sequence<N * M>{}, *this, std::move(other));
-  }
-  /// \brief Deep move constructor
-  template <typename OtherAccessor>
-    requires(!std::is_same_v<Accessor, OtherAccessor>) && HasNonConstAccessOperator<Accessor, T>
-  KOKKOS_INLINE_FUNCTION constexpr Matrix(Matrix<T, N, M, OtherAccessor, Ownership::Views>&& other) : accessor_() {
+  /// \brief Deep move constructor with different accessor or ownership
+  template <ValidMatrixType OtherMatrixType>
+  KOKKOS_INLINE_FUNCTION constexpr Matrix(OtherMatrixType&& other)
+    requires(!std::is_same_v<OtherMatrixType, Matrix<T, N, M, Accessor, Ownership::Owns>>) &&
+            (OtherMatrixType::num_rows == N) && (OtherMatrixType::num_cols == M) &&
+            (std::is_same_v<typename OtherMatrixType::scalar_t, T>)
+      : accessor_() {
     impl::deep_copy_impl(std::make_index_sequence<N * M>{}, *this, std::move(other));
   }
 
-  /// \brief Deep copy assignment operator with different accessor
-  /// \details Copies the data from the other matrix to our data. This is only enabled if T is not const.
-  template <typename OtherAccessor>
-  KOKKOS_INLINE_FUNCTION constexpr Matrix<T, N, M, Accessor, Ownership::Owns>& operator=(
-      const Matrix<T, N, M, OtherAccessor, Ownership::Owns>& other)
-    requires(!std::is_same_v<Accessor, OtherAccessor>) && HasNonConstAccessOperator<Accessor, T>
+  /// \brief Deep copy assignment operator with different accessor or ownership
+  /// \details Copies the data from the other vector to our data. This is only enabled if T is not const.
+  template <ValidMatrixType OtherMatrixType>
+  KOKKOS_INLINE_FUNCTION constexpr Matrix<T, N, M, Accessor, Ownership::Owns>& operator=(const OtherMatrixType& other)
+    requires(!std::is_same_v<OtherMatrixType, Matrix<T, N, M, Accessor, Ownership::Owns>>) &&
+            (OtherMatrixType::num_rows == N) && (OtherMatrixType::num_cols == M) &&
+            (std::is_same_v<typename OtherMatrixType::scalar_t, T>) && HasNonConstAccessOperator<Accessor, T>
   {
     impl::deep_copy_impl(std::make_index_sequence<N * M>{}, *this, other);
     return *this;
   }
 
-  /// \brief Deep copy assignment operator with same accessor
-  /// \details Copies the data from the other matrix to our data. This is only enabled if T is not const.
-  /// Yes, this function is necessary. If we only use the version for differing accessor, the compiler can get confused.
-  KOKKOS_INLINE_FUNCTION constexpr Matrix<T, N, M, Accessor, Ownership::Owns>& operator=(
-      const Matrix<T, N, M, Accessor, Ownership::Owns>& other)
-    requires HasNonConstAccessOperator<Accessor, T>
+  /// \brief Deep move assignment operator with different accessor or ownership
+  /// \details Moves the data from the other vector to our data. This is only enabled if T is not const.
+  template <ValidMatrixType OtherMatrixType>
+  KOKKOS_INLINE_FUNCTION constexpr Matrix<T, N, M, Accessor, Ownership::Owns>& operator=(OtherMatrixType&& other)
+    requires(!std::is_same_v<OtherMatrixType, Matrix<T, N, M, Accessor, Ownership::Owns>>) &&
+            (OtherMatrixType::num_rows == N) && (OtherMatrixType::num_cols == M) &&
+            (std::is_same_v<typename OtherMatrixType::scalar_t, T>) && HasNonConstAccessOperator<Accessor, T>
   {
-    impl::deep_copy_impl(std::make_index_sequence<N * M>{}, *this, other);
-    return *this;
-  }
-
-  /// \brief Deep copy assignment operator with different accessor
-  /// \details Copies the data from the other matrix to our data. This is only enabled if T is not const.
-  template <typename OtherAccessor>
-  KOKKOS_INLINE_FUNCTION constexpr Matrix<T, N, M, Accessor, Ownership::Owns>& operator=(
-      const Matrix<T, N, M, OtherAccessor, Ownership::Views>& other)
-    requires(!std::is_same_v<Accessor, OtherAccessor>) && HasNonConstAccessOperator<Accessor, T>
-  {
-    impl::deep_copy_impl(std::make_index_sequence<N * M>{}, *this, other);
-    return *this;
-  }
-
-  /// \brief Deep copy assignment operator with same accessor
-  /// \details Copies the data from the other matrix to our data. This is only enabled if T is not const.
-  /// Yes, this function is necessary. If we only use the version for differing accessor, the compiler can get confused.
-  KOKKOS_INLINE_FUNCTION constexpr Matrix<T, N, M, Accessor, Ownership::Owns>& operator=(
-      const Matrix<T, N, M, Accessor, Ownership::Views>& other)
-    requires HasNonConstAccessOperator<Accessor, T>
-  {
-    impl::deep_copy_impl(std::make_index_sequence<N * M>{}, *this, other);
+    impl::deep_copy_impl(std::make_index_sequence<N * M>{}, *this, std::move(other));
     return *this;
   }
 
@@ -874,52 +812,6 @@ class Matrix {
     requires HasNonConstAccessOperator<Accessor, T>
   {
     impl::fill_impl(std::make_index_sequence<N * M>{}, *this, value);
-    return *this;
-  }
-
-  /// \brief Move assignment operator with different accessor.
-  /// \details Moves the data from the other matrix to our data. This is only enabled if T is not const.
-  template <typename OtherAccessor>
-  KOKKOS_INLINE_FUNCTION constexpr Matrix<T, N, M, Accessor, Ownership::Owns>& operator=(
-      Matrix<T, N, M, OtherAccessor, Ownership::Owns>&& other)
-    requires(!std::is_same_v<Accessor, OtherAccessor>) && HasNonConstAccessOperator<Accessor, T>
-  {
-    impl::deep_copy_impl(std::make_index_sequence<N * M>{}, *this, std::move(other));
-    return *this;
-  }
-
-  /// \brief Move assignment operator with same accessor
-  /// \details Moves the data from the other matrix to our data. This is only enabled if T is not const.
-  /// Yes, this function is necessary. If we only use the version for differing accessor, the compiler can get confused.
-  KOKKOS_INLINE_FUNCTION constexpr Matrix<T, N, M, Accessor, Ownership::Owns>& operator=(
-      Matrix<T, N, M, Accessor, Ownership::Owns>&& other)
-    requires HasNonConstAccessOperator<Accessor, T>
-  {
-    impl::deep_copy_impl(std::make_index_sequence<N * M>{}, *this, std::move(other));
-    return *this;
-  }
-
-  /// \brief Move assignment operator with different accessor.
-  /// Same as deep copy since a other's data is not owned.
-  /// \details Moves the data from the other matrix to our data. This is only enabled if T is not const.
-  template <typename OtherAccessor>
-  KOKKOS_INLINE_FUNCTION constexpr Matrix<T, N, M, Accessor, Ownership::Owns>& operator=(
-      Matrix<T, N, M, OtherAccessor, Ownership::Views>&& other)
-    requires(!std::is_same_v<Accessor, OtherAccessor>) && HasNonConstAccessOperator<Accessor, T>
-  {
-    impl::deep_copy_impl(std::make_index_sequence<N * M>{}, *this, std::move(other));
-    return *this;
-  }
-
-  /// \brief Move assignment operator with same accessor
-  /// Same as deep copy since a other's data is not owned.
-  /// \details Moves the data from the other matrix to our data. This is only enabled if T is not const.
-  /// Yes, this function is necessary. If we only use the version for differing accessor, the compiler can get confused.
-  KOKKOS_INLINE_FUNCTION constexpr Matrix<T, N, M, Accessor, Ownership::Owns>& operator=(
-      Matrix<T, N, M, Accessor, Ownership::Views>&& other)
-    requires HasNonConstAccessOperator<Accessor, T>
-  {
-    impl::deep_copy_impl(std::make_index_sequence<N * M>{}, *this, std::move(other));
     return *this;
   }
   //@}
@@ -1744,6 +1636,101 @@ template <size_t N, size_t M, typename T, ValidAccessor<T> Accessor, typename Ow
 KOKKOS_INLINE_FUNCTION constexpr auto two_norm(const Matrix<T, N, M, Accessor, OwnershipType>& mat) {
   return Kokkos::sqrt(frobenius_inner_product(mat, mat));
 }
+//@}
+
+// Just to double check
+static_assert(std::is_trivially_copyable_v<Matrix<double, 3, 3>>);
+static_assert(std::is_trivially_destructible_v<Matrix<double, 3, 3>>);
+static_assert(std::is_copy_constructible_v<Matrix<double, 3, 3>>);
+static_assert(std::is_move_constructible_v<Matrix<double, 3, 3>>);
+
+//! \name Type specializations
+//@{
+
+#define MUNDY_MATH_MATRIX_SIZE_SPECIALIZATION_IMPL(alias, alias_lower, N, M)                                   \
+  template <typename T, ValidAccessor<T> Accessor = Array<T, N * M>, typename OwnershipType = Ownership::Owns> \
+    requires std::is_arithmetic_v<T>                                                                           \
+  using alias = Matrix<T, N, M, Accessor, OwnershipType>;                                                      \
+  template <typename T, ValidAccessor<T> Accessor = Array<T, N * M>>                                           \
+    requires std::is_arithmetic_v<T>                                                                           \
+  using alias##View = Matrix<T, N, M, Accessor, Ownership::Views>;                                             \
+  template <typename T, ValidAccessor<T> Accessor = Array<T, N * M>>                                           \
+    requires std::is_arithmetic_v<T>                                                                           \
+  using Owning##alias = Matrix<T, N, M, Accessor, Ownership::Owns>;                                            \
+  template <typename TypeToCheck>                                                                              \
+  struct is_##alias_lower##_impl : std::false_type {};                                                         \
+  template <typename T, typename Accessor, typename OwnershipType>                                             \
+  struct is_##alias_lower##_impl<alias<T, Accessor, OwnershipType>> : std::true_type {};                       \
+  template <typename TypeToCheck>                                                                              \
+  struct is_##alias_lower : public is_##alias_lower##_impl<std::decay_t<TypeToCheck>> {};                      \
+  template <typename TypeToCheck>                                                                              \
+  constexpr bool is_##alias_lower##_v = is_##alias_lower<TypeToCheck>::value;
+
+#define MUNDY_MATH_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(alias, alias_lower, T, N, M)           \
+  template <ValidAccessor<T> Accessor = Array<T, N * M>, typename OwnershipType = Ownership::Owns> \
+  using alias = Vector<T, N, Accessor, OwnershipType>;                                             \
+  template <ValidAccessor<T> Accessor = Array<T, N * M>>                                           \
+  using alias##View = Matrix<T, N, M, Accessor, Ownership::Views>;                                 \
+  template <ValidAccessor<T> Accessor = Array<T, N * M>>                                           \
+  using Owning##alias = Matrix<T, N, M, Accessor, Ownership::Owns>;                                \
+  template <typename TypeToCheck>                                                                  \
+  struct is_##alias_lower##_impl : std::false_type {};                                             \
+  template <typename Accessor, typename OwnershipType>                                             \
+  struct is_##alias_lower##_impl<alias<Accessor, OwnershipType>> : std::true_type {};              \
+  template <typename TypeToCheck>                                                                  \
+  struct is_##alias_lower : public is_##alias_lower##_impl<std::decay_t<TypeToCheck>> {};          \
+  template <typename TypeToCheck>                                                                  \
+  constexpr bool is_##alias_lower##_v = is_##alias_lower<TypeToCheck>::value;
+
+#define MUNDY_MATH_MATRIX_SIZE_SPECIALIZATION(N, M) \
+  MUNDY_MATH_MATRIX_SIZE_SPECIALIZATION_IMPL(Matrix##N##M, matrix##N##M, N, M)
+
+#define MUNDY_MATH_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_FLOAT_DOUBLE(N, M)                            \
+  MUNDY_MATH_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(Matrix##N##M##f, matrix##N##M##f, float, N, M) \
+  MUNDY_MATH_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(Matrix##N##M##d, matrix##N##M##d, double, N, M)
+
+#define MUNDY_MATH_MATRIX_EXPAND_1_TO_6_1D(macro_1d) \
+  macro_1d(1) macro_1d(2) macro_1d(3) macro_1d(4) macro_1d(5) macro_1d(6)
+
+// clang-format off
+#define MUNDY_MATH_MATRIX_EXPAND_1_TO_6_2D(macro_2d) \
+  macro_2d(1, 1) macro_2d(1, 2) macro_2d(1, 3) macro_2d(1, 4) macro_2d(1, 5) macro_2d(1, 6) \
+  macro_2d(2, 1) macro_2d(2, 2) macro_2d(2, 3) macro_2d(2, 4) macro_2d(2, 5) macro_2d(2, 6) \
+  macro_2d(3, 1) macro_2d(3, 2) macro_2d(3, 3) macro_2d(3, 4) macro_2d(3, 5) macro_2d(3, 6) \
+  macro_2d(4, 1) macro_2d(4, 2) macro_2d(4, 3) macro_2d(4, 4) macro_2d(4, 5) macro_2d(4, 6) \
+  macro_2d(5, 1) macro_2d(5, 2) macro_2d(5, 3) macro_2d(5, 4) macro_2d(5, 5) macro_2d(5, 6) \
+  macro_2d(6, 1) macro_2d(6, 2) macro_2d(6, 3) macro_2d(6, 4) macro_2d(6, 5) macro_2d(6, 6)
+// clang-format on
+
+/// \brief Matrix specializations
+/// \note Sorry for the layers of macros. I needed to avoid having 36 * 3 evocations of the type specialization macro.
+/// The following just calls that macro for each of the 36 combinations of N and M.
+MUNDY_MATH_MATRIX_EXPAND_1_TO_6_2D(
+    MUNDY_MATH_MATRIX_SIZE_SPECIALIZATION)  // This is what creates Matrix11, Matrix12, etc.
+MUNDY_MATH_MATRIX_EXPAND_1_TO_6_2D(
+    MUNDY_MATH_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_FLOAT_DOUBLE)  // This is what creates Matrix11d, Matrix12d, etc.
+
+// Special diagonals overloads
+MUNDY_MATH_MATRIX_SIZE_SPECIALIZATION_IMPL(Matrix1, matrix1, 1, 1)
+MUNDY_MATH_MATRIX_SIZE_SPECIALIZATION_IMPL(Matrix2, matrix2, 2, 2)
+MUNDY_MATH_MATRIX_SIZE_SPECIALIZATION_IMPL(Matrix3, matrix3, 3, 3)
+MUNDY_MATH_MATRIX_SIZE_SPECIALIZATION_IMPL(Matrix4, matrix4, 4, 4)
+MUNDY_MATH_MATRIX_SIZE_SPECIALIZATION_IMPL(Matrix5, matrix5, 5, 5)
+MUNDY_MATH_MATRIX_SIZE_SPECIALIZATION_IMPL(Matrix6, matrix6, 6, 6)
+
+MUNDY_MATH_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(Matrix1f, matrix1f, float, 1, 1)
+MUNDY_MATH_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(Matrix2f, matrix2f, float, 2, 2)
+MUNDY_MATH_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(Matrix3f, matrix3f, float, 3, 3)
+MUNDY_MATH_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(Matrix4f, matrix4f, float, 4, 4)
+MUNDY_MATH_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(Matrix5f, matrix5f, float, 5, 5)
+MUNDY_MATH_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(Matrix6f, matrix6f, float, 6, 6)
+
+MUNDY_MATH_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(Matrix1d, matrix1d, double, 1, 1)
+MUNDY_MATH_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(Matrix2d, matrix2d, double, 2, 2)
+MUNDY_MATH_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(Matrix3d, matrix3d, double, 3, 3)
+MUNDY_MATH_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(Matrix4d, matrix4d, double, 4, 4)
+MUNDY_MATH_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(Matrix5d, matrix5d, double, 5, 5)
+MUNDY_MATH_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(Matrix6d, matrix6d, double, 6, 6)
 //@}
 
 //! \name Matrix<T, Accessor> views

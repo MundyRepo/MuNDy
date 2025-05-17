@@ -3863,7 +3863,7 @@ class HP1 {
     const mundy::math::Vector3<double> center(0.0, 0.0, 0.0);
     const auto orientation = mundy::math::Quaternion<double>::identity();
     auto level_set = [&a, &b, &c, &center, &orientation](const double &radius,
-                                                         const mundy::math::Vector3<double> &point) -> double {
+                                                         const auto &point) -> double {
       // const auto body_frame_point = conjugate(orientation) * (point - center);
       const auto body_frame_point = point - center;
       const double inv_a2 = 1.0 / ((a - radius) * (a - radius));
@@ -3876,7 +3876,7 @@ class HP1 {
     // Fast compute of the outward 'normal' at the point
     auto outward_normal = [&a, &b, &c, &center, &orientation](
                               const double &radius,
-                              const mundy::math::Vector3<double> &point) -> mundy::math::Vector3<double> {
+                              const auto &point) -> mundy::math::Vector3<double> {
       const auto body_frame_point = point - center;
       const double inv_a2 = 1.0 / ((a - radius) * (a - radius));
       const double inv_b2 = 1.0 / ((b - radius) * (b - radius));

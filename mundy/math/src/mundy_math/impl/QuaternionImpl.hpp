@@ -3,7 +3,7 @@
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
 //                                              Copyright 2024 Bryce Palmer
-// 
+//
 // Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
@@ -198,7 +198,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto quat_vec_multiplication_impl(
   const Quaternion<U> vec_quat(0.0, vec[0], vec[1], vec[2]);
   const auto quat_inv = inverse(quat);
   const auto quat_result = quat * vec_quat * quat_inv;
-  return quat_result.vector();
+  return Vector3<std::common_type_t<T, U>>(quat_result[1], quat_result[2], quat_result[3]);
 }
 
 /// \brief Vector-quaternion multiplication (same as v^T * R = transpose(R^T * v))
@@ -215,10 +215,9 @@ KOKKOS_INLINE_FUNCTION constexpr auto vec_quat_multiplication_impl(
   const Quaternion<T> vec_quat(0.0, vec[0], vec[1], vec[2]);
   const auto quat_inv = inverse(quat);
   const auto quat_result = quat_inv * vec_quat * quat;
-  return quat_result.vector();
+  return Vector3<std::common_type_t<T, U>>(quat_result[1], quat_result[2], quat_result[3]);
 }
 
-/// \brief Quaternion-matrix multiplication
 /// \param[in] other The other matrix.
 template <typename T, typename U, ValidAccessor<T> Accessor, typename OwnershipType, ValidAccessor<U> OtherAccessor,
           typename OtherOwnershipType>

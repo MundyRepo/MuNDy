@@ -93,6 +93,17 @@ using LocalResultViewType = Kokkos::View<LocalIntersection *, DeviceExecutionSpa
 //! \name Setup
 //@{
 
+KOKKOS_INLINE_FUNCTION
+bool fma_equal(stk::mesh::FastMeshIndex lhs, stk::mesh::FastMeshIndex rhs) {
+  return (lhs.bucket_id == rhs.bucket_id) && (lhs.bucket_ord  == rhs.bucket_ord);
+}
+
+KOKKOS_INLINE_FUNCTION
+bool fma_less(stk::mesh::FastMeshIndex lhs, stk::mesh::FastMeshIndex rhs) {
+  return lhs.bucket_id == rhs.bucket_id ? lhs.bucket_ord < rhs.bucket_ord : lhs.bucket_id < rhs.bucket_id;
+}
+
+
 void generate_particles(stk::mesh::BulkData &bulk_data, const size_t num_particles_global,
                         stk::mesh::Part &particle_part) {
   // get the avenge number of particles per process
@@ -353,7 +364,7 @@ void compute_signed_separation_distance_and_contact_normal(
         const stk::mesh::FastMeshIndex target_index = local_search_results(i).rangeIdentProc.id();
 
         // Skip self interaction and avoid double counting
-        if (target_index < source_index || target_index == source_index) {
+        if (fma_less(target_index, source_index) || fma_equal(target_index, source_index)) {
           signed_sep_dist(i) = 0.0;
           con_normals_ij(i, 0) = 0.0;
           con_normals_ij(i, 1) = 0.0;
@@ -530,7 +541,7 @@ void sum_collision_force(stk::mesh::NgpMesh &ngp_mesh, const LocalResultViewType
         const stk::mesh::FastMeshIndex target_index = local_search_results(i).rangeIdentProc.id();
 
         // Skip self interaction and avoid double counting
-        if (target_index < source_index || target_index == source_index) {
+        if (fma_less(target_index, source_index) || fma_equal(target_index, source_index)) {
           return;
         }
 
@@ -621,7 +632,7 @@ void compute_rate_of_change_of_sep(stk::mesh::NgpMesh &ngp_mesh, const LocalResu
         const stk::mesh::FastMeshIndex target_index = local_search_results(i).rangeIdentProc.id();
 
         // Skip self interaction and avoid double counting
-        if (target_index < source_index || target_index == source_index) {
+        if (fma_less(target_index, source_index) || fma_equal(target_index, source_index)) {
           signed_sep_dot(i) = 0.0;
           return;
         }

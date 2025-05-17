@@ -582,9 +582,9 @@ int main(int argc, char **argv) {
     const double poisson_ratio = 0.3;
     const double radius = 0.1;
     const double length = 1.0;
-    const double num_spherocyliners = 8000000;
+    const double num_spherocyliners = 8000;
     const mundy::geom::Point<double> domain_low{0.0, 0.0, 0.0};
-    const mundy::geom::Point<double> domain_high{100.0, 100.0, 100.0};
+    const mundy::geom::Point<double> domain_high{10.0, 10.0, 10.0};
     const double time_step_size = 0.00001;
     const size_t num_time_steps = 10000;
     const size_t io_frequency = 1000;
