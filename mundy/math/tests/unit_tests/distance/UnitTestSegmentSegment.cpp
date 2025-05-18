@@ -3,7 +3,7 @@
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
 //                                              Copyright 2024 Bryce Palmer
-// 
+//
 // Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
@@ -73,12 +73,12 @@ concept RandomNumberGenerator = requires(T rng) {
 };
 
 template <RandomNumberGenerator RngType>
-void generate_intersecting_line_segments(RngType& rng, Vector3<double>& a1, Vector3<double>& a2, Vector3<double>& b1,
-                                         Vector3<double>& b2, double& u, double& v) {
+void generate_intersecting_line_segments(RngType& rng, Vector3d& a1, Vector3d& a2, Vector3d& b1, Vector3d& b2,
+                                         double& u, double& v) {
   // Generate two line segments ((a1,a2) and (b1,b2)) that intersect, and set
   // u and v as the parametric points of intersection on the two respective
   // lines.
-  Vector3<double> intersection;
+  Vector3d intersection;
   for (unsigned i = 0; i < 3; i++) {
     intersection[i] = rng.template rand<double>();
     a1[i] = rng.template rand<double>();
@@ -104,7 +104,7 @@ void generate_intersecting_line_segments(RngType& rng, Vector3<double>& a1, Vect
 }
 
 template <RandomNumberGenerator RngType>
-void random_sphere(RngType& rng, const double radius, const Vector3<double>& offset, Vector3<double>& value) {
+void random_sphere(RngType& rng, const double radius, const Vector3d& offset, Vector3d& value) {
   // Generate a point within a sphere centered at offset with a given radius.
   double theta = 2. * Kokkos::numbers::pi_v<double> * rng.template rand<double>();
   double phi = Kokkos::numbers::pi_v<double> * rng.template rand<double>();
@@ -114,23 +114,21 @@ void random_sphere(RngType& rng, const double radius, const Vector3<double>& off
 }
 
 template <RandomNumberGenerator RngType>
-void generate_non_intersecting_line_segments(RngType& rng, Vector3<double>& a1, Vector3<double>& a2,
-                                             Vector3<double>& b1, Vector3<double>& b2) {
+void generate_non_intersecting_line_segments(RngType& rng, Vector3d& a1, Vector3d& a2, Vector3d& b1, Vector3d& b2) {
   // Generate two line segments ((a1,a2) and (b1,b2)) that do not intersect.
   // The endpoints of each line segment are generated from two non-overlapping
   // spheres, and the two spheres for each line segment are physically displaced
   // as well.
 
   static const double radius = 0.5 - 1.e-6;
-  random_sphere(rng, radius, Vector3<double>(0., 0., 0.), a1);
-  random_sphere(rng, radius, Vector3<double>(1., 0., 0.), a2);
-  random_sphere(rng, radius, Vector3<double>(0., 1., 0.), b1);
-  random_sphere(rng, radius, Vector3<double>(1., 1., 0.), b2);
+  random_sphere(rng, radius, Vector3d(0., 0., 0.), a1);
+  random_sphere(rng, radius, Vector3d(1., 0., 0.), a2);
+  random_sphere(rng, radius, Vector3d(0., 1., 0.), b1);
+  random_sphere(rng, radius, Vector3d(1., 1., 0.), b2);
 }
 
 template <RandomNumberGenerator RngType>
-void generate_colinear_line_segments(RngType& rng, Vector3<double>& a1, Vector3<double>& a2, Vector3<double>& b1,
-                                     Vector3<double>& b2) {
+void generate_colinear_line_segments(RngType& rng, Vector3d& a1, Vector3d& a2, Vector3d& b1, Vector3d& b2) {
   // Generate two line segments ((a1,a2) and (b1,b2)) that are colinear.
   for (unsigned i = 0; i < 3; i++) {
     a1[i] = rng.template rand<double>();
@@ -154,9 +152,8 @@ enum class DegeneracyType {
 };
 
 template <RandomNumberGenerator RngType>
-void generate_lines_at_known_distance(RngType& rng, double& line_dist, Vector3<double>& a1, Vector3<double>& a2,
-                                      Vector3<double>& b1, Vector3<double>& b2, Vector3<double>& a12,
-                                      Vector3<double>& b12, double& u, double& v,
+void generate_lines_at_known_distance(RngType& rng, double& line_dist, Vector3d& a1, Vector3d& a2, Vector3d& b1,
+                                      Vector3d& b2, Vector3d& a12, Vector3d& b12, double& u, double& v,
                                       DegeneracyType degeneracy = DegeneracyType::RANDOM) {
   // Generate two lines ((a1,a2) and (b1,b2)) set a known distance (line_dist)
   // apart. the parameter and value of the closest points for lines a and b are
@@ -184,12 +181,12 @@ void generate_lines_at_known_distance(RngType& rng, double& line_dist, Vector3<d
   const double theta1 = acos(2. * rng.template rand<double>() - 1.);
   const double theta2 = acos(2. * rng.template rand<double>() - 1.);
 
-  Vector3<double> v1 = {
+  Vector3d v1 = {
       cos(phi1) * sin(theta1),
       sin(phi1) * sin(theta1),
       cos(theta1),
   };
-  Vector3<double> v2 = {
+  Vector3d v2 = {
       cos(phi2) * sin(theta2),
       sin(phi2) * sin(theta2),
       cos(theta2),
@@ -197,7 +194,7 @@ void generate_lines_at_known_distance(RngType& rng, double& line_dist, Vector3<d
 
   // Because v1 and v2 may be equal, care needs to be taken when determining the line distance along v3.
   // Instead of normalizing v3, we'll scale it randomly by [0, 1] such that its norm is the desired line distance.
-  const Vector3<double> v3 = mundy::math::cross(v1, v2) * rng.template rand<double>();
+  const Vector3d v3 = mundy::math::cross(v1, v2) * rng.template rand<double>();
   const double norm_v3 = mundy::math::norm(v3);
   line_dist = norm_v3;
 
@@ -224,9 +221,8 @@ void generate_lines_at_known_distance(RngType& rng, double& line_dist, Vector3<d
 }
 
 template <RandomNumberGenerator RngType>
-void generate_line_segments_at_known_distance(RngType& rng, double& line_dist, Vector3<double>& a1, Vector3<double>& a2,
-                                              Vector3<double>& b1, Vector3<double>& b2, Vector3<double>& a12,
-                                              Vector3<double>& b12, double& u, double& v,
+void generate_line_segments_at_known_distance(RngType& rng, double& line_dist, Vector3d& a1, Vector3d& a2, Vector3d& b1,
+                                              Vector3d& b2, Vector3d& a12, Vector3d& b12, double& u, double& v,
                                               DegeneracyType degeneracy = DegeneracyType::RANDOM) {
   // Generate two line segments ((a1,a2) and (b1,b2)) set a known distance (line_dist)
   // apart. The parameter and value of the closest points for lines a and b are
@@ -249,12 +245,12 @@ void generate_line_segments_at_known_distance(RngType& rng, double& line_dist, V
   const double theta1 = acos(2. * rng.template rand<double>() - 1.);
   const double theta2 = acos(2. * rng.template rand<double>() - 1.);
 
-  Vector3<double> v1 = {
+  Vector3d v1 = {
       cos(phi1) * sin(theta1),
       sin(phi1) * sin(theta1),
       cos(theta1),
   };
-  Vector3<double> v2 = {
+  Vector3d v2 = {
       cos(phi2) * sin(theta2),
       sin(phi2) * sin(theta2),
       cos(theta2),
@@ -262,7 +258,7 @@ void generate_line_segments_at_known_distance(RngType& rng, double& line_dist, V
 
   // Because v1 and v2 may be equal, care needs to be taken when determining the line distance along v3.
   // Instead of normalizing v3, we'll scale it randomly by [0, 1] such that its norm is the desired line distance.
-  const Vector3<double> v3 = mundy::math::cross(v1, v2) * rng.template rand<double>();
+  const Vector3d v3 = mundy::math::cross(v1, v2) * rng.template rand<double>();
   const double norm_v3 = mundy::math::norm(v3);
   line_dist = norm_v3;
 
@@ -299,8 +295,8 @@ void generate_line_segments_at_known_distance(RngType& rng, double& line_dist, V
 }
 
 template <RandomNumberGenerator RngType>
-void generate_line_at_known_distance(RngType& rng, Vector3<double>& a1, Vector3<double>& a2, Vector3<double>& a12,
-                                     Vector3<double>& p, double& dist) {
+void generate_line_at_known_distance(RngType& rng, Vector3d& a1, Vector3d& a2, Vector3d& a12, Vector3d& p,
+                                     double& dist) {
   // Generate a line (a1,a2) set a known distance (dist) from a generated point p.
 
   // Generate a random point p
@@ -317,12 +313,12 @@ void generate_line_at_known_distance(RngType& rng, Vector3<double>& a1, Vector3<
   const double phi2 = 2. * Kokkos::numbers::pi_v<double> * rng.template rand<double>();
   const double theta1 = acos(2. * rng.template rand<double>() - 1.);
   const double theta2 = acos(2. * rng.template rand<double>() - 1.);
-  Vector3<double> v1 = {
+  Vector3d v1 = {
       cos(phi1) * sin(theta1),
       sin(phi1) * sin(theta1),
       cos(theta1),
   };
-  Vector3<double> v2 = {
+  Vector3d v2 = {
       cos(phi2) * sin(theta2),
       sin(phi2) * sin(theta2),
       cos(theta2),
@@ -357,7 +353,7 @@ TEST(DistanceBetweenLines, PositiveResult) {
   openrand::Philox rng(generate_test_seed(), 0);
   unsigned nTests = MUNDY_MATH_TESTS_UNIT_TESTS_SEGMENT_SEGMENT_DISTANCE_NUM_SAMPLES_PER_TEST;
 
-  Vector3<double> a1, a2, b1, b2, a12_expected, a12_actual, b12_expected, b12_actual;
+  Vector3d a1, a2, b1, b2, a12_expected, a12_actual, b12_expected, b12_actual;
   double u_expected, v_expected, u_actual, v_actual, dist_expected, dist_sq_actual;
   for (unsigned i = 0; i < nTests; i++) {
     generate_lines_at_known_distance(rng, dist_expected, a1, a2, b1, b2, a12_expected, b12_expected, u_expected,
@@ -380,7 +376,7 @@ TEST(DistanceBetweenLineSegments, PositiveResult) {
   openrand::Philox rng(generate_test_seed(), 0);
   unsigned nTests = MUNDY_MATH_TESTS_UNIT_TESTS_SEGMENT_SEGMENT_DISTANCE_NUM_SAMPLES_PER_TEST;
 
-  Vector3<double> a1, a2, b1, b2, a12_expected, a12_actual, b12_expected, b12_actual;
+  Vector3d a1, a2, b1, b2, a12_expected, a12_actual, b12_expected, b12_actual;
   double u_expected, v_expected, u_actual, v_actual, dist_expected, dist_sq_actual;
   for (unsigned i = 0; i < nTests; i++) {
     generate_line_segments_at_known_distance(rng, dist_expected, a1, a2, b1, b2, a12_expected, b12_expected, u_expected,
@@ -403,7 +399,7 @@ TEST(DistanceBetweenLineSegments, APeskyEdgeCase) {
   // The following pesky edge case is for a colinear rod that caused an untested edge case.
   // TODO(palmerb4): We'll need colinear rods that give each of the 4 possible cases.
   openrand::Philox rng(generate_test_seed(), 0);
-  Vector3<double> a1, a2, b1, b2, a12_expected, a12_actual, b12_expected, b12_actual;
+  Vector3d a1, a2, b1, b2, a12_expected, a12_actual, b12_expected, b12_actual;
 
   double u_expected, v_expected, u_actual, v_actual, dist_expected, dist_sq_actual;
   // Hardcoding a case that I know is wrong.
@@ -433,7 +429,7 @@ TEST(DistanceToLine, PositiveResult) {
   openrand::Philox rng(generate_test_seed(), 0);
   unsigned nTests = MUNDY_MATH_TESTS_UNIT_TESTS_SEGMENT_SEGMENT_DISTANCE_NUM_SAMPLES_PER_TEST;
 
-  Vector3<double> a1, a2, a12_actual, a12_expected, p;
+  Vector3d a1, a2, a12_actual, a12_expected, p;
   double t;
   double dist_expected, dist_sq_actual;
   for (unsigned i = 0; i < nTests; i++) {

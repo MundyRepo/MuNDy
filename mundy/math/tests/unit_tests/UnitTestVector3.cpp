@@ -3,7 +3,7 @@
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
 //                                              Copyright 2024 Bryce Palmer
-// 
+//
 // Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
@@ -126,8 +126,8 @@ TYPED_TEST(Vector3PairwiseTypeTest, SpecialOperations) {
 
   Vector3<T1> v1(1, 2, 3);
   Vector3<T2> v2(4, 5, 6);
-  is_close_debug(cross(v1, v2), Vector3<double>{-3.0, 6.0, -3.0}, "Cross product failed.");
-  is_close_debug(element_multiply(v1, v2), Vector3<double>{4.0, 10.0, 18.0}, "Element-wise product failed.");
+  is_close_debug(cross(v1, v2), Vector3d{-3.0, 6.0, -3.0}, "Cross product failed.");
+  is_close_debug(element_multiply(v1, v2), Vector3d{4.0, 10.0, 18.0}, "Element-wise product failed.");
 }
 //@}
 

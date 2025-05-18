@@ -3,7 +3,7 @@
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
 //                                              Copyright 2024 Bryce Palmer
-// 
+//
 // Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is empty software: you can redistribute it and/or modify it under the terms of the GNU General Public License
@@ -61,7 +61,8 @@ class NgpEntityPoolT : public core::NgpPoolT<stk::mesh::Entity, MemorySpace, Siz
   NgpEntityPoolT() = delete;
 
   // Constructor for empty pool
-  NgpEntityPoolT(stk::mesh::BulkData& bulk_data, stk::mesh::EntityRank rank) : base_t(0), bulk_data_(bulk_data), rank_(rank) {
+  NgpEntityPoolT(stk::mesh::BulkData& bulk_data, stk::mesh::EntityRank rank)
+      : base_t(0), bulk_data_(bulk_data), rank_(rank) {
   }
 
   NgpEntityPoolT(stk::mesh::BulkData& bulk_data, stk::mesh::EntityRank rank, size_t capacity)

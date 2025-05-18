@@ -3,7 +3,7 @@
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
 //                                              Copyright 2024 Bryce Palmer
-// 
+//
 // Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
@@ -360,15 +360,15 @@ class FieldFillTest : public PerfTestFieldBLAS {
     double fill_value_local = fill_value;
     for (size_t i = 0; i < num_iterations; ++i) {
       // Instead of using stk's field_fill, write if from scratch using a host for_each_entity_run loop
-      stk::mesh::for_each_entity_run(
-          bulk, field.entity_rank(), selector,
-          [&field, &fill_value_local]([[maybe_unused]] const stk::mesh::BulkData& bulk, const stk::mesh::Entity entity) {
-            const int num_components = stk::mesh::field_scalars_per_entity(field, entity);
-            double* raw_field_data = stk::mesh::field_data(field, entity);
-            for (int i = 0; i < num_components; ++i) {
-              raw_field_data[i] = fill_value_local;
-            }
-          });
+      stk::mesh::for_each_entity_run(bulk, field.entity_rank(), selector,
+                                     [&field, &fill_value_local]([[maybe_unused]] const stk::mesh::BulkData& bulk,
+                                                                 const stk::mesh::Entity entity) {
+                                       const int num_components = stk::mesh::field_scalars_per_entity(field, entity);
+                                       double* raw_field_data = stk::mesh::field_data(field, entity);
+                                       for (int i = 0; i < num_components; ++i) {
+                                         raw_field_data[i] = fill_value_local;
+                                       }
+                                     });
     }
   }
 };  // class FieldFillTest

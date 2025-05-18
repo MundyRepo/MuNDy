@@ -3,7 +3,7 @@
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
 //                                              Copyright 2024 Bryce Palmer
-// 
+//
 // Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
@@ -84,8 +84,8 @@ PartReqs &PartReqs::set_part_topology(const stk::topology::topology_t &part_topo
     bool part_rank_already_set = this->constrains_part_rank();
     MUNDY_THROW_REQUIRE(
         !part_rank_already_set, std::logic_error,
-        std::string("PartReqs: Parts are designed to fall into three catagories: name set, name and topology set, ")
-            + "name and rank set. \n This part already sets the rank, so it's invalid to also set the topology.");
+        std::string("PartReqs: Parts are designed to fall into three catagories: name set, name and topology set, ") +
+            "name and rank set. \n This part already sets the rank, so it's invalid to also set the topology.");
     part_topology_ = part_topology;
     part_topology_is_set_ = true;
     this->check_if_valid();
@@ -100,8 +100,8 @@ PartReqs &PartReqs::set_part_rank(const stk::topology::rank_t &part_rank) {
     bool part_topology_already_set = this->constrains_part_topology();
     MUNDY_THROW_REQUIRE(
         !part_topology_already_set, std::logic_error,
-        std::string("PartReqs: Parts are designed to fall into three catagories: name set, name and topology set, ")
-            + "name and rank set. \n This part already sets the topology, so it's invalid to also set the rank.");
+        std::string("PartReqs: Parts are designed to fall into three catagories: name set, name and topology set, ") +
+            "name and rank set. \n This part already sets the topology, so it's invalid to also set the rank.");
     part_rank_ = part_rank;
     part_rank_is_set_ = true;
     this->check_if_valid();
@@ -157,7 +157,7 @@ PartReqs &PartReqs::add_and_sync_field_reqs(std::shared_ptr<FieldReqsBase> field
     master_part_reqs_ptr_->add_and_sync_field_reqs(field_reqs_ptr);
   } else {
     MUNDY_THROW_REQUIRE(field_reqs_ptr != nullptr, std::invalid_argument,
-                       "MeshReqs: The pointer passed to add_and_sync_field_reqs cannot be a nullptr.");
+                        "MeshReqs: The pointer passed to add_and_sync_field_reqs cannot be a nullptr.");
 
     // Check if the provided parameters are valid.
     field_reqs_ptr->check_if_valid();
@@ -188,7 +188,7 @@ PartReqs &PartReqs::add_and_sync_subpart_reqs(std::shared_ptr<PartReqs> part_req
     master_part_reqs_ptr_->add_and_sync_subpart_reqs(part_reqs_ptr);
   } else {
     MUNDY_THROW_REQUIRE(part_reqs_ptr != nullptr, std::invalid_argument,
-                       "MeshReqs: The pointer passed to add_and_sync_subpart_reqs cannot be a nullptr.");
+                        "MeshReqs: The pointer passed to add_and_sync_subpart_reqs cannot be a nullptr.");
 
     // Check if the provided parameters are valid.
     part_reqs_ptr->check_if_valid();
@@ -297,8 +297,9 @@ stk::topology::topology_t PartReqs::get_part_topology() const {
   if (has_master_part_reqs_) {
     return master_part_reqs_ptr_->get_part_topology();
   } else {
-    MUNDY_THROW_REQUIRE(this->constrains_part_topology(), std::logic_error,
-                       "PartReqs: Attempting to access the part topology requirement even though part topology is unconstrained.");
+    MUNDY_THROW_REQUIRE(
+        this->constrains_part_topology(), std::logic_error,
+        "PartReqs: Attempting to access the part topology requirement even though part topology is unconstrained.");
 
     return part_topology_;
   }
@@ -320,9 +321,9 @@ bool PartReqs::has_entity_induction() const {
   if (has_master_part_reqs_) {
     return master_part_reqs_ptr_->has_entity_induction();
   } else {
-    MUNDY_THROW_REQUIRE(
-        has_entity_induction_is_set_, std::logic_error,
-        std::string("PartReqs: Attempting to access the entity induction requirement even though entity induction is unconstrained."));
+    MUNDY_THROW_REQUIRE(has_entity_induction_is_set_, std::logic_error,
+                        std::string("PartReqs: Attempting to access the entity induction requirement even though "
+                                    "entity induction is unconstrained."));
 
     return has_entity_induction_;
   }
@@ -367,7 +368,7 @@ PartReqs &PartReqs::set_master_part_reqs(std::shared_ptr<PartReqs> master_part_r
 
 std::shared_ptr<PartReqs> PartReqs::get_master_part_reqs() {
   MUNDY_THROW_REQUIRE(has_master_part_reqs_, std::logic_error,
-                     "PartReqs: The master part requirements have not been set. Cannot return a null pointer.");
+                      "PartReqs: The master part requirements have not been set. Cannot return a null pointer.");
   return master_part_reqs_ptr_;
 }
 
@@ -381,33 +382,38 @@ bool PartReqs::has_master_part_reqs() const {
 stk::mesh::Part &PartReqs::declare_part_on_mesh(mundy::mesh::MetaData *const meta_data_ptr) const {
   MUNDY_THROW_REQUIRE(meta_data_ptr != nullptr, std::invalid_argument, "PartReqs: MetaData pointer cannot be null).");
   MUNDY_THROW_REQUIRE(this->constrains_part_name(), std::logic_error,
-                     "PartReqs: Part name must be set before calling declare_part.");
+                      "PartReqs: Part name must be set before calling declare_part.");
 
   // Declare the Part.
   stk::mesh::Part *part_ptr;
   const bool arg_force_no_induce = this->constrains_part_induction() ? !this->has_entity_induction() : false;
 
-  std::cout << "Part with name: " << this->get_part_name() << (this->constrains_part_induction() ? " has entity induction." : " does not have entity induction.") << " and force_no_induce is " << arg_force_no_induce << std::endl; 
+  std::cout << "Part with name: " << this->get_part_name()
+            << (this->constrains_part_induction() ? " has entity induction." : " does not have entity induction.")
+            << " and force_no_induce is " << arg_force_no_induce << std::endl;
 
   if (this->constrains_part_topology()) {
-    part_ptr = &meta_data_ptr->declare_part_with_topology(this->get_part_name(), this->get_part_topology(), arg_force_no_induce);
-    MUNDY_THROW_REQUIRE(part_ptr->force_no_induce() == arg_force_no_induce, std::runtime_error, "PartReqs: The force_no_induce flag was not set correctly.");
+    part_ptr = &meta_data_ptr->declare_part_with_topology(this->get_part_name(), this->get_part_topology(),
+                                                          arg_force_no_induce);
+    MUNDY_THROW_REQUIRE(part_ptr->force_no_induce() == arg_force_no_induce, std::runtime_error,
+                        "PartReqs: The force_no_induce flag was not set correctly.");
   } else if (this->constrains_part_rank()) {
     part_ptr = &meta_data_ptr->declare_part(this->get_part_name(), this->get_part_rank(), arg_force_no_induce);
-    MUNDY_THROW_REQUIRE(part_ptr->force_no_induce() == arg_force_no_induce, std::runtime_error, "PartReqs: The force_no_induce flag was not set correctly.");
+    MUNDY_THROW_REQUIRE(part_ptr->force_no_induce() == arg_force_no_induce, std::runtime_error,
+                        "PartReqs: The force_no_induce flag was not set correctly.");
   } else {
     MUNDY_THROW_REQUIRE(!arg_force_no_induce, std::logic_error,
-                       "PartReqs: Part induction cannot be disabled for a part that only has a name.");
+                        "PartReqs: Part induction cannot be disabled for a part that only has a name.");
 
     part_ptr = &meta_data_ptr->declare_part(this->get_part_name());
   }
 
   MUNDY_THROW_REQUIRE(this->get_part_name() == part_ptr->name(), std::logic_error,
-                     fmt::format("PartReqs: Weird. The desired part name and actual part name differ.\n"
-                                 "This should never happen. Please report this bug to the developers.\n"
-                                 "  Desired part name: {}\n"
-                                 "  Actual part name: {}.",
-                                 this->get_part_name(), part_ptr->name()));
+                      fmt::format("PartReqs: Weird. The desired part name and actual part name differ.\n"
+                                  "This should never happen. Please report this bug to the developers.\n"
+                                  "  Desired part name: {}\n"
+                                  "  Actual part name: {}.",
+                                  this->get_part_name(), part_ptr->name()));
 
   // Declare the Part's fields and associate them with the Part.
   // Loop over each rank's field map.
@@ -441,7 +447,7 @@ PartReqs &PartReqs::check_if_valid() {
   // One invalid state is if we have a master part reqs object but master_part_reqs_ptr_ is null.
   if (has_master_part_reqs_) {
     MUNDY_THROW_REQUIRE(master_part_reqs_ptr_ != nullptr, std::logic_error,
-                       "PartReqs: We have a master part reqs object but master_part_reqs_ptr_ is null.");
+                        "PartReqs: We have a master part reqs object but master_part_reqs_ptr_ is null.");
     master_part_reqs_ptr_->check_if_valid();
   }
 
@@ -454,7 +460,7 @@ PartReqs &PartReqs::sync(std::shared_ptr<PartReqs> part_reqs_ptr) {
 
   // Check if the provided pointer is valid. Throw an error if it is not.
   MUNDY_THROW_REQUIRE(part_reqs_ptr != nullptr, std::invalid_argument,
-                     "PartReqs: The given PartReqs pointer cannot be null.");
+                      "PartReqs: The given PartReqs pointer cannot be null.");
 
   auto merge = [&](PartReqs *us_ptr, PartReqs *them_ptr, PartReqs *merged_ptr) {
     // Check if the provided parameters are valid.
@@ -465,9 +471,9 @@ PartReqs &PartReqs::sync(std::shared_ptr<PartReqs> part_reqs_ptr) {
     const bool we_constrain_part_name = us_ptr->constrains_part_name();
     const bool they_constrain_part_name = them_ptr->constrains_part_name();
     if (we_constrain_part_name && they_constrain_part_name) {
-      MUNDY_THROW_REQUIRE(us_ptr->get_part_name() == them_ptr->get_part_name(), std::invalid_argument,
-                         fmt::format("PartReqs: One of the inputs has incompatible name ({}).\n",
-                                     them_ptr->get_part_name()));
+      MUNDY_THROW_REQUIRE(
+          us_ptr->get_part_name() == them_ptr->get_part_name(), std::invalid_argument,
+          fmt::format("PartReqs: One of the inputs has incompatible name ({}).\n", them_ptr->get_part_name()));
 
       merged_ptr->set_part_name(us_ptr->get_part_name());
     } else if (we_constrain_part_name) {
@@ -479,9 +485,9 @@ PartReqs &PartReqs::sync(std::shared_ptr<PartReqs> part_reqs_ptr) {
     const bool we_constrain_part_rank = us_ptr->constrains_part_rank();
     const bool they_constrain_part_rank = them_ptr->constrains_part_rank();
     if (we_constrain_part_rank && they_constrain_part_rank) {
-      MUNDY_THROW_REQUIRE(us_ptr->get_part_rank() == them_ptr->get_part_rank(), std::invalid_argument,
-                         fmt::format("PartReqs: One of the inputs has incompatible rank ({}).\n",
-                                     them_ptr->get_part_rank()));
+      MUNDY_THROW_REQUIRE(
+          us_ptr->get_part_rank() == them_ptr->get_part_rank(), std::invalid_argument,
+          fmt::format("PartReqs: One of the inputs has incompatible rank ({}).\n", them_ptr->get_part_rank()));
       merged_ptr->set_part_rank(us_ptr->get_part_rank());
     } else if (we_constrain_part_rank) {
       merged_ptr->set_part_rank(us_ptr->get_part_rank());
@@ -492,9 +498,9 @@ PartReqs &PartReqs::sync(std::shared_ptr<PartReqs> part_reqs_ptr) {
     const bool we_constrain_part_topology = us_ptr->constrains_part_topology();
     const bool they_constrain_part_topology = them_ptr->constrains_part_topology();
     if (we_constrain_part_topology && they_constrain_part_topology) {
-      MUNDY_THROW_REQUIRE(us_ptr->get_part_topology() == them_ptr->get_part_topology(), std::invalid_argument,
-                         fmt::format("PartReqs: One of the inputs has incompatible topology ({}).\n",
-                                     them_ptr->get_part_topology()));
+      MUNDY_THROW_REQUIRE(
+          us_ptr->get_part_topology() == them_ptr->get_part_topology(), std::invalid_argument,
+          fmt::format("PartReqs: One of the inputs has incompatible topology ({}).\n", them_ptr->get_part_topology()));
       merged_ptr->set_part_topology(us_ptr->get_part_topology());
     } else if (we_constrain_part_topology) {
       merged_ptr->set_part_topology(us_ptr->get_part_topology());
@@ -506,8 +512,8 @@ PartReqs &PartReqs::sync(std::shared_ptr<PartReqs> part_reqs_ptr) {
     const bool they_constrain_part_induction = them_ptr->constrains_part_induction();
     if (we_constrain_part_induction && they_constrain_part_induction) {
       MUNDY_THROW_REQUIRE(us_ptr->has_entity_induction() == them_ptr->has_entity_induction(), std::invalid_argument,
-                         fmt::format("PartReqs: One of the inputs has incompatible induction ({}).\n",
-                                     them_ptr->has_entity_induction()));
+                          fmt::format("PartReqs: One of the inputs has incompatible induction ({}).\n",
+                                      them_ptr->has_entity_induction()));
       if (us_ptr->has_entity_induction()) {
         merged_ptr->enable_entity_induction();
       } else {

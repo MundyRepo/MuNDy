@@ -3,7 +3,7 @@
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
 //                                              Copyright 2024 Bryce Palmer
-// 
+//
 // Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
@@ -331,8 +331,8 @@ TEST(ComputeSignedSeparationDistanceAndContactNormal,
     // Orientate the spherocylinder to align with the y-axis.
     auto orientation = mundy::math::euler_to_quat(0.0, 0.0, M_PI / 2.0);
     mundy::mesh::quaternion_field_data(*orientation_field_ptr, sy1_element) = orientation;
-    ASSERT_TRUE(is_approx_close(orientation * mundy::math::Vector3<double>{1.0, 0.0, 0.0},
-                                mundy::math::Vector3<double>{0.0, 1.0, 0.0}))
+    ASSERT_TRUE(
+        is_approx_close(orientation * mundy::math::Vector3d{1.0, 0.0, 0.0}, mundy::math::Vector3d{0.0, 1.0, 0.0}))
         << "Failed to orient sy1 correctly";
   }
   if (rank == 1 || num_ranks == 1) {
@@ -347,8 +347,8 @@ TEST(ComputeSignedSeparationDistanceAndContactNormal,
     // Orientate the spherocylinder to align with the z-axis.
     auto orientation = mundy::math::euler_to_quat(0.0, -M_PI / 2.0, 0.0);
     mundy::mesh::quaternion_field_data(*orientation_field_ptr, sy2_element) = orientation;
-    ASSERT_TRUE(is_approx_close(orientation * mundy::math::Vector3<double>{1.0, 0.0, 0.0},
-                                mundy::math::Vector3<double>{0.0, 0.0, 1.0}))
+    ASSERT_TRUE(
+        is_approx_close(orientation * mundy::math::Vector3d{1.0, 0.0, 0.0}, mundy::math::Vector3d{0.0, 0.0, 1.0}))
         << "Failed to orient sy2 correctly";
   }
 
@@ -396,43 +396,39 @@ TEST(ComputeSignedSeparationDistanceAndContactNormal,
     // Sphere-Sphere
     const auto cn_sp1_sp2 = mundy::mesh::vector3_field_data(*linker_cn_field_ptr, sp1_sp2_linker);
     const double ssd_sp1_sp2 = stk::mesh::field_data(*linker_ssd_field_ptr, sp1_sp2_linker)[0];
-    EXPECT_TRUE(is_approx_close(cn_sp1_sp2, mundy::math::Vector3<double>{1.0 / 3.0, 2.0 / 3.0, 2.0 / 3.0}))
+    EXPECT_TRUE(is_approx_close(cn_sp1_sp2, mundy::math::Vector3d{1.0 / 3.0, 2.0 / 3.0, 2.0 / 3.0}))
         << "cn_sp1_sp2 = " << cn_sp1_sp2;
     EXPECT_DOUBLE_EQ(ssd_sp1_sp2, -0.5);
 
     // Sphere-Spherocylinder
     const auto cn_sp1_sy1 = mundy::mesh::vector3_field_data(*linker_cn_field_ptr, sp1_sy1_linker);
     const double ssd_sp1_sy1 = stk::mesh::field_data(*linker_ssd_field_ptr, sp1_sy1_linker)[0];
-    EXPECT_TRUE(is_approx_close(cn_sp1_sy1, mundy::math::Vector3<double>{-1.0, 0.0, 0.0}))
-        << "cn_sp1_sy1 = " << cn_sp1_sy1;
+    EXPECT_TRUE(is_approx_close(cn_sp1_sy1, mundy::math::Vector3d{-1.0, 0.0, 0.0})) << "cn_sp1_sy1 = " << cn_sp1_sy1;
     EXPECT_DOUBLE_EQ(ssd_sp1_sy1, -2.5);
 
     // Sphere-Spherocylinder Segment
     const auto cn_sp1_seg1 = mundy::mesh::vector3_field_data(*linker_cn_field_ptr, sp1_seg1_linker);
     const double ssd_sp1_seg1 = stk::mesh::field_data(*linker_ssd_field_ptr, sp1_seg1_linker)[0];
-    EXPECT_TRUE(is_approx_close(cn_sp1_seg1, mundy::math::Vector3<double>{0.0, 1.0, 0.0}))
-        << "cn_sp1_seg1 = " << cn_sp1_seg1;
+    EXPECT_TRUE(is_approx_close(cn_sp1_seg1, mundy::math::Vector3d{0.0, 1.0, 0.0})) << "cn_sp1_seg1 = " << cn_sp1_seg1;
     EXPECT_DOUBLE_EQ(ssd_sp1_seg1, -1.5);
 
     // Spherocylinder Segment-Spherocylinder Segment
     const auto cn_seg1_seg2 = mundy::mesh::vector3_field_data(*linker_cn_field_ptr, seg1_seg2_linker);
     const double ssd_seg1_seg2 = stk::mesh::field_data(*linker_ssd_field_ptr, seg1_seg2_linker)[0];
-    EXPECT_TRUE(is_approx_close(cn_seg1_seg2, mundy::math::Vector3<double>{0.0, 1.0, 0.0}))
+    EXPECT_TRUE(is_approx_close(cn_seg1_seg2, mundy::math::Vector3d{0.0, 1.0, 0.0}))
         << "cn_seg1_seg2 = " << cn_seg1_seg2;
     EXPECT_DOUBLE_EQ(ssd_seg1_seg2, -3.0);
 
     // Spherocylinder-Spherocylinder
     const auto cn_sy1_sy2 = mundy::mesh::vector3_field_data(*linker_cn_field_ptr, sy1_sy2_linker);
     const double ssd_sy1_sy2 = stk::mesh::field_data(*linker_ssd_field_ptr, sy1_sy2_linker)[0];
-    EXPECT_TRUE(is_approx_close(cn_sy1_sy2, mundy::math::Vector3<double>{-1.0, 0.0, 0.0}))
-        << "cn_sy1_sy2 = " << cn_sy1_sy2;
+    EXPECT_TRUE(is_approx_close(cn_sy1_sy2, mundy::math::Vector3d{-1.0, 0.0, 0.0})) << "cn_sy1_sy2 = " << cn_sy1_sy2;
     EXPECT_DOUBLE_EQ(ssd_sy1_sy2, -2.5);
 
     // Spherocylinder-Spherocylinder Segment
     const auto cn_sy1_seg1 = mundy::mesh::vector3_field_data(*linker_cn_field_ptr, sy1_seg1_linker);
     const double ssd_sy1_seg1 = stk::mesh::field_data(*linker_ssd_field_ptr, sy1_seg1_linker)[0];
-    EXPECT_TRUE(is_approx_close(cn_sy1_seg1, mundy::math::Vector3<double>{1.0, 0.0, 0.0}))
-        << "cn_sy1_seg1 = " << cn_sy1_seg1;
+    EXPECT_TRUE(is_approx_close(cn_sy1_seg1, mundy::math::Vector3d{1.0, 0.0, 0.0})) << "cn_sy1_seg1 = " << cn_sy1_seg1;
     EXPECT_DOUBLE_EQ(ssd_sy1_seg1, -2.5);
   }
 }

@@ -3,7 +3,7 @@
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
 //                                              Copyright 2024 Bryce Palmer
-// 
+//
 // Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
@@ -106,7 +106,8 @@ KOKKOS_INLINE_FUNCTION static constexpr Kokkos::Array<bool, N * M> create_row_an
 
 /// \brief Cast (and copy) the matrix to a different type
 template <typename U, size_t... Is, typename T, size_t N, size_t M, ValidAccessor<T> Accessor, typename OwnershipType>
-KOKKOS_INLINE_FUNCTION auto cast_impl(std::index_sequence<Is...>, const AMatrix<T, N, M, Accessor, OwnershipType>& mat) {
+KOKKOS_INLINE_FUNCTION auto cast_impl(std::index_sequence<Is...>,
+                                      const AMatrix<T, N, M, Accessor, OwnershipType>& mat) {
   return AMatrix<U, N, M>{static_cast<U>(mat[Is])...};
 }
 
@@ -184,7 +185,7 @@ KOKKOS_INLINE_FUNCTION void fill_impl(std::index_sequence<Is...>, AMatrix<T, N, 
 /// \brief Unary minus operator
 template <size_t... Is, typename T, size_t N, size_t M, ValidAccessor<T> Accessor, typename OwnershipType>
 KOKKOS_INLINE_FUNCTION AMatrix<T, N, M> unary_minus_impl(std::index_sequence<Is...>,
-                                                        const AMatrix<T, N, M, Accessor, OwnershipType>& mat) {
+                                                         const AMatrix<T, N, M, Accessor, OwnershipType>& mat) {
   AMatrix<T, N, M> result;
   ((result[Is] = -mat[Is]), ...);
   return result;
@@ -194,10 +195,9 @@ KOKKOS_INLINE_FUNCTION AMatrix<T, N, M> unary_minus_impl(std::index_sequence<Is.
 /// \param[in] other The other matrix.
 template <size_t... Is, typename T, size_t N, size_t M, typename U, ValidAccessor<T> Accessor, typename OwnershipType,
           ValidAccessor<U> OtherAccessor, typename OtherOwnershipType>
-KOKKOS_INLINE_FUNCTION auto matrix_matrix_addition_impl(std::index_sequence<Is...>,
-                                                        const AMatrix<T, N, M, Accessor, OwnershipType>& mat,
-                                                        const AMatrix<U, N, M, OtherAccessor, OtherOwnershipType>& other)
-    -> AMatrix<std::common_type_t<T, U>, N, M> {
+KOKKOS_INLINE_FUNCTION auto matrix_matrix_addition_impl(
+    std::index_sequence<Is...>, const AMatrix<T, N, M, Accessor, OwnershipType>& mat,
+    const AMatrix<U, N, M, OtherAccessor, OtherOwnershipType>& other) -> AMatrix<std::common_type_t<T, U>, N, M> {
   using CommonType = std::common_type_t<T, U>;
   AMatrix<CommonType, N, M> result;
   ((result[Is] = static_cast<CommonType>(mat[Is]) + static_cast<CommonType>(other[Is])), ...);
@@ -410,7 +410,8 @@ KOKKOS_INLINE_FUNCTION T sum_impl(std::index_sequence<Is...>, const AMatrix<T, N
 
 /// \brief Product of all elements
 template <size_t... Is, typename T, size_t N, size_t M, ValidAccessor<T> Accessor, typename OwnershipType>
-KOKKOS_INLINE_FUNCTION T product_impl(std::index_sequence<Is...>, const AMatrix<T, N, M, Accessor, OwnershipType>& mat) {
+KOKKOS_INLINE_FUNCTION T product_impl(std::index_sequence<Is...>,
+                                      const AMatrix<T, N, M, Accessor, OwnershipType>& mat) {
   return (mat[Is] * ...);
 }
 

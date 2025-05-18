@@ -3,7 +3,7 @@
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
 //                                              Copyright 2024 Bryce Palmer
-// 
+//
 // Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
@@ -38,15 +38,15 @@
 //   - SpherocylinderSegment
 //   - Ring
 #include <mundy_geom/primitives/AABB.hpp>
+#include <mundy_geom/primitives/Circle3D.hpp>
 #include <mundy_geom/primitives/Ellipsoid.hpp>
 #include <mundy_geom/primitives/Line.hpp>
 #include <mundy_geom/primitives/LineSegment.hpp>
 #include <mundy_geom/primitives/Point.hpp>
+#include <mundy_geom/primitives/Ring.hpp>
 #include <mundy_geom/primitives/Sphere.hpp>
 #include <mundy_geom/primitives/Spherocylinder.hpp>
 #include <mundy_geom/primitives/SpherocylinderSegment.hpp>
 #include <mundy_geom/primitives/VSegment.hpp>
-#include <mundy_geom/primitives/Circle3D.hpp>
-#include <mundy_geom/primitives/Ring.hpp>
 
 #endif  // MUNDY_GEOM_PRIMITIVES_HPP_

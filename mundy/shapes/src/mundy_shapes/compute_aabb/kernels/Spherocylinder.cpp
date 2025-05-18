@@ -3,7 +3,7 @@
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
 //                                              Copyright 2024 Bryce Palmer
-// 
+//
 // Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
@@ -162,7 +162,7 @@ void Spherocylinder::execute(const stk::mesh::Selector &spherocylinder_selector)
         // Find the endpoints.
         // Note, the orientation maps the reference configuration to the current configuration and in the reference
         // configuration the spherocylinder is aligned with the x-axis.
-        const auto tangent_vector = element_orientation * mundy::math::Vector3<double>(1.0, 0.0, 0.0);
+        const auto tangent_vector = element_orientation * mundy::math::Vector3d(1.0, 0.0, 0.0);
         const auto left_endpoint = node_coord - 0.5 * tangent_vector * length;
         const auto right_endpoint = node_coord + 0.5 * tangent_vector * length;
 

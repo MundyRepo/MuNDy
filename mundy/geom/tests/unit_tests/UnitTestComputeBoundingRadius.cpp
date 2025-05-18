@@ -3,7 +3,7 @@
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
 //                                              Copyright 2024 Bryce Palmer
-// 
+//
 // Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
@@ -167,22 +167,22 @@ std::vector<SphereTestCase<double>> sphere_test_cases() {
 
 std::vector<EllipsoidTestCase<double>> ellipsoid_test_cases() {
   // The bounding radius of an ellipsoid is the maximum of its radii.
-  using mundy::math::Quaternion;
-  using mundy::math::Vector3;
+  using mundy::math::Quaterniond;
+  using mundy::math::Vector3d;
   std::vector<EllipsoidTestCase<double>> test_cases;
 
   // Bounding radius is independent of orientation
-  Quaternion<double> random_quat = Quaternion<double>{static_cast<double>(rand()), static_cast<double>(rand()),
-                                                      static_cast<double>(rand()), static_cast<double>(rand())};
+  Quaterniond random_quat = Quaterniond{static_cast<double>(rand()), static_cast<double>(rand()),
+                                        static_cast<double>(rand()), static_cast<double>(rand())};
   random_quat.normalize();
 
   test_cases.push_back(
       EllipsoidTestCase{.name = std::string("spherical"),  //
-                        .ellipsoid = Ellipsoid<double>{Point<double>{1, -2, 3}, random_quat, Vector3<double>{4, 4, 4}},
+                        .ellipsoid = Ellipsoid<double>{Point<double>{1, -2, 3}, random_quat, Vector3d{4, 4, 4}},
                         .expected_bounding_radius = 4.0});
   test_cases.push_back(
       EllipsoidTestCase{.name = std::string("ellipsoidal"),  //
-                        .ellipsoid = Ellipsoid<double>{Point<double>{1, -2, 3}, random_quat, Vector3<double>{4, 5, 6}},
+                        .ellipsoid = Ellipsoid<double>{Point<double>{1, -2, 3}, random_quat, Vector3d{4, 5, 6}},
                         .expected_bounding_radius = 6.0});
   return test_cases;
 }
@@ -190,13 +190,13 @@ std::vector<EllipsoidTestCase<double>> ellipsoid_test_cases() {
 std::vector<SpherocylinderTestCase<double>> spherocylinder_test_cases() {
   // Our spherocylinders have a center, a radius, a length, and a quaternion orientation
   // Their bounding radius is just the 0.5 length + radius
-  using mundy::math::Quaternion;
+  using mundy::math::Quaterniond;
   using mundy::math::Vector3;
   std::vector<SpherocylinderTestCase<double>> test_cases;
 
   // Bounding radius is independent of orientation
-  Quaternion<double> random_quat = Quaternion<double>{static_cast<double>(rand()), static_cast<double>(rand()),
-                                                      static_cast<double>(rand()), static_cast<double>(rand())};
+  Quaterniond random_quat = Quaterniond{static_cast<double>(rand()), static_cast<double>(rand()),
+                                        static_cast<double>(rand()), static_cast<double>(rand())};
   random_quat.normalize();
 
   test_cases.push_back(

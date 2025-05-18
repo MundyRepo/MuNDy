@@ -3,7 +3,7 @@
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
 //                                              Copyright 2024 Bryce Palmer
-// 
+//
 // Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
@@ -45,9 +45,8 @@ namespace math {
 /// \param A The symmetric positive definite matrix
 /// \return The lower triangular matrix of the Cholesky decomposition
 template <typename T, ValidAccessor<T> Accessor, typename OwnershipType>
-KOKKOS_INLINE_FUNCTION auto cholesky(const AMatrix3<T, Accessor, OwnershipType> &A) {
-  MUNDY_THROW_ASSERT(A(0, 0) > get_zero_tolerance<T>(), std::invalid_argument,
-                     "Matrix3 must be positive definite");
+KOKKOS_INLINE_FUNCTION auto cholesky(const AMatrix3<T, Accessor, OwnershipType>& A) {
+  MUNDY_THROW_ASSERT(A(0, 0) > get_zero_tolerance<T>(), std::invalid_argument, "Matrix3 must be positive definite");
   const T l11 = Kokkos::sqrt(A(0, 0));
   const T l21 = A(1, 0) / l11;
   const T l22 = Kokkos::sqrt(A(1, 1) - l21 * l21);

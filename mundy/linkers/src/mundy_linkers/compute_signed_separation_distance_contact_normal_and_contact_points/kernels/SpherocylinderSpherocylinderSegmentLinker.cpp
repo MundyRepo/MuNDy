@@ -3,7 +3,7 @@
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
 //                                              Copyright 2024 Bryce Palmer
-// 
+//
 // Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
@@ -217,7 +217,7 @@ void SpherocylinderSpherocylinderSegmentLinker::execute(
         // Find the endpoints of the spherocylinder
         // Note, the orientation maps the reference configuration to the current configuration and in the reference
         // configuration the spherocylinder is aligned with the x-axis.
-        const auto tangent_vector = spherocylinder_orientation * mundy::math::Vector3<double>(1.0, 0.0, 0.0);
+        const auto tangent_vector = spherocylinder_orientation * mundy::math::Vector3d(1.0, 0.0, 0.0);
         const auto spherocylinder_left_endpt =
             spherocylinder_center_coord - 0.5 * tangent_vector * spherocylinder_length;
         const auto spherocylinder_right_endpt =
@@ -225,8 +225,8 @@ void SpherocylinderSpherocylinderSegmentLinker::execute(
 
         // Compute the separation distance and contact point along the center line of the spherocylinder and the
         // spherocylinder_segment
-        mundy::math::Vector3<double> closest_point1;
-        mundy::math::Vector3<double> closest_point2;
+        mundy::math::Vector3d closest_point1;
+        mundy::math::Vector3d closest_point2;
         double t1;
         double t2;
         const double distance = Kokkos::sqrt(mundy::math::distance::distance_sq_between_line_segments(

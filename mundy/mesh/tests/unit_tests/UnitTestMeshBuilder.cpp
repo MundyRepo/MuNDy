@@ -3,7 +3,7 @@
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
 //                                              Copyright 2024 Bryce Palmer
-// 
+//
 // Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
@@ -186,11 +186,11 @@ TEST(MeshBuilderTest, BulkDataAddFmwkData) {
   builder.set_add_fmwk_data_flag(true);
   std::shared_ptr<stk::mesh::BulkData> bulk_data_ptr = builder.create_bulk_data();
 
-  #ifdef SIERRA_MIGRATION
-    EXPECT_TRUE(bulk_data_ptr->add_fmwk_data());
-  #else
-    EXPECT_FALSE(bulk_data_ptr->add_fmwk_data());
-  #endif
+#ifdef SIERRA_MIGRATION
+  EXPECT_TRUE(bulk_data_ptr->add_fmwk_data());
+#else
+  EXPECT_FALSE(bulk_data_ptr->add_fmwk_data());
+#endif
 }
 
 TEST(MeshBuilderTest, BulkdataAddFmwkDataFalse) {

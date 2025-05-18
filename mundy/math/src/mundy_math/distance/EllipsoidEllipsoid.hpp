@@ -3,7 +3,7 @@
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
 //                                              Copyright 2024 Bryce Palmer
-// 
+//
 // Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
@@ -172,8 +172,8 @@ template <typename Scalar, typename Accessor1, typename Accessor2, typename Acce
           typename OwnershipType2, typename OwnershipType3>
 KOKKOS_FUNCTION Scalar shared_normal_ssd_between_ellipsoid_and_point(
     const AVector3<Scalar, Accessor1, OwnershipType1>& center,
-    const AQuaternion<Scalar, Accessor2, OwnershipType2>& orientation, const Scalar r1, const Scalar r2, const Scalar r3,
-    const AVector3<Scalar, Accessor3, OwnershipType3>& point, Vector3<Scalar>& closest_point,
+    const AQuaternion<Scalar, Accessor2, OwnershipType2>& orientation, const Scalar r1, const Scalar r2,
+    const Scalar r3, const AVector3<Scalar, Accessor3, OwnershipType3>& point, Vector3<Scalar>& closest_point,
     Vector3<Scalar>& ellipsoid_normal) {
   // Setup the minimization
   // Note, the actual error is not guaranteed to be less than min_objective_delta due to the use of approximate
@@ -214,8 +214,8 @@ template <typename Scalar, typename Accessor1, typename Accessor2, typename Acce
           typename OwnershipType2, typename OwnershipType3>
 KOKKOS_FUNCTION Scalar shared_normal_ssd_between_ellipsoid_and_point(
     const AVector3<Scalar, Accessor1, OwnershipType1>& center,
-    const AQuaternion<Scalar, Accessor2, OwnershipType2>& orientation, const Scalar r1, const Scalar r2, const Scalar r3,
-    const AVector3<Scalar, Accessor3, OwnershipType3>& point) {
+    const AQuaternion<Scalar, Accessor2, OwnershipType2>& orientation, const Scalar r1, const Scalar r2,
+    const Scalar r3, const AVector3<Scalar, Accessor3, OwnershipType3>& point) {
   Vector3<Scalar> closest_point;
   Vector3<Scalar> ellipsoid_normal;
   return shared_normal_ssd_between_ellipsoid_and_point(center, orientation, r1, r2, r3, point, closest_point,

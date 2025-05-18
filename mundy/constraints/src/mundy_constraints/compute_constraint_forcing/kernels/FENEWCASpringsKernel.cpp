@@ -3,7 +3,7 @@
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
 //                                              Copyright 2024 Bryce Palmer
-// 
+//
 // Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
@@ -150,9 +150,9 @@ void FENEWCASpringsKernel::execute(const stk::mesh::Selector &spring_selector) {
 
         // Check if the maximum spring extend is less than the rmax value, otherwise, FENE bonds will be unstable.
         MUNDY_THROW_ASSERT(edge_length_adj < element_rmax[0], std::runtime_error,
-                            std::string("FENEWCASpringsKernel: FENEWCA bond is unstable. The current bond length is ") +
-                                std::to_string(edge_length_adj) + std::string(" and the maximum bond length is ") +
-                                std::to_string(element_rmax[0]) + std::string("."));
+                           std::string("FENEWCASpringsKernel: FENEWCA bond is unstable. The current bond length is ") +
+                               std::to_string(edge_length_adj) + std::string(" and the maximum bond length is ") +
+                               std::to_string(element_rmax[0]) + std::string("."));
 
         // Compute the spring force.
         const double spring_force = element_spring_constant[0] * edge_length_adj /

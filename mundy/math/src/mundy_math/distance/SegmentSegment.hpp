@@ -3,7 +3,7 @@
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
 //                                              Copyright 2024 Bryce Palmer
-// 
+//
 // Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
@@ -106,11 +106,10 @@ KOKKOS_FUNCTION Scalar distance_from_point_to_line(const AVector3<Scalar, Access
  */
 template <typename Scalar, typename Accessor1, typename Accessor2, typename Accessor3, typename Accessor4,
           typename OwnershipType1, typename OwnershipType2, typename OwnershipType3, typename OwnershipType4>
-KOKKOS_FUNCTION Scalar distance_sq_from_point_to_line_segment(const AVector3<Scalar, Accessor1, OwnershipType1>& x,
-                                                              const AVector3<Scalar, Accessor2, OwnershipType2>& p1,
-                                                              const AVector3<Scalar, Accessor3, OwnershipType3>& p2,
-                                                              AVector3<Scalar, Accessor4, OwnershipType4>& closest_point,
-                                                              Scalar& t) {
+KOKKOS_FUNCTION Scalar distance_sq_from_point_to_line_segment(
+    const AVector3<Scalar, Accessor1, OwnershipType1>& x, const AVector3<Scalar, Accessor2, OwnershipType2>& p1,
+    const AVector3<Scalar, Accessor3, OwnershipType3>& p2, AVector3<Scalar, Accessor4, OwnershipType4>& closest_point,
+    Scalar& t) {
   // Determine appropriate vectors
   const auto p21 = p2 - p1;
 
@@ -210,7 +209,8 @@ KOKKOS_FUNCTION Scalar distance_sq_between_lines(const AVector3<Scalar, Accessor
                                                  const AVector3<Scalar, Accessor3, OwnershipType3>& m0,
                                                  const AVector3<Scalar, Accessor4, OwnershipType4>& m1,  // line 2
                                                  AVector3<Scalar, Accessor5, OwnershipType5>& closest_point1,
-                                                 AVector3<Scalar, Accessor6, OwnershipType6>& closest_point2, Scalar& t1,
+                                                 AVector3<Scalar, Accessor6, OwnershipType6>& closest_point2,
+                                                 Scalar& t1,
                                                  Scalar& t2)  // parametric coords of the closest points
 {
   // Part of this function was adapted from VTK, which, in turn adapted part of it from "GeometryAlgorithms.com"

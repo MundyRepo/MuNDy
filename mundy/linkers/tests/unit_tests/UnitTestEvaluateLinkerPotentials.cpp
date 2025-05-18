@@ -3,7 +3,7 @@
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
 //                                              Copyright 2024 Bryce Palmer
-// 
+//
 // Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
@@ -473,7 +473,7 @@ TEST(EvaluateLinkerPotentials, FrictionalHertzianContactSlideSlipSphere) {
 
   // Replicate the EvaluateLinkerPotentials kernel for the frictional hertzian contact force and simplify it for our
   // needs.
-  using Vector3 = mundy::math::Vector3<double>;
+  using Vector3 = mundy::math::Vector3d;
   auto eval_hertz_with_friction =
       [](const double &time_step_size, const double &density, const double &normal_spring_coeff,
          const double &tang_spring_coeff, const double &normal_damping_coeff, const double &tang_damping_coeff,
@@ -551,18 +551,18 @@ TEST(EvaluateLinkerPotentials, FrictionalHertzianContactSlideSlipSphere) {
   const double tang_damping_coeff = 0.5;
 
   // Initialize the sphere
-  mundy::math::Vector3<double> position(0.0, radius, 0.0);
-  mundy::math::Vector3<double> orientation(0.0, 0.0, 0.0);
-  mundy::math::Vector3<double> velocity(initial_vel, 0.0, 0.0);
-  mundy::math::Vector3<double> omega(0.0, 0.0, 0.0);
-  mundy::math::Vector3<double> acceleration(0.0, 0.0, 0.0);
-  mundy::math::Vector3<double> alpha(0.0, 0.0, 0.0);
-  mundy::math::Vector3<double> tang_disp(0.0, 0.0, 0.0);
-  mundy::math::Vector3<double> potential_force_field(0.0, 0.0, 0.0);
+  mundy::math::Vector3d position(0.0, radius, 0.0);
+  mundy::math::Vector3d orientation(0.0, 0.0, 0.0);
+  mundy::math::Vector3d velocity(initial_vel, 0.0, 0.0);
+  mundy::math::Vector3d omega(0.0, 0.0, 0.0);
+  mundy::math::Vector3d acceleration(0.0, 0.0, 0.0);
+  mundy::math::Vector3d alpha(0.0, 0.0, 0.0);
+  mundy::math::Vector3d tang_disp(0.0, 0.0, 0.0);
+  mundy::math::Vector3d potential_force_field(0.0, 0.0, 0.0);
 
   // Left is the sphere, right is the table, so the normal points down and the right velocity is zero.
-  const auto left_contact_normal = mundy::math::Vector3<double>(0.0, -1.0, 0.0);
-  const auto right_cp_vel = mundy::math::Vector3<double>(0.0, 0.0, 0.0);
+  const auto left_contact_normal = mundy::math::Vector3d(0.0, -1.0, 0.0);
+  const auto right_cp_vel = mundy::math::Vector3d(0.0, 0.0, 0.0);
   double signed_separation_distance = position[1] - radius;
 
   // Save the x-velocity of the sphere, the signed separation distance, and the time
@@ -604,7 +604,7 @@ TEST(EvaluateLinkerPotentials, FrictionalHertzianContactSlideSlipSphere) {
     potential_force_field.set(0.0, 0.0, 0.0);
 
     // We are at time t^{k+1}. Compute F^{k+1} and tau^{k+1}
-    mundy::math::Vector3<double> left_cp_vel = velocity + mundy::math::cross(omega, radius * left_contact_normal);
+    mundy::math::Vector3d left_cp_vel = velocity + mundy::math::cross(omega, radius * left_contact_normal);
     eval_hertz_with_friction(time_step_size, density, normal_spring_coeff, tang_spring_coeff, normal_damping_coeff,
                              tang_damping_coeff, friction_coeff, radius, radius, signed_separation_distance,
                              left_cp_vel, right_cp_vel, left_contact_normal, tang_disp, potential_force_field);
@@ -615,7 +615,7 @@ TEST(EvaluateLinkerPotentials, FrictionalHertzianContactSlideSlipSphere) {
     //
     // Use the forces and torques to get a(t + dt) and alpha(t + dt) but stored in temporary variables to avoid
     // overwriting a(t) and alpha(t)
-    auto acceleration_next = potential_force_field / mass - mundy::math::Vector3<double>(0.0, g, 0.0);
+    auto acceleration_next = potential_force_field / mass - mundy::math::Vector3d(0.0, g, 0.0);
     auto alpha_next = mundy::math::cross(radius * left_contact_normal, potential_force_field) / inertia;
     velocity += 0.5 * (acceleration + acceleration_next) * time_step_size;
     omega += 0.5 * (alpha + alpha_next) * time_step_size;

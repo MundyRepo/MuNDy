@@ -57,7 +57,7 @@
 #include <mundy_mesh/fmt_stk_types.hpp>
 
 #define BUCKET_ORDINAL_ERROR_MESSAGE(function_name, bucket_ord, bucket_size)                                   \
-  MUNDY_THROW_ASSERT(bucket_ord < bucket_size, std::invalid_argument,                                      \
+  MUNDY_THROW_ASSERT(bucket_ord < bucket_size, std::invalid_argument,                                          \
                      fmt::format("LinkedBucketConn::{}: bucket_ordinal({}) must be less than bucket_size({})", \
                                  function_name, bucket_ord, bucket_size))
 

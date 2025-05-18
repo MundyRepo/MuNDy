@@ -3,7 +3,7 @@
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
 //                                              Copyright 2024 Bryce Palmer
-// 
+//
 // Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
@@ -207,16 +207,16 @@ void SpherocylinderSpherocylinderLinker::execute(
         // Find the endpoints of the spherocylinder
         // Note, the orientation maps the reference configuration to the current configuration and in the reference
         // configuration the spherocylinder is aligned with the x-axis.
-        const auto tangent_vector1 = spherocylinder1_orientation * mundy::math::Vector3<double>(1.0, 0.0, 0.0);
-        const auto tangent_vector2 = spherocylinder2_orientation * mundy::math::Vector3<double>(1.0, 0.0, 0.0);
+        const auto tangent_vector1 = spherocylinder1_orientation * mundy::math::Vector3d(1.0, 0.0, 0.0);
+        const auto tangent_vector2 = spherocylinder2_orientation * mundy::math::Vector3d(1.0, 0.0, 0.0);
         const auto left_endpoint1 = spherocylinder1_center_coord - 0.5 * tangent_vector1 * spherocylinder1_length;
         const auto left_endpoint2 = spherocylinder2_center_coord - 0.5 * tangent_vector2 * spherocylinder2_length;
         const auto right_endpoint1 = spherocylinder1_center_coord + 0.5 * tangent_vector1 * spherocylinder1_length;
         const auto right_endpoint2 = spherocylinder2_center_coord + 0.5 * tangent_vector2 * spherocylinder2_length;
 
         // Compute the separation distance and contact point along the center line of each spherocylinder
-        mundy::math::Vector3<double> closest_point1;
-        mundy::math::Vector3<double> closest_point2;
+        mundy::math::Vector3d closest_point1;
+        mundy::math::Vector3d closest_point2;
         double t1;
         double t2;
         const double distance = Kokkos::sqrt(mundy::math::distance::distance_sq_between_line_segments(

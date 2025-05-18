@@ -3,7 +3,7 @@
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
 //                                              Copyright 2024 Bryce Palmer
-// 
+//
 // Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
@@ -193,7 +193,7 @@ void SphereSpherocylinderSegmentLinker::execute(
             stk::mesh::field_data(element_radius_field, spherocylinder_segment_element)[0];
 
         // Compute the separation distance and contact point along the center line of the spherocylinder_segment
-        mundy::math::Vector3<double> closest_point;
+        mundy::math::Vector3d closest_point;
         double t;
         const double distance = std::sqrt(mundy::math::distance::distance_sq_from_point_to_line_segment(
             sphere_center_coord, spherocylinder_segment_left_endpoint_coord,

@@ -3,7 +3,7 @@
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
 //                                              Copyright 2024 Bryce Palmer
-// 
+//
 // Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
@@ -203,7 +203,7 @@ TEST(UnitTestAggregate, BasicUsage) {
   bulk_data.modification_end();
 
   // Populate the center and radius
-  math::Vector3<double> expected_center{1.0, 2.0, 3.0};
+  math::Vector3d expected_center{1.0, 2.0, 3.0};
   double expected_radius = 0.5;
   stk::mesh::field_data(node_center_field, node1)[0] = expected_center[0];
   stk::mesh::field_data(node_center_field, node1)[1] = expected_center[1];

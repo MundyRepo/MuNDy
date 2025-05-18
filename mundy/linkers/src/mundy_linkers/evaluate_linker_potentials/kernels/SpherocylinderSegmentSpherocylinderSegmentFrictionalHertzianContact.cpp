@@ -3,7 +3,7 @@
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
 //                                              Copyright 2024 Bryce Palmer
-// 
+//
 // Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
@@ -355,7 +355,7 @@ void SpherocylinderSegmentSpherocylinderSegmentFrictionalHertzianContact::set_mu
 namespace {
 
 template <typename Accessor, typename OwnershipType>
-mundy::math::Vector3<double> get_contact_point_velocity(
+mundy::math::Vector3d get_contact_point_velocity(
     const mundy::math::AVector3<double, Accessor, OwnershipType> &contact_point, const stk::mesh::Entity *nodes,
     const stk::mesh::Field<double> &node_velocity_field, const stk::mesh::Field<double> &node_coords_field) {
   const auto pos0 = mundy::mesh::vector3_field_data(node_coords_field, nodes[0]);

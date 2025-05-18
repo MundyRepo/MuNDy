@@ -3,7 +3,7 @@
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
 //                                              Copyright 2024 Bryce Palmer
-// 
+//
 // Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
@@ -138,8 +138,7 @@ KOKKOS_INLINE_FUNCTION void abort_require(
     if constexpr (std::is_same_v<std::remove_const<decltype(message_to_print)>, std::string>) {
       Kokkos::abort(
           get_throw_require_device_string(assertion_string, message_to_print, file_string, line_string).c_str());
-    } else if constexpr (
-      MUNDY_IS_CHAR_ARRAY(message_to_print) || MUNDY_IS_OUR_STRING_LITERAL(message_to_print)) {
+    } else if constexpr (MUNDY_IS_CHAR_ARRAY(message_to_print) || MUNDY_IS_OUR_STRING_LITERAL(message_to_print)) {
       Kokkos::abort(
           get_throw_require_device_string(assertion_string, message_to_print, file_string, line_string).value);
     } else {

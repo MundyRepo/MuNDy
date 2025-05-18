@@ -1237,7 +1237,7 @@ struct DiffDotsReducer {
  public:
   // Required
   typedef DiffDotsReducer reducer;
-  typedef mundy::math::Vector3<double> value_type;
+  typedef mundy::math::Vector3d value_type;
   typedef Kokkos::View<value_type *, Space, Kokkos::MemoryUnmanaged> result_view_type;
 
  private:
@@ -1287,13 +1287,13 @@ void compute_diff_dots(const stk::ParallelMachine parallel,           //
   Kokkos::Profiling::pushRegion("mundy::mech::compute_diff_dots");
 
   // Local variables to store dot products
-  mundy::math::Vector3<double> local_xx_xg_gg_diff = {0.0, 0.0, 0.0};
+  mundy::math::Vector3d local_xx_xg_gg_diff = {0.0, 0.0, 0.0};
 
   // Perform parallel reduction to compute the dot products
   using range_policy = Kokkos::RangePolicy<stk::ngp::ExecSpace>;
   Kokkos::parallel_reduce(
       "ComputeDiffDots", range_policy(0, lagrange_multipliers.extent(0)),
-      KOKKOS_LAMBDA(const int i, mundy::math::Vector3<double> &acc_xx_xg_gg_diff) {
+      KOKKOS_LAMBDA(const int i, mundy::math::Vector3d &acc_xx_xg_gg_diff) {
         const double lag_mult = lagrange_multipliers(i);
         const double lag_mult_tmp = lagrange_multipliers_tmp(i);
         const double sep_dot = signed_sep_dot(i);
@@ -2274,11 +2274,11 @@ std::vector<std::vector<mundy::geom::Point<double>>> get_chromosome_positions_fr
 std::vector<std::vector<mundy::geom::Point<double>>> get_chromosome_positions_grid(
     const unsigned num_chromosomes, const unsigned num_nodes_per_chromosome, const double segment_length) {
   std::vector<std::vector<mundy::geom::Point<double>>> all_chromosome_positions(num_chromosomes);
-  const mundy::math::Vector3<double> alignment_dir{0.0, 0.0, 1.0};
+  const mundy::math::Vector3d alignment_dir{0.0, 0.0, 1.0};
   for (size_t j = 0; j < num_chromosomes; j++) {
     all_chromosome_positions[j].reserve(num_nodes_per_chromosome);
     openrand::Philox rng(j, 0);
-    mundy::math::Vector3<double> start_pos(2.0 * static_cast<double>(j), 0.0, 0.0);
+    mundy::math::Vector3d start_pos(2.0 * static_cast<double>(j), 0.0, 0.0);
     for (size_t i = 0; i < num_nodes_per_chromosome; ++i) {
       const auto pos = start_pos + static_cast<double>(i) * segment_length * alignment_dir;
       all_chromosome_positions[j].emplace_back(pos);
@@ -2300,15 +2300,15 @@ std::vector<std::vector<mundy::geom::Point<double>>> get_chromosome_positions_ra
 
     // Find a random place within the unit cell with a random orientation for the chain.
     openrand::Philox rng(j, 0);
-    mundy::math::Vector3<double> pos_start{rng.uniform<double>(domain_low[0], domain_high[0]),
-                                           rng.uniform<double>(domain_low[1], domain_high[1]),
-                                           rng.uniform<double>(domain_low[2], domain_high[2])};
+    mundy::math::Vector3d pos_start{rng.uniform<double>(domain_low[0], domain_high[0]),
+                                    rng.uniform<double>(domain_low[1], domain_high[1]),
+                                    rng.uniform<double>(domain_low[2], domain_high[2])};
 
     // Find a random unit vector direction
     const double zrand = rng.rand<double>() - 1.0;
     const double wrand = std::sqrt(1.0 - zrand * zrand);
     const double trand = 2.0 * M_PI * rng.rand<double>();
-    mundy::math::Vector3<double> u_hat{wrand * std::cos(trand), wrand * std::sin(trand), zrand};
+    mundy::math::Vector3d u_hat{wrand * std::cos(trand), wrand * std::sin(trand), zrand};
 
     for (size_t i = 0; i < num_nodes_per_chromosome; ++i) {
       auto pos = pos_start + static_cast<double>(i) * segment_length * u_hat;
@@ -2335,7 +2335,7 @@ std::vector<std::vector<mundy::geom::Point<double>>> get_chromosome_positions_hi
     const double zrand = rng.rand<double>() - 1.0;
     const double wrand = std::sqrt(1.0 - zrand * zrand);
     const double trand = 2.0 * M_PI * rng.rand<double>();
-    mundy::math::Vector3<double> u_hat(wrand * std::cos(trand), wrand * std::sin(trand), zrand);
+    mundy::math::Vector3d u_hat(wrand * std::cos(trand), wrand * std::sin(trand), zrand);
 
     // Once we have the number of chromosome spheres we can get the hilbert curve set up. This will be at some
     // orientation and then have sides with a length of initial_chromosome_separation.
@@ -2343,13 +2343,13 @@ std::vector<std::vector<mundy::geom::Point<double>>> get_chromosome_positions_hi
         mundy::math::create_hilbert_positions_and_directors(num_nodes_per_chromosome, u_hat, segment_length);
 
     // Create the local positions of the spheres
-    std::vector<mundy::math::Vector3<double>> sphere_position_array;
+    std::vector<mundy::math::Vector3d> sphere_position_array;
     for (size_t isphere = 0; isphere < num_nodes_per_chromosome; isphere++) {
       sphere_position_array.push_back(hilbert_position_array[isphere]);
     }
 
     // Figure out where the center of the chromosome is, and its radius, in its own local space
-    mundy::math::Vector3<double> r_chromosome_center_local(0.0, 0.0, 0.0);
+    mundy::math::Vector3d r_chromosome_center_local(0.0, 0.0, 0.0);
     double r_max = 0.0;
     for (size_t i = 0; i < sphere_position_array.size(); i++) {
       r_chromosome_center_local += sphere_position_array[i];
@@ -2366,9 +2366,9 @@ std::vector<std::vector<mundy::geom::Point<double>>> get_chromosome_positions_hi
     bool chromosome_inserted = false;
     while (itrial <= max_trials) {
       // Generate a random position within the unit cell.
-      mundy::math::Vector3<double> r_start(rng.uniform<double>(domain_low[0], domain_high[0]),
-                                           rng.uniform<double>(domain_low[1], domain_high[1]),
-                                           rng.uniform<double>(domain_low[2], domain_high[2]));
+      mundy::math::Vector3d r_start(rng.uniform<double>(domain_low[0], domain_high[0]),
+                                    rng.uniform<double>(domain_low[1], domain_high[1]),
+                                    rng.uniform<double>(domain_low[2], domain_high[2]));
 
       // Check for overlaps with existing chromosomes
       bool found_overlap = false;
@@ -2458,7 +2458,7 @@ void compute_periphery_collision_forces(stk::mesh::NgpMesh &ngp_mesh,           
   const double inv_a2 = 1.0 / (a * a);
   const double inv_b2 = 1.0 / (b * b);
   const double inv_c2 = 1.0 / (c * c);
-  auto level_set = [&inv_a2, &inv_b2, &inv_c2, &periphery_shape](const mundy::math::Vector3<double> &point) -> double {
+  auto level_set = [&inv_a2, &inv_b2, &inv_c2, &periphery_shape](const mundy::math::Vector3d &point) -> double {
     const auto body_frame_point =
         mundy::math::conjugate(periphery_shape.orientation()) * (point - periphery_shape.center());
     return (body_frame_point[0] * body_frame_point[0] * inv_a2 + body_frame_point[1] * body_frame_point[1] * inv_b2 +
@@ -2481,14 +2481,14 @@ void compute_periphery_collision_forces(stk::mesh::NgpMesh &ngp_mesh,           
         const double &z1 = aabb[5];
 
         // Compute all 8 corners of the AABB
-        const auto bottom_left_front = mundy::math::Vector3<double>(x0, y0, z0);
-        const auto bottom_right_front = mundy::math::Vector3<double>(x1, y0, z0);
-        const auto top_left_front = mundy::math::Vector3<double>(x0, y1, z0);
-        const auto top_right_front = mundy::math::Vector3<double>(x1, y1, z0);
-        const auto bottom_left_back = mundy::math::Vector3<double>(x0, y0, z1);
-        const auto bottom_right_back = mundy::math::Vector3<double>(x1, y0, z1);
-        const auto top_left_back = mundy::math::Vector3<double>(x0, y1, z1);
-        const auto top_right_back = mundy::math::Vector3<double>(x1, y1, z1);
+        const auto bottom_left_front = mundy::math::Vector3d(x0, y0, z0);
+        const auto bottom_right_front = mundy::math::Vector3d(x1, y0, z0);
+        const auto top_left_front = mundy::math::Vector3d(x0, y1, z0);
+        const auto top_right_front = mundy::math::Vector3d(x1, y1, z0);
+        const auto bottom_left_back = mundy::math::Vector3d(x0, y0, z1);
+        const auto bottom_right_back = mundy::math::Vector3d(x1, y0, z1);
+        const auto top_left_back = mundy::math::Vector3d(x0, y1, z1);
+        const auto top_right_back = mundy::math::Vector3d(x1, y1, z1);
         const double all_points_inside_periphery =
             level_set(bottom_left_front) < 0.0 && level_set(bottom_right_front) < 0.0 &&
             level_set(top_left_front) < 0.0 && level_set(top_right_front) < 0.0 && level_set(bottom_left_back) < 0.0 &&
@@ -2504,8 +2504,8 @@ void compute_periphery_collision_forces(stk::mesh::NgpMesh &ngp_mesh,           
 
           // Note, the ellipsoid for the ssd calc has outward normal, whereas the periphery has inward normal.
           // Hence, the sign flip.
-          mundy::math::Vector3<double> contact_point;
-          mundy::math::Vector3<double> ellipsoid_nhat;
+          mundy::math::Vector3d contact_point;
+          mundy::math::Vector3d ellipsoid_nhat;
           const double shared_normal_ssd = -mundy::math::distance::shared_normal_ssd_between_ellipsoid_and_point(
                                                periphery_shape.center(), periphery_shape.orientation(), a, b, c,
                                                node_coords, contact_point, ellipsoid_nhat) -

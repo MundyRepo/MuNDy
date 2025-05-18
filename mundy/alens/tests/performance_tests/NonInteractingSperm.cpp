@@ -428,8 +428,8 @@ class SpermSimulation {
     for (size_t j = 0; j < num_sperm_; j++) {
       // To make our lives easier, we alogn the sperm with the z-axis, as this makes our edge orientation a unit
       // quaternion.
-      mundy::math::Vector3<double> tail_coord(0.0, 2 * j * sperm_radius_, 0.0);
-      mundy::math::Vector3<double> sperm_axis(0.0, 0.0, 1.0);
+      mundy::math::Vector3d tail_coord(0.0, 2 * j * sperm_radius_, 0.0);
+      mundy::math::Vector3d sperm_axis(0.0, 0.0, 1.0);
 
       // Because we are creating multiple sperm, we need to determine the node and element index ranges for each sperm.
       size_t start_node_id = num_nodes_per_sperm_ * j + 1u;
@@ -699,8 +699,7 @@ class SpermSimulation {
            &sperm_initial_segment_length]([[maybe_unused]] const stk::mesh::BulkData &bulk_data,
                                           const stk::mesh::Entity &edge) {
             // The orientation of the edge is the identity since we are currently in the reference configuration.
-            mundy::mesh::quaternion_field_data(edge_orientation_field, edge) =
-                mundy::math::Quaternion<double>::identity();
+            mundy::mesh::quaternion_field_data(edge_orientation_field, edge) = mundy::math::Quaterniond::identity();
             mundy::mesh::vector3_field_data(edge_tangent_field, edge) = sperm_axis;
             stk::mesh::field_data(edge_length_field, edge)[0] = sperm_initial_segment_length;
           });
@@ -887,8 +886,8 @@ class SpermSimulation {
             const double cos_half_t = std::cos(0.5 * node_i_twist);
             const double sin_half_t = std::sin(0.5 * node_i_twist);
             const auto rot_via_twist =
-                mundy::math::Quaternion<double>(cos_half_t, sin_half_t * edge_tangent_old[0],
-                                                sin_half_t * edge_tangent_old[1], sin_half_t * edge_tangent_old[2]);
+                mundy::math::Quaterniond(cos_half_t, sin_half_t * edge_tangent_old[0], sin_half_t * edge_tangent_old[1],
+                                         sin_half_t * edge_tangent_old[2]);
             const auto rot_via_parallel_transport =
                 mundy::math::quat_from_parallel_transport(edge_tangent_old, edge_tangent);
             edge_orientation = rot_via_parallel_transport * rot_via_twist * edge_orientation_old;
@@ -904,7 +903,7 @@ class SpermSimulation {
             // std::cout << "Edge tangent : " << edge_tangent << std::endl;
             // std::cout << " Edge tangent via transp: " << rot_via_parallel_transport * edge_tangent_old <<
             // std::endl; std::cout << " Edge tangent via orient: " << edge_orientation *
-            // mundy::math::Vector3<double>(0.0, 0.0, 1.0)
+            // mundy::math::Vector3d(0.0, 0.0, 1.0)
             //           << std::endl;
           }
         });
@@ -1064,7 +1063,7 @@ class SpermSimulation {
           const double moment_of_inertia = 0.25 * M_PI * node_radius * node_radius * node_radius * node_radius;
           const double shear_modulus = 0.5 * sperm_youngs_modulus / (1.0 + sperm_poissons_ratio);
           const double inv_rest_segment_length = 1.0 / sperm_rest_segment_length;
-          auto bending_torque = mundy::math::Vector3<double>(
+          auto bending_torque = mundy::math::Vector3d(
               -inv_rest_segment_length * sperm_youngs_modulus * moment_of_inertia * delta_curvature[0],
               -inv_rest_segment_length * sperm_youngs_modulus * moment_of_inertia * delta_curvature[1],
               -inv_rest_segment_length * 2 * shear_modulus * moment_of_inertia *

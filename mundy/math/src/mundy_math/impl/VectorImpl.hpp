@@ -3,7 +3,7 @@
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
 //                                              Copyright 2024 Bryce Palmer
-// 
+//
 // Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
@@ -102,7 +102,7 @@ KOKKOS_INLINE_FUNCTION constexpr void fill_impl(std::index_sequence<Is...>, AVec
 /// \brief Unary minus operator
 template <size_t... Is, typename T, size_t N, ValidAccessor<T> Accessor, typename OwnershipType>
 KOKKOS_INLINE_FUNCTION constexpr AVector<T, N> unary_minus_impl(std::index_sequence<Is...>,
-                                                               const AVector<T, N, Accessor, OwnershipType>& vec) {
+                                                                const AVector<T, N, Accessor, OwnershipType>& vec) {
   AVector<T, N> result;
   ((result[Is] = -vec[Is]), ...);
   return result;
@@ -125,9 +125,9 @@ KOKKOS_INLINE_FUNCTION constexpr auto vector_vector_add_impl(
 /// \param[in] other The other vector.
 template <size_t... Is, typename T, size_t N, typename U, ValidAccessor<T> Accessor, typename OwnershipType,
           ValidAccessor<U> OtherAccessor, typename OtherOwnershipType>
-KOKKOS_INLINE_FUNCTION constexpr void self_vector_add_impl(std::index_sequence<Is...>,
-                                                           AVector<T, N, Accessor, OwnershipType>& vec,
-                                                           const AVector<U, N, OtherAccessor, OtherOwnershipType>& other)
+KOKKOS_INLINE_FUNCTION constexpr void self_vector_add_impl(
+    std::index_sequence<Is...>, AVector<T, N, Accessor, OwnershipType>& vec,
+    const AVector<U, N, OtherAccessor, OtherOwnershipType>& other)
   requires HasNonConstAccessOperator<Accessor, T>
 {
   ((vec[Is] += static_cast<T>(other[Is])), ...);

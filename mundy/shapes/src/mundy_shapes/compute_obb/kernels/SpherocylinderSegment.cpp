@@ -3,7 +3,7 @@
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
 //                                              Copyright 2024 Bryce Palmer
-// 
+//
 // Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
@@ -148,12 +148,12 @@ void SpherocylinderSegment::execute(const stk::mesh::Selector &spherocylinder_se
         const auto right_node_coord = mundy::mesh::vector3_field_data(node_coord_field, right_node);
 
         // Compute the orientation of the spherocylinder segment.
-        const mundy::math::Vector3<double> element_orientation_vec = right_node_coord - left_node_coord;
+        const mundy::math::Vector3d element_orientation_vec = right_node_coord - left_node_coord;
 
         // Find any two orthonormal vectors to the orientation vector.
-        const mundy::math::Vector3<double> x_axis(1.0, 0.0, 0.0);
-        const mundy::math::Vector3<double> y_axis(0.0, 1.0, 0.0);
-        const mundy::math::Vector3<double> z_axis(0.0, 0.0, 1.0);
+        const mundy::math::Vector3d x_axis(1.0, 0.0, 0.0);
+        const mundy::math::Vector3d y_axis(0.0, 1.0, 0.0);
+        const mundy::math::Vector3d z_axis(0.0, 0.0, 1.0);
         auto perp_vector0 =
             mundy::math::norm(mundy::math::cross(element_orientation_vec, x_axis)) > 1.0e-12 ? x_axis : y_axis;
         auto perp_vector1 = mundy::math::cross(element_orientation_vec, perp_vector0);

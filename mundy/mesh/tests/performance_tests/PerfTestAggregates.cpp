@@ -3,7 +3,7 @@
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
 //                                              Copyright 2024 Bryce Palmer
-// 
+//
 // Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
@@ -102,15 +102,16 @@ std::pair<TimingResults, TimingResults> run_test_for_fields(const stk::mesh::Bul
 
   // Move the spheres according to their velocity
   Kokkos::Timer field_move_timer;
-  stk::mesh::for_each_entity_run(bulk_data, stk::topology::NODE_RANK, sphere_part,
-                                 [dt, &node_center_field, &node_velocity_field]([[maybe_unused]] const stk::mesh::BulkData& bulk_data,
-                                                                                const stk::mesh::Entity& node) {
-                                   double* center = stk::mesh::field_data(node_center_field, node);
-                                   double* velocity = stk::mesh::field_data(node_velocity_field, node);
-                                   center[0] += dt * velocity[0];
-                                   center[1] += dt * velocity[1];
-                                   center[2] += dt * velocity[2];
-                                 });
+  stk::mesh::for_each_entity_run(
+      bulk_data, stk::topology::NODE_RANK, sphere_part,
+      [dt, &node_center_field, &node_velocity_field]([[maybe_unused]] const stk::mesh::BulkData& bulk_data,
+                                                     const stk::mesh::Entity& node) {
+        double* center = stk::mesh::field_data(node_center_field, node);
+        double* velocity = stk::mesh::field_data(node_velocity_field, node);
+        center[0] += dt * velocity[0];
+        center[1] += dt * velocity[1];
+        center[2] += dt * velocity[2];
+      });
   double field_move_time = field_move_timer.seconds();
 
   double overall_fields_time = overall_fields_timer.seconds();

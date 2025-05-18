@@ -3,7 +3,7 @@
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
 //                                              Copyright 2024 Bryce Palmer
-// 
+//
 // Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
@@ -166,7 +166,6 @@ void LinkData::sync_to_device() {
   auto ngp_link_data = get_updated_ngp_data(*this);
   ngp_link_data.sync_to_device();
 }
-
 
 }  // namespace mesh
 

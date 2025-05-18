@@ -3,7 +3,7 @@
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
 //                                              Copyright 2024 Bryce Palmer
-// 
+//
 // Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
@@ -234,7 +234,8 @@ void basic_usage_test() {
           // Check the connected entities
           for (unsigned link_ordinal = 0; link_ordinal < 3; ++link_ordinal) {
             // TODO(palmerb4): Test that these are set via some device-compatable map.
-            [[maybe_unused]] FastMeshIndex linked_entity = ngp_link_data.get_linked_entity_index(linker_index, link_ordinal);
+            [[maybe_unused]] FastMeshIndex linked_entity =
+                ngp_link_data.get_linked_entity_index(linker_index, link_ordinal);
             [[maybe_unused]] EntityId linked_entity_id = ngp_link_data.get_linked_entity_id(linker_index, link_ordinal);
             [[maybe_unused]] EntityRank linked_entity_rank =
                 ngp_link_data.get_linked_entity_rank(linker_index, link_ordinal);

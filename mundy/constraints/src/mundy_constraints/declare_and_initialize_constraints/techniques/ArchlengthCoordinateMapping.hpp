@@ -3,7 +3,7 @@
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
 //                                              Copyright 2024 Bryce Palmer
-// 
+//
 // Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
@@ -141,8 +141,8 @@ class Helix : public ArchlengthCoordinateMapping {
     // We can do this by finding an arbitrary vector that is not parallel to the axis, taking the cross product
     // with the normal, and normalizing the result. This gives us a vector that is orthogonal to the axis.
     // By taking the cross product of the axis and this vector, we get a second vector that is orthogonal to both.
-    const mundy::math::Vector3<double> ihat(1.0, 0.0, 0.0);
-    const mundy::math::Vector3<double> jhat(0.0, 1.0, 0.0);
+    const mundy::math::Vector3d ihat(1.0, 0.0, 0.0);
+    const mundy::math::Vector3d jhat(0.0, 1.0, 0.0);
     basis_vector0_ = mundy::math::norm(mundy::math::cross(axis_, ihat)) > 1.0e-12 ? ihat : jhat;
     basis_vector0_ /= mundy::math::norm(basis_vector0_);
     basis_vector1_ = mundy::math::cross(axis_, basis_vector0_);
@@ -175,10 +175,10 @@ class Helix : public ArchlengthCoordinateMapping {
   double b_;
   double distance_between_nodes_;
   double delta_t_;
-  mundy::math::Vector3<double> start_;
-  mundy::math::Vector3<double> axis_;
-  mundy::math::Vector3<double> basis_vector0_;
-  mundy::math::Vector3<double> basis_vector1_;
+  mundy::math::Vector3d start_;
+  mundy::math::Vector3d axis_;
+  mundy::math::Vector3d basis_vector0_;
+  mundy::math::Vector3d basis_vector1_;
 };  // class Helix
 
 }  // namespace techniques

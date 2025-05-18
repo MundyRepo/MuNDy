@@ -4,7 +4,7 @@
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
 //                                              Copyright 2024 Bryce Palmer
-// 
+//
 // Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
@@ -145,21 +145,21 @@ class apply_brownian_motion_rod {
     const double inv_drag_rot = (pi * viscosity * p * p / 3) / (Kokkos::log(p) - 0.662 + 0.917 / p - 0.053 / (p * p));
 
     // RFD from Delong, JCP, 2015
-    auto tangent = quat * math::Vector3<double>(0.0, 0.0, 1.0);
+    auto tangent = quat * math::Vector3d(0.0, 0.0, 1.0);
 
     auto n_mat = (inv_drag_para - inv_drag_perp) * math::outer_product(tangent, tangent) +
-                 inv_drag_perp * math::Matrix3<double>::identity();
+                 inv_drag_perp * math::Matrix3d::identity();
     auto n_mat_sqrt = math::cholesky(n_mat);  // This is just L in N = LL^T
 
     // Drift and diffusion
-    math::Vector3<double> w_rot(rng.randn<double>(), rng.randn<double>(), rng.randn<double>());
-    math::Vector3<double> w_pos(rng.randn<double>(), rng.randn<double>(), rng.randn<double>());
-    math::Vector3<double> w_rfd_rot(rng.randn<double>(), rng.randn<double>(), rng.randn<double>());
+    math::Vector3d w_rot(rng.randn<double>(), rng.randn<double>(), rng.randn<double>());
+    math::Vector3d w_pos(rng.randn<double>(), rng.randn<double>(), rng.randn<double>());
+    math::Vector3d w_rfd_rot(rng.randn<double>(), rng.randn<double>(), rng.randn<double>());
 
-    math::rotate_quaternion(quat, w_rfd_rot, a_small_number_);          // Update the quaternion for the rod
-    tangent = quat * math::Vector3<double>(0.0, 0.0, 1.0);  // Propagate to the tangent
+    math::rotate_quaternion(quat, w_rfd_rot, a_small_number_);  // Update the quaternion for the rod
+    tangent = quat * math::Vector3d(0.0, 0.0, 1.0);             // Propagate to the tangent
     auto n_mat_rfd = (inv_drag_para - inv_drag_perp) * math::outer_product(tangent, tangent) +
-                     inv_drag_perp * math::Matrix3<double>::identity();  // Propagate to the mobility matrix
+                     inv_drag_perp * math::Matrix3d::identity();  // Propagate to the mobility matrix
 
     auto vel_brown = kbt_coeff_ * (n_mat_sqrt * w_pos);                     // Gaussian noise
     vel_brown += (kbt_ / a_small_number_) * ((n_mat_rfd - n_mat) * w_pos);  // RFD drift
@@ -565,7 +565,7 @@ class update_configuration_orientation {
     math::rotate_quaternion(quat, omega, dt_);
     std::cout << "quat 1: " << quat << std::endl;
     std::cout << "omega: " << omega << std::endl;
-    tangent = quat * math::Vector3<double>(0.0, 0.0, 1.0);
+    tangent = quat * math::Vector3d(0.0, 0.0, 1.0);
   }
 
   void apply_to(auto& rod_node_agg, const stk::mesh::Selector& subset_selector) {
@@ -747,7 +747,7 @@ struct AngularCrosslinkerEnergy {
     const double new_spring_length = math::norm(new_spring_r);
     const bool spring_is_zero_length = new_spring_length < math::get_zero_tolerance<double>();
     const auto new_spring_tangent =
-        spring_is_zero_length ? math::Vector3<double>(0., 0., 0.) : new_spring_r / new_spring_length;
+        spring_is_zero_length ? math::Vector3d(0., 0., 0.) : new_spring_r / new_spring_length;
 
     const double cos_theta_other = math::dot(opposite_tangent, new_spring_tangent);
     const double cos_theta_to_bind = math::dot(rod_tangent, new_spring_tangent);
@@ -777,7 +777,7 @@ struct AngularCrosslinkerEnergy {
     const auto spring_r = right_spring_coords - left_spring_coords;
     const double spring_length = math::norm(spring_r);
     const bool spring_is_zero_length = spring_length < math::get_zero_tolerance<double>();
-    const auto spring_tangent = spring_is_zero_length ? math::Vector3<double>(0., 0., 0.) : spring_r / spring_length;
+    const auto spring_tangent = spring_is_zero_length ? math::Vector3d(0., 0., 0.) : spring_r / spring_length;
 
     const double cos_theta_left = math::dot(left_tangent, spring_tangent);
     const double cos_theta_right = math::dot(right_tangent, spring_tangent);
@@ -826,7 +826,7 @@ struct HookeanPlusAngularCrosslinkerEnergy {
     const double new_spring_length = math::norm(new_spring_r);
     const bool spring_is_zero_length = new_spring_length < math::get_zero_tolerance<double>();
     const auto new_spring_tangent =
-        spring_is_zero_length ? math::Vector3<double>(0., 0., 0.) : new_spring_r / new_spring_length;
+        spring_is_zero_length ? math::Vector3d(0., 0., 0.) : new_spring_r / new_spring_length;
 
     const double cos_theta_other = math::dot(opposite_tangent, new_spring_tangent);
     const double cos_theta_to_bind = math::dot(rod_tangent, new_spring_tangent);
@@ -858,7 +858,7 @@ struct HookeanPlusAngularCrosslinkerEnergy {
     const auto spring_r = right_spring_coords - left_spring_coords;
     const double spring_length = math::norm(spring_r);
     const bool spring_is_zero_length = spring_length < math::get_zero_tolerance<double>();
-    const auto spring_tangent = spring_is_zero_length ? math::Vector3<double>(0., 0., 0.) : spring_r / spring_length;
+    const auto spring_tangent = spring_is_zero_length ? math::Vector3d(0., 0., 0.) : spring_r / spring_length;
 
     const double cos_theta_left = math::dot(left_tangent, spring_tangent);
     const double cos_theta_right = math::dot(right_tangent, spring_tangent);
@@ -1155,7 +1155,7 @@ class apply_hertzian_contact {
 
           geom::Point<double> rod1_centerline_contact_point, rod2_centerline_contact_point;
           double rod1_contact_point_arc_length, rod2_contact_point_arc_length;
-          math::Vector3<double> rod1_to_rod2_centerline_sep;
+          math::Vector3d rod1_to_rod2_centerline_sep;
           const double signed_sep_dist =
               geom::distance(rod1_centerline, rod2_centerline,                              //
                              rod1_centerline_contact_point, rod2_centerline_contact_point,  //
@@ -1507,10 +1507,10 @@ void run_main() {
   // Rod params
   double rod_radius = 0.5;
   double rod_length = 20;
-  math::Quaternion<double> rod_orient1 = math::euler_to_quat(0.0, 2.5 * M_PI / 180, 0.0);
-  math::Quaternion<double> rod_orient2 = math::euler_to_quat(0.0, -2.5 * M_PI / 180, 0.0);
-  math::Vector3<double> rod_tangent1 = rod_orient1 * math::Vector3<double>(0.0, 0.0, 1.0);
-  math::Vector3<double> rod_tangent2 = rod_orient2 * math::Vector3<double>(0.0, 0.0, 1.0);
+  math::Quaterniond rod_orient1 = math::euler_to_quat(0.0, 2.5 * M_PI / 180, 0.0);
+  math::Quaterniond rod_orient2 = math::euler_to_quat(0.0, -2.5 * M_PI / 180, 0.0);
+  math::Vector3d rod_tangent1 = rod_orient1 * math::Vector3d(0.0, 0.0, 1.0);
+  math::Vector3d rod_tangent2 = rod_orient2 * math::Vector3d(0.0, 0.0, 1.0);
   double init_rod_sep = 2.0;
 
   // Spring params
@@ -1585,32 +1585,31 @@ void run_main() {
       .add_field_data<double>(&elem_rest_cos_torsion_angle_field, {rest_cos_torsion_angle})    //
       .add_field_data<size_t>(&elem_rng_counter_field, {0});
 
+  // Rod elements
+  dec_helper
+      .create_element()  //
+      .owning_proc(0)    //
+      .id(1)             //
+      .topology(stk::topology::PARTICLE)
+      .add_part(&rod_part)                                                         //
+      .nodes({1})                                                                  //
+      .add_field_data<double>(&elem_length_field, {rod_length})                    //
+      .add_field_data<double>(&elem_radius_field, {rod_radius})                    //
+      .add_field_data<double>(&elem_bind_site_spacing_field, {bind_site_spacing})  //
+      .add_field_data<size_t>(&elem_rng_counter_field, {0});
 
-    // Rod elements
-    dec_helper
-        .create_element()  //
-        .owning_proc(0)    //
-        .id(1)      //
-        .topology(stk::topology::PARTICLE)
-        .add_part(&rod_part)                                                         //
-        .nodes({1})                                                           //
-        .add_field_data<double>(&elem_length_field, {rod_length})                    //
-        .add_field_data<double>(&elem_radius_field, {rod_radius})                    //
-        .add_field_data<double>(&elem_bind_site_spacing_field, {bind_site_spacing})  //
-        .add_field_data<size_t>(&elem_rng_counter_field, {0});
+  dec_helper
+      .create_element()  //
+      .owning_proc(0)    //
+      .id(2)             //
+      .topology(stk::topology::PARTICLE)
+      .add_part(&rod_part)                                                         //
+      .nodes({2})                                                                  //
+      .add_field_data<double>(&elem_length_field, {rod_length})                    //
+      .add_field_data<double>(&elem_radius_field, {rod_radius})                    //
+      .add_field_data<double>(&elem_bind_site_spacing_field, {bind_site_spacing})  //
+      .add_field_data<size_t>(&elem_rng_counter_field, {0});
 
-    dec_helper
-        .create_element()  //
-        .owning_proc(0)    //
-        .id(2)      //
-        .topology(stk::topology::PARTICLE)
-        .add_part(&rod_part)                                                         //
-        .nodes({2})                                                           //
-        .add_field_data<double>(&elem_length_field, {rod_length})                    //
-        .add_field_data<double>(&elem_radius_field, {rod_radius})                    //
-        .add_field_data<double>(&elem_bind_site_spacing_field, {bind_site_spacing})  //
-        .add_field_data<size_t>(&elem_rng_counter_field, {0});
-      
   // Declare the entities
   dec_helper.check_consistency(bulk_data);
   bulk_data.modification_begin();

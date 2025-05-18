@@ -443,17 +443,17 @@ void declare_and_initialize_sperm(stk::mesh::BulkData &bulk_data, stk::mesh::Par
     // TODO(palmerb4): Notice that we are shifting the sperm to be separated by a diameter.
     bool flip_sperm = sperm_directions[j];
     // const bool flip_sperm = false;
-    // mundy::math::Vector3<double> tail_coord(0.0, 2.0 * j * (2.0 * sperm_radius),
+    // mundy::math::Vector3d tail_coord(0.0, 2.0 * j * (2.0 * sperm_radius),
     //                                         (flip_sperm ? segment_length * (num_nodes_per_sperm - 1) : 0.0) -
     //                                             (is_boundary_sperm ? segment_length * (num_nodes_per_sperm - 1) :
     //                                             0.0));
     double random_shift = static_cast<double>(rand()) / RAND_MAX * segment_length * (num_nodes_per_sperm - 1);
 
-    mundy::math::Vector3<double> tail_coord(
+    mundy::math::Vector3d tail_coord(
         0.0, j * (2.0 * sperm_radius) / 0.8,
         (flip_sperm ? (segment_length * (num_nodes_per_sperm - 1) + random_shift) : random_shift));
 
-    mundy::math::Vector3<double> sperm_axis(0.0, 0.0, flip_sperm ? -1.0 : 1.0);
+    mundy::math::Vector3d sperm_axis(0.0, 0.0, flip_sperm ? -1.0 : 1.0);
 
     // Because we are creating multiple sperm, we need to determine the node and element index ranges for each sperm.
     size_t start_node_id = num_nodes_per_sperm * j + 1u;
@@ -752,17 +752,17 @@ void declare_and_initialize_sperm(stk::mesh::BulkData &bulk_data, stk::mesh::Par
           const stk::mesh::Entity *edge_nodes = bulk_data.begin_nodes(edge);
           const auto edge_node0_coords = mundy::mesh::vector3_field_data(node_coords_field, edge_nodes[0]);
           const auto edge_node1_coords = mundy::mesh::vector3_field_data(node_coords_field, edge_nodes[1]);
-          mundy::math::Vector3<double> edge_tangent = edge_node1_coords - edge_node0_coords;
+          mundy::math::Vector3d edge_tangent = edge_node1_coords - edge_node0_coords;
           const double edge_length = mundy::math::norm(edge_tangent);
           edge_tangent /= edge_length;
           // Using the triad to generate the orientation
-          auto d1 = mundy::math::Vector3<double>(flip_sperm ? -1.0 : 1.0, 0.0, 0.0);
-          mundy::math::Vector3<double> d3 = edge_tangent;
-          mundy::math::Vector3<double> d2 = mundy::math::cross(d3, d1);
+          auto d1 = mundy::math::Vector3d(flip_sperm ? -1.0 : 1.0, 0.0, 0.0);
+          mundy::math::Vector3d d3 = edge_tangent;
+          mundy::math::Vector3d d2 = mundy::math::cross(d3, d1);
           d2 /= mundy::math::norm(d2);
           MUNDY_THROW_ASSERT(mundy::math::dot(d3, mundy::math::cross(d1, d2)) > 0.0, std::logic_error,
                              "The triad is not right-handed.");
-          mundy::math::Matrix3<double> D;
+          mundy::math::Matrix3d D;
           D.set_column(0, d1);
           D.set_column(1, d2);
           D.set_column(2, d3);
@@ -880,8 +880,8 @@ void compute_edge_information(stk::mesh::NgpMesh &ngp_mesh, const stk::mesh::Par
         const double cos_half_t = Kokkos::cos(0.5 * node_i_twist);
         const double sin_half_t = Kokkos::sin(0.5 * node_i_twist);
         const auto rot_via_twist =
-            mundy::math::Quaternion<double>(cos_half_t, sin_half_t * edge_tangent_old[0],
-                                            sin_half_t * edge_tangent_old[1], sin_half_t * edge_tangent_old[2]);
+            mundy::math::Quaterniond(cos_half_t, sin_half_t * edge_tangent_old[0], sin_half_t * edge_tangent_old[1],
+                                     sin_half_t * edge_tangent_old[2]);
         const auto rot_via_parallel_transport =
             mundy::math::quat_from_parallel_transport(edge_tangent_old, edge_tangent);
         edge_orientation = rot_via_parallel_transport * rot_via_twist * edge_orientation_old;
@@ -896,7 +896,7 @@ void compute_edge_information(stk::mesh::NgpMesh &ngp_mesh, const stk::mesh::Par
         //           << std::endl;
         // std::cout << "Edge tangent : " << edge_tangent << " Edge tangent old: " << edge_tangent_old << std::endl;
         // std::cout << " Edge tangent via transp: " << rot_via_parallel_transport * edge_tangent_old << std::endl;
-        // std::cout << " Edge tangent via orient: " << edge_orientation * mundy::math::Vector3<double>(0.0, 0.0, 1.0)
+        // std::cout << " Edge tangent via orient: " << edge_orientation * mundy::math::Vector3d(0.0, 0.0, 1.0)
         //           << std::endl;
       });
 
@@ -1049,7 +1049,7 @@ void compute_internal_force_and_twist_torque(
         const double moment_of_inertia = 0.25 * M_PI * node_radius * node_radius * node_radius * node_radius;
         const double shear_modulus = 0.5 * sperm_youngs_modulus / (1.0 + sperm_poissons_ratio);
         const double inv_rest_segment_length = 1.0 / sperm_rest_segment_length;
-        auto bending_torque = mundy::math::Vector3<double>(
+        auto bending_torque = mundy::math::Vector3d(
             -inv_rest_segment_length * sperm_youngs_modulus * moment_of_inertia * delta_curvature[0],
             -inv_rest_segment_length * sperm_youngs_modulus * moment_of_inertia * delta_curvature[1],
             -inv_rest_segment_length * 2 * shear_modulus * moment_of_inertia * delta_curvature[2]);
@@ -1285,9 +1285,9 @@ void wrap_segment_preserve_shape(const auto &p0_in, const auto &p1_in, double y_
                                  double z_max, auto &p0_out, auto &p1_out) {
   // Compute wrapped center
   auto center = 0.5 * (p0_in + p1_in);
-  mundy::math::Vector3<double> wrapped_center{center[0],                                  // no periodicity in x
-                                              wrap_to_interval(center[1], y_min, y_max),  //
-                                              wrap_to_interval(center[2], z_min, z_max)};
+  mundy::math::Vector3d wrapped_center{center[0],                                  // no periodicity in x
+                                       wrap_to_interval(center[1], y_min, y_max),  //
+                                       wrap_to_interval(center[2], z_min, z_max)};
 
   // Translation vector
   auto offset = wrapped_center - center;
@@ -1394,8 +1394,8 @@ void compute_hertzian_contact_force_and_torque(const stk::mesh::BulkData &bulk_d
         }
 
         // Compute the minimum signed separation distance between the segments
-        mundy::math::Vector3<double> closest_point_source;
-        mundy::math::Vector3<double> closest_point_target;
+        mundy::math::Vector3d closest_point_source;
+        mundy::math::Vector3d closest_point_target;
         double archlength_source;
         double archlength_target;
         const double distance = Kokkos::sqrt(mundy::math::distance::distance_sq_between_line_segments(
@@ -1546,10 +1546,10 @@ void compute_hertzian_contact_force_and_torque(const stk::mesh::BulkData &bulk_d
 
 //         ////////////////////
 //         // Periodic image //
-//         mundy::math::Vector3<double> source_node0_coords;
-//         mundy::math::Vector3<double> source_node1_coords;
-//         mundy::math::Vector3<double> target_node0_coords;
-//         mundy::math::Vector3<double> target_node1_coords;
+//         mundy::math::Vector3d source_node0_coords;
+//         mundy::math::Vector3d source_node1_coords;
+//         mundy::math::Vector3d target_node0_coords;
+//         mundy::math::Vector3d target_node1_coords;
 //         wrap_segment_preserve_shape(source_node0_coords_tmp, source_node1_coords_tmp,  //
 //                                     0.0, domain_width, 0.0, domain_height,             //
 //                                     source_node0_coords, source_node1_coords);
@@ -1655,13 +1655,13 @@ void compute_hertzian_contact_force_and_torque(const stk::mesh::BulkData &bulk_d
 //                                                                                 : domain_width;
 
 //         // Shift the source segment
-//         mundy::math::Vector3<double> shift = mundy::math::Vector3<double>(0.0, shift_y, shift_z);
-//         mundy::math::Vector3<double> source_node0_coords_shifted = source_node0_coords + shift;
-//         mundy::math::Vector3<double> source_node1_coords_shifted = source_node1_coords + shift;
+//         mundy::math::Vector3d shift = mundy::math::Vector3d(0.0, shift_y, shift_z);
+//         mundy::math::Vector3d source_node0_coords_shifted = source_node0_coords + shift;
+//         mundy::math::Vector3d source_node1_coords_shifted = source_node1_coords + shift;
 
 //         // Compute the minimum signed separation distance between the segments
-//         mundy::math::Vector3<double> closest_point_source;
-//         mundy::math::Vector3<double> closest_point_target;
+//         mundy::math::Vector3d closest_point_source;
+//         mundy::math::Vector3d closest_point_target;
 //         double archlength_source;
 //         double archlength_target;
 //         const double distance = Kokkos::sqrt(mundy::math::distance::distance_sq_between_line_segments(
@@ -1817,35 +1817,35 @@ void compute_hertzian_contact_force_and_torque(const stk::mesh::BulkData &bulk_d
 
 //         ///
 //         // Periodic image
-//         // mundy::math::Vector3<double> source_node0_coords{
+//         // mundy::math::Vector3d source_node0_coords{
 //         //   source_node0_coords_tmp[0],
 //         //   wrap_to_interval(source_node0_coords_tmp[1], 0.0, domain_width),
 //         //   wrap_to_interval(source_node0_coords_tmp[2], 0.0, domain_height)};
-//         // mundy::math::Vector3<double> source_node1_coords{
+//         // mundy::math::Vector3d source_node1_coords{
 //         //   source_node1_coords_tmp[0],
 //         //   wrap_to_interval(source_node1_coords_tmp[1], 0.0, domain_width),
 //         //   wrap_to_interval(source_node1_coords_tmp[2], 0.0, domain_height)};
-//         // mundy::math::Vector3<double> target_node0_coords{
+//         // mundy::math::Vector3d target_node0_coords{
 //         //   target_node0_coords_tmp[0],
 //         //   wrap_to_interval(target_node0_coords_tmp[1], 0.0, domain_width),
 //         //   wrap_to_interval(target_node0_coords_tmp[2], 0.0, domain_height)};
-//         // mundy::math::Vector3<double> target_node1_coords{
+//         // mundy::math::Vector3d target_node1_coords{
 //         //   target_node1_coords_tmp[0],
 //         //   wrap_to_interval(target_node1_coords_tmp[1], 0.0, domain_width),
 //         //   wrap_to_interval(target_node1_coords_tmp[2], 0.0, domain_height)};
-//         mundy::math::Vector3<double> source_node0_coords{
+//         mundy::math::Vector3d source_node0_coords{
 //           source_node0_coords_tmp[0],
 //           wrap_to_interval(source_node0_coords_tmp[1], 0.0, domain_width),
 //           source_node0_coords_tmp[2]};
-//         mundy::math::Vector3<double> source_node1_coords{
+//         mundy::math::Vector3d source_node1_coords{
 //           source_node1_coords_tmp[0],
 //           wrap_to_interval(source_node1_coords_tmp[1], 0.0, domain_width),
 //           source_node1_coords_tmp[2]};
-//         mundy::math::Vector3<double> target_node0_coords{
+//         mundy::math::Vector3d target_node0_coords{
 //           target_node0_coords_tmp[0],
 //           wrap_to_interval(target_node0_coords_tmp[1], 0.0, domain_width),
 //           target_node0_coords_tmp[2]};
-//         mundy::math::Vector3<double> target_node1_coords{
+//         mundy::math::Vector3d target_node1_coords{
 //           target_node1_coords_tmp[0],
 //           wrap_to_interval(target_node1_coords_tmp[1], 0.0, domain_width),
 //           target_node1_coords_tmp[2]};
@@ -1876,8 +1876,8 @@ void compute_hertzian_contact_force_and_torque(const stk::mesh::BulkData &bulk_d
 //         }
 
 //         // Compute the minimum signed separation distance between the segments
-//         mundy::math::Vector3<double> closest_point_source;
-//         mundy::math::Vector3<double> closest_point_target;
+//         mundy::math::Vector3d closest_point_source;
+//         mundy::math::Vector3d closest_point_target;
 //         double archlength_source;
 //         double archlength_target;
 //         const double distance = Kokkos::sqrt(mundy::math::distance::distance_sq_between_line_segments(
@@ -2415,9 +2415,7 @@ void run(int argc, char **argv) {
 
       Kokkos::Timer create_search_aabbs_timer;
       search_aabbs = create_search_aabbs(bulk_data, ngp_mesh, run_config.search_buffer, run_config.domain_width,
-                                                run_config.domain_height,
-      spherocylinder_segments_part,
-                                         ngp_elem_aabb_field);
+                                         run_config.domain_height, spherocylinder_segments_part, ngp_elem_aabb_field);
       std::cout << "Create search aabbs time: " << create_search_aabbs_timer.seconds() << std::endl;
 
       Kokkos::Timer search_timer;
@@ -2475,8 +2473,9 @@ void run(int argc, char **argv) {
     {
       // Hertzian contact force
       compute_hertzian_contact_force_and_torque(bulk_data, ngp_mesh, run_config.sperm_youngs_modulus,
-                                                run_config.sperm_poissons_ratio, spherocylinder_segments_part, search_results,
-                                                ngp_node_coords_field, ngp_elem_radius_field, ngp_node_force_field);
+                                                run_config.sperm_poissons_ratio, spherocylinder_segments_part,
+                                                search_results, ngp_node_coords_field, ngp_elem_radius_field,
+                                                ngp_node_force_field);
 
       // Centerline twist rod forces
       propagate_rest_curvature(ngp_mesh, current_time, run_config.amplitude, run_config.spatial_wavelength,

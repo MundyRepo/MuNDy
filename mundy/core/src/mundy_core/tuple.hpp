@@ -3,7 +3,7 @@
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
 //                                              Copyright 2024 Bryce Palmer
-// 
+//
 // Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
@@ -174,7 +174,7 @@ struct tuple_impl<std::index_sequence<Idx...>, Elements...> : public tuple_membe
   /// \brief Default copy/move/assign constructors
   KOKKOS_FUNCTION
   constexpr tuple_impl(const tuple_impl&) = default;
-  
+
   KOKKOS_FUNCTION
   constexpr tuple_impl(tuple_impl&&) = default;
 

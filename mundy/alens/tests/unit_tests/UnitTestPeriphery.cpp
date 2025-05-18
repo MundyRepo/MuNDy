@@ -1160,7 +1160,7 @@ TEST(PeripheryTest, SKFIERigidBodyMotion) {
   const double sphere_radius = 1.0;
   const double viscosity = 1.0;
   const size_t num_bulk_points = 8;
-  const mundy::math::Vector3<double> omega(0.0, 0.0, 1.0);
+  const mundy::math::Vector3d omega(0.0, 0.0, 1.0);
   const double cube_side_half_length = sphere_radius / 3;
 
   // Setup the bulk points at the corner of the cube with side length cude_side_length
@@ -1213,7 +1213,7 @@ TEST(PeripheryTest, SKFIERigidBodyMotion) {
     const double x = bulk_points(3 * i);
     const double y = bulk_points(3 * i + 1);
     const double z = bulk_points(3 * i + 2);
-    const mundy::math::Vector3<double> p(x, y, z);
+    const mundy::math::Vector3d p(x, y, z);
     const auto v = mundy::math::cross(omega, p);
   }
 
@@ -1230,7 +1230,7 @@ TEST(PeripheryTest, SKFIERigidBodyMotion) {
           const double x = points(3 * i);
           const double y = points(3 * i + 1);
           const double z = points(3 * i + 2);
-          const mundy::math::Vector3<double> p(x, y, z);
+          const mundy::math::Vector3d p(x, y, z);
           const auto v = mundy::math::cross(omega, p);
           input_field(3 * i) = v[0];
           input_field(3 * i + 1) = v[1];
@@ -1249,7 +1249,7 @@ TEST(PeripheryTest, SKFIERigidBodyMotion) {
           const double x = bulk_points(3 * i);
           const double y = bulk_points(3 * i + 1);
           const double z = bulk_points(3 * i + 2);
-          const mundy::math::Vector3<double> b(x, y, z);
+          const mundy::math::Vector3d b(x, y, z);
           const auto v = mundy::math::cross(omega, b);
           expected_results(3 * i) = v[0];
           expected_results(3 * i + 1) = v[1];
@@ -1292,7 +1292,7 @@ TEST(PeripheryTest, SKFIERigidBodyMotionFromFile) {
   const double sphere_radius = 28.0;
   const double viscosity = 1.0;
   const size_t num_bulk_points = 8;
-  const mundy::math::Vector3<double> omega(1.0, 1.0, 1.0);
+  const mundy::math::Vector3d omega(1.0, 1.0, 1.0);
   const double cube_side_half_length = sphere_radius / 3;
 
   // Setup the bulk points at the corner of the cube with side length cude_side_length
@@ -1335,7 +1335,7 @@ TEST(PeripheryTest, SKFIERigidBodyMotionFromFile) {
     const double x = bulk_points(3 * i);
     const double y = bulk_points(3 * i + 1);
     const double z = bulk_points(3 * i + 2);
-    const mundy::math::Vector3<double> b(x, y, z);
+    const mundy::math::Vector3d b(x, y, z);
     const auto v = mundy::math::cross(omega, b);
     expected_bulk_velocity(3 * i) = v[0];
     expected_bulk_velocity(3 * i + 1) = v[1];
@@ -1378,7 +1378,7 @@ TEST(PeripheryTest, SKFIERigidBodyMotionFromFile) {
       const double x = points(3 * j);
       const double y = points(3 * j + 1);
       const double z = points(3 * j + 2);
-      const mundy::math::Vector3<double> p(x, y, z);
+      const mundy::math::Vector3d p(x, y, z);
       const auto v = mundy::math::cross(omega, p);
       surface_slip_velocity(3 * j) = v[0];
       surface_slip_velocity(3 * j + 1) = v[1];
@@ -1569,8 +1569,8 @@ auto run_periphery_rpyc(const double &viscosity, const int num_spheres,
       Kokkos::DefaultHostExecutionSpace(), viscosity, num_surface_nodes, num_spheres, surface_positions,
       sphere_positions, surface_normals, surface_weights, surface_forces, sphere_velocities);
 
-  mundy::math::Vector3<double> final_sphere_velocity(sphere_velocities(0), sphere_velocities(1), sphere_velocities(2));
-  mundy::math::Vector3<double> final_sphere_force(sphere_forces(0), sphere_forces(1), sphere_forces(2));
+  mundy::math::Vector3d final_sphere_velocity(sphere_velocities(0), sphere_velocities(1), sphere_velocities(2));
+  mundy::math::Vector3d final_sphere_force(sphere_forces(0), sphere_forces(1), sphere_forces(2));
   return std::make_tuple(final_sphere_velocity, final_sphere_force);
 }
 
@@ -1593,12 +1593,12 @@ TEST(PeripheryRPYC, SphereQuadPeripheryRPYC) {
 
   // Create a set of tests where we move the sphere towards the periphery in various directions
   std::vector<std::string> test_types = {"SphereQuadXFx", "SphereQuadYFy", "SphereQuadZFz", "Random"};
-  std::vector<mundy::math::Vector3<double>> director = {
-      mundy::math::Vector3<double>(1.0, 0.0, 0.0), mundy::math::Vector3<double>(0.0, 1.0, 0.0),
-      mundy::math::Vector3<double>(0.0, 0.0, 1.0), mundy::math::Vector3<double>(1.0, 1.0, 1.0)};
-  std::vector<mundy::math::Vector3<double>> force_director = {
-      mundy::math::Vector3<double>(1.0, 0.0, 0.0), mundy::math::Vector3<double>(0.0, 1.0, 0.0),
-      mundy::math::Vector3<double>(0.0, 0.0, 1.0), mundy::math::Vector3<double>(1.0, 1.0, 1.0)};
+  std::vector<mundy::math::Vector3d> director = {
+      mundy::math::Vector3d(1.0, 0.0, 0.0), mundy::math::Vector3d(0.0, 1.0, 0.0), mundy::math::Vector3d(0.0, 0.0, 1.0),
+      mundy::math::Vector3d(1.0, 1.0, 1.0)};
+  std::vector<mundy::math::Vector3d> force_director = {
+      mundy::math::Vector3d(1.0, 0.0, 0.0), mundy::math::Vector3d(0.0, 1.0, 0.0), mundy::math::Vector3d(0.0, 0.0, 1.0),
+      mundy::math::Vector3d(1.0, 1.0, 1.0)};
 
   mfile << "TestType, Order, NumSurfacePoints, Viscosity, SphereRadius, PeripheryRadius, X, Y, Z, Fx, Fy, Fz, Vx, "
            "Vy, Vz\n";
@@ -1709,12 +1709,12 @@ TEST(PeripheryRPYC, ExternalQuadPeripheryRPYC) {
       "./sphere_triangle_weights_1280.dat", "./sphere_triangle_weights_3840.dat", "./sphere_triangle_weights_5120.dat"};
   std::vector<std::string> external_quadrature_normals_filename = {
       "./sphere_triangle_normals_1280.dat", "./sphere_triangle_normals_3840.dat", "./sphere_triangle_normals_5120.dat"};
-  std::vector<mundy::math::Vector3<double>> director = {
-      mundy::math::Vector3<double>(1.0, 0.0, 0.0), mundy::math::Vector3<double>(0.0, 1.0, 0.0),
-      mundy::math::Vector3<double>(0.0, 0.0, 1.0), mundy::math::Vector3<double>(1.0, 1.0, 1.0)};
-  std::vector<mundy::math::Vector3<double>> force_director = {
-      mundy::math::Vector3<double>(1.0, 0.0, 0.0), mundy::math::Vector3<double>(0.0, 1.0, 0.0),
-      mundy::math::Vector3<double>(0.0, 0.0, 1.0), mundy::math::Vector3<double>(1.0, 1.0, 1.0)};
+  std::vector<mundy::math::Vector3d> director = {
+      mundy::math::Vector3d(1.0, 0.0, 0.0), mundy::math::Vector3d(0.0, 1.0, 0.0), mundy::math::Vector3d(0.0, 0.0, 1.0),
+      mundy::math::Vector3d(1.0, 1.0, 1.0)};
+  std::vector<mundy::math::Vector3d> force_director = {
+      mundy::math::Vector3d(1.0, 0.0, 0.0), mundy::math::Vector3d(0.0, 1.0, 0.0), mundy::math::Vector3d(0.0, 0.0, 1.0),
+      mundy::math::Vector3d(1.0, 1.0, 1.0)};
 
   mfile << "TestType, QuadFile, NumSurfacePoints, Viscosity, SphereRadius, PeripheryRadius, X, Y, Z, Fx, Fy, Fz, Vx, "
            "Vy, Vz\n";

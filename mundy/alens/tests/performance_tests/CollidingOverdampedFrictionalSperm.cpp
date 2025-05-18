@@ -77,10 +77,10 @@ The goal of this example is to simulate the swimming motion of a multiple, colli
 // /// \brief Get the tangent and quaternion orientation of the next segment given the curvature, tangent, and
 // orientation
 // /// of the current.
-// void next_segment(const mundy::math::Vector3<double> &curvature_i, const mundy::math::Vector3<double> &tangent_im1,
-//                   const mundy::math::Quaternion<double> &edge_orientation_im1,
-//                   mundy::math::Vector3<double> *const tangent_i_ptr,
-//                   mundy::math::Quaternion<double> *const edge_orientation_i_ptr) {
+// void next_segment(const mundy::math::Vector3d &curvature_i, const mundy::math::Vector3d &tangent_im1,
+//                   const mundy::math::Quaterniond &edge_orientation_im1,
+//                   mundy::math::Vector3d *const tangent_i_ptr,
+//                   mundy::math::Quaterniond *const edge_orientation_i_ptr) {
 //   // Compute the current rotation gradient q_i
 //   // Because $\kappa_i$ is twice the vector component of the unit quaternion $q_i$, we can compute the scalar
 //   component
@@ -90,14 +90,14 @@ The goal of this example is to simulate the swimming motion of a multiple, colli
 //     throw std::invalid_argument("The curvature norm squared is greater than 4.0. This is not a valid curvature.");
 //   }
 //   const double scalar_component = std::sqrt(1.0 - 0.25 * curvature_norm2);
-//   const mundy::math::Quaternion<double> rotation_gradient_i(scalar_component, 0.5 * curvature_i[0],
+//   const mundy::math::Quaterniond rotation_gradient_i(scalar_component, 0.5 * curvature_i[0],
 //                                                             0.5 * curvature_i[1], 0.5 * curvature_i[2]);
 
 //   // Compute D_i
 //   // Now, $q_i = \overline{d^{i-1}}d^i$ but we are interested in finding $\mathcal{D} = d^i \overline{d^{i-1}} :
 //   // \bd^{i-1}_I \mapsto \bd^{i}_I$. Well, $q_i = \overline{d^{i-1}}\mathcal{D}d^{i-1}$, so
 //   // $\mathcal{D}_i = d^{i-1}q_i\overline{d^{i-1}}$.
-//   const mundy::math::Quaternion<double> D_i =
+//   const mundy::math::Quaterniond D_i =
 //       edge_orientation_im1 * rotation_gradient_i * mundy::math::conjugate(edge_orientation_im1);
 //   *tangent_i_ptr = D_i * tangent_im1;
 
@@ -106,7 +106,7 @@ The goal of this example is to simulate the swimming motion of a multiple, colli
 //   to
 //   // the
 //   // // new tangent.
-//   // mundy::math::Quaternion<double> parallel_transport_quat =
+//   // mundy::math::Quaterniond parallel_transport_quat =
 //   //     mundy::math::quat_from_parallel_transport(tangent_im1, *tangent_i_ptr);
 
 //   *edge_orientation_i_ptr = D_i * edge_orientation_im1;
@@ -114,21 +114,21 @@ The goal of this example is to simulate the swimming motion of a multiple, colli
 
 // /// \brief Function for computing the node positions of a centerline twist rod given a known curvature and segment
 // /// length The curvature and segment length are paramatrized in terms of the arc length s along the rod
-// std::pair<std::vector<mundy::math::Vector3<double>>, std::vector<mundy::math::Quaternion<double>>>
-// compute_centerline_twist_rod_backbone(const std::function<mundy::math::Vector3<double>(const double)>
+// std::pair<std::vector<mundy::math::Vector3d>, std::vector<mundy::math::Quaterniond>>
+// compute_centerline_twist_rod_backbone(const std::function<mundy::math::Vector3d(const double)>
 // &curvature_func,
 //                                       const double &segment_length, const size_t &num_segments,
-//                                       const mundy::math::Vector3<double> &start_position,
-//                                       const mundy::math::Vector3<double> &start_tangent) {
+//                                       const mundy::math::Vector3d &start_position,
+//                                       const mundy::math::Vector3d &start_tangent) {
 //   // Compute the tangent and orientation of the first segment
-//   mundy::math::Vector3<double> current_tangent = start_tangent;
-//   mundy::math::Vector3<double> z_axis(0.0, 0.0, 1.0);
-//   mundy::math::Quaternion<double> current_edge_orientation =
+//   mundy::math::Vector3d current_tangent = start_tangent;
+//   mundy::math::Vector3d z_axis(0.0, 0.0, 1.0);
+//   mundy::math::Quaterniond current_edge_orientation =
 //       mundy::math::quat_from_parallel_transport(z_axis, current_tangent);
 
 //   // Compute the node positions
-//   std::vector<mundy::math::Vector3<double>> node_positions(num_segments + 1);
-//   std::vector<mundy::math::Quaternion<double>> edge_orientations(num_segments);
+//   std::vector<mundy::math::Vector3d> node_positions(num_segments + 1);
+//   std::vector<mundy::math::Quaterniond> edge_orientations(num_segments);
 
 //   node_positions[0] = start_position;
 //   node_positions[1] = start_position + segment_length * current_tangent;
@@ -136,11 +136,11 @@ The goal of this example is to simulate the swimming motion of a multiple, colli
 //   for (size_t i = 1; i < num_segments; ++i) {
 //     // Compute the curvature at the current segment
 //     const double s = i * segment_length;
-//     const mundy::math::Vector3<double> current_curvature = curvature_func(s);
+//     const mundy::math::Vector3d current_curvature = curvature_func(s);
 
 //     // Compute the tangent and orientation of the next segment
-//     mundy::math::Vector3<double> next_tangent;
-//     mundy::math::Quaternion<double> next_edge_orientation;
+//     mundy::math::Vector3d next_tangent;
+//     mundy::math::Quaterniond next_edge_orientation;
 //     next_segment(current_curvature, current_tangent, current_edge_orientation, &next_tangent,
 //     &next_edge_orientation);
 
@@ -706,11 +706,11 @@ class SpermSimulation {
       // TODO(palmerb4): Notice that we are shifting the sperm to be separated by a diameter.
       const bool flip_sperm = j % 2 == 0;
       // const bool flip_sperm = false;
-      mundy::math::Vector3<double> tail_coord(
+      mundy::math::Vector3d tail_coord(
           0.0, 2.0 * j * (2.0 * sperm_radius_),
           (flip_sperm ? segment_length * (num_nodes_per_sperm_ - 1) : 0.0) -
               (is_boundary_sperm ? sperm_initial_segment_length_ * (num_nodes_per_sperm_ - 1) : 0.0));
-      mundy::math::Vector3<double> sperm_axis(0.0, 0.0, flip_sperm ? -1.0 : 1.0);
+      mundy::math::Vector3d sperm_axis(0.0, 0.0, flip_sperm ? -1.0 : 1.0);
 
       // Because we are creating multiple sperm, we need to determine the node and element index ranges for each sperm.
       size_t start_node_id = num_nodes_per_sperm_ * j + 1u;
@@ -1050,17 +1050,17 @@ class SpermSimulation {
             const stk::mesh::Entity *edge_nodes = bulk_data.begin_nodes(edge);
             const auto edge_node0_coords = mundy::mesh::vector3_field_data(node_coord_field, edge_nodes[0]);
             const auto edge_node1_coords = mundy::mesh::vector3_field_data(node_coord_field, edge_nodes[1]);
-            mundy::math::Vector3<double> edge_tangent = edge_node1_coords - edge_node0_coords;
+            mundy::math::Vector3d edge_tangent = edge_node1_coords - edge_node0_coords;
             const double edge_length = mundy::math::norm(edge_tangent);
             edge_tangent /= edge_length;
             // Using the triad to generate the orientation
-            auto d1 = mundy::math::Vector3<double>(flip_sperm ? -1.0 : 1.0, 0.0, 0.0);
-            mundy::math::Vector3<double> d3 = edge_tangent;
-            mundy::math::Vector3<double> d2 = mundy::math::cross(d3, d1);
+            auto d1 = mundy::math::Vector3d(flip_sperm ? -1.0 : 1.0, 0.0, 0.0);
+            mundy::math::Vector3d d3 = edge_tangent;
+            mundy::math::Vector3d d2 = mundy::math::cross(d3, d1);
             d2 /= mundy::math::norm(d2);
             MUNDY_THROW_ASSERT(mundy::math::dot(d3, mundy::math::cross(d1, d2)) > 0.0, std::logic_error,
                                "The triad is not right-handed.");
-            mundy::math::Matrix3<double> D;
+            mundy::math::Matrix3d D;
             D.set_column(0, d1);
             D.set_column(1, d2);
             D.set_column(2, d3);
@@ -1233,8 +1233,8 @@ class SpermSimulation {
             const double cos_half_t = std::cos(0.5 * node_i_twist);
             const double sin_half_t = std::sin(0.5 * node_i_twist);
             const auto rot_via_twist =
-                mundy::math::Quaternion<double>(cos_half_t, sin_half_t * edge_tangent_old[0],
-                                                sin_half_t * edge_tangent_old[1], sin_half_t * edge_tangent_old[2]);
+                mundy::math::Quaterniond(cos_half_t, sin_half_t * edge_tangent_old[0], sin_half_t * edge_tangent_old[1],
+                                         sin_half_t * edge_tangent_old[2]);
             const auto rot_via_parallel_transport =
                 mundy::math::quat_from_parallel_transport(edge_tangent_old, edge_tangent);
             edge_orientation = rot_via_parallel_transport * rot_via_twist * edge_orientation_old;
@@ -1249,7 +1249,7 @@ class SpermSimulation {
             //           << std::endl;
             // std::cout << "Edge tangent : " << edge_tangent << std::endl;
             // std::cout << " Edge tangent via transp: " << rot_via_parallel_transport * edge_tangent_old << std::endl;
-            // std::cout << " Edge tangent via orient: " << edge_orientation * mundy::math::Vector3<double>(0.0,
+            // std::cout << " Edge tangent via orient: " << edge_orientation * mundy::math::Vector3d(0.0,
             // 0.0, 1.0)
             //           << std::endl;
           }
@@ -1412,7 +1412,7 @@ class SpermSimulation {
           const double moment_of_inertia = 0.25 * M_PI * node_radius * node_radius * node_radius * node_radius;
           const double shear_modulus = 0.5 * sperm_youngs_modulus / (1.0 + sperm_poissons_ratio);
           const double inv_rest_segment_length = 1.0 / sperm_rest_segment_length;
-          auto bending_torque = mundy::math::Vector3<double>(
+          auto bending_torque = mundy::math::Vector3d(
               -inv_rest_segment_length * sperm_youngs_modulus * moment_of_inertia * delta_curvature[0],
               -inv_rest_segment_length * sperm_youngs_modulus * moment_of_inertia * delta_curvature[1],
               -inv_rest_segment_length * 2 * shear_modulus * moment_of_inertia * delta_curvature[2]);

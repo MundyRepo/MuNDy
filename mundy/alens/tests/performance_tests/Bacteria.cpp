@@ -192,7 +192,7 @@ void subdivide_spherocylinders(stk::mesh::BulkData &bulk_data, const stk::mesh::
           // their length and coordinates. Length of children is parent length / 2 - parent radius Center of
           // children is parent center +/- parent tangent * (parent radius - child length / 2)
           const auto parent_orientation = mundy::mesh::quaternion_field_data(orientation_field, parent);
-          const auto parent_tangent = parent_orientation * mundy::math::Vector3<double>(1.0, 0.0, 0.0);
+          const auto parent_tangent = parent_orientation * mundy::math::Vector3d(1.0, 0.0, 0.0);
           auto parent_node_coords = mundy::mesh::vector3_field_data(coordinate_field, parent_node);
           auto child_node_coords = mundy::mesh::vector3_field_data(coordinate_field, child_node);
 
@@ -653,8 +653,8 @@ class BacteriaSim {
         stk::mesh::field_data(*element_youngs_modulus_field_ptr_, bacteria)[0] = bacteria_youngs_modulus_;
         stk::mesh::field_data(*element_poissons_ratio_field_ptr_, bacteria)[0] = bacteria_poissons_ratio_;
 
-        mundy::math::Vector3<double> current_tangent(1.0, 0.0, 0.0);
-        mundy::math::Vector3<double> x_axis(1.0, 0.0, 0.0);
+        mundy::math::Vector3d current_tangent(1.0, 0.0, 0.0);
+        mundy::math::Vector3d x_axis(1.0, 0.0, 0.0);
         mundy::mesh::quaternion_field_data(*element_orientation_field_ptr_, bacteria) =
             mundy::math::quat_from_parallel_transport(x_axis, current_tangent);
         mundy::mesh::vector3_field_data(*element_tangent_field_ptr_, bacteria) = current_tangent;
@@ -886,8 +886,8 @@ class BacteriaSim {
             const double sw = sin(w * timestep_size / 2);
             const double cw = cos(w * timestep_size / 2);
             const double s = old_orientation.w();
-            const mundy::math::Vector3<double> p(old_orientation.x(), old_orientation.y(), old_orientation.z());
-            const mundy::math::Vector3<double> xyz =
+            const mundy::math::Vector3d p(old_orientation.x(), old_orientation.y(), old_orientation.z());
+            const mundy::math::Vector3d xyz =
                 s * sw * omega * winv + cw * p + sw * winv * (mundy::math::cross(omega, p));
             mundy::mesh::quaternion_field_data(element_orientation_field, element).w() =
                 s * cw - (mundy::math::dot(p, omega)) * sw * winv;
@@ -1006,7 +1006,7 @@ class BacteriaSim {
           const auto element_orientation = mundy::mesh::quaternion_field_data(element_orientation_field, bacteria);
 
           // Compute the tangent
-          element_tangent = element_orientation * mundy::math::Vector3<double>(1.0, 0.0, 0.0);
+          element_tangent = element_orientation * mundy::math::Vector3d(1.0, 0.0, 0.0);
         });
   }
 

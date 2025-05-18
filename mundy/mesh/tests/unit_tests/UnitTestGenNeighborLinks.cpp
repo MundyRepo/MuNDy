@@ -3,7 +3,7 @@
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
 //                                              Copyright 2024 Bryce Palmer
-// 
+//
 // Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
@@ -128,7 +128,8 @@ TEST(GenNeighborLinks, BasicUsage) {
   generator.set_source_target_rank(ELEM_RANK, ELEM_RANK)
       .set_enforce_source_target_symmetry(true)
       .set_search_buffer(0.0)
-      .set_search_filter(make_search_filter(stk::ngp::HostExecSpace{}, search_filters::ExcludeSelfInteractions(ELEM_RANK, ELEM_RANK)))
+      .set_search_filter(
+          make_search_filter(stk::ngp::HostExecSpace{}, search_filters::ExcludeSelfInteractions(ELEM_RANK, ELEM_RANK)))
       .acts_on(spheres_part, spheres_part, bounding_sphere_gen, bounding_sphere_gen,
                stk::mesh::PartVector{&sp_sp_links_part})
       .concretize();
