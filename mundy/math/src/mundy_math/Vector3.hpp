@@ -149,12 +149,12 @@ KOKKOS_INLINE_FUNCTION constexpr auto get_vector3_view(Accessor&& data) {
 
 template <typename T, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto get_owning_vector3(Accessor& data) {
-  return Vector3<T, Accessor>(data);
+  return OwningVector3<T, Accessor>(data);
 }
 
 template <typename T, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto get_owning_vector3(Accessor&& data) {
-  return Vector3<T, Accessor>(std::forward<Accessor>(data));
+  return OwningVector3<T, Accessor>(std::forward<Accessor>(data));
 }
 //@}
 

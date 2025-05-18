@@ -34,7 +34,6 @@
 
 // Our libs
 #include <mundy_core/throw_assert.hpp>    // for MUNDY_THROW_ASSERT
-#include <mundy_math/Vector.hpp>         // for mundy::math::AVector
 #include <mundy_math/Accessor.hpp>        // for mundy::math::ValidAccessor
 #include <mundy_math/Array.hpp>           // for mundy::math::Array
 #include <mundy_math/MaskedView.hpp>      // for mundy::math::MaskedView
@@ -42,6 +41,7 @@
 #include <mundy_math/StridedView.hpp>     // for mundy::math::StridedView
 #include <mundy_math/Tolerance.hpp>       // for mundy::math::get_zero_tolerance
 #include <mundy_math/TransposedView.hpp>  // for mundy::math::TransposedView
+#include <mundy_math/Vector.hpp>          // for mundy::math::AVector
 #include <mundy_math/impl/MatrixImpl.hpp>
 
 namespace mundy {
@@ -195,8 +195,7 @@ class AMatrix<T, N, M, Accessor, Ownership::Views> {
   /// \brief Deep copy assignment operator with different accessor or ownership
   /// \details Copies the data from the other vector to our data. This is only enabled if T is not const.
   template <ValidMatrixType OtherMatrixType>
-  KOKKOS_INLINE_FUNCTION constexpr AMatrix<T, N, M, Accessor, Ownership::Views>& operator=(
-      const OtherMatrixType& other)
+  KOKKOS_INLINE_FUNCTION constexpr AMatrix<T, N, M, Accessor, Ownership::Views>& operator=(const OtherMatrixType& other)
     requires(!std::is_same_v<OtherMatrixType, AMatrix<T, N, M, Accessor, Ownership::Views>>) &&
             (OtherMatrixType::num_rows == N) && (OtherMatrixType::num_cols == M) &&
             (std::is_same_v<typename OtherMatrixType::scalar_t, T>) && HasNonConstAccessOperator<Accessor, T>
@@ -1335,7 +1334,11 @@ using MatrixView = AMatrix<T, N, M, Accessor, Ownership::Views>;
 
 template <typename T, size_t N, size_t M, ValidAccessor<T> Accessor = Array<T, N * M>>
   requires std::is_arithmetic_v<T>
-using Matrix = AMatrix<T, N, M, Accessor, Ownership::Owns>;
+using OwningMatrix = AMatrix<T, N, M, Accessor, Ownership::Owns>;
+
+template <typename T, size_t N, size_t M>
+  requires std::is_arithmetic_v<T>
+using Matrix = OwningMatrix<T, N, M, Array<T, N * M>>;
 
 static_assert(is_matrix_v<AMatrix<int, 3, 4>>, "Odd, default matrix is not a matrix.");
 static_assert(is_matrix_v<AMatrix<int, 3, 4, Array<int, 12>>>,
@@ -1659,7 +1662,10 @@ static_assert(std::is_move_constructible_v<AMatrix<double, 3, 3>>);
   using alias##View = AMatrix<T, N, M, Accessor, Ownership::Views>;                                            \
   template <typename T, ValidAccessor<T> Accessor = Array<T, N * M>>                                           \
     requires std::is_arithmetic_v<T>                                                                           \
-  using alias = AMatrix<T, N, M, Accessor, Ownership::Owns>;                                           \
+  using Owning##alias = AMatrix<T, N, M, Accessor, Ownership::Owns>;                                           \
+  template <typename T>                                                                                        \
+    requires std::is_arithmetic_v<T>                                                                           \
+  using alias = Owning##alias<T>;                                                                              \
   template <typename TypeToCheck>                                                                              \
   struct is_##alias_lower##_impl : std::false_type {};                                                         \
   template <typename T, typename Accessor, typename OwnershipType>                                             \
@@ -1675,7 +1681,8 @@ static_assert(std::is_move_constructible_v<AMatrix<double, 3, 3>>);
   template <ValidAccessor<T> Accessor = Array<T, N * M>>                                           \
   using alias##View = AMatrix<T, N, M, Accessor, Ownership::Views>;                                \
   template <ValidAccessor<T> Accessor = Array<T, N * M>>                                           \
-  using alias = AMatrix<T, N, M, Accessor, Ownership::Owns>;                                       \
+  using Owning##alias = AMatrix<T, N, M, Accessor, Ownership::Owns>;                               \
+  using alias = Owning##alias<>;                                                                   \
   template <typename TypeToCheck>                                                                  \
   struct is_##alias_lower##_impl : std::false_type {};                                             \
   template <typename Accessor, typename OwnershipType>                                             \
@@ -1764,12 +1771,12 @@ KOKKOS_INLINE_FUNCTION constexpr auto get_matrix_view(Accessor&& data) {
 
 template <typename T, size_t N, size_t M, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto get_owning_matrix(Accessor& data) {
-  return Matrix<T, N, M, Accessor>(data);
+  return OwningMatrix<T, N, M, Accessor>(data);
 }
 
 template <typename T, size_t N, size_t M, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto get_owning_matrix(Accessor&& data) {
-  return Matrix<T, N, M, Accessor>(std::forward<Accessor>(data));
+  return OwningMatrix<T, N, M, Accessor>(std::forward<Accessor>(data));
 }
 //@}
 

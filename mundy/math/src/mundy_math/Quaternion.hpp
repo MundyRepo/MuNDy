@@ -1051,7 +1051,11 @@ using QuaternionView = AQuaternion<T, Accessor, Ownership::Views>;
 
 template <typename T, ValidAccessor<T> Accessor = Array<T, 4>>
   requires std::is_floating_point_v<T>
-using Quaternion = AQuaternion<T, Accessor, Ownership::Owns>;
+using OwningQuaternion = AQuaternion<T, Accessor, Ownership::Owns>;
+
+template <typename T>
+  requires std::is_floating_point_v<T>
+using Quaternion = OwningQuaternion<T, Array<T, 4>>;
 
 static_assert(is_quaternion_v<AQuaternion<double>>, "Odd, default AQuaternion is not a quaternion.");
 static_assert(is_quaternion_v<AQuaternion<double, Array<double, 4>>>,
@@ -1469,15 +1473,16 @@ static_assert(std::is_move_constructible_v<AQuaternion<double>>);
 
 #define MUNDY_MATH_QUATERNION_TYPE_SPECIALIZATION(alias, alias_lower, T)                       \
   template <ValidAccessor<T> Accessor = Array<T, 4>, typename OwnershipType = Ownership::Owns> \
-  using A##alias = AQuaternion<T, Accessor, OwnershipType>;                                       \
+  using A##alias = AQuaternion<T, Accessor, OwnershipType>;                                    \
   template <ValidAccessor<T> Accessor = Array<T, 4>>                                           \
   using alias##View = AQuaternion<T, Accessor, Ownership::Views>;                              \
   template <ValidAccessor<T> Accessor = Array<T, 4>>                                           \
-  using alias = AQuaternion<T, Accessor, Ownership::Owns>;                             \
+  using Owning##alias = AQuaternion<T, Accessor, Ownership::Owns>;                             \
+  using alias = Owning##alias<>;                                                               \
   template <typename TypeToCheck>                                                              \
   struct is_##alias_lower##_impl : std::false_type {};                                         \
   template <typename Accessor, typename OwnershipType>                                         \
-  struct is_##alias_lower##_impl<A##alias<Accessor, OwnershipType>> : std::true_type {};          \
+  struct is_##alias_lower##_impl<A##alias<Accessor, OwnershipType>> : std::true_type {};       \
   template <typename TypeToCheck>                                                              \
   struct is_##alias_lower : public is_##alias_lower##_impl<std::decay_t<TypeToCheck>> {};      \
   template <typename TypeToCheck>                                                              \
@@ -1516,12 +1521,12 @@ KOKKOS_INLINE_FUNCTION constexpr auto get_quaternion_view(Accessor &&data) {
 
 template <typename T, typename Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto get_owning_quaternion(const Accessor &data) {
-  return Quaternion<T, Accessor>(data);
+  return OwningQuaternion<T, Accessor>(data);
 }
 
 template <typename T, typename Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto get_owning_quaternion(Accessor &&data) {
-  return Quaternion<T, Accessor>(std::move(data));
+  return OwningQuaternion<T, Accessor>(std::move(data));
 }
 //@}
 

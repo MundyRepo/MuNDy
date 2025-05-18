@@ -844,7 +844,11 @@ using VectorView = AVector<T, N, Accessor, Ownership::Views>;
 
 template <typename T, size_t N, ValidAccessor<T> Accessor = Array<T, N>>
   requires std::is_arithmetic_v<T>
-using Vector = AVector<T, N, Accessor, Ownership::Owns>;
+using OwningVector = AVector<T, N, Accessor, Ownership::Owns>;
+
+template <typename T, size_t N>
+  requires std::is_arithmetic_v<T>
+using Vector = OwningVector<T, N, Array<T, N>>;
 
 static_assert(is_vector_v<AVector<int, 3>>, "Odd, default AVector is not a vector.");
 static_assert(is_vector_v<AVector<int, 3, Array<int, 3>>>, "Odd, default vector with Array accessor is not a vector.");
@@ -1172,17 +1176,20 @@ static_assert(std::is_move_constructible_v<AVector<double, 3>>);
 #define MUNDY_MATH_VECTOR_SIZE_SPECIALIZATION(alias, alias_lower, N)                                       \
   template <typename T, ValidAccessor<T> Accessor = Array<T, N>, typename OwnershipType = Ownership::Owns> \
     requires std::is_arithmetic_v<T>                                                                       \
-  using A##alias = AVector<T, N, Accessor, OwnershipType>;                                                    \
+  using A##alias = AVector<T, N, Accessor, OwnershipType>;                                                 \
   template <typename T, ValidAccessor<T> Accessor = Array<T, N>>                                           \
     requires std::is_arithmetic_v<T>                                                                       \
   using alias##View = AVector<T, N, Accessor, Ownership::Views>;                                           \
   template <typename T, ValidAccessor<T> Accessor = Array<T, N>>                                           \
     requires std::is_arithmetic_v<T>                                                                       \
-  using alias = AVector<T, N, Accessor, Ownership::Owns>;                                          \
+  using Owning##alias = AVector<T, N, Accessor, Ownership::Owns>;                                          \
+  template <typename T>                                                                                    \
+    requires std::is_arithmetic_v<T>                                                                       \
+  using alias = Owning##alias<T>;                                                                          \
   template <typename TypeToCheck>                                                                          \
   struct is_##alias_lower##_impl : std::false_type {};                                                     \
   template <typename T, typename Accessor, typename OwnershipType>                                         \
-  struct is_##alias_lower##_impl<A##alias<T, Accessor, OwnershipType>> : std::true_type {};                   \
+  struct is_##alias_lower##_impl<A##alias<T, Accessor, OwnershipType>> : std::true_type {};                \
   template <typename TypeToCheck>                                                                          \
   struct is_##alias_lower : public is_##alias_lower##_impl<std::decay_t<TypeToCheck>> {};                  \
   template <typename TypeToCheck>                                                                          \
@@ -1190,15 +1197,16 @@ static_assert(std::is_move_constructible_v<AVector<double, 3>>);
 
 #define MUNDY_MATH_VECTOR_TYPE_AND_SIZE_SPECIALIZATION(alias, alias_lower, T, N)               \
   template <ValidAccessor<T> Accessor = Array<T, N>, typename OwnershipType = Ownership::Owns> \
-  using A##alias = AVector<T, N, Accessor, OwnershipType>;                                        \
+  using A##alias = AVector<T, N, Accessor, OwnershipType>;                                     \
   template <ValidAccessor<T> Accessor = Array<T, N>>                                           \
   using alias##View = AVector<T, N, Accessor, Ownership::Views>;                               \
   template <ValidAccessor<T> Accessor = Array<T, N>>                                           \
-  using alias = AVector<T, N, Accessor, Ownership::Owns>;                              \
+  using Owning##alias = AVector<T, N, Accessor, Ownership::Owns>;                              \
+  using alias = Owning##alias<>;                                                               \
   template <typename TypeToCheck>                                                              \
   struct is_##alias_lower##_impl : std::false_type {};                                         \
   template <typename Accessor, typename OwnershipType>                                         \
-  struct is_##alias_lower##_impl<A##alias<Accessor, OwnershipType>> : std::true_type {};          \
+  struct is_##alias_lower##_impl<A##alias<Accessor, OwnershipType>> : std::true_type {};       \
   template <typename TypeToCheck>                                                              \
   struct is_##alias_lower : public is_##alias_lower##_impl<std::decay_t<TypeToCheck>> {};      \
   template <typename TypeToCheck>                                                              \
@@ -1254,12 +1262,12 @@ KOKKOS_INLINE_FUNCTION constexpr auto get_vector_view(Accessor&& data) {
 
 template <typename T, size_t N, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto get_owning_vector(Accessor& data) {
-  return Vector<T, N, Accessor>(data);
+  return OwningVector<T, N, Accessor>(data);
 }
 
 template <typename T, size_t N, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto get_owning_vector(Accessor&& data) {
-  return Vector<T, N, Accessor>(std::forward<Accessor>(data));
+  return OwningVector<T, N, Accessor>(std::forward<Accessor>(data));
 }
 //@}
 

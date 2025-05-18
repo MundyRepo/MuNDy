@@ -211,12 +211,12 @@ KOKKOS_INLINE_FUNCTION constexpr auto get_matrix3_view(Accessor&& data) {
 
 template <typename T, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto get_owning_matrix3(Accessor& data) {
-  return Matrix3<T, Accessor>(data);
+  return OwningMatrix3<T, Accessor>(data);
 }
 
 template <typename T, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto get_owning_matrix3(Accessor&& data) {
-  return Matrix3<T, Accessor>(std::forward<Accessor>(data));
+  return OwningMatrix3<T, Accessor>(std::forward<Accessor>(data));
 }
 //@}
 
