@@ -55,7 +55,7 @@ namespace {
 /// \param[in] v2 The second Vector3
 /// \param[in] message_if_fail The message to print if the test fails
 template <typename U, typename OtherAccessor, typename T, typename Accessor>
-void is_close_debug(const Vector3<U, OtherAccessor>& v1, const Vector3<T, Accessor>& v2,
+void is_close_debug(const AVector3<U, OtherAccessor>& v1, const AVector3<T, Accessor>& v2,
                     const std::string& message_if_fail = "") {
   if (!is_approx_close(v1, v2)) {
     std::cout << "v1 = " << v1 << std::endl;
@@ -69,7 +69,7 @@ void is_close_debug(const Vector3<U, OtherAccessor>& v1, const Vector3<T, Access
 /// \param[in] v2 The second Vector3
 /// \param[in] message_if_fail The message to print if the test fails
 template <typename U, typename OtherAccessor, typename T, typename Accessor>
-void is_different_debug(const Vector3<U, OtherAccessor>& v1, const Vector3<T, Accessor>& v2,
+void is_different_debug(const AVector3<U, OtherAccessor>& v1, const AVector3<T, Accessor>& v2,
                         const std::string& message_if_fail = "") {
   if (is_approx_close(v1, v2)) {
     std::cout << "v1 = " << v1 << std::endl;

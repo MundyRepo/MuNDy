@@ -356,7 +356,7 @@ namespace {
 
 template <typename Accessor, typename OwnershipType>
 mundy::math::Vector3<double> get_contact_point_velocity(
-    const mundy::math::Vector3<double, Accessor, OwnershipType> &contact_point, const stk::mesh::Entity *nodes,
+    const mundy::math::AVector3<double, Accessor, OwnershipType> &contact_point, const stk::mesh::Entity *nodes,
     const stk::mesh::Field<double> &node_velocity_field, const stk::mesh::Field<double> &node_coords_field) {
   const auto pos0 = mundy::mesh::vector3_field_data(node_coords_field, nodes[0]);
   const auto pos1 = mundy::mesh::vector3_field_data(node_coords_field, nodes[1]);

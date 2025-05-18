@@ -76,9 +76,9 @@ calls that can accept Vector3's with non-owning memory, you should write Vector3
 // Here, p1 and p2 are two non-coincident points on the line.
 template <typename Scalar, typename Accessor1, typename Accessor2, typename Accessor3, typename OwnershipType1,
           typename OwnershipType2, typename OwnershipType3>
-KOKKOS_FUNCTION Scalar distance_from_point_to_line(const Vector3<Scalar, Accessor1, OwnershipType1>& x,
-                                                   const Vector3<Scalar, Accessor2, OwnershipType2>& p1,
-                                                   const Vector3<Scalar, Accessor3, OwnershipType3>& p2) {
+KOKKOS_FUNCTION Scalar distance_from_point_to_line(const AVector3<Scalar, Accessor1, OwnershipType1>& x,
+                                                   const AVector3<Scalar, Accessor2, OwnershipType2>& p1,
+                                                   const AVector3<Scalar, Accessor3, OwnershipType3>& p2) {
   const auto np1 = x - p1;
   auto p1p2 = p1 - p2;
   const Scalar p1p2_norm_sq = mundy::math::dot(p1p2, p1p2);
@@ -106,10 +106,10 @@ KOKKOS_FUNCTION Scalar distance_from_point_to_line(const Vector3<Scalar, Accesso
  */
 template <typename Scalar, typename Accessor1, typename Accessor2, typename Accessor3, typename Accessor4,
           typename OwnershipType1, typename OwnershipType2, typename OwnershipType3, typename OwnershipType4>
-KOKKOS_FUNCTION Scalar distance_sq_from_point_to_line_segment(const Vector3<Scalar, Accessor1, OwnershipType1>& x,
-                                                              const Vector3<Scalar, Accessor2, OwnershipType2>& p1,
-                                                              const Vector3<Scalar, Accessor3, OwnershipType3>& p2,
-                                                              Vector3<Scalar, Accessor4, OwnershipType4>& closest_point,
+KOKKOS_FUNCTION Scalar distance_sq_from_point_to_line_segment(const AVector3<Scalar, Accessor1, OwnershipType1>& x,
+                                                              const AVector3<Scalar, Accessor2, OwnershipType2>& p1,
+                                                              const AVector3<Scalar, Accessor3, OwnershipType3>& p2,
+                                                              AVector3<Scalar, Accessor4, OwnershipType4>& closest_point,
                                                               Scalar& t) {
   // Determine appropriate vectors
   const auto p21 = p2 - p1;
@@ -154,9 +154,9 @@ KOKKOS_FUNCTION Scalar distance_sq_from_point_to_line_segment(const Vector3<Scal
 
 template <typename Scalar, typename Accessor1, typename Accessor2, typename Accessor3, typename OwnershipType1,
           typename OwnershipType2, typename OwnershipType3>
-KOKKOS_FUNCTION Scalar distance_sq_from_point_to_line_segment(const Vector3<Scalar, Accessor1, OwnershipType1>& x,
-                                                              const Vector3<Scalar, Accessor2, OwnershipType2>& p1,
-                                                              const Vector3<Scalar, Accessor3, OwnershipType3>& p2) {
+KOKKOS_FUNCTION Scalar distance_sq_from_point_to_line_segment(const AVector3<Scalar, Accessor1, OwnershipType1>& x,
+                                                              const AVector3<Scalar, Accessor2, OwnershipType2>& p1,
+                                                              const AVector3<Scalar, Accessor3, OwnershipType3>& p2) {
   // Define some temporary variables
   Vector3<Scalar> closest_point_tmp;
   Scalar t_tmp;
@@ -205,12 +205,12 @@ KOKKOS_FUNCTION Scalar distance_sq_from_point_to_line_segment(const Vector3<Scal
 template <typename Scalar, typename Accessor1, typename Accessor2, typename Accessor3, typename Accessor4,
           typename Accessor5, typename Accessor6, typename OwnershipType1, typename OwnershipType2,
           typename OwnershipType3, typename OwnershipType4, typename OwnershipType5, typename OwnershipType6>
-KOKKOS_FUNCTION Scalar distance_sq_between_lines(const Vector3<Scalar, Accessor1, OwnershipType1>& l0,
-                                                 const Vector3<Scalar, Accessor2, OwnershipType2>& l1,  // line 1
-                                                 const Vector3<Scalar, Accessor3, OwnershipType3>& m0,
-                                                 const Vector3<Scalar, Accessor4, OwnershipType4>& m1,  // line 2
-                                                 Vector3<Scalar, Accessor5, OwnershipType5>& closest_point1,
-                                                 Vector3<Scalar, Accessor6, OwnershipType6>& closest_point2, Scalar& t1,
+KOKKOS_FUNCTION Scalar distance_sq_between_lines(const AVector3<Scalar, Accessor1, OwnershipType1>& l0,
+                                                 const AVector3<Scalar, Accessor2, OwnershipType2>& l1,  // line 1
+                                                 const AVector3<Scalar, Accessor3, OwnershipType3>& m0,
+                                                 const AVector3<Scalar, Accessor4, OwnershipType4>& m1,  // line 2
+                                                 AVector3<Scalar, Accessor5, OwnershipType5>& closest_point1,
+                                                 AVector3<Scalar, Accessor6, OwnershipType6>& closest_point2, Scalar& t1,
                                                  Scalar& t2)  // parametric coords of the closest points
 {
   // Part of this function was adapted from VTK, which, in turn adapted part of it from "GeometryAlgorithms.com"
@@ -247,10 +247,10 @@ KOKKOS_FUNCTION Scalar distance_sq_between_lines(const Vector3<Scalar, Accessor1
 
 template <typename Scalar, typename Accessor1, typename Accessor2, typename Accessor3, typename Accessor4,
           typename OwnershipType1, typename OwnershipType2, typename OwnershipType3, typename OwnershipType4>
-KOKKOS_FUNCTION Scalar distance_sq_between_lines(const Vector3<Scalar, Accessor1, OwnershipType1>& l0,
-                                                 const Vector3<Scalar, Accessor2, OwnershipType2>& l1,
-                                                 const Vector3<Scalar, Accessor3, OwnershipType3>& m0,
-                                                 const Vector3<Scalar, Accessor4, OwnershipType4>& m1) {
+KOKKOS_FUNCTION Scalar distance_sq_between_lines(const AVector3<Scalar, Accessor1, OwnershipType1>& l0,
+                                                 const AVector3<Scalar, Accessor2, OwnershipType2>& l1,
+                                                 const AVector3<Scalar, Accessor3, OwnershipType3>& m0,
+                                                 const AVector3<Scalar, Accessor4, OwnershipType4>& m1) {
   // Part of this function was adapted from VTK, which, in turn adapted part of it from "GeometryAlgorithms.com"
   const auto u = l1 - l0;
   const auto v = m1 - m0;
@@ -299,12 +299,12 @@ template <typename Scalar, typename Accessor1, typename Accessor2, typename Acce
           typename Accessor5, typename Accessor6, typename OwnershipType1, typename OwnershipType2,
           typename OwnershipType3, typename OwnershipType4, typename OwnershipType5, typename OwnershipType6>
 KOKKOS_FUNCTION Scalar
-distance_sq_between_line_segments(const Vector3<Scalar, Accessor1, OwnershipType1>& l0,
-                                  const Vector3<Scalar, Accessor2, OwnershipType2>& l1,  // line segment 1
-                                  const Vector3<Scalar, Accessor3, OwnershipType3>& m0,
-                                  const Vector3<Scalar, Accessor4, OwnershipType4>& m1,  // line segment 2
-                                  Vector3<Scalar, Accessor5, OwnershipType5>& closest_point1,
-                                  Vector3<Scalar, Accessor6, OwnershipType6>& closest_point2, Scalar& t1, Scalar& t2) {
+distance_sq_between_line_segments(const AVector3<Scalar, Accessor1, OwnershipType1>& l0,
+                                  const AVector3<Scalar, Accessor2, OwnershipType2>& l1,  // line segment 1
+                                  const AVector3<Scalar, Accessor3, OwnershipType3>& m0,
+                                  const AVector3<Scalar, Accessor4, OwnershipType4>& m1,  // line segment 2
+                                  AVector3<Scalar, Accessor5, OwnershipType5>& closest_point1,
+                                  AVector3<Scalar, Accessor6, OwnershipType6>& closest_point2, Scalar& t1, Scalar& t2) {
   // Part of this function was adapted from VTK, which, in turn adapted part of it from "GeometryAlgorithms.com"
   const auto u = l1 - l0;
   const auto v = m1 - m0;

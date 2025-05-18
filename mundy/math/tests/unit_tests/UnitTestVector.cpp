@@ -73,8 +73,8 @@ void is_close_debug(const U& a, const T& b, const std::string& message_if_fail =
 /// \param[in] message_if_fail The message to print if the test fails
 template <size_t N, typename U, typename OtherAccessor, typename OtherOwnershipType, typename T, typename Accessor,
           typename OwnershipType>
-void is_close_debug(const Vector<U, N, OtherAccessor, OtherOwnershipType>& v1,
-                    const Vector<T, N, Accessor, OwnershipType>& v2, const std::string& message_if_fail = "") {
+void is_close_debug(const AVector<U, N, OtherAccessor, OtherOwnershipType>& v1,
+                    const AVector<T, N, Accessor, OwnershipType>& v2, const std::string& message_if_fail = "") {
   if (!is_approx_close(v1, v2)) {
     std::cout << "v1 = " << v1 << std::endl;
     std::cout << "v2 = " << v2 << std::endl;
@@ -88,8 +88,8 @@ void is_close_debug(const Vector<U, N, OtherAccessor, OtherOwnershipType>& v1,
 /// \param[in] message_if_fail The message to print if the test fails
 template <size_t N, typename U, typename OtherAccessor, typename OtherOwnershipType, typename T, typename Accessor,
           typename OwnershipType>
-void is_different_debug(const Vector<U, N, OtherAccessor, OtherOwnershipType>& v1,
-                        const Vector<T, N, Accessor, OwnershipType>& v2, const std::string& message_if_fail = "") {
+void is_different_debug(const AVector<U, N, OtherAccessor, OtherOwnershipType>& v1,
+                        const AVector<T, N, Accessor, OwnershipType>& v2, const std::string& message_if_fail = "") {
   if (is_approx_close(v1, v2)) {
     std::cout << "v1 = " << v1 << std::endl;
     std::cout << "v2 = " << v2 << std::endl;

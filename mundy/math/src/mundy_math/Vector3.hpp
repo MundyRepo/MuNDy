@@ -3,7 +3,7 @@
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
 //                                              Copyright 2024 Bryce Palmer
-// 
+//
 // Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
@@ -36,9 +36,9 @@
 #include <mundy_core/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
 #include <mundy_math/Accessor.hpp>      // for mundy::math::ValidAccessor
 #include <mundy_math/Array.hpp>         // for mundy::math::Array
+#include <mundy_math/Matrix3.hpp>       // for mundy::math::Matrix3
 #include <mundy_math/Tolerance.hpp>     // for mundy::math::get_zero_tolerance
 #include <mundy_math/Vector.hpp>        // for mundy::math::Vector
-#include <mundy_math/Matrix3.hpp>       // for mundy::math::Matrix3
 
 namespace mundy {
 
@@ -90,8 +90,8 @@ concept ValidVector3Type = is_vector3_v<std::decay_t<Vector3Type>> &&
 /// \param[in] b The second vector.
 template <typename U, typename T, ValidAccessor<U> Accessor1, typename Ownership1, ValidAccessor<T> Accessor2,
           typename Ownership2>
-KOKKOS_INLINE_FUNCTION constexpr auto cross(const Vector3<U, Accessor1, Ownership1>& a,
-                                            const Vector3<T, Accessor2, Ownership2>& b)
+KOKKOS_INLINE_FUNCTION constexpr auto cross(const AVector3<U, Accessor1, Ownership1>& a,
+                                            const AVector3<T, Accessor2, Ownership2>& b)
     -> Vector3<std::common_type_t<T, U>> {
   using CommonType = std::common_type_t<T, U>;
   Vector3<CommonType> result;
@@ -109,8 +109,8 @@ KOKKOS_INLINE_FUNCTION constexpr auto cross(const Vector3<U, Accessor1, Ownershi
 /// \param[in] b The second vector.
 template <typename U, typename T, ValidAccessor<U> Accessor1, typename Ownership1, ValidAccessor<T> Accessor2,
           typename Ownership2>
-KOKKOS_INLINE_FUNCTION constexpr auto element_multiply(const Vector3<U, Accessor1, Ownership1>& a,
-                                                       const Vector3<T, Accessor2, Ownership2>& b)
+KOKKOS_INLINE_FUNCTION constexpr auto element_multiply(const AVector3<U, Accessor1, Ownership1>& a,
+                                                       const AVector3<T, Accessor2, Ownership2>& b)
     -> Vector3<std::common_type_t<T, U>> {
   using CommonType = std::common_type_t<T, U>;
   Vector3<CommonType> result;
@@ -149,12 +149,12 @@ KOKKOS_INLINE_FUNCTION constexpr auto get_vector3_view(Accessor&& data) {
 
 template <typename T, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto get_owning_vector3(Accessor& data) {
-  return OwningVector3<T, Accessor>(data);
+  return Vector3<T, Accessor>(data);
 }
 
 template <typename T, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto get_owning_vector3(Accessor&& data) {
-  return OwningVector3<T, Accessor>(std::forward<Accessor>(data));
+  return Vector3<T, Accessor>(std::forward<Accessor>(data));
 }
 //@}
 

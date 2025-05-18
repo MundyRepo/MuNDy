@@ -3,7 +3,7 @@
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
 //                                              Copyright 2024 Bryce Palmer
-// 
+//
 // Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
@@ -74,7 +74,7 @@ void is_close_debug(const U& a, const T& b, const std::string& message_if_fail =
 /// \param[in] message_if_fail The message to print if the test fails
 template <typename U, typename T, ValidAccessor<U> Accessor1, typename Ownership1, ValidAccessor<T> Accessor2,
           typename Ownership2>
-void is_close_debug(const Matrix3<U, Accessor1, Ownership1>& m1, const Matrix3<T, Accessor2, Ownership2>& m2,
+void is_close_debug(const AMatrix3<U, Accessor1, Ownership1>& m1, const AMatrix3<T, Accessor2, Ownership2>& m2,
                     const std::string& message_if_fail = "") {
   if (!is_approx_close(m1, m2)) {
     std::cout << "m1 = " << m1 << std::endl;
@@ -89,7 +89,7 @@ void is_close_debug(const Matrix3<U, Accessor1, Ownership1>& m1, const Matrix3<T
 /// \param[in] message_if_fail The message to print if the test fails
 template <typename U, typename T, ValidAccessor<U> Accessor1, typename Ownership1, ValidAccessor<T> Accessor2,
           typename Ownership2>
-void is_close_debug(const Vector3<U, Accessor1, Ownership1>& v1, const Vector3<T, Accessor2, Ownership2>& v2,
+void is_close_debug(const AVector3<U, Accessor1, Ownership1>& v1, const AVector3<T, Accessor2, Ownership2>& v2,
                     const std::string& message_if_fail = "") {
   if (!is_approx_close(v1, v2)) {
     std::cout << "v1 = " << v1 << std::endl;
@@ -104,7 +104,7 @@ void is_close_debug(const Vector3<U, Accessor1, Ownership1>& v1, const Vector3<T
 /// \param[in] message_if_fail The message to print if the test fails
 template <typename U, typename T, ValidAccessor<U> Accessor1, typename Ownership1, ValidAccessor<T> Accessor2,
           typename Ownership2>
-void is_different_debug(const Matrix3<U, Accessor1, Ownership1>& m1, const Matrix3<T, Accessor2, Ownership2>& m2,
+void is_different_debug(const AMatrix3<U, Accessor1, Ownership1>& m1, const AMatrix3<T, Accessor2, Ownership2>& m2,
                         const std::string& message_if_fail = "") {
   if (is_approx_close(m1, m2)) {
     std::cout << "m1 = " << m1 << std::endl;
@@ -119,7 +119,7 @@ void is_different_debug(const Matrix3<U, Accessor1, Ownership1>& m1, const Matri
 /// \param[in] message_if_fail The message to print if the test fails
 template <typename U, typename T, ValidAccessor<U> Accessor1, typename Ownership1, ValidAccessor<T> Accessor2,
           typename Ownership2>
-void is_different_debug(const Vector3<U, Accessor1, Ownership1>& v1, const Vector3<T, Accessor2, Ownership2>& v2,
+void is_different_debug(const AVector3<U, Accessor1, Ownership1>& v1, const AVector3<T, Accessor2, Ownership2>& v2,
                         const std::string& message_if_fail = "") {
   if (is_approx_close(v1, v2)) {
     std::cout << "v1 = " << v1 << std::endl;

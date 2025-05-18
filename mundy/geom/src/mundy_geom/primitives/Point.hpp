@@ -47,7 +47,7 @@ namespace geom {
 /// product, etc.). Had we created our own interface, we would have hidden the mathematical operations from the user.
 template <typename Scalar, mundy::math::ValidAccessor<Scalar> Accessor = mundy::math::Array<Scalar, 3>,
           typename OwnershipType = mundy::math::Ownership::Owns>
-using Point = mundy::math::Vector3<Scalar, Accessor, OwnershipType>;
+using Point = mundy::math::AVector3<Scalar, Accessor, OwnershipType>;
 //
 template <typename Scalar, mundy::math::ValidAccessor<Scalar> Accessor = mundy::math::Array<Scalar, 3>>
 using OwningPoint = Point<Scalar, Accessor, mundy::math::Ownership::Owns>;

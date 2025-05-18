@@ -45,7 +45,7 @@ namespace math {
 /// \param A The symmetric positive definite matrix
 /// \return The lower triangular matrix of the Cholesky decomposition
 template <typename T, ValidAccessor<T> Accessor, typename OwnershipType>
-KOKKOS_INLINE_FUNCTION auto cholesky(const Matrix3<T, Accessor, OwnershipType> &A) {
+KOKKOS_INLINE_FUNCTION auto cholesky(const AMatrix3<T, Accessor, OwnershipType> &A) {
   MUNDY_THROW_ASSERT(A(0, 0) > get_zero_tolerance<T>(), std::invalid_argument,
                      "Matrix3 must be positive definite");
   const T l11 = Kokkos::sqrt(A(0, 0));
@@ -178,10 +178,10 @@ concept ValidMatrix3Type = is_matrix3_v<std::decay_t<Matrix3Type>> &&
                              } -> std::convertible_to<const typename std::decay_t<Matrix3Type>::scalar_t>;
                            };  // ValidMatrix3Type
 
-static_assert(is_matrix3_v<Matrix3<int>>, "Odd, default matrix3 is not a matrix3.");
-static_assert(is_matrix3_v<Matrix3<int, Array<int, 9>>>, "Odd, default matrix3 with Array accessor is not a matrix3.");
+static_assert(is_matrix3_v<AMatrix3<int>>, "Odd, default matrix3 is not a matrix3.");
+static_assert(is_matrix3_v<AMatrix3<int, Array<int, 9>>>, "Odd, default matrix3 with Array accessor is not a matrix3.");
 static_assert(is_matrix3_v<Matrix3View<int>>, "Odd, Matrix3View is not a matrix3.");
-static_assert(is_matrix3_v<OwningMatrix3<int>>, "Odd, OwningMatrix3 is not a matrix3.");
+static_assert(is_matrix3_v<Matrix3<int>>, "Odd, OwningMatrix3 is not a matrix3.");
 
 //! \name Matrix3<T, Accessor> views
 //@{
@@ -211,12 +211,12 @@ KOKKOS_INLINE_FUNCTION constexpr auto get_matrix3_view(Accessor&& data) {
 
 template <typename T, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto get_owning_matrix3(Accessor& data) {
-  return OwningMatrix3<T, Accessor>(data);
+  return Matrix3<T, Accessor>(data);
 }
 
 template <typename T, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto get_owning_matrix3(Accessor&& data) {
-  return OwningMatrix3<T, Accessor>(std::forward<Accessor>(data));
+  return Matrix3<T, Accessor>(std::forward<Accessor>(data));
 }
 //@}
 
