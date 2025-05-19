@@ -454,6 +454,7 @@ class HP1 {
                           std::string("Invalid hydro type. Received '") + hydro_type_string +
                               "' but expected 'RPYC', 'RPY', or 'STOKES'.");
     }
+    simid_ = simulation_params.get<size_t>("simid");
     initial_chromosome_separation_ = simulation_params.get<double>("initial_chromosome_separation");
     MUNDY_THROW_REQUIRE(timestep_size_ > 0, std::invalid_argument, "timestep_size_ must be greater than 0.");
     MUNDY_THROW_REQUIRE(viscosity_ > 0, std::invalid_argument, "viscosity_ must be greater than 0.");
@@ -772,6 +773,7 @@ class HP1 {
              "Backbone sphere hydrodynamic radius. Even if n-body hydrodynamics is disabled, we still have "
              "self-interaction.")
         .set("hydro_type", std::string(default_backbone_hydro_type_), "Hydrodynamic kernel type.")
+        .set("simid", default_simid_, "Simulation ID.", make_new_validator(prefer_size_t, accept_int))
         .set("initial_chromosome_separation", default_initial_chromosome_separation_, "Initial chromosome separation.")
         .set("initialization_type", std::string(default_initialization_type_string_), "Initialization_type.")
         .set("initialize_from_exo_filename", std::string(default_initialize_from_exo_filename_),
@@ -933,6 +935,7 @@ class HP1 {
 
       std::cout << std::endl;
       std::cout << "SIMULATION:" << std::endl;
+      std::cout << "  simid:           " << simid_ << std::endl;
       std::cout << "  num_time_steps:  " << num_time_steps_ << std::endl;
       std::cout << "  timestep_size:   " << timestep_size_ << std::endl;
       std::cout << "  viscosity:       " << viscosity_ << std::endl;
@@ -2450,7 +2453,7 @@ class HP1 {
     // Initialize the EE springs (euchromatin activity)
     if (!restart_performed_) {
       mundy::mesh::utils::fill_field_with_value(*ee_springs_part_ptr_, *element_rng_field_ptr_,
-                                                std::array<unsigned, 1>{0});
+                                                std::array<unsigned, 1>{simid_ * num_time_steps_});
       mundy::mesh::utils::fill_field_with_value(*ee_springs_part_ptr_, *euchromatin_state_field_ptr_,
                                                 std::array<unsigned, 1>{0});
       mundy::mesh::utils::fill_field_with_value(*ee_springs_part_ptr_, *euchromatin_perform_state_change_field_ptr_,
@@ -2467,7 +2470,8 @@ class HP1 {
     mundy::mesh::utils::fill_field_with_value(*hp1_part_ptr_, *element_spring_r0_field_ptr_,
                                               std::array<double, 1>{crosslinker_r0_});
     if (!restart_performed_) {
-      mundy::mesh::utils::fill_field_with_value(*hp1_part_ptr_, *element_rng_field_ptr_, std::array<unsigned, 1>{0});
+      mundy::mesh::utils::fill_field_with_value(*hp1_part_ptr_, *element_rng_field_ptr_,
+                                                std::array<unsigned, 1>{simid_ * num_time_steps_});
     }
     mundy::mesh::utils::fill_field_with_value(*hp1_part_ptr_, *element_radius_field_ptr_,
                                               std::array<double, 1>{crosslinker_cutoff_radius_});
@@ -2476,6 +2480,11 @@ class HP1 {
     const stk::mesh::Selector chromatin_spheres = *e_part_ptr_ | *h_part_ptr_;
     mundy::mesh::utils::fill_field_with_value(chromatin_spheres, *element_radius_field_ptr_,
                                               std::array<double, 1>{backbone_sphere_hydrodynamic_radius_});
+    // Set the RNG counter for the spheres
+    if (!restart_performed_) {
+      mundy::mesh::utils::fill_field_with_value(chromatin_spheres, *node_rng_field_ptr_,
+                                                std::array<unsigned, 1>{simid_ * num_time_steps_});
+    }
 
     // Initialize node positions for each chromosome
     if (!restart_performed_) {
@@ -4793,6 +4802,7 @@ class HP1 {
   bool check_maximum_speed_pre_position_update_;
   double max_allowable_speed_;
   HYDRO_TYPE hydro_type_;
+  size_t simid_;
 
   // IO params
   size_t io_frequency_;
@@ -4909,6 +4919,7 @@ class HP1 {
   static constexpr double default_unit_cell_size_[3] = {10.0, 10.0, 10.0};
   static constexpr bool default_check_maximum_speed_pre_position_update_ = false;
   static constexpr double default_max_allowable_speed_ = std::numeric_limits<double>::max();
+  static constexpr size_t default_simid_ = 0;
 
   // IO params
   static constexpr size_t default_io_frequency_ = 10;
