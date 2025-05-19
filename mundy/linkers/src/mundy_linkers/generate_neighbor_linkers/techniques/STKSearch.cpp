@@ -166,7 +166,7 @@ std::vector<stk::mesh::Part *> STKSearch::get_valid_target_entity_parts() const 
 // \name Actions
 //{
 
-#define MUNDY_USE_OLD_STK_SEARCH
+// #define MUNDY_USE_OLD_STK_SEARCH
 
 #ifdef MUNDY_USE_OLD_STK_SEARCH
 

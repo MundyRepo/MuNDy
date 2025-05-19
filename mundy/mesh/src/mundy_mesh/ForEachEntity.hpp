@@ -3,7 +3,7 @@
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
 //                                              Copyright 2024 Bryce Palmer
-// 
+//
 // Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
@@ -28,6 +28,7 @@
 #include <type_traits>  // for std::is_base_of
 
 // Trilinos
+#include <Kokkos_Core.hpp>
 #include <stk_mesh/base/ForEachEntity.hpp>     // for mundy::mesh::for_each_entity_run
 #include <stk_mesh/base/NgpForEachEntity.hpp>  // for mundy::mesh::for_each_entity_run
 
@@ -49,28 +50,61 @@ inline void for_each_entity_run(Mesh &mesh, stk::topology::rank_t rank, const st
   stk::mesh::for_each_entity_run(mesh, rank, selector, functor, exec_space);
 }
 
-template <typename ALGORITHM_TO_RUN_PER_ENTITY>
+template <typename AlgorithmPerEntity>
+struct TeamFunctor {
+  using team_policy_t = Kokkos::TeamPolicy<Kokkos::DefaultHostExecutionSpace>;
+  using team_member_t = typename team_policy_t::member_type;
+
+  TeamFunctor(const stk::mesh::BulkData &m, const stk::mesh::BucketVector &bs, const AlgorithmPerEntity &f)
+      : mesh(m), buckets(bs), functor(f) {
+  }
+
+  void operator()(const team_member_t &team_member) const {
+    stk::mesh::Bucket *bucket = buckets[team_member.league_rank()];
+    const int bucket_size = bucket->size();
+    Kokkos::parallel_for(Kokkos::TeamThreadRange(team_member, bucket_size), [&](const int i) {
+      if constexpr (std::is_invocable_v<AlgorithmPerEntity, const stk::mesh::BulkData &,
+                                        const stk::mesh::MeshIndex &>) {
+        functor(mesh, stk::mesh::MeshIndex({bucket, i}));
+      } else {
+        functor(mesh, (*bucket)[i]);
+      }
+    });
+  }
+
+  const stk::mesh::BulkData &mesh;
+  const stk::mesh::BucketVector &buckets;
+  const AlgorithmPerEntity &functor;
+};
+
+template <typename AlgorithmPerEntity>
 inline void for_each_entity_run(const stk::mesh::BulkData &mesh, stk::topology::rank_t rank,
-                                const stk::mesh::Selector &selector, const ALGORITHM_TO_RUN_PER_ENTITY &functor) {
-  stk::mesh::for_each_entity_run(mesh, rank, selector, functor);
+                                const stk::mesh::Selector &selector, const AlgorithmPerEntity &functor) {
+  const stk::mesh::BucketVector &buckets = mesh.get_buckets(rank, selector);
+  using team_policy = Kokkos::TeamPolicy<Kokkos::DefaultHostExecutionSpace>;
+  const int n_buckets = buckets.size();
+  TeamFunctor<AlgorithmPerEntity> team_functor(mesh, buckets, functor);
+
+  Kokkos::parallel_for("for_each_entity_run", team_policy(n_buckets, Kokkos::AUTO), team_functor);
 }
 
-template <typename ALGORITHM_TO_RUN_PER_ENTITY>
+template <typename AlgorithmPerEntity>
 inline void for_each_entity_run(const stk::mesh::BulkData &mesh, stk::topology::rank_t rank,
-                                const ALGORITHM_TO_RUN_PER_ENTITY &functor) {
-  stk::mesh::for_each_entity_run(mesh, rank, functor);
+                                const AlgorithmPerEntity &functor) {
+  stk::mesh::Selector selectAll = mesh.mesh_meta_data().universal_part();
+  for_each_entity_run(mesh, rank, selectAll, functor);
 }
 
-// template <typename ALGORITHM_TO_RUN_PER_ENTITY>
+// template <typename AlgorithmPerEntity>
 // inline void for_each_entity_run_no_threads(const stk::mesh::BulkData &mesh, stk::topology::rank_t rank,
-//                                     const stk::mesh::Selector &selector, const ALGORITHM_TO_RUN_PER_ENTITY &functor)
+//                                     const stk::mesh::Selector &selector, const AlgorithmPerEntity &functor)
 //                                     {
 //   stk::mesh::for_each_entity_run_no_threads(mesh, rank, selector, functor);
 // }
 
-// template <typename ALGORITHM_TO_RUN_PER_ENTITY>
+// template <typename AlgorithmPerEntity>
 // inline void for_each_entity_run_no_threads(const stk::mesh::BulkData &mesh, stk::topology::rank_t rank,
-//                                     const ALGORITHM_TO_RUN_PER_ENTITY &functor) {
+//                                     const AlgorithmPerEntity &functor) {
 //   stk::mesh::for_each_entity_run_no_threads(mesh, rank, functor);
 // }
 
