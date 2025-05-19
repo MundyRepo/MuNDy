@@ -3329,6 +3329,7 @@ class HP1 {
     // modification section, as even doing that is slightly expensive.
 
     bulk_data_ptr_->modification_begin();
+    Kokkos::Profiling::pushRegion("HP1::state_change_crosslinkers::modification_begin");
 
     // Perform L->D
     for (const stk::mesh::Entity &hp1_h_neighbor_genx : hp1_h_neighbor_genxs) {
@@ -3356,9 +3357,11 @@ class HP1 {
               *bulk_data_ptr_, crosslinker_hp1, target_sphere_node, 1);
           MUNDY_THROW_ASSERT(bind_worked, std::logic_error, "Failed to bind crosslinker to node.");
 
+#ifndef NDEBUG
           std::cout << "Rank: " << stk::parallel_machine_rank(MPI_COMM_WORLD) << " Binding crosslinker "
                     << bulk_data_ptr_->identifier(crosslinker_hp1) << " to node "
                     << bulk_data_ptr_->identifier(target_sphere_node) << std::endl;
+#endif
 
           // Now change the part from left to doubly bound.
           const bool is_crosslinker_locally_owned =
@@ -3398,9 +3401,11 @@ class HP1 {
                 *bulk_data_ptr_, crosslinker_hp1, target_sphere_node, 1);
             MUNDY_THROW_ASSERT(bind_worked, std::logic_error, "Failed to bind crosslinker to node.");
 
+#ifndef NDEBUG
             std::cout << "Rank: " << stk::parallel_machine_rank(MPI_COMM_WORLD) << " Periphery: Binding crosslinker "
                       << bulk_data_ptr_->identifier(crosslinker_hp1) << " to node "
                       << bulk_data_ptr_->identifier(target_sphere_node) << std::endl;
+#endif
 
             // Now change the part from left to doubly bound.
             const bool is_crosslinker_locally_owned =
@@ -3428,9 +3433,11 @@ class HP1 {
             *bulk_data_ptr_, crosslinker_hp1, left_node, 1);
         MUNDY_THROW_ASSERT(unbind_worked, std::logic_error, "Failed to unbind crosslinker from node.");
 
+#ifndef NDEBUG
         std::cout << "Rank: " << stk::parallel_machine_rank(MPI_COMM_WORLD) << " Unbinding crosslinker "
                   << bulk_data_ptr_->identifier(crosslinker_hp1) << " from node "
                   << bulk_data_ptr_->identifier(bulk_data_ptr_->begin_nodes(crosslinker_hp1)[1]) << std::endl;
+#endif
 
         // Now change the part from doubly to left bound.
         const bool is_crosslinker_locally_owned =
@@ -3443,6 +3450,7 @@ class HP1 {
       }
     }
 
+    Kokkos::Profiling::popRegion();
     bulk_data_ptr_->modification_end();
 
     // The above may have invalidated the ghosting for our genx ghosting, so we need to reghost the linked entities to

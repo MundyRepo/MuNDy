@@ -651,7 +651,7 @@ void panelize_velocity_kernel_over_target_points([[maybe_unused]] const Executio
   // Define the team policy with the number of panels
   using team_policy = Kokkos::TeamPolicy<ExecutionSpace>;
   Kokkos::parallel_for(
-      "Panalize_Target_Points", team_policy(num_panels, Kokkos::AUTO),
+      team_policy(num_panels, Kokkos::AUTO),
       KOKKOS_LAMBDA(const team_policy::member_type &team_member) {
         const int panel_start = team_member.league_rank() * panel_size;
         const int panel_end =
