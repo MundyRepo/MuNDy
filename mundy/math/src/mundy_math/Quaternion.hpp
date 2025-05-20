@@ -1041,6 +1041,7 @@ class AQuaternion<T, Accessor, Ownership::Owns> {
 
   // We are friends with all AQuaternions regardless of their Accessor or type
   template <typename U, ValidAccessor<U> OtherAccessor, typename OtherOwnershipType>
+    requires std::is_floating_point_v<U>
   friend class AQuaternion;
   //@}
 };  // AQuaternion (owning)

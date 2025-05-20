@@ -372,7 +372,7 @@ struct RunConfig {
 
   double timestep_size = 1e-5;
   size_t num_time_steps = 200000000;
-  size_t io_frequency = 50000;
+  size_t io_frequency = 10000;
   double search_buffer = 2 * sperm_radius;
   double domain_width =
       2 * num_sperm * sperm_radius / 0.8;  // One diameter separation between sperm == 50% area fraction
@@ -772,6 +772,26 @@ void declare_and_initialize_sperm(stk::mesh::BulkData &bulk_data, stk::mesh::Par
           stk::mesh::field_data(edge_length_field, edge)[0] = edge_length;
         });
   }
+
+
+  // Mark the fields modified on the host
+  node_coords_field.modify_on_host();
+  node_velocity_field.modify_on_host();
+  node_force_field.modify_on_host();
+  node_twist_field.modify_on_host();
+  node_twist_velocity_field.modify_on_host();
+  node_twist_torque_field.modify_on_host();
+  node_archlength_field.modify_on_host();
+  node_curvature_field.modify_on_host();
+  node_rest_curvature_field.modify_on_host();
+  node_radius_field.modify_on_host();
+  node_sperm_id_field.modify_on_host();
+  edge_orientation_field.modify_on_host();
+  edge_tangent_field.modify_on_host();
+  edge_length_field.modify_on_host();
+  element_radius_field.modify_on_host();
+  element_rest_length_field.modify_on_host();
+
 }
 
 void validate_node_radius(stk::mesh::NgpMesh &ngp_mesh, const stk::mesh::Selector &selector,
@@ -1124,9 +1144,11 @@ void compute_internal_force_and_twist_torque(
         Kokkos::atomic_add(&node_i_force[2], right_node_force[2]);
       });
 
-  // Sum the node force and torque over shared nodes.
-  stk::mesh::parallel_sum(ngp_mesh.get_bulk_on_host(),
-                          std::vector<NgpDoubleField *>{&node_force_field, &node_twist_torque_field});
+  // Sum the node force and torque over shared nodes (only if multiple ranks are present)
+  if (ngp_mesh.get_bulk_on_host().parallel_size() > 1) {
+    stk::mesh::parallel_sum(ngp_mesh.get_bulk_on_host(),
+                            std::vector<NgpDoubleField *>{&node_force_field, &node_twist_torque_field});
+  }
 
   node_force_field.modify_on_device();
   node_twist_torque_field.modify_on_device();
@@ -1186,17 +1208,17 @@ void compute_aabbs(stk::mesh::NgpMesh &ngp_mesh, const stk::mesh::Selector &segm
         const double radius = element_radius_field(segment_index, 0);
 
         double min_x = Kokkos::min(node0_coords[0], node1_coords[0]) - radius;
-        double max_x = Kokkos::max(node0_coords[0], node1_coords[0]) + radius;
         double min_y = Kokkos::min(node0_coords[1], node1_coords[1]) - radius;
-        double max_y = Kokkos::max(node0_coords[1], node1_coords[1]) + radius;
         double min_z = Kokkos::min(node0_coords[2], node1_coords[2]) - radius;
+        double max_x = Kokkos::max(node0_coords[0], node1_coords[0]) + radius;
+        double max_y = Kokkos::max(node0_coords[1], node1_coords[1]) + radius;
         double max_z = Kokkos::max(node0_coords[2], node1_coords[2]) + radius;
 
         elem_aabb_field(segment_index, 0) = min_x;
-        elem_aabb_field(segment_index, 1) = max_x;
-        elem_aabb_field(segment_index, 2) = min_y;
-        elem_aabb_field(segment_index, 3) = max_y;
-        elem_aabb_field(segment_index, 4) = min_z;
+        elem_aabb_field(segment_index, 1) = min_y;
+        elem_aabb_field(segment_index, 2) = min_z;
+        elem_aabb_field(segment_index, 3) = max_x;
+        elem_aabb_field(segment_index, 4) = max_y;
         elem_aabb_field(segment_index, 5) = max_z;
       });
 
@@ -1222,6 +1244,15 @@ SearchBoxesViewType create_search_aabbs(const stk::mesh::BulkData &bulk_data, co
   Kokkos::parallel_for(
       stk::ngp::DeviceRangePolicy(0, num_local_segments), KOKKOS_LAMBDA(const unsigned &i) {
         stk::mesh::FastMeshIndex segment_index = segment_indices(i);
+
+        // search_aabbs(i) = BoxIdentProc{
+        //     stk::search::Box<double>{elem_aabb_field(segment_index, 0) - search_buffer,
+        //                               elem_aabb_field(segment_index, 1) - search_buffer,
+        //                               elem_aabb_field(segment_index, 2) - search_buffer,
+        //                               elem_aabb_field(segment_index, 3) + search_buffer,
+        //                               elem_aabb_field(segment_index, 4) + search_buffer,
+        //                               elem_aabb_field(segment_index, 5) + search_buffer},
+        //     IdentProc(segment_index, my_rank)};
 
         for (int s0 = 0; s0 < 3; s0++) {  // s0, s1 in [0, 1, 2]
           for (int s1 = 0; s1 < 3; s1++) {
@@ -1367,31 +1398,31 @@ void compute_hertzian_contact_force_and_torque(const stk::mesh::BulkData &bulk_d
         auto target_node0_force = mundy::mesh::vector3_field_data(node_force_field, target_node0_index);
         auto target_node1_force = mundy::mesh::vector3_field_data(node_force_field, target_node1_index);
 
-        ////////////////////////////////////////////
-        // Compute the AABB of the source segment //
-        // The corners of the boxes are the min and max of the coordinates of the nodes +/- the radius of the nodes
-        double source_min_x = Kokkos::min(source_node0_coords[0], source_node1_coords[0]) - source_radius;
-        double source_max_x = Kokkos::max(source_node0_coords[0], source_node1_coords[0]) + source_radius;
-        double source_min_y = Kokkos::min(source_node0_coords[1], source_node1_coords[1]) - source_radius;
-        double source_max_y = Kokkos::max(source_node0_coords[1], source_node1_coords[1]) + source_radius;
-        double source_min_z = Kokkos::min(source_node0_coords[2], source_node1_coords[2]) - source_radius;
-        double source_max_z = Kokkos::max(source_node0_coords[2], source_node1_coords[2]) + source_radius;
+        // ////////////////////////////////////////////
+        // // Compute the AABB of the source segment //
+        // // The corners of the boxes are the min and max of the coordinates of the nodes +/- the radius of the nodes
+        // double source_min_x = Kokkos::min(source_node0_coords[0], source_node1_coords[0]) - source_radius;
+        // double source_max_x = Kokkos::max(source_node0_coords[0], source_node1_coords[0]) + source_radius;
+        // double source_min_y = Kokkos::min(source_node0_coords[1], source_node1_coords[1]) - source_radius;
+        // double source_max_y = Kokkos::max(source_node0_coords[1], source_node1_coords[1]) + source_radius;
+        // double source_min_z = Kokkos::min(source_node0_coords[2], source_node1_coords[2]) - source_radius;
+        // double source_max_z = Kokkos::max(source_node0_coords[2], source_node1_coords[2]) + source_radius;
 
-        // Compute the AABB for the target segment
-        double target_min_x = Kokkos::min(target_node0_coords[0], target_node1_coords[0]) - target_radius;
-        double target_max_x = Kokkos::max(target_node0_coords[0], target_node1_coords[0]) + target_radius;
-        double target_min_y = Kokkos::min(target_node0_coords[1], target_node1_coords[1]) - target_radius;
-        double target_max_y = Kokkos::max(target_node0_coords[1], target_node1_coords[1]) + target_radius;
-        double target_min_z = Kokkos::min(target_node0_coords[2], target_node1_coords[2]) - target_radius;
-        double target_max_z = Kokkos::max(target_node0_coords[2], target_node1_coords[2]) + target_radius;
+        // // Compute the AABB for the target segment
+        // double target_min_x = Kokkos::min(target_node0_coords[0], target_node1_coords[0]) - target_radius;
+        // double target_max_x = Kokkos::max(target_node0_coords[0], target_node1_coords[0]) + target_radius;
+        // double target_min_y = Kokkos::min(target_node0_coords[1], target_node1_coords[1]) - target_radius;
+        // double target_max_y = Kokkos::max(target_node0_coords[1], target_node1_coords[1]) + target_radius;
+        // double target_min_z = Kokkos::min(target_node0_coords[2], target_node1_coords[2]) - target_radius;
+        // double target_max_z = Kokkos::max(target_node0_coords[2], target_node1_coords[2]) + target_radius;
 
-        const bool aabbs_overlap = source_min_x <= target_max_x && source_max_x >= target_min_x &&
-                                   source_min_y <= target_max_y && source_max_y >= target_min_y &&
-                                   source_min_z <= target_max_z && source_max_z >= target_min_z;
+        // const bool aabbs_overlap = source_min_x <= target_max_x && source_max_x >= target_min_x &&
+        //                            source_min_y <= target_max_y && source_max_y >= target_min_y &&
+        //                            source_min_z <= target_max_z && source_max_z >= target_min_z;
 
-        if (!aabbs_overlap) {
-          return;
-        }
+        // if (!aabbs_overlap) {
+        //   return;
+        // }
 
         // Compute the minimum signed separation distance between the segments
         mundy::math::Vector3d closest_point_source;
@@ -2328,6 +2359,7 @@ void run(int argc, char **argv) {
   stk_io_broker.add_field(output_file_index, edge_length_field);
   stk_io_broker.add_field(output_file_index, element_radius_field);
   stk_io_broker.add_field(output_file_index, element_rest_length_field);
+  stk_io_broker.add_field(output_file_index, elem_aabb_field);
 
   declare_and_initialize_sperm(bulk_data, centerline_twist_springs_part, boundary_sperm_part,
                                spherocylinder_segments_part,  //
@@ -2397,7 +2429,6 @@ void run(int argc, char **argv) {
     }
 
     // Check if we need to recreate the neighbors
-    Kokkos::Timer check_rebuild_timer;
     mundy::mesh::field_copy<double>(elem_aabb_field, elem_old_aabb_field, stk::ngp::ExecSpace{});
     compute_aabbs(ngp_mesh, spherocylinder_segments_part, ngp_node_coords_field, ngp_elem_radius_field,
                   ngp_elem_aabb_field);
@@ -2408,25 +2439,21 @@ void run(int argc, char **argv) {
     if (max_abs_disp > run_config.search_buffer) {
       rebuild_neighbors = true;
     }
-    std::cout << "Check rebuild time: " << check_rebuild_timer.seconds() << std::endl;
 
     if (rebuild_neighbors) {
       std::cout << "Rebuilding neighbors." << std::endl;
 
-      Kokkos::Timer create_search_aabbs_timer;
       search_aabbs = create_search_aabbs(bulk_data, ngp_mesh, run_config.search_buffer, run_config.domain_width,
                                          run_config.domain_height, spherocylinder_segments_part, ngp_elem_aabb_field);
-      std::cout << "Create search aabbs time: " << create_search_aabbs_timer.seconds() << std::endl;
 
-      Kokkos::Timer search_timer;
       stk::search::SearchMethod search_method = stk::search::MORTON_LBVH;
       const bool results_parallel_symmetry = true;   // create source -> target and target -> source pairs
       const bool auto_swap_domain_and_range = true;  // swap source and target if target is owned and source is not
       const bool sort_search_results = false;        // sort the search results by source id
       stk::search::coarse_search(search_aabbs, search_aabbs, search_method, bulk_data.parallel(), search_results,
                                  stk::ngp::ExecSpace{}, results_parallel_symmetry);
-      std::cout << "Search time: " << search_timer.seconds() << std::endl;
-
+      
+      std::cout << "Search results size: " << search_results.size() << std::endl;
       rebuild_neighbors = false;
       mundy::mesh::field_fill(0.0, elem_aabb_disp_since_last_rebuild_field, stk::ngp::ExecSpace{});
     }
