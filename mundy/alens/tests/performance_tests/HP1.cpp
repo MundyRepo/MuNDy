@@ -456,6 +456,8 @@ class HP1 {
     }
     simid_ = simulation_params.get<size_t>("simid");
     initial_chromosome_separation_ = simulation_params.get<double>("initial_chromosome_separation");
+    specify_chromosome_layout_ = simulation_params.get<bool>("specify_chromosome_layout");
+    specify_chromosome_file_ = simulation_params.get<std::string>("specify_chromosome_file");
     MUNDY_THROW_REQUIRE(timestep_size_ > 0, std::invalid_argument, "timestep_size_ must be greater than 0.");
     MUNDY_THROW_REQUIRE(viscosity_ > 0, std::invalid_argument, "viscosity_ must be greater than 0.");
     MUNDY_THROW_REQUIRE(initial_chromosome_separation_ >= 0, std::invalid_argument,
@@ -795,6 +797,10 @@ class HP1 {
              "The frequency at which we should update the background fluid velocity field. If not 1, the old velocity "
              "will be reused for the next update_frequency steps.",
              make_new_validator(prefer_size_t, accept_int))
+        .set("specify_chromosome_layout", default_specify_chromosome_layout_,
+             "If true, we will use the specified chromosome layout from the input file.")
+        .set("specify_chromosome_file", std::string(default_specify_chromosome_file_),
+             "If specify_chromosome_layout is true, this is the file containing the chromosome layout.")
         // IO
         .set("loadbalance_post_initialization", default_loadbalance_post_initialization_,
              "If we should load balance post-initialization or not.")
@@ -966,6 +972,10 @@ class HP1 {
         std::cout << "  max_allowable_speed: " << max_allowable_speed_ << std::endl;
       }
       std::cout << "  hydro_update_frequency: " << hydro_update_frequency_ << std::endl;
+      if (specify_chromosome_layout_) {
+        std::cout << "  specify_chromosome_layout: " << specify_chromosome_layout_ << std::endl;
+        std::cout << "  specify_chromosome_file: " << specify_chromosome_file_ << std::endl;
+      }
 
       std::cout << std::endl;
       std::cout << "IO:" << std::endl;
@@ -1870,6 +1880,270 @@ class HP1 {
     std::cout << "...finished declaring system\n";
   }
 
+  // Create the chromatin backbone and HP1 crosslinkers with a given layout
+  void create_chromatin_backbone_and_hp1_with_layout() {
+    // Each chromosome will have a different number of spheres, so just start at the beginning with the creation
+    // of said chromosome!
+    const bool enable_backbone_collision = enable_backbone_collision_;
+    const bool enable_backbone_springs = enable_backbone_springs_;
+    const bool enable_crosslinkers = enable_crosslinkers_;
+
+    // Load the regional map from the chromosome layout file
+    std::vector<std::string> chromosome_regional_map;
+    std::ifstream layout_file(specify_chromosome_file_);
+    MUNDY_THROW_REQUIRE(layout_file.is_open(), std::runtime_error,
+                        "The chromosome layout file " + specify_chromosome_file_ + " could not be opened.");
+    std::string line;
+    while (std::getline(layout_file, line)) {
+      // Remove whitespace from the line
+      line.erase(remove_if(line.begin(), line.end(), isspace), line.end());
+      if (!line.empty()) {
+        chromosome_regional_map.push_back(line);
+      }
+    }
+
+    bulk_data_ptr_->modification_begin();
+
+    // Rank 0: Declare N chromatin chains randomly in space
+    size_t node_count = 0;
+    size_t element_count = 0;
+    if (bulk_data_ptr_->parallel_rank() == 0) {
+      for (size_t j = 0; j < num_chromosomes_; j++) {
+        std::cout << "Creating chromosome with layout " << j << std::endl;
+
+        // This is directly taken from the NGP rewrite, adapted for here
+        /* Declare the chromatin and HP1
+        //  E : euchromatin spheres
+        //  H : heterochromatin spheres
+        //  | : crosslinkers
+        // ---: backbone springs/backbone segments
+        //
+        //  |   |                           |   |
+        //  H---H---E---E---E---E---E---E---H---H
+        //
+        // The actual connectivity looks like this:
+        //  n : node, s : segment and or spring, c : crosslinker
+        //
+        // c1_      c3_       c5_       c7_
+        // | /      | /       | /       | /
+        // n1       n3        n5        n7
+        //  \      /  \      /  \      /
+        //   s1   s2   s3   s4   s5   s6
+        //    \  /      \  /      \  /
+        //     n2        n4        n6
+        //     | \       | \       | \
+        //     c2⎻       c4⎻       c6⎻
+        //
+        // If you look at this long enough, the pattern is clear.
+        //  - One less segment than nodes.
+        //  - Same number of crosslinkers as heterochromatin nodes.
+        //  - Segment i connects to nodes i and i+1.
+        //  - Crosslinker i connects to nodes i and i.
+        //
+        // We need to use this information to populate the node and element info vectors.
+        // Mundy will handle passing off this information to the bulk data. Just make sure that all
+        // MPI ranks contain the same node and element info. This way, we can determine which nodes
+        // should become shared.
+        //
+        // Rules (non-exhaustive):
+        //  - Neither nodes nor elements need to have parts or fields.
+        //  - The rank and type of the fields must be consistant. You can't pass an element field to a node,
+        //    nor can you set the value of a field to a different type or size than it was declared as.
+        //  - The owner of a node must be the same as one of the elements that connects to it.
+        //  - A node connected to an element not on the same rank as the node will be shared with the owner of the
+        element.
+        //  - Field/Part names are case-sensitive but don't attempt to declare "field_1" and "Field_1" as if
+        //    that will give two different fields since STKIO will not be able to distinguish between them.
+        //  - A (non-zero) negative node id in the element connection list can be used to indicate that a node should be
+        left unassigned.
+        //  - All parts need to be able to contain an element of the given topology.
+        */
+
+        // Get the number of spheres int the chromosome by the length of the string
+        std::string current_regional_map = chromosome_regional_map[j];
+        const size_t num_nodes_per_chromosome = current_regional_map.length();
+        const size_t num_segments_per_chromosome = num_nodes_per_chromosome - 1;
+        std::cout << "Regional map: " << num_nodes_per_chromosome << std::endl;
+        std::cout << current_regional_map << std::endl;
+
+        // Figure out the number of segments, etc, that we are linking, so keep track of the number of heterochromatin
+        // nodes, euchromatin nodes, etc.
+        const size_t num_heterochromatin_spheres =
+            std::count(current_regional_map.begin(), current_regional_map.end(), 'H');
+        const size_t num_euchromatin_spheres =
+            std::count(current_regional_map.begin(), current_regional_map.end(), 'E');
+
+        // Figure out the starting indices of the nodes and elements
+        const size_t start_node_id = node_count + 1u;
+        const size_t start_element_id = element_count + 1u;
+
+        // Helper functions for getting the IDs of various objects
+        auto get_node_id = [start_node_id](const size_t &seq_node_index) { return start_node_id + seq_node_index; };
+
+        auto get_sphere_id = [start_element_id](const size_t &seq_sphere_index) {
+          return start_element_id + seq_sphere_index;
+        };
+
+        auto get_segment_id = [start_element_id, num_nodes_per_chromosome](const size_t &seq_segment_index) {
+          return start_element_id + num_nodes_per_chromosome + seq_segment_index;
+        };
+
+        auto get_crosslinker_id = [start_element_id, num_nodes_per_chromosome, num_segments_per_chromosome,
+                                   enable_backbone_collision,
+                                   enable_backbone_springs](const size_t &seq_crosslinker_index) {
+          return start_element_id + num_nodes_per_chromosome +
+                 (enable_backbone_springs || enable_backbone_collision) * num_segments_per_chromosome +
+                 seq_crosslinker_index;
+        };
+
+        auto is_first_or_last_element_in_chain = [num_segments_per_chromosome](const size_t &seq_segment_index) {
+          return seq_segment_index == 0 || seq_segment_index == num_segments_per_chromosome - 1;  // 0-based indexing
+        };
+
+        // Temporary/scratch variables
+        stk::mesh::PartVector empty;
+
+        std::cout << "  Building backbone segments" << std::endl;
+        for (size_t segment_local_idx = 0; segment_local_idx < num_segments_per_chromosome; segment_local_idx++) {
+          // Keep track of the vertex IDs for part memebership (local index into array)
+          const size_t vertex_left_idx = segment_local_idx;
+          const size_t vertex_right_idx = segment_local_idx + 1;
+          // Process the nodes for this segment
+          stk::mesh::EntityId left_node_id = get_node_id(segment_local_idx);
+          stk::mesh::EntityId right_node_id = get_node_id(segment_local_idx + 1);
+
+          stk::mesh::Entity left_node = bulk_data_ptr_->get_entity(node_rank_, left_node_id);
+          stk::mesh::Entity right_node = bulk_data_ptr_->get_entity(node_rank_, right_node_id);
+          if (!bulk_data_ptr_->is_valid(left_node)) {
+            left_node = bulk_data_ptr_->declare_node(left_node_id, empty);
+            node_count++;
+          }
+          if (!bulk_data_ptr_->is_valid(right_node)) {
+            right_node = bulk_data_ptr_->declare_node(right_node_id, empty);
+            node_count++;
+          }
+
+          // Each node is attached to a sphere that is (H)eterochromatin, (E)uchromatin, or (BS)BindingSite
+          std::string left_region(1, current_regional_map[vertex_left_idx]);
+          std::string right_region(1, current_regional_map[vertex_right_idx]);
+          stk::mesh::EntityId left_sphere_id = get_sphere_id(segment_local_idx);
+          stk::mesh::EntityId right_sphere_id = get_sphere_id(segment_local_idx + 1);
+          stk::mesh::Entity left_sphere = bulk_data_ptr_->get_entity(element_rank_, left_sphere_id);
+          stk::mesh::Entity right_sphere = bulk_data_ptr_->get_entity(element_rank_, right_sphere_id);
+          if (!bulk_data_ptr_->is_valid(left_sphere)) {
+            // Figure out the part we belong to
+            stk::mesh::PartVector pvector;
+            if (left_region == "H") {
+              pvector.push_back(h_part_ptr_);
+            } else if (left_region == "E") {
+              pvector.push_back(e_part_ptr_);
+            }
+            // Declare the sphere and connect to it's node
+            left_sphere = bulk_data_ptr_->declare_element(left_sphere_id, pvector);
+            bulk_data_ptr_->declare_relation(left_sphere, left_node, 0);
+            // Assign the chainID
+            stk::mesh::field_data(*element_chainid_field_ptr_, left_sphere)[0] = j;
+            element_count++;
+          }
+          if (!bulk_data_ptr_->is_valid(right_sphere)) {
+            // Figure out the part we belong to
+            stk::mesh::PartVector pvector;
+            if (right_region == "H") {
+              pvector.push_back(h_part_ptr_);
+            } else if (right_region == "E") {
+              pvector.push_back(e_part_ptr_);
+            }
+            // Declare the sphere and connect to it's node
+            right_sphere = bulk_data_ptr_->declare_element(right_sphere_id, pvector);
+            bulk_data_ptr_->declare_relation(right_sphere, right_node, 0);
+            // Assign the chainID
+            stk::mesh::field_data(*element_chainid_field_ptr_, right_sphere)[0] = j;
+            element_count++;
+          }
+
+          // Figure out how to do the spherocylinder segments along the edges now
+          if (enable_backbone_springs || enable_backbone_collision) {
+            stk::mesh::Entity segment = bulk_data_ptr_->get_entity(element_rank_, get_segment_id(segment_local_idx));
+            if (!bulk_data_ptr_->is_valid(segment)) {
+              stk::mesh::PartVector pvector;
+              pvector.push_back(backbone_segments_part_ptr_);
+              if (enable_backbone_springs) {
+                if (left_region == "E" && right_region == "E") {
+                  pvector.push_back(ee_springs_part_ptr_);
+                } else if (left_region == "E" && right_region == "H") {
+                  pvector.push_back(eh_springs_part_ptr_);
+                } else if (left_region == "H" && right_region == "E") {
+                  pvector.push_back(eh_springs_part_ptr_);
+                } else if (left_region == "H" && right_region == "H") {
+                  pvector.push_back(hh_springs_part_ptr_);
+                }
+              }
+              segment = bulk_data_ptr_->declare_element(get_segment_id(segment_local_idx), pvector);
+              bulk_data_ptr_->declare_relation(segment, left_node, 0);
+              bulk_data_ptr_->declare_relation(segment, right_node, 1);
+              // Assign the chainID
+              stk::mesh::field_data(*element_chainid_field_ptr_, segment)[0] = j;
+
+              // Assign if the segment is an endpoint or not
+              stk::mesh::field_data(*element_requires_endpoint_correction_field_ptr_, segment)[0] =
+                  is_first_or_last_element_in_chain(segment_local_idx);
+              element_count++;
+            }
+          }
+        }
+        std::cout << "  ...finished building backbone segments" << std::endl;
+
+        // Declare the crosslinkers along the backbone
+        // Every sphere gets a left bound crosslinker
+        //  E : euchromatin spheres
+        //  H : heterochromatin spheres
+        //  | : crosslinkers
+        // ---: backbone springs
+        //
+        //  |   |                           |   |
+        //  H---H---E---E---E---E---E---E---H---H
+
+        // March down the chain of spheres, adding crosslinkers as we go. We just want to add to the heterochromatin
+        // spheres, and so keep track of a running hp1_sphere_index.
+        if (enable_crosslinkers_) {
+          std::cout << "  Building hp1 segments" << std::endl;
+          size_t hp1_sphere_index = 0;
+          for (size_t sphere_local_idx = 0; sphere_local_idx < num_nodes_per_chromosome; sphere_local_idx++) {
+            stk::mesh::Entity sphere_node = bulk_data_ptr_->get_entity(node_rank_, get_node_id(sphere_local_idx));
+            MUNDY_THROW_ASSERT(bulk_data_ptr_->is_valid(sphere_node), std::invalid_argument,
+                               fmt::format("Node {} is not valid", sphere_local_idx));
+
+            // Check if we are a heterochromatin sphere
+            std::string current_region(1, current_regional_map[sphere_local_idx]);
+            if (current_region == "H") {
+              // Bind left and right nodes to the same node to start simulation (everybody is left bound)
+              // Create the HP1 crosslinker
+              auto left_bound_hp1_part_vector = stk::mesh::PartVector{left_hp1_part_ptr_};
+              stk::mesh::EntityId hp1_crosslinker_id = get_crosslinker_id(hp1_sphere_index);
+              stk::mesh::Entity hp1_crosslinker =
+                  bulk_data_ptr_->declare_element(hp1_crosslinker_id, left_bound_hp1_part_vector);
+              stk::mesh::Permutation invalid_perm = stk::mesh::Permutation::INVALID_PERMUTATION;
+              bulk_data_ptr_->declare_relation(hp1_crosslinker, sphere_node, 0, invalid_perm);
+              bulk_data_ptr_->declare_relation(hp1_crosslinker, sphere_node, 1, invalid_perm);
+              MUNDY_THROW_ASSERT(
+                  bulk_data_ptr_->bucket(hp1_crosslinker).topology() != stk::topology::INVALID_TOPOLOGY,
+                  std::logic_error,
+                  fmt::format("The crosslinker with id {} has an invalid topology.", hp1_crosslinker_id));
+              // Assign the chainID
+              stk::mesh::field_data(*element_chainid_field_ptr_, hp1_crosslinker)[0] = j;
+
+              hp1_sphere_index++;
+              element_count++;
+            }
+          }
+          std::cout << "  ...finished building hp1 segments" << std::endl;
+        }
+      }
+    }
+    bulk_data_ptr_->modification_end();
+    std::cout << "...finished declaring system\n";
+  }
+
   void initialize_chromosome_positions_from_file() {
     // The filename is in initialize_from_dat_filename_
     //
@@ -1889,7 +2163,7 @@ class HP1 {
       const size_t num_heterochromatin_spheres = num_chromatin_repeats_ / 2 * num_heterochromatin_per_repeat_ +
                                                  num_chromatin_repeats_ % 2 * num_heterochromatin_per_repeat_;
       const size_t num_euchromatin_spheres = num_chromatin_repeats_ / 2 * num_euchromatin_per_repeat_;
-      const size_t num_nodes_per_chromosome = num_heterochromatin_spheres + num_euchromatin_spheres;
+      size_t num_nodes_per_chromosome = num_heterochromatin_spheres + num_euchromatin_spheres;
 
       // Open the file
       std::ifstream infile(initialize_from_dat_filename_);
@@ -2553,7 +2827,11 @@ class HP1 {
 
   void declare_and_initialize_hp1() {
     if (!restart_performed_) {
-      create_chromatin_backbone_and_hp1();
+      if (!specify_chromosome_layout_) {
+        create_chromatin_backbone_and_hp1();
+      } else {
+        create_chromatin_backbone_and_hp1_with_layout();
+      }
     }
     initialize_chromatin_backbone_and_hp1();
     std::cout << "Done initializing!\n";
@@ -4803,6 +5081,8 @@ class HP1 {
   double max_allowable_speed_;
   HYDRO_TYPE hydro_type_;
   size_t simid_;
+  bool specify_chromosome_layout_;
+  std::string specify_chromosome_file_;
 
   // IO params
   size_t io_frequency_;
@@ -4920,6 +5200,8 @@ class HP1 {
   static constexpr bool default_check_maximum_speed_pre_position_update_ = false;
   static constexpr double default_max_allowable_speed_ = std::numeric_limits<double>::max();
   static constexpr size_t default_simid_ = 0;
+  static constexpr bool default_specify_chromosome_layout_ = false;
+  static constexpr std::string_view default_specify_chromosome_file_ = "chromosome_layout.dat";
 
   // IO params
   static constexpr size_t default_io_frequency_ = 10;
