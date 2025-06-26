@@ -27,6 +27,6 @@ RUN . $SPACK_ROOT/share/spack/setup-env.sh && \
     spack add trilinos@16.0.0%gcc@11.4.0+belos~boost+exodus+hdf5+kokkos+openmp~shared+stk+zoltan+zoltan2 cxxstd=17 ^kokkos@4.3.01+hwloc+openmp~shared ^openmpi@4.1.2 && \
     spack add cmake@3.23 && \
     spack concretize && \
-    spack install -j12 && \
+    spack install && \
     spack load cmake@3.23 && \
     spack gc -y
