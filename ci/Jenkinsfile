@@ -79,6 +79,7 @@ pipeline {
         sh 'cd ${HOME}'
         sh 'dep/install_fmt.sh ${MUNDY_DEPS}'
         sh 'dep/install_gtest.sh ${MUNDY_DEPS}'
+        sh 'printenv'
       }
     }
   }
