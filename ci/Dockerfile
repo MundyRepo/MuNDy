@@ -18,15 +18,15 @@ ENV SPACK_ROOT=/opt/spack
 RUN echo "source $SPACK_ROOT/share/spack/setup-env.sh" >> /etc/bash.bashrc
 SHELL ["/bin/bash", "-c"]
 
-ENV SPACK_TRILINOS=/root/spack_trilinos
+ENV SPACK_TRILINOS=/opt/spack_trilinos
 RUN . $SPACK_ROOT/share/spack/setup-env.sh && \
     mkdir $SPACK_TRILINOS && \
     cd $SPACK_TRILINOS && \
     spack env create -d $SPACK_TRILINOS && \
     spack env activate $SPACK_TRILINOS && \
     spack add trilinos@16.0.0%gcc@11.4.0+belos~boost+exodus+hdf5+kokkos+openmp~shared+stk+zoltan+zoltan2 cxxstd=17 ^kokkos@4.3.01+hwloc+openmp~shared ^openmpi@4.1.2 && \
-    spack add cmake@3.23 && \
+    spack add cmake@3.27.9 && \
     spack concretize && \
     spack install && \
-    spack load cmake@3.23 && \
+    spack load cmake@3.27.9 && \
     spack gc -y

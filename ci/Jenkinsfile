@@ -73,7 +73,7 @@ pipeline {
         MUNDY_DEPS = "${WORKSPACE}/mundy_deps"
         MUNDY_INSTALL = "${WORKSPACE}/mundy_install"
         SPACK_ROOT = "/opt/spack"
-        SPACK_TRILINOS = "/root/spack_trilinos"
+        SPACK_TRILINOS = "/opt/spack_trilinos"
       }
       steps {
         echo 'Building software inside the container'
