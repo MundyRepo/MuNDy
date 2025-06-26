@@ -1,0 +1,56 @@
+def cleanCheckout() {
+  // noop - do nothing
+  echo 'cleanCheckout() called - not yet implemented'
+}
+
+pipeline {
+  agent any
+
+  stages {
+    stage('Validate repo') {
+      agent {
+        dockerfile {
+          filename 'ci/Dockerfile' // Can also be relative path to Dockerfile
+          dir '.'
+          label 'linux'
+          /* args '-X -Y' // These get passed to docker run */
+          /* additionalBuildArgs '-X -Y' // These get passed to docker build */
+        }
+      }
+      steps {
+        script {
+          cleanCheckout()
+        }
+      }
+      post { always { sh "rm -rf ./*" }}
+    }
+
+    stage('Build Software and Test Via Docker') {
+      agent {
+        dockerfile {
+          filename 'ci/Dockerfile' // Can also be relative path to Dockerfile
+          dir '.'
+          label 'linux'
+          /* args '-X -Y' // These get passed to docker run */
+          /* additionalBuildArgs '-X -Y' // These get passed to docker build */
+        }
+      }
+      steps {
+        echo 'Building software inside the container'
+        sh './scripts/build.sh'
+
+        echo 'Executing tests'
+        sh './scripts/test.sh'
+      }
+    }
+  }
+
+  post {
+    success {
+      echo "Build and test were completed successfully."
+    }
+    failure {
+      echo "Build and test process failed."
+    }
+  }
+}
