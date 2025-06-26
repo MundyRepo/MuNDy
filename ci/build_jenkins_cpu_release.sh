@@ -2,6 +2,7 @@
 . ${SPACK_ROOT}/share/spack/setup-env.sh
 ls ${SPACK_TRILINOS}
 spack env activate ${SPACK_TRILINOS}/.
+spack find
 mkdir -p ${MUNDY_DEPS}
 dep/install_fmt.sh ${MUNDY_DEPS}
 dep/install_gtest.sh ${MUNDY_DEPS}
