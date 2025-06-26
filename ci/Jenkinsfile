@@ -75,7 +75,8 @@ pipeline {
         SPACK_TRILINOS = "/root/spack_trilinos"
       }
       steps {
-        sh 'cd ${SPACK_ROOT} && source share/spack/setup-env.sh'
+        sh 'cd ${SPACK_ROOT}'
+        sh '. share/spack/setup-env.sh'
         sh 'cd ${HOME}'
         sh 'dep/install_fmt.sh ${MUNDY_DEPS}'
         sh 'dep/install_gtest.sh ${MUNDY_DEPS}'
