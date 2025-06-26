@@ -10,7 +10,7 @@ dep/install_openrand.sh ${MUNDY_DEPS}
 export TRILINOS_ROOT_DIR=$(spack location -i trilinos)
 echo "TRILINOS_ROOT_DIR: ${TRILINOS_ROOT_DIR}"
 git submodule update --init --recursive
-cmake -B build . -GNinja \
+cmake -B build . \
     -DCMAKE_BUILD_TYPE=RELEASE \
     -DCMAKE_CXX_COMPILER=mpicxx \
     -DCMAKE_CXX_FLAGS="-O3 -g -fno-omit-frame-pointer -march=native" \
@@ -49,4 +49,4 @@ cmake -B build . -GNinja \
     ${compiler_flags} \
     ${install_dir} \
     ${extra_args}
-ninja -C build
+cd build/ && make
