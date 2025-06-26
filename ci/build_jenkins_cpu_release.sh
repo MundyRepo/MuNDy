@@ -1,11 +1,13 @@
 #!/bin/bash
 . ${SPACK_ROOT}/share/spack/setup-env.sh
-spack env activate ${SPACK_TRILINOS}
+ls ${SPACK_TRILINOS}
+spack env activate ${SPACK_TRILINOS}/.
 mkdir -p ${MUNDY_DEPS}
 dep/install_fmt.sh ${MUNDY_DEPS}
 dep/install_gtest.sh ${MUNDY_DEPS}
 dep/install_openrand.sh ${MUNDY_DEPS}
 export TRILINOS_ROOT_DIR=$(spack location -i trilinos)
+echo "TRILINOS_ROOT_DIR: ${TRILINOS_ROOT_DIR}"
 cmake -B build . \
     -DCMAKE_BUILD_TYPE=RELEASE \
     -DCMAKE_CXX_COMPILER=mpicxx \
@@ -44,4 +46,4 @@ cmake -B build . \
     ${ccache_args} \
     ${compiler_flags} \
     ${install_dir} \
-    ${extra_args}' 
+    ${extra_args}
