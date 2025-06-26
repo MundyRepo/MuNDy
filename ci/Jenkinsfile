@@ -75,14 +75,10 @@ pipeline {
         SPACK_TRILINOS = "/root/spack_trilinos"
       }
       steps {
-        sh 'cd ${SPACK_ROOT}'
-        sh 'ls'
-        sh 'pwd'
-        sh '. share/spack/setup-env.sh'
-        sh 'cd ${HOME}'
+        sh '. ${SPACK_ROOT}share/spack/setup-env.sh'
         sh 'dep/install_fmt.sh ${MUNDY_DEPS}'
         sh 'dep/install_gtest.sh ${MUNDY_DEPS}'
-        sh 'printenv'
+        sh 'ls ${MUNDY_DEPS}'
       }
     }
   }
