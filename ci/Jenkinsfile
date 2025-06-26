@@ -76,6 +76,8 @@ pipeline {
       }
       steps {
         sh 'cd ${SPACK_ROOT}'
+        sh 'ls'
+        sh 'pwd'
         sh '. share/spack/setup-env.sh'
         sh 'cd ${HOME}'
         sh 'dep/install_fmt.sh ${MUNDY_DEPS}'
