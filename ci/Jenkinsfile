@@ -76,6 +76,7 @@ pipeline {
       }
       steps {
         sh '. ${SPACK_ROOT}/share/spack/setup-env.sh'
+        sh 'mkdir -p ${MUNDY_DEPS}'
         sh 'dep/install_fmt.sh ${MUNDY_DEPS}'
         sh 'dep/install_gtest.sh ${MUNDY_DEPS}'
         sh 'ls ${MUNDY_DEPS}'
