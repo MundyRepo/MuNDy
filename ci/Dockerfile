@@ -12,7 +12,8 @@ RUN apt -y update && \
     apt -y autoclean && \
     rm -rf /var/cache/apt/* /var/lib/apt/lists/*
 
-RUN git clone -c feature.manyFiles=true --depth=2 https://github.com/spack/spack.git /opt/spack
+ARG SPACK_TAG=v0.23.1
+RUN git clone -c feature.manyFiles=true --depth=2 --branch ${SPACK_TAG} https://github.com/spack/spack.git /opt/spack
 ENV SPACK_ROOT=/opt/spack
 RUN echo "source $SPACK_ROOT/share/spack/setup-env.sh" >> /etc/bash.bashrc
 SHELL ["/bin/bash", "-c"]
