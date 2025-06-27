@@ -1,6 +1,5 @@
 #!/bin/bash
 . ${SPACK_ROOT}/share/spack/setup-env.sh
-ls ${SPACK_TRILINOS}
 spack env activate ${SPACK_TRILINOS}/.
 spack find -p
 mkdir -p ${MUNDY_DEPS}
