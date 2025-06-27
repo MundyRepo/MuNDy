@@ -78,6 +78,9 @@ pipeline {
       steps {
         echo 'Building software inside the container'
         sh './ci/build_jenkins_cpu_release.sh'
+
+        echo 'Executing tests'
+        sh './ci/test_jenkins_cpu_release.sh'
       }
     }
   }
