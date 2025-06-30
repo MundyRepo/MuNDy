@@ -65,7 +65,7 @@ pipeline {
         dockerfile {
           filename 'ci/Dockerfile'
           dir '.'
-          label 'cpuRelease'
+          label 'linux'
         }
       }
       environment {
