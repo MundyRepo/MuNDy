@@ -65,7 +65,7 @@ pipeline {
         dockerfile {
           filename 'ci/Dockerfile'
           dir '.'
-          label 'linux'
+          label 'cpuRelease'
         }
       }
       environment {
@@ -82,6 +82,25 @@ pipeline {
         echo 'Executing tests'
         sh './ci/test_jenkins_cpu_release.sh'
       }
+    }
+  }
+  post {
+    failure {
+      emailext subject: '$PROJECT_NAME - Build #$BUILD_NUMBER - $BUILD_STATUS',
+	        body: '''$PROJECT_NAME - Build #$BUILD_NUMBER - $BUILD_STATUS
+Check console output at $BUILD_URL to view full results.
+Building $BRANCH_NAME for $CAUSE
+$JOB_DESCRIPTION
+Changes:
+$CHANGES
+End of build log:
+${BUILD_LOG,maxLines=200}
+''',
+      recipientProviders: [
+        [$class, 'DeveloperRecipientProvider'],
+      ],
+        replyTo: '$DEFAULT_REPLYTO',
+        to: 'cedelmaier@flatironinstitute.org, bpalmer@flatironinstitute.org'
     }
   }
 }
