@@ -130,6 +130,20 @@ template <class FieldType>
 KOKKOS_INLINE_FUNCTION auto matrix3_field_data(FieldType& f, const stk::mesh::FastMeshIndex& i) {
   return math::get_owning_matrix3<typename FieldType::value_type>(f(i));
 }
+
+/// \brief A helper function for getting a view of a field's data as a Matrix3
+template <class FieldType>
+KOKKOS_INLINE_FUNCTION auto aabb_field_data(FieldType& f, const stk::mesh::FastMeshIndex& i) {
+  constexpr size_t shift = 3;
+  using scalar_t = typename FieldType::value_type;
+  auto shifted_data_accessor = math::get_owning_shifted_accessor<scalar_t, shift>(f(i));
+  auto max_corner = math::get_owning_vector3<scalar_t>(std::move(shifted_data_accessor));
+  auto min_corner = math::get_owning_vector3<scalar_t>(f(i));
+
+  using min_point_t = decltype(min_corner);
+  using max_point_t = decltype(max_corner);
+  return geom::AABB<scalar_t, min_point_t, max_point_t>(min_corner, max_corner);
+}
 //@}
 
 }  // namespace mesh

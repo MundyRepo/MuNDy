@@ -786,6 +786,13 @@ decltype(auto) get_updated_ngp_component(const QuaternionFieldComponent<ScalarTy
   return NgpQuaternionFieldComponent<ngp_field_type>(ngp_field);
 }
 //
+template <typename ScalarType>
+decltype(auto) get_updated_ngp_component(const AABBFieldComponent<ScalarType>& component) {
+  auto& ngp_field = stk::mesh::get_updated_ngp_field<ScalarType>(component.field());
+  using ngp_field_type = std::remove_reference_t<decltype(ngp_field)>;
+  return NgpAABBFieldComponent<ngp_field_type>(ngp_field);
+}
+//
 template <typename ValueType>
 decltype(auto) get_updated_ngp_component(const FieldComponent<ValueType>& component) {
   auto& ngp_field = stk::mesh::get_updated_ngp_field<ValueType>(component.field());
