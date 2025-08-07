@@ -200,7 +200,7 @@ void invert_matrix([[maybe_unused]] const ExecutionSpace &space, const MatrixTyp
   // Fill matrix_inv with the identity matrix
   Kokkos::deep_copy(matrix_inv, 0.0);
   Kokkos::parallel_for(
-      "FillIdentity", Kokkos::RangePolicy<>(0, matrix_size), KOKKOS_LAMBDA(const size_t i) { matrix_inv(i, i) = 1.0; });
+      "FillIdentity", Kokkos::RangePolicy<ExecutionSpace>(0, matrix_size), KOKKOS_LAMBDA(const size_t i) { matrix_inv(i, i) = 1.0; });
 
   // Solve the dense linear equation system M*X = I, which results in X = M^{-1}
   // On exist, M is replaced with its LU decomposition

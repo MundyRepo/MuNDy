@@ -30,6 +30,7 @@
 #include <vector>         // for std::vector
 
 // Trilinos libs
+#include <Trilinos_version.h>  // for TRILINOS_MAJOR_MINOR_VERSION
 #include <Kokkos_Core.hpp>            // for Kokkos::initialize, Kokkos::finalize, Kokkos::Timer
 #include <Kokkos_Pair.hpp>            // for Kokkos::pair
 #include <Kokkos_UnorderedMap.hpp>    // for Kokkos::UnorderedMap
@@ -166,9 +167,11 @@ std::vector<stk::mesh::Part *> STKSearch::get_valid_target_entity_parts() const 
 // \name Actions
 //{
 
-// #define MUNDY_USE_OLD_STK_SEARCH
+#if TRILINOS_MAJOR_MINOR_VERSION < 160000
+#define MUNDY_USE_OLD_STK_SEARCH
+#endif
 
-#ifdef MUNDY_USE_OLD_STK_SEARCH
+#ifdef MUNDY_USE_OLD_STK_SEARCH  // only works for new trilinos
 
 namespace {
 

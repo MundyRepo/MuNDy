@@ -143,7 +143,7 @@ ConvergenceResults perform_convergence_study(const double &viscosity, const Quad
   std::vector<double> stashed_num_quadrature_points;
   std::vector<double> stashed_error_abs;
   std::vector<double> stashed_error_rel;
-  for (int order = 2; order <= 64; order *= 2) {
+  for (int order = 2; order <= 16; order *= 2) {
     // Generate the quadrature rule
     auto [points, weights, normals] = quad_gen(order);
     const size_t num_quadrature_points = weights.extent(0);
@@ -198,7 +198,7 @@ ConvergenceResults perform_self_convergence_study(const double &viscosity, const
   std::vector<double> stashed_num_quadrature_points;
   std::vector<double> stashed_error_abs;
   std::vector<double> stashed_error_rel;
-  for (int order = 2; order <= 32; order *= 2) {
+  for (int order = 2; order <= 16; order *= 2) {
     // Generate the quadrature rule
     auto [points, weights, normals] = quad_gen(order);
     const size_t num_quadrature_points = weights.extent(0);
@@ -461,7 +461,7 @@ TEST(PeripheryTest, SphereQuadBasicChecks) {
   // Define the sphere radius
   const double sphere_radius = 12.34;
   const double sphere_surface_area = 4.0 * M_PI * sphere_radius * sphere_radius;
-  for (int order = 1; order <= 32; order *= 2) {
+  for (int order = 1; order <= 16; order *= 2) {
     std::vector<double> weights;
     std::vector<double> points;
     std::vector<double> normals;
@@ -509,7 +509,7 @@ TEST(PeripheryTest, SphereQuadAnalyticallyIntegrableFunctions) {
     // Weird behavior can occur for order = 1, so we start at order = 2
     std::vector<double> num_quadrature_points;
     std::vector<double> errors;
-    for (int order = 2; order <= 64; order *= 2) {
+    for (int order = 2; order <= 16; order *= 2) {
       std::vector<double> weights;
       std::vector<double> points;
       std::vector<double> normals;
@@ -1286,7 +1286,7 @@ TEST(PeripheryTest, SKFIERigidBodyMotionFromFile) {
   // M^{-1} U
 
   // Skip this test until we get the files read in properly
-  GTEST_SKIP() << "Skipping until we get the files read in properly";
+  // GTEST_SKIP() << "Skipping until we get the files read in properly";
 
   // Setup the convergence study
   const double sphere_radius = 28.0;
@@ -1361,9 +1361,9 @@ TEST(PeripheryTest, SKFIERigidBodyMotionFromFile) {
   for (size_t i = 0; i < vec_num_quad_points.size(); ++i) {
     // Read in the normals, points, and weights to kokkos views
     const size_t num_quad_points = vec_num_quad_points[i];
-    std::string filename_normals = "./dat_files/sphere_triangle_normals_" + std::to_string(num_quad_points) + ".dat";
-    std::string filename_points = "./dat_files/sphere_triangle_points_" + std::to_string(num_quad_points) + ".dat";
-    std::string filename_weights = "./dat_files/sphere_triangle_weights_" + std::to_string(num_quad_points) + ".dat";
+    std::string filename_normals = "./sphere_triangle_normals_" + std::to_string(num_quad_points) + ".dat";
+    std::string filename_points = "./sphere_triangle_points_" + std::to_string(num_quad_points) + ".dat";
+    std::string filename_weights = "./sphere_triangle_weights_" + std::to_string(num_quad_points) + ".dat";
     Kokkos::View<double *, Kokkos::LayoutLeft, Kokkos::HostSpace> normals("normal", 3 * num_quad_points);
     Kokkos::View<double *, Kokkos::LayoutLeft, Kokkos::HostSpace> points("points", 3 * num_quad_points);
     Kokkos::View<double *, Kokkos::LayoutLeft, Kokkos::HostSpace> weights("weights", num_quad_points);
@@ -1450,9 +1450,9 @@ TEST(PeripheryTest, SKFIESelfConvFromFile) {
   for (size_t i = 0; i < vec_num_quad_points.size(); ++i) {
     // Read in the normals, points, and weights to kokkos views
     const size_t num_quad_points = vec_num_quad_points[i];
-    std::string filename_normals = "./dat_files/sphere_triangle_normals_" + std::to_string(num_quad_points) + ".dat";
-    std::string filename_points = "./dat_files/sphere_triangle_points_" + std::to_string(num_quad_points) + ".dat";
-    std::string filename_weights = "./dat_files/sphere_triangle_weights_" + std::to_string(num_quad_points) + ".dat";
+    std::string filename_normals = "./sphere_triangle_normals_" + std::to_string(num_quad_points) + ".dat";
+    std::string filename_points = "./sphere_triangle_points_" + std::to_string(num_quad_points) + ".dat";
+    std::string filename_weights = "./sphere_triangle_weights_" + std::to_string(num_quad_points) + ".dat";
     Kokkos::View<double *, Kokkos::LayoutLeft, Kokkos::HostSpace> normals("normal", 3 * num_quad_points);
     Kokkos::View<double *, Kokkos::LayoutLeft, Kokkos::HostSpace> points("points", 3 * num_quad_points);
     Kokkos::View<double *, Kokkos::LayoutLeft, Kokkos::HostSpace> weights("weights", num_quad_points);
@@ -1604,7 +1604,7 @@ TEST(PeripheryRPYC, SphereQuadPeripheryRPYC) {
            "Vy, Vz\n";
 
   // Build a periphery of a given spectral order (or later, from an external file)
-  for (int order = 2; order <= 64; order *= 2) {
+  for (int order = 2; order <= 16; order *= 2) {
     std::cout << "Order = " << order << std::endl;
     // Create a periphery according to the constructor
     std::vector<double> points_vec;

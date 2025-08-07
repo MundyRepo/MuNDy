@@ -55,6 +55,7 @@ int main(int argc, char** argv) {
 
   stk::parallel_machine_init(&argc, &argv);
   Kokkos::initialize(argc, argv);
+  Kokkos::print_configuration(std::cout);
 
   testing::InitGoogleMock(&argc, argv);
   int return_val = RUN_ALL_TESTS();
