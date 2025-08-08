@@ -18,11 +18,16 @@
 // **********************************************************************************************************************
 // @HEADER
 
+#define ANKERL_NANOBENCH_IMPLEMENT
+
 // C++ core
 #include <functional>  // for std::function
 #include <iostream>    // for std::cout, std::endl
 #include <memory>      // for std::unique_ptr
 #include <vector>      // for std::vector
+
+// External
+#include "nanobench.h"
 
 // Trilinos libs
 #include <Trilinos_version.h>  // for TRILINOS_MAJOR_MINOR_VERSION
@@ -231,14 +236,13 @@ class PerfTestFieldBLAS {
     // stk::mesh::EntityVector entities_to_move_to_block_3;
 
     // const stk::mesh::BucketVector& buckets =
-    //     bulk_data_ptr_->get_buckets(stk::topology::ELEM_RANK, *block1_part_ptr_ &
-    //     meta_data_ptr_->locally_owned_part());
+    //     bulk_data_ptr_->get_buckets(stk::topology::ELEM_RANK, *block1_part_ptr_ & meta_data_ptr_->locally_owned_part());
     // for (size_t bucket_count = 0, bucket_end = buckets.size(); bucket_count < bucket_end; ++bucket_count) {
     //   stk::mesh::Bucket& bucket = *buckets[bucket_count];
     //   for (size_t elem_count = 0, elem_end = bucket.size(); elem_count < elem_end; ++elem_count) {
     //     stk::mesh::Entity elem = bucket[elem_count];
-    //     MUNDY_THROW_REQUIRE(bulk_data_ptr_->is_valid(elem), std::runtime_error, "Attempted to move an invalid
-    //     entity."); if (elem_count % 3 == 0) {
+    //     MUNDY_THROW_REQUIRE(bulk_data_ptr_->is_valid(elem), std::runtime_error, "Attempted to move an invalid entity.");
+    //     if (elem_count % 3 == 0) {
     //       entities_to_move_to_block_2.push_back(elem);
     //     } else if (elem_count % 3 == 1) {
     //       entities_to_move_to_block_3.push_back(elem);
@@ -1161,49 +1165,38 @@ class FieldAbsMinTest : public PerfTestFieldBLAS {
 
 template <typename TestType>
 inline void time_test(TestType& test, const std::string& test_name, const size_t num_iterations = 1000) {
-  // Only print time to 3 digits
-  std::cout.precision(3);
-  std::cout << test_name << ":   \t (STK, STK NGP, Mundy NGP, Our STK) = ";
   test.setup();
 
+  ankerl::nanobench::Bench bench;
+  bench.relative(true).title(test_name).unit("op").performanceCounters(true).minEpochIterations(1000);
+
   if constexpr (TestType::has_stk_test) {
-    Kokkos::Timer timer;
-    test.run_stk(num_iterations);
-    const double average_time = static_cast<double>(timer.seconds()) / static_cast<double>(num_iterations);
-    std::cout << "(" << average_time << ", ";
-  } else {
-    std::cout << "(        , ";
+    bench.run("stk", [&] {
+      test.run_stk();
+      Kokkos::fence();
+    });
   }
 
   if constexpr (TestType::has_stk_ngp_test) {
-    Kokkos::Timer timer;
-    test.run_stk_ngp(num_iterations);
-    const double average_time = static_cast<double>(timer.seconds()) / static_cast<double>(num_iterations);
-    std::cout << average_time << ", ";
-  } else {
-    std::cout << "        , ";
+    bench.run("stk_ngp", [&] {
+      test.run_stk_ngp();
+      Kokkos::fence();
+    });
   }
 
   if constexpr (TestType::has_mundy_ngp_test) {
-    Kokkos::Timer timer;
-    test.run_mundy_ngp(num_iterations);
-    const double average_time = static_cast<double>(timer.seconds()) / static_cast<double>(num_iterations);
-    std::cout << average_time << ", ";
-  } else {
-    std::cout << "        , ";
+    bench.run("mundy_ngp", [&] {
+      test.run_mundy_ngp();
+      Kokkos::fence();
+    });
   }
 
   if constexpr (TestType::has_our_stk_test) {
-    Kokkos::Timer timer;
-    test.run_our_stk_test(num_iterations);
-    const double average_time = static_cast<double>(timer.seconds()) / static_cast<double>(num_iterations);
-    std::cout << average_time << ") seconds" << std::endl;
-  } else {
-    std::cout << "         ) seconds" << std::endl;
+    bench.run("our_stk", [&] {
+      test.run_our_stk_test();
+      Kokkos::fence();
+    });
   }
-
-  // Reset precision
-  std::cout.precision(6);
 }
 
 }  // namespace

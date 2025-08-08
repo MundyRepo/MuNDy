@@ -55,6 +55,18 @@ namespace mesh {
 
 namespace {
 
+struct compute_velocity {
+  double one_over_6pi_mu;
+  KOKKOS_INLINE_FUNCTION
+  void operator()(auto& sphere_view) const {
+    auto force = get<FORCE>(sphere_view, 0);
+    auto velocity = get<VELOCITY>(sphere_view, 0);
+    auto radius = get<RADIUS>(sphere_view);
+    double inv_radius = 1.0 / radius[0];
+    velocity = (one_over_6pi_mu * inv_radius) * force;
+  }
+};
+
 void test_direct(const stk::mesh::BulkData& bulk_data, stk::mesh::Part& sphere_part,
                  stk::mesh::Field<double>& node_center_field, stk::mesh::Field<double>& node_force_field,
                  stk::mesh::Field<double>& node_velocity_field, stk::mesh::Field<double>& elem_radius_field) {
@@ -63,21 +75,36 @@ void test_direct(const stk::mesh::BulkData& bulk_data, stk::mesh::Part& sphere_p
   constexpr double one_over_6pi = 1.0 / (6.0 * pi);
   const double one_over_6pi_mu = one_over_6pi / viscosity;
 
+  auto ngp_mesh = stk::mesh::get_updated_ngp_mesh(bulk_data);
+  auto ngp_node_center_field = stk::mesh::get_updated_ngp_field<double>(node_center_field);
+  auto ngp_node_force_field = stk::mesh::get_updated_ngp_field<double>(node_force_field);
+  auto ngp_node_velocity_field = stk::mesh::get_updated_ngp_field<double>(node_velocity_field);
+  auto ngp_elem_radius_field = stk::mesh::get_updated_ngp_field<double>(elem_radius_field);
+
+  ngp_node_center_field.sync_to_device();
+  ngp_node_force_field.sync_to_device();
+  ngp_node_velocity_field.sync_to_device();
+  ngp_elem_radius_field.sync_to_device();
+
   // Compute the velocity of each sphere according to drag v = f / (6 * pi * r * mu)
-  stk::mesh::for_each_entity_run(bulk_data, stk::topology::ELEM_RANK, sphere_part,
-                                 [one_over_6pi_mu, &node_force_field, &node_velocity_field, &elem_radius_field](
-                                     const stk::mesh::BulkData& bulk_data, const stk::mesh::Entity& sphere) {
-                                   stk::mesh::Entity node = bulk_data.begin_nodes(sphere)[0];
-                                   double* force = stk::mesh::field_data(node_force_field, node);
-                                   double* velocity = stk::mesh::field_data(node_velocity_field, node);
-                                   double radius = stk::mesh::field_data(elem_radius_field, sphere)[0];
-                                   double inv_radius = 1.0 / radius;
-                                   velocity[0] = one_over_6pi_mu * force[0] * inv_radius;
-                                   velocity[1] = one_over_6pi_mu * force[1] * inv_radius;
-                                   velocity[2] = one_over_6pi_mu * force[2] * inv_radius;
-                                 });
+  stk::mesh::for_each_entity_run(
+      ngp_mesh, stk::topology::ELEM_RANK, sphere_part, KOKKOS_LAMBDA(const stk::mesh::FastMeshIndex sphere_index) {
+        stk::mesh::NgpMesh::ConnectedNodes nodes = ngp_mesh.get_nodes(stk::topology::ELEM_RANK, sphere_index);
+        stk::mesh::FastMeshIndex node_index = ngp_mesh.fast_mesh_index(nodes[0]);
+        stk::mesh::EntityFieldData<double> node_coords = ngp_node_center_field(node_index);
+        stk::mesh::EntityFieldData<double> force = ngp_node_force_field(node_index);
+        stk::mesh::EntityFieldData<double> velocity = ngp_node_velocity_field(node_index);
+        double radius = ngp_elem_radius_field(sphere_index, 0);
+        double inv_radius = 1.0 / radius;
+        velocity[0] = one_over_6pi_mu * force[0] * inv_radius;
+        velocity[1] = one_over_6pi_mu * force[1] * inv_radius;
+        velocity[2] = one_over_6pi_mu * force[2] * inv_radius;
+      });
+
+  ngp_node_velocity_field.modify_on_device();
+
   Kokkos::fence();
-  ankerl::nanobench::doNotOptimizeAway(node_velocity_field);  // Prevent optimization of the result
+  ankerl::nanobench::doNotOptimizeAway(ngp_node_velocity_field);  // Prevent optimization of the result
 }
 
 void test_aggregate(const stk::mesh::BulkData& bulk_data, stk::mesh::Part& sphere_part,
@@ -101,15 +128,13 @@ void test_aggregate(const stk::mesh::BulkData& bulk_data, stk::mesh::Part& spher
                                .add_component<VELOCITY, stk::topology::NODE_RANK>(velocity_accessor)
                                .add_component<RADIUS, stk::topology::ELEM_RANK>(radius_accessor);
 
-  // Compute the velocity of each sphere according to drag v = f / (6 * pi * r * mu)
-  sphere_data.for_each([one_over_6pi_mu](auto& sphere_view) {
-    auto force = sphere_view.template get<FORCE>(0);
-    auto velocity = sphere_view.template get<VELOCITY>(0);
-    auto radius = sphere_view.template get<RADIUS>();
-    double inv_radius = 1.0 / radius[0];
-    velocity = (one_over_6pi_mu * inv_radius) * force;
-  });
+  auto ngp_sphere_data = get_updated_ngp_aggregate(sphere_data);
+  ngp_sphere_data.template sync_to_device<CENTER, FORCE, VELOCITY, RADIUS>();
 
+  // Compute the velocity of each sphere according to drag v = f / (6 * pi * r * mu)
+  ngp_sphere_data.template for_each(compute_velocity{one_over_6pi_mu});
+
+  ngp_sphere_data.template modify_on_device<VELOCITY>();
   Kokkos::fence();
   ankerl::nanobench::doNotOptimizeAway(node_velocity_field);  // Prevent optimization of the result
 }
@@ -149,7 +174,6 @@ void run_test() {
 
   // Create the spheres and populate the fields
   bulk_data.modification_begin();
-  std::vector<stk::mesh::Entity> spheres(num_spheres);
   for (size_t i = 0; i < num_spheres; ++i) {
     stk::mesh::Entity node = bulk_data.declare_node(i + 1);  // 1-based indexing
     stk::mesh::Entity elem = bulk_data.declare_element(i + 1, stk::mesh::PartVector{&sphere_part});
@@ -162,20 +186,18 @@ void run_test() {
     scalar_field_data(elem_radius_field, elem).set(0.5);
   }
   bulk_data.modification_end();
+  Kokkos::fence();
 
   // Run the test using nanobench
   ankerl::nanobench::Bench bench;
   bench.relative(true).title("Agg").unit("op").performanceCounters(true).minEpochIterations(1000);
 
   bench.run("direct", [&] {
-    test_direct(bulk_data, sphere_part, node_center_field, node_force_field, node_velocity_field,
-                elem_radius_field);
+    test_direct(bulk_data, sphere_part, node_center_field, node_force_field, node_velocity_field, elem_radius_field);
   });
   bench.run("aggregates", [&] {
-    test_aggregate(bulk_data, sphere_part, node_center_field, node_force_field, node_velocity_field,
-                  elem_radius_field);
+    test_aggregate(bulk_data, sphere_part, node_center_field, node_force_field, node_velocity_field, elem_radius_field);
   });
-
 }
 
 }  // namespace
