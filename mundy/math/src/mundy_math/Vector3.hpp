@@ -109,7 +109,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto cross(const AVector3<U, Accessor1, Ownersh
 /// \param[in] b The second vector.
 template <typename U, typename T, ValidAccessor<U> Accessor1, typename Ownership1, ValidAccessor<T> Accessor2,
           typename Ownership2>
-KOKKOS_INLINE_FUNCTION constexpr auto element_multiply(const AVector3<U, Accessor1, Ownership1>& a,
+KOKKOS_INLINE_FUNCTION constexpr auto elementwise_multiply(const AVector3<U, Accessor1, Ownership1>& a,
                                                        const AVector3<T, Accessor2, Ownership2>& b)
     -> Vector3<std::common_type_t<T, U>> {
   using CommonType = std::common_type_t<T, U>;

@@ -127,7 +127,7 @@ TYPED_TEST(Vector3PairwiseTypeTest, SpecialOperations) {
   Vector3<T1> v1(1, 2, 3);
   Vector3<T2> v2(4, 5, 6);
   is_close_debug(cross(v1, v2), Vector3d{-3.0, 6.0, -3.0}, "Cross product failed.");
-  is_close_debug(element_multiply(v1, v2), Vector3d{4.0, 10.0, 18.0}, "Element-wise product failed.");
+  is_close_debug(elementwise_multiply(v1, v2), Vector3d{4.0, 10.0, 18.0}, "Element-wise product failed.");
 }
 //@}
 
