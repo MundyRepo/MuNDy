@@ -27,8 +27,13 @@ SET(NOINSTALLHEADERS
   src/mundy_mesh/LinkData.hpp
   src/mundy_mesh/MeshBuilder.hpp
   src/mundy_mesh/MetaData.hpp
+  src/mundy_mesh/NewLinkMetaData.hpp
+  src/mundy_mesh/NewNgpCRSPartition.hpp
+  src/mundy_mesh/NewNgpLinkData.hpp
+  src/mundy_mesh/NewNgpLinkRequests.hpp
   src/mundy_mesh/NgpEntityPool.hpp
   src/mundy_mesh/NgpFieldBLAS.hpp
+  src/mundy_mesh/NgpForEachLink.hpp
   src/mundy_mesh/NgpUtils.hpp
   src/mundy_mesh/StringToSelector.hpp
   src/mundy_mesh/StringToTopology.hpp

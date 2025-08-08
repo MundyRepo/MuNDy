@@ -55,6 +55,7 @@
 #include <mundy_mesh/MetaData.hpp>            // for mundy::mesh::MetaData
 #include <mundy_mesh/NewLinkMetaData.hpp>     // for mundy::mesh::NewLinkMetaData
 #include <mundy_mesh/NewNgpCRSPartition.hpp>  // for mundy::mesh::NewNgpCRSPartition
+#include <mundy_mesh/NewNgpLinkRequests.hpp>  // for mundy::mesh::NewNgpLinkRequests
 #include <mundy_mesh/NgpFieldBLAS.hpp>        // for mundy::mesh::field_copy
 
 namespace mundy {
@@ -186,6 +187,8 @@ namespace mesh {
 /// If using a single process or if only linking element or constraint-rank entities, then partial consistency is the
 /// same as full consistency. The level of consistency is passed to the process_requests function, accepting a bool
 /// stating if the requests are fully consistent or not. This function will enter a modification cycle only if needed.
+///
+/// This class will need templated by Ngp memory space come Trilinos 16.2.
 class NewNgpLinkData {
  public:
   //! \name Aliases
@@ -237,6 +240,9 @@ class NewNgpLinkData {
         ngp_link_crs_needs_updated_field_(
             stk::mesh::get_updated_ngp_field<NewLinkMetaData::link_crs_needs_updated_field_t::value_type>(
                 link_meta_data.link_crs_needs_updated_field())),
+        ngp_link_marked_for_destruction_field_(
+            stk::mesh::get_updated_ngp_field<NewLinkMetaData::link_marked_for_destruction_field_t::value_type>(
+                link_meta_data.link_marked_for_destruction_field())),
         all_crs_partitions_("AllCRSPartitions", 0),
         stk_link_bucket_to_partition_id_map_(10) {
   }
@@ -490,7 +496,9 @@ class NewNgpLinkData {
 
   /// \brief Get the CRS partitions for a given link subset selector (Memoized/host only/not thread safe).
   ///
-  /// This is the only way for either mundy or users to create a new partition.
+  /// This is the only way for either mundy or users to create a new partition. The returned view is persistent
+  /// but its contents/size will change dynamically as new partitions are created and destroyed. The only promise
+  /// we will make is to never delete a partition outside of a modification cycle.
   const NgpCRSPartitionView &get_or_create_crs_partitions(const stk::mesh::Selector &selector) const {
     MUNDY_THROW_ASSERT(is_valid(), std::invalid_argument, "Link data is not valid.");
 
@@ -708,8 +716,6 @@ class NewNgpLinkData {
     // This tells us that the LinkDataObserver is in charge of deciding when to rebuild this map but not when to build
     // it in the first place. We could use a memoized getter that sees if the list is empty or not. If it's empty, it
     // calls rebuild_stk_link_bucket_to_partition_id_map.
-    const NgpCRSPartitionView &crs_partitions = get_or_create_crs_partitions(link_subset_selector);
-
     flag_dirty_linked_buckets_of_modified_links(link_subset_selector);
     reset_dirty_linked_buckets(link_subset_selector);
     gather_part_1_count(link_subset_selector);
@@ -748,15 +754,40 @@ class NewNgpLinkData {
   //@{
 
   /// \brief Request the destruction of a link. This will be processed in the next process_requests call.
+  KOKKOS_INLINE_FUNCTION
+  void request_destruction(const stk::mesh::FastMeshIndex &linker_index) const {
+    ngp_link_marked_for_destruction_field_(linker_index, 0) = true;
+  }
+
+  /// \brief Request the destruction of a link. This will be processed in the next process_requests call (host version).
   inline void request_destruction_host(const stk::mesh::Entity &linker) const {
     MUNDY_THROW_ASSERT(link_meta_data().link_rank() == bulk_data().entity_rank(linker), std::invalid_argument,
                        "Linker is not of the correct rank.");
     MUNDY_THROW_ASSERT(bulk_data().is_valid(linker), std::invalid_argument, "Linker is not valid.");
 
     auto &link_marked_for_destruction_field = link_meta_data().link_marked_for_destruction_field();
-    auto &link_needs_updated_field = link_meta_data().link_crs_needs_updated_field();
     stk::mesh::field_data(link_marked_for_destruction_field, linker)[0] = true;
-    stk::mesh::field_data(link_needs_updated_field, linker)[0] = true;  // CRS conn of linked entities needs updated
+  }
+
+  /// \brief Get a helper for requesting links for a collection of parts (memoized).
+  const NewNgpLinkRequests &get_or_create_link_requests(const stk::mesh::PartVector &link_parts,
+                                                        unsigned requested_dimensionality = 0,
+                                                        unsigned requested_capacity = 0) const {
+    // Order and repetition don't matter for the link parts, so we sort and uniquify them.
+    stk::mesh::PartVector sorted_uniqued_link_parts = link_parts;
+    stk::util::sort_and_unique(sorted_uniqued_link_parts);
+
+    auto it = part_vector_to_request_links_map_.find(sorted_uniqued_link_parts);
+    if (it != part_vector_to_request_links_map_.end()) {
+      // Return the existing helper
+      return it->second;
+    } else {
+      // Create a new helper
+      auto [other_it, inserted] = part_vector_to_request_links_map_.try_emplace(
+          sorted_uniqued_link_parts, link_meta_data(), sorted_uniqued_link_parts, requested_dimensionality,
+          requested_capacity);
+      return other_it->second;
+    }
   }
 
   /// \brief Process all requests for creation/destruction made since the last process_requests call.
@@ -770,6 +801,10 @@ class NewNgpLinkData {
   void process_requests(bool assume_fully_consistent = false) {
     MUNDY_THROW_REQUIRE(false, std::invalid_argument, "Processing requests not implemented yet.");
   }
+  //@}
+
+  //! \name STK NGP interface
+  //@{
 
   void modify_on_host() {
     ngp_linked_entities_field_.modify_on_host();
@@ -779,6 +814,7 @@ class NewNgpLinkData {
     ngp_linked_entity_bucket_ids_field_.modify_on_host();
     ngp_linked_entity_bucket_ords_field_.modify_on_host();
     ngp_link_crs_needs_updated_field_.modify_on_host();
+    ngp_link_marked_for_destruction_field_.modify_on_host();
   }
 
   void modify_on_device() {
@@ -789,6 +825,7 @@ class NewNgpLinkData {
     ngp_linked_entity_bucket_ids_field_.modify_on_device();
     ngp_linked_entity_bucket_ords_field_.modify_on_device();
     ngp_link_crs_needs_updated_field_.modify_on_device();
+    ngp_link_marked_for_destruction_field_.modify_on_device();
   }
 
   void sync_to_host() {
@@ -799,6 +836,7 @@ class NewNgpLinkData {
     ngp_linked_entity_bucket_ids_field_.sync_to_host();
     ngp_linked_entity_bucket_ords_field_.sync_to_host();
     ngp_link_crs_needs_updated_field_.sync_to_host();
+    ngp_link_marked_for_destruction_field_.sync_to_host();
   }
 
   void sync_to_device() {
@@ -809,6 +847,7 @@ class NewNgpLinkData {
     ngp_linked_entity_bucket_ids_field_.sync_to_device();
     ngp_linked_entity_bucket_ords_field_.sync_to_device();
     ngp_link_crs_needs_updated_field_.sync_to_device();
+    ngp_link_marked_for_destruction_field_.sync_to_device();
   }
   //@}
 
@@ -823,6 +862,7 @@ class NewNgpLinkData {
   using ngp_linked_entity_bucket_ids_field_t = stk::mesh::NgpField<unsigned>;
   using ngp_linked_entity_bucket_ords_field_t = stk::mesh::NgpField<unsigned>;
   using ngp_link_crs_needs_updated_field_t = stk::mesh::NgpField<int>;
+  using ngp_link_marked_for_destruction_field_t = stk::mesh::NgpField<unsigned>;
   using LinkBucketToPartitionIdMap = Kokkos::UnorderedMap<unsigned, unsigned, stk::ngp::MemSpace>;
   //@}
 
@@ -1464,15 +1504,13 @@ class NewNgpLinkData {
     return stk::mesh::field_scalars_per_entity(linked_es_field, linker_bucket);
   }
 
-  /// \brief Get the dimensionality of a linker bucket (device compatible)
-  inline unsigned get_linker_dimensionality(const stk::mesh::Bucket &linker_bucket) const {
-    MUNDY_THROW_ASSERT(link_meta_data().link_rank() == linker_bucket.entity_rank(), std::invalid_argument,
-                       "Linker bucket is not of the correct rank.");
-    MUNDY_THROW_ASSERT(linker_bucket.member(link_meta_data().universal_link_part()), std::invalid_argument,
-                       "Linker bucket is not a subset of our universal link part.");
-
+  /// \brief Get the dimensionality for a collection of linker parts
+  inline unsigned get_linker_dimensionality_host(const stk::mesh::PartVector &parts) const {
+    // The restriction may be empty if the parts are not a subset of the universal link part.
     auto &linked_es_field = link_meta_data().linked_entities_field();
-    return stk::mesh::field_scalars_per_entity(linked_es_field, linker_bucket);
+    const stk::mesh::FieldRestriction &restriction =
+        stk::mesh::find_restriction(linked_es_field, link_meta_data().link_rank(), parts);
+    return restriction.num_scalars_per_entity();
   }
 
   /// \brief Get the dimensionality of a linker partition
@@ -1485,11 +1523,7 @@ class NewNgpLinkData {
       parts[i] = &mesh_meta_data().get_part(partition_key[i]);
     }
 
-    // FieldBase::restrictions
-    auto &linked_es_field = link_meta_data().linked_entities_field();
-    const stk::mesh::FieldRestriction &restriction =
-        stk::mesh::find_restriction(linked_es_field, link_meta_data().link_rank(), parts);
-    return restriction.num_scalars_per_entity();
+    return get_linker_dimensionality_host(parts);
   }
 
   /// \brief Get if the CRS connectivity for a link needs to be updated.
@@ -1536,9 +1570,11 @@ class NewNgpLinkData {
 
   using SelectorToPartitionsMap = std::map<stk::mesh::Selector, NgpCRSPartitionView>;
   using PartitionKeyToIdMap = std::map<PartitionKey, unsigned>;
+  using PartVectorToRequestLinks = std::map<stk::mesh::PartVector, NewNgpLinkRequests>;
   mutable SelectorToPartitionsMap
       selector_to_partitions_map_;  // Maybe we want to use a view here to reduce copy overhead.
   mutable PartitionKeyToIdMap partition_key_to_id_map_;
+  mutable PartVectorToRequestLinks part_vector_to_request_links_map_;
   //@}
 
   //! \name Internal members (device compatible)
@@ -1553,6 +1589,7 @@ class NewNgpLinkData {
   ngp_linked_entity_bucket_ids_field_t ngp_linked_entity_bucket_ids_field_;
   ngp_linked_entity_bucket_ords_field_t ngp_linked_entity_bucket_ords_field_;
   ngp_link_crs_needs_updated_field_t ngp_link_crs_needs_updated_field_;
+  ngp_link_marked_for_destruction_field_t ngp_link_marked_for_destruction_field_;
   mutable NgpCRSPartitionView all_crs_partitions_;
   LinkBucketToPartitionIdMap stk_link_bucket_to_partition_id_map_;
   //@}
