@@ -530,7 +530,44 @@ KOKKOS_INLINE_FUNCTION T one_norm_impl(std::index_sequence<Is...>,
   ((max_value = Kokkos::max(max_value, Kokkos::abs(sum(mat.template view_column<Is>())))), ...);
   return max_value;
 }
+
+/// \brief Apply a function to each element of the matrix
+template <size_t... Is, typename Func, typename T, size_t N, size_t M, ValidAccessor<T> Accessor,
+          typename OwnershipType>
+KOKKOS_INLINE_FUNCTION auto apply_impl(std::index_sequence<Is...>, const Func& func,
+                                       const AMatrix<T, N, M, Accessor, OwnershipType>& mat)
+    -> AMatrix<std::invoke_result_t<Func, T>, N, M> {
+  using ResultType = std::invoke_result_t<Func, T>;
+  AMatrix<ResultType, N, M> result;
+  ((result[Is] = func(mat[Is])), ...);
+  return result;
+}
+
+/// \brief Apply a function to each row of the matrix
+template <size_t... Is, typename Func, typename T, size_t N, size_t M, ValidAccessor<T> Accessor,
+          typename OwnershipType>
+KOKKOS_INLINE_FUNCTION auto apply_row_impl(std::index_sequence<Is...>, const Func& func,
+                                           const AMatrix<T, N, M, Accessor, OwnershipType>& mat)
+    -> AMatrix<typename std::invoke_result_t<Func, Vector<T, M>>::scalar_t, N, M> {
+  using ResultType = typename std::invoke_result_t<Func, Vector<T, M>>::scalar_t;
+  AMatrix<ResultType, N, M> result;
+  ((result.template view_row<Is>() = func(mat.template view_row<Is>())), ...);
+  return result;
+}
+
+/// \brief Apply a function to each column of the matrix
+template <size_t... Is, typename Func, typename T, size_t N, size_t M, ValidAccessor<T> Accessor,
+          typename OwnershipType>
+KOKKOS_INLINE_FUNCTION auto apply_column_impl(std::index_sequence<Is...>, const Func& func,
+                                              const AMatrix<T, N, M, Accessor, OwnershipType>& mat)
+    -> AMatrix<typename std::invoke_result_t<Func, Vector<T, N>>::scalar_t, N, M> {
+  using ResultType = typename std::invoke_result_t<Func, Vector<T, M>>::scalar_t;
+  AMatrix<ResultType, N, M> result;
+  ((result.template view_column<Is>() = func(mat.template view_column<Is>())), ...);
+  return result;
+}
 //@}
+
 }  // namespace impl
 
 }  // namespace math

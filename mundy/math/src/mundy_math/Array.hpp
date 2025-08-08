@@ -174,6 +174,13 @@ class Array {
   //@}
 };  // Array
 
+/// \brief Apply a function to each element of an array
+template <typename Func, typename T, size_t N>
+KOKKOS_INLINE_FUNCTION constexpr auto apply(Func&& func, const Array<T, N>& array)
+    -> Array<decltype(func(array[0])), N> {
+  return impl::apply_impl(std::make_index_sequence<N>{}, std::forward<Func>(func), array);
+}
+
 // Just to double check
 static_assert(std::is_trivially_copyable_v<Kokkos::Array<double, 3>>);
 static_assert(std::is_trivially_copyable_v<Array<double, 3>>);

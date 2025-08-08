@@ -658,6 +658,44 @@ TYPED_TEST(Matrix3SingleTypeTest, SpecialOperationsEdgeCases) {
 }
 //@}
 
+//! \name Apply
+//@{
+
+struct an_external_functor {
+  template <typename T>
+  T operator()(const T& x) const {
+    return x + 1;
+  }
+};
+
+struct an_vector_external_functor {
+  template <typename T>
+  auto operator()(const T& x) const {
+    // Set each element of the row or column to the sum of its elements
+    return sum(x) * Vector3<typename T::scalar_t>{1, 1, 1};
+  }
+};
+
+TYPED_TEST(Matrix3SingleTypeTest, Apply) {
+  // Apply to each element of the matrix
+  Matrix3<TypeParam> m1(1, 2, 3, 
+                        4, 5, 6, 
+                        -7, -8, -9);
+  auto m2 = apply(an_external_functor{}, m1);
+  using T3 = decltype(m2)::scalar_t;
+  is_close_debug(m2, Matrix3<T3>{2, 3, 4, 5, 6, 7, -6, -7, -8}, "Apply to elements failed.");
+
+  // Apply to each row
+  auto m3 = apply_row(an_vector_external_functor{}, m1);
+  using T4 = decltype(m3)::scalar_t;
+  is_close_debug(m3, Matrix3<T4>{6, 6, 6, 15, 15, 15, -24, -24, -24}, "Apply to rows failed.");
+
+  // Apply to each column
+  auto m4 = apply_column(an_vector_external_functor{}, m1);
+  is_close_debug(m4, Matrix3<T4>{-2, -1, 0, -2, -1, 0, -2, -1, 0}, "Apply to columns failed.");  
+}
+//@}
+
 //! \name Matrix3 Views
 //@{
 

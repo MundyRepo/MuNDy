@@ -1599,6 +1599,33 @@ KOKKOS_INLINE_FUNCTION constexpr auto frobenius_inner_product(const AMatrix<U, N
                                                               const AMatrix<T, N, M, Accessor2, OwnershipType2>& b) {
   return impl::frobenius_inner_product_impl(std::make_index_sequence<N * M>{}, a, b);
 }
+
+/// \brief Apply a function to each element of the matrix
+/// \param[in] func The function to apply.
+/// \param[in] mat The matrix.
+template <typename Func, size_t N, size_t M, typename T, ValidAccessor<T> Accessor, typename OwnershipType>
+KOKKOS_INLINE_FUNCTION constexpr auto apply(Func&& func, const AMatrix<T, N, M, Accessor, OwnershipType>& mat)
+    -> AMatrix<std::invoke_result_t<Func, T>, N, M> {
+  return impl::apply_impl(std::make_index_sequence<N * M>{}, std::forward<Func>(func), mat);
+}
+
+/// \brief Apply a function to each row of the matrix
+/// \param[in] func The function to apply.
+/// \param[in] mat The matrix.
+template <typename Func, size_t N, size_t M, typename T, ValidAccessor<T> Accessor, typename OwnershipType>
+KOKKOS_INLINE_FUNCTION constexpr auto apply_row(Func&& func, const AMatrix<T, N, M, Accessor, OwnershipType>& mat)
+    -> AMatrix<typename std::invoke_result_t<Func, Vector<T, M>>::scalar_t, N, M> {
+  return impl::apply_row_impl(std::make_index_sequence<N>{}, std::forward<Func>(func), mat);
+}
+
+/// \brief Apply a function to each column of the matrix
+/// \param[in] func The function to apply.
+/// \param[in] mat The matrix.
+template <typename Func, size_t N, size_t M, typename T, ValidAccessor<T> Accessor, typename OwnershipType>
+KOKKOS_INLINE_FUNCTION constexpr auto apply_column(Func&& func, const AMatrix<T, N, M, Accessor, OwnershipType>& mat)
+    -> AMatrix<typename std::invoke_result_t<Func, Vector<T, N>>::scalar_t, N, M> {
+  return impl::apply_column_impl(std::make_index_sequence<M>{}, std::forward<Func>(func), mat);
+}
 //@}
 
 //! \name Special vector operations with matrices

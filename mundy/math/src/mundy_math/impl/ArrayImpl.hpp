@@ -54,6 +54,16 @@ KOKKOS_INLINE_FUNCTION constexpr void fill_impl(std::index_sequence<Is...>, Arra
   ((array[Is] = value), ...);
 }
 
+/// \brief Apply implementation for Array
+template <size_t... Is, typename Func, typename T, size_t N>
+KOKKOS_INLINE_FUNCTION constexpr auto apply_impl(std::index_sequence<Is...>, const Func& func, const Array<T, N>& array)
+    -> Array<std::invoke_result_t<Func, T>, N> {
+  using result_type = std::invoke_result_t<Func, T>;
+  Array<result_type, N> result;
+  ((result[Is] = func(array[Is])), ...);
+  return result;
+}
+
 }  // namespace impl
 
 }  // namespace math

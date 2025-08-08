@@ -615,6 +615,100 @@ TYPED_TEST(VectorPairwiseTypeTest, SpecialOperations) {
 }
 //@}
 
+//! \name Apply
+//@{
+
+struct an_external_functor {
+  template <typename T>
+  T operator()(const T& x) const {
+    return x + 1;
+  }
+};
+
+TYPED_TEST(VectorSingleTypeTest, Apply) {
+  // Using a lambda function
+  // Dim 1
+  OurVector1<TypeParam> v1(1);
+  auto v2 = apply([](auto x) { return x + 1; }, v1);
+  is_close_debug(v2, OurVector1<TypeParam>{2}, "Apply failed.");
+
+  // Dim 2
+  OurVector2<TypeParam> v3(1, 2);
+  auto v4 = apply([](auto x) { return x + 1; }, v3);
+  is_close_debug(v4, OurVector2<TypeParam>{2, 3}, "Apply failed.");
+
+  // Dim 3
+  OurVector3<TypeParam> v5(1, 2, 3);
+  auto v6 = apply([](auto x) { return x + 1; }, v5);
+  is_close_debug(v6, OurVector3<TypeParam>{2, 3, 4}, "Apply failed.");
+
+  // Using an external function
+  // Dim 1
+  OurVector1<TypeParam> v7(1);
+  auto v8 = apply(an_external_functor{}, v7);
+  is_close_debug(v8, OurVector1<TypeParam>{2}, "Apply failed.");
+
+  // Dim 2
+  OurVector2<TypeParam> v9(1, 2);
+  auto v10 = apply(an_external_functor{}, v9);
+  is_close_debug(v10, OurVector2<TypeParam>{2, 3}, "Apply failed.");
+
+  // Dim 3
+  OurVector3<TypeParam> v11(1, 2, 3);
+  auto v12 = apply(an_external_functor{}, v11);
+  is_close_debug(v12, OurVector3<TypeParam>{2, 3, 4}, "Apply failed.");
+
+  // Using a temporary vector
+  auto v13 = apply(an_external_functor{}, OurVector1<TypeParam>{1});
+  is_close_debug(v13, OurVector1<TypeParam>{2}, "Apply failed.");
+}
+
+struct an_external_constexpr_functor {
+  template <typename T>
+  constexpr T operator()(const T& x) const {
+    return x + 1;
+  }
+};
+
+TYPED_TEST(VectorSingleTypeTest, ConstexprApply) {
+  // Using a lambda function
+  // Dim 1
+  constexpr OurVector1<TypeParam> v1(1);
+  constexpr auto v2 = apply([](auto x) { return x + 1; }, v1);
+  static_assert(std::abs(v2[0] - 2) < 1e-6, "Constexpr apply failed.");
+
+  // Dim 2
+  constexpr OurVector2<TypeParam> v3(1, 2);
+  constexpr auto v4 = apply([](auto x) { return x + 1; }, v3);
+  static_assert(std::abs(v4[0] - 2) < 1e-6 && std::abs(v4[1] - 3) < 1e-6,
+                "Constexpr apply failed.");
+
+  // Dim 3
+  constexpr OurVector3<TypeParam> v5(1, 2, 3);
+  constexpr auto v6 = apply([](auto x) { return x + 1; }, v5);
+  static_assert(std::abs(v6[0] - 2) < 1e-6 && std::abs(v6[1] - 3) < 1e-6 &&
+                std::abs(v6[2] - 4) < 1e-6, "Constexpr apply failed.");
+
+  // Using an external function
+  // Dim 1
+  constexpr OurVector1<TypeParam> v7(1);
+  constexpr auto v8 = apply(an_external_constexpr_functor{}, v7);
+  static_assert(std::abs(v8[0] - 2) < 1e-6, "Constexpr apply failed.");
+
+  // Dim 2
+  constexpr OurVector2<TypeParam> v9(1, 2);
+  constexpr auto v10 = apply(an_external_constexpr_functor{}, v9);
+  static_assert(std::abs(v10[0] - 2) < 1e-6 && std::abs(v10[1] - 3) < 1e-6,
+                "Constexpr apply failed.");
+
+  // Dim 3
+  constexpr OurVector3<TypeParam> v11(1, 2, 3);
+  constexpr auto v12 = apply(an_external_constexpr_functor{}, v11);
+  static_assert(std::abs(v12[0] - 2) < 1e-6 && std::abs(v12[1] - 3) < 1e-6 &&
+                std::abs(v12[2] - 4) < 1e-6, "Constexpr apply failed.");
+}
+//@}
+
 //! \name Vector Views
 //@{
 

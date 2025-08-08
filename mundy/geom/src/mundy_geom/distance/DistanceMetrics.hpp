@@ -81,7 +81,6 @@ struct PeriodicSpaceMetric {
         point1_scaled[i] = 0.0;
       }
       if (Kokkos::fabs(point2_scaled[i] - 1.0) < mundy::math::get_zero_tolerance<Scalar>()) {
-        // Guard against numerical errors that may cause the scaled coordinates to be exactly 1.0
         point2_scaled[i] = 0.0;
       }
     }

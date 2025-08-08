@@ -61,13 +61,13 @@ KOKKOS_INLINE_FUNCTION constexpr void deep_copy_impl(std::index_sequence<Is...>,
   ((vec[Is] = other[Is]), ...);
 }
 
-/// \brief Move assignment operator with same accessor
+/// \brief Move assignment operator. Simply because the vector owns the accessor, doesn't mean we can move its contents.
 /// \details Moves the data from the other vector to our data. This is only enabled if T is not const.
-template <size_t... Is, typename T, size_t N, ValidAccessor<T> Accessor, typename OwnershipType>
+template <size_t... Is, typename T, size_t N, ValidAccessor<T> Accessor, typename OwnershipType, ValidAccessor<T> OtherAccessor>
   requires HasNonConstAccessOperator<Accessor, T>
 KOKKOS_INLINE_FUNCTION constexpr void move_impl(std::index_sequence<Is...>, AVector<T, N, Accessor, OwnershipType>& vec,
-                                                AVector<T, N, Accessor, Ownership::Owns>&& other) {
-  ((vec[Is] = std::move(other[Is])), ...);
+                                                AVector<T, N, OtherAccessor, Ownership::Owns>&& other) {
+  ((vec[Is] = other[Is]), ...);
 }
 
 /// \brief Set all elements of the vector
@@ -334,6 +334,17 @@ KOKKOS_INLINE_FUNCTION constexpr auto dot_product_impl(std::index_sequence<Is...
                                                        const AVector<T, N, OtherAccessor, OtherOwnershipType>& vec2) {
   using CommonType = std::common_type_t<U, T>;
   return ((static_cast<CommonType>(vec1[Is]) * static_cast<CommonType>(vec2[Is])) + ...);
+}
+
+/// \brief Apply a function to each element of a vector
+template <size_t... Is, typename Func, typename T, size_t N, ValidAccessor<T> Accessor, typename OwnershipType>
+KOKKOS_INLINE_FUNCTION constexpr auto apply_impl(std::index_sequence<Is...>, const Func& func,
+                                                 const AVector<T, N, Accessor, OwnershipType>& vec)
+    -> AVector<std::invoke_result_t<Func, T>, N> {
+  using result_type = std::invoke_result_t<Func, T>;
+  AVector<result_type, N> result;
+  ((result[Is] = func(vec[Is])), ...);
+  return result;
 }
 //@}
 }  // namespace impl
