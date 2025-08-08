@@ -47,3 +47,10 @@ tribits_add_executable_and_test(
   UnitTestComputeBoundingRadius.cpp
     ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
   )
+
+tribits_add_executable_and_test(
+  UnitTestPeriodicMetric
+  SOURCES
+  UnitTestPeriodicMetric.cpp
+    ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
+  )
