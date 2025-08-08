@@ -50,6 +50,7 @@ namespace mundy {
 namespace geom {
 
 namespace {
+
 //! \brief Unit tests
 //@{
 
@@ -122,6 +123,43 @@ TEST(FreeAndPeriodicMetricDistances, PositiveResult) {
   EXPECT_NE(sep_periodic[0], point2_crossed_x[0] - point1[0]);
   EXPECT_DOUBLE_EQ(sep_periodic[1], point2_crossed_x[1] - point1[1]);
   EXPECT_DOUBLE_EQ(sep_periodic[2], point2_crossed_x[2] - point1[2]);
+}
+
+TEST(FreeAndPeriodicMetricPointPoint, PositiveResult) {
+  // Origin point
+  mundy::geom::Point<double> point1{1.0, 1.0, 1.0};
+  mundy::math::Vector3<double> cell_size{100.0, 30.0, 20.0};
+  // Build the periodic space metric with a unit cell
+  PeriodicSpaceMetric<double> periodic_space_metric;
+  unit_cell_box(periodic_space_metric, cell_size);
+
+  // Test point that should not be a periodic image
+  mundy::geom::Point<double> point2{2.0, 2.0, 2.0};
+
+  // Get the distance measures without separation vectors
+  auto free_distance = mundy::geom::distance(point1, point2);
+  auto periodic_distance = mundy::geom::distance_pbc(point1, point2, periodic_space_metric);
+
+  EXPECT_DOUBLE_EQ(free_distance, periodic_distance);
+
+  // Get the separation vectors
+  mundy::math::Vector3<double> sep_free;
+  mundy::math::Vector3<double> sep_periodic;
+  free_distance = mundy::geom::distance(point1, point2, sep_free);
+  periodic_distance = mundy::geom::distance_pbc(point1, point2, periodic_space_metric, sep_periodic);
+  EXPECT_DOUBLE_EQ(sep_free[0], point2[0] - point1[0]);
+  for (size_t i = 0; i < 3; ++i) {
+    EXPECT_DOUBLE_EQ(sep_free[i], sep_periodic[i]);
+  }
+
+  // Test point that is wrapped in x
+  mundy::geom::Point<double> point2_crossed_x{99.0, 2.0, 2.0};
+  free_distance = mundy::geom::distance(point1, point2_crossed_x, sep_free);
+  periodic_distance = mundy::geom::distance_pbc(point1, point2_crossed_x, periodic_space_metric, sep_periodic);
+  EXPECT_NE(free_distance, periodic_distance);
+  EXPECT_DOUBLE_EQ(sep_periodic[0], -2.0);
+  EXPECT_DOUBLE_EQ(sep_periodic[1], sep_free[1]);
+  EXPECT_DOUBLE_EQ(sep_periodic[2], sep_free[2]);
 }
 
 }  // namespace

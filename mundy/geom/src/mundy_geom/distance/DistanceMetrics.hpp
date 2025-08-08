@@ -41,7 +41,8 @@ namespace geom {
 ///
 
 // XXX Move the following function somewhere else, this just to call something like Kokkos::floor but on a floating
-// point number.
+// point number. This is also templated by both a Scalar integer and Scalar floating point type, for use later when
+// needing this to run on a GPU, and having to consider 32 vs. 64-bit calculations.
 template <typename ScalarInt, typename Scalar>
 KOKKOS_INLINE_FUNCTION Scalar pbc_floor(Scalar x) {
   return static_cast<Scalar>(x < Scalar(0.0) ? static_cast<ScalarInt>(x - Scalar(0.5))
@@ -55,7 +56,7 @@ KOKKOS_INLINE_FUNCTION Scalar pbc_floor(Scalar x) {
 template <typename Scalar>
 struct FreeSpaceMetric {
   KOKKOS_INLINE_FUNCTION
-  void operator()(Point<Scalar>& sep, const Point<Scalar>& point1, const Point<Scalar>& point2) {
+  void operator()(Point<Scalar>& sep, const Point<Scalar>& point1, const Point<Scalar>& point2) const {
     sep = point2 - point1;
   }
 };
@@ -67,7 +68,7 @@ struct FreeSpaceMetric {
 template <typename Scalar>
 struct PeriodicSpaceMetric {
   KOKKOS_INLINE_FUNCTION
-  void operator()(Point<Scalar>& sep, const Point<Scalar>& point1, const Point<Scalar>& point2) {
+  void operator()(Point<Scalar>& sep, const Point<Scalar>& point1, const Point<Scalar>& point2) const {
     // Convert to fractional coordinates
     mundy::math::Vector3<Scalar> point1_scaled = point1 * h_inv;
     mundy::math::Vector3<Scalar> point2_scaled = point2 * h_inv;
