@@ -25,42 +25,51 @@
 #include <Kokkos_Core.hpp>
 
 // Mundy
-#include <mundy_geom/distance/PointPoint.hpp>     // for mundy::geom::distance(Point, Point)
-#include <mundy_geom/distance/Types.hpp>          // for mundy::geom::SharedNormalSigned
-#include <mundy_geom/primitives/LineSegment.hpp>  // for mundy::geom::LineSegment
-#include <mundy_geom/primitives/Point.hpp>        // for mundy::geom::Point
-#include <mundy_math/Tolerance.hpp>               // for mundy::math::get_zero_tolerance
+#include <mundy_geom/distance/DistanceMetrics.hpp>  // for mundy::geom::FreeSpaceMetric, mundy::geom::PeriodicSpaceMetric
+#include <mundy_geom/distance/PointPoint.hpp>       // for mundy::geom::distance(Point, Point)
+#include <mundy_geom/distance/Types.hpp>            // for mundy::geom::SharedNormalSigned
+#include <mundy_geom/primitives/LineSegment.hpp>    // for mundy::geom::LineSegment
+#include <mundy_geom/primitives/Point.hpp>          // for mundy::geom::Point
+#include <mundy_math/Tolerance.hpp>                 // for mundy::math::get_zero_tolerance
 
 namespace mundy {
 
 namespace geom {
 
-/// \brief Compute the shared normal signed separation distance between a point and a line segment
-/// \tparam Scalar The scalar type
-/// \param[in] point The point
-/// \param[in] line_segment The line segment
-template <typename Scalar>
-KOKKOS_FUNCTION Scalar distance(const Point<Scalar>& point, const LineSegment<Scalar>& line_segment) {
-  return SharedNormalSigned{}, point, line_segment;
-}
+//! \name Periodic space distance calculations
+//@{
 
 /// \brief Compute the shared normal signed separation distance between a point and a line segment
 /// \tparam Scalar The scalar type
+/// \tparam Metric The metric type
 /// \param[in] point The point
 /// \param[in] line_segment The line segment
-template <typename Scalar>
-KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distance_type, const Point<Scalar>& point,
-                                const LineSegment<Scalar>& line_segment) {
+/// \param[in] metric The metric to use for the distance calculation
+template <typename Scalar, typename Metric>
+KOKKOS_FUNCTION Scalar distance_pbc(const Point<Scalar>& point, const LineSegment<Scalar>& line_segment,
+                                    const Metric& metric) {
+  return distance_pbc(SharedNormalSigned{}, point, line_segment, metric);
+}
+
+/// \brief Compute the shared normal signed separation distance between a point and a line segment according to a metric
+/// \tparam Scalar The scalar type
+/// \tparam Metric The metric type
+/// \param[in] point The point
+/// \param[in] line_segment The line segment
+/// \param[in] metric The metric to use for the distance calculation
+template <typename Scalar, typename Metric>
+KOKKOS_FUNCTION Scalar distance_pbc([[maybe_unused]] const SharedNormalSigned distance_type, const Point<Scalar>& point,
+                                    const LineSegment<Scalar>& line_segment, const Metric& metric) {
   const auto& p1 = line_segment.start();
   const auto& p2 = line_segment.end();
-  const auto p21 = p2 - p1;
+  const auto p21 = metric(p1, p2);
 
   // Define some temporary variables
   mundy::math::Vector3<Scalar> closest_point_tmp;
   double t_tmp;
 
   // Get parametric location
-  const Scalar num = mundy::math::dot(p21, point - p1);
+  const Scalar num = mundy::math::dot(p21, metric(p1, point));
   if ((num < mundy::math::get_zero_tolerance<Scalar>()) & (num > -mundy::math::get_zero_tolerance<Scalar>())) {
     // CASE 1: The vector from p1 to x is orthogonal to the line.
     // In this case, the closest point is p1 and the parametric coordinate is 0.
@@ -91,39 +100,51 @@ KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distan
     }
   }
 
-  return distance(point, closest_point_tmp);
+  return distance_pbc(point, closest_point_tmp, metric);
 }
 
 /// \brief Compute the euclidean distance between a point and a line segment
 /// \tparam Scalar The scalar type
+/// \tparam Metric The metric type
 /// \param[in] point The point
 /// \param[in] line_segment The line segment
+/// \param[in] metric The metric to use for the distance calculation
 /// \param[out] closest_point The closest point on the line segment
 /// \param[out] arch_length The arch-length parameter of the closest point on the line segment
 /// \param[out] sep The separation vector (from point to line segment)
-template <typename Scalar>
-KOKKOS_FUNCTION Scalar distance(const Point<Scalar>& point, const LineSegment<Scalar>& line_segment,
-                                Point<Scalar>& closest_point, Scalar& arch_length, mundy::math::Vector3<Scalar>& sep) {
-  return distance(SharedNormalSigned{}, point, line_segment, closest_point, arch_length, sep);
+template <typename Scalar, typename Metric>
+KOKKOS_FUNCTION Scalar distance_pbc(const Point<Scalar>& point,               //
+                                    const LineSegment<Scalar>& line_segment,  //
+                                    const Metric& metric,                     //
+                                    Point<Scalar>& closest_point,             //
+                                    Scalar& arch_length,                      //
+                                    mundy::math::Vector3<Scalar>& sep) {
+  return distance_pbc(SharedNormalSigned{}, point, line_segment, metric, closest_point, arch_length, sep);
 }
 
 /// \brief Compute the shared normal signed separation distance between a point and a line segment
 /// \tparam Scalar The scalar type
+/// \tparam Metric The metric type
 /// \param[in] point The point
 /// \param[in] line_segment The line segment
+/// \param[in] metric The metric to use for the distance calculation
 /// \param[out] closest_point The closest point on the line segment
 /// \param[out] arch_length The arch-length parameter of the closest point on the line segment
 /// \param[out] sep The separation vector (from point to line segment)
-template <typename Scalar>
-KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distance_type, const Point<Scalar>& point,
-                                const LineSegment<Scalar>& line_segment, Point<Scalar>& closest_point,
-                                Scalar& arch_length, mundy::math::Vector3<Scalar>& sep) {
+template <typename Scalar, typename Metric>
+KOKKOS_FUNCTION Scalar distance_pbc([[maybe_unused]] const SharedNormalSigned distance_type,  //
+                                    const Point<Scalar>& point,                               //
+                                    const LineSegment<Scalar>& line_segment,                  //
+                                    const Metric& metric,                                     //
+                                    Point<Scalar>& closest_point,                             //
+                                    Scalar& arch_length,                                      //
+                                    mundy::math::Vector3<Scalar>& sep) {
   const auto& p1 = line_segment.start();
   const auto& p2 = line_segment.end();
-  const auto p21 = p2 - p1;
+  const auto p21 = metric(p1, p2);
 
   // Get parametric location
-  const Scalar num = mundy::math::dot(p21, point - p1);
+  const Scalar num = mundy::math::dot(p21, metric(p1, point));
   if ((num < mundy::math::get_zero_tolerance<Scalar>()) & (num > -mundy::math::get_zero_tolerance<Scalar>())) {
     // CASE 1: The vector from p1 to x is orthogonal to the line.
     // In this case, the closest point is p1 and the parametric coordinate is 0.
@@ -154,8 +175,63 @@ KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distan
     }
   }
 
-  return distance(point, closest_point, sep);
+  return distance_pbc(point, closest_point, metric, sep);
 }
+
+//@}
+
+//! \name Free space distance calculations
+//@{
+
+/// \brief Compute the shared normal signed separation distance between a point and a line segment
+/// \tparam Scalar The scalar type
+/// \param[in] point The point
+/// \param[in] line_segment The line segment
+template <typename Scalar>
+KOKKOS_FUNCTION Scalar distance(const Point<Scalar>& point, const LineSegment<Scalar>& line_segment) {
+  return distance_pbc(SharedNormalSigned{}, point, line_segment, FreeSpaceMetric<Scalar>{});
+}
+
+/// \brief Compute the shared normal signed separation distance between a point and a line segment
+/// \tparam Scalar The scalar type
+/// \param[in] point The point
+/// \param[in] line_segment The line segment
+template <typename Scalar>
+KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distance_type, const Point<Scalar>& point,
+                                const LineSegment<Scalar>& line_segment) {
+  return distance_pbc(point, line_segment, FreeSpaceMetric<Scalar>{});
+}
+
+/// \brief Compute the euclidean distance between a point and a line segment
+/// \tparam Scalar The scalar type
+/// \param[in] point The point
+/// \param[in] line_segment The line segment
+/// \param[out] closest_point The closest point on the line segment
+/// \param[out] arch_length The arch-length parameter of the closest point on the line segment
+/// \param[out] sep The separation vector (from point to line segment)
+template <typename Scalar>
+KOKKOS_FUNCTION Scalar distance(const Point<Scalar>& point, const LineSegment<Scalar>& line_segment,
+                                Point<Scalar>& closest_point, Scalar& arch_length, mundy::math::Vector3<Scalar>& sep) {
+  return distance_pbc(SharedNormalSigned{}, point, line_segment, FreeSpaceMetric<Scalar>{}, closest_point, arch_length,
+                      sep);
+}
+
+/// \brief Compute the shared normal signed separation distance between a point and a line segment
+/// \tparam Scalar The scalar type
+/// \param[in] point The point
+/// \param[in] line_segment The line segment
+/// \param[out] closest_point The closest point on the line segment
+/// \param[out] arch_length The arch-length parameter of the closest point on the line segment
+/// \param[out] sep The separation vector (from point to line segment)
+template <typename Scalar>
+KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distance_type, const Point<Scalar>& point,
+                                const LineSegment<Scalar>& line_segment, Point<Scalar>& closest_point,
+                                Scalar& arch_length, mundy::math::Vector3<Scalar>& sep) {
+  return distance_pbc(SharedNormalSigned{}, point, line_segment, FreeSpaceMetric<Scalar>{}, closest_point, arch_length,
+                      sep);
+}
+
+//@}
 
 }  // namespace geom
 

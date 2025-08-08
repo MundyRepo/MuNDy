@@ -38,6 +38,14 @@ namespace mundy {
 
 namespace geom {
 
+  //! \name Periodic space distance calculations
+//@{
+
+//@}
+
+//! \name Free space distance calculations
+//@{
+
 /// \brief Compute the distance between two line segments
 /// \tparam Scalar The scalar type
 /// \param[in] line_segment1 The first line segment
@@ -317,6 +325,8 @@ KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const Euclidean distance_type,
   return distance(SharedNormalSigned{}, line_segment1, line_segment2, closest_point1, closest_point2, arch_length1,
                   arch_length2, sep);
 }
+
+//@}
 
 }  // namespace geom
 

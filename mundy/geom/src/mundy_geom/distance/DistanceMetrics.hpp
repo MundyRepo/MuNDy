@@ -52,23 +52,21 @@ KOKKOS_INLINE_FUNCTION Scalar pbc_floor(Scalar x) {
 /// \brief Compute the free space distance between two points
 /// \param[in] point1 The first point
 /// \param[in] point2 The second point
-/// \param[out] sep The separation vector (from point1 to point2)
 template <typename Scalar>
 struct FreeSpaceMetric {
   KOKKOS_INLINE_FUNCTION
-  void operator()(Point<Scalar>& sep, const Point<Scalar>& point1, const Point<Scalar>& point2) const {
-    sep = point2 - point1;
+  Point<Scalar> operator()(const Point<Scalar>& point1, const Point<Scalar>& point2) const {
+    return point2 - point1;
   }
 };
 
 /// \brief Compute the periodic space distance between two points
 /// \param[in] point1 The first point
 /// \param[in] point2 The second point
-/// \param[out] sep The separation vector (from point1 to point2)
 template <typename Scalar>
 struct PeriodicSpaceMetric {
   KOKKOS_INLINE_FUNCTION
-  void operator()(Point<Scalar>& sep, const Point<Scalar>& point1, const Point<Scalar>& point2) const {
+  Point<Scalar> operator()(const Point<Scalar>& point1, const Point<Scalar>& point2) const {
     // Convert to fractional coordinates
     mundy::math::Vector3<Scalar> point1_scaled = point1 * h_inv;
     mundy::math::Vector3<Scalar> point2_scaled = point2 * h_inv;
@@ -94,7 +92,7 @@ struct PeriodicSpaceMetric {
       ds[i] -= pbc_floor<int64_t, double>(ds[i]);
     }
 
-    sep = ds * h;
+    return ds * h;
   }
 
   mundy::math::Matrix3<Scalar> h;      ///< Unit cell matrix

@@ -45,9 +45,7 @@ namespace geom {
 template <typename Scalar, typename Metric>
 KOKKOS_FUNCTION Scalar distance_pbc([[maybe_unused]] const SharedNormalSigned distance_type,
                                     const Point<Scalar>& point1, const Point<Scalar>& point2, const Metric& metric) {
-  mundy::geom::Point<Scalar> sep;
-  metric(sep, point1, point2);
-  return mundy::math::norm(sep);
+  return mundy::math::norm(metric(point1, point2));
 }
 
 /// \brief Compute the shared normal signed separation distance between two points according to a metric
@@ -61,7 +59,7 @@ template <typename Scalar, typename Metric>
 KOKKOS_FUNCTION Scalar distance_pbc([[maybe_unused]] const SharedNormalSigned distance_type,
                                     const Point<Scalar>& point1, const Point<Scalar>& point2, const Metric& metric,
                                     mundy::math::Vector3<Scalar>& sep) {
-  metric(sep, point1, point2);
+  sep = metric(point1, point2);
   return mundy::math::norm(sep);
 }
 
