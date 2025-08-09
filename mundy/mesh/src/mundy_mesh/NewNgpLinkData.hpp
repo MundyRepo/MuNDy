@@ -55,6 +55,7 @@
 #include <mundy_mesh/MetaData.hpp>            // for mundy::mesh::MetaData
 #include <mundy_mesh/NewLinkMetaData.hpp>     // for mundy::mesh::NewLinkMetaData
 #include <mundy_mesh/NewNgpCRSPartition.hpp>  // for mundy::mesh::NewNgpCRSPartition
+#include <mundy_mesh/NewNgpLinkMetaData.hpp>  // for mundy::mesh::NewNgpLinkMetaData
 #include <mundy_mesh/NewNgpLinkRequests.hpp>  // for mundy::mesh::NewNgpLinkRequests
 #include <mundy_mesh/NgpFieldBLAS.hpp>        // for mundy::mesh::field_copy
 
@@ -213,38 +214,15 @@ class NewNgpLinkData {
   /// \brief Canonical constructor.
   /// \param bulk_data [in] The bulk data manager we extend.
   /// \param link_meta_data [in] Our meta data manager.
-  NewNgpLinkData(BulkData &bulk_data, NewLinkMetaData &link_meta_data)
+  NewNgpLinkData(BulkData &bulk_data, NewNgpLinkMetaData ngp_link_meta_data)
       : bulk_data_ptr_(&bulk_data),
         mesh_meta_data_ptr_(&bulk_data.mesh_meta_data()),
-        link_meta_data_ptr_(&link_meta_data),
-        link_rank_(link_meta_data.link_rank()),
+        link_meta_data_ptr_(&ngp_link_meta_data.link_meta_data()),
         ngp_mesh_(stk::mesh::get_updated_ngp_mesh(bulk_data)),
-        ngp_linked_entities_field_(
-            stk::mesh::get_updated_ngp_field<NewLinkMetaData::linked_entities_field_t::value_type>(
-                link_meta_data.linked_entities_field())),
-        ngp_linked_entities_crs_field_(
-            stk::mesh::get_updated_ngp_field<NewLinkMetaData::linked_entities_field_t::value_type>(
-                link_meta_data.linked_entities_crs_field())),
-        ngp_linked_entity_ids_field_(
-            stk::mesh::get_updated_ngp_field<NewLinkMetaData::linked_entity_ids_field_t::value_type>(
-                link_meta_data.linked_entity_ids_field())),
-        ngp_linked_entity_ranks_field_(
-            stk::mesh::get_updated_ngp_field<NewLinkMetaData::linked_entity_ranks_field_t::value_type>(
-                link_meta_data.linked_entity_ranks_field())),
-        ngp_linked_entity_bucket_ids_field_(
-            stk::mesh::get_updated_ngp_field<NewLinkMetaData::linked_entity_bucket_ids_field_t::value_type>(
-                link_meta_data.linked_entity_bucket_ids_field())),
-        ngp_linked_entity_bucket_ords_field_(
-            stk::mesh::get_updated_ngp_field<NewLinkMetaData::linked_entity_bucket_ords_field_t::value_type>(
-                link_meta_data.linked_entity_bucket_ords_field())),
-        ngp_link_crs_needs_updated_field_(
-            stk::mesh::get_updated_ngp_field<NewLinkMetaData::link_crs_needs_updated_field_t::value_type>(
-                link_meta_data.link_crs_needs_updated_field())),
-        ngp_link_marked_for_destruction_field_(
-            stk::mesh::get_updated_ngp_field<NewLinkMetaData::link_marked_for_destruction_field_t::value_type>(
-                link_meta_data.link_marked_for_destruction_field())),
+        ngp_link_meta_data_(ngp_link_meta_data),
         all_crs_partitions_("AllCRSPartitions", 0),
         stk_link_bucket_to_partition_id_map_(10) {
+    MUNDY_THROW_ASSERT(ngp_link_meta_data.is_valid(), std::invalid_argument, "Given link meta data is not valid.");
   }
 
   /// \brief Destructor.
@@ -309,7 +287,7 @@ class NewNgpLinkData {
   /// \brief Fetch the link rank
   KOKKOS_FUNCTION
   stk::mesh::EntityRank link_rank() const {
-    return link_rank_;
+    return ngp_link_meta_data_.link_rank();
   }
   //@}
 
@@ -366,12 +344,14 @@ class NewNgpLinkData {
     stk::mesh::Entity linked_entity = ngp_mesh_.get_entity(linked_entity_rank, linked_entity_index);
     stk::mesh::EntityKey linked_entity_key = ngp_mesh_.entity_key(linked_entity);
 
-    ngp_linked_entities_field_(linker_index, link_ordinal) = linked_entity.local_offset();
-    ngp_linked_entity_ids_field_(linker_index, link_ordinal) = linked_entity_key.id();
-    ngp_linked_entity_ranks_field_(linker_index, link_ordinal) = linked_entity_rank;
-    ngp_linked_entity_bucket_ids_field_(linker_index, link_ordinal) = linked_entity_index.bucket_id;
-    ngp_linked_entity_bucket_ords_field_(linker_index, link_ordinal) = linked_entity_index.bucket_ord;
-    ngp_link_crs_needs_updated_field_(linker_index, 0) = true;
+    ngp_link_meta_data_.ngp_linked_entities_field()(linker_index, link_ordinal) = linked_entity.local_offset();
+    ngp_link_meta_data_.ngp_linked_entity_ids_field()(linker_index, link_ordinal) = linked_entity_key.id();
+    ngp_link_meta_data_.ngp_linked_entity_ranks_field()(linker_index, link_ordinal) = linked_entity_rank;
+    ngp_link_meta_data_.ngp_linked_entity_bucket_ids_field()(linker_index, link_ordinal) =
+        linked_entity_index.bucket_id;
+    ngp_link_meta_data_.ngp_linked_entity_bucket_ords_field()(linker_index, link_ordinal) =
+        linked_entity_index.bucket_ord;
+    ngp_link_meta_data_.ngp_link_crs_needs_updated_field()(linker_index, 0) = true;
   }
 
   /// \brief Delete a relation between a linker and a linked entity.
@@ -401,13 +381,13 @@ class NewNgpLinkData {
   }
   KOKKOS_INLINE_FUNCTION
   void delete_relation(const stk::mesh::FastMeshIndex &linker_index, unsigned link_ordinal) const {
-    ngp_linked_entities_field_(linker_index, link_ordinal) = stk::mesh::Entity().local_offset();
-    ngp_linked_entity_ids_field_(linker_index, link_ordinal) = stk::mesh::EntityId();
-    ngp_linked_entity_ranks_field_(linker_index, link_ordinal) =
+    ngp_link_meta_data_.ngp_linked_entities_field()(linker_index, link_ordinal) = stk::mesh::Entity().local_offset();
+    ngp_link_meta_data_.ngp_linked_entity_ids_field()(linker_index, link_ordinal) = stk::mesh::EntityId();
+    ngp_link_meta_data_.ngp_linked_entity_ranks_field()(linker_index, link_ordinal) =
         static_cast<NewLinkMetaData::entity_rank_value_t>(stk::topology::INVALID_RANK);
-    ngp_linked_entity_bucket_ids_field_(linker_index, link_ordinal) = 0;
-    ngp_linked_entity_bucket_ords_field_(linker_index, link_ordinal) = 0;
-    ngp_link_crs_needs_updated_field_(linker_index, 0) = true;
+    ngp_link_meta_data_.ngp_linked_entity_bucket_ids_field()(linker_index, link_ordinal) = 0;
+    ngp_link_meta_data_.ngp_linked_entity_bucket_ords_field()(linker_index, link_ordinal) = 0;
+    ngp_link_meta_data_.ngp_link_crs_needs_updated_field()(linker_index, 0) = true;
   }
 
   /// \brief Get the linked entity for a given linker and link ordinal.
@@ -424,7 +404,7 @@ class NewNgpLinkData {
   }
   KOKKOS_INLINE_FUNCTION
   stk::mesh::Entity get_linked_entity(const stk::mesh::FastMeshIndex &linker_index, unsigned link_ordinal) const {
-    return stk::mesh::Entity(ngp_linked_entities_field_(linker_index, link_ordinal));
+    return stk::mesh::Entity(ngp_link_meta_data_.ngp_linked_entities_field()(linker_index, link_ordinal));
   }
 
   /// \brief Get the linked entity index for a given linker and link ordinal.
@@ -445,8 +425,9 @@ class NewNgpLinkData {
   KOKKOS_INLINE_FUNCTION
   stk::mesh::FastMeshIndex get_linked_entity_index(const stk::mesh::FastMeshIndex &linker_index,
                                                    unsigned link_ordinal) const {
-    return stk::mesh::FastMeshIndex(ngp_linked_entity_bucket_ids_field_(linker_index, link_ordinal),
-                                    ngp_linked_entity_bucket_ords_field_(linker_index, link_ordinal));
+    return stk::mesh::FastMeshIndex(
+        ngp_link_meta_data_.ngp_linked_entity_bucket_ids_field()(linker_index, link_ordinal),
+        ngp_link_meta_data_.ngp_linked_entity_bucket_ords_field()(linker_index, link_ordinal));
   }
 
   /// \brief Get the linked entity id for a given linker and link ordinal.
@@ -463,7 +444,7 @@ class NewNgpLinkData {
   }
   KOKKOS_INLINE_FUNCTION
   stk::mesh::EntityId get_linked_entity_id(const stk::mesh::FastMeshIndex &linker_index, unsigned link_ordinal) const {
-    return ngp_linked_entity_ids_field_(linker_index, link_ordinal);
+    return ngp_link_meta_data_.ngp_linked_entity_ids_field()(linker_index, link_ordinal);
   }
 
   /// \brief Get the linked entity rank for a given linker and link ordinal.
@@ -482,7 +463,8 @@ class NewNgpLinkData {
   KOKKOS_INLINE_FUNCTION
   stk::mesh::EntityRank get_linked_entity_rank(const stk::mesh::FastMeshIndex &linker_index,
                                                unsigned link_ordinal) const {
-    return static_cast<stk::mesh::EntityRank>(ngp_linked_entity_ranks_field_(linker_index, link_ordinal));
+    return static_cast<stk::mesh::EntityRank>(
+        ngp_link_meta_data_.ngp_linked_entity_ranks_field()(linker_index, link_ordinal));
   }
 
   /// \brief Get all CRS partitions.
@@ -756,7 +738,7 @@ class NewNgpLinkData {
   /// \brief Request the destruction of a link. This will be processed in the next process_requests call.
   KOKKOS_INLINE_FUNCTION
   void request_destruction(const stk::mesh::FastMeshIndex &linker_index) const {
-    ngp_link_marked_for_destruction_field_(linker_index, 0) = true;
+    ngp_link_meta_data_.ngp_link_marked_for_destruction_field()(linker_index, 0) = true;
   }
 
   /// \brief Request the destruction of a link. This will be processed in the next process_requests call (host version).
@@ -807,47 +789,47 @@ class NewNgpLinkData {
   //@{
 
   void modify_on_host() {
-    ngp_linked_entities_field_.modify_on_host();
-    ngp_linked_entities_crs_field_.modify_on_host();
-    ngp_linked_entity_ids_field_.modify_on_host();
-    ngp_linked_entity_ranks_field_.modify_on_host();
-    ngp_linked_entity_bucket_ids_field_.modify_on_host();
-    ngp_linked_entity_bucket_ords_field_.modify_on_host();
-    ngp_link_crs_needs_updated_field_.modify_on_host();
-    ngp_link_marked_for_destruction_field_.modify_on_host();
+    ngp_link_meta_data_.ngp_linked_entities_field().modify_on_host();
+    ngp_link_meta_data_.ngp_linked_entities_crs_field().modify_on_host();
+    ngp_link_meta_data_.ngp_linked_entity_ids_field().modify_on_host();
+    ngp_link_meta_data_.ngp_linked_entity_ranks_field().modify_on_host();
+    ngp_link_meta_data_.ngp_linked_entity_bucket_ids_field().modify_on_host();
+    ngp_link_meta_data_.ngp_linked_entity_bucket_ords_field().modify_on_host();
+    ngp_link_meta_data_.ngp_link_crs_needs_updated_field().modify_on_host();
+    ngp_link_meta_data_.ngp_link_marked_for_destruction_field().modify_on_host();
   }
 
   void modify_on_device() {
-    ngp_linked_entities_field_.modify_on_device();
-    ngp_linked_entities_crs_field_.modify_on_device();
-    ngp_linked_entity_ids_field_.modify_on_device();
-    ngp_linked_entity_ranks_field_.modify_on_device();
-    ngp_linked_entity_bucket_ids_field_.modify_on_device();
-    ngp_linked_entity_bucket_ords_field_.modify_on_device();
-    ngp_link_crs_needs_updated_field_.modify_on_device();
-    ngp_link_marked_for_destruction_field_.modify_on_device();
+    ngp_link_meta_data_.ngp_linked_entities_field().modify_on_device();
+    ngp_link_meta_data_.ngp_linked_entities_crs_field().modify_on_device();
+    ngp_link_meta_data_.ngp_linked_entity_ids_field().modify_on_device();
+    ngp_link_meta_data_.ngp_linked_entity_ranks_field().modify_on_device();
+    ngp_link_meta_data_.ngp_linked_entity_bucket_ids_field().modify_on_device();
+    ngp_link_meta_data_.ngp_linked_entity_bucket_ords_field().modify_on_device();
+    ngp_link_meta_data_.ngp_link_crs_needs_updated_field().modify_on_device();
+    ngp_link_meta_data_.ngp_link_marked_for_destruction_field().modify_on_device();
   }
 
   void sync_to_host() {
-    ngp_linked_entities_field_.sync_to_host();
-    ngp_linked_entities_crs_field_.sync_to_host();
-    ngp_linked_entity_ids_field_.sync_to_host();
-    ngp_linked_entity_ranks_field_.sync_to_host();
-    ngp_linked_entity_bucket_ids_field_.sync_to_host();
-    ngp_linked_entity_bucket_ords_field_.sync_to_host();
-    ngp_link_crs_needs_updated_field_.sync_to_host();
-    ngp_link_marked_for_destruction_field_.sync_to_host();
+    ngp_link_meta_data_.ngp_linked_entities_field().sync_to_host();
+    ngp_link_meta_data_.ngp_linked_entities_crs_field().sync_to_host();
+    ngp_link_meta_data_.ngp_linked_entity_ids_field().sync_to_host();
+    ngp_link_meta_data_.ngp_linked_entity_ranks_field().sync_to_host();
+    ngp_link_meta_data_.ngp_linked_entity_bucket_ids_field().sync_to_host();
+    ngp_link_meta_data_.ngp_linked_entity_bucket_ords_field().sync_to_host();
+    ngp_link_meta_data_.ngp_link_crs_needs_updated_field().sync_to_host();
+    ngp_link_meta_data_.ngp_link_marked_for_destruction_field().sync_to_host();
   }
 
   void sync_to_device() {
-    ngp_linked_entities_field_.sync_to_device();
-    ngp_linked_entities_crs_field_.sync_to_device();
-    ngp_linked_entity_ids_field_.sync_to_device();
-    ngp_linked_entity_ranks_field_.sync_to_device();
-    ngp_linked_entity_bucket_ids_field_.sync_to_device();
-    ngp_linked_entity_bucket_ords_field_.sync_to_device();
-    ngp_link_crs_needs_updated_field_.sync_to_device();
-    ngp_link_marked_for_destruction_field_.sync_to_device();
+    ngp_link_meta_data_.ngp_linked_entities_field().sync_to_device();
+    ngp_link_meta_data_.ngp_linked_entities_crs_field().sync_to_device();
+    ngp_link_meta_data_.ngp_linked_entity_ids_field().sync_to_device();
+    ngp_link_meta_data_.ngp_linked_entity_ranks_field().sync_to_device();
+    ngp_link_meta_data_.ngp_linked_entity_bucket_ids_field().sync_to_device();
+    ngp_link_meta_data_.ngp_linked_entity_bucket_ords_field().sync_to_device();
+    ngp_link_meta_data_.ngp_link_crs_needs_updated_field().sync_to_device();
+    ngp_link_meta_data_.ngp_link_marked_for_destruction_field().sync_to_device();
   }
   //@}
 
@@ -1480,7 +1462,7 @@ class NewNgpLinkData {
   }
   KOKKOS_INLINE_FUNCTION
   stk::mesh::Entity get_linked_entity_crs(const stk::mesh::FastMeshIndex &linker_index, unsigned link_ordinal) const {
-    return stk::mesh::Entity(ngp_linked_entities_crs_field_(linker_index, link_ordinal));
+    return stk::mesh::Entity(ngp_link_meta_data_.ngp_linked_entities_crs_field()(linker_index, link_ordinal));
   }
 
   /// \brief Get the dimensionality of a linker
@@ -1537,7 +1519,7 @@ class NewNgpLinkData {
   }
   KOKKOS_INLINE_FUNCTION
   bool get_link_crs_needs_updated(const stk::mesh::FastMeshIndex &linker_index) const {
-    return ngp_link_crs_needs_updated_field_(linker_index, 0);
+    return ngp_link_meta_data_.ngp_link_crs_needs_updated_field()(linker_index, 0);
   }
 
   /// \brief Destroy all links that have been marked for destruction.
@@ -1582,14 +1564,7 @@ class NewNgpLinkData {
 
   stk::mesh::EntityRank link_rank_;
   stk::mesh::NgpMesh ngp_mesh_;
-  ngp_linked_entities_field_t ngp_linked_entities_field_;
-  ngp_linked_entities_field_t ngp_linked_entities_crs_field_;
-  ngp_linked_entity_ids_field_t ngp_linked_entity_ids_field_;
-  ngp_linked_entity_ranks_field_t ngp_linked_entity_ranks_field_;
-  ngp_linked_entity_bucket_ids_field_t ngp_linked_entity_bucket_ids_field_;
-  ngp_linked_entity_bucket_ords_field_t ngp_linked_entity_bucket_ords_field_;
-  ngp_link_crs_needs_updated_field_t ngp_link_crs_needs_updated_field_;
-  ngp_link_marked_for_destruction_field_t ngp_link_marked_for_destruction_field_;
+  NewNgpLinkMetaData ngp_link_meta_data_;
   mutable NgpCRSPartitionView all_crs_partitions_;
   LinkBucketToPartitionIdMap stk_link_bucket_to_partition_id_map_;
   //@}

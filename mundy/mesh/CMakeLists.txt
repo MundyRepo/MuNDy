@@ -30,6 +30,7 @@ SET(NOINSTALLHEADERS
   src/mundy_mesh/NewLinkMetaData.hpp
   src/mundy_mesh/NewNgpCRSPartition.hpp
   src/mundy_mesh/NewNgpLinkData.hpp
+  src/mundy_mesh/NewNgpLinkMetaData.hpp
   src/mundy_mesh/NewNgpLinkRequests.hpp
   src/mundy_mesh/NgpEntityPool.hpp
   src/mundy_mesh/NgpFieldBLAS.hpp

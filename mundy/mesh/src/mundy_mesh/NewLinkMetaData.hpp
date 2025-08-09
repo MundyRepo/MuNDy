@@ -50,6 +50,9 @@ namespace mesh {
 //! \name Forward declarations
 //@{
 
+class NewNgpLinkMetaData;
+class NewLinkData;
+class NewLinkPartition;
 class NewNgpLinkData;
 class NewNgpLinkPartition;
 //@}
@@ -297,14 +300,13 @@ class NewLinkMetaData {
   //! \name Friends <3
   //@{
 
+  friend class NewNgpLinkMetaData;
+  friend class NewLinkData;
+  friend class NewLinkPartition;
   friend class NewNgpLinkData;
   friend class NewNgpLinkPartition;
   friend NewLinkMetaData declare_link_meta_data(MetaData &meta_data, const std::string &our_name,
                                              stk::mesh::EntityRank link_rank);
-
-  template <typename FunctionToRunPerLinkedEntity>
-  friend void for_each_linked_entity_run(const NewNgpLinkData &, const stk::mesh::Selector &, const stk::mesh::Selector &,
-                                         const FunctionToRunPerLinkedEntity &);
   //@}
 
   //! \name Internal members
@@ -330,6 +332,7 @@ class NewLinkMetaData {
 /// \param our_name [in] The name of this link data.
 /// \param link_rank [in] The rank of the link entities.
 NewLinkMetaData declare_link_meta_data(MetaData &meta_data, const std::string &our_name, stk::mesh::EntityRank link_rank) {
+  // TODO(palmerb4): Tie the lifetime of this object to the BulkData object so we can return a reference to it.
   return NewLinkMetaData(meta_data, our_name, link_rank);
 }
 
