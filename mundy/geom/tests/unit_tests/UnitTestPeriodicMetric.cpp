@@ -34,16 +34,10 @@
 // Mundy
 #include <mundy_geom/distance.hpp>                  // for mundy::geom::distance
 #include <mundy_geom/distance/DistanceMetrics.hpp>  // for mundy::geom::FreeSpaceMetric, mundy::geom::PeriodicSpaceMetric
-#include <mundy_geom/primitives.hpp>                // for mundy::geom::Point, mundy::geom::LineSegment
-#include <mundy_math/Tolerance.hpp>                 // for mundy::math::get_zero_tolerance
-#include <mundy_math/Vector3.hpp>                   // for mundy::math::Vector3
-
-/// \brief The following global is used to control the number of samples per test.
-/// For unit tests, this number should be kept low to ensure fast test times, but to still give an immediate warning if
-/// something went very wrong. For integration tests, we recommend setting this number to 10,000 or more.
-#ifndef MUNDY_GEOM_TESTS_UNIT_TESTS_SEGMENT_SEGMENT_DISTANCE_NUM_SAMPLES_PER_TEST
-#define MUNDY_GEOM_TESTS_UNIT_TESTS_SEGMENT_SEGMENT_DISTANCE_NUM_SAMPLES_PER_TEST 1000000
-#endif
+#include <mundy_geom/distance/OldDistanceMetrics.hpp>  // for mundy::geom::OldFreeSpaceMetric, mundy::geom::OldPeriodicSpaceMetric
+#include <mundy_geom/primitives.hpp>                   // for mundy::geom::Point, mundy::geom::LineSegment
+#include <mundy_math/Tolerance.hpp>                    // for mundy::math::get_zero_tolerance
+#include <mundy_math/Vector3.hpp>                      // for mundy::math::Vector3
 
 namespace mundy {
 
@@ -98,13 +92,12 @@ TEST(FreeAndPeriodicMetricDistances, PositiveResult) {
   sep_free = free_space_metric(point1, point2_crossed_x);
   sep_periodic = periodic_space_metric(point1, point2_crossed_x);
 
-  std::cout << "Real space separation vector crossing x boundary: " << sep_free << std::endl;
-  std::cout << "Periodic space separation vector crossing x boundary: " << sep_periodic << std::endl;
-
   EXPECT_DOUBLE_EQ(sep_free[0], point2_crossed_x[0] - point1[0]);
   EXPECT_DOUBLE_EQ(sep_free[1], point2_crossed_x[1] - point1[1]);
   EXPECT_DOUBLE_EQ(sep_free[2], point2_crossed_x[2] - point1[2]);
+
   EXPECT_NE(sep_periodic[0], point2_crossed_x[0] - point1[0]);
+  EXPECT_DOUBLE_EQ(sep_periodic[0], point2_crossed_x[0] - point1[0] - cell_size[0]);
   EXPECT_DOUBLE_EQ(sep_periodic[1], point2_crossed_x[1] - point1[1]);
   EXPECT_DOUBLE_EQ(sep_periodic[2], point2_crossed_x[2] - point1[2]);
 }
@@ -113,7 +106,7 @@ TEST(FreeAndPeriodicMetricPointPoint, PositiveResult) {
   // Origin point
   Point<double> point1{1.0, 1.0, 1.0};
   math::Vector3<double> cell_size{100.0, 30.0, 20.0};
-  
+
   PeriodicSpaceMetric<double> periodic_space_metric = periodic_metric_from_unit_cell(cell_size);
 
   // Test point that should not be a periodic image
@@ -156,8 +149,7 @@ TEST(FreeAndPeriodicMetricPointLineSegment, PositiveResult) {
   PeriodicSpaceMetric<double> periodic_space_metric = periodic_metric_from_unit_cell(cell_size);
 
   // Test segment that should not be a periodic image
-  LineSegment<double> line_segment{Point<double>{2.0, 1.0, 1.0},
-                                                Point<double>{4.0, 1.0, 1.0}};
+  LineSegment<double> line_segment{Point<double>{2.0, 1.0, 1.0}, Point<double>{4.0, 1.0, 1.0}};
 
   // Get the distance measures without separation vectors
   auto free_distance = distance(point1, line_segment);
@@ -171,8 +163,8 @@ TEST(FreeAndPeriodicMetricPointLineSegment, PositiveResult) {
   math::Vector3<double> closest_periodic;
   double arc_periodic;
   free_distance = distance(point1, line_segment, closest_free, arc_free, sep_free);
-  periodic_distance = distance_pbc(point1, line_segment, periodic_space_metric, closest_periodic,
-                                                arc_periodic, sep_periodic);
+  periodic_distance =
+      distance_pbc(point1, line_segment, periodic_space_metric, closest_periodic, arc_periodic, sep_periodic);
   EXPECT_DOUBLE_EQ(sep_free[0], 1.0);
   EXPECT_DOUBLE_EQ(sep_free[1], 0.0);
   EXPECT_DOUBLE_EQ(sep_free[2], 0.0);
@@ -181,16 +173,15 @@ TEST(FreeAndPeriodicMetricPointLineSegment, PositiveResult) {
   }
 
   // Place a segment that is fully in the periodic image
-  LineSegment<double> line_segment_crossed_x{Point<double>{97.0, 1.0, 1.0},
-                                                          Point<double>{99.0, 1.0, 1.0}};
+  LineSegment<double> line_segment_crossed_x{Point<double>{97.0, 1.0, 1.0}, Point<double>{99.0, 1.0, 1.0}};
   free_distance = distance(point1, line_segment_crossed_x);
   periodic_distance = distance_pbc(point1, line_segment_crossed_x, periodic_space_metric);
   EXPECT_NE(free_distance, periodic_distance);
   EXPECT_DOUBLE_EQ(periodic_distance, 2.0);
   // separation distance too
   free_distance = distance(point1, line_segment_crossed_x, closest_free, arc_free, sep_free);
-  periodic_distance = distance_pbc(point1, line_segment_crossed_x, periodic_space_metric, closest_periodic,
-                                                arc_periodic, sep_periodic);
+  periodic_distance =
+      distance_pbc(point1, line_segment_crossed_x, periodic_space_metric, closest_periodic, arc_periodic, sep_periodic);
   EXPECT_DOUBLE_EQ(sep_free[0], 96.0);
   EXPECT_DOUBLE_EQ(sep_free[1], 0.0);
   EXPECT_DOUBLE_EQ(sep_free[2], 0.0);
@@ -206,17 +197,15 @@ TEST(FreeAndPeriodicMetricPointLineSegment, PositiveResult) {
   EXPECT_DOUBLE_EQ(closest_periodic[2], 1.0);
 
   // Place a segment that is fully in the periodic image has the point orthogonal
-  LineSegment<double> line_segment_crossed_y_orthogonal{Point<double>{0.0, 99.0, 1.0},
-                                                                     Point<double>{2.0, 99.0, 1.0}};
+  LineSegment<double> line_segment_crossed_y_orthogonal{Point<double>{0.0, 99.0, 1.0}, Point<double>{2.0, 99.0, 1.0}};
   free_distance = distance(point1, line_segment_crossed_y_orthogonal);
   periodic_distance = distance_pbc(point1, line_segment_crossed_y_orthogonal, periodic_space_metric);
   EXPECT_NE(free_distance, periodic_distance);
   EXPECT_DOUBLE_EQ(periodic_distance, 2.0);
   // seaparation distance too
   free_distance = distance(point1, line_segment_crossed_y_orthogonal, closest_free, arc_free, sep_free);
-  periodic_distance = distance_pbc(
-      point1, line_segment_crossed_y_orthogonal, periodic_space_metric, closest_periodic, arc_periodic,
-      sep_periodic);
+  periodic_distance = distance_pbc(point1, line_segment_crossed_y_orthogonal, periodic_space_metric, closest_periodic,
+                                   arc_periodic, sep_periodic);
   EXPECT_DOUBLE_EQ(sep_free[0], 0.0);
   EXPECT_DOUBLE_EQ(sep_free[1], 98.0);
   EXPECT_DOUBLE_EQ(sep_free[2], 0.0);
@@ -234,16 +223,15 @@ TEST(FreeAndPeriodicMetricPointLineSegment, PositiveResult) {
   // Now the tricky one, split the segment across the periodic boundary, also use a point that is further into the
   // domain
   Point<double> point2{2.0, 2.0, 1.0};
-  LineSegment<double> line_segment_crossed_x_y{Point<double>{99.0, 99.0, 1.0},
-                                                            Point<double>{1.0, 1.0, 1.0}};
+  LineSegment<double> line_segment_crossed_x_y{Point<double>{99.0, 99.0, 1.0}, Point<double>{1.0, 1.0, 1.0}};
   free_distance = distance(point2, line_segment_crossed_x_y);
   periodic_distance = distance_pbc(point2, line_segment_crossed_x_y, periodic_space_metric);
   EXPECT_NE(free_distance, periodic_distance);
   EXPECT_DOUBLE_EQ(periodic_distance, Kokkos::sqrt(2.0));
   // separation distance too
   free_distance = distance(point2, line_segment_crossed_x_y, closest_free, arc_free, sep_free);
-  periodic_distance = distance_pbc(
-      point2, line_segment_crossed_x_y, periodic_space_metric, closest_periodic, arc_periodic, sep_periodic);
+  periodic_distance = distance_pbc(point2, line_segment_crossed_x_y, periodic_space_metric, closest_periodic,
+                                   arc_periodic, sep_periodic);
   EXPECT_NEAR(sep_free[0], 0.0, 1e-6);
   EXPECT_NEAR(sep_free[1], 0.0, 1e-6);
   EXPECT_NEAR(sep_free[2], 0.0, 1e-6);
@@ -257,6 +245,48 @@ TEST(FreeAndPeriodicMetricPointLineSegment, PositiveResult) {
   EXPECT_DOUBLE_EQ(closest_periodic[0], 1.0);
   EXPECT_DOUBLE_EQ(closest_periodic[1], 1.0);
   EXPECT_DOUBLE_EQ(closest_periodic[2], 1.0);
+}
+
+template <typename Scalar, typename RNG>
+Point<Scalar> generate_random_point(const AABB<Scalar>& box, RNG& rng) {
+  // Generate a random point within the bounding box
+  Scalar x = rng.uniform(box.x_min(), box.x_max());
+  Scalar y = rng.uniform(box.y_min(), box.y_max());
+  Scalar z = rng.uniform(box.z_min(), box.z_max());
+  return Point<Scalar>(x, y, z);
+}
+
+TEST(PeriodicMetric, OldVsNew) {
+  size_t seed = 1234;
+  size_t num_samples = 10000;
+
+  math::Vector3<double> cell_size{100.0, 100.0, 100.0};
+  AABB<double> box{0.0, 0.0, 0.0, 100.0, 100.0, 100.0};
+  auto periodic_metric = periodic_metric_from_unit_cell(cell_size);
+  auto periodic_metric_scale_only = periodic_metric_from_unit_cell(cell_size);
+
+  mundy::geom::OldPeriodicSpaceMetric<double> old_periodic_metric;
+  old_unit_cell_box(old_periodic_metric, cell_size);
+
+  for (size_t t = 0; t < num_samples; ++t) {
+    openrand::Philox rng(seed, t);
+
+    // Generate two random points within the bounding box
+    Point<double> point1 = generate_random_point<double>(box, rng);
+    Point<double> point2 = generate_random_point<double>(box, rng);
+
+    // Calculate the separation vectors using both metrics
+    math::Vector3<double> sep_new = periodic_metric(point1, point2);
+    math::Vector3<double> sep_old = old_periodic_metric(point1, point2);
+    math::Vector3<double> sep_scale_only = periodic_metric_scale_only(point1, point2);
+
+    double diff1 = norm(sep_new - sep_old);
+    double diff2 = norm(sep_new - sep_scale_only);
+    EXPECT_NEAR(diff1, 0.0, mundy::math::get_relaxed_zero_tolerance<double>())
+        << "Difference in separation vectors exceeds tolerance.";
+    EXPECT_NEAR(diff2, 0.0, mundy::math::get_relaxed_zero_tolerance<double>())
+        << "Difference in separation vectors exceeds tolerance for scale-only metric.";
+  }
 }
 
 }  // namespace
