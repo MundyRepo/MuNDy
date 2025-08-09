@@ -117,13 +117,13 @@ class PeriodicScaledSpaceMetric {
   /// \brief Constructor with unit cell matrix
   explicit constexpr PeriodicScaledSpaceMetric(const mundy::math::Vector3<Scalar>& cell_size)
       : scale_(cell_size),
-        scale_inv_(Scalar(1.0) / cell_size[0], Scalar(1.0) / cell_size[1], Scalar(1.0) / cell_size[2]) {
+        scale_inv_(Scalar(1.0) / scale_[0], Scalar(1.0) / scale_[1], Scalar(1.0) / scale_[2]) {
   }
 
   /// \brief Set the cell size
   void set_cell_size(const mundy::math::Vector3<Scalar>& cell_size) {
     scale_ = cell_size;
-    scale_inv_.set(Scalar(1.0) / cell_size[0], Scalar(1.0) / cell_size[1], Scalar(1.0) / cell_size[2]);
+    scale_inv_.set(Scalar(1.0) / scale_[0], Scalar(1.0) / scale_[1], Scalar(1.0) / scale_[2]);
   }
 
   /// \brief Distance vector between two points in periodic space (from point1 to point2)

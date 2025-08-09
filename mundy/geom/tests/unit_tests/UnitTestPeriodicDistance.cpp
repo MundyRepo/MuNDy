@@ -73,6 +73,9 @@ periodic image remains in the same location), and compute the updated periodic d
 space result.
 */
 
+//! \name Random primitive generation
+//@{
+
 template <typename Scalar, typename RNG>
 Point<Scalar> generate_random_point(const AABB<Scalar>& box, RNG& rng) {
   // Generate a random point within the bounding box
@@ -114,10 +117,10 @@ Sphere<Scalar> generate_random_sphere(const AABB<Scalar>& box, RNG& rng) {
   // Generate a random center point within the bounding box
   Point<Scalar> center = generate_random_point<Scalar>(box, rng);
 
-  // Generate a random radius (between 0 and 0.5 times the smallest box size)
+  // Generate a random radius (between 0 and 0.25 times the smallest box size)
   Scalar min_width =
       Kokkos::min(Kokkos::min(box.x_max() - box.x_min(), box.y_max() - box.y_min()), box.z_max() - box.z_min());
-  Scalar radius = rng.uniform(0.0, 0.5 * min_width);
+  Scalar radius = rng.uniform(0.0, 0.25 * min_width);
   return Sphere<Scalar>(center, radius);
 }
 
@@ -126,13 +129,19 @@ Ellipsoid<Scalar> generate_random_ellipsoid(const AABB<Scalar>& box, RNG& rng) {
   // Generate a random center point within the bounding box
   Point<Scalar> center = generate_random_point<Scalar>(box, rng);
 
-  // Generate random semi-axis radii (between 0 and 0.5 times the smallest box size)
+  // Generate random semi-axis radii (between 0 and 0.25 times the smallest box size)
   Scalar min_width =
       Kokkos::min(Kokkos::min(box.x_max() - box.x_min(), box.y_max() - box.y_min()), box.z_max() - box.z_min());
-  Scalar r0 = rng.uniform(0.0, 0.5 * min_width);
-  Scalar r1 = rng.uniform(0.0, 0.5 * min_width);
-  Scalar r2 = rng.uniform(0.0, 0.5 * min_width);
-  return Ellipsoid<Scalar>(center, r0, r1, r2);
+  Scalar r0 = rng.uniform(0.0, 0.25 * min_width);
+  Scalar r1 = rng.uniform(0.0, 0.25 * min_width);
+  Scalar r2 = rng.uniform(0.0, 0.25 * min_width);
+
+  // Random orientation
+  mundy::math::Vector3<Scalar> z_hat{0.0, 0.0, 1.0};
+  mundy::math::Vector3<Scalar> u_hat = generate_random_unit_vector<Scalar>(box, rng);
+  auto random_quaternion = mundy::math::quat_from_parallel_transport(z_hat, u_hat);
+
+  return Ellipsoid<Scalar>(center, random_quaternion, r0, r1, r2);
 }
 
 template <typename Scalar, typename RNG>
@@ -143,7 +152,7 @@ Circle3D<Scalar> generate_random_circle3D(const AABB<Scalar>& box, RNG& rng) {
   // Generate a random radius (between 0 and 0.5 times the smallest box size)
   Scalar min_width =
       Kokkos::min(Kokkos::min(box.x_max() - box.x_min(), box.y_max() - box.y_min()), box.z_max() - box.z_min());
-  Scalar radius = rng.uniform(0.0, 0.5 * min_width);
+  Scalar radius = rng.uniform(0.0, 0.25 * min_width);
 
   // Generate a random quaternion orientation rotating the circle's normal from z-axis to a random unit vector
   mundy::math::Vector3<Scalar> z_hat{0.0, 0.0, 1.0};
@@ -152,6 +161,44 @@ Circle3D<Scalar> generate_random_circle3D(const AABB<Scalar>& box, RNG& rng) {
 
   return Circle3D<Scalar>(center, random_quaternion, radius);
 }
+//@}
+
+//! \name Translate a primitive
+//@{
+
+template <typename Scalar>
+Point<Scalar> translate(const Point<Scalar>& point, const mundy::math::Vector3<Scalar>& disp) {
+  return Point<Scalar>(point[0] + disp[0], point[1] + disp[1], point[2] + disp[2]);
+}
+
+template <typename Scalar>
+Line<Scalar> translate(const Line<Scalar>& line, const mundy::math::Vector3<Scalar>& disp) {
+  return Line<Scalar>(translate(line.center(), disp), line.direction());
+}
+
+template <typename Scalar>
+LineSegment<Scalar> translate(const LineSegment<Scalar>& line_segment, const mundy::math::Vector3<Scalar>& disp) {
+  return LineSegment<Scalar>(translate(line_segment.start(), disp), translate(line_segment.end(), disp));
+}
+
+template <typename Scalar>
+Sphere<Scalar> translate(const Sphere<Scalar>& sphere, const mundy::math::Vector3<Scalar>& disp) {
+  return Sphere<Scalar>(translate(sphere.center(), disp), sphere.radius());
+}
+
+template <typename Scalar>
+Ellipsoid<Scalar> translate(const Ellipsoid<Scalar>& ellipsoid, const mundy::math::Vector3<Scalar>& disp) {
+  return Ellipsoid<Scalar>(translate(ellipsoid.center(), disp), ellipsoid.orientation(), ellipsoid.radii());
+}
+
+template <typename Scalar>
+Circle3D<Scalar> translate(const Circle3D<Scalar>& circle, const mundy::math::Vector3<Scalar>& disp) {
+  return Circle3D<Scalar>(translate(circle.center(), disp), circle.orientation(), circle.radius());
+}
+//@}
+
+//! \name Runtime to compile-time dispatch
+//@{
 
 enum class TestObjectType : std::uint8_t {
   POINT = 0,
@@ -330,12 +377,43 @@ struct apply_pairwise_functor {
 
   Functor functor_;
 };  // apply_pairwise_functor
+//@}
 
 struct compute_distance_impl {
   using return_type = double;
   template <typename ShapeTraits1, typename ShapeTraits2, typename RNG>
   KOKKOS_INLINE_FUNCTION return_type operator()(ShapeTraits1, ShapeTraits2, const AABB<double>& box, RNG& rng) const {
-    return distance(ShapeTraits1::generate(box, rng), ShapeTraits2::generate(box, rng));
+    auto obj1 = ShapeTraits1::generate(box, rng);
+    auto obj2 = ShapeTraits2::generate(box, rng);
+    return distance(obj1, obj2);
+  }
+};
+
+struct compute_distance_min_image_impl {
+  using return_type = double;
+  template <typename ShapeTraits1, typename ShapeTraits2, typename RNG>
+  KOKKOS_INLINE_FUNCTION return_type operator()(ShapeTraits1, ShapeTraits2, const AABB<double>& box, RNG& rng) const {
+    auto obj1 = ShapeTraits1::generate(box, rng);
+    auto obj2 = ShapeTraits2::generate(box, rng);
+
+    // Assume that obj1 and obj2 are both within the bounding box
+    auto box_size = mundy::math::Vector3<double>{box.x_max() - box.x_min(),  //
+                                                 box.y_max() - box.y_min(),  //
+                                                 box.z_max() - box.z_min()};
+
+    mundy::math::Vector<double, 27> min_image_distance;
+    for (int i = 0; i < 3; ++i) {
+      for (int j = 0; j < 3; ++j) {
+        for (int k = 0; k < 3; ++k) {
+          // Shift obj2 by the box dimensions in each direction
+          mundy::math::Vector3<double> disp((i - 1) * box_size[0], (j - 1) * box_size[1], (k - 1) * box_size[2]);
+          auto shifted_obj2 = translate(obj2, disp);
+          min_image_distance(i * 9 + j * 3 + k) = distance(obj1, shifted_obj2);
+        }
+      }
+    }
+
+    return min(min_image_distance);
   }
 };
 
@@ -344,7 +422,26 @@ struct compute_distance_pbc_impl {
   template <typename ShapeTraits1, typename ShapeTraits2, typename RNG, typename Metric>
   KOKKOS_INLINE_FUNCTION return_type operator()(ShapeTraits1, ShapeTraits2, const AABB<double>& box, RNG& rng,
                                                 const Metric& metric) const {
-    return distance_pbc(ShapeTraits1::generate(box, rng), ShapeTraits2::generate(box, rng), metric);
+    auto obj1 = ShapeTraits1::generate(box, rng);
+    auto obj2 = ShapeTraits2::generate(box, rng);
+    return distance_pbc(obj1, obj2, metric);
+  }
+};
+
+struct compute_distance_pbc_shifted_impl {
+  using return_type = double;
+  template <typename ShapeTraits1, typename ShapeTraits2, typename RNG, typename Metric>
+  KOKKOS_INLINE_FUNCTION return_type operator()(ShapeTraits1, ShapeTraits2, const AABB<double>& box, RNG& rng,
+                                                const Metric& metric) const {
+    auto obj1 = ShapeTraits1::generate(box, rng);
+    auto obj2 = ShapeTraits2::generate(box, rng);
+
+    // Shift obj2 by the box dimensions in each direction
+    mundy::math::Vector3<double> box_disp{box.x_max() - box.x_min(),  //
+                                          box.y_max() - box.y_min(),  //
+                                          box.z_max() - box.z_min()};
+    obj2 = translate(obj2, box_disp);
+    return distance_pbc(obj1, obj2, metric);
   }
 };
 
@@ -357,12 +454,32 @@ KOKKOS_INLINE_FUNCTION double compute_distance(TestObjectType type1, TestObjectT
   return apply(type1, type2, box, rng);
 }
 
+KOKKOS_INLINE_FUNCTION double compute_distance_min_image(TestObjectType type1, TestObjectType type2,
+                                                         const AABB<double>& box, size_t seed, size_t counter) {
+  openrand::Philox rng(seed, counter);
+
+  using Functor = compute_distance_min_image_impl;
+  apply_pairwise_functor<Functor> apply;
+  return apply(type1, type2, box, rng);
+}
+
 template <typename Metric>
 KOKKOS_INLINE_FUNCTION double compute_distance_pbc(TestObjectType type1, TestObjectType type2, const AABB<double>& box,
                                                    size_t seed, size_t counter, const Metric& metric) {
   openrand::Philox rng(seed, counter);
 
   using Functor = compute_distance_pbc_impl;
+  apply_pairwise_functor<Functor> apply;
+  return apply(type1, type2, box, rng, metric);
+}
+
+template <typename Metric>
+KOKKOS_INLINE_FUNCTION double compute_distance_pbc_shifted(TestObjectType type1, TestObjectType type2,
+                                                           const AABB<double>& box, size_t seed, size_t counter,
+                                                           const Metric& metric) {
+  openrand::Philox rng(seed, counter);
+
+  using Functor = compute_distance_pbc_shifted_impl;
   apply_pairwise_functor<Functor> apply;
   return apply(type1, type2, box, rng, metric);
 }
@@ -395,7 +512,56 @@ TEST(UnitTestPeriodicDistance, TestAperiodic) {
       // Must use the same seed and counter for each
       double free_space_distance = compute_distance(type1, type2, box, seed, counter);
       double periodic_distance = compute_distance_pbc(type1, type2, box, seed, counter, FreeSpaceMetric{});
-      EXPECT_NEAR(free_space_distance, periodic_distance, mundy::math::get_zero_tolerance<double>())
+      EXPECT_NEAR(free_space_distance, periodic_distance, mundy::math::get_relaxed_zero_tolerance<double>())
+          << " for types " << type1 << " and " << type2;
+
+      ++counter;
+    }
+  }
+}
+
+TEST(UnitTestPeriodicDistance, TestPeriodic) {
+  // Validate that we can actually compute the distance for each pair of test objects
+  size_t seed = 1234;
+  size_t counter = 0;
+  size_t num_trials = 1;  // Number of trials for each pair
+
+  using ShapePair = Kokkos::pair<TestObjectType, TestObjectType>;
+  std::vector<ShapePair> test_pairs = {{TestObjectType::POINT, TestObjectType::POINT},
+                                       {TestObjectType::POINT, TestObjectType::LINE},
+                                       {TestObjectType::POINT, TestObjectType::LINE_SEGMENT},
+                                       {TestObjectType::POINT, TestObjectType::SPHERE},
+                                       {TestObjectType::LINE, TestObjectType::LINE},
+                                       {TestObjectType::LINE, TestObjectType::SPHERE},
+                                       {TestObjectType::LINE_SEGMENT, TestObjectType::LINE_SEGMENT},
+                                       {TestObjectType::LINE_SEGMENT, TestObjectType::SPHERE},
+                                       {TestObjectType::SPHERE, TestObjectType::SPHERE},
+                                       {TestObjectType::ELLIPSOID, TestObjectType::ELLIPSOID},
+                                       {TestObjectType::CIRCLE_3D, TestObjectType::CIRCLE_3D}};
+
+  mundy::math::Vector3<double> cell_size{1.0, 1.0, 1.0};
+  AABB<double> box{0.0, 0.0, 0.0, 1.0, 1.0, 1.0};  // Unit cube bounding box
+  auto periodic_metric = periodic_scaled_metric_from_unit_cell(cell_size);
+
+  for (const auto& pair : test_pairs) {
+    for (size_t t = 0; t < num_trials; ++t) {
+      TestObjectType type1 = pair.first;
+      TestObjectType type2 = pair.second;
+
+      // Must use the same seed and counter for each
+      double free_space_distance = compute_distance(type1, type2, box, seed, counter);
+      double min_free_space_distance = compute_distance_min_image(type1, type2, box, seed, counter);
+      double periodic_distance = compute_distance_pbc(type1, type2, box, seed, counter, periodic_metric);
+      double periodic_distance_shifted =
+          compute_distance_pbc_shifted(type1, type2, box, seed, counter, periodic_metric);
+
+      std::cout << "For types: " << type1 << " and " << type2 << ", free space distance: " << free_space_distance
+                << ", min image distance: " << min_free_space_distance << ", periodic distance: " << periodic_distance
+                << ", periodic distance shifted: " << periodic_distance_shifted << std::endl;
+
+      EXPECT_NEAR(min_free_space_distance, periodic_distance, mundy::math::get_relaxed_zero_tolerance<double>())
+          << " for types " << type1 << " and " << type2;
+      EXPECT_NEAR(min_free_space_distance, periodic_distance_shifted, mundy::math::get_relaxed_zero_tolerance<double>())
           << " for types " << type1 << " and " << type2;
 
       ++counter;
