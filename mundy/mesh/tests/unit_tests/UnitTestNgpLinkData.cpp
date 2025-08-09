@@ -187,69 +187,71 @@ void basic_usage_test() {
 
   // NGP stuff
   // The lambda allows us to scope what is or is not copied by the KOKKOS_LAMBDA since bulk_data cannot be copied
-  // link_data.modify_on_host();
-  // link_data.sync_to_device();
-  // auto run_ngp_test = [&link_part_a, &link_part_b, &link_part_c, &link_data]() {
-  //   unsigned universal_link_ordinal =
-  //       link_data.link_meta_data().universal_link_part().mesh_meta_data_ordinal();
-  //   unsigned part_a_ordinal = link_part_a.mesh_meta_data_ordinal();
-  //   unsigned part_b_ordinal = link_part_b.mesh_meta_data_ordinal();
-  //   unsigned part_c_ordinal = link_part_c.mesh_meta_data_ordinal();
+  link_data.modify_on_host();
+  link_data.sync_to_device();
+  auto run_ngp_test = [&link_part_a, &link_part_b, &link_part_c, &link_data]() {
+    unsigned universal_link_ordinal =
+        link_data.link_meta_data().universal_link_part().mesh_meta_data_ordinal();
+    unsigned part_a_ordinal = link_part_a.mesh_meta_data_ordinal();
+    unsigned part_b_ordinal = link_part_b.mesh_meta_data_ordinal();
+    unsigned part_c_ordinal = link_part_c.mesh_meta_data_ordinal();
 
-  //   for_each_link_run(
-  //       link_data, link_part_b,
-  //     KOKKOS_LAMBDA(const FastMeshIndex& linker_index) {
-  //         Check the link itself
-  //         MUNDY_THROW_REQUIRE(link_data.ngp_mesh()
-  //                         .get_bucket(link_data.link_rank(), linker_index.bucket_id)
-  //                         .member(universal_link_ordinal), std::runtime_error, "Part membership error");
-  //         MUNDY_THROW_REQUIRE(link_data.ngp_mesh()
-  //                         .get_bucket(link_data.link_rank(), linker_index.bucket_id)
-  //                         .member(part_b_ordinal), std::runtime_error, "Part membership error");
-  //         MUNDY_THROW_REQUIRE(link_data.ngp_mesh()
-  //                         .get_bucket(link_data.link_rank(), linker_index.bucket_id)
-  //                         .member(part_c_ordinal), std::runtime_error, "Part membership error");
-  //         MUNDY_THROW_REQUIRE(!link_data.ngp_mesh()
-  //                          .get_bucket(link_data.link_rank(), linker_index.bucket_id)
-  //                          .member(part_a_ordinal), std::runtime_error, "Part membership error");
+    for_each_link_run(
+        link_data, link_part_b,
+      KOKKOS_LAMBDA(const FastMeshIndex& linker_index) {
+          // Check the link itself
+          MUNDY_THROW_REQUIRE(link_data.ngp_mesh()
+                          .get_bucket(link_data.link_rank(), linker_index.bucket_id)
+                          .member(universal_link_ordinal), std::runtime_error, "Part membership error");
+          MUNDY_THROW_REQUIRE(link_data.ngp_mesh()
+                          .get_bucket(link_data.link_rank(), linker_index.bucket_id)
+                          .member(part_b_ordinal), std::runtime_error, "Part membership error");
+          MUNDY_THROW_REQUIRE(link_data.ngp_mesh()
+                          .get_bucket(link_data.link_rank(), linker_index.bucket_id)
+                          .member(part_c_ordinal), std::runtime_error, "Part membership error");
+          MUNDY_THROW_REQUIRE(!link_data.ngp_mesh()
+                           .get_bucket(link_data.link_rank(), linker_index.bucket_id)
+                           .member(part_a_ordinal), std::runtime_error, "Part membership error");
 
-  //         Check that all downward linked entities are non-empty
-  //         unsigned dimensionality_part_b = 3;
-  //         for (unsigned d = 0; d < dimensionality_part_b; ++d) {
-  //           stk::mesh::Entity linked_entity = link_data.get_linked_entity(linker_index, d);
-  //           MUNDY_THROW_REQUIRE(linked_entity != stk::mesh::Entity(), std::runtime_error, "Fetching downward link failed.");
-  //         }
-  //       });
+          // Check that all downward linked entities are non-empty
+          unsigned dimensionality_part_b = 3;
+          for (unsigned d = 0; d < dimensionality_part_b; ++d) {
+            stk::mesh::Entity linked_entity = link_data.get_linked_entity(linker_index, d);
+            MUNDY_THROW_REQUIRE(linked_entity != stk::mesh::Entity(), std::runtime_error, "Fetching downward link failed.");
+          }
+        });
 
-  //   Not only can you fetch linked entities on the device, you can declare and delete relations in parallel and
-  //   without thread contention.
-  //   for_each_link_run(
-  //       link_data, link_part_b, KOKKOS_LAMBDA(const FastMeshIndex& linker_index) {
-  //         // Get the linked entities and swap their order
-  //         FastMeshIndex linked_entity_0 = link_data.get_linked_entity_index(linker_index, 0);
-  //         FastMeshIndex linked_entity_1 = link_data.get_linked_entity_index(linker_index, 1);
-  //         FastMeshIndex linked_entity_2 = link_data.get_linked_entity_index(linker_index, 2);
+    // Not only can you fetch linked entities on the device, you can declare and delete relations in parallel and
+    // without thread contention.
+    for_each_link_run(
+        link_data, link_part_b, KOKKOS_LAMBDA(const FastMeshIndex& linker_index) {
+          // Get the linked entities and swap their order
+          FastMeshIndex linked_entity_0 = link_data.get_linked_entity_index(linker_index, 0);
+          FastMeshIndex linked_entity_1 = link_data.get_linked_entity_index(linker_index, 1);
+          FastMeshIndex linked_entity_2 = link_data.get_linked_entity_index(linker_index, 2);
 
-  //         EntityRank entity_0_rank = link_data.get_linked_entity_rank(linker_index, 0);
-  //         EntityRank entity_1_rank = link_data.get_linked_entity_rank(linker_index, 1);
-  //         EntityRank entity_2_rank = link_data.get_linked_entity_rank(linker_index, 2);
+          EntityRank entity_0_rank = link_data.get_linked_entity_rank(linker_index, 0);
+          EntityRank entity_1_rank = link_data.get_linked_entity_rank(linker_index, 1);
+          EntityRank entity_2_rank = link_data.get_linked_entity_rank(linker_index, 2);
 
-  //         link_data.delete_relation(linker_index, 0);
-  //         link_data.delete_relation(linker_index, 1);
-  //         link_data.delete_relation(linker_index, 2);
+          link_data.delete_relation(linker_index, 0);
+          link_data.delete_relation(linker_index, 1);
+          link_data.delete_relation(linker_index, 2);
 
-  //         link_data.declare_relation(linker_index, entity_2_rank, linked_entity_2, 0);
-  //         link_data.declare_relation(linker_index, entity_1_rank, linked_entity_1, 1);
-  //         link_data.declare_relation(linker_index, entity_0_rank, linked_entity_0, 2);
-  //       });
+          link_data.declare_relation(linker_index, entity_2_rank, linked_entity_2, 0);
+          link_data.declare_relation(linker_index, entity_1_rank, linked_entity_1, 1);
+          link_data.declare_relation(linker_index, entity_0_rank, linked_entity_0, 2);
+        });
 
-  //   link_data.modify_on_device();
-  //   link_data.sync_to_host();
-  // };
-  // run_ngp_test();
+    link_data.modify_on_device();
+    link_data.sync_to_host();
+  };
+  run_ngp_test();
 
   // Check the CRS connectivity
+  EXPECT_FALSE(link_data.is_crs_connectivity_up_to_date());
   link_data.update_crs_connectivity();
+  EXPECT_TRUE(link_data.is_crs_connectivity_up_to_date());
   auto& crs_partition_view = link_data.get_all_crs_partitions();
 }
 

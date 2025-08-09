@@ -590,8 +590,8 @@ class NewNgpLinkData {
   ///  1. A reduction over all selected partitions to check if any of the CRS buckets are dirty.
   ///  2. A reduction over all selected links to check if any of the links are dirty.
   /// These aren't expensive operations and they're designed to be fast/GPU-compatible, but they aren't free.
-  bool is_crs_up_to_date(const stk::mesh::Selector &selector) {
-    Kokkos::Profiling::pushRegion("NewNgpLinkData::is_crs_up_to_date");
+  bool is_crs_connectivity_up_to_date(const stk::mesh::Selector &selector) {
+    Kokkos::Profiling::pushRegion("NewNgpLinkData::is_crs_connectivity_up_to_date");
 
     stk::mesh::Selector link_subset_selector = link_meta_data().universal_link_part() & selector;
 
@@ -605,27 +605,36 @@ class NewNgpLinkData {
     const auto &team_policy =
         stk::ngp::TeamPolicy<stk::mesh::NgpMesh::MeshExecSpace>(partitions.extent(0), Kokkos::AUTO);
 
-    bool crs_buckets_up_to_date = true;
+    bool any_dirty = false;
     Kokkos::parallel_reduce(
-        "NewNgpLinkData::is_crs_up_to_date", team_policy,
-        KOKKOS_LAMBDA(const TeamHandleType &team, bool &team_local_crs_buckets_up_to_date) {
+        "NewNgpLinkData::is_crs_connectivity_up_to_date", team_policy,
+        KOKKOS_LAMBDA(const TeamHandleType &team, bool &team_local_any_dirty) {
           const stk::mesh::Ordinal partition_id = team.league_rank();
           const NewNgpCRSPartition &partition = partitions(partition_id);
-          team_local_crs_buckets_up_to_date = true;
+          
+          bool tmp_team_local_any_dirty = false;
+  
           for (stk::topology::rank_t rank = stk::topology::NODE_RANK; rank < stk::topology::NUM_RANKS; ++rank) {
+            
             const unsigned num_buckets = partition.num_buckets(rank);
+            bool rank_local_any_dirty = false;  
             Kokkos::parallel_reduce(
                 Kokkos::TeamThreadRange(team, num_buckets),
-                KOKKOS_LAMBDA(const unsigned bucket_index, bool &thread_local_crs_buckets_up_to_date) {
+                KOKKOS_LAMBDA(const unsigned bucket_index, bool &thread_local_any_dirty) {
                   const auto &crs_bucket = partition.get_crs_bucket_conn(rank, bucket_index);
-                  if (crs_bucket.dirty_) {
-                    thread_local_crs_buckets_up_to_date = false;
-                  }
+                  thread_local_any_dirty = crs_bucket.dirty_;
                 },
-                Kokkos::LOr<bool>(team_local_crs_buckets_up_to_date));
+                Kokkos::LOr<bool>(rank_local_any_dirty));
+
+            if (rank_local_any_dirty) {
+              tmp_team_local_any_dirty = true;
+            }
           }
+
+          team_local_any_dirty = tmp_team_local_any_dirty;
         },
-        Kokkos::LOr<bool>(crs_buckets_up_to_date));
+        Kokkos::LOr<bool>(any_dirty));
+    bool crs_buckets_up_to_date = !any_dirty;
 
     if (crs_buckets_up_to_date) {  // No need to perform the second check if the first fails.
       //  2. A selected link is out-of-date.
@@ -639,13 +648,18 @@ class NewNgpLinkData {
     return crs_buckets_up_to_date;
   }
 
-  /// \brief Propagate changes made to the COO connectivity to the CRS connectivity.
+  /// \brief Check if the CRS connectivity is up-to-date for all links.
+  bool is_crs_connectivity_up_to_date() {
+    return is_crs_connectivity_up_to_date(bulk_data().mesh_meta_data().universal_part());
+  }
+
+  /// \brief Propagate changes made to the COO connectivity to the CRS connectivity for the given link subset selector.
   /// This takes changes made via the declare/delete_relation functions or request/destroy links and updates
   /// the CRS connectivity to reflect these changes.
   void update_crs_connectivity(const stk::mesh::Selector &selector) {
     stk::mesh::Selector link_subset_selector = link_meta_data().universal_link_part() & selector;
 
-    if (is_crs_up_to_date(link_subset_selector)) {
+    if (is_crs_connectivity_up_to_date(link_subset_selector)) {
       return;
     }
 
@@ -714,6 +728,11 @@ class NewNgpLinkData {
 #endif
   }
 
+  /// \brief Propagate changes made to the COO connectivity to the CRS connectivity.
+  void update_crs_connectivity() {
+    update_crs_connectivity(bulk_data().mesh_meta_data().universal_part());
+  }
+
   /// \brief Check consistency between the COO and CRS connectivity (valid even in RELEASE mode).
   /// Relatively expensive check that verifies COO -> CRS and CRS -> COO consistency.
   void check_crs_coo_consistency(const stk::mesh::Selector &selector) {
@@ -722,13 +741,6 @@ class NewNgpLinkData {
     check_linked_bucket_conn_size(link_subset_selector);
     check_coo_to_crs_conn(link_subset_selector);
     check_crs_to_coo_conn(link_subset_selector);
-  }
-
-  /// \brief Propagate changes made to the COO connectivity to the CRS connectivity.
-  /// This takes changes made via the declare/delete_relation functions or request/destroy links and updates
-  /// the CRS connectivity to reflect these changes.
-  void update_crs_connectivity() {
-    update_crs_connectivity(bulk_data().mesh_meta_data().universal_part());
   }
   //@}
 
@@ -1261,15 +1273,12 @@ class NewNgpLinkData {
       Kokkos::parallel_for(
           Kokkos::RangePolicy<stk::mesh::NgpMesh::MeshExecSpace>(0, ngp_mesh.num_buckets(rank)),
           KOKKOS_LAMBDA(const int &bucket_id) {
-            // Fetch our bucket
-            const stk::mesh::NgpMesh::BucketType &bucket = ngp_mesh.get_bucket(rank, bucket_id);
-
             // Serial loop over the partitions
             for (unsigned partition_id = 0; partition_id < crs_partitions.extent(0); ++partition_id) {
               NewNgpCRSPartition &crs_partition = crs_partitions(partition_id);
 
               // Fetch the crs bucket conn for this rank and bucket
-              auto &crs_bucket_conn = crs_partition.get_crs_bucket_conn(rank, bucket.bucket_id());
+              auto &crs_bucket_conn = crs_partition.get_crs_bucket_conn(rank, bucket_id);
               crs_bucket_conn.dirty_ = false;  // Reset the dirty flag
             }
           });
