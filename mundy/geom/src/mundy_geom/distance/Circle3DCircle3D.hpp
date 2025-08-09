@@ -31,38 +31,52 @@
 #include <mundy_math/minimize.hpp>    // for mundy::math::find_min_using_approximate_derivatives
 
 // Mundy geom
-#include <mundy_geom/distance/Types.hpp>       // for mundy::geom::SharedNormalSigned
-#include <mundy_geom/primitives/Circle3D.hpp>  // for mundy::geom::Circle3D
-#include <mundy_geom/primitives/Point.hpp>     // for mundy::geom::Point
+#include <mundy_geom/distance/DistanceMetrics.hpp>  // for mundy::geom::FreeSpaceMetric
+#include <mundy_geom/distance/Types.hpp>            // for mundy::geom::SharedNormalSigned
+#include <mundy_geom/primitives/Circle3D.hpp>       // for mundy::geom::Circle3D
+#include <mundy_geom/primitives/Point.hpp>          // for mundy::geom::Point
 
 namespace mundy {
 
 namespace geom {
 
-template <typename Scalar>
-KOKKOS_FUNCTION Scalar distance(const Circle3D<Scalar>& circle3d1, const Circle3D<Scalar>& circle3d2) {
-  return distance(Euclidean{}, circle3d1, circle3d2);
+//! \name Periodic space distance calculations
+//@{
+
+template <typename Scalar, typename Metric>
+KOKKOS_FUNCTION Scalar distance_pbc(const Circle3D<Scalar>& circle3d1,  //
+                                    const Circle3D<Scalar>& circle3d2,  //
+                                    const Metric& metric) {
+  return distance_pbc(Euclidean{}, circle3d1, circle3d2, metric);
 }
 
-template <typename Scalar>
-KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const Euclidean distance_type, const Circle3D<Scalar>& circle3d1,
-                                const Circle3D<Scalar>& circle3d2) {
+template <typename Scalar, typename Metric>
+KOKKOS_FUNCTION Scalar distance_pbc([[maybe_unused]] const Euclidean distance_type,  //
+                                    const Circle3D<Scalar>& circle3d1,               //
+                                    const Circle3D<Scalar>& circle3d2,               //
+                                    const Metric& metric) {
   Point<Scalar> closest_point1;
   Point<Scalar> closest_point2;
   mundy::math::Vector3<Scalar> shared_normal1;
   mundy::math::Vector3<Scalar> shared_normal2;
-  return distance(distance_type, circle3d1, circle3d2, closest_point1, closest_point2, shared_normal1, shared_normal2);
+  return distance_pbc(distance_type, circle3d1, circle3d2, metric,  //
+                      closest_point1, closest_point2, shared_normal1, shared_normal2);
 }
 
-template <typename Scalar>
+template <typename Scalar, typename Metric>
 class Circle3DCircle3DObjective {
  public:
   KOKKOS_FUNCTION
-  Circle3DCircle3DObjective(const Circle3D<Scalar>& circle3d0, const Circle3D<Scalar>& circle3d1,
-                            mundy::math::Vector3<Scalar>& shared_normal0, mundy::math::Vector3<Scalar>& shared_normal1,
-                            Point<Scalar>& foot_point0, Point<Scalar>& foot_point1)
+  Circle3DCircle3DObjective(const Circle3D<Scalar>& circle3d0,             //
+                            const Circle3D<Scalar>& circle3d1,             //
+                            const Metric& metric,                          //
+                            mundy::math::Vector3<Scalar>& shared_normal0,  //
+                            mundy::math::Vector3<Scalar>& shared_normal1,  //
+                            Point<Scalar>& foot_point0,                    //
+                            Point<Scalar>& foot_point1)
       : circle3d0_(circle3d0),
         circle3d1_(circle3d1),
+        metric_(metric),
         shared_normal0_(shared_normal0),
         shared_normal1_(shared_normal1),
         foot_point0_(foot_point0),
@@ -80,7 +94,7 @@ class Circle3DCircle3DObjective {
     foot_point0_ = theta_to_foot_point_on_circle3d(theta1_theta2[0], circle3d0_);
     foot_point1_ = theta_to_foot_point_on_circle3d(theta1_theta2[1], circle3d1_);
 
-    shared_normal0_ = foot_point1_ - foot_point0_;
+    shared_normal0_ = metric_(foot_point0_, foot_point1_);
 
     const double norm = mundy::math::norm(shared_normal0_);
     shared_normal0_ /= (norm > mundy::math::get_zero_tolerance<Scalar>() ? norm : 1.0);
@@ -92,17 +106,22 @@ class Circle3DCircle3DObjective {
  private:
   const Circle3D<Scalar>& circle3d0_;
   const Circle3D<Scalar>& circle3d1_;
+  const Metric& metric_;
   mundy::math::Vector3<Scalar>& shared_normal0_;
   mundy::math::Vector3<Scalar>& shared_normal1_;
   Point<Scalar>& foot_point0_;
   Point<Scalar>& foot_point1_;
 };
 
-template <typename Scalar>
-KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const Euclidean distance_type, const Circle3D<Scalar>& circle3d1,
-                                const Circle3D<Scalar>& circle3d2, Point<Scalar>& closest_point1,
-                                Point<Scalar>& closest_point2, mundy::math::Vector3<Scalar>& shared_normal1,
-                                mundy::math::Vector3<Scalar>& shared_normal2) {
+template <typename Scalar, typename Metric>
+KOKKOS_FUNCTION Scalar distance_pbc([[maybe_unused]] const Euclidean distance_type,  //
+                                    const Circle3D<Scalar>& circle3d1,               //
+                                    const Circle3D<Scalar>& circle3d2,               //
+                                    const Metric& metric,                            //
+                                    Point<Scalar>& closest_point1,                   //
+                                    Point<Scalar>& closest_point2,                   //
+                                    mundy::math::Vector3<Scalar>& shared_normal1,    //
+                                    mundy::math::Vector3<Scalar>& shared_normal2) {
   // Setup the minimization
   // Note, the actual error is not guaranteed to be less than min_objective_delta due to the use of approximate
   // derivatives. Instead, we saw that the error was typically less than the square root of min_objective_delta.
@@ -110,7 +129,7 @@ KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const Euclidean distance_type, 
   constexpr size_t lbfgs_max_memory_size = 10;
 
   // Reuse the solution space rather than re-allocating it each time
-  Circle3DCircle3DObjective minimize_euclidean_distance(circle3d1, circle3d2,            //
+  Circle3DCircle3DObjective minimize_euclidean_distance(circle3d1, circle3d2, metric,    //
                                                         shared_normal1, shared_normal2,  //
                                                         closest_point1, closest_point2);
 
@@ -139,6 +158,36 @@ KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const Euclidean distance_type, 
   minimize_euclidean_distance(global_theta1_theta2_sol);
   return global_dist;
 }
+//@}
+
+//! \name Free space distance calculations
+//@{
+
+template <typename Scalar>
+KOKKOS_FUNCTION Scalar distance(const Circle3D<Scalar>& circle3d1,  //
+                                const Circle3D<Scalar>& circle3d2) {
+  return distance_pbc(circle3d1, circle3d2, FreeSpaceMetric<Scalar>{});
+}
+
+template <typename Scalar, typename DistanceType>
+KOKKOS_FUNCTION Scalar distance(const DistanceType distance_type,   //
+                                const Circle3D<Scalar>& circle3d1,  //
+                                const Circle3D<Scalar>& circle3d2) {
+  return distance_pbc(distance_type, circle3d1, circle3d2, FreeSpaceMetric<Scalar>{});
+}
+
+template <typename Scalar, typename DistanceType>
+KOKKOS_FUNCTION Scalar distance(const DistanceType distance_type,              //
+                                const Circle3D<Scalar>& circle3d1,             //
+                                const Circle3D<Scalar>& circle3d2,             //
+                                Point<Scalar>& closest_point1,                 //
+                                Point<Scalar>& closest_point2,                 //
+                                mundy::math::Vector3<Scalar>& shared_normal1,  //
+                                mundy::math::Vector3<Scalar>& shared_normal2) {
+  return distance_pbc(distance_type, circle3d1, circle3d2, FreeSpaceMetric<Scalar>{},  //
+                      closest_point1, closest_point2, shared_normal1, shared_normal2);
+}
+//@}
 
 }  // namespace geom
 

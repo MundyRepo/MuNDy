@@ -25,6 +25,7 @@
 #include <Kokkos_Core.hpp>
 
 // Mundy
+#include <mundy_geom/distance/DistanceMetrics.hpp>   // for mundy::geom::FreeSpaceMetric
 #include <mundy_geom/distance/PointLineSegment.hpp>  // for mundy::geom::distance(Point, LineSegment)
 #include <mundy_geom/distance/Types.hpp>             // for mundy::geom::SharedNormalSigned
 #include <mundy_geom/primitives/LineSegment.hpp>     // for mundy::geom::LineSegment
@@ -35,23 +36,30 @@ namespace mundy {
 
 namespace geom {
 
+//! \name Periodic space distance calculations
+//@{
+
 /// \brief Compute the distance between a line segment and a sphere
 /// \tparam Scalar The scalar type
 /// \param[in] line_segment The line segment
 /// \param[in] sphere The sphere
-template <typename Scalar>
-KOKKOS_FUNCTION Scalar distance(const LineSegment<Scalar>& line_segment, const Sphere<Scalar>& sphere) {
-  return distance(SharedNormalSigned{}, line_segment, sphere);
+template <typename Scalar, typename Metric>
+KOKKOS_FUNCTION Scalar distance_pbc(const LineSegment<Scalar>& line_segment,  //
+                                    const Sphere<Scalar>& sphere,             //
+                                    const Metric& metric) {
+  return distance_pbc(SharedNormalSigned{}, line_segment, sphere, metric);
 }
 
 /// \brief Compute the shared normal signed separation distance between a line segment and a sphere
 /// \tparam Scalar The scalar type
 /// \param[in] line_segment The line segment
 /// \param[in] sphere The sphere
-template <typename Scalar>
-KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distance_type,
-                                const LineSegment<Scalar>& line_segment, const Sphere<Scalar>& sphere) {
-  return distance(sphere.center(), line_segment) - sphere.radius();
+template <typename Scalar, typename Metric>
+KOKKOS_FUNCTION Scalar distance_pbc([[maybe_unused]] const SharedNormalSigned distance_type,  //
+                                    const LineSegment<Scalar>& line_segment,                  //
+                                    const Sphere<Scalar>& sphere,                             //
+                                    const Metric& metric) {
+  return distance_pbc(sphere.center(), line_segment, metric) - sphere.radius();
 }
 
 /// \brief Compute the distance between a line segment and a sphere
@@ -61,10 +69,14 @@ KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distan
 /// \param[out] closest_point The closest point on the line segment
 /// \param[out] arch_length The arch-length parameter of the closest point on the line segment
 /// \param[out] sep The separation vector (from line_segment to sphere)
-template <typename Scalar>
-KOKKOS_FUNCTION Scalar distance(const LineSegment<Scalar>& line_segment, const Sphere<Scalar>& sphere,
-                                Point<Scalar>& closest_point, Scalar& arch_length, mundy::math::Vector3<Scalar>& sep) {
-  return distance(SharedNormalSigned{}, line_segment, sphere, closest_point, arch_length, sep);
+template <typename Scalar, typename Metric>
+KOKKOS_FUNCTION Scalar distance_pbc(const LineSegment<Scalar>& line_segment,  //
+                                    const Sphere<Scalar>& sphere,             //
+                                    const Metric& metric,                     //
+                                    Point<Scalar>& closest_point,             //
+                                    Scalar& arch_length,                      //
+                                    mundy::math::Vector3<Scalar>& sep) {
+  return distance_pbc(SharedNormalSigned{}, line_segment, sphere, metric, closest_point, arch_length, sep);
 }
 
 /// \brief Compute the shared normal signed separation distance between a line segment and a sphere
@@ -74,17 +86,83 @@ KOKKOS_FUNCTION Scalar distance(const LineSegment<Scalar>& line_segment, const S
 /// \param[out] closest_point The closest point on the line segment
 /// \param[out] arch_length The arch-length parameter of the closest point on the line segment
 /// \param[out] sep The separation vector (from line_segment to sphere)
-template <typename Scalar>
-KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distance_type,
-                                const LineSegment<Scalar>& line_segment, const Sphere<Scalar>& sphere,
-                                Point<Scalar>& closest_point, Scalar& arch_length, mundy::math::Vector3<Scalar>& sep) {
-  const Scalar line_center_distance = distance(sphere.center(), line_segment, closest_point, arch_length, sep);
+template <typename Scalar, typename Metric>
+KOKKOS_FUNCTION Scalar distance_pbc([[maybe_unused]] const SharedNormalSigned distance_type,  //
+                                    const LineSegment<Scalar>& line_segment,                  //
+                                    const Sphere<Scalar>& sphere,                             //
+                                    const Metric& metric,                                     //
+                                    Point<Scalar>& closest_point,                             //
+                                    Scalar& arch_length,                                      //
+                                    mundy::math::Vector3<Scalar>& sep) {
+  const Scalar line_center_distance =
+      distance_pbc(sphere.center(), line_segment, metric, closest_point, arch_length, sep);
 
   // Rescale the separation vector to the surface of the sphere
   const Scalar surface_distance = line_center_distance - sphere.radius();
   sep *= surface_distance / line_center_distance;
   return surface_distance;
 }
+//@}
+
+//! \name Free space distance calculations
+//@{
+
+/// \brief Compute the distance between a line segment and a sphere
+/// \tparam Scalar The scalar type
+/// \param[in] line_segment The line segment
+/// \param[in] sphere The sphere
+template <typename Scalar>
+KOKKOS_FUNCTION Scalar distance(const LineSegment<Scalar>& line_segment,  //
+                                const Sphere<Scalar>& sphere) {
+  return distance_pbc(line_segment, sphere, FreeSpaceMetric<Scalar>{});
+}
+
+/// \brief Compute the shared normal signed separation distance between a line segment and a sphere
+/// \tparam Scalar The scalar type
+/// \param[in] line_segment The line segment
+/// \param[in] sphere The sphere
+template <typename Scalar, typename DistanceType>
+KOKKOS_FUNCTION Scalar distance(const DistanceType distance_type,         //
+                                const LineSegment<Scalar>& line_segment,  //
+                                const Sphere<Scalar>& sphere) {
+  return distance_pbc(distance_type, line_segment, sphere, FreeSpaceMetric<Scalar>{});
+}
+
+/// \brief Compute the distance between a line segment and a sphere
+/// \tparam Scalar The scalar type
+/// \param[in] line_segment The line segment
+/// \param[in] sphere The sphere
+/// \param[out] closest_point The closest point on the line segment
+/// \param[out] arch_length The arch-length parameter of the closest point on the line segment
+/// \param[out] sep The separation vector (from line_segment to sphere)
+template <typename Scalar>
+KOKKOS_FUNCTION Scalar distance(const LineSegment<Scalar>& line_segment,  //
+                                const Sphere<Scalar>& sphere,             //
+                                Point<Scalar>& closest_point,             //
+                                Scalar& arch_length,                      //
+                                mundy::math::Vector3<Scalar>& sep) {
+  return distance_pbc(line_segment, sphere, FreeSpaceMetric<Scalar>{},  //
+                      closest_point, arch_length, sep);
+}
+
+/// \brief Compute the shared normal signed separation distance between a line segment and a sphere
+/// \tparam Scalar The scalar type
+/// \param[in] line_segment The line segment
+/// \param[in] sphere The sphere
+/// \param[out] closest_point The closest point on the line segment
+/// \param[out] arch_length The arch-length parameter of the closest point on the line segment
+/// \param[out] sep The separation vector (from line_segment to sphere)
+template <typename Scalar, typename DistanceType>
+KOKKOS_FUNCTION Scalar distance(const DistanceType distance_type,         //
+                                const LineSegment<Scalar>& line_segment,  //
+                                const Sphere<Scalar>& sphere,             //
+                                Point<Scalar>& closest_point,             //
+                                Scalar& arch_length,                      //
+                                mundy::math::Vector3<Scalar>& sep) {
+  return distance_pbc(distance_type, line_segment, sphere, FreeSpaceMetric<Scalar>{},  //
+                      closest_point, arch_length, sep);
+}
+//@}
 
 }  // namespace geom
 

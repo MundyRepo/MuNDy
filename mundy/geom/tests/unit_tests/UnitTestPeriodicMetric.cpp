@@ -153,7 +153,6 @@ TEST(FreeAndPeriodicMetricPointLineSegment, PositiveResult) {
   Point<double> point1{1.0, 1.0, 1.0};
   math::Vector3<double> cell_size{100.0, 100.0, 100.0};
 
-  FreeSpaceMetric<double> free_space_metric{};
   PeriodicSpaceMetric<double> periodic_space_metric = periodic_metric_from_unit_cell(cell_size);
 
   // Test segment that should not be a periodic image
