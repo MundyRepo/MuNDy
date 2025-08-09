@@ -63,7 +63,8 @@ KOKKOS_INLINE_FUNCTION constexpr void deep_copy_impl(std::index_sequence<Is...>,
 
 /// \brief Move assignment operator. Simply because the vector owns the accessor, doesn't mean we can move its contents.
 /// \details Moves the data from the other vector to our data. This is only enabled if T is not const.
-template <size_t... Is, typename T, size_t N, ValidAccessor<T> Accessor, typename OwnershipType, ValidAccessor<T> OtherAccessor>
+template <size_t... Is, typename T, size_t N, ValidAccessor<T> Accessor, typename OwnershipType,
+          ValidAccessor<T> OtherAccessor>
   requires HasNonConstAccessOperator<Accessor, T>
 KOKKOS_INLINE_FUNCTION constexpr void move_impl(std::index_sequence<Is...>, AVector<T, N, Accessor, OwnershipType>& vec,
                                                 AVector<T, N, OtherAccessor, Ownership::Owns>&& other) {
@@ -334,6 +335,18 @@ KOKKOS_INLINE_FUNCTION constexpr auto dot_product_impl(std::index_sequence<Is...
                                                        const AVector<T, N, OtherAccessor, OtherOwnershipType>& vec2) {
   using CommonType = std::common_type_t<U, T>;
   return ((static_cast<CommonType>(vec1[Is]) * static_cast<CommonType>(vec2[Is])) + ...);
+}
+
+/// \brief Element-wise product
+template <size_t... Is, size_t N, typename U, typename T, ValidAccessor<U> Accessor1, typename Ownership1,
+          ValidAccessor<T> Accessor2, typename Ownership2>
+KOKKOS_INLINE_FUNCTION constexpr auto elementwise_multiply_impl(std::index_sequence<Is...>,
+                                                                const AVector<U, N, Accessor1, Ownership1>& a,
+                                                                const AVector<T, N, Accessor2, Ownership2>& b) {
+  using CommonType = std::common_type_t<U, T>;
+  AVector<CommonType, N> result;
+  ((result[Is] = static_cast<CommonType>(a[Is]) * static_cast<CommonType>(b[Is])), ...);
+  return result;
 }
 
 /// \brief Apply a function to each element of a vector

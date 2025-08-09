@@ -538,8 +538,8 @@ class AVector<T, N, Accessor, Ownership::Owns> {
   template <ValidVectorType OtherVectorType>
   KOKKOS_INLINE_FUNCTION constexpr AVector(const OtherVectorType& other)
     requires(!std::is_same_v<OtherVectorType, AVector<T, N, Accessor, Ownership::Owns>>) &&
-            (OtherVectorType::size == N) && (std::is_same_v<typename OtherVectorType::scalar_t, T>)
-            && HasDefaultConstructor<Accessor>
+            (OtherVectorType::size == N) &&
+            (std::is_same_v<typename OtherVectorType::scalar_t, T>) && HasDefaultConstructor<Accessor>
       : accessor_() {
     impl::deep_copy_impl(std::make_index_sequence<N>{}, *this, other);
   }
@@ -548,8 +548,8 @@ class AVector<T, N, Accessor, Ownership::Owns> {
   template <ValidVectorType OtherVectorType>
   KOKKOS_INLINE_FUNCTION constexpr AVector(OtherVectorType&& other)
     requires(!std::is_same_v<OtherVectorType, AVector<T, N, Accessor, Ownership::Owns>>) &&
-            (OtherVectorType::size == N) && (std::is_same_v<typename OtherVectorType::scalar_t, T>)
-            && HasDefaultConstructor<Accessor>
+            (OtherVectorType::size == N) &&
+            (std::is_same_v<typename OtherVectorType::scalar_t, T>) && HasDefaultConstructor<Accessor>
       : accessor_() {
     impl::deep_copy_impl(std::make_index_sequence<N>{}, *this, std::move(other));
   }
@@ -1060,12 +1060,22 @@ KOKKOS_INLINE_FUNCTION constexpr auto dot(const AVector<U, N, Accessor1, Ownersh
   return impl::dot_product_impl(std::make_index_sequence<N>{}, a, b);
 }
 
+/// \brief Element-wise product
+/// \param[in] a The first vector.
+/// \param[in] b The second vector.
+template <size_t N, typename U, typename T, ValidAccessor<U> Accessor1, typename Ownership1, ValidAccessor<T> Accessor2,
+          typename Ownership2>
+KOKKOS_INLINE_FUNCTION constexpr auto elementwise_multiply(const AVector<U, N, Accessor1, Ownership1>& a,
+                                                           const AVector<T, N, Accessor2, Ownership2>& b) {
+  return impl::elementwise_multiply_impl(std::make_index_sequence<N>{}, a, b);
+}
+
 /// \brief Apply a function to each element of the vector
 /// \param[in] func The function to apply.
 /// \param[in] vec The vector.
 template <typename Func, size_t N, typename T, ValidAccessor<T> Accessor, typename OwnershipType>
-KOKKOS_INLINE_FUNCTION constexpr auto apply(Func&& func, const AVector<T, N, Accessor, OwnershipType>& vec) -> 
-    AVector<std::invoke_result_t<Func, T>, N> {
+KOKKOS_INLINE_FUNCTION constexpr auto apply(Func&& func, const AVector<T, N, Accessor, OwnershipType>& vec)
+    -> AVector<std::invoke_result_t<Func, T>, N> {
   return impl::apply_impl(std::make_index_sequence<N>{}, std::forward<Func>(func), vec);
 }
 //@}
