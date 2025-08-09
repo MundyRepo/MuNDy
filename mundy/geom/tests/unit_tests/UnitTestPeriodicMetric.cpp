@@ -258,7 +258,7 @@ Point<Scalar> generate_random_point(const AABB<Scalar>& box, RNG& rng) {
 
 TEST(PeriodicMetric, OldVsNew) {
   size_t seed = 1234;
-  size_t num_samples = 10000;
+  size_t num_samples = 100000;
 
   math::Vector3<double> cell_size{100.0, 100.0, 100.0};
   AABB<double> box{0.0, 0.0, 0.0, 100.0, 100.0, 100.0};
@@ -286,6 +286,40 @@ TEST(PeriodicMetric, OldVsNew) {
         << "Difference in separation vectors exceeds tolerance.";
     EXPECT_NEAR(diff2, 0.0, mundy::math::get_relaxed_zero_tolerance<double>())
         << "Difference in separation vectors exceeds tolerance for scale-only metric.";
+  }
+}
+
+TEST(PeriodicMetric, MinImageDirectVsPeriodic) {
+  size_t seed = 1234;
+  size_t num_samples = 100000;
+
+  math::Vector3<double> cell_size{100.0, 100.0, 100.0};
+  AABB<double> box{0.0, 0.0, 0.0, 100.0, 100.0, 100.0};
+  auto periodic_metric = periodic_metric_from_unit_cell(cell_size);
+
+  for (size_t t = 0; t < num_samples; ++t) {
+    openrand::Philox rng(seed, t);
+
+    // Generate two random points within the bounding box
+    Point<double> point1 = generate_random_point<double>(box, rng);
+    Point<double> point2 = generate_random_point<double>(box, rng);
+
+    // Compute the minimum image distance using the free-space metric and the 27 periodic images
+    mundy::math::Vector<double, 27> min_image_distances;
+    for (int i = 0; i < 3; ++i) {
+      for (int j = 0; j < 3; ++j) {
+        for (int k = 0; k < 3; ++k) {
+          // Shift obj2 by the box dimensions in each direction
+          mundy::math::Vector3<double> disp((i - 1) * cell_size[0], (j - 1) * cell_size[1], (k - 1) * cell_size[2]);
+          min_image_distances(i * 9 + j * 3 + k) = distance(point1, point2 + disp);
+        }
+      }
+    }
+
+    double min_image_distance = min(min_image_distances);
+    double periodic_distance = distance_pbc(point1, point2, periodic_metric);
+    EXPECT_NEAR(min_image_distance, periodic_distance, mundy::math::get_relaxed_zero_tolerance<double>())
+        << "Minimum image distance does not match periodic distance.";
   }
 }
 
