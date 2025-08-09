@@ -194,7 +194,7 @@ KOKKOS_FUNCTION Scalar distance_pbc([[maybe_unused]] const SharedNormalSigned di
 template <typename Scalar>
 KOKKOS_FUNCTION Scalar distance(const Point<Scalar>& point,  //
                                 const LineSegment<Scalar>& line_segment) {
-  return distance_pbc(point, line_segment, FreeSpaceMetric<Scalar>{});
+  return distance_pbc(point, line_segment, FreeSpaceMetric{});
 }
 
 /// \brief Compute the shared normal signed separation distance between a point and a line segment
@@ -205,7 +205,7 @@ template <typename Scalar, typename DistanceType>
 KOKKOS_FUNCTION Scalar distance(const DistanceType distance_type,  //
                                 const Point<Scalar>& point,        //
                                 const LineSegment<Scalar>& line_segment) {
-  return distance_pbc(distance_type, point, line_segment, FreeSpaceMetric<Scalar>{});
+  return distance_pbc(distance_type, point, line_segment, FreeSpaceMetric{});
 }
 
 /// \brief Compute the euclidean distance between a point and a line segment
@@ -221,7 +221,7 @@ KOKKOS_FUNCTION Scalar distance(const Point<Scalar>& point,               //
                                 Point<Scalar>& closest_point,             //
                                 Scalar& arch_length,                      //
                                 mundy::math::Vector3<Scalar>& sep) {
-  return distance_pbc(point, line_segment, FreeSpaceMetric<Scalar>{},  //
+  return distance_pbc(point, line_segment, FreeSpaceMetric{},  //
                       closest_point, arch_length, sep);
 }
 
@@ -239,7 +239,7 @@ KOKKOS_FUNCTION Scalar distance(const DistanceType distance_type,         //
                                 Point<Scalar>& closest_point,             //
                                 Scalar& arch_length,                      //
                                 mundy::math::Vector3<Scalar>& sep) {
-  return distance_pbc(distance_type, point, line_segment, FreeSpaceMetric<Scalar>{},  //
+  return distance_pbc(distance_type, point, line_segment, FreeSpaceMetric{},  //
                       closest_point, arch_length, sep);
 }
 //@}

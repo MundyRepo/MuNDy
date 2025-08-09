@@ -46,7 +46,7 @@ template <typename Scalar, typename Metric>
 KOKKOS_FUNCTION Scalar distance_pbc(const Point<Scalar>& point,    //
                                     const Sphere<Scalar>& sphere,  //
                                     const Metric& metric) {
-  return distance_pbc(SharedNormalSigned{}, point, sphere);
+  return distance_pbc(SharedNormalSigned{}, point, sphere, metric);
 }
 
 /// \brief Compute the shared normal signed separation distance between a point and a sphere
@@ -90,7 +90,7 @@ KOKKOS_FUNCTION Scalar distance_pbc(const Point<Scalar>& point,    //
 template <typename Scalar>
 KOKKOS_FUNCTION Scalar distance(const Point<Scalar>& point,  //
                                 const Sphere<Scalar>& sphere) {
-  return distance_pbc(point, sphere, FreeSpaceMetric<Scalar>{});
+  return distance_pbc(point, sphere, FreeSpaceMetric{});
 }
 
 /// \brief Compute the shared normal signed separation distance between a point and a sphere
@@ -101,7 +101,7 @@ template <typename Scalar, typename DistanceType>
 KOKKOS_FUNCTION Scalar distance(const DistanceType distance_type,  //
                                 const Point<Scalar>& point,        //
                                 const Sphere<Scalar>& sphere) {
-  return distance_pbc(distance_type, point, sphere, FreeSpaceMetric<Scalar>{});
+  return distance_pbc(distance_type, point, sphere, FreeSpaceMetric{});
 }
 
 /// \brief Compute the distance between a point and a sphere
@@ -113,7 +113,7 @@ template <typename Scalar>
 KOKKOS_FUNCTION Scalar distance(const Point<Scalar>& point,    //
                                 const Sphere<Scalar>& sphere,  //
                                 mundy::math::Vector3<Scalar>& sep) {
-  return distance_pbc(point, sphere, FreeSpaceMetric<Scalar>{}, sep);
+  return distance_pbc(point, sphere, FreeSpaceMetric{}, sep);
 }
 //@}
 

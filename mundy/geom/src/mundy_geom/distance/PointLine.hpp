@@ -62,7 +62,7 @@ KOKKOS_FUNCTION Scalar distance_pbc([[maybe_unused]] const SharedNormalSigned di
   Scalar projection = mundy::math::dot(line_to_point, line.direction());
 
   // Compute the magnitude of the component of the vector perpendicular to the line
-  return distance_pbc(projection * line.direction(), metric);
+  return distance_pbc(projection * line.direction(), line_to_point, metric);
 }
 
 /// \brief Compute the euclidean distance between a point and a line
@@ -118,7 +118,7 @@ KOKKOS_FUNCTION Scalar distance_pbc([[maybe_unused]] const SharedNormalSigned di
 template <typename Scalar>
 KOKKOS_FUNCTION Scalar distance(const Point<Scalar>& point,  //
                                 const Line<Scalar>& line) {
-  return distance_pbc(point, line, FreeSpaceMetric<Scalar>{});
+  return distance_pbc(point, line, FreeSpaceMetric{});
 }
 
 /// \brief Compute the shared normal signed separation distance between a point and a line
@@ -129,7 +129,7 @@ template <typename Scalar, typename DistanceType>
 KOKKOS_FUNCTION Scalar distance(const DistanceType distance_type,  //
                                 const Point<Scalar>& point,        //
                                 const Line<Scalar>& line) {
-  return distance_pbc(distance_type, point, line, FreeSpaceMetric<Scalar>{});
+  return distance_pbc(distance_type, point, line, FreeSpaceMetric{});
 }
 
 /// \brief Compute the euclidean distance between a point and a line
@@ -145,7 +145,7 @@ KOKKOS_FUNCTION Scalar distance(const Point<Scalar>& point,    //
                                 Point<Scalar>& closest_point,  //
                                 Scalar& arch_length,           //
                                 mundy::math::Vector3<Scalar>& sep) {
-  return distance_pbc(point, line, FreeSpaceMetric<Scalar>{},  //
+  return distance_pbc(point, line, FreeSpaceMetric{},  //
                       closest_point, arch_length, sep);
 }
 
@@ -163,7 +163,7 @@ KOKKOS_FUNCTION Scalar distance(const DistanceType distance_type,  //
                                 Point<Scalar>& closest_point,      //
                                 Scalar& arch_length,               //
                                 mundy::math::Vector3<Scalar>& sep) {
-  return distance_pbc(distance_type, point, line, FreeSpaceMetric<Scalar>{},  //
+  return distance_pbc(distance_type, point, line, FreeSpaceMetric{},  //
                       closest_point, arch_length, sep);
 }
 //@}

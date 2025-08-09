@@ -52,10 +52,10 @@ KOKKOS_INLINE_FUNCTION constexpr Scalar pbc_floor(Scalar x) {
 
 }  // namespace impl
 
-template <typename Scalar>
 class FreeSpaceMetric {
  public:
   /// \brief Distance vector between two points in free space (from point1 to point2)
+  template <typename Scalar>
   KOKKOS_INLINE_FUNCTION
   constexpr Point<Scalar> operator()(const Point<Scalar>& point1, const Point<Scalar>& point2) const {
     return point2 - point1;

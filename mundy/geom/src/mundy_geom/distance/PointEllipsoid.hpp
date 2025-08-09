@@ -145,14 +145,14 @@ KOKKOS_FUNCTION Scalar distance_pbc([[maybe_unused]] const SharedNormalSigned di
 template <typename Scalar>
 KOKKOS_FUNCTION Scalar distance(const Point<Scalar>& point,  //
                                 const Ellipsoid<Scalar>& ellipsoid) {
-  return distance_pbc(point, ellipsoid, FreeSpaceMetric<Scalar>{});
+  return distance_pbc(point, ellipsoid, FreeSpaceMetric{});
 }
 
 template <typename Scalar, typename DistanceType>
 KOKKOS_FUNCTION Scalar distance(const DistanceType distance_type,  //
                                 const Point<Scalar>& point,        //
                                 const Ellipsoid<Scalar>& ellipsoid) {
-  return distance_pbc(distance_type, point, ellipsoid, FreeSpaceMetric<Scalar>{});
+  return distance_pbc(distance_type, point, ellipsoid, FreeSpaceMetric{});
 }
 
 template <typename Scalar, typename DistanceType>
@@ -161,7 +161,7 @@ KOKKOS_FUNCTION Scalar distance(const DistanceType distance_type,    //
                                 const Ellipsoid<Scalar>& ellipsoid,  //
                                 Point<Scalar>& closest_point,        //
                                 mundy::math::Vector3<Scalar>& ellipsoid_normal) {
-  return distance_pbc(distance_type, point, ellipsoid, FreeSpaceMetric<Scalar>{},  //
+  return distance_pbc(distance_type, point, ellipsoid, FreeSpaceMetric{},  //
                   closest_point, ellipsoid_normal);
 }
 //@}

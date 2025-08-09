@@ -113,7 +113,7 @@ KOKKOS_FUNCTION Scalar distance_pbc([[maybe_unused]] const SharedNormalSigned di
 template <typename Scalar>
 KOKKOS_FUNCTION Scalar distance(const Line<Scalar>& line,  //
                                 const Sphere<Scalar>& sphere) {
-  return distance_pbc(line, sphere, FreeSpaceMetric<Scalar>{});
+  return distance_pbc(line, sphere, FreeSpaceMetric{});
 }
 
 /// \brief Compute the shared normal signed separation distance between a line and a sphere
@@ -124,7 +124,7 @@ template <typename Scalar, typename DistanceType>
 KOKKOS_FUNCTION Scalar distance(const DistanceType distance_type,  //
                                 const Line<Scalar>& line,          //
                                 const Sphere<Scalar>& sphere) {
-  return distance_pbc(distance_type, line, sphere, FreeSpaceMetric<Scalar>{});
+  return distance_pbc(distance_type, line, sphere, FreeSpaceMetric{});
 }
 
 /// \brief Compute the distance between a line and a sphere
@@ -140,7 +140,7 @@ KOKKOS_FUNCTION Scalar distance(const Line<Scalar>& line,      //
                                 Point<Scalar>& closest_point,  //
                                 Scalar& arch_length,           //
                                 mundy::math::Vector3<Scalar>& sep) {
-  return distance_pbc(line, sphere, FreeSpaceMetric<Scalar>{},  //
+  return distance_pbc(line, sphere, FreeSpaceMetric{},  //
                       closest_point, arch_length, sep);
 }
 
@@ -158,7 +158,7 @@ KOKKOS_FUNCTION Scalar distance(const DistanceType distance_type,  //
                                 Point<Scalar>& closest_point,      //
                                 Scalar& arch_length,               //
                                 mundy::math::Vector3<Scalar>& sep) {
-  return distance_pbc(distance_type, line, sphere, FreeSpaceMetric<Scalar>{},  //
+  return distance_pbc(distance_type, line, sphere, FreeSpaceMetric{},  //
                       closest_point, arch_length, sep);
 }
 //@}

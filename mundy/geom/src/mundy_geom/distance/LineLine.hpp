@@ -173,7 +173,7 @@ KOKKOS_FUNCTION Scalar distance_pbc([[maybe_unused]] const SharedNormalSigned di
 template <typename Scalar>
 KOKKOS_FUNCTION Scalar distance(const Line<Scalar>& line1,  //
                                 const Line<Scalar>& line2) {
-  return distance_pbc(line1, line2, FreeSpaceMetric<Scalar>{});
+  return distance_pbc(line1, line2, FreeSpaceMetric{});
 }
 
 /// \brief Compute the distance between two lines
@@ -185,7 +185,7 @@ template <typename Scalar, typename DistanceType>
 KOKKOS_FUNCTION Scalar distance(const DistanceType distance_type,  //
                                 const Line<Scalar>& line1,         //
                                 const Line<Scalar>& line2) {
-  return distance_pbc(distance_type, line1, line2, FreeSpaceMetric<Scalar>{});
+  return distance_pbc(distance_type, line1, line2, FreeSpaceMetric{});
 }
 
 /// \brief Compute the distance between two lines (defaults to SharedNormalSigned distance)
@@ -205,7 +205,7 @@ KOKKOS_FUNCTION Scalar distance(const Line<Scalar>& line1,      //
                                 Scalar& arch_length1,           //
                                 Scalar& arch_length2,           //
                                 mundy::math::Vector3<Scalar>& sep) {
-  return distance_pbc(line1, line2, FreeSpaceMetric<Scalar>{},  //
+  return distance_pbc(line1, line2, FreeSpaceMetric{},  //
                       closest_point1, closest_point2, arch_length1, arch_length2, sep);
 }
 
@@ -228,7 +228,7 @@ KOKKOS_FUNCTION Scalar distance(const DistanceType distance_type,  //
                                 Scalar& arch_length1,              //
                                 Scalar& arch_length2,              //
                                 mundy::math::Vector3<Scalar>& sep) {
-  return distance_pbc(distance_type, line1, line2, FreeSpaceMetric<Scalar>{},  //
+  return distance_pbc(distance_type, line1, line2, FreeSpaceMetric{},  //
                       closest_point1, closest_point2, arch_length1, arch_length2, sep);
 }
 //@}

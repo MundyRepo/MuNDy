@@ -166,14 +166,14 @@ KOKKOS_FUNCTION Scalar distance_pbc([[maybe_unused]] const Euclidean distance_ty
 template <typename Scalar>
 KOKKOS_FUNCTION Scalar distance(const Circle3D<Scalar>& circle3d1,  //
                                 const Circle3D<Scalar>& circle3d2) {
-  return distance_pbc(circle3d1, circle3d2, FreeSpaceMetric<Scalar>{});
+  return distance_pbc(circle3d1, circle3d2, FreeSpaceMetric{});
 }
 
 template <typename Scalar, typename DistanceType>
 KOKKOS_FUNCTION Scalar distance(const DistanceType distance_type,   //
                                 const Circle3D<Scalar>& circle3d1,  //
                                 const Circle3D<Scalar>& circle3d2) {
-  return distance_pbc(distance_type, circle3d1, circle3d2, FreeSpaceMetric<Scalar>{});
+  return distance_pbc(distance_type, circle3d1, circle3d2, FreeSpaceMetric{});
 }
 
 template <typename Scalar, typename DistanceType>
@@ -184,7 +184,7 @@ KOKKOS_FUNCTION Scalar distance(const DistanceType distance_type,              /
                                 Point<Scalar>& closest_point2,                 //
                                 mundy::math::Vector3<Scalar>& shared_normal1,  //
                                 mundy::math::Vector3<Scalar>& shared_normal2) {
-  return distance_pbc(distance_type, circle3d1, circle3d2, FreeSpaceMetric<Scalar>{},  //
+  return distance_pbc(distance_type, circle3d1, circle3d2, FreeSpaceMetric{},  //
                       closest_point1, closest_point2, shared_normal1, shared_normal2);
 }
 //@}

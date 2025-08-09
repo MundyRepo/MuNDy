@@ -47,8 +47,8 @@ namespace geom {
 /// \param[in] line_segment1 The first line segment
 /// \param[in] line_segment2 The second line segment
 template <typename Scalar, typename Metric>
-KOKKOS_FUNCTION Scalar distance_pbc(const LineSegment<Scalar>& line_segment1, //
-                                    const LineSegment<Scalar>& line_segment2, //
+KOKKOS_FUNCTION Scalar distance_pbc(const LineSegment<Scalar>& line_segment1,  //
+                                    const LineSegment<Scalar>& line_segment2,  //
                                     const Metric& metric) {
   return distance_pbc(SharedNormalSigned{}, line_segment1, line_segment2, metric);
 }
@@ -62,9 +62,8 @@ KOKKOS_FUNCTION Scalar distance_pbc([[maybe_unused]] const Euclidean distance_ty
                                     const LineSegment<Scalar>& line_segment1,        //
                                     const LineSegment<Scalar>& line_segment2,        //
                                     const Metric& metric) {
-                                      // no difference between distance types for line segments
-  return distance_pbc(SharedNormalSigned{}, line_segment1,
-                  line_segment2, metric);  
+  // no difference between distance types for line segments
+  return distance_pbc(SharedNormalSigned{}, line_segment1, line_segment2, metric);
 }
 
 /// \brief Compute the euclidean separation distance between two line segments
@@ -353,9 +352,9 @@ KOKKOS_FUNCTION Scalar distance_pbc([[maybe_unused]] const Euclidean distance_ty
 /// \param[in] line_segment1 The first line segment
 /// \param[in] line_segment2 The second line segment
 template <typename Scalar>
-KOKKOS_FUNCTION Scalar distance_pbc(const LineSegment<Scalar>& line_segment1,  //
-                                    const LineSegment<Scalar>& line_segment2) {
-  return distance_pbc(line_segment1, line_segment2, FreeSpaceMetric<Scalar>{});
+KOKKOS_FUNCTION Scalar distance(const LineSegment<Scalar>& line_segment1,  //
+                                const LineSegment<Scalar>& line_segment2) {
+  return distance_pbc(line_segment1, line_segment2, FreeSpaceMetric{});
 }
 
 /// \brief Compute the separation distance between two line segments
@@ -366,7 +365,7 @@ template <typename Scalar, typename DistanceType>
 KOKKOS_FUNCTION Scalar distance(const DistanceType distance_type,          //
                                 const LineSegment<Scalar>& line_segment1,  //
                                 const LineSegment<Scalar>& line_segment2) {
-  return distance_pbc(distance_type, line_segment1, line_segment2, FreeSpaceMetric<Scalar>{});
+  return distance_pbc(distance_type, line_segment1, line_segment2, FreeSpaceMetric{});
 }
 
 /// \brief Compute the distance between two line segments
@@ -386,7 +385,7 @@ KOKKOS_FUNCTION Scalar distance(const LineSegment<Scalar>& line_segment1,  //
                                 Scalar& arch_length1,                      //
                                 Scalar& arch_length2,                      //
                                 mundy::math::Vector3<Scalar>& sep) {
-  return distance_pbc(line_segment1, line_segment2, FreeSpaceMetric<Scalar>{},  //
+  return distance_pbc(line_segment1, line_segment2, FreeSpaceMetric{},  //
                       closest_point1, closest_point2, arch_length1, arch_length2, sep);
 }
 
@@ -408,7 +407,7 @@ KOKKOS_FUNCTION Scalar distance(const DistanceType distance_type,
                                 Scalar& arch_length1,                      //
                                 Scalar& arch_length2,                      //
                                 mundy::math::Vector3<Scalar>& sep) {
-  return distance_pbc(distance_type, line_segment1, line_segment2, FreeSpaceMetric<Scalar>{},  //
+  return distance_pbc(distance_type, line_segment1, line_segment2, FreeSpaceMetric{},  //
                       closest_point1, closest_point2, arch_length1, arch_length2, sep);
 }
 //@}

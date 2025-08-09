@@ -59,7 +59,7 @@ TEST(FreeAndPeriodicMetricConstruction, PositiveResult) {
   Point<double> point2{4.0, 5.0, 6.0};
   math::Vector3<double> cell_size{10.0, 10.0, 10.0};
 
-  FreeSpaceMetric<double> free_space_metric{};
+  FreeSpaceMetric free_space_metric{};
   PeriodicSpaceMetric<double> periodic_space_metric = periodic_metric_from_unit_cell(cell_size);
 
   // Calculate the separation vectors in this case, which should be equal
@@ -78,7 +78,7 @@ TEST(FreeAndPeriodicMetricDistances, PositiveResult) {
   Point<double> point1{1.0, 1.0, 1.0};
   math::Vector3<double> cell_size{100.0, 30.0, 20.0};
 
-  FreeSpaceMetric<double> free_space_metric{};
+  FreeSpaceMetric free_space_metric{};
   PeriodicSpaceMetric<double> periodic_space_metric = periodic_metric_from_unit_cell(cell_size);
 
   // Calculate the separation vectors in the near case not crossing a periodic boundary
