@@ -156,6 +156,10 @@ void declare_and_validate_relations(const TestContext& context,
                 context.bulk_data->entity_key(entities[j + 1]).id());
     }
   }
+
+  link_data.modify_on_host();
+
+  EXPECT_FALSE(link_data.is_crs_connectivity_up_to_date()) << "The modification should have dirtied the CRS connectivity.";
 }
 
 void validate_ngp_link_data(const TestContext& context, NewNgpLinkData& link_data) {
@@ -219,18 +223,66 @@ void modify_ngp_link_data(const TestContext& context, NewNgpLinkData& link_data)
       });
 
   link_data.modify_on_device();
+  
+  EXPECT_FALSE(link_data.is_crs_connectivity_up_to_date()) << "The modification should have dirtied the CRS connectivity.";
+}
+
+template <size_t Dimensionality>
+void validate_crs_connectivity(const TestContext& context, LinkInitializationData<Dimensionality>& link_init_data,
+                               NewNgpLinkData& link_data) {
+  link_data.update_crs_connectivity();
+  EXPECT_TRUE(link_data.is_crs_connectivity_up_to_date());
+
+  // Invert the LinkInitializationData struct to store expected CRS connectivity
+  std::map<stk::mesh::Entity, std::vector<stk::mesh::Entity>> expected_crs_conn;  // Entity to links map
+  for (const auto& entities : link_init_data.link_and_linked_entities) {
+    stk::mesh::Entity link = entities[0];
+    for (size_t i = 1; i < entities.size(); ++i) {
+      expected_crs_conn[entities[i]].push_back(link);
+    }
+  }
+
+  // Perform test on host
+  link_data.sync_to_host();
+
+  auto& crs_partition_view = link_data.get_or_create_crs_partitions(*link_init_data.link_part);
+  EXPECT_EQ(crs_partition_view.extent(0), 1u) << "Expected one CRS partition for the part.";
+
+  for (stk::mesh::EntityRank rank = stk::topology::NODE_RANK; rank < stk::topology::NUM_RANKS; ++rank) {
+    stk::mesh::for_each_entity_run(
+        link_data.bulk_data(), rank,
+        [&expected_crs_conn, &crs_partition_view](const stk::mesh::BulkData& bulk_data,
+                                                  const stk::mesh::Entity& entity) {
+          auto it = expected_crs_conn.find(entity);
+          if (it != expected_crs_conn.end()) {
+            // Convert expected links to a set for comparison
+            const std::vector<stk::mesh::Entity>& expected_links = it->second;
+            std::set<stk::mesh::Entity> expected_link_set(expected_links.begin(), expected_links.end());
+
+            // Fetch the actual connected links from the CRS connectivity
+            std::set<stk::mesh::Entity> actual_link_set;
+            for (unsigned partition_id = 0; partition_id < crs_partition_view.extent(0); ++partition_id) {
+              const NewNgpCRSPartition& partition = crs_partition_view(partition_id);
+              const stk::mesh::FastMeshIndex entity_index{bulk_data.bucket(entity).bucket_id(),
+                                                          bulk_data.bucket_ordinal(entity)};
+
+              auto connected_links = partition.get_connected_links(
+                  bulk_data.entity_rank(entity),
+                  entity_index);  // TODO(palmerb4): We currently only offer a device CRS connectivity interface. This
+                                  // will fail for GPU builds.
+              for (unsigned l = 0; l < connected_links.size(); ++l) {
+                actual_link_set.insert(connected_links[l]);
+              }
+            }
+
+            // Compare expected and actual sets
+            EXPECT_EQ(expected_link_set, actual_link_set);
+          }
+        });
+  }
 }
 
 /// @brief Unit test basic usage of LinkData in Mundy.
-///
-/// This test covers the following:
-/// - Setting up the mesh and metadata.
-/// - Declaring link metadata and parts.
-/// - Adding link support to parts.
-/// - Declaring entities and links between them.
-/// - Validating the links and their connected entities.
-/// - Running parallel operations on links.
-/// - Synchronizing link data between host and device.
 void basic_usage_test() {
   TestContext context;
   context.link_rank = stk::topology::NODE_RANK;
@@ -277,17 +329,13 @@ void basic_usage_test() {
   declare_and_validate_relations(context, link_init_data_b, link_data);
 
   // NGP stuff
-  link_data.modify_on_host();
-
   validate_ngp_link_data(context, link_data);
   modify_ngp_link_data(context, link_data);
   validate_ngp_link_data(context, link_data);
 
   // Check the CRS connectivity
-  EXPECT_FALSE(link_data.is_crs_connectivity_up_to_date());
-  link_data.update_crs_connectivity();
-  EXPECT_TRUE(link_data.is_crs_connectivity_up_to_date());
-  auto& crs_partition_view = link_data.get_all_crs_partitions();
+  validate_crs_connectivity(context, link_init_data_a, link_data);
+  validate_crs_connectivity(context, link_init_data_b, link_data);
 }
 
 TEST(UnitTestNgpLinkData, BasicUsage) {

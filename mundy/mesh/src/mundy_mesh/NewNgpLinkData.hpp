@@ -733,14 +733,22 @@ class NewNgpLinkData {
     update_crs_connectivity(bulk_data().mesh_meta_data().universal_part());
   }
 
-  /// \brief Check consistency between the COO and CRS connectivity (valid even in RELEASE mode).
+  /// \brief Check consistency between the COO and CRS connectivity for the given selector
+  ///
   /// Relatively expensive check that verifies COO -> CRS and CRS -> COO consistency.
+  ///
+  /// \note The checks performed in this function are performed even in RELEASE mode.
   void check_crs_coo_consistency(const stk::mesh::Selector &selector) {
     stk::mesh::Selector link_subset_selector = link_meta_data().universal_link_part() & selector;
     check_all_links_in_sync(link_subset_selector);
     check_linked_bucket_conn_size(link_subset_selector);
     check_coo_to_crs_conn(link_subset_selector);
     check_crs_to_coo_conn(link_subset_selector);
+  }
+
+  /// \brief Check consistency between the COO and CRS connectivity for all links
+  void check_crs_coo_consistency() {
+    check_crs_coo_consistency(bulk_data().mesh_meta_data().universal_part());
   }
   //@}
 
