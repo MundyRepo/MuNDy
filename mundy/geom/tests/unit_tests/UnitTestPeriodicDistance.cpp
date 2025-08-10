@@ -106,6 +106,19 @@ Line<Scalar> generate_random_line(const AABB<Scalar>& box, RNG& rng) {
 
 template <typename Scalar, typename RNG>
 LineSegment<Scalar> generate_random_line_segment(const AABB<Scalar>& box, RNG& rng) {
+  // Unknown if the following is necessary or not. We'll keep it until debugging is over.
+  // // Generate two random points within the bounding box with lengths less than 0.5 times the smallest box size
+  // double min_width =
+  //     Kokkos::min(Kokkos::min(box.x_max() - box.x_min(), box.y_max() - box.y_min()), box.z_max() - box.z_min());
+
+  // while (true) {
+  //   Point<Scalar> p1 = generate_random_point<Scalar>(box, rng);
+  //   Point<Scalar> p2 = generate_random_point<Scalar>(box, rng);
+  //   if (distance(p1, p2) < 0.5 * min_width) {
+  //     return LineSegment<Scalar>(p1, p2);
+  //   }
+  // }
+
   // Generate two random points within the bounding box
   Point<Scalar> p1 = generate_random_point<Scalar>(box, rng);
   Point<Scalar> p2 = generate_random_point<Scalar>(box, rng);
@@ -484,6 +497,122 @@ KOKKOS_INLINE_FUNCTION double compute_distance_pbc_shifted(TestObjectType type1,
   return apply(type1, type2, box, rng, metric);
 }
 
+TEST(UnitTestPeriodicDistance, PeriodicFailureCase) {
+  // Two line segments
+  //   a: (0.0126464, 0.547307, 0.833031) -> (0.0576377, 0.682308, 0.364761)
+  //   b: (0.708635, 0.396194, 0.328567) -> (0.264517, 0.277178, 0.142539)
+  // In free-space the min distance solution (from vtk's python interface) is 0.5062726330273937
+  //
+  // from vtkmodules.vtkCommonDataModel import vtkLine
+  // from vtkmodules.vtkCommonCore import reference
+  //
+  // l0 = [0.0126464, 0.547307, 0.833031]
+  // l1 = [0.0576377, 0.682308, 0.364761]
+  // m0 = [0.708635 , 0.396194, 0.328567]
+  // m1 = [0.264517 , 0.277178, 0.142539]
+  //
+  // closest1 = [0.0, 0.0, 0.0]
+  // closest2 = [0.0, 0.0, 0.0]
+  // t1 = reference(0.0)
+  // t2 = reference(0.0)
+  //
+  // d2 = vtkLine.DistanceBetweenLineSegments(l0, l1, m0, m1, closest1, closest2, t1, t2)
+  // dist = d2 ** 0.5
+  // print("min distance:", dist)
+  double expected_distance = 0.5062726330273937;
+  double expected_min_image_distance = 0.44625207297733677;
+  LineSegment<double> a(Point<double>(0.0126464, 0.547307, 0.833031), Point<double>(0.0576377, 0.682308, 0.364761));
+  LineSegment<double> b(Point<double>(0.708635, 0.396194, 0.328567), Point<double>(0.264517, 0.277178, 0.142539));
+
+  // Free space distance
+  Point<double> free_space_closest1;
+  Point<double> free_space_closest2;
+  double free_space_arch_length1 = 0.0;
+  double free_space_arch_length2 = 0.0;
+  mundy::math::Vector3<double> free_space_sep;
+  double free_space_distance = distance(a, b, free_space_closest1, free_space_closest2, free_space_arch_length1,
+                                        free_space_arch_length2, free_space_sep);
+
+  // Periodic distance (with a free space metric)
+  Point<double> periodic_closest1;
+  Point<double> periodic_closest2;
+  double periodic_arch_length1 = 0.0;
+  double periodic_arch_length2 = 0.0;
+  mundy::math::Vector3<double> periodic_sep;
+  double free_space_distance2 = distance_pbc(a, b, FreeSpaceMetric{}, 
+                                             periodic_closest1, periodic_closest2, periodic_arch_length1,
+                                             periodic_arch_length2, periodic_sep);
+
+  EXPECT_NEAR(free_space_distance, expected_distance, mundy::math::get_relaxed_zero_tolerance<double>());
+  EXPECT_NEAR(free_space_distance2, expected_distance, mundy::math::get_relaxed_zero_tolerance<double>());
+  EXPECT_NEAR(norm(free_space_closest1 - free_space_closest2), free_space_distance, mundy::math::get_relaxed_zero_tolerance<double>());
+  EXPECT_NEAR(norm(free_space_sep), free_space_distance, mundy::math::get_relaxed_zero_tolerance<double>());
+  EXPECT_NEAR(free_space_arch_length1, periodic_arch_length1, mundy::math::get_relaxed_zero_tolerance<double>());
+  EXPECT_NEAR(free_space_arch_length2, periodic_arch_length2, mundy::math::get_relaxed_zero_tolerance<double>());
+
+  // Periodic distance (direct min image calculation)
+  mundy::math::Vector3<double> box_size{1.0, 1.0, 1.0};
+  double min_image_distance = std::numeric_limits<double>::max();
+  Point<double> min_image_closest1;
+  Point<double> min_image_closest2;
+  double min_image_arch_length1 = 0.0;
+  double min_image_arch_length2 = 0.0;
+  mundy::math::Vector3<double> min_image_sep;
+  for (int i = -1; i <= 1; ++i) {
+    for (int j = -1; j <= 1; ++j) {
+      for (int k = -1; k <= 1; ++k) {
+        mundy::math::Vector3<double> disp(static_cast<double>(i) * box_size[0],  //
+                                          static_cast<double>(j) * box_size[1],  //
+                                          static_cast<double>(k) * box_size[2]);
+        LineSegment<double> b_shifted = translate(b, disp);
+        
+        Point<double> temp_closest1;
+        Point<double> temp_closest2;
+        double temp_arch_length1 = 0.0;
+        double temp_arch_length2 = 0.0;
+        mundy::math::Vector3<double> temp_sep;
+        double d = distance(a, b_shifted, 
+                            temp_closest1, temp_closest2, 
+                            temp_arch_length1, temp_arch_length2, 
+                            temp_sep);
+        if (d < min_image_distance) {
+          min_image_distance = d;
+          min_image_closest1 = temp_closest1;
+          min_image_closest2 = temp_closest2;
+          min_image_arch_length1 = temp_arch_length1;
+          min_image_arch_length2 = temp_arch_length2; 
+          min_image_sep = temp_sep;         
+        }
+      }
+    }
+  }
+
+  EXPECT_NEAR(min_image_distance, expected_min_image_distance, mundy::math::get_relaxed_zero_tolerance<double>())
+      << "Min image distance did not match expected value.";
+  
+  // Periodic distance (with a periodic space metric)
+  auto periodic_metric = periodic_scaled_metric_from_unit_cell(box_size);
+
+  Point<double> periodic2_closest1;
+  Point<double> periodic2_closest2;
+  double periodic2_arch_length1 = 0.0;
+  double periodic2_arch_length2 = 0.0;
+  mundy::math::Vector3<double> periodic2_sep;
+  double periodic_distance = distance_pbc(a, b, periodic_metric, 
+                                          periodic2_closest1, periodic2_closest2, 
+                                          periodic2_arch_length1, periodic2_arch_length2, 
+                                          periodic2_sep);
+  
+  EXPECT_NEAR(periodic_distance, expected_min_image_distance, mundy::math::get_relaxed_zero_tolerance<double>())
+      << "Periodic distance did not match expected value.";
+  EXPECT_NEAR(distance_pbc(periodic2_closest1, periodic2_closest2, periodic_metric), periodic_distance,
+              mundy::math::get_relaxed_zero_tolerance<double>());
+  EXPECT_NEAR(norm(periodic2_sep), periodic_distance, mundy::math::get_relaxed_zero_tolerance<double>());
+  EXPECT_NEAR(periodic2_arch_length1, min_image_arch_length1, mundy::math::get_relaxed_zero_tolerance<double>());
+  EXPECT_NEAR(periodic2_arch_length2, min_image_arch_length2, mundy::math::get_relaxed_zero_tolerance<double>());
+  EXPECT_NEAR(norm(periodic2_sep-min_image_sep), 0.0, mundy::math::get_relaxed_zero_tolerance<double>());
+}
+
 TEST(UnitTestPeriodicDistance, TestAperiodic) {
   // Validate that we can actually compute the distance for each pair of test objects
   size_t seed = 1234;
@@ -524,7 +653,7 @@ TEST(UnitTestPeriodicDistance, TestPeriodic) {
   // Validate that we can actually compute the distance for each pair of test objects
   size_t seed = 1234;
   size_t counter = 0;
-  size_t num_trials = 1;  // Number of trials for each pair
+  size_t num_trials = 100;  // Number of trials for each pair
 
   using ShapePair = Kokkos::pair<TestObjectType, TestObjectType>;
   std::vector<ShapePair> test_pairs = {{TestObjectType::POINT, TestObjectType::POINT},
@@ -549,19 +678,14 @@ TEST(UnitTestPeriodicDistance, TestPeriodic) {
       TestObjectType type2 = pair.second;
 
       // Must use the same seed and counter for each
-      double free_space_distance = compute_distance(type1, type2, box, seed, counter);
       double min_free_space_distance = compute_distance_min_image(type1, type2, box, seed, counter);
       double periodic_distance = compute_distance_pbc(type1, type2, box, seed, counter, periodic_metric);
       double periodic_distance_shifted =
           compute_distance_pbc_shifted(type1, type2, box, seed, counter, periodic_metric);
 
-      std::cout << "For types: " << type1 << " and " << type2 << ", free space distance: " << free_space_distance
-                << ", min image distance: " << min_free_space_distance << ", periodic distance: " << periodic_distance
-                << ", periodic distance shifted: " << periodic_distance_shifted << std::endl;
-
-      EXPECT_NEAR(min_free_space_distance, periodic_distance, mundy::math::get_relaxed_zero_tolerance<double>())
+      ASSERT_NEAR(min_free_space_distance, periodic_distance, mundy::math::get_relaxed_zero_tolerance<double>())
           << " for types " << type1 << " and " << type2;
-      EXPECT_NEAR(min_free_space_distance, periodic_distance_shifted, mundy::math::get_relaxed_zero_tolerance<double>())
+      ASSERT_NEAR(min_free_space_distance, periodic_distance_shifted, mundy::math::get_relaxed_zero_tolerance<double>())
           << " for types " << type1 << " and " << type2;
 
       ++counter;

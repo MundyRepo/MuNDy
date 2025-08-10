@@ -284,7 +284,9 @@ KOKKOS_FUNCTION bool operator!=(const LineSegmentType1& line_segment1, const Lin
 /// \brief OStream operator
 template <ValidLineSegmentType LineSegmentType>
 std::ostream& operator<<(std::ostream& os, const LineSegmentType& line_segment) {
-  os << "{" << line_segment.start() << "->" << line_segment.end() << "}";
+  os << "{" << line_segment.start() << "->" << line_segment.end() 
+   << ", length: " << norm(line_segment.end() - line_segment.start()) <<
+  "}";
   return os;
 }
 
