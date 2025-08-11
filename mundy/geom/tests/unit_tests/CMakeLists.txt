@@ -61,3 +61,12 @@ tribits_add_executable_and_test(
   UnitTestPeriodicDistance.cpp
     ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
   )
+
+# tribits_add_executable_and_test(
+#   UnitTestPeriodicity
+#   SOURCES
+#   UnitTestPeriodicity.cpp
+#     ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
+#   )
+
+  

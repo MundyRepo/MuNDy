@@ -30,34 +30,22 @@
 #include <Kokkos_Core.hpp>
 
 // Mundy
-#include <mundy_geom/distance/Types.hpp>    // for mundy::geom::SharedNormalSigned, Euclidean
-#include <mundy_geom/primitives/Point.hpp>  // for mundy::geom::Point
-#include <mundy_math/Matrix3.hpp>           // for mundy::math::Matrix3
-#include <mundy_math/Vector3.hpp>           // for mundy::math::Vector3
+#include <mundy_geom/primitives.hpp>      // for mundy::geom::Point, ...
+#include <mundy_math/Matrix3.hpp>         // for mundy::math::Matrix3
+#include <mundy_math/Quaternion.hpp>      // for mundy::math::Quaternion
+#include <mundy_math/Vector3.hpp>         // for mundy::math::Vector3
+#include <mundy_math/Tolerance.hpp>       // for mundy::math::get_zero_tolerance
 
 namespace mundy {
 
 namespace geom {
 
-namespace impl {
-
-// XXX Move the following function somewhere else, this just to call something like Kokkos::floor but on a floating
-// point number. This is also templated by both a Scalar integer and Scalar floating point type, for use later when
-// needing this to run on a GPU, and having to consider 32 vs. 64-bit calculations.
-template <typename ScalarInt, typename Scalar>
-KOKKOS_INLINE_FUNCTION constexpr Scalar pbc_floor(Scalar x) {
-  return static_cast<Scalar>(x < Scalar(0.0) ? static_cast<ScalarInt>(x - Scalar(0.5))
-                                             : static_cast<ScalarInt>(x + Scalar(0.5)));
-}
-
-}  // namespace impl
-
 class FreeSpaceMetric {
  public:
   /// \brief Distance vector between two points in free space (from point1 to point2)
   template <typename Scalar>
-  KOKKOS_INLINE_FUNCTION
-  constexpr Point<Scalar> operator()(const Point<Scalar>& point1, const Point<Scalar>& point2) const {
+  KOKKOS_INLINE_FUNCTION constexpr Point<Scalar> operator()(const Point<Scalar>& point1,
+                                                            const Point<Scalar>& point2) const {
     return point2 - point1;
   }
 };
@@ -82,25 +70,14 @@ class PeriodicSpaceMetric {
   /// \brief Distance vector between two points in periodic space (from point1 to point2)
   KOKKOS_INLINE_FUNCTION
   constexpr Point<Scalar> operator()(const Point<Scalar>& point1, const Point<Scalar>& point2) const {
-    // Convert to fractional coordinates
-    mundy::math::Vector3<Scalar> point1_scaled = h_inv_ * point1;
-    mundy::math::Vector3<Scalar> point2_scaled = h_inv_ * point2;
+    // Convert the difference to fractional coordinates
+    auto ds_frac = h_inv_ * (point2 - point1);
 
-    // Wrap the scaled coordinates back into the unit cell
-    auto wrap_scaled_coordinates = [](double xyz) -> double {
-      // Guard against numerical errors that may cause the scaled coordinates to be exactly 1.0
-      // via multiplying by a boolean mask
-      bool is_safe = Kokkos::fabs(xyz - 1.0) >= mundy::math::get_zero_tolerance<double>();
-      return is_safe * (xyz - impl::pbc_floor<int64_t, double>(xyz));
-    };
-    point1_scaled = apply(wrap_scaled_coordinates, point1_scaled);
-    point2_scaled = apply(wrap_scaled_coordinates, point2_scaled);
+    // Minimum-image convention: wrap the fractional coordinates into the unit cell
+    ds_frac = apply([](Scalar x) { return x - Kokkos::round(x); }, ds_frac);
 
-    // Now we can do the separation vector from the scaled coordinates and put it back in real space at the end.
-    mundy::math::Vector3<Scalar> ds = point2_scaled - point1_scaled;
-    ds = apply([](double xyz) -> double { return xyz - impl::pbc_floor<int64_t, double>(xyz); }, ds);
-
-    return h_ * ds;
+    // Map the fractional coordinates back to real space
+    return h_ * ds_frac;
   }
 
  private:
@@ -116,8 +93,7 @@ class PeriodicScaledSpaceMetric {
 
   /// \brief Constructor with unit cell matrix
   explicit constexpr PeriodicScaledSpaceMetric(const mundy::math::Vector3<Scalar>& cell_size)
-      : scale_(cell_size),
-        scale_inv_(Scalar(1.0) / scale_[0], Scalar(1.0) / scale_[1], Scalar(1.0) / scale_[2]) {
+      : scale_(cell_size), scale_inv_(Scalar(1.0) / scale_[0], Scalar(1.0) / scale_[1], Scalar(1.0) / scale_[2]) {
   }
 
   /// \brief Set the cell size
@@ -129,25 +105,14 @@ class PeriodicScaledSpaceMetric {
   /// \brief Distance vector between two points in periodic space (from point1 to point2)
   KOKKOS_INLINE_FUNCTION
   constexpr Point<Scalar> operator()(const Point<Scalar>& point1, const Point<Scalar>& point2) const {
-    // Convert to fractional coordinates
-    mundy::math::Vector3<Scalar> point1_scaled = mundy::math::elementwise_multiply(scale_inv_, point1);
-    mundy::math::Vector3<Scalar> point2_scaled = mundy::math::elementwise_multiply(scale_inv_, point2);
+    // Convert the difference to fractional coordinates
+    auto ds_frac = mundy::math::elementwise_multiply(scale_inv_, point2 - point1);
 
-    // Wrap the scaled coordinates back into the unit cell
-    auto wrap_scaled_coordinates = [](double xyz) -> double {
-      // Guard against numerical errors that may cause the scaled coordinates to be exactly 1.0
-      // via multiplying by a boolean mask
-      bool is_safe = Kokkos::fabs(xyz - 1.0) >= mundy::math::get_zero_tolerance<double>();
-      return is_safe * (xyz - impl::pbc_floor<int64_t, double>(xyz));
-    };
-    point1_scaled = apply(wrap_scaled_coordinates, point1_scaled);
-    point2_scaled = apply(wrap_scaled_coordinates, point2_scaled);
+    // Minimum-image convention: wrap the fractional coordinates into the unit cell
+    ds_frac = apply([](Scalar x) { return x - Kokkos::round(x); }, ds_frac);
 
-    // Now we can do the separation vector from the scaled coordinates and put it back in real space at the end.
-    mundy::math::Vector3<Scalar> ds = point2_scaled - point1_scaled;
-    ds = apply([](double xyz) -> double { return xyz - impl::pbc_floor<int64_t, double>(xyz); }, ds);
-
-    return mundy::math::elementwise_multiply(scale_, ds);
+    // Map the fractional coordinates back to real space
+    return mundy::math::elementwise_multiply(scale_, ds_frac);
   }
 
  private:

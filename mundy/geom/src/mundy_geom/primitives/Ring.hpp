@@ -32,6 +32,9 @@
 // Our libs
 #include <mundy_core/throw_assert.hpp>      // for MUNDY_THROW_ASSERT
 #include <mundy_geom/primitives/Point.hpp>  // for mundy::geom::Point
+#include <mundy_geom/primitives/Circle3D.hpp>  // for mundy::geom::Circle3D
+#include <mundy_math/Quaternion.hpp>        // for mundy::math::Quaternion
+#include <mundy_math/Vector3.hpp>           // for mundy::math::Vector3
 
 namespace mundy {
 
