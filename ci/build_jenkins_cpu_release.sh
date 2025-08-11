@@ -6,6 +6,7 @@ mkdir -p ${MUNDY_DEPS}
 dep/install_fmt.sh ${MUNDY_DEPS}
 dep/install_gtest.sh ${MUNDY_DEPS}
 dep/install_openrand.sh ${MUNDY_DEPS}
+dep/install_nanobench.sh ${MUNDY_DEPS}
 export TRILINOS_ROOT_DIR=$(spack location -i trilinos)
 echo "TRILINOS_ROOT_DIR: ${TRILINOS_ROOT_DIR}"
 git submodule update --init --recursive
@@ -44,6 +45,7 @@ cmake -B build . \
     -DTPL_KokkosKernels_DIR:PATH=${TRILINOS_ROOT_DIR} \
     -DTPL_STK_DIR:PATH=${TRILINOS_ROOT_DIR} \
     -DTPL_Teuchos_DIR:PATH=${TRILINOS_ROOT_DIR} \
+    -DTPL_nanobench_DIR:PATH=${TPL_ROOT_DIR} \
     ${ccache_args} \
     ${compiler_flags} \
     ${install_dir} \
