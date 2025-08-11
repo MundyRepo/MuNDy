@@ -32,6 +32,7 @@ tribits_copy_files_to_binary_dir(
         cube.ply
         bee_hive.ply
         EXEDEPS PerfTestDeclareEntities
+        CATEGORIES PERFORMANCE
     )
 
 tribits_add_executable(

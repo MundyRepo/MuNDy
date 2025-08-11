@@ -45,4 +45,5 @@ tribits_copy_files_to_binary_dir(
     sphere_triangle_weights_5120.dat
     sphere_triangle_normals_5120.dat
     EXEDEPS UnitTestPeriphery
+    CATEGORIES HEAVY
     )

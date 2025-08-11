@@ -23,6 +23,7 @@ tribits_add_executable_and_test(
     UnitTestConfigurator.cpp
     ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1
+  CATEGORIES BASIC
 )
 
 tribits_add_executable_and_test(
@@ -47,4 +48,5 @@ tribits_copy_files_to_binary_dir(
   SOURCE_FILES
     unit_test_configurator_basic.yaml
   EXEDEPS UnitTestConfigurator
+  CATEGORIES BASIC
 )

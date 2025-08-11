@@ -108,6 +108,7 @@ tribits_copy_files_to_binary_dir(
     hp1_pos.dat
     hp1_hilbert_centers.dat
     EXEDEPS HP1
+    CATEGORIES PERFORMANCE
     )
 
 tribits_add_executable(
