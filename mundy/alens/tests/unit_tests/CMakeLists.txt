@@ -29,7 +29,7 @@ tribits_add_executable_and_test(
   UnitTestPeriphery.cpp
     ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1
-  CATEGORIES NIGHTLY
+  CATEGORIES HEAVY
 )
 
 tribits_copy_files_to_binary_dir(
