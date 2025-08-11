@@ -63,14 +63,14 @@ Point<Scalar> generate_random_unit_vector(const AABB<Scalar>& box, RNG& rng) {
   const Scalar wrand = Kokkos::sqrt(static_cast<Scalar>(1) - zrand * zrand);
   const Scalar trand = two_pi * rng.template rand<Scalar>();
 
-  return mundy::math::Vector3<Scalar>{wrand * Kokkos::cos(trand), wrand * Kokkos::sin(trand), zrand};
+  return math::Vector3<Scalar>{wrand * Kokkos::cos(trand), wrand * Kokkos::sin(trand), zrand};
 }
 
 template <typename Scalar, typename RNG>
 Line<Scalar> generate_random_line(const AABB<Scalar>& box, RNG& rng) {
   // Generate random point in the domain and a random direction
   Point<Scalar> center = generate_random_point<Scalar>(box, rng);
-  mundy::math::Vector3<Scalar> direction = generate_random_unit_vector<Scalar>(box, rng);
+  math::Vector3<Scalar> direction = generate_random_unit_vector<Scalar>(box, rng);
   return Line<Scalar>(center, direction);
 }
 
@@ -120,9 +120,9 @@ Ellipsoid<Scalar> generate_random_ellipsoid(const AABB<Scalar>& box, RNG& rng) {
   Scalar r2 = rng.uniform(0.0, 0.25 * min_width);
 
   // Random orientation
-  mundy::math::Vector3<Scalar> z_hat{0.0, 0.0, 1.0};
-  mundy::math::Vector3<Scalar> u_hat = generate_random_unit_vector<Scalar>(box, rng);
-  auto random_quaternion = mundy::math::quat_from_parallel_transport(z_hat, u_hat);
+  math::Vector3<Scalar> z_hat{0.0, 0.0, 1.0};
+  math::Vector3<Scalar> u_hat = generate_random_unit_vector<Scalar>(box, rng);
+  auto random_quaternion = math::quat_from_parallel_transport(z_hat, u_hat);
 
   return Ellipsoid<Scalar>(center, random_quaternion, r0, r1, r2);
 }
@@ -138,9 +138,9 @@ Circle3D<Scalar> generate_random_circle3D(const AABB<Scalar>& box, RNG& rng) {
   Scalar radius = rng.uniform(0.0, 0.25 * min_width);
 
   // Generate a random quaternion orientation rotating the circle's normal from z-axis to a random unit vector
-  mundy::math::Vector3<Scalar> z_hat{0.0, 0.0, 1.0};
-  mundy::math::Vector3<Scalar> u_hat = generate_random_unit_vector<Scalar>(box, rng);
-  auto random_quaternion = mundy::math::quat_from_parallel_transport(z_hat, u_hat);
+  math::Vector3<Scalar> z_hat{0.0, 0.0, 1.0};
+  math::Vector3<Scalar> u_hat = generate_random_unit_vector<Scalar>(box, rng);
+  auto random_quaternion = math::quat_from_parallel_transport(z_hat, u_hat);
 
   return Circle3D<Scalar>(center, random_quaternion, radius);
 }
@@ -150,37 +150,37 @@ Circle3D<Scalar> generate_random_circle3D(const AABB<Scalar>& box, RNG& rng) {
 //@{
 
 template <typename Scalar>
-Point<Scalar> translate(const Point<Scalar>& point, const mundy::math::Vector3<Scalar>& disp) {
+Point<Scalar> translate(const Point<Scalar>& point, const math::Vector3<Scalar>& disp) {
   return Point<Scalar>(point[0] + disp[0], point[1] + disp[1], point[2] + disp[2]);
 }
 
 template <typename Scalar>
-Line<Scalar> translate(const Line<Scalar>& line, const mundy::math::Vector3<Scalar>& disp) {
+Line<Scalar> translate(const Line<Scalar>& line, const math::Vector3<Scalar>& disp) {
   return Line<Scalar>(translate(line.center(), disp), line.direction());
 }
 
 template <typename Scalar>
-LineSegment<Scalar> translate(const LineSegment<Scalar>& line_segment, const mundy::math::Vector3<Scalar>& disp) {
+LineSegment<Scalar> translate(const LineSegment<Scalar>& line_segment, const math::Vector3<Scalar>& disp) {
   return LineSegment<Scalar>(translate(line_segment.start(), disp), translate(line_segment.end(), disp));
 }
 
 template <typename Scalar>
-Sphere<Scalar> translate(const Sphere<Scalar>& sphere, const mundy::math::Vector3<Scalar>& disp) {
+Sphere<Scalar> translate(const Sphere<Scalar>& sphere, const math::Vector3<Scalar>& disp) {
   return Sphere<Scalar>(translate(sphere.center(), disp), sphere.radius());
 }
 
 template <typename Scalar>
-Ellipsoid<Scalar> translate(const Ellipsoid<Scalar>& ellipsoid, const mundy::math::Vector3<Scalar>& disp) {
+Ellipsoid<Scalar> translate(const Ellipsoid<Scalar>& ellipsoid, const math::Vector3<Scalar>& disp) {
   return Ellipsoid<Scalar>(translate(ellipsoid.center(), disp), ellipsoid.orientation(), ellipsoid.radii());
 }
 
 template <typename Scalar>
-Circle3D<Scalar> translate(const Circle3D<Scalar>& circle, const mundy::math::Vector3<Scalar>& disp) {
+Circle3D<Scalar> translate(const Circle3D<Scalar>& circle, const math::Vector3<Scalar>& disp) {
   return Circle3D<Scalar>(translate(circle.center(), disp), circle.orientation(), circle.radius());
 }
 
 template <typename Scalar>
-AABB<Scalar> translate(const AABB<Scalar>& aabb, const mundy::math::Vector3<Scalar>& disp) {
+AABB<Scalar> translate(const AABB<Scalar>& aabb, const math::Vector3<Scalar>& disp) {
   return AABB<Scalar>(translate(aabb.min_corner(), disp), translate(aabb.max_corner(), disp));
 }
 //@}
@@ -395,7 +395,7 @@ struct test_wrap_points_impl {
     // Generate a random shape outside the primary box and wrap it to the primary box
     auto s = ShapeTraits::generate(disjoint_box, rng);
     s = wrap_points(s, metric);
-    
+
     bool all_in_primary_domain = true;
     ShapeTraits::for_each_point(s, [&](const auto& point) {
       if (!is_point_in_box(point, primary_box)) {
@@ -434,7 +434,7 @@ struct test_unwrap_to_ref_impl {
 
 template <typename Metric>
 KOKKOS_INLINE_FUNCTION bool test_wrap_points(TestObjectType type, const AABB<double>& primary_box,
-                                               const AABB<double>& disjoint_box, size_t seed, size_t counter,
+                                             const AABB<double>& disjoint_box, size_t seed, size_t counter,
                                              const Metric& metric) {
   openrand::Philox rng(seed, counter);
 
@@ -475,12 +475,12 @@ TEST(PeriodicMetric, MinImageDirectVsPeriodic) {
     Point<double> point2 = generate_random_point<double>(box, rng);
 
     // Compute the minimum image distance using the free-space metric and the 27 periodic images
-    mundy::math::Vector<double, 27> min_image_distances;
+    math::Vector<double, 27> min_image_distances;
     for (int i = 0; i < 3; ++i) {
       for (int j = 0; j < 3; ++j) {
         for (int k = 0; k < 3; ++k) {
           // Shift obj2 by the box dimensions in each direction
-          mundy::math::Vector3<double> disp((i - 1) * cell_size[0], (j - 1) * cell_size[1], (k - 1) * cell_size[2]);
+          math::Vector3<double> disp((i - 1) * cell_size[0], (j - 1) * cell_size[1], (k - 1) * cell_size[2]);
           min_image_distances(i * 9 + j * 3 + k) = norm(euclidean_metric.sep(point1, point2 + disp));
         }
       }
@@ -489,9 +489,9 @@ TEST(PeriodicMetric, MinImageDirectVsPeriodic) {
     double min_image_distance = min(min_image_distances);
     double periodic_distance = norm(periodic_metric.sep(point1, point2));
     double periodic_distance_scale_only = norm(periodic_metric_scale_only.sep(point1, point2));
-    ASSERT_NEAR(min_image_distance, periodic_distance, mundy::math::get_relaxed_zero_tolerance<double>())
+    ASSERT_NEAR(min_image_distance, periodic_distance, math::get_relaxed_zero_tolerance<double>())
         << "Minimum image distance does not match periodic distance.";
-    ASSERT_NEAR(min_image_distance, periodic_distance_scale_only, mundy::math::get_relaxed_zero_tolerance<double>())
+    ASSERT_NEAR(min_image_distance, periodic_distance_scale_only, math::get_relaxed_zero_tolerance<double>())
         << "Minimum image distance does not match periodic distance (scale only).";
   }
 }
@@ -509,7 +509,6 @@ TEST(PeriodicMetric, WrapPoints) {
   auto periodic_metric_scale_only = periodic_scaled_metric_from_unit_cell(cell_size);
   EuclideanMetric euclidean_metric{};
 
-  using ShapePair = Kokkos::pair<TestObjectType, TestObjectType>;
   std::vector<TestObjectType> test_types = {TestObjectType::POINT,        TestObjectType::LINE,
                                             TestObjectType::LINE_SEGMENT, TestObjectType::SPHERE,
                                             TestObjectType::ELLIPSOID,    TestObjectType::CIRCLE_3D};
@@ -521,7 +520,7 @@ TEST(PeriodicMetric, WrapPoints) {
             << "Wrapping points for type " << type << " failed. For the periodic metric.";
         EXPECT_TRUE(test_wrap_points(type, box, disjoint_box, seed, counter, periodic_metric_scale_only))
             << "Wrapping points for type " << type << " failed. For the periodic metric (scale only).";
-        
+
         // For the aperiodic metric, wrapping should just return the original point
         EXPECT_TRUE(test_wrap_points(type, disjoint_box, disjoint_box, seed, counter, euclidean_metric))
             << "Wrapping points for type " << type << " failed. For the free space metric.";
@@ -549,7 +548,6 @@ TEST(PeriodicMetric, UnwrapPointsToRef) {
   auto periodic_metric_scale_only = periodic_scaled_metric_from_unit_cell(cell_size);
   EuclideanMetric euclidean_metric{};
 
-  using ShapePair = Kokkos::pair<TestObjectType, TestObjectType>;
   std::vector<TestObjectType> test_types = {TestObjectType::POINT,        TestObjectType::LINE,
                                             TestObjectType::LINE_SEGMENT, TestObjectType::SPHERE,
                                             TestObjectType::ELLIPSOID,    TestObjectType::CIRCLE_3D};
@@ -561,7 +559,7 @@ TEST(PeriodicMetric, UnwrapPointsToRef) {
             << "Unwrapping points for type " << type << " failed. For the periodic metric.";
         EXPECT_TRUE(test_unwrap_to_ref(type, box, disjoint_box, seed, counter, periodic_metric_scale_only))
             << "Unwrapping points for type " << type << " failed. For the periodic metric (scale only).";
-        
+
         // For the aperiodic metric, unwrapping should just return the original point
         EXPECT_TRUE(test_unwrap_to_ref(type, disjoint_box, disjoint_box, seed, counter, euclidean_metric))
             << "Unwrapping points for type " << type << " failed. For the free space metric.";
@@ -573,6 +571,137 @@ TEST(PeriodicMetric, UnwrapPointsToRef) {
 
       ++counter;
     }
+  }
+}
+
+LineSegment<double> generate_spanning_line_segment_with_length_limit(const AABB<double>& box1, const AABB<double>& box2,
+                                                                     openrand::Philox& rng, double max_length) {
+  // Generate a random line segment with one end in box1 and the other in box2
+  // Ensure that the length of the segment is less than max_length
+  while (true) {
+    Point<double> p1 = generate_random_point<double>(box1, rng);
+    Point<double> p2 = generate_random_point<double>(box2, rng);
+    LineSegment<double> segment(p1, p2);
+    if (math::norm(p1 - p2) <= max_length) {
+      return segment;
+    }
+  }
+}
+
+TEST(PeriodicMetric, WrapPointsSpanning) {
+  // Test the special case of a line segment that crosses the domain boundary
+  // Generate a random segment whose length is less then 0.5 times the smallest box size
+  // with one end in the primary box and the other in the disjoint box
+  size_t seed = 1234;
+  size_t counter = 0;
+  size_t num_trials = 1000;  // Number of trials for each pair
+
+  double domain_width = 100.0;
+  math::Vector3<double> cell_size{domain_width, domain_width, domain_width};
+  AABB<double> box{0.0, 0.0, 0.0, domain_width, domain_width, domain_width};
+  auto disjoint_box = translate(box, math::Vector3<double>{domain_width, domain_width, domain_width});
+
+  auto periodic_metric = periodic_metric_from_unit_cell(cell_size);
+  auto periodic_metric_scale_only = periodic_scaled_metric_from_unit_cell(cell_size);
+  EuclideanMetric euclidean_metric{};
+
+  for (size_t t = 0; t < num_trials; ++t) {
+    openrand::Philox rng(seed, counter);
+
+    // Generate a random line segment with one end in the primary box and the other in the disjoint box
+    LineSegment<double> line_segment =
+        generate_spanning_line_segment_with_length_limit(box, disjoint_box, rng, 0.5 * domain_width);
+
+    // Expected results
+    auto expected_periodic_start = wrap_points(line_segment.start(), periodic_metric);
+    auto expected_periodic_end = wrap_points(line_segment.end(), periodic_metric);
+
+    ASSERT_TRUE(math::norm(expected_periodic_start - expected_periodic_end) >
+                math::norm(line_segment.start() - line_segment.end()))
+        << "Test setup failure: Wrapping the segment should have caused it to have a MUCH longer euclidean length.";
+
+    // Periodic check
+    auto line_segment_periodic = wrap_points(line_segment, periodic_metric);
+    EXPECT_NEAR(math::norm(line_segment_periodic.start() - expected_periodic_start), 0.0,
+                math::get_relaxed_zero_tolerance<double>())
+        << "Wrapped line segment start point does not match expected value.";
+    EXPECT_NEAR(math::norm(line_segment_periodic.end() - expected_periodic_end), 0.0,
+                math::get_relaxed_zero_tolerance<double>())
+        << "Wrapped line segment end point does not match expected value.";
+
+    // Periodic check (scale only)
+    auto line_segment_periodic_scale_only = wrap_points(line_segment, periodic_metric_scale_only);
+    EXPECT_NEAR(math::norm(line_segment_periodic_scale_only.start() - expected_periodic_start), 0.0,
+                math::get_relaxed_zero_tolerance<double>())
+        << "Wrapped line segment start point does not match expected value (scale only).";
+    EXPECT_NEAR(math::norm(line_segment_periodic_scale_only.end() - expected_periodic_end), 0.0,
+                math::get_relaxed_zero_tolerance<double>())
+        << "Wrapped line segment end point does not match expected value (scale only).";
+
+    // Aperiodic check (should be unchanged)
+    auto line_segment_aperiodic = wrap_points(line_segment, euclidean_metric);
+    EXPECT_NEAR(math::norm(line_segment_aperiodic.start() - line_segment.start()), 0.0,
+                math::get_relaxed_zero_tolerance<double>())
+        << "Wrapped line segment start point does not match original value for the free space metric.";
+    EXPECT_NEAR(math::norm(line_segment_aperiodic.end() - line_segment.end()), 0.0,
+                math::get_relaxed_zero_tolerance<double>())
+        << "Wrapped line segment end point does not match original value for the free space metric.";
+
+    ++counter;
+  }
+}
+
+TEST(PeriodicMetric, UnwrapPointsSpanning) {
+  size_t seed = 1234;
+  size_t counter = 0;
+  size_t num_trials = 1000;  // Number of trials for each pair
+
+  double domain_width = 100.0;
+  math::Vector3<double> cell_size{domain_width, domain_width, domain_width};
+  AABB<double> box{0.0, 0.0, 0.0, domain_width, domain_width, domain_width};
+  auto disjoint_box = translate(box, math::Vector3<double>{domain_width, domain_width, domain_width});
+
+  auto periodic_metric = periodic_metric_from_unit_cell(cell_size);
+  auto periodic_metric_scale_only = periodic_scaled_metric_from_unit_cell(cell_size);
+  EuclideanMetric euclidean_metric{};
+
+  for (size_t t = 0; t < num_trials; ++t) {
+    openrand::Philox rng(seed, counter);
+
+    // Generate a random line segment with one end in the primary box and the other in the disjoint box
+    LineSegment<double> line_segment =
+        generate_spanning_line_segment_with_length_limit(box, disjoint_box, rng, 0.5 * domain_width);
+
+    // No-op check (should be unchanged)
+    auto line_segment_unwrapped = unwrap_points_to_ref(line_segment, periodic_metric, line_segment.start());
+    EXPECT_NEAR(math::norm(line_segment_unwrapped.start() - line_segment.start()), 0.0,
+                math::get_relaxed_zero_tolerance<double>())
+        << "Unwrapped line segment start point should not change.";
+    EXPECT_NEAR(math::norm(line_segment_unwrapped.end() - line_segment.end()), 0.0,
+                math::get_relaxed_zero_tolerance<double>())
+        << "Unwrapped line segment end point should not change.";
+
+    // Wrap points to break the length. Then unwrap to get back to the original segment
+    double expected_length = math::norm(line_segment.start() - line_segment.end());
+    auto line_segment_wrapped = wrap_points(line_segment, periodic_metric);
+    double wrapped_length = math::norm(line_segment_wrapped.start() - line_segment_wrapped.end());
+    auto line_segment_unwrapped_again =
+        unwrap_points_to_ref(line_segment_wrapped, periodic_metric, line_segment.start());
+    double unwrapped_length = math::norm(line_segment_unwrapped_again.start() - line_segment_unwrapped_again.end());
+    EXPECT_TRUE(expected_length < wrapped_length)
+        << "Test setup failure: Wrapping the segment should have caused it to have a MUCH longer euclidean length.";
+    EXPECT_NEAR(expected_length, unwrapped_length, math::get_relaxed_zero_tolerance<double>())
+        << "Unwrapped line segment length does not match the original length.";
+
+    // Because our reference point starts in the domain our initial and final segments should match
+    EXPECT_NEAR(math::norm(line_segment_unwrapped_again.start() - line_segment.start()), 0.0,
+                math::get_relaxed_zero_tolerance<double>())
+        << "Unwrapped line segment start point does not match original value.";
+    EXPECT_NEAR(math::norm(line_segment_unwrapped_again.end() - line_segment.end()), 0.0,
+                math::get_relaxed_zero_tolerance<double>())
+        << "Unwrapped line segment end point does not match original value.";
+
+    ++counter;
   }
 }
 
