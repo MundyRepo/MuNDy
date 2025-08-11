@@ -1,9 +1,9 @@
 FIND_PACKAGE(nanobench REQUIRED
     CONFIG
     HINTS
-      ${TPL_nanoench_DIR}/lib/cmake/nanobench
-      ${TPL_nanoench_DIR}/lib64/cmake/nanobench
-      ${TPL_nanoench_DIR}
+      ${TPL_nanobench_DIR}/lib/cmake/nanobench
+      ${TPL_nanobench_DIR}/lib64/cmake/nanobench
+      ${TPL_nanobench_DIR}
 )
 
 tribits_extpkg_create_imported_all_libs_target_and_config_file(
