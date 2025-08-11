@@ -178,6 +178,11 @@ template <typename Scalar>
 Circle3D<Scalar> translate(const Circle3D<Scalar>& circle, const mundy::math::Vector3<Scalar>& disp) {
   return Circle3D<Scalar>(translate(circle.center(), disp), circle.orientation(), circle.radius());
 }
+
+template <typename Scalar>
+AABB<Scalar> translate(const AABB<Scalar>& aabb, const mundy::math::Vector3<Scalar>& disp) {
+  return AABB<Scalar>(translate(aabb.min_corner(), disp), translate(aabb.max_corner(), disp));
+}
 //@}
 
 //! \name Runtime to compile-time dispatch
@@ -346,22 +351,22 @@ struct apply_functor {
     MUNDY_THROW_ASSERT(runtime_type != TestObjectType::INVALID, std::invalid_argument,
                        "Invalid test object type provided.");
 
-    if (runtime_type1 == TestObjectType::POINT) {
+    if (runtime_type == TestObjectType::POINT) {
       return functor_(TestObjectTraits<TestObjectType::POINT>{},  //
                       std::forward<Args>(args)...);
-    } else if (runtime_type1 == TestObjectType::LINE) {
+    } else if (runtime_type == TestObjectType::LINE) {
       return functor_(TestObjectTraits<TestObjectType::LINE>{},  //
                       std::forward<Args>(args)...);
-    } else if (runtime_type1 == TestObjectType::LINE_SEGMENT) {
+    } else if (runtime_type == TestObjectType::LINE_SEGMENT) {
       return functor_(TestObjectTraits<TestObjectType::LINE_SEGMENT>{},  //
                       std::forward<Args>(args)...);
-    } else if (runtime_type1 == TestObjectType::SPHERE) {
+    } else if (runtime_type == TestObjectType::SPHERE) {
       return functor_(TestObjectTraits<TestObjectType::SPHERE>{},  //
                       std::forward<Args>(args)...);
-    } else if (runtime_type1 == TestObjectType::ELLIPSOID) {
+    } else if (runtime_type == TestObjectType::ELLIPSOID) {
       return functor_(TestObjectTraits<TestObjectType::ELLIPSOID>{},  //
                       std::forward<Args>(args)...);
-    } else if (runtime_type1 == TestObjectType::CIRCLE_3D) {
+    } else if (runtime_type == TestObjectType::CIRCLE_3D) {
       return functor_(TestObjectTraits<TestObjectType::CIRCLE_3D>{},  //
                       std::forward<Args>(args)...);
     } else {
@@ -384,13 +389,16 @@ struct test_wrap_points_impl {
   using return_type = bool;
 
   template <typename ShapeTraits, typename RNG, typename Metric>
-  KOKKOS_INLINE_FUNCTION return_type operator()(ShapeTraits, const AABB<double>& box, RNG& rng,
+  KOKKOS_INLINE_FUNCTION return_type operator()(ShapeTraits, const AABB<double>& primary_box,
+                                                const AABB<double>& disjoint_box, RNG& rng,
                                                 const Metric& metric) const {
-    auto s = ShapeTraits::generate(box, rng);
-    wrap_points(s, metric);
+    // Generate a random shape outside the primary box and wrap it to the primary box
+    auto s = ShapeTraits::generate(disjoint_box, rng);
+    s = wrap_points(s, metric);
+    
     bool all_in_primary_domain = true;
     ShapeTraits::for_each_point(s, [&](const auto& point) {
-      if (!is_point_in_box(point, box)) {
+      if (!is_point_in_box(point, primary_box)) {
         all_in_primary_domain = false;
       }
     });
@@ -398,13 +406,52 @@ struct test_wrap_points_impl {
   }
 };
 
-KOKKOS_INLINE_FUNCTION double test_wrap_points(TestObjectType type, const AABB<double>& box, size_t seed,
-                                               size_t counter) {
+struct test_unwrap_to_ref_impl {
+  using return_type = bool;
+
+  template <typename ShapeTraits, typename RNG, typename Metric>
+  KOKKOS_INLINE_FUNCTION return_type operator()(ShapeTraits, const AABB<double>& primary_box,
+                                                const AABB<double>& disjoint_box, RNG& rng,
+                                                const Metric& metric) const {
+    // Generate a random shape within the primary box and unwrap it to a reference point
+    // outside the primary box
+    auto s = ShapeTraits::generate(primary_box, rng);
+    Point<double> ref_point = generate_random_point<double>(disjoint_box, rng);
+    s = unwrap_points_to_ref(s, metric, ref_point);
+
+    // The shifted object should have all points within one image of the reference point
+    auto primary_center = 0.5 * (primary_box.min_corner() + primary_box.max_corner());
+    auto shifted_box = translate(primary_box, ref_point - primary_center);
+    bool all_in_primary_domain = true;
+    ShapeTraits::for_each_point(s, [&](const auto& point) {
+      if (!is_point_in_box(point, shifted_box)) {
+        all_in_primary_domain = false;
+      }
+    });
+    return all_in_primary_domain;
+  }
+};
+
+template <typename Metric>
+KOKKOS_INLINE_FUNCTION bool test_wrap_points(TestObjectType type, const AABB<double>& primary_box,
+                                               const AABB<double>& disjoint_box, size_t seed, size_t counter,
+                                             const Metric& metric) {
   openrand::Philox rng(seed, counter);
 
   using Functor = test_wrap_points_impl;
   apply_functor<Functor> apply;
-  return apply(type, box, rng);
+  return apply(type, primary_box, disjoint_box, rng, metric);
+}
+
+template <typename Metric>
+KOKKOS_INLINE_FUNCTION bool test_unwrap_to_ref(TestObjectType type, const AABB<double>& primary_box,
+                                               const AABB<double>& disjoint_box, size_t seed, size_t counter,
+                                               const Metric& metric) {
+  openrand::Philox rng(seed, counter);
+
+  using Functor = test_unwrap_to_ref_impl;
+  apply_functor<Functor> apply;
+  return apply(type, primary_box, disjoint_box, rng, metric);
 }
 
 //! \brief Unit tests
@@ -449,7 +496,84 @@ TEST(PeriodicMetric, MinImageDirectVsPeriodic) {
   }
 }
 
-TEST(PeriodicMetric, WrapRigid) {
+TEST(PeriodicMetric, WrapPoints) {
+  size_t seed = 1234;
+  size_t counter = 0;
+  size_t num_trials = 1000;  // Number of trials for each pair
+
+  math::Vector3<double> cell_size{100.0, 100.0, 100.0};
+  AABB<double> box{0.0, 0.0, 0.0, 100.0, 100.0, 100.0};
+  AABB<double> disjoint_box{900.0, 900.0, 900.0, 1000.0, 1000.0, 1000.0};
+
+  auto periodic_metric = periodic_metric_from_unit_cell(cell_size);
+  auto periodic_metric_scale_only = periodic_scaled_metric_from_unit_cell(cell_size);
+  EuclideanMetric euclidean_metric{};
+
+  using ShapePair = Kokkos::pair<TestObjectType, TestObjectType>;
+  std::vector<TestObjectType> test_types = {TestObjectType::POINT,        TestObjectType::LINE,
+                                            TestObjectType::LINE_SEGMENT, TestObjectType::SPHERE,
+                                            TestObjectType::ELLIPSOID,    TestObjectType::CIRCLE_3D};
+
+  for (const auto& type : test_types) {
+    for (size_t t = 0; t < num_trials; ++t) {
+      if (type != TestObjectType::LINE) {
+        EXPECT_TRUE(test_wrap_points(type, box, disjoint_box, seed, counter, periodic_metric))
+            << "Wrapping points for type " << type << " failed. For the periodic metric.";
+        EXPECT_TRUE(test_wrap_points(type, box, disjoint_box, seed, counter, periodic_metric_scale_only))
+            << "Wrapping points for type " << type << " failed. For the periodic metric (scale only).";
+        
+        // For the aperiodic metric, wrapping should just return the original point
+        EXPECT_TRUE(test_wrap_points(type, disjoint_box, disjoint_box, seed, counter, euclidean_metric))
+            << "Wrapping points for type " << type << " failed. For the free space metric.";
+      } else {
+        // Expect a "Not implemented error"
+        EXPECT_THROW(test_wrap_points(type, box, disjoint_box, seed, counter, periodic_metric), std::invalid_argument)
+            << "Wrapping points for type " << type << " should throw an error for the periodic metric.";
+      }
+
+      ++counter;
+    }
+  }
+}
+
+TEST(PeriodicMetric, UnwrapPointsToRef) {
+  size_t seed = 1234;
+  size_t counter = 0;
+  size_t num_trials = 1000;  // Number of trials for each pair
+
+  math::Vector3<double> cell_size{100.0, 100.0, 100.0};
+  AABB<double> box{0.0, 0.0, 0.0, 100.0, 100.0, 100.0};
+  AABB<double> disjoint_box{900.0, 900.0, 900.0, 1000.0, 1000.0, 1000.0};
+
+  auto periodic_metric = periodic_metric_from_unit_cell(cell_size);
+  auto periodic_metric_scale_only = periodic_scaled_metric_from_unit_cell(cell_size);
+  EuclideanMetric euclidean_metric{};
+
+  using ShapePair = Kokkos::pair<TestObjectType, TestObjectType>;
+  std::vector<TestObjectType> test_types = {TestObjectType::POINT,        TestObjectType::LINE,
+                                            TestObjectType::LINE_SEGMENT, TestObjectType::SPHERE,
+                                            TestObjectType::ELLIPSOID,    TestObjectType::CIRCLE_3D};
+
+  for (const auto& type : test_types) {
+    for (size_t t = 0; t < num_trials; ++t) {
+      if (type != TestObjectType::LINE) {
+        EXPECT_TRUE(test_unwrap_to_ref(type, box, disjoint_box, seed, counter, periodic_metric))
+            << "Unwrapping points for type " << type << " failed. For the periodic metric.";
+        EXPECT_TRUE(test_unwrap_to_ref(type, box, disjoint_box, seed, counter, periodic_metric_scale_only))
+            << "Unwrapping points for type " << type << " failed. For the periodic metric (scale only).";
+        
+        // For the aperiodic metric, unwrapping should just return the original point
+        EXPECT_TRUE(test_unwrap_to_ref(type, disjoint_box, disjoint_box, seed, counter, euclidean_metric))
+            << "Unwrapping points for type " << type << " failed. For the free space metric.";
+      } else {
+        // Expect a "Not implemented error"
+        EXPECT_THROW(test_unwrap_to_ref(type, box, disjoint_box, seed, counter, periodic_metric), std::invalid_argument)
+            << "Unwrapping points for type " << type << " should throw an error for the periodic metric.";
+      }
+
+      ++counter;
+    }
+  }
 }
 
 }  // namespace

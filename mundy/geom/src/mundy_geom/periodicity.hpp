@@ -64,7 +64,7 @@ KOKKOS_INLINE_FUNCTION constexpr math::Vector3<Scalar> frac_minimum_image(const 
 template <typename Integer, typename Scalar>
 KOKKOS_INLINE_FUNCTION constexpr math::Vector3<Scalar> frac_wrap_to_unit_cell(
     const math::Vector3<Scalar>& fractional_vec) {
-  return apply([](Scalar x) { return safe_unit_mod1(x); }, fractional_vec);
+  return apply([](Scalar x) { return safe_unit_mod1<Integer>(x); }, fractional_vec);
 }
 
 }  // namespace impl
@@ -808,6 +808,21 @@ template <typename Scalar, typename Metric>
 KOKKOS_INLINE_FUNCTION void unwrap_points_to_ref_inplace(Ring<Scalar>& ring, const Metric& metric,
                                                          const Point<Scalar>& ref_point) {
   unwrap_points_to_ref_inplace(ring.center(), metric, ref_point);
+}
+
+/// \brief Unwrap all points of an ellipsoid into the same image as the reference point
+template <typename Scalar, typename Metric>
+KOKKOS_INLINE_FUNCTION Ellipsoid<Scalar> unwrap_points_to_ref(const Ellipsoid<Scalar>& ellipsoid, const Metric& metric,
+                                                               const Point<Scalar>& ref_point) {
+  auto new_center = unwrap_points_to_ref(ellipsoid.center(), metric, ref_point);
+  return Ellipsoid<Scalar>(new_center, ellipsoid.orientation(), ellipsoid.radii());
+}
+
+/// \brief Unwrap all points of an ellipsoid into the same image as the reference point (inplace)
+template <typename Scalar, typename Metric>
+KOKKOS_INLINE_FUNCTION void unwrap_points_to_ref_inplace(Ellipsoid<Scalar>& ellipsoid, const Metric& metric,
+                                                           const Point<Scalar>& ref_point) {
+  unwrap_points_to_ref_inplace(ellipsoid.center(), metric, ref_point);
 }
 //@}
 
