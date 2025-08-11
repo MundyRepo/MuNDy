@@ -45,7 +45,7 @@ cmake -B build . \
     -DTPL_KokkosKernels_DIR:PATH=${TRILINOS_ROOT_DIR} \
     -DTPL_STK_DIR:PATH=${TRILINOS_ROOT_DIR} \
     -DTPL_Teuchos_DIR:PATH=${TRILINOS_ROOT_DIR} \
-    -DTPL_nanobench_DIR:PATH=${TPL_ROOT_DIR} \
+    -DTPL_nanobench_DIR:PATH=${MUNDY_DEPS} \
     ${ccache_args} \
     ${compiler_flags} \
     ${install_dir} \
