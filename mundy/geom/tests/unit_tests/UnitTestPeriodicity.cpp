@@ -233,10 +233,16 @@ template <>
 struct TestObjectTraits<TestObjectType::POINT> {
   using type = Point<double>;
   static constexpr TestObjectType object_type = TestObjectType::POINT;
+  static constexpr unsigned num_points = 1;
 
   // Function to generate a random point within a given bounding box
   static type generate(const AABB<double>& box, openrand::Philox& rng) {
     return generate_random_point<double>(box, rng);
+  }
+
+  // Function to fetch the reference point
+  static KOKKOS_FUNCTION Point<double> reference_point(const type& point) {
+    return point;
   }
 
   // Apply a function to each point
@@ -250,10 +256,16 @@ template <>
 struct TestObjectTraits<TestObjectType::LINE> {
   using type = Line<double>;
   static constexpr TestObjectType object_type = TestObjectType::LINE;
+  static constexpr unsigned num_points = 1;
 
   // Function to generate a random line within a given bounding box
   static type generate(const AABB<double>& box, openrand::Philox& rng) {
     return generate_random_line<double>(box, rng);
+  }
+
+  // Function to fetch the reference point
+  static KOKKOS_FUNCTION Point<double> reference_point(const type& line) {
+    return line.center();
   }
 
   // Apply a function to each point on the line
@@ -267,10 +279,16 @@ template <>
 struct TestObjectTraits<TestObjectType::LINE_SEGMENT> {
   using type = LineSegment<double>;
   static constexpr TestObjectType object_type = TestObjectType::LINE_SEGMENT;
+  static constexpr unsigned num_points = 2;
 
   // Function to generate a random line segment within a given bounding box
   static type generate(const AABB<double>& box, openrand::Philox& rng) {
     return generate_random_line_segment<double>(box, rng);
+  }
+
+  // Function to fetch the reference point
+  static KOKKOS_FUNCTION Point<double> reference_point(const type& line_segment) {
+    return line_segment.start();
   }
 
   // Apply a function to each point on the line segment
@@ -285,10 +303,16 @@ template <>
 struct TestObjectTraits<TestObjectType::SPHERE> {
   using type = Sphere<double>;
   static constexpr TestObjectType object_type = TestObjectType::SPHERE;
+  static constexpr unsigned num_points = 1;
 
   // Function to generate a random sphere within a given bounding box
   static type generate(const AABB<double>& box, openrand::Philox& rng) {
     return generate_random_sphere<double>(box, rng);
+  }
+
+  // Function to fetch the reference point
+  static KOKKOS_FUNCTION Point<double> reference_point(const type& sphere) {
+    return sphere.center();
   }
 
   // Apply a function to each point on the sphere
@@ -303,10 +327,16 @@ template <>
 struct TestObjectTraits<TestObjectType::ELLIPSOID> {
   using type = Ellipsoid<double>;
   static constexpr TestObjectType object_type = TestObjectType::ELLIPSOID;
+  static constexpr unsigned num_points = 1;
 
   // Function to generate a random ellipsoid within a given bounding box
   static type generate(const AABB<double>& box, openrand::Philox& rng) {
     return generate_random_ellipsoid<double>(box, rng);
+  }
+
+  // Function to fetch the reference point
+  static KOKKOS_FUNCTION Point<double> reference_point(const type& ellipsoid) {
+    return ellipsoid.center();
   }
 
   // Apply a function to each point on the ellipsoid
@@ -321,10 +351,16 @@ template <>
 struct TestObjectTraits<TestObjectType::CIRCLE_3D> {
   using type = Circle3D<double>;
   static constexpr TestObjectType object_type = TestObjectType::CIRCLE_3D;
+  static constexpr unsigned num_points = 1;
 
   // Function to generate a random circle3D within a given bounding box
   static type generate(const AABB<double>& box, openrand::Philox& rng) {
     return generate_random_circle3D<double>(box, rng);
+  }
+
+  // Function to fetch the reference point
+  static KOKKOS_FUNCTION Point<double> reference_point(const type& circle) {
+    return circle.center();
   }
 
   // Apply a function to each point on the circle3D
@@ -385,6 +421,53 @@ KOKKOS_INLINE_FUNCTION bool is_point_in_box(const Point<double>& point, const AA
           point[2] >= box.z_min() && point[2] <= box.z_max());
 }
 
+struct test_wrap_rigid_impl {
+  using return_type = bool;
+
+  template <typename ShapeTraits, typename RNG, typename Metric>
+  KOKKOS_INLINE_FUNCTION return_type operator()(ShapeTraits, const AABB<double>& primary_box,
+                                                const AABB<double>& other_box, RNG& rng, const Metric& metric) const {
+    // Generate a random shape within other_box and wrap it to the primary box (rigidly)
+    //
+    // The reference point should end up within the primary box and all others should maintain the same relative
+    // positions
+    constexpr unsigned num_points = ShapeTraits::num_points;
+    Kokkos::Array<math::Vector3<double>, num_points> original_displacements;
+    Kokkos::Array<math::Vector3<double>, num_points> wrapped_displacements;
+
+    auto s = ShapeTraits::generate(other_box, rng);
+    Point<double> ref_point = ShapeTraits::reference_point(s);
+
+    unsigned i = 0;
+    ShapeTraits::for_each_point(s, [&](const auto& point) {
+      original_displacements[i] = point - ref_point;
+      ++i;
+    });
+
+    s = wrap_rigid(s, metric);
+    Point<double> wrapped_ref_point = ShapeTraits::reference_point(s);
+
+    bool ref_in_primary_domain = is_point_in_box(wrapped_ref_point, primary_box);
+
+    i = 0;
+    ShapeTraits::for_each_point(s, [&](const auto& point) {
+      wrapped_displacements[i] = point - wrapped_ref_point;
+      ++i;
+    });
+
+    // Check that all displacements are the same before and after wrapping
+    bool all_displacements_equal = true;
+    for (unsigned j = 0; j < num_points; ++j) {
+      if (math::norm(original_displacements[j] - wrapped_displacements[j]) >
+          math::get_relaxed_zero_tolerance<double>()) {
+        all_displacements_equal = false;
+      }
+    }
+
+    return ref_in_primary_domain && all_displacements_equal;
+  }
+};
+
 struct test_wrap_points_impl {
   using return_type = bool;
 
@@ -431,6 +514,17 @@ struct test_unwrap_to_ref_impl {
     return all_in_primary_domain;
   }
 };
+
+template <typename Metric>
+KOKKOS_INLINE_FUNCTION bool test_wrap_rigid(TestObjectType type, const AABB<double>& primary_box,
+                                            const AABB<double>& other_box, size_t seed, size_t counter,
+                                            const Metric& metric) {
+  openrand::Philox rng(seed, counter);
+
+  using Functor = test_wrap_rigid_impl;
+  apply_functor<Functor> apply;
+  return apply(type, primary_box, other_box, rng, metric);
+}
 
 template <typename Metric>
 KOKKOS_INLINE_FUNCTION bool test_wrap_points(TestObjectType type, const AABB<double>& primary_box,
@@ -493,6 +587,45 @@ TEST(PeriodicMetric, MinImageDirectVsPeriodic) {
         << "Minimum image distance does not match periodic distance.";
     ASSERT_NEAR(min_image_distance, periodic_distance_scale_only, math::get_relaxed_zero_tolerance<double>())
         << "Minimum image distance does not match periodic distance (scale only).";
+  }
+}
+
+TEST(PeriodicMetric, WrapRigid) {
+  size_t seed = 1234;
+  size_t counter = 0;
+  size_t num_trials = 1000;  // Number of trials for each pair
+
+  math::Vector3<double> cell_size{100.0, 100.0, 100.0};
+  AABB<double> box{0.0, 0.0, 0.0, 100.0, 100.0, 100.0};
+  auto overlapping_box = translate(box, math::Vector3<double>{50.0, 50.0, 50.0});
+
+  auto periodic_metric = periodic_metric_from_unit_cell(cell_size);
+  auto periodic_metric_scale_only = periodic_scaled_metric_from_unit_cell(cell_size);
+  EuclideanMetric euclidean_metric{};
+
+  std::vector<TestObjectType> test_types = {TestObjectType::POINT,        TestObjectType::LINE,
+                                            TestObjectType::LINE_SEGMENT, TestObjectType::SPHERE,
+                                            TestObjectType::ELLIPSOID,    TestObjectType::CIRCLE_3D};
+
+  for (const auto& type : test_types) {
+    for (size_t t = 0; t < num_trials; ++t) {
+      if (type != TestObjectType::LINE) {
+        EXPECT_TRUE(test_wrap_rigid(type, box, overlapping_box, seed, counter, periodic_metric))
+            << "Rigid wrapping for type " << type << " failed. For the periodic metric.";
+        EXPECT_TRUE(test_wrap_rigid(type, box, overlapping_box, seed, counter, periodic_metric_scale_only))
+            << "Rigid wrapping for type " << type << " failed. For the periodic metric (scale only).";
+
+        // For the aperiodic metric, rigid wrapping should just return the original point
+        EXPECT_TRUE(test_wrap_rigid(type, box, box, seed, counter, euclidean_metric))
+            << "Rigid wrapping for type " << type << " failed. For the free space metric.";
+      } else {
+        // Expect a "Not implemented error"
+        EXPECT_THROW(test_wrap_rigid(type, box, overlapping_box, seed, counter, periodic_metric), std::invalid_argument)
+            << "Rigid wrapping for type " << type << " should throw an error for the periodic metric.";
+      }
+
+      ++counter;
+    }
   }
 }
 
