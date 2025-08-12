@@ -34,6 +34,7 @@
 // Mundy
 #include <mundy_geom/periodicity.hpp>  // for mundy::geom::PeriodicMetric, ...
 #include <mundy_geom/primitives.hpp>   // for mundy::geom::Point, mundy::geom::LineSegment
+#include <mundy_geom/transform.hpp>    // for mundy::geom::translate
 #include <mundy_math/Tolerance.hpp>    // for mundy::math::get_zero_tolerance
 #include <mundy_math/Vector3.hpp>      // for mundy::math::Vector3
 
@@ -143,45 +144,6 @@ Circle3D<Scalar> generate_random_circle3D(const AABB<Scalar>& box, RNG& rng) {
   auto random_quaternion = math::quat_from_parallel_transport(z_hat, u_hat);
 
   return Circle3D<Scalar>(center, random_quaternion, radius);
-}
-//@}
-
-//! \name Translate a primitive
-//@{
-
-template <typename Scalar>
-Point<Scalar> translate(const Point<Scalar>& point, const math::Vector3<Scalar>& disp) {
-  return Point<Scalar>(point[0] + disp[0], point[1] + disp[1], point[2] + disp[2]);
-}
-
-template <typename Scalar>
-Line<Scalar> translate(const Line<Scalar>& line, const math::Vector3<Scalar>& disp) {
-  return Line<Scalar>(translate(line.center(), disp), line.direction());
-}
-
-template <typename Scalar>
-LineSegment<Scalar> translate(const LineSegment<Scalar>& line_segment, const math::Vector3<Scalar>& disp) {
-  return LineSegment<Scalar>(translate(line_segment.start(), disp), translate(line_segment.end(), disp));
-}
-
-template <typename Scalar>
-Sphere<Scalar> translate(const Sphere<Scalar>& sphere, const math::Vector3<Scalar>& disp) {
-  return Sphere<Scalar>(translate(sphere.center(), disp), sphere.radius());
-}
-
-template <typename Scalar>
-Ellipsoid<Scalar> translate(const Ellipsoid<Scalar>& ellipsoid, const math::Vector3<Scalar>& disp) {
-  return Ellipsoid<Scalar>(translate(ellipsoid.center(), disp), ellipsoid.orientation(), ellipsoid.radii());
-}
-
-template <typename Scalar>
-Circle3D<Scalar> translate(const Circle3D<Scalar>& circle, const math::Vector3<Scalar>& disp) {
-  return Circle3D<Scalar>(translate(circle.center(), disp), circle.orientation(), circle.radius());
-}
-
-template <typename Scalar>
-AABB<Scalar> translate(const AABB<Scalar>& aabb, const math::Vector3<Scalar>& disp) {
-  return AABB<Scalar>(translate(aabb.min_corner(), disp), translate(aabb.max_corner(), disp));
 }
 //@}
 
