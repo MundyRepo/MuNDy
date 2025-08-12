@@ -74,7 +74,7 @@ class Spherocylinder {
   /// \brief Default constructor for owning Spherocylinders. Default initializes the center and sets the radius to an
   /// invalid value of -1
   KOKKOS_FUNCTION
-  Spherocylinder()
+  constexpr Spherocylinder()
     requires std::is_same_v<OwnershipType, mundy::math::Ownership::Owns>
       : center_(scalar_t(), scalar_t(), scalar_t()),
         orientation_(static_cast<scalar_t>(1), static_cast<scalar_t>(0), static_cast<scalar_t>(0),
@@ -85,7 +85,7 @@ class Spherocylinder {
 
   /// \brief No default constructor for viewing Spherocylinders.
   KOKKOS_FUNCTION
-  Spherocylinder()
+  constexpr Spherocylinder()
     requires std::is_same_v<OwnershipType, mundy::math::Ownership::Views>
   = delete;
 
@@ -95,8 +95,8 @@ class Spherocylinder {
   /// \param[in] radius The radius of the Spherocylinder.
   /// \param[in] length The length of the Spherocylinder.
   KOKKOS_FUNCTION
-  Spherocylinder(const point_t& center, const orientation_t& orientation, const scalar_t& radius,
-                 const scalar_t& length)
+  constexpr Spherocylinder(const point_t& center, const orientation_t& orientation, const scalar_t& radius,
+                           const scalar_t& length)
       : center_(center), orientation_(orientation), radius_(radius), length_(length) {
   }
 
@@ -106,32 +106,32 @@ class Spherocylinder {
   /// \param[in] radius The radius of the Spherocylinder.
   /// \param[in] length The length of the Spherocylinder.
   template <ValidPointType OtherPointType, mundy::math::ValidQuaternionType OtherQuaternionType>
-  KOKKOS_FUNCTION Spherocylinder(const OtherPointType& center, const OtherQuaternionType& orientation,
-                                 const scalar_t& radius, const scalar_t& length)
+  KOKKOS_FUNCTION constexpr Spherocylinder(const OtherPointType& center, const OtherQuaternionType& orientation,
+                                           const scalar_t& radius, const scalar_t& length)
     requires(!std::is_same_v<OtherPointType, point_t> || !std::is_same_v<OtherQuaternionType, orientation_t>)
       : center_(center), orientation_(orientation), radius_(radius), length_(length) {
   }
 
   /// \brief Destructor
   KOKKOS_DEFAULTED_FUNCTION
-  ~Spherocylinder() = default;
+  constexpr ~Spherocylinder() = default;
 
   /// \brief Deep copy constructor
   KOKKOS_FUNCTION
-  Spherocylinder(const Spherocylinder<scalar_t, point_t, orientation_t, ownership_t>& other)
+  constexpr Spherocylinder(const Spherocylinder<scalar_t, point_t, orientation_t, ownership_t>& other)
       : center_(other.center_), orientation_(other.orientation_), radius_(other.radius_), length_(other.length_) {
   }
 
   /// \brief Deep copy constructor with different spherocylinder type
   template <typename OtherSpherocylinderType>
-  KOKKOS_FUNCTION Spherocylinder(const OtherSpherocylinderType& other)
+  KOKKOS_FUNCTION constexpr Spherocylinder(const OtherSpherocylinderType& other)
     requires(!std::is_same_v<OtherSpherocylinderType, Spherocylinder<scalar_t, point_t, orientation_t, ownership_t>>)
       : center_(other.center_), orientation_(other.orientation_), radius_(other.radius_), length_(other.length_) {
   }
 
   /// \brief Deep move constructor
   KOKKOS_FUNCTION
-  Spherocylinder(Spherocylinder<scalar_t, point_t, orientation_t, ownership_t>&& other)
+  constexpr Spherocylinder(Spherocylinder<scalar_t, point_t, orientation_t, ownership_t>&& other)
       : center_(std::move(other.center_)),
         orientation_{std::move(other.orientation_)},
         radius_(std::move(other.radius_)),
@@ -140,7 +140,7 @@ class Spherocylinder {
 
   /// \brief Deep move constructor
   template <typename OtherSpherocylinderType>
-  KOKKOS_FUNCTION Spherocylinder(OtherSpherocylinderType&& other)
+  KOKKOS_FUNCTION constexpr Spherocylinder(OtherSpherocylinderType&& other)
     requires(!std::is_same_v<OtherSpherocylinderType, Spherocylinder<scalar_t, point_t, orientation_t, ownership_t>>)
       : center_(std::move(other.center_)),
         orientation_{std::move(other.orientation_)},
@@ -154,7 +154,7 @@ class Spherocylinder {
 
   /// \brief Copy assignment operator
   KOKKOS_FUNCTION
-  Spherocylinder<scalar_t, point_t, orientation_t, ownership_t>& operator=(
+  constexpr Spherocylinder<scalar_t, point_t, orientation_t, ownership_t>& operator=(
       const Spherocylinder<scalar_t, point_t, orientation_t, ownership_t>& other) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     center_ = other.center_;
@@ -166,7 +166,7 @@ class Spherocylinder {
 
   /// \brief Copy assignment operator
   template <typename OtherSpherocylinderType>
-  KOKKOS_FUNCTION Spherocylinder<scalar_t, point_t, orientation_t, ownership_t>& operator=(
+  KOKKOS_FUNCTION constexpr Spherocylinder<scalar_t, point_t, orientation_t, ownership_t>& operator=(
       const OtherSpherocylinderType& other)
     requires(!std::is_same_v<OtherSpherocylinderType, Spherocylinder<scalar_t, point_t, orientation_t, ownership_t>>)
   {
@@ -180,7 +180,7 @@ class Spherocylinder {
 
   /// \brief Move assignment operator
   KOKKOS_FUNCTION
-  Spherocylinder<scalar_t, point_t, orientation_t, ownership_t>& operator=(
+  constexpr Spherocylinder<scalar_t, point_t, orientation_t, ownership_t>& operator=(
       Spherocylinder<scalar_t, point_t, orientation_t, ownership_t>&& other) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     center_ = std::move(other.center_);
@@ -192,7 +192,7 @@ class Spherocylinder {
 
   /// \brief Move assignment operator
   template <typename OtherSpherocylinderType>
-  KOKKOS_FUNCTION Spherocylinder<scalar_t, point_t, orientation_t, ownership_t>& operator=(
+  KOKKOS_FUNCTION constexpr Spherocylinder<scalar_t, point_t, orientation_t, ownership_t>& operator=(
       OtherSpherocylinderType&& other)
     requires(!std::is_same_v<OtherSpherocylinderType, Spherocylinder<scalar_t, point_t, orientation_t, ownership_t>>)
   {
@@ -210,49 +210,49 @@ class Spherocylinder {
 
   /// \brief Accessor for the center
   KOKKOS_FUNCTION
-  const point_t& center() const {
+  constexpr const point_t& center() const {
     return center_;
   }
 
   /// \brief Accessor for the center
   KOKKOS_FUNCTION
-  point_t& center() {
+  constexpr point_t& center() {
     return center_;
   }
 
   /// \brief Accessor for the orientation
   KOKKOS_FUNCTION
-  const orientation_t& orientation() const {
+  constexpr const orientation_t& orientation() const {
     return orientation_;
   }
 
   /// \brief Accessor for the orientation
   KOKKOS_FUNCTION
-  orientation_t& orientation() {
+  constexpr orientation_t& orientation() {
     return orientation_;
   }
 
   /// \brief Accessor for the radius
   KOKKOS_FUNCTION
-  const scalar_t& radius() const {
+  constexpr const scalar_t& radius() const {
     return radius_;
   }
 
   /// \brief Accessor for the radius
   KOKKOS_FUNCTION
-  scalar_t& radius() {
+  constexpr scalar_t& radius() {
     return radius_;
   }
 
   /// \brief Accessor for the length
   KOKKOS_FUNCTION
-  const scalar_t& length() const {
+  constexpr const scalar_t& length() const {
     return length_;
   }
 
   /// \brief Accessor for the length
   KOKKOS_FUNCTION
-  scalar_t& length() {
+  constexpr scalar_t& length() {
     return length_;
   }
   //@}
@@ -263,7 +263,7 @@ class Spherocylinder {
   /// \brief Set the center
   /// \param[in] center The new center.
   template <ValidPointType OtherPointType>
-  KOKKOS_FUNCTION void set_center(const OtherPointType& center) {
+  KOKKOS_FUNCTION constexpr void set_center(const OtherPointType& center) {
     center_ = center;
   }
 
@@ -272,7 +272,7 @@ class Spherocylinder {
   /// \param[in] y The y-coordinate.
   /// \param[in] z The z-coordinate.
   KOKKOS_FUNCTION
-  void set_center(const scalar_t& x, const scalar_t& y, const scalar_t& z) {
+  constexpr void set_center(const scalar_t& x, const scalar_t& y, const scalar_t& z) {
     center_[0] = x;
     center_[1] = y;
     center_[2] = z;
@@ -281,7 +281,7 @@ class Spherocylinder {
   /// \brief Set the orientation
   /// \param[in] orientation The new orientation.
   KOKKOS_FUNCTION
-  void set_orientation(const orientation_t& orientation) {
+  constexpr void set_orientation(const orientation_t& orientation) {
     orientation_ = orientation;
   }
 
@@ -291,7 +291,7 @@ class Spherocylinder {
   /// \param[in] qy The y-component of the orientation quaternion.
   /// \param[in] qz The z-component of the orientation quaternion.
   KOKKOS_FUNCTION
-  void set_orientation(const scalar_t& qw, const scalar_t& qx, const scalar_t& qy, const scalar_t& qz) {
+  constexpr void set_orientation(const scalar_t& qw, const scalar_t& qx, const scalar_t& qy, const scalar_t& qz) {
     orientation_[0] = qw;
     orientation_[1] = qx;
     orientation_[2] = qy;
@@ -301,14 +301,14 @@ class Spherocylinder {
   /// \brief Set the radius
   /// \param[in] radius The new radius.
   KOKKOS_FUNCTION
-  void set_radius(const scalar_t& radius) {
+  constexpr void set_radius(const scalar_t& radius) {
     radius_ = radius;
   }
 
   /// \brief Set the length
   /// \param[in] length The new length.
   KOKKOS_FUNCTION
-  void set_length(const scalar_t& length) {
+  constexpr void set_length(const scalar_t& length) {
     length_ = length;
   }
   //@}
@@ -366,8 +366,8 @@ static_assert(ValidSpherocylinderType<Spherocylinder<float>> && ValidSpherocylin
 
 /// \brief Equality operator
 template <ValidSpherocylinderType SpherocylinderType1, ValidSpherocylinderType SpherocylinderType2>
-KOKKOS_FUNCTION bool operator==(const SpherocylinderType1& spherocylinder1,
-                                const SpherocylinderType2& spherocylinder2) {
+KOKKOS_FUNCTION constexpr bool operator==(const SpherocylinderType1& spherocylinder1,
+                                          const SpherocylinderType2& spherocylinder2) {
   return (spherocylinder1.radius() == spherocylinder2.radius()) &&
          (spherocylinder1.length() == spherocylinder2.length()) &&
          (spherocylinder1.center() == spherocylinder2.center()) &&
@@ -376,8 +376,8 @@ KOKKOS_FUNCTION bool operator==(const SpherocylinderType1& spherocylinder1,
 
 /// \brief Inequality operator
 template <ValidSpherocylinderType SpherocylinderType1, ValidSpherocylinderType SpherocylinderType2>
-KOKKOS_FUNCTION bool operator!=(const SpherocylinderType1& spherocylinder1,
-                                const SpherocylinderType2& spherocylinder2) {
+KOKKOS_FUNCTION constexpr bool operator!=(const SpherocylinderType1& spherocylinder1,
+                                          const SpherocylinderType2& spherocylinder2) {
   return (spherocylinder1.radius() != spherocylinder2.radius()) ||
          (spherocylinder1.length() != spherocylinder2.length()) ||
          (spherocylinder1.center() != spherocylinder2.center()) ||

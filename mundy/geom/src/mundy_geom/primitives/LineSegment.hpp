@@ -66,14 +66,14 @@ class LineSegment {
 
   /// \brief Default constructor for owning LineSegments. Default initialize the start and end points.
   KOKKOS_FUNCTION
-  LineSegment()
+  constexpr LineSegment()
     requires std::is_same_v<OwnershipType, mundy::math::Ownership::Owns>
       : start_(scalar_t(), scalar_t(), scalar_t()), end_(scalar_t(), scalar_t(), scalar_t()) {
   }
 
   /// \brief No default constructor for viewing LineSegmentss.
   KOKKOS_FUNCTION
-  LineSegment()
+  constexpr LineSegment()
     requires std::is_same_v<OwnershipType, mundy::math::Ownership::Views>
   = delete;
 
@@ -81,41 +81,43 @@ class LineSegment {
   /// \param[in] start The start of the LineSegment.
   /// \param[in] end The end of the LineSegment.
   KOKKOS_FUNCTION
-  LineSegment(const point_t& start, const point_t& end) : start_(start), end_(end) {
+  constexpr LineSegment(const point_t& start, const point_t& end) : start_(start), end_(end) {
   }
 
   /// \brief Constructor to initialize the start and end points.
   /// \param[in] start The start of the LineSegment.
   /// \param[in] end The end of the LineSegment.
   template <ValidPointType OtherPointType>
-  KOKKOS_FUNCTION LineSegment(const OtherPointType& start, const OtherPointType& end) : start_(start), end_(end) {
+  KOKKOS_FUNCTION constexpr LineSegment(const OtherPointType& start, const OtherPointType& end)
+      : start_(start), end_(end) {
   }
 
   /// \brief Destructor
   KOKKOS_DEFAULTED_FUNCTION
-  ~LineSegment() = default;
+  constexpr ~LineSegment() = default;
 
   /// \brief Deep copy constructor
   KOKKOS_FUNCTION
-  LineSegment(const LineSegment<scalar_t, point_t, ownership_t>& other) : start_(other.start_), end_(other.end_) {
+  constexpr LineSegment(const LineSegment<scalar_t, point_t, ownership_t>& other)
+      : start_(other.start_), end_(other.end_) {
   }
 
   /// \brief Deep copy constructor
   template <typename OtherLineSegmentType>
-  KOKKOS_FUNCTION LineSegment(const OtherLineSegmentType& other)
+  KOKKOS_FUNCTION constexpr LineSegment(const OtherLineSegmentType& other)
     requires(!std::is_same_v<OtherLineSegmentType, LineSegment<scalar_t, point_t, ownership_t>>)
       : start_(other.start_), end_(other.end_) {
   }
 
   /// \brief Deep move constructor
   KOKKOS_FUNCTION
-  LineSegment(LineSegment<scalar_t, point_t, ownership_t>&& other)
+  constexpr LineSegment(LineSegment<scalar_t, point_t, ownership_t>&& other)
       : start_(std::move(other.start_)), end_(std::move(other.end_)) {
   }
 
   /// \brief Deep move constructor
   template <typename OtherLineSegmentType>
-  KOKKOS_FUNCTION LineSegment(OtherLineSegmentType&& other)
+  KOKKOS_FUNCTION constexpr LineSegment(OtherLineSegmentType&& other)
     requires(!std::is_same_v<OtherLineSegmentType, LineSegment<scalar_t, point_t, ownership_t>>)
       : start_(std::move(other.start_)), end_(std::move(other.end_)) {
   }
@@ -126,7 +128,8 @@ class LineSegment {
 
   /// \brief Copy assignment operator
   KOKKOS_FUNCTION
-  LineSegment<scalar_t, point_t, ownership_t>& operator=(const LineSegment<scalar_t, point_t, ownership_t>& other) {
+  constexpr LineSegment<scalar_t, point_t, ownership_t>& operator=(
+      const LineSegment<scalar_t, point_t, ownership_t>& other) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     start_ = other.start_;
     end_ = other.end_;
@@ -135,7 +138,7 @@ class LineSegment {
 
   /// \brief Copy assignment operator
   template <typename OtherLineSegmentType>
-  KOKKOS_FUNCTION LineSegment<scalar_t, point_t, ownership_t>& operator=(const OtherLineSegmentType& other)
+  KOKKOS_FUNCTION constexpr LineSegment<scalar_t, point_t, ownership_t>& operator=(const OtherLineSegmentType& other)
     requires(!std::is_same_v<OtherLineSegmentType, LineSegment<scalar_t, point_t, ownership_t>>)
   {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
@@ -146,7 +149,8 @@ class LineSegment {
 
   /// \brief Move assignment operator
   KOKKOS_FUNCTION
-  LineSegment<scalar_t, point_t, ownership_t>& operator=(LineSegment<scalar_t, point_t, ownership_t>&& other) {
+  constexpr LineSegment<scalar_t, point_t, ownership_t>& operator=(
+      LineSegment<scalar_t, point_t, ownership_t>&& other) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     start_ = std::move(other.start_);
     end_ = std::move(other.end_);
@@ -155,7 +159,7 @@ class LineSegment {
 
   /// \brief Move assignment operator
   template <typename OtherLineSegmentType>
-  KOKKOS_FUNCTION LineSegment<scalar_t, point_t, ownership_t>& operator=(OtherLineSegmentType&& other)
+  KOKKOS_FUNCTION constexpr LineSegment<scalar_t, point_t, ownership_t>& operator=(OtherLineSegmentType&& other)
     requires(!std::is_same_v<OtherLineSegmentType, LineSegment<scalar_t, point_t, ownership_t>>)
   {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
@@ -170,25 +174,25 @@ class LineSegment {
 
   /// \brief Accessor for the start
   KOKKOS_FUNCTION
-  const point_t& start() const {
+  constexpr const point_t& start() const {
     return start_;
   }
 
   /// \brief Accessor for the start
   KOKKOS_FUNCTION
-  point_t& start() {
+  constexpr point_t& start() {
     return start_;
   }
 
   /// \brief Accessor for the end
   KOKKOS_FUNCTION
-  const point_t& end() const {
+  constexpr const point_t& end() const {
     return end_;
   }
 
   /// \brief Accessor for the end
   KOKKOS_FUNCTION
-  point_t& end() {
+  constexpr point_t& end() {
     return end_;
   }
   //@}
@@ -199,7 +203,7 @@ class LineSegment {
   /// \brief Set the start point
   /// \param[in] start The new start point.
   template <ValidPointType OtherPointType>
-  KOKKOS_FUNCTION void set_start(const OtherPointType& start) {
+  KOKKOS_FUNCTION constexpr void set_start(const OtherPointType& start) {
     start_ = start;
   }
 
@@ -208,7 +212,7 @@ class LineSegment {
   /// \param[in] y The y-coordinate.
   /// \param[in] z The z-coordinate.
   KOKKOS_FUNCTION
-  void set_start(const Scalar& x, const Scalar& y, const Scalar& z) {
+  constexpr void set_start(const Scalar& x, const Scalar& y, const Scalar& z) {
     start_[0] = x;
     start_[1] = y;
     start_[2] = z;
@@ -217,7 +221,7 @@ class LineSegment {
   /// \brief Set the end point
   /// \param[in] end The new end point.
   template <ValidPointType OtherPointType>
-  KOKKOS_FUNCTION void set_end(const OtherPointType& end) {
+  KOKKOS_FUNCTION constexpr void set_end(const OtherPointType& end) {
     end_ = end;
   }
 
@@ -226,7 +230,7 @@ class LineSegment {
   /// \param[in] y The y-coordinate.
   /// \param[in] z The z-coordinate.
   KOKKOS_FUNCTION
-  void set_end(const Scalar& x, const Scalar& y, const Scalar& z) {
+  constexpr void set_end(const Scalar& x, const Scalar& y, const Scalar& z) {
     end_[0] = x;
     end_[1] = y;
     end_[2] = z;
@@ -271,13 +275,15 @@ static_assert(ValidLineSegmentType<LineSegment<float>> && ValidLineSegmentType<c
 
 /// \brief Equality operator
 template <ValidLineSegmentType LineSegmentType1, ValidLineSegmentType LineSegmentType2>
-KOKKOS_FUNCTION bool operator==(const LineSegmentType1& line_segment1, const LineSegmentType2& line_segment2) {
+KOKKOS_FUNCTION constexpr bool operator==(const LineSegmentType1& line_segment1,
+                                          const LineSegmentType2& line_segment2) {
   return (line_segment1.start() == line_segment2.start()) && (line_segment1.end() == line_segment2.end());
 }
 
 /// \brief Inequality operator
 template <ValidLineSegmentType LineSegmentType1, ValidLineSegmentType LineSegmentType2>
-KOKKOS_FUNCTION bool operator!=(const LineSegmentType1& line_segment1, const LineSegmentType2& line_segment2) {
+KOKKOS_FUNCTION constexpr bool operator!=(const LineSegmentType1& line_segment1,
+                                          const LineSegmentType2& line_segment2) {
   return (line_segment1.start() != line_segment2.start()) || (line_segment1.end() != line_segment2.end());
 }
 

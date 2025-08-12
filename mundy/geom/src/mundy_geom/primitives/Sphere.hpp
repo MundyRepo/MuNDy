@@ -67,14 +67,14 @@ class Sphere {
   /// \brief Default constructor for owning Spheres. Default initializes the center and sets the radius to an invalid
   /// value of -1
   KOKKOS_FUNCTION
-  Sphere()
+  constexpr Sphere()
     requires std::is_same_v<OwnershipType, mundy::math::Ownership::Owns>
       : center_(scalar_t(), scalar_t(), scalar_t()), radius_(static_cast<scalar_t>(-1)) {
   }
 
   /// \brief No default constructor for viewing Spheres.
   KOKKOS_FUNCTION
-  Sphere()
+  constexpr Sphere()
     requires std::is_same_v<OwnershipType, mundy::math::Ownership::Views>
   = delete;
 
@@ -82,43 +82,43 @@ class Sphere {
   /// \param[in] center The center of the Sphere.
   /// \param[in] radius The radius of the Sphere.
   KOKKOS_FUNCTION
-  Sphere(const point_t& center, const scalar_t& radius) : center_(center), radius_(radius) {
+  constexpr Sphere(const point_t& center, const scalar_t& radius) : center_(center), radius_(radius) {
   }
 
   /// \brief Constructor to initialize the center and radius.
   /// \param[in] center The center of the Sphere.
   /// \param[in] radius The radius of the Sphere.
   template <typename OtherPointType>
-  KOKKOS_FUNCTION Sphere(const OtherPointType& center, const scalar_t& radius)
+  KOKKOS_FUNCTION constexpr Sphere(const OtherPointType& center, const scalar_t& radius)
     requires(!std::is_same_v<OtherPointType, point_t>)
       : center_(center), radius_(radius) {
   }
 
   /// \brief Destructor
   KOKKOS_DEFAULTED_FUNCTION
-  ~Sphere() = default;
+  constexpr ~Sphere() = default;
 
   /// \brief Deep copy constructor
   KOKKOS_FUNCTION
-  Sphere(const Sphere<scalar_t, point_t, ownership_t>& other) : center_(other.center_), radius_(other.radius_) {
+  constexpr Sphere(const Sphere<scalar_t, point_t, ownership_t>& other) : center_(other.center_), radius_(other.radius_) {
   }
 
   /// \brief Deep copy constructor with different sphere type
   template <typename OtherSphereType>
-  KOKKOS_FUNCTION Sphere(const OtherSphereType& other)
+  KOKKOS_FUNCTION constexpr Sphere(const OtherSphereType& other)
     requires(!std::is_same_v<OtherSphereType, Sphere<scalar_t, point_t, ownership_t>>)
       : center_(other.center_), radius_(other.radius_) {
   }
 
   /// \brief Deep move constructor
   KOKKOS_FUNCTION
-  Sphere(Sphere<scalar_t, point_t, ownership_t>&& other)
+  constexpr Sphere(Sphere<scalar_t, point_t, ownership_t>&& other)
       : center_(std::move(other.center_)), radius_(std::move(other.radius_)) {
   }
 
   /// \brief Deep move constructor
   template <typename OtherSphereType>
-  KOKKOS_FUNCTION Sphere(OtherSphereType&& other)
+  KOKKOS_FUNCTION constexpr Sphere(OtherSphereType&& other)
     requires(!std::is_same_v<OtherSphereType, Sphere<scalar_t, point_t, ownership_t>>)
       : center_(std::move(other.center_)), radius_(std::move(other.radius_)) {
   }
@@ -129,7 +129,7 @@ class Sphere {
 
   /// \brief Copy assignment operator
   KOKKOS_FUNCTION
-  Sphere<scalar_t, point_t, ownership_t>& operator=(const Sphere<scalar_t, point_t, ownership_t>& other) {
+  constexpr Sphere<scalar_t, point_t, ownership_t>& operator=(const Sphere<scalar_t, point_t, ownership_t>& other) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     center_ = other.center_;
     radius_ = other.radius_;
@@ -138,7 +138,7 @@ class Sphere {
 
   /// \brief Copy assignment operator
   template <typename OtherSphereType>
-  KOKKOS_FUNCTION Sphere<scalar_t, point_t, ownership_t>& operator=(const OtherSphereType& other)
+  KOKKOS_FUNCTION constexpr Sphere<scalar_t, point_t, ownership_t>& operator=(const OtherSphereType& other)
     requires(!std::is_same_v<OtherSphereType, Sphere<scalar_t, point_t, ownership_t>>)
   {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
@@ -149,7 +149,7 @@ class Sphere {
 
   /// \brief Move assignment operator
   KOKKOS_FUNCTION
-  Sphere<scalar_t, point_t, ownership_t>& operator=(Sphere<scalar_t, point_t, ownership_t>&& other) {
+  constexpr Sphere<scalar_t, point_t, ownership_t>& operator=(Sphere<scalar_t, point_t, ownership_t>&& other) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     center_ = std::move(other.center_);
     radius_ = std::move(other.radius_);
@@ -158,7 +158,7 @@ class Sphere {
 
   /// \brief Move assignment operator
   template <typename OtherSphereType>
-  KOKKOS_FUNCTION Sphere<scalar_t, point_t, ownership_t>& operator=(OtherSphereType&& other)
+  KOKKOS_FUNCTION constexpr Sphere<scalar_t, point_t, ownership_t>& operator=(OtherSphereType&& other)
     requires(!std::is_same_v<OtherSphereType, Sphere<scalar_t, point_t, ownership_t>>)
   {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
@@ -173,25 +173,25 @@ class Sphere {
 
   /// \brief Accessor for the center
   KOKKOS_FUNCTION
-  const point_t& center() const {
+  constexpr const point_t& center() const {
     return center_;
   }
 
   /// \brief Accessor for the center
   KOKKOS_FUNCTION
-  point_t& center() {
+  constexpr point_t& center() {
     return center_;
   }
 
   /// \brief Accessor for the radius
   KOKKOS_FUNCTION
-  const scalar_t& radius() const {
+  constexpr const scalar_t& radius() const {
     return radius_;
   }
 
   /// \brief Accessor for the radius
   KOKKOS_FUNCTION
-  scalar_t& radius() {
+  constexpr scalar_t& radius() {
     return radius_;
   }
   //@}
@@ -202,7 +202,7 @@ class Sphere {
   /// \brief Set the center
   /// \param[in] center The new center.
   template <ValidPointType OtherPointType>
-  KOKKOS_FUNCTION void set_center(const OtherPointType& center) {
+  KOKKOS_FUNCTION constexpr void set_center(const OtherPointType& center) {
     center_ = center;
   }
 
@@ -211,7 +211,7 @@ class Sphere {
   /// \param[in] y The y-coordinate.
   /// \param[in] z The z-coordinate.
   KOKKOS_FUNCTION
-  void set_center(const scalar_t& x, const scalar_t& y, const scalar_t& z) {
+  constexpr void set_center(const scalar_t& x, const scalar_t& y, const scalar_t& z) {
     center_[0] = x;
     center_[1] = y;
     center_[2] = z;
@@ -220,7 +220,7 @@ class Sphere {
   /// \brief Set the radius
   /// \param[in] radius The new radius.
   KOKKOS_FUNCTION
-  void set_radius(const scalar_t& radius) {
+  constexpr void set_radius(const scalar_t& radius) {
     radius_ = radius;
   }
   //@}
@@ -266,13 +266,13 @@ static_assert(ValidSphereType<Sphere<float>> && ValidSphereType<const Sphere<flo
 
 /// \brief Equality operator
 template <ValidSphereType SphereType1, ValidSphereType SphereType2>
-KOKKOS_FUNCTION bool operator==(const SphereType1& sphere1, const SphereType2& sphere2) {
+KOKKOS_FUNCTION constexpr bool operator==(const SphereType1& sphere1, const SphereType2& sphere2) {
   return (sphere1.radius() == sphere2.radius()) && (sphere1.center() == sphere2.center());
 }
 
 /// \brief Inequality operator
 template <ValidSphereType SphereType1, ValidSphereType SphereType2>
-KOKKOS_FUNCTION bool operator!=(const SphereType1& sphere1, const SphereType2& sphere2) {
+KOKKOS_FUNCTION constexpr bool operator!=(const SphereType1& sphere1, const SphereType2& sphere2) {
   return (sphere1.radius() != sphere2.radius()) || (sphere1.center() != sphere2.center());
 }
 

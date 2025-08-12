@@ -196,110 +196,110 @@ class AABB {
   //@{
 
   /// \brief Accesses the AABB as though it were an array of size 6 with the min then max corners.
-  KOKKOS_FUNCTION const scalar_t& operator[](const size_t& i) const {
+  KOKKOS_FUNCTION constexpr const scalar_t& operator[](const size_t& i) const {
     MUNDY_THROW_ASSERT(i < 6, std::out_of_range, "Index out of range");
     return i < 3 ? min_corner_[i] : max_corner_[i - 3];
   }
 
   /// \brief Accesses the AABB as though it were an array of size 6 with the min then max corners.
-  KOKKOS_FUNCTION scalar_t& operator[](const size_t& i) {
+  KOKKOS_FUNCTION constexpr scalar_t& operator[](const size_t& i) {
     MUNDY_THROW_ASSERT(i < 6, std::out_of_range, "Index out of range");
     return i < 3 ? min_corner_[i] : max_corner_[i - 3];
   }
 
   /// \brief Accessor for the minimum corner
   KOKKOS_FUNCTION
-  const min_point_t& min_corner() const {
+  constexpr const min_point_t& min_corner() const {
     return min_corner_;
   }
 
   /// \brief Accessor for the minimum corner
   KOKKOS_FUNCTION
-  min_point_t& min_corner() {
+  constexpr min_point_t& min_corner() {
     return min_corner_;
   }
 
   /// \brief Accessor for the maximum corner
   KOKKOS_FUNCTION
-  const max_point_t& max_corner() const {
+  constexpr const max_point_t& max_corner() const {
     return max_corner_;
   }
 
   /// \brief Accessor for the maximum corner
   KOKKOS_FUNCTION
-  max_point_t& max_corner() {
+  constexpr max_point_t& max_corner() {
     return max_corner_;
   }
 
   /// \brief Accessor for x_min
   KOKKOS_FUNCTION
-  const scalar_t& x_min() const {
+  constexpr const scalar_t& x_min() const {
     return min_corner_[0];
   }
 
   /// \brief Accessor for x_min
   KOKKOS_FUNCTION
-  scalar_t& x_min() {
+  constexpr scalar_t& x_min() {
     return min_corner_[0];
   }
 
   /// \brief Accessor for y_min
   KOKKOS_FUNCTION
-  const scalar_t& y_min() const {
+  constexpr const scalar_t& y_min() const {
     return min_corner_[1];
   }
 
   /// \brief Accessor for y_min
   KOKKOS_FUNCTION
-  scalar_t& y_min() {
+  constexpr scalar_t& y_min() {
     return min_corner_[1];
   }
 
   /// \brief Accessor for z_min
   KOKKOS_FUNCTION
-  const scalar_t& z_min() const {
+  constexpr const scalar_t& z_min() const {
     return min_corner_[2];
   }
 
   /// \brief Accessor for z_min
   KOKKOS_FUNCTION
-  scalar_t& z_min() {
+  constexpr scalar_t& z_min() {
     return min_corner_[2];
   }
 
   /// \brief Accessor for x_max
   KOKKOS_FUNCTION
-  const scalar_t& x_max() const {
+  constexpr const scalar_t& x_max() const {
     return max_corner_[0];
   }
 
   /// \brief Accessor for x_max
   KOKKOS_FUNCTION
-  scalar_t& x_max() {
+  constexpr scalar_t& x_max() {
     return max_corner_[0];
   }
 
   /// \brief Accessor for y_max
   KOKKOS_FUNCTION
-  const scalar_t& y_max() const {
+  constexpr const scalar_t& y_max() const {
     return max_corner_[1];
   }
 
   /// \brief Accessor for y_max
   KOKKOS_FUNCTION
-  scalar_t& y_max() {
+  constexpr scalar_t& y_max() {
     return max_corner_[1];
   }
 
   /// \brief Accessor for z_max
   KOKKOS_FUNCTION
-  const scalar_t& z_max() const {
+  constexpr const scalar_t& z_max() const {
     return max_corner_[2];
   }
 
   /// \brief Accessor for z_max
   KOKKOS_FUNCTION
-  scalar_t& z_max() {
+  constexpr scalar_t& z_max() {
     return max_corner_[2];
   }
   //@}
@@ -310,7 +310,7 @@ class AABB {
   /// \brief Set the minimum corner
   /// \param[in] min_corner The new minimum corner.
   template <ValidPointType OtherPointType>
-  KOKKOS_FUNCTION void set_min_corner(const OtherPointType& min_corner) {
+  KOKKOS_FUNCTION constexpr void set_min_corner(const OtherPointType& min_corner) {
     min_corner_ = min_corner;
   }
 
@@ -319,7 +319,7 @@ class AABB {
   /// \param[in] y The new y-coordinate.
   /// \param[in] z The new z-coordinate.
   KOKKOS_FUNCTION
-  void set_min_corner(const scalar_t& x, const scalar_t& y, const scalar_t& z) {
+  constexpr void set_min_corner(const scalar_t& x, const scalar_t& y, const scalar_t& z) {
     min_corner_[0] = x;
     min_corner_[1] = y;
     min_corner_[2] = z;
@@ -328,7 +328,7 @@ class AABB {
   /// \brief Set the maximum corner
   /// \param[in] max_corner The new maximum corner.
   template <ValidPointType OtherPointType>
-  KOKKOS_FUNCTION void set_max_corner(const OtherPointType& max_corner) {
+  KOKKOS_FUNCTION constexpr void set_max_corner(const OtherPointType& max_corner) {
     max_corner_ = max_corner;
   }
 
@@ -337,7 +337,7 @@ class AABB {
   /// \param[in] y The new y-coordinate.
   /// \param[in] z The new z-coordinate.
   KOKKOS_FUNCTION
-  void set_max_corner(const scalar_t& x, const scalar_t& y, const scalar_t& z) {
+  constexpr void set_max_corner(const scalar_t& x, const scalar_t& y, const scalar_t& z) {
     max_corner_[0] = x;
     max_corner_[1] = y;
     max_corner_[2] = z;
@@ -432,13 +432,13 @@ static_assert(ValidAABBType<AABB<float>> && ValidAABBType<const AABB<float>> && 
 
 /// \brief Equality operator
 template <ValidAABBType AABBType1, ValidAABBType AABBType2>
-KOKKOS_FUNCTION bool operator==(const AABBType1& aabb1, const AABBType2& aabb2) {
+KOKKOS_FUNCTION constexpr bool operator==(const AABBType1& aabb1, const AABBType2& aabb2) {
   return (aabb1.min_corner() == aabb2.min_corner()) && (aabb1.max_corner() == aabb2.max_corner());
 }
 
 /// \brief Inequality operator
 template <ValidAABBType AABBType1, ValidAABBType AABBType2>
-KOKKOS_FUNCTION bool operator!=(const AABBType1& aabb1, const AABBType2& aabb2) {
+KOKKOS_FUNCTION constexpr bool operator!=(const AABBType1& aabb1, const AABBType2& aabb2) {
   return (aabb1.min_corner() != aabb2.min_corner()) || (aabb1.max_corner() != aabb2.max_corner());
 }
 
@@ -450,7 +450,7 @@ std::ostream& operator<<(std::ostream& os, const AABB<Scalar>& aabb) {
 
 /// \brief Check if two AABBs intersect
 template <ValidAABBType AABBType1, ValidAABBType AABBType2>
-KOKKOS_FUNCTION bool intersects(const AABBType1& aabb1, const AABBType2& aabb2) {
+KOKKOS_FUNCTION constexpr bool intersects(const AABBType1& aabb1, const AABBType2& aabb2) {
   const auto& amax = aabb1.max_corner();
   const auto& bmin = aabb2.min_corner();
   if (amax[0] < bmin[0] || amax[1] < bmin[1] || amax[2] < bmin[2]) {

@@ -76,14 +76,14 @@ class Ring {
   /// \brief Default constructor for owning Rings. Default initializes the center and sets the radius to an
   /// invalid value of -1
   KOKKOS_FUNCTION
-  Ring()
+  constexpr Ring()
     requires std::is_same_v<OwnershipType, mundy::math::Ownership::Owns>
       : center_circle_(), minor_radius_(static_cast<scalar_t>(-1)) {
   }
 
   /// \brief No default constructor for viewing Rings.
   KOKKOS_FUNCTION
-  Ring()
+  constexpr Ring()
     requires std::is_same_v<OwnershipType, mundy::math::Ownership::Views>
   = delete;
 
@@ -93,7 +93,7 @@ class Ring {
   /// \param[in] major_radius The radius of the center circle of the Ring.
   /// \param[in] minor_radius The radius of the tube around said circle.
   KOKKOS_FUNCTION
-  Ring(const point_t& center, const orientation_t& orientation, const scalar_t& major_radius,
+  constexpr Ring(const point_t& center, const orientation_t& orientation, const scalar_t& major_radius,
        const scalar_t& minor_radius)
       : center_circle_(center, orientation, major_radius), minor_radius_(minor_radius) {
   }
@@ -104,7 +104,7 @@ class Ring {
   /// \param[in] major_radius The radius of the center circle of the Ring.
   /// \param[in] minor_radius The radius of the tube around said circle.
   template <ValidPointType OtherPointType, mundy::math::ValidQuaternionType OtherQuaternionType>
-  KOKKOS_FUNCTION Ring(const OtherPointType& center, const OtherQuaternionType& orientation,
+  KOKKOS_FUNCTION constexpr Ring(const OtherPointType& center, const OtherQuaternionType& orientation,
                        const scalar_t& major_radius, const scalar_t& minor_radius)
     requires(!std::is_same_v<OtherPointType, point_t> || !std::is_same_v<OtherQuaternionType, orientation_t>)
       : center_circle_(center, orientation, major_radius), minor_radius_(minor_radius) {
@@ -112,30 +112,30 @@ class Ring {
 
   /// \brief Destructor
   KOKKOS_DEFAULTED_FUNCTION
-  ~Ring() = default;
+  constexpr ~Ring() = default;
 
   /// \brief Deep copy constructor
   KOKKOS_FUNCTION
-  Ring(const Ring<scalar_t, point_t, orientation_t, ownership_t>& other)
+  constexpr Ring(const Ring<scalar_t, point_t, orientation_t, ownership_t>& other)
       : center_circle_(other.center_circle_), minor_radius_(other.minor_radius_) {
   }
 
   /// \brief Deep copy constructor with different ring type
   template <typename OtherRingType>
-  KOKKOS_FUNCTION Ring(const OtherRingType& other)
+  KOKKOS_FUNCTION constexpr Ring(const OtherRingType& other)
     requires(!std::is_same_v<OtherRingType, Ring<scalar_t, point_t, orientation_t, ownership_t>>)
       : center_circle_(other.center_circle_), minor_radius_(other.minor_radius_) {
   }
 
   /// \brief Deep move constructor
   KOKKOS_FUNCTION
-  Ring(Ring<scalar_t, point_t, orientation_t, ownership_t>&& other)
+  constexpr Ring(Ring<scalar_t, point_t, orientation_t, ownership_t>&& other)
       : center_circle_(std::move(other.center_circle_)), minor_radius_(std::move(other.minor_radius_)) {
   }
 
   /// \brief Deep move constructor
   template <typename OtherRingType>
-  KOKKOS_FUNCTION Ring(OtherRingType&& other)
+  KOKKOS_FUNCTION constexpr Ring(OtherRingType&& other)
     requires(!std::is_same_v<OtherRingType, Ring<scalar_t, point_t, orientation_t, ownership_t>>)
       : center_circle_(std::move(other.center_circle_)), minor_radius_(std::move(other.minor_radius_)) {
   }
@@ -146,7 +146,7 @@ class Ring {
 
   /// \brief Copy assignment operator
   KOKKOS_FUNCTION
-  Ring<scalar_t, point_t, orientation_t, ownership_t>& operator=(
+  constexpr Ring<scalar_t, point_t, orientation_t, ownership_t>& operator=(
       const Ring<scalar_t, point_t, orientation_t, ownership_t>& other) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     center_circle_ = other.center_circle_;
@@ -156,7 +156,7 @@ class Ring {
 
   /// \brief Copy assignment operator
   template <typename OtherRingType>
-  KOKKOS_FUNCTION Ring<scalar_t, point_t, orientation_t, ownership_t>& operator=(const OtherRingType& other)
+  KOKKOS_FUNCTION constexpr Ring<scalar_t, point_t, orientation_t, ownership_t>& operator=(const OtherRingType& other)
     requires(!std::is_same_v<OtherRingType, Ring<scalar_t, point_t, orientation_t, ownership_t>>)
   {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
@@ -167,7 +167,7 @@ class Ring {
 
   /// \brief Move assignment operator
   KOKKOS_FUNCTION
-  Ring<scalar_t, point_t, orientation_t, ownership_t>& operator=(
+  constexpr Ring<scalar_t, point_t, orientation_t, ownership_t>& operator=(
       Ring<scalar_t, point_t, orientation_t, ownership_t>&& other) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     center_circle_ = std::move(other.center_circle_);
@@ -177,7 +177,7 @@ class Ring {
 
   /// \brief Move assignment operator
   template <typename OtherRingType>
-  KOKKOS_FUNCTION Ring<scalar_t, point_t, orientation_t, ownership_t>& operator=(OtherRingType&& other)
+  KOKKOS_FUNCTION constexpr Ring<scalar_t, point_t, orientation_t, ownership_t>& operator=(OtherRingType&& other)
     requires(!std::is_same_v<OtherRingType, Ring<scalar_t, point_t, orientation_t, ownership_t>>)
   {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
@@ -192,55 +192,55 @@ class Ring {
 
   /// \brief Accessor for the center line (a Circle3D)
   KOKKOS_FUNCTION
-  const Circle3D<scalar_t, point_t, orientation_t, ownership_t>& center_circle() const {
+  constexpr const Circle3D<scalar_t, point_t, orientation_t, ownership_t>& center_circle() const {
     return center_circle_;
   }
 
   /// \brief Accessor for the center
   KOKKOS_FUNCTION
-  const point_t& center() const {
+  constexpr const point_t& center() const {
     return center_circle_.center();
   }
 
   /// \brief Accessor for the center
   KOKKOS_FUNCTION
-  point_t& center() {
+  constexpr point_t& center() {
     return center_circle_.center();
   }
 
   /// \brief Accessor for the orientation
   KOKKOS_FUNCTION
-  const orientation_t& orientation() const {
+  constexpr const orientation_t& orientation() const {
     return center_circle_.orientation();
   }
 
   /// \brief Accessor for the orientation
   KOKKOS_FUNCTION
-  orientation_t& orientation() {
+  constexpr orientation_t& orientation() {
     return center_circle_.orientation();
   }
 
   /// \brief Accessor for the major radius
   KOKKOS_FUNCTION
-  const scalar_t& major_radius() const {
+  constexpr const scalar_t& major_radius() const {
     return center_circle_.major_radius();
   }
 
   /// \brief Accessor for the major radius
   KOKKOS_FUNCTION
-  scalar_t& major_radius() {
+  constexpr scalar_t& major_radius() {
     return center_circle_.major_radius();
   }
 
   /// \brief Accessor for the minor radius
   KOKKOS_FUNCTION
-  const scalar_t& minor_radius() const {
+  constexpr const scalar_t& minor_radius() const {
     return minor_radius_;
   }
 
   /// \brief Accessor for the minor radius
   KOKKOS_FUNCTION
-  scalar_t& minor_radius() {
+  constexpr scalar_t& minor_radius() {
     return minor_radius_;
   }
   //@}
@@ -251,7 +251,7 @@ class Ring {
   /// \brief Set the center
   /// \param[in] center The new center.
   template <ValidPointType OtherPointType>
-  KOKKOS_FUNCTION void set_center(const OtherPointType& center) {
+  KOKKOS_FUNCTION constexpr void set_center(const OtherPointType& center) {
     center_circle_.set_center(center);
   }
 
@@ -260,14 +260,14 @@ class Ring {
   /// \param[in] y The y-coordinate.
   /// \param[in] z The z-coordinate.
   KOKKOS_FUNCTION
-  void set_center(const scalar_t& x, const scalar_t& y, const scalar_t& z) {
+  constexpr void set_center(const scalar_t& x, const scalar_t& y, const scalar_t& z) {
     center_circle_.set_center(x, y, z);
   }
 
   /// \brief Set the orientation
   /// \param[in] orientation The new orientation.
   KOKKOS_FUNCTION
-  void set_orientation(const orientation_t& orientation) {
+  constexpr void set_orientation(const orientation_t& orientation) {
     center_circle_.set_orientation(orientation);
   }
 
@@ -277,21 +277,21 @@ class Ring {
   /// \param[in] qy The y-component of the orientation quaternion.
   /// \param[in] qz The z-component of the orientation quaternion.
   KOKKOS_FUNCTION
-  void set_orientation(const scalar_t& qw, const scalar_t& qx, const scalar_t& qy, const scalar_t& qz) {
+  constexpr void set_orientation(const scalar_t& qw, const scalar_t& qx, const scalar_t& qy, const scalar_t& qz) {
     center_circle_.set_orientation(qw, qx, qy, qz);
   }
 
   /// \brief Set the major radius
   /// \param[in] major_radius The new major radius.
   KOKKOS_FUNCTION
-  void set_major_radius(const scalar_t& major_radius) {
+  constexpr void set_major_radius(const scalar_t& major_radius) {
     center_circle_.set_major_radius(major_radius);
   }
 
   /// \brief Set the minor radius
   /// \param[in] minor_radius The new minor radius.
   KOKKOS_FUNCTION
-  void set_minor_radius(const scalar_t& minor_radius) {
+  constexpr void set_minor_radius(const scalar_t& minor_radius) {
     minor_radius_ = minor_radius;
   }
   //@}
@@ -344,14 +344,14 @@ static_assert(ValidRingType<Ring<float>> && ValidRingType<const Ring<float>> && 
 
 /// \brief Equality operator
 template <ValidRingType RingType1, ValidRingType RingType2>
-KOKKOS_FUNCTION bool operator==(const RingType1& ring1, const RingType2& ring2) {
+KOKKOS_FUNCTION constexpr bool operator==(const RingType1& ring1, const RingType2& ring2) {
   return (ring1.major_radius() == ring2.major_radius()) && (ring1.minor_radius() == ring2.minor_radius()) &&
          (ring1.center() == ring2.center()) && (ring1.orientation() == ring2.orientation());
 }
 
 /// \brief Inequality operator
 template <ValidRingType RingType1, ValidRingType RingType2>
-KOKKOS_FUNCTION bool operator!=(const RingType1& ring1, const RingType2& ring2) {
+KOKKOS_FUNCTION constexpr bool operator!=(const RingType1& ring1, const RingType2& ring2) {
   return (ring1.major_radius() != ring2.major_radius()) || (ring1.minor_radius() != ring2.minor_radius()) ||
          (ring1.center() != ring2.center()) || (ring1.orientation() != ring2.orientation());
 }
