@@ -32,6 +32,7 @@
 // Mundy
 #include <mundy_core/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
 #include <mundy_geom/primitives.hpp>    // for mundy::geom::Point, mundy::geom::LineSegment, ...
+#include <mundy_geom/transform.hpp>     // for mundy::geom::translate
 #include <mundy_math/Matrix3.hpp>       // for mundy::math::Matrix3
 #include <mundy_math/Quaternion.hpp>    // for mundy::math::Quaternion
 #include <mundy_math/Tolerance.hpp>     // for mundy::math::get_zero_tolerance
@@ -94,6 +95,18 @@ class EuclideanMetric {
   KOKKOS_INLINE_FUNCTION constexpr Point<Scalar> wrap(const Point<Scalar>& point) const {
     return point;
   }
+
+  /// \brief Direct lattice vectors (return as the columns of a matrix)
+  KOKKOS_INLINE_FUNCTION constexpr math::Matrix3<double> direct_lattice_vectors() const {
+    return math::Matrix3<double>::identity();
+  }
+
+  /// \brief Shift a point by a given number of lattice images in each direction (free space does nothing)
+  template <typename Scalar, typename Integer>
+  KOKKOS_INLINE_FUNCTION constexpr Point<Scalar> shift_image(const Point<Scalar>& point,
+                                                             [[maybe_unused]] const math::Vector3<Integer>& num_images) const {
+    return point;
+  }
 };  // EuclideanMetric
 
 template <typename Scalar>
@@ -141,6 +154,18 @@ class PeriodicMetric {
   KOKKOS_INLINE_FUNCTION
   constexpr OurPoint wrap(const OurPoint& point) const {
     return from_fractional(impl::frac_wrap_to_unit_cell<int64_t>(to_fractional(point)));
+  }
+
+  /// \brief Direct lattice vectors (return as the columns of a matrix)
+  KOKKOS_INLINE_FUNCTION constexpr OurMatrix3 direct_lattice_vectors() const {
+    return h_;
+  }
+
+  /// \brief Shift a point by a given number of lattice images in each direction
+  template<typename Integer>
+  KOKKOS_INLINE_FUNCTION
+  constexpr OurPoint shift_image(const OurPoint& point, const math::Vector3<Integer>& num_images) const {
+    return  translate(point, h_ * num_images);
   }
 
  private:
@@ -194,6 +219,18 @@ class PeriodicScaledMetric {
     return from_fractional(impl::frac_wrap_to_unit_cell<int64_t>(to_fractional(point)));
   }
 
+  /// \brief Direct lattice vectors (return as the columns of a matrix)
+  KOKKOS_INLINE_FUNCTION constexpr OurMatrix3 direct_lattice_vectors() const {
+    return OurMatrix3::diagonal(scale_);
+  }
+
+  /// \brief Shift a point by a given number of lattice images in each direction
+  template<typename Integer>
+  KOKKOS_INLINE_FUNCTION
+  constexpr OurPoint shift_image(const OurPoint& point, const math::Vector3<Integer>& num_images) const {
+    return  translate(point, math::elementwise_multiply(scale_, num_images));
+  }
+
  private:
   OurVector3 scale_;      ///< Unit cell scaling factors
   OurVector3 scale_inv_;  ///< Inverse of the scaling factors
@@ -219,6 +256,94 @@ KOKKOS_INLINE_FUNCTION constexpr PeriodicScaledMetric<Scalar> periodic_scaled_me
     const math::Vector3<Scalar>& cell_size) {
   return PeriodicScaledMetric<Scalar>{cell_size};
 }
+//@}
+
+//! \name Get the periodic reference point for an object
+//@{
+/*
+
+
+The set of reference points:
+                Point -> center
+          LineSegment -> start
+                 Line -> center
+             Circle3D -> center
+             VSegment -> start
+                 AABB -> min_corner
+               Sphere -> center
+       Spherocylinder -> center
+SpherocylinderSegment -> start
+                 Ring -> center
+            Ellipsoid -> center
+*/
+
+template <typename Scalar>
+KOKKOS_INLINE_FUNCTION Point<Scalar> reference_point(const Point<Scalar>& point) {
+  return point;
+}
+
+template <typename Scalar>
+KOKKOS_INLINE_FUNCTION Point<Scalar> reference_point(const Line<Scalar>& line) {
+  return line.center();
+}
+
+template <typename Scalar>
+KOKKOS_INLINE_FUNCTION Point<Scalar> reference_point(const LineSegment<Scalar>& line_segment) {
+  return line_segment.start();
+}
+
+template <typename Scalar>
+KOKKOS_INLINE_FUNCTION Point<Scalar> reference_point(const Circle3D<Scalar>& circle) {
+  return circle.center();
+}
+
+template <typename Scalar>
+KOKKOS_INLINE_FUNCTION Point<Scalar> reference_point(const VSegment<Scalar>& v_segment) {
+  return v_segment.start();
+}
+
+template <typename Scalar>
+KOKKOS_INLINE_FUNCTION Point<Scalar> reference_point(const AABB<Scalar>& aabb) {
+  return aabb.min_corner();
+}
+
+template <typename Scalar>
+KOKKOS_INLINE_FUNCTION Point<Scalar> reference_point(const Sphere<Scalar>& sphere) {
+  return sphere.center();
+}
+
+template <typename Scalar>
+KOKKOS_INLINE_FUNCTION Point<Scalar> reference_point(const Spherocylinder<Scalar>& spherocylinder) {
+  return spherocylinder.center();
+}
+
+template <typename Scalar>
+KOKKOS_INLINE_FUNCTION Point<Scalar> reference_point(const SpherocylinderSegment<Scalar>& spherocylinder_segment) {
+  return spherocylinder_segment.start();
+}
+
+template <typename Scalar>
+KOKKOS_INLINE_FUNCTION Point<Scalar> reference_point(const Ring<Scalar>& ring) {
+  return ring.center();
+}
+
+template <typename Scalar>
+KOKKOS_INLINE_FUNCTION Point<Scalar> reference_point(const Ellipsoid<Scalar>& ellipsoid) {
+  return ellipsoid.center();
+}
+//@}
+
+//! \name Shift image functions to take an object and shift it by a lattice vector
+//@{
+
+/// \brief Shift an object by a lattice vector
+template <typename Integer, typename Object, typename Metric>
+KOKKOS_INLINE_FUNCTION Object shift_image(const Object& obj,                             //
+                                          const math::Vector3<Integer>& lattice_vector,  //
+                                          const Metric& metric) {
+  return translate(obj, metric.shift_image(reference_point(obj), lattice_vector));
+}
+
 //@}
 
 //! \name Rigid wrapping functions (based on a consistent reference point)
@@ -813,7 +938,7 @@ KOKKOS_INLINE_FUNCTION void unwrap_points_to_ref_inplace(Ring<Scalar>& ring, con
 /// \brief Unwrap all points of an ellipsoid into the same image as the reference point
 template <typename Scalar, typename Metric>
 KOKKOS_INLINE_FUNCTION Ellipsoid<Scalar> unwrap_points_to_ref(const Ellipsoid<Scalar>& ellipsoid, const Metric& metric,
-                                                               const Point<Scalar>& ref_point) {
+                                                              const Point<Scalar>& ref_point) {
   auto new_center = unwrap_points_to_ref(ellipsoid.center(), metric, ref_point);
   return Ellipsoid<Scalar>(new_center, ellipsoid.orientation(), ellipsoid.radii());
 }
@@ -821,7 +946,7 @@ KOKKOS_INLINE_FUNCTION Ellipsoid<Scalar> unwrap_points_to_ref(const Ellipsoid<Sc
 /// \brief Unwrap all points of an ellipsoid into the same image as the reference point (inplace)
 template <typename Scalar, typename Metric>
 KOKKOS_INLINE_FUNCTION void unwrap_points_to_ref_inplace(Ellipsoid<Scalar>& ellipsoid, const Metric& metric,
-                                                           const Point<Scalar>& ref_point) {
+                                                         const Point<Scalar>& ref_point) {
   unwrap_points_to_ref_inplace(ellipsoid.center(), metric, ref_point);
 }
 //@}

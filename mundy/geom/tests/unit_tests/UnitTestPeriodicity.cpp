@@ -491,6 +491,55 @@ struct test_unwrap_to_ref_impl {
   }
 };
 
+struct test_shift_image_impl {
+  using return_type = bool;
+
+  template <typename ShapeTraits, typename RNG, typename Metric>
+  KOKKOS_INLINE_FUNCTION return_type operator()(ShapeTraits,                               //
+                                                const AABB<double>& box,                   //
+                                                const math::Vector3<int>& lattice_vector,  //
+                                                RNG& rng,                                  //
+                                                const Metric& metric) const {
+    constexpr unsigned num_points = ShapeTraits::num_points;
+    Kokkos::Array<math::Vector3<double>, num_points> original_displacements;
+    Kokkos::Array<math::Vector3<double>, num_points> shifted_displacements;
+
+    auto s = ShapeTraits::generate(box, rng);
+    Point<double> ref_point = ShapeTraits::reference_point(s);
+
+    unsigned i = 0;
+    ShapeTraits::for_each_point(s, [&](const auto& point) {
+      original_displacements[i] = point - ref_point;
+      ++i;
+    });
+
+    s = shift_image(s, lattice_vector, metric);
+    Point<double> shifted_ref_point = ShapeTraits::reference_point(s);
+
+    auto shifted_ref_displacement = shifted_ref_point - ref_point;
+    auto expected_displacement = metric.shift_image(ref_point, lattice_vector);
+    bool displacements_match =
+        math::norm(shifted_ref_displacement - expected_displacement) < math::get_relaxed_zero_tolerance<double>();
+
+    i = 0;
+    ShapeTraits::for_each_point(s, [&](const auto& point) {
+      shifted_displacements[i] = point - shifted_ref_point;
+      ++i;
+    });
+
+    // Check that all displacements are the same before and after wrapping
+    bool all_displacements_equal = true;
+    for (unsigned j = 0; j < num_points; ++j) {
+      if (math::norm(original_displacements[j] - shifted_displacements[j]) >
+          math::get_relaxed_zero_tolerance<double>()) {
+        all_displacements_equal = false;
+      }
+    }
+
+    return displacements_match && all_displacements_equal;
+  }
+};
+
 template <typename Metric>
 KOKKOS_INLINE_FUNCTION bool test_wrap_rigid(TestObjectType type, const AABB<double>& primary_box,
                                             const AABB<double>& other_box, size_t seed, size_t counter,
@@ -522,6 +571,17 @@ KOKKOS_INLINE_FUNCTION bool test_unwrap_to_ref(TestObjectType type, const AABB<d
   using Functor = test_unwrap_to_ref_impl;
   apply_functor<Functor> apply;
   return apply(type, primary_box, disjoint_box, rng, metric);
+}
+
+template <typename Metric>
+KOKKOS_INLINE_FUNCTION bool test_shift_image(TestObjectType type, const AABB<double>& box,
+                                             const math::Vector3<int>& lattice_vector,  //
+                                             size_t seed, size_t counter, const Metric& metric) {
+  openrand::Philox rng(seed, counter);
+
+  using Functor = test_shift_image_impl;
+  apply_functor<Functor> apply;
+  return apply(type, box, lattice_vector, rng, metric);
 }
 
 //! \brief Unit tests
@@ -811,6 +871,42 @@ TEST(PeriodicMetric, UnwrapPointsSpanning) {
         << "Unwrapped line segment end point does not match original value.";
 
     ++counter;
+  }
+}
+
+TEST(PeriodicMetric, ShiftImage) {
+  size_t seed = 1234;
+  size_t counter = 0;
+  size_t num_trials = 1;  // Number of trials for each pair
+
+  math::Vector3<double> cell_size{100.0, 100.0, 100.0};
+  AABB<double> box{0.0, 0.0, 0.0, 100.0, 100.0, 100.0};
+  auto disjoint_box = translate(box, math::Vector3<double>{100.0, 100.0, 100.0});
+
+  auto periodic_metric = periodic_metric_from_unit_cell(cell_size);
+  auto periodic_metric_scale_only = periodic_scaled_metric_from_unit_cell(cell_size);
+  EuclideanMetric euclidean_metric{};
+
+  std::vector<TestObjectType> test_types = {TestObjectType::POINT,        TestObjectType::LINE,
+                                            TestObjectType::LINE_SEGMENT, TestObjectType::SPHERE,
+                                            TestObjectType::ELLIPSOID,    TestObjectType::CIRCLE_3D};
+
+  for (const auto& type : test_types) {
+    for (size_t t = 0; t < num_trials; ++t) {
+      // Generate a random lattice vector between -10 and 10 in each direction
+      openrand::Philox rng(seed, counter);
+      math::Vector3<int> lattice_vector{rng.uniform<int>(-10, 10),
+                                        rng.uniform<int>(-10, 10),
+                                        rng.uniform<int>(-10, 10)};
+      EXPECT_TRUE(test_shift_image(type, disjoint_box, lattice_vector, seed, counter, periodic_metric))
+          << "Shift image for type " << type << " failed. For the periodic metric.";
+      EXPECT_TRUE(test_shift_image(type, disjoint_box, lattice_vector, seed, counter, periodic_metric_scale_only))
+          << "Shift image for type " << type << " failed. For the periodic metric (scale only).";
+      EXPECT_TRUE(test_shift_image(type, disjoint_box, lattice_vector, seed, counter, euclidean_metric))
+          << "Shift image for type " << type << " failed. For the free space metric.";
+
+      ++counter;
+    }
   }
 }
 
