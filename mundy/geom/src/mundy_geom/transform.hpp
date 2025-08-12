@@ -210,7 +210,7 @@ Supported shapes:
   - LineSegment
   - VSegment
   - Circle3D
-  - AABB
+  - AABB (not valid)
   - Sphere
   - Spherocylinder
   - SpherocylinderSegment
