@@ -49,20 +49,6 @@ tribits_add_executable_and_test(
   )
 
 tribits_add_executable_and_test(
-  UnitTestPeriodicMetric
-  SOURCES
-  UnitTestPeriodicMetric.cpp
-    ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
-  )
-
-tribits_add_executable_and_test(
-  UnitTestPeriodicDistance
-  SOURCES
-  UnitTestPeriodicDistance.cpp
-    ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
-  )
-
-tribits_add_executable_and_test(
   UnitTestPeriodicity
   SOURCES
   UnitTestPeriodicity.cpp

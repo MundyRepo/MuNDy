@@ -33,97 +33,6 @@ namespace mundy {
 
 namespace geom {
 
-//! \name Periodic space distance calculations
-//@{
-
-/// \brief Compute the shared normal signed separation distance between two points according to a metric
-/// \tparam Scalar The scalar type
-/// \tparam Metric The metric type
-/// \param[in] point1 The first point
-/// \param[in] point2 The second point
-/// \param[in] metric The metric to use for the distance calculation
-template <typename Scalar, typename Metric>
-KOKKOS_FUNCTION Scalar distance_pbc([[maybe_unused]] const SharedNormalSigned distance_type,  //
-                                    const Point<Scalar>& point1,                              //
-                                    const Point<Scalar>& point2, const Metric& metric) {
-  return mundy::math::norm(metric(point1, point2));
-}
-
-/// \brief Compute the shared normal signed separation distance between two points according to a metric
-/// \tparam Scalar The scalar type
-/// \tparam Metric The metric type
-/// \param[in] point1 The first point
-/// \param[in] point2 The second point
-/// \param[in] metric The metric to use for the distance calculation
-/// \param[out] sep The separation vector (from point1 to point2)
-template <typename Scalar, typename Metric>
-KOKKOS_FUNCTION Scalar distance_pbc([[maybe_unused]] const SharedNormalSigned distance_type,  //
-                                    const Point<Scalar>& point1,                              //
-                                    const Point<Scalar>& point2,                              //
-                                    const Metric& metric, mundy::math::Vector3<Scalar>& sep) {
-  sep = metric(point1, point2);
-  return mundy::math::norm(sep);
-}
-
-/// \brief Compute the euclidean distance between two points according to a metric
-/// \tparam Scalar The scalar type
-/// \tparam Metric The metric type
-/// \param[in] point1 The first point
-/// \param[in] point2 The second point
-/// \param[in] metric The metric to use for the distance calculation
-template <typename Scalar, typename Metric>
-KOKKOS_FUNCTION Scalar distance_pbc([[maybe_unused]] const Euclidean distance_type,  //
-                                    const Point<Scalar>& point1,                     //
-                                    const Point<Scalar>& point2,                     //
-                                    const Metric& metric) {
-  return distance_pbc(SharedNormalSigned{}, point1, point2, metric);
-}
-
-/// \brief Compute the euclidean distance between two points according to a metric
-/// \tparam Scalar The scalar type
-/// \tparam Metric The metric type
-/// \param[in] point1 The first point
-/// \param[in] point2 The second point
-/// \param[in] metric The metric to use for the distance calculation
-/// \param[out] sep The separation vector (from point1 to point2)
-template <typename Scalar, typename Metric>
-KOKKOS_FUNCTION Scalar distance_pbc([[maybe_unused]] const Euclidean distance_type,  //
-                                    const Point<Scalar>& point1,                     //
-                                    const Point<Scalar>& point2,                     //
-                                    const Metric& metric,                            //
-                                    mundy::math::Vector3<Scalar>& sep) {
-  return distance_pbc(SharedNormalSigned{}, point1, point2, metric, sep);
-}
-
-/// \brief Compute the shared normal signed separation distance between two points according to a metric
-/// \tparam Scalar The scalar type
-/// \tparam Metric The metric type
-/// \param[in] point1 The first point
-/// \param[in] point2 The second point
-/// \param[in] metric The metric to use for the distance calculation
-template <typename Scalar, typename Metric>
-KOKKOS_FUNCTION Scalar distance_pbc(const Point<Scalar>& point1,  //
-                                    const Point<Scalar>& point2,  //
-                                    const Metric& metric) {
-  return distance_pbc(SharedNormalSigned{}, point1, point2, metric);
-}
-
-/// \brief Compute the euclidean distance between two points according to a metric
-/// \tparam Scalar The scalar type
-/// \tparam Metric The metric type
-/// \param[in] point1 The first point
-/// \param[in] point2 The second point
-/// \param[in] metric The metric to use for the distance calculation
-/// \param[out] sep The separation vector (from point1 to point2)
-template <typename Scalar, typename Metric>
-KOKKOS_FUNCTION Scalar distance_pbc(const Point<Scalar>& point1,  //
-                                    const Point<Scalar>& point2,  //
-                                    const Metric& metric,         //
-                                    mundy::math::Vector3<Scalar>& sep) {
-  return distance_pbc(SharedNormalSigned{}, point1, point2, metric, sep);
-}
-//@}
-
 //! \name Free space distance calculations
 //@{
 
@@ -132,20 +41,58 @@ KOKKOS_FUNCTION Scalar distance_pbc(const Point<Scalar>& point1,  //
 /// \param[in] point1 The first point
 /// \param[in] point2 The second point
 template <typename Scalar>
-KOKKOS_FUNCTION Scalar distance(const Point<Scalar>& point1,  //
+KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
+                                const Point<Scalar>& point1,                              //
                                 const Point<Scalar>& point2) {
-  return distance_pbc(point1, point2, FreeSpaceMetric{});
+  return mundy::math::norm(point2 - point1);
 }
 
 /// \brief Compute the shared normal signed separation distance between two points
 /// \tparam Scalar The scalar type
 /// \param[in] point1 The first point
 /// \param[in] point2 The second point
-template <typename Scalar, typename DistanceType>
-KOKKOS_FUNCTION Scalar distance(const DistanceType distance_type,  //
-                                const Point<Scalar>& point1,       //
+/// \param[out] sep The separation vector (from point1 to point2)
+template <typename Scalar>
+KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
+                                const Point<Scalar>& point1,                              //
+                                const Point<Scalar>& point2,                              //
+                                mundy::math::Vector3<Scalar>& sep) {
+  sep = point2 - point1;
+  return mundy::math::norm(sep);
+}
+
+/// \brief Compute the euclidean distance between two points
+/// \tparam Scalar The scalar type
+/// \param[in] point1 The first point
+/// \param[in] point2 The second point
+template <typename Scalar>
+KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const Euclidean distance_type,  //
+                                const Point<Scalar>& point1,                     //
                                 const Point<Scalar>& point2) {
-  return distance_pbc(distance_type, point1, point2, FreeSpaceMetric{});
+  return distance(SharedNormalSigned{}, point1, point2);
+}
+
+/// \brief Compute the euclidean distance between two points
+/// \tparam Scalar The scalar type
+/// \param[in] point1 The first point
+/// \param[in] point2 The second point
+/// \param[out] sep The separation vector (from point1 to point2)
+template <typename Scalar>
+KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const Euclidean distance_type,  //
+                                const Point<Scalar>& point1,                     //
+                                const Point<Scalar>& point2,                     //
+                                mundy::math::Vector3<Scalar>& sep) {
+  return distance(SharedNormalSigned{}, point1, point2, sep);
+}
+
+/// \brief Compute the shared normal signed separation distance between two points
+/// \tparam Scalar The scalar type
+/// \param[in] point1 The first point
+/// \param[in] point2 The second point
+template <typename Scalar>
+KOKKOS_FUNCTION Scalar distance(const Point<Scalar>& point1,  //
+                                const Point<Scalar>& point2) {
+  return distance(SharedNormalSigned{}, point1, point2);
 }
 
 /// \brief Compute the euclidean distance between two points
@@ -157,20 +104,7 @@ template <typename Scalar>
 KOKKOS_FUNCTION Scalar distance(const Point<Scalar>& point1,  //
                                 const Point<Scalar>& point2,  //
                                 mundy::math::Vector3<Scalar>& sep) {
-  return distance_pbc(point1, point2, FreeSpaceMetric{}, sep);
-}
-
-/// \brief Compute the shared normal signed separation distance between two points
-/// \tparam Scalar The scalar type
-/// \param[in] point1 The first point
-/// \param[in] point2 The second point
-/// \param[out] sep The separation vector (from point1 to point2)
-template <typename Scalar, typename DistanceType>
-KOKKOS_FUNCTION Scalar distance(const DistanceType distance_type,  //
-                                const Point<Scalar>& point1,       //
-                                const Point<Scalar>& point2,       //
-                                mundy::math::Vector3<Scalar>& sep) {
-  return distance_pbc(distance_type, point1, point2, FreeSpaceMetric{}, sep);
+  return distance(SharedNormalSigned{}, point1, point2, sep);
 }
 //@}
 

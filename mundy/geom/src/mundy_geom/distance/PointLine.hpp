@@ -34,80 +34,6 @@ namespace mundy {
 
 namespace geom {
 
-//! \name Periodic space distance calculations
-//@{
-
-/// \brief Compute the shared normal signed separation distance between a point and a line
-/// \tparam Scalar The scalar type
-/// \param[in] point The point
-/// \param[in] line The line
-template <typename Scalar, typename Metric>
-KOKKOS_FUNCTION Scalar distance_pbc(const Point<Scalar>& point,  //
-                                    const Line<Scalar>& line,    //
-                                    const Metric& metric) {
-  return distance_pbc(SharedNormalSigned{}, point, line, metric);
-}
-
-/// \brief Compute the shared normal signed separation distance between a point and a line
-/// \tparam Scalar The scalar type
-/// \param[in] point The point
-/// \param[in] line The line
-template <typename Scalar, typename Metric>
-KOKKOS_FUNCTION Scalar distance_pbc([[maybe_unused]] const SharedNormalSigned distance_type,  //
-                                    const Point<Scalar>& point,                               //
-                                    const Line<Scalar>& line,                                 //
-                                    const Metric& metric) {
-  // Compute the projection of the vector onto the line's direction
-  auto line_to_point = metric(line.center(), point);
-  Scalar projection = mundy::math::dot(line_to_point, line.direction());
-
-  // Compute the magnitude of the component of the vector perpendicular to the line
-  return distance_pbc(projection * line.direction(), line_to_point, metric);
-}
-
-/// \brief Compute the euclidean distance between a point and a line
-/// \tparam Scalar The scalar type
-/// \param[in] point The point
-/// \param[in] line The line
-/// \param[out] closest_point The closest point on the line
-/// \param[out] arch_length The arch-length parameter of the closest point on the line
-/// \param[out] sep The separation vector (from point to line)
-template <typename Scalar, typename Metric>
-KOKKOS_FUNCTION Scalar distance_pbc(const Point<Scalar>& point,    //
-                                    const Line<Scalar>& line,      //
-                                    const Metric& metric,          //
-                                    Point<Scalar>& closest_point,  //
-                                    Scalar& arch_length,           //
-                                    mundy::math::Vector3<Scalar>& sep) {
-  // No difference between distance types for points and lines
-  return distance_pbc(SharedNormalSigned{}, point, line, closest_point, arch_length, sep);
-}
-
-/// \brief Compute the shared normal signed separation distance between a point and a line
-/// \tparam Scalar The scalar type
-/// \param[in] point The point
-/// \param[in] line The line
-/// \param[out] closest_point The closest point on the line
-/// \param[out] arch_length The arch-length parameter of the closest point on the line
-/// \param[out] sep The separation vector (from point to line)
-template <typename Scalar, typename Metric>
-KOKKOS_FUNCTION Scalar distance_pbc([[maybe_unused]] const SharedNormalSigned distance_type,  //
-                                    const Point<Scalar>& point,                               //
-                                    const Line<Scalar>& line,                                 //
-                                    const Metric& metric,                                     //
-                                    Point<Scalar>& closest_point,                             //
-                                    Scalar& arch_length,                                      //
-                                    mundy::math::Vector3<Scalar>& sep) {
-  // Compute the projection of the vector onto the line's direction
-  auto line_to_point = metric(line.center(), point);
-  arch_length = mundy::math::dot(line_to_point, line.direction());
-  closest_point = line.center() + arch_length * line.direction();
-
-  // Compute the magnitude of the component of the vector perpendicular to the line
-  return distance_pbc(arch_length * line.direction(), line_to_point, metric);
-}
-//@}
-
 //! \name Free space distance calculations
 //@{
 
@@ -118,18 +44,23 @@ KOKKOS_FUNCTION Scalar distance_pbc([[maybe_unused]] const SharedNormalSigned di
 template <typename Scalar>
 KOKKOS_FUNCTION Scalar distance(const Point<Scalar>& point,  //
                                 const Line<Scalar>& line) {
-  return distance_pbc(point, line, FreeSpaceMetric{});
+  return distance(SharedNormalSigned{}, point, line);
 }
 
 /// \brief Compute the shared normal signed separation distance between a point and a line
 /// \tparam Scalar The scalar type
 /// \param[in] point The point
 /// \param[in] line The line
-template <typename Scalar, typename DistanceType>
-KOKKOS_FUNCTION Scalar distance(const DistanceType distance_type,  //
-                                const Point<Scalar>& point,        //
+template <typename Scalar>
+KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
+                                const Point<Scalar>& point,                               //
                                 const Line<Scalar>& line) {
-  return distance_pbc(distance_type, point, line, FreeSpaceMetric{});
+  // Compute the projection of the vector onto the line's direction
+  auto line_to_point = point - line.center();
+  Scalar projection = mundy::math::dot(line_to_point, line.direction());
+
+  // Compute the magnitude of the component of the vector perpendicular to the line
+  return distance(projection * line.direction(), line_to_point);
 }
 
 /// \brief Compute the euclidean distance between a point and a line
@@ -145,8 +76,8 @@ KOKKOS_FUNCTION Scalar distance(const Point<Scalar>& point,    //
                                 Point<Scalar>& closest_point,  //
                                 Scalar& arch_length,           //
                                 mundy::math::Vector3<Scalar>& sep) {
-  return distance_pbc(point, line, FreeSpaceMetric{},  //
-                      closest_point, arch_length, sep);
+  // No difference between distance types for points and lines
+  return distance(SharedNormalSigned{}, point, line, closest_point, arch_length, sep);
 }
 
 /// \brief Compute the shared normal signed separation distance between a point and a line
@@ -156,15 +87,20 @@ KOKKOS_FUNCTION Scalar distance(const Point<Scalar>& point,    //
 /// \param[out] closest_point The closest point on the line
 /// \param[out] arch_length The arch-length parameter of the closest point on the line
 /// \param[out] sep The separation vector (from point to line)
-template <typename Scalar, typename DistanceType>
-KOKKOS_FUNCTION Scalar distance(const DistanceType distance_type,  //
-                                const Point<Scalar>& point,        //
-                                const Line<Scalar>& line,          //
-                                Point<Scalar>& closest_point,      //
-                                Scalar& arch_length,               //
+template <typename Scalar>
+KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
+                                const Point<Scalar>& point,                               //
+                                const Line<Scalar>& line,                                 //
+                                Point<Scalar>& closest_point,                             //
+                                Scalar& arch_length,                                      //
                                 mundy::math::Vector3<Scalar>& sep) {
-  return distance_pbc(distance_type, point, line, FreeSpaceMetric{},  //
-                      closest_point, arch_length, sep);
+  // Compute the projection of the vector onto the line's direction
+  auto line_to_point = point - line.center();
+  arch_length = mundy::math::dot(line_to_point, line.direction());
+  closest_point = line.center() + arch_length * line.direction();
+
+  // Compute the magnitude of the component of the vector perpendicular to the line
+  return distance(arch_length * line.direction(), line_to_point);
 }
 //@}
 

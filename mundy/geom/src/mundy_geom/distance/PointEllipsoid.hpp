@@ -26,6 +26,7 @@
 
 // Mundy
 #include <mundy_geom/distance/DistanceMetrics.hpp>  // for mundy::geom::FreeSpaceMetric
+#include <mundy_geom/distance/PointPoint.hpp>       // for mundy::geom::distance(Point, Point)
 #include <mundy_geom/distance/Types.hpp>            // for mundy::geom::SharedNormalSigned
 #include <mundy_geom/primitives/Ellipsoid.hpp>      // for mundy::geom::Ellipsoid
 #include <mundy_geom/primitives/Point.hpp>          // for mundy::geom::Point
@@ -38,37 +39,34 @@ namespace mundy {
 
 namespace geom {
 
-//! \name Periodic space distance calculations
+//! \name Free space distance calculations
 //@{
 
-template <typename Scalar, typename Metric>
-KOKKOS_FUNCTION Scalar distance_pbc(const Point<Scalar>& point,  //
-                                    const Ellipsoid<Scalar>& ellipsoid, //
-                                    const Metric& metric) {
-  return distance_pbc(SharedNormalSigned{}, point, ellipsoid, metric);
+template <typename Scalar>
+KOKKOS_FUNCTION Scalar distance(const Point<Scalar>& point,  //
+                                const Ellipsoid<Scalar>& ellipsoid) {
+  return distance(SharedNormalSigned{}, point, ellipsoid);
 }
 
-template <typename Scalar, typename Metric>
-KOKKOS_FUNCTION Scalar distance_pbc([[maybe_unused]] const SharedNormalSigned distance_type,  //
-                                    const Point<Scalar>& point,                               //
-                                    const Ellipsoid<Scalar>& ellipsoid,                       //
-                                    const Metric& metric) {
+template <typename Scalar>
+KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
+                                const Point<Scalar>& point,                               //
+                                const Ellipsoid<Scalar>& ellipsoid) {
   Point<Scalar> closest_point;
   mundy::math::Vector3<Scalar> ellipsoid_normal;
-  return distance_pbc(distance_type, point, ellipsoid, metric,  //
-                      closest_point, ellipsoid_normal);
+  return distance(distance_type, point, ellipsoid,  //
+                  closest_point, ellipsoid_normal);
 }
 
-template <typename Scalar, typename Metric>
+template <typename Scalar>
 class PointEllipsoidObjective {
  public:
   KOKKOS_FUNCTION
   PointEllipsoidObjective(const Point<Scalar>& point,                   //
                           const Ellipsoid<Scalar>& ellipsoid,           //
-                          const Metric& metric,                         //
                           mundy::math::Vector3<Scalar>& shared_normal,  //
                           Point<Scalar>& foot_point)
-      : point_(point), ellipsoid_(ellipsoid), metric_(metric), shared_normal_(shared_normal), foot_point_(foot_point) {
+      : point_(point), ellipsoid_(ellipsoid), shared_normal_(shared_normal), foot_point_(foot_point) {
   }
 
   KOKKOS_FUNCTION Scalar operator()(const mundy::math::Vector<Scalar, 2>& theta_phi) const {
@@ -83,24 +81,22 @@ class PointEllipsoidObjective {
     foot_point_ = map_surface_normal_to_foot_point_on_ellipsoid(shared_normal_, ellipsoid_);
 
     // The objective is the shared normal euclidean separation distance. NOT the signed separation distance.
-    return distance_pbc(foot_point_, point_, metric_);
+    return distance(foot_point_, point_);
   }
 
  private:
   const Point<Scalar>& point_;
   const Ellipsoid<Scalar>& ellipsoid_;
-  const Metric& metric_;
   mundy::math::Vector3<Scalar>& shared_normal_;
   Point<Scalar>& foot_point_;
 };
 
-template <typename Scalar, typename Metric>
-KOKKOS_FUNCTION Scalar distance_pbc([[maybe_unused]] const SharedNormalSigned distance_type,  //
-                                    const Point<Scalar>& point,                               //
-                                    const Ellipsoid<Scalar>& ellipsoid,                       //
-                                    const Metric& metric,                                     //
-                                    Point<Scalar>& closest_point,                             //
-                                    mundy::math::Vector3<Scalar>& ellipsoid_normal) {
+template <typename Scalar>
+KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
+                                const Point<Scalar>& point,                               //
+                                const Ellipsoid<Scalar>& ellipsoid,                       //
+                                Point<Scalar>& closest_point,                             //
+                                mundy::math::Vector3<Scalar>& ellipsoid_normal) {
   // Setup the minimization
   // Note, the actual error is not guaranteed to be less than min_objective_delta due to the use of approximate
   // derivatives. Instead, we saw that the error was typically less than the square root of min_objective_delta.
@@ -108,7 +104,7 @@ KOKKOS_FUNCTION Scalar distance_pbc([[maybe_unused]] const SharedNormalSigned di
   constexpr size_t lbfgs_max_memory_size = 10;
 
   // Reuse the solution space rather than re-allocating it each time
-  PointEllipsoidObjective shared_normal_objective(point, ellipsoid, metric, ellipsoid_normal, closest_point);
+  PointEllipsoidObjective shared_normal_objective(point, ellipsoid, ellipsoid_normal, closest_point);
 
   constexpr Scalar pi = Kokkos::numbers::pi_v<Scalar>;
   constexpr Scalar zero = static_cast<Scalar>(0.0);
@@ -135,34 +131,7 @@ KOKKOS_FUNCTION Scalar distance_pbc([[maybe_unused]] const SharedNormalSigned di
 
   // Evaluating the objective updates the shared normal and foot points
   shared_normal_objective(global_theta_phi_sol);
-  return mundy::math::dot(metric(closest_point, point), ellipsoid_normal);
-}
-//@}
-
-//! \name Free space distance calculations
-//@{
-
-template <typename Scalar>
-KOKKOS_FUNCTION Scalar distance(const Point<Scalar>& point,  //
-                                const Ellipsoid<Scalar>& ellipsoid) {
-  return distance_pbc(point, ellipsoid, FreeSpaceMetric{});
-}
-
-template <typename Scalar, typename DistanceType>
-KOKKOS_FUNCTION Scalar distance(const DistanceType distance_type,  //
-                                const Point<Scalar>& point,        //
-                                const Ellipsoid<Scalar>& ellipsoid) {
-  return distance_pbc(distance_type, point, ellipsoid, FreeSpaceMetric{});
-}
-
-template <typename Scalar, typename DistanceType>
-KOKKOS_FUNCTION Scalar distance(const DistanceType distance_type,    //
-                                const Point<Scalar>& point,          //
-                                const Ellipsoid<Scalar>& ellipsoid,  //
-                                Point<Scalar>& closest_point,        //
-                                mundy::math::Vector3<Scalar>& ellipsoid_normal) {
-  return distance_pbc(distance_type, point, ellipsoid, FreeSpaceMetric{},  //
-                  closest_point, ellipsoid_normal);
+  return mundy::math::dot(point - closest_point, ellipsoid_normal);
 }
 //@}
 

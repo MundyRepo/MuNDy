@@ -36,18 +36,17 @@ namespace mundy {
 
 namespace geom {
 
-//! \name Periodic space distance calculations
+//! \name Free space distance calculations
 //@{
 
 /// \brief Compute the distance between two lines (defaults to SharedNormalSigned distance)
 /// \tparam Scalar The scalar type
 /// \param[in] line1 One line
 /// \param[in] line2 The other line
-template <typename Scalar, typename Metric>
-KOKKOS_FUNCTION Scalar distance_pbc(const Line<Scalar>& line1,  //
-                                    const Line<Scalar>& line2,  //
-                                    const Metric& metric) {
-  return distance_pbc(SharedNormalSigned{}, line1, line2, metric);
+template <typename Scalar>
+KOKKOS_FUNCTION Scalar distance(const Line<Scalar>& line1,  //
+                                const Line<Scalar>& line2) {
+  return distance(SharedNormalSigned{}, line1, line2);
 }
 
 /// \brief Compute the distance between two lines
@@ -55,13 +54,12 @@ KOKKOS_FUNCTION Scalar distance_pbc(const Line<Scalar>& line1,  //
 /// \param[in] distance_type The distance type
 /// \param[in] line1 One line
 /// \param[in] line2 The other line
-template <typename Scalar, typename Metric>
-KOKKOS_FUNCTION Scalar distance_pbc([[maybe_unused]] const SharedNormalSigned distance_type,  //
-                                    const Line<Scalar>& line1,                                //
-                                    const Line<Scalar>& line2,                                //
-                                    const Metric& metric) {
+template <typename Scalar>
+KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
+                                const Line<Scalar>& line1,                                //
+                                const Line<Scalar>& line2) {
   // Part of this function was adapted from VTK, which, in turn adapted part of it from "GeometryAlgorithms.com"
-  const auto center_center = metric(line2.center(), line1.center());
+  const auto center_center = line1.center() - line2.center();
   const Scalar a = mundy::math::dot(line1.direction(), line1.direction());
   const Scalar b = mundy::math::dot(line1.direction(), line2.direction());
   const Scalar c = mundy::math::dot(line2.direction(), line2.direction());
@@ -79,7 +77,7 @@ KOKKOS_FUNCTION Scalar distance_pbc([[maybe_unused]] const SharedNormalSigned di
   const Scalar inv_D = static_cast<Scalar>(1.0) / D;
   const auto closest_point1 = line1.center() + (b * e - c * d) * line1.direction() * inv_D;
   const auto closest_point2 = line2.center() + (a * e - b * d) * line2.direction() * inv_D;
-  return distance_pbc(closest_point1, closest_point2, metric);
+  return distance(closest_point1, closest_point2);
 }
 
 /// \brief Compute the distance between two lines
@@ -87,12 +85,11 @@ KOKKOS_FUNCTION Scalar distance_pbc([[maybe_unused]] const SharedNormalSigned di
 /// \param[in] distance_type The distance type
 /// \param[in] line1 One line
 /// \param[in] line2 The other line
-template <typename Scalar, typename Metric>
-KOKKOS_FUNCTION Scalar distance_pbc([[maybe_unused]] const Euclidean distance_type,  //
-                                    const Line<Scalar>& line1,                       //
-                                    const Line<Scalar>& line2,                       //
-                                    const Metric& metric) {
-  return distance_pbc(SharedNormalSigned{}, line1, line2, metric);  // no difference between distance types for lines
+template <typename Scalar>
+KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const Euclidean distance_type,  //
+                                const Line<Scalar>& line1,                       //
+                                const Line<Scalar>& line2) {
+  return distance(SharedNormalSigned{}, line1, line2);  // no difference between distance types for lines
 }
 
 /// \brief Compute the distance between two lines (defaults to SharedNormalSigned distance)
@@ -104,17 +101,16 @@ KOKKOS_FUNCTION Scalar distance_pbc([[maybe_unused]] const Euclidean distance_ty
 /// \param[out] arch_length1 The arch-length parameter of the closest point on line1
 /// \param[out] arch_length2 The arch-length parameter of the closest point on line2
 /// \param[out] sep The separation vector (from line1 to line2)
-template <typename Scalar, typename Metric>
-KOKKOS_FUNCTION Scalar distance_pbc(const Line<Scalar>& line1,      //
-                                    const Line<Scalar>& line2,      //
-                                    const Metric& metric,           //
-                                    Point<Scalar>& closest_point1,  //
-                                    Point<Scalar>& closest_point2,  //
-                                    Scalar& arch_length1,           //
-                                    Scalar& arch_length2,           //
-                                    mundy::math::Vector3<Scalar>& sep) {
-  return distance_pbc(SharedNormalSigned{}, line1, line2, metric,  //
-                      closest_point1, closest_point2, arch_length1, arch_length2, sep);
+template <typename Scalar>
+KOKKOS_FUNCTION Scalar distance(const Line<Scalar>& line1,      //
+                                const Line<Scalar>& line2,      //
+                                Point<Scalar>& closest_point1,  //
+                                Point<Scalar>& closest_point2,  //
+                                Scalar& arch_length1,           //
+                                Scalar& arch_length2,           //
+                                mundy::math::Vector3<Scalar>& sep) {
+  return distance(SharedNormalSigned{}, line1, line2,  //
+                  closest_point1, closest_point2, arch_length1, arch_length2, sep);
 }
 
 /// \brief Compute the distance between two lines
@@ -127,18 +123,17 @@ KOKKOS_FUNCTION Scalar distance_pbc(const Line<Scalar>& line1,      //
 /// \param[out] arch_length1 The arch-length parameter of the closest point on line1
 /// \param[out] arch_length2 The arch-length parameter of the closest point on line2
 /// \param[out] sep The separation vector (from line1 to line2)
-template <typename Scalar, typename Metric>
-KOKKOS_FUNCTION Scalar distance_pbc([[maybe_unused]] const SharedNormalSigned distance_type,  //
-                                    const Line<Scalar>& line1,                                //
-                                    const Line<Scalar>& line2,                                //
-                                    const Metric& metric,                                     //
-                                    Point<Scalar>& closest_point1,                            //
-                                    Point<Scalar>& closest_point2,                            //
-                                    Scalar& arch_length1,                                     //
-                                    Scalar& arch_length2,                                     //
-                                    mundy::math::Vector3<Scalar>& sep) {
+template <typename Scalar>
+KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
+                                const Line<Scalar>& line1,                                //
+                                const Line<Scalar>& line2,                                //
+                                Point<Scalar>& closest_point1,                            //
+                                Point<Scalar>& closest_point2,                            //
+                                Scalar& arch_length1,                                     //
+                                Scalar& arch_length2,                                     //
+                                mundy::math::Vector3<Scalar>& sep) {
   // Part of this function was adapted from VTK, which, in turn adapted part of it from "GeometryAlgorithms.com"
-  const auto center_center = metric(line2.center(), line1.center());
+  const auto center_center = line1.center() - line2.center();
   const Scalar a = mundy::math::dot(line1.direction(), line1.direction());
   const Scalar b = mundy::math::dot(line1.direction(), line2.direction());
   const Scalar c = mundy::math::dot(line2.direction(), line2.direction());
@@ -159,77 +154,7 @@ KOKKOS_FUNCTION Scalar distance_pbc([[maybe_unused]] const SharedNormalSigned di
   arch_length2 = (a * e - b * d) * inv_D;
   closest_point1 = line1.center() + arch_length1 * line1.direction();
   closest_point2 = line2.center() + arch_length2 * line2.direction();
-  return distance_pbc(closest_point1, closest_point2, metric, sep);
-}
-//@}
-
-//! \name Free space distance calculations
-//@{
-
-/// \brief Compute the distance between two lines (defaults to SharedNormalSigned distance)
-/// \tparam Scalar The scalar type
-/// \param[in] line1 One line
-/// \param[in] line2 The other line
-template <typename Scalar>
-KOKKOS_FUNCTION Scalar distance(const Line<Scalar>& line1,  //
-                                const Line<Scalar>& line2) {
-  return distance_pbc(line1, line2, FreeSpaceMetric{});
-}
-
-/// \brief Compute the distance between two lines
-/// \tparam Scalar The scalar type
-/// \param[in] distance_type The distance type
-/// \param[in] line1 One line
-/// \param[in] line2 The other line
-template <typename Scalar, typename DistanceType>
-KOKKOS_FUNCTION Scalar distance(const DistanceType distance_type,  //
-                                const Line<Scalar>& line1,         //
-                                const Line<Scalar>& line2) {
-  return distance_pbc(distance_type, line1, line2, FreeSpaceMetric{});
-}
-
-/// \brief Compute the distance between two lines (defaults to SharedNormalSigned distance)
-/// \tparam Scalar The scalar type
-/// \param[in] line1 One line
-/// \param[in] line2 The other line
-/// \param[out] closest_point1 The closest point on line1
-/// \param[out] closest_point2 The closest point on line2
-/// \param[out] arch_length1 The arch-length parameter of the closest point on line1
-/// \param[out] arch_length2 The arch-length parameter of the closest point on line2
-/// \param[out] sep The separation vector (from line1 to line2)
-template <typename Scalar>
-KOKKOS_FUNCTION Scalar distance(const Line<Scalar>& line1,      //
-                                const Line<Scalar>& line2,      //
-                                Point<Scalar>& closest_point1,  //
-                                Point<Scalar>& closest_point2,  //
-                                Scalar& arch_length1,           //
-                                Scalar& arch_length2,           //
-                                mundy::math::Vector3<Scalar>& sep) {
-  return distance_pbc(line1, line2, FreeSpaceMetric{},  //
-                      closest_point1, closest_point2, arch_length1, arch_length2, sep);
-}
-
-/// \brief Compute the distance between two lines
-/// \tparam Scalar The scalar type
-/// \param[in] distance_type The distance type
-/// \param[in] line1 One line
-/// \param[in] line2 The other line
-/// \param[out] closest_point1 The closest point on line1
-/// \param[out] closest_point2 The closest point on line2
-/// \param[out] arch_length1 The arch-length parameter of the closest point on line1
-/// \param[out] arch_length2 The arch-length parameter of the closest point on line2
-/// \param[out] sep The separation vector (from line1 to line2)
-template <typename Scalar, typename DistanceType>
-KOKKOS_FUNCTION Scalar distance(const DistanceType distance_type,  //
-                                const Line<Scalar>& line1,         //
-                                const Line<Scalar>& line2,         //
-                                Point<Scalar>& closest_point1,     //
-                                Point<Scalar>& closest_point2,     //
-                                Scalar& arch_length1,              //
-                                Scalar& arch_length2,              //
-                                mundy::math::Vector3<Scalar>& sep) {
-  return distance_pbc(distance_type, line1, line2, FreeSpaceMetric{},  //
-                      closest_point1, closest_point2, arch_length1, arch_length2, sep);
+  return distance(closest_point1, closest_point2, sep);
 }
 //@}
 
