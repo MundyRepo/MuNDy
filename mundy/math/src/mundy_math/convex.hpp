@@ -42,16 +42,26 @@ struct Unconstrained {
   using scalar_t = Scalar;
 
   KOKKOS_INLINE_FUNCTION
+  constexpr scalar_t operator()(const scalar_t& x) const {
+    return project(x);
+  }
+
+  KOKKOS_INLINE_FUNCTION
   constexpr scalar_t project(const scalar_t& x) const {
     return x;
   }
 };
 
-template <typename Backend>
+template <typename Scalar>
 struct LowerBound {
   using scalar_t = Scalar;
 
   scalar_t lower_bound;
+
+  KOKKOS_INLINE_FUNCTION
+  constexpr scalar_t operator()(const scalar_t& x) const {
+    return project(x);
+  }
 
   KOKKOS_INLINE_FUNCTION
   constexpr scalar_t project(const scalar_t& x) const {
@@ -59,11 +69,16 @@ struct LowerBound {
   }
 };
 
-template <typename Backend>
+template <typename Scalar>
 struct UpperBound {
   using scalar_t = Scalar;
 
   scalar_t upper_bound;
+
+  KOKKOS_INLINE_FUNCTION
+  constexpr scalar_t operator()(const scalar_t& x) const {
+    return project(x);
+  }
 
   KOKKOS_INLINE_FUNCTION
   constexpr scalar_t project(const scalar_t& x) const {
@@ -71,12 +86,17 @@ struct UpperBound {
   }
 };
 
-template <typename Backend>
+template <typename Scalar>
 struct Bounded {
   using scalar_t = Scalar;
 
   scalar_t lower_bound;
   scalar_t upper_bound;
+
+  KOKKOS_INLINE_FUNCTION
+  constexpr scalar_t operator()(const scalar_t& x) const {
+    return project(x);
+  }
 
   KOKKOS_INLINE_FUNCTION
   constexpr scalar_t project(const scalar_t& x) const {
@@ -102,12 +122,22 @@ struct KokkosBackend {
     return x.extent(0);
   }
 
-  static scalar_t vector_data(const vector_t& x, size_t i) {
+  static const scalar_t& vector_data(const vector_t& x, size_t i) {
+    return x(i);
+  }
+
+  static scalar_t& vector_data(vector_t& x, size_t i) {
     return x(i);
   }
 
   static void deep_copy(vector_t& dest, const vector_t& src) {
     Kokkos::deep_copy(dest, src);
+  }
+
+  template <typename LinearOp>
+  KOKKOS_INLINE_FUNCTION static void apply(const LinearOp& op, const vector_t& x, vector_t& y) {
+    // How should we apply?
+    MUNDY_THROW_REQUIRE(false, std::logic_error, "apply not implemented for KokkosBackend.");
   }
 
   static void axpby(const scalar_t alpha, const vector_t& x, const scalar_t beta, const vector_t& y) {
@@ -140,6 +170,23 @@ struct KokkosBackend {
     return result;
   }
 
+  static scalar_t diff_dot(const vector_t& x1, const vector_t& x2,  //
+                           const vector_t& y1, const vector_t& y2) {
+    MUNDY_THROW_ASSERT(x1.extent(0) == x2.extent(0) && x1.extent(0) == y1.extent(0) &&
+                       x1.extent(0) == y2.extent(0),
+                       std::invalid_argument, "x1, x2, y1, and y2 must have the same size.");
+    scalar_t result = 0;
+    Kokkos::parallel_reduce(
+        "diff_dot", Kokkos::RangePolicy<exec_space>(0, x1.extent(0)),
+        KOKKOS_LAMBDA(const int i, scalar_t& sum) {
+          scalar_t x_diff = x1(i) - x2(i);
+          scalar_t y_diff = y1(i) - y2(i);
+          sum += x_diff * y_diff;
+        },
+        result);
+    return result;
+  }
+
   template <typename Functor>
   static void reduce_max(size_t n, const Functor& func, scalar_t& result) {
     Kokkos::parallel_reduce(
@@ -158,12 +205,21 @@ struct MundyMathBackend {
     return vector_t::size;
   }
 
-  KOKKOS_INLINE_FUNCTION static scalar_t vector_data(const vector_t& x, size_t i) {
+  KOKKOS_INLINE_FUNCTION static const scalar_t& vector_data(const vector_t& x, size_t i) {
+    return x[i];
+  }
+
+  KOKKOS_INLINE_FUNCTION static scalar_t& vector_data(vector_t& x, size_t i) {
     return x[i];
   }
 
   KOKKOS_INLINE_FUNCTION static void deep_copy(vector_t& dest, const vector_t& src) {
     dest = src;
+  }
+
+  template <typename LinearOp>
+  KOKKOS_INLINE_FUNCTION static void apply(const LinearOp& op, const vector_t& x, vector_t& y) {
+    y = op * x;
   }
 
   KOKKOS_INLINE_FUNCTION static void axpby(const scalar_t alpha, const vector_t& x, const scalar_t beta, vector_t& y) {
@@ -173,24 +229,32 @@ struct MundyMathBackend {
   template <typename Wrapper>
   KOKKOS_INLINE_FUNCTION static void wrapped_axpbyz(const scalar_t alpha, const vector_t& x, const scalar_t beta,
                                                     const vector_t& y, vector_t& z, const Wrapper& wrapper) {
-    z = apply(wrapper, alpha * x + beta * y);
+    z = ::mundy::math::apply(wrapper, alpha * x + beta * y);
   }
 
   KOKKOS_INLINE_FUNCTION static scalar_t diff_dot(const vector_t& x, const vector_t& y) {
-    return dot(x - y, x - y);
+    auto diff = x - y;
+    return dot(diff, diff);
   }
 
-  template <class Functor, class T>
+  KOKKOS_INLINE_FUNCTION static scalar_t diff_dot(const vector_t& x1, const vector_t& x2,  //
+                                                  const vector_t& y1, const vector_t& y2) {
+    auto x_diff = x1 - x2;
+    auto y_diff = y1 - y2;
+    return dot(x_diff, y_diff);
+  }
+
+  template <class Functor>
   KOKKOS_INLINE_FUNCTION static void reduce_max(size_t n, const Functor& func, scalar_t& result) {
     MUNDY_THROW_ASSERT(n == N, std::invalid_argument, "reduce_max: n must match the size of the vector.");
     reduce_max_impl(std::make_index_sequence<N>{}, func, result);
   }
 
  private:
-  template <size_t Is..., class Functor>
+  template <size_t... Is, class Functor>
   KOKKOS_INLINE_FUNCTION static void reduce_max_impl(std::index_sequence<Is...>, const Functor& func,
                                                      scalar_t& result) {
-    scalar_t max_val = std::numeric_limits<T>::lowest();
+    scalar_t max_val = std::numeric_limits<scalar_t>::lowest();
     ((func(Is, max_val)), ...);
     result = max_val;
   }
@@ -221,19 +285,12 @@ class CQPPProblem {
   }
 
   // Accessors — all const to preserve the problem definition
-  KOKKOS_INLINE_FUNCTION Backend backend() const {
-    return Backend{};
-  }
-
-  KOKKOS_INLINE_FUNCTION const linear_op_t& A() const {
-    return A_;
-  }
-  KOKKOS_INLINE_FUNCTION const vector_t& q() const {
-    return q_;
-  }
-  KOKKOS_INLINE_FUNCTION const space_t& space() const {
-    return space_;
-  }
+  // clang-format off
+  KOKKOS_INLINE_FUNCTION Backend backend() const { return Backend{}; }
+  KOKKOS_INLINE_FUNCTION const linear_op_t& A() const { return A_; }
+  KOKKOS_INLINE_FUNCTION const vector_t& q() const { return q_; }
+  KOKKOS_INLINE_FUNCTION const space_t& space() const { return space_; }
+  // clang-format on
 
  private:
   const linear_op_t& A_;
@@ -264,16 +321,11 @@ class LCPProblem {
   LCPProblem(Backend, const linear_op_t& A, const vector_t& q) : A_(A), q_(q) {
   }
 
-  KOKKOS_INLINE_FUNCTION Backend backend() const {
-    return Backend{};
-  }
-
-  KOKKOS_INLINE_FUNCTION const linear_op_t& A() const {
-    return A_;
-  }
-  KOKKOS_INLINE_FUNCTION const vector_t& q() const {
-    return q_;
-  }
+  // clang-format off
+  KOKKOS_INLINE_FUNCTION Backend backend() const { return Backend{}; }
+  KOKKOS_INLINE_FUNCTION const linear_op_t& A() const { return A_; }
+  KOKKOS_INLINE_FUNCTION const vector_t& q() const { return q_; }
+  // clang-format on
 
  private:
   const linear_op_t& A_;
@@ -282,7 +334,7 @@ class LCPProblem {
 
 template <class Backend, class LinearOp>
 auto to_cqpp(const LCPProblem<Backend, LinearOp>& P) {
-  static constexpr LowerBound Rn_plus{static_cast<typename Backend::scalar_t>(0)};
+  static constexpr space::LowerBound Rn_plus{static_cast<typename Backend::scalar_t>(0)};
   return CQPPProblem(P.backend(), P.A(), P.q(), Rn_plus);
 }
 //@}
@@ -290,12 +342,14 @@ auto to_cqpp(const LCPProblem<Backend, LinearOp>& P) {
 //! \name Policies
 //@{
 
-struct LinfNormProjectedGradientResidual {
+struct LinfNormProjectedGradientResidual {  // LCP only
   template <typename Backend, typename ConvexSpace>
   KOKKOS_INLINE_FUNCTION typename Backend::scalar_t operator()([[maybe_unused]] const Backend& backend,  //
                                                                const typename Backend::vector_t& x,      //
                                                                const typename Backend::vector_t& grad,   //
                                                                const ConvexSpace& convex_space) const {
+    using scalar_t = typename Backend::scalar_t;
+
     size_t n = Backend::vector_size(x);
     scalar_t largest_abs_gradient;
     Backend::reduce_max(
@@ -303,11 +357,11 @@ struct LinfNormProjectedGradientResidual {
         KOKKOS_LAMBDA(const int i, scalar_t& max_val) {
           // perform the projection EQ 2.2 of Dai & Fletcher 2005
           scalar_t x_i = Backend::vector_data(x, i);
-          scalar_t grad_i = Backend::vector_data(grad, i)
+          scalar_t grad_i = Backend::vector_data(grad, i);
 
-              scalar_t abs_projected_grad;
+          scalar_t abs_projected_grad;
           if (x_i < get_zero_tolerance<scalar_t>()) {
-            abs_projected_grad = convex_space.project(grad_i);
+            abs_projected_grad = Kokkos::max(0.0, grad_i);
           } else {
             abs_projected_grad = Kokkos::abs(grad_i);
           }
@@ -318,23 +372,60 @@ struct LinfNormProjectedGradientResidual {
         },
         largest_abs_gradient);
 
+    std::cout << "Largest absolute gradient: " << largest_abs_gradient << std::endl;
+    std::cout << "x: " << x << std::endl;
+    std::cout << "grad: " << grad << std::endl;
+
     return largest_abs_gradient;
   }
 };
 
-struct BBStepStrategy {
-  KOKKOS_INLINE_FUNCTION
-  typename Backend::scalar_t operator()([[maybe_unused]] const Backend& backend,  //
-                                        const typename Backend::vector_t& x_old,
-                                        const typename Backend::vector_t& grad_old,  //
-                                        const typename Backend::vector_t& x,
-                                        const typename Backend::vector_t& grad) const {
+struct LinfNormProjectedDiffResidual {
+  template <typename Backend, typename ConvexSpace>
+  KOKKOS_INLINE_FUNCTION typename Backend::scalar_t operator()([[maybe_unused]] const Backend& backend,  //
+                                                               const typename Backend::vector_t& x,      //
+                                                               const typename Backend::vector_t& grad,   //
+                                                               const ConvexSpace& convex_space) const {
     using scalar_t = typename Backend::scalar_t;
 
-    scalar_t num = Backend::diff_dot(x - x_old, grad - grad_old);
-    scalar_t denom = Backend::diff_dot(grad - grad_old, grad - grad_old);
+    // This res comes from line 17 and Eq 25 of Mazhar 2015
+    // res =  1.0 / (3 * num_unknowns * gd) * norm_inf(xk - proj(xk - gd * gk))
+    size_t num_unknowns = Backend::vector_size(x);
+    constexpr scalar_t small_step_size = 1e-6;
+    scalar_t largest_abs_diff;
+    Backend::reduce_max(
+        num_unknowns,
+        KOKKOS_LAMBDA(const int i, scalar_t& max_val) {
+          scalar_t x_i = Backend::vector_data(x, i);
+          scalar_t grad_i = Backend::vector_data(grad, i);
+          scalar_t x_i_proj = convex_space.project(x_i - small_step_size * grad_i);
+          scalar_t abs_diff = Kokkos::abs(x_i - x_i_proj);
+          if (abs_diff > max_val) {
+            max_val = abs_diff;
+          }
+        },
+        largest_abs_diff);
+
+    return largest_abs_diff / small_step_size;
+  }
+};
+
+struct BBStepStrategy {
+  template <typename Backend>
+  KOKKOS_INLINE_FUNCTION typename Backend::scalar_t operator()([[maybe_unused]] const Backend& backend,  //
+                                                               const typename Backend::vector_t& x_old,
+                                                               const typename Backend::vector_t& grad_old,  //
+                                                               const typename Backend::vector_t& x,
+                                                               const typename Backend::vector_t& grad) const {
+    using scalar_t = typename Backend::scalar_t;
+
+    scalar_t num = Backend::diff_dot(x, x_old);                    // (x - x_old) dot (x - x_old)
+    scalar_t denom = Backend::diff_dot(x, x_old, grad, grad_old);  // (x - x_old) dot (grad - grad_old)
+
+    // Avoid division by zero
     constexpr scalar_t eps = get_zero_tolerance<scalar_t>() * 10;
     denom += eps * (Kokkos::abs(denom) < eps);
+
     return num / denom;
   }
 };  // BBStepStrategy
@@ -344,7 +435,7 @@ template <typename Scalar>
 struct PGDConfig {
   using scalar_t = Scalar;
 
-  unsigned max_iter{1000};
+  unsigned max_iters{1000};
   Scalar tol{get_relaxed_zero_tolerance<Scalar>()};
 };
 
@@ -352,10 +443,17 @@ template <class Scalar>
 struct SolveResult {
   using scalar_t = Scalar;
 
-  unsigned iters{0};
+  unsigned num_iters{0};
   Scalar residual{0};
   bool converged{false};
 };
+
+/// \brief Write SolveResult to an ostream
+template <class Scalar>
+std::ostream& operator<<(std::ostream& os, const SolveResult<Scalar> result) {
+  os << "num_iters: " << result.num_iters << ", residual: " << result.residual << ", converged?: " << result.converged;
+  return os;
+}
 
 template <class Backend>
 class PGDState {
@@ -365,7 +463,8 @@ class PGDState {
   using scalar_t = typename Backend::scalar_t;
 
   KOKKOS_INLINE_FUNCTION
-  PGDState(vector_t& x, vector_t& g, vector_t& x_tmp, vector_t& g_tmp) : x_(x), g_(g), x_tmp_(x_tmp), g_tmp_(g_tmp) {
+  PGDState(const Backend&, vector_t& x, vector_t& g, vector_t& x_tmp, vector_t& g_tmp)
+      : x_(x), g_(g), x_tmp_(x_tmp), g_tmp_(g_tmp) {
   }
 
   // Accessors (const/non-const as needed)
@@ -435,10 +534,10 @@ class PGDStrategy {
     Backend::deep_copy(state.x_tmp(), state.x());
 
     // grad_tmp = A x_tmp + q
-    prob.A().apply(state.x_tmp(), state.grad_tmp());
+    Backend::apply(prob.A(), state.x_tmp(), state.grad_tmp());
     Backend::axpby(one, prob.q(), one, state.grad_tmp());
 
-    // Dai–Fletcher Sec. 5 initial step
+    // Dai-Fletcher Sec. 5 initial step
     state.residual() = resid_(Backend{}, state.x_tmp(), state.grad_tmp(), prob.space());
     state.step_size() = one / state.residual();
 
@@ -455,26 +554,28 @@ class PGDStrategy {
   KOKKOS_INLINE_FUNCTION bool iterate(const Problem& prob, state_t& state) const {
     constexpr scalar_t one = static_cast<scalar_t>(1);
 
-    if (state.converged() || state.iter() >= cfg_.max_iter) {
+    if (state.converged() || state.iter() >= cfg_.max_iters) {
       return state.converged();
     }
 
-    // x = Proj(x_tmp + step_size * grad_tmp)
-    Backend::wrapped_axpbyz(state.step_size(), state.x_tmp(), one, state.grad_tmp(), state.x(), prob.space());
+    // x = Proj(x_tmp - step_size * grad_tmp)
+    std::cout << "state.step_size(): " << state.step_size() << std::endl;
+    Backend::wrapped_axpbyz(one, state.x_tmp(), -state.step_size(), state.grad_tmp(), state.x(), prob.space());
 
     // grad = A x + q
-    prob.A().apply(state.x(), state.grad());
+    Backend::apply(prob.A(), state.x(), state.grad());
     Backend::axpby(one, prob.q(), one, state.grad());
 
     // residual & test
     state.residual() = resid_(Backend{}, state.x(), state.grad(), prob.space());
+    std::cout << "state.residual(): " << state.residual() << " state.iter(): " << state.iter() << std::endl;
     if (state.residual() <= static_cast<scalar_t>(cfg_.tol)) {
       state.converged() = true;
       return true;
     }
 
     // update step size and roll x_tmp/grad_tmp forward
-    state.step_size() = step_(state.x_tmp(), state.grad_tmp(), state.x(), state.grad());
+    state.step_size() = step_(Backend{}, state.x_tmp(), state.grad_tmp(), state.x(), state.grad());
     Backend::deep_copy(state.x_tmp(), state.x());
     Backend::deep_copy(state.grad_tmp(), state.grad());
     ++state.iter();
@@ -483,7 +584,7 @@ class PGDStrategy {
 
   KOKKOS_INLINE_FUNCTION
   bool done(const state_t& state) const {
-    return state.converged() || state.iter() >= cfg_.max_iter;
+    return state.converged() || state.iter() >= cfg_.max_iters;
   }
 
   KOKKOS_INLINE_FUNCTION result_t result(const state_t& state) const {
@@ -506,7 +607,72 @@ concept CQPPSolverStrategy = requires(Strategy& s, const Problem& prob) {
   { s.result() } -> std::same_as<typename Strategy::result_t>;
 };
 
+//! \name Deduction guides
+//@{
+
+/// \brief Deduction guide for CQPPProblem
+template <typename Backend, typename LinearOp, typename ConvexSpace>
+CQPPProblem(Backend, const LinearOp&, const typename Backend::vector_t&, const ConvexSpace&)
+    -> CQPPProblem<Backend, LinearOp, ConvexSpace>;
+
+/// \brief Deduction guide for LCPProblem
+template <typename Backend, typename LinearOp>
+LCPProblem(Backend, const LinearOp&, const typename Backend::vector_t&) -> LCPProblem<Backend, LinearOp>;
+
+/// \brief Deduction guide for PGDConfig
+template <typename Scalar>
+PGDConfig(unsigned, Scalar) -> PGDConfig<Scalar>;
+
+/// \brief Deduction guide for PGDState
+template <class Backend>
+PGDState(const Backend&, typename Backend::vector_t&, typename Backend::vector_t&, typename Backend::vector_t&,
+         typename Backend::vector_t&) -> PGDState<Backend>;
+
+/// \brief Deduction guide for PGDStrategy
+template <class Backend, class StepPolicy, class ResidualPolicy>
+PGDStrategy(Backend, StepPolicy, ResidualPolicy, PGDConfig<typename Backend::scalar_t> = {})
+    -> PGDStrategy<Backend, StepPolicy, ResidualPolicy>;
+//@}
+
 }  // namespace convex
+
+template <typename LinearOp, typename ConvexSpace, typename Scalar, size_t N>
+KOKKOS_INLINE_FUNCTION auto make_mundy_math_cqpp(const LinearOp& A, const Vector<Scalar, N>& q,
+                                                 const ConvexSpace& space) {
+  using backend_t = convex::MundyMathBackend<Scalar, N>;
+  return convex::CQPPProblem(backend_t{}, A, q, space);
+}
+
+template <typename LinearOp, typename Scalar, size_t N>
+KOKKOS_INLINE_FUNCTION auto make_mundy_math_lcp(const LinearOp& A, const Vector<Scalar, N>& q) {
+  using backend_t = convex::MundyMathBackend<Scalar, N>;
+  return convex::LCPProblem(backend_t{}, A, q);
+}
+
+template <class Backend, class StepPolicy, class ResidualPolicy>
+KOKKOS_INLINE_FUNCTION auto make_pgd_solution_strategy(const Backend& backend,                 //
+                                                       const StepPolicy& step_policy,          //
+                                                       const ResidualPolicy& residual_policy,  //
+                                                       const convex::PGDConfig<typename Backend::scalar_t>& cfg = {}) {
+  return convex::PGDStrategy(backend, step_policy, residual_policy, cfg);
+}
+
+template <class Backend>
+KOKKOS_INLINE_FUNCTION auto make_pgd_solution_strategy(const Backend& backend,  //
+                                                       const convex::PGDConfig<typename Backend::scalar_t>& cfg = {}) {
+  using DefaultStepPolicy = convex::BBStepStrategy;
+  using DefaultResidualPolicy = convex::LinfNormProjectedDiffResidual;
+  return convex::PGDStrategy(backend, DefaultStepPolicy{}, DefaultResidualPolicy{}, cfg);
+}
+
+template <class Backend>
+KOKKOS_INLINE_FUNCTION auto make_pgd_state(const Backend& backend,             //
+                                           typename Backend::vector_t& x,      //
+                                           typename Backend::vector_t& grad,   //
+                                           typename Backend::vector_t& x_tmp,  //
+                                           typename Backend::vector_t& grad_tmp) {
+  return convex::PGDState(backend, x, grad, x_tmp, grad_tmp);
+}
 
 /// \brief Solve a constrained quadratic programming problem (CQPP)
 ///
@@ -556,7 +722,7 @@ KOKKOS_INLINE_FUNCTION auto solve_cqpp(const Problem& prob, const Strategy& stra
 ///
 ///    auto pgd = make_pgd_solution_strategy(                //
 ///        backend, cfg);                                    // Use default step/residual strategies
-///    auto pgd = make_pgd_solution_strategy(                //
+///    // auto pgd = make_pgd_solution_strategy(             //
 ///        backend, MyStepStrat{}, MyResidualStrat{}, cfg);  // Custom step/residual strategies
 ///    auto pgd_state = make_pgd_state(backend, x, grad, x_tmp, grad_tmp);
 ///

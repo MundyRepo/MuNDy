@@ -24,18 +24,12 @@
 #include <Kokkos_Core.hpp>  // for Kokkos::Array
 
 // C++ core libs
-#include <algorithm>    // for std::max
-#include <map>          // for std::map
-#include <memory>       // for std::shared_ptr, std::unique_ptr
-#include <stdexcept>    // for std::logic_error, std::invalid_argument
-#include <string>       // for std::string
-#include <type_traits>  // for std::enable_if, std::is_base_of, std::conjunction, std::is_convertible
-#include <utility>      // for std::move
-#include <vector>       // for std::vector
+#include <ostream>      // for std::cout 
 
 // Mundy libs
 #include <mundy_math/Vector.hpp>  // for mundy::math::Vector
-#include <mundy_math/convex.hpp>  // for mundy::math::convex::CQPPProblem/LCPProblem
+#include <mundy_math/Matrix.hpp>  // for mundy::math::Matrix
+#include <mundy_math/convex.hpp>  // for mundy::math::solve_lcp/solve_cqpp
 
 namespace mundy {
 
@@ -43,12 +37,14 @@ namespace math {
 
 namespace {
 
-//! \name Test problems
+//! \name MundyMath backend test problems
+//@{
 
 struct UnconstrainedSPD1Problem {
   using scalar_t = double;
   using vector_t = Vector3d;
-  using linear_operator_t = Matrix3d;
+  using linear_op_t = Matrix3d;
+  using backend_t = convex::MundyMathBackend<scalar_t, 3>;
 
   auto get_space() const {
     return convex::space::Unconstrained<scalar_t>();
@@ -58,81 +54,53 @@ struct UnconstrainedSPD1Problem {
     return Vector3d{1.0, 0.0, 1.0};
   }
 
-  linear_operator_t get_A() const {
-    return Matrix3d{2.0, -1.0, 0.0, -1.0, 2.0, -1.0, 0.0, -1.0, 2.0};
+  linear_op_t get_A() const {
+    return Matrix3d{2.0,  -1.0, 0.0,   //
+                    -1.0, 2.0,  -1.0,  //
+                    0.0,  -1.0, 2.0};
   }
 
   vector_t get_q() const {
     return -get_A() * get_exact_solution();
   }
 };
+//@}
 
 TEST(Convex, AnalyticalSolutions) {
-  UnconstrainedSPD1Problem problem;
-  auto A = problem.get_A();
-  auto q = problem.get_q();
-  auto x_exact = problem.get_exact_solution();
+  UnconstrainedSPD1Problem test1;
 
-  convex::MundyMathBackend backend;
+  // Problem setup
+  auto A = test1.get_A();
+  auto q = test1.get_q();
+  auto space = test1.get_space();
+  auto x_exact = test1.get_exact_solution();
+  Vector3d x{0.0, 0.0, 0.0}, grad{}, x_tmp{}, grad_tmp{};
+
+  // Build the problem
+  const auto cqpp = make_mundy_math_cqpp(A, q, space);
+
+  // Reuse the backend token from the problem
+  const auto backend = cqpp.backend();
+
+  // Strategy + state
+  convex::PGDConfig cfg{.max_iters = 1000, .tol = 1e-6};
+  auto pgd = make_pgd_solution_strategy(backend, cfg);
+  auto pgd_state = make_pgd_state(backend, x, grad, x_tmp, grad_tmp);
+
+  // Solve (can reuse "cqpp" and "pgd" across many states)
+  auto result = solve_cqpp(cqpp, pgd, pgd_state);
+  std::cout << result << std::endl;
+
+  // Check results
+  EXPECT_TRUE(result.converged);
+  EXPECT_LE(result.num_iters, cfg.max_iters);
+
+  std::cout << "x: " << x << std::endl;
+  std::cout << "x_exact: " << x_exact << std::endl;
+  for (int i = 0; i < 3; ++i) {
+    EXPECT_NEAR(x[i], x_exact[i], cfg.tol);
+  }
 }
-
-// KOKKOS_INLINE_FUNCTION double quadratic1(const Vector<double, 2>& x) {
-//   return x[0] * x[0] + x[1] * x[1];
-// };
-
-// KOKKOS_INLINE_FUNCTION double quadratic2(const Vector<double, 2>& x) {
-//   return (x[0] - 2.0) * (x[0] - 2.0) + (x[1] + 1.0) * (x[1] + 1.0);
-// };
-
-// template <size_t N>
-// KOKKOS_INLINE_FUNCTION double rosenbrock(const Vector<double, N>& x) {
-//   double sum = 0.0;
-//   for (size_t i = 0; i < N - 1; ++i) {
-//     sum += 2.0 * std::pow(x[i + 1] - x[i] * x[i], 2.0) + std::pow(1.0 - x[i], 2.0);
-//   }
-//   return sum;
-// };
-
-// TEST(Minimize, SimpleFunctions) {
-//   constexpr size_t lbfgs_max_memory_size = 10;
-//   const double min_objective_delta = 1e-7;
-
-//   // Simple quadratic function
-//   {
-//     Vector<double, 2> x = {1.0, 1.0};
-//     double min_cost = find_min_using_approximate_derivatives<lbfgs_max_memory_size>(quadratic1, x,
-//     min_objective_delta); EXPECT_NEAR(min_cost, 0.0, min_objective_delta); EXPECT_NEAR(x[0], 0.0,
-//     min_objective_delta); EXPECT_NEAR(x[1], 0.0, min_objective_delta);
-//   }
-
-//   // Simple shifted quadratic function
-//   {
-//     Vector<double, 2> x = {1.0, 1.0};
-//     double min_cost = find_min_using_approximate_derivatives<lbfgs_max_memory_size>(quadratic2, x,
-//     min_objective_delta); EXPECT_NEAR(min_cost, 0.0, min_objective_delta); EXPECT_NEAR(x[0], 2.0,
-//     min_objective_delta); EXPECT_NEAR(x[1], -1.0, min_objective_delta);
-//   }
-// }
-
-// TEST(Minimize, ComplexFunctions) {
-//   // Note, the actual error is not guaranteed to be less than min_objective_delta due to the use of approximate
-//   // derivatives. Instead, we saw that the error was typically less than the square root of min_objective_delta.
-//   const double min_objective_delta = 1e-7;
-//   const double test_tolerance = std::sqrt(min_objective_delta);
-//   constexpr size_t lbfgs_max_memory_size = 10;
-//   constexpr size_t N = 42;
-
-//   // N-dimensional Rosenbrock function
-//   {
-//     Vector<double, N> x = {0.0};
-//     double min_cost =
-//         find_min_using_approximate_derivatives<lbfgs_max_memory_size>(rosenbrock<N>, x, min_objective_delta);
-//     EXPECT_NEAR(min_cost, 0.0, test_tolerance);
-//     for (size_t i = 0; i < N; ++i) {
-//       EXPECT_NEAR(x[i], 1.0, test_tolerance);
-//     }
-//   }
-// }
 
 }  // namespace
 
