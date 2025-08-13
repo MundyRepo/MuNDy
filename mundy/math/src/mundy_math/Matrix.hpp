@@ -997,7 +997,7 @@ class AMatrix<T, N, M, Accessor, Ownership::Owns> {
   /// \tparam[in] row The row index to drop.
   /// \tparam[in] col The column index to drop
   template <size_t row_to_exclude, size_t col_to_exclude>
-  KOKKOS_INLINE_FUNCTION auto constexpr view_minor() const {
+  KOKKOS_INLINE_FUNCTION constexpr auto view_minor() const {
     // To explain, we use a compile-time mask to exclude the given row and column from the submatrix.
     constexpr size_t newN = N - 1;
     constexpr size_t newM = M - 1;
@@ -1385,7 +1385,7 @@ template <size_t N, size_t M, typename U, typename T, ValidAccessor<U> Accessor1
           ValidAccessor<T> Accessor2, typename OwnershipType2>
 KOKKOS_INLINE_FUNCTION constexpr bool is_close(
     const AMatrix<U, N, M, Accessor1, OwnershipType1>& mat1, const AMatrix<T, N, M, Accessor2, OwnershipType2>& mat2,
-    const std::common_type_t<T, U>& tol = get_zero_tolerance<std::common_type_t<T, U>>()) {
+     const decltype(get_comparison_tolerance<T, U>())& tol = get_comparison_tolerance<T, U>()) {
   return impl::is_close_impl(std::make_index_sequence<N * M>{}, mat1, mat2, tol);
 }
 
@@ -1397,7 +1397,7 @@ template <size_t N, size_t M, typename U, typename T, ValidAccessor<U> Accessor1
           ValidAccessor<T> Accessor2, typename OwnershipType2>
 KOKKOS_INLINE_FUNCTION constexpr bool is_approx_close(
     const AMatrix<U, N, M, Accessor1, OwnershipType1>& mat1, const AMatrix<T, N, M, Accessor2, OwnershipType2>& mat2,
-    const std::common_type_t<T, U>& tol = get_relaxed_zero_tolerance<std::common_type_t<T, U>>()) {
+     const decltype(get_relaxed_comparison_tolerance<T, U>())& tol = get_relaxed_comparison_tolerance<T, U>()) {
   return is_close(mat1, mat2, tol);
 }
 //@}

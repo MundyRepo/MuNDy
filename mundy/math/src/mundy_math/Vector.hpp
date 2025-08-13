@@ -256,6 +256,12 @@ class AVector<T, N, Accessor, Ownership::Views> {
   constexpr const std::conditional_t<std::is_pointer_v<Accessor>, Accessor, Accessor&> data() const {
     return accessor_;
   }
+
+  /// \brief Cast (and copy) the vector to a different type
+  template <typename U>
+  KOKKOS_INLINE_FUNCTION constexpr auto cast() const {
+    return impl::cast_impl<U>(std::make_index_sequence<N>{}, *this);
+  }
   //@}
 
   //! \name Setters and modifiers
@@ -629,6 +635,12 @@ class AVector<T, N, Accessor, Ownership::Owns> {
   KOKKOS_INLINE_FUNCTION
   constexpr const Accessor& data() const {
     return accessor_;
+  }
+
+  /// \brief Cast (and copy) the vector to a different type
+  template <typename U>
+  KOKKOS_INLINE_FUNCTION constexpr auto cast() const {
+    return impl::cast_impl<U>(std::make_index_sequence<N>{}, *this);
   }
   //@}
 

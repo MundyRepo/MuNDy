@@ -569,7 +569,7 @@ template <size_t max_size, size_t N, typename search_strategy_type, typename sto
 KOKKOS_FUNCTION double find_min_using_approximate_derivatives(search_strategy_type search_strategy,
                                                               stop_strategy_type stop_strategy,
                                                               const CostFunctionType& cost_func, Vector<double, N>& x,
-                                                              const double min_alowable_cost,
+                                                              const double min_allowable_cost,
                                                               const double derivative_eps = 1e-7) {
   Vector<double, N> g;
   Vector<double, N> s;
@@ -577,14 +577,14 @@ KOKKOS_FUNCTION double find_min_using_approximate_derivatives(search_strategy_ty
   double cost = cost_func(x);
   const auto derivative_func = central_differences(cost_func, derivative_eps);
   g = derivative_func(x);
-  while (stop_strategy.should_continue_search(x, cost, g) && cost > min_alowable_cost) {
+  while (stop_strategy.should_continue_search(x, cost, g) && cost > min_allowable_cost) {
     s = search_strategy.get_next_direction(x, cost, g);
 
     double alpha =
         line_search(line_search_funct(cost_func, x, s), cost,
                     central_differences(line_search_funct(cost_func, x, s), derivative_eps),
                     dot(g, s),  // Sometimes the following line is a better way of determining the initial gradient.
-                    search_strategy.get_wolfe_rho(), search_strategy.get_wolfe_sigma(), min_alowable_cost,
+                    search_strategy.get_wolfe_rho(), search_strategy.get_wolfe_sigma(), min_allowable_cost,
                     search_strategy.get_max_line_search_iterations());
 
     // Take the search step indicated by the above line search

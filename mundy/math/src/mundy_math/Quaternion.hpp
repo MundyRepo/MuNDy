@@ -329,6 +329,15 @@ class AQuaternion<T, Accessor, Ownership::Views> {
     auto shifted_accessor = get_shifted_view<T, 1>(accessor_);
     return get_owning_vector<T, 3>(std::move(shifted_accessor));
   }
+
+  /// \brief Cast (and copy) the quaternion to a different type
+  template <typename U>
+  KOKKOS_INLINE_FUNCTION constexpr auto cast() const {
+    return AQuaternion<U>{static_cast<U>(accessor_[0]),  //
+                          static_cast<U>(accessor_[1]),  //
+                          static_cast<U>(accessor_[2]),  //
+                          static_cast<U>(accessor_[3])};
+  }
   //@}
 
   //! \name Setters and modifiers
@@ -799,6 +808,15 @@ class AQuaternion<T, Accessor, Ownership::Owns> {
     auto shifted_accessor = get_shifted_view<T, 1>(accessor_);
     return get_owning_vector<T, 3>(std::move(shifted_accessor));
   }
+
+  /// \brief Cast (and copy) the quaternion to a different type
+  template <typename U>
+  KOKKOS_INLINE_FUNCTION constexpr auto cast() const {
+    return AQuaternion<U>{static_cast<U>(accessor_[0]),  //
+                          static_cast<U>(accessor_[1]),  //
+                          static_cast<U>(accessor_[2]),  //
+                          static_cast<U>(accessor_[3])};
+  }
   //@}
 
   //! \name Setters and modifiers
@@ -1091,12 +1109,12 @@ template <typename U, typename T, ValidAccessor<U> Accessor1, typename Ownership
           typename OwnershipType2>
 KOKKOS_INLINE_FUNCTION constexpr bool is_close(
     const AQuaternion<U, Accessor1, OwnershipType1> &quat1, const AQuaternion<T, Accessor2, OwnershipType2> &quat2,
-    const std::common_type_t<T, U> &tol = get_zero_tolerance<std::common_type_t<T, U>>()) {
-  using CommonType = std::common_type_t<T, U>;
-  return Kokkos::abs(static_cast<CommonType>(quat1[0]) - static_cast<CommonType>(quat2[0])) < tol &&
-         Kokkos::abs(static_cast<CommonType>(quat1[1]) - static_cast<CommonType>(quat2[1])) < tol &&
-         Kokkos::abs(static_cast<CommonType>(quat1[2]) - static_cast<CommonType>(quat2[2])) < tol &&
-         Kokkos::abs(static_cast<CommonType>(quat1[3]) - static_cast<CommonType>(quat2[3])) < tol;
+     const decltype(get_comparison_tolerance<T, U>())& tol = get_comparison_tolerance<T, U>()) {
+  using Tol = decltype(tol);
+  return Kokkos::abs(static_cast<Tol>(quat1[0]) - static_cast<Tol>(quat2[0])) <= tol &&
+         Kokkos::abs(static_cast<Tol>(quat1[1]) - static_cast<Tol>(quat2[1])) <= tol &&
+         Kokkos::abs(static_cast<Tol>(quat1[2]) - static_cast<Tol>(quat2[2])) <= tol &&
+         Kokkos::abs(static_cast<Tol>(quat1[3]) - static_cast<Tol>(quat2[3])) <= tol;
 }
 
 /// \brief AQuaternion-quaternion equality (element-wise within a relaxed tolerance)
@@ -1107,7 +1125,7 @@ template <typename U, typename T, ValidAccessor<U> Accessor1, typename Ownership
           typename OwnershipType2>
 KOKKOS_INLINE_FUNCTION constexpr bool is_approx_close(
     const AQuaternion<U, Accessor1, OwnershipType1> &quat1, const AQuaternion<T, Accessor2, OwnershipType2> &quat2,
-    const std::common_type_t<T, U> &tol = get_relaxed_zero_tolerance<std::common_type_t<T, U>>()) {
+     const decltype(get_relaxed_comparison_tolerance<T, U>())& tol = get_relaxed_comparison_tolerance<T, U>()) {
   return is_close(quat1, quat2, tol);
 }
 //@}
@@ -1234,7 +1252,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto slerp(const AQuaternion<U, Accessor1, Owne
   }
 
   // Check for near-parallel case
-  if (1 - dot_q12 < epsilon) {
+  if (static_cast<CommonType>(1) - dot_q12 < epsilon) {
     // Linear Interpolation as fallback
     return AQuaternion<CommonType>{
         static_cast<CommonType>(q1[0]) +
@@ -1249,8 +1267,9 @@ KOKKOS_INLINE_FUNCTION constexpr auto slerp(const AQuaternion<U, Accessor1, Owne
     // Spherical Interpolation
     const CommonType theta = std::acos(dot_q12);
     const CommonType sin_theta = std::sin(theta);
-    const CommonType s1 = std::sin((CommonType(1) - t) * theta) / sin_theta;
-    const CommonType s2 = std::sin(t * theta) / sin_theta;
+    const CommonType inv_sin_theta = static_cast<CommonType>(1) / sin_theta;
+    const CommonType s1 = std::sin((static_cast<CommonType>(1) - static_cast<CommonType>(t)) * theta) * inv_sin_theta;
+    const CommonType s2 = std::sin(static_cast<CommonType>(t) * theta) * inv_sin_theta;
 
     return AQuaternion<CommonType>{(static_cast<CommonType>(s1) * static_cast<CommonType>(q1[0])) +
                                        (static_cast<CommonType>(s2) * static_cast<CommonType>(q2_adjusted[0])),

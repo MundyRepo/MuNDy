@@ -62,7 +62,7 @@ KOKKOS_INLINE_FUNCTION constexpr T get_relaxed_zero_tolerance() {
   if constexpr (std::is_same_v<cT, float>) {
     return 1e-3f;
   } else if constexpr (std::is_same_v<cT, double>) {
-    return 1e-6;
+    return 1e-8;
   } else {
     // For integral types, tolerance doesn't make sense, return 0
     return T(0);
@@ -93,6 +93,23 @@ KOKKOS_INLINE_FUNCTION constexpr auto get_comparison_tolerance() {
   }
 }
 
+/// \brief A helper function for getting the tolerance to use when comparing two different types.
+/// int    - int -> double
+/// float  - int -> float
+/// double - int -> double
+template <typename T1, typename T2>
+  requires std::is_arithmetic_v<T1> && std::is_arithmetic_v<T2>
+KOKKOS_INLINE_FUNCTION constexpr auto get_comparison_tolerance_promote_ints() {
+  using cT1 = std::remove_reference_t<T1>;
+  using cT2 = std::remove_reference_t<T2>;
+
+  if constexpr (std::is_integral_v<cT1> && std::is_integral_v<cT2>) {
+    return get_comparison_tolerance<double, double>();
+  } else {
+    return get_comparison_tolerance<T1, T2>();
+  }
+}
+
 /// \brief A helper function for getting the relaxed tolerance to use when comparing two different types.
 /// This class chooses the tolerance based on the smaller of the two types.
 template <typename T1, typename T2>
@@ -100,6 +117,20 @@ template <typename T1, typename T2>
 KOKKOS_INLINE_FUNCTION constexpr auto get_relaxed_comparison_tolerance() {
   using T = decltype(get_comparison_tolerance<T1, T2>());
   return get_relaxed_zero_tolerance<T>();
+}
+
+/// \brief A helper function for getting the relaxed tolerance to use when comparing two different types.
+template <typename T1, typename T2>
+  requires std::is_arithmetic_v<T1> && std::is_arithmetic_v<T2>
+KOKKOS_INLINE_FUNCTION constexpr auto get_relaxed_comparison_tolerance_promote_ints() {
+  using cT1 = std::remove_reference_t<T1>;
+  using cT2 = std::remove_reference_t<T2>;
+
+  if constexpr (std::is_integral_v<cT1> && std::is_integral_v<cT2>) {
+    return get_relaxed_comparison_tolerance<double, double>();
+  } else {
+    return get_relaxed_comparison_tolerance<T1, T2>();
+  }
 }
 
 }  // namespace math

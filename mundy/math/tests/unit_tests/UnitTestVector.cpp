@@ -571,46 +571,49 @@ TYPED_TEST(VectorSingleTypeTest, BasicArithmeticReductionOperations) {
 TYPED_TEST(VectorPairwiseTypeTest, SpecialOperations) {
   using T1 = typename TypeParam::T1;
   using T2 = typename TypeParam::T2;
+  using C = decltype(get_comparison_tolerance_promote_ints<T1, T2>());
 
   // Dim 1
   OurVector1<T1> v1(1);
   OurVector1<T2> v2(2);
-  is_close_debug(dot(v1, v2), 2.0, "Dot product failed.");
-  is_close_debug(norm(v1), 1.0, "Norm failed.");
-  is_close_debug(norm_squared(v1), 1.0, "Norm squared failed.");
-  is_close_debug(infinity_norm(v1), 1.0, "Infinity norm failed.");
-  is_close_debug(one_norm(v1), 1.0, "One norm failed.");
-  is_close_debug(two_norm(v1), 1.0, "Two norm failed.");
-  is_close_debug(two_norm_squared(v1), 1.0, "Two norm squared failed.");
-  is_close_debug(minor_angle(v1, v2), 0.0, "Minor angle failed.");
-  is_close_debug(major_angle(v1, v2), M_PI, "Major angle failed.");
+  is_close_debug(dot(v1, v2), static_cast<C>(2.0), "Dot product failed.");
+  is_close_debug(norm(v1), static_cast<C>(1.0), "Norm failed.");
+  is_close_debug(norm_squared(v1), static_cast<C>(1.0), "Norm squared failed.");
+  is_close_debug(infinity_norm(v1), static_cast<C>(1.0), "Infinity norm failed.");
+  is_close_debug(one_norm(v1), static_cast<C>(1.0), "One norm failed.");
+  is_close_debug(two_norm(v1), static_cast<C>(1.0), "Two norm failed.");
+  is_close_debug(two_norm_squared(v1), static_cast<C>(1.0), "Two norm squared failed.");
+  is_close_debug(minor_angle(v1, v2), static_cast<C>(0.0), "Minor angle failed.");
+  is_close_debug(major_angle(v1, v2), static_cast<C>(M_PI), "Major angle failed.");
 
   // Dim 2
   OurVector2<T1> v3(1, 2);
   OurVector2<T2> v4(3, 4);
-  is_close_debug(dot(v3, v4), 11.0, "Dot product failed.");
-  is_close_debug(norm(v3), std::sqrt(5.0), "Norm failed.");
-  is_close_debug(norm_squared(v3), 5.0, "Norm squared failed.");
-  is_close_debug(infinity_norm(v3), 2.0, "Infinity norm failed.");
-  is_close_debug(one_norm(v3), 3.0, "One norm failed.");
-  is_close_debug(two_norm(v3), std::sqrt(5.0), "Two norm failed.");
-  is_close_debug(two_norm_squared(v3), 5.0, "Two norm squared failed.");
-  is_close_debug(minor_angle(v3, v4), std::acos(11.0 / (std::sqrt(5.0) * std::sqrt(25.0))), "Minor angle failed.");
-  is_close_debug(major_angle(v3, v4), M_PI - std::acos(11.0 / (std::sqrt(5.0) * std::sqrt(25.0))),
+  is_close_debug(dot(v3, v4), static_cast<C>(11.0), "Dot product failed.");
+  is_close_debug(norm(v3), static_cast<C>(std::sqrt(5.0)), "Norm failed.");
+  is_close_debug(norm_squared(v3), static_cast<C>(5.0), "Norm squared failed.");
+  is_close_debug(infinity_norm(v3), static_cast<C>(2.0), "Infinity norm failed.");
+  is_close_debug(one_norm(v3), static_cast<C>(3.0), "One norm failed.");
+  is_close_debug(two_norm(v3), static_cast<C>(std::sqrt(5.0)), "Two norm failed.");
+  is_close_debug(two_norm_squared(v3), static_cast<C>(5.0), "Two norm squared failed.");
+  is_close_debug(minor_angle(v3, v4), static_cast<C>(std::acos(11.0 / (std::sqrt(5.0) * std::sqrt(25.0)))),
+                 "Minor angle failed.");
+  is_close_debug(major_angle(v3, v4), static_cast<C>(M_PI - std::acos(11.0 / (std::sqrt(5.0) * std::sqrt(25.0)))),
                  "Major angle failed.");
 
   // Dim 3
   OurVector3<T1> v5(1, 2, 3);
   OurVector3<T2> v6(4, 5, 6);
-  is_close_debug(dot(v5, v6), 32.0, "Dot product failed.");
-  is_close_debug(norm(v5), std::sqrt(14.0), "Norm failed.");
-  is_close_debug(norm_squared(v5), 14.0, "Norm squared failed.");
-  is_close_debug(infinity_norm(v5), 3.0, "Infinity norm failed.");
-  is_close_debug(one_norm(v5), 6.0, "One norm failed.");
-  is_close_debug(two_norm(v5), std::sqrt(14.0), "Two norm failed.");
-  is_close_debug(two_norm_squared(v5), 14.0, "Two norm squared failed.");
-  is_close_debug(minor_angle(v5, v6), std::acos(32.0 / (std::sqrt(14.0) * std::sqrt(77.0))), "Minor angle failed.");
-  is_close_debug(major_angle(v5, v6), M_PI - std::acos(32.0 / (std::sqrt(14.0) * std::sqrt(77.0))),
+  is_close_debug(dot(v5, v6), static_cast<C>(32.0), "Dot product failed.");
+  is_close_debug(norm(v5), static_cast<C>(std::sqrt(14.0)), "Norm failed.");
+  is_close_debug(norm_squared(v5), static_cast<C>(14.0), "Norm squared failed.");
+  is_close_debug(infinity_norm(v5), static_cast<C>(3.0), "Infinity norm failed.");
+  is_close_debug(one_norm(v5), static_cast<C>(6.0), "One norm failed.");
+  is_close_debug(two_norm(v5), static_cast<C>(std::sqrt(14.0)), "Two norm failed.");
+  is_close_debug(two_norm_squared(v5), static_cast<C>(14.0), "Two norm squared failed.");
+  is_close_debug(minor_angle(v5, v6), static_cast<C>(std::acos(32.0 / (std::sqrt(14.0) * std::sqrt(77.0)))),
+                 "Minor angle failed.");
+  is_close_debug(major_angle(v5, v6), static_cast<C>(M_PI - std::acos(32.0 / (std::sqrt(14.0) * std::sqrt(77.0)))),
                  "Major angle failed.");
 }
 //@}
@@ -680,14 +683,13 @@ TYPED_TEST(VectorSingleTypeTest, ConstexprApply) {
   // Dim 2
   constexpr OurVector2<TypeParam> v3(1, 2);
   constexpr auto v4 = apply([](auto x) { return x + 1; }, v3);
-  static_assert(std::abs(v4[0] - 2) < 1e-6 && std::abs(v4[1] - 3) < 1e-6,
-                "Constexpr apply failed.");
+  static_assert(std::abs(v4[0] - 2) < 1e-6 && std::abs(v4[1] - 3) < 1e-6, "Constexpr apply failed.");
 
   // Dim 3
   constexpr OurVector3<TypeParam> v5(1, 2, 3);
   constexpr auto v6 = apply([](auto x) { return x + 1; }, v5);
-  static_assert(std::abs(v6[0] - 2) < 1e-6 && std::abs(v6[1] - 3) < 1e-6 &&
-                std::abs(v6[2] - 4) < 1e-6, "Constexpr apply failed.");
+  static_assert(std::abs(v6[0] - 2) < 1e-6 && std::abs(v6[1] - 3) < 1e-6 && std::abs(v6[2] - 4) < 1e-6,
+                "Constexpr apply failed.");
 
   // Using an external function
   // Dim 1
@@ -698,14 +700,13 @@ TYPED_TEST(VectorSingleTypeTest, ConstexprApply) {
   // Dim 2
   constexpr OurVector2<TypeParam> v9(1, 2);
   constexpr auto v10 = apply(an_external_constexpr_functor{}, v9);
-  static_assert(std::abs(v10[0] - 2) < 1e-6 && std::abs(v10[1] - 3) < 1e-6,
-                "Constexpr apply failed.");
+  static_assert(std::abs(v10[0] - 2) < 1e-6 && std::abs(v10[1] - 3) < 1e-6, "Constexpr apply failed.");
 
   // Dim 3
   constexpr OurVector3<TypeParam> v11(1, 2, 3);
   constexpr auto v12 = apply(an_external_constexpr_functor{}, v11);
-  static_assert(std::abs(v12[0] - 2) < 1e-6 && std::abs(v12[1] - 3) < 1e-6 &&
-                std::abs(v12[2] - 4) < 1e-6, "Constexpr apply failed.");
+  static_assert(std::abs(v12[0] - 2) < 1e-6 && std::abs(v12[1] - 3) < 1e-6 && std::abs(v12[2] - 4) < 1e-6,
+                "Constexpr apply failed.");
 }
 //@}
 
