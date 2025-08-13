@@ -201,7 +201,7 @@ struct MundyMathBackend {
   using scalar_t = Scalar;
   using vector_t = Vector<scalar_t, N>;
 
-  KOKKOS_INLINE_FUNCTION static size_t vector_size(const vector_t& x) {
+  KOKKOS_INLINE_FUNCTION static size_t vector_size(const vector_t& /*x*/) {
     return vector_t::size;
   }
 
@@ -371,10 +371,6 @@ struct LinfNormProjectedGradientResidual {  // LCP only
           }
         },
         largest_abs_gradient);
-
-    std::cout << "Largest absolute gradient: " << largest_abs_gradient << std::endl;
-    std::cout << "x: " << x << std::endl;
-    std::cout << "grad: " << grad << std::endl;
 
     return largest_abs_gradient;
   }
@@ -559,7 +555,6 @@ class PGDStrategy {
     }
 
     // x = Proj(x_tmp - step_size * grad_tmp)
-    std::cout << "state.step_size(): " << state.step_size() << std::endl;
     Backend::wrapped_axpbyz(one, state.x_tmp(), -state.step_size(), state.grad_tmp(), state.x(), prob.space());
 
     // grad = A x + q
@@ -568,7 +563,6 @@ class PGDStrategy {
 
     // residual & test
     state.residual() = resid_(Backend{}, state.x(), state.grad(), prob.space());
-    std::cout << "state.residual(): " << state.residual() << " state.iter(): " << state.iter() << std::endl;
     if (state.residual() <= static_cast<scalar_t>(cfg_.tol)) {
       state.converged() = true;
       return true;
