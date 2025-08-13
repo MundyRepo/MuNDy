@@ -24,11 +24,11 @@
 #include <Kokkos_Core.hpp>  // for Kokkos::Array
 
 // C++ core libs
-#include <ostream>      // for std::cout 
+#include <ostream>  // for std::cout
 
 // Mundy libs
-#include <mundy_math/Vector.hpp>  // for mundy::math::Vector
 #include <mundy_math/Matrix.hpp>  // for mundy::math::Matrix
+#include <mundy_math/Vector.hpp>  // for mundy::math::Vector
 #include <mundy_math/convex.hpp>  // for mundy::math::solve_lcp/solve_cqpp
 
 namespace mundy {
@@ -45,6 +45,10 @@ struct UnconstrainedSPD1Problem {
   using vector_t = Vector3d;
   using linear_op_t = Matrix3d;
   using backend_t = convex::MundyMathBackend<scalar_t, 3>;
+
+  std::string name() const {
+    return "UnconstrainedSPD1Problem";
+  }
 
   auto get_space() const {
     return convex::space::Unconstrained<scalar_t>();
@@ -71,6 +75,10 @@ struct InactiveBoxConstrainedSPDProblem {
   using linear_op_t = Matrix3d;
   using backend_t = convex::MundyMathBackend<scalar_t, 3>;
 
+  std::string name() const {
+    return "InactiveBoxConstrainedSPDProblem";
+  }
+
   auto get_space() const {
     return convex::space::Bounded<scalar_t>(0.0, 2.0);
   }
@@ -96,6 +104,10 @@ struct ActiveBoxConstrainedSPDProblem {
   using linear_op_t = Matrix3d;
   using backend_t = convex::MundyMathBackend<scalar_t, 3>;
 
+  std::string name() const {
+    return "ActiveBoxConstrainedSPDProblem";
+  }
+
   auto get_space() const {
     return convex::space::Bounded<scalar_t>(9.0, 10.0);
   }
@@ -114,15 +126,98 @@ struct ActiveBoxConstrainedSPDProblem {
     return -get_A() * get_exact_solution();
   }
 };
+
+template <size_t N>
+struct RandomLCP {
+  using scalar_t = double;
+  using vector_t = Vector<scalar_t, N>;
+  using linear_op_t = Matrix<scalar_t, N, N>;
+  using backend_t = convex::MundyMathBackend<scalar_t, N>;
+
+  std::string name() const {
+    return "RandomLCP" + std::to_string(N);
+  }
+
+  RandomLCP() {
+    // 1. Build M
+    A_ = gen_random_p_matrix();
+
+    // 2. Choose disjoint supports for z* and w*
+    for (size_t i = 0; i < N; ++i) {
+      double u01 = static_cast<double>(rand()) / RAND_MAX;
+      bool is_active = static_cast<double>(rand()) / RAND_MAX < 0.5;
+      if (is_active) {
+        x_star_[i] = u01 * 0.9 + 0.1;
+        grad_star_[i] = 0.0;
+      } else {
+        x_star_[i] = 0.0;
+        grad_star_[i] = u01 * 0.9 + 0.1;
+      }
+    }
+
+    // 3. q that makes (z*, w*) solve the LCP
+    q_ = grad_star_ - A_ * x_star_;
+  }
+
+  auto get_space() const {
+    return convex::space::LowerBound<scalar_t>(0.0);
+  }
+
+  vector_t get_exact_solution() const {
+    return x_star_;
+  }
+
+  linear_op_t get_A() const {
+    return A_;
+  }
+
+  vector_t get_q() const {
+    return q_;
+  }
+
+ private:
+  linear_op_t gen_random_matrix() {
+    linear_op_t mat;
+    for (size_t i = 0; i < N; ++i) {
+      for (size_t j = 0; j < N; ++j) {
+        mat(i, j) = 1.0 - 2 * static_cast<double>(rand()) / RAND_MAX;
+      }
+    }
+    return mat;
+  }
+
+  linear_op_t gen_random_p_matrix() {
+    // Strictly diagonally dominant with positive diagonal
+    linear_op_t mat = gen_random_matrix();
+    for (size_t i = 0; i < N; ++i) {
+      scalar_t off_diag_abs_row_sum = 0;
+      for (size_t j = 0; j < N; ++j) {
+        off_diag_abs_row_sum += Kokkos::abs(mat(i, j)) * (i != j);
+      }
+      mat(i, i) = off_diag_abs_row_sum + 10.0;
+    }
+
+    return mat;
+  }
+
+  linear_op_t A_;
+  vector_t q_;
+  vector_t x_star_;
+  vector_t grad_star_;
+};
 //@}
 
 void run_mundy_math_test(const auto& test) {
-  // Problem setup (us a bad initial guess to force more iterations)
+  // Problem setup
   auto A = test.get_A();
   auto q = test.get_q();
   auto space = test.get_space();
   auto x_exact = test.get_exact_solution();
-  Vector3d x{99.0, -99.0, 99.0}, grad{}, x_tmp{}, grad_tmp{};
+
+  using vector_t = decltype(x_exact);
+  vector_t x{}, grad{}, x_tmp{}, grad_tmp{};
+
+  x.fill(99.99);  // use a bad initial guess to force more iterations
 
   // Build the problem
   const auto cqpp = make_mundy_math_cqpp(A, q, space);
@@ -141,20 +236,18 @@ void run_mundy_math_test(const auto& test) {
   // Check results
   EXPECT_TRUE(result.converged);
   EXPECT_LE(result.num_iters, cfg.max_iters);
-  for (int i = 0; i < 3; ++i) {
+  for (size_t i = 0; i < vector_t::size; ++i) {
     EXPECT_NEAR(x[i], x_exact[i], 10 * cfg.tol);
   }
 }
 
 TEST(Convex, AnalyticalSolutions) {
-  std::tuple<UnconstrainedSPD1Problem, InactiveBoxConstrainedSPDProblem,
-             ActiveBoxConstrainedSPDProblem>
-      test_cases;
-  std::apply(
-      [](auto&&... test_case) {
-        (run_mundy_math_test(test_case), ...);
-      },
-      test_cases);
+  auto test_cases = std::make_tuple(UnconstrainedSPD1Problem{},          //
+                                    InactiveBoxConstrainedSPDProblem{},  //
+                                    ActiveBoxConstrainedSPDProblem{},    //
+                                    RandomLCP<3>{},                      //
+                                    RandomLCP<7>{});
+  std::apply([](auto&&... test_case) { (run_mundy_math_test(test_case), ...); }, test_cases);
 }
 
 }  // namespace

@@ -1357,19 +1357,21 @@ static_assert(is_matrix_v<Matrix<int, 3, 4>>, "Odd, Matrix is not a matrix.");
 /// \param[in] mat The matrix.
 template <typename T, size_t N, size_t M, ValidAccessor<T> Accessor, typename OwnershipType>
 std::ostream& operator<<(std::ostream& os, const AMatrix<T, N, M, Accessor, OwnershipType>& mat) {
+  os << "[";
   for (size_t i = 0; i < N; ++i) {
-    os << "(";
+    os << "[";
     for (size_t j = 0; j < M; ++j) {
       os << mat(i, j);
       if (j < M - 1) {
         os << ", ";
       }
     }
-    os << ")";
+    os << "]";
     if (i < N - 1) {
       os << std::endl;
     }
   }
+  os << "]";
   return os;
 }
 //@}
