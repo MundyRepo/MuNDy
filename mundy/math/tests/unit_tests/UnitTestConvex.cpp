@@ -40,6 +40,8 @@ namespace {
 //! \name MundyMath backend test problems
 //@{
 
+namespace math_backend {
+
 struct UnconstrainedSPD1Problem {
   using scalar_t = double;
   using vector_t = Vector3d;
@@ -205,6 +207,304 @@ struct RandomLCP {
   vector_t x_star_;
   vector_t grad_star_;
 };
+
+}  // namespace math_backend
+//@}
+
+//! \name Kokkos backend test problems (single process)
+//@{
+
+namespace kokkos_backend {
+
+struct UnconstrainedSPD1Problem {
+  using exec_space = Kokkos::DefaultExecutionSpace;
+  using mem_space = exec_space::memory_space;
+
+  using scalar_t = double;
+  using layout_t = Kokkos::View<scalar_t*, mem_space>::array_layout;
+  using vector_t = Kokkos::View<scalar_t*, layout_t, mem_space>;
+  using linear_op_t = Kokkos::View<scalar_t**, layout_t, mem_space>;
+  using backend_t = convex::KokkosBackend<scalar_t, layout_t, mem_space, exec_space>;
+
+  std::string name() const {
+    return "UnconstrainedSPD1Problem";
+  }
+
+  unsigned size() const {
+    return 3;
+  }
+
+  auto get_exec_space() const {
+    return exec_space{};
+  }
+
+  auto get_space() const {
+    return convex::space::Unconstrained<scalar_t>();
+  }
+
+  vector_t get_exact_solution() const {
+    vector_t x_exact(Kokkos::view_alloc(Kokkos::WithoutInitializing, "x_exact"), 3);
+
+    auto x_exact_host = Kokkos::create_mirror_view(x_exact);
+    x_exact_host(0) = 1.0;
+    x_exact_host(1) = 0.0;
+    x_exact_host(2) = 1.0;
+    Kokkos::deep_copy(x_exact, x_exact_host);
+
+    return x_exact;
+  }
+
+  linear_op_t get_A() const {
+    linear_op_t A(Kokkos::view_alloc(Kokkos::WithoutInitializing, "A"), 3, 3);
+
+    // clang-format off
+    auto A_host = Kokkos::create_mirror_view(A);
+    A_host(0, 0) = 2.0;  A_host(0, 1) = -1.0; A_host(0, 2) = 0.0;
+    A_host(1, 0) = -1.0; A_host(1, 1) = 2.0;  A_host(1, 2) = -1.0;
+    A_host(2, 0) = 0.0;  A_host(2, 1) = -1.0; A_host(2, 2) = 2.0;
+    // clang-format on
+
+    Kokkos::deep_copy(A, A_host);
+    return A;
+  }
+
+  vector_t get_q() const {
+    vector_t q(Kokkos::view_alloc(Kokkos::WithoutInitializing, "q"), 3);
+    backend_t::apply(-1.0, get_A(), get_exact_solution(), 0.0, q);
+    return q;
+  }
+};
+
+struct InactiveBoxConstrainedSPDProblem {
+  using exec_space = Kokkos::DefaultExecutionSpace;
+  using mem_space = exec_space::memory_space;
+
+  using scalar_t = double;
+  using layout_t = Kokkos::View<scalar_t*, mem_space>::array_layout;
+  using vector_t = Kokkos::View<scalar_t*, layout_t, mem_space>;
+  using linear_op_t = Kokkos::View<scalar_t**, layout_t, mem_space>;
+  using backend_t = convex::KokkosBackend<scalar_t, layout_t, mem_space, exec_space>;
+
+  std::string name() const {
+    return "InactiveBoxConstrainedSPDProblem";
+  }
+
+  unsigned size() const {
+    return 3;
+  }
+
+  auto get_exec_space() const {
+    return exec_space{};
+  }
+
+  auto get_space() const {
+    return convex::space::Bounded<scalar_t>(0.0, 2.0);
+  }
+
+  vector_t get_exact_solution() const {
+    vector_t x_exact(Kokkos::view_alloc(Kokkos::WithoutInitializing, "x_exact"), 3);
+
+    auto x_exact_host = Kokkos::create_mirror_view(x_exact);
+    x_exact_host(0) = 1.0;
+    x_exact_host(1) = 0.0;
+    x_exact_host(2) = 1.0;
+    Kokkos::deep_copy(x_exact, x_exact_host);
+
+    return x_exact;
+  }
+
+  linear_op_t get_A() const {
+    linear_op_t A(Kokkos::view_alloc(Kokkos::WithoutInitializing, "A"), 3, 3);
+
+    // clang-format off
+    auto A_host = Kokkos::create_mirror_view(A);
+    A_host(0, 0) = 2.0;  A_host(0, 1) = -1.0; A_host(0, 2) = 0.0;
+    A_host(1, 0) = -1.0; A_host(1, 1) = 2.0;  A_host(1, 2) = -1.0;
+    A_host(2, 0) = 0.0;  A_host(2, 1) = -1.0; A_host(2, 2) = 2.0;
+    // clang-format on
+
+    Kokkos::deep_copy(A, A_host);
+    return A;
+  }
+
+  vector_t get_q() const {
+    vector_t q(Kokkos::view_alloc(Kokkos::WithoutInitializing, "q"), 3);
+    backend_t::apply(-1.0, get_A(), get_exact_solution(), 0.0, q);
+    return q;
+  }
+};
+
+struct ActiveBoxConstrainedSPDProblem {
+  using exec_space = Kokkos::DefaultExecutionSpace;
+  using mem_space = exec_space::memory_space;
+
+  using scalar_t = double;
+  using layout_t = Kokkos::View<scalar_t*, mem_space>::array_layout;
+  using vector_t = Kokkos::View<scalar_t*, layout_t, mem_space>;
+  using linear_op_t = Kokkos::View<scalar_t**, layout_t, mem_space>;
+  using backend_t = convex::KokkosBackend<scalar_t, layout_t, mem_space, exec_space>;
+
+  std::string name() const {
+    return "ActiveBoxConstrainedSPDProblem";
+  }
+
+  unsigned size() const {
+    return 3;
+  }
+
+  auto get_exec_space() const {
+    return exec_space{};
+  }
+
+  auto get_space() const {
+    return convex::space::Bounded<scalar_t>(9.0, 10.0);
+  }
+
+  vector_t get_exact_solution() const {
+    vector_t x_exact(Kokkos::view_alloc(Kokkos::WithoutInitializing, "x_exact"), 3);
+
+    auto x_exact_host = Kokkos::create_mirror_view(x_exact);
+    x_exact_host(0) = 9.0;
+    x_exact_host(1) = 9.0;
+    x_exact_host(2) = 9.0;
+    Kokkos::deep_copy(x_exact, x_exact_host);
+
+    return x_exact;
+  }
+
+  linear_op_t get_A() const {
+    linear_op_t A(Kokkos::view_alloc(Kokkos::WithoutInitializing, "A"), 3, 3);
+
+    // clang-format off
+    auto A_host = Kokkos::create_mirror_view(A);
+    A_host(0, 0) = 2.0;  A_host(0, 1) = -1.0; A_host(0, 2) = 0.0;
+    A_host(1, 0) = -1.0; A_host(1, 1) = 2.0;  A_host(1, 2) = -1.0;
+    A_host(2, 0) = 0.0;  A_host(2, 1) = -1.0; A_host(2, 2) = 2.0;
+    // clang-format on
+
+    Kokkos::deep_copy(A, A_host);
+    return A;
+  }
+
+  vector_t get_q() const {
+    vector_t q(Kokkos::view_alloc(Kokkos::WithoutInitializing, "q"), 3);
+    backend_t::apply(-1.0, get_A(), get_exact_solution(), 0.0, q);
+    return q;
+  }
+};
+
+struct RandomLCP {
+  using exec_space = Kokkos::DefaultExecutionSpace;
+  using mem_space = exec_space::memory_space;
+
+  using scalar_t = double;
+  using layout_t = Kokkos::View<scalar_t*, mem_space>::array_layout;
+  using vector_t = Kokkos::View<scalar_t*, layout_t, mem_space>;
+  using linear_op_t = Kokkos::View<scalar_t**, layout_t, mem_space>;
+  using backend_t = convex::KokkosBackend<scalar_t, layout_t, mem_space, exec_space>;
+
+  std::string name() const {
+    return "RandomLCP" + std::to_string(size_);
+  }
+
+  unsigned size() const {
+    return size_;
+  }
+
+  auto get_exec_space() const {
+    return exec_space{};
+  }
+
+  RandomLCP(unsigned size) : size_(size) {
+    // 1. Build M
+    A_ = gen_random_p_matrix(size_);
+
+    // 2. Choose disjoint supports for z* and w*
+    x_star_ = vector_t(Kokkos::view_alloc(Kokkos::WithoutInitializing, "x_star"), size_);
+    grad_star_ = vector_t(Kokkos::view_alloc(Kokkos::WithoutInitializing, "grad_star"), size_);
+    auto x_star_host = Kokkos::create_mirror_view(x_star_);
+    auto grad_star_host = Kokkos::create_mirror_view(grad_star_);
+    for (size_t i = 0; i < size_; ++i) {
+      double u01 = static_cast<double>(rand()) / RAND_MAX;
+      bool is_active = static_cast<double>(rand()) / RAND_MAX < 0.5;
+      if (is_active) {
+        x_star_host[i] = u01 * 0.9 + 0.1;
+        grad_star_host[i] = 0.0;
+      } else {
+        x_star_host[i] = 0.0;
+        grad_star_host[i] = u01 * 0.9 + 0.1;
+      }
+    }
+    Kokkos::deep_copy(x_star_, x_star_host);
+    Kokkos::deep_copy(grad_star_, grad_star_host);
+
+    // 3. q that makes (z*, w*) solve the LCP
+    // q_ = grad_star_ - A_ * x_star_;
+    q_ = vector_t(Kokkos::view_alloc(Kokkos::WithoutInitializing, "q"), size_);
+    backend_t::axpby(1.0, grad_star_, 0.0, q_);
+    backend_t::apply(-1.0, A_, x_star_, 1.0, q_);
+  }
+
+  auto get_space() const {
+    return convex::space::LowerBound<scalar_t>(0.0);
+  }
+
+  vector_t get_exact_solution() const {
+    return x_star_;
+  }
+
+  linear_op_t get_A() const {
+    return A_;
+  }
+
+  vector_t get_q() const {
+    return q_;
+  }
+
+ private:
+  linear_op_t gen_random_matrix(unsigned size) {
+    linear_op_t mat(Kokkos::view_alloc(Kokkos::WithoutInitializing, "mat"), size, size);
+
+    // Fill with random values in [-1, 1] (not a statistically random matrix but this is a test)
+    auto mat_host = Kokkos::create_mirror_view(mat);
+    Kokkos::parallel_for(
+        "gen_random_matrix", Kokkos::MDRangePolicy<Kokkos::Rank<2>>({0, 0}, {size, size}),
+        KOKKOS_LAMBDA(const size_t i, const size_t j) {
+          mat_host(i, j) = 1.0 - 2 * static_cast<double>(rand()) / RAND_MAX;
+        });
+    Kokkos::deep_copy(mat, mat_host);
+
+    return mat;
+  }
+
+  linear_op_t gen_random_p_matrix(unsigned size) {
+    // Strictly diagonally dominant with positive diagonal
+    linear_op_t mat = gen_random_matrix(size);
+
+    // Team loop over each row, thread reduce over columns
+    using team_policy = Kokkos::TeamPolicy<exec_space>;
+    using team_member = typename team_policy::member_type;
+    Kokkos::parallel_for(
+        "gen_random_p_matrix", team_policy(size, Kokkos::AUTO()), KOKKOS_LAMBDA(const team_member& team) {
+          size_t i = team.league_rank();
+          scalar_t off_diag_abs_row_sum = 0;
+          Kokkos::parallel_reduce(
+              Kokkos::TeamThreadRange(team, 0, size),
+              [&](const size_t j, scalar_t& sum) { sum += Kokkos::abs(mat(i, j)) * (j != i); }, off_diag_abs_row_sum);
+          mat(i, i) = off_diag_abs_row_sum + 10.0;
+        });
+
+    return mat;
+  }
+
+  unsigned size_;
+  linear_op_t A_;
+  vector_t q_;
+  vector_t x_star_;
+  vector_t grad_star_;
+};
+
+}  // namespace kokkos_backend
 //@}
 
 void run_mundy_math_test(const auto& test) {
@@ -241,13 +541,68 @@ void run_mundy_math_test(const auto& test) {
   }
 }
 
-TEST(Convex, AnalyticalSolutions) {
-  auto test_cases = std::make_tuple(UnconstrainedSPD1Problem{},          //
-                                    InactiveBoxConstrainedSPDProblem{},  //
-                                    ActiveBoxConstrainedSPDProblem{},    //
-                                    RandomLCP<3>{},                      //
-                                    RandomLCP<7>{});
+void run_kokkos_test(const auto& test) {
+  // Problem setup
+  auto exec_space = test.get_exec_space();
+  auto A = test.get_A();
+  auto q = test.get_q();
+  auto space = test.get_space();
+  auto x_exact = test.get_exact_solution();
+  unsigned size = test.size();
+
+  using vector_t = decltype(x_exact);
+  vector_t x(Kokkos::view_alloc(Kokkos::WithoutInitializing, "x"), size);
+  vector_t grad(Kokkos::view_alloc(Kokkos::WithoutInitializing, "grad"), size);
+  vector_t x_tmp(Kokkos::view_alloc(Kokkos::WithoutInitializing, "x_tmp"), size);
+  vector_t grad_tmp(Kokkos::view_alloc(Kokkos::WithoutInitializing, "grad_tmp"), size);
+
+  Kokkos::deep_copy(x, 99.99);  // use a bad initial guess to force more iterations
+
+  // Build the problem
+  const auto cqpp = make_kokkos_cqpp(exec_space, A, q, space);
+
+  // Reuse the backend token from the problem
+  const auto backend = cqpp.backend();
+
+  // Strategy + state
+  convex::PGDConfig cfg{.max_iters = 1000, .tol = 1e-6};
+  auto pgd = make_pgd_solution_strategy(backend, cfg);
+  auto pgd_state = make_pgd_state(backend, x, grad, x_tmp, grad_tmp);
+
+  // Solve (can reuse "cqpp" and "pgd" across many states)
+  auto result = solve_cqpp(cqpp, pgd, pgd_state);
+
+  // Check results
+  EXPECT_TRUE(result.converged);
+  EXPECT_LE(result.num_iters, cfg.max_iters);
+
+  // Copy x to host for comparison
+  auto x_host = Kokkos::create_mirror_view(x);
+  auto x_exact_host = Kokkos::create_mirror_view(x_exact);
+  Kokkos::deep_copy(x_host, x);
+  Kokkos::deep_copy(x_exact_host, x_exact);
+  for (size_t i = 0; i < size; ++i) {
+    EXPECT_NEAR(x_host[i], x_exact_host[i], 10 * cfg.tol);
+  }
+}
+
+TEST(Convex, MundyMathAnalyticalSolutions) {
+  auto test_cases = std::make_tuple(math_backend::UnconstrainedSPD1Problem{},          //
+                                    math_backend::InactiveBoxConstrainedSPDProblem{},  //
+                                    math_backend::ActiveBoxConstrainedSPDProblem{},    //
+                                    math_backend::RandomLCP<3>{},                      //
+                                    math_backend::RandomLCP<7>{});
   std::apply([](auto&&... test_case) { (run_mundy_math_test(test_case), ...); }, test_cases);
+}
+
+TEST(Convex, KokkosAnalyticalSolutions) {
+  auto test_cases = std::make_tuple(kokkos_backend::UnconstrainedSPD1Problem{},          //
+                                    kokkos_backend::InactiveBoxConstrainedSPDProblem{},  //
+                                    kokkos_backend::ActiveBoxConstrainedSPDProblem{},    //
+                                    kokkos_backend::RandomLCP{3},                        //
+                                    kokkos_backend::RandomLCP{7},                        //
+                                    kokkos_backend::RandomLCP{200});
+  std::apply([](auto&&... test_case) { (run_kokkos_test(test_case), ...); }, test_cases);
 }
 
 }  // namespace

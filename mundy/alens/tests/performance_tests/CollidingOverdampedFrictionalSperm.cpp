@@ -1878,7 +1878,7 @@ class SpermSimulation {
     mundy::mesh::for_each_entity_run(
         *bulk_data_ptr_, node_rank_, locally_owned_selector,
         [&node_velocity_field, &node_twist_velocity_field, &node_radius_field, &sperm_density, &local_kinetic_energy](
-            const stk::mesh::BulkData &bulk_data, const stk::mesh::Entity &node) {
+            const stk::mesh::BulkData &/*bulk_data*/, const stk::mesh::Entity &node) {
           // Get the required input fields
           const double node_radius = stk::mesh::field_data(node_radius_field, node)[0];
           const auto node_velocity = mundy::mesh::vector3_field_data(node_velocity_field, node);
@@ -1922,7 +1922,6 @@ class SpermSimulation {
     // I now want to try a more intentional approach based on the kinetic energy of the system.
     // Starying at 1e6, I will let the system evolve until its kinetic energy is less than some threshold value. I will
     // then increase the Young's modulus by a factor of 10 and repeat.
-    size_t count = 0;
     for (size_t count = 0; count < 1000000; count++) {
       if (count % 1000 == 0) {
         std::cout << "Equilibriating the system. Iteration " << count << std::endl;

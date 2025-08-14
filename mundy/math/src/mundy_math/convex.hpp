@@ -21,6 +21,11 @@
 #ifndef MUNDY_MATH_CONVEX_HPP_
 #define MUNDY_MATH_CONVEX_HPP_
 
+// Kokkos:
+#include <KokkosBlas.hpp>
+#include <KokkosBlas_gesv.hpp>
+#include <Kokkos_Core.hpp>
+
 // Mundy core:
 #include <mundy_core/throw_assert.hpp>
 
@@ -37,6 +42,8 @@ namespace convex {
 namespace space {
 
 // These are 1d convex spaces, which will be applied to each element of a vector assuming a separable convex space
+
+/// \brief Proj(x) = x for all x in R
 template <typename Scalar>
 struct Unconstrained {
   using scalar_t = Scalar;
@@ -52,6 +59,7 @@ struct Unconstrained {
   }
 };
 
+/// \brief Proj(x) = max(x, lower_bound) for all x in R
 template <typename Scalar>
 struct LowerBound {
   using scalar_t = Scalar;
@@ -69,6 +77,7 @@ struct LowerBound {
   }
 };
 
+/// \brief Proj(x) = min(x, upper_bound) for all x in R
 template <typename Scalar>
 struct UpperBound {
   using scalar_t = Scalar;
@@ -86,6 +95,7 @@ struct UpperBound {
   }
 };
 
+/// \brief Proj(x) = min(max(x, lower_bound), upper_bound) for all x in R
 template <typename Scalar>
 struct Bounded {
   using scalar_t = Scalar;
@@ -118,15 +128,36 @@ struct KokkosBackend {
   using exec_space = ExecSpace;
   using memory_space = MemorySpace;
 
-  static size_t vector_size(const vector_t& x) {
+ private:
+  //! \name Concepts / helpers
+  //@{
+
+  template <class Op>
+  static constexpr int view_rank_v = std::remove_reference_t<Op>::rank;
+
+  template <class Op>
+  static constexpr bool value_compatible_v =
+      std::is_convertible_v<typename std::remove_reference_t<Op>::non_const_value_type, scalar_t>;
+
+  template <class Op>
+  static constexpr bool is_dense_mat_view_v = Kokkos::is_view_v<Op> && view_rank_v<Op> == 2 && value_compatible_v<Op>;
+
+  template <class Op>
+  static constexpr bool has_apply_member_v = std::is_same_v<
+      decltype(std::declval<const Op&>().apply(std::declval<const vector_t&>(), std::declval<vector_t&>())), void>;
+  //@}
+
+ public:
+  
+  KOKKOS_INLINE_FUNCTION static size_t vector_size(const vector_t& x) {
     return x.extent(0);
   }
 
-  static const scalar_t& vector_data(const vector_t& x, size_t i) {
+  KOKKOS_INLINE_FUNCTION static const scalar_t& vector_data(const vector_t& x, size_t i) {
     return x(i);
   }
 
-  static scalar_t& vector_data(vector_t& x, size_t i) {
+  KOKKOS_INLINE_FUNCTION static scalar_t& vector_data(vector_t& x, size_t i) {
     return x(i);
   }
 
@@ -134,17 +165,62 @@ struct KokkosBackend {
     Kokkos::deep_copy(dest, src);
   }
 
+  // Path 1: If op is a dense 2D Kokkos::View, call BLAS gemv.
+  // y = A*x
+  template <class LinearOp>
+    requires(is_dense_mat_view_v<LinearOp>)
+  static void apply(const LinearOp& A, const vector_t& x, vector_t& y) {
+    MUNDY_THROW_ASSERT(A.extent(1) == x.extent(0), std::invalid_argument, "gemv: dimension mismatch A(:,1) vs x");
+    MUNDY_THROW_ASSERT(A.extent(0) == y.extent(0), std::invalid_argument, "gemv: dimension mismatch A(0,:) vs y");
+    KokkosBlas::gemv(exec_space{}, "N", scalar_t(1), A, x, scalar_t(0), y);
+  }
+
+  // Path 1: If op is a dense 2D Kokkos::View, call BLAS gemv.
+  // y = alpha * A * x + beta * y
+  template <class LinearOp>
+    requires(is_dense_mat_view_v<LinearOp>)
+  static void apply(double alpha, const LinearOp& A, const vector_t& x, double beta, vector_t& y) {
+    MUNDY_THROW_ASSERT(A.extent(1) == x.extent(0), std::invalid_argument, "gemv: dimension mismatch A(:,1) vs x");
+    MUNDY_THROW_ASSERT(A.extent(0) == y.extent(0), std::invalid_argument, "gemv: dimension mismatch A(0,:) vs y");
+    KokkosBlas::gemv(exec_space{}, "N", alpha, A, x, beta, y);
+  }
+
+  // Path 2: If op has member `apply(x,y)`
+  template <class LinearOp>
+    requires(!is_dense_mat_view_v<LinearOp> && has_apply_member_v<LinearOp>)
+  static void apply(const LinearOp& op, const vector_t& x, vector_t& y) {
+    op.apply(x, y);
+  }
+
+  // Path 3: Otherwise, runtime error.
   template <typename LinearOp>
-  KOKKOS_INLINE_FUNCTION static void apply(const LinearOp& op, const vector_t& x, vector_t& y) {
-    // How should we apply?
-    MUNDY_THROW_REQUIRE(false, std::logic_error, "apply not implemented for KokkosBackend.");
+    requires(!is_dense_mat_view_v<LinearOp> && !has_apply_member_v<LinearOp>)
+  static void apply(const LinearOp& op, const vector_t& x, vector_t& y) {
+    MUNDY_THROW_REQUIRE(false, std::logic_error,
+                        "KokkosBackend::apply: op must be a rank-2 Kokkos::View or provide void apply(x,y).");
   }
 
   static void axpby(const scalar_t alpha, const vector_t& x, const scalar_t beta, const vector_t& y) {
     MUNDY_THROW_ASSERT(x.extent(0) == y.extent(0), std::invalid_argument, "x and y must have the same size.");
-    Kokkos::parallel_for(
-        "axpbyg", Kokkos::RangePolicy<exec_space>(0, x.extent(0)),
-        KOKKOS_LAMBDA(const int i) { y(i) = alpha * x(i) + beta * y(i); });
+    const bool alpha_is_zero = Kokkos::abs(alpha) < get_zero_tolerance<scalar_t>();
+    const bool beta_is_zero = Kokkos::abs(beta) < get_zero_tolerance<scalar_t>();
+    
+    if (!alpha_is_zero && !beta_is_zero) {
+      Kokkos::parallel_for(
+          "axpby", Kokkos::RangePolicy<exec_space>(0, x.extent(0)),
+          KOKKOS_LAMBDA(const int i) { y(i) = alpha * x(i) + beta * y(i); });
+    } else if(alpha_is_zero && !beta_is_zero) {
+      Kokkos::parallel_for(
+          "axpby", Kokkos::RangePolicy<exec_space>(0, x.extent(0)),
+          KOKKOS_LAMBDA(const int i) { y(i) *= beta; });
+    } else if(!alpha_is_zero && beta_is_zero) {
+      Kokkos::parallel_for(
+          "axpby", Kokkos::RangePolicy<exec_space>(0, x.extent(0)),
+          KOKKOS_LAMBDA(const int i) { y(i) = alpha * x(i); });
+    } else {
+      // Both alpha and beta are zero. Set y to zero.
+      Kokkos::deep_copy(y, scalar_t(0));
+    }
   }
 
   template <typename Wrapper>
@@ -152,9 +228,26 @@ struct KokkosBackend {
                              vector_t& z, const Wrapper& wrapper) {
     MUNDY_THROW_ASSERT(x.extent(0) == y.extent(0) && x.extent(0) == z.extent(0), std::invalid_argument,
                        "x, y, and z must have the same size.");
-    Kokkos::parallel_for(
-        "axpbyg", Kokkos::RangePolicy<exec_space>(0, x.extent(0)),
-        KOKKOS_LAMBDA(const int i) { z(i) = wrapper(alpha * x(i) + beta * y(i)); });
+    const bool alpha_is_zero = Kokkos::abs(alpha) < get_zero_tolerance<scalar_t>();
+    const bool beta_is_zero = Kokkos::abs(beta) < get_zero_tolerance<scalar_t>();
+    
+    if (!alpha_is_zero && !beta_is_zero) {
+      Kokkos::parallel_for(
+          "wrapped_axpbyz", Kokkos::RangePolicy<exec_space>(0, x.extent(0)),
+          KOKKOS_LAMBDA(const int i) { z(i) = wrapper(alpha * x(i) + beta * y(i)); });
+    } else if(alpha_is_zero && !beta_is_zero) {
+      Kokkos::parallel_for(
+          "wrapped_axpbyz", Kokkos::RangePolicy<exec_space>(0, x.extent(0)),
+          KOKKOS_LAMBDA(const int i) { z(i) = wrapper(beta * y(i)); });
+    } else if(!alpha_is_zero && beta_is_zero) {
+      Kokkos::parallel_for(
+          "wrapped_axpbyz", Kokkos::RangePolicy<exec_space>(0, x.extent(0)),
+          KOKKOS_LAMBDA(const int i) { z(i) = wrapper(alpha * x(i)); });
+    } else {
+      Kokkos::parallel_for(
+          "wrapped_axpbyz", Kokkos::RangePolicy<exec_space>(0, x.extent(0)),
+          KOKKOS_LAMBDA(const int i) { z(i) = wrapper(0.0); });
+    }
   }
 
   static scalar_t diff_dot(const vector_t& x, const vector_t& y) {
@@ -172,8 +265,7 @@ struct KokkosBackend {
 
   static scalar_t diff_dot(const vector_t& x1, const vector_t& x2,  //
                            const vector_t& y1, const vector_t& y2) {
-    MUNDY_THROW_ASSERT(x1.extent(0) == x2.extent(0) && x1.extent(0) == y1.extent(0) &&
-                       x1.extent(0) == y2.extent(0),
+    MUNDY_THROW_ASSERT(x1.extent(0) == x2.extent(0) && x1.extent(0) == y1.extent(0) && x1.extent(0) == y2.extent(0),
                        std::invalid_argument, "x1, x2, y1, and y2 must have the same size.");
     scalar_t result = 0;
     Kokkos::parallel_reduce(
@@ -640,6 +732,24 @@ KOKKOS_INLINE_FUNCTION auto make_mundy_math_cqpp(const LinearOp& A, const Vector
 template <typename LinearOp, typename Scalar, size_t N>
 KOKKOS_INLINE_FUNCTION auto make_mundy_math_lcp(const LinearOp& A, const Vector<Scalar, N>& q) {
   using backend_t = convex::MundyMathBackend<Scalar, N>;
+  return convex::LCPProblem(backend_t{}, A, q);
+}
+
+template <typename LinearOp, typename ConvexSpace, typename Scalar, typename Layout, typename MemorySpace,
+          typename ExecSpace>
+KOKKOS_INLINE_FUNCTION auto make_kokkos_cqpp(const ExecSpace& /*exec_space*/,                      //
+                                             const LinearOp& A,                                    //
+                                             const Kokkos::View<Scalar*, Layout, MemorySpace>& q,  //
+                                             const ConvexSpace& space) {
+  using backend_t = convex::KokkosBackend<Scalar, Layout, MemorySpace, ExecSpace>;
+  return convex::CQPPProblem(backend_t{}, A, q, space);
+}
+
+template <typename LinearOp, typename Scalar, typename Layout, typename MemorySpace, typename ExecSpace>
+KOKKOS_INLINE_FUNCTION auto make_kokkos_cqpp(const ExecSpace& /*exec_space*/,  //
+                                             const LinearOp& A,                //
+                                             const Kokkos::View<Scalar*, Layout, MemorySpace>& q) {
+  using backend_t = convex::KokkosBackend<Scalar, Layout, MemorySpace, ExecSpace>;
   return convex::LCPProblem(backend_t{}, A, q);
 }
 

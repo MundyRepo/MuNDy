@@ -61,7 +61,7 @@ struct TeamFunctor {
 
   void operator()(const team_member_t &team_member) const {
     stk::mesh::Bucket *bucket = buckets[team_member.league_rank()];
-    const int bucket_size = bucket->size();
+    const int bucket_size = static_cast<int>(bucket->size());
     Kokkos::parallel_for(Kokkos::TeamThreadRange(team_member, bucket_size), [&](const int i) {
       if constexpr (std::is_invocable_v<AlgorithmPerEntity, const stk::mesh::BulkData &,
                                         const stk::mesh::MeshIndex &>) {
