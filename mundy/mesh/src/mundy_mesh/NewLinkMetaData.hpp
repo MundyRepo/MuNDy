@@ -47,16 +47,6 @@ namespace mundy {
 
 namespace mesh {
 
-//! \name Forward declarations
-//@{
-
-class NewNgpLinkMetaData;
-class NewLinkData;
-class NewLinkPartition;
-class NewNgpLinkData;
-class NewNgpLinkPartition;
-//@}
-
 class NewLinkMetaData {
  public:
   //! \name Type aliases
@@ -305,7 +295,11 @@ class NewLinkMetaData {
   friend class NewLinkPartition;
   friend class NewNgpLinkData;
   friend class NewNgpLinkPartition;
+  template <typename T>
+  friend class NewNgpLinkRequestsT;
   friend NewLinkMetaData declare_link_meta_data(MetaData &meta_data, const std::string &our_name,
+                                             stk::mesh::EntityRank link_rank);
+  friend std::shared_ptr<NewLinkMetaData> declare_link_meta_data_ptr(MetaData &meta_data, const std::string &our_name,
                                              stk::mesh::EntityRank link_rank);
   //@}
 
@@ -334,6 +328,11 @@ class NewLinkMetaData {
 NewLinkMetaData declare_link_meta_data(MetaData &meta_data, const std::string &our_name, stk::mesh::EntityRank link_rank) {
   // TODO(palmerb4): Tie the lifetime of this object to the BulkData object so we can return a reference to it.
   return NewLinkMetaData(meta_data, our_name, link_rank);
+}
+
+std::shared_ptr<NewLinkMetaData> declare_link_meta_data_ptr(MetaData &meta_data, const std::string &our_name, stk::mesh::EntityRank link_rank) {
+  // TODO(palmerb4): Tie the lifetime of this object to the BulkData object so we can return a reference to it.
+  return std::shared_ptr<NewLinkMetaData>(new NewLinkMetaData(meta_data, our_name, link_rank));
 }
 
 }  // namespace mesh
