@@ -103,8 +103,8 @@ class EuclideanMetric {
 
   /// \brief Shift a point by a given number of lattice images in each direction (free space does nothing)
   template <typename Scalar, typename Integer>
-  KOKKOS_INLINE_FUNCTION constexpr Point<Scalar> shift_image(const Point<Scalar>& point,
-                                                             [[maybe_unused]] const math::Vector3<Integer>& num_images) const {
+  KOKKOS_INLINE_FUNCTION constexpr Point<Scalar> shift_image(
+      const Point<Scalar>& point, [[maybe_unused]] const math::Vector3<Integer>& num_images) const {
     return point;
   }
 };  // EuclideanMetric
@@ -162,10 +162,10 @@ class PeriodicMetric {
   }
 
   /// \brief Shift a point by a given number of lattice images in each direction
-  template<typename Integer>
-  KOKKOS_INLINE_FUNCTION
-  constexpr OurPoint shift_image(const OurPoint& point, const math::Vector3<Integer>& num_images) const {
-    return  translate(point, h_ * num_images);
+  template <typename Integer>
+  KOKKOS_INLINE_FUNCTION constexpr OurPoint shift_image(const OurPoint& point,
+                                                        const math::Vector3<Integer>& num_images) const {
+    return translate(point, h_ * num_images);
   }
 
  private:
@@ -225,10 +225,10 @@ class PeriodicScaledMetric {
   }
 
   /// \brief Shift a point by a given number of lattice images in each direction
-  template<typename Integer>
-  KOKKOS_INLINE_FUNCTION
-  constexpr OurPoint shift_image(const OurPoint& point, const math::Vector3<Integer>& num_images) const {
-    return  translate(point, math::elementwise_multiply(scale_, num_images));
+  template <typename Integer>
+  KOKKOS_INLINE_FUNCTION constexpr OurPoint shift_image(const OurPoint& point,
+                                                        const math::Vector3<Integer>& num_images) const {
+    return translate(point, math::elementwise_multiply(scale_, num_images));
   }
 
  private:
@@ -262,7 +262,6 @@ KOKKOS_INLINE_FUNCTION constexpr PeriodicScaledMetric<Scalar> periodic_scaled_me
 //@{
 /*
 
-
 The set of reference points:
                 Point -> center
           LineSegment -> start
@@ -277,58 +276,60 @@ SpherocylinderSegment -> start
             Ellipsoid -> center
 */
 
-template <typename Scalar>
-KOKKOS_INLINE_FUNCTION Point<Scalar> reference_point(const Point<Scalar>& point) {
+template <ValidPointType PointT>
+KOKKOS_INLINE_FUNCTION Point<typename PointT::scalar_t> reference_point(const PointT& point) {
   return point;
 }
 
-template <typename Scalar>
-KOKKOS_INLINE_FUNCTION Point<Scalar> reference_point(const Line<Scalar>& line) {
+template <ValidLineType LineT>
+KOKKOS_INLINE_FUNCTION Point<typename LineT::scalar_t> reference_point(const LineT& line) {
   return line.center();
 }
 
-template <typename Scalar>
-KOKKOS_INLINE_FUNCTION Point<Scalar> reference_point(const LineSegment<Scalar>& line_segment) {
+template <ValidLineSegmentType LineSegmentT>
+KOKKOS_INLINE_FUNCTION Point<typename LineSegmentT::scalar_t> reference_point(const LineSegmentT& line_segment) {
   return line_segment.start();
 }
 
-template <typename Scalar>
-KOKKOS_INLINE_FUNCTION Point<Scalar> reference_point(const Circle3D<Scalar>& circle) {
+template <ValidCircle3DType Circle3DT>
+KOKKOS_INLINE_FUNCTION Point<typename Circle3DT::scalar_t> reference_point(const Circle3DT& circle) {
   return circle.center();
 }
 
-template <typename Scalar>
-KOKKOS_INLINE_FUNCTION Point<Scalar> reference_point(const VSegment<Scalar>& v_segment) {
+template <ValidVSegmentType VSegmentT>
+KOKKOS_INLINE_FUNCTION Point<typename VSegmentT::scalar_t> reference_point(const VSegmentT& v_segment) {
   return v_segment.start();
 }
 
-template <typename Scalar>
-KOKKOS_INLINE_FUNCTION Point<Scalar> reference_point(const AABB<Scalar>& aabb) {
+template <ValidAABBType AABBT>
+KOKKOS_INLINE_FUNCTION Point<typename AABBT::scalar_t> reference_point(const AABBT& aabb) {
   return aabb.min_corner();
 }
 
-template <typename Scalar>
-KOKKOS_INLINE_FUNCTION Point<Scalar> reference_point(const Sphere<Scalar>& sphere) {
+template <ValidSphereType SphereT>
+KOKKOS_INLINE_FUNCTION Point<typename SphereT::scalar_t> reference_point(const SphereT& sphere) {
   return sphere.center();
 }
 
-template <typename Scalar>
-KOKKOS_INLINE_FUNCTION Point<Scalar> reference_point(const Spherocylinder<Scalar>& spherocylinder) {
+template <ValidSpherocylinderType SpherocylinderT>
+KOKKOS_INLINE_FUNCTION Point<typename SpherocylinderT::scalar_t> reference_point(
+    const SpherocylinderT& spherocylinder) {
   return spherocylinder.center();
 }
 
-template <typename Scalar>
-KOKKOS_INLINE_FUNCTION Point<Scalar> reference_point(const SpherocylinderSegment<Scalar>& spherocylinder_segment) {
+template <ValidSpherocylinderSegmentType SpherocylinderSegmentT>
+KOKKOS_INLINE_FUNCTION Point<typename SpherocylinderSegmentT::scalar_t> reference_point(
+    const SpherocylinderSegmentT& spherocylinder_segment) {
   return spherocylinder_segment.start();
 }
 
-template <typename Scalar>
-KOKKOS_INLINE_FUNCTION Point<Scalar> reference_point(const Ring<Scalar>& ring) {
+template <ValidRingType RingT>
+KOKKOS_INLINE_FUNCTION Point<typename RingT::scalar_t> reference_point(const RingT& ring) {
   return ring.center();
 }
 
-template <typename Scalar>
-KOKKOS_INLINE_FUNCTION Point<Scalar> reference_point(const Ellipsoid<Scalar>& ellipsoid) {
+template <ValidEllipsoidType EllipsoidT>
+KOKKOS_INLINE_FUNCTION Point<typename EllipsoidT::scalar_t> reference_point(const EllipsoidT& ellipsoid) {
   return ellipsoid.center();
 }
 //@}
@@ -336,11 +337,11 @@ KOKKOS_INLINE_FUNCTION Point<Scalar> reference_point(const Ellipsoid<Scalar>& el
 //! \name Shift image functions to take an object and shift it by a lattice vector
 //@{
 
-/// \brief Shift an object by a lattice vector
+/// \brief Shift an object by a lattice vector (returns a new object, owning its own memory)
 template <typename Integer, typename Object, typename Metric>
-KOKKOS_INLINE_FUNCTION Object shift_image(const Object& obj,                             //
-                                          const math::Vector3<Integer>& lattice_vector,  //
-                                          const Metric& metric) {
+KOKKOS_INLINE_FUNCTION auto shift_image(const Object& obj,                             //
+                                                                     const math::Vector3<Integer>& lattice_vector,  //
+                                                                     const Metric& metric) {
   auto shift_disp = metric.shift_image(reference_point(obj), lattice_vector) - reference_point(obj);
   return translate(obj, shift_disp);
 }

@@ -41,8 +41,8 @@ namespace mundy {
 namespace geom {
 
 template <typename Scalar, ValidPointType PointType = Point<Scalar>,
-          mundy::math::ValidQuaternionType QuaternionType = mundy::math::Quaternion<Scalar>,
-          typename OwnershipType = mundy::math::Ownership::Owns>
+          math::ValidQuaternionType QuaternionType = math::Quaternion<Scalar>,
+          typename OwnershipType = math::Ownership::Owns>
 class Ring {
   static_assert(std::is_same_v<typename PointType::scalar_t, Scalar> &&
                     std::is_same_v<typename QuaternionType::scalar_t, Scalar>,
@@ -77,14 +77,14 @@ class Ring {
   /// invalid value of -1
   KOKKOS_FUNCTION
   constexpr Ring()
-    requires std::is_same_v<OwnershipType, mundy::math::Ownership::Owns>
+    requires std::is_same_v<OwnershipType, math::Ownership::Owns>
       : center_circle_(), minor_radius_(static_cast<scalar_t>(-1)) {
   }
 
   /// \brief No default constructor for viewing Rings.
   KOKKOS_FUNCTION
   constexpr Ring()
-    requires std::is_same_v<OwnershipType, mundy::math::Ownership::Views>
+    requires std::is_same_v<OwnershipType, math::Ownership::Views>
   = delete;
 
   /// \brief Constructor to initialize the ring.
@@ -103,7 +103,7 @@ class Ring {
   /// \param[in] orientation The orientation of the Ring (as a quaternion).
   /// \param[in] major_radius The radius of the center circle of the Ring.
   /// \param[in] minor_radius The radius of the tube around said circle.
-  template <ValidPointType OtherPointType, mundy::math::ValidQuaternionType OtherQuaternionType>
+  template <ValidPointType OtherPointType, math::ValidQuaternionType OtherQuaternionType>
   KOKKOS_FUNCTION constexpr Ring(const OtherPointType& center, const OtherQuaternionType& orientation,
                        const scalar_t& major_radius, const scalar_t& minor_radius)
     requires(!std::is_same_v<OtherPointType, point_t> || !std::is_same_v<OtherQuaternionType, orientation_t>)
@@ -298,42 +298,27 @@ class Ring {
 
  private:
   Circle3D<scalar_t, point_t, orientation_t, ownership_t> center_circle_;
-  std::conditional_t<std::is_same_v<OwnershipType, mundy::math::Ownership::Owns>, scalar_t, scalar_t&> minor_radius_;
+  std::conditional_t<std::is_same_v<OwnershipType, math::Ownership::Owns>, scalar_t, scalar_t&> minor_radius_;
 };
+
+/// @brief (Implementation) Type trait to determine if a type is a Ring
+template <typename T>
+struct impl_is_ring : std::false_type {};
+//
+template <typename Scalar, ValidPointType PointType, math::ValidQuaternionType QuaternionType,
+          typename OwnershipType>
+struct impl_is_ring<Ring<Scalar, PointType, QuaternionType, OwnershipType>> : std::true_type {};
 
 /// @brief Type trait to determine if a type is a Ring
 template <typename T>
-struct is_ring : std::false_type {};
-//
-template <typename Scalar, ValidPointType PointType, mundy::math::ValidQuaternionType QuaternionType,
-          typename OwnershipType>
-struct is_ring<Ring<Scalar, PointType, QuaternionType, OwnershipType>> : std::true_type {};
-//
-template <typename Scalar, ValidPointType PointType, mundy::math::ValidQuaternionType QuaternionType,
-          typename OwnershipType>
-struct is_ring<const Ring<Scalar, PointType, QuaternionType, OwnershipType>> : std::true_type {};
+struct is_ring : impl_is_ring<std::remove_cv_t<T>> {};
 //
 template <typename T>
 constexpr bool is_ring_v = is_ring<T>::value;
 
 /// @brief Concept to check if a type is a valid Ring type
 template <typename RingType>
-concept ValidRingType =
-    is_ring_v<std::decay_t<RingType>> && is_point_v<typename std::decay_t<RingType>::point_t> &&
-    mundy::math::is_quaternion_v<typename std::decay_t<RingType>::orientation_t> &&
-    is_point_v<decltype(std::declval<std::decay_t<RingType>>().center())> &&
-    is_point_v<decltype(std::declval<const std::decay_t<RingType>>().center())> &&
-    mundy::math::is_quaternion_v<decltype(std::declval<std::decay_t<RingType>>().orientation())> &&
-    mundy::math::is_quaternion_v<decltype(std::declval<const std::decay_t<RingType>>().orientation())> &&
-    requires(std::decay_t<RingType> ring, const std::decay_t<RingType> const_ring) {
-      typename std::decay_t<RingType>::scalar_t;
-      typename std::decay_t<RingType>::point_t;
-      typename std::decay_t<RingType>::orientation_t;
-      { ring.major_radius() } -> std::same_as<typename std::decay_t<RingType>::scalar_t&>;
-      { const_ring.major_radius() } -> std::same_as<const typename std::decay_t<RingType>::scalar_t&>;
-      { ring.minor_radius() } -> std::same_as<typename std::decay_t<RingType>::scalar_t&>;
-      { const_ring.minor_radius() } -> std::same_as<const typename std::decay_t<RingType>::scalar_t&>;
-    };  // ValidRingType
+concept ValidRingType = is_ring_v<RingType>;
 
 static_assert(ValidRingType<Ring<float>> && ValidRingType<const Ring<float>> && ValidRingType<Ring<double>> &&
                   ValidRingType<const Ring<double>>,

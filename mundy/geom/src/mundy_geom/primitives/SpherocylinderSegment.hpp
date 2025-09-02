@@ -38,7 +38,7 @@ namespace mundy {
 namespace geom {
 
 template <typename Scalar, ValidPointType PointType = Point<Scalar>,
-          typename OwnershipType = mundy::math::Ownership::Owns>
+          typename OwnershipType = math::Ownership::Owns>
 class SpherocylinderSegment {
   static_assert(std::is_same_v<typename PointType::scalar_t, Scalar>,
                 "The scalar_t of the PointType must match the Scalar type.");
@@ -67,7 +67,7 @@ class SpherocylinderSegment {
   /// \brief Default constructor for owning SpherocylinderSegments. Default initialize the start and end points.
   KOKKOS_FUNCTION
   constexpr SpherocylinderSegment()
-    requires std::is_same_v<OwnershipType, mundy::math::Ownership::Owns>
+    requires std::is_same_v<OwnershipType, math::Ownership::Owns>
       : start_(scalar_t(), scalar_t(), scalar_t()),
         end_(scalar_t(), scalar_t(), scalar_t()),
         radius_(static_cast<scalar_t>(-1)) {
@@ -76,7 +76,7 @@ class SpherocylinderSegment {
   /// \brief No default constructor for viewing SpherocylinderSegmentss.
   KOKKOS_FUNCTION
   constexpr SpherocylinderSegment()
-    requires std::is_same_v<OwnershipType, mundy::math::Ownership::Views>
+    requires std::is_same_v<OwnershipType, math::Ownership::Views>
   = delete;
 
   /// \brief Constructor to initialize the start and end points.
@@ -268,18 +268,19 @@ class SpherocylinderSegment {
  private:
   point_t start_;
   point_t end_;
-  std::conditional_t<std::is_same_v<OwnershipType, mundy::math::Ownership::Owns>, scalar_t, scalar_t&> radius_;
+  std::conditional_t<std::is_same_v<OwnershipType, math::Ownership::Owns>, scalar_t, scalar_t&> radius_;
 };
 
-/// @brief Type trait to determine if a type is a SpherocylinderSegment
+/// @brief (Implementation) Type trait to determine if a type is a SpherocylinderSegment
 template <typename T>
-struct is_spherocylinder_segment : std::false_type {};
+struct impl_is_spherocylinder_segment : std::false_type {};
 //
 template <typename Scalar, ValidPointType PointType, typename OwnershipType>
-struct is_spherocylinder_segment<SpherocylinderSegment<Scalar, PointType, OwnershipType>> : std::true_type {};
-//
-template <typename Scalar, ValidPointType PointType, typename OwnershipType>
-struct is_spherocylinder_segment<const SpherocylinderSegment<Scalar, PointType, OwnershipType>> : std::true_type {};
+struct impl_is_spherocylinder_segment<SpherocylinderSegment<Scalar, PointType, OwnershipType>> : std::true_type {};
+
+/// \brief Type trait to determine if a type is a SpherocylinderSegment
+template <typename T>
+struct is_spherocylinder_segment : impl_is_spherocylinder_segment<std::remove_cv_t<T>> {};
 //
 template <typename T>
 inline constexpr bool is_spherocylinder_segment_v = is_spherocylinder_segment<T>::value;
@@ -287,21 +288,7 @@ inline constexpr bool is_spherocylinder_segment_v = is_spherocylinder_segment<T>
 /// @brief Concept to check if a type is a valid SpherocylinderSegment type
 template <typename SpherocylinderSegmentType>
 concept ValidSpherocylinderSegmentType =
-    is_spherocylinder_segment_v<std::remove_cv_t<SpherocylinderSegmentType>> &&
-    is_point_v<decltype(std::declval<std::remove_cv_t<SpherocylinderSegmentType>>().start())> &&
-    is_point_v<decltype(std::declval<std::remove_cv_t<SpherocylinderSegmentType>>().end())> &&
-    is_point_v<decltype(std::declval<const std::remove_cv_t<SpherocylinderSegmentType>>().start())> &&
-    is_point_v<decltype(std::declval<const std::remove_cv_t<SpherocylinderSegmentType>>().end())> &&
-    requires(std::remove_cv_t<SpherocylinderSegmentType> spherocylinder_segment,
-             const std::remove_cv_t<SpherocylinderSegmentType> const_spherocylinder_segment) {
-      typename std::remove_cv_t<SpherocylinderSegmentType>::scalar_t;
-      {
-        spherocylinder_segment.radius()
-      } -> std::same_as<typename std::remove_cv_t<SpherocylinderSegmentType>::scalar_t&>;
-      {
-        const_spherocylinder_segment.radius()
-      } -> std::same_as<const typename std::remove_cv_t<SpherocylinderSegmentType>::scalar_t&>;
-    };  // ValidSpherocylinderSegmentType
+    is_spherocylinder_segment_v<SpherocylinderSegmentType>;
 
 static_assert(ValidSpherocylinderSegmentType<SpherocylinderSegment<float>> &&
                   ValidSpherocylinderSegmentType<const SpherocylinderSegment<float>> &&

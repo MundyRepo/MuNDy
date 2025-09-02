@@ -40,8 +40,8 @@ namespace mundy {
 namespace geom {
 
 template <typename Scalar, ValidPointType PointType = Point<Scalar>,
-          mundy::math::ValidQuaternionType QuaternionType = mundy::math::Quaternion<Scalar>,
-          typename OwnershipType = mundy::math::Ownership::Owns>
+          math::ValidQuaternionType QuaternionType = math::Quaternion<Scalar>,
+          typename OwnershipType = math::Ownership::Owns>
 class Circle3D {
   static_assert(std::is_same_v<typename PointType::scalar_t, Scalar> &&
                     std::is_same_v<typename QuaternionType::scalar_t, Scalar>,
@@ -76,7 +76,7 @@ class Circle3D {
   /// \brief Default constructor for owning Circle3Ds. Initializes as invalid.
   KOKKOS_FUNCTION
   constexpr Circle3D()
-    requires std::is_same_v<OwnershipType, mundy::math::Ownership::Owns>
+    requires std::is_same_v<OwnershipType, math::Ownership::Owns>
       : center_(scalar_t(), scalar_t(), scalar_t()),
         orientation_(static_cast<scalar_t>(1), static_cast<scalar_t>(0), static_cast<scalar_t>(0),
                      static_cast<scalar_t>(0)),
@@ -86,7 +86,7 @@ class Circle3D {
   /// \brief No default constructor for viewing Circle3Ds.
   KOKKOS_FUNCTION
   constexpr Circle3D()
-    requires std::is_same_v<OwnershipType, mundy::math::Ownership::Views>
+    requires std::is_same_v<OwnershipType, math::Ownership::Views>
   = delete;
 
   /// \brief Constructor to initialize the circle3d.
@@ -104,7 +104,7 @@ class Circle3D {
   /// \param[in] orientation The quaternion orientation mapping a circle with normal in the z-direction to the lab
   /// frame.
   /// \param[in] radius The radius of the circle.
-  template <ValidPointType OtherPointType, mundy::math::ValidQuaternionType OtherQuaternionType>
+  template <ValidPointType OtherPointType, math::ValidQuaternionType OtherQuaternionType>
   KOKKOS_FUNCTION constexpr Circle3D(const OtherPointType& center, const OtherQuaternionType& orientation, const scalar_t& radius)
     requires(!std::is_same_v<OtherPointType, point_t> || !std::is_same_v<OtherQuaternionType, orientation_t>)
       : center_(center), orientation_(orientation), radius_(radius) {
@@ -287,40 +287,27 @@ class Circle3D {
  private:
   point_t center_;
   orientation_t orientation_;
-  std::conditional_t<std::is_same_v<OwnershipType, mundy::math::Ownership::Owns>, scalar_t, scalar_t&> radius_;
+  std::conditional_t<std::is_same_v<OwnershipType, math::Ownership::Owns>, scalar_t, scalar_t&> radius_;
 };
 
-/// @brief Type trait to determine if a type is a Circle3D
+/// @brief (Implementation) Type trait to determine if a type is a Circle3d
 template <typename T>
-struct is_circle3d : std::false_type {};
+struct is_circle3d_impl : std::false_type {};
 //
-template <typename Scalar, ValidPointType PointType, mundy::math::ValidQuaternionType QuaternionType,
+template <typename Scalar, ValidPointType PointType, math::ValidQuaternionType QuaternionType,
           typename OwnershipType>
-struct is_circle3d<Circle3D<Scalar, PointType, QuaternionType, OwnershipType>> : std::true_type {};
-//
-template <typename Scalar, ValidPointType PointType, mundy::math::ValidQuaternionType QuaternionType,
-          typename OwnershipType>
-struct is_circle3d<const Circle3D<Scalar, PointType, QuaternionType, OwnershipType>> : std::true_type {};
+struct is_circle3d_impl<Circle3D<Scalar, PointType, QuaternionType, OwnershipType>> : std::true_type {};
+
+/// @brief Type trait to determine if a type is a Circle3d
+template <typename T>
+struct is_circle3d : is_circle3d_impl<std::remove_cv_t<T>> {};
 //
 template <typename T>
 constexpr bool is_circle3d_v = is_circle3d<T>::value;
 
-/// @brief Concept to check if a type is a valid Circle3D type
+/// @brief Concept to determine if a type is a valid Circle3D type
 template <typename Circle3DType>
-concept ValidCircle3DType =
-    is_circle3d_v<std::decay_t<Circle3DType>> && is_point_v<typename std::decay_t<Circle3DType>::point_t> &&
-    mundy::math::is_quaternion_v<typename std::decay_t<Circle3DType>::orientation_t> &&
-    is_point_v<decltype(std::declval<std::decay_t<Circle3DType>>().center())> &&
-    is_point_v<decltype(std::declval<const std::decay_t<Circle3DType>>().center())> &&
-    mundy::math::is_quaternion_v<decltype(std::declval<std::decay_t<Circle3DType>>().orientation())> &&
-    mundy::math::is_quaternion_v<decltype(std::declval<const std::decay_t<Circle3DType>>().orientation())> &&
-    requires(std::decay_t<Circle3DType> circle3d, const std::decay_t<Circle3DType> const_circle3d) {
-      typename std::decay_t<Circle3DType>::scalar_t;
-      typename std::decay_t<Circle3DType>::point_t;
-      typename std::decay_t<Circle3DType>::orientation_t;
-      { circle3d.radius() } -> std::same_as<typename std::decay_t<Circle3DType>::scalar_t&>;
-      { const_circle3d.radius() } -> std::same_as<const typename std::decay_t<Circle3DType>::scalar_t&>;
-    };  // ValidCircle3DType
+concept ValidCircle3DType = is_circle3d_v<Circle3DType>;
 
 static_assert(ValidCircle3DType<Circle3D<float>> && ValidCircle3DType<const Circle3D<float>> &&
                   ValidCircle3DType<Circle3D<double>> && ValidCircle3DType<const Circle3D<double>>,

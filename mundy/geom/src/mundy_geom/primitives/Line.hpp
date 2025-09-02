@@ -39,7 +39,7 @@ namespace mundy {
 namespace geom {
 
 template <typename Scalar, ValidPointType PointType = Point<Scalar>,
-          typename OwnershipType = mundy::math::Ownership::Owns>
+          typename OwnershipType = math::Ownership::Owns>
 class Line {
   static_assert(std::is_same_v<typename PointType::scalar_t, Scalar>,
                 "The scalar_t of the PointType must match the Scalar type.");
@@ -71,14 +71,14 @@ class Line {
   /// \brief Default constructor for owning Lines. Default initialize the
   KOKKOS_FUNCTION
   constexpr Line()
-    requires std::is_same_v<OwnershipType, mundy::math::Ownership::Owns>
+    requires std::is_same_v<OwnershipType, math::Ownership::Owns>
       : center_(scalar_t(), scalar_t(), scalar_t()), direction_(scalar_t(), scalar_t(), scalar_t()) {
   }
 
   /// \brief No default constructor for viewing Lines.
   KOKKOS_FUNCTION
   constexpr Line()
-    requires std::is_same_v<OwnershipType, mundy::math::Ownership::Views>
+    requires std::is_same_v<OwnershipType, math::Ownership::Views>
   = delete;
 
   /// \brief Constructor to initialize the center and radius.
@@ -91,7 +91,7 @@ class Line {
   /// \brief Constructor to initialize the center and radius.
   /// \param[in] center The center of the Line.
   /// \param[in] direction The direction of the Line.
-  template <ValidPointType OtherPointType, mundy::math::ValidVectorType OtherVectorType>
+  template <ValidPointType OtherPointType, math::ValidVectorType OtherVectorType>
   KOKKOS_FUNCTION constexpr Line(const OtherPointType& center, const OtherVectorType& direction)
     requires(!std::is_same_v<OtherPointType, point_t> || !std::is_same_v<OtherVectorType, vector_t>)
       : center_(center), direction_(direction) {
@@ -222,7 +222,7 @@ class Line {
 
   /// \brief Set the direction
   /// \param[in] direction The new direction.
-  template <mundy::math::ValidVectorType OtherVectorType>
+  template <math::ValidVectorType OtherVectorType>
   KOKKOS_FUNCTION constexpr void set_direction(const OtherVectorType& direction) {
     direction_ = direction;
   }
@@ -244,29 +244,23 @@ class Line {
   vector_t direction_;  ///< The direction of the line.
 };
 
-/// @brief Type trait to determine if a type is a Line
+/// @brief (Implementation) Type trait to determine if a type is a Line
 template <typename T>
-struct is_line : std::false_type {};
+struct impl_is_line : std::false_type {};
 //
 template <typename Scalar, ValidPointType PointType, typename OwnershipType>
-struct is_line<Line<Scalar, PointType, OwnershipType>> : std::true_type {};
-//
-template <typename Scalar, ValidPointType PointType, typename OwnershipType>
-struct is_line<const Line<Scalar, PointType, OwnershipType>> : std::true_type {};
+struct impl_is_line<Line<Scalar, PointType, OwnershipType>> : std::true_type {};
+
+/// \brief Type trait to determine if a type is a Line
+template<typename T>
+struct is_line : impl_is_line<std::remove_cv_t<T>> {};
 //
 template <typename T>
 inline constexpr bool is_line_v = is_line<T>::value;
 
 /// @brief Concept to check if a type is a valid Line type
 template <typename LineType>
-concept ValidLineType =
-    is_line_v<std::remove_cv_t<LineType>> &&
-    is_point_v<decltype(std::declval<std::remove_cv_t<LineType>>().center())> &&
-    mundy::math::is_vector3_v<decltype(std::declval<std::remove_cv_t<LineType>>().direction())> &&
-    is_point_v<decltype(std::declval<const std::remove_cv_t<LineType>>().center())> &&
-    mundy::math::is_vector3_v<decltype(std::declval<const std::remove_cv_t<LineType>>().direction())> &&
-    requires(std::remove_cv_t<LineType> line) { typename std::remove_cv_t<LineType>::scalar_t; };
-// ValidLineType
+concept ValidLineType = is_line_v<LineType>;
 
 static_assert(ValidLineType<Line<float>> && ValidLineType<const Line<float>> && ValidLineType<Line<double>> &&
                   ValidLineType<const Line<double>>,

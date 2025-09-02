@@ -38,7 +38,7 @@ namespace mundy {
 namespace geom {
 
 template <typename Scalar, ValidPointType PointType = Point<Scalar>,
-          typename OwnershipType = mundy::math::Ownership::Owns>
+          typename OwnershipType = math::Ownership::Owns>
 class Sphere {
   static_assert(std::is_same_v<typename PointType::scalar_t, Scalar>,
                 "The scalar type of the PointType must match the scalar type of the Sphere.");
@@ -68,14 +68,14 @@ class Sphere {
   /// value of -1
   KOKKOS_FUNCTION
   constexpr Sphere()
-    requires std::is_same_v<OwnershipType, mundy::math::Ownership::Owns>
+    requires std::is_same_v<OwnershipType, math::Ownership::Owns>
       : center_(scalar_t(), scalar_t(), scalar_t()), radius_(static_cast<scalar_t>(-1)) {
   }
 
   /// \brief No default constructor for viewing Spheres.
   KOKKOS_FUNCTION
   constexpr Sphere()
-    requires std::is_same_v<OwnershipType, mundy::math::Ownership::Views>
+    requires std::is_same_v<OwnershipType, math::Ownership::Views>
   = delete;
 
   /// \brief Constructor to initialize the center and radius.
@@ -227,35 +227,26 @@ class Sphere {
 
  private:
   point_t center_;
-  std::conditional_t<std::is_same_v<ownership_t, mundy::math::Ownership::Owns>, scalar_t, scalar_t&> radius_;
+  std::conditional_t<std::is_same_v<ownership_t, math::Ownership::Owns>, scalar_t, scalar_t&> radius_;
 };
 
-/// @brief Type trait to determine if a type is a Sphere
+/// @brief (Implementation) Type trait to determine if a type is a Sphere
 template <typename T>
 struct is_sphere_impl : std::false_type {};
 //
 template <typename Scalar, ValidPointType PointType, typename OwnershipType>
 struct is_sphere_impl<Sphere<Scalar, PointType, OwnershipType>> : std::true_type {};
-//
+
+/// \brief Type trait to determine if a type is a Sphere
 template <typename T>
-struct is_sphere : is_sphere_impl<std::decay_t<T>> {};
+struct is_sphere : is_sphere_impl<std::remove_cv_t<T>> {};
 //
 template <typename T>
 constexpr bool is_sphere_v = is_sphere<T>::value;
 
 /// @brief Concept to check if a type is a valid Sphere type
 template <typename SphereType>
-concept ValidSphereType = is_sphere_v<SphereType> && is_point_v<typename SphereType::point_t> &&
-                          is_point_v<decltype(std::declval<SphereType>().center())> &&
-                          is_point_v<decltype(std::declval<const SphereType>().center())> &&
-                          requires(std::decay_t<SphereType> sphere, const std::decay_t<SphereType> const_sphere) {
-                            typename std::decay_t<SphereType>::scalar_t;
-                            typename std::decay_t<SphereType>::point_t;
-                            { sphere.radius() } -> std::convertible_to<typename std::decay_t<SphereType>::scalar_t&>;
-                            {
-                              const_sphere.radius()
-                            } -> std::convertible_to<const typename std::decay_t<SphereType>::scalar_t&>;
-                          };
+concept ValidSphereType = is_sphere_v<SphereType>;
 
 static_assert(ValidSphereType<Sphere<float>> && ValidSphereType<const Sphere<float>> &&
                   ValidSphereType<Sphere<double>> && ValidSphereType<const Sphere<double>>,

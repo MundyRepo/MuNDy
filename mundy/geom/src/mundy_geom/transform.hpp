@@ -55,52 +55,60 @@ Supported shapes:
 //@{
 
 /// \brief Translate a point by a given displacement vector
-template <typename Scalar>
-KOKKOS_INLINE_FUNCTION Point<Scalar> translate(const Point<Scalar>& point, const math::Vector3<Scalar>& disp) {
+template <typename Scalar, ValidPointType PointT>
+  requires std::is_same_v<typename PointT::scalar_t, Scalar>
+KOKKOS_INLINE_FUNCTION Point<Scalar> translate(const PointT& point, const math::Vector3<Scalar>& disp) {
   return point + disp;
 }
 
 /// \brief Translate a point by a given displacement vector (inplace)
-template <typename Scalar>
-KOKKOS_INLINE_FUNCTION void translate_inplace(Point<Scalar>& point, const math::Vector3<Scalar>& disp) {
+template <typename Scalar, ValidPointType PointT>
+  requires std::is_same_v<typename PointT::scalar_t, Scalar>
+KOKKOS_INLINE_FUNCTION void translate_inplace(PointT& point, const math::Vector3<Scalar>& disp) {
   point += disp;
 }
 
 /// \brief Translate a line by a given displacement vector
-template <typename Scalar>
-KOKKOS_INLINE_FUNCTION Line<Scalar> translate(const Line<Scalar>& line, const math::Vector3<Scalar>& disp) {
+template <typename Scalar, ValidLineType LineT>
+  requires std::is_same_v<typename LineT::scalar_t, Scalar>
+KOKKOS_INLINE_FUNCTION Line<Scalar> translate(const LineT& line, const math::Vector3<Scalar>& disp) {
   return Line<Scalar>(line.center() + disp, line.direction());
 }
 
 /// \brief Translate a line by a given displacement vector (inplace)
-template <typename Scalar>
-KOKKOS_INLINE_FUNCTION void translate_inplace(Line<Scalar>& line, const math::Vector3<Scalar>& disp) {
+template <typename Scalar, ValidLineType LineT>
+  requires std::is_same_v<typename LineT::scalar_t, Scalar>
+KOKKOS_INLINE_FUNCTION void translate_inplace(LineT& line, const math::Vector3<Scalar>& disp) {
   line.center() += disp;
 }
 
 /// \brief Translate a line segment by a given displacement vector
-template <typename Scalar>
-KOKKOS_INLINE_FUNCTION LineSegment<Scalar> translate(const LineSegment<Scalar>& line_segment,
+template <typename Scalar, ValidLineSegmentType LineSegmentT>
+  requires std::is_same_v<typename LineSegmentT::scalar_t, Scalar>
+KOKKOS_INLINE_FUNCTION LineSegment<Scalar> translate(const LineSegmentT& line_segment,
                                                      const math::Vector3<Scalar>& disp) {
   return LineSegment<Scalar>(line_segment.start() + disp, line_segment.end() + disp);
 }
 
 /// \brief Translate a line segment by a given displacement vector (inplace)
-template <typename Scalar>
-KOKKOS_INLINE_FUNCTION void translate_inplace(LineSegment<Scalar>& line_segment, const math::Vector3<Scalar>& disp) {
+template <typename Scalar, ValidLineSegmentType LineSegmentT>
+  requires std::is_same_v<typename LineSegmentT::scalar_t, Scalar>
+KOKKOS_INLINE_FUNCTION void translate_inplace(LineSegmentT& line_segment, const math::Vector3<Scalar>& disp) {
   line_segment.start() += disp;
   line_segment.end() += disp;
 }
 
 /// \brief Translate a v-segment by a given displacement vector
-template <typename Scalar>
-KOKKOS_INLINE_FUNCTION VSegment<Scalar> translate(const VSegment<Scalar>& v_segment,
+template <typename Scalar, ValidVSegmentType VSegmentT>
+  requires std::is_same_v<typename VSegmentT::scalar_t, Scalar>
+KOKKOS_INLINE_FUNCTION VSegment<Scalar> translate(const VSegmentT& v_segment,
                                                   const math::Vector3<Scalar>& disp) {
   return VSegment<Scalar>(v_segment.start() + disp, v_segment.middle() + disp, v_segment.end() + disp);
 }
 
 /// \brief Translate a v-segment by a given displacement vector (inplace)
-template <typename Scalar>
+template <typename Scalar, ValidVSegmentType VSegmentT>
+  requires std::is_same_v<typename VSegmentT::scalar_t, Scalar>
 KOKKOS_INLINE_FUNCTION void translate_inplace(VSegment<Scalar>& v_segment, const math::Vector3<Scalar>& disp) {
   v_segment.start() += disp;
   v_segment.middle() += disp;
@@ -108,94 +116,108 @@ KOKKOS_INLINE_FUNCTION void translate_inplace(VSegment<Scalar>& v_segment, const
 }
 
 /// \brief Translate a circle3D by a given displacement vector
-template <typename Scalar>
-KOKKOS_INLINE_FUNCTION Circle3D<Scalar> translate(const Circle3D<Scalar>& circle, const math::Vector3<Scalar>& disp) {
+template <typename Scalar, ValidCircle3DType Circle3DT>
+  requires std::is_same_v<typename Circle3DT::scalar_t, Scalar>
+KOKKOS_INLINE_FUNCTION Circle3D<Scalar> translate(const Circle3DT& circle, const math::Vector3<Scalar>& disp) {
   return Circle3D<Scalar>(circle.center() + disp, circle.orientation(), circle.radius());
 }
 
 /// \brief Translate a circle3D by a given displacement vector (inplace)
-template <typename Scalar>
+template <typename Scalar, ValidCircle3DType Circle3DT>
+  requires std::is_same_v<typename Circle3DT::scalar_t, Scalar>
 KOKKOS_INLINE_FUNCTION void translate_inplace(Circle3D<Scalar>& circle, const math::Vector3<Scalar>& disp) {
   circle.center() += disp;
 }
 
 /// \brief Translate an AABB by a given displacement vector
-template <typename Scalar>
-KOKKOS_INLINE_FUNCTION AABB<Scalar> translate(const AABB<Scalar>& aabb, const math::Vector3<Scalar>& disp) {
+template <typename Scalar, ValidAABBType AABBT>
+  requires std::is_same_v<typename AABBT::scalar_t, Scalar>
+KOKKOS_INLINE_FUNCTION AABB<Scalar> translate(const AABBT& aabb, const math::Vector3<Scalar>& disp) {
   return AABB<Scalar>(aabb.min_corner() + disp, aabb.max_corner() + disp);
 }
 
 /// \brief Translate an AABB by a given displacement vector (inplace)
-template <typename Scalar>
-KOKKOS_INLINE_FUNCTION void translate_inplace(AABB<Scalar>& aabb, const math::Vector3<Scalar>& disp) {
+template <typename Scalar, ValidAABBType AABBT>
+  requires std::is_same_v<typename AABBT::scalar_t, Scalar>
+KOKKOS_INLINE_FUNCTION void translate_inplace(AABBT& aabb, const math::Vector3<Scalar>& disp) {
   aabb.min_corner() += disp;
   aabb.max_corner() += disp;
 }
 
 /// \brief Translate a sphere by a given displacement vector
-template <typename Scalar>
-KOKKOS_INLINE_FUNCTION Sphere<Scalar> translate(const Sphere<Scalar>& sphere, const math::Vector3<Scalar>& disp) {
+template <typename Scalar, ValidSphereType SphereT>
+  requires std::is_same_v<typename SphereT::scalar_t, Scalar>
+KOKKOS_INLINE_FUNCTION Sphere<Scalar> translate(const SphereT& sphere, const math::Vector3<Scalar>& disp) {
   return Sphere<Scalar>(sphere.center() + disp, sphere.radius());
 }
 
 /// \brief Translate a sphere by a given displacement vector (inplace)
-template <typename Scalar>
-KOKKOS_INLINE_FUNCTION void translate_inplace(Sphere<Scalar>& sphere, const math::Vector3<Scalar>& disp) {
+template <typename Scalar, ValidSphereType SphereT>
+  requires std::is_same_v<typename SphereT::scalar_t, Scalar>
+KOKKOS_INLINE_FUNCTION void translate_inplace(SphereT& sphere, const math::Vector3<Scalar>& disp) {
   sphere.center() += disp;
 }
 
 /// \brief Translate a spherocylinder by a given displacement vector
-template <typename Scalar>
-KOKKOS_INLINE_FUNCTION Spherocylinder<Scalar> translate(const Spherocylinder<Scalar>& spherocylinder,
+template <typename Scalar, ValidSpherocylinderType SpherocylinderT>
+  requires std::is_same_v<typename SpherocylinderT::scalar_t, Scalar>
+KOKKOS_INLINE_FUNCTION Spherocylinder<Scalar> translate(const SpherocylinderT& spherocylinder,
                                                         const math::Vector3<Scalar>& disp) {
   return Spherocylinder<Scalar>(spherocylinder.center() + disp, spherocylinder.orientation(), spherocylinder.radius(),
                                 spherocylinder.length());
 }
 
 /// \brief Translate a spherocylinder by a given displacement vector (inplace)
-template <typename Scalar>
-KOKKOS_INLINE_FUNCTION void translate_inplace(Spherocylinder<Scalar>& spherocylinder,
+template <typename Scalar, ValidSpherocylinderType SpherocylinderT>
+  requires std::is_same_v<typename SpherocylinderT::scalar_t, Scalar>
+KOKKOS_INLINE_FUNCTION void translate_inplace(SpherocylinderT& spherocylinder,
                                               const math::Vector3<Scalar>& disp) {
   spherocylinder.center() += disp;
 }
 
 /// \brief Translate a spherocylinder segment by a given displacement vector
-template <typename Scalar>
+template <typename Scalar, ValidSpherocylinderSegmentType SpherocylinderSegmentT>
+  requires std::is_same_v<typename SpherocylinderSegmentT::scalar_t, Scalar>
 KOKKOS_INLINE_FUNCTION SpherocylinderSegment<Scalar> translate(
-    const SpherocylinderSegment<Scalar>& spherocylinder_segment, const math::Vector3<Scalar>& disp) {
+    const SpherocylinderSegmentT& spherocylinder_segment, const math::Vector3<Scalar>& disp) {
   return SpherocylinderSegment<Scalar>(spherocylinder_segment.start() + disp, spherocylinder_segment.end() + disp);
 }
 
 /// \brief Translate a spherocylinder segment by a given displacement vector (inplace)
-template <typename Scalar>
-KOKKOS_INLINE_FUNCTION void translate_inplace(SpherocylinderSegment<Scalar>& spherocylinder_segment,
+template <typename Scalar, ValidSpherocylinderSegmentType SpherocylinderSegmentT>
+  requires std::is_same_v<typename SpherocylinderSegmentT::scalar_t, Scalar>
+KOKKOS_INLINE_FUNCTION void translate_inplace(SpherocylinderSegmentT& spherocylinder_segment,
                                               const math::Vector3<Scalar>& disp) {
   spherocylinder_segment.start() += disp;
   spherocylinder_segment.end() += disp;
 }
 
 /// \brief Translate a ring by a given displacement vector
-template <typename Scalar>
-KOKKOS_INLINE_FUNCTION Ring<Scalar> translate(const Ring<Scalar>& ring, const math::Vector3<Scalar>& disp) {
+template <typename Scalar, ValidRingType RingT>
+  requires std::is_same_v<typename RingT::scalar_t, Scalar>
+KOKKOS_INLINE_FUNCTION Ring<Scalar> translate(const RingT& ring, const math::Vector3<Scalar>& disp) {
   return Ring<Scalar>(ring.center() + disp, ring.orientation(), ring.major_radius(), ring.minor_radius());
 }
 
 /// \brief Translate a ring by a given displacement vector (inplace)
-template <typename Scalar>
+template <typename Scalar, ValidRingType RingT>
+  requires std::is_same_v<typename RingT::scalar_t, Scalar>
 KOKKOS_INLINE_FUNCTION void translate_inplace(Ring<Scalar>& ring, const math::Vector3<Scalar>& disp) {
   ring.center() += disp;
 }
 
 /// \brief Translate an ellipsoid by a given displacement vector
-template <typename Scalar>
-KOKKOS_INLINE_FUNCTION Ellipsoid<Scalar> translate(const Ellipsoid<Scalar>& ellipsoid,
+template <typename Scalar, ValidEllipsoidType EllipsoidT>
+  requires std::is_same_v<typename EllipsoidT::scalar_t, Scalar>
+KOKKOS_INLINE_FUNCTION Ellipsoid<Scalar> translate(const EllipsoidT& ellipsoid,
                                                    const math::Vector3<Scalar>& disp) {
   return Ellipsoid<Scalar>(ellipsoid.center() + disp, ellipsoid.orientation(), ellipsoid.radii());
 }
 
 /// \brief Translate an ellipsoid by a given displacement vector (inplace)
-template <typename Scalar>
-KOKKOS_INLINE_FUNCTION void translate_inplace(Ellipsoid<Scalar>& ellipsoid, const math::Vector3<Scalar>& disp) {
+template <typename Scalar, ValidEllipsoidType EllipsoidT>
+  requires std::is_same_v<typename EllipsoidT::scalar_t, Scalar>
+KOKKOS_INLINE_FUNCTION void translate_inplace(EllipsoidT& ellipsoid, const math::Vector3<Scalar>& disp) {
   ellipsoid.center() += disp;
 }
 //@}

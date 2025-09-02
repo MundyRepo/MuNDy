@@ -517,7 +517,7 @@ struct test_shift_image_impl {
     Point<double> shifted_ref_point = ShapeTraits::reference_point(s);
 
     auto shifted_ref_displacement = shifted_ref_point - ref_point;
-    auto expected_displacement = metric.shift_image(ref_point, lattice_vector);
+    auto expected_displacement = metric.shift_image(ref_point, lattice_vector) - ref_point;
     bool displacements_match =
         math::norm(shifted_ref_displacement - expected_displacement) < math::get_relaxed_zero_tolerance<double>();
 

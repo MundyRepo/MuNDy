@@ -38,7 +38,7 @@ namespace mundy {
 namespace geom {
 
 template <typename Scalar, ValidPointType PointType = Point<Scalar>,
-          typename OwnershipType = mundy::math::Ownership::Owns>
+          typename OwnershipType = math::Ownership::Owns>
 class VSegment {
   static_assert(std::is_same_v<typename PointType::scalar_t, Scalar>,
                 "The scalar_t of the PointType must match the Scalar type.");
@@ -67,7 +67,7 @@ class VSegment {
   /// \brief Default constructor for owning VSegments. Default initialize the start, middle, and end points.
   KOKKOS_FUNCTION
   constexpr VSegment()
-    requires std::is_same_v<OwnershipType, mundy::math::Ownership::Owns>
+    requires std::is_same_v<OwnershipType, math::Ownership::Owns>
       : start_(scalar_t(), scalar_t(), scalar_t()),
         middle_(scalar_t(), scalar_t(), scalar_t()),
         end_(scalar_t(), scalar_t(), scalar_t()) {
@@ -76,7 +76,7 @@ class VSegment {
   /// \brief No default constructor for viewing VSegmentss.
   KOKKOS_FUNCTION
   constexpr VSegment()
-    requires std::is_same_v<OwnershipType, mundy::math::Ownership::Views>
+    requires std::is_same_v<OwnershipType, math::Ownership::Views>
   = delete;
 
   /// \brief Constructor to initialize the start, middle, and end points.
@@ -281,31 +281,23 @@ class VSegment {
   point_t end_;
 };
 
-/// @brief Type trait to determine if a type is a VSegment
+/// @brief (Implementation) Type trait to determine if a type is a VSegment
 template <typename T>
-struct is_v_segment : std::false_type {};
+struct impl_is_v_segment : std::false_type {};
 //
 template <typename Scalar, ValidPointType PointType, typename OwnershipType>
-struct is_v_segment<VSegment<Scalar, PointType, OwnershipType>> : std::true_type {};
-//
-template <typename Scalar, ValidPointType PointType, typename OwnershipType>
-struct is_v_segment<const VSegment<Scalar, PointType, OwnershipType>> : std::true_type {};
+struct impl_is_v_segment<VSegment<Scalar, PointType, OwnershipType>> : std::true_type {};
+
+/// \brief Type trait to determine if a type is a VSegment
+template <typename T>
+struct is_v_segment : impl_is_v_segment<std::remove_cv_t<T>> {};
 //
 template <typename T>
 inline constexpr bool is_v_segment_v = is_v_segment<T>::value;
 
 /// @brief Concept to check if a type is a valid VSegment type
 template <typename VSegmentType>
-concept ValidVSegmentType = is_v_segment_v<std::remove_cv_t<VSegmentType>> &&
-                            is_point_v<decltype(std::declval<std::remove_cv_t<VSegmentType>>().start())> &&
-                            is_point_v<decltype(std::declval<std::remove_cv_t<VSegmentType>>().middle())> &&
-                            is_point_v<decltype(std::declval<std::remove_cv_t<VSegmentType>>().end())> &&
-                            is_point_v<decltype(std::declval<const std::remove_cv_t<VSegmentType>>().start())> &&
-                            is_point_v<decltype(std::declval<const std::remove_cv_t<VSegmentType>>().middle())> &&
-                            is_point_v<decltype(std::declval<const std::remove_cv_t<VSegmentType>>().end())> &&
-                            requires(std::remove_cv_t<VSegmentType> line) {
-                              typename std::remove_cv_t<VSegmentType>::scalar_t;
-                            };  // ValidVSegmentType
+concept ValidVSegmentType = is_v_segment_v<VSegmentType>;
 
 static_assert(ValidVSegmentType<VSegment<float>> && ValidVSegmentType<const VSegment<float>> &&
                   ValidVSegmentType<VSegment<double>> && ValidVSegmentType<const VSegment<double>>,

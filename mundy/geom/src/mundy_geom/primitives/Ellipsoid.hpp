@@ -40,8 +40,8 @@ namespace mundy {
 namespace geom {
 
 template <typename Scalar, ValidPointType PointType = Point<Scalar>,
-          mundy::math::ValidQuaternionType OrientationType = mundy::math::Quaternion<Scalar>,
-          typename OwnershipType = mundy::math::Ownership::Owns>
+          math::ValidQuaternionType OrientationType = math::Quaternion<Scalar>,
+          typename OwnershipType = math::Ownership::Owns>
 class Ellipsoid {
   static_assert(std::is_same_v<typename PointType::scalar_t, Scalar> &&
                     std::is_same_v<typename OrientationType::scalar_t, Scalar>,
@@ -76,7 +76,7 @@ class Ellipsoid {
   /// invalid value of -1
   KOKKOS_FUNCTION
   constexpr Ellipsoid()
-    requires std::is_same_v<OwnershipType, mundy::math::Ownership::Owns>
+    requires std::is_same_v<OwnershipType, math::Ownership::Owns>
       : center_(scalar_t(), scalar_t(), scalar_t()),
         orientation_{static_cast<scalar_t>(1), static_cast<scalar_t>(0), static_cast<scalar_t>(0),
                      static_cast<scalar_t>(0)},
@@ -86,7 +86,7 @@ class Ellipsoid {
   /// \brief No default constructor for viewing ellipsoids.
   KOKKOS_FUNCTION
   constexpr Ellipsoid()
-    requires std::is_same_v<OwnershipType, mundy::math::Ownership::Views>
+    requires std::is_same_v<OwnershipType, math::Ownership::Views>
   = delete;
 
   /// \brief Constructor to initialize the center and radii.
@@ -97,7 +97,7 @@ class Ellipsoid {
   KOKKOS_FUNCTION
   constexpr Ellipsoid(const point_t& center, const scalar_t& radius_1, const scalar_t& radius_2,
                       const scalar_t& radius_3)
-    requires std::is_same_v<OwnershipType, mundy::math::Ownership::Owns>
+    requires std::is_same_v<OwnershipType, math::Ownership::Owns>
       : center_(center),
         orientation_{static_cast<scalar_t>(1), static_cast<scalar_t>(0), static_cast<scalar_t>(0),
                      static_cast<scalar_t>(0)},
@@ -119,7 +119,7 @@ class Ellipsoid {
   constexpr Ellipsoid(const scalar_t& x, const scalar_t& y, const scalar_t& z, const scalar_t& qw, const scalar_t& qx,
                       const scalar_t& qy, const scalar_t& qz, const scalar_t& radius_1, const scalar_t& radius_2,
                       const scalar_t& radius_3)
-    requires std::is_same_v<OwnershipType, mundy::math::Ownership::Owns>
+    requires std::is_same_v<OwnershipType, math::Ownership::Owns>
       : center_(x, y, z), orientation_(qw, qx, qy, qz), radii_{radius_1, radius_2, radius_3} {
   }
 
@@ -137,7 +137,7 @@ class Ellipsoid {
   KOKKOS_FUNCTION
   constexpr Ellipsoid(const point_t& center, const orientation_t& orientation, const scalar_t& radius_1,
                       const scalar_t& radius_2, const scalar_t& radius_3)
-    requires std::is_same_v<OwnershipType, mundy::math::Ownership::Owns>
+    requires std::is_same_v<OwnershipType, math::Ownership::Owns>
       : center_(center), orientation_(orientation), radii_(radius_1, radius_2, radius_3) {
   }
 
@@ -370,34 +370,25 @@ class Ellipsoid {
   point_t radii_;
 };
 
-/// @brief Type trait to determine if a type is am Ellipsoid
+/// @brief (Implementation) Type trait to determine if a type is am Ellipsoid
 template <typename T>
-struct is_ellipsoid : std::false_type {};
+struct impl_is_ellipsoid : std::false_type {};
 //
-template <typename Scalar, ValidPointType PointType, mundy::math::ValidQuaternionType OrientationType,
+template <typename Scalar, ValidPointType PointType, math::ValidQuaternionType OrientationType,
           typename OwnershipType>
-struct is_ellipsoid<Ellipsoid<Scalar, PointType, OrientationType, OwnershipType>> : std::true_type {};
+struct impl_is_ellipsoid<Ellipsoid<Scalar, PointType, OrientationType, OwnershipType>> : std::true_type {};
 //
-template <typename Scalar, ValidPointType PointType, mundy::math::ValidQuaternionType OrientationType,
-          typename OwnershipType>
-struct is_ellipsoid<const Ellipsoid<Scalar, PointType, OrientationType, OwnershipType>> : std::true_type {};
+
+/// \brief Type trait to determine if a type is an Ellipsoid
+template <typename T>
+struct is_ellipsoid : impl_is_ellipsoid<std::remove_cv_t<T>> {};
 //
 template <typename T>
 inline constexpr bool is_ellipsoid_v = is_ellipsoid<T>::value;
 
 /// @brief Concept to check if a type is an Ellipsoid
 template <typename EllipsoidType>
-concept ValidEllipsoidType =
-    is_ellipsoid_v<std::remove_cv_t<EllipsoidType>> &&
-    is_point_v<decltype(std::declval<std::remove_cv_t<EllipsoidType>>().center())> &&
-    mundy::math::is_quaternion_v<decltype(std::declval<std::remove_cv_t<EllipsoidType>>().orientation())> &&
-    mundy::math::is_vector3_v<decltype(std::declval<std::remove_cv_t<EllipsoidType>>().radii())> &&
-    is_point_v<decltype(std::declval<const std::remove_cv_t<EllipsoidType>>().center())> &&
-    mundy::math::is_quaternion_v<decltype(std::declval<const std::remove_cv_t<EllipsoidType>>().orientation())> &&
-    mundy::math::is_vector3_v<decltype(std::declval<const std::remove_cv_t<EllipsoidType>>().radii())> &&
-    requires(std::remove_cv_t<EllipsoidType> ellipsoid) {
-      typename std::remove_cv_t<EllipsoidType>::scalar_t;
-    };  // ValidEllipsoidType
+concept ValidEllipsoidType = is_ellipsoid_v<EllipsoidType>;
 
 static_assert(ValidEllipsoidType<Ellipsoid<float>> && ValidEllipsoidType<const Ellipsoid<float>> &&
                   ValidEllipsoidType<Ellipsoid<double>> && ValidEllipsoidType<const Ellipsoid<double>>,
@@ -429,7 +420,7 @@ std::ostream& operator<<(std::ostream& os, const EllipsoidType& ellipsoid) {
 
 template <ValidEllipsoidType EllipsoidType>
 KOKKOS_FUNCTION constexpr Point<typename EllipsoidType::scalar_t> map_body_frame_normal_to_ellipsoid(
-    const mundy::math::Vector3<typename EllipsoidType::scalar_t>& body_frame_nhat, const EllipsoidType& ellipsoid) {
+    const math::Vector3<typename EllipsoidType::scalar_t>& body_frame_nhat, const EllipsoidType& ellipsoid) {
   using Scalar = typename EllipsoidType::scalar_t;
   constexpr Scalar half = static_cast<Scalar>(0.5);
   constexpr Scalar one = static_cast<Scalar>(1.0);
@@ -444,13 +435,13 @@ KOKKOS_FUNCTION constexpr Point<typename EllipsoidType::scalar_t> map_body_frame
   const Scalar sign2 = Kokkos::copysign(one, body_frame_nhat[2]);
 
   Scalar alpha1, alpha2;
-  if (sign0 * body_frame_nhat[0] > mundy::math::get_zero_tolerance<Scalar>()) {
+  if (sign0 * body_frame_nhat[0] > math::get_zero_tolerance<Scalar>()) {
     const Scalar tmp0 = one / (r1 * body_frame_nhat[0]);
     const Scalar tmp1 = tmp0 * r2 * body_frame_nhat[1];
     const Scalar tmp2 = tmp0 * r3 * body_frame_nhat[2];
     alpha1 = one / (one + tmp1 * tmp1);
     alpha2 = one / (one + tmp2 * tmp2 * alpha1);
-  } else if (sign1 * body_frame_nhat[1] > mundy::math::get_zero_tolerance<Scalar>()) {
+  } else if (sign1 * body_frame_nhat[1] > math::get_zero_tolerance<Scalar>()) {
     const Scalar tmp = r3 * body_frame_nhat[2] / (r2 * body_frame_nhat[1]);
     alpha1 = zero;
     alpha2 = one / (one + tmp * tmp);
@@ -470,8 +461,8 @@ KOKKOS_FUNCTION constexpr Point<typename EllipsoidType::scalar_t> map_body_frame
 }
 
 template <typename Scalar, typename Accessor1, typename OwnershipType1, ValidEllipsoidType EllipsoidType>
-KOKKOS_FUNCTION constexpr mundy::math::Vector3<Scalar> map_surface_normal_to_foot_point_on_ellipsoid(
-    const mundy::math::AVector3<Scalar, Accessor1, OwnershipType1>& lab_frame_ellipsoid_nhat,
+KOKKOS_FUNCTION constexpr math::Vector3<Scalar> map_surface_normal_to_foot_point_on_ellipsoid(
+    const math::AVector3<Scalar, Accessor1, OwnershipType1>& lab_frame_ellipsoid_nhat,
     const EllipsoidType& ellipsoid) {
   const auto body_frame_nhat = conjugate(ellipsoid.orientation()) * lab_frame_ellipsoid_nhat;
   const auto body_frame_foot_point = map_body_frame_normal_to_ellipsoid(body_frame_nhat, ellipsoid);

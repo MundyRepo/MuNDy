@@ -58,16 +58,16 @@ class AABB {
 
   /// \brief Our ownership type.
   /// One of three values
-  ///  - mundy::math::Ownership::Owns: If both the min and max points own their data.
-  ///  - mundy::math::Ownership::Views: If both the min and max points are views into other data.
-  ///  - mundy::math::Ownership::Mixed: If the min and max points have different ownership types.
+  ///  - math::Ownership::Owns: If both the min and max points own their data.
+  ///  - math::Ownership::Views: If both the min and max points are views into other data.
+  ///  - math::Ownership::Mixed: If the min and max points have different ownership types.
   using OwnershipType = std::conditional_t<
-      std::is_same_v<typename min_point_t::ownership_t, mundy::math::Ownership::Owns> &&
-          std::is_same_v<typename max_point_t::ownership_t, mundy::math::Ownership::Owns>,
-      mundy::math::Ownership::Owns,
-      std::conditional_t<std::is_same_v<typename min_point_t::ownership_t, mundy::math::Ownership::Views> &&
-                             std::is_same_v<typename max_point_t::ownership_t, mundy::math::Ownership::Views>,
-                         mundy::math::Ownership::Views, mundy::math::Ownership::Mixed>>;
+      std::is_same_v<typename min_point_t::ownership_t, math::Ownership::Owns> &&
+          std::is_same_v<typename max_point_t::ownership_t, math::Ownership::Owns>,
+      math::Ownership::Owns,
+      std::conditional_t<std::is_same_v<typename min_point_t::ownership_t, math::Ownership::Views> &&
+                             std::is_same_v<typename max_point_t::ownership_t, math::Ownership::Views>,
+                         math::Ownership::Views, math::Ownership::Mixed>>;
   //@}
 
   //! \name Constructors and destructor
@@ -77,14 +77,14 @@ class AABB {
   /// Nothing can be inside this aabb.
   KOKKOS_FUNCTION
   constexpr AABB()
-    requires std::is_same_v<OwnershipType, mundy::math::Ownership::Owns>
+    requires std::is_same_v<OwnershipType, math::Ownership::Owns>
       : min_corner_(scalar_max(), scalar_max(), scalar_max()), max_corner_(scalar_min(), scalar_min(), scalar_min()) {
   }
 
   /// \brief No default constructor for viewing/mixed AABBs.
   KOKKOS_FUNCTION
   constexpr AABB()
-    requires(!std::is_same_v<OwnershipType, mundy::math::Ownership::Owns>)
+    requires(!std::is_same_v<OwnershipType, math::Ownership::Owns>)
   = delete;
 
   /// \brief Constructor to directly set the min and max corners.
@@ -113,7 +113,7 @@ class AABB {
   /// \param[in] z_max The maximum z-coordinate.
   KOKKOS_FUNCTION
   constexpr AABB(scalar_t x_min, scalar_t y_min, scalar_t z_min, scalar_t x_max, scalar_t y_max, scalar_t z_max)
-    requires std::is_same_v<OwnershipType, mundy::math::Ownership::Owns>
+    requires std::is_same_v<OwnershipType, math::Ownership::Owns>
       : min_corner_(x_min, y_min, z_min), max_corner_(x_max, y_max, z_max) {
   }
 
@@ -369,8 +369,8 @@ class AABB {
 template <typename Scalar>
 AABB(Scalar, Scalar, Scalar, Scalar, Scalar, Scalar) -> AABB<Scalar>;
 //
-template <typename Scalar, ValidPointType MinPointType, ValidPointType MaxPointType>
-AABB(MinPointType, MaxPointType) -> AABB<Scalar, MinPointType, MaxPointType>;
+template <ValidPointType MinPointType, ValidPointType MaxPointType>
+AABB(MinPointType, MaxPointType) -> AABB<typename MaxPointType::scalar_t, MinPointType, MaxPointType>;
 
 /// @brief (Implementation) Type trait to determine if a type is an AABB
 template <typename T>
@@ -388,40 +388,7 @@ constexpr bool is_aabb_v = is_aabb<T>::value;
 
 /// @brief Concept to determine if a type is a valid AABB type
 template <typename AABBType>
-concept ValidAABBType = is_aabb_v<std::remove_cv_t<AABBType>> &&
-                        is_point_v<decltype(std::declval<std::remove_cv_t<AABBType>>().min_corner())> &&
-                        is_point_v<decltype(std::declval<std::remove_cv_t<AABBType>>().max_corner())> &&
-                        is_point_v<decltype(std::declval<const std::remove_cv_t<AABBType>>().min_corner())> &&
-                        is_point_v<decltype(std::declval<const std::remove_cv_t<AABBType>>().max_corner())> &&
-                        requires(std::remove_cv_t<AABBType> aabb, const std::remove_cv_t<AABBType> const_aabb) {
-                          typename std::remove_cv_t<AABBType>::scalar_t;
-
-                          { aabb.x_min() } -> std::convertible_to<typename std::remove_cv_t<AABBType>::scalar_t&>;
-                          { aabb.y_min() } -> std::convertible_to<typename std::remove_cv_t<AABBType>::scalar_t&>;
-                          { aabb.z_min() } -> std::convertible_to<typename std::remove_cv_t<AABBType>::scalar_t&>;
-                          { aabb.x_max() } -> std::convertible_to<typename std::remove_cv_t<AABBType>::scalar_t&>;
-                          { aabb.y_max() } -> std::convertible_to<typename std::remove_cv_t<AABBType>::scalar_t&>;
-                          { aabb.z_max() } -> std::convertible_to<typename std::remove_cv_t<AABBType>::scalar_t&>;
-
-                          {
-                            const_aabb.x_min()
-                          } -> std::convertible_to<const typename std::remove_cv_t<AABBType>::scalar_t&>;
-                          {
-                            const_aabb.y_min()
-                          } -> std::convertible_to<const typename std::remove_cv_t<AABBType>::scalar_t&>;
-                          {
-                            const_aabb.z_min()
-                          } -> std::convertible_to<const typename std::remove_cv_t<AABBType>::scalar_t&>;
-                          {
-                            const_aabb.x_max()
-                          } -> std::convertible_to<const typename std::remove_cv_t<AABBType>::scalar_t&>;
-                          {
-                            const_aabb.y_max()
-                          } -> std::convertible_to<const typename std::remove_cv_t<AABBType>::scalar_t&>;
-                          {
-                            const_aabb.z_max()
-                          } -> std::convertible_to<const typename std::remove_cv_t<AABBType>::scalar_t&>;
-                        };  // ValidAABBType
+concept ValidAABBType = is_aabb_v<AABBType>;
 
 static_assert(ValidAABBType<AABB<float>> && ValidAABBType<const AABB<float>> && ValidAABBType<AABB<double>> &&
                   ValidAABBType<const AABB<double>>,

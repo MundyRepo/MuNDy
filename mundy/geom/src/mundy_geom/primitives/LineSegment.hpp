@@ -38,7 +38,7 @@ namespace mundy {
 namespace geom {
 
 template <typename Scalar, ValidPointType PointType = Point<Scalar>,
-          typename OwnershipType = mundy::math::Ownership::Owns>
+          typename OwnershipType = math::Ownership::Owns>
 class LineSegment {
   static_assert(std::is_same_v<typename PointType::scalar_t, Scalar>,
                 "The scalar_t of the PointType must match the Scalar type.");
@@ -67,14 +67,14 @@ class LineSegment {
   /// \brief Default constructor for owning LineSegments. Default initialize the start and end points.
   KOKKOS_FUNCTION
   constexpr LineSegment()
-    requires std::is_same_v<OwnershipType, mundy::math::Ownership::Owns>
+    requires std::is_same_v<OwnershipType, math::Ownership::Owns>
       : start_(scalar_t(), scalar_t(), scalar_t()), end_(scalar_t(), scalar_t(), scalar_t()) {
   }
 
   /// \brief No default constructor for viewing LineSegmentss.
   KOKKOS_FUNCTION
   constexpr LineSegment()
-    requires std::is_same_v<OwnershipType, mundy::math::Ownership::Views>
+    requires std::is_same_v<OwnershipType, math::Ownership::Views>
   = delete;
 
   /// \brief Constructor to initialize the start and end points.
@@ -242,29 +242,23 @@ class LineSegment {
   point_t end_;
 };
 
+/// @brief (Implementation) Type trait to determine if a type is a LineSegment
+template <typename T>
+struct imple_is_line_segment : std::false_type {};
+//
+template <typename Scalar, ValidPointType PointType, typename OwnershipType>
+struct imple_is_line_segment<LineSegment<Scalar, PointType, OwnershipType>> : std::true_type {};
+
 /// @brief Type trait to determine if a type is a LineSegment
 template <typename T>
-struct is_line_segment : std::false_type {};
-//
-template <typename Scalar, ValidPointType PointType, typename OwnershipType>
-struct is_line_segment<LineSegment<Scalar, PointType, OwnershipType>> : std::true_type {};
-//
-template <typename Scalar, ValidPointType PointType, typename OwnershipType>
-struct is_line_segment<const LineSegment<Scalar, PointType, OwnershipType>> : std::true_type {};
+struct is_line_segment : imple_is_line_segment<std::remove_cv_t<T>> {};
 //
 template <typename T>
 inline constexpr bool is_line_segment_v = is_line_segment<T>::value;
 
 /// @brief Concept to check if a type is a valid LineSegment type
 template <typename LineSegmentType>
-concept ValidLineSegmentType = is_line_segment_v<std::remove_cv_t<LineSegmentType>> &&
-                               is_point_v<decltype(std::declval<std::remove_cv_t<LineSegmentType>>().start())> &&
-                               is_point_v<decltype(std::declval<std::remove_cv_t<LineSegmentType>>().end())> &&
-                               is_point_v<decltype(std::declval<const std::remove_cv_t<LineSegmentType>>().start())> &&
-                               is_point_v<decltype(std::declval<const std::remove_cv_t<LineSegmentType>>().end())> &&
-                               requires(std::remove_cv_t<LineSegmentType> line) {
-                                 typename std::remove_cv_t<LineSegmentType>::scalar_t;
-                               };  // ValidLineSegmentType
+concept ValidLineSegmentType = is_line_segment_v<LineSegmentType>;
 
 static_assert(ValidLineSegmentType<LineSegment<float>> && ValidLineSegmentType<const LineSegment<float>> &&
                   ValidLineSegmentType<LineSegment<double>> && ValidLineSegmentType<const LineSegment<double>>,

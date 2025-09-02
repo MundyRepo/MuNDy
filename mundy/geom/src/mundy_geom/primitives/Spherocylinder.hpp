@@ -38,8 +38,8 @@ namespace mundy {
 namespace geom {
 
 template <typename Scalar, ValidPointType PointType = Point<Scalar>,
-          mundy::math::ValidQuaternionType QuaternionType = mundy::math::Quaternion<Scalar>,
-          typename OwnershipType = mundy::math::Ownership::Owns>
+          math::ValidQuaternionType QuaternionType = math::Quaternion<Scalar>,
+          typename OwnershipType = math::Ownership::Owns>
 class Spherocylinder {
   static_assert(
       std::is_same_v<typename PointType::scalar_t, Scalar> && std::is_same_v<typename QuaternionType::scalar_t, Scalar>,
@@ -75,7 +75,7 @@ class Spherocylinder {
   /// invalid value of -1
   KOKKOS_FUNCTION
   constexpr Spherocylinder()
-    requires std::is_same_v<OwnershipType, mundy::math::Ownership::Owns>
+    requires std::is_same_v<OwnershipType, math::Ownership::Owns>
       : center_(scalar_t(), scalar_t(), scalar_t()),
         orientation_(static_cast<scalar_t>(1), static_cast<scalar_t>(0), static_cast<scalar_t>(0),
                      static_cast<scalar_t>(0)),
@@ -86,7 +86,7 @@ class Spherocylinder {
   /// \brief No default constructor for viewing Spherocylinders.
   KOKKOS_FUNCTION
   constexpr Spherocylinder()
-    requires std::is_same_v<OwnershipType, mundy::math::Ownership::Views>
+    requires std::is_same_v<OwnershipType, math::Ownership::Views>
   = delete;
 
   /// \brief Constructor to initialize the center and radius.
@@ -105,7 +105,7 @@ class Spherocylinder {
   /// \param[in] orientation The orientation of the Spherocylinder (as a quaternion).
   /// \param[in] radius The radius of the Spherocylinder.
   /// \param[in] length The length of the Spherocylinder.
-  template <ValidPointType OtherPointType, mundy::math::ValidQuaternionType OtherQuaternionType>
+  template <ValidPointType OtherPointType, math::ValidQuaternionType OtherQuaternionType>
   KOKKOS_FUNCTION constexpr Spherocylinder(const OtherPointType& center, const OtherQuaternionType& orientation,
                                            const scalar_t& radius, const scalar_t& length)
     requires(!std::is_same_v<OtherPointType, point_t> || !std::is_same_v<OtherQuaternionType, orientation_t>)
@@ -316,21 +316,21 @@ class Spherocylinder {
  private:
   point_t center_;
   orientation_t orientation_;
-  std::conditional_t<std::is_same_v<OwnershipType, mundy::math::Ownership::Owns>, scalar_t, scalar_t&> radius_;
-  std::conditional_t<std::is_same_v<OwnershipType, mundy::math::Ownership::Owns>, scalar_t, scalar_t&> length_;
+  std::conditional_t<std::is_same_v<OwnershipType, math::Ownership::Owns>, scalar_t, scalar_t&> radius_;
+  std::conditional_t<std::is_same_v<OwnershipType, math::Ownership::Owns>, scalar_t, scalar_t&> length_;
 };
 
-/// @brief Type trait to determine if a type is a Spherocylinder
+/// @brief (Implementation) Type trait to determine if a type is a Spherocylinder
 template <typename T>
-struct is_spherocylinder : std::false_type {};
+struct impl_is_spherocylinder : std::false_type {};
 //
-template <typename Scalar, ValidPointType PointType, mundy::math::ValidQuaternionType QuaternionType,
+template <typename Scalar, ValidPointType PointType, math::ValidQuaternionType QuaternionType,
           typename OwnershipType>
-struct is_spherocylinder<Spherocylinder<Scalar, PointType, QuaternionType, OwnershipType>> : std::true_type {};
-//
-template <typename Scalar, ValidPointType PointType, mundy::math::ValidQuaternionType QuaternionType,
-          typename OwnershipType>
-struct is_spherocylinder<const Spherocylinder<Scalar, PointType, QuaternionType, OwnershipType>> : std::true_type {};
+struct impl_is_spherocylinder<Spherocylinder<Scalar, PointType, QuaternionType, OwnershipType>> : std::true_type {};
+
+/// \brief Type trait to determine if a type is a Spherocylinder
+template<typename T>
+struct is_spherocylinder : impl_is_spherocylinder<std::remove_cv_t<T>> {};
 //
 template <typename T>
 constexpr bool is_spherocylinder_v = is_spherocylinder<T>::value;
@@ -338,23 +338,7 @@ constexpr bool is_spherocylinder_v = is_spherocylinder<T>::value;
 /// @brief Concept to check if a type is a valid Spherocylinder type
 template <typename SpherocylinderType>
 concept ValidSpherocylinderType =
-    is_spherocylinder_v<std::decay_t<SpherocylinderType>> &&
-    is_point_v<typename std::decay_t<SpherocylinderType>::point_t> &&
-    mundy::math::is_quaternion_v<typename std::decay_t<SpherocylinderType>::orientation_t> &&
-    is_point_v<decltype(std::declval<std::decay_t<SpherocylinderType>>().center())> &&
-    is_point_v<decltype(std::declval<const std::decay_t<SpherocylinderType>>().center())> &&
-    mundy::math::is_quaternion_v<decltype(std::declval<std::decay_t<SpherocylinderType>>().orientation())> &&
-    mundy::math::is_quaternion_v<decltype(std::declval<const std::decay_t<SpherocylinderType>>().orientation())> &&
-    requires(std::decay_t<SpherocylinderType> spherocylinder,
-             const std::decay_t<SpherocylinderType> const_spherocylinder) {
-      typename std::decay_t<SpherocylinderType>::scalar_t;
-      typename std::decay_t<SpherocylinderType>::point_t;
-      typename std::decay_t<SpherocylinderType>::orientation_t;
-      { spherocylinder.radius() } -> std::same_as<typename std::decay_t<SpherocylinderType>::scalar_t&>;
-      { const_spherocylinder.radius() } -> std::same_as<const typename std::decay_t<SpherocylinderType>::scalar_t&>;
-      { spherocylinder.length() } -> std::same_as<typename std::decay_t<SpherocylinderType>::scalar_t&>;
-      { const_spherocylinder.length() } -> std::same_as<const typename std::decay_t<SpherocylinderType>::scalar_t&>;
-    };  // ValidSpherocylinderType
+    is_spherocylinder_v<SpherocylinderType>;
 
 static_assert(ValidSpherocylinderType<Spherocylinder<float>> && ValidSpherocylinderType<const Spherocylinder<float>> &&
                   ValidSpherocylinderType<Spherocylinder<double>> &&
