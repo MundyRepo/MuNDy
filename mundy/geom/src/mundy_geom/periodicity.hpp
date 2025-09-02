@@ -341,9 +341,9 @@ template <typename Integer, typename Object, typename Metric>
 KOKKOS_INLINE_FUNCTION Object shift_image(const Object& obj,                             //
                                           const math::Vector3<Integer>& lattice_vector,  //
                                           const Metric& metric) {
-  return translate(obj, metric.shift_image(reference_point(obj), lattice_vector));
+  auto shift_disp = metric.shift_image(reference_point(obj), lattice_vector) - reference_point(obj);
+  return translate(obj, shift_disp);
 }
-
 //@}
 
 //! \name Rigid wrapping functions (based on a consistent reference point)
