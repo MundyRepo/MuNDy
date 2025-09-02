@@ -595,7 +595,7 @@ TEST(PeriodicMetric, MinImageDirectVsPeriodic) {
   AABB<double> box{0.0, 0.0, 0.0, 100.0, 100.0, 100.0};
   auto periodic_metric = periodic_metric_from_unit_cell(cell_size);
   auto periodic_metric_scale_only = periodic_scaled_metric_from_unit_cell(cell_size);
-  EuclideanMetric euclidean_metric{};
+  EuclideanMetric<double> euclidean_metric{};
 
   for (size_t t = 0; t < num_samples; ++t) {
     openrand::Philox rng(seed, t);
@@ -637,7 +637,7 @@ TEST(PeriodicMetric, WrapRigid) {
 
   auto periodic_metric = periodic_metric_from_unit_cell(cell_size);
   auto periodic_metric_scale_only = periodic_scaled_metric_from_unit_cell(cell_size);
-  EuclideanMetric euclidean_metric{};
+  EuclideanMetric<double> euclidean_metric{};
 
   std::vector<TestObjectType> test_types = {TestObjectType::POINT,        TestObjectType::LINE,
                                             TestObjectType::LINE_SEGMENT, TestObjectType::SPHERE,
@@ -676,7 +676,7 @@ TEST(PeriodicMetric, WrapPoints) {
 
   auto periodic_metric = periodic_metric_from_unit_cell(cell_size);
   auto periodic_metric_scale_only = periodic_scaled_metric_from_unit_cell(cell_size);
-  EuclideanMetric euclidean_metric{};
+  EuclideanMetric<double> euclidean_metric{};
 
   std::vector<TestObjectType> test_types = {TestObjectType::POINT,        TestObjectType::LINE,
                                             TestObjectType::LINE_SEGMENT, TestObjectType::SPHERE,
@@ -715,7 +715,7 @@ TEST(PeriodicMetric, UnwrapPointsToRef) {
 
   auto periodic_metric = periodic_metric_from_unit_cell(cell_size);
   auto periodic_metric_scale_only = periodic_scaled_metric_from_unit_cell(cell_size);
-  EuclideanMetric euclidean_metric{};
+  EuclideanMetric<double> euclidean_metric{};
 
   std::vector<TestObjectType> test_types = {TestObjectType::POINT,        TestObjectType::LINE,
                                             TestObjectType::LINE_SEGMENT, TestObjectType::SPHERE,
@@ -772,7 +772,7 @@ TEST(PeriodicMetric, WrapPointsSpanning) {
 
   auto periodic_metric = periodic_metric_from_unit_cell(cell_size);
   auto periodic_metric_scale_only = periodic_scaled_metric_from_unit_cell(cell_size);
-  EuclideanMetric euclidean_metric{};
+  EuclideanMetric<double> euclidean_metric{};
 
   for (size_t t = 0; t < num_trials; ++t) {
     openrand::Philox rng(seed, counter);
@@ -832,7 +832,7 @@ TEST(PeriodicMetric, UnwrapPointsSpanning) {
 
   auto periodic_metric = periodic_metric_from_unit_cell(cell_size);
   auto periodic_metric_scale_only = periodic_scaled_metric_from_unit_cell(cell_size);
-  EuclideanMetric euclidean_metric{};
+  EuclideanMetric<double> euclidean_metric{};
 
   for (size_t t = 0; t < num_trials; ++t) {
     openrand::Philox rng(seed, counter);
@@ -885,7 +885,7 @@ TEST(PeriodicMetric, ShiftImage) {
 
   auto periodic_metric = periodic_metric_from_unit_cell(cell_size);
   auto periodic_metric_scale_only = periodic_scaled_metric_from_unit_cell(cell_size);
-  EuclideanMetric euclidean_metric{};
+  EuclideanMetric<double> euclidean_metric{};
 
   std::vector<TestObjectType> test_types = {TestObjectType::POINT,        TestObjectType::LINE,
                                             TestObjectType::LINE_SEGMENT, TestObjectType::SPHERE,

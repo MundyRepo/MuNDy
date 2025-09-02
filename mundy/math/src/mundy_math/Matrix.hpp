@@ -1321,7 +1321,7 @@ class AMatrix<T, N, M, Accessor, Ownership::Owns> {
     static_assert(OtherN == min_dim,
                   "The vector must have the same number of elements as the minimum dimension of the "
                   "matrix.");
-    AMatrix<std::remove_const_t<T>, N, M> result;
+    AMatrix<std::remove_const_t<T>, N, M> result(static_cast<T>(0));  // Fill non-diagonal with zeros
     ((result(Is, Is) = static_cast<T>(vec[Is])), ...);
     return result;
   }

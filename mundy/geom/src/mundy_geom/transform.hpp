@@ -55,169 +55,165 @@ Supported shapes:
 //@{
 
 /// \brief Translate a point by a given displacement vector
-template <typename Scalar, ValidPointType PointT>
-  requires std::is_same_v<typename PointT::scalar_t, Scalar>
-KOKKOS_INLINE_FUNCTION Point<Scalar> translate(const PointT& point, const math::Vector3<Scalar>& disp) {
+template <ValidPointType PointT, math::ValidVector3Type Vector3T>
+  requires std::is_same_v<typename PointT::scalar_t, typename Vector3T::scalar_t>
+KOKKOS_INLINE_FUNCTION auto translate(const PointT& point, const Vector3T& disp) {
   return point + disp;
 }
 
 /// \brief Translate a point by a given displacement vector (inplace)
-template <typename Scalar, ValidPointType PointT>
-  requires std::is_same_v<typename PointT::scalar_t, Scalar>
-KOKKOS_INLINE_FUNCTION void translate_inplace(PointT& point, const math::Vector3<Scalar>& disp) {
+template <ValidPointType PointT, math::ValidVector3Type Vector3T>
+  requires std::is_same_v<typename PointT::scalar_t, typename Vector3T::scalar_t>
+KOKKOS_INLINE_FUNCTION void translate_inplace(PointT& point, const Vector3T& disp) {
   point += disp;
 }
 
 /// \brief Translate a line by a given displacement vector
-template <typename Scalar, ValidLineType LineT>
-  requires std::is_same_v<typename LineT::scalar_t, Scalar>
-KOKKOS_INLINE_FUNCTION Line<Scalar> translate(const LineT& line, const math::Vector3<Scalar>& disp) {
-  return Line<Scalar>(line.center() + disp, line.direction());
+template <ValidLineType LineT, math::ValidVector3Type Vector3T>
+  requires std::is_same_v<typename LineT::scalar_t, typename Vector3T::scalar_t>
+KOKKOS_INLINE_FUNCTION auto translate(const LineT& line, const Vector3T& disp) {
+  return Line<typename Vector3T::scalar_t>(line.center() + disp, line.direction());
 }
 
 /// \brief Translate a line by a given displacement vector (inplace)
-template <typename Scalar, ValidLineType LineT>
-  requires std::is_same_v<typename LineT::scalar_t, Scalar>
-KOKKOS_INLINE_FUNCTION void translate_inplace(LineT& line, const math::Vector3<Scalar>& disp) {
+template <ValidLineType LineT, math::ValidVector3Type Vector3T>
+  requires std::is_same_v<typename LineT::scalar_t, typename Vector3T::scalar_t>
+KOKKOS_INLINE_FUNCTION void translate_inplace(LineT& line, const Vector3T& disp) {
   line.center() += disp;
 }
 
 /// \brief Translate a line segment by a given displacement vector
-template <typename Scalar, ValidLineSegmentType LineSegmentT>
-  requires std::is_same_v<typename LineSegmentT::scalar_t, Scalar>
-KOKKOS_INLINE_FUNCTION LineSegment<Scalar> translate(const LineSegmentT& line_segment,
-                                                     const math::Vector3<Scalar>& disp) {
-  return LineSegment<Scalar>(line_segment.start() + disp, line_segment.end() + disp);
+template <ValidLineSegmentType LineSegmentT, math::ValidVector3Type Vector3T>
+  requires std::is_same_v<typename LineSegmentT::scalar_t, typename Vector3T::scalar_t>
+KOKKOS_INLINE_FUNCTION auto translate(const LineSegmentT& line_segment, const Vector3T& disp) {
+  return LineSegment<typename Vector3T::scalar_t>(line_segment.start() + disp, line_segment.end() + disp);
 }
 
 /// \brief Translate a line segment by a given displacement vector (inplace)
-template <typename Scalar, ValidLineSegmentType LineSegmentT>
-  requires std::is_same_v<typename LineSegmentT::scalar_t, Scalar>
-KOKKOS_INLINE_FUNCTION void translate_inplace(LineSegmentT& line_segment, const math::Vector3<Scalar>& disp) {
+template <ValidLineSegmentType LineSegmentT, math::ValidVector3Type Vector3T>
+  requires std::is_same_v<typename LineSegmentT::scalar_t, typename Vector3T::scalar_t>
+KOKKOS_INLINE_FUNCTION void translate_inplace(LineSegmentT& line_segment, const Vector3T& disp) {
   line_segment.start() += disp;
   line_segment.end() += disp;
 }
 
 /// \brief Translate a v-segment by a given displacement vector
-template <typename Scalar, ValidVSegmentType VSegmentT>
-  requires std::is_same_v<typename VSegmentT::scalar_t, Scalar>
-KOKKOS_INLINE_FUNCTION VSegment<Scalar> translate(const VSegmentT& v_segment,
-                                                  const math::Vector3<Scalar>& disp) {
-  return VSegment<Scalar>(v_segment.start() + disp, v_segment.middle() + disp, v_segment.end() + disp);
+template <ValidVSegmentType VSegmentT, math::ValidVector3Type Vector3T>
+  requires std::is_same_v<typename VSegmentT::scalar_t, typename Vector3T::scalar_t>
+KOKKOS_INLINE_FUNCTION auto translate(const VSegmentT& v_segment, const Vector3T& disp) {
+  return VSegment<typename Vector3T::scalar_t>(v_segment.start() + disp, v_segment.middle() + disp,
+                                               v_segment.end() + disp);
 }
 
 /// \brief Translate a v-segment by a given displacement vector (inplace)
-template <typename Scalar, ValidVSegmentType VSegmentT>
-  requires std::is_same_v<typename VSegmentT::scalar_t, Scalar>
-KOKKOS_INLINE_FUNCTION void translate_inplace(VSegment<Scalar>& v_segment, const math::Vector3<Scalar>& disp) {
+template <ValidVSegmentType VSegmentT, math::ValidVector3Type Vector3T>
+  requires std::is_same_v<typename VSegmentT::scalar_t, typename Vector3T::scalar_t>
+KOKKOS_INLINE_FUNCTION void translate_inplace(VSegmentT& v_segment, const Vector3T& disp) {
   v_segment.start() += disp;
   v_segment.middle() += disp;
   v_segment.end() += disp;
 }
 
 /// \brief Translate a circle3D by a given displacement vector
-template <typename Scalar, ValidCircle3DType Circle3DT>
-  requires std::is_same_v<typename Circle3DT::scalar_t, Scalar>
-KOKKOS_INLINE_FUNCTION Circle3D<Scalar> translate(const Circle3DT& circle, const math::Vector3<Scalar>& disp) {
-  return Circle3D<Scalar>(circle.center() + disp, circle.orientation(), circle.radius());
+template <ValidCircle3DType Circle3DT, math::ValidVector3Type Vector3T>
+  requires std::is_same_v<typename Circle3DT::scalar_t, typename Vector3T::scalar_t>
+KOKKOS_INLINE_FUNCTION auto translate(const Circle3DT& circle, const Vector3T& disp) {
+  return Circle3D<typename Vector3T::scalar_t>(circle.center() + disp, circle.orientation(), circle.radius());
 }
 
 /// \brief Translate a circle3D by a given displacement vector (inplace)
-template <typename Scalar, ValidCircle3DType Circle3DT>
-  requires std::is_same_v<typename Circle3DT::scalar_t, Scalar>
-KOKKOS_INLINE_FUNCTION void translate_inplace(Circle3D<Scalar>& circle, const math::Vector3<Scalar>& disp) {
+template <ValidCircle3DType Circle3DT, math::ValidVector3Type Vector3T>
+  requires std::is_same_v<typename Circle3DT::scalar_t, typename Vector3T::scalar_t>
+KOKKOS_INLINE_FUNCTION void translate_inplace(Circle3DT& circle, const Vector3T& disp) {
   circle.center() += disp;
 }
 
 /// \brief Translate an AABB by a given displacement vector
-template <typename Scalar, ValidAABBType AABBT>
-  requires std::is_same_v<typename AABBT::scalar_t, Scalar>
-KOKKOS_INLINE_FUNCTION AABB<Scalar> translate(const AABBT& aabb, const math::Vector3<Scalar>& disp) {
-  return AABB<Scalar>(aabb.min_corner() + disp, aabb.max_corner() + disp);
+template <ValidAABBType AABBT, math::ValidVector3Type Vector3T>
+  requires std::is_same_v<typename AABBT::scalar_t, typename Vector3T::scalar_t>
+KOKKOS_INLINE_FUNCTION auto translate(const AABBT& aabb, const Vector3T& disp) {
+  return AABB<typename Vector3T::scalar_t>(aabb.min_corner() + disp, aabb.max_corner() + disp);
 }
 
 /// \brief Translate an AABB by a given displacement vector (inplace)
-template <typename Scalar, ValidAABBType AABBT>
-  requires std::is_same_v<typename AABBT::scalar_t, Scalar>
-KOKKOS_INLINE_FUNCTION void translate_inplace(AABBT& aabb, const math::Vector3<Scalar>& disp) {
+template <ValidAABBType AABBT, math::ValidVector3Type Vector3T>
+  requires std::is_same_v<typename AABBT::scalar_t, typename Vector3T::scalar_t>
+KOKKOS_INLINE_FUNCTION void translate_inplace(AABBT& aabb, const Vector3T& disp) {
   aabb.min_corner() += disp;
   aabb.max_corner() += disp;
 }
 
 /// \brief Translate a sphere by a given displacement vector
-template <typename Scalar, ValidSphereType SphereT>
-  requires std::is_same_v<typename SphereT::scalar_t, Scalar>
-KOKKOS_INLINE_FUNCTION Sphere<Scalar> translate(const SphereT& sphere, const math::Vector3<Scalar>& disp) {
-  return Sphere<Scalar>(sphere.center() + disp, sphere.radius());
+template <ValidSphereType SphereT, math::ValidVector3Type Vector3T>
+  requires std::is_same_v<typename SphereT::scalar_t, typename Vector3T::scalar_t>
+KOKKOS_INLINE_FUNCTION auto translate(const SphereT& sphere, const Vector3T& disp) {
+  return Sphere<typename Vector3T::scalar_t>(sphere.center() + disp, sphere.radius());
 }
 
 /// \brief Translate a sphere by a given displacement vector (inplace)
-template <typename Scalar, ValidSphereType SphereT>
-  requires std::is_same_v<typename SphereT::scalar_t, Scalar>
-KOKKOS_INLINE_FUNCTION void translate_inplace(SphereT& sphere, const math::Vector3<Scalar>& disp) {
+template <ValidSphereType SphereT, math::ValidVector3Type Vector3T>
+  requires std::is_same_v<typename SphereT::scalar_t, typename Vector3T::scalar_t>
+KOKKOS_INLINE_FUNCTION void translate_inplace(SphereT& sphere, const Vector3T& disp) {
   sphere.center() += disp;
 }
 
 /// \brief Translate a spherocylinder by a given displacement vector
-template <typename Scalar, ValidSpherocylinderType SpherocylinderT>
-  requires std::is_same_v<typename SpherocylinderT::scalar_t, Scalar>
-KOKKOS_INLINE_FUNCTION Spherocylinder<Scalar> translate(const SpherocylinderT& spherocylinder,
-                                                        const math::Vector3<Scalar>& disp) {
-  return Spherocylinder<Scalar>(spherocylinder.center() + disp, spherocylinder.orientation(), spherocylinder.radius(),
-                                spherocylinder.length());
+template <ValidSpherocylinderType SpherocylinderT, math::ValidVector3Type Vector3T>
+  requires std::is_same_v<typename SpherocylinderT::scalar_t, typename Vector3T::scalar_t>
+KOKKOS_INLINE_FUNCTION auto translate(const SpherocylinderT& spherocylinder, const Vector3T& disp) {
+  return Spherocylinder<typename Vector3T::scalar_t>(spherocylinder.center() + disp, spherocylinder.orientation(),
+                                                     spherocylinder.radius(), spherocylinder.length());
 }
 
 /// \brief Translate a spherocylinder by a given displacement vector (inplace)
-template <typename Scalar, ValidSpherocylinderType SpherocylinderT>
-  requires std::is_same_v<typename SpherocylinderT::scalar_t, Scalar>
-KOKKOS_INLINE_FUNCTION void translate_inplace(SpherocylinderT& spherocylinder,
-                                              const math::Vector3<Scalar>& disp) {
+template <ValidSpherocylinderType SpherocylinderT, math::ValidVector3Type Vector3T>
+  requires std::is_same_v<typename SpherocylinderT::scalar_t, typename Vector3T::scalar_t>
+KOKKOS_INLINE_FUNCTION void translate_inplace(SpherocylinderT& spherocylinder, const Vector3T& disp) {
   spherocylinder.center() += disp;
 }
 
 /// \brief Translate a spherocylinder segment by a given displacement vector
-template <typename Scalar, ValidSpherocylinderSegmentType SpherocylinderSegmentT>
-  requires std::is_same_v<typename SpherocylinderSegmentT::scalar_t, Scalar>
-KOKKOS_INLINE_FUNCTION SpherocylinderSegment<Scalar> translate(
-    const SpherocylinderSegmentT& spherocylinder_segment, const math::Vector3<Scalar>& disp) {
-  return SpherocylinderSegment<Scalar>(spherocylinder_segment.start() + disp, spherocylinder_segment.end() + disp);
+template <ValidSpherocylinderSegmentType SpherocylinderSegmentT, math::ValidVector3Type Vector3T>
+  requires std::is_same_v<typename SpherocylinderSegmentT::scalar_t, typename Vector3T::scalar_t>
+KOKKOS_INLINE_FUNCTION auto translate(const SpherocylinderSegmentT& spherocylinder_segment, const Vector3T& disp) {
+  return SpherocylinderSegment<typename Vector3T::scalar_t>(spherocylinder_segment.start() + disp,
+                                                            spherocylinder_segment.end() + disp);
 }
 
 /// \brief Translate a spherocylinder segment by a given displacement vector (inplace)
-template <typename Scalar, ValidSpherocylinderSegmentType SpherocylinderSegmentT>
-  requires std::is_same_v<typename SpherocylinderSegmentT::scalar_t, Scalar>
-KOKKOS_INLINE_FUNCTION void translate_inplace(SpherocylinderSegmentT& spherocylinder_segment,
-                                              const math::Vector3<Scalar>& disp) {
+template <ValidSpherocylinderSegmentType SpherocylinderSegmentT, math::ValidVector3Type Vector3T>
+  requires std::is_same_v<typename SpherocylinderSegmentT::scalar_t, typename Vector3T::scalar_t>
+KOKKOS_INLINE_FUNCTION void translate_inplace(SpherocylinderSegmentT& spherocylinder_segment, const Vector3T& disp) {
   spherocylinder_segment.start() += disp;
   spherocylinder_segment.end() += disp;
 }
 
 /// \brief Translate a ring by a given displacement vector
-template <typename Scalar, ValidRingType RingT>
-  requires std::is_same_v<typename RingT::scalar_t, Scalar>
-KOKKOS_INLINE_FUNCTION Ring<Scalar> translate(const RingT& ring, const math::Vector3<Scalar>& disp) {
-  return Ring<Scalar>(ring.center() + disp, ring.orientation(), ring.major_radius(), ring.minor_radius());
+template <ValidRingType RingT, math::ValidVector3Type Vector3T>
+  requires std::is_same_v<typename RingT::scalar_t, typename Vector3T::scalar_t>
+KOKKOS_INLINE_FUNCTION auto translate(const RingT& ring, const Vector3T& disp) {
+  return Ring<typename Vector3T::scalar_t>(ring.center() + disp, ring.orientation(), ring.major_radius(),
+                                           ring.minor_radius());
 }
 
 /// \brief Translate a ring by a given displacement vector (inplace)
-template <typename Scalar, ValidRingType RingT>
-  requires std::is_same_v<typename RingT::scalar_t, Scalar>
-KOKKOS_INLINE_FUNCTION void translate_inplace(Ring<Scalar>& ring, const math::Vector3<Scalar>& disp) {
+template <ValidRingType RingT, math::ValidVector3Type Vector3T>
+  requires std::is_same_v<typename RingT::scalar_t, typename Vector3T::scalar_t>
+KOKKOS_INLINE_FUNCTION void translate_inplace(RingT& ring, const Vector3T& disp) {
   ring.center() += disp;
 }
 
 /// \brief Translate an ellipsoid by a given displacement vector
-template <typename Scalar, ValidEllipsoidType EllipsoidT>
-  requires std::is_same_v<typename EllipsoidT::scalar_t, Scalar>
-KOKKOS_INLINE_FUNCTION Ellipsoid<Scalar> translate(const EllipsoidT& ellipsoid,
-                                                   const math::Vector3<Scalar>& disp) {
-  return Ellipsoid<Scalar>(ellipsoid.center() + disp, ellipsoid.orientation(), ellipsoid.radii());
+template <ValidEllipsoidType EllipsoidT, math::ValidVector3Type Vector3T>
+  requires std::is_same_v<typename EllipsoidT::scalar_t, typename Vector3T::scalar_t>
+KOKKOS_INLINE_FUNCTION auto translate(const EllipsoidT& ellipsoid, const Vector3T& disp) {
+  return Ellipsoid<typename Vector3T::scalar_t>(ellipsoid.center() + disp, ellipsoid.orientation(), ellipsoid.radii());
 }
 
 /// \brief Translate an ellipsoid by a given displacement vector (inplace)
-template <typename Scalar, ValidEllipsoidType EllipsoidT>
-  requires std::is_same_v<typename EllipsoidT::scalar_t, Scalar>
-KOKKOS_INLINE_FUNCTION void translate_inplace(EllipsoidT& ellipsoid, const math::Vector3<Scalar>& disp) {
+template <ValidEllipsoidType EllipsoidT, math::ValidVector3Type Vector3T>
+  requires std::is_same_v<typename EllipsoidT::scalar_t, typename Vector3T::scalar_t>
+KOKKOS_INLINE_FUNCTION void translate_inplace(EllipsoidT& ellipsoid, const Vector3T& disp) {
   ellipsoid.center() += disp;
 }
 //@}
@@ -241,151 +237,177 @@ Supported shapes:
 */
 
 /// \brief Rotate a point about the origin by a given quaternion
-template <typename Scalar>
-KOKKOS_INLINE_FUNCTION Point<Scalar> rotate(const Point<Scalar>& point, const math::Quaternion<Scalar>& q) {
+template <ValidPointType PointT, math::ValidQuaternionType QuaternionT>
+  requires std::is_same_v<typename PointT::scalar_t, typename QuaternionT::scalar_t>
+KOKKOS_INLINE_FUNCTION Point<typename QuaternionT::scalar_t> rotate(const PointT& point, const QuaternionT& q) {
   return q * point;
 }
 
 /// \brief Rotate a point about the origin by a given quaternion (inplace)
-template <typename Scalar>
-KOKKOS_INLINE_FUNCTION void rotate_inplace(Point<Scalar>& point, const math::Quaternion<Scalar>& q) {
+template <ValidPointType PointT, math::ValidQuaternionType QuaternionT>
+  requires std::is_same_v<typename PointT::scalar_t, typename QuaternionT::scalar_t>
+KOKKOS_INLINE_FUNCTION void rotate_inplace(PointT& point, const QuaternionT& q) {
   point = q * point;
 }
 
 /// \brief Rotate a line about the origin by a given quaternion
-template <typename Scalar>
-KOKKOS_INLINE_FUNCTION Line<Scalar> rotate(const Line<Scalar>& line, const math::Quaternion<Scalar>& q) {
-  return Line<Scalar>(q * line.center(), q * line.direction());
+template <ValidLineType LineT, math::ValidQuaternionType QuaternionT>
+  requires std::is_same_v<typename LineT::scalar_t, typename QuaternionT::scalar_t>
+KOKKOS_INLINE_FUNCTION Line<typename QuaternionT::scalar_t> rotate(const LineT& line, const QuaternionT& q) {
+  return Line<typename QuaternionT::scalar_t>(q * line.center(), q * line.direction());
 }
 
 /// \brief Rotate a line about the origin by a given quaternion (inplace)
-template <typename Scalar>
-KOKKOS_INLINE_FUNCTION void rotate_inplace(Line<Scalar>& line, const math::Quaternion<Scalar>& q) {
+template <ValidLineType LineT, math::ValidQuaternionType QuaternionT>
+  requires std::is_same_v<typename LineT::scalar_t, typename QuaternionT::scalar_t>
+KOKKOS_INLINE_FUNCTION void rotate_inplace(LineT& line, const QuaternionT& q) {
   line.center() = q * line.center();
   line.direction() = q * line.direction();
 }
 
 /// \brief Rotate a line segment about the origin by a given quaternion
-template <typename Scalar>
-KOKKOS_INLINE_FUNCTION LineSegment<Scalar> rotate(const LineSegment<Scalar>& line_segment,
-                                                  const math::Quaternion<Scalar>& q) {
-  return LineSegment<Scalar>(q * line_segment.start(), q * line_segment.end());
+template <ValidLineSegmentType LineSegmentT, math::ValidQuaternionType QuaternionT>
+  requires std::is_same_v<typename LineSegmentT::scalar_t, typename QuaternionT::scalar_t>
+KOKKOS_INLINE_FUNCTION LineSegment<typename QuaternionT::scalar_t> rotate(const LineSegmentT& line_segment,
+                                                                          const QuaternionT& q) {
+  return LineSegment<typename QuaternionT::scalar_t>(q * line_segment.start(), q * line_segment.end());
 }
 
 /// \brief Rotate a line segment about the origin by a given quaternion (inplace)
-template <typename Scalar>
-KOKKOS_INLINE_FUNCTION void rotate_inplace(LineSegment<Scalar>& line_segment, const math::Quaternion<Scalar>& q) {
+template <ValidLineSegmentType LineSegmentT, math::ValidQuaternionType QuaternionT>
+  requires std::is_same_v<typename LineSegmentT::scalar_t, typename QuaternionT::scalar_t>
+KOKKOS_INLINE_FUNCTION void rotate_inplace(LineSegmentT& line_segment, const QuaternionT& q) {
   line_segment.start() = q * line_segment.start();
   line_segment.end() = q * line_segment.end();
 }
 
 /// \brief Rotate a v-segment about the origin by a given quaternion
-template <typename Scalar>
-KOKKOS_INLINE_FUNCTION VSegment<Scalar> rotate(const VSegment<Scalar>& v_segment, const math::Quaternion<Scalar>& q) {
-  return VSegment<Scalar>(q * v_segment.start(), q * v_segment.middle(), q * v_segment.end());
+template <ValidVSegmentType VSegmentT, math::ValidQuaternionType QuaternionT>
+  requires std::is_same_v<typename VSegmentT::scalar_t, typename QuaternionT::scalar_t>
+KOKKOS_INLINE_FUNCTION VSegment<typename QuaternionT::scalar_t> rotate(const VSegmentT& v_segment,
+                                                                       const QuaternionT& q) {
+  return VSegment<typename QuaternionT::scalar_t>(q * v_segment.start(), q * v_segment.middle(), q * v_segment.end());
 }
 
 /// \brief Rotate a v-segment about the origin by a given quaternion (inplace)
-template <typename Scalar>
-KOKKOS_INLINE_FUNCTION void rotate_inplace(VSegment<Scalar>& v_segment, const math::Quaternion<Scalar>& q) {
+template <ValidVSegmentType VSegmentT, math::ValidQuaternionType QuaternionT>
+  requires std::is_same_v<typename VSegmentT::scalar_t, typename QuaternionT::scalar_t>
+KOKKOS_INLINE_FUNCTION void rotate_inplace(VSegmentT& v_segment, const QuaternionT& q) {
   v_segment.start() = q * v_segment.start();
   v_segment.middle() = q * v_segment.middle();
   v_segment.end() = q * v_segment.end();
 }
 
 /// \brief Rotate a circle3D about the origin by a given quaternion
-template <typename Scalar>
-KOKKOS_INLINE_FUNCTION Circle3D<Scalar> rotate(const Circle3D<Scalar>& circle, const math::Quaternion<Scalar>& q) {
-  return Circle3D<Scalar>(q * circle.center(), circle.orientation() * q, circle.radius());
+template <ValidCircle3DType Circle3DT, math::ValidQuaternionType QuaternionT>
+  requires std::is_same_v<typename Circle3DT::scalar_t, typename QuaternionT::scalar_t>
+KOKKOS_INLINE_FUNCTION Circle3D<typename QuaternionT::scalar_t> rotate(const Circle3DT& circle, const QuaternionT& q) {
+  return Circle3D<typename QuaternionT::scalar_t>(q * circle.center(), circle.orientation() * q, circle.radius());
 }
 
 /// \brief Rotate a circle3D about the origin by a given quaternion (inplace)
-template <typename Scalar>
-KOKKOS_INLINE_FUNCTION void rotate_inplace(Circle3D<Scalar>& circle, const math::Quaternion<Scalar>& q) {
+template <ValidCircle3DType Circle3DT, math::ValidQuaternionType QuaternionT>
+  requires std::is_same_v<typename Circle3DT::scalar_t, typename QuaternionT::scalar_t>
+KOKKOS_INLINE_FUNCTION void rotate_inplace(Circle3DT& circle, const QuaternionT& q) {
   circle.center() = q * circle.center();
   circle.orientation() = circle.orientation() * q;
 }
 
 /// \brief Rotate an AABB about the origin by a given quaternion
-template <typename Scalar>
-KOKKOS_INLINE_FUNCTION AABB<Scalar> rotate(const AABB<Scalar>& aabb, const math::Quaternion<Scalar>& q) {
+template <ValidAABBType AABBT, math::ValidQuaternionType QuaternionT>
+  requires std::is_same_v<typename AABBT::scalar_t, typename QuaternionT::scalar_t>
+KOKKOS_INLINE_FUNCTION AABB<typename QuaternionT::scalar_t> rotate(const AABBT& aabb, const QuaternionT& q) {
   MUNDY_THROW_ASSERT(
       false, std::runtime_error,
       "AABB rotation is not well-defined. Should it becomes a generalized Box or should it be the aabb of said box?");
 }
 
 /// \brief Rotate an AABB about the origin by a given quaternion (inplace)
-template <typename Scalar>
-KOKKOS_INLINE_FUNCTION void rotate_inplace(AABB<Scalar>& aabb, const math::Quaternion<Scalar>& q) {
+template <ValidAABBType AABBT, math::ValidQuaternionType QuaternionT>
+  requires std::is_same_v<typename AABBT::scalar_t, typename QuaternionT::scalar_t>
+KOKKOS_INLINE_FUNCTION void rotate_inplace(AABBT& aabb, const QuaternionT& q) {
   MUNDY_THROW_ASSERT(
       false, std::runtime_error,
       "AABB rotation is not well-defined. Should it becomes a generalized Box or should it be the aabb of said box?");
 }
 
 /// \brief Rotate a sphere about the origin by a given quaternion
-template <typename Scalar>
-KOKKOS_INLINE_FUNCTION Sphere<Scalar> rotate(const Sphere<Scalar>& sphere, const math::Quaternion<Scalar>& q) {
-  return Sphere<Scalar>(q * sphere.center(), sphere.radius());
+template <ValidSphereType SphereT, math::ValidQuaternionType QuaternionT>
+  requires std::is_same_v<typename SphereT::scalar_t, typename QuaternionT::scalar_t>
+KOKKOS_INLINE_FUNCTION Sphere<typename QuaternionT::scalar_t> rotate(const SphereT& sphere, const QuaternionT& q) {
+  return Sphere<typename QuaternionT::scalar_t>(q * sphere.center(), sphere.radius());
 }
 
 /// \brief Rotate a sphere about the origin by a given quaternion (inplace)
-template <typename Scalar>
-KOKKOS_INLINE_FUNCTION void rotate_inplace(Sphere<Scalar>& sphere, const math::Quaternion<Scalar>& q) {
+template <ValidSphereType SphereT, math::ValidQuaternionType QuaternionT>
+  requires std::is_same_v<typename SphereT::scalar_t, typename QuaternionT::scalar_t>
+KOKKOS_INLINE_FUNCTION void rotate_inplace(SphereT& sphere, const QuaternionT& q) {
   sphere.center() = q * sphere.center();
 }
 
 /// \brief Rotate a spherocylinder about the origin by a given quaternion
-template <typename Scalar>
-KOKKOS_INLINE_FUNCTION Spherocylinder<Scalar> rotate(const Spherocylinder<Scalar>& spherocylinder,
-                                                     const math::Quaternion<Scalar>& q) {
-  return Spherocylinder<Scalar>(q * spherocylinder.center(), spherocylinder.orientation() * q, spherocylinder.radius(),
-                                spherocylinder.length());
+template <ValidSpherocylinderType SpherocylinderT, math::ValidQuaternionType QuaternionT>
+  requires std::is_same_v<typename SpherocylinderT::scalar_t, typename QuaternionT::scalar_t>
+KOKKOS_INLINE_FUNCTION Spherocylinder<typename QuaternionT::scalar_t> rotate(const SpherocylinderT& spherocylinder,
+                                                                             const QuaternionT& q) {
+  return Spherocylinder<typename QuaternionT::scalar_t>(q * spherocylinder.center(), spherocylinder.orientation() * q,
+                                                        spherocylinder.radius(), spherocylinder.length());
 }
 
 /// \brief Rotate a spherocylinder about the origin by a given quaternion (inplace)
-template <typename Scalar>
-KOKKOS_INLINE_FUNCTION void rotate_inplace(Spherocylinder<Scalar>& spherocylinder, const math::Quaternion<Scalar>& q) {
+template <ValidSpherocylinderType SpherocylinderT, math::ValidQuaternionType QuaternionT>
+  requires std::is_same_v<typename SpherocylinderT::scalar_t, typename QuaternionT::scalar_t>
+KOKKOS_INLINE_FUNCTION void rotate_inplace(SpherocylinderT& spherocylinder, const QuaternionT& q) {
   spherocylinder.center() = q * spherocylinder.center();
   spherocylinder.orientation() = spherocylinder.orientation() * q;
 }
 
 /// \brief Rotate a spherocylinder segment about the origin by a given quaternion
-template <typename Scalar>
-KOKKOS_INLINE_FUNCTION SpherocylinderSegment<Scalar> rotate(const SpherocylinderSegment<Scalar>& spherocylinder_segment,
-                                                            const math::Quaternion<Scalar>& q) {
-  return SpherocylinderSegment<Scalar>(q * spherocylinder_segment.start(), q * spherocylinder_segment.end());
+template <ValidSpherocylinderSegmentType SpherocylinderSegmentT, math::ValidQuaternionType QuaternionT>
+  requires std::is_same_v<typename SpherocylinderSegmentT::scalar_t, typename QuaternionT::scalar_t>
+KOKKOS_INLINE_FUNCTION SpherocylinderSegment<typename QuaternionT::scalar_t> rotate(
+    const SpherocylinderSegmentT& spherocylinder_segment, const QuaternionT& q) {
+  return SpherocylinderSegment<typename QuaternionT::scalar_t>(q * spherocylinder_segment.start(),
+                                                               q * spherocylinder_segment.end());
 }
 
 /// \brief Rotate a spherocylinder segment about the origin by a given quaternion (inplace)
-template <typename Scalar>
-KOKKOS_INLINE_FUNCTION void rotate_inplace(SpherocylinderSegment<Scalar>& spherocylinder_segment,
-                                           const math::Quaternion<Scalar>& q) {
+template <ValidSpherocylinderSegmentType SpherocylinderSegmentT, math::ValidQuaternionType QuaternionT>
+  requires std::is_same_v<typename SpherocylinderSegmentT::scalar_t, typename QuaternionT::scalar_t>
+KOKKOS_INLINE_FUNCTION void rotate_inplace(SpherocylinderSegmentT& spherocylinder_segment, const QuaternionT& q) {
   spherocylinder_segment.start() = q * spherocylinder_segment.start();
   spherocylinder_segment.end() = q * spherocylinder_segment.end();
 }
 
 /// \brief Rotate a ring about the origin by a given quaternion
-template <typename Scalar>
-KOKKOS_INLINE_FUNCTION Ring<Scalar> rotate(const Ring<Scalar>& ring, const math::Quaternion<Scalar>& q) {
-  return Ring<Scalar>(q * ring.center(), ring.orientation() * q, ring.major_radius(), ring.minor_radius());
+template <ValidRingType RingT, math::ValidQuaternionType QuaternionT>
+  requires std::is_same_v<typename RingT::scalar_t, typename QuaternionT::scalar_t>
+KOKKOS_INLINE_FUNCTION Ring<typename QuaternionT::scalar_t> rotate(const RingT& ring, const QuaternionT& q) {
+  return Ring<typename QuaternionT::scalar_t>(q * ring.center(), ring.orientation() * q, ring.major_radius(),
+                                              ring.minor_radius());
 }
 
 /// \brief Rotate a ring about the origin by a given quaternion (inplace)
-template <typename Scalar>
-KOKKOS_INLINE_FUNCTION void rotate_inplace(Ring<Scalar>& ring, const math::Quaternion<Scalar>& q) {
+template <ValidRingType RingT, math::ValidQuaternionType QuaternionT>
+  requires std::is_same_v<typename RingT::scalar_t, typename QuaternionT::scalar_t>
+KOKKOS_INLINE_FUNCTION void rotate_inplace(RingT& ring, const QuaternionT& q) {
   ring.center() = q * ring.center();
   ring.orientation() = ring.orientation() * q;
 }
 
 /// \brief Rotate an ellipsoid about the origin by a given quaternion
-template <typename Scalar>
-KOKKOS_INLINE_FUNCTION Ellipsoid<Scalar> rotate(const Ellipsoid<Scalar>& ellipsoid, const math::Quaternion<Scalar>& q) {
-  return Ellipsoid<Scalar>(q * ellipsoid.center(), ellipsoid.orientation() * q, ellipsoid.radii());
+template <ValidEllipsoidType EllipsoidT, math::ValidQuaternionType QuaternionT>
+  requires std::is_same_v<typename EllipsoidT::scalar_t, typename QuaternionT::scalar_t>
+KOKKOS_INLINE_FUNCTION Ellipsoid<typename QuaternionT::scalar_t> rotate(const EllipsoidT& ellipsoid,
+                                                                        const QuaternionT& q) {
+  return Ellipsoid<typename QuaternionT::scalar_t>(q * ellipsoid.center(), ellipsoid.orientation() * q,
+                                                   ellipsoid.radii());
 }
 
 /// \brief Rotate an ellipsoid about the origin by a given quaternion (inplace)
-template <typename Scalar>
-KOKKOS_INLINE_FUNCTION void rotate_inplace(Ellipsoid<Scalar>& ellipsoid, const math::Quaternion<Scalar>& q) {
+template <ValidEllipsoidType EllipsoidT, math::ValidQuaternionType QuaternionT>
+  requires std::is_same_v<typename EllipsoidT::scalar_t, typename QuaternionT::scalar_t>
+KOKKOS_INLINE_FUNCTION void rotate_inplace(EllipsoidT& ellipsoid, const QuaternionT& q) {
   ellipsoid.center() = q * ellipsoid.center();
   ellipsoid.orientation() = ellipsoid.orientation() * q;
 }
