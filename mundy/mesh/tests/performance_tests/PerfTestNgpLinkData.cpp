@@ -1034,8 +1034,6 @@ void randomly_modify_links(TestContext& context, const TestParameters& params) {
   connect_entities_and_links(context, params, seed, percent_modified_buckets, percent_modified_links);
 }
 
-
-
 /// \brief The driver for a single performance test given a set of parameters.
 void run_test(ankerl::nanobench::Bench& bench, const TestParameters& params) {
   TestContext context;
@@ -1200,14 +1198,3 @@ int main(int argc, char** argv) {
 
   return 0;
 }
-
-/* Initial observations:
-
-get_or_create_crs_partitions scales faster than linear with the number of link partitions but is independent of link dimensionality.
-
-1    link  gives (1, 0.000192031), (50, 0.000187375), (100, 0.000188507)
-1k   links gives (1, 0.000241712), (50, 0.0743558),   (100, 0.273967)
-500k links gives (1, 0.0274539),   (50, 1.35771),     (100, 3.33674)
-1M   links gives (1, 0.163916),    (50, 4.46783),     (100, 6.72034)
-*/
-

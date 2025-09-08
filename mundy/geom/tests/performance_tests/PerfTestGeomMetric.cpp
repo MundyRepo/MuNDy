@@ -30,7 +30,7 @@
 #include <vector>     // for std::vector
 
 // External
-#include "nanobench.h"
+#include <nanobench.h>
 
 // Trilinos
 #include <Kokkos_Core.hpp>                 // for Kokkos::initialize, Kokkos::finalize

@@ -48,14 +48,11 @@ namespace mundy {
 
 namespace mesh {
 
-//! \name Forward declarations
-//@{
-
-class NewLinkData;
-class NewLinkPartition;
-class NewNgpLinkData;
-class NewNgpLinkPartition;
-//@}
+namespace impl {
+  // Forward declaration (needed due to declaring a friend in a namespaced scope)
+  template <typename NgpMemSpace>
+  class NgpLinkDataCRSManagerT;
+}
 
 class NewNgpLinkMetaData {
  public:
@@ -256,10 +253,14 @@ class NewNgpLinkMetaData {
   //! \name Friends <3
   //@{
 
-  friend class NewLinkData;
-  friend class NewLinkPartition;
-  friend class NewNgpLinkData;
-  friend class NewNgpLinkPartition;
+  template<typename T>
+  friend class NewNgpLinkDataT;
+
+  template <typename T>
+  friend class impl::NgpLinkDataCRSManagerT;
+
+  template <typename T>
+  friend class NewNgpLinkRequestsT;
   //@}
 
   //! \name Internal members

@@ -663,6 +663,7 @@ TYPED_TEST(Matrix3SingleTypeTest, SpecialOperationsEdgeCases) {
 
 struct an_external_functor {
   template <typename T>
+  KOKKOS_FUNCTION
   T operator()(const T& x) const {
     return x + 1;
   }
@@ -670,6 +671,7 @@ struct an_external_functor {
 
 struct an_vector_external_functor {
   template <typename T>
+  KOKKOS_FUNCTION
   auto operator()(const T& x) const {
     // Set each element of the row or column to the sum of its elements
     return sum(x) * Vector3<typename T::scalar_t>{1, 1, 1};

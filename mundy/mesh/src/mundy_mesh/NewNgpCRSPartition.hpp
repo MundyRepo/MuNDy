@@ -331,7 +331,8 @@ struct NewNgpCRSPartitionT {
   KOKKOS_INLINE_FUNCTION
   bool contains(stk::mesh::PartOrdinal part_ordinal) const {
     bool does_contain = false;
-    for (stk::mesh::PartOrdinal &ordinal : ngp_key_) {
+    for (unsigned i = 0u; i < ngp_key_.extent(0); ++i) {
+      stk::mesh::PartOrdinal ordinal = ngp_key_(i);
       if (ordinal == part_ordinal) {
         does_contain = true;
         break;

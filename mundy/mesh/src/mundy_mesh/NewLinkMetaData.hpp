@@ -47,6 +47,12 @@ namespace mundy {
 
 namespace mesh {
 
+namespace impl {
+  // Forward declaration (needed due to declaring a friend in a namespaced scope)
+  template <typename NgpMemSpace>
+  class NgpLinkDataCRSManagerT;
+}
+
 class NewLinkMetaData {
  public:
   //! \name Type aliases
@@ -291,12 +297,16 @@ class NewLinkMetaData {
   //@{
 
   friend class NewNgpLinkMetaData;
-  friend class NewLinkData;
-  friend class NewLinkPartition;
-  friend class NewNgpLinkData;
-  friend class NewNgpLinkPartition;
+
+  template <typename T>
+  friend class NewNgpLinkDataT;
+
+  template <typename T>
+  friend class impl::NgpLinkDataCRSManagerT;
+
   template <typename T>
   friend class NewNgpLinkRequestsT;
+
   friend NewLinkMetaData declare_link_meta_data(MetaData &meta_data, const std::string &our_name,
                                              stk::mesh::EntityRank link_rank);
   friend std::shared_ptr<NewLinkMetaData> declare_link_meta_data_ptr(MetaData &meta_data, const std::string &our_name,

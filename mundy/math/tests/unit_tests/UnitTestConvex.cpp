@@ -52,20 +52,24 @@ struct UnconstrainedSPD1Problem {
     return "UnconstrainedSPD1Problem";
   }
 
+  KOKKOS_INLINE_FUNCTION
   auto get_space() const {
     return convex::space::Unconstrained<scalar_t>();
   }
 
+  KOKKOS_INLINE_FUNCTION
   vector_t get_exact_solution() const {
     return Vector3d{1.0, 0.0, 1.0};
   }
 
+  KOKKOS_INLINE_FUNCTION
   linear_op_t get_A() const {
     return Matrix3d{2.0,  -1.0, 0.0,   //
                     -1.0, 2.0,  -1.0,  //
                     0.0,  -1.0, 2.0};
   }
 
+  KOKKOS_INLINE_FUNCTION
   vector_t get_q() const {
     return -get_A() * get_exact_solution();
   }
@@ -81,20 +85,24 @@ struct InactiveBoxConstrainedSPDProblem {
     return "InactiveBoxConstrainedSPDProblem";
   }
 
+  KOKKOS_INLINE_FUNCTION
   auto get_space() const {
     return convex::space::Bounded<scalar_t>(0.0, 2.0);
   }
 
+  KOKKOS_INLINE_FUNCTION
   vector_t get_exact_solution() const {
     return Vector3d{1.0, 0.0, 1.0};
   }
 
+  KOKKOS_INLINE_FUNCTION
   linear_op_t get_A() const {
     return Matrix3d{2.0,  -1.0, 0.0,   //
                     -1.0, 2.0,  -1.0,  //
                     0.0,  -1.0, 2.0};
   }
 
+  KOKKOS_INLINE_FUNCTION
   vector_t get_q() const {
     return -get_A() * get_exact_solution();
   }
@@ -110,20 +118,24 @@ struct ActiveBoxConstrainedSPDProblem {
     return "ActiveBoxConstrainedSPDProblem";
   }
 
+  KOKKOS_INLINE_FUNCTION
   auto get_space() const {
     return convex::space::Bounded<scalar_t>(9.0, 10.0);
   }
 
+  KOKKOS_INLINE_FUNCTION
   vector_t get_exact_solution() const {
     return Vector3d{9.0, 9.0, 9.0};
   }
 
+  KOKKOS_INLINE_FUNCTION
   linear_op_t get_A() const {
     return Matrix3d{2.0,  -1.0, 0.0,   //
                     -1.0, 2.0,  -1.0,  //
                     0.0,  -1.0, 2.0};
   }
 
+  KOKKOS_INLINE_FUNCTION
   vector_t get_q() const {
     return -get_A() * get_exact_solution();
   }
@@ -140,6 +152,7 @@ struct RandomLCP {
     return "RandomLCP" + std::to_string(N);
   }
 
+  KOKKOS_INLINE_FUNCTION
   RandomLCP() {
     // 1. Build M
     A_ = gen_random_p_matrix();
@@ -161,23 +174,27 @@ struct RandomLCP {
     q_ = grad_star_ - A_ * x_star_;
   }
 
+  KOKKOS_INLINE_FUNCTION
   auto get_space() const {
     return convex::space::LowerBound<scalar_t>(0.0);
   }
 
+  KOKKOS_INLINE_FUNCTION
   vector_t get_exact_solution() const {
     return x_star_;
   }
 
+  KOKKOS_INLINE_FUNCTION
   linear_op_t get_A() const {
     return A_;
   }
 
+  KOKKOS_INLINE_FUNCTION
   vector_t get_q() const {
     return q_;
   }
 
- private:
+  KOKKOS_INLINE_FUNCTION
   linear_op_t gen_random_matrix() {
     linear_op_t mat;
     for (size_t i = 0; i < N; ++i) {
@@ -188,6 +205,7 @@ struct RandomLCP {
     return mat;
   }
 
+  KOKKOS_INLINE_FUNCTION
   linear_op_t gen_random_p_matrix() {
     // Strictly diagonally dominant with positive diagonal
     linear_op_t mat = gen_random_matrix();
@@ -202,6 +220,7 @@ struct RandomLCP {
     return mat;
   }
 
+ private:
   linear_op_t A_;
   vector_t q_;
   vector_t x_star_;
@@ -461,7 +480,6 @@ struct RandomLCP {
     return q_;
   }
 
- private:
   linear_op_t gen_random_matrix(unsigned size) {
     linear_op_t mat(Kokkos::view_alloc(Kokkos::WithoutInitializing, "mat"), size, size);
 
@@ -497,6 +515,7 @@ struct RandomLCP {
     return mat;
   }
 
+ private:
   unsigned size_;
   linear_op_t A_;
   vector_t q_;
@@ -526,7 +545,7 @@ void run_mundy_math_test(const auto& test) {
   const auto backend = cqpp.backend();
 
   // Strategy + state
-  convex::PGDConfig cfg{.max_iters = 1000, .tol = 1e-6};
+  convex::PGDConfig<double> cfg{.max_iters = 1000, .tol = 1e-6};
   auto pgd = make_pgd_solution_strategy(backend, cfg);
   auto pgd_state = make_pgd_state(backend, x, grad, x_tmp, grad_tmp);
 
@@ -565,7 +584,7 @@ void run_kokkos_test(const auto& test) {
   const auto backend = cqpp.backend();
 
   // Strategy + state
-  convex::PGDConfig cfg{.max_iters = 1000, .tol = 1e-6};
+  convex::PGDConfig<double> cfg{.max_iters = 1000, .tol = 1e-6};
   auto pgd = make_pgd_solution_strategy(backend, cfg);
   auto pgd_state = make_pgd_state(backend, x, grad, x_tmp, grad_tmp);
 

@@ -2,6 +2,13 @@ TRILINOS_ROOT_DIR=$1
 TPL_ROOT_DIR=$2
 MUNDY_SOURCE_DIR=$3
 
+# . ~/spack/share/spack/setup-env.sh
+# spack env activate tril16_gpu
+# bash ../do-cmake-gpu.sh /mnt/home/bpalmer/spack/opt/spack/linux-rocky8-cascadelake/gcc-11.4.0/trilinos-16.0.0-2ldlcb6knaptx7q23x2jtdngukx6kc4e ~/envs/GPUMundyScratch/ ../
+
+
+
+
 # bash ../do-cmake-gpu.sh /mnt/sw/nix/store/6wikgk3cr5f1s9dj7rq6ai1ik6f3ncb1-trilinos-14.2.0/ ~/envs/GPUMundyScratch/ ../
 # bash ../do-cmake-gpu.sh /mnt/ceph/users/bpalmer/envs/spack/opt/spack/linux-rocky8-cascadelake/gcc-11.4.0/trilinos-16.0.0-wms6rcs5kbxydtaydwbum7ypy3esleak ~/envs/GPUMundyScratch/ ../
 echo "Using Trilinos dir: $TRILINOS_ROOT_DIR"
@@ -52,7 +59,7 @@ cmake \
 -DMundy_ENABLE_STKFMM=OFF \
 -DMundy_ENABLE_PVFMM=OFF \
 -DMundy_TEST_CATEGORIES="BASIC;CONTINUOUS;NIGHTLY;HEAVY;PERFORMANCE" \
--DTPL_GTest_DIR:PATH=${TPL_ROOT_DIR} \
+-DTPL_GTest_DIR:PATH=${TPL_ROOT_DIR}/lib64/cmake/GTest/ \
 -DTPL_OpenRAND_DIR:PATH=${TPL_ROOT_DIR} \
 -DTPL_fmt_DIR:PATH=${TPL_ROOT_DIR} \
 -DTPL_Kokkos_DIR:PATH=${TRILINOS_ROOT_DIR} \
