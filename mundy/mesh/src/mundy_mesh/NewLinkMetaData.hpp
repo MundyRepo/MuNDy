@@ -207,60 +207,60 @@ class NewLinkMetaData {
   //@{
 
   /// \brief Fetch the linked entity ids field.
-  linked_entity_ids_field_t &linked_entity_ids_field() {
+  linked_entity_ids_field_t &linked_entity_ids_field() noexcept {
     return linked_entity_ids_field_;
   }
 
   /// \brief Fetch the linked entity ranks field.
-  linked_entity_ranks_field_t &linked_entity_ranks_field() {
+  linked_entity_ranks_field_t &linked_entity_ranks_field() noexcept {
     return linked_entity_ranks_field_;
   }
 
   /// \brief Fetch the linked entities field
-  const linked_entities_field_t &linked_entities_field() const {
+  const linked_entities_field_t &linked_entities_field() const noexcept {
     return linked_entities_field_;
   }
-  linked_entities_field_t &linked_entities_field() {
+  linked_entities_field_t &linked_entities_field() noexcept {
     return linked_entities_field_;
   }
 
   /// \brief Fetch the linked entities field (as last seen by the CRS).
-  const linked_entities_field_t &linked_entities_crs_field() const {
+  const linked_entities_field_t &linked_entities_crs_field() const noexcept {
     return linked_entities_crs_field_;
   }
-  linked_entities_field_t &linked_entities_crs_field() {
+  linked_entities_field_t &linked_entities_crs_field() noexcept {
     return linked_entities_crs_field_;
   }
 
   /// \brief Fetch the linked entity bucket id field.
-  const linked_entity_bucket_ids_field_t &linked_entity_bucket_ids_field() const {
+  const linked_entity_bucket_ids_field_t &linked_entity_bucket_ids_field() const noexcept {
     return linked_entity_bucket_ids_field_;
   }
-  linked_entity_bucket_ids_field_t &linked_entity_bucket_ids_field() {
+  linked_entity_bucket_ids_field_t &linked_entity_bucket_ids_field() noexcept {
     return linked_entity_bucket_ids_field_;
   }
 
   /// \brief Fetch the linked entity bucket ord field.
-  const linked_entity_bucket_ords_field_t &linked_entity_bucket_ords_field() const {
+  const linked_entity_bucket_ords_field_t &linked_entity_bucket_ords_field() const noexcept {
     return linked_entity_bucket_ords_field_;
   }
-  linked_entity_bucket_ords_field_t &linked_entity_bucket_ords_field() {
+  linked_entity_bucket_ords_field_t &linked_entity_bucket_ords_field() noexcept {
     return linked_entity_bucket_ords_field_;
   }
 
   /// \brief Fetch the link crs needs updated field.
-  const link_crs_needs_updated_field_t &link_crs_needs_updated_field() const {
+  const link_crs_needs_updated_field_t &link_crs_needs_updated_field() const noexcept {
     return link_crs_needs_updated_field_;
   }
-  link_crs_needs_updated_field_t &link_crs_needs_updated_field() {
+  link_crs_needs_updated_field_t &link_crs_needs_updated_field() noexcept {
     return link_crs_needs_updated_field_;
   }
 
   /// \brief Fetch the link marked for destruction field.
-  const link_marked_for_destruction_field_t &link_marked_for_destruction_field() const {
+  const link_marked_for_destruction_field_t &link_marked_for_destruction_field() const noexcept {
     return link_marked_for_destruction_field_;
   }
-  link_marked_for_destruction_field_t &link_marked_for_destruction_field() {
+  link_marked_for_destruction_field_t &link_marked_for_destruction_field() noexcept {
     return link_marked_for_destruction_field_;
   }
   //@}

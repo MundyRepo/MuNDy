@@ -198,7 +198,7 @@ KOKKOS_INLINE_FUNCTION void abort_require(
 /// \brief Throw an exception if the given assertion is false.
 /// \note This macro is only compiled if NDEBUG is not defined. Well, that's a lie. Technically, we still use the
 /// assertion_to_test but only its type and not its value. This avoids unused variable warnings and shouldn't have any
-/// performance impact. TODO(palmerb4): Confirm this claim.
+/// performance impact. TODO(palmerb4): Formally benchmark this claim. At least in prelim tests, it is true.
 ///
 /// \param assertion_to_test The assertion to test
 /// \param exception_to_throw The exception to throw if the assertion is false (will only be thrown on the host)

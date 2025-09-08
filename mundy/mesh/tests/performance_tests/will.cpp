@@ -438,14 +438,15 @@ class eval_mobility_rod {
     // Rod data:
     double length = get<LENGTH>(rod_view)[0];
     double radius = get<RADIUS>(rod_view)[0];
+    double total_length = length + 2 * radius;
 
     // Slender fiber has 0 rot drag about the long axis, regularize with identity rot mobility
     constexpr double pi = Kokkos::numbers::pi_v<double>;
     const double viscosity = 1;
-    const double p = (length + 2 * radius) / (2 * radius);
-    const double inv_drag_perp = 4 * pi * viscosity / (Kokkos::log(p) + 0.839 + 0.185 / p + 0.233 / (p * p));
-    const double inv_drag_para = 2 * pi * viscosity / (Kokkos::log(p) - 0.207 + 0.98 / p - 0.133 / (p * p));
-    const double inv_drag_rot = (pi * viscosity * p * p / 3) / (Kokkos::log(p) - 0.662 + 0.917 / p - 0.053 / (p * p));
+    const double p = total_length / (2 * radius);
+    const double inv_drag_perp = 4 * pi * viscosity * total_length / (Kokkos::log(p) + 0.839 + 0.185 / p + 0.233 / (p * p));
+    const double inv_drag_para = 2 * pi * viscosity * total_length / (Kokkos::log(p) - 0.207 + 0.98 / p - 0.133 / (p * p));
+    const double inv_drag_rot = (pi * viscosity * total_length * total_length / 3) / (Kokkos::log(p) - 0.662 + 0.917 / p - 0.053 / (p * p));
 
     // Note, += is safe here without atomic under the assumption that no two particles share a node
     auto force_para = math::dot(force, tangent) * tangent;

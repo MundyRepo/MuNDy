@@ -119,17 +119,17 @@ struct NewNgpCRSBucketConnT {
   }
 
   KOKKOS_INLINE_FUNCTION
-  unsigned bucket_id() const {
+  unsigned bucket_id() const noexcept {
     return bucket_id_;
   }
 
   KOKKOS_INLINE_FUNCTION
-  size_t size() const {
+  size_t size() const noexcept {
     return bucket_size_;
   }
 
   KOKKOS_INLINE_FUNCTION
-  size_t capacity() const {
+  size_t capacity() const noexcept {
     return bucket_capacity_;
   }
 
@@ -140,7 +140,7 @@ struct NewNgpCRSBucketConnT {
     return ConnectedEntities(&sparse_connectivity_(offset), length, 1);
   }
 
-  KOKKOS_FUNCTION
+  KOKKOS_INLINE_FUNCTION
   unsigned num_connected_links(unsigned offset_into_bucket) const {
     return num_connected_links_(offset_into_bucket);
   }
@@ -157,8 +157,10 @@ struct NewNgpCRSBucketConnT {
       // Note, we resize our bucket views to be the same size as the bucket *capacity*, not the bucket *size*,
       // since the bucket size changes more frequently than the capacity due to STK's dynamicly adapted capacity.
       // This also means that there is no need for us to invent our own capacity management scheme.
-      Kokkos::resize(num_connected_links_, bucket_capacity_);
-      Kokkos::resize(sparse_connectivity_offsets_, bucket_capacity_ + 1);
+      Kokkos::realloc(num_connected_links_, bucket_capacity_);
+      Kokkos::realloc(sparse_connectivity_offsets_, bucket_capacity_ + 1);
+      Kokkos::deep_copy(num_connected_links_, 0);
+      Kokkos::deep_copy(sparse_connectivity_offsets_, 0);
     }
   }
 
@@ -188,7 +190,7 @@ struct NewNgpCRSBucketConnT {
     std::cout << std::endl;
   }
 
-  bool dirty_;  ///< Whether this bucket's connectivity has been modified since the last update.
+  int dirty_;  ///< Whether this bucket's connectivity has been modified since the last update.
   unsigned bucket_size_;
   unsigned bucket_capacity_;
   unsigned bucket_id_;
@@ -241,11 +243,8 @@ struct NewNgpCRSPartitionT {
     for (stk::mesh::EntityRank rank = stk::topology::NODE_RANK; rank < stk::topology::NUM_RANKS; ++rank) {
       const stk::mesh::BucketVector &buckets = bulk_data.buckets(rank);
       size_t num_buckets = buckets.size();
-      linked_buckets_[rank] =
-          LinkedBucketView(Kokkos::view_alloc(Kokkos::WithoutInitializing, "LinkedBuckets"), num_buckets);
-      
+      linked_buckets_[rank] = LinkedBucketView("LinkedBuckets", num_buckets);
       for (size_t i = 0; i < num_buckets; ++i) {
-        new (&linked_buckets_[rank](i)) LinkedBucket();
         linked_buckets_[rank](i).initialize_bucket_attributes(*buckets[i]);
       }
     }
@@ -277,10 +276,8 @@ struct NewNgpCRSPartitionT {
     for (stk::mesh::EntityRank rank = stk::topology::NODE_RANK; rank < stk::topology::NUM_RANKS; ++rank) {
       const stk::mesh::BucketVector &buckets = bulk_data.buckets(rank);
       size_t num_buckets = buckets.size();
-      linked_buckets_[rank] =
-          LinkedBucketView(Kokkos::view_alloc(Kokkos::WithoutInitializing, "LinkedBuckets"), num_buckets);
+      linked_buckets_[rank] = LinkedBucketView("LinkedBuckets", num_buckets);
       for (size_t i = 0; i < num_buckets; ++i) {
-        new (&linked_buckets_[rank](i)) LinkedBucket();
         linked_buckets_[rank](i).initialize_bucket_attributes(*buckets[i]);
       }
     }
@@ -301,37 +298,37 @@ struct NewNgpCRSPartitionT {
   //@{
 
   /// \brief Fetch the partition key.
-  KOKKOS_FUNCTION
-  const NgpPartitionKey &ngp_key() const {
+  KOKKOS_INLINE_FUNCTION
+  const NgpPartitionKey &ngp_key() const noexcept {
     return ngp_key_;
   }
 
   /// \brief Fetch the partition id.
-  KOKKOS_FUNCTION
-  stk::mesh::Ordinal id() const {
+  KOKKOS_INLINE_FUNCTION
+  stk::mesh::Ordinal id() const noexcept {
     return id_;
   }
 
   /// \brief Fetch the link rank.
-  KOKKOS_FUNCTION
-  stk::mesh::EntityRank link_rank() const {
+  KOKKOS_INLINE_FUNCTION
+  stk::mesh::EntityRank link_rank() const noexcept {
     return link_rank_;
   }
 
   /// \brief Fetch the link dimensionality.
-  KOKKOS_FUNCTION
-  unsigned link_dimensionality() const {
+  KOKKOS_INLINE_FUNCTION
+  unsigned link_dimensionality() const noexcept {
     return link_dimensionality_;
   }
 
   /// \brief Fetch the selector for this partition.
-  KOKKOS_FUNCTION
-  stk::mesh::Selector selector() const {
+  KOKKOS_INLINE_FUNCTION
+  stk::mesh::Selector selector() const noexcept {
     return selector_;
   }
 
   /// \brief Check if this partition contains a given part
-  KOKKOS_FUNCTION
+  KOKKOS_INLINE_FUNCTION
   bool contains(stk::mesh::PartOrdinal part_ordinal) const {
     bool does_contain = false;
     for (stk::mesh::PartOrdinal &ordinal : ngp_key_) {
@@ -348,7 +345,7 @@ struct NewNgpCRSPartitionT {
   //@{
 
   /// \brief If any of our linkers connect to an entity in the given bucket within the CRS connectivity.
-  KOKKOS_FUNCTION
+  KOKKOS_INLINE_FUNCTION
   bool connects_to(stk::mesh::EntityRank rank, const unsigned &bucket_id) const {
     MUNDY_THROW_ASSERT(rank < stk::topology::NUM_RANKS, std::invalid_argument,
                        "Bucket rank is out of bounds for this partition.");
@@ -358,7 +355,7 @@ struct NewNgpCRSPartitionT {
   }
 
   /// \brief Get the number of linked buckets for a given rank.
-  KOKKOS_FUNCTION
+  KOKKOS_INLINE_FUNCTION
   unsigned num_buckets(stk::mesh::EntityRank rank) const {
     MUNDY_THROW_ASSERT(rank < stk::topology::NUM_RANKS, std::invalid_argument,
                        "Bucket rank is out of bounds for this partition.");
@@ -366,7 +363,7 @@ struct NewNgpCRSPartitionT {
   }
 
   /// \brief Get the linked bucket for a given rank and bucket id.
-  KOKKOS_FUNCTION
+  KOKKOS_INLINE_FUNCTION
   LinkedBucket &get_crs_bucket_conn(stk::mesh::EntityRank rank, unsigned bucket_id) {
     MUNDY_THROW_ASSERT(rank < stk::topology::NUM_RANKS, std::invalid_argument,
                        "Bucket rank is out of bounds for this partition.");
@@ -374,7 +371,7 @@ struct NewNgpCRSPartitionT {
                        "Bucket id is out of bounds for this partition.");
     return linked_buckets_[rank](bucket_id);
   }
-  KOKKOS_FUNCTION
+  KOKKOS_INLINE_FUNCTION
   const LinkedBucket &get_crs_bucket_conn(stk::mesh::EntityRank rank, unsigned bucket_id) const {
     MUNDY_THROW_ASSERT(rank < stk::topology::NUM_RANKS, std::invalid_argument,
                        "Bucket rank is out of bounds for this partition.");
@@ -384,7 +381,7 @@ struct NewNgpCRSPartitionT {
   }
 
   /// \brief Get all links in the current partition that connect to the given entity in the CRS connectivity.
-  KOKKOS_FUNCTION
+  KOKKOS_INLINE_FUNCTION
   ConnectedEntities get_connected_links(stk::mesh::EntityRank rank,
                                         const stk::mesh::FastMeshIndex &entity_index) const {
     MUNDY_THROW_ASSERT(rank < stk::topology::NUM_RANKS, std::invalid_argument,
@@ -397,7 +394,7 @@ struct NewNgpCRSPartitionT {
   }
 
   /// \brief Get the number of links in the current partition that connect to the given entity in the CRS connectivity.
-  KOKKOS_FUNCTION
+  KOKKOS_INLINE_FUNCTION
   unsigned num_connected_links(stk::mesh::EntityRank rank, const stk::mesh::FastMeshIndex &entity_index) const {
     MUNDY_THROW_ASSERT(rank < stk::topology::NUM_RANKS, std::invalid_argument,
                        "Bucket rank is out of bounds for this partition.");

@@ -405,9 +405,9 @@ class WeightedSampler {
   /// \param rng        Random number generator.
   template <class RNG>
   void consider(index_type item, RNG& rng, double weight) {
+    MUNDY_THROW_ASSERT(weight > 0.0 || weight != weight, std::invalid_argument,
+                       "Weight must be positive and not NaN.");
     if (capacity_ == 0) return;
-
-    if (!(weight > 0.0)) return;  // skip zero/nonpositive or NaN
 
     // Draw U ~ (0,1); clamp away from 0 to avoid log(0).
     double u = rng.template rand<double>();
@@ -444,42 +444,21 @@ class WeightedSampler {
   Heap heap_;
 };
 
-void connect_entities_and_links(TestContext& context, const TestParameters& params) {
+void connect_entities_and_links(TestContext& context, const TestParameters& params, 
+  size_t seed = 1234,
+  double entity_bucket_selection_percentage = 1.0, double link_selection_percentage = 1.0) {
+  
   // At this point, all of the entities and links have been declared and the mesh is no longer in a modification cycle.
-
-  // 1.0. Choose the ranks for each downward linked entity. The modes are
-  //   same: All entities of NODE_RANK
-  //   random: All entities of random ranks
-  //   one_to_many: First entity is of a ELEM_RANK rank, the rest are of NODE_RANK
   stk::mesh::BulkData& bulk_data = *context.bulk_data;
-  std::vector<stk::mesh::EntityRank> linked_entity_ranks(params.link_dimensionality);
   MUNDY_THROW_REQUIRE(params.link_dimensionality > 0, std::invalid_argument, "Link dimensionality must be non-zero.");
-
-  if (params.linked_entity_ranks_type == LinkedEntityRanksType::SAME) {
-    std::fill(linked_entity_ranks.begin(), linked_entity_ranks.end(), stk::topology::NODE_RANK);
-  } else if (params.linked_entity_ranks_type == LinkedEntityRanksType::RANDOM) {
-    std::mt19937_64 rng(1234);
-    std::uniform_int_distribution<int> rank_dist(0, bulk_data.mesh_meta_data().entity_rank_count() - 1);
-    for (size_t d = 0; d < params.link_dimensionality; ++d) {
-      linked_entity_ranks[d] = static_cast<stk::mesh::EntityRank>(rank_dist(rng));
-    }
-  } else if (params.linked_entity_ranks_type == LinkedEntityRanksType::ONE_TO_MANY) {
-    MUNDY_THROW_REQUIRE(params.link_dimensionality >= 2, std::invalid_argument,
-                        "Link dimensionality must be at least 2 for one-to-many linked entity ranks.");
-    linked_entity_ranks[0] = stk::topology::ELEM_RANK;
-    std::fill(linked_entity_ranks.begin() + 1, linked_entity_ranks.end(), stk::topology::NODE_RANK);
-  } else {
-    MUNDY_THROW_REQUIRE(false, std::invalid_argument,
-                        std::string("Unsupported linked entity ranks type: ") +
-                            std::to_string(static_cast<int>(params.linked_entity_ranks_type)));
-  }
-
+  
   // 1. Get all non-link entities in the mesh.
   stk::mesh::BucketVector rank_buckets[stk::topology::NUM_RANKS];
   stk::mesh::Selector link_selector = stk::mesh::selectUnion(context.link_parts);
   for (size_t i = 0; i < stk::topology::NUM_RANKS; ++i) {
     stk::topology::rank_t rank = static_cast<stk::topology::rank_t>(i);
     rank_buckets[i] = bulk_data.get_buckets(rank, !link_selector);
+    std::cout << "Rank " << rank << " has " << rank_buckets[i].size() << " buckets." << std::endl;
   }
 
   // 2.
@@ -497,8 +476,8 @@ void connect_entities_and_links(TestContext& context, const TestParameters& para
 
     // 2.1. For each link bucket, preselect L entity buckets to maybe draw from.
     stk::mesh::BucketVector buckets_to_maybe_draw_from[stk::topology::NUM_RANKS];
-    openrand::Philox bucket_rng(link_bucket_id, 0);  // no need for counter to be non-zero.
-
+    openrand::Philox bucket_rng(seed, link_bucket_id);
+    
     for (size_t i = 0; i < stk::topology::NUM_RANKS; ++i) {
       const size_t num_entity_buckets = rank_buckets[i].size();
       const size_t num_buckets_to_consider =
@@ -530,19 +509,23 @@ void connect_entities_and_links(TestContext& context, const TestParameters& para
     size_t num_links_in_bucket = link_bucket.size();
     for (size_t link_ord = 0; link_ord < num_links_in_bucket; ++link_ord) {
       stk::mesh::Entity link_entity = link_bucket[link_ord];
-      openrand::Philox link_rng(link_ord, 0);  // no need for counter to be non-zero.
+      openrand::Philox link_rng(seed, link_ord);
 
+      // Choose the ranks for each downward linked entity. The modes are
+      //   same: All entities of NODE_RANK
+      //   random: All entities of random ranks
+      //   one_to_many: First entity is of a ELEM_RANK rank, the rest are of NODE_RANK
       if (linked_entity_ranks_type == LinkedEntityRanksType::SAME) {
         WeightedSampler<stk::mesh::Entity> node_entity_sampler(link_dimensionality);
         for (stk::mesh::Bucket* entity_bucket : buckets_to_maybe_draw_from[stk::topology::NODE_RANK]) {
           const size_t num_entities_in_bucket = entity_bucket->size();
-          const double center_in_entity_space =
-              (static_cast<double>(link_ord) + 0.5) *
-              (static_cast<double>(num_entities_in_bucket) / static_cast<double>(num_links_in_bucket));
+          // const double center_in_entity_space =
+          //     (static_cast<double>(link_ord) + 0.5) *
+          //     (static_cast<double>(num_entities_in_bucket) / static_cast<double>(num_links_in_bucket));
 
           for (size_t entity_ord = 0; entity_ord < num_entities_in_bucket; ++entity_ord) {
             const double g = std::exp(
-                -0.5 * std::pow((static_cast<double>(entity_ord) - center_in_entity_space) / id_sigma_entity, 2.0));
+                -0.5 * std::pow((static_cast<double>(entity_ord) - static_cast<double>(link_ord)) / id_sigma_entity, 2.0));
             const double weight = (1.0 - id_locality) + id_locality * g;
             MUNDY_THROW_ASSERT(bulk_data.is_valid((*entity_bucket)[entity_ord]), std::logic_error,
                                std::string("Entity in bucket is not valid. Bucket idx: ") +
@@ -560,7 +543,14 @@ void connect_entities_and_links(TestContext& context, const TestParameters& para
         for (unsigned d = 0; d < selected_nodes.size(); ++d) {
           stk::mesh::Entity selected_node = selected_nodes[d];
           MUNDY_THROW_ASSERT(bulk_data.is_valid(selected_node), std::logic_error, "Selected entity is not valid.");
-          link_data.declare_relation_host(link_entity, selected_node, d);
+
+          openrand::Philox entity_bucket_rng(seed, bulk_data.bucket(selected_node).bucket_id());
+          if (entity_bucket_rng.rand<double>() > entity_bucket_selection_percentage) {
+            break; // If the entity fails the entity bucket selection, skip the rest.
+          }
+          if (bucket_rng.rand<double>() < link_selection_percentage) {
+            link_data.declare_relation_host(link_entity, selected_node, d);
+          }
         }
 
       } else if (linked_entity_ranks_type == LinkedEntityRanksType::RANDOM) {
@@ -603,7 +593,14 @@ void connect_entities_and_links(TestContext& context, const TestParameters& para
                ++j) {  // We might end up with holes in the downward connections.
             stk::mesh::Entity selected_entity = selected_entities[j];
             MUNDY_THROW_ASSERT(bulk_data.is_valid(selected_entity), std::logic_error, "Selected entity is not valid.");
-            link_data.declare_relation_host(link_entity, selected_entity, j + num_entities_per_rank_shift[i]);
+            
+            openrand::Philox entity_bucket_rng(seed, bulk_data.bucket(selected_entity).bucket_id());
+            if (entity_bucket_rng.rand<double>() > entity_bucket_selection_percentage) {
+              break; // If the entity fails the entity bucket selection, skip the rest.
+            }
+            if (bucket_rng.rand<double>() < link_selection_percentage) {
+              link_data.declare_relation_host(link_entity, selected_entity, j + num_entities_per_rank_shift[i]);
+            }
           }
         }
 
@@ -641,7 +638,14 @@ void connect_entities_and_links(TestContext& context, const TestParameters& para
         std::vector<stk::mesh::Entity> selected_elems = elem_entity_sampler.extract_indices();
         stk::mesh::Entity selected_elem = selected_elems[0];
         MUNDY_THROW_ASSERT(bulk_data.is_valid(selected_elem), std::logic_error, "Selected entity is not valid.");
-        link_data.declare_relation_host(link_entity, selected_elem, 0);
+        
+        openrand::Philox elem_bucket_rng(seed, bulk_data.bucket(selected_elem).bucket_id());
+        if (elem_bucket_rng.rand<double>() > entity_bucket_selection_percentage) {
+          continue; // If the element fails the entity bucket selection, skip the rest.
+        }
+        if (bucket_rng.rand<double>() < link_selection_percentage) {
+          link_data.declare_relation_host(link_entity, selected_elem, 0);
+        }
 
         // Declare the link relations between the link and the chosen nodes
         std::vector<stk::mesh::Entity> selected_nodes = node_entity_sampler.extract_indices();
@@ -651,7 +655,14 @@ void connect_entities_and_links(TestContext& context, const TestParameters& para
         for (unsigned j = 0; j < selected_nodes.size(); ++j) {
           stk::mesh::Entity selected_node = selected_nodes[j];
           MUNDY_THROW_ASSERT(bulk_data.is_valid(selected_node), std::logic_error, "Selected entity is not valid.");
-          link_data.declare_relation_host(link_entity, selected_node, j + 1);  // Start at 1 since 0 is the element.
+          
+          openrand::Philox entity_bucket_rng(seed, bulk_data.bucket(selected_node).bucket_id());
+          if (entity_bucket_rng.rand<double>() > entity_bucket_selection_percentage) {
+            break; // If any of the nodes fail the entity bucket selection, skip the rest.
+          }
+          if (bucket_rng.rand<double>() < link_selection_percentage) {
+            link_data.declare_relation_host(link_entity, selected_node, j + 1);  // Start at 1 since 0 is the element.
+          }
         }
 
       } else {
@@ -662,6 +673,368 @@ void connect_entities_and_links(TestContext& context, const TestParameters& para
     }
   }
 }
+
+// - How do these parameters affect the cost of looping over each link, fetching its linked entities, and performing an
+//     operation on them?
+//     - Force reduction: Compute an equal and opposite force on each linked entity given their node coordinates and
+//       atomically update their node force field. The function need not make physical sense.
+//   - How do these parameters affect the cost of looping over each linked entity, fetching its links, and performing an
+//     operation on their downward connections?
+//     - Same force reduction as above but without an atomic since we never loop over the same entity twice.
+
+/*
+The trick here is to choose an operation that has the same computational cost for all three linked entity types.
+I don't see how this can be done since the locality will differ even if they all have the same fields.
+
+Honestly, this part of the test isn't so much about how the entity ranks compare but how things like COO vs CRS impact
+performance.
+
+We'll use a different function per LinkedEntityRanksType and per COO vs CRS but COO vs CRS should perform the same
+operation.
+
+-  Same is easy for pairwise operations to do both COO and CRS. The issue with the CRS is double counting since we will
+loop over both objects and only act on the one with the smallest ID. Doing something like only acting on the one in
+the first ordinal slot isn't feasible since the check has a computational cost of number of link dimensionality
+squared.
+
+- We could offer specific cases.
+  1. Same rank with dimensionality two: force potential between pairs of entities.
+  2. Random rank with dimensionality two: force potential between pairs of entities (with fields of different ranks).
+  3. Same or random with any dimensionality (all reduce max): every entity gets the max value of a field across all
+linked entities.
+  4. One to many with any dimensionality (reduce sum): force reduction from the many to the one (with fields of
+different ranks).
+*/
+
+// Case 1: Same rank with dimensionality two: force potential between pairs of entities.
+class eval_force_potential_same_rank {
+ public:
+  /// \brief Constructor that declares the necessary fields and sets up the data.
+  eval_force_potential_same_rank(TestContext& context, const TestParameters& params)
+      : context_(context),
+        params_(params),
+        position_field_(context.meta_data->declare_field<double>(stk::topology::NODE_RANK, "position")),
+        coo_force_field_(context.meta_data->declare_field<double>(stk::topology::NODE_RANK, "coo_force")),
+        crs_force_field_(context.meta_data->declare_field<double>(stk::topology::NODE_RANK, "crs_force")) {
+    stk::mesh::put_field_on_mesh(position_field_, context.bulk_data->mesh_meta_data().universal_part(), 3,
+                                 non_zero_vector3_initial_value_);
+    stk::mesh::put_field_on_mesh(coo_force_field_, context.bulk_data->mesh_meta_data().universal_part(), 3,
+                                 non_zero_vector3_initial_value_);
+    stk::mesh::put_field_on_mesh(crs_force_field_, context.bulk_data->mesh_meta_data().universal_part(), 3,
+                                 non_zero_vector3_initial_value_);
+    assert_invariants();
+  }
+
+  void assert_invariants() {
+    MUNDY_THROW_REQUIRE(params_.linked_entity_ranks_type == LinkedEntityRanksType::SAME, std::invalid_argument,
+                        "Linked entity ranks type must be SAME for eval_force_potential_same_rank.");
+    MUNDY_THROW_REQUIRE(params_.link_dimensionality == 2, std::invalid_argument,
+                        "Link dimensionality must be 2 for eval_force_potential_same_rank.");
+  }
+
+  void run_coo() {
+    // Loop over all links, fetch their two linked entities, compute the force between them based on a simple linear
+    // spring potential. Atomic sum the equal and opposite forces on each entity.
+  }
+
+  void run_crs() {
+    // Loop over each linked entity, fetch its links, for each downward linked entity that isn't itself, compute the
+    // force between them based on a simple linear spring potential. Sum that force onto the target entity. No atomic
+    // since we never loop over the same target entity twice.
+  }
+
+  void validate_coo_vs_crs() {
+    // Coo and crs should have identical force fields
+  }
+
+ private:
+  TestContext& context_;
+  const TestParameters& params_;
+
+  // Internal fields
+  using DoubleField = stk::mesh::Field<double>;
+  DoubleField& position_field_;
+  DoubleField& coo_force_field_;
+  DoubleField& crs_force_field_;
+
+  static constexpr double non_zero_vector3_initial_value_[3] = {1.1, 2.2, 3.3};
+};
+
+// Case 2: Random rank with dimensionality two
+// Details: force potential between pairs of entities (with fields of different ranks).
+class eval_force_potential_random_rank {
+ public:
+  /// \brief Constructor that declares the necessary fields and sets up the data.
+  eval_force_potential_random_rank(TestContext& context, const TestParameters& params)
+      : context_(context), params_(params) {
+    for (size_t i = 0; i < stk::topology::NUM_RANKS; ++i) {
+      stk::topology::rank_t rank = static_cast<stk::topology::rank_t>(i);
+      position_fields_[i] =
+          &context.meta_data->declare_field<double>(rank, ("position_rank_" + std::to_string(rank)).c_str());
+      coo_force_fields_[i] =
+          &context.meta_data->declare_field<double>(rank, ("coo_force_rank_" + std::to_string(rank)).c_str());
+      crs_force_fields_[i] =
+          &context.meta_data->declare_field<double>(rank, ("crs_force_rank_" + std::to_string(rank)).c_str());
+
+      stk::mesh::put_field_on_mesh(*position_fields_[i], context.bulk_data->mesh_meta_data().universal_part(), 3,
+                                   vector3_initial_value_);
+      stk::mesh::put_field_on_mesh(*coo_force_fields_[i], context.bulk_data->mesh_meta_data().universal_part(), 3,
+                                   vector3_initial_value_);
+      stk::mesh::put_field_on_mesh(*crs_force_fields_[i], context.bulk_data->mesh_meta_data().universal_part(), 3,
+                                   vector3_initial_value_);
+    }
+
+    assert_invariants();
+  }
+
+  void assert_invariants() {
+    MUNDY_THROW_REQUIRE(params_.linked_entity_ranks_type == LinkedEntityRanksType::RANDOM, std::invalid_argument,
+                        "Linked entity ranks type must be RANDOM for eval_force_potential_random_rank.");
+    MUNDY_THROW_REQUIRE(params_.link_dimensionality == 2, std::invalid_argument,
+                        "Link dimensionality must be 2 for eval_force_potential_random_rank.");
+  }
+
+  void run_coo() {
+    // Loop over all links, fetch their two linked entities, compute the force between them based on a simple linear
+    // spring potential. Atomic sum the equal and opposite forces on each entity.
+  }
+
+  void run_crs() {
+    // Loop over each linked entity, fetch its links, for each downward linked entity that isn't itself, compute the
+    // force between them based on a simple linear spring potential. Sum that force onto the target entity. No atomic
+    // since we never loop over the same target entity twice.
+  }
+
+  void validate_coo_vs_crs() {
+    // Coo and crs should have identical force fields
+  }
+
+ private:
+  TestContext& context_;
+  const TestParameters& params_;
+
+  // Internal fields
+  using DoubleField = stk::mesh::Field<double>;
+  DoubleField* position_fields_[stk::topology::NUM_RANKS];
+  DoubleField* coo_force_fields_[stk::topology::NUM_RANKS];
+  DoubleField* crs_force_fields_[stk::topology::NUM_RANKS];
+
+  static constexpr double vector3_initial_value_[3] = {1.1, 2.2, 3.3};
+};
+
+// Case 3: Same rank with any dimensionality
+// Details: reduce the force of linked entities into its link.
+class eval_force_reduction_same_rank {
+ public:
+  /// \brief Constructor that declares the necessary fields and sets up the data.
+  eval_force_reduction_same_rank(TestContext& context, const TestParameters& params)
+      : context_(context),
+        params_(params),
+        coo_link_force_field_(context.meta_data->declare_field<double>(params.link_rank, "coo_link_force")),
+        crs_link_force_field_(context.meta_data->declare_field<double>(params.link_rank, "crs_link_force")),
+        entity_force_field_(context.meta_data->declare_field<double>(stk::topology::NODE_RANK, "entity_force")) {
+    stk::mesh::put_field_on_mesh(coo_link_force_field_, context.link_meta_data->universal_link_part(), 3,
+                                 link_force_initial_value_);
+    stk::mesh::put_field_on_mesh(crs_link_force_field_, context.link_meta_data->universal_link_part(), 3,
+                                 link_force_initial_value_);
+    stk::mesh::put_field_on_mesh(entity_force_field_, context.bulk_data->mesh_meta_data().universal_part(), 3,
+                                 entity_force_initial_value_);
+    assert_invariants();
+  }
+
+  void assert_invariants() {
+    MUNDY_THROW_REQUIRE(params_.linked_entity_ranks_type == LinkedEntityRanksType::SAME, std::invalid_argument,
+                        "Linked entity ranks type must be SAME for eval_force_reduction_same_rank.");
+  }
+
+  void run_coo() {
+    // Loop over all links, fetch their linked entities, sum their force field into the link's force field. No atomic
+    // since we never loop over the same link twice.
+  }
+
+  void run_crs() {
+    // Loop over each linked entity, fetch its links and atomically sum the linked entity's force fields into said
+    // link's.
+  }
+
+  void validate_coo_vs_crs() {
+    // Coo and crs should have identical link force fields
+  }
+
+ private:
+  TestContext& context_;
+  const TestParameters& params_;
+
+  // Internal fields
+  using DoubleField = stk::mesh::Field<double>;
+  DoubleField& coo_link_force_field_;
+  DoubleField& crs_link_force_field_;
+  DoubleField& entity_force_field_;
+
+  static constexpr double link_force_initial_value_[3] = {0.0, 0.0, 0.0};
+  static constexpr double entity_force_initial_value_[3] = {1.1, 2.2, 3.3};
+};
+
+// Case 4: Same random with any dimensionality
+// Details: reduce the force of linked entities into its link.
+class eval_force_reduction_random_rank {
+ public:
+  /// \brief Constructor that declares the necessary fields and sets up the data.
+  eval_force_reduction_random_rank(TestContext& context, const TestParameters& params)
+      : context_(context),
+        params_(params),
+        coo_link_force_field_(context.meta_data->declare_field<double>(params.link_rank, "coo_link_force")),
+        crs_link_force_field_(context.meta_data->declare_field<double>(params.link_rank, "crs_link_force")) {
+    for (size_t i = 0; i < stk::topology::NUM_RANKS; ++i) {
+      stk::topology::rank_t rank = static_cast<stk::topology::rank_t>(i);
+      entity_force_fields_[i] =
+          &context.meta_data->declare_field<double>(rank, ("entity_force_fields_rank_" + std::to_string(rank)).c_str());
+
+      stk::mesh::put_field_on_mesh(*entity_force_fields_[i], context.bulk_data->mesh_meta_data().universal_part(), 3,
+                                   vector3_initial_value_);
+    }
+
+    assert_invariants();
+  }
+
+  void assert_invariants() {
+    MUNDY_THROW_REQUIRE(params_.linked_entity_ranks_type == LinkedEntityRanksType::SAME, std::invalid_argument,
+                        "Linked entity ranks type must be SAME for eval_force_reduction_random_rank.");
+  }
+
+  void run_coo() {
+    // Loop over all links, fetch their linked entities, sum their force field into the link's force field. No atomic
+    // since we never loop over the same link twice.
+  }
+
+  void run_crs() {
+    // Loop over each linked entity, fetch its links and atomically sum the linked entity's force fields into said
+    // link's.
+  }
+
+  void validate_coo_vs_crs() {
+    // Coo and crs should have identical force fields
+  }
+
+ private:
+  TestContext& context_;
+  const TestParameters& params_;
+
+  // Internal fields
+  using DoubleField = stk::mesh::Field<double>;
+  DoubleField& coo_link_force_field_;
+  DoubleField& crs_link_force_field_;
+  DoubleField* entity_force_fields_[stk::topology::NUM_RANKS];
+
+  static constexpr double vector3_initial_value_[3] = {1.1, 2.2, 3.3};
+};
+
+// Case 5: One to many with any dimensionality (reduce sum)
+// Details: force reduction from the many to the one (with fields of different ranks).
+class eval_force_reduction_one_to_many {
+ public:
+  /// \brief Constructor that declares the necessary fields and sets up the data.
+  eval_force_reduction_one_to_many(TestContext& context, const TestParameters& params)
+      : context_(context),
+        params_(params),
+        node_force_field_(context.meta_data->declare_field<double>(stk::topology::NODE_RANK, "node_force")),
+        elem_force_field_(context.meta_data->declare_field<double>(stk::topology::ELEM_RANK, "elem_force")) {
+    stk::mesh::put_field_on_mesh(node_force_field_, context.link_meta_data->universal_link_part(), 3,
+                                 non_zero_vector3_initial_value_);
+    stk::mesh::put_field_on_mesh(elem_force_field_, context.link_meta_data->universal_link_part(), 3,
+                                 zero_vector3_initial_value_);
+    assert_invariants();
+  }
+
+  void assert_invariants() {
+    MUNDY_THROW_REQUIRE(params_.linked_entity_ranks_type == LinkedEntityRanksType::ONE_TO_MANY, std::invalid_argument,
+                        "Linked entity ranks type must be SAME for eval_force_reduction_one_to_many.");
+  }
+
+  void run_coo() {
+    // Loop over all links, fetch their linked entities, atomically sum their force field into the first linked entity's
+    // force field.
+  }
+
+  void run_crs() {
+    // Loop over each element rank linked entity, fetch its links and sum the node-rank linked entity's force fields
+    // into the element's.
+  }
+
+  void validate_coo_vs_crs() {
+    // Coo and crs should have identical link force fields
+  }
+
+ private:
+  TestContext& context_;
+  const TestParameters& params_;
+
+  // Internal fields
+  using DoubleField = stk::mesh::Field<double>;
+  DoubleField& node_force_field_;
+  DoubleField& elem_force_field_;
+
+  static constexpr double zero_vector3_initial_value_[3] = {0.0, 0.0, 0.0};
+  static constexpr double non_zero_vector3_initial_value_[3] = {1.1, 2.2, 3.3};
+};
+
+/* Modifications:
+
+One of the important things to test is how the cost of performing update_crs_connectivity() varies with modifications to the COO.
+The twp factors that should control the performance is the number of entity buckets flagged as dirty and the number of links marked 
+as modified.
+*/
+
+
+void mark_one_bucket_per_partition_per_rank_as_modified(TestContext& context, const TestParameters& params) {
+  int count = 0;
+  auto crs_partitions = context.link_data.get_or_create_crs_partitions(context.link_meta_data->universal_link_part());
+  for (unsigned partition_id = 0; partition_id < crs_partitions.extent(0); ++partition_id) {
+    NewNgpCRSPartition &crs_partition = crs_partitions(partition_id);
+
+    // Fetch the crs bucket conn for this rank and bucket
+    for (stk::topology::rank_t rank = stk::topology::NODE_RANK; rank < stk::topology::NUM_RANKS; ++rank) {
+      if (crs_partition.num_buckets(rank) > 0) {
+        auto &crs_bucket_conn = crs_partition.get_crs_bucket_conn(rank, 0 /* first bucket */);
+        crs_bucket_conn.dirty_ = true;
+        ++count;
+      }
+    }
+  }
+
+  std::cout << "count of modified buckets: " << count << std::endl;
+}
+
+void randomly_mark_buckets_per_partition_per_rank_as_modified(TestContext& context, const TestParameters& params) {
+  double percentage = 1; // Each bucket has a 10% chance of being marked dirty.
+
+  int count = 0;
+  auto crs_partitions = context.link_data.get_or_create_crs_partitions(context.link_meta_data->universal_link_part());
+  for (unsigned partition_id = 0; partition_id < crs_partitions.extent(0); ++partition_id) {
+    NewNgpCRSPartition &crs_partition = crs_partitions(partition_id);
+
+    // Fetch the crs bucket conn for this rank and bucket
+    for (stk::topology::rank_t rank = stk::topology::NODE_RANK; rank < stk::topology::NUM_RANKS; ++rank) {
+      for (size_t bucket_idx = 0; bucket_idx < crs_partition.num_buckets(rank); ++bucket_idx) {
+        auto &crs_bucket_conn = crs_partition.get_crs_bucket_conn(rank, bucket_idx);
+        openrand::Philox rng(rank, crs_bucket_conn.bucket_id());
+        crs_bucket_conn.dirty_ = rng.rand<double>() < percentage;
+        count += crs_bucket_conn.dirty_;
+      }
+    }
+  }
+
+  std::cout << "count of modified buckets: " << count << std::endl;
+}
+
+void randomly_modify_links(TestContext& context, const TestParameters& params) {
+  size_t seed = 42;
+  double percent_modified_buckets = 1.0; // Each entity bucket has a p% chance of having its links modified.
+  double percent_modified_links = 0.1;   // Each link in that bucket has a p% chance of being modified.
+  connect_entities_and_links(context, params, seed, percent_modified_buckets, percent_modified_links);
+}
+
+
 
 /// \brief The driver for a single performance test given a set of parameters.
 void run_test(ankerl::nanobench::Bench& bench, const TestParameters& params) {
@@ -677,10 +1050,44 @@ void run_test(ankerl::nanobench::Bench& bench, const TestParameters& params) {
   connect_entities_and_links(context, params);
   context.link_data.sync_to_device();
 
-  // Benchmark the get_or_create_crs_partitions() call
-  // bench.run(params.to_string(),
-  //           [&]() { context.link_data.get_or_create_crs_partitions(context.link_meta_data->universal_link_part());
-  //           });
+  // Benchmark get_or_create_crs_partitions(selector)
+  Kokkos::Timer timer;
+  context.link_data.get_or_create_crs_partitions(context.link_meta_data->universal_link_part());
+  std::cout << "Initial_get_or_create_crs_partitions() time: " << timer.seconds() << " seconds." << std::endl;
+
+  timer.reset();
+  context.link_data.get_or_create_crs_partitions(context.link_meta_data->universal_link_part());
+  std::cout << "Subsequent_get_or_create_crs_partitions() time: " << timer.seconds() << " seconds." << std::endl;
+
+  // Benchmark is_crs_connectivity_up_to_date()
+  timer.reset();
+  bool is_up_to_date = context.link_data.is_crs_connectivity_up_to_date();
+  MUNDY_THROW_REQUIRE(!is_up_to_date, std::logic_error,
+                      "We have created COO connectivity but not updated the CRS, so is_crs_connectivity_up_to_date() "
+                      "should return false.");
+  std::cout << "is_crs_connectivity_up_to_date() time: " << timer.seconds() << " seconds." << std::endl;
+
+  // Benchmark update_crs_connectivity()
+  timer.reset();
+  context.link_data.update_crs_connectivity();
+  std::cout << "update_crs_connectivity() time: " << timer.seconds() << " seconds." << std::endl;
+
+  timer.reset();
+  context.link_data.update_crs_connectivity();  // Should perform is_crs_connectivity_up_to_date and return early.
+  std::cout << "Subsequent_update_crs_connectivity() time: " << timer.seconds() << " seconds." << std::endl;
+
+  randomly_modify_links(context, params);
+  context.link_data.sync_to_device();
+
+  is_up_to_date = context.link_data.is_crs_connectivity_up_to_date();
+  MUNDY_THROW_REQUIRE(!is_up_to_date, std::logic_error,
+                      "Supposedly, we have marked one bucket per partition per rank as dirty, so is_crs_connectivity_up_to_date() "
+                      "should return false.");
+
+  timer.reset();
+  context.link_data.update_crs_connectivity();  // Should only update the one dirty bucket per rank per partition.
+  std::cout << "update_crs_connectivity() after marking one bucket per partition per rank as dirty took "
+            << timer.seconds() << " seconds." << std::endl;
 }
 
 /// \brief The driver that runs the performance tests over a range of parameters.
@@ -694,25 +1101,22 @@ void run_tests() {
   //                                                             LinkedEntityRanksType::RANDOM,               //
   //                                                             LinkedEntityRanksType::ONE_TO_MANY};         // 3 tests
   // std::vector<stk::mesh::EntityRank> link_ranks_iter{stk::topology::NODE_RANK, stk::topology::ELEM_RANK};  // 2 tests
-  // std::vector<unsigned> link_dimensionality_iter{2, 3, 4, 6, 8, 10, 20, 30, 40, 60, 80, 100};              // 12
-  // tests std::vector<unsigned> num_link_partitions_iter{1, 2, 3, 4, 6, 8, 10, 20, 30, 40, 60, 80, 100};           //
-  // 13 tests std::vector<double> id_locality_iter{0.0, 0.2, 0.4, 0.6, 0.8, 1.0}; // 6 tests std::vector<double>
-  // id_sigma_bucket_iter{0.0, 0.25, 0.5, 0.75, 1.0, 2.0, 4.0};  // 7 tests (in bucket_id space) std::vector<double>
-  // id_sigma_entity_iter{0., 2., 4., 8., 16., 32., 64.};        // 7 tests (in bucket_ord space)
+  // std::vector<unsigned> link_dimensionality_iter{2, 3, 4, 6, 8, 10, 20, 30, 40, 60, 80, 100};              // 12 tests
+  // std::vector<unsigned> num_link_partitions_iter{1, 2, 3, 4, 6, 8, 10, 20, 30, 40, 60, 80, 100};           // 13 tests
+  // std::vector<double> id_locality_iter{0.0, 0.2, 0.4, 0.6, 0.8, 1.0};                                      // 6 tests
+  // std::vector<double> id_sigma_bucket_iter{0.0, 0.25, 0.5, 0.75, 1.0, 2.0, 4.0};  // 7 tests (in bucket_id space)
+  // std::vector<double> id_sigma_entity_iter{0., 2., 4., 8., 16., 32., 64.};        // 7 tests (in bucket_ord space)
 
-  std::vector<size_t> num_entities_per_rank_iter{1, 1'000'000};                                            // 7 tests
-  std::vector<size_t> num_links_iter{1, 1'000'000};                                                        // 7 tests
-  std::vector<LinkDistribution> link_distribution_iter{LinkDistribution::EQUAL,                            //
-                                                       LinkDistribution::LOG_NORMAL};                      // 2 tests
-  std::vector<LinkedEntityRanksType> linked_entity_ranks_iter{LinkedEntityRanksType::SAME,                 //
-                                                              LinkedEntityRanksType::RANDOM,               //
-                                                              LinkedEntityRanksType::ONE_TO_MANY};         // 3 tests
-  std::vector<stk::mesh::EntityRank> link_ranks_iter{stk::topology::NODE_RANK, stk::topology::ELEM_RANK};  // 2 tests
-  std::vector<unsigned> link_dimensionality_iter{2, 100};                                                  // 12 tests
-  std::vector<unsigned> num_link_partitions_iter{1, 100};                                                  // 13 tests
-  std::vector<double> id_locality_iter{0.0};                                                               // 6 tests
-  std::vector<double> id_sigma_bucket_iter{0.0};  // 7 tests (in bucket_id space)
-  std::vector<double> id_sigma_entity_iter{0.};   // 7 tests (in bucket_ord space)
+  std::vector<size_t> num_entities_per_rank_iter{500'000};                                            // 7 tests
+  std::vector<size_t> num_links_iter{500'000};                                                        // 7 tests
+  std::vector<LinkDistribution> link_distribution_iter{LinkDistribution::EQUAL};                      // 2 tests
+  std::vector<LinkedEntityRanksType> linked_entity_ranks_iter{LinkedEntityRanksType::SAME};         // 3 tests
+  std::vector<stk::mesh::EntityRank> link_ranks_iter{stk::topology::NODE_RANK};  // 2 tests
+  std::vector<unsigned> link_dimensionality_iter{2};                                                  // 12 tests 
+  std::vector<unsigned> num_link_partitions_iter{1};                                                  // 13 tests 
+  std::vector<double> id_locality_iter{1.0}; // 6 tests 
+  std::vector<double> id_sigma_bucket_iter{1.0};  // 7 tests (in bucket_id space) 
+  std::vector<double> id_sigma_entity_iter{10.0};   // 7 tests (in bucket_ord space)
 
   // Setup the I/O and bench
   std::ofstream csv("link_data_perf_results.csv");
@@ -721,7 +1125,7 @@ void run_tests() {
 
   ankerl::nanobench::Bench bench;
   bench
-      .output(nullptr)  // no console output
+      // .output(nullptr)  // no console output
       .title("Link Data Performance Tests")
       .unit("op")
       .warmup(10)
@@ -754,18 +1158,19 @@ void run_tests() {
                       run_test(bench, params);
 
                       // After bench.run(), the most recent results are available via results().back()
-                      if (!bench.results().empty()) {
-                        const auto& rlast = bench.results().back();
-                        double ns_per_op = rlast.average(ankerl::nanobench::Result::Measure::elapsed);
+                      // if (!bench.results().empty()) {
+                      //   const auto& rlast = bench.results().back();
+                      //   double ns_per_op = rlast.average(ankerl::nanobench::Result::Measure::elapsed);
 
-                        // Output the results
-                        std::ofstream csv("link_data_perf_results.csv", std::ios_base::app);
-                        csv << params.num_entities_per_rank << ", " << params.num_links << ", "
-                            << static_cast<int>(params.link_distribution) << ", " << static_cast<int>(params.link_rank)
-                            << ", " << params.link_dimensionality << ", " << params.num_link_partitions << ", "
-                            << params.id_locality << ", " << params.id_sigma_bucket << ", " << params.id_sigma_entity
-                            << ", " << ns_per_op << "\n";
-                      }
+                      //   // Output the results
+                      //   std::ofstream csv("link_data_perf_results.csv", std::ios_base::app);
+                      //   csv << params.num_entities_per_rank << ", " << params.num_links << ", "
+                      //       << static_cast<int>(params.link_distribution) << ", " <<
+                      //       static_cast<int>(params.link_rank)
+                      //       << ", " << params.link_dimensionality << ", " << params.num_link_partitions << ", "
+                      //       << params.id_locality << ", " << params.id_sigma_bucket << ", " << params.id_sigma_entity
+                      //       << ", " << ns_per_op << "\n";
+                      // }
                     }
                   }
                 }
@@ -795,3 +1200,14 @@ int main(int argc, char** argv) {
 
   return 0;
 }
+
+/* Initial observations:
+
+get_or_create_crs_partitions scales faster than linear with the number of link partitions but is independent of link dimensionality.
+
+1    link  gives (1, 0.000192031), (50, 0.000187375), (100, 0.000188507)
+1k   links gives (1, 0.000241712), (50, 0.0743558),   (100, 0.273967)
+500k links gives (1, 0.0274539),   (50, 1.35771),     (100, 3.33674)
+1M   links gives (1, 0.163916),    (50, 4.46783),     (100, 6.72034)
+*/
+

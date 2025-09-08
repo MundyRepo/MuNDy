@@ -276,17 +276,17 @@ class NewNgpLinkData {
 
   /// \brief Fetch the ngp mesh
   KOKKOS_FUNCTION
-  const stk::mesh::NgpMesh &ngp_mesh() const {
+  const stk::mesh::NgpMesh &ngp_mesh() const noexcept {
     return ngp_mesh_;
   }
   KOKKOS_FUNCTION
-  stk::mesh::NgpMesh &ngp_mesh() {
+  stk::mesh::NgpMesh &ngp_mesh()  noexcept{
     return ngp_mesh_;
   }
 
   /// \brief Fetch the link rank
   KOKKOS_FUNCTION
-  stk::mesh::EntityRank link_rank() const {
+  stk::mesh::EntityRank link_rank() const noexcept {
     return ngp_link_meta_data_.link_rank();
   }
   //@}
@@ -472,7 +472,7 @@ class NewNgpLinkData {
   /// Safety: This view is always safe to use and the reference is valid as long as the NewNgpLinkData is valid, which
   /// has the same lifetime as the bulk data manager. It remains valid even during mesh modifications.
   KOKKOS_INLINE_FUNCTION
-  const NgpCRSPartitionView &get_all_crs_partitions() const {
+  const NgpCRSPartitionView &get_all_crs_partitions() const noexcept {
     return all_crs_partitions_;
   }
 
@@ -600,41 +600,56 @@ class NewNgpLinkData {
     //    - Team loop over each selected partition and thread loop over each bucket in the partition. If any bucket is
     //    dirty, atomically set the needs updated flag to true.
     const NgpCRSPartitionView &partitions = get_or_create_crs_partitions(link_subset_selector);
-
-    typedef stk::ngp::TeamPolicy<stk::mesh::NgpMesh::MeshExecSpace>::member_type TeamHandleType;
-    const auto &team_policy =
-        stk::ngp::TeamPolicy<stk::mesh::NgpMesh::MeshExecSpace>(partitions.extent(0), Kokkos::AUTO);
-
-    bool any_dirty = false;
-    Kokkos::parallel_reduce(
-        "NewNgpLinkData::is_crs_connectivity_up_to_date", team_policy,
-        KOKKOS_LAMBDA(const TeamHandleType &team, bool &team_local_any_dirty) {
-          const stk::mesh::Ordinal partition_id = team.league_rank();
-          const NewNgpCRSPartition &partition = partitions(partition_id);
-          
-          bool tmp_team_local_any_dirty = false;
-  
-          for (stk::topology::rank_t rank = stk::topology::NODE_RANK; rank < stk::topology::NUM_RANKS; ++rank) {
-            
-            const unsigned num_buckets = partition.num_buckets(rank);
-            bool rank_local_any_dirty = false;  
-            Kokkos::parallel_reduce(
-                Kokkos::TeamThreadRange(team, num_buckets),
-                KOKKOS_LAMBDA(const unsigned bucket_index, bool &thread_local_any_dirty) {
-                  const auto &crs_bucket = partition.get_crs_bucket_conn(rank, bucket_index);
-                  thread_local_any_dirty = crs_bucket.dirty_;
-                },
-                Kokkos::LOr<bool>(rank_local_any_dirty));
-
-            if (rank_local_any_dirty) {
-              tmp_team_local_any_dirty = true;
-            }
+    unsigned num_partitions = partitions.extent(0);
+    bool crs_buckets_up_to_date = true;
+    for (unsigned i = 0; i < num_partitions; ++i) {
+      const NewNgpCRSPartition &partition = partitions(i);
+      for (stk::topology::rank_t rank = stk::topology::NODE_RANK; rank < stk::topology::NUM_RANKS; ++rank) {
+        const unsigned num_buckets = partition.num_buckets(rank);
+        for (unsigned bucket_index = 0; bucket_index < num_buckets; ++bucket_index) {
+          const auto &crs_bucket_conn = partition.get_crs_bucket_conn(rank, bucket_index);
+          if (crs_bucket_conn.dirty_) {
+            crs_buckets_up_to_date = false;
+            goto done_checking_crs_buckets;
           }
+        }
+      }
+    }  
+    done_checking_crs_buckets:
 
-          team_local_any_dirty = tmp_team_local_any_dirty;
-        },
-        Kokkos::LOr<bool>(any_dirty));
-    bool crs_buckets_up_to_date = !any_dirty;
+    // TODO(palmerb4): It appears as though counting the number of dirty buckets in a parallel_for is slower than doing it
+    // serially (at least for a CPU build). Is this true for GPU builds too?
+
+    // int num_dirty_buckets = 0;
+    // typedef stk::ngp::TeamPolicy<stk::mesh::NgpMesh::MeshExecSpace>::member_type TeamHandleType;
+    // const auto &team_policy =
+    //     stk::ngp::TeamPolicy<stk::mesh::NgpMesh::MeshExecSpace>(partitions.extent(0), Kokkos::AUTO);
+    // Kokkos::parallel_reduce(
+    //     "NewNgpLinkData::is_crs_connectivity_up_to_date", team_policy,
+    //     KOKKOS_LAMBDA(const TeamHandleType &team, int &team_local_count) {
+    //       const stk::mesh::Ordinal partition_id = team.league_rank();
+    //       const NewNgpCRSPartition &partition = partitions(partition_id);
+
+    //       int tmp_team_local_count = 0;
+
+    //       for (stk::topology::rank_t rank = stk::topology::NODE_RANK; rank < stk::topology::NUM_RANKS; ++rank) {
+    //         const unsigned num_buckets = partition.num_buckets(rank);
+    //         int rank_local_count = 0;
+    //         Kokkos::parallel_reduce(
+    //             Kokkos::TeamThreadRange(team, num_buckets),
+    //             KOKKOS_LAMBDA(const unsigned bucket_index, int &count) {
+    //               const auto &crs_bucket_conn = partition.get_crs_bucket_conn(rank, bucket_index);
+    //               count += crs_bucket_conn.dirty_;
+    //             },
+    //             Kokkos::Sum<int>(rank_local_count));
+    //         tmp_team_local_count += rank_local_count;
+    //       }
+
+    //       team_local_count += tmp_team_local_count;
+    //     },
+    //     Kokkos::Sum<int>(num_dirty_buckets));
+    // bool crs_buckets_up_to_date = num_dirty_buckets == 0;
+    // std::cout << "num_dirty_buckets: " << num_dirty_buckets << std::endl;
 
     if (crs_buckets_up_to_date) {  // No need to perform the second check if the first fails.
       //  2. A selected link is out-of-date.
@@ -713,11 +728,17 @@ class NewNgpLinkData {
     // it in the first place. We could use a memoized getter that sees if the list is empty or not. If it's empty, it
     // calls rebuild_stk_link_bucket_to_partition_id_map.
     flag_dirty_linked_buckets_of_modified_links(link_subset_selector);
+
     reset_dirty_linked_buckets(link_subset_selector);
+
     gather_part_1_count(link_subset_selector);
+
     gather_part_2_partial_sum(link_subset_selector);
+
     scatter_part_1_setup(link_subset_selector);
+
     scatter_part_2_fill(link_subset_selector);
+
     finalize_crs_update(link_subset_selector);
 
     Kokkos::Profiling::popRegion();
@@ -981,9 +1002,8 @@ class NewNgpLinkData {
                     const stk::mesh::EntityRank linked_entity_crs_rank = ngp_mesh.entity_rank(linked_entity_crs);
                     auto &crs_bucket_conn =
                         crs_partition.get_crs_bucket_conn(linked_entity_crs_rank, linked_entity_crs_index.bucket_id);
-                    Kokkos::atomic_fetch_max(
-                        &crs_bucket_conn.dirty_,
-                        true);  // TODO: This should be a protected function (flag_as_dirty_atomically)
+                    Kokkos::atomic_store(&crs_bucket_conn.dirty_,
+                                         true);  // TODO: This should be a protected function (flag_as_dirty_atomically)
                   }
 
                   bool new_entity_is_valid = (linked_entity != stk::mesh::Entity());
@@ -993,9 +1013,8 @@ class NewNgpLinkData {
                     const stk::mesh::EntityRank linked_entity_rank = ngp_mesh.entity_rank(linked_entity);
                     auto &crs_bucket_conn =
                         crs_partition.get_crs_bucket_conn(linked_entity_rank, new_linked_entity_index.bucket_id);
-                    Kokkos::atomic_fetch_max(
-                        &crs_bucket_conn.dirty_,
-                        true);  // TODO: This should be a protected function (flag_as_dirty_atomically)
+                    Kokkos::atomic_store(&crs_bucket_conn.dirty_,
+                                         true);  // TODO: This should be a protected function (flag_as_dirty_atomically)
                   }
                 }
               }
@@ -1097,9 +1116,10 @@ class NewNgpLinkData {
                 stk::mesh::EntityRank linked_entity_rank = get_linked_entity_rank(link_index, d);
                 auto &crs_bucket_conn =
                     crs_partition.get_crs_bucket_conn(linked_entity_rank, linked_entity_index.bucket_id);
+
                 if (crs_bucket_conn.dirty_) {
                   // Atomically increment the connectivity count
-                  Kokkos::atomic_fetch_add(&crs_bucket_conn.num_connected_links_(linked_entity_index.bucket_ord), 1);
+                  Kokkos::atomic_add(&crs_bucket_conn.num_connected_links_(linked_entity_index.bucket_ord), 1u);
                 }
               }
             }
@@ -1186,8 +1206,9 @@ class NewNgpLinkData {
           if (crs_bucket_conn.dirty_ && crs_bucket_conn.sparse_connectivity_offsets_.extent(0) > 0) {
             // Only resize if needed
             unsigned new_size = crs_bucket_conn.sparse_connectivity_offsets_(crs_bucket_conn.size());
-            if (new_size != crs_bucket_conn.sparse_connectivity_.extent(0)) {
-              Kokkos::resize(crs_bucket_conn.sparse_connectivity_, new_size);
+            if (new_size > crs_bucket_conn.sparse_connectivity_.extent(0)) {  // Only grow
+              Kokkos::resize(Kokkos::view_alloc(Kokkos::WithoutInitializing), crs_bucket_conn.sparse_connectivity_,
+                             new_size);
             }
           }
         }
@@ -1252,7 +1273,6 @@ class NewNgpLinkData {
                   const unsigned offset = crs_bucket_conn.sparse_connectivity_offsets_(linked_entity_index.bucket_ord);
                   const unsigned num_inserted_old = Kokkos::atomic_fetch_add(
                       &crs_bucket_conn.num_connected_links_(linked_entity_index.bucket_ord), 1);
-
                   crs_bucket_conn.sparse_connectivity_(offset + num_inserted_old) = link;
                 }
               }
@@ -1276,30 +1296,51 @@ class NewNgpLinkData {
     auto crs_partitions = get_or_create_crs_partitions(link_subset_selector);
 
     // Serial loop over each rank
+    Kokkos::Timer timer;
     for (stk::topology::rank_t rank = stk::topology::NODE_RANK; rank < stk::topology::NUM_RANKS; ++rank) {
-      // Regular parallel_for over each stk bucket of said rank
-      Kokkos::parallel_for(
-          Kokkos::RangePolicy<stk::mesh::NgpMesh::MeshExecSpace>(0, ngp_mesh.num_buckets(rank)),
-          KOKKOS_LAMBDA(const int &bucket_id) {
-            // Serial loop over the partitions
-            for (unsigned partition_id = 0; partition_id < crs_partitions.extent(0); ++partition_id) {
-              NewNgpCRSPartition &crs_partition = crs_partitions(partition_id);
+      // Regular for loop over each stk bucket of said rank
+      for (unsigned bucket_id = 0; bucket_id < ngp_mesh.num_buckets(rank); ++bucket_id) {
+        // Serial loop over the partitions
+        for (unsigned partition_id = 0; partition_id < crs_partitions.extent(0); ++partition_id) {
+          NewNgpCRSPartition &crs_partition = crs_partitions(partition_id);
 
-              // Fetch the crs bucket conn for this rank and bucket
-              auto &crs_bucket_conn = crs_partition.get_crs_bucket_conn(rank, bucket_id);
-              crs_bucket_conn.dirty_ = false;  // Reset the dirty flag
-            }
-          });
+          // Fetch the crs bucket conn for this rank and bucket
+          auto &crs_bucket_conn = crs_partition.get_crs_bucket_conn(rank, bucket_id);
+          crs_bucket_conn.dirty_ = false;  // Reset the dirty flag
+        }
+      }
+
+      // TODO(palmerb4): It appears as though resetting the flag in a parallel_for is slower than doing it
+      // serially (at least for a CPU build). Is this true for GPU builds too?
+
+      // Regular parallel_for over each stk bucket of said rank
+      // Kokkos::parallel_for(
+      //     Kokkos::RangePolicy<stk::mesh::NgpMesh::MeshExecSpace>(0, ngp_mesh.num_buckets(rank)),
+      //     KOKKOS_LAMBDA(const int &bucket_id) {
+      //       // Serial loop over the partitions
+      //       for (unsigned partition_id = 0; partition_id < crs_partitions.extent(0); ++partition_id) {
+      //         NewNgpCRSPartition &crs_partition = crs_partitions(partition_id);
+
+      //         // Fetch the crs bucket conn for this rank and bucket
+      //         auto &crs_bucket_conn = crs_partition.get_crs_bucket_conn(rank, bucket_id);
+      //         crs_bucket_conn.dirty_ = false;  // Reset the dirty flag
+      //       }
+      //     });
     }
+    std::cout << " Reset dirty flag time: " << timer.seconds() << " seconds" << std::endl;
 
     // Mark all selected links as up-to-date
+    timer.reset();
     auto &link_needs_updated_field = link_meta_data().link_crs_needs_updated_field();
     ::mundy::mesh::field_fill(0, link_needs_updated_field, link_subset_selector, stk::ngp::ExecSpace());
+    std::cout << " Mark links up-to-date time: " << timer.seconds() << " seconds" << std::endl;
 
     // Copy the old COO connectivity to the new COO connectivity
+    timer.reset();
     ::mundy::mesh::field_copy<entity_value_t>(link_meta_data().linked_entities_field(),
                                               link_meta_data().linked_entities_crs_field(), link_subset_selector,
                                               stk::ngp::ExecSpace());
+    std::cout << " Copy old to new COO time: " << timer.seconds() << " seconds" << std::endl;
 
     Kokkos::Profiling::popRegion();
   }
@@ -1437,13 +1478,6 @@ class NewNgpLinkData {
                     if (linked_entity == entity) {
                       found_entity = true;
                       break;
-                    }
-                  }
-
-                  if (!found_entity) {
-                    for (unsigned d = 0; d < dimensionality; ++d) {
-                      stk::mesh::Entity linked_entity = get_linked_entity(connected_link_index, d);
-                      std::cout << linked_entity << std::endl;
                     }
                   }
 
