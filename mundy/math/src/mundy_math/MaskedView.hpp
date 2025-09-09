@@ -49,6 +49,8 @@ class MaskedAccessor;
 template <typename T, size_t N, Kokkos::Array<bool, N> mask, ValidAccessor<T> Accessor>
 class MaskedAccessor<T, N, mask, Accessor, Ownership::Views> {
  private:
+
+  KOKKOS_INLINE_FUNCTION
   static constexpr Kokkos::Array<size_t, N> create_index_array() {
     Kokkos::Array<size_t, N> indices{};
     size_t idx = 0;
@@ -60,12 +62,19 @@ class MaskedAccessor<T, N, mask, Accessor, Ownership::Views> {
     return indices;
   }
 
+  /// \brief CUDA doesn't like static constexpr internal variables, so we use a constexpr variable in a static function instead
+  KOKKOS_INLINE_FUNCTION
+  static constexpr size_t map_index(size_t k) {
+    constexpr Kokkos::Array<size_t, N> valid_indices = create_index_array();
+    return valid_indices[k];
+  }
+
  public:
   //! \name Internal data
   //@{
 
   std::conditional_t<std::is_pointer_v<Accessor>, Accessor, Accessor&> accessor_;
-  static constexpr Kokkos::Array<size_t, N> valid_indices_ = create_index_array();
+  // static constexpr Kokkos::Array<size_t, N> valid_indices_ = create_index_array();
   //@}
 
   /// \brief Constructor for reference accessors
@@ -95,13 +104,15 @@ class MaskedAccessor<T, N, mask, Accessor, Ownership::Views> {
   /// \brief Element access operator
   /// \param[in] idx The index of the element.
   KOKKOS_INLINE_FUNCTION constexpr const auto& operator[](size_t idx) const {
-    return accessor_[valid_indices_[idx]];
+    return accessor_[map_index(idx)];
   }
 };  // class MaskedAccessor
 
 template <typename T, size_t N, Kokkos::Array<bool, N> mask, ValidAccessor<T> Accessor>
 class MaskedAccessor<T, N, mask, Accessor, Ownership::Owns> {
  private:
+
+  KOKKOS_INLINE_FUNCTION
   static constexpr Kokkos::Array<size_t, N> create_index_array() {
     Kokkos::Array<size_t, N> indices{};
     size_t idx = 0;
@@ -113,12 +124,19 @@ class MaskedAccessor<T, N, mask, Accessor, Ownership::Owns> {
     return indices;
   }
 
+  /// \brief CUDA doesn't like static constexpr internal variables, so we use a constexpr variable in a static function instead
+  KOKKOS_INLINE_FUNCTION
+  static constexpr size_t map_index(size_t k) {
+    constexpr Kokkos::Array<size_t, N> valid_indices = create_index_array();
+    return valid_indices[k];
+  }
+
  public:
   //! \name Internal data
   //@{
 
   Accessor accessor_;
-  static constexpr Kokkos::Array<size_t, N> valid_indices_ = create_index_array();
+  // static constexpr Kokkos::Array<size_t, N> valid_indices_ = create_index_array();
   //@}
 
   /// \brief Default constructor.
@@ -148,7 +166,7 @@ class MaskedAccessor<T, N, mask, Accessor, Ownership::Owns> {
   /// \brief Element access operator
   /// \param[in] idx The index of the element.
   KOKKOS_INLINE_FUNCTION constexpr const auto& operator[](size_t idx) const {
-    return accessor_[valid_indices_[idx]];
+    return accessor_[map_index(idx)];
   }
 };  // class MaskedAccessor
 

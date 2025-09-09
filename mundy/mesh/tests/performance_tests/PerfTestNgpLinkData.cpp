@@ -32,7 +32,7 @@
 #include <vector>       // for std::vector
 
 // External
-#include "nanobench.h"
+#include <nanobench.h>
 
 // Trilinos libs
 #include <stk_mesh/base/BulkData.hpp>
@@ -291,7 +291,7 @@ void setup_mesh_and_metadata(TestContext& context, const TestParameters& params)
 
   context.bulk_data = builder.create_bulk_data(context.meta_data);
 
-  context.link_meta_data = declare_link_meta_data_ptr(*context.meta_data, "ALL_LINKS", params.link_rank);
+  context.link_meta_data = new_declare_link_meta_data_ptr(*context.meta_data, "ALL_LINKS", params.link_rank);
   context.link_data = declare_ngp_link_data(*context.bulk_data, *context.link_meta_data);
 }
 
@@ -472,6 +472,7 @@ void connect_entities_and_links(TestContext& context, const TestParameters& para
   const stk::mesh::BucketVector& link_buckets = bulk_data.get_buckets(params.link_rank, link_selector);
   const size_t num_link_buckets = link_buckets.size();
   for (size_t link_bucket_id = 0; link_bucket_id < num_link_buckets; ++link_bucket_id) {
+    std::cout << "link_bucket_id: " << link_bucket_id << std::endl;
     stk::mesh::Bucket& link_bucket = *link_buckets[link_bucket_id];
 
     // 2.1. For each link bucket, preselect L entity buckets to maybe draw from.
@@ -508,6 +509,7 @@ void connect_entities_and_links(TestContext& context, const TestParameters& para
     // 2.3. For each link in said bucket...
     size_t num_links_in_bucket = link_bucket.size();
     for (size_t link_ord = 0; link_ord < num_links_in_bucket; ++link_ord) {
+      std::cout << "link_ord: " << link_ord << std::endl;
       stk::mesh::Entity link_entity = link_bucket[link_ord];
       openrand::Philox link_rng(seed, link_ord);
 
@@ -549,6 +551,7 @@ void connect_entities_and_links(TestContext& context, const TestParameters& para
             break; // If the entity fails the entity bucket selection, skip the rest.
           }
           if (bucket_rng.rand<double>() < link_selection_percentage) {
+            std::cout << "declare_relation_host" << std::endl;
             link_data.declare_relation_host(link_entity, selected_node, d);
           }
         }
@@ -1041,12 +1044,25 @@ void run_test(ankerl::nanobench::Bench& bench, const TestParameters& params) {
   declare_link_parts(context, params);
 
   context.bulk_data->modification_begin();
+
+  Kokkos::fence();
+  std::cout << "Declaring entities..." << std::endl;
   declare_entities(context, params);
+
+  Kokkos::fence();
+  std::cout << "Declaring links..." << std::endl;
   declare_links(context, params);
   context.bulk_data->modification_end();
 
+  Kokkos::fence();
+  std::cout << "Connecting entities and links..." << std::endl;
   connect_entities_and_links(context, params);
-  context.link_data.sync_to_device();
+
+  std::cout << "Syncing link data to device..." << std::endl;
+  context.link_data.sync_to_device(); // NGP DATA ISN'T SAFE ACROSS MOD CYCLES
+
+  Kokkos::fence();
+  std::cout << "Setup complete." << std::endl;
 
   // Benchmark get_or_create_crs_partitions(selector)
   Kokkos::Timer timer;
@@ -1105,8 +1121,8 @@ void run_tests() {
   // std::vector<double> id_sigma_bucket_iter{0.0, 0.25, 0.5, 0.75, 1.0, 2.0, 4.0};  // 7 tests (in bucket_id space)
   // std::vector<double> id_sigma_entity_iter{0., 2., 4., 8., 16., 32., 64.};        // 7 tests (in bucket_ord space)
 
-  std::vector<size_t> num_entities_per_rank_iter{500'000};                                            // 7 tests
-  std::vector<size_t> num_links_iter{500'000};                                                        // 7 tests
+  std::vector<size_t> num_entities_per_rank_iter{5'000};                                            // 7 tests
+  std::vector<size_t> num_links_iter{5'000};                                                        // 7 tests
   std::vector<LinkDistribution> link_distribution_iter{LinkDistribution::EQUAL};                      // 2 tests
   std::vector<LinkedEntityRanksType> linked_entity_ranks_iter{LinkedEntityRanksType::SAME};         // 3 tests
   std::vector<stk::mesh::EntityRank> link_ranks_iter{stk::topology::NODE_RANK};  // 2 tests
@@ -1190,6 +1206,7 @@ void run_tests() {
 int main(int argc, char** argv) {
   stk::parallel_machine_init(&argc, &argv);
   Kokkos::initialize(argc, argv);
+  Kokkos::print_configuration(std::cout);
 
   mundy::mesh::run_tests();
 

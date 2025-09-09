@@ -346,7 +346,7 @@ struct MundyMathBackend {
   template <size_t... Is, class Functor>
   KOKKOS_INLINE_FUNCTION static void reduce_max_impl(std::index_sequence<Is...>, const Functor& func,
                                                      scalar_t& result) {
-    scalar_t max_val = std::numeric_limits<scalar_t>::lowest();
+    scalar_t max_val = -Kokkos::Experimental::infinity_v<scalar_t>;
     ((func(Is, max_val)), ...);
     result = max_val;
   }

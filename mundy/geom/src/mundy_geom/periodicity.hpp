@@ -205,14 +205,17 @@ class PeriodicScaledMetric {
   using OurPoint = Point<Scalar>;
 
   /// \brief Default constructor
+  KOKKOS_DEFAULTED_FUNCTION
   constexpr PeriodicScaledMetric() = default;
 
   /// \brief Constructor with unit cell matrix
+  KOKKOS_INLINE_FUNCTION
   explicit constexpr PeriodicScaledMetric(const OurVector3& cell_size)
       : scale_(cell_size), scale_inv_(Scalar(1.0) / scale_[0], Scalar(1.0) / scale_[1], Scalar(1.0) / scale_[2]) {
   }
 
   /// \brief Set the cell size
+  KOKKOS_INLINE_FUNCTION
   void set_cell_size(const OurVector3& cell_size) {
     scale_ = cell_size;
     scale_inv_.set(Scalar(1.0) / scale_[0], Scalar(1.0) / scale_[1], Scalar(1.0) / scale_[2]);

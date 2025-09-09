@@ -92,24 +92,24 @@ tribits_add_executable(
     CATEGORIES PERFORMANCE
     )
 
-tribits_add_executable(
-    HP1
-    SOURCES
-    HP1.cpp
-    CATEGORIES PERFORMANCE
-    )
-tribits_copy_files_to_binary_dir(
-    HP1CopyFiles
-    SOURCE_FILES
-    hp1.yaml
-    hp1_periphery_quadrature_normals.dat
-    hp1_periphery_quadrature_points.dat
-    hp1_periphery_quadrature_weights.dat
-    hp1_pos.dat
-    hp1_hilbert_centers.dat
-    EXEDEPS HP1
-    CATEGORIES PERFORMANCE
-    )
+# tribits_add_executable(
+#     HP1
+#     SOURCES
+#     HP1.cpp
+#     CATEGORIES PERFORMANCE
+#     )
+# tribits_copy_files_to_binary_dir(
+#     HP1CopyFiles
+#     SOURCE_FILES
+#     hp1.yaml
+#     hp1_periphery_quadrature_normals.dat
+#     hp1_periphery_quadrature_points.dat
+#     hp1_periphery_quadrature_weights.dat
+#     hp1_pos.dat
+#     hp1_hilbert_centers.dat
+#     EXEDEPS HP1
+#     CATEGORIES PERFORMANCE
+#     )
 
 tribits_add_executable(
     NonInteractingSperm

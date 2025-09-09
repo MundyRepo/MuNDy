@@ -307,9 +307,9 @@ class NewLinkMetaData {
   template <typename T>
   friend class NewNgpLinkRequestsT;
 
-  friend NewLinkMetaData declare_link_meta_data(MetaData &meta_data, const std::string &our_name,
+  friend NewLinkMetaData new_declare_link_meta_data(MetaData &meta_data, const std::string &our_name,
                                              stk::mesh::EntityRank link_rank);
-  friend std::shared_ptr<NewLinkMetaData> declare_link_meta_data_ptr(MetaData &meta_data, const std::string &our_name,
+  friend std::shared_ptr<NewLinkMetaData> new_declare_link_meta_data_ptr(MetaData &meta_data, const std::string &our_name,
                                              stk::mesh::EntityRank link_rank);
   //@}
 
@@ -335,12 +335,12 @@ class NewLinkMetaData {
 /// \param meta_data [in] The mesh meta data manager. (pre-commit)
 /// \param our_name [in] The name of this link data.
 /// \param link_rank [in] The rank of the link entities.
-NewLinkMetaData declare_link_meta_data(MetaData &meta_data, const std::string &our_name, stk::mesh::EntityRank link_rank) {
+NewLinkMetaData new_declare_link_meta_data(MetaData &meta_data, const std::string &our_name, stk::mesh::EntityRank link_rank) {
   // TODO(palmerb4): Tie the lifetime of this object to the BulkData object so we can return a reference to it.
   return NewLinkMetaData(meta_data, our_name, link_rank);
 }
 
-std::shared_ptr<NewLinkMetaData> declare_link_meta_data_ptr(MetaData &meta_data, const std::string &our_name, stk::mesh::EntityRank link_rank) {
+std::shared_ptr<NewLinkMetaData> new_declare_link_meta_data_ptr(MetaData &meta_data, const std::string &our_name, stk::mesh::EntityRank link_rank) {
   // TODO(palmerb4): Tie the lifetime of this object to the BulkData object so we can return a reference to it.
   return std::shared_ptr<NewLinkMetaData>(new NewLinkMetaData(meta_data, our_name, link_rank));
 }

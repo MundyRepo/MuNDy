@@ -22,6 +22,7 @@
 #include <gtest/gtest.h>  // for TEST, ASSERT_NO_THROW, etc
 
 #include <Kokkos_Core.hpp>  // for Kokkos::Array
+#include <openrand/philox.h>  // for openrand::Philox
 
 // C++ core libs
 #include <ostream>  // for std::cout
@@ -488,7 +489,8 @@ struct RandomLCP {
     Kokkos::parallel_for(
         "gen_random_matrix", Kokkos::MDRangePolicy<Kokkos::Rank<2>>({0, 0}, {size, size}),
         KOKKOS_LAMBDA(const size_t i, const size_t j) {
-          mat_host(i, j) = 1.0 - 2 * static_cast<double>(rand()) / RAND_MAX;
+          openrand::Philox rng(i, j);
+          mat_host(i, j) = rng.uniform<double>(-1.0, 1.0);
         });
     Kokkos::deep_copy(mat, mat_host);
 

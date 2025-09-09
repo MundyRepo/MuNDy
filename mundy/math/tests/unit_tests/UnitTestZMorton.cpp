@@ -280,7 +280,7 @@ TEST(ZMortonFloatSig, OneOverPowerOfTwo) {
   }
 
   for (int i(52); i > 0; --i) {
-    auto d_uint = zorder_knn::detail::FloatToUInt(1.0f + std::pow(2.0, -i));
+    auto d_uint = zorder_knn::detail::FloatToUInt(1.0 + std::pow(2.0, -i));
     EXPECT_EQ(zorder_knn::detail::FloatSig(d_uint), 0x1ll << (52 - i));
   }
 }

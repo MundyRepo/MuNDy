@@ -77,8 +77,8 @@ class NgpLinkDataCRSManagerT {
 
   using entity_value_t = stk::mesh::Entity::entity_value_type;
   using ConnectedEntities = stk::util::StridedArray<const stk::mesh::Entity>;
-  using NgpCRSPartitionView = Kokkos::View<NewNgpCRSPartition *, Kokkos::DefaultExecutionSpace>;
-  using LinkBucketToPartitionIdMap = Kokkos::UnorderedMap<unsigned, unsigned, stk::ngp::MemSpace>;
+  using NgpCRSPartitionView = Kokkos::View<NewNgpCRSPartition *, stk::ngp::UVMMemSpace>;
+  using LinkBucketToPartitionIdMap = Kokkos::UnorderedMap<unsigned, unsigned, NgpMemSpace>;
   //@}
 
   //! \name Constructors and destructor
@@ -119,6 +119,7 @@ class NgpLinkDataCRSManagerT {
   /// but its contents/size will change dynamically as new partitions are created and destroyed. The only promise
   /// we will make is to never delete a partition outside of a modification cycle.
   const NgpCRSPartitionView &get_or_create_crs_partitions(const stk::mesh::Selector &selector) const {
+    MUNDY_THROW_REQUIRE(link_data_ptr_, std::invalid_argument, "Link data hasn't been set.");
     MUNDY_THROW_ASSERT(link_data_ptr_->is_valid(), std::invalid_argument, "Link data is not valid.");
     const NewNgpLinkDataT<NgpMemSpace> &link_data = *link_data_ptr_;
 
@@ -153,15 +154,18 @@ class NgpLinkDataCRSManagerT {
       size_t num_old_partitions = old_keys.size();
       if (num_new_partitions > 0) {
         // 3. Grow the size of the partition view by the number of new unique keys
+        std::cout << "Resizing all_crs_partitions_ from " << num_previous_partitions << " to "
+                  << (num_previous_partitions + num_new_partitions) << std::endl;
         Kokkos::resize(Kokkos::WithoutInitializing, all_crs_partitions_, num_previous_partitions + num_new_partitions);
 
         // 4. Create a new NewNgpCRSPartition (for each unique new key) and store it within the all_crs_partitions_ view
         stk::mesh::Ordinal partition_id = static_cast<stk::mesh::Ordinal>(num_previous_partitions);
         for (const PartitionKey &key : new_keys) {
+          std::cout << "I think the following will fail" << std::endl;
           new (&all_crs_partitions_(partition_id))
               NewNgpCRSPartition(partition_id, key, link_data.link_rank(),
                                  link_data.get_linker_dimensionality_host(key), link_data.bulk_data());
-
+          std::cout << "Welp, it didn't fail" << std::endl;
           partition_key_to_id_map_[key] = partition_id;
           ++partition_id;
         }
@@ -210,8 +214,9 @@ class NgpLinkDataCRSManagerT {
   /// These aren't expensive operations and they're designed to be fast/GPU-compatible, but they aren't free.
   bool is_crs_connectivity_up_to_date(const stk::mesh::Selector &selector) {
     Kokkos::Profiling::pushRegion("NewNgpLinkData::is_crs_connectivity_up_to_date");
-
+    
     // Dereference just once
+    MUNDY_THROW_REQUIRE(link_data_ptr_, std::invalid_argument, "Link data hasn't been set.");
     stk::mesh::Selector link_subset_selector = link_data_ptr_->link_meta_data().universal_link_part() & selector;
 
     // Two types of out-of-date:
@@ -256,7 +261,7 @@ class NgpLinkDataCRSManagerT {
     //         int rank_local_count = 0;
     //         Kokkos::parallel_reduce(
     //             Kokkos::TeamThreadRange(team, num_buckets),
-    //             KOKKOS_LAMBDA(const unsigned bucket_index, int &count) {
+    //             [&](const unsigned bucket_index, int &count) {
     //               const auto &crs_bucket_conn = partition.get_crs_bucket_conn(rank, bucket_index);
     //               count += crs_bucket_conn.dirty_;
     //             },
@@ -284,6 +289,7 @@ class NgpLinkDataCRSManagerT {
 
   /// \brief Check if the CRS connectivity is up-to-date for all links.
   bool is_crs_connectivity_up_to_date() {
+    MUNDY_THROW_REQUIRE(link_data_ptr_, std::invalid_argument, "Link data hasn't been set.");
     return is_crs_connectivity_up_to_date(link_data_ptr_->bulk_data().mesh_meta_data().universal_part());
   }
 
@@ -291,6 +297,7 @@ class NgpLinkDataCRSManagerT {
   /// This takes changes made via the declare/delete_relation functions or request/destroy links and updates
   /// the CRS connectivity to reflect these changes.
   void update_crs_connectivity(const stk::mesh::Selector &selector) {
+    MUNDY_THROW_REQUIRE(link_data_ptr_, std::invalid_argument, "Link data hasn't been set.");
     stk::mesh::Selector link_subset_selector = link_data_ptr_->link_meta_data().universal_link_part() & selector;
 
     if (is_crs_connectivity_up_to_date(link_subset_selector)) {
@@ -370,6 +377,7 @@ class NgpLinkDataCRSManagerT {
 
   /// \brief Propagate changes made to the COO connectivity to the CRS connectivity.
   void update_crs_connectivity() {
+    MUNDY_THROW_REQUIRE(link_data_ptr_, std::invalid_argument, "Link data hasn't been set.");
     update_crs_connectivity(link_data_ptr_->bulk_data().mesh_meta_data().universal_part());
   }
 
@@ -385,6 +393,8 @@ class NgpLinkDataCRSManagerT {
 
   /// \brief Update the map from link bucket id to partition id (host only/not thread safe).
   void update_stk_link_bucket_to_partition_id_map() {
+    MUNDY_THROW_REQUIRE(link_data_ptr_, std::invalid_argument, "Link data hasn't been set.");
+    
     // Get all link buckets that currently have selectors.
     stk::mesh::Selector all_selector;
     for (const auto &pair : selector_to_partitions_map_) {
@@ -418,6 +428,8 @@ class NgpLinkDataCRSManagerT {
 
   void flag_dirty_linked_buckets_of_modified_links(const stk::mesh::Selector &selector) {
     Kokkos::Profiling::pushRegion("NgpLinkPartitionT::flag_dirty_linked_buckets");
+    
+    MUNDY_THROW_REQUIRE(link_data_ptr_, std::invalid_argument, "Link data hasn't been set.");
     stk::mesh::Selector link_subset_selector = link_data_ptr_->link_meta_data().universal_link_part() & selector;
 
     // Flag dirty buckets: Team loop over selected link buckets, fetch their partition, thread loop over links,
@@ -435,7 +447,7 @@ class NgpLinkDataCRSManagerT {
     typedef stk::ngp::TeamPolicy<stk::mesh::NgpMesh::MeshExecSpace>::member_type TeamHandleType;
     const auto &team_policy = stk::ngp::TeamPolicy<stk::mesh::NgpMesh::MeshExecSpace>(bucket_ids.size(), Kokkos::AUTO);
 
-    Kokkos::parallel_for(
+    Kokkos::parallel_for("flag_dirty_linked_buckets_of_modified_links",
         team_policy, KOKKOS_LAMBDA(const TeamHandleType &team) {
           // Fetch our bucket
           const unsigned bucket_id = bucket_ids.get<stk::mesh::NgpMesh::MeshExecSpace>(team.league_rank());
@@ -497,6 +509,8 @@ class NgpLinkDataCRSManagerT {
 
   void reset_dirty_linked_buckets(const stk::mesh::Selector &selector) {
     Kokkos::Profiling::pushRegion("NgpLinkPartitionT::reset_dirty_linked_buckets");
+   
+    MUNDY_THROW_REQUIRE(link_data_ptr_, std::invalid_argument, "Link data hasn't been set.");
     stk::mesh::Selector link_subset_selector = link_data_ptr_->link_meta_data().universal_link_part() & selector;
 
     //  Reset dirty buckets: Serial loop over each rank, team loop over each stk bucket of said rank, serial loop over
@@ -512,7 +526,7 @@ class NgpLinkDataCRSManagerT {
       typedef stk::ngp::TeamPolicy<stk::mesh::NgpMesh::MeshExecSpace>::member_type TeamHandleType;
       const auto &team_policy =
           stk::ngp::TeamPolicy<stk::mesh::NgpMesh::MeshExecSpace>(ngp_mesh.num_buckets(rank), Kokkos::AUTO);
-      Kokkos::parallel_for(
+      Kokkos::parallel_for("reset_dirty_linked_buckets",
           team_policy, KOKKOS_LAMBDA(const TeamHandleType &team) {
             // Fetch our bucket
             const stk::mesh::NgpMesh::BucketType &bucket = ngp_mesh.get_bucket(rank, team.league_rank());
@@ -540,6 +554,8 @@ class NgpLinkDataCRSManagerT {
 
   void gather_part_1_count(const stk::mesh::Selector &selector) {
     Kokkos::Profiling::pushRegion("NgpLinkPartitionT::gather_part_1_count");
+    
+    MUNDY_THROW_REQUIRE(link_data_ptr_, std::invalid_argument, "Link data hasn't been set.");
     stk::mesh::Selector link_subset_selector = link_data_ptr_->link_meta_data().universal_link_part() & selector;
 
     // Gather part 1 (count): Team loop over selected link buckets, fetch their partition, team loop over the links,
@@ -557,7 +573,7 @@ class NgpLinkDataCRSManagerT {
     typedef stk::ngp::TeamPolicy<stk::mesh::NgpMesh::MeshExecSpace>::member_type TeamHandleType;
     const auto &team_policy = stk::ngp::TeamPolicy<stk::mesh::NgpMesh::MeshExecSpace>(bucket_ids.size(), Kokkos::AUTO);
 
-    Kokkos::parallel_for(
+    Kokkos::parallel_for("gather_part_1_count",
         team_policy, KOKKOS_LAMBDA(const TeamHandleType &team) {
           // Fetch our bucket
           const unsigned bucket_id = bucket_ids.get<stk::mesh::NgpMesh::MeshExecSpace>(team.league_rank());
@@ -603,6 +619,8 @@ class NgpLinkDataCRSManagerT {
 
   void gather_part_2_partial_sum(const stk::mesh::Selector &selector) {
     Kokkos::Profiling::pushRegion("NgpLinkPartitionT::gather_part_2_partial_sum");
+    
+    MUNDY_THROW_REQUIRE(link_data_ptr_, std::invalid_argument, "Link data hasn't been set.");
     stk::mesh::Selector link_subset_selector = link_data_ptr_->link_meta_data().universal_link_part() & selector;
 
     // Gather part 2 (partial sum): Serial loop over each rank, team loop over the stk buckets of said rank, serial loop
@@ -618,7 +636,7 @@ class NgpLinkDataCRSManagerT {
       typedef stk::ngp::TeamPolicy<stk::mesh::NgpMesh::MeshExecSpace>::member_type TeamHandleType;
       const auto &team_policy =
           stk::ngp::TeamPolicy<stk::mesh::NgpMesh::MeshExecSpace>(ngp_mesh.num_buckets(rank), Kokkos::AUTO);
-      Kokkos::parallel_for(
+      Kokkos::parallel_for("gather_part_2_partial_sum",
           team_policy, KOKKOS_LAMBDA(const TeamHandleType &team) {
             // Fetch our bucket
             const stk::mesh::NgpMesh::BucketType &bucket = ngp_mesh.get_bucket(rank, team.league_rank());
@@ -636,7 +654,7 @@ class NgpLinkDataCRSManagerT {
                 // Use a parallel_scan to compute the offsets
                 Kokkos::parallel_scan(
                     Kokkos::TeamThreadRange(team, 0u, bucket_size),
-                    KOKKOS_LAMBDA(unsigned i, unsigned &partial_sum, bool final_pass) {
+                    [&](unsigned i, unsigned &partial_sum, bool final_pass) {
                       const unsigned num_connected_links = crs_bucket_conn.num_connected_links_(i);
                       if (final_pass) {
                         // exclusive offset
@@ -659,6 +677,8 @@ class NgpLinkDataCRSManagerT {
 
   void scatter_part_1_setup(const stk::mesh::Selector &selector) {
     Kokkos::Profiling::pushRegion("NgpLinkPartitionT::scatter_part_1_setup");
+    
+    MUNDY_THROW_REQUIRE(link_data_ptr_, std::invalid_argument, "Link data hasn't been set.");
     stk::mesh::Selector link_subset_selector = link_data_ptr_->link_meta_data().universal_link_part() & selector;
 
     // Scatter part 1 (setup): Serial loop over each rank, team loop over the stk buckets of said rank, serial loop over
@@ -692,6 +712,8 @@ class NgpLinkDataCRSManagerT {
 
   void scatter_part_2_fill(const stk::mesh::Selector &selector) {
     Kokkos::Profiling::pushRegion("NgpLinkPartitionT::scatter_part_2_fill");
+    
+    MUNDY_THROW_REQUIRE(link_data_ptr_, std::invalid_argument, "Link data hasn't been set.");
     stk::mesh::Selector link_subset_selector = link_data_ptr_->link_meta_data().universal_link_part() & selector;
 
     // Scatter part 2 (fill): Team loop over each selected link buckets, fetch
@@ -709,7 +731,7 @@ class NgpLinkDataCRSManagerT {
     typedef stk::ngp::TeamPolicy<stk::mesh::NgpMesh::MeshExecSpace>::member_type TeamHandleType;
     const auto &team_policy = stk::ngp::TeamPolicy<stk::mesh::NgpMesh::MeshExecSpace>(bucket_ids.size(), Kokkos::AUTO);
 
-    Kokkos::parallel_for(
+    Kokkos::parallel_for("scatter_part_2_fill",
         team_policy, KOKKOS_LAMBDA(const TeamHandleType &team) {
           // Fetch our bucket
           const unsigned bucket_id = bucket_ids.get<stk::mesh::NgpMesh::MeshExecSpace>(team.league_rank());
@@ -759,6 +781,8 @@ class NgpLinkDataCRSManagerT {
 
   void finalize_crs_update(const stk::mesh::Selector &selector) {
     Kokkos::Profiling::pushRegion("NgpLinkPartitionT::scatter_part_3_finalize");
+  
+    MUNDY_THROW_REQUIRE(link_data_ptr_, std::invalid_argument, "Link data hasn't been set.");
     stk::mesh::Selector link_subset_selector = link_data_ptr_->link_meta_data().universal_link_part() & selector;
 
     // Finalize CRS update: Mark all buckets as no longer dirty, mark all selected links are up-to-date, and copy the
@@ -788,7 +812,7 @@ class NgpLinkDataCRSManagerT {
       // serially (at least for a CPU build). Is this true for GPU builds too?
 
       // Regular parallel_for over each stk bucket of said rank
-      // Kokkos::parallel_for(
+      // Kokkos::parallel_for("finalize_crs_update_reset_dirty_flag",
       //     Kokkos::RangePolicy<stk::mesh::NgpMesh::MeshExecSpace>(0, ngp_mesh.num_buckets(rank)),
       //     KOKKOS_LAMBDA(const int &bucket_id) {
       //       // Serial loop over the partitions
@@ -825,6 +849,7 @@ class NgpLinkDataCRSManagerT {
   ///
   /// \note The checks performed in this function are performed even in RELEASE mode.
   void check_crs_coo_consistency(const stk::mesh::Selector &selector) {
+    MUNDY_THROW_REQUIRE(link_data_ptr_, std::invalid_argument, "Link data hasn't been set.");
     stk::mesh::Selector link_subset_selector = link_data_ptr_->link_meta_data().universal_link_part() & selector;
     check_all_links_in_sync(link_subset_selector);
     check_linked_bucket_conn_size(link_subset_selector);
@@ -834,10 +859,12 @@ class NgpLinkDataCRSManagerT {
 
   /// \brief Check consistency between the COO and CRS connectivity for all links
   void check_crs_coo_consistency() {
+    MUNDY_THROW_REQUIRE(link_data_ptr_, std::invalid_argument, "Link data hasn't been set.");
     check_crs_coo_consistency(link_data_ptr_->bulk_data().mesh_meta_data().universal_part());
   }
 
   void check_all_links_in_sync(const stk::mesh::Selector &selector) {
+    MUNDY_THROW_REQUIRE(link_data_ptr_, std::invalid_argument, "Link data hasn't been set.");
     stk::mesh::Selector link_subset_selector = link_data_ptr_->link_meta_data().universal_link_part() & selector;
 
     int needs_updated_count = field_sum<int>(link_data_ptr_->link_meta_data().link_crs_needs_updated_field(),
@@ -846,6 +873,7 @@ class NgpLinkDataCRSManagerT {
   }
 
   void check_linked_bucket_conn_size(const stk::mesh::Selector &selector) {
+    MUNDY_THROW_REQUIRE(link_data_ptr_, std::invalid_argument, "Link data hasn't been set.");
     stk::mesh::Selector link_subset_selector = link_data_ptr_->link_meta_data().universal_link_part() & selector;
 
     // Serial loop over each selected partition. Serial loop over each rank.
@@ -863,6 +891,7 @@ class NgpLinkDataCRSManagerT {
   }
 
   void check_coo_to_crs_conn(const stk::mesh::Selector &selector) {
+    MUNDY_THROW_REQUIRE(link_data_ptr_, std::invalid_argument, "Link data hasn't been set.");
     stk::mesh::Selector link_subset_selector = link_data_ptr_->link_meta_data().universal_link_part() & selector;
 
     // Serial loop over each partial, hierarchical parallelism over each link in said selector,
@@ -921,6 +950,7 @@ class NgpLinkDataCRSManagerT {
   }
 
   void check_crs_to_coo_conn(const stk::mesh::Selector &selector) {
+    MUNDY_THROW_REQUIRE(link_data_ptr_, std::invalid_argument, "Link data hasn't been set.");
     stk::mesh::Selector link_subset_selector = link_data_ptr_->link_meta_data().universal_link_part() & selector;
 
     // Serial loop over each rank, team loop over each stk bucket of said rank, serial loop over each CRS partition,
@@ -939,7 +969,7 @@ class NgpLinkDataCRSManagerT {
       const auto &team_policy =
           stk::ngp::TeamPolicy<stk::mesh::NgpMesh::MeshExecSpace>(bucket_ids.size(), Kokkos::AUTO);
 
-      Kokkos::parallel_for(
+      Kokkos::parallel_for("check_crs_to_coo_conn",
           team_policy, KOKKOS_LAMBDA(const TeamHandleType &team) {
             // Fetch our bucket
             const unsigned bucket_id = bucket_ids.get<stk::mesh::NgpMesh::MeshExecSpace>(team.league_rank());
@@ -999,7 +1029,7 @@ class NgpLinkDataCRSManagerT {
   }
 
   KOKKOS_INLINE_FUNCTION
-  bool fma_equal(stk::mesh::FastMeshIndex lhs, stk::mesh::FastMeshIndex rhs) {
+  static bool fma_equal(stk::mesh::FastMeshIndex lhs, stk::mesh::FastMeshIndex rhs) {
     return (lhs.bucket_id == rhs.bucket_id) && (lhs.bucket_ord == rhs.bucket_ord);
   }
 
@@ -1010,8 +1040,7 @@ class NgpLinkDataCRSManagerT {
   using SelectorToPartitionsMap = std::map<stk::mesh::Selector, NgpCRSPartitionView>;
   using PartitionKeyToIdMap = std::map<PartitionKey, unsigned>;
   using PartVectorToRequestLinks = std::map<stk::mesh::PartVector, NewNgpLinkRequests>;
-  mutable SelectorToPartitionsMap
-      selector_to_partitions_map_;  // Maybe we want to use a view here to reduce copy overhead.
+  mutable SelectorToPartitionsMap selector_to_partitions_map_;  // Maybe we want to use a view here to reduce copy overhead.
   mutable PartitionKeyToIdMap partition_key_to_id_map_;
   //@}
 
@@ -1160,7 +1189,7 @@ class NewNgpLinkDataT {
   //@{
 
   using ConnectedEntities = stk::util::StridedArray<const stk::mesh::Entity>;
-  using NgpCRSPartitionView = Kokkos::View<NewNgpCRSPartition *, Kokkos::DefaultExecutionSpace>;
+  using NgpCRSPartitionView = Kokkos::View<NewNgpCRSPartition *, stk::ngp::UVMMemSpace>;
   //@}
 
   //! \name Constructors and destructor
@@ -1609,6 +1638,7 @@ class NewNgpLinkDataT {
     ngp_link_meta_data_.ngp_linked_entity_bucket_ords_field().sync_to_device();
     ngp_link_meta_data_.ngp_link_crs_needs_updated_field().sync_to_device();
     ngp_link_meta_data_.ngp_link_marked_for_destruction_field().sync_to_device();
+    std::cout << "End of sync_to_device" << std::endl;
   }
   //@}
 

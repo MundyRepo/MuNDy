@@ -23,27 +23,27 @@
 
 # This test had no asserts and takes minutes to run. It outputs convergence numbers which must be read and compared. 
 # It is ideal for regression testing, not unit testing.
-tribits_add_executable_and_test(
-  UnitTestPeriphery
-  SOURCES
-  UnitTestPeriphery.cpp
-    ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
-  NUM_MPI_PROCS 1
-  CATEGORIES HEAVY
-)
+# tribits_add_executable_and_test(
+#   UnitTestPeriphery
+#   SOURCES
+#   UnitTestPeriphery.cpp
+#     ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
+#   NUM_MPI_PROCS 1
+#   CATEGORIES HEAVY
+# )
 
-tribits_copy_files_to_binary_dir(
-    UnitTestPeripheryCopyFiles
-    SOURCE_FILES
-    sphere_triangle_points_1280.dat
-    sphere_triangle_weights_1280.dat
-    sphere_triangle_normals_1280.dat
-    sphere_triangle_points_3840.dat
-    sphere_triangle_weights_3840.dat
-    sphere_triangle_normals_3840.dat
-    sphere_triangle_points_5120.dat
-    sphere_triangle_weights_5120.dat
-    sphere_triangle_normals_5120.dat
-    EXEDEPS UnitTestPeriphery
-    CATEGORIES HEAVY
-    )
+# tribits_copy_files_to_binary_dir(
+#     UnitTestPeripheryCopyFiles
+#     SOURCE_FILES
+#     sphere_triangle_points_1280.dat
+#     sphere_triangle_weights_1280.dat
+#     sphere_triangle_normals_1280.dat
+#     sphere_triangle_points_3840.dat
+#     sphere_triangle_weights_3840.dat
+#     sphere_triangle_normals_3840.dat
+#     sphere_triangle_points_5120.dat
+#     sphere_triangle_weights_5120.dat
+#     sphere_triangle_normals_5120.dat
+#     EXEDEPS UnitTestPeriphery
+#     CATEGORIES HEAVY
+#     )

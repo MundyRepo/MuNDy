@@ -54,14 +54,17 @@ template <typename Scalar>
 class PeriodicSpaceMetric {
  public:
   /// \brief Default constructor
+  KOKKOS_DEFAULTED_FUNCTION
   constexpr PeriodicSpaceMetric() = default;
 
   /// \brief Constructor with unit cell matrix
+  KOKKOS_INLINE_FUNCTION
   explicit constexpr PeriodicSpaceMetric(const mundy::math::Matrix3<Scalar>& h)
       : h_(h), h_inv_(mundy::math::inverse(h)) {
   }
 
   /// \brief Set the unit cell matrix
+  KOKKOS_INLINE_FUNCTION
   void constexpr set_unit_cell_matrix(const mundy::math::Matrix3<Scalar>& h) {
     h_ = h;
     h_inv_ = mundy::math::inverse(h_);
@@ -89,14 +92,17 @@ template <typename Scalar>
 class PeriodicScaledSpaceMetric {
  public:
   /// \brief Default constructor
+  KOKKOS_DEFAULTED_FUNCTION
   constexpr PeriodicScaledSpaceMetric() = default;
 
   /// \brief Constructor with unit cell matrix
+  KOKKOS_INLINE_FUNCTION
   explicit constexpr PeriodicScaledSpaceMetric(const mundy::math::Vector3<Scalar>& cell_size)
       : scale_(cell_size), scale_inv_(Scalar(1.0) / scale_[0], Scalar(1.0) / scale_[1], Scalar(1.0) / scale_[2]) {
   }
 
   /// \brief Set the cell size
+  KOKKOS_INLINE_FUNCTION
   void set_cell_size(const mundy::math::Vector3<Scalar>& cell_size) {
     scale_ = cell_size;
     scale_inv_.set(Scalar(1.0) / scale_[0], Scalar(1.0) / scale_[1], Scalar(1.0) / scale_[2]);

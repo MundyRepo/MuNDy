@@ -106,7 +106,6 @@ struct NewNgpCRSBucketConnT {
   using UnsignedViewType = Kokkos::View<unsigned *, stk::ngp::MemSpace>;
   using ConnectedEntities = stk::util::StridedArray<const stk::mesh::Entity>;
 
-  KOKKOS_FUNCTION
   NewNgpCRSBucketConnT()
       : dirty_(false),
         bucket_size_(0),
@@ -218,7 +217,7 @@ struct NewNgpCRSPartitionT {
   //! \name Public constructors and destructor
   //@{
 
-  KOKKOS_DEFAULTED_FUNCTION NewNgpCRSPartitionT() = default;
+  NewNgpCRSPartitionT() = default;
 
   NewNgpCRSPartitionT(const stk::mesh::Ordinal &partition_id, const PartitionKey key,
                       const stk::mesh::EntityRank &link_rank, const unsigned link_dimensionality,
@@ -243,7 +242,8 @@ struct NewNgpCRSPartitionT {
     for (stk::mesh::EntityRank rank = stk::topology::NODE_RANK; rank < stk::topology::NUM_RANKS; ++rank) {
       const stk::mesh::BucketVector &buckets = bulk_data.buckets(rank);
       size_t num_buckets = buckets.size();
-      linked_buckets_[rank] = LinkedBucketView("LinkedBuckets", num_buckets);
+      linked_buckets_[rank] = LinkedBucketView(
+        "LinkedBuckets", num_buckets);
       for (size_t i = 0; i < num_buckets; ++i) {
         linked_buckets_[rank](i).initialize_bucket_attributes(*buckets[i]);
       }
@@ -283,12 +283,11 @@ struct NewNgpCRSPartitionT {
     }
   }
 
-  KOKKOS_DEFAULTED_FUNCTION NewNgpCRSPartitionT(const NewNgpCRSPartitionT &other) = default;
-  KOKKOS_DEFAULTED_FUNCTION NewNgpCRSPartitionT(NewNgpCRSPartitionT &&other) = default;
-  KOKKOS_DEFAULTED_FUNCTION NewNgpCRSPartitionT &operator=(const NewNgpCRSPartitionT &other) = default;
-  KOKKOS_DEFAULTED_FUNCTION NewNgpCRSPartitionT &operator=(NewNgpCRSPartitionT &&other) = default;
+  NewNgpCRSPartitionT(const NewNgpCRSPartitionT &other) = default;
+  NewNgpCRSPartitionT(NewNgpCRSPartitionT &&other) = default;
+  NewNgpCRSPartitionT &operator=(const NewNgpCRSPartitionT &other) = default;
+  NewNgpCRSPartitionT &operator=(NewNgpCRSPartitionT &&other) = default;
 
-  KOKKOS_FUNCTION
   virtual ~NewNgpCRSPartitionT() {
     clear_buckets_and_views();
   }

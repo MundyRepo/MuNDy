@@ -75,7 +75,7 @@ void setup_mesh_and_metadata(TestContext& context) {
 }
 
 NewLinkMetaData declare_and_validate_link_metadata(TestContext& context, const std::string& name) {
-  NewLinkMetaData link_meta_data = declare_link_meta_data(*context.meta_data, name, context.link_rank);
+  NewLinkMetaData link_meta_data = new_declare_link_meta_data(*context.meta_data, name, context.link_rank);
   EXPECT_EQ(link_meta_data.link_rank(), context.link_rank);
   EXPECT_TRUE(link_meta_data.name() == name);
   EXPECT_EQ(link_meta_data.universal_link_part().primary_entity_rank(), context.link_rank);

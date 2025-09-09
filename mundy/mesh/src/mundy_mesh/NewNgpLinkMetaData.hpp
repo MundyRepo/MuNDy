@@ -49,10 +49,10 @@ namespace mundy {
 namespace mesh {
 
 namespace impl {
-  // Forward declaration (needed due to declaring a friend in a namespaced scope)
-  template <typename NgpMemSpace>
-  class NgpLinkDataCRSManagerT;
-}
+// Forward declaration (needed due to declaring a friend in a namespaced scope)
+template <typename NgpMemSpace>
+class NgpLinkDataCRSManagerT;
+}  // namespace impl
 
 class NewNgpLinkMetaData {
  public:
@@ -123,7 +123,6 @@ class NewNgpLinkMetaData {
   //@{
 
   /// \brief Get if the this object is in a valid state.
-  KOKKOS_INLINE_FUNCTION
   bool is_valid() const {
     return link_meta_data_ptr_ != nullptr;
   }
@@ -144,7 +143,8 @@ class NewNgpLinkMetaData {
   }
 
   /// \brief Fetch the link rank.
-  stk::mesh::EntityRank link_rank() const {
+  KOKKOS_INLINE_FUNCTION
+  stk::mesh::EntityRank link_rank() const noexcept {
     return link_rank_;
   }
 
@@ -154,7 +154,7 @@ class NewNgpLinkMetaData {
   /// linked entities when doing things like post-processing the output EXO file, but it should be seen as read-only.
   /// Use declare/delete_relation to modify it since they perform additional behind-the-scenes bookkeeping.
   KOKKOS_INLINE_FUNCTION
-  const ngp_linked_entity_ids_field_t &ngp_linked_entity_ids_field() const {
+  const ngp_linked_entity_ids_field_t &ngp_linked_entity_ids_field() const noexcept {
     return ngp_linked_entity_ids_field_;
   }
 
@@ -162,12 +162,13 @@ class NewNgpLinkMetaData {
   ///
   /// Same comment as linked_entity_ids_field. Treat this field as read-only.
   KOKKOS_INLINE_FUNCTION
-  const ngp_linked_entity_ranks_field_t &ngp_linked_entity_ranks_field() const {
+  const ngp_linked_entity_ranks_field_t &ngp_linked_entity_ranks_field() const noexcept {
     return ngp_linked_entity_ranks_field_;
   }
 
   /// \brief Fetch the universal link part.
-  stk::mesh::PartOrdinal universal_link_part_ord() const {
+  KOKKOS_INLINE_FUNCTION
+  stk::mesh::PartOrdinal universal_link_part_ord() const noexcept {
     return universal_link_part_ord_;
   }
   //@}
@@ -191,60 +192,74 @@ class NewNgpLinkMetaData {
   //@{
 
   /// \brief Fetch the linked entity ids field.
-  ngp_linked_entity_ids_field_t &ngp_linked_entity_ids_field() {
+  KOKKOS_INLINE_FUNCTION
+  ngp_linked_entity_ids_field_t &ngp_linked_entity_ids_field() noexcept {
     return ngp_linked_entity_ids_field_;
   }
 
   /// \brief Fetch the linked entity ranks field.
-  ngp_linked_entity_ranks_field_t &ngp_linked_entity_ranks_field() {
+  KOKKOS_INLINE_FUNCTION
+  ngp_linked_entity_ranks_field_t &ngp_linked_entity_ranks_field() noexcept {
     return ngp_linked_entity_ranks_field_;
   }
 
   /// \brief Fetch the linked entities field
-  const ngp_linked_entities_field_t &ngp_linked_entities_field() const {
+  KOKKOS_INLINE_FUNCTION
+  const ngp_linked_entities_field_t &ngp_linked_entities_field() const noexcept {
     return ngp_linked_entities_field_;
   }
+  KOKKOS_INLINE_FUNCTION
   ngp_linked_entities_field_t &ngp_linked_entities_field() {
     return ngp_linked_entities_field_;
   }
 
   /// \brief Fetch the linked entities field (as last seen by the CRS).
-  const ngp_linked_entities_field_t &ngp_linked_entities_crs_field() const {
+  KOKKOS_INLINE_FUNCTION
+  const ngp_linked_entities_field_t &ngp_linked_entities_crs_field() const noexcept {
     return ngp_linked_entities_crs_field_;
   }
-  ngp_linked_entities_field_t &ngp_linked_entities_crs_field() {
+  KOKKOS_INLINE_FUNCTION
+  ngp_linked_entities_field_t &ngp_linked_entities_crs_field() noexcept {
     return ngp_linked_entities_crs_field_;
   }
 
   /// \brief Fetch the linked entity bucket id field.
-  const ngp_linked_entity_bucket_ids_field_t &ngp_linked_entity_bucket_ids_field() const {
+  KOKKOS_INLINE_FUNCTION
+  const ngp_linked_entity_bucket_ids_field_t &ngp_linked_entity_bucket_ids_field() const noexcept {
     return ngp_linked_entity_bucket_ids_field_;
   }
-  ngp_linked_entity_bucket_ids_field_t &ngp_linked_entity_bucket_ids_field() {
+  KOKKOS_INLINE_FUNCTION
+  ngp_linked_entity_bucket_ids_field_t &ngp_linked_entity_bucket_ids_field() noexcept {
     return ngp_linked_entity_bucket_ids_field_;
   }
 
   /// \brief Fetch the linked entity bucket ord field.
-  const ngp_linked_entity_bucket_ords_field_t &ngp_linked_entity_bucket_ords_field() const {
+  KOKKOS_INLINE_FUNCTION
+  const ngp_linked_entity_bucket_ords_field_t &ngp_linked_entity_bucket_ords_field() const noexcept {
     return ngp_linked_entity_bucket_ords_field_;
   }
-  ngp_linked_entity_bucket_ords_field_t &ngp_linked_entity_bucket_ords_field() {
+  KOKKOS_INLINE_FUNCTION
+  ngp_linked_entity_bucket_ords_field_t &ngp_linked_entity_bucket_ords_field() noexcept {
     return ngp_linked_entity_bucket_ords_field_;
   }
 
   /// \brief Fetch the link crs needs updated field.
-  const ngp_link_crs_needs_updated_field_t &ngp_link_crs_needs_updated_field() const {
+  KOKKOS_INLINE_FUNCTION
+  const ngp_link_crs_needs_updated_field_t &ngp_link_crs_needs_updated_field() const noexcept {
     return ngp_link_crs_needs_updated_field_;
   }
-  ngp_link_crs_needs_updated_field_t &ngp_link_crs_needs_updated_field() {
+  KOKKOS_INLINE_FUNCTION
+  ngp_link_crs_needs_updated_field_t &ngp_link_crs_needs_updated_field() noexcept {
     return ngp_link_crs_needs_updated_field_;
   }
 
   /// \brief Fetch the link marked for destruction field.
-  const ngp_link_marked_for_destruction_field_t &ngp_link_marked_for_destruction_field() const {
+  KOKKOS_INLINE_FUNCTION
+  const ngp_link_marked_for_destruction_field_t &ngp_link_marked_for_destruction_field() const noexcept {
     return ngp_link_marked_for_destruction_field_;
   }
-  ngp_link_marked_for_destruction_field_t &ngp_link_marked_for_destruction_field() {
+  KOKKOS_INLINE_FUNCTION
+  ngp_link_marked_for_destruction_field_t &ngp_link_marked_for_destruction_field() noexcept {
     return ngp_link_marked_for_destruction_field_;
   }
   //@}
@@ -253,7 +268,7 @@ class NewNgpLinkMetaData {
   //! \name Friends <3
   //@{
 
-  template<typename T>
+  template <typename T>
   friend class NewNgpLinkDataT;
 
   template <typename T>
