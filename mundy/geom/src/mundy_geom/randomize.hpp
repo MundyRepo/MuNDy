@@ -68,7 +68,7 @@ template <typename Scalar, typename RNG>
 KOKKOS_INLINE_FUNCTION Point<Scalar> generate_random_unit_vector(RNG& rng) {
   constexpr Scalar two_pi = 2.0 * Kokkos::numbers::pi_v<Scalar>;
 
-  const Scalar zrand = rng.template rand<Scalar>() - static_cast<Scalar>(1);
+  const Scalar zrand = static_cast<Scalar>(2) * rng.template rand<Scalar>() - static_cast<Scalar>(1);
   const Scalar wrand = Kokkos::sqrt(static_cast<Scalar>(1) - zrand * zrand);
   const Scalar trand = two_pi * rng.template rand<Scalar>();
 
