@@ -485,14 +485,12 @@ struct RandomLCP {
     linear_op_t mat(Kokkos::view_alloc(Kokkos::WithoutInitializing, "mat"), size, size);
 
     // Fill with random values in [-1, 1] (not a statistically random matrix but this is a test)
-    auto mat_host = Kokkos::create_mirror_view(mat);
     Kokkos::parallel_for(
         "gen_random_matrix", Kokkos::MDRangePolicy<Kokkos::Rank<2>>({0, 0}, {size, size}),
         KOKKOS_LAMBDA(const size_t i, const size_t j) {
           openrand::Philox rng(i, j);
-          mat_host(i, j) = rng.uniform<double>(-1.0, 1.0);
+          mat(i, j) = rng.uniform<double>(-1.0, 1.0);
         });
-    Kokkos::deep_copy(mat, mat_host);
 
     return mat;
   }
