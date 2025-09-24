@@ -104,7 +104,7 @@ void generate_particles(stk::mesh::BulkData &bulk_data, const size_t num_particl
   // num_particles_local isn't guaranteed to divide perfectly
   // add the extra workload to the first r ranks
   size_t remaining_particles = num_particles_global - num_particles_local * bulk_data.parallel_size();
-  if (bulk_data.parallel_rank() < remaining_particles) {
+  if (static_cast<size_t>(bulk_data.parallel_rank()) < remaining_particles) {
     num_particles_local += 1;
   }
 

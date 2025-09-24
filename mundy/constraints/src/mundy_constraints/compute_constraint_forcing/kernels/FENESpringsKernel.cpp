@@ -32,13 +32,13 @@
 #include <stk_mesh/base/Entity.hpp>         // for stk::mesh::Entity
 #include <stk_mesh/base/Field.hpp>          // for stk::mesh::Field, stl::mesh::field_data
 #include <stk_mesh/base/FieldParallel.hpp>  // for stk::mesh::communicate_field_data
-#include <stk_mesh/base/ForEachEntity.hpp>  // for mundy::mesh::for_each_entity_run
 
 // Mundy libs
 #include <mundy_constraints/FENESprings.hpp>  // for mundy::constraints::FENESprings
 #include <mundy_constraints/compute_constraint_forcing/kernels/FENESpringsKernel.hpp>  // for mundy::constraints::compute_constraint_forcing::kernels::FENESpringsKernel
 #include <mundy_core/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
 #include <mundy_mesh/BulkData.hpp>      // for mundy::mesh::BulkData
+#include <mundy_mesh/ForEachEntity.hpp>  // for mundy::mesh::for_each_entity_run
 
 namespace mundy {
 

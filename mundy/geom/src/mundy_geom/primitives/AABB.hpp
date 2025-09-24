@@ -409,8 +409,8 @@ KOKKOS_FUNCTION constexpr bool operator!=(const AABBType1& aabb1, const AABBType
   return (aabb1.min_corner() != aabb2.min_corner()) || (aabb1.max_corner() != aabb2.max_corner());
 }
 
-template <typename Scalar>
-std::ostream& operator<<(std::ostream& os, const AABB<Scalar>& aabb) {
+template <ValidAABBType AABBType>
+std::ostream& operator<<(std::ostream& os, const AABBType& aabb) {
   os << "{" << aabb.min_corner() << "->" << aabb.max_corner() << "}";
   return os;
 }

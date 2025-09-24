@@ -34,7 +34,6 @@
 #include <stk_mesh/base/Comm.hpp>           // for comm_mesh_counts
 #include <stk_mesh/base/Entity.hpp>         // for stk::mesh::Entity
 #include <stk_mesh/base/FieldParallel.hpp>  // for stk:::mesh::communicate_field_data
-#include <stk_mesh/base/ForEachEntity.hpp>  // for mundy::mesh::for_each_entity_run
 #include <stk_mesh/base/GetEntities.hpp>    // for stk::mesh::get_selected_entities
 #include <stk_mesh/base/MeshBuilder.hpp>    // for stk::mesh::MeshBuilder
 #include <stk_mesh/base/Part.hpp>           // for stk::mesh::Part, stk::mesh::intersect
@@ -54,6 +53,7 @@
 #include <mundy_meta/MetaFactory.hpp>  // for mundy::meta::MetaMethodFactory and mundy::meta::HasMeshReqsAndIsRegisterable
 #include <mundy_meta/utils/MeshGeneration.hpp>  // for mundy::meta::utils::generate_class_instance_and_mesh_from_meta_class_requirements
 #include <mundy_shapes/ComputeAABB.hpp>  // for mundy::shapes::ComputeAABB
+#include <mundy_mesh/ForEachEntity.hpp>  // for mundy::mesh::for_each_entity_run
 
 namespace mundy {
 

@@ -159,9 +159,6 @@ class UnitTestFieldBLAS : public ::testing::Test {
  public:
   using DoubleField = stk::mesh::Field<double>;
   using CoordinateFunc = std::function<std::vector<double>(const double*)>;
-  static constexpr double alpha = -1.4;
-  static constexpr double beta = 0.3333333;
-  static constexpr double gamma = 3.14159;
   static constexpr double initial_value[3] = {-1, 2, -0.3};
 
   UnitTestFieldBLAS()

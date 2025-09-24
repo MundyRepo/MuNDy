@@ -42,7 +42,6 @@
 
 // Mundy libs
 #include <mundy_core/throw_assert.hpp>   // for MUNDY_THROW_ASSERT
-#include <mundy_mesh/ForEachEntity.hpp>  // for mundy::mesh::for_each_entity_run
 #include <mundy_mesh/MetaData.hpp>       // for mundy::mesh::MetaData
 
 namespace mundy {

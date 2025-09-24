@@ -32,13 +32,6 @@
 // Trilinos libs
 #include <Trilinos_version.h>  // for TRILINOS_MAJOR_MINOR_VERSION
 
-#include <stk_mesh/base/Entity.hpp>               // for stk::mesh::Entity
-#include <stk_mesh/base/Field.hpp>                // for stk::mesh::Field
-#include <stk_mesh/base/FindRestriction.hpp>      // for stk::mesh::find_restriction
-#include <stk_mesh/base/GetEntities.hpp>          // for stk::mesh::get_selected_entities
-#include <stk_mesh/base/GetNgpField.hpp>          // for stk::mesh::get_updated_ngp_field
-#include <stk_mesh/base/GetNgpMesh.hpp>           // for stk::mesh::get_updated_ngp_mesh
-#include <stk_mesh/base/NgpField.hpp>             // for stk::mesh::NgpField
 #include <stk_mesh/base/NgpMesh.hpp>              // for stk::mesh::NgpMesh
 #include <stk_mesh/base/Part.hpp>                 // stk::mesh::Part
 #include <stk_mesh/base/Selector.hpp>             // stk::mesh::Selector
@@ -50,7 +43,7 @@
 #include <mundy_mesh/BulkData.hpp>          // for mundy::mesh::BulkData
 #include <mundy_mesh/ForEachEntity.hpp>     // for mundy::mesh::for_each_entity_run
 #include <mundy_mesh/MetaData.hpp>          // for mundy::mesh::MetaData
-#include <mundy_mesh/NewNgpLinkData.hpp>    // for mundy::mesh::NewNgpLinkData
+#include <mundy_mesh/NgpLinkData.hpp>    // for mundy::mesh::NgpLinkData
 
 namespace mundy {
 
@@ -67,7 +60,7 @@ namespace mesh {
 /// The functor must have the following signature:
 ///   operator()(const FastMeshIndex &) -> void
 template <typename FunctionToRunPerLink>
-void for_each_link_run(const NewNgpLinkData &ngp_link_data, const stk::mesh::Selector &linker_subset_selector,
+void for_each_link_run(const NgpLinkData &ngp_link_data, const stk::mesh::Selector &linker_subset_selector,
                        const FunctionToRunPerLink &functor) {
   ::mundy::mesh::for_each_entity_run(
       ngp_link_data.ngp_mesh(), ngp_link_data.link_rank(),
@@ -75,9 +68,8 @@ void for_each_link_run(const NewNgpLinkData &ngp_link_data, const stk::mesh::Sel
 }
 
 /// \brief Run an ngp-compatible function over each link in the ngp_link_data in parallel.
-/// See for_each_link_run(const NewNgpLinkData &, const stk::mesh::Selector &, const FunctionToRunPerLink &)
 template <typename FunctionToRunPerLink>
-void for_each_link_run(const NewNgpLinkData &ngp_link_data, const FunctionToRunPerLink &functor) {
+void for_each_link_run(const NgpLinkData &ngp_link_data, const FunctionToRunPerLink &functor) {
   for_each_link_run(ngp_link_data, ngp_link_data.link_meta_data().universal_link_part(), functor);
 }
 //@}

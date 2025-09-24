@@ -19,7 +19,7 @@
 // @HEADER
 
 /// \file AngularSpringsKernel.cpp
-/// \brief Definition of the ComputeCOnstraintForcing's AngularSpringsKernel.
+/// \brief Definition of the ComputeConstraintForcing's AngularSpringsKernel.
 
 // C++ core libs
 #include <memory>  // for std::shared_ptr, std::unique_ptr
@@ -31,7 +31,6 @@
 #include <stk_mesh/base/Entity.hpp>         // for stk::mesh::Entity
 #include <stk_mesh/base/Field.hpp>          // for stk::mesh::Field, stl::mesh::field_data
 #include <stk_mesh/base/FieldParallel.hpp>  // for stk::mesh::communicate_field_data
-#include <stk_mesh/base/ForEachEntity.hpp>  // for mundy::mesh::for_each_entity_run
 
 // Mundy libs
 #include <mundy_constraints/AngularSprings.hpp>  // for mundy::constraints::AngularSprings
@@ -40,6 +39,7 @@
 #include <mundy_math/Vector3.hpp>       // for mundy::math::Vector3
 #include <mundy_mesh/BulkData.hpp>      // for mundy::mesh::BulkData
 #include <mundy_mesh/FieldViews.hpp>  // for mundy::mesh::vector3_field_data, mundy::mesh::quaternion_field_data, mundy::mesh::matrix3_field_data
+#include <mundy_mesh/ForEachEntity.hpp>  // for mundy::mesh::for_each_entity_run
 
 namespace mundy {
 

@@ -39,7 +39,6 @@ The goal of this example is to simulate the swimming motion of a multiple, non-i
 #include <stk_mesh/base/FEMHelpers.hpp>          // for stk::mesh::declare_element, stk::mesh::declare_element_edge
 #include <stk_mesh/base/Field.hpp>               // for stk::mesh::Field, stk::mesh::field_data
 #include <stk_mesh/base/FieldParallel.hpp>       // for stk::mesh::parallel_sum
-#include <stk_mesh/base/ForEachEntity.hpp>       // for mundy::mesh::for_each_entity_run
 #include <stk_mesh/base/Part.hpp>                // for stk::mesh::Part, stk::mesh::intersect
 #include <stk_mesh/base/Selector.hpp>            // for stk::mesh::Selector
 #include <stk_topology/topology.hpp>             // for stk::topology
@@ -58,6 +57,7 @@ The goal of this example is to simulate the swimming motion of a multiple, non-i
 #include <mundy_meta/FieldReqs.hpp>                 // for mundy::meta::FieldReqs
 #include <mundy_meta/MeshReqs.hpp>                  // for mundy::meta::MeshReqs
 #include <mundy_meta/PartReqs.hpp>                  // for mundy::meta::PartReqs
+#include <mundy_mesh/ForEachEntity.hpp>  // for mundy::mesh::for_each_entity_run
 
 /// \brief The main function for the sperm simulation broken down into digestible chunks.
 ///

@@ -6,15 +6,17 @@ MUNDY_SOURCE_DIR=$3
 
 # bash ../do-cmake.sh /mnt/ceph/users/bpalmer/envs/spack/opt/spack/linux-rocky8-cascadelake/gcc-11.4.0/trilinos-master-ek7lwb5ilssmazas2p3zhavykp6kiyf4 ~/envs/MundyScratch/ ../
 
+# bash ../do-cmake.sh /mnt/home/cedelmaier/Projects/Software/spack/opt/spack/linux-rocky8-cascadelake/gcc-11.4.0/trilinos-16.0.0-jg6itzcs5ms7vsuecbejqfr7l3bbjm2f/ ~/mundyscratch ../
+
 echo "Using Trilinos dir: $TRILINOS_ROOT_DIR"
 echo "Using TPL dir: $TPL_ROOT_DIR"
 echo "Using STK test-app dir: $MUNDY_SOURCE_DIR"
 
 cmake \
--DCMAKE_BUILD_TYPE=${BUILD_TYPE:-RELEASE} \
+-DCMAKE_BUILD_TYPE=${BUILD_TYPE:-DEBUG} \
 -DCMAKE_CXX_COMPILER=mpicxx \
 -DCMAKE_CXX_FLAGS="-O3 -march=native" \
--DCMAKE_INSTALL_PREFIX=${INSTALL_DIR:-$HOME/envs/MundyScratch} \
+-DCMAKE_INSTALL_PREFIX=$TPL_ROOT_DIR \
 -DTPL_ENABLE_MPI=ON \
 -DKokkos_ENABLE_SERIAL=OFF \
 -DKokkos_ENABLE_OPENMP=ON \

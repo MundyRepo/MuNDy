@@ -30,7 +30,6 @@
 #include <Teuchos_ParameterList.hpp>        // for Teuchos::ParameterList
 #include <stk_mesh/base/Entity.hpp>         // for stk::mesh::Entity
 #include <stk_mesh/base/Field.hpp>          // for stk::mesh::Field, stl::mesh::field_data
-#include <stk_mesh/base/ForEachEntity.hpp>  // for mundy::mesh::for_each_entity_run
 
 // Mundy libs
 #include <mundy_math/Quaternion.hpp>                                        // for mundy::math::Quaternion
@@ -38,6 +37,7 @@
 #include <mundy_mesh/BulkData.hpp>                                          // for mundy::mesh::BulkData
 #include <mundy_shapes/Spherocylinders.hpp>                                 // for mundy::shapes::Spherocylinders
 #include <mundy_shapes/compute_bounding_radius/kernels/Spherocylinder.hpp>  // for mundy::shapes::compute_bounding_radius::kernels::Spherocylinder
+#include <mundy_mesh/ForEachEntity.hpp>  // for mundy::mesh::for_each_entity_run
 
 namespace mundy {
 

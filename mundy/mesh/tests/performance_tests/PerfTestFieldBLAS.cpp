@@ -137,25 +137,6 @@ class PerfTestFieldBLAS {
     return &field;
   }
 
-  CoordinateFunc get_field1_func() const {
-    return [](const double* entity_coords) {
-      return std::vector<double>{-entity_coords[0] * entity_coords[0], 2 * entity_coords[1]};
-    };
-  }
-
-  CoordinateFunc get_field2_func() const {
-    return [](const double* entity_coords) {
-      return std::vector<double>{entity_coords[0] * entity_coords[1], 3 * entity_coords[1] * entity_coords[1]};
-    };
-  }
-
-  CoordinateFunc get_field3_func() const {
-    return [](const double* entity_coords) {
-      return std::vector<double>{entity_coords[0] * entity_coords[1], 3 * entity_coords[1] * entity_coords[2],
-                                 5 * entity_coords[2] * entity_coords[0]};
-    };
-  }
-
   void setup_three_field_N_hex_mesh(
       const size_t num_hexes_per_dim, stk::mesh::BulkData::AutomaticAuraOption aura_option,
       std::unique_ptr<stk::mesh::FieldDataManager> field_data_manager,
@@ -1168,7 +1149,7 @@ inline void time_test(TestType& test, const std::string& test_name, const size_t
   test.setup();
 
   ankerl::nanobench::Bench bench;
-  bench.relative(true).title(test_name).unit("op").performanceCounters(true).minEpochIterations(1000);
+  bench.relative(true).title(test_name).unit("op").performanceCounters(true).minEpochIterations(num_iterations);
 
   if constexpr (TestType::has_stk_test) {
     bench.run("stk", [&] {

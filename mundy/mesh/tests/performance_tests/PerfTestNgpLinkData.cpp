@@ -277,7 +277,7 @@ struct TestContext {
   std::shared_ptr<MetaData> meta_data;
   std::shared_ptr<BulkData> bulk_data;
   std::shared_ptr<NewLinkMetaData> link_meta_data;
-  NewNgpLinkData link_data;
+  NewLinkData link_data;
   stk::mesh::PartVector link_parts;  ///< One per link partition
 };
 
@@ -292,7 +292,7 @@ void setup_mesh_and_metadata(TestContext& context, const TestParameters& params)
   context.bulk_data = builder.create_bulk_data(context.meta_data);
 
   context.link_meta_data = new_declare_link_meta_data_ptr(*context.meta_data, "ALL_LINKS", params.link_rank);
-  context.link_data = declare_ngp_link_data(*context.bulk_data, *context.link_meta_data);
+  context.link_data = declare_link_data(*context.bulk_data, *context.link_meta_data);
 }
 
 void declare_link_parts(TestContext& context, const TestParameters& params) {
@@ -405,7 +405,7 @@ class WeightedSampler {
   /// \param rng        Random number generator.
   template <class RNG>
   void consider(index_type item, RNG& rng, double weight) {
-    MUNDY_THROW_ASSERT(weight > 0.0 || weight != weight, std::invalid_argument,
+    MUNDY_THROW_ASSERT(weight >= 0.0 || weight != weight, std::invalid_argument,
                        "Weight must be positive and not NaN.");
     if (capacity_ == 0) return;
 
@@ -472,7 +472,6 @@ void connect_entities_and_links(TestContext& context, const TestParameters& para
   const stk::mesh::BucketVector& link_buckets = bulk_data.get_buckets(params.link_rank, link_selector);
   const size_t num_link_buckets = link_buckets.size();
   for (size_t link_bucket_id = 0; link_bucket_id < num_link_buckets; ++link_bucket_id) {
-    std::cout << "link_bucket_id: " << link_bucket_id << std::endl;
     stk::mesh::Bucket& link_bucket = *link_buckets[link_bucket_id];
 
     // 2.1. For each link bucket, preselect L entity buckets to maybe draw from.
@@ -509,7 +508,6 @@ void connect_entities_and_links(TestContext& context, const TestParameters& para
     // 2.3. For each link in said bucket...
     size_t num_links_in_bucket = link_bucket.size();
     for (size_t link_ord = 0; link_ord < num_links_in_bucket; ++link_ord) {
-      std::cout << "link_ord: " << link_ord << std::endl;
       stk::mesh::Entity link_entity = link_bucket[link_ord];
       openrand::Philox link_rng(seed, link_ord);
 
@@ -551,8 +549,7 @@ void connect_entities_and_links(TestContext& context, const TestParameters& para
             break; // If the entity fails the entity bucket selection, skip the rest.
           }
           if (bucket_rng.rand<double>() < link_selection_percentage) {
-            std::cout << "declare_relation_host" << std::endl;
-            link_data.declare_relation_host(link_entity, selected_node, d);
+            link_data.declare_relation(link_entity, selected_node, d);
           }
         }
 
@@ -602,7 +599,7 @@ void connect_entities_and_links(TestContext& context, const TestParameters& para
               break; // If the entity fails the entity bucket selection, skip the rest.
             }
             if (bucket_rng.rand<double>() < link_selection_percentage) {
-              link_data.declare_relation_host(link_entity, selected_entity, j + num_entities_per_rank_shift[i]);
+              link_data.declare_relation(link_entity, selected_entity, j + num_entities_per_rank_shift[i]);
             }
           }
         }
@@ -647,7 +644,7 @@ void connect_entities_and_links(TestContext& context, const TestParameters& para
           continue; // If the element fails the entity bucket selection, skip the rest.
         }
         if (bucket_rng.rand<double>() < link_selection_percentage) {
-          link_data.declare_relation_host(link_entity, selected_elem, 0);
+          link_data.declare_relation(link_entity, selected_elem, 0);
         }
 
         // Declare the link relations between the link and the chosen nodes
@@ -664,7 +661,7 @@ void connect_entities_and_links(TestContext& context, const TestParameters& para
             break; // If any of the nodes fail the entity bucket selection, skip the rest.
           }
           if (bucket_rng.rand<double>() < link_selection_percentage) {
-            link_data.declare_relation_host(link_entity, selected_node, j + 1);  // Start at 1 since 0 is the element.
+            link_data.declare_relation(link_entity, selected_node, j + 1);  // Start at 1 since 0 is the element.
           }
         }
 
@@ -675,6 +672,8 @@ void connect_entities_and_links(TestContext& context, const TestParameters& para
       }
     }
   }
+
+  link_data.modify_coo_on_host();
 }
 
 // - How do these parameters affect the cost of looping over each link, fetching its linked entities, and performing an
@@ -983,7 +982,7 @@ class eval_force_reduction_one_to_many {
 
 /* Modifications:
 
-One of the important things to test is how the cost of performing update_crs_connectivity() varies with modifications to the COO.
+One of the important things to test is how the cost of performing update_crs_from_coo() varies with modifications to the COO.
 The twp factors that should control the performance is the number of entity buckets flagged as dirty and the number of links marked 
 as modified.
 */
@@ -999,7 +998,7 @@ void mark_one_bucket_per_partition_per_rank_as_modified(TestContext& context, co
     for (stk::topology::rank_t rank = stk::topology::NODE_RANK; rank < stk::topology::NUM_RANKS; ++rank) {
       if (crs_partition.num_buckets(rank) > 0) {
         auto &crs_bucket_conn = crs_partition.get_crs_bucket_conn(rank, 0 /* first bucket */);
-        crs_bucket_conn.dirty_ = true;
+        impl::get_dirty_flag(crs_bucket_conn) = true;
         ++count;
       }
     }
@@ -1021,8 +1020,8 @@ void randomly_mark_buckets_per_partition_per_rank_as_modified(TestContext& conte
       for (size_t bucket_idx = 0; bucket_idx < crs_partition.num_buckets(rank); ++bucket_idx) {
         auto &crs_bucket_conn = crs_partition.get_crs_bucket_conn(rank, bucket_idx);
         openrand::Philox rng(rank, crs_bucket_conn.bucket_id());
-        crs_bucket_conn.dirty_ = rng.rand<double>() < percentage;
-        count += crs_bucket_conn.dirty_;
+        impl::get_dirty_flag(crs_bucket_conn) = rng.rand<double>() < percentage;
+        count += impl::get_dirty_flag(crs_bucket_conn);
       }
     }
   }
@@ -1059,7 +1058,7 @@ void run_test(ankerl::nanobench::Bench& bench, const TestParameters& params) {
   connect_entities_and_links(context, params);
 
   std::cout << "Syncing link data to device..." << std::endl;
-  context.link_data.sync_to_device(); // NGP DATA ISN'T SAFE ACROSS MOD CYCLES
+  context.link_data.sync_coo_to_device();
 
   Kokkos::fence();
   std::cout << "Setup complete." << std::endl;
@@ -1073,34 +1072,34 @@ void run_test(ankerl::nanobench::Bench& bench, const TestParameters& params) {
   context.link_data.get_or_create_crs_partitions(context.link_meta_data->universal_link_part());
   std::cout << "Subsequent_get_or_create_crs_partitions() time: " << timer.seconds() << " seconds." << std::endl;
 
-  // Benchmark is_crs_connectivity_up_to_date()
+  // Benchmark is_crs_up_to_date()
   timer.reset();
-  bool is_up_to_date = context.link_data.is_crs_connectivity_up_to_date();
+  bool is_up_to_date = context.link_data.is_crs_up_to_date();
   MUNDY_THROW_REQUIRE(!is_up_to_date, std::logic_error,
-                      "We have created COO connectivity but not updated the CRS, so is_crs_connectivity_up_to_date() "
+                      "We have created COO connectivity but not updated the CRS, so is_crs_up_to_date() "
                       "should return false.");
-  std::cout << "is_crs_connectivity_up_to_date() time: " << timer.seconds() << " seconds." << std::endl;
+  std::cout << "is_crs_up_to_date() time: " << timer.seconds() << " seconds." << std::endl;
 
-  // Benchmark update_crs_connectivity()
+  // Benchmark update_crs_from_coo()
   timer.reset();
-  context.link_data.update_crs_connectivity();
-  std::cout << "update_crs_connectivity() time: " << timer.seconds() << " seconds." << std::endl;
+  context.link_data.update_crs_from_coo();
+  std::cout << "update_crs_from_coo() time: " << timer.seconds() << " seconds." << std::endl;
 
   timer.reset();
-  context.link_data.update_crs_connectivity();  // Should perform is_crs_connectivity_up_to_date and return early.
+  context.link_data.update_crs_from_coo();  // Should perform is_crs_up_to_date and return early.
   std::cout << "Subsequent_update_crs_connectivity() time: " << timer.seconds() << " seconds." << std::endl;
 
   randomly_modify_links(context, params);
-  context.link_data.sync_to_device();
+  context.link_data.sync_coo_to_device();
 
-  is_up_to_date = context.link_data.is_crs_connectivity_up_to_date();
+  is_up_to_date = context.link_data.is_crs_up_to_date();
   MUNDY_THROW_REQUIRE(!is_up_to_date, std::logic_error,
-                      "Supposedly, we have marked one bucket per partition per rank as dirty, so is_crs_connectivity_up_to_date() "
+                      "Supposedly, we have marked one bucket per partition per rank as dirty, so is_crs_up_to_date() "
                       "should return false.");
 
   timer.reset();
-  context.link_data.update_crs_connectivity();  // Should only update the one dirty bucket per rank per partition.
-  std::cout << "update_crs_connectivity() after marking one bucket per partition per rank as dirty took "
+  context.link_data.update_crs_from_coo();  // Should only update the one dirty bucket per rank per partition.
+  std::cout << "update_crs_from_coo() after marking one bucket per partition per rank as dirty took "
             << timer.seconds() << " seconds." << std::endl;
 }
 

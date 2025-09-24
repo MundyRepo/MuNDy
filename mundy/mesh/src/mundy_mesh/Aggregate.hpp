@@ -44,36 +44,37 @@
 #include <mundy_mesh/BulkData.hpp>       // for mundy::mesh::BulkData
 #include <mundy_mesh/FieldViews.hpp>     // for mundy::mesh::vector3_field_data, mundy::mesh::quaternion_field_data
 #include <mundy_mesh/fmt_stk_types.hpp>  // for STK-compatible fmt::format
+#include <mundy_mesh/ForEachEntity.hpp>  // for mundy::mesh::for_each_entity_run
 
 namespace mundy {
 
 namespace mesh {
 
-//! \name Our Tags
+//! \name Our Tags (types never need to be complete)
 //@{
 
-struct CENTER {};
-struct POSITION {};
+struct CENTER;
+struct POSITION;
 
-struct RADIUS {};
-struct COLLISION_RADIUS {};
-struct HYDRO_RADIUS {};
+struct RADIUS;
+struct COLLISION_RADIUS;
+struct HYDRO_RADIUS;
 
-struct ORIENT {};
-struct DIRECTION {};
+struct ORIENT;
+struct DIRECTION;
 
-struct LIN_VEL {};
-struct ANG_VEL {};
-struct VELOCITY {};
-struct OMEGA {};
+struct LIN_VEL;
+struct ANG_VEL;
+struct VELOCITY;
+struct OMEGA;
 
-struct FORCE {};
-struct TORQUE {};
-struct MASS {};
-struct DENSITY {};
+struct FORCE;
+struct TORQUE;
+struct MASS;
+struct DENSITY;
 
-struct RNG_COUNTER {};
-struct LINKED_ENTITIES {};
+struct RNG_COUNTER;
+struct LINKED_ENTITIES;
 //@}
 
 //! \name Components
@@ -1276,7 +1277,7 @@ class Aggregate {
       f(view);
     };
 
-    stk::mesh::for_each_entity_run(agg.bulk_data(), agg.rank(), sel, wrapped_functor);
+    ::mundy::mesh::for_each_entity_run(agg.bulk_data(), agg.rank(), sel, wrapped_functor);
   }
 
   /// \brief Apply a functor on the EntityView of each entity in the current data aggregate
@@ -1290,7 +1291,7 @@ class Aggregate {
       f(view);
     };
 
-    stk::mesh::for_each_entity_run(agg.bulk_data(), agg.rank(), agg.selector(), wrapped_functor);
+    ::mundy::mesh::for_each_entity_run(agg.bulk_data(), agg.rank(), agg.selector(), wrapped_functor);
   }
 
  private:
@@ -1447,7 +1448,7 @@ class NgpAggregate {
     auto local_ngp_mesh = agg.ngp_mesh();
     impl::NgpFunctorWrapper<our_t, Functor> wrapper(agg, f);
     stk::mesh::Selector sel = agg.selector() & subset_selector;
-    stk::mesh::for_each_entity_run(local_ngp_mesh, agg.rank(), sel, wrapper);
+    ::mundy::mesh::for_each_entity_run(local_ngp_mesh, agg.rank(), sel, wrapper);
   }
 
   /// \brief Apply a functor on the EntityView of each entity in the current data aggregate
@@ -1458,7 +1459,7 @@ class NgpAggregate {
 
     auto local_ngp_mesh = agg.ngp_mesh();
     impl::NgpFunctorWrapper<our_t, Functor> wrapper(agg, f);
-    stk::mesh::for_each_entity_run(local_ngp_mesh, agg.rank(), agg.selector(), wrapper);
+    ::mundy::mesh::for_each_entity_run(local_ngp_mesh, agg.rank(), agg.selector(), wrapper);
   }
 
  private:

@@ -34,7 +34,6 @@
 // Trilinos
 #include <stk_mesh/base/EntityLess.hpp>                         // for stk::mesh::EntityLess
 #include <stk_mesh/base/FieldParallel.hpp>                      // for stk::mesh::communicate_field_data
-#include <stk_mesh/base/ForEachEntity.hpp>                      // for mundy::mesh::for_each_entity_run
 #include <stk_mesh/baseImpl/ForEachEntityLoopAbstractions.hpp>  // for stk::mesh::impl::for_each_selected_entity_run_no_threads
 #include <stk_topology/topology.hpp>                            // for stk::topology
 #include <stk_util/parallel/CommSparse.hpp>                     // for stk::CommSparse
@@ -48,6 +47,7 @@
 #include <mundy_meta/FieldReqs.hpp>         // for mundy::meta::FieldReqs
 #include <mundy_meta/MeshReqs.hpp>          // for mundy::meta::MeshReqs
 #include <mundy_meta/PartReqs.hpp>          // for mundy::meta::PartReqs
+#include <mundy_mesh/ForEachEntity.hpp>  // for mundy::mesh::for_each_entity_run
 
 namespace mundy {
 
