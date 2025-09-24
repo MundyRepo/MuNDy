@@ -72,6 +72,18 @@ template <typename FunctionToRunPerLink>
 void for_each_link_run(const NgpLinkData &ngp_link_data, const FunctionToRunPerLink &functor) {
   for_each_link_run(ngp_link_data, ngp_link_data.link_meta_data().universal_link_part(), functor);
 }
+
+template <typename FunctionToRunPerLink>
+void for_each_link_run(const LinkData &link_data, const stk::mesh::Selector &linker_subset_selector,
+                       const FunctionToRunPerLink &functor) {
+  ::mundy::mesh::for_each_entity_run(
+      link_data.bulk_data(), link_data.link_rank(),
+      link_data.link_meta_data().universal_link_part() & linker_subset_selector, functor);
+}
+template <typename FunctionToRunPerLink>
+void for_each_link_run(const LinkData &link_data, const FunctionToRunPerLink &functor) {
+  for_each_link_run(link_data, link_data.link_meta_data().universal_link_part(), functor);
+}
 //@}
 
 }  // namespace mesh

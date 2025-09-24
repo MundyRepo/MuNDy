@@ -137,6 +137,7 @@ template <size_t Dimensionality>
 void declare_and_validate_relations(const TestContext& context,
                                     const LinkInitializationData<Dimensionality>& link_init_data, LinkData& link_data) {
   unsigned num_links_this_part = link_init_data.link_and_linked_entities.size();
+  std::cout << "num_links_this_part: " << num_links_this_part << std::endl;
   for (unsigned i = 0; i < num_links_this_part; ++i) {
     const auto& entities = link_init_data.link_and_linked_entities[i];
     const auto& entity_ranks = link_init_data.linked_entity_ranks[i];
@@ -154,22 +155,68 @@ void declare_and_validate_relations(const TestContext& context,
       EXPECT_EQ(link_data.coo_data().get_linked_entity(entities[0], j), entities[j + 1]);
       EXPECT_EQ(link_data.coo_data().get_linked_entity_rank(entities[0], j), entity_ranks[j]);
       EXPECT_EQ(link_data.coo_data().get_linked_entity_id(entities[0], j), context.bulk_data->entity_key(entities[j + 1]).id());
+      std::cout << i << " " << link_data.coo_data().get_linked_entity(entities[0], j) << std::endl;
     }
   }
 
   link_data.coo_modify_on_host();
+
+  std::cout << "get_updated_ngp_link_data" << std::endl;
   NgpLinkData &ngp_link_data = get_updated_ngp_link_data(link_data);
-  EXPECT_FALSE(ngp_link_data.is_crs_up_to_date()) << "The modification should have dirtied the CRS connectivity.";
+
+  std::cout << "is_crs_up_to_date" << std::endl;
+  EXPECT_FALSE(ngp_link_data.is_crs_up_to_date()) << "The modification should have dirtied the CRS connectivity and we should detect that, despite the host being modified and not the device.";
 }
 
 void validate_ngp_link_data(const TestContext& context, LinkData& link_data) {
-  unsigned universal_link_ordinal = link_data.link_meta_data().universal_link_part().mesh_meta_data_ordinal();
-  unsigned part_a_ordinal = context.link_part_a->mesh_meta_data_ordinal();
-  unsigned part_b_ordinal = context.link_part_b->mesh_meta_data_ordinal();
-  unsigned part_c_ordinal = context.link_part_c->mesh_meta_data_ordinal();
+  stk::mesh::Part& universal_link_part = link_data.link_meta_data().universal_link_part();
+  stk::mesh::Part& link_part_a = *context.link_part_a;
+  stk::mesh::Part& link_part_b = *context.link_part_b;
+  stk::mesh::Part& link_part_c = *context.link_part_c;
+  unsigned universal_link_ordinal = universal_link_part.mesh_meta_data_ordinal();
+  unsigned part_a_ordinal = link_part_a.mesh_meta_data_ordinal();
+  unsigned part_b_ordinal = link_part_b.mesh_meta_data_ordinal();
+  unsigned part_c_ordinal = link_part_c.mesh_meta_data_ordinal();
+
+  // First check on the host
+  for_each_link_run(
+      link_data, *context.link_part_b, [&](const stk::mesh::BulkData& bulk_data, const stk::mesh::Entity& linker) {
+        // Check the link itself
+        const stk::mesh::Bucket &linker_bucket = bulk_data.bucket(linker);
+        MUNDY_THROW_REQUIRE(bulk_data.is_valid(linker), std::runtime_error, "Linker is not valid.");
+        MUNDY_THROW_REQUIRE(linker_bucket.member(universal_link_ordinal), std::runtime_error, "Part membership error");
+        MUNDY_THROW_REQUIRE(linker_bucket.member(part_b_ordinal), std::runtime_error, "Part membership error");
+        MUNDY_THROW_REQUIRE(linker_bucket.member(part_c_ordinal), std::runtime_error, "Part membership error");
+        MUNDY_THROW_REQUIRE(!linker_bucket.member(part_a_ordinal), std::runtime_error, "Part membership error");
+
+        // Check that all downward linked entities are non-empty
+        unsigned dimensionality_part_b = 3;
+        for (unsigned d = 0; d < dimensionality_part_b; ++d) {
+          stk::mesh::Entity linked_entity = link_data.coo_data().get_linked_entity(linker, d);
+          MUNDY_THROW_REQUIRE(bulk_data.is_valid(linked_entity), std::runtime_error, "Linked entity is not valid.");
+          MUNDY_THROW_REQUIRE(linked_entity != stk::mesh::Entity(), std::runtime_error,
+                              "Fetching downward link failed.");
+        }
+      });
 
   NgpLinkData &ngp_link_data = get_updated_ngp_link_data(link_data);
   ngp_link_data.coo_sync_to_device();
+
+  stk::mesh::Entity::entity_value_type linked_entity_field_sum_host = 
+    ::mundy::mesh::field_sum<stk::mesh::Entity::entity_value_type>(
+      impl::get_linked_entities_field(link_data.link_meta_data()), *context.link_part_b,
+      stk::ngp::HostExecSpace());
+  
+  stk::mesh::Entity::entity_value_type linked_entity_field_sum_device = 
+    ::mundy::mesh::field_sum<stk::mesh::Entity::entity_value_type>(
+      impl::get_linked_entities_field(link_data.link_meta_data()), *context.link_part_b, 
+        stk::ngp::ExecSpace());
+  std::cout << "linked_entity_field_sum_host = " << linked_entity_field_sum_host << std::endl;
+  std::cout << "linked_entity_field_sum_device = " << linked_entity_field_sum_device << std::endl;
+  
+  MUNDY_THROW_REQUIRE(linked_entity_field_sum_host != 0, std::runtime_error, "host data was likely not properly initialized.");
+  MUNDY_THROW_REQUIRE(linked_entity_field_sum_device != 0, std::runtime_error, "device data wasn't properly synced.");
+  MUNDY_THROW_REQUIRE(linked_entity_field_sum_host == linked_entity_field_sum_device, std::runtime_error, "device data wasn't properly synced.");
 
   for_each_link_run(
       ngp_link_data, *context.link_part_b, KOKKOS_LAMBDA(const stk::mesh::FastMeshIndex& linker_index) {
@@ -330,18 +377,24 @@ void basic_usage_test() {
   context.bulk_data->modification_end();
 
   // Declare and validate relations for 2-linked entities (works even though we are outside of a modification block)
+  std::cout << "declare_and_validate_relations" << std::endl;
   declare_and_validate_relations(context, link_init_data_a, link_data);
 
   // Declare and validate relations for 3-linked entities
   declare_and_validate_relations(context, link_init_data_b, link_data);
 
   // NGP stuff
+  std::cout << "validate_ngp_link_data1" << std::endl;
   validate_ngp_link_data(context, link_data);
+  std::cout << "modify_ngp_link_data" << std::endl;
   modify_ngp_link_data(context, link_data);
+  std::cout << "validate_ngp_link_data2" << std::endl;
   validate_ngp_link_data(context, link_data);
 
   // Check the CRS connectivity
+  std::cout << "validate_crs_connectivity1" << std::endl;
   validate_crs_connectivity(context, link_init_data_a, link_data);
+  std::cout << "validate_crs_connectivity2" << std::endl;
   validate_crs_connectivity(context, link_init_data_b, link_data);
 }
 

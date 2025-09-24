@@ -126,14 +126,18 @@ class NgpCOOToCRSSynchronizerT {
     //  1. The CRS connectivity of a selected partition is dirty.
     //    - Team loop over each selected partition and thread loop over each bucket in the partition. If any bucket is
     //    dirty, atomically set the needs updated flag to true.
+    std::cout << "is_crs_up_to_date: Checking if any crs buckets are dirty..." << std::endl;
     const NgpLinkCRSPartitionView &partitions = crs_data.get_or_create_crs_partitions(link_subset_selector);
     unsigned num_partitions = partitions.extent(0);
     bool crs_buckets_up_to_date = true;
     for (unsigned i = 0; i < num_partitions; ++i) {
+      std::cout << i << " / " << num_partitions << std::endl;
       const NgpLinkCRSPartitionT<NgpMemSpace> &partition = partitions(i);
       for (stk::topology::rank_t rank = stk::topology::NODE_RANK; rank < stk::topology::NUM_RANKS; ++rank) {
+        std::cout << "  rank: " << rank << std::endl;
         const unsigned num_buckets = partition.num_buckets(rank);
         for (unsigned bucket_index = 0; bucket_index < num_buckets; ++bucket_index) {
+          std::cout << "    bucket: " << bucket_index << " / " << num_buckets << std::endl;
           const auto &crs_bucket_conn = partition.get_crs_bucket_conn(rank, bucket_index);
           if (impl::get_dirty_flag(crs_bucket_conn)) {
             crs_buckets_up_to_date = false;
@@ -180,12 +184,14 @@ class NgpCOOToCRSSynchronizerT {
 
     if (crs_buckets_up_to_date) {  // No need to perform the second check if the first fails.
       //  2. A selected link is out-of-date.
+      std::cout << "is_crs_up_to_date: Checking if any links are out-of-date..." << std::endl;
       int link_needs_updated_count = ::mundy::mesh::field_sum<int>(
           impl::get_link_crs_needs_updated_field(crs_data.link_meta_data()), link_subset_selector, stk::ngp::ExecSpace());
       bool links_up_to_date = (link_needs_updated_count == 0);
       return links_up_to_date;
     }
 
+    std::cout << "is_crs_up_to_date: CRS buckets are dirty." << std::endl;
     Kokkos::Profiling::popRegion();
     return crs_buckets_up_to_date;
   }

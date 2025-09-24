@@ -175,12 +175,6 @@ TEST(MeshBuilderTest, SetSpatialDimensionAndEntityRankNames) {
   EXPECT_EQ(expected_rank_names, bulk_data_ptr->mesh_meta_data().entity_rank_names());
 }
 
-TEST(MeshBuilderTest, BulkDataAddFmwkDataDefault) {
-  std::shared_ptr<stk::mesh::BulkData> bulk_data_ptr = MeshBuilder(MPI_COMM_WORLD).create_bulk_data();
-
-  EXPECT_FALSE(bulk_data_ptr->add_fmwk_data());
-}
-
 TEST(MeshBuilderTest, BulkDataAddFmwkData) {
   MeshBuilder builder(MPI_COMM_WORLD);
   builder.set_add_fmwk_data_flag(true);

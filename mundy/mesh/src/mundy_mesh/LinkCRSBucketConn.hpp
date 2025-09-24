@@ -89,6 +89,17 @@ class LinkCRSBucketConnT {  // Raw data in any space.
         sparse_connectivity_("sparse_connectivity", 0) {
   }
 
+  LinkCRSBucketConnT(const stk::mesh::Bucket &bucket)
+      : dirty_(false),
+        bucket_size_(static_cast<unsigned>(bucket.size())),
+        bucket_capacity_(static_cast<unsigned>(bucket.capacity())),
+        bucket_id_(bucket.bucket_id()),
+        bucket_rank_(bucket.entity_rank()),
+        num_connected_links_("num_connected_links", bucket.capacity()),
+        sparse_connectivity_offsets_("sparse_connectivity_offsets", bucket.capacity() + 1),
+        sparse_connectivity_("sparse_connectivity", 0) {
+  }
+
   KOKKOS_INLINE_FUNCTION
   unsigned bucket_id() const noexcept {
     return bucket_id_;
@@ -119,25 +130,6 @@ class LinkCRSBucketConnT {  // Raw data in any space.
   KOKKOS_INLINE_FUNCTION
   unsigned num_connected_links(unsigned offset_into_bucket) const {
     return num_connected_links_(offset_into_bucket);
-  }
-
-  void initialize_bucket_attributes(const stk::mesh::Bucket &bucket) {
-    dirty_ = false;
-    bool bucket_capacity_changed = bucket.capacity() != bucket_capacity_;
-    bucket_id_ = bucket.bucket_id();
-    bucket_rank_ = bucket.entity_rank();
-    bucket_capacity_ = bucket.capacity();
-    bucket_size_ = bucket.size();
-
-    if (bucket_capacity_changed) {
-      // Note, we resize our bucket views to be the same size as the bucket *capacity*, not the bucket *size*,
-      // since the bucket size changes more frequently than the capacity due to STK's dynamicly adapted capacity.
-      // This also means that there is no need for us to invent our own capacity management scheme.
-      Kokkos::realloc(num_connected_links_, bucket_capacity_);
-      Kokkos::realloc(sparse_connectivity_offsets_, bucket_capacity_ + 1);
-      Kokkos::deep_copy(num_connected_links_, 0);
-      Kokkos::deep_copy(sparse_connectivity_offsets_, 0);
-    }
   }
 
   void dump() const {

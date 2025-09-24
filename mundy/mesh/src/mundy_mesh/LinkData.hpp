@@ -282,12 +282,18 @@ class LinkData {
   void crs_modify_on_host() {
     MUNDY_THROW_REQUIRE(false, std::invalid_argument,
                         "The host CRS is a read-only copy of the device CRS and may not be modified directly.");
+    if (crs_has_device_data()) {
+      crs_synchronizer_->modify_on_host();
+    }
   }
   void crs_modify_on_device() {
     MUNDY_THROW_REQUIRE(crs_modified_on_host_ == false, std::invalid_argument,
                         "The device CRS may not be modified while the host CRS is modified."
                         "Either sync the host CRS to device or clear the host modification state.");
     crs_modified_on_device_ = true;
+    if (crs_has_device_data()) {
+      crs_synchronizer_->modify_on_device();
+    }
   }
   bool crs_need_sync_to_host() const {
     return crs_modified_on_device_;
@@ -353,12 +359,18 @@ class LinkData {
                         "The host COO may not be modified while the device COO is also modified."
                         "Either sync the device COO to host or clear the device modification state.");
     coo_modified_on_host_ = true;
+    if (coo_has_device_data()) {
+      coo_synchronizer_->modify_on_host();
+    }
   }
   void coo_modify_on_device() {
     MUNDY_THROW_REQUIRE(coo_modified_on_host_ == false, std::invalid_argument,
                         "The device COO may not be modified while the host COO is also modified."
                         "Either sync the host COO to device or clear the host modification state.");
     coo_modified_on_device_ = true;
+    if (coo_has_device_data()) {
+      coo_synchronizer_->modify_on_device();
+    }
   }
   bool coo_need_sync_to_host() const {
     return coo_modified_on_device_;
@@ -380,8 +392,11 @@ class LinkData {
     }
   }
   void coo_sync_to_device() {
+    std::cout << "coo_sync_to_device" << std::endl;
     if (coo_need_sync_to_device()) {
+      std::cout << "Needs sync to device" << std::endl;
       if (coo_has_device_data()) {
+        std::cout << "Has device data" << std::endl;
         coo_synchronizer_->update_post_mesh_mod();
         coo_synchronizer_->sync_to_device();
       } else {
