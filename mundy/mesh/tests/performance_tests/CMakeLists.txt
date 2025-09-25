@@ -56,12 +56,12 @@ tribits_add_executable(
     CATEGORIES PERFORMANCE
     )
 
-# tribits_add_executable(
-#     PerfTestNgpLinkData
-#     SOURCES
-#     PerfTestNgpLinkData.cpp
-#     CATEGORIES PERFORMANCE
-#     )
+tribits_add_executable(
+    PerfTestNgpLinkData
+    SOURCES
+    PerfTestNgpLinkData.cpp
+    CATEGORIES PERFORMANCE
+    )
 
 # These tests require Trilinos 16.0.0 or later
 # They still get built but will simply print a warning and return

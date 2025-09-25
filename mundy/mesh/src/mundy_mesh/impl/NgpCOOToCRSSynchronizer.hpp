@@ -53,7 +53,6 @@
 // Mundy libs
 #include <mundy_core/throw_assert.hpp>        // for MUNDY_THROW_ASSERT
 #include <mundy_mesh/ForEachEntity.hpp>       // for mundy::mesh::for_each_entity_run
-#include <mundy_mesh/GetNgpLinkData.hpp>      // for mundy::mesh::get_updated_data
 #include <mundy_mesh/MetaData.hpp>            // for mundy::mesh::MetaData
 #include <mundy_mesh/LinkMetaData.hpp>     // for mundy::mesh::LinkMetaData
 #include <mundy_mesh/LinkCRSPartition.hpp>  // for mundy::mesh::LinkCRSPartition
@@ -255,7 +254,7 @@ class NgpCOOToCRSSynchronizerT {
     flag_dirty_linked_buckets_of_modified_links(crs_data, coo_data, link_subset_selector);
 
     reset_dirty_linked_buckets(crs_data, coo_data, link_subset_selector);
-
+    
     gather_part_1_count(crs_data, coo_data, link_subset_selector);
 
     gather_part_2_partial_sum(crs_data, coo_data, link_subset_selector);
@@ -265,7 +264,6 @@ class NgpCOOToCRSSynchronizerT {
     scatter_part_2_fill(crs_data, coo_data, link_subset_selector);
 
     finalize_crs_update(crs_data, coo_data, link_subset_selector);
-
     Kokkos::Profiling::popRegion();
 
 // If in debug, check consistency
@@ -543,6 +541,7 @@ class NgpCOOToCRSSynchronizerT {
 
     // Resize the bucket sparse connectivity arrays
     const NgpLinkCRSPartitionView &crs_partitions = crs_data.get_or_create_crs_partitions(link_subset_selector);
+#pragma omp parallel for
     for (unsigned partition_id = 0; partition_id < crs_partitions.extent(0); ++partition_id) {
       NgpLinkCRSPartitionT<NgpMemSpace> &crs_partition = crs_partitions(partition_id);
       for (stk::topology::rank_t rank = stk::topology::NODE_RANK; rank < stk::topology::NUM_RANKS; ++rank) {

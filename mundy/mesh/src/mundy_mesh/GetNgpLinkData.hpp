@@ -51,7 +51,7 @@ namespace mesh {
 /// for the lifetime of the bulk data. Consequently, you must use the same NgpMemSpace for ALL get_updated_ngp_* calls
 /// for a given bulk data. We follow the same design here with the NgpLinkDataT.
 template <typename NgpMemSpace = stk::ngp::MemSpace>
-inline NgpLinkDataT<NgpMemSpace>& get_updated_ngp_link_data(const LinkData& link_data) {
+NgpLinkDataT<NgpMemSpace>& get_updated_ngp_link_data(const LinkData& link_data) {
   static_assert(Kokkos::SpaceAccessibility<NgpMemSpace, stk::ngp::MemSpace>::accessible,
                 "In a GPU-enabled build, get_updated_ngp_mesh requires a device-accessible memory-space.");
   MUNDY_THROW_REQUIRE(link_data.is_valid(), std::invalid_argument, "Given link data is not valid.");
@@ -81,7 +81,7 @@ inline NgpLinkDataT<NgpMemSpace>& get_updated_ngp_link_data(const LinkData& link
   return std::any_cast<NgpLinkDataT<NgpMemSpace>&>(any_ngp_link_data);
 }
 
-inline NgpLinkData& get_updated_ngp_link_data(const LinkData& link_data) {
+NgpLinkData& get_updated_ngp_link_data(const LinkData& link_data) {
   return get_updated_ngp_link_data<stk::ngp::MemSpace>(link_data);
 }
 

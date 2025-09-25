@@ -216,6 +216,7 @@ class LinkCRSDataT {  // Raw data in any space
 
         // 4. Create a new LinkCRSPartition (for each unique new key) and store it within the all_crs_partitions_ view
         stk::mesh::Ordinal partition_id = static_cast<stk::mesh::Ordinal>(num_previous_partitions);
+        Kokkos::Timer timer;
         for (const PartitionKey &key : new_keys) {
           new (&all_crs_partitions_(partition_id))
               LinkCRSPartition(partition_id, key, link_rank(), get_linker_dimensionality(key),
@@ -223,6 +224,7 @@ class LinkCRSDataT {  // Raw data in any space
           partition_key_to_id_map_[key] = partition_id;
           ++partition_id;
         }
+        std::cout << "Created " << num_new_partitions << " new partitions in " << timer.seconds() << " seconds." << std::endl;
       }
 
       // 5. Create a new view of CRS partitions of size equal to the number of unique keys (both existing and new)
@@ -451,8 +453,8 @@ class LinkCRSDataT {  // Raw data in any space
   //@{
 
   mutable LinkCRSPartitionView all_crs_partitions_;
-  LinkBucketToPartitionIdMap stk_link_bucket_to_partition_id_map_;
   LinkBucketToPartitionIdMap::HostMirror stk_link_bucket_to_partition_id_map_host_;
+  LinkBucketToPartitionIdMap stk_link_bucket_to_partition_id_map_;
   //@}
 };  // LinkCRSDataT
 
