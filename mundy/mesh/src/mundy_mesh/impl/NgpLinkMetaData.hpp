@@ -33,13 +33,13 @@
 // Trilinos libs
 #include <Trilinos_version.h>  // for TRILINOS_MAJOR_MINOR_VERSION
 
-#include <stk_mesh/base/Entity.hpp>    // for stk::mesh::Entity
-#include <stk_mesh/base/Field.hpp>     // for stk::mesh::Field
-#include <stk_mesh/base/Part.hpp>      // stk::mesh::Part
-#include <stk_mesh/base/Selector.hpp>  // stk::mesh::Selector
-#include <stk_mesh/base/Types.hpp>     // for stk::mesh::EntityRank
-#include <stk_mesh/base/GetNgpField.hpp>     // for stk::mesh::get_updated_ngp_field
-#include <stk_util/ngp/NgpSpaces.hpp>  // for stk::ngp::HostMemSpace, stk::ngp::UVMMemSpace
+#include <stk_mesh/base/Entity.hpp>       // for stk::mesh::Entity
+#include <stk_mesh/base/Field.hpp>        // for stk::mesh::Field
+#include <stk_mesh/base/GetNgpField.hpp>  // for stk::mesh::get_updated_ngp_field
+#include <stk_mesh/base/Part.hpp>         // stk::mesh::Part
+#include <stk_mesh/base/Selector.hpp>     // stk::mesh::Selector
+#include <stk_mesh/base/Types.hpp>        // for stk::mesh::EntityRank
+#include <stk_util/ngp/NgpSpaces.hpp>     // for stk::ngp::HostMemSpace, stk::ngp::UVMMemSpace
 
 // Mundy libs
 #include <mundy_mesh/LinkMetaData.hpp>  // for mundy::mesh::LinkMetaData
@@ -50,7 +50,7 @@ namespace mesh {
 
 namespace impl {
 
-template<typename NgpMemSpace>
+template <typename NgpMemSpace>
 class NgpLinkMetaDataT {
  public:
   //! \name Type aliases
@@ -88,27 +88,22 @@ class NgpLinkMetaDataT {
   NgpLinkMetaDataT(LinkMetaData &link_meta_data)
       : link_meta_data_ptr_(&link_meta_data),
         link_rank_(link_meta_data.link_rank()),
-        ngp_linked_entities_field_(
-            stk::mesh::get_updated_ngp_field<linked_entities_field_t::value_type>(
-                impl::get_linked_entities_field(link_meta_data))),
-        ngp_linked_entities_crs_field_(
-            stk::mesh::get_updated_ngp_field<linked_entities_field_t::value_type>(
-                impl::get_linked_entities_crs_field(link_meta_data))),
-        ngp_linked_entity_ids_field_(
-            stk::mesh::get_updated_ngp_field<linked_entity_ids_field_t::value_type>(
-                impl::get_linked_entity_ids_field(link_meta_data))),
-        ngp_linked_entity_ranks_field_(
-            stk::mesh::get_updated_ngp_field<linked_entity_ranks_field_t::value_type>(
-                impl::get_linked_entity_ranks_field(link_meta_data))),
+        ngp_linked_entities_field_(stk::mesh::get_updated_ngp_field<linked_entities_field_t::value_type>(
+            impl::get_linked_entities_field(link_meta_data))),
+        ngp_linked_entities_crs_field_(stk::mesh::get_updated_ngp_field<linked_entities_field_t::value_type>(
+            impl::get_linked_entities_crs_field(link_meta_data))),
+        ngp_linked_entity_ids_field_(stk::mesh::get_updated_ngp_field<linked_entity_ids_field_t::value_type>(
+            impl::get_linked_entity_ids_field(link_meta_data))),
+        ngp_linked_entity_ranks_field_(stk::mesh::get_updated_ngp_field<linked_entity_ranks_field_t::value_type>(
+            impl::get_linked_entity_ranks_field(link_meta_data))),
         ngp_linked_entity_bucket_ids_field_(
             stk::mesh::get_updated_ngp_field<linked_entity_bucket_ids_field_t::value_type>(
                 impl::get_linked_entity_bucket_ids_field(link_meta_data))),
         ngp_linked_entity_bucket_ords_field_(
             stk::mesh::get_updated_ngp_field<linked_entity_bucket_ords_field_t::value_type>(
                 impl::get_linked_entity_bucket_ords_field(link_meta_data))),
-        ngp_link_crs_needs_updated_field_(
-            stk::mesh::get_updated_ngp_field<link_crs_needs_updated_field_t::value_type>(
-                impl::get_link_crs_needs_updated_field(link_meta_data))),
+        ngp_link_crs_needs_updated_field_(stk::mesh::get_updated_ngp_field<link_crs_needs_updated_field_t::value_type>(
+            impl::get_link_crs_needs_updated_field(link_meta_data))),
         ngp_link_marked_for_destruction_field_(
             stk::mesh::get_updated_ngp_field<link_marked_for_destruction_field_t::value_type>(
                 impl::get_link_marked_for_destruction_field(link_meta_data))),
@@ -252,7 +247,6 @@ class NgpLinkMetaDataT {
   //@}
 
  private:
-
   //! \name Internal members
   //@{
 
@@ -273,7 +267,7 @@ class NgpLinkMetaDataT {
 using NgpLinkMetaData = NgpLinkMetaDataT<stk::ngp::MemSpace>;
 
 /// \brief Get an updated ngp link meta data object.
-template<typename NgpMemSpace = stk::ngp::MemSpace>
+template <typename NgpMemSpace = stk::ngp::MemSpace>
 inline NgpLinkMetaDataT<NgpMemSpace> get_updated_ngp_link_meta_data(LinkMetaData &link_meta_data) {
   return NgpLinkMetaDataT<NgpMemSpace>(link_meta_data);
 }

@@ -31,15 +31,15 @@
 #include <stk_mesh/base/Types.hpp>   // for stk::mesh::EntityRank
 
 // Mundy libs
-#include <mundy_core/throw_assert.hpp>                // for MUNDY_THROW_ASSERT
-#include <mundy_mesh/BulkData.hpp>                    // for mundy::mesh::BulkData
-#include <mundy_mesh/LinkCOOData.hpp>                 // for mundy::mesh::LinkCOOData/NgpLinkCOOData
-#include <mundy_mesh/LinkCRSData.hpp>                 // for mundy::mesh::LinkCRSData/NgpLinkCRSData
-#include <mundy_mesh/LinkData.hpp>                    // for mundy::mesh::LinkData
-#include <mundy_mesh/LinkMetaData.hpp>                // for mundy::mesh::LinkMetaData
-#include <mundy_mesh/MetaData.hpp>                    // for mundy::mesh::MetaData
-#include <mundy_mesh/Types.hpp>                       // for mundy::mesh::NgpDataAccessTag
-#include <mundy_mesh/impl/NgpCOOToCRSSynchronizer.hpp> // for mundy::mesh::impl::NgpCOOToCRSSynchronizerT
+#include <mundy_core/throw_assert.hpp>                  // for MUNDY_THROW_ASSERT
+#include <mundy_mesh/BulkData.hpp>                      // for mundy::mesh::BulkData
+#include <mundy_mesh/LinkCOOData.hpp>                   // for mundy::mesh::LinkCOOData/NgpLinkCOOData
+#include <mundy_mesh/LinkCRSData.hpp>                   // for mundy::mesh::LinkCRSData/NgpLinkCRSData
+#include <mundy_mesh/LinkData.hpp>                      // for mundy::mesh::LinkData
+#include <mundy_mesh/LinkMetaData.hpp>                  // for mundy::mesh::LinkMetaData
+#include <mundy_mesh/MetaData.hpp>                      // for mundy::mesh::MetaData
+#include <mundy_mesh/Types.hpp>                         // for mundy::mesh::NgpDataAccessTag
+#include <mundy_mesh/impl/NgpCOOToCRSSynchronizer.hpp>  // for mundy::mesh::impl::NgpCOOToCRSSynchronizerT
 
 namespace mundy {
 
@@ -153,11 +153,11 @@ class NgpLinkDataT {
   //! \name CRS interface
   //@{
 
-  KOKKOS_FUNCTION 
+  KOKKOS_FUNCTION
   NgpLinkCRSDataT<NgpMemSpace> &crs_data() noexcept {
     return ngp_crs_data_;
   }
-  KOKKOS_FUNCTION 
+  KOKKOS_FUNCTION
   const NgpLinkCRSDataT<NgpMemSpace> &crs_data() const noexcept {
     return ngp_crs_data_;
   }
@@ -190,11 +190,11 @@ class NgpLinkDataT {
   //! \name COO interface
   //@{
 
-  KOKKOS_FUNCTION 
+  KOKKOS_FUNCTION
   NgpLinkCOODataT<NgpMemSpace> &coo_data() noexcept {
     return ngp_coo_data_;
   }
-  KOKKOS_FUNCTION 
+  KOKKOS_FUNCTION
   const NgpLinkCOODataT<NgpMemSpace> &coo_data() const noexcept {
     return ngp_coo_data_;
   }

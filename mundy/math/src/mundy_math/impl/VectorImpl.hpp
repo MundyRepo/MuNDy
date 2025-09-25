@@ -102,8 +102,7 @@ KOKKOS_INLINE_FUNCTION constexpr void fill_impl(std::index_sequence<Is...>, AVec
 
 /// \brief Cast (and copy) the vector to a different type
 template <typename U, size_t... Is, typename T, size_t N, ValidAccessor<T> Accessor, typename OwnershipType>
-KOKKOS_INLINE_FUNCTION auto cast_impl(std::index_sequence<Is...>,
-                                      const AVector<T, N, Accessor, OwnershipType>& vec) {
+KOKKOS_INLINE_FUNCTION auto cast_impl(std::index_sequence<Is...>, const AVector<T, N, Accessor, OwnershipType>& vec) {
   return AVector<U, N>{static_cast<U>(vec[Is])...};
 }
 

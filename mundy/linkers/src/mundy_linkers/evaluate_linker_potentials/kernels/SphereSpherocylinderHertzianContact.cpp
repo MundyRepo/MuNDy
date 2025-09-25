@@ -27,18 +27,18 @@
 #include <vector>  // for std::vector
 
 // Trilinos libs
-#include <Teuchos_ParameterList.hpp>        // for Teuchos::ParameterList
-#include <stk_mesh/base/Entity.hpp>         // for stk::mesh::Entity
-#include <stk_mesh/base/Field.hpp>          // for stk::mesh::Field, stl::mesh::field_data
+#include <Teuchos_ParameterList.hpp>  // for Teuchos::ParameterList
+#include <stk_mesh/base/Entity.hpp>   // for stk::mesh::Entity
+#include <stk_mesh/base/Field.hpp>    // for stk::mesh::Field, stl::mesh::field_data
 
 // Mundy libs
 #include <mundy_core/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
 #include <mundy_linkers/evaluate_linker_potentials/kernels/SphereSpherocylinderHertzianContact.hpp>  // for mundy::linkers::...::kernels::SphereSpherocylinderHertzianContact
 #include <mundy_mesh/BulkData.hpp>           // for mundy::mesh::BulkData
 #include <mundy_mesh/FieldViews.hpp>         // for mundy::mesh::vector3_field_data, mundy::mesh::quaternion_field_data
+#include <mundy_mesh/ForEachEntity.hpp>      // for mundy::mesh::for_each_entity_run
 #include <mundy_shapes/Spheres.hpp>          // for mundy::shapes::Spheres
 #include <mundy_shapes/Spherocylinders.hpp>  // for mundy::shapes::Spherocylinders
-#include <mundy_mesh/ForEachEntity.hpp>  // for mundy::mesh::for_each_entity_run
 
 namespace mundy {
 

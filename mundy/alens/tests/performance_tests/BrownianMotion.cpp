@@ -38,19 +38,20 @@ We'll need two MetaMethods: one for computing the brownian motion and one for ta
 #include <openrand/philox.h>
 
 // Trilinos libs
-#include <Kokkos_Core.hpp>                  // for Kokkos::initialize, Kokkos::finalize, Kokkos::Timer
-#include <Teuchos_ParameterList.hpp>        // for Teuchos::ParameterList
-#include <stk_mesh/base/Entity.hpp>         // for stk::mesh::Entity
-#include <stk_mesh/base/Part.hpp>           // for stk::mesh::Part, stk::mesh::intersect
-#include <stk_mesh/base/Selector.hpp>       // for stk::mesh::Selector
-#include <stk_topology/topology.hpp>        // for stk::topology
-#include <stk_util/parallel/Parallel.hpp>   // for stk::parallel_machine_init, stk::parallel_machine_finalize
+#include <Kokkos_Core.hpp>                 // for Kokkos::initialize, Kokkos::finalize, Kokkos::Timer
+#include <Teuchos_ParameterList.hpp>       // for Teuchos::ParameterList
+#include <stk_mesh/base/Entity.hpp>        // for stk::mesh::Entity
+#include <stk_mesh/base/Part.hpp>          // for stk::mesh::Part, stk::mesh::intersect
+#include <stk_mesh/base/Selector.hpp>      // for stk::mesh::Selector
+#include <stk_topology/topology.hpp>       // for stk::topology
+#include <stk_util/parallel/Parallel.hpp>  // for stk::parallel_machine_init, stk::parallel_machine_finalize
 
 // Mundy libs
 #include <mundy_core/MakeStringArray.hpp>       // for mundy::core::make_string_array
 #include <mundy_core/StringLiteral.hpp>         // for mundy::core::StringLiteral and mundy::core::make_string_literal
 #include <mundy_core/throw_assert.hpp>          // for MUNDY_THROW_ASSERT
 #include <mundy_mesh/BulkData.hpp>              // for mundy::mesh::BulkData
+#include <mundy_mesh/ForEachEntity.hpp>         // for mundy::mesh::for_each_entity_run
 #include <mundy_mesh/MetaData.hpp>              // for mundy::mesh::MetaData
 #include <mundy_meta/MetaFactory.hpp>           // for mundy::meta::MetaKernelFactory
 #include <mundy_meta/MetaKernel.hpp>            // for mundy::meta::MetaKernel
@@ -61,7 +62,6 @@ We'll need two MetaMethods: one for computing the brownian motion and one for ta
 #include <mundy_meta/PartReqs.hpp>  // for mundy::meta::PartReqs
 #include <mundy_meta/utils/MeshGeneration.hpp>  // for mundy::meta::utils::generate_class_instance_and_mesh_from_meta_class_requirements
 #include <mundy_shapes/Spheres.hpp>  // for mundy::shapes::Spheres
-#include <mundy_mesh/ForEachEntity.hpp>  // for mundy::mesh::for_each_entity_run
 
 class NodeEuler
     : public mundy::meta::MetaKernelDispatcher<NodeEuler, mundy::meta::make_registration_string("NODE_EULER")> {

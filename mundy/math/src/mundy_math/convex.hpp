@@ -148,7 +148,6 @@ struct KokkosBackend {
   //@}
 
  public:
-  
   KOKKOS_INLINE_FUNCTION static size_t vector_size(const vector_t& x) {
     return x.extent(0);
   }
@@ -204,16 +203,15 @@ struct KokkosBackend {
     MUNDY_THROW_ASSERT(x.extent(0) == y.extent(0), std::invalid_argument, "x and y must have the same size.");
     const bool alpha_is_zero = Kokkos::abs(alpha) < get_zero_tolerance<scalar_t>();
     const bool beta_is_zero = Kokkos::abs(beta) < get_zero_tolerance<scalar_t>();
-    
+
     if (!alpha_is_zero && !beta_is_zero) {
       Kokkos::parallel_for(
           "axpby", Kokkos::RangePolicy<exec_space>(0, x.extent(0)),
           KOKKOS_LAMBDA(const int i) { y(i) = alpha * x(i) + beta * y(i); });
-    } else if(alpha_is_zero && !beta_is_zero) {
+    } else if (alpha_is_zero && !beta_is_zero) {
       Kokkos::parallel_for(
-          "axpby", Kokkos::RangePolicy<exec_space>(0, x.extent(0)),
-          KOKKOS_LAMBDA(const int i) { y(i) *= beta; });
-    } else if(!alpha_is_zero && beta_is_zero) {
+          "axpby", Kokkos::RangePolicy<exec_space>(0, x.extent(0)), KOKKOS_LAMBDA(const int i) { y(i) *= beta; });
+    } else if (!alpha_is_zero && beta_is_zero) {
       Kokkos::parallel_for(
           "axpby", Kokkos::RangePolicy<exec_space>(0, x.extent(0)),
           KOKKOS_LAMBDA(const int i) { y(i) = alpha * x(i); });
@@ -230,16 +228,16 @@ struct KokkosBackend {
                        "x, y, and z must have the same size.");
     const bool alpha_is_zero = Kokkos::abs(alpha) < get_zero_tolerance<scalar_t>();
     const bool beta_is_zero = Kokkos::abs(beta) < get_zero_tolerance<scalar_t>();
-    
+
     if (!alpha_is_zero && !beta_is_zero) {
       Kokkos::parallel_for(
           "wrapped_axpbyz", Kokkos::RangePolicy<exec_space>(0, x.extent(0)),
           KOKKOS_LAMBDA(const int i) { z(i) = wrapper(alpha * x(i) + beta * y(i)); });
-    } else if(alpha_is_zero && !beta_is_zero) {
+    } else if (alpha_is_zero && !beta_is_zero) {
       Kokkos::parallel_for(
           "wrapped_axpbyz", Kokkos::RangePolicy<exec_space>(0, x.extent(0)),
           KOKKOS_LAMBDA(const int i) { z(i) = wrapper(beta * y(i)); });
-    } else if(!alpha_is_zero && beta_is_zero) {
+    } else if (!alpha_is_zero && beta_is_zero) {
       Kokkos::parallel_for(
           "wrapped_axpbyz", Kokkos::RangePolicy<exec_space>(0, x.extent(0)),
           KOKKOS_LAMBDA(const int i) { z(i) = wrapper(alpha * x(i)); });

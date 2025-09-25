@@ -168,14 +168,11 @@ void run_test() {
   bench.relative(true).title("Agg").unit("op").performanceCounters(true).minEpochIterations(1000);
 
   bench.run("direct", [&] {
-    test_direct(bulk_data, sphere_part, node_center_field, node_force_field, node_velocity_field,
-                elem_radius_field);
+    test_direct(bulk_data, sphere_part, node_center_field, node_force_field, node_velocity_field, elem_radius_field);
   });
   bench.run("aggregates", [&] {
-    test_aggregate(bulk_data, sphere_part, node_center_field, node_force_field, node_velocity_field,
-                  elem_radius_field);
+    test_aggregate(bulk_data, sphere_part, node_center_field, node_force_field, node_velocity_field, elem_radius_field);
   });
-
 }
 
 }  // namespace

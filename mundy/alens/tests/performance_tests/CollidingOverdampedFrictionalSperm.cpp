@@ -1878,7 +1878,7 @@ class SpermSimulation {
     mundy::mesh::for_each_entity_run(
         *bulk_data_ptr_, node_rank_, locally_owned_selector,
         [&node_velocity_field, &node_twist_velocity_field, &node_radius_field, &sperm_density, &local_kinetic_energy](
-            const stk::mesh::BulkData &/*bulk_data*/, const stk::mesh::Entity &node) {
+            const stk::mesh::BulkData & /*bulk_data*/, const stk::mesh::Entity &node) {
           // Get the required input fields
           const double node_radius = stk::mesh::field_data(node_radius_field, node)[0];
           const auto node_velocity = mundy::mesh::vector3_field_data(node_velocity_field, node);

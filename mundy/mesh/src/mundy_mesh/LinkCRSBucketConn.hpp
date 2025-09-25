@@ -46,10 +46,10 @@ KOKKOS_INLINE_FUNCTION int &get_dirty_flag(LinkCRSBucketConnT<MemSpace> &bucket_
 template <typename MemSpace>
 KOKKOS_INLINE_FUNCTION const int &get_dirty_flag(const LinkCRSBucketConnT<MemSpace> &bucket_conn);
 
-template <typename MemSpace> 
+template <typename MemSpace>
 KOKKOS_INLINE_FUNCTION unsigned &get_total_num_connected_links(LinkCRSBucketConnT<MemSpace> &bucket_conn);
 
-template <typename MemSpace> 
+template <typename MemSpace>
 KOKKOS_INLINE_FUNCTION const unsigned &get_total_num_connected_links(const LinkCRSBucketConnT<MemSpace> &bucket_conn);
 
 template <typename MemSpace>
@@ -128,7 +128,7 @@ class LinkCRSBucketConnT {  // Raw data in any space.
     return bucket_rank_;
   }
 
-  KOKKOS_INLINE_FUNCTION 
+  KOKKOS_INLINE_FUNCTION
   unsigned total_num_connected_links() const noexcept {
     return total_num_connected_links_;
   }
@@ -231,14 +231,12 @@ KOKKOS_INLINE_FUNCTION const int &get_dirty_flag(const LinkCRSBucketConnT<MemSpa
 }
 
 template <typename MemSpace>
-KOKKOS_INLINE_FUNCTION unsigned &get_total_num_connected_links(
-    LinkCRSBucketConnT<MemSpace> &bucket_conn) {
+KOKKOS_INLINE_FUNCTION unsigned &get_total_num_connected_links(LinkCRSBucketConnT<MemSpace> &bucket_conn) {
   return bucket_conn.total_num_connected_links_;
 }
 
 template <typename MemSpace>
-KOKKOS_INLINE_FUNCTION const unsigned &get_total_num_connected_links(
-    const LinkCRSBucketConnT<MemSpace> &bucket_conn) {
+KOKKOS_INLINE_FUNCTION const unsigned &get_total_num_connected_links(const LinkCRSBucketConnT<MemSpace> &bucket_conn) {
   return bucket_conn.total_num_connected_links_;
 }
 

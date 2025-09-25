@@ -895,8 +895,7 @@ TEST(PeriodicMetric, ShiftImage) {
     for (size_t t = 0; t < num_trials; ++t) {
       // Generate a random lattice vector between -10 and 10 in each direction
       openrand::Philox rng(seed, counter);
-      math::Vector3<int> lattice_vector{rng.uniform<int>(-10, 10),
-                                        rng.uniform<int>(-10, 10),
+      math::Vector3<int> lattice_vector{rng.uniform<int>(-10, 10), rng.uniform<int>(-10, 10),
                                         rng.uniform<int>(-10, 10)};
       EXPECT_TRUE(test_shift_image(type, disjoint_box, lattice_vector, seed, counter, periodic_metric))
           << "Shift image for type " << type << " failed. For the periodic metric.";

@@ -60,19 +60,19 @@ be better to use a contiguous vector of partitions indexed by contiguous i
 */
 
 // C++ core libs
+#include <any>     // for std::any
 #include <vector>  // for std::vector
-#include <any> // for std::any
 
 // Trilinos libs
 #include <Kokkos_Core.hpp>             // for Kokkos::View, KOKKOS_INLINE_FUNCTION
+#include <stk_mesh/base/BulkData.hpp>  // for stk::mesh::BulkData
 #include <stk_mesh/base/Entity.hpp>    // for stk::mesh::Entity
 #include <stk_mesh/base/Field.hpp>     // for stk::mesh::Field
+#include <stk_mesh/base/MetaData.hpp>  // for stk::mesh::MetaData
 #include <stk_mesh/base/Part.hpp>      // stk::mesh::Part
 #include <stk_mesh/base/Selector.hpp>  // stk::mesh::Selector
 #include <stk_mesh/base/Types.hpp>     // for stk::mesh::EntityRank
 #include <stk_util/ngp/NgpSpaces.hpp>  // for stk::ngp::HostMemSpace, stk::ngp::UVMMemSpace
-#include <stk_mesh/base/BulkData.hpp>           // for stk::mesh::BulkData
-#include <stk_mesh/base/MetaData.hpp>           // for stk::mesh::MetaData
 
 // Mundy libs
 #include <mundy_core/throw_assert.hpp>       // for MUNDY_THROW_ASSERT
@@ -132,7 +132,8 @@ class LinkCRSPartitionT {  // Raw data in any space.
       const stk::mesh::BucketVector &buckets = bulk_data.buckets(rank);
       size_t num_buckets = buckets.size();
 
-      linked_buckets_[rank] = LinkCRSBucketConnView(Kokkos::view_alloc(Kokkos::WithoutInitializing, "LinkedBuckets"), num_buckets);
+      linked_buckets_[rank] =
+          LinkCRSBucketConnView(Kokkos::view_alloc(Kokkos::WithoutInitializing, "LinkedBuckets"), num_buckets);
       for (size_t i = 0; i < num_buckets; ++i) {
         new (&linked_buckets_[rank][i]) LinkCRSBucketConn(*buckets[i]);
       }
@@ -296,7 +297,8 @@ class LinkCRSPartitionT {  // Raw data in any space.
 
   stk::mesh::Ordinal id_;    ///< Unique identifier for this partition.
   NgpPartitionKey ngp_key_;  ///< Sorted view of the part ordinals that this partition contains, in NGP memory space.
-  stk::mesh::Selector selector_;     ///< Selector for this partition, derived from the ngp_key_. Must be default constructable, copiable, movable on the device so we use a pointer.
+  stk::mesh::Selector selector_;     ///< Selector for this partition, derived from the ngp_key_. Must be default
+                                     ///< constructable, copiable, movable on the device so we use a pointer.
   stk::mesh::EntityRank link_rank_;  ///< Rank of the linkers in this partition.
   unsigned link_dimensionality_;     ///< Maximum dimensionality of the parts contained in this partition.
   LinkCRSBucketConnView linked_buckets_[stk::topology::NUM_RANKS];  ///< Bucketized CRS connectivity for each rank.
@@ -305,7 +307,7 @@ class LinkCRSPartitionT {  // Raw data in any space.
 
 // Following STK's default naming convention, to make return statements of our functions more readable.
 using LinkCRSPartition = LinkCRSPartitionT<stk::ngp::HostMemSpace>;
-template <typename NgpMemSpace> 
+template <typename NgpMemSpace>
 using NgpLinkCRSPartitionT = LinkCRSPartitionT<NgpMemSpace>;
 using NgpLinkCRSPartition = LinkCRSPartitionT<stk::ngp::MemSpace>;
 

@@ -51,12 +51,12 @@
 #include <stk_util/ngp/NgpSpaces.hpp>             // for stk::ngp::HostMemSpace, stk::ngp::UVMMemSpace
 
 // Mundy libs
-#include <mundy_core/throw_assert.hpp>        // for MUNDY_THROW_ASSERT
-#include <mundy_mesh/ForEachEntity.hpp>       // for mundy::mesh::for_each_entity_run
-#include <mundy_mesh/MetaData.hpp>            // for mundy::mesh::MetaData
-#include <mundy_mesh/LinkMetaData.hpp>     // for mundy::mesh::LinkMetaData
+#include <mundy_core/throw_assert.hpp>      // for MUNDY_THROW_ASSERT
+#include <mundy_mesh/ForEachEntity.hpp>     // for mundy::mesh::for_each_entity_run
 #include <mundy_mesh/LinkCRSPartition.hpp>  // for mundy::mesh::LinkCRSPartition
-#include <mundy_mesh/NgpFieldBLAS.hpp>        // for mundy::mesh::field_copy
+#include <mundy_mesh/LinkMetaData.hpp>      // for mundy::mesh::LinkMetaData
+#include <mundy_mesh/MetaData.hpp>          // for mundy::mesh::MetaData
+#include <mundy_mesh/NgpFieldBLAS.hpp>      // for mundy::mesh::field_copy
 
 namespace mundy {
 
@@ -178,8 +178,9 @@ class NgpCOOToCRSSynchronizerT {
 
     if (crs_buckets_up_to_date) {  // No need to perform the second check if the first fails.
       //  2. A selected link is out-of-date.
-      int link_needs_updated_count = ::mundy::mesh::field_sum<int>(
-          impl::get_link_crs_needs_updated_field(crs_data.link_meta_data()), link_subset_selector, stk::ngp::ExecSpace());
+      int link_needs_updated_count =
+          ::mundy::mesh::field_sum<int>(impl::get_link_crs_needs_updated_field(crs_data.link_meta_data()),
+                                        link_subset_selector, stk::ngp::ExecSpace());
       bool links_up_to_date = (link_needs_updated_count == 0);
       return links_up_to_date;
     }
@@ -254,7 +255,7 @@ class NgpCOOToCRSSynchronizerT {
     flag_dirty_linked_buckets_of_modified_links(crs_data, coo_data, link_subset_selector);
 
     reset_dirty_linked_buckets(crs_data, coo_data, link_subset_selector);
-    
+
     gather_part_1_count(crs_data, coo_data, link_subset_selector);
 
     gather_part_2_partial_sum(crs_data, coo_data, link_subset_selector);
@@ -456,7 +457,8 @@ class NgpCOOToCRSSynchronizerT {
 
                 if (impl::get_dirty_flag(crs_bucket_conn)) {
                   // Atomically increment the connectivity count
-                  Kokkos::atomic_add(&impl::get_num_connected_links(crs_bucket_conn)(linked_entity_index.bucket_ord), 1u);
+                  Kokkos::atomic_add(&impl::get_num_connected_links(crs_bucket_conn)(linked_entity_index.bucket_ord),
+                                     1u);
                 }
               }
             }
@@ -503,7 +505,8 @@ class NgpCOOToCRSSynchronizerT {
                 // Use a parallel_scan to compute the offsets
                 Kokkos::parallel_scan(Kokkos::TeamThreadRange(team, 0u, bucket_size),
                                       [&](unsigned i, unsigned &partial_sum, bool final_pass) {
-                                        const unsigned num_connected_links = impl::get_num_connected_links(crs_bucket_conn)(i);
+                                        const unsigned num_connected_links =
+                                            impl::get_num_connected_links(crs_bucket_conn)(i);
                                         if (final_pass) {
                                           // exclusive offset
                                           impl::get_sparse_connectivity_offsets(crs_bucket_conn)(i) = partial_sum;
@@ -516,9 +519,9 @@ class NgpCOOToCRSSynchronizerT {
                                         }
                                         partial_sum += num_connected_links;
                                       });
-              // Stash the total for access on the host
-              impl::get_total_num_connected_links(crs_bucket_conn) =
-                  impl::get_sparse_connectivity_offsets(crs_bucket_conn)(bucket_size);
+                // Stash the total for access on the host
+                impl::get_total_num_connected_links(crs_bucket_conn) =
+                    impl::get_sparse_connectivity_offsets(crs_bucket_conn)(bucket_size);
               }
             }
           });
@@ -552,8 +555,8 @@ class NgpCOOToCRSSynchronizerT {
             // Only resize if needed
             unsigned new_size = impl::get_total_num_connected_links(crs_bucket_conn);
             if (new_size > impl::get_sparse_connectivity(crs_bucket_conn).extent(0)) {  // Only grow
-              Kokkos::resize(Kokkos::view_alloc(Kokkos::WithoutInitializing), impl::get_sparse_connectivity(crs_bucket_conn),
-                             new_size);
+              Kokkos::resize(Kokkos::view_alloc(Kokkos::WithoutInitializing),
+                             impl::get_sparse_connectivity(crs_bucket_conn), new_size);
             }
           }
         }
@@ -573,7 +576,7 @@ class NgpCOOToCRSSynchronizerT {
     // their partition ID, thread loop over the links, serial loop over their downward linked entities, and if their
     // bucket is dirty, scatter the link. Copy the link into the old field. Update the count as each entity is inserted.
 
-    const NgpLinkCRSPartitionView& crs_partitions = crs_data.get_or_create_crs_partitions(link_subset_selector);
+    const NgpLinkCRSPartitionView &crs_partitions = crs_data.get_or_create_crs_partitions(link_subset_selector);
     auto stk_link_bucket_to_partition_id_map = crs_data.get_updated_stk_link_bucket_to_partition_id_map();
 
     const stk::mesh::NgpMesh &ngp_mesh = stk::mesh::get_updated_ngp_mesh(crs_data.bulk_data());
@@ -617,7 +620,8 @@ class NgpCOOToCRSSynchronizerT {
 
                 if (impl::get_dirty_flag(crs_bucket_conn)) {
                   // Atomically increment the connectivity count
-                  const unsigned offset = impl::get_sparse_connectivity_offsets(crs_bucket_conn)(linked_entity_index.bucket_ord);
+                  const unsigned offset =
+                      impl::get_sparse_connectivity_offsets(crs_bucket_conn)(linked_entity_index.bucket_ord);
                   const unsigned num_inserted_old = Kokkos::atomic_fetch_add(
                       &impl::get_num_connected_links(crs_bucket_conn)(linked_entity_index.bucket_ord), 1);
                   impl::get_sparse_connectivity(crs_bucket_conn)(offset + num_inserted_old) = link;

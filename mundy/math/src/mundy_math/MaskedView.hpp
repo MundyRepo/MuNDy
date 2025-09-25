@@ -49,7 +49,6 @@ class MaskedAccessor;
 template <typename T, size_t N, Kokkos::Array<bool, N> mask, ValidAccessor<T> Accessor>
 class MaskedAccessor<T, N, mask, Accessor, Ownership::Views> {
  private:
-
   KOKKOS_INLINE_FUNCTION
   static constexpr Kokkos::Array<size_t, N> create_index_array() {
     Kokkos::Array<size_t, N> indices{};
@@ -62,7 +61,8 @@ class MaskedAccessor<T, N, mask, Accessor, Ownership::Views> {
     return indices;
   }
 
-  /// \brief CUDA doesn't like static constexpr internal variables, so we use a constexpr variable in a static function instead
+  /// \brief CUDA doesn't like static constexpr internal variables, so we use a constexpr variable in a static
+  /// function instead
   KOKKOS_INLINE_FUNCTION
   static constexpr size_t map_index(size_t k) {
     constexpr Kokkos::Array<size_t, N> valid_indices = create_index_array();
@@ -111,7 +111,6 @@ class MaskedAccessor<T, N, mask, Accessor, Ownership::Views> {
 template <typename T, size_t N, Kokkos::Array<bool, N> mask, ValidAccessor<T> Accessor>
 class MaskedAccessor<T, N, mask, Accessor, Ownership::Owns> {
  private:
-
   KOKKOS_INLINE_FUNCTION
   static constexpr Kokkos::Array<size_t, N> create_index_array() {
     Kokkos::Array<size_t, N> indices{};
@@ -124,7 +123,8 @@ class MaskedAccessor<T, N, mask, Accessor, Ownership::Owns> {
     return indices;
   }
 
-  /// \brief CUDA doesn't like static constexpr internal variables, so we use a constexpr variable in a static function instead
+  /// \brief CUDA doesn't like static constexpr internal variables, so we use a constexpr variable in a static
+  /// function instead
   KOKKOS_INLINE_FUNCTION
   static constexpr size_t map_index(size_t k) {
     constexpr Kokkos::Array<size_t, N> valid_indices = create_index_array();

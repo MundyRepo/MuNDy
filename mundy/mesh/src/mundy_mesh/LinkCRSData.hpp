@@ -34,19 +34,19 @@
 // Trilinos libs
 #include <Kokkos_Sort.hpp>                        // for Kokkos::sort
 #include <Kokkos_UnorderedMap.hpp>                // for Kokkos::UnorderedMap
+#include <stk_mesh/base/BulkData.hpp>             // for stk::mesh::BulkData
 #include <stk_mesh/base/Entity.hpp>               // for stk::mesh::Entity
+#include <stk_mesh/base/FindRestriction.hpp>      // for stk::mesh::find_restriction
 #include <stk_mesh/base/Part.hpp>                 // stk::mesh::Part
 #include <stk_mesh/base/Selector.hpp>             // stk::mesh::Selector
 #include <stk_mesh/base/Types.hpp>                // for stk::mesh::EntityRank
 #include <stk_mesh/baseImpl/PartVectorUtils.hpp>  // for stk::mesh::impl::fill_add_parts_and_supersets
 #include <stk_util/ngp/NgpSpaces.hpp>             // for stk::ngp::HostMemSpace, stk::ngp::UVMMemSpace
-#include <stk_mesh/base/FindRestriction.hpp>      // for stk::mesh::find_restriction
-#include <stk_mesh/base/BulkData.hpp>           // for stk::mesh::BulkData
 
 // Mundy libs
-#include <mundy_core/throw_assert.hpp>        // for MUNDY_THROW_ASSERT
-#include <mundy_mesh/LinkCRSPartition.hpp>    // for mundy::mesh::LinkCRSPartition
-#include <mundy_mesh/LinkMetaData.hpp>        // for mundy::mesh::LinkMetaData
+#include <mundy_core/throw_assert.hpp>      // for MUNDY_THROW_ASSERT
+#include <mundy_mesh/LinkCRSPartition.hpp>  // for mundy::mesh::LinkCRSPartition
+#include <mundy_mesh/LinkMetaData.hpp>      // for mundy::mesh::LinkMetaData
 
 namespace mundy {
 
@@ -82,8 +82,8 @@ class LinkCRSDataT {  // Raw data in any space
   KOKKOS_DEFAULTED_FUNCTION LinkCRSDataT &operator=(LinkCRSDataT &&) = default;
 
   /// \brief Construct from scratch
-  LinkCRSDataT(stk::mesh::BulkData &bulk_data, LinkMetaData &link_meta_data) : 
-        bulk_data_ptr_(&bulk_data), 
+  LinkCRSDataT(stk::mesh::BulkData &bulk_data, LinkMetaData &link_meta_data)
+      : bulk_data_ptr_(&bulk_data),
         link_meta_data_ptr_(&link_meta_data),
         selector_to_partitions_map_(),
         partition_key_to_id_map_(),
@@ -97,12 +97,12 @@ class LinkCRSDataT {  // Raw data in any space
   /// \brief Construct from a LinkCRSDataT with a different memory space.
   /// Does NOT perform a deep copy. Simply steals their pointers to the bulk data and meta data.
   ///
-  /// This constructor exists so that we can use NgpLinkCRSData(LinkCRSData) to perform a shallow 
+  /// This constructor exists so that we can use NgpLinkCRSData(LinkCRSData) to perform a shallow
   /// copy if NgpMemSpace == MemSpace and this operator otherwise.
-  template<typename OtherMemSpace>
+  template <typename OtherMemSpace>
   explicit LinkCRSDataT(LinkCRSDataT<OtherMemSpace> &other)
-      requires(!std::is_same_v<OtherMemSpace, MemSpace>) :
-        bulk_data_ptr_(&other.bulk_data()),
+    requires(!std::is_same_v<OtherMemSpace, MemSpace>)
+      : bulk_data_ptr_(&other.bulk_data()),
         link_meta_data_ptr_(&other.link_meta_data()),
         selector_to_partitions_map_(),
         partition_key_to_id_map_(),
@@ -116,7 +116,7 @@ class LinkCRSDataT {  // Raw data in any space
   /// \brief Destructor.
   KOKKOS_FUNCTION virtual ~LinkCRSDataT() {
     clear_partitions_and_views();
-  } 
+  }
   //@}
 
   //! \name Getters
@@ -219,16 +219,17 @@ class LinkCRSDataT {  // Raw data in any space
         Kokkos::Timer timer;
         for (const PartitionKey &key : new_keys) {
           new (&all_crs_partitions_(partition_id))
-              LinkCRSPartition(partition_id, key, link_rank(), get_linker_dimensionality(key),
-                               bulk_data());
+              LinkCRSPartition(partition_id, key, link_rank(), get_linker_dimensionality(key), bulk_data());
           partition_key_to_id_map_[key] = partition_id;
           ++partition_id;
         }
-        std::cout << "Created " << num_new_partitions << " new partitions in " << timer.seconds() << " seconds." << std::endl;
+        std::cout << "Created " << num_new_partitions << " new partitions in " << timer.seconds() << " seconds."
+                  << std::endl;
       }
 
       // 5. Create a new view of CRS partitions of size equal to the number of unique keys (both existing and new)
-      LinkCRSPartitionView new_crs_partitions(Kokkos::view_alloc(Kokkos::WithoutInitializing, "LinkCRSPartitions"), num_new_partitions + num_old_partitions);
+      LinkCRSPartitionView new_crs_partitions(Kokkos::view_alloc(Kokkos::WithoutInitializing, "LinkCRSPartitions"),
+                                              num_new_partitions + num_old_partitions);
 
       // 6. Copy the corresponding LinkCRSPartition from the all_crs_partitions_ view to the new view using the key to
       // partition_id map
@@ -297,10 +298,10 @@ class LinkCRSDataT {  // Raw data in any space
         bool insert_success =
             stk_link_bucket_to_partition_id_map_host_.insert(bucket->bucket_id(), partition_id).success();
         MUNDY_THROW_ASSERT(insert_success, std::runtime_error,
-                            "Failed to insert bucket -> partition pair into the map. This is an internal error.");
+                           "Failed to insert bucket -> partition pair into the map. This is an internal error.");
       } else {
         MUNDY_THROW_ASSERT(false, std::logic_error,
-                            "Partition key not found in partition key to id map. This should never happen.");
+                           "Partition key not found in partition key to id map. This should never happen.");
       }
     }
 
@@ -308,7 +309,7 @@ class LinkCRSDataT {  // Raw data in any space
     Kokkos::deep_copy(stk_link_bucket_to_partition_id_map_, stk_link_bucket_to_partition_id_map_host_);
   }
 
-  template<typename OtherMemSpace>
+  template <typename OtherMemSpace>
   void synchronize_with(LinkCRSDataT<OtherMemSpace> &src) {  // Shallow copy if same space, otherwise deep copy
     if constexpr (std::is_same_v<MemSpace, OtherMemSpace>) {
       // Shallow copy. They have the same template param as us, so we're friends.
@@ -339,7 +340,7 @@ class LinkCRSDataT {  // Raw data in any space
         auto &our_partition = all_crs_partitions_(partition_id);
         auto &src_partition = src_crs_partitions(partition_id);
         deep_copy(our_partition, src_partition);
-      }    
+      }
     }
   }
 
@@ -409,32 +410,29 @@ class LinkCRSDataT {  // Raw data in any space
                  [](const LinkCRSPartition &a, const LinkCRSPartition &b) { return a.id() < b.id(); });
   }
 
-
   KOKKOS_FUNCTION
   void clear_partitions_and_views() {
     KOKKOS_IF_ON_HOST(
-      // Kill all_partitions_ if we're the last reference to it.
-      if (all_crs_partitions_.use_count() == 1) {
-        for (unsigned i = 0; i < all_crs_partitions_.size(); ++i) {
-          all_crs_partitions_[i].~LinkCRSPartition();
-        }
-      }
-
-      // Kill selector_to_partitions_map_'s partitions if we're the last reference to them.
-      // These are distinct copies of LinkCRSPartitions, so we need to destroy them too.
-      // TODO(palmerb4): Does this double free their internal views or will their ref count prevent that?
-      for (auto &pair : selector_to_partitions_map_) {
-        LinkCRSPartitionView &view = pair.second;
-        if (view.use_count() == 1) {
-          for (unsigned i = 0; i < view.size(); ++i) {
-            view[i].~LinkCRSPartition();
+        // Kill all_partitions_ if we're the last reference to it.
+        if (all_crs_partitions_.use_count() == 1) {
+          for (unsigned i = 0; i < all_crs_partitions_.size(); ++i) {
+            all_crs_partitions_[i].~LinkCRSPartition();
           }
         }
-      }
-    );
+
+        // Kill selector_to_partitions_map_'s partitions if we're the last reference to them.
+        // These are distinct copies of LinkCRSPartitions, so we need to destroy them too.
+        // TODO(palmerb4): Does this double free their internal views or will their ref count prevent that?
+        for (auto &pair : selector_to_partitions_map_) {
+          LinkCRSPartitionView &view = pair.second;
+          if (view.use_count() == 1) {
+            for (unsigned i = 0; i < view.size(); ++i) {
+              view[i].~LinkCRSPartition();
+            }
+          }
+        });
   }
   //@}
-
 
  private:
   //! \name Internal members (host only)
@@ -445,7 +443,8 @@ class LinkCRSDataT {  // Raw data in any space
 
   using SelectorToPartitionsMap = std::map<stk::mesh::Selector, LinkCRSPartitionView>;
   using PartitionKeyToIdMap = std::map<PartitionKey, unsigned>;
-  mutable SelectorToPartitionsMap selector_to_partitions_map_;  // NEEDS to be a VIEW data type. Right now, our copies may be modified without us knowing.
+  mutable SelectorToPartitionsMap selector_to_partitions_map_;  // NEEDS to be a VIEW data type. Right now, our copies
+                                                                // may be modified without us knowing.
   mutable PartitionKeyToIdMap partition_key_to_id_map_;
   //@}
 
@@ -460,7 +459,7 @@ class LinkCRSDataT {  // Raw data in any space
 
 // Following STK's default naming convention, to make return statements of our functions more readable.
 using LinkCRSData = LinkCRSDataT<stk::ngp::HostMemSpace>;
-template<typename NgpMemSpace>
+template <typename NgpMemSpace>
 using NgpLinkCRSDataT = LinkCRSDataT<NgpMemSpace>;
 using NgpLinkCRSData = LinkCRSDataT<stk::ngp::MemSpace>;
 

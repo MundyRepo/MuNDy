@@ -105,7 +105,8 @@ class Circle3D {
   /// frame.
   /// \param[in] radius The radius of the circle.
   template <ValidPointType OtherPointType, math::ValidQuaternionType OtherQuaternionType>
-  KOKKOS_FUNCTION constexpr Circle3D(const OtherPointType& center, const OtherQuaternionType& orientation, const scalar_t& radius)
+  KOKKOS_FUNCTION constexpr Circle3D(const OtherPointType& center, const OtherQuaternionType& orientation,
+                                     const scalar_t& radius)
     requires(!std::is_same_v<OtherPointType, point_t> || !std::is_same_v<OtherQuaternionType, orientation_t>)
       : center_(center), orientation_(orientation), radius_(radius) {
   }
@@ -161,7 +162,8 @@ class Circle3D {
 
   /// \brief Copy assignment operator
   template <typename OtherCircle3DType>
-  KOKKOS_FUNCTION constexpr Circle3D<scalar_t, point_t, orientation_t, ownership_t>& operator=(const OtherCircle3DType& other)
+  KOKKOS_FUNCTION constexpr Circle3D<scalar_t, point_t, orientation_t, ownership_t>& operator=(
+      const OtherCircle3DType& other)
     requires(!std::is_same_v<OtherCircle3DType, Circle3D<scalar_t, point_t, orientation_t, ownership_t>>)
   {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
@@ -184,7 +186,8 @@ class Circle3D {
 
   /// \brief Move assignment operator
   template <typename OtherCircle3DType>
-  KOKKOS_FUNCTION constexpr Circle3D<scalar_t, point_t, orientation_t, ownership_t>& operator=(OtherCircle3DType&& other)
+  KOKKOS_FUNCTION constexpr Circle3D<scalar_t, point_t, orientation_t, ownership_t>& operator=(
+      OtherCircle3DType&& other)
     requires(!std::is_same_v<OtherCircle3DType, Circle3D<scalar_t, point_t, orientation_t, ownership_t>>)
   {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
@@ -294,8 +297,7 @@ class Circle3D {
 template <typename T>
 struct is_circle3d_impl : std::false_type {};
 //
-template <typename Scalar, ValidPointType PointType, math::ValidQuaternionType QuaternionType,
-          typename OwnershipType>
+template <typename Scalar, ValidPointType PointType, math::ValidQuaternionType QuaternionType, typename OwnershipType>
 struct is_circle3d_impl<Circle3D<Scalar, PointType, QuaternionType, OwnershipType>> : std::true_type {};
 
 /// @brief Type trait to determine if a type is a Circle3d

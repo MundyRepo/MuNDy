@@ -28,29 +28,27 @@ namespace ngp {
 using HostMemSpace = stk::ngp::HostExecSpace::memory_space;
 using MemSpace = stk::ngp::ExecSpace::memory_space;
 
-}  // namespace mesh 
+}  // namespace ngp
 
 }  // namespace stk
-
-
 
 namespace mundy {
 
 namespace mesh {
 
 enum NgpDataAccessTag : uint8_t {
-  ReadWrite    = 0, // Sync values to memory space and mark as modified; Allow modification
-  ReadOnly     = 1, // Sync values to memory space and do not mark as modified; Disallow modification
-  OverwriteAll = 2, // Do not sync values to memory space and mark as modified; Allow modification
+  ReadWrite = 0,     // Sync values to memory space and mark as modified; Allow modification
+  ReadOnly = 1,      // Sync values to memory space and do not mark as modified; Disallow modification
+  OverwriteAll = 2,  // Do not sync values to memory space and mark as modified; Allow modification
 
-  Unsynchronized,      // Do not sync values to memory space and do not mark as modified; Allow modification
-  ConstUnsynchronized, // Do not sync values to memory space and do not mark as modified; Disallow modification
+  Unsynchronized,       // Do not sync values to memory space and do not mark as modified; Allow modification
+  ConstUnsynchronized,  // Do not sync values to memory space and do not mark as modified; Disallow modification
 
   InvalidAccess,
 };
 
-} // namespace mesh
+}  // namespace mesh
 
-} // namespace mundy
+}  // namespace mundy
 
 #endif  // MUNDY_MESH_TYPES_HPP_

@@ -100,7 +100,7 @@ struct OldPeriodicSpaceMetric {
 
 template <typename Scalar>
 KOKKOS_INLINE_FUNCTION constexpr void old_unit_cell_box(OldPeriodicSpaceMetric<Scalar>& metric,  //
-                                                    const mundy::math::Vector3<Scalar>& cell_size) {
+                                                        const mundy::math::Vector3<Scalar>& cell_size) {
   metric.h = mundy::math::Matrix3<Scalar>::identity();
   metric.h(0, 0) = cell_size[0];
   metric.h(1, 1) = cell_size[1];

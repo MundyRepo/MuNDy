@@ -19,10 +19,10 @@
 // @HEADER
 
 // External libs
-#include <gtest/gtest.h>  // for TEST, ASSERT_NO_THROW, etc
+#include <gtest/gtest.h>      // for TEST, ASSERT_NO_THROW, etc
+#include <openrand/philox.h>  // for openrand::Philox
 
 #include <Kokkos_Core.hpp>  // for Kokkos::Array
-#include <openrand/philox.h>  // for openrand::Philox
 
 // C++ core libs
 #include <ostream>  // for std::cout

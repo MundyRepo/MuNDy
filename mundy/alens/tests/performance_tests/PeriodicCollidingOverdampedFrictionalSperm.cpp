@@ -773,7 +773,6 @@ void declare_and_initialize_sperm(stk::mesh::BulkData &bulk_data, stk::mesh::Par
         });
   }
 
-
   // Mark the fields modified on the host
   node_coords_field.modify_on_host();
   node_velocity_field.modify_on_host();
@@ -791,7 +790,6 @@ void declare_and_initialize_sperm(stk::mesh::BulkData &bulk_data, stk::mesh::Par
   edge_length_field.modify_on_host();
   element_radius_field.modify_on_host();
   element_rest_length_field.modify_on_host();
-
 }
 
 void validate_node_radius(stk::mesh::NgpMesh &ngp_mesh, const stk::mesh::Selector &selector,
@@ -2452,7 +2450,7 @@ void run(int argc, char **argv) {
       const bool sort_search_results = false;        // sort the search results by source id
       stk::search::coarse_search(search_aabbs, search_aabbs, search_method, bulk_data.parallel(), search_results,
                                  stk::ngp::ExecSpace{}, results_parallel_symmetry);
-      
+
       std::cout << "Search results size: " << search_results.size() << std::endl;
       rebuild_neighbors = false;
       mundy::mesh::field_fill(0.0, elem_aabb_disp_since_last_rebuild_field, stk::ngp::ExecSpace{});

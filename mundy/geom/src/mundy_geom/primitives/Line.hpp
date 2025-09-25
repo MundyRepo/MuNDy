@@ -38,8 +38,7 @@ namespace mundy {
 
 namespace geom {
 
-template <typename Scalar, ValidPointType PointType = Point<Scalar>,
-          typename OwnershipType = math::Ownership::Owns>
+template <typename Scalar, ValidPointType PointType = Point<Scalar>, typename OwnershipType = math::Ownership::Owns>
 class Line {
   static_assert(std::is_same_v<typename PointType::scalar_t, Scalar>,
                 "The scalar_t of the PointType must match the Scalar type.");
@@ -103,7 +102,8 @@ class Line {
 
   /// \brief Deep copy constructor
   KOKKOS_FUNCTION
-  constexpr Line(const Line<scalar_t, point_t, ownership_t>& other) : center_(other.center_), direction_(other.direction_) {
+  constexpr Line(const Line<scalar_t, point_t, ownership_t>& other)
+      : center_(other.center_), direction_(other.direction_) {
   }
 
   /// \brief Deep copy constructor
@@ -252,7 +252,7 @@ template <typename Scalar, ValidPointType PointType, typename OwnershipType>
 struct impl_is_line<Line<Scalar, PointType, OwnershipType>> : std::true_type {};
 
 /// \brief Type trait to determine if a type is a Line
-template<typename T>
+template <typename T>
 struct is_line : impl_is_line<std::remove_cv_t<T>> {};
 //
 template <typename T>

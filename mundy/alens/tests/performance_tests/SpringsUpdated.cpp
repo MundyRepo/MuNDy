@@ -75,6 +75,7 @@ We'll need two MetaMethods: one for computing the brownian motion and one for ta
 #include <mundy_linkers/LinkerPotentialForceReduction.hpp>    // for mundy::linkers::LinkerPotentialForceReduction
 #include <mundy_linkers/NeighborLinkers.hpp>                  // for mundy::linkers::NeighborLinkers
 #include <mundy_mesh/BulkData.hpp>                            // for mundy::mesh::BulkData
+#include <mundy_mesh/ForEachEntity.hpp>                       // for mundy::mesh::for_each_entity_run
 #include <mundy_mesh/MetaData.hpp>                            // for mundy::mesh::MetaData
 #include <mundy_mesh/fmt_stk_types.hpp>                       // adds fmt::format for stk types
 #include <mundy_mesh/utils/FillFieldWithValue.hpp>            // for mundy::mesh::utils::fill_field_with_value
@@ -88,7 +89,6 @@ We'll need two MetaMethods: one for computing the brownian motion and one for ta
 #include <mundy_meta/utils/MeshGeneration.hpp>  // for mundy::meta::utils::generate_class_instance_and_mesh_from_meta_class_requirements
 #include <mundy_shapes/ComputeAABB.hpp>  // for mundy::shapes::ComputeAABB
 #include <mundy_shapes/Spheres.hpp>      // for mundy::shapes::Spheres
-#include <mundy_mesh/ForEachEntity.hpp>  // for mundy::mesh::for_each_entity_run
 
 class NodeEuler
     : public mundy::meta::MetaKernelDispatcher<NodeEuler, mundy::meta::make_registration_string("NODE_EULER")> {

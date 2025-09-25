@@ -28,11 +28,11 @@
 #include <any>  // for std::any
 
 // Trilinos libs
-#include <stk_mesh/base/Entity.hpp>  // for stk::mesh::Entity
-#include <stk_mesh/base/Field.hpp>   // for stk::mesh::Field
-#include <stk_mesh/base/Part.hpp>    // stk::mesh::Part
-#include <stk_mesh/base/Types.hpp>   // for stk::mesh::EntityRank
+#include <stk_mesh/base/Entity.hpp>       // for stk::mesh::Entity
+#include <stk_mesh/base/Field.hpp>        // for stk::mesh::Field
 #include <stk_mesh/base/GetNgpField.hpp>  // for stk::mesh::get_updated_ngp_field
+#include <stk_mesh/base/Part.hpp>         // stk::mesh::Part
+#include <stk_mesh/base/Types.hpp>        // for stk::mesh::EntityRank
 
 // Mundy libs
 #include <mundy_core/throw_assert.hpp>                 // for MUNDY_THROW_ASSERT
@@ -132,8 +132,7 @@ class LinkCOODataSynchronizerT : public HostDeviceSynchronizer {
   }
 
  private:
-
-  template<typename T>
+  template <typename T>
   auto &our_get_updated_ngp_field(const stk::mesh::Field<T> &field) {
     return stk::mesh::get_updated_ngp_field<T>(field);
   }

@@ -200,7 +200,8 @@ void invert_matrix([[maybe_unused]] const ExecutionSpace &space, const MatrixTyp
   // Fill matrix_inv with the identity matrix
   Kokkos::deep_copy(matrix_inv, 0.0);
   Kokkos::parallel_for(
-      "FillIdentity", Kokkos::RangePolicy<ExecutionSpace>(0, matrix_size), KOKKOS_LAMBDA(const size_t i) { matrix_inv(i, i) = 1.0; });
+      "FillIdentity", Kokkos::RangePolicy<ExecutionSpace>(0, matrix_size),
+      KOKKOS_LAMBDA(const size_t i) { matrix_inv(i, i) = 1.0; });
 
   // Solve the dense linear equation system M*X = I, which results in X = M^{-1}
   // On exist, M is replaced with its LU decomposition
@@ -651,8 +652,7 @@ void panelize_velocity_kernel_over_target_points([[maybe_unused]] const Executio
   // Define the team policy with the number of panels
   using team_policy = Kokkos::TeamPolicy<ExecutionSpace>;
   Kokkos::parallel_for(
-      team_policy(num_panels, Kokkos::AUTO),
-      KOKKOS_LAMBDA(const team_policy::member_type &team_member) {
+      team_policy(num_panels, Kokkos::AUTO), KOKKOS_LAMBDA(const team_policy::member_type &team_member) {
         const int panel_start = team_member.league_rank() * panel_size;
         const int panel_end =
             (panel_start + panel_size) > num_target_points ? num_target_points : (panel_start + panel_size);

@@ -29,19 +29,19 @@
 #include <memory>  // for std::shared_ptr, std::unique_ptr
 
 // Trilinos libs
-#include <stk_mesh/base/Entity.hpp>  // for stk::mesh::Entity
-#include <stk_mesh/base/Field.hpp>   // for stk::mesh::Field
-#include <stk_mesh/base/Part.hpp>    // stk::mesh::Part
-#include <stk_mesh/base/Types.hpp>   // for stk::mesh::EntityRank
-#include <stk_mesh/base/BulkData.hpp>      // for stk::mesh::BulkData
-#include <stk_mesh/base/MetaData.hpp>      // for stk::mesh::MetaData
+#include <stk_mesh/base/BulkData.hpp>  // for stk::mesh::BulkData
+#include <stk_mesh/base/Entity.hpp>    // for stk::mesh::Entity
+#include <stk_mesh/base/Field.hpp>     // for stk::mesh::Field
+#include <stk_mesh/base/MetaData.hpp>  // for stk::mesh::MetaData
+#include <stk_mesh/base/Part.hpp>      // stk::mesh::Part
+#include <stk_mesh/base/Types.hpp>     // for stk::mesh::EntityRank
 
 // Mundy libs
-#include <mundy_core/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
-#include <mundy_mesh/LinkCOOData.hpp>   // for mundy::mesh::LinkCOOData/NgpLinkCOOData
-#include <mundy_mesh/LinkCRSData.hpp>   // for mundy::mesh::LinkCRSData/NgpLinkCRSData
-#include <mundy_mesh/LinkMetaData.hpp>  // for mundy::mesh::LinkMetaData
-#include <mundy_mesh/Types.hpp>         // for mundy::mesh::NgpDataAccessTag
+#include <mundy_core/throw_assert.hpp>                 // for MUNDY_THROW_ASSERT
+#include <mundy_mesh/LinkCOOData.hpp>                  // for mundy::mesh::LinkCOOData/NgpLinkCOOData
+#include <mundy_mesh/LinkCRSData.hpp>                  // for mundy::mesh::LinkCRSData/NgpLinkCRSData
+#include <mundy_mesh/LinkMetaData.hpp>                 // for mundy::mesh::LinkMetaData
+#include <mundy_mesh/Types.hpp>                        // for mundy::mesh::NgpDataAccessTag
 #include <mundy_mesh/impl/HostDeviceSynchronizer.hpp>  // for mundy::mesh::impl::HostDeviceSynchronizer
 
 namespace mundy {
@@ -197,7 +197,8 @@ class LinkData {
   /// \brief Canonical constructor.
   /// \param bulk_data [in] The bulk data manager we extend.
   /// \param link_meta_data [in] Our meta data manager.
-  LinkData(stk::mesh::BulkData &bulk_data, LinkMetaData &link_meta_data)  // We do NOT take ownership of the LinkMetaData
+  LinkData(stk::mesh::BulkData &bulk_data,
+           LinkMetaData &link_meta_data)  // We do NOT take ownership of the LinkMetaData
       : bulk_data_ptr_(&bulk_data),
         mesh_meta_data_ptr_(&bulk_data.mesh_meta_data()),
         link_meta_data_ptr_(&link_meta_data),
@@ -320,9 +321,9 @@ class LinkData {
         crs_synchronizer_->update_post_mesh_mod();
         crs_synchronizer_->sync_to_device();
       } else {
-        MUNDY_THROW_REQUIRE(
-            false, std::logic_error,
-            "Why has crs_sync_to_device been called on a LinkData with no device CRS that somehow needs synced to host?");
+        MUNDY_THROW_REQUIRE(false, std::logic_error,
+                            "Why has crs_sync_to_device been called on a LinkData with no device CRS that somehow "
+                            "needs synced to host?");
       }
       crs_increment_num_syncs_to_device();
       crs_clear_host_sync_state();
@@ -397,9 +398,8 @@ class LinkData {
         coo_synchronizer_->update_post_mesh_mod();
         coo_synchronizer_->sync_to_device();
       } else {
-        MUNDY_THROW_REQUIRE(
-            false, std::logic_error,
-            "coo_sync_to_device been called on a LinkData with no device COO.");
+        MUNDY_THROW_REQUIRE(false, std::logic_error,
+                            "coo_sync_to_device been called on a LinkData with no device COO.");
       }
       coo_increment_num_syncs_to_device();
       coo_clear_host_sync_state();
@@ -421,7 +421,6 @@ class LinkData {
     ++coo_num_syncs_to_device_;
   }
   //@}
-
 
   //! \name CRS/COO interactions
   //@{
@@ -470,11 +469,13 @@ class LinkData {
   //@{
 
   friend std::any &impl::get_ngp_link_data(const LinkData &link_data);
-  friend void impl::set_coo_synchronizer(const LinkData &link_data, std::unique_ptr<impl::HostDeviceSynchronizer> synchronizer);
-  friend void impl::set_crs_synchronizer(const LinkData &link_data, std::unique_ptr<impl::HostDeviceSynchronizer> synchronizer);
+  friend void impl::set_coo_synchronizer(const LinkData &link_data,
+                                         std::unique_ptr<impl::HostDeviceSynchronizer> synchronizer);
+  friend void impl::set_crs_synchronizer(const LinkData &link_data,
+                                         std::unique_ptr<impl::HostDeviceSynchronizer> synchronizer);
   //@}
 
-  //! \name Internal members 
+  //! \name Internal members
   //@{
 
   stk::mesh::BulkData *bulk_data_ptr_;
@@ -484,7 +485,7 @@ class LinkData {
   LinkCOOData coo_data_;
   LinkCRSData crs_data_;
   mutable std::unique_ptr<impl::HostDeviceSynchronizer> coo_synchronizer_;
-  mutable std::unique_ptr<impl::HostDeviceSynchronizer> crs_synchronizer_; 
+  mutable std::unique_ptr<impl::HostDeviceSynchronizer> crs_synchronizer_;
   mutable std::any any_ngp_link_data_;
   mutable bool crs_modified_on_host_;
   mutable bool crs_modified_on_device_;
@@ -502,11 +503,13 @@ inline std::any &get_ngp_link_data(const LinkData &link_data) {
   return link_data.get_ngp_link_data();
 }
 
-inline void set_crs_synchronizer(const LinkData &link_data, std::unique_ptr<impl::HostDeviceSynchronizer> synchronizer) {
+inline void set_crs_synchronizer(const LinkData &link_data,
+                                 std::unique_ptr<impl::HostDeviceSynchronizer> synchronizer) {
   link_data.set_crs_synchronizer(std::move(synchronizer));
 }
 
-inline void set_coo_synchronizer(const LinkData &link_data, std::unique_ptr<impl::HostDeviceSynchronizer> synchronizer) {
+inline void set_coo_synchronizer(const LinkData &link_data,
+                                 std::unique_ptr<impl::HostDeviceSynchronizer> synchronizer) {
   link_data.set_coo_synchronizer(std::move(synchronizer));
 }
 

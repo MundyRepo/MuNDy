@@ -44,15 +44,15 @@
 #include <stk_mesh/base/Selector.hpp>
 
 // Mundy libs
-#include <mundy_math/Tolerance.hpp>           // for mundy::math::get_zero_tolerance
-#include <mundy_math/Vector3.hpp>             // for mundy::math::Vector3
-#include <mundy_mesh/BulkData.hpp>            // for mundy::mesh::BulkData
-#include <mundy_mesh/MeshBuilder.hpp>         // for mundy::mesh::MeshBuilder
-#include <mundy_mesh/MetaData.hpp>            // for mundy::mesh::MetaData
-#include <mundy_mesh/LinkData.hpp>      // for mundy::mesh::LinkData
-#include <mundy_mesh/NgpLinkData.hpp>      // for mundy::mesh::NgpLinkData
-#include <mundy_mesh/LinkMetaData.hpp>  // for mundy::mesh::LinkMetaData
+#include <mundy_math/Tolerance.hpp>       // for mundy::math::get_zero_tolerance
+#include <mundy_math/Vector3.hpp>         // for mundy::math::Vector3
+#include <mundy_mesh/BulkData.hpp>        // for mundy::mesh::BulkData
 #include <mundy_mesh/GetNgpLinkData.hpp>  // for mundy::mesh::get_updated_ngp_link_data
+#include <mundy_mesh/LinkData.hpp>        // for mundy::mesh::LinkData
+#include <mundy_mesh/LinkMetaData.hpp>    // for mundy::mesh::LinkMetaData
+#include <mundy_mesh/MeshBuilder.hpp>     // for mundy::mesh::MeshBuilder
+#include <mundy_mesh/MetaData.hpp>        // for mundy::mesh::MetaData
+#include <mundy_mesh/NgpLinkData.hpp>     // for mundy::mesh::NgpLinkData
 
 namespace mundy {
 
@@ -446,14 +446,13 @@ class WeightedSampler {
   Heap heap_;
 };
 
-void connect_entities_and_links(TestContext& context, const TestParameters& params, 
-  size_t seed = 1234,
-  double entity_bucket_selection_percentage = 1.0, double link_selection_percentage = 1.0) {
-  
+void connect_entities_and_links(TestContext& context, const TestParameters& params, size_t seed = 1234,
+                                double entity_bucket_selection_percentage = 1.0,
+                                double link_selection_percentage = 1.0) {
   // At this point, all of the entities and links have been declared and the mesh is no longer in a modification cycle.
   stk::mesh::BulkData& bulk_data = *context.bulk_data;
   MUNDY_THROW_REQUIRE(params.link_dimensionality > 0, std::invalid_argument, "Link dimensionality must be non-zero.");
-  
+
   // 1. Get all non-link entities in the mesh.
   stk::mesh::BucketVector rank_buckets[stk::topology::NUM_RANKS];
   stk::mesh::Selector link_selector = stk::mesh::selectUnion(context.link_parts);
@@ -469,7 +468,7 @@ void connect_entities_and_links(TestContext& context, const TestParameters& para
   const double id_sigma_bucket = params.id_sigma_bucket;
   const double id_sigma_entity = params.id_sigma_entity;
   const double id_locality = params.id_locality;
-  auto &link_data = context.link_data;
+  auto& link_data = context.link_data;
 
   const stk::mesh::BucketVector& link_buckets = bulk_data.get_buckets(params.link_rank, link_selector);
   const size_t num_link_buckets = link_buckets.size();
@@ -481,7 +480,7 @@ void connect_entities_and_links(TestContext& context, const TestParameters& para
     // 2.1. For each link bucket, preselect L entity buckets to maybe draw from.
     stk::mesh::BucketVector buckets_to_maybe_draw_from[stk::topology::NUM_RANKS];
     openrand::Philox bucket_rng(seed, link_bucket_id);
-    
+
     for (size_t i = 0; i < stk::topology::NUM_RANKS; ++i) {
       const size_t num_entity_buckets = rank_buckets[i].size();
       const size_t num_buckets_to_consider =
@@ -529,7 +528,8 @@ void connect_entities_and_links(TestContext& context, const TestParameters& para
 
           for (size_t entity_ord = 0; entity_ord < num_entities_in_bucket; ++entity_ord) {
             const double g = std::exp(
-                -0.5 * std::pow((static_cast<double>(entity_ord) - static_cast<double>(link_ord)) / id_sigma_entity, 2.0));
+                -0.5 *
+                std::pow((static_cast<double>(entity_ord) - static_cast<double>(link_ord)) / id_sigma_entity, 2.0));
             const double weight = (1.0 - id_locality) + id_locality * g;
             MUNDY_THROW_ASSERT(bulk_data.is_valid((*entity_bucket)[entity_ord]), std::logic_error,
                                std::string("Entity in bucket is not valid. Bucket idx: ") +
@@ -550,7 +550,7 @@ void connect_entities_and_links(TestContext& context, const TestParameters& para
 
           openrand::Philox entity_bucket_rng(seed, bulk_data.bucket(selected_node).bucket_id());
           if (entity_bucket_rng.rand<double>() > entity_bucket_selection_percentage) {
-            break; // If the entity fails the entity bucket selection, skip the rest.
+            break;  // If the entity fails the entity bucket selection, skip the rest.
           }
           if (bucket_rng.rand<double>() < link_selection_percentage) {
             link_data.coo_data().declare_relation(link_entity, selected_node, d);
@@ -597,10 +597,10 @@ void connect_entities_and_links(TestContext& context, const TestParameters& para
                ++j) {  // We might end up with holes in the downward connections.
             stk::mesh::Entity selected_entity = selected_entities[j];
             MUNDY_THROW_ASSERT(bulk_data.is_valid(selected_entity), std::logic_error, "Selected entity is not valid.");
-            
+
             openrand::Philox entity_bucket_rng(seed, bulk_data.bucket(selected_entity).bucket_id());
             if (entity_bucket_rng.rand<double>() > entity_bucket_selection_percentage) {
-              break; // If the entity fails the entity bucket selection, skip the rest.
+              break;  // If the entity fails the entity bucket selection, skip the rest.
             }
             if (bucket_rng.rand<double>() < link_selection_percentage) {
               link_data.coo_data().declare_relation(link_entity, selected_entity, j + num_entities_per_rank_shift[i]);
@@ -642,10 +642,10 @@ void connect_entities_and_links(TestContext& context, const TestParameters& para
         std::vector<stk::mesh::Entity> selected_elems = elem_entity_sampler.extract_indices();
         stk::mesh::Entity selected_elem = selected_elems[0];
         MUNDY_THROW_ASSERT(bulk_data.is_valid(selected_elem), std::logic_error, "Selected entity is not valid.");
-        
+
         openrand::Philox elem_bucket_rng(seed, bulk_data.bucket(selected_elem).bucket_id());
         if (elem_bucket_rng.rand<double>() > entity_bucket_selection_percentage) {
-          continue; // If the element fails the entity bucket selection, skip the rest.
+          continue;  // If the element fails the entity bucket selection, skip the rest.
         }
         if (bucket_rng.rand<double>() < link_selection_percentage) {
           link_data.coo_data().declare_relation(link_entity, selected_elem, 0);
@@ -659,13 +659,14 @@ void connect_entities_and_links(TestContext& context, const TestParameters& para
         for (unsigned j = 0; j < selected_nodes.size(); ++j) {
           stk::mesh::Entity selected_node = selected_nodes[j];
           MUNDY_THROW_ASSERT(bulk_data.is_valid(selected_node), std::logic_error, "Selected entity is not valid.");
-          
+
           openrand::Philox entity_bucket_rng(seed, bulk_data.bucket(selected_node).bucket_id());
           if (entity_bucket_rng.rand<double>() > entity_bucket_selection_percentage) {
-            break; // If any of the nodes fail the entity bucket selection, skip the rest.
+            break;  // If any of the nodes fail the entity bucket selection, skip the rest.
           }
           if (bucket_rng.rand<double>() < link_selection_percentage) {
-            link_data.coo_data().declare_relation(link_entity, selected_node, j + 1);  // Start at 1 since 0 is the element.
+            link_data.coo_data().declare_relation(link_entity, selected_node,
+                                                  j + 1);  // Start at 1 since 0 is the element.
           }
         }
 
@@ -986,24 +987,26 @@ class eval_force_reduction_one_to_many {
 
 /* Modifications:
 
-One of the important things to test is how the cost of performing update_crs_from_coo() varies with modifications to the COO.
-The twp factors that should control the performance is the number of entity buckets flagged as dirty and the number of links marked 
-as modified.
+One of the important things to test is how the cost of performing update_crs_from_coo() varies with modifications to the
+COO. The twp factors that should control the performance is the number of entity buckets flagged as dirty and the number
+of links marked as modified.
 */
-
 
 void mark_one_bucket_per_partition_per_rank_as_modified(TestContext& context, const TestParameters& params) {
   int count = 0;
   NgpLinkData& ngp_link_data = get_updated_ngp_link_data(context.link_data);
-  auto &crs_partitions = ngp_link_data.crs_data().get_or_create_crs_partitions(context.link_meta_data->universal_link_part());
+  auto& crs_partitions =
+      ngp_link_data.crs_data().get_or_create_crs_partitions(context.link_meta_data->universal_link_part());
   for (unsigned partition_id = 0; partition_id < crs_partitions.extent(0); ++partition_id) {
-    NgpLinkCRSPartition &crs_partition = crs_partitions(partition_id);  // Even though the partitions are on the device, we can access a subset of their data on the host.
-                                                                        // Only the NgpLinkCRSPartitions should be modified. Never the host side LinkCRSPartitions.
+    NgpLinkCRSPartition& crs_partition =
+        crs_partitions(partition_id);  // Even though the partitions are on the device, we can access a subset of their
+                                       // data on the host. Only the NgpLinkCRSPartitions should be modified. Never the
+                                       // host side LinkCRSPartitions.
 
     // Fetch the crs bucket conn for this rank and bucket
     for (stk::topology::rank_t rank = stk::topology::NODE_RANK; rank < stk::topology::NUM_RANKS; ++rank) {
       if (crs_partition.num_buckets(rank) > 0) {
-        auto &crs_bucket_conn = crs_partition.get_crs_bucket_conn(rank, 0 /* first bucket */);
+        auto& crs_bucket_conn = crs_partition.get_crs_bucket_conn(rank, 0 /* first bucket */);
         impl::get_dirty_flag(crs_bucket_conn) = true;
         ++count;
       }
@@ -1014,18 +1017,19 @@ void mark_one_bucket_per_partition_per_rank_as_modified(TestContext& context, co
 }
 
 void randomly_mark_buckets_per_partition_per_rank_as_modified(TestContext& context, const TestParameters& params) {
-  double percentage = 1; // Each bucket has a 10% chance of being marked dirty.
+  double percentage = 1;  // Each bucket has a 10% chance of being marked dirty.
 
   int count = 0;
   NgpLinkData& ngp_link_data = get_updated_ngp_link_data(context.link_data);
-  auto &crs_partitions = ngp_link_data.crs_data().get_or_create_crs_partitions(context.link_meta_data->universal_link_part());
+  auto& crs_partitions =
+      ngp_link_data.crs_data().get_or_create_crs_partitions(context.link_meta_data->universal_link_part());
   for (unsigned partition_id = 0; partition_id < crs_partitions.extent(0); ++partition_id) {
-    NgpLinkCRSPartition &crs_partition = crs_partitions(partition_id);
+    NgpLinkCRSPartition& crs_partition = crs_partitions(partition_id);
 
     // Fetch the crs bucket conn for this rank and bucket
     for (stk::topology::rank_t rank = stk::topology::NODE_RANK; rank < stk::topology::NUM_RANKS; ++rank) {
       for (size_t bucket_idx = 0; bucket_idx < crs_partition.num_buckets(rank); ++bucket_idx) {
-        auto &crs_bucket_conn = crs_partition.get_crs_bucket_conn(rank, bucket_idx);
+        auto& crs_bucket_conn = crs_partition.get_crs_bucket_conn(rank, bucket_idx);
         openrand::Philox rng(rank, crs_bucket_conn.bucket_id());
         impl::get_dirty_flag(crs_bucket_conn) = rng.rand<double>() < percentage;
         count += impl::get_dirty_flag(crs_bucket_conn);
@@ -1038,8 +1042,8 @@ void randomly_mark_buckets_per_partition_per_rank_as_modified(TestContext& conte
 
 void randomly_modify_links(TestContext& context, const TestParameters& params) {
   size_t seed = 42;
-  double percent_modified_buckets = 1.0; // Each entity bucket has a p% chance of having its links modified.
-  double percent_modified_links = 0.1;   // Each link in that bucket has a p% chance of being modified.
+  double percent_modified_buckets = 1.0;  // Each entity bucket has a p% chance of having its links modified.
+  double percent_modified_links = 0.1;    // Each link in that bucket has a p% chance of being modified.
   connect_entities_and_links(context, params, seed, percent_modified_buckets, percent_modified_links);
 }
 
@@ -1065,7 +1069,7 @@ void run_test(ankerl::nanobench::Bench& bench, const TestParameters& params) {
   connect_entities_and_links(context, params);
 
   std::cout << "Syncing link data to device..." << std::endl;
-  auto &ngp_link_data = get_updated_ngp_link_data(context.link_data);
+  auto& ngp_link_data = get_updated_ngp_link_data(context.link_data);
   ngp_link_data.coo_sync_to_device();
 
   Kokkos::fence();
@@ -1110,8 +1114,8 @@ void run_test(ankerl::nanobench::Bench& bench, const TestParameters& params) {
   timer.reset();
   ngp_link_data.update_crs_from_coo();  // Should only update the one dirty bucket per rank per partition.
   Kokkos::fence();
-  std::cout << "update_crs_from_coo() after marking one bucket per partition per rank as dirty took "
-            << timer.seconds() << " seconds." << std::endl;
+  std::cout << "update_crs_from_coo() after marking one bucket per partition per rank as dirty took " << timer.seconds()
+            << " seconds." << std::endl;
 }
 
 /// \brief The driver that runs the performance tests over a range of parameters.
@@ -1125,22 +1129,22 @@ void run_tests() {
   //                                                             LinkedEntityRanksType::RANDOM,               //
   //                                                             LinkedEntityRanksType::ONE_TO_MANY};         // 3 tests
   // std::vector<stk::mesh::EntityRank> link_ranks_iter{stk::topology::NODE_RANK, stk::topology::ELEM_RANK};  // 2 tests
-  // std::vector<unsigned> link_dimensionality_iter{2, 3, 4, 6, 8, 10, 20, 30, 40, 60, 80, 100};              // 12 tests
-  // std::vector<unsigned> num_link_partitions_iter{1, 2, 3, 4, 6, 8, 10, 20, 30, 40, 60, 80, 100};           // 13 tests
-  // std::vector<double> id_locality_iter{0.0, 0.2, 0.4, 0.6, 0.8, 1.0};                                      // 6 tests
-  // std::vector<double> id_sigma_bucket_iter{0.0, 0.25, 0.5, 0.75, 1.0, 2.0, 4.0};  // 7 tests (in bucket_id space)
-  // std::vector<double> id_sigma_entity_iter{0., 2., 4., 8., 16., 32., 64.};        // 7 tests (in bucket_ord space)
+  // std::vector<unsigned> link_dimensionality_iter{2, 3, 4, 6, 8, 10, 20, 30, 40, 60, 80, 100};              // 12
+  // tests std::vector<unsigned> num_link_partitions_iter{1, 2, 3, 4, 6, 8, 10, 20, 30, 40, 60, 80, 100};           //
+  // 13 tests std::vector<double> id_locality_iter{0.0, 0.2, 0.4, 0.6, 0.8, 1.0}; // 6 tests std::vector<double>
+  // id_sigma_bucket_iter{0.0, 0.25, 0.5, 0.75, 1.0, 2.0, 4.0};  // 7 tests (in bucket_id space) std::vector<double>
+  // id_sigma_entity_iter{0., 2., 4., 8., 16., 32., 64.};        // 7 tests (in bucket_ord space)
 
-  std::vector<size_t> num_entities_per_rank_iter{500'000};                                            // 7 tests
-  std::vector<size_t> num_links_iter{500'000};                                                        // 7 tests
-  std::vector<LinkDistribution> link_distribution_iter{LinkDistribution::EQUAL};                      // 2 tests
-  std::vector<LinkedEntityRanksType> linked_entity_ranks_iter{LinkedEntityRanksType::SAME};         // 3 tests
-  std::vector<stk::mesh::EntityRank> link_ranks_iter{stk::topology::NODE_RANK};  // 2 tests
-  std::vector<unsigned> link_dimensionality_iter{2};                                                  // 12 tests 
-  std::vector<unsigned> num_link_partitions_iter{1};                                                  // 13 tests 
-  std::vector<double> id_locality_iter{1.0}; // 6 tests 
-  std::vector<double> id_sigma_bucket_iter{1.0};  // 7 tests (in bucket_id space) 
-  std::vector<double> id_sigma_entity_iter{10.0};   // 7 tests (in bucket_ord space)
+  std::vector<size_t> num_entities_per_rank_iter{500'000};                                   // 7 tests
+  std::vector<size_t> num_links_iter{500'000};                                               // 7 tests
+  std::vector<LinkDistribution> link_distribution_iter{LinkDistribution::EQUAL};             // 2 tests
+  std::vector<LinkedEntityRanksType> linked_entity_ranks_iter{LinkedEntityRanksType::SAME};  // 3 tests
+  std::vector<stk::mesh::EntityRank> link_ranks_iter{stk::topology::NODE_RANK};              // 2 tests
+  std::vector<unsigned> link_dimensionality_iter{2};                                         // 12 tests
+  std::vector<unsigned> num_link_partitions_iter{1};                                         // 13 tests
+  std::vector<double> id_locality_iter{1.0};                                                 // 6 tests
+  std::vector<double> id_sigma_bucket_iter{1.0};   // 7 tests (in bucket_id space)
+  std::vector<double> id_sigma_entity_iter{10.0};  // 7 tests (in bucket_ord space)
 
   // Setup the I/O and bench
   std::ofstream csv("link_data_perf_results.csv");

@@ -147,14 +147,17 @@ void declare_and_validate_relations(const TestContext& context,
       // Validate linked entity, rank, and ID
       EXPECT_EQ(link_data.coo_data().get_linked_entity(entities[0], j), entities[j + 1]);
       EXPECT_EQ(link_data.coo_data().get_linked_entity_rank(entities[0], j), entity_ranks[j]);
-      EXPECT_EQ(link_data.coo_data().get_linked_entity_id(entities[0], j), context.bulk_data->entity_key(entities[j + 1]).id());
+      EXPECT_EQ(link_data.coo_data().get_linked_entity_id(entities[0], j),
+                context.bulk_data->entity_key(entities[j + 1]).id());
     }
   }
 
   link_data.coo_modify_on_host();
 
-  NgpLinkData &ngp_link_data = get_updated_ngp_link_data(link_data);
-  EXPECT_FALSE(ngp_link_data.is_crs_up_to_date()) << "The modification should have dirtied the CRS connectivity and we should detect that, despite the host being modified and not the device.";
+  NgpLinkData& ngp_link_data = get_updated_ngp_link_data(link_data);
+  EXPECT_FALSE(ngp_link_data.is_crs_up_to_date())
+      << "The modification should have dirtied the CRS connectivity and we should detect that, despite the host being "
+         "modified and not the device.";
 }
 
 void validate_ngp_link_data(const TestContext& context, LinkData& link_data) {
@@ -171,7 +174,7 @@ void validate_ngp_link_data(const TestContext& context, LinkData& link_data) {
   for_each_link_run(
       link_data, *context.link_part_b, [&](const stk::mesh::BulkData& bulk_data, const stk::mesh::Entity& linker) {
         // Check the link itself
-        const stk::mesh::Bucket &linker_bucket = bulk_data.bucket(linker);
+        const stk::mesh::Bucket& linker_bucket = bulk_data.bucket(linker);
         MUNDY_THROW_REQUIRE(bulk_data.is_valid(linker), std::runtime_error, "Linker is not valid.");
         MUNDY_THROW_REQUIRE(linker_bucket.member(universal_link_ordinal), std::runtime_error, "Part membership error");
         MUNDY_THROW_REQUIRE(linker_bucket.member(part_b_ordinal), std::runtime_error, "Part membership error");
@@ -188,22 +191,22 @@ void validate_ngp_link_data(const TestContext& context, LinkData& link_data) {
         }
       });
 
-  NgpLinkData &ngp_link_data = get_updated_ngp_link_data(link_data);
+  NgpLinkData& ngp_link_data = get_updated_ngp_link_data(link_data);
   ngp_link_data.coo_sync_to_device();
 
-  stk::mesh::Entity::entity_value_type linked_entity_field_sum_host = 
-    ::mundy::mesh::field_sum<stk::mesh::Entity::entity_value_type>(
-      impl::get_linked_entities_field(link_data.link_meta_data()), *context.link_part_b,
-      stk::ngp::HostExecSpace());
-  
-  stk::mesh::Entity::entity_value_type linked_entity_field_sum_device = 
-    ::mundy::mesh::field_sum<stk::mesh::Entity::entity_value_type>(
-      impl::get_linked_entities_field(link_data.link_meta_data()), *context.link_part_b, 
-        stk::ngp::ExecSpace());
-  
-  MUNDY_THROW_REQUIRE(linked_entity_field_sum_host != 0, std::runtime_error, "host data was likely not properly initialized.");
+  stk::mesh::Entity::entity_value_type linked_entity_field_sum_host =
+      ::mundy::mesh::field_sum<stk::mesh::Entity::entity_value_type>(
+          impl::get_linked_entities_field(link_data.link_meta_data()), *context.link_part_b, stk::ngp::HostExecSpace());
+
+  stk::mesh::Entity::entity_value_type linked_entity_field_sum_device =
+      ::mundy::mesh::field_sum<stk::mesh::Entity::entity_value_type>(
+          impl::get_linked_entities_field(link_data.link_meta_data()), *context.link_part_b, stk::ngp::ExecSpace());
+
+  MUNDY_THROW_REQUIRE(linked_entity_field_sum_host != 0, std::runtime_error,
+                      "host data was likely not properly initialized.");
   MUNDY_THROW_REQUIRE(linked_entity_field_sum_device != 0, std::runtime_error, "device data wasn't properly synced.");
-  MUNDY_THROW_REQUIRE(linked_entity_field_sum_host == linked_entity_field_sum_device, std::runtime_error, "device data wasn't properly synced.");
+  MUNDY_THROW_REQUIRE(linked_entity_field_sum_host == linked_entity_field_sum_device, std::runtime_error,
+                      "device data wasn't properly synced.");
 
   for_each_link_run(
       ngp_link_data, *context.link_part_b, KOKKOS_LAMBDA(const stk::mesh::FastMeshIndex& linker_index) {
@@ -236,7 +239,7 @@ void validate_ngp_link_data(const TestContext& context, LinkData& link_data) {
 }
 
 void modify_ngp_link_data(const TestContext& context, LinkData& link_data) {
-  NgpLinkData &ngp_link_data = get_updated_ngp_link_data(link_data);
+  NgpLinkData& ngp_link_data = get_updated_ngp_link_data(link_data);
   ngp_link_data.coo_sync_to_device();
 
   // Not only can you fetch linked entities on the device, you can declare and delete relations in parallel and
@@ -272,7 +275,7 @@ void modify_ngp_link_data(const TestContext& context, LinkData& link_data) {
 template <size_t Dimensionality>
 void validate_crs_connectivity(const TestContext& context, LinkInitializationData<Dimensionality>& link_init_data,
                                LinkData& link_data) {
-  NgpLinkData &ngp_link_data = get_updated_ngp_link_data(link_data);
+  NgpLinkData& ngp_link_data = get_updated_ngp_link_data(link_data);
   ngp_link_data.update_crs_from_coo();
   EXPECT_TRUE(ngp_link_data.is_crs_up_to_date());
 
@@ -293,7 +296,7 @@ void validate_crs_connectivity(const TestContext& context, LinkInitializationDat
     ::mundy::mesh::for_each_entity_run(
         link_data.bulk_data(), rank,
         [&expected_crs_conn, &crs_partition_view, rank](const stk::mesh::BulkData& bulk_data,
-                                                  const stk::mesh::Entity& entity) {
+                                                        const stk::mesh::Entity& entity) {
           auto it = expected_crs_conn.find(entity);
           if (it != expected_crs_conn.end()) {
             // Convert expected links to a set for comparison

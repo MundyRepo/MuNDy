@@ -217,13 +217,14 @@ class PerfTestFieldBLAS {
     // stk::mesh::EntityVector entities_to_move_to_block_3;
 
     // const stk::mesh::BucketVector& buckets =
-    //     bulk_data_ptr_->get_buckets(stk::topology::ELEM_RANK, *block1_part_ptr_ & meta_data_ptr_->locally_owned_part());
+    //     bulk_data_ptr_->get_buckets(stk::topology::ELEM_RANK, *block1_part_ptr_ &
+    //     meta_data_ptr_->locally_owned_part());
     // for (size_t bucket_count = 0, bucket_end = buckets.size(); bucket_count < bucket_end; ++bucket_count) {
     //   stk::mesh::Bucket& bucket = *buckets[bucket_count];
     //   for (size_t elem_count = 0, elem_end = bucket.size(); elem_count < elem_end; ++elem_count) {
     //     stk::mesh::Entity elem = bucket[elem_count];
-    //     MUNDY_THROW_REQUIRE(bulk_data_ptr_->is_valid(elem), std::runtime_error, "Attempted to move an invalid entity.");
-    //     if (elem_count % 3 == 0) {
+    //     MUNDY_THROW_REQUIRE(bulk_data_ptr_->is_valid(elem), std::runtime_error, "Attempted to move an invalid
+    //     entity."); if (elem_count % 3 == 0) {
     //       entities_to_move_to_block_2.push_back(elem);
     //     } else if (elem_count % 3 == 1) {
     //       entities_to_move_to_block_3.push_back(elem);

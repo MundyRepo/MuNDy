@@ -37,8 +37,7 @@ namespace mundy {
 
 namespace geom {
 
-template <typename Scalar, ValidPointType PointType = Point<Scalar>,
-          typename OwnershipType = math::Ownership::Owns>
+template <typename Scalar, ValidPointType PointType = Point<Scalar>, typename OwnershipType = math::Ownership::Owns>
 class Sphere {
   static_assert(std::is_same_v<typename PointType::scalar_t, Scalar>,
                 "The scalar type of the PointType must match the scalar type of the Sphere.");
@@ -100,7 +99,8 @@ class Sphere {
 
   /// \brief Deep copy constructor
   KOKKOS_FUNCTION
-  constexpr Sphere(const Sphere<scalar_t, point_t, ownership_t>& other) : center_(other.center_), radius_(other.radius_) {
+  constexpr Sphere(const Sphere<scalar_t, point_t, ownership_t>& other)
+      : center_(other.center_), radius_(other.radius_) {
   }
 
   /// \brief Deep copy constructor with different sphere type

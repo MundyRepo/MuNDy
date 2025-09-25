@@ -155,7 +155,8 @@ class FieldReqs : public FieldReqsBase {
                                                        const stk::mesh::Part &part) const override;
 
   /// \brief Declare/create the field that this class defines and assign it to the entire mesh.
-  stk::mesh::Field<FieldType_t> &declare_field_on_entire_mesh(mundy::mesh::MetaData *const meta_data_ptr) const override;
+  stk::mesh::Field<FieldType_t> &declare_field_on_entire_mesh(
+      mundy::mesh::MetaData *const meta_data_ptr) const override;
 
   /// \brief Delete the field name constraint (if it exists).
   FieldReqs<FieldType_t> &delete_field_name() override;

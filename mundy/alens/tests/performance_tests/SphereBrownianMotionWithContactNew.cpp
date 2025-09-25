@@ -66,6 +66,7 @@ We'll need two MetaMethods: one for computing the brownian motion and one for ta
 #include <mundy_linkers/LinkerPotentialForceReduction.hpp>    // for mundy::linkers::LinkerPotentialForceReduction
 #include <mundy_linkers/NeighborLinkers.hpp>                  // for mundy::linkers::NeighborLinkers
 #include <mundy_mesh/BulkData.hpp>                            // for mundy::mesh::BulkData
+#include <mundy_mesh/ForEachEntity.hpp>                       // for mundy::mesh::for_each_entity_run
 #include <mundy_mesh/MetaData.hpp>                            // for mundy::mesh::MetaData
 #include <mundy_mesh/utils/FillFieldWithValue.hpp>            // for mundy::mesh::utils::fill_field_with_value
 #include <mundy_meta/MetaFactory.hpp>                         // for mundy::meta::MetaKernelFactory
@@ -79,7 +80,6 @@ We'll need two MetaMethods: one for computing the brownian motion and one for ta
 #include <mundy_shapes/ComputeAABB.hpp>           // for mundy::shapes::ComputeAABB
 #include <mundy_shapes/DeclareAndInitShapes.hpp>  // for mundy::shapes::DeclareAndInitShapes
 #include <mundy_shapes/Spheres.hpp>               // for mundy::shapes::Spheres
-#include <mundy_mesh/ForEachEntity.hpp>  // for mundy::mesh::for_each_entity_run
 
 /*// A macro for a block of stuff
 #define TIME_BLOCK(thing_to_time, rank, message)                          \

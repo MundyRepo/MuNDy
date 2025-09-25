@@ -31,6 +31,7 @@
 
 // Trilinos libs
 #include <Trilinos_version.h>  // for TRILINOS_MAJOR_MINOR_VERSION
+
 #include <Kokkos_Core.hpp>            // for Kokkos::initialize, Kokkos::finalize, Kokkos::Timer
 #include <Kokkos_Pair.hpp>            // for Kokkos::pair
 #include <Kokkos_UnorderedMap.hpp>    // for Kokkos::UnorderedMap

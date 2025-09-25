@@ -1109,7 +1109,7 @@ template <typename U, typename T, ValidAccessor<U> Accessor1, typename Ownership
           typename OwnershipType2>
 KOKKOS_INLINE_FUNCTION constexpr bool is_close(
     const AQuaternion<U, Accessor1, OwnershipType1> &quat1, const AQuaternion<T, Accessor2, OwnershipType2> &quat2,
-     const decltype(get_comparison_tolerance<T, U>())& tol = get_comparison_tolerance<T, U>()) {
+    const decltype(get_comparison_tolerance<T, U>()) &tol = get_comparison_tolerance<T, U>()) {
   using Tol = decltype(tol);
   return Kokkos::abs(static_cast<Tol>(quat1[0]) - static_cast<Tol>(quat2[0])) <= tol &&
          Kokkos::abs(static_cast<Tol>(quat1[1]) - static_cast<Tol>(quat2[1])) <= tol &&
@@ -1125,7 +1125,7 @@ template <typename U, typename T, ValidAccessor<U> Accessor1, typename Ownership
           typename OwnershipType2>
 KOKKOS_INLINE_FUNCTION constexpr bool is_approx_close(
     const AQuaternion<U, Accessor1, OwnershipType1> &quat1, const AQuaternion<T, Accessor2, OwnershipType2> &quat2,
-     const decltype(get_relaxed_comparison_tolerance<T, U>())& tol = get_relaxed_comparison_tolerance<T, U>()) {
+    const decltype(get_relaxed_comparison_tolerance<T, U>()) &tol = get_relaxed_comparison_tolerance<T, U>()) {
   return is_close(quat1, quat2, tol);
 }
 //@}

@@ -35,8 +35,8 @@
 // Mundy libs
 #include <mundy_constraints/HookeanSprings.hpp>  // for mundy::constraints::HookeanSprings
 #include <mundy_constraints/compute_constraint_forcing/kernels/HookeanSpringsKernel.hpp>  // for mundy::constraints::compute_constraint_forcing::kernels::HookeanSpringsKernel
-#include <mundy_core/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
-#include <mundy_mesh/BulkData.hpp>      // for mundy::mesh::BulkData
+#include <mundy_core/throw_assert.hpp>   // for MUNDY_THROW_ASSERT
+#include <mundy_mesh/BulkData.hpp>       // for mundy::mesh::BulkData
 #include <mundy_mesh/ForEachEntity.hpp>  // for mundy::mesh::for_each_entity_run
 
 namespace mundy {

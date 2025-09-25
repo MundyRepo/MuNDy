@@ -3,7 +3,7 @@
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
 //                                              Copyright 2024 Bryce Palmer
-// 
+//
 // Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
@@ -63,9 +63,8 @@ TEST(SharedNormalDistanceBetweenEllipsoidAndPoint, AnalyticalSphereTestCases) {
   // Spheres admit an analytical signed separation distance. We can generate N random spheres with random positions,
   // radii, and orientations and check that the numerical signed separation distance matches the analytical result.
 
-  auto perform_test_for_given_spheres = [](const Point<double>& center,
-                                           const mundy::math::Quaterniond& orientation, const double r,
-                                           const Point<double>& point) {
+  auto perform_test_for_given_spheres = [](const Point<double>& center, const mundy::math::Quaterniond& orientation,
+                                           const double r, const Point<double>& point) {
     const Ellipsoid<double> ellipsoid(center, orientation, r, r, r);
     const double shared_normal_ssd = distance(SharedNormalSigned{}, point, ellipsoid);
     const double expected_ssd = mundy::math::norm(point - center) - r;
@@ -103,17 +102,17 @@ TEST(SharedNormalDistanceBetweenEllipsoids, AnalyticalSphereTestCases) {
   // Spheres admit an analytical signed separation distance. We can generate N random spheres with random positions,
   // radii, and orientations and check that the numerical signed separation distance matches the analytical result.
 
-  auto perform_test_for_given_spheres =
-      [](const Point<double>& center0, const mundy::math::Quaterniond& orientation0, const double r0,
-         const Point<double>& center1, const mundy::math::Quaterniond& orientation1, const double r1) {
-        const Ellipsoid<double> ellipsoid0(center0, orientation0, r0, r0, r0);
-        const Ellipsoid<double> ellipsoid1(center1, orientation1, r1, r1, r1);
-        const double shared_normal_ssd = distance(SharedNormalSigned{}, ellipsoid0, ellipsoid1);
-        const double expected_ssd = mundy::math::norm(center1 - center0) - r0 - r1;
+  auto perform_test_for_given_spheres = [](const Point<double>& center0, const mundy::math::Quaterniond& orientation0,
+                                           const double r0, const Point<double>& center1,
+                                           const mundy::math::Quaterniond& orientation1, const double r1) {
+    const Ellipsoid<double> ellipsoid0(center0, orientation0, r0, r0, r0);
+    const Ellipsoid<double> ellipsoid1(center1, orientation1, r1, r1, r1);
+    const double shared_normal_ssd = distance(SharedNormalSigned{}, ellipsoid0, ellipsoid1);
+    const double expected_ssd = mundy::math::norm(center1 - center0) - r0 - r1;
 
-        // Assert used to avoid 10 million throws
-        ASSERT_NEAR(shared_normal_ssd, expected_ssd, TEST_DOUBLE_EPSILON);
-      };
+    // Assert used to avoid 10 million throws
+    ASSERT_NEAR(shared_normal_ssd, expected_ssd, TEST_DOUBLE_EPSILON);
+  };
 
   openrand::Philox rng(generate_test_seed(), 0);
   const double min_xyz = -10.0;

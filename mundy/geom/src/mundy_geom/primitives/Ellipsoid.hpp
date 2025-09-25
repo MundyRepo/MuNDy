@@ -374,8 +374,7 @@ class Ellipsoid {
 template <typename T>
 struct impl_is_ellipsoid : std::false_type {};
 //
-template <typename Scalar, ValidPointType PointType, math::ValidQuaternionType OrientationType,
-          typename OwnershipType>
+template <typename Scalar, ValidPointType PointType, math::ValidQuaternionType OrientationType, typename OwnershipType>
 struct impl_is_ellipsoid<Ellipsoid<Scalar, PointType, OrientationType, OwnershipType>> : std::true_type {};
 //
 
@@ -462,8 +461,7 @@ KOKKOS_FUNCTION constexpr Point<typename EllipsoidType::scalar_t> map_body_frame
 
 template <typename Scalar, typename Accessor1, typename OwnershipType1, ValidEllipsoidType EllipsoidType>
 KOKKOS_FUNCTION constexpr math::Vector3<Scalar> map_surface_normal_to_foot_point_on_ellipsoid(
-    const math::AVector3<Scalar, Accessor1, OwnershipType1>& lab_frame_ellipsoid_nhat,
-    const EllipsoidType& ellipsoid) {
+    const math::AVector3<Scalar, Accessor1, OwnershipType1>& lab_frame_ellipsoid_nhat, const EllipsoidType& ellipsoid) {
   const auto body_frame_nhat = conjugate(ellipsoid.orientation()) * lab_frame_ellipsoid_nhat;
   const auto body_frame_foot_point = map_body_frame_normal_to_ellipsoid(body_frame_nhat, ellipsoid);
   return ellipsoid.orientation() * body_frame_foot_point + ellipsoid.center();

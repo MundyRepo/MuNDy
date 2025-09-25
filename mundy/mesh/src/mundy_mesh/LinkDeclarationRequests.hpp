@@ -47,27 +47,27 @@
 #include <stk_mesh/baseImpl/PartVectorUtils.hpp>  // for stk::mesh::impl::fill_add_parts_and_supersets
 
 // Mundy libs
-#include <mundy_core/NgpView.hpp>         // for mundy::core::NgpView
-#include <mundy_core/throw_assert.hpp>    // for MUNDY_THROW_ASSERT
-#include <mundy_mesh/BulkData.hpp>        // for mundy::mesh::BulkData
-#include <mundy_mesh/ForEachEntity.hpp>   // for mundy::mesh::for_each_entity_run
-#include <mundy_mesh/MetaData.hpp>        // for mundy::mesh::MetaData
-#include <mundy_mesh/NgpLinkData.hpp>  // for mundy::mesh::NgpLinkData
-#include <mundy_mesh/NgpFieldBLAS.hpp>    // for mundy::mesh::field_copy
+#include <mundy_core/NgpView.hpp>        // for mundy::core::NgpView
+#include <mundy_core/throw_assert.hpp>   // for MUNDY_THROW_ASSERT
+#include <mundy_mesh/BulkData.hpp>       // for mundy::mesh::BulkData
+#include <mundy_mesh/ForEachEntity.hpp>  // for mundy::mesh::for_each_entity_run
+#include <mundy_mesh/MetaData.hpp>       // for mundy::mesh::MetaData
+#include <mundy_mesh/NgpFieldBLAS.hpp>   // for mundy::mesh::field_copy
+#include <mundy_mesh/NgpLinkData.hpp>    // for mundy::mesh::NgpLinkData
 
 namespace mundy {
 
 namespace mesh {
 
 template <typename MemSpace>
-class LinkDeclarationRequestsT { // Raw data in any space
+class LinkDeclarationRequestsT {  // Raw data in any space
  public:
   /// \brief Default constructor.
   LinkDeclarationRequestsT() = default;
 
   /// \brief Canonical constructor.
   LinkDeclarationRequestsT(const LinkMetaData &link_meta_data, const stk::mesh::PartVector &add_parts,
-                      unsigned link_dimensionality, unsigned initial_capacity)
+                           unsigned link_dimensionality, unsigned initial_capacity)
       : link_meta_data_ptr_(&link_meta_data),
         link_parts_(add_parts),
         link_rank_(link_meta_data.link_rank()),

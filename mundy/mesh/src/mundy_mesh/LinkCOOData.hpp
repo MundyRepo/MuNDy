@@ -34,18 +34,18 @@
 // Trilinos libs
 #include <Kokkos_Sort.hpp>                        // for Kokkos::sort
 #include <Kokkos_UnorderedMap.hpp>                // for Kokkos::UnorderedMap
+#include <stk_mesh/base/BulkData.hpp>             // for stk::mesh::BulkData
 #include <stk_mesh/base/Entity.hpp>               // for stk::mesh::Entity
 #include <stk_mesh/base/Part.hpp>                 // stk::mesh::Part
 #include <stk_mesh/base/Selector.hpp>             // stk::mesh::Selector
 #include <stk_mesh/base/Types.hpp>                // for stk::mesh::EntityRank
 #include <stk_mesh/baseImpl/PartVectorUtils.hpp>  // for stk::mesh::impl::fill_add_parts_and_supersets
 #include <stk_util/ngp/NgpSpaces.hpp>             // for stk::ngp::HostMemSpace, stk::ngp::UVMMemSpace
-#include <stk_mesh/base/BulkData.hpp>        // for stk::mesh::BulkData
 
 // Mundy libs
-#include <mundy_core/throw_assert.hpp>        // for MUNDY_THROW_ASSERT
-#include <mundy_mesh/LinkMetaData.hpp>        // for mundy::mesh::LinkMetaData
-#include <mundy_mesh/impl/NgpLinkMetaData.hpp> // for mundy::mesh::impl::NgpLinkMetaDataT
+#include <mundy_core/throw_assert.hpp>          // for MUNDY_THROW_ASSERT
+#include <mundy_mesh/LinkMetaData.hpp>          // for mundy::mesh::LinkMetaData
+#include <mundy_mesh/impl/NgpLinkMetaData.hpp>  // for mundy::mesh::impl::NgpLinkMetaDataT
 
 namespace mundy {
 
@@ -229,7 +229,7 @@ class LinkCOOData {  // Host only | Valid during mesh modifications
                        "Linker is not of the correct rank.");
     MUNDY_THROW_ASSERT(bulk_data().is_valid(linker), std::invalid_argument, "Linker is not valid.");
 
-    auto &linked_e_ids_field =  impl::get_linked_entity_ids_field(link_meta_data());
+    auto &linked_e_ids_field = impl::get_linked_entity_ids_field(link_meta_data());
     return stk::mesh::field_data(linked_e_ids_field, linker)[link_ordinal];
   }
 
@@ -280,22 +280,21 @@ class LinkCOOData {  // Host only | Valid during mesh modifications
   //@}
 };  // LinkCOOData
 
-
-template<typename NgpMemSpace>
+template <typename NgpMemSpace>
 class NgpLinkCOODataT;
 
 namespace impl {
-template<typename NgpMemSpace>
-NgpLinkMetaDataT<NgpMemSpace> &get_ngp_link_meta_data(NgpLinkCOODataT<NgpMemSpace>& ngp_coo_data);
+template <typename NgpMemSpace>
+NgpLinkMetaDataT<NgpMemSpace> &get_ngp_link_meta_data(NgpLinkCOODataT<NgpMemSpace> &ngp_coo_data);
 
-template<typename NgpMemSpace>
-stk::mesh::NgpMesh &get_ngp_mesh(NgpLinkCOODataT<NgpMemSpace>& ngp_coo_data);
+template <typename NgpMemSpace>
+stk::mesh::NgpMesh &get_ngp_mesh(NgpLinkCOODataT<NgpMemSpace> &ngp_coo_data);
 
-template<typename NgpMemSpace>
+template <typename NgpMemSpace>
 class NgpCOOToCRSSynchronizerT;
 }  // namespace impl
 
-template<typename NgpMemSpace>
+template <typename NgpMemSpace>
 class NgpLinkCOODataT {  // Device only | Invalid during mesh modifications | Can become stale after mesh modifications
  public:
   //! \name Constructors and destructor
@@ -320,7 +319,6 @@ class NgpLinkCOODataT {  // Device only | Invalid during mesh modifications | Ca
     MUNDY_THROW_ASSERT(bulk_data_ptr_ != nullptr, std::invalid_argument, "Bulk data is not set.");
     MUNDY_THROW_ASSERT(link_meta_data_ptr_ != nullptr, std::invalid_argument, "Link meta data is not set.");
   }
-
 
   /// \brief Construct from a LinkCOOData.
   /// Does NOT perform a deep copy. Simply steals their pointers to the bulk data and meta data.
@@ -503,14 +501,13 @@ class NgpLinkCOODataT {  // Device only | Invalid during mesh modifications | Ca
   }
 
  private:
-  
-  template<typename T>
-  friend impl::NgpLinkMetaDataT<T> &impl::get_ngp_link_meta_data(NgpLinkCOODataT<T>& ngp_coo_data);
-  
-  template<typename T>
-  friend stk::mesh::NgpMesh &impl::get_ngp_mesh(NgpLinkCOODataT<T>& ngp_coo_data);
-  
-  template<typename T>
+  template <typename T>
+  friend impl::NgpLinkMetaDataT<T> &impl::get_ngp_link_meta_data(NgpLinkCOODataT<T> &ngp_coo_data);
+
+  template <typename T>
+  friend stk::mesh::NgpMesh &impl::get_ngp_mesh(NgpLinkCOODataT<T> &ngp_coo_data);
+
+  template <typename T>
   friend class impl::NgpCOOToCRSSynchronizerT;
 
   //! \name Internal members (host only)
@@ -532,12 +529,12 @@ class NgpLinkCOODataT {  // Device only | Invalid during mesh modifications | Ca
 using NgpLinkCOOData = NgpLinkCOODataT<stk::ngp::MemSpace>;
 
 namespace impl {
-template<typename NgpMemSpace>
-NgpLinkMetaDataT<NgpMemSpace> &get_ngp_link_meta_data(NgpLinkCOODataT<NgpMemSpace>& ngp_coo_data) {
+template <typename NgpMemSpace>
+NgpLinkMetaDataT<NgpMemSpace> &get_ngp_link_meta_data(NgpLinkCOODataT<NgpMemSpace> &ngp_coo_data) {
   return ngp_coo_data.ngp_link_meta_data_;
 }
-template<typename NgpMemSpace>
-stk::mesh::NgpMesh &get_ngp_mesh(NgpLinkCOODataT<NgpMemSpace>& ngp_coo_data) {
+template <typename NgpMemSpace>
+stk::mesh::NgpMesh &get_ngp_mesh(NgpLinkCOODataT<NgpMemSpace> &ngp_coo_data) {
   return ngp_coo_data.ngp_mesh_;
 }
 }  // namespace impl

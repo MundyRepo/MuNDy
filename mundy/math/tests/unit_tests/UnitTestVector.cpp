@@ -623,8 +623,7 @@ TYPED_TEST(VectorPairwiseTypeTest, SpecialOperations) {
 
 struct an_external_functor {
   template <typename T>
-  KOKKOS_INLINE_FUNCTION
-  T operator()(const T& x) const {
+  KOKKOS_INLINE_FUNCTION T operator()(const T& x) const {
     return x + 1;
   }
 };

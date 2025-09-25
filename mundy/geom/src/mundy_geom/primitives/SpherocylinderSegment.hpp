@@ -37,8 +37,7 @@ namespace mundy {
 
 namespace geom {
 
-template <typename Scalar, ValidPointType PointType = Point<Scalar>,
-          typename OwnershipType = math::Ownership::Owns>
+template <typename Scalar, ValidPointType PointType = Point<Scalar>, typename OwnershipType = math::Ownership::Owns>
 class SpherocylinderSegment {
   static_assert(std::is_same_v<typename PointType::scalar_t, Scalar>,
                 "The scalar_t of the PointType must match the Scalar type.");
@@ -91,7 +90,8 @@ class SpherocylinderSegment {
   /// \param[in] start The start of the SpherocylinderSegment.
   /// \param[in] end The end of the SpherocylinderSegment.
   template <ValidPointType OtherPointType>
-  KOKKOS_FUNCTION constexpr SpherocylinderSegment(const OtherPointType& start, const OtherPointType& end, const scalar_t& radius)
+  KOKKOS_FUNCTION constexpr SpherocylinderSegment(const OtherPointType& start, const OtherPointType& end,
+                                                  const scalar_t& radius)
       : start_(start), end_(end), radius_(radius) {
   }
 
@@ -287,8 +287,7 @@ inline constexpr bool is_spherocylinder_segment_v = is_spherocylinder_segment<T>
 
 /// @brief Concept to check if a type is a valid SpherocylinderSegment type
 template <typename SpherocylinderSegmentType>
-concept ValidSpherocylinderSegmentType =
-    is_spherocylinder_segment_v<SpherocylinderSegmentType>;
+concept ValidSpherocylinderSegmentType = is_spherocylinder_segment_v<SpherocylinderSegmentType>;
 
 static_assert(ValidSpherocylinderSegmentType<SpherocylinderSegment<float>> &&
                   ValidSpherocylinderSegmentType<const SpherocylinderSegment<float>> &&
@@ -303,7 +302,7 @@ static_assert(ValidSpherocylinderSegmentType<SpherocylinderSegment<float>> &&
 template <ValidSpherocylinderSegmentType SpherocylinderSegmentType1,
           ValidSpherocylinderSegmentType SpherocylinderSegmentType2>
 KOKKOS_FUNCTION constexpr bool operator==(const SpherocylinderSegmentType1& spherocylinder_segment1,
-                                const SpherocylinderSegmentType2& spherocylinder_segment2) {
+                                          const SpherocylinderSegmentType2& spherocylinder_segment2) {
   return (spherocylinder_segment1.radius() == spherocylinder_segment2.radius()) &&
          (spherocylinder_segment1.start() == spherocylinder_segment2.start()) &&
          (spherocylinder_segment1.end() == spherocylinder_segment2.end());
@@ -313,7 +312,7 @@ KOKKOS_FUNCTION constexpr bool operator==(const SpherocylinderSegmentType1& sphe
 template <ValidSpherocylinderSegmentType SpherocylinderSegmentType1,
           ValidSpherocylinderSegmentType SpherocylinderSegmentType2>
 KOKKOS_FUNCTION constexpr bool operator!=(const SpherocylinderSegmentType1& spherocylinder_segment1,
-                                const SpherocylinderSegmentType2& spherocylinder_segment2) {
+                                          const SpherocylinderSegmentType2& spherocylinder_segment2) {
   return ((spherocylinder_segment1.radius() != spherocylinder_segment2.radius())) ||
          (spherocylinder_segment1.start() != spherocylinder_segment2.start()) ||
          (spherocylinder_segment1.end() != spherocylinder_segment2.end());

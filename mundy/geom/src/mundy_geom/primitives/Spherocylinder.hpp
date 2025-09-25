@@ -324,12 +324,11 @@ class Spherocylinder {
 template <typename T>
 struct impl_is_spherocylinder : std::false_type {};
 //
-template <typename Scalar, ValidPointType PointType, math::ValidQuaternionType QuaternionType,
-          typename OwnershipType>
+template <typename Scalar, ValidPointType PointType, math::ValidQuaternionType QuaternionType, typename OwnershipType>
 struct impl_is_spherocylinder<Spherocylinder<Scalar, PointType, QuaternionType, OwnershipType>> : std::true_type {};
 
 /// \brief Type trait to determine if a type is a Spherocylinder
-template<typename T>
+template <typename T>
 struct is_spherocylinder : impl_is_spherocylinder<std::remove_cv_t<T>> {};
 //
 template <typename T>
@@ -337,8 +336,7 @@ constexpr bool is_spherocylinder_v = is_spherocylinder<T>::value;
 
 /// @brief Concept to check if a type is a valid Spherocylinder type
 template <typename SpherocylinderType>
-concept ValidSpherocylinderType =
-    is_spherocylinder_v<SpherocylinderType>;
+concept ValidSpherocylinderType = is_spherocylinder_v<SpherocylinderType>;
 
 static_assert(ValidSpherocylinderType<Spherocylinder<float>> && ValidSpherocylinderType<const Spherocylinder<float>> &&
                   ValidSpherocylinderType<Spherocylinder<double>> &&

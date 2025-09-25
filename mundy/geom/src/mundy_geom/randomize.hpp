@@ -185,7 +185,8 @@ KOKKOS_INLINE_FUNCTION AABB<Scalar> generate_random_aabb(const AABB<Scalar>& box
 
 /// \brief Generate a random AABB with random size and center point inside the box
 template <typename Scalar, typename RNG>
-KOKKOS_INLINE_FUNCTION AABB<Scalar> generate_random_aabb(const AABB<Scalar>& box, const math::Vector3<Scalar>& min_sizes,
+KOKKOS_INLINE_FUNCTION AABB<Scalar> generate_random_aabb(const AABB<Scalar>& box,
+                                                         const math::Vector3<Scalar>& min_sizes,
                                                          const math::Vector3<Scalar>& max_sizes, RNG& rng) {
   // Generate a random center point within the bounding box
   Point<Scalar> center = generate_random_point<Scalar>(box, rng);

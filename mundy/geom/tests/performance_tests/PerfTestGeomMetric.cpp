@@ -46,10 +46,8 @@
 #include <mundy_math/Vector.hpp>                       // for mundy::math::Vector
 
 mundy::math::Vector3d random_vector() {
-  return mundy::math::Vector3d{
-      static_cast<double>(rand()) / RAND_MAX,
-      static_cast<double>(rand()) / RAND_MAX,
-      static_cast<double>(rand()) / RAND_MAX};
+  return mundy::math::Vector3d{static_cast<double>(rand()) / RAND_MAX, static_cast<double>(rand()) / RAND_MAX,
+                               static_cast<double>(rand()) / RAND_MAX};
 }
 
 void speed_test() {
@@ -58,8 +56,8 @@ void speed_test() {
       .unit("op")
       .relative(true)
       .performanceCounters(true)
-      .warmup(500)                                                // a few warmup runs
-      .epochs(500)                                               // multiple independent epochs
+      .warmup(500)                                   // a few warmup runs
+      .epochs(500)                                   // multiple independent epochs
       .minEpochTime(std::chrono::microseconds(200))  // run long enough per epoch
       .minEpochIterations(100000);
 
@@ -95,15 +93,14 @@ void construction_test() {
       .unit("op")
       .relative(true)
       .performanceCounters(true)
-      .warmup(500)                                                // a few warmup runs
-      .epochs(500)                                               // multiple independent epochs
+      .warmup(500)                                   // a few warmup runs
+      .epochs(500)                                   // multiple independent epochs
       .minEpochTime(std::chrono::microseconds(200))  // run long enough per epoch
       .minEpochIterations(100000);
-  
+
   mundy::math::Vector3d cell_size = random_vector();
   mundy::math::Vector3d point1 = random_vector();
   mundy::math::Vector3d point2 = random_vector();
-
 
   bench.run("Old Periodic Metric | Loops", [&] {
     // Old constructor

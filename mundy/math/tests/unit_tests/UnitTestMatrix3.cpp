@@ -663,16 +663,14 @@ TYPED_TEST(Matrix3SingleTypeTest, SpecialOperationsEdgeCases) {
 
 struct an_external_functor {
   template <typename T>
-  KOKKOS_FUNCTION
-  T operator()(const T& x) const {
+  KOKKOS_FUNCTION T operator()(const T& x) const {
     return x + 1;
   }
 };
 
 struct an_vector_external_functor {
   template <typename T>
-  KOKKOS_FUNCTION
-  auto operator()(const T& x) const {
+  KOKKOS_FUNCTION auto operator()(const T& x) const {
     // Set each element of the row or column to the sum of its elements
     return sum(x) * Vector3<typename T::scalar_t>{1, 1, 1};
   }
@@ -680,9 +678,7 @@ struct an_vector_external_functor {
 
 TYPED_TEST(Matrix3SingleTypeTest, Apply) {
   // Apply to each element of the matrix
-  Matrix3<TypeParam> m1(1, 2, 3, 
-                        4, 5, 6, 
-                        -7, -8, -9);
+  Matrix3<TypeParam> m1(1, 2, 3, 4, 5, 6, -7, -8, -9);
   auto m2 = apply(an_external_functor{}, m1);
   using T3 = decltype(m2)::scalar_t;
   is_close_debug(m2, Matrix3<T3>{2, 3, 4, 5, 6, 7, -6, -7, -8}, "Apply to elements failed.");
@@ -694,7 +690,7 @@ TYPED_TEST(Matrix3SingleTypeTest, Apply) {
 
   // Apply to each column
   auto m4 = apply_column(an_vector_external_functor{}, m1);
-  is_close_debug(m4, Matrix3<T4>{-2, -1, 0, -2, -1, 0, -2, -1, 0}, "Apply to columns failed.");  
+  is_close_debug(m4, Matrix3<T4>{-2, -1, 0, -2, -1, 0, -2, -1, 0}, "Apply to columns failed.");
 }
 //@}
 

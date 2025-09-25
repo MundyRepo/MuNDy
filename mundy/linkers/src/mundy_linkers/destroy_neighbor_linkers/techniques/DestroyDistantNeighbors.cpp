@@ -40,8 +40,8 @@
 #include <mundy_linkers/Linkers.hpp>    // for mundy::linkers::connect_linker_to_entitys_nodes
 #include <mundy_linkers/destroy_neighbor_linkers/techniques/DestroyDistantNeighbors.hpp>  // for mundy::linkers::...::DestroyDistantNeighbors
 #include <mundy_mesh/BulkData.hpp>                                                        // for mundy::mesh::BulkData
+#include <mundy_mesh/ForEachEntity.hpp>                 // for mundy::mesh::for_each_entity_run
 #include <mundy_mesh/utils/DestroyFlaggedEntities.hpp>  // for mundy::mesh::utils::destroy_flagged_entities
-#include <mundy_mesh/ForEachEntity.hpp>  // for mundy::mesh::for_each_entity_run
 
 namespace mundy {
 

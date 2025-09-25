@@ -30,11 +30,11 @@
 #include <utility>
 
 // Our libs
-#include <mundy_core/throw_assert.hpp>      // for MUNDY_THROW_ASSERT
-#include <mundy_geom/primitives/Point.hpp>  // for mundy::geom::Point
+#include <mundy_core/throw_assert.hpp>         // for MUNDY_THROW_ASSERT
 #include <mundy_geom/primitives/Circle3D.hpp>  // for mundy::geom::Circle3D
-#include <mundy_math/Quaternion.hpp>        // for mundy::math::Quaternion
-#include <mundy_math/Vector3.hpp>           // for mundy::math::Vector3
+#include <mundy_geom/primitives/Point.hpp>     // for mundy::geom::Point
+#include <mundy_math/Quaternion.hpp>           // for mundy::math::Quaternion
+#include <mundy_math/Vector3.hpp>              // for mundy::math::Vector3
 
 namespace mundy {
 
@@ -94,7 +94,7 @@ class Ring {
   /// \param[in] minor_radius The radius of the tube around said circle.
   KOKKOS_FUNCTION
   constexpr Ring(const point_t& center, const orientation_t& orientation, const scalar_t& major_radius,
-       const scalar_t& minor_radius)
+                 const scalar_t& minor_radius)
       : center_circle_(center, orientation, major_radius), minor_radius_(minor_radius) {
   }
 
@@ -105,7 +105,7 @@ class Ring {
   /// \param[in] minor_radius The radius of the tube around said circle.
   template <ValidPointType OtherPointType, math::ValidQuaternionType OtherQuaternionType>
   KOKKOS_FUNCTION constexpr Ring(const OtherPointType& center, const OtherQuaternionType& orientation,
-                       const scalar_t& major_radius, const scalar_t& minor_radius)
+                                 const scalar_t& major_radius, const scalar_t& minor_radius)
     requires(!std::is_same_v<OtherPointType, point_t> || !std::is_same_v<OtherQuaternionType, orientation_t>)
       : center_circle_(center, orientation, major_radius), minor_radius_(minor_radius) {
   }
@@ -305,8 +305,7 @@ class Ring {
 template <typename T>
 struct impl_is_ring : std::false_type {};
 //
-template <typename Scalar, ValidPointType PointType, math::ValidQuaternionType QuaternionType,
-          typename OwnershipType>
+template <typename Scalar, ValidPointType PointType, math::ValidQuaternionType QuaternionType, typename OwnershipType>
 struct impl_is_ring<Ring<Scalar, PointType, QuaternionType, OwnershipType>> : std::true_type {};
 
 /// @brief Type trait to determine if a type is a Ring

@@ -34,12 +34,12 @@
 #include <stk_mesh/base/Types.hpp>   // for stk::mesh::EntityRank
 
 // Mundy libs
-#include <mundy_core/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
-#include <mundy_mesh/LinkCOOData.hpp>   // for mundy::mesh::LinkCOOData/NgpLinkCOOData
-#include <mundy_mesh/LinkCRSData.hpp>   // for mundy::mesh::LinkCRSData/NgpLinkCRSData
-#include <mundy_mesh/LinkMetaData.hpp>  // for mundy::mesh::LinkMetaData
-#include <mundy_mesh/MetaData.hpp>      // for mundy::mesh::MetaData
-#include <mundy_mesh/Types.hpp>         // for mundy::mesh::NgpDataAccessTag
+#include <mundy_core/throw_assert.hpp>                 // for MUNDY_THROW_ASSERT
+#include <mundy_mesh/LinkCOOData.hpp>                  // for mundy::mesh::LinkCOOData/NgpLinkCOOData
+#include <mundy_mesh/LinkCRSData.hpp>                  // for mundy::mesh::LinkCRSData/NgpLinkCRSData
+#include <mundy_mesh/LinkMetaData.hpp>                 // for mundy::mesh::LinkMetaData
+#include <mundy_mesh/MetaData.hpp>                     // for mundy::mesh::MetaData
+#include <mundy_mesh/Types.hpp>                        // for mundy::mesh::NgpDataAccessTag
 #include <mundy_mesh/impl/HostDeviceSynchronizer.hpp>  // for mundy::mesh::impl::HostDeviceSynchronizer
 
 namespace mundy {
@@ -48,10 +48,9 @@ namespace mesh {
 
 namespace impl {
 
-template<typename NgpMemSpace>
+template <typename NgpMemSpace>
 class LinkCRSDataSynchronizerT : public HostDeviceSynchronizer {
  public:
-  
   LinkCRSDataSynchronizerT(LinkCRSData &crs_data, NgpLinkCRSDataT<NgpMemSpace> &ngp_crs_data)
       : crs_data_(crs_data), ngp_crs_data_(ngp_crs_data) {
   }
@@ -84,7 +83,7 @@ class LinkCRSDataSynchronizerT : public HostDeviceSynchronizer {
     std::cout << "WARNING: update_post_mesh_mod() is a currently a no-op for LinkCRSDataSynchronizerT" << std::endl;
   }
 
-  private:
+ private:
   LinkCRSData &crs_data_;
   NgpLinkCRSDataT<NgpMemSpace> &ngp_crs_data_;
 };  // LinkCRSDataSynchronizerT

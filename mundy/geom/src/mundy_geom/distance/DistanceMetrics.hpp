@@ -30,11 +30,11 @@
 #include <Kokkos_Core.hpp>
 
 // Mundy
-#include <mundy_geom/primitives.hpp>      // for mundy::geom::Point, ...
-#include <mundy_math/Matrix3.hpp>         // for mundy::math::Matrix3
-#include <mundy_math/Quaternion.hpp>      // for mundy::math::Quaternion
-#include <mundy_math/Vector3.hpp>         // for mundy::math::Vector3
-#include <mundy_math/Tolerance.hpp>       // for mundy::math::get_zero_tolerance
+#include <mundy_geom/primitives.hpp>  // for mundy::geom::Point, ...
+#include <mundy_math/Matrix3.hpp>     // for mundy::math::Matrix3
+#include <mundy_math/Quaternion.hpp>  // for mundy::math::Quaternion
+#include <mundy_math/Tolerance.hpp>   // for mundy::math::get_zero_tolerance
+#include <mundy_math/Vector3.hpp>     // for mundy::math::Vector3
 
 namespace mundy {
 

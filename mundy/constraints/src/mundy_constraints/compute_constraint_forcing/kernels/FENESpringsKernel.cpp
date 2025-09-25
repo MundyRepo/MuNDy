@@ -36,8 +36,8 @@
 // Mundy libs
 #include <mundy_constraints/FENESprings.hpp>  // for mundy::constraints::FENESprings
 #include <mundy_constraints/compute_constraint_forcing/kernels/FENESpringsKernel.hpp>  // for mundy::constraints::compute_constraint_forcing::kernels::FENESpringsKernel
-#include <mundy_core/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
-#include <mundy_mesh/BulkData.hpp>      // for mundy::mesh::BulkData
+#include <mundy_core/throw_assert.hpp>   // for MUNDY_THROW_ASSERT
+#include <mundy_mesh/BulkData.hpp>       // for mundy::mesh::BulkData
 #include <mundy_mesh/ForEachEntity.hpp>  // for mundy::mesh::for_each_entity_run
 
 namespace mundy {

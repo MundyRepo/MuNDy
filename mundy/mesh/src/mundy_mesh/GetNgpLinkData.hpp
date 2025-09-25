@@ -25,7 +25,7 @@
 /// \brief Declaration of the GetNgpLinkData class
 
 // C++ core
-#include <memory>      // for std::shared_ptr, std::unique_ptr
+#include <memory>  // for std::shared_ptr, std::unique_ptr
 
 // STK
 #include <stk_util/ngp/NgpSpaces.hpp>  // for stk::ngp::HostMemSpace, stk::ngp::UVMMemSpace
