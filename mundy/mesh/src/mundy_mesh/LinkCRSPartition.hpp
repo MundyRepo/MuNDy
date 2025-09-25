@@ -323,7 +323,6 @@ void deep_copy(LinkCRSPartitionT<MemSpace1> &dest, const LinkCRSPartitionT<MemSp
       Kokkos::resize(Kokkos::WithoutInitializing, dest.linked_buckets_[rank], src.linked_buckets_[rank].extent(0));
     }
     for (unsigned i = 0; i < src.linked_buckets_[rank].extent(0); ++i) {
-      std::cout << "Deep copying link bucket conn " << i << " of rank " << rank << " from partition " << src.id_ << std::endl;
       new (&dest.linked_buckets_[rank][i]) LinkCRSBucketConnT<MemSpace1>();
       deep_copy(dest.linked_buckets_[rank](i), src.linked_buckets_[rank](i));
     }

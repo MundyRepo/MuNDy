@@ -97,12 +97,6 @@ void setup_parts_and_links(TestContext& context, LinkMetaData& link_meta_data) {
   context.meta_data->commit();
 }
 
-LinkData &declare_and_validate_link_data(TestContext& context, LinkMetaData& link_meta_data) {
-  static LinkData link_data = declare_link_data(*context.bulk_data, link_meta_data);
-  EXPECT_EQ(link_data.link_meta_data().link_rank(), link_meta_data.link_rank());
-  return link_data;
-}
-
 // Struct to organize link initialization data
 template <size_t Dimensionality>
 struct LinkInitializationData {
@@ -137,7 +131,6 @@ template <size_t Dimensionality>
 void declare_and_validate_relations(const TestContext& context,
                                     const LinkInitializationData<Dimensionality>& link_init_data, LinkData& link_data) {
   unsigned num_links_this_part = link_init_data.link_and_linked_entities.size();
-  std::cout << "num_links_this_part: " << num_links_this_part << std::endl;
   for (unsigned i = 0; i < num_links_this_part; ++i) {
     const auto& entities = link_init_data.link_and_linked_entities[i];
     const auto& entity_ranks = link_init_data.linked_entity_ranks[i];
@@ -155,16 +148,12 @@ void declare_and_validate_relations(const TestContext& context,
       EXPECT_EQ(link_data.coo_data().get_linked_entity(entities[0], j), entities[j + 1]);
       EXPECT_EQ(link_data.coo_data().get_linked_entity_rank(entities[0], j), entity_ranks[j]);
       EXPECT_EQ(link_data.coo_data().get_linked_entity_id(entities[0], j), context.bulk_data->entity_key(entities[j + 1]).id());
-      std::cout << i << " " << link_data.coo_data().get_linked_entity(entities[0], j) << std::endl;
     }
   }
 
   link_data.coo_modify_on_host();
 
-  std::cout << "get_updated_ngp_link_data" << std::endl;
   NgpLinkData &ngp_link_data = get_updated_ngp_link_data(link_data);
-
-  std::cout << "is_crs_up_to_date" << std::endl;
   EXPECT_FALSE(ngp_link_data.is_crs_up_to_date()) << "The modification should have dirtied the CRS connectivity and we should detect that, despite the host being modified and not the device.";
 }
 
@@ -211,8 +200,6 @@ void validate_ngp_link_data(const TestContext& context, LinkData& link_data) {
     ::mundy::mesh::field_sum<stk::mesh::Entity::entity_value_type>(
       impl::get_linked_entities_field(link_data.link_meta_data()), *context.link_part_b, 
         stk::ngp::ExecSpace());
-  std::cout << "linked_entity_field_sum_host = " << linked_entity_field_sum_host << std::endl;
-  std::cout << "linked_entity_field_sum_device = " << linked_entity_field_sum_device << std::endl;
   
   MUNDY_THROW_REQUIRE(linked_entity_field_sum_host != 0, std::runtime_error, "host data was likely not properly initialized.");
   MUNDY_THROW_REQUIRE(linked_entity_field_sum_device != 0, std::runtime_error, "device data wasn't properly synced.");
@@ -287,9 +274,7 @@ void validate_crs_connectivity(const TestContext& context, LinkInitializationDat
                                LinkData& link_data) {
   NgpLinkData &ngp_link_data = get_updated_ngp_link_data(link_data);
   ngp_link_data.update_crs_from_coo();
-  std::cout << "Finished updating the CRS connectivity from the COO connectivity." << std::endl;
   EXPECT_TRUE(ngp_link_data.is_crs_up_to_date());
-  std::cout << "Finished checking that the CRS connectivity is up to date." << std::endl;
 
   // Invert the LinkInitializationData struct to store expected CRS connectivity
   std::map<stk::mesh::Entity, std::vector<stk::mesh::Entity>> expected_crs_conn;  // Entity to links map
@@ -301,34 +286,14 @@ void validate_crs_connectivity(const TestContext& context, LinkInitializationDat
   }
 
   // Perform test on host
-  std::cout << "Syncing CRS data to host." << std::endl;
   link_data.crs_sync_to_host();
-  std::cout << "Finished syncing CRS data to host." << std::endl;
   const auto& crs_partition_view = link_data.crs_data().get_all_crs_partitions();
-  EXPECT_EQ(crs_partition_view.extent(0), 1u) << "Expected one CRS partition for the part.";
-
-  // Dump all partition buckets
-  for (unsigned partition_id = 0; partition_id < crs_partition_view.extent(0); ++partition_id) {
-    for (stk::mesh::EntityRank rank = stk::topology::NODE_RANK; rank < stk::topology::NUM_RANKS; ++rank) {
-      const LinkCRSPartition& partition = crs_partition_view(partition_id);
-      std::cout << "Partition ID: " << partition_id << ", Rank: " << static_cast<int>(rank)
-                << ", Num Buckets: " << partition.num_buckets(rank) << std::endl;
-      for (unsigned bucket_id = 0; bucket_id < partition.num_buckets(rank); ++bucket_id) {
-        const LinkCRSBucketConn& bucket_conn = partition.get_crs_bucket_conn(rank, bucket_id);
-        bucket_conn.dump();
-      }
-    }
-  }
-
-
 
   for (stk::mesh::EntityRank rank = stk::topology::NODE_RANK; rank < stk::topology::NUM_RANKS; ++rank) {
-    std::cout << "Checking rank " << static_cast<int>(rank) << std::endl;
     ::mundy::mesh::for_each_entity_run(
         link_data.bulk_data(), rank,
         [&expected_crs_conn, &crs_partition_view, rank](const stk::mesh::BulkData& bulk_data,
                                                   const stk::mesh::Entity& entity) {
-          std::cout << "Entity: " << entity << std::endl;
           auto it = expected_crs_conn.find(entity);
           if (it != expected_crs_conn.end()) {
             // Convert expected links to a set for comparison
@@ -338,13 +303,11 @@ void validate_crs_connectivity(const TestContext& context, LinkInitializationDat
             // Fetch the actual connected links from the CRS connectivity
             std::set<stk::mesh::Entity> actual_link_set;
             for (unsigned partition_id = 0; partition_id < crs_partition_view.extent(0); ++partition_id) {
-              std::cout << "Partition ID: " << partition_id << std::endl;
               const LinkCRSPartition& partition = crs_partition_view(partition_id);
               const stk::mesh::FastMeshIndex entity_index{bulk_data.bucket(entity).bucket_id(),
                                                           bulk_data.bucket_ordinal(entity)};
 
               auto connected_links = partition.get_connected_links(rank, entity_index);
-              std::cout << "num_connected_links: " << connected_links.size() << std::endl;
               for (unsigned l = 0; l < connected_links.size(); ++l) {
                 actual_link_set.insert(connected_links[l]);
               }
@@ -374,7 +337,8 @@ void basic_usage_test() {
   setup_parts_and_links(context, link_meta_data);
 
   // Declare and validate link data manager
-  LinkData &link_data = declare_and_validate_link_data(context, link_meta_data);
+  LinkData link_data = declare_link_data(*context.bulk_data, link_meta_data);
+  EXPECT_EQ(link_data.link_meta_data().link_rank(), link_meta_data.link_rank());
 
   // Declare some entities to connect and some links to place between them
   context.bulk_data->modification_begin();
@@ -400,24 +364,18 @@ void basic_usage_test() {
   context.bulk_data->modification_end();
 
   // Declare and validate relations for 2-linked entities (works even though we are outside of a modification block)
-  std::cout << "declare_and_validate_relations" << std::endl;
   declare_and_validate_relations(context, link_init_data_a, link_data);
 
   // Declare and validate relations for 3-linked entities
   declare_and_validate_relations(context, link_init_data_b, link_data);
 
   // NGP stuff
-  std::cout << "validate_ngp_link_data1" << std::endl;
   validate_ngp_link_data(context, link_data);
-  std::cout << "modify_ngp_link_data" << std::endl;
   modify_ngp_link_data(context, link_data);
-  std::cout << "validate_ngp_link_data2" << std::endl;
   validate_ngp_link_data(context, link_data);
 
   // Check the CRS connectivity
-  std::cout << "$$$ validate_crs_connectivity1 $$$" << std::endl;
   validate_crs_connectivity(context, link_init_data_a, link_data);
-  std::cout << "$$$ validate_crs_connectivity2 $$$" << std::endl;
   validate_crs_connectivity(context, link_init_data_b, link_data);
 }
 

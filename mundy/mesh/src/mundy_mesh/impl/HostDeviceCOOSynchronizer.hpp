@@ -60,7 +60,6 @@ class LinkCOODataSynchronizerT : public HostDeviceSynchronizer {
   virtual ~LinkCOODataSynchronizerT() = default;
 
   virtual void modify_on_host() override {
-    std::cout << "@@@@ COO modify_on_host @@@@" << std::endl;
     LinkMetaData &lmd = coo_data_.link_meta_data();
     impl::get_linked_entities_field(lmd).modify_on_host();
     impl::get_linked_entities_crs_field(lmd).modify_on_host();
@@ -73,7 +72,6 @@ class LinkCOODataSynchronizerT : public HostDeviceSynchronizer {
   }
 
   virtual void modify_on_device() override {
-    std::cout << "@@@@ COO modify_on_device @@@@" << std::endl;
     LinkMetaData &lmd = coo_data_.link_meta_data();
     impl::get_linked_entities_field(lmd).modify_on_device();
     impl::get_linked_entities_crs_field(lmd).modify_on_device();
@@ -86,7 +84,6 @@ class LinkCOODataSynchronizerT : public HostDeviceSynchronizer {
   }
 
   virtual void sync_to_host() override {
-    std::cout << "@@@@ COO sync_to_host @@@@" << std::endl;
     LinkMetaData &lmd = coo_data_.link_meta_data();
     impl::get_linked_entities_field(lmd).sync_to_host();
     impl::get_linked_entities_crs_field(lmd).sync_to_host();
@@ -99,7 +96,6 @@ class LinkCOODataSynchronizerT : public HostDeviceSynchronizer {
   }
 
   virtual void sync_to_device() override {
-    std::cout << "@@@@ COO sync_to_device @@@@" << std::endl;
     LinkMetaData &lmd = coo_data_.link_meta_data();
     impl::get_linked_entities_field(lmd).sync_to_device();
     impl::get_linked_entities_crs_field(lmd).sync_to_device();
@@ -112,7 +108,6 @@ class LinkCOODataSynchronizerT : public HostDeviceSynchronizer {
   }
 
   virtual void update_post_mesh_mod() override {
-    std::cout << "@@@@ COO update_post_mesh_mod @@@@" << std::endl;
     stk::mesh::NgpMesh &ngp_mesh = impl::get_ngp_mesh(ngp_coo_data_);
     NgpLinkMetaDataT<NgpMemSpace> &ngp_link_meta_data = impl::get_ngp_link_meta_data(ngp_coo_data_);
     LinkMetaData &link_meta_data = coo_data_.link_meta_data();

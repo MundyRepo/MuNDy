@@ -179,11 +179,9 @@ class LinkCRSDataT {  // Raw data in any space
   /// an empty partition as a result of this function is not considered a "modification" and does not dirty
   /// other memory spaces. Instead, we only maintain consistency of populated partitions across memory spaces.
   const LinkCRSPartitionView &get_or_create_crs_partitions(const stk::mesh::Selector &selector) const {
-    std::cout << "inside get_or_create_crs_partitions" << std::endl;
     MUNDY_THROW_ASSERT(is_valid(), std::invalid_argument, "Link data is not valid.");
 
     // We only care about the intersection of the given selector and our universe link selector.
-    std::cout << "about to create link_subset_selector" << std::endl;
     stk::mesh::Selector link_subset_selector = link_meta_data().universal_link_part() & selector;
 
     // Memoized return
@@ -194,12 +192,10 @@ class LinkCRSDataT {  // Raw data in any space
     } else {
       // Create a new view
       // 1. Map selector to buckets
-      std::cout << "about to get buckets" << std::endl;
       const stk::mesh::BucketVector &selected_buckets =
           bulk_data().get_buckets(link_meta_data().link_rank(), link_subset_selector);
 
       // 2. Sort and unique the keys for each buckets
-      std::cout << "about to get unique keys" << std::endl;
       std::set<PartitionKey> new_keys;
       std::set<PartitionKey> old_keys;
       for (const stk::mesh::Bucket *bucket : selected_buckets) {
@@ -216,14 +212,11 @@ class LinkCRSDataT {  // Raw data in any space
       size_t num_old_partitions = old_keys.size();
       if (num_new_partitions > 0) {
         // 3. Grow the size of the partition view by the number of new unique keys
-        std::cout << "about to resize all_crs_partitions_" << std::endl;
         Kokkos::resize(Kokkos::WithoutInitializing, all_crs_partitions_, num_previous_partitions + num_new_partitions);
 
         // 4. Create a new LinkCRSPartition (for each unique new key) and store it within the all_crs_partitions_ view
-        std::cout << "about to create new partitions" << std::endl;
         stk::mesh::Ordinal partition_id = static_cast<stk::mesh::Ordinal>(num_previous_partitions);
         for (const PartitionKey &key : new_keys) {
-          std::cout << " Creating new partition with id: " << partition_id << std::endl;
           new (&all_crs_partitions_(partition_id))
               LinkCRSPartition(partition_id, key, link_rank(), get_linker_dimensionality(key),
                                bulk_data());
@@ -237,7 +230,6 @@ class LinkCRSDataT {  // Raw data in any space
 
       // 6. Copy the corresponding LinkCRSPartition from the all_crs_partitions_ view to the new view using the key to
       // partition_id map
-      std::cout << "about to copy old partitions to new view" << std::endl;
       unsigned count = 0;
       for (const PartitionKey &key : old_keys) {
         auto it = partition_key_to_id_map_.find(key);
@@ -250,7 +242,6 @@ class LinkCRSDataT {  // Raw data in any space
                              "Partition key not found in partition key to id map. This should never happen.");
         }
       }
-      std::cout << "about to copy new partitions to new view" << std::endl;
       for (const PartitionKey &key : new_keys) {
         auto it = partition_key_to_id_map_.find(key);
         if (it != partition_key_to_id_map_.end()) {
@@ -262,14 +253,11 @@ class LinkCRSDataT {  // Raw data in any space
                              "Partition key not found in partition key to id map. This should never happen.");
         }
       }
-      std::cout << "Count: " << count << ", new_crs_partitions.extent(0): " << new_crs_partitions.extent(0) << std::endl;
 
       // 7. Store the new view in the selector to partitions map
-      std::cout << "about to store new view in map" << std::endl;
       selector_to_partitions_map_[link_subset_selector] = new_crs_partitions;
 
       // 8. Return a reference to the new view
-      std::cout << "about to return new view" << std::endl;
       return selector_to_partitions_map_[link_subset_selector];
     }
   }
@@ -345,14 +333,10 @@ class LinkCRSDataT {  // Raw data in any space
 
       for (unsigned partition_id = 0u; partition_id < all_crs_partitions_.extent(0); ++partition_id) {
         // The only way the following is true, is if we sort the partition view by partition id.
-        std::cout << "Synchronizing partition id: " << partition_id << std::endl;
         new (&all_crs_partitions_(partition_id)) LinkCRSPartition();
         auto &our_partition = all_crs_partitions_(partition_id);
         auto &src_partition = src_crs_partitions(partition_id);
         deep_copy(our_partition, src_partition);
-
-        std::cout << "  Our partition has " << our_partition.num_buckets(link_meta_data().link_rank())
-                  << " buckets." << std::endl;
       }    
     }
   }

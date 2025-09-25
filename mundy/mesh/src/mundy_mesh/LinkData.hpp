@@ -392,11 +392,8 @@ class LinkData {
     }
   }
   void coo_sync_to_device() {
-    std::cout << "coo_sync_to_device" << std::endl;
     if (coo_need_sync_to_device()) {
-      std::cout << "Needs sync to device" << std::endl;
       if (coo_has_device_data()) {
-        std::cout << "Has device data" << std::endl;
         coo_synchronizer_->update_post_mesh_mod();
         coo_synchronizer_->sync_to_device();
       } else {

@@ -121,9 +121,7 @@ class LinkMetaData {
   LinkMetaData &operator=(LinkMetaData &&) = default;
 
   /// \brief Destructor.
-  virtual ~LinkMetaData() {
-    std::cout << "DESTRUCTOR FOR LinkMetaData" << std::endl;
-  }
+  virtual ~LinkMetaData() = default;
   //@}
 
     //! \name Constructor
