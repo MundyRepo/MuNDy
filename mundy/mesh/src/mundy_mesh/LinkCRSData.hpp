@@ -350,6 +350,9 @@ class LinkCRSDataT {  // Raw data in any space
         auto &our_partition = all_crs_partitions_(partition_id);
         auto &src_partition = src_crs_partitions(partition_id);
         deep_copy(our_partition, src_partition);
+
+        std::cout << "  Our partition has " << our_partition.num_buckets(link_meta_data().link_rank())
+                  << " buckets." << std::endl;
       }    
     }
   }

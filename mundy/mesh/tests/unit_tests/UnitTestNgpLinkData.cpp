@@ -97,8 +97,8 @@ void setup_parts_and_links(TestContext& context, LinkMetaData& link_meta_data) {
   context.meta_data->commit();
 }
 
-LinkData declare_and_validate_link_data(TestContext& context, LinkMetaData& link_meta_data) {
-  LinkData link_data = declare_link_data(*context.bulk_data, link_meta_data);
+LinkData &declare_and_validate_link_data(TestContext& context, LinkMetaData& link_meta_data) {
+  static LinkData link_data = declare_link_data(*context.bulk_data, link_meta_data);
   EXPECT_EQ(link_data.link_meta_data().link_rank(), link_meta_data.link_rank());
   return link_data;
 }
@@ -304,15 +304,31 @@ void validate_crs_connectivity(const TestContext& context, LinkInitializationDat
   std::cout << "Syncing CRS data to host." << std::endl;
   link_data.crs_sync_to_host();
   std::cout << "Finished syncing CRS data to host." << std::endl;
-  const auto& crs_partition_view = link_data.crs_data().get_or_create_crs_partitions(*link_init_data.link_part);
+  const auto& crs_partition_view = link_data.crs_data().get_all_crs_partitions();
   EXPECT_EQ(crs_partition_view.extent(0), 1u) << "Expected one CRS partition for the part.";
+
+  // Dump all partition buckets
+  for (unsigned partition_id = 0; partition_id < crs_partition_view.extent(0); ++partition_id) {
+    for (stk::mesh::EntityRank rank = stk::topology::NODE_RANK; rank < stk::topology::NUM_RANKS; ++rank) {
+      const LinkCRSPartition& partition = crs_partition_view(partition_id);
+      std::cout << "Partition ID: " << partition_id << ", Rank: " << static_cast<int>(rank)
+                << ", Num Buckets: " << partition.num_buckets(rank) << std::endl;
+      for (unsigned bucket_id = 0; bucket_id < partition.num_buckets(rank); ++bucket_id) {
+        const LinkCRSBucketConn& bucket_conn = partition.get_crs_bucket_conn(rank, bucket_id);
+        bucket_conn.dump();
+      }
+    }
+  }
+
+
 
   for (stk::mesh::EntityRank rank = stk::topology::NODE_RANK; rank < stk::topology::NUM_RANKS; ++rank) {
     std::cout << "Checking rank " << static_cast<int>(rank) << std::endl;
     ::mundy::mesh::for_each_entity_run(
         link_data.bulk_data(), rank,
-        [&expected_crs_conn, &crs_partition_view](const stk::mesh::BulkData& bulk_data,
+        [&expected_crs_conn, &crs_partition_view, rank](const stk::mesh::BulkData& bulk_data,
                                                   const stk::mesh::Entity& entity) {
+          std::cout << "Entity: " << entity << std::endl;
           auto it = expected_crs_conn.find(entity);
           if (it != expected_crs_conn.end()) {
             // Convert expected links to a set for comparison
@@ -322,11 +338,13 @@ void validate_crs_connectivity(const TestContext& context, LinkInitializationDat
             // Fetch the actual connected links from the CRS connectivity
             std::set<stk::mesh::Entity> actual_link_set;
             for (unsigned partition_id = 0; partition_id < crs_partition_view.extent(0); ++partition_id) {
+              std::cout << "Partition ID: " << partition_id << std::endl;
               const LinkCRSPartition& partition = crs_partition_view(partition_id);
               const stk::mesh::FastMeshIndex entity_index{bulk_data.bucket(entity).bucket_id(),
                                                           bulk_data.bucket_ordinal(entity)};
 
-              auto connected_links = partition.get_connected_links(bulk_data.entity_rank(entity), entity_index);
+              auto connected_links = partition.get_connected_links(rank, entity_index);
+              std::cout << "num_connected_links: " << connected_links.size() << std::endl;
               for (unsigned l = 0; l < connected_links.size(); ++l) {
                 actual_link_set.insert(connected_links[l]);
               }
@@ -356,7 +374,7 @@ void basic_usage_test() {
   setup_parts_and_links(context, link_meta_data);
 
   // Declare and validate link data manager
-  LinkData link_data = declare_and_validate_link_data(context, link_meta_data);
+  LinkData &link_data = declare_and_validate_link_data(context, link_meta_data);
 
   // Declare some entities to connect and some links to place between them
   context.bulk_data->modification_begin();

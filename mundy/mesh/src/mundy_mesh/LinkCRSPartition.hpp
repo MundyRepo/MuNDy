@@ -311,6 +311,7 @@ using NgpLinkCRSPartition = LinkCRSPartitionT<stk::ngp::MemSpace>;
 
 template <typename MemSpace1, typename MemSpace2>
 void deep_copy(LinkCRSPartitionT<MemSpace1> &dest, const LinkCRSPartitionT<MemSpace2> &src) {
+  // Destination must at least be default constructed.
   dest.id_ = src.id_;
   dest.ngp_key_ = src.ngp_key_;
   dest.selector_ = src.selector_;

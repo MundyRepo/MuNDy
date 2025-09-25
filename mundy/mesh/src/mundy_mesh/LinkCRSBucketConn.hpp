@@ -217,6 +217,7 @@ void deep_copy(LinkCRSBucketConnT<MemSpace1> &dest, const LinkCRSBucketConnT<Mem
   Kokkos::deep_copy(dest.num_connected_links_, src.num_connected_links_);
   Kokkos::deep_copy(dest.sparse_connectivity_offsets_, src.sparse_connectivity_offsets_);
   Kokkos::deep_copy(dest.sparse_connectivity_, src.sparse_connectivity_);
+  dest.dump();
 }
 
 namespace impl {
