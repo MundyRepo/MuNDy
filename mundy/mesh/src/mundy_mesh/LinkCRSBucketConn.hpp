@@ -46,6 +46,12 @@ KOKKOS_INLINE_FUNCTION int &get_dirty_flag(LinkCRSBucketConnT<MemSpace> &bucket_
 template <typename MemSpace>
 KOKKOS_INLINE_FUNCTION const int &get_dirty_flag(const LinkCRSBucketConnT<MemSpace> &bucket_conn);
 
+template <typename MemSpace> 
+KOKKOS_INLINE_FUNCTION unsigned &get_total_num_connected_links(LinkCRSBucketConnT<MemSpace> &bucket_conn);
+
+template <typename MemSpace> 
+KOKKOS_INLINE_FUNCTION const unsigned &get_total_num_connected_links(const LinkCRSBucketConnT<MemSpace> &bucket_conn);
+
 template <typename MemSpace>
 KOKKOS_INLINE_FUNCTION Kokkos::View<unsigned *, MemSpace> &get_num_connected_links(
     LinkCRSBucketConnT<MemSpace> &bucket_conn);
@@ -84,6 +90,7 @@ class LinkCRSBucketConnT {  // Raw data in any space.
         bucket_capacity_(0),
         bucket_id_(0),
         bucket_rank_(stk::topology::INVALID_RANK),
+        total_num_connected_links_(0),
         num_connected_links_("num_connected_links", 0),
         sparse_connectivity_offsets_("sparse_connectivity_offsets", 0),
         sparse_connectivity_("sparse_connectivity", 0) {
@@ -95,6 +102,7 @@ class LinkCRSBucketConnT {  // Raw data in any space.
         bucket_capacity_(static_cast<unsigned>(bucket.capacity())),
         bucket_id_(bucket.bucket_id()),
         bucket_rank_(bucket.entity_rank()),
+        total_num_connected_links_(0),
         num_connected_links_("num_connected_links", bucket.capacity()),
         sparse_connectivity_offsets_("sparse_connectivity_offsets", bucket.capacity() + 1),
         sparse_connectivity_("sparse_connectivity", 0) {
@@ -120,6 +128,11 @@ class LinkCRSBucketConnT {  // Raw data in any space.
     return bucket_rank_;
   }
 
+  KOKKOS_INLINE_FUNCTION 
+  unsigned total_num_connected_links() const noexcept {
+    return total_num_connected_links_;
+  }
+
   KOKKOS_INLINE_FUNCTION
   ConnectedEntities get_connected_links(unsigned offset_into_bucket) const {
     const unsigned offset = sparse_connectivity_offsets_(offset_into_bucket);
@@ -138,6 +151,8 @@ class LinkCRSBucketConnT {  // Raw data in any space.
     std::cout << "Bucket size: " << bucket_size_ << std::endl;
     std::cout << "Bucket capacity: " << bucket_capacity_ << std::endl;
     std::cout << "Bucket is dirty?: " << (dirty_ ? "true" : "false") << std::endl;
+
+    std::cout << "Total Number of Connected Links: " << total_num_connected_links_ << std::endl;
 
     std::cout << "Number of Connected Links: size " << num_connected_links_.extent(0) << " values: ";
     for (unsigned i = 0; i < bucket_size_; ++i) {
@@ -163,6 +178,8 @@ class LinkCRSBucketConnT {  // Raw data in any space.
   template <typename MS1, typename MS2> friend void deep_copy(LinkCRSBucketConnT<MS1> &dest, const LinkCRSBucketConnT<MS2> &src);
   template <typename MS> friend       int &impl::get_dirty_flag(      LinkCRSBucketConnT<MS> &bucket_conn);
   template <typename MS> friend const int &impl::get_dirty_flag(const LinkCRSBucketConnT<MS> &bucket_conn);
+  template <typename MS> friend       unsigned &impl::get_total_num_connected_links(      LinkCRSBucketConnT<MS> &bucket_conn);
+  template <typename MS> friend const unsigned &impl::get_total_num_connected_links(const LinkCRSBucketConnT<MS> &bucket_conn);
   template <typename MS> friend       Kokkos::View<unsigned*, MS> &impl::get_num_connected_links(      LinkCRSBucketConnT<MS> &bucket_conn);
   template <typename MS> friend const Kokkos::View<unsigned*, MS> &impl::get_num_connected_links(const LinkCRSBucketConnT<MS> &bucket_conn);
   template <typename MS> friend       Kokkos::View<unsigned*, MS> &impl::get_sparse_connectivity_offsets(      LinkCRSBucketConnT<MS> &bucket_conn);
@@ -176,6 +193,7 @@ class LinkCRSBucketConnT {  // Raw data in any space.
   unsigned bucket_capacity_;
   unsigned bucket_id_;
   stk::mesh::EntityRank bucket_rank_;
+  unsigned total_num_connected_links_;
   UnsignedViewType num_connected_links_;
   UnsignedViewType sparse_connectivity_offsets_;
   BucketConnectivityType sparse_connectivity_;
@@ -192,6 +210,7 @@ void deep_copy(LinkCRSBucketConnT<MemSpace1> &dest, const LinkCRSBucketConnT<Mem
   dest.bucket_capacity_ = src.bucket_capacity_;
   dest.bucket_id_ = src.bucket_id_;
   dest.bucket_rank_ = src.bucket_rank_;
+  dest.total_num_connected_links_ = src.total_num_connected_links_;
   Kokkos::resize(dest.num_connected_links_, src.num_connected_links_.extent(0));
   Kokkos::resize(dest.sparse_connectivity_offsets_, src.sparse_connectivity_offsets_.extent(0));
   Kokkos::resize(dest.sparse_connectivity_, src.sparse_connectivity_.extent(0));
@@ -209,6 +228,18 @@ KOKKOS_INLINE_FUNCTION int &get_dirty_flag(LinkCRSBucketConnT<MemSpace> &bucket_
 template <typename MemSpace>
 KOKKOS_INLINE_FUNCTION const int &get_dirty_flag(const LinkCRSBucketConnT<MemSpace> &bucket_conn) {
   return bucket_conn.dirty_;
+}
+
+template <typename MemSpace>
+KOKKOS_INLINE_FUNCTION unsigned &get_total_num_connected_links(
+    LinkCRSBucketConnT<MemSpace> &bucket_conn) {
+  return bucket_conn.total_num_connected_links_;
+}
+
+template <typename MemSpace>
+KOKKOS_INLINE_FUNCTION const unsigned &get_total_num_connected_links(
+    const LinkCRSBucketConnT<MemSpace> &bucket_conn) {
+  return bucket_conn.total_num_connected_links_;
 }
 
 template <typename MemSpace>

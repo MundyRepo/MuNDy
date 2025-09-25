@@ -259,18 +259,19 @@ class NgpCOOToCRSSynchronizerT {
     // This tells us that the LinkDataObserver is in charge of deciding when to rebuild this map but not when to build
     // it in the first place. We could use a memoized getter that sees if the list is empty or not. If it's empty, it
     // calls rebuild_stk_link_bucket_to_partition_id_map.
+    std::cout << "flag_dirty_linked_buckets_of_modified_links" << std::endl;
     flag_dirty_linked_buckets_of_modified_links(crs_data, coo_data, link_subset_selector);
-
+    std::cout << "reset_dirty_linked_buckets" << std::endl;
     reset_dirty_linked_buckets(crs_data, coo_data, link_subset_selector);
-
+    std::cout << "gather_part_1_count" << std::endl;
     gather_part_1_count(crs_data, coo_data, link_subset_selector);
-
+    std::cout << "gather_part_2_partial_sum" << std::endl;
     gather_part_2_partial_sum(crs_data, coo_data, link_subset_selector);
-
+    std::cout << "scatter_part_1_setup" << std::endl;
     scatter_part_1_setup(crs_data, coo_data, link_subset_selector);
-
+    std::cout << "scatter_part_2_fill" << std::endl;
     scatter_part_2_fill(crs_data, coo_data, link_subset_selector);
-
+    std::cout << "finalize_crs_update" << std::endl;
     finalize_crs_update(crs_data, coo_data, link_subset_selector);
 
     Kokkos::Profiling::popRegion();
@@ -525,6 +526,9 @@ class NgpCOOToCRSSynchronizerT {
                                         }
                                         partial_sum += num_connected_links;
                                       });
+              // Stash the total for access on the host
+              impl::get_total_num_connected_links(crs_bucket_conn) =
+                  impl::get_sparse_connectivity_offsets(crs_bucket_conn)(bucket_size);
               }
             }
           });
@@ -553,9 +557,9 @@ class NgpCOOToCRSSynchronizerT {
         // Only attempt to resize dirty buckets that have non-zero connections
         for (unsigned bucket_id = 0; bucket_id < crs_partition.num_buckets(rank); ++bucket_id) {
           auto &crs_bucket_conn = crs_partition.get_crs_bucket_conn(rank, bucket_id);
-          if (impl::get_dirty_flag(crs_bucket_conn) && impl::get_sparse_connectivity_offsets(crs_bucket_conn).extent(0) > 0) {
+          if (impl::get_dirty_flag(crs_bucket_conn)) {
             // Only resize if needed
-            unsigned new_size = impl::get_sparse_connectivity_offsets(crs_bucket_conn)(crs_bucket_conn.size());
+            unsigned new_size = impl::get_total_num_connected_links(crs_bucket_conn);
             if (new_size > impl::get_sparse_connectivity(crs_bucket_conn).extent(0)) {  // Only grow
               Kokkos::resize(Kokkos::view_alloc(Kokkos::WithoutInitializing), impl::get_sparse_connectivity(crs_bucket_conn),
                              new_size);

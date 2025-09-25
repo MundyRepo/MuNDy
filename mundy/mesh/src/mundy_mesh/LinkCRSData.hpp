@@ -88,6 +88,7 @@ class LinkCRSDataT {  // Raw data in any space
         selector_to_partitions_map_(),
         partition_key_to_id_map_(),
         all_crs_partitions_("AllCRSPartitions", 0),
+        stk_link_bucket_to_partition_id_map_host_(10),
         stk_link_bucket_to_partition_id_map_(10) {
     MUNDY_THROW_ASSERT(bulk_data_ptr_ != nullptr, std::invalid_argument, "Bulk data is not set.");
     MUNDY_THROW_ASSERT(link_meta_data_ptr_ != nullptr, std::invalid_argument, "Link meta data is not set.");
@@ -106,6 +107,7 @@ class LinkCRSDataT {  // Raw data in any space
         selector_to_partitions_map_(),
         partition_key_to_id_map_(),
         all_crs_partitions_("AllCRSPartitions", 0),
+        stk_link_bucket_to_partition_id_map_host_(10),
         stk_link_bucket_to_partition_id_map_(10) {
     MUNDY_THROW_ASSERT(bulk_data_ptr_ != nullptr, std::invalid_argument, "Bulk data is not set.");
     MUNDY_THROW_ASSERT(link_meta_data_ptr_ != nullptr, std::invalid_argument, "Link meta data is not set.");
@@ -291,8 +293,8 @@ class LinkCRSDataT {  // Raw data in any space
     const unsigned num_link_buckets = static_cast<unsigned>(all_link_buckets.size());
 
     // Resize the map if needed. (only grow)
-    if (stk_link_bucket_to_partition_id_map_.capacity() < num_link_buckets) {
-      stk_link_bucket_to_partition_id_map_.rehash(num_link_buckets);
+    if (stk_link_bucket_to_partition_id_map_host_.capacity() < num_link_buckets) {
+      stk_link_bucket_to_partition_id_map_host_.rehash(num_link_buckets);
     }
 
     // Loop over each bucket, get its partition key, map the key to an id, and store the id in the map.
@@ -303,7 +305,7 @@ class LinkCRSDataT {  // Raw data in any space
       if (it != partition_key_to_id_map_.end()) {
         stk::mesh::Ordinal partition_id = it->second;
         bool insert_success =
-            stk_link_bucket_to_partition_id_map_.insert(bucket->bucket_id(), partition_id).success();
+            stk_link_bucket_to_partition_id_map_host_.insert(bucket->bucket_id(), partition_id).success();
         MUNDY_THROW_ASSERT(insert_success, std::runtime_error,
                             "Failed to insert bucket -> partition pair into the map. This is an internal error.");
       } else {
@@ -311,6 +313,9 @@ class LinkCRSDataT {  // Raw data in any space
                             "Partition key not found in partition key to id map. This should never happen.");
       }
     }
+
+    // Copy to device
+    Kokkos::deep_copy(stk_link_bucket_to_partition_id_map_, stk_link_bucket_to_partition_id_map_host_);
   }
 
   template<typename OtherMemSpace>
@@ -322,6 +327,7 @@ class LinkCRSDataT {  // Raw data in any space
       selector_to_partitions_map_ = src.selector_to_partitions_map_;
       partition_key_to_id_map_ = src.partition_key_to_id_map_;
       all_crs_partitions_ = src.all_crs_partitions_;
+      stk_link_bucket_to_partition_id_map_host_ = src.stk_link_bucket_to_partition_id_map_host_;
       stk_link_bucket_to_partition_id_map_ = src.stk_link_bucket_to_partition_id_map_;
     } else {
       // For each partition in the source, loop over each of its buckets and deep copy them to the corresponding
@@ -339,6 +345,8 @@ class LinkCRSDataT {  // Raw data in any space
 
       for (unsigned partition_id = 0u; partition_id < all_crs_partitions_.extent(0); ++partition_id) {
         // The only way the following is true, is if we sort the partition view by partition id.
+        std::cout << "Synchronizing partition id: " << partition_id << std::endl;
+        new (&all_crs_partitions_(partition_id)) LinkCRSPartition();
         auto &our_partition = all_crs_partitions_(partition_id);
         auto &src_partition = src_crs_partitions(partition_id);
         deep_copy(our_partition, src_partition);
@@ -457,6 +465,7 @@ class LinkCRSDataT {  // Raw data in any space
 
   mutable LinkCRSPartitionView all_crs_partitions_;
   LinkBucketToPartitionIdMap stk_link_bucket_to_partition_id_map_;
+  LinkBucketToPartitionIdMap::HostMirror stk_link_bucket_to_partition_id_map_host_;
   //@}
 };  // LinkCRSDataT
 

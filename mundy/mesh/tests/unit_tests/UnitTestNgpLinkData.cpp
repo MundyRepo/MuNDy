@@ -287,7 +287,9 @@ void validate_crs_connectivity(const TestContext& context, LinkInitializationDat
                                LinkData& link_data) {
   NgpLinkData &ngp_link_data = get_updated_ngp_link_data(link_data);
   ngp_link_data.update_crs_from_coo();
+  std::cout << "Finished updating the CRS connectivity from the COO connectivity." << std::endl;
   EXPECT_TRUE(ngp_link_data.is_crs_up_to_date());
+  std::cout << "Finished checking that the CRS connectivity is up to date." << std::endl;
 
   // Invert the LinkInitializationData struct to store expected CRS connectivity
   std::map<stk::mesh::Entity, std::vector<stk::mesh::Entity>> expected_crs_conn;  // Entity to links map
@@ -299,11 +301,14 @@ void validate_crs_connectivity(const TestContext& context, LinkInitializationDat
   }
 
   // Perform test on host
+  std::cout << "Syncing CRS data to host." << std::endl;
   link_data.crs_sync_to_host();
+  std::cout << "Finished syncing CRS data to host." << std::endl;
   const auto& crs_partition_view = link_data.crs_data().get_or_create_crs_partitions(*link_init_data.link_part);
   EXPECT_EQ(crs_partition_view.extent(0), 1u) << "Expected one CRS partition for the part.";
 
   for (stk::mesh::EntityRank rank = stk::topology::NODE_RANK; rank < stk::topology::NUM_RANKS; ++rank) {
+    std::cout << "Checking rank " << static_cast<int>(rank) << std::endl;
     ::mundy::mesh::for_each_entity_run(
         link_data.bulk_data(), rank,
         [&expected_crs_conn, &crs_partition_view](const stk::mesh::BulkData& bulk_data,
@@ -392,9 +397,9 @@ void basic_usage_test() {
   validate_ngp_link_data(context, link_data);
 
   // Check the CRS connectivity
-  std::cout << "validate_crs_connectivity1" << std::endl;
+  std::cout << "$$$ validate_crs_connectivity1 $$$" << std::endl;
   validate_crs_connectivity(context, link_init_data_a, link_data);
-  std::cout << "validate_crs_connectivity2" << std::endl;
+  std::cout << "$$$ validate_crs_connectivity2 $$$" << std::endl;
   validate_crs_connectivity(context, link_init_data_b, link_data);
 }
 
