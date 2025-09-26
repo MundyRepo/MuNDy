@@ -718,7 +718,7 @@ TYPED_TEST(VectorSingleTypeTest, ConstexprApply) {
 //@{
 
 template <typename TypeParam>
-bool check_atomic_op_load_store_test_for_false_positive() {
+bool check_atomic_op_load_store_test_for_false_positive_1d() {
   OurVector1<TypeParam> finished(false);
   auto func_no_atomic = [&finished]() {
     bool hit_max_loops = false;
@@ -740,8 +740,32 @@ bool check_atomic_op_load_store_test_for_false_positive() {
   return false_positive;
 }
 
-TYPED_TEST(VectorSingleTypeTest, AtomicOpTestLoadStore) {
-  if (check_atomic_op_load_store_test_for_false_positive<TypeParam>()) {
+
+template <typename TypeParam>
+bool check_atomic_op_load_store_test_for_false_positive_3d() {
+  OurVector3<TypeParam> finished(false);
+  auto func_no_atomic = [&finished]() {
+    bool hit_max_loops = false;
+    size_t max_loops = 1'000'000'000;
+    size_t i = 0;
+    while (!(finished[2])) {
+      if (i > max_loops) {
+        hit_max_loops = true;
+        break;
+      }
+      ++i;
+    }
+    return hit_max_loops;
+  };
+  auto result = std::async(std::launch::async, func_no_atomic);
+  std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  finished[2] = true;
+  bool false_positive = !result.get();
+  return false_positive;
+}
+
+TYPED_TEST(VectorSingleTypeTest, AtomicOpTestLoadStore1D) {
+  if (check_atomic_op_load_store_test_for_false_positive_1d<TypeParam>()) {
     GTEST_SKIP() << "Skipping atomic load/store test due to false positive in non-atomic test.\n"
                  << "This typically occurs if you compile with -O0.";
   }
@@ -766,7 +790,33 @@ TYPED_TEST(VectorSingleTypeTest, AtomicOpTestLoadStore) {
   EXPECT_FALSE(result.get()) << "Atomic load/store test failed.";
 }
 
-TYPED_TEST(VectorSingleTypeTest, AtomicOpTestAddSubMulDiv) {
+TYPED_TEST(VectorSingleTypeTest, AtomicOpTestLoadStore3D) {
+  if (check_atomic_op_load_store_test_for_false_positive_3d<TypeParam>()) {
+    GTEST_SKIP() << "Skipping atomic load/store test due to false positive in non-atomic test.\n"
+                 << "This typically occurs if you compile with -O0.";
+  }
+
+  OurVector3<TypeParam> finished(false);
+  auto func_atomic = [&finished]() {
+    bool hit_max_loops = false;
+    size_t max_loops = 1'000'000'000;
+    size_t i = 0;
+    while (!(atomic_load(&finished)[2])) {
+      if (i > max_loops) {
+        hit_max_loops = true;
+        break;
+      }
+      ++i;
+    }
+    return hit_max_loops;
+  };
+  auto result = std::async(std::launch::async, func_atomic);
+  std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  atomic_store(&finished, true);
+  EXPECT_FALSE(result.get()) << "Atomic load/store test failed.";
+}
+
+TYPED_TEST(VectorSingleTypeTest, AtomicOpTestAddSubMulDiv1D) {
   int num_threads = 8;
   int num_iterations = 10001;  // Must be odd
   int num_steps_of_mul_div = 2;
@@ -845,6 +895,120 @@ TYPED_TEST(VectorSingleTypeTest, AtomicOpTestAddSubMulDiv) {
   EXPECT_EQ(vv_mul_div_pos[0], std::pow(2, num_threads)) << "Atomic mul/div failed.";
   EXPECT_NE(vs_mul_div_neg[0], std::pow(2, num_threads)) << "False positive: Non-atomic mul/div succeeded.";
   EXPECT_NE(vv_mul_div_neg[0], std::pow(2, num_threads)) << "False positive: Non-atomic mul/div succeeded.";
+}
+
+TYPED_TEST(VectorSingleTypeTest, AtomicOpTestAddSubMulDiv3D) {
+  int num_threads = 8;
+  int num_iterations = 10001;  // Must be odd
+  int num_steps_of_mul_div = 2;
+
+  // Naming convention
+  // vs: Vector-scalar operation
+  // vv: Vector-vector operation
+  // pos: Positive result using atomic operations
+  // neg: Negative result without atomic operations
+  OurVector3<TypeParam> vs_add_pos(0, 1, 2);
+  OurVector3<TypeParam> vs_add_neg(0, 1, 2);
+  OurVector3<TypeParam> vv_add_pos(0, 1, 2);
+  OurVector3<TypeParam> vv_add_neg(0, 1, 2);
+
+  OurVector3<TypeParam> vs_sub_pos(0, 1, 2);
+  OurVector3<TypeParam> vs_sub_neg(0, 1, 2);
+  OurVector3<TypeParam> vv_sub_pos(0, 1, 2);
+  OurVector3<TypeParam> vv_sub_neg(0, 1, 2);
+
+  OurVector3<TypeParam> vs_mul_div_pos(1, 2, 3);
+  OurVector3<TypeParam> vs_mul_div_neg(1, 2, 3);
+  OurVector3<TypeParam> vv_mul_div_pos(1, 2, 3);
+  OurVector3<TypeParam> vv_mul_div_neg(1, 2, 3);
+
+  // Thread function to perform atomic_add
+  std::atomic<long long int> thread_id_counter(0);
+  auto thread_func = [&]() {
+    for (int i = 0; i < num_iterations; ++i) {
+      atomic_add(&vs_add_pos, 1);
+      atomic_add(&vv_add_pos, OurVector3<TypeParam>(1, 2, 3));
+      vs_add_neg += 1;
+      vv_add_neg += OurVector3<TypeParam>(1, 2, 3);
+
+      atomic_sub(&vs_sub_pos, 1);
+      atomic_sub(&vv_sub_pos, OurVector3<TypeParam>(1, 2, 3));
+      vs_sub_neg -= 1;
+      vv_sub_neg -= OurVector3<TypeParam>(1, 2, 3);
+
+      if (i % num_steps_of_mul_div == 0) {
+        atomic_mul(&vs_mul_div_pos, static_cast<TypeParam>(2));
+        atomic_elementwise_mul(&vv_mul_div_pos, OurVector3<TypeParam>(2, 3, 4));
+        vs_mul_div_neg *= static_cast<TypeParam>(2);
+        vv_mul_div_neg = elementwise_mul(vv_mul_div_neg, OurVector3<TypeParam>(2, 3, 4));
+      } else {
+        atomic_div(&vs_mul_div_pos, static_cast<TypeParam>(2));
+        atomic_elementwise_div(&vv_mul_div_pos, OurVector3<TypeParam>(2, 3, 4));
+        vs_mul_div_neg /= static_cast<TypeParam>(2);
+        vv_mul_div_neg = elementwise_div(vv_mul_div_neg, OurVector3<TypeParam>(2, 3, 4));
+      }
+    }
+  };
+
+  // Launch threads
+  std::vector<std::thread> threads;
+  for (int i = 0; i < num_threads; ++i) {
+    threads.emplace_back(thread_func);
+  }
+
+  // Join threads
+  for (auto& thread : threads) {
+    thread.join();
+  }
+
+  // Verify the result
+  EXPECT_EQ(vs_add_pos[0], 0 + num_threads * num_iterations) << "Atomic add failed.";
+  EXPECT_EQ(vs_add_pos[1], 1 + num_threads * num_iterations) << "Atomic add failed.";
+  EXPECT_EQ(vs_add_pos[2], 2 + num_threads * num_iterations) << "Atomic add failed.";
+
+  EXPECT_EQ(vv_add_pos[0], 0 + 1 * num_threads * num_iterations) << "Atomic add failed.";
+  EXPECT_EQ(vv_add_pos[1], 1 + 2 * num_threads * num_iterations) << "Atomic add failed.";
+  EXPECT_EQ(vv_add_pos[2], 2 + 3 * num_threads * num_iterations) << "Atomic add failed.";
+
+  EXPECT_NE(vs_add_neg[0], 0 + num_threads * num_iterations) << "False positive: Non-atomic add succeeded.";
+  EXPECT_NE(vs_add_neg[1], 1 + num_threads * num_iterations) << "False positive: Non-atomic add succeeded.";
+  EXPECT_NE(vs_add_neg[2], 2 + num_threads * num_iterations) << "False positive: Non-atomic add succeeded.";
+
+  EXPECT_NE(vv_add_neg[0], 0 + 1 * num_threads * num_iterations) << "False positive: Non-atomic add succeeded.";
+  EXPECT_NE(vv_add_neg[1], 1 + 2 * num_threads * num_iterations) << "False positive: Non-atomic add succeeded.";
+  EXPECT_NE(vv_add_neg[2], 2 + 3 * num_threads * num_iterations) << "False positive: Non-atomic add succeeded.";
+
+  EXPECT_EQ(vs_sub_pos[0], 0 - num_threads * num_iterations) << "Atomic sub failed.";
+  EXPECT_EQ(vs_sub_pos[1], 1 - num_threads * num_iterations) << "Atomic sub failed.";
+  EXPECT_EQ(vs_sub_pos[2], 2 - num_threads * num_iterations) << "Atomic sub failed.";
+
+  EXPECT_EQ(vv_sub_pos[0], 0 - 1 * num_threads * num_iterations) << "Atomic sub failed.";
+  EXPECT_EQ(vv_sub_pos[1], 1 - 2 * num_threads * num_iterations) << "Atomic sub failed.";
+  EXPECT_EQ(vv_sub_pos[2], 2 - 3 * num_threads * num_iterations) << "Atomic sub failed.";
+
+  EXPECT_NE(vs_sub_neg[0], 0 - num_threads * num_iterations) << "False positive: Non-atomic sub succeeded.";
+  EXPECT_NE(vs_sub_neg[1], 1 - num_threads * num_iterations) << "False positive: Non-atomic sub succeeded.";
+  EXPECT_NE(vs_sub_neg[2], 2 - num_threads * num_iterations) << "False positive: Non-atomic sub succeeded.";
+
+  EXPECT_NE(vv_sub_neg[0], -1 * num_threads * num_iterations) << "False positive: Non-atomic sub succeeded.";
+  EXPECT_NE(vv_sub_neg[1], -2 * num_threads * num_iterations) << "False positive: Non-atomic sub succeeded.";
+  EXPECT_NE(vv_sub_neg[2], -3 * num_threads * num_iterations) << "False positive: Non-atomic sub succeeded.";
+
+  EXPECT_EQ(vs_mul_div_pos[0], 1 * std::pow(2, num_threads)) << "Atomic mul/div failed.";
+  EXPECT_EQ(vs_mul_div_pos[1], 2 * std::pow(2, num_threads)) << "Atomic mul/div failed.";
+  EXPECT_EQ(vs_mul_div_pos[2], 3 * std::pow(2, num_threads)) << "Atomic mul/div failed.";
+
+  EXPECT_EQ(vv_mul_div_pos[0], 1 * std::pow(2, num_threads)) << "Atomic mul/div failed.";
+  EXPECT_EQ(vv_mul_div_pos[1], 2 * std::pow(3, num_threads)) << "Atomic mul/div failed.";
+  EXPECT_EQ(vv_mul_div_pos[2], 3 * std::pow(4, num_threads)) << "Atomic mul/div failed.";
+
+  EXPECT_NE(vs_mul_div_neg[0], 1 * std::pow(2, num_threads)) << "False positive: Non-atomic mul/div succeeded.";
+  EXPECT_NE(vs_mul_div_neg[1], 2 * std::pow(2, num_threads)) << "False positive: Non-atomic mul/div succeeded.";
+  EXPECT_NE(vs_mul_div_neg[2], 3 * std::pow(2, num_threads)) << "False positive: Non-atomic mul/div succeeded.";
+
+  EXPECT_NE(vv_mul_div_neg[0], 1 * std::pow(2, num_threads)) << "False positive: Non-atomic mul/div succeeded.";
+  EXPECT_NE(vv_mul_div_neg[1], 2 * std::pow(3, num_threads)) << "False positive: Non-atomic mul/div succeeded.";
+  EXPECT_NE(vv_mul_div_neg[2], 3 * std::pow(4, num_threads)) << "False positive: Non-atomic mul/div succeeded.";
 }
 //@}
 
