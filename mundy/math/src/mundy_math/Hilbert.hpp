@@ -65,7 +65,7 @@ size_t hilbert_3d(size_t s, size_t i, std::vector<mundy::math::Vector3d> &positi
 
   for (auto &dr : {dr1_new, dr2_new, dr3_new}) {
     mundy::math::Vector3d dr_stencil = {dr[0] < 0.0 ? 1.0 : 0.0, dr[1] < 0.0 ? 1.0 : 0.0, dr[2] < 0.0 ? 1.0 : 0.0};
-    current_position_new -= static_cast<double>(snew) * elementwise_multiply(dr_stencil, dr);
+    current_position_new -= static_cast<double>(snew) * elementwise_mul(dr_stencil, dr);
   }
 
   i = hilbert_3d(snew, i, position_array, current_position_new, dr2_new, dr3_new, dr1_new);

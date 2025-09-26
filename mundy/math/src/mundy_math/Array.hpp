@@ -125,9 +125,6 @@ class Array {
   constexpr T& operator[](size_t idx) {
     return data_[idx];
   }
-
-  /// \brief Const element access operator
-  /// \param[in] idx The index of the element.
   KOKKOS_INLINE_FUNCTION
   constexpr const T& operator[](size_t idx) const {
     return data_[idx];

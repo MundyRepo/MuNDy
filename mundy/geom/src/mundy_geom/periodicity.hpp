@@ -225,14 +225,14 @@ class PeriodicScaledMetric {
   template <ValidPointType PointT>
     requires std::is_same_v<typename PointT::scalar_t, Scalar>
   KOKKOS_INLINE_FUNCTION constexpr OurPoint to_fractional(const PointT& point) const {
-    return math::elementwise_multiply(scale_inv_, point);
+    return math::elementwise_mul(scale_inv_, point);
   }
 
   /// \brief Map a point from fractional coordinates to real space
   template <ValidPointType PointT>
     requires std::is_same_v<typename PointT::scalar_t, Scalar>
   KOKKOS_INLINE_FUNCTION constexpr OurPoint from_fractional(const PointT& point_frac) const {
-    return math::elementwise_multiply(scale_, point_frac);
+    return math::elementwise_mul(scale_, point_frac);
   }
 
   /// \brief Distance vector between two points in periodic space (from point1 to point2)
@@ -259,7 +259,7 @@ class PeriodicScaledMetric {
     requires std::is_same_v<typename PointT::scalar_t, Scalar>
   KOKKOS_INLINE_FUNCTION constexpr OurPoint shift_image(const PointT& point,
                                                         const math::Vector3<Integer>& num_images) const {
-    return translate(point, math::elementwise_multiply(scale_, num_images));
+    return translate(point, math::elementwise_mul(scale_, num_images));
   }
 
  private:

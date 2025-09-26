@@ -832,7 +832,6 @@ TEST(PeriodicMetric, UnwrapPointsSpanning) {
 
   auto periodic_metric = periodic_metric_from_unit_cell(cell_size);
   auto periodic_metric_scale_only = periodic_scaled_metric_from_unit_cell(cell_size);
-  EuclideanMetric<double> euclidean_metric{};
 
   for (size_t t = 0; t < num_trials; ++t) {
     openrand::Philox rng(seed, counter);

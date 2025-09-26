@@ -343,15 +343,27 @@ KOKKOS_INLINE_FUNCTION constexpr auto dot_product_impl(std::index_sequence<Is...
   return ((static_cast<CommonType>(vec1[Is]) * static_cast<CommonType>(vec2[Is])) + ...);
 }
 
-/// \brief Element-wise product
+/// \brief Element-wise multiplication
 template <size_t... Is, size_t N, typename U, typename T, ValidAccessor<U> Accessor1, typename Ownership1,
           ValidAccessor<T> Accessor2, typename Ownership2>
-KOKKOS_INLINE_FUNCTION constexpr auto elementwise_multiply_impl(std::index_sequence<Is...>,
-                                                                const AVector<U, N, Accessor1, Ownership1>& a,
-                                                                const AVector<T, N, Accessor2, Ownership2>& b) {
+KOKKOS_INLINE_FUNCTION constexpr auto vector_vector_elementwise_mul_impl(
+    std::index_sequence<Is...>, const AVector<U, N, Accessor1, Ownership1>& a,
+    const AVector<T, N, Accessor2, Ownership2>& b) {
   using CommonType = std::common_type_t<U, T>;
   AVector<CommonType, N> result;
   ((result[Is] = static_cast<CommonType>(a[Is]) * static_cast<CommonType>(b[Is])), ...);
+  return result;
+}
+
+/// \brief Element-wise division
+template <size_t... Is, size_t N, typename U, typename T, ValidAccessor<U> Accessor1, typename Ownership1,
+          ValidAccessor<T> Accessor2, typename Ownership2>
+KOKKOS_INLINE_FUNCTION constexpr auto vector_vector_elementwise_div_impl(
+    std::index_sequence<Is...>, const AVector<U, N, Accessor1, Ownership1>& a,
+    const AVector<T, N, Accessor2, Ownership2>& b) {
+  using CommonType = std::common_type_t<U, T>;
+  AVector<CommonType, N> result;
+  ((result[Is] = static_cast<CommonType>(a[Is]) / static_cast<CommonType>(b[Is])), ...);
   return result;
 }
 
@@ -366,6 +378,144 @@ KOKKOS_INLINE_FUNCTION constexpr auto apply_impl(std::index_sequence<Is...>, con
   return result;
 }
 //@}
+
+/// \brief Atomic v_copy = v.
+///
+/// Note: Even if the input is a view, the return is a plain owning vector.
+template <size_t... Is, size_t N, typename T, ValidAccessor<T> A, typename OT>
+KOKKOS_INLINE_FUNCTION AVector<T, N> atomic_vector_load_impl(std::index_sequence<Is...>,
+                                                             AVector<T, N, A, OT>* const v) {
+  AVector<T, N> result;
+  ((result[Is] = Kokkos::atomic_load(&((*v)[Is]))), ...);
+  return result;
+}
+
+/// \brief Atomic v[i] = s.
+template <size_t... Is, size_t N, typename T1, ValidAccessor<T1> A, typename OT, typename T2>
+KOKKOS_INLINE_FUNCTION void atomic_vector_scalar_store_impl(std::index_sequence<Is...>, AVector<T1, N, A, OT>* const v,
+                                                            const T2& s) {
+  ((Kokkos::atomic_store(&((*v)[Is]), static_cast<T1>(s))), ...);
+}
+
+/// \brief Atomic v1[i] = v2[i].
+template <size_t... Is, size_t N, typename T1, ValidAccessor<T1> A1, typename OT1, typename T2, ValidAccessor<T2> A2,
+          typename OT2>
+KOKKOS_INLINE_FUNCTION void atomic_vector_vector_store_impl(std::index_sequence<Is...>,
+                                                            AVector<T1, N, A1, OT1>* const v1,
+                                                            const AVector<T2, N, A2, OT2>& v2) {
+  ((Kokkos::atomic_store(&((*v1)[Is]), v2[Is])), ...);
+}
+
+#define MUNDY_MATH_VECTOR_SCALAR_ATOMIC_OP_IMPL(op_name, atomic_op)                                                  \
+  template <size_t... Is, size_t N, typename T1, ValidAccessor<T1> A1, typename OT1, typename T2>                    \
+  KOKKOS_INLINE_FUNCTION void atomic_vector_scalar_##op_name##_impl(std::index_sequence<Is...>,                      \
+                                                                    AVector<T1, N, A1, OT1>* const v, const T2& s) { \
+    ((atomic_op(&((*v)[Is]), static_cast<T1>(s))), ...);                                                             \
+  }
+
+#define MUNDY_MATH_VECTOR_VECTOR_ATOMIC_OP_IMPL(op_name, atomic_op)                                       \
+  template <size_t... Is, size_t N, typename T1, ValidAccessor<T1> A1, typename OT1, typename T2,         \
+            ValidAccessor<T2> A2, typename OT2>                                                           \
+  KOKKOS_INLINE_FUNCTION void atomic_vector_vector_##op_name##_impl(                                      \
+      std::index_sequence<Is...>, AVector<T1, N, A1, OT1>* const v1, const AVector<T2, N, A2, OT2>& v2) { \
+    ((atomic_op(&((*v1)[Is]), static_cast<T1>(v2[Is]))), ...);                                            \
+  }
+
+/// \brief Atomic v[i] += s
+MUNDY_MATH_VECTOR_SCALAR_ATOMIC_OP_IMPL(add, Kokkos::atomic_add)
+
+/// \brief Atomic v[i] -= s
+MUNDY_MATH_VECTOR_SCALAR_ATOMIC_OP_IMPL(sub, Kokkos::atomic_sub)
+
+/// \brief Atomic v[i] *= s
+MUNDY_MATH_VECTOR_SCALAR_ATOMIC_OP_IMPL(mul, Kokkos::atomic_mul)
+
+/// \brief Atomic v[i] /= s
+MUNDY_MATH_VECTOR_SCALAR_ATOMIC_OP_IMPL(div, Kokkos::atomic_div)
+
+/// \brief Atomic v1[i] += v2[i]
+MUNDY_MATH_VECTOR_VECTOR_ATOMIC_OP_IMPL(add, Kokkos::atomic_add)
+
+/// \brief Atomic v1[i] -= v2[i]
+MUNDY_MATH_VECTOR_VECTOR_ATOMIC_OP_IMPL(sub, Kokkos::atomic_sub)
+
+/// \brief Atomic v1[i] *= v2[i]
+MUNDY_MATH_VECTOR_VECTOR_ATOMIC_OP_IMPL(elementwise_mul, Kokkos::atomic_mul)
+
+/// \brief Atomic v1[i] /= v2[i]
+MUNDY_MATH_VECTOR_VECTOR_ATOMIC_OP_IMPL(elementwise_div, Kokkos::atomic_div)
+
+#define MUNDY_MATH_VECTOR_SCALAR_ATOMIC_FETCH_OP_IMPL(op_name, atomic_fetch_op)                   \
+  template <size_t... Is, size_t N, typename T1, ValidAccessor<T1> A1, typename OT1, typename T2> \
+  KOKKOS_INLINE_FUNCTION auto vector_scalar_atomic_fetch_##op_name##_impl(                        \
+      std::index_sequence<Is...>, AVector<T1, N, A1, OT1>* const v, const T2& s) {                \
+    AVector<T1, N> result;                                                                        \
+    ((result[Is] = atomic_fetch_op(&((*v)[Is]), static_cast<T1>(s))), ...);                       \
+    return result;                                                                                \
+  }
+
+#define MUNDY_MATH_VECTOR_VECTOR_ATOMIC_FETCH_OP_IMPL(op_name, atomic_fetch_op)                           \
+  template <size_t... Is, size_t N, typename T1, ValidAccessor<T1> A1, typename OT1, typename T2,         \
+            ValidAccessor<T2> A2, typename OT2>                                                           \
+  KOKKOS_INLINE_FUNCTION auto vector_vector_atomic_fetch_##op_name##_impl(                                \
+      std::index_sequence<Is...>, AVector<T1, N, A1, OT1>* const v1, const AVector<T2, N, A2, OT2>& v2) { \
+    AVector<T1, N> result;                                                                                \
+    ((result[Is] = atomic_fetch_op(&((*v1)[Is]), static_cast<T1>(v2[Is]))), ...);                         \
+    return result;                                                                                        \
+  }
+
+#define MUNDY_MATH_VECTOR_SCALAR_ATOMIC_OP_FETCH_IMPL(op_name, atomic_op_fetch)                   \
+  template <size_t... Is, size_t N, typename T1, ValidAccessor<T1> A1, typename OT1, typename T2> \
+  KOKKOS_INLINE_FUNCTION auto vector_scalar_atomic_##op_name##_fetch_impl(                        \
+      std::index_sequence<Is...>, AVector<T1, N, A1, OT1>* const v, const T2& s) {                \
+    AVector<T1, N> result;                                                                        \
+    ((result[Is] = atomic_op_fetch(&((*v)[Is]), static_cast<T1>(s))), ...);                       \
+    return result;                                                                                \
+  }
+
+#define MUNDY_MATH_VECTOR_VECTOR_ATOMIC_OP_FETCH_IMPL(op_name, atomic_op_fetch)                           \
+  template <size_t... Is, size_t N, typename T1, ValidAccessor<T1> A1, typename OT1, typename T2,         \
+            ValidAccessor<T2> A2, typename OT2>                                                           \
+  KOKKOS_INLINE_FUNCTION auto vector_vector_atomic_##op_name##_fetch_impl(                                \
+      std::index_sequence<Is...>, AVector<T1, N, A1, OT1>* const v1, const AVector<T2, N, A2, OT2>& v2) { \
+    AVector<T1, N> result;                                                                                \
+    ((result[Is] = atomic_op_fetch(&((*v1)[Is]), static_cast<T1>(v2[Is]))), ...);                         \
+    return result;                                                                                        \
+  }
+
+/// \brief Atomic v[i] += s (returns old/new v)
+MUNDY_MATH_VECTOR_SCALAR_ATOMIC_FETCH_OP_IMPL(add, Kokkos::atomic_fetch_add)
+MUNDY_MATH_VECTOR_SCALAR_ATOMIC_OP_FETCH_IMPL(add, Kokkos::atomic_add_fetch)
+
+/// \brief Atomic v[i] -= s (returns old/new v)
+MUNDY_MATH_VECTOR_SCALAR_ATOMIC_FETCH_OP_IMPL(sub, Kokkos::atomic_fetch_sub)
+MUNDY_MATH_VECTOR_SCALAR_ATOMIC_OP_FETCH_IMPL(sub, Kokkos::atomic_sub_fetch)
+
+/// \brief Atomic v[i] *= s (returns old/new v)
+MUNDY_MATH_VECTOR_SCALAR_ATOMIC_FETCH_OP_IMPL(mul, Kokkos::atomic_fetch_mul)
+MUNDY_MATH_VECTOR_SCALAR_ATOMIC_OP_FETCH_IMPL(mul, Kokkos::atomic_mul_fetch)
+
+/// \brief Atomic v[i] /= s (returns old/new v)
+MUNDY_MATH_VECTOR_SCALAR_ATOMIC_FETCH_OP_IMPL(div, Kokkos::atomic_fetch_div)
+MUNDY_MATH_VECTOR_SCALAR_ATOMIC_OP_FETCH_IMPL(div, Kokkos::atomic_div_fetch)
+
+/// \brief Atomic v1[i] += v2[i] (returns old/new v1)
+MUNDY_MATH_VECTOR_VECTOR_ATOMIC_FETCH_OP_IMPL(add, Kokkos::atomic_fetch_add)
+MUNDY_MATH_VECTOR_VECTOR_ATOMIC_OP_FETCH_IMPL(add, Kokkos::atomic_add_fetch)
+
+/// \brief Atomic v1[i] -= v2[i] (returns old/new v1)
+MUNDY_MATH_VECTOR_VECTOR_ATOMIC_FETCH_OP_IMPL(sub, Kokkos::atomic_fetch_sub)
+MUNDY_MATH_VECTOR_VECTOR_ATOMIC_OP_FETCH_IMPL(sub, Kokkos::atomic_sub_fetch)
+
+/// \brief Atomic v1[i] *= v2[i] (returns old/new v1)
+MUNDY_MATH_VECTOR_VECTOR_ATOMIC_FETCH_OP_IMPL(elementwise_mul, Kokkos::atomic_fetch_mul)
+MUNDY_MATH_VECTOR_VECTOR_ATOMIC_OP_FETCH_IMPL(elementwise_mul, Kokkos::atomic_mul_fetch)
+
+/// \brief Atomic v1[i] /= v2[i] (returns old/new v1)
+MUNDY_MATH_VECTOR_VECTOR_ATOMIC_FETCH_OP_IMPL(elementwise_div, Kokkos::atomic_fetch_div)
+MUNDY_MATH_VECTOR_VECTOR_ATOMIC_OP_FETCH_IMPL(elementwise_div, Kokkos::atomic_div_fetch)
+//@}
+
 }  // namespace impl
 
 }  // namespace math

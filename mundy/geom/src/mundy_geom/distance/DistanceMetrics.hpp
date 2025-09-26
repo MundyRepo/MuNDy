@@ -112,13 +112,13 @@ class PeriodicScaledSpaceMetric {
   KOKKOS_INLINE_FUNCTION
   constexpr Point<Scalar> operator()(const Point<Scalar>& point1, const Point<Scalar>& point2) const {
     // Convert the difference to fractional coordinates
-    auto ds_frac = mundy::math::elementwise_multiply(scale_inv_, point2 - point1);
+    auto ds_frac = mundy::math::elementwise_mul(scale_inv_, point2 - point1);
 
     // Minimum-image convention: wrap the fractional coordinates into the unit cell
     ds_frac = apply([](Scalar x) { return x - Kokkos::round(x); }, ds_frac);
 
     // Map the fractional coordinates back to real space
-    return mundy::math::elementwise_multiply(scale_, ds_frac);
+    return mundy::math::elementwise_mul(scale_, ds_frac);
   }
 
  private:
