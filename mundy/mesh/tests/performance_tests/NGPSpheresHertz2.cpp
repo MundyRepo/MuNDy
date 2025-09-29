@@ -2,8 +2,9 @@
 // **********************************************************************************************************************
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
-//                                           Copyright 2024 Flatiron Institute
-//                                                 Author: Bryce Palmer
+//                                              Copyright 2024 Bryce Palmer
+//
+// Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
 // as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
@@ -276,8 +277,8 @@ int main(int argc, char **argv) {
     const double force_c = Kokkos::sqrt(3.0);
     const double force_attraction_coeff = 2.0;
 
-    const math::Vector3<double> unit_cell_bottom_left = {-50.0, -50.0, -50.0};
-    const math::Vector3<double> unit_cell_top_right = {50.0, 50.0, 50.0};
+    const math::Vector3d unit_cell_bottom_left = {-50.0, -50.0, -50.0};
+    const math::Vector3d unit_cell_top_right = {50.0, 50.0, 50.0};
     const double time_step_size = 0.00001;
     const size_t num_time_steps = 1000 / time_step_size;
     const size_t io_frequency = std::round(0.1 / time_step_size);

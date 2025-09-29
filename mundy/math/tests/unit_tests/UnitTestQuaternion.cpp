@@ -2,8 +2,9 @@
 // **********************************************************************************************************************
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
-//                                           Copyright 2024 Flatiron Institute
-//                                                 Author: Bryce Palmer
+//                                              Copyright 2024 Bryce Palmer
+//
+// Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
 // as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
@@ -73,7 +74,7 @@ void is_close_debug(const U& a, const T& b, const std::string& message_if_fail =
 /// \param[in] message_if_fail The message to print if the test fails
 template <typename U, typename T, ValidAccessor<U> Accessor1, typename OwnershipType1, ValidAccessor<T> Accessor2,
           typename OwnershipType2>
-void is_close_debug(const Matrix3<U, Accessor1, OwnershipType1>& m1, const Matrix3<T, Accessor2, OwnershipType2>& m2,
+void is_close_debug(const AMatrix3<U, Accessor1, OwnershipType1>& m1, const AMatrix3<T, Accessor2, OwnershipType2>& m2,
                     const std::string& message_if_fail = "") {
   if (!is_approx_close(m1, m2)) {
     std::cout << "m1 = " << m1 << std::endl;
@@ -88,7 +89,7 @@ void is_close_debug(const Matrix3<U, Accessor1, OwnershipType1>& m1, const Matri
 /// \param[in] message_if_fail The message to print if the test fails
 template <typename U, typename T, ValidAccessor<U> Accessor1, typename OwnershipType1, ValidAccessor<T> Accessor2,
           typename OwnershipType2>
-void is_close_debug(const Vector3<U, Accessor1, OwnershipType1>& v1, const Vector3<T, Accessor2, OwnershipType2>& v2,
+void is_close_debug(const AVector3<U, Accessor1, OwnershipType1>& v1, const AVector3<T, Accessor2, OwnershipType2>& v2,
                     const std::string& message_if_fail = "") {
   if (!is_approx_close(v1, v2)) {
     std::cout << "v1 = " << v1 << std::endl;
@@ -103,8 +104,8 @@ void is_close_debug(const Vector3<U, Accessor1, OwnershipType1>& v1, const Vecto
 /// \param[in] message_if_fail The message to print if the test fails
 template <typename U, typename T, ValidAccessor<U> Accessor1, typename OwnershipType1, ValidAccessor<T> Accessor2,
           typename OwnershipType2>
-void is_close_debug(const Quaternion<U, Accessor1, OwnershipType1>& q1,
-                    const Quaternion<T, Accessor2, OwnershipType2>& q2, const std::string& message_if_fail = "") {
+void is_close_debug(const AQuaternion<U, Accessor1, OwnershipType1>& q1,
+                    const AQuaternion<T, Accessor2, OwnershipType2>& q2, const std::string& message_if_fail = "") {
   if (!is_approx_close(q1, q2)) {
     std::cout << "q1 = " << q1 << std::endl;
     std::cout << "q2 = " << q2 << std::endl;
@@ -118,8 +119,8 @@ void is_close_debug(const Quaternion<U, Accessor1, OwnershipType1>& q1,
 /// \param[in] message_if_fail The message to print if the test fails
 template <typename U, typename T, ValidAccessor<U> Accessor1, typename OwnershipType1, ValidAccessor<T> Accessor2,
           typename OwnershipType2>
-void is_different_debug(const Matrix3<U, Accessor1, OwnershipType1>& m1,
-                        const Matrix3<T, Accessor2, OwnershipType2>& m2, const std::string& message_if_fail = "") {
+void is_different_debug(const AMatrix3<U, Accessor1, OwnershipType1>& m1,
+                        const AMatrix3<T, Accessor2, OwnershipType2>& m2, const std::string& message_if_fail = "") {
   if (is_approx_close(m1, m2)) {
     std::cout << "m1 = " << m1 << std::endl;
     std::cout << "m2 = " << m2 << std::endl;
@@ -133,8 +134,8 @@ void is_different_debug(const Matrix3<U, Accessor1, OwnershipType1>& m1,
 /// \param[in] message_if_fail The message to print if the test fails
 template <typename U, typename T, ValidAccessor<U> Accessor1, typename OwnershipType1, ValidAccessor<T> Accessor2,
           typename OwnershipType2>
-void is_different_debug(const Vector3<U, Accessor1, OwnershipType1>& v1,
-                        const Vector3<T, Accessor2, OwnershipType2>& v2, const std::string& message_if_fail = "") {
+void is_different_debug(const AVector3<U, Accessor1, OwnershipType1>& v1,
+                        const AVector3<T, Accessor2, OwnershipType2>& v2, const std::string& message_if_fail = "") {
   if (is_approx_close(v1, v2)) {
     std::cout << "v1 = " << v1 << std::endl;
     std::cout << "v2 = " << v2 << std::endl;
@@ -148,8 +149,8 @@ void is_different_debug(const Vector3<U, Accessor1, OwnershipType1>& v1,
 /// \param[in] message_if_fail The message to print if the test fails
 template <typename U, typename T, ValidAccessor<U> Accessor1, typename OwnershipType1, ValidAccessor<T> Accessor2,
           typename OwnershipType2>
-void is_different_debug(const Quaternion<U, Accessor1, OwnershipType1>& q1,
-                        const Quaternion<T, Accessor2, OwnershipType2>& q2, const std::string& message_if_fail = "") {
+void is_different_debug(const AQuaternion<U, Accessor1, OwnershipType1>& q1,
+                        const AQuaternion<T, Accessor2, OwnershipType2>& q2, const std::string& message_if_fail = "") {
   if (is_approx_close(q1, q2)) {
     std::cout << "q1 = " << q1 << std::endl;
     std::cout << "q2 = " << q2 << std::endl;
@@ -348,41 +349,41 @@ TYPED_TEST(QuaternionSingleTypeTest, SpecialVectors) {
 TYPED_TEST(QuaternionPairwiseTypeTest, AdditionAndSubtractionWithQuaternion) {
   using T1 = typename TypeParam::T1;
   using T2 = typename TypeParam::T2;
+  using C = decltype(get_comparison_tolerance_promote_ints<T1, T2>());
 
   Quaternion<T1> q1(1, 2, 3, 4);
   Quaternion<T2> q2(4, 10, 11, 12);
   auto q3 = q1 + q2;
-  using T3 = decltype(q3)::scalar_t;
-  is_close_debug(q3, Quaternion<T3>{5, 12, 14, 16}, "Addition failed.");
+  is_close_debug(q3, Quaternion<C>{5, 12, 14, 16}, "Addition failed.");
 
   q1 += q2;
-  is_close_debug(q1, Quaternion<T1>{5, 12, 14, 16}, "Addition assignment failed.");
+  is_close_debug(q1, Quaternion<C>{5, 12, 14, 16}, "Addition assignment failed.");
 
   q3 = q1 - q2;
-  is_close_debug(q3, Quaternion<T3>{1, 2, 3, 4}, "Subtraction failed.");
+  is_close_debug(q3, Quaternion<C>{1, 2, 3, 4}, "Subtraction failed.");
 
   q1 -= q2;
-  is_close_debug(q1, Quaternion<T1>{1, 2, 3, 4}, "Subtraction assignment failed.");
+  is_close_debug(q1, Quaternion<C>{1, 2, 3, 4}, "Subtraction assignment failed.");
 }
 
 TYPED_TEST(QuaternionPairwiseTypeTest, AdditionAndSubtractionEdgeCases) {
   using T1 = typename TypeParam::T1;
   using T2 = typename TypeParam::T2;
+  using C = decltype(get_comparison_tolerance_promote_ints<T1, T2>());
 
   // Test that the addition and subtraction operators work with rvalues
   Quaternion<T1> q1(1, 2, 3, 4);
   auto q3 = q1 + Quaternion<T2>(4, 10, 11, 12);
-  using T3 = decltype(q3)::scalar_t;
-  is_close_debug(q3, Quaternion<T3>{5, 12, 14, 16}, "Right rvalue addition failed.");
+  is_close_debug(q3, Quaternion<C>{5, 12, 14, 16}, "Right rvalue addition failed.");
 
   q1 += Quaternion<T2>(4, 10, 11, 12);
-  is_close_debug(q1, Quaternion<T3>{5, 12, 14, 16}, "Right rvalue addition assignment failed.");
+  is_close_debug(q1, Quaternion<C>{5, 12, 14, 16}, "Right rvalue addition assignment failed.");
 
   q3 = q1 - Quaternion<T2>(4, 10, 11, 12);
-  is_close_debug(q3, Quaternion<T3>{1, 2, 3, 4}, "Right rvalue subtraction failed.");
+  is_close_debug(q3, Quaternion<C>{1, 2, 3, 4}, "Right rvalue subtraction failed.");
 
   q1 -= Quaternion<T2>(4, 10, 11, 12);
-  is_close_debug(q1, Quaternion<T3>{1, 2, 3, 4}, "Right rvalue subtraction assignment failed.");
+  is_close_debug(q1, Quaternion<C>{1, 2, 3, 4}, "Right rvalue subtraction assignment failed.");
 }
 //@}
 
@@ -392,30 +393,31 @@ TYPED_TEST(QuaternionPairwiseTypeTest, AdditionAndSubtractionEdgeCases) {
 TYPED_TEST(QuaternionPairwiseTypeTest, MultiplicationAndDivisionWithQuaternion) {
   using T1 = typename TypeParam::T1;
   using T2 = typename TypeParam::T2;
-  using T3 = decltype(Quaternion<T1>() * Quaternion<T2>())::scalar_t;
+  using C = decltype(get_comparison_tolerance_promote_ints<T1, T2>());
 
   // 90 degrees rotation around Z-axis
   Quaternion<T1> q1_z = get_quaternion_z_90<T1>();
   Quaternion<T2> q2_z = get_quaternion_y_90<T2>();
-  Quaternion<T3> expected_quat_z = {0.5, -0.5, 0.5, 0.5};
+  Quaternion<C> expected_quat_z = {0.5, -0.5, 0.5, 0.5};
   is_close_debug(q1_z * q2_z, expected_quat_z, "90 degrees rotation around Z-axis failed.");
 
   // 90 degrees rotation around Y-axis
   Quaternion<T1> q1_y = get_quaternion_y_90<T1>();
   Quaternion<T2> q2_y = get_quaternion_x_90<T2>();
-  Quaternion<T3> expected_quat_y = {0.5, 0.5, 0.5, -0.5};
+  Quaternion<C> expected_quat_y = {0.5, 0.5, 0.5, -0.5};
   is_close_debug(q1_y * q2_y, expected_quat_y, "90 degrees rotation around Y-axis failed.");
 
   // 90 degrees rotation around X-axis
   Quaternion<T1> q1_x = get_quaternion_x_90<T1>();
   Quaternion<T2> q2_x = get_quaternion_z_90<T2>();
-  Quaternion<T3> expected_quat_x = {0.5, 0.5, -0.5, 0.5};
+  Quaternion<C> expected_quat_x = {0.5, 0.5, -0.5, 0.5};
   is_close_debug(q1_x * q2_x, expected_quat_x, "90 degrees rotation around X-axis failed.");
 }
 
 TYPED_TEST(QuaternionPairwiseTypeTest, MultiplicationAndDivisionWithMatrix3) {
   using T1 = typename TypeParam::T1;
   using T2 = typename TypeParam::T2;
+  using C = decltype(get_comparison_tolerance_promote_ints<T1, T2>());
 
   // Choose a random matrix to rotate
   Matrix3<T2> m(1, 2, 3, 4, 5, 6, -7, -8, -9);
@@ -425,45 +427,52 @@ TYPED_TEST(QuaternionPairwiseTypeTest, MultiplicationAndDivisionWithMatrix3) {
   Quaternion<T1> q1_z = get_quaternion_z_90<T1>();
   Matrix3<T1> R_z = {0, -1, 0, 1, 0, 0, 0, 0, 1};
   is_close_debug(R_z, quaternion_to_rotation_matrix(q1_z), "Rotation matrix-quaternion mismatch.");
-  is_close_debug(R_z * m, Matrix3<T1>{-4, -5, -6, 1, 2, 3, -7, -8, -9},
+  is_close_debug(R_z * m, Matrix3<C>{-4, -5, -6, 1, 2, 3, -7, -8, -9},
                  "Matrix-matrix multiplication sanity check failed.");
-  is_close_debug(q1_z * m, R_z * m, "Left 90 degrees rotation around Z-axis failed.");
+  is_close_debug((q1_z * m).template cast<C>(), (R_z * m).template cast<C>(),
+                 "Left 90 degrees rotation around Z-axis failed.");
 
   // 90 degrees rotation around Y-axis: R_y m
   Quaternion<T1> q1_y = get_quaternion_y_90<T1>();
   Matrix3<T1> R_y = {0, 0, 1, 0, 1, 0, -1, 0, 0};
   is_close_debug(R_y, quaternion_to_rotation_matrix(q1_y), "Rotation matrix-quaternion mismatch.");
-  is_close_debug(R_y * m, Matrix3<T1>{-7, -8, -9, 4, 5, 6, -1, -2, -3},
+  is_close_debug(R_y * m, Matrix3<C>{-7, -8, -9, 4, 5, 6, -1, -2, -3},
                  "Matrix-matrix multiplication sanity check failed.");
-  is_close_debug(q1_y * m, R_y * m, "Left 90 degrees rotation around Y-axis failed.");
+  is_close_debug((q1_y * m).template cast<C>(), (R_y * m).template cast<C>(),
+                 "Left 90 degrees rotation around Y-axis failed.");
 
   // 90 degrees rotation around X-axis: R_x m
   Quaternion<T1> q1_x = get_quaternion_x_90<T1>();
   Matrix3<T1> R_x = {1, 0, 0, 0, 0, -1, 0, 1, 0};
   is_close_debug(R_x, quaternion_to_rotation_matrix(q1_x), "Rotation matrix-quaternion mismatch.");
-  is_close_debug(R_x * m, Matrix3<T1>{1, 2, 3, 7, 8, 9, 4, 5, 6}, "Matrix-matrix multiplication sanity check failed.");
-  is_close_debug(q1_x * m, R_x * m, "Left 90 degrees rotation around X-axis failed.");
+  is_close_debug(R_x * m, Matrix3<C>{1, 2, 3, 7, 8, 9, 4, 5, 6}, "Matrix-matrix multiplication sanity check failed.");
+  is_close_debug((q1_x * m).template cast<C>(), (R_x * m).template cast<C>(),
+                 "Left 90 degrees rotation around X-axis failed.");
 
   // Right multiplication of a matrix by a quaternion
   // 90 degrees rotation around Z-axis: m R_z
-  is_close_debug(m * R_z, Matrix3<T1>{2, -1, 3, 5, -4, 6, -8, 7, -9},
+  is_close_debug(m * R_z, Matrix3<C>{2, -1, 3, 5, -4, 6, -8, 7, -9},
                  "Matrix-matrix multiplication sanity check failed.");
-  is_close_debug(m * q1_z, m * R_z, "Right 90 degrees rotation around Z-axis failed.");
+  is_close_debug((m * q1_z).template cast<C>(), (m * R_z).template cast<C>(),
+                 "Right 90 degrees rotation around Z-axis failed.");
 
   // 90 degrees rotation around Y-axis: m R_y
-  is_close_debug(m * R_y, Matrix3<T1>{-3, 2, 1, -6, 5, 4, 9, -8, -7},
+  is_close_debug(m * R_y, Matrix3<C>{-3, 2, 1, -6, 5, 4, 9, -8, -7},
                  "Matrix-matrix multiplication sanity check failed.");
-  is_close_debug(m * q1_y, m * R_y, "Right 90 degrees rotation around Y-axis failed.");
+  is_close_debug((m * q1_y).template cast<C>(), (m * R_y).template cast<C>(),
+                 "Right 90 degrees rotation around Y-axis failed.");
 
   // 90 degrees rotation around X-axis: m R_x
-  is_close_debug(m * R_x, Matrix3<T1>{1, 3, -2, 4, 6, -5, -7, -9, 8},
+  is_close_debug(m * R_x, Matrix3<C>{1, 3, -2, 4, 6, -5, -7, -9, 8},
                  "Matrix-matrix multiplication sanity check failed.");
-  is_close_debug(m * q1_x, m * R_x, "Right 90 degrees rotation around X-axis failed.");
+  is_close_debug((m * q1_x).template cast<C>(), (m * R_x).template cast<C>(),
+                 "Right 90 degrees rotation around X-axis failed.");
 }
 
 TYPED_TEST(QuaternionPairwiseTypeTest, MultiplicationAndDivisionWithMatrix3sEdgeCases) {
   using T1 = typename TypeParam::T1;
   using T2 = typename TypeParam::T2;
+  using C = decltype(get_comparison_tolerance_promote_ints<T1, T2>());
 
   // Test that the multiplication and division operators work with rvalues
 
@@ -472,41 +481,47 @@ TYPED_TEST(QuaternionPairwiseTypeTest, MultiplicationAndDivisionWithMatrix3sEdge
   Quaternion<T1> q1_z = get_quaternion_z_90<T1>();
   Matrix3<T1> R_z = {0, -1, 0, 1, 0, 0, 0, 0, 1};
   is_close_debug(R_z, quaternion_to_rotation_matrix(q1_z), "Rotation matrix-quaternion mismatch.");
-  is_close_debug(q1_z * Matrix3<T2>{1, 2, 3, 4, 5, 6, -7, -8, -9}, R_z * Matrix3<T2>{1, 2, 3, 4, 5, 6, -7, -8, -9},
+  is_close_debug((q1_z * Matrix3<T2>{1, 2, 3, 4, 5, 6, -7, -8, -9}).template cast<C>(),  //
+                 (R_z * Matrix3<T2>{1, 2, 3, 4, 5, 6, -7, -8, -9}).template cast<C>(),   //
                  "Left 90 degrees rotation around Z-axis failed.");
 
   // 90 degrees rotation around Y-axis: R_y m
   Quaternion<T1> q1_y = get_quaternion_y_90<T1>();
   Matrix3<T1> R_y = {0, 0, 1, 0, 1, 0, -1, 0, 0};
   is_close_debug(R_y, quaternion_to_rotation_matrix(q1_y), "Rotation matrix-quaternion mismatch.");
-  is_close_debug(q1_y * Matrix3<T2>{1, 2, 3, 4, 5, 6, -7, -8, -9}, R_y * Matrix3<T2>{1, 2, 3, 4, 5, 6, -7, -8, -9},
+  is_close_debug((q1_y * Matrix3<T2>{1, 2, 3, 4, 5, 6, -7, -8, -9}).template cast<C>(),  //
+                 (R_y * Matrix3<T2>{1, 2, 3, 4, 5, 6, -7, -8, -9}).template cast<C>(),   //
                  "Left 90 degrees rotation around Y-axis failed.");
 
   // 90 degrees rotation around X-axis: R_x m
   Quaternion<T1> q1_x = get_quaternion_x_90<T1>();
   Matrix3<T1> R_x = {1, 0, 0, 0, 0, -1, 0, 1, 0};
   is_close_debug(R_x, quaternion_to_rotation_matrix(q1_x), "Rotation matrix-quaternion mismatch.");
-  is_close_debug(q1_x * Matrix3<T2>{1, 2, 3, 4, 5, 6, -7, -8, -9}, R_x * Matrix3<T2>{1, 2, 3, 4, 5, 6, -7, -8, -9},
+  is_close_debug((q1_x * Matrix3<T2>{1, 2, 3, 4, 5, 6, -7, -8, -9}).template cast<C>(),  //
+                 (R_x * Matrix3<T2>{1, 2, 3, 4, 5, 6, -7, -8, -9}).template cast<C>(),   //
                  "Left 90 degrees rotation around X-axis failed.");
 
   // Right multiplication of a matrix by a quaternion
   // 90 degrees rotation around Z-axis: m R_z
-  is_close_debug(Matrix3<T2>{1, 2, 3, 4, 5, 6, -7, -8, -9} * q1_z, Matrix3<T2>{1, 2, 3, 4, 5, 6, -7, -8, -9} * R_z,
+  is_close_debug((Matrix3<T2>{1, 2, 3, 4, 5, 6, -7, -8, -9} * q1_z).template cast<C>(),  //
+                 (Matrix3<T2>{1, 2, 3, 4, 5, 6, -7, -8, -9} * R_z).template cast<C>(),   //
                  "Right 90 degrees rotation around Z-axis failed.");
 
   // 90 degrees rotation around Y-axis: m R_y
-  is_close_debug(Matrix3<T2>{1, 2, 3, 4, 5, 6, -7, -8, -9} * q1_y, Matrix3<T2>{1, 2, 3, 4, 5, 6, -7, -8, -9} * R_y,
+  is_close_debug((Matrix3<T2>{1, 2, 3, 4, 5, 6, -7, -8, -9} * q1_y).template cast<C>(),  //
+                 (Matrix3<T2>{1, 2, 3, 4, 5, 6, -7, -8, -9} * R_y).template cast<C>(),   //
                  "Right 90 degrees rotation around Y-axis failed.");
 
   // 90 degrees rotation around X-axis: m R_x
-  is_close_debug(Matrix3<T2>{1, 2, 3, 4, 5, 6, -7, -8, -9} * q1_x, Matrix3<T2>{1, 2, 3, 4, 5, 6, -7, -8, -9} * R_x,
+  is_close_debug((Matrix3<T2>{1, 2, 3, 4, 5, 6, -7, -8, -9} * q1_x).template cast<C>(),  //
+                 (Matrix3<T2>{1, 2, 3, 4, 5, 6, -7, -8, -9} * R_x).template cast<C>(),   //
                  "Right 90 degrees rotation around X-axis failed.");
 }
 
 TYPED_TEST(QuaternionPairwiseTypeTest, MultiplicationAndDivisionWithVector3) {
   using T1 = typename TypeParam::T1;
   using T2 = typename TypeParam::T2;
-  using T3 = decltype(Quaternion<T1>() * Vector3<T2>())::scalar_t;
+  using C = decltype(get_comparison_tolerance_promote_ints<T1, T2>());
 
   // Choose a random vector to rotate
   Vector3<T2> v(1, 2, 3);
@@ -514,17 +529,17 @@ TYPED_TEST(QuaternionPairwiseTypeTest, MultiplicationAndDivisionWithVector3) {
   // Left multiplication of a vector by a quaternion
   // 90 degrees rotation around Z-axis: R_z v
   Quaternion<T1> q_z = get_quaternion_z_90<T1>();
-  Vector3<T3> expected_v_z = {-2, 1, 3};
+  Vector3<C> expected_v_z = {-2, 1, 3};
   is_close_debug(q_z * v, expected_v_z, "Left 90 degrees rotation around Z-axis failed.");
 
   // 90 degrees rotation around Y-axis: R_y v
   Quaternion<T1> q_y = get_quaternion_y_90<T1>();
-  Vector3<T3> expected_v_y = {3, 2, -1};
+  Vector3<C> expected_v_y = {3, 2, -1};
   is_close_debug(q_y * v, expected_v_y, "Left 90 degrees rotation around Y-axis failed.");
 
   // 90 degrees rotation around X-axis: R_x v
   Quaternion<T1> q_x = get_quaternion_x_90<T1>();
-  Vector3<T3> expected_v_x = {1, -3, 2};
+  Vector3<C> expected_v_x = {1, -3, 2};
   is_close_debug(q_x * v, expected_v_x, "Left 90 degrees rotation around X-axis failed.");
 
   // Right multiplication of a vector by a quaternion
@@ -544,24 +559,24 @@ TYPED_TEST(QuaternionPairwiseTypeTest, MultiplicationAndDivisionWithVector3) {
 TYPED_TEST(QuaternionPairwiseTypeTest, MultiplicationAndDivisionWithVector3sEdgeCases) {
   using T1 = typename TypeParam::T1;
   using T2 = typename TypeParam::T2;
-  using T3 = decltype(Quaternion<T1>() * Vector3<T2>())::scalar_t;
+  using C = decltype(get_comparison_tolerance_promote_ints<T1, T2>());
 
   // Test that the multiplication and division operators work with rvalues
 
   // Left multiplication of a vector by a quaternion
   // 90 degrees rotation around Z-axis: R_z v
   Quaternion<T1> q_z = get_quaternion_z_90<T1>();
-  Vector3<T3> expected_v_z = {-2, 1, 3};
+  Vector3<C> expected_v_z = {-2, 1, 3};
   is_close_debug(q_z * Vector3<T2>{1, 2, 3}, expected_v_z, "Left 90 degrees rotation around Z-axis failed.");
 
   // 90 degrees rotation around Y-axis: R_y v
   Quaternion<T1> q_y = get_quaternion_y_90<T1>();
-  Vector3<T3> expected_v_y = {3, 2, -1};
+  Vector3<C> expected_v_y = {3, 2, -1};
   is_close_debug(q_y * Vector3<T2>{1, 2, 3}, expected_v_y, "Left 90 degrees rotation around Y-axis failed.");
 
   // 90 degrees rotation around X-axis: R_x v
   Quaternion<T1> q_x = get_quaternion_x_90<T1>();
-  Vector3<T3> expected_v_x = {1, -3, 2};
+  Vector3<C> expected_v_x = {1, -3, 2};
   is_close_debug(q_x * Vector3<T2>{1, 2, 3}, expected_v_x, "Left 90 degrees rotation around X-axis failed.");
 
   // Right multiplication of a vector by a quaternion
@@ -581,23 +596,23 @@ TYPED_TEST(QuaternionPairwiseTypeTest, MultiplicationAndDivisionWithVector3sEdge
 TYPED_TEST(QuaternionPairwiseTypeTest, MultiplicationAndDivisionWithScalars) {
   using T1 = typename TypeParam::T1;
   using T2 = typename TypeParam::T2;
+  using C = decltype(get_comparison_tolerance_promote_ints<T1, T2>());
 
   Quaternion<T1> q1(1, 2, 3, 4);
   auto q2 = q1 * T2(2);
-  using T3 = decltype(q2)::scalar_t;
-  is_close_debug(q2, Quaternion<T3>{2, 4, 6, 8}, "Right multiplication failed.");
+  is_close_debug(q2, Quaternion<C>{2, 4, 6, 8}, "Right multiplication failed.");
 
   q2 = T2(2) * q1;
-  is_close_debug(q2, Quaternion<T3>{2, 4, 6, 8}, "Left multiplication failed.");
+  is_close_debug(q2, Quaternion<C>{2, 4, 6, 8}, "Left multiplication failed.");
 
   q2 = q1 / T2(2);
-  is_close_debug(q2, Quaternion<T3>{0.5, 1, 1.5, 2}, "Right division failed.");
+  is_close_debug(q2, Quaternion<C>{0.5, 1, 1.5, 2}, "Right division failed.");
 
   q1 /= T2(2);
-  is_close_debug(q1, Quaternion<T3>{0.5, 1, 1.5, 2}, "Division assignment failed.");
+  is_close_debug(q1, Quaternion<C>{0.5, 1, 1.5, 2}, "Division assignment failed.");
 
   q1 *= T2(2);
-  is_close_debug(q1, Quaternion<T3>{1, 2, 3, 4}, "Multiplication assignment failed.");
+  is_close_debug(q1, Quaternion<C>{1, 2, 3, 4}, "Multiplication assignment failed.");
 }
 //@}
 
@@ -607,93 +622,89 @@ TYPED_TEST(QuaternionPairwiseTypeTest, MultiplicationAndDivisionWithScalars) {
 TYPED_TEST(QuaternionPairwiseTypeTest, SpecialOperations) {
   using T1 = typename TypeParam::T1;
   using T2 = typename TypeParam::T2;
+  using C = decltype(get_comparison_tolerance_promote_ints<T1, T2>());
 
   // dot
   Quaternion<T1> q1(1, 2, 3, 4);
   Quaternion<T2> q2(4, 10, 11, 12);
-  is_close_debug(dot(q1, q2), 105, "Dot failed.");
+  is_close_debug(dot(q1, q2), static_cast<C>(105), "Dot failed.");
 
   // conjugate
   auto q3 = conjugate(q1);
-  using T3 = decltype(q3)::scalar_t;
-  is_close_debug(q3, Quaternion<T3>{1, -2, -3, -4}, "Conjugate failed.");
+  is_close_debug(q3, Quaternion<C>{1, -2, -3, -4}, "Conjugate failed.");
 
   // conjugate in place
   q1.conjugate();
-  is_close_debug(q1, Quaternion<T1>{1, -2, -3, -4}, "Conjugate assignment failed.");
+  is_close_debug(q1, Quaternion<C>{1, -2, -3, -4}, "Conjugate assignment failed.");
   q1 = {1, 2, 3, 4};
 
   // norm
-  is_close_debug(norm(q1), std::sqrt(30.0), "Norm failed.");
+  is_close_debug(norm(q1), static_cast<C>(std::sqrt(30.0)), "Norm failed.");
 
   // norm_squared
-  is_close_debug(norm_squared(q1), 30.0, "Norm squared failed.");
+  is_close_debug(norm_squared(q1), static_cast<C>(30.0), "Norm squared failed.");
 
   // normalize
   auto q4 = normalize(q1);
-  using T4 = decltype(q4)::scalar_t;
   is_close_debug(q4,
-                 Quaternion<T4>{static_cast<T4>(1.0 / std::sqrt(30.0)), static_cast<T4>(2.0 / std::sqrt(30.0)),
-                                static_cast<T4>(3.0 / std::sqrt(30.0)), static_cast<T4>(4.0 / std::sqrt(30.0))},
+                 Quaternion<C>{static_cast<C>(1.0 / std::sqrt(30.0)), static_cast<C>(2.0 / std::sqrt(30.0)),
+                               static_cast<C>(3.0 / std::sqrt(30.0)), static_cast<C>(4.0 / std::sqrt(30.0))},
                  "Normalize assignment failed.");
 
   // inverse
   auto q5 = inverse(q1);
-  using T5 = decltype(q5)::scalar_t;
   is_close_debug(q5,
-                 Quaternion<T5>{static_cast<T5>(1.0 / 30.0), static_cast<T5>(-2.0 / 30.0), static_cast<T5>(-3.0 / 30.0),
-                                static_cast<T5>(-4.0 / 30.0)},
+                 Quaternion<C>{static_cast<C>(1.0 / 30.0), static_cast<C>(-2.0 / 30.0), static_cast<C>(-3.0 / 30.0),
+                               static_cast<C>(-4.0 / 30.0)},
                  "Inverse failed.");
 
   // normalize in place
   q1.normalize();
   q2.normalize();
   is_close_debug(q1,
-                 Quaternion<T4>{static_cast<T4>(1.0 / std::sqrt(30.0)), static_cast<T4>(2.0 / std::sqrt(30.0)),
-                                static_cast<T4>(3.0 / std::sqrt(30.0)), static_cast<T4>(4.0 / std::sqrt(30.0))},
+                 Quaternion<C>{static_cast<C>(1.0 / std::sqrt(30.0)), static_cast<C>(2.0 / std::sqrt(30.0)),
+                               static_cast<C>(3.0 / std::sqrt(30.0)), static_cast<C>(4.0 / std::sqrt(30.0))},
                  "Normalize failed.");
 
   // slerp (only applicable to unit quaternions)
-  auto q6 = slerp(q1, q2, 0.5);
-  using T6 = decltype(q5)::scalar_t;
+  auto q6 = slerp(q1, q2, static_cast<C>(0.5));
   is_close_debug(q6,
-                 Quaternion<T6>{static_cast<T6>(0.1946219299433149), static_cast<T6>(0.4407059160784743),
-                                static_cast<T6>(0.5581347617390449), static_cast<T6>(0.6755636074046377)},
+                 Quaternion<C>{static_cast<C>(0.1946219299433149), static_cast<C>(0.4407059160784743),
+                               static_cast<C>(0.5581347617390449), static_cast<C>(0.6755636074046377)},
                  "Slerp failed.");
 }
 
 TYPED_TEST(QuaternionPairwiseTypeTest, SpecialOperationsEdgeCases) {
   using T1 = typename TypeParam::T1;
   using T2 = typename TypeParam::T2;
+  using C = decltype(get_comparison_tolerance_promote_ints<T1, T2>());
 
   // Test that the special vector operations work with rvalues
 
   // dot
-  is_close_debug(dot(Quaternion<T1>(1, 2, 3, 4), Quaternion<T2>(4, 10, 11, 12)), 105, "Dot failed.");
+  is_close_debug(dot(Quaternion<T1>(1, 2, 3, 4), Quaternion<T2>(4, 10, 11, 12)), static_cast<C>(105), "Dot failed.");
 
   // conjugate
-  is_close_debug(conjugate(Quaternion<T1>(1, 2, 3, 4)), Quaternion<T2>{1, -2, -3, -4}, "Conjugate failed.");
+  is_close_debug(conjugate(Quaternion<T1>(1, 2, 3, 4)), Quaternion<C>{1, -2, -3, -4}, "Conjugate failed.");
 
   // norm
-  is_close_debug(norm(Quaternion<T1>(1, 2, 3, 4)), std::sqrt(30.0), "Norm failed.");
+  is_close_debug(norm(Quaternion<T1>(1, 2, 3, 4)), static_cast<C>(std::sqrt(30.0)), "Norm failed.");
 
   // norm_squared
-  is_close_debug(norm_squared(Quaternion<T1>(1, 2, 3, 4)), 30.0, "Norm squared failed.");
+  is_close_debug(norm_squared(Quaternion<T1>(1, 2, 3, 4)), static_cast<C>(30.0), "Norm squared failed.");
 
   // normalize
   auto q4 = normalize(Quaternion<T1>(1, 2, 3, 4));
-  using T4 = decltype(q4)::scalar_t;
   is_close_debug(q4,
-                 Quaternion<T4>{static_cast<T4>(1.0 / std::sqrt(30.0)), static_cast<T4>(2.0 / std::sqrt(30.0)),
-                                static_cast<T4>(3.0 / std::sqrt(30.0)), static_cast<T4>(4.0 / std::sqrt(30.0))},
+                 Quaternion<C>{static_cast<C>(1.0 / std::sqrt(30.0)), static_cast<C>(2.0 / std::sqrt(30.0)),
+                               static_cast<C>(3.0 / std::sqrt(30.0)), static_cast<C>(4.0 / std::sqrt(30.0))},
                  "Normalize failed.");
 
   // slerp
-  auto q5 = slerp(normalize(Quaternion<T1>(1, 2, 3, 4)), normalize(Quaternion<T2>(4, 10, 11, 12)), 0.5);
-  using T5 = decltype(q5)::scalar_t;
+  auto q5 = slerp(normalize(Quaternion<T1>(1, 2, 3, 4)), normalize(Quaternion<T2>(4, 10, 11, 12)), static_cast<C>(0.5));
   is_close_debug(q5,
-                 Quaternion<T5>{static_cast<T5>(0.1946219299433149), static_cast<T5>(0.4407059160784743),
-                                static_cast<T5>(0.5581347617390449), static_cast<T5>(0.6755636074046377)},
+                 Quaternion<C>{static_cast<C>(0.1946219299433149), static_cast<C>(0.4407059160784743),
+                               static_cast<C>(0.5581347617390449), static_cast<C>(0.6755636074046377)},
                  "Slerp failed.");
 }
 //@}

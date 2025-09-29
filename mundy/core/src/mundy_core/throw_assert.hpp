@@ -2,8 +2,9 @@
 // **********************************************************************************************************************
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
-//                                           Copyright 2024 Flatiron Institute
-//                                        Author: Bryce Palmer ft. Chris Edelmaier
+//                                              Copyright 2024 Bryce Palmer
+//
+// Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
 // as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
@@ -137,8 +138,7 @@ KOKKOS_INLINE_FUNCTION void abort_require(
     if constexpr (std::is_same_v<std::remove_const<decltype(message_to_print)>, std::string>) {
       Kokkos::abort(
           get_throw_require_device_string(assertion_string, message_to_print, file_string, line_string).c_str());
-    } else if constexpr (
-      MUNDY_IS_CHAR_ARRAY(message_to_print) || MUNDY_IS_OUR_STRING_LITERAL(message_to_print)) {
+    } else if constexpr (MUNDY_IS_CHAR_ARRAY(message_to_print) || MUNDY_IS_OUR_STRING_LITERAL(message_to_print)) {
       Kokkos::abort(
           get_throw_require_device_string(assertion_string, message_to_print, file_string, line_string).value);
     } else {
@@ -198,7 +198,7 @@ KOKKOS_INLINE_FUNCTION void abort_require(
 /// \brief Throw an exception if the given assertion is false.
 /// \note This macro is only compiled if NDEBUG is not defined. Well, that's a lie. Technically, we still use the
 /// assertion_to_test but only its type and not its value. This avoids unused variable warnings and shouldn't have any
-/// performance impact. TODO(palmerb4): Confirm this claim.
+/// performance impact. TODO(palmerb4): Formally benchmark this claim. At least in prelim tests, it is true.
 ///
 /// \param assertion_to_test The assertion to test
 /// \param exception_to_throw The exception to throw if the assertion is false (will only be thrown on the host)

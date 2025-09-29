@@ -1,0 +1,106 @@
+def cleanCheckout() {
+  // noop - do nothing
+  echo 'cleanCheckout() called - not yet implemented'
+}
+
+// pipeline {
+//   agent any
+
+//   stages {
+//     stage('Validate repo') {
+//       agent {
+//         dockerfile {
+//           filename 'ci/Dockerfile' // Can also be relative path to Dockerfile
+//           dir '.'
+//           label 'linux'
+//           /* args '-X -Y' // These get passed to docker run */
+//           /* additionalBuildArgs '-X -Y' // These get passed to docker build */
+//         }
+//       }
+//       steps {
+//         script {
+//           cleanCheckout()
+//         }
+//       }
+//       post { always { sh "rm -rf ./*" }}
+//     }
+
+//     stage('Build Software and Test Via Docker') {
+//       agent {
+//         dockerfile {
+//           filename 'ci/Dockerfile' // Can also be relative path to Dockerfile
+//           dir '.'
+//           label 'linux'
+//           /* args '-X -Y' // These get passed to docker run */
+//           /* additionalBuildArgs '-X -Y' // These get passed to docker build */
+//         }
+//       }
+//       steps {
+//         echo 'Building software inside the container'
+//         sh './scripts/build.sh'
+
+//         echo 'Executing tests'
+//         sh './scripts/test.sh'
+//       }
+//     }
+//   }
+
+//   post {
+//     success {
+//       echo "Build and test were completed successfully."
+//     }
+//     failure {
+//       echo "Build and test process failed."
+//     }
+//   }
+// }
+pipeline {
+  agent none
+  options {
+    disableConcurrentBuilds()
+  }
+  stages {
+    stage('Build and Test') {
+      agent {
+        dockerfile {
+          filename 'ci/Dockerfile'
+          dir '.'
+          label 'linux'
+        }
+      }
+      environment {
+        HOME = "${WORKSPACE}"
+        MUNDY_DEPS = "${WORKSPACE}/mundy_deps"
+        MUNDY_INSTALL = "${WORKSPACE}/mundy_install"
+        SPACK_ROOT = "/opt/spack"
+        SPACK_TRILINOS = "/opt/spack_trilinos"
+      }
+      steps {
+        echo 'Building software inside the container'
+        sh './ci/build_jenkins_cpu_release.sh'
+
+        echo 'Executing tests'
+        sh './ci/test_jenkins_cpu_release.sh'
+      }
+    }
+  }
+  post {
+    failure {
+      emailext subject: '$PROJECT_NAME - Build #$BUILD_NUMBER - $BUILD_STATUS',
+      body: '''$PROJECT_NAME - Build #$BUILD_NUMBER - $BUILD_STATUS
+Check console output at $BUILD_URL to view full results.
+Building $BRANCH_NAME for $CAUSE
+$JOB_DESCRIPTION
+Changes:
+$CHANGES
+End of build log:
+${BUILD_LOG,maxLines=200}
+''',
+      recipientProviders: [
+    [$class: 'DevelopersRecipientProvider'],
+    ],
+      replyTo: '$DEFAULT_REPLYTO',
+      to: 'cedelmaier@flatironinstitute.org, bpalmer@flatironinstitute.org'
+      }
+  }
+}

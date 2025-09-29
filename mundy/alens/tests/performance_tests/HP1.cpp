@@ -2,8 +2,9 @@
 // **********************************************************************************************************************
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
-//                                           Copyright 2024 Flatiron Institute
-//                                                 Author: Bryce Palmer
+//                                              Copyright 2024 Bryce Palmer
+//
+// Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
 // as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
@@ -66,49 +67,30 @@ Interactions:
 #include <vector>      // for std::vector
 
 // Trilinos libs
-#include <Kokkos_Core.hpp>                   // for Kokkos::initialize, Kokkos::finalize, Kokkos::Timer
-#include <Teuchos_CommandLineProcessor.hpp>  // for Teuchos::CommandLineProcessor
-#include <Teuchos_ParameterList.hpp>         // for Teuchos::ParameterList
-#include <stk_balance/balance.hpp>           // for stk::balance::balanceStkMesh, stk::balance::BalanceSettings
-#include <stk_io/StkMeshIoBroker.hpp>        // for stk::io::StkMeshIoBroker
-#include <stk_mesh/base/Comm.hpp>            // for stk::mesh::comm_mesh_counts
-#include <stk_mesh/base/DumpMeshInfo.hpp>    // for stk::mesh::impl::dump_all_mesh_info
-#include <stk_mesh/base/Entity.hpp>          // for stk::mesh::Entity
-#include <stk_mesh/base/FieldParallel.hpp>   // for stk::parallel_sum
-#include <stk_mesh/base/ForEachEntity.hpp>   // for mundy::mesh::for_each_entity_run
-#include <stk_mesh/base/Part.hpp>            // for stk::mesh::Part, stk::mesh::intersect
-#include <stk_mesh/base/Selector.hpp>        // for stk::mesh::Selector
-#include <stk_topology/topology.hpp>         // for stk::topology
-#include <stk_util/parallel/Parallel.hpp>    // for stk::parallel_machine_init, stk::parallel_machine_finalize
+#include <Kokkos_Core.hpp>                     // for Kokkos::initialize, Kokkos::finalize, Kokkos::Timer
+#include <Teuchos_CommandLineProcessor.hpp>    // for Teuchos::CommandLineProcessor
+#include <Teuchos_ParameterList.hpp>           // for Teuchos::ParameterList
+#include <stk_balance/balance.hpp>             // for stk::balance::balanceStkMesh, stk::balance::BalanceSettings
+#include <stk_io/StkMeshIoBroker.hpp>          // for stk::io::StkMeshIoBroker
+#include <stk_mesh/base/Comm.hpp>              // for stk::mesh::comm_mesh_counts
+#include <stk_mesh/base/DumpMeshInfo.hpp>      // for stk::mesh::impl::dump_all_mesh_info
+#include <stk_mesh/base/Entity.hpp>            // for stk::mesh::Entity
 #include <stk_mesh/base/EntitySorterBase.hpp>  // for stk::mesh::EntitySorterBase
+#include <stk_mesh/base/FieldParallel.hpp>     // for stk::mesh::parallel_sum
 
-// Mundy libs
-#include <mundy_alens/actions_crosslinkers.hpp>                // for mundy::alens::crosslinkers...
-#include <mundy_alens/periphery/Periphery.hpp>                 // for gen_sphere_quadrature
-#include <mundy_constraints/AngularSprings.hpp>                // for mundy::constraints::AngularSprings
-#include <mundy_constraints/ComputeConstraintForcing.hpp>      // for mundy::constraints::ComputeConstraintForcing
-#include <mundy_constraints/DeclareAndInitConstraints.hpp>     // for mundy::constraints::DeclareAndInitConstraints
-#include <mundy_constraints/HookeanSprings.hpp>                // for mundy::constraints::HookeanSprings
+// Mundy core
 #include <mundy_core/MakeStringArray.hpp>                      // for mundy::core::make_string_array
 #include <mundy_core/OurAnyNumberParameterEntryValidator.hpp>  // for mundy::core::OurAnyNumberParameterEntryValidator
 #include <mundy_core/StringLiteral.hpp>  // for mundy::core::StringLiteral and mundy::core::make_string_literal
 #include <mundy_core/throw_assert.hpp>   // for MUNDY_THROW_ASSERT
-#include <mundy_io/IOBroker.hpp>         // for mundy::io::IOBroker
-#include <mundy_linkers/ComputeSignedSeparationDistanceAndContactNormal.hpp>  // for mundy::linkers::ComputeSignedSeparationDistanceAndContactNormal
-#include <mundy_linkers/DestroyNeighborLinkers.hpp>         // for mundy::linkers::DestroyNeighborLinkers
-#include <mundy_linkers/EvaluateLinkerPotentials.hpp>       // for mundy::linkers::EvaluateLinkerPotentials
-#include <mundy_linkers/GenerateNeighborLinkers.hpp>        // for mundy::linkers::GenerateNeighborLinkers
-#include <mundy_linkers/LinkerPotentialForceReduction.hpp>  // for mundy::linkers::LinkerPotentialForceReduction
-#include <mundy_linkers/NeighborLinkers.hpp>                // for mundy::linkers::NeighborLinkers
-#include <mundy_math/Hilbert.hpp>                           // for mundy::math::create_hilbert_positions_and_directors
-#include <mundy_math/Vector3.hpp>                           // for mundy::math::Vector3
-#include <mundy_math/distance/EllipsoidEllipsoid.hpp>       // for mundy::math::distance::ellipsoid_ellipsoid
-#include <mundy_mesh/BulkData.hpp>                          // for mundy::mesh::BulkData
-#include <mundy_mesh/FieldViews.hpp>     // for mundy::mesh::vector3_field_data, mundy::mesh::quaternion_field_data
-#include <mundy_mesh/MetaData.hpp>       // for mundy::mesh::MetaData
-#include <mundy_mesh/fmt_stk_types.hpp>  // adds fmt::format for stk types
-#include <mundy_mesh/utils/DestroyFlaggedEntities.hpp>        // for mundy::mesh::utils::destroy_flagged_entities
-#include <mundy_mesh/utils/FillFieldWithValue.hpp>            // for mundy::mesh::utils::fill_field_with_value
+
+// Mundy math
+#include <mundy_math/Hilbert.hpp>                      // for mundy::math::create_hilbert_positions_and_directors
+#include <mundy_math/Vector3.hpp>                      // for mundy::math::Vector3
+#include <mundy_math/distance/EllipsoidEllipsoid.hpp>  // for mundy::math::distance::ellipsoid_ellipsoid
+#include <mundy_math/zmort.hpp>                        // for mundy::math::zmorton_less(Vector3, Vector3)
+
+// Mundy meta
 #include <mundy_meta/MetaFactory.hpp>                         // for mundy::meta::MetaKernelFactory
 #include <mundy_meta/MetaKernel.hpp>                          // for mundy::meta::MetaKernel
 #include <mundy_meta/MetaKernelDispatcher.hpp>                // for mundy::meta::MetaKernelDispatcher
@@ -117,9 +99,39 @@ Interactions:
 #include <mundy_meta/ParameterValidationHelpers.hpp>  // for mundy::meta::check_parameter_and_set_default and mundy::meta::check_required_parameter
 #include <mundy_meta/PartReqs.hpp>  // for mundy::meta::PartReqs
 #include <mundy_meta/utils/MeshGeneration.hpp>  // for mundy::meta::utils::generate_class_instance_and_mesh_from_meta_class_requirements
+
+// Mundy mesh
+#include <mundy_mesh/BulkData.hpp>       // for mundy::mesh::BulkData
+#include <mundy_mesh/FieldViews.hpp>     // for mundy::mesh::vector3_field_data, mundy::mesh::quaternion_field_data
+#include <mundy_mesh/MetaData.hpp>       // for mundy::mesh::MetaData
+#include <mundy_mesh/fmt_stk_types.hpp>  // adds fmt::format for stk types
+#include <mundy_mesh/utils/DestroyFlaggedEntities.hpp>  // for mundy::mesh::utils::destroy_flagged_entities
+#include <mundy_mesh/utils/FillFieldWithValue.hpp>      // for mundy::mesh::utils::fill_field_with_value
+
+// Mundy shapes
 #include <mundy_shapes/ComputeAABB.hpp>  // for mundy::shapes::ComputeAABB
 #include <mundy_shapes/Spheres.hpp>      // for mundy::shapes::Spheres
-#include <mundy_math/zmort.hpp> // for mundy::math::zmorton_less(Vector3, Vector3)
+
+// Mundy constraint
+#include <mundy_constraints/HookeanSprings.hpp>  // for mundy::constraints::HookeanSprings
+
+// Mundy linkers
+#include <mundy_linkers/ComputeSignedSeparationDistanceAndContactNormal.hpp>  // for mundy::linkers::ComputeSignedSeparationDistanceAndContactNormal
+#include <mundy_linkers/DestroyNeighborLinkers.hpp>         // for mundy::linkers::DestroyNeighborLinkers
+#include <mundy_linkers/EvaluateLinkerPotentials.hpp>       // for mundy::linkers::EvaluateLinkerPotentials
+#include <mundy_linkers/GenerateNeighborLinkers.hpp>        // for mundy::linkers::GenerateNeighborLinkers
+#include <mundy_linkers/LinkerPotentialForceReduction.hpp>  // for mundy::linkers::LinkerPotentialForceReduction
+#include <mundy_linkers/NeighborLinkers.hpp>                // for mundy::linkers::NeighborLinkers
+
+// Mundy IO
+#include <mundy_io/IOBroker.hpp>  // for mundy::io::IOBroker
+
+// Mundy alens
+#include <mundy_alens/actions_crosslinkers.hpp>             // for mundy::alens::crosslinkers...
+#include <mundy_alens/periphery/Periphery.hpp>              // for gen_sphere_quadrature
+#include <mundy_constraints/AngularSprings.hpp>             // for mundy::constraints::AngularSprings
+#include <mundy_constraints/ComputeConstraintForcing.hpp>   // for mundy::constraints::ComputeConstraintForcing
+#include <mundy_constraints/DeclareAndInitConstraints.hpp>  // for mundy::constraints::DeclareAndInitConstraints
 
 namespace mundy {
 
@@ -151,6 +163,7 @@ enum class PERIPHERY_BIND_SITES_TYPE : unsigned { RANDOM = 0u, FROM_FILE };
 enum class PERIPHERY_SHAPE : unsigned { SPHERE = 0u, ELLIPSOID };
 enum class PERIPHERY_QUADRATURE : unsigned { GAUSS_LEGENDRE = 0u, FROM_FILE };
 enum class COLLISION_TYPE : unsigned { HERTZIAN = 0u, WCA };
+enum class HYDRO_TYPE : unsigned { RPYC = 0u, RPY, STOKES };
 
 std::ostream &operator<<(std::ostream &os, const BINDING_STATE_CHANGE &state) {
   switch (state) {
@@ -290,6 +303,24 @@ std::ostream &operator<<(std::ostream &os, const COLLISION_TYPE &collision_type)
   return os;
 }
 
+std::ostream &operator<<(std::ostream &os, const HYDRO_TYPE &hydro_type) {
+  switch (hydro_type) {
+    case HYDRO_TYPE::RPYC:
+      os << "RPYC";
+      break;
+    case HYDRO_TYPE::RPY:
+      os << "RPY";
+      break;
+    case HYDRO_TYPE::STOKES:
+      os << "STOKES";
+      break;
+    default:
+      os << "UNKNOWN";
+      break;
+  }
+  return os;
+}
+
 }  // namespace hp1
 
 }  // namespace alens
@@ -316,6 +347,9 @@ struct fmt::formatter<mundy::alens::hp1::PERIPHERY_QUADRATURE> : fmt::ostream_fo
 
 template <>
 struct fmt::formatter<mundy::alens::hp1::COLLISION_TYPE> : fmt::ostream_formatter {};
+
+template <>
+struct fmt::formatter<mundy::alens::hp1::HYDRO_TYPE> : fmt::ostream_formatter {};
 
 namespace mundy {
 
@@ -408,7 +442,22 @@ class HP1 {
     num_euchromatin_per_repeat_ = simulation_params.get<size_t>("num_euchromatin_per_repeat");
     num_heterochromatin_per_repeat_ = simulation_params.get<size_t>("num_heterochromatin_per_repeat");
     backbone_sphere_hydrodynamic_radius_ = simulation_params.get<double>("backbone_sphere_hydrodynamic_radius");
+    std::string hydro_type_string = simulation_params.get<std::string>("hydro_type");
+    if (hydro_type_string == "RPYC") {
+      hydro_type_ = HYDRO_TYPE::RPYC;
+    } else if (hydro_type_string == "RPY") {
+      hydro_type_ = HYDRO_TYPE::RPY;
+    } else if (hydro_type_string == "STOKES") {
+      hydro_type_ = HYDRO_TYPE::STOKES;
+    } else {
+      MUNDY_THROW_REQUIRE(false, std::invalid_argument,
+                          std::string("Invalid hydro type. Received '") + hydro_type_string +
+                              "' but expected 'RPYC', 'RPY', or 'STOKES'.");
+    }
+    simid_ = simulation_params.get<size_t>("simid");
     initial_chromosome_separation_ = simulation_params.get<double>("initial_chromosome_separation");
+    specify_chromosome_layout_ = simulation_params.get<bool>("specify_chromosome_layout");
+    specify_chromosome_file_ = simulation_params.get<std::string>("specify_chromosome_file");
     MUNDY_THROW_REQUIRE(timestep_size_ > 0, std::invalid_argument, "timestep_size_ must be greater than 0.");
     MUNDY_THROW_REQUIRE(viscosity_ > 0, std::invalid_argument, "viscosity_ must be greater than 0.");
     MUNDY_THROW_REQUIRE(initial_chromosome_separation_ >= 0, std::invalid_argument,
@@ -725,6 +774,8 @@ class HP1 {
         .set("backbone_sphere_hydrodynamic_radius", default_backbone_sphere_hydrodynamic_radius_,
              "Backbone sphere hydrodynamic radius. Even if n-body hydrodynamics is disabled, we still have "
              "self-interaction.")
+        .set("hydro_type", std::string(default_backbone_hydro_type_), "Hydrodynamic kernel type.")
+        .set("simid", default_simid_, "Simulation ID.", make_new_validator(prefer_size_t, accept_int))
         .set("initial_chromosome_separation", default_initial_chromosome_separation_, "Initial chromosome separation.")
         .set("initialization_type", std::string(default_initialization_type_string_), "Initialization_type.")
         .set("initialize_from_exo_filename", std::string(default_initialize_from_exo_filename_),
@@ -746,6 +797,10 @@ class HP1 {
              "The frequency at which we should update the background fluid velocity field. If not 1, the old velocity "
              "will be reused for the next update_frequency steps.",
              make_new_validator(prefer_size_t, accept_int))
+        .set("specify_chromosome_layout", default_specify_chromosome_layout_,
+             "If true, we will use the specified chromosome layout from the input file.")
+        .set("specify_chromosome_file", std::string(default_specify_chromosome_file_),
+             "If specify_chromosome_layout is true, this is the file containing the chromosome layout.")
         // IO
         .set("loadbalance_post_initialization", default_loadbalance_post_initialization_,
              "If we should load balance post-initialization or not.")
@@ -886,6 +941,7 @@ class HP1 {
 
       std::cout << std::endl;
       std::cout << "SIMULATION:" << std::endl;
+      std::cout << "  simid:           " << simid_ << std::endl;
       std::cout << "  num_time_steps:  " << num_time_steps_ << std::endl;
       std::cout << "  timestep_size:   " << timestep_size_ << std::endl;
       std::cout << "  viscosity:       " << viscosity_ << std::endl;
@@ -894,6 +950,7 @@ class HP1 {
       std::cout << "  num_euchromatin_per_repeat: " << num_euchromatin_per_repeat_ << std::endl;
       std::cout << "  num_heterochromatin_per_repeat:  " << num_heterochromatin_per_repeat_ << std::endl;
       std::cout << "  backbone_sphere_hydrodynamic_radius: " << backbone_sphere_hydrodynamic_radius_ << std::endl;
+      std::cout << "  hydro_type: " << hydro_type_ << std::endl;
       std::cout << "  initial_chromosome_separation:   " << initial_chromosome_separation_ << std::endl;
       std::cout << "  initialization_type:             " << initialization_type_ << std::endl;
       if (initialization_type_ == INITIALIZATION_TYPE::FROM_EXO) {
@@ -915,6 +972,10 @@ class HP1 {
         std::cout << "  max_allowable_speed: " << max_allowable_speed_ << std::endl;
       }
       std::cout << "  hydro_update_frequency: " << hydro_update_frequency_ << std::endl;
+      if (specify_chromosome_layout_) {
+        std::cout << "  specify_chromosome_layout: " << specify_chromosome_layout_ << std::endl;
+        std::cout << "  specify_chromosome_file: " << specify_chromosome_file_ << std::endl;
+      }
 
       std::cout << std::endl;
       std::cout << "IO:" << std::endl;
@@ -1819,6 +1880,270 @@ class HP1 {
     std::cout << "...finished declaring system\n";
   }
 
+  // Create the chromatin backbone and HP1 crosslinkers with a given layout
+  void create_chromatin_backbone_and_hp1_with_layout() {
+    // Each chromosome will have a different number of spheres, so just start at the beginning with the creation
+    // of said chromosome!
+    const bool enable_backbone_collision = enable_backbone_collision_;
+    const bool enable_backbone_springs = enable_backbone_springs_;
+    const bool enable_crosslinkers = enable_crosslinkers_;
+
+    // Load the regional map from the chromosome layout file
+    std::vector<std::string> chromosome_regional_map;
+    std::ifstream layout_file(specify_chromosome_file_);
+    MUNDY_THROW_REQUIRE(layout_file.is_open(), std::runtime_error,
+                        "The chromosome layout file " + specify_chromosome_file_ + " could not be opened.");
+    std::string line;
+    while (std::getline(layout_file, line)) {
+      // Remove whitespace from the line
+      line.erase(remove_if(line.begin(), line.end(), isspace), line.end());
+      if (!line.empty()) {
+        chromosome_regional_map.push_back(line);
+      }
+    }
+
+    bulk_data_ptr_->modification_begin();
+
+    // Rank 0: Declare N chromatin chains randomly in space
+    size_t node_count = 0;
+    size_t element_count = 0;
+    if (bulk_data_ptr_->parallel_rank() == 0) {
+      for (size_t j = 0; j < num_chromosomes_; j++) {
+        std::cout << "Creating chromosome with layout " << j << std::endl;
+
+        // This is directly taken from the NGP rewrite, adapted for here
+        /* Declare the chromatin and HP1
+        //  E : euchromatin spheres
+        //  H : heterochromatin spheres
+        //  | : crosslinkers
+        // ---: backbone springs/backbone segments
+        //
+        //  |   |                           |   |
+        //  H---H---E---E---E---E---E---E---H---H
+        //
+        // The actual connectivity looks like this:
+        //  n : node, s : segment and or spring, c : crosslinker
+        //
+        // c1_      c3_       c5_       c7_
+        // | /      | /       | /       | /
+        // n1       n3        n5        n7
+        //  \      /  \      /  \      /
+        //   s1   s2   s3   s4   s5   s6
+        //    \  /      \  /      \  /
+        //     n2        n4        n6
+        //     | \       | \       | \
+        //     c2⎻       c4⎻       c6⎻
+        //
+        // If you look at this long enough, the pattern is clear.
+        //  - One less segment than nodes.
+        //  - Same number of crosslinkers as heterochromatin nodes.
+        //  - Segment i connects to nodes i and i+1.
+        //  - Crosslinker i connects to nodes i and i.
+        //
+        // We need to use this information to populate the node and element info vectors.
+        // Mundy will handle passing off this information to the bulk data. Just make sure that all
+        // MPI ranks contain the same node and element info. This way, we can determine which nodes
+        // should become shared.
+        //
+        // Rules (non-exhaustive):
+        //  - Neither nodes nor elements need to have parts or fields.
+        //  - The rank and type of the fields must be consistant. You can't pass an element field to a node,
+        //    nor can you set the value of a field to a different type or size than it was declared as.
+        //  - The owner of a node must be the same as one of the elements that connects to it.
+        //  - A node connected to an element not on the same rank as the node will be shared with the owner of the
+        element.
+        //  - Field/Part names are case-sensitive but don't attempt to declare "field_1" and "Field_1" as if
+        //    that will give two different fields since STKIO will not be able to distinguish between them.
+        //  - A (non-zero) negative node id in the element connection list can be used to indicate that a node should be
+        left unassigned.
+        //  - All parts need to be able to contain an element of the given topology.
+        */
+
+        // Get the number of spheres int the chromosome by the length of the string
+        std::string current_regional_map = chromosome_regional_map[j];
+        const size_t num_nodes_per_chromosome = current_regional_map.length();
+        const size_t num_segments_per_chromosome = num_nodes_per_chromosome - 1;
+        std::cout << "Regional map: " << num_nodes_per_chromosome << std::endl;
+        std::cout << current_regional_map << std::endl;
+
+        // Figure out the number of segments, etc, that we are linking, so keep track of the number of heterochromatin
+        // nodes, euchromatin nodes, etc.
+        const size_t num_heterochromatin_spheres =
+            std::count(current_regional_map.begin(), current_regional_map.end(), 'H');
+        const size_t num_euchromatin_spheres =
+            std::count(current_regional_map.begin(), current_regional_map.end(), 'E');
+
+        // Figure out the starting indices of the nodes and elements
+        const size_t start_node_id = node_count + 1u;
+        const size_t start_element_id = element_count + 1u;
+
+        // Helper functions for getting the IDs of various objects
+        auto get_node_id = [start_node_id](const size_t &seq_node_index) { return start_node_id + seq_node_index; };
+
+        auto get_sphere_id = [start_element_id](const size_t &seq_sphere_index) {
+          return start_element_id + seq_sphere_index;
+        };
+
+        auto get_segment_id = [start_element_id, num_nodes_per_chromosome](const size_t &seq_segment_index) {
+          return start_element_id + num_nodes_per_chromosome + seq_segment_index;
+        };
+
+        auto get_crosslinker_id = [start_element_id, num_nodes_per_chromosome, num_segments_per_chromosome,
+                                   enable_backbone_collision,
+                                   enable_backbone_springs](const size_t &seq_crosslinker_index) {
+          return start_element_id + num_nodes_per_chromosome +
+                 (enable_backbone_springs || enable_backbone_collision) * num_segments_per_chromosome +
+                 seq_crosslinker_index;
+        };
+
+        auto is_first_or_last_element_in_chain = [num_segments_per_chromosome](const size_t &seq_segment_index) {
+          return seq_segment_index == 0 || seq_segment_index == num_segments_per_chromosome - 1;  // 0-based indexing
+        };
+
+        // Temporary/scratch variables
+        stk::mesh::PartVector empty;
+
+        std::cout << "  Building backbone segments" << std::endl;
+        for (size_t segment_local_idx = 0; segment_local_idx < num_segments_per_chromosome; segment_local_idx++) {
+          // Keep track of the vertex IDs for part memebership (local index into array)
+          const size_t vertex_left_idx = segment_local_idx;
+          const size_t vertex_right_idx = segment_local_idx + 1;
+          // Process the nodes for this segment
+          stk::mesh::EntityId left_node_id = get_node_id(segment_local_idx);
+          stk::mesh::EntityId right_node_id = get_node_id(segment_local_idx + 1);
+
+          stk::mesh::Entity left_node = bulk_data_ptr_->get_entity(node_rank_, left_node_id);
+          stk::mesh::Entity right_node = bulk_data_ptr_->get_entity(node_rank_, right_node_id);
+          if (!bulk_data_ptr_->is_valid(left_node)) {
+            left_node = bulk_data_ptr_->declare_node(left_node_id, empty);
+            node_count++;
+          }
+          if (!bulk_data_ptr_->is_valid(right_node)) {
+            right_node = bulk_data_ptr_->declare_node(right_node_id, empty);
+            node_count++;
+          }
+
+          // Each node is attached to a sphere that is (H)eterochromatin, (E)uchromatin, or (BS)BindingSite
+          std::string left_region(1, current_regional_map[vertex_left_idx]);
+          std::string right_region(1, current_regional_map[vertex_right_idx]);
+          stk::mesh::EntityId left_sphere_id = get_sphere_id(segment_local_idx);
+          stk::mesh::EntityId right_sphere_id = get_sphere_id(segment_local_idx + 1);
+          stk::mesh::Entity left_sphere = bulk_data_ptr_->get_entity(element_rank_, left_sphere_id);
+          stk::mesh::Entity right_sphere = bulk_data_ptr_->get_entity(element_rank_, right_sphere_id);
+          if (!bulk_data_ptr_->is_valid(left_sphere)) {
+            // Figure out the part we belong to
+            stk::mesh::PartVector pvector;
+            if (left_region == "H") {
+              pvector.push_back(h_part_ptr_);
+            } else if (left_region == "E") {
+              pvector.push_back(e_part_ptr_);
+            }
+            // Declare the sphere and connect to it's node
+            left_sphere = bulk_data_ptr_->declare_element(left_sphere_id, pvector);
+            bulk_data_ptr_->declare_relation(left_sphere, left_node, 0);
+            // Assign the chainID
+            stk::mesh::field_data(*element_chainid_field_ptr_, left_sphere)[0] = j;
+            element_count++;
+          }
+          if (!bulk_data_ptr_->is_valid(right_sphere)) {
+            // Figure out the part we belong to
+            stk::mesh::PartVector pvector;
+            if (right_region == "H") {
+              pvector.push_back(h_part_ptr_);
+            } else if (right_region == "E") {
+              pvector.push_back(e_part_ptr_);
+            }
+            // Declare the sphere and connect to it's node
+            right_sphere = bulk_data_ptr_->declare_element(right_sphere_id, pvector);
+            bulk_data_ptr_->declare_relation(right_sphere, right_node, 0);
+            // Assign the chainID
+            stk::mesh::field_data(*element_chainid_field_ptr_, right_sphere)[0] = j;
+            element_count++;
+          }
+
+          // Figure out how to do the spherocylinder segments along the edges now
+          if (enable_backbone_springs || enable_backbone_collision) {
+            stk::mesh::Entity segment = bulk_data_ptr_->get_entity(element_rank_, get_segment_id(segment_local_idx));
+            if (!bulk_data_ptr_->is_valid(segment)) {
+              stk::mesh::PartVector pvector;
+              pvector.push_back(backbone_segments_part_ptr_);
+              if (enable_backbone_springs) {
+                if (left_region == "E" && right_region == "E") {
+                  pvector.push_back(ee_springs_part_ptr_);
+                } else if (left_region == "E" && right_region == "H") {
+                  pvector.push_back(eh_springs_part_ptr_);
+                } else if (left_region == "H" && right_region == "E") {
+                  pvector.push_back(eh_springs_part_ptr_);
+                } else if (left_region == "H" && right_region == "H") {
+                  pvector.push_back(hh_springs_part_ptr_);
+                }
+              }
+              segment = bulk_data_ptr_->declare_element(get_segment_id(segment_local_idx), pvector);
+              bulk_data_ptr_->declare_relation(segment, left_node, 0);
+              bulk_data_ptr_->declare_relation(segment, right_node, 1);
+              // Assign the chainID
+              stk::mesh::field_data(*element_chainid_field_ptr_, segment)[0] = j;
+
+              // Assign if the segment is an endpoint or not
+              stk::mesh::field_data(*element_requires_endpoint_correction_field_ptr_, segment)[0] =
+                  is_first_or_last_element_in_chain(segment_local_idx);
+              element_count++;
+            }
+          }
+        }
+        std::cout << "  ...finished building backbone segments" << std::endl;
+
+        // Declare the crosslinkers along the backbone
+        // Every sphere gets a left bound crosslinker
+        //  E : euchromatin spheres
+        //  H : heterochromatin spheres
+        //  | : crosslinkers
+        // ---: backbone springs
+        //
+        //  |   |                           |   |
+        //  H---H---E---E---E---E---E---E---H---H
+
+        // March down the chain of spheres, adding crosslinkers as we go. We just want to add to the heterochromatin
+        // spheres, and so keep track of a running hp1_sphere_index.
+        if (enable_crosslinkers_) {
+          std::cout << "  Building hp1 segments" << std::endl;
+          size_t hp1_sphere_index = 0;
+          for (size_t sphere_local_idx = 0; sphere_local_idx < num_nodes_per_chromosome; sphere_local_idx++) {
+            stk::mesh::Entity sphere_node = bulk_data_ptr_->get_entity(node_rank_, get_node_id(sphere_local_idx));
+            MUNDY_THROW_ASSERT(bulk_data_ptr_->is_valid(sphere_node), std::invalid_argument,
+                               fmt::format("Node {} is not valid", sphere_local_idx));
+
+            // Check if we are a heterochromatin sphere
+            std::string current_region(1, current_regional_map[sphere_local_idx]);
+            if (current_region == "H") {
+              // Bind left and right nodes to the same node to start simulation (everybody is left bound)
+              // Create the HP1 crosslinker
+              auto left_bound_hp1_part_vector = stk::mesh::PartVector{left_hp1_part_ptr_};
+              stk::mesh::EntityId hp1_crosslinker_id = get_crosslinker_id(hp1_sphere_index);
+              stk::mesh::Entity hp1_crosslinker =
+                  bulk_data_ptr_->declare_element(hp1_crosslinker_id, left_bound_hp1_part_vector);
+              stk::mesh::Permutation invalid_perm = stk::mesh::Permutation::INVALID_PERMUTATION;
+              bulk_data_ptr_->declare_relation(hp1_crosslinker, sphere_node, 0, invalid_perm);
+              bulk_data_ptr_->declare_relation(hp1_crosslinker, sphere_node, 1, invalid_perm);
+              MUNDY_THROW_ASSERT(
+                  bulk_data_ptr_->bucket(hp1_crosslinker).topology() != stk::topology::INVALID_TOPOLOGY,
+                  std::logic_error,
+                  fmt::format("The crosslinker with id {} has an invalid topology.", hp1_crosslinker_id));
+              // Assign the chainID
+              stk::mesh::field_data(*element_chainid_field_ptr_, hp1_crosslinker)[0] = j;
+
+              hp1_sphere_index++;
+              element_count++;
+            }
+          }
+          std::cout << "  ...finished building hp1 segments" << std::endl;
+        }
+      }
+    }
+    bulk_data_ptr_->modification_end();
+    std::cout << "...finished declaring system\n";
+  }
+
   void initialize_chromosome_positions_from_file() {
     // The filename is in initialize_from_dat_filename_
     //
@@ -1838,7 +2163,7 @@ class HP1 {
       const size_t num_heterochromatin_spheres = num_chromatin_repeats_ / 2 * num_heterochromatin_per_repeat_ +
                                                  num_chromatin_repeats_ % 2 * num_heterochromatin_per_repeat_;
       const size_t num_euchromatin_spheres = num_chromatin_repeats_ / 2 * num_euchromatin_per_repeat_;
-      const size_t num_nodes_per_chromosome = num_heterochromatin_spheres + num_euchromatin_spheres;
+      size_t num_nodes_per_chromosome = num_heterochromatin_spheres + num_euchromatin_spheres;
 
       // Open the file
       std::ifstream infile(initialize_from_dat_filename_);
@@ -1895,9 +2220,9 @@ class HP1 {
       for (size_t j = 0; j < num_chromosomes_; j++) {
         openrand::Philox rng(j, 0);
         double jdouble = static_cast<double>(j);
-        mundy::math::Vector3<double> r_start(2.0 * jdouble, 0.0, 0.0);
+        mundy::math::Vector3d r_start(2.0 * jdouble, 0.0, 0.0);
         // Add a tiny random change in X to make sure we don't wind up in perfectly parallel pathological states
-        mundy::math::Vector3<double> u_hat(rng.uniform<double>(0.0, 0.001), 0.0, 1.0);
+        mundy::math::Vector3d u_hat(rng.uniform<double>(0.0, 0.001), 0.0, 1.0);
         u_hat = u_hat / mundy::math::two_norm(u_hat);
 
         // Figure out which nodes we are doing
@@ -1913,7 +2238,7 @@ class HP1 {
                              fmt::format("Node {} is not valid", i));
 
           // Assign the node coordinates
-          mundy::math::Vector3<double> r =
+          mundy::math::Vector3d r =
               r_start + static_cast<double>(i - start_node_index) * initial_chromosome_separation_ * u_hat;
           stk::mesh::field_data(*node_coord_field_ptr_, node)[0] = r[0];
           stk::mesh::field_data(*node_coord_field_ptr_, node)[1] = r[1];
@@ -1929,14 +2254,14 @@ class HP1 {
       for (size_t j = 0; j < num_chromosomes_; j++) {
         // Find a random place within the unit cell with a random orientation for the chain.
         openrand::Philox rng(j, 0);
-        mundy::math::Vector3<double> r_start(rng.uniform<double>(-0.5 * unit_cell_size_[0], 0.5 * unit_cell_size_[0]),
-                                             rng.uniform<double>(-0.5 * unit_cell_size_[1], 0.5 * unit_cell_size_[1]),
-                                             rng.uniform<double>(-0.5 * unit_cell_size_[2], 0.5 * unit_cell_size_[2]));
+        mundy::math::Vector3d r_start(rng.uniform<double>(-0.5 * unit_cell_size_[0], 0.5 * unit_cell_size_[0]),
+                                      rng.uniform<double>(-0.5 * unit_cell_size_[1], 0.5 * unit_cell_size_[1]),
+                                      rng.uniform<double>(-0.5 * unit_cell_size_[2], 0.5 * unit_cell_size_[2]));
         // Find a random unit vector direction
         const double zrand = rng.rand<double>() - 1.0;
         const double wrand = std::sqrt(1.0 - zrand * zrand);
         const double trand = 2.0 * M_PI * rng.rand<double>();
-        mundy::math::Vector3<double> u_hat(wrand * std::cos(trand), wrand * std::sin(trand), zrand);
+        mundy::math::Vector3d u_hat(wrand * std::cos(trand), wrand * std::sin(trand), zrand);
 
         // Figure out which nodes we are doing
         const size_t num_heterochromatin_spheres = num_chromatin_repeats_ / 2 * num_heterochromatin_per_repeat_ +
@@ -1951,7 +2276,7 @@ class HP1 {
                              fmt::format("Node {} is not valid", i));
 
           // Assign the node coordinates
-          mundy::math::Vector3<double> r =
+          mundy::math::Vector3d r =
               r_start + static_cast<double>(i - start_node_index) * initial_chromosome_separation_ * u_hat;
           stk::mesh::field_data(*node_coord_field_ptr_, node)[0] = r[0];
           stk::mesh::field_data(*node_coord_field_ptr_, node)[1] = r[1];
@@ -1969,17 +2294,17 @@ class HP1 {
       for (size_t j = 0; j < num_chromosomes_; j++) {
         // Start like we are pretending to be on a grid
         double jdouble = static_cast<double>(j);
-        mundy::math::Vector3<double> r_start(2.0 * jdouble, 0.0, 0.0);
-        mundy::math::Vector3<double> u_hat(0.0, 0.0, 1.0);
+        mundy::math::Vector3d r_start(2.0 * jdouble, 0.0, 0.0);
+        mundy::math::Vector3d u_hat(0.0, 0.0, 1.0);
 
         // If num_chromosomes == 2, then try to do the crosshatch for a timestep?
         if (num_chromosomes_ == 2) {
           if (j == 0) {
-            r_start = mundy::math::Vector3<double>(0.0, 0.0, 0.0);
-            u_hat = mundy::math::Vector3<double>(0.0, 0.0, 1.0);
+            r_start = mundy::math::Vector3d(0.0, 0.0, 0.0);
+            u_hat = mundy::math::Vector3d(0.0, 0.0, 1.0);
           } else if (j == 1) {
-            r_start = mundy::math::Vector3<double>(-5.0, 0.25, 5.0);
-            u_hat = mundy::math::Vector3<double>(1.0, 0.0, 0.0);
+            r_start = mundy::math::Vector3d(-5.0, 0.25, 5.0);
+            u_hat = mundy::math::Vector3d(1.0, 0.0, 0.0);
           }
         }
 
@@ -1996,7 +2321,7 @@ class HP1 {
                              fmt::format("Node {} is not valid", i));
 
           // Assign the node coordinates
-          mundy::math::Vector3<double> r =
+          mundy::math::Vector3d r =
               r_start + static_cast<double>(i - start_node_index) * initial_chromosome_separation_ * u_hat;
           stk::mesh::field_data(*node_coord_field_ptr_, node)[0] = r[0];
           stk::mesh::field_data(*node_coord_field_ptr_, node)[1] = r[1];
@@ -2034,7 +2359,7 @@ class HP1 {
                            fmt::format("Node {} is not valid.", i));
 
         // Assign the node coordinates
-        mundy::math::Vector3<double> r(0.0, 0.0, 0.0);
+        mundy::math::Vector3d r(0.0, 0.0, 0.0);
         if (i == start_node_index) {
           r[0] = -0.5 * initial_chromosome_separation_;
           r[1] = initial_chromosome_separation_;
@@ -2064,7 +2389,7 @@ class HP1 {
     // We need to get which chromosome this rank is responsible for initializing, luckily, should follow what was done
     // for the creation step. Do this inside a modification loop so we can go by node index, rather than ID.
     if (bulk_data_ptr_->parallel_rank() == 0) {
-      std::vector<mundy::math::Vector3<double>> chromosome_centers_array;
+      std::vector<mundy::math::Vector3d> chromosome_centers_array;
       std::vector<double> chromosome_radii_array;
       for (size_t ichromosome = 0; ichromosome < num_chromosomes_; ichromosome++) {
         // Figure out which nodes we are doing
@@ -2081,7 +2406,7 @@ class HP1 {
         const double zrand = rng.rand<double>() - 1.0;
         const double wrand = std::sqrt(1.0 - zrand * zrand);
         const double trand = 2.0 * M_PI * rng.rand<double>();
-        mundy::math::Vector3<double> u_hat(wrand * std::cos(trand), wrand * std::sin(trand), zrand);
+        mundy::math::Vector3d u_hat(wrand * std::cos(trand), wrand * std::sin(trand), zrand);
 
         // Once we have the number of chromosome spheres we can get the hilbert curve set up. This will be at some
         // orientation and then have sides with a length of initial_chromosome_separation.
@@ -2089,13 +2414,13 @@ class HP1 {
             num_nodes_per_chromosome, u_hat, initial_chromosome_separation_);
 
         // Create the local positions of the spheres
-        std::vector<mundy::math::Vector3<double>> sphere_position_array;
+        std::vector<mundy::math::Vector3d> sphere_position_array;
         for (size_t isphere = 0; isphere < num_nodes_per_chromosome; isphere++) {
           sphere_position_array.push_back(hilbert_position_array[isphere]);
         }
 
         // Figure out where the center of the chromosome is, and its radius, in its own local space
-        mundy::math::Vector3<double> r_chromosome_center_local(0.0, 0.0, 0.0);
+        mundy::math::Vector3d r_chromosome_center_local(0.0, 0.0, 0.0);
         double r_max = 0.0;
         for (size_t i = 0; i < sphere_position_array.size(); i++) {
           r_chromosome_center_local += sphere_position_array[i];
@@ -2112,10 +2437,9 @@ class HP1 {
         bool chromosome_inserted = false;
         while (itrial <= max_trials) {
           // Generate a random position within the unit cell.
-          mundy::math::Vector3<double> r_start(
-              rng.uniform<double>(-0.5 * unit_cell_size_[0], 0.5 * unit_cell_size_[0]),
-              rng.uniform<double>(-0.5 * unit_cell_size_[1], 0.5 * unit_cell_size_[1]),
-              rng.uniform<double>(-0.5 * unit_cell_size_[2], 0.5 * unit_cell_size_[2]));
+          mundy::math::Vector3d r_start(rng.uniform<double>(-0.5 * unit_cell_size_[0], 0.5 * unit_cell_size_[0]),
+                                        rng.uniform<double>(-0.5 * unit_cell_size_[1], 0.5 * unit_cell_size_[1]),
+                                        rng.uniform<double>(-0.5 * unit_cell_size_[2], 0.5 * unit_cell_size_[2]));
 
           // Check for overlaps with existing chromosomes
           bool found_overlap = false;
@@ -2139,7 +2463,7 @@ class HP1 {
                             fmt::format("Failed to insert chromosome after {} trials.", max_trials));
 
         // Generate all the positions along the curve due to the placement in the global space
-        std::vector<mundy::math::Vector3<double>> new_position_array;
+        std::vector<mundy::math::Vector3d> new_position_array;
         for (size_t i = 0; i < sphere_position_array.size(); i++) {
           new_position_array.push_back(chromosome_centers_array.back() + r_chromosome_center_local -
                                        sphere_position_array[i]);
@@ -2178,12 +2502,12 @@ class HP1 {
 
       // Because all chromosomes are the same, we can create a single hilbert curve and then place it in the lattice
       // for each chromosome.
-      const mundy::math::Vector3<double> x_hat(1.0, 0.0, 0.0);
+      const mundy::math::Vector3d x_hat(1.0, 0.0, 0.0);
       auto [hilbert_position_array, hilbert_directors] = mundy::math::create_hilbert_positions_and_directors(
           num_nodes_per_chromosome, x_hat, initial_chromosome_separation_);
 
       // Determine the center and bounding radius of the hilbert curve
-      mundy::math::Vector3<double> hilbert_center(0.0, 0.0, 0.0);
+      mundy::math::Vector3d hilbert_center(0.0, 0.0, 0.0);
       for (size_t i = 0; i < num_nodes_per_chromosome; i++) {
         hilbert_center += hilbert_position_array[i];
       }
@@ -2220,7 +2544,7 @@ class HP1 {
                                       "length is {} and the bounding radius is {}.",
                                       max_lattice_side_length, num_chromosomes_per_side * hilbert_bounding_radius));
 
-      std::vector<mundy::math::Vector3<double>> chromosome_centers_array;
+      std::vector<mundy::math::Vector3d> chromosome_centers_array;
       std::vector<double> chromosome_radii_array;
       for (size_t ichromosome = 0; ichromosome < num_chromosomes_; ichromosome++) {
         // Figure out which nodes we are doing
@@ -2231,18 +2555,18 @@ class HP1 {
         const size_t ix = ichromosome % num_chromosomes_per_side;
         const size_t iy = (ichromosome / num_chromosomes_per_side) % num_chromosomes_per_side;
         const size_t iz = ichromosome / (num_chromosomes_per_side * num_chromosomes_per_side);
-        const mundy::math::Vector3<double> center =
-            mundy::math::Vector3<double>((ix + 0.5) * lattice_spacing - 0.5 * max_lattice_side_length,
-                                         (iy + 0.5) * lattice_spacing - 0.5 * max_lattice_side_length,
-                                         (iz + 0.5) * lattice_spacing - 0.5 * max_lattice_side_length);
+        const mundy::math::Vector3d center =
+            mundy::math::Vector3d((ix + 0.5) * lattice_spacing - 0.5 * max_lattice_side_length,
+                                  (iy + 0.5) * lattice_spacing - 0.5 * max_lattice_side_length,
+                                  (iz + 0.5) * lattice_spacing - 0.5 * max_lattice_side_length);
 
         // Generate a random orientation for the chromosome
         openrand::Philox rng(ichromosome, 0);
         const double zrand = rng.rand<double>() - 1.0;
         const double wrand = std::sqrt(1.0 - zrand * zrand);
         const double trand = 2.0 * M_PI * rng.rand<double>();
-        mundy::math::Vector3<double> u_hat(wrand * std::cos(trand), wrand * std::sin(trand), zrand);
-        mundy::math::Quaternion<double> quat = mundy::math::quat_from_parallel_transport(x_hat, u_hat);
+        mundy::math::Vector3d u_hat(wrand * std::cos(trand), wrand * std::sin(trand), zrand);
+        mundy::math::Quaterniond quat = mundy::math::quat_from_parallel_transport(x_hat, u_hat);
 
         std::cout << "Chromosome " << ichromosome << " center: " << center << " orientation: " << quat
                   << " radius: " << hilbert_bounding_radius << std::endl;
@@ -2308,11 +2632,11 @@ class HP1 {
       const size_t num_nodes_per_chromosome = num_heterochromatin_spheres + num_euchromatin_spheres;
       // Because all chromosomes are the same, we can create a single hilbert curve and then place it in the lattice
       // for each chromosome.
-      const mundy::math::Vector3<double> x_hat(1.0, 0.0, 0.0);
+      const mundy::math::Vector3d x_hat(1.0, 0.0, 0.0);
       auto [hilbert_position_array, hilbert_directors] = mundy::math::create_hilbert_positions_and_directors(
           num_nodes_per_chromosome, x_hat, initial_chromosome_separation_);
       // Determine the center and bounding radius of the hilbert curve
-      mundy::math::Vector3<double> hilbert_center(0.0, 0.0, 0.0);
+      mundy::math::Vector3d hilbert_center(0.0, 0.0, 0.0);
       for (size_t i = 0; i < num_nodes_per_chromosome; i++) {
         hilbert_center += hilbert_position_array[i];
       }
@@ -2328,16 +2652,15 @@ class HP1 {
         // Figure out which nodes we are doing
         size_t start_node_index = num_nodes_per_chromosome * ichromosome + 1u;
         size_t end_node_index = num_nodes_per_chromosome * (ichromosome + 1) + 1u;
-        const mundy::math::Vector3<double> center{chromosome_centers[3 * ichromosome],
-                                                  chromosome_centers[3 * ichromosome + 1],
-                                                  chromosome_centers[3 * ichromosome + 2]};
+        const mundy::math::Vector3d center{chromosome_centers[3 * ichromosome], chromosome_centers[3 * ichromosome + 1],
+                                           chromosome_centers[3 * ichromosome + 2]};
         // Generate a random orientation for the chromosome
         openrand::Philox rng(ichromosome, 0);
         const double zrand = rng.rand<double>() - 1.0;
         const double wrand = std::sqrt(1.0 - zrand * zrand);
         const double trand = 2.0 * M_PI * rng.rand<double>();
-        mundy::math::Vector3<double> u_hat(wrand * std::cos(trand), wrand * std::sin(trand), zrand);
-        mundy::math::Quaternion<double> quat = mundy::math::quat_from_parallel_transport(x_hat, u_hat);
+        mundy::math::Vector3d u_hat(wrand * std::cos(trand), wrand * std::sin(trand), zrand);
+        mundy::math::Quaterniond quat = mundy::math::quat_from_parallel_transport(x_hat, u_hat);
         std::cout << "Chromosome " << ichromosome << " center: " << center << " orientation: " << quat
                   << " radius: " << hilbert_bounding_radius << std::endl;
         // Update the coordinates for this chromosome
@@ -2404,7 +2727,7 @@ class HP1 {
     // Initialize the EE springs (euchromatin activity)
     if (!restart_performed_) {
       mundy::mesh::utils::fill_field_with_value(*ee_springs_part_ptr_, *element_rng_field_ptr_,
-                                                std::array<unsigned, 1>{0});
+                                                std::array<unsigned, 1>{simid_ * num_time_steps_});
       mundy::mesh::utils::fill_field_with_value(*ee_springs_part_ptr_, *euchromatin_state_field_ptr_,
                                                 std::array<unsigned, 1>{0});
       mundy::mesh::utils::fill_field_with_value(*ee_springs_part_ptr_, *euchromatin_perform_state_change_field_ptr_,
@@ -2421,7 +2744,8 @@ class HP1 {
     mundy::mesh::utils::fill_field_with_value(*hp1_part_ptr_, *element_spring_r0_field_ptr_,
                                               std::array<double, 1>{crosslinker_r0_});
     if (!restart_performed_) {
-      mundy::mesh::utils::fill_field_with_value(*hp1_part_ptr_, *element_rng_field_ptr_, std::array<unsigned, 1>{0});
+      mundy::mesh::utils::fill_field_with_value(*hp1_part_ptr_, *element_rng_field_ptr_,
+                                                std::array<unsigned, 1>{simid_ * num_time_steps_});
     }
     mundy::mesh::utils::fill_field_with_value(*hp1_part_ptr_, *element_radius_field_ptr_,
                                               std::array<double, 1>{crosslinker_cutoff_radius_});
@@ -2430,6 +2754,11 @@ class HP1 {
     const stk::mesh::Selector chromatin_spheres = *e_part_ptr_ | *h_part_ptr_;
     mundy::mesh::utils::fill_field_with_value(chromatin_spheres, *element_radius_field_ptr_,
                                               std::array<double, 1>{backbone_sphere_hydrodynamic_radius_});
+    // Set the RNG counter for the spheres
+    if (!restart_performed_) {
+      mundy::mesh::utils::fill_field_with_value(chromatin_spheres, *node_rng_field_ptr_,
+                                                std::array<unsigned, 1>{simid_ * num_time_steps_});
+    }
 
     // Initialize node positions for each chromosome
     if (!restart_performed_) {
@@ -2498,7 +2827,11 @@ class HP1 {
 
   void declare_and_initialize_hp1() {
     if (!restart_performed_) {
-      create_chromatin_backbone_and_hp1();
+      if (!specify_chromosome_layout_) {
+        create_chromatin_backbone_and_hp1();
+      } else {
+        create_chromatin_backbone_and_hp1_with_layout();
+      }
     }
     initialize_chromatin_backbone_and_hp1();
     std::cout << "Done initializing!\n";
@@ -3283,6 +3616,7 @@ class HP1 {
     // modification section, as even doing that is slightly expensive.
 
     bulk_data_ptr_->modification_begin();
+    Kokkos::Profiling::pushRegion("HP1::state_change_crosslinkers::modification_begin");
 
     // Perform L->D
     for (const stk::mesh::Entity &hp1_h_neighbor_genx : hp1_h_neighbor_genxs) {
@@ -3310,9 +3644,11 @@ class HP1 {
               *bulk_data_ptr_, crosslinker_hp1, target_sphere_node, 1);
           MUNDY_THROW_ASSERT(bind_worked, std::logic_error, "Failed to bind crosslinker to node.");
 
+#ifndef NDEBUG
           std::cout << "Rank: " << stk::parallel_machine_rank(MPI_COMM_WORLD) << " Binding crosslinker "
                     << bulk_data_ptr_->identifier(crosslinker_hp1) << " to node "
                     << bulk_data_ptr_->identifier(target_sphere_node) << std::endl;
+#endif
 
           // Now change the part from left to doubly bound.
           const bool is_crosslinker_locally_owned =
@@ -3352,9 +3688,11 @@ class HP1 {
                 *bulk_data_ptr_, crosslinker_hp1, target_sphere_node, 1);
             MUNDY_THROW_ASSERT(bind_worked, std::logic_error, "Failed to bind crosslinker to node.");
 
+#ifndef NDEBUG
             std::cout << "Rank: " << stk::parallel_machine_rank(MPI_COMM_WORLD) << " Periphery: Binding crosslinker "
                       << bulk_data_ptr_->identifier(crosslinker_hp1) << " to node "
                       << bulk_data_ptr_->identifier(target_sphere_node) << std::endl;
+#endif
 
             // Now change the part from left to doubly bound.
             const bool is_crosslinker_locally_owned =
@@ -3382,9 +3720,11 @@ class HP1 {
             *bulk_data_ptr_, crosslinker_hp1, left_node, 1);
         MUNDY_THROW_ASSERT(unbind_worked, std::logic_error, "Failed to unbind crosslinker from node.");
 
+#ifndef NDEBUG
         std::cout << "Rank: " << stk::parallel_machine_rank(MPI_COMM_WORLD) << " Unbinding crosslinker "
                   << bulk_data_ptr_->identifier(crosslinker_hp1) << " from node "
                   << bulk_data_ptr_->identifier(bulk_data_ptr_->begin_nodes(crosslinker_hp1)[1]) << std::endl;
+#endif
 
         // Now change the part from doubly to left bound.
         const bool is_crosslinker_locally_owned =
@@ -3397,6 +3737,7 @@ class HP1 {
       }
     }
 
+    Kokkos::Profiling::popRegion();
     bulk_data_ptr_->modification_end();
 
     // The above may have invalidated the ghosting for our genx ghosting, so we need to reghost the linked entities to
@@ -3649,10 +3990,16 @@ class HP1 {
     Kokkos::deep_copy(sphere_velocities, sphere_velocities_host);
 
     // Apply the RPY kernel from spheres to spheres
-    mundy::alens::periphery::apply_rpyc_kernel(DeviceExecutionSpace(), viscosity, sphere_positions, sphere_positions,
-                                               sphere_radii, sphere_radii, sphere_forces, sphere_velocities);
-    // mundy::alens::periphery::apply_stokes_kernel(DeviceExecutionSpace(), viscosity, sphere_positions,
-    // sphere_positions, sphere_forces, sphere_velocities);
+    if (hydro_type_ == HYDRO_TYPE::RPYC) {
+      mundy::alens::periphery::apply_rpyc_kernel(DeviceExecutionSpace(), viscosity, sphere_positions, sphere_positions,
+                                                 sphere_radii, sphere_radii, sphere_forces, sphere_velocities);
+    } else if (hydro_type_ == HYDRO_TYPE::RPY) {
+      mundy::alens::periphery::apply_rpy_kernel(DeviceExecutionSpace(), viscosity, sphere_positions, sphere_positions,
+                                                sphere_radii, sphere_radii, sphere_forces, sphere_velocities);
+    } else if (hydro_type_ == HYDRO_TYPE::STOKES) {
+      mundy::alens::periphery::apply_stokes_kernel(DeviceExecutionSpace(), viscosity, sphere_positions,
+                                                   sphere_positions, sphere_forces, sphere_velocities);
+    }
 
     // If enabled, apply the correction for the no-slip boundary condition
     if (enable_periphery_hydrodynamics_) {
@@ -3668,10 +4015,18 @@ class HP1 {
       Kokkos::deep_copy(surface_radii, 0.0);
 
       // Apply the RPY kernel from spheres to periphery
-      mundy::alens::periphery::apply_rpyc_kernel(DeviceExecutionSpace(), viscosity, sphere_positions, surface_positions,
-                                                 sphere_radii, surface_radii, sphere_forces, surface_velocities);
-      // mundy::alens::periphery::apply_stokes_kernel(DeviceExecutionSpace(), viscosity, sphere_positions,
-      //                                              surface_positions, sphere_forces, surface_velocities);
+      if (hydro_type_ == HYDRO_TYPE::RPYC) {
+        mundy::alens::periphery::apply_rpyc_kernel(DeviceExecutionSpace(), viscosity, sphere_positions,
+                                                   surface_positions, sphere_radii, surface_radii, sphere_forces,
+                                                   surface_velocities);
+      } else if (hydro_type_ == HYDRO_TYPE::RPY) {
+        mundy::alens::periphery::apply_rpy_kernel(DeviceExecutionSpace(), viscosity, sphere_positions,
+                                                  surface_positions, sphere_radii, surface_radii, sphere_forces,
+                                                  surface_velocities);
+      } else if (hydro_type_ == HYDRO_TYPE::STOKES) {
+        mundy::alens::periphery::apply_stokes_kernel(DeviceExecutionSpace(), viscosity, sphere_positions,
+                                                     surface_positions, sphere_forces, surface_velocities);
+      }
 
       // Apply no-slip boundary conditions
       // This is done in two steps: first, we compute the forces on the periphery necessary to enforce no-slip
@@ -3682,6 +4037,7 @@ class HP1 {
           surface_normals, surface_weights, surface_forces, sphere_velocities);
 
       // The RPY kernel is only long-range, it doesn't add on self-interaction for the spheres
+      // NOTE do not uncomment this, it is merely for a historical record to prevent people from adding it!
       // mundy::alens::periphery::apply_local_drag(DeviceExecutionSpace(), viscosity, sphere_velocities, sphere_forces,
       //                                           sphere_radii);
     }
@@ -3713,10 +4069,9 @@ class HP1 {
     const double inv_a2 = 1.0 / (a * a);
     const double inv_b2 = 1.0 / (b * b);
     const double inv_c2 = 1.0 / (c * c);
-    const mundy::math::Vector3<double> center(0.0, 0.0, 0.0);
-    const auto orientation = mundy::math::Quaternion<double>::identity();
-    auto level_set = [&inv_a2, &inv_b2, &inv_c2, &center,
-                      &orientation](const mundy::math::Vector3<double> &point) -> double {
+    const mundy::math::Vector3d center(0.0, 0.0, 0.0);
+    const auto orientation = mundy::math::Quaterniond::identity();
+    auto level_set = [&inv_a2, &inv_b2, &inv_c2, &center, &orientation](const mundy::math::Vector3d &point) -> double {
       // const auto body_frame_point = conjugate(orientation) * (point - center);
       const auto body_frame_point = point - center;
       return (body_frame_point[0] * body_frame_point[0] * inv_a2 + body_frame_point[1] * body_frame_point[1] * inv_b2 +
@@ -3748,14 +4103,14 @@ class HP1 {
           const double z1 = sphere_aabb[5];
 
           // Compute all 8 corners of the AABB
-          const auto bottom_left_front = mundy::math::Vector3<double>(x0, y0, z0);
-          const auto bottom_right_front = mundy::math::Vector3<double>(x1, y0, z0);
-          const auto top_left_front = mundy::math::Vector3<double>(x0, y1, z0);
-          const auto top_right_front = mundy::math::Vector3<double>(x1, y1, z0);
-          const auto bottom_left_back = mundy::math::Vector3<double>(x0, y0, z1);
-          const auto bottom_right_back = mundy::math::Vector3<double>(x1, y0, z1);
-          const auto top_left_back = mundy::math::Vector3<double>(x0, y1, z1);
-          const auto top_right_back = mundy::math::Vector3<double>(x1, y1, z1);
+          const auto bottom_left_front = mundy::math::Vector3d(x0, y0, z0);
+          const auto bottom_right_front = mundy::math::Vector3d(x1, y0, z0);
+          const auto top_left_front = mundy::math::Vector3d(x0, y1, z0);
+          const auto top_right_front = mundy::math::Vector3d(x1, y1, z0);
+          const auto bottom_left_back = mundy::math::Vector3d(x0, y0, z1);
+          const auto bottom_right_back = mundy::math::Vector3d(x1, y0, z1);
+          const auto top_left_back = mundy::math::Vector3d(x0, y1, z1);
+          const auto top_right_back = mundy::math::Vector3d(x1, y1, z1);
           const double all_points_inside_periphery =
               level_set(bottom_left_front) < 0.0 && level_set(bottom_right_front) < 0.0 &&
               level_set(top_left_front) < 0.0 && level_set(top_right_front) < 0.0 &&
@@ -3770,8 +4125,8 @@ class HP1 {
 
             // Note, the ellipsoid for the ssd calc has outward normal, whereas the periphery has inward normal.
             // Hence, the sign flip.
-            mundy::math::Vector3<double> contact_point;
-            mundy::math::Vector3<double> ellipsoid_nhat;
+            mundy::math::Vector3d contact_point;
+            mundy::math::Vector3d ellipsoid_nhat;
             const double shared_normal_ssd =
                 -mundy::math::distance::shared_normal_ssd_between_ellipsoid_and_point(
                     center, orientation, a, b, c, node_coords, contact_point, ellipsoid_nhat) -
@@ -3797,10 +4152,9 @@ class HP1 {
     const double a = periphery_collision_axis_radius1_;
     const double b = periphery_collision_axis_radius2_;
     const double c = periphery_collision_axis_radius3_;
-    const mundy::math::Vector3<double> center(0.0, 0.0, 0.0);
-    const auto orientation = mundy::math::Quaternion<double>::identity();
-    auto level_set = [&a, &b, &c, &center, &orientation](const double &radius,
-                                                         const mundy::math::Vector3<double> &point) -> double {
+    const mundy::math::Vector3d center(0.0, 0.0, 0.0);
+    const auto orientation = mundy::math::Quaterniond::identity();
+    auto level_set = [&a, &b, &c, &center, &orientation](const double &radius, const auto &point) -> double {
       // const auto body_frame_point = conjugate(orientation) * (point - center);
       const auto body_frame_point = point - center;
       const double inv_a2 = 1.0 / ((a - radius) * (a - radius));
@@ -3811,15 +4165,14 @@ class HP1 {
              1;
     };
     // Fast compute of the outward 'normal' at the point
-    auto outward_normal = [&a, &b, &c, &center, &orientation](
-                              const double &radius,
-                              const mundy::math::Vector3<double> &point) -> mundy::math::Vector3<double> {
+    auto outward_normal = [&a, &b, &c, &center, &orientation](const double &radius,
+                                                              const auto &point) -> mundy::math::Vector3d {
       const auto body_frame_point = point - center;
       const double inv_a2 = 1.0 / ((a - radius) * (a - radius));
       const double inv_b2 = 1.0 / ((b - radius) * (b - radius));
       const double inv_c2 = 1.0 / ((c - radius) * (c - radius));
-      return mundy::math::Vector3<double>(2.0 * body_frame_point[0] * inv_a2, 2.0 * body_frame_point[1] * inv_b2,
-                                          2.0 * body_frame_point[2] * inv_c2);
+      return mundy::math::Vector3d(2.0 * body_frame_point[0] * inv_a2, 2.0 * body_frame_point[1] * inv_b2,
+                                   2.0 * body_frame_point[2] * inv_c2);
     };
 
     // Fetch local references to the fields
@@ -4678,8 +5031,8 @@ class HP1 {
       }
       double *a_coords = static_cast<double *>(stk::mesh::field_data(*coords_base, a));
       double *b_coords = static_cast<double *>(stk::mesh::field_data(*coords_base, b));
-      math::Vector3<double> a_vec(a_coords[0], a_coords[1], a_coords[2]);
-      math::Vector3<double> b_vec(b_coords[0], b_coords[1], b_coords[2]);
+      math::Vector3d a_vec(a_coords[0], a_coords[1], a_coords[2]);
+      math::Vector3d b_vec(b_coords[0], b_coords[1], b_coords[2]);
       return math::zmorton_less(a_vec, b_vec);
     }
 
@@ -4726,6 +5079,10 @@ class HP1 {
   bool loadbalance_post_initialization_;
   bool check_maximum_speed_pre_position_update_;
   double max_allowable_speed_;
+  HYDRO_TYPE hydro_type_;
+  size_t simid_;
+  bool specify_chromosome_layout_;
+  std::string specify_chromosome_file_;
 
   // IO params
   size_t io_frequency_;
@@ -4842,6 +5199,9 @@ class HP1 {
   static constexpr double default_unit_cell_size_[3] = {10.0, 10.0, 10.0};
   static constexpr bool default_check_maximum_speed_pre_position_update_ = false;
   static constexpr double default_max_allowable_speed_ = std::numeric_limits<double>::max();
+  static constexpr size_t default_simid_ = 0;
+  static constexpr bool default_specify_chromosome_layout_ = false;
+  static constexpr std::string_view default_specify_chromosome_file_ = "chromosome_layout.dat";
 
   // IO params
   static constexpr size_t default_io_frequency_ = 10;
@@ -4878,6 +5238,7 @@ class HP1 {
   static constexpr double default_backbone_wca_cutoff_ = 1.12246204831;  // 2^(1/6)
 
   // Backbone hydrodynamic params
+  static constexpr std::string_view default_backbone_hydro_type_ = "RPYC";
   static constexpr double default_backbone_sphere_hydrodynamic_radius_ = 0.05;
 
   // Crosslinker params

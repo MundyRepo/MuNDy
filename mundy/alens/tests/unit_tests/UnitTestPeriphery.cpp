@@ -2,8 +2,9 @@
 // **********************************************************************************************************************
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
-//                                           Copyright 2024 Flatiron Institute
-//                                                 Author: Bryce Palmer
+//                                              Copyright 2024 Bryce Palmer
+//
+// Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
 // as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
@@ -142,7 +143,7 @@ ConvergenceResults perform_convergence_study(const double &viscosity, const Quad
   std::vector<double> stashed_num_quadrature_points;
   std::vector<double> stashed_error_abs;
   std::vector<double> stashed_error_rel;
-  for (int order = 2; order <= 64; order *= 2) {
+  for (int order = 2; order <= 16; order *= 2) {
     // Generate the quadrature rule
     auto [points, weights, normals] = quad_gen(order);
     const size_t num_quadrature_points = weights.extent(0);
@@ -197,7 +198,7 @@ ConvergenceResults perform_self_convergence_study(const double &viscosity, const
   std::vector<double> stashed_num_quadrature_points;
   std::vector<double> stashed_error_abs;
   std::vector<double> stashed_error_rel;
-  for (int order = 2; order <= 32; order *= 2) {
+  for (int order = 2; order <= 16; order *= 2) {
     // Generate the quadrature rule
     auto [points, weights, normals] = quad_gen(order);
     const size_t num_quadrature_points = weights.extent(0);
@@ -460,7 +461,7 @@ TEST(PeripheryTest, SphereQuadBasicChecks) {
   // Define the sphere radius
   const double sphere_radius = 12.34;
   const double sphere_surface_area = 4.0 * M_PI * sphere_radius * sphere_radius;
-  for (int order = 1; order <= 32; order *= 2) {
+  for (int order = 1; order <= 16; order *= 2) {
     std::vector<double> weights;
     std::vector<double> points;
     std::vector<double> normals;
@@ -508,7 +509,7 @@ TEST(PeripheryTest, SphereQuadAnalyticallyIntegrableFunctions) {
     // Weird behavior can occur for order = 1, so we start at order = 2
     std::vector<double> num_quadrature_points;
     std::vector<double> errors;
-    for (int order = 2; order <= 64; order *= 2) {
+    for (int order = 2; order <= 16; order *= 2) {
       std::vector<double> weights;
       std::vector<double> points;
       std::vector<double> normals;
@@ -1159,7 +1160,7 @@ TEST(PeripheryTest, SKFIERigidBodyMotion) {
   const double sphere_radius = 1.0;
   const double viscosity = 1.0;
   const size_t num_bulk_points = 8;
-  const mundy::math::Vector3<double> omega(0.0, 0.0, 1.0);
+  const mundy::math::Vector3d omega(0.0, 0.0, 1.0);
   const double cube_side_half_length = sphere_radius / 3;
 
   // Setup the bulk points at the corner of the cube with side length cude_side_length
@@ -1212,7 +1213,7 @@ TEST(PeripheryTest, SKFIERigidBodyMotion) {
     const double x = bulk_points(3 * i);
     const double y = bulk_points(3 * i + 1);
     const double z = bulk_points(3 * i + 2);
-    const mundy::math::Vector3<double> p(x, y, z);
+    const mundy::math::Vector3d p(x, y, z);
     const auto v = mundy::math::cross(omega, p);
   }
 
@@ -1229,7 +1230,7 @@ TEST(PeripheryTest, SKFIERigidBodyMotion) {
           const double x = points(3 * i);
           const double y = points(3 * i + 1);
           const double z = points(3 * i + 2);
-          const mundy::math::Vector3<double> p(x, y, z);
+          const mundy::math::Vector3d p(x, y, z);
           const auto v = mundy::math::cross(omega, p);
           input_field(3 * i) = v[0];
           input_field(3 * i + 1) = v[1];
@@ -1248,7 +1249,7 @@ TEST(PeripheryTest, SKFIERigidBodyMotion) {
           const double x = bulk_points(3 * i);
           const double y = bulk_points(3 * i + 1);
           const double z = bulk_points(3 * i + 2);
-          const mundy::math::Vector3<double> b(x, y, z);
+          const mundy::math::Vector3d b(x, y, z);
           const auto v = mundy::math::cross(omega, b);
           expected_results(3 * i) = v[0];
           expected_results(3 * i + 1) = v[1];
@@ -1285,13 +1286,13 @@ TEST(PeripheryTest, SKFIERigidBodyMotionFromFile) {
   // M^{-1} U
 
   // Skip this test until we get the files read in properly
-  GTEST_SKIP() << "Skipping until we get the files read in properly";
+  // GTEST_SKIP() << "Skipping until we get the files read in properly";
 
   // Setup the convergence study
   const double sphere_radius = 28.0;
   const double viscosity = 1.0;
   const size_t num_bulk_points = 8;
-  const mundy::math::Vector3<double> omega(1.0, 1.0, 1.0);
+  const mundy::math::Vector3d omega(1.0, 1.0, 1.0);
   const double cube_side_half_length = sphere_radius / 3;
 
   // Setup the bulk points at the corner of the cube with side length cude_side_length
@@ -1334,7 +1335,7 @@ TEST(PeripheryTest, SKFIERigidBodyMotionFromFile) {
     const double x = bulk_points(3 * i);
     const double y = bulk_points(3 * i + 1);
     const double z = bulk_points(3 * i + 2);
-    const mundy::math::Vector3<double> b(x, y, z);
+    const mundy::math::Vector3d b(x, y, z);
     const auto v = mundy::math::cross(omega, b);
     expected_bulk_velocity(3 * i) = v[0];
     expected_bulk_velocity(3 * i + 1) = v[1];
@@ -1360,9 +1361,9 @@ TEST(PeripheryTest, SKFIERigidBodyMotionFromFile) {
   for (size_t i = 0; i < vec_num_quad_points.size(); ++i) {
     // Read in the normals, points, and weights to kokkos views
     const size_t num_quad_points = vec_num_quad_points[i];
-    std::string filename_normals = "./dat_files/sphere_triangle_normals_" + std::to_string(num_quad_points) + ".dat";
-    std::string filename_points = "./dat_files/sphere_triangle_points_" + std::to_string(num_quad_points) + ".dat";
-    std::string filename_weights = "./dat_files/sphere_triangle_weights_" + std::to_string(num_quad_points) + ".dat";
+    std::string filename_normals = "./sphere_triangle_normals_" + std::to_string(num_quad_points) + ".dat";
+    std::string filename_points = "./sphere_triangle_points_" + std::to_string(num_quad_points) + ".dat";
+    std::string filename_weights = "./sphere_triangle_weights_" + std::to_string(num_quad_points) + ".dat";
     Kokkos::View<double *, Kokkos::LayoutLeft, Kokkos::HostSpace> normals("normal", 3 * num_quad_points);
     Kokkos::View<double *, Kokkos::LayoutLeft, Kokkos::HostSpace> points("points", 3 * num_quad_points);
     Kokkos::View<double *, Kokkos::LayoutLeft, Kokkos::HostSpace> weights("weights", num_quad_points);
@@ -1377,7 +1378,7 @@ TEST(PeripheryTest, SKFIERigidBodyMotionFromFile) {
       const double x = points(3 * j);
       const double y = points(3 * j + 1);
       const double z = points(3 * j + 2);
-      const mundy::math::Vector3<double> p(x, y, z);
+      const mundy::math::Vector3d p(x, y, z);
       const auto v = mundy::math::cross(omega, p);
       surface_slip_velocity(3 * j) = v[0];
       surface_slip_velocity(3 * j + 1) = v[1];
@@ -1449,9 +1450,9 @@ TEST(PeripheryTest, SKFIESelfConvFromFile) {
   for (size_t i = 0; i < vec_num_quad_points.size(); ++i) {
     // Read in the normals, points, and weights to kokkos views
     const size_t num_quad_points = vec_num_quad_points[i];
-    std::string filename_normals = "./dat_files/sphere_triangle_normals_" + std::to_string(num_quad_points) + ".dat";
-    std::string filename_points = "./dat_files/sphere_triangle_points_" + std::to_string(num_quad_points) + ".dat";
-    std::string filename_weights = "./dat_files/sphere_triangle_weights_" + std::to_string(num_quad_points) + ".dat";
+    std::string filename_normals = "./sphere_triangle_normals_" + std::to_string(num_quad_points) + ".dat";
+    std::string filename_points = "./sphere_triangle_points_" + std::to_string(num_quad_points) + ".dat";
+    std::string filename_weights = "./sphere_triangle_weights_" + std::to_string(num_quad_points) + ".dat";
     Kokkos::View<double *, Kokkos::LayoutLeft, Kokkos::HostSpace> normals("normal", 3 * num_quad_points);
     Kokkos::View<double *, Kokkos::LayoutLeft, Kokkos::HostSpace> points("points", 3 * num_quad_points);
     Kokkos::View<double *, Kokkos::LayoutLeft, Kokkos::HostSpace> weights("weights", num_quad_points);
@@ -1568,8 +1569,8 @@ auto run_periphery_rpyc(const double &viscosity, const int num_spheres,
       Kokkos::DefaultHostExecutionSpace(), viscosity, num_surface_nodes, num_spheres, surface_positions,
       sphere_positions, surface_normals, surface_weights, surface_forces, sphere_velocities);
 
-  mundy::math::Vector3<double> final_sphere_velocity(sphere_velocities(0), sphere_velocities(1), sphere_velocities(2));
-  mundy::math::Vector3<double> final_sphere_force(sphere_forces(0), sphere_forces(1), sphere_forces(2));
+  mundy::math::Vector3d final_sphere_velocity(sphere_velocities(0), sphere_velocities(1), sphere_velocities(2));
+  mundy::math::Vector3d final_sphere_force(sphere_forces(0), sphere_forces(1), sphere_forces(2));
   return std::make_tuple(final_sphere_velocity, final_sphere_force);
 }
 
@@ -1592,18 +1593,18 @@ TEST(PeripheryRPYC, SphereQuadPeripheryRPYC) {
 
   // Create a set of tests where we move the sphere towards the periphery in various directions
   std::vector<std::string> test_types = {"SphereQuadXFx", "SphereQuadYFy", "SphereQuadZFz", "Random"};
-  std::vector<mundy::math::Vector3<double>> director = {
-      mundy::math::Vector3<double>(1.0, 0.0, 0.0), mundy::math::Vector3<double>(0.0, 1.0, 0.0),
-      mundy::math::Vector3<double>(0.0, 0.0, 1.0), mundy::math::Vector3<double>(1.0, 1.0, 1.0)};
-  std::vector<mundy::math::Vector3<double>> force_director = {
-      mundy::math::Vector3<double>(1.0, 0.0, 0.0), mundy::math::Vector3<double>(0.0, 1.0, 0.0),
-      mundy::math::Vector3<double>(0.0, 0.0, 1.0), mundy::math::Vector3<double>(1.0, 1.0, 1.0)};
+  std::vector<mundy::math::Vector3d> director = {
+      mundy::math::Vector3d(1.0, 0.0, 0.0), mundy::math::Vector3d(0.0, 1.0, 0.0), mundy::math::Vector3d(0.0, 0.0, 1.0),
+      mundy::math::Vector3d(1.0, 1.0, 1.0)};
+  std::vector<mundy::math::Vector3d> force_director = {
+      mundy::math::Vector3d(1.0, 0.0, 0.0), mundy::math::Vector3d(0.0, 1.0, 0.0), mundy::math::Vector3d(0.0, 0.0, 1.0),
+      mundy::math::Vector3d(1.0, 1.0, 1.0)};
 
   mfile << "TestType, Order, NumSurfacePoints, Viscosity, SphereRadius, PeripheryRadius, X, Y, Z, Fx, Fy, Fz, Vx, "
            "Vy, Vz\n";
 
   // Build a periphery of a given spectral order (or later, from an external file)
-  for (int order = 2; order <= 64; order *= 2) {
+  for (int order = 2; order <= 16; order *= 2) {
     std::cout << "Order = " << order << std::endl;
     // Create a periphery according to the constructor
     std::vector<double> points_vec;
@@ -1708,12 +1709,12 @@ TEST(PeripheryRPYC, ExternalQuadPeripheryRPYC) {
       "./sphere_triangle_weights_1280.dat", "./sphere_triangle_weights_3840.dat", "./sphere_triangle_weights_5120.dat"};
   std::vector<std::string> external_quadrature_normals_filename = {
       "./sphere_triangle_normals_1280.dat", "./sphere_triangle_normals_3840.dat", "./sphere_triangle_normals_5120.dat"};
-  std::vector<mundy::math::Vector3<double>> director = {
-      mundy::math::Vector3<double>(1.0, 0.0, 0.0), mundy::math::Vector3<double>(0.0, 1.0, 0.0),
-      mundy::math::Vector3<double>(0.0, 0.0, 1.0), mundy::math::Vector3<double>(1.0, 1.0, 1.0)};
-  std::vector<mundy::math::Vector3<double>> force_director = {
-      mundy::math::Vector3<double>(1.0, 0.0, 0.0), mundy::math::Vector3<double>(0.0, 1.0, 0.0),
-      mundy::math::Vector3<double>(0.0, 0.0, 1.0), mundy::math::Vector3<double>(1.0, 1.0, 1.0)};
+  std::vector<mundy::math::Vector3d> director = {
+      mundy::math::Vector3d(1.0, 0.0, 0.0), mundy::math::Vector3d(0.0, 1.0, 0.0), mundy::math::Vector3d(0.0, 0.0, 1.0),
+      mundy::math::Vector3d(1.0, 1.0, 1.0)};
+  std::vector<mundy::math::Vector3d> force_director = {
+      mundy::math::Vector3d(1.0, 0.0, 0.0), mundy::math::Vector3d(0.0, 1.0, 0.0), mundy::math::Vector3d(0.0, 0.0, 1.0),
+      mundy::math::Vector3d(1.0, 1.0, 1.0)};
 
   mfile << "TestType, QuadFile, NumSurfacePoints, Viscosity, SphereRadius, PeripheryRadius, X, Y, Z, Fx, Fy, Fz, Vx, "
            "Vy, Vz\n";

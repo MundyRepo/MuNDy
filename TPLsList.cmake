@@ -21,6 +21,7 @@ tribits_repository_define_tpls(
   GTest          "cmake/TPLs/"                                    PT
   OpenRAND       "cmake/TPLs/"                                    PT
   fmt            "cmake/TPLs/"                                    PT
+  nanobench      "cmake/TPLs/"                                    PT
   PVFMM          "cmake/TPLs/"                                    EX
   STKFMM         "cmake/TPLs/"                                    EX
   )

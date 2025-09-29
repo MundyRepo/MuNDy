@@ -2,8 +2,9 @@
 // **********************************************************************************************************************
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
-//                                           Copyright 2024 Flatiron Institute
-//                                                 Author: Bryce Palmer
+//                                              Copyright 2024 Bryce Palmer
+//
+// Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
 // as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
@@ -90,60 +91,60 @@ class FieldReqs : public FieldReqsBase {
 
   /// \brief Set the required field name.
   /// \param field_name [in] Required name of the field.
-  FieldReqs<FieldType_t> &set_field_name(const std::string &field_name) final;
+  FieldReqs<FieldType_t> &set_field_name(const std::string &field_name) override;
 
   /// \brief Set the required field rank.
   /// \param field_rank [in] Required rank of the field.
-  FieldReqs<FieldType_t> &set_field_rank(const stk::topology::rank_t &field_rank) final;
+  FieldReqs<FieldType_t> &set_field_rank(const stk::topology::rank_t &field_rank) override;
 
   /// \brief Set the required field dimension.
   /// \param field_dimension [in] Required dimension of the field.
-  FieldReqs<FieldType_t> &set_field_dimension(const unsigned field_dimension) final;
+  FieldReqs<FieldType_t> &set_field_dimension(const unsigned field_dimension) override;
 
   /// \brief Set the minimum required number of field states.
   /// \param field_min_number_of_states [in] Minimum required number of states of the field.
-  FieldReqs<FieldType_t> &set_field_min_number_of_states(const unsigned field_min_number_of_states) final;
+  FieldReqs<FieldType_t> &set_field_min_number_of_states(const unsigned field_min_number_of_states) override;
 
   /// \brief Set the minimum required number of field states UNLESS the current minimum number of states is larger.
   /// \param field_min_number_of_states [in] Minimum required number of states of the field.
-  FieldReqs<FieldType_t> &set_field_min_number_of_states_if_larger(const unsigned field_min_number_of_states) final;
+  FieldReqs<FieldType_t> &set_field_min_number_of_states_if_larger(const unsigned field_min_number_of_states) override;
 
   /// \brief Get if the field name is constrained or not.
-  bool constrains_field_name() const final;
+  bool constrains_field_name() const override;
 
   /// \brief Get if the field rank is constrained or not.
-  bool constrains_field_rank() const final;
+  bool constrains_field_rank() const override;
 
   /// \brief Get if the field dimension is constrained or not.
-  bool constrains_field_dimension() const final;
+  bool constrains_field_dimension() const override;
 
   /// \brief Get if the field minimum number of states is constrained or not.
-  bool constrains_field_min_number_of_states() const final;
+  bool constrains_field_min_number_of_states() const override;
 
   /// \brief Get if the field is fully specified.
-  bool is_fully_specified() const final;
+  bool is_fully_specified() const override;
 
   /// \brief Return the field name.
   /// Will throw an error if the field name is not constrained.
-  std::string get_field_name() const final;
+  std::string get_field_name() const override;
 
   /// \brief Return the field rank.
   /// Will throw an error if the field rank is not constrained.
-  stk::topology::rank_t get_field_rank() const final;
+  stk::topology::rank_t get_field_rank() const override;
 
   /// \brief Return the field dimension.
   /// Will throw an error if the field dimension is not constrained.
-  unsigned get_field_dimension() const final;
+  unsigned get_field_dimension() const override;
 
   /// \brief Return the minimum number of field states.
   /// Will throw an error if the minimum number of field states.
-  unsigned get_field_min_num_states() const final;
+  unsigned get_field_min_num_states() const override;
 
   /// \brief Return the typeinfo related to the field's type.
-  const std::type_info &get_field_type_info() const final;
+  const std::type_info &get_field_type_info() const override;
 
   /// \brief Return the required field attribute names.
-  std::vector<std::string> &get_field_attribute_names() final;
+  std::vector<std::string> &get_field_attribute_names() override;
   //@}
 
   //! \name Actions
@@ -151,34 +152,35 @@ class FieldReqs : public FieldReqsBase {
 
   /// \brief Declare/create the field that this class defines and assign it to a part.
   stk::mesh::Field<FieldType_t> &declare_field_on_part(mundy::mesh::MetaData *const meta_data_ptr,
-                                                       const stk::mesh::Part &part) const final;
+                                                       const stk::mesh::Part &part) const override;
 
   /// \brief Declare/create the field that this class defines and assign it to the entire mesh.
-  stk::mesh::Field<FieldType_t> &declare_field_on_entire_mesh(mundy::mesh::MetaData *const meta_data_ptr) const final;
+  stk::mesh::Field<FieldType_t> &declare_field_on_entire_mesh(
+      mundy::mesh::MetaData *const meta_data_ptr) const override;
 
   /// \brief Delete the field name constraint (if it exists).
-  FieldReqs<FieldType_t> &delete_field_name() final;
+  FieldReqs<FieldType_t> &delete_field_name() override;
 
   /// \brief Delete the field rank constraint (if it exists).
-  FieldReqs<FieldType_t> &delete_field_rank() final;
+  FieldReqs<FieldType_t> &delete_field_rank() override;
 
   /// \brief Delete the field dimension constraint (if it exists).
-  FieldReqs<FieldType_t> &delete_field_dimension() final;
+  FieldReqs<FieldType_t> &delete_field_dimension() override;
 
   /// \brief Delete the field minimum number of states constraint (if it exists).
-  FieldReqs<FieldType_t> &delete_field_min_number_of_states() final;
+  FieldReqs<FieldType_t> &delete_field_min_number_of_states() override;
 
   /// \brief Ensure that the current set of parameters is valid.
   ///
   /// Here, valid means that the rank, dimension, and number of states are > 0, but as unsigned ints, this is always the
   /// case. We will however, leave this checker incase the class grows and the set of requirements is no longer
   /// automatically satisfied.
-  FieldReqs<FieldType_t> &check_if_valid() final;
+  FieldReqs<FieldType_t> &check_if_valid() override;
 
   /// \brief Require that an attribute with the given name be present on the field.
   ///
   /// \param attribute_name [in] The name of the attribute that must be present on the field.
-  FieldReqs<FieldType_t> &add_field_attribute(const std::string &attribute_name) final;
+  FieldReqs<FieldType_t> &add_field_attribute(const std::string &attribute_name) override;
 
   /// \brief Synchronize (merge and rectify differences) the current parameters with any number of other \c FieldReqs.
   ///
@@ -187,13 +189,13 @@ class FieldReqs : public FieldReqsBase {
   /// \c FieldReqs must have the same rank, type, and dimension. It also syncs their attributes.
   ///
   /// \param field_reqs_ptr [in] A \c FieldReqs objects to sync with the current object.
-  FieldReqs<FieldType_t> &sync(std::shared_ptr<FieldReqsBase> field_reqs_ptr) final;
+  FieldReqs<FieldType_t> &sync(std::shared_ptr<FieldReqsBase> field_reqs_ptr) override;
 
   /// \brief Dump the contents of \c FieldReqs to the given stream (defaults to std::cout).
-  void print(std::ostream &os = std::cout, int indent_level = 0) const final;
+  void print(std::ostream &os = std::cout, int indent_level = 0) const override;
 
   /// \brief Return a string representation of the current set of requirements.
-  std::string get_reqs_as_a_string() const final;
+  std::string get_reqs_as_a_string() const override;
   //@}
 
  private:
@@ -201,13 +203,13 @@ class FieldReqs : public FieldReqsBase {
   //@{
 
   /// \brief Set the master field requirements for this class.
-  FieldReqs<FieldType_t> &set_master_field_reqs(std::shared_ptr<FieldReqsBase> master_field_req_ptr) final;
+  FieldReqs<FieldType_t> &set_master_field_reqs(std::shared_ptr<FieldReqsBase> master_field_req_ptr) override;
 
   /// \brief Get the master field requirements for this class.
-  std::shared_ptr<FieldReqsBase> get_master_field_reqs() final;
+  std::shared_ptr<FieldReqsBase> get_master_field_reqs() override;
 
   /// \brief Get if the current reqs have a master field reqs.
-  bool has_master_field_reqs() const final;
+  bool has_master_field_reqs() const override;
   //@}
 
   //! \name Private data

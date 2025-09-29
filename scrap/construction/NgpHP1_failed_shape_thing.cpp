@@ -2,8 +2,9 @@
 // **********************************************************************************************************************
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
-//                                           Copyright 2024 Flatiron Institute
-//                                                 Author: Bryce Palmer
+//                                              Copyright 2024 Bryce Palmer
+// 
+// Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
 // as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
@@ -751,11 +752,11 @@ std::vector<std::vector<mundy::geom::Point<double>>> get_chromosome_positions_fr
 std::vector<std::vector<mundy::geom::Point<double>>> get_chromosome_positions_grid(
     const unsigned num_chromosomes, const unsigned num_nodes_per_chromosome, const double segment_length) {
   std::vector<std::vector<mundy::geom::Point<double>>> all_chromosome_positions(num_chromosomes);
-  const mundy::math::Vector3<double> alignment_dir{0.0, 0.0, 1.0};
+  const mundy::math::Vector3d alignment_dir{0.0, 0.0, 1.0};
   for (size_t j = 0; j < num_chromosomes; j++) {
     all_chromosome_positions[j].reserve(num_nodes_per_chromosome);
     openrand::Philox rng(j, 0);
-    mundy::math::Vector3<double> start_pos(2.0 * static_cast<double>(j), 0.0, 0.0);
+    mundy::math::Vector3d start_pos(2.0 * static_cast<double>(j), 0.0, 0.0);
     for (size_t i = 0; i < num_nodes_per_chromosome; ++i) {
       const auto pos = start_pos + static_cast<double>(i) * segment_length * alignment_dir;
       all_chromosome_positions[j].emplace_back(pos);
@@ -772,7 +773,7 @@ std::vector<std::vector<mundy::geom::Point<double>>> get_chromosome_positions_ra
 
     // Find a random place within the unit cell with a random orientation for the chain.
     openrand::Philox rng(j, 0);
-    mundy::math::Vector3<double> r_start {
+    mundy::math::Vector3d r_start {
       rng.uniform<double>(domain_low[0], domain_high[0]), rng.uniform<double>(domain_low[1], domain_high[1]),
           rng.uniform<double>(domain_low[2], domain_high[2])
     }
@@ -781,7 +782,7 @@ std::vector<std::vector<mundy::geom::Point<double>>> get_chromosome_positions_ra
     const double zrand = rng.rand<double>() - 1.0;
     const double wrand = std::sqrt(1.0 - zrand * zrand);
     const double trand = 2.0 * M_PI * rng.rand<double>();
-    mundy::math::Vector3<double> u_hat{wrand * std::cos(trand), wrand * std::sin(trand), zrand};
+    mundy::math::Vector3d u_hat{wrand * std::cos(trand), wrand * std::sin(trand), zrand};
 
     for (size_t i = 0; i < num_nodes_per_chromosome; ++i) {
       auto pos = pos_start + static_cast<double>(i) * segment_length * u_hat;
@@ -813,7 +814,7 @@ std::vector<std::vector<mundy::geom::Point<double>>> get_chromosome_positions_hi
     const double zrand = rng.rand<double>() - 1.0;
     const double wrand = std::sqrt(1.0 - zrand * zrand);
     const double trand = 2.0 * M_PI * rng.rand<double>();
-    mundy::math::Vector3<double> u_hat(wrand * std::cos(trand), wrand * std::sin(trand), zrand);
+    mundy::math::Vector3d u_hat(wrand * std::cos(trand), wrand * std::sin(trand), zrand);
 
     // Once we have the number of chromosome spheres we can get the hilbert curve set up. This will be at some
     // orientation and then have sides with a length of initial_chromosome_separation.
@@ -821,13 +822,13 @@ std::vector<std::vector<mundy::geom::Point<double>>> get_chromosome_positions_hi
         num_nodes_per_chromosome, u_hat, initial_chromosome_separation_);
 
     // Create the local positions of the spheres
-    std::vector<mundy::math::Vector3<double>> sphere_position_array;
+    std::vector<mundy::math::Vector3d> sphere_position_array;
     for (size_t isphere = 0; isphere < num_nodes_per_chromosome; isphere++) {
       sphere_position_array.push_back(hilbert_position_array[isphere]);
     }
 
     // Figure out where the center of the chromosome is, and its radius, in its own local space
-    mundy::math::Vector3<double> r_chromosome_center_local(0.0, 0.0, 0.0);
+    mundy::math::Vector3d r_chromosome_center_local(0.0, 0.0, 0.0);
     double r_max = 0.0;
     for (size_t i = 0; i < sphere_position_array.size(); i++) {
       r_chromosome_center_local += sphere_position_array[i];
@@ -844,7 +845,7 @@ std::vector<std::vector<mundy::geom::Point<double>>> get_chromosome_positions_hi
     bool chromosome_inserted = false;
     while (itrial <= max_trials) {
       // Generate a random position within the unit cell.
-      mundy::math::Vector3<double> r_start(rng.uniform<double>(domain_low[0], domain_high[0]),
+      mundy::math::Vector3d r_start(rng.uniform<double>(domain_low[0], domain_high[0]),
                                            rng.uniform<double>(domain_low[1], domain_high[1]),
                                            rng.uniform<double>(domain_low[2], domain_high[2]));
 
@@ -1836,8 +1837,8 @@ void run(int argc, char **argv) {
     }
 
     // Setup the chromatin fibers
-    const mundy::math::Vector3<double> nucleus_center = {0.0, 0.0, 0.0};
-    const mundy::math::Vector3<double> nucleus_radii = {a, b, c};
+    const mundy::math::Vector3d nucleus_center = {0.0, 0.0, 0.0};
+    const mundy::math::Vector3d nucleus_radii = {a, b, c};
     const size_t num_fibers = 100;
     const size_t num_hetero_euchromatin_repeats = 7;
     const size_t num_heterochromatin_per_repeat = 90;
@@ -1852,8 +1853,8 @@ void run(int argc, char **argv) {
 
     for (size_t f = 0; f < num_fibers; f++) {
       // Generate a random walk for the fiber starting from a random location in the nucleus
-      mundy::math::Vector3<double> start = random_point_inside_ellipsoid(nucleus_center, nucleus_radii);
-      std::vector<mundy::math::Vector3<double>> fiber_walk = random_walk_inside_ellipsoid(
+      mundy::math::Vector3d start = random_point_inside_ellipsoid(nucleus_center, nucleus_radii);
+      std::vector<mundy::math::Vector3d> fiber_walk = random_walk_inside_ellipsoid(
           start, nucleus_center, nucleus_radii, num_nodes_per_heterochromatin, segment_length);
 
       // Declare the nodes, segments, and heterochromatin/euchromatin
@@ -2892,10 +2893,10 @@ class HP1 {
     const double inv_a2 = 1.0 / (a * a);
     const double inv_b2 = 1.0 / (b * b);
     const double inv_c2 = 1.0 / (c * c);
-    const mundy::math::Vector3<double> center(0.0, 0.0, 0.0);
-    const auto orientation = mundy::math::Quaternion<double>::identity();
+    const mundy::math::Vector3d center(0.0, 0.0, 0.0);
+    const auto orientation = mundy::math::Quaterniond::identity();
     auto level_set = [&inv_a2, &inv_b2, &inv_c2, &center,
-                      &orientation](const mundy::math::Vector3<double> &point) -> double {
+                      &orientation](const mundy::math::Vector3d &point) -> double {
       // const auto body_frame_point = conjugate(orientation) * (point - center);
       const auto body_frame_point = point - center;
       return (body_frame_point[0] * body_frame_point[0] * inv_a2 + body_frame_point[1] * body_frame_point[1] * inv_b2 +
@@ -2927,14 +2928,14 @@ class HP1 {
           const double z1 = sphere_aabb[5];
 
           // Compute all 8 corners of the AABB
-          const auto bottom_left_front = mundy::math::Vector3<double>(x0, y0, z0);
-          const auto bottom_right_front = mundy::math::Vector3<double>(x1, y0, z0);
-          const auto top_left_front = mundy::math::Vector3<double>(x0, y1, z0);
-          const auto top_right_front = mundy::math::Vector3<double>(x1, y1, z0);
-          const auto bottom_left_back = mundy::math::Vector3<double>(x0, y0, z1);
-          const auto bottom_right_back = mundy::math::Vector3<double>(x1, y0, z1);
-          const auto top_left_back = mundy::math::Vector3<double>(x0, y1, z1);
-          const auto top_right_back = mundy::math::Vector3<double>(x1, y1, z1);
+          const auto bottom_left_front = mundy::math::Vector3d(x0, y0, z0);
+          const auto bottom_right_front = mundy::math::Vector3d(x1, y0, z0);
+          const auto top_left_front = mundy::math::Vector3d(x0, y1, z0);
+          const auto top_right_front = mundy::math::Vector3d(x1, y1, z0);
+          const auto bottom_left_back = mundy::math::Vector3d(x0, y0, z1);
+          const auto bottom_right_back = mundy::math::Vector3d(x1, y0, z1);
+          const auto top_left_back = mundy::math::Vector3d(x0, y1, z1);
+          const auto top_right_back = mundy::math::Vector3d(x1, y1, z1);
           const double all_points_inside_periphery =
               level_set(bottom_left_front) < 0.0 && level_set(bottom_right_front) < 0.0 &&
               level_set(top_left_front) < 0.0 && level_set(top_right_front) < 0.0 &&
@@ -2949,8 +2950,8 @@ class HP1 {
 
             // Note, the ellipsoid for the ssd calc has outward normal, whereas the periphery has inward normal.
             // Hence, the sign flip.
-            mundy::math::Vector3<double> contact_point;
-            mundy::math::Vector3<double> ellipsoid_nhat;
+            mundy::math::Vector3d contact_point;
+            mundy::math::Vector3d ellipsoid_nhat;
             const double shared_normal_ssd =
                 -mundy::math::distance::shared_normal_ssd_between_ellipsoid_and_point(
                     center, orientation, a, b, c, node_coords, contact_point, ellipsoid_nhat) -
@@ -2976,10 +2977,10 @@ class HP1 {
     const double a = periphery_collision_axis_radius1_;
     const double b = periphery_collision_axis_radius2_;
     const double c = periphery_collision_axis_radius3_;
-    const mundy::math::Vector3<double> center(0.0, 0.0, 0.0);
-    const auto orientation = mundy::math::Quaternion<double>::identity();
+    const mundy::math::Vector3d center(0.0, 0.0, 0.0);
+    const auto orientation = mundy::math::Quaterniond::identity();
     auto level_set = [&a, &b, &c, &center, &orientation](const double &radius,
-                                                         const mundy::math::Vector3<double> &point) -> double {
+                                                         const mundy::math::Vector3d &point) -> double {
       // const auto body_frame_point = conjugate(orientation) * (point - center);
       const auto body_frame_point = point - center;
       const double inv_a2 = 1.0 / ((a - radius) * (a - radius));
@@ -2992,12 +2993,12 @@ class HP1 {
     // Fast compute of the outward 'normal' at the point
     auto outward_normal = [&a, &b, &c, &center, &orientation](
                               const double &radius,
-                              const mundy::math::Vector3<double> &point) -> mundy::math::Vector3<double> {
+                              const mundy::math::Vector3d &point) -> mundy::math::Vector3d {
       const auto body_frame_point = point - center;
       const double inv_a2 = 1.0 / ((a - radius) * (a - radius));
       const double inv_b2 = 1.0 / ((b - radius) * (b - radius));
       const double inv_c2 = 1.0 / ((c - radius) * (c - radius));
-      return mundy::math::Vector3<double>(2.0 * body_frame_point[0] * inv_a2, 2.0 * body_frame_point[1] * inv_b2,
+      return mundy::math::Vector3d(2.0 * body_frame_point[0] * inv_a2, 2.0 * body_frame_point[1] * inv_b2,
                                           2.0 * body_frame_point[2] * inv_c2);
     };
 

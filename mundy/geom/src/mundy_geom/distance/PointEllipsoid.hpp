@@ -2,8 +2,9 @@
 // **********************************************************************************************************************
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
-//                                           Copyright 2024 Flatiron Institute
-//                                                 Author: Bryce Palmer
+//                                              Copyright 2024 Bryce Palmer
+//
+// Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
 // as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
@@ -24,37 +25,47 @@
 #include <Kokkos_Core.hpp>
 
 // Mundy
-#include <mundy_geom/distance/Types.hpp>        // for mundy::geom::SharedNormalSigned
-#include <mundy_geom/primitives/Ellipsoid.hpp>  // for mundy::geom::Ellipsoid
-#include <mundy_geom/primitives/Point.hpp>      // for mundy::geom::Point
-#include <mundy_math/Quaternion.hpp>            // for mundy::math::Quaternion
-#include <mundy_math/Tolerance.hpp>             // for mundy::math::get_zero_tolerance
-#include <mundy_math/Vector3.hpp>               // for mundy::math::Vector3
-#include <mundy_math/minimize.hpp>              // for mundy::math::find_min_using_approximate_derivatives
+#include <mundy_geom/distance/DistanceMetrics.hpp>  // for mundy::geom::FreeSpaceMetric
+#include <mundy_geom/distance/PointPoint.hpp>       // for mundy::geom::distance(Point, Point)
+#include <mundy_geom/distance/Types.hpp>            // for mundy::geom::SharedNormalSigned
+#include <mundy_geom/primitives/Ellipsoid.hpp>      // for mundy::geom::Ellipsoid
+#include <mundy_geom/primitives/Point.hpp>          // for mundy::geom::Point
+#include <mundy_math/Quaternion.hpp>                // for mundy::math::Quaternion
+#include <mundy_math/Tolerance.hpp>                 // for mundy::math::get_zero_tolerance
+#include <mundy_math/Vector3.hpp>                   // for mundy::math::Vector3
+#include <mundy_math/minimize.hpp>                  // for mundy::math::find_min_using_approximate_derivatives
 
 namespace mundy {
 
 namespace geom {
 
+//! \name Free space distance calculations
+//@{
+
 template <typename Scalar>
-KOKKOS_FUNCTION Scalar distance(const Point<Scalar>& point, const Ellipsoid<Scalar>& ellipsoid) {
+KOKKOS_FUNCTION Scalar distance(const Point<Scalar>& point,  //
+                                const Ellipsoid<Scalar>& ellipsoid) {
   return distance(SharedNormalSigned{}, point, ellipsoid);
 }
 
 template <typename Scalar>
-KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distance_type, const Point<Scalar>& point,
+KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
+                                const Point<Scalar>& point,                               //
                                 const Ellipsoid<Scalar>& ellipsoid) {
   Point<Scalar> closest_point;
   mundy::math::Vector3<Scalar> ellipsoid_normal;
-  return distance(distance_type, point, ellipsoid, closest_point, ellipsoid_normal);
+  return distance(distance_type, point, ellipsoid,  //
+                  closest_point, ellipsoid_normal);
 }
 
 template <typename Scalar>
 class PointEllipsoidObjective {
  public:
   KOKKOS_FUNCTION
-  PointEllipsoidObjective(const Point<Scalar>& point, const Ellipsoid<Scalar>& ellipsoid,
-                          mundy::math::Vector3<Scalar>& shared_normal, Point<Scalar>& foot_point)
+  PointEllipsoidObjective(const Point<Scalar>& point,                   //
+                          const Ellipsoid<Scalar>& ellipsoid,           //
+                          mundy::math::Vector3<Scalar>& shared_normal,  //
+                          Point<Scalar>& foot_point)
       : point_(point), ellipsoid_(ellipsoid), shared_normal_(shared_normal), foot_point_(foot_point) {
   }
 
@@ -70,7 +81,7 @@ class PointEllipsoidObjective {
     foot_point_ = map_surface_normal_to_foot_point_on_ellipsoid(shared_normal_, ellipsoid_);
 
     // The objective is the shared normal euclidean separation distance. NOT the signed separation distance.
-    return mundy::math::norm(point_ - foot_point_);
+    return distance(foot_point_, point_);
   }
 
  private:
@@ -81,8 +92,10 @@ class PointEllipsoidObjective {
 };
 
 template <typename Scalar>
-KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distance_type, const Point<Scalar>& point,
-                                const Ellipsoid<Scalar>& ellipsoid, Point<Scalar>& closest_point,
+KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
+                                const Point<Scalar>& point,                               //
+                                const Ellipsoid<Scalar>& ellipsoid,                       //
+                                Point<Scalar>& closest_point,                             //
                                 mundy::math::Vector3<Scalar>& ellipsoid_normal) {
   // Setup the minimization
   // Note, the actual error is not guaranteed to be less than min_objective_delta due to the use of approximate
@@ -120,6 +133,7 @@ KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distan
   shared_normal_objective(global_theta_phi_sol);
   return mundy::math::dot(point - closest_point, ellipsoid_normal);
 }
+//@}
 
 }  // namespace geom
 

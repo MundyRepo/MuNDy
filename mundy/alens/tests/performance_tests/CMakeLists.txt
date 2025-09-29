@@ -2,8 +2,8 @@
 # **********************************************************************************************************************
 #
 # Mundy: Multi-body Nonlocal Dynamics
-# Copyright 2023 Flatiron Institute
-# Author: Bryce Palmer
+# Copyright 2024 Bryce Palmer
+# Developed under support from the NSF Graduate Research Fellowship Program.
 #
 # Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
 # as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
@@ -92,23 +92,24 @@ tribits_add_executable(
     CATEGORIES PERFORMANCE
     )
 
-tribits_add_executable(
-    HP1
-    SOURCES
-    HP1.cpp
-    CATEGORIES PERFORMANCE
-    )
-tribits_copy_files_to_binary_dir(
-    HP1CopyFiles
-    SOURCE_FILES
-    hp1.yaml
-    hp1_periphery_quadrature_normals.dat
-    hp1_periphery_quadrature_points.dat
-    hp1_periphery_quadrature_weights.dat
-    hp1_pos.dat
-    hp1_hilbert_centers.dat
-    EXEDEPS HP1
-    )
+# tribits_add_executable(
+#     HP1
+#     SOURCES
+#     HP1.cpp
+#     CATEGORIES PERFORMANCE
+#     )
+# tribits_copy_files_to_binary_dir(
+#     HP1CopyFiles
+#     SOURCE_FILES
+#     hp1.yaml
+#     hp1_periphery_quadrature_normals.dat
+#     hp1_periphery_quadrature_points.dat
+#     hp1_periphery_quadrature_weights.dat
+#     hp1_pos.dat
+#     hp1_hilbert_centers.dat
+#     EXEDEPS HP1
+#     CATEGORIES PERFORMANCE
+#     )
 
 tribits_add_executable(
     NonInteractingSperm

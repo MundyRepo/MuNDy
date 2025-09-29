@@ -2,8 +2,9 @@
 // **********************************************************************************************************************
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
-//                                           Copyright 2024 Flatiron Institute
-//                                                 Author: Bryce Palmer
+//                                              Copyright 2024 Bryce Palmer
+//
+// Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
 // as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
@@ -51,6 +52,16 @@ KOKKOS_INLINE_FUNCTION constexpr void deep_copy_impl(std::index_sequence<Is...>,
 template <size_t... Is, typename T, size_t N>
 KOKKOS_INLINE_FUNCTION constexpr void fill_impl(std::index_sequence<Is...>, Array<T, N>& array, const T& value) {
   ((array[Is] = value), ...);
+}
+
+/// \brief Apply implementation for Array
+template <size_t... Is, typename Func, typename T, size_t N>
+KOKKOS_INLINE_FUNCTION constexpr auto apply_impl(std::index_sequence<Is...>, const Func& func, const Array<T, N>& array)
+    -> Array<std::invoke_result_t<Func, T>, N> {
+  using result_type = std::invoke_result_t<Func, T>;
+  Array<result_type, N> result;
+  ((result[Is] = func(array[Is])), ...);
+  return result;
 }
 
 }  // namespace impl

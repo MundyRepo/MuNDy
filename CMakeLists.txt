@@ -2,8 +2,8 @@
 # **********************************************************************************************************************
 #
 # Mundy: Multi-body Nonlocal Dynamics
-# Copyright 2023 Flatiron Institute
-# Author: Bryce Palmer
+# Copyright 2024 Bryce Palmer
+# Developed under support from the NSF Graduate Research Fellowship Program.
 #
 # Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
 # as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
@@ -55,7 +55,10 @@ if (NOT CMAKE_CXX_STANDARD MATCHES "^${${PROJECT_NAME}_CMAKE_CXX_STANDARDS_ALLOW
 endif ()
 
 # Print the CMAKE_CXX_FLAGS
-message(STATUS "CMAKE_CXX_FLAGS = ${CMAKE_CXX_FLAGS}")
+message(STATUS "CMAKE_CXX_FLAGS='${CMAKE_CXX_FLAGS}'")
+message(STATUS "CMAKE_CXX_FLAGS_DEBUG='${CMAKE_CXX_FLAGS_DEBUG}'")
+message(STATUS "CMAKE_CXX_FLAGS_RELEASE='${CMAKE_CXX_FLAGS_RELEASE}'")
+message(STATUS "CMAKE_CXX_FLAGS_RELWITHDEBINFO='${CMAKE_CXX_FLAGS_RELWITHDEBINFO}'")
 
 # Do all of the processing for this Tribits project
 tribits_project()

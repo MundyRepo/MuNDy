@@ -2,8 +2,9 @@
 // **********************************************************************************************************************
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
-//                                           Copyright 2024 Flatiron Institute
-//                                                 Author: Bryce Palmer
+//                                              Copyright 2024 Bryce Palmer
+//
+// Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
 // as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
@@ -36,8 +37,7 @@ namespace mundy {
 
 namespace geom {
 
-template <typename Scalar, ValidPointType PointType = Point<Scalar>,
-          typename OwnershipType = mundy::math::Ownership::Owns>
+template <typename Scalar, ValidPointType PointType = Point<Scalar>, typename OwnershipType = math::Ownership::Owns>
 class SpherocylinderSegment {
   static_assert(std::is_same_v<typename PointType::scalar_t, Scalar>,
                 "The scalar_t of the PointType must match the Scalar type.");
@@ -65,8 +65,8 @@ class SpherocylinderSegment {
 
   /// \brief Default constructor for owning SpherocylinderSegments. Default initialize the start and end points.
   KOKKOS_FUNCTION
-  SpherocylinderSegment()
-    requires std::is_same_v<OwnershipType, mundy::math::Ownership::Owns>
+  constexpr SpherocylinderSegment()
+    requires std::is_same_v<OwnershipType, math::Ownership::Owns>
       : start_(scalar_t(), scalar_t(), scalar_t()),
         end_(scalar_t(), scalar_t(), scalar_t()),
         radius_(static_cast<scalar_t>(-1)) {
@@ -74,15 +74,15 @@ class SpherocylinderSegment {
 
   /// \brief No default constructor for viewing SpherocylinderSegmentss.
   KOKKOS_FUNCTION
-  SpherocylinderSegment()
-    requires std::is_same_v<OwnershipType, mundy::math::Ownership::Views>
+  constexpr SpherocylinderSegment()
+    requires std::is_same_v<OwnershipType, math::Ownership::Views>
   = delete;
 
   /// \brief Constructor to initialize the start and end points.
   /// \param[in] start The start of the SpherocylinderSegment.
   /// \param[in] end The end of the SpherocylinderSegment.
   KOKKOS_FUNCTION
-  SpherocylinderSegment(const point_t& start, const point_t& end, const scalar_t& radius)
+  constexpr SpherocylinderSegment(const point_t& start, const point_t& end, const scalar_t& radius)
       : start_(start), end_(end), radius_(radius) {
   }
 
@@ -90,36 +90,37 @@ class SpherocylinderSegment {
   /// \param[in] start The start of the SpherocylinderSegment.
   /// \param[in] end The end of the SpherocylinderSegment.
   template <ValidPointType OtherPointType>
-  KOKKOS_FUNCTION SpherocylinderSegment(const OtherPointType& start, const OtherPointType& end, const scalar_t& radius)
+  KOKKOS_FUNCTION constexpr SpherocylinderSegment(const OtherPointType& start, const OtherPointType& end,
+                                                  const scalar_t& radius)
       : start_(start), end_(end), radius_(radius) {
   }
 
   /// \brief Destructor
   KOKKOS_DEFAULTED_FUNCTION
-  ~SpherocylinderSegment() = default;
+  constexpr ~SpherocylinderSegment() = default;
 
   /// \brief Deep copy constructor
   KOKKOS_FUNCTION
-  SpherocylinderSegment(const SpherocylinderSegment<scalar_t, point_t, ownership_t>& other)
+  constexpr SpherocylinderSegment(const SpherocylinderSegment<scalar_t, point_t, ownership_t>& other)
       : start_(other.start_), end_(other.end_), radius_(other.radius_) {
   }
 
   /// \brief Deep copy constructor
   template <typename OtherSpherocylinderSegmentType>
-  KOKKOS_FUNCTION SpherocylinderSegment(const OtherSpherocylinderSegmentType& other)
+  KOKKOS_FUNCTION constexpr SpherocylinderSegment(const OtherSpherocylinderSegmentType& other)
     requires(!std::is_same_v<OtherSpherocylinderSegmentType, SpherocylinderSegment<scalar_t, point_t, ownership_t>>)
       : start_(other.start_), end_(other.end_), radius_(other.radius_) {
   }
 
   /// \brief Deep move constructor
   KOKKOS_FUNCTION
-  SpherocylinderSegment(SpherocylinderSegment<scalar_t, point_t, ownership_t>&& other)
+  constexpr SpherocylinderSegment(SpherocylinderSegment<scalar_t, point_t, ownership_t>&& other)
       : start_(std::move(other.start_)), end_(std::move(other.end_)), radius_(std::move(other.radius_)) {
   }
 
   /// \brief Deep move constructor
   template <typename OtherSpherocylinderSegmentType>
-  KOKKOS_FUNCTION SpherocylinderSegment(OtherSpherocylinderSegmentType&& other)
+  KOKKOS_FUNCTION constexpr SpherocylinderSegment(OtherSpherocylinderSegmentType&& other)
     requires(!std::is_same_v<OtherSpherocylinderSegmentType, SpherocylinderSegment<scalar_t, point_t, ownership_t>>)
       : start_(std::move(other.start_)), end_(std::move(other.end_)), radius_(std::move(other.radius_)) {
   }
@@ -130,7 +131,7 @@ class SpherocylinderSegment {
 
   /// \brief Copy assignment operator
   KOKKOS_FUNCTION
-  SpherocylinderSegment<scalar_t, point_t, ownership_t>& operator=(
+  constexpr SpherocylinderSegment<scalar_t, point_t, ownership_t>& operator=(
       const SpherocylinderSegment<scalar_t, point_t, ownership_t>& other) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     start_ = other.start_;
@@ -141,7 +142,7 @@ class SpherocylinderSegment {
 
   /// \brief Copy assignment operator
   template <typename OtherSpherocylinderSegmentType>
-  KOKKOS_FUNCTION SpherocylinderSegment<scalar_t, point_t, ownership_t>& operator=(
+  KOKKOS_FUNCTION constexpr SpherocylinderSegment<scalar_t, point_t, ownership_t>& operator=(
       const OtherSpherocylinderSegmentType& other)
     requires(!std::is_same_v<OtherSpherocylinderSegmentType, SpherocylinderSegment<scalar_t, point_t, ownership_t>>)
   {
@@ -154,7 +155,7 @@ class SpherocylinderSegment {
 
   /// \brief Move assignment operator
   KOKKOS_FUNCTION
-  SpherocylinderSegment<scalar_t, point_t, ownership_t>& operator=(
+  constexpr SpherocylinderSegment<scalar_t, point_t, ownership_t>& operator=(
       SpherocylinderSegment<scalar_t, point_t, ownership_t>&& other) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     start_ = std::move(other.start_);
@@ -165,7 +166,7 @@ class SpherocylinderSegment {
 
   /// \brief Move assignment operator
   template <typename OtherSpherocylinderSegmentType>
-  KOKKOS_FUNCTION SpherocylinderSegment<scalar_t, point_t, ownership_t>& operator=(
+  KOKKOS_FUNCTION constexpr SpherocylinderSegment<scalar_t, point_t, ownership_t>& operator=(
       OtherSpherocylinderSegmentType&& other)
     requires(!std::is_same_v<OtherSpherocylinderSegmentType, SpherocylinderSegment<scalar_t, point_t, ownership_t>>)
   {
@@ -182,37 +183,37 @@ class SpherocylinderSegment {
 
   /// \brief Accessor for the start
   KOKKOS_FUNCTION
-  const point_t& start() const {
+  constexpr const point_t& start() const {
     return start_;
   }
 
   /// \brief Accessor for the start
   KOKKOS_FUNCTION
-  point_t& start() {
+  constexpr point_t& start() {
     return start_;
   }
 
   /// \brief Accessor for the end
   KOKKOS_FUNCTION
-  const point_t& end() const {
+  constexpr const point_t& end() const {
     return end_;
   }
 
   /// \brief Accessor for the end
   KOKKOS_FUNCTION
-  point_t& end() {
+  constexpr point_t& end() {
     return end_;
   }
 
   /// \brief Accessor for the radius
   KOKKOS_FUNCTION
-  const scalar_t& radius() const {
+  constexpr const scalar_t& radius() const {
     return radius_;
   }
 
   /// \brief Accessor for the radius
   KOKKOS_FUNCTION
-  scalar_t& radius() {
+  constexpr scalar_t& radius() {
     return radius_;
   }
   //@}
@@ -223,7 +224,7 @@ class SpherocylinderSegment {
   /// \brief Set the start point
   /// \param[in] start The new start point.
   template <ValidPointType OtherPointType>
-  KOKKOS_FUNCTION void set_start(const OtherPointType& start) {
+  KOKKOS_FUNCTION constexpr void set_start(const OtherPointType& start) {
     start_ = start;
   }
 
@@ -232,7 +233,7 @@ class SpherocylinderSegment {
   /// \param[in] y The y-coordinate.
   /// \param[in] z The z-coordinate.
   KOKKOS_FUNCTION
-  void set_start(const Scalar& x, const Scalar& y, const Scalar& z) {
+  constexpr void set_start(const Scalar& x, const Scalar& y, const Scalar& z) {
     start_[0] = x;
     start_[1] = y;
     start_[2] = z;
@@ -241,7 +242,7 @@ class SpherocylinderSegment {
   /// \brief Set the end point
   /// \param[in] end The new end point.
   template <ValidPointType OtherPointType>
-  KOKKOS_FUNCTION void set_end(const OtherPointType& end) {
+  KOKKOS_FUNCTION constexpr void set_end(const OtherPointType& end) {
     end_ = end;
   }
 
@@ -250,7 +251,7 @@ class SpherocylinderSegment {
   /// \param[in] y The y-coordinate.
   /// \param[in] z The z-coordinate.
   KOKKOS_FUNCTION
-  void set_end(const Scalar& x, const Scalar& y, const Scalar& z) {
+  constexpr void set_end(const Scalar& x, const Scalar& y, const Scalar& z) {
     end_[0] = x;
     end_[1] = y;
     end_[2] = z;
@@ -259,7 +260,7 @@ class SpherocylinderSegment {
   /// \brief Set the radius
   /// \param[in] radius The new radius.
   KOKKOS_FUNCTION
-  void set_radius(const scalar_t& radius) {
+  constexpr void set_radius(const scalar_t& radius) {
     radius_ = radius;
   }
   //@}
@@ -267,40 +268,26 @@ class SpherocylinderSegment {
  private:
   point_t start_;
   point_t end_;
-  std::conditional_t<std::is_same_v<OwnershipType, mundy::math::Ownership::Owns>, scalar_t, scalar_t&> radius_;
+  std::conditional_t<std::is_same_v<OwnershipType, math::Ownership::Owns>, scalar_t, scalar_t&> radius_;
 };
 
-/// @brief Type trait to determine if a type is a SpherocylinderSegment
+/// @brief (Implementation) Type trait to determine if a type is a SpherocylinderSegment
 template <typename T>
-struct is_spherocylinder_segment : std::false_type {};
+struct impl_is_spherocylinder_segment : std::false_type {};
 //
 template <typename Scalar, ValidPointType PointType, typename OwnershipType>
-struct is_spherocylinder_segment<SpherocylinderSegment<Scalar, PointType, OwnershipType>> : std::true_type {};
-//
-template <typename Scalar, ValidPointType PointType, typename OwnershipType>
-struct is_spherocylinder_segment<const SpherocylinderSegment<Scalar, PointType, OwnershipType>> : std::true_type {};
+struct impl_is_spherocylinder_segment<SpherocylinderSegment<Scalar, PointType, OwnershipType>> : std::true_type {};
+
+/// \brief Type trait to determine if a type is a SpherocylinderSegment
+template <typename T>
+struct is_spherocylinder_segment : impl_is_spherocylinder_segment<std::remove_cv_t<T>> {};
 //
 template <typename T>
 inline constexpr bool is_spherocylinder_segment_v = is_spherocylinder_segment<T>::value;
 
 /// @brief Concept to check if a type is a valid SpherocylinderSegment type
 template <typename SpherocylinderSegmentType>
-concept ValidSpherocylinderSegmentType =
-    is_spherocylinder_segment_v<std::remove_cv_t<SpherocylinderSegmentType>> &&
-    is_point_v<decltype(std::declval<std::remove_cv_t<SpherocylinderSegmentType>>().start())> &&
-    is_point_v<decltype(std::declval<std::remove_cv_t<SpherocylinderSegmentType>>().end())> &&
-    is_point_v<decltype(std::declval<const std::remove_cv_t<SpherocylinderSegmentType>>().start())> &&
-    is_point_v<decltype(std::declval<const std::remove_cv_t<SpherocylinderSegmentType>>().end())> &&
-    requires(std::remove_cv_t<SpherocylinderSegmentType> spherocylinder_segment,
-             const std::remove_cv_t<SpherocylinderSegmentType> const_spherocylinder_segment) {
-      typename std::remove_cv_t<SpherocylinderSegmentType>::scalar_t;
-      {
-        spherocylinder_segment.radius()
-      } -> std::same_as<typename std::remove_cv_t<SpherocylinderSegmentType>::scalar_t&>;
-      {
-        const_spherocylinder_segment.radius()
-      } -> std::same_as<const typename std::remove_cv_t<SpherocylinderSegmentType>::scalar_t&>;
-    };  // ValidSpherocylinderSegmentType
+concept ValidSpherocylinderSegmentType = is_spherocylinder_segment_v<SpherocylinderSegmentType>;
 
 static_assert(ValidSpherocylinderSegmentType<SpherocylinderSegment<float>> &&
                   ValidSpherocylinderSegmentType<const SpherocylinderSegment<float>> &&
@@ -314,8 +301,8 @@ static_assert(ValidSpherocylinderSegmentType<SpherocylinderSegment<float>> &&
 /// \brief Equality operator
 template <ValidSpherocylinderSegmentType SpherocylinderSegmentType1,
           ValidSpherocylinderSegmentType SpherocylinderSegmentType2>
-KOKKOS_FUNCTION bool operator==(const SpherocylinderSegmentType1& spherocylinder_segment1,
-                                const SpherocylinderSegmentType2& spherocylinder_segment2) {
+KOKKOS_FUNCTION constexpr bool operator==(const SpherocylinderSegmentType1& spherocylinder_segment1,
+                                          const SpherocylinderSegmentType2& spherocylinder_segment2) {
   return (spherocylinder_segment1.radius() == spherocylinder_segment2.radius()) &&
          (spherocylinder_segment1.start() == spherocylinder_segment2.start()) &&
          (spherocylinder_segment1.end() == spherocylinder_segment2.end());
@@ -324,8 +311,8 @@ KOKKOS_FUNCTION bool operator==(const SpherocylinderSegmentType1& spherocylinder
 /// \brief Inequality operator
 template <ValidSpherocylinderSegmentType SpherocylinderSegmentType1,
           ValidSpherocylinderSegmentType SpherocylinderSegmentType2>
-KOKKOS_FUNCTION bool operator!=(const SpherocylinderSegmentType1& spherocylinder_segment1,
-                                const SpherocylinderSegmentType2& spherocylinder_segment2) {
+KOKKOS_FUNCTION constexpr bool operator!=(const SpherocylinderSegmentType1& spherocylinder_segment1,
+                                          const SpherocylinderSegmentType2& spherocylinder_segment2) {
   return ((spherocylinder_segment1.radius() != spherocylinder_segment2.radius())) ||
          (spherocylinder_segment1.start() != spherocylinder_segment2.start()) ||
          (spherocylinder_segment1.end() != spherocylinder_segment2.end());

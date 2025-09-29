@@ -2,8 +2,9 @@
 // **********************************************************************************************************************
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
-//                                           Copyright 2024 Flatiron Institute
-//                                                 Author: Bryce Palmer
+//                                              Copyright 2024 Bryce Palmer
+//
+// Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
 // as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
@@ -152,8 +153,8 @@ void test_quaternion_blas_no_views(const double alpha, const std::vector<double>
   const size_t num_entities = x.size() / 4;
   for (size_t i = 0; i < num_entities; ++i) {
     // Copy into quaternions
-    const mundy::math::Quaternion<double> x_quat(x[4 * i + 0], x[4 * i + 1], x[4 * i + 2], x[4 * i + 3]);
-    mundy::math::Quaternion<double> y_quat(y[4 * i + 0], y[4 * i + 1], y[4 * i + 2], y[4 * i + 3]);
+    const mundy::math::Quaterniond x_quat(x[4 * i + 0], x[4 * i + 1], x[4 * i + 2], x[4 * i + 3]);
+    mundy::math::Quaterniond y_quat(y[4 * i + 0], y[4 * i + 1], y[4 * i + 2], y[4 * i + 3]);
     y_quat = alpha * x_quat + beta * y_quat;
 
     // Copy back into the result
@@ -266,9 +267,9 @@ void test_quaternion_rotation_no_views(const std::vector<double> &q1, const std:
   const size_t num_entities = q1.size() / 4;
   for (size_t i = 0; i < num_entities; ++i) {
     // Copy into a quaternion
-    const mundy::math::Quaternion<double> q1_quat(q1[4 * i + 0], q1[4 * i + 1], q1[4 * i + 2], q1[4 * i + 3]);
-    const mundy::math::Quaternion<double> q2_quat(q2[4 * i + 0], q2[4 * i + 1], q2[4 * i + 2], q2[4 * i + 3]);
-    const mundy::math::Quaternion<double> q3_quat = q1_quat * q2_quat;
+    const mundy::math::Quaterniond q1_quat(q1[4 * i + 0], q1[4 * i + 1], q1[4 * i + 2], q1[4 * i + 3]);
+    const mundy::math::Quaterniond q2_quat(q2[4 * i + 0], q2[4 * i + 1], q2[4 * i + 2], q2[4 * i + 3]);
+    const mundy::math::Quaterniond q3_quat = q1_quat * q2_quat;
 
     // Copy back into the result
     q3[4 * i + 0] = q3_quat[0];

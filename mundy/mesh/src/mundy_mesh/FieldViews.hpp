@@ -2,8 +2,9 @@
 // **********************************************************************************************************************
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
-//                                           Copyright 2024 Flatiron Institute
-//                                                 Author: Bryce Palmer
+//                                              Copyright 2024 Bryce Palmer
+//
+// Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
 // as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
@@ -128,6 +129,20 @@ KOKKOS_INLINE_FUNCTION auto quaternion_field_data(FieldType& f, const stk::mesh:
 template <class FieldType>
 KOKKOS_INLINE_FUNCTION auto matrix3_field_data(FieldType& f, const stk::mesh::FastMeshIndex& i) {
   return math::get_owning_matrix3<typename FieldType::value_type>(f(i));
+}
+
+/// \brief A helper function for getting a view of a field's data as a Matrix3
+template <class FieldType>
+KOKKOS_INLINE_FUNCTION auto aabb_field_data(FieldType& f, const stk::mesh::FastMeshIndex& i) {
+  constexpr size_t shift = 3;
+  using scalar_t = typename FieldType::value_type;
+  auto shifted_data_accessor = math::get_owning_shifted_accessor<scalar_t, shift>(f(i));
+  auto max_corner = math::get_owning_vector3<scalar_t>(std::move(shifted_data_accessor));
+  auto min_corner = math::get_owning_vector3<scalar_t>(f(i));
+
+  using min_point_t = decltype(min_corner);
+  using max_point_t = decltype(max_corner);
+  return geom::AABB<scalar_t, min_point_t, max_point_t>(min_corner, max_corner);
 }
 //@}
 

@@ -2,8 +2,9 @@
 // **********************************************************************************************************************
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
-//                                           Copyright 2024 Flatiron Institute
-//                                                 Author: Bryce Palmer
+//                                              Copyright 2024 Bryce Palmer
+//
+// Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
 // as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
@@ -24,21 +25,26 @@
 #include <Kokkos_Core.hpp>
 
 // Mundy
-#include <mundy_geom/distance/PointPoint.hpp>  // for distance(Point, Point)
-#include <mundy_geom/distance/Types.hpp>       // for mundy::geom::SharedNormalSigned
-#include <mundy_geom/primitives/Point.hpp>     // for mundy::geom::Point
-#include <mundy_geom/primitives/Sphere.hpp>    // for mundy::geom::Sphere
+#include <mundy_geom/distance/DistanceMetrics.hpp>  // for mundy::geom::FreeSpaceMetric
+#include <mundy_geom/distance/PointPoint.hpp>       // for distance(Point, Point)
+#include <mundy_geom/distance/Types.hpp>            // for mundy::geom::SharedNormalSigned
+#include <mundy_geom/primitives/Point.hpp>          // for mundy::geom::Point
+#include <mundy_geom/primitives/Sphere.hpp>         // for mundy::geom::Sphere
 
 namespace mundy {
 
 namespace geom {
+
+//! \name Free space distance calculations
+//@{
 
 /// \brief Compute the shared normal signed separation distance between a point and a sphere
 /// \tparam Scalar The scalar type
 /// \param[in] point The point
 /// \param[in] sphere The sphere
 template <typename Scalar>
-KOKKOS_FUNCTION Scalar distance(const Point<Scalar>& point, const Sphere<Scalar>& sphere) {
+KOKKOS_FUNCTION Scalar distance(const Point<Scalar>& point,  //
+                                const Sphere<Scalar>& sphere) {
   return distance(SharedNormalSigned{}, point, sphere);
 }
 
@@ -47,7 +53,8 @@ KOKKOS_FUNCTION Scalar distance(const Point<Scalar>& point, const Sphere<Scalar>
 /// \param[in] point The point
 /// \param[in] sphere The sphere
 template <typename Scalar>
-KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distance_type, const Point<Scalar>& point,
+KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
+                                const Point<Scalar>& point,                               //
                                 const Sphere<Scalar>& sphere) {
   return distance(point, sphere.center()) - sphere.radius();
 }
@@ -58,7 +65,8 @@ KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distan
 /// \param[in] sphere The sphere
 /// \param[out] sep The separation vector (from point to sphere)
 template <typename Scalar>
-KOKKOS_FUNCTION Scalar distance(const Point<Scalar>& point, const Sphere<Scalar>& sphere,
+KOKKOS_FUNCTION Scalar distance(const Point<Scalar>& point,    //
+                                const Sphere<Scalar>& sphere,  //
                                 mundy::math::Vector3<Scalar>& sep) {
   const Scalar center_point_distance = distance(point, sphere.center(), sep);
 
@@ -67,6 +75,7 @@ KOKKOS_FUNCTION Scalar distance(const Point<Scalar>& point, const Sphere<Scalar>
   sep *= surface_distance / center_point_distance;
   return surface_distance;
 }
+//@}
 
 }  // namespace geom
 

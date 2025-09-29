@@ -2,8 +2,9 @@
 // **********************************************************************************************************************
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
-//                                           Copyright 2024 Flatiron Institute
-//                                                 Author: Bryce Palmer
+//                                              Copyright 2024 Bryce Palmer
+//
+// Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
 // as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
@@ -158,9 +159,6 @@ class UnitTestFieldBLAS : public ::testing::Test {
  public:
   using DoubleField = stk::mesh::Field<double>;
   using CoordinateFunc = std::function<std::vector<double>(const double*)>;
-  static constexpr double alpha = -1.4;
-  static constexpr double beta = 0.3333333;
-  static constexpr double gamma = 3.14159;
   static constexpr double initial_value[3] = {-1, 2, -0.3};
 
   UnitTestFieldBLAS()

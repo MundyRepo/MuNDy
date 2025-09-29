@@ -2,8 +2,9 @@
 // **********************************************************************************************************************
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
-//                                           Copyright 2024 Flatiron Institute
-//                                                 Author: Bryce Palmer
+//                                              Copyright 2024 Bryce Palmer
+//
+// Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
 // as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
@@ -24,23 +25,29 @@
 #include <Kokkos_Core.hpp>
 
 // Mundy
-#include <mundy_geom/distance/PointPoint.hpp>     // for mundy::geom::distance(Point, Point)
-#include <mundy_geom/distance/Types.hpp>          // for mundy::geom::SharedNormalSigned
-#include <mundy_geom/primitives/LineSegment.hpp>  // for mundy::geom::LineSegment
-#include <mundy_geom/primitives/Point.hpp>        // for mundy::geom::Point
-#include <mundy_math/Tolerance.hpp>               // for mundy::math::get_zero_tolerance
+#include <mundy_geom/distance/DistanceMetrics.hpp>  // for mundy::geom::FreeSpaceMetric, mundy::geom::PeriodicSpaceMetric
+#include <mundy_geom/distance/DistanceMetrics.hpp>  // for mundy::geom::FreeSpaceMetric
+#include <mundy_geom/distance/PointPoint.hpp>       // for mundy::geom::distance(Point, Point)
+#include <mundy_geom/distance/Types.hpp>            // for mundy::geom::SharedNormalSigned
+#include <mundy_geom/primitives/LineSegment.hpp>    // for mundy::geom::LineSegment
+#include <mundy_geom/primitives/Point.hpp>          // for mundy::geom::Point
+#include <mundy_math/Tolerance.hpp>                 // for mundy::math::get_zero_tolerance
 
 namespace mundy {
 
 namespace geom {
+
+//! \name Free space distance calculations
+//@{
 
 /// \brief Compute the shared normal signed separation distance between a point and a line segment
 /// \tparam Scalar The scalar type
 /// \param[in] point The point
 /// \param[in] line_segment The line segment
 template <typename Scalar>
-KOKKOS_FUNCTION Scalar distance(const Point<Scalar>& point, const LineSegment<Scalar>& line_segment) {
-  return SharedNormalSigned{}, point, line_segment;
+KOKKOS_FUNCTION Scalar distance(const Point<Scalar>& point,  //
+                                const LineSegment<Scalar>& line_segment) {
+  return distance(SharedNormalSigned{}, point, line_segment);
 }
 
 /// \brief Compute the shared normal signed separation distance between a point and a line segment
@@ -48,7 +55,8 @@ KOKKOS_FUNCTION Scalar distance(const Point<Scalar>& point, const LineSegment<Sc
 /// \param[in] point The point
 /// \param[in] line_segment The line segment
 template <typename Scalar>
-KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distance_type, const Point<Scalar>& point,
+KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
+                                const Point<Scalar>& point,                               //
                                 const LineSegment<Scalar>& line_segment) {
   const auto& p1 = line_segment.start();
   const auto& p2 = line_segment.end();
@@ -75,7 +83,7 @@ KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distan
       t_tmp = static_cast<Scalar>(0.0);
     } else {
       // CASE 3: The line is well-defined and we can compute the closest point.
-      const Scalar t_tmp = num / denom;
+      t_tmp = num / denom;
 
       if (t_tmp < static_cast<Scalar>(0.0)) {
         // CASE 3.1: The parameter for the infinite line is less than 0. Therefore, the closest point is p1.
@@ -101,9 +109,13 @@ KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distan
 /// \param[out] arch_length The arch-length parameter of the closest point on the line segment
 /// \param[out] sep The separation vector (from point to line segment)
 template <typename Scalar>
-KOKKOS_FUNCTION Scalar distance(const Point<Scalar>& point, const LineSegment<Scalar>& line_segment,
-                                Point<Scalar>& closest_point, Scalar& arch_length, mundy::math::Vector3<Scalar>& sep) {
-  return distance(SharedNormalSigned{}, point, line_segment, closest_point, arch_length, sep);
+KOKKOS_FUNCTION Scalar distance(const Point<Scalar>& point,               //
+                                const LineSegment<Scalar>& line_segment,  //
+                                Point<Scalar>& closest_point,             //
+                                Scalar& arch_length,                      //
+                                mundy::math::Vector3<Scalar>& sep) {
+  return distance(SharedNormalSigned{}, point, line_segment,  //
+                  closest_point, arch_length, sep);
 }
 
 /// \brief Compute the shared normal signed separation distance between a point and a line segment
@@ -114,22 +126,25 @@ KOKKOS_FUNCTION Scalar distance(const Point<Scalar>& point, const LineSegment<Sc
 /// \param[out] arch_length The arch-length parameter of the closest point on the line segment
 /// \param[out] sep The separation vector (from point to line segment)
 template <typename Scalar>
-KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distance_type, const Point<Scalar>& point,
-                                const LineSegment<Scalar>& line_segment, Point<Scalar>& closest_point,
-                                Scalar& arch_length, mundy::math::Vector3<Scalar>& sep) {
+KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
+                                const Point<Scalar>& point,                               //
+                                const LineSegment<Scalar>& line_segment,                  //
+                                Point<Scalar>& closest_point,                             //
+                                Scalar& arch_length,                                      //
+                                mundy::math::Vector3<Scalar>& sep) {
   const auto& p1 = line_segment.start();
   const auto& p2 = line_segment.end();
   const auto p21 = p2 - p1;
 
   // Get parametric location
-  const Scalar num = mundy::math::dot(p21, point - p1);
+  const Scalar num = dot(p21, point - p1);
   if ((num < mundy::math::get_zero_tolerance<Scalar>()) & (num > -mundy::math::get_zero_tolerance<Scalar>())) {
     // CASE 1: The vector from p1 to x is orthogonal to the line.
     // In this case, the closest point is p1 and the parametric coordinate is 0.
     closest_point = p1;
     arch_length = static_cast<Scalar>(0.0);
   } else {
-    const Scalar denom = mundy::math::dot(p21, p21);
+    const Scalar denom = dot(p21, p21);
 
     if (denom < mundy::math::get_zero_tolerance<Scalar>()) {
       // CASE 2: The line is degenerate (i.e., p1 and p2 are numerically the same point).
@@ -155,6 +170,7 @@ KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distan
 
   return distance(point, closest_point, sep);
 }
+//@}
 
 }  // namespace geom
 

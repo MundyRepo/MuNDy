@@ -2,8 +2,9 @@
 // **********************************************************************************************************************
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
-//                                           Copyright 2024 Flatiron Institute
-//                                                 Author: Bryce Palmer
+//                                              Copyright 2024 Bryce Palmer
+// 
+// Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
 // as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
@@ -128,7 +129,7 @@ struct VelocityReducer {
  public:
   // Required
   typedef VelocityReducer reducer;
-  typedef mundy::math::Vector3<double> value_type;
+  typedef mundy::math::Vector3d value_type;
   typedef Kokkos::View<value_type *, Space, Kokkos::MemoryUnmanaged> result_view_type;
 
  private:
@@ -174,7 +175,7 @@ struct VelocityKernelThreadReductionFunctor {
   }
 
   KOKKOS_INLINE_FUNCTION
-  void operator()(const int s, mundy::math::Vector3<double> &v_accum) const {
+  void operator()(const int s, mundy::math::Vector3d &v_accum) const {
     // Call the custom operation to compute the contribution
     compute_velocity_contribution_(t_, s, v_accum[0], v_accum[1], v_accum[2]);
   }
@@ -203,7 +204,7 @@ struct VelocityKernelTeamFunctor {
 
   KOKKOS_FUNCTION
   void operator()(const int t) const {
-    mundy::math::Vector3<double> v_sum = {0.0, 0.0, 0.0};
+    mundy::math::Vector3d v_sum = {0.0, 0.0, 0.0};
 
     // Loop over all source points
     Kokkos::parallel_reduce(Kokkos::ThreadVectorRange(team_member_, num_source_points_),
@@ -977,8 +978,8 @@ FastMeshIndicesViewType get_local_entity_indices(stk::mesh::EntityRank rank, stk
 
 template <typename Mesh, typename Field>
 inline void randomize_positions(Mesh &mesh, Field &coords_field,  //
-                                const mundy::math::Vector3<double> &domain_low,
-                                const mundy::math::Vector3<double> &domain_high, const stk::mesh::Selector &selector,
+                                const mundy::math::Vector3d &domain_low,
+                                const mundy::math::Vector3d &domain_high, const stk::mesh::Selector &selector,
                                 const size_t seed = 1234) {
   sync_field_to_owning_space(coords_field);
   mundy::mesh::for_each_entity_run(
@@ -1013,8 +1014,8 @@ int main(int argc, char **argv) {
     const double max_allowable_overlap = 1e-5;
     const int max_col_iterations = 10000;
     constexpr unsigned int spatial_dimension = 3;
-    const mundy::math::Vector3<double> domain_low(0.0, 0.0, 0.0);
-    const mundy::math::Vector3<double> domain_high(box_size, box_size, box_size);
+    const mundy::math::Vector3d domain_low(0.0, 0.0, 0.0);
+    const mundy::math::Vector3d domain_high(box_size, box_size, box_size);
 
     // Setup the mesh
     stk::mesh::MeshBuilder builder(MPI_COMM_WORLD);

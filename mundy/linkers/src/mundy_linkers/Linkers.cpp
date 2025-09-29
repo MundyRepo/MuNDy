@@ -2,8 +2,9 @@
 // **********************************************************************************************************************
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
-//                                           Copyright 2024 Flatiron Institute
-//                                                 Author: Bryce Palmer
+//                                              Copyright 2024 Bryce Palmer
+//
+// Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
 // as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
@@ -33,7 +34,6 @@
 // Trilinos
 #include <stk_mesh/base/EntityLess.hpp>                         // for stk::mesh::EntityLess
 #include <stk_mesh/base/FieldParallel.hpp>                      // for stk::mesh::communicate_field_data
-#include <stk_mesh/base/ForEachEntity.hpp>                      // for mundy::mesh::for_each_entity_run
 #include <stk_mesh/baseImpl/ForEachEntityLoopAbstractions.hpp>  // for stk::mesh::impl::for_each_selected_entity_run_no_threads
 #include <stk_topology/topology.hpp>                            // for stk::topology
 #include <stk_util/parallel/CommSparse.hpp>                     // for stk::CommSparse
@@ -43,6 +43,7 @@
 #include <mundy_agents/RankedAssembly.hpp>  // for mundy::agents::RankedAssembly
 #include <mundy_core/StringLiteral.hpp>     // for mundy::core::StringLiteral and mundy::core::make_string_literal
 #include <mundy_linkers/Linkers.hpp>        // for mundy::linkers::fixup_linker_node_sharing
+#include <mundy_mesh/ForEachEntity.hpp>     // for mundy::mesh::for_each_entity_run
 #include <mundy_mesh/fmt_stk_types.hpp>     // adds fmt::format for stk types
 #include <mundy_meta/FieldReqs.hpp>         // for mundy::meta::FieldReqs
 #include <mundy_meta/MeshReqs.hpp>          // for mundy::meta::MeshReqs

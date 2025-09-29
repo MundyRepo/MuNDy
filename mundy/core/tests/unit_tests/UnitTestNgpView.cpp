@@ -2,8 +2,9 @@
 // **********************************************************************************************************************
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
-//                                           Copyright 2024 Flatiron Institute
-//                                                 Author: Bryce Palmer
+//                                              Copyright 2024 Bryce Palmer
+//
+// Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
 // as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
@@ -101,10 +102,11 @@ TEST(NgpViewTest, SimpleUsage) {
   }
 
   ngp_view.sync_to_device();  // No op for host space
-  EXPECT_EQ(ngp_view.need_sync_to_device(), false) << "Any subsequent calls to sync_to_device() will not copy the data again, because the data is already in sync.";
+  EXPECT_EQ(ngp_view.need_sync_to_device(), false)
+      << "Any subsequent calls to sync_to_device() will not copy the data again, because the data is already in sync.";
 
-
-  // Modify on device, mark the device view as modified, sync to the host, and check that the host data has been updated.
+  // Modify on device, mark the device view as modified, sync to the host, and check that the host data has been
+  // updated.
   run_some_kernel(ngp_view);  // Don't use Kokkos lambdas in gtest macros.
   ngp_view.sync_to_host();
   for (size_t i = 0; i < 10; ++i) {

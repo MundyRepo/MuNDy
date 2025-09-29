@@ -6,26 +6,48 @@ comment: MuNDy on Rome CPUs
 parameterset:
   - name: param_set
     parameter:
-        #- { name: nodes, type: int, _: "1,2,4,8" }
-        #- { name: ranks_per_node, type: int, _: "120,60,30,15" }
-        #- { name: npart, type: int, _: "10000,100000,1000000,10000000" }
+      #- { name: nodes, type: int, _: "1,2,4,8" }
+      #- { name: ranks_per_node, type: int, _: "120,60,30,15" }
+      #- { name: npart, type: int, _: "10000,100000,1000000,10000000" }
       - { name: nodes, type: int, _: "1,2,4,8" }
       - { name: ranks_per_node, type: int, _: "120" }
-      - { name: npart, type: int, _: "100, 1000, 10000, 100000, 1000000, 10000000" }
+      - {
+          name: npart,
+          type: int,
+          _: "100, 1000, 10000, 100000, 1000000, 10000000",
+        }
 
-# Job configuration
+  # Job configuration
   - name: execute_set
     parameter:
       - { name: submit_cmd, _: sbatch }
       - { name: job_file, _: mundy_brownian_strongscaling.run }
       - { name: walltime, _: "01:00:00" }
-      - { name: cores_per_node, type: int, mode: python, _: "${sockets_per_node} * ${cores_per_socket}" }
-      - { name: threads_per_rank, type: int, mode: python, _: "int(${cores_per_node} / ${ranks_per_node})" }
-      - { name: num_ranks, type: int, mode: python, _: "${nodes} * ${ranks_per_node}" }
+      - {
+          name: cores_per_node,
+          type: int,
+          mode: python,
+          _: "${sockets_per_node} * ${cores_per_socket}",
+        }
+      - {
+          name: threads_per_rank,
+          type: int,
+          mode: python,
+          _: "int(${cores_per_node} / ${ranks_per_node})",
+        }
+      - {
+          name: num_ranks,
+          type: int,
+          mode: python,
+          _: "${nodes} * ${ranks_per_node}",
+        }
       - { name: ready_file, _: ready }
       - { name: err_file, _: mundy.err }
       - { name: out_file, _: mundy.out }
-      - { name: exec, _: "mpirun --map-by socket:pe=$$OMP_NUM_THREADS /mnt/home/cedelmaier/Projects/Biophysics/MuNDyScratch/build/mundy/shape/tests/performance/MundyShape_PerformanceTestBrownianMotion.exe ${npart} 100.0 10000 0.00025 1.0" }
+      - {
+          name: exec,
+          _: "mpirun --map-by socket:pe=$$OMP_NUM_THREADS /mnt/home/cedelmaier/Projects/Biophysics/MuNDyScratch/build/mundy/shape/tests/performance/MundyShape_PerformanceTestBrownianMotion.exe ${npart} 100.0 10000 0.00025 1.0",
+        }
   - name: architecture_rome
     parameter:
       - { name: total_nodes, type: int, _: 640 }
@@ -63,7 +85,12 @@ substituteset:
 patternset:
   name: pattern
   pattern:
-      - { name: timesteps_per_second, type: float, default: 0, _: "Performance:\\s+$jube_pat_fp" }
+    - {
+        name: timesteps_per_second,
+        type: float,
+        default: 0,
+        _: "Performance:\\s+$jube_pat_fp",
+      }
 
 # Operation
 step:
@@ -93,7 +120,7 @@ result:
   table:
     name: result
     style: pretty
-    sort: [npart,nodes,ranks_per_node,threads_per_rank]
+    sort: [npart, nodes, ranks_per_node, threads_per_rank]
     column:
       - npart
       - nodes

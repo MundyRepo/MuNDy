@@ -2,8 +2,9 @@
 // **********************************************************************************************************************
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
-//                                           Copyright 2024 Flatiron Institute
-//                                                 Author: Bryce Palmer
+//                                              Copyright 2024 Bryce Palmer
+//
+// Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
 // as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
@@ -36,8 +37,7 @@ namespace mundy {
 
 namespace geom {
 
-template <typename Scalar, ValidPointType PointType = Point<Scalar>,
-          typename OwnershipType = mundy::math::Ownership::Owns>
+template <typename Scalar, ValidPointType PointType = Point<Scalar>, typename OwnershipType = math::Ownership::Owns>
 class VSegment {
   static_assert(std::is_same_v<typename PointType::scalar_t, Scalar>,
                 "The scalar_t of the PointType must match the Scalar type.");
@@ -65,8 +65,8 @@ class VSegment {
 
   /// \brief Default constructor for owning VSegments. Default initialize the start, middle, and end points.
   KOKKOS_FUNCTION
-  VSegment()
-    requires std::is_same_v<OwnershipType, mundy::math::Ownership::Owns>
+  constexpr VSegment()
+    requires std::is_same_v<OwnershipType, math::Ownership::Owns>
       : start_(scalar_t(), scalar_t(), scalar_t()),
         middle_(scalar_t(), scalar_t(), scalar_t()),
         end_(scalar_t(), scalar_t(), scalar_t()) {
@@ -74,8 +74,8 @@ class VSegment {
 
   /// \brief No default constructor for viewing VSegmentss.
   KOKKOS_FUNCTION
-  VSegment()
-    requires std::is_same_v<OwnershipType, mundy::math::Ownership::Views>
+  constexpr VSegment()
+    requires std::is_same_v<OwnershipType, math::Ownership::Views>
   = delete;
 
   /// \brief Constructor to initialize the start, middle, and end points.
@@ -83,7 +83,7 @@ class VSegment {
   /// \param[in] middle The middle of the VSegment.
   /// \param[in] end The end of the VSegment.
   KOKKOS_FUNCTION
-  VSegment(const point_t& start, const point_t& middle, const point_t& end)
+  constexpr VSegment(const point_t& start, const point_t& middle, const point_t& end)
       : start_(start), middle_(middle), end_(end) {
   }
 
@@ -92,36 +92,37 @@ class VSegment {
   /// \param[in] middle The middle of the VSegment.
   /// \param[in] end The end of the VSegment.
   template <ValidPointType OtherPointType>
-  KOKKOS_FUNCTION VSegment(const OtherPointType& start, const OtherPointType& middle, const OtherPointType& end)
+  KOKKOS_FUNCTION constexpr VSegment(const OtherPointType& start, const OtherPointType& middle,
+                                     const OtherPointType& end)
       : start_(start), middle_(middle), end_(end) {
   }
 
   /// \brief Destructor
   KOKKOS_DEFAULTED_FUNCTION
-  ~VSegment() = default;
+  constexpr ~VSegment() = default;
 
   /// \brief Deep copy constructor
   KOKKOS_FUNCTION
-  VSegment(const VSegment<scalar_t, point_t, ownership_t>& other)
+  constexpr VSegment(const VSegment<scalar_t, point_t, ownership_t>& other)
       : start_(other.start_), middle_(other.middle_), end_(other.end_) {
   }
 
   /// \brief Deep copy constructor
   template <typename OtherVSegmentType>
-  KOKKOS_FUNCTION VSegment(const OtherVSegmentType& other)
+  KOKKOS_FUNCTION constexpr VSegment(const OtherVSegmentType& other)
     requires(!std::is_same_v<OtherVSegmentType, VSegment<scalar_t, point_t, ownership_t>>)
       : start_(other.start_), middle_(other.middle_), end_(other.end_) {
   }
 
   /// \brief Deep move constructor
   KOKKOS_FUNCTION
-  VSegment(VSegment<scalar_t, point_t, ownership_t>&& other)
+  constexpr VSegment(VSegment<scalar_t, point_t, ownership_t>&& other)
       : start_(std::move(other.start_)), middle_(std::move(other.middle_)), end_(std::move(other.end_)) {
   }
 
   /// \brief Deep move constructor
   template <typename OtherVSegmentType>
-  KOKKOS_FUNCTION VSegment(OtherVSegmentType&& other)
+  KOKKOS_FUNCTION constexpr VSegment(OtherVSegmentType&& other)
     requires(!std::is_same_v<OtherVSegmentType, VSegment<scalar_t, point_t, ownership_t>>)
       : start_(std::move(other.start_)), middle_(std::move(other.middle_)), end_(std::move(other.end_)) {
   }
@@ -132,7 +133,7 @@ class VSegment {
 
   /// \brief Copy assignment operator
   KOKKOS_FUNCTION
-  VSegment<scalar_t, point_t, ownership_t>& operator=(const VSegment<scalar_t, point_t, ownership_t>& other) {
+  constexpr VSegment<scalar_t, point_t, ownership_t>& operator=(const VSegment<scalar_t, point_t, ownership_t>& other) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     start_ = other.start_;
     middle_ = other.middle_;
@@ -142,7 +143,7 @@ class VSegment {
 
   /// \brief Copy assignment operator
   template <typename OtherVSegmentType>
-  KOKKOS_FUNCTION VSegment<scalar_t, point_t, ownership_t>& operator=(const OtherVSegmentType& other)
+  KOKKOS_FUNCTION constexpr VSegment<scalar_t, point_t, ownership_t>& operator=(const OtherVSegmentType& other)
     requires(!std::is_same_v<OtherVSegmentType, VSegment<scalar_t, point_t, ownership_t>>)
   {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
@@ -154,7 +155,7 @@ class VSegment {
 
   /// \brief Move assignment operator
   KOKKOS_FUNCTION
-  VSegment<scalar_t, point_t, ownership_t>& operator=(VSegment<scalar_t, point_t, ownership_t>&& other) {
+  constexpr VSegment<scalar_t, point_t, ownership_t>& operator=(VSegment<scalar_t, point_t, ownership_t>&& other) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     start_ = std::move(other.start_);
     middle_ = std::move(other.middle_);
@@ -164,7 +165,7 @@ class VSegment {
 
   /// \brief Move assignment operator
   template <typename OtherVSegmentType>
-  KOKKOS_FUNCTION VSegment<scalar_t, point_t, ownership_t>& operator=(OtherVSegmentType&& other)
+  KOKKOS_FUNCTION constexpr VSegment<scalar_t, point_t, ownership_t>& operator=(OtherVSegmentType&& other)
     requires(!std::is_same_v<OtherVSegmentType, VSegment<scalar_t, point_t, ownership_t>>)
   {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
@@ -180,37 +181,37 @@ class VSegment {
 
   /// \brief Accessor for the start
   KOKKOS_FUNCTION
-  const point_t& start() const {
+  constexpr const point_t& start() const {
     return start_;
   }
 
   /// \brief Accessor for the start
   KOKKOS_FUNCTION
-  point_t& start() {
+  constexpr point_t& start() {
     return start_;
   }
 
   /// \brief Accessor for the middle
   KOKKOS_FUNCTION
-  const point_t& middle() const {
+  constexpr const point_t& middle() const {
     return middle_;
   }
 
   /// \brief Accessor for the middle
   KOKKOS_FUNCTION
-  point_t& middle() {
+  constexpr point_t& middle() {
     return middle_;
   }
 
   /// \brief Accessor for the end
   KOKKOS_FUNCTION
-  const point_t& end() const {
+  constexpr const point_t& end() const {
     return end_;
   }
 
   /// \brief Accessor for the end
   KOKKOS_FUNCTION
-  point_t& end() {
+  constexpr point_t& end() {
     return end_;
   }
   //@}
@@ -221,7 +222,7 @@ class VSegment {
   /// \brief Set the start point
   /// \param[in] start The new start point.
   template <ValidPointType OtherPointType>
-  KOKKOS_FUNCTION void set_start(const OtherPointType& start) {
+  KOKKOS_FUNCTION constexpr void set_start(const OtherPointType& start) {
     start_ = start;
   }
 
@@ -230,7 +231,7 @@ class VSegment {
   /// \param[in] y The y-coordinate.
   /// \param[in] z The z-coordinate.
   KOKKOS_FUNCTION
-  void set_start(const Scalar& x, const Scalar& y, const Scalar& z) {
+  constexpr void set_start(const Scalar& x, const Scalar& y, const Scalar& z) {
     start_[0] = x;
     start_[1] = y;
     start_[2] = z;
@@ -239,7 +240,7 @@ class VSegment {
   /// \brief Set the middle point
   /// \param[in] middle The new middle point.
   template <ValidPointType OtherPointType>
-  KOKKOS_FUNCTION void set_middle(const OtherPointType& middle) {
+  KOKKOS_FUNCTION constexpr void set_middle(const OtherPointType& middle) {
     middle_ = middle;
   }
 
@@ -248,7 +249,7 @@ class VSegment {
   /// \param[in] y The y-coordinate.
   /// \param[in] z The z-coordinate.
   KOKKOS_FUNCTION
-  void set_middle(const Scalar& x, const Scalar& y, const Scalar& z) {
+  constexpr void set_middle(const Scalar& x, const Scalar& y, const Scalar& z) {
     middle_[0] = x;
     middle_[1] = y;
     middle_[2] = z;
@@ -257,7 +258,7 @@ class VSegment {
   /// \brief Set the end point
   /// \param[in] end The new end point.
   template <ValidPointType OtherPointType>
-  KOKKOS_FUNCTION void set_end(const OtherPointType& end) {
+  KOKKOS_FUNCTION constexpr void set_end(const OtherPointType& end) {
     end_ = end;
   }
 
@@ -266,7 +267,7 @@ class VSegment {
   /// \param[in] y The y-coordinate.
   /// \param[in] z The z-coordinate.
   KOKKOS_FUNCTION
-  void set_end(const Scalar& x, const Scalar& y, const Scalar& z) {
+  constexpr void set_end(const Scalar& x, const Scalar& y, const Scalar& z) {
     end_[0] = x;
     end_[1] = y;
     end_[2] = z;
@@ -279,31 +280,23 @@ class VSegment {
   point_t end_;
 };
 
-/// @brief Type trait to determine if a type is a VSegment
+/// @brief (Implementation) Type trait to determine if a type is a VSegment
 template <typename T>
-struct is_v_segment : std::false_type {};
+struct impl_is_v_segment : std::false_type {};
 //
 template <typename Scalar, ValidPointType PointType, typename OwnershipType>
-struct is_v_segment<VSegment<Scalar, PointType, OwnershipType>> : std::true_type {};
-//
-template <typename Scalar, ValidPointType PointType, typename OwnershipType>
-struct is_v_segment<const VSegment<Scalar, PointType, OwnershipType>> : std::true_type {};
+struct impl_is_v_segment<VSegment<Scalar, PointType, OwnershipType>> : std::true_type {};
+
+/// \brief Type trait to determine if a type is a VSegment
+template <typename T>
+struct is_v_segment : impl_is_v_segment<std::remove_cv_t<T>> {};
 //
 template <typename T>
 inline constexpr bool is_v_segment_v = is_v_segment<T>::value;
 
 /// @brief Concept to check if a type is a valid VSegment type
 template <typename VSegmentType>
-concept ValidVSegmentType = is_v_segment_v<std::remove_cv_t<VSegmentType>> &&
-                            is_point_v<decltype(std::declval<std::remove_cv_t<VSegmentType>>().start())> &&
-                            is_point_v<decltype(std::declval<std::remove_cv_t<VSegmentType>>().middle())> &&
-                            is_point_v<decltype(std::declval<std::remove_cv_t<VSegmentType>>().end())> &&
-                            is_point_v<decltype(std::declval<const std::remove_cv_t<VSegmentType>>().start())> &&
-                            is_point_v<decltype(std::declval<const std::remove_cv_t<VSegmentType>>().middle())> &&
-                            is_point_v<decltype(std::declval<const std::remove_cv_t<VSegmentType>>().end())> &&
-                            requires(std::remove_cv_t<VSegmentType> line) {
-                              typename std::remove_cv_t<VSegmentType>::scalar_t;
-                            };  // ValidVSegmentType
+concept ValidVSegmentType = is_v_segment_v<VSegmentType>;
 
 static_assert(ValidVSegmentType<VSegment<float>> && ValidVSegmentType<const VSegment<float>> &&
                   ValidVSegmentType<VSegment<double>> && ValidVSegmentType<const VSegment<double>>,
@@ -314,14 +307,14 @@ static_assert(ValidVSegmentType<VSegment<float>> && ValidVSegmentType<const VSeg
 
 /// \brief Equality operator
 template <ValidVSegmentType VSegmentType1, ValidVSegmentType VSegmentType2>
-KOKKOS_FUNCTION bool operator==(const VSegmentType1& v_segment1, const VSegmentType2& v_segment2) {
+KOKKOS_FUNCTION constexpr bool operator==(const VSegmentType1& v_segment1, const VSegmentType2& v_segment2) {
   return (v_segment1.start() == v_segment2.start()) && (v_segment1.middle() == v_segment2.middle()) &&
          (v_segment1.end() == v_segment2.end());
 }
 
 /// \brief Inequality operator
 template <ValidVSegmentType VSegmentType1, ValidVSegmentType VSegmentType2>
-KOKKOS_FUNCTION bool operator!=(const VSegmentType1& v_segment1, const VSegmentType2& v_segment2) {
+KOKKOS_FUNCTION constexpr bool operator!=(const VSegmentType1& v_segment1, const VSegmentType2& v_segment2) {
   return (v_segment1.start() != v_segment2.start()) || (v_segment1.middle() != v_segment2.middle()) ||
          (v_segment1.end() != v_segment2.end());
 }

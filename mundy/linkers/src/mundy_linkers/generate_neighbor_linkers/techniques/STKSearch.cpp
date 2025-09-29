@@ -2,8 +2,9 @@
 // **********************************************************************************************************************
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
-//                                           Copyright 2024 Flatiron Institute
-//                                                 Author: Bryce Palmer
+//                                              Copyright 2024 Bryce Palmer
+//
+// Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
 // as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
@@ -29,6 +30,8 @@
 #include <vector>         // for std::vector
 
 // Trilinos libs
+#include <Trilinos_version.h>  // for TRILINOS_MAJOR_MINOR_VERSION
+
 #include <Kokkos_Core.hpp>            // for Kokkos::initialize, Kokkos::finalize, Kokkos::Timer
 #include <Kokkos_Pair.hpp>            // for Kokkos::pair
 #include <Kokkos_UnorderedMap.hpp>    // for Kokkos::UnorderedMap
@@ -46,7 +49,7 @@
 #include <stk_mesh/base/NgpField.hpp>  // for stk::mesh::NgpField
 #include <stk_mesh/base/NgpForEachEntity.hpp>
 #include <stk_mesh/base/NgpMesh.hpp>
-#include <stk_search/BoundingBox.hpp>           // for stk::search::Box
+#include <stk_search/BoundingBox.hpp>  // for stk::search::Box
 // #include <stk_search/BoxIdent.hpp>              // for stk::search::IdentProcIntersection
 #include <stk_search/CoarseSearch.hpp>          // for stk::search::coarse_search
 #include <stk_search/SearchMethod.hpp>          // for stk::search::KDTREE
@@ -165,9 +168,11 @@ std::vector<stk::mesh::Part *> STKSearch::get_valid_target_entity_parts() const 
 // \name Actions
 //{
 
+#if TRILINOS_MAJOR_MINOR_VERSION < 160000
 #define MUNDY_USE_OLD_STK_SEARCH
+#endif
 
-#ifdef MUNDY_USE_OLD_STK_SEARCH
+#ifdef MUNDY_USE_OLD_STK_SEARCH  // only works for new trilinos
 
 namespace {
 
@@ -355,7 +360,8 @@ void STKSearch::execute(const stk::mesh::Selector &domain_input_selector,
   LinkedEntitiesFieldType &linked_entities_field = *linked_entities_field_ptr_;
   stk::mesh::Field<int> &linked_entity_owners_field = *linked_entity_owners_field_ptr_;
   stk::mesh::communicate_field_data(*bulk_data_ptr_, {linked_entities_field_ptr_, linked_entity_owners_field_ptr_});
-  // std::cout << "  Communicate linker field data time: " << communicate_linker_field_data_timer.seconds() << std::endl;
+  // std::cout << "  Communicate linker field data time: " << communicate_linker_field_data_timer.seconds() <<
+  // std::endl;
 
   /**
    * We have a collection of pairs and a collection of linkers which connect pairs. We need to optimize the process of
@@ -556,7 +562,6 @@ void STKSearch::execute(const stk::mesh::Selector &domain_input_selector,
     stk::mesh::communicate_field_data(ghosting, fields_to_communicate);
     // std::cout << "  Communicate fields time: " << communicate_fields_timer.seconds() << std::endl;
   }
-
 
   // std::cout << "  Overall time: " << overall_timer.seconds() << std::endl;
   // std::cout << "##############################################################" << std::endl;

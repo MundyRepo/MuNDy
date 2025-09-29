@@ -2,8 +2,9 @@
 // **********************************************************************************************************************
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
-//                                           Copyright 2024 Flatiron Institute
-//                                                 Author: Bryce Palmer
+//                                              Copyright 2024 Bryce Palmer
+//
+// Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
 // as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
@@ -182,8 +183,8 @@ class Helix {
     // We can do this by finding an arbitrary vector that is not parallel to the axis, taking the cross product
     // with the normal, and normalizing the result. This gives us a vector that is orthogonal to the axis.
     // By taking the cross product of the axis and this vector, we get a second vector that is orthogonal to both.
-    const mundy::math::Vector3<double> ihat(1.0, 0.0, 0.0);
-    const mundy::math::Vector3<double> jhat(0.0, 1.0, 0.0);
+    const mundy::math::Vector3d ihat(1.0, 0.0, 0.0);
+    const mundy::math::Vector3d jhat(0.0, 1.0, 0.0);
     basis_vector0_ = mundy::math::norm(mundy::math::cross(axis_, ihat)) > 1.0e-12 ? ihat : jhat;
     basis_vector0_ /= mundy::math::norm(basis_vector0_);
     basis_vector1_ = mundy::math::cross(axis_, basis_vector0_);
@@ -216,10 +217,10 @@ class Helix {
   double b_;
   double distance_between_nodes_;
   double delta_t_;
-  mundy::math::Vector3<double> start_;
-  mundy::math::Vector3<double> axis_;
-  mundy::math::Vector3<double> basis_vector0_;
-  mundy::math::Vector3<double> basis_vector1_;
+  mundy::math::Vector3d start_;
+  mundy::math::Vector3d axis_;
+  mundy::math::Vector3d basis_vector0_;
+  mundy::math::Vector3d basis_vector1_;
 };  // class Helix
 
 void ciliated_sphere() {
@@ -402,13 +403,12 @@ void ciliated_sphere() {
   stk::io::write_mesh_with_fields("ciliated_sphere.exo", bulk_data, step);
 }
 
-double distance_sq_from_point_to_line_segment(const mundy::math::Vector3<double> &x,
-                                              const mundy::math::Vector3<double> &p1,
-                                              const mundy::math::Vector3<double> &p2,
-                                              mundy::math::Vector3<double> *const closest_point = nullptr,
+double distance_sq_from_point_to_line_segment(const mundy::math::Vector3d &x, const mundy::math::Vector3d &p1,
+                                              const mundy::math::Vector3d &p2,
+                                              mundy::math::Vector3d *const closest_point = nullptr,
                                               double *const t = nullptr) {
   // Define some temporary variables
-  mundy::math::Vector3<double> closest_point_tmp;
+  mundy::math::Vector3d closest_point_tmp;
   double t_tmp;
 
   // Determine appropriate vectors
@@ -536,13 +536,13 @@ void bacteria_in_a_porous_media() {
   double max_sphere_radius = 0.1;
 
   // Place the spheres
-  std::vector<mundy::math::Vector3<double>> sphere_centers(num_spheres);
+  std::vector<mundy::math::Vector3d> sphere_centers(num_spheres);
   std::vector<double> sphere_radii(num_spheres);
   for (size_t i = 0; i < num_spheres; ++i) {
     double sphere_radius = min_sphere_radius + (max_sphere_radius - min_sphere_radius) * rand() / RAND_MAX;
-    mundy::math::Vector3<double> sphere_center = {domain_min[0] + (domain_max[0] - domain_min[0]) * rand() / RAND_MAX,
-                                                  domain_min[1] + (domain_max[1] - domain_min[1]) * rand() / RAND_MAX,
-                                                  domain_min[2] + (domain_max[2] - domain_min[2]) * rand() / RAND_MAX};
+    mundy::math::Vector3d sphere_center = {domain_min[0] + (domain_max[0] - domain_min[0]) * rand() / RAND_MAX,
+                                           domain_min[1] + (domain_max[1] - domain_min[1]) * rand() / RAND_MAX,
+                                           domain_min[2] + (domain_max[2] - domain_min[2]) * rand() / RAND_MAX};
     sphere_centers[i] = sphere_center;
     sphere_radii[i] = sphere_radius;
 
@@ -570,20 +570,18 @@ void bacteria_in_a_porous_media() {
       double rod_length = min_rod_length + (max_rod_length - min_rod_length) * rand() / RAND_MAX;
 
       // Generate a random left node
-      mundy::math::Vector3<double> left_node_coord = {
-          domain_min[0] + (domain_max[0] - domain_min[0]) * rand() / RAND_MAX,
-          domain_min[1] + (domain_max[1] - domain_min[1]) * rand() / RAND_MAX,
-          domain_min[2] + (domain_max[2] - domain_min[2]) * rand() / RAND_MAX};
+      mundy::math::Vector3d left_node_coord = {domain_min[0] + (domain_max[0] - domain_min[0]) * rand() / RAND_MAX,
+                                               domain_min[1] + (domain_max[1] - domain_min[1]) * rand() / RAND_MAX,
+                                               domain_min[2] + (domain_max[2] - domain_min[2]) * rand() / RAND_MAX};
 
       // Generate a random orientation
       const double u1 = static_cast<double>(rand()) / RAND_MAX;
       const double u2 = static_cast<double>(rand()) / RAND_MAX;
       const double theta = 2.0 * M_PI * u1;
       const double phi = std::acos(2.0 * u2 - 1.0);
-      mundy::math::Vector3<double> right_node_coord = {
-          rod_length * std::sin(phi) * std::cos(theta) + left_node_coord[0],
-          rod_length * std::sin(phi) * std::sin(theta) + left_node_coord[1],
-          rod_length * std::cos(phi) + left_node_coord[2]};
+      mundy::math::Vector3d right_node_coord = {rod_length * std::sin(phi) * std::cos(theta) + left_node_coord[0],
+                                                rod_length * std::sin(phi) * std::sin(theta) + left_node_coord[1],
+                                                rod_length * std::cos(phi) + left_node_coord[2]};
 
       // Check if the rod intersects any spheres
       bool intersects = false;
@@ -637,21 +635,21 @@ void bacteria_in_a_porous_media() {
   stk::io::write_mesh_with_fields("bacteria_in_a_porous_media.exo", bulk_data, step);
 }
 
-bool is_point_inside_ellipsoid(const mundy::math::Vector3<double> &point, const mundy::math::Vector3<double> &center,
-                               const mundy::math::Vector3<double> &radii) {
+bool is_point_inside_ellipsoid(const mundy::math::Vector3d &point, const mundy::math::Vector3d &center,
+                               const mundy::math::Vector3d &radii) {
   const double x = (point[0] - center[0]) / radii[0];
   const double y = (point[1] - center[1]) / radii[1];
   const double z = (point[2] - center[2]) / radii[2];
   return x * x + y * y + z * z <= 1.0;
 }
 
-mundy::math::Vector3<double> random_point_inside_ellipsoid(const mundy::math::Vector3<double> &center,
-                                                           const mundy::math::Vector3<double> &radii) {
+mundy::math::Vector3d random_point_inside_ellipsoid(const mundy::math::Vector3d &center,
+                                                    const mundy::math::Vector3d &radii) {
   // Generate random points within the bounding box of the ellipsoid
   // And reject points that are not within the ellipsoid until we get a winner
   const size_t max_num_attempts = 100000;
   for (size_t i = 0; i < max_num_attempts; ++i) {
-    const mundy::math::Vector3<double> point = {
+    const mundy::math::Vector3d point = {
         center[0] - radii[0] + 2.0 * radii[0] * static_cast<double>(rand()) / RAND_MAX,
         center[1] - radii[1] + 2.0 * radii[1] * static_cast<double>(rand()) / RAND_MAX,
         center[2] - radii[2] + 2.0 * radii[2] * static_cast<double>(rand()) / RAND_MAX};
@@ -663,12 +661,11 @@ mundy::math::Vector3<double> random_point_inside_ellipsoid(const mundy::math::Ve
   return center;  // Failed to find a point. Return the center.
 }
 
-std::vector<mundy::math::Vector3<double>> random_walk_inside_ellipsoid(const mundy::math::Vector3<double> &start,
-                                                                       const mundy::math::Vector3<double> &center,
-                                                                       const mundy::math::Vector3<double> &radii,
-                                                                       const size_t num_steps,
-                                                                       const double step_length) {
-  std::vector<mundy::math::Vector3<double>> walk(num_steps);
+std::vector<mundy::math::Vector3d> random_walk_inside_ellipsoid(const mundy::math::Vector3d &start,
+                                                                const mundy::math::Vector3d &center,
+                                                                const mundy::math::Vector3d &radii,
+                                                                const size_t num_steps, const double step_length) {
+  std::vector<mundy::math::Vector3d> walk(num_steps);
   walk[0] = start;
   const size_t max_num_attempts = 100000;
   for (size_t i = 1; i < num_steps; ++i) {
@@ -677,9 +674,9 @@ std::vector<mundy::math::Vector3<double>> random_walk_inside_ellipsoid(const mun
       const double u2 = static_cast<double>(rand()) / RAND_MAX;
       const double theta = 2.0 * M_PI * u1;
       const double phi = std::acos(2.0 * u2 - 1.0);
-      walk[i] = walk[i - 1] + step_length * mundy::math::Vector3<double>{std::sin(phi) * std::cos(theta),  //
-                                                                         std::sin(phi) * std::sin(theta),  //
-                                                                         std::cos(phi)};
+      walk[i] = walk[i - 1] + step_length * mundy::math::Vector3d{std::sin(phi) * std::cos(theta),  //
+                                                                  std::sin(phi) * std::sin(theta),  //
+                                                                  std::cos(phi)};
       if (is_point_inside_ellipsoid(walk[i], center, radii)) {
         break;
       }
@@ -868,8 +865,8 @@ void chromatin() {
   }
 
   // Setup the chromatin fibers
-  const mundy::math::Vector3<double> nucleus_center = {0.0, 0.0, 0.0};
-  const mundy::math::Vector3<double> nucleus_radii = {a, b, c};
+  const mundy::math::Vector3d nucleus_center = {0.0, 0.0, 0.0};
+  const mundy::math::Vector3d nucleus_radii = {a, b, c};
   const size_t num_fibers = 100;
   const size_t num_hetero_euchromatin_repeats = 7;
   const size_t num_heterochromatin_per_repeat = 90;
@@ -884,8 +881,8 @@ void chromatin() {
 
   for (size_t f = 0; f < num_fibers; f++) {
     // Generate a random walk for the fiber starting from a random location in the nucleus
-    mundy::math::Vector3<double> start = random_point_inside_ellipsoid(nucleus_center, nucleus_radii);
-    std::vector<mundy::math::Vector3<double>> fiber_walk = random_walk_inside_ellipsoid(
+    mundy::math::Vector3d start = random_point_inside_ellipsoid(nucleus_center, nucleus_radii);
+    std::vector<mundy::math::Vector3d> fiber_walk = random_walk_inside_ellipsoid(
         start, nucleus_center, nucleus_radii, num_nodes_per_heterochromatin, segment_length);
 
     // Declare the nodes, segments, and heterochromatin/euchromatin
@@ -976,9 +973,9 @@ void chromatin() {
   stk::io::write_mesh_with_fields("chromatin.exo", bulk_data, step);
 }
 
-bool line_segment_intersects_triangle(const mundy::math::Vector3<double> &p1, const mundy::math::Vector3<double> &p2,
-                                      const mundy::math::Vector3<double> &v1, const mundy::math::Vector3<double> &v2,
-                                      const mundy::math::Vector3<double> &v3) {
+bool line_segment_intersects_triangle(const mundy::math::Vector3d &p1, const mundy::math::Vector3d &p2,
+                                      const mundy::math::Vector3d &v1, const mundy::math::Vector3d &v2,
+                                      const mundy::math::Vector3d &v3) {
   // Tolerance for floating-point comparisons
   constexpr double epsilon = 1e-12;
 
@@ -1023,11 +1020,9 @@ bool line_segment_intersects_triangle(const mundy::math::Vector3<double> &p1, co
   return (t >= 0.0 && t <= 1.0);
 }
 
-double line_segment_signed_distance_to_triangle(const mundy::math::Vector3<double> &p1,
-                                                const mundy::math::Vector3<double> &p2,
-                                                const mundy::math::Vector3<double> &v1,
-                                                const mundy::math::Vector3<double> &v2,
-                                                const mundy::math::Vector3<double> &v3) {
+double line_segment_signed_distance_to_triangle(const mundy::math::Vector3d &p1, const mundy::math::Vector3d &p2,
+                                                const mundy::math::Vector3d &v1, const mundy::math::Vector3d &v2,
+                                                const mundy::math::Vector3d &v3) {
   // Tolerance for floating-point comparisons
   constexpr double epsilon = 1e-12;
 
@@ -1167,9 +1162,9 @@ void bee_hive() {
   // Setup the binding sites
   const size_t num_bind_sites_per_face = 100;
   for (size_t i = 0; i < num_faces; i++) {
-    const mundy::math::Vector3<double> coord1 = {x[face_ind[i][0]], y[face_ind[i][0]], z[face_ind[i][0]]};
-    const mundy::math::Vector3<double> coord2 = {x[face_ind[i][1]], y[face_ind[i][1]], z[face_ind[i][1]]};
-    const mundy::math::Vector3<double> coord3 = {x[face_ind[i][2]], y[face_ind[i][2]], z[face_ind[i][2]]};
+    const mundy::math::Vector3d coord1 = {x[face_ind[i][0]], y[face_ind[i][0]], z[face_ind[i][0]]};
+    const mundy::math::Vector3d coord2 = {x[face_ind[i][1]], y[face_ind[i][1]], z[face_ind[i][1]]};
+    const mundy::math::Vector3d coord3 = {x[face_ind[i][2]], y[face_ind[i][2]], z[face_ind[i][2]]};
 
     for (size_t j = 0; j < num_bind_sites_per_face; j++) {
       // Generate a random point on the triangle
@@ -1207,10 +1202,10 @@ void bee_hive() {
   const double max_rod_length = 8 * rod_radius;
 
   // Fill the domain min and max as the min and max of the vertices
-  mundy::math::Vector3<double> domain_min = {std::numeric_limits<double>::max(), std::numeric_limits<double>::max(),
-                                             std::numeric_limits<double>::max()};
-  mundy::math::Vector3<double> domain_max = {-std::numeric_limits<double>::max(), -std::numeric_limits<double>::max(),
-                                             -std::numeric_limits<double>::max()};
+  mundy::math::Vector3d domain_min = {std::numeric_limits<double>::max(), std::numeric_limits<double>::max(),
+                                      std::numeric_limits<double>::max()};
+  mundy::math::Vector3d domain_max = {-std::numeric_limits<double>::max(), -std::numeric_limits<double>::max(),
+                                      -std::numeric_limits<double>::max()};
   for (size_t i = 0; i < num_verts; ++i) {
     domain_min[0] = std::min(domain_min[0], x[i]);
     domain_min[1] = std::min(domain_min[1], y[i]);
@@ -1229,7 +1224,7 @@ void bee_hive() {
       double rod_length = min_rod_length + (max_rod_length - min_rod_length) * rand() / RAND_MAX;
 
       // Generate a random left node
-      const mundy::math::Vector3<double> left_node_coord = {
+      const mundy::math::Vector3d left_node_coord = {
           domain_min[0] + (domain_max[0] - domain_min[0]) * rand() / RAND_MAX,
           domain_min[1] + (domain_max[1] - domain_min[1]) * rand() / RAND_MAX,
           domain_min[2] + (domain_max[2] - domain_min[2]) * rand() / RAND_MAX};
@@ -1239,17 +1234,16 @@ void bee_hive() {
       const double u2 = static_cast<double>(rand()) / RAND_MAX;
       const double theta = 2.0 * M_PI * u1;
       const double phi = std::acos(2.0 * u2 - 1.0);
-      mundy::math::Vector3<double> right_node_coord = {
-          rod_length * std::sin(phi) * std::cos(theta) + left_node_coord[0],
-          rod_length * std::sin(phi) * std::sin(theta) + left_node_coord[1],
-          rod_length * std::cos(phi) + left_node_coord[2]};
+      mundy::math::Vector3d right_node_coord = {rod_length * std::sin(phi) * std::cos(theta) + left_node_coord[0],
+                                                rod_length * std::sin(phi) * std::sin(theta) + left_node_coord[1],
+                                                rod_length * std::cos(phi) + left_node_coord[2]};
 
       // Check if the rod intersects any triangles TODO: This currently doesn't work!!
       bool intersects = false;
       // for (size_t j = 0; j < num_faces; ++j) {
-      //   const mundy::math::Vector3<double> coord1 = {x[face_ind[j][0]], y[face_ind[j][0]], z[face_ind[j][0]]};
-      //   const mundy::math::Vector3<double> coord2 = {x[face_ind[j][1]], y[face_ind[j][1]], z[face_ind[j][1]]};
-      //   const mundy::math::Vector3<double> coord3 = {x[face_ind[j][2]], y[face_ind[j][2]], z[face_ind[j][2]]};
+      //   const mundy::math::Vector3d coord1 = {x[face_ind[j][0]], y[face_ind[j][0]], z[face_ind[j][0]]};
+      //   const mundy::math::Vector3d coord2 = {x[face_ind[j][1]], y[face_ind[j][1]], z[face_ind[j][1]]};
+      //   const mundy::math::Vector3d coord3 = {x[face_ind[j][2]], y[face_ind[j][2]], z[face_ind[j][2]]};
 
       //   const double signed_sep = line_segment_signed_distance_to_triangle(left_node_coord, right_node_coord, coord1,
       //   coord2, coord3) - rod_radius; if (signed_sep < 0.0) {

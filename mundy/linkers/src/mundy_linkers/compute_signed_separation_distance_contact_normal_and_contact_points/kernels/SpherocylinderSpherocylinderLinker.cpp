@@ -2,8 +2,9 @@
 // **********************************************************************************************************************
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
-//                                           Copyright 2024 Flatiron Institute
-//                                                 Author: Bryce Palmer
+//                                              Copyright 2024 Bryce Palmer
+//
+// Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
 // as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
@@ -27,10 +28,9 @@
 #include <vector>  // for std::vector
 
 // Trilinos libs
-#include <Teuchos_ParameterList.hpp>        // for Teuchos::ParameterList
-#include <stk_mesh/base/Entity.hpp>         // for stk::mesh::Entity
-#include <stk_mesh/base/Field.hpp>          // for stk::mesh::Field, stl::mesh::field_data
-#include <stk_mesh/base/ForEachEntity.hpp>  // for mundy::mesh::for_each_entity_run
+#include <Teuchos_ParameterList.hpp>  // for Teuchos::ParameterList
+#include <stk_mesh/base/Entity.hpp>   // for stk::mesh::Entity
+#include <stk_mesh/base/Field.hpp>    // for stk::mesh::Field, stl::mesh::field_data
 
 // Mundy libs
 #include <mundy_core/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
@@ -40,6 +40,7 @@
 #include <mundy_math/distance/SegmentSegment.hpp>  // for mundy::math::distance::distance_sq_between_line_segments
 #include <mundy_mesh/BulkData.hpp>                 // for mundy::mesh::BulkData
 #include <mundy_mesh/FieldViews.hpp>  // for mundy::mesh::vector3_field_data, mundy::mesh::quaternion_field_data, mundy::mesh::matrix3_field_data
+#include <mundy_mesh/ForEachEntity.hpp>      // for mundy::mesh::for_each_entity_run
 #include <mundy_shapes/Spherocylinders.hpp>  // for mundy::shapes::Spherocylinders
 
 namespace mundy {
@@ -206,16 +207,16 @@ void SpherocylinderSpherocylinderLinker::execute(
         // Find the endpoints of the spherocylinder
         // Note, the orientation maps the reference configuration to the current configuration and in the reference
         // configuration the spherocylinder is aligned with the x-axis.
-        const auto tangent_vector1 = spherocylinder1_orientation * mundy::math::Vector3<double>(1.0, 0.0, 0.0);
-        const auto tangent_vector2 = spherocylinder2_orientation * mundy::math::Vector3<double>(1.0, 0.0, 0.0);
+        const auto tangent_vector1 = spherocylinder1_orientation * mundy::math::Vector3d(1.0, 0.0, 0.0);
+        const auto tangent_vector2 = spherocylinder2_orientation * mundy::math::Vector3d(1.0, 0.0, 0.0);
         const auto left_endpoint1 = spherocylinder1_center_coord - 0.5 * tangent_vector1 * spherocylinder1_length;
         const auto left_endpoint2 = spherocylinder2_center_coord - 0.5 * tangent_vector2 * spherocylinder2_length;
         const auto right_endpoint1 = spherocylinder1_center_coord + 0.5 * tangent_vector1 * spherocylinder1_length;
         const auto right_endpoint2 = spherocylinder2_center_coord + 0.5 * tangent_vector2 * spherocylinder2_length;
 
         // Compute the separation distance and contact point along the center line of each spherocylinder
-        mundy::math::Vector3<double> closest_point1;
-        mundy::math::Vector3<double> closest_point2;
+        mundy::math::Vector3d closest_point1;
+        mundy::math::Vector3d closest_point2;
         double t1;
         double t2;
         const double distance = Kokkos::sqrt(mundy::math::distance::distance_sq_between_line_segments(

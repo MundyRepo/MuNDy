@@ -2,8 +2,9 @@
 // **********************************************************************************************************************
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
-//                                           Copyright 2024 Flatiron Institute
-//                                                 Author: Bryce Palmer
+//                                              Copyright 2024 Bryce Palmer
+//
+// Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
 // as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
@@ -31,13 +32,13 @@
 #include <stk_mesh/base/Entity.hpp>         // for stk::mesh::Entity
 #include <stk_mesh/base/Field.hpp>          // for stk::mesh::Field, stl::mesh::field_data
 #include <stk_mesh/base/FieldParallel.hpp>  // for stk::mesh::communicate_field_data
-#include <stk_mesh/base/ForEachEntity.hpp>  // for mundy::mesh::for_each_entity_run
 
 // Mundy libs
 #include <mundy_constraints/FENEWCASprings.hpp>  // for mundy::constraints::FENESprings
 #include <mundy_constraints/compute_constraint_forcing/kernels/FENEWCASpringsKernel.hpp>  // for mundy::constraints::compute_constraint_forcing::kernels::FENESpringsKernel
-#include <mundy_core/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
-#include <mundy_mesh/BulkData.hpp>      // for mundy::mesh::BulkData
+#include <mundy_core/throw_assert.hpp>   // for MUNDY_THROW_ASSERT
+#include <mundy_mesh/BulkData.hpp>       // for mundy::mesh::BulkData
+#include <mundy_mesh/ForEachEntity.hpp>  // for mundy::mesh::for_each_entity_run
 
 namespace mundy {
 
@@ -149,9 +150,9 @@ void FENEWCASpringsKernel::execute(const stk::mesh::Selector &spring_selector) {
 
         // Check if the maximum spring extend is less than the rmax value, otherwise, FENE bonds will be unstable.
         MUNDY_THROW_ASSERT(edge_length_adj < element_rmax[0], std::runtime_error,
-                            std::string("FENEWCASpringsKernel: FENEWCA bond is unstable. The current bond length is ") +
-                                std::to_string(edge_length_adj) + std::string(" and the maximum bond length is ") +
-                                std::to_string(element_rmax[0]) + std::string("."));
+                           std::string("FENEWCASpringsKernel: FENEWCA bond is unstable. The current bond length is ") +
+                               std::to_string(edge_length_adj) + std::string(" and the maximum bond length is ") +
+                               std::to_string(element_rmax[0]) + std::string("."));
 
         // Compute the spring force.
         const double spring_force = element_spring_constant[0] * edge_length_adj /

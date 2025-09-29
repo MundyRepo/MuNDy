@@ -2,8 +2,9 @@
 // **********************************************************************************************************************
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
-//                                           Copyright 2024 Flatiron Institute
-//                                                 Author: Bryce Palmer
+//                                              Copyright 2024 Bryce Palmer
+//
+// Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
 // as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
@@ -36,9 +37,13 @@ The goal of this example is to simulate the swimming motion of a multiple, colli
 #include <Teuchos_ParameterList.hpp>             // for Teuchos::ParameterList
 #include <Teuchos_YamlParameterListHelpers.hpp>  // for Teuchos::getParametersFromYamlFile
 
-// STK
-#include <stk_balance/balance.hpp>          // for stk::balance::balanceStkMesh, stk::balance::BalanceSettings
-#include <stk_io/StkMeshIoBroker.hpp>       // for stk::io::StkMeshIoBroker
+// STK Balance
+#include <stk_balance/balance.hpp>  // for stk::balance::balanceStkMesh, stk::balance::BalanceSettings
+
+// STK IO
+#include <stk_io/StkMeshIoBroker.hpp>  // for stk::io::StkMeshIoBroker
+
+// STK Mesh
 #include <stk_mesh/base/Comm.hpp>           // for stk::mesh::comm_mesh_counts
 #include <stk_mesh/base/DumpMeshInfo.hpp>   // for stk::mesh::impl::dump_all_mesh_info
 #include <stk_mesh/base/Entity.hpp>         // for stk::mesh::Entity
@@ -53,10 +58,22 @@ The goal of this example is to simulate the swimming motion of a multiple, colli
 #include <stk_mesh/base/NgpForEachEntity.hpp>
 #include <stk_mesh/base/NgpMesh.hpp>
 #include <stk_mesh/base/NgpReductions.hpp>
-#include <stk_mesh/base/Part.hpp>          // for stk::mesh::Part, stk::mesh::intersect
-#include <stk_mesh/base/Selector.hpp>      // for stk::mesh::Selector
-#include <stk_topology/topology.hpp>       // for stk::topology
+#include <stk_mesh/base/Part.hpp>      // for stk::mesh::Part, stk::mesh::intersect
+#include <stk_mesh/base/Selector.hpp>  // for stk::mesh::Selector
+
+// STK Topology
+#include <stk_topology/topology.hpp>  // for stk::topology
+
+// STK Util
 #include <stk_util/parallel/Parallel.hpp>  // for stk::parallel_machine_init, stk::parallel_machine_finalize
+
+// STK Search
+#include <stk_search/BoxIdent.hpp>
+#include <stk_search/CoarseSearch.hpp>
+#include <stk_search/IdentProc.hpp>
+#include <stk_search/Point.hpp>
+#include <stk_search/SearchMethod.hpp>
+#include <stk_search/Sphere.hpp>
 
 // Mundy libs
 #include <mundy_core/MakeStringArray.hpp>                                     // for mundy::core::make_string_array
@@ -73,8 +90,9 @@ The goal of this example is to simulate the swimming motion of a multiple, colli
 #include <mundy_math/Vector3.hpp>     // for mundy::math::Vector3
 #include <mundy_math/distance/SegmentSegment.hpp>  // for mundy::math::distance::distance_sq_from_point_to_line_segment
 #include <mundy_mesh/BulkData.hpp>                 // for mundy::mesh::BulkData
-#include <mundy_mesh/FieldViews.hpp>  // for mundy::mesh::vector3_field_data, mundy::mesh::quaternion_field_data
-#include <mundy_mesh/MetaData.hpp>    // for mundy::mesh::MetaData
+#include <mundy_mesh/FieldViews.hpp>    // for mundy::mesh::vector3_field_data, mundy::mesh::quaternion_field_data
+#include <mundy_mesh/MetaData.hpp>      // for mundy::mesh::MetaData
+#include <mundy_mesh/NgpFieldBLAS.hpp>  // for mundy::mesh::field_fill
 #include <mundy_mesh/utils/FillFieldWithValue.hpp>  // for mundy::mesh::utils::fill_field_with_value
 #include <mundy_meta/FieldReqs.hpp>                 // for mundy::meta::FieldReqs
 #include <mundy_meta/MeshReqs.hpp>                  // for mundy::meta::MeshReqs
@@ -190,15 +208,25 @@ using IntField = stk::mesh::Field<int>;
 using NgpDoubleField = stk::mesh::NgpField<double>;
 using NgpIntField = stk::mesh::NgpField<int>;
 
-/// Temporary until we update to Trilinos 16.0.0
-// inline bool operator==(const stk::mesh::FastMeshIndex &lhs, const stk::mesh::FastMeshIndex &rhs) {
-//   return lhs.bucket_id == rhs.bucket_id && lhs.bucket_ord == rhs.bucket_ord;
-// }
+KOKKOS_INLINE_FUNCTION
+bool fma_equal(stk::mesh::FastMeshIndex lhs, stk::mesh::FastMeshIndex rhs) {
+  return (lhs.bucket_id == rhs.bucket_id) && (lhs.bucket_ord == rhs.bucket_ord);
+}
 
-inline void print_rank0(auto thing_to_print, int indent_level = 0) {
+KOKKOS_INLINE_FUNCTION
+bool fma_less(stk::mesh::FastMeshIndex lhs, stk::mesh::FastMeshIndex rhs) {
+  return lhs.bucket_id == rhs.bucket_id ? lhs.bucket_ord < rhs.bucket_ord : lhs.bucket_id < rhs.bucket_id;
+}
+
+KOKKOS_INLINE_FUNCTION
+bool fma_greater(stk::mesh::FastMeshIndex lhs, stk::mesh::FastMeshIndex rhs) {
+  return lhs.bucket_id == rhs.bucket_id ? lhs.bucket_ord > rhs.bucket_ord : lhs.bucket_id < rhs.bucket_id;
+}
+
+inline void print_rank0(auto think_to_print, int indent_level = 0) {
   if (stk::parallel_machine_rank(MPI_COMM_WORLD) == 0) {
     std::string indent(indent_level * 2, ' ');
-    std::cout << indent << thing_to_print << std::endl;
+    std::cout << indent << think_to_print << std::endl;
   }
 }
 
@@ -337,17 +365,19 @@ struct RunConfig {
   double sperm_density = 1.0;
 
   double amplitude = 0.1;
-  double spatial_wavelength = num_nodes_per_sperm * sperm_initial_segment_length / 5.0;
+  double spatial_wavelength = (num_nodes_per_sperm - 1) * sperm_initial_segment_length / 5.0;
   double temporal_wavelength = 2 * M_PI;  // Units: seconds per oscillations
   // double temporal_wavelength = std::numeric_limits<double>::infinity();  // Units: seconds per oscillations
   double viscosity = 1;
 
   double timestep_size = 1e-5;
   size_t num_time_steps = 200000000;
-  size_t io_frequency = 20000;
-  double skin_distance = 2 * sperm_radius;
+  size_t io_frequency = 10000;
+  double search_buffer = 2 * sperm_radius;
   double domain_width =
       2 * num_sperm * sperm_radius / 0.8;  // One diameter separation between sperm == 50% area fraction
+  double domain_height = (num_nodes_per_sperm - 1) * sperm_initial_segment_length + 1.0;
+
   //@}
 };
 
@@ -413,16 +443,17 @@ void declare_and_initialize_sperm(stk::mesh::BulkData &bulk_data, stk::mesh::Par
     // TODO(palmerb4): Notice that we are shifting the sperm to be separated by a diameter.
     bool flip_sperm = sperm_directions[j];
     // const bool flip_sperm = false;
-    // mundy::math::Vector3<double> tail_coord(0.0, 2.0 * j * (2.0 * sperm_radius),
+    // mundy::math::Vector3d tail_coord(0.0, 2.0 * j * (2.0 * sperm_radius),
     //                                         (flip_sperm ? segment_length * (num_nodes_per_sperm - 1) : 0.0) -
     //                                             (is_boundary_sperm ? segment_length * (num_nodes_per_sperm - 1) :
     //                                             0.0));
+    double random_shift = static_cast<double>(rand()) / RAND_MAX * segment_length * (num_nodes_per_sperm - 1);
 
-    mundy::math::Vector3<double> tail_coord(0.0, j * (2.0 * sperm_radius) / 0.8,
-                                            (flip_sperm ? segment_length * (num_nodes_per_sperm - 1) : 0.0) -
-                                                (is_boundary_sperm ? segment_length * (num_nodes_per_sperm - 1) : 0.0));
+    mundy::math::Vector3d tail_coord(
+        0.0, j * (2.0 * sperm_radius) / 0.8,
+        (flip_sperm ? (segment_length * (num_nodes_per_sperm - 1) + random_shift) : random_shift));
 
-    mundy::math::Vector3<double> sperm_axis(0.0, 0.0, flip_sperm ? -1.0 : 1.0);
+    mundy::math::Vector3d sperm_axis(0.0, 0.0, flip_sperm ? -1.0 : 1.0);
 
     // Because we are creating multiple sperm, we need to determine the node and element index ranges for each sperm.
     size_t start_node_id = num_nodes_per_sperm * j + 1u;
@@ -448,7 +479,7 @@ void declare_and_initialize_sperm(stk::mesh::BulkData &bulk_data, stk::mesh::Par
     };
 
     auto get_centerline_twist_spring = [get_centerline_twist_spring_id, &bulk_data](const size_t &seq_node_index) {
-      return bulk_data.get_entity(stk::topology::ELEMENT_RANK, get_centerline_twist_spring_id(seq_node_index));
+      return bulk_data.get_entity(stk::topology::ELEM_RANK, get_centerline_twist_spring_id(seq_node_index));
     };
 
     auto get_spherocylinder_segment_id = [&start_spherocylinder_segment_spring_id](const size_t &seq_node_index) {
@@ -456,7 +487,7 @@ void declare_and_initialize_sperm(stk::mesh::BulkData &bulk_data, stk::mesh::Par
     };
 
     auto get_spherocylinder_segment = [get_spherocylinder_segment_id, &bulk_data](const size_t &seq_node_index) {
-      return bulk_data.get_entity(stk::topology::ELEMENT_RANK, get_spherocylinder_segment_id(seq_node_index));
+      return bulk_data.get_entity(stk::topology::ELEM_RANK, get_spherocylinder_segment_id(seq_node_index));
     };
 
     // Create the springs and their connected nodes, distributing the work across the ranks.
@@ -584,9 +615,9 @@ void declare_and_initialize_sperm(stk::mesh::BulkData &bulk_data, stk::mesh::Par
       stk::mesh::EntityId left_spherocylinder_segment_id = get_spherocylinder_segment_id(i);
       stk::mesh::EntityId right_spherocylinder_segment_id = get_spherocylinder_segment_id(i + 1);
       stk::mesh::Entity left_spherocylinder_segment =
-          bulk_data.get_entity(stk::topology::ELEMENT_RANK, left_spherocylinder_segment_id);
+          bulk_data.get_entity(stk::topology::ELEM_RANK, left_spherocylinder_segment_id);
       stk::mesh::Entity right_spherocylinder_segment =
-          bulk_data.get_entity(stk::topology::ELEMENT_RANK, right_spherocylinder_segment_id);
+          bulk_data.get_entity(stk::topology::ELEM_RANK, right_spherocylinder_segment_id);
       if (!bulk_data.is_valid(left_spherocylinder_segment)) {
         // Declare the spherocylinder segment and connect it to the nodes
         left_spherocylinder_segment = bulk_data.declare_element(left_spherocylinder_segment_id, spherocylinder_part);
@@ -721,17 +752,17 @@ void declare_and_initialize_sperm(stk::mesh::BulkData &bulk_data, stk::mesh::Par
           const stk::mesh::Entity *edge_nodes = bulk_data.begin_nodes(edge);
           const auto edge_node0_coords = mundy::mesh::vector3_field_data(node_coords_field, edge_nodes[0]);
           const auto edge_node1_coords = mundy::mesh::vector3_field_data(node_coords_field, edge_nodes[1]);
-          mundy::math::Vector3<double> edge_tangent = edge_node1_coords - edge_node0_coords;
+          mundy::math::Vector3d edge_tangent = edge_node1_coords - edge_node0_coords;
           const double edge_length = mundy::math::norm(edge_tangent);
           edge_tangent /= edge_length;
           // Using the triad to generate the orientation
-          auto d1 = mundy::math::Vector3<double>(flip_sperm ? -1.0 : 1.0, 0.0, 0.0);
-          mundy::math::Vector3<double> d3 = edge_tangent;
-          mundy::math::Vector3<double> d2 = mundy::math::cross(d3, d1);
+          auto d1 = mundy::math::Vector3d(flip_sperm ? -1.0 : 1.0, 0.0, 0.0);
+          mundy::math::Vector3d d3 = edge_tangent;
+          mundy::math::Vector3d d2 = mundy::math::cross(d3, d1);
           d2 /= mundy::math::norm(d2);
           MUNDY_THROW_ASSERT(mundy::math::dot(d3, mundy::math::cross(d1, d2)) > 0.0, std::logic_error,
                              "The triad is not right-handed.");
-          mundy::math::Matrix3<double> D;
+          mundy::math::Matrix3d D;
           D.set_column(0, d1);
           D.set_column(1, d2);
           D.set_column(2, d3);
@@ -741,6 +772,24 @@ void declare_and_initialize_sperm(stk::mesh::BulkData &bulk_data, stk::mesh::Par
           stk::mesh::field_data(edge_length_field, edge)[0] = edge_length;
         });
   }
+
+  // Mark the fields modified on the host
+  node_coords_field.modify_on_host();
+  node_velocity_field.modify_on_host();
+  node_force_field.modify_on_host();
+  node_twist_field.modify_on_host();
+  node_twist_velocity_field.modify_on_host();
+  node_twist_torque_field.modify_on_host();
+  node_archlength_field.modify_on_host();
+  node_curvature_field.modify_on_host();
+  node_rest_curvature_field.modify_on_host();
+  node_radius_field.modify_on_host();
+  node_sperm_id_field.modify_on_host();
+  edge_orientation_field.modify_on_host();
+  edge_tangent_field.modify_on_host();
+  edge_length_field.modify_on_host();
+  element_radius_field.modify_on_host();
+  element_rest_length_field.modify_on_host();
 }
 
 void validate_node_radius(stk::mesh::NgpMesh &ngp_mesh, const stk::mesh::Selector &selector,
@@ -849,8 +898,8 @@ void compute_edge_information(stk::mesh::NgpMesh &ngp_mesh, const stk::mesh::Par
         const double cos_half_t = Kokkos::cos(0.5 * node_i_twist);
         const double sin_half_t = Kokkos::sin(0.5 * node_i_twist);
         const auto rot_via_twist =
-            mundy::math::Quaternion<double>(cos_half_t, sin_half_t * edge_tangent_old[0],
-                                            sin_half_t * edge_tangent_old[1], sin_half_t * edge_tangent_old[2]);
+            mundy::math::Quaterniond(cos_half_t, sin_half_t * edge_tangent_old[0], sin_half_t * edge_tangent_old[1],
+                                     sin_half_t * edge_tangent_old[2]);
         const auto rot_via_parallel_transport =
             mundy::math::quat_from_parallel_transport(edge_tangent_old, edge_tangent);
         edge_orientation = rot_via_parallel_transport * rot_via_twist * edge_orientation_old;
@@ -865,7 +914,7 @@ void compute_edge_information(stk::mesh::NgpMesh &ngp_mesh, const stk::mesh::Par
         //           << std::endl;
         // std::cout << "Edge tangent : " << edge_tangent << " Edge tangent old: " << edge_tangent_old << std::endl;
         // std::cout << " Edge tangent via transp: " << rot_via_parallel_transport * edge_tangent_old << std::endl;
-        // std::cout << " Edge tangent via orient: " << edge_orientation * mundy::math::Vector3<double>(0.0, 0.0, 1.0)
+        // std::cout << " Edge tangent via orient: " << edge_orientation * mundy::math::Vector3d(0.0, 0.0, 1.0)
         //           << std::endl;
       });
 
@@ -1018,7 +1067,7 @@ void compute_internal_force_and_twist_torque(
         const double moment_of_inertia = 0.25 * M_PI * node_radius * node_radius * node_radius * node_radius;
         const double shear_modulus = 0.5 * sperm_youngs_modulus / (1.0 + sperm_poissons_ratio);
         const double inv_rest_segment_length = 1.0 / sperm_rest_segment_length;
-        auto bending_torque = mundy::math::Vector3<double>(
+        auto bending_torque = mundy::math::Vector3d(
             -inv_rest_segment_length * sperm_youngs_modulus * moment_of_inertia * delta_curvature[0],
             -inv_rest_segment_length * sperm_youngs_modulus * moment_of_inertia * delta_curvature[1],
             -inv_rest_segment_length * 2 * shear_modulus * moment_of_inertia * delta_curvature[2]);
@@ -1093,19 +1142,35 @@ void compute_internal_force_and_twist_torque(
         Kokkos::atomic_add(&node_i_force[2], right_node_force[2]);
       });
 
-  // Sum the node force and torque over shared nodes.
-  stk::mesh::parallel_sum(ngp_mesh.get_bulk_on_host(),
-                          std::vector<NgpDoubleField *>{&node_force_field, &node_twist_torque_field});
+  // Sum the node force and torque over shared nodes (only if multiple ranks are present)
+  if (ngp_mesh.get_bulk_on_host().parallel_size() > 1) {
+    stk::mesh::parallel_sum(ngp_mesh.get_bulk_on_host(),
+                            std::vector<NgpDoubleField *>{&node_force_field, &node_twist_torque_field});
+  }
 
   node_force_field.modify_on_device();
   node_twist_torque_field.modify_on_device();
 }
 
+//! \name Search
+//@{
+
+using ExecSpace = stk::ngp::ExecSpace;
+using IdentProc = stk::search::IdentProc<stk::mesh::FastMeshIndex, int>;
+using BoxIdentProc = stk::search::BoxIdentProc<stk::search::Box<double>, IdentProc>;
+using Intersection = stk::search::IdentProcIntersection<IdentProc, IdentProc>;
+using SearchBoxesViewType = Kokkos::View<BoxIdentProc *, ExecSpace>;
+using ResultViewType = Kokkos::View<Intersection *, ExecSpace>;
+using FastMeshIndicesViewType = Kokkos::View<stk::mesh::FastMeshIndex *, ExecSpace>;
+
+using LocalIdentProc = stk::search::IdentProc<stk::mesh::FastMeshIndex, int>;
+using LocalIntersection = stk::search::IdentProcIntersection<LocalIdentProc, LocalIdentProc>;
+using LocalResultViewType = Kokkos::View<LocalIntersection *, ExecSpace>;
+
 // Create local entities on host and copy to device
-using DeviceExecutionSpace = Kokkos::DefaultExecutionSpace;
-using FastMeshIndicesViewType = Kokkos::View<stk::mesh::FastMeshIndex *, DeviceExecutionSpace>;
+// Create local entities on host and copy to device
 FastMeshIndicesViewType get_local_entity_indices(const stk::mesh::BulkData &bulk_data, stk::mesh::EntityRank rank,
-                                                 stk::mesh::Selector selector) {
+                                                 const stk::mesh::Selector &selector) {
   std::vector<stk::mesh::Entity> local_entities;
   stk::mesh::get_entities(bulk_data, rank, selector, local_entities);
 
@@ -1113,20 +1178,159 @@ FastMeshIndicesViewType get_local_entity_indices(const stk::mesh::BulkData &bulk
   FastMeshIndicesViewType::HostMirror host_mesh_indices =
       Kokkos::create_mirror_view(Kokkos::WithoutInitializing, mesh_indices);
 
-  for (size_t i = 0; i < local_entities.size(); ++i) {
+  Kokkos::parallel_for(stk::ngp::HostRangePolicy(0, local_entities.size()), [&bulk_data, &local_entities,
+                                                                             &host_mesh_indices](const int i) {
     const stk::mesh::MeshIndex &mesh_index = bulk_data.mesh_index(local_entities[i]);
     host_mesh_indices(i) = stk::mesh::FastMeshIndex{mesh_index.bucket->bucket_id(), mesh_index.bucket_ordinal};
-  }
+  });
 
   Kokkos::deep_copy(mesh_indices, host_mesh_indices);
   return mesh_indices;
 }
 
-void compute_hertzian_contact_force_and_torque(stk::mesh::NgpMesh &ngp_mesh, const double sperm_youngs_modulus,
-                                               const double sperm_poissons_ratio, const double domain_width,
+void compute_aabbs(stk::mesh::NgpMesh &ngp_mesh, const stk::mesh::Selector &segments,
+                   stk::mesh::NgpField<double> &node_coords_field, stk::mesh::NgpField<double> &element_radius_field,
+                   stk::mesh::NgpField<double> &elem_aabb_field) {
+  node_coords_field.sync_to_device();
+  element_radius_field.sync_to_device();
+  elem_aabb_field.sync_to_device();
+
+  stk::mesh::for_each_entity_run(
+      ngp_mesh, stk::topology::ELEM_RANK, segments, KOKKOS_LAMBDA(const stk::mesh::FastMeshIndex &segment_index) {
+        stk::mesh::NgpMesh::ConnectedNodes nodes = ngp_mesh.get_nodes(stk::topology::ELEM_RANK, segment_index);
+        stk::mesh::FastMeshIndex node0_index = ngp_mesh.fast_mesh_index(nodes[0]);
+        stk::mesh::FastMeshIndex node1_index = ngp_mesh.fast_mesh_index(nodes[1]);
+
+        const auto node0_coords = mundy::mesh::vector3_field_data(node_coords_field, node0_index);
+        const auto node1_coords = mundy::mesh::vector3_field_data(node_coords_field, node1_index);
+        const double radius = element_radius_field(segment_index, 0);
+
+        double min_x = Kokkos::min(node0_coords[0], node1_coords[0]) - radius;
+        double min_y = Kokkos::min(node0_coords[1], node1_coords[1]) - radius;
+        double min_z = Kokkos::min(node0_coords[2], node1_coords[2]) - radius;
+        double max_x = Kokkos::max(node0_coords[0], node1_coords[0]) + radius;
+        double max_y = Kokkos::max(node0_coords[1], node1_coords[1]) + radius;
+        double max_z = Kokkos::max(node0_coords[2], node1_coords[2]) + radius;
+
+        elem_aabb_field(segment_index, 0) = min_x;
+        elem_aabb_field(segment_index, 1) = min_y;
+        elem_aabb_field(segment_index, 2) = min_z;
+        elem_aabb_field(segment_index, 3) = max_x;
+        elem_aabb_field(segment_index, 4) = max_y;
+        elem_aabb_field(segment_index, 5) = max_z;
+      });
+
+  elem_aabb_field.modify_on_device();
+}
+
+SearchBoxesViewType create_search_aabbs(const stk::mesh::BulkData &bulk_data, const stk::mesh::NgpMesh &ngp_mesh,
+                                        const double search_buffer, const double domain_width,
+                                        const double domain_height, const stk::mesh::Selector &segments,
+                                        stk::mesh::NgpField<double> &elem_aabb_field) {
+  elem_aabb_field.sync_to_device();
+
+  auto locally_owned_segments = segments & bulk_data.mesh_meta_data().locally_owned_part();
+  const unsigned num_local_segments =
+      stk::mesh::count_entities(bulk_data, stk::topology::ELEM_RANK, locally_owned_segments);
+  SearchBoxesViewType search_aabbs("search_aabbs", 9 * num_local_segments);  // 2d periodicity in y and z
+
+  // Slow host operation that is needed to get an index. There is plans to add this to the stk::mesh::NgpMesh.
+  FastMeshIndicesViewType segment_indices =
+      get_local_entity_indices(bulk_data, stk::topology::ELEM_RANK, locally_owned_segments);
+  const int my_rank = bulk_data.parallel_rank();
+
+  Kokkos::parallel_for(
+      stk::ngp::DeviceRangePolicy(0, num_local_segments), KOKKOS_LAMBDA(const unsigned &i) {
+        stk::mesh::FastMeshIndex segment_index = segment_indices(i);
+
+        // search_aabbs(i) = BoxIdentProc{
+        //     stk::search::Box<double>{elem_aabb_field(segment_index, 0) - search_buffer,
+        //                               elem_aabb_field(segment_index, 1) - search_buffer,
+        //                               elem_aabb_field(segment_index, 2) - search_buffer,
+        //                               elem_aabb_field(segment_index, 3) + search_buffer,
+        //                               elem_aabb_field(segment_index, 4) + search_buffer,
+        //                               elem_aabb_field(segment_index, 5) + search_buffer},
+        //     IdentProc(segment_index, my_rank)};
+
+        for (int s0 = 0; s0 < 3; s0++) {  // s0, s1 in [0, 1, 2]
+          for (int s1 = 0; s1 < 3; s1++) {
+            search_aabbs(9 * i + 3 * s0 + s1) = BoxIdentProc{
+                stk::search::Box<double>{elem_aabb_field(segment_index, 0) - search_buffer,
+                                         elem_aabb_field(segment_index, 1) - search_buffer + (s0 - 1) * domain_width,
+                                         elem_aabb_field(segment_index, 2) - search_buffer + (s1 - 1) * domain_height,
+                                         elem_aabb_field(segment_index, 3) + search_buffer,
+                                         elem_aabb_field(segment_index, 4) + search_buffer + (s0 - 1) * domain_width,
+                                         elem_aabb_field(segment_index, 5) + search_buffer + (s1 - 1) * domain_height},
+                IdentProc(segment_index, my_rank)};
+          }
+        }
+      });
+
+  return search_aabbs;
+}
+
+// KOKKOS_INLINE_FUNCTION
+// double wrap_to_interval0(double x, double a, double b) {
+//     double interval = b - a;
+//     double wrapped = a + std::fmod((x - a), interval);
+//     if (wrapped < a) wrapped += interval;
+//     return wrapped;
+// }
+
+// KOKKOS_INLINE_FUNCTION
+// double wrap_max1(double x, double max) {
+//   /* integer math: `(max + x % max) % max` */
+//   return Kokkos::fmod(max + Kokkos::fmod(x, max), max);
+// }
+
+// KOKKOS_INLINE_FUNCTION
+// double wrap_to_interval1(double x, double min, double max) {
+//   return min + wrap_max1(x - min, max - min);
+// }
+
+// KOKKOS_INLINE_FUNCTION
+// double wrap_to_interval3(double x, double a, double b) {
+//     double width = b - a;
+//     double offset = std::fmod(x - a, width);
+//     if (offset < 0) offset += width;
+//     return a + offset;
+// }
+
+KOKKOS_INLINE_FUNCTION
+double wrap_to_interval(double val, double lower_bound, double upper_bound) {
+  if (lower_bound > upper_bound) {
+    Kokkos::kokkos_swap(lower_bound, upper_bound);
+  }
+  val -= lower_bound;  // adjust to 0
+  double range_size = upper_bound - lower_bound;
+  if (range_size == 0) {
+    return upper_bound;
+  }  // avoid dividing by 0
+  return val - (range_size * Kokkos::floor(val / range_size)) + lower_bound;
+}
+
+KOKKOS_INLINE_FUNCTION
+void wrap_segment_preserve_shape(const auto &p0_in, const auto &p1_in, double y_min, double y_max, double z_min,
+                                 double z_max, auto &p0_out, auto &p1_out) {
+  // Compute wrapped center
+  auto center = 0.5 * (p0_in + p1_in);
+  mundy::math::Vector3d wrapped_center{center[0],                                  // no periodicity in x
+                                       wrap_to_interval(center[1], y_min, y_max),  //
+                                       wrap_to_interval(center[2], z_min, z_max)};
+
+  // Translation vector
+  auto offset = wrapped_center - center;
+
+  // Apply consistent shift to both endpoints
+  p0_out = p0_in + offset;
+  p1_out = p1_in + offset;
+}
+
+void compute_hertzian_contact_force_and_torque(const stk::mesh::BulkData &bulk_data, stk::mesh::NgpMesh &ngp_mesh,
+                                               const double sperm_youngs_modulus, const double sperm_poissons_ratio,
                                                const stk::mesh::Part &spherocylinder_segments_part,
-                                               NgpDoubleField &node_coords_field, NgpDoubleField &element_radius_field,
-                                               NgpDoubleField &node_force_field) {
+                                               const ResultViewType &search_results, NgpDoubleField &node_coords_field,
+                                               NgpDoubleField &element_radius_field, NgpDoubleField &node_force_field) {
   debug_print("Computing the Hertzian contact force and torque.");
 
   // Plan:
@@ -1140,142 +1344,638 @@ void compute_hertzian_contact_force_and_torque(stk::mesh::NgpMesh &ngp_mesh, con
   element_radius_field.sync_to_device();
   node_force_field.sync_to_device();
 
-  // Get the vector of segment indices
-  FastMeshIndicesViewType segment_indices =
-      get_local_entity_indices(ngp_mesh.get_bulk_on_host(), stk::topology::ELEMENT_RANK, spherocylinder_segments_part);
-  const size_t num_segments = segment_indices.extent(0);
-
   const double effective_youngs_modulus =
       (sperm_youngs_modulus * sperm_youngs_modulus) /
       (sperm_youngs_modulus - sperm_youngs_modulus * sperm_poissons_ratio * sperm_poissons_ratio +
        sperm_youngs_modulus - sperm_youngs_modulus * sperm_poissons_ratio * sperm_poissons_ratio);
   constexpr double four_thirds = 4.0 / 3.0;
   Kokkos::parallel_for(
-      stk::ngp::DeviceRangePolicy(0, num_segments), KOKKOS_LAMBDA(const unsigned &source_segment_indices_index) {
-        const stk::mesh::FastMeshIndex source_segment_index = segment_indices(source_segment_indices_index);
+      "apply_hertzian_contact_between_segments", stk::ngp::DeviceRangePolicy(0, search_results.size()),
+      KOKKOS_LAMBDA(const unsigned &i) {
+        const auto search_result = search_results(i);
+        const stk::mesh::FastMeshIndex source_segment_index = search_result.domainIdentProc.id();
+        const stk::mesh::FastMeshIndex target_segment_index = search_result.rangeIdentProc.id();
 
-        // Fetch the source segment, its nodes, and their field data
+        if (fma_less(target_segment_index, source_segment_index) ||
+            fma_equal(source_segment_index, target_segment_index)) {
+          // Skip self interaction, assuming that the domain is large enough that we cannot collide with our own
+          // periodic image. Also, skip double counting.
+          return;
+        }
+
+        // Fetch the source segment nodes
         stk::mesh::NgpMesh::ConnectedNodes source_nodes =
             ngp_mesh.get_nodes(stk::topology::ELEM_RANK, source_segment_index);
-        assert(source_nodes.size() == 2);
         stk::mesh::FastMeshIndex source_node0_index = ngp_mesh.fast_mesh_index(source_nodes[0]);
         stk::mesh::FastMeshIndex source_node1_index = ngp_mesh.fast_mesh_index(source_nodes[1]);
 
+        // Fetch the target segment nodes
+        stk::mesh::NgpMesh::ConnectedNodes target_nodes =
+            ngp_mesh.get_nodes(stk::topology::ELEM_RANK, target_segment_index);
+        stk::mesh::FastMeshIndex target_node0_index = ngp_mesh.fast_mesh_index(target_nodes[0]);
+        stk::mesh::FastMeshIndex target_node1_index = ngp_mesh.fast_mesh_index(target_nodes[1]);
+
+        // Skip neighboring segments (those that share a node)
+        if (fma_equal(source_node0_index, target_node0_index) || fma_equal(source_node0_index, target_node1_index) ||
+            fma_equal(source_node1_index, target_node0_index) || fma_equal(source_node1_index, target_node1_index)) {
+          return;
+        }
+
+        /////////////////
+        // Source data //
         const auto source_node0_coords = mundy::mesh::vector3_field_data(node_coords_field, source_node0_index);
         const auto source_node1_coords = mundy::mesh::vector3_field_data(node_coords_field, source_node1_index);
         const double source_radius = element_radius_field(source_segment_index, 0);
         auto source_node0_force = mundy::mesh::vector3_field_data(node_force_field, source_node0_index);
         auto source_node1_force = mundy::mesh::vector3_field_data(node_force_field, source_node1_index);
 
-        // Compute the AABB of the source segment
-        // The corners of the boxes are the min and max of the coordinates of the nodes +/- the radius of the nodes
-        double source_min_x = Kokkos::min(source_node0_coords[0], source_node1_coords[0]) - source_radius;
-        double source_max_x = Kokkos::max(source_node0_coords[0], source_node1_coords[0]) + source_radius;
-        double source_min_y = Kokkos::min(source_node0_coords[1], source_node1_coords[1]) - source_radius;
-        double source_max_y = Kokkos::max(source_node0_coords[1], source_node1_coords[1]) + source_radius;
-        double source_min_z = Kokkos::min(source_node0_coords[2], source_node1_coords[2]) - source_radius;
-        double source_max_z = Kokkos::max(source_node0_coords[2], source_node1_coords[2]) + source_radius;
+        // Target data
+        const auto target_node0_coords = mundy::mesh::vector3_field_data(node_coords_field, target_node0_index);
+        const auto target_node1_coords = mundy::mesh::vector3_field_data(node_coords_field, target_node1_index);
+        const double target_radius = element_radius_field(target_segment_index, 0);
+        auto target_node0_force = mundy::mesh::vector3_field_data(node_force_field, target_node0_index);
+        auto target_node1_force = mundy::mesh::vector3_field_data(node_force_field, target_node1_index);
 
-        // Loop over the target segments
-        for (size_t t = 0; t < num_segments; ++t) {
-          // Fetch the target segment, its nodes, and their field data
-          stk::mesh::FastMeshIndex target_segment_index = segment_indices[t];
+        // ////////////////////////////////////////////
+        // // Compute the AABB of the source segment //
+        // // The corners of the boxes are the min and max of the coordinates of the nodes +/- the radius of the nodes
+        // double source_min_x = Kokkos::min(source_node0_coords[0], source_node1_coords[0]) - source_radius;
+        // double source_max_x = Kokkos::max(source_node0_coords[0], source_node1_coords[0]) + source_radius;
+        // double source_min_y = Kokkos::min(source_node0_coords[1], source_node1_coords[1]) - source_radius;
+        // double source_max_y = Kokkos::max(source_node0_coords[1], source_node1_coords[1]) + source_radius;
+        // double source_min_z = Kokkos::min(source_node0_coords[2], source_node1_coords[2]) - source_radius;
+        // double source_max_z = Kokkos::max(source_node0_coords[2], source_node1_coords[2]) + source_radius;
 
-          stk::mesh::NgpMesh::ConnectedNodes target_nodes =
-              ngp_mesh.get_nodes(stk::topology::ELEM_RANK, target_segment_index);
-          assert(target_nodes.size() == 2);
-          stk::mesh::FastMeshIndex target_node0_index = ngp_mesh.fast_mesh_index(target_nodes[0]);
-          stk::mesh::FastMeshIndex target_node1_index = ngp_mesh.fast_mesh_index(target_nodes[1]);
+        // // Compute the AABB for the target segment
+        // double target_min_x = Kokkos::min(target_node0_coords[0], target_node1_coords[0]) - target_radius;
+        // double target_max_x = Kokkos::max(target_node0_coords[0], target_node1_coords[0]) + target_radius;
+        // double target_min_y = Kokkos::min(target_node0_coords[1], target_node1_coords[1]) - target_radius;
+        // double target_max_y = Kokkos::max(target_node0_coords[1], target_node1_coords[1]) + target_radius;
+        // double target_min_z = Kokkos::min(target_node0_coords[2], target_node1_coords[2]) - target_radius;
+        // double target_max_z = Kokkos::max(target_node0_coords[2], target_node1_coords[2]) + target_radius;
 
-          // Consider the current segment location as well as its periodic image to the left and right (in y)
-          // shift = domain_width * n for n in [-1, 0, 1]
-          Kokkos::Array<double, 3> shifts = {-domain_width, 0.0, domain_width};
-          const double target_radius = element_radius_field(target_segment_index, 0);
-          auto target_node0_coords_unsifted = mundy::mesh::vector3_field_data(node_coords_field, target_node0_index);
-          auto target_node1_coords_unsifted = mundy::mesh::vector3_field_data(node_coords_field, target_node1_index);
-          for (int s = 0; s < 3; ++s) {
-            // Skip self-interactions and interactions with neighboring segments only for the unsifted target segment
-            if (s == 1) {
-              // Skip neighboring segments (those that share a node)
-              if (source_node0_index == target_node0_index || source_node0_index == target_node1_index ||
-                  source_node1_index == target_node0_index || source_node1_index == target_node1_index) {
-                continue;
-              }
+        // const bool aabbs_overlap = source_min_x <= target_max_x && source_max_x >= target_min_x &&
+        //                            source_min_y <= target_max_y && source_max_y >= target_min_y &&
+        //                            source_min_z <= target_max_z && source_max_z >= target_min_z;
 
-              // Skip self-interactions
-              if (source_segment_index == target_segment_index) {
-                continue;
-              }
-            }
-            auto target_node0_coords = target_node0_coords_unsifted + mundy::math::Vector3<double>(0.0, shifts[s], 0.0);
-            auto target_node1_coords = target_node1_coords_unsifted + mundy::math::Vector3<double>(0.0, shifts[s], 0.0);
+        // if (!aabbs_overlap) {
+        //   return;
+        // }
 
-            // Compute the AABB of the target segment
-            double target_min_x = Kokkos::min(target_node0_coords[0], target_node1_coords[0]) - target_radius;
-            double target_max_x = Kokkos::max(target_node0_coords[0], target_node1_coords[0]) + target_radius;
-            double target_min_y = Kokkos::min(target_node0_coords[1], target_node1_coords[1]) - target_radius;
-            double target_max_y = Kokkos::max(target_node0_coords[1], target_node1_coords[1]) + target_radius;
-            double target_min_z = Kokkos::min(target_node0_coords[2], target_node1_coords[2]) - target_radius;
-            double target_max_z = Kokkos::max(target_node0_coords[2], target_node1_coords[2]) + target_radius;
+        // Compute the minimum signed separation distance between the segments
+        mundy::math::Vector3d closest_point_source;
+        mundy::math::Vector3d closest_point_target;
+        double archlength_source;
+        double archlength_target;
+        const double distance = Kokkos::sqrt(mundy::math::distance::distance_sq_between_line_segments(
+            source_node0_coords, source_node1_coords, target_node0_coords, target_node1_coords, closest_point_source,
+            closest_point_target, archlength_source, archlength_target));
 
-            // Check if the AABBs overlap
-            const bool aabbs_overlap = source_min_x <= target_max_x && source_max_x >= target_min_x &&
-                                       source_min_y <= target_max_y && source_max_y >= target_min_y &&
-                                       source_min_z <= target_max_z && source_max_z >= target_min_z;
-            if (aabbs_overlap) {
-              // Compute the minimum signed separation distance between the segments
-              mundy::math::Vector3<double> closest_point_source;
-              mundy::math::Vector3<double> closest_point_target;
-              double archlength_source = 0.0;
-              double archlength_target = 0.0;
-              const double distance = Kokkos::sqrt(mundy::math::distance::distance_sq_between_line_segments(
-                  source_node0_coords, source_node1_coords, target_node0_coords, target_node1_coords,
-                  closest_point_source, closest_point_target, archlength_source, archlength_target));
+        const auto source_to_target_vector = closest_point_target - closest_point_source;
+        double signed_separation_distance = distance - source_radius - target_radius;
+        if (signed_separation_distance > 0) {
+          signed_separation_distance = 0.0;
+        }
 
-              const auto source_to_target_vector = closest_point_target - closest_point_source;
-              const double radius_sum = source_radius + target_radius;
-              const double signed_separation_distance = distance - radius_sum;
-              if (signed_separation_distance < 0.0) {
-                // Compute the contact force and torque
-                // Somehow, the source is the one we need to sum into
+        // Compute the contact force and torque
+        const double inv_distance = 1.0 / distance;
+        const auto source_normal = inv_distance * source_to_target_vector;
 
-                const double inv_distance = 1.0 / distance;
-                const auto source_normal = inv_distance * source_to_target_vector;
+        // Compute the Hertzian contact force magnitude
+        // Note, signed separation distance is negative when particles overlap,
+        // so delta = -signed_separation_distance.
+        const double effective_radius = (source_radius * target_radius) / (source_radius + target_radius);
+        const double normal_force_magnitude = four_thirds * effective_youngs_modulus * Kokkos::sqrt(effective_radius) *
+                                              Kokkos::pow(-signed_separation_distance, 1.5);
+        const auto source_contact_force = -normal_force_magnitude * source_normal;
 
-                // Shift the closest points on the source to its surface
-                closest_point_source += source_normal * source_radius;
+        {
+          // Sum the force into the source segment nodes.
+          const auto left_to_cp = closest_point_source - source_node0_coords;
+          const auto left_to_right = source_node1_coords - source_node0_coords;
+          const double length = mundy::math::norm(left_to_right);
+          const double inv_length = 1.0 / length;
+          const auto tangent = left_to_right * inv_length;
+          const auto term1 = mundy::math::dot(tangent, source_contact_force) * left_to_cp * inv_length;
+          const auto term2 = mundy::math::dot(left_to_cp, tangent) *
+                             (source_contact_force + mundy::math::dot(tangent, source_contact_force) * tangent) *
+                             inv_length;
+          const auto sum = term2 - term1;
 
-                // Compute the Hertzian contact force magnitude
-                // Note, signed separation distance is negative when particles overlap,
-                // so delta = -signed_separation_distance.
-                const double effective_radius = (source_radius * target_radius) / (source_radius + target_radius);
-                const double normal_force_magnitude = four_thirds * effective_youngs_modulus *
-                                                      Kokkos::sqrt(effective_radius) *
-                                                      Kokkos::pow(-signed_separation_distance, 1.5);
-
-                // Sum the force into the target segment nodes.
-                const auto left_to_cp = closest_point_source - source_node0_coords;
-                const auto left_to_right = source_node1_coords - source_node0_coords;
-                const double length = mundy::math::norm(left_to_right);
-                const double inv_length = 1.0 / length;
-                const auto tangent = left_to_right * inv_length;
-
-                const auto contact_force = -normal_force_magnitude * source_normal;
-                const auto term1 = mundy::math::dot(tangent, contact_force) * left_to_cp * inv_length;
-                const auto term2 = mundy::math::dot(left_to_cp, tangent) *
-                                   (contact_force + mundy::math::dot(tangent, contact_force) * tangent) * inv_length;
-                const auto sum = term2 - term1;
-
-                source_node0_force += contact_force - sum;
-                source_node1_force += sum;
-              }
-            }
-          }
+          // Use an atomic add to sum the forces into the source
+          Kokkos::atomic_add(&source_node0_force[0], source_contact_force[0] - sum[0]);
+          Kokkos::atomic_add(&source_node0_force[1], source_contact_force[1] - sum[1]);
+          Kokkos::atomic_add(&source_node0_force[2], source_contact_force[2] - sum[2]);
+          Kokkos::atomic_add(&source_node1_force[0], sum[0]);
+          Kokkos::atomic_add(&source_node1_force[1], sum[1]);
+          Kokkos::atomic_add(&source_node1_force[2], sum[2]);
+        }
+        {
+          // Sum the force into the target segment nodes.
+          const auto left_to_cp = closest_point_target - target_node0_coords;
+          const auto left_to_right = target_node1_coords - target_node0_coords;
+          const double length = mundy::math::norm(left_to_right);
+          const double inv_length = 1.0 / length;
+          const auto tangent = left_to_right * inv_length;
+          const auto term1 = mundy::math::dot(tangent, -source_contact_force) * left_to_cp * inv_length;
+          const auto term2 = mundy::math::dot(left_to_cp, tangent) *
+                             (-source_contact_force + mundy::math::dot(tangent, -source_contact_force) * tangent) *
+                             inv_length;
+          const auto sum = term2 - term1;
+          // Use an atomic add to sum the forces into the target
+          Kokkos::atomic_add(&target_node0_force[0], -source_contact_force[0] - sum[0]);
+          Kokkos::atomic_add(&target_node0_force[1], -source_contact_force[1] - sum[1]);
+          Kokkos::atomic_add(&target_node0_force[2], -source_contact_force[2] - sum[2]);
+          Kokkos::atomic_add(&target_node1_force[0], sum[0]);
+          Kokkos::atomic_add(&target_node1_force[1], sum[1]);
+          Kokkos::atomic_add(&target_node1_force[2], sum[2]);
         }
       });
 
   node_force_field.modify_on_device();
 }
+
+// Works no NL
+// void compute_hertzian_contact_force_and_torque(const stk::mesh::BulkData &bulk_data, stk::mesh::NgpMesh &ngp_mesh,
+//                                                const double sperm_youngs_modulus, const double sperm_poissons_ratio,
+//                                                const double domain_width, const double domain_height,
+//                                                const stk::mesh::Part &spherocylinder_segments_part,
+//                                                NgpDoubleField &node_coords_field, NgpDoubleField
+//                                                &element_radius_field, NgpDoubleField &node_force_field) {
+//   debug_print("Computing the Hertzian contact force and torque.");
+
+//   // Plan:
+//   //   Loop over each spherocylinder segment in a for_each_entity_run. (These are our target segments.)
+//   //   Use a regular for loop over all other spherocylinder segments. (These are our source segments.)
+//   //   Use an initial cancellation step to check if the bounding spheres of the segments overlap.
+//   //   If they do, find the minimum signed separation distance between the segments.
+//   //   If the signed signed separation distance is less than the sum of the radii, compute the contact force and
+//   torque.
+//   //   Sum the result into the target segment. By construction, this sum need not be atomic.
+//   node_coords_field.sync_to_device();
+//   element_radius_field.sync_to_device();
+//   node_force_field.sync_to_device();
+
+//   // Get the vector of segment indices
+//   FastMeshIndicesViewType segment_indices =
+//       get_local_entity_indices(ngp_mesh.get_bulk_on_host(), stk::topology::ELEM_RANK, spherocylinder_segments_part);
+//   const size_t num_segments = segment_indices.extent(0);
+
+//   const double effective_youngs_modulus =
+//       (sperm_youngs_modulus * sperm_youngs_modulus) /
+//       (sperm_youngs_modulus - sperm_youngs_modulus * sperm_poissons_ratio * sperm_poissons_ratio +
+//        sperm_youngs_modulus - sperm_youngs_modulus * sperm_poissons_ratio * sperm_poissons_ratio);
+//   constexpr double four_thirds = 4.0 / 3.0;
+//   auto range_policy_2d = Kokkos::MDRangePolicy<Kokkos::Rank<2>>({0, 0}, {num_segments, num_segments});
+//   Kokkos::parallel_for(
+//       "apply_hertzian_contact_between_segments", range_policy_2d,
+//       KOKKOS_LAMBDA(const size_t source_segment_indices_index, const size_t target_segment_indices_index) {
+//         const stk::mesh::FastMeshIndex source_segment_index = segment_indices(source_segment_indices_index);
+//         const stk::mesh::FastMeshIndex target_segment_index = segment_indices(target_segment_indices_index);
+
+//         if (fma_less(target_segment_index, source_segment_index) ||
+//             fma_equal(source_segment_index, target_segment_index)) {
+//           // Skip self interaction, assuming that the domain is large enough that we cannot collide with our own
+//           // periodic image. Also, skip double counting.
+//           return;
+//         }
+
+//         // Fetch the source segment nodes
+//         stk::mesh::NgpMesh::ConnectedNodes source_nodes =
+//             ngp_mesh.get_nodes(stk::topology::ELEM_RANK, source_segment_index);
+//         stk::mesh::FastMeshIndex source_node0_index = ngp_mesh.fast_mesh_index(source_nodes[0]);
+//         stk::mesh::FastMeshIndex source_node1_index = ngp_mesh.fast_mesh_index(source_nodes[1]);
+
+//         // Fetch the target segment nodes
+//         stk::mesh::NgpMesh::ConnectedNodes target_nodes =
+//             ngp_mesh.get_nodes(stk::topology::ELEM_RANK, target_segment_index);
+//         stk::mesh::FastMeshIndex target_node0_index = ngp_mesh.fast_mesh_index(target_nodes[0]);
+//         stk::mesh::FastMeshIndex target_node1_index = ngp_mesh.fast_mesh_index(target_nodes[1]);
+
+//         // Skip neighboring segments (those that share a node)
+//         if (fma_equal(source_node0_index, target_node0_index) || fma_equal(source_node0_index, target_node1_index) ||
+//             fma_equal(source_node1_index, target_node0_index) || fma_equal(source_node1_index, target_node1_index)) {
+//           return;
+//         }
+
+//         /////////////////
+//         // Source data //
+//         const auto source_node0_coords_tmp = mundy::mesh::vector3_field_data(node_coords_field, source_node0_index);
+//         const auto source_node1_coords_tmp = mundy::mesh::vector3_field_data(node_coords_field, source_node1_index);
+//         const double source_radius = element_radius_field(source_segment_index, 0);
+//         auto source_node0_force = mundy::mesh::vector3_field_data(node_force_field, source_node0_index);
+//         auto source_node1_force = mundy::mesh::vector3_field_data(node_force_field, source_node1_index);
+
+//         // Target data
+//         const auto target_node0_coords_tmp = mundy::mesh::vector3_field_data(node_coords_field, target_node0_index);
+//         const auto target_node1_coords_tmp = mundy::mesh::vector3_field_data(node_coords_field, target_node1_index);
+//         const double target_radius = element_radius_field(target_segment_index, 0);
+//         auto target_node0_force = mundy::mesh::vector3_field_data(node_force_field, target_node0_index);
+//         auto target_node1_force = mundy::mesh::vector3_field_data(node_force_field, target_node1_index);
+
+//         ////////////////////
+//         // Periodic image //
+//         mundy::math::Vector3d source_node0_coords;
+//         mundy::math::Vector3d source_node1_coords;
+//         mundy::math::Vector3d target_node0_coords;
+//         mundy::math::Vector3d target_node1_coords;
+//         wrap_segment_preserve_shape(source_node0_coords_tmp, source_node1_coords_tmp,  //
+//                                     0.0, domain_width, 0.0, domain_height,             //
+//                                     source_node0_coords, source_node1_coords);
+//         wrap_segment_preserve_shape(target_node0_coords_tmp, target_node1_coords_tmp,  //
+//                                     0.0, domain_width, 0.0, domain_height,             //
+//                                     target_node0_coords, target_node1_coords);
+
+//         ////////////////////////////////////////////
+//         // Compute the AABB of the source segment //
+//         // The corners of the boxes are the min and max of the coordinates of the nodes +/- the radius of the nodes
+//         double source_min_z = Kokkos::min(source_node0_coords[2], source_node1_coords[2]) - source_radius;
+//         double source_max_z = Kokkos::max(source_node0_coords[2], source_node1_coords[2]) + source_radius;
+//         double source_min_y = Kokkos::min(source_node0_coords[1], source_node1_coords[1]) - source_radius;
+//         double source_max_y = Kokkos::max(source_node0_coords[1], source_node1_coords[1]) + source_radius;
+
+//         // Compute the AABB for the target segment
+//         double target_min_z = Kokkos::min(target_node0_coords[2], target_node1_coords[2]) - target_radius;
+//         double target_max_z = Kokkos::max(target_node0_coords[2], target_node1_coords[2]) + target_radius;
+//         double target_min_y = Kokkos::min(target_node0_coords[1], target_node1_coords[1]) - target_radius;
+//         double target_max_y = Kokkos::max(target_node0_coords[1], target_node1_coords[1]) + target_radius;
+
+//         // There are two periodic directions left and right giving 9 possible ways for our AABB's to overlap.
+//         // We do not however, need to check each one. We will label them 0 through 9 with 0 being the unshifted
+//         domain
+//         //
+//         // We know x = 0, so we ignore it
+//         //
+//         // 1 2 3
+//         // 4 0 5
+//         // 6 7 8
+//         //
+//         // We can precompute some of the values to avoid recomputing them for each shift.
+//         // Regardless of dimension, we will use left and right as the shift by -domain_width/domain_height and
+//         // +domain_width/domain_height
+//         bool source_min_z_c_lt_target_max_z = source_min_z <= target_max_z;
+//         bool source_min_z_l_lt_target_max_z = source_min_z - domain_height <= target_max_z;
+//         bool source_min_z_r_lt_target_max_z = source_min_z + domain_height <= target_max_z;
+//         bool source_max_z_c_gt_target_min_z = source_max_z >= target_min_z;
+//         bool source_max_z_l_gt_target_min_z = source_max_z - domain_height >= target_min_z;
+//         bool source_max_z_r_gt_target_min_z = source_max_z + domain_height >= target_min_z;
+
+//         bool source_min_y_c_lt_target_max_y = source_min_y <= target_max_y;
+//         bool source_min_y_l_lt_target_max_y = source_min_y - domain_width <= target_max_y;
+//         bool source_min_y_r_lt_target_max_y = source_min_y + domain_width <= target_max_y;
+//         bool source_max_y_c_gt_target_min_y = source_max_y >= target_min_y;
+//         bool source_max_y_l_gt_target_min_y = source_max_y - domain_width >= target_min_y;
+//         bool source_max_y_r_gt_target_min_y = source_max_y + domain_width >= target_min_y;
+
+//         // Now we compute the aabb overlaps for each case using the precomputed values
+//         const bool aabbs_overlap0 = source_min_z_c_lt_target_max_z && source_max_z_c_gt_target_min_z &&
+//                                     source_min_y_c_lt_target_max_y && source_max_y_c_gt_target_min_y;
+//         const bool aabbs_overlap1 = source_min_z_l_lt_target_max_z && source_max_z_l_gt_target_min_z &&
+//                                     source_min_y_r_lt_target_max_y && source_max_y_r_gt_target_min_y;
+//         const bool aabbs_overlap2 = source_min_z_c_lt_target_max_z && source_max_z_c_gt_target_min_z &&
+//                                     source_min_y_r_lt_target_max_y && source_max_y_r_gt_target_min_y;
+//         const bool aabbs_overlap3 = source_min_z_r_lt_target_max_z && source_max_z_r_gt_target_min_z &&
+//                                     source_min_y_r_lt_target_max_y && source_max_y_r_gt_target_min_y;
+//         const bool aabbs_overlap4 = source_min_z_l_lt_target_max_z && source_max_z_l_gt_target_min_z &&
+//                                     source_min_y_c_lt_target_max_y && source_max_y_c_gt_target_min_y;
+//         const bool aabbs_overlap5 = source_min_z_r_lt_target_max_z && source_max_z_r_gt_target_min_z &&
+//                                     source_min_y_c_lt_target_max_y && source_max_y_c_gt_target_min_y;
+//         const bool aabbs_overlap6 = source_min_z_l_lt_target_max_z && source_max_z_l_gt_target_min_z &&
+//                                     source_min_y_l_lt_target_max_y && source_max_y_l_gt_target_min_y;
+//         const bool aabbs_overlap7 = source_min_z_c_lt_target_max_z && source_max_z_c_gt_target_min_z &&
+//                                     source_min_y_l_lt_target_max_y && source_max_y_l_gt_target_min_y;
+//         const bool aabbs_overlap8 = source_min_z_r_lt_target_max_z && source_max_z_r_gt_target_min_z &&
+//                                     source_min_y_l_lt_target_max_y && source_max_y_l_gt_target_min_y;
+//         const bool aabbs_overlap = aabbs_overlap0 || aabbs_overlap1 || aabbs_overlap2 || aabbs_overlap3 ||
+//                                    aabbs_overlap4 || aabbs_overlap5 || aabbs_overlap6 || aabbs_overlap7 ||
+//                                    aabbs_overlap8;
+
+//         // const bool aabbs_overlap0 = source_min_x_c_lt_target_max_x && source_max_x_c_gt_target_min_x &&
+//         //                             source_min_y_r_lt_target_max_y && source_max_y_r_gt_target_min_y;
+//         // const bool aabbs_overlap1 = false;
+//         // const bool aabbs_overlap2 = false;
+//         // const bool aabbs_overlap3 = false;
+//         // const bool aabbs_overlap4 = source_min_x_l_lt_target_max_x && source_max_x_l_gt_target_min_x &&
+//         //                             source_min_y_c_lt_target_max_y && source_max_y_c_gt_target_min_y;
+//         // const bool aabbs_overlap5 = source_min_x_r_lt_target_max_x && source_max_x_r_gt_target_min_x &&
+//         //                             source_min_y_c_lt_target_max_y && source_max_y_c_gt_target_min_y;
+//         // const bool aabbs_overlap6 = false;
+//         // const bool aabbs_overlap7 = false;
+//         // const bool aabbs_overlap8 = false;
+
+//         // If none of them overlap exit early
+//         MUNDY_THROW_ASSERT(aabbs_overlap0 + aabbs_overlap1 + aabbs_overlap2 + aabbs_overlap3 + aabbs_overlap4 +
+//                                    aabbs_overlap5 + aabbs_overlap6 + aabbs_overlap7 + aabbs_overlap8 <=
+//                                1,
+//                            std::runtime_error,
+//                            "The domain size is too small allowing for contact with multiple periodic images");
+//         if (!aabbs_overlap) {
+//           return;
+//         }
+
+//         // Assume that the domain is large enough for intersection to only occur in one of the domains, we just need
+//         to
+//         // determine the appropriate shift to x and y
+//         double shift_z = (aabbs_overlap0 || aabbs_overlap2 || aabbs_overlap7)   ? 0.0
+//                          : (aabbs_overlap1 || aabbs_overlap4 || aabbs_overlap6) ? -domain_height
+//                                                                                 : domain_height;
+//         double shift_y = (aabbs_overlap0 || aabbs_overlap4 || aabbs_overlap5)   ? 0.0
+//                          : (aabbs_overlap6 || aabbs_overlap7 || aabbs_overlap8) ? -domain_width
+//                                                                                 : domain_width;
+
+//         // Shift the source segment
+//         mundy::math::Vector3d shift = mundy::math::Vector3d(0.0, shift_y, shift_z);
+//         mundy::math::Vector3d source_node0_coords_shifted = source_node0_coords + shift;
+//         mundy::math::Vector3d source_node1_coords_shifted = source_node1_coords + shift;
+
+//         // Compute the minimum signed separation distance between the segments
+//         mundy::math::Vector3d closest_point_source;
+//         mundy::math::Vector3d closest_point_target;
+//         double archlength_source;
+//         double archlength_target;
+//         const double distance = Kokkos::sqrt(mundy::math::distance::distance_sq_between_line_segments(
+//             source_node0_coords_shifted, source_node1_coords_shifted, target_node0_coords, target_node1_coords,
+//             closest_point_source, closest_point_target, archlength_source, archlength_target));
+
+//         const auto source_to_target_vector = closest_point_target - closest_point_source;
+//         double signed_separation_distance = distance - source_radius - target_radius;
+//         if (signed_separation_distance > 0) {
+//           signed_separation_distance = 0.0;
+//         }
+
+//         // Compute the contact force and torque
+//         const double inv_distance = 1.0 / distance;
+//         const auto source_normal = inv_distance * source_to_target_vector;
+
+//         // Compute the Hertzian contact force magnitude
+//         // Note, signed separation distance is negative when particles overlap,
+//         // so delta = -signed_separation_distance.
+//         const double effective_radius = (source_radius * target_radius) / (source_radius + target_radius);
+//         const double normal_force_magnitude = four_thirds * effective_youngs_modulus * Kokkos::sqrt(effective_radius)
+//         *
+//                                               Kokkos::pow(-signed_separation_distance, 1.5);
+//         const auto source_contact_force = -normal_force_magnitude * source_normal;
+
+//         {
+//           // Sum the force into the source segment nodes.
+//           const auto left_to_cp = closest_point_source - source_node0_coords_shifted;
+//           const auto left_to_right = source_node1_coords_shifted - source_node0_coords_shifted;
+//           const double length = mundy::math::norm(left_to_right);
+//           const double inv_length = 1.0 / length;
+//           const auto tangent = left_to_right * inv_length;
+//           const auto term1 = mundy::math::dot(tangent, source_contact_force) * left_to_cp * inv_length;
+//           const auto term2 = mundy::math::dot(left_to_cp, tangent) *
+//                              (source_contact_force + mundy::math::dot(tangent, source_contact_force) * tangent) *
+//                              inv_length;
+//           const auto sum = term2 - term1;
+
+//           // Use an atomic add to sum the forces into the source
+//           Kokkos::atomic_add(&source_node0_force[0], source_contact_force[0] - sum[0]);
+//           Kokkos::atomic_add(&source_node0_force[1], source_contact_force[1] - sum[1]);
+//           Kokkos::atomic_add(&source_node0_force[2], source_contact_force[2] - sum[2]);
+//           Kokkos::atomic_add(&source_node1_force[0], sum[0]);
+//           Kokkos::atomic_add(&source_node1_force[1], sum[1]);
+//           Kokkos::atomic_add(&source_node1_force[2], sum[2]);
+//         }
+//         {
+//           // Sum the force into the target segment nodes.
+//           const auto left_to_cp = closest_point_target - target_node0_coords;
+//           const auto left_to_right = target_node1_coords - target_node0_coords;
+//           const double length = mundy::math::norm(left_to_right);
+//           const double inv_length = 1.0 / length;
+//           const auto tangent = left_to_right * inv_length;
+//           const auto term1 = mundy::math::dot(tangent, -source_contact_force) * left_to_cp * inv_length;
+//           const auto term2 = mundy::math::dot(left_to_cp, tangent) *
+//                              (-source_contact_force + mundy::math::dot(tangent, -source_contact_force) * tangent) *
+//                              inv_length;
+//           const auto sum = term2 - term1;
+//           // Use an atomic add to sum the forces into the target
+//           Kokkos::atomic_add(&target_node0_force[0], -source_contact_force[0] - sum[0]);
+//           Kokkos::atomic_add(&target_node0_force[1], -source_contact_force[1] - sum[1]);
+//           Kokkos::atomic_add(&target_node0_force[2], -source_contact_force[2] - sum[2]);
+//           Kokkos::atomic_add(&target_node1_force[0], sum[0]);
+//           Kokkos::atomic_add(&target_node1_force[1], sum[1]);
+//           Kokkos::atomic_add(&target_node1_force[2], sum[2]);
+//         }
+//       });
+
+//   node_force_field.modify_on_device();
+// }
+
+// Doesn't work
+// void compute_hertzian_contact_force_and_torque( const stk::mesh::BulkData &bulk_data, stk::mesh::NgpMesh &ngp_mesh,
+// const double sperm_youngs_modulus,
+//                                                const double sperm_poissons_ratio, const double domain_width, const
+//                                                double domain_height, const stk::mesh::Part
+//                                                &spherocylinder_segments_part, NgpDoubleField &node_coords_field,
+//                                                NgpDoubleField &element_radius_field, NgpDoubleField
+//                                                &node_force_field) {
+//   debug_print("Computing the Hertzian contact force and torque.");
+
+//   // Plan:
+//   //   Loop over each spherocylinder segment in a for_each_entity_run. (These are our target segments.)
+//   //   Use a regular for loop over all other spherocylinder segments. (These are our source segments.)
+//   //   Use an initial cancellation step to check if the bounding spheres of the segments overlap.
+//   //   If they do, find the minimum signed separation distance between the segments.
+//   //   If the signed signed separation distance is less than the sum of the radii, compute the contact force and
+//   torque.
+//   //   Sum the result into the target segment. By construction, this sum need not be atomic.
+//   node_coords_field.sync_to_device();
+//   element_radius_field.sync_to_device();
+//   node_force_field.sync_to_device();
+
+//   // Get the vector of segment indices
+//   FastMeshIndicesViewType segment_indices =
+//       get_local_entity_indices(ngp_mesh.get_bulk_on_host(), stk::topology::ELEM_RANK,
+//       spherocylinder_segments_part);
+//   const size_t num_segments = segment_indices.extent(0);
+
+//   const double effective_youngs_modulus =
+//       (sperm_youngs_modulus * sperm_youngs_modulus) /
+//       (sperm_youngs_modulus - sperm_youngs_modulus * sperm_poissons_ratio * sperm_poissons_ratio +
+//        sperm_youngs_modulus - sperm_youngs_modulus * sperm_poissons_ratio * sperm_poissons_ratio);
+//   constexpr double four_thirds = 4.0 / 3.0;
+//   auto range_policy_2d = Kokkos::MDRangePolicy<Kokkos::Rank<2>>({0, 0}, {num_segments, num_segments});
+//   Kokkos::parallel_for(
+//       "apply_hertzian_contact_between_segments", range_policy_2d,
+//       KOKKOS_LAMBDA(const size_t source_segment_indices_index, const size_t target_segment_indices_index) {
+//         const stk::mesh::FastMeshIndex source_segment_index = segment_indices(source_segment_indices_index);
+//         const stk::mesh::FastMeshIndex target_segment_index = segment_indices(target_segment_indices_index);
+
+//         if (fma_less(target_segment_index, source_segment_index) || fma_equal(source_segment_index,
+//         target_segment_index)) {
+//           // Skip self interaction, assuming that the domain is large enough that we cannot collide with our own
+//           // periodic image. Also, skip double counting.
+//           return;
+//         }
+
+//         // Fetch the source segment nodes
+//         stk::mesh::NgpMesh::ConnectedNodes source_nodes =
+//             ngp_mesh.get_nodes(stk::topology::ELEM_RANK, source_segment_index);
+//         stk::mesh::FastMeshIndex source_node0_index = ngp_mesh.fast_mesh_index(source_nodes[0]);
+//         stk::mesh::FastMeshIndex source_node1_index = ngp_mesh.fast_mesh_index(source_nodes[1]);
+
+//         // Fetch the target segment nodes
+//         stk::mesh::NgpMesh::ConnectedNodes target_nodes =
+//             ngp_mesh.get_nodes(stk::topology::ELEM_RANK, target_segment_index);
+//         stk::mesh::FastMeshIndex target_node0_index = ngp_mesh.fast_mesh_index(target_nodes[0]);
+//         stk::mesh::FastMeshIndex target_node1_index = ngp_mesh.fast_mesh_index(target_nodes[1]);
+
+//           // Skip neighboring segments (those that share a node)
+//           if (fma_equal(source_node0_index, target_node0_index) || fma_equal(source_node0_index, target_node1_index)
+//           ||
+//               fma_equal(source_node1_index, target_node0_index) || fma_equal(source_node1_index, target_node1_index))
+//               {
+//             return;
+//           }
+
+//         /////////////////
+//         // Source data //
+//         const auto source_node0_coords_tmp = mundy::mesh::vector3_field_data(node_coords_field, source_node0_index);
+//         const auto source_node1_coords_tmp = mundy::mesh::vector3_field_data(node_coords_field, source_node1_index);
+//         const double source_radius = element_radius_field(source_segment_index, 0);
+//         auto source_node0_force = mundy::mesh::vector3_field_data(node_force_field, source_node0_index);
+//         auto source_node1_force = mundy::mesh::vector3_field_data(node_force_field, source_node1_index);
+
+//         // Target data
+//         const auto target_node0_coords_tmp = mundy::mesh::vector3_field_data(node_coords_field, target_node0_index);
+//         const auto target_node1_coords_tmp = mundy::mesh::vector3_field_data(node_coords_field, target_node1_index);
+//         const double target_radius = element_radius_field(target_segment_index, 0);
+//         auto target_node0_force = mundy::mesh::vector3_field_data(node_force_field, target_node0_index);
+//         auto target_node1_force = mundy::mesh::vector3_field_data(node_force_field, target_node1_index);
+
+//         ///
+//         // Periodic image
+//         // mundy::math::Vector3d source_node0_coords{
+//         //   source_node0_coords_tmp[0],
+//         //   wrap_to_interval(source_node0_coords_tmp[1], 0.0, domain_width),
+//         //   wrap_to_interval(source_node0_coords_tmp[2], 0.0, domain_height)};
+//         // mundy::math::Vector3d source_node1_coords{
+//         //   source_node1_coords_tmp[0],
+//         //   wrap_to_interval(source_node1_coords_tmp[1], 0.0, domain_width),
+//         //   wrap_to_interval(source_node1_coords_tmp[2], 0.0, domain_height)};
+//         // mundy::math::Vector3d target_node0_coords{
+//         //   target_node0_coords_tmp[0],
+//         //   wrap_to_interval(target_node0_coords_tmp[1], 0.0, domain_width),
+//         //   wrap_to_interval(target_node0_coords_tmp[2], 0.0, domain_height)};
+//         // mundy::math::Vector3d target_node1_coords{
+//         //   target_node1_coords_tmp[0],
+//         //   wrap_to_interval(target_node1_coords_tmp[1], 0.0, domain_width),
+//         //   wrap_to_interval(target_node1_coords_tmp[2], 0.0, domain_height)};
+//         mundy::math::Vector3d source_node0_coords{
+//           source_node0_coords_tmp[0],
+//           wrap_to_interval(source_node0_coords_tmp[1], 0.0, domain_width),
+//           source_node0_coords_tmp[2]};
+//         mundy::math::Vector3d source_node1_coords{
+//           source_node1_coords_tmp[0],
+//           wrap_to_interval(source_node1_coords_tmp[1], 0.0, domain_width),
+//           source_node1_coords_tmp[2]};
+//         mundy::math::Vector3d target_node0_coords{
+//           target_node0_coords_tmp[0],
+//           wrap_to_interval(target_node0_coords_tmp[1], 0.0, domain_width),
+//           target_node0_coords_tmp[2]};
+//         mundy::math::Vector3d target_node1_coords{
+//           target_node1_coords_tmp[0],
+//           wrap_to_interval(target_node1_coords_tmp[1], 0.0, domain_width),
+//           target_node1_coords_tmp[2]};
+
+//         ////////////////////////////////////////////
+//         // Compute the AABB of the source segment //
+//         // The corners of the boxes are the min and max of the coordinates of the nodes +/- the radius of the nodes
+//         double source_min_x = Kokkos::min(source_node0_coords[0], source_node1_coords[0]) - source_radius;
+//         double source_max_x = Kokkos::max(source_node0_coords[0], source_node1_coords[0]) + source_radius;
+//         double source_min_y = Kokkos::min(source_node0_coords[1], source_node1_coords[1]) - source_radius;
+//         double source_max_y = Kokkos::max(source_node0_coords[1], source_node1_coords[1]) + source_radius;
+//         double source_min_z = Kokkos::min(source_node0_coords[2], source_node1_coords[2]) - source_radius;
+//         double source_max_z = Kokkos::max(source_node0_coords[2], source_node1_coords[2]) + source_radius;
+
+//         // Compute the AABB for the target segment
+//         double target_min_x = Kokkos::min(target_node0_coords[0], target_node1_coords[0]) - target_radius;
+//         double target_max_x = Kokkos::max(target_node0_coords[0], target_node1_coords[0]) + target_radius;
+//         double target_min_y = Kokkos::min(target_node0_coords[1], target_node1_coords[1]) - target_radius;
+//         double target_max_y = Kokkos::max(target_node0_coords[1], target_node1_coords[1]) + target_radius;
+//         double target_min_z = Kokkos::min(target_node0_coords[2], target_node1_coords[2]) - target_radius;
+//         double target_max_z = Kokkos::max(target_node0_coords[2], target_node1_coords[2]) + target_radius;
+
+//         const bool aabbs_overlap = source_min_x <= target_max_x && source_max_x >= target_min_x &&
+//                                     source_min_y <= target_max_y && source_max_y >= target_min_y &&
+//                                     source_min_z <= target_max_z && source_max_z >= target_min_z;
+//         if (!aabbs_overlap) {
+//             return;
+//         }
+
+//         // Compute the minimum signed separation distance between the segments
+//         mundy::math::Vector3d closest_point_source;
+//         mundy::math::Vector3d closest_point_target;
+//         double archlength_source;
+//         double archlength_target;
+//         const double distance = Kokkos::sqrt(mundy::math::distance::distance_sq_between_line_segments(
+//             source_node0_coords, source_node1_coords, target_node0_coords, target_node1_coords,
+//             closest_point_source, closest_point_target, archlength_source, archlength_target));
+
+//         const auto source_to_target_vector = closest_point_target - closest_point_source;
+//         double signed_separation_distance = distance - source_radius - target_radius;
+//         if (signed_separation_distance > 0) {
+//           signed_separation_distance = 0.0;
+//         }
+
+//         // Compute the contact force and torque
+//         const double inv_distance = 1.0 / distance;
+//         const auto source_normal = inv_distance * source_to_target_vector;
+
+//         // Compute the Hertzian contact force magnitude
+//         const double effective_radius = (source_radius * target_radius) / (source_radius + target_radius);
+//         const double normal_force_magnitude = four_thirds * effective_youngs_modulus * Kokkos::sqrt(effective_radius)
+//         *
+//                                               Kokkos::pow(-signed_separation_distance, 1.5);
+//         const auto source_contact_force = -normal_force_magnitude * source_normal;
+
+//         {
+//           // Sum the force into the source segment nodes.
+//           const auto left_to_cp = closest_point_source - source_node0_coords;
+//           const auto left_to_right = source_node1_coords - source_node0_coords;
+//           const double length = mundy::math::norm(left_to_right);
+//           const double inv_length = 1.0 / length;
+//           const auto tangent = left_to_right * inv_length;
+//           const auto term1 = mundy::math::dot(tangent, source_contact_force) * left_to_cp * inv_length;
+//           const auto term2 = mundy::math::dot(left_to_cp, tangent) *
+//                              (source_contact_force + mundy::math::dot(tangent, source_contact_force) * tangent) *
+//                              inv_length;
+//           const auto sum = term2 - term1;
+
+//           // Use an atomic add to sum the forces into the source
+//           Kokkos::atomic_add(&source_node0_force[0], source_contact_force[0] - sum[0]);
+//           Kokkos::atomic_add(&source_node0_force[1], source_contact_force[1] - sum[1]);
+//           Kokkos::atomic_add(&source_node0_force[2], source_contact_force[2] - sum[2]);
+//           Kokkos::atomic_add(&source_node1_force[0], sum[0]);
+//           Kokkos::atomic_add(&source_node1_force[1], sum[1]);
+//           Kokkos::atomic_add(&source_node1_force[2], sum[2]);
+//         }
+//         {
+//           // Sum the force into the target segment nodes.
+//           const auto left_to_cp = closest_point_target - target_node0_coords;
+//           const auto left_to_right = target_node1_coords - target_node0_coords;
+//           const double length = mundy::math::norm(left_to_right);
+//           const double inv_length = 1.0 / length;
+//           const auto tangent = left_to_right * inv_length;
+//           const auto term1 = mundy::math::dot(tangent, -source_contact_force) * left_to_cp * inv_length;
+//           const auto term2 = mundy::math::dot(left_to_cp, tangent) *
+//                              (-source_contact_force + mundy::math::dot(tangent, -source_contact_force) * tangent) *
+//                              inv_length;
+//           const auto sum = term2 - term1;
+
+//           // Use an atomic add to sum the forces into the target
+//           Kokkos::atomic_add(&target_node0_force[0], -source_contact_force[0] - sum[0]);
+//           Kokkos::atomic_add(&target_node0_force[1], -source_contact_force[1] - sum[1]);
+//           Kokkos::atomic_add(&target_node0_force[2], -source_contact_force[2] - sum[2]);
+//           Kokkos::atomic_add(&target_node1_force[0], sum[0]);
+//           Kokkos::atomic_add(&target_node1_force[1], sum[1]);
+//           Kokkos::atomic_add(&target_node1_force[2], sum[2]);
+//         }
+//       });
+
+//   node_force_field.modify_on_device();
+// }
 
 void compute_generalized_velocity(stk::mesh::NgpMesh &ngp_mesh, const double viscosity,
                                   const stk::mesh::Part &spherocylinder_segments_part,
@@ -1482,7 +2182,7 @@ void run(int argc, char **argv) {
   // Setup the STK mesh
   stk::mesh::MeshBuilder mesh_builder(MPI_COMM_WORLD);
   mesh_builder.set_spatial_dimension(3);
-  mesh_builder.set_entity_rank_names({"NODE", "EDGE", "FACE", "ELEMENT", "CONSTRAINT"});
+  mesh_builder.set_entity_rank_names({"NODE", "EDGE", "FACE", "ELEM", "CONSTRAINT"});
   std::shared_ptr<stk::mesh::MetaData> meta_data_ptr = mesh_builder.create_meta_data();
   meta_data_ptr->use_simple_fields();  // Depreciated in newer versions of STK as they have finished the transition to
                                        // all fields are simple.
@@ -1496,6 +2196,8 @@ void run(int argc, char **argv) {
       meta_data.declare_field<double>(stk::topology::NODE_RANK, "NODE_COORDS");
   DoubleField &old_node_coords_field =  //
       meta_data.declare_field<double>(stk::topology::NODE_RANK, "OLD_NODE_COORDS");
+  DoubleField &node_displacement_since_last_rebuild_field =
+      meta_data.declare_field<double>(stk::topology::NODE_RANK, "OUR_DISP");
   DoubleField &node_velocity_field =  //
       meta_data.declare_field<double>(stk::topology::NODE_RANK, "NODE_VELOCITY");
   DoubleField &old_node_velocity_field =  //
@@ -1539,9 +2241,14 @@ void run(int argc, char **argv) {
       meta_data.declare_field<double>(stk::topology::EDGE_RANK, "EDGE_LENGTH");
 
   DoubleField &element_radius_field =  //
-      meta_data.declare_field<double>(stk::topology::ELEMENT_RANK, "ELEMENT_RADIUS");
+      meta_data.declare_field<double>(stk::topology::ELEM_RANK, "ELEM_RADIUS");
   DoubleField &element_rest_length_field =  //
-      meta_data.declare_field<double>(stk::topology::ELEMENT_RANK, "ELEMENT_REST_LENGTH");
+      meta_data.declare_field<double>(stk::topology::ELEM_RANK, "ELEM_REST_LENGTH");
+
+  DoubleField &elem_aabb_field = meta_data.declare_field<double>(stk::topology::ELEM_RANK, "ELEM_AABB");
+  DoubleField &elem_old_aabb_field = meta_data.declare_field<double>(stk::topology::ELEM_RANK, "ELEM_OLD_AABB");
+  DoubleField &elem_aabb_disp_since_last_rebuild_field =
+      meta_data.declare_field<double>(stk::topology::ELEM_RANK, "ELEM_AABB_DISPLACEMENT");
 
   // Assign the field output types
   stk::io::set_field_role(node_velocity_field, Ioss::Field::TRANSIENT);
@@ -1592,6 +2299,7 @@ void run(int argc, char **argv) {
   stk::io::put_io_part_attribute(spherocylinder_segments_part);
 
   // Assign fields to parts
+  double init_zero6[6] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
   stk::mesh::Part &universal_part = meta_data.universal_part();
   stk::mesh::put_field_on_mesh(node_coords_field, universal_part, 3, nullptr);
   stk::mesh::put_field_on_mesh(old_node_coords_field, universal_part, 3, nullptr);
@@ -1618,6 +2326,9 @@ void run(int argc, char **argv) {
   stk::mesh::put_field_on_mesh(element_radius_field, spherocylinder_segments_part, 1, nullptr);
   stk::mesh::put_field_on_mesh(element_radius_field, centerline_twist_springs_part, 1, nullptr);
   stk::mesh::put_field_on_mesh(element_rest_length_field, centerline_twist_springs_part, 1, nullptr);
+  stk::mesh::put_field_on_mesh(elem_aabb_field, spherocylinder_segments_part, 6, init_zero6);
+  stk::mesh::put_field_on_mesh(elem_old_aabb_field, spherocylinder_segments_part, 6, init_zero6);
+  stk::mesh::put_field_on_mesh(elem_aabb_disp_since_last_rebuild_field, spherocylinder_segments_part, 6, init_zero6);
 
   // Concretize the mesh
   meta_data.commit();
@@ -1646,6 +2357,7 @@ void run(int argc, char **argv) {
   stk_io_broker.add_field(output_file_index, edge_length_field);
   stk_io_broker.add_field(output_file_index, element_radius_field);
   stk_io_broker.add_field(output_file_index, element_rest_length_field);
+  stk_io_broker.add_field(output_file_index, elem_aabb_field);
 
   declare_and_initialize_sperm(bulk_data, centerline_twist_springs_part, boundary_sperm_part,
                                spherocylinder_segments_part,  //
@@ -1685,8 +2397,12 @@ void run(int argc, char **argv) {
   NgpDoubleField ngp_old_edge_tangent_field = stk::mesh::get_updated_ngp_field<double>(old_edge_tangent_field);
   NgpDoubleField ngp_edge_binormal_field = stk::mesh::get_updated_ngp_field<double>(edge_binormal_field);
   NgpDoubleField ngp_edge_length_field = stk::mesh::get_updated_ngp_field<double>(edge_length_field);
-  NgpDoubleField ngp_element_radius_field = stk::mesh::get_updated_ngp_field<double>(element_radius_field);
-  NgpDoubleField ngp_element_rest_length_field = stk::mesh::get_updated_ngp_field<double>(element_rest_length_field);
+  NgpDoubleField ngp_elem_radius_field = stk::mesh::get_updated_ngp_field<double>(element_radius_field);
+  NgpDoubleField ngp_elem_rest_length_field = stk::mesh::get_updated_ngp_field<double>(element_rest_length_field);
+  NgpDoubleField ngp_elem_aabb_field = stk::mesh::get_updated_ngp_field<double>(elem_aabb_field);
+  NgpDoubleField ngp_elem_old_aabb_field = stk::mesh::get_updated_ngp_field<double>(elem_old_aabb_field);
+  NgpDoubleField ngp_elem_aabb_disp_since_last_rebuild_field =
+      stk::mesh::get_updated_ngp_field<double>(elem_aabb_disp_since_last_rebuild_field);
 
   double current_time = 0.0;
   propagate_rest_curvature(ngp_mesh, current_time, run_config.amplitude, run_config.spatial_wavelength,
@@ -1698,6 +2414,9 @@ void run(int argc, char **argv) {
 
   // Time loop
   print_rank0(std::string("Running the simulation for ") + std::to_string(run_config.num_time_steps) + " time steps.");
+  bool rebuild_neighbors = true;
+  ResultViewType search_results;
+  SearchBoxesViewType search_aabbs;
 
   Kokkos::Timer timer;
   for (size_t timestep_index = 0; timestep_index < run_config.num_time_steps; timestep_index++) {
@@ -1705,6 +2424,36 @@ void run(int argc, char **argv) {
 
     if (timestep_index % 1000 == 0) {
       std::cout << "Time step " << timestep_index << " of " << run_config.num_time_steps << std::endl;
+    }
+
+    // Check if we need to recreate the neighbors
+    mundy::mesh::field_copy<double>(elem_aabb_field, elem_old_aabb_field, stk::ngp::ExecSpace{});
+    compute_aabbs(ngp_mesh, spherocylinder_segments_part, ngp_node_coords_field, ngp_elem_radius_field,
+                  ngp_elem_aabb_field);
+    mundy::mesh::field_axpbygz(1.0, elem_aabb_field, -1.0, elem_old_aabb_field, 1.0,
+                               elem_aabb_disp_since_last_rebuild_field, stk::ngp::ExecSpace{});
+    const double max_abs_disp =
+        mundy::mesh::field_amax<double>(elem_aabb_disp_since_last_rebuild_field, stk::ngp::ExecSpace{});
+    if (max_abs_disp > run_config.search_buffer) {
+      rebuild_neighbors = true;
+    }
+
+    if (rebuild_neighbors) {
+      std::cout << "Rebuilding neighbors." << std::endl;
+
+      search_aabbs = create_search_aabbs(bulk_data, ngp_mesh, run_config.search_buffer, run_config.domain_width,
+                                         run_config.domain_height, spherocylinder_segments_part, ngp_elem_aabb_field);
+
+      stk::search::SearchMethod search_method = stk::search::MORTON_LBVH;
+      const bool results_parallel_symmetry = true;   // create source -> target and target -> source pairs
+      const bool auto_swap_domain_and_range = true;  // swap source and target if target is owned and source is not
+      const bool sort_search_results = false;        // sort the search results by source id
+      stk::search::coarse_search(search_aabbs, search_aabbs, search_method, bulk_data.parallel(), search_results,
+                                 stk::ngp::ExecSpace{}, results_parallel_symmetry);
+
+      std::cout << "Search results size: " << search_results.size() << std::endl;
+      rebuild_neighbors = false;
+      mundy::mesh::field_fill(0.0, elem_aabb_disp_since_last_rebuild_field, stk::ngp::ExecSpace{});
     }
 
     // Prepare the current configuration.
@@ -1748,9 +2497,10 @@ void run(int argc, char **argv) {
     // Evaluate forces f(x(t + dt)).
     {
       // Hertzian contact force
-      compute_hertzian_contact_force_and_torque(
-          ngp_mesh, run_config.sperm_youngs_modulus, run_config.sperm_poissons_ratio, run_config.domain_width,
-          spherocylinder_segments_part, ngp_node_coords_field, ngp_element_radius_field, ngp_node_force_field);
+      compute_hertzian_contact_force_and_torque(bulk_data, ngp_mesh, run_config.sperm_youngs_modulus,
+                                                run_config.sperm_poissons_ratio, spherocylinder_segments_part,
+                                                search_results, ngp_node_coords_field, ngp_elem_radius_field,
+                                                ngp_node_force_field);
 
       // Centerline twist rod forces
       propagate_rest_curvature(ngp_mesh, current_time, run_config.amplitude, run_config.spatial_wavelength,
@@ -1809,8 +2559,8 @@ void run(int argc, char **argv) {
       ngp_edge_tangent_field.sync_to_host();
       ngp_edge_binormal_field.sync_to_host();
       ngp_edge_length_field.sync_to_host();
-      ngp_element_radius_field.sync_to_host();
-      ngp_element_rest_length_field.sync_to_host();
+      ngp_elem_radius_field.sync_to_host();
+      ngp_elem_rest_length_field.sync_to_host();
 
       stk_io_broker.begin_output_step(output_file_index, static_cast<double>(timestep_index));
       stk_io_broker.write_defined_output_fields(output_file_index);

@@ -2,8 +2,9 @@
 // **********************************************************************************************************************
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
-//                                           Copyright 2024 Flatiron Institute
-//                                                 Author: Bryce Palmer
+//                                              Copyright 2024 Bryce Palmer
+//
+// Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
 // as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
@@ -41,7 +42,6 @@ We'll need two MetaMethods: one for computing the brownian motion and one for ta
 #include <Teuchos_ParameterList.hpp>                      // for Teuchos::ParameterList
 #include <stk_mesh/base/DumpMeshInfo.hpp>                 // for stk::mesh::impl::dump_all_mesh_info
 #include <stk_mesh/base/Entity.hpp>                       // for stk::mesh::Entity
-#include <stk_mesh/base/ForEachEntity.hpp>                // for mundy::mesh::for_each_entity_run
 #include <stk_mesh/base/Part.hpp>                         // for stk::mesh::Part, stk::mesh::intersect
 #include <stk_mesh/base/Selector.hpp>                     // for stk::mesh::Selector
 #include <stk_topology/topology.hpp>                      // for stk::topology
@@ -53,6 +53,7 @@ We'll need two MetaMethods: one for computing the brownian motion and one for ta
 #include <mundy_core/StringLiteral.hpp>         // for mundy::core::StringLiteral and mundy::core::make_string_literal
 #include <mundy_core/throw_assert.hpp>          // for MUNDY_THROW_ASSERT
 #include <mundy_mesh/BulkData.hpp>              // for mundy::mesh::BulkData
+#include <mundy_mesh/ForEachEntity.hpp>         // for mundy::mesh::for_each_entity_run
 #include <mundy_mesh/MetaData.hpp>              // for mundy::mesh::MetaData
 #include <mundy_meta/MetaFactory.hpp>           // for mundy::meta::MetaKernelFactory
 #include <mundy_meta/MetaKernel.hpp>            // for mundy::meta::MetaKernel

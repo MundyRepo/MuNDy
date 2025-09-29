@@ -2,8 +2,8 @@
 # **********************************************************************************************************************
 #
 # Mundy: Multi-body Nonlocal Dynamics
-# Copyright 2023 Flatiron Institute
-# Author: Bryce Palmer
+# Copyright 2024 Bryce Palmer
+# Developed under support from the NSF Graduate Research Fellowship Program.
 #
 # Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
 # as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
@@ -32,6 +32,7 @@ tribits_copy_files_to_binary_dir(
         cube.ply
         bee_hive.ply
         EXEDEPS PerfTestDeclareEntities
+        CATEGORIES PERFORMANCE
     )
 
 tribits_add_executable(
@@ -45,6 +46,20 @@ tribits_add_executable(
     PerfTestAggregates
     SOURCES
     PerfTestAggregates.cpp
+    CATEGORIES PERFORMANCE
+    )
+
+tribits_add_executable(
+    PerfTestNgpAggregates
+    SOURCES
+    PerfTestNgpAggregates.cpp
+    CATEGORIES PERFORMANCE
+    )
+
+tribits_add_executable(
+    PerfTestNgpLinkData
+    SOURCES
+    PerfTestNgpLinkData.cpp
     CATEGORIES PERFORMANCE
     )
 
@@ -71,9 +86,9 @@ tribits_add_executable(
     CATEGORIES PERFORMANCE
     )
 
-tribits_add_executable(
-    will_it_to_be
-    SOURCES
-    will.cpp
-    CATEGORIES PERFORMANCE
-    )
+# tribits_add_executable(
+#     will_it_to_be
+#     SOURCES
+#     will.cpp
+#     CATEGORIES PERFORMANCE
+#     )

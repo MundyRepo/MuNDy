@@ -2,8 +2,9 @@
 // **********************************************************************************************************************
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
-//                                           Copyright 2024 Flatiron Institute
-//                                                 Author: Bryce Palmer
+//                                              Copyright 2024 Bryce Palmer
+//
+// Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
 // as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
@@ -354,7 +355,7 @@ TEST(DistanceBetweenLines, PositiveResult) {
   unsigned nTests = MUNDY_GEOM_TESTS_UNIT_TESTS_SEGMENT_SEGMENT_DISTANCE_NUM_SAMPLES_PER_TEST;
 
   Point<double> a1, a2, b1, b2, a12_expected, a12_actual, b12_expected, b12_actual;
-  mundy::math::Vector3<double> sep_actual;
+  mundy::math::Vector3d sep_actual;
   double u_expected, v_expected, u_actual, v_actual, dist_expected, dist_actual;
   for (unsigned i = 0; i < nTests; i++) {
     // (a1, a2) and (b1, b2) are points on the lines and u and v are the archlength measured from the left endpoint.
@@ -393,7 +394,7 @@ TEST(DistanceBetweenLineSegments, PositiveResult) {
   unsigned nTests = MUNDY_GEOM_TESTS_UNIT_TESTS_SEGMENT_SEGMENT_DISTANCE_NUM_SAMPLES_PER_TEST;
 
   Point<double> a1, a2, b1, b2, a12_expected, a12_actual, b12_expected, b12_actual;
-  mundy::math::Vector3<double> sep_actual;
+  mundy::math::Vector3d sep_actual;
   double u_expected, v_expected, u_actual, v_actual, dist_expected, dist_actual;
   for (unsigned i = 0; i < nTests; i++) {
     generate_line_segments_at_known_distance(rng, dist_expected, a1, a2, b1, b2, a12_expected, b12_expected, u_expected,
@@ -418,7 +419,7 @@ TEST(DistanceBetweenLineSegments, APeskyEdgeCase) {
   // TODO(palmerb4): We'll need colinear rods that give each of the 4 possible cases.
   openrand::Philox rng(generate_test_seed(), 0);
   Point<double> a1, a2, b1, b2, a12_expected, a12_actual, b12_expected, b12_actual;
-  mundy::math::Vector3<double> sep_actual;
+  mundy::math::Vector3d sep_actual;
 
   double u_expected, v_expected, u_actual, v_actual, dist_expected, dist_actual;
   // Hardcoding a case that I know is wrong.
@@ -452,7 +453,7 @@ TEST(DistanceToLine, PositiveResult) {
 
   Point<double> a1, a2, a12_actual, a12_expected, p;
   double dist_expected, dist_actual, u_actual;
-  mundy::math::Vector3<double> sep_actual;
+  mundy::math::Vector3d sep_actual;
   for (unsigned i = 0; i < nTests; i++) {
     generate_line_at_known_distance<openrand::Philox>(rng, a1, a2, a12_expected, p, dist_expected);
     const LineSegment<double> line_segment(a1, a2);

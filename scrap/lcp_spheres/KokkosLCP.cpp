@@ -2,8 +2,9 @@
 // **********************************************************************************************************************
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
-//                                           Copyright 2024 Flatiron Institute
-//                                                 Author: Bryce Palmer
+//                                              Copyright 2024 Bryce Palmer
+// 
+// Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
 // as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
@@ -51,7 +52,7 @@ struct VelocityReducer {
  public:
   // Required
   typedef VelocityReducer reducer;
-  typedef mundy::math::Vector3<double> value_type;
+  typedef mundy::math::Vector3d value_type;
   typedef Kokkos::View<value_type *, Space, Kokkos::MemoryUnmanaged> result_view_type;
 
  private:
@@ -97,7 +98,7 @@ struct VelocityKernelThreadReductionFunctor {
   }
 
   KOKKOS_INLINE_FUNCTION
-  void operator()(const int s, mundy::math::Vector3<double> &v_accum) const {
+  void operator()(const int s, mundy::math::Vector3d &v_accum) const {
     // Call the custom operation to compute the contribution
     compute_velocity_contribution_(t_, s, v_accum[0], v_accum[1], v_accum[2]);
   }
@@ -126,7 +127,7 @@ struct VelocityKernelTeamFunctor {
 
   KOKKOS_FUNCTION
   void operator()(const int t) const {
-    mundy::math::Vector3<double> v_sum = {0.0, 0.0, 0.0};
+    mundy::math::Vector3d v_sum = {0.0, 0.0, 0.0};
 
     // Loop over all source points
     Kokkos::parallel_reduce(Kokkos::ThreadVectorRange(team_member_, num_source_points_),

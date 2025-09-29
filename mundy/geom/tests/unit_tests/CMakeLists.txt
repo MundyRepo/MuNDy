@@ -2,8 +2,8 @@
 # **********************************************************************************************************************
 #
 # Mundy: Multi-body Nonlocal Dynamics
-# Copyright 2024 Flatiron Institute
-# Author: Bryce Palmer ft. Chris Edelmaier
+# Copyright 2024 Bryce Palmer
+# Developed under support from the NSF Graduate Research Fellowship Program. ft. Chris Edelmaier
 #
 # Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
 # as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
@@ -47,3 +47,12 @@ tribits_add_executable_and_test(
   UnitTestComputeBoundingRadius.cpp
     ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
   )
+
+tribits_add_executable_and_test(
+  UnitTestPeriodicity
+  SOURCES
+  UnitTestPeriodicity.cpp
+    ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
+  )
+
+  

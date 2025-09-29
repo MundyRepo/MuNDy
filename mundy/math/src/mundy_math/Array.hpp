@@ -2,8 +2,9 @@
 // **********************************************************************************************************************
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
-//                                           Copyright 2024 Flatiron Institute
-//                                                 Author: Bryce Palmer
+//                                              Copyright 2024 Bryce Palmer
+//
+// Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
 // as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
@@ -33,7 +34,7 @@
 // Our libs
 #include <mundy_core/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
 #include <mundy_math/Tolerance.hpp>     // for mundy::math::get_zero_tolerance
-#include <mundy_math/impl/ArrayImpl.hpp> 
+#include <mundy_math/impl/ArrayImpl.hpp>
 
 namespace mundy {
 
@@ -95,39 +96,24 @@ class Array {
   constexpr Array(const T& value) : Array(value, std::make_index_sequence<N>{}) {
   }
 
-  /// \brief Destructor
+  /// \brief Default destructor
   KOKKOS_DEFAULTED_FUNCTION constexpr ~Array() = default;
 
-  /// \brief Deep copy constructor
-  // Deep copy constructor
-  KOKKOS_INLINE_FUNCTION
-  constexpr Array(const Array<T, N>& other) : Array(other, std::make_index_sequence<N>{}) {
-  }
+  /// \brief Default copy constructor
+  KOKKOS_DEFAULTED_FUNCTION
+  constexpr Array(const Array<T, N>&) = default;
 
-  /// \brief Deep move constructor
-  KOKKOS_INLINE_FUNCTION
-  constexpr Array(Array<T, N>&& other) : Array(other, std::make_index_sequence<N>{}) {
-  }
+  /// \brief Default move constructor
+  KOKKOS_DEFAULTED_FUNCTION
+  constexpr Array(Array<T, N>&&) = default;
 
-  /// \brief Deep copy assignment operator
-  /// \details Copies the data from the other vector to our data. This is only enabled if T is not const.
-  KOKKOS_INLINE_FUNCTION
-  constexpr Array<T, N>& operator=(const Array<T, N>& other)
-    requires(!std::is_const_v<T>)
-  {
-    impl::deep_copy_impl(std::make_index_sequence<N>{}, *this, other);
-    return *this;
-  }
+  /// \brief Default copy assignment operator
+  KOKKOS_DEFAULTED_FUNCTION
+  constexpr Array<T, N>& operator=(const Array<T, N>&) = default;
 
-  /// \brief Move assignment operator
-  /// \details Moves the data from the other vector to our data. This is only enabled if T is not const.
-  KOKKOS_INLINE_FUNCTION
-  constexpr Array<T, N>& operator=(Array<T, N>&& other)
-    requires(!std::is_const_v<T>)
-  {
-    impl::deep_copy_impl(std::make_index_sequence<N>{}, *this, other);
-    return *this;
-  }
+  /// \brief Default move assignment operator
+  KOKKOS_DEFAULTED_FUNCTION
+  constexpr Array<T, N>& operator=(Array<T, N>&&) = default;
   //@}
 
   //! \name Accessors
@@ -139,9 +125,6 @@ class Array {
   constexpr T& operator[](size_t idx) {
     return data_[idx];
   }
-
-  /// \brief Const element access operator
-  /// \param[in] idx The index of the element.
   KOKKOS_INLINE_FUNCTION
   constexpr const T& operator[](size_t idx) const {
     return data_[idx];
@@ -187,6 +170,22 @@ class Array {
   }
   //@}
 };  // Array
+
+/// \brief Apply a function to each element of an array
+template <typename Func, typename T, size_t N>
+KOKKOS_INLINE_FUNCTION constexpr auto apply(Func&& func, const Array<T, N>& array)
+    -> Array<decltype(func(array[0])), N> {
+  return impl::apply_impl(std::make_index_sequence<N>{}, std::forward<Func>(func), array);
+}
+
+// Just to double check
+static_assert(std::is_trivially_copyable_v<Kokkos::Array<double, 3>>);
+static_assert(std::is_trivially_copyable_v<Array<double, 3>>);
+static_assert(std::is_trivially_destructible_v<Array<double, 3>>);
+static_assert(std::is_copy_constructible_v<Array<double, 3>>);
+static_assert(std::is_move_constructible_v<Array<double, 3>>);
+static_assert(std::is_copy_assignable_v<Array<double, 3>>);
+static_assert(std::is_move_assignable_v<Array<double, 3>>);
 
 }  // namespace math
 

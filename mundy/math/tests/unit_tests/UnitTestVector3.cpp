@@ -2,8 +2,9 @@
 // **********************************************************************************************************************
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
-//                                           Copyright 2024 Flatiron Institute
-//                                                 Author: Bryce Palmer
+//                                              Copyright 2024 Bryce Palmer
+//
+// Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
 // as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
@@ -54,7 +55,7 @@ namespace {
 /// \param[in] v2 The second Vector3
 /// \param[in] message_if_fail The message to print if the test fails
 template <typename U, typename OtherAccessor, typename T, typename Accessor>
-void is_close_debug(const Vector3<U, OtherAccessor>& v1, const Vector3<T, Accessor>& v2,
+void is_close_debug(const AVector3<U, OtherAccessor>& v1, const AVector3<T, Accessor>& v2,
                     const std::string& message_if_fail = "") {
   if (!is_approx_close(v1, v2)) {
     std::cout << "v1 = " << v1 << std::endl;
@@ -68,7 +69,7 @@ void is_close_debug(const Vector3<U, OtherAccessor>& v1, const Vector3<T, Access
 /// \param[in] v2 The second Vector3
 /// \param[in] message_if_fail The message to print if the test fails
 template <typename U, typename OtherAccessor, typename T, typename Accessor>
-void is_different_debug(const Vector3<U, OtherAccessor>& v1, const Vector3<T, Accessor>& v2,
+void is_different_debug(const AVector3<U, OtherAccessor>& v1, const AVector3<T, Accessor>& v2,
                         const std::string& message_if_fail = "") {
   if (is_approx_close(v1, v2)) {
     std::cout << "v1 = " << v1 << std::endl;
@@ -125,8 +126,8 @@ TYPED_TEST(Vector3PairwiseTypeTest, SpecialOperations) {
 
   Vector3<T1> v1(1, 2, 3);
   Vector3<T2> v2(4, 5, 6);
-  is_close_debug(cross(v1, v2), Vector3<double>{-3.0, 6.0, -3.0}, "Cross product failed.");
-  is_close_debug(element_multiply(v1, v2), Vector3<double>{4.0, 10.0, 18.0}, "Element-wise product failed.");
+  is_close_debug(cross(v1, v2), Vector3d{-3.0, 6.0, -3.0}, "Cross product failed.");
+  is_close_debug(elementwise_mul(v1, v2), Vector3d{4.0, 10.0, 18.0}, "Element-wise product failed.");
 }
 //@}
 

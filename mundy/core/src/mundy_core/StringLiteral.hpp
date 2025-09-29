@@ -2,8 +2,9 @@
 // **********************************************************************************************************************
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
-//                                           Copyright 2024 Flatiron Institute
-//                                                 Author: Bryce Palmer
+//                                              Copyright 2024 Bryce Palmer
+//
+// Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
 // as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
@@ -183,9 +184,8 @@ KOKKOS_INLINE_FUNCTION constexpr StringLiteral<N> make_string_literal(const char
 //! \name Helpers for determining if an object is a string literal (type traits fails for string literals)
 //@{
 
-#define MUNDY_IS_CHAR_ARRAY(x) ([&]<class __T = char>() constexpr {       \
-    return std::is_same_v<__T const (&)[sizeof(x)], decltype(x)>;    \
-}())
+#define MUNDY_IS_CHAR_ARRAY(x) \
+  ([&]<class __T = char>() constexpr { return std::is_same_v<__T const(&)[sizeof(x)], decltype(x)>; }())
 
 #define MUNDY_IS_STRING_LITERAL(x)                                          \
   ([&]<class __mundy_T = char>() constexpr {                                \

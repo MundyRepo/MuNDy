@@ -2,8 +2,9 @@
 // **********************************************************************************************************************
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
-//                                           Copyright 2024 Flatiron Institute
-//                                                 Author: Bryce Palmer
+//                                              Copyright 2024 Bryce Palmer
+//
+// Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
 // as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
@@ -26,16 +27,16 @@
 #include <vector>  // for std::vector
 
 // Trilinos libs
-#include <Teuchos_ParameterList.hpp>        // for Teuchos::ParameterList
-#include <stk_mesh/base/Entity.hpp>         // for stk::mesh::Entity
-#include <stk_mesh/base/Field.hpp>          // for stk::mesh::Field, stl::mesh::field_data
-#include <stk_mesh/base/ForEachEntity.hpp>  // for mundy::mesh::for_each_entity_run
+#include <Teuchos_ParameterList.hpp>  // for Teuchos::ParameterList
+#include <stk_mesh/base/Entity.hpp>   // for stk::mesh::Entity
+#include <stk_mesh/base/Field.hpp>    // for stk::mesh::Field, stl::mesh::field_data
 
 // Mundy libs
 #include <mundy_math/Quaternion.hpp>  // for mundy::math::Quaternion
 #include <mundy_math/Vector3.hpp>     // for mundy::math::Vector3
 #include <mundy_mesh/BulkData.hpp>    // for mundy::mesh::BulkData
 #include <mundy_mesh/FieldViews.hpp>  // for mundy::mesh::vector3_field_data, mundy::mesh::quaternion_field_data, mundy::mesh::matrix3_field_data
+#include <mundy_mesh/ForEachEntity.hpp>                                // for mundy::mesh::for_each_entity_run
 #include <mundy_shapes/SpherocylinderSegments.hpp>                     // for mundy::shapes::SpherocylinderSegments
 #include <mundy_shapes/compute_obb/kernels/SpherocylinderSegment.hpp>  // for mundy::shapes::compute_obb::kernels::SpherocylinderSegment
 
@@ -147,12 +148,12 @@ void SpherocylinderSegment::execute(const stk::mesh::Selector &spherocylinder_se
         const auto right_node_coord = mundy::mesh::vector3_field_data(node_coord_field, right_node);
 
         // Compute the orientation of the spherocylinder segment.
-        const mundy::math::Vector3<double> element_orientation_vec = right_node_coord - left_node_coord;
+        const mundy::math::Vector3d element_orientation_vec = right_node_coord - left_node_coord;
 
         // Find any two orthonormal vectors to the orientation vector.
-        const mundy::math::Vector3<double> x_axis(1.0, 0.0, 0.0);
-        const mundy::math::Vector3<double> y_axis(0.0, 1.0, 0.0);
-        const mundy::math::Vector3<double> z_axis(0.0, 0.0, 1.0);
+        const mundy::math::Vector3d x_axis(1.0, 0.0, 0.0);
+        const mundy::math::Vector3d y_axis(0.0, 1.0, 0.0);
+        const mundy::math::Vector3d z_axis(0.0, 0.0, 1.0);
         auto perp_vector0 =
             mundy::math::norm(mundy::math::cross(element_orientation_vec, x_axis)) > 1.0e-12 ? x_axis : y_axis;
         auto perp_vector1 = mundy::math::cross(element_orientation_vec, perp_vector0);

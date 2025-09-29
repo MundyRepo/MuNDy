@@ -2,8 +2,9 @@
 // **********************************************************************************************************************
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
-//                                           Copyright 2024 Flatiron Institute
-//                                                 Author: Bryce Palmer
+//                                              Copyright 2024 Bryce Palmer
+//
+// Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
 // as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
@@ -686,8 +687,8 @@ class FilamentSim {
       stk::mesh::field_data(*element_youngs_modulus_field_ptr_, filament)[0] = filament_youngs_modulus_;
       stk::mesh::field_data(*element_poissons_ratio_field_ptr_, filament)[0] = filament_poissons_ratio_;
 
-      mundy::math::Vector3<double> current_tangent(1.0, 0.0, 0.0);
-      mundy::math::Vector3<double> x_axis(1.0, 0.0, 0.0);
+      mundy::math::Vector3d current_tangent(1.0, 0.0, 0.0);
+      mundy::math::Vector3d x_axis(1.0, 0.0, 0.0);
       mundy::mesh::quaternion_field_data(*element_orientation_field_ptr_, filament) =
           mundy::math::quat_from_parallel_transport(x_axis, current_tangent);
       mundy::mesh::vector3_field_data(*element_tangent_field_ptr_, filament) = current_tangent;

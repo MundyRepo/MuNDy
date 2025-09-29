@@ -2,8 +2,9 @@
 // **********************************************************************************************************************
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
-//                                           Copyright 2024 Flatiron Institute
-//                                                 Author: Bryce Palmer
+//                                              Copyright 2024 Bryce Palmer
+//
+// Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
 // as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
@@ -17,11 +18,16 @@
 // **********************************************************************************************************************
 // @HEADER
 
+#define ANKERL_NANOBENCH_IMPLEMENT
+
 // C++ core
 #include <functional>  // for std::function
 #include <iostream>    // for std::cout, std::endl
 #include <memory>      // for std::unique_ptr
 #include <vector>      // for std::vector
+
+// External
+#include "nanobench.h"
 
 // Trilinos libs
 #include <Trilinos_version.h>  // for TRILINOS_MAJOR_MINOR_VERSION
@@ -129,25 +135,6 @@ class PerfTestFieldBLAS {
       stk::mesh::put_field_on_mesh(field, *part, num_components, initial_value);
     }
     return &field;
-  }
-
-  CoordinateFunc get_field1_func() const {
-    return [](const double* entity_coords) {
-      return std::vector<double>{-entity_coords[0] * entity_coords[0], 2 * entity_coords[1]};
-    };
-  }
-
-  CoordinateFunc get_field2_func() const {
-    return [](const double* entity_coords) {
-      return std::vector<double>{entity_coords[0] * entity_coords[1], 3 * entity_coords[1] * entity_coords[1]};
-    };
-  }
-
-  CoordinateFunc get_field3_func() const {
-    return [](const double* entity_coords) {
-      return std::vector<double>{entity_coords[0] * entity_coords[1], 3 * entity_coords[1] * entity_coords[2],
-                                 5 * entity_coords[2] * entity_coords[0]};
-    };
   }
 
   void setup_three_field_N_hex_mesh(
@@ -359,15 +346,15 @@ class FieldFillTest : public PerfTestFieldBLAS {
     double fill_value_local = fill_value;
     for (size_t i = 0; i < num_iterations; ++i) {
       // Instead of using stk's field_fill, write if from scratch using a host for_each_entity_run loop
-      stk::mesh::for_each_entity_run(
-          bulk, field.entity_rank(), selector,
-          [&field, &fill_value_local]([[maybe_unused]] const stk::mesh::BulkData& bulk, const stk::mesh::Entity entity) {
-            const int num_components = stk::mesh::field_scalars_per_entity(field, entity);
-            double* raw_field_data = stk::mesh::field_data(field, entity);
-            for (int i = 0; i < num_components; ++i) {
-              raw_field_data[i] = fill_value_local;
-            }
-          });
+      stk::mesh::for_each_entity_run(bulk, field.entity_rank(), selector,
+                                     [&field, &fill_value_local]([[maybe_unused]] const stk::mesh::BulkData& bulk,
+                                                                 const stk::mesh::Entity entity) {
+                                       const int num_components = stk::mesh::field_scalars_per_entity(field, entity);
+                                       double* raw_field_data = stk::mesh::field_data(field, entity);
+                                       for (int i = 0; i < num_components; ++i) {
+                                         raw_field_data[i] = fill_value_local;
+                                       }
+                                     });
     }
   }
 };  // class FieldFillTest
@@ -1160,49 +1147,38 @@ class FieldAbsMinTest : public PerfTestFieldBLAS {
 
 template <typename TestType>
 inline void time_test(TestType& test, const std::string& test_name, const size_t num_iterations = 1000) {
-  // Only print time to 3 digits
-  std::cout.precision(3);
-  std::cout << test_name << ":   \t (STK, STK NGP, Mundy NGP, Our STK) = ";
   test.setup();
 
+  ankerl::nanobench::Bench bench;
+  bench.relative(true).title(test_name).unit("op").performanceCounters(true).minEpochIterations(num_iterations);
+
   if constexpr (TestType::has_stk_test) {
-    Kokkos::Timer timer;
-    test.run_stk(num_iterations);
-    const double average_time = static_cast<double>(timer.seconds()) / static_cast<double>(num_iterations);
-    std::cout << "(" << average_time << ", ";
-  } else {
-    std::cout << "(        , ";
+    bench.run("stk", [&] {
+      test.run_stk();
+      Kokkos::fence();
+    });
   }
 
   if constexpr (TestType::has_stk_ngp_test) {
-    Kokkos::Timer timer;
-    test.run_stk_ngp(num_iterations);
-    const double average_time = static_cast<double>(timer.seconds()) / static_cast<double>(num_iterations);
-    std::cout << average_time << ", ";
-  } else {
-    std::cout << "        , ";
+    bench.run("stk_ngp", [&] {
+      test.run_stk_ngp();
+      Kokkos::fence();
+    });
   }
 
   if constexpr (TestType::has_mundy_ngp_test) {
-    Kokkos::Timer timer;
-    test.run_mundy_ngp(num_iterations);
-    const double average_time = static_cast<double>(timer.seconds()) / static_cast<double>(num_iterations);
-    std::cout << average_time << ", ";
-  } else {
-    std::cout << "        , ";
+    bench.run("mundy_ngp", [&] {
+      test.run_mundy_ngp();
+      Kokkos::fence();
+    });
   }
 
   if constexpr (TestType::has_our_stk_test) {
-    Kokkos::Timer timer;
-    test.run_our_stk_test(num_iterations);
-    const double average_time = static_cast<double>(timer.seconds()) / static_cast<double>(num_iterations);
-    std::cout << average_time << ") seconds" << std::endl;
-  } else {
-    std::cout << "         ) seconds" << std::endl;
+    bench.run("our_stk", [&] {
+      test.run_our_stk_test();
+      Kokkos::fence();
+    });
   }
-
-  // Reset precision
-  std::cout.precision(6);
 }
 
 }  // namespace

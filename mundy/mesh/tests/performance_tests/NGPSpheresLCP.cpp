@@ -2,8 +2,9 @@
 // **********************************************************************************************************************
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
-//                                           Copyright 2024 Flatiron Institute
-//                                                 Author: Bryce Palmer
+//                                              Copyright 2024 Bryce Palmer
+//
+// Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
 // as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
@@ -91,6 +92,16 @@ using LocalResultViewType = Kokkos::View<LocalIntersection *, DeviceExecutionSpa
 
 //! \name Setup
 //@{
+
+KOKKOS_INLINE_FUNCTION
+bool fma_equal(stk::mesh::FastMeshIndex lhs, stk::mesh::FastMeshIndex rhs) {
+  return (lhs.bucket_id == rhs.bucket_id) && (lhs.bucket_ord == rhs.bucket_ord);
+}
+
+KOKKOS_INLINE_FUNCTION
+bool fma_less(stk::mesh::FastMeshIndex lhs, stk::mesh::FastMeshIndex rhs) {
+  return lhs.bucket_id == rhs.bucket_id ? lhs.bucket_ord < rhs.bucket_ord : lhs.bucket_id < rhs.bucket_id;
+}
 
 void generate_particles(stk::mesh::BulkData &bulk_data, const size_t num_particles_global,
                         stk::mesh::Part &particle_part) {
@@ -352,7 +363,7 @@ void compute_signed_separation_distance_and_contact_normal(
         const stk::mesh::FastMeshIndex target_index = local_search_results(i).rangeIdentProc.id();
 
         // Skip self interaction and avoid double counting
-        if (target_index < source_index || target_index == source_index) {
+        if (fma_less(target_index, source_index) || fma_equal(target_index, source_index)) {
           signed_sep_dist(i) = 0.0;
           con_normals_ij(i, 0) = 0.0;
           con_normals_ij(i, 1) = 0.0;
@@ -436,7 +447,7 @@ struct DiffDotsReducer {
  public:
   // Required
   typedef DiffDotsReducer reducer;
-  typedef mundy::math::Vector3<double> value_type;
+  typedef mundy::math::Vector3d value_type;
   typedef Kokkos::View<value_type *, Space, Kokkos::MemoryUnmanaged> result_view_type;
 
  private:
@@ -481,13 +492,13 @@ void compute_diff_dots(const stk::ParallelMachine parallel,
                        const Kokkos::View<double *, DeviceMemorySpace> &signed_sep_dot_tmp, const double dt,
                        double &dot_xkdiff_xkdiff, double &dot_xkdiff_gkdiff, double &dot_gkdiff_gkdiff) {
   // Local variables to store dot products
-  mundy::math::Vector3<double> local_xx_xg_gg_diff = {0.0, 0.0, 0.0};
+  mundy::math::Vector3d local_xx_xg_gg_diff = {0.0, 0.0, 0.0};
 
   // Perform parallel reduction to compute the dot products
   using range_policy = Kokkos::RangePolicy<DeviceExecutionSpace>;
   Kokkos::parallel_reduce(
       "ComputeDiffDots", range_policy(0, lagrange_multipliers.extent(0)),
-      KOKKOS_LAMBDA(const int i, mundy::math::Vector3<double> &acc_xx_xg_gg_diff) {
+      KOKKOS_LAMBDA(const int i, mundy::math::Vector3d &acc_xx_xg_gg_diff) {
         const double lag_mult = lagrange_multipliers(i);
         const double lag_mult_tmp = lagrange_multipliers_tmp(i);
         const double sep_dot = signed_sep_dot(i);
@@ -529,7 +540,7 @@ void sum_collision_force(stk::mesh::NgpMesh &ngp_mesh, const LocalResultViewType
         const stk::mesh::FastMeshIndex target_index = local_search_results(i).rangeIdentProc.id();
 
         // Skip self interaction and avoid double counting
-        if (target_index < source_index || target_index == source_index) {
+        if (fma_less(target_index, source_index) || fma_equal(target_index, source_index)) {
           return;
         }
 
@@ -620,7 +631,7 @@ void compute_rate_of_change_of_sep(stk::mesh::NgpMesh &ngp_mesh, const LocalResu
         const stk::mesh::FastMeshIndex target_index = local_search_results(i).rangeIdentProc.id();
 
         // Skip self interaction and avoid double counting
-        if (target_index < source_index || target_index == source_index) {
+        if (fma_less(target_index, source_index) || fma_equal(target_index, source_index)) {
           signed_sep_dot(i) = 0.0;
           return;
         }

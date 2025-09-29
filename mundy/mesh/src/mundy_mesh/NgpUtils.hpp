@@ -2,8 +2,9 @@
 // **********************************************************************************************************************
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
-//                                           Copyright 2024 Flatiron Institute
-//                                                 Author: Bryce Palmer
+//                                              Copyright 2024 Bryce Palmer
+//
+// Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
 // as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
@@ -27,9 +28,10 @@
 #include <type_traits>
 
 // Trilinos
+#include <Trilinos_version.h>  // for TRILINOS_MAJOR_MINOR_VERSION
+
 #include <stk_mesh/base/NgpField.hpp>
 #include <stk_mesh/base/NgpMesh.hpp>
-#include <Trilinos_version.h>  // for TRILINOS_MAJOR_MINOR_VERSION
 
 namespace mundy {
 
@@ -53,7 +55,7 @@ constexpr bool is_host_field<stk::mesh::HostField<T, NgpMemSpace, NgpDebugger>> 
 
 template <typename T, typename NgpMemSpace, template <typename, typename> class NgpDebugger>
 constexpr bool is_host_field<const stk::mesh::HostField<T, NgpMemSpace, NgpDebugger>> = true;
-#else 
+#else
 template <typename T, template <typename> class NgpDebugger>
 constexpr bool is_device_field<stk::mesh::DeviceField<T, NgpDebugger>> = true;
 

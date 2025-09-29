@@ -2,8 +2,9 @@
 // **********************************************************************************************************************
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
-//                                           Copyright 2024 Flatiron Institute
-//                                                 Author: Bryce Palmer
+//                                              Copyright 2024 Bryce Palmer
+//
+// Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
 // as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
@@ -45,10 +46,10 @@ a single GPU.
 #include <algorithm>
 #include <fstream>
 #include <iostream>
+#include <numeric>
 #include <sstream>
 #include <string>
 #include <vector>
-#include <numeric>
 
 // Kokkos and Kokkos-Kernels
 #include <KokkosBlas.hpp>
@@ -199,7 +200,8 @@ void invert_matrix([[maybe_unused]] const ExecutionSpace &space, const MatrixTyp
   // Fill matrix_inv with the identity matrix
   Kokkos::deep_copy(matrix_inv, 0.0);
   Kokkos::parallel_for(
-      "FillIdentity", Kokkos::RangePolicy<>(0, matrix_size), KOKKOS_LAMBDA(const size_t i) { matrix_inv(i, i) = 1.0; });
+      "FillIdentity", Kokkos::RangePolicy<ExecutionSpace>(0, matrix_size),
+      KOKKOS_LAMBDA(const size_t i) { matrix_inv(i, i) = 1.0; });
 
   // Solve the dense linear equation system M*X = I, which results in X = M^{-1}
   // On exist, M is replaced with its LU decomposition
@@ -493,7 +495,7 @@ struct VelocityReducer {
  public:
   // Required
   typedef VelocityReducer reducer;
-  typedef mundy::math::Vector3<double> value_type;
+  typedef mundy::math::Vector3d value_type;
   typedef Kokkos::View<value_type *, Space, Kokkos::MemoryUnmanaged> result_view_type;
 
  private:
@@ -539,7 +541,7 @@ struct VelocityKernelThreadReductionFunctor {
   }
 
   KOKKOS_INLINE_FUNCTION
-  void operator()(const int s, mundy::math::Vector3<double> &v_accum) const {
+  void operator()(const int s, mundy::math::Vector3d &v_accum) const {
     // Call the custom operation to compute the contribution
     compute_velocity_contribution_(t_, s, v_accum[0], v_accum[1], v_accum[2]);
   }
@@ -568,7 +570,7 @@ struct VelocityKernelTeamFunctor {
 
   KOKKOS_FUNCTION
   void operator()(const int t) const {
-    mundy::math::Vector3<double> v_sum = {0.0, 0.0, 0.0};
+    mundy::math::Vector3d v_sum = {0.0, 0.0, 0.0};
 
     // Loop over all source points
     Kokkos::parallel_reduce(Kokkos::ThreadVectorRange(team_member_, num_source_points_),
@@ -650,8 +652,7 @@ void panelize_velocity_kernel_over_target_points([[maybe_unused]] const Executio
   // Define the team policy with the number of panels
   using team_policy = Kokkos::TeamPolicy<ExecutionSpace>;
   Kokkos::parallel_for(
-      "Panalize_Target_Points", team_policy(num_panels, Kokkos::AUTO),
-      KOKKOS_LAMBDA(const team_policy::member_type &team_member) {
+      team_policy(num_panels, Kokkos::AUTO), KOKKOS_LAMBDA(const team_policy::member_type &team_member) {
         const int panel_start = team_member.league_rank() * panel_size;
         const int panel_end =
             (panel_start + panel_size) > num_target_points ? num_target_points : (panel_start + panel_size);
@@ -742,7 +743,7 @@ void apply_stokes_kernel([[maybe_unused]] const ExecutionSpace &space,  //
   };
 
   panelize_velocity_kernel_over_target_points<32>(space, num_target_points, num_source_points, target_velocities,
-                                                   stokes_computation);
+                                                  stokes_computation);
 }
 
 /// \brief Apply the stokes kernel to map source forces to target velocities: u_target += M f_source
@@ -830,7 +831,7 @@ void apply_weighted_stokes_kernel([[maybe_unused]] const ExecutionSpace &space, 
   };
 
   panelize_velocity_kernel_over_target_points<32>(space, num_target_points, num_source_points, target_velocities,
-                                                   weighted_stokes_computation);
+                                                  weighted_stokes_computation);
 }
 
 /// \brief Apply the RPY kernel to map source forces to target velocities: u_target += M f_source
@@ -937,7 +938,7 @@ void apply_rpy_kernel([[maybe_unused]] const ExecutionSpace &space,  //
   };
 
   panelize_velocity_kernel_over_target_points<32>(space, num_target_points, num_source_points, target_velocities,
-                                                   rpy_computation);
+                                                  rpy_computation);
 }
 
 /// \brief Apply the corrected RPY kernel to map source forces to target velocities: u_target += M f_source
@@ -1069,8 +1070,8 @@ void apply_rpyc_kernel([[maybe_unused]] const ExecutionSpace &space,  //
       if (r2 < DOUBLE_ZERO) {
         // Skip self interaction
         return;
-      }     
-      
+      }
+
       const double max_a_b = Kokkos::max(a, b);
       const double scale_factor = one_over_six * inv_pi * inv_viscosity / max_a_b;
       vx_accum += scale_factor * fx;
@@ -1080,7 +1081,7 @@ void apply_rpyc_kernel([[maybe_unused]] const ExecutionSpace &space,  //
   };
 
   panelize_velocity_kernel_over_target_points<32>(space, num_target_points, num_source_points, target_velocities,
-                                                   rpyc_computation);
+                                                  rpyc_computation);
 }
 
 /// \brief Apply the stokes double layer kernel with singularity subtraction) to map source forces to target velocities:
@@ -1199,7 +1200,7 @@ void apply_stokes_double_layer_kernel_ss([[maybe_unused]] const ExecutionSpace &
   };
 
   panelize_velocity_kernel_over_target_points<32>(space, num_target_points, num_source_points, target_velocities,
-                                                   stokes_double_layer_computation);
+                                                  stokes_double_layer_computation);
 }
 
 /// \brief Apply the stokes double layer kernel to map source forces to target velocities: u_target += M f_source
@@ -1308,7 +1309,7 @@ void apply_stokes_double_layer_kernel([[maybe_unused]] const ExecutionSpace &spa
   };
 
   panelize_velocity_kernel_over_target_points<32>(space, num_target_points, num_source_points, target_velocities,
-                                                   stokes_double_layer_contribution);
+                                                  stokes_double_layer_contribution);
 }
 
 /// \brief Apply local drag to the sphere velocities v += 1/(6 pi mu r) f
@@ -1665,7 +1666,7 @@ void add_complementary_kernel([[maybe_unused]] const ExecutionSpace &space,     
   };
 
   panelize_velocity_kernel_over_target_points<32>(space, num_target_points, num_source_points, target_velocities,
-                                                   complementary_contribution);
+                                                  complementary_contribution);
 }
 
 /// \brief Fill the second kind Fredholm integral equation matrix for Stokes flow induced by a boundary due to
@@ -1864,10 +1865,10 @@ void apply_skfie([[maybe_unused]] const ExecutionSpace &space,          //
   };
 
   panelize_velocity_kernel_over_target_points<32>(space, num_target_points, num_source_points, target_velocities,
-                                                   skfie_contribution);
+                                                  skfie_contribution);
 }
 
-template<typename ExecSpace>
+template <typename ExecSpace>
 class PeripheryT {
  public:
   //! \name Types

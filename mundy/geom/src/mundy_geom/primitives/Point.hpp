@@ -2,8 +2,9 @@
 // **********************************************************************************************************************
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
-//                                           Copyright 2024 Flatiron Institute
-//                                                 Author: Bryce Palmer
+//                                              Copyright 2024 Bryce Palmer
+//
+// Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
 // as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
@@ -44,19 +45,26 @@ namespace geom {
 /// The following is a methodological choice to use the Vector3 class as the underlying data structure for the Point
 /// class. This is done to allow points to access the same mathematical operations as vectors (dot product, cross
 /// product, etc.). Had we created our own interface, we would have hidden the mathematical operations from the user.
-template <typename Scalar, mundy::math::ValidAccessor<Scalar> Accessor = mundy::math::Array<Scalar, 3>,
-          typename OwnershipType = mundy::math::Ownership::Owns>
-using Point = mundy::math::Vector3<Scalar, Accessor, OwnershipType>;
+template <typename Scalar, math::ValidAccessor<Scalar> Accessor = math::Array<Scalar, 3>,
+          typename OwnershipType = math::Ownership::Owns>
+using Point = math::AVector3<Scalar, Accessor, OwnershipType>;
 //
-template <typename Scalar, mundy::math::ValidAccessor<Scalar> Accessor = mundy::math::Array<Scalar, 3>>
-using OwningPoint = Point<Scalar, Accessor, mundy::math::Ownership::Owns>;
+template <typename Scalar, math::ValidAccessor<Scalar> Accessor = math::Array<Scalar, 3>>
+using OwningPoint = Point<Scalar, Accessor, math::Ownership::Owns>;
 //
-template <typename Scalar, mundy::math::ValidAccessor<Scalar> Accessor = mundy::math::Array<Scalar, 3>>
-using PointView = Point<Scalar, Accessor, mundy::math::Ownership::Views>;
+template <typename Scalar, math::ValidAccessor<Scalar> Accessor = math::Array<Scalar, 3>>
+using PointView = Point<Scalar, Accessor, math::Ownership::Views>;
+
+/// @brief (Implementation) Type trait to determine if a type is an AABB
+template <typename T>
+struct is_point_impl : std::false_type {};
+//
+template <typename Scalar, math::ValidAccessor<Scalar> Accessor, typename OwnershipType>
+struct is_point_impl<Point<Scalar, Accessor, OwnershipType>> : std::true_type {};
 
 /// @brief Type trait to determine if a type is a Point
 template <typename T>
-using is_point = mundy::math::is_vector3<T>;
+struct is_point : is_point_impl<std::remove_cv_t<T>> {};
 //
 template <typename T>
 constexpr bool is_point_v = is_point<T>::value;
@@ -64,17 +72,7 @@ constexpr bool is_point_v = is_point<T>::value;
 /// @brief Concept to check if a type has the necessary properties to be a valid Point type
 /// As a predicate to creating a new point type, specialize is_point for the new type.
 template <typename PointType>
-concept ValidPointType = requires(std::decay_t<PointType> point, const std::decay_t<PointType> const_point) {
-  is_point_v<std::decay_t<PointType>>;
-  typename std::decay_t<PointType>::scalar_t;
-  { point[0] } -> std::convertible_to<typename std::decay_t<PointType>::scalar_t>;
-  { point[1] } -> std::convertible_to<typename std::decay_t<PointType>::scalar_t>;
-  { point[2] } -> std::convertible_to<typename std::decay_t<PointType>::scalar_t>;
-
-  { const_point[0] } -> std::convertible_to<const typename std::decay_t<PointType>::scalar_t>;
-  { const_point[1] } -> std::convertible_to<const typename std::decay_t<PointType>::scalar_t>;
-  { const_point[2] } -> std::convertible_to<const typename std::decay_t<PointType>::scalar_t>;
-};  // ValidPointType
+concept ValidPointType = is_point_v<PointType>;
 
 static_assert(ValidPointType<Point<float>> && ValidPointType<const Point<float>> && ValidPointType<Point<double>> &&
                   ValidPointType<const Point<double>>,

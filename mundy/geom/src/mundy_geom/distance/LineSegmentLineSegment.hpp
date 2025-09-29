@@ -2,8 +2,9 @@
 // **********************************************************************************************************************
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
-//                                           Copyright 2024 Flatiron Institute
-//                                                 Author: Bryce Palmer
+//                                              Copyright 2024 Bryce Palmer
+//
+// Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
 // as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
@@ -27,7 +28,9 @@
 #include <Kokkos_Core.hpp>
 
 // Mundy
+#include <mundy_geom/distance/DistanceMetrics.hpp>   // for mundy::geom::FreeSpaceMetric
 #include <mundy_geom/distance/PointLineSegment.hpp>  // for mundy::geom::distance(Point, LineSegment)
+#include <mundy_geom/distance/PointPoint.hpp>        // for mundy::geom::distance(Point, Point)
 #include <mundy_geom/distance/Types.hpp>             // for mundy::geom::SharedNormalSigned
 #include <mundy_geom/primitives/LineSegment.hpp>     // for mundy::geom::LineSegment
 #include <mundy_geom/primitives/Point.hpp>           // for mundy::geom::Point
@@ -37,12 +40,16 @@ namespace mundy {
 
 namespace geom {
 
+//! \name Free space distance calculations
+//@{
+
 /// \brief Compute the distance between two line segments
 /// \tparam Scalar The scalar type
 /// \param[in] line_segment1 The first line segment
 /// \param[in] line_segment2 The second line segment
 template <typename Scalar>
-KOKKOS_FUNCTION Scalar distance(const LineSegment<Scalar>& line_segment1, const LineSegment<Scalar>& line_segment2) {
+KOKKOS_FUNCTION Scalar distance(const LineSegment<Scalar>& line_segment1,  //
+                                const LineSegment<Scalar>& line_segment2) {
   return distance(SharedNormalSigned{}, line_segment1, line_segment2);
 }
 
@@ -51,10 +58,11 @@ KOKKOS_FUNCTION Scalar distance(const LineSegment<Scalar>& line_segment1, const 
 /// \param[in] line_segment1 The first line segment
 /// \param[in] line_segment2 The second line segment
 template <typename Scalar>
-KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const Euclidean distance_type,
-                                const LineSegment<Scalar>& line_segment1, const LineSegment<Scalar>& line_segment2) {
-  return distance(SharedNormalSigned{}, line_segment1,
-                  line_segment2);  // no difference between distance types for line segments
+KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const Euclidean distance_type,  //
+                                const LineSegment<Scalar>& line_segment1,        //
+                                const LineSegment<Scalar>& line_segment2) {
+  // no difference between distance types for line segments
+  return distance(SharedNormalSigned{}, line_segment1, line_segment2);
 }
 
 /// \brief Compute the euclidean separation distance between two line segments
@@ -62,8 +70,9 @@ KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const Euclidean distance_type,
 /// \param[in] line_segment1 The first line segment
 /// \param[in] line_segment2 The second line segment
 template <typename Scalar>
-KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distance_type,
-                                const LineSegment<Scalar>& line_segment1, const LineSegment<Scalar>& line_segment2) {
+KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
+                                const LineSegment<Scalar>& line_segment1,                 //
+                                const LineSegment<Scalar>& line_segment2) {
   // Part of this function was adapted from VTK, which, in turn adapted part of it from "GeometryAlgorithms.com"
   const auto& l0 = line_segment1.start();
   const auto& l1 = line_segment1.end();
@@ -156,11 +165,15 @@ KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distan
 /// \param[out] arch_length2 The arch-length parameter of the closest point on the second line segment
 /// \param[out] sep The separation vector (from line_segment1 to line_segment2)
 template <typename Scalar>
-KOKKOS_FUNCTION Scalar distance(const LineSegment<Scalar>& line_segment1, const LineSegment<Scalar>& line_segment2,
-                                Point<Scalar>& closest_point1, Point<Scalar>& closest_point2, Scalar& arch_length1,
-                                Scalar& arch_length2, mundy::math::Vector3<Scalar>& sep) {
-  return distance(SharedNormalSigned{}, line_segment1, line_segment2, closest_point1, closest_point2, arch_length1,
-                  arch_length2, sep);
+KOKKOS_FUNCTION Scalar distance(const LineSegment<Scalar>& line_segment1,  //
+                                const LineSegment<Scalar>& line_segment2,  //
+                                Point<Scalar>& closest_point1,             //
+                                Point<Scalar>& closest_point2,             //
+                                Scalar& arch_length1,                      //
+                                Scalar& arch_length2,                      //
+                                mundy::math::Vector3<Scalar>& sep) {
+  return distance(SharedNormalSigned{}, line_segment1, line_segment2,  //
+                  closest_point1, closest_point2, arch_length1, arch_length2, sep);
 }
 
 /// \brief Compute the shared normal signed separation distance between two line segments
@@ -173,10 +186,14 @@ KOKKOS_FUNCTION Scalar distance(const LineSegment<Scalar>& line_segment1, const 
 /// \param[out] arch_length2 The arch-length parameter of the closest point on the second line segment
 /// \param[out] sep The separation vector (from line_segment1 to line_segment2)
 template <typename Scalar>
-KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distance_type,
-                                const LineSegment<Scalar>& line_segment1, const LineSegment<Scalar>& line_segment2,
-                                Point<Scalar>& closest_point1, Point<Scalar>& closest_point2, Scalar& arch_length1,
-                                Scalar& arch_length2, mundy::math::Vector3<Scalar>& sep) {
+KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
+                                const LineSegment<Scalar>& line_segment1,                 //
+                                const LineSegment<Scalar>& line_segment2,                 //
+                                Point<Scalar>& closest_point1,                            //
+                                Point<Scalar>& closest_point2,                            //
+                                Scalar& arch_length1,                                     //
+                                Scalar& arch_length2,                                     //
+                                mundy::math::Vector3<Scalar>& sep) {
   // Part of this function was adapted from VTK, which, in turn adapted part of it from "GeometryAlgorithms.com"
   const auto& l0 = line_segment1.start();
   const auto& l1 = line_segment1.end();
@@ -309,13 +326,18 @@ KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distan
 /// \param[out] arch_length2 The arch-length parameter of the closest point on the second line segment
 /// \param[out] sep The separation vector (from line_segment1 to line_segment2)
 template <typename Scalar>
-KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const Euclidean distance_type,
-                                const LineSegment<Scalar>& line_segment1, const LineSegment<Scalar>& line_segment2,
-                                Point<Scalar>& closest_point1, Point<Scalar>& closest_point2, Scalar& arch_length1,
-                                Scalar& arch_length2, mundy::math::Vector3<Scalar>& sep) {
-  return distance(SharedNormalSigned{}, line_segment1, line_segment2, closest_point1, closest_point2, arch_length1,
-                  arch_length2, sep);
+KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const Euclidean distance_type,  //
+                                const LineSegment<Scalar>& line_segment1,        //
+                                const LineSegment<Scalar>& line_segment2,        //
+                                Point<Scalar>& closest_point1,                   //
+                                Point<Scalar>& closest_point2,                   //
+                                Scalar& arch_length1,                            //
+                                Scalar& arch_length2,                            //
+                                mundy::math::Vector3<Scalar>& sep) {
+  return distance(SharedNormalSigned{}, line_segment1, line_segment2,  //
+                  closest_point1, closest_point2, arch_length1, arch_length2, sep);
 }
+//@}
 
 }  // namespace geom
 

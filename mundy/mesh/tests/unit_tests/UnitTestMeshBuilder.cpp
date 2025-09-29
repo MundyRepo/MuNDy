@@ -2,8 +2,9 @@
 // **********************************************************************************************************************
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
-//                                           Copyright 2024 Flatiron Institute
-//                                                 Author: Bryce Palmer
+//                                              Copyright 2024 Bryce Palmer
+//
+// Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
 // as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
@@ -174,22 +175,16 @@ TEST(MeshBuilderTest, SetSpatialDimensionAndEntityRankNames) {
   EXPECT_EQ(expected_rank_names, bulk_data_ptr->mesh_meta_data().entity_rank_names());
 }
 
-TEST(MeshBuilderTest, BulkDataAddFmwkDataDefault) {
-  std::shared_ptr<stk::mesh::BulkData> bulk_data_ptr = MeshBuilder(MPI_COMM_WORLD).create_bulk_data();
-
-  EXPECT_FALSE(bulk_data_ptr->add_fmwk_data());
-}
-
 TEST(MeshBuilderTest, BulkDataAddFmwkData) {
   MeshBuilder builder(MPI_COMM_WORLD);
   builder.set_add_fmwk_data_flag(true);
   std::shared_ptr<stk::mesh::BulkData> bulk_data_ptr = builder.create_bulk_data();
 
-  #ifdef SIERRA_MIGRATION
-    EXPECT_TRUE(bulk_data_ptr->add_fmwk_data());
-  #else
-    EXPECT_FALSE(bulk_data_ptr->add_fmwk_data());
-  #endif
+#ifdef SIERRA_MIGRATION
+  EXPECT_TRUE(bulk_data_ptr->add_fmwk_data());
+#else
+  EXPECT_FALSE(bulk_data_ptr->add_fmwk_data());
+#endif
 }
 
 TEST(MeshBuilderTest, BulkdataAddFmwkDataFalse) {

@@ -2,8 +2,9 @@
 // **********************************************************************************************************************
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
-//                                           Copyright 2024 Flatiron Institute
-//                                                 Author: Bryce Palmer
+//                                              Copyright 2024 Bryce Palmer
+//
+// Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
 // as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
@@ -21,11 +22,15 @@
 #include <gtest/gtest.h>  // for TEST, ASSERT_NO_THROW, etc
 
 // C++ core libs
-#include <algorithm>    // for std::max
-#include <map>          // for std::map
-#include <memory>       // for std::shared_ptr, std::unique_ptr
-#include <stdexcept>    // for std::logic_error, std::invalid_argument
-#include <string>       // for std::string
+#include <algorithm>  // for std::max
+#include <atomic>
+#include <barrier>
+#include <future>
+#include <map>        // for std::map
+#include <memory>     // for std::shared_ptr, std::unique_ptr
+#include <stdexcept>  // for std::logic_error, std::invalid_argument
+#include <string>     // for std::string
+#include <thread>
 #include <type_traits>  // for std::enable_if, std::is_base_of, std::conjunction, std::is_convertible
 #include <utility>      // for std::move
 #include <vector>       // for std::vector
@@ -72,8 +77,8 @@ void is_close_debug(const U& a, const T& b, const std::string& message_if_fail =
 /// \param[in] message_if_fail The message to print if the test fails
 template <size_t N, typename U, typename OtherAccessor, typename OtherOwnershipType, typename T, typename Accessor,
           typename OwnershipType>
-void is_close_debug(const Vector<U, N, OtherAccessor, OtherOwnershipType>& v1,
-                    const Vector<T, N, Accessor, OwnershipType>& v2, const std::string& message_if_fail = "") {
+void is_close_debug(const AVector<U, N, OtherAccessor, OtherOwnershipType>& v1,
+                    const AVector<T, N, Accessor, OwnershipType>& v2, const std::string& message_if_fail = "") {
   if (!is_approx_close(v1, v2)) {
     std::cout << "v1 = " << v1 << std::endl;
     std::cout << "v2 = " << v2 << std::endl;
@@ -87,8 +92,8 @@ void is_close_debug(const Vector<U, N, OtherAccessor, OtherOwnershipType>& v1,
 /// \param[in] message_if_fail The message to print if the test fails
 template <size_t N, typename U, typename OtherAccessor, typename OtherOwnershipType, typename T, typename Accessor,
           typename OwnershipType>
-void is_different_debug(const Vector<U, N, OtherAccessor, OtherOwnershipType>& v1,
-                        const Vector<T, N, Accessor, OwnershipType>& v2, const std::string& message_if_fail = "") {
+void is_different_debug(const AVector<U, N, OtherAccessor, OtherOwnershipType>& v1,
+                        const AVector<T, N, Accessor, OwnershipType>& v2, const std::string& message_if_fail = "") {
   if (is_approx_close(v1, v2)) {
     std::cout << "v1 = " << v1 << std::endl;
     std::cout << "v2 = " << v2 << std::endl;
@@ -135,46 +140,31 @@ using MyTypePairs = ::testing::Types<TypePair<int, float>, TypePair<int, double>
 TYPED_TEST_SUITE(VectorPairwiseTypeTest, MyTypePairs);
 //@}
 
-//! \name Helper typedefs
-//@{
-
-// \note The following typedefs are used because GTEST's macros interpret the comma in the template as separating
-// arguments
-template <typename T>
-using OurVector1 = Vector<T, 1>;
-
-template <typename T>
-using OurVector2 = Vector<T, 2>;
-
-template <typename T>
-using OurVector3 = Vector<T, 3>;
-//@}
-
 //! \name Vector Constructors and Destructor (in dims 1, 2, and 3)
 //@{
 
 TYPED_TEST(VectorSingleTypeTest, DefaultConstructor) {
-  ASSERT_NO_THROW(OurVector1<TypeParam>());
-  ASSERT_NO_THROW(OurVector2<TypeParam>());
-  ASSERT_NO_THROW(OurVector3<TypeParam>());
+  ASSERT_NO_THROW(Vector1<TypeParam>());
+  ASSERT_NO_THROW(Vector2<TypeParam>());
+  ASSERT_NO_THROW(Vector3<TypeParam>());
 }
 
 TYPED_TEST(VectorSingleTypeTest, LiteralConstruction) {
-  OurVector1<TypeParam>{1};
-  OurVector2<TypeParam>{1, 2};
-  OurVector3<TypeParam>{1, 2, 3};
-  constexpr OurVector1<TypeParam> v1{1};
-  constexpr OurVector2<TypeParam> v2{1, 2};
-  constexpr OurVector3<TypeParam> v3{1, 2, 3};
+  Vector1<TypeParam>{1};
+  Vector2<TypeParam>{1, 2};
+  Vector3<TypeParam>{1, 2, 3};
+  constexpr Vector1<TypeParam> v1{1};
+  constexpr Vector2<TypeParam> v2{1, 2};
+  constexpr Vector3<TypeParam> v3{1, 2, 3};
 }
 
 TYPED_TEST(VectorSingleTypeTest, ConstructorFromNScalars) {
-  ASSERT_NO_THROW(OurVector1<TypeParam>(1));
-  ASSERT_NO_THROW(OurVector2<TypeParam>(1, 2));
-  ASSERT_NO_THROW(OurVector3<TypeParam>(1, 2, 3));
-  OurVector1<TypeParam> v1(1);
-  OurVector2<TypeParam> v2(1, 2);
-  OurVector3<TypeParam> v3(1, 2, 3);
+  ASSERT_NO_THROW(Vector1<TypeParam>(1));
+  ASSERT_NO_THROW(Vector2<TypeParam>(1, 2));
+  ASSERT_NO_THROW(Vector3<TypeParam>(1, 2, 3));
+  Vector1<TypeParam> v1(1);
+  Vector2<TypeParam> v2(1, 2);
+  Vector3<TypeParam> v3(1, 2, 3);
   is_close_debug(v1[0], 1);
   is_close_debug(v2[0], 1);
   is_close_debug(v2[1], 2);
@@ -184,100 +174,100 @@ TYPED_TEST(VectorSingleTypeTest, ConstructorFromNScalars) {
 }
 
 TYPED_TEST(VectorSingleTypeTest, Comparison) {
-  OurVector1<TypeParam> v1{1};
-  OurVector1<TypeParam> v2{2};
+  Vector1<TypeParam> v1{1};
+  Vector1<TypeParam> v2{2};
   EXPECT_TRUE(is_close(v1, v1));
   EXPECT_FALSE(is_close(v1, v2));
   is_close_debug(v1, v1);
-  is_close_debug(v1, OurVector1<TypeParam>{1});
+  is_close_debug(v1, Vector1<TypeParam>{1});
 
-  OurVector2<TypeParam> v3{1, 2};
-  OurVector2<TypeParam> v4{2, 3};
+  Vector2<TypeParam> v3{1, 2};
+  Vector2<TypeParam> v4{2, 3};
   EXPECT_TRUE(is_close(v3, v3));
   EXPECT_FALSE(is_close(v3, v4));
   is_close_debug(v3, v3);
-  is_close_debug(v3, OurVector2<TypeParam>{1, 2});
+  is_close_debug(v3, Vector2<TypeParam>{1, 2});
 
-  OurVector3<TypeParam> v5{1, 2, 3};
-  OurVector3<TypeParam> v6{2, 3, 4};
+  Vector3<TypeParam> v5{1, 2, 3};
+  Vector3<TypeParam> v6{2, 3, 4};
   EXPECT_TRUE(is_close(v5, v5));
   EXPECT_FALSE(is_close(v5, v6));
   is_close_debug(v5, v5);
-  is_close_debug(v5, OurVector3<TypeParam>{1, 2, 3});
+  is_close_debug(v5, Vector3<TypeParam>{1, 2, 3});
 }
 
 TYPED_TEST(VectorSingleTypeTest, CopyConstructor) {
-  OurVector1<TypeParam> v1{1};
-  OurVector1<TypeParam> v2(v1);
+  Vector1<TypeParam> v1{1};
+  Vector1<TypeParam> v2(v1);
   is_close_debug(v1, v2, "Copy constructor failed.");
   v1.set(2);
   is_different_debug(v1, v2, "Copy constructor failed, somehow the data is shared.");
 
-  OurVector2<TypeParam> v3{1, 2};
-  OurVector2<TypeParam> v4(v3);
+  Vector2<TypeParam> v3{1, 2};
+  Vector2<TypeParam> v4(v3);
   is_close_debug(v3, v4, "Copy constructor failed.");
   v3.set(3, 4);
   is_different_debug(v3, v4, "Copy constructor failed, somehow the data is shared.");
 
-  OurVector3<TypeParam> v5{1, 2, 3};
-  OurVector3<TypeParam> v6(v5);
+  Vector3<TypeParam> v5{1, 2, 3};
+  Vector3<TypeParam> v6(v5);
   is_close_debug(v5, v6, "Copy constructor failed.");
   v5.set(4, 5, 6);
   is_different_debug(v5, v6, "Copy constructor failed, somehow the data is shared.");
 }
 
 TYPED_TEST(VectorSingleTypeTest, MoveConstructor) {
-  OurVector1<TypeParam> v1{1};
-  OurVector1<TypeParam> v2(std::move(v1));
-  is_close_debug(v2, OurVector1<TypeParam>{1}, "Move constructor failed.");
+  Vector1<TypeParam> v1{1};
+  Vector1<TypeParam> v2(std::move(v1));
+  is_close_debug(v2, Vector1<TypeParam>{1}, "Move constructor failed.");
 
-  OurVector2<TypeParam> v3{1, 2};
-  OurVector2<TypeParam> v4(std::move(v3));
-  is_close_debug(v4, OurVector2<TypeParam>{1, 2}, "Move constructor failed.");
+  Vector2<TypeParam> v3{1, 2};
+  Vector2<TypeParam> v4(std::move(v3));
+  is_close_debug(v4, Vector2<TypeParam>{1, 2}, "Move constructor failed.");
 
-  OurVector3<TypeParam> v5{1, 2, 3};
-  OurVector3<TypeParam> v6(std::move(v5));
-  is_close_debug(v6, OurVector3<TypeParam>{1, 2, 3}, "Move constructor failed.");
+  Vector3<TypeParam> v5{1, 2, 3};
+  Vector3<TypeParam> v6(std::move(v5));
+  is_close_debug(v6, Vector3<TypeParam>{1, 2, 3}, "Move constructor failed.");
 }
 
 TYPED_TEST(VectorSingleTypeTest, CopyAssignment) {
-  OurVector1<TypeParam> v1{1};
-  OurVector1<TypeParam> v2{2};
+  Vector1<TypeParam> v1{1};
+  Vector1<TypeParam> v2{2};
   ASSERT_NO_THROW(v2 = v1);
   is_close_debug(v1, v2, "Copy assignment failed.");
 
-  OurVector2<TypeParam> v3{1, 2};
-  OurVector2<TypeParam> v4{3, 4};
+  Vector2<TypeParam> v3{1, 2};
+  Vector2<TypeParam> v4{3, 4};
   ASSERT_NO_THROW(v4 = v3);
   is_close_debug(v3, v4, "Copy assignment failed.");
 
-  OurVector3<TypeParam> v5{1, 2, 3};
-  OurVector3<TypeParam> v6{4, 5, 6};
+  Vector3<TypeParam> v5{1, 2, 3};
+  Vector3<TypeParam> v6{4, 5, 6};
   ASSERT_NO_THROW(v6 = v5);
   is_close_debug(v5, v6, "Copy assignment failed.");
 }
 
 TYPED_TEST(VectorSingleTypeTest, MoveAssignment) {
-  OurVector1<TypeParam> v1{1};
-  OurVector1<TypeParam> v2{2};
+  Vector1<TypeParam> v1{1};
+  Vector1<TypeParam> v2{2};
   ASSERT_NO_THROW(v2 = std::move(v1));
-  is_close_debug(v2, OurVector1<TypeParam>{1}, "Move assignment failed.");
+  is_close_debug(v2, Vector1<TypeParam>{1}, "Move assignment failed.");
 
-  OurVector2<TypeParam> v3{1, 2};
-  OurVector2<TypeParam> v4{3, 4};
+  Vector2<TypeParam> v3{1, 2};
+  Vector2<TypeParam> v4{3, 4};
   ASSERT_NO_THROW(v4 = std::move(v3));
-  is_close_debug(v4, OurVector2<TypeParam>{1, 2}, "Move assignment failed.");
+  is_close_debug(v4, Vector2<TypeParam>{1, 2}, "Move assignment failed.");
 
-  OurVector3<TypeParam> v5{1, 2, 3};
-  OurVector3<TypeParam> v6{4, 5, 6};
+  Vector3<TypeParam> v5{1, 2, 3};
+  Vector3<TypeParam> v6{4, 5, 6};
   ASSERT_NO_THROW(v6 = std::move(v5));
-  is_close_debug(v6, OurVector3<TypeParam>{1, 2, 3}, "Move assignment failed.");
+  is_close_debug(v6, Vector3<TypeParam>{1, 2, 3}, "Move assignment failed.");
 }
 
 TYPED_TEST(VectorSingleTypeTest, Destructor) {
-  ASSERT_NO_THROW(OurVector1<TypeParam>());
-  ASSERT_NO_THROW(OurVector2<TypeParam>());
-  ASSERT_NO_THROW(OurVector3<TypeParam>());
+  ASSERT_NO_THROW(Vector1<TypeParam>());
+  ASSERT_NO_THROW(Vector2<TypeParam>());
+  ASSERT_NO_THROW(Vector3<TypeParam>());
 }
 //@}
 
@@ -285,12 +275,12 @@ TYPED_TEST(VectorSingleTypeTest, Destructor) {
 //@{
 
 TYPED_TEST(VectorSingleTypeTest, Accessors) {
-  OurVector1<TypeParam> v1(1);
+  Vector1<TypeParam> v1(1);
   is_close_debug(v1[0], 1);
   v1[0] = 2;
   is_close_debug(v1[0], 2);
 
-  OurVector2<TypeParam> v2(1, 2);
+  Vector2<TypeParam> v2(1, 2);
   is_close_debug(v2[0], 1);
   is_close_debug(v2[1], 2);
   v2[0] = 3;
@@ -298,7 +288,7 @@ TYPED_TEST(VectorSingleTypeTest, Accessors) {
   is_close_debug(v2[0], 3);
   is_close_debug(v2[1], 4);
 
-  OurVector3<TypeParam> v3(1, 2, 3);
+  Vector3<TypeParam> v3(1, 2, 3);
   is_close_debug(v3[0], 1);
   is_close_debug(v3[1], 2);
   is_close_debug(v3[2], 3);
@@ -316,37 +306,37 @@ TYPED_TEST(VectorSingleTypeTest, Accessors) {
 
 TYPED_TEST(VectorSingleTypeTest, Setters) {
   // Dim 1
-  OurVector1<TypeParam> v1;
+  Vector1<TypeParam> v1;
   v1.set(1);
-  is_close_debug(v1, OurVector1<TypeParam>{1}, "Set by scalar failed.");
+  is_close_debug(v1, Vector1<TypeParam>{1}, "Set by scalar failed.");
 
-  v1.set(OurVector1<TypeParam>{2});
-  is_close_debug(v1, OurVector1<TypeParam>{2}, "Set by vector failed.");
+  v1.set(Vector1<TypeParam>{2});
+  is_close_debug(v1, Vector1<TypeParam>{2}, "Set by vector failed.");
 
   v1.fill(3);
-  is_close_debug(v1, OurVector1<TypeParam>{3}, "Fill failed.");
+  is_close_debug(v1, Vector1<TypeParam>{3}, "Fill failed.");
 
   // Dim 2
-  OurVector2<TypeParam> v2;
+  Vector2<TypeParam> v2;
   v2.set(1, 2);
-  is_close_debug(v2, OurVector2<TypeParam>{1, 2}, "Set by two scalars failed.");
+  is_close_debug(v2, Vector2<TypeParam>{1, 2}, "Set by two scalars failed.");
 
-  v2.set(OurVector2<TypeParam>{3, 4});
-  is_close_debug(v2, OurVector2<TypeParam>{3, 4}, "Set by vector failed.");
+  v2.set(Vector2<TypeParam>{3, 4});
+  is_close_debug(v2, Vector2<TypeParam>{3, 4}, "Set by vector failed.");
 
   v2.fill(5);
-  is_close_debug(v2, OurVector2<TypeParam>{5, 5}, "Fill failed.");
+  is_close_debug(v2, Vector2<TypeParam>{5, 5}, "Fill failed.");
 
   // Dim 3
-  OurVector3<TypeParam> v3;
+  Vector3<TypeParam> v3;
   v3.set(1, 2, 3);
-  is_close_debug(v3, OurVector3<TypeParam>{1, 2, 3}, "Set by three scalars failed.");
+  is_close_debug(v3, Vector3<TypeParam>{1, 2, 3}, "Set by three scalars failed.");
 
-  v3.set(OurVector3<TypeParam>{4, 5, 6});
-  is_close_debug(v3, OurVector3<TypeParam>{4, 5, 6}, "Set by vector failed.");
+  v3.set(Vector3<TypeParam>{4, 5, 6});
+  is_close_debug(v3, Vector3<TypeParam>{4, 5, 6}, "Set by vector failed.");
 
   v3.fill(7);
-  is_close_debug(v3, OurVector3<TypeParam>{7, 7, 7}, "Fill failed.");
+  is_close_debug(v3, Vector3<TypeParam>{7, 7, 7}, "Fill failed.");
 }
 //@}
 
@@ -354,29 +344,29 @@ TYPED_TEST(VectorSingleTypeTest, Setters) {
 //@{
 
 TYPED_TEST(VectorSingleTypeTest, SpecialVectors) {
-  ASSERT_NO_THROW(OurVector1<TypeParam>::zeros());
-  ASSERT_NO_THROW(OurVector1<TypeParam>::ones());
-  auto ones1 = OurVector1<TypeParam>::ones();
-  auto zeros1 = OurVector1<TypeParam>::zeros();
+  ASSERT_NO_THROW(Vector1<TypeParam>::zeros());
+  ASSERT_NO_THROW(Vector1<TypeParam>::ones());
+  auto ones1 = Vector1<TypeParam>::ones();
+  auto zeros1 = Vector1<TypeParam>::zeros();
 
-  is_close_debug(ones1, OurVector1<TypeParam>{1}, "Ones failed.");
-  is_close_debug(zeros1, OurVector1<TypeParam>{0}, "Zeros failed.");
+  is_close_debug(ones1, Vector1<TypeParam>{1}, "Ones failed.");
+  is_close_debug(zeros1, Vector1<TypeParam>{0}, "Zeros failed.");
 
-  ASSERT_NO_THROW(OurVector2<TypeParam>::zeros());
-  ASSERT_NO_THROW(OurVector2<TypeParam>::ones());
-  auto ones2 = OurVector2<TypeParam>::ones();
-  auto zeros2 = OurVector2<TypeParam>::zeros();
+  ASSERT_NO_THROW(Vector2<TypeParam>::zeros());
+  ASSERT_NO_THROW(Vector2<TypeParam>::ones());
+  auto ones2 = Vector2<TypeParam>::ones();
+  auto zeros2 = Vector2<TypeParam>::zeros();
 
-  is_close_debug(ones2, OurVector2<TypeParam>{1, 1}, "Ones failed.");
-  is_close_debug(zeros2, OurVector2<TypeParam>{0, 0}, "Zeros failed.");
+  is_close_debug(ones2, Vector2<TypeParam>{1, 1}, "Ones failed.");
+  is_close_debug(zeros2, Vector2<TypeParam>{0, 0}, "Zeros failed.");
 
-  ASSERT_NO_THROW(OurVector3<TypeParam>::zeros());
-  ASSERT_NO_THROW(OurVector3<TypeParam>::ones());
-  auto ones3 = OurVector3<TypeParam>::ones();
-  auto zeros3 = OurVector3<TypeParam>::zeros();
+  ASSERT_NO_THROW(Vector3<TypeParam>::zeros());
+  ASSERT_NO_THROW(Vector3<TypeParam>::ones());
+  auto ones3 = Vector3<TypeParam>::ones();
+  auto zeros3 = Vector3<TypeParam>::zeros();
 
-  is_close_debug(ones3, OurVector3<TypeParam>{1, 1, 1}, "Ones failed.");
-  is_close_debug(zeros3, OurVector3<TypeParam>{0, 0, 0}, "Zeros failed.");
+  is_close_debug(ones3, Vector3<TypeParam>{1, 1, 1}, "Ones failed.");
+  is_close_debug(zeros3, Vector3<TypeParam>{0, 0, 0}, "Zeros failed.");
 }
 //@}
 
@@ -388,83 +378,83 @@ TYPED_TEST(VectorPairwiseTypeTest, AdditionAndSubtractionWithVector) {
   using T2 = typename TypeParam::T2;
 
   // Dim 1
-  OurVector1<T1> v1(1);
-  OurVector1<T2> v2(2);
+  Vector1<T1> v1(1);
+  Vector1<T2> v2(2);
   auto v3 = v1 + v2;
   using T3 = decltype(v3)::scalar_t;
-  is_close_debug(v3, OurVector1<T3>{3}, "Vector-vector addition failed.");
+  is_close_debug(v3, Vector1<T3>{3}, "Vector-vector addition failed.");
 
   v1 += v2;
-  is_close_debug(v1, OurVector1<T1>{3}, "Vector-vector addition assignment failed.");
+  is_close_debug(v1, Vector1<T1>{3}, "Vector-vector addition assignment failed.");
 
   v3 = v1 - v2;
-  is_close_debug(v3, OurVector1<T3>{1}, "Vector-vector subtraction failed.");
+  is_close_debug(v3, Vector1<T3>{1}, "Vector-vector subtraction failed.");
 
   v1 -= v2;
-  is_close_debug(v1, OurVector1<T1>{1}, "Vector-vector subtraction assignment failed.");
+  is_close_debug(v1, Vector1<T1>{1}, "Vector-vector subtraction assignment failed.");
 
   // Dim 2
-  OurVector2<T1> v4(1, 2);
-  OurVector2<T2> v5(3, 4);
+  Vector2<T1> v4(1, 2);
+  Vector2<T2> v5(3, 4);
   auto v6 = v4 + v5;
   using T4 = decltype(v6)::scalar_t;
-  is_close_debug(v6, OurVector2<T4>{4, 6}, "Vector-vector addition failed.");
+  is_close_debug(v6, Vector2<T4>{4, 6}, "Vector-vector addition failed.");
 
   v4 += v5;
-  is_close_debug(v4, OurVector2<T1>{4, 6}, "Vector-vector addition assignment failed.");
+  is_close_debug(v4, Vector2<T1>{4, 6}, "Vector-vector addition assignment failed.");
 
   v6 = v4 - v5;
-  is_close_debug(v6, OurVector2<T4>{1, 2}, "Vector-vector subtraction failed.");
+  is_close_debug(v6, Vector2<T4>{1, 2}, "Vector-vector subtraction failed.");
 
   v4 -= v5;
-  is_close_debug(v4, OurVector2<T1>{1, 2}, "Vector-vector subtraction assignment failed.");
+  is_close_debug(v4, Vector2<T1>{1, 2}, "Vector-vector subtraction assignment failed.");
 
   // Dim 3
-  OurVector3<T1> v7(1, 2, 3);
-  OurVector3<T2> v8(4, 5, 6);
+  Vector3<T1> v7(1, 2, 3);
+  Vector3<T2> v8(4, 5, 6);
   auto v9 = v7 + v8;
   using T5 = decltype(v9)::scalar_t;
-  is_close_debug(v9, OurVector3<T5>{5, 7, 9}, "Vector-vector addition failed.");
+  is_close_debug(v9, Vector3<T5>{5, 7, 9}, "Vector-vector addition failed.");
 
   v7 += v8;
-  is_close_debug(v7, OurVector3<T1>{5, 7, 9}, "Vector-vector addition assignment failed.");
+  is_close_debug(v7, Vector3<T1>{5, 7, 9}, "Vector-vector addition assignment failed.");
 
   v9 = v7 - v8;
-  is_close_debug(v9, OurVector3<T5>{1, 2, 3}, "Vector-vector subtraction failed.");
+  is_close_debug(v9, Vector3<T5>{1, 2, 3}, "Vector-vector subtraction failed.");
 
   v7 -= v8;
-  is_close_debug(v7, OurVector3<T1>{1, 2, 3}, "Vector-vector subtraction assignment failed.");
+  is_close_debug(v7, Vector3<T1>{1, 2, 3}, "Vector-vector subtraction assignment failed.");
 }
 TYPED_TEST(VectorPairwiseTypeTest, AdditionAndSubtractionWithScalars) {
   using T1 = typename TypeParam::T1;
   using T2 = typename TypeParam::T2;
 
   // Dim 1
-  OurVector1<T1> v1(1);
+  Vector1<T1> v1(1);
   auto v2 = v1 + T2(1);
   using T3 = decltype(v2)::scalar_t;
-  is_close_debug(v1 + T2(1), OurVector1<T3>{2}, "Vector-scalar addition failed.");
-  is_close_debug(T2(1) + v1, OurVector1<T3>{2}, "Scalar-vector addition failed.");
-  is_close_debug(v1 - T2(1), OurVector1<T3>{0}, "Vector-scalar subtraction failed.");
-  is_close_debug(T2(1) - v1, OurVector1<T3>{0}, "Scalar-vector subtraction failed.");
+  is_close_debug(v1 + T2(1), Vector1<T3>{2}, "Vector-scalar addition failed.");
+  is_close_debug(T2(1) + v1, Vector1<T3>{2}, "Scalar-vector addition failed.");
+  is_close_debug(v1 - T2(1), Vector1<T3>{0}, "Vector-scalar subtraction failed.");
+  is_close_debug(T2(1) - v1, Vector1<T3>{0}, "Scalar-vector subtraction failed.");
 
   // Dim 2
-  OurVector2<T1> v3(1, 2);
+  Vector2<T1> v3(1, 2);
   auto v4 = v3 + T2(1);
   using T4 = decltype(v4)::scalar_t;
-  is_close_debug(v4, OurVector2<T4>{2, 3}, "Vector-scalar addition failed.");
-  is_close_debug(T2(1) + v3, OurVector2<T4>{2, 3}, "Scalar-vector addition failed.");
-  is_close_debug(v3 - T2(1), OurVector2<T4>{0, 1}, "Vector-scalar subtraction failed.");
-  is_close_debug(T2(1) - v3, OurVector2<T4>{0, -1}, "Scalar-vector subtraction failed.");
+  is_close_debug(v4, Vector2<T4>{2, 3}, "Vector-scalar addition failed.");
+  is_close_debug(T2(1) + v3, Vector2<T4>{2, 3}, "Scalar-vector addition failed.");
+  is_close_debug(v3 - T2(1), Vector2<T4>{0, 1}, "Vector-scalar subtraction failed.");
+  is_close_debug(T2(1) - v3, Vector2<T4>{0, -1}, "Scalar-vector subtraction failed.");
 
   // Dim 3
-  OurVector3<T1> v5(1, 2, 3);
+  Vector3<T1> v5(1, 2, 3);
   auto v6 = v5 + T2(1);
   using T5 = decltype(v6)::scalar_t;
-  is_close_debug(v6, OurVector3<T5>{2, 3, 4}, "Vector-scalar addition failed.");
-  is_close_debug(T2(1) + v5, OurVector3<T5>{2, 3, 4}, "Scalar-vector addition failed.");
-  is_close_debug(v5 - T2(1), OurVector3<T5>{0, 1, 2}, "Vector-scalar subtraction failed.");
-  is_close_debug(T2(1) - v5, OurVector3<T5>{0, -1, -2}, "Scalar-vector subtraction failed.");
+  is_close_debug(v6, Vector3<T5>{2, 3, 4}, "Vector-scalar addition failed.");
+  is_close_debug(T2(1) + v5, Vector3<T5>{2, 3, 4}, "Scalar-vector addition failed.");
+  is_close_debug(v5 - T2(1), Vector3<T5>{0, 1, 2}, "Vector-scalar subtraction failed.");
+  is_close_debug(T2(1) - v5, Vector3<T5>{0, -1, -2}, "Scalar-vector subtraction failed.");
 }
 
 TYPED_TEST(VectorPairwiseTypeTest, AdditionAndSubtractionRValues) {
@@ -473,25 +463,25 @@ TYPED_TEST(VectorPairwiseTypeTest, AdditionAndSubtractionRValues) {
   using T2 = typename TypeParam::T2;
 
   // Dim 1
-  OurVector1<T1> v1(1);
-  is_close_debug(v1 + OurVector1<T2>{2}, OurVector1<T1>{3}, "Vector-vector addition failed.");
-  is_close_debug(OurVector1<T2>{2} + v1, OurVector1<T1>{3}, "Vector-vector addition failed.");
-  is_close_debug(v1 - OurVector1<T2>{2}, OurVector1<T1>{-1}, "Vector-vector subtraction failed.");
-  is_close_debug(OurVector1<T2>{2} - v1, OurVector1<T1>{1}, "Vector-vector subtraction failed.");
+  Vector1<T1> v1(1);
+  is_close_debug(v1 + Vector1<T2>{2}, Vector1<T1>{3}, "Vector-vector addition failed.");
+  is_close_debug(Vector1<T2>{2} + v1, Vector1<T1>{3}, "Vector-vector addition failed.");
+  is_close_debug(v1 - Vector1<T2>{2}, Vector1<T1>{-1}, "Vector-vector subtraction failed.");
+  is_close_debug(Vector1<T2>{2} - v1, Vector1<T1>{1}, "Vector-vector subtraction failed.");
 
   // Dim 2
-  OurVector2<T1> v2(1, 2);
-  is_close_debug(v2 + OurVector2<T2>{3, 4}, OurVector2<T1>{4, 6}, "Vector-vector addition failed.");
-  is_close_debug(OurVector2<T2>{3, 4} + v2, OurVector2<T1>{4, 6}, "Vector-vector addition failed.");
-  is_close_debug(v2 - OurVector2<T2>{3, 4}, OurVector2<T1>{-2, -2}, "Vector-vector subtraction failed.");
-  is_close_debug(OurVector2<T2>{3, 4} - v2, OurVector2<T1>{2, 2}, "Vector-vector subtraction failed.");
+  Vector2<T1> v2(1, 2);
+  is_close_debug(v2 + Vector2<T2>{3, 4}, Vector2<T1>{4, 6}, "Vector-vector addition failed.");
+  is_close_debug(Vector2<T2>{3, 4} + v2, Vector2<T1>{4, 6}, "Vector-vector addition failed.");
+  is_close_debug(v2 - Vector2<T2>{3, 4}, Vector2<T1>{-2, -2}, "Vector-vector subtraction failed.");
+  is_close_debug(Vector2<T2>{3, 4} - v2, Vector2<T1>{2, 2}, "Vector-vector subtraction failed.");
 
   // Dim 3
-  OurVector3<T1> v3(1, 2, 3);
-  is_close_debug(v3 + OurVector3<T2>{4, 5, 6}, OurVector3<T1>{5, 7, 9}, "Vector-vector addition failed.");
-  is_close_debug(OurVector3<T2>{4, 5, 6} + v3, OurVector3<T1>{5, 7, 9}, "Vector-vector addition failed.");
-  is_close_debug(v3 - OurVector3<T2>{4, 5, 6}, OurVector3<T1>{-3, -3, -3}, "Vector-vector subtraction failed.");
-  is_close_debug(OurVector3<T2>{4, 5, 6} - v3, OurVector3<T1>{3, 3, 3}, "Vector-vector subtraction failed.");
+  Vector3<T1> v3(1, 2, 3);
+  is_close_debug(v3 + Vector3<T2>{4, 5, 6}, Vector3<T1>{5, 7, 9}, "Vector-vector addition failed.");
+  is_close_debug(Vector3<T2>{4, 5, 6} + v3, Vector3<T1>{5, 7, 9}, "Vector-vector addition failed.");
+  is_close_debug(v3 - Vector3<T2>{4, 5, 6}, Vector3<T1>{-3, -3, -3}, "Vector-vector subtraction failed.");
+  is_close_debug(Vector3<T2>{4, 5, 6} - v3, Vector3<T1>{3, 3, 3}, "Vector-vector subtraction failed.");
 }
 //@}
 
@@ -503,28 +493,28 @@ TYPED_TEST(VectorPairwiseTypeTest, MultiplicationAndDivisionWithScalars) {
   using T2 = typename TypeParam::T2;
 
   // Dim 1
-  OurVector1<T1> v1(1);
+  Vector1<T1> v1(1);
   auto v2 = v1 * T2(2);
   using T3 = decltype(v2)::scalar_t;
-  is_close_debug(v2, OurVector1<T3>{2}, "Vector-scalar multiplication failed.");
-  is_close_debug(T2(2) * v1, OurVector1<T3>{2}, "Scalar-vector multiplication failed.");
-  is_close_debug(v2 / T2(2), OurVector1<T3>{1}, "Vector-scalar division failed.");
+  is_close_debug(v2, Vector1<T3>{2}, "Vector-scalar multiplication failed.");
+  is_close_debug(T2(2) * v1, Vector1<T3>{2}, "Scalar-vector multiplication failed.");
+  is_close_debug(v2 / T2(2), Vector1<T3>{1}, "Vector-scalar division failed.");
 
   // Dim 2
-  OurVector2<T1> v3(1, 2);
+  Vector2<T1> v3(1, 2);
   auto v4 = v3 * T2(2);
   using T4 = decltype(v4)::scalar_t;
-  is_close_debug(v4, OurVector2<T4>{2, 4}, "Vector-scalar multiplication failed.");
-  is_close_debug(T2(2) * v3, OurVector2<T4>{2, 4}, "Scalar-vector multiplication failed.");
-  is_close_debug(v4 / T2(2), OurVector2<T4>{1, 2}, "Vector-scalar division failed.");
+  is_close_debug(v4, Vector2<T4>{2, 4}, "Vector-scalar multiplication failed.");
+  is_close_debug(T2(2) * v3, Vector2<T4>{2, 4}, "Scalar-vector multiplication failed.");
+  is_close_debug(v4 / T2(2), Vector2<T4>{1, 2}, "Vector-scalar division failed.");
 
   // Dim 3
-  OurVector3<T1> v5(1, 2, 3);
+  Vector3<T1> v5(1, 2, 3);
   auto v6 = v5 * T2(2);
   using T5 = decltype(v6)::scalar_t;
-  is_close_debug(v6, OurVector3<T5>{2, 4, 6}, "Vector-scalar multiplication failed.");
-  is_close_debug(T2(2) * v5, OurVector3<T5>{2, 4, 6}, "Scalar-vector multiplication failed.");
-  is_close_debug(v6 / T2(2), OurVector3<T5>{1, 2, 3}, "Vector-scalar division failed.");
+  is_close_debug(v6, Vector3<T5>{2, 4, 6}, "Vector-scalar multiplication failed.");
+  is_close_debug(T2(2) * v5, Vector3<T5>{2, 4, 6}, "Scalar-vector multiplication failed.");
+  is_close_debug(v6 / T2(2), Vector3<T5>{1, 2, 3}, "Vector-scalar division failed.");
 }
 //@}
 
@@ -533,7 +523,7 @@ TYPED_TEST(VectorPairwiseTypeTest, MultiplicationAndDivisionWithScalars) {
 
 TYPED_TEST(VectorSingleTypeTest, BasicArithmeticReductionOperations) {
   // Dim 1
-  OurVector1<TypeParam> v1(1);
+  Vector1<TypeParam> v1(1);
   is_close_debug(sum(v1), 1, "Sum failed.");
   is_close_debug(product(v1), 1, "Product failed.");
   is_close_debug(min(v1), 1, "Min failed.");
@@ -543,7 +533,7 @@ TYPED_TEST(VectorSingleTypeTest, BasicArithmeticReductionOperations) {
   is_close_debug(stddev(v1), 0, "Stddev failed.");
 
   // Dim 2
-  OurVector2<TypeParam> v2(1, 2);
+  Vector2<TypeParam> v2(1, 2);
   is_close_debug(sum(v2), 3, "Sum failed.");
   is_close_debug(product(v2), 2, "Product failed.");
   is_close_debug(min(v2), 1, "Min failed.");
@@ -553,7 +543,7 @@ TYPED_TEST(VectorSingleTypeTest, BasicArithmeticReductionOperations) {
   is_close_debug(stddev(v2), 0.5, "Stddev failed.");
 
   // Dim 3
-  OurVector3<TypeParam> v3(1, 2, 3);
+  Vector3<TypeParam> v3(1, 2, 3);
   is_close_debug(sum(v3), 6, "Sum failed.");
   is_close_debug(product(v3), 6, "Product failed.");
   is_close_debug(min(v3), 1, "Min failed.");
@@ -570,47 +560,778 @@ TYPED_TEST(VectorSingleTypeTest, BasicArithmeticReductionOperations) {
 TYPED_TEST(VectorPairwiseTypeTest, SpecialOperations) {
   using T1 = typename TypeParam::T1;
   using T2 = typename TypeParam::T2;
+  using C = decltype(get_comparison_tolerance_promote_ints<T1, T2>());
 
   // Dim 1
-  OurVector1<T1> v1(1);
-  OurVector1<T2> v2(2);
-  is_close_debug(dot(v1, v2), 2.0, "Dot product failed.");
-  is_close_debug(norm(v1), 1.0, "Norm failed.");
-  is_close_debug(norm_squared(v1), 1.0, "Norm squared failed.");
-  is_close_debug(infinity_norm(v1), 1.0, "Infinity norm failed.");
-  is_close_debug(one_norm(v1), 1.0, "One norm failed.");
-  is_close_debug(two_norm(v1), 1.0, "Two norm failed.");
-  is_close_debug(two_norm_squared(v1), 1.0, "Two norm squared failed.");
-  is_close_debug(minor_angle(v1, v2), 0.0, "Minor angle failed.");
-  is_close_debug(major_angle(v1, v2), M_PI, "Major angle failed.");
+  Vector1<T1> v1(1);
+  Vector1<T2> v2(2);
+  is_close_debug(dot(v1, v2), static_cast<C>(2.0), "Dot product failed.");
+  is_close_debug(norm(v1), static_cast<C>(1.0), "Norm failed.");
+  is_close_debug(norm_squared(v1), static_cast<C>(1.0), "Norm squared failed.");
+  is_close_debug(infinity_norm(v1), static_cast<C>(1.0), "Infinity norm failed.");
+  is_close_debug(one_norm(v1), static_cast<C>(1.0), "One norm failed.");
+  is_close_debug(two_norm(v1), static_cast<C>(1.0), "Two norm failed.");
+  is_close_debug(two_norm_squared(v1), static_cast<C>(1.0), "Two norm squared failed.");
+  is_close_debug(minor_angle(v1, v2), static_cast<C>(0.0), "Minor angle failed.");
+  is_close_debug(major_angle(v1, v2), static_cast<C>(M_PI), "Major angle failed.");
 
   // Dim 2
-  OurVector2<T1> v3(1, 2);
-  OurVector2<T2> v4(3, 4);
-  is_close_debug(dot(v3, v4), 11.0, "Dot product failed.");
-  is_close_debug(norm(v3), std::sqrt(5.0), "Norm failed.");
-  is_close_debug(norm_squared(v3), 5.0, "Norm squared failed.");
-  is_close_debug(infinity_norm(v3), 2.0, "Infinity norm failed.");
-  is_close_debug(one_norm(v3), 3.0, "One norm failed.");
-  is_close_debug(two_norm(v3), std::sqrt(5.0), "Two norm failed.");
-  is_close_debug(two_norm_squared(v3), 5.0, "Two norm squared failed.");
-  is_close_debug(minor_angle(v3, v4), std::acos(11.0 / (std::sqrt(5.0) * std::sqrt(25.0))), "Minor angle failed.");
-  is_close_debug(major_angle(v3, v4), M_PI - std::acos(11.0 / (std::sqrt(5.0) * std::sqrt(25.0))),
+  Vector2<T1> v3(1, 2);
+  Vector2<T2> v4(3, 4);
+  is_close_debug(dot(v3, v4), static_cast<C>(11.0), "Dot product failed.");
+  is_close_debug(norm(v3), static_cast<C>(std::sqrt(5.0)), "Norm failed.");
+  is_close_debug(norm_squared(v3), static_cast<C>(5.0), "Norm squared failed.");
+  is_close_debug(infinity_norm(v3), static_cast<C>(2.0), "Infinity norm failed.");
+  is_close_debug(one_norm(v3), static_cast<C>(3.0), "One norm failed.");
+  is_close_debug(two_norm(v3), static_cast<C>(std::sqrt(5.0)), "Two norm failed.");
+  is_close_debug(two_norm_squared(v3), static_cast<C>(5.0), "Two norm squared failed.");
+  is_close_debug(minor_angle(v3, v4), static_cast<C>(std::acos(11.0 / (std::sqrt(5.0) * std::sqrt(25.0)))),
+                 "Minor angle failed.");
+  is_close_debug(major_angle(v3, v4), static_cast<C>(M_PI - std::acos(11.0 / (std::sqrt(5.0) * std::sqrt(25.0)))),
                  "Major angle failed.");
 
   // Dim 3
-  OurVector3<T1> v5(1, 2, 3);
-  OurVector3<T2> v6(4, 5, 6);
-  is_close_debug(dot(v5, v6), 32.0, "Dot product failed.");
-  is_close_debug(norm(v5), std::sqrt(14.0), "Norm failed.");
-  is_close_debug(norm_squared(v5), 14.0, "Norm squared failed.");
-  is_close_debug(infinity_norm(v5), 3.0, "Infinity norm failed.");
-  is_close_debug(one_norm(v5), 6.0, "One norm failed.");
-  is_close_debug(two_norm(v5), std::sqrt(14.0), "Two norm failed.");
-  is_close_debug(two_norm_squared(v5), 14.0, "Two norm squared failed.");
-  is_close_debug(minor_angle(v5, v6), std::acos(32.0 / (std::sqrt(14.0) * std::sqrt(77.0))), "Minor angle failed.");
-  is_close_debug(major_angle(v5, v6), M_PI - std::acos(32.0 / (std::sqrt(14.0) * std::sqrt(77.0))),
+  Vector3<T1> v5(1, 2, 3);
+  Vector3<T2> v6(4, 5, 6);
+  is_close_debug(dot(v5, v6), static_cast<C>(32.0), "Dot product failed.");
+  is_close_debug(norm(v5), static_cast<C>(std::sqrt(14.0)), "Norm failed.");
+  is_close_debug(norm_squared(v5), static_cast<C>(14.0), "Norm squared failed.");
+  is_close_debug(infinity_norm(v5), static_cast<C>(3.0), "Infinity norm failed.");
+  is_close_debug(one_norm(v5), static_cast<C>(6.0), "One norm failed.");
+  is_close_debug(two_norm(v5), static_cast<C>(std::sqrt(14.0)), "Two norm failed.");
+  is_close_debug(two_norm_squared(v5), static_cast<C>(14.0), "Two norm squared failed.");
+  is_close_debug(minor_angle(v5, v6), static_cast<C>(std::acos(32.0 / (std::sqrt(14.0) * std::sqrt(77.0)))),
+                 "Minor angle failed.");
+  is_close_debug(major_angle(v5, v6), static_cast<C>(M_PI - std::acos(32.0 / (std::sqrt(14.0) * std::sqrt(77.0)))),
                  "Major angle failed.");
+}
+//@}
+
+//! \name Apply
+//@{
+
+struct an_external_functor {
+  template <typename T>
+  KOKKOS_INLINE_FUNCTION T operator()(const T& x) const {
+    return x + 1;
+  }
+};
+
+TYPED_TEST(VectorSingleTypeTest, Apply) {
+  // Using a lambda function
+  // Dim 1
+  Vector1<TypeParam> v1(1);
+  auto v2 = apply([](auto x) { return x + 1; }, v1);
+  is_close_debug(v2, Vector1<TypeParam>{2}, "Apply failed.");
+
+  // Dim 2
+  Vector2<TypeParam> v3(1, 2);
+  auto v4 = apply([](auto x) { return x + 1; }, v3);
+  is_close_debug(v4, Vector2<TypeParam>{2, 3}, "Apply failed.");
+
+  // Dim 3
+  Vector3<TypeParam> v5(1, 2, 3);
+  auto v6 = apply([](auto x) { return x + 1; }, v5);
+  is_close_debug(v6, Vector3<TypeParam>{2, 3, 4}, "Apply failed.");
+
+  // Using an external function
+  // Dim 1
+  Vector1<TypeParam> v7(1);
+  auto v8 = apply(an_external_functor{}, v7);
+  is_close_debug(v8, Vector1<TypeParam>{2}, "Apply failed.");
+
+  // Dim 2
+  Vector2<TypeParam> v9(1, 2);
+  auto v10 = apply(an_external_functor{}, v9);
+  is_close_debug(v10, Vector2<TypeParam>{2, 3}, "Apply failed.");
+
+  // Dim 3
+  Vector3<TypeParam> v11(1, 2, 3);
+  auto v12 = apply(an_external_functor{}, v11);
+  is_close_debug(v12, Vector3<TypeParam>{2, 3, 4}, "Apply failed.");
+
+  // Using a temporary vector
+  auto v13 = apply(an_external_functor{}, Vector1<TypeParam>{1});
+  is_close_debug(v13, Vector1<TypeParam>{2}, "Apply failed.");
+}
+
+struct an_external_constexpr_functor {
+  template <typename T>
+  constexpr T operator()(const T& x) const {
+    return x + 1;
+  }
+};
+
+TYPED_TEST(VectorSingleTypeTest, ConstexprApply) {
+  // Using a lambda function
+  // Dim 1
+  constexpr Vector1<TypeParam> v1(1);
+  constexpr auto v2 = apply([](auto x) { return x + 1; }, v1);
+  static_assert(std::abs(v2[0] - 2) < 1e-6, "Constexpr apply failed.");
+
+  // Dim 2
+  constexpr Vector2<TypeParam> v3(1, 2);
+  constexpr auto v4 = apply([](auto x) { return x + 1; }, v3);
+  static_assert(std::abs(v4[0] - 2) < 1e-6 && std::abs(v4[1] - 3) < 1e-6, "Constexpr apply failed.");
+
+  // Dim 3
+  constexpr Vector3<TypeParam> v5(1, 2, 3);
+  constexpr auto v6 = apply([](auto x) { return x + 1; }, v5);
+  static_assert(std::abs(v6[0] - 2) < 1e-6 && std::abs(v6[1] - 3) < 1e-6 && std::abs(v6[2] - 4) < 1e-6,
+                "Constexpr apply failed.");
+
+  // Using an external function
+  // Dim 1
+  constexpr Vector1<TypeParam> v7(1);
+  constexpr auto v8 = apply(an_external_constexpr_functor{}, v7);
+  static_assert(std::abs(v8[0] - 2) < 1e-6, "Constexpr apply failed.");
+
+  // Dim 2
+  constexpr Vector2<TypeParam> v9(1, 2);
+  constexpr auto v10 = apply(an_external_constexpr_functor{}, v9);
+  static_assert(std::abs(v10[0] - 2) < 1e-6 && std::abs(v10[1] - 3) < 1e-6, "Constexpr apply failed.");
+
+  // Dim 3
+  constexpr Vector3<TypeParam> v11(1, 2, 3);
+  constexpr auto v12 = apply(an_external_constexpr_functor{}, v11);
+  static_assert(std::abs(v12[0] - 2) < 1e-6 && std::abs(v12[1] - 3) < 1e-6 && std::abs(v12[2] - 4) < 1e-6,
+                "Constexpr apply failed.");
+}
+//@}
+
+//! \name Atomic operations
+//@{
+
+template <typename TypeParam>
+bool check_vector_atomic_op_load_store_test_for_false_positive_1d() {
+  Vector1<TypeParam> finished(false);
+  auto func_no_atomic = [&finished]() {
+    bool hit_max_loops = false;
+    size_t max_loops = 1'000'000'000;
+    size_t i = 0;
+    while (!(finished[0])) {
+      if (i > max_loops) {
+        hit_max_loops = true;
+        break;
+      }
+      ++i;
+    }
+    return hit_max_loops;
+  };
+  auto result = std::async(std::launch::async, func_no_atomic);
+  std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  finished[0] = true;
+  bool false_positive = !result.get();
+  return false_positive;
+}
+
+template <typename TypeParam>
+bool check_vector_atomic_op_load_store_test_for_false_positive_3d() {
+  Vector3<TypeParam> finished(false);
+  auto func_no_atomic = [&finished]() {
+    bool hit_max_loops = false;
+    size_t max_loops = 1'000'000'000;
+    size_t i = 0;
+    while (!(finished[2])) {
+      if (i > max_loops) {
+        hit_max_loops = true;
+        break;
+      }
+      ++i;
+    }
+    return hit_max_loops;
+  };
+  auto result = std::async(std::launch::async, func_no_atomic);
+  std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  finished[2] = true;
+  bool false_positive = !result.get();
+  return false_positive;
+}
+
+TYPED_TEST(VectorSingleTypeTest, AtomicOpTestLoadStore1D) {
+  if (check_vector_atomic_op_load_store_test_for_false_positive_1d<TypeParam>()) {
+    GTEST_SKIP() << "Skipping atomic load/store test due to false positive in non-atomic test.\n"
+                 << "This typically occurs if you compile with -O0.";
+  }
+
+  Vector1<TypeParam> finished(false);
+  auto func_atomic = [&finished]() {
+    bool hit_max_loops = false;
+    size_t max_loops = 1'000'000'000;
+    size_t i = 0;
+    while (!(atomic_load(&finished)[0])) {
+      if (i > max_loops) {
+        hit_max_loops = true;
+        break;
+      }
+      ++i;
+    }
+    return hit_max_loops;
+  };
+  auto result = std::async(std::launch::async, func_atomic);
+  std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  atomic_store(&finished, true);
+  EXPECT_FALSE(result.get()) << "Atomic load/store test failed.";
+}
+
+TYPED_TEST(VectorSingleTypeTest, AtomicOpTestLoadStore3D) {
+  if (check_vector_atomic_op_load_store_test_for_false_positive_3d<TypeParam>()) {
+    GTEST_SKIP() << "Skipping atomic load/store test due to false positive in non-atomic test.\n"
+                 << "This typically occurs if you compile with -O0.";
+  }
+
+  Vector3<TypeParam> finished(false);
+  auto func_atomic = [&finished]() {
+    bool hit_max_loops = false;
+    size_t max_loops = 1'000'000'000;
+    size_t i = 0;
+    while (!(atomic_load(&finished)[2])) {
+      if (i > max_loops) {
+        hit_max_loops = true;
+        break;
+      }
+      ++i;
+    }
+    return hit_max_loops;
+  };
+  auto result = std::async(std::launch::async, func_atomic);
+  std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  atomic_store(&finished, true);
+  EXPECT_FALSE(result.get()) << "Atomic load/store test failed.";
+}
+
+TYPED_TEST(VectorSingleTypeTest, AtomicOpTestAddSubMulDiv1D) {
+  int num_threads = 8;
+  int num_iterations = 10001;  // Must be odd
+  int num_steps_of_mul_div = 2;
+
+  // Naming convention
+  // vs: Vector-scalar operation
+  // vv: Vector-vector operation
+  // pos: Positive result using atomic operations
+  // neg: Negative result without atomic operations
+  Vector1<TypeParam> vs_add_pos(0);
+  Vector1<TypeParam> vs_add_neg(0);
+  Vector1<TypeParam> vv_add_pos(0);
+  Vector1<TypeParam> vv_add_neg(0);
+
+  Vector1<TypeParam> vs_sub_pos(0);
+  Vector1<TypeParam> vs_sub_neg(0);
+  Vector1<TypeParam> vv_sub_pos(0);
+  Vector1<TypeParam> vv_sub_neg(0);
+
+  Vector1<TypeParam> vs_mul_div_pos(1);
+  Vector1<TypeParam> vs_mul_div_neg(1);
+  Vector1<TypeParam> vv_mul_div_pos(1);
+  Vector1<TypeParam> vv_mul_div_neg(1);
+
+  // Thread function to perform atomic_add
+  std::atomic<long long int> thread_id_counter(0);
+  auto thread_func = [&]() {
+    for (int i = 0; i < num_iterations; ++i) {
+      atomic_add(&vs_add_pos, 1);
+      atomic_add(&vv_add_pos, Vector1<TypeParam>(1));
+      vs_add_neg += 1;
+      vv_add_neg += Vector1<TypeParam>(1);
+
+      atomic_sub(&vs_sub_pos, 1);
+      atomic_sub(&vv_sub_pos, Vector1<TypeParam>(1));
+      vs_sub_neg -= 1;
+      vv_sub_neg -= Vector1<TypeParam>(1);
+
+      if (i % num_steps_of_mul_div == 0) {
+        atomic_mul(&vs_mul_div_pos, static_cast<TypeParam>(2));
+        atomic_elementwise_mul(&vv_mul_div_pos, Vector1<TypeParam>(2));
+        vs_mul_div_neg *= static_cast<TypeParam>(2);
+        vv_mul_div_neg = elementwise_mul(vv_mul_div_neg, Vector1<TypeParam>(2));
+      } else {
+        atomic_div(&vs_mul_div_pos, static_cast<TypeParam>(2));
+        atomic_elementwise_div(&vv_mul_div_pos, Vector1<TypeParam>(2));
+        vs_mul_div_neg /= static_cast<TypeParam>(2);
+        vv_mul_div_neg = elementwise_div(vv_mul_div_neg, Vector1<TypeParam>(2));
+      }
+    }
+  };
+
+  // Launch threads
+  std::vector<std::thread> threads;
+  for (int i = 0; i < num_threads; ++i) {
+    threads.emplace_back(thread_func);
+  }
+
+  // Join threads
+  for (auto& thread : threads) {
+    thread.join();
+  }
+
+  // Verify the result
+  EXPECT_EQ(vs_add_pos[0], num_threads * num_iterations) << "Atomic add failed.";
+  EXPECT_EQ(vv_add_pos[0], num_threads * num_iterations) << "Atomic add failed.";
+  EXPECT_NE(vs_add_neg[0], num_threads * num_iterations) << "False positive: Non-atomic add succeeded.";
+  EXPECT_NE(vv_add_neg[0], num_threads * num_iterations) << "False positive: Non-atomic add succeeded.";
+
+  EXPECT_EQ(vs_sub_pos[0], -num_threads * num_iterations) << "Atomic sub failed.";
+  EXPECT_EQ(vv_sub_pos[0], -num_threads * num_iterations) << "Atomic sub failed.";
+  EXPECT_NE(vs_sub_neg[0], -num_threads * num_iterations) << "False positive: Non-atomic sub succeeded.";
+  EXPECT_NE(vv_sub_neg[0], -num_threads * num_iterations) << "False positive: Non-atomic sub succeeded.";
+
+  EXPECT_EQ(vs_mul_div_pos[0], std::pow(2, num_threads)) << "Atomic mul/div failed.";
+  EXPECT_EQ(vv_mul_div_pos[0], std::pow(2, num_threads)) << "Atomic mul/div failed.";
+  EXPECT_NE(vs_mul_div_neg[0], std::pow(2, num_threads)) << "False positive: Non-atomic mul/div succeeded.";
+  EXPECT_NE(vv_mul_div_neg[0], std::pow(2, num_threads)) << "False positive: Non-atomic mul/div succeeded.";
+}
+
+TYPED_TEST(VectorSingleTypeTest, AtomicOpTestAddSubMulDiv3D) {
+  int num_threads = 8;
+  int num_iterations = 100001;  // Must be odd
+  int num_steps_of_mul_div = 2;
+
+  // Naming convention
+  // vs: Vector-scalar operation
+  // vv: Vector-vector operation
+  // pos: Positive result using atomic operations
+  // neg: Negative result without atomic operations
+  Vector3<TypeParam> vs_add_pos(0, 1, 2);
+  Vector3<TypeParam> vs_add_neg(0, 1, 2);
+  Vector3<TypeParam> vv_add_pos(0, 1, 2);
+  Vector3<TypeParam> vv_add_neg(0, 1, 2);
+
+  Vector3<TypeParam> vs_sub_pos(0, 1, 2);
+  Vector3<TypeParam> vs_sub_neg(0, 1, 2);
+  Vector3<TypeParam> vv_sub_pos(0, 1, 2);
+  Vector3<TypeParam> vv_sub_neg(0, 1, 2);
+
+  Vector3<TypeParam> vs_mul_div_pos(1, 2, 3);
+  Vector3<TypeParam> vs_mul_div_neg(1, 2, 3);
+  Vector3<TypeParam> vv_mul_div_pos(1, 2, 3);
+  Vector3<TypeParam> vv_mul_div_neg(1, 2, 3);
+
+  // Thread function to perform atomic_add
+  std::atomic<long long int> thread_id_counter(0);
+  auto thread_func = [&]() {
+    for (int i = 0; i < num_iterations; ++i) {
+      atomic_add(&vs_add_pos, 1);
+      atomic_add(&vv_add_pos, Vector3<TypeParam>(1, 2, 3));
+      vs_add_neg += 1;
+      vv_add_neg += Vector3<TypeParam>(1, 2, 3);
+
+      atomic_sub(&vs_sub_pos, 1);
+      atomic_sub(&vv_sub_pos, Vector3<TypeParam>(1, 2, 3));
+      vs_sub_neg -= 1;
+      vv_sub_neg -= Vector3<TypeParam>(1, 2, 3);
+
+      if (i % num_steps_of_mul_div == 0) {
+        atomic_mul(&vs_mul_div_pos, static_cast<TypeParam>(2));
+        atomic_elementwise_mul(&vv_mul_div_pos, Vector3<TypeParam>(2, 3, 4));
+        vs_mul_div_neg *= static_cast<TypeParam>(2);
+        vv_mul_div_neg = elementwise_mul(vv_mul_div_neg, Vector3<TypeParam>(2, 3, 4));
+      } else {
+        atomic_div(&vs_mul_div_pos, static_cast<TypeParam>(2));
+        atomic_elementwise_div(&vv_mul_div_pos, Vector3<TypeParam>(2, 3, 4));
+        vs_mul_div_neg /= static_cast<TypeParam>(2);
+        vv_mul_div_neg = elementwise_div(vv_mul_div_neg, Vector3<TypeParam>(2, 3, 4));
+      }
+    }
+  };
+
+  // Launch threads
+  std::vector<std::thread> threads;
+  for (int i = 0; i < num_threads; ++i) {
+    threads.emplace_back(thread_func);
+  }
+
+  // Join threads
+  for (auto& thread : threads) {
+    thread.join();
+  }
+
+  // Verify the result
+  EXPECT_EQ(vs_add_pos[0], 0 + num_threads * num_iterations) << "Atomic add failed.";
+  EXPECT_EQ(vs_add_pos[1], 1 + num_threads * num_iterations) << "Atomic add failed.";
+  EXPECT_EQ(vs_add_pos[2], 2 + num_threads * num_iterations) << "Atomic add failed.";
+
+  EXPECT_EQ(vv_add_pos[0], 0 + 1 * num_threads * num_iterations) << "Atomic add failed.";
+  EXPECT_EQ(vv_add_pos[1], 1 + 2 * num_threads * num_iterations) << "Atomic add failed.";
+  EXPECT_EQ(vv_add_pos[2], 2 + 3 * num_threads * num_iterations) << "Atomic add failed.";
+
+  EXPECT_NE(vs_add_neg[0], 0 + num_threads * num_iterations) << "False positive: Non-atomic add succeeded.";
+  EXPECT_NE(vs_add_neg[1], 1 + num_threads * num_iterations) << "False positive: Non-atomic add succeeded.";
+  EXPECT_NE(vs_add_neg[2], 2 + num_threads * num_iterations) << "False positive: Non-atomic add succeeded.";
+
+  EXPECT_NE(vv_add_neg[0], 0 + 1 * num_threads * num_iterations) << "False positive: Non-atomic add succeeded.";
+  EXPECT_NE(vv_add_neg[1], 1 + 2 * num_threads * num_iterations) << "False positive: Non-atomic add succeeded.";
+  EXPECT_NE(vv_add_neg[2], 2 + 3 * num_threads * num_iterations) << "False positive: Non-atomic add succeeded.";
+
+  EXPECT_EQ(vs_sub_pos[0], 0 - num_threads * num_iterations) << "Atomic sub failed.";
+  EXPECT_EQ(vs_sub_pos[1], 1 - num_threads * num_iterations) << "Atomic sub failed.";
+  EXPECT_EQ(vs_sub_pos[2], 2 - num_threads * num_iterations) << "Atomic sub failed.";
+
+  EXPECT_EQ(vv_sub_pos[0], 0 - 1 * num_threads * num_iterations) << "Atomic sub failed.";
+  EXPECT_EQ(vv_sub_pos[1], 1 - 2 * num_threads * num_iterations) << "Atomic sub failed.";
+  EXPECT_EQ(vv_sub_pos[2], 2 - 3 * num_threads * num_iterations) << "Atomic sub failed.";
+
+  EXPECT_NE(vs_sub_neg[0], 0 - num_threads * num_iterations) << "False positive: Non-atomic sub succeeded.";
+  EXPECT_NE(vs_sub_neg[1], 1 - num_threads * num_iterations) << "False positive: Non-atomic sub succeeded.";
+  EXPECT_NE(vs_sub_neg[2], 2 - num_threads * num_iterations) << "False positive: Non-atomic sub succeeded.";
+
+  EXPECT_NE(vv_sub_neg[0], -1 * num_threads * num_iterations) << "False positive: Non-atomic sub succeeded.";
+  EXPECT_NE(vv_sub_neg[1], -2 * num_threads * num_iterations) << "False positive: Non-atomic sub succeeded.";
+  EXPECT_NE(vv_sub_neg[2], -3 * num_threads * num_iterations) << "False positive: Non-atomic sub succeeded.";
+
+  EXPECT_EQ(vs_mul_div_pos[0], 1 * std::pow(2, num_threads)) << "Atomic mul/div failed.";
+  EXPECT_EQ(vs_mul_div_pos[1], 2 * std::pow(2, num_threads)) << "Atomic mul/div failed.";
+  EXPECT_EQ(vs_mul_div_pos[2], 3 * std::pow(2, num_threads)) << "Atomic mul/div failed.";
+
+  EXPECT_EQ(vv_mul_div_pos[0], 1 * std::pow(2, num_threads)) << "Atomic mul/div failed.";
+  EXPECT_EQ(vv_mul_div_pos[1], 2 * std::pow(3, num_threads)) << "Atomic mul/div failed.";
+  EXPECT_EQ(vv_mul_div_pos[2], 3 * std::pow(4, num_threads)) << "Atomic mul/div failed.";
+
+  EXPECT_NE(vs_mul_div_neg[0], 1 * std::pow(2, num_threads)) << "False positive: Non-atomic mul/div succeeded.";
+  EXPECT_NE(vs_mul_div_neg[1], 2 * std::pow(2, num_threads)) << "False positive: Non-atomic mul/div succeeded.";
+  EXPECT_NE(vs_mul_div_neg[2], 3 * std::pow(2, num_threads)) << "False positive: Non-atomic mul/div succeeded.";
+
+  EXPECT_NE(vv_mul_div_neg[0], 1 * std::pow(2, num_threads)) << "False positive: Non-atomic mul/div succeeded.";
+  EXPECT_NE(vv_mul_div_neg[1], 2 * std::pow(3, num_threads)) << "False positive: Non-atomic mul/div succeeded.";
+  EXPECT_NE(vv_mul_div_neg[2], 3 * std::pow(4, num_threads)) << "False positive: Non-atomic mul/div succeeded.";
+}
+
+TYPED_TEST(VectorSingleTypeTest, AtomicFetchOpTestAddSubMulDiv1D) {
+  int num_threads = 8;
+  int num_iterations = 100001;  // Must be odd
+  int num_steps_of_mul_div = 2;
+
+  // Naming convention
+  // vs: Vector-scalar operation
+  // vv: Vector-vector operation
+  // pos: Positive result using atomic operations
+  // neg: Negative result without atomic operations
+  Vector1<TypeParam> vs_add_pos(0);
+  Vector1<TypeParam> vs_add_neg(0);
+  Vector1<TypeParam> vv_add_pos(0);
+  Vector1<TypeParam> vv_add_neg(0);
+
+  Vector1<TypeParam> vs_sub_pos(0);
+  Vector1<TypeParam> vs_sub_neg(0);
+  Vector1<TypeParam> vv_sub_pos(0);
+  Vector1<TypeParam> vv_sub_neg(0);
+
+  Vector1<TypeParam> vs_mul_div_pos(1);
+  Vector1<TypeParam> vs_mul_div_neg(1);
+  Vector1<TypeParam> vv_mul_div_pos(1);
+  Vector1<TypeParam> vv_mul_div_neg(1);
+
+  std::vector<int> vs_add_pos_counts(num_iterations * num_threads, 0);
+  std::vector<int> vs_add_neg_counts(num_iterations * num_threads, 0);
+  std::vector<int> vv_add_pos_counts(num_iterations * num_threads, 0);
+  std::vector<int> vv_add_neg_counts(num_iterations * num_threads, 0);
+
+  std::vector<int> vs_sub_pos_counts(num_iterations * num_threads, 0);
+  std::vector<int> vs_sub_neg_counts(num_iterations * num_threads, 0);
+  std::vector<int> vv_sub_pos_counts(num_iterations * num_threads, 0);
+  std::vector<int> vv_sub_neg_counts(num_iterations * num_threads, 0);
+
+  int total_vs_mul_div_pos_count = 0;
+  int total_vs_mul_div_neg_count = 0;
+  int total_vv_mul_div_pos_count = 0;
+  int total_vv_mul_div_neg_count = 0;
+
+  // Thread function to perform atomic_add
+  std::atomic<long long int> thread_id_counter(0);
+  auto thread_func = [&]() {
+    for (int i = 0; i < num_iterations; ++i) {
+      Vector1<TypeParam> old_vs_add_pos = atomic_fetch_add(&vs_add_pos, 1);
+      Vector1<TypeParam> old_vv_add_pos = atomic_fetch_add(&vv_add_pos, Vector1<TypeParam>(1));
+      Vector1<TypeParam> old_vs_add_neg = vs_add_neg;
+      Vector1<TypeParam> old_vv_add_neg = vv_add_neg;
+      vs_add_neg += 1;
+      vv_add_neg += Vector1<TypeParam>(1);
+
+      int old_vs_add_pos_index = static_cast<int>(old_vs_add_pos[0]);
+      int old_vv_add_pos_index = static_cast<int>(old_vv_add_pos[0]);
+      int old_vs_add_neg_index = static_cast<int>(old_vs_add_neg[0]);
+      int old_vv_add_neg_index = static_cast<int>(old_vv_add_neg[0]);
+      if (old_vs_add_pos_index >= 0 && old_vs_add_pos_index < num_iterations * num_threads) {
+        vs_add_pos_counts[old_vs_add_pos_index] += 1;
+      }
+      if (old_vv_add_pos_index >= 0 && old_vv_add_pos_index < num_iterations * num_threads) {
+        vv_add_pos_counts[old_vv_add_pos_index] += 1;
+      }
+      if (old_vs_add_neg_index >= 0 && old_vs_add_neg_index < num_iterations * num_threads) {
+        vs_add_neg_counts[old_vs_add_neg_index] += 1;
+      }
+      if (old_vv_add_neg_index >= 0 && old_vv_add_neg_index < num_iterations * num_threads) {
+        vv_add_neg_counts[old_vv_add_neg_index] += 1;
+      }
+
+      Vector1<TypeParam> old_vs_sub_pos = atomic_fetch_sub(&vs_sub_pos, 1);
+      Vector1<TypeParam> old_vv_sub_pos = atomic_fetch_sub(&vv_sub_pos, Vector1<TypeParam>(1));
+      Vector1<TypeParam> old_vs_sub_neg = vs_sub_neg;
+      Vector1<TypeParam> old_vv_sub_neg = vv_sub_neg;
+      vs_sub_neg -= 1;
+      vv_sub_neg -= Vector1<TypeParam>(1);
+
+      int old_vs_sub_pos_index = -static_cast<int>(old_vs_sub_pos[0]);
+      int old_vv_sub_pos_index = -static_cast<int>(old_vv_sub_pos[0]);
+      int old_vs_sub_neg_index = -static_cast<int>(old_vs_sub_neg[0]);
+      int old_vv_sub_neg_index = -static_cast<int>(old_vv_sub_neg[0]);
+      if (old_vs_sub_pos_index >= 0 && old_vs_sub_pos_index < num_iterations * num_threads) {
+        vs_sub_pos_counts[old_vs_sub_pos_index] += 1;
+      }
+      if (old_vv_sub_pos_index >= 0 && old_vv_sub_pos_index < num_iterations * num_threads) {
+        vv_sub_pos_counts[old_vv_sub_pos_index] += 1;
+      }
+      if (old_vs_sub_neg_index >= 0 && old_vs_sub_neg_index < num_iterations * num_threads) {
+        vs_sub_neg_counts[old_vs_sub_neg_index] += 1;
+      }
+      if (old_vv_sub_neg_index >= 0 && old_vv_sub_neg_index < num_iterations * num_threads) {
+        vv_sub_neg_counts[old_vv_sub_neg_index] += 1;
+      }
+
+      Vector1<TypeParam> old_vs_mul_div_pos;
+      Vector1<TypeParam> old_vv_mul_div_pos;
+      Vector1<TypeParam> old_vs_mul_div_neg;
+      Vector1<TypeParam> old_vv_mul_div_neg;
+      if (i % num_steps_of_mul_div == 0) {
+        old_vs_mul_div_pos = atomic_fetch_mul(&vs_mul_div_pos, static_cast<TypeParam>(2));
+        old_vv_mul_div_pos = atomic_fetch_elementwise_mul(&vv_mul_div_pos, Vector1<TypeParam>(2));
+        old_vs_mul_div_neg = vs_mul_div_neg;
+        old_vv_mul_div_neg = vv_mul_div_neg;
+        vs_mul_div_neg *= static_cast<TypeParam>(2);
+        vv_mul_div_neg = elementwise_mul(vv_mul_div_neg, Vector1<TypeParam>(2));
+      } else {
+        old_vs_mul_div_pos = atomic_fetch_div(&vs_mul_div_pos, static_cast<TypeParam>(2));
+        old_vv_mul_div_pos = atomic_fetch_elementwise_div(&vv_mul_div_pos, Vector1<TypeParam>(2));
+        old_vs_mul_div_neg = vs_mul_div_neg;
+        old_vv_mul_div_neg = vv_mul_div_neg;
+        vs_mul_div_neg /= static_cast<TypeParam>(2);
+        vv_mul_div_neg = elementwise_div(vv_mul_div_neg, Vector1<TypeParam>(2));
+      }
+
+      int old_vs_mul_div_pos_index = static_cast<int>(std::log2(old_vs_mul_div_pos[0]));
+      int old_vv_mul_div_pos_index = static_cast<int>(std::log2(old_vv_mul_div_pos[0]));
+      int old_vs_mul_div_neg_index = static_cast<int>(std::log2(old_vs_mul_div_neg[0]));
+      int old_vv_mul_div_neg_index = static_cast<int>(std::log2(old_vv_mul_div_neg[0]));
+      if (old_vs_mul_div_pos_index >= 0 && old_vs_mul_div_pos_index <= num_threads) {
+        Kokkos::atomic_add(&total_vs_mul_div_pos_count, 1);
+      }
+      if (old_vv_mul_div_pos_index >= 0 && old_vv_mul_div_pos_index <= num_threads) {
+        Kokkos::atomic_add(&total_vv_mul_div_pos_count, 1);
+      }
+      if (old_vs_mul_div_neg_index >= 0 && old_vs_mul_div_neg_index <= num_threads) {
+        Kokkos::atomic_add(&total_vs_mul_div_neg_count, 1);
+      }
+      if (old_vv_mul_div_neg_index >= 0 && old_vv_mul_div_neg_index <= num_threads) {
+        Kokkos::atomic_add(&total_vv_mul_div_neg_count, 1);
+      }
+    }
+  };
+
+  // Launch threads
+  std::vector<std::thread> threads;
+  for (int i = 0; i < num_threads; ++i) {
+    threads.emplace_back(thread_func);
+  }
+
+  // Join threads
+  for (auto& thread : threads) {
+    thread.join();
+  }
+
+  // Verify the results
+  EXPECT_EQ(vs_add_pos[0], num_threads * num_iterations) << "Atomic fetch add failed.";
+  EXPECT_EQ(vv_add_pos[0], num_threads * num_iterations) << "Atomic fetch add failed.";
+  EXPECT_NE(vs_add_neg[0], num_threads * num_iterations) << "False positive: Non-atomic fetch add succeeded.";
+  EXPECT_NE(vv_add_neg[0], num_threads * num_iterations) << "False positive: Non-atomic fetch add succeeded.";
+
+  EXPECT_EQ(vs_sub_pos[0], -num_threads * num_iterations) << "Atomic fetch sub failed.";
+  EXPECT_EQ(vv_sub_pos[0], -num_threads * num_iterations) << "Atomic fetch sub failed.";
+  EXPECT_NE(vs_sub_neg[0], -num_threads * num_iterations) << "False positive: Non-atomic fetch sub succeeded.";
+  EXPECT_NE(vv_sub_neg[0], -num_threads * num_iterations) << "False positive: Non-atomic fetch sub succeeded.";
+
+  EXPECT_EQ(vs_mul_div_pos[0], std::pow(2, num_threads)) << "Atomic fetch mul/div failed.";
+  EXPECT_EQ(vv_mul_div_pos[0], std::pow(2, num_threads)) << "Atomic fetch mul/div failed.";
+  EXPECT_NE(vs_mul_div_neg[0], std::pow(2, num_threads)) << "False positive: Non-atomic fetch mul/div succeeded.";
+  EXPECT_NE(vv_mul_div_neg[0], std::pow(2, num_threads)) << "False positive: Non-atomic fetch mul/div succeeded.";
+
+  // Verify the fetch counts
+  bool vs_add_pos_fetch_passed = true;
+  bool vv_add_pos_fetch_passed = true;
+  bool vs_sub_pos_fetch_passed = true;
+  bool vv_sub_pos_fetch_passed = true;
+
+  bool vs_add_neg_fetch_passed = false;
+  bool vv_add_neg_fetch_passed = false;
+  bool vs_sub_neg_fetch_passed = false;
+  bool vv_sub_neg_fetch_passed = false;
+
+  for (int i = 0; i < num_iterations * num_threads; ++i) {
+    // Add
+    if (vs_add_pos_counts[i] != 1) {
+      vs_add_pos_fetch_passed = false;
+    }
+    if (vv_add_pos_counts[i] != 1) {
+      vv_add_pos_fetch_passed = false;
+    }
+    if (vs_add_neg_counts[i] != 1) {
+      vs_add_neg_fetch_passed = false;
+    }
+    if (vv_add_neg_counts[i] != 1) {
+      vv_add_neg_fetch_passed = false;
+    }
+
+    // Sub
+    if (vs_sub_pos_counts[i] != 1) {
+      vs_sub_pos_fetch_passed = false;
+    }
+    if (vv_sub_pos_counts[i] != 1) {
+      vv_sub_pos_fetch_passed = false;
+    }
+    if (vs_sub_neg_counts[i] != 1) {
+      vs_sub_neg_fetch_passed = false;
+    }
+    if (vv_sub_neg_counts[i] != 1) {
+      vv_sub_neg_fetch_passed = false;
+    }
+  }
+
+  EXPECT_TRUE(vs_add_pos_fetch_passed) << "Atomic fetch add failed to properly return old value.";
+  EXPECT_TRUE(vv_add_pos_fetch_passed) << "Atomic fetch add failed to properly return old value.";
+  EXPECT_TRUE(vs_sub_pos_fetch_passed) << "Atomic fetch sub failed to properly return old value.";
+  EXPECT_TRUE(vv_sub_pos_fetch_passed) << "Atomic fetch sub failed to properly return old value.";
+  EXPECT_FALSE(vs_add_neg_fetch_passed)
+      << "False positive: Atomic fetch add somehow returned old value correctly in non-atomic operation.";
+  EXPECT_FALSE(vv_add_neg_fetch_passed)
+      << "False positive: Atomic fetch add somehow returned old value correctly in non-atomic operation.";
+  EXPECT_FALSE(vs_sub_neg_fetch_passed)
+      << "False positive: Atomic fetch sub somehow returned old value correctly in non-atomic operation.";
+  EXPECT_FALSE(vv_sub_neg_fetch_passed)
+      << "False positive: Atomic fetch sub somehow returned old value correctly in non-atomic operation.";
+
+  // Addition and multiplication are communicative operations, so the best we can do is check the total number of
+  // operations.
+  int expected_num_occurrences = num_threads * num_iterations;
+  EXPECT_EQ(total_vs_mul_div_pos_count, expected_num_occurrences)
+      << "Atomic fetch mul/div failed to properly return old value.";
+  EXPECT_EQ(total_vv_mul_div_pos_count, expected_num_occurrences)
+      << "Atomic fetch mul/div failed to properly return old value.";
+  EXPECT_NE(total_vs_mul_div_neg_count, expected_num_occurrences)
+      << "False positive: Atomic fetch mul/div somehow returned old value correctly in non-atomic operation.";
+  EXPECT_NE(total_vv_mul_div_neg_count, expected_num_occurrences)
+      << "False positive: Atomic fetch mul/div somehow returned old value correctly in non-atomic operation.";
+}
+
+TYPED_TEST(VectorSingleTypeTest, AtomicFetchOpTestAddSubMulDiv3D) {
+  int num_threads = 8;
+  int num_iterations = 10001;  // Must be odd
+  int num_steps_of_mul_div = 2;
+
+  // Naming convention
+  // vs: Vector-scalar operation
+  // vv: Vector-vector operation
+  // pos: Positive result using atomic operations
+  // neg: Negative result without atomic operations
+  Vector3<TypeParam> vs_add_pos(0, 1, 2);
+  Vector3<TypeParam> vs_add_neg(0, 1, 2);
+  Vector3<TypeParam> vv_add_pos(0, 1, 2);
+  Vector3<TypeParam> vv_add_neg(0, 1, 2);
+
+  Vector3<TypeParam> vs_sub_pos(0, 1, 2);
+  Vector3<TypeParam> vs_sub_neg(0, 1, 2);
+  Vector3<TypeParam> vv_sub_pos(0, 1, 2);
+  Vector3<TypeParam> vv_sub_neg(0, 1, 2);
+
+  Vector3<TypeParam> vs_mul_div_pos(1, 2, 3);
+  Vector3<TypeParam> vs_mul_div_neg(1, 2, 3);
+  Vector3<TypeParam> vv_mul_div_pos(1, 2, 3);
+  Vector3<TypeParam> vv_mul_div_neg(1, 2, 3);
+
+  // Thread function to perform atomic_add
+  std::atomic<long long int> thread_id_counter(0);
+  auto thread_func = [&]() {
+    for (int i = 0; i < num_iterations; ++i) {
+      atomic_fetch_add(&vs_add_pos, 1);
+      atomic_fetch_add(&vv_add_pos, Vector3<TypeParam>(1, 2, 3));
+      vs_add_neg += 1;
+      vv_add_neg += Vector3<TypeParam>(1, 2, 3);
+
+      atomic_fetch_sub(&vs_sub_pos, 1);
+      atomic_fetch_sub(&vv_sub_pos, Vector3<TypeParam>(1, 2, 3));
+      vs_sub_neg -= 1;
+      vv_sub_neg -= Vector3<TypeParam>(1, 2, 3);
+
+      if (i % num_steps_of_mul_div == 0) {
+        atomic_fetch_mul(&vs_mul_div_pos, static_cast<TypeParam>(2));
+        atomic_fetch_elementwise_mul(&vv_mul_div_pos, Vector3<TypeParam>(2, 3, 4));
+        vs_mul_div_neg *= static_cast<TypeParam>(2);
+        vv_mul_div_neg = elementwise_mul(vv_mul_div_neg, Vector3<TypeParam>(2, 3, 4));
+      } else {
+        atomic_fetch_div(&vs_mul_div_pos, static_cast<TypeParam>(2));
+        atomic_fetch_elementwise_div(&vv_mul_div_pos, Vector3<TypeParam>(2, 3, 4));
+        vs_mul_div_neg /= static_cast<TypeParam>(2);
+        vv_mul_div_neg = elementwise_div(vv_mul_div_neg, Vector3<TypeParam>(2, 3, 4));
+      }
+    }
+  };
+
+  // Launch threads
+  std::vector<std::thread> threads;
+  for (int i = 0; i < num_threads; ++i) {
+    threads.emplace_back(thread_func);
+  }
+
+  // Join threads
+  for (auto& thread : threads) {
+    thread.join();
+  }
+
+  // Verify the result
+  EXPECT_EQ(vs_add_pos[0], 0 + num_threads * num_iterations) << "Atomic fetch add failed.";
+  EXPECT_EQ(vs_add_pos[1], 1 + num_threads * num_iterations) << "Atomic fetch add failed.";
+  EXPECT_EQ(vs_add_pos[2], 2 + num_threads * num_iterations) << "Atomic fetch add failed.";
+
+  EXPECT_EQ(vv_add_pos[0], 0 + 1 * num_threads * num_iterations) << "Atomic fetch add failed.";
+  EXPECT_EQ(vv_add_pos[1], 1 + 2 * num_threads * num_iterations) << "Atomic fetch add failed.";
+  EXPECT_EQ(vv_add_pos[2], 2 + 3 * num_threads * num_iterations) << "Atomic fetch add failed.";
+
+  EXPECT_NE(vs_add_neg[0], 0 + num_threads * num_iterations) << "False positive: Non-atomic fetch add succeeded.";
+  EXPECT_NE(vs_add_neg[1], 1 + num_threads * num_iterations) << "False positive: Non-atomic fetch add succeeded.";
+  EXPECT_NE(vs_add_neg[2], 2 + num_threads * num_iterations) << "False positive: Non-atomic fetch add succeeded.";
+
+  EXPECT_NE(vv_add_neg[0], 0 + 1 * num_threads * num_iterations) << "False positive: Non-atomic fetch add succeeded.";
+  EXPECT_NE(vv_add_neg[1], 1 + 2 * num_threads * num_iterations) << "False positive: Non-atomic fetch add succeeded.";
+  EXPECT_NE(vv_add_neg[2], 2 + 3 * num_threads * num_iterations) << "False positive: Non-atomic fetch add succeeded.";
+
+  EXPECT_EQ(vs_sub_pos[0], 0 - num_threads * num_iterations) << "Atomic fetch sub failed.";
+  EXPECT_EQ(vs_sub_pos[1], 1 - num_threads * num_iterations) << "Atomic fetch sub failed.";
+  EXPECT_EQ(vs_sub_pos[2], 2 - num_threads * num_iterations) << "Atomic fetch sub failed.";
+
+  EXPECT_EQ(vv_sub_pos[0], 0 - 1 * num_threads * num_iterations) << "Atomic fetch sub failed.";
+  EXPECT_EQ(vv_sub_pos[1], 1 - 2 * num_threads * num_iterations) << "Atomic fetch sub failed.";
+  EXPECT_EQ(vv_sub_pos[2], 2 - 3 * num_threads * num_iterations) << "Atomic fetch sub failed.";
+
+  EXPECT_NE(vs_sub_neg[0], 0 - num_threads * num_iterations) << "False positive: Non-atomic fetch sub succeeded.";
+  EXPECT_NE(vs_sub_neg[1], 1 - num_threads * num_iterations) << "False positive: Non-atomic fetch sub succeeded.";
+  EXPECT_NE(vs_sub_neg[2], 2 - num_threads * num_iterations) << "False positive: Non-atomic fetch sub succeeded.";
+
+  EXPECT_NE(vv_sub_neg[0], -1 * num_threads * num_iterations) << "False positive: Non-atomic fetch sub succeeded.";
+  EXPECT_NE(vv_sub_neg[1], -2 * num_threads * num_iterations) << "False positive: Non-atomic fetch sub succeeded.";
+  EXPECT_NE(vv_sub_neg[2], -3 * num_threads * num_iterations) << "False positive: Non-atomic fetch sub succeeded.";
+
+  EXPECT_EQ(vs_mul_div_pos[0], 1 * std::pow(2, num_threads)) << "Atomic fetch mul/div failed.";
+  EXPECT_EQ(vs_mul_div_pos[1], 2 * std::pow(2, num_threads)) << "Atomic fetch mul/div failed.";
+  EXPECT_EQ(vs_mul_div_pos[2], 3 * std::pow(2, num_threads)) << "Atomic fetch mul/div failed.";
+
+  EXPECT_EQ(vv_mul_div_pos[0], 1 * std::pow(2, num_threads)) << "Atomic fetch mul/div failed.";
+  EXPECT_EQ(vv_mul_div_pos[1], 2 * std::pow(3, num_threads)) << "Atomic fetch mul/div failed.";
+  EXPECT_EQ(vv_mul_div_pos[2], 3 * std::pow(4, num_threads)) << "Atomic fetch mul/div failed.";
+
+  EXPECT_NE(vs_mul_div_neg[0], 1 * std::pow(2, num_threads)) << "False positive: Non-atomic fetch mul/div succeeded.";
+  EXPECT_NE(vs_mul_div_neg[1], 2 * std::pow(2, num_threads)) << "False positive: Non-atomic fetch mul/div succeeded.";
+  EXPECT_NE(vs_mul_div_neg[2], 3 * std::pow(2, num_threads)) << "False positive: Non-atomic fetch mul/div succeeded.";
+
+  EXPECT_NE(vv_mul_div_neg[0], 1 * std::pow(2, num_threads)) << "False positive: Non-atomic fetch mul/div succeeded.";
+  EXPECT_NE(vv_mul_div_neg[1], 2 * std::pow(3, num_threads)) << "False positive: Non-atomic fetch mul/div succeeded.";
+  EXPECT_NE(vv_mul_div_neg[2], 3 * std::pow(4, num_threads)) << "False positive: Non-atomic fetch mul/div succeeded.";
 }
 //@}
 

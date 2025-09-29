@@ -2,8 +2,9 @@
 // **********************************************************************************************************************
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
-//                                           Copyright 2024 Flatiron Institute
-//                                                 Author: Bryce Palmer
+//                                              Copyright 2024 Bryce Palmer
+//
+// Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
 // as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
@@ -54,6 +55,7 @@ int main(int argc, char** argv) {
 
   stk::parallel_machine_init(&argc, &argv);
   Kokkos::initialize(argc, argv);
+  Kokkos::print_configuration(std::cout);
 
   testing::InitGoogleMock(&argc, argv);
   int return_val = RUN_ALL_TESTS();

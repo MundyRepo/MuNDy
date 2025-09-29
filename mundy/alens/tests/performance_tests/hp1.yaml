@@ -33,7 +33,7 @@ HP1:
 
   brownian_motion:
     kt: 0.1
-  
+
   backbone_springs:
     spring_type: "HARMONIC"
     spring_constant: 3.0
@@ -43,7 +43,7 @@ HP1:
     backbone_excluded_volume_radius: 0.5
     backbone_youngs_modulus: 1000.0
     backbone_poissons_ratio: 0.3
- 
+
   crosslinker:
     kt: 0.1
     spring_type: "HARMONIC"

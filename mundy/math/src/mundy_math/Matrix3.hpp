@@ -2,8 +2,9 @@
 // **********************************************************************************************************************
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
-//                                           Copyright 2024 Flatiron Institute
-//                                                 Author: Bryce Palmer
+//                                              Copyright 2024 Bryce Palmer
+//
+// Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
 // as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
@@ -40,25 +41,12 @@ namespace mundy {
 
 namespace math {
 
-/// \brief Class for a 3x3 matrix with arithmetic entries
-/// \tparam T The type of the entries.
-/// \tparam Accessor The type of the accessor.
-template <typename T, ValidAccessor<T> Accessor = Array<T, 9>, typename OwnershipType = Ownership::Owns>
-using Matrix3 = Matrix<T, 3, 3, Accessor, OwnershipType>;
-
-template <typename T, ValidAccessor<T> Accessor = Array<T, 9>>
-using Matrix3View = Matrix<T, 3, 3, Accessor, Ownership::Views>;
-
-template <typename T, ValidAccessor<T> Accessor = Array<T, 9>>
-using OwningMatrix3 = Matrix<T, 3, 3, Accessor, Ownership::Owns>;
-
-/// \brief Get the lower trangular matrix of the Cholesky decomposition of a symmetric positive definite matrix
+/// \brief Get the lower triangular matrix of the Cholesky decomposition of a symmetric positive definite matrix
 /// \param A The symmetric positive definite matrix
 /// \return The lower triangular matrix of the Cholesky decomposition
 template <typename T, ValidAccessor<T> Accessor, typename OwnershipType>
-KOKKOS_INLINE_FUNCTION auto cholesky(const Matrix3<T, Accessor, OwnershipType> &A) {
-  MUNDY_THROW_ASSERT(A(0, 0) > get_zero_tolerance<T>(), std::invalid_argument,
-                     "Matrix3 must be positive definite");
+KOKKOS_INLINE_FUNCTION auto cholesky(const AMatrix3<T, Accessor, OwnershipType>& A) {
+  MUNDY_THROW_ASSERT(A(0, 0) > get_zero_tolerance<T>(), std::invalid_argument, "Matrix3 must be positive definite");
   const T l11 = Kokkos::sqrt(A(0, 0));
   const T l21 = A(1, 0) / l11;
   const T l22 = Kokkos::sqrt(A(1, 1) - l21 * l21);
@@ -67,20 +55,6 @@ KOKKOS_INLINE_FUNCTION auto cholesky(const Matrix3<T, Accessor, OwnershipType> &
   const T l33 = Kokkos::sqrt(A(2, 2) - l31 * l31 - l32 * l32);
   return Matrix3<T>(l11, 0.0, 0.0, l21, l22, 0.0, l31, l32, l33);
 }
-
-/// \brief (Implementation) Type trait to determine if a type is a Matrix3
-template <typename TypeToCheck>
-struct is_matrix3_impl : std::false_type {};
-//
-template <typename T, typename Accessor, typename OwnershipType>
-struct is_matrix3_impl<Matrix3<T, Accessor, OwnershipType>> : std::true_type {};
-
-/// \brief Type trait to determine if a type is a Matrix3
-template <typename T>
-struct is_matrix3 : is_matrix3_impl<std::decay_t<T>> {};
-//
-template <typename TypeToCheck>
-constexpr bool is_matrix3_v = is_matrix3<TypeToCheck>::value;
 
 /// \brief A temporary concept to check if a type is a valid Matrix3 type
 /// TODO(palmerb4): Extend this concept to contain all shared setters and getters for our quaternions.
@@ -203,10 +177,10 @@ concept ValidMatrix3Type = is_matrix3_v<std::decay_t<Matrix3Type>> &&
                              } -> std::convertible_to<const typename std::decay_t<Matrix3Type>::scalar_t>;
                            };  // ValidMatrix3Type
 
-static_assert(is_matrix3_v<Matrix3<int>>, "Odd, default matrix3 is not a matrix3.");
-static_assert(is_matrix3_v<Matrix3<int, Array<int, 9>>>, "Odd, default matrix3 with Array accessor is not a matrix3.");
+static_assert(is_matrix3_v<AMatrix3<int>>, "Odd, default matrix3 is not a matrix3.");
+static_assert(is_matrix3_v<AMatrix3<int, Array<int, 9>>>, "Odd, default matrix3 with Array accessor is not a matrix3.");
 static_assert(is_matrix3_v<Matrix3View<int>>, "Odd, Matrix3View is not a matrix3.");
-static_assert(is_matrix3_v<OwningMatrix3<int>>, "Odd, OwningMatrix3 is not a matrix3.");
+static_assert(is_matrix3_v<Matrix3<int>>, "Odd, OwningMatrix3 is not a matrix3.");
 
 //! \name Matrix3<T, Accessor> views
 //@{

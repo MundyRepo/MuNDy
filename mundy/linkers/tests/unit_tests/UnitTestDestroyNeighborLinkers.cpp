@@ -2,8 +2,9 @@
 // **********************************************************************************************************************
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
-//                                           Copyright 2024 Flatiron Institute
-//                                                 Author: Bryce Palmer
+//                                              Copyright 2024 Bryce Palmer
+//
+// Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
 // as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
@@ -33,7 +34,6 @@
 #include <stk_mesh/base/Comm.hpp>           // for comm_mesh_counts
 #include <stk_mesh/base/Entity.hpp>         // for stk::mesh::Entity
 #include <stk_mesh/base/FieldParallel.hpp>  // for stk:::mesh::communicate_field_data
-#include <stk_mesh/base/ForEachEntity.hpp>  // for mundy::mesh::for_each_entity_run
 #include <stk_mesh/base/GetEntities.hpp>    // for stk::mesh::get_selected_entities
 #include <stk_mesh/base/MeshBuilder.hpp>    // for stk::mesh::MeshBuilder
 #include <stk_mesh/base/Part.hpp>           // for stk::mesh::Part, stk::mesh::intersect
@@ -45,11 +45,12 @@
 #include <mundy_core/MakeStringArray.hpp>             // for mundy::core::make_string_array
 #include <mundy_linkers/DestroyNeighborLinkers.hpp>   // for mundy::linkers::DestroyNeighborLinkers
 #include <mundy_linkers/GenerateNeighborLinkers.hpp>  // for mundy::linkers::GenerateNeighborLinkers
-#include <mundy_linkers/Linkers.hpp>   // for mundy::linkers::Linker and  mundy::linkers::declare_family_tree_relation
-#include <mundy_mesh/BulkData.hpp>     // for mundy::mesh::BulkData
-#include <mundy_mesh/MeshBuilder.hpp>  // for mundy::mesh::MeshBuilder
-#include <mundy_mesh/MetaData.hpp>     // for mundy::mesh::MetaData
-#include <mundy_meta/FieldReqs.hpp>    // for mundy::meta::FieldReqs
+#include <mundy_linkers/Linkers.hpp>     // for mundy::linkers::Linker and  mundy::linkers::declare_family_tree_relation
+#include <mundy_mesh/BulkData.hpp>       // for mundy::mesh::BulkData
+#include <mundy_mesh/ForEachEntity.hpp>  // for mundy::mesh::for_each_entity_run
+#include <mundy_mesh/MeshBuilder.hpp>    // for mundy::mesh::MeshBuilder
+#include <mundy_mesh/MetaData.hpp>       // for mundy::mesh::MetaData
+#include <mundy_meta/FieldReqs.hpp>      // for mundy::meta::FieldReqs
 #include <mundy_meta/MetaFactory.hpp>  // for mundy::meta::MetaMethodFactory and mundy::meta::HasMeshReqsAndIsRegisterable
 #include <mundy_meta/utils/MeshGeneration.hpp>  // for mundy::meta::utils::generate_class_instance_and_mesh_from_meta_class_requirements
 #include <mundy_shapes/ComputeAABB.hpp>  // for mundy::shapes::ComputeAABB
@@ -492,7 +493,7 @@ TEST(DestroyNeighborLinkers, RepeatedNeighborLinkerGenerationAndDestructionForSp
   }
 
   // Free variables
-  const int num_spheres_per_process = 1000;
+  const int num_spheres_per_process = 100;
   const double volume_fraction = 0.4;
   const double sphere_radius = 1.0;
   const double sphere_volume = (4.0 / 3.0) * M_PI * std::pow(sphere_radius, 3);

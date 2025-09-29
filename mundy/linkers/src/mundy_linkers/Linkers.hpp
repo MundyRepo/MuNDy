@@ -2,8 +2,9 @@
 // **********************************************************************************************************************
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
-//                                           Copyright 2024 Flatiron Institute
-//                                                 Author: Bryce Palmer
+//                                              Copyright 2024 Bryce Palmer
+//
+// Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
 // as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
@@ -130,7 +131,7 @@ class Linkers : public mundy::agents::RankedAssembly<mundy::core::make_string_li
 template <typename... Entities>
   requires(std::is_same_v<std::remove_cv_t<std::remove_reference_t<Entities>>, stk::mesh::Entity> && ...)
 inline void connect_linker_to_entitys_nodes(stk::mesh::BulkData& bulk_data, const stk::mesh::Entity& linker,
-                                     const Entities&... to_entities) {
+                                            const Entities&... to_entities) {
   MUNDY_THROW_ASSERT(bulk_data.in_modifiable_state(), std::logic_error,
                      "declare_relation: The mesh must be in a modification cycle.");
   MUNDY_THROW_ASSERT(bulk_data.entity_rank(linker) == stk::topology::CONSTRAINT_RANK, std::logic_error,

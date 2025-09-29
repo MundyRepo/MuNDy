@@ -2,8 +2,9 @@
 // **********************************************************************************************************************
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
-//                                           Copyright 2024 Flatiron Institute
-//                                                 Author: Bryce Palmer
+//                                              Copyright 2024 Bryce Palmer
+//
+// Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
 // as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
@@ -57,16 +58,16 @@ class AABB {
 
   /// \brief Our ownership type.
   /// One of three values
-  ///  - mundy::math::Ownership::Owns: If both the min and max points own their data.
-  ///  - mundy::math::Ownership::Views: If both the min and max points are views into other data.
-  ///  - mundy::math::Ownership::Mixed: If the min and max points have different ownership types.
+  ///  - math::Ownership::Owns: If both the min and max points own their data.
+  ///  - math::Ownership::Views: If both the min and max points are views into other data.
+  ///  - math::Ownership::Mixed: If the min and max points have different ownership types.
   using OwnershipType = std::conditional_t<
-      std::is_same_v<typename min_point_t::ownership_t, mundy::math::Ownership::Owns> &&
-          std::is_same_v<typename max_point_t::ownership_t, mundy::math::Ownership::Owns>,
-      mundy::math::Ownership::Owns,
-      std::conditional_t<std::is_same_v<typename min_point_t::ownership_t, mundy::math::Ownership::Views> &&
-                             std::is_same_v<typename max_point_t::ownership_t, mundy::math::Ownership::Views>,
-                         mundy::math::Ownership::Views, mundy::math::Ownership::Mixed>>;
+      std::is_same_v<typename min_point_t::ownership_t, math::Ownership::Owns> &&
+          std::is_same_v<typename max_point_t::ownership_t, math::Ownership::Owns>,
+      math::Ownership::Owns,
+      std::conditional_t<std::is_same_v<typename min_point_t::ownership_t, math::Ownership::Views> &&
+                             std::is_same_v<typename max_point_t::ownership_t, math::Ownership::Views>,
+                         math::Ownership::Views, math::Ownership::Mixed>>;
   //@}
 
   //! \name Constructors and destructor
@@ -76,14 +77,14 @@ class AABB {
   /// Nothing can be inside this aabb.
   KOKKOS_FUNCTION
   constexpr AABB()
-    requires std::is_same_v<OwnershipType, mundy::math::Ownership::Owns>
+    requires std::is_same_v<OwnershipType, math::Ownership::Owns>
       : min_corner_(scalar_max(), scalar_max(), scalar_max()), max_corner_(scalar_min(), scalar_min(), scalar_min()) {
   }
 
   /// \brief No default constructor for viewing/mixed AABBs.
   KOKKOS_FUNCTION
   constexpr AABB()
-    requires(!std::is_same_v<OwnershipType, mundy::math::Ownership::Owns>)
+    requires(!std::is_same_v<OwnershipType, math::Ownership::Owns>)
   = delete;
 
   /// \brief Constructor to directly set the min and max corners.
@@ -112,7 +113,7 @@ class AABB {
   /// \param[in] z_max The maximum z-coordinate.
   KOKKOS_FUNCTION
   constexpr AABB(scalar_t x_min, scalar_t y_min, scalar_t z_min, scalar_t x_max, scalar_t y_max, scalar_t z_max)
-    requires std::is_same_v<OwnershipType, mundy::math::Ownership::Owns>
+    requires std::is_same_v<OwnershipType, math::Ownership::Owns>
       : min_corner_(x_min, y_min, z_min), max_corner_(x_max, y_max, z_max) {
   }
 
@@ -195,110 +196,110 @@ class AABB {
   //@{
 
   /// \brief Accesses the AABB as though it were an array of size 6 with the min then max corners.
-  KOKKOS_FUNCTION const scalar_t& operator[](const size_t& i) const {
+  KOKKOS_FUNCTION constexpr const scalar_t& operator[](const size_t& i) const {
     MUNDY_THROW_ASSERT(i < 6, std::out_of_range, "Index out of range");
     return i < 3 ? min_corner_[i] : max_corner_[i - 3];
   }
 
   /// \brief Accesses the AABB as though it were an array of size 6 with the min then max corners.
-  KOKKOS_FUNCTION scalar_t& operator[](const size_t& i) {
+  KOKKOS_FUNCTION constexpr scalar_t& operator[](const size_t& i) {
     MUNDY_THROW_ASSERT(i < 6, std::out_of_range, "Index out of range");
     return i < 3 ? min_corner_[i] : max_corner_[i - 3];
   }
 
   /// \brief Accessor for the minimum corner
   KOKKOS_FUNCTION
-  const min_point_t& min_corner() const {
+  constexpr const min_point_t& min_corner() const {
     return min_corner_;
   }
 
   /// \brief Accessor for the minimum corner
   KOKKOS_FUNCTION
-  min_point_t& min_corner() {
+  constexpr min_point_t& min_corner() {
     return min_corner_;
   }
 
   /// \brief Accessor for the maximum corner
   KOKKOS_FUNCTION
-  const max_point_t& max_corner() const {
+  constexpr const max_point_t& max_corner() const {
     return max_corner_;
   }
 
   /// \brief Accessor for the maximum corner
   KOKKOS_FUNCTION
-  max_point_t& max_corner() {
+  constexpr max_point_t& max_corner() {
     return max_corner_;
   }
 
   /// \brief Accessor for x_min
   KOKKOS_FUNCTION
-  const scalar_t& x_min() const {
+  constexpr const scalar_t& x_min() const {
     return min_corner_[0];
   }
 
   /// \brief Accessor for x_min
   KOKKOS_FUNCTION
-  scalar_t& x_min() {
+  constexpr scalar_t& x_min() {
     return min_corner_[0];
   }
 
   /// \brief Accessor for y_min
   KOKKOS_FUNCTION
-  const scalar_t& y_min() const {
+  constexpr const scalar_t& y_min() const {
     return min_corner_[1];
   }
 
   /// \brief Accessor for y_min
   KOKKOS_FUNCTION
-  scalar_t& y_min() {
+  constexpr scalar_t& y_min() {
     return min_corner_[1];
   }
 
   /// \brief Accessor for z_min
   KOKKOS_FUNCTION
-  const scalar_t& z_min() const {
+  constexpr const scalar_t& z_min() const {
     return min_corner_[2];
   }
 
   /// \brief Accessor for z_min
   KOKKOS_FUNCTION
-  scalar_t& z_min() {
+  constexpr scalar_t& z_min() {
     return min_corner_[2];
   }
 
   /// \brief Accessor for x_max
   KOKKOS_FUNCTION
-  const scalar_t& x_max() const {
+  constexpr const scalar_t& x_max() const {
     return max_corner_[0];
   }
 
   /// \brief Accessor for x_max
   KOKKOS_FUNCTION
-  scalar_t& x_max() {
+  constexpr scalar_t& x_max() {
     return max_corner_[0];
   }
 
   /// \brief Accessor for y_max
   KOKKOS_FUNCTION
-  const scalar_t& y_max() const {
+  constexpr const scalar_t& y_max() const {
     return max_corner_[1];
   }
 
   /// \brief Accessor for y_max
   KOKKOS_FUNCTION
-  scalar_t& y_max() {
+  constexpr scalar_t& y_max() {
     return max_corner_[1];
   }
 
   /// \brief Accessor for z_max
   KOKKOS_FUNCTION
-  const scalar_t& z_max() const {
+  constexpr const scalar_t& z_max() const {
     return max_corner_[2];
   }
 
   /// \brief Accessor for z_max
   KOKKOS_FUNCTION
-  scalar_t& z_max() {
+  constexpr scalar_t& z_max() {
     return max_corner_[2];
   }
   //@}
@@ -309,7 +310,7 @@ class AABB {
   /// \brief Set the minimum corner
   /// \param[in] min_corner The new minimum corner.
   template <ValidPointType OtherPointType>
-  KOKKOS_FUNCTION void set_min_corner(const OtherPointType& min_corner) {
+  KOKKOS_FUNCTION constexpr void set_min_corner(const OtherPointType& min_corner) {
     min_corner_ = min_corner;
   }
 
@@ -318,7 +319,7 @@ class AABB {
   /// \param[in] y The new y-coordinate.
   /// \param[in] z The new z-coordinate.
   KOKKOS_FUNCTION
-  void set_min_corner(const scalar_t& x, const scalar_t& y, const scalar_t& z) {
+  constexpr void set_min_corner(const scalar_t& x, const scalar_t& y, const scalar_t& z) {
     min_corner_[0] = x;
     min_corner_[1] = y;
     min_corner_[2] = z;
@@ -327,7 +328,7 @@ class AABB {
   /// \brief Set the maximum corner
   /// \param[in] max_corner The new maximum corner.
   template <ValidPointType OtherPointType>
-  KOKKOS_FUNCTION void set_max_corner(const OtherPointType& max_corner) {
+  KOKKOS_FUNCTION constexpr void set_max_corner(const OtherPointType& max_corner) {
     max_corner_ = max_corner;
   }
 
@@ -336,7 +337,7 @@ class AABB {
   /// \param[in] y The new y-coordinate.
   /// \param[in] z The new z-coordinate.
   KOKKOS_FUNCTION
-  void set_max_corner(const scalar_t& x, const scalar_t& y, const scalar_t& z) {
+  constexpr void set_max_corner(const scalar_t& x, const scalar_t& y, const scalar_t& z) {
     max_corner_[0] = x;
     max_corner_[1] = y;
     max_corner_[2] = z;
@@ -368,8 +369,8 @@ class AABB {
 template <typename Scalar>
 AABB(Scalar, Scalar, Scalar, Scalar, Scalar, Scalar) -> AABB<Scalar>;
 //
-template <typename Scalar, ValidPointType MinPointType, ValidPointType MaxPointType>
-AABB(MinPointType, MaxPointType) -> AABB<Scalar, MinPointType, MaxPointType>;
+template <ValidPointType MinPointType, ValidPointType MaxPointType>
+AABB(MinPointType, MaxPointType) -> AABB<typename MaxPointType::scalar_t, MinPointType, MaxPointType>;
 
 /// @brief (Implementation) Type trait to determine if a type is an AABB
 template <typename T>
@@ -387,40 +388,7 @@ constexpr bool is_aabb_v = is_aabb<T>::value;
 
 /// @brief Concept to determine if a type is a valid AABB type
 template <typename AABBType>
-concept ValidAABBType = is_aabb_v<std::remove_cv_t<AABBType>> &&
-                        is_point_v<decltype(std::declval<std::remove_cv_t<AABBType>>().min_corner())> &&
-                        is_point_v<decltype(std::declval<std::remove_cv_t<AABBType>>().max_corner())> &&
-                        is_point_v<decltype(std::declval<const std::remove_cv_t<AABBType>>().min_corner())> &&
-                        is_point_v<decltype(std::declval<const std::remove_cv_t<AABBType>>().max_corner())> &&
-                        requires(std::remove_cv_t<AABBType> aabb, const std::remove_cv_t<AABBType> const_aabb) {
-                          typename std::remove_cv_t<AABBType>::scalar_t;
-
-                          { aabb.x_min() } -> std::convertible_to<typename std::remove_cv_t<AABBType>::scalar_t&>;
-                          { aabb.y_min() } -> std::convertible_to<typename std::remove_cv_t<AABBType>::scalar_t&>;
-                          { aabb.z_min() } -> std::convertible_to<typename std::remove_cv_t<AABBType>::scalar_t&>;
-                          { aabb.x_max() } -> std::convertible_to<typename std::remove_cv_t<AABBType>::scalar_t&>;
-                          { aabb.y_max() } -> std::convertible_to<typename std::remove_cv_t<AABBType>::scalar_t&>;
-                          { aabb.z_max() } -> std::convertible_to<typename std::remove_cv_t<AABBType>::scalar_t&>;
-
-                          {
-                            const_aabb.x_min()
-                          } -> std::convertible_to<const typename std::remove_cv_t<AABBType>::scalar_t&>;
-                          {
-                            const_aabb.y_min()
-                          } -> std::convertible_to<const typename std::remove_cv_t<AABBType>::scalar_t&>;
-                          {
-                            const_aabb.z_min()
-                          } -> std::convertible_to<const typename std::remove_cv_t<AABBType>::scalar_t&>;
-                          {
-                            const_aabb.x_max()
-                          } -> std::convertible_to<const typename std::remove_cv_t<AABBType>::scalar_t&>;
-                          {
-                            const_aabb.y_max()
-                          } -> std::convertible_to<const typename std::remove_cv_t<AABBType>::scalar_t&>;
-                          {
-                            const_aabb.z_max()
-                          } -> std::convertible_to<const typename std::remove_cv_t<AABBType>::scalar_t&>;
-                        };  // ValidAABBType
+concept ValidAABBType = is_aabb_v<AABBType>;
 
 static_assert(ValidAABBType<AABB<float>> && ValidAABBType<const AABB<float>> && ValidAABBType<AABB<double>> &&
                   ValidAABBType<const AABB<double>>,
@@ -431,25 +399,25 @@ static_assert(ValidAABBType<AABB<float>> && ValidAABBType<const AABB<float>> && 
 
 /// \brief Equality operator
 template <ValidAABBType AABBType1, ValidAABBType AABBType2>
-KOKKOS_FUNCTION bool operator==(const AABBType1& aabb1, const AABBType2& aabb2) {
+KOKKOS_FUNCTION constexpr bool operator==(const AABBType1& aabb1, const AABBType2& aabb2) {
   return (aabb1.min_corner() == aabb2.min_corner()) && (aabb1.max_corner() == aabb2.max_corner());
 }
 
 /// \brief Inequality operator
 template <ValidAABBType AABBType1, ValidAABBType AABBType2>
-KOKKOS_FUNCTION bool operator!=(const AABBType1& aabb1, const AABBType2& aabb2) {
+KOKKOS_FUNCTION constexpr bool operator!=(const AABBType1& aabb1, const AABBType2& aabb2) {
   return (aabb1.min_corner() != aabb2.min_corner()) || (aabb1.max_corner() != aabb2.max_corner());
 }
 
-template <typename Scalar>
-std::ostream& operator<<(std::ostream& os, const AABB<Scalar>& aabb) {
+template <ValidAABBType AABBType>
+std::ostream& operator<<(std::ostream& os, const AABBType& aabb) {
   os << "{" << aabb.min_corner() << "->" << aabb.max_corner() << "}";
   return os;
 }
 
 /// \brief Check if two AABBs intersect
 template <ValidAABBType AABBType1, ValidAABBType AABBType2>
-KOKKOS_FUNCTION bool intersects(const AABBType1& aabb1, const AABBType2& aabb2) {
+KOKKOS_FUNCTION constexpr bool intersects(const AABBType1& aabb1, const AABBType2& aabb2) {
   const auto& amax = aabb1.max_corner();
   const auto& bmin = aabb2.min_corner();
   if (amax[0] < bmin[0] || amax[1] < bmin[1] || amax[2] < bmin[2]) {

@@ -2,8 +2,9 @@
 // **********************************************************************************************************************
 //
 //                                          Mundy: Multi-body Nonlocal Dynamics
-//                                           Copyright 2024 Flatiron Institute
-//                                                 Author: Bryce Palmer
+//                                              Copyright 2024 Bryce Palmer
+//
+// Developed under support from the NSF Graduate Research Fellowship Program.
 //
 // Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
 // as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
@@ -180,28 +181,28 @@ std::vector<SphereTestCase<double>> sphere_test_cases() {
 std::vector<EllipsoidTestCase<double>> ellipsoid_test_cases() {
   // Our ellipsoids have a center, 3 radii, and a quaternion orientation
   // Lets start by testing unit orientation
-  using mundy::math::Quaternion;
-  using mundy::math::Vector3;
+  using mundy::math::Quaterniond;
+  using mundy::math::Vector3d;
   std::vector<EllipsoidTestCase<double>> test_cases;
 
   // Rotate 90 degrees about the x-axis
-  const Quaternion<double> x_90_rot = get_quaternion_x_90<double>();
+  const Quaterniond x_90_rot = get_quaternion_x_90<double>();
 
   test_cases.push_back(EllipsoidTestCase{
       .name = std::string("spherical"),  //
-      .ellipsoid = Ellipsoid<double>{Point<double>{1, -2, 3}, Quaternion<double>{1, 0, 0, 0}, Vector3<double>{4, 4, 4}},
+      .ellipsoid = Ellipsoid<double>{Point<double>{1, -2, 3}, Quaterniond{1, 0, 0, 0}, Vector3d{4, 4, 4}},
       .expected_aabb = AABB<double>{-3, -6, -1, 5, 2, 7}});
   test_cases.push_back(EllipsoidTestCase{
       .name = std::string("ellipsoidal"),  //
-      .ellipsoid = Ellipsoid<double>{Point<double>{1, -2, 3}, Quaternion<double>{1, 0, 0, 0}, Vector3<double>{4, 5, 6}},
+      .ellipsoid = Ellipsoid<double>{Point<double>{1, -2, 3}, Quaterniond{1, 0, 0, 0}, Vector3d{4, 5, 6}},
       .expected_aabb = AABB<double>{-3, -7, -3, 5, 3, 9}});
   test_cases.push_back(
       EllipsoidTestCase{.name = std::string("rotated 90 degrees about x"),  // y goes to -z, z goes to y
-                        .ellipsoid = Ellipsoid<double>{Point<double>{0, 0, 0}, x_90_rot, Vector3<double>{4, 5, 6}},
+                        .ellipsoid = Ellipsoid<double>{Point<double>{0, 0, 0}, x_90_rot, Vector3d{4, 5, 6}},
                         .expected_aabb = AABB<double>{-4, -6, -5, 4, 6, 5}});
   test_cases.push_back(
       EllipsoidTestCase{.name = std::string("rotated 90 degrees about x + shift"),
-                        .ellipsoid = Ellipsoid<double>{Point<double>{1, -2, 3}, x_90_rot, Vector3<double>{4, 5, 6}},
+                        .ellipsoid = Ellipsoid<double>{Point<double>{1, -2, 3}, x_90_rot, Vector3d{4, 5, 6}},
                         .expected_aabb = AABB<double>{-3, -8, -2, 5, 4, 8}});
   return test_cases;
 }
@@ -209,23 +210,23 @@ std::vector<EllipsoidTestCase<double>> ellipsoid_test_cases() {
 std::vector<SpherocylinderTestCase<double>> spherocylinder_test_cases() {
   // Our spherocylinders have a center, a radius, a length, and a quaternion orientation
   // Lets start by testing unit orientation
-  using mundy::math::Quaternion;
+  using mundy::math::Quaterniond;
   using mundy::math::Vector3;
   std::vector<SpherocylinderTestCase<double>> test_cases;
 
-  const Quaternion<double> x_90_rot = get_quaternion_x_90<double>();
+  const Quaterniond x_90_rot = get_quaternion_x_90<double>();
 
   test_cases.push_back(SpherocylinderTestCase{
       .name = std::string("spherical"),  //
-      .spherocylinder = Spherocylinder<double>{Point<double>{1, -2, 3}, Quaternion<double>{1, 0, 0, 0}, 4, 0},
+      .spherocylinder = Spherocylinder<double>{Point<double>{1, -2, 3}, Quaterniond{1, 0, 0, 0}, 4, 0},
       .expected_aabb = AABB<double>{-3, -6, -1, 5, 2, 7}});
   test_cases.push_back(SpherocylinderTestCase{
       .name = std::string("line segment"),  //
-      .spherocylinder = Spherocylinder<double>{Point<double>{1, -2, 3}, Quaternion<double>{1, 0, 0, 0}, 0, 4},
+      .spherocylinder = Spherocylinder<double>{Point<double>{1, -2, 3}, Quaterniond{1, 0, 0, 0}, 0, 4},
       .expected_aabb = AABB<double>{1, -2, 1, 1, -2, 5}});
   test_cases.push_back(SpherocylinderTestCase{
       .name = std::string("regular"),  //
-      .spherocylinder = Spherocylinder<double>{Point<double>{1, -2, 3}, Quaternion<double>{1, 0, 0, 0}, 2, 4},
+      .spherocylinder = Spherocylinder<double>{Point<double>{1, -2, 3}, Quaterniond{1, 0, 0, 0}, 2, 4},
       .expected_aabb = AABB<double>{-1, -4, -1, 3, 0, 7}});
   test_cases.push_back(
       SpherocylinderTestCase{.name = std::string("rotated 90 degrees about x"),  // y goes to -z, z goes to y
