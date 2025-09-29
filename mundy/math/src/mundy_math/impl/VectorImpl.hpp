@@ -377,7 +377,6 @@ KOKKOS_INLINE_FUNCTION constexpr auto apply_impl(std::index_sequence<Is...>, con
   ((result[Is] = func(vec[Is])), ...);
   return result;
 }
-//@}
 
 /// \brief Atomic v_copy = v.
 ///

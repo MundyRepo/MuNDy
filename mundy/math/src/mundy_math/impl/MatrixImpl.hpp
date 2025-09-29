@@ -531,6 +531,30 @@ KOKKOS_INLINE_FUNCTION T one_norm_impl(std::index_sequence<Is...>,
   return max_value;
 }
 
+/// \brief Element-wise multiplication
+template <size_t... Is, typename T, size_t N, size_t M, typename U, ValidAccessor<U> Accessor, typename OwnershipType,
+          ValidAccessor<T> OtherAccessor, typename OtherOwnershipType>
+KOKKOS_INLINE_FUNCTION constexpr auto matrix_matrix_elementwise_mul_impl(
+    std::index_sequence<Is...>, const AMatrix<U, N, M, Accessor, OwnershipType>& a,
+    const AMatrix<T, N, M, OtherAccessor, OtherOwnershipType>& b) {
+  using CommonType = std::common_type_t<U, T>;
+  AMatrix<CommonType, N, M> result;
+  ((result[Is] = static_cast<CommonType>(a[Is]) * static_cast<CommonType>(b[Is])), ...);
+  return result;
+}
+
+/// \brief Element-wise division
+template <size_t... Is, typename T, size_t N, size_t M, typename U, ValidAccessor<U> Accessor, typename OwnershipType,
+          ValidAccessor<T> OtherAccessor, typename OtherOwnershipType>
+KOKKOS_INLINE_FUNCTION constexpr auto matrix_matrix_elementwise_div_impl(
+    std::index_sequence<Is...>, const AMatrix<U, N, M, Accessor, OwnershipType>& a,
+    const AMatrix<T, N, M, OtherAccessor, OtherOwnershipType>& b) {
+  using CommonType = std::common_type_t<U, T>;
+  AMatrix<CommonType, N, M> result;
+  ((result[Is] = static_cast<CommonType>(a[Is]) / static_cast<CommonType>(b[Is])), ...);
+  return result;
+}
+
 /// \brief Apply a function to each element of the matrix
 template <size_t... Is, typename Func, typename T, size_t N, size_t M, ValidAccessor<T> Accessor,
           typename OwnershipType>
@@ -566,6 +590,142 @@ KOKKOS_INLINE_FUNCTION auto apply_column_impl(std::index_sequence<Is...>, const 
   ((result.template view_column<Is>() = func(mat.template view_column<Is>())), ...);
   return result;
 }
+
+/// \brief Atomic m_copy = m.
+///
+/// Note: Even if the input is a view, the return is a plain owning matrix.
+template <size_t... Is, size_t N, size_t M, typename T, ValidAccessor<T> A, typename OT>
+KOKKOS_INLINE_FUNCTION AMatrix<T, N, M> atomic_matrix_load_impl(std::index_sequence<Is...>,
+                                                                AMatrix<T, N, M, A, OT>* const m) {
+  AMatrix<T, N, M> result;
+  ((result[Is] = Kokkos::atomic_load(&((*m)[Is]))), ...);
+  return result;
+}
+
+/// \brief Atomic m[i] = s.
+template <size_t... Is, size_t N, size_t M, typename T1, ValidAccessor<T1> A, typename OT, typename T2>
+KOKKOS_INLINE_FUNCTION void atomic_matrix_scalar_store_impl(std::index_sequence<Is...>,
+                                                            AMatrix<T1, N, M, A, OT>* const m, const T2& s) {
+  ((Kokkos::atomic_store(&((*m)[Is]), static_cast<T1>(s))), ...);
+}
+
+/// \brief Atomic m1[i] = m2[i].
+template <size_t... Is, size_t N, size_t M, typename T1, ValidAccessor<T1> A1, typename OT1, typename T2,
+          ValidAccessor<T2> A2, typename OT2>
+KOKKOS_INLINE_FUNCTION void atomic_matrix_matrix_store_impl(std::index_sequence<Is...>,
+                                                            AMatrix<T1, N, M, A1, OT1>* const m1,
+                                                            const AMatrix<T2, N, M, A2, OT2>& m2) {
+  ((Kokkos::atomic_store(&((*m1)[Is]), m2[Is])), ...);
+}
+
+#define MUNDY_MATH_MATRIX_SCALAR_ATOMIC_OP_IMPL(op_name, atomic_op)                                         \
+  template <size_t... Is, size_t N, size_t M, typename T1, ValidAccessor<T1> A1, typename OT1, typename T2> \
+  KOKKOS_INLINE_FUNCTION void atomic_matrix_scalar_##op_name##_impl(                                        \
+      std::index_sequence<Is...>, AMatrix<T1, N, M, A1, OT1>* const m, const T2& s) {                       \
+    ((atomic_op(&((*m)[Is]), static_cast<T1>(s))), ...);                                                    \
+  }
+
+#define MUNDY_MATH_MATRIX_MATRIX_ATOMIC_OP_IMPL(op_name, atomic_op)                                             \
+  template <size_t... Is, size_t N, size_t M, typename T1, ValidAccessor<T1> A1, typename OT1, typename T2,     \
+            ValidAccessor<T2> A2, typename OT2>                                                                 \
+  KOKKOS_INLINE_FUNCTION void atomic_matrix_matrix_##op_name##_impl(                                            \
+      std::index_sequence<Is...>, AMatrix<T1, N, M, A1, OT1>* const m1, const AMatrix<T2, N, M, A2, OT2>& m2) { \
+    ((atomic_op(&((*m1)[Is]), static_cast<T1>(m2[Is]))), ...);                                                  \
+  }
+
+/// \brief Atomic m[i, j] += s
+MUNDY_MATH_MATRIX_SCALAR_ATOMIC_OP_IMPL(add, Kokkos::atomic_add)
+
+/// \brief Atomic m[i, j] -= s
+MUNDY_MATH_MATRIX_SCALAR_ATOMIC_OP_IMPL(sub, Kokkos::atomic_sub)
+
+/// \brief Atomic m[i, j] *= s
+MUNDY_MATH_MATRIX_SCALAR_ATOMIC_OP_IMPL(mul, Kokkos::atomic_mul)
+
+/// \brief Atomic m[i, j] /= s
+MUNDY_MATH_MATRIX_SCALAR_ATOMIC_OP_IMPL(div, Kokkos::atomic_div)
+
+/// \brief Atomic m1[i, j] += m2[i, j]
+MUNDY_MATH_MATRIX_MATRIX_ATOMIC_OP_IMPL(add, Kokkos::atomic_add)
+
+/// \brief Atomic m1[i, j] -= m2[i, j]
+MUNDY_MATH_MATRIX_MATRIX_ATOMIC_OP_IMPL(sub, Kokkos::atomic_sub)
+
+/// \brief Atomic m1[i, j] *= m2[i, j]
+MUNDY_MATH_MATRIX_MATRIX_ATOMIC_OP_IMPL(elementwise_mul, Kokkos::atomic_mul)
+
+/// \brief Atomic m1[i, j] /= m2[i, j]
+MUNDY_MATH_MATRIX_MATRIX_ATOMIC_OP_IMPL(elementwise_div, Kokkos::atomic_div)
+
+#define MUNDY_MATH_MATRIX_SCALAR_ATOMIC_FETCH_OP_IMPL(op_name, atomic_fetch_op)                             \
+  template <size_t... Is, size_t N, size_t M, typename T1, ValidAccessor<T1> A1, typename OT1, typename T2> \
+  KOKKOS_INLINE_FUNCTION auto matrix_scalar_atomic_fetch_##op_name##_impl(                                  \
+      std::index_sequence<Is...>, AMatrix<T1, N, M, A1, OT1>* const m, const T2& s) {                       \
+    AMatrix<T1, N, M> result;                                                                               \
+    ((result[Is] = atomic_fetch_op(&((*m)[Is]), static_cast<T1>(s))), ...);                                 \
+    return result;                                                                                          \
+  }
+
+#define MUNDY_MATH_MATRIX_MATRIX_ATOMIC_FETCH_OP_IMPL(op_name, atomic_fetch_op)                                 \
+  template <size_t... Is, size_t N, size_t M, typename T1, ValidAccessor<T1> A1, typename OT1, typename T2,     \
+            ValidAccessor<T2> A2, typename OT2>                                                                 \
+  KOKKOS_INLINE_FUNCTION auto matrix_matrix_atomic_fetch_##op_name##_impl(                                      \
+      std::index_sequence<Is...>, AMatrix<T1, N, M, A1, OT1>* const m1, const AMatrix<T2, N, M, A2, OT2>& m2) { \
+    AMatrix<T1, N, M> result;                                                                                   \
+    ((result[Is] = atomic_fetch_op(&((*m1)[Is]), static_cast<T1>(m2[Is]))), ...);                               \
+    return result;                                                                                              \
+  }
+
+#define MUNDY_MATH_MATRIX_SCALAR_ATOMIC_OP_FETCH_IMPL(op_name, atomic_op_fetch)                             \
+  template <size_t... Is, size_t N, size_t M, typename T1, ValidAccessor<T1> A1, typename OT1, typename T2> \
+  KOKKOS_INLINE_FUNCTION auto matrix_scalar_atomic_##op_name##_fetch_impl(                                  \
+      std::index_sequence<Is...>, AMatrix<T1, N, M, A1, OT1>* const m, const T2& s) {                       \
+    AMatrix<T1, N, M> result;                                                                               \
+    ((result[Is] = atomic_op_fetch(&((*m)[Is]), static_cast<T1>(s))), ...);                                 \
+    return result;                                                                                          \
+  }
+
+#define MUNDY_MATH_MATRIX_MATRIX_ATOMIC_OP_FETCH_IMPL(op_name, atomic_op_fetch)                                 \
+  template <size_t... Is, size_t N, size_t M, typename T1, ValidAccessor<T1> A1, typename OT1, typename T2,     \
+            ValidAccessor<T2> A2, typename OT2>                                                                 \
+  KOKKOS_INLINE_FUNCTION auto matrix_matrix_atomic_##op_name##_fetch_impl(                                      \
+      std::index_sequence<Is...>, AMatrix<T1, N, M, A1, OT1>* const m1, const AMatrix<T2, N, M, A2, OT2>& m2) { \
+    AMatrix<T1, N, M> result;                                                                                   \
+    ((result[Is] = atomic_op_fetch(&((*m1)[Is]), static_cast<T1>(m2[Is]))), ...);                               \
+    return result;                                                                                              \
+  }
+
+/// \brief Atomic m[i, j] += s (returns old/new m)
+MUNDY_MATH_MATRIX_SCALAR_ATOMIC_FETCH_OP_IMPL(add, Kokkos::atomic_fetch_add)
+MUNDY_MATH_MATRIX_SCALAR_ATOMIC_OP_FETCH_IMPL(add, Kokkos::atomic_add_fetch)
+
+/// \brief Atomic m[i, j] -= s (returns old/new m)
+MUNDY_MATH_MATRIX_SCALAR_ATOMIC_FETCH_OP_IMPL(sub, Kokkos::atomic_fetch_sub)
+MUNDY_MATH_MATRIX_SCALAR_ATOMIC_OP_FETCH_IMPL(sub, Kokkos::atomic_sub_fetch)
+
+/// \brief Atomic m[i, j] *= s (returns old/new m)
+MUNDY_MATH_MATRIX_SCALAR_ATOMIC_FETCH_OP_IMPL(mul, Kokkos::atomic_fetch_mul)
+MUNDY_MATH_MATRIX_SCALAR_ATOMIC_OP_FETCH_IMPL(mul, Kokkos::atomic_mul_fetch)
+
+/// \brief Atomic m[i, j] /= s (returns old/new m)
+MUNDY_MATH_MATRIX_SCALAR_ATOMIC_FETCH_OP_IMPL(div, Kokkos::atomic_fetch_div)
+MUNDY_MATH_MATRIX_SCALAR_ATOMIC_OP_FETCH_IMPL(div, Kokkos::atomic_div_fetch)
+
+/// \brief Atomic m1[i, j] += m2[i, j] (returns old/new m1)
+MUNDY_MATH_MATRIX_MATRIX_ATOMIC_FETCH_OP_IMPL(add, Kokkos::atomic_fetch_add)
+MUNDY_MATH_MATRIX_MATRIX_ATOMIC_OP_FETCH_IMPL(add, Kokkos::atomic_add_fetch)
+
+/// \brief Atomic m1[i, j] -= m2[i, j] (returns old/new m1)
+MUNDY_MATH_MATRIX_MATRIX_ATOMIC_FETCH_OP_IMPL(sub, Kokkos::atomic_fetch_sub)
+MUNDY_MATH_MATRIX_MATRIX_ATOMIC_OP_FETCH_IMPL(sub, Kokkos::atomic_sub_fetch)
+
+/// \brief Atomic m1[i, j] *= m2[i, j] (returns old/new m1)
+MUNDY_MATH_MATRIX_MATRIX_ATOMIC_FETCH_OP_IMPL(elementwise_mul, Kokkos::atomic_fetch_mul)
+MUNDY_MATH_MATRIX_MATRIX_ATOMIC_OP_FETCH_IMPL(elementwise_mul, Kokkos::atomic_mul_fetch)
+
+/// \brief Atomic m1[i, j] /= m2[i, j] (returns old/new m1)
+MUNDY_MATH_MATRIX_MATRIX_ATOMIC_FETCH_OP_IMPL(elementwise_div, Kokkos::atomic_fetch_div)
+MUNDY_MATH_MATRIX_MATRIX_ATOMIC_OP_FETCH_IMPL(elementwise_div, Kokkos::atomic_div_fetch)
 //@}
 
 }  // namespace impl

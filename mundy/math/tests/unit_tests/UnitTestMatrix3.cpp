@@ -22,11 +22,15 @@
 #include <gtest/gtest.h>  // for TEST, ASSERT_NO_THROW, etc
 
 // C++ core libs
-#include <algorithm>    // for std::max
-#include <map>          // for std::map
-#include <memory>       // for std::shared_ptr, std::unique_ptr
-#include <stdexcept>    // for std::logic_error, std::invalid_argument
-#include <string>       // for std::string
+#include <algorithm>  // for std::max
+#include <atomic>
+#include <barrier>
+#include <future>
+#include <map>        // for std::map
+#include <memory>     // for std::shared_ptr, std::unique_ptr
+#include <stdexcept>  // for std::logic_error, std::invalid_argument
+#include <string>     // for std::string
+#include <thread>
 #include <type_traits>  // for std::enable_if, std::is_base_of, std::conjunction, std::is_convertible
 #include <utility>      // for std::move
 #include <vector>       // for std::vector
@@ -691,6 +695,356 @@ TYPED_TEST(Matrix3SingleTypeTest, Apply) {
   // Apply to each column
   auto m4 = apply_column(an_vector_external_functor{}, m1);
   is_close_debug(m4, Matrix3<T4>{-2, -1, 0, -2, -1, 0, -2, -1, 0}, "Apply to columns failed.");
+}
+//@}
+
+//! \name Atomic operations
+//@{
+
+template <typename TypeParam>
+bool check_matrix_atomic_op_load_store_test_for_false_positive_1d() {
+  Matrix1<TypeParam> finished(false);
+  auto func_no_atomic = [&finished]() {
+    bool hit_max_loops = false;
+    size_t max_loops = 1'000'000'000;
+    size_t i = 0;
+    while (!(finished[0])) {
+      if (i > max_loops) {
+        hit_max_loops = true;
+        break;
+      }
+      ++i;
+    }
+    return hit_max_loops;
+  };
+  auto result = std::async(std::launch::async, func_no_atomic);
+  std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  finished[0] = true;
+  bool false_positive = !result.get();
+  return false_positive;
+}
+
+TYPED_TEST(Matrix3SingleTypeTest, AtomicOpTestLoadStore1D) {
+  if (check_matrix_atomic_op_load_store_test_for_false_positive_1d<TypeParam>()) {
+    GTEST_SKIP() << "Skipping atomic load/store test due to false positive in non-atomic test.\n"
+                 << "This typically occurs if you compile with -O0.";
+  }
+
+  Matrix1<TypeParam> finished(false);
+  auto func_atomic = [&finished]() {
+    bool hit_max_loops = false;
+    size_t max_loops = 1'000'000'000;
+    size_t i = 0;
+    while (!(atomic_load(&finished)[0])) {
+      if (i > max_loops) {
+        hit_max_loops = true;
+        break;
+      }
+      ++i;
+    }
+    return hit_max_loops;
+  };
+  auto result = std::async(std::launch::async, func_atomic);
+  std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  atomic_store(&finished, true);
+  EXPECT_FALSE(result.get()) << "Atomic load/store test failed.";
+}
+
+TYPED_TEST(Matrix3SingleTypeTest, AtomicOpTestAddSubMulDiv1D) {
+  int num_threads = 8;
+  int num_iterations = 10001;  // Must be odd
+  int num_steps_of_mul_div = 2;
+
+  // Naming convention
+  // ms: Matrix-scalar operation
+  // mm: Matrix-vector operation
+  // pos: Positive result using atomic operations
+  // neg: Negative result without atomic operations
+  Matrix1<TypeParam> ms_add_pos(0);
+  Matrix1<TypeParam> ms_add_neg(0);
+  Matrix1<TypeParam> mm_add_pos(0);
+  Matrix1<TypeParam> mm_add_neg(0);
+
+  Matrix1<TypeParam> ms_sub_pos(0);
+  Matrix1<TypeParam> ms_sub_neg(0);
+  Matrix1<TypeParam> mm_sub_pos(0);
+  Matrix1<TypeParam> mm_sub_neg(0);
+
+  Matrix1<TypeParam> ms_mul_div_pos(1);
+  Matrix1<TypeParam> ms_mul_div_neg(1);
+  Matrix1<TypeParam> mm_mul_div_pos(1);
+  Matrix1<TypeParam> mm_mul_div_neg(1);
+
+  // Thread function to perform atomic_add
+  std::atomic<long long int> thread_id_counter(0);
+  auto thread_func = [&]() {
+    for (int i = 0; i < num_iterations; ++i) {
+      atomic_add(&ms_add_pos, 1);
+      atomic_add(&mm_add_pos, Matrix1<TypeParam>(1));
+      ms_add_neg += 1;
+      mm_add_neg += Matrix1<TypeParam>(1);
+
+      atomic_sub(&ms_sub_pos, 1);
+      atomic_sub(&mm_sub_pos, Matrix1<TypeParam>(1));
+      ms_sub_neg -= 1;
+      mm_sub_neg -= Matrix1<TypeParam>(1);
+
+      if (i % num_steps_of_mul_div == 0) {
+        atomic_mul(&ms_mul_div_pos, static_cast<TypeParam>(2));
+        atomic_elementwise_mul(&mm_mul_div_pos, Matrix1<TypeParam>(2));
+        ms_mul_div_neg *= static_cast<TypeParam>(2);
+        mm_mul_div_neg = elementwise_mul(mm_mul_div_neg, Matrix1<TypeParam>(2));
+      } else {
+        atomic_div(&ms_mul_div_pos, static_cast<TypeParam>(2));
+        atomic_elementwise_div(&mm_mul_div_pos, Matrix1<TypeParam>(2));
+        ms_mul_div_neg /= static_cast<TypeParam>(2);
+        mm_mul_div_neg = elementwise_div(mm_mul_div_neg, Matrix1<TypeParam>(2));
+      }
+    }
+  };
+
+  // Launch threads
+  std::vector<std::thread> threads;
+  for (int i = 0; i < num_threads; ++i) {
+    threads.emplace_back(thread_func);
+  }
+
+  // Join threads
+  for (auto& thread : threads) {
+    thread.join();
+  }
+
+  // Verify the result
+  EXPECT_EQ(ms_add_pos[0], num_threads * num_iterations) << "Atomic add failed.";
+  EXPECT_EQ(mm_add_pos[0], num_threads * num_iterations) << "Atomic add failed.";
+  EXPECT_NE(ms_add_neg[0], num_threads * num_iterations) << "False positive: Non-atomic add succeeded.";
+  EXPECT_NE(mm_add_neg[0], num_threads * num_iterations) << "False positive: Non-atomic add succeeded.";
+
+  EXPECT_EQ(ms_sub_pos[0], -num_threads * num_iterations) << "Atomic sub failed.";
+  EXPECT_EQ(mm_sub_pos[0], -num_threads * num_iterations) << "Atomic sub failed.";
+  EXPECT_NE(ms_sub_neg[0], -num_threads * num_iterations) << "False positive: Non-atomic sub succeeded.";
+  EXPECT_NE(mm_sub_neg[0], -num_threads * num_iterations) << "False positive: Non-atomic sub succeeded.";
+
+  EXPECT_EQ(ms_mul_div_pos[0], std::pow(2, num_threads)) << "Atomic mul/div failed.";
+  EXPECT_EQ(mm_mul_div_pos[0], std::pow(2, num_threads)) << "Atomic mul/div failed.";
+  EXPECT_NE(ms_mul_div_neg[0], std::pow(2, num_threads)) << "False positive: Non-atomic mul/div succeeded.";
+  EXPECT_NE(mm_mul_div_neg[0], std::pow(2, num_threads)) << "False positive: Non-atomic mul/div succeeded.";
+}
+
+TYPED_TEST(Matrix3SingleTypeTest, AtomicFetchOpTestAddSubMulDiv1D) {
+  int num_threads = 8;
+  int num_iterations = 100001;  // Must be odd
+  int num_steps_of_mul_div = 2;
+
+  // Naming convention
+  // ms: Matrix-scalar operation
+  // mm: Matrix-vector operation
+  // pos: Positive result using atomic operations
+  // neg: Negative result without atomic operations
+  Matrix1<TypeParam> ms_add_pos(0);
+  Matrix1<TypeParam> ms_add_neg(0);
+  Matrix1<TypeParam> mm_add_pos(0);
+  Matrix1<TypeParam> mm_add_neg(0);
+
+  Matrix1<TypeParam> ms_sub_pos(0);
+  Matrix1<TypeParam> ms_sub_neg(0);
+  Matrix1<TypeParam> mm_sub_pos(0);
+  Matrix1<TypeParam> mm_sub_neg(0);
+
+  Matrix1<TypeParam> ms_mul_div_pos(1);
+  Matrix1<TypeParam> ms_mul_div_neg(1);
+  Matrix1<TypeParam> mm_mul_div_pos(1);
+  Matrix1<TypeParam> mm_mul_div_neg(1);
+
+  std::vector<int> ms_add_pos_counts(num_iterations * num_threads, 0);
+  std::vector<int> ms_add_neg_counts(num_iterations * num_threads, 0);
+  std::vector<int> mm_add_pos_counts(num_iterations * num_threads, 0);
+  std::vector<int> mm_add_neg_counts(num_iterations * num_threads, 0);
+  
+  std::vector<int> ms_sub_pos_counts(num_iterations * num_threads, 0);
+  std::vector<int> ms_sub_neg_counts(num_iterations * num_threads, 0);
+  std::vector<int> mm_sub_pos_counts(num_iterations * num_threads, 0);
+  std::vector<int> mm_sub_neg_counts(num_iterations * num_threads, 0);
+
+  int total_ms_mul_div_pos_count = 0;
+  int total_ms_mul_div_neg_count = 0;
+  int total_mm_mul_div_pos_count = 0;
+  int total_mm_mul_div_neg_count = 0;
+
+  // Thread function to perform atomic_add
+  std::atomic<long long int> thread_id_counter(0);
+  auto thread_func = [&]() {
+    for (int i = 0; i < num_iterations; ++i) {
+      Matrix1<TypeParam> old_ms_add_pos = atomic_fetch_add(&ms_add_pos, 1);
+      Matrix1<TypeParam> old_mm_add_pos = atomic_fetch_add(&mm_add_pos, Matrix1<TypeParam>(1));
+      Matrix1<TypeParam> old_ms_add_neg = ms_add_neg;
+      Matrix1<TypeParam> old_mm_add_neg = mm_add_neg;
+      ms_add_neg += 1;
+      mm_add_neg += Matrix1<TypeParam>(1);
+
+      int old_ms_add_pos_index = static_cast<int>(old_ms_add_pos[0]);
+      int old_mm_add_pos_index = static_cast<int>(old_mm_add_pos[0]);
+      int old_ms_add_neg_index = static_cast<int>(old_ms_add_neg[0]);
+      int old_mm_add_neg_index = static_cast<int>(old_mm_add_neg[0]);
+      if (old_ms_add_pos_index >= 0 && old_ms_add_pos_index < num_iterations * num_threads) {
+        ms_add_pos_counts[old_ms_add_pos_index] += 1;
+      }
+      if (old_mm_add_pos_index >= 0 && old_mm_add_pos_index < num_iterations * num_threads) {
+        mm_add_pos_counts[old_mm_add_pos_index] += 1;
+      }
+      if (old_ms_add_neg_index >= 0 && old_ms_add_neg_index < num_iterations * num_threads) {
+        ms_add_neg_counts[old_ms_add_neg_index] += 1;
+      }
+      if (old_mm_add_neg_index >= 0 && old_mm_add_neg_index < num_iterations * num_threads) {
+        mm_add_neg_counts[old_mm_add_neg_index] += 1;
+      }
+
+      Matrix1<TypeParam> old_ms_sub_pos = atomic_fetch_sub(&ms_sub_pos, 1);
+      Matrix1<TypeParam> old_mm_sub_pos = atomic_fetch_sub(&mm_sub_pos, Matrix1<TypeParam>(1));
+      Matrix1<TypeParam> old_ms_sub_neg = ms_sub_neg;
+      Matrix1<TypeParam> old_mm_sub_neg = mm_sub_neg;
+      ms_sub_neg -= 1;
+      mm_sub_neg -= Matrix1<TypeParam>(1);
+
+      int old_ms_sub_pos_index = -static_cast<int>(old_ms_sub_pos[0]);
+      int old_mm_sub_pos_index = -static_cast<int>(old_mm_sub_pos[0]);
+      int old_ms_sub_neg_index = -static_cast<int>(old_ms_sub_neg[0]);
+      int old_mm_sub_neg_index = -static_cast<int>(old_mm_sub_neg[0]);
+      if (old_ms_sub_pos_index >= 0 && old_ms_sub_pos_index < num_iterations * num_threads) {
+        ms_sub_pos_counts[old_ms_sub_pos_index] += 1;
+      }
+      if (old_mm_sub_pos_index >= 0 && old_mm_sub_pos_index < num_iterations * num_threads) {
+        mm_sub_pos_counts[old_mm_sub_pos_index] += 1;
+      }
+      if (old_ms_sub_neg_index >= 0 && old_ms_sub_neg_index < num_iterations * num_threads) {
+        ms_sub_neg_counts[old_ms_sub_neg_index] += 1;
+      }
+      if (old_mm_sub_neg_index >= 0 && old_mm_sub_neg_index < num_iterations * num_threads) {
+        mm_sub_neg_counts[old_mm_sub_neg_index] += 1;
+      }
+
+      Matrix1<TypeParam> old_ms_mul_div_pos;
+      Matrix1<TypeParam> old_mm_mul_div_pos;
+      Matrix1<TypeParam> old_ms_mul_div_neg;
+      Matrix1<TypeParam> old_mm_mul_div_neg;
+      if (i % num_steps_of_mul_div == 0) {
+        old_ms_mul_div_pos = atomic_fetch_mul(&ms_mul_div_pos, static_cast<TypeParam>(2));
+        old_mm_mul_div_pos = atomic_fetch_elementwise_mul(&mm_mul_div_pos, Matrix1<TypeParam>(2));
+        old_ms_mul_div_neg = ms_mul_div_neg;
+        old_mm_mul_div_neg = mm_mul_div_neg;
+        ms_mul_div_neg *= static_cast<TypeParam>(2);
+        mm_mul_div_neg = elementwise_mul(mm_mul_div_neg, Matrix1<TypeParam>(2));
+      } else {
+        old_ms_mul_div_pos = atomic_fetch_div(&ms_mul_div_pos, static_cast<TypeParam>(2));
+        old_mm_mul_div_pos = atomic_fetch_elementwise_div(&mm_mul_div_pos, Matrix1<TypeParam>(2));
+        old_ms_mul_div_neg = ms_mul_div_neg;
+        old_mm_mul_div_neg = mm_mul_div_neg;
+        ms_mul_div_neg /= static_cast<TypeParam>(2);
+        mm_mul_div_neg = elementwise_div(mm_mul_div_neg, Matrix1<TypeParam>(2));
+      }
+
+      int old_ms_mul_div_pos_index = static_cast<int>(std::log2(old_ms_mul_div_pos[0]));
+      int old_mm_mul_div_pos_index = static_cast<int>(std::log2(old_mm_mul_div_pos[0]));
+      int old_ms_mul_div_neg_index = static_cast<int>(std::log2(old_ms_mul_div_neg[0]));
+      int old_mm_mul_div_neg_index = static_cast<int>(std::log2(old_mm_mul_div_neg[0]));
+      if (old_ms_mul_div_pos_index >= 0 && old_ms_mul_div_pos_index <= num_threads) {
+        Kokkos::atomic_add(&total_ms_mul_div_pos_count, 1);
+      }
+      if (old_mm_mul_div_pos_index >= 0 && old_mm_mul_div_pos_index <= num_threads) {
+        Kokkos::atomic_add(&total_mm_mul_div_pos_count, 1);
+      }
+      if (old_ms_mul_div_neg_index >= 0 && old_ms_mul_div_neg_index <= num_threads) {
+        Kokkos::atomic_add(&total_ms_mul_div_neg_count, 1);
+      }
+      if (old_mm_mul_div_neg_index >= 0 && old_mm_mul_div_neg_index <= num_threads) {
+        Kokkos::atomic_add(&total_mm_mul_div_neg_count, 1);
+      }
+    }
+  };
+
+  // Launch threads
+  std::vector<std::thread> threads;
+  for (int i = 0; i < num_threads; ++i) {
+    threads.emplace_back(thread_func);
+  }
+
+  // Join threads
+  for (auto& thread : threads) {
+    thread.join();
+  }
+
+  // Verify the results
+  EXPECT_EQ(ms_add_pos[0], num_threads * num_iterations) << "Atomic fetch add failed.";
+  EXPECT_EQ(mm_add_pos[0], num_threads * num_iterations) << "Atomic fetch add failed.";
+  EXPECT_NE(ms_add_neg[0], num_threads * num_iterations) << "False positive: Non-atomic fetch add succeeded.";
+  EXPECT_NE(mm_add_neg[0], num_threads * num_iterations) << "False positive: Non-atomic fetch add succeeded.";
+
+  EXPECT_EQ(ms_sub_pos[0], -num_threads * num_iterations) << "Atomic fetch sub failed.";
+  EXPECT_EQ(mm_sub_pos[0], -num_threads * num_iterations) << "Atomic fetch sub failed.";
+  EXPECT_NE(ms_sub_neg[0], -num_threads * num_iterations) << "False positive: Non-atomic fetch sub succeeded.";
+  EXPECT_NE(mm_sub_neg[0], -num_threads * num_iterations) << "False positive: Non-atomic fetch sub succeeded.";
+
+  EXPECT_EQ(ms_mul_div_pos[0], std::pow(2, num_threads)) << "Atomic fetch mul/div failed.";
+  EXPECT_EQ(mm_mul_div_pos[0], std::pow(2, num_threads)) << "Atomic fetch mul/div failed.";
+  EXPECT_NE(ms_mul_div_neg[0], std::pow(2, num_threads)) << "False positive: Non-atomic fetch mul/div succeeded.";
+  EXPECT_NE(mm_mul_div_neg[0], std::pow(2, num_threads)) << "False positive: Non-atomic fetch mul/div succeeded.";
+
+  // Verify the fetch counts
+  bool ms_add_pos_fetch_passed = true;
+  bool mm_add_pos_fetch_passed = true;
+  bool ms_sub_pos_fetch_passed = true;
+  bool mm_sub_pos_fetch_passed = true;
+
+  bool ms_add_neg_fetch_passed = false;
+  bool mm_add_neg_fetch_passed = false;
+  bool ms_sub_neg_fetch_passed = false;
+  bool mm_sub_neg_fetch_passed = false;
+
+  for (int i = 0; i < num_iterations * num_threads; ++i) {
+    // Add
+    if (ms_add_pos_counts[i] != 1) {
+      ms_add_pos_fetch_passed = false;
+    }
+    if (mm_add_pos_counts[i] != 1) {
+      mm_add_pos_fetch_passed = false;
+    }
+    if (ms_add_neg_counts[i] != 1) {
+      ms_add_neg_fetch_passed = false;
+    }
+    if (mm_add_neg_counts[i] != 1) {
+      mm_add_neg_fetch_passed = false;
+    }
+
+    // Sub
+    if (ms_sub_pos_counts[i] != 1) {
+      ms_sub_pos_fetch_passed = false;
+    }
+    if (mm_sub_pos_counts[i] != 1) {
+      mm_sub_pos_fetch_passed = false;
+    }
+    if (ms_sub_neg_counts[i] != 1) {
+      ms_sub_neg_fetch_passed = false;
+    }
+    if (mm_sub_neg_counts[i] != 1) {
+      mm_sub_neg_fetch_passed = false;
+    }
+  }
+
+  EXPECT_TRUE(ms_add_pos_fetch_passed) << "Atomic fetch add failed to properly return old value.";
+  EXPECT_TRUE(mm_add_pos_fetch_passed) << "Atomic fetch add failed to properly return old value.";
+  EXPECT_TRUE(ms_sub_pos_fetch_passed) << "Atomic fetch sub failed to properly return old value.";
+  EXPECT_TRUE(mm_sub_pos_fetch_passed) << "Atomic fetch sub failed to properly return old value.";
+  EXPECT_FALSE(ms_add_neg_fetch_passed) << "False positive: Atomic fetch add somehow returned old value correctly in non-atomic operation.";
+  EXPECT_FALSE(mm_add_neg_fetch_passed) << "False positive: Atomic fetch add somehow returned old value correctly in non-atomic operation.";  
+  EXPECT_FALSE(ms_sub_neg_fetch_passed) << "False positive: Atomic fetch sub somehow returned old value correctly in non-atomic operation.";
+  EXPECT_FALSE(mm_sub_neg_fetch_passed) << "False positive: Atomic fetch sub somehow returned old value correctly in non-atomic operation.";
+
+  // Addition and multiplication are communicative operations, so the best we can do is check the total number of operations.
+  int expected_num_occurrences = num_threads * num_iterations;
+  EXPECT_EQ(total_ms_mul_div_pos_count, expected_num_occurrences) << "Atomic fetch mul/div failed to properly return old value.";
+  EXPECT_EQ(total_mm_mul_div_pos_count, expected_num_occurrences) << "Atomic fetch mul/div failed to properly return old value.";
+  EXPECT_NE(total_ms_mul_div_neg_count, expected_num_occurrences) << "False positive: Atomic fetch mul/div somehow returned old value correctly in non-atomic operation.";
+  EXPECT_NE(total_mm_mul_div_neg_count, expected_num_occurrences) << "False positive: Atomic fetch mul/div somehow returned old value correctly in non-atomic operation.";
 }
 //@}
 
