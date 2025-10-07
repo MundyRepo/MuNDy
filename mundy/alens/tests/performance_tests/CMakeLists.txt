@@ -92,12 +92,12 @@ tribits_add_executable(
     CATEGORIES PERFORMANCE
     )
 
-# tribits_add_executable(
-#     HP1
-#     SOURCES
-#     HP1.cpp
-#     CATEGORIES PERFORMANCE
-#     )
+tribits_add_executable(
+    HP1
+    SOURCES
+    HP1.cpp
+    CATEGORIES PERFORMANCE
+    )
 # tribits_copy_files_to_binary_dir(
 #     HP1CopyFiles
 #     SOURCE_FILES
