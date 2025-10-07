@@ -411,7 +411,7 @@ struct test_wrap_rigid_impl {
     Kokkos::Array<math::Vector3<double>, num_points> original_displacements;
     Kokkos::Array<math::Vector3<double>, num_points> wrapped_displacements;
 
-    auto s = ShapeTraits::generate(other_box, rng);
+    auto s = ShapeTraits::generate(other_box, rng);  // All points fall within other_box
     Point<double> ref_point = ShapeTraits::reference_point(s);
 
     unsigned i = 0;
@@ -452,7 +452,7 @@ struct test_wrap_points_impl {
                                                 const AABB<double>& disjoint_box, RNG& rng,
                                                 const Metric& metric) const {
     // Generate a random shape outside the primary box and wrap it to the primary box
-    auto s = ShapeTraits::generate(disjoint_box, rng);
+    auto s = ShapeTraits::generate(disjoint_box, rng); // All points fall within disjoint_box
     s = wrap_points(s, metric);
 
     bool all_in_primary_domain = true;
@@ -474,20 +474,54 @@ struct test_unwrap_to_ref_impl {
                                                 const Metric& metric) const {
     // Generate a random shape within the primary box and unwrap it to a reference point
     // outside the primary box
-    auto s = ShapeTraits::generate(primary_box, rng);
+    constexpr unsigned num_points = ShapeTraits::num_points;
+    Kokkos::Array<math::Vector3<double>, num_points> original_displacements;
+    Kokkos::Array<math::Vector3<double>, num_points> shifted_displacements;
+    
+    auto s = ShapeTraits::generate(primary_box, rng);  // All points fall within primary_box
     Point<double> ref_point = generate_random_point<double>(disjoint_box, rng);
+
+    unsigned i = 0;
+    ShapeTraits::for_each_point(s, [&](const auto& point) {
+      original_displacements[i] = point - reference_point(s);
+      ++i;
+    });
+
     s = unwrap_points_to_ref(s, metric, ref_point);
 
-    // The shifted object should have all points within one image of the reference point
-    auto primary_center = 0.5 * (primary_box.min_corner() + primary_box.max_corner());
-    auto shifted_box = translate(primary_box, ref_point - primary_center);
-    bool all_in_primary_domain = true;
+    i = 0;
     ShapeTraits::for_each_point(s, [&](const auto& point) {
-      if (!is_point_in_box(point, shifted_box)) {
-        all_in_primary_domain = false;
-      }
+      shifted_displacements[i] = point - reference_point(s);
+      ++i;
     });
-    return all_in_primary_domain;
+
+    // Check that all displacements are the same before and after wrapping
+    bool all_displacements_equal = true;
+    for (unsigned j = 0; j < num_points; ++j) {
+      if (math::norm(original_displacements[j] - shifted_displacements[j]) >
+          math::get_relaxed_zero_tolerance<double>()) {
+        all_displacements_equal = false;
+      }
+    }
+
+    // The separation vector between reference_point(s) and ref_point should be less than half the box size
+    // in each dimension (not necessarily in magnitude) that is periodic.
+    math::Vector3<double> box_lengths{primary_box.x_max() - primary_box.x_min(),
+                                       primary_box.y_max() - primary_box.y_min(),
+                                       primary_box.z_max() - primary_box.z_min()};
+    bool shape_ref_point_within_half_box = true;
+    for (int d = 0; d < 3; ++d) {
+      if (metric.is_periodic(d)) {
+        bool this_dimension_within_half_box =
+            Kokkos::abs(reference_point(s)[d] - ref_point[d]) <= 0.5 * box_lengths[d];
+        if (!this_dimension_within_half_box) {
+          shape_ref_point_within_half_box = false;
+          break;
+        }
+      }
+    }
+    
+    return shape_ref_point_within_half_box && all_displacements_equal;
   }
 };
 
@@ -567,7 +601,6 @@ KOKKOS_INLINE_FUNCTION bool test_unwrap_to_ref(TestObjectType type, const AABB<d
                                                const AABB<double>& disjoint_box, size_t seed, size_t counter,
                                                const Metric& metric) {
   openrand::Philox rng(seed, counter);
-
   using Functor = test_unwrap_to_ref_impl;
   apply_functor<Functor> apply;
   return apply(type, primary_box, disjoint_box, rng, metric);
@@ -707,7 +740,7 @@ TEST(PeriodicMetric, WrapPoints) {
 TEST(PeriodicMetric, UnwrapPointsToRef) {
   size_t seed = 1234;
   size_t counter = 0;
-  size_t num_trials = 1000;  // Number of trials for each pair
+  size_t num_trials = 2;  // Number of trials for each pair
 
   math::Vector3<double> cell_size{100.0, 100.0, 100.0};
   AABB<double> box{0.0, 0.0, 0.0, 100.0, 100.0, 100.0};

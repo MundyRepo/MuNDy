@@ -750,7 +750,8 @@ TYPED_TEST(Matrix3SingleTypeTest, AtomicOpTestLoadStore1D) {
   EXPECT_FALSE(result.get()) << "Atomic load/store test failed.";
 }
 
-TYPED_TEST(Matrix3SingleTypeTest, AtomicOpTestAddSubMulDiv1D) {
+template <typename TypeParam>
+bool check_matrix_atomic_op_add_sub_mul_div_or_false_positive_1d() {
   int num_threads = 8;
   int num_iterations = 10001;  // Must be odd
   int num_steps_of_mul_div = 2;
@@ -760,43 +761,26 @@ TYPED_TEST(Matrix3SingleTypeTest, AtomicOpTestAddSubMulDiv1D) {
   // mm: Matrix-vector operation
   // pos: Positive result using atomic operations
   // neg: Negative result without atomic operations
-  Matrix1<TypeParam> ms_add_pos(0);
   Matrix1<TypeParam> ms_add_neg(0);
-  Matrix1<TypeParam> mm_add_pos(0);
   Matrix1<TypeParam> mm_add_neg(0);
-
-  Matrix1<TypeParam> ms_sub_pos(0);
   Matrix1<TypeParam> ms_sub_neg(0);
-  Matrix1<TypeParam> mm_sub_pos(0);
   Matrix1<TypeParam> mm_sub_neg(0);
-
-  Matrix1<TypeParam> ms_mul_div_pos(1);
   Matrix1<TypeParam> ms_mul_div_neg(1);
-  Matrix1<TypeParam> mm_mul_div_pos(1);
   Matrix1<TypeParam> mm_mul_div_neg(1);
 
   // Thread function to perform atomic_add
   std::atomic<long long int> thread_id_counter(0);
   auto thread_func = [&]() {
     for (int i = 0; i < num_iterations; ++i) {
-      atomic_add(&ms_add_pos, 1);
-      atomic_add(&mm_add_pos, Matrix1<TypeParam>(1));
       ms_add_neg += 1;
       mm_add_neg += Matrix1<TypeParam>(1);
-
-      atomic_sub(&ms_sub_pos, 1);
-      atomic_sub(&mm_sub_pos, Matrix1<TypeParam>(1));
       ms_sub_neg -= 1;
       mm_sub_neg -= Matrix1<TypeParam>(1);
 
       if (i % num_steps_of_mul_div == 0) {
-        atomic_mul(&ms_mul_div_pos, static_cast<TypeParam>(2));
-        atomic_elementwise_mul(&mm_mul_div_pos, Matrix1<TypeParam>(2));
         ms_mul_div_neg *= static_cast<TypeParam>(2);
         mm_mul_div_neg = elementwise_mul(mm_mul_div_neg, Matrix1<TypeParam>(2));
       } else {
-        atomic_div(&ms_mul_div_pos, static_cast<TypeParam>(2));
-        atomic_elementwise_div(&mm_mul_div_pos, Matrix1<TypeParam>(2));
         ms_mul_div_neg /= static_cast<TypeParam>(2);
         mm_mul_div_neg = elementwise_div(mm_mul_div_neg, Matrix1<TypeParam>(2));
       }
@@ -815,23 +799,85 @@ TYPED_TEST(Matrix3SingleTypeTest, AtomicOpTestAddSubMulDiv1D) {
   }
 
   // Verify the result
+  bool ms_add_false_positive = (ms_add_neg[0] == num_threads * num_iterations);
+  bool mm_add_false_positive = (mm_add_neg[0] == num_threads * num_iterations);
+  bool ms_sub_false_positive = (ms_sub_neg[0] == -num_threads * num_iterations);
+  bool mm_sub_false_positive = (mm_sub_neg[0] == -num_threads * num_iterations);
+  bool ms_mul_div_false_positive = (ms_mul_div_neg[0] == std::pow(2, num_threads));
+  bool mm_mul_div_false_positive = (mm_mul_div_neg[0] == std::pow(2, num_threads));
+  return ms_add_false_positive || mm_add_false_positive || ms_sub_false_positive ||
+         mm_sub_false_positive || ms_mul_div_false_positive || mm_mul_div_false_positive;
+}
+
+TYPED_TEST(Matrix3SingleTypeTest, AtomicOpTestAddSubMulDiv1D) {
+  if (check_matrix_atomic_op_add_sub_mul_div_or_false_positive_1d<TypeParam>()) {
+    GTEST_SKIP() << "Skipping atomic add/sub/mul/div test due to false positive in non-atomic test.\n"
+                 << "This typically occurs if you run ctest with too many parallel jobs on too few CPU cores.";
+  }
+
+  int num_threads = 8;
+  int num_iterations = 10001;  // Must be odd
+  int num_steps_of_mul_div = 2;
+
+  // Naming convention
+  // ms: Matrix-scalar operation
+  // mm: Matrix-vector operation
+  // pos: Positive result using atomic operations
+  // neg: Negative result without atomic operations
+  Matrix1<TypeParam> ms_add_pos(0);
+  Matrix1<TypeParam> mm_add_pos(0);
+  Matrix1<TypeParam> ms_sub_pos(0);
+  Matrix1<TypeParam> mm_sub_pos(0);
+  Matrix1<TypeParam> ms_mul_div_pos(1);
+  Matrix1<TypeParam> mm_mul_div_pos(1);
+
+  // Thread function to perform atomic_add
+  std::atomic<long long int> thread_id_counter(0);
+  auto thread_func = [&]() {
+    for (int i = 0; i < num_iterations; ++i) {
+      atomic_add(&ms_add_pos, 1);
+      atomic_add(&mm_add_pos, Matrix1<TypeParam>(1));
+      atomic_sub(&ms_sub_pos, 1);
+      atomic_sub(&mm_sub_pos, Matrix1<TypeParam>(1));
+
+      if (i % num_steps_of_mul_div == 0) {
+        atomic_mul(&ms_mul_div_pos, static_cast<TypeParam>(2));
+        atomic_elementwise_mul(&mm_mul_div_pos, Matrix1<TypeParam>(2));
+      } else {
+        atomic_div(&ms_mul_div_pos, static_cast<TypeParam>(2));
+        atomic_elementwise_div(&mm_mul_div_pos, Matrix1<TypeParam>(2));
+      }
+    }
+  };
+
+  // Launch threads
+  std::vector<std::thread> threads;
+  for (int i = 0; i < num_threads; ++i) {
+    threads.emplace_back(thread_func);
+  }
+
+  // Join threads
+  for (auto& thread : threads) {
+    thread.join();
+  }
+
+  // Verify the result
   EXPECT_EQ(ms_add_pos[0], num_threads * num_iterations) << "Atomic add failed.";
   EXPECT_EQ(mm_add_pos[0], num_threads * num_iterations) << "Atomic add failed.";
-  EXPECT_NE(ms_add_neg[0], num_threads * num_iterations) << "False positive: Non-atomic add succeeded.";
-  EXPECT_NE(mm_add_neg[0], num_threads * num_iterations) << "False positive: Non-atomic add succeeded.";
 
   EXPECT_EQ(ms_sub_pos[0], -num_threads * num_iterations) << "Atomic sub failed.";
   EXPECT_EQ(mm_sub_pos[0], -num_threads * num_iterations) << "Atomic sub failed.";
-  EXPECT_NE(ms_sub_neg[0], -num_threads * num_iterations) << "False positive: Non-atomic sub succeeded.";
-  EXPECT_NE(mm_sub_neg[0], -num_threads * num_iterations) << "False positive: Non-atomic sub succeeded.";
 
   EXPECT_EQ(ms_mul_div_pos[0], std::pow(2, num_threads)) << "Atomic mul/div failed.";
   EXPECT_EQ(mm_mul_div_pos[0], std::pow(2, num_threads)) << "Atomic mul/div failed.";
-  EXPECT_NE(ms_mul_div_neg[0], std::pow(2, num_threads)) << "False positive: Non-atomic mul/div succeeded.";
-  EXPECT_NE(mm_mul_div_neg[0], std::pow(2, num_threads)) << "False positive: Non-atomic mul/div succeeded.";
 }
 
 TYPED_TEST(Matrix3SingleTypeTest, AtomicFetchOpTestAddSubMulDiv1D) {
+  if (check_matrix_atomic_op_add_sub_mul_div_or_false_positive_1d<TypeParam>()) {
+    GTEST_SKIP() << "Skipping atomic add/sub/mul/div test due to false positive in non-atomic test.\n"
+                 << "This typically occurs if you run ctest with too many parallel jobs on too few CPU cores.";
+  }
+
   int num_threads = 8;
   int num_iterations = 100001;  // Must be odd
   int num_steps_of_mul_div = 2;

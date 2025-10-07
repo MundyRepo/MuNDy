@@ -130,6 +130,9 @@ class AVector<T, N, Accessor, Ownership::Views> {
   /// \brief Our ownership type
   using ownership_t = Ownership::Views;
 
+  /// \brief Deep copy type
+  using deep_copy_t = AVector<T, N>;
+
   /// \brief The size of the vector
   static constexpr size_t size = N;
   //@}
@@ -247,6 +250,12 @@ class AVector<T, N, Accessor, Ownership::Views> {
   KOKKOS_INLINE_FUNCTION
   constexpr const std::conditional_t<std::is_pointer_v<Accessor>, Accessor, Accessor&> data() const {
     return accessor_;
+  }
+
+  /// \brief Get a deep copy of the vector
+  KOKKOS_INLINE_FUNCTION
+  constexpr deep_copy_t copy() const {
+    return *this;
   }
 
   /// \brief Cast (and copy) the vector to a different type
@@ -450,6 +459,9 @@ class AVector<T, N, Accessor, Ownership::Owns> {
   /// \brief Our ownership type
   using ownership_t = Ownership::Owns;
 
+  /// \brief Deep copy type
+  using deep_copy_t = AVector<T, N>;
+
   /// \brief The type of the accessor
   using accessor_t = Accessor;
 
@@ -619,6 +631,12 @@ class AVector<T, N, Accessor, Ownership::Owns> {
   KOKKOS_INLINE_FUNCTION
   constexpr const Accessor& data() const {
     return accessor_;
+  }
+
+  /// \brief Get a deep copy of the vector
+  KOKKOS_INLINE_FUNCTION 
+  constexpr deep_copy_t copy() const {
+    return *this;
   }
 
   /// \brief Cast (and copy) the vector to a different type

@@ -152,6 +152,9 @@ class AQuaternion<T, Accessor, Ownership::Views> {
 
   /// \brief Our ownership type
   using ownership_t = Ownership::Views;
+
+  /// \brief Deep copy type
+  using deep_copy_t = AQuaternion<T>;
   //@}
 
   //! \name Constructors and destructor
@@ -328,6 +331,12 @@ class AQuaternion<T, Accessor, Ownership::Views> {
   constexpr auto vector() {
     auto shifted_accessor = get_shifted_view<T, 1>(accessor_);
     return get_owning_vector<T, 3>(std::move(shifted_accessor));
+  }
+
+  /// \brief Get a deep copy of the quaternion
+  KOKKOS_INLINE_FUNCTION
+  constexpr deep_copy_t copy() const {
+    return *this;
   }
 
   /// \brief Cast (and copy) the quaternion to a different type
@@ -597,6 +606,9 @@ class AQuaternion<T, Accessor, Ownership::Owns> {
 
   /// \brief Our ownership type
   using ownership_t = Ownership::Owns;
+
+  /// \brief Deep copy type
+  using deep_copy_t = AQuaternion<T>;
   //@}
 
   //! \name Constructors and destructor
@@ -807,6 +819,12 @@ class AQuaternion<T, Accessor, Ownership::Owns> {
   constexpr auto vector() {
     auto shifted_accessor = get_shifted_view<T, 1>(accessor_);
     return get_owning_vector<T, 3>(std::move(shifted_accessor));
+  }
+
+  /// \brief Get a deep copy of the quaternion
+  KOKKOS_INLINE_FUNCTION
+  constexpr deep_copy_t copy() const {
+    return *this;
   }
 
   /// \brief Cast (and copy) the quaternion to a different type

@@ -137,6 +137,9 @@ class AMatrix<T, N, M, Accessor, Ownership::Views> {
 
   /// \brief Our ownership type
   using ownership_t = Ownership::Views;
+  
+  /// \brief Deep copy type
+  using deep_copy_t = AMatrix<T, N, M>;
 
   /// \brief The number of rows
   static constexpr size_t num_rows = N;
@@ -421,6 +424,12 @@ class AMatrix<T, N, M, Accessor, Ownership::Views> {
     return get_owning_matrix<T, newN, newM>(std::move(masked_data_accessor));
   }
 
+  /// \brief Get a deep copy of the matrix
+  KOKKOS_INLINE_FUNCTION
+  constexpr deep_copy_t copy() const {
+    return *this;
+  }
+  
   /// \brief Cast (and copy) the matrix to a different type
   template <typename U>
   KOKKOS_INLINE_FUNCTION constexpr auto cast() const {
@@ -694,6 +703,9 @@ class AMatrix<T, N, M, Accessor, Ownership::Owns> {
 
   /// \brief Our ownership type
   using ownership_t = Ownership::Views;
+
+  /// \brief Deep copy type
+  using deep_copy_t = AMatrix<T, N, M>;
 
   /// \brief The number of rows
   static constexpr size_t num_rows = N;

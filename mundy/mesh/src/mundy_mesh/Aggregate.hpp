@@ -183,6 +183,10 @@ class FieldComponent : public FieldComponentBase {
 
  private:
   stk::mesh::Field<ValueType>& field_;
+
+ public:
+  /// \brief The view type returned by operator()
+  using view_t = decltype(std::declval<FieldComponent<ValueType>>().operator()(std::declval<stk::mesh::Entity>()));
 };  // FieldComponent
 
 template <typename NgpFieldType>
@@ -239,6 +243,11 @@ class NgpFieldComponent : public NgpFieldComponentBase {
 
  private:
   NgpFieldType ngp_field_;
+ 
+ public:
+  /// \brief The view type returned by operator()
+  using view_t =
+      decltype(std::declval<NgpFieldComponent<NgpFieldType>>().operator()(std::declval<stk::mesh::FastMeshIndex>()));
 };  // NgpFieldComponent
 
 template <typename ScalarType>
@@ -268,6 +277,11 @@ class ScalarFieldComponent : public FieldComponentBase {
 
  private:
   stk::mesh::Field<ScalarType>& field_;
+
+ public:
+  /// \brief The view type returned by operator()
+  using view_t =
+      decltype(std::declval<ScalarFieldComponent<ScalarType>>().operator()(std::declval<stk::mesh::Entity>()));
 };  // ScalarFieldComponent
 
 template <typename NgpFieldType>
@@ -325,6 +339,11 @@ class NgpScalarFieldComponent : public NgpFieldComponentBase {
 
  private:
   NgpFieldType ngp_field_;
+
+ public:
+  /// \brief The view type returned by operator()
+  using view_t = decltype(std::declval<NgpScalarFieldComponent<NgpFieldType>>().operator()(
+      std::declval<stk::mesh::FastMeshIndex>()));
 };  // NgpScalarFieldComponent
 
 template <typename ScalarType>
@@ -353,6 +372,11 @@ class Vector3FieldComponent : public FieldComponentBase {
 
  private:
   stk::mesh::Field<ScalarType>& field_;
+
+ public:
+  /// \brief The view type returned by operator()
+  using view_t =
+      decltype(std::declval<Vector3FieldComponent<ScalarType>>().operator()(std::declval<stk::mesh::Entity>()));
 };  // Vector3FieldComponent
 
 template <typename NgpFieldType>
@@ -409,6 +433,11 @@ class NgpVector3FieldComponent : public NgpFieldComponentBase {
 
  private:
   NgpFieldType ngp_field_;
+
+ public:
+  /// \brief The view type returned by operator()
+  using view_t = decltype(std::declval<NgpVector3FieldComponent<NgpFieldType>>().operator()(
+      std::declval<stk::mesh::FastMeshIndex>()));
 };  // NgpVector3FieldComponent
 
 template <typename ScalarType>
@@ -437,6 +466,11 @@ class Matrix3FieldComponent : public FieldComponentBase {
 
  private:
   stk::mesh::Field<ScalarType>& field_;
+
+ public:
+  /// \brief The view type returned by operator()
+  using view_t =
+      decltype(std::declval<Matrix3FieldComponent<ScalarType>>().operator()(std::declval<stk::mesh::Entity>()));
 };  // Matrix3FieldComponent
 
 template <typename NgpFieldType>
@@ -493,6 +527,11 @@ class NgpMatrix3FieldComponent : public NgpFieldComponentBase {
 
  private:
   NgpFieldType ngp_field_;
+
+ public:
+  /// \brief The view type returned by operator()
+  using view_t = decltype(std::declval<NgpMatrix3FieldComponent<NgpFieldType>>().operator()(
+      std::declval<stk::mesh::FastMeshIndex>()));
 };  // NgpMatrix3FieldComponent
 
 template <typename ScalarType>
@@ -521,6 +560,11 @@ class QuaternionFieldComponent : public FieldComponentBase {
 
  private:
   stk::mesh::Field<ScalarType>& field_;
+
+ public:
+  /// \brief The view type returned by operator()
+  using view_t =
+      decltype(std::declval<QuaternionFieldComponent<ScalarType>>().operator()(std::declval<stk::mesh::Entity>()));
 };  // QuaternionFieldComponent
 
 template <typename NgpFieldType>
@@ -572,6 +616,11 @@ class NgpQuaternionFieldComponent : public NgpFieldComponentBase {
 
  private:
   NgpFieldType ngp_field_;
+
+ public:
+  /// \brief The view type returned by operator()
+  using view_t = decltype(std::declval<NgpQuaternionFieldComponent<NgpFieldType>>().operator()(
+      std::declval<stk::mesh::FastMeshIndex>()));
 };  // NgpQuaternionFieldComponent
 
 template <typename ScalarType>
@@ -600,6 +649,10 @@ class AABBFieldComponent : public FieldComponentBase {
 
  private:
   stk::mesh::Field<ScalarType>& field_;
+
+ public:
+  /// \brief The view type returned by operator()
+  using view_t = decltype(std::declval<AABBFieldComponent<ScalarType>>().operator()(std::declval<stk::mesh::Entity>()));
 };  // AABBFieldComponent
 
 template <typename NgpFieldType>
@@ -652,6 +705,11 @@ class NgpAABBFieldComponent : public NgpFieldComponentBase {
 
  private:
   NgpFieldType ngp_field_;
+
+ public:
+  /// \brief The view type returned by operator()
+  using view_t = decltype(std::declval<NgpAABBFieldComponent<NgpFieldType>>().operator()(
+      std::declval<stk::mesh::FastMeshIndex>()));
 };  // NgpAABBFieldComponent
 
 /// \brief A small helper type for tying a Tag to an underlying component
@@ -702,6 +760,11 @@ class TaggedComponent {
 
  private:
   component_type component_;
+
+ public:
+  /// \brief The view type returned by operator()
+  using view_t = decltype(std::declval<TaggedComponent<Tag, our_rank, ComponentType>>().operator()(
+      std::declval<stk::mesh::Entity>()));
 };  // TaggedComponent
 
 /// \brief A small helper type for tying a Tag to an underlying ngp-compatible component
@@ -755,6 +818,11 @@ class NgpTaggedComponent {
 
  private:
   component_type component_;
+
+ public:
+  /// \brief The view type returned by operator()
+  using view_t = decltype(std::declval<NgpTaggedComponent<Tag, our_rank, NgpComponentType>>().operator()(
+      std::declval<stk::mesh::FastMeshIndex>()));
 };  // NgpTaggedComponent
 
 /// \brief A helper function for getting the NGP component from a regular component

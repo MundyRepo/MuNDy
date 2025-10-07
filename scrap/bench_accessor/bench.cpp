@@ -21,16 +21,16 @@ class Accessor {
  public:
   Accessor() = default;
 
-  explicit Accessor(double shared_value)
+  explicit inline Accessor(double shared_value)
       : our_type_(variant_t::SHARED), shared_value_(shared_value), vector_(), parts_(), part_mapped_scalars_(), part_mapped_vectors_() {}
 
-  explicit Accessor(const std::vector<double>& vec)
+  explicit inline Accessor(const std::vector<double>& vec)
       : our_type_(variant_t::VECTOR), shared_value_(), vector_(vec), parts_(), part_mapped_scalars_(), part_mapped_vectors_() {}
 
-  Accessor(std::vector<int> parts, std::map<int, double> part_mapped_scalars)
+  inline Accessor(std::vector<int> parts, std::map<int, double> part_mapped_scalars)
       : our_type_(variant_t::MAPPED_SCALAR), shared_value_(), vector_(), parts_(std::move(parts)), part_mapped_scalars_(std::move(part_mapped_scalars)), part_mapped_vectors_() {}
 
-  Accessor(std::vector<int> parts, std::map<int,  std::vector<double>> part_mapped_vectors)
+  inline Accessor(std::vector<int> parts, std::map<int,  std::vector<double>> part_mapped_vectors)
       : our_type_(variant_t::MAPPED_VECTOR), shared_value_(), vector_(), parts_(std::move(parts)), part_mapped_scalars_(), part_mapped_vectors_(std::move(part_mapped_vectors)) {}
 
   inline const double& operator()(std::size_t i) const {
@@ -57,9 +57,9 @@ class Accessor {
 
 class ScalarAccessor {
  public:
-  ScalarAccessor() = default;
+  inline ScalarAccessor() = default;
 
-  explicit ScalarAccessor(double shared_value)
+  explicit inline ScalarAccessor(double shared_value)
       :shared_value_(shared_value) {}
 
   inline const double& operator()(std::size_t i) const {
@@ -72,9 +72,9 @@ class ScalarAccessor {
 
 class VectorAccessor {
  public:
-  VectorAccessor() = default;
+  inline VectorAccessor() = default;
 
-  explicit VectorAccessor(const std::vector<double>& vec)
+  explicit inline VectorAccessor(const std::vector<double>& vec)
       : vector_(vec) {}
 
   inline const double& operator()(std::size_t i) const {
@@ -84,7 +84,6 @@ class VectorAccessor {
  private:
   std::vector<double> vector_;
 };
-
 
 // ----- Data setup -----
 static void randomize(std::vector<double>& v, std::uint64_t seed) {
