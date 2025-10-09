@@ -83,6 +83,8 @@ template <typename T>
 void check_field_data_on_host(const std::string& message_to_throw, const stk::mesh::BulkData& stk_mesh,
                               const stk::mesh::FieldBase& stk_field, const stk::mesh::Selector& selector,
                               T expected_value, int component = -1, T component_value = 0) {
+  stk_field.sync_to_host();
+  
   stk::mesh::for_each_entity_run(
       stk_mesh, stk_field.entity_rank(), selector,
       [&]([[maybe_unused]] const stk::mesh::BulkData& bulk, const stk::mesh::Entity entity) {
@@ -104,11 +106,15 @@ void check_field_data_on_host(const std::string& message_to_throw, const stk::me
 inline void set_field_data_on_host(const stk::mesh::BulkData& stk_mesh, const stk::mesh::FieldBase& stk_field,
                                    const stk::mesh::Selector& selector,
                                    std::function<std::vector<double>(const double*)> func) {
-  const stk::mesh::FieldBase* coord_field = stk_mesh.mesh_meta_data().coordinate_field();
+  const stk::mesh::FieldBase &coord_field = *stk_mesh.mesh_meta_data().coordinate_field();
+  
+  stk_field.clear_host_sync_state();
+  coord_field.sync_to_host();
+
   stk::mesh::for_each_entity_run(
       stk_mesh, stk_field.entity_rank(), selector,
       [&]([[maybe_unused]] const stk::mesh::BulkData& bulk, const stk::mesh::Entity entity) {
-        double* entity_coords = static_cast<double*>(stk::mesh::field_data(*coord_field, entity));
+        double* entity_coords = static_cast<double*>(stk::mesh::field_data(coord_field, entity));
         auto expected_values = func(entity_coords);
         const int num_components = stk::mesh::field_scalars_per_entity(stk_field, entity);
         double* raw_field_data = static_cast<double*>(stk::mesh::field_data(stk_field, entity));
@@ -116,17 +122,23 @@ inline void set_field_data_on_host(const stk::mesh::BulkData& stk_mesh, const st
           raw_field_data[i] = expected_values[i];
         }
       });
+
+  stk_field.modify_on_host();
 }
 
 inline void check_field_data_on_host_func(const std::string& message_to_throw, const stk::mesh::BulkData& stk_mesh,
                                           const stk::mesh::FieldBase& stk_field, const stk::mesh::Selector& selector,
                                           const std::vector<const stk::mesh::FieldBase*>& other_fields,
                                           std::function<std::vector<double>(const double*)> func) {
-  const stk::mesh::FieldBase* coord_field = stk_mesh.mesh_meta_data().coordinate_field();
+  const stk::mesh::FieldBase &coord_field = *stk_mesh.mesh_meta_data().coordinate_field();
+
+  stk_field.sync_to_host();
+  coord_field.sync_to_host();
+
   stk::mesh::for_each_entity_run(
       stk_mesh, stk_field.entity_rank(), selector,
       [&]([[maybe_unused]] const stk::mesh::BulkData& bulk, const stk::mesh::Entity entity) {
-        double* entity_coords = static_cast<double*>(stk::mesh::field_data(*coord_field, entity));
+        double* entity_coords = static_cast<double*>(stk::mesh::field_data(coord_field, entity));
         auto expected_values = func(entity_coords);
 
         unsigned int num_components = stk::mesh::field_scalars_per_entity(stk_field, entity);
@@ -144,7 +156,7 @@ void randomize_coordinates(const stk::mesh::BulkData& bulk_data, const stk::mesh
                            const unsigned spatial_dimension) {
   // Dereference values in *this
   const stk::mesh::Selector universal = bulk_data.mesh_meta_data().universal_part();
-
+  node_coord_field.clear_host_sync_state();
   stk::mesh::for_each_entity_run(bulk_data, stk::topology::NODE_RANK, universal,
                                  [&]([[maybe_unused]] const stk::mesh::BulkData& bulk, const stk::mesh::Entity entity) {
                                    double* raw_field_data =
@@ -153,6 +165,7 @@ void randomize_coordinates(const stk::mesh::BulkData& bulk_data, const stk::mesh
                                      raw_field_data[i] = static_cast<double>(rand()) / RAND_MAX;
                                    }
                                  });
+  node_coord_field.modify_on_host();
 }
 
 class UnitTestFieldBLAS : public ::testing::Test {

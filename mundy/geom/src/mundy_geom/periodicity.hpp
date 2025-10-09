@@ -183,10 +183,8 @@ class PeriodicMetric {
   template <typename Integer, math::ValidVector3Type Vector3T>
   KOKKOS_INLINE_FUNCTION constexpr math::Vector3<typename Vector3T::scalar_t> frac_minimum_image(
       const Vector3T& fractional_vec) const {
-    return apply([](Scalar x) {      
-      return x - static_cast<Scalar>(static_cast<Integer>(Kokkos::round(x))); 
-    },
-                fractional_vec);
+    return apply([](Scalar x) { return x - static_cast<Scalar>(static_cast<Integer>(Kokkos::round(x))); },
+                 fractional_vec);
   }
 
   template <typename Integer, math::ValidVector3Type Vector3T>
@@ -281,7 +279,7 @@ class PeriodicScaledMetric {
   KOKKOS_INLINE_FUNCTION constexpr math::Vector3<typename Vector3T::scalar_t> frac_minimum_image(
       const Vector3T& fractional_vec) const {
     return apply([](Scalar x) { return x - static_cast<Scalar>(static_cast<Integer>(Kokkos::round(x))); },
-                fractional_vec);
+                 fractional_vec);
   }
 
   template <typename Integer, math::ValidVector3Type Vector3T>

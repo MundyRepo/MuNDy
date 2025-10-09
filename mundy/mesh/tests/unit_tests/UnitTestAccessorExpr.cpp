@@ -38,6 +38,7 @@
 #include <mundy_mesh/MeshBuilder.hpp>  // for mundy::mesh::MeshBuilder
 #include <mundy_mesh/MetaData.hpp>     // for mundy::mesh::MetaData
 #include <mundy_mesh/NgpFieldBLAS.hpp>  // for mundy::mesh::field_axpby, etc.
+#include <mundy_mesh/NgpAccessorExpr.hpp>  // for accessor expressions
 
 namespace mundy {
 

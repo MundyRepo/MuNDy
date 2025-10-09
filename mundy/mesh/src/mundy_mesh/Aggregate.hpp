@@ -45,6 +45,7 @@
 #include <mundy_mesh/FieldViews.hpp>     // for mundy::mesh::vector3_field_data, mundy::mesh::quaternion_field_data
 #include <mundy_mesh/ForEachEntity.hpp>  // for mundy::mesh::for_each_entity_run
 #include <mundy_mesh/fmt_stk_types.hpp>  // for STK-compatible fmt::format
+#include <mundy_mesh/NgpAccessorExpr.hpp>  // for mundy::mesh::AccessorExpr and EntityExprBase
 
 namespace mundy {
 
@@ -192,6 +193,8 @@ class FieldComponent : public FieldComponentBase {
 template <typename NgpFieldType>
 class NgpFieldComponent : public NgpFieldComponentBase {
  public:
+  using our_t = NgpFieldComponent<NgpFieldType>;
+
   NgpFieldComponent() = default;
   NgpFieldComponent(NgpFieldType ngp_field)
 #if TRILINOS_MAJOR_MINOR_VERSION >= 160000
@@ -211,6 +214,17 @@ class NgpFieldComponent : public NgpFieldComponentBase {
   KOKKOS_INLINE_FUNCTION
   decltype(auto) operator()(stk::mesh::FastMeshIndex entity_index) const {
     return ngp_field_(entity_index);
+  }
+
+  /// \brief Calling operator()(entity_expr) on any accessor will return an AccessorExpr
+  /// Example:
+  ///   auto v3_accessor = Vector3FieldComponent(v3_field);
+  ///   EntityExpr all_nodes(node_selector, stk::topology::NODE_RANK);
+  ///   auto get_v3_expr = v3_accessor(all_nodes);
+  template <class EntityExpr>
+  KOKKOS_INLINE_FUNCTION
+  auto operator()(const EntityExprBase<EntityExpr>& e) const {
+    return AccessorExpr<our_t, EntityExpr>(*this, e);
   }
 
   KOKKOS_INLINE_FUNCTION
@@ -287,6 +301,8 @@ class ScalarFieldComponent : public FieldComponentBase {
 template <typename NgpFieldType>
 class NgpScalarFieldComponent : public NgpFieldComponentBase {
  public:
+  using our_t = NgpScalarFieldComponent<NgpFieldType>;
+ 
   NgpScalarFieldComponent() = default;
   NgpScalarFieldComponent(NgpFieldType ngp_field)
 #if TRILINOS_MAJOR_MINOR_VERSION >= 160000
@@ -307,6 +323,17 @@ class NgpScalarFieldComponent : public NgpFieldComponentBase {
   KOKKOS_INLINE_FUNCTION
   decltype(auto) operator()(stk::mesh::FastMeshIndex entity_index) const {
     return scalar_field_data(ngp_field_, entity_index);
+  }
+  
+  /// \brief Calling operator()(entity_expr) on any accessor will return an AccessorExpr
+  /// Example:
+  ///   auto v3_accessor = Vector3FieldComponent(v3_field);
+  ///   EntityExpr all_nodes(node_selector, stk::topology::NODE_RANK);
+  ///   auto get_v3_expr = v3_accessor(all_nodes);
+  template <class EntityExpr>
+  KOKKOS_INLINE_FUNCTION
+  auto operator()(const EntityExprBase<EntityExpr>& e) const {
+    return AccessorExpr<our_t, EntityExpr>(*this, e);
   }
 
   KOKKOS_INLINE_FUNCTION
@@ -382,6 +409,8 @@ class Vector3FieldComponent : public FieldComponentBase {
 template <typename NgpFieldType>
 class NgpVector3FieldComponent : public NgpFieldComponentBase {
  public:
+  using our_t = NgpVector3FieldComponent<NgpFieldType>;
+
   NgpVector3FieldComponent() = default;
   NgpVector3FieldComponent(NgpFieldType ngp_field)
 #if TRILINOS_MAJOR_MINOR_VERSION >= 160000
@@ -401,6 +430,17 @@ class NgpVector3FieldComponent : public NgpFieldComponentBase {
   KOKKOS_INLINE_FUNCTION
   decltype(auto) operator()(stk::mesh::FastMeshIndex entity_index) const {
     return vector3_field_data(ngp_field_, entity_index);
+  }
+
+  /// \brief Calling operator()(entity_expr) on any accessor will return an AccessorExpr
+  /// Example:
+  ///   auto v3_accessor = Vector3FieldComponent(v3_field);
+  ///   EntityExpr all_nodes(node_selector, stk::topology::NODE_RANK);
+  ///   auto get_v3_expr = v3_accessor(all_nodes);
+  template <class EntityExpr>
+  KOKKOS_INLINE_FUNCTION
+  auto operator()(const EntityExprBase<EntityExpr>& e) const {
+    return AccessorExpr<our_t, EntityExpr>(*this, e);
   }
 
   KOKKOS_INLINE_FUNCTION
@@ -476,6 +516,8 @@ class Matrix3FieldComponent : public FieldComponentBase {
 template <typename NgpFieldType>
 class NgpMatrix3FieldComponent : public NgpFieldComponentBase {
  public:
+  using our_t = NgpMatrix3FieldComponent<NgpFieldType>;
+
   NgpMatrix3FieldComponent() = default;
   NgpMatrix3FieldComponent(NgpFieldType ngp_field)
 #if TRILINOS_MAJOR_MINOR_VERSION >= 160000
@@ -495,6 +537,17 @@ class NgpMatrix3FieldComponent : public NgpFieldComponentBase {
   KOKKOS_INLINE_FUNCTION
   decltype(auto) operator()(stk::mesh::FastMeshIndex entity_index) const {
     return matrix3_field_data(ngp_field_, entity_index);
+  }
+
+  /// \brief Calling operator()(entity_expr) on any accessor will return an AccessorExpr
+  /// Example:
+  ///   auto v3_accessor = Vector3FieldComponent(v3_field);
+  ///   EntityExpr all_nodes(node_selector, stk::topology::NODE_RANK);
+  ///   auto get_v3_expr = v3_accessor(all_nodes);
+  template <class EntityExpr>
+  KOKKOS_INLINE_FUNCTION
+  auto operator()(const EntityExprBase<EntityExpr>& e) const {
+    return AccessorExpr<our_t, EntityExpr>(*this, e);
   }
 
   KOKKOS_INLINE_FUNCTION
@@ -570,6 +623,8 @@ class QuaternionFieldComponent : public FieldComponentBase {
 template <typename NgpFieldType>
 class NgpQuaternionFieldComponent : public NgpFieldComponentBase {
  public:
+  using our_t = NgpQuaternionFieldComponent<NgpFieldType>;
+
   NgpQuaternionFieldComponent() = default;
   NgpQuaternionFieldComponent(NgpFieldType ngp_field)
 #if TRILINOS_MAJOR_MINOR_VERSION >= 160000
@@ -589,6 +644,17 @@ class NgpQuaternionFieldComponent : public NgpFieldComponentBase {
   KOKKOS_INLINE_FUNCTION
   decltype(auto) operator()(stk::mesh::FastMeshIndex entity_index) const {
     return quaternion_field_data(ngp_field_, entity_index);
+  }
+
+  /// \brief Calling operator()(entity_expr) on any accessor will return an AccessorExpr
+  /// Example:
+  ///   auto v3_accessor = Vector3FieldComponent(v3_field);
+  ///   EntityExpr all_nodes(node_selector, stk::topology::NODE_RANK);
+  ///   auto get_v3_expr = v3_accessor(all_nodes);
+  template <class EntityExpr>
+  KOKKOS_INLINE_FUNCTION
+  auto operator()(const EntityExprBase<EntityExpr>& e) const {
+    return AccessorExpr<our_t, EntityExpr>(*this, e);
   }
 
   KOKKOS_INLINE_FUNCTION
@@ -658,6 +724,8 @@ class AABBFieldComponent : public FieldComponentBase {
 template <typename NgpFieldType>
 class NgpAABBFieldComponent : public NgpFieldComponentBase {
  public:
+  using our_t = NgpAABBFieldComponent<NgpFieldType>;
+
   NgpAABBFieldComponent() = default;
   NgpAABBFieldComponent(NgpFieldType ngp_field)
 #if TRILINOS_MAJOR_MINOR_VERSION >= 160000
@@ -678,6 +746,17 @@ class NgpAABBFieldComponent : public NgpFieldComponentBase {
   KOKKOS_INLINE_FUNCTION
   decltype(auto) operator()(stk::mesh::FastMeshIndex entity_index) const {
     return aabb_field_data(ngp_field_, entity_index);
+  }
+
+  /// \brief Calling operator()(entity_expr) on any accessor will return an AccessorExpr
+  /// Example:
+  ///   auto v3_accessor = Vector3FieldComponent(v3_field);
+  ///   EntityExpr all_nodes(node_selector, stk::topology::NODE_RANK);
+  ///   auto get_v3_expr = v3_accessor(all_nodes);
+  template <class EntityExpr>
+  KOKKOS_INLINE_FUNCTION
+  auto operator()(const EntityExprBase<EntityExpr>& e) const {
+    return AccessorExpr<our_t, EntityExpr>(*this, e);
   }
 
   KOKKOS_INLINE_FUNCTION
@@ -771,6 +850,7 @@ class TaggedComponent {
 template <typename Tag, stk::topology::rank_t our_rank, typename NgpComponentType>
 class NgpTaggedComponent {
  public:
+  using our_t = NgpTaggedComponent<Tag, our_rank, NgpComponentType>;
   using tag_type = Tag;
   using component_type = NgpComponentType;
   static constexpr stk::topology::rank_t rank = our_rank;
@@ -788,6 +868,17 @@ class NgpTaggedComponent {
   KOKKOS_INLINE_FUNCTION
   decltype(auto) operator()(stk::mesh::FastMeshIndex entity_index) const {
     return component_(entity_index);
+  }
+
+  /// \brief Calling operator()(entity_expr) on any accessor will return an AccessorExpr
+  /// Example:
+  ///   auto v3_accessor = Vector3FieldComponent(v3_field);
+  ///   EntityExpr all_nodes(node_selector, stk::topology::NODE_RANK);
+  ///   auto get_v3_expr = v3_accessor(all_nodes);
+  template <class EntityExpr>
+  KOKKOS_INLINE_FUNCTION
+  auto operator()(const EntityExprBase<EntityExpr>& e) const {
+    return AccessorExpr<our_t, EntityExpr>(*this, e);
   }
 
   KOKKOS_INLINE_FUNCTION

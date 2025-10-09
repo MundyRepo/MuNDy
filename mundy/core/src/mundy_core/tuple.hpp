@@ -226,6 +226,12 @@ struct tuple : public tuple_impl<decltype(std::make_index_sequence<sizeof...(Ele
 
   KOKKOS_FUNCTION
   constexpr tuple& operator=(tuple&&) = default;
+
+  /// \brief Get the size of the tuple
+  KOKKOS_FUNCTION
+  static constexpr size_t size() {
+    return sizeof...(Elements);
+  }
 };
 
 template <size_t Idx, class... Args>
@@ -266,6 +272,9 @@ KOKKOS_FUNCTION constexpr auto tuple_cat(const tuple<FirstElements...>& first, c
   // Delegate to the implementation
   return tuple_cat_impl(first, second, FirstIndices{}, SecondIndices{});
 }
+
+template <typename... input_t>
+using tuple_cat_t = decltype(tuple_cat(std::declval<input_t>()...));
 
 /// Make a tuple from a list of values.
 template <class... Elements>
