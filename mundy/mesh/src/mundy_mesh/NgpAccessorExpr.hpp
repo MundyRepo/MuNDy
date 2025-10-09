@@ -38,9 +38,10 @@
 
 // Mundy
 #include <mundy_core/throw_assert.hpp>   // for MUNDY_THROW_ASSERT
-#include <mundy_mesh/ForEachEntity.hpp>  // for mundy::mesh::for_each_entity_run
-#include <mundy_math/Vector.hpp>         // for mundy::math::Vector
 #include <mundy_core/tuple.hpp>          // for mundy::core::tuple
+#include <mundy_math/Vector.hpp>         // for mundy::math::Vector
+#include <mundy_mesh/ForEachEntity.hpp>  // for mundy::mesh::for_each_entity_run
+
 namespace mundy {
 
 namespace mesh {
@@ -118,16 +119,16 @@ constexpr void set_true(Vector<bool, M>& a) {
 // Cache is just a mundy::core::tuple of types.
 // IsCached is a math::Vector<bool, N>, so it's compatable with compile-time vector operations <3!!!
 
-auto dot.eval<CacheOffset, IsCached>(fmas, cache, context)
-  auto lhs_res = lhs.eval<CacheOffset, IsCached>(fmas, cache, context);
+auto dot.eval<CacheOffset, CacheSize, IsCached>(fmas, cache, context)
+  auto lhs_res = lhs.eval<CacheOffset, CacheSize, IsCached>(fmas, cache, context);
 
   // Evaluating the LHS may have changed the cache, so we need to update IsCached for the RHS
-  constexpr auto updated_is_cached = LeftExpr::update_is_cached<CacheOffset, IsCached>();
+  constexpr auto updated_is_cached = LeftExpr::update_is_cached<CacheOffset, CacheSize, IsCached>();
   auto rhs_res = rhs.eval<CacheOffset + LeftExpr::num_cached_types, updated_is_cached>(fmas, cache, context));
 
   return dot(lhs_res, rhs_res);
 
-auto reuse.eval<CacheOffset, IsCached>(fmas, cache, context) {
+auto reuse.eval<CacheOffset, CacheSize, IsCached>(fmas, cache, context) {
   // The cache offset is for us and all of our sub-expressions. Our cached object is the last one in that range.
   // Basically read from right to left in the cache when traversing via eval.
   //   [  unrelated expr cache | our sub-expr cache  |  our cache  | unrelated expr cache ]
@@ -137,13 +138,13 @@ auto reuse.eval<CacheOffset, IsCached>(fmas, cache, context) {
   if constexpr (IsCached[our_cache_offset]) {
     return get<our_cache_offset>(cache);
   } else {
-    auto val = prev_expr_.eval<CacheOffset, IsCached>(fmas, cache, context);
+    auto val = prev_expr_.eval<CacheOffset, CacheSize, IsCached>(fmas, cache, context);
     get<CacheOffset>(cache) = val;
     return val;
   }
 }
 
-void fuse.eval<CacheOffset, IsCached>(fmas, cache, context) {
+void fuse.eval<CacheOffset, CacheSize, IsCached>(fmas, cache, context) {
   // Let's assume that this fuse is for three expressions expr1, expr2, expr3
 
   constexpr size_t expr1_offset = CacheOffset;
@@ -200,6 +201,22 @@ for_each_entity_eval_expr(Expr expr) {
         expr.template eval<cache_offset, is_cached>(entity_index, cache, evaluation_context);
       });
 }
+
+// A comment on make_entity_expr. The entire tree must use one and only one EntityExpr. It can be reused
+throughout the tree but there can only be one. It is what decides how to perform the for_each_entity_run.
+
+// A step back. Part of the reason for this is to allow access to the rank of all involved entities, their selector,
+and the mesh. We used the execution context to pass the mesh through the evals but also sadly had EntityExpr return
+ngp mesh, making this separation of concerns invalid. 
+
+// The problem here is that all expressions need to access the same execution context within which we have the 
+// mesh, ranks, and selectors. Technically, the execution context of the ngp mesh could be separated from the selectors
+// and ranks. If this is the case, then we still have an execution context that must be passed through all evals but
+// we also have an additional ~thing~ that the entire expression must agree on. This ~thing~ is what we are calling
+// the EntityExpr, which is a poor name since it is closer to the EntityContext. This is as apposed to the ExecutionContext.
+// But like, just loop that all together into Context and be done with it. We can still type specialize the evals on 
+// a template of the class, so there's no loss of functionality.
+
 */
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -283,38 +300,41 @@ class EntityExprBase {
  public:
   using our_t = EntityExprBase<DerivedEntityExpr>;
 
-  /// \brief The cache type for us and all of our sub-expressions
-  /// Likely only a subset of the cache passed to eval.
-  using our_cache_t = typename DerivedEntityExpr::our_cache_t;
-  static constexpr size_t num_cached_types = our_cache_t::size();
-  static constexpr size_t num_entities = DerivedEntityExpr::num_entities;
-
   KOKKOS_INLINE_FUNCTION
   constexpr const DerivedEntityExpr &self() const noexcept {
     return static_cast<const DerivedEntityExpr &>(*this);
   }
 
+  stk::mesh::NgpMesh ngp_mesh() const {
+    return self().ngp_mesh();
+  }
+
+  template<size_t Ord = 0>
+  stk::mesh::Selector selector() const {
+    return self().template selector<Ord>();
+  }
+
+  template<size_t Ord = 0>
   KOKKOS_INLINE_FUNCTION
   stk::mesh::EntityRank rank() const {
-    return self().rank();
+    return self().template rank<Ord>();
   }
 
-  template <size_t CacheOffset, math::Vector<bool, our_cache_t::size()> IsCached, typename CacheType, class Ctx>
-  KOKKOS_INLINE_FUNCTION stk::mesh::FastMeshIndex eval(
-      const Kokkos::Array<stk::mesh::FastMeshIndex, num_entities> &fmis, CacheType &cache, const Ctx &context) const {
-    return self().template eval<CacheOffset, IsCached>(fmis, cache, context);
+  template <size_t CacheOffset, size_t CacheSize, math::Vector<bool, CacheSize> IsCached,  //
+            size_t NumEntities, typename CacheType, class Ctx>
+  KOKKOS_INLINE_FUNCTION stk::mesh::FastMeshIndex eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities> &fmis,
+                                                       CacheType &cache, const Ctx &context) const {
+    return self().template eval<CacheOffset, CacheSize, IsCached>(fmis, cache, context);
   }
 
-  template <size_t CacheOffset, math::Vector<bool, our_cache_t::size()> IsCached, typename CacheType, class Ctx>
+  template <size_t CacheOffset, size_t CacheSize, math::Vector<bool, CacheSize> IsCached, typename CacheType, class Ctx>
   KOKKOS_INLINE_FUNCTION stk::mesh::FastMeshIndex eval(const stk::mesh::FastMeshIndex &fmi, CacheType &cache,
-                                                       const Ctx &context) const
-    requires(num_entities == 1)
-  {
-    return self().template eval<CacheOffset, IsCached>(fmi, cache, context);
+                                                       const Ctx &context) const {
+    return self().template eval<CacheOffset, CacheSize, IsCached>(fmi, cache, context);
   }
 
   KOKKOS_INLINE_FUNCTION
-  static our_cache_t init_cache() {
+  static auto init_cache() {
     return DerivedEntityExpr::init_cache();
   }
 
@@ -323,9 +343,9 @@ class EntityExprBase {
     return DerivedEntityExpr::init_is_cached();
   }
 
-  template <size_t CacheOffset, math::Vector<bool, our_cache_t::size()> IsCached>
+  template <size_t CacheOffset, size_t CacheSize, math::Vector<bool, CacheSize> IsCached>
   KOKKOS_INLINE_FUNCTION static constexpr auto update_is_cached() {
-    return DerivedEntityExpr::template update_is_cached<CacheOffset, IsCached>();
+    return DerivedEntityExpr::template update_is_cached<CacheOffset, CacheSize, IsCached>();
   }
 
   template <class Ctx>
@@ -350,8 +370,30 @@ class EntityExprBase {
 };
 
 // How would all of this look in a for_each_entity_expr_eval
+// template <typename EntityExpr>
+// void for_each_entity_evaluate_expr(
+//     const stk::mesh::NgpMesh& ngp_mesh, const stk::mesh::Selector& selector,
+//     const EntityExprBase<EntityExpr> &entity_expr) {
+//   static_assert(EntityExpr::num_entities == 1,
+//                 "for_each_entity_evaluate_expr only works with single-entity expressions");
+//   stk::mesh::EntityRank rank = entity_expr.rank();
+
+//   // Sync all fields to the appropriate space and mark modified where necessary
+//   NgpContext evaluation_context(ngp_mesh);
+//   entity_expr.propagate_synchronize(evaluation_context);
+
+//   // Perform the evaluation
+//   ::mundy::mesh::for_each_entity_run(
+//       ngp_mesh, selector, rank, KOKKOS_LAMBDA(const stk::mesh::FastMeshIndex &entity_index) {
+//         // Setup the reused cache for this entity
+//         auto cache = EntityExpr::init_cache();
+//         constexpr auto is_cached = EntityExpr::init_is_cached();
+//         constexpr size_t cache_offset = 0;
+//         entity_expr.template eval<cache_offset, is_cached>(entity_index, cache, evaluation_context);
+//       });
+// }
 template <typename EntityExpr>
-void for_each_entity_evaluate_expr(const EntityExprBase<EntityExpr> &entity_expr) {
+void for_each_entity_evaluate_expr(const EntityExpr &entity_expr) {
   static_assert(EntityExpr::num_entities == 1,
                 "for_each_entity_evaluate_expr only works with single-entity expressions");
   stk::mesh::EntityRank rank = entity_expr.rank();
@@ -369,7 +411,8 @@ void for_each_entity_evaluate_expr(const EntityExprBase<EntityExpr> &entity_expr
         auto cache = EntityExpr::init_cache();
         constexpr auto is_cached = EntityExpr::init_is_cached();
         constexpr size_t cache_offset = 0;
-        entity_expr.template eval<cache_offset, is_cached>(entity_index, cache, evaluation_context);
+        constexpr size_t cache_size = decltype(cache)::size();
+        entity_expr.template eval<cache_offset, cache_size, is_cached>(entity_index, cache, evaluation_context);
       });
 }
 
@@ -387,21 +430,46 @@ class ConnectedEntitiesExpr : public EntityExprBase<ConnectedEntitiesExpr<PrevEn
       : prev_entity_expr_(prev_entity_expr), conn_rank_(conn_rank) {
   }
 
-  template <size_t CacheOffset, math::Vector<bool, our_cache_t::size()> IsCached, typename CacheType>
+  KOKKOS_INLINE_FUNCTION
+  ConnectedEntitiesExpr(EntityExprBase<PrevEntityExpr> prev_entity_expr_base, stk::mesh::EntityRank conn_rank)
+      : prev_entity_expr_(prev_entity_expr_base.self()), conn_rank_(conn_rank) {
+  }
+
+  KOKKOS_INLINE_FUNCTION
+  stk::mesh::NgpMesh ngp_mesh() const {
+    return prev_entity_expr_.ngp_mesh();
+  }
+
+  template<size_t Ord = 0>
+  stk::mesh::Selector selector() const {
+    return prev_entity_expr_.template selector<Ord>();
+  }
+
+  template<size_t Ord = 0>
+  KOKKOS_INLINE_FUNCTION
+  stk::mesh::EntityRank rank() const {
+    // TODO(palmerb4): Need a better naming convention. This is the rank needed to perform
+    // the evaluation, not the connectivity rank. The current name
+    return prev_entity_expr_.template rank<Ord>();  
+  }
+
+  template <size_t CacheOffset, size_t CacheSize, math::Vector<bool, CacheSize> IsCached, typename CacheType>
   KOKKOS_INLINE_FUNCTION ConnectedEntities eval(const Kokkos::Array<stk::mesh::FastMeshIndex, num_entities> &fmis,
                                                 CacheType &cache, const NgpContext &context) const {
     stk::mesh::EntityRank entity_rank = prev_entity_expr_.rank();
-    stk::mesh::FastMeshIndex entity_index = prev_entity_expr_.template eval<CacheOffset, IsCached>(fmis, cache, context);
+    stk::mesh::FastMeshIndex entity_index =
+        prev_entity_expr_.template eval<CacheOffset, CacheSize, IsCached>(fmis, cache, context);
     return context.ngp_mesh().get_connected_entities(entity_rank, entity_index, conn_rank_);
   }
 
-  template <size_t CacheOffset, math::Vector<bool, our_cache_t::size()> IsCached, typename CacheType>
+  template <size_t CacheOffset, size_t CacheSize, math::Vector<bool, CacheSize> IsCached, typename CacheType>
   KOKKOS_INLINE_FUNCTION ConnectedEntities eval(const stk::mesh::FastMeshIndex &fmi, CacheType &cache,
                                                 const NgpContext &context) const
     requires(num_entities == 1)
   {
     stk::mesh::EntityRank entity_rank = prev_entity_expr_.rank();
-    stk::mesh::FastMeshIndex entity_index = prev_entity_expr_.template eval<CacheOffset, IsCached>(fmi, cache, context);
+    stk::mesh::FastMeshIndex entity_index =
+        prev_entity_expr_.template eval<CacheOffset, CacheSize, IsCached>(fmi, cache, context);
     return context.ngp_mesh().get_connected_entities(entity_rank, entity_index, conn_rank_);
   }
 
@@ -415,10 +483,10 @@ class ConnectedEntitiesExpr : public EntityExprBase<ConnectedEntitiesExpr<PrevEn
     return math::Vector<bool, our_cache_t::size()>{false};
   }
 
-  template <size_t CacheOffset, math::Vector<bool, our_cache_t::size()> IsCached>
+  template <size_t CacheOffset, size_t CacheSize, math::Vector<bool, CacheSize> IsCached>
   KOKKOS_INLINE_FUNCTION static constexpr auto update_is_cached() {
     // We don't add any cache entries, so just propagate the flags from our previous expression
-    return PrevEntityExpr::template update_is_cached<CacheOffset, IsCached>();
+    return PrevEntityExpr::template update_is_cached<CacheOffset, CacheSize, IsCached>();
   }
 
   KOKKOS_INLINE_FUNCTION
@@ -452,35 +520,50 @@ class ConnectedEntitiesExpr : public EntityExprBase<ConnectedEntitiesExpr<PrevEn
 };
 
 template <size_t NumEntities, size_t Ord>
-class CTimeEntityExpr : public EntityExprBase<CTimeEntityExpr<NumEntities, Ord>> {
+class EntityExpr : public EntityExprBase<EntityExpr<NumEntities, Ord>> {
  public:
-  using our_t = CTimeEntityExpr<NumEntities, Ord>;
+  using our_t = EntityExpr<NumEntities, Ord>;
   using our_cache_t = core::tuple<>;
   static constexpr size_t num_cached_types = our_cache_t::size();
   static constexpr size_t num_entities = NumEntities;
 
   KOKKOS_INLINE_FUNCTION
-  CTimeEntityExpr(const stk::mesh::EntityRank &rank) : rank_(rank) {
+  EntityExpr(const stk::mesh::NgpMesh &ngp_mesh, const stk::mesh::Selector &selector,
+                  const stk::mesh::EntityRank &rank)
+      : ngp_mesh_(ngp_mesh), selector_(selector), rank_(rank) {
   }
 
   KOKKOS_INLINE_FUNCTION
+  stk::mesh::NgpMesh ngp_mesh() const {
+    return ngp_mesh_;
+  }
+
+  template<size_t Ord = 0>
+  stk::mesh::Selector selector() const {
+    static_assert(Ord < NumEntities, "EntityExpr ordinal must be less than NumEntities");
+    return selector_;
+  }
+
+  template<size_t Ord = 0>
+  KOKKOS_INLINE_FUNCTION
   stk::mesh::EntityRank rank() const {
+    static_assert(Ord < NumEntities, "EntityExpr ordinal must be less than NumEntities");
     return rank_;
   }
 
-  template <size_t CacheOffset, math::Vector<bool, our_cache_t::size()> IsCached, typename CacheType>
+  template <size_t CacheOffset, size_t CacheSize, math::Vector<bool, CacheSize> IsCached, typename CacheType>
   KOKKOS_INLINE_FUNCTION stk::mesh::FastMeshIndex eval(const Kokkos::Array<stk::mesh::FastMeshIndex, num_entities> fmis,
                                                        CacheType &cache, const NgpContext & /*context*/) const {
-    static_assert(Ord < NumEntities, "CTimeEntityExpr ordinal must be less than NumEntities");
+    static_assert(Ord < NumEntities, "EntityExpr ordinal must be less than NumEntities");
     return fmis[ordinal_];
   }
 
-  template <size_t CacheOffset, math::Vector<bool, our_cache_t::size()> IsCached, typename CacheType>
+  template <size_t CacheOffset, size_t CacheSize, math::Vector<bool, CacheSize> IsCached, typename CacheType>
   KOKKOS_INLINE_FUNCTION stk::mesh::FastMeshIndex eval(const stk::mesh::FastMeshIndex fmi, CacheType &cache,
                                                        const NgpContext & /*context*/) const
     requires(num_entities == 1)
   {
-    static_assert(Ord == 0, "CTimeEntityExpr with a single entity must have Ord == 0");
+    static_assert(Ord == 0, "EntityExpr with a single entity must have Ord == 0");
     return fmi;
   }
 
@@ -494,7 +577,7 @@ class CTimeEntityExpr : public EntityExprBase<CTimeEntityExpr<NumEntities, Ord>>
     return math::Vector<bool, our_cache_t::size()>{false};
   }
 
-  template <size_t CacheOffset, math::Vector<bool, our_cache_t::size()> IsCached>
+  template <size_t CacheOffset, size_t CacheSize, math::Vector<bool, CacheSize> IsCached>
   KOKKOS_INLINE_FUNCTION static constexpr auto update_is_cached() {
     // Nothing changes. We neither add anything to the cache nor have any sub-expressions.
     return IsCached;
@@ -526,9 +609,23 @@ class CTimeEntityExpr : public EntityExprBase<CTimeEntityExpr<NumEntities, Ord>>
   }
 
  private:
+  stk::mesh::NgpMesh ngp_mesh_;
+  stk::mesh::Selector selector_;
   stk::mesh::EntityRank rank_;
   static constexpr size_t ordinal_ = Ord;
 };
+
+auto make_entity_expr(const stk::mesh::NgpMesh &ngp_mesh, const stk::mesh::Selector &selector,
+                      const stk::mesh::EntityRank &rank) {
+  return EntityExpr<1, 0>(ngp_mesh, selector, rank);
+}
+
+template <size_t NumEntities, size_t Ord>
+auto make_multi_entity_expr(const stk::mesh::NgpMesh &ngp_mesh, const stk::mesh::Selector &selector,
+                            const stk::mesh::EntityRank &rank) {
+  static_assert(Ord < NumEntities, "EntityExpr ordinal must be less than NumEntities");
+  return EntityExpr<NumEntities, Ord>(ngp_mesh, selector, rank);
+}
 
 template <size_t NumEntities>
 class RTimeEntityExpr : public EntityExprBase<RTimeEntityExpr<NumEntities>> {
@@ -539,15 +636,30 @@ class RTimeEntityExpr : public EntityExprBase<RTimeEntityExpr<NumEntities>> {
   static constexpr size_t num_entities = NumEntities;
 
   KOKKOS_INLINE_FUNCTION
-  RTimeEntityExpr(const stk::mesh::EntityRank &rank, size_t ordinal) : rank_(rank), ordinal_(ordinal) {
+  RTimeEntityExpr(const stk::mesh::NgpMesh &ngp_mesh, const stk::mesh::Selector &selector,
+                  const stk::mesh::EntityRank &rank, size_t ordinal)
+      : ngp_mesh_(ngp_mesh), selector_(selector), rank_(rank), ordinal_(ordinal) {
   }
 
   KOKKOS_INLINE_FUNCTION
+  stk::mesh::NgpMesh ngp_mesh() const {
+    return ngp_mesh_;
+  }
+
+  template<size_t Ord = 0>
+  stk::mesh::Selector selector() const {
+    static_assert(Ord < NumEntities, "RTimeEntityExpr ordinal must be less than NumEntities");
+    return selector_;
+  }
+
+  template<size_t Ord = 0>
+  KOKKOS_INLINE_FUNCTION
   stk::mesh::EntityRank rank() const {
+    static_assert(Ord < NumEntities, "RTimeEntityExpr ordinal must be less than NumEntities");
     return rank_;
   }
 
-  template <size_t CacheOffset, math::Vector<bool, our_cache_t::size()> IsCached, typename CacheType>
+  template <size_t CacheOffset, size_t CacheSize, math::Vector<bool, CacheSize> IsCached, typename CacheType>
   KOKKOS_INLINE_FUNCTION stk::mesh::FastMeshIndex eval(
       const Kokkos::Array<stk::mesh::FastMeshIndex, num_entities> &fmis, CacheType &cache,
       const NgpContext & /*context*/) const {
@@ -556,7 +668,7 @@ class RTimeEntityExpr : public EntityExprBase<RTimeEntityExpr<NumEntities>> {
     return fmis[ordinal_];
   }
 
-  template <size_t CacheOffset, math::Vector<bool, our_cache_t::size()> IsCached, typename CacheType>
+  template <size_t CacheOffset, size_t CacheSize, math::Vector<bool, CacheSize> IsCached, typename CacheType>
   KOKKOS_INLINE_FUNCTION stk::mesh::FastMeshIndex eval(const stk::mesh::FastMeshIndex &fmi, CacheType &cache,
                                                        const NgpContext & /*context*/) const
     requires(num_entities == 1)
@@ -575,7 +687,7 @@ class RTimeEntityExpr : public EntityExprBase<RTimeEntityExpr<NumEntities>> {
     return math::Vector<bool, our_cache_t::size()>{false};
   }
 
-  template <size_t CacheOffset, math::Vector<bool, our_cache_t::size()> IsCached>
+  template <size_t CacheOffset, size_t CacheSize, math::Vector<bool, CacheSize> IsCached>
   KOKKOS_INLINE_FUNCTION static constexpr auto update_is_cached() {
     // Nothing changes. We neither add anything to the cache nor have any sub-expressions.
     return IsCached;
@@ -607,6 +719,8 @@ class RTimeEntityExpr : public EntityExprBase<RTimeEntityExpr<NumEntities>> {
   }
 
  private:
+  stk::mesh::NgpMesh ngp_mesh_;
+  stk::mesh::Selector selector_;
   stk::mesh::EntityRank rank_;
   size_t ordinal_;
 };
@@ -645,18 +759,25 @@ class AddExpr : public MathExprBase<AddExpr<LeftMathExpr, RightMathExpr>> {
   AddExpr(LeftMathExpr left, RightMathExpr right) : left_(left), right_(right) {
   }
 
-  template <size_t CacheOffset, math::Vector<bool, our_cache_t::size()> IsCached, typename CacheType>
-  KOKKOS_INLINE_FUNCTION auto eval(const Kokkos::Array<stk::mesh::FastMeshIndex, num_entities> &fmis, CacheType &cache,
-                                   const NgpContext &context) const {
-    return left_.template eval<CacheOffset, IsCached>(fmis, cache, context) + right_.template eval<CacheOffset, IsCached>(fmis, cache, context);
+  KOKKOS_INLINE_FUNCTION
+  AddExpr(MathExprBase<LeftMathExpr> left, MathExprBase<RightMathExpr> right)
+      : left_(left.self()), right_(right.self()) {
   }
 
-  template <size_t CacheOffset, math::Vector<bool, our_cache_t::size()> IsCached, typename CacheType>
+  template <size_t CacheOffset, size_t CacheSize, math::Vector<bool, CacheSize> IsCached, typename CacheType>
+  KOKKOS_INLINE_FUNCTION auto eval(const Kokkos::Array<stk::mesh::FastMeshIndex, num_entities> &fmis, CacheType &cache,
+                                   const NgpContext &context) const {
+    return left_.template eval<CacheOffset, CacheSize, IsCached>(fmis, cache, context) +
+           right_.template eval<CacheOffset, CacheSize, IsCached>(fmis, cache, context);
+  }
+
+  template <size_t CacheOffset, size_t CacheSize, math::Vector<bool, CacheSize> IsCached, typename CacheType>
   KOKKOS_INLINE_FUNCTION auto eval(const stk::mesh::FastMeshIndex &fmi, CacheType &cache,
                                    const NgpContext &context) const
     requires(num_entities == 1)
   {
-    return left_.template eval<CacheOffset, IsCached>(fmi, cache, context) + right_.template eval<CacheOffset, IsCached>(fmi, cache, context);
+    return left_.template eval<CacheOffset, CacheSize, IsCached>(fmi, cache, context) +
+           right_.template eval<CacheOffset, CacheSize, IsCached>(fmi, cache, context);
   }
 
   KOKKOS_INLINE_FUNCTION
@@ -669,10 +790,10 @@ class AddExpr : public MathExprBase<AddExpr<LeftMathExpr, RightMathExpr>> {
     return math::Vector<bool, our_cache_t::size()>{false};
   }
 
-  template <size_t CacheOffset, math::Vector<bool, our_cache_t::size()> IsCached>
+  template <size_t CacheOffset, size_t CacheSize, math::Vector<bool, CacheSize> IsCached>
   KOKKOS_INLINE_FUNCTION static constexpr auto update_is_cached() {
     // Propagate the flags from our left and right expressions
-    constexpr auto updated_flags_left = LeftMathExpr::template update_is_cached<CacheOffset, IsCached>();
+    constexpr auto updated_flags_left = LeftMathExpr::template update_is_cached<CacheOffset, CacheSize, IsCached>();
     constexpr auto updated_flags =
         RightMathExpr::template update_is_cached<CacheOffset + LeftMathExpr::num_cached_types, updated_flags_left>();
     return updated_flags;
@@ -718,18 +839,25 @@ class SubExpr : public MathExprBase<SubExpr<LeftMathExpr, RightMathExpr>> {
   SubExpr(LeftMathExpr left, RightMathExpr right) : left_(left), right_(right) {
   }
 
-  template <size_t CacheOffset, math::Vector<bool, our_cache_t::size()> IsCached, typename CacheType>
-  KOKKOS_INLINE_FUNCTION auto eval(const Kokkos::Array<stk::mesh::FastMeshIndex, num_entities> &fmis, CacheType &cache,
-                                   const NgpContext &context) const {
-    return left_.template eval<CacheOffset, IsCached>(fmis, cache, context) - right_.template eval<CacheOffset, IsCached>(fmis, cache, context);
+  KOKKOS_INLINE_FUNCTION
+  SubExpr(MathExprBase<LeftMathExpr> left, MathExprBase<RightMathExpr> right)
+      : left_(left.self()), right_(right.self()) {
   }
 
-  template <size_t CacheOffset, math::Vector<bool, our_cache_t::size()> IsCached, typename CacheType>
+  template <size_t CacheOffset, size_t CacheSize, math::Vector<bool, CacheSize> IsCached, typename CacheType>
+  KOKKOS_INLINE_FUNCTION auto eval(const Kokkos::Array<stk::mesh::FastMeshIndex, num_entities> &fmis, CacheType &cache,
+                                   const NgpContext &context) const {
+    return left_.template eval<CacheOffset, CacheSize, IsCached>(fmis, cache, context) -
+           right_.template eval<CacheOffset, CacheSize, IsCached>(fmis, cache, context);
+  }
+
+  template <size_t CacheOffset, size_t CacheSize, math::Vector<bool, CacheSize> IsCached, typename CacheType>
   KOKKOS_INLINE_FUNCTION auto eval(const stk::mesh::FastMeshIndex &fmi, CacheType &cache,
                                    const NgpContext &context) const
     requires(num_entities == 1)
   {
-    return left_.template eval<CacheOffset, IsCached>(fmi, cache, context) - right_.template eval<CacheOffset, IsCached>(fmi, cache, context);
+    return left_.template eval<CacheOffset, CacheSize, IsCached>(fmi, cache, context) -
+           right_.template eval<CacheOffset, CacheSize, IsCached>(fmi, cache, context);
   }
 
   KOKKOS_INLINE_FUNCTION
@@ -742,10 +870,10 @@ class SubExpr : public MathExprBase<SubExpr<LeftMathExpr, RightMathExpr>> {
     return math::Vector<bool, our_cache_t::size()>{false};
   }
 
-  template <size_t CacheOffset, math::Vector<bool, our_cache_t::size()> IsCached>
+  template <size_t CacheOffset, size_t CacheSize, math::Vector<bool, CacheSize> IsCached>
   KOKKOS_INLINE_FUNCTION static constexpr auto update_is_cached() {
     // Propagate the flags from our left and right expressions
-    constexpr auto updated_flags_left = LeftMathExpr::template update_is_cached<CacheOffset, IsCached>();
+    constexpr auto updated_flags_left = LeftMathExpr::template update_is_cached<CacheOffset, CacheSize, IsCached>();
     constexpr auto updated_flags =
         RightMathExpr::template update_is_cached<CacheOffset + LeftMathExpr::num_cached_types, updated_flags_left>();
     return updated_flags;
@@ -785,24 +913,31 @@ class MulExpr : public MathExprBase<MulExpr<LeftMathExpr, RightMathExpr>> {
   using our_t = MulExpr<LeftMathExpr, RightMathExpr>;
   using our_cache_t = core::tuple_cat_t<typename LeftMathExpr::our_cache_t, typename RightMathExpr::our_cache_t>;
   static constexpr size_t num_cached_types = our_cache_t::size();
-  static constexpr size_t num_entities = LeftMathExpr::NumEntities;
+  static constexpr size_t num_entities = LeftMathExpr::num_entities;
 
   KOKKOS_INLINE_FUNCTION
   MulExpr(LeftMathExpr left, RightMathExpr right) : left_(left), right_(right) {
   }
 
-  template <size_t CacheOffset, math::Vector<bool, our_cache_t::size()> IsCached, typename CacheType>
-  KOKKOS_INLINE_FUNCTION auto eval(const Kokkos::Array<stk::mesh::FastMeshIndex, num_entities> &fmis, CacheType &cache,
-                                   const NgpContext &context) const {
-    return left_.template eval<CacheOffset, IsCached>(fmis, cache, context) * right_.template eval<CacheOffset, IsCached>(fmis, cache, context);
+  KOKKOS_INLINE_FUNCTION
+  MulExpr(MathExprBase<LeftMathExpr> left, MathExprBase<RightMathExpr> right)
+      : left_(left.self()), right_(right.self()) {
   }
 
-  template <size_t CacheOffset, math::Vector<bool, our_cache_t::size()> IsCached, typename CacheType>
+  template <size_t CacheOffset, size_t CacheSize, math::Vector<bool, CacheSize> IsCached, typename CacheType>
+  KOKKOS_INLINE_FUNCTION auto eval(const Kokkos::Array<stk::mesh::FastMeshIndex, num_entities> &fmis, CacheType &cache,
+                                   const NgpContext &context) const {
+    return left_.template eval<CacheOffset, CacheSize, IsCached>(fmis, cache, context) *
+           right_.template eval<CacheOffset, CacheSize, IsCached>(fmis, cache, context);
+  }
+
+  template <size_t CacheOffset, size_t CacheSize, math::Vector<bool, CacheSize> IsCached, typename CacheType>
   KOKKOS_INLINE_FUNCTION auto eval(const stk::mesh::FastMeshIndex &fmi, CacheType &cache,
                                    const NgpContext &context) const
     requires(num_entities == 1)
   {
-    return left_.template eval<CacheOffset, IsCached>(fmi, cache, context) * right_.template eval<CacheOffset, IsCached>(fmi, cache, context);
+    return left_.template eval<CacheOffset, CacheSize, IsCached>(fmi, cache, context) *
+           right_.template eval<CacheOffset, CacheSize, IsCached>(fmi, cache, context);
   }
 
   KOKKOS_INLINE_FUNCTION
@@ -815,10 +950,10 @@ class MulExpr : public MathExprBase<MulExpr<LeftMathExpr, RightMathExpr>> {
     return math::Vector<bool, our_cache_t::size()>{false};
   }
 
-  template <size_t CacheOffset, math::Vector<bool, our_cache_t::size()> IsCached>
+  template <size_t CacheOffset, size_t CacheSize, math::Vector<bool, CacheSize> IsCached>
   KOKKOS_INLINE_FUNCTION static constexpr auto update_is_cached() {
     // Propagate the flags from our left and right expressions
-    constexpr auto updated_flags_left = LeftMathExpr::template update_is_cached<CacheOffset, IsCached>();
+    constexpr auto updated_flags_left = LeftMathExpr::template update_is_cached<CacheOffset, CacheSize, IsCached>();
     constexpr auto updated_flags =
         RightMathExpr::template update_is_cached<CacheOffset + LeftMathExpr::num_cached_types, updated_flags_left>();
     return updated_flags;
@@ -864,18 +999,25 @@ class DivExpr : public MathExprBase<DivExpr<LeftMathExpr, RightMathExpr>> {
   DivExpr(LeftMathExpr left, RightMathExpr right) : left_(left), right_(right) {
   }
 
-  template <size_t CacheOffset, math::Vector<bool, our_cache_t::size()> IsCached, typename CacheType>
-  KOKKOS_INLINE_FUNCTION auto eval(const Kokkos::Array<stk::mesh::FastMeshIndex, num_entities> &fmis, CacheType &cache,
-                                   const NgpContext &context) const {
-    return left_.template eval<CacheOffset, IsCached>(fmis, cache, context) / right_.template eval<CacheOffset, IsCached>(fmis, cache, context);
+  KOKKOS_INLINE_FUNCTION
+  DivExpr(MathExprBase<LeftMathExpr> left, MathExprBase<RightMathExpr> right)
+      : left_(left.self()), right_(right.self()) {
   }
 
-  template <size_t CacheOffset, math::Vector<bool, our_cache_t::size()> IsCached, typename CacheType>
+  template <size_t CacheOffset, size_t CacheSize, math::Vector<bool, CacheSize> IsCached, typename CacheType>
+  KOKKOS_INLINE_FUNCTION auto eval(const Kokkos::Array<stk::mesh::FastMeshIndex, num_entities> &fmis, CacheType &cache,
+                                   const NgpContext &context) const {
+    return left_.template eval<CacheOffset, CacheSize, IsCached>(fmis, cache, context) /
+           right_.template eval<CacheOffset, CacheSize, IsCached>(fmis, cache, context);
+  }
+
+  template <size_t CacheOffset, size_t CacheSize, math::Vector<bool, CacheSize> IsCached, typename CacheType>
   KOKKOS_INLINE_FUNCTION auto eval(const stk::mesh::FastMeshIndex &fmi, CacheType &cache,
                                    const NgpContext &context) const
     requires(num_entities == 1)
   {
-    return left_.template eval<CacheOffset, IsCached>(fmi, cache, context) / right_.template eval<CacheOffset, IsCached>(fmi, cache, context);
+    return left_.template eval<CacheOffset, CacheSize, IsCached>(fmi, cache, context) /
+           right_.template eval<CacheOffset, CacheSize, IsCached>(fmi, cache, context);
   }
 
   KOKKOS_INLINE_FUNCTION
@@ -888,10 +1030,10 @@ class DivExpr : public MathExprBase<DivExpr<LeftMathExpr, RightMathExpr>> {
     return math::Vector<bool, our_cache_t::size()>{false};
   }
 
-  template <size_t CacheOffset, math::Vector<bool, our_cache_t::size()> IsCached>
+  template <size_t CacheOffset, size_t CacheSize, math::Vector<bool, CacheSize> IsCached>
   KOKKOS_INLINE_FUNCTION static constexpr auto update_is_cached() {
     // Propagate the flags from our left and right expressions
-    constexpr auto updated_flags_left = LeftMathExpr::template update_is_cached<CacheOffset, IsCached>();
+    constexpr auto updated_flags_left = LeftMathExpr::template update_is_cached<CacheOffset, CacheSize, IsCached>();
     constexpr auto updated_flags =
         RightMathExpr::template update_is_cached<CacheOffset + LeftMathExpr::num_cached_types, updated_flags_left>();
     return updated_flags;
@@ -937,18 +1079,20 @@ class AssignExpr : public MathExprBase<AssignExpr<TargetExpr, SourceExpr>> {
   AssignExpr(TargetExpr trg_expr, SourceExpr src_expr) : trg_expr_(trg_expr), src_expr_(src_expr) {
   }
 
-  template <size_t CacheOffset, math::Vector<bool, our_cache_t::size()> IsCached, typename CacheType>
+  template <size_t CacheOffset, size_t CacheSize, math::Vector<bool, CacheSize> IsCached, typename CacheType>
   KOKKOS_INLINE_FUNCTION void eval(const Kokkos::Array<stk::mesh::FastMeshIndex, num_entities> &fmis, CacheType &cache,
                                    const NgpContext &context) const {
-    trg_expr_.template eval<CacheOffset, IsCached>(fmis, cache, context) = src_expr_.template eval<CacheOffset, IsCached>(fmis, cache, context);
+    trg_expr_.template eval<CacheOffset, CacheSize, IsCached>(fmis, cache, context) =
+        src_expr_.template eval<CacheOffset, CacheSize, IsCached>(fmis, cache, context);
   }
 
-  template <size_t CacheOffset, math::Vector<bool, our_cache_t::size()> IsCached, typename CacheType>
+  template <size_t CacheOffset, size_t CacheSize, math::Vector<bool, CacheSize> IsCached, typename CacheType>
   KOKKOS_INLINE_FUNCTION void eval(const stk::mesh::FastMeshIndex fmi, CacheType &cache,
                                    const NgpContext &context) const
     requires(num_entities == 1)
   {
-    trg_expr_.template eval<CacheOffset, IsCached>(fmi, cache, context) = src_expr_.template eval<CacheOffset, IsCached>(fmi, cache, context);
+    trg_expr_.template eval<CacheOffset, CacheSize, IsCached>(fmi, cache, context) =
+        src_expr_.template eval<CacheOffset, CacheSize, IsCached>(fmi, cache, context);
   }
 
   KOKKOS_INLINE_FUNCTION
@@ -961,10 +1105,10 @@ class AssignExpr : public MathExprBase<AssignExpr<TargetExpr, SourceExpr>> {
     return math::Vector<bool, our_cache_t::size()>{false};
   }
 
-  template <size_t CacheOffset, math::Vector<bool, our_cache_t::size()> IsCached>
+  template <size_t CacheOffset, size_t CacheSize, math::Vector<bool, CacheSize> IsCached>
   KOKKOS_INLINE_FUNCTION static constexpr auto update_is_cached() {
     // Propagate the flags from our left and right expressions
-    constexpr auto updated_flags_left = TargetExpr::template update_is_cached<CacheOffset, IsCached>();
+    constexpr auto updated_flags_left = TargetExpr::template update_is_cached<CacheOffset, CacheSize, IsCached>();
     constexpr auto updated_flags =
         SourceExpr::template update_is_cached<CacheOffset + TargetExpr::num_cached_types, updated_flags_left>();
     return updated_flags;
@@ -1009,18 +1153,25 @@ class AddEqualsExpr : public MathExprBase<AddEqualsExpr<LeftMathExpr, RightMathE
   AddEqualsExpr(LeftMathExpr left, RightMathExpr right) : left_(left), right_(right) {
   }
 
-  template <size_t CacheOffset, math::Vector<bool, our_cache_t::size()> IsCached, typename CacheType>
-  KOKKOS_INLINE_FUNCTION void eval(const Kokkos::Array<stk::mesh::FastMeshIndex, num_entities> &fmis, CacheType &cache,
-                                   const NgpContext &context) const {
-    left_.template eval<CacheOffset, IsCached>(fmis, cache, context) += right_.template eval<CacheOffset, IsCached>(fmis, cache, context);
+  KOKKOS_INLINE_FUNCTION
+  AddEqualsExpr(EntityExprBase<LeftMathExpr> left, EntityExprBase<RightMathExpr> right)
+      : left_(left.self()), right_(right.self()) {
   }
 
-  template <size_t CacheOffset, math::Vector<bool, our_cache_t::size()> IsCached, typename CacheType>
+  template <size_t CacheOffset, size_t CacheSize, math::Vector<bool, CacheSize> IsCached, typename CacheType>
+  KOKKOS_INLINE_FUNCTION void eval(const Kokkos::Array<stk::mesh::FastMeshIndex, num_entities> &fmis, CacheType &cache,
+                                   const NgpContext &context) const {
+    left_.template eval<CacheOffset, CacheSize, IsCached>(fmis, cache, context) +=
+        right_.template eval<CacheOffset, CacheSize, IsCached>(fmis, cache, context);
+  }
+
+  template <size_t CacheOffset, size_t CacheSize, math::Vector<bool, CacheSize> IsCached, typename CacheType>
   KOKKOS_INLINE_FUNCTION void eval(const stk::mesh::FastMeshIndex &fmi, CacheType &cache,
                                    const NgpContext &context) const
     requires(num_entities == 1)
   {
-    left_.template eval<CacheOffset, IsCached>(fmi, cache, context) += right_.template eval<CacheOffset, IsCached>(fmi, cache, context);
+    left_.template eval<CacheOffset, CacheSize, IsCached>(fmi, cache, context) +=
+        right_.template eval<CacheOffset, CacheSize, IsCached>(fmi, cache, context);
   }
 
   KOKKOS_INLINE_FUNCTION
@@ -1033,10 +1184,10 @@ class AddEqualsExpr : public MathExprBase<AddEqualsExpr<LeftMathExpr, RightMathE
     return math::Vector<bool, our_cache_t::size()>{false};
   }
 
-  template <size_t CacheOffset, math::Vector<bool, our_cache_t::size()> IsCached>
+  template <size_t CacheOffset, size_t CacheSize, math::Vector<bool, CacheSize> IsCached>
   KOKKOS_INLINE_FUNCTION static constexpr auto update_is_cached() {
     // Propagate the flags from our left and right expressions
-    constexpr auto updated_flags_left = LeftMathExpr::template update_is_cached<CacheOffset, IsCached>();
+    constexpr auto updated_flags_left = LeftMathExpr::template update_is_cached<CacheOffset, CacheSize, IsCached>();
     constexpr auto updated_flags =
         RightMathExpr::template update_is_cached<CacheOffset + LeftMathExpr::num_cached_types, updated_flags_left>();
     return updated_flags;
@@ -1082,18 +1233,25 @@ class SubEqualsExpr : public MathExprBase<SubEqualsExpr<LeftMathExpr, RightMathE
   SubEqualsExpr(LeftMathExpr left, RightMathExpr right) : left_(left), right_(right) {
   }
 
-  template <size_t CacheOffset, math::Vector<bool, our_cache_t::size()> IsCached, typename CacheType>
-  KOKKOS_INLINE_FUNCTION void eval(const Kokkos::Array<stk::mesh::FastMeshIndex, num_entities> &fmis, CacheType &cache,
-                                   const NgpContext &context) const {
-    left_.template eval<CacheOffset, IsCached>(fmis, cache, context) -= right_.template eval<CacheOffset, IsCached>(fmis, cache, context);
+  KOKKOS_INLINE_FUNCTION
+  SubEqualsExpr(MathExprBase<LeftMathExpr> left, MathExprBase<RightMathExpr> right)
+      : left_(left.self()), right_(right.self()) {
   }
 
-  template <size_t CacheOffset, math::Vector<bool, our_cache_t::size()> IsCached, typename CacheType>
+  template <size_t CacheOffset, size_t CacheSize, math::Vector<bool, CacheSize> IsCached, typename CacheType>
+  KOKKOS_INLINE_FUNCTION void eval(const Kokkos::Array<stk::mesh::FastMeshIndex, num_entities> &fmis, CacheType &cache,
+                                   const NgpContext &context) const {
+    left_.template eval<CacheOffset, CacheSize, IsCached>(fmis, cache, context) -=
+        right_.template eval<CacheOffset, CacheSize, IsCached>(fmis, cache, context);
+  }
+
+  template <size_t CacheOffset, size_t CacheSize, math::Vector<bool, CacheSize> IsCached, typename CacheType>
   KOKKOS_INLINE_FUNCTION void eval(const stk::mesh::FastMeshIndex &fmi, CacheType &cache,
                                    const NgpContext &context) const
     requires(num_entities == 1)
   {
-    left_.template eval<CacheOffset, IsCached>(fmi, cache, context) -= right_.template eval<CacheOffset, IsCached>(fmi, cache, context);
+    left_.template eval<CacheOffset, CacheSize, IsCached>(fmi, cache, context) -=
+        right_.template eval<CacheOffset, CacheSize, IsCached>(fmi, cache, context);
   }
 
   KOKKOS_INLINE_FUNCTION
@@ -1106,10 +1264,10 @@ class SubEqualsExpr : public MathExprBase<SubEqualsExpr<LeftMathExpr, RightMathE
     return math::Vector<bool, our_cache_t::size()>{false};
   }
 
-  template <size_t CacheOffset, math::Vector<bool, our_cache_t::size()> IsCached>
+  template <size_t CacheOffset, size_t CacheSize, math::Vector<bool, CacheSize> IsCached>
   KOKKOS_INLINE_FUNCTION static constexpr auto update_is_cached() {
     // Propagate the flags from our left and right expressions
-    constexpr auto updated_flags_left = LeftMathExpr::template update_is_cached<CacheOffset, IsCached>();
+    constexpr auto updated_flags_left = LeftMathExpr::template update_is_cached<CacheOffset, CacheSize, IsCached>();
     constexpr auto updated_flags =
         RightMathExpr::template update_is_cached<CacheOffset + LeftMathExpr::num_cached_types, updated_flags_left>();
     return updated_flags;
@@ -1154,18 +1312,25 @@ class MulEqualsExpr : public MathExprBase<MulEqualsExpr<LeftMathExpr, RightMathE
   MulEqualsExpr(LeftMathExpr left, RightMathExpr right) : left_(left), right_(right) {
   }
 
-  template <size_t CacheOffset, math::Vector<bool, our_cache_t::size()> IsCached, typename CacheType>
-  KOKKOS_INLINE_FUNCTION void eval(const Kokkos::Array<stk::mesh::FastMeshIndex, num_entities> &fmis, CacheType &cache,
-                                   const NgpContext &context) const {
-    left_.template eval<CacheOffset, IsCached>(fmis, cache, context) *= right_.template eval<CacheOffset, IsCached>(fmis, cache, context);
+  KOKKOS_INLINE_FUNCTION
+  MulEqualsExpr(MathExprBase<LeftMathExpr> left, MathExprBase<RightMathExpr> right)
+      : left_(left.self()), right_(right.self()) {
   }
 
-  template <size_t CacheOffset, math::Vector<bool, our_cache_t::size()> IsCached, typename CacheType>
+  template <size_t CacheOffset, size_t CacheSize, math::Vector<bool, CacheSize> IsCached, typename CacheType>
+  KOKKOS_INLINE_FUNCTION void eval(const Kokkos::Array<stk::mesh::FastMeshIndex, num_entities> &fmis, CacheType &cache,
+                                   const NgpContext &context) const {
+    left_.template eval<CacheOffset, CacheSize, IsCached>(fmis, cache, context) *=
+        right_.template eval<CacheOffset, CacheSize, IsCached>(fmis, cache, context);
+  }
+
+  template <size_t CacheOffset, size_t CacheSize, math::Vector<bool, CacheSize> IsCached, typename CacheType>
   KOKKOS_INLINE_FUNCTION void eval(const stk::mesh::FastMeshIndex &fmi, CacheType &cache,
                                    const NgpContext &context) const
     requires(num_entities == 1)
   {
-    left_.template eval<CacheOffset, IsCached>(fmi, cache, context) *= right_.template eval<CacheOffset, IsCached>(fmi, cache, context);
+    left_.template eval<CacheOffset, CacheSize, IsCached>(fmi, cache, context) *=
+        right_.template eval<CacheOffset, CacheSize, IsCached>(fmi, cache, context);
   }
 
   KOKKOS_INLINE_FUNCTION
@@ -1178,10 +1343,10 @@ class MulEqualsExpr : public MathExprBase<MulEqualsExpr<LeftMathExpr, RightMathE
     return math::Vector<bool, our_cache_t::size()>{false};
   }
 
-  template <size_t CacheOffset, math::Vector<bool, our_cache_t::size()> IsCached>
+  template <size_t CacheOffset, size_t CacheSize, math::Vector<bool, CacheSize> IsCached>
   KOKKOS_INLINE_FUNCTION static constexpr auto update_is_cached() {
     // Propagate the flags from our left and right expressions
-    constexpr auto updated_flags_left = LeftMathExpr::template update_is_cached<CacheOffset, IsCached>();
+    constexpr auto updated_flags_left = LeftMathExpr::template update_is_cached<CacheOffset, CacheSize, IsCached>();
     constexpr auto updated_flags =
         RightMathExpr::template update_is_cached<CacheOffset + LeftMathExpr::num_cached_types, updated_flags_left>();
     return updated_flags;
@@ -1226,18 +1391,25 @@ class DivEqualsExpr : public MathExprBase<DivEqualsExpr<LeftMathExpr, RightMathE
   DivEqualsExpr(LeftMathExpr left, RightMathExpr right) : left_(left), right_(right) {
   }
 
-  template <size_t CacheOffset, math::Vector<bool, our_cache_t::size()> IsCached, typename CacheType>
-  KOKKOS_INLINE_FUNCTION void eval(const Kokkos::Array<stk::mesh::FastMeshIndex, num_entities> &fmis, CacheType &cache,
-                                   const NgpContext &context) const {
-    left_.template eval<CacheOffset, IsCached>(fmis, cache, context) /= right_.template eval<CacheOffset, IsCached>(fmis, cache, context);
+  KOKKOS_INLINE_FUNCTION
+  DivEqualsExpr(MathExprBase<LeftMathExpr> left, MathExprBase<RightMathExpr> right)
+      : left_(left.self()), right_(right.self()) {
   }
 
-  template <size_t CacheOffset, math::Vector<bool, our_cache_t::size()> IsCached, typename CacheType>
+  template <size_t CacheOffset, size_t CacheSize, math::Vector<bool, CacheSize> IsCached, typename CacheType>
+  KOKKOS_INLINE_FUNCTION void eval(const Kokkos::Array<stk::mesh::FastMeshIndex, num_entities> &fmis, CacheType &cache,
+                                   const NgpContext &context) const {
+    left_.template eval<CacheOffset, CacheSize, IsCached>(fmis, cache, context) /=
+        right_.template eval<CacheOffset, CacheSize, IsCached>(fmis, cache, context);
+  }
+
+  template <size_t CacheOffset, size_t CacheSize, math::Vector<bool, CacheSize> IsCached, typename CacheType>
   KOKKOS_INLINE_FUNCTION void eval(const stk::mesh::FastMeshIndex &fmi, CacheType &cache,
                                    const NgpContext &context) const
     requires(num_entities == 1)
   {
-    left_.template eval<CacheOffset, IsCached>(fmi, cache, context) /= right_.template eval<CacheOffset, IsCached>(fmi, cache, context);
+    left_.template eval<CacheOffset, CacheSize, IsCached>(fmi, cache, context) /=
+        right_.template eval<CacheOffset, CacheSize, IsCached>(fmi, cache, context);
   }
 
   KOKKOS_INLINE_FUNCTION
@@ -1250,10 +1422,10 @@ class DivEqualsExpr : public MathExprBase<DivEqualsExpr<LeftMathExpr, RightMathE
     return math::Vector<bool, our_cache_t::size()>{false};
   }
 
-  template <size_t CacheOffset, math::Vector<bool, our_cache_t::size()> IsCached>
+  template <size_t CacheOffset, size_t CacheSize, math::Vector<bool, CacheSize> IsCached>
   KOKKOS_INLINE_FUNCTION static constexpr auto update_is_cached() {
     // Propagate the flags from our left and right expressions
-    constexpr auto updated_flags_left = LeftMathExpr::template update_is_cached<CacheOffset, IsCached>();
+    constexpr auto updated_flags_left = LeftMathExpr::template update_is_cached<CacheOffset, CacheSize, IsCached>();
     constexpr auto updated_flags =
         RightMathExpr::template update_is_cached<CacheOffset + LeftMathExpr::num_cached_types, updated_flags_left>();
     return updated_flags;
@@ -1295,23 +1467,30 @@ class AccessorExpr : public MathExprBase<AccessorExpr<AccessorT, PrevEntityExpr>
   static constexpr size_t num_entities = PrevEntityExpr::num_entities;
 
   KOKKOS_INLINE_FUNCTION
-  AccessorExpr(AccessorT accessor, const EntityExprBase<PrevEntityExpr> &prev_entity_expr)
+  AccessorExpr(AccessorT accessor, const PrevEntityExpr &prev_entity_expr)
       : accessor_(accessor), prev_entity_expr_(prev_entity_expr) {
   }
 
-  template <size_t CacheOffset, math::Vector<bool, our_cache_t::size()> IsCached, typename CacheType>
+  KOKKOS_INLINE_FUNCTION
+  AccessorExpr(AccessorT accessor, const EntityExprBase<PrevEntityExpr> &prev_entity_expr_base)
+      : accessor_(accessor), prev_entity_expr_(prev_entity_expr_base.self()) {
+  }
+
+  template <size_t CacheOffset, size_t CacheSize, math::Vector<bool, CacheSize> IsCached, typename CacheType>
   KOKKOS_INLINE_FUNCTION auto eval(const Kokkos::Array<stk::mesh::FastMeshIndex, num_entities> &fmis, CacheType &cache,
                                    const NgpContext &context) const {
-    stk::mesh::FastMeshIndex entity_index = prev_entity_expr_.template eval<CacheOffset, IsCached>(fmis, cache, context);
+    stk::mesh::FastMeshIndex entity_index =
+        prev_entity_expr_.template eval<CacheOffset, CacheSize, IsCached>(fmis, cache, context);
     return accessor_(entity_index);
   }
 
-  template <size_t CacheOffset, math::Vector<bool, our_cache_t::size()> IsCached, typename CacheType>
+  template <size_t CacheOffset, size_t CacheSize, math::Vector<bool, CacheSize> IsCached, typename CacheType>
   KOKKOS_INLINE_FUNCTION auto eval(const stk::mesh::FastMeshIndex &fmi, CacheType &cache,
                                    const NgpContext &context) const
     requires(num_entities == 1)
   {
-    stk::mesh::FastMeshIndex entity_index = prev_entity_expr_.template eval<CacheOffset, IsCached>(fmi, cache, context);
+    stk::mesh::FastMeshIndex entity_index =
+        prev_entity_expr_.template eval<CacheOffset, CacheSize, IsCached>(fmi, cache, context);
     return accessor_(entity_index);
   }
 
@@ -1325,10 +1504,10 @@ class AccessorExpr : public MathExprBase<AccessorExpr<AccessorT, PrevEntityExpr>
     return math::Vector<bool, our_cache_t::size()>{false};
   }
 
-  template <size_t CacheOffset, math::Vector<bool, our_cache_t::size()> IsCached>
+  template <size_t CacheOffset, size_t CacheSize, math::Vector<bool, CacheSize> IsCached>
   KOKKOS_INLINE_FUNCTION static constexpr auto update_is_cached() {
     // We don't add any cache entries, so just propagate the flags from our previous expression
-    return PrevEntityExpr::template update_is_cached<CacheOffset, IsCached>();
+    return PrevEntityExpr::template update_is_cached<CacheOffset, CacheSize, IsCached>();
   }
 
   void flag_read_only(const NgpContext & /*context*/) {
@@ -1357,9 +1536,6 @@ template <typename DerivedMathExpr>
 class MathExprBase {
  public:
   using our_t = MathExprBase<DerivedMathExpr>;
-  using our_cache_t = typename DerivedMathExpr::our_cache_t;
-  static constexpr size_t num_cached_types = our_cache_t::size();
-  static constexpr size_t num_entities = DerivedMathExpr::num_entities;
 
   KOKKOS_DEFAULTED_FUNCTION
   constexpr MathExprBase() = default;
@@ -1369,21 +1545,21 @@ class MathExprBase {
     return static_cast<const DerivedMathExpr &>(*this);
   }
 
-  template <size_t CacheOffset, math::Vector<bool, our_cache_t::size()> IsCached, typename CacheType, class Ctx>
-  KOKKOS_INLINE_FUNCTION auto eval(const Kokkos::Array<stk::mesh::FastMeshIndex, num_entities> &fmis, CacheType &cache,
+  template <size_t CacheOffset, size_t CacheSize, math::Vector<bool, CacheSize> IsCached,  //
+            size_t NumEntities, typename CacheType, class Ctx>
+  KOKKOS_INLINE_FUNCTION auto eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities> &fmis, CacheType &cache,
                                    const Ctx &context) const {
-    return self().template eval<CacheOffset, IsCached>(fmis, cache, context);
+    return self().template eval<CacheOffset, CacheSize, IsCached>(fmis, cache, context);
   }
 
-  template <size_t CacheOffset, math::Vector<bool, our_cache_t::size()> IsCached, typename CacheType, class Ctx>
-  KOKKOS_INLINE_FUNCTION auto eval(const stk::mesh::FastMeshIndex &fmi, CacheType &cache, const Ctx &context) const
-    requires(num_entities == 1)
-  {
-    return self().template eval<CacheOffset, IsCached>(fmi, cache, context);
+  template <size_t CacheOffset, size_t CacheSize, math::Vector<bool, CacheSize> IsCached,  //
+            typename CacheType, class Ctx>
+  KOKKOS_INLINE_FUNCTION auto eval(const stk::mesh::FastMeshIndex &fmi, CacheType &cache, const Ctx &context) const {
+    return self().template eval<CacheOffset, CacheSize, IsCached>(fmi, cache, context);
   }
 
   KOKKOS_INLINE_FUNCTION
-  static our_cache_t init_cache() {
+  static auto init_cache() {
     return DerivedMathExpr::init_cache();
   }
 
@@ -1392,9 +1568,9 @@ class MathExprBase {
     return DerivedMathExpr::init_is_cached();
   }
 
-  template <size_t CacheOffset, math::Vector<bool, our_cache_t::size()> IsCached>
+  template <size_t CacheOffset, size_t CacheSize, math::Vector<bool, CacheSize> IsCached>
   KOKKOS_INLINE_FUNCTION static constexpr auto update_is_cached() {
-    return DerivedMathExpr::template update_is_cached<CacheOffset, IsCached>();
+    return DerivedMathExpr::template update_is_cached<CacheOffset, CacheSize, IsCached>();
   }
 
   template <class Ctx>
@@ -1419,57 +1595,57 @@ class MathExprBase {
 
   template <typename OtherExpr>
   auto operator+(const MathExprBase<OtherExpr> &other) const {
-    return AddExpr<MathExprBase<DerivedMathExpr>, MathExprBase<OtherExpr>>(*this, other);
+    return AddExpr<DerivedMathExpr, OtherExpr>(*this, other);
   }
 
   template <typename OtherExpr>
   auto operator-(const MathExprBase<OtherExpr> &other) const {
-    return SubExpr<MathExprBase<DerivedMathExpr>, MathExprBase<OtherExpr>>(*this, other);
+    return SubExpr<DerivedMathExpr, OtherExpr>(*this, other);
   }
 
   template <typename OtherExpr>
   auto operator*(const MathExprBase<OtherExpr> &other) const {
-    return MulExpr<MathExprBase<DerivedMathExpr>, MathExprBase<OtherExpr>>(*this, other);
+    return MulExpr<DerivedMathExpr, OtherExpr>(*this, other);
   }
 
   template <typename OtherExpr>
   auto operator/(const MathExprBase<OtherExpr> &other) const {
-    return DivExpr<MathExprBase<DerivedMathExpr>, MathExprBase<OtherExpr>>(*this, other);
+    return DivExpr<DerivedMathExpr, OtherExpr>(*this, other);
   }
 
   template <typename OtherExpr>
   auto operator=(const MathExprBase<OtherExpr> &other) {
-    auto expr = AssignExpr<MathExprBase<DerivedMathExpr>, MathExprBase<OtherExpr>>(*this, other);
+    auto expr = AssignExpr<DerivedMathExpr, OtherExpr>(*this, other);
     for_each_entity_evaluate_expr(expr);
   }
 
   template <typename OtherExpr>
   auto operator=(const EntityExprBase<OtherExpr> &other) {
-    auto expr = AssignExpr<MathExprBase<DerivedMathExpr>, EntityExprBase<OtherExpr>>(*this, other);
+    auto expr = AssignExpr<DerivedMathExpr, OtherExpr>(*this, other);
     for_each_entity_evaluate_expr(expr);
   }
 
   template <typename OtherExpr>
   void operator+=(const MathExprBase<OtherExpr> &other) {
-    auto expr = AddExpr<MathExprBase<DerivedMathExpr>, MathExprBase<OtherExpr>>(*this, other);
+    auto expr = AddExpr<DerivedMathExpr, OtherExpr>(*this, other);
     for_each_entity_evaluate_expr(expr);
   }
 
   template <typename OtherExpr>
   void operator-=(const MathExprBase<OtherExpr> &other) {
-    auto expr = SubExpr<MathExprBase<DerivedMathExpr>, MathExprBase<OtherExpr>>(*this, other);
+    auto expr = SubExpr<DerivedMathExpr, OtherExpr>(*this, other);
     for_each_entity_evaluate_expr(expr);
   }
 
   template <typename OtherExpr>
   void operator*=(const MathExprBase<OtherExpr> &other) {
-    auto expr = MulExpr<MathExprBase<DerivedMathExpr>, MathExprBase<OtherExpr>>(*this, other);
+    auto expr = MulExpr<DerivedMathExpr, OtherExpr>(*this, other);
     for_each_entity_evaluate_expr(expr);
   }
 
   template <typename OtherExpr>
   void operator/=(const MathExprBase<OtherExpr> &other) {
-    auto expr = DivExpr<MathExprBase<DerivedMathExpr>, MathExprBase<OtherExpr>>(*this, other);
+    auto expr = DivExpr<DerivedMathExpr, OtherExpr>(*this, other);
     for_each_entity_evaluate_expr(expr);
   }
 };
@@ -1489,7 +1665,7 @@ class ReuseEntityExpr : public EntityExprBase<ReuseEntityExpr<PrevEntityExpr>> {
       : prev_entity_expr_(prev_entity_expr), evaluated_(false), stored_value_() {
   }
 
-  template <size_t CacheOffset, math::Vector<bool, PrevEntityExpr::num_cached_types + 1> IsCached, typename CacheType>
+  template <size_t CacheOffset, size_t CacheSize, math::Vector<bool, CacheSize> IsCached, typename CacheType>
   KOKKOS_INLINE_FUNCTION stk::mesh::FastMeshIndex eval(
       const Kokkos::Array<stk::mesh::FastMeshIndex, num_entities> &fmis, CacheType &cache,
       const NgpContext &context) const {
@@ -1497,13 +1673,13 @@ class ReuseEntityExpr : public EntityExprBase<ReuseEntityExpr<PrevEntityExpr>> {
     if constexpr (IsCached[our_cache_offset]) {
       return get<our_cache_offset>(cache);
     } else {
-      auto val = prev_entity_expr_.template eval<CacheOffset, IsCached>(fmis, cache, context);
+      auto val = prev_entity_expr_.template eval<CacheOffset, CacheSize, IsCached>(fmis, cache, context);
       get<CacheOffset>(cache) = val;
       return val;
     }
   }
 
-  template <size_t CacheOffset, math::Vector<bool, PrevEntityExpr::num_cached_types + 1> IsCached, typename CacheType>
+  template <size_t CacheOffset, size_t CacheSize, math::Vector<bool, CacheSize> IsCached, typename CacheType>
   KOKKOS_INLINE_FUNCTION stk::mesh::FastMeshIndex eval(const stk::mesh::FastMeshIndex &fmi, CacheType &cache,
                                                        const NgpContext &context) const
     requires(num_entities == 1)
@@ -1512,7 +1688,7 @@ class ReuseEntityExpr : public EntityExprBase<ReuseEntityExpr<PrevEntityExpr>> {
     if constexpr (IsCached[our_cache_offset]) {
       return get<our_cache_offset>(cache);
     } else {
-      auto val = prev_entity_expr_.template eval<CacheOffset, IsCached>(fmi, cache, context);
+      auto val = prev_entity_expr_.template eval<CacheOffset, CacheSize, IsCached>(fmi, cache, context);
       get<CacheOffset>(cache) = val;
       return val;
     }
@@ -1532,10 +1708,10 @@ class ReuseEntityExpr : public EntityExprBase<ReuseEntityExpr<PrevEntityExpr>> {
     return math::Vector<bool, our_cache_t::size()>{false};
   }
 
-  template <size_t CacheOffset, math::Vector<bool, our_cache_t::size()> IsCached>
+  template <size_t CacheOffset, size_t CacheSize, math::Vector<bool, CacheSize> IsCached>
   KOKKOS_INLINE_FUNCTION static constexpr auto update_is_cached() {
     // Our cached object comes after that of our sub-expression
-    auto updated_flags = PrevEntityExpr::template update_is_cached<CacheOffset, IsCached>();
+    auto updated_flags = PrevEntityExpr::template update_is_cached<CacheOffset, CacheSize, IsCached>();
     updated_flags[CacheOffset + PrevEntityExpr::num_cached_types] = true;
     return updated_flags;
   }
@@ -1560,7 +1736,7 @@ class ReuseMathExpr : public MathExprBase<ReuseMathExpr<PrevMathExpr>> {
   ReuseMathExpr(PrevMathExpr prev_math_expr) : prev_math_expr_(prev_math_expr), evaluated_(false), stored_value_() {
   }
 
-  template <size_t CacheOffset, math::Vector<bool, PrevMathExpr::num_cached_types + 1> IsCached, typename CacheType>
+  template <size_t CacheOffset, size_t CacheSize, math::Vector<bool, CacheSize> IsCached, typename CacheType>
   KOKKOS_INLINE_FUNCTION auto eval(const Kokkos::Array<stk::mesh::FastMeshIndex, num_entities> &fmis, CacheType &cache,
                                    const NgpContext &context) const {
     // The cache offset is for us and all of our sub-expressions. Our cached object is the last one in that range.
@@ -1572,13 +1748,13 @@ class ReuseMathExpr : public MathExprBase<ReuseMathExpr<PrevMathExpr>> {
     if constexpr (IsCached[our_cache_offset]) {
       return get<our_cache_offset>(cache);
     } else {
-      auto val = prev_math_expr_.template eval<CacheOffset, IsCached>(fmis, cache, context);
+      auto val = prev_math_expr_.template eval<CacheOffset, CacheSize, IsCached>(fmis, cache, context);
       get<CacheOffset>(cache) = val;
       return val;
     }
   }
 
-  template <size_t CacheOffset, math::Vector<bool, PrevMathExpr::num_cached_types + 1> IsCached, typename CacheType>
+  template <size_t CacheOffset, size_t CacheSize, math::Vector<bool, CacheSize> IsCached, typename CacheType>
   KOKKOS_INLINE_FUNCTION auto eval(const stk::mesh::FastMeshIndex &fmi, CacheType &cache,
                                    const NgpContext &context) const
     requires(num_entities == 1)
@@ -1587,7 +1763,7 @@ class ReuseMathExpr : public MathExprBase<ReuseMathExpr<PrevMathExpr>> {
     if constexpr (IsCached[our_cache_offset]) {
       return get<our_cache_offset>(cache);
     } else {
-      auto val = prev_math_expr_.template eval<CacheOffset, IsCached>(fmi, cache, context);
+      auto val = prev_math_expr_.template eval<CacheOffset, CacheSize, IsCached>(fmi, cache, context);
       get<CacheOffset>(cache) = val;
       return val;
     }
@@ -1608,10 +1784,10 @@ class ReuseMathExpr : public MathExprBase<ReuseMathExpr<PrevMathExpr>> {
     return math::Vector<bool, our_cache_t::size()>{false};
   }
 
-  template <size_t CacheOffset, math::Vector<bool, our_cache_t::size()> IsCached>
+  template <size_t CacheOffset, size_t CacheSize, math::Vector<bool, CacheSize> IsCached>
   KOKKOS_INLINE_FUNCTION static constexpr auto update_is_cached() {
     // Propagate the flags from our left and right expressions
-    auto updated_flags = PrevMathExpr::template update_is_cached<CacheOffset, IsCached>();
+    auto updated_flags = PrevMathExpr::template update_is_cached<CacheOffset, CacheSize, IsCached>();
     updated_flags[CacheOffset + PrevMathExpr::num_cached_types] = true;
     return updated_flags;
   }
