@@ -431,7 +431,7 @@ TEST_F(UnitTestAccessorExprFixture, Construction) {
   auto ngp_mesh = get_updated_ngp_mesh(get_bulk());
   auto eblock1 = make_entity_expr(ngp_mesh, block1_selector_, stk::topology::NODE_RANK);
 
-  ngp_x_accessor(eblock1) *= ngp_y_accessor(eblock1);
+  ngp_x_accessor(eblock1) += ngp_y_accessor(eblock1);
 }
 
 
