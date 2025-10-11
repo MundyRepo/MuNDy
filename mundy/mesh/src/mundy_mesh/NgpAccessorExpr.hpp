@@ -54,7 +54,7 @@ To allow fields/components to be used as though they were their underlying type 
 
 For example, let vec*, mat*, quat* be accessors of the appropriate type. Then the following will create and evaluate
 an inlined expression list:
-  CTimeEntityExpr all_rods(rod_selector, rank);
+  EntityExpr all_rods(rod_selector, rank);
   ConnectedEntitiesExpr rod_nodes = all_rods.get_connectivity(NODE_RANK);
   auto vec3_1 = avec3_1(rod_nodes[0]) + avec3_2(rod_nodes[1]);
   auto vec3_2 = avec3_2(all_rods);
@@ -182,7 +182,7 @@ auto expr.init_cache() {
 }
 
 for_each_entity_eval_expr(Expr expr) {
-  static_assert(CTimeEntityExpr::num_entities == 1,
+  static_assert(EntityExpr::num_entities == 1,
                 "for_each_entity_evaluate_expr only works with single-entity expressions");
   stk::mesh::EntityRank rank = expr.rank();
   stk::mesh::Selector selector = expr.selector();
@@ -202,18 +202,18 @@ for_each_entity_eval_expr(Expr expr) {
       });
 }
 
-// A comment on make_entity_expr. The entire tree must use one and only one CTimeEntityExpr. It can be reused
+// A comment on make_entity_expr. The entire tree must use one and only one EntityExpr. It can be reused
 throughout the tree but there can only be one. It is what decides how to perform the for_each_entity_run.
 
 // A step back. Part of the reason for this is to allow access to the rank of all involved entities, their selector,
-and the mesh. We used the execution context to pass the mesh through the evals but also sadly had CTimeEntityExpr return
+and the mesh. We used the execution context to pass the mesh through the evals but also sadly had EntityExpr return
 ngp mesh, making this separation of concerns invalid.
 
 // The problem here is that all expressions need to access the same execution context within which we have the
 // mesh, ranks, and selectors. Technically, the execution context of the ngp mesh could be separated from the selectors
 // and ranks. If this is the case, then we still have an execution context that must be passed through all evals but
 // we also have an additional ~thing~ that the entire expression must agree on. This ~thing~ is what we are calling
-// the CTimeEntityExpr, which is a poor name since it is closer to the EntityContext. This is as apposed to the
+// the EntityExpr, which is a poor name since it is closer to the EntityContext. This is as apposed to the
 ExecutionContext.
 // But like, just loop that all together into Context and be done with it. We can still type specialize the evals on
 // a template of the class, so there's no loss of functionality.
@@ -244,7 +244,7 @@ the host.
 // }
 //
 // void euler_update_rods_expr() {
-//   CTimeEntityExpr rods(rod_selector, rank);
+//   EntityExpr rods(rod_selector, rank);
 //   ConnectedEntitiesExpr nodes = rods.get_connectivity(NODE_RANK);
 //   auto center = rod_agg.get<CENTER>(nodes[0]);
 //   auto quat = rod_agg.get<QUAT>(nodes[0]);
@@ -270,7 +270,7 @@ the host.
 // }
 //
 // void max_speed_expr() {
-//   CTimeEntityExpr all_rods(rod_selector, rank);
+//   EntityExpr all_rods(rod_selector, rank);
 //   double max_speed = reduce_max(norm(avelocity(all_rods)));
 // }
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -512,15 +512,15 @@ class ConnectedEntitiesExpr : public EntityExprBase<ConnectedEntitiesExpr<PrevEn
 };
 
 template <size_t NumEntities, size_t Ord, typename DriverType>
-class CTimeEntityExpr : public EntityExprBase<CTimeEntityExpr<NumEntities, Ord, DriverType>> {
+class EntityExpr : public EntityExprBase<EntityExpr<NumEntities, Ord, DriverType>> {
  public:
-  using our_t = CTimeEntityExpr<NumEntities, Ord, DriverType>;
+  using our_t = EntityExpr<NumEntities, Ord, DriverType>;
   using our_cache_t = core::tuple<>;
   static constexpr size_t num_cached_types = our_cache_t::size();
   static constexpr size_t num_entities = NumEntities;
 
   KOKKOS_INLINE_FUNCTION
-  CTimeEntityExpr(const stk::mesh::EntityRank &rank, const DriverType *driver) : rank_(rank), driver_(driver) {
+  EntityExpr(const stk::mesh::EntityRank &rank, const DriverType *driver) : rank_(rank), driver_(driver) {
   }
 
   /// \brief The rank of the entity we return
@@ -532,7 +532,7 @@ class CTimeEntityExpr : public EntityExprBase<CTimeEntityExpr<NumEntities, Ord, 
   template <size_t CacheOffset, size_t CacheSize, math::Vector<bool, CacheSize> IsCached, typename CacheType>
   KOKKOS_INLINE_FUNCTION stk::mesh::FastMeshIndex eval(const Kokkos::Array<stk::mesh::FastMeshIndex, num_entities> fmis,
                                                        CacheType &cache, const NgpEvalContext & /*context*/) const {
-    static_assert(Ord < NumEntities, "CTimeEntityExpr ordinal must be less than NumEntities");
+    static_assert(Ord < NumEntities, "EntityExpr ordinal must be less than NumEntities");
     return fmis[ordinal_];
   }
 
@@ -541,7 +541,7 @@ class CTimeEntityExpr : public EntityExprBase<CTimeEntityExpr<NumEntities, Ord, 
                                                        const NgpEvalContext & /*context*/) const
     requires(num_entities == 1)
   {
-    static_assert(Ord == 0, "CTimeEntityExpr with a single entity must have Ord == 0");
+    static_assert(Ord == 0, "EntityExpr with a single entity must have Ord == 0");
     return fmi;
   }
 
@@ -598,97 +598,10 @@ class CTimeEntityExpr : public EntityExprBase<CTimeEntityExpr<NumEntities, Ord, 
 
 auto make_entity_expr(const stk::mesh::NgpMesh &ngp_mesh, const stk::mesh::Selector &selector,
                       const stk::mesh::EntityRank &rank) {
-  // Create a single driver and pass it to the CTimeEntityExpr
+  // Create a single driver and pass it to the EntityExpr
   static NgpForEachEntityExprDriver driver(ngp_mesh, selector, rank);
-  return CTimeEntityExpr<1, 0, NgpForEachEntityExprDriver>(rank, &driver);
+  return EntityExpr<1, 0, NgpForEachEntityExprDriver>(rank, &driver);
 }
-
-template <size_t NumEntities, typename DriverType>
-class RTimeEntityExpr : public EntityExprBase<RTimeEntityExpr<NumEntities, DriverType>> {
- public:
-  using our_t = RTimeEntityExpr<NumEntities, DriverType>;
-  using our_cache_t = core::tuple<>;
-  static constexpr size_t num_cached_types = our_cache_t::size();
-  static constexpr size_t num_entities = NumEntities;
-
-  KOKKOS_INLINE_FUNCTION
-  RTimeEntityExpr(const stk::mesh::EntityRank &rank, size_t ordinal, const DriverType *driver)
-      : rank_(rank), ordinal_(ordinal), driver_(driver) {
-  }
-
-  KOKKOS_INLINE_FUNCTION
-  stk::mesh::EntityRank rank() const {
-    return rank_;
-  }
-
-  template <size_t CacheOffset, size_t CacheSize, math::Vector<bool, CacheSize> IsCached, typename CacheType>
-  KOKKOS_INLINE_FUNCTION stk::mesh::FastMeshIndex eval(
-      const Kokkos::Array<stk::mesh::FastMeshIndex, num_entities> &fmis, CacheType &cache,
-      const NgpEvalContext & /*context*/) const {
-    MUNDY_THROW_ASSERT(ordinal_ < NumEntities, std::out_of_range,
-                       "RTimeEntityExpr ordinal must be less than NumEntities");
-    return fmis[ordinal_];
-  }
-
-  template <size_t CacheOffset, size_t CacheSize, math::Vector<bool, CacheSize> IsCached, typename CacheType>
-  KOKKOS_INLINE_FUNCTION stk::mesh::FastMeshIndex eval(const stk::mesh::FastMeshIndex &fmi, CacheType &cache,
-                                                       const NgpEvalContext & /*context*/) const
-    requires(num_entities == 1)
-  {
-    MUNDY_THROW_ASSERT(ordinal_ == 0, std::out_of_range, "RTimeEntityExpr with a single entity must have Ord == 0");
-    return fmi;
-  }
-
-  KOKKOS_INLINE_FUNCTION
-  static our_cache_t init_cache() {
-    return our_cache_t{};
-  }
-
-  KOKKOS_INLINE_FUNCTION
-  static constexpr auto init_is_cached() {
-    return math::Vector<bool, our_cache_t::size()>{false};
-  }
-
-  template <size_t CacheOffset, size_t CacheSize, math::Vector<bool, CacheSize> IsCached>
-  KOKKOS_INLINE_FUNCTION static constexpr auto update_is_cached() {
-    // Nothing changes. We neither add anything to the cache nor have any sub-expressions.
-    return IsCached;
-  }
-
-  KOKKOS_INLINE_FUNCTION
-  auto get_connectivity(stk::mesh::EntityRank conn_rank) const {
-    return ConnectedEntitiesExpr<our_t>(*this, conn_rank);
-  }
-
-  void propagate_synchronize(const NgpEvalContext & /*context*/) {
-    // Leaf node, nothing to do here.
-  }
-
-  void flag_read_only(const NgpEvalContext & /*context*/) {
-    // Our return type is naturally read-only. Nothing to do here.
-  }
-
-  void flag_read_write(const NgpEvalContext & /*context*/) {
-    std::cout
-        << "Warning: Attempting to write to the return type of an entity expression, which returns a temporary value."
-        << std::endl;
-  }
-
-  void flag_overwrite_all(const NgpEvalContext & /*context*/) {
-    std::cout
-        << "Warning: Attempting to write to the return type of an entity expression, which returns a temporary value."
-        << std::endl;
-  }
-
-  const auto driver() const {
-    return driver_;
-  }
-
- private:
-  stk::mesh::EntityRank rank_;
-  size_t ordinal_;
-  const DriverType *driver_;
-};
 //@}
 
 //! \name Views of mathematical expressions
@@ -1849,6 +1762,39 @@ template <typename PrevEntityExpr>
 ReuseEntityExpr<PrevEntityExpr> reuse(EntityExprBase<PrevEntityExpr> expr) {
   return ReuseEntityExpr<PrevEntityExpr>(expr);
 }
+
+/// \brief Perform a fused assignment operation
+/// fused_assign(
+//       trg_expr1 = src_expr1,
+///      trg_expr2 = src_expr2,
+///               ...
+///      trg_exprN = src_exprN);
+template <typename... TrgSrcExprPairs>
+void fused_assign(const AssignExpr<TrgSrcExprPairs...> &...exprs) {
+  constexpr size_t num_trg_src_pairs = sizeof...(TrgSrcExprPairs);
+  static_assert(num_trg_src_pairs % 2 == 0,
+                "The number of target/source expression pairs in fused_assign must be even.");
+  FusedAssignExpr<TrgSrcExprPairs...> fused_expr(exprs...);
+}
+
+/*
+I have some problems without cache system that I want to discuss and fledge out here.
+First and foremost, if a math expression concatenates the cache of the left and the right, then there
+can be no reuse between the two. If, instead, it uses the cache of the left and passes it to the right, then
+there is no possibility for the right operation to add objects to the cache that the left isn't aware of.
+
+Something important to consider here is that our design is carefully setup to ensure that identical sub-expressions in
+the tree will always return the same result given the same input. That is, if you can identify a subset of the tree
+(from a given node all the way to its leaves) that matches another subset, then they are compatible with reuse. Because
+our reuse is based on "if constexpr" they have zero overhead and do not introduce branching. As such, it seems like your
+tag system can be done using the collective type of the sub-expressions. So, we basically want our expression system to
+use a tagged bag (aka Aggregate). To then decide what to cache, we need to perform something similar to update_is_cached
+but instead of setting equal to true, we count the total number of occurrences of each tag in the bag. Then, whenever 
+ANYTHING in the tree is evaluated, we conditionally cache the result if the number of occurrences of that tag is > 1. This
+way, the user never marks anything as reused, but rather the system automatically determines what to cache. The fact that
+we are using "if constexpr" means that there is no runtime overhead to this approach.
+*/
+
 //@}
 
 }  // namespace mesh

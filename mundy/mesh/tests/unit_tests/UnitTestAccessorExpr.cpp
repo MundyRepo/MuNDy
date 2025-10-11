@@ -187,15 +187,9 @@ class UnitTestAccessorExprFixture : public ::testing::Test {
 
   CoordinateFunc get_field_x_func() const {
     return [](const double* coords) {
-      return std::vector<double>{coords[0] * coords[1],
-                                 3 * coords[1] * coords[2],
-                                 5 * coords[2] * coords[0],
-                                 7 * coords[0] * coords[0],
-                                 11 * coords[1] * coords[1],
-                                 13 * coords[2] * coords[2],
-                                 17 * coords[0] * coords[1],
-                                 19 * coords[1] * coords[2],
-                                 23 * coords[2] * coords[0]};
+      return std::vector<double>{coords[0] * coords[1],      3 * coords[1] * coords[2],  5 * coords[2] * coords[0],
+                                 7 * coords[0] * coords[0],  11 * coords[1] * coords[1], 13 * coords[2] * coords[2],
+                                 17 * coords[0] * coords[1], 19 * coords[1] * coords[2], 23 * coords[2] * coords[0]};
     };
   }
 
@@ -293,15 +287,14 @@ class UnitTestAccessorExprFixture : public ::testing::Test {
     check_hex_inherited_part_membership(hex5, *block3_part_ptr_);
   }
 
-  void setup_hex_mesh(
-      const stk::mesh::EntityRank& entity_rank, stk::mesh::BulkData::AutomaticAuraOption aura_option,
-    #if TRILINOS_MAJOR_MINOR_VERSION >= 160000
-      std::unique_ptr<stk::mesh::FieldDataManager> field_data_manager,
-    #else
-      stk::mesh::FieldDataManager* field_data_manager,
-    #endif
-      unsigned initial_bucket_capacity = stk::mesh::get_default_initial_bucket_capacity(),
-      unsigned maximum_bucket_capacity = stk::mesh::get_default_maximum_bucket_capacity()) {
+  void setup_hex_mesh(const stk::mesh::EntityRank& entity_rank, stk::mesh::BulkData::AutomaticAuraOption aura_option,
+#if TRILINOS_MAJOR_MINOR_VERSION >= 160000
+                      std::unique_ptr<stk::mesh::FieldDataManager> field_data_manager,
+#else
+                      stk::mesh::FieldDataManager* field_data_manager,
+#endif
+                      unsigned initial_bucket_capacity = stk::mesh::get_default_initial_bucket_capacity(),
+                      unsigned maximum_bucket_capacity = stk::mesh::get_default_maximum_bucket_capacity()) {
     stk::mesh::MeshBuilder builder(communicator_);
     builder.set_spatial_dimension(spatial_dimension_);
     builder.set_entity_rank_names(entity_rank_names_);
@@ -408,19 +401,20 @@ class UnitTestAccessorExprFixture : public ::testing::Test {
   stk::mesh::Selector block3_selector_;
 };  // class UnitTestAccessorExprFixture
 
-TEST_F(UnitTestAccessorExprFixture, Construction) {
+TEST_F(UnitTestAccessorExprFixture, field_swap) {
   if (stk::parallel_machine_size(communicator_) > 2) {
     GTEST_SKIP() << "This test is only designed to run with 1 or 2 MPI ranks.";
   }
 
   const int we_know_there_are_five_ranks = 5;
-  #if TRILINOS_MAJOR_MINOR_VERSION >= 160000
+#if TRILINOS_MAJOR_MINOR_VERSION >= 160000
   auto field_data_manager = std::make_unique<stk::mesh::DefaultFieldDataManager>(we_know_there_are_five_ranks);
   setup_hex_mesh(stk::topology::NODE_RANK, stk::mesh::BulkData::AUTO_AURA, std::move(field_data_manager));
-  #else
-  stk::mesh::DefaultFieldDataManager* field_data_manager_ptr = new stk::mesh::DefaultFieldDataManager(we_know_there_are_five_ranks);
+#else
+  stk::mesh::DefaultFieldDataManager* field_data_manager_ptr =
+      new stk::mesh::DefaultFieldDataManager(we_know_there_are_five_ranks);
   setup_hex_mesh(stk::topology::NODE_RANK, stk::mesh::BulkData::AUTO_AURA, field_data_manager_ptr);
-  #endif
+#endif
 
   auto x_accessor = ScalarFieldComponent(*field_x_ptr_);
   auto y_accessor = ScalarFieldComponent(*field_y_ptr_);
@@ -429,53 +423,16 @@ TEST_F(UnitTestAccessorExprFixture, Construction) {
   auto ngp_y_accessor = get_updated_ngp_component(y_accessor);
 
   auto ngp_mesh = get_updated_ngp_mesh(get_bulk());
-  auto eblock1 = make_entity_expr(ngp_mesh, block1_selector_, stk::topology::NODE_RANK);
 
-  ngp_x_accessor(eblock1) += ngp_y_accessor(eblock1);
+  {
+    auto eblock2 = make_entity_expr(ngp_mesh, block2_selector_, stk::topology::NODE_RANK);
+
+    // fused_assign evaluates all right hand sides before assigning them to the left hand sides. 
+    // This is the same as python's syntax: x, y = y, x. 
+    fused_assign(ngp_x_accessor(eblock2), /*=*/ngp_y_accessor(eblock2), //
+                ngp_y_accessor(eblock2), /*=*/ ngp_x_accessor(eblock2));
+  }
 }
-
-
-// TEST_F(UnitTestAccessorExprFixture, Construction) {
-//   if (stk::parallel_machine_size(communicator_) > 2) {
-//     GTEST_SKIP() << "This test is only designed to run with 1 or 2 MPI ranks.";
-//   }
-
-//   for (const stk::mesh::EntityRank& entity_rank : {stk::topology::ELEMENT_RANK, stk::topology::NODE_RANK}) {
-//     const int we_know_there_are_five_ranks = 5;
-//     auto field_data_manager = std::make_unique<stk::mesh::DefaultFieldDataManager>(we_know_there_are_five_ranks);
-//     setup_hex_mesh(entity_rank, stk::mesh::BulkData::AUTO_AURA, std::move(field_data_manager));
-
-//     auto field_x_func = get_field_x_func();
-//     auto field_y_func = get_field_y_func();
-//     auto field_z_func = get_field_z_func();
-//     auto expected_value_func = [&field_x_func, &field_y_func, &field_z_func](const double* entity_coords) {
-//       std::vector<double> field_x_values = field_x_func(entity_coords);
-//       std::vector<double> field_y_values = field_y_func(entity_coords);
-//       std::vector<double> field_z_values = field_z_func(entity_coords);
-//       const unsigned min_size = std::min({field_x_values.size(), field_y_values.size(), field_z_values.size()});
-//       for (unsigned i = 0; i < min_size; ++i) {
-//         field_z_values[i] = field_x_values[i] * field_y_values[i];
-//       }
-//       return field_z_values;
-//     };
-
-//     {
-
-
-
-//     }
-
-//     // field_product<double>(*field_x_ptr_, *field_y_ptr_, *field_z_ptr_, block1_selector_ - block2_selector_,
-//     //                       stk::ngp::ExecSpace());
-
-//     check_field_data_on_host_func("product_field does not multiply.", get_bulk(), *field3_ptr_,
-//                                   block1_selector_ - block2_selector_, {}, expected_value_func);
-//     check_field_data_on_host_func("product_field does not respect selector.", get_bulk(), *field3_ptr_,
-//                                   block2_selector_ - block1_selector_, {}, get_field_z_func());
-
-//     reset_mesh();
-//   }
-// }
 
 }  // namespace
 
