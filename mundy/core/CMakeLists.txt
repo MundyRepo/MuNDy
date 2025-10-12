@@ -15,6 +15,7 @@ GLOBAL_SET(${PACKAGE_NAME}_ENABLE_ALL_OPTIONAL_PACKAGES ON)
 # find src/ -type f -name "*.hpp" | sed 's/^.\/\///' | sort
 # find src/ -type f -name "*.cpp" | sed 's/^.\/\///' | sort
 SET(NOINSTALLHEADERS 
+  src/mundy_core/aggregate.hpp
   src/mundy_core/attribute_unused.hpp
   src/mundy_core/MakeStringArray.hpp
   src/mundy_core/NgpPool.hpp

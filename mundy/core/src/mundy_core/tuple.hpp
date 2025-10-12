@@ -116,6 +116,8 @@ template <class T, size_t Idx>
 struct tuple_member {
   T value;
 
+  using value_type = T;
+
   // If T is default constructible, provide a default constructor
   KOKKOS_FUNCTION
   constexpr tuple_member()
@@ -144,8 +146,10 @@ struct tuple_member {
 template <size_t SearchIdx, size_t Idx, class T>
 struct tuple_idx_matcher {
   using type = tuple_member<T, Idx>;
+
   template <class Other>
-  KOKKOS_FUNCTION constexpr auto operator|([[maybe_unused]] Other v) const {
+  KOKKOS_FUNCTION 
+  constexpr auto operator|([[maybe_unused]] Other v) const {
     if constexpr (Idx == SearchIdx) {
       return *this;
     } else {
@@ -186,15 +190,27 @@ struct tuple_impl<std::index_sequence<Idx...>, Elements...> : public tuple_membe
 
   template <size_t N>
   KOKKOS_FUNCTION constexpr auto& get() {
+    static_assert(N < sizeof...(Elements), "Index out of bounds in tuple::get<N>()");
     using base_t = decltype((tuple_idx_matcher<N, Idx, Elements>() | ...));
     return base_t::type::get();
   }
 
   template <size_t N>
   KOKKOS_FUNCTION constexpr const auto& get() const {
+    static_assert(N < sizeof...(Elements), "Index out of bounds in tuple::get<N>()");
     using base_t = decltype((tuple_idx_matcher<N, Idx, Elements>() | ...));
     return base_t::type::get();
   }
+
+  // Helper alias: select the matching base; sentinel ensures fold is never empty.
+  template <size_t N>
+  using base_of = typename decltype(
+      (tuple_idx_matcher<N, Idx, Elements>() | ... |
+       tuple_idx_matcher<N, N, void>{})
+    )::type;
+  
+  template <size_t N>
+  using element_t = typename base_of<N>::value_type;
 };
 
 // A simple tuple-like class for representing slices internally and is
@@ -243,6 +259,9 @@ template <size_t Idx, class... Args>
 KOKKOS_FUNCTION constexpr const auto& get(const tuple<Args...>& vals) {
   return vals.template get<Idx>();
 }
+
+template <size_t Idx, class TupleType>
+using tuple_element_t = typename TupleType::template element_t<Idx>;
 
 template <class... Elements>
 tuple(Elements...) -> tuple<Elements...>;

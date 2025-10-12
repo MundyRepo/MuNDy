@@ -425,12 +425,12 @@ TEST_F(UnitTestAccessorExprFixture, field_swap) {
   auto ngp_mesh = get_updated_ngp_mesh(get_bulk());
 
   {
-    auto eblock2 = make_entity_expr(ngp_mesh, block2_selector_, stk::topology::NODE_RANK);
+    auto eb2 = make_entity_expr(ngp_mesh, block2_selector_, stk::topology::NODE_RANK);
 
     // fused_assign evaluates all right hand sides before assigning them to the left hand sides. 
     // This is the same as python's syntax: x, y = y, x. 
-    fused_assign(ngp_x_accessor(eblock2), /*=*/ngp_y_accessor(eblock2), //
-                ngp_y_accessor(eblock2), /*=*/ ngp_x_accessor(eblock2));
+    fused_assign(ngp_x_accessor(eb2), /*=*/ ngp_y_accessor(eb2), //
+                 ngp_y_accessor(eb2), /*=*/ ngp_x_accessor(eb2));
   }
 }
 
