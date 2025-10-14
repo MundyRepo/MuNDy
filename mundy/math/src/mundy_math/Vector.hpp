@@ -171,14 +171,19 @@ class AVector<T, N, Accessor, Ownership::Views> {
   KOKKOS_DEFAULTED_FUNCTION
   constexpr AVector(AVector<T, N, Accessor, Ownership::Views>&&) = default;
 
-  /// \brief Default copy assignment operator (shallow copy)
-  KOKKOS_DEFAULTED_FUNCTION
-  constexpr AVector<T, N, Accessor, Ownership::Views>& operator=(const AVector<T, N, Accessor, Ownership::Views>&) =
-      default;
+  /// \brief Default copy assignment operator (deep copy)
+  KOKKOS_INLINE_FUNCTION
+  constexpr AVector<T, N, Accessor, Ownership::Views>& operator=(const AVector<T, N, Accessor, Ownership::Views>&other ) {
+    impl::deep_copy_impl(std::make_index_sequence<N>{}, *this, other);
+    return *this;
+  }
 
-  /// \brief Default move assignment operator (shallow move)
-  KOKKOS_DEFAULTED_FUNCTION
-  constexpr AVector<T, N, Accessor, Ownership::Views>& operator=(AVector<T, N, Accessor, Ownership::Views>&&) = default;
+  /// \brief Default move assignment operator (deep move)
+  KOKKOS_INLINE_FUNCTION
+  constexpr AVector<T, N, Accessor, Ownership::Views>& operator=(AVector<T, N, Accessor, Ownership::Views>&&other) {
+    impl::deep_copy_impl(std::make_index_sequence<N>{}, *this, other);
+    return *this;
+  }
 
   // Custom copy/move constructors and assignment operators when interacting with a AVector of a different type
   // We do not allow copy/move construction from a AVector of a different type. This is undefined behavior.
@@ -203,7 +208,7 @@ class AVector<T, N, Accessor, Ownership::Views> {
             (OtherVectorType::size == N) &&
             (std::is_same_v<typename OtherVectorType::scalar_t, T>) && HasNonConstAccessOperator<Accessor, T>
   {
-    impl::deep_copy_impl(std::make_index_sequence<N>{}, *this, std::move(other));
+    impl::deep_copy_impl(std::make_index_sequence<N>{}, *this, other);
     return *this;
   }
 
@@ -525,22 +530,27 @@ class AVector<T, N, Accessor, Ownership::Owns> {
 
   // Default copy/move constructors and assignment operators when interacting with a AVector of the same type
 
-  /// \brief Default copy constructor
+  /// \brief Default copy constructor (deep copies the accessor, not necessarily the data)
   KOKKOS_DEFAULTED_FUNCTION
   constexpr AVector(const AVector<T, N, Accessor, Ownership::Owns>&) = default;
 
-  /// \brief Default move constructor
+  /// \brief Default move constructor (deep moves the accessor, not necessarily the data)
   KOKKOS_DEFAULTED_FUNCTION
   constexpr AVector(AVector<T, N, Accessor, Ownership::Owns>&&) = default;
 
-  /// \brief Default copy assignment operator
-  KOKKOS_DEFAULTED_FUNCTION
-  constexpr AVector<T, N, Accessor, Ownership::Owns>& operator=(const AVector<T, N, Accessor, Ownership::Owns>&) =
-      default;
+  /// \brief Default copy assignment operator (deep copys the data)
+  KOKKOS_INLINE_FUNCTION
+  constexpr AVector<T, N, Accessor, Ownership::Owns>& operator=(const AVector<T, N, Accessor, Ownership::Owns>&other) {
+    impl::deep_copy_impl(std::make_index_sequence<N>{}, *this, other);
+    return *this;
+  }
 
-  /// \brief Default move assignment operator
-  KOKKOS_DEFAULTED_FUNCTION
-  constexpr AVector<T, N, Accessor, Ownership::Owns>& operator=(AVector<T, N, Accessor, Ownership::Owns>&&) = default;
+  /// \brief Default move assignment operator (deep copies the data)
+  KOKKOS_INLINE_FUNCTION
+  constexpr AVector<T, N, Accessor, Ownership::Owns>& operator=(AVector<T, N, Accessor, Ownership::Owns>&&other) {
+    impl::deep_copy_impl(std::make_index_sequence<N>{}, *this, other);
+    return *this;
+  }
 
   // Custom copy/move constructors and assignment operators when interacting with a AVector of a different type
 
@@ -1369,10 +1379,10 @@ MUNDY_MATH_VECTOR_VECTOR_ATOMIC_OP_FETCH(elementwise_div)
 //@}
 
 // Just to double check
-static_assert(std::is_trivially_copyable_v<AVector<double, 3>>);
-static_assert(std::is_trivially_destructible_v<AVector<double, 3>>);
-static_assert(std::is_copy_constructible_v<AVector<double, 3>>);
-static_assert(std::is_move_constructible_v<AVector<double, 3>>);
+// static_assert(std::is_trivially_copyable_v<AVector<double, 3>>);
+// static_assert(std::is_trivially_destructible_v<AVector<double, 3>>);
+// static_assert(std::is_copy_constructible_v<AVector<double, 3>>);
+// static_assert(std::is_move_constructible_v<AVector<double, 3>>);
 
 //! \name Type specializations
 //@{

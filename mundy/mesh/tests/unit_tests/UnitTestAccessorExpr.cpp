@@ -403,6 +403,43 @@ class UnitTestAccessorExprFixture : public ::testing::Test {
   stk::mesh::Selector block3_selector_;
 };  // class UnitTestAccessorExprFixture
 
+
+TEST_F(UnitTestAccessorExprFixture, field_copy) {
+  if (stk::parallel_machine_size(communicator_) > 2) {
+    GTEST_SKIP() << "This test is only designed to run with 1 or 2 MPI ranks.";
+  }
+
+  const int we_know_there_are_five_ranks = 5;
+#if TRILINOS_MAJOR_MINOR_VERSION >= 160000
+  auto field_data_manager = std::make_unique<stk::mesh::DefaultFieldDataManager>(we_know_there_are_five_ranks);
+  setup_hex_mesh(stk::topology::NODE_RANK, stk::mesh::BulkData::AUTO_AURA, std::move(field_data_manager));
+#else
+  stk::mesh::DefaultFieldDataManager* field_data_manager_ptr =
+      new stk::mesh::DefaultFieldDataManager(we_know_there_are_five_ranks);
+  setup_hex_mesh(stk::topology::NODE_RANK, stk::mesh::BulkData::AUTO_AURA, field_data_manager_ptr);
+#endif
+
+  stk::mesh::Selector b1_not_b2 = block1_selector_ - block2_selector_;
+  auto x = ScalarFieldComponent(*field_x_ptr_);
+  auto y = ScalarFieldComponent(*field_y_ptr_);
+
+  auto ngp_x = get_updated_ngp_component(x);
+  auto ngp_y = get_updated_ngp_component(y);
+
+  auto ngp_mesh = get_updated_ngp_mesh(get_bulk());
+
+  {
+    auto es = make_entity_expr(get_bulk(), b1_not_b2, stk::topology::NODE_RANK);
+    ngp_x(es) = ngp_y(es);
+  }
+
+  check_field_data_on_host_func<1>("field copy error. x", get_bulk(), *field_x_ptr_, b1_not_b2, {}, get_field_y_func());
+  check_field_data_on_host_func<1>("field copy error. y", get_bulk(), *field_y_ptr_, b1_not_b2, {}, get_field_y_func());
+
+  check_field_data_on_host_func<1>("field subset error. x", get_bulk(), *field_x_ptr_, !b1_not_b2, {}, get_field_x_func());
+  check_field_data_on_host_func<1>("field subset error. y", get_bulk(), *field_y_ptr_, !b1_not_b2, {}, get_field_y_func());
+}
+
 TEST_F(UnitTestAccessorExprFixture, field_swap) {
   if (stk::parallel_machine_size(communicator_) > 2) {
     GTEST_SKIP() << "This test is only designed to run with 1 or 2 MPI ranks.";
@@ -419,21 +456,33 @@ TEST_F(UnitTestAccessorExprFixture, field_swap) {
 #endif
 
   stk::mesh::Selector b1_not_b2 = block1_selector_ - block2_selector_;
-  auto x_accessor = ScalarFieldComponent(*field_x_ptr_);
-  auto y_accessor = ScalarFieldComponent(*field_y_ptr_);
+  auto x = ScalarFieldComponent(*field_x_ptr_);
+  auto y = ScalarFieldComponent(*field_y_ptr_);
 
-  auto ngp_x_accessor = get_updated_ngp_component(x_accessor);
-  auto ngp_y_accessor = get_updated_ngp_component(y_accessor);
+  auto ngp_x = get_updated_ngp_component(x);
+  auto ngp_y = get_updated_ngp_component(y);
 
   auto ngp_mesh = get_updated_ngp_mesh(get_bulk());
 
   {
-    auto eb2 = make_entity_expr(ngp_mesh, b1_not_b2, stk::topology::NODE_RANK);
+    auto es = make_entity_expr(get_bulk(), b1_not_b2, stk::topology::NODE_RANK);
 
     // fused_assign evaluates all right hand sides before assigning them to the left hand sides.
     // This is the same as python's syntax: x, y = y, x.
-    fused_assign(ngp_x_accessor(eb2), /*=*/copy(ngp_y_accessor(eb2)),  //
-                 ngp_y_accessor(eb2), /*=*/copy(ngp_x_accessor(eb2)));
+    //
+    // You must still use copy because since the result of ngp_x(es) is a view, so the stashed rhs is a copy of a view.
+    // y_view_copy = y_view
+    // x_view_copy = x_view
+    // x_view[0] = y_view_copy[0]
+    // y_view[0] = x_view_copy[0]
+    //
+    // If you use copy, then the logic becomes
+    // y_copy = copy(y_view)
+    // x_copy = copy(x_view)
+    // x_view[0] = y_copy[0]
+    // y_view[0] = x_copy[0]
+    fused_assign(ngp_x(es), /*=*/ copy(ngp_y(es)),  //
+                 ngp_y(es), /*=*/ copy(ngp_x(es)));
   }
 
   check_field_data_on_host_func<1>("fields didn't swap. x", get_bulk(), *field_x_ptr_, b1_not_b2, {}, get_field_y_func());
