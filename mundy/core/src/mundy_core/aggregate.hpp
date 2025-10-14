@@ -235,8 +235,6 @@ class aggregate {
   //@}
 };  // aggregate
 
-
-
 //! \name Non-member functions
 //@{
 
@@ -260,18 +258,36 @@ constexpr auto& get(aggregate<Components...>& agg) {
   return agg.template get<Tag>();
 }
 
-/// \brief Check if we have a component with the given Tag
+/// \brief Check if an aggregate have a component with the given Tag
 template <typename Tag, typename... Components>
 KOKKOS_INLINE_FUNCTION
 constexpr bool has(const aggregate<Components...>& /*agg*/) {
   return aggregate<Components...>::template has<Tag>();
 }
 
+/// \brief Check if an aggregate type has a component with the given Tag usage has_v<Tag, AggType>
+template <typename Tag, typename AggType>
+KOKKOS_INLINE_FUNCTION
+constexpr bool has() {
+  return AggType::template has<Tag>();
+}
 /// \brief Add a new component to an existing aggregate (fluent interface)
 template <typename Tag, typename NewComponent, typename... Components>
 KOKKOS_INLINE_FUNCTION
 constexpr auto append(const aggregate<Components...>& agg, NewComponent new_component) {
   return agg.template append<Tag>(std::move(new_component));
+}
+
+/// \brief Overload the stream operator for aggregates
+template <typename... Components>
+std::ostream& operator<<(std::ostream& os, const aggregate<Components...>& agg) {
+  // Print the (tag, val) pairs
+  os << "aggregate{";
+  ((os << typeid(typename Components::tag_type).name() << ": " << agg.template get<typename Components::tag_type>()
+       << (sizeof...(Components) > 1 ? ", " : "")),
+   ...);
+  os << "}";
+  return os;
 }
 //@}
 

@@ -1561,6 +1561,12 @@ KOKKOS_INLINE_FUNCTION constexpr OutputType stddev_f(const AMatrix<T, N, M, Acce
 //! \name Special matrix operations
 //@{
 
+/// \brief Get a deep copy of the given matrix
+template <ValidMatrixType MatrixType>
+KOKKOS_INLINE_FUNCTION constexpr auto copy(const MatrixType& m) {
+  return m.copy();
+}
+
 /// \brief AMatrix transpose
 /// \param[in] mat The matrix.
 template <size_t N, size_t M, typename T, ValidAccessor<T> Accessor, typename OwnershipType>

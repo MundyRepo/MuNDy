@@ -108,6 +108,7 @@ inline void set_field_data_on_host(const stk::mesh::BulkData& stk_mesh, const st
   stk_field.modify_on_host();
 }
 
+template <size_t NumComponents>
 inline void check_field_data_on_host_func(const std::string& message_to_throw, const stk::mesh::BulkData& stk_mesh,
                                           const stk::mesh::FieldBase& stk_field, const stk::mesh::Selector& selector,
                                           const std::vector<const stk::mesh::FieldBase*>& other_fields,
@@ -122,14 +123,9 @@ inline void check_field_data_on_host_func(const std::string& message_to_throw, c
       [&]([[maybe_unused]] const stk::mesh::BulkData& bulk, const stk::mesh::Entity entity) {
         double* entity_coords = static_cast<double*>(stk::mesh::field_data(coord_field, entity));
         auto expected_values = func(entity_coords);
-
-        unsigned int num_components = stk::mesh::field_scalars_per_entity(stk_field, entity);
-        for (const stk::mesh::FieldBase* other_field : other_fields) {
-          num_components = std::min(num_components, stk::mesh::field_scalars_per_entity(*other_field, entity));
-        }
         const double* raw_field_data = reinterpret_cast<const double*>(stk::mesh::field_data(stk_field, entity));
-        for (unsigned int i = 0; i < num_components; ++i) {
-          EXPECT_DOUBLE_EQ(raw_field_data[i], expected_values[i]) << message_to_throw;
+        for (unsigned int i = 0; i < NumComponents; ++i) {
+          ASSERT_DOUBLE_EQ(raw_field_data[i], expected_values[i]) << message_to_throw;
         }
       });
 }
@@ -228,6 +224,9 @@ class UnitTestAccessorExprFixture : public ::testing::Test {
     set_field_data_on_host(*bulk_data_ptr_, *field_x_ptr_, all_blocks, get_field_x_func());
     set_field_data_on_host(*bulk_data_ptr_, *field_y_ptr_, all_blocks, get_field_y_func());
     set_field_data_on_host(*bulk_data_ptr_, *field_z_ptr_, all_blocks, get_field_z_func());
+    set_field_data_on_host(*bulk_data_ptr_, *field_xs_ptr_, all_blocks, get_field_x_func());
+    set_field_data_on_host(*bulk_data_ptr_, *field_ys_ptr_, all_blocks, get_field_y_func());
+    set_field_data_on_host(*bulk_data_ptr_, *field_zs_ptr_, all_blocks, get_field_z_func());
   }
 
   void validate_initial_mesh() {
@@ -335,10 +334,12 @@ class UnitTestAccessorExprFixture : public ::testing::Test {
                                          {block1_part_ptr_, block2_part_ptr_, block3_part_ptr_});
     field_z_ptr_ = create_field_on_parts("field_z", stk::topology::NODE_RANK, 9,
                                          {block1_part_ptr_, block2_part_ptr_, block3_part_ptr_});
-    field_scratch1_ptr_ = create_field_on_parts("field_scratch1", stk::topology::NODE_RANK, 9,
-                                                {block1_part_ptr_, block2_part_ptr_, block3_part_ptr_});
-    field_scratch2_ptr_ = create_field_on_parts("field_scratch2", stk::topology::NODE_RANK, 9,
-                                                {block1_part_ptr_, block2_part_ptr_, block3_part_ptr_});
+    field_xs_ptr_ = create_field_on_parts("field_x_scratch", stk::topology::NODE_RANK, 9,
+                                          {block1_part_ptr_, block2_part_ptr_, block3_part_ptr_});
+    field_ys_ptr_ = create_field_on_parts("field_y_scratch", stk::topology::NODE_RANK, 9,
+                                          {block1_part_ptr_, block2_part_ptr_, block3_part_ptr_});
+    field_zs_ptr_ = create_field_on_parts("field_z_scratch", stk::topology::NODE_RANK, 9,
+                                          {block1_part_ptr_, block2_part_ptr_, block3_part_ptr_});
     field1_ptr_ = create_field_on_parts("field1", stk::topology::NODE_RANK, 9, {block1_part_ptr_});
     field2_ptr_ = create_field_on_parts("field2", stk::topology::NODE_RANK, 9, {block2_part_ptr_});
     field3_ptr_ = create_field_on_parts("field3", stk::topology::NODE_RANK, 9, {block3_part_ptr_});
@@ -385,8 +386,9 @@ class UnitTestAccessorExprFixture : public ::testing::Test {
   DoubleField* field_y_ptr_;
   DoubleField* field_z_ptr_;
 
-  DoubleField* field_scratch1_ptr_;
-  DoubleField* field_scratch2_ptr_;
+  DoubleField* field_xs_ptr_;
+  DoubleField* field_ys_ptr_;
+  DoubleField* field_zs_ptr_;
 
   DoubleField* field1_ptr_;
   DoubleField* field2_ptr_;
@@ -416,6 +418,7 @@ TEST_F(UnitTestAccessorExprFixture, field_swap) {
   setup_hex_mesh(stk::topology::NODE_RANK, stk::mesh::BulkData::AUTO_AURA, field_data_manager_ptr);
 #endif
 
+  stk::mesh::Selector b1_not_b2 = block1_selector_ - block2_selector_;
   auto x_accessor = ScalarFieldComponent(*field_x_ptr_);
   auto y_accessor = ScalarFieldComponent(*field_y_ptr_);
 
@@ -425,13 +428,19 @@ TEST_F(UnitTestAccessorExprFixture, field_swap) {
   auto ngp_mesh = get_updated_ngp_mesh(get_bulk());
 
   {
-    auto eb2 = make_entity_expr(ngp_mesh, block2_selector_, stk::topology::NODE_RANK);
+    auto eb2 = make_entity_expr(ngp_mesh, b1_not_b2, stk::topology::NODE_RANK);
 
-    // fused_assign evaluates all right hand sides before assigning them to the left hand sides. 
-    // This is the same as python's syntax: x, y = y, x. 
-    fused_assign(ngp_x_accessor(eb2), /*=*/ ngp_y_accessor(eb2), //
-                 ngp_y_accessor(eb2), /*=*/ ngp_x_accessor(eb2));
+    // fused_assign evaluates all right hand sides before assigning them to the left hand sides.
+    // This is the same as python's syntax: x, y = y, x.
+    fused_assign(ngp_x_accessor(eb2), /*=*/copy(ngp_y_accessor(eb2)),  //
+                 ngp_y_accessor(eb2), /*=*/copy(ngp_x_accessor(eb2)));
   }
+
+  check_field_data_on_host_func<1>("fields didn't swap. x", get_bulk(), *field_x_ptr_, b1_not_b2, {}, get_field_y_func());
+  check_field_data_on_host_func<1>("fields didn't swap. y", get_bulk(), *field_y_ptr_, b1_not_b2, {}, get_field_x_func());
+
+  check_field_data_on_host_func<1>("field subset error. x", get_bulk(), *field_x_ptr_, !b1_not_b2, {}, get_field_x_func());
+  check_field_data_on_host_func<1>("field subset error. y", get_bulk(), *field_y_ptr_, !b1_not_b2, {}, get_field_y_func());
 }
 
 }  // namespace

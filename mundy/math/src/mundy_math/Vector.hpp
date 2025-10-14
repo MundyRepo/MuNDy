@@ -1064,6 +1064,12 @@ KOKKOS_INLINE_FUNCTION constexpr OutputType stddev_f(const AVector<T, N, Accesso
 //! \name Special vector operations
 //@{
 
+/// \brief Get a deep copy of the given vector
+template <ValidVectorType VectorType>
+KOKKOS_INLINE_FUNCTION constexpr auto copy(const VectorType& v) {
+  return v.copy();
+}
+
 /// \brief Dot product of two vectors
 /// \param[in] a The first vector.
 /// \param[in] b The second vector.

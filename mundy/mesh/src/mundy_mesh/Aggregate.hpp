@@ -39,13 +39,13 @@
 #include <stk_topology/topology.hpp>      // for stk::topology::topology_t
 
 // Mundy
-#include <mundy_core/throw_assert.hpp>   // for MUNDY_THROW_ASSERT
-#include <mundy_core/tuple.hpp>          // for mundy::core::tuple
-#include <mundy_mesh/BulkData.hpp>       // for mundy::mesh::BulkData
-#include <mundy_mesh/FieldViews.hpp>     // for mundy::mesh::vector3_field_data, mundy::mesh::quaternion_field_data
-#include <mundy_mesh/ForEachEntity.hpp>  // for mundy::mesh::for_each_entity_run
-#include <mundy_mesh/fmt_stk_types.hpp>  // for STK-compatible fmt::format
+#include <mundy_core/throw_assert.hpp>     // for MUNDY_THROW_ASSERT
+#include <mundy_core/tuple.hpp>            // for mundy::core::tuple
+#include <mundy_mesh/BulkData.hpp>         // for mundy::mesh::BulkData
+#include <mundy_mesh/FieldViews.hpp>       // for mundy::mesh::vector3_field_data, mundy::mesh::quaternion_field_data
+#include <mundy_mesh/ForEachEntity.hpp>    // for mundy::mesh::for_each_entity_run
 #include <mundy_mesh/NgpAccessorExpr.hpp>  // for mundy::mesh::AccessorExpr and EntityExprBase
+#include <mundy_mesh/fmt_stk_types.hpp>    // for STK-compatible fmt::format
 
 namespace mundy {
 
@@ -108,6 +108,14 @@ class FieldComponentBase {
     field_base_.modify_on_host();
   }
 
+  void clear_host_sync_state() {
+    field_base_.clear_host_sync_state();
+  }
+
+  void clear_device_sync_state() {
+    field_base_.clear_device_sync_state();
+  }
+
   const stk::mesh::FieldBase& field_base() {
     return field_base_;
   }
@@ -144,6 +152,14 @@ class NgpFieldComponentBase {
 
   void modify_on_host() {
     host_field_base_->modify_on_host();
+  }
+
+  void clear_host_sync_state() {
+    host_field_base_->clear_host_sync_state();
+  }
+
+  void clear_device_sync_state() {
+    host_field_base_->clear_device_sync_state();
   }
 
   const stk::mesh::FieldBase& host_field_base() {
@@ -222,9 +238,12 @@ class NgpFieldComponent : public NgpFieldComponentBase {
   ///   EntityExpr all_nodes(node_selector, stk::topology::NODE_RANK);
   ///   auto get_v3_expr = v3_accessor(all_nodes);
   template <class EntityExpr>
-  KOKKOS_INLINE_FUNCTION
-  auto operator()(const EntityExprBase<EntityExpr>& e) const {
-    return AccessorExpr<our_t, EntityExpr>(*this, e);
+  KOKKOS_INLINE_FUNCTION auto operator()(const EntityExprBase<EntityExpr>& e) const {
+    MUNDY_THROW_REQUIRE(e.rank() == ngp_field_.get_rank(), std::runtime_error,
+                        fmt::format("Attempting to access field of rank {} on entity expression of rank {}",
+                                    ngp_field_.get_rank(), e.rank()));
+
+    return AccessorExpr<our_t, EntityExpr>(*this, e.self());
   }
 
   KOKKOS_INLINE_FUNCTION
@@ -253,11 +272,19 @@ class NgpFieldComponent : public NgpFieldComponentBase {
   void modify_on_host() {
     ngp_field_.modify_on_host();
   }
+
+  void clear_host_sync_state() {
+    ngp_field_.clear_host_sync_state();
+  }
+
+  void clear_device_sync_state() {
+    ngp_field_.clear_device_sync_state();
+  }
 #endif
 
  private:
   NgpFieldType ngp_field_;
- 
+
  public:
   /// \brief The view type returned by operator()
   using view_t =
@@ -302,7 +329,7 @@ template <typename NgpFieldType>
 class NgpScalarFieldComponent : public NgpFieldComponentBase {
  public:
   using our_t = NgpScalarFieldComponent<NgpFieldType>;
- 
+
   NgpScalarFieldComponent() = default;
   NgpScalarFieldComponent(NgpFieldType ngp_field)
 #if TRILINOS_MAJOR_MINOR_VERSION >= 160000
@@ -324,16 +351,18 @@ class NgpScalarFieldComponent : public NgpFieldComponentBase {
   decltype(auto) operator()(stk::mesh::FastMeshIndex entity_index) const {
     return scalar_field_data(ngp_field_, entity_index);
   }
-  
+
   /// \brief Calling operator()(entity_expr) on any accessor will return an AccessorExpr
   /// Example:
   ///   auto v3_accessor = Vector3FieldComponent(v3_field);
   ///   EntityExpr all_nodes(node_selector, stk::topology::NODE_RANK);
   ///   auto get_v3_expr = v3_accessor(all_nodes);
   template <class EntityExpr>
-  KOKKOS_INLINE_FUNCTION
-  auto operator()(const EntityExprBase<EntityExpr>& e) const {
-    return AccessorExpr<our_t, EntityExpr>(*this, e);
+  KOKKOS_INLINE_FUNCTION auto operator()(const EntityExprBase<EntityExpr>& e) const {
+    MUNDY_THROW_REQUIRE(e.rank() == ngp_field_.get_rank(), std::runtime_error,
+                        fmt::format("Attempting to access field of rank {} on entity expression of rank {}",
+                                    ngp_field_.get_rank(), e.rank()));
+    return AccessorExpr<our_t, EntityExpr>(*this, e.self());
   }
 
   KOKKOS_INLINE_FUNCTION
@@ -361,6 +390,14 @@ class NgpScalarFieldComponent : public NgpFieldComponentBase {
 
   void modify_on_host() {
     ngp_field_.modify_on_host();
+  }
+
+  void clear_host_sync_state() {
+    ngp_field_.clear_host_sync_state();
+  }
+
+  void clear_device_sync_state() {
+    ngp_field_.clear_device_sync_state();
   }
 #endif
 
@@ -438,9 +475,11 @@ class NgpVector3FieldComponent : public NgpFieldComponentBase {
   ///   EntityExpr all_nodes(node_selector, stk::topology::NODE_RANK);
   ///   auto get_v3_expr = v3_accessor(all_nodes);
   template <class EntityExpr>
-  KOKKOS_INLINE_FUNCTION
-  auto operator()(const EntityExprBase<EntityExpr>& e) const {
-    return AccessorExpr<our_t, EntityExpr>(*this, e);
+  KOKKOS_INLINE_FUNCTION auto operator()(const EntityExprBase<EntityExpr>& e) const {
+    MUNDY_THROW_REQUIRE(e.rank() == ngp_field_.get_rank(), std::runtime_error,
+                        fmt::format("Attempting to access field of rank {} on entity expression of rank {}",
+                                    ngp_field_.get_rank(), e.rank()));
+    return AccessorExpr<our_t, EntityExpr>(*this, e.self());
   }
 
   KOKKOS_INLINE_FUNCTION
@@ -468,6 +507,14 @@ class NgpVector3FieldComponent : public NgpFieldComponentBase {
 
   void modify_on_host() {
     ngp_field_.modify_on_host();
+  }
+
+  void clear_host_sync_state() {
+    ngp_field_.clear_host_sync_state();
+  }
+
+  void clear_device_sync_state() {
+    ngp_field_.clear_device_sync_state();
   }
 #endif
 
@@ -545,9 +592,11 @@ class NgpMatrix3FieldComponent : public NgpFieldComponentBase {
   ///   EntityExpr all_nodes(node_selector, stk::topology::NODE_RANK);
   ///   auto get_v3_expr = v3_accessor(all_nodes);
   template <class EntityExpr>
-  KOKKOS_INLINE_FUNCTION
-  auto operator()(const EntityExprBase<EntityExpr>& e) const {
-    return AccessorExpr<our_t, EntityExpr>(*this, e);
+  KOKKOS_INLINE_FUNCTION auto operator()(const EntityExprBase<EntityExpr>& e) const {
+    MUNDY_THROW_REQUIRE(e.rank() == ngp_field_.get_rank(), std::runtime_error,
+                        fmt::format("Attempting to access field of rank {} on entity expression of rank {}",
+                                    ngp_field_.get_rank(), e.rank()));
+    return AccessorExpr<our_t, EntityExpr>(*this, e.self());
   }
 
   KOKKOS_INLINE_FUNCTION
@@ -575,6 +624,14 @@ class NgpMatrix3FieldComponent : public NgpFieldComponentBase {
 
   void modify_on_host() {
     ngp_field_.modify_on_host();
+  }
+
+  void clear_host_sync_state() {
+    ngp_field_.clear_host_sync_state();
+  }
+
+  void clear_device_sync_state() {
+    ngp_field_.clear_device_sync_state();
   }
 #endif
 
@@ -652,9 +709,11 @@ class NgpQuaternionFieldComponent : public NgpFieldComponentBase {
   ///   EntityExpr all_nodes(node_selector, stk::topology::NODE_RANK);
   ///   auto get_v3_expr = v3_accessor(all_nodes);
   template <class EntityExpr>
-  KOKKOS_INLINE_FUNCTION
-  auto operator()(const EntityExprBase<EntityExpr>& e) const {
-    return AccessorExpr<our_t, EntityExpr>(*this, e);
+  KOKKOS_INLINE_FUNCTION auto operator()(const EntityExprBase<EntityExpr>& e) const {
+    MUNDY_THROW_REQUIRE(e.rank() == ngp_field_.get_rank(), std::runtime_error,
+                        fmt::format("Attempting to access field of rank {} on entity expression of rank {}",
+                                    ngp_field_.get_rank(), e.rank()));
+    return AccessorExpr<our_t, EntityExpr>(*this, e.self());
   }
 
   KOKKOS_INLINE_FUNCTION
@@ -677,6 +736,14 @@ class NgpQuaternionFieldComponent : public NgpFieldComponentBase {
 
   void modify_on_host() {
     ngp_field_.modify_on_host();
+  }
+
+  void clear_host_sync_state() {
+    ngp_field_.clear_host_sync_state();
+  }
+
+  void clear_device_sync_state() {
+    ngp_field_.clear_device_sync_state();
   }
 #endif
 
@@ -754,9 +821,11 @@ class NgpAABBFieldComponent : public NgpFieldComponentBase {
   ///   EntityExpr all_nodes(node_selector, stk::topology::NODE_RANK);
   ///   auto get_v3_expr = v3_accessor(all_nodes);
   template <class EntityExpr>
-  KOKKOS_INLINE_FUNCTION
-  auto operator()(const EntityExprBase<EntityExpr>& e) const {
-    return AccessorExpr<our_t, EntityExpr>(*this, e);
+  KOKKOS_INLINE_FUNCTION auto operator()(const EntityExprBase<EntityExpr>& e) const {
+    MUNDY_THROW_REQUIRE(e.rank() == ngp_field_.get_rank(), std::runtime_error,
+                        fmt::format("Attempting to access field of rank {} on entity expression of rank {}",
+                                    ngp_field_.get_rank(), e.rank()));
+    return AccessorExpr<our_t, EntityExpr>(*this, e.self());
   }
 
   KOKKOS_INLINE_FUNCTION
@@ -779,6 +848,14 @@ class NgpAABBFieldComponent : public NgpFieldComponentBase {
 
   void modify_on_host() {
     ngp_field_.modify_on_host();
+  }
+
+  void clear_host_sync_state() {
+    ngp_field_.clear_host_sync_state();
+  }
+
+  void clear_device_sync_state() {
+    ngp_field_.clear_device_sync_state();
   }
 #endif
 
@@ -837,6 +914,14 @@ class TaggedComponent {
     component_.modify_on_host();
   }
 
+  void clear_host_sync_state() {
+    component_.clear_host_sync_state();
+  }
+
+  void clear_device_sync_state() {
+    component_.clear_device_sync_state();
+  }
+
  private:
   component_type component_;
 
@@ -876,9 +961,11 @@ class NgpTaggedComponent {
   ///   EntityExpr all_nodes(node_selector, stk::topology::NODE_RANK);
   ///   auto get_v3_expr = v3_accessor(all_nodes);
   template <class EntityExpr>
-  KOKKOS_INLINE_FUNCTION
-  auto operator()(const EntityExprBase<EntityExpr>& e) const {
-    return AccessorExpr<our_t, EntityExpr>(*this, e);
+  KOKKOS_INLINE_FUNCTION auto operator()(const EntityExprBase<EntityExpr>& e) const {
+    MUNDY_THROW_REQUIRE(e.rank() == rank, std::runtime_error,
+                        fmt::format("Attempting to access field of rank {} on entity expression of rank {}",
+                                    rank, e.rank()));
+    return AccessorExpr<our_t, EntityExpr>(*this, e.self());
   }
 
   KOKKOS_INLINE_FUNCTION
@@ -905,6 +992,14 @@ class NgpTaggedComponent {
 
   void modify_on_host() {
     component_.modify_on_host();
+  }
+
+  void clear_host_sync_state() {
+    component_.clear_host_sync_state();
+  }
+
+  void clear_device_sync_state() {
+    component_.clear_device_sync_state();
   }
 
  private:
@@ -1219,7 +1314,7 @@ class NgpEntityView;
 ///
 /// Our Accessors, the data they access, and the return type of the Accessor's get_view method are as follows:
 ///          Component Name                :              Data it accesses             ->         Return Type
-///   ScalarFieldComponent                 :  Field<scalar_t>                          ->  scalar_t&
+///   ScalarFieldComponent                 :  Field<scalar_t>                          ->  ScalarView<scalar_t>
 ///   Vector3FieldComponent                :  Field<scalar_t>                          ->  Vector3View<scalar_t>
 ///   Matrix3FieldComponent                :  Field<scalar_t>                          ->  Matrix3View<scalar_t>
 ///   QuaternionFieldComponent             :  Field<scalar_t>                          ->  QuaternionView<scalar_t>

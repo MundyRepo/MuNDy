@@ -1185,6 +1185,12 @@ KOKKOS_INLINE_FUNCTION constexpr auto operator*(const AMatrix3<U, Accessor1, Own
 //! \name Special quaternion operations
 //@{
 
+/// \brief Get a deep copy of the given quaternion
+template <ValidQuaternionType QuaternionType>
+KOKKOS_INLINE_FUNCTION constexpr auto copy(const QuaternionType& q) {
+  return q.copy();
+}
+
 /// \brief Get the dot product of two quaternions
 /// \param[in] q1 The first quaternion.
 /// \param[in] q2 The second quaternion.

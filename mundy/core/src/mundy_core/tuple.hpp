@@ -148,8 +148,7 @@ struct tuple_idx_matcher {
   using type = tuple_member<T, Idx>;
 
   template <class Other>
-  KOKKOS_FUNCTION 
-  constexpr auto operator|([[maybe_unused]] Other v) const {
+  KOKKOS_FUNCTION constexpr auto operator|([[maybe_unused]] Other v) const {
     if constexpr (Idx == SearchIdx) {
       return *this;
     } else {
@@ -204,11 +203,9 @@ struct tuple_impl<std::index_sequence<Idx...>, Elements...> : public tuple_membe
 
   // Helper alias: select the matching base; sentinel ensures fold is never empty.
   template <size_t N>
-  using base_of = typename decltype(
-      (tuple_idx_matcher<N, Idx, Elements>() | ... |
-       tuple_idx_matcher<N, N, void>{})
-    )::type;
-  
+  using base_of =
+      typename decltype((tuple_idx_matcher<N, Idx, Elements>() | ... | tuple_idx_matcher<N, N, void>{}))::type;
+
   template <size_t N>
   using element_t = typename base_of<N>::value_type;
 };
