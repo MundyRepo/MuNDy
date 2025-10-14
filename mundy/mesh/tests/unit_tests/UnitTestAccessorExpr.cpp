@@ -405,6 +405,44 @@ class UnitTestAccessorExprFixture : public ::testing::Test {
 
 struct XTag;
 struct YTag;
+struct ZTag;
+
+TEST_F(UnitTestAccessorExprFixture, field_fill) {
+  if (stk::parallel_machine_size(communicator_) > 2) {
+    GTEST_SKIP() << "This test is only designed to run with 1 or 2 MPI ranks.";
+  }
+
+  const int we_know_there_are_five_ranks = 5;
+#if TRILINOS_MAJOR_MINOR_VERSION >= 160000
+  auto field_data_manager = std::make_unique<stk::mesh::DefaultFieldDataManager>(we_know_there_are_five_ranks);
+  setup_hex_mesh(stk::topology::NODE_RANK, stk::mesh::BulkData::AUTO_AURA, std::move(field_data_manager));
+#else
+  stk::mesh::DefaultFieldDataManager* field_data_manager_ptr =
+      new stk::mesh::DefaultFieldDataManager(we_know_there_are_five_ranks);
+  setup_hex_mesh(stk::topology::NODE_RANK, stk::mesh::BulkData::AUTO_AURA, field_data_manager_ptr);
+#endif
+
+  const double fill_value = 3.14159;
+  auto expected_value_func = [fill_value](const double* entity_coords) {
+    return std::vector<double>{fill_value};
+  };
+
+
+  stk::mesh::Selector b1_not_b2 = block1_selector_ - block2_selector_;
+  auto x = make_tagged_component<XTag, stk::topology::NODE_RANK>(ScalarFieldComponent(*field_x_ptr_));
+  auto ngp_x = get_updated_ngp_component(x);
+  auto ngp_mesh = get_updated_ngp_mesh(get_bulk());
+
+  {
+    auto es = make_entity_expr(get_bulk(), b1_not_b2, stk::topology::NODE_RANK);
+    ngp_x(es) = fill_value;
+  }
+
+  check_field_data_on_host_func<1>("fill_field does not fill.", get_bulk(), *field_x_ptr_,
+                                b1_not_b2, {}, expected_value_func);
+  check_field_data_on_host_func<1>("fill_field does not respect selector.", get_bulk(), *field_x_ptr_,
+                                !b1_not_b2, {}, get_field_x_func());
+}
 
 TEST_F(UnitTestAccessorExprFixture, field_copy) {
   if (stk::parallel_machine_size(communicator_) > 2) {
@@ -489,16 +527,14 @@ TEST_F(UnitTestAccessorExprFixture, field_swap) {
                  ngp_y(es), /*=*/ copy(ngp_x(es)));
   }
 
-  check_field_data_on_host_func<1>("fields didn't swap. x", get_bulk(), *field_x_ptr_, b1_not_b2, {}, get_field_y_func());
-  check_field_data_on_host_func<1>("fields didn't swap. y", get_bulk(), *field_y_ptr_, b1_not_b2, {}, get_field_x_func());
+  check_field_data_on_host_func<1>("field_swap error. x", get_bulk(), *field_x_ptr_, b1_not_b2, {}, get_field_y_func());
+  check_field_data_on_host_func<1>("field_swap error. y", get_bulk(), *field_y_ptr_, b1_not_b2, {}, get_field_x_func());
 
   check_field_data_on_host_func<1>("field subset error. x", get_bulk(), *field_x_ptr_, !b1_not_b2, {}, get_field_x_func());
   check_field_data_on_host_func<1>("field subset error. y", get_bulk(), *field_y_ptr_, !b1_not_b2, {}, get_field_y_func());
 }
 
-
-
-TEST_F(UnitTestAccessorExprFixture, field_swap) {
+TEST_F(UnitTestAccessorExprFixture, field_scale) {
   if (stk::parallel_machine_size(communicator_) > 2) {
     GTEST_SKIP() << "This test is only designed to run with 1 or 2 MPI ranks.";
   }
@@ -513,40 +549,111 @@ TEST_F(UnitTestAccessorExprFixture, field_swap) {
   setup_hex_mesh(stk::topology::NODE_RANK, stk::mesh::BulkData::AUTO_AURA, field_data_manager_ptr);
 #endif
 
+  const double alpha = 3.14159;
+  auto field_x_func = get_field_x_func();
+  auto expected_value_func = [&alpha, &field_x_func](const double* entity_coords) {
+    return std::vector<double>{alpha * field_x_func(entity_coords)[0]};
+  };
+
+  stk::mesh::Selector b1_not_b2 = block1_selector_ - block2_selector_;
+  auto x = make_tagged_component<XTag, stk::topology::NODE_RANK>(ScalarFieldComponent(*field_x_ptr_));
+  auto ngp_x = get_updated_ngp_component(x);
+  auto ngp_mesh = get_updated_ngp_mesh(get_bulk());
+
+  {
+    auto es = make_entity_expr(get_bulk(), b1_not_b2, stk::topology::NODE_RANK);
+    ngp_x(es) *= alpha;
+  }
+
+  check_field_data_on_host_func<1>("field_scale does not fill.", get_bulk(), *field_x_ptr_,
+                                b1_not_b2, {}, expected_value_func);
+  check_field_data_on_host_func<1>("field_scale does not respect selector.", get_bulk(), *field_x_ptr_,
+                                !b1_not_b2, {}, get_field_x_func());
+}
+
+TEST_F(UnitTestAccessorExprFixture, field_product) {
+  if (stk::parallel_machine_size(communicator_) > 2) {
+    GTEST_SKIP() << "This test is only designed to run with 1 or 2 MPI ranks.";
+  }
+
+  const int we_know_there_are_five_ranks = 5;
+#if TRILINOS_MAJOR_MINOR_VERSION >= 160000
+  auto field_data_manager = std::make_unique<stk::mesh::DefaultFieldDataManager>(we_know_there_are_five_ranks);
+  setup_hex_mesh(stk::topology::NODE_RANK, stk::mesh::BulkData::AUTO_AURA, std::move(field_data_manager));
+#else
+  stk::mesh::DefaultFieldDataManager* field_data_manager_ptr =
+      new stk::mesh::DefaultFieldDataManager(we_know_there_are_five_ranks);
+  setup_hex_mesh(stk::topology::NODE_RANK, stk::mesh::BulkData::AUTO_AURA, field_data_manager_ptr);
+#endif
+
+  auto field_x_func = get_field_x_func();
+  auto field_y_func = get_field_y_func();
+  auto expected_value_func = [&field_x_func, &field_y_func](const double* entity_coords) {
+    return std::vector<double>{field_x_func(entity_coords)[0] * field_y_func(entity_coords)[0]};
+  };
+
+  stk::mesh::Selector b1_not_b2 = block1_selector_ - block2_selector_;
+  auto x = make_tagged_component<XTag, stk::topology::NODE_RANK>(ScalarFieldComponent(*field_x_ptr_));
+  auto y = make_tagged_component<YTag, stk::topology::NODE_RANK>(ScalarFieldComponent(*field_y_ptr_));
+  auto z = make_tagged_component<ZTag, stk::topology::NODE_RANK>(ScalarFieldComponent(*field_z_ptr_));
+
+  auto ngp_x = get_updated_ngp_component(x);
+  auto ngp_y = get_updated_ngp_component(y);
+  auto ngp_z = get_updated_ngp_component(z);
+  auto ngp_mesh = get_updated_ngp_mesh(get_bulk());
+
+  {
+    auto es = make_entity_expr(get_bulk(), b1_not_b2, stk::topology::NODE_RANK);
+    ngp_z(es) = ngp_x(es) * ngp_y(es);
+  }
+
+  check_field_data_on_host_func<1>("field_product error. x", get_bulk(), *field_x_ptr_, b1_not_b2, {}, get_field_x_func());
+  check_field_data_on_host_func<1>("field_product error. y", get_bulk(), *field_y_ptr_, b1_not_b2, {}, get_field_y_func());
+  check_field_data_on_host_func<1>("field_product error. z", get_bulk(), *field_z_ptr_, b1_not_b2, {}, expected_value_func);
+
+  check_field_data_on_host_func<1>("field subset error. x", get_bulk(), *field_x_ptr_, !b1_not_b2, {}, get_field_x_func());
+  check_field_data_on_host_func<1>("field subset error. y", get_bulk(), *field_y_ptr_, !b1_not_b2, {}, get_field_y_func());
+  check_field_data_on_host_func<1>("field subset error. z", get_bulk(), *field_z_ptr_, !b1_not_b2, {}, get_field_z_func());
+}
+
+TEST_F(UnitTestAccessorExprFixture, field_axpby) {
+  if (stk::parallel_machine_size(communicator_) > 2) {
+    GTEST_SKIP() << "This test is only designed to run with 1 or 2 MPI ranks.";
+  }
+
+  const int we_know_there_are_five_ranks = 5;
+#if TRILINOS_MAJOR_MINOR_VERSION >= 160000
+  auto field_data_manager = std::make_unique<stk::mesh::DefaultFieldDataManager>(we_know_there_are_five_ranks);
+  setup_hex_mesh(stk::topology::NODE_RANK, stk::mesh::BulkData::AUTO_AURA, std::move(field_data_manager));
+#else
+  stk::mesh::DefaultFieldDataManager* field_data_manager_ptr =
+      new stk::mesh::DefaultFieldDataManager(we_know_there_are_five_ranks);
+  setup_hex_mesh(stk::topology::NODE_RANK, stk::mesh::BulkData::AUTO_AURA, field_data_manager_ptr);
+#endif
+
+  const double alpha = 3.14159;
+  const double beta = 2.71828;
+  auto field_x_func = get_field_x_func();
+  auto field_y_func = get_field_y_func();
+  auto expected_value_func = [alpha, beta, &field_x_func, &field_y_func](const double* entity_coords) {
+    return std::vector<double>{alpha * field_x_func(entity_coords)[0] + beta * field_y_func(entity_coords)[0]};
+  };
+
   stk::mesh::Selector b1_not_b2 = block1_selector_ - block2_selector_;
   auto x = make_tagged_component<XTag, stk::topology::NODE_RANK>(ScalarFieldComponent(*field_x_ptr_));
   auto y = make_tagged_component<YTag, stk::topology::NODE_RANK>(ScalarFieldComponent(*field_y_ptr_));
 
   auto ngp_x = get_updated_ngp_component(x);
   auto ngp_y = get_updated_ngp_component(y);
-
   auto ngp_mesh = get_updated_ngp_mesh(get_bulk());
 
   {
     auto es = make_entity_expr(get_bulk(), b1_not_b2, stk::topology::NODE_RANK);
-
-    // fused_assign evaluates all right hand sides before assigning them to the left hand sides.
-    // This is the same as python's syntax: x, y = y, x.
-    //
-    // You must still use copy because since the result of ngp_x(es) is a view, so the stashed rhs is a copy of a view.
-    // y_view_copy = y_view
-    // x_view_copy = x_view
-    // x_view[0] = y_view_copy[0]
-    // y_view[0] = x_view_copy[0]
-    //
-    // If you use copy, then the logic becomes
-    // y_copy = copy(y_view)
-    // x_copy = copy(x_view)
-    // x_view[0] = y_copy[0]
-    // y_view[0] = x_copy[0]
-    //
-    // Should we do this automatically in fused_assign if the rhs is an AccessorExpr?
-    fused_assign(ngp_x(es), /*=*/ copy(ngp_y(es)),  //
-                 ngp_y(es), /*=*/ copy(ngp_x(es)));
+    ngp_y(es) = alpha * ngp_x(es) + beta * ngp_y(es);
   }
 
-  check_field_data_on_host_func<1>("fields didn't swap. x", get_bulk(), *field_x_ptr_, b1_not_b2, {}, get_field_y_func());
-  check_field_data_on_host_func<1>("fields didn't swap. y", get_bulk(), *field_y_ptr_, b1_not_b2, {}, get_field_x_func());
+  check_field_data_on_host_func<1>("field_axpby error. x", get_bulk(), *field_x_ptr_, b1_not_b2, {}, get_field_x_func());
+  check_field_data_on_host_func<1>("field_axpby error. y", get_bulk(), *field_y_ptr_, b1_not_b2, {}, expected_value_func);
 
   check_field_data_on_host_func<1>("field subset error. x", get_bulk(), *field_x_ptr_, !b1_not_b2, {}, get_field_x_func());
   check_field_data_on_host_func<1>("field subset error. y", get_bulk(), *field_y_ptr_, !b1_not_b2, {}, get_field_y_func());
