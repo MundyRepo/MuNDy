@@ -35,6 +35,8 @@
 #include <stk_mesh/base/NgpMesh.hpp>   // for stk::mesh::NgpMesh
 #include <stk_mesh/base/Selector.hpp>  // for stk::mesh::Selector
 #include <stk_mesh/base/Types.hpp>     // for stk::mesh::FastMeshIndex
+#include <stk_mesh/base/NgpReductions.hpp> // for stk::mesh::for_each_entity_reduce
+#include <stk_util/parallel/ParallelReduce.hpp>  // for stk::all_reduce_*
 
 // Mundy
 #include <mundy_core/StringLiteral.hpp>  // for mundy::core::StringLiteral
@@ -782,8 +784,8 @@ class EntityExpr : public EntityExprBase<EntityExpr<NumEntities, Ord, DriverType
 
 class NgpForEachEntityExprDriver {
  public:
-  NgpForEachEntityExprDriver(stk::mesh::NgpMesh ngp_mesh, stk::mesh::Selector selector, stk::mesh::EntityRank rank)
-      : ngp_mesh_(ngp_mesh), selector_(selector), rank_(rank) {
+  NgpForEachEntityExprDriver(const stk::mesh::BulkData& bulk_data, stk::mesh::Selector selector, stk::mesh::EntityRank rank)
+      : bulk_data_ptr_(&bulk_data), selector_(selector), rank_(rank) {
   }
 
   // Default copy/move constructor and assignment operator are fine
@@ -793,8 +795,10 @@ class NgpForEachEntityExprDriver {
   NgpForEachEntityExprDriver &operator=(NgpForEachEntityExprDriver &&) = default;
   virtual ~NgpForEachEntityExprDriver() = default;
 
-  stk::mesh::NgpMesh ngp_mesh() const {
-    return ngp_mesh_;
+  const stk::mesh::BulkData &bulk_data() const {
+    MUNDY_THROW_REQUIRE(bulk_data_ptr_ != nullptr, std::logic_error,
+                       "NgpForEachEntityExprDriver has a null BulkData pointer");
+    return *bulk_data_ptr_;
   }
 
   stk::mesh::Selector selector() const {
@@ -810,13 +814,16 @@ class NgpForEachEntityExprDriver {
     // Copy to derived expression type for lambda capture
     auto expr = expr_base.self();
 
+    // Get the up-to-date NGP mesh
+    stk::mesh::NgpMesh &ngp_mesh = get_updated_ngp_mesh(bulk_data());
+
     // Sync all fields to the appropriate space and mark modified where necessary
-    NgpEvalContext evaluation_context(ngp_mesh_);
+    NgpEvalContext evaluation_context(ngp_mesh);
     expr.propagate_synchronize(evaluation_context);
 
     // Perform the evaluation
     ::mundy::mesh::for_each_entity_run(
-        ngp_mesh_, rank_, selector_, KOKKOS_LAMBDA(const stk::mesh::FastMeshIndex &entity_index) {
+        ngp_mesh, rank_, selector_, KOKKOS_LAMBDA(const stk::mesh::FastMeshIndex &entity_index) {
           // expr.eval(Kokkos::Array<stk::mesh::FastMeshIndex, 1>{entity_index}, evaluation_context);
 
           // Sum the counts of each expression in the tree
@@ -831,8 +838,49 @@ class NgpForEachEntityExprDriver {
         });
   }
 
+  template <typename Expr, typename ReductionOp>
+  void reduce_local(CachableExprBase<Expr> &expr_base, ReductionOp& reduction) const {
+    // Copy to derived expression type for lambda capture
+    auto expr = expr_base.self();
+
+    // Get the up-to-date NGP mesh
+    stk::mesh::NgpMesh &ngp_mesh = get_updated_ngp_mesh(bulk_data());
+
+    // Sync all fields to the appropriate space and mark modified where necessary
+    NgpEvalContext evaluation_context(ngp_mesh);
+    expr.propagate_synchronize(evaluation_context);
+
+    // Perform the evaluation
+    using value_type = typename ReductionOp::value_type;
+    stk::mesh::for_each_entity_reduce(
+        ngp_mesh, rank_, selector_, reduction, KOKKOS_LAMBDA(const stk::mesh::FastMeshIndex &entity_index, value_type& value) {
+          // Sum the counts of each expression in the tree
+          constexpr auto empty_eval_counts = core::make_aggregate();
+          constexpr auto eval_counts =
+              Expr::template increment_eval_counts<decltype(empty_eval_counts), empty_eval_counts>();
+
+          // Perform the eval
+          auto empty_cache = core::make_aggregate();
+          auto [val, final_cache] = expr.template cached_eval<decltype(eval_counts), eval_counts>(
+              Kokkos::Array<stk::mesh::FastMeshIndex, 1>{entity_index}, empty_cache, evaluation_context);
+
+          // Combine into the reduction
+          using val_t = decltype(val);
+          if constexpr (std::is_same_v<val_t, value_type>) {
+            // Directly compatible types; just combine
+            reduction.join(value, val);
+          } if constexpr (math::is_scalar_wrapper_v<val_t>) {
+            // val is a scalar wrapper; extract the underlying value and combine
+            reduction.join(value, val[0]);
+          } else {
+            // Unknown return type, attempt to use it directly
+            reduction.join(value, val);
+          }
+        });
+  }
+
  private:
-  stk::mesh::NgpMesh ngp_mesh_;
+  const stk::mesh::BulkData* bulk_data_ptr_;
   stk::mesh::Selector selector_;
   stk::mesh::EntityRank rank_;
 };
@@ -851,18 +899,14 @@ auto make_entity_expr(stk::mesh::BulkData &bulk_data, const stk::mesh::Selector 
   }
 
   // Stash our driver in the map if it doesn't already exist
-  stk::mesh::NgpMesh &ngp_mesh = get_updated_ngp_mesh(bulk_data);
   const NgpForEachEntityExprDriver *driver_ptr;
   if (driver_map->contains(rank, selector)) {
     // Driver already exists for this rank and selector; reuse it
     NgpForEachEntityExprDriver &existing_driver = driver_map->at<NgpForEachEntityExprDriver>(rank, selector);
-
-    // The NgpMesh may have updated since the last time we created this driver, so update it
-    existing_driver = NgpForEachEntityExprDriver(ngp_mesh, selector, rank);
     driver_ptr = &existing_driver;
   } else {
     // Driver doesn't exist yet; create and insert it
-    NgpForEachEntityExprDriver new_driver(ngp_mesh, selector, rank);
+    NgpForEachEntityExprDriver new_driver(bulk_data, selector, rank);
     driver_map->insert<NgpForEachEntityExprDriver>(rank, selector, std::move(new_driver));
     const NgpForEachEntityExprDriver &inserted_driver = driver_map->at<NgpForEachEntityExprDriver>(rank, selector);
     driver_ptr = &inserted_driver;
@@ -1813,6 +1857,77 @@ void fused_assign(const TrgSrcExprPairs &...exprs) {
                 "The number of target/source expression pairs in fused_assign must be even.");
   FusedAssignExpr<TrgSrcExprPairs...> fused_expr(exprs...);
   fused_expr.driver()->run(fused_expr);
+}
+
+/// \brief Reduces value of a given expression over all entities in the driver on this process
+template <typename Expr, typename ReductionOp>
+ requires (is_crtp_base_of_v<MathExprBase, Expr> || is_crtp_base_of_v<EntityExprBase, Expr>)
+void reduce_local(Expr &&expr, ReductionOp &reduction) {
+  auto driver = expr.driver();
+  driver->reduce_local(expr, reduction);
+}
+
+/// \brief Reduce sum (process local)
+template <typename Scalar, typename Expr>
+ requires (is_crtp_base_of_v<MathExprBase, Expr> || is_crtp_base_of_v<EntityExprBase, Expr>)
+auto reduce_local_sum(Expr &&expr) {
+  Scalar local_sum = 0;
+  Kokkos::Sum<Scalar> sum_reduction(local_sum);
+  reduce_local(std::forward<Expr>(expr), sum_reduction);
+  return local_sum;
+}
+
+/// \brief Reduce max (process local)
+template <typename Scalar, typename Expr>
+ requires (is_crtp_base_of_v<MathExprBase, Expr> || is_crtp_base_of_v<EntityExprBase, Expr>)
+auto reduce_local_max(Expr &&expr) {
+  Scalar local_max;
+  Kokkos::Max<Scalar> max_reduction(local_max);
+  reduce_local(std::forward<Expr>(expr), max_reduction);
+  return local_max;
+}
+
+/// \brief Reduce min (process local)
+template <typename Scalar, typename Expr>
+ requires (is_crtp_base_of_v<MathExprBase, Expr> || is_crtp_base_of_v<EntityExprBase, Expr>)
+auto reduce_local_min(Expr &&expr) {
+  Scalar local_min;
+  Kokkos::Min<Scalar> min_reduction(local_min);
+  reduce_local(std::forward<Expr>(expr), min_reduction);
+  return local_min;
+}
+
+/// \brief Reduces sum (all processes)
+template <typename Scalar, typename Expr>
+ requires (is_crtp_base_of_v<MathExprBase, Expr> || is_crtp_base_of_v<EntityExprBase, Expr>)
+auto all_reduce_sum(Expr &&expr) {
+  auto *driver = expr.driver();
+  Scalar local_sum = reduce_local_sum<Scalar>(std::forward<Expr>(expr));
+  Scalar global_sum = 0;
+  stk::all_reduce_sum(driver->bulk_data().parallel(), &local_sum, &global_sum, 1);
+  return global_sum;
+}
+
+/// \brief Reduces max (all processes)
+template <typename Scalar, typename Expr>
+ requires (is_crtp_base_of_v<MathExprBase, Expr> || is_crtp_base_of_v<EntityExprBase, Expr>)
+auto all_reduce_max(Expr &&expr) {
+  auto *driver = expr.driver();
+  Scalar local_max = reduce_local_max<Scalar>(std::forward<Expr>(expr));
+  Scalar global_max = 0;
+  stk::all_reduce_max(driver->bulk_data().parallel(), &local_max, &global_max, 1);
+  return global_max;
+}
+
+/// \brief Reduces min (all processes)
+template <typename Scalar, typename Expr>
+ requires (is_crtp_base_of_v<MathExprBase, Expr> || is_crtp_base_of_v<EntityExprBase, Expr>)
+auto all_reduce_min(Expr &&expr) {
+  auto *driver = expr.driver();
+  Scalar local_min = reduce_local_min<Scalar>(std::forward<Expr>(expr));
+  Scalar global_min = 0;
+  stk::all_reduce_min(driver->bulk_data().parallel(), &local_min, &global_min, 1);
+  return global_min;
 }
 
 /*

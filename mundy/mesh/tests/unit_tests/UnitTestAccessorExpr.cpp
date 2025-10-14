@@ -423,10 +423,7 @@ TEST_F(UnitTestAccessorExprFixture, field_fill) {
 #endif
 
   const double fill_value = 3.14159;
-  auto expected_value_func = [fill_value](const double* entity_coords) {
-    return std::vector<double>{fill_value};
-  };
-
+  auto expected_value_func = [fill_value](const double* entity_coords) { return std::vector<double>{fill_value}; };
 
   stk::mesh::Selector b1_not_b2 = block1_selector_ - block2_selector_;
   auto x = make_tagged_component<XTag, stk::topology::NODE_RANK>(ScalarFieldComponent(*field_x_ptr_));
@@ -438,10 +435,10 @@ TEST_F(UnitTestAccessorExprFixture, field_fill) {
     ngp_x(es) = fill_value;
   }
 
-  check_field_data_on_host_func<1>("fill_field does not fill.", get_bulk(), *field_x_ptr_,
-                                b1_not_b2, {}, expected_value_func);
-  check_field_data_on_host_func<1>("fill_field does not respect selector.", get_bulk(), *field_x_ptr_,
-                                !b1_not_b2, {}, get_field_x_func());
+  check_field_data_on_host_func<1>("fill_field does not fill.", get_bulk(), *field_x_ptr_, b1_not_b2, {},
+                                   expected_value_func);
+  check_field_data_on_host_func<1>("fill_field does not respect selector.", get_bulk(), *field_x_ptr_, !b1_not_b2, {},
+                                   get_field_x_func());
 }
 
 TEST_F(UnitTestAccessorExprFixture, field_copy) {
@@ -476,8 +473,10 @@ TEST_F(UnitTestAccessorExprFixture, field_copy) {
   check_field_data_on_host_func<1>("field copy error. x", get_bulk(), *field_x_ptr_, b1_not_b2, {}, get_field_y_func());
   check_field_data_on_host_func<1>("field copy error. y", get_bulk(), *field_y_ptr_, b1_not_b2, {}, get_field_y_func());
 
-  check_field_data_on_host_func<1>("field subset error. x", get_bulk(), *field_x_ptr_, !b1_not_b2, {}, get_field_x_func());
-  check_field_data_on_host_func<1>("field subset error. y", get_bulk(), *field_y_ptr_, !b1_not_b2, {}, get_field_y_func());
+  check_field_data_on_host_func<1>("field subset error. x", get_bulk(), *field_x_ptr_, !b1_not_b2, {},
+                                   get_field_x_func());
+  check_field_data_on_host_func<1>("field subset error. y", get_bulk(), *field_y_ptr_, !b1_not_b2, {},
+                                   get_field_y_func());
 }
 
 TEST_F(UnitTestAccessorExprFixture, field_swap) {
@@ -523,15 +522,17 @@ TEST_F(UnitTestAccessorExprFixture, field_swap) {
     // y_view[0] = x_copy[0]
     //
     // Should we do this automatically in fused_assign if the rhs is an AccessorExpr?
-    fused_assign(ngp_x(es), /*=*/ copy(ngp_y(es)),  //
-                 ngp_y(es), /*=*/ copy(ngp_x(es)));
+    fused_assign(ngp_x(es), /*=*/copy(ngp_y(es)),  //
+                 ngp_y(es), /*=*/copy(ngp_x(es)));
   }
 
   check_field_data_on_host_func<1>("field_swap error. x", get_bulk(), *field_x_ptr_, b1_not_b2, {}, get_field_y_func());
   check_field_data_on_host_func<1>("field_swap error. y", get_bulk(), *field_y_ptr_, b1_not_b2, {}, get_field_x_func());
 
-  check_field_data_on_host_func<1>("field subset error. x", get_bulk(), *field_x_ptr_, !b1_not_b2, {}, get_field_x_func());
-  check_field_data_on_host_func<1>("field subset error. y", get_bulk(), *field_y_ptr_, !b1_not_b2, {}, get_field_y_func());
+  check_field_data_on_host_func<1>("field subset error. x", get_bulk(), *field_x_ptr_, !b1_not_b2, {},
+                                   get_field_x_func());
+  check_field_data_on_host_func<1>("field subset error. y", get_bulk(), *field_y_ptr_, !b1_not_b2, {},
+                                   get_field_y_func());
 }
 
 TEST_F(UnitTestAccessorExprFixture, field_scale) {
@@ -565,10 +566,10 @@ TEST_F(UnitTestAccessorExprFixture, field_scale) {
     ngp_x(es) *= alpha;
   }
 
-  check_field_data_on_host_func<1>("field_scale does not fill.", get_bulk(), *field_x_ptr_,
-                                b1_not_b2, {}, expected_value_func);
-  check_field_data_on_host_func<1>("field_scale does not respect selector.", get_bulk(), *field_x_ptr_,
-                                !b1_not_b2, {}, get_field_x_func());
+  check_field_data_on_host_func<1>("field_scale does not fill.", get_bulk(), *field_x_ptr_, b1_not_b2, {},
+                                   expected_value_func);
+  check_field_data_on_host_func<1>("field_scale does not respect selector.", get_bulk(), *field_x_ptr_, !b1_not_b2, {},
+                                   get_field_x_func());
 }
 
 TEST_F(UnitTestAccessorExprFixture, field_product) {
@@ -607,13 +608,19 @@ TEST_F(UnitTestAccessorExprFixture, field_product) {
     ngp_z(es) = ngp_x(es) * ngp_y(es);
   }
 
-  check_field_data_on_host_func<1>("field_product error. x", get_bulk(), *field_x_ptr_, b1_not_b2, {}, get_field_x_func());
-  check_field_data_on_host_func<1>("field_product error. y", get_bulk(), *field_y_ptr_, b1_not_b2, {}, get_field_y_func());
-  check_field_data_on_host_func<1>("field_product error. z", get_bulk(), *field_z_ptr_, b1_not_b2, {}, expected_value_func);
+  check_field_data_on_host_func<1>("field_product error. x", get_bulk(), *field_x_ptr_, b1_not_b2, {},
+                                   get_field_x_func());
+  check_field_data_on_host_func<1>("field_product error. y", get_bulk(), *field_y_ptr_, b1_not_b2, {},
+                                   get_field_y_func());
+  check_field_data_on_host_func<1>("field_product error. z", get_bulk(), *field_z_ptr_, b1_not_b2, {},
+                                   expected_value_func);
 
-  check_field_data_on_host_func<1>("field subset error. x", get_bulk(), *field_x_ptr_, !b1_not_b2, {}, get_field_x_func());
-  check_field_data_on_host_func<1>("field subset error. y", get_bulk(), *field_y_ptr_, !b1_not_b2, {}, get_field_y_func());
-  check_field_data_on_host_func<1>("field subset error. z", get_bulk(), *field_z_ptr_, !b1_not_b2, {}, get_field_z_func());
+  check_field_data_on_host_func<1>("field subset error. x", get_bulk(), *field_x_ptr_, !b1_not_b2, {},
+                                   get_field_x_func());
+  check_field_data_on_host_func<1>("field subset error. y", get_bulk(), *field_y_ptr_, !b1_not_b2, {},
+                                   get_field_y_func());
+  check_field_data_on_host_func<1>("field subset error. z", get_bulk(), *field_z_ptr_, !b1_not_b2, {},
+                                   get_field_z_func());
 }
 
 TEST_F(UnitTestAccessorExprFixture, field_axpby) {
@@ -652,12 +659,197 @@ TEST_F(UnitTestAccessorExprFixture, field_axpby) {
     ngp_y(es) = alpha * ngp_x(es) + beta * ngp_y(es);
   }
 
-  check_field_data_on_host_func<1>("field_axpby error. x", get_bulk(), *field_x_ptr_, b1_not_b2, {}, get_field_x_func());
-  check_field_data_on_host_func<1>("field_axpby error. y", get_bulk(), *field_y_ptr_, b1_not_b2, {}, expected_value_func);
+  check_field_data_on_host_func<1>("field_axpby error. x", get_bulk(), *field_x_ptr_, b1_not_b2, {},
+                                   get_field_x_func());
+  check_field_data_on_host_func<1>("field_axpby error. y", get_bulk(), *field_y_ptr_, b1_not_b2, {},
+                                   expected_value_func);
 
-  check_field_data_on_host_func<1>("field subset error. x", get_bulk(), *field_x_ptr_, !b1_not_b2, {}, get_field_x_func());
-  check_field_data_on_host_func<1>("field subset error. y", get_bulk(), *field_y_ptr_, !b1_not_b2, {}, get_field_y_func());
+  check_field_data_on_host_func<1>("field subset error. x", get_bulk(), *field_x_ptr_, !b1_not_b2, {},
+                                   get_field_x_func());
+  check_field_data_on_host_func<1>("field subset error. y", get_bulk(), *field_y_ptr_, !b1_not_b2, {},
+                                   get_field_y_func());
 }
+
+template <size_t NumComponents>
+double host_direct_field_dot(const stk::mesh::BulkData& bulk_data, const stk::mesh::FieldBase& field1,
+                             const stk::mesh::FieldBase& field2, const stk::mesh::Selector& selector) {
+  double local_dot = 0.0;
+  stk::mesh::for_each_entity_run(
+      bulk_data, field1.entity_rank(), selector,
+      [&]([[maybe_unused]] const stk::mesh::BulkData& bulk, const stk::mesh::Entity entity) {
+        const double* raw_field1_data = reinterpret_cast<const double*>(stk::mesh::field_data(field1, entity));
+        const double* raw_field2_data = reinterpret_cast<const double*>(stk::mesh::field_data(field2, entity));
+        for (size_t i = 0; i < NumComponents; ++i) {
+#pragma omp atomic
+          local_dot += raw_field1_data[i] * raw_field2_data[i];
+        }
+      });
+
+  double global_dot = 0.0;
+  stk::all_reduce_sum(bulk_data.parallel(), &local_dot, &global_dot, 1);
+  return global_dot;
+}
+
+template <size_t NumComponents>
+double host_direct_field_nrm2(const stk::mesh::BulkData& bulk_data, const stk::mesh::FieldBase& field,
+                              const stk::mesh::Selector& selector) {
+  return std::sqrt(host_direct_field_dot<NumComponents>(bulk_data, field, field, selector));
+}
+
+template <size_t NumComponents>
+double host_direct_field_sum(const stk::mesh::BulkData& bulk_data, const stk::mesh::FieldBase& field,
+                             const stk::mesh::Selector& selector) {
+  double local_sum = 0.0;
+  stk::mesh::for_each_entity_run(bulk_data, field.entity_rank(), selector,
+                                 [&]([[maybe_unused]] const stk::mesh::BulkData& bulk, const stk::mesh::Entity entity) {
+                                   const double* raw_field_data =
+                                       reinterpret_cast<const double*>(stk::mesh::field_data(field, entity));
+                                   for (size_t i = 0; i < NumComponents; ++i) {
+#pragma omp atomic
+                                     local_sum += raw_field_data[i];
+                                   }
+                                 });
+
+  double global_sum = 0.0;
+  stk::all_reduce_sum(bulk_data.parallel(), &local_sum, &global_sum, 1);
+  return global_sum;
+}
+
+template <size_t NumComponents>
+double host_direct_field_asum(const stk::mesh::BulkData& bulk_data, const stk::mesh::FieldBase& field,
+                              const stk::mesh::Selector& selector) {
+  double local_asum = 0.0;
+  stk::mesh::for_each_entity_run(bulk_data, field.entity_rank(), selector,
+                                 [&]([[maybe_unused]] const stk::mesh::BulkData& bulk, const stk::mesh::Entity entity) {
+                                   const double* raw_field_data =
+                                       reinterpret_cast<const double*>(stk::mesh::field_data(field, entity));
+                                   for (size_t i = 0; i < NumComponents; ++i) {
+#pragma omp critical
+                                     {
+                                       local_asum += Kokkos::abs(raw_field_data[i]);
+                                     }
+                                   }
+                                 });
+
+  double global_asum = 0.0;
+  stk::all_reduce_sum(bulk_data.parallel(), &local_asum, &global_asum, 1);
+  return global_asum;
+}
+
+template <size_t NumComponents>
+double host_direct_field_max(const stk::mesh::BulkData& bulk_data, const stk::mesh::FieldBase& field,
+                             const stk::mesh::Selector& selector) {
+  double local_max = -std::numeric_limits<double>::max();
+  stk::mesh::for_each_entity_run(bulk_data, field.entity_rank(), selector,
+                                 [&]([[maybe_unused]] const stk::mesh::BulkData& bulk, const stk::mesh::Entity entity) {
+                                   const double* raw_field_data =
+                                       reinterpret_cast<const double*>(stk::mesh::field_data(field, entity));
+                                   for (size_t i = 0; i < NumComponents; ++i) {
+#pragma omp critical
+                                     {
+                                       local_max = Kokkos::max(local_max, raw_field_data[i]);
+                                     }
+                                   }
+                                 });
+
+  double global_max = 0.0;
+  stk::all_reduce_max(bulk_data.parallel(), &local_max, &global_max, 1);
+  return global_max;
+}
+
+template <size_t NumComponents>
+double host_direct_field_amax(const stk::mesh::BulkData& bulk_data, const stk::mesh::FieldBase& field,
+                              const stk::mesh::Selector& selector) {
+  double local_amax = -std::numeric_limits<double>::max();
+  stk::mesh::for_each_entity_run(bulk_data, field.entity_rank(), selector,
+                                 [&]([[maybe_unused]] const stk::mesh::BulkData& bulk, const stk::mesh::Entity entity) {
+                                   const double* raw_field_data =
+                                       reinterpret_cast<const double*>(stk::mesh::field_data(field, entity));
+                                   for (size_t i = 0; i < NumComponents; ++i) {
+#pragma omp critical
+                                     {
+                                       local_amax = Kokkos::max(local_amax, Kokkos::abs(raw_field_data[i]));
+                                     }
+                                   }
+                                 });
+
+  double global_amax = 0.0;
+  stk::all_reduce_max(bulk_data.parallel(), &local_amax, &global_amax, 1);
+  return global_amax;
+}
+
+template <size_t NumComponents>
+double host_direct_field_min(const stk::mesh::BulkData& bulk_data, const stk::mesh::FieldBase& field,
+                             const stk::mesh::Selector& selector) {
+  double local_min = std::numeric_limits<double>::max();
+  stk::mesh::for_each_entity_run(bulk_data, field.entity_rank(), selector,
+                                 [&]([[maybe_unused]] const stk::mesh::BulkData& bulk, const stk::mesh::Entity entity) {
+                                   const double* raw_field_data =
+                                       reinterpret_cast<const double*>(stk::mesh::field_data(field, entity));
+                                   for (size_t i = 0; i < NumComponents; ++i) {
+#pragma omp critical
+                                     {
+                                       local_min = Kokkos::min(local_min, raw_field_data[i]);
+                                     }
+                                   }
+                                 });
+
+  double global_min = 0.0;
+  stk::all_reduce_min(bulk_data.parallel(), &local_min, &global_min, 1);
+  return global_min;
+}
+
+template <size_t NumComponents>
+double host_direct_field_amin(const stk::mesh::BulkData& bulk_data, const stk::mesh::FieldBase& field,
+                              const stk::mesh::Selector& selector) {
+  double local_amin = std::numeric_limits<double>::max();
+  stk::mesh::for_each_entity_run(bulk_data, field.entity_rank(), selector,
+                                 [&]([[maybe_unused]] const stk::mesh::BulkData& bulk, const stk::mesh::Entity entity) {
+                                   const double* raw_field_data =
+                                       reinterpret_cast<const double*>(stk::mesh::field_data(field, entity));
+                                   for (size_t i = 0; i < NumComponents; ++i) {
+#pragma omp critical
+                                     {
+                                       local_amin = Kokkos::min(local_amin, Kokkos::abs(raw_field_data[i]));
+                                     }
+                                   }
+                                 });
+
+  double global_amin = 0.0;
+  stk::all_reduce_min(bulk_data.parallel(), &local_amin, &global_amin, 1);
+  return global_amin;
+}
+
+TEST_F(UnitTestAccessorExprFixture, field_dot) {
+  if (stk::parallel_machine_size(communicator_) > 2) {
+    GTEST_SKIP() << "This test is only designed to run with 1 or 2 MPI ranks.";
+  }
+
+  const int we_know_there_are_five_ranks = 5;
+#if TRILINOS_MAJOR_MINOR_VERSION >= 160000
+  auto field_data_manager = std::make_unique<stk::mesh::DefaultFieldDataManager>(we_know_there_are_five_ranks);
+  setup_hex_mesh(stk::topology::NODE_RANK, stk::mesh::BulkData::AUTO_AURA, std::move(field_data_manager));
+#else
+  stk::mesh::DefaultFieldDataManager* field_data_manager_ptr =
+      new stk::mesh::DefaultFieldDataManager(we_know_there_are_five_ranks);
+  setup_hex_mesh(stk::topology::NODE_RANK, stk::mesh::BulkData::AUTO_AURA, field_data_manager_ptr);
+#endif
+
+  stk::mesh::Selector b1_not_b2 = block1_selector_ - block2_selector_;
+  auto x = make_tagged_component<XTag, stk::topology::NODE_RANK>(ScalarFieldComponent(*field_x_ptr_));
+  auto y = make_tagged_component<YTag, stk::topology::NODE_RANK>(ScalarFieldComponent(*field_y_ptr_));
+
+  auto ngp_x = get_updated_ngp_component(x);
+  auto ngp_y = get_updated_ngp_component(y);
+
+  auto ngp_mesh = get_updated_ngp_mesh(get_bulk());
+
+  auto es = make_entity_expr(get_bulk(), b1_not_b2, stk::topology::NODE_RANK);
+  double actual_dot = all_reduce_sum<double>(ngp_x(es) * ngp_y(es));
+  double expected_dot = host_direct_field_dot<1>(get_bulk(), *field_x_ptr_, *field_y_ptr_, b1_not_b2);
+  EXPECT_NEAR(actual_dot, expected_dot, 1.0e-12);
+}
+
 
 
 }  // namespace
