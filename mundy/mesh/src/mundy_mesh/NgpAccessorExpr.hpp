@@ -37,12 +37,12 @@
 #include <stk_mesh/base/Types.hpp>     // for stk::mesh::FastMeshIndex
 
 // Mundy
+#include <mundy_core/StringLiteral.hpp>  // for mundy::core::StringLiteral
 #include <mundy_core/aggregate.hpp>      // for mundy::core::aggregate
 #include <mundy_core/throw_assert.hpp>   // for MUNDY_THROW_ASSERT
 #include <mundy_core/tuple.hpp>          // for mundy::core::tuple
 #include <mundy_math/Vector.hpp>         // for mundy::math::Vector
 #include <mundy_mesh/ForEachEntity.hpp>  // for mundy::mesh::for_each_entity_run
-#include <mundy_core/StringLiteral.hpp>  // for mundy::core::StringLiteral
 
 namespace mundy {
 
@@ -319,7 +319,6 @@ KOKKOS_FUNCTION auto expr_chain_impl(const ExprTuple &exprs,
   if constexpr (num_expr == 1) {
     // Single expr; just eval it and return its value and the current cache
     auto val = core::get<0>(exprs).eval(fmis, ctx);
-    std::cout << "I: 0 | val_i: " << val << std::endl;
     return core::tuple{std::move(val)};
   } else if constexpr (I == num_expr) {
     // No more exprs; return empty values tuple and the current cache
@@ -327,7 +326,6 @@ KOKKOS_FUNCTION auto expr_chain_impl(const ExprTuple &exprs,
   } else {
     // Evaluate current expr with the current cache
     auto val_i = core::get<I>(exprs).eval(fmis, ctx);
-    std::cout << "I: " << I << " | val_i: " << val_i << std::endl;
 
     // Recurse for the rest, threading the updated cache
     auto vals_tail = expr_chain_impl<I + 1>(exprs, fmis, ctx);
@@ -370,28 +368,28 @@ class AnyRankSelectorMap {
     const auto &selector_map = ranked_selector_maps_[rank];
     return selector_map.find(selector) != selector_map.end();
   }
-    
+
   template <typename T>
   void insert(stk::mesh::EntityRank rank, const stk::mesh::Selector &selector, T value) {
     auto &selector_map = ranked_selector_maps_[rank];
-    MUNDY_THROW_ASSERT(!contains(rank, selector), std::logic_error, 
-    "Attempting to insert a rank and selector pair into AnyRankSelectorMap that is already present");
+    MUNDY_THROW_ASSERT(!contains(rank, selector), std::logic_error,
+                       "Attempting to insert a rank and selector pair into AnyRankSelectorMap that is already present");
     selector_map.emplace(selector, std::move(value));
   }
 
   template <typename T>
   T &at(stk::mesh::EntityRank rank, const stk::mesh::Selector &selector) {
     auto &selector_map = ranked_selector_maps_[rank];
-    MUNDY_THROW_ASSERT(contains(rank, selector), std::logic_error, 
-      "Attempting to access a rank and selector pair into AnyRankSelectorMap that isn't present");
+    MUNDY_THROW_ASSERT(contains(rank, selector), std::logic_error,
+                       "Attempting to access a rank and selector pair into AnyRankSelectorMap that isn't present");
     return std::any_cast<T &>(selector_map.at(selector));
   }
 
   template <typename T>
   const T &at(stk::mesh::EntityRank rank, const stk::mesh::Selector &selector) const {
     auto &selector_map = ranked_selector_maps_[rank];
-    MUNDY_THROW_ASSERT(contains(rank, selector), std::logic_error, 
-      "Attempting to access a rank and selector pair into AnyRankSelectorMap that isn't present");
+    MUNDY_THROW_ASSERT(contains(rank, selector), std::logic_error,
+                       "Attempting to access a rank and selector pair into AnyRankSelectorMap that isn't present");
     return std::any_cast<const T &>(selector_map.at(selector));
   }
 
@@ -620,6 +618,7 @@ class ConnectedEntitiesExpr : public EntityExprBase<ConnectedEntitiesExpr<PrevEn
       if constexpr (core::has<our_tag, std::remove_reference_t<OldCacheType>>()) {
         // The fact that our tag exists in the old cache means that our eval has cached its result before.
         // Return the cached value and the old cache
+        std::cout << "Reusing cached connectivity" << std::endl;
         auto cache = std::forward<OldCacheType>(old_cache);
         return Kokkos::make_pair(get<our_tag>(cache), cache);
       } else {
@@ -710,6 +709,7 @@ class EntityExpr : public EntityExprBase<EntityExpr<NumEntities, Ord, DriverType
       if constexpr (core::has<our_tag, std::remove_reference_t<OldCacheType>>()) {
         // The fact that our tag exists in the old cache means that our eval has cached its result before. means that
         // our eval has cached its result before. Return the cached value
+        std::cout << "Reusing cached entity" << std::endl;
         auto cache = std::forward<OldCacheType>(old_cache);
         auto val = get<our_tag>(cache);
         return Kokkos::make_pair(val, cache);
@@ -772,7 +772,7 @@ class NgpForEachEntityExprDriver {
   NgpForEachEntityExprDriver &operator=(const NgpForEachEntityExprDriver &) = default;
   NgpForEachEntityExprDriver &operator=(NgpForEachEntityExprDriver &&) = default;
   virtual ~NgpForEachEntityExprDriver() = default;
-  
+
   stk::mesh::NgpMesh ngp_mesh() const {
     return ngp_mesh_;
   }
@@ -785,35 +785,29 @@ class NgpForEachEntityExprDriver {
     return rank_;
   }
 
-  // template <typename Expr>
-  // void run(CachableExprBase<Expr> &expr_base) const {
-  //   // Copy to derived expression type for lambda capture
-  //   std::cout << "Fetching derived expr." << std::endl;
-  //   auto expr = expr_base.self();
   template <typename Expr>
-  void run(Expr expr) const {
+  void run(CachableExprBase<Expr> &expr_base) const {
+    // Copy to derived expression type for lambda capture
+    auto expr = expr_base.self();
+
     // Sync all fields to the appropriate space and mark modified where necessary
     NgpEvalContext evaluation_context(ngp_mesh_);
-
-    std::cout << "Propagating sync." << std::endl;
     expr.propagate_synchronize(evaluation_context);
 
     // Perform the evaluation
-    std::cout << "Starting for_each_entity_run." << std::endl;
     ::mundy::mesh::for_each_entity_run(
         ngp_mesh_, rank_, selector_, KOKKOS_LAMBDA(const stk::mesh::FastMeshIndex &entity_index) {
-          std::cout << "About to perform eval." << std::endl;
-          expr.eval(Kokkos::Array<stk::mesh::FastMeshIndex, 1>{entity_index}, evaluation_context);
+          // expr.eval(Kokkos::Array<stk::mesh::FastMeshIndex, 1>{entity_index}, evaluation_context);
 
           // Sum the counts of each expression in the tree
-          // constexpr auto empty_eval_counts = core::make_aggregate();
-          // constexpr auto eval_counts =
-          //     Expr::template increment_eval_counts<decltype(empty_eval_counts), empty_eval_counts>();
+          constexpr auto empty_eval_counts = core::make_aggregate();
+          constexpr auto eval_counts =
+              Expr::template increment_eval_counts<decltype(empty_eval_counts), empty_eval_counts>();
 
-          // // Perform the eval
-          // auto empty_cache = core::make_aggregate();
-          // expr.template cached_eval<decltype(eval_counts), eval_counts>(
-          //     Kokkos::Array<stk::mesh::FastMeshIndex, 1>{entity_index}, empty_cache, evaluation_context);
+          // Perform the eval
+          auto empty_cache = core::make_aggregate();
+          expr.template cached_eval<decltype(eval_counts), eval_counts>(
+              Kokkos::Array<stk::mesh::FastMeshIndex, 1>{entity_index}, empty_cache, evaluation_context);
         });
   }
 
@@ -830,18 +824,18 @@ auto make_entity_expr(stk::mesh::BulkData &bulk_data, const stk::mesh::Selector 
 
   using driver_map_t = impl::AnyRankSelectorMap<core::make_string_literal("ExprDrivers")>;
   stk::mesh::MetaData &meta_data = bulk_data.mesh_meta_data();
-  driver_map_t* driver_map = const_cast<driver_map_t*>(meta_data.get_attribute<driver_map_t>());
+  driver_map_t *driver_map = const_cast<driver_map_t *>(meta_data.get_attribute<driver_map_t>());
   if (driver_map == nullptr) {
-    const driver_map_t* new_driver_map = new driver_map_t();
-    driver_map =  const_cast<driver_map_t*>(meta_data.declare_attribute_with_delete(new_driver_map));
+    const driver_map_t *new_driver_map = new driver_map_t();
+    driver_map = const_cast<driver_map_t *>(meta_data.declare_attribute_with_delete(new_driver_map));
   }
 
   // Stash our driver in the map if it doesn't already exist
-  stk::mesh::NgpMesh& ngp_mesh = get_updated_ngp_mesh(bulk_data);
-  const NgpForEachEntityExprDriver* driver_ptr;
+  stk::mesh::NgpMesh &ngp_mesh = get_updated_ngp_mesh(bulk_data);
+  const NgpForEachEntityExprDriver *driver_ptr;
   if (driver_map->contains(rank, selector)) {
     // Driver already exists for this rank and selector; reuse it
-    NgpForEachEntityExprDriver& existing_driver = driver_map->at<NgpForEachEntityExprDriver>(rank, selector);
+    NgpForEachEntityExprDriver &existing_driver = driver_map->at<NgpForEachEntityExprDriver>(rank, selector);
 
     // The NgpMesh may have updated since the last time we created this driver, so update it
     existing_driver = NgpForEachEntityExprDriver(ngp_mesh, selector, rank);
@@ -850,7 +844,7 @@ auto make_entity_expr(stk::mesh::BulkData &bulk_data, const stk::mesh::Selector 
     // Driver doesn't exist yet; create and insert it
     NgpForEachEntityExprDriver new_driver(ngp_mesh, selector, rank);
     driver_map->insert<NgpForEachEntityExprDriver>(rank, selector, std::move(new_driver));
-    const NgpForEachEntityExprDriver& inserted_driver = driver_map->at<NgpForEachEntityExprDriver>(rank, selector);
+    const NgpForEachEntityExprDriver &inserted_driver = driver_map->at<NgpForEachEntityExprDriver>(rank, selector);
     driver_ptr = &inserted_driver;
   }
 
@@ -893,44 +887,21 @@ class AssignExpr : public MathExprBase<AssignExpr<TargetExpr, SourceExpr>> {
 
   KOKKOS_INLINE_FUNCTION void eval(const Kokkos::Array<stk::mesh::FastMeshIndex, num_entities> &fmis,
                                    const NgpEvalContext &context) const {
-    std::cout << "LHS types: " << typeid(decltype(trg_expr_.eval(fmis, context))).name() << " | RHS types: " << typeid(decltype(src_expr_.eval(fmis, context))).name() << std::endl;
-    std::cout << "BEFORE LHS: " << trg_expr_.eval(fmis, context) << " | RHS: " << src_expr_.eval(fmis, context) << std::endl;
     trg_expr_.eval(fmis, context) = src_expr_.eval(fmis, context);
-    std::cout << "AFTER  LHS: " << trg_expr_.eval(fmis, context) << " | RHS: " << src_expr_.eval(fmis, context) << std::endl;
   }
 
   template <typename EvalCountsType, EvalCountsType eval_counts, typename OldCacheType>
   void cached_eval(const Kokkos::Array<stk::mesh::FastMeshIndex, num_entities> &fmis, OldCacheType &&old_cache,
                    const NgpEvalContext &context) const {
-    static_assert(has<our_tag>(eval_counts), "eval_counts must contain our tag");
+    static_assert(!core::has<our_tag, std::remove_reference_t<OldCacheType>>(),
+                  "The cache somehow contains our tag, but our eval returns void and should never cache anything.");
 
-    if constexpr (get<our_tag>(eval_counts) > 1) {
-      std::cout << "Caching of assignment expression" << std::endl;
-      if constexpr (core::has<our_tag, std::remove_reference_t<OldCacheType>>()) {
-        // The fact that our tag exists in the old cache means that our eval has cached its result before. means that
-        // our eval has cached its result before. Return the cached value
-        auto cache = std::forward<OldCacheType>(old_cache);
-        auto val = get<our_tag>(cache);
-        return Kokkos::make_pair(val, cache);
-      } else {
-        // Eval our subexpressions first, allowing them to cache their results if necessary
-        auto [trg_val, new_cache] = trg_expr_.template cached_eval<EvalCountsType, eval_counts>(
-            fmis, std::forward<OldCacheType>(old_cache), context);
-        auto [src_val, newer_cache] =
-            src_expr_.template cached_eval<EvalCountsType, eval_counts>(fmis, std::move(new_cache), context);
-        trg_val = src_val;
-        MUNDY_THROW_ASSERT(false, std::logic_error,
-                           "Attempting to cache the result of an assignment expression, which returns void.");
-      }
-    } else {
-      std::cout << "No caching of assignment expression" << std::endl;
-      // Eval our subexpressions first, allowing them to cache their results if necessary
-      auto [trg_val, new_cache] = trg_expr_.template cached_eval<EvalCountsType, eval_counts>(
-          fmis, std::forward<OldCacheType>(old_cache), context);
-      auto [src_val, newer_cache] =
-          src_expr_.template cached_eval<EvalCountsType, eval_counts>(fmis, std::move(new_cache), context);
-      trg_val = src_val;
-    }
+    // Eval our subexpressions first, allowing them to cache their results if necessary
+    auto [trg_val, new_cache] = trg_expr_.template cached_eval<EvalCountsType, eval_counts>(
+        fmis, std::forward<OldCacheType>(old_cache), context);
+    auto [src_val, newer_cache] =
+        src_expr_.template cached_eval<EvalCountsType, eval_counts>(fmis, std::move(new_cache), context);
+    trg_val = src_val;
   }
 
   void propagate_synchronize(const NgpEvalContext &context) {
@@ -986,22 +957,22 @@ class AssignExpr : public MathExprBase<AssignExpr<TargetExpr, SourceExpr>> {
                                                                                                                   \
     template <typename OtherExpr>                                                                                 \
     auto operator+(const MathExprBase<OtherExpr> &other) const {                                                  \
-      return AddExpr<our_t, OtherExpr>(*this, other.self());                                            \
+      return AddExpr<our_t, OtherExpr>(*this, other.self());                                                      \
     }                                                                                                             \
                                                                                                                   \
     template <typename OtherExpr>                                                                                 \
     auto operator-(const MathExprBase<OtherExpr> &other) const {                                                  \
-      return SubExpr<our_t, OtherExpr>(*this, other.self());                                            \
+      return SubExpr<our_t, OtherExpr>(*this, other.self());                                                      \
     }                                                                                                             \
                                                                                                                   \
     template <typename OtherExpr>                                                                                 \
     auto operator*(const MathExprBase<OtherExpr> &other) const {                                                  \
-      return MulExpr<our_t, OtherExpr>(*this, other.self());                                            \
+      return MulExpr<our_t, OtherExpr>(*this, other.self());                                                      \
     }                                                                                                             \
                                                                                                                   \
     template <typename OtherExpr>                                                                                 \
     auto operator/(const MathExprBase<OtherExpr> &other) const {                                                  \
-      return DivExpr<our_t, OtherExpr>(*this, other.self());                                            \
+      return DivExpr<our_t, OtherExpr>(*this, other.self());                                                      \
     }                                                                                                             \
                                                                                                                   \
     KOKKOS_INLINE_FUNCTION auto eval(const Kokkos::Array<stk::mesh::FastMeshIndex, num_entities> &fmis,           \
@@ -1018,6 +989,7 @@ class AssignExpr : public MathExprBase<AssignExpr<TargetExpr, SourceExpr>> {
         if constexpr (core::has<our_tag, std::remove_reference_t<OldCacheType>>()) {                              \
           /* The fact that our tag exists in the old cache means that our eval has cached its result before.*/    \
           /* Return the cached value */                                                                           \
+          std::cout << "Reusing cached binary math expression for operator " #op << std::endl;            \
           auto cache = std::forward<OldCacheType>(old_cache);                                                     \
           auto val = get<our_tag>(cache);                                                                         \
           return Kokkos::make_pair(val, cache);                                                                   \
@@ -1080,92 +1052,73 @@ class AssignExpr : public MathExprBase<AssignExpr<TargetExpr, SourceExpr>> {
     RightMathExpr right_;                                                                                         \
   };
 
-#define MUNDY_ACCESSOR_EXPR_OP_EQUALS(OpName, op_equals)                                                              \
-  template <typename LeftMathExpr, typename RightMathExpr>                                                            \
-  class OpName##EqualsExpr : public MathExprBase<OpName##EqualsExpr<LeftMathExpr, RightMathExpr>> {                   \
-   public:                                                                                                            \
-    using our_t = OpName##EqualsExpr<LeftMathExpr, RightMathExpr>;                                                    \
-    using our_tag = typename MathExprBase<OpName##EqualsExpr<LeftMathExpr, RightMathExpr>>::our_tag;                  \
-    using sub_expressions_t = core::tuple<LeftMathExpr, RightMathExpr>;                                               \
-    static constexpr size_t num_entities = LeftMathExpr::num_entities;                                                \
-                                                                                                                      \
-    KOKKOS_INLINE_FUNCTION                                                                                            \
-    OpName##EqualsExpr(LeftMathExpr left, RightMathExpr right) : left_(left), right_(right) {                         \
-    }                                                                                                                 \
-                                                                                                                      \
-    KOKKOS_INLINE_FUNCTION                                                                                            \
-    OpName##EqualsExpr(const EntityExprBase<LeftMathExpr> &left, const EntityExprBase<RightMathExpr> &right)          \
-        : left_(left.self()), right_(right.self()) {                                                                  \
-    }                                                                                                                 \
-                                                                                                                      \
-    KOKKOS_INLINE_FUNCTION void eval(const Kokkos::Array<stk::mesh::FastMeshIndex, num_entities> &fmis,               \
-                                     const NgpEvalContext &context) const {                                           \
-      left_.eval(fmis, context) op_equals right_.eval(fmis, context);                                                 \
-    }                                                                                                                 \
-                                                                                                                      \
-    template <typename EvalCountsType, EvalCountsType eval_counts, typename OldCacheType>                             \
-    void cached_eval(const Kokkos::Array<stk::mesh::FastMeshIndex, num_entities> &fmis, OldCacheType &&old_cache,     \
-                     const NgpEvalContext &context) const {                                                           \
-      static_assert(has<our_tag>(eval_counts), "eval_counts must contain our tag");                                   \
-                                                                                                                      \
-      if constexpr (get<our_tag>(eval_counts) > 1) {                                                                  \
-        if constexpr (core::has<our_tag, std::remove_reference_t<OldCacheType>>()) {                                  \
-          /* The fact that our tag exists in the old cache means that our eval has cached its result before. means */ \
-          /* that our eval has cached its result before. Return the cached value */                                   \
-          auto val = get<our_tag>(old_cache);                                                                         \
-          return Kokkos::make_pair(val, old_cache);                                                                   \
-        } else {                                                                                                      \
-          /* Eval our subexpressions first, allowing them to cache their results if necessary */                      \
-          auto [left_val, new_cache] =                                                                                \
-              left_.template cached_eval<EvalCountsType, eval_counts>(fmis, old_cache, context);                      \
-          auto [right_val, newer_cache] =                                                                             \
-              right_.template cached_eval<EvalCountsType, eval_counts>(fmis, new_cache, context);                     \
-          left_val op_equals right_val;                                                                               \
-          MUNDY_THROW_ASSERT(false, std::logic_error,                                                                 \
-                             "Attempting to cache the result of an assignment expression, which returns void.");      \
-        }                                                                                                             \
-      } else {                                                                                                        \
-        /* Eval our subexpressions first, allowing them to cache their results if necessary */                        \
-        auto [left_val, new_cache] =                                                                                  \
-            left_.template cached_eval<EvalCountsType, eval_counts>(fmis, old_cache, context);                        \
-        auto [right_val, newer_cache] =                                                                               \
-            right_.template cached_eval<EvalCountsType, eval_counts>(fmis, new_cache, context);                       \
-        left_val op_equals right_val;                                                                                 \
-      }                                                                                                               \
-    }                                                                                                                 \
-                                                                                                                      \
-    void propagate_synchronize(const NgpEvalContext &context) {                                                       \
-      left_.flag_read_write(context);                                                                                 \
-      right_.flag_read_only(context);                                                                                 \
-      left_.propagate_synchronize(context);                                                                           \
-      right_.propagate_synchronize(context);                                                                          \
-    }                                                                                                                 \
-                                                                                                                      \
-    void flag_read_only(const NgpEvalContext & /*context*/) {                                                         \
-      /* Our return type is naturally read-only. Nothing to do here. */                                               \
-    }                                                                                                                 \
-                                                                                                                      \
-    void flag_read_write(const NgpEvalContext & /*context*/) {                                                        \
-      std::cout << "Warning: Attempting to write to the return type of a binary expression, which returns a "         \
-                   "temporary value."                                                                                 \
-                << std::endl;                                                                                         \
-    }                                                                                                                 \
-                                                                                                                      \
-    void flag_overwrite_all(const NgpEvalContext & /*context*/) {                                                     \
-      std::cout << "Warning: Attempting to write to the return type of a binary expression, which returns a "         \
-                   "temporary value."                                                                                 \
-                << std::endl;                                                                                         \
-    }                                                                                                                 \
-                                                                                                                      \
-    const auto driver() const {                                                                                       \
-      auto d = left_.driver();                                                                                        \
-      MUNDY_THROW_ASSERT(d == right_.driver(), std::logic_error, "Mismatched drivers in binary math expression");     \
-      return d;                                                                                                       \
-    }                                                                                                                 \
-                                                                                                                      \
-   private:                                                                                                           \
-    LeftMathExpr left_;                                                                                               \
-    RightMathExpr right_;                                                                                             \
+#define MUNDY_ACCESSOR_EXPR_OP_EQUALS(OpName, op_equals)                                                               \
+  template <typename LeftMathExpr, typename RightMathExpr>                                                             \
+  class OpName##EqualsExpr : public MathExprBase<OpName##EqualsExpr<LeftMathExpr, RightMathExpr>> {                    \
+   public:                                                                                                             \
+    using our_t = OpName##EqualsExpr<LeftMathExpr, RightMathExpr>;                                                     \
+    using our_tag = typename MathExprBase<OpName##EqualsExpr<LeftMathExpr, RightMathExpr>>::our_tag;                   \
+    using sub_expressions_t = core::tuple<LeftMathExpr, RightMathExpr>;                                                \
+    static constexpr size_t num_entities = LeftMathExpr::num_entities;                                                 \
+                                                                                                                       \
+    KOKKOS_INLINE_FUNCTION                                                                                             \
+    OpName##EqualsExpr(LeftMathExpr left, RightMathExpr right) : left_(left), right_(right) {                          \
+    }                                                                                                                  \
+                                                                                                                       \
+    KOKKOS_INLINE_FUNCTION                                                                                             \
+    OpName##EqualsExpr(const EntityExprBase<LeftMathExpr> &left, const EntityExprBase<RightMathExpr> &right)           \
+        : left_(left.self()), right_(right.self()) {                                                                   \
+    }                                                                                                                  \
+                                                                                                                       \
+    KOKKOS_INLINE_FUNCTION void eval(const Kokkos::Array<stk::mesh::FastMeshIndex, num_entities> &fmis,                \
+                                     const NgpEvalContext &context) const {                                            \
+      left_.eval(fmis, context) op_equals right_.eval(fmis, context);                                                  \
+    }                                                                                                                  \
+                                                                                                                       \
+    template <typename EvalCountsType, EvalCountsType eval_counts, typename OldCacheType>                              \
+    void cached_eval(const Kokkos::Array<stk::mesh::FastMeshIndex, num_entities> &fmis, OldCacheType &&old_cache,      \
+                     const NgpEvalContext &context) const {                                                            \
+      static_assert(!core::has<our_tag, std::remove_reference_t<OldCacheType>>(),                                      \
+                    "The cache somehow contains our tag, but our eval returns void and should never cache anything."); \
+      /* Eval our subexpressions first, allowing them to cache their results if necessary */                           \
+      auto [left_val, new_cache] = left_.template cached_eval<EvalCountsType, eval_counts>(fmis, old_cache, context);  \
+      auto [right_val, newer_cache] =                                                                                  \
+          right_.template cached_eval<EvalCountsType, eval_counts>(fmis, new_cache, context);                          \
+      left_val op_equals right_val;                                                                                    \
+    }                                                                                                                  \
+                                                                                                                       \
+    void propagate_synchronize(const NgpEvalContext &context) {                                                        \
+      left_.flag_read_write(context);                                                                                  \
+      right_.flag_read_only(context);                                                                                  \
+      left_.propagate_synchronize(context);                                                                            \
+      right_.propagate_synchronize(context);                                                                           \
+    }                                                                                                                  \
+                                                                                                                       \
+    void flag_read_only(const NgpEvalContext & /*context*/) {                                                          \
+      /* Our return type is naturally read-only. Nothing to do here. */                                                \
+    }                                                                                                                  \
+                                                                                                                       \
+    void flag_read_write(const NgpEvalContext & /*context*/) {                                                         \
+      std::cout << "Warning: Attempting to write to the return type of a binary expression, which returns a "          \
+                   "temporary value."                                                                                  \
+                << std::endl;                                                                                          \
+    }                                                                                                                  \
+                                                                                                                       \
+    void flag_overwrite_all(const NgpEvalContext & /*context*/) {                                                      \
+      std::cout << "Warning: Attempting to write to the return type of a binary expression, which returns a "          \
+                   "temporary value."                                                                                  \
+                << std::endl;                                                                                          \
+    }                                                                                                                  \
+                                                                                                                       \
+    const auto driver() const {                                                                                        \
+      auto d = left_.driver();                                                                                         \
+      MUNDY_THROW_ASSERT(d == right_.driver(), std::logic_error, "Mismatched drivers in binary math expression");      \
+      return d;                                                                                                        \
+    }                                                                                                                  \
+                                                                                                                       \
+   private:                                                                                                            \
+    LeftMathExpr left_;                                                                                                \
+    RightMathExpr right_;                                                                                              \
   };
 
 MUNDY_ACCESSOR_EXPR_OP(Add, +)
@@ -1177,26 +1130,25 @@ MUNDY_ACCESSOR_EXPR_OP_EQUALS(Sub, -=)
 MUNDY_ACCESSOR_EXPR_OP_EQUALS(Div, /=)
 MUNDY_ACCESSOR_EXPR_OP_EQUALS(Mul, *=)
 
-template <typename AccessorT, typename PrevEntityExpr>
-class AccessorExpr : public MathExprBase<AccessorExpr<AccessorT, PrevEntityExpr>> {
+template <typename TaggedAccessorT, typename PrevEntityExpr>
+class AccessorExpr : public MathExprBase<AccessorExpr<TaggedAccessorT, PrevEntityExpr>> {
  public:
-  using our_t = AccessorExpr<AccessorT, PrevEntityExpr>;
+  using our_t = AccessorExpr<TaggedAccessorT, PrevEntityExpr>;
   using our_tag = typename MathExprBase<our_t>::our_tag;
   using sub_expressions_t = core::tuple<PrevEntityExpr>;
   static constexpr size_t num_entities = PrevEntityExpr::num_entities;
 
   KOKKOS_INLINE_FUNCTION
-  AccessorExpr(AccessorT accessor, const PrevEntityExpr &prev_entity_expr)
-      : accessor_(accessor), prev_entity_expr_(prev_entity_expr) {
+  AccessorExpr(TaggedAccessorT tagged_accessor, const PrevEntityExpr &prev_entity_expr)
+      : tagged_accessor_(tagged_accessor), prev_entity_expr_(prev_entity_expr) {
   }
 
   KOKKOS_INLINE_FUNCTION
-  AccessorExpr(AccessorT accessor, const EntityExprBase<PrevEntityExpr> &prev_entity_expr_base)
-      : accessor_(accessor), prev_entity_expr_(prev_entity_expr_base.self()) {
+  AccessorExpr(TaggedAccessorT tagged_accessor, const EntityExprBase<PrevEntityExpr> &prev_entity_expr_base)
+      : tagged_accessor_(tagged_accessor), prev_entity_expr_(prev_entity_expr_base.self()) {
   }
 
   auto operator=(const our_t &other) {
-    std::cout << "In AccessorExpr::operator=(const our_t &)" << std::endl;
     auto expr = AssignExpr<our_t, our_t>(*this, other);
     expr.driver()->run(expr);
   }
@@ -1204,7 +1156,6 @@ class AccessorExpr : public MathExprBase<AccessorExpr<AccessorT, PrevEntityExpr>
   template <typename OtherExpr>
     requires(!std::is_same_v<OtherExpr, our_t>)
   auto operator=(const MathExprBase<OtherExpr> &other) {
-    std::cout << "In AccessorExpr::operator=(const MathExprBase<OtherExpr> &)" << std::endl;
     auto expr = AssignExpr<our_t, OtherExpr>(*this, other.self());
     expr.driver()->run(expr);
   }
@@ -1212,7 +1163,6 @@ class AccessorExpr : public MathExprBase<AccessorExpr<AccessorT, PrevEntityExpr>
   template <typename OtherExpr>
     requires(!std::is_same_v<OtherExpr, our_t>)
   auto operator=(const EntityExprBase<OtherExpr> &other) {
-    std::cout << "In AccessorExpr::operator=(const EntityExprBase<OtherExpr> &)" << std::endl;
     auto expr = AssignExpr<our_t, OtherExpr>(*this, other.self());
     expr.driver()->run(expr);
   }
@@ -1264,33 +1214,52 @@ class AccessorExpr : public MathExprBase<AccessorExpr<AccessorT, PrevEntityExpr>
   KOKKOS_INLINE_FUNCTION auto eval(const Kokkos::Array<stk::mesh::FastMeshIndex, num_entities> &fmis,
                                    const NgpEvalContext &context) const {
     stk::mesh::FastMeshIndex entity_index = prev_entity_expr_.eval(fmis, context);
-    return accessor_(entity_index);
+    return tagged_accessor_(entity_index);
   }
 
   template <typename EvalCountsType, EvalCountsType eval_counts, typename OldCacheType>
   auto cached_eval(const Kokkos::Array<stk::mesh::FastMeshIndex, num_entities> &fmis, OldCacheType &&old_cache,
                    const NgpEvalContext &context) const {
     static_assert(has<our_tag>(eval_counts), "eval_counts must contain our tag");
-    // Our return is not "static" in the sense that it depends on an internal and changes from accessor to accessor.
-    // Consequently, we cannot cache our return value here. We must always eval it fresh.
-    auto [entity_index, new_cache] = prev_entity_expr_.template cached_eval<EvalCountsType, eval_counts>(
-        fmis, std::forward<OldCacheType>(old_cache), context);
-    auto val = accessor_(entity_index);
-    return Kokkos::make_pair(val, new_cache);
+
+    if constexpr (get<our_tag>(eval_counts) > 1) {
+      if constexpr (core::has<our_tag, std::remove_reference_t<OldCacheType>>()) {
+        // The fact that our tag exists in the old cache means that our eval has cached its result before.
+        // Return the cached value and the old cache
+        std::cout << "Reusing cached accessor" << std::endl;
+        auto cache = std::forward<OldCacheType>(old_cache);
+        return Kokkos::make_pair(get<our_tag>(cache), cache);
+      } else {
+        // Eval our subexpressions first
+        auto [entity_index, new_cache] = prev_entity_expr_.template cached_eval<EvalCountsType, eval_counts>(
+            fmis, std::forward<OldCacheType>(old_cache), context);
+
+        // Our eval result needs cached, but is not yet cached
+        auto val = tagged_accessor_(entity_index);
+        auto newest_cache = append<our_tag>(std::move(new_cache), val);
+        return Kokkos::make_pair(val, newest_cache);
+      }
+    } else {
+      // We don't need to cache our value, so just compute and return it
+      auto [entity_index, new_cache] = prev_entity_expr_.template cached_eval<EvalCountsType, eval_counts>(
+          fmis, std::forward<OldCacheType>(old_cache), context);
+      auto val = tagged_accessor_(entity_index);
+      return Kokkos::make_pair(val, new_cache);
+    }
   }
 
   void flag_read_only(const NgpEvalContext & /*context*/) {
-    accessor_.sync_to_device();
+    tagged_accessor_.sync_to_device();
   }
 
   void flag_read_write(const NgpEvalContext & /*context*/) {
-    accessor_.sync_to_device();
-    accessor_.modify_on_device();
+    tagged_accessor_.sync_to_device();
+    tagged_accessor_.modify_on_device();
   }
 
   void flag_overwrite_all(const NgpEvalContext & /*context*/) {
-    accessor_.clear_host_sync_state();
-    accessor_.modify_on_device();
+    tagged_accessor_.clear_host_sync_state();
+    tagged_accessor_.modify_on_device();
   }
 
   void propagate_synchronize(const NgpEvalContext & /*context*/) {
@@ -1305,7 +1274,7 @@ class AccessorExpr : public MathExprBase<AccessorExpr<AccessorT, PrevEntityExpr>
   }
 
  private:
-  AccessorT accessor_;
+  TaggedAccessorT tagged_accessor_;
   PrevEntityExpr prev_entity_expr_;
 };
 
@@ -1456,7 +1425,7 @@ class CopyExpr : public MathExprBase<CopyExpr<PrevMathExpr>> {
   }
 
   template <typename EvalCountsType, EvalCountsType eval_counts, typename OldCacheType>
-  void cached_eval(const Kokkos::Array<stk::mesh::FastMeshIndex, num_entities> &fmis, OldCacheType &&old_cache,
+  auto cached_eval(const Kokkos::Array<stk::mesh::FastMeshIndex, num_entities> &fmis, OldCacheType &&old_cache,
                    const NgpEvalContext &context) const {
     static_assert(has<our_tag>(eval_counts), "eval_counts must contain our tag");
 
@@ -1464,6 +1433,7 @@ class CopyExpr : public MathExprBase<CopyExpr<PrevMathExpr>> {
       if constexpr (core::has<our_tag, std::remove_reference_t<OldCacheType>>()) {
         // The fact that our tag exists in the old cache means that our eval has cached its result before. means that
         // our eval has cached its result before. Return the cached value
+        std::cout << "Reusing cached copy expression" << std::endl;
         auto cache = std::forward<OldCacheType>(old_cache);
         auto val = get<our_tag>(cache);
         return Kokkos::make_pair(val, cache);
@@ -1535,13 +1505,11 @@ class FusedAssignExpr : public MathExprBase<FusedAssignExpr<TrgSrcExprPairs...>>
 
   KOKKOS_INLINE_FUNCTION
   FusedAssignExpr(const TrgSrcExprPairs &...exprs) : exprs_(core::make_tuple(exprs...)) {
-    std::cout << "In FusedAssignExpr constructor" << std::endl;
   }
 
   KOKKOS_INLINE_FUNCTION void eval(const Kokkos::Array<stk::mesh::FastMeshIndex, num_entities> &fmis,
                                    const NgpEvalContext &context) const {
     // Eval all expressions, storing their results for later.
-    std::cout << "Evaluating expr chain" << std::endl;
     auto all_values = impl::expr_chain(exprs_, fmis, context);
 
     // Set all right hand sides to their corresponding left hand sides.
@@ -1551,34 +1519,15 @@ class FusedAssignExpr : public MathExprBase<FusedAssignExpr<TrgSrcExprPairs...>>
   template <typename EvalCountsType, EvalCountsType eval_counts, typename OldCacheType>
   void cached_eval(const Kokkos::Array<stk::mesh::FastMeshIndex, num_entities> &fmis, OldCacheType &&old_cache,
                    const NgpEvalContext &context) const {
-    static_assert(has<our_tag>(eval_counts), "eval_counts must contain our tag");
+    static_assert(!core::has<our_tag, std::remove_reference_t<OldCacheType>>(),
+                  "The cache somehow contains our tag, but our eval returns void and should never cache anything.");
 
-    if constexpr (get<our_tag>(eval_counts) > 1) {
-      if constexpr (core::has<our_tag, std::remove_reference_t<OldCacheType>>()) {
-        // The fact that our tag exists in the old cache means that our eval has cached its result before. means that
-        // our eval has cached its result before. Return the cached value
-        auto cache = std::forward<OldCacheType>(old_cache);
-        auto val = get<our_tag>(cache);
-        return Kokkos::make_pair(val, cache);
-      } else {
-        // Eval all expressions, storing their results for later.
-        auto [all_values, final_cache] = impl::cached_expr_chain<EvalCountsType, eval_counts>(
-            exprs_, fmis, std::forward<OldCacheType>(old_cache), context);
+    // Eval all expressions, storing their results for later.
+    auto [all_values, final_cache] = impl::cached_expr_chain<EvalCountsType, eval_counts>(
+        exprs_, fmis, std::forward<OldCacheType>(old_cache), context);
 
-        // Set all right hand sides to their corresponding left hand sides.
-        set_impl(all_values, std::make_index_sequence<2 * num_pairs>{});
-
-        MUNDY_THROW_ASSERT(false, std::logic_error,
-                           "Attempting to cache the result of an assignment expression, which returns void.");
-      }
-    } else {
-      // Eval all expressions, storing their results for later.
-      auto [all_values, final_cache] = impl::cached_expr_chain<EvalCountsType, eval_counts>(
-          exprs_, fmis, std::forward<OldCacheType>(old_cache), context);
-
-      // Set all right hand sides to their corresponding left hand sides.
-      set_impl(all_values, std::make_index_sequence<2 * num_pairs>{});
-    }
+    // Set all right hand sides to their corresponding left hand sides.
+    set_impl(all_values, std::make_index_sequence<2 * num_pairs>{});
   }
 
   void flag_read_only(const NgpEvalContext & /*context*/) {
@@ -1619,11 +1568,7 @@ class FusedAssignExpr : public MathExprBase<FusedAssignExpr<TrgSrcExprPairs...>>
     // 1 % 2 -> 1
     // 2 % 2 -> 0
     if constexpr (I % 2 == 0) {
-      std::cout << "before " << I << " (" << core::get<I>(all_values) << ") = " << (I + 1) << " ("
-                << core::get<I + 1>(all_values) << ")" << std::endl;
       core::get<I>(all_values) = core::get<I + 1>(all_values);
-      std::cout << "after " << I << " (" << core::get<I>(all_values) << ") = " << (I + 1) << " ("
-                << core::get<I + 1>(all_values) << ")" << std::endl;
     }
   }
 
@@ -1782,9 +1727,9 @@ and return a new_cache, otherwise, we can just return our eval result.
 
 AHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
 
-Well, I made a mistake in my cache logic above. Accessor expressions do not return a static value. They are the only type
-with that property. The only way you can cache an accessor is if it is a tagged accessor. The reason is that
-the tag says ensures that no two accessors with the same tag can ever return different values, effectively making 
+Well, I made a mistake in my cache logic above. Accessor expressions do not return a static value. They are the only
+type with that property. The only way you can cache an accessor is if it is a tagged accessor. The reason is that the
+tag says ensures that no two accessors with the same tag can ever return different values, effectively making
 AccessorExpr's eval function static.
 
 */

@@ -237,14 +237,14 @@ class NgpFieldComponent : public NgpFieldComponentBase {
   ///   auto v3_accessor = Vector3FieldComponent(v3_field);
   ///   EntityExpr all_nodes(node_selector, stk::topology::NODE_RANK);
   ///   auto get_v3_expr = v3_accessor(all_nodes);
-  template <class EntityExpr>
-  KOKKOS_INLINE_FUNCTION auto operator()(const EntityExprBase<EntityExpr>& e) const {
-    MUNDY_THROW_REQUIRE(e.rank() == ngp_field_.get_rank(), std::runtime_error,
-                        fmt::format("Attempting to access field of rank {} on entity expression of rank {}",
-                                    ngp_field_.get_rank(), e.rank()));
+  // template <class EntityExpr>
+  // KOKKOS_INLINE_FUNCTION auto operator()(const EntityExprBase<EntityExpr>& e) const {
+  //   MUNDY_THROW_REQUIRE(e.rank() == ngp_field_.get_rank(), std::runtime_error,
+  //                       fmt::format("Attempting to access field of rank {} on entity expression of rank {}",
+  //                                   ngp_field_.get_rank(), e.rank()));
 
-    return AccessorExpr<our_t, EntityExpr>(*this, e.self());
-  }
+  //   return AccessorExpr<our_t, EntityExpr>(*this, e.self());
+  // }
 
   KOKKOS_INLINE_FUNCTION
   NgpFieldType& ngp_field() {
@@ -357,13 +357,13 @@ class NgpScalarFieldComponent : public NgpFieldComponentBase {
   ///   auto v3_accessor = Vector3FieldComponent(v3_field);
   ///   EntityExpr all_nodes(node_selector, stk::topology::NODE_RANK);
   ///   auto get_v3_expr = v3_accessor(all_nodes);
-  template <class EntityExpr>
-  KOKKOS_INLINE_FUNCTION auto operator()(const EntityExprBase<EntityExpr>& e) const {
-    MUNDY_THROW_REQUIRE(e.rank() == ngp_field_.get_rank(), std::runtime_error,
-                        fmt::format("Attempting to access field of rank {} on entity expression of rank {}",
-                                    ngp_field_.get_rank(), e.rank()));
-    return AccessorExpr<our_t, EntityExpr>(*this, e.self());
-  }
+  // template <class EntityExpr>
+  // KOKKOS_INLINE_FUNCTION auto operator()(const EntityExprBase<EntityExpr>& e) const {
+  //   MUNDY_THROW_REQUIRE(e.rank() == ngp_field_.get_rank(), std::runtime_error,
+  //                       fmt::format("Attempting to access field of rank {} on entity expression of rank {}",
+  //                                   ngp_field_.get_rank(), e.rank()));
+  //   return AccessorExpr<our_t, EntityExpr>(*this, e.self());
+  // }
 
   KOKKOS_INLINE_FUNCTION
   NgpFieldType& ngp_field() {
@@ -474,13 +474,13 @@ class NgpVector3FieldComponent : public NgpFieldComponentBase {
   ///   auto v3_accessor = Vector3FieldComponent(v3_field);
   ///   EntityExpr all_nodes(node_selector, stk::topology::NODE_RANK);
   ///   auto get_v3_expr = v3_accessor(all_nodes);
-  template <class EntityExpr>
-  KOKKOS_INLINE_FUNCTION auto operator()(const EntityExprBase<EntityExpr>& e) const {
-    MUNDY_THROW_REQUIRE(e.rank() == ngp_field_.get_rank(), std::runtime_error,
-                        fmt::format("Attempting to access field of rank {} on entity expression of rank {}",
-                                    ngp_field_.get_rank(), e.rank()));
-    return AccessorExpr<our_t, EntityExpr>(*this, e.self());
-  }
+  // template <class EntityExpr>
+  // KOKKOS_INLINE_FUNCTION auto operator()(const EntityExprBase<EntityExpr>& e) const {
+  //   MUNDY_THROW_REQUIRE(e.rank() == ngp_field_.get_rank(), std::runtime_error,
+  //                       fmt::format("Attempting to access field of rank {} on entity expression of rank {}",
+  //                                   ngp_field_.get_rank(), e.rank()));
+  //   return AccessorExpr<our_t, EntityExpr>(*this, e.self());
+  // }
 
   KOKKOS_INLINE_FUNCTION
   NgpFieldType& ngp_field() {
@@ -591,13 +591,13 @@ class NgpMatrix3FieldComponent : public NgpFieldComponentBase {
   ///   auto v3_accessor = Vector3FieldComponent(v3_field);
   ///   EntityExpr all_nodes(node_selector, stk::topology::NODE_RANK);
   ///   auto get_v3_expr = v3_accessor(all_nodes);
-  template <class EntityExpr>
-  KOKKOS_INLINE_FUNCTION auto operator()(const EntityExprBase<EntityExpr>& e) const {
-    MUNDY_THROW_REQUIRE(e.rank() == ngp_field_.get_rank(), std::runtime_error,
-                        fmt::format("Attempting to access field of rank {} on entity expression of rank {}",
-                                    ngp_field_.get_rank(), e.rank()));
-    return AccessorExpr<our_t, EntityExpr>(*this, e.self());
-  }
+  // template <class EntityExpr>
+  // KOKKOS_INLINE_FUNCTION auto operator()(const EntityExprBase<EntityExpr>& e) const {
+  //   MUNDY_THROW_REQUIRE(e.rank() == ngp_field_.get_rank(), std::runtime_error,
+  //                       fmt::format("Attempting to access field of rank {} on entity expression of rank {}",
+  //                                   ngp_field_.get_rank(), e.rank()));
+  //   return AccessorExpr<our_t, EntityExpr>(*this, e.self());
+  // }
 
   KOKKOS_INLINE_FUNCTION
   NgpFieldType& ngp_field() {
@@ -708,13 +708,13 @@ class NgpQuaternionFieldComponent : public NgpFieldComponentBase {
   ///   auto v3_accessor = Vector3FieldComponent(v3_field);
   ///   EntityExpr all_nodes(node_selector, stk::topology::NODE_RANK);
   ///   auto get_v3_expr = v3_accessor(all_nodes);
-  template <class EntityExpr>
-  KOKKOS_INLINE_FUNCTION auto operator()(const EntityExprBase<EntityExpr>& e) const {
-    MUNDY_THROW_REQUIRE(e.rank() == ngp_field_.get_rank(), std::runtime_error,
-                        fmt::format("Attempting to access field of rank {} on entity expression of rank {}",
-                                    ngp_field_.get_rank(), e.rank()));
-    return AccessorExpr<our_t, EntityExpr>(*this, e.self());
-  }
+  // template <class EntityExpr>
+  // KOKKOS_INLINE_FUNCTION auto operator()(const EntityExprBase<EntityExpr>& e) const {
+  //   MUNDY_THROW_REQUIRE(e.rank() == ngp_field_.get_rank(), std::runtime_error,
+  //                       fmt::format("Attempting to access field of rank {} on entity expression of rank {}",
+  //                                   ngp_field_.get_rank(), e.rank()));
+  //   return AccessorExpr<our_t, EntityExpr>(*this, e.self());
+  // }
 
   KOKKOS_INLINE_FUNCTION
   NgpFieldType& ngp_field() {
@@ -820,13 +820,13 @@ class NgpAABBFieldComponent : public NgpFieldComponentBase {
   ///   auto v3_accessor = Vector3FieldComponent(v3_field);
   ///   EntityExpr all_nodes(node_selector, stk::topology::NODE_RANK);
   ///   auto get_v3_expr = v3_accessor(all_nodes);
-  template <class EntityExpr>
-  KOKKOS_INLINE_FUNCTION auto operator()(const EntityExprBase<EntityExpr>& e) const {
-    MUNDY_THROW_REQUIRE(e.rank() == ngp_field_.get_rank(), std::runtime_error,
-                        fmt::format("Attempting to access field of rank {} on entity expression of rank {}",
-                                    ngp_field_.get_rank(), e.rank()));
-    return AccessorExpr<our_t, EntityExpr>(*this, e.self());
-  }
+  // template <class EntityExpr>
+  // KOKKOS_INLINE_FUNCTION auto operator()(const EntityExprBase<EntityExpr>& e) const {
+  //   MUNDY_THROW_REQUIRE(e.rank() == ngp_field_.get_rank(), std::runtime_error,
+  //                       fmt::format("Attempting to access field of rank {} on entity expression of rank {}",
+  //                                   ngp_field_.get_rank(), e.rank()));
+  //   return AccessorExpr<our_t, EntityExpr>(*this, e.self());
+  // }
 
   KOKKOS_INLINE_FUNCTION
   NgpFieldType& ngp_field() {
@@ -930,6 +930,11 @@ class TaggedComponent {
   using view_t = decltype(std::declval<TaggedComponent<Tag, our_rank, ComponentType>>().operator()(
       std::declval<stk::mesh::Entity>()));
 };  // TaggedComponent
+
+template<typename Tag, stk::topology::rank_t our_rank, typename ComponentType>
+TaggedComponent<Tag, our_rank, ComponentType> make_tagged_component(ComponentType component) {
+  return TaggedComponent<Tag, our_rank, ComponentType>(component);
+}
 
 /// \brief A small helper type for tying a Tag to an underlying ngp-compatible component
 template <typename Tag, stk::topology::rank_t our_rank, typename NgpComponentType>
