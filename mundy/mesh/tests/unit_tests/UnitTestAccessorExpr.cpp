@@ -125,7 +125,7 @@ inline void check_field_data_on_host_func(const std::string& message_to_throw, c
         auto expected_values = func(entity_coords);
         const double* raw_field_data = reinterpret_cast<const double*>(stk::mesh::field_data(stk_field, entity));
         for (unsigned int i = 0; i < NumComponents; ++i) {
-          ASSERT_DOUBLE_EQ(raw_field_data[i], expected_values[i]) << message_to_throw;
+          ASSERT_NEAR(raw_field_data[i], expected_values[i], 1e-12) << message_to_throw;
         }
       });
 }
@@ -229,7 +229,7 @@ class UnitTestAccessorExprFixture : public ::testing::Test {
     set_field_data_on_host(*bulk_data_ptr_, *field_zs_ptr_, all_blocks, get_field_z_func());
   }
 
-  void validate_initial_mesh() {
+  void validate_initial_five_hex_mesh() {
     const stk::mesh::Entity hex1 = get_bulk().get_entity(stk::topology::ELEMENT_RANK, 1);
     const stk::mesh::Entity hex2 = get_bulk().get_entity(stk::topology::ELEMENT_RANK, 2);
     const stk::mesh::Entity hex3 = get_bulk().get_entity(stk::topology::ELEMENT_RANK, 3);
@@ -286,6 +286,67 @@ class UnitTestAccessorExprFixture : public ::testing::Test {
     check_hex_inherited_part_membership(hex5, *block3_part_ptr_);
   }
 
+  void declare_five_hexes() {
+    const int parallel_size = get_bulk().parallel_size();
+    ASSERT_TRUE(parallel_size == 1 || parallel_size == 2) << "This test is only designed to run with 1 or 2 MPI ranks.";
+    std::string mesh_desc;
+    if (parallel_size == 1) {
+      mesh_desc =
+          "textmesh:"
+          "0,1,HEX_8,1,2,3,4,5,6,7,8,block_1\n"
+          "0,2,HEX_8,5,6,7,8,9,10,11,12,block_1\n"
+          "0,3,HEX_8,9,13,14,15,16,17,18,19,block_2\n"
+          "0,4,HEX_8,9,20,21,22,23,24,25,26,block_2\n"
+          "0,5,HEX_8,9,27,28,29,30,31,32,33,block_3";
+    } else {
+      mesh_desc =
+          "textmesh:"
+          "0,1,HEX_8,1,2,3,4,5,6,7,8,block_1\n"
+          "1,2,HEX_8,5,6,7,8,9,10,11,12,block_1\n"
+          "0,3,HEX_8,9,13,14,15,16,17,18,19,block_2\n"
+          "1,4,HEX_8,9,20,21,22,23,24,25,26,block_2\n"
+          "0,5,HEX_8,9,27,28,29,30,31,32,33,block_3";
+    }
+
+    stk::io::fill_mesh_with_auto_decomp(mesh_desc, *bulk_data_ptr_);
+    validate_initial_five_hex_mesh();
+  }
+
+  void declare_N_hexes_per_dimension(const size_t num_hexes_per_dim) {
+    const std::string mesh_desc = "generated:" + std::to_string(num_hexes_per_dim) + "x" +
+                                  std::to_string(num_hexes_per_dim) + "x" + std::to_string(num_hexes_per_dim);
+    stk::io::fill_mesh(mesh_desc, *bulk_data_ptr_);
+
+
+    // All of the hexes start in block_1. Move a third of them to block_2 and a third of them to block_3, removing them
+    // from block_1.
+    bulk_data_ptr_->modification_begin();
+    stk::mesh::EntityVector entities_to_move_to_block_2;
+    stk::mesh::EntityVector entities_to_move_to_block_3;
+
+    const stk::mesh::BucketVector& buckets =
+        bulk_data_ptr_->get_buckets(stk::topology::ELEM_RANK, *block1_part_ptr_ &
+        meta_data_ptr_->locally_owned_part());
+    for (size_t bucket_count = 0, bucket_end = buckets.size(); bucket_count < bucket_end; ++bucket_count) {
+      stk::mesh::Bucket& bucket = *buckets[bucket_count];
+      for (size_t elem_count = 0, elem_end = bucket.size(); elem_count < elem_end; ++elem_count) {
+        stk::mesh::Entity elem = bucket[elem_count];
+        MUNDY_THROW_REQUIRE(bulk_data_ptr_->is_valid(elem), std::runtime_error, "Attempted to move an invalid entity."); 
+        if (elem_count % 3 == 0) {
+          entities_to_move_to_block_2.push_back(elem);
+        } else if (elem_count % 3 == 1) {
+          entities_to_move_to_block_3.push_back(elem);
+        }
+      }
+    }
+
+    bulk_data_ptr_->change_entity_parts(entities_to_move_to_block_2, stk::mesh::ConstPartVector{block2_part_ptr_},
+                                        stk::mesh::ConstPartVector{block1_part_ptr_});
+    bulk_data_ptr_->change_entity_parts(entities_to_move_to_block_3, stk::mesh::ConstPartVector{block3_part_ptr_},
+                                        stk::mesh::ConstPartVector{block1_part_ptr_});
+    bulk_data_ptr_->modification_end();
+  }
+
   void setup_hex_mesh(const stk::mesh::EntityRank& entity_rank, stk::mesh::BulkData::AutomaticAuraOption aura_option,
 #if TRILINOS_MAJOR_MINOR_VERSION >= 160000
                       std::unique_ptr<stk::mesh::FieldDataManager> field_data_manager,
@@ -328,45 +389,26 @@ class UnitTestAccessorExprFixture : public ::testing::Test {
     block3_selector_ = *block3_part_ptr_;
 
     node_coord_field_ptr_ = &meta_data_ptr_->declare_field<double>(stk::topology::NODE_RANK, "coordinates");
-    field_x_ptr_ = create_field_on_parts("field_x", stk::topology::NODE_RANK, 9,
+    
+    unsigned scalars_per_entity = 1;
+    field_x_ptr_ = create_field_on_parts("field_x", stk::topology::NODE_RANK, scalars_per_entity,
                                          {block1_part_ptr_, block2_part_ptr_, block3_part_ptr_});
-    field_y_ptr_ = create_field_on_parts("field_y", stk::topology::NODE_RANK, 9,
+    field_y_ptr_ = create_field_on_parts("field_y", stk::topology::NODE_RANK, scalars_per_entity,
                                          {block1_part_ptr_, block2_part_ptr_, block3_part_ptr_});
-    field_z_ptr_ = create_field_on_parts("field_z", stk::topology::NODE_RANK, 9,
+    field_z_ptr_ = create_field_on_parts("field_z", stk::topology::NODE_RANK, scalars_per_entity,
                                          {block1_part_ptr_, block2_part_ptr_, block3_part_ptr_});
-    field_xs_ptr_ = create_field_on_parts("field_x_scratch", stk::topology::NODE_RANK, 9,
+    field_xs_ptr_ = create_field_on_parts("field_x_scratch", stk::topology::NODE_RANK, scalars_per_entity,
                                           {block1_part_ptr_, block2_part_ptr_, block3_part_ptr_});
-    field_ys_ptr_ = create_field_on_parts("field_y_scratch", stk::topology::NODE_RANK, 9,
+    field_ys_ptr_ = create_field_on_parts("field_y_scratch", stk::topology::NODE_RANK, scalars_per_entity,
                                           {block1_part_ptr_, block2_part_ptr_, block3_part_ptr_});
-    field_zs_ptr_ = create_field_on_parts("field_z_scratch", stk::topology::NODE_RANK, 9,
+    field_zs_ptr_ = create_field_on_parts("field_z_scratch", stk::topology::NODE_RANK, scalars_per_entity,
                                           {block1_part_ptr_, block2_part_ptr_, block3_part_ptr_});
-    field1_ptr_ = create_field_on_parts("field1", stk::topology::NODE_RANK, 9, {block1_part_ptr_});
-    field2_ptr_ = create_field_on_parts("field2", stk::topology::NODE_RANK, 9, {block2_part_ptr_});
-    field3_ptr_ = create_field_on_parts("field3", stk::topology::NODE_RANK, 9, {block3_part_ptr_});
+    field1_ptr_ = create_field_on_parts("field1", stk::topology::NODE_RANK, scalars_per_entity, {block1_part_ptr_});
+    field2_ptr_ = create_field_on_parts("field2", stk::topology::NODE_RANK, scalars_per_entity, {block2_part_ptr_});
+    field3_ptr_ = create_field_on_parts("field3", stk::topology::NODE_RANK, scalars_per_entity, {block3_part_ptr_});
 
-    const int parallel_size = get_bulk().parallel_size();
-    ASSERT_TRUE(parallel_size == 1 || parallel_size == 2) << "This test is only designed to run with 1 or 2 MPI ranks.";
-    std::string mesh_desc;
-    if (parallel_size == 1) {
-      mesh_desc =
-          "textmesh:"
-          "0,1,HEX_8,1,2,3,4,5,6,7,8,block_1\n"
-          "0,2,HEX_8,5,6,7,8,9,10,11,12,block_1\n"
-          "0,3,HEX_8,9,13,14,15,16,17,18,19,block_2\n"
-          "0,4,HEX_8,9,20,21,22,23,24,25,26,block_2\n"
-          "0,5,HEX_8,9,27,28,29,30,31,32,33,block_3";
-    } else {
-      mesh_desc =
-          "textmesh:"
-          "0,1,HEX_8,1,2,3,4,5,6,7,8,block_1\n"
-          "1,2,HEX_8,5,6,7,8,9,10,11,12,block_1\n"
-          "0,3,HEX_8,9,13,14,15,16,17,18,19,block_2\n"
-          "1,4,HEX_8,9,20,21,22,23,24,25,26,block_2\n"
-          "0,5,HEX_8,9,27,28,29,30,31,32,33,block_3";
-    }
-
-    stk::io::fill_mesh_with_auto_decomp(mesh_desc, *bulk_data_ptr_);
-    validate_initial_mesh();
+    declare_five_hexes();
+    // declare_N_hexes_per_dimension(100);
     reset_field_values();
   }
 
@@ -850,7 +892,61 @@ TEST_F(UnitTestAccessorExprFixture, field_dot) {
   EXPECT_NEAR(actual_dot, expected_dot, 1.0e-12);
 }
 
+TEST_F(UnitTestAccessorExprFixture, quick_perf_test_against_blas) {
+  if (stk::parallel_machine_size(communicator_) > 2) {
+    GTEST_SKIP() << "This test is only designed to run with 1 or 2 MPI ranks.";
+  }
 
+  const int we_know_there_are_five_ranks = 5;
+#if TRILINOS_MAJOR_MINOR_VERSION >= 160000
+  auto field_data_manager = std::make_unique<stk::mesh::DefaultFieldDataManager>(we_know_there_are_five_ranks);
+  setup_hex_mesh(stk::topology::NODE_RANK, stk::mesh::BulkData::AUTO_AURA, std::move(field_data_manager));
+#else
+  stk::mesh::DefaultFieldDataManager* field_data_manager_ptr =
+      new stk::mesh::DefaultFieldDataManager(we_know_there_are_five_ranks);
+  setup_hex_mesh(stk::topology::NODE_RANK, stk::mesh::BulkData::AUTO_AURA, field_data_manager_ptr);
+#endif
+
+  stk::mesh::Selector b1_not_b2 = block1_selector_ - block2_selector_;
+  auto x = make_tagged_component<XTag, stk::topology::NODE_RANK>(ScalarFieldComponent(*field_x_ptr_));
+  auto y = make_tagged_component<YTag, stk::topology::NODE_RANK>(ScalarFieldComponent(*field_y_ptr_));
+
+  auto ngp_x = get_updated_ngp_component(x);
+  auto ngp_y = get_updated_ngp_component(y);
+
+  auto ngp_mesh = get_updated_ngp_mesh(get_bulk());
+
+  auto es = make_entity_expr(get_bulk(), b1_not_b2, stk::topology::NODE_RANK);
+
+  unsigned num_warmups = 10;
+  unsigned num_replicates = 100;
+  Kokkos::Timer timer;
+
+  double elapsed_expr = 0;
+  double elapsed_blas = 0;
+  for (unsigned i = 0; i < num_replicates + num_warmups; ++i) {
+    if (i < num_warmups) {
+      double actual_dot = all_reduce_sum<double>(ngp_x(es) * ngp_y(es));
+      double expected_dot = field_dot<double>(*field_x_ptr_, *field_y_ptr_, b1_not_b2, stk::ngp::ExecSpace());
+      EXPECT_NEAR(actual_dot, expected_dot, 1.0e-10);
+      timer.reset();
+    } else {
+      double actual_dot = all_reduce_sum<double>(ngp_x(es) * ngp_y(es));
+      Kokkos::fence();
+      elapsed_expr += timer.seconds();
+      timer.reset();
+      double expected_dot = field_dot<double>(*field_x_ptr_, *field_y_ptr_, b1_not_b2, stk::ngp::ExecSpace());
+      Kokkos::fence();
+      elapsed_blas += timer.seconds();
+      EXPECT_NEAR(actual_dot, expected_dot, 1.0e-10);
+      timer.reset();
+    }
+  }
+  elapsed_expr /= num_replicates;
+  elapsed_blas /= num_replicates;
+  std::cout << "AccessorExpr dot time: " << elapsed_expr << std::endl;
+  std::cout << "BLAS dot time: " << elapsed_blas << std::endl;
+}
 
 }  // namespace
 

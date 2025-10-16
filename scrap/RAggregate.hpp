@@ -626,8 +626,8 @@ auto tie_from_variants(const std::array<Variant, R>& vs) {
 
 // Try the I-th multichoose; on match, call f(tuple_of_refs)
 // Returns true if matched.
-template <std::size_t I, class Variant, std::size_t R, class F, typename ...ExtraArgs>
-bool try_one(std::array<Variant, R>& vs, const F& f, ExtraArgs& ...args) {
+template <std::size_t I, class Variant, std::size_t R, class F, typename... ExtraArgs>
+bool try_one(std::array<Variant, R>& vs, const F& f, ExtraArgs&... args) {
   if (match_active<I>(vs)) {
     auto tup = tie_from_variants<I, Variant, R>(vs);
     std::invoke(f, tup, args...);
@@ -635,8 +635,8 @@ bool try_one(std::array<Variant, R>& vs, const F& f, ExtraArgs& ...args) {
   }
   return false;
 }
-template <std::size_t I, class Variant, std::size_t R, class F, typename ...ExtraArgs>
-bool try_one(const std::array<Variant, R>& vs, const F& f, ExtraArgs& ...args) {
+template <std::size_t I, class Variant, std::size_t R, class F, typename... ExtraArgs>
+bool try_one(const std::array<Variant, R>& vs, const F& f, ExtraArgs&... args) {
   if (match_active<I>(vs)) {
     auto tup = tie_from_variants<I, Variant, R>(vs);
     std::invoke(f, tup, args...);
@@ -646,13 +646,13 @@ bool try_one(const std::array<Variant, R>& vs, const F& f, ExtraArgs& ...args) {
 }
 
 // Visit over all patterns until a match
-template <class Variant, std::size_t R, class F, std::size_t... I, typename ...ExtraArgs>
+template <class Variant, std::size_t R, class F, std::size_t... I, typename... ExtraArgs>
 bool visit_impl(std::array<Variant, R>& vs, const F& f, std::index_sequence<I...>, ExtraArgs&... args) {
   bool done = false;
   ((done = done || try_one<I, Variant, R>(vs, f, args...)), ...);
   return done;
 }
-template <class Variant, std::size_t R, class F, std::size_t... I, typename ...ExtraArgs>
+template <class Variant, std::size_t R, class F, std::size_t... I, typename... ExtraArgs>
 bool visit_impl(const std::array<Variant, R>& vs, const F& f, std::index_sequence<I...>, ExtraArgs&... args) {
   bool done = false;
   ((done = done || try_one<I, Variant, R>(vs, f, args...)), ...);
@@ -667,12 +667,12 @@ bool visit_impl(const std::array<Variant, R>& vs, const F& f, std::index_sequenc
 //
 // Calls f(tup_of_refs) where tup_of_refs is a tuple of (const) lvalue refs to each active value.
 // Returns true if a match was found, false otherwise.
-template <class Variant, std::size_t R, class F, typename ...ExtraArgs>
+template <class Variant, std::size_t R, class F, typename... ExtraArgs>
 bool visit_multicomb(std::array<Variant, R>& vs, const F& f, ExtraArgs&... args) {
   using Tab = multicomb_index_table<Variant, R>;
   return detail::visit_impl<Variant, R>(vs, f, std::make_index_sequence<Tab::size>{}, args...);
 }
-template <class Variant, std::size_t R, class F, typename ...ExtraArgs>
+template <class Variant, std::size_t R, class F, typename... ExtraArgs>
 bool visit_multicomb(const std::array<Variant, R>& vs, const F& f, ExtraArgs&... args) {
   using Tab = multicomb_index_table<Variant, R>;
   return detail::visit_impl<Variant, R>(vs, f, std::make_index_sequence<Tab::size>{}, args...);
@@ -771,7 +771,7 @@ auto tagged_ragg = make_tagged_ragg<stk::topology::PARTICLE>(bulk_data, selector
                        .add_accessor<CENTER>(center_racc)
                        .add_accessor<RADIUS>(radius_racc);
 
-// We use visit to convert the tagged aggregate into a compile-time optimized aggregate object 
+// We use visit to convert the tagged aggregate into a compile-time optimized aggregate object
 tagged_ragg.visit([](auto& agg) {
   // We perform an action that acts on the aggregate
   stk::mesh::for_each_entity_run(
@@ -789,16 +789,14 @@ tagged_ragg.visit([](auto& agg) {
 // Notes:
 // We are unable to sort the variants by active index because we cannot sort the tuple of tags in the same way
 // due to the variant index being runtime. We can use a reorder map instead, which has no effect on performance.
-template<size_t N, 
-  typename ...Tags,
-  typename ...VariantTs>
+template <size_t N, typename... Tags, typename... VariantTs>
 struct TaggedBagOfVariants {
   using tags_t = std::tuple<Tags...>;
   using variant_types_t = std::tuple<VariantTs...>;
   using variant_t = std::variant<VariantTs...>;
   std::array<variant_t, N> variants;
 
-  template<typename Tag>
+  template <typename Tag>
   auto insert(Tag tag, variant_t var) {
     // Create a new TaggedBagOfVariants with the new tag/variant added
     auto new_tags = std::tuple_cat(tags_t{}, std::tuple<Tag>{});
@@ -818,22 +816,21 @@ struct TaggedBagOfVariants {
     return map_from_sorted_to_original;
   }
 
-  template<typename Visitor>
-  bool visit(const Visitor &visitor) {
-    bool success = visit_multicomb(variants, visitor, tags_t{}); // calls visitor(tuple_of_active_types, tuple_of_their_tags)
+  template <typename Visitor>
+  bool visit(const Visitor& visitor) {
+    bool success =
+        visit_multicomb(variants, visitor, tags_t{});  // calls visitor(tuple_of_active_types, tuple_of_their_tags)
     return success;
   }
 };
 
-template<size_t N, 
-  typename ...Tags,
-  typename ...Types>
+template <size_t N, typename... Tags, typename... Types>
 struct TaggedBagOfObjects {
   using tags_t = std::tuple<Tags...>;
   using types_t = std::tuple<Types...>;
   std::tuple<Types...> objs;
 
-  template<typename Tag, typename NewObject>
+  template <typename Tag, typename NewObject>
   auto insert(Tag tag, NewObject obj) {
     // Create a new TaggedBagOfVariants with the new tag/variant added
     auto new_tags = std::tuple_cat(tags_t{}, std::tuple<Tag>{});
@@ -842,16 +839,49 @@ struct TaggedBagOfObjects {
   }
 };
 
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Same logic, a new day.
+//
+// Mundy now formally offers core::aggregate as a generalized data structure that mimics a compile-time map from key to
+// object similar in many ways to boost::hana::map. We'll call our TaggedBagOfVariants variant_aggregate and write it in
+// condensed form as v_agg.
 
+template <size_t N, typename... Tags, typename... VariantTs>
+struct TaggedBagOfVariants {
+  using tags_t = std::tuple<Tags...>;
+  using variant_types_t = std::tuple<VariantTs...>;
+  using variant_t = std::variant<VariantTs...>;
+  std::array<variant_t, N> variants;
 
+  template <typename Tag>
+  auto insert(Tag tag, variant_t var) {
+    // Create a new TaggedBagOfVariants with the new tag/variant added
+    auto new_tags = std::tuple_cat(tags_t{}, std::tuple<Tag>{});
+    std::array<variant_t, N + 1> new_variants;
+    for (size_t i = 0; i < N; ++i) {
+      new_variants[i] = variants[i];
+    }
+    new_variants[N] = var;
+    return TaggedBagOfVariants<N + 1, Tags..., Tag, VariantTs...>{new_variants};
+  }
 
+  std::array<size_t, N> build_reorder_map() {  // map[sorted_id] = original_id
+    std::array<size_t, N> map_from_sorted_to_original{};
+    std::iota(map_from_sorted_to_original.begin(), map_from_sorted_to_original.end(), 0);
+    std::sort(map_from_sorted_to_original.begin(), map_from_sorted_to_original.end(),
+              [this](size_t a, size_t b) { return variants[a].index() < variants[b].index(); });
+    return map_from_sorted_to_original;
+  }
 
-
-
-
-
-
-
+  template <typename Visitor>
+  bool visit(const Visitor& visitor) {
+    bool success =
+        visit_multicomb(variants, visitor, tags_t{});  // calls visitor(tuple_of_active_types, tuple_of_their_tags)
+    return success;
+  }
+};
 
 }  // namespace mesh
 

@@ -1067,7 +1067,7 @@ decltype(auto) get_updated_ngp_component(const TaggedComponent<Tag, our_rank, Co
   return NgpTaggedComponent<Tag, our_rank, ngp_component_type>(ngp_component);
 }
 
-namespace impl {
+namespace agg_impl {
 
 /// \brief Helper function to locate the component that matches a Tag
 /// We assume each tag occurs only once and perform a simple linear search.
@@ -1160,8 +1160,6 @@ class NgpFunctorWrapper {
   FunctorType functor_;
 };  // NgpFunctorWrapper
 
-}  // namespace impl
-
 // A concept to check if a single component has a tag_type
 template <typename T>
 concept has_tag_type = requires { typename T::tag_type; };
@@ -1192,7 +1190,7 @@ KOKKOS_FUNCTION static constexpr const auto& find_component(const core::tuple<Co
   static_assert(all_have_tags<Components...>, "All of the given components must have tags.");
   static_assert(has_component_v<Tag, Components...>,
                 "Attempting to find a component that does not exist in the given tuple");
-  return impl::find_const_component_impl<Tag>(tuple, std::make_index_sequence<sizeof...(Components)>{});
+  return agg_impl::find_const_component_impl<Tag>(tuple, std::make_index_sequence<sizeof...(Components)>{});
 }
 
 /// \brief Fetch the component corresponding to the given Tag
@@ -1201,21 +1199,24 @@ KOKKOS_FUNCTION static constexpr auto& find_component(core::tuple<Components...>
   static_assert(all_have_tags<Components...>, "All of the given components must have tags.");
   static_assert(has_component_v<Tag, Components...>,
                 "Attempting to find a component that does not exist in the given tuple");
-  return impl::find_component_impl<Tag>(tuple, std::make_index_sequence<sizeof...(Components)>{});
+  return agg_impl::find_component_impl<Tag>(tuple, std::make_index_sequence<sizeof...(Components)>{});
 }
 
 /// \brief Determine if any components in a tuple have a given rank
 template <stk::topology::rank_t rank, typename... Components>
 KOKKOS_FUNCTION static constexpr bool has_rank(const core::tuple<Components...>& tuple) {
   static_assert(all_have_tags<Components...>, "All of the given components must have tags.");
-  return impl::has_rank_impl<rank>(tuple, std::make_index_sequence<sizeof...(Components)>{});
+  return agg_impl::has_rank_impl<rank>(tuple, std::make_index_sequence<sizeof...(Components)>{});
 }
 /// \brief Determine if ~all~ components in a tuple have a given rank
 template <stk::topology::rank_t rank, typename... Components>
 KOKKOS_FUNCTION static constexpr bool all_have_rank(const core::tuple<Components...>& tuple) {
   static_assert(all_have_tags<Components...>, "All of the given components must have tags.");
-  return impl::all_have_rank_impl<rank>(tuple, std::make_index_sequence<sizeof...(Components)>{});
+  return agg_impl::all_have_rank_impl<rank>(tuple, std::make_index_sequence<sizeof...(Components)>{});
 }
+
+}  // namespace agg_impl
+
 
 /// Forward declarations:
 template <stk::topology::topology_t OurTopology, stk::topology::rank_t OurRank, typename... Components>
@@ -1425,7 +1426,7 @@ class NgpEntityView;
 template <stk::topology::topology_t OurTopology, stk::topology::rank_t OurRank, typename... Components>
 class Aggregate {
  public:
-  static_assert(all_have_tags<Components...>, "All of the given components must have tags.");
+  static_assert(agg_impl::all_have_tags<Components...>, "All of the given components must have tags.");
   using ComponentsTuple = core::tuple<Components...>;
 
   //! \name Constructors
@@ -1485,13 +1486,13 @@ class Aggregate {
   /// \brief Fetch the component corresponding to the given Tag
   template <typename Tag>
   const auto& get_component() const {
-    return find_component<Tag>(components_);
+    return agg_impl::find_component<Tag>(components_);
   }
 
   /// \brief Fetch the component corresponding to the given Tag
   template <typename Tag>
   auto& get_component() {
-    return find_component<Tag>(components_);
+    return agg_impl::find_component<Tag>(components_);
   }
 
   /// \brief Synchronize the components marked by the given tags to the device
@@ -1567,7 +1568,7 @@ template <stk::topology::topology_t OurTopology, stk::topology::rank_t OurRank, 
 class NgpAggregate {
  public:
   using NgpComponentsTuple = core::tuple<NgpComponents...>;
-  static_assert(all_have_tags<NgpComponents...>, "All of the given components must have tags.");
+  static_assert(agg_impl::all_have_tags<NgpComponents...>, "All of the given components must have tags.");
 
   //! \name Constructors
   //@{
@@ -1657,13 +1658,13 @@ class NgpAggregate {
   /// \brief Fetch the component corresponding to the given Tag
   template <typename Tag>
   KOKKOS_INLINE_FUNCTION const auto& get_component() const {
-    return find_component<Tag>(ngp_components_);
+    return agg_impl::find_component<Tag>(ngp_components_);
   }
 
   /// \brief Fetch the component corresponding to the given Tag
   template <typename Tag>
   KOKKOS_INLINE_FUNCTION auto& get_component() {
-    return find_component<Tag>(ngp_components_);
+    return agg_impl::find_component<Tag>(ngp_components_);
   }
 
   /// \brief Synchronize the components marked by the given tags to the device
@@ -1705,7 +1706,7 @@ class NgpAggregate {
     our_t agg = *this;
 
     auto local_ngp_mesh = agg.ngp_mesh();
-    impl::NgpFunctorWrapper<our_t, Functor> wrapper(agg, f);
+    agg_impl::NgpFunctorWrapper<our_t, Functor> wrapper(agg, f);
     stk::mesh::Selector sel = agg.selector() & subset_selector;
     ::mundy::mesh::for_each_entity_run(local_ngp_mesh, agg.rank(), sel, wrapper);
   }
@@ -1717,7 +1718,7 @@ class NgpAggregate {
     our_t agg = *this;
 
     auto local_ngp_mesh = agg.ngp_mesh();
-    impl::NgpFunctorWrapper<our_t, Functor> wrapper(agg, f);
+    agg_impl::NgpFunctorWrapper<our_t, Functor> wrapper(agg, f);
     ::mundy::mesh::for_each_entity_run(local_ngp_mesh, agg.rank(), agg.selector(), wrapper);
   }
 

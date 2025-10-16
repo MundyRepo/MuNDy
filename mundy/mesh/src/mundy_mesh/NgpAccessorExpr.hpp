@@ -640,7 +640,6 @@ class ConnectedEntitiesExpr : public EntityExprBase<ConnectedEntitiesExpr<PrevEn
       if constexpr (core::has<our_tag, std::remove_reference_t<OldCacheType>>()) {
         // The fact that our tag exists in the old cache means that our eval has cached its result before.
         // Return the cached value and the old cache
-        std::cout << "Reusing cached connectivity" << std::endl;
         auto cache = std::forward<OldCacheType>(old_cache);
         return Kokkos::make_pair(get<our_tag>(cache), cache);
       } else {
@@ -731,7 +730,6 @@ class EntityExpr : public EntityExprBase<EntityExpr<NumEntities, Ord, DriverType
       if constexpr (core::has<our_tag, std::remove_reference_t<OldCacheType>>()) {
         // The fact that our tag exists in the old cache means that our eval has cached its result before. means that
         // our eval has cached its result before. Return the cached value
-        std::cout << "Reusing cached entity" << std::endl;
         auto cache = std::forward<OldCacheType>(old_cache);
         auto val = get<our_tag>(cache);
         return Kokkos::make_pair(val, cache);
@@ -1106,7 +1104,6 @@ class AssignExpr : public MathExprBase<AssignExpr<TargetExpr, SourceExpr>> {
         if constexpr (core::has<our_tag, std::remove_reference_t<OldCacheType>>()) {                              \
           /* The fact that our tag exists in the old cache means that our eval has cached its result before.*/    \
           /* Return the cached value */                                                                           \
-          std::cout << "Reusing cached binary math expression for operator " #op << std::endl;                    \
           auto cache = std::forward<OldCacheType>(old_cache);                                                     \
           auto val = get<our_tag>(cache);                                                                         \
           return Kokkos::make_pair(val, cache);                                                                   \
@@ -1440,7 +1437,6 @@ class AccessorExpr : public MathExprBase<AccessorExpr<TaggedAccessorT, PrevEntit
       if constexpr (core::has<our_tag, std::remove_reference_t<OldCacheType>>()) {
         // The fact that our tag exists in the old cache means that our eval has cached its result before.
         // Return the cached value and the old cache
-        std::cout << "Reusing cached accessor" << std::endl;
         auto cache = std::forward<OldCacheType>(old_cache);
         return Kokkos::make_pair(get<our_tag>(cache), cache);
       } else {
@@ -1641,7 +1637,6 @@ class CopyExpr : public MathExprBase<CopyExpr<PrevMathExpr>> {
       if constexpr (core::has<our_tag, std::remove_reference_t<OldCacheType>>()) {
         // The fact that our tag exists in the old cache means that our eval has cached its result before. means that
         // our eval has cached its result before. Return the cached value
-        std::cout << "Reusing cached copy expression" << std::endl;
         auto cache = std::forward<OldCacheType>(old_cache);
         auto val = get<our_tag>(cache);
         return Kokkos::make_pair(val, cache);
