@@ -41,6 +41,7 @@ namespace core {
   - count_type<T, Types...>      : count how many times T appears in Types...
   - index_finder<T, Types...>    : find the index of T in Types... (only valid if all types are unique and the type is
   present)
+  - type_at_index_t<I, Types...> : get the I'th type in Types...
 
 */
 
@@ -83,6 +84,26 @@ struct index_finder<T> {
 template <class T, class... Ts>
 static constexpr size_t index_finder_v = index_finder<T, Ts...>::value;
 
+// **********************************************************************************************************************
+/// \brief Get the I'th type in a variadic list of types
+template <size_t I, class... Ts>
+struct type_at_index;
+//
+// Primary template for getting the I-th type
+template <std::size_t I, typename Head, typename... Tail>
+struct type_at_index {
+    static_assert(I < 1 + sizeof...(Tail), "Index out of bounds in type_at_index");
+    using type = typename type_at_index<I - 1, Tail...>::type;
+};
+//
+// Specialization for the base case (I = 0)
+template <typename Head, typename... Tail>
+struct type_at_index<0, Head, Tail...> {
+    using type = Head;
+};
+//
+template <size_t I, class... Ts>
+using type_at_index_t = typename type_at_index<I, Ts...>::type;
 
 }  // namespace core
 

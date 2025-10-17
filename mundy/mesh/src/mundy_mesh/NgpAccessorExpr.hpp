@@ -450,7 +450,7 @@ class CachableExprBase {
  private:
   template <typename Tag, typename AggregateType, AggregateType agg>
   KOKKOS_INLINE_FUNCTION static constexpr auto increment_tag_count() {
-    if constexpr (has<Tag>(agg)) {
+    if constexpr (core::aggregate_has_v<Tag, AggregateType>) {
       auto new_agg = agg;
       get<Tag>(new_agg) += 1;
       return new_agg;
@@ -637,7 +637,7 @@ class ConnectedEntitiesExpr : public EntityExprBase<ConnectedEntitiesExpr<PrevEn
     static_assert(has<our_tag>(eval_counts), "eval_counts must contain our tag");
 
     if constexpr (get<our_tag>(eval_counts) > 1) {
-      if constexpr (core::has<our_tag, std::remove_reference_t<OldCacheType>>()) {
+      if constexpr (core::aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>) {
         // The fact that our tag exists in the old cache means that our eval has cached its result before.
         // Return the cached value and the old cache
         auto cache = std::forward<OldCacheType>(old_cache);
@@ -727,7 +727,7 @@ class EntityExpr : public EntityExprBase<EntityExpr<NumEntities, Ord, DriverType
     static_assert(has<our_tag>(eval_counts), "eval_counts must contain our tag");
 
     if constexpr (get<our_tag>(eval_counts) > 1) {
-      if constexpr (core::has<our_tag, std::remove_reference_t<OldCacheType>>()) {
+      if constexpr (core::aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>) {
         // The fact that our tag exists in the old cache means that our eval has cached its result before. means that
         // our eval has cached its result before. Return the cached value
         auto cache = std::forward<OldCacheType>(old_cache);
@@ -957,7 +957,7 @@ class ConstantMathExpr : public MathExprBase<ConstantMathExpr<ConstantType>> {
   KOKKOS_INLINE_FUNCTION auto cached_eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities> & /*fmis*/,
                                           OldCacheType &&old_cache, const NgpEvalContext & /*context*/) const {
     static_assert(
-        !core::has<our_tag, std::remove_reference_t<OldCacheType>>(),
+        !core::aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>,
         "The cache somehow contains our tag, but our eval returns a constant and should never cache anything.");
     return Kokkos::make_pair(value_, std::forward<OldCacheType>(old_cache));
   }
@@ -1007,7 +1007,7 @@ class AssignExpr : public MathExprBase<AssignExpr<TargetExpr, SourceExpr>> {
   template <typename EvalCountsType, EvalCountsType eval_counts, size_t NumEntities, typename OldCacheType>
   KOKKOS_INLINE_FUNCTION void cached_eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities> &fmis,
                                           OldCacheType &&old_cache, const NgpEvalContext &context) const {
-    static_assert(!core::has<our_tag, std::remove_reference_t<OldCacheType>>(),
+    static_assert(!core::aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>,
                   "The cache somehow contains our tag, but our eval returns void and should never cache anything.");
 
     // Eval our subexpressions first, allowing them to cache their results if necessary
@@ -1101,7 +1101,7 @@ class AssignExpr : public MathExprBase<AssignExpr<TargetExpr, SourceExpr>> {
       static_assert(has<our_tag>(eval_counts), "eval_counts must contain our tag");                               \
                                                                                                                   \
       if constexpr (get<our_tag>(eval_counts) > 1) {                                                              \
-        if constexpr (core::has<our_tag, std::remove_reference_t<OldCacheType>>()) {                              \
+        if constexpr (core::aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>) {                              \
           /* The fact that our tag exists in the old cache means that our eval has cached its result before.*/    \
           /* Return the cached value */                                                                           \
           auto cache = std::forward<OldCacheType>(old_cache);                                                     \
@@ -1244,7 +1244,7 @@ class AssignExpr : public MathExprBase<AssignExpr<TargetExpr, SourceExpr>> {
     template <typename EvalCountsType, EvalCountsType eval_counts, size_t NumEntities, typename OldCacheType>          \
     KOKKOS_INLINE_FUNCTION void cached_eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities> &fmis,          \
                                             OldCacheType &&old_cache, const NgpEvalContext &context) const {           \
-      static_assert(!core::has<our_tag, std::remove_reference_t<OldCacheType>>(),                                      \
+      static_assert(!core::aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>,                                      \
                     "The cache somehow contains our tag, but our eval returns void and should never cache anything."); \
       /* Eval our subexpressions first, allowing them to cache their results if necessary */                           \
       auto [left_val, new_cache] = left_.template cached_eval<EvalCountsType, eval_counts>(fmis, old_cache, context);  \
@@ -1434,7 +1434,7 @@ class AccessorExpr : public MathExprBase<AccessorExpr<TaggedAccessorT, PrevEntit
     static_assert(has<our_tag>(eval_counts), "eval_counts must contain our tag");
 
     if constexpr (get<our_tag>(eval_counts) > 1) {
-      if constexpr (core::has<our_tag, std::remove_reference_t<OldCacheType>>()) {
+      if constexpr (core::aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>) {
         // The fact that our tag exists in the old cache means that our eval has cached its result before.
         // Return the cached value and the old cache
         auto cache = std::forward<OldCacheType>(old_cache);
@@ -1634,7 +1634,7 @@ class CopyExpr : public MathExprBase<CopyExpr<PrevMathExpr>> {
     static_assert(has<our_tag>(eval_counts), "eval_counts must contain our tag");
 
     if constexpr (get<our_tag>(eval_counts) > 1) {
-      if constexpr (core::has<our_tag, std::remove_reference_t<OldCacheType>>()) {
+      if constexpr (core::aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>) {
         // The fact that our tag exists in the old cache means that our eval has cached its result before. means that
         // our eval has cached its result before. Return the cached value
         auto cache = std::forward<OldCacheType>(old_cache);
@@ -1770,7 +1770,7 @@ class FusedAssignExpr : public MathExprBase<FusedAssignExpr<TrgSrcExprPairs...>>
   template <typename EvalCountsType, EvalCountsType eval_counts, size_t NumEntities, typename OldCacheType>
   KOKKOS_INLINE_FUNCTION void cached_eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities> &fmis,
                                           OldCacheType &&old_cache, const NgpEvalContext &context) const {
-    static_assert(!core::has<our_tag, std::remove_reference_t<OldCacheType>>(),
+    static_assert(!core::aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>,
                   "The cache somehow contains our tag, but our eval returns void and should never cache anything.");
 
     // Eval all expressions, storing their results for later.

@@ -847,41 +847,30 @@ struct TaggedBagOfObjects {
 // Mundy now formally offers core::aggregate as a generalized data structure that mimics a compile-time map from key to
 // object similar in many ways to boost::hana::map. We'll call our TaggedBagOfVariants variant_aggregate and write it in
 // condensed form as v_agg.
-
-template <size_t N, typename... Tags, typename... VariantTs>
-struct TaggedBagOfVariants {
-  using tags_t = std::tuple<Tags...>;
-  using variant_types_t = std::tuple<VariantTs...>;
-  using variant_t = std::variant<VariantTs...>;
-  std::array<variant_t, N> variants;
-
-  template <typename Tag>
-  auto insert(Tag tag, variant_t var) {
-    // Create a new TaggedBagOfVariants with the new tag/variant added
-    auto new_tags = std::tuple_cat(tags_t{}, std::tuple<Tag>{});
-    std::array<variant_t, N + 1> new_variants;
-    for (size_t i = 0; i < N; ++i) {
-      new_variants[i] = variants[i];
-    }
-    new_variants[N] = var;
-    return TaggedBagOfVariants<N + 1, Tags..., Tag, VariantTs...>{new_variants};
-  }
-
-  std::array<size_t, N> build_reorder_map() {  // map[sorted_id] = original_id
-    std::array<size_t, N> map_from_sorted_to_original{};
-    std::iota(map_from_sorted_to_original.begin(), map_from_sorted_to_original.end(), 0);
-    std::sort(map_from_sorted_to_original.begin(), map_from_sorted_to_original.end(),
-              [this](size_t a, size_t b) { return variants[a].index() < variants[b].index(); });
-    return map_from_sorted_to_original;
-  }
-
-  template <typename Visitor>
-  bool visit(const Visitor& visitor) {
-    bool success =
-        visit_multicomb(variants, visitor, tags_t{});  // calls visitor(tuple_of_active_types, tuple_of_their_tags)
-    return success;
-  }
-};
+//
+// I am currently working about the issue of sorting by active type. We have a "working" prototype that correctly converts
+// each variant of a variant_aggregate to its active type and uses this to populate a concrete aggregate. The problem is that
+// this prototype doesn't maintain the correct tag to type mapping because we cannot sort the tags in the same way as the variants.
+//
+// We have unsorted tags in a tuple and sorted concrete types in a tuple.
+// The only solution is to make get<tag>(this_weird_sorted_aggregate) do a compile-time map from tag to index and then use a
+// runtime undo_sort_map to get the correct index into the sorted concrete types.
+//
+// // Some python code for a test
+// import numpy as np
+// import math
+// def num_visits_direct(num_alts, num_variants):
+//     return num_alts**num_variants
+//
+// def num_visits_sorted(num_alts, num_variants):
+//     return math.factorial(num_alts + num_variants - 1) // (math.factorial(num_variants) * math.factorial(num_alts - 1))
+//
+// def num_visits_sorted_and_tagged(num_alts, num_variants):
+//     return math.factorial(num_alts + num_variants - 1) // (math.factorial(num_variants) * math.factorial(num_alts - 1)) * math.factorial(num_variants)
+//
+// for num_alts in range(1, 5):
+//     for num_variants in range(1, 13):
+//         print(f"{num_alts:2d} {num_variants:2d} {num_visits_sorted(num_alts, num_variants):6d} {num_visits_direct(num_alts, num_variants):6d} {num_visits_sorted_and_tagged(num_alts, num_variants):6d}")
 
 }  // namespace mesh
 

@@ -165,7 +165,7 @@ struct tuple_impl<std::index_sequence<Idx...>, Elements...> : public tuple_membe
       typename decltype((tuple_idx_matcher<N, Idx, Elements>() | ... | tuple_idx_matcher<N, N, void>{}))::type;
 
   template <size_t N>
-  using element_t = typename base_of<N>::value_type;
+  using element_t = type_at_index_t<N, Elements...>;
 };
 
 }  // namespace impl
@@ -227,8 +227,29 @@ KOKKOS_FUNCTION constexpr const auto& get(const tuple<Args...>& vals) {
   return vals.template get<T>();
 }
 
-template <size_t Idx, class TupleType>
-using tuple_element_t = typename TupleType::template element_t<Idx>;
+// -------- tuple_size
+template<class T> struct tuple_size; // primary
+
+template<class... Es>
+struct tuple_size<tuple<Es...>> {
+  static constexpr std::size_t value = sizeof...(Es);
+};
+
+template<class T>
+static constexpr std::size_t tuple_size_v = tuple_size<T>::value;
+
+// -------- tuple_element
+template<std::size_t I, class T>
+struct tuple_element; // primary
+
+template<std::size_t I, class... Es>
+struct tuple_element<I, tuple<Es...>> {
+  static_assert(I < sizeof...(Es), "tuple_element index out of bounds");
+  using type = type_at_index_t<I, Es...>;  // your existing meta util; OK with incomplete types
+};
+
+template<std::size_t I, class T>
+using tuple_element_t = typename tuple_element<I, T>::type;
 
 template <class... Elements>
 tuple(Elements...) -> tuple<Elements...>;

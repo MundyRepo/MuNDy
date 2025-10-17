@@ -328,6 +328,27 @@ auto make_variant_aggregate() {
   return variant_aggregate<VariantType>();
 }
 
+/// \brief Check if a variant_aggregate have a variant with the given Tag
+template <typename Tag, typename VariantType, typename... Tags>
+KOKKOS_INLINE_FUNCTION constexpr bool has(const variant_aggregate<VariantType, Tags...>& /*v_agg*/) {
+  return variant_aggregate<VariantType, Tags...>::template has<Tag>();
+}
+
+/// \brief Check if a variant aggregate type has a component with the given Tag usage variant_aggregate_has_v<Tag, VarAggType>
+template <typename Tag, typename VarAggType>
+struct variant_aggregate_has {
+  static constexpr bool value = VarAggType::template has<Tag>();
+};
+//
+template <typename Tag, typename VarAggType>
+static constexpr bool variant_aggregate_has_v = variant_aggregate_has<Tag, VarAggType>::value;
+
+/// \brief Add a new component to an existing aggregate (fluent interface)
+template <typename Tag, typename NewComponent, typename... Components>
+KOKKOS_INLINE_FUNCTION constexpr auto append(const aggregate<Components...>& agg, NewComponent new_component) {
+  return agg.template append<Tag>(std::move(new_component));
+}
+
 /// \brief An aggregate: A bag of compile-time tagged types
 /// In other words, a compile-time unordered map of arbitrary types indexed by tag type.
 ///
@@ -449,11 +470,15 @@ KOKKOS_INLINE_FUNCTION constexpr bool has(const aggregate<Components...>& /*agg*
   return aggregate<Components...>::template has<Tag>();
 }
 
-/// \brief Check if an aggregate type has a component with the given Tag usage has_v<Tag, AggType>
+/// \brief Check if an aggregate type has a component with the given Tag usage aggregate_has_v<Tag, AggType>
 template <typename Tag, typename AggType>
-KOKKOS_INLINE_FUNCTION constexpr bool has() {
-  return AggType::template has<Tag>();
-}
+struct aggregate_has {
+  static constexpr bool value = AggType::template has<Tag>();
+};
+//
+template <typename Tag, typename AggType>
+static constexpr bool aggregate_has_v = aggregate_has<Tag, AggType>::value;
+
 /// \brief Add a new component to an existing aggregate (fluent interface)
 template <typename Tag, typename NewComponent, typename... Components>
 KOKKOS_INLINE_FUNCTION constexpr auto append(const aggregate<Components...>& agg, NewComponent new_component) {
