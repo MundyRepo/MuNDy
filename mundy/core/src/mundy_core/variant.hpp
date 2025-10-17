@@ -39,12 +39,12 @@ namespace mundy {
 
 namespace core {
 
-template <class... Types>
+template <class... Alts>
 struct variant {
  private:
-  static_assert((std::is_copy_assignable_v<Types> && ...), "All types must be copy assignable.");
-  static_assert((std::is_default_constructible_v<Types> && ...), "All types must be default constructible.");
-  tuple<Types...> storage_;
+  static_assert((std::is_copy_assignable_v<Alts> && ...), "All types must be copy assignable.");
+  static_assert((std::is_default_constructible_v<Alts> && ...), "All types must be default constructible.");
+  tuple<Alts...> storage_;
   size_t active_index_;
 
   //! \name Helpers
@@ -60,7 +60,7 @@ struct variant {
 
   // Function to reset the current active type to its default value
   KOKKOS_FUNCTION void reset_active_type() {
-    reset_active_type_impl(std::make_index_sequence<sizeof...(Types)>{});
+    reset_active_type_impl(std::make_index_sequence<sizeof...(Alts)>{});
   }
   //@}
 
@@ -71,8 +71,8 @@ struct variant {
 
   /// \brief Constructor for initializing with a specific type
   template <class T>
-    requires(contains_type_v<T, Types...>)
-  KOKKOS_FUNCTION constexpr variant(T const& value) : storage_{}, active_index_{index_of<T>()} {
+    requires(contains_type_v<T, Alts...>)
+  KOKKOS_FUNCTION constexpr variant(const T& value) : storage_{}, active_index_{index_of<T>()} {
     storage_.template get<T>() = value;
   }
 
@@ -81,9 +81,14 @@ struct variant {
     return active_index_;
   }
 
+  /// \brief Get the number of alternatives
+  KOKKOS_FUNCTION static constexpr size_t size() {
+    return sizeof...(Alts);
+  }
+
   template <class T>
-  static constexpr size_t index_of() {
-    return index_finder_v<T, Types...>;
+  KOKKOS_FUNCTION static constexpr size_t index_of() {
+    return index_finder_v<T, Alts...>;
   }
 
   /// \brief Check if a specific type is active
@@ -94,27 +99,42 @@ struct variant {
 
   /// \brief The J'th alternative type
   template <size_t J>
-  using alternative_t = typename tuple<Types...>::template element_t<J>;
+  using alternative_t = type_at_index_t<J, Alts...>;
 
   /// \brief Get the value of the active type
   template <class T>
   KOKKOS_FUNCTION constexpr T& get() {
-    static_assert(contains_type_v<T, Types...>, "Type is not in variant.");
+    static_assert(contains_type_v<T, Alts...>, "Type is not in variant.");
     assert(holds_alternative<T>() && "Incorrect type access");
     constexpr size_t index_of_t = index_of<T>();
     return storage_.template get<index_of_t>();
   }
   template <class T>
   KOKKOS_FUNCTION constexpr const T& get() const {
-    static_assert(contains_type_v<T, Types...>, "Type is not in variant.");
+    static_assert(contains_type_v<T, Alts...>, "Type is not in variant.");
     assert(holds_alternative<T>() && "Incorrect type access");
     constexpr size_t index_of_t = index_of<T>();
     return storage_.template get<index_of_t>();
   }
 
+  /// \brief Get the value of the active type based on the active index
+  template <size_t ActiveIdx>
+  KOKKOS_FUNCTION constexpr auto get() -> alternative_t<ActiveIdx>& {
+    using Alt = alternative_t<ActiveIdx>;
+    assert(holds_alternative<Alt>() && "Incorrect type access using active index");
+    return storage_.template get<ActiveIdx>();
+  }
+  template <size_t ActiveIdx>
+  KOKKOS_FUNCTION constexpr auto get() const -> const alternative_t<ActiveIdx>& {
+    using Alt = alternative_t<ActiveIdx>;
+    assert(holds_alternative<Alt>() && "Incorrect type access using active index");
+    return storage_.template get<ActiveIdx>();
+  }
+
+
   /// \brief Set a new active type, default-constructing the previous type
   template <class T>
-    requires(contains_type_v<T, Types...>)
+    requires(contains_type_v<T, Alts...>)
   KOKKOS_FUNCTION constexpr void operator=(T const& value) {
     reset_active_type();
     active_index_ = index_of<T>();
@@ -126,30 +146,52 @@ struct variant {
 //@{
 
 /// \brief Get the index of the given type
-template <class T, class... Types>
+template <class T, class... Alts>
 constexpr size_t index_of() {
-  return variant<Types...>::template index_of<T>();
+  return variant<Alts...>::template index_of<T>();
 }
 
 /// \brief Check if a specific type is active
-template <class T, class... Types>
-KOKKOS_FUNCTION constexpr bool holds_alternative(const variant<Types...>& var) {
+template <class T, class... Alts>
+KOKKOS_FUNCTION constexpr bool holds_alternative(const variant<Alts...>& var) {
   return var.template holds_alternative<T>();
 }
 
-/// \brief Get the J'th alternative type
-template <size_t J, class... Types>
-using variant_alternative_t = typename variant<Types...>::template alternative_t<J>;
+/// \brief Get the J'th alternative type TODO(palmerb4): Make independent of concrete variant instance
+template <size_t J, class VariantType>
+using variant_alternative_t = typename VariantType::template alternative_t<J>;
 
 /// \brief Get the value of the active type
-template <class T, class... Types>
-KOKKOS_FUNCTION constexpr T& get(variant<Types...>& var) {
+template <class T, class... Alts>
+KOKKOS_FUNCTION constexpr T& get(variant<Alts...>& var) {
   return var.template get<T>();
 }
-template <class T, class... Types>
-KOKKOS_FUNCTION constexpr const T& get(const variant<Types...>& var) {
+template <class T, class... Alts>
+KOKKOS_FUNCTION constexpr const T& get(const variant<Alts...>& var) {
   return var.template get<T>();
 }
+
+  /// \brief Get the value of the active type based on the active index
+template <size_t ActiveIdx, class... Alts>
+KOKKOS_FUNCTION constexpr auto& get(variant<Alts...>& var) {
+  return var.template get<ActiveIdx>();
+}
+template <size_t ActiveIdx, class... Alts>
+KOKKOS_FUNCTION constexpr const auto& get(const variant<Alts...>& var) {
+  return var.template get<ActiveIdx>();
+}
+
+// -------- variant_size
+template<class T> struct variant_size; // primary
+
+template<class... Alts>
+struct variant_size<variant<Alts...>> {
+  static constexpr std::size_t value = sizeof...(Alts);
+};
+
+template<class T>
+static constexpr std::size_t variant_size_v = variant_size<T>::value;
+
 //@}
 
 }  // namespace core

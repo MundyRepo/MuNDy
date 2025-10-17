@@ -44,11 +44,10 @@ namespace impl {
 template <class T, size_t Idx>
 struct tuple_member {
   T value;
-
   using value_type = T;
 
   // If T is default constructible, provide a default constructor
-  KOKKOS_FUNCTION
+  KOKKOS_DEFAULTED_FUNCTION
   constexpr tuple_member()
     requires std::default_initializable<T>
   = default;
@@ -70,7 +69,8 @@ struct tuple_member {
   }
 };
 
-/// \brief Helper class which will be used via a fold expression to select the member with the correct Idx in a pack of tuple_members
+/// \brief Helper class which will be used via a fold expression to select the member with the correct Idx in a pack of
+/// tuple_members
 template <size_t SearchIdx, size_t Idx, class T>
 struct tuple_idx_matcher {
   using type = tuple_member<T, Idx>;
@@ -85,7 +85,8 @@ struct tuple_idx_matcher {
   }
 };
 
-/// \brief Helper class which will be used via a fold expression to select the member with the correct type in a pack of tuple_members
+/// \brief Helper class which will be used via a fold expression to select the member with the correct type in a pack of
+/// tuple_members
 template <class SearchType, size_t Idx, class T>
 struct tuple_type_matcher {
   using type = tuple_member<T, Idx>;
@@ -100,14 +101,13 @@ struct tuple_type_matcher {
   }
 };
 
-
 template <class IdxSeq, class... Elements>
 struct tuple_impl;
 
 template <size_t... Idx, class... Elements>
 struct tuple_impl<std::index_sequence<Idx...>, Elements...> : public tuple_member<Elements, Idx>... {
   // If all elements are default constructible, provide a default constructor
-  KOKKOS_FUNCTION
+  KOKKOS_DEFAULTED_FUNCTION
   constexpr tuple_impl()
     requires((std::default_initializable<Elements> && ...))
   = default;
@@ -119,17 +119,10 @@ struct tuple_impl<std::index_sequence<Idx...>, Elements...> : public tuple_membe
   }
 
   /// \brief Default copy/move/assign constructors
-  KOKKOS_FUNCTION
-  constexpr tuple_impl(const tuple_impl&) = default;
-
-  KOKKOS_FUNCTION
-  constexpr tuple_impl(tuple_impl&&) = default;
-
-  KOKKOS_FUNCTION
-  constexpr tuple_impl& operator=(const tuple_impl&) = default;
-
-  KOKKOS_FUNCTION
-  constexpr tuple_impl& operator=(tuple_impl&&) = default;
+  KOKKOS_DEFAULTED_FUNCTION constexpr tuple_impl(const tuple_impl&) = default;
+  KOKKOS_DEFAULTED_FUNCTION constexpr tuple_impl(tuple_impl&&) = default;
+  KOKKOS_DEFAULTED_FUNCTION constexpr tuple_impl& operator=(const tuple_impl&) = default;
+  KOKKOS_DEFAULTED_FUNCTION constexpr tuple_impl& operator=(tuple_impl&&) = default;
 
   /// \brief Get the element of the tuple at index N
   template <size_t N>
@@ -161,11 +154,9 @@ struct tuple_impl<std::index_sequence<Idx...>, Elements...> : public tuple_membe
 
   // Helper alias: select the matching base; sentinel ensures fold is never empty.
   template <size_t N>
+    requires(sizeof...(Elements) > 0)
   using base_of =
       typename decltype((tuple_idx_matcher<N, Idx, Elements>() | ... | tuple_idx_matcher<N, N, void>{}))::type;
-
-  template <size_t N>
-  using element_t = type_at_index_t<N, Elements...>;
 };
 
 }  // namespace impl
@@ -176,7 +167,7 @@ struct tuple_impl<std::index_sequence<Idx...>, Elements...> : public tuple_membe
 template <class... Elements>
 struct tuple : public impl::tuple_impl<decltype(std::make_index_sequence<sizeof...(Elements)>()), Elements...> {
   // If all elements are default constructible, provide a default constructor
-  KOKKOS_FUNCTION
+  KOKKOS_DEFAULTED_FUNCTION
   constexpr tuple()
     requires((std::default_initializable<Elements> && ...))
   = default;
@@ -188,23 +179,21 @@ struct tuple : public impl::tuple_impl<decltype(std::make_index_sequence<sizeof.
   }
 
   /// \brief Default copy/move/assign constructors
-  KOKKOS_FUNCTION
-  constexpr tuple(const tuple&) = default;
-
-  KOKKOS_FUNCTION
-  constexpr tuple(tuple&&) = default;
-
-  KOKKOS_FUNCTION
-  constexpr tuple& operator=(const tuple&) = default;
-
-  KOKKOS_FUNCTION
-  constexpr tuple& operator=(tuple&&) = default;
+  KOKKOS_DEFAULTED_FUNCTION constexpr tuple(const tuple&) = default;
+  KOKKOS_DEFAULTED_FUNCTION constexpr tuple(tuple&&) = default;
+  KOKKOS_DEFAULTED_FUNCTION constexpr tuple& operator=(const tuple&) = default;
+  KOKKOS_DEFAULTED_FUNCTION constexpr tuple& operator=(tuple&&) = default;
 
   /// \brief Get the size of the tuple
   KOKKOS_FUNCTION
   static constexpr size_t size() {
     return sizeof...(Elements);
   }
+
+  /// \brief Get the type of the N'th element
+  template <size_t N>
+    requires(sizeof...(Elements) > 0)
+  using element_t = type_at_index_t<N, Elements...>;
 };
 
 template <size_t Idx, class... Args>
@@ -228,27 +217,28 @@ KOKKOS_FUNCTION constexpr const auto& get(const tuple<Args...>& vals) {
 }
 
 // -------- tuple_size
-template<class T> struct tuple_size; // primary
+template <class T>
+struct tuple_size;  // primary
 
-template<class... Es>
+template <class... Es>
 struct tuple_size<tuple<Es...>> {
   static constexpr std::size_t value = sizeof...(Es);
 };
 
-template<class T>
+template <class T>
 static constexpr std::size_t tuple_size_v = tuple_size<T>::value;
 
 // -------- tuple_element
-template<std::size_t I, class T>
-struct tuple_element; // primary
+template <std::size_t I, class T>
+struct tuple_element;  // primary
 
-template<std::size_t I, class... Es>
+template <std::size_t I, class... Es>
 struct tuple_element<I, tuple<Es...>> {
   static_assert(I < sizeof...(Es), "tuple_element index out of bounds");
   using type = type_at_index_t<I, Es...>;  // your existing meta util; OK with incomplete types
 };
 
-template<std::size_t I, class T>
+template <std::size_t I, class T>
 using tuple_element_t = typename tuple_element<I, T>::type;
 
 template <class... Elements>

@@ -35,7 +35,6 @@
 #include <mundy_core/tuple.hpp>        // for mundy::core::tuple
 #include <mundy_core/type_traits.hpp>  // for core::count_type_v
 #include <mundy_core/variant.hpp>      // for mundy::core::variant
-
 namespace mundy {
 
 namespace core {
@@ -130,26 +129,33 @@ class TaggedComponent {
   using tag_type = Tag;
   using component_type = Type;
 
-  constexpr TaggedComponent(component_type component) : component_(component) {
+  KOKKOS_INLINE_FUNCTION constexpr TaggedComponent(component_type component) : component_(component) {
   }
 
   /// \brief Default copy/move/assign constructors
-  constexpr TaggedComponent(const TaggedComponent&) = default;
-  constexpr TaggedComponent(TaggedComponent&&) = default;
-  constexpr TaggedComponent& operator=(const TaggedComponent&) = default;
-  constexpr TaggedComponent& operator=(TaggedComponent&&) = default;
+  KOKKOS_DEFAULTED_FUNCTION constexpr TaggedComponent(const TaggedComponent&) = default;
+  KOKKOS_DEFAULTED_FUNCTION constexpr TaggedComponent(TaggedComponent&&) = default;
+  KOKKOS_DEFAULTED_FUNCTION constexpr TaggedComponent& operator=(const TaggedComponent&) = default;
+  KOKKOS_DEFAULTED_FUNCTION constexpr TaggedComponent& operator=(TaggedComponent&&) = default;
 
-  inline constexpr const component_type& component() const {
+  KOKKOS_INLINE_FUNCTION
+  constexpr const component_type& component() const {
     // Our lifetime should be at least as long as the component's
     return component_;
   }
 
-  inline constexpr component_type& component() {
+  KOKKOS_INLINE_FUNCTION
+  constexpr component_type& component() {
     return component_;
   }
 
   component_type component_;
 };  // TaggedComponent
+
+template <typename Tag, typename Type>
+KOKKOS_INLINE_FUNCTION constexpr TaggedComponent<Tag, Type> apply_tag(Type t) {
+  return TaggedComponent<Tag, Type>(t);
+}
 
 }  // namespace impl
 
@@ -255,7 +261,7 @@ class variant_aggregate {
   template <typename Tag>
   KOKKOS_FUNCTION constexpr auto append(variant_t new_variant) const {
     // Copy the old variants into a new array with one extra slot
-    Kokkos::Array<variant_t, N> new_variants;
+    Kokkos::Array<variant_t, N + 1> new_variants;
     for (size_t i = 0; i < N; ++i) {
       new_variants[i] = variants_[i];
     }
@@ -267,6 +273,7 @@ class variant_aggregate {
 
   /// \brief The I'th tag type
   template <size_t I>
+    requires(sizeof...(Tags) > 0)
   using tag_t = tuple_element_t<I, TagsTuple>;
 
   /// \brief Fetch the I'th component (compile-time index)
@@ -315,6 +322,14 @@ class variant_aggregate {
     return N;
   }
 
+  std::array<size_t, N> build_reorder_map() const {  // map[sorted_id] = original_id
+    std::array<size_t, N> map_from_sorted_to_original{};
+    std::iota(map_from_sorted_to_original.begin(), map_from_sorted_to_original.end(), 0);
+    std::sort(map_from_sorted_to_original.begin(), map_from_sorted_to_original.end(),
+              [this](size_t a, size_t b) { return variants_[a].index() < variants_[b].index(); });
+    return map_from_sorted_to_original;
+  }
+
   //! \name Private members (no touch)
   //@{
 
@@ -324,9 +339,43 @@ class variant_aggregate {
 
 /// \brief Canonical way to construct a variant_aggregate
 template <typename VariantType>
-auto make_variant_aggregate() {
+KOKKOS_INLINE_FUNCTION constexpr auto make_variant_aggregate() {
   return variant_aggregate<VariantType>();
 }
+
+/// \brief Fetch the variant corresponding to the given Tag
+template <typename Tag, typename VariantType, typename... Tags>
+KOKKOS_INLINE_FUNCTION constexpr const VariantType& get(const variant_aggregate<VariantType, Tags...>& v_agg) {
+  return v_agg.template get<Tag>();
+}
+
+/// \brief Fetch the variant corresponding to the given Tag
+template <typename Tag, typename VariantType, typename... Tags>
+KOKKOS_INLINE_FUNCTION constexpr VariantType& get(variant_aggregate<VariantType, Tags...>& v_agg) {
+  return v_agg.template get<Tag>();
+}
+
+/// \brief Fetch the variant at index I
+template <size_t I, typename VariantType, typename... Tags>
+KOKKOS_INLINE_FUNCTION constexpr const VariantType& get(const variant_aggregate<VariantType, Tags...>& v_agg) {
+  return v_agg.template get<I>();
+}
+template <size_t I, typename VariantType, typename... Tags>
+KOKKOS_INLINE_FUNCTION constexpr VariantType& get(variant_aggregate<VariantType, Tags...>& v_agg) {
+  return v_agg.template get<I>();
+}
+
+/// \brief The I'th variant_aggregate tag
+template <size_t I, typename VarAggType>
+struct variant_aggregate_tag;
+
+template <size_t I, typename VariantType, typename... Tags>
+struct variant_aggregate_tag<I, variant_aggregate<VariantType, Tags...>> {
+  using type = type_at_index_t<I, Tags...>;
+};
+
+template <size_t I, typename VarAggType>
+using variant_aggregate_tag_t = variant_aggregate_tag<I, VarAggType>::type;
 
 /// \brief Check if a variant_aggregate have a variant with the given Tag
 template <typename Tag, typename VariantType, typename... Tags>
@@ -334,7 +383,8 @@ KOKKOS_INLINE_FUNCTION constexpr bool has(const variant_aggregate<VariantType, T
   return variant_aggregate<VariantType, Tags...>::template has<Tag>();
 }
 
-/// \brief Check if a variant aggregate type has a component with the given Tag usage variant_aggregate_has_v<Tag, VarAggType>
+/// \brief Check if a variant aggregate type has a component with the given Tag usage variant_aggregate_has_v<Tag,
+/// VarAggType>
 template <typename Tag, typename VarAggType>
 struct variant_aggregate_has {
   static constexpr bool value = VarAggType::template has<Tag>();
@@ -344,9 +394,10 @@ template <typename Tag, typename VarAggType>
 static constexpr bool variant_aggregate_has_v = variant_aggregate_has<Tag, VarAggType>::value;
 
 /// \brief Add a new component to an existing aggregate (fluent interface)
-template <typename Tag, typename NewComponent, typename... Components>
-KOKKOS_INLINE_FUNCTION constexpr auto append(const aggregate<Components...>& agg, NewComponent new_component) {
-  return agg.template append<Tag>(std::move(new_component));
+template <typename Tag, typename VariantType, typename... Tags>
+KOKKOS_INLINE_FUNCTION constexpr auto append(const variant_aggregate<VariantType, Tags...>& v_agg,
+                                             VariantType new_variant) {
+  return v_agg.template append<Tag>(std::move(new_variant));
 }
 
 /// \brief An aggregate: A bag of compile-time tagged types
@@ -400,6 +451,11 @@ class aggregate {
     return NewType(new_tuple);
   }
 
+  /// \brief The I'th tag type
+  template <size_t I>
+    requires(sizeof...(TaggedComponents) > 0)
+  using tag_t = typename tuple_element_t<I, TaggedComponentsTuple>::tag_type;
+
   /// \brief Fetch the I'th component
   template <size_t I>
   KOKKOS_INLINE_FUNCTION constexpr const auto& get() const {
@@ -409,10 +465,6 @@ class aggregate {
   KOKKOS_INLINE_FUNCTION constexpr auto& get() {
     return tagged_components_.template get<I>().component();
   }
-
-  /// \brief The I'th tag type
-  template <size_t I>
-  using tag_t = typename tuple_element_t<I, TaggedComponentsTuple>::tag_type;
 
   /// \brief Fetch the component corresponding to the given Tag
   template <typename Tag>
@@ -464,6 +516,16 @@ KOKKOS_INLINE_FUNCTION constexpr auto& get(aggregate<Components...>& agg) {
   return agg.template get<Tag>();
 }
 
+/// \brief Fetch the component at index I
+template <size_t I, typename... Components>
+KOKKOS_INLINE_FUNCTION constexpr const auto& get(const aggregate<Components...>& agg) {
+  return agg.template get<I>();
+}
+template <size_t I, typename... Components>
+KOKKOS_INLINE_FUNCTION constexpr auto& get(aggregate<Components...>& agg) {
+  return agg.template get<I>();
+}
+
 /// \brief Check if an aggregate have a component with the given Tag
 template <typename Tag, typename... Components>
 KOKKOS_INLINE_FUNCTION constexpr bool has(const aggregate<Components...>& /*agg*/) {
@@ -484,6 +546,18 @@ template <typename Tag, typename NewComponent, typename... Components>
 KOKKOS_INLINE_FUNCTION constexpr auto append(const aggregate<Components...>& agg, NewComponent new_component) {
   return agg.template append<Tag>(std::move(new_component));
 }
+
+/// \brief The I'th aggregate tag
+template <size_t I, typename AggType>
+struct aggregate_tag;
+
+template <size_t I, typename... Components>
+struct aggregate_tag<I, aggregate<Components...>> {
+  using type = type_at_index_t<I, Components...>::tag_type;
+};
+
+template <size_t I, typename AggType>
+using aggregate_tag_t = aggregate_tag<I, AggType>::type;
 
 /// \brief Overload the stream operator for aggregates
 template <typename... Components>
@@ -550,40 +624,54 @@ struct multicomb_index_table {
 };
 
 template <typename VariantAggregateType, std::array<int, VariantAggregateType::size()> active_ids, std::size_t... Is>
-auto make_aggregate_from_active_impl(const VariantAggregateType& v_agg, std::index_sequence<Is...>) {
+auto make_aggregate_from_active_impl(const VariantAggregateType& v_agg,
+                                     const std::array<size_t, VariantAggregateType::size()>& reorder_map,
+                                     std::index_sequence<Is...>) {
   using variant_t = typename VariantAggregateType::variant_t;
-  using AggregateType = aggregate<impl::TaggedComponent<typename VariantAggregateType::template tag_t<Is>, variant_alternative_t<active_ids[Is], variant_t>>...>;
-  return AggregateType(std::get<active_ids[Is]>(v_agg.template get<Is>())...);
+  using AggregateType = aggregate<impl::TaggedComponent<typename VariantAggregateType::template tag_t<Is>,
+                                                        variant_alternative_t<active_ids[Is], variant_t>>...>;
+  return AggregateType(
+      core::make_tuple(impl::apply_tag</* I'th tag */ variant_aggregate_tag_t<Is, VariantAggregateType>>(
+          /* I'th object */ get<active_ids[Is]>(/* I'th variant*/ v_agg.get(reorder_map[Is])))...));
 }
 
 /// \brief Construct a concrete aggregate from the active indices of a variant_aggregate
 template <typename VariantAggregateType, std::array<int, VariantAggregateType::size()> active_ids>
-auto make_aggregate_from_active(const VariantAggregateType& v_agg) {
-  return make_aggregate_from_active_impl<VariantAggregateType, active_ids>(v_agg, std::make_index_sequence<VariantAggregateType::size()>{});
+auto make_aggregate_from_active(const VariantAggregateType& v_agg,
+                                const std::array<size_t, VariantAggregateType::size()>& reorder_map) {
+  return make_aggregate_from_active_impl<VariantAggregateType, active_ids>(
+      v_agg, reorder_map, std::make_index_sequence<VariantAggregateType::size()>{});
 }
 
 /// \brief Compare active indices of vs against the I-th pattern
 template <std::size_t I, typename VariantType, typename... Tags>
-bool match_active(const variant_aggregate<VariantType, Tags...>& v_agg) {
+bool match_active(const variant_aggregate<VariantType, Tags...>& v_agg,
+                  const std::array<size_t, sizeof...(Tags)>& reorder_map) {
   constexpr std::size_t R = sizeof...(Tags);
+  std::cout << "match_active: ";
+  // multicomb_index_table assumes that the variants are sorted by active index.
   for (int j = 0; j < R; ++j) {
-    const VariantType& v = v_agg.get(j);
+    const VariantType& v = v_agg.get(reorder_map[j]);
     if (v.index() != multicomb_index_table<VariantType::size(), R>::idxs[I][j]) {
+      std::cout << "0" << std::endl;
       return false;
     }
+    std::cout << "1";
   }
+  std::cout << std::endl;
   return true;
 }
 
 /// \brief Try the I-th multichoose; on match, call f(tuple_of_refs)
 /// \return true if matched.
 template <std::size_t I, typename VariantType, typename... Tags, typename Visitor>
-bool try_one(const variant_aggregate<VariantType, Tags...>& v_agg, const Visitor& visitor) {
+bool try_one(const variant_aggregate<VariantType, Tags...>& v_agg,
+             const std::array<size_t, sizeof...(Tags)>& reorder_map, const Visitor& visitor) {
   constexpr std::size_t R = sizeof...(Tags);
-  if (match_active<I>(v_agg)) {
+  if (match_active<I>(v_agg, reorder_map)) {
     // Success! multicomb_index_table<N, R>::idxs[I] gives the std::array<int, R> of active indices
     constexpr std::array<int, R> active_ids = multicomb_index_table<VariantType::size(), R>::idxs[I];
-    auto agg = make_aggregate_from_active<variant_aggregate<VariantType, Tags...>, active_ids>(v_agg);
+    auto agg = make_aggregate_from_active<variant_aggregate<VariantType, Tags...>, active_ids>(v_agg, reorder_map);
     visitor(agg);
     return true;
   }
@@ -592,11 +680,13 @@ bool try_one(const variant_aggregate<VariantType, Tags...>& v_agg, const Visitor
 
 /// \brief Visit over all patterns until a match
 template <typename VariantType, typename... Tags, typename Visitor, std::size_t... I>
-void visit_impl(const variant_aggregate<VariantType, Tags...>& v_agg, const Visitor& visitor,
+void visit_impl(const variant_aggregate<VariantType, Tags...>& v_agg,
+                const std::array<size_t, sizeof...(Tags)>& reorder_map, const Visitor& visitor,
                 std::index_sequence<I...>) {
   bool done = false;
-  ((done = done || try_one<I>(v_agg, visitor)), ...);
-  MUNDY_THROW_ASSERT(done, std::runtime_error, "Internal error: no matching type combo found in visit.");
+  ((done = done || try_one<I>(v_agg, reorder_map, visitor)), ...);
+  std::cout << "Done? " << (done ? "yes" : "no") << std::endl;
+  assert(done && "Internal error: no matching type combo found in visit.");
 }
 
 }  // namespace impl
@@ -616,7 +706,8 @@ void visit_impl(const variant_aggregate<VariantType, Tags...>& v_agg, const Visi
 template <typename VariantType, typename... Tags, typename Visitor>
 void visit(const variant_aggregate<VariantType, Tags...>& v_agg, const Visitor& visitor) {
   using cached_table = impl::multicomb_index_table<VariantType::size(), sizeof...(Tags)>;
-  impl::visit_impl(v_agg, visitor, std::make_index_sequence<cached_table::size()>{});
+  std::array<size_t, sizeof...(Tags)> reorder_map = v_agg.build_reorder_map();
+  impl::visit_impl(v_agg, reorder_map, visitor, std::make_index_sequence<cached_table::size>{});
 }
 
 }  // namespace core

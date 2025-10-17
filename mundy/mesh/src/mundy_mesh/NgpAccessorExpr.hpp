@@ -863,7 +863,10 @@ class NgpForEachEntityExprDriver {
               Kokkos::Array<stk::mesh::FastMeshIndex, 1>{entity_index}, empty_cache, evaluation_context);
 
           // Combine into the reduction
+          // To avoid CUDA being CUDA, we must "touch" the reduction
+          [[maybe_unused]] auto meaningless_return_to_make_cuda_happy = reduction.reference();
           using val_t = decltype(val);
+
           if constexpr (std::is_same_v<val_t, value_type>) {
             // Directly compatible types; just combine
             reduction.join(value, val);
@@ -1824,7 +1827,7 @@ class FusedAssignExpr : public MathExprBase<FusedAssignExpr<TrgSrcExprPairs...>>
   }
 
   template <size_t... Is, typename Ctx>
-  KOKKOS_INLINE_FUNCTION void propagate_synchronize_impl(std::index_sequence<Is...>, const Ctx &context) {
+  void propagate_synchronize_impl(std::index_sequence<Is...>, const Ctx &context) {
     static_assert(sizeof...(Is) == num_pairs, "Index sequence size must match number of target/source pairs.");
 
     // Flag all right hand sides as read-only and all left hand sides as overwrite-all.

@@ -31,6 +31,7 @@
 // Kokkos
 #include <Kokkos_Core.hpp>
 
+
 namespace mundy {
 
 namespace core {
@@ -41,7 +42,6 @@ namespace core {
   - count_type<T, Types...>      : count how many times T appears in Types...
   - index_finder<T, Types...>    : find the index of T in Types... (only valid if all types are unique and the type is
   present)
-  - type_at_index_t<I, Types...> : get the I'th type in Types...
 
 */
 
@@ -69,29 +69,28 @@ static constexpr size_t count_type_v = count_type<T, Types...>::value;
 template <class T, class... Ts>
 struct index_finder;
 //
-template <class T, class First, class... Rest>
-struct index_finder<T, First, Rest...> {
-  static_assert(count_type_v<T, First, Rest...> == 1, "Type must appear exactly once in list");
-  static_assert(sizeof...(Rest) + 1 > 0, "Type not found in list");
-  static constexpr size_t value = std::is_same_v<T, First> ? 0 : 1 + index_finder<T, Rest...>::value;
-};
-//
 template <class T>
 struct index_finder<T> {
   static constexpr size_t value = 0;
 };
 //
+template <class T, class First, class... Rest>
+struct index_finder<T, First, Rest...> {
+  static_assert(sizeof...(Rest) + 1 > 0, "Type not found in list");
+  static constexpr size_t value = std::is_same_v<T, First> ? 0 : 1 + index_finder<T, Rest...>::value;
+};
+//
 template <class T, class... Ts>
+  requires(count_type_v<T, Ts...> == 1)
 static constexpr size_t index_finder_v = index_finder<T, Ts...>::value;
 
 // **********************************************************************************************************************
 /// \brief Get the I'th type in a variadic list of types
-template <size_t I, class... Ts>
+template <std::size_t I, typename... Ts>
 struct type_at_index;
 //
-// Primary template for getting the I-th type
 template <std::size_t I, typename Head, typename... Tail>
-struct type_at_index {
+struct type_at_index<I, Head, Tail...> {
     static_assert(I < 1 + sizeof...(Tail), "Index out of bounds in type_at_index");
     using type = typename type_at_index<I - 1, Tail...>::type;
 };
@@ -103,6 +102,7 @@ struct type_at_index<0, Head, Tail...> {
 };
 //
 template <size_t I, class... Ts>
+  requires(I < sizeof...(Ts))
 using type_at_index_t = typename type_at_index<I, Ts...>::type;
 
 }  // namespace core

@@ -76,8 +76,10 @@ The goal of this example is to simulate the swimming motion of a multiple, colli
 #include <stk_search/Sphere.hpp>
 
 // Mundy libs
-#include <mundy_core/MakeStringArray.hpp>                                     // for mundy::core::make_string_array
-#include <mundy_core/throw_assert.hpp>                                        // for MUNDY_THROW_ASSERT
+#include <mundy_core/MakeStringArray.hpp>  // for mundy::core::make_string_array
+#include <mundy_core/throw_assert.hpp>     // for MUNDY_THROW_ASSERT
+#include <mundy_geom/periodicity.hpp>
+#include <mundy_geom/primitives.hpp>
 #include <mundy_linkers/ComputeSignedSeparationDistanceAndContactNormal.hpp>  // for mundy::linkers::ComputeSignedSeparationDistanceAndContactNormal
 #include <mundy_linkers/DestroyNeighborLinkers.hpp>         // for mundy::linkers::DestroyNeighborLinkers
 #include <mundy_linkers/EvaluateLinkerPotentials.hpp>       // for mundy::linkers::EvaluateLinkerPotentials
@@ -414,8 +416,8 @@ void declare_and_initialize_sperm(stk::mesh::BulkData &bulk_data, stk::mesh::Par
                                   const DoubleField &node_curvature_field, const DoubleField &node_rest_curvature_field,
                                   const DoubleField &node_radius_field, const IntField &node_sperm_id_field,
                                   const DoubleField &edge_orientation_field, const DoubleField &edge_tangent_field,
-                                  const DoubleField &edge_length_field, const DoubleField &element_radius_field,
-                                  const DoubleField &element_rest_length_field) {
+                                  const DoubleField &edge_length_field, const DoubleField &elem_radius_field,
+                                  const DoubleField &elem_rest_length_field) {
   debug_print("Declaring and initializing the sperm.");
 
   stk::mesh::MetaData &meta_data = bulk_data.mesh_meta_data();
@@ -518,10 +520,10 @@ void declare_and_initialize_sperm(stk::mesh::BulkData &bulk_data, stk::mesh::Par
             : stk::mesh::PartVector{&centerline_twist_springs_part, &meta_data.get_topology_root_part(edge_topo)};
 
     // Centerline twist springs connect nodes i, i+1, and i+2. We need to start at node i=0 and end at node N - 2.
-    const size_t start_element_chain_index = (rank == 0) ? start_seq_node_index : start_seq_node_index - 1;
-    const size_t end_start_element_chain_index =
+    const size_t start_elem_chain_index = (rank == 0) ? start_seq_node_index : start_seq_node_index - 1;
+    const size_t end_start_elem_chain_index =
         (rank == bulk_data.parallel_size() - 1) ? end_seq_node_index - 2 : end_seq_node_index - 1;
-    for (size_t i = start_element_chain_index; i < end_start_element_chain_index; ++i) {
+    for (size_t i = start_elem_chain_index; i < end_start_elem_chain_index; ++i) {
       // Note, the connectivity for a SHELL_TRI_3 is as follows:
       /*                    2
       //                    o
@@ -658,12 +660,12 @@ void declare_and_initialize_sperm(stk::mesh::BulkData &bulk_data, stk::mesh::Par
                                  scratch3);
 
       // Populate the spring's data
-      stk::mesh::field_data(element_radius_field, spring)[0] = sperm_radius;
-      stk::mesh::field_data(element_rest_length_field, spring)[0] = rest_segment_length;
+      stk::mesh::field_data(elem_radius_field, spring)[0] = sperm_radius;
+      stk::mesh::field_data(elem_rest_length_field, spring)[0] = rest_segment_length;
 
       // Populate the spherocylinder segment's data
-      stk::mesh::field_data(element_radius_field, left_spherocylinder_segment)[0] = sperm_radius;
-      stk::mesh::field_data(element_radius_field, right_spherocylinder_segment)[0] = sperm_radius;
+      stk::mesh::field_data(elem_radius_field, left_spherocylinder_segment)[0] = sperm_radius;
+      stk::mesh::field_data(elem_radius_field, right_spherocylinder_segment)[0] = sperm_radius;
     }
 
     // Share the nodes with the neighboring ranks. At this point, these nodes should all exist.
@@ -788,8 +790,8 @@ void declare_and_initialize_sperm(stk::mesh::BulkData &bulk_data, stk::mesh::Par
   edge_orientation_field.modify_on_host();
   edge_tangent_field.modify_on_host();
   edge_length_field.modify_on_host();
-  element_radius_field.modify_on_host();
-  element_rest_length_field.modify_on_host();
+  elem_radius_field.modify_on_host();
+  elem_rest_length_field.modify_on_host();
 }
 
 void validate_node_radius(stk::mesh::NgpMesh &ngp_mesh, const stk::mesh::Selector &selector,
@@ -1153,7 +1155,7 @@ void compute_internal_force_and_twist_torque(
 
 struct FastMeshIndexAndPeriodicShift {
   stk::mesh::FastMeshIndex mesh_index;
-  Kokkos::Array<int, 3> periodic_shifts;  // -1, 0, or 1 in each direction
+  math::Vector3d shift;
 };
 
 KOKKOS_INLINE_FUNCTION
@@ -1163,8 +1165,7 @@ constexpr bool operator<(const FastMeshIndexAndPeriodicShift &lhs, const FastMes
 
 KOKKOS_INLINE_FUNCTION
 constexpr bool operator==(const FastMeshIndexAndPeriodicShift &lhs, const FastMeshIndexAndPeriodicShift &rhs) {
-  return fma_equal(lhs.mesh_index, rhs.mesh_index) && lhs.periodic_shifts[0] == rhs.periodic_shifts[0] &&
-         lhs.periodic_shifts[1] == rhs.periodic_shifts[1] && lhs.periodic_shifts[2] == rhs.periodic_shifts[2];
+  return fma_equal(lhs.mesh_index, rhs.mesh_index);
 }
 
 using ExecSpace = stk::ngp::ExecSpace;
@@ -1201,10 +1202,10 @@ FastMeshIndicesViewType get_local_entity_indices(const stk::mesh::BulkData &bulk
 }
 
 void compute_aabbs(stk::mesh::NgpMesh &ngp_mesh, const stk::mesh::Selector &segments,
-                   stk::mesh::NgpField<double> &node_coords_field, stk::mesh::NgpField<double> &element_radius_field,
+                   stk::mesh::NgpField<double> &node_coords_field, stk::mesh::NgpField<double> &elem_radius_field,
                    stk::mesh::NgpField<double> &elem_aabb_field) {
   node_coords_field.sync_to_device();
-  element_radius_field.sync_to_device();
+  elem_radius_field.sync_to_device();
   elem_aabb_field.sync_to_device();
 
   stk::mesh::for_each_entity_run(
@@ -1215,7 +1216,7 @@ void compute_aabbs(stk::mesh::NgpMesh &ngp_mesh, const stk::mesh::Selector &segm
 
         const auto node0_coords = mesh::vector3_field_data(node_coords_field, node0_index);
         const auto node1_coords = mesh::vector3_field_data(node_coords_field, node1_index);
-        const double radius = element_radius_field(segment_index, 0);
+        const double radius = elem_radius_field(segment_index, 0);
 
         double min_x = Kokkos::min(node0_coords[0], node1_coords[0]) - radius;
         double min_y = Kokkos::min(node0_coords[1], node1_coords[1]) - radius;
@@ -1235,16 +1236,17 @@ void compute_aabbs(stk::mesh::NgpMesh &ngp_mesh, const stk::mesh::Selector &segm
   elem_aabb_field.modify_on_device();
 }
 
-SearchBoxesViewType create_search_aabbs(const stk::mesh::BulkData &bulk_data, const stk::mesh::NgpMesh &ngp_mesh,
-                                        const double search_buffer, const double domain_width,
-                                        const double domain_height, const stk::mesh::Selector &segments,
-                                        stk::mesh::NgpField<double> &elem_aabb_field) {
+template <typename Metric>
+Kokkos::pair<SearchBoxesViewType, SearchBoxesViewType> create_search_aabbs(
+    const stk::mesh::BulkData &bulk_data, const stk::mesh::NgpMesh &ngp_mesh, const double search_buffer,
+    const Metric &metric, const stk::mesh::Selector &segments, stk::mesh::NgpField<double> &elem_aabb_field) {
   elem_aabb_field.sync_to_device();
 
   auto locally_owned_segments = segments & bulk_data.mesh_meta_data().locally_owned_part();
   const unsigned num_local_segments =
       stk::mesh::count_entities(bulk_data, stk::topology::ELEM_RANK, locally_owned_segments);
-  SearchBoxesViewType search_aabbs("search_aabbs", 9 * num_local_segments);  // 2d periodicity in y and z
+  SearchBoxesViewType target_search_aabbs("target_search_aabbs", num_local_segments);      // no periodicity
+  SearchBoxesViewType source_search_aabbs("source_search_aabbs", 9 * num_local_segments);  // 2d periodicity in y and z
 
   // Slow host operation that is needed to get an index. There is plans to add this to the stk::mesh::NgpMesh.
   FastMeshIndicesViewType segment_indices =
@@ -1255,39 +1257,47 @@ SearchBoxesViewType create_search_aabbs(const stk::mesh::BulkData &bulk_data, co
       stk::ngp::DeviceRangePolicy(0, num_local_segments), KOKKOS_LAMBDA(const unsigned &i) {
         stk::mesh::FastMeshIndex segment_index = segment_indices(i);
 
-        // search_aabbs(i) = BoxIdentProc{
-        //     stk::search::Box<double>{elem_aabb_field(segment_index, 0) - search_buffer,
-        //                               elem_aabb_field(segment_index, 1) - search_buffer,
-        //                               elem_aabb_field(segment_index, 2) - search_buffer,
-        //                               elem_aabb_field(segment_index, 3) + search_buffer,
-        //                               elem_aabb_field(segment_index, 4) + search_buffer,
-        //                               elem_aabb_field(segment_index, 5) + search_buffer},
-        //     IdentProc(segment_index, my_rank)};
+        // Methodology is as follows:
+        //  - Wrap the bottom left corner of the LAB frame AABB of the segment into the domain. This is our target
+        //  segment
+        //  - Compute the wrap displacement vector from original to wrapped reference position
+        //  - Stamp out the 9 periodic images of source segments, computing their shift vector and displacement from
+        //  original
+        //  - Compute the source AABBs
+        //  - Stash both the source and target AABBs
+        auto aabb = mesh::aabb_field_data(elem_aabb_field, segment_index);
+        auto wrapped_aabb = geom::wrap_rigid(aabb, metric);
+        FastMeshIndexAndPeriodicShift target_fma_and_shift{segment_index,
+                                                           wrapped_aabb.min_corner() - aabb.min_corner()};
+        target_search_aabbs(i) =
+            BoxIdentProc{stk::search::Box<double>{wrapped_aabb[0] - search_buffer, wrapped_aabb[1] - search_buffer,
+                                                  wrapped_aabb[2] - search_buffer, wrapped_aabb[3] + search_buffer,
+                                                  wrapped_aabb[4] + search_buffer, wrapped_aabb[5] + search_buffer},
+                         IdentProc(target_fma_and_shift, my_rank)};
 
         for (int s0 = 0; s0 < 3; s0++) {  // s0, s1 in [0, 1, 2]
           for (int s1 = 0; s1 < 3; s1++) {
-            FastMeshIndexAndPeriodicShift fma_and_shift{segment_index, Kokkos::Array<int, 3>{0, s0 - 1, s1 - 1}};
-            search_aabbs(9 * i + 3 * s0 + s1) = BoxIdentProc{
-                stk::search::Box<double>{elem_aabb_field(segment_index, 0) - search_buffer,
-                                         elem_aabb_field(segment_index, 1) - search_buffer + (s0 - 1) * domain_width,
-                                         elem_aabb_field(segment_index, 2) - search_buffer + (s1 - 1) * domain_height,
-                                         elem_aabb_field(segment_index, 3) + search_buffer,
-                                         elem_aabb_field(segment_index, 4) + search_buffer + (s0 - 1) * domain_width,
-                                         elem_aabb_field(segment_index, 5) + search_buffer + (s1 - 1) * domain_height},
-                IdentProc(fma_and_shift, my_rank)};
+            math::Vector3<int> lattice_shift{0, s0 - 1, s1 - 1};
+            auto shifted_aabb = geom::shift_image(wrapped_aabb, lattice_shift, metric);
+            FastMeshIndexAndPeriodicShift source_fma_and_shift{segment_index,
+                                                               shifted_aabb.min_corner() - aabb.min_corner()};
+            source_search_aabbs(9 * i + 3 * s0 + s1) =
+                BoxIdentProc{stk::search::Box<double>{shifted_aabb[0] - search_buffer, shifted_aabb[1] - search_buffer,
+                                                      shifted_aabb[2] - search_buffer, shifted_aabb[3] + search_buffer,
+                                                      shifted_aabb[4] + search_buffer, shifted_aabb[5] + search_buffer},
+                             IdentProc(source_fma_and_shift, my_rank)};
           }
         }
       });
 
-  return search_aabbs;
+  return Kokkos::make_pair(target_search_aabbs, source_search_aabbs);
 }
 
 void compute_hertzian_contact_force_and_torque(const stk::mesh::BulkData &bulk_data, stk::mesh::NgpMesh &ngp_mesh,
                                                const double sperm_youngs_modulus, const double sperm_poissons_ratio,
-                                               const double domain_width, const double domain_height,
                                                const stk::mesh::Part &spherocylinder_segments_part,
                                                const ResultViewType &search_results, NgpDoubleField &node_coords_field,
-                                               NgpDoubleField &element_radius_field, NgpDoubleField &node_force_field) {
+                                               NgpDoubleField &elem_radius_field, NgpDoubleField &node_force_field) {
   debug_print("Computing the Hertzian contact force and torque.");
 
   // Plan:
@@ -1298,7 +1308,7 @@ void compute_hertzian_contact_force_and_torque(const stk::mesh::BulkData &bulk_d
   //   If the signed signed separation distance is less than the sum of the radii, compute the contact force and torque.
   //   Sum the result into the target segment. By construction, this sum need not be atomic.
   node_coords_field.sync_to_device();
-  element_radius_field.sync_to_device();
+  elem_radius_field.sync_to_device();
   node_force_field.sync_to_device();
 
   const double effective_youngs_modulus =
@@ -1342,52 +1352,22 @@ void compute_hertzian_contact_force_and_torque(const stk::mesh::BulkData &bulk_d
 
         /////////////////
         // Source data //
-        const auto source_node0_coords = mesh::vector3_field_data(node_coords_field, source_node0_index) +
-                                         math::Vector3d{0.0, source_fma_and_shift.periodic_shifts[1] * domain_width,
-                                                        source_fma_and_shift.periodic_shifts[2] * domain_height};
-        const auto source_node1_coords = mesh::vector3_field_data(node_coords_field, source_node1_index) +
-                                         math::Vector3d{0.0, source_fma_and_shift.periodic_shifts[1] * domain_width,
-                                                        source_fma_and_shift.periodic_shifts[2] * domain_height};
-        const double source_radius = element_radius_field(source_segment_index, 0);
+        const auto source_node0_coords =
+            mesh::vector3_field_data(node_coords_field, source_node0_index) + source_fma_and_shift.shift;
+        const auto source_node1_coords =
+            mesh::vector3_field_data(node_coords_field, source_node1_index) + source_fma_and_shift.shift;
+        const double source_radius = elem_radius_field(source_segment_index, 0);
         auto source_node0_force = mesh::vector3_field_data(node_force_field, source_node0_index);
         auto source_node1_force = mesh::vector3_field_data(node_force_field, source_node1_index);
 
         // Target data
-        const auto target_node0_coords = mesh::vector3_field_data(node_coords_field, target_node0_index) +
-                                         math::Vector3d{0.0, target_fma_and_shift.periodic_shifts[1] * domain_width,
-                                                        target_fma_and_shift.periodic_shifts[2] * domain_height};
-        const auto target_node1_coords = mesh::vector3_field_data(node_coords_field, target_node1_index) +
-                                         math::Vector3d{0.0, target_fma_and_shift.periodic_shifts[1] * domain_width,
-                                                        target_fma_and_shift.periodic_shifts[2] * domain_height};
-        const double target_radius = element_radius_field(target_segment_index, 0);
+        const auto target_node0_coords =
+            mesh::vector3_field_data(node_coords_field, target_node0_index) + target_fma_and_shift.shift;
+        const auto target_node1_coords =
+            mesh::vector3_field_data(node_coords_field, target_node1_index) + target_fma_and_shift.shift;
+        const double target_radius = elem_radius_field(target_segment_index, 0);
         auto target_node0_force = mesh::vector3_field_data(node_force_field, target_node0_index);
         auto target_node1_force = mesh::vector3_field_data(node_force_field, target_node1_index);
-
-        // ////////////////////////////////////////////
-        // // Compute the AABB of the source segment //
-        // // The corners of the boxes are the min and max of the coordinates of the nodes +/- the radius of the nodes
-        // double source_min_x = Kokkos::min(source_node0_coords[0], source_node1_coords[0]) - source_radius;
-        // double source_max_x = Kokkos::max(source_node0_coords[0], source_node1_coords[0]) + source_radius;
-        // double source_min_y = Kokkos::min(source_node0_coords[1], source_node1_coords[1]) - source_radius;
-        // double source_max_y = Kokkos::max(source_node0_coords[1], source_node1_coords[1]) + source_radius;
-        // double source_min_z = Kokkos::min(source_node0_coords[2], source_node1_coords[2]) - source_radius;
-        // double source_max_z = Kokkos::max(source_node0_coords[2], source_node1_coords[2]) + source_radius;
-
-        // // Compute the AABB for the target segment
-        // double target_min_x = Kokkos::min(target_node0_coords[0], target_node1_coords[0]) - target_radius;
-        // double target_max_x = Kokkos::max(target_node0_coords[0], target_node1_coords[0]) + target_radius;
-        // double target_min_y = Kokkos::min(target_node0_coords[1], target_node1_coords[1]) - target_radius;
-        // double target_max_y = Kokkos::max(target_node0_coords[1], target_node1_coords[1]) + target_radius;
-        // double target_min_z = Kokkos::min(target_node0_coords[2], target_node1_coords[2]) - target_radius;
-        // double target_max_z = Kokkos::max(target_node0_coords[2], target_node1_coords[2]) + target_radius;
-
-        // const bool aabbs_overlap = source_min_x <= target_max_x && source_max_x >= target_min_x &&
-        //                            source_min_y <= target_max_y && source_max_y >= target_min_y &&
-        //                            source_min_z <= target_max_z && source_max_z >= target_min_z;
-
-        // if (!aabbs_overlap) {
-        //   return;
-        // }
 
         // Compute the minimum signed separation distance between the segments
         math::Vector3d closest_point_source;
@@ -1723,9 +1703,9 @@ void run(int argc, char **argv) {
   DoubleField &edge_length_field =  //
       meta_data.declare_field<double>(stk::topology::EDGE_RANK, "EDGE_LENGTH");
 
-  DoubleField &element_radius_field =  //
+  DoubleField &elem_radius_field =  //
       meta_data.declare_field<double>(stk::topology::ELEM_RANK, "ELEM_RADIUS");
-  DoubleField &element_rest_length_field =  //
+  DoubleField &elem_rest_length_field =  //
       meta_data.declare_field<double>(stk::topology::ELEM_RANK, "ELEM_REST_LENGTH");
 
   DoubleField &elem_aabb_field = meta_data.declare_field<double>(stk::topology::ELEM_RANK, "ELEM_AABB");
@@ -1749,8 +1729,8 @@ void run(int argc, char **argv) {
   stk::io::set_field_role(edge_tangent_field, Ioss::Field::TRANSIENT);
   stk::io::set_field_role(edge_binormal_field, Ioss::Field::TRANSIENT);
   stk::io::set_field_role(edge_length_field, Ioss::Field::TRANSIENT);
-  stk::io::set_field_role(element_radius_field, Ioss::Field::TRANSIENT);
-  stk::io::set_field_role(element_rest_length_field, Ioss::Field::TRANSIENT);
+  stk::io::set_field_role(elem_radius_field, Ioss::Field::TRANSIENT);
+  stk::io::set_field_role(elem_rest_length_field, Ioss::Field::TRANSIENT);
 
   stk::io::set_field_output_type(node_coords_field, stk::io::FieldOutputType::VECTOR_3D);
   stk::io::set_field_output_type(node_velocity_field, stk::io::FieldOutputType::VECTOR_3D);
@@ -1768,8 +1748,8 @@ void run(int argc, char **argv) {
   stk::io::set_field_output_type(edge_tangent_field, stk::io::FieldOutputType::VECTOR_3D);
   stk::io::set_field_output_type(edge_binormal_field, stk::io::FieldOutputType::VECTOR_3D);
   stk::io::set_field_output_type(edge_length_field, stk::io::FieldOutputType::SCALAR);
-  stk::io::set_field_output_type(element_radius_field, stk::io::FieldOutputType::SCALAR);
-  stk::io::set_field_output_type(element_rest_length_field, stk::io::FieldOutputType::SCALAR);
+  stk::io::set_field_output_type(elem_radius_field, stk::io::FieldOutputType::SCALAR);
+  stk::io::set_field_output_type(elem_rest_length_field, stk::io::FieldOutputType::SCALAR);
 
   // Declare the parts
   stk::mesh::Part &boundary_sperm_part = meta_data.declare_part("BOUNDARY_SPERM", stk::topology::ELEM_RANK);
@@ -1806,9 +1786,9 @@ void run(int argc, char **argv) {
   stk::mesh::put_field_on_mesh(old_edge_tangent_field, centerline_twist_springs_part, 3, nullptr);
   stk::mesh::put_field_on_mesh(edge_binormal_field, centerline_twist_springs_part, 3, nullptr);
   stk::mesh::put_field_on_mesh(edge_length_field, centerline_twist_springs_part, 1, nullptr);
-  stk::mesh::put_field_on_mesh(element_radius_field, spherocylinder_segments_part, 1, nullptr);
-  stk::mesh::put_field_on_mesh(element_radius_field, centerline_twist_springs_part, 1, nullptr);
-  stk::mesh::put_field_on_mesh(element_rest_length_field, centerline_twist_springs_part, 1, nullptr);
+  stk::mesh::put_field_on_mesh(elem_radius_field, spherocylinder_segments_part, 1, nullptr);
+  stk::mesh::put_field_on_mesh(elem_radius_field, centerline_twist_springs_part, 1, nullptr);
+  stk::mesh::put_field_on_mesh(elem_rest_length_field, centerline_twist_springs_part, 1, nullptr);
   stk::mesh::put_field_on_mesh(elem_aabb_field, spherocylinder_segments_part, 6, init_zero6);
   stk::mesh::put_field_on_mesh(elem_old_aabb_field, spherocylinder_segments_part, 6, init_zero6);
   stk::mesh::put_field_on_mesh(elem_aabb_disp_since_last_rebuild_field, spherocylinder_segments_part, 6, init_zero6);
@@ -1838,8 +1818,8 @@ void run(int argc, char **argv) {
   stk_io_broker.add_field(output_file_index, edge_tangent_field);
   stk_io_broker.add_field(output_file_index, edge_binormal_field);
   stk_io_broker.add_field(output_file_index, edge_length_field);
-  stk_io_broker.add_field(output_file_index, element_radius_field);
-  stk_io_broker.add_field(output_file_index, element_rest_length_field);
+  stk_io_broker.add_field(output_file_index, elem_radius_field);
+  stk_io_broker.add_field(output_file_index, elem_rest_length_field);
   stk_io_broker.add_field(output_file_index, elem_aabb_field);
 
   declare_and_initialize_sperm(bulk_data, centerline_twist_springs_part, boundary_sperm_part,
@@ -1852,7 +1832,7 @@ void run(int argc, char **argv) {
                                node_curvature_field, node_rest_curvature_field, node_radius_field,
                                node_sperm_id_field,                                            //
                                edge_orientation_field, edge_tangent_field, edge_length_field,  //
-                               element_radius_field, element_rest_length_field);
+                               elem_radius_field, elem_rest_length_field);
 
   // At this point, the sperm have been declared. We can fetch the NGP mesh and fields.
   stk::mesh::NgpMesh ngp_mesh = stk::mesh::get_updated_ngp_mesh(bulk_data);
@@ -1880,8 +1860,8 @@ void run(int argc, char **argv) {
   NgpDoubleField ngp_old_edge_tangent_field = stk::mesh::get_updated_ngp_field<double>(old_edge_tangent_field);
   NgpDoubleField ngp_edge_binormal_field = stk::mesh::get_updated_ngp_field<double>(edge_binormal_field);
   NgpDoubleField ngp_edge_length_field = stk::mesh::get_updated_ngp_field<double>(edge_length_field);
-  NgpDoubleField ngp_elem_radius_field = stk::mesh::get_updated_ngp_field<double>(element_radius_field);
-  NgpDoubleField ngp_elem_rest_length_field = stk::mesh::get_updated_ngp_field<double>(element_rest_length_field);
+  NgpDoubleField ngp_elem_radius_field = stk::mesh::get_updated_ngp_field<double>(elem_radius_field);
+  NgpDoubleField ngp_elem_rest_length_field = stk::mesh::get_updated_ngp_field<double>(elem_rest_length_field);
   NgpDoubleField ngp_elem_aabb_field = stk::mesh::get_updated_ngp_field<double>(elem_aabb_field);
   NgpDoubleField ngp_elem_old_aabb_field = stk::mesh::get_updated_ngp_field<double>(elem_old_aabb_field);
   NgpDoubleField ngp_elem_aabb_disp_since_last_rebuild_field =
@@ -1924,15 +1904,17 @@ void run(int argc, char **argv) {
     if (rebuild_neighbors) {
       std::cout << "Rebuilding neighbors." << std::endl;
 
-      search_aabbs = create_search_aabbs(bulk_data, ngp_mesh, run_config.search_buffer, run_config.domain_width,
-                                         run_config.domain_height, spherocylinder_segments_part, ngp_elem_aabb_field);
+      geom::PeriodicMetricYZ<double> periodic_metric(run_config.domain_width, run_config.domain_height);
+      auto [target_search_aabbs, source_search_aabbs] =
+          create_search_aabbs(bulk_data, ngp_mesh, run_config.search_buffer, periodic_metric,
+                              spherocylinder_segments_part, ngp_elem_aabb_field);
 
       stk::search::SearchMethod search_method = stk::search::MORTON_LBVH;
       const bool results_parallel_symmetry = true;   // create source -> target and target -> source pairs
       const bool auto_swap_domain_and_range = true;  // swap source and target if target is owned and source is not
       const bool sort_search_results = false;        // sort the search results by source id
-      stk::search::coarse_search(search_aabbs, search_aabbs, search_method, bulk_data.parallel(), search_results,
-                                 stk::ngp::ExecSpace{}, results_parallel_symmetry);
+      stk::search::coarse_search(source_search_aabbs, target_search_aabbs, search_method, bulk_data.parallel(),
+                                 search_results, stk::ngp::ExecSpace{}, results_parallel_symmetry);
 
       std::cout << "Search results size: " << search_results.size() << std::endl;
       rebuild_neighbors = false;
@@ -1981,9 +1963,9 @@ void run(int argc, char **argv) {
     {
       // Hertzian contact force
       compute_hertzian_contact_force_and_torque(bulk_data, ngp_mesh, run_config.sperm_youngs_modulus,
-                                                run_config.sperm_poissons_ratio, run_config.domain_width,
-                                                run_config.domain_height, spherocylinder_segments_part, search_results,
-                                                ngp_node_coords_field, ngp_elem_radius_field, ngp_node_force_field);
+                                                run_config.sperm_poissons_ratio, spherocylinder_segments_part,
+                                                search_results, ngp_node_coords_field, ngp_elem_radius_field,
+                                                ngp_node_force_field);
 
       // Centerline twist rod forces
 
@@ -2074,7 +2056,7 @@ int main(int argc, char **argv) {
   Kokkos::print_configuration(std::cout);
 
   // Run the simulation using the given parameters
-  run(argc, argv);
+  mundy::run(argc, argv);
 
   // Finalize MPI
   Kokkos::finalize();
