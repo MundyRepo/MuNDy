@@ -50,7 +50,7 @@ The goal of this example is to simulate the swimming motion of a multiple, colli
 #include <stk_mesh/base/FEMHelpers.hpp>     // for stk::mesh::declare_element, stk::mesh::declare_element_edge
 #include <stk_mesh/base/Field.hpp>          // for stk::mesh::Field, stk::mesh::field_data
 #include <stk_mesh/base/FieldParallel.hpp>  // for stk::mesh::parallel_sum
-#include <stk_mesh/base/ForEachEntity.hpp>  // for mundy::mesh::for_each_entity_run
+#include <stk_mesh/base/ForEachEntity.hpp>  // for stk::mesh::for_each_entity_run
 #include <stk_mesh/base/GetNgpField.hpp>
 #include <stk_mesh/base/GetNgpMesh.hpp>
 #include <stk_mesh/base/NgpField.hpp>
@@ -98,6 +98,8 @@ The goal of this example is to simulate the swimming motion of a multiple, colli
 #include <mundy_meta/MeshReqs.hpp>                  // for mundy::meta::MeshReqs
 #include <mundy_meta/PartReqs.hpp>                  // for mundy::meta::PartReqs
 #include <mundy_shapes/ComputeAABB.hpp>             // for mundy::shapes::ComputeAABB
+
+namespace mundy {
 
 /// \brief The main function for the sperm simulation broken down into digestible chunks.
 ///
@@ -442,17 +444,17 @@ void declare_and_initialize_sperm(stk::mesh::BulkData &bulk_data, stk::mesh::Par
     // TODO(palmerb4): Notice that we are shifting the sperm to be separated by a diameter.
     bool flip_sperm = sperm_directions[j];
     // const bool flip_sperm = false;
-    // mundy::math::Vector3d tail_coord(0.0, 2.0 * j * (2.0 * sperm_radius),
+    // math::Vector3d tail_coord(0.0, 2.0 * j * (2.0 * sperm_radius),
     //                                         (flip_sperm ? segment_length * (num_nodes_per_sperm - 1) : 0.0) -
     //                                             (is_boundary_sperm ? segment_length * (num_nodes_per_sperm - 1) :
     //                                             0.0));
     double random_shift = static_cast<double>(rand()) / RAND_MAX * ((segment_length) * (num_nodes_per_sperm - 1) + 10);
 
-    mundy::math::Vector3d tail_coord(
+    math::Vector3d tail_coord(
         0.0, j * (2.0 * sperm_radius) / 0.8,
         (flip_sperm ? (segment_length * (num_nodes_per_sperm - 1) + random_shift) : random_shift));
 
-    mundy::math::Vector3d sperm_axis(0.0, 0.0, flip_sperm ? -1.0 : 1.0);
+    math::Vector3d sperm_axis(0.0, 0.0, flip_sperm ? -1.0 : 1.0);
 
     // Because we are creating multiple sperm, we need to determine the node and element index ranges for each sperm.
     size_t start_node_id = num_nodes_per_sperm * j + 1u;
@@ -727,47 +729,46 @@ void declare_and_initialize_sperm(stk::mesh::BulkData &bulk_data, stk::mesh::Par
       MUNDY_THROW_ASSERT(bulk_data.bucket(node).member(centerline_twist_springs_part), std::logic_error,
                          "The node must be a member of the centerline twist part.");
 
-      mundy::mesh::vector3_field_data(node_coords_field, node) =
+      mesh::vector3_field_data(node_coords_field, node) =
           tail_coord + sperm_axis * static_cast<double>(i) * segment_length;
-      mundy::mesh::vector3_field_data(node_velocity_field, node).set(0.0, 0.0, 0.0);
-      mundy::mesh::vector3_field_data(node_force_field, node).set(0.0, 0.0, 0.0);
+      mesh::vector3_field_data(node_velocity_field, node).set(0.0, 0.0, 0.0);
+      mesh::vector3_field_data(node_force_field, node).set(0.0, 0.0, 0.0);
       stk::mesh::field_data(node_twist_field, node)[0] = 0.0;
       stk::mesh::field_data(node_twist_velocity_field, node)[0] = 0.0;
       stk::mesh::field_data(node_twist_torque_field, node)[0] = 0.0;
-      mundy::mesh::vector3_field_data(node_curvature_field, node).set(0.0, 0.0, 0.0);
-      mundy::mesh::vector3_field_data(node_rest_curvature_field, node).set(0.0, 0.0, 0.0);
+      mesh::vector3_field_data(node_curvature_field, node).set(0.0, 0.0, 0.0);
+      mesh::vector3_field_data(node_rest_curvature_field, node).set(0.0, 0.0, 0.0);
       stk::mesh::field_data(node_radius_field, node)[0] = sperm_radius;
       stk::mesh::field_data(node_archlength_field, node)[0] = i * segment_length;
       stk::mesh::field_data(node_sperm_id_field, node)[0] = j;
     }
 
     // Populate the edge data
-    mundy::mesh::for_each_entity_run(
+    mesh::for_each_entity_run(
         bulk_data, stk::topology::EDGE_RANK, meta_data.locally_owned_part(),
         [&node_coords_field, &edge_orientation_field, &edge_tangent_field, &edge_length_field, &flip_sperm](
             const stk::mesh::BulkData &bulk_data, const stk::mesh::Entity &edge) {
           // We are currently in the reference configuration, so the orientation must map from Cartesian to reference
           // lab frame.
           const stk::mesh::Entity *edge_nodes = bulk_data.begin_nodes(edge);
-          const auto edge_node0_coords = mundy::mesh::vector3_field_data(node_coords_field, edge_nodes[0]);
-          const auto edge_node1_coords = mundy::mesh::vector3_field_data(node_coords_field, edge_nodes[1]);
-          mundy::math::Vector3d edge_tangent = edge_node1_coords - edge_node0_coords;
-          const double edge_length = mundy::math::norm(edge_tangent);
+          const auto edge_node0_coords = mesh::vector3_field_data(node_coords_field, edge_nodes[0]);
+          const auto edge_node1_coords = mesh::vector3_field_data(node_coords_field, edge_nodes[1]);
+          math::Vector3d edge_tangent = edge_node1_coords - edge_node0_coords;
+          const double edge_length = math::norm(edge_tangent);
           edge_tangent /= edge_length;
           // Using the triad to generate the orientation
-          auto d1 = mundy::math::Vector3d(flip_sperm ? -1.0 : 1.0, 0.0, 0.0);
-          mundy::math::Vector3d d3 = edge_tangent;
-          mundy::math::Vector3d d2 = mundy::math::cross(d3, d1);
-          d2 /= mundy::math::norm(d2);
-          MUNDY_THROW_ASSERT(mundy::math::dot(d3, mundy::math::cross(d1, d2)) > 0.0, std::logic_error,
+          auto d1 = math::Vector3d(flip_sperm ? -1.0 : 1.0, 0.0, 0.0);
+          math::Vector3d d3 = edge_tangent;
+          math::Vector3d d2 = math::cross(d3, d1);
+          d2 /= math::norm(d2);
+          MUNDY_THROW_ASSERT(math::dot(d3, math::cross(d1, d2)) > 0.0, std::logic_error,
                              "The triad is not right-handed.");
-          mundy::math::Matrix3d D;
+          math::Matrix3d D;
           D.set_column(0, d1);
           D.set_column(1, d2);
           D.set_column(2, d3);
-          mundy::mesh::quaternion_field_data(edge_orientation_field, edge) =
-              mundy::math::rotation_matrix_to_quaternion(D);
-          mundy::mesh::vector3_field_data(edge_tangent_field, edge) = edge_tangent;
+          mesh::quaternion_field_data(edge_orientation_field, edge) = math::rotation_matrix_to_quaternion(D);
+          mesh::vector3_field_data(edge_tangent_field, edge) = edge_tangent;
           stk::mesh::field_data(edge_length_field, edge)[0] = edge_length;
         });
   }
@@ -796,7 +797,7 @@ void validate_node_radius(stk::mesh::NgpMesh &ngp_mesh, const stk::mesh::Selecto
   debug_print("Validating the node radius.");
 
   // Assert that the radius is positive
-  mundy::mesh::for_each_entity_run(
+  mesh::for_each_entity_run(
       ngp_mesh, stk::topology::NODE_RANK, selector, KOKKOS_LAMBDA(const stk::mesh::FastMeshIndex &node_index) {
         const double radius = node_radius_field(node_index, 0);
         MUNDY_THROW_ASSERT(radius > 0.0, std::invalid_argument, "The radius must be positive.");
@@ -817,7 +818,7 @@ void propagate_rest_curvature(stk::mesh::NgpMesh &ngp_mesh, const double &curren
 
   // Propagate the rest curvature of the nodes according to
   // kappa_rest = amplitude * sin(spatial_frequency * archlength + temporal_frequency * time).
-  mundy::mesh::for_each_entity_run(
+  mesh::for_each_entity_run(
       ngp_mesh, stk::topology::NODE_RANK, centerline_twist_springs_part,
       KOKKOS_LAMBDA(const stk::mesh::FastMeshIndex &node_index) {
         const double node_archlength = node_archlength_field(node_index, 0);
@@ -862,7 +863,7 @@ void compute_edge_information(stk::mesh::NgpMesh &ngp_mesh, const stk::mesh::Par
   //
   // p^j(x_{j}, x_{j+1}) = p_{ T^i }^{ t^j(x_{j}, x_{j+1}) } is the parallel transport quaternion from the reference
   // tangent T^i to the current tangent t^j(x_{j}, x_{j+1}).
-  mundy::mesh::for_each_entity_run(
+  mesh::for_each_entity_run(
       ngp_mesh, stk::topology::EDGE_RANK, centerline_twist_springs_part,
       KOKKOS_LAMBDA(const stk::mesh::FastMeshIndex &edge_index) {
         // Get the nodes of the edge
@@ -873,34 +874,33 @@ void compute_edge_information(stk::mesh::NgpMesh &ngp_mesh, const stk::mesh::Par
         const stk::mesh::FastMeshIndex node_ip1_index = ngp_mesh.fast_mesh_index(node_ip1);
 
         // Get the required input fields
-        const auto node_i_coords = mundy::mesh::vector3_field_data(node_coords_field, node_i_index);
-        const auto node_ip1_coords = mundy::mesh::vector3_field_data(node_coords_field, node_ip1_index);
+        const auto node_i_coords = mesh::vector3_field_data(node_coords_field, node_i_index);
+        const auto node_ip1_coords = mesh::vector3_field_data(node_coords_field, node_ip1_index);
         const double node_i_twist = node_twist_field(node_i_index, 0);
-        const auto edge_tangent_old = mundy::mesh::vector3_field_data(old_edge_tangent_field, edge_index);
-        const auto edge_orientation_old = mundy::mesh::quaternion_field_data(old_edge_orientation_field, edge_index);
+        const auto edge_tangent_old = mesh::vector3_field_data(old_edge_tangent_field, edge_index);
+        const auto edge_orientation_old = mesh::quaternion_field_data(old_edge_orientation_field, edge_index);
 
         // Get the output fields
-        auto edge_tangent = mundy::mesh::vector3_field_data(edge_tangent_field, edge_index);
-        auto edge_binormal = mundy::mesh::vector3_field_data(edge_binormal_field, edge_index);
-        auto edge_orientation = mundy::mesh::quaternion_field_data(edge_orientation_field, edge_index);
+        auto edge_tangent = mesh::vector3_field_data(edge_tangent_field, edge_index);
+        auto edge_binormal = mesh::vector3_field_data(edge_binormal_field, edge_index);
+        auto edge_orientation = mesh::quaternion_field_data(edge_orientation_field, edge_index);
 
         // Compute the un-normalized edge tangent
         edge_tangent = node_ip1_coords - node_i_coords;
-        edge_length_field(edge_index, 0) = mundy::math::norm(edge_tangent);
+        edge_length_field(edge_index, 0) = math::norm(edge_tangent);
         edge_tangent /= edge_length_field(edge_index, 0);
 
         // Compute the edge binormal
-        edge_binormal = (2.0 * mundy::math::cross(edge_tangent_old, edge_tangent)) /
-                        (1.0 + mundy::math::dot(edge_tangent_old, edge_tangent));
+        edge_binormal =
+            (2.0 * math::cross(edge_tangent_old, edge_tangent)) / (1.0 + math::dot(edge_tangent_old, edge_tangent));
 
         // Compute the edge orientations
         const double cos_half_t = Kokkos::cos(0.5 * node_i_twist);
         const double sin_half_t = Kokkos::sin(0.5 * node_i_twist);
         const auto rot_via_twist =
-            mundy::math::Quaterniond(cos_half_t, sin_half_t * edge_tangent_old[0], sin_half_t * edge_tangent_old[1],
-                                     sin_half_t * edge_tangent_old[2]);
-        const auto rot_via_parallel_transport =
-            mundy::math::quat_from_parallel_transport(edge_tangent_old, edge_tangent);
+            math::Quaterniond(cos_half_t, sin_half_t * edge_tangent_old[0], sin_half_t * edge_tangent_old[1],
+                              sin_half_t * edge_tangent_old[2]);
+        const auto rot_via_parallel_transport = math::quat_from_parallel_transport(edge_tangent_old, edge_tangent);
         edge_orientation = rot_via_parallel_transport * rot_via_twist * edge_orientation_old;
 
         // Two things to check:
@@ -908,12 +908,12 @@ void compute_edge_information(stk::mesh::NgpMesh &ngp_mesh, const stk::mesh::Par
         //  2. Does the application of this quaternion to the old edge tangent produce the new edge tangent?
         //
         // std::cout << "rot_via_parallel_transport: " << rot_via_parallel_transport
-        //           << " has norm: " << mundy::math::norm(rot_via_parallel_transport) << std::endl;
-        // std::cout << "rot_via_twist: " << rot_via_twist << " has norm: " << mundy::math::norm(rot_via_twist)
+        //           << " has norm: " << math::norm(rot_via_parallel_transport) << std::endl;
+        // std::cout << "rot_via_twist: " << rot_via_twist << " has norm: " << math::norm(rot_via_twist)
         //           << std::endl;
         // std::cout << "Edge tangent : " << edge_tangent << " Edge tangent old: " << edge_tangent_old << std::endl;
         // std::cout << " Edge tangent via transp: " << rot_via_parallel_transport * edge_tangent_old << std::endl;
-        // std::cout << " Edge tangent via orient: " << edge_orientation * mundy::math::Vector3d(0.0, 0.0, 1.0)
+        // std::cout << " Edge tangent via orient: " << edge_orientation * math::Vector3d(0.0, 0.0, 1.0)
         //           << std::endl;
       });
 
@@ -952,7 +952,7 @@ void compute_node_curvature_and_rotation_gradient(stk::mesh::NgpMesh &ngp_mesh,
   //   kappa^i = q_i - conj(q_i) = 2 * vec(q_i)
   // where
   //   q_i = conj(d^{i-1}) d^i is the Lagrangian rotation gradient.
-  mundy::mesh::for_each_entity_run(
+  mesh::for_each_entity_run(
       ngp_mesh, stk::topology::ELEM_RANK, centerline_twist_springs_part,
       KOKKOS_LAMBDA(const stk::mesh::FastMeshIndex &spring_index) {
         // Curvature needs to "know" about the order of edges, so it's best to loop over
@@ -970,16 +970,15 @@ void compute_node_curvature_and_rotation_gradient(stk::mesh::NgpMesh &ngp_mesh,
         const stk::mesh::FastMeshIndex right_edge_index = ngp_mesh.fast_mesh_index(right_edge);
 
         // Get the required input fields
-        const auto edge_im1_orientation = mundy::mesh::quaternion_field_data(edge_orientation_field, left_edge_index);
-        const auto edge_i_orientation = mundy::mesh::quaternion_field_data(edge_orientation_field, right_edge_index);
+        const auto edge_im1_orientation = mesh::quaternion_field_data(edge_orientation_field, left_edge_index);
+        const auto edge_i_orientation = mesh::quaternion_field_data(edge_orientation_field, right_edge_index);
 
         // Get the output fields
-        auto node_curvature = mundy::mesh::vector3_field_data(node_curvature_field, center_node_index);
-        auto node_rotation_gradient =
-            mundy::mesh::quaternion_field_data(node_rotation_gradient_field, center_node_index);
+        auto node_curvature = mesh::vector3_field_data(node_curvature_field, center_node_index);
+        auto node_rotation_gradient = mesh::quaternion_field_data(node_rotation_gradient_field, center_node_index);
 
         // Compute the node curvature
-        node_rotation_gradient = mundy::math::conjugate(edge_im1_orientation) * edge_i_orientation;
+        node_rotation_gradient = math::conjugate(edge_im1_orientation) * edge_i_orientation;
         node_curvature = 2.0 * node_rotation_gradient.vector();
       });
 
@@ -1011,7 +1010,7 @@ void compute_internal_force_and_twist_torque(
   // Note, we only loop over locally owned edges to avoid double counting the influence of ghosted edges.
   auto locally_owned_selector = stk::mesh::Selector(centerline_twist_springs_part) &
                                 ngp_mesh.get_bulk_on_host().mesh_meta_data().locally_owned_part();
-  mundy::mesh::for_each_entity_run(
+  mesh::for_each_entity_run(
       ngp_mesh, stk::topology::ELEM_RANK, locally_owned_selector,
       KOKKOS_LAMBDA(const stk::mesh::FastMeshIndex &spring_index) {
         // Ok. This is a bit involved.
@@ -1043,53 +1042,51 @@ void compute_internal_force_and_twist_torque(
         const stk::mesh::FastMeshIndex edge_i_index = ngp_mesh.fast_mesh_index(edge_i);
 
         // Get the required input fields
-        const auto node_i_curvature = mundy::mesh::vector3_field_data(node_curvature_field, node_i_index);
-        const auto node_i_rest_curvature = mundy::mesh::vector3_field_data(node_rest_curvature_field, node_i_index);
-        const auto node_i_rotation_gradient =
-            mundy::mesh::quaternion_field_data(node_rotation_gradient_field, node_i_index);
+        const auto node_i_curvature = mesh::vector3_field_data(node_curvature_field, node_i_index);
+        const auto node_i_rest_curvature = mesh::vector3_field_data(node_rest_curvature_field, node_i_index);
+        const auto node_i_rotation_gradient = mesh::quaternion_field_data(node_rotation_gradient_field, node_i_index);
         const double node_radius = node_radius_field(node_i_index, 0);
-        const auto edge_im1_tangent = mundy::mesh::vector3_field_data(edge_tangent_field, edge_im1_index);
-        const auto edge_i_tangent = mundy::mesh::vector3_field_data(edge_tangent_field, edge_i_index);
-        const auto edge_im1_binormal = mundy::mesh::vector3_field_data(edge_binormal_field, edge_im1_index);
-        const auto edge_i_binormal = mundy::mesh::vector3_field_data(edge_binormal_field, edge_i_index);
+        const auto edge_im1_tangent = mesh::vector3_field_data(edge_tangent_field, edge_im1_index);
+        const auto edge_i_tangent = mesh::vector3_field_data(edge_tangent_field, edge_i_index);
+        const auto edge_im1_binormal = mesh::vector3_field_data(edge_binormal_field, edge_im1_index);
+        const auto edge_i_binormal = mesh::vector3_field_data(edge_binormal_field, edge_i_index);
         const double edge_im1_length = edge_length_field(edge_im1_index, 0);
         const double edge_i_length = edge_length_field(edge_i_index, 0);
-        const auto edge_im1_orientation = mundy::mesh::quaternion_field_data(edge_orientation_field, edge_im1_index);
+        const auto edge_im1_orientation = mesh::quaternion_field_data(edge_orientation_field, edge_im1_index);
 
         // Get the output fields
-        auto node_im1_force = mundy::mesh::vector3_field_data(node_force_field, node_im1_index);
-        auto node_i_force = mundy::mesh::vector3_field_data(node_force_field, node_i_index);
-        auto node_ip1_force = mundy::mesh::vector3_field_data(node_force_field, node_ip1_index);
+        auto node_im1_force = mesh::vector3_field_data(node_force_field, node_im1_index);
+        auto node_i_force = mesh::vector3_field_data(node_force_field, node_i_index);
+        auto node_ip1_force = mesh::vector3_field_data(node_force_field, node_ip1_index);
 
         // Compute the Lagrangian torque induced by the curvature
         auto delta_curvature = node_i_curvature - node_i_rest_curvature;
         const double moment_of_inertia = 0.25 * M_PI * node_radius * node_radius * node_radius * node_radius;
         const double shear_modulus = 0.5 * sperm_youngs_modulus / (1.0 + sperm_poissons_ratio);
         const double inv_rest_segment_length = 1.0 / sperm_rest_segment_length;
-        auto bending_torque = mundy::math::Vector3d(
-            -inv_rest_segment_length * sperm_youngs_modulus * moment_of_inertia * delta_curvature[0],
-            -inv_rest_segment_length * sperm_youngs_modulus * moment_of_inertia * delta_curvature[1],
-            -inv_rest_segment_length * 2 * shear_modulus * moment_of_inertia * delta_curvature[2]);
+        auto bending_torque =
+            math::Vector3d(-inv_rest_segment_length * sperm_youngs_modulus * moment_of_inertia * delta_curvature[0],
+                           -inv_rest_segment_length * sperm_youngs_modulus * moment_of_inertia * delta_curvature[1],
+                           -inv_rest_segment_length * 2 * shear_modulus * moment_of_inertia * delta_curvature[2]);
 
         // We'll reuse the bending torque for the rotated bending torque
         bending_torque = edge_im1_orientation * (node_i_rotation_gradient.w() * bending_torque +
-                                                 mundy::math::cross(node_i_rotation_gradient.vector(), bending_torque));
+                                                 math::cross(node_i_rotation_gradient.vector(), bending_torque));
 
         // Compute the force and torque on the nodes
         const auto tmp_force_ip1 = 1.0 / edge_i_length *
-                                   (mundy::math::cross(bending_torque, edge_i_tangent) +
-                                    0.5 * mundy::math::dot(edge_i_tangent, bending_torque) *
-                                        (mundy::math::dot(edge_i_tangent, edge_i_binormal) * edge_i_tangent) -
+                                   (math::cross(bending_torque, edge_i_tangent) +
+                                    0.5 * math::dot(edge_i_tangent, bending_torque) *
+                                        (math::dot(edge_i_tangent, edge_i_binormal) * edge_i_tangent) -
                                     edge_i_binormal);
         const auto tmp_force_im1 =
             1.0 / edge_im1_length *
-            (mundy::math::cross(bending_torque, edge_im1_tangent) +
-             0.5 * mundy::math::dot(edge_im1_tangent, bending_torque) *
-                 (mundy::math::dot(edge_im1_tangent, edge_im1_binormal) * edge_im1_tangent - edge_im1_binormal));
+            (math::cross(bending_torque, edge_im1_tangent) +
+             0.5 * math::dot(edge_im1_tangent, bending_torque) *
+                 (math::dot(edge_im1_tangent, edge_im1_binormal) * edge_im1_tangent - edge_im1_binormal));
 
-        Kokkos::atomic_add(&node_twist_torque_field(node_i_index, 0), mundy::math::dot(edge_i_tangent, bending_torque));
-        Kokkos::atomic_add(&node_twist_torque_field(node_im1_index, 0),
-                           -mundy::math::dot(edge_im1_tangent, bending_torque));
+        Kokkos::atomic_add(&node_twist_torque_field(node_i_index, 0), math::dot(edge_i_tangent, bending_torque));
+        Kokkos::atomic_add(&node_twist_torque_field(node_im1_index, 0), -math::dot(edge_im1_tangent, bending_torque));
         Kokkos::atomic_add(&node_ip1_force[0], tmp_force_ip1[0]);
         Kokkos::atomic_add(&node_ip1_force[1], tmp_force_ip1[1]);
         Kokkos::atomic_add(&node_ip1_force[2], tmp_force_ip1[2]);
@@ -1103,7 +1100,7 @@ void compute_internal_force_and_twist_torque(
 
   // Compute internal force induced by differences in rest and current length
   // Note, we only loop over locally owned edges to avoid double counting the influence of ghosted edges.
-  mundy::mesh::for_each_entity_run(
+  mesh::for_each_entity_run(
       ngp_mesh, stk::topology::EDGE_RANK, locally_owned_selector,
       KOKKOS_LAMBDA(const stk::mesh::FastMeshIndex &edge_index) {
         // F_left = k (l - l_rest) tangent
@@ -1120,13 +1117,13 @@ void compute_internal_force_and_twist_torque(
         const stk::mesh::FastMeshIndex node_i_index = ngp_mesh.fast_mesh_index(node_i);
 
         // Get the required input fields
-        const auto edge_tangent = mundy::mesh::vector3_field_data(edge_tangent_field, edge_index);
+        const auto edge_tangent = mesh::vector3_field_data(edge_tangent_field, edge_index);
         const double edge_length = edge_length_field(edge_index, 0);
         const double node_radius = node_radius_field(node_i_index, 0);
 
         // Get the output fields
-        auto node_im1_force = mundy::mesh::vector3_field_data(node_force_field, node_im1_index);
-        auto node_i_force = mundy::mesh::vector3_field_data(node_force_field, node_i_index);
+        auto node_im1_force = mesh::vector3_field_data(node_force_field, node_im1_index);
+        auto node_i_force = mesh::vector3_field_data(node_force_field, node_i_index);
 
         // Compute the internal force
         const double spring_constant =
@@ -1216,8 +1213,8 @@ void compute_aabbs(stk::mesh::NgpMesh &ngp_mesh, const stk::mesh::Selector &segm
         stk::mesh::FastMeshIndex node0_index = ngp_mesh.fast_mesh_index(nodes[0]);
         stk::mesh::FastMeshIndex node1_index = ngp_mesh.fast_mesh_index(nodes[1]);
 
-        const auto node0_coords = mundy::mesh::vector3_field_data(node_coords_field, node0_index);
-        const auto node1_coords = mundy::mesh::vector3_field_data(node_coords_field, node1_index);
+        const auto node0_coords = mesh::vector3_field_data(node_coords_field, node0_index);
+        const auto node1_coords = mesh::vector3_field_data(node_coords_field, node1_index);
         const double radius = element_radius_field(segment_index, 0);
 
         double min_x = Kokkos::min(node0_coords[0], node1_coords[0]) - radius;
@@ -1345,30 +1342,26 @@ void compute_hertzian_contact_force_and_torque(const stk::mesh::BulkData &bulk_d
 
         /////////////////
         // Source data //
-        const auto source_node0_coords =
-            mundy::mesh::vector3_field_data(node_coords_field, source_node0_index) +
-            mundy::math::Vector3d{0.0, source_fma_and_shift.periodic_shifts[1] * domain_width,
-                                  source_fma_and_shift.periodic_shifts[2] * domain_height};
-        const auto source_node1_coords =
-            mundy::mesh::vector3_field_data(node_coords_field, source_node1_index) +
-            mundy::math::Vector3d{0.0, source_fma_and_shift.periodic_shifts[1] * domain_width,
-                                  source_fma_and_shift.periodic_shifts[2] * domain_height};
+        const auto source_node0_coords = mesh::vector3_field_data(node_coords_field, source_node0_index) +
+                                         math::Vector3d{0.0, source_fma_and_shift.periodic_shifts[1] * domain_width,
+                                                        source_fma_and_shift.periodic_shifts[2] * domain_height};
+        const auto source_node1_coords = mesh::vector3_field_data(node_coords_field, source_node1_index) +
+                                         math::Vector3d{0.0, source_fma_and_shift.periodic_shifts[1] * domain_width,
+                                                        source_fma_and_shift.periodic_shifts[2] * domain_height};
         const double source_radius = element_radius_field(source_segment_index, 0);
-        auto source_node0_force = mundy::mesh::vector3_field_data(node_force_field, source_node0_index);
-        auto source_node1_force = mundy::mesh::vector3_field_data(node_force_field, source_node1_index);
+        auto source_node0_force = mesh::vector3_field_data(node_force_field, source_node0_index);
+        auto source_node1_force = mesh::vector3_field_data(node_force_field, source_node1_index);
 
         // Target data
-        const auto target_node0_coords =
-            mundy::mesh::vector3_field_data(node_coords_field, target_node0_index) +
-            mundy::math::Vector3d{0.0, target_fma_and_shift.periodic_shifts[1] * domain_width,
-                                  target_fma_and_shift.periodic_shifts[2] * domain_height};
-        const auto target_node1_coords =
-            mundy::mesh::vector3_field_data(node_coords_field, target_node1_index) +
-            mundy::math::Vector3d{0.0, target_fma_and_shift.periodic_shifts[1] * domain_width,
-                                  target_fma_and_shift.periodic_shifts[2] * domain_height};
+        const auto target_node0_coords = mesh::vector3_field_data(node_coords_field, target_node0_index) +
+                                         math::Vector3d{0.0, target_fma_and_shift.periodic_shifts[1] * domain_width,
+                                                        target_fma_and_shift.periodic_shifts[2] * domain_height};
+        const auto target_node1_coords = mesh::vector3_field_data(node_coords_field, target_node1_index) +
+                                         math::Vector3d{0.0, target_fma_and_shift.periodic_shifts[1] * domain_width,
+                                                        target_fma_and_shift.periodic_shifts[2] * domain_height};
         const double target_radius = element_radius_field(target_segment_index, 0);
-        auto target_node0_force = mundy::mesh::vector3_field_data(node_force_field, target_node0_index);
-        auto target_node1_force = mundy::mesh::vector3_field_data(node_force_field, target_node1_index);
+        auto target_node0_force = mesh::vector3_field_data(node_force_field, target_node0_index);
+        auto target_node1_force = mesh::vector3_field_data(node_force_field, target_node1_index);
 
         // ////////////////////////////////////////////
         // // Compute the AABB of the source segment //
@@ -1397,11 +1390,11 @@ void compute_hertzian_contact_force_and_torque(const stk::mesh::BulkData &bulk_d
         // }
 
         // Compute the minimum signed separation distance between the segments
-        mundy::math::Vector3d closest_point_source;
-        mundy::math::Vector3d closest_point_target;
+        math::Vector3d closest_point_source;
+        math::Vector3d closest_point_target;
         double archlength_source;
         double archlength_target;
-        const double distance = Kokkos::sqrt(mundy::math::distance::distance_sq_between_line_segments(
+        const double distance = Kokkos::sqrt(math::distance::distance_sq_between_line_segments(
             source_node0_coords, source_node1_coords, target_node0_coords, target_node1_coords, closest_point_source,
             closest_point_target, archlength_source, archlength_target));
 
@@ -1427,13 +1420,12 @@ void compute_hertzian_contact_force_and_torque(const stk::mesh::BulkData &bulk_d
           // Sum the force into the source segment nodes.
           const auto left_to_cp = closest_point_source - source_node0_coords;
           const auto left_to_right = source_node1_coords - source_node0_coords;
-          const double length = mundy::math::norm(left_to_right);
+          const double length = math::norm(left_to_right);
           const double inv_length = 1.0 / length;
           const auto tangent = left_to_right * inv_length;
-          const auto term1 = mundy::math::dot(tangent, source_contact_force) * left_to_cp * inv_length;
-          const auto term2 = mundy::math::dot(left_to_cp, tangent) *
-                             (source_contact_force + mundy::math::dot(tangent, source_contact_force) * tangent) *
-                             inv_length;
+          const auto term1 = math::dot(tangent, source_contact_force) * left_to_cp * inv_length;
+          const auto term2 = math::dot(left_to_cp, tangent) *
+                             (source_contact_force + math::dot(tangent, source_contact_force) * tangent) * inv_length;
           const auto sum = term2 - term1;
 
           // Use an atomic add to sum the forces into the source
@@ -1448,13 +1440,12 @@ void compute_hertzian_contact_force_and_torque(const stk::mesh::BulkData &bulk_d
           // Sum the force into the target segment nodes.
           const auto left_to_cp = closest_point_target - target_node0_coords;
           const auto left_to_right = target_node1_coords - target_node0_coords;
-          const double length = mundy::math::norm(left_to_right);
+          const double length = math::norm(left_to_right);
           const double inv_length = 1.0 / length;
           const auto tangent = left_to_right * inv_length;
-          const auto term1 = mundy::math::dot(tangent, -source_contact_force) * left_to_cp * inv_length;
-          const auto term2 = mundy::math::dot(left_to_cp, tangent) *
-                             (-source_contact_force + mundy::math::dot(tangent, -source_contact_force) * tangent) *
-                             inv_length;
+          const auto term1 = math::dot(tangent, -source_contact_force) * left_to_cp * inv_length;
+          const auto term2 = math::dot(left_to_cp, tangent) *
+                             (-source_contact_force + math::dot(tangent, -source_contact_force) * tangent) * inv_length;
           const auto sum = term2 - term1;
           // Use an atomic add to sum the forces into the target
           Kokkos::atomic_add(&target_node0_force[0], -source_contact_force[0] - sum[0]);
@@ -1491,18 +1482,18 @@ void compute_generalized_velocity(stk::mesh::NgpMesh &ngp_mesh, const double vis
   // Solve the mobility problem for the nodes
   const double one_over_6_pi_viscosity = 1.0 / (6.0 * M_PI * viscosity);
   const double one_over_8_pi_viscosity = 1.0 / (8.0 * M_PI * viscosity);
-  mundy::mesh::for_each_entity_run(
+  mesh::for_each_entity_run(
       ngp_mesh, stk::topology::NODE_RANK, spherocylinder_segments_part,
       KOKKOS_LAMBDA(const stk::mesh::FastMeshIndex &node_index) {
         // Get the required input fields
-        const auto node_force = mundy::mesh::vector3_field_data(node_force_field, node_index);
+        const auto node_force = mesh::vector3_field_data(node_force_field, node_index);
         const double node_radius = node_radius_field(node_index, 0);
         const double node_twist_torque = node_twist_torque_field(node_index, 0);
 
         assert(node_radius > 1e-12);
 
         // Get the output fields
-        auto node_velocity = mundy::mesh::vector3_field_data(node_velocity_field, node_index);
+        auto node_velocity = mesh::vector3_field_data(node_velocity_field, node_index);
         auto node_twist_velocity = node_twist_velocity_field(node_index, 0);
 
         // Compute the generalized velocity
@@ -1531,16 +1522,16 @@ void update_generalized_position(stk::mesh::NgpMesh &ngp_mesh, const double time
   node_twist_field.sync_to_device();
 
   // Update the generalized position using Euler's method
-  mundy::mesh::for_each_entity_run(
+  mesh::for_each_entity_run(
       ngp_mesh, stk::topology::NODE_RANK, centerline_twist_springs_part,
       KOKKOS_LAMBDA(const stk::mesh::FastMeshIndex &node_index) {
         // Update the generalized position
-        const auto old_node_coord = mundy::mesh::vector3_field_data(old_node_coords_field, node_index);
-        const auto old_node_velocity = mundy::mesh::vector3_field_data(old_node_velocity_field, node_index);
+        const auto old_node_coord = mesh::vector3_field_data(old_node_coords_field, node_index);
+        const auto old_node_velocity = mesh::vector3_field_data(old_node_velocity_field, node_index);
         const auto old_node_twist = old_node_twist_field(node_index, 0);
         const auto old_node_twist_velocity = old_node_twist_velocity_field(node_index, 0);
 
-        auto node_coord = mundy::mesh::vector3_field_data(node_coords_field, node_index);
+        auto node_coord = mesh::vector3_field_data(node_coords_field, node_index);
         auto node_twist = node_twist_field(node_index, 0);
 
         node_coord = old_node_coord + timestep_size * old_node_velocity;
@@ -1575,7 +1566,7 @@ void apply_monolayer(stk::mesh::NgpMesh &ngp_mesh, const stk::mesh::Part &center
 
   // Set the x-coordinate of the nodes to zero.
   // Set the x-velocity of the nodes to zero.
-  mundy::mesh::for_each_entity_run(
+  mesh::for_each_entity_run(
       ngp_mesh, stk::topology::NODE_RANK, centerline_twist_springs_part,
       KOKKOS_LAMBDA(const stk::mesh::FastMeshIndex &node_index) {
         // Apply the monolayer
@@ -1919,13 +1910,13 @@ void run(int argc, char **argv) {
     }
 
     // Check if we need to recreate the neighbors
-    mundy::mesh::field_copy<double>(elem_aabb_field, elem_old_aabb_field, stk::ngp::ExecSpace{});
+    mesh::field_copy<double>(elem_aabb_field, elem_old_aabb_field, stk::ngp::ExecSpace{});
     compute_aabbs(ngp_mesh, spherocylinder_segments_part, ngp_node_coords_field, ngp_elem_radius_field,
                   ngp_elem_aabb_field);
-    mundy::mesh::field_axpbygz(1.0, elem_aabb_field, -1.0, elem_old_aabb_field, 1.0,
-                               elem_aabb_disp_since_last_rebuild_field, stk::ngp::ExecSpace{});
+    mesh::field_axpbygz(1.0, elem_aabb_field, -1.0, elem_old_aabb_field, 1.0, elem_aabb_disp_since_last_rebuild_field,
+                        stk::ngp::ExecSpace{});
     const double max_abs_disp =
-        mundy::mesh::field_amax<double>(elem_aabb_disp_since_last_rebuild_field, stk::ngp::ExecSpace{});
+        mesh::field_amax<double>(elem_aabb_disp_since_last_rebuild_field, stk::ngp::ExecSpace{});
     if (max_abs_disp > run_config.search_buffer) {
       rebuild_neighbors = true;
     }
@@ -1945,7 +1936,7 @@ void run(int argc, char **argv) {
 
       std::cout << "Search results size: " << search_results.size() << std::endl;
       rebuild_neighbors = false;
-      mundy::mesh::field_fill(0.0, elem_aabb_disp_since_last_rebuild_field, stk::ngp::ExecSpace{});
+      mesh::field_fill(0.0, elem_aabb_disp_since_last_rebuild_field, stk::ngp::ExecSpace{});
     }
 
     // Prepare the current configuration.
@@ -1995,13 +1986,13 @@ void run(int argc, char **argv) {
                                                 ngp_node_coords_field, ngp_elem_radius_field, ngp_node_force_field);
 
       // Centerline twist rod forces
-      
+
       if (timestep_index > 1000000) {
         auto corrected_time = current_time - 1000000 * run_config.timestep_size;
         propagate_rest_curvature(ngp_mesh, corrected_time, run_config.amplitude, run_config.spatial_wavelength,
-                                run_config.temporal_wavelength,  //
-                                centerline_twist_springs_part, ngp_node_archlength_field, ngp_node_sperm_id_field,
-                                ngp_node_rest_curvature_field);
+                                 run_config.temporal_wavelength,  //
+                                 centerline_twist_springs_part, ngp_node_archlength_field, ngp_node_sperm_id_field,
+                                 ngp_node_rest_curvature_field);
       }
 
       compute_edge_information(ngp_mesh, centerline_twist_springs_part,  //
@@ -2073,6 +2064,8 @@ void run(int argc, char **argv) {
     std::cout << "Time per timestep: " << std::setprecision(15) << avg_time_per_timestep << std::endl;
   }
 }
+
+}  // namespace mundy
 
 int main(int argc, char **argv) {
   // Initialize MPI
