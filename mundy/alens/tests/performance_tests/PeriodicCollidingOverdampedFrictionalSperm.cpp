@@ -376,7 +376,7 @@ struct RunConfig {
   // double temporal_wavelength = std::numeric_limits<double>::infinity();  // Units: seconds per oscillations
   double viscosity = 1;
 
-  double timestep_size = 1e-5;
+  double timestep_size = 1e-3;
   size_t num_time_steps = 200000000;
   size_t io_frequency = 1000;
   double search_buffer = 2 * sperm_radius;
@@ -1062,7 +1062,7 @@ void compute_internal_force_and_twist_torque(
         // Get the required input fields
         const auto node_i_curvature = mesh::vector3_field_data(node_curvature_field, node_i_index);
         const auto node_i_rest_curvature = mesh::vector3_field_data(node_rest_curvature_field, node_i_index);
-        const auto node_i_rotation_gradient = mesh::quaternion_field_data(node_rotation_gradient_field, node_i_index);
+        const auto node_i_rotation_grad = mesh::quaternion_field_data(node_rotation_gradient_field, node_i_index);
         const double node_radius = node_radius_field(node_i_index, 0);
         const auto edge_im1_tangent = mesh::vector3_field_data(edge_tangent_field, edge_im1_index);
         const auto edge_i_tangent = mesh::vector3_field_data(edge_tangent_field, edge_i_index);
@@ -1082,41 +1082,48 @@ void compute_internal_force_and_twist_torque(
         const double moment_of_inertia = 0.25 * M_PI * node_radius * node_radius * node_radius * node_radius;
         const double shear_modulus = 0.5 * sperm_youngs_modulus / (1.0 + sperm_poissons_ratio);
         const double inv_rest_segment_length = 1.0 / sperm_rest_segment_length;
-        auto bending_torque =
+        auto node_torque_i =
             math::Vector3d(-inv_rest_segment_length * sperm_youngs_modulus * moment_of_inertia * delta_curvature[0],
                            -inv_rest_segment_length * sperm_youngs_modulus * moment_of_inertia * delta_curvature[1],
                            -inv_rest_segment_length * 2 * shear_modulus * moment_of_inertia * delta_curvature[2]);
 
         // We'll reuse the bending torque for the rotated bending torque
-        bending_torque = edge_im1_orientation * (node_i_rotation_gradient.w() * bending_torque +
-                                                 math::cross(node_i_rotation_gradient.vector(), bending_torque));
+        auto lab_node_torque_i = edge_im1_orientation * (node_i_rotation_grad.w() * node_torque_i +
+                                                  math::cross(node_i_rotation_grad.vector(), node_torque_i));
 
         // Compute the force and torque on the nodes
-        const double proj_torque_i = math::dot(bending_torque, edge_i_tangent);
-        const double proj_torque_im1 = math::dot(bending_torque, edge_im1_tangent);
+        const double proj_torque_i = math::dot(lab_node_torque_i, edge_i_tangent);
+        const double proj_torque_im1 = math::dot(lab_node_torque_i, edge_im1_tangent);
         const double proj_binormal_i = math::dot(edge_i_binormal, edge_i_tangent);
         const double proj_binormal_im1 = math::dot(edge_im1_binormal, edge_im1_tangent);
-        const auto tmp_force_ip1 = 1.0 / edge_i_length *
-                                   (math::cross(bending_torque, edge_i_tangent) 
-                                   -0.5 * proj_torque_i * edge_i_binormal
-                                   +0.5 * proj_binormal_i * proj_torque_i * edge_i_tangent);
-        const auto tmp_force_im1 = 1.0 / edge_im1_length *
-                                   (math::cross(bending_torque, edge_im1_tangent) 
-                                   -0.5 * proj_torque_im1 * edge_im1_binormal
-                                   +0.5 * proj_binormal_im1 * proj_torque_im1 * edge_im1_tangent);
-        const auto tmp_force_i = -tmp_force_ip1 - tmp_force_im1;
+        
+        const auto tmp_ip1 = math::cross(lab_node_torque_i, edge_i_tangent)
+                              -0.5 * proj_torque_i * edge_i_binormal;
+        const auto tmp_im1 = math::cross(lab_node_torque_i, edge_im1_tangent)
+                              -0.5 * proj_torque_im1 * edge_im1_binormal;
+        const auto force_ip1 = 1.0 / edge_i_length * (
+          tmp_ip1 - math::dot(tmp_ip1, edge_i_tangent) * edge_i_tangent
+        );
+        const auto force_im1 = 1.0 / edge_im1_length * (
+          tmp_im1 - math::dot(tmp_im1, edge_im1_tangent) * edge_im1_tangent
+        );
 
-        Kokkos::atomic_add(&node_twist_torque_field(node_i_index, 0), proj_torque_i);
-        Kokkos::atomic_add(&node_twist_torque_field(node_im1_index, 0), -proj_torque_im1);
-        Kokkos::atomic_add(&node_ip1_force[0], tmp_force_ip1[0]);
-        Kokkos::atomic_add(&node_ip1_force[1], tmp_force_ip1[1]);
-        Kokkos::atomic_add(&node_ip1_force[2], tmp_force_ip1[2]);
-        Kokkos::atomic_add(&node_i_force[0], tmp_force_i[0]);
-        Kokkos::atomic_add(&node_i_force[1], tmp_force_i[1]);
-        Kokkos::atomic_add(&node_i_force[2], tmp_force_i[2]);
-        Kokkos::atomic_add(&node_im1_force[0], tmp_force_im1[0]);
-        Kokkos::atomic_add(&node_im1_force[1], tmp_force_im1[1]);
-        Kokkos::atomic_add(&node_im1_force[2], tmp_force_im1[2]);
+        const auto force_i = -force_ip1 - force_im1;
+        const auto twist_torque_i = proj_torque_i;
+        const auto twist_torque_im1 = -proj_torque_im1;
+
+        // Accumulate the results using atomic operations
+        Kokkos::atomic_add(&node_twist_torque_field(node_i_index, 0), twist_torque_i);
+        Kokkos::atomic_add(&node_twist_torque_field(node_im1_index, 0), twist_torque_im1);
+        Kokkos::atomic_add(&node_ip1_force[0], force_ip1[0]);
+        Kokkos::atomic_add(&node_ip1_force[1], force_ip1[1]);
+        Kokkos::atomic_add(&node_ip1_force[2], force_ip1[2]);
+        Kokkos::atomic_add(&node_i_force[0], force_i[0]);
+        Kokkos::atomic_add(&node_i_force[1], force_i[1]);
+        Kokkos::atomic_add(&node_i_force[2], force_i[2]);
+        Kokkos::atomic_add(&node_im1_force[0], force_im1[0]);
+        Kokkos::atomic_add(&node_im1_force[1], force_im1[1]);
+        Kokkos::atomic_add(&node_im1_force[2], force_im1[2]);
       });
 
   // Compute internal force induced by differences in rest and current length
@@ -2144,11 +2151,13 @@ void run(int argc, char **argv) {
 
       // Rotate the field states. Use a deep copy to update the old fields.
       deep_copy<double, 3>(ngp_mesh, ngp_old_node_coords_field, ngp_node_coords_field, universal_part);
-      deep_copy<double, 3>(ngp_mesh, ngp_old_node_velocity_field, ngp_node_velocity_field, universal_part);
       deep_copy<double, 1>(ngp_mesh, ngp_old_node_twist_field, ngp_node_twist_field, universal_part);
+      deep_copy<double, 3>(ngp_mesh, ngp_old_node_velocity_field, ngp_node_velocity_field, universal_part);
       deep_copy<double, 1>(ngp_mesh, ngp_old_node_twist_velocity_field, ngp_node_twist_velocity_field, universal_part);
+      if (timestep_index == 0) {
       deep_copy<double, 4>(ngp_mesh, ngp_old_edge_orientation_field, ngp_edge_orientation_field, universal_part);
       deep_copy<double, 3>(ngp_mesh, ngp_old_edge_tangent_field, ngp_edge_tangent_field, universal_part);
+      }
 
       // Move the nodes from t -> t + dt.
       //   x(t + dt) = x(t) + dt v(t)
@@ -2277,8 +2286,7 @@ int main(int argc, char **argv) {
   Kokkos::print_configuration(std::cout);
 
   // Run the simulation using the given parameters
-  mundy::test_generalized_map();
-  // mundy::run(argc, argv);
+  mundy::run(argc, argv);
 
   // Finalize MPI
   Kokkos::finalize();
