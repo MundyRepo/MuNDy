@@ -866,7 +866,8 @@ class AMatrix<T, N, M, Accessor, Ownership::Owns> {
   /// \param[in] col The column index.
   KOKKOS_INLINE_FUNCTION
   constexpr T& operator()(size_t row, size_t col) {
-    return accessor_[row * N + col];
+    // Row-major access
+    return accessor_[row * M + col];
   }
 
   /// \brief Const element access operators
@@ -875,7 +876,7 @@ class AMatrix<T, N, M, Accessor, Ownership::Owns> {
   /// \param[in] col The column index.
   KOKKOS_INLINE_FUNCTION
   constexpr const T& operator()(size_t row, size_t col) const {
-    return accessor_[row * N + col];
+    return accessor_[row * M + col];
   }
 
   /// \brief Get the internal data accessor
@@ -1189,10 +1190,10 @@ class AMatrix<T, N, M, Accessor, Ownership::Owns> {
 
   /// \brief AMatrix-matrix multiplication
   /// \param[in] other The other matrix.
-  template <typename U, ValidAccessor<U> OtherAccessor, typename OtherOwnershipType>
+  template <typename U, typename OtherAccessor, typename OtherOwnershipType, size_t OtherN, size_t OtherM>
   KOKKOS_INLINE_FUNCTION constexpr auto operator*(
-      const AMatrix<U, N, M, OtherAccessor, OtherOwnershipType>& other) const {
-    return impl::matrix_matrix_multiplication_impl(std::make_index_sequence<N * M>{}, *this, other);
+      const AMatrix<U, OtherN, OtherM, OtherAccessor, OtherOwnershipType>& other) const {
+    return impl::matrix_matrix_multiplication_impl(std::make_index_sequence<N * OtherM>{}, *this, other);
   }
 
   /// \brief Self-matrix multiplication
@@ -1380,7 +1381,7 @@ std::ostream& operator<<(std::ostream& os, const AMatrix<T, N, M, Accessor, Owne
     }
     os << "]";
     if (i < N - 1) {
-      os << std::endl;
+      os << "\n";
     }
   }
   os << "]";

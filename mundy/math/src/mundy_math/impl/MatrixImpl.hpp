@@ -63,6 +63,7 @@ template <size_t... Is, typename T, size_t N, size_t M, ValidAccessor<T> Accesso
   requires HasNonConstAccessOperator<Accessor, T>
 KOKKOS_INLINE_FUNCTION void deep_copy_impl(std::index_sequence<Is...>, AMatrix<T, N, M, Accessor, OwnershipType>& mat,
                                            const AMatrix<T, N, M, OtherAccessor, OtherOwnershipType>& other) {
+  static_assert(sizeof...(Is) == N * M, "Number of indices must match number of elements in the matrix.");
   ((mat[Is] = other[Is]), ...);
 }
 
@@ -73,6 +74,7 @@ template <size_t... Is, typename T, size_t N, size_t M, ValidAccessor<T> Accesso
   requires HasNonConstAccessOperator<Accessor, T>
 KOKKOS_INLINE_FUNCTION void move_impl(std::index_sequence<Is...>, AMatrix<T, N, M, Accessor, OwnershipType>& mat,
                                       AMatrix<T, N, M, OtherAccessor, OtherOwnershipType>&& other) {
+  static_assert(sizeof...(Is) == N * M, "Number of indices must match number of elements in the matrix.");
   ((mat[Is] = std::move(other[Is])), ...);
 }
 
@@ -81,7 +83,8 @@ KOKKOS_INLINE_FUNCTION void move_impl(std::index_sequence<Is...>, AMatrix<T, N, 
 template <size_t... Is, typename T, size_t N, size_t M, ValidAccessor<T> Accessor, typename OwnershipType>
 KOKKOS_INLINE_FUNCTION AVector<std::remove_const_t<T>, N> copy_column_impl(
     std::index_sequence<Is...>, const AMatrix<T, N, M, Accessor, OwnershipType>& mat, size_t col) {
-  return {mat[col + Is * N]...};
+  static_assert(sizeof...(Is) == N, "Number of indices must match number of rows.");
+  return {mat(Is, col)...};
 }
 
 /// \brief Get a deep copy of a certain row of the matrix
@@ -89,7 +92,8 @@ KOKKOS_INLINE_FUNCTION AVector<std::remove_const_t<T>, N> copy_column_impl(
 template <size_t... Is, typename T, size_t N, size_t M, ValidAccessor<T> Accessor, typename OwnershipType>
 KOKKOS_INLINE_FUNCTION AVector<std::remove_const_t<T>, M> copy_row_impl(
     std::index_sequence<Is...>, const AMatrix<T, N, M, Accessor, OwnershipType>& mat, size_t row) {
-  return {mat[M * row + Is]...};
+  static_assert(sizeof...(Is) == M, "Number of indices must match number of columns.");
+  return {mat(row, Is)...};
 }
 
 /// \brief Create a mask that excludes a specific row and column
@@ -108,6 +112,7 @@ KOKKOS_INLINE_FUNCTION static constexpr Kokkos::Array<bool, N * M> create_row_an
 template <typename U, size_t... Is, typename T, size_t N, size_t M, ValidAccessor<T> Accessor, typename OwnershipType>
 KOKKOS_INLINE_FUNCTION auto cast_impl(std::index_sequence<Is...>,
                                       const AMatrix<T, N, M, Accessor, OwnershipType>& mat) {
+  static_assert(sizeof...(Is) == N * M, "Number of indices must match number of elements in the matrix.");
   return AMatrix<U, N, M>{static_cast<U>(mat[Is])...};
 }
 
@@ -117,6 +122,7 @@ template <size_t... Is, typename T, size_t N, size_t M, ValidAccessor<T> Accesso
   requires HasNonConstAccessOperator<Accessor, T>
 KOKKOS_INLINE_FUNCTION void set_impl(std::index_sequence<Is...>, AMatrix<T, N, M, Accessor, OwnershipType>& mat,
                                      Args&&... args) {
+  static_assert(sizeof...(Is) == N * M, "Number of arguments must match number of elements in the matrix.");
   ((mat[Is] = std::forward<Args>(args)), ...);
 }
 
@@ -127,6 +133,7 @@ template <size_t... Is, typename T, size_t N, size_t M, ValidAccessor<T> Accesso
   requires HasNonConstAccessOperator<Accessor, T>
 KOKKOS_INLINE_FUNCTION void set_impl(std::index_sequence<Is...>, AMatrix<T, N, M, Accessor, OwnershipType>& mat,
                                      const auto& accessor) {
+  static_assert(sizeof...(Is) == N * M, "Number of indices must match number of elements in the matrix.");
   ((mat[Is] = accessor[Is]), ...);
 }
 
@@ -137,7 +144,8 @@ template <size_t... Is, typename T, size_t N, size_t M, ValidAccessor<T> Accesso
   requires HasNonConstAccessOperator<Accessor, T>
 KOKKOS_INLINE_FUNCTION void set_row_impl(std::index_sequence<Is...>, AMatrix<T, N, M, Accessor, OwnershipType>& mat,
                                          const size_t& i, Args&&... args) {
-  ((mat[Is + M * i] = std::forward<Args>(args)), ...);
+  static_assert(sizeof...(Is) == M, "Number of arguments must match number of columns.");
+  ((mat(i, Is) = std::forward<Args>(args)), ...);
 }
 
 /// \brief Set a certain row of the matrix
@@ -148,7 +156,8 @@ template <size_t... Is, typename T, size_t N, size_t M, ValidAccessor<T> Accesso
   requires HasNonConstAccessOperator<Accessor, T>
 KOKKOS_INLINE_FUNCTION void set_row_impl(std::index_sequence<Is...>, AMatrix<T, N, M, Accessor, OwnershipType>& mat,
                                          const size_t& i, const AVector<T, M, OtherAccessor, OtherOwnershipType>& row) {
-  ((mat[Is + M * i] = row[Is]), ...);
+  static_assert(sizeof...(Is) == M, "Number of arguments must match number of columns.");
+  ((mat(i, Is) = row[Is]), ...);
 }
 
 /// \brief Set a certain column of the matrix
@@ -158,7 +167,8 @@ template <size_t... Is, typename T, size_t N, size_t M, ValidAccessor<T> Accesso
   requires HasNonConstAccessOperator<Accessor, T>
 KOKKOS_INLINE_FUNCTION void set_column_impl(std::index_sequence<Is...>, AMatrix<T, N, M, Accessor, OwnershipType>& mat,
                                             const size_t& j, Args&&... args) {
-  ((mat[j + Is * N] = std::forward<Args>(args)), ...);
+  static_assert(sizeof...(Is) == N, "Number of arguments must match number of rows.");
+  ((mat(Is, j) = std::forward<Args>(args)), ...);
 }
 
 /// \brief Set a certain column of the matrix
@@ -170,7 +180,8 @@ template <size_t... Is, typename T, size_t N, size_t M, ValidAccessor<T> Accesso
 KOKKOS_INLINE_FUNCTION void set_column_impl(std::index_sequence<Is...>, AMatrix<T, N, M, Accessor, OwnershipType>& mat,
                                             const size_t& j,
                                             const AVector<T, N, OtherAccessor, OtherOwnershipType>& col) {
-  ((mat[j + Is * N] = col[Is]), ...);
+  static_assert(sizeof...(Is) == N, "Number of arguments must match number of rows.");
+  ((mat(Is, j) = col[Is]), ...);
 }
 
 /// \brief Set all elements of the matrix to a single value
@@ -179,6 +190,7 @@ template <size_t... Is, typename T, size_t N, size_t M, ValidAccessor<T> Accesso
   requires HasNonConstAccessOperator<Accessor, T>
 KOKKOS_INLINE_FUNCTION void fill_impl(std::index_sequence<Is...>, AMatrix<T, N, M, Accessor, OwnershipType>& mat,
                                       const T& value) {
+  static_assert(sizeof...(Is) == N * M, "Number of indices must match number of elements in the matrix.");
   ((mat[Is] = value), ...);
 }
 
@@ -186,6 +198,7 @@ KOKKOS_INLINE_FUNCTION void fill_impl(std::index_sequence<Is...>, AMatrix<T, N, 
 template <size_t... Is, typename T, size_t N, size_t M, ValidAccessor<T> Accessor, typename OwnershipType>
 KOKKOS_INLINE_FUNCTION AMatrix<T, N, M> unary_minus_impl(std::index_sequence<Is...>,
                                                          const AMatrix<T, N, M, Accessor, OwnershipType>& mat) {
+  static_assert(sizeof...(Is) == N * M, "Number of indices must match number of elements in the matrix.");
   AMatrix<T, N, M> result;
   ((result[Is] = -mat[Is]), ...);
   return result;
@@ -295,7 +308,9 @@ template <size_t... Is, typename T, size_t N, size_t M, ValidAccessor<T> Accesso
 KOKKOS_INLINE_FUNCTION auto matrix_matrix_multiplication_impl(
     std::index_sequence<Is...>, const AMatrix<T, N, M, Accessor, OwnershipType>& mat,
     const AMatrix<U, OtherN, OtherM, OtherAccessor, OtherOwnershipType>& other)
-    -> AMatrix<std::common_type_t<T, U>, OtherN, OtherM> {
+    -> AMatrix<std::common_type_t<T, U>, N, OtherM> {
+  static_assert(sizeof...(Is) == N * OtherM,
+                "Number of indices must match the shared dimension of the result matrix.");
   static_assert(M == OtherN,
                 "AMatrix-matrix multiplication requires the number of columns in the first matrix to be equal to the "
                 "number of rows in the second matrix.");
@@ -305,11 +320,11 @@ KOKKOS_INLINE_FUNCTION auto matrix_matrix_multiplication_impl(
   using CommonType = std::common_type_t<T, U>;
   AMatrix<CommonType, N, OtherM> result;
   (...,
-   (result(Is / M, Is % M) = mundy::math::dot(mat.template view_row<Is / M>(), other.template view_column<Is % M>())));
+   (result(Is / OtherM, Is % OtherM) = dot(mat.template view_row<Is / OtherM>(), other.template view_column<Is % OtherM>())));
   return result;
 }
 
-/// \brief Self-matrix multiplication
+/// \brief Self-matrix multiplication (only valid for square matrices)
 /// \param[in] other The other matrix.
 template <size_t... Is, typename T, size_t N, ValidAccessor<T> Accessor, typename OwnershipType, typename U,
           ValidAccessor<U> OtherAccessor, typename OtherOwnershipType>
@@ -477,11 +492,11 @@ template <size_t... Is, typename T, size_t N, size_t M, ValidAccessor<T> Accesso
 KOKKOS_INLINE_FUNCTION auto transpose_impl(std::index_sequence<Is...>,
                                            const AMatrix<T, N, M, Accessor, OwnershipType>& mat) {
   AMatrix<T, M, N> result;
-  ((result(Is % M, Is / M) = mat(Is / N, Is % N)), ...);
+  ((result(Is % M, Is / M) = mat(Is / M, Is % M)), ...);
   return result;
 }
 
-/// \brief AMatrix cofactors
+/// \brief AMatrix cofactors (only valid for square matrices)
 template <size_t... Is, typename T, size_t N, ValidAccessor<T> Accessor, typename OwnershipType>
 KOKKOS_INLINE_FUNCTION auto cofactors_impl(std::index_sequence<Is...>,
                                            const AMatrix<T, N, N, Accessor, OwnershipType>& mat) {

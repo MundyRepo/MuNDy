@@ -80,6 +80,7 @@ The goal of this example is to simulate the swimming motion of a multiple, colli
 #include <mundy_core/throw_assert.hpp>     // for MUNDY_THROW_ASSERT
 #include <mundy_geom/periodicity.hpp>
 #include <mundy_geom/primitives.hpp>
+#include <mundy_geom/randomize.hpp>
 #include <mundy_linkers/ComputeSignedSeparationDistanceAndContactNormal.hpp>  // for mundy::linkers::ComputeSignedSeparationDistanceAndContactNormal
 #include <mundy_linkers/DestroyNeighborLinkers.hpp>         // for mundy::linkers::DestroyNeighborLinkers
 #include <mundy_linkers/EvaluateLinkerPotentials.hpp>       // for mundy::linkers::EvaluateLinkerPotentials
@@ -353,7 +354,7 @@ struct RunConfig {
   //@{
   std::string input_file_name = "input.yaml";
 
-  size_t num_sperm = 20;
+  size_t num_sperm = 1;
   size_t num_nodes_per_sperm = 301;
   double sperm_radius = 0.5;
   double sperm_initial_segment_length = 2.0 * sperm_radius;
@@ -362,24 +363,24 @@ struct RunConfig {
   double sperm_rest_curvature_bend1 = 0.0;
   double sperm_rest_curvature_bend2 = 0.0;
 
-  double sperm_youngs_modulus = 1000000.00;
+  double sperm_youngs_modulus = 10000.00;
   double sperm_relaxed_youngs_modulus = sperm_youngs_modulus;
   double sperm_normal_youngs_modulus = sperm_youngs_modulus;
   double sperm_poissons_ratio = 0.3;
   double sperm_density = 1.0;
 
+  // double amplitude = 0.0;
   double amplitude = 0.1;
   double spatial_wavelength = (num_nodes_per_sperm - 1) * sperm_initial_segment_length / 5.0;
   double temporal_wavelength = 2 * M_PI;  // Units: seconds per oscillations
   // double temporal_wavelength = std::numeric_limits<double>::infinity();  // Units: seconds per oscillations
   double viscosity = 1;
 
-  double timestep_size = 1e-6;
+  double timestep_size = 1e-5;
   size_t num_time_steps = 200000000;
-  size_t io_frequency = 100000;
+  size_t io_frequency = 1000;
   double search_buffer = 2 * sperm_radius;
-  double domain_width =
-      2 * num_sperm * sperm_radius / 0.8;  // One diameter separation between sperm == 50% area fraction
+  double domain_width = 2 * std::sqrt(num_sperm) * sperm_radius / 0.8;  // One diameter separation between sperm == 50% area fraction
   double domain_height = (num_nodes_per_sperm - 1) * sperm_initial_segment_length + 11.0;
   //@}
 };
@@ -433,8 +434,8 @@ void declare_and_initialize_sperm(stk::mesh::BulkData &bulk_data, stk::mesh::Par
   // i=4: ^v^v^v^v^v
   int degree_of_interleaving = 4;
   std::cout << "degree_of_interleaving: " << degree_of_interleaving << std::endl;
-  std::vector<bool> sperm_directions = interleaved_vector(num_sperm, degree_of_interleaving);
-
+  // std::vector<bool> sperm_directions = interleaved_vector(num_sperm, degree_of_interleaving);
+  
   for (size_t j = 0; j < num_sperm; j++) {
     // To make our lives easier, we align the sperm with the z-axis, as this makes our edge orientation a unit
     // quaternion.
@@ -444,17 +445,28 @@ void declare_and_initialize_sperm(stk::mesh::BulkData &bulk_data, stk::mesh::Par
     const bool is_boundary_sperm = false;
 
     // TODO(palmerb4): Notice that we are shifting the sperm to be separated by a diameter.
-    bool flip_sperm = sperm_directions[j];
-    // const bool flip_sperm = false;
+    // bool flip_sperm = sperm_directions[j];
+    const bool flip_sperm = false;
     // math::Vector3d tail_coord(0.0, 2.0 * j * (2.0 * sperm_radius),
     //                                         (flip_sperm ? segment_length * (num_nodes_per_sperm - 1) : 0.0) -
     //                                             (is_boundary_sperm ? segment_length * (num_nodes_per_sperm - 1) :
     //                                             0.0));
     double random_shift = static_cast<double>(rand()) / RAND_MAX * ((segment_length) * (num_nodes_per_sperm - 1) + 10);
 
+    // math::Vector3d tail_coord(
+    //     0.0, j * (2.0 * sperm_radius) / 0.8,
+    //     (flip_sperm ? (segment_length * (num_nodes_per_sperm - 1) + random_shift) : random_shift));
+    double width =  2 * num_sperm * sperm_radius / 0.8;
+    double spacing = width / num_sperm;
+
+    // From j to n x m in grid
+    size_t rows = static_cast<size_t>(std::sqrt(num_sperm));
+    size_t cols = (num_sperm + rows - 1) / rows;
+    size_t row = j / cols;
+    size_t col = j % cols;
+
     math::Vector3d tail_coord(
-        0.0, j * (2.0 * sperm_radius) / 0.8,
-        (flip_sperm ? (segment_length * (num_nodes_per_sperm - 1) + random_shift) : random_shift));
+        (row + 0.5) * spacing, (col + 0.5) * spacing, 0.0);
 
     math::Vector3d sperm_axis(0.0, 0.0, flip_sperm ? -1.0 : 1.0);
 
@@ -748,17 +760,21 @@ void declare_and_initialize_sperm(stk::mesh::BulkData &bulk_data, stk::mesh::Par
     // Populate the edge data
     mesh::for_each_entity_run(
         bulk_data, stk::topology::EDGE_RANK, meta_data.locally_owned_part(),
-        [&node_coords_field, &edge_orientation_field, &edge_tangent_field, &edge_length_field, &flip_sperm](
+        [&node_coords_field, &node_sperm_id_field, &edge_orientation_field, &edge_tangent_field, &edge_length_field, &flip_sperm](
             const stk::mesh::BulkData &bulk_data, const stk::mesh::Entity &edge) {
           // We are currently in the reference configuration, so the orientation must map from Cartesian to reference
           // lab frame.
           const stk::mesh::Entity *edge_nodes = bulk_data.begin_nodes(edge);
+          const int sperm_id = stk::mesh::field_data(node_sperm_id_field, edge_nodes[0])[0];
           const auto edge_node0_coords = mesh::vector3_field_data(node_coords_field, edge_nodes[0]);
           const auto edge_node1_coords = mesh::vector3_field_data(node_coords_field, edge_nodes[1]);
           math::Vector3d edge_tangent = edge_node1_coords - edge_node0_coords;
           const double edge_length = math::norm(edge_tangent);
           edge_tangent /= edge_length;
           // Using the triad to generate the orientation
+          openrand::Philox rng(sperm_id, bulk_data.identifier(edge));
+          const double phase = 2.0 * M_PI * rng.rand<double>();
+          // auto d1 = math::euler_to_quat(0.0, 0.0, phase) * math::Vector3d(flip_sperm ? -1.0 : 1.0, 0.0, 0.0);
           auto d1 = math::Vector3d(flip_sperm ? -1.0 : 1.0, 0.0, 0.0);
           math::Vector3d d3 = edge_tangent;
           math::Vector3d d2 = math::cross(d3, d1);
@@ -831,10 +847,10 @@ void propagate_rest_curvature(stk::mesh::NgpMesh &ngp_mesh, const double &curren
         // The same RNG is used for all time.
         openrand::Philox rng(node_sperm_id, 0);
         const double phase = 2.0 * M_PI * rng.rand<double>();
-        node_rest_curvature_field(node_index, 0) =
-            amplitude * Kokkos::sin(spatial_frequency * node_archlength + temporal_frequency * current_time + phase);
+        node_rest_curvature_field(node_index, 0) = 0.0;
         node_rest_curvature_field(node_index, 1) = 0.0;
-        node_rest_curvature_field(node_index, 2) = 0.0;
+        node_rest_curvature_field(node_index, 2) = 0.01 * (node_archlength > 1e-12 && node_archlength < 300 - 1e-12);
+        // Must be a function that goes to zero at node_archlength = 0, 300
       });
 
   node_rest_curvature_field.modify_on_device();
@@ -1076,25 +1092,28 @@ void compute_internal_force_and_twist_torque(
                                                  math::cross(node_i_rotation_gradient.vector(), bending_torque));
 
         // Compute the force and torque on the nodes
+        const double proj_torque_i = math::dot(bending_torque, edge_i_tangent);
+        const double proj_torque_im1 = math::dot(bending_torque, edge_im1_tangent);
+        const double proj_binormal_i = math::dot(edge_i_binormal, edge_i_tangent);
+        const double proj_binormal_im1 = math::dot(edge_im1_binormal, edge_im1_tangent);
         const auto tmp_force_ip1 = 1.0 / edge_i_length *
-                                   (math::cross(bending_torque, edge_i_tangent) +
-                                    0.5 * math::dot(edge_i_tangent, bending_torque) *
-                                        (math::dot(edge_i_tangent, edge_i_binormal) * edge_i_tangent) -
-                                    edge_i_binormal);
-        const auto tmp_force_im1 =
-            1.0 / edge_im1_length *
-            (math::cross(bending_torque, edge_im1_tangent) +
-             0.5 * math::dot(edge_im1_tangent, bending_torque) *
-                 (math::dot(edge_im1_tangent, edge_im1_binormal) * edge_im1_tangent - edge_im1_binormal));
+                                   (math::cross(bending_torque, edge_i_tangent) 
+                                   -0.5 * proj_torque_i * edge_i_binormal
+                                   +0.5 * proj_binormal_i * proj_torque_i * edge_i_tangent);
+        const auto tmp_force_im1 = 1.0 / edge_im1_length *
+                                   (math::cross(bending_torque, edge_im1_tangent) 
+                                   -0.5 * proj_torque_im1 * edge_im1_binormal
+                                   +0.5 * proj_binormal_im1 * proj_torque_im1 * edge_im1_tangent);
+        const auto tmp_force_i = -tmp_force_ip1 - tmp_force_im1;
 
-        Kokkos::atomic_add(&node_twist_torque_field(node_i_index, 0), math::dot(edge_i_tangent, bending_torque));
-        Kokkos::atomic_add(&node_twist_torque_field(node_im1_index, 0), -math::dot(edge_im1_tangent, bending_torque));
+        Kokkos::atomic_add(&node_twist_torque_field(node_i_index, 0), proj_torque_i);
+        Kokkos::atomic_add(&node_twist_torque_field(node_im1_index, 0), -proj_torque_im1);
         Kokkos::atomic_add(&node_ip1_force[0], tmp_force_ip1[0]);
         Kokkos::atomic_add(&node_ip1_force[1], tmp_force_ip1[1]);
         Kokkos::atomic_add(&node_ip1_force[2], tmp_force_ip1[2]);
-        Kokkos::atomic_add(&node_i_force[0], -tmp_force_ip1[0] - tmp_force_im1[0]);
-        Kokkos::atomic_add(&node_i_force[1], -tmp_force_ip1[1] - tmp_force_im1[1]);
-        Kokkos::atomic_add(&node_i_force[2], -tmp_force_ip1[2] - tmp_force_im1[2]);
+        Kokkos::atomic_add(&node_i_force[0], tmp_force_i[0]);
+        Kokkos::atomic_add(&node_i_force[1], tmp_force_i[1]);
+        Kokkos::atomic_add(&node_i_force[2], tmp_force_i[2]);
         Kokkos::atomic_add(&node_im1_force[0], tmp_force_im1[0]);
         Kokkos::atomic_add(&node_im1_force[1], tmp_force_im1[1]);
         Kokkos::atomic_add(&node_im1_force[2], tmp_force_im1[2]);
@@ -1277,7 +1296,7 @@ Kokkos::pair<SearchBoxesViewType, SearchBoxesViewType> create_search_aabbs(
 
         for (int s0 = 0; s0 < 3; s0++) {  // s0, s1 in [0, 1, 2]
           for (int s1 = 0; s1 < 3; s1++) {
-            math::Vector3<int> lattice_shift{0, s0 - 1, s1 - 1};
+            math::Vector3<int> lattice_shift{s0 - 1, s1 - 1, 0};
             auto shifted_aabb = geom::shift_image(wrapped_aabb, lattice_shift, metric);
             FastMeshIndexAndPeriodicShift source_fma_and_shift{segment_index,
                                                                shifted_aabb.min_corner() - aabb.min_corner()};
@@ -1474,7 +1493,7 @@ void compute_generalized_velocity(stk::mesh::NgpMesh &ngp_mesh, const double vis
 
         // Get the output fields
         auto node_velocity = mesh::vector3_field_data(node_velocity_field, node_index);
-        auto node_twist_velocity = node_twist_velocity_field(node_index, 0);
+        auto& node_twist_velocity = node_twist_velocity_field(node_index, 0);
 
         // Compute the generalized velocity
         const double inv_node_radius = 1.0 / node_radius;
@@ -1512,7 +1531,7 @@ void update_generalized_position(stk::mesh::NgpMesh &ngp_mesh, const double time
         const auto old_node_twist_velocity = old_node_twist_velocity_field(node_index, 0);
 
         auto node_coord = mesh::vector3_field_data(node_coords_field, node_index);
-        auto node_twist = node_twist_field(node_index, 0);
+        auto &node_twist = node_twist_field(node_index, 0);
 
         node_coord = old_node_coord + timestep_size * old_node_velocity;
         node_twist = old_node_twist + timestep_size * old_node_twist_velocity;
@@ -1520,6 +1539,38 @@ void update_generalized_position(stk::mesh::NgpMesh &ngp_mesh, const double time
 
   node_coords_field.modify_on_device();
   node_twist_field.modify_on_device();
+}
+
+void update_edge_basis(stk::mesh::NgpMesh &ngp_mesh, const stk::mesh::Selector& edge_selector, 
+   stk::mesh::NgpField<double> &edge_orientation_field,
+   stk::mesh::NgpField<double> &edge_basis_1_field,
+    stk::mesh::NgpField<double> &edge_basis_2_field,
+    stk::mesh::NgpField<double> &edge_basis_3_field) {
+ // This is the real-space basis for the edge computed by applying the orientation quaternion to the reference basis.
+  debug_print("Updating the edge basis vectors.");
+
+  edge_orientation_field.sync_to_device();
+
+  mesh::for_each_entity_run(
+      ngp_mesh, stk::topology::EDGE_RANK, edge_selector,
+      KOKKOS_LAMBDA(const stk::mesh::FastMeshIndex &edge_index) {
+        // Get the required input fields
+        const auto edge_orientation = mesh::quaternion_field_data(edge_orientation_field, edge_index);
+
+        // Get the output fields
+        auto edge_basis_1 = mesh::vector3_field_data(edge_basis_1_field,  edge_index);
+        auto edge_basis_2 = mesh::vector3_field_data(edge_basis_2_field,  edge_index);
+        auto edge_basis_3 = mesh::vector3_field_data(edge_basis_3_field,  edge_index);
+
+        // Compute the edge basis vectors by rotating the reference basis vectors
+        edge_basis_1 = edge_orientation * math::Vector3d(1.0, 0.0, 0.0);
+        edge_basis_2 = edge_orientation * math::Vector3d(0.0, 1.0, 0.0);
+        edge_basis_3 = edge_orientation * math::Vector3d(0.0, 0.0, 1.0);
+      });
+
+  edge_basis_1_field .modify_on_device();
+  edge_basis_2_field .modify_on_device();
+  edge_basis_3_field .modify_on_device();
 }
 
 void disable_twist(stk::mesh::NgpMesh &ngp_mesh, NgpDoubleField &node_twist_field,
@@ -1634,6 +1685,152 @@ void deep_copy(stk::mesh::NgpMesh &ngp_mesh, stk::mesh::NgpField<FieldValueType>
   target_field.modify_on_device();
 }
 
+struct Dependencies {
+  double node_radius;
+
+  math::Vector3d edge_im1_tangent;
+  math::Vector3d edge_i_tangent;
+
+  math::Vector3d edge_im1_binormal;
+  math::Vector3d edge_i_binormal;
+
+  double edge_im1_length;
+  double edge_i_length;
+
+  math::Quaterniond edge_im1_orientation;
+  math::Quaterniond edge_i_orientation;
+};
+
+math::Vector<double, 11> apply_KT(const math::Vector3d &node_torque_i, const Dependencies &d) {
+  auto node_i_rotation_grad = math::conjugate(d.edge_im1_orientation) * d.edge_i_orientation;
+
+  // We'll reuse the bending torque for the rotated bending torque
+  auto lab_node_torque_i = d.edge_im1_orientation * (node_i_rotation_grad.w() * node_torque_i +
+                                            math::cross(node_i_rotation_grad.vector(), node_torque_i));
+
+  // Compute the force and torque on the nodes
+  const double proj_torque_i = math::dot(lab_node_torque_i, d.edge_i_tangent);
+  const double proj_torque_im1 = math::dot(lab_node_torque_i, d.edge_im1_tangent);
+  const double proj_binormal_i = math::dot(d.edge_i_binormal, d.edge_i_tangent);
+  const double proj_binormal_im1 = math::dot(d.edge_im1_binormal, d.edge_im1_tangent);
+  
+  const auto tmp_ip1 = math::cross(lab_node_torque_i, d.edge_i_tangent)
+                         -0.5 * proj_torque_i * d.edge_i_binormal;
+  const auto tmp_im1 = math::cross(lab_node_torque_i, d.edge_im1_tangent)
+                         -0.5 * proj_torque_im1 * d.edge_im1_binormal;
+  const auto force_ip1 = 1.0 / d.edge_i_length * (
+    tmp_ip1 - math::dot(tmp_ip1, d.edge_i_tangent) * d.edge_i_tangent
+  );
+  const auto force_im1 = 1.0 / d.edge_im1_length * (
+    tmp_im1 - math::dot(tmp_im1, d.edge_im1_tangent) * d.edge_im1_tangent
+  );
+
+  // const auto force_ip1 = 1.0 / d.edge_i_length *
+  //                             (math::cross(lab_node_torque_i, d.edge_i_tangent) 
+  //                             -0.5 * proj_torque_i * d.edge_i_binormal
+  //                             +0.5 * proj_binormal_i * proj_torque_i * d.edge_i_tangent);
+  // const auto force_im1 = 1.0 / d.edge_im1_length *
+  //                             (math::cross(lab_node_torque_i, d.edge_im1_tangent) 
+  //                             -0.5 * proj_torque_im1 * d.edge_im1_binormal
+  //                             +0.5 * proj_binormal_im1 * proj_torque_im1 * d.edge_im1_tangent);
+  const auto force_i = -force_ip1 - force_im1;
+  const auto twist_torque_i = proj_torque_i;
+  const auto twist_torque_im1 = -proj_torque_im1;
+  
+  // Stash the result in a single vector
+  math::Vector<double, 11> result;
+  result[0] = force_im1[0];
+  result[1] = force_im1[1];
+  result[2] = force_im1[2];
+  result[3] = force_i[0];
+  result[4] = force_i[1];
+  result[5] = force_i[2];
+  result[6] = force_ip1[0];
+  result[7] = force_ip1[1];
+  result[8] = force_ip1[2];
+  result[9] = twist_torque_im1;
+  result[10] = twist_torque_i;
+  return result;
+}
+
+math::Vector3d apply_K(const math::Vector<double, 11> input, const Dependencies &d) {
+  // Unpack the input into vel_im1, vel_i, twist_vel_im1, twist_vel_i
+  math::Vector3d vel_im1{input[0], input[1], input[2]};
+  math::Vector3d vel_i{input[3], input[4], input[5]};
+  math::Vector3d vel_ip1{input[6], input[7], input[8]};
+  double twist_vel_im1 = input[9];
+  double twist_vel_i = input[10];
+
+  auto node_i_rotation_grad = math::conjugate(d.edge_im1_orientation) * d.edge_i_orientation;
+
+  auto vel_diff_ip1 = vel_ip1 - vel_i;
+  auto projected_vel_diff_i = (vel_diff_ip1 - math::dot(vel_diff_ip1, d.edge_i_tangent) * d.edge_i_tangent) / d.edge_i_length;
+  auto binormal_stuff_i = math::cross(d.edge_i_tangent, projected_vel_diff_i) - 0.5 * d.edge_i_tangent * math::dot(projected_vel_diff_i, d.edge_i_binormal);
+
+  auto vel_diff_i = vel_i - vel_im1;
+  auto projected_vel_diff_im1 = (vel_diff_i - math::dot(vel_diff_i, d.edge_im1_tangent) * d.edge_im1_tangent) / d.edge_im1_length;
+  auto binormal_stuff_im1 = math::cross(d.edge_im1_tangent, projected_vel_diff_im1) - 0.5 * d.edge_im1_tangent * math::dot(projected_vel_diff_im1, d.edge_im1_binormal);
+
+  auto tmp1 = d.edge_i_tangent * twist_vel_i - d.edge_im1_tangent * twist_vel_im1 + binormal_stuff_i - binormal_stuff_im1;
+  auto tmp2 = math::conjugate(d.edge_im1_orientation) * tmp1;
+
+  math::Vector3d rate_of_change_of_curvature_i = node_i_rotation_grad.w() * tmp2 - math::cross(node_i_rotation_grad.vector(), tmp2);
+  return rate_of_change_of_curvature_i;
+}
+
+void test_generalized_map() {
+  // Out goal in this mini test is to demonstrate that out K^T matrix is actually the the transpose of the K matrix.
+  // We never actually construct the matrices so we will do this via acting on on the columns of the identity matrix
+  // to extract K and K^T.
+
+  math::Matrix<double, 3, 11> K(0);  // 3 rows and 11 columns
+  math::Matrix<double, 11, 3> KT(0);  // 11 rows and 3 columns
+
+  // Randomize the dependencies
+  openrand::Philox rng(0, 0);
+  Dependencies d;
+  d.node_radius = rng.rand<double>() + 0.1;
+
+  auto old_tangent_im1 = geom::generate_random_unit_vector<double>(rng);
+  auto old_tangent_i = geom::generate_random_unit_vector<double>(rng);
+
+  d.edge_im1_length = rng.rand<double>() + 0.1;
+  d.edge_i_length = rng.rand<double>() + 0.1;
+  d.edge_im1_orientation = geom::generate_random_unit_quaternion<double>(rng);
+  d.edge_i_orientation = geom::generate_random_unit_quaternion<double>(rng);
+  d.edge_im1_tangent = d.edge_im1_orientation * math::Vector3d(0.0, 0.0, 1.0);
+  d.edge_i_tangent = d.edge_i_orientation * math::Vector3d(0.0, 0.0, 1.0);     
+  d.edge_im1_binormal = (2 * math::cross(old_tangent_im1, d.edge_im1_tangent)) / (1.0 + math::dot(old_tangent_im1, d.edge_im1_tangent));
+  d.edge_i_binormal = (2 * math::cross(old_tangent_i, d.edge_i_tangent)) / (1.0 + math::dot(old_tangent_i, d.edge_i_tangent));
+
+  // Fill KT
+  for (unsigned col = 0; col< 3; ++col) {
+    math::Vector<double, 3> e_i(0);
+    e_i[col] = 1.0;
+    auto KT_col = apply_KT(e_i, d);
+    std::cout << "KT_col[" << col << "] = " << KT_col << std::endl;
+    KT.set_column(col, KT_col);
+  }
+
+  // Fill K
+  for (unsigned col = 0; col< 11; ++col) {
+    math::Vector<double, 11> e_i(0);
+    e_i[col] = 1.0;
+    auto K_col = apply_K(e_i, d);
+    std::cout << "K_col[" << col << "] = " << K_col << std::endl;
+    K.set_column(col, K_col);
+  }
+
+
+  std::cout << "K = \n" << K << std::endl;
+  std::cout << "KT = \n" << KT << std::endl;
+  std::cout << "norm(KT - transpose(K)) = " << math::two_norm(KT -  math::transpose(K)) << std::endl;
+}
+
+
+
+
+
 void run(int argc, char **argv) {
   debug_print("Running the simulation.");
 
@@ -1698,6 +1895,11 @@ void run(int argc, char **argv) {
       meta_data.declare_field<double>(stk::topology::EDGE_RANK, "EDGE_TANGENT");
   DoubleField &old_edge_tangent_field =  //
       meta_data.declare_field<double>(stk::topology::EDGE_RANK, "OLD_EDGE_TANGENT");
+
+  DoubleField &edge_basis_1_field = meta_data.declare_field<double>(stk::topology::EDGE_RANK, "EDGE_BASIS_1");
+  DoubleField &edge_basis_2_field = meta_data.declare_field<double>(stk::topology::EDGE_RANK, "EDGE_BASIS_2");
+  DoubleField &edge_basis_3_field = meta_data.declare_field<double>(stk::topology::EDGE_RANK, "EDGE_BASIS_3");
+
   DoubleField &edge_binormal_field =  //
       meta_data.declare_field<double>(stk::topology::EDGE_RANK, "EDGE_BINORMAL");
   DoubleField &edge_length_field =  //
@@ -1747,6 +1949,9 @@ void run(int argc, char **argv) {
   // stk::io::set_field_output_type(edge_orientation_field, ...);   // No quaternion type with Ioss/Exodus/VTK
   stk::io::set_field_output_type(edge_tangent_field, stk::io::FieldOutputType::VECTOR_3D);
   stk::io::set_field_output_type(edge_binormal_field, stk::io::FieldOutputType::VECTOR_3D);
+  stk::io::set_field_output_type(edge_basis_1_field, stk::io::FieldOutputType::VECTOR_3D);
+  stk::io::set_field_output_type(edge_basis_2_field, stk::io::FieldOutputType::VECTOR_3D);
+  stk::io::set_field_output_type(edge_basis_3_field, stk::io::FieldOutputType::VECTOR_3D);
   stk::io::set_field_output_type(edge_length_field, stk::io::FieldOutputType::SCALAR);
   stk::io::set_field_output_type(elem_radius_field, stk::io::FieldOutputType::SCALAR);
   stk::io::set_field_output_type(elem_rest_length_field, stk::io::FieldOutputType::SCALAR);
@@ -1760,6 +1965,7 @@ void run(int argc, char **argv) {
   // stk::io::put_io_part_attribute(boundary_sperm_part);  // There are special ways to write out element-rank parts
   stk::io::put_io_part_attribute(centerline_twist_springs_part);
   stk::io::put_io_part_attribute(spherocylinder_segments_part);
+  stk::io::put_edge_block_io_part_attribute(meta_data.get_topology_root_part(stk::topology::LINE_2));
 
   // Assign fields to parts
   double init_zero6[6] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
@@ -1780,18 +1986,21 @@ void run(int argc, char **argv) {
   stk::mesh::put_field_on_mesh(node_radius_field, universal_part, 1, nullptr);
   stk::mesh::put_field_on_mesh(node_archlength_field, universal_part, 1, nullptr);
   stk::mesh::put_field_on_mesh(node_sperm_id_field, universal_part, 1, nullptr);
-  stk::mesh::put_field_on_mesh(edge_orientation_field, centerline_twist_springs_part, 4, nullptr);
-  stk::mesh::put_field_on_mesh(old_edge_orientation_field, centerline_twist_springs_part, 4, nullptr);
-  stk::mesh::put_field_on_mesh(edge_tangent_field, centerline_twist_springs_part, 3, nullptr);
-  stk::mesh::put_field_on_mesh(old_edge_tangent_field, centerline_twist_springs_part, 3, nullptr);
-  stk::mesh::put_field_on_mesh(edge_binormal_field, centerline_twist_springs_part, 3, nullptr);
-  stk::mesh::put_field_on_mesh(edge_length_field, centerline_twist_springs_part, 1, nullptr);
-  stk::mesh::put_field_on_mesh(elem_radius_field, spherocylinder_segments_part, 1, nullptr);
-  stk::mesh::put_field_on_mesh(elem_radius_field, centerline_twist_springs_part, 1, nullptr);
-  stk::mesh::put_field_on_mesh(elem_rest_length_field, centerline_twist_springs_part, 1, nullptr);
-  stk::mesh::put_field_on_mesh(elem_aabb_field, spherocylinder_segments_part, 6, init_zero6);
-  stk::mesh::put_field_on_mesh(elem_old_aabb_field, spherocylinder_segments_part, 6, init_zero6);
-  stk::mesh::put_field_on_mesh(elem_aabb_disp_since_last_rebuild_field, spherocylinder_segments_part, 6, init_zero6);
+  stk::mesh::put_field_on_mesh(edge_orientation_field, universal_part, 4, nullptr);
+  stk::mesh::put_field_on_mesh(old_edge_orientation_field, universal_part, 4, nullptr);
+  stk::mesh::put_field_on_mesh(edge_tangent_field, universal_part, 3, nullptr);
+  stk::mesh::put_field_on_mesh(old_edge_tangent_field, universal_part, 3, nullptr);
+  stk::mesh::put_field_on_mesh(edge_binormal_field, universal_part, 3, nullptr);
+  stk::mesh::put_field_on_mesh(edge_basis_1_field, universal_part, 3, nullptr);
+  stk::mesh::put_field_on_mesh(edge_basis_2_field, universal_part, 3, nullptr);
+  stk::mesh::put_field_on_mesh(edge_basis_3_field, universal_part, 3, nullptr);
+  stk::mesh::put_field_on_mesh(edge_length_field, universal_part, 1, nullptr);
+  stk::mesh::put_field_on_mesh(elem_radius_field, universal_part, 1, nullptr);
+  stk::mesh::put_field_on_mesh(elem_radius_field, universal_part, 1, nullptr);
+  stk::mesh::put_field_on_mesh(elem_rest_length_field, universal_part, 1, nullptr);
+  stk::mesh::put_field_on_mesh(elem_aabb_field, universal_part, 6, init_zero6);
+  stk::mesh::put_field_on_mesh(elem_old_aabb_field, universal_part, 6, init_zero6);
+  stk::mesh::put_field_on_mesh(elem_aabb_disp_since_last_rebuild_field, universal_part, 6, init_zero6);
 
   // Concretize the mesh
   meta_data.commit();
@@ -1817,13 +2026,16 @@ void run(int argc, char **argv) {
   stk_io_broker.add_field(output_file_index, edge_orientation_field);
   stk_io_broker.add_field(output_file_index, edge_tangent_field);
   stk_io_broker.add_field(output_file_index, edge_binormal_field);
+  stk_io_broker.add_field(output_file_index, edge_basis_1_field);
+  stk_io_broker.add_field(output_file_index, edge_basis_2_field);
+  stk_io_broker.add_field(output_file_index, edge_basis_3_field);
   stk_io_broker.add_field(output_file_index, edge_length_field);
   stk_io_broker.add_field(output_file_index, elem_radius_field);
   stk_io_broker.add_field(output_file_index, elem_rest_length_field);
   stk_io_broker.add_field(output_file_index, elem_aabb_field);
 
   declare_and_initialize_sperm(bulk_data, centerline_twist_springs_part, boundary_sperm_part,
-                               spherocylinder_segments_part,  //
+                               spherocylinder_segments_part,  // 
                                run_config.num_sperm, run_config.num_nodes_per_sperm, run_config.sperm_radius,
                                run_config.sperm_initial_segment_length,
                                run_config.sperm_rest_segment_length,  //
@@ -1859,6 +2071,9 @@ void run(int argc, char **argv) {
   NgpDoubleField ngp_edge_tangent_field = stk::mesh::get_updated_ngp_field<double>(edge_tangent_field);
   NgpDoubleField ngp_old_edge_tangent_field = stk::mesh::get_updated_ngp_field<double>(old_edge_tangent_field);
   NgpDoubleField ngp_edge_binormal_field = stk::mesh::get_updated_ngp_field<double>(edge_binormal_field);
+  NgpDoubleField ngp_edge_basis_1_field = stk::mesh::get_updated_ngp_field<double>(edge_basis_1_field);
+  NgpDoubleField ngp_edge_basis_2_field = stk::mesh::get_updated_ngp_field<double>(edge_basis_2_field);
+  NgpDoubleField ngp_edge_basis_3_field = stk::mesh::get_updated_ngp_field<double>(edge_basis_3_field);
   NgpDoubleField ngp_edge_length_field = stk::mesh::get_updated_ngp_field<double>(edge_length_field);
   NgpDoubleField ngp_elem_radius_field = stk::mesh::get_updated_ngp_field<double>(elem_radius_field);
   NgpDoubleField ngp_elem_rest_length_field = stk::mesh::get_updated_ngp_field<double>(elem_rest_length_field);
@@ -1904,7 +2119,7 @@ void run(int argc, char **argv) {
     if (rebuild_neighbors) {
       std::cout << "Rebuilding neighbors." << std::endl;
 
-      geom::PeriodicMetricYZ<double> periodic_metric(run_config.domain_width, run_config.domain_height);
+      geom::PeriodicMetricXY<double> periodic_metric(run_config.domain_width, run_config.domain_width);
       auto [target_search_aabbs, source_search_aabbs] =
           create_search_aabbs(bulk_data, ngp_mesh, run_config.search_buffer, periodic_metric,
                               spherocylinder_segments_part, ngp_elem_aabb_field);
@@ -1924,8 +2139,8 @@ void run(int argc, char **argv) {
     // Prepare the current configuration.
     {
       // Apply constraints before we move the nodes.
-      disable_twist(ngp_mesh, ngp_node_twist_field, ngp_node_twist_velocity_field);
-      apply_monolayer(ngp_mesh, centerline_twist_springs_part, ngp_node_coords_field, ngp_node_velocity_field);
+      // disable_twist(ngp_mesh, ngp_node_twist_field, ngp_node_twist_velocity_field);
+      // apply_monolayer(ngp_mesh, centerline_twist_springs_part, ngp_node_coords_field, ngp_node_velocity_field);
 
       // Rotate the field states. Use a deep copy to update the old fields.
       deep_copy<double, 3>(ngp_mesh, ngp_old_node_coords_field, ngp_node_coords_field, universal_part);
@@ -1962,20 +2177,16 @@ void run(int argc, char **argv) {
     // Evaluate forces f(x(t + dt)).
     {
       // Hertzian contact force
-      compute_hertzian_contact_force_and_torque(bulk_data, ngp_mesh, run_config.sperm_youngs_modulus,
-                                                run_config.sperm_poissons_ratio, spherocylinder_segments_part,
-                                                search_results, ngp_node_coords_field, ngp_elem_radius_field,
-                                                ngp_node_force_field);
+      // compute_hertzian_contact_force_and_torque(bulk_data, ngp_mesh, run_config.sperm_youngs_modulus,
+      //                                           run_config.sperm_poissons_ratio, spherocylinder_segments_part,
+      //                                           search_results, ngp_node_coords_field, ngp_elem_radius_field,
+      //                                           ngp_node_force_field);
 
       // Centerline twist rod forces
-
-      if (timestep_index > 1000000) {
-        auto corrected_time = current_time - 1000000 * run_config.timestep_size;
-        propagate_rest_curvature(ngp_mesh, corrected_time, run_config.amplitude, run_config.spatial_wavelength,
-                                 run_config.temporal_wavelength,  //
-                                 centerline_twist_springs_part, ngp_node_archlength_field, ngp_node_sperm_id_field,
-                                 ngp_node_rest_curvature_field);
-      }
+      // propagate_rest_curvature(ngp_mesh, current_time, run_config.amplitude, run_config.spatial_wavelength,
+      //                           run_config.temporal_wavelength,  //
+      //                           centerline_twist_springs_part, ngp_node_archlength_field, ngp_node_sperm_id_field,
+      //                           ngp_node_rest_curvature_field);
 
       compute_edge_information(ngp_mesh, centerline_twist_springs_part,  //
                                ngp_node_coords_field, ngp_node_twist_field, ngp_edge_orientation_field,
@@ -2002,6 +2213,7 @@ void run(int argc, char **argv) {
                                    ngp_node_velocity_field, ngp_node_twist_velocity_field);
     }
 
+
     // IO. If desired, write out the data for time t.
     if (timestep_index % run_config.io_frequency == 0) {
       stk::mesh::ngp_field_fence(meta_data);
@@ -2010,6 +2222,12 @@ void run(int argc, char **argv) {
         double avg_time_per_timestep = static_cast<double>(timer.seconds()) / static_cast<double>(timestep_index);
         std::cout << "Time per timestep: " << std::setprecision(15) << avg_time_per_timestep << std::endl;
       }
+
+      // Update the edge bases before writing
+      update_edge_basis(ngp_mesh, centerline_twist_springs_part, ngp_edge_orientation_field, ngp_edge_basis_1_field,
+                        ngp_edge_basis_2_field, ngp_edge_basis_3_field);
+
+
 
       // Sync every io field to the host
       ngp_node_coords_field.sync_to_host();
@@ -2027,6 +2245,9 @@ void run(int argc, char **argv) {
       ngp_edge_orientation_field.sync_to_host();
       ngp_edge_tangent_field.sync_to_host();
       ngp_edge_binormal_field.sync_to_host();
+      ngp_edge_basis_1_field.sync_to_host();
+      ngp_edge_basis_2_field.sync_to_host();
+      ngp_edge_basis_3_field.sync_to_host();
       ngp_edge_length_field.sync_to_host();
       ngp_elem_radius_field.sync_to_host();
       ngp_elem_rest_length_field.sync_to_host();
@@ -2056,7 +2277,8 @@ int main(int argc, char **argv) {
   Kokkos::print_configuration(std::cout);
 
   // Run the simulation using the given parameters
-  mundy::run(argc, argv);
+  mundy::test_generalized_map();
+  // mundy::run(argc, argv);
 
   // Finalize MPI
   Kokkos::finalize();
