@@ -872,6 +872,49 @@ struct TaggedBagOfObjects {
 //     for num_variants in range(1, 13):
 //         print(f"{num_alts:2d} {num_variants:2d} {num_visits_sorted(num_alts, num_variants):6d} {num_visits_direct(num_alts, num_variants):6d} {num_visits_sorted_and_tagged(num_alts, num_variants):6d}")
 
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Same logic, a newer day.
+//
+// The above idea has a flaw. The fact that the variants are tagged encodes an order, which means that compile-time
+// enumeration of all possible types is impractical since we must expand (#Als)^(#Vars) expansions. We can however, be 
+// selective in what we make compile-time. We can continue to unrole with sorting giving #Alts choose #Vars with replacement
+// expansions, which is much much smaller. We store in arrays the sets of active types (as opposed to in a single tuple) so
+// that we can access them via runtime index and we store an aggregate mapping tag to.... In this design, Tag -> return 
+// type is a runtime map meaning we cannot have get<Tag>(agg) return a different concrete view type. And given a tag, we
+// have no ability to know which active type is associated with it at compile-time, not without enumerating all possible
+// combinations. At best, we can do get<Tag>(v_agg) and return a variant, taking us back to step 1.
+//
+// If I, magically, knew the return type from get<Tag>(v_agg), then I would know the active type for that Tag at compile-
+// time. Can we go the other way and make this map compile-time compatable while avoiding using templates in python?
+// That is to say, can we append to a VariantAggregate in a way that always maintains sorting by active type? Instead
+// of appending by variant, you would append by concrete type. In this way, we would know exactly where within the tags tuple
+// to insert the new tag to maintain sorting. That works in C++. This would allow us to have a single interface for functions
+// that are meant to act on shared values or fields without having to enumerate all possibilities of scalar/field. In this 
+// design, because the tags are already sorted by active type, we can call get<Tag>(agg), as we do now, and get out the 
+// correct result since Tag to return type is known at compile-time. Because these are sorted we have as many types as
+// #Alts choose #Vars with replacement.
+//
+// How does this new design impact python?
+// a = make_accessor_aggregate()        % Return type is AccessorAggregate<>
+//       .append_shared("RADIUS", 2.5)         % Return type is AccessorAggregate<SharedAccessor>
+//       .append_field("COORDS", node_coords)  % Return type is AccessorAggregate<SharedAccessor, VectorAccessor>
+//       .append_shared("MASS", 1.0)           % Return type is AccessorAggregate<SharedAccessor, SharedAccessor, VectorAccessor>
+//
+// We would need to auto-generate these types but they would each have exactly two append functions, one that takes in a shared
+// value and one that takes in a field. Each would know exactly where within the return type to append.
+//
+// What about mapping from a string tagged aggregate (like up here in python) to C++? Well, in this design, AccessorAggregate
+// contains an array of variants sorted by their accessor type and a vector of string tags. The problem is that AccessorAggregate
+// needs to have a compile-time get<I>(aagg) to fetch the I'th object in the aggregate, so the runtime tags here are useless, as
+// they have no ability to perform get!
+//
+// auto center_racc = ragg.get_accessor<accessor_t::VECTOR3<double>>(NODE_RANK, rename_map["CENTER"]);  // Variant :(
+// auto radius_racc = ragg.get_accessor<accessor_t::SCALAR<double>>(ELEM_RANK, rename_map["RADIUS"]);
+// auto tagged_ragg = make_tagged_ragg<stk::topology::PARTICLE>(bulk_data, selector)
+//                        .add_accessor<CENTER>(center_racc)
+//                        .add_accessor<RADIUS>(radius_racc);
 }  // namespace mesh
 
 }  // namespace mundy

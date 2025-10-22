@@ -1,3 +1,5 @@
+//g++ -O3 -std=c++20 ./variant_bench.cpp
+
 #include <cassert>
 #include <chrono>
 #include <cstddef>
@@ -1448,24 +1450,25 @@ static inline double poly6_sum_v_agg(const VarAgg& v_agg, std::size_t N) {
 // template <typename VarAgg>
 // static inline double poly6_sum_v_agg(const VarAgg& v_agg, std::size_t N) {
 //   double s = 0.0;
+//   const auto& vx = get<TagX>(v_agg);
+//   const auto& va = get<TagA>(v_agg);
+//   const auto& vb = get<TagB>(v_agg);
+//   const auto& vc = get<TagC>(v_agg);
+//   const auto& vd = get<TagD>(v_agg);
+//   const auto& ve = get<TagE>(v_agg);
+//   const auto& vf = get<TagF>(v_agg);
 //   for (std::size_t i = 0; i < N; ++i) {
-//     const auto& vx = get<TagX>(v_agg);
-//     const auto& va = get<TagA>(v_agg);
-//     const auto& vb = get<TagB>(v_agg);
-//     const auto& vc = get<TagC>(v_agg);
-//     const auto& vd = get<TagD>(v_agg);
-//     const auto& ve = get<TagE>(v_agg);
-//     const auto& vf = get<TagF>(v_agg);
 
-//     const double xi = holds_alternative<ScalarAccessor>(vx) ? get<ScalarAccessor>(vx)(i) :
-//     get<VectorAccessor>(vx)(i); const double ai = holds_alternative<ScalarAccessor>(va) ? get<ScalarAccessor>(va)(i)
-//     : get<VectorAccessor>(va)(i); const double bi = holds_alternative<ScalarAccessor>(vb) ?
-//     get<ScalarAccessor>(vb)(i) : get<VectorAccessor>(vb)(i); const double ci = holds_alternative<ScalarAccessor>(vc)
-//     ? get<ScalarAccessor>(vc)(i) : get<VectorAccessor>(vc)(i); const double di =
-//     holds_alternative<ScalarAccessor>(vd) ? get<ScalarAccessor>(vd)(i) : get<VectorAccessor>(vd)(i); const double ei
-//     = holds_alternative<ScalarAccessor>(ve) ? get<ScalarAccessor>(ve)(i) : get<VectorAccessor>(ve)(i); const double
-//     fi = holds_alternative<ScalarAccessor>(vf) ? get<ScalarAccessor>(vf)(i) : get<VectorAccessor>(vf)(i); s +=
-//     (((((ai * xi + bi) * xi + ci) * xi + di) * xi + ei) * xi + fi);
+// // clang-format off
+//     const double xi = holds_alternative<ScalarAccessor>(vx) ? get<ScalarAccessor>(vx)(i) : get<VectorAccessor>(vx)(i); 
+//     const double ai = holds_alternative<ScalarAccessor>(va) ? get<ScalarAccessor>(va)(i) : get<VectorAccessor>(va)(i); 
+//     const double bi = holds_alternative<ScalarAccessor>(vb) ? get<ScalarAccessor>(vb)(i) : get<VectorAccessor>(vb)(i); 
+//     const double ci = holds_alternative<ScalarAccessor>(vc) ? get<ScalarAccessor>(vc)(i) : get<VectorAccessor>(vc)(i); 
+//     const double di = holds_alternative<ScalarAccessor>(vd) ? get<ScalarAccessor>(vd)(i) : get<VectorAccessor>(vd)(i); 
+//     const double ei = holds_alternative<ScalarAccessor>(ve) ? get<ScalarAccessor>(ve)(i) : get<VectorAccessor>(ve)(i); 
+//     const double fi = holds_alternative<ScalarAccessor>(vf) ? get<ScalarAccessor>(vf)(i) : get<VectorAccessor>(vf)(i); 
+// // clang-format on
+//     s += (((((ai * xi + bi) * xi + ci) * xi + di) * xi + ei) * xi + fi);
 //   }
 //   return s;
 // }
@@ -1513,7 +1516,7 @@ template <class Fn>
 static double time_avg_ns(Fn&& fn, int iters) {
   using namespace std::chrono;
 
-  for (int warm = 0; warm < 100; ++warm) {
+  for (int warm = 0; warm < 5000; ++warm) {
     double s = fn();
     std::cout << "warm sum=" << std::setprecision(17) << s << '\n';
   }
@@ -1533,7 +1536,7 @@ static double time_avg_ns(Fn&& fn, int iters) {
 int main(int argc, char** argv) {
   // Parameters
   std::size_t length = 1'000'000;  // elements
-  int iters = 100;                 // timing iterations
+  int iters = 5000;                 // timing iterations
   if (argc > 1) {
     length = static_cast<std::size_t>(std::stoull(argv[1]));
   }
