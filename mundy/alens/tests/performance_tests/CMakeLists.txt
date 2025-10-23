@@ -112,41 +112,6 @@ tribits_add_executable(
 #     )
 
 tribits_add_executable(
-    NonInteractingSperm
-    SOURCES
-    NonInteractingSperm.cpp
-    CATEGORIES PERFORMANCE
-    )
-
-tribits_add_executable(
-    CollidingSperm
-    SOURCES
-    CollidingSperm.cpp
-    CATEGORIES PERFORMANCE
-    )
-
-tribits_add_executable(
-    CollidingFrictionalSperm
-    SOURCES
-    CollidingFrictionalSperm.cpp
-    CATEGORIES PERFORMANCE
-    )
-
-tribits_add_executable(
-    CollidingOverdampedFrictionalSperm
-    SOURCES
-    CollidingOverdampedFrictionalSperm.cpp
-    CATEGORIES PERFORMANCE
-    )
-
-tribits_add_executable(
-    PeriodicCollidingOverdampedFrictionalSperm
-    SOURCES
-    PeriodicCollidingOverdampedFrictionalSperm.cpp
-    CATEGORIES PERFORMANCE
-    )
-
-tribits_add_executable(
     SpheresPerif
     SOURCES
     SpheresPerif.cpp
