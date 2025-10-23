@@ -1,0 +1,36 @@
+simulation:
+    configuration:
+        n_dim: 3
+        configuration_version: 0
+        restart: false
+        restart_filename: foo.txt
+        meta_method_subset_execution_interface:
+            sphere_compute_aabb:
+                method: COMPUTE_AABB
+                fixed_params:
+                    enabled_kernel_names: [SPHERE]
+                    element_aabb_field_name: ELEMENT_AABB
+                    SPHERE:
+                        valid_entity_part_names: [SPHERES]
+                mutable_params:
+                    buffer_distance: 0.0
+        meta_method_pairwise_subset_execution_interface:
+            sphere_neighbor_linkers:
+                method: GENERATE_NEIGHBOR_LINKERS
+    actions:
+        n_steps: 1
+        setup:
+            sphere_compute_aabb:
+                trigger:
+                    name: always
+        run:
+            sphere_compute_aabb:
+                trigger:
+                    name: always
+            sphere_neighbor_linkers:
+                trigger:
+                    name: always
+        finalize:
+            sphere_neighbor_linkers:
+                trigger:
+                    name: always

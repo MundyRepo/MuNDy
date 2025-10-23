@@ -1,0 +1,15 @@
+simulation:
+    configuration:
+        n_dim: 3
+        meta_method_subset_execution_interface:
+            sphere_compute_aabb:
+                method: COMPUTE_AABB
+                fixed_params:
+                    enabled_kernel_names: [SPHERE]
+                    element_aabb_field_name: ELEMENT_AABB
+                    SPHERE:
+                        valid_entity_part_names: [SPHERES]
+                mutable_params:
+                    buffer_distance: 0.0
+    actions:
+        run: [sphere_compute_aabb]

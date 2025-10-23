@@ -1,0 +1,6 @@
+#ifndef MUNDYAGENTS_CONFIG_HPP_
+#define MUNDYAGENTS_CONFIG_HPP_
+
+// Declare special variables, especially those related to optional features, TPLs, and workarounds.
+
+#endif  // MUNDYAGENTS_CONFIG_HPP_
