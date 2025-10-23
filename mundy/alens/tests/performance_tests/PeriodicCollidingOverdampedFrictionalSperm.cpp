@@ -18,16 +18,8 @@
 // **********************************************************************************************************************
 // @HEADER
 
-/* Notes:
-
-The goal of this example is to simulate the swimming motion of a multiple, colliding long sperm.
-*/
-
-// External libs
+// External
 #include <openrand/philox.h>
-
-// Boost
-// #include <boost/math/tools/roots.hpp>
 
 // Kokkos
 #include <Kokkos_Core.hpp>  // for Kokkos::initialize, Kokkos::finalize, Kokkos::Timer
@@ -75,24 +67,23 @@ The goal of this example is to simulate the swimming motion of a multiple, colli
 #include <stk_search/SearchMethod.hpp>
 #include <stk_search/Sphere.hpp>
 
-// Mundy libs
+// Mundy core
 #include <mundy_core/MakeStringArray.hpp>  // for mundy::core::make_string_array
 #include <mundy_core/throw_assert.hpp>     // for MUNDY_THROW_ASSERT
-#include <mundy_geom/periodicity.hpp>
-#include <mundy_geom/primitives.hpp>
-#include <mundy_geom/randomize.hpp>
-#include <mundy_linkers/ComputeSignedSeparationDistanceAndContactNormal.hpp>  // for mundy::linkers::ComputeSignedSeparationDistanceAndContactNormal
-#include <mundy_linkers/DestroyNeighborLinkers.hpp>         // for mundy::linkers::DestroyNeighborLinkers
-#include <mundy_linkers/EvaluateLinkerPotentials.hpp>       // for mundy::linkers::EvaluateLinkerPotentials
-#include <mundy_linkers/GenerateNeighborLinkers.hpp>        // for mundy::linkers::GenerateNeighborLinkers
-#include <mundy_linkers/LinkerPotentialForceReduction.hpp>  // for mundy::linkers::LinkerPotentialForceReduction
-#include <mundy_linkers/NeighborLinkers.hpp>                // for mundy::linkers::NeighborLinkers
-#include <mundy_linkers/neighbor_linkers/SpherocylinderSegmentSpherocylinderSegmentLinkers.hpp>  // for mundy::...::SpherocylinderSegmentSpherocylinderSegmentLinkers
+
+// Mundy math
 #include <mundy_math/Matrix3.hpp>     // for mundy::math::Matrix3
 #include <mundy_math/Quaternion.hpp>  // for mundy::math::Quaternion, mundy::math::quat_from_parallel_transport
 #include <mundy_math/Vector3.hpp>     // for mundy::math::Vector3
 #include <mundy_math/distance/SegmentSegment.hpp>  // for mundy::math::distance::distance_sq_from_point_to_line_segment
-#include <mundy_mesh/BulkData.hpp>                 // for mundy::mesh::BulkData
+
+// Mundy geom
+#include <mundy_geom/periodicity.hpp>
+#include <mundy_geom/primitives.hpp>
+#include <mundy_geom/randomize.hpp>
+
+// Mundy mesh
+#include <mundy_mesh/BulkData.hpp>      // for mundy::mesh::BulkData
 #include <mundy_mesh/FieldViews.hpp>    // for mundy::mesh::vector3_field_data, mundy::mesh::quaternion_field_data
 #include <mundy_mesh/MetaData.hpp>      // for mundy::mesh::MetaData
 #include <mundy_mesh/NgpFieldBLAS.hpp>  // for mundy::mesh::field_fill
@@ -100,94 +91,75 @@ The goal of this example is to simulate the swimming motion of a multiple, colli
 #include <mundy_meta/FieldReqs.hpp>                 // for mundy::meta::FieldReqs
 #include <mundy_meta/MeshReqs.hpp>                  // for mundy::meta::MeshReqs
 #include <mundy_meta/PartReqs.hpp>                  // for mundy::meta::PartReqs
-#include <mundy_shapes/ComputeAABB.hpp>             // for mundy::shapes::ComputeAABB
 
 namespace mundy {
 
-/// \brief The main function for the sperm simulation broken down into digestible chunks.
+/// \brief A simulation of N long flexible fibers (sperm) in a periodic domain with undulatory motion, contact, and
+/// overdamped dynamics.
 ///
-/// This class is in charge of setting up and executing the following tasks. In the future, this will all be handled by
-/// the Configurator.
-///   // Preprocess
-///   - Parse user parameter
+/// #################################################################
+/// # How to install the dependencies for this code on FI's cluster #
+/// module purge
+/// module load modules/2.3-20240529
+/// module load slurm cuda/12.3.2 openmpi/cuda-4.0.7 gcc/11.4.0 cmake/3.27.9 hwloc openblas hdf5 netcdf-c
 ///
-///   // Setup
-///   - Declare the fixed and mutable params for the desired MetaMethods
-///   - Construct the mesh and the method instances
-///   - Declare and initialize the sperm's nodes, edges, and elements (centerline twist springs)
-///    (Using BulkData's declare_node, declare_element, declare_element_edge functions)
+/// git clone --depth=2 --branch=releases/v0.23 https://github.com/spack/spack.git ~/spack
+/// . ~/spack/share/spack/setup-env.sh
+/// spack env create tril16_gpu
+/// spack env activate tril16_gpu
+/// spack external find cuda
+/// spack external find cmake
+/// spack external find openmpi
+/// spack external find openblas
+/// spack external find hdf5
+/// spack external find hwloc
 ///
-///   // Timeloop
-///   - Run the timeloop for t in range(0, T):
-///       // IO.
-///       - If desired, write out the data for time t
-///         (Using stk::io::StkMeshIoBroker)
+/// spack add kokkos+openmp+cuda+cuda_constexpr+cuda_lambda+cuda_relocatable_device_code~cuda_uvm~shared+wrapper
+/// cuda_arch=90 ^cuda@12.3.107 spack add magma+cuda cuda_arch=90 ^cuda@12.3.107 spack add
+/// trilinos@16.0.0%gcc@11.4.0+belos~boost+exodus+hdf5+kokkos+openmp++cuda+cuda_rdc+stk+zoltan+zoltan2~shared~uvm+wrapper
+/// cuda_arch=90 cxxstd=17 ^cuda@12.3.107 ^openblas@0.3.26
 ///
-///       // Prepare the current configuration.
-///       - Rotate the field states
-///         (Using BulkData's update_field_data_states function)
+/// spack concretize
+/// spack install -j12
 ///
-///       - Zero the node forces and velocities for time t + dt
-///         (Using mundy's fill_field_with_value function)
+/// ####################
+/// # Installing Mundy #
+/// git clone https://github.com/MundyRepo/MuNDy.git -b runtime
+/// cd MuNDy
+/// source ~/spack/share/spack/setup-env.sh
+/// spack env activate tril16_gpu
+/// module purge
+/// module load modules/2.3-20240529
+/// module load slurm cuda/12.3.2 openmpi/cuda-4.0.7 gcc/11.4.0 cmake/3.27.9 hwloc openblas hdf5 netcdf-c
 ///
-///       // Motion from t -> t + dt:
-///        - Apply velocity/acceleration constraints like no motion for particle 1
-///         (By directly looping over all nodes and setting the velocity/acceleration to zero)
+/// cd dep
+/// bash ./install_all.sh
+/// ~/spack/opt/spack/linux-rocky8-cascadelake/gcc-11.4.0/trilinos-16.0.0-2ldlcb6knaptx7q23x2jtdngukx6kc4e
+/// ~/envs/GPUMundyScratch/ cd ..
 ///
-///        - Evaluate x(t + dt) = x(t) + v(t) * dt + a(t) * dt^2 / 2
-///         (By looping over all nodes and updating the coordinates)
+/// mkdir build && cd build
+/// bash ../do-cmake-gpu.sh
+/// ~/spack/opt/spack/linux-rocky8-cascadelake/gcc-11.4.0/trilinos-16.0.0-2ldlcb6knaptx7q23x2jtdngukx6kc4e
+/// ~/envs/GPUMundyScratch/ ../ make -j12 ctest -j12 --output-on-failure
 ///
-///       // Evaluate forces f(x(t + dt))
-///       {
-///         // Hertzian contact
-///         {
-///             // Neighbor detection rod-rod
-///             - Check if the rod-rod neighbor list needs updated or not
-///                 - Compute the AABBs for the rods
-///                  (Using mundy's ComputeAABB function)
+/// ####################
+/// # Running the code #
 ///
-///                 - Delete rod-rod neighbor linkers that are too far apart
-///                  (Using the DestroyDistantNeighbors technique of mundy's DestroyNeighborLinkers function)
+/// source ~/spack/share/spack/setup-env.sh
+/// spack env activate tril16_gpu
+/// module purge
+/// module load modules/2.3-20240529
+/// module load slurm cuda/12.3.2 openmpi/cuda-4.0.7 gcc/11.4.0 cmake/3.27.9 hwloc openblas hdf5 netcdf-c
 ///
-///                 - Generate neighbor linkers between nearby rods
-///                  (Using the GenerateNeighborLinkers function of mundy's GenerateNeighborLinkers function)
+/// cd build
+/// srun --nodes=1 --constraint=h100 -p gpu --gpus=1 --ntasks=1 --cpus-per-task=1 --time=01:00:00 --pty bash -i
+/// mpirun -n 1 ./mundy/alens/tests/performance_tests/MundyAlens_PeriodicCollidingOverdampedFrictionalSperm.exe
 ///
-///             // Hertzian contact force evaluation
-///             - Compute the signed separation distance and contact normal between neighboring rods
-///              (Using mundy's ComputeSignedSeparationDistanceAndContactNormal function)
+/// ######################
+/// # Simulation details #
 ///
-///             - Evaluate the Hertzian contact potential between neighboring rods
-///              (Using mundy's EvaluateLinkerPotentials function)
-///
-///             - Sum the linker potential force to get the induced node force on each rod
-///              (Using mundy's LinkerPotentialForceReduction function)
-///         }
-///
-///         // Centerline twist rod model
-///         - Compute the edge information (length, tangent, and binormal)
-///          (By looping over all edges and computing the edge length, tangent, binormal)
-///
-///         - Compute the node curvature and rotation gradient
-///          (By looping over all centerline twist spring elements and computing the curvature & rotation gradient at
-///          their center node using the edge orientations)
-///
-///         - Compute the internal force and twist torque
-///          (By looping over all centerline twist spring elements, using the curvature to compute the induced
-///          benching/twisting torque and stretch force, and using them to compute the force and twist-torque on the
-///          nodes. .)
-///       }
-///
-///       // Compute velocity and acceleration
-///        - Evaluate a(t + dt) = M^{-1} f(x(t + dt))
-///         (By looping over all nodes and computing the node acceleration and twist acceleration from the force and
-///         twist torque)
-///
-///        - Evaluate v(t + dt) = v(t) + (a(t) + a(t + dt)) * dt / 2
-///         (By looping over all nodes and updating the node velocity and twist rate using the corresponding
-///         accelerations)
-///
-/// The sperm themselves are modeled as a chain of rods with a centerline twist spring connecting pairs of adjacent
-/// edges:
+/// The sperm themselves are modeled as a chain of extensible rods with a centerline twist spring connecting pairs of
+/// adjacent edges:
 /*
 /// n1       n3        n5        n7
 ///  \      /  \      /  \      /
@@ -203,11 +175,10 @@ namespace mundy {
 ///
 /// STK EntityId-wise. Nodes are numbered sequentially from 1 to num_nodes. Centerline twist springs are numbered
 /// sequentially from 1 to num_nodes-2.
-///
-/// To turn this into a movie use:
-/// ffmpeg -framerate 20 -pattern_type glob -i 'mov_stiff*.png' -c:v libvpx-vp9 -b:v 0 -crf 24 -threads 16 -row-mt 1
-/// -pass 1 -f null /dev/null && ffmpeg -framerate 60 -pattern_type glob -i 'mov_stiff*.png' -c:v libvpx-vp9 -b:v 0 -crf
-/// 24 -threads 16 -row-mt 1 -pass 2 stiff_movie.webm
+
+//! \name Helpers and type aliases
+//@{
+
 using DoubleField = stk::mesh::Field<double>;
 using IntField = stk::mesh::Field<int>;
 using NgpDoubleField = stk::mesh::NgpField<double>;
@@ -241,150 +212,25 @@ inline void debug_print([[maybe_unused]] auto thing_to_print, [[maybe_unused]] i
 #endif
 }
 
-struct RunConfig {
-  void parse_user_inputs(int argc, char **argv) {
-    debug_print("Parsing user inputs.");
+template <typename FieldValueType, int FieldDimension>
+void deep_copy(stk::mesh::NgpMesh &ngp_mesh, stk::mesh::NgpField<FieldValueType> &target_field,
+               stk::mesh::NgpField<FieldValueType> &source_field, const stk::mesh::Selector &selector) {
+  target_field.sync_to_device();
+  source_field.sync_to_device();
 
-    // Parse the command line options.
-    Teuchos::CommandLineProcessor cmdp(false, false);
+  stk::mesh::for_each_entity_run(
+      ngp_mesh, target_field.get_rank(), selector, KOKKOS_LAMBDA(const stk::mesh::FastMeshIndex &index) {
+        for (int i = 0; i < FieldDimension; ++i) {
+          target_field(index, i) = source_field(index, i);
+        }
+      });
 
-    // If we should accept the parameters directly from the command line or from a file
-    bool use_input_file = false;
-    cmdp.setOption("use_input_file", "no_use_input_file", &use_input_file, "Use an input file.");
-    bool use_input_file_found = cmdp.parse(argc, argv) == Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL;
-    MUNDY_THROW_ASSERT(use_input_file_found, std::invalid_argument, "Failed to parse the command line arguments.");
+  target_field.modify_on_device();
+}
+//@}
 
-    // Switch to requiring that all options must be recognized.
-    cmdp.recogniseAllOptions(true);
-
-    if (!use_input_file) {
-      // Parse the command line options.
-
-      //   Sperm initialization:
-      cmdp.setOption("num_sperm", &num_sperm, "Number of sperm.");
-      cmdp.setOption("num_nodes_per_sperm", &num_nodes_per_sperm, "Number of nodes per sperm.");
-      cmdp.setOption("sperm_radius", &sperm_radius, "The radius of each sperm.");
-      cmdp.setOption("sperm_initial_segment_length", &sperm_initial_segment_length, "Initial sperm segment length.");
-      cmdp.setOption("sperm_rest_segment_length", &sperm_rest_segment_length, "Rest sperm segment length.");
-      cmdp.setOption("sperm_rest_curvature_twist", &sperm_rest_curvature_twist, "Rest curvature (twist) of the sperm.");
-      cmdp.setOption("sperm_rest_curvature_bend1", &sperm_rest_curvature_bend1,
-                     "Rest curvature (bend along the first coordinate direction) of the sperm.");
-      cmdp.setOption("sperm_rest_curvature_bend2", &sperm_rest_curvature_bend2,
-                     "Rest curvature (bend along the second coordinate direction) of the sperm.");
-
-      cmdp.setOption("sperm_density", &sperm_density, "Density of the sperm.");
-      cmdp.setOption("sperm_youngs_modulus", &sperm_youngs_modulus, "Young's modulus of the sperm.");
-      cmdp.setOption("sperm_poissons_ratio", &sperm_poissons_ratio, "Poisson's ratio of the sperm.");
-
-      //   The simulation:
-      cmdp.setOption("num_time_steps", &num_time_steps, "Number of time steps.");
-      cmdp.setOption("timestep_size", &timestep_size, "Time step size.");
-      cmdp.setOption("io_frequency", &io_frequency, "Number of timesteps between writing output.");
-
-      bool was_parse_successful = cmdp.parse(argc, argv) == Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL;
-      MUNDY_THROW_ASSERT(was_parse_successful, std::invalid_argument, "Failed to parse the command line arguments.");
-    } else {
-      cmdp.setOption("input_file", &input_file_name, "The name of the input file.");
-      bool was_parse_successful = cmdp.parse(argc, argv) == Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL;
-      MUNDY_THROW_ASSERT(was_parse_successful, std::invalid_argument, "Failed to parse the command line arguments.");
-
-      // Read in the parameters from the parameter list.
-      Teuchos::ParameterList param_list = *Teuchos::getParametersFromYamlFile(input_file_name);
-
-      num_sperm = param_list.get<int>("num_sperm");
-      num_nodes_per_sperm = param_list.get<int>("num_nodes_per_sperm");
-      sperm_radius = param_list.get<double>("sperm_radius");
-      sperm_initial_segment_length = param_list.get<double>("sperm_initial_segment_length");
-      sperm_rest_segment_length = param_list.get<double>("sperm_rest_segment_length");
-      sperm_rest_curvature_twist = param_list.get<double>("sperm_rest_curvature_twist");
-      sperm_rest_curvature_bend1 = param_list.get<double>("sperm_rest_curvature_bend1");
-      sperm_rest_curvature_bend2 = param_list.get<double>("sperm_rest_curvature_bend2");
-
-      sperm_density = param_list.get<double>("sperm_density");
-      sperm_youngs_modulus = param_list.get<double>("sperm_youngs_modulus");
-      sperm_poissons_ratio = param_list.get<double>("sperm_poissons_ratio");
-
-      num_time_steps = param_list.get<int>("num_time_steps");
-      timestep_size = param_list.get<double>("timestep_size");
-    }
-
-    check_input_parameters();
-  }
-
-  void check_input_parameters() {
-    debug_print("Checking input parameters.");
-    MUNDY_THROW_ASSERT(num_sperm > 0, std::invalid_argument, "num_sperm must be greater than 0.");
-    MUNDY_THROW_ASSERT(num_nodes_per_sperm > 0, std::invalid_argument, "num_nodes_per_sperm must be greater than 0.");
-    MUNDY_THROW_ASSERT(sperm_radius > 0, std::invalid_argument, "sperm_radius must be greater than 0.");
-    MUNDY_THROW_ASSERT(sperm_initial_segment_length > -1e-12, std::invalid_argument,
-                       "sperm_initial_segment_length must be greater than or equal to 0.");
-    MUNDY_THROW_ASSERT(sperm_rest_segment_length > -1e-12, std::invalid_argument,
-                       "sperm_rest_segment_length must be greater than or equal to 0.");
-    MUNDY_THROW_ASSERT(sperm_youngs_modulus > 0, std::invalid_argument, "sperm_youngs_modulus must be greater than 0.");
-    MUNDY_THROW_ASSERT(sperm_poissons_ratio > 0, std::invalid_argument, "sperm_poissons_ratio must be greater than 0.");
-
-    MUNDY_THROW_ASSERT(num_time_steps > 0, std::invalid_argument, "num_time_steps must be greater than 0.");
-    MUNDY_THROW_ASSERT(timestep_size > 0, std::invalid_argument, "timestep_size must be greater than 0.");
-    MUNDY_THROW_ASSERT(io_frequency > 0, std::invalid_argument, "io_frequency must be greater than 0.");
-  }
-
-  void print() {
-    debug_print("Dumping user inputs.");
-    if (stk::parallel_machine_rank(MPI_COMM_WORLD) == 0) {
-      std::cout << "##################################################" << std::endl;
-      std::cout << "INPUT PARAMETERS:" << std::endl;
-      std::cout << "  num_sperm: " << num_sperm << std::endl;
-      std::cout << "  num_nodes_per_sperm: " << num_nodes_per_sperm << std::endl;
-      std::cout << "  sperm_radius: " << sperm_radius << std::endl;
-      std::cout << "  sperm_initial_segment_length: " << sperm_initial_segment_length << std::endl;
-      std::cout << "  sperm_rest_segment_length: " << sperm_rest_segment_length << std::endl;
-      std::cout << "  spatial_wavelength: " << spatial_wavelength << std::endl;
-      std::cout << "  temporal_wavelength: " << temporal_wavelength << std::endl;
-      std::cout << "  sperm_youngs_modulus: " << sperm_youngs_modulus << std::endl;
-      std::cout << "  sperm_poissons_ratio: " << sperm_poissons_ratio << std::endl;
-      std::cout << "  sperm_density: " << sperm_density << std::endl;
-      std::cout << "  num_time_steps: " << num_time_steps << std::endl;
-      std::cout << "  timestep_size: " << timestep_size << std::endl;
-      std::cout << "  io_frequency: " << io_frequency << std::endl;
-      std::cout << "##################################################" << std::endl;
-    }
-  }
-
-  //! \name User parameters
-  //@{
-  std::string input_file_name = "input.yaml";
-
-  size_t num_sperm = 400;
-  size_t num_nodes_per_sperm = 301;
-  double sperm_radius = 0.5;
-  double sperm_initial_segment_length = 2.0 * sperm_radius;
-  double sperm_rest_segment_length = 2.0 * sperm_radius;
-  double sperm_rest_curvature_twist = 0.0;
-  double sperm_rest_curvature_bend1 = 0.0;
-  double sperm_rest_curvature_bend2 = 0.0;
-
-  double sperm_youngs_modulus = 500000.00;
-  double sperm_relaxed_youngs_modulus = sperm_youngs_modulus;
-  double sperm_normal_youngs_modulus = sperm_youngs_modulus;
-  double sperm_poissons_ratio = 0.3;
-  double sperm_density = 1.0;
-
-  // double amplitude = 0.0;
-  double amplitude = 0.1;
-  double spatial_wavelength = (num_nodes_per_sperm - 1) * sperm_initial_segment_length / 5.0;
-  double temporal_wavelength = 2 * M_PI;  // Units: seconds per oscillations
-  // double temporal_wavelength = std::numeric_limits<double>::infinity();  // Units: seconds per oscillations
-  double viscosity = 1;
-
-  double timestep_size = 1e-5;
-  size_t num_time_steps = 200000000;
-  size_t io_frequency = 10000;
-  double search_buffer = sperm_radius;
-  double domain_width =
-      2 * std::sqrt(num_sperm) * sperm_radius / 0.8;  // One diameter separation between sperm == 50% area fraction
-  double domain_height = (num_nodes_per_sperm - 1) * sperm_initial_segment_length + 11.0;
-  //@}
-};
+//! \name Declaration/initialization of the system
+//@{
 
 std::vector<bool> interleaved_vector(int N, int i) {
   // Ensure N is divisible by 2 and i is within range
@@ -466,7 +312,8 @@ void declare_and_initialize_sperm(stk::mesh::BulkData &bulk_data, stk::mesh::Par
     size_t row = j / rows;
     size_t col = j % rows;
 
-    const bool flip_sperm = (std::pow(-1, row) * std::pow(-1, col)) == -1;
+    const bool flip_sperm = false;
+    // const bool flip_sperm = (std::pow(-1, row) * std::pow(-1, col)) == -1;
     std::cout << "(" << row << ", " << col << ") = " << flip_sperm << std::endl;
     math::Vector3d tail_coord((row + 0.5) * spacing, (col + 0.5) * spacing,
                               (flip_sperm ? segment_length * (num_nodes_per_sperm - 1) : 0.0));
@@ -813,18 +660,153 @@ void declare_and_initialize_sperm(stk::mesh::BulkData &bulk_data, stk::mesh::Par
   elem_radius_field.modify_on_host();
   elem_rest_length_field.modify_on_host();
 }
+//@}
 
-void validate_node_radius(stk::mesh::NgpMesh &ngp_mesh, const stk::mesh::Selector &selector,
-                          NgpDoubleField &node_radius_field) {
-  debug_print("Validating the node radius.");
+//! \name Search
+//@{
 
-  // Assert that the radius is positive
-  mesh::for_each_entity_run(
-      ngp_mesh, stk::topology::NODE_RANK, selector, KOKKOS_LAMBDA(const stk::mesh::FastMeshIndex &node_index) {
-        const double radius = node_radius_field(node_index, 0);
-        MUNDY_THROW_ASSERT(radius > 0.0, std::invalid_argument, "The radius must be positive.");
-      });
+struct FastMeshIndexAndPeriodicShift {
+  stk::mesh::FastMeshIndex mesh_index;
+  math::Vector3d shift;
+};
+
+KOKKOS_INLINE_FUNCTION
+constexpr bool operator<(const FastMeshIndexAndPeriodicShift &lhs, const FastMeshIndexAndPeriodicShift &rhs) {
+  return fma_less(lhs.mesh_index, rhs.mesh_index);
 }
+
+KOKKOS_INLINE_FUNCTION
+constexpr bool operator==(const FastMeshIndexAndPeriodicShift &lhs, const FastMeshIndexAndPeriodicShift &rhs) {
+  return fma_equal(lhs.mesh_index, rhs.mesh_index);
+}
+
+using ExecSpace = stk::ngp::ExecSpace;
+using IdentProc = stk::search::IdentProc<FastMeshIndexAndPeriodicShift, int>;
+using BoxIdentProc = stk::search::BoxIdentProc<stk::search::Box<double>, IdentProc>;
+using Intersection = stk::search::IdentProcIntersection<IdentProc, IdentProc>;
+using SearchBoxesViewType = Kokkos::View<BoxIdentProc *, ExecSpace>;
+using ResultViewType = Kokkos::View<Intersection *, ExecSpace>;
+using FastMeshIndicesViewType = Kokkos::View<stk::mesh::FastMeshIndex *, ExecSpace>;
+
+using LocalIdentProc = stk::search::IdentProc<stk::mesh::FastMeshIndex, int>;
+using LocalIntersection = stk::search::IdentProcIntersection<LocalIdentProc, LocalIdentProc>;
+using LocalResultViewType = Kokkos::View<LocalIntersection *, ExecSpace>;
+
+// Create local entities on host and copy to device
+FastMeshIndicesViewType get_local_entity_indices(const stk::mesh::BulkData &bulk_data, stk::mesh::EntityRank rank,
+                                                 const stk::mesh::Selector &selector) {
+  std::vector<stk::mesh::Entity> local_entities;
+  stk::mesh::get_entities(bulk_data, rank, selector, local_entities);
+
+  FastMeshIndicesViewType mesh_indices("mesh_indices", local_entities.size());
+  FastMeshIndicesViewType::HostMirror host_mesh_indices =
+      Kokkos::create_mirror_view(Kokkos::WithoutInitializing, mesh_indices);
+
+  Kokkos::parallel_for(stk::ngp::HostRangePolicy(0, local_entities.size()), [&bulk_data, &local_entities,
+                                                                             &host_mesh_indices](const int i) {
+    const stk::mesh::MeshIndex &mesh_index = bulk_data.mesh_index(local_entities[i]);
+    host_mesh_indices(i) = stk::mesh::FastMeshIndex{mesh_index.bucket->bucket_id(), mesh_index.bucket_ordinal};
+  });
+
+  Kokkos::deep_copy(mesh_indices, host_mesh_indices);
+  return mesh_indices;
+}
+
+void compute_aabbs(stk::mesh::NgpMesh &ngp_mesh, const stk::mesh::Selector &segments,
+                   stk::mesh::NgpField<double> &node_coords_field, stk::mesh::NgpField<double> &elem_radius_field,
+                   stk::mesh::NgpField<double> &elem_aabb_field) {
+  node_coords_field.sync_to_device();
+  elem_radius_field.sync_to_device();
+  elem_aabb_field.sync_to_device();
+
+  stk::mesh::for_each_entity_run(
+      ngp_mesh, stk::topology::ELEM_RANK, segments, KOKKOS_LAMBDA(const stk::mesh::FastMeshIndex &segment_index) {
+        stk::mesh::NgpMesh::ConnectedNodes nodes = ngp_mesh.get_nodes(stk::topology::ELEM_RANK, segment_index);
+        stk::mesh::FastMeshIndex node0_index = ngp_mesh.fast_mesh_index(nodes[0]);
+        stk::mesh::FastMeshIndex node1_index = ngp_mesh.fast_mesh_index(nodes[1]);
+
+        const auto node0_coords = mesh::vector3_field_data(node_coords_field, node0_index);
+        const auto node1_coords = mesh::vector3_field_data(node_coords_field, node1_index);
+        const double radius = elem_radius_field(segment_index, 0);
+
+        double min_x = Kokkos::min(node0_coords[0], node1_coords[0]) - radius;
+        double min_y = Kokkos::min(node0_coords[1], node1_coords[1]) - radius;
+        double min_z = Kokkos::min(node0_coords[2], node1_coords[2]) - radius;
+        double max_x = Kokkos::max(node0_coords[0], node1_coords[0]) + radius;
+        double max_y = Kokkos::max(node0_coords[1], node1_coords[1]) + radius;
+        double max_z = Kokkos::max(node0_coords[2], node1_coords[2]) + radius;
+
+        elem_aabb_field(segment_index, 0) = min_x;
+        elem_aabb_field(segment_index, 1) = min_y;
+        elem_aabb_field(segment_index, 2) = min_z;
+        elem_aabb_field(segment_index, 3) = max_x;
+        elem_aabb_field(segment_index, 4) = max_y;
+        elem_aabb_field(segment_index, 5) = max_z;
+      });
+
+  elem_aabb_field.modify_on_device();
+}
+
+template <typename Metric>
+Kokkos::pair<SearchBoxesViewType, SearchBoxesViewType> create_search_aabbs(
+    const stk::mesh::BulkData &bulk_data, const stk::mesh::NgpMesh &ngp_mesh, const double search_buffer,
+    const Metric &metric, const stk::mesh::Selector &segments, stk::mesh::NgpField<double> &elem_aabb_field) {
+  elem_aabb_field.sync_to_device();
+
+  auto locally_owned_segments = segments & bulk_data.mesh_meta_data().locally_owned_part();
+  const unsigned num_local_segments =
+      stk::mesh::count_entities(bulk_data, stk::topology::ELEM_RANK, locally_owned_segments);
+  SearchBoxesViewType target_search_aabbs("target_search_aabbs", num_local_segments);      // no periodicity
+  SearchBoxesViewType source_search_aabbs("source_search_aabbs", 9 * num_local_segments);  // 2d periodicity in y and z
+
+  // Slow host operation that is needed to get an index. There is plans to add this to the stk::mesh::NgpMesh.
+  FastMeshIndicesViewType segment_indices =
+      get_local_entity_indices(bulk_data, stk::topology::ELEM_RANK, locally_owned_segments);
+  const int my_rank = bulk_data.parallel_rank();
+
+  Kokkos::parallel_for(
+      stk::ngp::DeviceRangePolicy(0, num_local_segments), KOKKOS_LAMBDA(const unsigned &i) {
+        stk::mesh::FastMeshIndex segment_index = segment_indices(i);
+
+        // Methodology is as follows:
+        //  - Wrap the bottom left corner of the LAB frame AABB of the segment into the domain. This is our target
+        //  segment
+        //  - Compute the wrap displacement vector from original to wrapped reference position
+        //  - Stamp out the 9 periodic images of source segments, computing their shift vector and displacement from
+        //  original
+        //  - Compute the source AABBs
+        //  - Stash both the source and target AABBs
+        auto aabb = mesh::aabb_field_data(elem_aabb_field, segment_index);
+        auto wrapped_aabb = geom::wrap_rigid(aabb, metric);
+        FastMeshIndexAndPeriodicShift target_fma_and_shift{segment_index,
+                                                           wrapped_aabb.min_corner() - aabb.min_corner()};
+        target_search_aabbs(i) =
+            BoxIdentProc{stk::search::Box<double>{wrapped_aabb[0] - search_buffer, wrapped_aabb[1] - search_buffer,
+                                                  wrapped_aabb[2] - search_buffer, wrapped_aabb[3] + search_buffer,
+                                                  wrapped_aabb[4] + search_buffer, wrapped_aabb[5] + search_buffer},
+                         IdentProc(target_fma_and_shift, my_rank)};
+
+        for (int s0 = 0; s0 < 3; s0++) {  // s0, s1 in [0, 1, 2]
+          for (int s1 = 0; s1 < 3; s1++) {
+            math::Vector3<int> lattice_shift{s0 - 1, s1 - 1, 0};
+            auto shifted_aabb = geom::shift_image(wrapped_aabb, lattice_shift, metric);
+            FastMeshIndexAndPeriodicShift source_fma_and_shift{segment_index,
+                                                               shifted_aabb.min_corner() - aabb.min_corner()};
+            source_search_aabbs(9 * i + 3 * s0 + s1) =
+                BoxIdentProc{stk::search::Box<double>{shifted_aabb[0] - search_buffer, shifted_aabb[1] - search_buffer,
+                                                      shifted_aabb[2] - search_buffer, shifted_aabb[3] + search_buffer,
+                                                      shifted_aabb[4] + search_buffer, shifted_aabb[5] + search_buffer},
+                             IdentProc(source_fma_and_shift, my_rank)};
+          }
+        }
+      });
+
+  return Kokkos::make_pair(target_search_aabbs, source_search_aabbs);
+}
+//@}
+
+//! \name Physics routines
+//@{
 
 void propagate_rest_curvature(stk::mesh::NgpMesh &ngp_mesh, const double &current_time, const double &amplitude,
                               const double &spatial_wavelength, const double &temporal_wavelength,
@@ -985,8 +967,10 @@ void compute_node_curvature_and_rotation_gradient(stk::mesh::NgpMesh &ngp_mesh,
         // the slt elements and not the nodes. Get the lower rank entities
         const stk::mesh::NgpMesh::ConnectedEntities edges = ngp_mesh.get_edges(stk::topology::ELEM_RANK, spring_index);
         const stk::mesh::NgpMesh::ConnectedEntities nodes = ngp_mesh.get_nodes(stk::topology::ELEM_RANK, spring_index);
-        assert(edges.size() == 2);
-        assert(nodes.size() == 3);
+        MUNDY_THROW_ASSERT(edges.size() == 2, std::logic_error,
+                           "A centerline twist spring must have exactly two edges connected to it.");
+        MUNDY_THROW_ASSERT(nodes.size() == 3, std::logic_error,
+                           "A centerline twist spring must have exactly three nodes connected to it.");
 
         const stk::mesh::Entity center_node = nodes[1];
         const stk::mesh::Entity left_edge = edges[0];
@@ -1176,149 +1160,6 @@ void compute_internal_force_and_twist_torque(
 
   node_force_field.modify_on_device();
   node_twist_torque_field.modify_on_device();
-}
-
-//! \name Search
-//@{
-
-struct FastMeshIndexAndPeriodicShift {
-  stk::mesh::FastMeshIndex mesh_index;
-  math::Vector3d shift;
-};
-
-KOKKOS_INLINE_FUNCTION
-constexpr bool operator<(const FastMeshIndexAndPeriodicShift &lhs, const FastMeshIndexAndPeriodicShift &rhs) {
-  return fma_less(lhs.mesh_index, rhs.mesh_index);
-}
-
-KOKKOS_INLINE_FUNCTION
-constexpr bool operator==(const FastMeshIndexAndPeriodicShift &lhs, const FastMeshIndexAndPeriodicShift &rhs) {
-  return fma_equal(lhs.mesh_index, rhs.mesh_index);
-}
-
-using ExecSpace = stk::ngp::ExecSpace;
-using IdentProc = stk::search::IdentProc<FastMeshIndexAndPeriodicShift, int>;
-using BoxIdentProc = stk::search::BoxIdentProc<stk::search::Box<double>, IdentProc>;
-using Intersection = stk::search::IdentProcIntersection<IdentProc, IdentProc>;
-using SearchBoxesViewType = Kokkos::View<BoxIdentProc *, ExecSpace>;
-using ResultViewType = Kokkos::View<Intersection *, ExecSpace>;
-using FastMeshIndicesViewType = Kokkos::View<stk::mesh::FastMeshIndex *, ExecSpace>;
-
-using LocalIdentProc = stk::search::IdentProc<stk::mesh::FastMeshIndex, int>;
-using LocalIntersection = stk::search::IdentProcIntersection<LocalIdentProc, LocalIdentProc>;
-using LocalResultViewType = Kokkos::View<LocalIntersection *, ExecSpace>;
-
-// Create local entities on host and copy to device
-// Create local entities on host and copy to device
-FastMeshIndicesViewType get_local_entity_indices(const stk::mesh::BulkData &bulk_data, stk::mesh::EntityRank rank,
-                                                 const stk::mesh::Selector &selector) {
-  std::vector<stk::mesh::Entity> local_entities;
-  stk::mesh::get_entities(bulk_data, rank, selector, local_entities);
-
-  FastMeshIndicesViewType mesh_indices("mesh_indices", local_entities.size());
-  FastMeshIndicesViewType::HostMirror host_mesh_indices =
-      Kokkos::create_mirror_view(Kokkos::WithoutInitializing, mesh_indices);
-
-  Kokkos::parallel_for(stk::ngp::HostRangePolicy(0, local_entities.size()), [&bulk_data, &local_entities,
-                                                                             &host_mesh_indices](const int i) {
-    const stk::mesh::MeshIndex &mesh_index = bulk_data.mesh_index(local_entities[i]);
-    host_mesh_indices(i) = stk::mesh::FastMeshIndex{mesh_index.bucket->bucket_id(), mesh_index.bucket_ordinal};
-  });
-
-  Kokkos::deep_copy(mesh_indices, host_mesh_indices);
-  return mesh_indices;
-}
-
-void compute_aabbs(stk::mesh::NgpMesh &ngp_mesh, const stk::mesh::Selector &segments,
-                   stk::mesh::NgpField<double> &node_coords_field, stk::mesh::NgpField<double> &elem_radius_field,
-                   stk::mesh::NgpField<double> &elem_aabb_field) {
-  node_coords_field.sync_to_device();
-  elem_radius_field.sync_to_device();
-  elem_aabb_field.sync_to_device();
-
-  stk::mesh::for_each_entity_run(
-      ngp_mesh, stk::topology::ELEM_RANK, segments, KOKKOS_LAMBDA(const stk::mesh::FastMeshIndex &segment_index) {
-        stk::mesh::NgpMesh::ConnectedNodes nodes = ngp_mesh.get_nodes(stk::topology::ELEM_RANK, segment_index);
-        stk::mesh::FastMeshIndex node0_index = ngp_mesh.fast_mesh_index(nodes[0]);
-        stk::mesh::FastMeshIndex node1_index = ngp_mesh.fast_mesh_index(nodes[1]);
-
-        const auto node0_coords = mesh::vector3_field_data(node_coords_field, node0_index);
-        const auto node1_coords = mesh::vector3_field_data(node_coords_field, node1_index);
-        const double radius = elem_radius_field(segment_index, 0);
-
-        double min_x = Kokkos::min(node0_coords[0], node1_coords[0]) - radius;
-        double min_y = Kokkos::min(node0_coords[1], node1_coords[1]) - radius;
-        double min_z = Kokkos::min(node0_coords[2], node1_coords[2]) - radius;
-        double max_x = Kokkos::max(node0_coords[0], node1_coords[0]) + radius;
-        double max_y = Kokkos::max(node0_coords[1], node1_coords[1]) + radius;
-        double max_z = Kokkos::max(node0_coords[2], node1_coords[2]) + radius;
-
-        elem_aabb_field(segment_index, 0) = min_x;
-        elem_aabb_field(segment_index, 1) = min_y;
-        elem_aabb_field(segment_index, 2) = min_z;
-        elem_aabb_field(segment_index, 3) = max_x;
-        elem_aabb_field(segment_index, 4) = max_y;
-        elem_aabb_field(segment_index, 5) = max_z;
-      });
-
-  elem_aabb_field.modify_on_device();
-}
-
-template <typename Metric>
-Kokkos::pair<SearchBoxesViewType, SearchBoxesViewType> create_search_aabbs(
-    const stk::mesh::BulkData &bulk_data, const stk::mesh::NgpMesh &ngp_mesh, const double search_buffer,
-    const Metric &metric, const stk::mesh::Selector &segments, stk::mesh::NgpField<double> &elem_aabb_field) {
-  elem_aabb_field.sync_to_device();
-
-  auto locally_owned_segments = segments & bulk_data.mesh_meta_data().locally_owned_part();
-  const unsigned num_local_segments =
-      stk::mesh::count_entities(bulk_data, stk::topology::ELEM_RANK, locally_owned_segments);
-  SearchBoxesViewType target_search_aabbs("target_search_aabbs", num_local_segments);      // no periodicity
-  SearchBoxesViewType source_search_aabbs("source_search_aabbs", 9 * num_local_segments);  // 2d periodicity in y and z
-
-  // Slow host operation that is needed to get an index. There is plans to add this to the stk::mesh::NgpMesh.
-  FastMeshIndicesViewType segment_indices =
-      get_local_entity_indices(bulk_data, stk::topology::ELEM_RANK, locally_owned_segments);
-  const int my_rank = bulk_data.parallel_rank();
-
-  Kokkos::parallel_for(
-      stk::ngp::DeviceRangePolicy(0, num_local_segments), KOKKOS_LAMBDA(const unsigned &i) {
-        stk::mesh::FastMeshIndex segment_index = segment_indices(i);
-
-        // Methodology is as follows:
-        //  - Wrap the bottom left corner of the LAB frame AABB of the segment into the domain. This is our target
-        //  segment
-        //  - Compute the wrap displacement vector from original to wrapped reference position
-        //  - Stamp out the 9 periodic images of source segments, computing their shift vector and displacement from
-        //  original
-        //  - Compute the source AABBs
-        //  - Stash both the source and target AABBs
-        auto aabb = mesh::aabb_field_data(elem_aabb_field, segment_index);
-        auto wrapped_aabb = geom::wrap_rigid(aabb, metric);
-        FastMeshIndexAndPeriodicShift target_fma_and_shift{segment_index,
-                                                           wrapped_aabb.min_corner() - aabb.min_corner()};
-        target_search_aabbs(i) =
-            BoxIdentProc{stk::search::Box<double>{wrapped_aabb[0] - search_buffer, wrapped_aabb[1] - search_buffer,
-                                                  wrapped_aabb[2] - search_buffer, wrapped_aabb[3] + search_buffer,
-                                                  wrapped_aabb[4] + search_buffer, wrapped_aabb[5] + search_buffer},
-                         IdentProc(target_fma_and_shift, my_rank)};
-
-        for (int s0 = 0; s0 < 3; s0++) {  // s0, s1 in [0, 1, 2]
-          for (int s1 = 0; s1 < 3; s1++) {
-            math::Vector3<int> lattice_shift{s0 - 1, s1 - 1, 0};
-            auto shifted_aabb = geom::shift_image(wrapped_aabb, lattice_shift, metric);
-            FastMeshIndexAndPeriodicShift source_fma_and_shift{segment_index,
-                                                               shifted_aabb.min_corner() - aabb.min_corner()};
-            source_search_aabbs(9 * i + 3 * s0 + s1) =
-                BoxIdentProc{stk::search::Box<double>{shifted_aabb[0] - search_buffer, shifted_aabb[1] - search_buffer,
-                                                      shifted_aabb[2] - search_buffer, shifted_aabb[3] + search_buffer,
-                                                      shifted_aabb[4] + search_buffer, shifted_aabb[5] + search_buffer},
-                             IdentProc(source_fma_and_shift, my_rank)};
-          }
-        }
-      });
-
-  return Kokkos::make_pair(target_search_aabbs, source_search_aabbs);
 }
 
 void compute_hertzian_contact_force_and_torque(const stk::mesh::BulkData &bulk_data, stk::mesh::NgpMesh &ngp_mesh,
@@ -1616,81 +1457,10 @@ void apply_monolayer(stk::mesh::NgpMesh &ngp_mesh, const stk::mesh::Part &center
   node_velocity_field.modify_on_device();
 }
 
-// void equilibriate() {
-//   debug_print("Equilibriating the system.");
+//@}
 
-//   // Notes:
-//   // Equilibiration is necessary because we are  starting from straight rods and attempting to equilibriate to a
-//   // sinusoidal shape.
-//   //
-//   // This isn't so much the problem as the fact that our Young's modulus is ~6e16! This is astronomically high and is
-//   // causing instabilities. We need to equilibriate to a system that is stable under these conditions.
-//   //
-//   // I have tried the following:
-//   //  1. Starting at a Young's Modulous of 1e6 and running for a million timesteps before increasing to 6e16 (kaboom)
-//   //  2. Starting at a Young's Modulous of 1e6 and increasing by a factor of 10 every 100,000 timesteps (kaboom)
-//   //  3. Starting at a Young's Modulous of 1e6 and running for a million timesteps before increasing to exponentially
-//   //  as in 2.
-//   //
-//   // I now want to try a more intentional approach based on the kinetic energy of the system.
-//   // Starying at 1e6, I will let the system evolve until its kinetic energy is less than some threshold value. I will
-//   // then increase the Young's modulus by a factor of 10 and repeat.
-//   size_t count = 0;
-//   for (size_t count = 0; count < 1000000; count++) {
-//     if (count % 1000 == 0) {
-//       std::cout << "Equilibriating the system. Iteration " << count << std::endl;
-//     }
-//     // Prepare the current configuration.
-//     {
-//       // Apply constraints before we move the nodes.
-//       disable_twist();
-//       apply_monolayer();
-
-//       // Rotate the field states.
-//       rotate_field_states();
-
-//       // Move the nodes from t -> t + dt.
-//       //   x(t + dt) = x(t) + dt v(t)
-//       update_generalized_position();
-
-//       // Reset the fields in the current timestep.
-//       zero_out_transient_node_fields();
-//     }
-
-//     // Evaluate forces f(x(t + dt)).
-//     {
-//       // Hertzian contact force
-//       compute_hertzian_contact_force_and_torque();
-
-//       // Centerline twist rod forces
-//       compute_edge_information();
-//       compute_node_curvature_and_rotation_gradient();
-//       compute_internal_force_and_twist_torque();
-//     }
-
-//     // Compute velocity v(x(t+dt))
-//     {
-//       // Compute the current velocity from the current forces.
-//       compute_generalized_velocity();
-//     }
-//   }
-// }
-
-template <typename FieldValueType, int FieldDimension>
-void deep_copy(stk::mesh::NgpMesh &ngp_mesh, stk::mesh::NgpField<FieldValueType> &target_field,
-               stk::mesh::NgpField<FieldValueType> &source_field, const stk::mesh::Selector &selector) {
-  target_field.sync_to_device();
-  source_field.sync_to_device();
-
-  stk::mesh::for_each_entity_run(
-      ngp_mesh, target_field.get_rank(), selector, KOKKOS_LAMBDA(const stk::mesh::FastMeshIndex &index) {
-        for (int i = 0; i < FieldDimension; ++i) {
-          target_field(index, i) = source_field(index, i);
-        }
-      });
-
-  target_field.modify_on_device();
-}
+//! \name An auxilary test to check that our K and K^T matrix-free implementations are indeed transposes of each other
+//@{
 
 struct Dependencies {
   double node_radius;
@@ -1835,6 +1605,11 @@ void test_generalized_map() {
   std::cout << "KT = \n" << KT << std::endl;
   std::cout << "norm(KT - transpose(K)) = " << math::two_norm(KT - math::transpose(K)) << std::endl;
 }
+//@}
+
+//! \name Some helpers to declare fields/parts
+// TODO(palmerb4): Move these into MundyMesh
+//@{
 
 template <typename T>
 class FieldDeclarationBuilderT {
@@ -1848,26 +1623,32 @@ class FieldDeclarationBuilderT {
         field_has_output_type_(false) {
   }
 
+  // Copy/Move constructors and assignment operators
+  FieldDeclarationBuilderT(const FieldDeclarationBuilderT &) = default;
+  FieldDeclarationBuilderT(FieldDeclarationBuilderT &&) = default;
+  FieldDeclarationBuilderT &operator=(const FieldDeclarationBuilderT &) = default;
+  FieldDeclarationBuilderT &operator=(FieldDeclarationBuilderT &&) = default;
+
   // Fluent interface for (rank, name) and optionally role and output type
-  FieldDeclarationBuilderT &rank(stk::mesh::EntityRank rank) {
+  FieldDeclarationBuilderT rank(stk::mesh::EntityRank rank) {
     field_has_rank_ = true;
     rank_ = rank;
     return *this;
   }
 
-  FieldDeclarationBuilderT &name(const std::string &field_name) {
+  FieldDeclarationBuilderT name(const std::string &field_name) {
     field_has_name_ = true;
     field_name_ = field_name;
     return *this;
   }
 
-  FieldDeclarationBuilderT &role(Ioss::Field::RoleType field_role) {
+  FieldDeclarationBuilderT role(Ioss::Field::RoleType field_role) {
     field_has_role_ = true;
     field_role_ = field_role;
     return *this;
   }
 
-  FieldDeclarationBuilderT &output_type(stk::io::FieldOutputType output_type) {
+  FieldDeclarationBuilderT output_type(stk::io::FieldOutputType output_type) {
     field_has_output_type_ = true;
     output_type_ = output_type;
     return *this;
@@ -1918,6 +1699,12 @@ class FieldDeclarationBuilder {
         field_has_output_type_(false) {
   }
 
+  // Copy/Move constructors and assignment operators
+  FieldDeclarationBuilder(const FieldDeclarationBuilder &) = default;
+  FieldDeclarationBuilder(FieldDeclarationBuilder &&) = default;
+  FieldDeclarationBuilder &operator=(const FieldDeclarationBuilder &) = default;
+  FieldDeclarationBuilder &operator=(FieldDeclarationBuilder &&) = default;
+
   // Fluent interface for (rank, name) and optionally role and output type
   template <typename T>
   FieldDeclarationBuilderT<T> type() {
@@ -1937,25 +1724,25 @@ class FieldDeclarationBuilder {
     return typed_builder;
   }
 
-  FieldDeclarationBuilder &rank(stk::mesh::EntityRank rank) {
+  FieldDeclarationBuilder rank(stk::mesh::EntityRank rank) {
     field_has_rank_ = true;
     rank_ = rank;
     return *this;
   }
 
-  FieldDeclarationBuilder &name(const std::string &field_name) {
+  FieldDeclarationBuilder name(const std::string &field_name) {
     field_has_name_ = true;
     field_name_ = field_name;
     return *this;
   }
 
-  FieldDeclarationBuilder &role(Ioss::Field::RoleType field_role) {
+  FieldDeclarationBuilder role(Ioss::Field::RoleType field_role) {
     field_has_role_ = true;
     field_role_ = field_role;
     return *this;
   }
 
-  FieldDeclarationBuilder &output_type(stk::io::FieldOutputType output_type) {
+  FieldDeclarationBuilder output_type(stk::io::FieldOutputType output_type) {
     field_has_output_type_ = true;
     output_type_ = output_type;
     return *this;
@@ -1983,15 +1770,344 @@ class FieldDeclarationBuilder {
   stk::io::FieldOutputType output_type_;
 };
 
+enum IOPartRole { NONE, IO, ASSEMBLY, EDGE_BLOCK };
+
+class PartDeclarationBuilder {
+ public:
+  // Constructor
+  PartDeclarationBuilder(stk::mesh::MetaData &meta_data)
+      : meta_data_(meta_data),
+        part_has_name_(false),
+        part_has_rank_(false),
+        part_has_topology_(false),
+        part_has_subparts_(false),
+        part_has_role_(false) {
+  }
+
+  // Fluent interface
+  PartDeclarationBuilder name(const std::string &part_name) {
+    part_has_name_ = true;
+    part_name_ = part_name;
+    return *this;
+  }
+
+  PartDeclarationBuilder rank(stk::mesh::EntityRank part_rank) {
+    part_has_rank_ = true;
+    part_rank_ = part_rank;
+    return *this;
+  }
+
+  PartDeclarationBuilder topology(stk::topology::topology_t part_topology) {
+    part_has_topology_ = true;
+    part_topology_ = part_topology;
+    return *this;
+  }
+
+  PartDeclarationBuilder role(IOPartRole io_part_role) {
+    part_has_role_ = true;
+    part_role_ = io_part_role;
+    return *this;
+  }
+
+  PartDeclarationBuilder subpart(const stk::mesh::Part &subpart) {
+    part_has_subparts_ = true;
+    subset_part_ids_.push_back(subpart.mesh_meta_data_ordinal());
+    return *this;
+  }
+
+  /// \brief Declare a part with the given properties.
+  stk::mesh::Part &declare() {
+    // Validate that required parameters have been set
+    MUNDY_THROW_REQUIRE(part_has_name_, std::logic_error, "Part name must be set before declaring a part.");
+
+    bool is_named_part = part_has_name_ && !part_has_rank_ && !part_has_topology_;
+    bool is_ranked_part = part_has_name_ && part_has_rank_ && !part_has_topology_;
+    bool is_topological_part = part_has_name_ && !part_has_rank_ && part_has_topology_;
+    print();
+    MUNDY_THROW_REQUIRE(
+        is_named_part || is_ranked_part || is_topological_part, std::logic_error,
+        fmt::format(
+            "Part with name ('{}') is not properly specified. You may either specify:\n"
+            "   1. A name (but no rank or topology)    -> meta_data.declare_part('name')\n"
+            "   2. A name and a rank (but no topology) -> meta_data.declare_part('name', rank)\n"
+            "   3. A name and a topology (but no rank) -> meta_data.declare_part_with_topology('name', topology)\n"
+            "However, you have specified both a rank and a topology.",
+            part_name_));
+
+    if (is_named_part) {
+      return internal_declare_named_part();
+    } else if (is_ranked_part) {
+      return internal_declare_ranked_part();
+    } else {  // is_topological_part
+      return internal_declare_topological_part();
+    }
+  }
+
+  void print(std::ostream &os = std::cout) const {
+    os << "PartDeclarationBuilder:" << std::endl;
+    if (part_has_name_) {
+      os << "  Name: " << part_name_ << std::endl;
+    }
+    if (part_has_rank_) {
+      os << "  Rank: " << part_rank_ << std::endl;
+    }
+    if (part_has_topology_) {
+      os << "  Topology: " << stk::topology(part_topology_) << std::endl;
+    }
+    if (part_has_subparts_) {
+      os << "  Subparts: ";
+      for (unsigned subpart_id : subset_part_ids_) {
+        os << subpart_id << " ";
+      }
+      os << std::endl;
+    }
+    if (part_has_role_) {
+      os << "  Role: ";
+      switch (part_role_) {
+        case IOPartRole::IO:
+          os << "IO";
+          break;
+        case IOPartRole::ASSEMBLY:
+          os << "ASSEMBLY";
+          break;
+        case IOPartRole::EDGE_BLOCK:
+          os << "EDGE_BLOCK";
+          break;
+        case IOPartRole::NONE:
+        default:
+          os << "NONE";
+          break;
+      }
+      os << std::endl;
+    }
+  }
+
+ private:
+  void apply_optional_properties(stk::mesh::Part &part) {
+    // Apply optional subparts
+    if (part_has_subparts_) {
+      for (unsigned subpart_id : subset_part_ids_) {
+        stk::mesh::Part &subpart = meta_data_.get_part(subpart_id);
+        meta_data_.declare_part_subset(part, subpart);
+      }
+    }
+
+    // Apply optional role
+    if (part_has_role_) {
+      switch (part_role_) {
+        case IOPartRole::IO:
+          stk::io::put_io_part_attribute(part);
+          break;
+        case IOPartRole::ASSEMBLY:
+          stk::io::put_assembly_io_part_attribute(part);
+          break;
+        case IOPartRole::EDGE_BLOCK:
+          stk::io::put_edge_block_io_part_attribute(part);
+          break;
+        case IOPartRole::NONE:
+        default:
+          // Do nothing
+          break;
+      }
+    }
+  }
+
+  stk::mesh::Part &internal_declare_named_part() {
+    stk::mesh::Part &part = meta_data_.declare_part(part_name_);
+    apply_optional_properties(part);
+    return part;
+  }
+
+  stk::mesh::Part &internal_declare_ranked_part() {
+    stk::mesh::Part &part = meta_data_.declare_part(part_name_, part_rank_);
+    apply_optional_properties(part);
+    return part;
+  }
+
+  stk::mesh::Part &internal_declare_topological_part() {
+    stk::mesh::Part &part = meta_data_.declare_part_with_topology(part_name_, part_topology_);
+    apply_optional_properties(part);
+    return part;
+  }
+
+  stk::mesh::MetaData &meta_data_;
+
+  // Part properties
+  bool part_has_name_;
+  bool part_has_rank_;
+  bool part_has_topology_;
+  bool part_has_subparts_;
+  bool part_has_role_;
+
+  std::string part_name_;
+  stk::mesh::EntityRank part_rank_;
+  stk::topology::topology_t part_topology_;
+  std::vector<unsigned> subset_part_ids_;
+  IOPartRole part_role_;
+};
+//@}
+
+//! \name Run the simulation
+//@{
+
+struct RunConfig {
+  void parse_user_inputs(int argc, char **argv) {
+    debug_print("Parsing user inputs.");
+
+    // Parse the command line options.
+    Teuchos::CommandLineProcessor cmdp(false, false);
+
+    // If we should accept the parameters directly from the command line or from a file
+    bool use_input_file = false;
+    cmdp.setOption("use_input_file", "no_use_input_file", &use_input_file, "Use an input file.");
+    bool use_input_file_found = cmdp.parse(argc, argv) == Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL;
+    MUNDY_THROW_ASSERT(use_input_file_found, std::invalid_argument, "Failed to parse the command line arguments.");
+
+    // Switch to requiring that all options must be recognized.
+    cmdp.recogniseAllOptions(true);
+
+    if (!use_input_file) {
+      // Parse the command line options.
+
+      //   Sperm initialization:
+      cmdp.setOption("num_sperm", &num_sperm, "Number of sperm.");
+      cmdp.setOption("num_nodes_per_sperm", &num_nodes_per_sperm, "Number of nodes per sperm.");
+      cmdp.setOption("sperm_radius", &sperm_radius, "The radius of each sperm.");
+      cmdp.setOption("sperm_initial_segment_length", &sperm_initial_segment_length, "Initial sperm segment length.");
+      cmdp.setOption("sperm_rest_segment_length", &sperm_rest_segment_length, "Rest sperm segment length.");
+      cmdp.setOption("sperm_rest_curvature_twist", &sperm_rest_curvature_twist, "Rest curvature (twist) of the sperm.");
+      cmdp.setOption("sperm_rest_curvature_bend1", &sperm_rest_curvature_bend1,
+                     "Rest curvature (bend along the first coordinate direction) of the sperm.");
+      cmdp.setOption("sperm_rest_curvature_bend2", &sperm_rest_curvature_bend2,
+                     "Rest curvature (bend along the second coordinate direction) of the sperm.");
+
+      cmdp.setOption("sperm_density", &sperm_density, "Density of the sperm.");
+      cmdp.setOption("sperm_youngs_modulus", &sperm_youngs_modulus, "Young's modulus of the sperm.");
+      cmdp.setOption("sperm_poissons_ratio", &sperm_poissons_ratio, "Poisson's ratio of the sperm.");
+
+      //   The simulation:
+      cmdp.setOption("num_time_steps", &num_time_steps, "Number of time steps.");
+      cmdp.setOption("timestep_size", &timestep_size, "Time step size.");
+      cmdp.setOption("io_frequency", &io_frequency, "Number of timesteps between writing output.");
+
+      bool was_parse_successful = cmdp.parse(argc, argv) == Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL;
+      MUNDY_THROW_ASSERT(was_parse_successful, std::invalid_argument, "Failed to parse the command line arguments.");
+    } else {
+      cmdp.setOption("input_file", &input_file_name, "The name of the input file.");
+      bool was_parse_successful = cmdp.parse(argc, argv) == Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL;
+      MUNDY_THROW_ASSERT(was_parse_successful, std::invalid_argument, "Failed to parse the command line arguments.");
+
+      // Read in the parameters from the parameter list.
+      Teuchos::ParameterList param_list = *Teuchos::getParametersFromYamlFile(input_file_name);
+
+      num_sperm = param_list.get<int>("num_sperm");
+      num_nodes_per_sperm = param_list.get<int>("num_nodes_per_sperm");
+      sperm_radius = param_list.get<double>("sperm_radius");
+      sperm_initial_segment_length = param_list.get<double>("sperm_initial_segment_length");
+      sperm_rest_segment_length = param_list.get<double>("sperm_rest_segment_length");
+      sperm_rest_curvature_twist = param_list.get<double>("sperm_rest_curvature_twist");
+      sperm_rest_curvature_bend1 = param_list.get<double>("sperm_rest_curvature_bend1");
+      sperm_rest_curvature_bend2 = param_list.get<double>("sperm_rest_curvature_bend2");
+
+      sperm_density = param_list.get<double>("sperm_density");
+      sperm_youngs_modulus = param_list.get<double>("sperm_youngs_modulus");
+      sperm_poissons_ratio = param_list.get<double>("sperm_poissons_ratio");
+
+      num_time_steps = param_list.get<int>("num_time_steps");
+      timestep_size = param_list.get<double>("timestep_size");
+    }
+
+    check_input_parameters();
+  }
+
+  void check_input_parameters() {
+    debug_print("Checking input parameters.");
+    MUNDY_THROW_ASSERT(num_sperm > 0, std::invalid_argument, "num_sperm must be greater than 0.");
+    MUNDY_THROW_ASSERT(num_nodes_per_sperm > 0, std::invalid_argument, "num_nodes_per_sperm must be greater than 0.");
+    MUNDY_THROW_ASSERT(sperm_radius > 0, std::invalid_argument, "sperm_radius must be greater than 0.");
+    MUNDY_THROW_ASSERT(sperm_initial_segment_length > -1e-12, std::invalid_argument,
+                       "sperm_initial_segment_length must be greater than or equal to 0.");
+    MUNDY_THROW_ASSERT(sperm_rest_segment_length > -1e-12, std::invalid_argument,
+                       "sperm_rest_segment_length must be greater than or equal to 0.");
+    MUNDY_THROW_ASSERT(sperm_youngs_modulus > 0, std::invalid_argument, "sperm_youngs_modulus must be greater than 0.");
+    MUNDY_THROW_ASSERT(sperm_poissons_ratio > 0, std::invalid_argument, "sperm_poissons_ratio must be greater than 0.");
+
+    MUNDY_THROW_ASSERT(num_time_steps > 0, std::invalid_argument, "num_time_steps must be greater than 0.");
+    MUNDY_THROW_ASSERT(timestep_size > 0, std::invalid_argument, "timestep_size must be greater than 0.");
+    MUNDY_THROW_ASSERT(io_frequency > 0, std::invalid_argument, "io_frequency must be greater than 0.");
+  }
+
+  void print() {
+    debug_print("Dumping user inputs.");
+    if (stk::parallel_machine_rank(MPI_COMM_WORLD) == 0) {
+      std::cout << "##################################################" << std::endl;
+      std::cout << "INPUT PARAMETERS:" << std::endl;
+      std::cout << "  num_sperm: " << num_sperm << std::endl;
+      std::cout << "  num_nodes_per_sperm: " << num_nodes_per_sperm << std::endl;
+      std::cout << "  sperm_radius: " << sperm_radius << std::endl;
+      std::cout << "  sperm_initial_segment_length: " << sperm_initial_segment_length << std::endl;
+      std::cout << "  sperm_rest_segment_length: " << sperm_rest_segment_length << std::endl;
+      std::cout << "  spatial_wavelength: " << spatial_wavelength << std::endl;
+      std::cout << "  temporal_wavelength: " << temporal_wavelength << std::endl;
+      std::cout << "  sperm_youngs_modulus: " << sperm_youngs_modulus << std::endl;
+      std::cout << "  sperm_poissons_ratio: " << sperm_poissons_ratio << std::endl;
+      std::cout << "  sperm_density: " << sperm_density << std::endl;
+      std::cout << "  num_time_steps: " << num_time_steps << std::endl;
+      std::cout << "  timestep_size: " << timestep_size << std::endl;
+      std::cout << "  io_frequency: " << io_frequency << std::endl;
+      std::cout << "##################################################" << std::endl;
+    }
+  }
+
+  //! \name User parameters
+  //@{
+  std::string input_file_name = "input.yaml";
+
+  size_t num_sperm = 400;
+  size_t num_nodes_per_sperm = 301;
+  double sperm_radius = 0.5;
+  double sperm_initial_segment_length = 2.0 * sperm_radius;
+  double sperm_rest_segment_length = 2.0 * sperm_radius;
+  double sperm_rest_curvature_twist = 0.0;
+  double sperm_rest_curvature_bend1 = 0.0;
+  double sperm_rest_curvature_bend2 = 0.0;
+
+  double sperm_youngs_modulus = 500000.00;
+  double sperm_relaxed_youngs_modulus = sperm_youngs_modulus;
+  double sperm_normal_youngs_modulus = sperm_youngs_modulus;
+  double sperm_poissons_ratio = 0.3;
+  double sperm_density = 1.0;
+
+  // double amplitude = 0.0;
+  double amplitude = 0.1;
+  double spatial_wavelength = (num_nodes_per_sperm - 1) * sperm_initial_segment_length / 5.0;
+  double temporal_wavelength = 2 * M_PI;  // Units: seconds per oscillations
+  // double temporal_wavelength = std::numeric_limits<double>::infinity();  // Units: seconds per oscillations
+  double viscosity = 1;
+
+  double timestep_size = 1e-5;
+  size_t num_time_steps = 200000000;
+  size_t io_frequency = 10000;
+  double search_buffer = sperm_radius;
+  double domain_width =
+      2 * std::sqrt(num_sperm) * sperm_radius / 0.8;  // One diameter separation between sperm == 50% area fraction
+  double domain_height = (num_nodes_per_sperm - 1) * sperm_initial_segment_length + 11.0;
+  //@}
+};
+
 void run(int argc, char **argv) {
   debug_print("Running the simulation.");
 
-  // Preprocess
+  /////////////////
+  // PRE-PROCESS //
+  /////////////////
   RunConfig run_config;
   run_config.parse_user_inputs(argc, argv);
   run_config.print();
 
-  // Setup the STK mesh
+  ///////////
+  // SETUP //
+  ///////////
   stk::mesh::MeshBuilder mesh_builder(MPI_COMM_WORLD);
   mesh_builder.set_spatial_dimension(3);
   mesh_builder.set_entity_rank_names({"NODE", "EDGE", "FACE", "ELEM", "CONSTRAINT"});
@@ -2051,52 +2167,49 @@ void run(int argc, char **argv) {
   DoubleField &elem_aabb_field        = declarer.type<double>().role(TRANSIENT)/*No io type for aabb*/.rank(ELEM_RANK).name("ELEM_AABB").declare();
   DoubleField &elem_old_aabb_field    = declarer.type<double>().role(TRANSIENT)/*No io type for aabb*/.rank(ELEM_RANK).name("ELEM_OLD_AABB").declare();
   DoubleField &elem_aabb_disp_since_last_rebuild_field = declarer.type<double>().role(TRANSIENT)/*No io type for quat*/.rank(ELEM_RANK).name("ELEM_AABB_DISPLACEMENT").declare();
-  // clang-format on
 
   // Declare the parts
-  stk::mesh::Part &boundary_sperm_part = meta_data.declare_part("BOUNDARY_SPERM", stk::topology::ELEM_RANK);
-  stk::mesh::Part &centerline_twist_springs_part =
-      meta_data.declare_part_with_topology("CENTERLINE_TWIST_SPRINGS", stk::topology::SHELL_TRI_3);
-  stk::mesh::Part &spherocylinder_segments_part =
-      meta_data.declare_part_with_topology("SPHEROCYLINDER_SEGMENTS", stk::topology::BEAM_2);
-  stk::io::put_io_part_attribute(centerline_twist_springs_part);
-  stk::io::put_io_part_attribute(spherocylinder_segments_part);
+  PartDeclarationBuilder part_declarer(meta_data);
+  stk::mesh::Part &boundary_sperm_part           = part_declarer.name("BOUNDARY_SPERM")          .rank(ELEM_RANK)                     .role(IOPartRole::ASSEMBLY).declare();
+  stk::mesh::Part &centerline_twist_springs_part = part_declarer.name("CENTERLINE_TWIST_SPRINGS").topology(stk::topology::SHELL_TRI_3).role(IOPartRole::IO).declare();
+  stk::mesh::Part &spherocylinder_segments_part  = part_declarer.name("SPHEROCYLINDER_SEGMENTS") .topology(stk::topology::BEAM_2)     .role(IOPartRole::IO).declare();
   stk::io::put_edge_block_io_part_attribute(meta_data.get_topology_root_part(stk::topology::LINE_2));
 
   // Assign fields to parts
   double init_zero6[6] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
   stk::mesh::Part &universal_part = meta_data.universal_part();
-  stk::mesh::put_field_on_mesh(node_coords_field, universal_part, 3, nullptr);
-  stk::mesh::put_field_on_mesh(old_node_coords_field, universal_part, 3, nullptr);
-  stk::mesh::put_field_on_mesh(node_velocity_field, universal_part, 3, nullptr);
-  stk::mesh::put_field_on_mesh(old_node_velocity_field, universal_part, 3, nullptr);
-  stk::mesh::put_field_on_mesh(node_force_field, universal_part, 3, nullptr);
-  stk::mesh::put_field_on_mesh(node_twist_field, universal_part, 1, nullptr);
-  stk::mesh::put_field_on_mesh(old_node_twist_field, universal_part, 1, nullptr);
-  stk::mesh::put_field_on_mesh(node_twist_velocity_field, universal_part, 1, nullptr);
+  stk::mesh::put_field_on_mesh(node_coords_field,             universal_part, 3, nullptr);
+  stk::mesh::put_field_on_mesh(old_node_coords_field,         universal_part, 3, nullptr);
+  stk::mesh::put_field_on_mesh(node_velocity_field,           universal_part, 3, nullptr);
+  stk::mesh::put_field_on_mesh(old_node_velocity_field,       universal_part, 3, nullptr);
+  stk::mesh::put_field_on_mesh(node_force_field,              universal_part, 3, nullptr);
+  stk::mesh::put_field_on_mesh(node_twist_field,              universal_part, 1, nullptr);
+  stk::mesh::put_field_on_mesh(old_node_twist_field,          universal_part, 1, nullptr);
+  stk::mesh::put_field_on_mesh(node_twist_velocity_field,     universal_part, 1, nullptr);
   stk::mesh::put_field_on_mesh(old_node_twist_velocity_field, universal_part, 1, nullptr);
-  stk::mesh::put_field_on_mesh(node_twist_torque_field, universal_part, 1, nullptr);
-  stk::mesh::put_field_on_mesh(node_curvature_field, universal_part, 3, nullptr);
-  stk::mesh::put_field_on_mesh(node_rest_curvature_field, universal_part, 3, nullptr);
-  stk::mesh::put_field_on_mesh(node_rotation_gradient_field, universal_part, 4, nullptr);
-  stk::mesh::put_field_on_mesh(node_radius_field, universal_part, 1, nullptr);
-  stk::mesh::put_field_on_mesh(node_archlength_field, universal_part, 1, nullptr);
-  stk::mesh::put_field_on_mesh(node_sperm_id_field, universal_part, 1, nullptr);
-  stk::mesh::put_field_on_mesh(edge_orientation_field, universal_part, 4, nullptr);
-  stk::mesh::put_field_on_mesh(old_edge_orientation_field, universal_part, 4, nullptr);
-  stk::mesh::put_field_on_mesh(edge_tangent_field, universal_part, 3, nullptr);
-  stk::mesh::put_field_on_mesh(old_edge_tangent_field, universal_part, 3, nullptr);
-  stk::mesh::put_field_on_mesh(edge_binormal_field, universal_part, 3, nullptr);
-  stk::mesh::put_field_on_mesh(edge_basis_1_field, universal_part, 3, nullptr);
-  stk::mesh::put_field_on_mesh(edge_basis_2_field, universal_part, 3, nullptr);
-  stk::mesh::put_field_on_mesh(edge_basis_3_field, universal_part, 3, nullptr);
-  stk::mesh::put_field_on_mesh(edge_length_field, universal_part, 1, nullptr);
-  stk::mesh::put_field_on_mesh(elem_radius_field, universal_part, 1, nullptr);
-  stk::mesh::put_field_on_mesh(elem_radius_field, universal_part, 1, nullptr);
-  stk::mesh::put_field_on_mesh(elem_rest_length_field, universal_part, 1, nullptr);
-  stk::mesh::put_field_on_mesh(elem_aabb_field, universal_part, 6, init_zero6);
-  stk::mesh::put_field_on_mesh(elem_old_aabb_field, universal_part, 6, init_zero6);
+  stk::mesh::put_field_on_mesh(node_twist_torque_field,       universal_part, 1, nullptr);
+  stk::mesh::put_field_on_mesh(node_curvature_field,          universal_part, 3, nullptr);
+  stk::mesh::put_field_on_mesh(node_rest_curvature_field,     universal_part, 3, nullptr);
+  stk::mesh::put_field_on_mesh(node_rotation_gradient_field,  universal_part, 4, nullptr);
+  stk::mesh::put_field_on_mesh(node_radius_field,             universal_part, 1, nullptr);
+  stk::mesh::put_field_on_mesh(node_archlength_field,         universal_part, 1, nullptr);
+  stk::mesh::put_field_on_mesh(node_sperm_id_field,           universal_part, 1, nullptr);
+  stk::mesh::put_field_on_mesh(edge_orientation_field,        universal_part, 4, nullptr);
+  stk::mesh::put_field_on_mesh(old_edge_orientation_field,    universal_part, 4, nullptr);
+  stk::mesh::put_field_on_mesh(edge_tangent_field,            universal_part, 3, nullptr);
+  stk::mesh::put_field_on_mesh(old_edge_tangent_field,        universal_part, 3, nullptr);
+  stk::mesh::put_field_on_mesh(edge_binormal_field,           universal_part, 3, nullptr);
+  stk::mesh::put_field_on_mesh(edge_basis_1_field,            universal_part, 3, nullptr);
+  stk::mesh::put_field_on_mesh(edge_basis_2_field,            universal_part, 3, nullptr);
+  stk::mesh::put_field_on_mesh(edge_basis_3_field,            universal_part, 3, nullptr);
+  stk::mesh::put_field_on_mesh(edge_length_field,             universal_part, 1, nullptr);
+  stk::mesh::put_field_on_mesh(elem_radius_field,             universal_part, 1, nullptr);
+  stk::mesh::put_field_on_mesh(elem_radius_field,             universal_part, 1, nullptr);
+  stk::mesh::put_field_on_mesh(elem_rest_length_field,        universal_part, 1, nullptr);
+  stk::mesh::put_field_on_mesh(elem_aabb_field,               universal_part, 6, init_zero6);
+  stk::mesh::put_field_on_mesh(elem_old_aabb_field,           universal_part, 6, init_zero6);
   stk::mesh::put_field_on_mesh(elem_aabb_disp_since_last_rebuild_field, universal_part, 6, init_zero6);
+  // clang-format on
 
   // Concretize the mesh
   meta_data.commit();
@@ -2130,6 +2243,9 @@ void run(int argc, char **argv) {
   stk_io_broker.add_field(output_file_index, elem_rest_length_field);
   stk_io_broker.add_field(output_file_index, elem_aabb_field);
 
+  ////////////////
+  // INITIALIZE //
+  ////////////////
   declare_and_initialize_sperm(bulk_data, centerline_twist_springs_part, boundary_sperm_part,
                                spherocylinder_segments_part,  //
                                run_config.num_sperm, run_config.num_nodes_per_sperm, run_config.sperm_radius,
@@ -2183,10 +2299,9 @@ void run(int argc, char **argv) {
                            run_config.temporal_wavelength, centerline_twist_springs_part, ngp_node_archlength_field,
                            ngp_node_sperm_id_field, ngp_node_rest_curvature_field);
 
-  // Equilibriate the system
-  // equilibriate();
-
-  // Time loop
+  ///////////////
+  // TIME-LOOP //
+  ///////////////
   print_rank0(std::string("Running the simulation for ") + std::to_string(run_config.num_time_steps) + " time steps.");
   bool rebuild_neighbors = true;
   ResultViewType search_results;
@@ -2200,39 +2315,46 @@ void run(int argc, char **argv) {
       std::cout << "Time step " << timestep_index << " of " << run_config.num_time_steps << std::endl;
     }
 
-    // Check if we need to recreate the neighbors
-    mesh::field_copy<double>(elem_aabb_field, elem_old_aabb_field, stk::ngp::ExecSpace{});
-    compute_aabbs(ngp_mesh, spherocylinder_segments_part, ngp_node_coords_field, ngp_elem_radius_field,
-                  ngp_elem_aabb_field);
-    mesh::field_axpbygz(1.0, elem_aabb_field, -1.0, elem_old_aabb_field, 1.0, elem_aabb_disp_since_last_rebuild_field,
-                        stk::ngp::ExecSpace{});
-    const double max_abs_disp =
-        mesh::field_amax<double>(elem_aabb_disp_since_last_rebuild_field, stk::ngp::ExecSpace{});
-    if (max_abs_disp > run_config.search_buffer) {
-      rebuild_neighbors = true;
+    ///////////////////
+    // NEIGHBOR LIST //
+    ///////////////////
+    {
+      // Check if we need to recreate the neighbors
+      mesh::field_copy<double>(elem_aabb_field, elem_old_aabb_field, stk::ngp::ExecSpace{});
+      compute_aabbs(ngp_mesh, spherocylinder_segments_part, ngp_node_coords_field, ngp_elem_radius_field,
+                    ngp_elem_aabb_field);
+      mesh::field_axpbygz(1.0, elem_aabb_field, -1.0, elem_old_aabb_field, 1.0, elem_aabb_disp_since_last_rebuild_field,
+                          stk::ngp::ExecSpace{});
+      const double max_abs_disp =
+          mesh::field_amax<double>(elem_aabb_disp_since_last_rebuild_field, stk::ngp::ExecSpace{});
+      if (max_abs_disp > run_config.search_buffer) {
+        rebuild_neighbors = true;
+      }
+
+      if (rebuild_neighbors) {
+        std::cout << "Rebuilding neighbors." << std::endl;
+
+        geom::PeriodicMetricXY<double> periodic_metric(run_config.domain_width, run_config.domain_width);
+        auto [target_search_aabbs, source_search_aabbs] =
+            create_search_aabbs(bulk_data, ngp_mesh, run_config.search_buffer, periodic_metric,
+                                spherocylinder_segments_part, ngp_elem_aabb_field);
+
+        stk::search::SearchMethod search_method = stk::search::MORTON_LBVH;
+        const bool results_parallel_symmetry = true;   // create source -> target and target -> source pairs
+        const bool auto_swap_domain_and_range = true;  // swap source and target if target is owned and source is not
+        const bool sort_search_results = false;        // sort the search results by source id
+        stk::search::coarse_search(source_search_aabbs, target_search_aabbs, search_method, bulk_data.parallel(),
+                                  search_results, stk::ngp::ExecSpace{}, results_parallel_symmetry);
+
+        std::cout << "Search results size: " << search_results.size() << std::endl;
+        rebuild_neighbors = false;
+        mesh::field_fill(0.0, elem_aabb_disp_since_last_rebuild_field, stk::ngp::ExecSpace{});
+      }
     }
 
-    if (rebuild_neighbors) {
-      std::cout << "Rebuilding neighbors." << std::endl;
-
-      geom::PeriodicMetricXY<double> periodic_metric(run_config.domain_width, run_config.domain_width);
-      auto [target_search_aabbs, source_search_aabbs] =
-          create_search_aabbs(bulk_data, ngp_mesh, run_config.search_buffer, periodic_metric,
-                              spherocylinder_segments_part, ngp_elem_aabb_field);
-
-      stk::search::SearchMethod search_method = stk::search::MORTON_LBVH;
-      const bool results_parallel_symmetry = true;   // create source -> target and target -> source pairs
-      const bool auto_swap_domain_and_range = true;  // swap source and target if target is owned and source is not
-      const bool sort_search_results = false;        // sort the search results by source id
-      stk::search::coarse_search(source_search_aabbs, target_search_aabbs, search_method, bulk_data.parallel(),
-                                 search_results, stk::ngp::ExecSpace{}, results_parallel_symmetry);
-
-      std::cout << "Search results size: " << search_results.size() << std::endl;
-      rebuild_neighbors = false;
-      mesh::field_fill(0.0, elem_aabb_disp_since_last_rebuild_field, stk::ngp::ExecSpace{});
-    }
-
-    // Prepare the current configuration.
+    //////////////
+    // PRE-STEP //
+    //////////////
     {
       // Apply constraints before we move the nodes.
       // disable_twist(ngp_mesh, ngp_node_twist_field, ngp_node_twist_velocity_field);
@@ -2272,6 +2394,9 @@ void run(int argc, char **argv) {
       ngp_node_twist_torque_field.modify_on_device();
     }
 
+    //////////
+    // STEP //
+    //////////
     // Evaluate forces f(x(t + dt)).
     {
       // Hertzian contact force
@@ -2311,6 +2436,9 @@ void run(int argc, char **argv) {
                                    ngp_node_velocity_field, ngp_node_twist_velocity_field);
     }
 
+    ///////////////
+    // POST-STEP //
+    ///////////////
     // IO. If desired, write out the data for time t.
     if (timestep_index % run_config.io_frequency == 0) {
       stk::mesh::ngp_field_fence(meta_data);
@@ -2320,7 +2448,7 @@ void run(int argc, char **argv) {
         std::cout << "Time per timestep: " << std::setprecision(15) << avg_time_per_timestep << std::endl;
       }
 
-      // Update the edge bases before writing
+      // Update the edge bases before writing since it's purely for IO.
       update_edge_basis(ngp_mesh, centerline_twist_springs_part, ngp_edge_orientation_field, ngp_edge_basis_1_field,
                         ngp_edge_basis_2_field, ngp_edge_basis_3_field);
 
@@ -2362,6 +2490,7 @@ void run(int argc, char **argv) {
     std::cout << "Time per timestep: " << std::setprecision(15) << avg_time_per_timestep << std::endl;
   }
 }
+//@}
 
 }  // namespace mundy
 
@@ -2372,6 +2501,7 @@ int main(int argc, char **argv) {
   Kokkos::print_configuration(std::cout);
 
   // Run the simulation using the given parameters
+  // See RunConfig struct for user parameters and defaults
   mundy::run(argc, argv);
 
   // Finalize MPI
