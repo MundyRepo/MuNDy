@@ -17,9 +17,14 @@ GLOBAL_SET(${PACKAGE_NAME}_ENABLE_ALL_OPTIONAL_PACKAGES ON)
 SET(NOINSTALLHEADERS 
   src/mundy_math/Accessor.hpp
   src/mundy_math/Array.hpp
-  src/mundy_math/distance/EllipsoidEllipsoid.hpp
-  src/mundy_math/distance/SegmentSegment.hpp
+  src/mundy_math/convex.hpp
   src/mundy_math/Hilbert.hpp
+  src/mundy_math/impl/AccessorImpl.hpp
+  src/mundy_math/impl/ArrayImpl.hpp
+  src/mundy_math/impl/MatrixImpl.hpp
+  src/mundy_math/impl/minimize_impl.hpp
+  src/mundy_math/impl/QuaternionImpl.hpp
+  src/mundy_math/impl/VectorImpl.hpp
   src/mundy_math/MaskedView.hpp
   src/mundy_math/Matrix3.hpp
   src/mundy_math/Matrix.hpp
@@ -32,6 +37,7 @@ SET(NOINSTALLHEADERS
   src/mundy_math/TransposedView.hpp
   src/mundy_math/Vector3.hpp
   src/mundy_math/Vector.hpp
+  src/mundy_math/zmort.hpp
   )
 
 SET(SOURCES 
