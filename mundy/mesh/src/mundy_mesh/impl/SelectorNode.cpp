@@ -22,14 +22,14 @@
 #include <string>
 
 // Mundy
-#include <mundy_mesh/utils/SelectorEval.hpp>
-#include <mundy_mesh/utils/SelectorNode.hpp>
+#include <mundy_mesh/impl/SelectorEval.hpp>
+#include <mundy_mesh/impl/SelectorNode.hpp>
 
 namespace mundy {
 
 namespace mesh {
 
-namespace utils {
+namespace impl {
 
 SelectorNode::SelectorNode(Opcode opcode, SelectorEval *owner, const stk::mesh::Selector &data)
     : opcode_(opcode),
@@ -172,7 +172,7 @@ void SelectorNode::eval_trace(const NodeWeightMap &node_weights, EvalNodesType &
   }
 }
 
-}  // namespace utils
+}  // namespace impl
 
 }  // namespace mesh
 

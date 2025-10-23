@@ -25,13 +25,13 @@
 #include <typeinfo>
 
 // Mundy
-#include <mundy_mesh/utils/SelectorLexem.hpp>
+#include <mundy_mesh/impl/SelectorLexem.hpp>
 
 namespace mundy {
 
 namespace mesh {
 
-namespace utils {
+namespace impl {
 
 template <class T>
 T convert_cast(const std::string &s) {
@@ -104,7 +104,7 @@ SelectorLexemVector tokenize(const std::string &expression) {
   return lex_vector;
 }
 
-}  // namespace utils
+}  // namespace impl
 
 }  // namespace mesh
 

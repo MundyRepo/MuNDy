@@ -18,8 +18,8 @@
 // **********************************************************************************************************************
 // @HEADER
 
-#ifndef MUNDY_MESH_UTILS_SELECTORNODE_HPP_
-#define MUNDY_MESH_UTILS_SELECTORNODE_HPP_
+#ifndef MUNDY_MESH_IMPL_SELECTORNODE_HPP_
+#define MUNDY_MESH_IMPL_SELECTORNODE_HPP_
 
 // C++ core
 #include <exception>  // for std::exception
@@ -54,7 +54,7 @@ namespace mundy {
 
 namespace mesh {
 
-namespace utils {
+namespace impl {
 
 // Forward declarations
 class SelectorNode;
@@ -152,10 +152,10 @@ class SelectorNode {
   //@}
 };
 
-}  // namespace utils
+}  // namespace impl
 
 }  // namespace mesh
 
 }  // namespace mundy
 
-#endif  // MUNDY_MESH_UTILS_SELECTORNODE_HPP_
+#endif  // MUNDY_MESH_IMPL_SELECTORNODE_HPP_

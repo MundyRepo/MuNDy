@@ -19,15 +19,15 @@
 // @HEADER
 
 // Mundy
-#include <mundy_mesh/utils/SelectorEval.hpp>
-#include <mundy_mesh/utils/SelectorNode.hpp>
-#include <mundy_mesh/utils/SelectorParser.hpp>
+#include <mundy_mesh/impl/SelectorEval.hpp>
+#include <mundy_mesh/impl/SelectorNode.hpp>
+#include <mundy_mesh/impl/SelectorParser.hpp>
 
 namespace mundy {
 
 namespace mesh {
 
-namespace utils {
+namespace impl {
 
 using LexemIterator = SelectorLexemVector::const_iterator;
 
@@ -223,7 +223,7 @@ SelectorNode *parse_rvalue(SelectorEval &eval, LexemIterator from, LexemIterator
   }
 }
 
-}  // namespace utils
+}  // namespace impl
 
 }  // namespace mesh
 

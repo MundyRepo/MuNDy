@@ -23,15 +23,15 @@
 
 // Mundy
 #include <mundy_mesh/BulkData.hpp>              // for mundy::mesh::BulkData
-#include <mundy_mesh/utils/SelectorEval.hpp>    // for mundy::mesh::utils::SelectorEval
-#include <mundy_mesh/utils/SelectorLexem.hpp>   // for mundy::mesh::utils::SelectorLexem
-#include <mundy_mesh/utils/SelectorParser.hpp>  // for mundy::mesh::utils::SelectorParser
+#include <mundy_mesh/impl/SelectorEval.hpp>    // for mundy::mesh::impl::SelectorEval
+#include <mundy_mesh/impl/SelectorLexem.hpp>   // for mundy::mesh::impl::SelectorLexem
+#include <mundy_mesh/impl/SelectorParser.hpp>  // for mundy::mesh::impl::SelectorParser
 
 namespace mundy {
 
 namespace mesh {
 
-namespace utils {
+namespace impl {
 
 SelectorEval::SelectorEval(const BulkData &bulk_data, const std::string &expression)
     : bulk_data_(bulk_data),
@@ -206,7 +206,7 @@ int SelectorEval::assign_result_buffer_indices() {
   return indexAssigner.get_result_buffer_size();
 }
 
-}  // namespace utils
+}  // namespace impl
 
 }  // namespace mesh
 

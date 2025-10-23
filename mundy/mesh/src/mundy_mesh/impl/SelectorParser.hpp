@@ -18,17 +18,17 @@
 // **********************************************************************************************************************
 // @HEADER
 
-#ifndef MUNDY_MESH_UTILS_SELECTORPARSER_HPP_
-#define MUNDY_MESH_UTILS_SELECTORPARSER_HPP_
+#ifndef MUNDY_MESH_IMPL_SELECTORPARSER_HPP_
+#define MUNDY_MESH_IMPL_SELECTORPARSER_HPP_
 
 // Mundy
-#include <mundy_mesh/utils/SelectorLexem.hpp>  // for mundy::mesh::utils::SelectorLexem
+#include <mundy_mesh/impl/SelectorLexem.hpp>  // for mundy::mesh::impl::SelectorLexem
 
 namespace mundy {
 
 namespace mesh {
 
-namespace utils {
+namespace impl {
 
 class SelectorNode;
 class SelectorEval;
@@ -41,10 +41,10 @@ class SelectorEval;
 SelectorNode *parse_statements(SelectorEval &eval, SelectorLexemVector::const_iterator from,
                                SelectorLexemVector::const_iterator to);
 
-}  // namespace utils
+}  // namespace impl
 
 }  // namespace mesh
 
 }  // namespace mundy
 
-#endif  // MUNDY_MESH_UTILS_SELECTORPARSER_HPP_
+#endif  // MUNDY_MESH_IMPL_SELECTORPARSER_HPP_

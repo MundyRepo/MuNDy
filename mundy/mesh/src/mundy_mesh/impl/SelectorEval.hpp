@@ -18,8 +18,8 @@
 // **********************************************************************************************************************
 // @HEADER
 
-#ifndef MUNDY_MESH_UTILS_SELECTOREVAL_HPP_
-#define MUNDY_MESH_UTILS_SELECTOREVAL_HPP_
+#ifndef MUNDY_MESH_IMPL_SELECTOREVAL_HPP_
+#define MUNDY_MESH_IMPL_SELECTOREVAL_HPP_
 
 /// \file SelectorEval.hpp
 /// \brief A class for evaluating selector expressions
@@ -35,13 +35,13 @@
 
 // Mundy
 #include <mundy_mesh/BulkData.hpp>            // for mundy::mesh::BulkData
-#include <mundy_mesh/utils/SelectorNode.hpp>  // for mundy::mesh::utils::SelectorNode
+#include <mundy_mesh/impl/SelectorNode.hpp>  // for mundy::mesh::impl::SelectorNode
 
 namespace mundy {
 
 namespace mesh {
 
-namespace utils {
+namespace impl {
 
 // Forward declarations
 class SelectorNode;
@@ -212,10 +212,10 @@ class SelectorEval {
   //@}
 };
 
-}  // namespace utils
+}  // namespace impl
 
 }  // namespace mesh
 
 }  // namespace mundy
 
-#endif  // MUNDY_MESH_UTILS_SELECTOREVAL_HPP_
+#endif  // MUNDY_MESH_IMPL_SELECTOREVAL_HPP_

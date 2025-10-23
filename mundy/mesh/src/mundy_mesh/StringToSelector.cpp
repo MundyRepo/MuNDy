@@ -29,14 +29,14 @@
 #include <stk_mesh/base/Selector.hpp>  // for stk::mesh::Selector
 
 // Mundy libs
-#include <mundy_mesh/utils/SelectorEval.hpp>  // for mundy::mesh::utils::SelectorEval
+#include <mundy_mesh/impl/SelectorEval.hpp>  // for mundy::mesh::impl::SelectorEval
 
 namespace mundy {
 
 namespace mesh {
 
 stk::mesh::Selector string_to_selector(const BulkData &bulk_data, const std::string &selector_string) {
-  auto eval = utils::SelectorEval(bulk_data, selector_string);
+  auto eval = impl::SelectorEval(bulk_data, selector_string);
   eval.parse();
   return eval.evaluate();
 }

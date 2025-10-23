@@ -18,8 +18,8 @@
 // **********************************************************************************************************************
 // @HEADER
 
-#ifndef MUNDY_MESH_UTILS_SELECTORLEXEM_HPP_
-#define MUNDY_MESH_UTILS_SELECTORLEXEM_HPP_
+#ifndef MUNDY_MESH_IMPL_SELECTORLEXEM_HPP_
+#define MUNDY_MESH_IMPL_SELECTORLEXEM_HPP_
 
 // C++ core
 #include <string>  // for std::string
@@ -29,7 +29,7 @@ namespace mundy {
 
 namespace mesh {
 
-namespace utils {
+namespace impl {
 
 template <class T>
 T convert_cast(const std::string &s);
@@ -109,10 +109,10 @@ typedef std::vector<SelectorLexem> SelectorLexemVector;
 /// \param expression The expression to tokenize.
 SelectorLexemVector tokenize(const std::string &expression);
 
-}  // namespace utils
+}  // namespace impl
 
 }  // namespace mesh
 
 }  // namespace mundy
 
-#endif /* MUNDY_MESH_UTILS_SELECTORLEXEM_HPP_ */
+#endif /* MUNDY_MESH_IMPL_SELECTORLEXEM_HPP_ */
