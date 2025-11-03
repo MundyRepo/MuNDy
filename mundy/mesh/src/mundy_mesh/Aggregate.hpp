@@ -184,9 +184,9 @@ class FieldComponent : public FieldComponentBase {
   FieldComponent& operator=(FieldComponent&&) = default;
 
   inline decltype(auto) operator()(stk::mesh::Entity entity) const {
-    ValueType* data_ptr = stk::mesh::field_data(*field_, entity);
+    ValueType* data_ptr = stk::mesh::field_data(field_, entity);
     MUNDY_THROW_ASSERT(data_ptr, std::runtime_error, "Field data is null");
-    unsigned num_scalars = stk::mesh::field_scalars_per_entity(*field_, entity);
+    unsigned num_scalars = stk::mesh::field_scalars_per_entity(field_, entity);
     return stk::mesh::EntityFieldData<ValueType>(data_ptr, num_scalars);
   }
 
