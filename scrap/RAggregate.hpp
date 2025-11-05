@@ -915,6 +915,99 @@ struct TaggedBagOfObjects {
 // auto tagged_ragg = make_tagged_ragg<stk::topology::PARTICLE>(bulk_data, selector)
 //                        .add_accessor<CENTER>(center_racc)
 //                        .add_accessor<RADIUS>(radius_racc);
+//
+//
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// A day older, maybe not much wiser.
+//
+// It's truly impossible for us to not enumerate all (#Als)^(#Vars) combinations. Doesn't matter how we slice it. Think of
+// aggregates as a single sample from a MASSIVE space made possible because of C++'s template system. There is just no way
+// to avoid this expansion if we want to map from a runtime aggregate to a compile-time aggregate.
+//
+// What I learned most recently:
+//   - Pure C++ can support the mapping from tagged variant to a concrete aggregate with active types so long as the append
+//     function of the tagged aggregate takes in the concrete type and uses this knowledge to maintain compile-time sorting 
+//     by active type. This would require #Alts choose #Vars with replacement expansions, which is manageable. This design 
+//     is not, however, compatable with Python because we are using compile-time knowledge to reduce the number of expansions.
+//   - Using a finite set of compile-time tags instead of strings and sorting the variant by active tag, thereby giving us
+//     a compile-time map from tag to sorted index. This fails because of the #Tags choose #Vars with replacement expansion,
+//     which is a huge number because #Tags is large.
+//
+// There's an alternative here. Let the function accept an Agg or a RAgg with a specified set of accepted types per tag.
+// In many physics-based applications, most values should only ever be field. Coords, force, torque, velocity, etc are all
+// field. Mass, radius, charge, etc are all either shared or fields. We can inform users if the total number of combinations
+// is too large (say > 256). If your application only allows shared/field for parameters, then you may have at most 8 total
+// parameters before you exceed this limit. This is probably acceptable for many applications. If it becomes a limitation,
+// then combine the parameters together into a single type like using a vector, matrix, or quaternion instead of one scalar
+// per component.
+//
+// Even though a runtime aggregate uses variants and users are free to set any of the tags to any variant type, the calling
+// function will throw if an unsupported combination is provided. This is done to avoid templates and to keep our interface
+// consistant between C++ and Python. Pure C++ can call the direct aggregate version if they want to avoid this overhead.
+//
+// Note, with this design, the overhead is entirely on the compiler. At runtime, we will map the ragg to an agg for lossless
+// performance. Instead, the overhead comes from compiling all possible combinations during the visitation step.
+//
+// There is one potential problem with this that we observed in our variant benchmark. We observed that generating an agg
+// from a v_agg during visitation was WAY slower than unpacking into concrete accessors. To me, this means that we need to
+// offer three inputs: a tagged variant aggregate, a concrete aggregate, and the set of accessors. The aggregate will be 
+// unpacked into concrete accessors and then passed into the accessor function. Similarly, the tagged variant aggregate will be
+// unpacked into concrete accessors via visitation and then passed into the accessor function.
+//
+// The reason aggregates exist is to aggregate multiple accessors into a single logical object that can be passed around easily.
+// They no longer serve the same role as mundy::mesh::Aggregate once did, where they would have for_each functions, as the
+// old syntax led to confusion. But, if we unpack judiciously and automatically in a way that the user doesn't have to think about,
+// then we get the best of both worlds: quicker compilation, more logical code, and an easy to use interface.
+
+/*
+
+What if we used setters instead of a rename map? Would this allow us to append based on active type? We could have 
+setters that take in either shared value or an accessor.
+
+names: ["x",    "y",    "z"]
+types: [shared, shared, field]
+
+names: ["y",    "z",    "x"]
+types: [shared, shared, field]
+
+
+TYPE ERASED VIEW TYPE
+auto sphere_centers = ragg.get_accessor<accessor_t::VECTOR3<double>>(NODE_RANK, rename_map["CENTER"]);
+
+
+## Visit
+- Takes in an array of runtime tagged variants sorted by their active type index and a visitor
+- Calls visitor(array of runtime tagged type erased shared values, array of runtime tagged type erased fields)
+
+The index into the original array of variants maps directly onto the concatenated array of shared values and fields.
+But, because this index is runtime, we have no ability to map the size of these arrays and that index to a concrete
+type.
+
+All of this is fixed if mundy offers finite set of tags within python where expansions to mundy may augment this set.
+
+With this RuntimeAggregate.append would require 2 (scalar/field) functions per tag. Each would return a unique type
+by inserting said object/tag into the end of the existing sorted arrays of active types and tags.
+
+If we do not offer the name, then we could offer something like TAG_1, TAG_2, ..., TAG_100, to allow users to
+append without naming. But if they want a specific name, they must use one of the predefined tags like FORCE, VELOCITY,
+etc. Basically, every tag that mundy expects as a potential input to an algorithm would be predefined in this master
+list. There would be no point in offering tags that we don't use. If an expansion to mundy adds a new algorithm that
+expects a new tag, then we augment the master list. When creating the field, they used a string name.
+
+What we've effectively done is force the responsibility of mapping string name to compile-time tag type onto the user.
+
+
+
+## Problem statement ##
+
+Given:
+  - Array of type erased shared values and an array of type erased accessors
+  - 
+
+
+*/
 }  // namespace mesh
 
 }  // namespace mundy

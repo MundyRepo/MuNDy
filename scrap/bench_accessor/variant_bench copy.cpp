@@ -10,7 +10,6 @@
 #include <random>
 #include <string>
 #include <vector>
-#include <thread>    // for std::this_thread
 
 // ----- Accessor (vector-backed or shared scalar) -----
 enum class variant_t : unsigned { SHARED = 0u, VECTOR, CONDITIONAL, MAPPED_SCALAR, MAPPED_VECTOR, INVALID };
@@ -94,11 +93,11 @@ struct tuple_member {
   }
 
   // Provide get() or equivalent
-  inline constexpr T& get() {
+  constexpr T& get() {
     return value;
   }
 
-  inline constexpr T const& get() const {
+  constexpr T const& get() const {
     return value;
   }
 };
@@ -110,7 +109,7 @@ struct tuple_idx_matcher {
   using type = tuple_member<T, Idx>;
 
   template <class Other>
-  inline constexpr auto operator|([[maybe_unused]] Other v) const {
+  constexpr auto operator|([[maybe_unused]] Other v) const {
     if constexpr (Idx == SearchIdx) {
       return *this;
     } else {
@@ -126,7 +125,7 @@ struct tuple_type_matcher {
   using type = tuple_member<T, Idx>;
 
   template <class Other>
-  inline constexpr auto operator|([[maybe_unused]] Other v) const {
+  constexpr auto operator|([[maybe_unused]] Other v) const {
     if constexpr (std::is_same_v<T, SearchType>) {
       return *this;
     } else {
@@ -141,33 +140,33 @@ struct tuple_impl;
 template <size_t... Idx, class... Elements>
 struct tuple_impl<std::index_sequence<Idx...>, Elements...> : public tuple_member<Elements, Idx>... {
   // If all elements are default constructible, provide a default constructor
-  inline constexpr tuple_impl()
+  constexpr tuple_impl()
     requires((std::default_initializable<Elements> && ...))
   = default;
 
-  inline constexpr tuple_impl(Elements... vals)
+  constexpr tuple_impl(Elements... vals)
     requires(sizeof...(Elements) > 0)
       : tuple_member<Elements, Idx>{vals}... {
   }
 
   /// \brief Default copy/move/assign constructors
-  inline constexpr tuple_impl(const tuple_impl&) = default;
+  constexpr tuple_impl(const tuple_impl&) = default;
 
-  inline constexpr tuple_impl(tuple_impl&&) = default;
+  constexpr tuple_impl(tuple_impl&&) = default;
 
-  inline constexpr tuple_impl& operator=(const tuple_impl&) = default;
+  constexpr tuple_impl& operator=(const tuple_impl&) = default;
 
-  inline constexpr tuple_impl& operator=(tuple_impl&&) = default;
+  constexpr tuple_impl& operator=(tuple_impl&&) = default;
 
   /// \brief Get the element of the tuple at index N
   template <size_t N>
-  inline constexpr auto& get() {
+  constexpr auto& get() {
     static_assert(N < sizeof...(Elements), "Index out of bounds in tuple::get<N>()");
     using base_t = decltype((tuple_idx_matcher<N, Idx, Elements>() | ...));
     return base_t::type::get();
   }
   template <size_t N>
-  inline constexpr const auto& get() const {
+  constexpr const auto& get() const {
     static_assert(N < sizeof...(Elements), "Index out of bounds in tuple::get<N>()");
     using base_t = decltype((tuple_idx_matcher<N, Idx, Elements>() | ...));
     return base_t::type::get();
@@ -175,13 +174,13 @@ struct tuple_impl<std::index_sequence<Idx...>, Elements...> : public tuple_membe
 
   /// \brief Get the element of the tuple with the given type T (errors if T is not unique)
   template <typename T>
-  inline constexpr const auto& get() const {
+  constexpr const auto& get() const {
     static_assert(count_type_v<T, Elements...> == 1, "Type must appear exactly once in tuple to use get<T>()");
     using base_t = decltype((tuple_type_matcher<T, Idx, Elements>() | ...));
     return base_t::type::get();
   }
   template <typename T>
-  inline constexpr auto& get() {
+  constexpr auto& get() {
     static_assert(count_type_v<T, Elements...> == 1, "Type must appear exactly once in tuple to use get<T>()");
     using base_t = decltype((tuple_type_matcher<T, Idx, Elements>() | ...));
     return base_t::type::get();
@@ -202,26 +201,26 @@ struct tuple_impl<std::index_sequence<Idx...>, Elements...> : public tuple_membe
 template <class... Elements>
 struct tuple : public impl::tuple_impl<decltype(std::make_index_sequence<sizeof...(Elements)>()), Elements...> {
   // If all elements are default constructible, provide a default constructor
-  inline constexpr tuple()
+  constexpr tuple()
     requires((std::default_initializable<Elements> && ...))
   = default;
 
-  inline constexpr tuple(Elements... vals)
+  constexpr tuple(Elements... vals)
     requires(sizeof...(Elements) > 0)
       : impl::tuple_impl<decltype(std::make_index_sequence<sizeof...(Elements)>()), Elements...>(vals...) {
   }
 
   /// \brief Default copy/move/assign constructors
-  inline constexpr tuple(const tuple&) = default;
+  constexpr tuple(const tuple&) = default;
 
-  inline constexpr tuple(tuple&&) = default;
+  constexpr tuple(tuple&&) = default;
 
-  inline constexpr tuple& operator=(const tuple&) = default;
+  constexpr tuple& operator=(const tuple&) = default;
 
-  inline constexpr tuple& operator=(tuple&&) = default;
+  constexpr tuple& operator=(tuple&&) = default;
 
   /// \brief Get the size of the tuple
-  inline static constexpr size_t size() {
+  static constexpr size_t size() {
     return sizeof...(Elements);
   }
 
@@ -232,22 +231,22 @@ struct tuple : public impl::tuple_impl<decltype(std::make_index_sequence<sizeof.
 };
 
 template <size_t Idx, class... Args>
-inline constexpr auto& get(tuple<Args...>& vals) {
+constexpr auto& get(tuple<Args...>& vals) {
   return vals.template get<Idx>();
 }
 
 template <size_t Idx, class... Args>
-inline constexpr const auto& get(const tuple<Args...>& vals) {
+constexpr const auto& get(const tuple<Args...>& vals) {
   return vals.template get<Idx>();
 }
 
 template <class T, class... Args>
-inline constexpr auto& get(tuple<Args...>& vals) {
+constexpr auto& get(tuple<Args...>& vals) {
   return vals.template get<T>();
 }
 
 template <class T, class... Args>
-inline constexpr const auto& get(const tuple<Args...>& vals) {
+constexpr const auto& get(const tuple<Args...>& vals) {
   return vals.template get<T>();
 }
 
@@ -281,7 +280,7 @@ tuple(Elements...) -> tuple<Elements...>;
 
 // Implementation to concatenate two tuples using index sequences
 template <class FirstTuple, class SecondTuple, std::size_t... FirstIndices, std::size_t... SecondIndices>
-inline constexpr auto tuple_cat_impl(const FirstTuple& first, const SecondTuple& second, std::index_sequence<FirstIndices...>,
+constexpr auto tuple_cat_impl(const FirstTuple& first, const SecondTuple& second, std::index_sequence<FirstIndices...>,
                               std::index_sequence<SecondIndices...>) {
   // Extract elements from both tuples and construct the new tuple
   // This copy the elements of the tuples into the new tuple, so we remove const and ref qualifiers
@@ -292,7 +291,7 @@ inline constexpr auto tuple_cat_impl(const FirstTuple& first, const SecondTuple&
 
 // Public-facing `tuple_cat` function
 template <class... FirstElements, class... SecondElements>
-inline constexpr auto tuple_cat(const tuple<FirstElements...>& first, const tuple<SecondElements...>& second) {
+constexpr auto tuple_cat(const tuple<FirstElements...>& first, const tuple<SecondElements...>& second) {
   constexpr auto first_size = sizeof...(FirstElements);
   constexpr auto second_size = sizeof...(SecondElements);
 
@@ -309,7 +308,7 @@ using tuple_cat_t = decltype(tuple_cat(std::declval<input_t>()...));
 
 /// Make a tuple from a list of values.
 template <class... Elements>
-inline constexpr auto make_tuple(Elements... vals) {
+constexpr auto make_tuple(Elements... vals) {
   return tuple<Elements...>{vals...};
 }
 
@@ -318,7 +317,7 @@ namespace impl {
 /// \brief Helper function to locate the component that matches a Tag
 /// We assume each tag occurs only once and perform a simple linear search.
 template <typename Tag, typename First, typename... Rest>
-inline static constexpr const auto& find_const_component_recurse_impl(const First& first, const Rest&... rest) {
+static constexpr const auto& find_const_component_recurse_impl(const First& first, const Rest&... rest) {
   if constexpr (std::is_same_v<typename First::tag_type, Tag>) {
     return first;
   } else {
@@ -328,7 +327,7 @@ inline static constexpr const auto& find_const_component_recurse_impl(const Firs
 
 /// \brief Fetch the component corresponding to the given Tag using an index sequence
 template <typename Tag, typename... Components, std::size_t... Is>
-inline static constexpr auto& find_const_component_impl(const tuple<Components...>& tuple, std::index_sequence<Is...>) {
+static constexpr auto& find_const_component_impl(const tuple<Components...>& tuple, std::index_sequence<Is...>) {
   // Unpack into the
   return find_const_component_recurse_impl<Tag>(get<Is>(tuple)...);
 }
@@ -336,7 +335,7 @@ inline static constexpr auto& find_const_component_impl(const tuple<Components..
 /// \brief Helper function to locate the component that matches a Tag
 /// We assume each tag occurs only once and perform a simple linear search.
 template <typename Tag, typename First, typename... Rest>
-inline static constexpr auto& find_component_recurse_impl(First& first, Rest&... rest) {
+static constexpr auto& find_component_recurse_impl(First& first, Rest&... rest) {
   if constexpr (std::is_same_v<typename First::tag_type, Tag>) {
     return first;
   } else {
@@ -346,7 +345,7 @@ inline static constexpr auto& find_component_recurse_impl(First& first, Rest&...
 
 /// \brief Fetch the component corresponding to the given Tag using an index sequence
 template <typename Tag, typename... Components, std::size_t... Is>
-inline static constexpr auto& find_component_impl(tuple<Components...>& tuple, std::index_sequence<Is...>) {
+static constexpr auto& find_component_impl(tuple<Components...>& tuple, std::index_sequence<Is...>) {
   // Unpack into the
   return find_component_recurse_impl<Tag>(get<Is>(tuple)...);
 }
@@ -377,7 +376,7 @@ static constexpr bool has_component_v = has_component<Tag, Components...>::value
 
 /// \brief Fetch the component corresponding to the given Tag (returns a const reference since the tuple is const)
 template <typename Tag, typename... Components>
-inline static constexpr const auto& find_component(const tuple<Components...>& tuple) {
+static constexpr const auto& find_component(const tuple<Components...>& tuple) {
   static_assert(all_have_tags<Components...>, "All of the given components must have tags.");
   static_assert(has_component_v<Tag, Components...>,
                 "Attempting to find a component that does not exist in the given tuple");
@@ -386,7 +385,7 @@ inline static constexpr const auto& find_component(const tuple<Components...>& t
 
 /// \brief Fetch the component corresponding to the given Tag
 template <typename Tag, typename... Components>
-inline static constexpr auto& find_component(tuple<Components...>& tuple) {
+static constexpr auto& find_component(tuple<Components...>& tuple) {
   static_assert(all_have_tags<Components...>, "All of the given components must have tags.");
   static_assert(has_component_v<Tag, Components...>,
                 "Attempting to find a component that does not exist in the given tuple");
@@ -400,14 +399,14 @@ class TaggedComponent {
   using tag_type = Tag;
   using component_type = Type;
 
-  inline constexpr TaggedComponent(component_type component) : component_(component) {
+  constexpr TaggedComponent(component_type component) : component_(component) {
   }
 
   /// \brief Default copy/move/assign constructors
-  inline constexpr TaggedComponent(const TaggedComponent&) = default;
-  inline constexpr TaggedComponent(TaggedComponent&&) = default;
-  inline constexpr TaggedComponent& operator=(const TaggedComponent&) = default;
-  inline constexpr TaggedComponent& operator=(TaggedComponent&&) = default;
+  constexpr TaggedComponent(const TaggedComponent&) = default;
+  constexpr TaggedComponent(TaggedComponent&&) = default;
+  constexpr TaggedComponent& operator=(const TaggedComponent&) = default;
+  constexpr TaggedComponent& operator=(TaggedComponent&&) = default;
 
   inline constexpr const component_type& component() const {
     // Our lifetime should be at least as long as the component's
@@ -422,7 +421,7 @@ class TaggedComponent {
 };  // TaggedComponent
 
 template <typename Tag, typename Type>
-inline TaggedComponent<Tag, Type> apply_tag(Type t) {
+TaggedComponent<Tag, Type> apply_tag(Type t) {
   return TaggedComponent<Tag, Type>(t);
 }
 
@@ -440,7 +439,7 @@ struct variant {
   //@{
 
   template <size_t... Ids>
-  inline void reset_active_type_impl(std::index_sequence<Ids...>) {
+  void reset_active_type_impl(std::index_sequence<Ids...>) {
     ((active_index_ == Ids
           ? (storage_.template get<Ids>() = std::decay_t<decltype(storage_.template get<Ids>())>{}, true)
           : false),
@@ -448,46 +447,46 @@ struct variant {
   }
 
   // Function to reset the current active type to its default value
-  inline void reset_active_type() {
+  void reset_active_type() {
     reset_active_type_impl(std::make_index_sequence<sizeof...(Alts)>{});
   }
   //@}
 
  public:
   /// \brief Default constructor initializes the first type as active
-  inline constexpr variant() : storage_{}, active_index_{0} {
+  constexpr variant() : storage_{}, active_index_{0} {
   }
 
   /// \brief Constructor for initializing with a specific type
   template <class T>
     requires(contains_type_v<T, Alts...>)
-  inline constexpr variant(const T& value) : storage_{}, active_index_{index_of<T>()} {
+  constexpr variant(const T& value) : storage_{}, active_index_{index_of<T>()} {
     storage_.template get<T>() = value;
   }
 
   /// \brief Get the active type index
-  inline constexpr size_t index() const {
+  constexpr size_t index() const {
     return active_index_;
   }
 
   /// \brief Get the number of alternatives
-  inline static constexpr size_t size() {
+  static constexpr size_t size() {
     return sizeof...(Alts);
   }
 
   template <class T>
-  inline static constexpr size_t index_of() {
+  static constexpr size_t index_of() {
     return index_finder_v<T, Alts...>;
   }
 
   /// \brief Check if a specific type is active
   template <class T>
-  inline constexpr bool holds_alternative() const {
+  constexpr bool holds_alternative() const {
     return active_index_ == index_of<T>();
   }
 
   template <size_t I>
-  inline constexpr bool holds_alternative() const {
+  constexpr bool holds_alternative() const {
     return active_index_ == I;
   }
 
@@ -497,14 +496,14 @@ struct variant {
 
   /// \brief Get the value of the active type
   template <class T>
-  inline constexpr T& get() {
+  constexpr T& get() {
     static_assert(contains_type_v<T, Alts...>, "Type is not in variant.");
     assert(holds_alternative<T>() && "Incorrect type access");
     constexpr size_t index_of_t = index_of<T>();
     return storage_.template get<index_of_t>();
   }
   template <class T>
-  inline constexpr const T& get() const {
+  constexpr const T& get() const {
     static_assert(contains_type_v<T, Alts...>, "Type is not in variant.");
     assert(holds_alternative<T>() && "Incorrect type access");
     constexpr size_t index_of_t = index_of<T>();
@@ -513,13 +512,13 @@ struct variant {
 
   /// \brief Get the value of the active type based on the active index
   template <size_t ActiveIdx>
-  inline constexpr auto get() -> alternative_t<ActiveIdx>& {
+  constexpr auto get() -> alternative_t<ActiveIdx>& {
     using Alt = alternative_t<ActiveIdx>;
     assert(holds_alternative<Alt>() && "Incorrect type access using active index");
     return storage_.template get<ActiveIdx>();
   }
   template <size_t ActiveIdx>
-  inline constexpr const auto get() const -> const alternative_t<ActiveIdx>& {
+  constexpr const auto get() const -> const alternative_t<ActiveIdx>& {
     using Alt = alternative_t<ActiveIdx>;
     assert(holds_alternative<Alt>() && "Incorrect type access using active index");
     return storage_.template get<ActiveIdx>();
@@ -528,7 +527,7 @@ struct variant {
   /// \brief Set a new active type, default-constructing the previous type
   template <class T>
     requires(contains_type_v<T, Alts...>)
-  inline constexpr void operator=(T const& value) {
+  constexpr void operator=(T const& value) {
     reset_active_type();
     active_index_ = index_of<T>();
     storage_.template get<T>() = value;
@@ -540,17 +539,17 @@ struct variant {
 
 /// \brief Get the index of the given type
 template <class T, class... Alts>
-inline constexpr size_t index_of() {
+constexpr size_t index_of() {
   return variant<Alts...>::template index_of<T>();
 }
 
 /// \brief Check if a specific type is active
 template <class T, class... Alts>
-inline constexpr bool holds_alternative(const variant<Alts...>& var) {
+constexpr bool holds_alternative(const variant<Alts...>& var) {
   return var.template holds_alternative<T>();
 }
 template <size_t I, class... Alts>
-inline constexpr bool holds_alternative(const variant<Alts...>& var) {
+constexpr bool holds_alternative(const variant<Alts...>& var) {
   return var.template holds_alternative<I>();
 }
 
@@ -561,21 +560,21 @@ using variant_alternative_t = typename VariantType::template alternative_t<J>;
 
 /// \brief Get the value of the active type
 template <class T, class... Alts>
-inline constexpr T& get(variant<Alts...>& var) {
+constexpr T& get(variant<Alts...>& var) {
   return var.template get<T>();
 }
 template <class T, class... Alts>
-inline constexpr const T& get(const variant<Alts...>& var) {
+constexpr const T& get(const variant<Alts...>& var) {
   return var.template get<T>();
 }
 
 /// \brief Get the value of the active type based on the active index
 template <size_t ActiveIdx, class... Alts>
-inline constexpr auto& get(variant<Alts...>& var) {
+constexpr auto& get(variant<Alts...>& var) {
   return var.template get<ActiveIdx>();
 }
 template <size_t ActiveIdx, class... Alts>
-inline constexpr const auto& get(const variant<Alts...>& var) {
+constexpr const auto& get(const variant<Alts...>& var) {
   return var.template get<ActiveIdx>();
 }
 
@@ -606,22 +605,22 @@ class variant_aggregate {
 
   /// \brief Default constructor
 
-  inline constexpr variant_aggregate() = default;
+  constexpr variant_aggregate() = default;
 
   /// \brief Construct a variant_aggregate that has the given tagged variants
-  inline constexpr variant_aggregate(std::array<variant_t, N> variants) : variants_(std::move(variants)) {
+  constexpr variant_aggregate(std::array<variant_t, N> variants) : variants_(std::move(variants)) {
   }
 
   /// \brief Default copy/move/assign constructors
-  inline constexpr variant_aggregate(const variant_aggregate&) = default;
-  inline constexpr variant_aggregate(variant_aggregate&&) = default;
-  inline constexpr variant_aggregate& operator=(const variant_aggregate&) = default;
-  inline constexpr variant_aggregate& operator=(variant_aggregate&&) = default;
+  constexpr variant_aggregate(const variant_aggregate&) = default;
+  constexpr variant_aggregate(variant_aggregate&&) = default;
+  constexpr variant_aggregate& operator=(const variant_aggregate&) = default;
+  constexpr variant_aggregate& operator=(variant_aggregate&&) = default;
   //@}
 
   /// \brief Add a component (fluent interface):
   template <typename Tag>
-  inline constexpr auto append(variant_t new_variant) const {
+  constexpr auto append(variant_t new_variant) const {
     // Copy the old variants into a new array with one extra slot
     std::array<variant_t, N + 1> new_variants;
     for (size_t i = 0; i < N; ++i) {
@@ -640,47 +639,47 @@ class variant_aggregate {
 
   /// \brief Fetch the I'th component (compile-time index)
   template <size_t I>
-  inline constexpr const variant_t& get() const {
+  constexpr const variant_t& get() const {
     return variants_[I];
   }
   template <size_t I>
-  inline constexpr variant_t& get() {
+  constexpr variant_t& get() {
     return variants_[I];
   }
 
   /// \brief Fetch the I'th component (runtime index)
 
-  inline constexpr const variant_t& get(size_t I) const {
+  constexpr const variant_t& get(size_t I) const {
     return variants_[I];
   }
 
-  inline constexpr variant_t& get(size_t I) {
+  constexpr variant_t& get(size_t I) {
     return variants_[I];
   }
 
   /// \brief Fetch the component corresponding to the given Tag
   template <typename Tag>
-  inline constexpr const variant_t& get() const {
+  constexpr const variant_t& get() const {
     constexpr size_t index = index_finder_v<Tag, Tags...>;
     return variants_[index];
   }
 
   /// \brief Fetch the component corresponding to the given Tag
   template <typename Tag>
-  inline constexpr variant_t& get() {
+  constexpr variant_t& get() {
     constexpr size_t index = index_finder_v<Tag, Tags...>;
     return variants_[index];
   }
 
   /// \brief Check if we have a component with the given Tag
   template <typename Tag>
-  inline static constexpr bool has() {
+  static constexpr bool has() {
     return contains_type_v<Tag, Tags...>;
   }
 
   /// \brief Get the number of components in this variant_aggregate
 
-  inline static constexpr size_t size() {
+  static constexpr size_t size() {
     return N;
   }
 
@@ -693,27 +692,29 @@ class variant_aggregate {
 
 /// \brief Canonical way to construct a variant_aggregate
 template <typename VariantType>
-inline auto make_variant_aggregate() {
+auto make_variant_aggregate() {
   return variant_aggregate<VariantType>();
 }
 
 /// \brief Fetch the variant corresponding to the given Tag
 template <typename Tag, typename VariantType, typename... Tags>
-inline constexpr const VariantType& get(const variant_aggregate<VariantType, Tags...>& v_agg) {
+constexpr const VariantType& get(const variant_aggregate<VariantType, Tags...>& v_agg) {
   return v_agg.template get<Tag>();
 }
+
+/// \brief Fetch the variant corresponding to the given Tag
 template <typename Tag, typename VariantType, typename... Tags>
-inline constexpr VariantType& get(variant_aggregate<VariantType, Tags...>& v_agg) {
+constexpr VariantType& get(variant_aggregate<VariantType, Tags...>& v_agg) {
   return v_agg.template get<Tag>();
 }
 
 /// \brief Fetch the variant at index I
 template <size_t I, typename VariantType, typename... Tags>
-inline constexpr const VariantType& get(const variant_aggregate<VariantType, Tags...>& v_agg) {
+constexpr const VariantType& get(const variant_aggregate<VariantType, Tags...>& v_agg) {
   return v_agg.template get<I>();
 }
 template <size_t I, typename VariantType, typename... Tags>
-inline constexpr VariantType& get(variant_aggregate<VariantType, Tags...>& v_agg) {
+constexpr VariantType& get(variant_aggregate<VariantType, Tags...>& v_agg) {
   return v_agg.template get<I>();
 }
 
@@ -731,7 +732,7 @@ using variant_aggregate_tag_t = variant_aggregate_tag<I, VarAggType>::type;
 
 /// \brief Check if a variant_aggregate have a variant with the given Tag
 template <typename Tag, typename VariantType, typename... Tags>
-inline constexpr bool has(const variant_aggregate<VariantType, Tags...>& /*v_agg*/) {
+constexpr bool has(const variant_aggregate<VariantType, Tags...>& /*v_agg*/) {
   return variant_aggregate<VariantType, Tags...>::template has<Tag>();
 }
 
@@ -747,7 +748,7 @@ static constexpr bool variant_aggregate_has_v = variant_aggregate_has<Tag, VarAg
 
 /// \brief Add a new component to an existing aggregate (fluent interface)
 template <typename Tag, typename VariantType, typename... Tags>
-inline constexpr auto append(const variant_aggregate<VariantType, Tags...>& v_agg, VariantType new_variant) {
+constexpr auto append(const variant_aggregate<VariantType, Tags...>& v_agg, VariantType new_variant) {
   return v_agg.template append<Tag>(std::move(new_variant));
 }
 
@@ -774,24 +775,24 @@ class aggregate {
 
   /// \brief Default constructor
 
-  inline constexpr aggregate() = default;
+  constexpr aggregate() = default;
 
   /// \brief Construct an aggregate that has the given components
-  inline constexpr aggregate(TaggedComponentsTuple tagged_components)
+  constexpr aggregate(TaggedComponentsTuple tagged_components)
     requires(sizeof...(TaggedComponents) > 0)
       : tagged_components_(std::move(tagged_components)) {
   }
 
   /// \brief Default copy/move/assign constructors
-  inline constexpr aggregate(const aggregate&) = default;
-  inline constexpr aggregate(aggregate&&) = default;
-  inline constexpr aggregate& operator=(const aggregate&) = default;
-  inline constexpr aggregate& operator=(aggregate&&) = default;
+  constexpr aggregate(const aggregate&) = default;
+  constexpr aggregate(aggregate&&) = default;
+  constexpr aggregate& operator=(const aggregate&) = default;
+  constexpr aggregate& operator=(aggregate&&) = default;
   //@}
 
   /// \brief Add a component (fluent interface):
   template <typename Tag, typename NewComponent>
-  inline constexpr auto append(NewComponent new_component) const {
+  constexpr auto append(NewComponent new_component) const {
     impl::TaggedComponent<Tag, NewComponent> new_tagged_comp(std::move(new_component));
     auto new_tuple = tuple_cat(tagged_components_, ::make_tuple(new_tagged_comp));
 
@@ -808,33 +809,33 @@ class aggregate {
 
   /// \brief Fetch the I'th component
   template <size_t I>
-  inline constexpr const auto& get() const {
+  constexpr const auto& get() const {
     return tagged_components_.template get<I>().component();
   }
   template <size_t I>
-  inline constexpr auto& get() {
+  constexpr auto& get() {
     return tagged_components_.template get<I>().component();
   }
 
   /// \brief Fetch the component corresponding to the given Tag
   template <typename Tag>
-  inline constexpr const auto& get() const {
+  constexpr const auto& get() const {
     return impl::find_component<Tag>(tagged_components_).component();
   }
   template <typename Tag>
-  inline constexpr auto& get() {
+  constexpr auto& get() {
     return impl::find_component<Tag>(tagged_components_).component();
   }
 
   /// \brief Check if we have a component with the given Tag
   template <typename Tag>
-  inline static constexpr bool has() {
+  static constexpr bool has() {
     return impl::has_component_v<Tag, TaggedComponents...>;
   }
 
   /// \brief Get the number of components in this aggregate
 
-  inline static constexpr size_t size() {
+  static constexpr size_t size() {
     return sizeof...(TaggedComponents);
   }
 
@@ -850,35 +851,35 @@ class aggregate {
 
 /// \brief The type of aggregates is typically inferred, so this is the canonical way to construct one.
 
-inline constexpr auto make_aggregate() {
+constexpr auto make_aggregate() {
   return aggregate<>();
 }
 
 /// \brief Fetch the component corresponding to the given Tag
 template <typename Tag, typename... Components>
-inline constexpr const auto& get(const aggregate<Components...>& agg) {
+constexpr const auto& get(const aggregate<Components...>& agg) {
   return agg.template get<Tag>();
 }
 
 /// \brief Fetch the component corresponding to the given Tag
 template <typename Tag, typename... Components>
-inline constexpr auto& get(aggregate<Components...>& agg) {
+constexpr auto& get(aggregate<Components...>& agg) {
   return agg.template get<Tag>();
 }
 
 /// \brief Fetch the component at index I
 template <size_t I, typename... Components>
-inline constexpr const auto& get(const aggregate<Components...>& agg) {
+constexpr const auto& get(const aggregate<Components...>& agg) {
   return agg.template get<I>();
 }
 template <size_t I, typename... Components>
-inline constexpr auto& get(aggregate<Components...>& agg) {
+constexpr auto& get(aggregate<Components...>& agg) {
   return agg.template get<I>();
 }
 
 /// \brief Check if an aggregate have a component with the given Tag
 template <typename Tag, typename... Components>
-inline constexpr bool has(const aggregate<Components...>& /*agg*/) {
+constexpr bool has(const aggregate<Components...>& /*agg*/) {
   return aggregate<Components...>::template has<Tag>();
 }
 
@@ -893,7 +894,7 @@ static constexpr bool aggregate_has_v = aggregate_has<Tag, AggType>::value;
 
 /// \brief Add a new component to an existing aggregate (fluent interface)
 template <typename Tag, typename NewComponent, typename... Components>
-inline constexpr auto append(const aggregate<Components...>& agg, NewComponent new_component) {
+constexpr auto append(const aggregate<Components...>& agg, NewComponent new_component) {
   return agg.template append<Tag>(std::move(new_component));
 }
 
@@ -927,24 +928,6 @@ struct NonOwningVector {
   // Just a pointer and a size
   T* data;
   std::size_t size;
-
-  inline NonOwningVector() = default;
-
-  inline NonOwningVector(T* data_ptr, std::size_t sz) : data(data_ptr), size(sz) {
-  }
-
-  inline NonOwningVector(std::vector<T>& vec) : data(vec.data()), size(vec.size()) {
-  }
-
-  // Copy/move constructors and assignments
-  inline NonOwningVector(const NonOwningVector& other) = default;
-  inline NonOwningVector(NonOwningVector&& other) = default;
-  inline NonOwningVector& operator=(const NonOwningVector& other) = default;
-  inline NonOwningVector& operator=(NonOwningVector&& other) = default;
-
-  inline T& operator[](std::size_t i) const {
-    return data[i];
-  }
 };
 
 
@@ -959,32 +942,31 @@ class Accessor {
   // explicit inline Accessor(const std::vector<double>& vec) : our_type_(variant_t::VECTOR), variant_(vec) {
   // }
 
-
-  // explicit inline Accessor(double shared_value) : variant_(shared_value), is_shared_(true) {
-  // }
-
-  // explicit inline Accessor(std::vector<double>& vec) : variant_(vec), is_shared_(false) {
-  // }
-
-
-  explicit inline Accessor(double shared_value) : shared_value_(shared_value), vector_{}, is_shared_(true) {
+  explicit inline Accessor(double shared_value) : variant_(shared_value), is_shared_(true) {
   }
 
-  explicit inline Accessor(std::vector<double>& vec) : shared_value_{}, vector_(NonOwningVector<double>(vec)), is_shared_(false) {
+  explicit inline Accessor(const std::vector<double>& vec) : variant_(vec), is_shared_(false) {
   }
 
+  inline const double& operator()(std::size_t i) const {
+    return is_shared_ ? get<double>(variant_) : 
+        get<std::vector<double>>(variant_)[i];
 
-  inline double& operator()(std::size_t i) const {
-    return is_shared_ ? 
-    const_cast<double&>(shared_value_) :
-      const_cast<double&>(vector_[i]);
+    // if (our_type_ == variant_t::SHARED) {
+    //   return shared_value_;
+    // } else if (our_type_ == variant_t::VECTOR) {
+    //   return vector_[i];
+    // } else if (our_type_ == variant_t::MAPPED_SCALAR) {
+    //   return part_mapped_scalars_.at(parts_[i]);
+    // } else {
+    //   return part_mapped_vectors_.at(parts_[i])[i];
+    // }
   }
 
+ private:
   // const variant_t our_type_;
-  // using actual_variant_t = variant<double, std::vector<double>>;
-  // const actual_variant_t variant_;
-  double shared_value_;
-  NonOwningVector<double> vector_;
+  using actual_variant_t = variant<double, std::vector<double>>;
+  const actual_variant_t variant_;
   const bool is_shared_;
 };
 
@@ -1045,7 +1027,7 @@ class Accessor {
 
 class ScalarAccessor {
  public:
-  inline ScalarAccessor() = default;
+  ScalarAccessor() = default;
 
   explicit inline ScalarAccessor(double shared_value) : shared_value_(shared_value) {
   }
@@ -1061,8 +1043,8 @@ class ScalarAccessor {
     return *this;
   }
 
-  inline double& operator()(std::size_t i) const {
-    return const_cast<double&>(shared_value_);
+  inline const double& operator()(std::size_t i) const {
+    return shared_value_;
   }
 
  private:
@@ -1087,8 +1069,8 @@ class VectorAccessor {
     return *this;
   }
 
-  inline double& operator()(std::size_t i) const {
-    return const_cast<double&>(vector_[i]);
+  inline const double& operator()(std::size_t i) const {
+    return vector_[i];
   }
 
  private:
@@ -1103,7 +1085,7 @@ static void randomize(std::vector<double>& v, std::uint64_t seed) {
 }
 
 struct Coeffs6 {
-  std::vector<double> a, b, c, d, e, f, x, y;
+  std::vector<double> a, b, c, d, e, f, x;
   std::size_t N{};
 };
 
@@ -1118,7 +1100,6 @@ static Coeffs6& get_coeffs(std::size_t N) {
     C.e.assign(N, 0.0);
     C.f.assign(N, 0.0);
     C.x.assign(N, 0.0);
-    C.y.assign(N, 0.0);
     C.N = N;
     randomize(C.a, 101);
     randomize(C.b, 202);
@@ -1140,11 +1121,11 @@ struct TagC;
 struct TagD;
 struct TagE;
 struct TagF;
-struct TagY;
 
 // Agg-based Horner (6 coefficients)
 template <typename Agg>
-static void poly6_sum_agg(const Agg& agg, std::size_t N) {
+static inline double poly6_sum_agg(const Agg& agg, std::size_t N) {
+  double s = 0.0;
   for (std::size_t i = 0; i < N; ++i) {
     const auto& x = get<TagX>(agg);
     const auto& a = get<TagA>(agg);
@@ -1153,10 +1134,10 @@ static void poly6_sum_agg(const Agg& agg, std::size_t N) {
     const auto& d = get<TagD>(agg);
     const auto& e = get<TagE>(agg);
     const auto& f = get<TagF>(agg);
-    const auto& y = get<TagY>(agg);
     const double xi = x(i);
-    y(i) = (((((a(i) * xi + b(i)) * xi + c(i)) * xi + d(i)) * xi + e(i)) * xi + f(i));
+    s += (((((a(i) * xi + b(i)) * xi + c(i)) * xi + d(i)) * xi + e(i)) * xi + f(i));
   }
+  return s;
 }
 
 #define ALT_UNROLL(Ax, Aa, Ab, Ac, Ad, Ae, Af)                                                                         \
@@ -1171,14 +1152,14 @@ static void poly6_sum_agg(const Agg& agg, std::size_t N) {
     const auto& d_accessor = get<Ad>(vd);                                                                    \
     const auto& e_accessor = get<Ae>(ve);                                                                    \
     const auto& f_accessor = get<Af>(vf);                                                                    \
-    const auto& y_accessor = get<Af>(vy);                                                                    \
     for (std::size_t i = 0; i < N; ++i) {                                                                              \
       const double xi = x_accessor(i);                                                                                 \
-      y_accessor(i) =                                                                                                             \
+      s +=                                                                                                             \
           (((((a_accessor(i) * xi + b_accessor(i)) * xi + c_accessor(i)) * xi + d_accessor(i)) * xi + e_accessor(i)) * \
                xi +                                                                                                    \
            f_accessor(i));                                                                                             \
     }                                                                                                                  \
+    return s;                                                                                                          \
   }
 
 // #define ALT_UNROLL(Ax, Aa, Ab, Ac, Ad, Ae, Af)                                                                         \
@@ -1479,7 +1460,8 @@ static void poly6_sum_agg(const Agg& agg, std::size_t N) {
 // }
 
 template <typename VarAgg>
-static void poly6_sum_v_agg(VarAgg& v_agg, std::size_t N) {
+static inline double poly6_sum_v_agg(const VarAgg& v_agg, std::size_t N) {
+  double s = 0.0;
   const auto& vx = get<TagX>(v_agg);
   const auto& va = get<TagA>(v_agg);
   const auto& vb = get<TagB>(v_agg);
@@ -1487,7 +1469,6 @@ static void poly6_sum_v_agg(VarAgg& v_agg, std::size_t N) {
   const auto& vd = get<TagD>(v_agg);
   const auto& ve = get<TagE>(v_agg);
   const auto& vf = get<TagF>(v_agg);
-  const auto& vy = get<TagY>(v_agg);
   
   for (std::size_t i = 0; i < N; ++i) {
 
@@ -1500,76 +1481,76 @@ static void poly6_sum_v_agg(VarAgg& v_agg, std::size_t N) {
     const double ei = holds_alternative<ScalarAccessor>(ve) ? get<ScalarAccessor>(ve)(i) : get<VectorAccessor>(ve)(i); 
     const double fi = holds_alternative<ScalarAccessor>(vf) ? get<ScalarAccessor>(vf)(i) : get<VectorAccessor>(vf)(i); 
 // clang-format on
-    get<VectorAccessor>(vy)(i) = (((((ai * xi + bi) * xi + ci) * xi + di) * xi + ei) * xi + fi);
+    s += (((((ai * xi + bi) * xi + ci) * xi + di) * xi + ei) * xi + fi);
   }
+  return s;
 }
 
 // Accessor-based Horner (6 coefficients)
-template <class AAcc, class BAcc, class CAcc, class DAcc, class EAcc, class FAcc, class XAcc, class YAcc>
-static void poly6_sum_accessor(const AAcc& a, const BAcc& b, const CAcc& c, const DAcc& d, const EAcc& e,
-                                        const FAcc& f, const XAcc& x, const YAcc& y, std::size_t N) {
+template <class AAcc, class BAcc, class CAcc, class DAcc, class EAcc, class FAcc, class XAcc>
+static inline double poly6_sum_accessor(const AAcc& a, const BAcc& b, const CAcc& c, const DAcc& d, const EAcc& e,
+                                        const FAcc& f, const XAcc& x, std::size_t N) {
+  double s = 0.0;
   for (std::size_t i = 0; i < N; ++i) {
     const double xi = x(i);
-    y(i) = (((((a(i) * xi + b(i)) * xi + c(i)) * xi + d(i)) * xi + e(i)) * xi + f(i));
+    s += (((((a(i) * xi + b(i)) * xi + c(i)) * xi + d(i)) * xi + e(i)) * xi + f(i));
   }
+  return s;
 }
 
 // Direct vectors
-static void poly6_sum_direct_vecs(const std::vector<double>& a, const std::vector<double>& b,
+static inline double poly6_sum_direct_vecs(const std::vector<double>& a, const std::vector<double>& b,
                                            const std::vector<double>& c, const std::vector<double>& d,
                                            const std::vector<double>& e, const std::vector<double>& f,
-                                           const std::vector<double>& x, std::vector<double>& y, std::size_t N) {
+                                           const std::vector<double>& x, std::size_t N) {
+  double s = 0.0;
   for (std::size_t i = 0; i < N; ++i) {
     const double xi = x[i];
-    y[i] = (((((a[i] * xi + b[i]) * xi + c[i]) * xi + d[i]) * xi + e[i]) * xi + f[i]);
+    s += (((((a[i] * xi + b[i]) * xi + c[i]) * xi + d[i]) * xi + e[i]) * xi + f[i]);
   }
+  return s;
 }
 
 // Direct scalars
-static void poly6_sum_direct_scalars(double a, double b, double c, double d, double e, double f, double x,
-std::vector<double>& y,
+static inline double poly6_sum_direct_scalars(double a, double b, double c, double d, double e, double f, double x,
                                               std::size_t N) {
+  double s = 0.0;
   for (std::size_t i = 0; i < N; ++i) {
     const double xi = x;
-    y[i] = (((((a * xi + b) * xi + c) * xi + d) * xi + e) * xi + f);
+    s += (((((a * xi + b) * xi + c) * xi + d) * xi + e) * xi + f);
   }
+  return s;
 }
 
 // ----- Simple timing harness -----
 using our_clock_t = std::chrono::steady_clock;
-
-void sleep_for_a_bit(const std::chrono::milliseconds pause_duration = std::chrono::milliseconds(100)) {
-  std::this_thread::sleep_for(pause_duration);
-}
 
 template <class Fn>
 static double time_avg_ns(Fn&& fn, int iters) {
   using namespace std::chrono;
 
   double s = 0.0;
-  sleep_for_a_bit(std::chrono::milliseconds(100));
   for (int warm = 0; warm < 100; ++warm) {
-   fn();
+    s += fn();
   }
+  std::cout << "warm sum=" << std::setprecision(17) << s << '\n';
 
-  sleep_for_a_bit(std::chrono::milliseconds(100));
   long double total_ns = 0.0L;
   for (int k = 0; k < iters; ++k) {
     auto t0 = our_clock_t::now();
-    fn();
+    s += fn();
     auto t1 = our_clock_t::now();
     // Print AFTER stopping timer to avoid timing I/O but still defeat DCE
     total_ns += duration_cast<nanoseconds>(t1 - t0).count();
   }
+  std::cout << "sum=" << std::setprecision(17) << s << '\n';
   return static_cast<double>(total_ns / iters);
 }
 
-
-
 int main(int argc, char** argv) {
   // Parameters
-  std::size_t length = 10000000;  // elements
-  int iters = 100;                 // timing iterations
+  std::size_t length = 1'000'000;  // elements
+  int iters = 1000;                 // timing iterations
   if (argc > 1) {
     length = static_cast<std::size_t>(std::stoull(argv[1]));
   }
@@ -1588,8 +1569,7 @@ int main(int argc, char** argv) {
                    .append<TagC>(VectorAccessor(C.c))
                    .append<TagD>(VectorAccessor(C.d))
                    .append<TagE>(VectorAccessor(C.e))
-                   .append<TagF>(VectorAccessor(C.f))
-                   .append<TagY>(VectorAccessor(C.y));
+                   .append<TagF>(VectorAccessor(C.f));
   double avg_ns_v_agg = time_avg_ns([&] { return poly6_sum_v_agg(v_agg, C.N); }, iters);
 
   // -1.5) Scalar V-Agg-based Horner (6 coefficients)
@@ -1600,8 +1580,7 @@ int main(int argc, char** argv) {
                        .append<TagC>(ScalarAccessor(0.33))
                        .append<TagD>(ScalarAccessor(0.44))
                        .append<TagE>(ScalarAccessor(0.55))
-                       .append<TagF>(ScalarAccessor(0.66))
-                        .append<TagY>(VectorAccessor(C.y));
+                       .append<TagF>(ScalarAccessor(0.66));
   double avg_ns_v_agg_sca = time_avg_ns([&] { return poly6_sum_v_agg(v_agg_sca, C.N); }, iters);
 
   // 0) Agg-based Horner (6 coefficients)
@@ -1612,48 +1591,45 @@ int main(int argc, char** argv) {
                  .append<TagC>(Accessor(C.c))
                  .append<TagD>(Accessor(C.d))
                  .append<TagE>(Accessor(C.e))
-                 .append<TagF>(Accessor(C.f))
-                  .append<TagY>(Accessor(C.y));
+                 .append<TagF>(Accessor(C.f));
   double avg_ns_agg = time_avg_ns([&] { return poly6_sum_agg(agg, C.N); }, iters);
 
   /// 0.5) Scalar Agg-based Horner (6 coefficients)
   auto agg_sca = make_aggregate()
-                     .append<TagX>(Accessor(0.77))
-                     .append<TagA>(Accessor(0.11))
-                     .append<TagB>(Accessor(0.22))
-                     .append<TagC>(Accessor(0.33))
-                     .append<TagD>(Accessor(0.44))
-                     .append<TagE>(Accessor(0.55))
-                     .append<TagF>(Accessor(0.66))
-                      .append<TagY>(Accessor(C.y));
+                     .append<TagX>(ScalarAccessor(0.77))
+                     .append<TagA>(ScalarAccessor(0.11))
+                     .append<TagB>(ScalarAccessor(0.22))
+                     .append<TagC>(ScalarAccessor(0.33))
+                     .append<TagD>(ScalarAccessor(0.44))
+                     .append<TagE>(ScalarAccessor(0.55))
+                     .append<TagF>(ScalarAccessor(0.66));
   double avg_ns_agg_sca = time_avg_ns([&] { return poly6_sum_agg(agg_sca, C.N); }, iters);
 
   // 1) 6 Accessors backed by vectors (each Accessor copies its vector by design)
-  Accessor av(C.a), bv(C.b), cv(C.c), dv(C.d), ev(C.e), fv(C.f), xv(C.x), yv(C.y);
-  double avg_ns_acc_vec = time_avg_ns([&] { return poly6_sum_accessor(av, bv, cv, dv, ev, fv, xv, yv, C.N); }, iters);
+  Accessor av(C.a), bv(C.b), cv(C.c), dv(C.d), ev(C.e), fv(C.f), xv(C.x);
+  double avg_ns_acc_vec = time_avg_ns([&] { return poly6_sum_accessor(av, bv, cv, dv, ev, fv, xv, C.N); }, iters);
 
   // 1) 6 Accessors backed by vectors (each Accessor copies its vector by design)
-  VectorAccessor avx(C.a), bvx(C.b), cvx(C.c), dvx(C.d), evx(C.e), fvx(C.f), xvx(C.x), yvx(C.y);
+  VectorAccessor avx(C.a), bvx(C.b), cvx(C.c), dvx(C.d), evx(C.e), fvx(C.f), xvx(C.x);
   double avg_ns_acc_vec_explicit =
-      time_avg_ns([&] { return poly6_sum_accessor(avx, bvx, cvx, dvx, evx, fvx, xvx, yvx, C.N); }, iters);
+      time_avg_ns([&] { return poly6_sum_accessor(avx, bvx, cvx, dvx, evx, fvx, xvx, C.N); }, iters);
 
   // 2) 6 Accessors backed by shared scalars
-  Accessor as(0.11), bs(0.22), cs(0.33), ds(0.44), es(0.55), fs(0.66), xs(0.77), ys(C.y);
-  double avg_ns_acc_sca = time_avg_ns([&] { return poly6_sum_accessor(as, bs, cs, ds, es, fs, xs, ys, C.N); }, iters);
+  Accessor as(0.11), bs(0.22), cs(0.33), ds(0.44), es(0.55), fs(0.66), xs(0.77);
+  double avg_ns_acc_sca = time_avg_ns([&] { return poly6_sum_accessor(as, bs, cs, ds, es, fs, xs, C.N); }, iters);
 
   // 2) 6 Accessors backed by shared scalars
   ScalarAccessor asx(0.11), bsx(0.22), csx(0.33), dsx(0.44), esx(0.55), fsx(0.66), xsx(0.77);
-  VectorAccessor ysx(C.y);
   double avg_ns_acc_sca_explicit =
-      time_avg_ns([&] { return poly6_sum_accessor(asx, bsx, csx, dsx, esx, fsx, xsx, ysx, C.N); }, iters);
+      time_avg_ns([&] { return poly6_sum_accessor(asx, bsx, csx, dsx, esx, fsx, xsx, C.N); }, iters);
 
   // 3) Direct vectors (no accessors)
   double avg_ns_dir_vec =
-      time_avg_ns([&] { return poly6_sum_direct_vecs(C.a, C.b, C.c, C.d, C.e, C.f, C.x, C.y, C.N); }, iters);
+      time_avg_ns([&] { return poly6_sum_direct_vecs(C.a, C.b, C.c, C.d, C.e, C.f, C.x, C.N); }, iters);
 
   // 4) Direct scalars (no accessors)
   const double a0 = 0.11, b0 = 0.22, c0 = 0.33, d0 = 0.44, e0 = 0.55, f0 = 0.66, x0 = 0.77;
-  double avg_ns_dir_sca = time_avg_ns([&] { return poly6_sum_direct_scalars(a0, b0, c0, d0, e0, f0, x0, C.y, C.N); }, iters);
+  double avg_ns_dir_sca = time_avg_ns([&] { return poly6_sum_direct_scalars(a0, b0, c0, d0, e0, f0, x0, C.N); }, iters);
 
   // Report (averages)
   auto to_ms = [](double ns) { return ns / 1e6; };

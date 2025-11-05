@@ -68,6 +68,12 @@ class EuclideanMetric {
   using OurPoint = Point<Scalar>;
 
   /// \brief Get if the given dimension is periodic
+  template<unsigned dimension>
+  KOKKOS_INLINE_FUNCTION static constexpr bool is_periodic() {
+    return false;
+  }
+
+  /// \brief Get if the given dimension is periodic
   KOKKOS_INLINE_FUNCTION constexpr bool is_periodic(unsigned /*dimension*/) const {
     return false;
   }
@@ -157,6 +163,12 @@ class PeriodicMetric {
   }
 
   /// \brief Get if the given dimension is periodic
+  template<unsigned dimension>
+  KOKKOS_INLINE_FUNCTION static constexpr bool is_periodic() {
+    return true;
+  }
+
+  /// \brief Get if the given dimension is periodic
   KOKKOS_INLINE_FUNCTION constexpr bool is_periodic(unsigned /*dimension*/) const {
     return true;
   }
@@ -228,6 +240,212 @@ class PeriodicMetric {
 
 
 template <typename Scalar>
+class PeriodicMetricX {
+ public:
+  /// \brief Type aliases
+  using scalar_t = Scalar;
+  using OurVector3 = math::Vector3<Scalar>;
+  using OurPoint = Point<Scalar>;
+
+  /// \brief Default constructor
+  KOKKOS_DEFAULTED_FUNCTION
+  constexpr PeriodicMetricX() = default;
+
+  /// \brief Constructor with unit cell matrix
+  KOKKOS_INLINE_FUNCTION
+  explicit constexpr PeriodicMetricX(const double width_x) : scale_{width_x, 1.0, 1.0}, inv_scale_{1.0 / width_x, 1.0, 1.0} {
+    MUNDY_THROW_ASSERT(width_x > 0, std::invalid_argument, "Cell dimensions must be positive");
+  }
+
+  /// \brief Get if the given dimension is periodic
+  template<unsigned dimension>
+  KOKKOS_INLINE_FUNCTION static constexpr bool is_periodic() {
+    return dimension == 0;
+  }
+
+  /// \brief Get if the given dimension is periodic
+  KOKKOS_INLINE_FUNCTION constexpr bool is_periodic(unsigned dimension) const {
+    return dimension == 0;
+  }
+
+  /// \brief Get the number of periodic dimensions
+  KOKKOS_INLINE_FUNCTION constexpr unsigned num_periodic_dimensions() const {
+    return 1;
+  }
+
+  /// \brief Map a point into fractional coordinates
+  template <ValidPointType PointT>
+    requires std::is_same_v<typename PointT::scalar_t, Scalar>
+  KOKKOS_INLINE_FUNCTION constexpr OurPoint to_fractional(const PointT& point) const {
+    return math::elementwise_mul(inv_scale_, point);
+  }
+
+  /// \brief Map a point from fractional coordinates to real space
+  template <ValidPointType PointT>
+    requires std::is_same_v<typename PointT::scalar_t, Scalar>
+  KOKKOS_INLINE_FUNCTION constexpr OurPoint from_fractional(const PointT& point_frac) const {
+    return math::elementwise_mul(scale_, point_frac);
+  }
+
+  template <typename Integer, math::ValidVector3Type Vector3T>
+  KOKKOS_INLINE_FUNCTION constexpr math::Vector3<typename Vector3T::scalar_t> frac_minimum_image(
+      const Vector3T& fractional_vec) const {
+    OurVector3 min_image{
+      fractional_vec[0] - static_cast<Scalar>(static_cast<Integer>(Kokkos::round(fractional_vec[0]))),
+      fractional_vec[1],
+      fractional_vec[2]};
+    return min_image;
+  }
+
+  template <typename Integer, math::ValidVector3Type Vector3T>
+  KOKKOS_INLINE_FUNCTION constexpr math::Vector3<typename Vector3T::scalar_t> frac_wrap_to_unit_cell(
+      const Vector3T& fractional_vec) const {
+    OurVector3 wrapped{
+      impl::safe_unit_mod1<Integer>(fractional_vec[0]),
+      fractional_vec[1],
+      fractional_vec[2]};
+    return wrapped;
+  }
+
+  /// \brief Distance vector between two points in periodic space (from point1 to point2)
+  template <ValidPointType PointT1, ValidPointType PointT2>
+    requires std::is_same_v<typename PointT1::scalar_t, Scalar> && std::is_same_v<typename PointT2::scalar_t, Scalar>
+  KOKKOS_INLINE_FUNCTION constexpr OurPoint sep(const PointT1& point1, const PointT2& point2) const {
+    // Assumes linearity of to_fractional
+    return from_fractional(frac_minimum_image<int64_t>(to_fractional(point2 - point1)));
+  }
+
+  /// \brief Wrap a point into the periodic space
+  template <ValidPointType PointT>
+    requires std::is_same_v<typename PointT::scalar_t, Scalar>
+  KOKKOS_INLINE_FUNCTION constexpr OurPoint wrap(const PointT& point) const {
+    return from_fractional(frac_wrap_to_unit_cell<int64_t>(to_fractional(point)));
+  }
+
+  /// TODO(palmerb4): I don't think this should be offered.
+  // /// \brief Direct lattice vectors (return as the columns of a matrix)
+  // KOKKOS_INLINE_FUNCTION constexpr OurMatrix3 direct_lattice_vectors() const {
+  //   return h_;
+  // }
+
+  /// \brief Shift a point by a given number of lattice images in each direction
+  template <ValidPointType PointT, typename Integer>
+    requires std::is_same_v<typename PointT::scalar_t, Scalar>
+  KOKKOS_INLINE_FUNCTION constexpr OurPoint shift_image(const PointT& point,
+                                                        const math::Vector3<Integer>& num_images) const {
+    return translate(point, from_fractional(num_images.template cast<Scalar>()));
+  }
+
+ private:
+  OurVector3 scale_;      ///< Unit cell scaling factors
+  OurVector3 inv_scale_;  ///< Inverse of the scaling factors
+};  // PeriodicMetricX
+
+
+
+template <typename Scalar>
+class PeriodicMetricY {
+ public:
+  /// \brief Type aliases
+  using scalar_t = Scalar;
+  using OurVector3 = math::Vector3<Scalar>;
+  using OurPoint = Point<Scalar>;
+
+  /// \brief Default constructor
+  KOKKOS_DEFAULTED_FUNCTION
+  constexpr PeriodicMetricY() = default;
+
+  /// \brief Constructor with unit cell matrix
+  KOKKOS_INLINE_FUNCTION
+  explicit constexpr PeriodicMetricY(const double width_y) : scale_{1.0, width_y, 1.0}, inv_scale_{1.0, 1.0 / width_y, 1.0} {
+    MUNDY_THROW_ASSERT(width_y > 0, std::invalid_argument, "Cell dimensions must be positive");
+  }
+
+  /// \brief Get if the given dimension is periodic
+  template<unsigned dimension>
+  KOKKOS_INLINE_FUNCTION static constexpr bool is_periodic() {
+    return dimension == 1;
+  }
+
+  /// \brief Get if the given dimension is periodic
+  KOKKOS_INLINE_FUNCTION constexpr bool is_periodic(unsigned dimension) const {
+    return dimension == 1;
+  }
+
+  /// \brief Get the number of periodic dimensions
+  KOKKOS_INLINE_FUNCTION constexpr unsigned num_periodic_dimensions() const {
+    return 1;
+  }
+
+  /// \brief Map a point into fractional coordinates
+  template <ValidPointType PointT>
+    requires std::is_same_v<typename PointT::scalar_t, Scalar>
+  KOKKOS_INLINE_FUNCTION constexpr OurPoint to_fractional(const PointT& point) const {
+    return math::elementwise_mul(inv_scale_, point);
+  }
+
+  /// \brief Map a point from fractional coordinates to real space
+  template <ValidPointType PointT>
+    requires std::is_same_v<typename PointT::scalar_t, Scalar>
+  KOKKOS_INLINE_FUNCTION constexpr OurPoint from_fractional(const PointT& point_frac) const {
+    return math::elementwise_mul(scale_, point_frac);
+  }
+
+  template <typename Integer, math::ValidVector3Type Vector3T>
+  KOKKOS_INLINE_FUNCTION constexpr math::Vector3<typename Vector3T::scalar_t> frac_minimum_image(
+      const Vector3T& fractional_vec) const {
+    OurVector3 min_image{
+      fractional_vec[0],
+      fractional_vec[1] - static_cast<Scalar>(static_cast<Integer>(Kokkos::round(fractional_vec[1]))),
+      fractional_vec[2]};
+    return min_image;
+  }
+
+  template <typename Integer, math::ValidVector3Type Vector3T>
+  KOKKOS_INLINE_FUNCTION constexpr math::Vector3<typename Vector3T::scalar_t> frac_wrap_to_unit_cell(
+      const Vector3T& fractional_vec) const {
+    OurVector3 wrapped{
+      fractional_vec[0],
+      impl::safe_unit_mod1<Integer>(fractional_vec[1]),
+      fractional_vec[2]};
+    return wrapped;
+  }
+
+  /// \brief Distance vector between two points in periodic space (from point1 to point2)
+  template <ValidPointType PointT1, ValidPointType PointT2>
+    requires std::is_same_v<typename PointT1::scalar_t, Scalar> && std::is_same_v<typename PointT2::scalar_t, Scalar>
+  KOKKOS_INLINE_FUNCTION constexpr OurPoint sep(const PointT1& point1, const PointT2& point2) const {
+    // Assumes linearity of to_fractional
+    return from_fractional(frac_minimum_image<int64_t>(to_fractional(point2 - point1)));
+  }
+
+  /// \brief Wrap a point into the periodic space
+  template <ValidPointType PointT>
+    requires std::is_same_v<typename PointT::scalar_t, Scalar>
+  KOKKOS_INLINE_FUNCTION constexpr OurPoint wrap(const PointT& point) const {
+    return from_fractional(frac_wrap_to_unit_cell<int64_t>(to_fractional(point)));
+  }
+
+  /// TODO(palmerb4): I don't think this should be offered.
+  // /// \brief Direct lattice vectors (return as the columns of a matrix)
+  // KOKKOS_INLINE_FUNCTION constexpr OurMatrix3 direct_lattice_vectors() const {
+  //   return h_;
+  // }
+
+  /// \brief Shift a point by a given number of lattice images in each direction
+  template <ValidPointType PointT, typename Integer>
+    requires std::is_same_v<typename PointT::scalar_t, Scalar>
+  KOKKOS_INLINE_FUNCTION constexpr OurPoint shift_image(const PointT& point,
+                                                        const math::Vector3<Integer>& num_images) const {
+    return translate(point, from_fractional(num_images.template cast<Scalar>()));
+  }
+
+ private:
+  OurVector3 scale_;      ///< Unit cell scaling factors
+  OurVector3 inv_scale_;  ///< Inverse of the scaling factors
+};  // PeriodicMetricY
+
+template <typename Scalar>
 class PeriodicMetricXY {
  public:
   /// \brief Type aliases
@@ -243,6 +461,12 @@ class PeriodicMetricXY {
   KOKKOS_INLINE_FUNCTION
   explicit constexpr PeriodicMetricXY(const double width_x, const double width_y) : scale_{width_x, width_y, 1.0}, inv_scale_{1.0 / width_x, 1.0 / width_y, 1.0} {
     MUNDY_THROW_ASSERT(width_x > 0 && width_y > 0, std::invalid_argument, "Cell dimensions must be positive");
+  }
+
+  /// \brief Get if the given dimension is periodic
+  template<unsigned dimension>
+  KOKKOS_INLINE_FUNCTION static constexpr bool is_periodic() {
+    return dimension == 0 || dimension == 1;
   }
 
   /// \brief Get if the given dimension is periodic
@@ -339,6 +563,12 @@ class PeriodicMetricYZ {
   KOKKOS_INLINE_FUNCTION
   explicit constexpr PeriodicMetricYZ(const double width_y, const double width_z) : scale_{1.0, width_y, width_z}, inv_scale_{1.0, 1.0 / width_y, 1.0 / width_z} {
     MUNDY_THROW_ASSERT(width_y > 0 && width_z > 0, std::invalid_argument, "Cell dimensions must be positive");
+  }
+
+  /// \brief Get if the given dimension is periodic
+  template<unsigned dimension>
+  KOKKOS_INLINE_FUNCTION static constexpr bool is_periodic() {
+    return dimension == 1 || dimension == 2;
   }
 
   /// \brief Get if the given dimension is periodic
@@ -442,6 +672,12 @@ class PeriodicScaledMetric {
   void set_cell_size(const OurVector3& cell_size) {
     scale_ = cell_size;
     scale_inv_.set(Scalar(1.0) / scale_[0], Scalar(1.0) / scale_[1], Scalar(1.0) / scale_[2]);
+  }
+
+  /// \brief Get if the given dimension is periodic
+  template<unsigned dimension>
+  KOKKOS_INLINE_FUNCTION static constexpr bool is_periodic() {
+    return true;
   }
 
   /// \brief Get if the given dimension is periodic
