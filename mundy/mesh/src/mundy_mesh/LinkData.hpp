@@ -26,7 +26,7 @@
 
 // C++ core libs
 #include <any>     // for std::any
-#include <memory>  // for std::shared_ptr, std::unique_ptr
+#include <memory>  // for std::shared_ptr, std::shared_ptr
 
 // Trilinos libs
 #include <stk_mesh/base/BulkData.hpp>  // for stk::mesh::BulkData
@@ -51,8 +51,8 @@ namespace mesh {
 class LinkData;
 namespace impl {
 std::any &get_ngp_link_data(const LinkData &link_data);
-void set_coo_synchronizer(const LinkData &link_data, std::unique_ptr<impl::HostDeviceSynchronizer> synchronizer);
-void set_crs_synchronizer(const LinkData &link_data, std::unique_ptr<impl::HostDeviceSynchronizer> synchronizer);
+void set_coo_synchronizer(const LinkData &link_data, std::shared_ptr<impl::HostDeviceSynchronizer> synchronizer);
+void set_crs_synchronizer(const LinkData &link_data, std::shared_ptr<impl::HostDeviceSynchronizer> synchronizer);
 }  // namespace impl
 
 /// \class LinkData
@@ -456,11 +456,11 @@ class LinkData {
     return any_ngp_link_data_;
   }
 
-  void set_coo_synchronizer(std::unique_ptr<impl::HostDeviceSynchronizer> synchronizer) const {
+  void set_coo_synchronizer(std::shared_ptr<impl::HostDeviceSynchronizer> synchronizer) const {
     coo_synchronizer_ = std::move(synchronizer);
   }
 
-  void set_crs_synchronizer(std::unique_ptr<impl::HostDeviceSynchronizer> synchronizer) const {
+  void set_crs_synchronizer(std::shared_ptr<impl::HostDeviceSynchronizer> synchronizer) const {
     crs_synchronizer_ = std::move(synchronizer);
   }
   //@}
@@ -470,9 +470,9 @@ class LinkData {
 
   friend std::any &impl::get_ngp_link_data(const LinkData &link_data);
   friend void impl::set_coo_synchronizer(const LinkData &link_data,
-                                         std::unique_ptr<impl::HostDeviceSynchronizer> synchronizer);
+                                         std::shared_ptr<impl::HostDeviceSynchronizer> synchronizer);
   friend void impl::set_crs_synchronizer(const LinkData &link_data,
-                                         std::unique_ptr<impl::HostDeviceSynchronizer> synchronizer);
+                                         std::shared_ptr<impl::HostDeviceSynchronizer> synchronizer);
   //@}
 
   //! \name Internal members
@@ -484,8 +484,8 @@ class LinkData {
 
   LinkCOOData coo_data_;
   LinkCRSData crs_data_;
-  mutable std::unique_ptr<impl::HostDeviceSynchronizer> coo_synchronizer_;
-  mutable std::unique_ptr<impl::HostDeviceSynchronizer> crs_synchronizer_;
+  mutable std::shared_ptr<impl::HostDeviceSynchronizer> coo_synchronizer_;
+  mutable std::shared_ptr<impl::HostDeviceSynchronizer> crs_synchronizer_;
   mutable std::any any_ngp_link_data_;
   mutable bool crs_modified_on_host_;
   mutable bool crs_modified_on_device_;
@@ -504,16 +504,38 @@ inline std::any &get_ngp_link_data(const LinkData &link_data) {
 }
 
 inline void set_crs_synchronizer(const LinkData &link_data,
-                                 std::unique_ptr<impl::HostDeviceSynchronizer> synchronizer) {
+                                 std::shared_ptr<impl::HostDeviceSynchronizer> synchronizer) {
   link_data.set_crs_synchronizer(std::move(synchronizer));
 }
 
 inline void set_coo_synchronizer(const LinkData &link_data,
-                                 std::unique_ptr<impl::HostDeviceSynchronizer> synchronizer) {
+                                 std::shared_ptr<impl::HostDeviceSynchronizer> synchronizer) {
   link_data.set_coo_synchronizer(std::move(synchronizer));
 }
 
 }  // namespace impl
+
+struct LinkDataMap {
+  std::map<std::string, std::shared_ptr<LinkData>> contents[stk::topology::NUM_RANKS];
+};
+
+inline std::shared_ptr<LinkData> declare_link_data_ptr(stk::mesh::BulkData &bulk_data, LinkMetaData &link_meta_data) {
+  // Tie the lifetime of this object to the BulkData object so we can return a reference to it.
+  stk::mesh::MetaData& meta_data = bulk_data.mesh_meta_data();
+  LinkDataMap *link_data_map = const_cast<LinkDataMap *>(meta_data.get_attribute<LinkDataMap>());
+  if (link_data_map == nullptr) {
+    const LinkDataMap *new_link_data_map = new LinkDataMap();
+    link_data_map = const_cast<LinkDataMap *>(meta_data.declare_attribute_with_delete(new_link_data_map));
+  }
+  const std::string &our_name = link_meta_data.name();
+  stk::mesh::EntityRank link_rank = link_meta_data.link_rank();
+  if (link_data_map->contents[link_rank].find(our_name) == link_data_map->contents[link_rank].end()) {
+    // The name/rank combo doesn't exist yet, so we can create it.
+    link_data_map->contents[link_rank].emplace(
+        our_name, std::shared_ptr<LinkData>(new LinkData(bulk_data, link_meta_data)));
+  }
+  return link_data_map->contents[link_rank][our_name];
+}
 
 /// \brief Declare a new LinkData object.
 ///
@@ -524,11 +546,29 @@ inline void set_coo_synchronizer(const LinkData &link_data,
 /// \param link_meta_data [in] Our meta data manager. Must be persistant with a lifetime at least as long as the
 ///   generated LinkData.
 /// \return A new LinkData object.
-LinkData declare_link_data(stk::mesh::BulkData &bulk_data, LinkMetaData &link_meta_data) {
-  // TODO(palmerb4): Store a map of LinkData objects in the BulkData object using an attribute
-  //  this way, we can tie the lifetime of the LinkData object to the BulkData object and return
-  //  a reference here.
-  return LinkData(bulk_data, link_meta_data);
+inline LinkData &declare_link_data(stk::mesh::BulkData &bulk_data, LinkMetaData &link_meta_data) {
+  return *declare_link_data_ptr(bulk_data, link_meta_data);
+}
+
+/// \brief Get an existing LinkData object
+inline std::shared_ptr<LinkData> get_link_data(const stk::mesh::BulkData &bulk_data, const std::string &our_name,
+                                        stk::mesh::EntityRank link_rank) {
+  const stk::mesh::MetaData& meta_data = bulk_data.mesh_meta_data();
+  LinkDataMap *link_data_map = const_cast<LinkDataMap *>(meta_data.get_attribute<LinkDataMap>());
+  if (link_data_map == nullptr) {
+    return nullptr;
+  }
+  auto it = link_data_map->contents[link_rank].find(our_name);
+  if (it == link_data_map->contents[link_rank].end()) {
+    return nullptr;
+  }
+  return it->second;
+}
+
+inline std::shared_ptr<LinkData> get_link_data(const stk::mesh::BulkData &bulk_data, const LinkMetaData& link_meta_data) {
+  const std::string &our_name = link_meta_data.name();
+  stk::mesh::EntityRank link_rank = link_meta_data.link_rank();
+  return get_link_data(bulk_data, our_name, link_rank);
 }
 
 }  // namespace mesh

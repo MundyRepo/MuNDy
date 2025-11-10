@@ -44,6 +44,7 @@
 
 // Mundy
 #include <mundy_core/throw_assert.hpp>   // for MUNDY_THROW_REQUIRE
+#include <mundy_mesh/LinkData.hpp>       // for mundy::mesh::LinkData
 #include <mundy_mesh/fmt_stk_types.hpp>  // adds fmt::format for stk types
 
 namespace mundy {
@@ -140,24 +141,50 @@ class DeclareEntitiesHelper {
     std::vector<T> data_;
   };
 
+  struct DeclareLinksInfo {
+    stk::mesh::EntityIdVector linked_entity_ids;
+    std::vector<stk::mesh::EntityRank> linked_entity_ranks;
+  };
+
   struct DeclareNodeInfo {
-   public:
     int owning_proc = 0;
     std::vector<int> non_owning_shared_procs;
     stk::mesh::EntityId id = stk::mesh::InvalidEntityId;
     stk::mesh::PartVector parts;
     std::vector<std::shared_ptr<FieldDataBase>> field_data;
+    std::map<std::string, DeclareLinksInfo> link_info_map;
   };
 
   struct DeclareElementInfo {
-   public:
     int owning_proc = 0;
     stk::mesh::EntityId id = stk::mesh::InvalidEntityId;
     stk::topology topology = stk::topology::INVALID_TOPOLOGY;
     stk::mesh::EntityIdVector node_ids;
     stk::mesh::PartVector parts;
     std::vector<std::shared_ptr<FieldDataBase>> field_data;
+    std::map<std::string, DeclareLinksInfo> link_info_map;
   };
+
+  // Overload the operator<<
+  friend std::ostream& operator<<(std::ostream& os, const DeclareLinksInfo& info) {
+    size_t num_links = info.linked_entity_ids.size();
+    os << "  Linked Entities: ";
+    if (num_links == 0) {
+      os << "None";
+    } else {
+      os << "{";
+      for (size_t i = 0; i < num_links; ++i) {
+        os << "(" << info.linked_entity_ranks[i] << ", " << info.linked_entity_ids[i] << ")";
+        if (i < num_links - 1) {
+          os << ", ";
+        } else {
+          os << "}";
+        }
+      }
+    }
+    os << "\n";
+    return os;
+  }
 
   /// Overload the operator<<
   friend std::ostream& operator<<(std::ostream& os, const DeclareNodeInfo& info) {
@@ -212,6 +239,15 @@ class DeclareEntitiesHelper {
       }
     }
     os << "\n";
+
+    // Print the links
+    if (!info.link_info_map.empty()) {
+      os << "  Links Info:\n";
+      for (const auto& link_pair : info.link_info_map) {
+        os << "    LinkMetaData Name: " << link_pair.first << "\n";
+        os << link_pair.second;
+      }
+    }
 
     return os;
   }
@@ -291,6 +327,16 @@ class DeclareEntitiesHelper {
         ++field_data_counter;
       }
     }
+
+    // Print the links
+    if (!info.link_info_map.empty()) {
+      os << "  Links Info:\n";
+      for (const auto& link_pair : info.link_info_map) {
+        os << "    LinkMetaData Name: " << link_pair.first << "\n";
+        os << link_pair.second;
+      }
+    }
+
     os << "\n";
     return os;
   }
@@ -350,6 +396,25 @@ class DeclareEntitiesHelper {
     template <typename T>
     NodeBuilder& add_field_data(stk::mesh::FieldBase* const field, const T& data) {
       node_info_.field_data.push_back(std::make_shared<FieldData<T>>(field, std::vector<T>{data}));
+      return *this;
+    }
+
+    /// \brief This node is a valid linker. Link it to a given entity at the desired ordinal.
+    /// \param link_data_ptr The link data to link under.
+    /// \param linked_entity_id The entity id of the entity to link to.
+    /// \param linked_entity_rank The entity rank of the entity to link to.
+    /// \param ordinal The slot/ordinal to link the entity at.
+    NodeBuilder& links_to(LinkData* const link_data_ptr, const stk::mesh::EntityId linked_entity_id,
+                          const stk::mesh::EntityRank linked_entity_rank, const unsigned ordinal) {
+      MUNDY_THROW_REQUIRE(link_data_ptr != nullptr, std::invalid_argument, "LinkData pointer is null.");
+      const std::string& link_meta_data_name = link_data_ptr->link_meta_data().name();
+      auto& link_info = node_info_.link_info_map[link_meta_data_name];
+      if (link_info.linked_entity_ids.size() <= ordinal) {
+        link_info.linked_entity_ids.resize(ordinal + 1, stk::mesh::InvalidEntityId);
+        link_info.linked_entity_ranks.resize(ordinal + 1, stk::topology::INVALID_RANK);
+      }
+      link_info.linked_entity_ids[ordinal] = linked_entity_id;
+      link_info.linked_entity_ranks[ordinal] = linked_entity_rank;
       return *this;
     }
 
@@ -439,6 +504,23 @@ class DeclareEntitiesHelper {
     template <typename T>
     ElementBuilder& add_field_data(stk::mesh::FieldBase* const field, const T& data) {
       element_info_.field_data.push_back(std::make_shared<FieldData<T>>(field, std::vector<T>{data}));
+      return *this;
+    }
+
+    /// \brief This element is a valid linker. Link it to a given entity at the desired ordinal.
+    /// \param link_meta_data_name The name of the LinkMetaData to link under.
+    /// \param linked_entity_id The entity id of the entity to link to.
+    /// \param linked_entity_rank The entity rank of the entity to link to.
+    /// \param ordinal The slot/ordinal to link the entity at.
+    ElementBuilder& links_to(const std::string& link_meta_data_name, const stk::mesh::EntityId linked_entity_id,
+                             const stk::mesh::EntityRank linked_entity_rank, const unsigned ordinal) {
+      auto& link_info = element_info_.link_info_map[link_meta_data_name];
+      if (link_info.linked_entity_ids.size() <= ordinal) {
+        link_info.linked_entity_ids.resize(ordinal + 1, stk::mesh::InvalidEntityId);
+        link_info.linked_entity_ranks.resize(ordinal + 1, stk::topology::INVALID_RANK);
+      }
+      link_info.linked_entity_ids[ordinal] = linked_entity_id;
+      link_info.linked_entity_ranks[ordinal] = linked_entity_rank;
       return *this;
     }
 

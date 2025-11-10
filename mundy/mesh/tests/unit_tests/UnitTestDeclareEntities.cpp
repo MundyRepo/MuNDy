@@ -37,6 +37,8 @@
 
 // Mundy
 #include <mundy_mesh/DeclareEntities.hpp>  // for mundy::mesh::DeclareEntitiesHelper
+#include <mundy_mesh/LinkMetaData.hpp>     // for mundy::mesh::LinkMetaData
+#include <mundy_mesh/LinkData.hpp>        // for mundy::mesh::LinkData
 
 namespace mundy {
 
@@ -95,18 +97,27 @@ class UnitTestDeclareEntities : public ::testing::Test {
     builder.set_initial_bucket_capacity(initial_bucket_capacity);
     builder.set_maximum_bucket_capacity(maximum_bucket_capacity);
 
-    if (meta_data_ptr_ == nullptr) {
-      meta_data_ptr_ = builder.create_meta_data();
-      meta_data_ptr_->use_simple_fields();
-      meta_data_ptr_->set_coordinate_field_name("coordinates");
-    }
+    meta_data_ptr_ = builder.create_meta_data();
+    meta_data_ptr_->use_simple_fields();
+    meta_data_ptr_->set_coordinate_field_name("coordinates");
 
-    if (bulk_data_ptr_ == nullptr) {
-      bulk_data_ptr_ = builder.create(meta_data_ptr_);
-      aura_option_ = aura_option;
-      initial_bucket_capacity_ = initial_bucket_capacity;
-      maximum_bucket_capacity_ = maximum_bucket_capacity;
-    }
+    link_meta_data_nodes_ptr_ = declare_link_meta_data_ptr(*meta_data_ptr_, "ALL_LINKS", stk::topology::NODE_RANK);
+    link_meta_data_elems_ptr_ = declare_link_meta_data_ptr(*meta_data_ptr_, "ALL_LINKS", stk::topology::ELEM_RANK);
+
+    ASSERT_TRUE(link_meta_data_nodes_ptr_ != nullptr);
+    ASSERT_TRUE(link_meta_data_elems_ptr_ != nullptr);
+    ASSERT_TRUE(link_meta_data_nodes_ptr_ != link_meta_data_elems_ptr_);  // Just like fields, you can replicate names as long as the rank is different
+
+    bulk_data_ptr_ = builder.create(meta_data_ptr_);
+    link_data_nodes_ptr_ = declare_link_data_ptr(*bulk_data_ptr_, *link_meta_data_nodes_ptr_);
+    link_data_elems_ptr_ = declare_link_data_ptr(*bulk_data_ptr_, *link_meta_data_elems_ptr_);
+    aura_option_ = aura_option;
+    initial_bucket_capacity_ = initial_bucket_capacity;
+    maximum_bucket_capacity_ = maximum_bucket_capacity;
+
+    ASSERT_TRUE(bulk_data_ptr_ != nullptr);
+    ASSERT_TRUE(link_data_nodes_ptr_ != nullptr);
+    ASSERT_TRUE(link_data_elems_ptr_ != nullptr);
 
     // Declare parts and fields
     /* Method:
@@ -146,6 +157,11 @@ class UnitTestDeclareEntities : public ::testing::Test {
     EXPECT_EQ(element_rank_part_ptr_->topology(), stk::topology::INVALID_TOPOLOGY);
     EXPECT_EQ(node_part_ptr_->topology(), stk::topology::NODE);
 
+    // Setup the links
+    unsigned dimensionality = 2;
+    node_slinks_part_ptr_ = &link_meta_data_nodes_ptr_->declare_link_part("NODE_SURFACE_LINKS", dimensionality);
+    elem_slinks_part_ptr_ = &link_meta_data_elems_ptr_->declare_link_part("ELEM_SURFACE_LINKS", dimensionality);
+
     meta_data_ptr_->commit();
   }
 
@@ -159,8 +175,15 @@ class UnitTestDeclareEntities : public ::testing::Test {
   MPI_Comm communicator_;
   unsigned spatial_dimension_;
   std::vector<std::string> entity_rank_names_;
+
   std::shared_ptr<stk::mesh::MetaData> meta_data_ptr_;
+  std::shared_ptr<LinkMetaData> link_meta_data_nodes_ptr_;
+  std::shared_ptr<LinkMetaData> link_meta_data_elems_ptr_;
+
   std::shared_ptr<stk::mesh::BulkData> bulk_data_ptr_;
+  std::shared_ptr<LinkData> link_data_nodes_ptr_;
+  std::shared_ptr<LinkData> link_data_elems_ptr_;
+
   stk::mesh::BulkData::AutomaticAuraOption aura_option_{stk::mesh::BulkData::AUTO_AURA};
   unsigned initial_bucket_capacity_ = 0;
   unsigned maximum_bucket_capacity_ = 0;
@@ -174,6 +197,8 @@ class UnitTestDeclareEntities : public ::testing::Test {
   stk::mesh::Part* particle_part_ptr_;
   stk::mesh::Part* element_rank_part_ptr_;
   stk::mesh::Part* node_part_ptr_;
+  stk::mesh::Part* node_slinks_part_ptr_;
+  stk::mesh::Part* elem_slinks_part_ptr_;
 };  // class UnitTestDeclareEntities
 
 TEST_F(UnitTestDeclareEntities, Fixture) {
@@ -330,6 +355,132 @@ TEST_F(UnitTestDeclareEntities, DeclareEntities) {
     EXPECT_DOUBLE_EQ(stk::mesh::field_data(*other_elem_field_ptr_, particle)[0],
                      1.23 + bulk_data_ptr_->identifier(particle) - 1 - num_edges);
   }
+}
+
+TEST_F(UnitTestDeclareEntities, DeclareLinks) {
+  if (stk::parallel_machine_size(communicator_) != 1) {
+    GTEST_SKIP() << "This test is only designed to run with 1 MPI rank.";
+  }
+
+  // Setup: Two particles (elem + node) with a spring (elem + 2 nodes) attached to their surface via links
+  // The links are members of the link meta data with name "LINKS"
+  setup();
+
+  DeclareEntitiesHelper builder;
+  
+  // Create two particles
+  for (size_t i = 0; i < 2; ++i) {
+    builder.create_node()
+        .id(i + 1)
+        .owning_proc(0)
+        .add_part(node_part_ptr_);
+    builder.create_element()
+        .id(i + 1)
+        .owning_proc(0)
+        .topology(stk::topology::PARTICLE)
+        .nodes({i + 1})
+        .add_part(particle_part_ptr_);
+  }
+
+  // Create a spring
+  builder.create_node()
+      .id(3)
+      .owning_proc(0)
+      .add_part(node_part_ptr_);
+  builder.create_node()
+      .id(4)
+      .owning_proc(0)
+      .add_part(node_part_ptr_);
+  builder.create_element()
+      .id(3)
+      .owning_proc(0)
+      .topology(stk::topology::BEAM_2)
+      .nodes({3, 4})
+      .add_part(beam_2_part_ptr_);
+
+  // Create two node rank links
+  builder.create_node()
+      .id(5)
+      .owning_proc(0)
+      .add_part(node_slinks_part_ptr_)  // Endows this node with link dimensionality 2 within the node rank "ALL_LINKS" link data
+      .links_to(link_data_nodes_ptr_.get(), 1, stk::topology::ELEM_RANK, 0)  // Link to particle 1
+      .links_to(link_data_nodes_ptr_.get(), 3, stk::topology::NODE_RANK, 1); // Link to spring node 1
+  builder.create_node()
+      .id(6)
+      .owning_proc(0)
+      .add_part(node_slinks_part_ptr_)  // Endows this node with link dimensionality 2 within the node rank "ALL_LINKS" link data
+      .links_to(link_data_nodes_ptr_.get(), 2, stk::topology::ELEM_RANK, 0)  // Link to particle 2
+      .links_to(link_data_nodes_ptr_.get(), 4, stk::topology::NODE_RANK, 1); // Link to spring node 2
+
+  EXPECT_NO_THROW(builder.check_consistency(*bulk_data_ptr_)) << "Builder consistency check failed.";
+  bulk_data_ptr_->modification_begin();
+  builder.declare_entities(*bulk_data_ptr_);
+  bulk_data_ptr_->modification_end();
+
+  // Validate that the two particles (elem + node), a spring (elem + 2 nodes), and two node-rank linkers were created
+  // Particles
+  stk::mesh::Entity particle_node1 = bulk_data_ptr_->get_entity(stk::topology::NODE_RANK, 1);
+  stk::mesh::Entity particle_node2 = bulk_data_ptr_->get_entity(stk::topology::NODE_RANK, 2);
+  stk::mesh::Entity particle1 = bulk_data_ptr_->get_entity(stk::topology::ELEMENT_RANK, 1);
+  stk::mesh::Entity particle2 = bulk_data_ptr_->get_entity(stk::topology::ELEMENT_RANK, 2);
+  EXPECT_TRUE(bulk_data_ptr_->is_valid(particle_node1))
+      << "Node " << bulk_data_ptr_->identifier(particle_node1) << " is not valid.";
+  EXPECT_TRUE(bulk_data_ptr_->is_valid(particle_node2))
+      << "Node " << bulk_data_ptr_->identifier(particle_node2) << " is not valid.";
+  EXPECT_TRUE(bulk_data_ptr_->is_valid(particle1)) << "Particle " << bulk_data_ptr_->identifier(particle1) << " is not valid.";
+  EXPECT_TRUE(bulk_data_ptr_->is_valid(particle2)) << "Particle " << bulk_data_ptr_->identifier(particle2) << " is not valid.";
+  EXPECT_TRUE(bulk_data_ptr_->bucket(particle_node1).member(*node_part_ptr_));
+  EXPECT_TRUE(bulk_data_ptr_->bucket(particle_node2).member(*node_part_ptr_));
+  EXPECT_TRUE(bulk_data_ptr_->bucket(particle_node1).member(*particle_part_ptr_)) << "Inherited part membership failed";
+  EXPECT_TRUE(bulk_data_ptr_->bucket(particle_node2).member(*particle_part_ptr_)) << "Inherited part membership failed";
+  EXPECT_TRUE(bulk_data_ptr_->bucket(particle1).member(*particle_part_ptr_));
+  EXPECT_TRUE(bulk_data_ptr_->bucket(particle2).member(*particle_part_ptr_));
+
+  // Spring
+  stk::mesh::Entity spring_node1 = bulk_data_ptr_->get_entity(stk::topology::NODE_RANK, 3);
+  stk::mesh::Entity spring_node2 = bulk_data_ptr_->get_entity(stk::topology::NODE_RANK, 4);
+  stk::mesh::Entity spring = bulk_data_ptr_->get_entity(stk::topology::ELEMENT_RANK, 3);
+  EXPECT_TRUE(bulk_data_ptr_->is_valid(spring_node1))
+      << "Node " << bulk_data_ptr_->identifier(spring_node1) << " is not valid.";
+  EXPECT_TRUE(bulk_data_ptr_->is_valid(spring_node2))
+      << "Node " << bulk_data_ptr_->identifier(spring_node2) << " is not valid.";
+  EXPECT_TRUE(bulk_data_ptr_->is_valid(spring)) << "Spring " << bulk_data_ptr_->identifier(spring) << " is not valid.";
+  EXPECT_TRUE(bulk_data_ptr_->bucket(spring_node1).member(*node_part_ptr_));
+  EXPECT_TRUE(bulk_data_ptr_->bucket(spring_node2).member(*node_part_ptr_));
+  EXPECT_TRUE(bulk_data_ptr_->bucket(spring_node1).member(*beam_2_part_ptr_)) << "Inherited part membership failed";
+  EXPECT_TRUE(bulk_data_ptr_->bucket(spring_node2).member(*beam_2_part_ptr_)) << "Inherited part membership failed";
+  EXPECT_TRUE(bulk_data_ptr_->bucket(spring).member(*beam_2_part_ptr_));
+
+  // Node-rank linkers
+  stk::mesh::Entity link_node1 = bulk_data_ptr_->get_entity(stk::topology::NODE_RANK, 5);
+  stk::mesh::Entity link_node2 = bulk_data_ptr_->get_entity(stk::topology::NODE_RANK, 6);
+  EXPECT_TRUE(bulk_data_ptr_->is_valid(link_node1))
+      << "Link Node " << bulk_data_ptr_->identifier(link_node1) << " is not valid.";
+  EXPECT_TRUE(bulk_data_ptr_->is_valid(link_node2))
+      << "Link Node " << bulk_data_ptr_->identifier(link_node2) << " is not valid.";
+  EXPECT_TRUE(bulk_data_ptr_->bucket(link_node1).member(*node_slinks_part_ptr_));
+  EXPECT_TRUE(bulk_data_ptr_->bucket(link_node2).member(*node_slinks_part_ptr_));
+    
+  // Verify the links | node_coo_data.get_linked_entity(
+  LinkCOOData &node_coo_data = link_data_nodes_ptr_->coo_data();
+  ASSERT_TRUE(node_coo_data.is_valid());
+  stk::mesh::Entity linked_entity0 = node_coo_data.get_linked_entity(link_node1, 0);
+  stk::mesh::Entity linked_entity1 = node_coo_data.get_linked_entity(link_node1, 1);
+  stk::mesh::Entity linked_entity2 = node_coo_data.get_linked_entity(link_node2, 0);
+  stk::mesh::Entity linked_entity3 = node_coo_data.get_linked_entity(link_node2, 1);
+  EXPECT_TRUE(bulk_data_ptr_->is_valid(linked_entity0))
+      << "Linked entity 0 from link node " << bulk_data_ptr_->identifier(link_node1) << " is not valid.";
+  EXPECT_TRUE(bulk_data_ptr_->is_valid(linked_entity1))
+      << "Linked entity 1 from link node " << bulk_data_ptr_->identifier(link_node1) << " is not valid.";
+  EXPECT_TRUE(bulk_data_ptr_->is_valid(linked_entity2))
+      << "Linked entity 0 from link node " << bulk_data_ptr_->identifier(link_node2) << " is not valid.";
+  EXPECT_TRUE(bulk_data_ptr_->is_valid(linked_entity3))
+      << "Linked entity 1 from link node " << bulk_data_ptr_->identifier(link_node2) << " is not valid.";
+
+  EXPECT_TRUE(node_coo_data.get_linked_entity(link_node1, 0) == particle1);
+  EXPECT_TRUE(node_coo_data.get_linked_entity(link_node1, 1) == spring_node1);
+  EXPECT_TRUE(node_coo_data.get_linked_entity(link_node2, 0) == particle2);
+  EXPECT_TRUE(node_coo_data.get_linked_entity(link_node2, 1) == spring_node2);
 }
 
 }  // namespace

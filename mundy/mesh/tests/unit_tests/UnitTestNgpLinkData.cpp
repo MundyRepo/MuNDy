@@ -77,7 +77,7 @@ void setup_mesh_and_metadata(TestContext& context) {
 }
 
 LinkMetaData declare_and_validate_link_metadata(TestContext& context, const std::string& name) {
-  LinkMetaData link_meta_data = declare_link_meta_data(*context.meta_data, name, context.link_rank);
+  LinkMetaData &link_meta_data = declare_link_meta_data(*context.meta_data, name, context.link_rank);
   EXPECT_EQ(link_meta_data.link_rank(), context.link_rank);
   EXPECT_TRUE(link_meta_data.name() == name);
   EXPECT_EQ(link_meta_data.universal_link_part().primary_entity_rank(), context.link_rank);
@@ -340,7 +340,7 @@ void basic_usage_test() {
   setup_parts_and_links(context, link_meta_data);
 
   // Declare and validate link data manager
-  LinkData link_data = declare_link_data(*context.bulk_data, link_meta_data);
+  LinkData &link_data = declare_link_data(*context.bulk_data, link_meta_data);
   EXPECT_EQ(link_data.link_meta_data().link_rank(), link_meta_data.link_rank());
 
   // Declare some entities to connect and some links to place between them

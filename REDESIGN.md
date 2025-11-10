@@ -1,3 +1,16 @@
+# Needs EntityExpr ready in Nov/24
+  - Non-static branches
+  - Aggregates need to not take in rank
+  - Tagging accessors needs simplified
+  - Declaring links needs to become a part of the DeclareEntitiesHelper
+  - NeighborEntityExpression
+  - Ability to access linked entities in an entity expression
+  - Atomics! Also, how to correctly perform += for a fused assign w/ atomic?
+
+
+
+
+#########################
 At the moment, this code is testbed for some of Mundy's new features. For example, our streamlined entity/field/part
 declaration helpers. It's also a testbed for aggregates, which are ever-evolving, as we figure out the best way for
 users to "aggregate" their data into logical groupings. Given that this is a pure C++ application, we will directly
@@ -103,17 +116,122 @@ that use strings to lookup accessors, then we can grow into more complex systems
 by only supporting stk fields and not shared values. Then, later, use visitation to unpack into concrete
 accessors for more complex systems.
 
-Think like a runtime entity component system with components (variant accessors) that are accessed via 
-string tag
-
- by runtime than accessed via their
-stored type. Do we even want 
+Think like a runtime entity component system with components (variant accessors) that are accessed via string tag
 
 
 
+Why offer compute_aabb when you can offer an entity expression that does so? Entity expressions don't solve
+everything. They allow us to very cleanly handle single-object for_each_entity functions, for each pair functions,
+and for each linked entities. That covers most of mundy's functions. That said, it doesn't address more complex
+functions such as resolving contact between all rods, spheres, and polytopes. Imagine that, at max complexity,
+we could have O(10) rigid body and O(20) constraint types. That's just too much to take in to any function.
+
+That's why assigning a contact attribute to a part feels right. All parts that are marked as involved in contact will
+be considered (body vs constraint). If you are involved in contact, then you must have a multibody type attribute. We 
+can use a single selector to start when it comes to subset selecting contact. So "for all parts that are flagged with a
+multibody type and fall within the given selector, perform constrained time integration."
+  SimulationGraph g;
+
+  g.addNode(IntegrateNode{
+    .selector = all_dynamic() && !has<Sleeping>()
+  });
+
+  g.addNode(BroadphaseNode{
+    .selector = has<Collider>()
+  });
+
+  // This node can now handle *all* shape pairs allowed by the narrowphase table.
+  g.addNode(ContactGenerationNode{
+    .setA           = has<RigidBody>(), // or any attribute-based selector
+    .setB           = has<RigidBody>(),
+    .output_channel = "all_contacts"
+  });
+
+  g.addNode(ContactSolveNode{
+    .contacts_from = "all_contacts",
+    .solver        = ReLCP{}
+  });
+
+We could offer more complex selectors that allow selection based on attributes:
+  locally_owned && !meta_data.attr<bool>("sleeping");
+  auto spheres = meta_data.attr<ShapeKind>("shape_kind") == ShapeKind::Sphere;
+  auto rods    = meta_data.attr<ShapeKind>("shape_kind") == ShapeKind::Rod;
+
+## Open question:
+Given a part tagged with a given multibody part, how does it "become" the desired type?
+
+One option would be to always use the same field names, ranks, and topologies, as was done in Agents. All spheres have a
+radius and a center field. I dislike this because it doesn't allow for variation in field names or accessor types. If we
+want to be truly agnostic, then using raggs would work if we were willing to pay the compile-time cost. Hell, if python 
+uses auto-gen to type-specialize templates, then C++ could too.
+
+SphereSelector -> contact/hydro ragg generator -> RAgg w/ CENTER & RADIUS -> code-gen (type sparsity) -> Agg w/ CENTER & RADIUS
 
 
+The following isn't THAT bad as long as users know the right recipes. If they want to use the same generator for both hydro and
+contact, they can.
+  stk::mesh::Part &spheres = part_declarer.name("SPHERES").topology(stk::topology::PARTICLE).role(IOPartRole::IO).declare();
+  auto assemble_contact_spheres_agg = [&spheres]() {
+    return make_aggregate<stk::topology::PARTICLE>(spheres)
+      .append<CENTER>(center_field)
+      .append<RADIUS>(contact_radius_field);
+  };
+  auto assemble_hydro_spheres_agg = [&spheres]() {
+    return make_aggregate<stk::topology::PARTICLE>(spheres)
+      .append<CENTER>(center_field)
+      .append<RADIUS>(hydro_radius_field);
+  };
 
+alternatively
+  meta_data.register_shape<shape_kind::SPHERES>(
+    SphereAgg{.selector=spheres, 
+              .center=node_coords_field, 
+              .radius=contact_radius_field});
+  meta_data.register_constraint<constraint::HOOKEAN_SPRING>(
+    HookeanSpringAgg{.selector=springs, 
+                    .endpoints=node_coords_field,
+                    .rest_length=rest_length_field,
+                    .spring_constant=spring_constant_field});
+
+We could generalize this with runtime aggregate auto-gen or vis finite visitation via 
+  auto spheres = make_runtime_aggregate("OUR_CUSTOM_SPHERES")
+      .append("CENTER", vector3_coords_accessor)
+      .append("RADIUS", scalar_radius_accessor);
+  contact.register_shape(shape::SPHERES, spheres);
+
+This feels too inflexible. 
+  stk::mesh::Part &spheres = part_declarer.name("SPHERES").topology(stk::topology::PARTICLE).role(IOPartRole::IO).attribute("shape_kind", ShapeKind::Sphere).declare();
+  // or simply
+  mundy::agent::Spheres &spheres = mundy::agent::declare_shape<shape_kind::SPHERES>(meta_data, SphereData{.node_center = "CENTER", .elem_radius = "RADIUS"});
+
+Users can type specialize certain functions to allow for new types of shapes and constraints.
+
+Yeah but what about different types of mobility? If the user wants to add a new mobility type, then it's up to that mobility type to impose a requirement upon the spheres
+of needing a certain accessor with a given view type and rank. That's why the set of enabled meta methods informed the mesh requirements! Methods require certain accessors
+but those accessors often require initialization, so it's a bad idea for methods to declare fields. This also means that imposing a set of recipes for basic shapes is 
+inflexible--it cannot handle the large assortment of possible types such as a hookean dynamic spring. At the moment, this means that you kinda look at the set of methods 
+that you want to use, create a master object that meets all those requirements, and then pass that object into said methods. This does create some conflicts because swapping
+our methods at runtime means also swapping out initializations at runtime.
+
+For now every simulation contains:
+  - 1 canonical configuration C(t)
+  - 1 time integrator (constrained or unconstrained) taking C(t) -> C(t+dt)
+  - 1 mobility evaluator (mapping abstract )
+  - N generalized force generators force += F(C)
+  - N generalized velocity generators force += F(C)
+  - N pre-step functions
+  - N post-step functions
+
+The integrator controls
+  - zero-ing out the generalized force and torque
+  - performing the force/velocity evaluations at the correct point of the timestep, for example at C(t+dt) for an implicit solve instead of C(t)
+  - performing the configurational update from C(t) -> C(t+dt)
+  - performing the pre-steps (At which point the configuration, forces, and velocities are at time t)
+  - performing the post-steps (At which point the configuration, forces, and velocities are at time t+dt)
+
+Registering "fixes" with mundy isn't a bad idea just like LAMMPS. Maybe we even mirror their time step pipeline/terminology. 
+
+##############
 
 The interface for KMC needs generalized. 
 

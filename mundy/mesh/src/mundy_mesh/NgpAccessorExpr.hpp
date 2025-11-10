@@ -225,6 +225,10 @@ ExecutionContext.
 I think we're looking for something like a driver or evaluator or manager that we store a pointer to and only access on
 the host.
 
+/////////
+We should allow for expressions to be flagged as having non-static return type. If they do, then their result will not
+be cached. So an accessor(entity_expr) will cache its result only if entity_expr says that its return type is
+static. If the return type is static or not is always known at compile-time.
 */
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
