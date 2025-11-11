@@ -13,7 +13,7 @@ echo "Using TPL dir: $TPL_ROOT_DIR"
 echo "Using STK test-app dir: $MUNDY_SOURCE_DIR"
 
 cmake \
--DCMAKE_BUILD_TYPE=${BUILD_TYPE:-RelWithDebInfo} \
+-DCMAKE_BUILD_TYPE=${BUILD_TYPE:-DEBUG} \
 -DCMAKE_CXX_COMPILER=mpicxx \
 -DCMAKE_CXX_FLAGS="-O3 -march=native" \
 -DCMAKE_INSTALL_PREFIX=$TPL_ROOT_DIR \

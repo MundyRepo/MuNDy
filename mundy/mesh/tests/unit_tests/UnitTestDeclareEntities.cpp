@@ -82,7 +82,11 @@ class UnitTestDeclareEntities : public ::testing::Test {
   }
 
   void setup_mesh(stk::mesh::BulkData::AutomaticAuraOption aura_option,
-                  std::unique_ptr<stk::mesh::FieldDataManager> field_data_manager,
+#if TRILINOS_MAJOR_MINOR_VERSION >= 160000
+                      std::unique_ptr<stk::mesh::FieldDataManager> field_data_manager,
+#else
+                      stk::mesh::FieldDataManager* field_data_manager,
+#endif
                   unsigned initial_bucket_capacity = stk::mesh::get_default_initial_bucket_capacity(),
                   unsigned maximum_bucket_capacity = stk::mesh::get_default_maximum_bucket_capacity()) {
     stk::mesh::MeshBuilder builder(communicator_);
@@ -92,10 +96,14 @@ class UnitTestDeclareEntities : public ::testing::Test {
 #if TRILINOS_MAJOR_MINOR_VERSION >= 160000
     builder.set_field_data_manager(std::move(field_data_manager));
 #else
-    builder.set_field_data_manager(field_data_manager.get());
+    builder.set_field_data_manager(field_data_manager);
 #endif
     builder.set_initial_bucket_capacity(initial_bucket_capacity);
     builder.set_maximum_bucket_capacity(maximum_bucket_capacity);
+
+    if (meta_data_ptr_ != nullptr || bulk_data_ptr_ != nullptr) {
+      std::cout << "WARNING: Overwriting existing mesh meta data and/or bulk data pointers!" << std::endl;
+    }
 
     meta_data_ptr_ = builder.create_meta_data();
     meta_data_ptr_->use_simple_fields();
@@ -103,19 +111,19 @@ class UnitTestDeclareEntities : public ::testing::Test {
 
     link_meta_data_nodes_ptr_ = declare_link_meta_data_ptr(*meta_data_ptr_, "ALL_LINKS", stk::topology::NODE_RANK);
     link_meta_data_elems_ptr_ = declare_link_meta_data_ptr(*meta_data_ptr_, "ALL_LINKS", stk::topology::ELEM_RANK);
-
     ASSERT_TRUE(link_meta_data_nodes_ptr_ != nullptr);
     ASSERT_TRUE(link_meta_data_elems_ptr_ != nullptr);
     ASSERT_TRUE(link_meta_data_nodes_ptr_ != link_meta_data_elems_ptr_);  // Just like fields, you can replicate names as long as the rank is different
 
     bulk_data_ptr_ = builder.create(meta_data_ptr_);
-    link_data_nodes_ptr_ = declare_link_data_ptr(*bulk_data_ptr_, *link_meta_data_nodes_ptr_);
-    link_data_elems_ptr_ = declare_link_data_ptr(*bulk_data_ptr_, *link_meta_data_elems_ptr_);
+    ASSERT_TRUE(bulk_data_ptr_ != nullptr);
+
     aura_option_ = aura_option;
     initial_bucket_capacity_ = initial_bucket_capacity;
     maximum_bucket_capacity_ = maximum_bucket_capacity;
 
-    ASSERT_TRUE(bulk_data_ptr_ != nullptr);
+    link_data_nodes_ptr_ = declare_link_data_ptr(*bulk_data_ptr_, *link_meta_data_nodes_ptr_);
+    link_data_elems_ptr_ = declare_link_data_ptr(*bulk_data_ptr_, *link_meta_data_elems_ptr_);
     ASSERT_TRUE(link_data_nodes_ptr_ != nullptr);
     ASSERT_TRUE(link_data_elems_ptr_ != nullptr);
 
@@ -129,7 +137,7 @@ class UnitTestDeclareEntities : public ::testing::Test {
 
     beam_2_part_ptr_ = &meta_data_ptr_->declare_part_with_topology("beam_2_part", stk::topology::BEAM_2);
     particle_part_ptr_ = &meta_data_ptr_->declare_part_with_topology("particle_part", stk::topology::PARTICLE);
-    element_rank_part_ptr_ = &meta_data_ptr_->declare_part("element_rank_part", stk::topology::ELEMENT_RANK);
+    element_rank_part_ptr_ = &meta_data_ptr_->declare_part("element_rank_part", stk::topology::ELEM_RANK);
     node_part_ptr_ = &meta_data_ptr_->declare_part_with_topology("node_part", stk::topology::NODE);
 
     elem_field_ptr_ =
@@ -161,14 +169,23 @@ class UnitTestDeclareEntities : public ::testing::Test {
     unsigned dimensionality = 2;
     node_slinks_part_ptr_ = &link_meta_data_nodes_ptr_->declare_link_part("NODE_SURFACE_LINKS", dimensionality);
     elem_slinks_part_ptr_ = &link_meta_data_elems_ptr_->declare_link_part("ELEM_SURFACE_LINKS", dimensionality);
+    ASSERT_TRUE(node_slinks_part_ptr_ != nullptr);
+    ASSERT_TRUE(elem_slinks_part_ptr_ != nullptr);
 
     meta_data_ptr_->commit();
   }
 
   void setup() {
     const int we_know_there_are_five_ranks = 5;
-    auto field_data_manager = std::make_unique<stk::mesh::DefaultFieldDataManager>(we_know_there_are_five_ranks);
+   
+   #if TRILINOS_MAJOR_MINOR_VERSION >= 160000
+  auto field_data_manager = std::make_unique<stk::mesh::DefaultFieldDataManager>(we_know_there_are_five_ranks);
     setup_mesh(stk::mesh::BulkData::AUTO_AURA, std::move(field_data_manager));
+#else
+  stk::mesh::DefaultFieldDataManager* field_data_manager_ptr =
+      new stk::mesh::DefaultFieldDataManager(we_know_there_are_five_ranks);
+    setup_mesh(stk::mesh::BulkData::AUTO_AURA, field_data_manager_ptr);
+#endif
   }
 
  protected:
@@ -203,6 +220,10 @@ class UnitTestDeclareEntities : public ::testing::Test {
 
 TEST_F(UnitTestDeclareEntities, Fixture) {
   ASSERT_NO_THROW(setup());
+
+  bulk_data_ptr_->modification_begin();
+  bulk_data_ptr_->declare_element(1);
+  bulk_data_ptr_->modification_end();
 
   // None of the fields or parts should be null
   EXPECT_NE(elem_field_ptr_, nullptr);

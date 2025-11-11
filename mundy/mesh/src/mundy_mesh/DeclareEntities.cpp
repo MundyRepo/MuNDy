@@ -50,6 +50,9 @@ namespace mundy {
 namespace mesh {
 
 void DeclareEntitiesHelper::check_consistency(const stk::mesh::BulkData& bulk_data) const {
+  std::cout << "Checking consistency of DeclareEntitiesHelper with "
+            << node_info_vec_.size() << " nodes and "
+            << element_info_vec_.size() << " elements." << std::endl;
   // Get the set of unique node and element ids to be added
   // In doing so, if we find a duplicate, we can return early
   std::unordered_set<stk::mesh::EntityId> unique_node_ids;
@@ -77,6 +80,20 @@ void DeclareEntitiesHelper::check_consistency(const stk::mesh::BulkData& bulk_da
                               fmt::format("Element {} connects to non-existent node {}", element_info.id, node_id));
         }
       }
+    }
+  }
+
+  // Check that the parts of all elements and nodes are non nullptr
+  for (const auto& node_info : node_info_vec_) {
+    for (const auto& part_ptr : node_info.parts) {
+      MUNDY_THROW_REQUIRE(part_ptr != nullptr, std::runtime_error,
+                          fmt::format("Node {} has a null part pointer in its part list", node_info.id));
+    }
+  }
+  for (const auto& element_info : element_info_vec_) {
+    for (const auto& part_ptr : element_info.parts) {
+      MUNDY_THROW_REQUIRE(part_ptr != nullptr, std::runtime_error,
+                          fmt::format("Element {} has a null part pointer in its part list", element_info.id));
     }
   }
 
@@ -181,6 +198,11 @@ DeclareEntitiesHelper& DeclareEntitiesHelper::declare_entities(stk::mesh::BulkDa
   // Declare all elements. Declare their nodes as we go. Mark sharing as necessary.
   for (const auto& element_info : element_info_vec_) {
     if (element_info.owning_proc == our_rank) {
+      std::cout << element_info << std::endl;
+      // print each part name
+      for (const auto& part_ptr : element_info.parts) {
+        std::cout << "  Part: " << part_ptr->name() << std::endl;
+      }
       stk::mesh::Entity element = bulk_data.declare_element(element_info.id, element_info.parts);
       if (element_info.node_ids.size() != 0) {
         stk::mesh::Permutation perm = stk::mesh::Permutation::INVALID_PERMUTATION;
