@@ -400,6 +400,14 @@ KOKKOS_INLINE_FUNCTION constexpr auto append(const variant_aggregate<VariantType
   return v_agg.template append<Tag>(std::move(new_variant));
 }
 
+namespace impl {
+
+/// \brief A concept to check if a given type has operator()(args...)
+template <typename T, typename... Args>
+concept callable_with = requires(T t, Args... args) { t(std::forward<Args>(args)...); };
+
+}  // namespace impl
+
 /// \brief An aggregate: A bag of compile-time tagged types
 /// In other words, a compile-time unordered map of arbitrary types indexed by tag type.
 ///
@@ -411,6 +419,69 @@ KOKKOS_INLINE_FUNCTION constexpr auto append(const variant_aggregate<VariantType
 ///   auto agg = mundy::core::make_aggregate()
 ///       .append<Tag1>(component1)
 ///       .append<Tag2>(component2);
+/// \endcode
+///
+///
+/// # Example use cases include
+///
+/// 1. Compile-time extensible tuple:
+/// \code{.cpp}
+///   auto cfg = make_aggregate()
+///       .append<DT>(0.01)
+///       .append<MAX_ITERS>(1000);
+///  
+///   double dt     = cfg.get<DT>();
+///   size_t it_max = cfg.get<MAX_ITERS>();
+///   // double dt  = cfg.get<DT>(0);  // error: DT is not callable
+/// \endcode
+///
+/// 2. Aggregation of accessors:
+/// \code{.cpp}
+///   auto spheres = make_aggregate()
+///       .append<CENTER>(center_accessor)
+///       .append<RADIUS>(radius_accessor);
+///   
+///   auto c = spheres.get<CENTER>(10);
+///   auto r = spheres.get<RADIUS>(3);
+///
+///   auto stored_center_accessor = spheres.get<CENTER>();
+/// \endcode
+///
+/// 3. Aggregation of policies/strategies:
+/// \code{.cpp}
+///   auto solver_policies = make_aggregate()
+///       .append<SOLVER>(solver_policy)
+///       .append<PRECONDITIONER>(preconditioner_policy);
+///
+///   solver_policies.get<SOLVER>().solve(..., solver_policies.get<PRECONDITIONER>(), ...);
+/// \endcode
+///
+/// 4. Aggregation of algorithms/functors:
+/// \code{.cpp}
+///   auto algs = make_aggregate()
+///       .append<SORT>(SortAlgorithm{})
+///       .append<FILTER>(FilterAlgorithm{});
+///   
+///   algs.get<SORT>(data);
+///   auto filtered = algs.get<FILTER>(data);
+/// \endcode
+///
+/// 5. Mixed usage:
+/// \code{.cpp}
+///   auto agg = make_aggregate()
+///       .append<POS>(pos_accessor)
+///       .append<VEL>(vel_accessor)
+///       .append<DT>(0.01);
+///   
+///   agg.get<POS>(i) += agg.get<VEL>(i) * agg.get<DT>();
+/// \endcode
+///
+///
+/// # Tag requirements
+/// Each Tag type must be unique within an aggregate but can otherwise be any type (including incomplete types).
+/// Indeed, to make declaring types easier, the simplest strategy is to use incomplete structs:
+/// \code{.cpp}
+///   struct DT; struct MAX_ITERS;
 /// \endcode
 template <typename... TaggedComponents>
 class aggregate {
@@ -474,6 +545,34 @@ class aggregate {
   template <typename Tag>
   KOKKOS_INLINE_FUNCTION constexpr auto& get() {
     return impl::find_component<Tag>(tagged_components_).component();
+  }
+
+  /// \brief Get tagged object of the given args: Perform get<I'th tag>()(args...) with syntactic sugar
+  template<size_t I, typename... Args>
+  KOKKOS_INLINE_FUNCTION constexpr decltype(auto) get(Args&&... args) const {
+    static_assert(impl::callable_with<decltype(get<I>()), Args...>,
+                  "The I'th component is not callable with the given arguments.");
+    return get<I>()(std::forward<Args>(args)...);
+  }
+  template<size_t I, typename... Args>
+  KOKKOS_INLINE_FUNCTION constexpr decltype(auto) get(Args&&... args) {
+    static_assert(impl::callable_with<decltype(get<I>()), Args...>,
+                  "The I'th component is not callable with the given arguments.");
+    return get<I>()(std::forward<Args>(args)...);
+  }
+
+  /// \brief Get tagged object of the given args: Perform get<TAG>()(args...) with syntactic sugar
+  template<typename Tag, typename... Args>
+  KOKKOS_INLINE_FUNCTION constexpr decltype(auto) get(Args&&... args) const {
+    static_assert(impl::callable_with<decltype(get<Tag>()), Args...>,
+                  "The component with the given Tag is not callable with the given arguments.");
+    return get<Tag>()(std::forward<Args>(args)...);
+  }
+  template<typename Tag, typename... Args>
+  KOKKOS_INLINE_FUNCTION constexpr decltype(auto) get(Args&&... args) {
+    static_assert(impl::callable_with<decltype(get<Tag>()), Args...>,
+                  "The component with the given Tag is not callable with the given arguments.");
+    return get<Tag>()(std::forward<Args>(args)...);
   }
 
   /// \brief Check if we have a component with the given Tag

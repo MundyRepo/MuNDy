@@ -1,13 +1,31 @@
 # Needs EntityExpr ready in Nov/24
   - Non-static branches
-  - Aggregates need to not take in rank
   - Tagging accessors needs simplified
-  - Declaring links needs to become a part of the DeclareEntitiesHelper
-  - NeighborEntityExpression
+  - STK aggregates need replaced by core::aggregate
+  - NeighborEntityExpr
+  - AggregateEntityExpr
   - Ability to access linked entities in an entity expression
   - Atomics! Also, how to correctly perform += for a fused assign w/ atomic?
 
 
+CONCLUSIONS:
+ - core::aggregates ONLY and no mesh::STKComponentAggregates
+ - All primitives are replaced with core::aggregates
+ - Within a kernel, users will create core::aggregates and then pass them
+   to the desired geom functions.
+ - We will NOT offer a to_sphere function or something along those lines
+   since it is a users responsibility to construct an aggregate with the
+   desired subset of data.
+ - Entity
+
+
+
+
+
+
+
+
+WORD VOMIT:
 
 
 #########################
@@ -25,6 +43,10 @@ Now, we have a design decision to make. How should the aggregates "look":
             auto center = agg.get<CENTER>(center_node_index);
             auto radius = agg.get<RADIUS>(sphere_index);
             center += radius[0];
+
+            // or for fused operations.
+            auto sphere = make_aggregate().append<CENTER>(center).append<RADIUS>(radius);
+            wrap_rigid(sphere);
           });
     - They don't offer for_each directly and don't necessarily store a selector, rank, or topology.
     - Benefits:
@@ -36,8 +58,8 @@ the interface more readable, since users write agg.get<RADIUS>(node2_idx)[0] ins
 which has led to confusion about which is the ordinal and which is the operator[] of the returned view!
       3. core::aggregate can be used elsewhere in Mundy and isn't tied to STK or ECS.
       4. Tags are pretty flexible
-    - Flaws:
-      1. This design requires more direct interaction with STK
+    - Flaws that aren't necessarily bad things:
+      1. This design requires more direct interaction with STK 
       2. One step withdrawn from mundy::geom::primitives. These are just data containers that must be unpacked into geom
       objects.
   2. mesh::STKComponentAggregate:
@@ -231,6 +253,16 @@ The integrator controls
 
 Registering "fixes" with mundy isn't a bad idea just like LAMMPS. Maybe we even mirror their time step pipeline/terminology. 
 
+
+
+
+
+
+
+
+
+
+
 ##############
 
 The interface for KMC needs generalized. 
@@ -247,7 +279,7 @@ This is exactly like the current Aggregate concept with its get_view(Entity) des
 with the creation of a true mech object. The problem we had with this is that sometimes, you really
 do want a temporary object and not a view. Right now, Aggregates always return views. You can't have
 a function that acts on an aggregate that's an owning spring2. We need this for our energy functionals
-since we want to try out different configurations. 
+since we want to try out different configurations.
 
 Basically, instead of making a bunch of named objects like Springs, DynamicSprings, etc, we want a general
 aggregate type. But, with python, we'll need to make that concrete anyway for users to use them within 
@@ -295,3 +327,7 @@ that we want to continue using ComponentAggregates, for_each, and their EntityVi
 We will not attempt to support runtime aggregates. We will, however, attempt to create a python interface with
 auto-compiled tag-dispatched methods. I don't think we should use operator() for the kernels tho, passing
 *this is confusing to Chris. 
+
+#########################
+As STK put it, fields are first class citizens. In the new design, aggregates are just a means of aggregating
+fields. Nothing more.

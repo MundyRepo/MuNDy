@@ -43,6 +43,14 @@ tribits_add_executable_and_test(
     ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1-4
   )
+
+tribits_add_executable_and_test(
+  UnitTestAggregate
+  SOURCES
+  UnitTestAggregate.cpp
+    ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
+  NUM_MPI_PROCS 1-4
+  )
   
 tribits_add_executable_and_test(
   UnitTestNgpView
