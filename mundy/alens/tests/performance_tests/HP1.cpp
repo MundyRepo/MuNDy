@@ -748,6 +748,7 @@ class HP1 {
     active_euchromatin_force_sigma_ = param_list.get<double>("force_sigma");
     active_euchromatin_force_kon_ = param_list.get<double>("kon");
     active_euchromatin_force_koff_ = param_list.get<double>("koff");
+    active_euchromatin_hydro_only_ = param_list.get<bool>("hydro_only");
   }
 
   static Teuchos::ParameterList get_valid_params() {
@@ -941,7 +942,9 @@ class HP1 {
     valid_parameter_list.sublist("active_euchromatin_forces")
         .set("force_sigma", default_active_euchromatin_force_sigma_, "Active euchromatin force sigma.")
         .set("kon", default_active_euchromatin_force_kon_, "Active euchromatin force kon.")
-        .set("koff", default_active_euchromatin_force_koff_, "Active euchromatin force koff.");
+        .set("koff", default_active_euchromatin_force_koff_, "Active euchromatin force koff.")
+        .set("hydro_only", default_active_euchromatin_hydro_only_,
+             "If true, only apply active forces in hydrodynamic calculations (not self-interaction).");
 
     valid_parameter_list.sublist("neighbor_list")
         .set("skin_distance", default_skin_distance_, "Neighbor list skin distance.")
@@ -1143,6 +1146,7 @@ class HP1 {
         std::cout << "  force_sigma: " << active_euchromatin_force_sigma_ << std::endl;
         std::cout << "  kon: " << active_euchromatin_force_kon_ << std::endl;
         std::cout << "  koff: " << active_euchromatin_force_koff_ << std::endl;
+        std::cout << "  hydro_only: " << active_euchromatin_hydro_only_ << std::endl;
       }
 
       std::cout << std::endl;
@@ -1181,7 +1185,7 @@ class HP1 {
                  mundy::core::make_string_array("E", "H", "BS", "EESPRINGS", "EHSPRINGS", "HHSPRINGS", "LEFT_HP1",
                                                 "DOUBLY_HP1_H", "DOUBLY_HP1_BS"))
             .set("enabled_io_fields_node_rank",
-                 mundy::core::make_string_array("NODE_VELOCITY", "NODE_FORCE", "NODE_RNG_COUNTER"))
+                 mundy::core::make_string_array("NODE_VELOCITY", "NODE_FORCE", "NODE_ACTIVE_FORCE", "NODE_RNG_COUNTER"))
             .set("enabled_io_fields_element_rank",
                  mundy::core::make_string_array(
                      "ELEMENT_RADIUS", "ELEMENT_RNG_COUNTER", "ELEMENT_REALIZED_BINDING_RATES",
@@ -1263,6 +1267,7 @@ class HP1 {
         .add_field_reqs<double>("NODE_VELOCITY_HYDRO", node_rank_, 3, 1)
         .add_field_reqs<double>("NODE_VELOCITY_HYDRO_OLD", node_rank_, 3, 1)
         .add_field_reqs<double>("NODE_FORCE", node_rank_, 3, 1)
+        .add_field_reqs<double>("NODE_ACTIVE_FORCE", node_rank_, 3, 1)
         .add_field_reqs<unsigned>("NODE_RNG_COUNTER", node_rank_, 1, 1)
         .add_field_reqs<double>("TRANSIENT_NODE_COORDINATES", node_rank_, 3, 1)
         .add_subpart_reqs("E", stk::topology::PARTICLE)
@@ -1546,6 +1551,7 @@ class HP1 {
     node_velocity_hydro_field_ptr_ = fetch_field<double>("NODE_VELOCITY_HYDRO", node_rank_);
     node_velocity_hydro_old_field_ptr_ = fetch_field<double>("NODE_VELOCITY_HYDRO_OLD", node_rank_);
     node_force_field_ptr_ = fetch_field<double>("NODE_FORCE", node_rank_);
+    node_active_force_field_ptr_ = fetch_field<double>("NODE_ACTIVE_FORCE", node_rank_);
     node_rng_field_ptr_ = fetch_field<unsigned>("NODE_RNG_COUNTER", node_rank_);
 
     element_rng_field_ptr_ = fetch_field<unsigned>("ELEMENT_RNG_COUNTER", element_rank_);
@@ -3051,6 +3057,7 @@ class HP1 {
   void zero_out_transient_node_fields() {
     mundy::mesh::utils::fill_field_with_value<double>(*node_velocity_field_ptr_, std::array<double, 3>{0.0, 0.0, 0.0});
     mundy::mesh::utils::fill_field_with_value<double>(*node_force_field_ptr_, std::array<double, 3>{0.0, 0.0, 0.0});
+    mundy::mesh::utils::fill_field_with_value<double>(*node_active_force_field_ptr_, std::array<double, 3>{0.0, 0.0, 0.0});
   }
 
   void zero_out_transient_element_fields() {
@@ -4480,13 +4487,14 @@ class HP1 {
     stk::mesh::Field<unsigned>& euchromatin_state = *euchromatin_state_field_ptr_;
     stk::mesh::Field<double>& node_coord_field = *node_coord_field_ptr_;
     stk::mesh::Field<double>& node_force_field = *node_force_field_ptr_;
+    stk::mesh::Field<double>& node_active_force_field = *node_active_force_field_ptr_;
 
     const double& active_force_sigma = active_euchromatin_force_sigma_;
 
     // Loop over the euchromatin spring elements and decide if they switch to the active state
     mundy::mesh::for_each_entity_run(
         *bulk_data_ptr_, stk::topology::ELEMENT_RANK, ee_springs_part,
-        [&euchromatin_state, &node_coord_field, &node_force_field, &active_force_sigma](
+        [&euchromatin_state, &node_coord_field, &node_force_field, &node_active_force_field, &active_force_sigma](
             [[maybe_unused]] const stk::mesh::BulkData& bulk_data, const stk::mesh::Entity& euchromatin_spring) {
           // We are not going to increment the elapsed time ourselves, but rely on someone outside of this loop to do
           // that at the end of a timestep, in order to keep it consistent with the total elapsed time in the system.
@@ -4513,6 +4521,8 @@ class HP1 {
             // Add the force dipole to the nodes.
             double* node1_force = stk::mesh::field_data(node_force_field, node1);
             double* node2_force = stk::mesh::field_data(node_force_field, node2);
+            double* node1_active_force = stk::mesh::field_data(node_active_force_field, node1);
+            double* node2_active_force = stk::mesh::field_data(node_active_force_field, node2);
 
 #pragma omp atomic
             node1_force[0] -= right_node_force[0];
@@ -4526,10 +4536,23 @@ class HP1 {
             node2_force[1] += right_node_force[1];
 #pragma omp atomic
             node2_force[2] += right_node_force[2];
+
+#pragma omp atomic
+            node1_active_force[0] -= right_node_force[0];
+#pragma omp atomic
+            node1_active_force[1] -= right_node_force[1];
+#pragma omp atomic
+            node1_active_force[2] -= right_node_force[2];
+#pragma omp atomic
+            node2_active_force[0] += right_node_force[0];
+#pragma omp atomic
+            node2_active_force[1] += right_node_force[1];
+#pragma omp atomic
+            node2_active_force[2] += right_node_force[2];
           }
         });
     // Sum the forces on shared nodes.
-    stk::mesh::parallel_sum(*bulk_data_ptr_, {node_force_field_ptr_});
+    stk::mesh::parallel_sum(*bulk_data_ptr_, {node_force_field_ptr_, node_active_force_field_ptr_});
 
     Kokkos::Profiling::popRegion();
   }
@@ -4762,6 +4785,38 @@ class HP1 {
     Kokkos::Profiling::popRegion();
   }
 
+  void compute_dry_velocity_no_active_forces() {
+    // Compute both the dry velocity due to external forces but not active forces
+    Kokkos::Profiling::pushRegion("HP1::compute_dry_velocity_no_active_forces");
+
+    // Selectors and aliases
+    const stk::mesh::Selector chromatin_spheres_selector = *e_part_ptr_ | *h_part_ptr_;
+    stk::mesh::Field<double>& node_velocity_field = *node_velocity_field_ptr_;
+    stk::mesh::Field<double>& node_force_field = *node_force_field_ptr_;
+    stk::mesh::Field<double>& node_active_force_field = *node_active_force_field_ptr_;
+    double& timestep_size = timestep_size_;
+    double sphere_drag_coeff = 6.0 * M_PI * viscosity_ * backbone_sphere_hydrodynamic_radius_;
+    double inv_drag_coeff = 1.0 / sphere_drag_coeff;
+
+    // Compute the total velocity of the nonorientable spheres
+    mundy::mesh::for_each_entity_run(
+        *bulk_data_ptr_, stk::topology::NODE_RANK, chromatin_spheres_selector,
+        [&node_velocity_field, &node_force_field, &node_active_force_field, &timestep_size, &sphere_drag_coeff, &inv_drag_coeff](
+            [[maybe_unused]] const stk::mesh::BulkData& bulk_data, const stk::mesh::Entity& sphere_node) {
+          // Get the specific values for each sphere
+          double* node_velocity = stk::mesh::field_data(node_velocity_field, sphere_node);
+          double* node_force = stk::mesh::field_data(node_force_field, sphere_node);
+          double* node_active_force = stk::mesh::field_data(node_active_force_field, sphere_node);
+
+          // Uext = Fext * inv_drag_coeff
+          node_velocity[0] += (node_force[0] - node_active_force[0]) * inv_drag_coeff;
+          node_velocity[1] += (node_force[1] - node_active_force[1]) * inv_drag_coeff;
+          node_velocity[2] += (node_force[2] - node_active_force[2]) * inv_drag_coeff;
+        });
+
+    Kokkos::Profiling::popRegion();
+  }
+
   void check_maximum_speed_pre_position_update() {
     // Selectors and aliases
     const stk::mesh::Selector chromatin_spheres_selector = *e_part_ptr_ | *h_part_ptr_;
@@ -4925,7 +4980,11 @@ class HP1 {
       if (enable_chromatin_brownian_motion_) compute_brownian_velocity();
       if (enable_backbone_n_body_hydrodynamics_) {
         // RPY hydro is only the long range hydrodynamics. We still need to compute the self-interaction.
-        compute_dry_velocity();
+        if (active_euchromatin_hydro_only_) {
+          compute_dry_velocity_no_active_forces();
+        } else {
+          compute_dry_velocity();
+        }
 
         stk::mesh::Selector chromatin_spheres_selector = *e_part_ptr_ | *h_part_ptr_;
         stk::mesh::Field<double>& node_velocity_field = *node_velocity_field_ptr_;
@@ -4983,7 +5042,11 @@ class HP1 {
               node_velocity[2] += node_velocity_hydro[2];
             });
       } else {
-        compute_dry_velocity();
+        if (active_euchromatin_hydro_only_) {
+          compute_dry_velocity_no_active_forces();
+        } else {
+          compute_dry_velocity();
+        }
       }
 
       // Logging, if desired, write to console
@@ -5089,6 +5152,7 @@ class HP1 {
   stk::mesh::Field<double>* node_coord_field_ptr_;
   stk::mesh::Field<double>* node_velocity_field_ptr_;
   stk::mesh::Field<double>* node_force_field_ptr_;
+  stk::mesh::Field<double>* node_active_force_field_ptr_;
   stk::mesh::Field<double>* node_velocity_hydro_field_ptr_;
   stk::mesh::Field<double>* node_velocity_hydro_old_field_ptr_;
 
@@ -5355,6 +5419,7 @@ class HP1 {
   double active_euchromatin_force_sigma_;
   double active_euchromatin_force_kon_;
   double active_euchromatin_force_koff_;
+  bool active_euchromatin_hydro_only_;
 
   // Neighbor list params
   double skin_distance_;
@@ -5483,6 +5548,7 @@ class HP1 {
   static constexpr double default_active_euchromatin_force_sigma_ = 1.0;
   static constexpr double default_active_euchromatin_force_kon_ = 1.0;
   static constexpr double default_active_euchromatin_force_koff_ = 1.0;
+  static constexpr bool default_active_euchromatin_hydro_only_ = false;
 
   // Neighbor list params
   static constexpr double default_skin_distance_ = 1.0;
