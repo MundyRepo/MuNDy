@@ -48,7 +48,6 @@ struct FILTER;
 struct POS;
 struct VEL;
 
-// Test case 1: Compile-time extensible tuple
 TEST(AggregateTest, CompileTimeExtensibleTuple) {
   auto cfg = make_aggregate()       //
                  .append<DT>(0.01)  //
@@ -61,7 +60,15 @@ TEST(AggregateTest, CompileTimeExtensibleTuple) {
   static_assert(aggregate_has_v<MAX_ITERS, decltype(cfg)>);
 }
 
-// Test case 2: Aggregation of accessors
+TEST(AggregateTest, ConstexprUsage) {
+  constexpr auto cfg = make_aggregate()       //
+                           .append<DT>(0.02)  //
+                           .append<MAX_ITERS>(500);
+
+  static_assert(cfg.get<DT>() == 0.02);
+  static_assert(cfg.get<MAX_ITERS>() == 500);
+}
+
 TEST(AggregateTest, AggregationOfAccessors) {
   auto center_accessor = [](int i) { return i * 2; };
   auto radius_accessor = [](int i) { return i + 1; };
@@ -72,12 +79,13 @@ TEST(AggregateTest, AggregationOfAccessors) {
 
   EXPECT_EQ(spheres.get<CENTER>()(10), 20);
   EXPECT_EQ(spheres.get<RADIUS>()(3), 4);
+  EXPECT_EQ(spheres.get<CENTER>(10), 20);
+  EXPECT_EQ(spheres.get<RADIUS>(3), 4);
 
   auto stored_center_accessor = spheres.get<CENTER>();
   EXPECT_EQ(stored_center_accessor(5), 10);
 }
 
-// Test case 3: Aggregation of policies/strategies
 TEST(AggregateTest, AggregationOfPolicies) {
   struct SolverPolicy {
     int solve(int a, int b) const {
@@ -95,10 +103,9 @@ TEST(AggregateTest, AggregationOfPolicies) {
                              .append<PRECONDITIONER>(PreconditionerPolicy{});
 
   EXPECT_EQ(solver_policies.get<SOLVER>().solve(3, 4), 7);
-  EXPECT_EQ(solver_policies.get<PRECONDITIONER>()(5), 10);
+  EXPECT_EQ(solver_policies.get<PRECONDITIONER>(5), 10);
 }
 
-// Test case 4: Aggregation of algorithms/functors
 TEST(AggregateTest, AggregationOfAlgorithms) {
   struct SortAlgorithm {
     void operator()(std::vector<int>& data) const {
@@ -118,14 +125,13 @@ TEST(AggregateTest, AggregationOfAlgorithms) {
                   .append<FILTER>(FilterAlgorithm{});
 
   std::vector<int> data = {5, 3, 8, 1};
-  algs.get<SORT>()(data);
+  algs.get<SORT>(data);
   EXPECT_EQ(data, (std::vector<int>{1, 3, 5, 8}));
 
-  auto filtered = algs.get<FILTER>()(data);
+  auto filtered = algs.get<FILTER>(data);
   EXPECT_EQ(filtered, (std::vector<int>{8}));
 }
 
-// Test case 5: Mixed usage
 TEST(AggregateTest, MixedUsage) {
   auto pos_accessor = [](int i) { return i * 10; };
   auto vel_accessor = [](int i) { return i + 2; };
@@ -136,11 +142,10 @@ TEST(AggregateTest, MixedUsage) {
                  .append<DT>(0.01);
 
   int i = 3;
-  double new_pos = agg.get<POS>()(i) + agg.get<VEL>()(i) * agg.get<DT>();
+  double new_pos = agg.get<POS>(i) + agg.get<VEL>(i) * agg.get<DT>();
   EXPECT_DOUBLE_EQ(new_pos, (i * 10) + (i + 2) * 0.01);
 }
 
-// Test case 6: Check if a tag exists
 TEST(AggregateTest, HasTag) {
   auto agg = make_aggregate()       //
                  .append<DT>(0.01)  //
@@ -150,6 +155,8 @@ TEST(AggregateTest, HasTag) {
   EXPECT_TRUE(has<MAX_ITERS>(agg));
   EXPECT_FALSE(has<CENTER>(agg));
 }
+
+// 
 
 }  // namespace
 

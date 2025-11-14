@@ -6,7 +6,8 @@
   - AggregateEntityExpr
   - Ability to access linked entities in an entity expression
   - Atomics! Also, how to correctly perform += for a fused assign w/ atomic?
-
+  - RNGEntityExpr
+  - Our quaternion is backwards. 
 
 CONCLUSIONS:
  - core::aggregates ONLY and no mesh::STKComponentAggregates
@@ -37,11 +38,19 @@ touch the compile-time tagged, STK aggregates and operate on them directly.
 Now, we have a design decision to make. How should the aggregates "look":
   1. core::aggregate:
     - They are a tagged collection of types identical to a compile-time extensible struct.
+      auto spheres = sphere_data.to_agg(bulk_data);
       stk::mesh::for_each_entity_run(
           ngp_mesh, stk::topology::ELEM_RANK, sphere_selector, KOKKOS_LAMBDA(stk::mesh::FastMeshIndex sphere_index) {
             stk::mesh::FastMeshIndex center_node_index = ngp_mesh.fast_mesh_index(ngp_mesh.nodes(sphere_index)[0]);
-            auto center = agg.get<CENTER>(center_node_index);
-            auto radius = agg.get<RADIUS>(sphere_index);
+
+            // Option 1: Via an agg
+            auto center = spheres.get<CENTER>(center_node_index);
+            auto radius = spheres.get<RADIUS>(sphere_index);
+            center += radius[0];
+
+            // Option 2: Via accessors directly
+            auto center = center_accessor(center_node_index);
+            auto radius = radius_accessor(sphere_index);
             center += radius[0];
 
             // or for fused operations.
