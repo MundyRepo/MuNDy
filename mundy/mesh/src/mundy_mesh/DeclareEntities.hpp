@@ -449,37 +449,37 @@ class DeclareEntitiesHelper {
    public:
     /// \brief Set the processor that owns the element.
     ElementBuilder& owning_proc(const int proc) {
-      element_info_.owning_proc = proc;
+      elem_info_.owning_proc = proc;
       return *this;
     }
 
     /// \brief Set the entity id of the element (indexed from 1)
     ElementBuilder& id(const stk::mesh::EntityId entity_id) {
-      element_info_.id = entity_id;
+      elem_info_.id = entity_id;
       return *this;
     }
 
     /// \brief Set the topology of the element.
     ElementBuilder& topology(const stk::topology topology) {
-      element_info_.topology = topology;
+      elem_info_.topology = topology;
       return *this;
     }
 
     /// \brief Set the nodes that the element is connected to.
     ElementBuilder& nodes(const std::vector<stk::mesh::EntityId>& node_ids) {
-      element_info_.node_ids = node_ids;
+      elem_info_.node_ids = node_ids;
       return *this;
     }
 
     /// \brief Add a part to the element (i.e, a part that the element belongs to)
     ElementBuilder& add_part(stk::mesh::Part* part_ptr) {
-      element_info_.parts.push_back(part_ptr);
+      elem_info_.parts.push_back(part_ptr);
       return *this;
     }
 
     /// \brief Add a vector of parts to the element (i.e, parts that the element belongs to)
     ElementBuilder& add_parts(const stk::mesh::PartVector& parts) {
-      element_info_.parts.insert(element_info_.parts.end(), parts.begin(), parts.end());
+      elem_info_.parts.insert(elem_info_.parts.end(), parts.begin(), parts.end());
       return *this;
     }
 
@@ -494,7 +494,7 @@ class DeclareEntitiesHelper {
     /// \param data The data to set
     template <typename T>
     ElementBuilder& add_field_data(stk::mesh::FieldBase* const field, const std::vector<T>& data) {
-      element_info_.field_data.push_back(std::make_shared<FieldData<T>>(field, data));
+      elem_info_.field_data.push_back(std::make_shared<FieldData<T>>(field, data));
       return *this;
     }
 
@@ -503,7 +503,7 @@ class DeclareEntitiesHelper {
     /// \param data The data to set
     template <typename T>
     ElementBuilder& add_field_data(stk::mesh::FieldBase* const field, const T& data) {
-      element_info_.field_data.push_back(std::make_shared<FieldData<T>>(field, std::vector<T>{data}));
+      elem_info_.field_data.push_back(std::make_shared<FieldData<T>>(field, std::vector<T>{data}));
       return *this;
     }
 
@@ -512,9 +512,11 @@ class DeclareEntitiesHelper {
     /// \param linked_entity_id The entity id of the entity to link to.
     /// \param linked_entity_rank The entity rank of the entity to link to.
     /// \param ordinal The slot/ordinal to link the entity at.
-    ElementBuilder& links_to(const std::string& link_meta_data_name, const stk::mesh::EntityId linked_entity_id,
-                             const stk::mesh::EntityRank linked_entity_rank, const unsigned ordinal) {
-      auto& link_info = element_info_.link_info_map[link_meta_data_name];
+    ElementBuilder& links_to(LinkData* const link_data_ptr, const stk::mesh::EntityId linked_entity_id,
+                          const stk::mesh::EntityRank linked_entity_rank, const unsigned ordinal) {
+      MUNDY_THROW_REQUIRE(link_data_ptr != nullptr, std::invalid_argument, "LinkData pointer is null.");
+      const std::string& link_meta_data_name = link_data_ptr->link_meta_data().name();
+      auto& link_info = elem_info_.link_info_map[link_meta_data_name];
       if (link_info.linked_entity_ids.size() <= ordinal) {
         link_info.linked_entity_ids.resize(ordinal + 1, stk::mesh::InvalidEntityId);
         link_info.linked_entity_ranks.resize(ordinal + 1, stk::topology::INVALID_RANK);
@@ -531,7 +533,7 @@ class DeclareEntitiesHelper {
 
     /// Overload the operator<<
     friend std::ostream& operator<<(std::ostream& os, const ElementBuilder& builder) {
-      const auto& info = builder.element_info_;
+      const auto& info = builder.elem_info_;
       os << info;
       return os;
     }
@@ -539,14 +541,14 @@ class DeclareEntitiesHelper {
    private:
     /// \brief Private constructor for the ElementBuilder.
     ElementBuilder(DeclareEntitiesHelper& owner, DeclareElementInfo& element_info)
-        : owner_(owner), element_info_(element_info) {
+        : owner_(owner), elem_info_(element_info) {
     }
 
     //! \name Internal Data
     //@{
 
     DeclareEntitiesHelper& owner_;
-    DeclareElementInfo& element_info_;
+    DeclareElementInfo& elem_info_;
     //@}
 
     //! \name Friends <3
@@ -574,8 +576,8 @@ class DeclareEntitiesHelper {
   ///
   /// \return The ElementBuilder for the new element.
   ElementBuilder create_element() {
-    element_info_vec_.emplace_back();
-    return ElementBuilder(*this, element_info_vec_.back());
+    elem_info_vec_.emplace_back();
+    return ElementBuilder(*this, elem_info_vec_.back());
   }
 
   /// \brief Create a vector of NodeBuilders for parallel construction of nodes (not thread safe).
@@ -608,8 +610,8 @@ class DeclareEntitiesHelper {
     std::vector<ElementBuilder> builders;
     builders.reserve(num_elements);
     for (size_t i = 0; i < num_elements; ++i) {
-      element_info_vec_.emplace_back();
-      builders.push_back(ElementBuilder(*this, element_info_vec_.back()));
+      elem_info_vec_.emplace_back();
+      builders.push_back(ElementBuilder(*this, elem_info_vec_.back()));
     }
     return builders;
   }
@@ -622,9 +624,9 @@ class DeclareEntitiesHelper {
       os << "Node " << ++node_count << ":\n";
       os << node_info;
     }
-    os << "Number of Elements: " << builder.element_info_vec_.size() << "\n";
+    os << "Number of Elements: " << builder.elem_info_vec_.size() << "\n";
     size_t element_count = 0;
-    for (const auto& element_info : builder.element_info_vec_) {
+    for (const auto& element_info : builder.elem_info_vec_) {
       os << "Element " << ++element_count << ":\n";
       os << element_info;
     }
@@ -721,7 +723,7 @@ class DeclareEntitiesHelper {
   //@{
 
   std::vector<DeclareNodeInfo> node_info_vec_;
-  std::vector<DeclareElementInfo> element_info_vec_;
+  std::vector<DeclareElementInfo> elem_info_vec_;
   //@}
 };
 

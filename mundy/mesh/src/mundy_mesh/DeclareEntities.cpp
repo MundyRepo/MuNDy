@@ -41,18 +41,15 @@
 // Mundy
 #include <mundy_core/throw_assert.hpp>     // for MUNDY_THROW_REQUIRE
 #include <mundy_mesh/DeclareEntities.hpp>  // for mundy::mesh::DeclareEntitiesHelper
-#include <mundy_mesh/fmt_stk_types.hpp>    // adds fmt::format for stk types
+#include <mundy_mesh/LinkData.hpp>         // for mundy::mesh::get_link_data, mundy::mesh::LinkData
 #include <mundy_mesh/LinkMetaData.hpp>     // for mundy::mesh::LinkMetaData
-#include <mundy_mesh/LinkData.hpp>     // for mundy::mesh::get_link_data, mundy::mesh::LinkData
+#include <mundy_mesh/fmt_stk_types.hpp>    // adds fmt::format for stk types
 
 namespace mundy {
 
 namespace mesh {
 
 void DeclareEntitiesHelper::check_consistency(const stk::mesh::BulkData& bulk_data) const {
-  std::cout << "Checking consistency of DeclareEntitiesHelper with "
-            << node_info_vec_.size() << " nodes and "
-            << element_info_vec_.size() << " elements." << std::endl;
   // Get the set of unique node and element ids to be added
   // In doing so, if we find a duplicate, we can return early
   std::unordered_set<stk::mesh::EntityId> unique_node_ids;
@@ -62,14 +59,14 @@ void DeclareEntitiesHelper::check_consistency(const stk::mesh::BulkData& bulk_da
       MUNDY_THROW_REQUIRE(false, std::runtime_error, fmt::format("Duplicate node id found: {}", node_info.id));
     }
   }
-  for (const auto& element_info : element_info_vec_) {
+  for (const auto& element_info : elem_info_vec_) {
     if (!unique_element_ids.insert(element_info.id).second) {
       MUNDY_THROW_REQUIRE(false, std::runtime_error, fmt::format("Duplicate element id found: {}", element_info.id));
     }
   }
 
   // Check for elements connected to non-existent nodes that aren't marked as Invalid
-  for (const auto& element_info : element_info_vec_) {
+  for (const auto& element_info : elem_info_vec_) {
     for (const stk::mesh::EntityId node_id : element_info.node_ids) {
       const bool is_node_marked_as_invalid = node_id == stk::mesh::InvalidEntityId;
       if (!is_node_marked_as_invalid) {
@@ -90,7 +87,7 @@ void DeclareEntitiesHelper::check_consistency(const stk::mesh::BulkData& bulk_da
                           fmt::format("Node {} has a null part pointer in its part list", node_info.id));
     }
   }
-  for (const auto& element_info : element_info_vec_) {
+  for (const auto& element_info : elem_info_vec_) {
     for (const auto& part_ptr : element_info.parts) {
       MUNDY_THROW_REQUIRE(part_ptr != nullptr, std::runtime_error,
                           fmt::format("Element {} has a null part pointer in its part list", element_info.id));
@@ -98,7 +95,7 @@ void DeclareEntitiesHelper::check_consistency(const stk::mesh::BulkData& bulk_da
   }
 
   // Check that the given set of parts will create an entity of the given topology
-  for (const auto& element_info : element_info_vec_) {
+  for (const auto& element_info : elem_info_vec_) {
     const stk::topology given_topo = element_info.topology;
     const stk::topology actual_topo =
         get_topology(bulk_data.mesh_meta_data(), stk::topology::ELEM_RANK, element_info.parts);
@@ -111,7 +108,7 @@ void DeclareEntitiesHelper::check_consistency(const stk::mesh::BulkData& bulk_da
   }
 
   // Check that the number of nodes that an element connects to matches its topology
-  for (const auto& element_info : element_info_vec_) {
+  for (const auto& element_info : elem_info_vec_) {
     const stk::topology topo = element_info.topology;
     const size_t num_nodes = element_info.node_ids.size();
     const size_t num_nodes_expected = topo.num_nodes();
@@ -131,7 +128,7 @@ void DeclareEntitiesHelper::check_consistency(const stk::mesh::BulkData& bulk_da
     }
   }
 
-  for (const auto& element_info : element_info_vec_) {
+  for (const auto& element_info : elem_info_vec_) {
     for (const auto& field_data : element_info.field_data) {
       const stk::mesh::FieldBase* field = field_data->field();
       const stk::mesh::EntityRank field_rank = field->entity_rank();
@@ -150,15 +147,15 @@ void DeclareEntitiesHelper::check_consistency(const stk::mesh::BulkData& bulk_da
       auto link_meta_data_ptr =
           get_link_meta_data(bulk_data.mesh_meta_data(), link_meta_data_name, stk::topology::NODE_RANK);
       MUNDY_THROW_REQUIRE(link_meta_data_ptr != nullptr, std::runtime_error,
-                          fmt::format("Node {} has link info for link meta data '{}' that does not exist",
-                                      node_info.id, link_meta_data_name));
+                          fmt::format("Node {} has link info for link meta data '{}' that does not exist", node_info.id,
+                                      link_meta_data_name));
       MUNDY_THROW_REQUIRE(link_meta_data_ptr->link_rank() == stk::topology::NODE_RANK, std::runtime_error,
                           fmt::format("Node {} has link info for link meta data '{}' that is not node-rank link data",
                                       node_info.id, link_meta_data_name));
     }
   }
 
-  for (const auto& element_info : element_info_vec_) {
+  for (const auto& element_info : elem_info_vec_) {
     for (const auto& link_info_pair : element_info.link_info_map) {
       const std::string& link_meta_data_name = link_info_pair.first;
       auto link_meta_data_ptr =
@@ -166,9 +163,10 @@ void DeclareEntitiesHelper::check_consistency(const stk::mesh::BulkData& bulk_da
       MUNDY_THROW_REQUIRE(link_meta_data_ptr != nullptr, std::runtime_error,
                           fmt::format("Element {} has link info for link meta data '{}' that does not exist",
                                       element_info.id, link_meta_data_name));
-      MUNDY_THROW_REQUIRE(link_meta_data_ptr->link_rank() == stk::topology::ELEM_RANK, std::runtime_error,
-                          fmt::format("Element {} has link info for link meta data '{}' that is not element-rank link data",
-                                      element_info.id, link_meta_data_name));
+      MUNDY_THROW_REQUIRE(
+          link_meta_data_ptr->link_rank() == stk::topology::ELEM_RANK, std::runtime_error,
+          fmt::format("Element {} has link info for link meta data '{}' that is not element-rank link data",
+                      element_info.id, link_meta_data_name));
     }
   }
 }
@@ -182,27 +180,22 @@ DeclareEntitiesHelper& DeclareEntitiesHelper::declare_entities(stk::mesh::BulkDa
 
   // Construct maps for quick lookup of node and element info
   std::unordered_map<stk::mesh::EntityId, DeclareNodeInfo> node_info_map;
-  std::unordered_map<stk::mesh::EntityId, DeclareElementInfo> element_info_map;
+  std::unordered_map<stk::mesh::EntityId, DeclareElementInfo> elem_info_map;
   for (const auto& node_info : node_info_vec_) {
     MUNDY_THROW_REQUIRE(node_info_map.find(node_info.id) == node_info_map.end(), std::runtime_error,
                         fmt::format("Duplicate node id found: {}", node_info.id));
     node_info_map[node_info.id] = node_info;
   }
 
-  for (const auto& element_info : element_info_vec_) {
-    MUNDY_THROW_REQUIRE(element_info_map.find(element_info.id) == element_info_map.end(), std::runtime_error,
+  for (const auto& element_info : elem_info_vec_) {
+    MUNDY_THROW_REQUIRE(elem_info_map.find(element_info.id) == elem_info_map.end(), std::runtime_error,
                         fmt::format("Duplicate element id found: {}", element_info.id));
-    element_info_map[element_info.id] = element_info;
+    elem_info_map[element_info.id] = element_info;
   }
 
   // Declare all elements. Declare their nodes as we go. Mark sharing as necessary.
-  for (const auto& element_info : element_info_vec_) {
+  for (const auto& element_info : elem_info_vec_) {
     if (element_info.owning_proc == our_rank) {
-      std::cout << element_info << std::endl;
-      // print each part name
-      for (const auto& part_ptr : element_info.parts) {
-        std::cout << "  Part: " << part_ptr->name() << std::endl;
-      }
       stk::mesh::Entity element = bulk_data.declare_element(element_info.id, element_info.parts);
       if (element_info.node_ids.size() != 0) {
         stk::mesh::Permutation perm = stk::mesh::Permutation::INVALID_PERMUTATION;
@@ -291,12 +284,13 @@ DeclareEntitiesHelper& DeclareEntitiesHelper::declare_entities(stk::mesh::BulkDa
   }
 
   // Now that every node/element is declared, set up the links
-  
+
   // Elem linkers
-  // 1. Check if action is required: Loop over each element, if we own or share any of its nodes, we need to set up its links
-  // 2. Get the link data: find its link info, fetch the corresponding link meta data. Get the corresponding LinkData. 
+  // 1. Check if action is required: Loop over each element, if we own or share any of its nodes, we need to set up its
+  // links
+  // 2. Get the link data: find its link info, fetch the corresponding link meta data. Get the corresponding LinkData.
   // 3. Declare the link relations
-  for (const auto& element_info : element_info_vec_) {
+  for (const auto& element_info : elem_info_vec_) {
     const bool we_own_element = element_info.owning_proc == our_rank;
     bool we_ghost_element = false;
     for (const auto& node_id : element_info.node_ids) {
@@ -322,8 +316,7 @@ DeclareEntitiesHelper& DeclareEntitiesHelper::declare_entities(stk::mesh::BulkDa
         const std::string& link_data_name = link_info_pair.first;
         const DeclareLinksInfo& link_info = link_info_pair.second;
 
-        auto link_data_ptr =
-            get_link_data(bulk_data, link_data_name, stk::topology::ELEM_RANK);
+        auto link_data_ptr = get_link_data(bulk_data, link_data_name, stk::topology::ELEM_RANK);
         MUNDY_THROW_REQUIRE(link_data_ptr != nullptr, std::runtime_error,
                             fmt::format("Element {} has link info for link data '{}' that does not exist",
                                         element_info.id, link_data_name));
@@ -335,9 +328,8 @@ DeclareEntitiesHelper& DeclareEntitiesHelper::declare_entities(stk::mesh::BulkDa
           }
 
           stk::mesh::EntityRank linked_entity_rank = link_info.linked_entity_ranks[ordinal];
-          stk::mesh::Entity linked_entity =
-              bulk_data.get_entity(linked_entity_rank, linked_entity_id);
-          
+          stk::mesh::Entity linked_entity = bulk_data.get_entity(linked_entity_rank, linked_entity_id);
+
           MUNDY_THROW_REQUIRE(bulk_data.is_valid(linked_entity), std::runtime_error,
                               fmt::format("Element {} is trying to link to non-existent entity (rank {}, id {})",
                                           element_info.id, linked_entity_rank, linked_entity_id));
@@ -346,7 +338,6 @@ DeclareEntitiesHelper& DeclareEntitiesHelper::declare_entities(stk::mesh::BulkDa
       }
     }
   }
-
 
   // Node linkers
   // 1. Check if action is required: Loop over each node, if we own or share it, we need to set up its links
@@ -367,11 +358,10 @@ DeclareEntitiesHelper& DeclareEntitiesHelper::declare_entities(stk::mesh::BulkDa
         const std::string& link_data_name = link_info_pair.first;
         const DeclareLinksInfo& link_info = link_info_pair.second;
 
-        auto link_data_ptr =
-            get_link_data(bulk_data, link_data_name, stk::topology::NODE_RANK);
-        MUNDY_THROW_REQUIRE(link_data_ptr != nullptr, std::runtime_error,
-                            fmt::format("Node {} has link info for link data '{}' that does not exist",
-                                        node_info.id, link_data_name));
+        auto link_data_ptr = get_link_data(bulk_data, link_data_name, stk::topology::NODE_RANK);
+        MUNDY_THROW_REQUIRE(
+            link_data_ptr != nullptr, std::runtime_error,
+            fmt::format("Node {} has link info for link data '{}' that does not exist", node_info.id, link_data_name));
         for (size_t ordinal = 0; ordinal < link_info.linked_entity_ids.size(); ++ordinal) {
           // If the linked entity id is invalid, skip it
           stk::mesh::EntityId linked_entity_id = link_info.linked_entity_ids[ordinal];
@@ -380,9 +370,8 @@ DeclareEntitiesHelper& DeclareEntitiesHelper::declare_entities(stk::mesh::BulkDa
           }
 
           stk::mesh::EntityRank linked_entity_rank = link_info.linked_entity_ranks[ordinal];
-          stk::mesh::Entity linked_entity =
-              bulk_data.get_entity(linked_entity_rank, linked_entity_id);
-          
+          stk::mesh::Entity linked_entity = bulk_data.get_entity(linked_entity_rank, linked_entity_id);
+
           MUNDY_THROW_REQUIRE(bulk_data.is_valid(linked_entity), std::runtime_error,
                               fmt::format("Node {} is trying to link to non-existent entity (rank {}, id {})",
                                           node_info.id, linked_entity_rank, linked_entity_id));

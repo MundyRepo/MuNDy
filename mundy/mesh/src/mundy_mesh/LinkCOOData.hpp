@@ -144,7 +144,7 @@ class LinkCOOData {  // Host only | Valid during mesh modifications
   /// \param linked_entity [in] The linked entity (may be invalid).
   /// \param link_ordinal [in] The ordinal of the linked entity.
   inline void declare_relation(const stk::mesh::Entity &linker, const stk::mesh::Entity &linked_entity,
-                               unsigned link_ordinal) {
+                               unsigned link_ordinal) const {
     MUNDY_THROW_ASSERT(link_rank() == bulk_data().entity_rank(linker), std::invalid_argument,
                        "Linker is not of the correct rank.");
     MUNDY_THROW_ASSERT(bulk_data().is_valid(linker), std::invalid_argument, "Linker is not valid.");
@@ -169,7 +169,7 @@ class LinkCOOData {  // Host only | Valid during mesh modifications
   ///
   /// \param linker [in] The linker (must be valid and of the correct rank).
   /// \param link_ordinal [in] The ordinal of the linked entity.
-  inline void delete_relation(const stk::mesh::Entity &linker, unsigned link_ordinal) {
+  inline void delete_relation(const stk::mesh::Entity &linker, unsigned link_ordinal) const {
     MUNDY_THROW_ASSERT(link_rank() == bulk_data().entity_rank(linker), std::invalid_argument,
                        "Linker is not of the correct rank.");
     MUNDY_THROW_ASSERT(bulk_data().is_valid(linker), std::invalid_argument, "Linker is not valid.");

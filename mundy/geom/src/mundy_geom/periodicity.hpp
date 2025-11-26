@@ -38,6 +38,99 @@
 #include <mundy_math/Tolerance.hpp>     // for mundy::math::get_zero_tolerance
 #include <mundy_math/Vector3.hpp>       // for mundy::math::Vector3
 
+// Need a runtime metric with a visit function that can turn into a concrete metric.
+// This needs to be finitely enumerable, so like stk::topology, we must use an enum for distinct metric types.
+// class metric {
+//  public:
+//   enum metric_t {
+//     INVALID_METRIC,
+//     BEGIN_METRIC,
+
+//     CARTESIAN = BEGIN_METRIC,  // Non-periodic
+//     ORTHORHOMBIC, ORTHO = ORTHORHOMBIC,  // Axes aligned with coordinate axes
+//     TRICLINIC, TRI = TRICLINIC,  // General periodic box with tilted axes
+
+//     END_METRIC,
+//     NUM_METRICS = END_METRIC - BEGIN_METRIC,
+//     FORCE_METRIC_TO_UNSIGNED = ~0U  // max unsigned int
+//   };
+
+//   KOKKOS_INLINE_FUNCTION
+//   bool is_valid() const {
+//     return value_ != INVALID_METRIC;
+//   }
+
+//   //! \name Cast to integer type
+//   //@{
+
+//   /// \brief Implicit cast to metric_t enum type
+//   KOKKOS_INLINE_FUNCTION
+//   operator metric_t() const {
+//     return value_;
+//   }
+
+//   /// \brief return metric_t enum type
+//   KOKKOS_INLINE_FUNCTION
+//   metric_t operator()() const {
+//     return value_;
+//   }
+
+//   /// \brief return metric_t enum type
+//   KOKKOS_INLINE_FUNCTION
+//   metric_t value() const {
+//     return value_;
+//   }
+//   //@}
+
+//   //! \name Constructors and assignment
+//   //@{
+
+//   /// \brief Default construct to invalid
+//   KOKKOS_INLINE_FUNCTION
+//   metric() : value_(INVALID_TOPOLOGY) {
+//   }
+
+//   /// \brief Implicit construct from a metric_t
+//   KOKKOS_INLINE_FUNCTION
+//   metric(metric_t m) : value_(m) {
+//   }
+
+//   /// \brief Copy constructor
+//   KOKKOS_INLINE_FUNCTION
+//   metric(const metric& m) : value_(m.value_) {
+//   }
+
+//   /// \brief Assignment operator
+//   KOKKOS_INLINE_FUNCTION
+//   metric& operator=(const metric& rhs) {
+//     if (&rhs != this) {
+//       value_ = rhs.value_;
+//     }
+//     return *this;
+//   }
+//   //@}
+
+//   //! \name Comparison operators
+//   //@{
+
+//   KOKKOS_INLINE_FUNCTION
+//   bool operator==(const metric& rhs) const {
+//     return value_ == rhs.value_;
+//   }
+
+//   KOKKOS_INLINE_FUNCTION
+//   bool operator==(const metric_t& rhs) const {
+//     return value_ == rhs;
+//   }
+//   //@}
+
+//  private:
+//   metric_t value_ = INVALID_METRIC;
+//   using metric_variant_t = mundy::core::variant<
+//     mundy::geom::
+// };
+
+
 namespace mundy {
 
 namespace geom {
@@ -340,8 +433,6 @@ class PeriodicMetricX {
   OurVector3 scale_;      ///< Unit cell scaling factors
   OurVector3 inv_scale_;  ///< Inverse of the scaling factors
 };  // PeriodicMetricX
-
-
 
 template <typename Scalar>
 class PeriodicMetricY {
@@ -756,6 +847,18 @@ class PeriodicScaledMetric {
 template <typename Scalar>
 KOKKOS_INLINE_FUNCTION constexpr PeriodicMetric<Scalar> periodic_metric_from_unit_cell(
     const math::Vector3<Scalar>& cell_size) {
+  auto h = math::Matrix3<Scalar>::identity();
+  h(0, 0) = cell_size[0];
+  h(1, 1) = cell_size[1];
+  h(2, 2) = cell_size[2];
+  return PeriodicMetric<Scalar>{std::move(h)};
+}
+
+/// \brief Create a periodic space metric from domain min and max corners
+template <typename Scalar>
+KOKKOS_INLINE_FUNCTION constexpr PeriodicMetric<Scalar> periodic_metric_from_domain(
+    const math::Vector3<Scalar>& domain_min, const math::Vector3<Scalar>& domain_max) {
+  auto cell_size = domain_max - domain_min;
   auto h = math::Matrix3<Scalar>::identity();
   h(0, 0) = cell_size[0];
   h(1, 1) = cell_size[1];

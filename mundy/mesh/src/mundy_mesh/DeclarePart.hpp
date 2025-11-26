@@ -142,7 +142,6 @@ class PartDeclarationHelper {
     bool is_named_part = part_has_name_ && !part_has_rank_ && !part_has_topology_;
     bool is_ranked_part = part_has_name_ && part_has_rank_ && !part_has_topology_;
     bool is_topological_part = part_has_name_ && !part_has_rank_ && part_has_topology_;
-    print();
     MUNDY_THROW_REQUIRE(
         is_named_part || is_ranked_part || is_topological_part, std::logic_error,
         fmt::format(
