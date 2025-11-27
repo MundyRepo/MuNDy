@@ -92,15 +92,15 @@ void set_crs_synchronizer(const LinkData &link_data, std::shared_ptr<impl::HostD
 /// Declaring links can be done via the standard declare_entity interface, however, connecting these links to their
 /// linked entities must be mediated via the link data. For this reason, we provide only const access to the linked
 /// entities field. Use it to ~view~ the connections, not to ~modify~ them. Instead, use the link data's
-/// declare_relation(linker, linked_entity, link_ordinal) and delete_relation(linker, link_ordinal) to modify the
+/// declare_relation(linker, linked_entity, link_ordinal) and destroy_relation(linker, link_ordinal) to modify the
 /// relationship between a link and its linked entities. These functions are thread-safe and may be called in parallel
 /// so long as you do not call declare_relation(linker, *, link_ordinal) for the same linker and ordinal on two
 /// different threads (something that would be weird to do anyway).
 ///
 /// Some comments on requirements:
-///  - Both declare_relation and delete_relation require that the linker be valid, but not necessarily the linked
+///  - Both declare_relation and destroy_relation require that the linker be valid, but not necessarily the linked
 ///  entity.
-///  - To maintain parallel consistency, we require that declare/delete_relation be performed consistently for each
+///  - To maintain parallel consistency, we require that declare/destroy_relation be performed consistently for each
 /// process that locally owns or shares the given linker or linked entity.
 ///
 /// \note Once a relationship between a link and a linked entity is declared or destroyed, the link data is marked as
@@ -160,7 +160,7 @@ void set_crs_synchronizer(const LinkData &link_data, std::shared_ptr<impl::HostD
 /// and request_link(linked_entity0, linked_entity1, ... linked_entityN) to request the destruction of a link and the
 /// creation of a link between the given entities, respectively. These requests may be made in parallel and are
 /// processed in the next process_requests call. These functions streamline the enforcement of the requirement that
-/// "declare/delete_relation are performed consistently for each process that locally owns or shares the given linker or
+/// "declare/destroy_relation are performed consistently for each process that locally owns or shares the given linker or
 /// linked entity." We do so at two ~levels ~of user investment, each with different costs.
 ///
 /// ## FULLY_CONSISTENT: You did all the work

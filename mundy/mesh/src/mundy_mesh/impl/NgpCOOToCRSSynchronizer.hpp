@@ -195,7 +195,7 @@ class NgpCOOToCRSSynchronizerT {
   }
 
   /// \brief Propagate changes made to the COO connectivity to the CRS connectivity for the given link subset selector.
-  /// This takes changes made via the declare/delete_relation functions or request/destroy links and updates
+  /// This takes changes made via the declare/destroy_relation functions or request/destroy links and updates
   /// the CRS connectivity to reflect these changes.
   static void update_crs_from_coo(NgpLinkCRSDataT<NgpMemSpace> &crs_data, NgpLinkCOODataT<NgpMemSpace> &coo_data,
                                   const stk::mesh::Selector &selector) {

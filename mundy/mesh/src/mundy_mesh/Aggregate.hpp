@@ -1697,6 +1697,13 @@ class NgpAggregate {
     return NgpEntityView<OurTopology, OurRank, NgpComponents...>(ngp_mesh_, ngp_components_, entity_index);
   }
 
+  /// \brief Get an EntityView for the given entity
+  KOKKOS_INLINE_FUNCTION
+  NgpEntityView<OurTopology, OurRank, NgpComponents...> get_view(stk::mesh::Entity entity) const {
+    stk::mesh::FastMeshIndex entity_index = ngp_mesh_.fast_mesh_index(entity);
+    return NgpEntityView<OurTopology, OurRank, NgpComponents...>(ngp_mesh_, ngp_components_, entity_index);
+  }
+
   /// \brief Apply a functor on the EntityView of each entity in the current data aggregate that is also in the given
   /// subset selector
   template <typename Functor>

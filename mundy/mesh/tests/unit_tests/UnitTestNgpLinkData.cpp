@@ -257,9 +257,9 @@ void modify_ngp_link_data(const TestContext& context, LinkData& link_data) {
         stk::mesh::EntityRank entity_1_rank = ngp_coo_data.get_linked_entity_rank(linker_index, 1);
         stk::mesh::EntityRank entity_2_rank = ngp_coo_data.get_linked_entity_rank(linker_index, 2);
 
-        ngp_coo_data.delete_relation(linker_index, 0);
-        ngp_coo_data.delete_relation(linker_index, 1);
-        ngp_coo_data.delete_relation(linker_index, 2);
+        ngp_coo_data.destroy_relation(linker_index, 0);
+        ngp_coo_data.destroy_relation(linker_index, 1);
+        ngp_coo_data.destroy_relation(linker_index, 2);
 
         ngp_coo_data.declare_relation(linker_index, entity_2_rank, linked_entity_2, 0);
         ngp_coo_data.declare_relation(linker_index, entity_1_rank, linked_entity_1, 1);

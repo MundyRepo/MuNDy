@@ -253,7 +253,7 @@ LinkCOOData : ConstLinkCOOData:  // Host only | Valid during mesh modifications
 
   // Actions (each one will accept Entity/MeshIndex/FastMeshIndex overloads)
   declare_relation(linker, linked_entity, link_ordinal) -> void
-  delete_relation(linker, link_ordinal) -> void
+  destroy_relation(linker, link_ordinal) -> void
 
 NgpLinkCOODataT<NgpMemSpace> : ConstLinkCOOData:  // Device only | Invalid during mesh modifications
   public:
@@ -264,7 +264,7 @@ NgpLinkCOODataT<NgpMemSpace> : ConstLinkCOOData:  // Device only | Invalid durin
 
   // Actions (each one will accept Entity/MeshIndex/FastMeshIndex overloads)
   declare_relation(linker, linked_entity, link_ordinal) -> void
-  delete_relation(linker, link_ordinal) -> void
+  destroy_relation(linker, link_ordinal) -> void
 
 using (Const)NgpLinkCOOData = (Const)NgpLinkCOODataT<stk::ngp::MemSpace>;
 

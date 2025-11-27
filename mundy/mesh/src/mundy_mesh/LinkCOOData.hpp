@@ -169,7 +169,7 @@ class LinkCOOData {  // Host only | Valid during mesh modifications
   ///
   /// \param linker [in] The linker (must be valid and of the correct rank).
   /// \param link_ordinal [in] The ordinal of the linked entity.
-  inline void delete_relation(const stk::mesh::Entity &linker, unsigned link_ordinal) const {
+  inline void destroy_relation(const stk::mesh::Entity &linker, unsigned link_ordinal) const {
     MUNDY_THROW_ASSERT(link_rank() == bulk_data().entity_rank(linker), std::invalid_argument,
                        "Linker is not of the correct rank.");
     MUNDY_THROW_ASSERT(bulk_data().is_valid(linker), std::invalid_argument, "Linker is not valid.");
@@ -416,13 +416,20 @@ class NgpLinkCOODataT {  // Device only | Invalid during mesh modifications | Ca
         linked_entity_index.bucket_ord;
     ngp_link_meta_data_.ngp_link_crs_needs_updated_field()(linker_index, 0) = true;
   }
+  KOKKOS_INLINE_FUNCTION
+  void declare_relation(const stk::mesh::Entity &linker,         //
+                        const stk::mesh::Entity &linked_entity,  //
+                        unsigned link_ordinal) const {
+    declare_relation(ngp_mesh_.fast_mesh_index(linker), ngp_mesh_.entity_rank(linked_entity),
+                     ngp_mesh_.fast_mesh_index(linked_entity), link_ordinal);
+  }
 
   /// \brief Delete a relation between a linker and a linked entity.
   ///
   /// \param linker [in] The linker (must be valid and of the correct rank).
   /// \param link_ordinal [in] The ordinal of the linked entity.
   KOKKOS_INLINE_FUNCTION
-  void delete_relation(const stk::mesh::FastMeshIndex &linker_index, unsigned link_ordinal) const {
+  void destroy_relation(const stk::mesh::FastMeshIndex &linker_index, unsigned link_ordinal) const {
     ngp_link_meta_data_.ngp_linked_entities_field()(linker_index, link_ordinal) = stk::mesh::Entity().local_offset();
     ngp_link_meta_data_.ngp_linked_entity_ids_field()(linker_index, link_ordinal) = stk::mesh::EntityId();
     ngp_link_meta_data_.ngp_linked_entity_ranks_field()(linker_index, link_ordinal) =
@@ -430,6 +437,10 @@ class NgpLinkCOODataT {  // Device only | Invalid during mesh modifications | Ca
     ngp_link_meta_data_.ngp_linked_entity_bucket_ids_field()(linker_index, link_ordinal) = 0;
     ngp_link_meta_data_.ngp_linked_entity_bucket_ords_field()(linker_index, link_ordinal) = 0;
     ngp_link_meta_data_.ngp_link_crs_needs_updated_field()(linker_index, 0) = true;
+  }
+  KOKKOS_INLINE_FUNCTION
+  void destroy_relation(const stk::mesh::Entity &linker, unsigned link_ordinal) const {
+    destroy_relation(ngp_mesh_.fast_mesh_index(linker), link_ordinal);
   }
 
   /// \brief Get the linked entity for a given linker and link ordinal.
@@ -439,6 +450,10 @@ class NgpLinkCOODataT {  // Device only | Invalid during mesh modifications | Ca
   KOKKOS_INLINE_FUNCTION
   stk::mesh::Entity get_linked_entity(const stk::mesh::FastMeshIndex &linker_index, unsigned link_ordinal) const {
     return stk::mesh::Entity(ngp_link_meta_data_.ngp_linked_entities_field()(linker_index, link_ordinal));
+  }
+  KOKKOS_INLINE_FUNCTION
+  stk::mesh::Entity get_linked_entity(const stk::mesh::Entity &linker, unsigned link_ordinal) const {
+    return get_linked_entity(ngp_mesh_.fast_mesh_index(linker), link_ordinal);
   }
 
   /// \brief Get the linked entity index for a given linker and link ordinal.
@@ -452,6 +467,10 @@ class NgpLinkCOODataT {  // Device only | Invalid during mesh modifications | Ca
         ngp_link_meta_data_.ngp_linked_entity_bucket_ids_field()(linker_index, link_ordinal),
         ngp_link_meta_data_.ngp_linked_entity_bucket_ords_field()(linker_index, link_ordinal));
   }
+  KOKKOS_INLINE_FUNCTION
+  stk::mesh::FastMeshIndex get_linked_entity_index(const stk::mesh::Entity &linker, unsigned link_ordinal) const {
+    return get_linked_entity_index(ngp_mesh_.fast_mesh_index(linker), link_ordinal);
+  }
 
   /// \brief Get the linked entity id for a given linker and link ordinal.
   ///
@@ -460,6 +479,10 @@ class NgpLinkCOODataT {  // Device only | Invalid during mesh modifications | Ca
   KOKKOS_INLINE_FUNCTION
   stk::mesh::EntityId get_linked_entity_id(const stk::mesh::FastMeshIndex &linker_index, unsigned link_ordinal) const {
     return ngp_link_meta_data_.ngp_linked_entity_ids_field()(linker_index, link_ordinal);
+  }
+  KOKKOS_INLINE_FUNCTION
+  stk::mesh::EntityId get_linked_entity_id(const stk::mesh::Entity &linker, unsigned link_ordinal) const {
+    return get_linked_entity_id(ngp_mesh_.fast_mesh_index(linker), link_ordinal);
   }
 
   /// \brief Get the linked entity rank for a given linker and link ordinal.
@@ -471,6 +494,10 @@ class NgpLinkCOODataT {  // Device only | Invalid during mesh modifications | Ca
                                                unsigned link_ordinal) const {
     return static_cast<stk::mesh::EntityRank>(
         ngp_link_meta_data_.ngp_linked_entity_ranks_field()(linker_index, link_ordinal));
+  }
+  KOKKOS_INLINE_FUNCTION
+  stk::mesh::EntityRank get_linked_entity_rank(const stk::mesh::Entity &linker, unsigned link_ordinal) const {
+    return get_linked_entity_rank(ngp_mesh_.fast_mesh_index(linker), link_ordinal);
   }
   //@}
 
@@ -493,11 +520,19 @@ class NgpLinkCOODataT {  // Device only | Invalid during mesh modifications | Ca
   stk::mesh::Entity get_linked_entity_crs(const stk::mesh::FastMeshIndex &linker_index, unsigned link_ordinal) const {
     return stk::mesh::Entity(ngp_link_meta_data_.ngp_linked_entities_crs_field()(linker_index, link_ordinal));
   }
+  KOKKOS_INLINE_FUNCTION
+  stk::mesh::Entity get_linked_entity_crs(const stk::mesh::Entity &linker, unsigned link_ordinal) const {
+    return get_linked_entity_crs(ngp_mesh_.fast_mesh_index(linker), link_ordinal);
+  }
 
   /// \brief Get if the CRS connectivity for a link needs to be updated.
   KOKKOS_INLINE_FUNCTION
   bool get_link_crs_needs_updated(const stk::mesh::FastMeshIndex &linker_index) const {
     return ngp_link_meta_data_.ngp_link_crs_needs_updated_field()(linker_index, 0);
+  }
+  KOKKOS_INLINE_FUNCTION
+  bool get_link_crs_needs_updated(const stk::mesh::Entity &linker) const {
+    return get_link_crs_needs_updated(ngp_mesh_.fast_mesh_index(linker));
   }
 
  private:
