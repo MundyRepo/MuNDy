@@ -1440,7 +1440,6 @@ class Aggregate {
 
   /// \brief Construct an Aggregate that has the given components
   Aggregate(const stk::mesh::BulkData& bulk_data, stk::mesh::Selector selector, ComponentsTuple components)
-    requires(sizeof...(Components) > 0)
       : bulk_data_(bulk_data), selector_(std::move(selector)), components_(std::move(components)) {
   }
 
@@ -1585,7 +1584,6 @@ class NgpAggregate {
 
   /// \brief Construct an Aggregate that has the given components
   NgpAggregate(stk::mesh::NgpMesh ngp_mesh, stk::mesh::Selector selector, NgpComponentsTuple ngp_components)
-    requires(sizeof...(NgpComponents) > 0)
       : ngp_mesh_(ngp_mesh), host_selector_(std::move(selector)), ngp_components_(std::move(ngp_components)) {
   }
 

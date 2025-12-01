@@ -119,33 +119,38 @@ struct Bounded {
 //! \name Backends
 //@{
 
+namespace impl {
+
+template <class Op, typename Scalar>
+concept DenseMatView =
+  Kokkos::is_view_v<Op> &&
+  requires {
+    // These are checked in constraint context:
+    { std::remove_reference_t<Op>::rank } -> std::convertible_to<int>;
+    typename std::remove_reference_t<Op>::non_const_value_type;
+  } &&
+  (std::remove_reference_t<Op>::rank == 2) &&
+  std::is_convertible_v<
+    typename std::remove_reference_t<Op>::non_const_value_type,
+    Scalar
+  >;
+
+template <class Op, typename VectorView>
+concept HasApplyMember =
+  requires(const Op& op, const VectorView& x, VectorView& y) {
+    { op.apply(x, y) } -> std::same_as<void>;
+  };
+
+}  // namespace impl
+
 /// \brief Backend for Kokkos single process execution
-template <typename Scalar, typename Layout, typename MemorySpace, typename ExecSpace>
+template <typename Scalar, typename DoubleVectorView, typename ExecSpace>
 struct KokkosBackend {
  public:
   using scalar_t = Scalar;
-  using vector_t = Kokkos::View<scalar_t*, Layout, MemorySpace>;
+  using vector_t = DoubleVectorView;
   using exec_space = ExecSpace;
-  using memory_space = MemorySpace;
-
- private:
-  //! \name Concepts / helpers
-  //@{
-
-  template <class Op>
-  static constexpr int view_rank_v = std::remove_reference_t<Op>::rank;
-
-  template <class Op>
-  static constexpr bool value_compatible_v =
-      std::is_convertible_v<typename std::remove_reference_t<Op>::non_const_value_type, scalar_t>;
-
-  template <class Op>
-  static constexpr bool is_dense_mat_view_v = Kokkos::is_view_v<Op> && view_rank_v<Op> == 2 && value_compatible_v<Op>;
-
-  template <class Op>
-  static constexpr bool has_apply_member_v = std::is_same_v<
-      decltype(std::declval<const Op&>().apply(std::declval<const vector_t&>(), std::declval<vector_t&>())), void>;
-  //@}
+  using memory_space = typename DoubleVectorView::memory_space;
 
  public:
   KOKKOS_INLINE_FUNCTION static size_t vector_size(const vector_t& x) {
@@ -167,7 +172,7 @@ struct KokkosBackend {
   // Path 1: If op is a dense 2D Kokkos::View, call BLAS gemv.
   // y = A*x
   template <class LinearOp>
-    requires(is_dense_mat_view_v<LinearOp>)
+    requires(impl::DenseMatView<LinearOp, scalar_t>)
   static void apply(const LinearOp& A, const vector_t& x, vector_t& y) {
     MUNDY_THROW_ASSERT(A.extent(1) == x.extent(0), std::invalid_argument, "gemv: dimension mismatch A(:,1) vs x");
     MUNDY_THROW_ASSERT(A.extent(0) == y.extent(0), std::invalid_argument, "gemv: dimension mismatch A(0,:) vs y");
@@ -177,7 +182,7 @@ struct KokkosBackend {
   // Path 1: If op is a dense 2D Kokkos::View, call BLAS gemv.
   // y = alpha * A * x + beta * y
   template <class LinearOp>
-    requires(is_dense_mat_view_v<LinearOp>)
+    requires(impl::DenseMatView<LinearOp, scalar_t>)
   static void apply(double alpha, const LinearOp& A, const vector_t& x, double beta, vector_t& y) {
     MUNDY_THROW_ASSERT(A.extent(1) == x.extent(0), std::invalid_argument, "gemv: dimension mismatch A(:,1) vs x");
     MUNDY_THROW_ASSERT(A.extent(0) == y.extent(0), std::invalid_argument, "gemv: dimension mismatch A(0,:) vs y");
@@ -186,14 +191,14 @@ struct KokkosBackend {
 
   // Path 2: If op has member `apply(x,y)`
   template <class LinearOp>
-    requires(!is_dense_mat_view_v<LinearOp> && has_apply_member_v<LinearOp>)
+    requires(!impl::DenseMatView<LinearOp, scalar_t> && impl::HasApplyMember<LinearOp, vector_t>)
   static void apply(const LinearOp& op, const vector_t& x, vector_t& y) {
     op.apply(x, y);
   }
 
   // Path 3: Otherwise, runtime error.
   template <typename LinearOp>
-    requires(!is_dense_mat_view_v<LinearOp> && !has_apply_member_v<LinearOp>)
+    requires(!impl::DenseMatView<LinearOp, scalar_t> && !impl::HasApplyMember<LinearOp, vector_t>)
   static void apply(const LinearOp& op, const vector_t& x, vector_t& y) {
     MUNDY_THROW_REQUIRE(false, std::logic_error,
                         "KokkosBackend::apply: op must be a rank-2 Kokkos::View or provide void apply(x,y).");
@@ -733,21 +738,22 @@ KOKKOS_INLINE_FUNCTION auto make_mundy_math_lcp(const LinearOp& A, const Vector<
   return convex::LCPProblem(backend_t{}, A, q);
 }
 
-template <typename LinearOp, typename ConvexSpace, typename Scalar, typename Layout, typename MemorySpace,
-          typename ExecSpace>
-KOKKOS_INLINE_FUNCTION auto make_kokkos_cqpp(const ExecSpace& /*exec_space*/,                      //
-                                             const LinearOp& A,                                    //
-                                             const Kokkos::View<Scalar*, Layout, MemorySpace>& q,  //
+template <typename LinearOp, typename ConvexSpace, typename DoubleVectorView, typename ExecSpace>
+KOKKOS_INLINE_FUNCTION auto make_kokkos_cqpp(const ExecSpace& /*exec_space*/,  //
+                                             const LinearOp& A,                //
+                                             const DoubleVectorView& q,        //
                                              const ConvexSpace& space) {
-  using backend_t = convex::KokkosBackend<Scalar, Layout, MemorySpace, ExecSpace>;
+  using scalar_t = DoubleVectorView::non_const_value_type;
+  using backend_t = convex::KokkosBackend<scalar_t, DoubleVectorView, ExecSpace>;
   return convex::CQPPProblem(backend_t{}, A, q, space);
 }
 
-template <typename LinearOp, typename Scalar, typename Layout, typename MemorySpace, typename ExecSpace>
-KOKKOS_INLINE_FUNCTION auto make_kokkos_cqpp(const ExecSpace& /*exec_space*/,  //
-                                             const LinearOp& A,                //
-                                             const Kokkos::View<Scalar*, Layout, MemorySpace>& q) {
-  using backend_t = convex::KokkosBackend<Scalar, Layout, MemorySpace, ExecSpace>;
+template <typename LinearOp, typename DoubleVectorView, typename ExecSpace>
+KOKKOS_INLINE_FUNCTION auto make_kokkos_lcp(const ExecSpace& /*exec_space*/,  //
+                                            const LinearOp& A,                //
+                                            const DoubleVectorView& q) {
+  using scalar_t = DoubleVectorView::non_const_value_type;
+  using backend_t = convex::KokkosBackend<scalar_t, DoubleVectorView, ExecSpace>;
   return convex::LCPProblem(backend_t{}, A, q);
 }
 

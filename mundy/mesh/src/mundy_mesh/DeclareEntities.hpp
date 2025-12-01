@@ -559,6 +559,20 @@ class DeclareEntitiesHelper {
   };  // class ElementBuilder
   //@}
 
+  //! \name Getters
+  //@{
+
+  /// \brief Get the current number of nodes to be declared.
+  size_t num_nodes() const {
+    return node_info_vec_.size();
+  }
+
+  /// \brief Get the current number of elements to be declared.
+  size_t num_elements() const {
+    return elem_info_vec_.size();
+  }
+  //@}
+
   //! \name Actions
   //@{
 

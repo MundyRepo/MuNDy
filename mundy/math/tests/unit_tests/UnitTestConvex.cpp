@@ -244,7 +244,7 @@ struct UnconstrainedSPD1Problem {
   using layout_t = Kokkos::View<scalar_t*, mem_space>::array_layout;
   using vector_t = Kokkos::View<scalar_t*, layout_t, mem_space>;
   using linear_op_t = Kokkos::View<scalar_t**, layout_t, mem_space>;
-  using backend_t = convex::KokkosBackend<scalar_t, layout_t, mem_space, exec_space>;
+  using backend_t = convex::KokkosBackend<scalar_t, vector_t, exec_space>;
 
   std::string name() const {
     return "UnconstrainedSPD1Problem";
@@ -303,7 +303,7 @@ struct InactiveBoxConstrainedSPDProblem {
   using layout_t = Kokkos::View<scalar_t*, mem_space>::array_layout;
   using vector_t = Kokkos::View<scalar_t*, layout_t, mem_space>;
   using linear_op_t = Kokkos::View<scalar_t**, layout_t, mem_space>;
-  using backend_t = convex::KokkosBackend<scalar_t, layout_t, mem_space, exec_space>;
+  using backend_t = convex::KokkosBackend<scalar_t, vector_t, exec_space>;
 
   std::string name() const {
     return "InactiveBoxConstrainedSPDProblem";
@@ -362,7 +362,7 @@ struct ActiveBoxConstrainedSPDProblem {
   using layout_t = Kokkos::View<scalar_t*, mem_space>::array_layout;
   using vector_t = Kokkos::View<scalar_t*, layout_t, mem_space>;
   using linear_op_t = Kokkos::View<scalar_t**, layout_t, mem_space>;
-  using backend_t = convex::KokkosBackend<scalar_t, layout_t, mem_space, exec_space>;
+  using backend_t = convex::KokkosBackend<scalar_t, vector_t, exec_space>;
 
   std::string name() const {
     return "ActiveBoxConstrainedSPDProblem";
@@ -421,7 +421,7 @@ struct RandomLCP {
   using layout_t = Kokkos::View<scalar_t*, mem_space>::array_layout;
   using vector_t = Kokkos::View<scalar_t*, layout_t, mem_space>;
   using linear_op_t = Kokkos::View<scalar_t**, layout_t, mem_space>;
-  using backend_t = convex::KokkosBackend<scalar_t, layout_t, mem_space, exec_space>;
+  using backend_t = convex::KokkosBackend<scalar_t, vector_t, exec_space>;
 
   std::string name() const {
     return "RandomLCP" + std::to_string(size_);
