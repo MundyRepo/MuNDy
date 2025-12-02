@@ -4,6 +4,10 @@
 
 MuNDy is a C++ framework for high-performance simulation of **multibody nonlocal dynamics** on modern CPU and GPU architectures.
 
+![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg)
+![Backend-Kokkos](https://img.shields.io/badge/backend-Kokkos-1E88E5.svg)
+![Mesh-STK](https://img.shields.io/badge/mesh-Trilinos%2FSTK-4CAF50.svg)
+
 > [!IMPORTANT]  
 > **Project status (2025-11-02)**  
 > MuNDy is under active development. We have chosen to make development public as we move toward a first formal release targeted for **summer 2026**.
@@ -56,9 +60,9 @@ Core, Kokkos-friendly building blocks for type-level plumbing, error handling, a
   - Supports `constexpr` concatenation  
 
 - **`MUNDY_THROW_ASSERT` / `MUNDY_THROW_REQUIRE`**  
-  Kokkos-compatible throw/assert helpers with diagnostics.  
+  Kokkos-compatible throw/assert helpers with diagnostics and detailed error context 
   - On-device: abort  
-  - On-host: throw with detailed error context  
+  - On-host: throw
 
 - **`NgpPool` / `NgpView`**  
   Dual-view abstractions that follow MuNDy’s sync semantics plus a dual-view push/pop pool.  
@@ -181,9 +185,9 @@ Helpers and abstractions for integrating MuNDy with Trilinos/STK meshes and fiel
 
 Independent projects that emerged from MuNDy’s infrastructure and are usable on their own.
 * **[OpenRAND](https://github.com/msu-sparta/OpenRAND)**
-  Performance-portable, counter-based random number generation that is extremely simple to use.
-
-  * Designed for HPC applications
+  Performance-portable, counter-based random number generation that is stupid simple to use.
+  * Designed for to easily fit in GPU registers
+  * Makes reproducibility in spite of varied parallelism possible
   * Now used by HOOMD-Blue
 
 * **[mundy_mock_app](https://github.com/MundyRepo/mundy_mock_app)** /
