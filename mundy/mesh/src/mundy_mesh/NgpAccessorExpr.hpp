@@ -27,15 +27,15 @@
 #include <Kokkos_Core.hpp>  // for KOKKOS_LAMBDA, etc.
 
 // STK mesh
-#include <stk_mesh/base/BulkData.hpp>  // for stk::mesh::BulkData
-#include <stk_mesh/base/Entity.hpp>    // for stk::mesh::Entity
-#include <stk_mesh/base/Field.hpp>     // for stk::mesh::Field
-#include <stk_mesh/base/MetaData.hpp>  // for stk::mesh::MetaData
-#include <stk_mesh/base/NgpField.hpp>  // for stk::mesh::NgpField
-#include <stk_mesh/base/NgpMesh.hpp>   // for stk::mesh::NgpMesh
-#include <stk_mesh/base/Selector.hpp>  // for stk::mesh::Selector
-#include <stk_mesh/base/Types.hpp>     // for stk::mesh::FastMeshIndex
-#include <stk_mesh/base/NgpReductions.hpp> // for stk::mesh::for_each_entity_reduce
+#include <stk_mesh/base/BulkData.hpp>            // for stk::mesh::BulkData
+#include <stk_mesh/base/Entity.hpp>              // for stk::mesh::Entity
+#include <stk_mesh/base/Field.hpp>               // for stk::mesh::Field
+#include <stk_mesh/base/MetaData.hpp>            // for stk::mesh::MetaData
+#include <stk_mesh/base/NgpField.hpp>            // for stk::mesh::NgpField
+#include <stk_mesh/base/NgpMesh.hpp>             // for stk::mesh::NgpMesh
+#include <stk_mesh/base/NgpReductions.hpp>       // for stk::mesh::for_each_entity_reduce
+#include <stk_mesh/base/Selector.hpp>            // for stk::mesh::Selector
+#include <stk_mesh/base/Types.hpp>               // for stk::mesh::FastMeshIndex
 #include <stk_util/parallel/ParallelReduce.hpp>  // for stk::all_reduce_*
 
 // Mundy
@@ -301,13 +301,13 @@ struct is_crtp_base_of_impl : std::is_base_of<B<E>, E> {};
 
 template <typename EvalCountsType, EvalCountsType eval_counts, std::size_t I = 0, class ExprTuple, size_t NumEntities,
           class CacheType, class Ctx>
-KOKKOS_FUNCTION auto cached_expr_chain_impl(const ExprTuple &exprs,
-                                            const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities> &fmis,
-                                            CacheType &&cache, const Ctx &ctx) {
+KOKKOS_FUNCTION auto cached_expr_chain_impl(const ExprTuple& exprs,
+                                            const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities>& fmis,
+                                            CacheType&& cache, const Ctx& ctx) {
   constexpr size_t num_expr = ExprTuple::size();
   if constexpr (num_expr == 1) {
     // Single expr; just eval it and return its value and the current cache
-    auto &expr = core::get<0>(exprs);
+    auto& expr = core::get<0>(exprs);
     auto [val, next_cache] =
         expr.template cached_eval<EvalCountsType, eval_counts>(fmis, std::forward<CacheType>(cache), ctx);
     return Kokkos::make_pair(core::tuple{val}, next_cache);
@@ -316,7 +316,7 @@ KOKKOS_FUNCTION auto cached_expr_chain_impl(const ExprTuple &exprs,
     return Kokkos::make_pair(core::tuple<>{}, std::forward<CacheType>(cache));
   } else {
     // Evaluate current expr with the current cache
-    auto &expr = core::get<I>(exprs);
+    auto& expr = core::get<I>(exprs);
     auto [val_i, next_cache] =
         expr.template cached_eval<EvalCountsType, eval_counts>(fmis, std::forward<CacheType>(cache), ctx);
 
@@ -331,8 +331,8 @@ KOKKOS_FUNCTION auto cached_expr_chain_impl(const ExprTuple &exprs,
 }
 
 template <std::size_t I = 0, class ExprTuple, size_t NumEntities, class Ctx>
-KOKKOS_FUNCTION auto expr_chain_impl(const ExprTuple &exprs,
-                                     const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities> &fmis, const Ctx &ctx) {
+KOKKOS_FUNCTION auto expr_chain_impl(const ExprTuple& exprs,
+                                     const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities>& fmis, const Ctx& ctx) {
   constexpr size_t num_expr = ExprTuple::size();
   if constexpr (num_expr == 1) {
     // Single expr; just eval it and return its value and the current cache
@@ -357,16 +357,16 @@ KOKKOS_FUNCTION auto expr_chain_impl(const ExprTuple &exprs,
 // Public interface
 template <typename EvalCountsType, EvalCountsType eval_counts, class ExprTuple, size_t NumEntities, class CacheType,
           class Ctx>
-KOKKOS_INLINE_FUNCTION auto cached_expr_chain(const ExprTuple &exprs,
-                                              const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities> &fmis,
-                                              CacheType &&cache0, const Ctx &ctx) {
+KOKKOS_INLINE_FUNCTION auto cached_expr_chain(const ExprTuple& exprs,
+                                              const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities>& fmis,
+                                              CacheType&& cache0, const Ctx& ctx) {
   return cached_expr_chain_impl<EvalCountsType, eval_counts>(exprs, fmis, std::forward<CacheType>(cache0), ctx);
 }
 
 template <class ExprTuple, size_t NumEntities, class Ctx>
-KOKKOS_INLINE_FUNCTION auto expr_chain(const ExprTuple &exprs,
-                                       const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities> &fmis,
-                                       const Ctx &ctx) {
+KOKKOS_INLINE_FUNCTION auto expr_chain(const ExprTuple& exprs,
+                                       const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities>& fmis,
+                                       const Ctx& ctx) {
   return expr_chain_impl(exprs, fmis, ctx);
 }
 
@@ -382,33 +382,33 @@ class AnyRankSelectorMap {
   }
 
   /// \brief If a given rank/selector pair is in the map
-  bool contains(stk::mesh::EntityRank rank, const stk::mesh::Selector &selector) const {
-    const auto &selector_map = ranked_selector_maps_[rank];
+  bool contains(stk::mesh::EntityRank rank, const stk::mesh::Selector& selector) const {
+    const auto& selector_map = ranked_selector_maps_[rank];
     return selector_map.find(selector) != selector_map.end();
   }
 
   template <typename T>
-  void insert(stk::mesh::EntityRank rank, const stk::mesh::Selector &selector, T value) {
-    auto &selector_map = ranked_selector_maps_[rank];
+  void insert(stk::mesh::EntityRank rank, const stk::mesh::Selector& selector, T value) {
+    auto& selector_map = ranked_selector_maps_[rank];
     MUNDY_THROW_ASSERT(!contains(rank, selector), std::logic_error,
                        "Attempting to insert a rank and selector pair into AnyRankSelectorMap that is already present");
     selector_map.emplace(selector, std::move(value));
   }
 
   template <typename T>
-  T &at(stk::mesh::EntityRank rank, const stk::mesh::Selector &selector) {
-    auto &selector_map = ranked_selector_maps_[rank];
+  T& at(stk::mesh::EntityRank rank, const stk::mesh::Selector& selector) {
+    auto& selector_map = ranked_selector_maps_[rank];
     MUNDY_THROW_ASSERT(contains(rank, selector), std::logic_error,
                        "Attempting to access a rank and selector pair into AnyRankSelectorMap that isn't present");
-    return std::any_cast<T &>(selector_map.at(selector));
+    return std::any_cast<T&>(selector_map.at(selector));
   }
 
   template <typename T>
-  const T &at(stk::mesh::EntityRank rank, const stk::mesh::Selector &selector) const {
-    auto &selector_map = ranked_selector_maps_[rank];
+  const T& at(stk::mesh::EntityRank rank, const stk::mesh::Selector& selector) const {
+    auto& selector_map = ranked_selector_maps_[rank];
     MUNDY_THROW_ASSERT(contains(rank, selector), std::logic_error,
                        "Attempting to access a rank and selector pair into AnyRankSelectorMap that isn't present");
-    return std::any_cast<const T &>(selector_map.at(selector));
+    return std::any_cast<const T&>(selector_map.at(selector));
   }
 
  private:
@@ -478,26 +478,26 @@ class CachableExprBase {
 
  public:
   KOKKOS_INLINE_FUNCTION
-  constexpr const DerivedExpr &self() const noexcept {
-    return static_cast<const DerivedExpr &>(*this);
+  constexpr const DerivedExpr& self() const noexcept {
+    return static_cast<const DerivedExpr&>(*this);
   }
 
   KOKKOS_INLINE_FUNCTION
-  constexpr DerivedExpr &self() noexcept {
-    return static_cast<DerivedExpr &>(*this);
+  constexpr DerivedExpr& self() noexcept {
+    return static_cast<DerivedExpr&>(*this);
   }
 
   /// \brief Evaluate the expression
   template <size_t NumEntities, class Ctx>
-  KOKKOS_INLINE_FUNCTION auto eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities> &fmis,
-                                   const Ctx &context) const {
+  KOKKOS_INLINE_FUNCTION auto eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities>& fmis,
+                                   const Ctx& context) const {
     return self().eval(fmis, context);
   }
 
   /// \brief Evaluate the expression
   template <typename EvalCountsType, EvalCountsType eval_counts, typename OldCacheType, size_t NumEntities, class Ctx>
-  KOKKOS_INLINE_FUNCTION auto cached_eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities> &fmis,
-                                          OldCacheType &&old_cache, const Ctx &context) const {
+  KOKKOS_INLINE_FUNCTION auto cached_eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities>& fmis,
+                                          OldCacheType&& old_cache, const Ctx& context) const {
     return self().template cached_eval<EvalCountsType, eval_counts>(fmis, std::forward<OldCacheType>(old_cache),
                                                                     context);
   }
@@ -514,22 +514,22 @@ class CachableExprBase {
   //@{
 
   template <class Ctx>
-  void propagate_synchronize(const Ctx &context) {
+  void propagate_synchronize(const Ctx& context) {
     self().propagate_synchronize(context);
   }
 
   template <class Ctx>
-  void flag_read_only(const Ctx &context) {
+  void flag_read_only(const Ctx& context) {
     self().flag_read_only(context);
   }
 
   template <class Ctx>
-  void flag_read_write(const Ctx &context) {
+  void flag_read_write(const Ctx& context) {
     self().flag_read_write(context);
   }
 
   template <class Ctx>
-  void flag_overwrite_all(const Ctx &context) {
+  void flag_overwrite_all(const Ctx& context) {
     self().flag_overwrite_all(context);
   }
   //@}
@@ -542,13 +542,13 @@ class EntityExprBase : public CachableExprBase<DerivedEntityExpr> {
   using our_tag = typename CachableExprBase<DerivedEntityExpr>::our_tag;
 
   KOKKOS_INLINE_FUNCTION
-  constexpr const DerivedEntityExpr &self() const noexcept {
-    return static_cast<const DerivedEntityExpr &>(*this);
+  constexpr const DerivedEntityExpr& self() const noexcept {
+    return static_cast<const DerivedEntityExpr&>(*this);
   }
 
   KOKKOS_INLINE_FUNCTION
-  constexpr DerivedEntityExpr &self() noexcept {
-    return static_cast<DerivedEntityExpr &>(*this);
+  constexpr DerivedEntityExpr& self() noexcept {
+    return static_cast<DerivedEntityExpr&>(*this);
   }
 
   /// \brief The rank of the entity we return
@@ -564,14 +564,14 @@ class EntityExprBase : public CachableExprBase<DerivedEntityExpr> {
 
   /// \brief Evaluate the expression
   template <size_t NumEntities, class Ctx>
-  KOKKOS_INLINE_FUNCTION stk::mesh::FastMeshIndex eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities> &fmis,
-                                                       const Ctx &context) const {
+  KOKKOS_INLINE_FUNCTION stk::mesh::FastMeshIndex eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities>& fmis,
+                                                       const Ctx& context) const {
     return self().eval(fmis, context);
   }
 
   template <typename EvalCountsType, EvalCountsType eval_counts, typename OldCacheType, size_t NumEntities, class Ctx>
-  KOKKOS_INLINE_FUNCTION auto cached_eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities> &fmis,
-                                          OldCacheType &&old_cache, const Ctx &context) const {
+  KOKKOS_INLINE_FUNCTION auto cached_eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities>& fmis,
+                                          OldCacheType&& old_cache, const Ctx& context) const {
     return self().template cached_eval<EvalCountsType, eval_counts>(fmis, std::forward<OldCacheType>(old_cache),
                                                                     context);
   }
@@ -580,22 +580,22 @@ class EntityExprBase : public CachableExprBase<DerivedEntityExpr> {
   //@{
 
   template <class Ctx>
-  void propagate_synchronize(const Ctx &context) {
+  void propagate_synchronize(const Ctx& context) {
     self().propagate_synchronize(context);
   }
 
   template <class Ctx>
-  void flag_read_only(const Ctx &context) {
+  void flag_read_only(const Ctx& context) {
     self().flag_read_only(context);
   }
 
   template <class Ctx>
-  void flag_read_write(const Ctx &context) {
+  void flag_read_write(const Ctx& context) {
     self().flag_read_write(context);
   }
 
   template <class Ctx>
-  void flag_overwrite_all(const Ctx &context) {
+  void flag_overwrite_all(const Ctx& context) {
     self().flag_overwrite_all(context);
   }
   //@}
@@ -618,7 +618,7 @@ class ConnectedEntitiesExpr : public EntityExprBase<ConnectedEntitiesExpr<PrevEn
   }
 
   KOKKOS_INLINE_FUNCTION
-  ConnectedEntitiesExpr(const EntityExprBase<PrevEntityExpr> &prev_entity_expr_base, stk::mesh::EntityRank conn_rank)
+  ConnectedEntitiesExpr(const EntityExprBase<PrevEntityExpr>& prev_entity_expr_base, stk::mesh::EntityRank conn_rank)
       : prev_entity_expr_(prev_entity_expr_base.self()), conn_rank_(conn_rank) {
   }
 
@@ -628,16 +628,16 @@ class ConnectedEntitiesExpr : public EntityExprBase<ConnectedEntitiesExpr<PrevEn
   }
 
   template <size_t NumEntities>
-  KOKKOS_INLINE_FUNCTION ConnectedEntities eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities> &fmis,
-                                                const NgpEvalContext &context) const {
+  KOKKOS_INLINE_FUNCTION ConnectedEntities eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities>& fmis,
+                                                const NgpEvalContext& context) const {
     stk::mesh::EntityRank entity_rank = prev_entity_expr_.rank();
     stk::mesh::FastMeshIndex entity_index = prev_entity_expr_.eval(fmis, context);
     return context.ngp_mesh().get_connected_entities(entity_rank, entity_index, conn_rank_);
   }
 
   template <typename EvalCountsType, EvalCountsType eval_counts, size_t NumEntities, typename OldCacheType>
-  KOKKOS_INLINE_FUNCTION auto cached_eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities> &fmis,
-                                          OldCacheType &&old_cache, const NgpEvalContext &context) const {
+  KOKKOS_INLINE_FUNCTION auto cached_eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities>& fmis,
+                                          OldCacheType&& old_cache, const NgpEvalContext& context) const {
     static_assert(has<our_tag>(eval_counts), "eval_counts must contain our tag");
 
     if constexpr (get<our_tag>(eval_counts) > 1) {
@@ -672,21 +672,21 @@ class ConnectedEntitiesExpr : public EntityExprBase<ConnectedEntitiesExpr<PrevEn
     return ConnectedEntitiesExpr<our_t>(*this, conn_rank);
   }
 
-  void propagate_synchronize(const NgpEvalContext &context) {
+  void propagate_synchronize(const NgpEvalContext& context) {
     prev_entity_expr_.propagate_synchronize(context);
   }
 
-  void flag_read_only(const NgpEvalContext & /*context*/) {
+  void flag_read_only(const NgpEvalContext& /*context*/) {
     // Our return type is naturally read-only. Nothing to do here.
   }
 
-  void flag_read_write(const NgpEvalContext & /*context*/) {
+  void flag_read_write(const NgpEvalContext& /*context*/) {
     std::cout
         << "Warning: Attempting to write to the return type of an entity expression, which returns a temporary value."
         << std::endl;
   }
 
-  void flag_overwrite_all(const NgpEvalContext & /*context*/) {
+  void flag_overwrite_all(const NgpEvalContext& /*context*/) {
     std::cout
         << "Warning: Attempting to write to the return type of an entity expression, which returns a temporary value."
         << std::endl;
@@ -710,7 +710,7 @@ class EntityExpr : public EntityExprBase<EntityExpr<NumEntities, Ord, DriverType
   static constexpr size_t num_entities = NumEntities;
 
   KOKKOS_INLINE_FUNCTION
-  EntityExpr(const stk::mesh::EntityRank &rank, const DriverType *driver) : rank_(rank), driver_(driver) {
+  EntityExpr(const stk::mesh::EntityRank& rank, const DriverType* driver) : rank_(rank), driver_(driver) {
   }
 
   /// \brief The rank of the entity we return
@@ -720,14 +720,14 @@ class EntityExpr : public EntityExprBase<EntityExpr<NumEntities, Ord, DriverType
   }
 
   KOKKOS_INLINE_FUNCTION stk::mesh::FastMeshIndex eval(const Kokkos::Array<stk::mesh::FastMeshIndex, num_entities> fmis,
-                                                       const NgpEvalContext & /*context*/) const {
+                                                       const NgpEvalContext& /*context*/) const {
     static_assert(Ord < NumEntities, "EntityExpr ordinal must be less than NumEntities");
     return fmis[Ord];
   }
 
   template <typename EvalCountsType, EvalCountsType eval_counts, typename OldCacheType>
-  KOKKOS_INLINE_FUNCTION auto cached_eval(const Kokkos::Array<stk::mesh::FastMeshIndex, num_entities> &fmis,
-                                          OldCacheType &&old_cache, const NgpEvalContext & /*context*/) const {
+  KOKKOS_INLINE_FUNCTION auto cached_eval(const Kokkos::Array<stk::mesh::FastMeshIndex, num_entities>& fmis,
+                                          OldCacheType&& old_cache, const NgpEvalContext& /*context*/) const {
     static_assert(has<our_tag>(eval_counts), "eval_counts must contain our tag");
 
     if constexpr (get<our_tag>(eval_counts) > 1) {
@@ -755,51 +755,53 @@ class EntityExpr : public EntityExprBase<EntityExpr<NumEntities, Ord, DriverType
     return ConnectedEntitiesExpr<our_t>(*this, conn_rank);
   }
 
-  void propagate_synchronize(const NgpEvalContext & /*context*/) {
+  void propagate_synchronize(const NgpEvalContext& /*context*/) {
     // Leaf node, nothing to do here.
   }
 
-  void flag_read_only(const NgpEvalContext & /*context*/) {
+  void flag_read_only(const NgpEvalContext& /*context*/) {
     // Our return type is naturally read-only. Nothing to do here.
   }
 
-  void flag_read_write(const NgpEvalContext & /*context*/) {
+  void flag_read_write(const NgpEvalContext& /*context*/) {
     std::cout
         << "Warning: Attempting to write to the return type of an entity expression, which returns a temporary value."
         << std::endl;
   }
 
-  void flag_overwrite_all(const NgpEvalContext & /*context*/) {
+  void flag_overwrite_all(const NgpEvalContext& /*context*/) {
     std::cout
         << "Warning: Attempting to write to the return type of an entity expression, which returns a temporary value."
         << std::endl;
   }
 
-  const DriverType *driver() const {
+  const DriverType* driver() const {
     return driver_;
   }
 
  private:
   stk::mesh::EntityRank rank_;
-  const DriverType *driver_;
+  const DriverType* driver_;
 };
 
+template <typename ExecSpace = stk::ngp::ExecSpace>
 class NgpForEachEntityExprDriver {
  public:
-  NgpForEachEntityExprDriver(const stk::mesh::BulkData& bulk_data, stk::mesh::Selector selector, stk::mesh::EntityRank rank)
-      : bulk_data_ptr_(&bulk_data), selector_(selector), rank_(rank) {
+  NgpForEachEntityExprDriver(const stk::mesh::BulkData& bulk_data, stk::mesh::Selector selector,
+                             stk::mesh::EntityRank rank, const ExecSpace& exec_space = ExecSpace())
+      : bulk_data_ptr_(&bulk_data), selector_(selector), rank_(rank), exec_space_(exec_space) {
   }
 
   // Default copy/move constructor and assignment operator are fine
-  NgpForEachEntityExprDriver(const NgpForEachEntityExprDriver &) = default;
-  NgpForEachEntityExprDriver(NgpForEachEntityExprDriver &&) = default;
-  NgpForEachEntityExprDriver &operator=(const NgpForEachEntityExprDriver &) = default;
-  NgpForEachEntityExprDriver &operator=(NgpForEachEntityExprDriver &&) = default;
+  NgpForEachEntityExprDriver(const NgpForEachEntityExprDriver&) = default;
+  NgpForEachEntityExprDriver(NgpForEachEntityExprDriver&&) = default;
+  NgpForEachEntityExprDriver& operator=(const NgpForEachEntityExprDriver&) = default;
+  NgpForEachEntityExprDriver& operator=(NgpForEachEntityExprDriver&&) = default;
   virtual ~NgpForEachEntityExprDriver() = default;
 
-  const stk::mesh::BulkData &bulk_data() const {
+  const stk::mesh::BulkData& bulk_data() const {
     MUNDY_THROW_REQUIRE(bulk_data_ptr_ != nullptr, std::logic_error,
-                       "NgpForEachEntityExprDriver has a null BulkData pointer");
+                        "NgpForEachEntityExprDriver has a null BulkData pointer");
     return *bulk_data_ptr_;
   }
 
@@ -811,13 +813,17 @@ class NgpForEachEntityExprDriver {
     return rank_;
   }
 
+  ExecSpace exec_space() const {
+    return exec_space_;
+  }
+
   template <typename Expr>
-  void run(CachableExprBase<Expr> &expr_base) const {
+  void run(CachableExprBase<Expr>& expr_base) const {
     // Copy to derived expression type for lambda capture
     auto expr = expr_base.self();
 
     // Get the up-to-date NGP mesh
-    stk::mesh::NgpMesh &ngp_mesh = get_updated_ngp_mesh(bulk_data());
+    stk::mesh::NgpMesh& ngp_mesh = get_updated_ngp_mesh(bulk_data());
 
     // Sync all fields to the appropriate space and mark modified where necessary
     NgpEvalContext evaluation_context(ngp_mesh);
@@ -825,7 +831,8 @@ class NgpForEachEntityExprDriver {
 
     // Perform the evaluation
     ::mundy::mesh::for_each_entity_run(
-        ngp_mesh, rank_, selector_, KOKKOS_LAMBDA(const stk::mesh::FastMeshIndex &entity_index) {
+        ngp_mesh, rank_, selector_, KOKKOS_LAMBDA(const stk::mesh::FastMeshIndex& entity_index) {
+          // Non-cached eval
           // expr.eval(Kokkos::Array<stk::mesh::FastMeshIndex, 1>{entity_index}, evaluation_context);
 
           // Sum the counts of each expression in the tree
@@ -841,12 +848,12 @@ class NgpForEachEntityExprDriver {
   }
 
   template <typename Expr, typename ReductionOp>
-  void reduce_local(CachableExprBase<Expr> &expr_base, ReductionOp& reduction) const {
+  void reduce_local(CachableExprBase<Expr>& expr_base, ReductionOp& reduction) const {
     // Copy to derived expression type for lambda capture
     auto expr = expr_base.self();
 
     // Get the up-to-date NGP mesh
-    stk::mesh::NgpMesh &ngp_mesh = get_updated_ngp_mesh(bulk_data());
+    stk::mesh::NgpMesh& ngp_mesh = get_updated_ngp_mesh(bulk_data());
 
     // Sync all fields to the appropriate space and mark modified where necessary
     NgpEvalContext evaluation_context(ngp_mesh);
@@ -855,7 +862,8 @@ class NgpForEachEntityExprDriver {
     // Perform the evaluation
     using value_type = typename ReductionOp::value_type;
     stk::mesh::for_each_entity_reduce(
-        ngp_mesh, rank_, selector_, reduction, KOKKOS_LAMBDA(const stk::mesh::FastMeshIndex &entity_index, value_type& value) {
+        ngp_mesh, rank_, selector_, reduction,
+        KOKKOS_LAMBDA(const stk::mesh::FastMeshIndex& entity_index, value_type& value) {
           // Sum the counts of each expression in the tree
           constexpr auto empty_eval_counts = core::make_aggregate();
           constexpr auto eval_counts =
@@ -874,7 +882,8 @@ class NgpForEachEntityExprDriver {
           if constexpr (std::is_same_v<val_t, value_type>) {
             // Directly compatible types; just combine
             reduction.join(value, val);
-          } if constexpr (math::is_scalar_wrapper_v<val_t>) {
+          }
+          if constexpr (math::is_scalar_wrapper_v<val_t>) {
             // val is a scalar wrapper; extract the underlying value and combine
             reduction.join(value, val[0]);
           } else {
@@ -888,36 +897,39 @@ class NgpForEachEntityExprDriver {
   const stk::mesh::BulkData* bulk_data_ptr_;
   stk::mesh::Selector selector_;
   stk::mesh::EntityRank rank_;
+  ExecSpace exec_space_;
 };
 
-auto make_entity_expr(stk::mesh::BulkData &bulk_data, const stk::mesh::Selector &selector,
-                      const stk::mesh::EntityRank &rank) {
+template <typename ExecSpace = stk::ngp::ExecSpace>
+auto make_entity_expr(stk::mesh::BulkData& bulk_data, const stk::mesh::Selector& selector,
+                      const stk::mesh::EntityRank& rank, const ExecSpace& exec_space = ExecSpace()) {
   // To ensure that all expressions have the same driver, we store a persistent driver manager
   // on the meta data and use it to memoize the driver for the given rank and selector.
 
-  using driver_map_t = impl::AnyRankSelectorMap<core::make_string_literal("ExprDrivers")>;
-  stk::mesh::MetaData &meta_data = bulk_data.mesh_meta_data();
-  driver_map_t *driver_map = const_cast<driver_map_t *>(meta_data.get_attribute<driver_map_t>());
+  using driver_t = NgpForEachEntityExprDriver<ExecSpace>;
+  using driver_map_t = impl::AnyRankSelectorMap<core::make_string_literal("NgpExprDrivers")>;
+  stk::mesh::MetaData& meta_data = bulk_data.mesh_meta_data();
+  driver_map_t* driver_map = const_cast<driver_map_t*>(meta_data.get_attribute<driver_map_t>());
   if (driver_map == nullptr) {
-    const driver_map_t *new_driver_map = new driver_map_t();
-    driver_map = const_cast<driver_map_t *>(meta_data.declare_attribute_with_delete(new_driver_map));
+    const driver_map_t* new_driver_map = new driver_map_t();
+    driver_map = const_cast<driver_map_t*>(meta_data.declare_attribute_with_delete(new_driver_map));
   }
 
   // Stash our driver in the map if it doesn't already exist
-  const NgpForEachEntityExprDriver *driver_ptr;
+  const driver_t* driver_ptr;
   if (driver_map->contains(rank, selector)) {
     // Driver already exists for this rank and selector; reuse it
-    NgpForEachEntityExprDriver &existing_driver = driver_map->at<NgpForEachEntityExprDriver>(rank, selector);
+    driver_t& existing_driver = driver_map->at<driver_t>(rank, selector);
     driver_ptr = &existing_driver;
   } else {
     // Driver doesn't exist yet; create and insert it
-    NgpForEachEntityExprDriver new_driver(bulk_data, selector, rank);
-    driver_map->insert<NgpForEachEntityExprDriver>(rank, selector, std::move(new_driver));
-    const NgpForEachEntityExprDriver &inserted_driver = driver_map->at<NgpForEachEntityExprDriver>(rank, selector);
+    driver_t new_driver(bulk_data, selector, rank);
+    driver_map->insert<driver_t>(rank, selector, std::move(new_driver));
+    const driver_t& inserted_driver = driver_map->at<driver_t>(rank, selector);
     driver_ptr = &inserted_driver;
   }
 
-  return EntityExpr<1, 0, NgpForEachEntityExprDriver>(rank, driver_ptr);
+  return EntityExpr<1, 0, driver_t>(rank, driver_ptr);
 }
 //@}
 
@@ -955,33 +967,33 @@ class ConstantMathExpr : public MathExprBase<ConstantMathExpr<ConstantType>> {
   }
 
   template <size_t NumEntities>
-  KOKKOS_INLINE_FUNCTION ConstantType eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities> & /*fmis*/,
-                                           const NgpEvalContext & /*context*/) const {
+  KOKKOS_INLINE_FUNCTION ConstantType eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities>& /*fmis*/,
+                                           const NgpEvalContext& /*context*/) const {
     return value_;
   }
 
   template <typename EvalCountsType, EvalCountsType eval_counts, size_t NumEntities, typename OldCacheType>
-  KOKKOS_INLINE_FUNCTION auto cached_eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities> & /*fmis*/,
-                                          OldCacheType &&old_cache, const NgpEvalContext & /*context*/) const {
+  KOKKOS_INLINE_FUNCTION auto cached_eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities>& /*fmis*/,
+                                          OldCacheType&& old_cache, const NgpEvalContext& /*context*/) const {
     static_assert(
         !core::aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>,
         "The cache somehow contains our tag, but our eval returns a constant and should never cache anything.");
     return Kokkos::make_pair(value_, std::forward<OldCacheType>(old_cache));
   }
 
-  void propagate_synchronize(const NgpEvalContext & /*context*/) {
+  void propagate_synchronize(const NgpEvalContext& /*context*/) {
     // Nothing to do here
   }
 
-  void flag_read_only(const NgpEvalContext & /*context*/) {
+  void flag_read_only(const NgpEvalContext& /*context*/) {
     // Nothing to do here
   }
 
-  void flag_read_write(const NgpEvalContext & /*context*/) {
+  void flag_read_write(const NgpEvalContext& /*context*/) {
     std::cout << "Warning: Attempting to write to a constant expression." << std::endl;
   }
 
-  void flag_overwrite_all(const NgpEvalContext & /*context*/) {
+  void flag_overwrite_all(const NgpEvalContext& /*context*/) {
     std::cout << "Warning: Attempting to write to a constant expression." << std::endl;
   }
 
@@ -1006,14 +1018,14 @@ class AssignExpr : public MathExprBase<AssignExpr<TargetExpr, SourceExpr>> {
   }
 
   template <size_t NumEntities>
-  KOKKOS_INLINE_FUNCTION void eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities> &fmis,
-                                   const NgpEvalContext &context) const {
+  KOKKOS_INLINE_FUNCTION void eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities>& fmis,
+                                   const NgpEvalContext& context) const {
     trg_expr_.eval(fmis, context) = src_expr_.eval(fmis, context);
   }
 
   template <typename EvalCountsType, EvalCountsType eval_counts, size_t NumEntities, typename OldCacheType>
-  KOKKOS_INLINE_FUNCTION void cached_eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities> &fmis,
-                                          OldCacheType &&old_cache, const NgpEvalContext &context) const {
+  KOKKOS_INLINE_FUNCTION void cached_eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities>& fmis,
+                                          OldCacheType&& old_cache, const NgpEvalContext& context) const {
     static_assert(!core::aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>,
                   "The cache somehow contains our tag, but our eval returns void and should never cache anything.");
 
@@ -1025,32 +1037,46 @@ class AssignExpr : public MathExprBase<AssignExpr<TargetExpr, SourceExpr>> {
     trg_val = src_val;
   }
 
-  void propagate_synchronize(const NgpEvalContext &context) {
+  void propagate_synchronize(const NgpEvalContext& context) {
     src_expr_.flag_read_only(context);
     trg_expr_.flag_overwrite_all(context);
     trg_expr_.propagate_synchronize(context);
     src_expr_.propagate_synchronize(context);
   }
 
-  void flag_read_only(const NgpEvalContext & /*context*/) {
+  void flag_read_only(const NgpEvalContext& /*context*/) {
     MUNDY_THROW_ASSERT(false, std::logic_error,
                        "Attempting to read the return type of an assignment expression, which returns void.");
   }
 
-  void flag_read_write(const NgpEvalContext & /*context*/) {
+  void flag_read_write(const NgpEvalContext& /*context*/) {
     MUNDY_THROW_ASSERT(false, std::logic_error,
                        "Attempting to read the return type of an assignment expression, which returns void.");
   }
 
-  void flag_overwrite_all(const NgpEvalContext & /*context*/) {
+  void flag_overwrite_all(const NgpEvalContext& /*context*/) {
     MUNDY_THROW_ASSERT(false, std::logic_error,
                        "Attempting to write to the return type of an assignment expression, which returns void.");
   }
 
   auto driver() const {
-    auto d = trg_expr_.driver();
-    MUNDY_THROW_ASSERT(d == src_expr_.driver(), std::logic_error, "Mismatched drivers in assignment expression");
-    return d;
+    using nullptr_t = decltype(nullptr);
+
+    constexpr bool has_trg_driver = !std::is_same_v<nullptr_t, decltype(trg_expr_.driver())>;
+    constexpr bool has_src_driver = !std::is_same_v<nullptr_t, decltype(src_expr_.driver())>;
+    static_assert(
+        has_trg_driver || has_src_driver,
+        "At least one of the source or target expressions in an assignment expression must have a non-null driver.");
+
+    if constexpr (has_trg_driver) {
+      auto d = trg_expr_.driver();
+      if constexpr (has_src_driver) {
+        MUNDY_THROW_ASSERT(d == src_expr_.driver(), std::logic_error, "Mismatched drivers in assignment expression");
+      }
+      return d;
+    } else {
+      return src_expr_.driver();
+    }
   }
 
  private:
@@ -1058,168 +1084,182 @@ class AssignExpr : public MathExprBase<AssignExpr<TargetExpr, SourceExpr>> {
   SourceExpr src_expr_;
 };
 
-#define MUNDY_ACCESSOR_EXPR_OP(OpName, op)                                                                        \
-  template <typename LeftMathExpr, typename RightMathExpr>                                                        \
-  class OpName##Expr : public MathExprBase<OpName##Expr<LeftMathExpr, RightMathExpr>> {                           \
-   public:                                                                                                        \
-    using our_t = OpName##Expr<LeftMathExpr, RightMathExpr>;                                                      \
-    using our_tag = typename MathExprBase<OpName##Expr<LeftMathExpr, RightMathExpr>>::our_tag;                    \
-    using sub_expressions_t = core::tuple<LeftMathExpr, RightMathExpr>;                                           \
-    static constexpr bool constrains_num_entities = false;                                                        \
-                                                                                                                  \
-    KOKKOS_INLINE_FUNCTION                                                                                        \
-    OpName##Expr(LeftMathExpr left, RightMathExpr right) : left_(left), right_(right) {                           \
-    }                                                                                                             \
-                                                                                                                  \
-    KOKKOS_INLINE_FUNCTION                                                                                        \
-    OpName##Expr(const MathExprBase<LeftMathExpr> &left, const MathExprBase<RightMathExpr> &right)                \
-        : left_(left.self()), right_(right.self()) {                                                              \
-    }                                                                                                             \
-                                                                                                                  \
-    template <typename OtherExpr>                                                                                 \
-    auto operator+(const MathExprBase<OtherExpr> &other) const {                                                  \
-      return AddExpr<our_t, OtherExpr>(*this, other.self());                                                      \
-    }                                                                                                             \
-                                                                                                                  \
-    template <typename OtherExpr>                                                                                 \
-    auto operator-(const MathExprBase<OtherExpr> &other) const {                                                  \
-      return SubExpr<our_t, OtherExpr>(*this, other.self());                                                      \
-    }                                                                                                             \
-                                                                                                                  \
-    template <typename OtherExpr>                                                                                 \
-    auto operator*(const MathExprBase<OtherExpr> &other) const {                                                  \
-      return MulExpr<our_t, OtherExpr>(*this, other.self());                                                      \
-    }                                                                                                             \
-                                                                                                                  \
-    template <typename OtherExpr>                                                                                 \
-    auto operator/(const MathExprBase<OtherExpr> &other) const {                                                  \
-      return DivExpr<our_t, OtherExpr>(*this, other.self());                                                      \
-    }                                                                                                             \
-                                                                                                                  \
-    template <size_t NumEntities>                                                                                 \
-    KOKKOS_INLINE_FUNCTION auto eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities> &fmis,            \
-                                     const NgpEvalContext &context) const {                                       \
-      return left_.eval(fmis, context) op right_.eval(fmis, context);                                             \
-    }                                                                                                             \
-                                                                                                                  \
-    template <typename EvalCountsType, EvalCountsType eval_counts, size_t NumEntities, typename OldCacheType>     \
-    KOKKOS_INLINE_FUNCTION auto cached_eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities> &fmis,     \
-                                            OldCacheType &&old_cache, const NgpEvalContext &context) const {      \
-      static_assert(has<our_tag>(eval_counts), "eval_counts must contain our tag");                               \
-                                                                                                                  \
-      if constexpr (get<our_tag>(eval_counts) > 1) {                                                              \
-        if constexpr (core::aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>) {                              \
-          /* The fact that our tag exists in the old cache means that our eval has cached its result before.*/    \
-          /* Return the cached value */                                                                           \
-          auto cache = std::forward<OldCacheType>(old_cache);                                                     \
-          auto val = get<our_tag>(cache);                                                                         \
-          return Kokkos::make_pair(val, cache);                                                                   \
-        } else {                                                                                                  \
-          /* Eval our subexpressions first, allowing them to cache their results if necessary */                  \
-          auto [left_val, new_cache] = left_.template cached_eval<EvalCountsType, eval_counts>(                   \
-              fmis, std::forward<OldCacheType>(old_cache), context);                                              \
-          auto [right_val, newer_cache] =                                                                         \
-              right_.template cached_eval<EvalCountsType, eval_counts>(fmis, std::move(new_cache), context);      \
-                                                                                                                  \
-          /* Our eval result needs cached, but is not yet cached */                                               \
-          auto val = left_val op right_val;                                                                       \
-          auto newest_cache = append<our_tag>(std::move(newer_cache), val);                                       \
-          return Kokkos::make_pair(val, newest_cache);                                                            \
-        }                                                                                                         \
-      } else {                                                                                                    \
-        /* Eval our subexpressions first, allowing them to cache their results if necessary */                    \
-        auto [left_val, new_cache] = left_.template cached_eval<EvalCountsType, eval_counts>(                     \
-            fmis, std::forward<OldCacheType>(old_cache), context);                                                \
-        auto [right_val, newer_cache] =                                                                           \
-            right_.template cached_eval<EvalCountsType, eval_counts>(fmis, std::move(new_cache), context);        \
-                                                                                                                  \
-        /* Don't cache our result */                                                                              \
-        auto val = left_val op right_val;                                                                         \
-        return Kokkos::make_pair(val, newer_cache);                                                               \
-      }                                                                                                           \
-    }                                                                                                             \
-                                                                                                                  \
-    void propagate_synchronize(const NgpEvalContext &context) {                                                   \
-      left_.flag_read_only(context);                                                                              \
-      right_.flag_read_only(context);                                                                             \
-      left_.propagate_synchronize(context);                                                                       \
-      right_.propagate_synchronize(context);                                                                      \
-    }                                                                                                             \
-                                                                                                                  \
-    void flag_read_only(const NgpEvalContext & /*context*/) {                                                     \
-      /* Our return type is naturally read-only. Nothing to do here. */                                           \
-    }                                                                                                             \
-                                                                                                                  \
-    void flag_read_write(const NgpEvalContext & /*context*/) {                                                    \
-      std::cout << "Warning: Attempting to write to the return type of a binary expression, which returns a "     \
-                   "temporary value."                                                                             \
-                << std::endl;                                                                                     \
-    }                                                                                                             \
-                                                                                                                  \
-    void flag_overwrite_all(const NgpEvalContext & /*context*/) {                                                 \
-      std::cout << "Warning: Attempting to write to the return type of a binary expression, which returns a "     \
-                   "temporary value."                                                                             \
-                << std::endl;                                                                                     \
-    }                                                                                                             \
-                                                                                                                  \
-    const auto driver() const {                                                                                   \
-      auto d = left_.driver();                                                                                    \
-      MUNDY_THROW_ASSERT(d == right_.driver(), std::logic_error, "Mismatched drivers in binary math expression"); \
-      return d;                                                                                                   \
-    }                                                                                                             \
-                                                                                                                  \
-   private:                                                                                                       \
-    LeftMathExpr left_;                                                                                           \
-    RightMathExpr right_;                                                                                         \
+#define MUNDY_ACCESSOR_EXPR_OP(OpName, op)                                                                           \
+  template <typename LeftMathExpr, typename RightMathExpr>                                                           \
+  class OpName##Expr : public MathExprBase<OpName##Expr<LeftMathExpr, RightMathExpr>> {                              \
+   public:                                                                                                           \
+    using our_t = OpName##Expr<LeftMathExpr, RightMathExpr>;                                                         \
+    using our_tag = typename MathExprBase<OpName##Expr<LeftMathExpr, RightMathExpr>>::our_tag;                       \
+    using sub_expressions_t = core::tuple<LeftMathExpr, RightMathExpr>;                                              \
+    static constexpr bool constrains_num_entities = false;                                                           \
+                                                                                                                     \
+    KOKKOS_INLINE_FUNCTION                                                                                           \
+    OpName##Expr(LeftMathExpr left, RightMathExpr right) : left_(left), right_(right) {                              \
+    }                                                                                                                \
+                                                                                                                     \
+    KOKKOS_INLINE_FUNCTION                                                                                           \
+    OpName##Expr(const MathExprBase<LeftMathExpr>& left, const MathExprBase<RightMathExpr>& right)                   \
+        : left_(left.self()), right_(right.self()) {                                                                 \
+    }                                                                                                                \
+                                                                                                                     \
+    template <typename OtherExpr>                                                                                    \
+    auto operator+(const MathExprBase<OtherExpr>& other) const {                                                     \
+      return AddExpr<our_t, OtherExpr>(*this, other.self());                                                         \
+    }                                                                                                                \
+                                                                                                                     \
+    template <typename OtherExpr>                                                                                    \
+    auto operator-(const MathExprBase<OtherExpr>& other) const {                                                     \
+      return SubExpr<our_t, OtherExpr>(*this, other.self());                                                         \
+    }                                                                                                                \
+                                                                                                                     \
+    template <typename OtherExpr>                                                                                    \
+    auto operator*(const MathExprBase<OtherExpr>& other) const {                                                     \
+      return MulExpr<our_t, OtherExpr>(*this, other.self());                                                         \
+    }                                                                                                                \
+                                                                                                                     \
+    template <typename OtherExpr>                                                                                    \
+    auto operator/(const MathExprBase<OtherExpr>& other) const {                                                     \
+      return DivExpr<our_t, OtherExpr>(*this, other.self());                                                         \
+    }                                                                                                                \
+                                                                                                                     \
+    template <size_t NumEntities>                                                                                    \
+    KOKKOS_INLINE_FUNCTION auto eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities>& fmis,               \
+                                     const NgpEvalContext& context) const {                                          \
+      return left_.eval(fmis, context) op right_.eval(fmis, context);                                                \
+    }                                                                                                                \
+                                                                                                                     \
+    template <typename EvalCountsType, EvalCountsType eval_counts, size_t NumEntities, typename OldCacheType>        \
+    KOKKOS_INLINE_FUNCTION auto cached_eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities>& fmis,        \
+                                            OldCacheType&& old_cache, const NgpEvalContext& context) const {         \
+      static_assert(has<our_tag>(eval_counts), "eval_counts must contain our tag");                                  \
+                                                                                                                     \
+      if constexpr (get<our_tag>(eval_counts) > 1) {                                                                 \
+        if constexpr (core::aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>) {                       \
+          /* The fact that our tag exists in the old cache means that our eval has cached its result before.*/       \
+          /* Return the cached value */                                                                              \
+          auto cache = std::forward<OldCacheType>(old_cache);                                                        \
+          auto val = get<our_tag>(cache);                                                                            \
+          return Kokkos::make_pair(val, cache);                                                                      \
+        } else {                                                                                                     \
+          /* Eval our subexpressions first, allowing them to cache their results if necessary */                     \
+          auto [left_val, new_cache] = left_.template cached_eval<EvalCountsType, eval_counts>(                      \
+              fmis, std::forward<OldCacheType>(old_cache), context);                                                 \
+          auto [right_val, newer_cache] =                                                                            \
+              right_.template cached_eval<EvalCountsType, eval_counts>(fmis, std::move(new_cache), context);         \
+                                                                                                                     \
+          /* Our eval result needs cached, but is not yet cached */                                                  \
+          auto val = left_val op right_val;                                                                          \
+          auto newest_cache = append<our_tag>(std::move(newer_cache), val);                                          \
+          return Kokkos::make_pair(val, newest_cache);                                                               \
+        }                                                                                                            \
+      } else {                                                                                                       \
+        /* Eval our subexpressions first, allowing them to cache their results if necessary */                       \
+        auto [left_val, new_cache] = left_.template cached_eval<EvalCountsType, eval_counts>(                        \
+            fmis, std::forward<OldCacheType>(old_cache), context);                                                   \
+        auto [right_val, newer_cache] =                                                                              \
+            right_.template cached_eval<EvalCountsType, eval_counts>(fmis, std::move(new_cache), context);           \
+                                                                                                                     \
+        /* Don't cache our result */                                                                                 \
+        auto val = left_val op right_val;                                                                            \
+        return Kokkos::make_pair(val, newer_cache);                                                                  \
+      }                                                                                                              \
+    }                                                                                                                \
+                                                                                                                     \
+    void propagate_synchronize(const NgpEvalContext& context) {                                                      \
+      left_.flag_read_only(context);                                                                                 \
+      right_.flag_read_only(context);                                                                                \
+      left_.propagate_synchronize(context);                                                                          \
+      right_.propagate_synchronize(context);                                                                         \
+    }                                                                                                                \
+                                                                                                                     \
+    void flag_read_only(const NgpEvalContext& /*context*/) {                                                         \
+      /* Our return type is naturally read-only. Nothing to do here. */                                              \
+    }                                                                                                                \
+                                                                                                                     \
+    void flag_read_write(const NgpEvalContext& /*context*/) {                                                        \
+      std::cout << "Warning: Attempting to write to the return type of a binary expression, which returns a "        \
+                   "temporary value."                                                                                \
+                << std::endl;                                                                                        \
+    }                                                                                                                \
+                                                                                                                     \
+    void flag_overwrite_all(const NgpEvalContext& /*context*/) {                                                     \
+      std::cout << "Warning: Attempting to write to the return type of a binary expression, which returns a "        \
+                   "temporary value."                                                                                \
+                << std::endl;                                                                                        \
+    }                                                                                                                \
+                                                                                                                     \
+    const auto driver() const {                                                                                      \
+      using nullptr_t = decltype(nullptr);                                                                           \
+                                                                                                                     \
+      constexpr bool has_left_driver = !std::is_same_v<nullptr_t, decltype(left_.driver())>;                         \
+      constexpr bool has_right_driver = !std::is_same_v<nullptr_t, decltype(right_.driver())>;                       \
+      static_assert(                                                                                                 \
+          has_left_driver || has_right_driver,                                                                       \
+          "At least one of the left or right expressions in a binary math expression must have a non-null driver."); \
+                                                                                                                     \
+      if constexpr (has_left_driver) {                                                                               \
+        auto d = left_.driver();                                                                                     \
+        if constexpr (has_right_driver) {                                                                            \
+          MUNDY_THROW_ASSERT(d == right_.driver(), std::logic_error, "Mismatched drivers in binary math expression");  \
+        }                                                                                                            \
+        return d;                                                                                                    \
+      } else {                                                                                                       \
+        return right_.driver();                                                                                      \
+      }                                                                                                              \
+    }                                                                                                                \
+                                                                                                                     \
+   private:                                                                                                          \
+    LeftMathExpr left_;                                                                                              \
+    RightMathExpr right_;                                                                                            \
   };
 
 #define MUNDY_ACCESSOR_NON_MEMBER_OP_WITH_CONSTANT(OpName)                                                        \
   /* Non-member operators with ConstantMathExpr */                                                                \
   template <typename ConstantType, typename SubLeftExpr, typename SubRightExpr>                                   \
     requires(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                      \
-  auto operator+(const ConstantType &c, const OpName##Expr<SubLeftExpr, SubRightExpr> &expr) {                    \
+  auto operator+(const ConstantType& c, const OpName##Expr<SubLeftExpr, SubRightExpr>& expr) {                    \
     auto constant_expr = ConstantMathExpr<ConstantType>(c);                                                       \
     return AddExpr<ConstantMathExpr<ConstantType>, OpName##Expr<SubLeftExpr, SubRightExpr>>(constant_expr, expr); \
   }                                                                                                               \
   template <typename ConstantType, typename SubLeftExpr, typename SubRightExpr>                                   \
     requires(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                      \
-  auto operator-(const ConstantType &c, const OpName##Expr<SubLeftExpr, SubRightExpr> &expr) {                    \
+  auto operator-(const ConstantType& c, const OpName##Expr<SubLeftExpr, SubRightExpr>& expr) {                    \
     auto constant_expr = ConstantMathExpr<ConstantType>(c);                                                       \
     return SubExpr<ConstantMathExpr<ConstantType>, OpName##Expr<SubLeftExpr, SubRightExpr>>(constant_expr, expr); \
   }                                                                                                               \
   template <typename ConstantType, typename SubLeftExpr, typename SubRightExpr>                                   \
     requires(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                      \
-  auto operator*(const ConstantType &c, const OpName##Expr<SubLeftExpr, SubRightExpr> &expr) {                    \
+  auto operator*(const ConstantType& c, const OpName##Expr<SubLeftExpr, SubRightExpr>& expr) {                    \
     auto constant_expr = ConstantMathExpr<ConstantType>(c);                                                       \
     return MulExpr<ConstantMathExpr<ConstantType>, OpName##Expr<SubLeftExpr, SubRightExpr>>(constant_expr, expr); \
   }                                                                                                               \
   template <typename ConstantType, typename SubLeftExpr, typename SubRightExpr>                                   \
     requires(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                      \
-  auto operator/(const ConstantType &c, const OpName##Expr<SubLeftExpr, SubRightExpr> &expr) {                    \
+  auto operator/(const ConstantType& c, const OpName##Expr<SubLeftExpr, SubRightExpr>& expr) {                    \
     auto constant_expr = ConstantMathExpr<ConstantType>(c);                                                       \
     return DivExpr<ConstantMathExpr<ConstantType>, OpName##Expr<SubLeftExpr, SubRightExpr>>(constant_expr, expr); \
   }                                                                                                               \
   template <typename ConstantType, typename SubLeftExpr, typename SubRightExpr>                                   \
     requires(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                      \
-  auto operator+(const OpName##Expr<SubLeftExpr, SubRightExpr> &expr, const ConstantType &c) {                    \
+  auto operator+(const OpName##Expr<SubLeftExpr, SubRightExpr>& expr, const ConstantType& c) {                    \
     auto constant_expr = ConstantMathExpr<ConstantType>(c);                                                       \
     return AddExpr<OpName##Expr<SubLeftExpr, SubRightExpr>, ConstantMathExpr<ConstantType>>(expr, constant_expr); \
   }                                                                                                               \
   template <typename ConstantType, typename SubLeftExpr, typename SubRightExpr>                                   \
     requires(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                      \
-  auto operator-(const OpName##Expr<SubLeftExpr, SubRightExpr> &expr, const ConstantType &c) {                    \
+  auto operator-(const OpName##Expr<SubLeftExpr, SubRightExpr>& expr, const ConstantType& c) {                    \
     auto constant_expr = ConstantMathExpr<ConstantType>(c);                                                       \
     return SubExpr<OpName##Expr<SubLeftExpr, SubRightExpr>, ConstantMathExpr<ConstantType>>(expr, constant_expr); \
   }                                                                                                               \
   template <typename ConstantType, typename SubLeftExpr, typename SubRightExpr>                                   \
     requires(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                      \
-  auto operator*(const OpName##Expr<SubLeftExpr, SubRightExpr> &expr, const ConstantType &c) {                    \
+  auto operator*(const OpName##Expr<SubLeftExpr, SubRightExpr>& expr, const ConstantType& c) {                    \
     auto constant_expr = ConstantMathExpr<ConstantType>(c);                                                       \
     return MulExpr<OpName##Expr<SubLeftExpr, SubRightExpr>, ConstantMathExpr<ConstantType>>(expr, constant_expr); \
   }                                                                                                               \
   template <typename ConstantType, typename SubLeftExpr, typename SubRightExpr>                                   \
     requires(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                      \
-  auto operator/(const OpName##Expr<SubLeftExpr, SubRightExpr> &expr, const ConstantType &c) {                    \
+  auto operator/(const OpName##Expr<SubLeftExpr, SubRightExpr>& expr, const ConstantType& c) {                    \
     auto constant_expr = ConstantMathExpr<ConstantType>(c);                                                       \
     return DivExpr<OpName##Expr<SubLeftExpr, SubRightExpr>, ConstantMathExpr<ConstantType>>(expr, constant_expr); \
   }
@@ -1238,20 +1278,20 @@ class AssignExpr : public MathExprBase<AssignExpr<TargetExpr, SourceExpr>> {
     }                                                                                                                  \
                                                                                                                        \
     KOKKOS_INLINE_FUNCTION                                                                                             \
-    OpName##EqualsExpr(const EntityExprBase<LeftMathExpr> &left, const EntityExprBase<RightMathExpr> &right)           \
+    OpName##EqualsExpr(const EntityExprBase<LeftMathExpr>& left, const EntityExprBase<RightMathExpr>& right)           \
         : left_(left.self()), right_(right.self()) {                                                                   \
     }                                                                                                                  \
                                                                                                                        \
     template <size_t NumEntities>                                                                                      \
-    KOKKOS_INLINE_FUNCTION void eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities> &fmis,                 \
-                                     const NgpEvalContext &context) const {                                            \
+    KOKKOS_INLINE_FUNCTION void eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities>& fmis,                 \
+                                     const NgpEvalContext& context) const {                                            \
       left_.eval(fmis, context) op_equals right_.eval(fmis, context);                                                  \
     }                                                                                                                  \
                                                                                                                        \
     template <typename EvalCountsType, EvalCountsType eval_counts, size_t NumEntities, typename OldCacheType>          \
-    KOKKOS_INLINE_FUNCTION void cached_eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities> &fmis,          \
-                                            OldCacheType &&old_cache, const NgpEvalContext &context) const {           \
-      static_assert(!core::aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>,                                      \
+    KOKKOS_INLINE_FUNCTION void cached_eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities>& fmis,          \
+                                            OldCacheType&& old_cache, const NgpEvalContext& context) const {           \
+      static_assert(!core::aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>,                            \
                     "The cache somehow contains our tag, but our eval returns void and should never cache anything."); \
       /* Eval our subexpressions first, allowing them to cache their results if necessary */                           \
       auto [left_val, new_cache] = left_.template cached_eval<EvalCountsType, eval_counts>(fmis, old_cache, context);  \
@@ -1260,33 +1300,47 @@ class AssignExpr : public MathExprBase<AssignExpr<TargetExpr, SourceExpr>> {
       left_val op_equals right_val;                                                                                    \
     }                                                                                                                  \
                                                                                                                        \
-    void propagate_synchronize(const NgpEvalContext &context) {                                                        \
+    void propagate_synchronize(const NgpEvalContext& context) {                                                        \
       left_.flag_read_write(context);                                                                                  \
       right_.flag_read_only(context);                                                                                  \
       left_.propagate_synchronize(context);                                                                            \
       right_.propagate_synchronize(context);                                                                           \
     }                                                                                                                  \
                                                                                                                        \
-    void flag_read_only(const NgpEvalContext & /*context*/) {                                                          \
+    void flag_read_only(const NgpEvalContext& /*context*/) {                                                           \
       /* Our return type is naturally read-only. Nothing to do here. */                                                \
     }                                                                                                                  \
                                                                                                                        \
-    void flag_read_write(const NgpEvalContext & /*context*/) {                                                         \
+    void flag_read_write(const NgpEvalContext& /*context*/) {                                                          \
       std::cout << "Warning: Attempting to write to the return type of a binary expression, which returns a "          \
                    "temporary value."                                                                                  \
                 << std::endl;                                                                                          \
     }                                                                                                                  \
                                                                                                                        \
-    void flag_overwrite_all(const NgpEvalContext & /*context*/) {                                                      \
+    void flag_overwrite_all(const NgpEvalContext& /*context*/) {                                                       \
       std::cout << "Warning: Attempting to write to the return type of a binary expression, which returns a "          \
                    "temporary value."                                                                                  \
                 << std::endl;                                                                                          \
     }                                                                                                                  \
                                                                                                                        \
     const auto driver() const {                                                                                        \
-      auto d = left_.driver();                                                                                         \
-      MUNDY_THROW_ASSERT(d == right_.driver(), std::logic_error, "Mismatched drivers in binary math expression");      \
-      return d;                                                                                                        \
+      using nullptr_t = decltype(nullptr);                                                                             \
+                                                                                                                       \
+      constexpr bool has_left_driver = !std::is_same_v<nullptr_t, decltype(left_.driver())>;                           \
+      constexpr bool has_right_driver = !std::is_same_v<nullptr_t, decltype(right_.driver())>;                         \
+      static_assert(                                                                                                   \
+          has_left_driver || has_right_driver,                                                                         \
+          "At least one of the left or right expressions in a binary math expression must have a non-null driver.");   \
+                                                                                                                       \
+      if constexpr (has_left_driver) {                                                                                 \
+        auto d = left_.driver();                                                                                       \
+        if constexpr (has_right_driver) {                                                                              \
+          MUNDY_THROW_ASSERT(d == right_.driver(), std::logic_error, "Mismatched drivers in binary math expression");    \
+        }                                                                                                              \
+        return d;                                                                                                      \
+      } else {                                                                                                         \
+        return right_.driver();                                                                                        \
+      }                                                                                                                \
     }                                                                                                                  \
                                                                                                                        \
    private:                                                                                                            \
@@ -1316,81 +1370,81 @@ class AccessorExpr : public MathExprBase<AccessorExpr<TaggedAccessorT, PrevEntit
   static constexpr bool constrains_num_entities = false;
 
   KOKKOS_INLINE_FUNCTION
-  AccessorExpr(TaggedAccessorT tagged_accessor, const PrevEntityExpr &prev_entity_expr)
+  AccessorExpr(TaggedAccessorT tagged_accessor, const PrevEntityExpr& prev_entity_expr)
       : tagged_accessor_(tagged_accessor), prev_entity_expr_(prev_entity_expr) {
   }
 
   KOKKOS_INLINE_FUNCTION
-  AccessorExpr(TaggedAccessorT tagged_accessor, const EntityExprBase<PrevEntityExpr> &prev_entity_expr_base)
+  AccessorExpr(TaggedAccessorT tagged_accessor, const EntityExprBase<PrevEntityExpr>& prev_entity_expr_base)
       : tagged_accessor_(tagged_accessor), prev_entity_expr_(prev_entity_expr_base.self()) {
   }
 
-  auto operator=(const our_t &other) {
+  auto operator=(const our_t& other) {
     auto expr = AssignExpr<our_t, our_t>(*this, other);
     expr.driver()->run(expr);
   }
 
   template <typename OtherExpr>
     requires(!std::is_same_v<OtherExpr, our_t>)
-  auto operator=(const MathExprBase<OtherExpr> &other) {
+  auto operator=(const MathExprBase<OtherExpr>& other) {
     auto expr = AssignExpr<our_t, OtherExpr>(*this, other.self());
     expr.driver()->run(expr);
   }
 
   template <typename OtherExpr>
     requires(!std::is_same_v<OtherExpr, our_t>)
-  auto operator=(const EntityExprBase<OtherExpr> &other) {
+  auto operator=(const EntityExprBase<OtherExpr>& other) {
     auto expr = AssignExpr<our_t, OtherExpr>(*this, other.self());
     expr.driver()->run(expr);
   }
 
   template <typename OtherExpr>
-  auto operator+(const MathExprBase<OtherExpr> &other) const {
+  auto operator+(const MathExprBase<OtherExpr>& other) const {
     return AddExpr<our_t, OtherExpr>(*this, other.self());
   }
 
   template <typename OtherExpr>
-  auto operator-(const MathExprBase<OtherExpr> &other) const {
+  auto operator-(const MathExprBase<OtherExpr>& other) const {
     return SubExpr<our_t, OtherExpr>(*this, other.self());
   }
 
   template <typename OtherExpr>
-  auto operator*(const MathExprBase<OtherExpr> &other) const {
+  auto operator*(const MathExprBase<OtherExpr>& other) const {
     return MulExpr<our_t, OtherExpr>(*this, other.self());
   }
 
   template <typename OtherExpr>
-  auto operator/(const MathExprBase<OtherExpr> &other) const {
+  auto operator/(const MathExprBase<OtherExpr>& other) const {
     return DivExpr<our_t, OtherExpr>(*this, other.self());
   }
 
   template <typename OtherExpr>
-  void operator+=(const MathExprBase<OtherExpr> &other) {
+  void operator+=(const MathExprBase<OtherExpr>& other) {
     auto expr = AddEqualsExpr<our_t, OtherExpr>(*this, other.self());
     expr.driver()->run(expr);
   }
 
   template <typename OtherExpr>
-  void operator-=(const MathExprBase<OtherExpr> &other) {
+  void operator-=(const MathExprBase<OtherExpr>& other) {
     auto expr = SubEqualsExpr<our_t, OtherExpr>(*this, other.self());
     expr.driver()->run(expr);
   }
 
   template <typename OtherExpr>
-  void operator*=(const MathExprBase<OtherExpr> &other) {
+  void operator*=(const MathExprBase<OtherExpr>& other) {
     auto expr = MulEqualsExpr<our_t, OtherExpr>(*this, other.self());
     expr.driver()->run(expr);
   }
 
   template <typename OtherExpr>
-  void operator/=(const MathExprBase<OtherExpr> &other) {
+  void operator/=(const MathExprBase<OtherExpr>& other) {
     auto expr = DivEqualsExpr<our_t, OtherExpr>(*this, other.self());
     expr.driver()->run(expr);
   }
 
   template <typename ConstantType>
     requires(!is_crtp_base_of_v<MathExprBase, ConstantType> && !is_crtp_base_of_v<EntityExprBase, ConstantType>)
-  auto operator=(const ConstantType &c) {
+  auto operator=(const ConstantType& c) {
     auto constant_expr = ConstantMathExpr<ConstantType>(c);
     auto expr = AssignExpr<our_t, ConstantMathExpr<ConstantType>>(*this, constant_expr);
     expr.driver()->run(expr);
@@ -1398,7 +1452,7 @@ class AccessorExpr : public MathExprBase<AccessorExpr<TaggedAccessorT, PrevEntit
 
   template <typename ConstantType>
     requires(!is_crtp_base_of_v<MathExprBase, ConstantType> && !is_crtp_base_of_v<EntityExprBase, ConstantType>)
-  auto operator+=(const ConstantType &c) {
+  auto operator+=(const ConstantType& c) {
     auto constant_expr = ConstantMathExpr<ConstantType>(c);
     auto expr = AddEqualsExpr<our_t, ConstantMathExpr<ConstantType>>(*this, constant_expr);
     expr.driver()->run(expr);
@@ -1406,7 +1460,7 @@ class AccessorExpr : public MathExprBase<AccessorExpr<TaggedAccessorT, PrevEntit
 
   template <typename ConstantType>
     requires(!is_crtp_base_of_v<MathExprBase, ConstantType> && !is_crtp_base_of_v<EntityExprBase, ConstantType>)
-  auto operator-=(const ConstantType &c) {
+  auto operator-=(const ConstantType& c) {
     auto constant_expr = ConstantMathExpr<ConstantType>(c);
     auto expr = SubEqualsExpr<our_t, ConstantMathExpr<ConstantType>>(*this, constant_expr);
     expr.driver()->run(expr);
@@ -1414,7 +1468,7 @@ class AccessorExpr : public MathExprBase<AccessorExpr<TaggedAccessorT, PrevEntit
 
   template <typename ConstantType>
     requires(!is_crtp_base_of_v<MathExprBase, ConstantType> && !is_crtp_base_of_v<EntityExprBase, ConstantType>)
-  auto operator*=(const ConstantType &c) {
+  auto operator*=(const ConstantType& c) {
     auto constant_expr = ConstantMathExpr<ConstantType>(c);
     auto expr = MulEqualsExpr<our_t, ConstantMathExpr<ConstantType>>(*this, constant_expr);
     expr.driver()->run(expr);
@@ -1422,22 +1476,22 @@ class AccessorExpr : public MathExprBase<AccessorExpr<TaggedAccessorT, PrevEntit
 
   template <typename ConstantType>
     requires(!is_crtp_base_of_v<MathExprBase, ConstantType> && !is_crtp_base_of_v<EntityExprBase, ConstantType>)
-  auto operator/=(const ConstantType &c) {
+  auto operator/=(const ConstantType& c) {
     auto constant_expr = ConstantMathExpr<ConstantType>(c);
     auto expr = DivEqualsExpr<our_t, ConstantMathExpr<ConstantType>>(*this, constant_expr);
     expr.driver()->run(expr);
   }
 
   template <size_t NumEntities>
-  KOKKOS_INLINE_FUNCTION auto eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities> &fmis,
-                                   const NgpEvalContext &context) const {
+  KOKKOS_INLINE_FUNCTION auto eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities>& fmis,
+                                   const NgpEvalContext& context) const {
     stk::mesh::FastMeshIndex entity_index = prev_entity_expr_.eval(fmis, context);
     return tagged_accessor_(entity_index);
   }
 
   template <typename EvalCountsType, EvalCountsType eval_counts, size_t NumEntities, typename OldCacheType>
-  KOKKOS_INLINE_FUNCTION auto cached_eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities> &fmis,
-                                          OldCacheType &&old_cache, const NgpEvalContext &context) const {
+  KOKKOS_INLINE_FUNCTION auto cached_eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities>& fmis,
+                                          OldCacheType&& old_cache, const NgpEvalContext& context) const {
     static_assert(has<our_tag>(eval_counts), "eval_counts must contain our tag");
 
     if constexpr (get<our_tag>(eval_counts) > 1) {
@@ -1465,28 +1519,28 @@ class AccessorExpr : public MathExprBase<AccessorExpr<TaggedAccessorT, PrevEntit
     }
   }
 
-  void flag_read_only(const NgpEvalContext & /*context*/) {
+  void flag_read_only(const NgpEvalContext& /*context*/) {
     tagged_accessor_.sync_to_device();
   }
 
-  void flag_read_write(const NgpEvalContext & /*context*/) {
+  void flag_read_write(const NgpEvalContext& /*context*/) {
     tagged_accessor_.sync_to_device();
     tagged_accessor_.modify_on_device();
   }
 
-  void flag_overwrite_all(const NgpEvalContext & /*context*/) {
+  void flag_overwrite_all(const NgpEvalContext& /*context*/) {
     tagged_accessor_.clear_host_sync_state();
     tagged_accessor_.modify_on_device();
   }
 
-  void propagate_synchronize(const NgpEvalContext & /*context*/) {
+  void propagate_synchronize(const NgpEvalContext& /*context*/) {
   }
 
   const auto driver() const {
     return prev_entity_expr_.driver();
   }
 
-  const PrevEntityExpr &prev_entity_expr() const {
+  const PrevEntityExpr& prev_entity_expr() const {
     return prev_entity_expr_;
   }
 
@@ -1498,56 +1552,56 @@ class AccessorExpr : public MathExprBase<AccessorExpr<TaggedAccessorT, PrevEntit
 /* Non-member operators with ConstantMathExpr */
 template <typename ConstantType, typename SubTaggedAccessorT, typename SubPrevEntityExpr>
   requires(!is_crtp_base_of_v<MathExprBase, ConstantType> && !is_crtp_base_of_v<EntityExprBase, ConstantType>)
-auto operator+(const ConstantType &c, const AccessorExpr<SubTaggedAccessorT, SubPrevEntityExpr> &expr) {
+auto operator+(const ConstantType& c, const AccessorExpr<SubTaggedAccessorT, SubPrevEntityExpr>& expr) {
   auto constant_expr = ConstantMathExpr<ConstantType>(c);
   return AddExpr<ConstantMathExpr<ConstantType>, AccessorExpr<SubTaggedAccessorT, SubPrevEntityExpr>>(constant_expr,
                                                                                                       expr);
 }
 template <typename ConstantType, typename SubTaggedAccessorT, typename SubPrevEntityExpr>
   requires(!is_crtp_base_of_v<MathExprBase, ConstantType> && !is_crtp_base_of_v<EntityExprBase, ConstantType>)
-auto operator-(const ConstantType &c, const AccessorExpr<SubTaggedAccessorT, SubPrevEntityExpr> &expr) {
+auto operator-(const ConstantType& c, const AccessorExpr<SubTaggedAccessorT, SubPrevEntityExpr>& expr) {
   auto constant_expr = ConstantMathExpr<ConstantType>(c);
   return SubExpr<ConstantMathExpr<ConstantType>, AccessorExpr<SubTaggedAccessorT, SubPrevEntityExpr>>(constant_expr,
                                                                                                       expr);
 }
 template <typename ConstantType, typename SubTaggedAccessorT, typename SubPrevEntityExpr>
   requires(!is_crtp_base_of_v<MathExprBase, ConstantType> && !is_crtp_base_of_v<EntityExprBase, ConstantType>)
-auto operator*(const ConstantType &c, const AccessorExpr<SubTaggedAccessorT, SubPrevEntityExpr> &expr) {
+auto operator*(const ConstantType& c, const AccessorExpr<SubTaggedAccessorT, SubPrevEntityExpr>& expr) {
   auto constant_expr = ConstantMathExpr<ConstantType>(c);
   return MulExpr<ConstantMathExpr<ConstantType>, AccessorExpr<SubTaggedAccessorT, SubPrevEntityExpr>>(constant_expr,
                                                                                                       expr);
 }
 template <typename ConstantType, typename SubTaggedAccessorT, typename SubPrevEntityExpr>
   requires(!is_crtp_base_of_v<MathExprBase, ConstantType> && !is_crtp_base_of_v<EntityExprBase, ConstantType>)
-auto operator/(const ConstantType &c, const AccessorExpr<SubTaggedAccessorT, SubPrevEntityExpr> &expr) {
+auto operator/(const ConstantType& c, const AccessorExpr<SubTaggedAccessorT, SubPrevEntityExpr>& expr) {
   auto constant_expr = ConstantMathExpr<ConstantType>(c);
   return DivExpr<ConstantMathExpr<ConstantType>, AccessorExpr<SubTaggedAccessorT, SubPrevEntityExpr>>(constant_expr,
                                                                                                       expr);
 }
 template <typename ConstantType, typename SubTaggedAccessorT, typename SubPrevEntityExpr>
   requires(!is_crtp_base_of_v<MathExprBase, ConstantType> && !is_crtp_base_of_v<EntityExprBase, ConstantType>)
-auto operator+(const AccessorExpr<SubTaggedAccessorT, SubPrevEntityExpr> &expr, const ConstantType &c) {
+auto operator+(const AccessorExpr<SubTaggedAccessorT, SubPrevEntityExpr>& expr, const ConstantType& c) {
   auto constant_expr = ConstantMathExpr<ConstantType>(c);
   return AddExpr<AccessorExpr<SubTaggedAccessorT, SubPrevEntityExpr>, ConstantMathExpr<ConstantType>>(expr,
                                                                                                       constant_expr);
 }
 template <typename ConstantType, typename SubTaggedAccessorT, typename SubPrevEntityExpr>
   requires(!is_crtp_base_of_v<MathExprBase, ConstantType> && !is_crtp_base_of_v<EntityExprBase, ConstantType>)
-auto operator-(const AccessorExpr<SubTaggedAccessorT, SubPrevEntityExpr> &expr, const ConstantType &c) {
+auto operator-(const AccessorExpr<SubTaggedAccessorT, SubPrevEntityExpr>& expr, const ConstantType& c) {
   auto constant_expr = ConstantMathExpr<ConstantType>(c);
   return SubExpr<AccessorExpr<SubTaggedAccessorT, SubPrevEntityExpr>, ConstantMathExpr<ConstantType>>(expr,
                                                                                                       constant_expr);
 }
 template <typename ConstantType, typename SubTaggedAccessorT, typename SubPrevEntityExpr>
   requires(!is_crtp_base_of_v<MathExprBase, ConstantType> && !is_crtp_base_of_v<EntityExprBase, ConstantType>)
-auto operator*(const AccessorExpr<SubTaggedAccessorT, SubPrevEntityExpr> &expr, const ConstantType &c) {
+auto operator*(const AccessorExpr<SubTaggedAccessorT, SubPrevEntityExpr>& expr, const ConstantType& c) {
   auto constant_expr = ConstantMathExpr<ConstantType>(c);
   return MulExpr<AccessorExpr<SubTaggedAccessorT, SubPrevEntityExpr>, ConstantMathExpr<ConstantType>>(expr,
                                                                                                       constant_expr);
 }
 template <typename ConstantType, typename SubTaggedAccessorT, typename SubPrevEntityExpr>
   requires(!is_crtp_base_of_v<MathExprBase, ConstantType> && !is_crtp_base_of_v<EntityExprBase, ConstantType>)
-auto operator/(const AccessorExpr<SubTaggedAccessorT, SubPrevEntityExpr> &expr, const ConstantType &c) {
+auto operator/(const AccessorExpr<SubTaggedAccessorT, SubPrevEntityExpr>& expr, const ConstantType& c) {
   auto constant_expr = ConstantMathExpr<ConstantType>(c);
   return DivExpr<AccessorExpr<SubTaggedAccessorT, SubPrevEntityExpr>, ConstantMathExpr<ConstantType>>(expr,
                                                                                                       constant_expr);
@@ -1563,44 +1617,44 @@ class MathExprBase : public CachableExprBase<DerivedMathExpr> {
   constexpr MathExprBase() = default;
 
   KOKKOS_INLINE_FUNCTION
-  constexpr const DerivedMathExpr &self() const noexcept {
-    return static_cast<const DerivedMathExpr &>(*this);
+  constexpr const DerivedMathExpr& self() const noexcept {
+    return static_cast<const DerivedMathExpr&>(*this);
   }
 
   KOKKOS_INLINE_FUNCTION
-  constexpr DerivedMathExpr &self() noexcept {
-    return static_cast<DerivedMathExpr &>(*this);
+  constexpr DerivedMathExpr& self() noexcept {
+    return static_cast<DerivedMathExpr&>(*this);
   }
 
   template <size_t NumEntities, class Ctx>
-  KOKKOS_INLINE_FUNCTION auto eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities> &fmis,
-                                   const Ctx &context) const {
+  KOKKOS_INLINE_FUNCTION auto eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities>& fmis,
+                                   const Ctx& context) const {
     return self().eval(fmis, context);
   }
 
   template <typename EvalCountsType, EvalCountsType eval_counts, typename CacheType, size_t NumEntities, class Ctx>
-  KOKKOS_INLINE_FUNCTION auto cached_eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities> &fmis,
-                                          CacheType &cache, const Ctx &context) const {
+  KOKKOS_INLINE_FUNCTION auto cached_eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities>& fmis,
+                                          CacheType& cache, const Ctx& context) const {
     return self().template cached_eval<EvalCountsType, eval_counts>(fmis, cache, context);
   }
 
   template <class Ctx>
-  void propagate_synchronize(const Ctx &context) {
+  void propagate_synchronize(const Ctx& context) {
     self().propagate_synchronize(context);
   }
 
   template <class Ctx>
-  void flag_read_only(const Ctx &context) {
+  void flag_read_only(const Ctx& context) {
     self().flag_read_only(context);
   }
 
   template <class Ctx>
-  void flag_read_write(const Ctx &context) {
+  void flag_read_write(const Ctx& context) {
     self().flag_read_write(context);
   }
 
   template <class Ctx>
-  void flag_overwrite_all(const Ctx &context) {
+  void flag_overwrite_all(const Ctx& context) {
     self().flag_overwrite_all(context);
   }
 
@@ -1622,22 +1676,22 @@ class CopyExpr : public MathExprBase<CopyExpr<PrevMathExpr>> {
   static constexpr bool constrains_num_entities = true;
 
   KOKKOS_INLINE_FUNCTION
-  CopyExpr(const PrevMathExpr &prev_math_expr) : prev_math_expr_(prev_math_expr) {
+  CopyExpr(const PrevMathExpr& prev_math_expr) : prev_math_expr_(prev_math_expr) {
   }
 
   KOKKOS_INLINE_FUNCTION
-  CopyExpr(const EntityExprBase<PrevMathExpr> &prev_math_expr_base) : prev_math_expr_(prev_math_expr_base.self()) {
+  CopyExpr(const EntityExprBase<PrevMathExpr>& prev_math_expr_base) : prev_math_expr_(prev_math_expr_base.self()) {
   }
 
   template <size_t NumEntities>
-  KOKKOS_INLINE_FUNCTION auto eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities> &fmis,
-                                   const NgpEvalContext &context) const {
+  KOKKOS_INLINE_FUNCTION auto eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities>& fmis,
+                                   const NgpEvalContext& context) const {
     return copy(prev_math_expr_.eval(fmis, context));
   }
 
   template <typename EvalCountsType, EvalCountsType eval_counts, size_t NumEntities, typename OldCacheType>
-  KOKKOS_INLINE_FUNCTION auto cached_eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities> &fmis,
-                                          OldCacheType &&old_cache, const NgpEvalContext &context) const {
+  KOKKOS_INLINE_FUNCTION auto cached_eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities>& fmis,
+                                          OldCacheType&& old_cache, const NgpEvalContext& context) const {
     static_assert(has<our_tag>(eval_counts), "eval_counts must contain our tag");
 
     if constexpr (get<our_tag>(eval_counts) > 1) {
@@ -1664,22 +1718,22 @@ class CopyExpr : public MathExprBase<CopyExpr<PrevMathExpr>> {
     }
   }
 
-  void propagate_synchronize(const NgpEvalContext &context) {
+  void propagate_synchronize(const NgpEvalContext& context) {
     prev_math_expr_.flag_read_only(context);
     prev_math_expr_.propagate_synchronize(context);
   }
 
-  void flag_read_only(const NgpEvalContext & /*context*/) {
+  void flag_read_only(const NgpEvalContext& /*context*/) {
     // Nothing to do here
   }
 
-  void flag_read_write(const NgpEvalContext & /*context*/) {
+  void flag_read_write(const NgpEvalContext& /*context*/) {
     std::cout << "Warning: Attempting to write to the return type of a copy expression, which returns a "
                  "temporary value."
               << std::endl;
   }
 
-  void flag_overwrite_all(const NgpEvalContext & /*context*/) {
+  void flag_overwrite_all(const NgpEvalContext& /*context*/) {
     std::cout << "Warning: Attempting to write to the return type of a copy expression, which returns a "
                  "temporary value."
               << std::endl;
@@ -1696,56 +1750,56 @@ class CopyExpr : public MathExprBase<CopyExpr<PrevMathExpr>> {
 /* Non-member operators with ConstantMathExpr */
 template <typename ConstantType, typename SubPrevMathExpr>
   requires(!is_crtp_base_of_v<MathExprBase, ConstantType>)
-auto operator+(const ConstantType &c, const CopyExpr<SubPrevMathExpr> &expr) {
+auto operator+(const ConstantType& c, const CopyExpr<SubPrevMathExpr>& expr) {
   auto constant_expr = ConstantMathExpr<ConstantType>(c);
   return AddExpr<ConstantMathExpr<ConstantType>, CopyExpr<SubPrevMathExpr>>(constant_expr, expr);
 }
 template <typename ConstantType, typename SubPrevMathExpr>
   requires(!is_crtp_base_of_v<MathExprBase, ConstantType>)
-auto operator-(const ConstantType &c, const CopyExpr<SubPrevMathExpr> &expr) {
+auto operator-(const ConstantType& c, const CopyExpr<SubPrevMathExpr>& expr) {
   auto constant_expr = ConstantMathExpr<ConstantType>(c);
   return SubExpr<ConstantMathExpr<ConstantType>, CopyExpr<SubPrevMathExpr>>(constant_expr, expr);
 }
 template <typename ConstantType, typename SubPrevMathExpr>
   requires(!is_crtp_base_of_v<MathExprBase, ConstantType>)
-auto operator*(const ConstantType &c, const CopyExpr<SubPrevMathExpr> &expr) {
+auto operator*(const ConstantType& c, const CopyExpr<SubPrevMathExpr>& expr) {
   auto constant_expr = ConstantMathExpr<ConstantType>(c);
   return MulExpr<ConstantMathExpr<ConstantType>, CopyExpr<SubPrevMathExpr>>(constant_expr, expr);
 }
 template <typename ConstantType, typename SubPrevMathExpr>
   requires(!is_crtp_base_of_v<MathExprBase, ConstantType>)
-auto operator/(const ConstantType &c, const CopyExpr<SubPrevMathExpr> &expr) {
+auto operator/(const ConstantType& c, const CopyExpr<SubPrevMathExpr>& expr) {
   auto constant_expr = ConstantMathExpr<ConstantType>(c);
   return DivExpr<ConstantMathExpr<ConstantType>, CopyExpr<SubPrevMathExpr>>(constant_expr, expr);
 }
 template <typename ConstantType, typename SubPrevMathExpr>
   requires(!is_crtp_base_of_v<MathExprBase, ConstantType>)
-auto operator+(const CopyExpr<SubPrevMathExpr> &expr, const ConstantType &c) {
+auto operator+(const CopyExpr<SubPrevMathExpr>& expr, const ConstantType& c) {
   auto constant_expr = ConstantMathExpr<ConstantType>(c);
   return AddExpr<CopyExpr<SubPrevMathExpr>, ConstantMathExpr<ConstantType>>(expr, constant_expr);
 }
 template <typename ConstantType, typename SubPrevMathExpr>
   requires(!is_crtp_base_of_v<MathExprBase, ConstantType>)
-auto operator-(const CopyExpr<SubPrevMathExpr> &expr, const ConstantType &c) {
+auto operator-(const CopyExpr<SubPrevMathExpr>& expr, const ConstantType& c) {
   auto constant_expr = ConstantMathExpr<ConstantType>(c);
   return SubExpr<CopyExpr<SubPrevMathExpr>, ConstantMathExpr<ConstantType>>(expr, constant_expr);
 }
 template <typename ConstantType, typename SubPrevMathExpr>
   requires(!is_crtp_base_of_v<MathExprBase, ConstantType>)
-auto operator*(const CopyExpr<SubPrevMathExpr> &expr, const ConstantType &c) {
+auto operator*(const CopyExpr<SubPrevMathExpr>& expr, const ConstantType& c) {
   auto constant_expr = ConstantMathExpr<ConstantType>(c);
   return MulExpr<CopyExpr<SubPrevMathExpr>, ConstantMathExpr<ConstantType>>(expr, constant_expr);
 }
 template <typename ConstantType, typename SubPrevMathExpr>
   requires(!is_crtp_base_of_v<MathExprBase, ConstantType>)
-auto operator/(const CopyExpr<SubPrevMathExpr> &expr, const ConstantType &c) {
+auto operator/(const CopyExpr<SubPrevMathExpr>& expr, const ConstantType& c) {
   auto constant_expr = ConstantMathExpr<ConstantType>(c);
   return DivExpr<CopyExpr<SubPrevMathExpr>, ConstantMathExpr<ConstantType>>(expr, constant_expr);
 }
 
 /// \brief Deep copies the value of the given expression.
 template <typename Expr>
-auto copy(const MathExprBase<Expr> &expr) {
+auto copy(const MathExprBase<Expr>& expr) {
   return CopyExpr<Expr>(expr.self());
 }
 
@@ -1761,12 +1815,12 @@ class FusedAssignExpr : public MathExprBase<FusedAssignExpr<TrgSrcExprPairs...>>
   static constexpr bool constrains_num_entities = false;
 
   KOKKOS_INLINE_FUNCTION
-  FusedAssignExpr(const TrgSrcExprPairs &...exprs) : exprs_(core::make_tuple(exprs...)) {
+  FusedAssignExpr(const TrgSrcExprPairs&... exprs) : exprs_(core::make_tuple(exprs...)) {
   }
 
   template <size_t NumEntities>
-  KOKKOS_INLINE_FUNCTION void eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities> &fmis,
-                                   const NgpEvalContext &context) const {
+  KOKKOS_INLINE_FUNCTION void eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities>& fmis,
+                                   const NgpEvalContext& context) const {
     // Eval all expressions, storing their results for later.
     auto all_values = impl::expr_chain(exprs_, fmis, context);
 
@@ -1775,8 +1829,8 @@ class FusedAssignExpr : public MathExprBase<FusedAssignExpr<TrgSrcExprPairs...>>
   }
 
   template <typename EvalCountsType, EvalCountsType eval_counts, size_t NumEntities, typename OldCacheType>
-  KOKKOS_INLINE_FUNCTION void cached_eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities> &fmis,
-                                          OldCacheType &&old_cache, const NgpEvalContext &context) const {
+  KOKKOS_INLINE_FUNCTION void cached_eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities>& fmis,
+                                          OldCacheType&& old_cache, const NgpEvalContext& context) const {
     static_assert(!core::aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>,
                   "The cache somehow contains our tag, but our eval returns void and should never cache anything.");
 
@@ -1788,22 +1842,22 @@ class FusedAssignExpr : public MathExprBase<FusedAssignExpr<TrgSrcExprPairs...>>
     set_impl(all_values, std::make_index_sequence<2 * num_pairs>{});
   }
 
-  void flag_read_only(const NgpEvalContext & /*context*/) {
+  void flag_read_only(const NgpEvalContext& /*context*/) {
     MUNDY_THROW_ASSERT(false, std::logic_error,
                        "Attempting to read the return type of an assignment expression, which returns void.");
   }
 
-  void flag_read_write(const NgpEvalContext & /*context*/) {
+  void flag_read_write(const NgpEvalContext& /*context*/) {
     MUNDY_THROW_ASSERT(false, std::logic_error,
                        "Attempting to read the return type of an assignment expression, which returns void.");
   }
 
-  void flag_overwrite_all(const NgpEvalContext & /*context*/) {
+  void flag_overwrite_all(const NgpEvalContext& /*context*/) {
     MUNDY_THROW_ASSERT(false, std::logic_error,
                        "Attempting to write to the return type of an assignment expression, which returns void.");
   }
 
-  void propagate_synchronize(const NgpEvalContext &context) {
+  void propagate_synchronize(const NgpEvalContext& context) {
     propagate_synchronize_impl(std::make_index_sequence<num_pairs>{}, context);
   }
 
@@ -1814,13 +1868,13 @@ class FusedAssignExpr : public MathExprBase<FusedAssignExpr<TrgSrcExprPairs...>>
 
   //  private:
   template <typename AllValuesType, size_t... Is>
-  KOKKOS_INLINE_FUNCTION static void set_impl(AllValuesType &all_values, std::index_sequence<Is...>) {
+  KOKKOS_INLINE_FUNCTION static void set_impl(AllValuesType& all_values, std::index_sequence<Is...>) {
     static_assert(sizeof...(Is) == 2 * num_pairs, "Index sequence size must match number of target + source exprs.");
     (set_i_impl<Is>(all_values), ...);
   }
 
   template <size_t I, typename AllValuesType>
-  KOKKOS_INLINE_FUNCTION static void set_i_impl(AllValuesType &all_values) {
+  KOKKOS_INLINE_FUNCTION static void set_i_impl(AllValuesType& all_values) {
     // I = 0, 1, 2, 3
     // 0 % 2 -> 0
     // 1 % 2 -> 1
@@ -1831,7 +1885,7 @@ class FusedAssignExpr : public MathExprBase<FusedAssignExpr<TrgSrcExprPairs...>>
   }
 
   template <size_t... Is, typename Ctx>
-  void propagate_synchronize_impl(std::index_sequence<Is...>, const Ctx &context) {
+  void propagate_synchronize_impl(std::index_sequence<Is...>, const Ctx& context) {
     static_assert(sizeof...(Is) == num_pairs, "Index sequence size must match number of target/source pairs.");
 
     // Flag all right hand sides as read-only and all left hand sides as overwrite-all.
@@ -1853,7 +1907,7 @@ class FusedAssignExpr : public MathExprBase<FusedAssignExpr<TrgSrcExprPairs...>>
 ///               ...
 ///      trg_exprN, /*=*/ src_exprN);
 template <typename... TrgSrcExprPairs>
-void fused_assign(const TrgSrcExprPairs &...exprs) {
+void fused_assign(const TrgSrcExprPairs&... exprs) {
   constexpr size_t num_trg_src_pairs = sizeof...(TrgSrcExprPairs);
   static_assert(num_trg_src_pairs % 2 == 0,
                 "The number of target/source expression pairs in fused_assign must be even.");
@@ -1863,16 +1917,16 @@ void fused_assign(const TrgSrcExprPairs &...exprs) {
 
 /// \brief Reduces value of a given expression over all entities in the driver on this process
 template <typename Expr, typename ReductionOp>
- requires (is_crtp_base_of_v<MathExprBase, Expr> || is_crtp_base_of_v<EntityExprBase, Expr>)
-void reduce_local(Expr &&expr, ReductionOp &reduction) {
+  requires(is_crtp_base_of_v<MathExprBase, Expr> || is_crtp_base_of_v<EntityExprBase, Expr>)
+void reduce_local(Expr&& expr, ReductionOp& reduction) {
   auto driver = expr.driver();
   driver->reduce_local(expr, reduction);
 }
 
 /// \brief Reduce sum (process local)
 template <typename Scalar, typename Expr>
- requires (is_crtp_base_of_v<MathExprBase, Expr> || is_crtp_base_of_v<EntityExprBase, Expr>)
-auto reduce_local_sum(Expr &&expr) {
+  requires(is_crtp_base_of_v<MathExprBase, Expr> || is_crtp_base_of_v<EntityExprBase, Expr>)
+auto reduce_local_sum(Expr&& expr) {
   Scalar local_sum = 0;
   Kokkos::Sum<Scalar> sum_reduction(local_sum);
   reduce_local(std::forward<Expr>(expr), sum_reduction);
@@ -1881,8 +1935,8 @@ auto reduce_local_sum(Expr &&expr) {
 
 /// \brief Reduce max (process local)
 template <typename Scalar, typename Expr>
- requires (is_crtp_base_of_v<MathExprBase, Expr> || is_crtp_base_of_v<EntityExprBase, Expr>)
-auto reduce_local_max(Expr &&expr) {
+  requires(is_crtp_base_of_v<MathExprBase, Expr> || is_crtp_base_of_v<EntityExprBase, Expr>)
+auto reduce_local_max(Expr&& expr) {
   Scalar local_max;
   Kokkos::Max<Scalar> max_reduction(local_max);
   reduce_local(std::forward<Expr>(expr), max_reduction);
@@ -1891,8 +1945,8 @@ auto reduce_local_max(Expr &&expr) {
 
 /// \brief Reduce min (process local)
 template <typename Scalar, typename Expr>
- requires (is_crtp_base_of_v<MathExprBase, Expr> || is_crtp_base_of_v<EntityExprBase, Expr>)
-auto reduce_local_min(Expr &&expr) {
+  requires(is_crtp_base_of_v<MathExprBase, Expr> || is_crtp_base_of_v<EntityExprBase, Expr>)
+auto reduce_local_min(Expr&& expr) {
   Scalar local_min;
   Kokkos::Min<Scalar> min_reduction(local_min);
   reduce_local(std::forward<Expr>(expr), min_reduction);
@@ -1901,9 +1955,9 @@ auto reduce_local_min(Expr &&expr) {
 
 /// \brief Reduces sum (all processes)
 template <typename Scalar, typename Expr>
- requires (is_crtp_base_of_v<MathExprBase, Expr> || is_crtp_base_of_v<EntityExprBase, Expr>)
-auto all_reduce_sum(Expr &&expr) {
-  auto *driver = expr.driver();
+  requires(is_crtp_base_of_v<MathExprBase, Expr> || is_crtp_base_of_v<EntityExprBase, Expr>)
+auto all_reduce_sum(Expr&& expr) {
+  auto* driver = expr.driver();
   Scalar local_sum = reduce_local_sum<Scalar>(std::forward<Expr>(expr));
   Scalar global_sum = 0;
   stk::all_reduce_sum(driver->bulk_data().parallel(), &local_sum, &global_sum, 1);
@@ -1912,9 +1966,9 @@ auto all_reduce_sum(Expr &&expr) {
 
 /// \brief Reduces max (all processes)
 template <typename Scalar, typename Expr>
- requires (is_crtp_base_of_v<MathExprBase, Expr> || is_crtp_base_of_v<EntityExprBase, Expr>)
-auto all_reduce_max(Expr &&expr) {
-  auto *driver = expr.driver();
+  requires(is_crtp_base_of_v<MathExprBase, Expr> || is_crtp_base_of_v<EntityExprBase, Expr>)
+auto all_reduce_max(Expr&& expr) {
+  auto* driver = expr.driver();
   Scalar local_max = reduce_local_max<Scalar>(std::forward<Expr>(expr));
   Scalar global_max = 0;
   stk::all_reduce_max(driver->bulk_data().parallel(), &local_max, &global_max, 1);
@@ -1923,9 +1977,9 @@ auto all_reduce_max(Expr &&expr) {
 
 /// \brief Reduces min (all processes)
 template <typename Scalar, typename Expr>
- requires (is_crtp_base_of_v<MathExprBase, Expr> || is_crtp_base_of_v<EntityExprBase, Expr>)
-auto all_reduce_min(Expr &&expr) {
-  auto *driver = expr.driver();
+  requires(is_crtp_base_of_v<MathExprBase, Expr> || is_crtp_base_of_v<EntityExprBase, Expr>)
+auto all_reduce_min(Expr&& expr) {
+  auto* driver = expr.driver();
   Scalar local_min = reduce_local_min<Scalar>(std::forward<Expr>(expr));
   Scalar global_min = 0;
   stk::all_reduce_min(driver->bulk_data().parallel(), &local_min, &global_min, 1);

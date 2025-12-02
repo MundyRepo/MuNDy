@@ -469,12 +469,10 @@ TEST_F(UnitTestAccessorExprFixture, field_fill) {
 
   stk::mesh::Selector b1_not_b2 = block1_selector_ - block2_selector_;
   auto x = make_tagged_component<XTag, stk::topology::NODE_RANK>(ScalarFieldComponent(*field_x_ptr_));
-  auto ngp_x = get_updated_ngp_component(x);
-  auto ngp_mesh = get_updated_ngp_mesh(get_bulk());
 
   {
     auto es = make_entity_expr(get_bulk(), b1_not_b2, stk::topology::NODE_RANK);
-    ngp_x(es) = fill_value;
+    x(es) = fill_value;
   }
 
   check_field_data_on_host_func<1>("fill_field does not fill.", get_bulk(), *field_x_ptr_, b1_not_b2, {},
@@ -502,14 +500,9 @@ TEST_F(UnitTestAccessorExprFixture, field_copy) {
   auto x = make_tagged_component<XTag, stk::topology::NODE_RANK>(ScalarFieldComponent(*field_x_ptr_));
   auto y = make_tagged_component<YTag, stk::topology::NODE_RANK>(ScalarFieldComponent(*field_y_ptr_));
 
-  auto ngp_x = get_updated_ngp_component(x);
-  auto ngp_y = get_updated_ngp_component(y);
-
-  auto ngp_mesh = get_updated_ngp_mesh(get_bulk());
-
   {
     auto es = make_entity_expr(get_bulk(), b1_not_b2, stk::topology::NODE_RANK);
-    ngp_x(es) = ngp_y(es);
+    x(es) = y(es);
   }
 
   check_field_data_on_host_func<1>("field copy error. x", get_bulk(), *field_x_ptr_, b1_not_b2, {}, get_field_y_func());
@@ -540,18 +533,13 @@ TEST_F(UnitTestAccessorExprFixture, field_swap) {
   auto x = make_tagged_component<XTag, stk::topology::NODE_RANK>(ScalarFieldComponent(*field_x_ptr_));
   auto y = make_tagged_component<YTag, stk::topology::NODE_RANK>(ScalarFieldComponent(*field_y_ptr_));
 
-  auto ngp_x = get_updated_ngp_component(x);
-  auto ngp_y = get_updated_ngp_component(y);
-
-  auto ngp_mesh = get_updated_ngp_mesh(get_bulk());
-
   {
     auto es = make_entity_expr(get_bulk(), b1_not_b2, stk::topology::NODE_RANK);
 
     // fused_assign evaluates all right hand sides before assigning them to the left hand sides.
     // This is the same as python's syntax: x, y = y, x.
     //
-    // You must still use copy because since the result of ngp_x(es) is a view, so the stashed rhs is a copy of a view.
+    // You must still use copy because since the result of x(es) is a view, so the stashed rhs is a copy of a view.
     // y_view_copy = y_view
     // x_view_copy = x_view
     // x_view[0] = y_view_copy[0]
@@ -564,8 +552,8 @@ TEST_F(UnitTestAccessorExprFixture, field_swap) {
     // y_view[0] = x_copy[0]
     //
     // Should we do this automatically in fused_assign if the rhs is an AccessorExpr?
-    fused_assign(ngp_x(es), /*=*/copy(ngp_y(es)),  //
-                 ngp_y(es), /*=*/copy(ngp_x(es)));
+    fused_assign(x(es), /*=*/copy(y(es)),  //
+                 y(es), /*=*/copy(x(es)));
   }
 
   check_field_data_on_host_func<1>("field_swap error. x", get_bulk(), *field_x_ptr_, b1_not_b2, {}, get_field_y_func());
@@ -600,12 +588,10 @@ TEST_F(UnitTestAccessorExprFixture, field_scale) {
 
   stk::mesh::Selector b1_not_b2 = block1_selector_ - block2_selector_;
   auto x = make_tagged_component<XTag, stk::topology::NODE_RANK>(ScalarFieldComponent(*field_x_ptr_));
-  auto ngp_x = get_updated_ngp_component(x);
-  auto ngp_mesh = get_updated_ngp_mesh(get_bulk());
 
   {
     auto es = make_entity_expr(get_bulk(), b1_not_b2, stk::topology::NODE_RANK);
-    ngp_x(es) *= alpha;
+    x(es) *= alpha;
   }
 
   check_field_data_on_host_func<1>("field_scale does not fill.", get_bulk(), *field_x_ptr_, b1_not_b2, {},
@@ -640,14 +626,9 @@ TEST_F(UnitTestAccessorExprFixture, field_product) {
   auto y = make_tagged_component<YTag, stk::topology::NODE_RANK>(ScalarFieldComponent(*field_y_ptr_));
   auto z = make_tagged_component<ZTag, stk::topology::NODE_RANK>(ScalarFieldComponent(*field_z_ptr_));
 
-  auto ngp_x = get_updated_ngp_component(x);
-  auto ngp_y = get_updated_ngp_component(y);
-  auto ngp_z = get_updated_ngp_component(z);
-  auto ngp_mesh = get_updated_ngp_mesh(get_bulk());
-
   {
     auto es = make_entity_expr(get_bulk(), b1_not_b2, stk::topology::NODE_RANK);
-    ngp_z(es) = ngp_x(es) * ngp_y(es);
+    z(es) = x(es) * y(es);
   }
 
   check_field_data_on_host_func<1>("field_product error. x", get_bulk(), *field_x_ptr_, b1_not_b2, {},
@@ -692,13 +673,9 @@ TEST_F(UnitTestAccessorExprFixture, field_axpby) {
   auto x = make_tagged_component<XTag, stk::topology::NODE_RANK>(ScalarFieldComponent(*field_x_ptr_));
   auto y = make_tagged_component<YTag, stk::topology::NODE_RANK>(ScalarFieldComponent(*field_y_ptr_));
 
-  auto ngp_x = get_updated_ngp_component(x);
-  auto ngp_y = get_updated_ngp_component(y);
-  auto ngp_mesh = get_updated_ngp_mesh(get_bulk());
-
   {
     auto es = make_entity_expr(get_bulk(), b1_not_b2, stk::topology::NODE_RANK);
-    ngp_y(es) = alpha * ngp_x(es) + beta * ngp_y(es);
+    y(es) = alpha * x(es) + beta * y(es);
   }
 
   check_field_data_on_host_func<1>("field_axpby error. x", get_bulk(), *field_x_ptr_, b1_not_b2, {},
@@ -881,13 +858,8 @@ TEST_F(UnitTestAccessorExprFixture, field_dot) {
   auto x = make_tagged_component<XTag, stk::topology::NODE_RANK>(ScalarFieldComponent(*field_x_ptr_));
   auto y = make_tagged_component<YTag, stk::topology::NODE_RANK>(ScalarFieldComponent(*field_y_ptr_));
 
-  auto ngp_x = get_updated_ngp_component(x);
-  auto ngp_y = get_updated_ngp_component(y);
-
-  auto ngp_mesh = get_updated_ngp_mesh(get_bulk());
-
   auto es = make_entity_expr(get_bulk(), b1_not_b2, stk::topology::NODE_RANK);
-  double actual_dot = all_reduce_sum<double>(ngp_x(es) * ngp_y(es));
+  double actual_dot = all_reduce_sum<double>(x(es) * y(es));
   double expected_dot = host_direct_field_dot<1>(get_bulk(), *field_x_ptr_, *field_y_ptr_, b1_not_b2);
   EXPECT_NEAR(actual_dot, expected_dot, 1.0e-12);
 }
@@ -911,11 +883,6 @@ TEST_F(UnitTestAccessorExprFixture, quick_perf_test_against_blas) {
   auto x = make_tagged_component<XTag, stk::topology::NODE_RANK>(ScalarFieldComponent(*field_x_ptr_));
   auto y = make_tagged_component<YTag, stk::topology::NODE_RANK>(ScalarFieldComponent(*field_y_ptr_));
 
-  auto ngp_x = get_updated_ngp_component(x);
-  auto ngp_y = get_updated_ngp_component(y);
-
-  auto ngp_mesh = get_updated_ngp_mesh(get_bulk());
-
   auto es = make_entity_expr(get_bulk(), b1_not_b2, stk::topology::NODE_RANK);
 
   unsigned num_warmups = 10;
@@ -926,12 +893,12 @@ TEST_F(UnitTestAccessorExprFixture, quick_perf_test_against_blas) {
   double elapsed_blas = 0;
   for (unsigned i = 0; i < num_replicates + num_warmups; ++i) {
     if (i < num_warmups) {
-      double actual_dot = all_reduce_sum<double>(ngp_x(es) * ngp_y(es));
+      double actual_dot = all_reduce_sum<double>(x(es) * y(es));
       double expected_dot = field_dot<double>(*field_x_ptr_, *field_y_ptr_, b1_not_b2, stk::ngp::ExecSpace());
       EXPECT_NEAR(actual_dot, expected_dot, 1.0e-10);
       timer.reset();
     } else {
-      double actual_dot = all_reduce_sum<double>(ngp_x(es) * ngp_y(es));
+      double actual_dot = all_reduce_sum<double>(x(es) * y(es));
       Kokkos::fence();
       elapsed_expr += timer.seconds();
       timer.reset();

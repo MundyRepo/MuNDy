@@ -576,6 +576,12 @@ class DeclareEntitiesHelper {
   //! \name Actions
   //@{
 
+  /// \brief Reserve space for nodes and elements to avoid reallocations.
+  void reserve(const size_t num_nodes, const size_t num_elements) {
+    node_info_vec_.reserve(num_nodes);
+    elem_info_vec_.reserve(num_elements);
+  }
+
   /// \brief Create a new NodeBuilder for hierarchical construction of a node (not thread safe).
   /// NodeBuilder views our internal data, so we will automatically know about modifications to the node.
   ///

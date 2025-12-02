@@ -122,24 +122,18 @@ struct Bounded {
 namespace impl {
 
 template <class Op, typename Scalar>
-concept DenseMatView =
-  Kokkos::is_view_v<Op> &&
-  requires {
-    // These are checked in constraint context:
-    { std::remove_reference_t<Op>::rank } -> std::convertible_to<int>;
-    typename std::remove_reference_t<Op>::non_const_value_type;
-  } &&
-  (std::remove_reference_t<Op>::rank == 2) &&
-  std::is_convertible_v<
-    typename std::remove_reference_t<Op>::non_const_value_type,
-    Scalar
-  >;
+concept DenseMatView = Kokkos::is_view_v<Op> &&
+                       requires {
+                         // These are checked in constraint context:
+                         { std::remove_reference_t<Op>::rank } -> std::convertible_to<int>;
+                         typename std::remove_reference_t<Op>::non_const_value_type;
+                       } && (std::remove_reference_t<Op>::rank == 2) &&
+                       std::is_convertible_v<typename std::remove_reference_t<Op>::non_const_value_type, Scalar>;
 
 template <class Op, typename VectorView>
-concept HasApplyMember =
-  requires(const Op& op, const VectorView& x, VectorView& y) {
-    { op.apply(x, y) } -> std::same_as<void>;
-  };
+concept HasApplyMember = requires(const Op& op, const VectorView& x, VectorView& y) {
+  { op.apply(x, y) } -> std::same_as<void>;
+};
 
 }  // namespace impl
 

@@ -889,6 +889,14 @@ class TaggedComponent {
     return component_(entity);
   }
 
+  /// \brief Calling operator()(entity_expr) on any accessor will return an AccessorExpr
+  /// Example:
+  ///   auto v3_accessor = Vector3FieldComponent(v3_field);
+  ///   EntityExpr all_nodes(node_selector, stk::topology::NODE_RANK);
+  ///   auto get_v3_expr = v3_accessor(all_nodes);
+  template <class EntityExpr>
+  auto operator()(const EntityExprBase<EntityExpr>& e) const;
+
   inline const component_type& component() const {
     // Our lifetime should be at least as long as the component's
     return component_;
@@ -1065,6 +1073,20 @@ decltype(auto) get_updated_ngp_component(const TaggedComponent<Tag, our_rank, Co
   auto ngp_component = get_updated_ngp_component(tagged_component.component());
   using ngp_component_type = std::remove_reference_t<decltype(ngp_component)>;
   return NgpTaggedComponent<Tag, our_rank, ngp_component_type>(ngp_component);
+}
+
+template <typename Tag, stk::topology::rank_t our_rank, typename ComponentType>
+template <class EntityExpr>
+auto TaggedComponent<Tag, our_rank, ComponentType>::operator()(const EntityExprBase<EntityExpr>& e) const {
+  MUNDY_THROW_REQUIRE(e.rank() == rank, std::runtime_error,
+                      fmt::format("Attempting to access field of rank {} on entity expression of rank {}",
+                                  rank, e.rank()));
+  
+  // Entity expressions are (currently) always on the device, so we need to get the NGP tagged component
+  // TODO(palmerb4): Allow for exec_spaces that aren't simply the default execution space (need Tril 16.1+)
+  [[maybe_used]] auto exec_space = e.driver()->exec_space();
+  auto ngp_this = get_updated_ngp_component(*this);
+  return ngp_this(e.self());
 }
 
 namespace agg_impl {
