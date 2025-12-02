@@ -1695,8 +1695,8 @@ KOKKOS_INLINE_FUNCTION constexpr auto frobenius_norm(const AMatrix<T, N, M, Acce
 
 /// \brief AMatrix infinity norm
 template <size_t N, size_t M, typename T, ValidAccessor<T> Accessor, typename OwnershipType>
-KOKKOS_INLINE_FUNCTION constexpr auto infinity_norm(const AMatrix<T, N, M, Accessor, OwnershipType>& mat) {
-  return impl::infinity_norm_impl(std::make_index_sequence<N>{}, mat);
+KOKKOS_INLINE_FUNCTION constexpr auto inf_norm(const AMatrix<T, N, M, Accessor, OwnershipType>& mat) {
+  return impl::inf_norm_impl(std::make_index_sequence<N>{}, mat);
 }
 
 /// \brief AMatrix 1-norm

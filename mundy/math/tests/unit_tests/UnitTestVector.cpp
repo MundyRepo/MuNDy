@@ -568,7 +568,7 @@ TYPED_TEST(VectorPairwiseTypeTest, SpecialOperations) {
   is_close_debug(dot(v1, v2), static_cast<C>(2.0), "Dot product failed.");
   is_close_debug(norm(v1), static_cast<C>(1.0), "Norm failed.");
   is_close_debug(norm_squared(v1), static_cast<C>(1.0), "Norm squared failed.");
-  is_close_debug(infinity_norm(v1), static_cast<C>(1.0), "Infinity norm failed.");
+  is_close_debug(inf_norm(v1), static_cast<C>(1.0), "Infinity norm failed.");
   is_close_debug(one_norm(v1), static_cast<C>(1.0), "One norm failed.");
   is_close_debug(two_norm(v1), static_cast<C>(1.0), "Two norm failed.");
   is_close_debug(two_norm_squared(v1), static_cast<C>(1.0), "Two norm squared failed.");
@@ -581,7 +581,7 @@ TYPED_TEST(VectorPairwiseTypeTest, SpecialOperations) {
   is_close_debug(dot(v3, v4), static_cast<C>(11.0), "Dot product failed.");
   is_close_debug(norm(v3), static_cast<C>(std::sqrt(5.0)), "Norm failed.");
   is_close_debug(norm_squared(v3), static_cast<C>(5.0), "Norm squared failed.");
-  is_close_debug(infinity_norm(v3), static_cast<C>(2.0), "Infinity norm failed.");
+  is_close_debug(inf_norm(v3), static_cast<C>(2.0), "Infinity norm failed.");
   is_close_debug(one_norm(v3), static_cast<C>(3.0), "One norm failed.");
   is_close_debug(two_norm(v3), static_cast<C>(std::sqrt(5.0)), "Two norm failed.");
   is_close_debug(two_norm_squared(v3), static_cast<C>(5.0), "Two norm squared failed.");
@@ -596,7 +596,7 @@ TYPED_TEST(VectorPairwiseTypeTest, SpecialOperations) {
   is_close_debug(dot(v5, v6), static_cast<C>(32.0), "Dot product failed.");
   is_close_debug(norm(v5), static_cast<C>(std::sqrt(14.0)), "Norm failed.");
   is_close_debug(norm_squared(v5), static_cast<C>(14.0), "Norm squared failed.");
-  is_close_debug(infinity_norm(v5), static_cast<C>(3.0), "Infinity norm failed.");
+  is_close_debug(inf_norm(v5), static_cast<C>(3.0), "Infinity norm failed.");
   is_close_debug(one_norm(v5), static_cast<C>(6.0), "One norm failed.");
   is_close_debug(two_norm(v5), static_cast<C>(std::sqrt(14.0)), "Two norm failed.");
   is_close_debug(two_norm_squared(v5), static_cast<C>(14.0), "Two norm squared failed.");

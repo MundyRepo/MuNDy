@@ -1180,15 +1180,15 @@ class AssignExpr : public MathExprBase<AssignExpr<TargetExpr, SourceExpr>> {
     }                                                                                                                 \
                                                                                                                       \
     void flag_read_write(const NgpEvalContext& /*context*/) {                                                         \
-      std::cout << "Warning: Attempting to write to the return type of a binary expression, which returns a "         \
-                   "temporary value."                                                                                 \
-                << std::endl;                                                                                         \
+      MUNDY_THROW_ASSERT(                                                                                             \
+          false, std::logic_error,                                                                                    \
+          "Attempting to write to the return type of a binary expression, which returns a temporary value.");         \
     }                                                                                                                 \
                                                                                                                       \
     void flag_overwrite_all(const NgpEvalContext& /*context*/) {                                                      \
-      std::cout << "Warning: Attempting to write to the return type of a binary expression, which returns a "         \
-                   "temporary value."                                                                                 \
-                << std::endl;                                                                                         \
+      MUNDY_THROW_ASSERT(                                                                                             \
+          false, std::logic_error,                                                                                    \
+          "Attempting to write to the return type of a binary expression, which returns a temporary value.");         \
     }                                                                                                                 \
                                                                                                                       \
     const auto driver() const {                                                                                       \
@@ -1216,55 +1216,389 @@ class AssignExpr : public MathExprBase<AssignExpr<TargetExpr, SourceExpr>> {
     RightMathExpr right_;                                                                                             \
   };
 
-#define MUNDY_ACCESSOR_NON_MEMBER_OP_WITH_CONSTANT(OpName)                                                        \
-  /* Non-member operators with ConstantMathExpr */                                                                \
-  template <typename ConstantType, typename SubLeftExpr, typename SubRightExpr>                                   \
-    requires(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                      \
-  auto operator+(const ConstantType& c, const OpName##Expr<SubLeftExpr, SubRightExpr>& expr) {                    \
-    auto constant_expr = ConstantMathExpr<ConstantType>(c);                                                       \
-    return AddExpr<ConstantMathExpr<ConstantType>, OpName##Expr<SubLeftExpr, SubRightExpr>>(constant_expr, expr); \
-  }                                                                                                               \
-  template <typename ConstantType, typename SubLeftExpr, typename SubRightExpr>                                   \
-    requires(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                      \
-  auto operator-(const ConstantType& c, const OpName##Expr<SubLeftExpr, SubRightExpr>& expr) {                    \
-    auto constant_expr = ConstantMathExpr<ConstantType>(c);                                                       \
-    return SubExpr<ConstantMathExpr<ConstantType>, OpName##Expr<SubLeftExpr, SubRightExpr>>(constant_expr, expr); \
-  }                                                                                                               \
-  template <typename ConstantType, typename SubLeftExpr, typename SubRightExpr>                                   \
-    requires(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                      \
-  auto operator*(const ConstantType& c, const OpName##Expr<SubLeftExpr, SubRightExpr>& expr) {                    \
-    auto constant_expr = ConstantMathExpr<ConstantType>(c);                                                       \
-    return MulExpr<ConstantMathExpr<ConstantType>, OpName##Expr<SubLeftExpr, SubRightExpr>>(constant_expr, expr); \
-  }                                                                                                               \
-  template <typename ConstantType, typename SubLeftExpr, typename SubRightExpr>                                   \
-    requires(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                      \
-  auto operator/(const ConstantType& c, const OpName##Expr<SubLeftExpr, SubRightExpr>& expr) {                    \
-    auto constant_expr = ConstantMathExpr<ConstantType>(c);                                                       \
-    return DivExpr<ConstantMathExpr<ConstantType>, OpName##Expr<SubLeftExpr, SubRightExpr>>(constant_expr, expr); \
-  }                                                                                                               \
-  template <typename ConstantType, typename SubLeftExpr, typename SubRightExpr>                                   \
-    requires(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                      \
-  auto operator+(const OpName##Expr<SubLeftExpr, SubRightExpr>& expr, const ConstantType& c) {                    \
-    auto constant_expr = ConstantMathExpr<ConstantType>(c);                                                       \
-    return AddExpr<OpName##Expr<SubLeftExpr, SubRightExpr>, ConstantMathExpr<ConstantType>>(expr, constant_expr); \
-  }                                                                                                               \
-  template <typename ConstantType, typename SubLeftExpr, typename SubRightExpr>                                   \
-    requires(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                      \
-  auto operator-(const OpName##Expr<SubLeftExpr, SubRightExpr>& expr, const ConstantType& c) {                    \
-    auto constant_expr = ConstantMathExpr<ConstantType>(c);                                                       \
-    return SubExpr<OpName##Expr<SubLeftExpr, SubRightExpr>, ConstantMathExpr<ConstantType>>(expr, constant_expr); \
-  }                                                                                                               \
-  template <typename ConstantType, typename SubLeftExpr, typename SubRightExpr>                                   \
-    requires(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                      \
-  auto operator*(const OpName##Expr<SubLeftExpr, SubRightExpr>& expr, const ConstantType& c) {                    \
-    auto constant_expr = ConstantMathExpr<ConstantType>(c);                                                       \
-    return MulExpr<OpName##Expr<SubLeftExpr, SubRightExpr>, ConstantMathExpr<ConstantType>>(expr, constant_expr); \
-  }                                                                                                               \
-  template <typename ConstantType, typename SubLeftExpr, typename SubRightExpr>                                   \
-    requires(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                      \
-  auto operator/(const OpName##Expr<SubLeftExpr, SubRightExpr>& expr, const ConstantType& c) {                    \
-    auto constant_expr = ConstantMathExpr<ConstantType>(c);                                                       \
-    return DivExpr<OpName##Expr<SubLeftExpr, SubRightExpr>, ConstantMathExpr<ConstantType>>(expr, constant_expr); \
+/// \brief Create an expression for applying a function on the read only result of a math expression
+/// Single argument version
+#define MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(ExprClassName, FuncName, Func)                                          \
+  template <typename PrevMathExpr>                                                                                 \
+  class ExprClassName##Expr : public MathExprBase<ExprClassName##Expr<PrevMathExpr>> {                             \
+   public:                                                                                                         \
+    using our_t = ExprClassName##Expr<PrevMathExpr>;                                                               \
+    using our_tag = typename MathExprBase<ExprClassName##Expr<PrevMathExpr>>::our_tag;                             \
+    using sub_expressions_t = core::tuple<PrevMathExpr>;                                                           \
+    static constexpr bool constrains_num_entities = true;                                                          \
+                                                                                                                   \
+    KOKKOS_INLINE_FUNCTION                                                                                         \
+    ExprClassName##Expr(const PrevMathExpr& prev_math_expr) : prev_math_expr_(prev_math_expr) {                    \
+    }                                                                                                              \
+                                                                                                                   \
+    KOKKOS_INLINE_FUNCTION                                                                                         \
+    ExprClassName##Expr(const EntityExprBase<PrevMathExpr>& prev_math_expr_base)                                   \
+        : prev_math_expr_(prev_math_expr_base.self()) {                                                            \
+    }                                                                                                              \
+                                                                                                                   \
+    template <typename OtherExpr>                                                                                  \
+    auto operator+(const MathExprBase<OtherExpr>& other) const {                                                   \
+      return AddExpr<our_t, OtherExpr>(*this, other.self());                                                       \
+    }                                                                                                              \
+                                                                                                                   \
+    template <typename OtherExpr>                                                                                  \
+    auto operator-(const MathExprBase<OtherExpr>& other) const {                                                   \
+      return SubExpr<our_t, OtherExpr>(*this, other.self());                                                       \
+    }                                                                                                              \
+                                                                                                                   \
+    template <typename OtherExpr>                                                                                  \
+    auto operator*(const MathExprBase<OtherExpr>& other) const {                                                   \
+      return MulExpr<our_t, OtherExpr>(*this, other.self());                                                       \
+    }                                                                                                              \
+                                                                                                                   \
+    template <typename OtherExpr>                                                                                  \
+    auto operator/(const MathExprBase<OtherExpr>& other) const {                                                   \
+      return DivExpr<our_t, OtherExpr>(*this, other.self());                                                       \
+    }                                                                                                              \
+                                                                                                                   \
+    template <size_t NumEntities>                                                                                  \
+    KOKKOS_INLINE_FUNCTION auto eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities>& fmis,             \
+                                     const NgpEvalContext& context) const {                                        \
+      return Func(prev_math_expr_.eval(fmis, context));                                                            \
+    }                                                                                                              \
+                                                                                                                   \
+    template <typename EvalCountsType, EvalCountsType eval_counts, size_t NumEntities, typename OldCacheType>      \
+    KOKKOS_INLINE_FUNCTION auto cached_eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities>& fmis,      \
+                                            OldCacheType&& old_cache, const NgpEvalContext& context) const {       \
+      static_assert(has<our_tag>(eval_counts), "eval_counts must contain our tag");                                \
+                                                                                                                   \
+      if constexpr (get<our_tag>(eval_counts) > 1) {                                                               \
+        if constexpr (core::aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>) {                     \
+          /* The fact that our tag exists in the old cache means that our eval has cached its result before, means \
+           * that */                                                                                               \
+          /* our eval has cached its result before. Return the cached value */                                     \
+          auto cache = std::forward<OldCacheType>(old_cache);                                                      \
+          auto val = get<our_tag>(cache);                                                                          \
+          return Kokkos::make_pair(val, cache);                                                                    \
+        } else {                                                                                                   \
+          /* Eval our subexpressions first, allowing them to cache their results if necessary */                   \
+          auto [arg, new_cache] = prev_math_expr_.template cached_eval<EvalCountsType, eval_counts>(               \
+              fmis, std::forward<OldCacheType>(old_cache), context);                                               \
+          auto val = Func(arg);                                                                                    \
+          auto newer_cache = append<our_tag>(std::move(new_cache), val);                                           \
+          return Kokkos::make_pair(val, newer_cache);                                                              \
+        }                                                                                                          \
+      } else {                                                                                                     \
+        /* Eval our subexpressions first, allowing them to cache their results if necessary */                     \
+        auto [arg, new_cache] = prev_math_expr_.template cached_eval<EvalCountsType, eval_counts>(                 \
+            fmis, std::forward<OldCacheType>(old_cache), context);                                                 \
+        auto val = Func(arg);                                                                                      \
+        return Kokkos::make_pair(val, new_cache);                                                                  \
+      }                                                                                                            \
+    }                                                                                                              \
+                                                                                                                   \
+    void propagate_synchronize(const NgpEvalContext& context) {                                                    \
+      prev_math_expr_.flag_read_only(context);                                                                     \
+      prev_math_expr_.propagate_synchronize(context);                                                              \
+    }                                                                                                              \
+                                                                                                                   \
+    void flag_read_only(const NgpEvalContext& /*context*/) {                                                       \
+      /* Nothing to do here */                                                                                     \
+    }                                                                                                              \
+                                                                                                                   \
+    void flag_read_write(const NgpEvalContext& /*context*/) {                                                      \
+      MUNDY_THROW_ASSERT(                                                                                          \
+          false, std::logic_error,                                                                                 \
+          "Attempting to write to the return type of a copy expression, which returns a temporary value.");        \
+    }                                                                                                              \
+                                                                                                                   \
+    void flag_overwrite_all(const NgpEvalContext& /*context*/) {                                                   \
+      MUNDY_THROW_ASSERT(                                                                                          \
+          false, std::logic_error,                                                                                 \
+          "Attempting to write to the return type of a copy expression, which returns a temporary value.");        \
+    }                                                                                                              \
+                                                                                                                   \
+    auto driver() const {                                                                                          \
+      return prev_math_expr_.driver();                                                                             \
+    }                                                                                                              \
+                                                                                                                   \
+   private:                                                                                                        \
+    PrevMathExpr prev_math_expr_;                                                                                  \
+  };                                                                                                               \
+                                                                                                                   \
+  /* Evaluate the given function on an expression */                                                               \
+  template <typename Expr>                                                                                         \
+  auto FuncName(const MathExprBase<Expr>& expr) {                                                                  \
+    return ExprClassName##Expr<Expr>(expr.self());                                                                 \
+  }
+
+/// \brief Create an expression for applying a function on the read only result of two math expressions
+/// Dual argument version
+#define MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_2(ExprClassName, FuncName, Func)                                             \
+  template <typename LeftMathExpr, typename RightMathExpr>                                                            \
+  class ExprClassName##Expr : public MathExprBase<ExprClassName##Expr<LeftMathExpr, RightMathExpr>> {                 \
+   public:                                                                                                            \
+    using our_t = ExprClassName##Expr<LeftMathExpr, RightMathExpr>;                                                   \
+    using our_tag = typename MathExprBase<ExprClassName##Expr<LeftMathExpr, RightMathExpr>>::our_tag;                 \
+    using sub_expressions_t = core::tuple<LeftMathExpr, RightMathExpr>;                                               \
+    static constexpr bool constrains_num_entities = false;                                                            \
+                                                                                                                      \
+    KOKKOS_INLINE_FUNCTION                                                                                            \
+    ExprClassName##Expr(LeftMathExpr left, RightMathExpr right) : left_(left), right_(right) {                        \
+    }                                                                                                                 \
+                                                                                                                      \
+    KOKKOS_INLINE_FUNCTION                                                                                            \
+    ExprClassName##Expr(const MathExprBase<LeftMathExpr>& left, const MathExprBase<RightMathExpr>& right)             \
+        : left_(left.self()), right_(right.self()) {                                                                  \
+    }                                                                                                                 \
+                                                                                                                      \
+    template <typename OtherExpr>                                                                                     \
+    auto operator+(const MathExprBase<OtherExpr>& other) const {                                                      \
+      return AddExpr<our_t, OtherExpr>(*this, other.self());                                                          \
+    }                                                                                                                 \
+                                                                                                                      \
+    template <typename OtherExpr>                                                                                     \
+    auto operator-(const MathExprBase<OtherExpr>& other) const {                                                      \
+      return SubExpr<our_t, OtherExpr>(*this, other.self());                                                          \
+    }                                                                                                                 \
+                                                                                                                      \
+    template <typename OtherExpr>                                                                                     \
+    auto operator*(const MathExprBase<OtherExpr>& other) const {                                                      \
+      return MulExpr<our_t, OtherExpr>(*this, other.self());                                                          \
+    }                                                                                                                 \
+                                                                                                                      \
+    template <typename OtherExpr>                                                                                     \
+    auto operator/(const MathExprBase<OtherExpr>& other) const {                                                      \
+      return DivExpr<our_t, OtherExpr>(*this, other.self());                                                          \
+    }                                                                                                                 \
+                                                                                                                      \
+    template <size_t NumEntities>                                                                                     \
+    KOKKOS_INLINE_FUNCTION auto eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities>& fmis,                \
+                                     const NgpEvalContext& context) const {                                           \
+      return Func(left_.eval(fmis, context), right_.eval(fmis, context));                                             \
+    }                                                                                                                 \
+                                                                                                                      \
+    template <typename EvalCountsType, EvalCountsType eval_counts, size_t NumEntities, typename OldCacheType>         \
+    KOKKOS_INLINE_FUNCTION auto cached_eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities>& fmis,         \
+                                            OldCacheType&& old_cache, const NgpEvalContext& context) const {          \
+      static_assert(has<our_tag>(eval_counts), "eval_counts must contain our tag");                                   \
+                                                                                                                      \
+      if constexpr (get<our_tag>(eval_counts) > 1) {                                                                  \
+        if constexpr (core::aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>) {                        \
+          /* The fact that our tag exists in the old cache means that our eval has cached its result before.*/        \
+          /* Return the cached value */                                                                               \
+          auto cache = std::forward<OldCacheType>(old_cache);                                                         \
+          auto val = get<our_tag>(cache);                                                                             \
+          return Kokkos::make_pair(val, cache);                                                                       \
+        } else {                                                                                                      \
+          /* Eval our subexpressions first, allowing them to cache their results if necessary */                      \
+          auto [left_val, new_cache] = left_.template cached_eval<EvalCountsType, eval_counts>(                       \
+              fmis, std::forward<OldCacheType>(old_cache), context);                                                  \
+          auto [right_val, newer_cache] =                                                                             \
+              right_.template cached_eval<EvalCountsType, eval_counts>(fmis, std::move(new_cache), context);          \
+                                                                                                                      \
+          /* Our eval result needs cached, but is not yet cached */                                                   \
+          auto val = Func(left_val, right_val);                                                                       \
+          auto newest_cache = append<our_tag>(std::move(newer_cache), val);                                           \
+          return Kokkos::make_pair(val, newest_cache);                                                                \
+        }                                                                                                             \
+      } else {                                                                                                        \
+        /* Eval our subexpressions first, allowing them to cache their results if necessary */                        \
+        auto [left_val, new_cache] = left_.template cached_eval<EvalCountsType, eval_counts>(                         \
+            fmis, std::forward<OldCacheType>(old_cache), context);                                                    \
+        auto [right_val, newer_cache] =                                                                               \
+            right_.template cached_eval<EvalCountsType, eval_counts>(fmis, std::move(new_cache), context);            \
+                                                                                                                      \
+        /* Don't cache our result */                                                                                  \
+        auto val = Func(left_val, right_val);                                                                         \
+        return Kokkos::make_pair(val, newer_cache);                                                                   \
+      }                                                                                                               \
+    }                                                                                                                 \
+                                                                                                                      \
+    void propagate_synchronize(const NgpEvalContext& context) {                                                       \
+      left_.flag_read_only(context);                                                                                  \
+      right_.flag_read_only(context);                                                                                 \
+      left_.propagate_synchronize(context);                                                                           \
+      right_.propagate_synchronize(context);                                                                          \
+    }                                                                                                                 \
+                                                                                                                      \
+    void flag_read_only(const NgpEvalContext& /*context*/) {                                                          \
+      /* Our return type is naturally read-only. Nothing to do here. */                                               \
+    }                                                                                                                 \
+                                                                                                                      \
+    void flag_read_write(const NgpEvalContext& /*context*/) {                                                         \
+      MUNDY_THROW_ASSERT(false, std::logic_error,                                                                     \
+                         "Attempting to write to the return type of a binary expression, which returns a "            \
+                         "temporary value.");                                                                         \
+    }                                                                                                                 \
+                                                                                                                      \
+    void flag_overwrite_all(const NgpEvalContext& /*context*/) {                                                      \
+      MUNDY_THROW_ASSERT(false, std::logic_error,                                                                     \
+                         "Attempting to write to the return type of a binary expression, which returns a "            \
+                         "temporary value.");                                                                         \
+    }                                                                                                                 \
+                                                                                                                      \
+    const auto driver() const {                                                                                       \
+      using nullptr_t = decltype(nullptr);                                                                            \
+                                                                                                                      \
+      constexpr bool has_left_driver = !std::is_same_v<nullptr_t, decltype(left_.driver())>;                          \
+      constexpr bool has_right_driver = !std::is_same_v<nullptr_t, decltype(right_.driver())>;                        \
+      static_assert(                                                                                                  \
+          has_left_driver || has_right_driver,                                                                        \
+          "At least one of the left or right expressions in a binary math expression must have a non-null driver.");  \
+                                                                                                                      \
+      if constexpr (has_left_driver) {                                                                                \
+        auto d = left_.driver();                                                                                      \
+        if constexpr (has_right_driver) {                                                                             \
+          MUNDY_THROW_ASSERT(d == right_.driver(), std::logic_error, "Mismatched drivers in binary math expression"); \
+        }                                                                                                             \
+        return d;                                                                                                     \
+      } else {                                                                                                        \
+        return right_.driver();                                                                                       \
+      }                                                                                                               \
+    }                                                                                                                 \
+                                                                                                                      \
+   private:                                                                                                           \
+    LeftMathExpr left_;                                                                                               \
+    RightMathExpr right_;                                                                                             \
+  };                                                                                                                  \
+                                                                                                                      \
+  /* Evaluate the given function on two expressions */                                                                \
+  template <typename LeftExpr, typename RightExpr>                                                                    \
+    requires(is_crtp_base_of_v<MathExprBase, LeftExpr> || is_crtp_base_of_v<MathExprBase, RightExpr>)                 \
+  auto FuncName(const MathExprBase<LeftExpr>& left_expr, const MathExprBase<RightExpr>& right_expr) {                 \
+    return ExprClassName##Expr<LeftExpr, RightExpr>(left_expr.self(), right_expr.self());                             \
+  }                                                                                                                   \
+  /* On an expression and a constant */                                                                               \
+  template <typename LeftExpr, typename RightT>                                                                       \
+    requires(is_crtp_base_of_v<MathExprBase, LeftExpr> && !is_crtp_base_of_v<MathExprBase, RightT>)                   \
+  auto FuncName(const MathExprBase<LeftExpr>& left_expr, const RightT& right_const) {                                 \
+    using RightExpr = ConstantMathExpr<RightT>;                                                                       \
+    auto right_expr = RightExpr(right_const);                                                                         \
+    return ExprClassName##Expr<LeftExpr, RightExpr>(left_expr.self(), right_expr);                                    \
+  }                                                                                                                   \
+  /* On a constant and an expression */                                                                               \
+  template <typename LeftT, typename RightExpr>                                                                       \
+    requires(!is_crtp_base_of_v<MathExprBase, LeftT> && is_crtp_base_of_v<MathExprBase, RightExpr>)                   \
+  auto FuncName(const LeftT& left_const, const MathExprBase<RightExpr>& right_expr) {                                 \
+    using LeftExpr = ConstantMathExpr<LeftT>;                                                                         \
+    auto left_expr = LeftExpr(left_const);                                                                            \
+    return ExprClassName##Expr<LeftExpr, RightExpr>(left_expr, right_expr.self());                                    \
+  }                                                                                                                   \
+  /* On two constants (not allowed) */                                                                                \
+  template <typename LeftT, typename RightT>                                                                          \
+    requires(!is_crtp_base_of_v<MathExprBase, LeftT> && !is_crtp_base_of_v<MathExprBase, RightT>)                     \
+  void FuncName(const LeftT& left_const, const RightT& right_const) {                                                 \
+    MUNDY_THROW_ASSERT(                                                                                               \
+        false, std::logic_error,                                                                                      \
+        "At least one argument to " #FuncName                                                                         \
+        " must be a math expression.\n"                                                                               \
+        "The provided arguments were both constants. How would we know how to run the expression over entities?");    \
+  }
+
+#define MUNDY_ACCESSOR_EXPR_NON_MEMBER_WITH_CONSTANT_1(ExprClassName)                                          \
+  /* Non-member operators with ConstantMathExpr */                                                             \
+  template <typename ConstantType, typename SubPrevMathExpr>                                                   \
+    requires(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                   \
+  auto operator+(const ConstantType& c, const ExprClassName##Expr<SubPrevMathExpr>& expr) {                    \
+    auto constant_expr = ConstantMathExpr<ConstantType>(c);                                                    \
+    return AddExpr<ConstantMathExpr<ConstantType>, ExprClassName##Expr<SubPrevMathExpr>>(constant_expr, expr); \
+  }                                                                                                            \
+  template <typename ConstantType, typename SubPrevMathExpr>                                                   \
+    requires(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                   \
+  auto operator-(const ConstantType& c, const ExprClassName##Expr<SubPrevMathExpr>& expr) {                    \
+    auto constant_expr = ConstantMathExpr<ConstantType>(c);                                                    \
+    return SubExpr<ConstantMathExpr<ConstantType>, ExprClassName##Expr<SubPrevMathExpr>>(constant_expr, expr); \
+  }                                                                                                            \
+  template <typename ConstantType, typename SubPrevMathExpr>                                                   \
+    requires(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                   \
+  auto operator*(const ConstantType& c, const ExprClassName##Expr<SubPrevMathExpr>& expr) {                    \
+    auto constant_expr = ConstantMathExpr<ConstantType>(c);                                                    \
+    return MulExpr<ConstantMathExpr<ConstantType>, ExprClassName##Expr<SubPrevMathExpr>>(constant_expr, expr); \
+  }                                                                                                            \
+  template <typename ConstantType, typename SubPrevMathExpr>                                                   \
+    requires(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                   \
+  auto operator/(const ConstantType& c, const ExprClassName##Expr<SubPrevMathExpr>& expr) {                    \
+    auto constant_expr = ConstantMathExpr<ConstantType>(c);                                                    \
+    return DivExpr<ConstantMathExpr<ConstantType>, ExprClassName##Expr<SubPrevMathExpr>>(constant_expr, expr); \
+  }                                                                                                            \
+  template <typename ConstantType, typename SubPrevMathExpr>                                                   \
+    requires(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                   \
+  auto operator+(const ExprClassName##Expr<SubPrevMathExpr>& expr, const ConstantType& c) {                    \
+    auto constant_expr = ConstantMathExpr<ConstantType>(c);                                                    \
+    return AddExpr<ExprClassName##Expr<SubPrevMathExpr>, ConstantMathExpr<ConstantType>>(expr, constant_expr); \
+  }                                                                                                            \
+  template <typename ConstantType, typename SubPrevMathExpr>                                                   \
+    requires(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                   \
+  auto operator-(const ExprClassName##Expr<SubPrevMathExpr>& expr, const ConstantType& c) {                    \
+    auto constant_expr = ConstantMathExpr<ConstantType>(c);                                                    \
+    return SubExpr<ExprClassName##Expr<SubPrevMathExpr>, ConstantMathExpr<ConstantType>>(expr, constant_expr); \
+  }                                                                                                            \
+  template <typename ConstantType, typename SubPrevMathExpr>                                                   \
+    requires(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                   \
+  auto operator*(const ExprClassName##Expr<SubPrevMathExpr>& expr, const ConstantType& c) {                    \
+    auto constant_expr = ConstantMathExpr<ConstantType>(c);                                                    \
+    return MulExpr<ExprClassName##Expr<SubPrevMathExpr>, ConstantMathExpr<ConstantType>>(expr, constant_expr); \
+  }                                                                                                            \
+  template <typename ConstantType, typename SubPrevMathExpr>                                                   \
+    requires(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                   \
+  auto operator/(const ExprClassName##Expr<SubPrevMathExpr>& expr, const ConstantType& c) {                    \
+    auto constant_expr = ConstantMathExpr<ConstantType>(c);                                                    \
+    return DivExpr<ExprClassName##Expr<SubPrevMathExpr>, ConstantMathExpr<ConstantType>>(expr, constant_expr); \
+  }
+
+#define MUNDY_ACCESSOR_EXPR_NON_MEMBER_WITH_CONSTANT_2(ExprClassName)                                              \
+  /* Non-member operators with ConstantMathExpr */                                                                 \
+  template <typename ConstantType, typename SubLeftExpr, typename SubRightExpr>                                    \
+    requires(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                       \
+  auto operator+(const ConstantType& c, const ExprClassName##Expr<SubLeftExpr, SubRightExpr>& expr) {              \
+    auto constant_expr = ConstantMathExpr<ConstantType>(c);                                                        \
+    return AddExpr<ConstantMathExpr<ConstantType>, ExprClassName##Expr<SubLeftExpr, SubRightExpr>>(constant_expr,  \
+                                                                                                   expr);          \
+  }                                                                                                                \
+  template <typename ConstantType, typename SubLeftExpr, typename SubRightExpr>                                    \
+    requires(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                       \
+  auto operator-(const ConstantType& c, const ExprClassName##Expr<SubLeftExpr, SubRightExpr>& expr) {              \
+    auto constant_expr = ConstantMathExpr<ConstantType>(c);                                                        \
+    return SubExpr<ConstantMathExpr<ConstantType>, ExprClassName##Expr<SubLeftExpr, SubRightExpr>>(constant_expr,  \
+                                                                                                   expr);          \
+  }                                                                                                                \
+  template <typename ConstantType, typename SubLeftExpr, typename SubRightExpr>                                    \
+    requires(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                       \
+  auto operator*(const ConstantType& c, const ExprClassName##Expr<SubLeftExpr, SubRightExpr>& expr) {              \
+    auto constant_expr = ConstantMathExpr<ConstantType>(c);                                                        \
+    return MulExpr<ConstantMathExpr<ConstantType>, ExprClassName##Expr<SubLeftExpr, SubRightExpr>>(constant_expr,  \
+                                                                                                   expr);          \
+  }                                                                                                                \
+  template <typename ConstantType, typename SubLeftExpr, typename SubRightExpr>                                    \
+    requires(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                       \
+  auto operator/(const ConstantType& c, const ExprClassName##Expr<SubLeftExpr, SubRightExpr>& expr) {              \
+    auto constant_expr = ConstantMathExpr<ConstantType>(c);                                                        \
+    return DivExpr<ConstantMathExpr<ConstantType>, ExprClassName##Expr<SubLeftExpr, SubRightExpr>>(constant_expr,  \
+                                                                                                   expr);          \
+  }                                                                                                                \
+  template <typename ConstantType, typename SubLeftExpr, typename SubRightExpr>                                    \
+    requires(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                       \
+  auto operator+(const ExprClassName##Expr<SubLeftExpr, SubRightExpr>& expr, const ConstantType& c) {              \
+    auto constant_expr = ConstantMathExpr<ConstantType>(c);                                                        \
+    return AddExpr<ExprClassName##Expr<SubLeftExpr, SubRightExpr>, ConstantMathExpr<ConstantType>>(expr,           \
+                                                                                                   constant_expr); \
+  }                                                                                                                \
+  template <typename ConstantType, typename SubLeftExpr, typename SubRightExpr>                                    \
+    requires(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                       \
+  auto operator-(const ExprClassName##Expr<SubLeftExpr, SubRightExpr>& expr, const ConstantType& c) {              \
+    auto constant_expr = ConstantMathExpr<ConstantType>(c);                                                        \
+    return SubExpr<ExprClassName##Expr<SubLeftExpr, SubRightExpr>, ConstantMathExpr<ConstantType>>(expr,           \
+                                                                                                   constant_expr); \
+  }                                                                                                                \
+  template <typename ConstantType, typename SubLeftExpr, typename SubRightExpr>                                    \
+    requires(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                       \
+  auto operator*(const ExprClassName##Expr<SubLeftExpr, SubRightExpr>& expr, const ConstantType& c) {              \
+    auto constant_expr = ConstantMathExpr<ConstantType>(c);                                                        \
+    return MulExpr<ExprClassName##Expr<SubLeftExpr, SubRightExpr>, ConstantMathExpr<ConstantType>>(expr,           \
+                                                                                                   constant_expr); \
+  }                                                                                                                \
+  template <typename ConstantType, typename SubLeftExpr, typename SubRightExpr>                                    \
+    requires(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                       \
+  auto operator/(const ExprClassName##Expr<SubLeftExpr, SubRightExpr>& expr, const ConstantType& c) {              \
+    auto constant_expr = ConstantMathExpr<ConstantType>(c);                                                        \
+    return DivExpr<ExprClassName##Expr<SubLeftExpr, SubRightExpr>, ConstantMathExpr<ConstantType>>(expr,           \
+                                                                                                   constant_expr); \
   }
 
 #define MUNDY_ACCESSOR_EXPR_OP_EQUALS(OpName, op_equals)                                                               \
@@ -1355,14 +1689,53 @@ MUNDY_ACCESSOR_EXPR_OP(Add, +)
 MUNDY_ACCESSOR_EXPR_OP(Sub, -)
 MUNDY_ACCESSOR_EXPR_OP(Div, /)
 MUNDY_ACCESSOR_EXPR_OP(Mul, *)
-MUNDY_ACCESSOR_NON_MEMBER_OP_WITH_CONSTANT(Add)
-MUNDY_ACCESSOR_NON_MEMBER_OP_WITH_CONSTANT(Sub)
-MUNDY_ACCESSOR_NON_MEMBER_OP_WITH_CONSTANT(Div)
-MUNDY_ACCESSOR_NON_MEMBER_OP_WITH_CONSTANT(Mul)
+MUNDY_ACCESSOR_EXPR_NON_MEMBER_WITH_CONSTANT_2(Add)
+MUNDY_ACCESSOR_EXPR_NON_MEMBER_WITH_CONSTANT_2(Sub)
+MUNDY_ACCESSOR_EXPR_NON_MEMBER_WITH_CONSTANT_2(Div)
+MUNDY_ACCESSOR_EXPR_NON_MEMBER_WITH_CONSTANT_2(Mul)
 MUNDY_ACCESSOR_EXPR_OP_EQUALS(Add, +=)
 MUNDY_ACCESSOR_EXPR_OP_EQUALS(Sub, -=)
 MUNDY_ACCESSOR_EXPR_OP_EQUALS(Div, /=)
 MUNDY_ACCESSOR_EXPR_OP_EQUALS(Mul, *=)
+
+// Vector/Matrix/Quaternion functions
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(Copy, copy, copy)                                      // v, q, m
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(Sum, sum, sum)                                         // v, q, m
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(Product, product, ::mundy::math::product)              // Vector/Matrix/Quaternion
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(Min, min, ::mundy::math::min)                          // Vector/Matrix/Quaternion
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(Max, max, ::mundy::math::max)                          // Vector/Matrix/Quaternion
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(Mean, mean, ::mundy::math::mean)                       // Vector/Matrix/Quaternion
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(Variance, variance, ::mundy::math::variance)           // Vector/Matrix/Quaternion
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(StdDev, stddev, ::mundy::math::stddev)                 // Vector/Matrix/Quaternion
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(Norm, norm, ::mundy::math::norm)                       // v, q, m
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(OneNorm, one_norm, ::mundy::math::one_norm)            // v, m
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(InfNorm, inf_norm, ::mundy::math::inf_norm)            // v, m
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(TwoNorm, two_norm, ::mundy::math::two_norm)            // v, m
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(Inverse, inverse, ::mundy::math::inverse)              // m, q
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(Conjugate, conjugate, ::mundy::math::conjugate)        // q
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(Normalize, normalize, ::mundy::math::normalize)        // q
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(Trace, trace, ::mundy::math::trace)                    // m
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(Transpose, transpose, ::mundy::math::transpose)        // m
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(Determinant, determinant, ::mundy::math::determinant)  // m
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(Adjugate, adjugate, ::mundy::math::adjugate)           // m
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(Cofactors, cofactors, ::mundy::math::cofactors)        // m
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_2(Dot, dot, ::mundy::math::dot)                          // v-v, q-q
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_2(Cross, cross, ::mundy::math::cross)                    // v-v
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_2(ElementwiseMul, elementwise_mul, ::mundy::math::elementwise_mul)  // v-v, m-m
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_2(ElementwiseDiv, elementwise_div, ::mundy::math::elementwise_div)  // v-v, m-m
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_2(Slerp, slerp, ::mundy::math::slerp)                               // q-q
+
+// Scalar functions
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(Abs, abs, Kokkos::abs)
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(Sqrt, sqrt, Kokkos::sqrt)
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(Exp, exp, Kokkos::exp)
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(Log, log, Kokkos::log)
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(Sin, sin, Kokkos::sin)
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(Cos, cos, Kokkos::cos)
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(Tan, tan, Kokkos::tan)
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(Asin, asin, Kokkos::asin)
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(Acos, acos, Kokkos::acos)
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(Atan, atan, Kokkos::atan)
 
 template <typename TaggedAccessorT, typename PrevEntityExpr>
 class AccessorExpr : public MathExprBase<AccessorExpr<TaggedAccessorT, PrevEntityExpr>> {
@@ -1924,7 +2297,8 @@ class CounterBasedRNGExpr
   template <typename T, typename LowExpr, typename HighExpr>
     requires(is_crtp_base_of_v<MathExprBase, LowExpr> && is_crtp_base_of_v<MathExprBase, HighExpr>)
   auto uniform(const LowExpr& low_expr, const HighExpr& high_expr) const {
-    return UniformDistributionExpr<our_t, T, LowExpr, HighExpr, CounterBasedRandomGenerator>(*this, low_expr, high_expr);
+    return UniformDistributionExpr<our_t, T, LowExpr, HighExpr, CounterBasedRandomGenerator>(*this, low_expr,
+                                                                                             high_expr);
   }
   // Low is an expression but high is a constant
   template <typename T, typename LowExpr, typename HighT>
@@ -1946,10 +2320,10 @@ class CounterBasedRNGExpr
   template <typename T, typename LowT, typename HighT>
     requires(!is_crtp_base_of_v<MathExprBase, LowT> && !is_crtp_base_of_v<MathExprBase, HighT>)
   void uniform(const LowT& low, const HighT& high) const {
-    MUNDY_THROW_REQUIRE(
-        false, std::logic_error,
-        "Both low and high arguments to uniform() cannot be constants.\n"
-        "At least one of them must be an expression, lest we have no idea how to run the expression over multiple entities.");
+    MUNDY_THROW_REQUIRE(false, std::logic_error,
+                        "Both low and high arguments to uniform() cannot be constants.\n"
+                        "At least one of them must be an expression, lest we have no idea how to run the expression "
+                        "over multiple entities.");
   }
 
   void flag_read_only(const NgpEvalContext& context) {
@@ -2011,165 +2385,31 @@ auto rng(const SeedExpr& seed_expr, const CounterExpr& counter_expr) {
 template <typename SeedExpr, typename CounterT, typename CounterBasedRandomGenerator = openrand::Philox>
   requires(is_crtp_base_of_v<MathExprBase, SeedExpr> && !is_crtp_base_of_v<MathExprBase, CounterT>)
 auto rng(const SeedExpr& seed_expr, const CounterT& counter) {
-  auto counter_expr = ConstantMathExpr<CounterT>(counter);
   using CounterExpr = ConstantMathExpr<CounterT>;
+  auto counter_expr = CounterExpr(counter);
   return rng<SeedExpr, CounterExpr, CounterBasedRandomGenerator>(seed_expr, counter_expr);
 }
 /// Seed is a constant but counter is an expression
 template <typename SeedT, typename CounterExpr, typename CounterBasedRandomGenerator = openrand::Philox>
   requires(!is_crtp_base_of_v<MathExprBase, SeedT> && is_crtp_base_of_v<MathExprBase, CounterExpr>)
 auto rng(const SeedT& seed, const CounterExpr& counter_expr) {
-  auto seed_expr = ConstantMathExpr<SeedT>(seed);
   using SeedExpr = ConstantMathExpr<SeedT>;
+  auto seed_expr = SeedExpr(seed);
   return rng<SeedExpr, CounterExpr, CounterBasedRandomGenerator>(seed_expr, counter_expr);
 }
 /// Both seed and counter are constants (not allowed)
 template <typename SeedT, typename CounterT, typename CounterBasedRandomGenerator = openrand::Philox>
   requires(!is_crtp_base_of_v<MathExprBase, SeedT> && !is_crtp_base_of_v<MathExprBase, CounterT>)
 void rng(const SeedT& seed, const CounterT& counter) {
-  MUNDY_THROW_REQUIRE(
-    false, std::logic_error,
-    "Both seed and counter arguments to rng() cannot be constants.\n"
-    "At least one of them must be an expression, lest we have no idea how to run the expression over multiple entities.");
+  MUNDY_THROW_REQUIRE(false, std::logic_error,
+                      "Both seed and counter arguments to rng() cannot be constants.\n"
+                      "At least one of them must be an expression, lest we have no idea how to run the expression over "
+                      "multiple entities.");
 }
 //@}
 
 //! \name Helpers
 //@{
-
-template <typename PrevMathExpr>
-class CopyExpr : public MathExprBase<CopyExpr<PrevMathExpr>> {
- public:
-  using our_t = CopyExpr<PrevMathExpr>;
-  using our_tag = typename MathExprBase<CopyExpr<PrevMathExpr>>::our_tag;
-  using sub_expressions_t = core::tuple<PrevMathExpr>;
-  static constexpr bool constrains_num_entities = true;
-
-  KOKKOS_INLINE_FUNCTION
-  CopyExpr(const PrevMathExpr& prev_math_expr) : prev_math_expr_(prev_math_expr) {
-  }
-
-  KOKKOS_INLINE_FUNCTION
-  CopyExpr(const EntityExprBase<PrevMathExpr>& prev_math_expr_base) : prev_math_expr_(prev_math_expr_base.self()) {
-  }
-
-  template <size_t NumEntities>
-  KOKKOS_INLINE_FUNCTION auto eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities>& fmis,
-                                   const NgpEvalContext& context) const {
-    return copy(prev_math_expr_.eval(fmis, context));
-  }
-
-  template <typename EvalCountsType, EvalCountsType eval_counts, size_t NumEntities, typename OldCacheType>
-  KOKKOS_INLINE_FUNCTION auto cached_eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities>& fmis,
-                                          OldCacheType&& old_cache, const NgpEvalContext& context) const {
-    static_assert(has<our_tag>(eval_counts), "eval_counts must contain our tag");
-
-    if constexpr (get<our_tag>(eval_counts) > 1) {
-      if constexpr (core::aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>) {
-        // The fact that our tag exists in the old cache means that our eval has cached its result before. means that
-        // our eval has cached its result before. Return the cached value
-        auto cache = std::forward<OldCacheType>(old_cache);
-        auto val = get<our_tag>(cache);
-        return Kokkos::make_pair(val, cache);
-      } else {
-        // Eval our subexpressions first, allowing them to cache their results if necessary
-        auto [view, new_cache] = prev_math_expr_.template cached_eval<EvalCountsType, eval_counts>(
-            fmis, std::forward<OldCacheType>(old_cache), context);
-        auto val = copy(view);
-        auto newer_cache = append<our_tag>(std::move(new_cache), val);
-        return Kokkos::make_pair(val, newer_cache);
-      }
-    } else {
-      // Eval our subexpressions first, allowing them to cache their results if necessary
-      auto [view, new_cache] = prev_math_expr_.template cached_eval<EvalCountsType, eval_counts>(
-          fmis, std::forward<OldCacheType>(old_cache), context);
-      auto val = copy(view);
-      return Kokkos::make_pair(val, new_cache);
-    }
-  }
-
-  void propagate_synchronize(const NgpEvalContext& context) {
-    prev_math_expr_.flag_read_only(context);
-    prev_math_expr_.propagate_synchronize(context);
-  }
-
-  void flag_read_only(const NgpEvalContext& /*context*/) {
-    // Nothing to do here
-  }
-
-  void flag_read_write(const NgpEvalContext& /*context*/) {
-    MUNDY_THROW_ASSERT(false, std::logic_error,
-                       "Attempting to write to the return type of a copy expression, which returns a temporary value.");
-  }
-
-  void flag_overwrite_all(const NgpEvalContext& /*context*/) {
-    MUNDY_THROW_ASSERT(false, std::logic_error,
-                       "Attempting to write to the return type of a copy expression, which returns a temporary value.");
-  }
-
-  auto driver() const {
-    return prev_math_expr_.driver();
-  }
-
- private:
-  PrevMathExpr prev_math_expr_;
-};
-
-/* Non-member operators with ConstantMathExpr */
-template <typename ConstantType, typename SubPrevMathExpr>
-  requires(!is_crtp_base_of_v<MathExprBase, ConstantType>)
-auto operator+(const ConstantType& c, const CopyExpr<SubPrevMathExpr>& expr) {
-  auto constant_expr = ConstantMathExpr<ConstantType>(c);
-  return AddExpr<ConstantMathExpr<ConstantType>, CopyExpr<SubPrevMathExpr>>(constant_expr, expr);
-}
-template <typename ConstantType, typename SubPrevMathExpr>
-  requires(!is_crtp_base_of_v<MathExprBase, ConstantType>)
-auto operator-(const ConstantType& c, const CopyExpr<SubPrevMathExpr>& expr) {
-  auto constant_expr = ConstantMathExpr<ConstantType>(c);
-  return SubExpr<ConstantMathExpr<ConstantType>, CopyExpr<SubPrevMathExpr>>(constant_expr, expr);
-}
-template <typename ConstantType, typename SubPrevMathExpr>
-  requires(!is_crtp_base_of_v<MathExprBase, ConstantType>)
-auto operator*(const ConstantType& c, const CopyExpr<SubPrevMathExpr>& expr) {
-  auto constant_expr = ConstantMathExpr<ConstantType>(c);
-  return MulExpr<ConstantMathExpr<ConstantType>, CopyExpr<SubPrevMathExpr>>(constant_expr, expr);
-}
-template <typename ConstantType, typename SubPrevMathExpr>
-  requires(!is_crtp_base_of_v<MathExprBase, ConstantType>)
-auto operator/(const ConstantType& c, const CopyExpr<SubPrevMathExpr>& expr) {
-  auto constant_expr = ConstantMathExpr<ConstantType>(c);
-  return DivExpr<ConstantMathExpr<ConstantType>, CopyExpr<SubPrevMathExpr>>(constant_expr, expr);
-}
-template <typename ConstantType, typename SubPrevMathExpr>
-  requires(!is_crtp_base_of_v<MathExprBase, ConstantType>)
-auto operator+(const CopyExpr<SubPrevMathExpr>& expr, const ConstantType& c) {
-  auto constant_expr = ConstantMathExpr<ConstantType>(c);
-  return AddExpr<CopyExpr<SubPrevMathExpr>, ConstantMathExpr<ConstantType>>(expr, constant_expr);
-}
-template <typename ConstantType, typename SubPrevMathExpr>
-  requires(!is_crtp_base_of_v<MathExprBase, ConstantType>)
-auto operator-(const CopyExpr<SubPrevMathExpr>& expr, const ConstantType& c) {
-  auto constant_expr = ConstantMathExpr<ConstantType>(c);
-  return SubExpr<CopyExpr<SubPrevMathExpr>, ConstantMathExpr<ConstantType>>(expr, constant_expr);
-}
-template <typename ConstantType, typename SubPrevMathExpr>
-  requires(!is_crtp_base_of_v<MathExprBase, ConstantType>)
-auto operator*(const CopyExpr<SubPrevMathExpr>& expr, const ConstantType& c) {
-  auto constant_expr = ConstantMathExpr<ConstantType>(c);
-  return MulExpr<CopyExpr<SubPrevMathExpr>, ConstantMathExpr<ConstantType>>(expr, constant_expr);
-}
-template <typename ConstantType, typename SubPrevMathExpr>
-  requires(!is_crtp_base_of_v<MathExprBase, ConstantType>)
-auto operator/(const CopyExpr<SubPrevMathExpr>& expr, const ConstantType& c) {
-  auto constant_expr = ConstantMathExpr<ConstantType>(c);
-  return DivExpr<CopyExpr<SubPrevMathExpr>, ConstantMathExpr<ConstantType>>(expr, constant_expr);
-}
-
-/// \brief Deep copies the value of the given expression.
-template <typename Expr>
-auto copy(const MathExprBase<Expr>& expr) {
-  return CopyExpr<Expr>(expr.self());
-}
 
 template <typename... TrgSrcExprPairs>
 class FusedAssignExpr : public MathExprBase<FusedAssignExpr<TrgSrcExprPairs...>> {

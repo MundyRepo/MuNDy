@@ -76,7 +76,7 @@ The following operations can be performed on vectors to compute various properti
 | **Operation**          | **Description**                                                                 | **Example** (for `Vector2d v1{1., 2.}, v2{3., 4.}`) |
 |-------------------------|---------------------------------------------------------------------------------|----------------------------------------------------------|
 | `dot(v1, v2)`          | Dot product of two vectors.                                                     | `dot(v1, v2)` → `1. * 3. + 2. * 4. = 11.`          |
-| `infinity_norm(v)`     | Infinity norm (maximum absolute value of components).                           | `infinity_norm(v1)` → `2.`                              |
+| `inf_norm(v)`     | Infinity norm (maximum absolute value of components).                           | `inf_norm(v1)` → `2.`                              |
 | `one_norm(v)`          | 1-norm (sum of absolute values of components).                                  | `one_norm(v1)` → `1. + 2. = 3.`                       |
 | `two_norm(v)`          | 2-norm (Euclidean norm, square root of the sum of squares).                     | `two_norm(v1)` → `sqrt(1.^2 + 2.^2) = sqrt(5.)`       |
 | `two_norm_squared(v)`  | Squared 2-norm (sum of squares of components).                                   | `two_norm_squared(v1)` → `1.^2 + 2.^2 = 5.`           |
@@ -177,7 +177,7 @@ The following operations can be performed on matrices to compute various propert
 | `frobenius_inner_product(m1, m2)` | Frobenius inner product of two matrices.                                   |
 | `outer_product(v1, v2)`    | Outer product of two vectors, resulting in a matrix.                            |
 | `frobenius_norm(m)`        | Frobenius norm (square root of the sum of squares of all elements).              |
-| `infinity_norm(m)`         | Maximum absolute row sum.                                                       |
+| `inf_norm(m)`         | Maximum absolute row sum.                                                       |
 | `one_norm(m)`              | Maximum absolute column sum.                                                    |
 | `two_norm(m)`              | 2-norm (largest singular value of the matrix).                                  |
 

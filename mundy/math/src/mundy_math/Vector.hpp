@@ -1136,7 +1136,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto apply(Func&& func, const AVector<T, N, Acc
 /// \brief AVector infinity norm
 /// \param[in] vec The vector.
 template <size_t N, typename T, ValidAccessor<T> Accessor, typename OwnershipType>
-KOKKOS_INLINE_FUNCTION constexpr auto infinity_norm(const AVector<T, N, Accessor, OwnershipType>& vec) {
+KOKKOS_INLINE_FUNCTION constexpr auto inf_norm(const AVector<T, N, Accessor, OwnershipType>& vec) {
   return max(vec);
 }
 

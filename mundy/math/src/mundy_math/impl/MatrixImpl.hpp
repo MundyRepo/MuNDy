@@ -529,7 +529,7 @@ KOKKOS_INLINE_FUNCTION auto outer_product_impl(std::index_sequence<Is...>,
 
 /// \brief Infinity norm
 template <size_t... Is, typename T, size_t N, size_t M, ValidAccessor<T> Accessor, typename OwnershipType>
-KOKKOS_INLINE_FUNCTION T infinity_norm_impl(std::index_sequence<Is...>,
+KOKKOS_INLINE_FUNCTION T inf_norm_impl(std::index_sequence<Is...>,
                                             const AMatrix<T, N, M, Accessor, OwnershipType>& mat) {
   T max_value = Kokkos::abs(sum(mat.template view_row<0>()));
   ((max_value = Kokkos::max(max_value, Kokkos::abs(sum(mat.template view_row<Is>())))), ...);
