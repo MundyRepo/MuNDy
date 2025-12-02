@@ -110,7 +110,7 @@ class LinkMetaData {
         link_crs_needs_updated_field_(meta_data.declare_field<int>(link_rank_, "MUNDY_LINK_CRS_NEEDS_UPDATED")),
         link_marked_for_destruction_field_(
             meta_data.declare_field<unsigned>(link_rank_, "MUNDY_LINK_MARKED_FOR_DESTRUCTION")),
-        universal_link_part_(meta_data.declare_part(std::string("MUNDY_UNIVERSAL_") + our_name + rank_to_string(link_rank_), link_rank_)) {
+        universal_link_part_(meta_data.declare_part(std::string("MUNDY_UNIVERSAL_") + our_name + "_" + rank_to_string(link_rank_), link_rank_)) {
     unsigned links_start_valid[1] = {0};
     stk::mesh::put_field_on_mesh(link_marked_for_destruction_field_, meta_data.universal_part(), 1, links_start_valid);
   }
