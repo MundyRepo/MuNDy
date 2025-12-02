@@ -153,7 +153,7 @@ Further mechanical models and integration hooks will be added as the library mat
 
 ---
 
-### MundySTK: MuNDy’s extension to Trilinos/STK
+### MundyMesh: MuNDy’s extension to Trilinos/STK
 
 Helpers and abstractions for integrating MuNDy with Trilinos/STK meshes and fields.
 - **`StringToSelector` / `StringToTopology` / `StringToRank`**  
@@ -213,6 +213,9 @@ Independent projects that emerged from MuNDy’s infrastructure and are usable o
   - Designed to easily fit in GPU registers
   - Makes reproducibility in spite of varied parallelism possible
   - Now used by HOOMD-Blue
+  
+- **[alsous_gigantism_2025](https://github.com/flatironinstitute/alsous_gigantism_2025)**
+  A discrete elastic rod model implemented using MuNDy (becomes public end of December 2025). 
 
 - **[mundy_mock_app](https://github.com/MundyRepo/mundy_mock_app)** /
   **[mundy_mock_app_tribits](https://github.com/MundyRepo/mundy_mock_app_tribits)**
