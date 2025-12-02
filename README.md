@@ -9,7 +9,7 @@ MuNDy is a C++ framework for high-performance simulation of **multibody nonlocal
 ![Mesh-STK](https://img.shields.io/badge/mesh-Trilinos%2FSTK-4CAF50.svg)
 
 > [!IMPORTANT]  
-> **Project status (2025-11-02)**  
+> **Project status (12/2/2025):** 
 > MuNDy is under active development. We have chosen to make development public as we move toward a first formal release targeted for **summer 2026**.
 
 ---
@@ -186,7 +186,7 @@ Helpers and abstractions for integrating MuNDy with Trilinos/STK meshes and fiel
 Independent projects that emerged from MuNDy’s infrastructure and are usable on their own.
 * **[OpenRAND](https://github.com/msu-sparta/OpenRAND)**
   Performance-portable, counter-based random number generation that is stupid simple to use.
-  * Designed for to easily fit in GPU registers
+  * Designed to easily fit in GPU registers
   * Makes reproducibility in spite of varied parallelism possible
   * Now used by HOOMD-Blue
 
@@ -202,7 +202,7 @@ Independent projects that emerged from MuNDy’s infrastructure and are usable o
 ## Release Roadmap
 
 Planned steps toward the first public release (estimated summer 2026):
-* [ ] Python API mirroing accessor expressions
+* [ ] Python API mirroring accessor expressions
 * [ ] Flesh out the Wiki with user-facing documentation and design notes
 * [ ] Polish Doxygen and public API docs
   * Implementation details should not clutter the user-facing API
