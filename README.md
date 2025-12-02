@@ -184,27 +184,27 @@ Helpers and abstractions for integrating MuNDy with Trilinos/STK meshes and fiel
 ### Standalone Offshoots
 
 Independent projects that emerged from MuNDy’s infrastructure and are usable on their own.
-* **[OpenRAND](https://github.com/msu-sparta/OpenRAND)**
+- **[OpenRAND](https://github.com/msu-sparta/OpenRAND)**
   Performance-portable, counter-based random number generation that is stupid simple to use.
-  * Designed to easily fit in GPU registers
-  * Makes reproducibility in spite of varied parallelism possible
-  * Now used by HOOMD-Blue
+  - Designed to easily fit in GPU registers
+  - Makes reproducibility in spite of varied parallelism possible
+  - Now used by HOOMD-Blue
 
-* **[mundy_mock_app](https://github.com/MundyRepo/mundy_mock_app)** /
+- **[mundy_mock_app](https://github.com/MundyRepo/mundy_mock_app)** /
   **[mundy_mock_app_tribits](https://github.com/MundyRepo/mundy_mock_app_tribits)**
   Helper applications for bootstrapping MuNDy-based codes:
 
-  * CMake-based or TriBITS+CMake templates
-  * Intended as starting points for internal and external applications that depend on MuNDy
+  - CMake-based or TriBITS+CMake templates
+  - Intended as starting points for internal and external applications that depend on MuNDy
 
 ---
 
 ## Release Roadmap
 
 Planned steps toward the first public release (estimated summer 2026):
-* [ ] Python API mirroring accessor expressions
-* [ ] Flesh out the Wiki with user-facing documentation and design notes
-* [ ] Polish Doxygen and public API docs
-  * Implementation details should not clutter the user-facing API
-* [ ] Tutorial + Example applications
+- [ ] Python API mirroring accessor expressions
+- [ ] Flesh out the Wiki with user-facing documentation and design notes
+- [ ] Polish Doxygen and public API docs
+  - Implementation details should not clutter the user-facing API
+- [ ] Tutorial + Example applications
 ---
