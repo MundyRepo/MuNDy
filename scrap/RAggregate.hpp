@@ -50,40 +50,39 @@ namespace mundy {
 namespace mesh {
 
 /// \brief Runtime aggregates
-// Runtime aggregates perform pack and unpack. 
+// Runtime aggregates perform pack and unpack.
 
 struct FieldAccessor {
- std::string name = "FieldAccessor";
- };
+  std::string name = "FieldAccessor";
+};
 struct ScalarAccessor {
- std::string name = "ScalarAccessor";
- };
+  std::string name = "ScalarAccessor";
+};
 struct AABBAccessor {
- std::string name = "AABBAccessor";
- };
-template<size_t N> 
+  std::string name = "AABBAccessor";
+};
+template <size_t N>
 struct VectorAccessor {
- std::string name = "VectorAccessorN";
- };
-
+  std::string name = "VectorAccessorN";
+};
 
 namespace accessor_t {
-  struct FIELD;
-  
-  struct SCALAR;
-  
-  template<size_t N> 
-  struct VECTOR;
-  
-  using VECTOR3 = VECTOR<3>;
-  
-  template<size_t N, size_t M> 
-  struct MATRIX;
-  
-  using MATRIX33 = MATRIX<3, 3>;
+struct FIELD;
 
-  struct AABB;
-}
+struct SCALAR;
+
+template <size_t N>
+struct VECTOR;
+
+using VECTOR3 = VECTOR<3>;
+
+template <size_t N, size_t M>
+struct MATRIX;
+
+using MATRIX33 = MATRIX<3, 3>;
+
+struct AABB;
+}  // namespace accessor_t
 
 template <typename T>
 struct to_accessor_type;
@@ -99,7 +98,7 @@ template <>
 struct to_accessor_type<accessor_t::SCALAR> {
   using type = ScalarAccessor;
 };
-template<size_t N> 
+template <size_t N>
 struct to_accessor_type<accessor_t::VECTOR<N>> {
   using type = VectorAccessor<N>;
 };
@@ -113,7 +112,6 @@ struct to_accessor_type<accessor_t::AABB> {
 // ragg.get_accessor<accessor_t::AABB<T>>(rank, name) -> AABBAccessor
 // ragg.get_accessor<accessor_t::USER_TYPE, T>(rank, name) -> TheirCustomAccessor
 
-
 // every accessor has at most 4 types:
 // - shared single value
 // - singe value per part
@@ -124,75 +122,65 @@ struct to_accessor_type<accessor_t::AABB> {
 //             .add_component<CENTER>(center_accessor)
 //             .add_component<COLLISION_RADIUS>(radius_accessor);
 
-
 RuntimeAggregate ragg = make_runtime_aggregate(bulk_data, selector, stk::topology::PARTICLE)
-    .add_accessor(NODE_RANK, "OUR_CENTER", center_accessor)
-    .add_accessor(NODE_RANK, "OUR_RADIUS", radius_accessor);
+                            .add_accessor(NODE_RANK, "OUR_CENTER", center_accessor)
+                            .add_accessor(ELEM_RANK, "OUR_RADIUS", radius_accessor);
 
-std::map<std::string, std::string> rename_map{
-  {"CENTER", "OUR_CENTER"},
-  {"RADIUS", "OUR_RADIUS"}
-};
+std::map<std::string, std::string> rename_map{{"CENTER", "OUR_CENTER"}, {"RADIUS", "OUR_RADIUS"}};
 
-// Option 1: Compile-time aggregate with no concept of connectivity.
+// Option 1: Runtime aggregate within kernel
 auto agg = make_aggregate<stk::topology::PARTICLE>(bulk_data, selector)
-        .add_accessor<CENTER>(ragg.get_accessor<accessor_t::VECTOR3<double>>(NODE_RANK, rename_map["CENTER"]))
-        .add_accessor<RADIUS>(ragg.get_accessor<accessor_t::VECTOR3<double>>(NODE_RANK, rename_map["RADIUS"]));
-stk::mesh::for_each_entity_run(ngp_mesh, 
-  KOKKOS_LAMBDA(stk::mesh::FastMeshIndex sphere_index)
-    stk::mesh::FastMeshIndex center_node_index = ngp_mesh.fast_mesh_index(ngp_mesh.nodes(sphere_index)[0]);
-    auto center = agg.get<CENTER>(center_node_index);
-    auto radius = agg.get<RADIUS>(sphere_index);
-    center += radius[0];
-  );
+               .add_accessor<CENTER>(ragg.get_accessor<accessor_t::VECTOR3<double>>(NODE_RANK, rename_map["CENTER"]))
+               .add_accessor<RADIUS>(ragg.get_accessor<accessor_t::VECTOR3<double>>(ELEM_RANK, rename_map["RADIUS"]));
+stk::mesh::for_each_entity_run(ngp_mesh, KOKKOS_LAMBDA(stk::mesh::FastMeshIndex sphere_index)
+                                             stk::mesh::FastMeshIndex center_node_index =
+                                                 ngp_mesh.fast_mesh_index(ngp_mesh.nodes(sphere_index)[0]);
+                               auto center = agg.get<CENTER>(center_node_index);
+                               auto radius = agg.get<RADIUS>(sphere_index); center += radius[0];);
 
 // Option 2: Compile-time aggregate with connectivity helper
 auto agg = make_aggregate<stk::topology::PARTICLE>(bulk_data, selector)
-        .add_accessor<CENTER>(ragg.get_accessor<accessor_t::VECTOR3<double>>(NODE_RANK, rename_map["CENTER"]))
-        .add_accessor<RADIUS>(ragg.get_accessor<accessor_t::VECTOR3<double>>(NODE_RANK, rename_map["RADIUS"]));
-agg.for_each(
-  KOKKOS_LAMBDA(auto& sphere)
-    auto center = sphere.get<CENTER>(0 /* node ord */);
-    auto radius = sphere.get<RADIUS>();
-    center += radius[0];
-  );
+               .add_accessor<CENTER>(ragg.get_accessor<accessor_t::VECTOR3<double>>(NODE_RANK, rename_map["CENTER"]))
+               .add_accessor<RADIUS>(ragg.get_accessor<accessor_t::VECTOR3<double>>(NODE_RANK, rename_map["RADIUS"]));
+agg.for_each(KOKKOS_LAMBDA(auto& sphere) auto center = sphere.get<CENTER>(0 /* node ord */);
+             auto radius = sphere.get<RADIUS>(); center += radius[0];);
 
 // Option 3: No aggregates within kernels
 auto sphere_centers = ragg.get_accessor<accessor_t::VECTOR3<double>>(NODE_RANK, rename_map["CENTER"]);
 auto sphere_radii = ragg.get_accessor<accessor_t::VECTOR3<double>>(NODE_RANK, rename_map["RADIUS"]);
 
-stk::mesh::for_each_entity_run(ngp_mesh, 
-  KOKKOS_LAMBDA(stk::mesh::FastMeshIndex sphere_index)
-    stk::mesh::FastMeshIndex center_node_index = ngp_mesh.fast_mesh_index(ngp_mesh.nodes(sphere_index)[0]);
-    auto center = sphere_centers(center_node_index);
-    auto radius = sphere_radii(sphere_index);
-    center += radius[0];
-  );
-
+stk::mesh::for_each_entity_run(ngp_mesh, KOKKOS_LAMBDA(stk::mesh::FastMeshIndex sphere_index)
+                                             stk::mesh::FastMeshIndex center_node_index =
+                                                 ngp_mesh.fast_mesh_index(ngp_mesh.nodes(sphere_index)[0]);
+                               auto center = sphere_centers(center_node_index);
+                               auto radius = sphere_radii(sphere_index); center += radius[0];);
 
 class RuntimeAggregate {
  public:
   RuntimeAggregate() = default;
-  RuntimeAggregate(stk::topology top) : rank_(top.rank()), topology_(top) {}
-  RuntimeAggregate(stk::mesh::EntityRank rank) : rank_(rank), topology_(stk::topology::INVALID_TOPOLOGY) {}
+  RuntimeAggregate(stk::topology top) : rank_(top.rank()), topology_(top) {
+  }
+  RuntimeAggregate(stk::mesh::EntityRank rank) : rank_(rank), topology_(stk::topology::INVALID_TOPOLOGY) {
+  }
 
   RuntimeAggregate& add_accessor(const stk::mesh::EntityRank rank, std::string name, AccessorBase accessor) {
     auto result = ranked_accessor_maps_[rank].insert({name, accessor});
-    MUNDY_THROW_REQUIRE(result.second, std::logic_error, 
-      fmt::format("Accessor with rank {} and name '{}' already exists. No duplicates allowed.", rank, name));
+    MUNDY_THROW_REQUIRE(
+        result.second, std::logic_error,
+        fmt::format("Accessor with rank {} and name '{}' already exists. No duplicates allowed.", rank, name));
 
     return this;
   }
 
-  template<accessor_t A>
+  template <accessor_t A>
   auto get_accessor(const stk::mesh::EntityRank rank, std::string name) -> to_accessor_type_t<A> {
     // Check if an aggregate of the given rank/name exists
-    MUNDY_THROW_REQUIRE(ranked_accessor_maps_[rank].contains(name), std::logic_error, 
-      fmt::format("Failed to find aggregate of rank {} with name '{}'", rank, name));
+    MUNDY_THROW_REQUIRE(ranked_accessor_maps_[rank].contains(name), std::logic_error,
+                        fmt::format("Failed to find aggregate of rank {} with name '{}'", rank, name));
 
-    return dynamic_cast< to_accessor_type_t<A> >(ranked_accessor_maps_[rank][name]);
+    return dynamic_cast<to_accessor_type_t<A>>(ranked_accessor_maps_[rank][name]);
   }
- 
+
  private:
   stk::mesh::EntitRank rank_;
   stk::topology topology_;
@@ -201,8 +189,825 @@ class RuntimeAggregate {
   AggregateMap ranked_accessor_maps_[stk::topology::NUM_RANKS];
 };
 
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/*
+Given a runtime_aggregate containing N tagged runtime_accessors that are variants of V standard
+accessor types, there are V choose N with replacement total combinations for the resulting compile-time aggregate type.
+Can we enumerate this list explicitly to map our runtime aggregate to its accessor? Let's pretend that N is known at
+compile-time.
+*/
+using RuntimeAccessor = std::variant<A1, A2, A3>;
+
+template <unsigned NumAccessors>
+class RuntimeAggregate {
+  static constexpr num_accessors = NumAccessors;
+  static constexpr num_variant_types = 3;
+  static constexpr num_combinations = factorial(num_variant_types + num_accessors - 1) / factorial(num_accessors);
+
+  [[A1, A2, A3], [A1, A2, A3], [A1, A2, A3], ..., [A1, A2, A3]]
+
+  ...
+};
+
+/// Static functor wrapper
+template <typename Functor, unsigned Value>
+struct FunctorWrapper {
+  static void apply(const Functor& functor) {
+    using type = value_to_type_t<Value>;
+    functor(type{});
+  }
+};
+
+template <typename Functor, unsigned... Values>
+const auto get_functor_jump_table_impl(std::integer_sequence<unsigned, Values...> /* int_seq */) {
+  static constexpr void (*jump_table[])(const Functor& functor) = {FunctorWrapper<Functor, Values>::apply...};
+  return jump_table;
+}
+
+template <typename Functor>
+const auto get_functor_jump_table() {
+  return get_functor_jump_table_impl<Functor>(std::make_integer_sequence<unsigned, static_cast<unsigned>(1000)>{});
+}
+
+template <typename Functor>
+void run(unsigned runtime_value, const Functor& functor) {
+  auto jump_table = get_functor_jump_table<Functor>();
+  jump_table[runtime_value](functor);
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// How to create a compile-time set of all combinations of N choose R with replacement:
+#include <array>
+#include <cstddef>
+#include <iostream>
+#include <type_traits>
+#include <utility>
+
+// ---------- compile-time binomial ----------
+constexpr unsigned long long binom(unsigned int n, unsigned int k) {
+  if (k > n) return 0ULL;
+  if (k > n - k) k = n - k;
+  unsigned long long r = 1;
+  for (unsigned int i = 1; i <= k; ++i) {
+    // exact division in integers
+    r = (r * (n - k + i)) / i;
+  }
+  return r;
+}
+
+// ---------- unrank the k-th R-combination from {0..M} (no replacement) in colex ----------
+// Returns strictly increasing b[0..R-1], where 0 <= b0 < ... < b{R-1} <= M.
+template <int R>
+constexpr std::array<int, R> unrank_comb_norep(unsigned int M, unsigned long long k) {
+  static_assert(R >= 0);
+  std::array<int, R> b{};
+  int x = static_cast<int>(M);
+  for (int i = R; i >= 1; --i) {
+    while (binom(x, static_cast<unsigned>(i)) > k) {
+      --x;
+    }
+    b[i - 1] = x;
+    k -= binom(x, static_cast<unsigned>(i));
+    --x;
+  }
+  return b;
+}
+
+// ---------- map back to weakly increasing a[i] = b[i] - i ----------
+template <int N, int R>
+consteval std::array<int, R> ith_multicomb(unsigned long long k) {
+  static_assert(N >= 0 && R >= 0);
+  constexpr unsigned int M = static_cast<unsigned int>(N + R - 1);  // upper bound for b
+  auto b = unrank_comb_norep<R>(M, k);
+  std::array<int, R> a{};
+  for (int i = 0; i < R; ++i) a[i] = b[i] - i;  // 0 <= a0 <= ... <= a{R-1} <= N-1
+  return a;
+}
+
+// ---------- build the whole table at compile time ----------
+template <int N, int R>
+consteval auto all_multicomb() {
+  constexpr auto CNT = binom(N + R - 1, R);
+  std::array<std::array<int, R>, CNT> out{};
+  for (unsigned long long k = 0; k < CNT; ++k) {
+    out[k] = ith_multicomb<N, R>(k);
+  }
+  return out;
+}
+
+// ---------- example usage ----------
+static_assert(binom(6, 3) == 20);
+constexpr auto combos = all_multicomb<4, 3>();        // N=4 items, choose R=3 with replacement
+static_assert(combos.size() == binom(4 + 3 - 1, 3));  // 20
+// e.g., combos[0] == {0,0,0}, combos[1] == {0,0,1}, ..., combos.back() == {3,3,3}
+
+int main() {
+  constexpr auto combos = all_multicomb<4, 3>();  // N=4 items, choose R=3 with replacement
+  for (int c = 0; c < combos.size(); ++c) {
+    for (int d = 0; d < 3; ++d) {
+      std::cout << combos[c][d];
+    }
+    std::cout << std::endl;
+  }
+  return 0;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// How to take a tuple of T types and generate all combinations of T choose R with replacement:
+
+#include <array>
+#include <tuple>
+#include <type_traits>
+#include <utility>
+
+// ---------- compile-time binomial ----------
+constexpr unsigned long long binom(unsigned int n, unsigned int k) {
+  if (k > n) return 0ULL;
+  if (k > n - k) k = n - k;
+  unsigned long long r = 1;
+  for (unsigned int i = 1; i <= k; ++i) r = (r * (n - k + i)) / i;
+  return r;
+}
+
+// ---------- unrank the k-th R-combination (no replacement) in colex ----------
+template <int R>
+constexpr std::array<int, R> unrank_comb_norep(unsigned int M, unsigned long long k) {
+  std::array<int, R> b{};
+  int x = static_cast<int>(M);
+  for (int i = R; i >= 1; --i) {
+    while (binom(x, static_cast<unsigned>(i)) > k) --x;
+    b[i - 1] = x;
+    k -= binom(x, static_cast<unsigned>(i));
+    --x;
+  }
+  return b;
+}
+
+// ---------- all weakly-increasing R-tuples over [0..N-1] (with replacement) ----------
+template <int N, int R>
+consteval auto all_multicomb() {
+  constexpr auto CNT = binom(N + R - 1, R);
+  constexpr unsigned int M = static_cast<unsigned int>(N + R - 1);
+  std::array<std::array<int, R>, CNT> out{};
+  for (unsigned long long k = 0; k < CNT; ++k) {
+    auto b = unrank_comb_norep<R>(M, k);               // strict increasing in [0..M]
+    for (int i = 0; i < R; ++i) out[k][i] = b[i] - i;  // map to weakly increasing a
+  }
+  return out;
+}
+
+// ---------- map indices to types ----------
+template <class Types, int... Idx>
+using pick_types_t = std::tuple<std::tuple_element_t<Idx, Types>...>;
+
+// Build a type: std::tuple< pick_types_t<Types, a0,a1,...>, pick_types_t<Types, ...>, ... >
+template <class Types, int R>
+struct all_type_combos_t {
+ private:
+  static constexpr auto idxs = all_multicomb<std::tuple_size_v<Types>, R>();
+  template <std::size_t I>
+  using elem_t = pick_types_t<Types, idxs[I][0], idxs[I][1],
+                              (R > 2 ? idxs[I][2] : 0)  // guarded but ok for generalization
+                              // If you generalize R, expand this via an index sequence.
+                              >;
+  template <std::size_t... I>
+  static auto build(std::index_sequence<I...>) -> std::tuple<elem_t<I>...>;
+
+ public:
+  using type = decltype(build(std::make_index_sequence<idxs.size()>{}));
+};
+
+// Helper alias
+template <class Types, int R>
+using all_type_combos = typename all_type_combos_t<Types, R>::type;
+
+// -------------------- Example --------------------
+#include <string>
+
+using Types = std::tuple<int, double, std::string, float>;
+using TuplesR3 = all_type_combos<Types, 3>;
+
+// size check: C(4+3-1, 3) = 20
+static_assert(std::tuple_size_v<TuplesR3> == binom(4 + 3 - 1, 3));
+
+// spot checks on first/last elements (colex order):
+static_assert(std::is_same_v<std::tuple_element_t<0, TuplesR3>, std::tuple<int, int, int>>);
+static_assert(std::is_same_v<std::tuple_element_t<19, TuplesR3>, std::tuple<float, float, float>>);
+
+int main() {
+  return 0;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// How to map a runtime array to a compile time tuple of default constructed types:
+#include <array>
+#include <functional>
+#include <iostream>
+#include <string>
+#include <tuple>
+#include <type_traits>
+#include <typeindex>
+#include <utility>
+// ---------- compile-time binomial ----------
+constexpr unsigned long long binom(unsigned int n, unsigned int k) {
+  if (k > n) return 0ULL;
+  if (k > n - k) k = n - k;
+  unsigned long long r = 1;
+  for (unsigned int i = 1; i <= k; ++i) r = (r * (n - k + i)) / i;
+  return r;
+}
+
+// ---------- unrank R-combination (no replacement) in colex ----------
+template <int R>
+constexpr std::array<int, R> unrank_comb_norep(unsigned int M, unsigned long long k) {
+  std::array<int, R> b{};
+  int x = static_cast<int>(M);
+  for (int i = R; i >= 1; --i) {
+    while (binom(x, static_cast<unsigned>(i)) > k) --x;
+    b[i - 1] = x;
+    k -= binom(x, static_cast<unsigned>(i));
+    --x;
+  }
+  return b;
+}
+
+// ---------- all weakly-increasing R-tuples over [0..N-1] ----------
+template <int N, int R>
+consteval auto all_multicomb_indices() {
+  constexpr auto CNT = binom(N + R - 1, R);
+  constexpr unsigned int M = static_cast<unsigned int>(N + R - 1);
+  std::array<std::array<int, R>, CNT> out{};
+  for (unsigned long long k = 0; k < CNT; ++k) {
+    auto b = unrank_comb_norep<R>(M, k);
+    for (int i = 0; i < R; ++i) out[k][i] = b[i] - i;  // weakly increasing 0..N-1
+  }
+  return out;
+}
+
+// ---------- turn index tuples into type tuples ----------
+template <class Types, int... Idx>
+using pick_types_t = std::tuple<std::tuple_element_t<Idx, Types>...>;
+
+template <class Types, int R>
+struct all_type_combos_t {
+  static constexpr int N = static_cast<int>(std::tuple_size_v<Types>);
+  static constexpr auto idxs = all_multicomb_indices<N, R>();
+
+  template <std::size_t I, std::size_t... J>
+  static auto make_elem(std::index_sequence<J...>) -> pick_types_t<Types, idxs[I][static_cast<int>(J)]...>;
+
+  template <std::size_t I>
+  using elem_t = decltype(make_elem<I>(std::make_index_sequence<R>{}));
+
+  template <std::size_t... I>
+  static auto build(std::index_sequence<I...>) -> std::tuple<elem_t<I>...>;
+
+  using type = decltype(build(std::make_index_sequence<idxs.size()>{}));
+};
+
+template <class Types, int R>
+using all_type_combos = typename all_type_combos_t<Types, R>::type;
+
+// ---------- runtime match + visit ----------
+namespace detail {
+
+// Does `ti` match the type pattern of tuple `Tup` element-wise?
+template <class Tup, std::size_t... J>
+bool match_types(const std::array<std::type_index, std::tuple_size_v<Tup>>& ti, std::index_sequence<J...>) {
+  return ((ti[J] == std::type_index(typeid(std::tuple_element_t<J, Tup>))) && ...);
+}
+
+template <class Types, int R, std::size_t I, class F>
+bool try_one(const std::array<std::type_index, R>& ti, F&& f) {
+  using Tup = typename all_type_combos_t<Types, R>::template elem_t<I>;
+  if (match_types<Tup>(ti, std::make_index_sequence<R>{})) {
+    std::invoke(std::forward<F>(f), Tup{});  // default-constructed concrete tuple
+    return true;
+  }
+  return false;
+}
+
+template <class Types, int R, class F, std::size_t... I>
+bool visit_impl(const std::array<std::type_index, R>& ti, F&& f, std::index_sequence<I...>) {
+  bool done = false;
+  // Short-circuit fold: evaluate left-to-right and stop once matched.
+  ((done = done || try_one<Types, R, I>(ti, f)), ...);
+  return done;
+}
+
+}  // namespace detail
+
+// Public API:
+// - Returns true if a matching multichoose type was found, and calls f(Tup{}).
+// - Requires that the input type_index array is in the same weakly-increasing order
+//   as the generated combinations (0..N-1 order of `Types`).
+template <class Types, int R, class F>
+bool visit_multicomb(const std::array<std::type_index, R>& ti, F&& f) {
+  using Combos = all_type_combos<Types, R>;
+  constexpr std::size_t CNT = std::tuple_size_v<Combos>;
+  return detail::visit_impl<Types, R>(ti, std::forward<F>(f), std::make_index_sequence<CNT>{});
+}
+
+// -------------------- Example --------------------
+using Types = std::tuple<int, double, std::string, float>;
+
+int main() {
+  // Example: want to visit the "001" (int,double,double) and "233" (double,float,float)
+  std::array<std::type_index, 3> key1{typeid(int), typeid(double), typeid(double)};
+  std::array<std::type_index, 3> key2{typeid(double), typeid(float), typeid(float)};
+
+  auto printer = [](auto tup) {
+    using T = decltype(tup);
+    // do "visit" work here; we just print the demangled-ish type names count
+    constexpr std::size_t R = std::tuple_size_v<T>;
+    std::cout << typeid(T).name() << ": " << typeid(std::get<0>(tup)).name() << typeid(std::get<1>(tup)).name()
+              << typeid(std::get<2>(tup)).name() << std::endl;
+  };
+
+  bool ok1 = visit_multicomb<Types, 3>(key1, printer);  // matches {0,1,1}
+  bool ok2 = visit_multicomb<Types, 3>(key2, printer);  // matches {1,3,3}
+  (void)ok1;
+  (void)ok2;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// How to map an array of variants to a compile time tuple of their active types:
+#include <array>
+#include <functional>
+#include <tuple>
+#include <type_traits>
+#include <utility>
+#include <variant>
+
+// ---------- compile-time binomial ----------
+constexpr unsigned long long binom(unsigned int n, unsigned int k) {
+  if (k > n) return 0ULL;
+  if (k > n - k) k = n - k;
+  unsigned long long r = 1;
+  for (unsigned int i = 1; i <= k; ++i) r = (r * (n - k + i)) / i;
+  return r;
+}
+
+// ---------- unrank R-combination (no replacement) in colex ----------
+template <std::size_t R>
+constexpr std::array<int, R> unrank_comb_norep(unsigned int M, unsigned long long k) {
+  std::array<int, R> b{};
+  int x = static_cast<int>(M);
+  for (int i = R; i >= 1; --i) {
+    while (binom(x, static_cast<unsigned>(i)) > k) --x;
+    b[i - 1] = x;
+    k -= binom(x, static_cast<unsigned>(i));
+    --x;
+  }
+  return b;
+}
+
+// ---------- all weakly-increasing R-tuples over [0..N-1] ----------
+template <int N, std::size_t R>
+consteval auto all_multicomb_indices() {
+  constexpr auto CNT = binom(N + R - 1, R);
+  constexpr unsigned int M = static_cast<unsigned int>(N + R - 1);
+  std::array<std::array<int, R>, CNT> out{};
+  for (unsigned long long k = 0; k < CNT; ++k) {
+    auto b = unrank_comb_norep<R>(M, k);
+    for (int i = 0; i < R; ++i) out[k][i] = b[i] - i;  // weakly increasing 0..N-1
+  }
+  return out;
+}
+
+// Cache the indices table per (Variant,R)
+template <class Variant, std::size_t R>
+struct multicomb_index_table {
+  static constexpr int N = static_cast<int>(std::variant_size_v<std::remove_cv_t<std::remove_reference_t<Variant>>>);
+  static constexpr auto idxs = all_multicomb_indices<N, R>();
+  static constexpr std::size_t size = idxs.size();
+};
+
+// ---------- helpers that use the cached table ----------
+namespace detail {
+
+// Compare active indices of vs against the I-th pattern
+template <std::size_t I, class Variant, std::size_t R>
+bool match_active(const std::array<Variant, R>& vs) {
+  for (int j = 0; j < R; ++j) {
+    if (vs[j].index() != multicomb_index_table<Variant, R>::idxs[I][j]) return false;
+  }
+  return true;
+}
+
+// Make a tuple of references to the active alternatives for the I-th pattern
+template <std::size_t I, class Variant, std::size_t R, std::size_t... J>
+auto tie_from_variants_impl(std::array<Variant, R>& vs, std::index_sequence<J...>) {
+  return std::tie(std::get<multicomb_index_table<Variant, R>::idxs[I][static_cast<int>(J)]>(vs[J])...);
+}
+template <std::size_t I, class Variant, std::size_t R, std::size_t... J>
+auto tie_from_variants_impl(const std::array<Variant, R>& vs, std::index_sequence<J...>) {
+  return std::tie(std::get<multicomb_index_table<Variant, R>::idxs[I][static_cast<int>(J)]>(vs[J])...);
+}
+template <std::size_t I, class Variant, std::size_t R>
+auto tie_from_variants(std::array<Variant, R>& vs) {
+  return tie_from_variants_impl<I, Variant, R>(vs, std::make_index_sequence<R>{});
+}
+template <std::size_t I, class Variant, std::size_t R>
+auto tie_from_variants(const std::array<Variant, R>& vs) {
+  return tie_from_variants_impl<I, Variant, R>(vs, std::make_index_sequence<R>{});
+}
+
+// Try the I-th multichoose; on match, call f(tuple_of_refs)
+// Returns true if matched.
+template <std::size_t I, class Variant, std::size_t R, class F, typename... ExtraArgs>
+bool try_one(std::array<Variant, R>& vs, const F& f, ExtraArgs&... args) {
+  if (match_active<I>(vs)) {
+    auto tup = tie_from_variants<I, Variant, R>(vs);
+    std::invoke(f, tup, args...);
+    return true;
+  }
+  return false;
+}
+template <std::size_t I, class Variant, std::size_t R, class F, typename... ExtraArgs>
+bool try_one(const std::array<Variant, R>& vs, const F& f, ExtraArgs&... args) {
+  if (match_active<I>(vs)) {
+    auto tup = tie_from_variants<I, Variant, R>(vs);
+    std::invoke(f, tup, args...);
+    return true;
+  }
+  return false;
+}
+
+// Visit over all patterns until a match
+template <class Variant, std::size_t R, class F, std::size_t... I, typename... ExtraArgs>
+bool visit_impl(std::array<Variant, R>& vs, const F& f, std::index_sequence<I...>, ExtraArgs&... args) {
+  bool done = false;
+  ((done = done || try_one<I, Variant, R>(vs, f, args...)), ...);
+  return done;
+}
+template <class Variant, std::size_t R, class F, std::size_t... I, typename... ExtraArgs>
+bool visit_impl(const std::array<Variant, R>& vs, const F& f, std::index_sequence<I...>, ExtraArgs&... args) {
+  bool done = false;
+  ((done = done || try_one<I, Variant, R>(vs, f, args...)), ...);
+  return done;
+}
+
+}  // namespace detail
+
+// ---------- Public API ----------
+// Requires the runtime array to be in the same weakly-increasing order
+// as the multichoose enumeration over the variant alternatives.
+//
+// Calls f(tup_of_refs) where tup_of_refs is a tuple of (const) lvalue refs to each active value.
+// Returns true if a match was found, false otherwise.
+template <class Variant, std::size_t R, class F, typename... ExtraArgs>
+bool visit_multicomb(std::array<Variant, R>& vs, const F& f, ExtraArgs&... args) {
+  using Tab = multicomb_index_table<Variant, R>;
+  return detail::visit_impl<Variant, R>(vs, f, std::make_index_sequence<Tab::size>{}, args...);
+}
+template <class Variant, std::size_t R, class F, typename... ExtraArgs>
+bool visit_multicomb(const std::array<Variant, R>& vs, const F& f, ExtraArgs&... args) {
+  using Tab = multicomb_index_table<Variant, R>;
+  return detail::visit_impl<Variant, R>(vs, f, std::make_index_sequence<Tab::size>{}, args...);
+}
+
+// -------------------- Example --------------------
+#include <iostream>
+#include <string>
+
+int main() {
+  using V = std::variant<int, double, std::string, float>;
+  std::array<V, 3> a1{5, 2.0, 2.5};                    // indices {0,1,1}
+  std::array<V, 3> a2{std::string("hi"), 1.0f, 1.0f};  // indices {2,3,3}
+
+  auto printer = [](const auto& tup) {
+    // tup is std::tuple<const Alt0&, const Alt1&, const Alt2&>
+    std::cout << typeid(tup).name() << std::endl;
+    std::apply(
+        [](const auto&... xs) {
+          ((std::cout << xs << " "), ...);
+          std::cout << "\n";
+        },
+        tup);
+  };
+
+  visit_multicomb<V, 3>(a1, printer);  // prints: 5 2 2.5
+  visit_multicomb<V, 3>(a2, printer);  // prints: hi 1 1
+}
+
+int main() {
+  // Example: want to visit the "001" (int,double,double) and "233" (double,float,float)
+  std::array<Variant, 3> key1{int(42), double(3.14), double(41.3)};
+  std::array<Variant, 3> key2{double(3.14), float(32), float(23)};
+
+  auto printer = [](auto tup) {
+    using T = decltype(tup);
+    // do "visit" work here; we just print the demangled-ish type names count
+    constexpr std::size_t R = std::tuple_size_v<T>;
+    std::cout << typeid(T).name() << ": " << typeid(std::get<0>(tup)).name() << typeid(std::get<1>(tup)).name()
+              << typeid(std::get<2>(tup)).name() << std::endl;
+  };
+
+  bool ok1 = visit_multicomb(key1, printer);  // matches {0,1,1}
+  bool ok2 = visit_multicomb(key2, printer);  // matches {1,3,3}
+  (void)ok1;
+  (void)ok2;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/*
+Current logic:
+The order of accessors within an aggregate doesn't matter. This means that the set of concrete aggregate types is rather
+small. We will sort them by their active variant index, allowing direct comparison to all_multicomb_indices.
+visit_multicomb can then map the set of sorted runtime accessors to a tuple of concrete accessors. This tuple is now,
+however, tagged.
+
+How to handle tags?
+We can store a tag string on the runtime accessors. The user would need to provide a map between compile-time tag and
+runtime string. We would store a tuple of tags and an array of strings. How then, can we map the tuple of tags, array of
+strings, and tuple of concrete accessors to a tuple of tagged concrete accessors?
+
+(Tags, std::array<std::string, N> tag_strings, std::tuple<Accessor1, ..., AccessorN> accessors)
+  -> std::tuple<TaggedAccessor1, ..., TaggedAccessorN>
+
+Ok, you take the tuple of accessors and build a map from string to tuple element index. Sure, that works but going from
+there to a tuple of tagged accessors is impossible because this map is runtime and that tuple type is compile-time.
+
+Also can't go the other way around and loop over the tuple of tags because the runtime strings still get in the way.
+
+.add_accessor<CENTER>(center_accessor) works because it allows the user to provide the tag at compile-time. We still
+need that but how can it be paired with the runtime string? The problem is that we are bound to a design where the type
+is explicitly known but we are inside of an if-else block unable to return. Here, add_accessor is templated on the
+accessor type, which means no intermediary runtime object can change that type.
+
+Let's ask a different question: What is the purpose of tags? Tags give us the ability to call view.get<TAG>(entity)
+instead of view.node_coords_accessor(entity). The tag is used (at compile-time) to find the correct accessor.
+
+Can we do a pre-step before the current one? We have a RuntimeAggregate, which users touch directly but lack an
+intermediary TaggedRuntimeAggregate, which contains tagged variants. Visit, should be performed on this object
+and when we sort the tuple of runtime aggregates, we should also sort the tuple of tags.
+
+// User creates their RuntimeAggregate
+RuntimeAggregate ragg = make_runtime_aggregate(bulk_data, selector, stk::topology::PARTICLE)
+                            .add_accessor(NODE_RANK, "OUR_CENTER", center_accessor)
+                            .add_accessor(ELEM_RANK, "OUR_RADIUS", radius_accessor);
+
+// User creates a rename map to tell us how their names correspond to our expected names
+std::map<std::string, std::string> rename_map{{"CENTER", "OUR_CENTER"}, {"RADIUS", "OUR_RADIUS"}};
+
+// We use the given rename map to unpack their runtime aggregate and add custom compile-time tags to each accessor
+auto center_racc = ragg.get_accessor<accessor_t::VECTOR3<double>>(NODE_RANK, rename_map["CENTER"]);
+auto radius_racc = ragg.get_accessor<accessor_t::SCALAR<double>>(ELEM_RANK, rename_map["RADIUS"]);
+auto tagged_ragg = make_tagged_ragg<stk::topology::PARTICLE>(bulk_data, selector)
+                       .add_accessor<CENTER>(center_racc)
+                       .add_accessor<RADIUS>(radius_racc);
+
+// We use visit to convert the tagged aggregate into a compile-time optimized aggregate object
+tagged_ragg.visit([](auto& agg) {
+  // We perform an action that acts on the aggregate
+  stk::mesh::for_each_entity_run(
+      ngp_mesh, KOKKOS_LAMBDA(stk::mesh::FastMeshIndex sphere_index) {
+        stk::mesh::FastMeshIndex center_node_index = ngp_mesh.fast_mesh_index(ngp_mesh.nodes(sphere_index)[0]);
+        auto center = agg.get<CENTER>(center_node_index);
+        auto radius = agg.get<RADIUS>(sphere_index);
+        center += radius[0];
+      });
+});
+*/
+
+// In the following, we extend our current prototype to include tags
+//
+// Notes:
+// We are unable to sort the variants by active index because we cannot sort the tuple of tags in the same way
+// due to the variant index being runtime. We can use a reorder map instead, which has no effect on performance.
+template <size_t N, typename... Tags, typename... VariantTs>
+struct TaggedBagOfVariants {
+  using tags_t = std::tuple<Tags...>;
+  using variant_types_t = std::tuple<VariantTs...>;
+  using variant_t = std::variant<VariantTs...>;
+  std::array<variant_t, N> variants;
+
+  template <typename Tag>
+  auto insert(Tag tag, variant_t var) {
+    // Create a new TaggedBagOfVariants with the new tag/variant added
+    auto new_tags = std::tuple_cat(tags_t{}, std::tuple<Tag>{});
+    std::array<variant_t, N + 1> new_variants;
+    for (size_t i = 0; i < N; ++i) {
+      new_variants[i] = variants[i];
+    }
+    new_variants[N] = var;
+    return TaggedBagOfVariants<N + 1, Tags..., Tag, VariantTs...>{new_variants};
+  }
+
+  std::array<size_t, N> build_reorder_map() {  // map[sorted_id] = original_id
+    std::array<size_t, N> map_from_sorted_to_original{};
+    std::iota(map_from_sorted_to_original.begin(), map_from_sorted_to_original.end(), 0);
+    std::sort(map_from_sorted_to_original.begin(), map_from_sorted_to_original.end(),
+              [this](size_t a, size_t b) { return variants[a].index() < variants[b].index(); });
+    return map_from_sorted_to_original;
+  }
+
+  template <typename Visitor>
+  bool visit(const Visitor& visitor) {
+    bool success =
+        visit_multicomb(variants, visitor, tags_t{});  // calls visitor(tuple_of_active_types, tuple_of_their_tags)
+    return success;
+  }
+};
+
+template <size_t N, typename... Tags, typename... Types>
+struct TaggedBagOfObjects {
+  using tags_t = std::tuple<Tags...>;
+  using types_t = std::tuple<Types...>;
+  std::tuple<Types...> objs;
+
+  template <typename Tag, typename NewObject>
+  auto insert(Tag tag, NewObject obj) {
+    // Create a new TaggedBagOfVariants with the new tag/variant added
+    auto new_tags = std::tuple_cat(tags_t{}, std::tuple<Tag>{});
+    auto new_objs = std::tuple_cat(objs, std::tuple<NewObject>{obj});
+    return TaggedBagOfObjects<N + 1, Tags..., Tag, Types..., NewObject>{new_objs};
+  }
+};
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Same logic, a new day.
+//
+// Mundy now formally offers core::aggregate as a generalized data structure that mimics a compile-time map from key to
+// object similar in many ways to boost::hana::map. We'll call our TaggedBagOfVariants variant_aggregate and write it in
+// condensed form as v_agg.
+//
+// I am currently working about the issue of sorting by active type. We have a "working" prototype that correctly converts
+// each variant of a variant_aggregate to its active type and uses this to populate a concrete aggregate. The problem is that
+// this prototype doesn't maintain the correct tag to type mapping because we cannot sort the tags in the same way as the variants.
+//
+// We have unsorted tags in a tuple and sorted concrete types in a tuple.
+// The only solution is to make get<tag>(this_weird_sorted_aggregate) do a compile-time map from tag to index and then use a
+// runtime undo_sort_map to get the correct index into the sorted concrete types.
+//
+// // Some python code for a test
+// import numpy as np
+// import math
+// def num_visits_direct(num_alts, num_variants):
+//     return num_alts**num_variants
+//
+// def num_visits_sorted(num_alts, num_variants):
+//     return math.factorial(num_alts + num_variants - 1) // (math.factorial(num_variants) * math.factorial(num_alts - 1))
+//
+// def num_visits_sorted_and_tagged(num_alts, num_variants):
+//     return math.factorial(num_alts + num_variants - 1) // (math.factorial(num_variants) * math.factorial(num_alts - 1)) * math.factorial(num_variants)
+//
+// for num_alts in range(1, 5):
+//     for num_variants in range(1, 13):
+//         print(f"{num_alts:2d} {num_variants:2d} {num_visits_sorted(num_alts, num_variants):6d} {num_visits_direct(num_alts, num_variants):6d} {num_visits_sorted_and_tagged(num_alts, num_variants):6d}")
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Same logic, a newer day.
+//
+// The above idea has a flaw. The fact that the variants are tagged encodes an order, which means that compile-time
+// enumeration of all possible types is impractical since we must expand (#Als)^(#Vars) expansions. We can however, be 
+// selective in what we make compile-time. We can continue to unrole with sorting giving #Alts choose #Vars with replacement
+// expansions, which is much much smaller. We store in arrays the sets of active types (as opposed to in a single tuple) so
+// that we can access them via runtime index and we store an aggregate mapping tag to.... In this design, Tag -> return 
+// type is a runtime map meaning we cannot have get<Tag>(agg) return a different concrete view type. And given a tag, we
+// have no ability to know which active type is associated with it at compile-time, not without enumerating all possible
+// combinations. At best, we can do get<Tag>(v_agg) and return a variant, taking us back to step 1.
+//
+// If I, magically, knew the return type from get<Tag>(v_agg), then I would know the active type for that Tag at compile-
+// time. Can we go the other way and make this map compile-time compatable while avoiding using templates in python?
+// That is to say, can we append to a VariantAggregate in a way that always maintains sorting by active type? Instead
+// of appending by variant, you would append by concrete type. In this way, we would know exactly where within the tags tuple
+// to insert the new tag to maintain sorting. That works in C++. This would allow us to have a single interface for functions
+// that are meant to act on shared values or fields without having to enumerate all possibilities of scalar/field. In this 
+// design, because the tags are already sorted by active type, we can call get<Tag>(agg), as we do now, and get out the 
+// correct result since Tag to return type is known at compile-time. Because these are sorted we have as many types as
+// #Alts choose #Vars with replacement.
+//
+// How does this new design impact python?
+// a = make_accessor_aggregate()        % Return type is AccessorAggregate<>
+//       .append_shared("RADIUS", 2.5)         % Return type is AccessorAggregate<SharedAccessor>
+//       .append_field("COORDS", node_coords)  % Return type is AccessorAggregate<SharedAccessor, VectorAccessor>
+//       .append_shared("MASS", 1.0)           % Return type is AccessorAggregate<SharedAccessor, SharedAccessor, VectorAccessor>
+//
+// We would need to auto-generate these types but they would each have exactly two append functions, one that takes in a shared
+// value and one that takes in a field. Each would know exactly where within the return type to append.
+//
+// What about mapping from a string tagged aggregate (like up here in python) to C++? Well, in this design, AccessorAggregate
+// contains an array of variants sorted by their accessor type and a vector of string tags. The problem is that AccessorAggregate
+// needs to have a compile-time get<I>(aagg) to fetch the I'th object in the aggregate, so the runtime tags here are useless, as
+// they have no ability to perform get!
+//
+// auto center_racc = ragg.get_accessor<accessor_t::VECTOR3<double>>(NODE_RANK, rename_map["CENTER"]);  // Variant :(
+// auto radius_racc = ragg.get_accessor<accessor_t::SCALAR<double>>(ELEM_RANK, rename_map["RADIUS"]);
+// auto tagged_ragg = make_tagged_ragg<stk::topology::PARTICLE>(bulk_data, selector)
+//                        .add_accessor<CENTER>(center_racc)
+//                        .add_accessor<RADIUS>(radius_racc);
+//
+//
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// A day older, maybe not much wiser.
+//
+// It's truly impossible for us to not enumerate all (#Als)^(#Vars) combinations. Doesn't matter how we slice it. Think of
+// aggregates as a single sample from a MASSIVE space made possible because of C++'s template system. There is just no way
+// to avoid this expansion if we want to map from a runtime aggregate to a compile-time aggregate.
+//
+// What I learned most recently:
+//   - Pure C++ can support the mapping from tagged variant to a concrete aggregate with active types so long as the append
+//     function of the tagged aggregate takes in the concrete type and uses this knowledge to maintain compile-time sorting 
+//     by active type. This would require #Alts choose #Vars with replacement expansions, which is manageable. This design 
+//     is not, however, compatable with Python because we are using compile-time knowledge to reduce the number of expansions.
+//   - Using a finite set of compile-time tags instead of strings and sorting the variant by active tag, thereby giving us
+//     a compile-time map from tag to sorted index. This fails because of the #Tags choose #Vars with replacement expansion,
+//     which is a huge number because #Tags is large.
+//
+// There's an alternative here. Let the function accept an Agg or a RAgg with a specified set of accepted types per tag.
+// In many physics-based applications, most values should only ever be field. Coords, force, torque, velocity, etc are all
+// field. Mass, radius, charge, etc are all either shared or fields. We can inform users if the total number of combinations
+// is too large (say > 256). If your application only allows shared/field for parameters, then you may have at most 8 total
+// parameters before you exceed this limit. This is probably acceptable for many applications. If it becomes a limitation,
+// then combine the parameters together into a single type like using a vector, matrix, or quaternion instead of one scalar
+// per component.
+//
+// Even though a runtime aggregate uses variants and users are free to set any of the tags to any variant type, the calling
+// function will throw if an unsupported combination is provided. This is done to avoid templates and to keep our interface
+// consistant between C++ and Python. Pure C++ can call the direct aggregate version if they want to avoid this overhead.
+//
+// Note, with this design, the overhead is entirely on the compiler. At runtime, we will map the ragg to an agg for lossless
+// performance. Instead, the overhead comes from compiling all possible combinations during the visitation step.
+//
+// There is one potential problem with this that we observed in our variant benchmark. We observed that generating an agg
+// from a v_agg during visitation was WAY slower than unpacking into concrete accessors. To me, this means that we need to
+// offer three inputs: a tagged variant aggregate, a concrete aggregate, and the set of accessors. The aggregate will be 
+// unpacked into concrete accessors and then passed into the accessor function. Similarly, the tagged variant aggregate will be
+// unpacked into concrete accessors via visitation and then passed into the accessor function.
+//
+// The reason aggregates exist is to aggregate multiple accessors into a single logical object that can be passed around easily.
+// They no longer serve the same role as mundy::mesh::Aggregate once did, where they would have for_each functions, as the
+// old syntax led to confusion. But, if we unpack judiciously and automatically in a way that the user doesn't have to think about,
+// then we get the best of both worlds: quicker compilation, more logical code, and an easy to use interface.
+
+/*
+
+What if we used setters instead of a rename map? Would this allow us to append based on active type? We could have 
+setters that take in either shared value or an accessor.
+
+names: ["x",    "y",    "z"]
+types: [shared, shared, field]
+
+names: ["y",    "z",    "x"]
+types: [shared, shared, field]
 
 
+TYPE ERASED VIEW TYPE
+auto sphere_centers = ragg.get_accessor<accessor_t::VECTOR3<double>>(NODE_RANK, rename_map["CENTER"]);
+
+
+## Visit
+- Takes in an array of runtime tagged variants sorted by their active type index and a visitor
+- Calls visitor(array of runtime tagged type erased shared values, array of runtime tagged type erased fields)
+
+The index into the original array of variants maps directly onto the concatenated array of shared values and fields.
+But, because this index is runtime, we have no ability to map the size of these arrays and that index to a concrete
+type.
+
+All of this is fixed if mundy offers finite set of tags within python where expansions to mundy may augment this set.
+
+With this RuntimeAggregate.append would require 2 (scalar/field) functions per tag. Each would return a unique type
+by inserting said object/tag into the end of the existing sorted arrays of active types and tags.
+
+If we do not offer the name, then we could offer something like TAG_1, TAG_2, ..., TAG_100, to allow users to
+append without naming. But if they want a specific name, they must use one of the predefined tags like FORCE, VELOCITY,
+etc. Basically, every tag that mundy expects as a potential input to an algorithm would be predefined in this master
+list. There would be no point in offering tags that we don't use. If an expansion to mundy adds a new algorithm that
+expects a new tag, then we augment the master list. When creating the field, they used a string name.
+
+What we've effectively done is force the responsibility of mapping string name to compile-time tag type onto the user.
+
+
+
+## Problem statement ##
+
+Given:
+  - Array of type erased shared values and an array of type erased accessors
+  - 
+
+
+*/
 }  // namespace mesh
 
 }  // namespace mundy

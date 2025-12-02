@@ -80,7 +80,7 @@ class LinkCRSDataSynchronizerT : public HostDeviceSynchronizer {
     // once we make it possible to keep the CRS data up to date during mesh modifications.
     //
     // For now, we will just rebuild the CRS data from the COO data after mesh modifications
-    std::cout << "WARNING: update_post_mesh_mod() is a currently a no-op for LinkCRSDataSynchronizerT" << std::endl;
+    // std::cout << "WARNING: update_post_mesh_mod() is a currently a no-op for LinkCRSDataSynchronizerT" << std::endl;
   }
 
  private:

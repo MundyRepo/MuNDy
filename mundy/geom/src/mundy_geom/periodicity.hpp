@@ -38,6 +38,99 @@
 #include <mundy_math/Tolerance.hpp>     // for mundy::math::get_zero_tolerance
 #include <mundy_math/Vector3.hpp>       // for mundy::math::Vector3
 
+// Need a runtime metric with a visit function that can turn into a concrete metric.
+// This needs to be finitely enumerable, so like stk::topology, we must use an enum for distinct metric types.
+// class metric {
+//  public:
+//   enum metric_t {
+//     INVALID_METRIC,
+//     BEGIN_METRIC,
+
+//     CARTESIAN = BEGIN_METRIC,  // Non-periodic
+//     ORTHORHOMBIC, ORTHO = ORTHORHOMBIC,  // Axes aligned with coordinate axes
+//     TRICLINIC, TRI = TRICLINIC,  // General periodic box with tilted axes
+
+//     END_METRIC,
+//     NUM_METRICS = END_METRIC - BEGIN_METRIC,
+//     FORCE_METRIC_TO_UNSIGNED = ~0U  // max unsigned int
+//   };
+
+//   KOKKOS_INLINE_FUNCTION
+//   bool is_valid() const {
+//     return value_ != INVALID_METRIC;
+//   }
+
+//   //! \name Cast to integer type
+//   //@{
+
+//   /// \brief Implicit cast to metric_t enum type
+//   KOKKOS_INLINE_FUNCTION
+//   operator metric_t() const {
+//     return value_;
+//   }
+
+//   /// \brief return metric_t enum type
+//   KOKKOS_INLINE_FUNCTION
+//   metric_t operator()() const {
+//     return value_;
+//   }
+
+//   /// \brief return metric_t enum type
+//   KOKKOS_INLINE_FUNCTION
+//   metric_t value() const {
+//     return value_;
+//   }
+//   //@}
+
+//   //! \name Constructors and assignment
+//   //@{
+
+//   /// \brief Default construct to invalid
+//   KOKKOS_INLINE_FUNCTION
+//   metric() : value_(INVALID_TOPOLOGY) {
+//   }
+
+//   /// \brief Implicit construct from a metric_t
+//   KOKKOS_INLINE_FUNCTION
+//   metric(metric_t m) : value_(m) {
+//   }
+
+//   /// \brief Copy constructor
+//   KOKKOS_INLINE_FUNCTION
+//   metric(const metric& m) : value_(m.value_) {
+//   }
+
+//   /// \brief Assignment operator
+//   KOKKOS_INLINE_FUNCTION
+//   metric& operator=(const metric& rhs) {
+//     if (&rhs != this) {
+//       value_ = rhs.value_;
+//     }
+//     return *this;
+//   }
+//   //@}
+
+//   //! \name Comparison operators
+//   //@{
+
+//   KOKKOS_INLINE_FUNCTION
+//   bool operator==(const metric& rhs) const {
+//     return value_ == rhs.value_;
+//   }
+
+//   KOKKOS_INLINE_FUNCTION
+//   bool operator==(const metric_t& rhs) const {
+//     return value_ == rhs;
+//   }
+//   //@}
+
+//  private:
+//   metric_t value_ = INVALID_METRIC;
+//   using metric_variant_t = mundy::core::variant<
+//     mundy::geom::
+// };
+
+
 namespace mundy {
 
 namespace geom {
@@ -56,21 +149,6 @@ KOKKOS_INLINE_FUNCTION constexpr Scalar safe_unit_mod1(Scalar s) {
   return t;
 }
 
-template <typename Integer, math::ValidVector3Type Vector3T>
-KOKKOS_INLINE_FUNCTION constexpr math::Vector3<typename Vector3T::scalar_t> frac_minimum_image(
-    const Vector3T& fractional_vec) {
-  using Scalar = typename Vector3T::scalar_t;
-  return apply([](Scalar x) { return x - static_cast<Scalar>(static_cast<Integer>(Kokkos::round(x))); },
-               fractional_vec);
-}
-
-template <typename Integer, math::ValidVector3Type Vector3T>
-KOKKOS_INLINE_FUNCTION constexpr math::Vector3<typename Vector3T::scalar_t> frac_wrap_to_unit_cell(
-    const Vector3T& fractional_vec) {
-  using Scalar = typename Vector3T::scalar_t;
-  return apply([](Scalar x) { return safe_unit_mod1<Integer>(x); }, fractional_vec);
-}
-
 }  // namespace impl
 
 template <typename Scalar>
@@ -81,6 +159,22 @@ class EuclideanMetric {
   using OurVector3 = math::Vector3<Scalar>;
   using OurMatrix3 = math::Matrix3<Scalar>;
   using OurPoint = Point<Scalar>;
+
+  /// \brief Get if the given dimension is periodic
+  template<unsigned dimension>
+  KOKKOS_INLINE_FUNCTION static constexpr bool is_periodic() {
+    return false;
+  }
+
+  /// \brief Get if the given dimension is periodic
+  KOKKOS_INLINE_FUNCTION constexpr bool is_periodic(unsigned /*dimension*/) const {
+    return false;
+  }
+
+  /// \brief Get the number of periodic dimensions
+  KOKKOS_INLINE_FUNCTION constexpr unsigned num_periodic_dimensions() const {
+    return 0;
+  }
 
   /// \brief Map a point into fractional coordinates
   template <ValidPointType PointT>
@@ -94,6 +188,18 @@ class EuclideanMetric {
     requires std::is_same_v<typename PointT::scalar_t, Scalar>
   KOKKOS_INLINE_FUNCTION constexpr OurPoint from_fractional(const PointT& point_frac) const {
     return point_frac;
+  }
+
+  template <typename Integer, math::ValidVector3Type Vector3T>
+  KOKKOS_INLINE_FUNCTION constexpr math::Vector3<typename Vector3T::scalar_t> frac_minimum_image(
+      const Vector3T& fractional_vec) const {
+    return fractional_vec;
+  }
+
+  template <typename Integer, math::ValidVector3Type Vector3T>
+  KOKKOS_INLINE_FUNCTION constexpr math::Vector3<typename Vector3T::scalar_t> frac_wrap_to_unit_cell(
+      const Vector3T& fractional_vec) const {
+    return fractional_vec;
   }
 
   /// \brief Distance vector between two points in free space (from point1 to point2)
@@ -149,6 +255,22 @@ class PeriodicMetric {
     h_inv_ = math::inverse(h_);
   }
 
+  /// \brief Get if the given dimension is periodic
+  template<unsigned dimension>
+  KOKKOS_INLINE_FUNCTION static constexpr bool is_periodic() {
+    return true;
+  }
+
+  /// \brief Get if the given dimension is periodic
+  KOKKOS_INLINE_FUNCTION constexpr bool is_periodic(unsigned /*dimension*/) const {
+    return true;
+  }
+
+  /// \brief Get the number of periodic dimensions
+  KOKKOS_INLINE_FUNCTION constexpr unsigned num_periodic_dimensions() const {
+    return 3;
+  }
+
   /// \brief Map a point into fractional coordinates
   template <ValidPointType PointT>
     requires std::is_same_v<typename PointT::scalar_t, Scalar>
@@ -163,19 +285,32 @@ class PeriodicMetric {
     return h_ * point_frac;
   }
 
+  template <typename Integer, math::ValidVector3Type Vector3T>
+  KOKKOS_INLINE_FUNCTION constexpr math::Vector3<typename Vector3T::scalar_t> frac_minimum_image(
+      const Vector3T& fractional_vec) const {
+    return apply([](Scalar x) { return x - static_cast<Scalar>(static_cast<Integer>(Kokkos::round(x))); },
+                 fractional_vec);
+  }
+
+  template <typename Integer, math::ValidVector3Type Vector3T>
+  KOKKOS_INLINE_FUNCTION constexpr math::Vector3<typename Vector3T::scalar_t> frac_wrap_to_unit_cell(
+      const Vector3T& fractional_vec) const {
+    return apply([](Scalar x) { return impl::safe_unit_mod1<Integer>(x); }, fractional_vec);
+  }
+
   /// \brief Distance vector between two points in periodic space (from point1 to point2)
   template <ValidPointType PointT1, ValidPointType PointT2>
     requires std::is_same_v<typename PointT1::scalar_t, Scalar> && std::is_same_v<typename PointT2::scalar_t, Scalar>
   KOKKOS_INLINE_FUNCTION constexpr OurPoint sep(const PointT1& point1, const PointT2& point2) const {
     // Assumes linearity of to_fractional
-    return from_fractional(impl::frac_minimum_image<int64_t>(to_fractional(point2 - point1)));
+    return from_fractional(frac_minimum_image<int64_t>(to_fractional(point2 - point1)));
   }
 
   /// \brief Wrap a point into the periodic space
   template <ValidPointType PointT>
     requires std::is_same_v<typename PointT::scalar_t, Scalar>
   KOKKOS_INLINE_FUNCTION constexpr OurPoint wrap(const PointT& point) const {
-    return from_fractional(impl::frac_wrap_to_unit_cell<int64_t>(to_fractional(point)));
+    return from_fractional(frac_wrap_to_unit_cell<int64_t>(to_fractional(point)));
   }
 
   /// \brief Direct lattice vectors (return as the columns of a matrix)
@@ -195,6 +330,415 @@ class PeriodicMetric {
   OurMatrix3 h_;      ///< Unit cell matrix
   OurMatrix3 h_inv_;  ///< Inverse of the unit cell matrix
 };  // PeriodicMetric
+
+
+template <typename Scalar>
+class PeriodicMetricX {
+ public:
+  /// \brief Type aliases
+  using scalar_t = Scalar;
+  using OurVector3 = math::Vector3<Scalar>;
+  using OurPoint = Point<Scalar>;
+
+  /// \brief Default constructor
+  KOKKOS_DEFAULTED_FUNCTION
+  constexpr PeriodicMetricX() = default;
+
+  /// \brief Constructor with unit cell matrix
+  KOKKOS_INLINE_FUNCTION
+  explicit constexpr PeriodicMetricX(const double width_x) : scale_{width_x, 1.0, 1.0}, inv_scale_{1.0 / width_x, 1.0, 1.0} {
+    MUNDY_THROW_ASSERT(width_x > 0, std::invalid_argument, "Cell dimensions must be positive");
+  }
+
+  /// \brief Get if the given dimension is periodic
+  template<unsigned dimension>
+  KOKKOS_INLINE_FUNCTION static constexpr bool is_periodic() {
+    return dimension == 0;
+  }
+
+  /// \brief Get if the given dimension is periodic
+  KOKKOS_INLINE_FUNCTION constexpr bool is_periodic(unsigned dimension) const {
+    return dimension == 0;
+  }
+
+  /// \brief Get the number of periodic dimensions
+  KOKKOS_INLINE_FUNCTION constexpr unsigned num_periodic_dimensions() const {
+    return 1;
+  }
+
+  /// \brief Map a point into fractional coordinates
+  template <ValidPointType PointT>
+    requires std::is_same_v<typename PointT::scalar_t, Scalar>
+  KOKKOS_INLINE_FUNCTION constexpr OurPoint to_fractional(const PointT& point) const {
+    return math::elementwise_mul(inv_scale_, point);
+  }
+
+  /// \brief Map a point from fractional coordinates to real space
+  template <ValidPointType PointT>
+    requires std::is_same_v<typename PointT::scalar_t, Scalar>
+  KOKKOS_INLINE_FUNCTION constexpr OurPoint from_fractional(const PointT& point_frac) const {
+    return math::elementwise_mul(scale_, point_frac);
+  }
+
+  template <typename Integer, math::ValidVector3Type Vector3T>
+  KOKKOS_INLINE_FUNCTION constexpr math::Vector3<typename Vector3T::scalar_t> frac_minimum_image(
+      const Vector3T& fractional_vec) const {
+    OurVector3 min_image{
+      fractional_vec[0] - static_cast<Scalar>(static_cast<Integer>(Kokkos::round(fractional_vec[0]))),
+      fractional_vec[1],
+      fractional_vec[2]};
+    return min_image;
+  }
+
+  template <typename Integer, math::ValidVector3Type Vector3T>
+  KOKKOS_INLINE_FUNCTION constexpr math::Vector3<typename Vector3T::scalar_t> frac_wrap_to_unit_cell(
+      const Vector3T& fractional_vec) const {
+    OurVector3 wrapped{
+      impl::safe_unit_mod1<Integer>(fractional_vec[0]),
+      fractional_vec[1],
+      fractional_vec[2]};
+    return wrapped;
+  }
+
+  /// \brief Distance vector between two points in periodic space (from point1 to point2)
+  template <ValidPointType PointT1, ValidPointType PointT2>
+    requires std::is_same_v<typename PointT1::scalar_t, Scalar> && std::is_same_v<typename PointT2::scalar_t, Scalar>
+  KOKKOS_INLINE_FUNCTION constexpr OurPoint sep(const PointT1& point1, const PointT2& point2) const {
+    // Assumes linearity of to_fractional
+    return from_fractional(frac_minimum_image<int64_t>(to_fractional(point2 - point1)));
+  }
+
+  /// \brief Wrap a point into the periodic space
+  template <ValidPointType PointT>
+    requires std::is_same_v<typename PointT::scalar_t, Scalar>
+  KOKKOS_INLINE_FUNCTION constexpr OurPoint wrap(const PointT& point) const {
+    return from_fractional(frac_wrap_to_unit_cell<int64_t>(to_fractional(point)));
+  }
+
+  /// TODO(palmerb4): I don't think this should be offered.
+  // /// \brief Direct lattice vectors (return as the columns of a matrix)
+  // KOKKOS_INLINE_FUNCTION constexpr OurMatrix3 direct_lattice_vectors() const {
+  //   return h_;
+  // }
+
+  /// \brief Shift a point by a given number of lattice images in each direction
+  template <ValidPointType PointT, typename Integer>
+    requires std::is_same_v<typename PointT::scalar_t, Scalar>
+  KOKKOS_INLINE_FUNCTION constexpr OurPoint shift_image(const PointT& point,
+                                                        const math::Vector3<Integer>& num_images) const {
+    return translate(point, from_fractional(num_images.template cast<Scalar>()));
+  }
+
+ private:
+  OurVector3 scale_;      ///< Unit cell scaling factors
+  OurVector3 inv_scale_;  ///< Inverse of the scaling factors
+};  // PeriodicMetricX
+
+template <typename Scalar>
+class PeriodicMetricY {
+ public:
+  /// \brief Type aliases
+  using scalar_t = Scalar;
+  using OurVector3 = math::Vector3<Scalar>;
+  using OurPoint = Point<Scalar>;
+
+  /// \brief Default constructor
+  KOKKOS_DEFAULTED_FUNCTION
+  constexpr PeriodicMetricY() = default;
+
+  /// \brief Constructor with unit cell matrix
+  KOKKOS_INLINE_FUNCTION
+  explicit constexpr PeriodicMetricY(const double width_y) : scale_{1.0, width_y, 1.0}, inv_scale_{1.0, 1.0 / width_y, 1.0} {
+    MUNDY_THROW_ASSERT(width_y > 0, std::invalid_argument, "Cell dimensions must be positive");
+  }
+
+  /// \brief Get if the given dimension is periodic
+  template<unsigned dimension>
+  KOKKOS_INLINE_FUNCTION static constexpr bool is_periodic() {
+    return dimension == 1;
+  }
+
+  /// \brief Get if the given dimension is periodic
+  KOKKOS_INLINE_FUNCTION constexpr bool is_periodic(unsigned dimension) const {
+    return dimension == 1;
+  }
+
+  /// \brief Get the number of periodic dimensions
+  KOKKOS_INLINE_FUNCTION constexpr unsigned num_periodic_dimensions() const {
+    return 1;
+  }
+
+  /// \brief Map a point into fractional coordinates
+  template <ValidPointType PointT>
+    requires std::is_same_v<typename PointT::scalar_t, Scalar>
+  KOKKOS_INLINE_FUNCTION constexpr OurPoint to_fractional(const PointT& point) const {
+    return math::elementwise_mul(inv_scale_, point);
+  }
+
+  /// \brief Map a point from fractional coordinates to real space
+  template <ValidPointType PointT>
+    requires std::is_same_v<typename PointT::scalar_t, Scalar>
+  KOKKOS_INLINE_FUNCTION constexpr OurPoint from_fractional(const PointT& point_frac) const {
+    return math::elementwise_mul(scale_, point_frac);
+  }
+
+  template <typename Integer, math::ValidVector3Type Vector3T>
+  KOKKOS_INLINE_FUNCTION constexpr math::Vector3<typename Vector3T::scalar_t> frac_minimum_image(
+      const Vector3T& fractional_vec) const {
+    OurVector3 min_image{
+      fractional_vec[0],
+      fractional_vec[1] - static_cast<Scalar>(static_cast<Integer>(Kokkos::round(fractional_vec[1]))),
+      fractional_vec[2]};
+    return min_image;
+  }
+
+  template <typename Integer, math::ValidVector3Type Vector3T>
+  KOKKOS_INLINE_FUNCTION constexpr math::Vector3<typename Vector3T::scalar_t> frac_wrap_to_unit_cell(
+      const Vector3T& fractional_vec) const {
+    OurVector3 wrapped{
+      fractional_vec[0],
+      impl::safe_unit_mod1<Integer>(fractional_vec[1]),
+      fractional_vec[2]};
+    return wrapped;
+  }
+
+  /// \brief Distance vector between two points in periodic space (from point1 to point2)
+  template <ValidPointType PointT1, ValidPointType PointT2>
+    requires std::is_same_v<typename PointT1::scalar_t, Scalar> && std::is_same_v<typename PointT2::scalar_t, Scalar>
+  KOKKOS_INLINE_FUNCTION constexpr OurPoint sep(const PointT1& point1, const PointT2& point2) const {
+    // Assumes linearity of to_fractional
+    return from_fractional(frac_minimum_image<int64_t>(to_fractional(point2 - point1)));
+  }
+
+  /// \brief Wrap a point into the periodic space
+  template <ValidPointType PointT>
+    requires std::is_same_v<typename PointT::scalar_t, Scalar>
+  KOKKOS_INLINE_FUNCTION constexpr OurPoint wrap(const PointT& point) const {
+    return from_fractional(frac_wrap_to_unit_cell<int64_t>(to_fractional(point)));
+  }
+
+  /// TODO(palmerb4): I don't think this should be offered.
+  // /// \brief Direct lattice vectors (return as the columns of a matrix)
+  // KOKKOS_INLINE_FUNCTION constexpr OurMatrix3 direct_lattice_vectors() const {
+  //   return h_;
+  // }
+
+  /// \brief Shift a point by a given number of lattice images in each direction
+  template <ValidPointType PointT, typename Integer>
+    requires std::is_same_v<typename PointT::scalar_t, Scalar>
+  KOKKOS_INLINE_FUNCTION constexpr OurPoint shift_image(const PointT& point,
+                                                        const math::Vector3<Integer>& num_images) const {
+    return translate(point, from_fractional(num_images.template cast<Scalar>()));
+  }
+
+ private:
+  OurVector3 scale_;      ///< Unit cell scaling factors
+  OurVector3 inv_scale_;  ///< Inverse of the scaling factors
+};  // PeriodicMetricY
+
+template <typename Scalar>
+class PeriodicMetricXY {
+ public:
+  /// \brief Type aliases
+  using scalar_t = Scalar;
+  using OurVector3 = math::Vector3<Scalar>;
+  using OurPoint = Point<Scalar>;
+
+  /// \brief Default constructor
+  KOKKOS_DEFAULTED_FUNCTION
+  constexpr PeriodicMetricXY() = default;
+
+  /// \brief Constructor with unit cell matrix
+  KOKKOS_INLINE_FUNCTION
+  explicit constexpr PeriodicMetricXY(const double width_x, const double width_y) : scale_{width_x, width_y, 1.0}, inv_scale_{1.0 / width_x, 1.0 / width_y, 1.0} {
+    MUNDY_THROW_ASSERT(width_x > 0 && width_y > 0, std::invalid_argument, "Cell dimensions must be positive");
+  }
+
+  /// \brief Get if the given dimension is periodic
+  template<unsigned dimension>
+  KOKKOS_INLINE_FUNCTION static constexpr bool is_periodic() {
+    return dimension == 0 || dimension == 1;
+  }
+
+  /// \brief Get if the given dimension is periodic
+  KOKKOS_INLINE_FUNCTION constexpr bool is_periodic(unsigned dimension) const {
+    return dimension == 0 || dimension == 1;
+  }
+
+  /// \brief Get the number of periodic dimensions
+  KOKKOS_INLINE_FUNCTION constexpr unsigned num_periodic_dimensions() const {
+    return 2;
+  }
+
+  /// \brief Map a point into fractional coordinates
+  template <ValidPointType PointT>
+    requires std::is_same_v<typename PointT::scalar_t, Scalar>
+  KOKKOS_INLINE_FUNCTION constexpr OurPoint to_fractional(const PointT& point) const {
+    return math::elementwise_mul(inv_scale_, point);
+  }
+
+  /// \brief Map a point from fractional coordinates to real space
+  template <ValidPointType PointT>
+    requires std::is_same_v<typename PointT::scalar_t, Scalar>
+  KOKKOS_INLINE_FUNCTION constexpr OurPoint from_fractional(const PointT& point_frac) const {
+    return math::elementwise_mul(scale_, point_frac);
+  }
+
+  template <typename Integer, math::ValidVector3Type Vector3T>
+  KOKKOS_INLINE_FUNCTION constexpr math::Vector3<typename Vector3T::scalar_t> frac_minimum_image(
+      const Vector3T& fractional_vec) const {
+    OurVector3 min_image{
+      fractional_vec[0] - static_cast<Scalar>(static_cast<Integer>(Kokkos::round(fractional_vec[0]))),
+      fractional_vec[1] - static_cast<Scalar>(static_cast<Integer>(Kokkos::round(fractional_vec[1]))),
+      fractional_vec[2]};
+    return min_image;
+  }
+
+  template <typename Integer, math::ValidVector3Type Vector3T>
+  KOKKOS_INLINE_FUNCTION constexpr math::Vector3<typename Vector3T::scalar_t> frac_wrap_to_unit_cell(
+      const Vector3T& fractional_vec) const {
+    OurVector3 wrapped{
+      impl::safe_unit_mod1<Integer>(fractional_vec[0]),
+      impl::safe_unit_mod1<Integer>(fractional_vec[1]),
+      fractional_vec[2]};
+    return wrapped;
+  }
+
+  /// \brief Distance vector between two points in periodic space (from point1 to point2)
+  template <ValidPointType PointT1, ValidPointType PointT2>
+    requires std::is_same_v<typename PointT1::scalar_t, Scalar> && std::is_same_v<typename PointT2::scalar_t, Scalar>
+  KOKKOS_INLINE_FUNCTION constexpr OurPoint sep(const PointT1& point1, const PointT2& point2) const {
+    // Assumes linearity of to_fractional
+    return from_fractional(frac_minimum_image<int64_t>(to_fractional(point2 - point1)));
+  }
+
+  /// \brief Wrap a point into the periodic space
+  template <ValidPointType PointT>
+    requires std::is_same_v<typename PointT::scalar_t, Scalar>
+  KOKKOS_INLINE_FUNCTION constexpr OurPoint wrap(const PointT& point) const {
+    return from_fractional(frac_wrap_to_unit_cell<int64_t>(to_fractional(point)));
+  }
+
+  /// TODO(palmerb4): I don't think this should be offered.
+  // /// \brief Direct lattice vectors (return as the columns of a matrix)
+  // KOKKOS_INLINE_FUNCTION constexpr OurMatrix3 direct_lattice_vectors() const {
+  //   return h_;
+  // }
+
+  /// \brief Shift a point by a given number of lattice images in each direction
+  template <ValidPointType PointT, typename Integer>
+    requires std::is_same_v<typename PointT::scalar_t, Scalar>
+  KOKKOS_INLINE_FUNCTION constexpr OurPoint shift_image(const PointT& point,
+                                                        const math::Vector3<Integer>& num_images) const {
+    return translate(point, from_fractional(num_images.template cast<Scalar>()));
+  }
+
+ private:
+  OurVector3 scale_;      ///< Unit cell scaling factors
+  OurVector3 inv_scale_;  ///< Inverse of the scaling factors
+};  // PeriodicMetricXY
+
+template <typename Scalar>
+class PeriodicMetricYZ {
+ public:
+  /// \brief Type aliases
+  using scalar_t = Scalar;
+  using OurVector3 = math::Vector3<Scalar>;
+  using OurPoint = Point<Scalar>;
+
+  /// \brief Default constructor
+  KOKKOS_DEFAULTED_FUNCTION
+  constexpr PeriodicMetricYZ() = default;
+
+  /// \brief Constructor with unit cell matrix
+  KOKKOS_INLINE_FUNCTION
+  explicit constexpr PeriodicMetricYZ(const double width_y, const double width_z) : scale_{1.0, width_y, width_z}, inv_scale_{1.0, 1.0 / width_y, 1.0 / width_z} {
+    MUNDY_THROW_ASSERT(width_y > 0 && width_z > 0, std::invalid_argument, "Cell dimensions must be positive");
+  }
+
+  /// \brief Get if the given dimension is periodic
+  template<unsigned dimension>
+  KOKKOS_INLINE_FUNCTION static constexpr bool is_periodic() {
+    return dimension == 1 || dimension == 2;
+  }
+
+  /// \brief Get if the given dimension is periodic
+  KOKKOS_INLINE_FUNCTION constexpr bool is_periodic(unsigned dimension) const {
+    return dimension == 1 || dimension == 2;
+  }
+
+  /// \brief Get the number of periodic dimensions
+  KOKKOS_INLINE_FUNCTION constexpr unsigned num_periodic_dimensions() const {
+    return 2;
+  }
+
+  /// \brief Map a point into fractional coordinates
+  template <ValidPointType PointT>
+    requires std::is_same_v<typename PointT::scalar_t, Scalar>
+  KOKKOS_INLINE_FUNCTION constexpr OurPoint to_fractional(const PointT& point) const {
+    return math::elementwise_mul(inv_scale_, point);
+  }
+
+  /// \brief Map a point from fractional coordinates to real space
+  template <ValidPointType PointT>
+    requires std::is_same_v<typename PointT::scalar_t, Scalar>
+  KOKKOS_INLINE_FUNCTION constexpr OurPoint from_fractional(const PointT& point_frac) const {
+    return math::elementwise_mul(scale_, point_frac);
+  }
+
+  template <typename Integer, math::ValidVector3Type Vector3T>
+  KOKKOS_INLINE_FUNCTION constexpr math::Vector3<typename Vector3T::scalar_t> frac_minimum_image(
+      const Vector3T& fractional_vec) const {
+    OurVector3 min_image{
+      fractional_vec[0],
+      fractional_vec[1] - static_cast<Scalar>(static_cast<Integer>(Kokkos::round(fractional_vec[1]))),
+      fractional_vec[2] - static_cast<Scalar>(static_cast<Integer>(Kokkos::round(fractional_vec[2])))};
+    return min_image;
+  }
+
+  template <typename Integer, math::ValidVector3Type Vector3T>
+  KOKKOS_INLINE_FUNCTION constexpr math::Vector3<typename Vector3T::scalar_t> frac_wrap_to_unit_cell(
+      const Vector3T& fractional_vec) const {
+    OurVector3 wrapped{
+      fractional_vec[0],
+      impl::safe_unit_mod1<Integer>(fractional_vec[1]),
+     impl::safe_unit_mod1<Integer>(fractional_vec[2])};
+    return wrapped;
+  }
+
+  /// \brief Distance vector between two points in periodic space (from point1 to point2)
+  template <ValidPointType PointT1, ValidPointType PointT2>
+    requires std::is_same_v<typename PointT1::scalar_t, Scalar> && std::is_same_v<typename PointT2::scalar_t, Scalar>
+  KOKKOS_INLINE_FUNCTION constexpr OurPoint sep(const PointT1& point1, const PointT2& point2) const {
+    // Assumes linearity of to_fractional
+    return from_fractional(frac_minimum_image<int64_t>(to_fractional(point2 - point1)));
+  }
+
+  /// \brief Wrap a point into the periodic space
+  template <ValidPointType PointT>
+    requires std::is_same_v<typename PointT::scalar_t, Scalar>
+  KOKKOS_INLINE_FUNCTION constexpr OurPoint wrap(const PointT& point) const {
+    return from_fractional(frac_wrap_to_unit_cell<int64_t>(to_fractional(point)));
+  }
+
+  /// TODO(palmerb4): I don't think this should be offered.
+  // /// \brief Direct lattice vectors (return as the columns of a matrix)
+  // KOKKOS_INLINE_FUNCTION constexpr OurMatrix3 direct_lattice_vectors() const {
+  //   return h_;
+  // }
+
+  /// \brief Shift a point by a given number of lattice images in each direction
+  template <ValidPointType PointT, typename Integer>
+    requires std::is_same_v<typename PointT::scalar_t, Scalar>
+  KOKKOS_INLINE_FUNCTION constexpr OurPoint shift_image(const PointT& point,
+                                                        const math::Vector3<Integer>& num_images) const {
+    return translate(point, from_fractional(num_images.template cast<Scalar>()));
+  }
+
+ private:
+  OurVector3 scale_;      ///< Unit cell scaling factors
+  OurVector3 inv_scale_;  ///< Inverse of the scaling factors
+};  // PeriodicMetricYZ
 
 template <typename Scalar>
 class PeriodicScaledMetric {
@@ -221,6 +765,22 @@ class PeriodicScaledMetric {
     scale_inv_.set(Scalar(1.0) / scale_[0], Scalar(1.0) / scale_[1], Scalar(1.0) / scale_[2]);
   }
 
+  /// \brief Get if the given dimension is periodic
+  template<unsigned dimension>
+  KOKKOS_INLINE_FUNCTION static constexpr bool is_periodic() {
+    return true;
+  }
+
+  /// \brief Get if the given dimension is periodic
+  KOKKOS_INLINE_FUNCTION constexpr bool is_periodic(unsigned /*dimension*/) const {
+    return true;
+  }
+
+  /// \brief Get the number of periodic dimensions
+  KOKKOS_INLINE_FUNCTION constexpr unsigned num_periodic_dimensions() const {
+    return 3;
+  }
+
   /// \brief Map a point into fractional coordinates
   template <ValidPointType PointT>
     requires std::is_same_v<typename PointT::scalar_t, Scalar>
@@ -235,18 +795,31 @@ class PeriodicScaledMetric {
     return math::elementwise_mul(scale_, point_frac);
   }
 
+  template <typename Integer, math::ValidVector3Type Vector3T>
+  KOKKOS_INLINE_FUNCTION constexpr math::Vector3<typename Vector3T::scalar_t> frac_minimum_image(
+      const Vector3T& fractional_vec) const {
+    return apply([](Scalar x) { return x - static_cast<Scalar>(static_cast<Integer>(Kokkos::round(x))); },
+                 fractional_vec);
+  }
+
+  template <typename Integer, math::ValidVector3Type Vector3T>
+  KOKKOS_INLINE_FUNCTION constexpr math::Vector3<typename Vector3T::scalar_t> frac_wrap_to_unit_cell(
+      const Vector3T& fractional_vec) const {
+    return apply([](Scalar x) { return impl::safe_unit_mod1<Integer>(x); }, fractional_vec);
+  }
+
   /// \brief Distance vector between two points in periodic space (from point1 to point2)
   template <ValidPointType PointT1, ValidPointType PointT2>
     requires std::is_same_v<typename PointT1::scalar_t, Scalar> && std::is_same_v<typename PointT2::scalar_t, Scalar>
   KOKKOS_INLINE_FUNCTION constexpr OurPoint sep(const PointT1& point1, const PointT2& point2) const {
-    return from_fractional(impl::frac_minimum_image<int64_t>(to_fractional(point2 - point1)));
+    return from_fractional(frac_minimum_image<int64_t>(to_fractional(point2 - point1)));
   }
 
   /// \brief Wrap a point into the periodic space
   template <ValidPointType PointT>
     requires std::is_same_v<typename PointT::scalar_t, Scalar>
   KOKKOS_INLINE_FUNCTION constexpr OurPoint wrap(const PointT& point) const {
-    return from_fractional(impl::frac_wrap_to_unit_cell<int64_t>(to_fractional(point)));
+    return from_fractional(frac_wrap_to_unit_cell<int64_t>(to_fractional(point)));
   }
 
   /// \brief Direct lattice vectors (return as the columns of a matrix)
@@ -274,6 +847,18 @@ class PeriodicScaledMetric {
 template <typename Scalar>
 KOKKOS_INLINE_FUNCTION constexpr PeriodicMetric<Scalar> periodic_metric_from_unit_cell(
     const math::Vector3<Scalar>& cell_size) {
+  auto h = math::Matrix3<Scalar>::identity();
+  h(0, 0) = cell_size[0];
+  h(1, 1) = cell_size[1];
+  h(2, 2) = cell_size[2];
+  return PeriodicMetric<Scalar>{std::move(h)};
+}
+
+/// \brief Create a periodic space metric from domain min and max corners
+template <typename Scalar>
+KOKKOS_INLINE_FUNCTION constexpr PeriodicMetric<Scalar> periodic_metric_from_domain(
+    const math::Vector3<Scalar>& domain_min, const math::Vector3<Scalar>& domain_max) {
+  auto cell_size = domain_max - domain_min;
   auto h = math::Matrix3<Scalar>::identity();
   h(0, 0) = cell_size[0];
   h(1, 1) = cell_size[1];
@@ -397,9 +982,8 @@ SpherocylinderSegment -> start
             Ellipsoid -> center
 
 Re-imagining the names for these functions:
-wrap_points: wraps each point of the object independently using the metric's wrap function.
-unwrap_points_to_ref: unwraps each point of the object into the same image as the reference
-point. wrap_rigid: rigid translation so the internal reference point ends up wrapped into the primary cell; all other
+ -wrap_points: wraps each point of the object independently using the metric's wrap function.
+ -wrap_rigid: rigid translation so the internal reference point ends up wrapped into the primary cell; all other
 points move with it.
 */
 
@@ -736,7 +1320,7 @@ KOKKOS_INLINE_FUNCTION void wrap_points_inplace(EllipsoidT& ellipsoid, const Met
 }
 //@}
 
-//! \name Unwrap all points of an object into the same image as the reference point
+//! \name Unwrap all points of an object to be within one image of the reference point
 //@{
 
 /*
@@ -747,34 +1331,21 @@ within the primary cell. Otherwise, they are the same up to wrap_rigid applied t
 Note. The following are valid even if the ref point is one of the given points.
 */
 
-/// \brief Unwrap all points of a point into the same image as the reference point
+/// \brief Unwrap all points of a point to be within one image of the reference point
 template <ValidPointType PointT1, ValidPointType PointT2, typename Metric>
 KOKKOS_INLINE_FUNCTION Point<typename PointT1::scalar_t> unwrap_points_to_ref(const PointT1& point,
                                                                               const Metric& metric,
                                                                               const PointT2& ref_point) {
-  // Map reference point to fractional coordinates
-  const auto s = metric.to_fractional(point);
-  const auto sr = metric.to_fractional(ref_point);
-
-  // Minimum-image convention
-  const auto d = impl::frac_minimum_image<int64_t>(s - sr);
-
-  // Map the fractional coordinates back to real space
-  return metric.from_fractional(sr + d);
+  return ref_point + metric.sep(ref_point, point);
 }
 
-/// \brief Unwrap all points of a point into the same image as the reference point (inplace)
+/// \brief Unwrap all points of a point to be within one image of the reference point (inplace)
 template <ValidPointType PointT, typename Metric>
 KOKKOS_INLINE_FUNCTION void unwrap_points_to_ref_inplace(PointT& point, const Metric& metric, const PointT& ref_point) {
-  const auto s = metric.to_fractional(point);
-  const auto sr = metric.to_fractional(ref_point);
-
-  const auto d = impl::frac_minimum_image<int64_t>(s - sr);
-
-  point = metric.from_fractional(sr + d);
+  point = ref_point + metric.sep(ref_point, point);
 }
 
-/// \brief Unwrap all points of a line into the same image as the reference point
+/// \brief Unwrap all points of a line to be within one image of the reference point
 template <ValidLineType LineT, ValidPointType PointT, typename Metric>
 KOKKOS_INLINE_FUNCTION Line<typename PointT::scalar_t> unwrap_points_to_ref(const LineT& line, const Metric& metric,
                                                                             const PointT& ref_point) {
@@ -784,7 +1355,7 @@ KOKKOS_INLINE_FUNCTION Line<typename PointT::scalar_t> unwrap_points_to_ref(cons
   return line;
 }
 
-/// \brief Unwrap all points of a line into the same image as the reference point (inplace)
+/// \brief Unwrap all points of a line to be within one image of the reference point (inplace)
 template <ValidLineType LineT, ValidPointType PointT, typename Metric>
 KOKKOS_INLINE_FUNCTION void unwrap_points_to_ref_inplace(LineT& line, const Metric& metric, const PointT& ref_point) {
   MUNDY_THROW_REQUIRE(false, std::invalid_argument,
@@ -792,7 +1363,7 @@ KOKKOS_INLINE_FUNCTION void unwrap_points_to_ref_inplace(LineT& line, const Metr
                       "infinite in length and could fill the space.")
 }
 
-/// \brief Unwrap all points of a line segment into the same image as the reference point
+/// \brief Unwrap all points of a line segment to be within one image of the reference point
 template <ValidLineSegmentType LineSegmentT, ValidPointType PointT, typename Metric>
 KOKKOS_INLINE_FUNCTION LineSegment<typename PointT::scalar_t> unwrap_points_to_ref(const LineSegmentT& line_segment,
                                                                                    const Metric& metric,
@@ -801,14 +1372,14 @@ KOKKOS_INLINE_FUNCTION LineSegment<typename PointT::scalar_t> unwrap_points_to_r
   const auto s_end = metric.to_fractional(line_segment.end());
   const auto sr = metric.to_fractional(ref_point);
 
-  const auto d_start = impl::frac_minimum_image<int64_t>(s_start - sr);
-  const auto d_end = impl::frac_minimum_image<int64_t>(s_end - sr);
+  const auto d_start = metric.template frac_minimum_image<int64_t>(s_start - sr);
+  const auto d_end = metric.template frac_minimum_image<int64_t>(s_end - sr);
 
   return LineSegment<typename PointT::scalar_t>(metric.from_fractional(sr + d_start),
                                                 metric.from_fractional(sr + d_end));
 }
 
-/// \brief Unwrap all points of a line segment into the same image as the reference point
+/// \brief Unwrap all points of a line segment to be within one image of the reference point
 /// (inplace)
 template <ValidLineSegmentType LineSegmentT, ValidPointType PointT, typename Metric>
 KOKKOS_INLINE_FUNCTION void unwrap_points_to_ref_inplace(LineSegmentT& line_segment, const Metric& metric,
@@ -817,14 +1388,14 @@ KOKKOS_INLINE_FUNCTION void unwrap_points_to_ref_inplace(LineSegmentT& line_segm
   const auto s_end = metric.to_fractional(line_segment.end());
   const auto sr = metric.to_fractional(ref_point);
 
-  const auto d_start = impl::frac_minimum_image<int64_t>(s_start - sr);
-  const auto d_end = impl::frac_minimum_image<int64_t>(s_end - sr);
+  const auto d_start = metric.template frac_minimum_image<int64_t>(s_start - sr);
+  const auto d_end = metric.template frac_minimum_image<int64_t>(s_end - sr);
 
   line_segment.set_start(metric.from_fractional(sr + d_start));
   line_segment.set_end(metric.from_fractional(sr + d_end));
 }
 
-/// \brief Unwrap all points of a circle3D into the same image as the reference point
+/// \brief Unwrap all points of a circle3D to be within one image of the reference point
 template <ValidCircle3DType Circle3DT, ValidPointType PointT, typename Metric>
 KOKKOS_INLINE_FUNCTION Circle3D<typename PointT::scalar_t> unwrap_points_to_ref(const Circle3DT& circle,
                                                                                 const Metric& metric,
@@ -833,14 +1404,14 @@ KOKKOS_INLINE_FUNCTION Circle3D<typename PointT::scalar_t> unwrap_points_to_ref(
   return Circle3D<typename PointT::scalar_t>(new_center, circle.orientation(), circle.radius());
 }
 
-/// \brief Unwrap all points of a circle3D into the same image as the reference point (inplace)
+/// \brief Unwrap all points of a circle3D to be within one image of the reference point (inplace)
 template <ValidCircle3DType Circle3DT, ValidPointType PointT, typename Metric>
 KOKKOS_INLINE_FUNCTION void unwrap_points_to_ref_inplace(Circle3DT& circle, const Metric& metric,
                                                          const PointT& ref_point) {
   unwrap_points_to_ref_inplace(circle.center(), metric, ref_point);
 }
 
-/// \brief Unwrap all points of a v-segment into the same image as the reference point
+/// \brief Unwrap all points of a v-segment to be within one image of the reference point
 template <ValidVSegmentType VSegmentT, ValidPointType PointT, typename Metric>
 KOKKOS_INLINE_FUNCTION VSegment<typename PointT::scalar_t> unwrap_points_to_ref(const VSegmentT& v_segment,
                                                                                 const Metric& metric,
@@ -850,15 +1421,15 @@ KOKKOS_INLINE_FUNCTION VSegment<typename PointT::scalar_t> unwrap_points_to_ref(
   const auto s_end = metric.to_fractional(v_segment.end());
   const auto sr = metric.to_fractional(ref_point);
 
-  const auto d_start = impl::frac_minimum_image<int64_t>(s_start - sr);
-  const auto d_middle = impl::frac_minimum_image<int64_t>(s_middle - sr);
-  const auto d_end = impl::frac_minimum_image<int64_t>(s_end - sr);
+  const auto d_start = metric.template frac_minimum_image<int64_t>(s_start - sr);
+  const auto d_middle = metric.template frac_minimum_image<int64_t>(s_middle - sr);
+  const auto d_end = metric.template frac_minimum_image<int64_t>(s_end - sr);
 
   return VSegment<typename PointT::scalar_t>(metric.from_fractional(sr + d_start),
                                              metric.from_fractional(sr + d_middle), metric.from_fractional(sr + d_end));
 }
 
-/// \brief Unwrap all points of a v-segment into the same image as the reference point (inplace)
+/// \brief Unwrap all points of a v-segment to be within one image of the reference point (inplace)
 template <ValidVSegmentType VSegmentT, ValidPointType PointT, typename Metric>
 KOKKOS_INLINE_FUNCTION void unwrap_points_to_ref_inplace(VSegmentT& v_segment, const Metric& metric,
                                                          const PointT& ref_point) {
@@ -867,16 +1438,16 @@ KOKKOS_INLINE_FUNCTION void unwrap_points_to_ref_inplace(VSegmentT& v_segment, c
   const auto s_end = metric.to_fractional(v_segment.end());
   const auto sr = metric.to_fractional(ref_point);
 
-  const auto d_start = impl::frac_minimum_image<int64_t>(s_start - sr);
-  const auto d_middle = impl::frac_minimum_image<int64_t>(s_middle - sr);
-  const auto d_end = impl::frac_minimum_image<int64_t>(s_end - sr);
+  const auto d_start = metric.template frac_minimum_image<int64_t>(s_start - sr);
+  const auto d_middle = metric.template frac_minimum_image<int64_t>(s_middle - sr);
+  const auto d_end = metric.template frac_minimum_image<int64_t>(s_end - sr);
 
   v_segment.set_start(metric.from_fractional(sr + d_start));
   v_segment.set_middle(metric.from_fractional(sr + d_middle));
   v_segment.set_end(metric.from_fractional(sr + d_end));
 }
 
-/// \brief Unwrap all points of an AABB into the same image as the reference point
+/// \brief Unwrap all points of an AABB to be within one image of the reference point
 template <ValidAABBType AABBT, ValidPointType PointT, typename Metric>
 KOKKOS_INLINE_FUNCTION AABB<typename PointT::scalar_t> unwrap_points_to_ref(const AABBT& aabb, const Metric& metric,
                                                                             const PointT& ref_point) {
@@ -884,27 +1455,27 @@ KOKKOS_INLINE_FUNCTION AABB<typename PointT::scalar_t> unwrap_points_to_ref(cons
   const auto s_max = metric.to_fractional(aabb.max_corner());
   const auto sr = metric.to_fractional(ref_point);
 
-  const auto d_min = impl::frac_minimum_image<int64_t>(s_min - sr);
-  const auto d_max = impl::frac_minimum_image<int64_t>(s_max - sr);
+  const auto d_min = metric.template frac_minimum_image<int64_t>(s_min - sr);
+  const auto d_max = metric.template frac_minimum_image<int64_t>(s_max - sr);
 
   return AABB<typename PointT::scalar_t>(metric.from_fractional(sr + d_min), metric.from_fractional(sr + d_max));
 }
 
-/// \brief Unwrap all points of an AABB into the same image as the reference point (inplace)
+/// \brief Unwrap all points of an AABB to be within one image of the reference point (inplace)
 template <ValidAABBType AABBT, ValidPointType PointT, typename Metric>
 KOKKOS_INLINE_FUNCTION void unwrap_points_to_ref_inplace(AABBT& aabb, const Metric& metric, const PointT& ref_point) {
   const auto s_min = metric.to_fractional(aabb.min_corner());
   const auto s_max = metric.to_fractional(aabb.max_corner());
   const auto sr = metric.to_fractional(ref_point);
 
-  const auto d_min = impl::frac_minimum_image<int64_t>(s_min - sr);
-  const auto d_max = impl::frac_minimum_image<int64_t>(s_max - sr);
+  const auto d_min = metric.template frac_minimum_image<int64_t>(s_min - sr);
+  const auto d_max = metric.template frac_minimum_image<int64_t>(s_max - sr);
 
   aabb.set_min_corner(metric.from_fractional(sr + d_min));
   aabb.set_max_corner(metric.from_fractional(sr + d_max));
 }
 
-/// \brief Unwrap all points of a sphere into the same image as the reference point
+/// \brief Unwrap all points of a sphere to be within one image of the reference point
 template <ValidSphereType SphereT, ValidPointType PointT, typename Metric>
 KOKKOS_INLINE_FUNCTION Sphere<typename PointT::scalar_t> unwrap_points_to_ref(const SphereT& sphere,
                                                                               const Metric& metric,
@@ -913,14 +1484,14 @@ KOKKOS_INLINE_FUNCTION Sphere<typename PointT::scalar_t> unwrap_points_to_ref(co
   return Sphere<typename PointT::scalar_t>(new_center, sphere.radius());
 }
 
-/// \brief Unwrap all points of a sphere into the same image as the reference point (inplace)
+/// \brief Unwrap all points of a sphere to be within one image of the reference point (inplace)
 template <ValidSphereType SphereT, ValidPointType PointT, typename Metric>
 KOKKOS_INLINE_FUNCTION void unwrap_points_to_ref_inplace(SphereT& sphere, const Metric& metric,
                                                          const PointT& ref_point) {
   unwrap_points_to_ref_inplace(sphere.center(), metric, ref_point);
 }
 
-/// \brief Unwrap all points of a spherocylinder into the same image as the reference point
+/// \brief Unwrap all points of a spherocylinder to be within one image of the reference point
 template <ValidSpherocylinderType SpherocylinderT, ValidPointType PointT, typename Metric>
 KOKKOS_INLINE_FUNCTION Spherocylinder<typename PointT::scalar_t> unwrap_points_to_ref(
     const SpherocylinderT& spherocylinder, const Metric& metric, const PointT& ref_point) {
@@ -929,14 +1500,14 @@ KOKKOS_INLINE_FUNCTION Spherocylinder<typename PointT::scalar_t> unwrap_points_t
                                                    spherocylinder.length());
 }
 
-/// \brief Unwrap all points of a spherocylinder into the same image as the reference point (inplace)
+/// \brief Unwrap all points of a spherocylinder to be within one image of the reference point (inplace)
 template <ValidSpherocylinderType SpherocylinderT, ValidPointType PointT, typename Metric>
 KOKKOS_INLINE_FUNCTION void unwrap_points_to_ref_inplace(SpherocylinderT& spherocylinder, const Metric& metric,
                                                          const PointT& ref_point) {
   unwrap_points_to_ref_inplace(spherocylinder.center(), metric, ref_point);
 }
 
-/// \brief Unwrap all points of a spherocylinder segment into the same image as the reference
+/// \brief Unwrap all points of a spherocylinder segment to be within one image of the reference
 /// point
 template <ValidSpherocylinderSegmentType SpherocylinderSegmentT, ValidPointType PointT, typename Metric>
 KOKKOS_INLINE_FUNCTION SpherocylinderSegment<typename PointT::scalar_t> unwrap_points_to_ref(
@@ -945,8 +1516,8 @@ KOKKOS_INLINE_FUNCTION SpherocylinderSegment<typename PointT::scalar_t> unwrap_p
   const auto s_end = metric.to_fractional(spherocylinder_segment.end());
   const auto sr = metric.to_fractional(ref_point);
 
-  const auto d_start = impl::frac_minimum_image<int64_t>(s_start - sr);
-  const auto d_end = impl::frac_minimum_image<int64_t>(s_end - sr);
+  const auto d_start = metric.template frac_minimum_image<int64_t>(s_start - sr);
+  const auto d_end = metric.template frac_minimum_image<int64_t>(s_end - sr);
 
   return SpherocylinderSegment<typename PointT::scalar_t>(metric.from_fractional(sr + d_start),  //
                                                           metric.from_fractional(sr + d_end),    //
@@ -955,7 +1526,7 @@ KOKKOS_INLINE_FUNCTION SpherocylinderSegment<typename PointT::scalar_t> unwrap_p
                                                           spherocylinder_segment.length());
 }
 
-/// \brief Unwrap all points of a spherocylinder segment into the same image as the reference point (inplace)
+/// \brief Unwrap all points of a spherocylinder segment to be within one image of the reference point (inplace)
 template <ValidSpherocylinderSegmentType SpherocylinderSegmentT, ValidPointType PointT, typename Metric>
 KOKKOS_INLINE_FUNCTION void unwrap_points_to_ref_inplace(SpherocylinderSegmentT& spherocylinder_segment,
                                                          const Metric& metric, const PointT& ref_point) {
@@ -963,14 +1534,14 @@ KOKKOS_INLINE_FUNCTION void unwrap_points_to_ref_inplace(SpherocylinderSegmentT&
   const auto s_end = metric.to_fractional(spherocylinder_segment.end());
   const auto sr = metric.to_fractional(ref_point);
 
-  const auto d_start = impl::frac_minimum_image<int64_t>(s_start - sr);
-  const auto d_end = impl::frac_minimum_image<int64_t>(s_end - sr);
+  const auto d_start = metric.template frac_minimum_image<int64_t>(s_start - sr);
+  const auto d_end = metric.template frac_minimum_image<int64_t>(s_end - sr);
 
   spherocylinder_segment.set_start(metric.from_fractional(sr + d_start));
   spherocylinder_segment.set_end(metric.from_fractional(sr + d_end));
 }
 
-/// \brief Unwrap all points of a ring into the same image as the reference point
+/// \brief Unwrap all points of a ring to be within one image of the reference point
 template <ValidRingType RingT, ValidPointType PointT, typename Metric>
 KOKKOS_INLINE_FUNCTION Ring<typename PointT::scalar_t> unwrap_points_to_ref(const RingT& ring, const Metric& metric,
                                                                             const PointT& ref_point) {
@@ -978,13 +1549,13 @@ KOKKOS_INLINE_FUNCTION Ring<typename PointT::scalar_t> unwrap_points_to_ref(cons
   return Ring<typename PointT::scalar_t>(new_center, ring.orientation(), ring.major_radius(), ring.minor_radius());
 }
 
-/// \brief Unwrap all points of a ring into the same image as the reference point (inplace)
+/// \brief Unwrap all points of a ring to be within one image of the reference point (inplace)
 template <ValidRingType RingT, ValidPointType PointT, typename Metric>
 KOKKOS_INLINE_FUNCTION void unwrap_points_to_ref_inplace(RingT& ring, const Metric& metric, const PointT& ref_point) {
   unwrap_points_to_ref_inplace(ring.center(), metric, ref_point);
 }
 
-/// \brief Unwrap all points of an ellipsoid into the same image as the reference point
+/// \brief Unwrap all points of an ellipsoid to be within one image of the reference point
 template <ValidEllipsoidType EllipsoidT, ValidPointType PointT, typename Metric>
 KOKKOS_INLINE_FUNCTION Ellipsoid<typename PointT::scalar_t> unwrap_points_to_ref(const EllipsoidT& ellipsoid,
                                                                                  const Metric& metric,
@@ -993,7 +1564,7 @@ KOKKOS_INLINE_FUNCTION Ellipsoid<typename PointT::scalar_t> unwrap_points_to_ref
   return Ellipsoid<typename PointT::scalar_t>(new_center, ellipsoid.orientation(), ellipsoid.radii());
 }
 
-/// \brief Unwrap all points of an ellipsoid into the same image as the reference point (inplace)
+/// \brief Unwrap all points of an ellipsoid to be within one image of the reference point (inplace)
 template <ValidEllipsoidType EllipsoidT, ValidPointType PointT, typename Metric>
 KOKKOS_INLINE_FUNCTION void unwrap_points_to_ref_inplace(EllipsoidT& ellipsoid, const Metric& metric,
                                                          const PointT& ref_point) {

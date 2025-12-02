@@ -159,7 +159,7 @@ class NgpLinkMetaDataT {
   ///
   /// \note Users should not edit this field yourself. We expose it to you because it's how you'll interact with the
   /// linked entities when doing things like post-processing the output EXO file, but it should be seen as read-only.
-  /// Use declare/delete_relation to modify it since they perform additional behind-the-scenes bookkeeping.
+  /// Use declare/destroy_relation to modify it since they perform additional behind-the-scenes bookkeeping.
   KOKKOS_INLINE_FUNCTION
   const ngp_linked_entity_ids_field_t &ngp_linked_entity_ids_field() const noexcept {
     return ngp_linked_entity_ids_field_;

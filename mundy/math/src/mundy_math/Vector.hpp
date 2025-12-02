@@ -130,6 +130,9 @@ class AVector<T, N, Accessor, Ownership::Views> {
   /// \brief Our ownership type
   using ownership_t = Ownership::Views;
 
+  /// \brief Deep copy type
+  using deep_copy_t = AVector<T, N>;
+
   /// \brief The size of the vector
   static constexpr size_t size = N;
   //@}
@@ -168,14 +171,19 @@ class AVector<T, N, Accessor, Ownership::Views> {
   KOKKOS_DEFAULTED_FUNCTION
   constexpr AVector(AVector<T, N, Accessor, Ownership::Views>&&) = default;
 
-  /// \brief Default copy assignment operator (shallow copy)
-  KOKKOS_DEFAULTED_FUNCTION
-  constexpr AVector<T, N, Accessor, Ownership::Views>& operator=(const AVector<T, N, Accessor, Ownership::Views>&) =
-      default;
+  /// \brief Default copy assignment operator (deep copy)
+  KOKKOS_INLINE_FUNCTION
+  constexpr AVector<T, N, Accessor, Ownership::Views>& operator=(const AVector<T, N, Accessor, Ownership::Views>&other ) {
+    impl::deep_copy_impl(std::make_index_sequence<N>{}, *this, other);
+    return *this;
+  }
 
-  /// \brief Default move assignment operator (shallow move)
-  KOKKOS_DEFAULTED_FUNCTION
-  constexpr AVector<T, N, Accessor, Ownership::Views>& operator=(AVector<T, N, Accessor, Ownership::Views>&&) = default;
+  /// \brief Default move assignment operator (deep move)
+  KOKKOS_INLINE_FUNCTION
+  constexpr AVector<T, N, Accessor, Ownership::Views>& operator=(AVector<T, N, Accessor, Ownership::Views>&&other) {
+    impl::deep_copy_impl(std::make_index_sequence<N>{}, *this, other);
+    return *this;
+  }
 
   // Custom copy/move constructors and assignment operators when interacting with a AVector of a different type
   // We do not allow copy/move construction from a AVector of a different type. This is undefined behavior.
@@ -200,7 +208,7 @@ class AVector<T, N, Accessor, Ownership::Views> {
             (OtherVectorType::size == N) &&
             (std::is_same_v<typename OtherVectorType::scalar_t, T>) && HasNonConstAccessOperator<Accessor, T>
   {
-    impl::deep_copy_impl(std::make_index_sequence<N>{}, *this, std::move(other));
+    impl::deep_copy_impl(std::make_index_sequence<N>{}, *this, other);
     return *this;
   }
 
@@ -211,6 +219,11 @@ class AVector<T, N, Accessor, Ownership::Views> {
   {
     impl::fill_impl(std::make_index_sequence<N>{}, *this, value);
     return *this;
+  }
+
+  /// \brief Allow for automatic conversion of a length 1 vector to a scalar
+  KOKKOS_INLINE_FUNCTION constexpr operator T() requires(N == 1) {
+    return accessor_[0];
   }
   //@}
 
@@ -247,6 +260,12 @@ class AVector<T, N, Accessor, Ownership::Views> {
   KOKKOS_INLINE_FUNCTION
   constexpr const std::conditional_t<std::is_pointer_v<Accessor>, Accessor, Accessor&> data() const {
     return accessor_;
+  }
+
+  /// \brief Get a deep copy of the vector
+  KOKKOS_INLINE_FUNCTION
+  constexpr deep_copy_t copy() const {
+    return *this;
   }
 
   /// \brief Cast (and copy) the vector to a different type
@@ -450,6 +469,9 @@ class AVector<T, N, Accessor, Ownership::Owns> {
   /// \brief Our ownership type
   using ownership_t = Ownership::Owns;
 
+  /// \brief Deep copy type
+  using deep_copy_t = AVector<T, N>;
+
   /// \brief The type of the accessor
   using accessor_t = Accessor;
 
@@ -513,22 +535,27 @@ class AVector<T, N, Accessor, Ownership::Owns> {
 
   // Default copy/move constructors and assignment operators when interacting with a AVector of the same type
 
-  /// \brief Default copy constructor
+  /// \brief Default copy constructor (deep copies the accessor, not necessarily the data)
   KOKKOS_DEFAULTED_FUNCTION
   constexpr AVector(const AVector<T, N, Accessor, Ownership::Owns>&) = default;
 
-  /// \brief Default move constructor
+  /// \brief Default move constructor (deep moves the accessor, not necessarily the data)
   KOKKOS_DEFAULTED_FUNCTION
   constexpr AVector(AVector<T, N, Accessor, Ownership::Owns>&&) = default;
 
-  /// \brief Default copy assignment operator
-  KOKKOS_DEFAULTED_FUNCTION
-  constexpr AVector<T, N, Accessor, Ownership::Owns>& operator=(const AVector<T, N, Accessor, Ownership::Owns>&) =
-      default;
+  /// \brief Default copy assignment operator (deep copys the data)
+  KOKKOS_INLINE_FUNCTION
+  constexpr AVector<T, N, Accessor, Ownership::Owns>& operator=(const AVector<T, N, Accessor, Ownership::Owns>&other) {
+    impl::deep_copy_impl(std::make_index_sequence<N>{}, *this, other);
+    return *this;
+  }
 
-  /// \brief Default move assignment operator
-  KOKKOS_DEFAULTED_FUNCTION
-  constexpr AVector<T, N, Accessor, Ownership::Owns>& operator=(AVector<T, N, Accessor, Ownership::Owns>&&) = default;
+  /// \brief Default move assignment operator (deep copies the data)
+  KOKKOS_INLINE_FUNCTION
+  constexpr AVector<T, N, Accessor, Ownership::Owns>& operator=(AVector<T, N, Accessor, Ownership::Owns>&&other) {
+    impl::deep_copy_impl(std::make_index_sequence<N>{}, *this, other);
+    return *this;
+  }
 
   // Custom copy/move constructors and assignment operators when interacting with a AVector of a different type
 
@@ -584,6 +611,11 @@ class AVector<T, N, Accessor, Ownership::Owns> {
     impl::fill_impl(std::make_index_sequence<N>{}, *this, value);
     return *this;
   }
+
+  /// \brief Allow for automatic conversion of a length 1 vector to a scalar
+  KOKKOS_INLINE_FUNCTION constexpr operator T() requires(N == 1) {
+    return accessor_[0];
+  }
   //@}
 
   //! \name Accessors
@@ -619,6 +651,12 @@ class AVector<T, N, Accessor, Ownership::Owns> {
   KOKKOS_INLINE_FUNCTION
   constexpr const Accessor& data() const {
     return accessor_;
+  }
+
+  /// \brief Get a deep copy of the vector
+  KOKKOS_INLINE_FUNCTION 
+  constexpr deep_copy_t copy() const {
+    return *this;
   }
 
   /// \brief Cast (and copy) the vector to a different type
@@ -1046,6 +1084,12 @@ KOKKOS_INLINE_FUNCTION constexpr OutputType stddev_f(const AVector<T, N, Accesso
 //! \name Special vector operations
 //@{
 
+/// \brief Get a deep copy of the given vector
+template <ValidVectorType VectorType>
+KOKKOS_INLINE_FUNCTION constexpr auto copy(const VectorType& v) {
+  return v.copy();
+}
+
 /// \brief Dot product of two vectors
 /// \param[in] a The first vector.
 /// \param[in] b The second vector.
@@ -1092,7 +1136,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto apply(Func&& func, const AVector<T, N, Acc
 /// \brief AVector infinity norm
 /// \param[in] vec The vector.
 template <size_t N, typename T, ValidAccessor<T> Accessor, typename OwnershipType>
-KOKKOS_INLINE_FUNCTION constexpr auto infinity_norm(const AVector<T, N, Accessor, OwnershipType>& vec) {
+KOKKOS_INLINE_FUNCTION constexpr auto inf_norm(const AVector<T, N, Accessor, OwnershipType>& vec) {
   return max(vec);
 }
 
@@ -1345,10 +1389,10 @@ MUNDY_MATH_VECTOR_VECTOR_ATOMIC_OP_FETCH(elementwise_div)
 //@}
 
 // Just to double check
-static_assert(std::is_trivially_copyable_v<AVector<double, 3>>);
-static_assert(std::is_trivially_destructible_v<AVector<double, 3>>);
-static_assert(std::is_copy_constructible_v<AVector<double, 3>>);
-static_assert(std::is_move_constructible_v<AVector<double, 3>>);
+// static_assert(std::is_trivially_copyable_v<AVector<double, 3>>);
+// static_assert(std::is_trivially_destructible_v<AVector<double, 3>>);
+// static_assert(std::is_copy_constructible_v<AVector<double, 3>>);
+// static_assert(std::is_move_constructible_v<AVector<double, 3>>);
 
 //! \name Type specializations
 //@{
@@ -1412,6 +1456,13 @@ MUNDY_MATH_VECTOR_TYPE_AND_SIZE_SPECIALIZATION(Vector3f, vector3f, float, 3)
 MUNDY_MATH_VECTOR_TYPE_AND_SIZE_SPECIALIZATION(Vector4f, vector4f, float, 4)
 MUNDY_MATH_VECTOR_TYPE_AND_SIZE_SPECIALIZATION(Vector5f, vector5f, float, 5)
 MUNDY_MATH_VECTOR_TYPE_AND_SIZE_SPECIALIZATION(Vector6f, vector6f, float, 6)
+
+MUNDY_MATH_VECTOR_TYPE_AND_SIZE_SPECIALIZATION(Vector1i, vector1i, int, 1)
+MUNDY_MATH_VECTOR_TYPE_AND_SIZE_SPECIALIZATION(Vector2i, vector2i, int, 2)
+MUNDY_MATH_VECTOR_TYPE_AND_SIZE_SPECIALIZATION(Vector3i, vector3i, int, 3)
+MUNDY_MATH_VECTOR_TYPE_AND_SIZE_SPECIALIZATION(Vector4i, vector4i, int, 4)
+MUNDY_MATH_VECTOR_TYPE_AND_SIZE_SPECIALIZATION(Vector5i, vector5i, int, 5)
+MUNDY_MATH_VECTOR_TYPE_AND_SIZE_SPECIALIZATION(Vector6i, vector6i, int, 6)
 //@}
 
 //! \name AVector views

@@ -49,7 +49,7 @@ namespace mesh {
 //! \name stk::mesh::Field data views
 ///@{
 
-/// \brief A helper function for getting a view of a field's data as a scalar. 1 scalar per entity.
+/// \brief Get a view of a field's data as a scalar. 1 scalar per entity.
 template <class FieldType, typename StkDebugger = stk::mesh::DefaultStkFieldSyncDebugger>
 inline auto scalar_field_data(const FieldType& f, stk::mesh::Entity e,
                               stk::mesh::DummyOverload dummyArg = stk::mesh::DummyOverload(),
@@ -58,16 +58,108 @@ inline auto scalar_field_data(const FieldType& f, stk::mesh::Entity e,
       stk::mesh::field_data(f, e, dummyArg, fileName, lineNumber));
 }
 
-/// \brief A helper function for getting a view of a field's data as a Vector3. 3 scalars per entity.
-template <class FieldType, typename StkDebugger = stk::mesh::DefaultStkFieldSyncDebugger>
-inline auto vector3_field_data(const FieldType& f, stk::mesh::Entity e,
-                               stk::mesh::DummyOverload dummyArg = stk::mesh::DummyOverload(),
-                               const char* fileName = HOST_DEBUG_FILE_NAME, int lineNumber = HOST_DEBUG_LINE_NUMBER) {
-  return math::get_vector3_view<typename FieldType::value_type>(
+/// \brief Get a view of a field's data as a Vector<N>. N scalars per entity.
+template <size_t N, class FieldType, typename StkDebugger = stk::mesh::DefaultStkFieldSyncDebugger>
+inline auto vector_field_data(const FieldType& f, stk::mesh::Entity e,
+                              stk::mesh::DummyOverload dummyArg = stk::mesh::DummyOverload(),
+                              const char* fileName = HOST_DEBUG_FILE_NAME, int lineNumber = HOST_DEBUG_LINE_NUMBER) {
+  return math::get_vector_view<typename FieldType::value_type, N>(
       stk::mesh::field_data(f, e, dummyArg, fileName, lineNumber));
 }
 
-/// \brief A helper function for getting a view of a field's data as a Quaternion. 4 scalars per entity.
+#define MUNDY_IMPL_VECTOR_FIELD_DATA_N(N)                                                                      \
+  template <class FieldType, typename StkDebugger = stk::mesh::DefaultStkFieldSyncDebugger>                    \
+  inline auto vector##N##_field_data(                                                                          \
+      const FieldType& f, stk::mesh::Entity e, stk::mesh::DummyOverload dummyArg = stk::mesh::DummyOverload(), \
+      const char* fileName = HOST_DEBUG_FILE_NAME, int lineNumber = HOST_DEBUG_LINE_NUMBER) {                  \
+    return math::get_vector_view<typename FieldType::value_type, N>(                                           \
+        stk::mesh::field_data(f, e, dummyArg, fileName, lineNumber));                                          \
+  }
+
+MUNDY_IMPL_VECTOR_FIELD_DATA_N(1)  // vector1_field_data
+MUNDY_IMPL_VECTOR_FIELD_DATA_N(2)  // vector2_field_data
+MUNDY_IMPL_VECTOR_FIELD_DATA_N(3)  // vector3_field_data
+MUNDY_IMPL_VECTOR_FIELD_DATA_N(4)  // vector4_field_data
+MUNDY_IMPL_VECTOR_FIELD_DATA_N(5)  // vector5_field_data
+MUNDY_IMPL_VECTOR_FIELD_DATA_N(6)  // vector6_field_data
+#undef MUNDY_IMPL_VECTOR_FIELD_DATA_N
+
+/// \brief Get a view of a field's data as a Matrix<N, M>. N * M scalars per entity.
+template <size_t N, size_t M, class FieldType, typename StkDebugger = stk::mesh::DefaultStkFieldSyncDebugger>
+inline auto matrix_field_data(const FieldType& f, stk::mesh::Entity e,
+                              stk::mesh::DummyOverload dummyArg = stk::mesh::DummyOverload(),
+                              const char* fileName = HOST_DEBUG_FILE_NAME, int lineNumber = HOST_DEBUG_LINE_NUMBER) {
+  return math::get_matrix_view<typename FieldType::value_type, N, M>(
+      stk::mesh::field_data(f, e, dummyArg, fileName, lineNumber));
+}
+
+/// \brief Get a view of a field's data as a Matrix<N, M>. N * M scalars per entity. (explicit naming)
+#define MUNDY_IMPL_MATRIX_FIELD_DATA_NM(N, M)                                                                  \
+  template <class FieldType, typename StkDebugger = stk::mesh::DefaultStkFieldSyncDebugger>                    \
+  inline auto matrix##N####M##_field_data(                                                                     \
+      const FieldType& f, stk::mesh::Entity e, stk::mesh::DummyOverload dummyArg = stk::mesh::DummyOverload(), \
+      const char* fileName = HOST_DEBUG_FILE_NAME, int lineNumber = HOST_DEBUG_LINE_NUMBER) {                  \
+    return math::get_matrix_view<typename FieldType::value_type, N, M>(                                        \
+        stk::mesh::field_data(f, e, dummyArg, fileName, lineNumber));                                          \
+  }
+
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(1, 1)  // matrix11_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(1, 2)  // matrix12_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(1, 3)  // matrix13_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(1, 4)  // matrix14_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(1, 5)  // matrix15_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(1, 6)  // matrix16_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(2, 1)  // matrix21_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(2, 2)  // matrix22_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(2, 3)  // matrix23_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(2, 4)  // matrix24_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(2, 5)  // matrix25_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(2, 6)  // matrix26_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(3, 1)  // matrix31_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(3, 2)  // matrix32_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(3, 3)  // matrix33_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(3, 4)  // matrix34_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(3, 5)  // matrix35_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(3, 6)  // matrix36_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(4, 1)  // matrix41_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(4, 2)  // matrix42_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(4, 3)  // matrix43_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(4, 4)  // matrix44_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(4, 5)  // matrix45_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(4, 6)  // matrix46_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(5, 1)  // matrix51_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(5, 2)  // matrix52_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(5, 3)  // matrix53_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(5, 4)  // matrix54_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(5, 5)  // matrix55_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(5, 6)  // matrix56_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(6, 1)  // matrix61_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(6, 2)  // matrix62_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(6, 3)  // matrix63_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(6, 4)  // matrix64_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(6, 5)  // matrix65_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(6, 6)  // matrix66_field_data
+#undef MUNDY_IMPL_MATRIX_FIELD_DATA_NM
+
+/// \brief Get a view of a field's data as a Matrix<N, N>. N * N scalars per entity. (explicit naming square)
+#define MUNDY_IMPL_MATRIX_FIELD_DATA_NN(N)                                                                     \
+  template <class FieldType, typename StkDebugger = stk::mesh::DefaultStkFieldSyncDebugger>                    \
+  inline auto matrix##N##_field_data(                                                                          \
+      const FieldType& f, stk::mesh::Entity e, stk::mesh::DummyOverload dummyArg = stk::mesh::DummyOverload(), \
+      const char* fileName = HOST_DEBUG_FILE_NAME, int lineNumber = HOST_DEBUG_LINE_NUMBER) {                  \
+    return math::get_matrix_view<typename FieldType::value_type, N, N>(                                        \
+        stk::mesh::field_data(f, e, dummyArg, fileName, lineNumber));                                          \
+  }
+
+MUNDY_IMPL_MATRIX_FIELD_DATA_NN(1)  // matrix1_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NN(2)  // matrix2_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NN(3)  // matrix3_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NN(4)  // matrix4_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NN(5)  // matrix5_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NN(6)  // matrix6_field_data
+#undef MUNDY_IMPL_MATRIX_FIELD_DATA_NN
+
+/// \brief Get a view of a field's data as a Quaternion. 4 scalars per entity.
 template <class FieldType, typename StkDebugger = stk::mesh::DefaultStkFieldSyncDebugger>
 inline auto quaternion_field_data(const FieldType& f, stk::mesh::Entity e,
                                   stk::mesh::DummyOverload dummyArg = stk::mesh::DummyOverload(),
@@ -77,16 +169,7 @@ inline auto quaternion_field_data(const FieldType& f, stk::mesh::Entity e,
       stk::mesh::field_data(f, e, dummyArg, fileName, lineNumber));
 }
 
-/// \brief A helper function for getting a view of a field's data as a Matrix3. 9 scalars per entity.
-template <class FieldType, typename StkDebugger = stk::mesh::DefaultStkFieldSyncDebugger>
-inline auto matrix3_field_data(const FieldType& f, stk::mesh::Entity e,
-                               stk::mesh::DummyOverload dummyArg = stk::mesh::DummyOverload(),
-                               const char* fileName = HOST_DEBUG_FILE_NAME, int lineNumber = HOST_DEBUG_LINE_NUMBER) {
-  return math::get_matrix3_view<typename FieldType::value_type>(
-      stk::mesh::field_data(f, e, dummyArg, fileName, lineNumber));
-}
-
-/// \brief A helper function for getting a view of a field's data as an AABB. 6 scalars per entity.
+/// \brief Get a view of a field's data as an AABB. 6 scalars per entity.
 template <class FieldType, typename StkDebugger = stk::mesh::DefaultStkFieldSyncDebugger>
 inline auto aabb_field_data(const FieldType& f, stk::mesh::Entity e,
                             stk::mesh::DummyOverload dummyArg = stk::mesh::DummyOverload(),
@@ -107,31 +190,103 @@ inline auto aabb_field_data(const FieldType& f, stk::mesh::Entity e,
 //! \name stk::mesh::NgpField data views
 ///@{
 
-/// \brief A helper function for getting a view of a field's data as a ScalarWrapper.
+/// \brief Get a view of a field's data as a ScalarWrapper.
 template <class FieldType>
 KOKKOS_INLINE_FUNCTION auto scalar_field_data(FieldType& f, const stk::mesh::FastMeshIndex& i) {
   return math::get_owning_scalar<typename FieldType::value_type>(f(i));
 }
 
-/// \brief A helper function for getting a view of a field's data as a Vector3
-template <class FieldType>
-KOKKOS_INLINE_FUNCTION auto vector3_field_data(FieldType& f, const stk::mesh::FastMeshIndex& i) {
-  return math::get_owning_vector3<typename FieldType::value_type>(f(i));
+/// \brief Get a view of a field's data as a Vector<N>
+template <size_t N, class FieldType>
+KOKKOS_INLINE_FUNCTION auto vector_field_data(FieldType& f, const stk::mesh::FastMeshIndex& i) {
+  return math::get_owning_vector<typename FieldType::value_type, N>(f(i));
 }
 
-/// \brief A helper function for getting a view of a field's data as a Quaternion
+#define MUNDY_IMPL_VECTOR_FIELD_DATA_N(N)                                                               \
+  template <class FieldType>                                                                            \
+  KOKKOS_INLINE_FUNCTION auto vector##N##_field_data(FieldType& f, const stk::mesh::FastMeshIndex& i) { \
+    return math::get_owning_vector<typename FieldType::value_type, N>(f(i));                            \
+  }
+
+MUNDY_IMPL_VECTOR_FIELD_DATA_N(1)  // vector1_field_data
+MUNDY_IMPL_VECTOR_FIELD_DATA_N(2)  // vector2_field_data
+MUNDY_IMPL_VECTOR_FIELD_DATA_N(3)  // vector3_field_data
+MUNDY_IMPL_VECTOR_FIELD_DATA_N(4)  // vector4_field_data
+MUNDY_IMPL_VECTOR_FIELD_DATA_N(5)  // vector5_field_data
+MUNDY_IMPL_VECTOR_FIELD_DATA_N(6)  // vector6_field_data
+#undef MUNDY_IMPL_VECTOR_FIELD_DATA_N
+
+/// \brief Get a view of a field's data as a Matrix<N, M>
+template <size_t N, size_t M, class FieldType>
+KOKKOS_INLINE_FUNCTION auto matrix_field_data(FieldType& f, const stk::mesh::FastMeshIndex& i) {
+  return math::get_owning_matrix<typename FieldType::value_type, N, M>(f(i));
+}
+
+#define MUNDY_IMPL_MATRIX_FIELD_DATA_NM(N, M)                                                                \
+  template <class FieldType>                                                                                 \
+  KOKKOS_INLINE_FUNCTION auto matrix##N####M##_field_data(FieldType& f, const stk::mesh::FastMeshIndex& i) { \
+    return math::get_owning_matrix<typename FieldType::value_type, N, M>(f(i));                              \
+  }
+
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(1, 1)  // matrix11_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(1, 2)  // matrix12_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(1, 3)  // matrix13_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(1, 4)  // matrix14_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(1, 5)  // matrix15_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(1, 6)  // matrix16_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(2, 1)  // matrix21_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(2, 2)  // matrix22_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(2, 3)  // matrix23_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(2, 4)  // matrix24_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(2, 5)  // matrix25_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(2, 6)  // matrix26_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(3, 1)  // matrix31_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(3, 2)  // matrix32_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(3, 3)  // matrix33_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(3, 4)  // matrix34_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(3, 5)  // matrix35_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(3, 6)  // matrix36_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(4, 1)  // matrix41_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(4, 2)  // matrix42_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(4, 3)  // matrix43_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(4, 4)  // matrix44_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(4, 5)  // matrix45_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(4, 6)  // matrix46_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(5, 1)  // matrix51_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(5, 2)  // matrix52_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(5, 3)  // matrix53_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(5, 4)  // matrix54_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(5, 5)  // matrix55_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(5, 6)  // matrix56_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(6, 1)  // matrix61_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(6, 2)  // matrix62_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(6, 3)  // matrix63_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(6, 4)  // matrix64_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(6, 5)  // matrix65_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NM(6, 6)  // matrix66_field_data
+#undef MUNDY_IMPL_MATRIX_FIELD_DATA_NM
+
+#define MUNDY_IMPL_MATRIX_FIELD_DATA_NN(N)                                                              \
+  template <class FieldType>                                                                            \
+  KOKKOS_INLINE_FUNCTION auto matrix##N##_field_data(FieldType& f, const stk::mesh::FastMeshIndex& i) { \
+    return math::get_owning_matrix<typename FieldType::value_type, N, N>(f(i));                         \
+  }
+
+MUNDY_IMPL_MATRIX_FIELD_DATA_NN(1)  // matrix1_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NN(2)  // matrix2_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NN(3)  // matrix3_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NN(4)  // matrix4_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NN(5)  // matrix5_field_data
+MUNDY_IMPL_MATRIX_FIELD_DATA_NN(6)  // matrix6_field_data
+#undef MUNDY_IMPL_MATRIX_FIELD_DATA_NN
+
+/// \brief Get a view of a field's data as a Quaternion
 template <class FieldType>
 KOKKOS_INLINE_FUNCTION auto quaternion_field_data(FieldType& f, const stk::mesh::FastMeshIndex& i) {
   return math::get_owning_quaternion<typename FieldType::value_type>(f(i));
 }
 
-/// \brief A helper function for getting a view of a field's data as a Matrix3
-template <class FieldType>
-KOKKOS_INLINE_FUNCTION auto matrix3_field_data(FieldType& f, const stk::mesh::FastMeshIndex& i) {
-  return math::get_owning_matrix3<typename FieldType::value_type>(f(i));
-}
-
-/// \brief A helper function for getting a view of a field's data as a Matrix3
+/// \brief Get a view of a field's data as a Matrix3
 template <class FieldType>
 KOKKOS_INLINE_FUNCTION auto aabb_field_data(FieldType& f, const stk::mesh::FastMeshIndex& i) {
   constexpr size_t shift = 3;

@@ -14,14 +14,5 @@ tribits_package_define_dependencies(
     Math         math        PT  OPTIONAL
     Geom         geom        PT  OPTIONAL
     Mesh         mesh        PT  OPTIONAL
-    Meta         meta        PT  OPTIONAL
-    Agents       agents      PT  OPTIONAL
-    Shapes       shapes      PT  OPTIONAL
-    Linkers      linkers     PT  OPTIONAL
-    Io           io          PT  OPTIONAL
-    Constraints  constraints  PT  OPTIONAL
-    # Balance      balance     PT  OPTIONAL
-    Alens        alens       PT  OPTIONAL
-    Driver       driver      PT  OPTIONAL
   REGRESSION_EMAIL_LIST brycepalmer96@gmail.com
   )

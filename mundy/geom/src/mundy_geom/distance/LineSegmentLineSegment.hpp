@@ -73,7 +73,8 @@ template <typename Scalar>
 KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
                                 const LineSegment<Scalar>& line_segment1,                 //
                                 const LineSegment<Scalar>& line_segment2) {
-  // Part of this function was adapted from VTK, which, in turn adapted part of it from "GeometryAlgorithms.com"
+  // Part of this function was adapted from VTK's vtkLine::DistanceBetweenLineSegments, which, in turn adapted part of
+  // it from "GeometryAlgorithms.com"
   const auto& l0 = line_segment1.start();
   const auto& l1 = line_segment1.end();
   const auto& m0 = line_segment2.start();
@@ -90,7 +91,7 @@ KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distan
   const Scalar D = a * c - b * b;  // always >= 0
 
   // Compute the line parameters of the two closest points
-  if (D < mundy::math::get_zero_tolerance<Scalar>()) {
+  if (D < Kokkos::sqrt(mundy::math::get_zero_tolerance<Scalar>())) {
     // CASE 1: The lines are colinear. Therefore, one of the four endpoints is the
     // point of closest approach. We'll directly compute the 4 distances and the closest point on the line.
     const Scalar dist1 = distance(l0, line_segment2);
@@ -211,7 +212,7 @@ KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distan
   const Scalar D = a * c - b * b;  // always >= 0
 
   // Compute the line parameters of the two closest points
-  if (D < mundy::math::get_zero_tolerance<Scalar>()) {
+  if (D < Kokkos::sqrt(mundy::math::get_zero_tolerance<Scalar>())) {
     // CASE 1: The lines are colinear. Therefore, one of the four endpoints is the
     // point of closest approach. We'll directly compute the 4 distances and the closest point on the line.
     Point<Scalar> closest_point_tmp1;

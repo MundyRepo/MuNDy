@@ -29,6 +29,7 @@
 #include <string>     // for std::string
 #include <typeindex>  // for std::type_index
 #include <vector>     // for std::vector
+#include <sstream>    // for std::ostringstream
 
 // Trilinos libs
 #include <Trilinos_version.h>  // for TRILINOS_MAJOR_MINOR_VERSION
@@ -94,7 +95,7 @@ class LinkMetaData {
   LinkMetaData() = delete;
 
   /// \brief Construct and declare
-  LinkMetaData(MetaData &meta_data, const std::string &our_name, stk::mesh::EntityRank link_rank)
+  LinkMetaData(stk::mesh::MetaData &meta_data, const std::string &our_name, stk::mesh::EntityRank link_rank)
       : our_name_(our_name),
         meta_data_(meta_data),
         link_rank_(link_rank),
@@ -109,7 +110,7 @@ class LinkMetaData {
         link_crs_needs_updated_field_(meta_data.declare_field<int>(link_rank_, "MUNDY_LINK_CRS_NEEDS_UPDATED")),
         link_marked_for_destruction_field_(
             meta_data.declare_field<unsigned>(link_rank_, "MUNDY_LINK_MARKED_FOR_DESTRUCTION")),
-        universal_link_part_(meta_data.declare_part(std::string("MUNDY_UNIVERSAL_") + our_name, link_rank_)) {
+        universal_link_part_(meta_data.declare_part(std::string("MUNDY_UNIVERSAL_") + our_name + "_" + rank_to_string(link_rank_), link_rank_)) {
     unsigned links_start_valid[1] = {0};
     stk::mesh::put_field_on_mesh(link_marked_for_destruction_field_, meta_data.universal_part(), 1, links_start_valid);
   }
@@ -146,7 +147,7 @@ class LinkMetaData {
   ///
   /// \note Users should not edit this field yourself. We expose it to you because it's how you'll interact with the
   /// linked entities when doing things like post-processing the output EXO file, but it should be seen as read-only.
-  /// Use declare/delete_relation to modify it since they perform additional behind-the-scenes bookkeeping.
+  /// Use declare/destroy_relation to modify it since they perform additional behind-the-scenes bookkeeping.
   const linked_entity_ids_field_t &linked_entity_ids_field() const {
     return linked_entity_ids_field_;
   }
@@ -169,12 +170,12 @@ class LinkMetaData {
   }
 
   /// \brief Fetch the mesh meta data manager for this bulk data manager.
-  const MetaData &mesh_meta_data() const {
+  const stk::mesh::MetaData &mesh_meta_data() const {
     return meta_data_;
   }
 
   /// \brief Fetch the mesh meta data manager for this bulk data manager.
-  MetaData &mesh_meta_data() {
+  stk::mesh::MetaData &mesh_meta_data() {
     return meta_data_;
   }
   //@}
@@ -294,6 +295,14 @@ class LinkMetaData {
   //! \name Helper functions
   //@{
 
+  /// \brief Map the given rank to string
+  static std::string rank_to_string(stk::mesh::EntityRank rank) {
+    // Use STK's existing ostream<< operator for EntityRank and turn it into a string
+    std::ostringstream s;
+    s << rank;
+    return s.str();
+  }
+
   /// \brief Add the linked entities and keys field to the part with the given dimensionality
   inline void put_link_fields_on_part(stk::mesh::Part &part, unsigned link_dimensionality) {
     std::vector<entity_value_t> initial_linked_entities(link_dimensionality, stk::mesh::Entity().local_offset());
@@ -340,7 +349,7 @@ class LinkMetaData {
   //@{
 
   std::string our_name_;
-  MetaData &meta_data_;
+  stk::mesh::MetaData &meta_data_;
   stk::mesh::EntityRank link_rank_;
   linked_entities_field_t &linked_entities_field_;
   linked_entities_field_t &linked_entities_crs_field_;
@@ -354,20 +363,51 @@ class LinkMetaData {
   //@}
 };  // LinkMetaData
 
+struct LinkMetaDataMap {
+  std::map<std::string, std::shared_ptr<LinkMetaData>> contents[stk::topology::NUM_RANKS];
+};
+
 /// \brief Construct a new LinkMetaData object.
 /// \param meta_data [in] The mesh meta data manager. (pre-commit)
 /// \param our_name [in] The name of this link data.
 /// \param link_rank [in] The rank of the link entities.
-inline LinkMetaData declare_link_meta_data(MetaData &meta_data, const std::string &our_name,
-                                           stk::mesh::EntityRank link_rank) {
-  // TODO(palmerb4): Tie the lifetime of this object to the BulkData object so we can return a reference to it.
-  return LinkMetaData(meta_data, our_name, link_rank);
+inline std::shared_ptr<LinkMetaData> declare_link_meta_data_ptr(stk::mesh::MetaData &meta_data, const std::string &our_name,
+                                                                stk::mesh::EntityRank link_rank) {
+  // Tie the lifetime of this object to the BulkData object so we can return a reference to it.
+  LinkMetaDataMap *meta_data_map = const_cast<LinkMetaDataMap *>(meta_data.get_attribute<LinkMetaDataMap>());
+  if (meta_data_map == nullptr) {
+    const LinkMetaDataMap *new_meta_data_map = new LinkMetaDataMap();
+    meta_data_map = const_cast<LinkMetaDataMap *>(meta_data.declare_attribute_with_delete(new_meta_data_map));
+  }
+  
+  if (meta_data_map->contents[link_rank].find(our_name) == meta_data_map->contents[link_rank].end()) {
+    // The name/rank combo doesn't exist yet, so we can create it.
+    meta_data_map->contents[link_rank].emplace(our_name, std::shared_ptr<LinkMetaData>(new LinkMetaData(meta_data, our_name, link_rank)));
+  }
+
+  return meta_data_map->contents[link_rank][our_name];
 }
 
-inline std::shared_ptr<LinkMetaData> declare_link_meta_data_ptr(MetaData &meta_data, const std::string &our_name,
+/// \brief Construct a new LinkMetaData object.
+/// \param meta_data [in] The mesh meta data manager. (pre-commit)
+/// \param our_name [in] The name of this link data.
+/// \param link_rank [in] The rank of the link entities.
+inline LinkMetaData& declare_link_meta_data(stk::mesh::MetaData &meta_data, const std::string &our_name,
+                                           stk::mesh::EntityRank link_rank) {
+  return *declare_link_meta_data_ptr(meta_data, our_name, link_rank);
+}
+
+inline std::shared_ptr<LinkMetaData> get_link_meta_data(const stk::mesh::MetaData &meta_data, const std::string &our_name,
                                                                 stk::mesh::EntityRank link_rank) {
-  // TODO(palmerb4): Tie the lifetime of this object to the BulkData object so we can return a reference to it.
-  return std::shared_ptr<LinkMetaData>(new LinkMetaData(meta_data, our_name, link_rank));
+  LinkMetaDataMap *meta_data_map = const_cast<LinkMetaDataMap *>(meta_data.get_attribute<LinkMetaDataMap>());
+  if (meta_data_map == nullptr) {
+    return nullptr;
+  }
+  auto it = meta_data_map->contents[link_rank].find(our_name);
+  if (it == meta_data_map->contents[link_rank].end()) {
+    return nullptr;
+  }
+  return it->second;
 }
 
 namespace impl {

@@ -71,9 +71,9 @@ NgpLinkDataT<NgpMemSpace>& get_updated_ngp_link_data(const LinkData& link_data) 
     NgpLinkCRSData& ngp_crs_data = ngp_link_data.crs_data();
 
     impl::set_crs_synchronizer(
-        link_data, std::move(std::make_unique<impl::LinkCRSDataSynchronizerT<NgpMemSpace>>(crs_data, ngp_crs_data)));
+        link_data, std::move(std::make_shared<impl::LinkCRSDataSynchronizerT<NgpMemSpace>>(crs_data, ngp_crs_data)));
     impl::set_coo_synchronizer(
-        link_data, std::move(std::make_unique<impl::LinkCOODataSynchronizerT<NgpMemSpace>>(coo_data, ngp_coo_data)));
+        link_data, std::move(std::make_shared<impl::LinkCOODataSynchronizerT<NgpMemSpace>>(coo_data, ngp_coo_data)));
   } else {
     std::any_cast<NgpLinkDataT<NgpMemSpace>&>(any_ngp_link_data).update_post_mesh_mod();
   }

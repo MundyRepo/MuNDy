@@ -35,7 +35,15 @@ tribits_add_executable_and_test(
     ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1-4
 )
-  
+
+tribits_add_executable_and_test(
+  UnitTestMatrix
+  SOURCES
+    UnitTestMatrix.cpp
+    ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
+    NUM_MPI_PROCS 1-4
+)
+
 tribits_add_executable_and_test(
   UnitTestVector3
   SOURCES
@@ -91,5 +99,3 @@ tribits_add_executable_and_test(
     ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1
 )
-  
-add_subdirectory(distance)

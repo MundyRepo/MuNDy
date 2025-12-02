@@ -71,24 +71,3 @@ tribits_add_executable(
     PerfTestFieldBLAS.cpp
     CATEGORIES PERFORMANCE
     )
-
-tribits_add_executable(
-    NGPSpheresHertz
-    SOURCES
-    NGPSpheresHertz.cpp
-    CATEGORIES PERFORMANCE
-    )
-
-tribits_add_executable(
-    NGPSpheresLCP
-    SOURCES
-    NGPSpheresLCP.cpp
-    CATEGORIES PERFORMANCE
-    )
-
-# tribits_add_executable(
-#     will_it_to_be
-#     SOURCES
-#     will.cpp
-#     CATEGORIES PERFORMANCE
-#     )

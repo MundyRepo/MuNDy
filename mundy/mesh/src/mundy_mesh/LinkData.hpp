@@ -26,7 +26,7 @@
 
 // C++ core libs
 #include <any>     // for std::any
-#include <memory>  // for std::shared_ptr, std::unique_ptr
+#include <memory>  // for std::shared_ptr, std::shared_ptr
 
 // Trilinos libs
 #include <stk_mesh/base/BulkData.hpp>  // for stk::mesh::BulkData
@@ -51,8 +51,8 @@ namespace mesh {
 class LinkData;
 namespace impl {
 std::any &get_ngp_link_data(const LinkData &link_data);
-void set_coo_synchronizer(const LinkData &link_data, std::unique_ptr<impl::HostDeviceSynchronizer> synchronizer);
-void set_crs_synchronizer(const LinkData &link_data, std::unique_ptr<impl::HostDeviceSynchronizer> synchronizer);
+void set_coo_synchronizer(const LinkData &link_data, std::shared_ptr<impl::HostDeviceSynchronizer> synchronizer);
+void set_crs_synchronizer(const LinkData &link_data, std::shared_ptr<impl::HostDeviceSynchronizer> synchronizer);
 }  // namespace impl
 
 /// \class LinkData
@@ -92,15 +92,15 @@ void set_crs_synchronizer(const LinkData &link_data, std::unique_ptr<impl::HostD
 /// Declaring links can be done via the standard declare_entity interface, however, connecting these links to their
 /// linked entities must be mediated via the link data. For this reason, we provide only const access to the linked
 /// entities field. Use it to ~view~ the connections, not to ~modify~ them. Instead, use the link data's
-/// declare_relation(linker, linked_entity, link_ordinal) and delete_relation(linker, link_ordinal) to modify the
+/// declare_relation(linker, linked_entity, link_ordinal) and destroy_relation(linker, link_ordinal) to modify the
 /// relationship between a link and its linked entities. These functions are thread-safe and may be called in parallel
 /// so long as you do not call declare_relation(linker, *, link_ordinal) for the same linker and ordinal on two
 /// different threads (something that would be weird to do anyway).
 ///
 /// Some comments on requirements:
-///  - Both declare_relation and delete_relation require that the linker be valid, but not necessarily the linked
+///  - Both declare_relation and destroy_relation require that the linker be valid, but not necessarily the linked
 ///  entity.
-///  - To maintain parallel consistency, we require that declare/delete_relation be performed consistently for each
+///  - To maintain parallel consistency, we require that declare/destroy_relation be performed consistently for each
 /// process that locally owns or shares the given linker or linked entity.
 ///
 /// \note Once a relationship between a link and a linked entity is declared or destroyed, the link data is marked as
@@ -160,7 +160,7 @@ void set_crs_synchronizer(const LinkData &link_data, std::unique_ptr<impl::HostD
 /// and request_link(linked_entity0, linked_entity1, ... linked_entityN) to request the destruction of a link and the
 /// creation of a link between the given entities, respectively. These requests may be made in parallel and are
 /// processed in the next process_requests call. These functions streamline the enforcement of the requirement that
-/// "declare/delete_relation are performed consistently for each process that locally owns or shares the given linker or
+/// "declare/destroy_relation are performed consistently for each process that locally owns or shares the given linker or
 /// linked entity." We do so at two ~levels ~of user investment, each with different costs.
 ///
 /// ## FULLY_CONSISTENT: You did all the work
@@ -456,11 +456,11 @@ class LinkData {
     return any_ngp_link_data_;
   }
 
-  void set_coo_synchronizer(std::unique_ptr<impl::HostDeviceSynchronizer> synchronizer) const {
+  void set_coo_synchronizer(std::shared_ptr<impl::HostDeviceSynchronizer> synchronizer) const {
     coo_synchronizer_ = std::move(synchronizer);
   }
 
-  void set_crs_synchronizer(std::unique_ptr<impl::HostDeviceSynchronizer> synchronizer) const {
+  void set_crs_synchronizer(std::shared_ptr<impl::HostDeviceSynchronizer> synchronizer) const {
     crs_synchronizer_ = std::move(synchronizer);
   }
   //@}
@@ -470,9 +470,9 @@ class LinkData {
 
   friend std::any &impl::get_ngp_link_data(const LinkData &link_data);
   friend void impl::set_coo_synchronizer(const LinkData &link_data,
-                                         std::unique_ptr<impl::HostDeviceSynchronizer> synchronizer);
+                                         std::shared_ptr<impl::HostDeviceSynchronizer> synchronizer);
   friend void impl::set_crs_synchronizer(const LinkData &link_data,
-                                         std::unique_ptr<impl::HostDeviceSynchronizer> synchronizer);
+                                         std::shared_ptr<impl::HostDeviceSynchronizer> synchronizer);
   //@}
 
   //! \name Internal members
@@ -484,8 +484,8 @@ class LinkData {
 
   LinkCOOData coo_data_;
   LinkCRSData crs_data_;
-  mutable std::unique_ptr<impl::HostDeviceSynchronizer> coo_synchronizer_;
-  mutable std::unique_ptr<impl::HostDeviceSynchronizer> crs_synchronizer_;
+  mutable std::shared_ptr<impl::HostDeviceSynchronizer> coo_synchronizer_;
+  mutable std::shared_ptr<impl::HostDeviceSynchronizer> crs_synchronizer_;
   mutable std::any any_ngp_link_data_;
   mutable bool crs_modified_on_host_;
   mutable bool crs_modified_on_device_;
@@ -504,16 +504,38 @@ inline std::any &get_ngp_link_data(const LinkData &link_data) {
 }
 
 inline void set_crs_synchronizer(const LinkData &link_data,
-                                 std::unique_ptr<impl::HostDeviceSynchronizer> synchronizer) {
+                                 std::shared_ptr<impl::HostDeviceSynchronizer> synchronizer) {
   link_data.set_crs_synchronizer(std::move(synchronizer));
 }
 
 inline void set_coo_synchronizer(const LinkData &link_data,
-                                 std::unique_ptr<impl::HostDeviceSynchronizer> synchronizer) {
+                                 std::shared_ptr<impl::HostDeviceSynchronizer> synchronizer) {
   link_data.set_coo_synchronizer(std::move(synchronizer));
 }
 
 }  // namespace impl
+
+struct LinkDataMap {
+  std::map<std::string, std::shared_ptr<LinkData>> contents[stk::topology::NUM_RANKS];
+};
+
+inline std::shared_ptr<LinkData> declare_link_data_ptr(stk::mesh::BulkData &bulk_data, LinkMetaData &link_meta_data) {
+  // Tie the lifetime of this object to the BulkData object so we can return a reference to it.
+  stk::mesh::MetaData& meta_data = bulk_data.mesh_meta_data();
+  LinkDataMap *link_data_map = const_cast<LinkDataMap *>(meta_data.get_attribute<LinkDataMap>());
+  if (link_data_map == nullptr) {
+    const LinkDataMap *new_link_data_map = new LinkDataMap();
+    link_data_map = const_cast<LinkDataMap *>(meta_data.declare_attribute_with_delete(new_link_data_map));
+  }
+  const std::string &our_name = link_meta_data.name();
+  stk::mesh::EntityRank link_rank = link_meta_data.link_rank();
+  if (link_data_map->contents[link_rank].find(our_name) == link_data_map->contents[link_rank].end()) {
+    // The name/rank combo doesn't exist yet, so we can create it.
+    link_data_map->contents[link_rank].emplace(
+        our_name, std::shared_ptr<LinkData>(new LinkData(bulk_data, link_meta_data)));
+  }
+  return link_data_map->contents[link_rank][our_name];
+}
 
 /// \brief Declare a new LinkData object.
 ///
@@ -524,11 +546,29 @@ inline void set_coo_synchronizer(const LinkData &link_data,
 /// \param link_meta_data [in] Our meta data manager. Must be persistant with a lifetime at least as long as the
 ///   generated LinkData.
 /// \return A new LinkData object.
-LinkData declare_link_data(stk::mesh::BulkData &bulk_data, LinkMetaData &link_meta_data) {
-  // TODO(palmerb4): Store a map of LinkData objects in the BulkData object using an attribute
-  //  this way, we can tie the lifetime of the LinkData object to the BulkData object and return
-  //  a reference here.
-  return LinkData(bulk_data, link_meta_data);
+inline LinkData &declare_link_data(stk::mesh::BulkData &bulk_data, LinkMetaData &link_meta_data) {
+  return *declare_link_data_ptr(bulk_data, link_meta_data);
+}
+
+/// \brief Get an existing LinkData object
+inline std::shared_ptr<LinkData> get_link_data(const stk::mesh::BulkData &bulk_data, const std::string &our_name,
+                                        stk::mesh::EntityRank link_rank) {
+  const stk::mesh::MetaData& meta_data = bulk_data.mesh_meta_data();
+  LinkDataMap *link_data_map = const_cast<LinkDataMap *>(meta_data.get_attribute<LinkDataMap>());
+  if (link_data_map == nullptr) {
+    return nullptr;
+  }
+  auto it = link_data_map->contents[link_rank].find(our_name);
+  if (it == link_data_map->contents[link_rank].end()) {
+    return nullptr;
+  }
+  return it->second;
+}
+
+inline std::shared_ptr<LinkData> get_link_data(const stk::mesh::BulkData &bulk_data, const LinkMetaData& link_meta_data) {
+  const std::string &our_name = link_meta_data.name();
+  stk::mesh::EntityRank link_rank = link_meta_data.link_rank();
+  return get_link_data(bulk_data, our_name, link_rank);
 }
 
 }  // namespace mesh

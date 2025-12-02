@@ -96,6 +96,19 @@ concept ValidScalarWrapperType = is_scalar_wrapper_v<std::decay_t<ScalarWrapperT
                                    } -> std::convertible_to<const typename std::decay_t<ScalarWrapperType>::scalar_t>;
                                  };  // ValidScalarWrapperType
 
+//! \name Special scalar operations
+//@{
+
+/// \brief Scalar-scalar multiplication (not otherwise inherited by the math of AVector)
+template <typename U, typename T, ValidAccessor<U> Accessor1, typename Ownership1, ValidAccessor<T> Accessor2,
+          typename Ownership2>
+KOKKOS_INLINE_FUNCTION constexpr auto operator*(const AScalarWrapper<U, Accessor1, Ownership1>& a,
+                                                  const AScalarWrapper<T, Accessor2, Ownership2>& b)
+    -> AScalarWrapper<std::common_type_t<T, U>> {
+  return AScalarWrapper<std::common_type_t<T, U>>{a[0] * b[0]};
+}
+//@}
+
 //! \name AScalarWrapper<T, Accessor> views
 //@{
 

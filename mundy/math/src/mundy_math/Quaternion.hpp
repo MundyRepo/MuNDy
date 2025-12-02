@@ -152,6 +152,9 @@ class AQuaternion<T, Accessor, Ownership::Views> {
 
   /// \brief Our ownership type
   using ownership_t = Ownership::Views;
+
+  /// \brief Deep copy type
+  using deep_copy_t = AQuaternion<T>;
   //@}
 
   //! \name Constructors and destructor
@@ -328,6 +331,12 @@ class AQuaternion<T, Accessor, Ownership::Views> {
   constexpr auto vector() {
     auto shifted_accessor = get_shifted_view<T, 1>(accessor_);
     return get_owning_vector<T, 3>(std::move(shifted_accessor));
+  }
+
+  /// \brief Get a deep copy of the quaternion
+  KOKKOS_INLINE_FUNCTION
+  constexpr deep_copy_t copy() const {
+    return *this;
   }
 
   /// \brief Cast (and copy) the quaternion to a different type
@@ -597,6 +606,9 @@ class AQuaternion<T, Accessor, Ownership::Owns> {
 
   /// \brief Our ownership type
   using ownership_t = Ownership::Owns;
+
+  /// \brief Deep copy type
+  using deep_copy_t = AQuaternion<T>;
   //@}
 
   //! \name Constructors and destructor
@@ -807,6 +819,12 @@ class AQuaternion<T, Accessor, Ownership::Owns> {
   constexpr auto vector() {
     auto shifted_accessor = get_shifted_view<T, 1>(accessor_);
     return get_owning_vector<T, 3>(std::move(shifted_accessor));
+  }
+
+  /// \brief Get a deep copy of the quaternion
+  KOKKOS_INLINE_FUNCTION
+  constexpr deep_copy_t copy() const {
+    return *this;
   }
 
   /// \brief Cast (and copy) the quaternion to a different type
@@ -1167,6 +1185,12 @@ KOKKOS_INLINE_FUNCTION constexpr auto operator*(const AMatrix3<U, Accessor1, Own
 //! \name Special quaternion operations
 //@{
 
+/// \brief Get a deep copy of the given quaternion
+template <ValidQuaternionType QuaternionType>
+KOKKOS_INLINE_FUNCTION constexpr auto copy(const QuaternionType& q) {
+  return q.copy();
+}
+
 /// \brief Get the dot product of two quaternions
 /// \param[in] q1 The first quaternion.
 /// \param[in] q2 The second quaternion.
@@ -1207,7 +1231,7 @@ KOKKOS_INLINE_FUNCTION constexpr AQuaternion<std::remove_const_t<T>> inverse(
 /// \param[in] quat The quaternion.
 template <typename T, ValidAccessor<T> Accessor, typename OwnershipType>
 KOKKOS_INLINE_FUNCTION constexpr auto norm(const AQuaternion<T, Accessor, OwnershipType> &quat) {
-  return std::sqrt(quat[0] * quat[0] + quat[1] * quat[1] + quat[2] * quat[2] + quat[3] * quat[3]);
+  return Kokkos::sqrt(quat[0] * quat[0] + quat[1] * quat[1] + quat[2] * quat[2] + quat[3] * quat[3]);
 }
 
 /// \brief Get the squared norm of a quaternion

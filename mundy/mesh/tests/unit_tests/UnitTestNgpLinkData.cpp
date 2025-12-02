@@ -77,7 +77,7 @@ void setup_mesh_and_metadata(TestContext& context) {
 }
 
 LinkMetaData declare_and_validate_link_metadata(TestContext& context, const std::string& name) {
-  LinkMetaData link_meta_data = declare_link_meta_data(*context.meta_data, name, context.link_rank);
+  LinkMetaData &link_meta_data = declare_link_meta_data(*context.meta_data, name, context.link_rank);
   EXPECT_EQ(link_meta_data.link_rank(), context.link_rank);
   EXPECT_TRUE(link_meta_data.name() == name);
   EXPECT_EQ(link_meta_data.universal_link_part().primary_entity_rank(), context.link_rank);
@@ -257,9 +257,9 @@ void modify_ngp_link_data(const TestContext& context, LinkData& link_data) {
         stk::mesh::EntityRank entity_1_rank = ngp_coo_data.get_linked_entity_rank(linker_index, 1);
         stk::mesh::EntityRank entity_2_rank = ngp_coo_data.get_linked_entity_rank(linker_index, 2);
 
-        ngp_coo_data.delete_relation(linker_index, 0);
-        ngp_coo_data.delete_relation(linker_index, 1);
-        ngp_coo_data.delete_relation(linker_index, 2);
+        ngp_coo_data.destroy_relation(linker_index, 0);
+        ngp_coo_data.destroy_relation(linker_index, 1);
+        ngp_coo_data.destroy_relation(linker_index, 2);
 
         ngp_coo_data.declare_relation(linker_index, entity_2_rank, linked_entity_2, 0);
         ngp_coo_data.declare_relation(linker_index, entity_1_rank, linked_entity_1, 1);
@@ -340,7 +340,7 @@ void basic_usage_test() {
   setup_parts_and_links(context, link_meta_data);
 
   // Declare and validate link data manager
-  LinkData link_data = declare_link_data(*context.bulk_data, link_meta_data);
+  LinkData &link_data = declare_link_data(*context.bulk_data, link_meta_data);
   EXPECT_EQ(link_data.link_meta_data().link_rank(), link_meta_data.link_rank());
 
   // Declare some entities to connect and some links to place between them

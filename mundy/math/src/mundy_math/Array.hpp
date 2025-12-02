@@ -73,7 +73,7 @@ class Array {
   KOKKOS_INLINE_FUNCTION constexpr explicit Array(Args&&... args) : data_{std::forward<Args>(args)...} {
   }
 
-  // /// \brief Constructor to initialize all elements via initializer list
+  /// \brief Constructor to initialize all elements via initializer list
   KOKKOS_INLINE_FUNCTION
   constexpr Array(const std::initializer_list<T>& list)
     requires(!std::is_const_v<T>)
@@ -186,6 +186,26 @@ static_assert(std::is_copy_constructible_v<Array<double, 3>>);
 static_assert(std::is_move_constructible_v<Array<double, 3>>);
 static_assert(std::is_copy_assignable_v<Array<double, 3>>);
 static_assert(std::is_move_assignable_v<Array<double, 3>>);
+
+/// \brief Write the array to an output stream
+template <typename T, size_t N>
+std::ostream& operator<<(std::ostream& os, const Array<T, N>& a) {
+  os << "(";
+  if constexpr (N == 0) {
+    // Do nothing
+  } else if constexpr (N == 1) {
+    os << a[0];
+  } else {
+    for (size_t i = 0; i < N; ++i) {
+      os << a[i];
+      if (i < N - 1) {
+        os << ", ";
+      }
+    }
+  }
+  os << ")";
+  return os;
+}
 
 }  // namespace math
 

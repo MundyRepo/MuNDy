@@ -447,6 +447,30 @@ TEST(DistanceBetweenLineSegments, APeskyEdgeCase) {
   EXPECT_NEAR(v_expected, v_actual, TEST_DOUBLE_EPSILON);
 }
 
+TEST(DistanceBetweenLineSegments, APeskyEdgeCaseCollinear) {
+  // The following pesky edge case is for a colinear rod that caused an untested edge case.
+  // TODO(palmerb4): We'll need colinear rods that give each of the 4 possible cases.
+  openrand::Philox rng(generate_test_seed(), 0);
+  Point<double> a1, a2, b1, b2;
+  mundy::math::Vector3d sep_actual;
+
+  double u_expected, v_expected, u_actual, v_actual, dist_expected, dist_actual;
+  // Hardcoding a case that I know is wrong.
+  a1 = {9.64101615137754, 6, 3.18961417478521};
+  b1 = {10.39230484541326, 6, 0.6472696138825587};
+  a2 = {9.64101615137754, 6, 8.189614174785209};
+  b2 = {10.39230484541326, 6, 5.647269613882559};
+  dist_expected = 0.7512886940357237;
+
+  const LineSegment<double> line_segment_a(a1, a2);
+  const LineSegment<double> line_segment_b(b1, b2);
+  dist_actual = distance(line_segment_a, line_segment_b);
+  EXPECT_NEAR(dist_expected, dist_actual, TEST_DOUBLE_EPSILON);
+
+  auto dist_actual_rev = distance(line_segment_b, line_segment_a);
+  EXPECT_NEAR(dist_actual_rev, dist_actual, TEST_DOUBLE_EPSILON);
+}
+
 TEST(DistanceToLine, PositiveResult) {
   openrand::Philox rng(generate_test_seed(), 0);
   unsigned nTests = MUNDY_GEOM_TESTS_UNIT_TESTS_SEGMENT_SEGMENT_DISTANCE_NUM_SAMPLES_PER_TEST;

@@ -39,12 +39,13 @@
 #include <stk_topology/topology.hpp>      // for stk::topology::topology_t
 
 // Mundy
-#include <mundy_core/throw_assert.hpp>   // for MUNDY_THROW_ASSERT
-#include <mundy_core/tuple.hpp>          // for mundy::core::tuple
-#include <mundy_mesh/BulkData.hpp>       // for mundy::mesh::BulkData
-#include <mundy_mesh/FieldViews.hpp>     // for mundy::mesh::vector3_field_data, mundy::mesh::quaternion_field_data
-#include <mundy_mesh/ForEachEntity.hpp>  // for mundy::mesh::for_each_entity_run
-#include <mundy_mesh/fmt_stk_types.hpp>  // for STK-compatible fmt::format
+#include <mundy_core/throw_assert.hpp>     // for MUNDY_THROW_ASSERT
+#include <mundy_core/tuple.hpp>            // for mundy::core::tuple
+#include <mundy_mesh/BulkData.hpp>         // for mundy::mesh::BulkData
+#include <mundy_mesh/FieldViews.hpp>       // for mundy::mesh::vector3_field_data, mundy::mesh::quaternion_field_data
+#include <mundy_mesh/ForEachEntity.hpp>    // for mundy::mesh::for_each_entity_run
+#include <mundy_mesh/NgpAccessorExpr.hpp>  // for mundy::mesh::AccessorExpr and EntityExprBase
+#include <mundy_mesh/fmt_stk_types.hpp>    // for STK-compatible fmt::format
 
 namespace mundy {
 
@@ -107,6 +108,14 @@ class FieldComponentBase {
     field_base_.modify_on_host();
   }
 
+  void clear_host_sync_state() {
+    field_base_.clear_host_sync_state();
+  }
+
+  void clear_device_sync_state() {
+    field_base_.clear_device_sync_state();
+  }
+
   const stk::mesh::FieldBase& field_base() {
     return field_base_;
   }
@@ -145,6 +154,14 @@ class NgpFieldComponentBase {
     host_field_base_->modify_on_host();
   }
 
+  void clear_host_sync_state() {
+    host_field_base_->clear_host_sync_state();
+  }
+
+  void clear_device_sync_state() {
+    host_field_base_->clear_device_sync_state();
+  }
+
   const stk::mesh::FieldBase& host_field_base() {
     return *host_field_base_;
   }
@@ -167,9 +184,9 @@ class FieldComponent : public FieldComponentBase {
   FieldComponent& operator=(FieldComponent&&) = default;
 
   inline decltype(auto) operator()(stk::mesh::Entity entity) const {
-    ValueType* data_ptr = stk::mesh::field_data(*field_, entity);
+    ValueType* data_ptr = stk::mesh::field_data(field_, entity);
     MUNDY_THROW_ASSERT(data_ptr, std::runtime_error, "Field data is null");
-    unsigned num_scalars = stk::mesh::field_scalars_per_entity(*field_, entity);
+    unsigned num_scalars = stk::mesh::field_scalars_per_entity(field_, entity);
     return stk::mesh::EntityFieldData<ValueType>(data_ptr, num_scalars);
   }
 
@@ -183,11 +200,17 @@ class FieldComponent : public FieldComponentBase {
 
  private:
   stk::mesh::Field<ValueType>& field_;
+
+ public:
+  /// \brief The view type returned by operator()
+  using view_t = decltype(std::declval<FieldComponent<ValueType>>().operator()(std::declval<stk::mesh::Entity>()));
 };  // FieldComponent
 
 template <typename NgpFieldType>
 class NgpFieldComponent : public NgpFieldComponentBase {
  public:
+  using our_t = NgpFieldComponent<NgpFieldType>;
+
   NgpFieldComponent() = default;
   NgpFieldComponent(NgpFieldType ngp_field)
 #if TRILINOS_MAJOR_MINOR_VERSION >= 160000
@@ -208,6 +231,20 @@ class NgpFieldComponent : public NgpFieldComponentBase {
   decltype(auto) operator()(stk::mesh::FastMeshIndex entity_index) const {
     return ngp_field_(entity_index);
   }
+
+  /// \brief Calling operator()(entity_expr) on any accessor will return an AccessorExpr
+  /// Example:
+  ///   auto v3_accessor = Vector3FieldComponent(v3_field);
+  ///   EntityExpr all_nodes(node_selector, stk::topology::NODE_RANK);
+  ///   auto get_v3_expr = v3_accessor(all_nodes);
+  // template <class EntityExpr>
+  // KOKKOS_INLINE_FUNCTION auto operator()(const EntityExprBase<EntityExpr>& e) const {
+  //   MUNDY_THROW_REQUIRE(e.rank() == ngp_field_.get_rank(), std::runtime_error,
+  //                       fmt::format("Attempting to access field of rank {} on entity expression of rank {}",
+  //                                   ngp_field_.get_rank(), e.rank()));
+
+  //   return AccessorExpr<our_t, EntityExpr>(*this, e.self());
+  // }
 
   KOKKOS_INLINE_FUNCTION
   NgpFieldType& ngp_field() {
@@ -235,10 +272,23 @@ class NgpFieldComponent : public NgpFieldComponentBase {
   void modify_on_host() {
     ngp_field_.modify_on_host();
   }
+
+  void clear_host_sync_state() {
+    ngp_field_.clear_host_sync_state();
+  }
+
+  void clear_device_sync_state() {
+    ngp_field_.clear_device_sync_state();
+  }
 #endif
 
  private:
   NgpFieldType ngp_field_;
+
+ public:
+  /// \brief The view type returned by operator()
+  using view_t =
+      decltype(std::declval<NgpFieldComponent<NgpFieldType>>().operator()(std::declval<stk::mesh::FastMeshIndex>()));
 };  // NgpFieldComponent
 
 template <typename ScalarType>
@@ -268,11 +318,18 @@ class ScalarFieldComponent : public FieldComponentBase {
 
  private:
   stk::mesh::Field<ScalarType>& field_;
+
+ public:
+  /// \brief The view type returned by operator()
+  using view_t =
+      decltype(std::declval<ScalarFieldComponent<ScalarType>>().operator()(std::declval<stk::mesh::Entity>()));
 };  // ScalarFieldComponent
 
 template <typename NgpFieldType>
 class NgpScalarFieldComponent : public NgpFieldComponentBase {
  public:
+  using our_t = NgpScalarFieldComponent<NgpFieldType>;
+
   NgpScalarFieldComponent() = default;
   NgpScalarFieldComponent(NgpFieldType ngp_field)
 #if TRILINOS_MAJOR_MINOR_VERSION >= 160000
@@ -294,6 +351,19 @@ class NgpScalarFieldComponent : public NgpFieldComponentBase {
   decltype(auto) operator()(stk::mesh::FastMeshIndex entity_index) const {
     return scalar_field_data(ngp_field_, entity_index);
   }
+
+  /// \brief Calling operator()(entity_expr) on any accessor will return an AccessorExpr
+  /// Example:
+  ///   auto v3_accessor = Vector3FieldComponent(v3_field);
+  ///   EntityExpr all_nodes(node_selector, stk::topology::NODE_RANK);
+  ///   auto get_v3_expr = v3_accessor(all_nodes);
+  // template <class EntityExpr>
+  // KOKKOS_INLINE_FUNCTION auto operator()(const EntityExprBase<EntityExpr>& e) const {
+  //   MUNDY_THROW_REQUIRE(e.rank() == ngp_field_.get_rank(), std::runtime_error,
+  //                       fmt::format("Attempting to access field of rank {} on entity expression of rank {}",
+  //                                   ngp_field_.get_rank(), e.rank()));
+  //   return AccessorExpr<our_t, EntityExpr>(*this, e.self());
+  // }
 
   KOKKOS_INLINE_FUNCTION
   NgpFieldType& ngp_field() {
@@ -321,10 +391,23 @@ class NgpScalarFieldComponent : public NgpFieldComponentBase {
   void modify_on_host() {
     ngp_field_.modify_on_host();
   }
+
+  void clear_host_sync_state() {
+    ngp_field_.clear_host_sync_state();
+  }
+
+  void clear_device_sync_state() {
+    ngp_field_.clear_device_sync_state();
+  }
 #endif
 
  private:
   NgpFieldType ngp_field_;
+
+ public:
+  /// \brief The view type returned by operator()
+  using view_t = decltype(std::declval<NgpScalarFieldComponent<NgpFieldType>>().operator()(
+      std::declval<stk::mesh::FastMeshIndex>()));
 };  // NgpScalarFieldComponent
 
 template <typename ScalarType>
@@ -353,11 +436,18 @@ class Vector3FieldComponent : public FieldComponentBase {
 
  private:
   stk::mesh::Field<ScalarType>& field_;
+
+ public:
+  /// \brief The view type returned by operator()
+  using view_t =
+      decltype(std::declval<Vector3FieldComponent<ScalarType>>().operator()(std::declval<stk::mesh::Entity>()));
 };  // Vector3FieldComponent
 
 template <typename NgpFieldType>
 class NgpVector3FieldComponent : public NgpFieldComponentBase {
  public:
+  using our_t = NgpVector3FieldComponent<NgpFieldType>;
+
   NgpVector3FieldComponent() = default;
   NgpVector3FieldComponent(NgpFieldType ngp_field)
 #if TRILINOS_MAJOR_MINOR_VERSION >= 160000
@@ -378,6 +468,19 @@ class NgpVector3FieldComponent : public NgpFieldComponentBase {
   decltype(auto) operator()(stk::mesh::FastMeshIndex entity_index) const {
     return vector3_field_data(ngp_field_, entity_index);
   }
+
+  /// \brief Calling operator()(entity_expr) on any accessor will return an AccessorExpr
+  /// Example:
+  ///   auto v3_accessor = Vector3FieldComponent(v3_field);
+  ///   EntityExpr all_nodes(node_selector, stk::topology::NODE_RANK);
+  ///   auto get_v3_expr = v3_accessor(all_nodes);
+  // template <class EntityExpr>
+  // KOKKOS_INLINE_FUNCTION auto operator()(const EntityExprBase<EntityExpr>& e) const {
+  //   MUNDY_THROW_REQUIRE(e.rank() == ngp_field_.get_rank(), std::runtime_error,
+  //                       fmt::format("Attempting to access field of rank {} on entity expression of rank {}",
+  //                                   ngp_field_.get_rank(), e.rank()));
+  //   return AccessorExpr<our_t, EntityExpr>(*this, e.self());
+  // }
 
   KOKKOS_INLINE_FUNCTION
   NgpFieldType& ngp_field() {
@@ -405,10 +508,23 @@ class NgpVector3FieldComponent : public NgpFieldComponentBase {
   void modify_on_host() {
     ngp_field_.modify_on_host();
   }
+
+  void clear_host_sync_state() {
+    ngp_field_.clear_host_sync_state();
+  }
+
+  void clear_device_sync_state() {
+    ngp_field_.clear_device_sync_state();
+  }
 #endif
 
  private:
   NgpFieldType ngp_field_;
+
+ public:
+  /// \brief The view type returned by operator()
+  using view_t = decltype(std::declval<NgpVector3FieldComponent<NgpFieldType>>().operator()(
+      std::declval<stk::mesh::FastMeshIndex>()));
 };  // NgpVector3FieldComponent
 
 template <typename ScalarType>
@@ -437,11 +553,18 @@ class Matrix3FieldComponent : public FieldComponentBase {
 
  private:
   stk::mesh::Field<ScalarType>& field_;
+
+ public:
+  /// \brief The view type returned by operator()
+  using view_t =
+      decltype(std::declval<Matrix3FieldComponent<ScalarType>>().operator()(std::declval<stk::mesh::Entity>()));
 };  // Matrix3FieldComponent
 
 template <typename NgpFieldType>
 class NgpMatrix3FieldComponent : public NgpFieldComponentBase {
  public:
+  using our_t = NgpMatrix3FieldComponent<NgpFieldType>;
+
   NgpMatrix3FieldComponent() = default;
   NgpMatrix3FieldComponent(NgpFieldType ngp_field)
 #if TRILINOS_MAJOR_MINOR_VERSION >= 160000
@@ -462,6 +585,19 @@ class NgpMatrix3FieldComponent : public NgpFieldComponentBase {
   decltype(auto) operator()(stk::mesh::FastMeshIndex entity_index) const {
     return matrix3_field_data(ngp_field_, entity_index);
   }
+
+  /// \brief Calling operator()(entity_expr) on any accessor will return an AccessorExpr
+  /// Example:
+  ///   auto v3_accessor = Vector3FieldComponent(v3_field);
+  ///   EntityExpr all_nodes(node_selector, stk::topology::NODE_RANK);
+  ///   auto get_v3_expr = v3_accessor(all_nodes);
+  // template <class EntityExpr>
+  // KOKKOS_INLINE_FUNCTION auto operator()(const EntityExprBase<EntityExpr>& e) const {
+  //   MUNDY_THROW_REQUIRE(e.rank() == ngp_field_.get_rank(), std::runtime_error,
+  //                       fmt::format("Attempting to access field of rank {} on entity expression of rank {}",
+  //                                   ngp_field_.get_rank(), e.rank()));
+  //   return AccessorExpr<our_t, EntityExpr>(*this, e.self());
+  // }
 
   KOKKOS_INLINE_FUNCTION
   NgpFieldType& ngp_field() {
@@ -489,10 +625,23 @@ class NgpMatrix3FieldComponent : public NgpFieldComponentBase {
   void modify_on_host() {
     ngp_field_.modify_on_host();
   }
+
+  void clear_host_sync_state() {
+    ngp_field_.clear_host_sync_state();
+  }
+
+  void clear_device_sync_state() {
+    ngp_field_.clear_device_sync_state();
+  }
 #endif
 
  private:
   NgpFieldType ngp_field_;
+
+ public:
+  /// \brief The view type returned by operator()
+  using view_t = decltype(std::declval<NgpMatrix3FieldComponent<NgpFieldType>>().operator()(
+      std::declval<stk::mesh::FastMeshIndex>()));
 };  // NgpMatrix3FieldComponent
 
 template <typename ScalarType>
@@ -521,11 +670,18 @@ class QuaternionFieldComponent : public FieldComponentBase {
 
  private:
   stk::mesh::Field<ScalarType>& field_;
+
+ public:
+  /// \brief The view type returned by operator()
+  using view_t =
+      decltype(std::declval<QuaternionFieldComponent<ScalarType>>().operator()(std::declval<stk::mesh::Entity>()));
 };  // QuaternionFieldComponent
 
 template <typename NgpFieldType>
 class NgpQuaternionFieldComponent : public NgpFieldComponentBase {
  public:
+  using our_t = NgpQuaternionFieldComponent<NgpFieldType>;
+
   NgpQuaternionFieldComponent() = default;
   NgpQuaternionFieldComponent(NgpFieldType ngp_field)
 #if TRILINOS_MAJOR_MINOR_VERSION >= 160000
@@ -546,6 +702,19 @@ class NgpQuaternionFieldComponent : public NgpFieldComponentBase {
   decltype(auto) operator()(stk::mesh::FastMeshIndex entity_index) const {
     return quaternion_field_data(ngp_field_, entity_index);
   }
+
+  /// \brief Calling operator()(entity_expr) on any accessor will return an AccessorExpr
+  /// Example:
+  ///   auto v3_accessor = Vector3FieldComponent(v3_field);
+  ///   EntityExpr all_nodes(node_selector, stk::topology::NODE_RANK);
+  ///   auto get_v3_expr = v3_accessor(all_nodes);
+  // template <class EntityExpr>
+  // KOKKOS_INLINE_FUNCTION auto operator()(const EntityExprBase<EntityExpr>& e) const {
+  //   MUNDY_THROW_REQUIRE(e.rank() == ngp_field_.get_rank(), std::runtime_error,
+  //                       fmt::format("Attempting to access field of rank {} on entity expression of rank {}",
+  //                                   ngp_field_.get_rank(), e.rank()));
+  //   return AccessorExpr<our_t, EntityExpr>(*this, e.self());
+  // }
 
   KOKKOS_INLINE_FUNCTION
   NgpFieldType& ngp_field() {
@@ -568,10 +737,23 @@ class NgpQuaternionFieldComponent : public NgpFieldComponentBase {
   void modify_on_host() {
     ngp_field_.modify_on_host();
   }
+
+  void clear_host_sync_state() {
+    ngp_field_.clear_host_sync_state();
+  }
+
+  void clear_device_sync_state() {
+    ngp_field_.clear_device_sync_state();
+  }
 #endif
 
  private:
   NgpFieldType ngp_field_;
+
+ public:
+  /// \brief The view type returned by operator()
+  using view_t = decltype(std::declval<NgpQuaternionFieldComponent<NgpFieldType>>().operator()(
+      std::declval<stk::mesh::FastMeshIndex>()));
 };  // NgpQuaternionFieldComponent
 
 template <typename ScalarType>
@@ -600,11 +782,17 @@ class AABBFieldComponent : public FieldComponentBase {
 
  private:
   stk::mesh::Field<ScalarType>& field_;
+
+ public:
+  /// \brief The view type returned by operator()
+  using view_t = decltype(std::declval<AABBFieldComponent<ScalarType>>().operator()(std::declval<stk::mesh::Entity>()));
 };  // AABBFieldComponent
 
 template <typename NgpFieldType>
 class NgpAABBFieldComponent : public NgpFieldComponentBase {
  public:
+  using our_t = NgpAABBFieldComponent<NgpFieldType>;
+
   NgpAABBFieldComponent() = default;
   NgpAABBFieldComponent(NgpFieldType ngp_field)
 #if TRILINOS_MAJOR_MINOR_VERSION >= 160000
@@ -627,6 +815,19 @@ class NgpAABBFieldComponent : public NgpFieldComponentBase {
     return aabb_field_data(ngp_field_, entity_index);
   }
 
+  /// \brief Calling operator()(entity_expr) on any accessor will return an AccessorExpr
+  /// Example:
+  ///   auto v3_accessor = Vector3FieldComponent(v3_field);
+  ///   EntityExpr all_nodes(node_selector, stk::topology::NODE_RANK);
+  ///   auto get_v3_expr = v3_accessor(all_nodes);
+  // template <class EntityExpr>
+  // KOKKOS_INLINE_FUNCTION auto operator()(const EntityExprBase<EntityExpr>& e) const {
+  //   MUNDY_THROW_REQUIRE(e.rank() == ngp_field_.get_rank(), std::runtime_error,
+  //                       fmt::format("Attempting to access field of rank {} on entity expression of rank {}",
+  //                                   ngp_field_.get_rank(), e.rank()));
+  //   return AccessorExpr<our_t, EntityExpr>(*this, e.self());
+  // }
+
   KOKKOS_INLINE_FUNCTION
   NgpFieldType& ngp_field() {
     return ngp_field_;
@@ -648,10 +849,23 @@ class NgpAABBFieldComponent : public NgpFieldComponentBase {
   void modify_on_host() {
     ngp_field_.modify_on_host();
   }
+
+  void clear_host_sync_state() {
+    ngp_field_.clear_host_sync_state();
+  }
+
+  void clear_device_sync_state() {
+    ngp_field_.clear_device_sync_state();
+  }
 #endif
 
  private:
   NgpFieldType ngp_field_;
+
+ public:
+  /// \brief The view type returned by operator()
+  using view_t = decltype(std::declval<NgpAABBFieldComponent<NgpFieldType>>().operator()(
+      std::declval<stk::mesh::FastMeshIndex>()));
 };  // NgpAABBFieldComponent
 
 /// \brief A small helper type for tying a Tag to an underlying component
@@ -674,6 +888,14 @@ class TaggedComponent {
   inline decltype(auto) operator()(stk::mesh::Entity entity) const {
     return component_(entity);
   }
+
+  /// \brief Calling operator()(entity_expr) on any accessor will return an AccessorExpr
+  /// Example:
+  ///   auto v3_accessor = Vector3FieldComponent(v3_field);
+  ///   EntityExpr all_nodes(node_selector, stk::topology::NODE_RANK);
+  ///   auto get_v3_expr = v3_accessor(all_nodes);
+  template <class EntityExpr>
+  auto operator()(const EntityExprBase<EntityExpr>& e) const;
 
   inline const component_type& component() const {
     // Our lifetime should be at least as long as the component's
@@ -700,14 +922,33 @@ class TaggedComponent {
     component_.modify_on_host();
   }
 
+  void clear_host_sync_state() {
+    component_.clear_host_sync_state();
+  }
+
+  void clear_device_sync_state() {
+    component_.clear_device_sync_state();
+  }
+
  private:
   component_type component_;
+
+ public:
+  /// \brief The view type returned by operator()
+  using view_t = decltype(std::declval<TaggedComponent<Tag, our_rank, ComponentType>>().operator()(
+      std::declval<stk::mesh::Entity>()));
 };  // TaggedComponent
+
+template<typename Tag, stk::topology::rank_t our_rank, typename ComponentType>
+TaggedComponent<Tag, our_rank, ComponentType> make_tagged_component(ComponentType component) {
+  return TaggedComponent<Tag, our_rank, ComponentType>(component);
+}
 
 /// \brief A small helper type for tying a Tag to an underlying ngp-compatible component
 template <typename Tag, stk::topology::rank_t our_rank, typename NgpComponentType>
 class NgpTaggedComponent {
  public:
+  using our_t = NgpTaggedComponent<Tag, our_rank, NgpComponentType>;
   using tag_type = Tag;
   using component_type = NgpComponentType;
   static constexpr stk::topology::rank_t rank = our_rank;
@@ -725,6 +966,19 @@ class NgpTaggedComponent {
   KOKKOS_INLINE_FUNCTION
   decltype(auto) operator()(stk::mesh::FastMeshIndex entity_index) const {
     return component_(entity_index);
+  }
+
+  /// \brief Calling operator()(entity_expr) on any accessor will return an AccessorExpr
+  /// Example:
+  ///   auto v3_accessor = Vector3FieldComponent(v3_field);
+  ///   EntityExpr all_nodes(node_selector, stk::topology::NODE_RANK);
+  ///   auto get_v3_expr = v3_accessor(all_nodes);
+  template <class EntityExpr>
+  KOKKOS_INLINE_FUNCTION auto operator()(const EntityExprBase<EntityExpr>& e) const {
+    MUNDY_THROW_REQUIRE(e.rank() == rank, std::runtime_error,
+                        fmt::format("Attempting to access field of rank {} on entity expression of rank {}",
+                                    rank, e.rank()));
+    return AccessorExpr<our_t, EntityExpr>(*this, e.self());
   }
 
   KOKKOS_INLINE_FUNCTION
@@ -753,8 +1007,21 @@ class NgpTaggedComponent {
     component_.modify_on_host();
   }
 
+  void clear_host_sync_state() {
+    component_.clear_host_sync_state();
+  }
+
+  void clear_device_sync_state() {
+    component_.clear_device_sync_state();
+  }
+
  private:
   component_type component_;
+
+ public:
+  /// \brief The view type returned by operator()
+  using view_t = decltype(std::declval<NgpTaggedComponent<Tag, our_rank, NgpComponentType>>().operator()(
+      std::declval<stk::mesh::FastMeshIndex>()));
 };  // NgpTaggedComponent
 
 /// \brief A helper function for getting the NGP component from a regular component
@@ -808,7 +1075,20 @@ decltype(auto) get_updated_ngp_component(const TaggedComponent<Tag, our_rank, Co
   return NgpTaggedComponent<Tag, our_rank, ngp_component_type>(ngp_component);
 }
 
-namespace impl {
+template <typename Tag, stk::topology::rank_t our_rank, typename ComponentType>
+template <class EntityExpr>
+auto TaggedComponent<Tag, our_rank, ComponentType>::operator()(const EntityExprBase<EntityExpr>& e) const {
+  MUNDY_THROW_REQUIRE(e.rank() == rank, std::runtime_error,
+                      fmt::format("Attempting to access field of rank {} on entity expression of rank {}",
+                                  rank, e.rank()));
+  
+  // Entity expressions are (currently) always on the device, so we need to get the NGP tagged component
+  // TODO(palmerb4): Allow for exec_spaces that aren't simply the default execution space (need Tril 16.1+)
+  auto ngp_this = get_updated_ngp_component(*this);
+  return ngp_this(e.self());
+}
+
+namespace agg_impl {
 
 /// \brief Helper function to locate the component that matches a Tag
 /// We assume each tag occurs only once and perform a simple linear search.
@@ -901,8 +1181,6 @@ class NgpFunctorWrapper {
   FunctorType functor_;
 };  // NgpFunctorWrapper
 
-}  // namespace impl
-
 // A concept to check if a single component has a tag_type
 template <typename T>
 concept has_tag_type = requires { typename T::tag_type; };
@@ -933,7 +1211,7 @@ KOKKOS_FUNCTION static constexpr const auto& find_component(const core::tuple<Co
   static_assert(all_have_tags<Components...>, "All of the given components must have tags.");
   static_assert(has_component_v<Tag, Components...>,
                 "Attempting to find a component that does not exist in the given tuple");
-  return impl::find_const_component_impl<Tag>(tuple, std::make_index_sequence<sizeof...(Components)>{});
+  return agg_impl::find_const_component_impl<Tag>(tuple, std::make_index_sequence<sizeof...(Components)>{});
 }
 
 /// \brief Fetch the component corresponding to the given Tag
@@ -942,21 +1220,24 @@ KOKKOS_FUNCTION static constexpr auto& find_component(core::tuple<Components...>
   static_assert(all_have_tags<Components...>, "All of the given components must have tags.");
   static_assert(has_component_v<Tag, Components...>,
                 "Attempting to find a component that does not exist in the given tuple");
-  return impl::find_component_impl<Tag>(tuple, std::make_index_sequence<sizeof...(Components)>{});
+  return agg_impl::find_component_impl<Tag>(tuple, std::make_index_sequence<sizeof...(Components)>{});
 }
 
 /// \brief Determine if any components in a tuple have a given rank
 template <stk::topology::rank_t rank, typename... Components>
 KOKKOS_FUNCTION static constexpr bool has_rank(const core::tuple<Components...>& tuple) {
   static_assert(all_have_tags<Components...>, "All of the given components must have tags.");
-  return impl::has_rank_impl<rank>(tuple, std::make_index_sequence<sizeof...(Components)>{});
+  return agg_impl::has_rank_impl<rank>(tuple, std::make_index_sequence<sizeof...(Components)>{});
 }
 /// \brief Determine if ~all~ components in a tuple have a given rank
 template <stk::topology::rank_t rank, typename... Components>
 KOKKOS_FUNCTION static constexpr bool all_have_rank(const core::tuple<Components...>& tuple) {
   static_assert(all_have_tags<Components...>, "All of the given components must have tags.");
-  return impl::all_have_rank_impl<rank>(tuple, std::make_index_sequence<sizeof...(Components)>{});
+  return agg_impl::all_have_rank_impl<rank>(tuple, std::make_index_sequence<sizeof...(Components)>{});
 }
+
+}  // namespace agg_impl
+
 
 /// Forward declarations:
 template <stk::topology::topology_t OurTopology, stk::topology::rank_t OurRank, typename... Components>
@@ -1060,7 +1341,7 @@ class NgpEntityView;
 ///
 /// Our Accessors, the data they access, and the return type of the Accessor's get_view method are as follows:
 ///          Component Name                :              Data it accesses             ->         Return Type
-///   ScalarFieldComponent                 :  Field<scalar_t>                          ->  scalar_t&
+///   ScalarFieldComponent                 :  Field<scalar_t>                          ->  ScalarView<scalar_t>
 ///   Vector3FieldComponent                :  Field<scalar_t>                          ->  Vector3View<scalar_t>
 ///   Matrix3FieldComponent                :  Field<scalar_t>                          ->  Matrix3View<scalar_t>
 ///   QuaternionFieldComponent             :  Field<scalar_t>                          ->  QuaternionView<scalar_t>
@@ -1166,7 +1447,7 @@ class NgpEntityView;
 template <stk::topology::topology_t OurTopology, stk::topology::rank_t OurRank, typename... Components>
 class Aggregate {
  public:
-  static_assert(all_have_tags<Components...>, "All of the given components must have tags.");
+  static_assert(agg_impl::all_have_tags<Components...>, "All of the given components must have tags.");
   using ComponentsTuple = core::tuple<Components...>;
 
   //! \name Constructors
@@ -1180,7 +1461,6 @@ class Aggregate {
 
   /// \brief Construct an Aggregate that has the given components
   Aggregate(const stk::mesh::BulkData& bulk_data, stk::mesh::Selector selector, ComponentsTuple components)
-    requires(sizeof...(Components) > 0)
       : bulk_data_(bulk_data), selector_(std::move(selector)), components_(std::move(components)) {
   }
 
@@ -1226,13 +1506,13 @@ class Aggregate {
   /// \brief Fetch the component corresponding to the given Tag
   template <typename Tag>
   const auto& get_component() const {
-    return find_component<Tag>(components_);
+    return agg_impl::find_component<Tag>(components_);
   }
 
   /// \brief Fetch the component corresponding to the given Tag
   template <typename Tag>
   auto& get_component() {
-    return find_component<Tag>(components_);
+    return agg_impl::find_component<Tag>(components_);
   }
 
   /// \brief Synchronize the components marked by the given tags to the device
@@ -1308,7 +1588,7 @@ template <stk::topology::topology_t OurTopology, stk::topology::rank_t OurRank, 
 class NgpAggregate {
  public:
   using NgpComponentsTuple = core::tuple<NgpComponents...>;
-  static_assert(all_have_tags<NgpComponents...>, "All of the given components must have tags.");
+  static_assert(agg_impl::all_have_tags<NgpComponents...>, "All of the given components must have tags.");
 
   //! \name Constructors
   //@{
@@ -1325,7 +1605,6 @@ class NgpAggregate {
 
   /// \brief Construct an Aggregate that has the given components
   NgpAggregate(stk::mesh::NgpMesh ngp_mesh, stk::mesh::Selector selector, NgpComponentsTuple ngp_components)
-    requires(sizeof...(NgpComponents) > 0)
       : ngp_mesh_(ngp_mesh), host_selector_(std::move(selector)), ngp_components_(std::move(ngp_components)) {
   }
 
@@ -1398,13 +1677,13 @@ class NgpAggregate {
   /// \brief Fetch the component corresponding to the given Tag
   template <typename Tag>
   KOKKOS_INLINE_FUNCTION const auto& get_component() const {
-    return find_component<Tag>(ngp_components_);
+    return agg_impl::find_component<Tag>(ngp_components_);
   }
 
   /// \brief Fetch the component corresponding to the given Tag
   template <typename Tag>
   KOKKOS_INLINE_FUNCTION auto& get_component() {
-    return find_component<Tag>(ngp_components_);
+    return agg_impl::find_component<Tag>(ngp_components_);
   }
 
   /// \brief Synchronize the components marked by the given tags to the device
@@ -1437,6 +1716,13 @@ class NgpAggregate {
     return NgpEntityView<OurTopology, OurRank, NgpComponents...>(ngp_mesh_, ngp_components_, entity_index);
   }
 
+  /// \brief Get an EntityView for the given entity
+  KOKKOS_INLINE_FUNCTION
+  NgpEntityView<OurTopology, OurRank, NgpComponents...> get_view(stk::mesh::Entity entity) const {
+    stk::mesh::FastMeshIndex entity_index = ngp_mesh_.fast_mesh_index(entity);
+    return NgpEntityView<OurTopology, OurRank, NgpComponents...>(ngp_mesh_, ngp_components_, entity_index);
+  }
+
   /// \brief Apply a functor on the EntityView of each entity in the current data aggregate that is also in the given
   /// subset selector
   template <typename Functor>
@@ -1446,7 +1732,7 @@ class NgpAggregate {
     our_t agg = *this;
 
     auto local_ngp_mesh = agg.ngp_mesh();
-    impl::NgpFunctorWrapper<our_t, Functor> wrapper(agg, f);
+    agg_impl::NgpFunctorWrapper<our_t, Functor> wrapper(agg, f);
     stk::mesh::Selector sel = agg.selector() & subset_selector;
     ::mundy::mesh::for_each_entity_run(local_ngp_mesh, agg.rank(), sel, wrapper);
   }
@@ -1458,7 +1744,7 @@ class NgpAggregate {
     our_t agg = *this;
 
     auto local_ngp_mesh = agg.ngp_mesh();
-    impl::NgpFunctorWrapper<our_t, Functor> wrapper(agg, f);
+    agg_impl::NgpFunctorWrapper<our_t, Functor> wrapper(agg, f);
     ::mundy::mesh::for_each_entity_run(local_ngp_mesh, agg.rank(), agg.selector(), wrapper);
   }
 

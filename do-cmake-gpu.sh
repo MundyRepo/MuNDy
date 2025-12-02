@@ -28,7 +28,7 @@ export CUDA_MANAGED_FORCE_DEVICE_ALLOC=1
 cmake \
 -DCMAKE_BUILD_TYPE=${BUILD_TYPE:-RELEASE} \
 -DCMAKE_CXX_COMPILER=${OMPI_CXX} \
--DCMAKE_INSTALL_PREFIX=${INSTALL_DIR:-$HOME/envs/MundyScratch} \
+-DCMAKE_INSTALL_PREFIX=${INSTALL_DIR:-$HOME/envs/GPUMundyScratch} \
 -DCMAKE_CXX_FLAGS="-O3 -march=native -Wall -Wextra -Wdouble-promotion -Wconversion -lmpi -lcuda" \
 -DTPL_ENABLE_MPI=ON \
 -DTPL_ENABLE_CUDA=ON \

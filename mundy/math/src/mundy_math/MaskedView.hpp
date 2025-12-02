@@ -74,7 +74,6 @@ class MaskedAccessor<T, N, mask, Accessor, Ownership::Views> {
   //@{
 
   std::conditional_t<std::is_pointer_v<Accessor>, Accessor, Accessor&> accessor_;
-  // static constexpr Kokkos::Array<size_t, N> valid_indices_ = create_index_array();
   //@}
 
   /// \brief Constructor for reference accessors
@@ -136,7 +135,6 @@ class MaskedAccessor<T, N, mask, Accessor, Ownership::Owns> {
   //@{
 
   Accessor accessor_;
-  // static constexpr Kokkos::Array<size_t, N> valid_indices_ = create_index_array();
   //@}
 
   /// \brief Default constructor.

@@ -137,6 +137,9 @@ class AMatrix<T, N, M, Accessor, Ownership::Views> {
 
   /// \brief Our ownership type
   using ownership_t = Ownership::Views;
+  
+  /// \brief Deep copy type
+  using deep_copy_t = AMatrix<T, N, M>;
 
   /// \brief The number of rows
   static constexpr size_t num_rows = N;
@@ -421,6 +424,12 @@ class AMatrix<T, N, M, Accessor, Ownership::Views> {
     return get_owning_matrix<T, newN, newM>(std::move(masked_data_accessor));
   }
 
+  /// \brief Get a deep copy of the matrix
+  KOKKOS_INLINE_FUNCTION
+  constexpr deep_copy_t copy() const {
+    return *this;
+  }
+  
   /// \brief Cast (and copy) the matrix to a different type
   template <typename U>
   KOKKOS_INLINE_FUNCTION constexpr auto cast() const {
@@ -695,6 +704,9 @@ class AMatrix<T, N, M, Accessor, Ownership::Owns> {
   /// \brief Our ownership type
   using ownership_t = Ownership::Views;
 
+  /// \brief Deep copy type
+  using deep_copy_t = AMatrix<T, N, M>;
+
   /// \brief The number of rows
   static constexpr size_t num_rows = N;
 
@@ -854,7 +866,8 @@ class AMatrix<T, N, M, Accessor, Ownership::Owns> {
   /// \param[in] col The column index.
   KOKKOS_INLINE_FUNCTION
   constexpr T& operator()(size_t row, size_t col) {
-    return accessor_[row * N + col];
+    // Row-major access
+    return accessor_[row * M + col];
   }
 
   /// \brief Const element access operators
@@ -863,7 +876,7 @@ class AMatrix<T, N, M, Accessor, Ownership::Owns> {
   /// \param[in] col The column index.
   KOKKOS_INLINE_FUNCTION
   constexpr const T& operator()(size_t row, size_t col) const {
-    return accessor_[row * N + col];
+    return accessor_[row * M + col];
   }
 
   /// \brief Get the internal data accessor
@@ -1177,10 +1190,10 @@ class AMatrix<T, N, M, Accessor, Ownership::Owns> {
 
   /// \brief AMatrix-matrix multiplication
   /// \param[in] other The other matrix.
-  template <typename U, ValidAccessor<U> OtherAccessor, typename OtherOwnershipType>
+  template <typename U, typename OtherAccessor, typename OtherOwnershipType, size_t OtherN, size_t OtherM>
   KOKKOS_INLINE_FUNCTION constexpr auto operator*(
-      const AMatrix<U, N, M, OtherAccessor, OtherOwnershipType>& other) const {
-    return impl::matrix_matrix_multiplication_impl(std::make_index_sequence<N * M>{}, *this, other);
+      const AMatrix<U, OtherN, OtherM, OtherAccessor, OtherOwnershipType>& other) const {
+    return impl::matrix_matrix_multiplication_impl(std::make_index_sequence<N * OtherM>{}, *this, other);
   }
 
   /// \brief Self-matrix multiplication
@@ -1368,7 +1381,7 @@ std::ostream& operator<<(std::ostream& os, const AMatrix<T, N, M, Accessor, Owne
     }
     os << "]";
     if (i < N - 1) {
-      os << std::endl;
+      os << "\n";
     }
   }
   os << "]";
@@ -1549,6 +1562,12 @@ KOKKOS_INLINE_FUNCTION constexpr OutputType stddev_f(const AMatrix<T, N, M, Acce
 //! \name Special matrix operations
 //@{
 
+/// \brief Get a deep copy of the given matrix
+template <ValidMatrixType MatrixType>
+KOKKOS_INLINE_FUNCTION constexpr auto copy(const MatrixType& m) {
+  return m.copy();
+}
+
 /// \brief AMatrix transpose
 /// \param[in] mat The matrix.
 template <size_t N, size_t M, typename T, ValidAccessor<T> Accessor, typename OwnershipType>
@@ -1676,8 +1695,8 @@ KOKKOS_INLINE_FUNCTION constexpr auto frobenius_norm(const AMatrix<T, N, M, Acce
 
 /// \brief AMatrix infinity norm
 template <size_t N, size_t M, typename T, ValidAccessor<T> Accessor, typename OwnershipType>
-KOKKOS_INLINE_FUNCTION constexpr auto infinity_norm(const AMatrix<T, N, M, Accessor, OwnershipType>& mat) {
-  return impl::infinity_norm_impl(std::make_index_sequence<N>{}, mat);
+KOKKOS_INLINE_FUNCTION constexpr auto inf_norm(const AMatrix<T, N, M, Accessor, OwnershipType>& mat) {
+  return impl::inf_norm_impl(std::make_index_sequence<N>{}, mat);
 }
 
 /// \brief AMatrix 1-norm
@@ -1943,6 +1962,13 @@ MUNDY_MATH_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(Matrix3d, matrix3d, double, 
 MUNDY_MATH_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(Matrix4d, matrix4d, double, 4, 4)
 MUNDY_MATH_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(Matrix5d, matrix5d, double, 5, 5)
 MUNDY_MATH_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(Matrix6d, matrix6d, double, 6, 6)
+
+MUNDY_MATH_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(Matrix1i, matrix1i, int, 1, 1)
+MUNDY_MATH_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(Matrix2i, matrix2i, int, 2, 2)
+MUNDY_MATH_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(Matrix3i, matrix3i, int, 3, 3)
+MUNDY_MATH_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(Matrix4i, matrix4i, int, 4, 4)
+MUNDY_MATH_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(Matrix5i, matrix5i, int, 5, 5)
+MUNDY_MATH_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(Matrix6i, matrix6i, int, 6, 6)
 //@}
 
 //! \name AMatrix<T, Accessor> views
