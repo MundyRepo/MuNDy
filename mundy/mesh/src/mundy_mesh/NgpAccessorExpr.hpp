@@ -26,6 +26,9 @@
 // Kokkos
 #include <Kokkos_Core.hpp>  // for KOKKOS_LAMBDA, etc.
 
+// OpenRAND
+#include <openrand/philox.h>  // for openrand::Philox
+
 // STK mesh
 #include <stk_mesh/base/BulkData.hpp>            // for stk::mesh::BulkData
 #include <stk_mesh/base/Entity.hpp>              // for stk::mesh::Entity
@@ -1312,15 +1315,15 @@ class AssignExpr : public MathExprBase<AssignExpr<TargetExpr, SourceExpr>> {
     }                                                                                                                  \
                                                                                                                        \
     void flag_read_write(const NgpEvalContext& /*context*/) {                                                          \
-      std::cout << "Warning: Attempting to write to the return type of a binary expression, which returns a "          \
-                   "temporary value."                                                                                  \
-                << std::endl;                                                                                          \
+    MUNDY_THROW_ASSERT(                                                                                                 \
+        false, std::logic_error,                                                                                       \
+        "Attempting to write to the return type of a binary expression, which returns a temporary value.");            \
     }                                                                                                                  \
                                                                                                                        \
     void flag_overwrite_all(const NgpEvalContext& /*context*/) {                                                       \
-      std::cout << "Warning: Attempting to write to the return type of a binary expression, which returns a "          \
-                   "temporary value."                                                                                  \
-                << std::endl;                                                                                          \
+      MUNDY_THROW_ASSERT(                                                                                                 \
+        false, std::logic_error,                                                                                       \
+        "Attempting to write to the return type of a binary expression, which returns a temporary value.");            \
     }                                                                                                                  \
                                                                                                                        \
     const auto driver() const {                                                                                        \
@@ -1664,6 +1667,375 @@ class MathExprBase : public CachableExprBase<DerivedMathExpr> {
 };
 //@}
 
+//! \name RNG stuff
+//@{
+
+/// RNG.rand<double>()
+template<typename RNGExpr, typename T, typename RNGType>
+class RandomDistributionExpr : public MathExprBase<RandomDistributionExpr<RNGExpr, T, RNGType>> {
+ public:
+  using our_t = RandomDistributionExpr<RNGExpr, T, RNGType>;
+  using our_tag = typename MathExprBase<our_t>::our_tag;
+  using sub_expressions_t = core::tuple<RNGExpr>;
+  static constexpr bool constrains_num_entities = false;
+
+  KOKKOS_INLINE_FUNCTION
+  RandomDistributionExpr(const RNGExpr& rng_expr) : rng_expr_(rng_expr) {
+  }
+
+  template <size_t NumEntities>
+  KOKKOS_INLINE_FUNCTION auto eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities>& fmis,
+                                   const NgpEvalContext& context) const {
+    auto rng = rng_expr_.eval(fmis, context);
+    return rng.template rand<T>();
+  }
+
+  template <typename EvalCountsType, EvalCountsType eval_counts, size_t NumEntities, typename OldCacheType>
+  KOKKOS_INLINE_FUNCTION auto cached_eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities>& fmis,
+                                          OldCacheType&& old_cache, const NgpEvalContext& context) const {
+    static_assert(has<our_tag>(eval_counts), "eval_counts must contain our tag");
+
+    if constexpr (get<our_tag>(eval_counts) > 1) {
+      if constexpr (core::aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>) {
+        // The fact that our tag exists in the old cache means that our eval has cached its result before.
+        // Return the cached value and the old cache
+        auto cache = std::forward<OldCacheType>(old_cache);
+        return Kokkos::make_pair(get<our_tag>(cache), cache);
+      } else {
+        // Eval our subexpressions first
+        auto [rng, new_cache] = rng_expr_.template cached_eval<EvalCountsType, eval_counts>(
+            fmis, std::forward<OldCacheType>(old_cache), context);
+
+        // Our eval result needs cached, but is not yet cached
+        auto val = rng.template rand<T>();
+        auto newest_cache = append<our_tag>(std::move(new_cache), val);
+        return Kokkos::make_pair(val, newest_cache);
+      }
+    } else {
+      // We don't need to cache our value, so just compute and return it
+      auto [rng, new_cache] = rng_expr_.template cached_eval<EvalCountsType, eval_counts>(
+          fmis, std::forward<OldCacheType>(old_cache), context);
+      auto val = rng.template rand<T>();
+      return Kokkos::make_pair(val, new_cache);
+    }
+  }
+
+  void propagate_synchronize(const NgpEvalContext& context) {
+    rng_expr_.flag_read_only(context);
+    rng_expr_.propagate_synchronize(context);
+  }
+
+  void flag_read_only(const NgpEvalContext& context) {
+    // Our return type is naturally read-only. Nothing to do here.
+  }
+
+  void flag_read_write(const NgpEvalContext& context) {
+    MUNDY_THROW_ASSERT(
+        false, std::logic_error,
+        "Attempting to mark a random number generator expression as read-write, but the return type is a temporary value.");
+  }
+
+  void flag_overwrite_all(const NgpEvalContext& context) {
+    MUNDY_THROW_ASSERT(
+        false, std::logic_error,
+        "Attempting to mark a random number generator expression as overwrite-all, but the return type is a temporary value.");
+  }
+
+  const auto driver() const {
+    return rng_expr_.driver();
+  }
+  
+  private:
+  RNGExpr rng_expr_;
+};
+
+// RNG.uniform(low, high)
+template<typename RNGExpr, typename LowExpr, typename HighExpr, typename RNGType>
+class UniformDistributionExpr : public MathExprBase<UniformDistributionExpr<RNGExpr, LowExpr, HighExpr, RNGType>> {
+ public:
+  using our_t = UniformDistributionExpr<RNGExpr, LowExpr, HighExpr, RNGType>;
+  using our_tag = typename MathExprBase<our_t>::our_tag;
+  using sub_expressions_t = core::tuple<RNGExpr, LowExpr, HighExpr>;
+  static constexpr bool constrains_num_entities = false;
+
+  KOKKOS_INLINE_FUNCTION
+  UniformDistributionExpr(const RNGExpr& rng_expr, const LowExpr& low_expr, const HighExpr& high_expr)
+      : rng_expr_(rng_expr), low_expr_(low_expr), high_expr_(high_expr) {
+  }
+
+  template <size_t NumEntities>
+  KOKKOS_INLINE_FUNCTION auto eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities>& fmis,
+                                   const NgpEvalContext& context) const {
+    auto rng = rng_expr_.eval(fmis, context);
+    auto low = low_expr_.eval(fmis, context);
+    auto high = high_expr_.eval(fmis, context);
+    return rng.uniform(low, high);
+  }
+
+  template <typename EvalCountsType, EvalCountsType eval_counts, size_t NumEntities, typename OldCacheType>
+  KOKKOS_INLINE_FUNCTION auto cached_eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities>& fmis,
+                                          OldCacheType&& old_cache, const NgpEvalContext& context) const {
+    static_assert(has<our_tag>(eval_counts), "eval_counts must contain our tag");
+
+    if constexpr (get<our_tag>(eval_counts) > 1) {
+      if constexpr (core::aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>) {
+        // The fact that our tag exists in the old cache means that our eval has cached its result before.
+        // Return the cached value and the old cache
+        auto cache = std::forward<OldCacheType>(old_cache);
+        return Kokkos::make_pair(get<our_tag>(cache), cache);
+      } else {
+        // Eval our subexpressions first
+        auto [rng, new_cache] = rng_expr_.template cached_eval<EvalCountsType, eval_counts>(
+            fmis, std::forward<OldCacheType>(old_cache), context);
+        auto [low, newer_cache] = low_expr_.template cached_eval<EvalCountsType, eval_counts>(
+            fmis, std::move(new_cache), context);
+        auto [high, newest_cache] = high_expr_.template cached_eval<EvalCountsType, eval_counts>(
+            fmis, std::move(newer_cache), context);
+        // Our eval result needs cached, but is not yet cached
+        auto val = rng.uniform(low, high);
+        auto final_cache = append<our_tag>(std::move(newest_cache), val);
+        return Kokkos::make_pair(val, final_cache);
+      }
+    } else {
+      // We don't need to cache our value, so just compute and return it
+      auto [rng, new_cache] = rng_expr_.template cached_eval<EvalCountsType, eval_counts>(
+          fmis, std::forward<OldCacheType>(old_cache), context);
+      auto [low, newer_cache] = low_expr_.template cached_eval<EvalCountsType, eval_counts>(
+          fmis, std::move(new_cache), context);
+      auto [high, newest_cache] = high_expr_.template cached_eval<EvalCountsType, eval_counts>(
+          fmis, std::move(newer_cache), context);
+      auto val = rng.uniform(low, high);
+      return Kokkos::make_pair(val, newest_cache);
+    }
+  }
+
+  void propagate_synchronize(const NgpEvalContext& context) {
+    rng_expr_.flag_read_only(context);
+    rng_expr_.propagate_synchronize(context);
+  }
+
+  void flag_read_only(const NgpEvalContext& context) {
+    // Our return type is naturally read-only. Nothing to do here.
+  }
+
+  void flag_read_write(const NgpEvalContext& /*context*/) {
+    MUNDY_THROW_ASSERT(
+        false, std::logic_error,
+        "Attempting to mark a random number generator expression as read-write, but the return type is a temporary value.");
+  }
+
+  void flag_overwrite_all(const NgpEvalContext& /*context*/) {
+    MUNDY_THROW_ASSERT(
+        false, std::logic_error,
+        "Attempting to mark a random number generator expression as overwrite-all, but the return type is a temporary value.");
+  }
+
+  const auto driver() const {
+    using nullptr_t = decltype(nullptr);
+    constexpr bool has_rng_driver = !std::is_same_v<nullptr_t, decltype(rng_expr_.driver())>;
+    constexpr bool has_low_driver = !std::is_same_v<nullptr_t, decltype(low_expr_.driver())>;
+    constexpr bool has_high_driver = !std::is_same_v<nullptr_t, decltype(high_expr_.driver())>;
+    static_assert(
+        has_rng_driver,
+        "The RNG expression in a uniform distribution expression must have a non-null driver.");
+
+    if constexpr (has_low_driver) {
+      MUNDY_THROW_ASSERT(
+          rng_expr_.driver() == low_expr_.driver(), std::logic_error,
+          "Mismatched drivers in uniform distribution expression.");
+    }
+    if constexpr (has_high_driver) {
+      MUNDY_THROW_ASSERT(
+          rng_expr_.driver() == high_expr_.driver(), std::logic_error,
+          "Mismatched drivers in uniform distribution expression.");
+    }
+    return rng_expr_.driver();
+  }
+
+  private:
+  RNGExpr rng_expr_;
+  LowExpr low_expr_;
+  HighExpr high_expr_;
+};
+
+/// \brief An expression for generating random number generator based on a given seed and counter expression
+/// This class is then used to generate expressions for drawing random numbers from various distributions
+template<typename SeedExpr, typename CounterExpr, typename CounterBasedRandomGenerator>
+class CounterBasedRNGExpr : public MathExprBase<CounterBasedRNGExpr<SeedExpr, CounterExpr, CounterBasedRandomGenerator>> {
+ public:
+  using our_t = CounterBasedRNGExpr<SeedExpr, CounterExpr, CounterBasedRandomGenerator>;
+  using our_tag = typename MathExprBase<our_t>::our_tag;
+  using sub_expressions_t = core::tuple<SeedExpr, CounterExpr>;
+  static constexpr bool constrains_num_entities = false;
+
+  KOKKOS_INLINE_FUNCTION
+  CounterBasedRNGExpr(const SeedExpr& seed_expr, const CounterExpr& counter_expr)
+      : seed_expr_(seed_expr), counter_expr_(counter_expr) {
+  }
+
+  template <size_t NumEntities>
+  KOKKOS_INLINE_FUNCTION auto eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities>& fmis,
+                                   const NgpEvalContext& context) const {
+    auto seed = seed_expr_.eval(fmis, context);
+    auto counter = counter_expr_.eval(fmis, context);
+    return CounterBasedRandomGenerator(seed, counter);
+  }
+
+  template <typename EvalCountsType, EvalCountsType eval_counts, size_t NumEntities, typename OldCacheType>
+  KOKKOS_INLINE_FUNCTION auto cached_eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities>& fmis,
+                                          OldCacheType&& old_cache, const NgpEvalContext& context) const {
+    static_assert(has<our_tag>(eval_counts), "eval_counts must contain our tag");
+
+    if constexpr (get<our_tag>(eval_counts) > 1) {
+      if constexpr (core::aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>) {
+        // The fact that our tag exists in the old cache means that our eval has cached its result before.
+        // Return the cached value and the old cache
+        auto cache = std::forward<OldCacheType>(old_cache);
+        return Kokkos::make_pair(get<our_tag>(cache), cache);
+      } else {
+        // Eval our subexpressions first
+        auto [seed, new_cache] = seed_expr_.template cached_eval<EvalCountsType, eval_counts>(
+            fmis, std::forward<OldCacheType>(old_cache), context);
+        auto [counter, newer_cache] = counter_expr_.template cached_eval<EvalCountsType, eval_counts>(
+            fmis, std::move(new_cache), context);
+
+        // Our eval result needs cached, but is not yet cached
+        auto val = CounterBasedRandomGenerator(seed, counter);
+        auto newest_cache = append<our_tag>(std::move(newer_cache), val);
+        return Kokkos::make_pair(val, newest_cache);
+      }
+    } else {
+      // We don't need to cache our value, so just compute and return it
+      auto [seed, new_cache] = seed_expr_.template cached_eval<EvalCountsType, eval_counts>(
+          fmis, std::forward<OldCacheType>(old_cache), context);
+      auto [counter, newer_cache] = counter_expr_.template cached_eval<EvalCountsType, eval_counts>(
+          fmis, std::move(new_cache), context);
+      auto val = CounterBasedRandomGenerator(seed, counter);
+      return Kokkos::make_pair(val, newer_cache);
+    }
+  }
+
+  // Allow the user to rand_gen_expr.rand<double>() to get an expression for generating random doubles between 0 and 1
+  template <typename T>
+  auto rand() const {
+    return RandomDistributionExpr<our_t, T, CounterBasedRandomGenerator>(*this);
+  }
+
+  // Allow the user to rand_gen_expr.uniform(low, high) to get an expression for generating random numbers between low and high
+  // Low & high are expressions
+  template <typename LowExpr, typename HighExpr>
+  requires(is_crtp_base_of_v<MathExprBase, LowExpr> && is_crtp_base_of_v<MathExprBase, HighExpr>)
+  auto uniform(const LowExpr& low_expr, const HighExpr& high_expr) const {
+    return UniformDistributionExpr<our_t, LowExpr, HighExpr, CounterBasedRandomGenerator>(*this, low_expr, high_expr);
+  }
+  // Low is an expression but high is a constant
+  template <typename LowExpr, typename HighT>
+  requires(is_crtp_base_of_v<MathExprBase, LowExpr> && !is_crtp_base_of_v<MathExprBase, HighT>)
+  auto uniform(const LowExpr& low_expr, const HighT& high) const {
+    auto high_expr = ConstantMathExpr<HighT>(high);
+    using HighExpr = ConstantMathExpr<HighT>;
+    return uniform<LowExpr, HighExpr>(low_expr, high_expr);
+  }
+  // Low is a constant but high is an expression
+  template <typename LowT, typename HighExpr>
+  requires(!is_crtp_base_of_v<MathExprBase, LowT> && is_crtp_base_of_v<MathExprBase, HighExpr>)
+  auto uniform(const LowT& low, const HighExpr& high_expr) const {
+    auto low_expr = ConstantMathExpr<LowT>(low);
+    using LowExpr = ConstantMathExpr<LowT>;
+    return uniform<LowExpr, HighExpr>(low_expr, high_expr);
+  }
+  // Low & high are constants
+  template <typename LowT, typename HighT>
+  requires(!is_crtp_base_of_v<MathExprBase, LowT> && !is_crtp_base_of_v<MathExprBase, HighT>)
+  auto uniform(const LowT& low, const HighT& high) const {
+    auto low_expr = ConstantMathExpr<LowT>(low);
+    auto high_expr = ConstantMathExpr<HighT>(high);
+    using LowExpr = ConstantMathExpr<LowT>;
+    using HighExpr = ConstantMathExpr<HighT>;
+    return uniform<LowExpr, HighExpr>(low_expr, high_expr);
+  }
+
+  void flag_read_only(const NgpEvalContext& context) {
+    // Our return type is naturally read-only. Nothing to do here.
+  }
+
+  void flag_read_write(const NgpEvalContext& /*context*/) {
+    MUNDY_THROW_ASSERT(
+        false, std::logic_error,
+        "Attempting to mark a random number generator expression as read-write, but the RNG is a temporary value.");
+  }
+
+  void flag_overwrite_all(const NgpEvalContext& /*context*/) {
+    // Nothing to do here
+  }
+
+  void propagate_synchronize(const NgpEvalContext& context) {
+    seed_expr_.flag_read_only(context);
+    counter_expr_.flag_read_only(context);
+    seed_expr_.propagate_synchronize(context);
+    counter_expr_.propagate_synchronize(context);
+  }
+
+  auto driver() const {
+    using nullptr_t = decltype(nullptr);
+
+    constexpr bool has_seed_driver = !std::is_same_v<nullptr_t, decltype(seed_expr_.driver())>;
+    constexpr bool has_counter_driver = !std::is_same_v<nullptr_t, decltype(counter_expr_.driver())>;
+    static_assert(
+        has_seed_driver || has_counter_driver,
+        "At least one of the seed or counter expressions in a random generator expression must have a non-null driver.");
+
+    if constexpr (has_seed_driver) {
+      auto d = seed_expr_.driver();
+      if constexpr (has_counter_driver) {
+        MUNDY_THROW_ASSERT(d == counter_expr_.driver(), std::logic_error, "Mismatched drivers in random generator expression");
+      }
+      return d;
+    } else {
+      return counter_expr_.driver();
+    }
+  }
+
+ private:
+  SeedExpr seed_expr_;
+  CounterExpr counter_expr_;
+};
+
+/// \brief Create a counter-based random number generator using the given seed and counter
+/// Seed and counter are expressions
+template <typename SeedExpr, typename CounterExpr, typename CounterBasedRandomGenerator = openrand::Philox>
+requires(is_crtp_base_of_v<MathExprBase, SeedExpr> && is_crtp_base_of_v<MathExprBase, CounterExpr>)
+auto rng(const SeedExpr& seed_expr, const CounterExpr& counter_expr) {
+  return CounterBasedRNGExpr<SeedExpr, CounterExpr, CounterBasedRandomGenerator>(seed_expr, counter_expr);
+}
+/// Seed is an expression but counter is a constant
+template <typename SeedExpr, typename CounterT, typename CounterBasedRandomGenerator = openrand::Philox>
+requires(is_crtp_base_of_v<MathExprBase, SeedExpr> && !is_crtp_base_of_v<MathExprBase, CounterT>)
+auto rng(const SeedExpr& seed_expr, const CounterT& counter) {
+  auto counter_expr = ConstantMathExpr<CounterT>(counter);
+  using CounterExpr = ConstantMathExpr<CounterT>;
+  return rng<SeedExpr, CounterExpr, CounterBasedRandomGenerator>(seed_expr, counter_expr);
+}
+/// Seed is a constant but counter is an expression
+template <typename SeedT, typename CounterExpr, typename CounterBasedRandomGenerator = openrand::Philox>
+requires(!is_crtp_base_of_v<MathExprBase, SeedT> && is_crtp_base_of_v<MathExprBase, CounterExpr>)
+auto rng(const SeedT& seed, const CounterExpr& counter_expr) {
+  auto seed_expr = ConstantMathExpr<SeedT>(seed);
+  using SeedExpr = ConstantMathExpr<SeedT>;
+  return rng<SeedExpr, CounterExpr, CounterBasedRandomGenerator>(seed_expr, counter_expr);
+}
+/// Both seed and counter are constants
+template <typename SeedT, typename CounterT, typename CounterBasedRandomGenerator = openrand::Philox>
+requires(!is_crtp_base_of_v<MathExprBase, SeedT> && !is_crtp_base_of_v<MathExprBase, CounterT>)
+auto rng(const SeedT& seed, const CounterT& counter) {
+  auto seed_expr = ConstantMathExpr<SeedT>(seed);
+  auto counter_expr = ConstantMathExpr<CounterT>(counter);
+  using SeedExpr = ConstantMathExpr<SeedT>;
+  using CounterExpr = ConstantMathExpr<CounterT>;
+  return rng<SeedExpr, CounterExpr, CounterBasedRandomGenerator>(seed_expr, counter_expr);
+}
+//@}
+
 //! \name Helpers
 //@{
 
@@ -1728,15 +2100,15 @@ class CopyExpr : public MathExprBase<CopyExpr<PrevMathExpr>> {
   }
 
   void flag_read_write(const NgpEvalContext& /*context*/) {
-    std::cout << "Warning: Attempting to write to the return type of a copy expression, which returns a "
-                 "temporary value."
-              << std::endl;
+    MUNDY_THROW_ASSERT(
+        false, std::logic_error,
+        "Attempting to write to the return type of a copy expression, which returns a temporary value.");
   }
 
   void flag_overwrite_all(const NgpEvalContext& /*context*/) {
-    std::cout << "Warning: Attempting to write to the return type of a copy expression, which returns a "
-                 "temporary value."
-              << std::endl;
+    MUNDY_THROW_ASSERT(
+        false, std::logic_error,
+        "Attempting to write to the return type of a copy expression, which returns a temporary value.");
   }
 
   auto driver() const {

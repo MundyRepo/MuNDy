@@ -220,6 +220,11 @@ class AVector<T, N, Accessor, Ownership::Views> {
     impl::fill_impl(std::make_index_sequence<N>{}, *this, value);
     return *this;
   }
+
+  /// \brief Allow for automatic conversion of a length 1 vector to a scalar
+  KOKKOS_INLINE_FUNCTION constexpr operator T() requires(N == 1) {
+    return accessor_[0];
+  }
   //@}
 
   //! \name Accessors
@@ -605,6 +610,11 @@ class AVector<T, N, Accessor, Ownership::Owns> {
   {
     impl::fill_impl(std::make_index_sequence<N>{}, *this, value);
     return *this;
+  }
+
+  /// \brief Allow for automatic conversion of a length 1 vector to a scalar
+  KOKKOS_INLINE_FUNCTION constexpr operator T() requires(N == 1) {
+    return accessor_[0];
   }
   //@}
 
