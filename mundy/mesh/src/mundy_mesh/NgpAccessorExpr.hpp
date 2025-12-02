@@ -1983,7 +1983,8 @@ class CounterBasedRNGExpr : public MathExprBase<CounterBasedRNGExpr<SeedExpr, Co
     constexpr bool has_counter_driver = !std::is_same_v<nullptr_t, decltype(counter_expr_.driver())>;
     static_assert(
         has_seed_driver || has_counter_driver,
-        "At least one of the seed or counter expressions in a random generator expression must have a non-null driver.");
+        "At least one of the seed or counter expressions in a random generator expression must have a non-null driver.\n"
+        "For example, they can't both be constants. How would we know how to run the expression.");
 
     if constexpr (has_seed_driver) {
       auto d = seed_expr_.driver();

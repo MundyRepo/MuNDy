@@ -345,7 +345,70 @@ struct ScratchDoubleFieldTag;
 struct ScratchFloatFieldTag;
 struct ScratchIntFieldTag;
 
-TEST_F(UnitTestRngAccessorExprFixture, field_fill) {
+template<bool use_seed_expr, bool use_counter_expr>
+void randomize_test(stk::mesh::BulkData& bulk_data,
+                    stk::mesh::Field<size_t>& seed_field,
+                    stk::mesh::Field<size_t>& counter_field,
+                    stk::mesh::Field<double>& double_field,
+                    stk::mesh::Field<float>& float_field,
+                    stk::mesh::Field<int>& int_field,
+                    stk::mesh::Selector& selector) {
+  auto seed = make_tagged_component<SeedFieldTag, stk::topology::NODE_RANK>(ScalarFieldComponent(seed_field));
+  auto counter = make_tagged_component<CounterFieldTag, stk::topology::NODE_RANK>(ScalarFieldComponent(counter_field));
+  auto double_accessor = make_tagged_component<DoubleFieldTag, stk::topology::NODE_RANK>(ScalarFieldComponent(double_field));
+  auto float_accessor = make_tagged_component<FloatFieldTag, stk::topology::NODE_RANK>(ScalarFieldComponent(float_field));
+  auto int_accessor = make_tagged_component<IntFieldTag, stk::topology::NODE_RANK>(ScalarFieldComponent(int_field));
+
+  
+  size_t fixed_seed = 11235;
+  size_t fixed_counter = 98765;
+  auto es = make_entity_expr(bulk_data, selector, stk::topology::NODE_RANK);
+  if constexpr (use_seed_expr && use_counter_expr) {
+    auto our_rng = rng(seed(es), counter(es));
+    double_accessor(es) = our_rng.template rand<double>();
+    float_accessor(es) = our_rng.template rand<float>();
+    int_accessor(es) = our_rng.template rand<int>();
+  } else if constexpr (use_seed_expr && !use_counter_expr) {
+    auto our_rng = rng(seed(es), fixed_counter);
+    double_accessor(es) = our_rng.template rand<double>();
+    float_accessor(es) = our_rng.template rand<float>();
+    int_accessor(es) = our_rng.template rand<int>();
+  } else if constexpr (!use_seed_expr && use_counter_expr) {
+    auto our_rng = rng(fixed_seed, counter(es));
+    double_accessor(es) = our_rng.template rand<double>();
+    float_accessor(es) = our_rng.template rand<float>();
+    int_accessor(es) = our_rng.template rand<int>();
+  } else {
+    static_assert(use_seed_expr != false && use_counter_expr != false, "Test will not compile unless at least one of use_seed_expr or use_counter_expr is true.");
+  }
+  
+  double_accessor.sync_to_host();
+  float_accessor.sync_to_host();
+  int_accessor.sync_to_host();
+
+  ::mundy::mesh::for_each_entity_run(bulk_data, stk::topology::NODE_RANK, selector, 
+    [&double_accessor, &float_accessor, &int_accessor, &seed, &counter, fixed_seed, fixed_counter](const stk::mesh::BulkData &bulk_data, const stk::mesh::Entity& e) {
+      size_t local_seed = use_seed_expr ? seed(e) : fixed_seed;
+      size_t local_counter = use_counter_expr ? counter(e) : fixed_counter;
+
+      openrand::Philox rng_d(local_seed, local_counter);
+      double actual_value_d = double_accessor(e);
+      double expected_value_d = rng_d.rand<double>();
+      EXPECT_DOUBLE_EQ(actual_value_d, expected_value_d); 
+
+      openrand::Philox rng_f(local_seed, local_counter);
+      float actual_value_f = float_accessor(e);
+      float expected_value_f = rng_f.rand<float>();
+      EXPECT_FLOAT_EQ(actual_value_f, expected_value_f);
+
+      openrand::Philox rng_i(local_seed, local_counter);
+      int actual_value_i = int_accessor(e);
+      int expected_value_i = rng_i.rand<int>();
+      EXPECT_EQ(actual_value_i, expected_value_i);
+    });
+}
+
+TEST_F(UnitTestRngAccessorExprFixture, randomize_field) {
   if (stk::parallel_machine_size(communicator_) > 2) {
     GTEST_SKIP() << "This test is only designed to run with 1 or 2 MPI ranks.";
   }
@@ -361,14 +424,17 @@ TEST_F(UnitTestRngAccessorExprFixture, field_fill) {
 #endif
 
   stk::mesh::Selector b1_not_b2 = block1_selector_ - block2_selector_;
-  auto seed = make_tagged_component<SeedFieldTag, stk::topology::NODE_RANK>(ScalarFieldComponent(*seed_field_ptr_));
-  auto counter = make_tagged_component<CounterFieldTag, stk::topology::NODE_RANK>(ScalarFieldComponent(*counter_field_ptr_));
-  auto double_field = make_tagged_component<DoubleFieldTag, stk::topology::NODE_RANK>(ScalarFieldComponent(*double_field_ptr_));
+  randomize_test<true, true>(get_bulk(), *seed_field_ptr_, *counter_field_ptr_,
+                             *double_field_ptr_, *float_field_ptr_, *int_field_ptr_,
+                             b1_not_b2);
 
-  {
-    auto es = make_entity_expr(get_bulk(), b1_not_b2, stk::topology::NODE_RANK);
-    double_field(es) = rng(seed(es), counter(es)).rand<double>();
-  }
+  randomize_test<true, false>(get_bulk(), *seed_field_ptr_, *counter_field_ptr_,
+                              *double_field_ptr_, *float_field_ptr_, *int_field_ptr_,
+                              b1_not_b2);
+
+  randomize_test<false, true>(get_bulk(), *seed_field_ptr_, *counter_field_ptr_,
+                              *double_field_ptr_, *float_field_ptr_, *int_field_ptr_,
+                              b1_not_b2);
 }
 
 }  // namespace

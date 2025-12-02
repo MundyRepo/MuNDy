@@ -1084,7 +1084,6 @@ auto TaggedComponent<Tag, our_rank, ComponentType>::operator()(const EntityExprB
   
   // Entity expressions are (currently) always on the device, so we need to get the NGP tagged component
   // TODO(palmerb4): Allow for exec_spaces that aren't simply the default execution space (need Tril 16.1+)
-  [[maybe_used]] auto exec_space = e.driver()->exec_space();
   auto ngp_this = get_updated_ngp_component(*this);
   return ngp_this(e.self());
 }
