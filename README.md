@@ -39,6 +39,30 @@ This structure is intended to keep:
 - **Core utilities** small, reusable, and dependency-light.
 - **Simulation layers** configurable, so applications can opt into only what they need.
 
+### Code Statistics (via cloc)
+```text
+cloc-1.96.pl --exclude-dir=TriBITS,ci,doc,scrap ./MuNDy
+     297 text files.
+     265 unique files.                                          
+      38 files ignored.
+
+github.com/AlDanial/cloc v 1.96  T=1.11 s (238.9 files/s, 63105.6 lines/s)
+-------------------------------------------------------------------------------
+Language                     files          blank        comment           code
+-------------------------------------------------------------------------------
+C/C++ Header                   123           6162          11370          24786
+C++                             58           3261           3473          15295
+CMake                           64            370           1758           1736
+Markdown                         4            245              0            828
+Bourne Shell                    13             83             74            263
+Text                             1             25              0            172
+JSON                             1              0              0             83
+YAML                             1              0              0              3
+-------------------------------------------------------------------------------
+SUM:                           265          10146          16675          43166
+-------------------------------------------------------------------------------
+```
+
 ---
 
 ## Subpackages
