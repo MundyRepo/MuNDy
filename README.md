@@ -22,7 +22,7 @@ MuNDy is a C++ framework for high-performance simulation of **multibody nonlocal
   - [MundyMath: Constexpr, inline mathematics](#mundymath-constexpr-inline-mathematics)
   - [MundyGeom: Geometric primitives and utilities](#mundygeom-geometric-primitives-and-utilities)
   - [MundyMech: Mechanical primitives and utilities](#mundymech-mechanical-primitives-and-utilities-under-construction)
-  - [MundySTK: MuNDy’s extension to Trilinos/STK](#mundystk-mundys-extension-to-trilinosstk)
+  - [MundyMesh: MuNDy’s extension to Trilinos/STK](#mundymesh-mundys-extension-to-trilinosstk)
   - [Standalone Offshoots](#standalone-offshoots)
 - [Release Roadmap](#release-roadmap)
 
