@@ -26,10 +26,10 @@ SET(NOINSTALLHEADERS
   # src/mundy_mesh/GenNeighborLinkers.hpp
   src/mundy_mesh/GetNgpLinkData.hpp
   src/mundy_mesh/impl/HostDeviceCOOSynchronizer.hpp
-  src/mundy_mesh/impl/HostDeviceCRSSynchronizer.hpp
+  src/mundy_mesh/impl/HostDeviceCSRSynchronizer.hpp
   src/mundy_mesh/impl/HostDeviceSynchronizer.hpp
   src/mundy_mesh/impl/LinkedBucketConn.hpp
-  src/mundy_mesh/impl/NgpCOOToCRSSynchronizer.hpp
+  src/mundy_mesh/impl/NgpCOOToCSRSynchronizer.hpp
   src/mundy_mesh/impl/NgpFieldBLASImpl.hpp
   src/mundy_mesh/impl/NgpLinkMetaData.hpp
   src/mundy_mesh/impl/SelectorEval.hpp
@@ -37,9 +37,9 @@ SET(NOINSTALLHEADERS
   src/mundy_mesh/impl/SelectorNode.hpp
   src/mundy_mesh/impl/SelectorParser.hpp
   src/mundy_mesh/LinkCOOData.hpp
-  src/mundy_mesh/LinkCRSBucketConn.hpp
-  src/mundy_mesh/LinkCRSData.hpp
-  src/mundy_mesh/LinkCRSPartition.hpp
+  src/mundy_mesh/LinkCSRBucketConn.hpp
+  src/mundy_mesh/LinkCSRData.hpp
+  src/mundy_mesh/LinkCSRPartition.hpp
   src/mundy_mesh/LinkData.hpp
   src/mundy_mesh/LinkDeclarationRequests.hpp
   src/mundy_mesh/LinkDestructionRequests.hpp

@@ -34,12 +34,12 @@
 #include <mundy_core/throw_assert.hpp>                  // for MUNDY_THROW_ASSERT
 #include <mundy_mesh/BulkData.hpp>                      // for mundy::mesh::BulkData
 #include <mundy_mesh/LinkCOOData.hpp>                   // for mundy::mesh::LinkCOOData/NgpLinkCOOData
-#include <mundy_mesh/LinkCRSData.hpp>                   // for mundy::mesh::LinkCRSData/NgpLinkCRSData
+#include <mundy_mesh/LinkCSRData.hpp>                   // for mundy::mesh::LinkCSRData/NgpLinkCSRData
 #include <mundy_mesh/LinkData.hpp>                      // for mundy::mesh::LinkData
 #include <mundy_mesh/LinkMetaData.hpp>                  // for mundy::mesh::LinkMetaData
 #include <mundy_mesh/MetaData.hpp>                      // for mundy::mesh::MetaData
 #include <mundy_mesh/Types.hpp>                         // for mundy::mesh::NgpDataAccessTag
-#include <mundy_mesh/impl/NgpCOOToCRSSynchronizer.hpp>  // for mundy::mesh::impl::NgpCOOToCRSSynchronizerT
+#include <mundy_mesh/impl/NgpCOOToCSRSynchronizer.hpp>  // for mundy::mesh::impl::NgpCOOToCSRSynchronizerT
 
 namespace mundy {
 
@@ -150,15 +150,15 @@ class NgpLinkDataT {
   }
   //@}
 
-  //! \name CRS interface
+  //! \name CSR interface
   //@{
 
   KOKKOS_FUNCTION
-  NgpLinkCRSDataT<NgpMemSpace> &crs_data() noexcept {
+  NgpLinkCSRDataT<NgpMemSpace> &crs_data() noexcept {
     return ngp_crs_data_;
   }
   KOKKOS_FUNCTION
-  const NgpLinkCRSDataT<NgpMemSpace> &crs_data() const noexcept {
+  const NgpLinkCSRDataT<NgpMemSpace> &crs_data() const noexcept {
     return ngp_crs_data_;
   }
   void crs_modify_on_host() {
@@ -224,50 +224,50 @@ class NgpLinkDataT {
   }
   //@}
 
-  //! \name CRS/COO interactions
+  //! \name CSR/COO interactions
   //@{
 
-  /// \brief Check if the CRS connectivity is up-to-date for the given link subset selector.
+  /// \brief Check if the CSR connectivity is up-to-date for the given link subset selector.
   ///
   /// \note This check is more than just a lookup of a flag. Instead, it performs two operations
-  ///  1. A reduction over all selected partitions to check if any of the CRS buckets are dirty.
+  ///  1. A reduction over all selected partitions to check if any of the CSR buckets are dirty.
   ///  2. A reduction over all selected links to check if any of the links are dirty.
   /// These aren't expensive operations and they're designed to be fast/GPU-compatible, but they aren't free.
   bool is_crs_up_to_date(const stk::mesh::Selector &selector) {
-    return impl::NgpCOOToCRSSynchronizerT<NgpMemSpace>::is_crs_up_to_date(ngp_crs_data_, ngp_coo_data_, selector);
+    return impl::NgpCOOToCSRSynchronizerT<NgpMemSpace>::is_crs_up_to_date(ngp_crs_data_, ngp_coo_data_, selector);
   }
 
-  /// \brief Check if the CRS connectivity is up-to-date for all links.
+  /// \brief Check if the CSR connectivity is up-to-date for all links.
   bool is_crs_up_to_date() {
-    return impl::NgpCOOToCRSSynchronizerT<NgpMemSpace>::is_crs_up_to_date(ngp_crs_data_, ngp_coo_data_);
+    return impl::NgpCOOToCSRSynchronizerT<NgpMemSpace>::is_crs_up_to_date(ngp_crs_data_, ngp_coo_data_);
   }
 
-  /// \brief Propagate changes made to the COO connectivity to the CRS connectivity for the given link subset selector.
+  /// \brief Propagate changes made to the COO connectivity to the CSR connectivity for the given link subset selector.
   /// This takes changes made via the declare/destroy_relation functions or request/destroy links and updates
-  /// the CRS connectivity to reflect these changes.
+  /// the CSR connectivity to reflect these changes.
   void update_crs_from_coo(const stk::mesh::Selector &selector) {
-    impl::NgpCOOToCRSSynchronizerT<NgpMemSpace>::update_crs_from_coo(ngp_crs_data_, ngp_coo_data_, selector);
+    impl::NgpCOOToCSRSynchronizerT<NgpMemSpace>::update_crs_from_coo(ngp_crs_data_, ngp_coo_data_, selector);
     crs_modify_on_device();
   }
 
-  /// \brief Propagate changes made to the COO connectivity to the CRS connectivity.
+  /// \brief Propagate changes made to the COO connectivity to the CSR connectivity.
   void update_crs_from_coo() {
-    impl::NgpCOOToCRSSynchronizerT<NgpMemSpace>::update_crs_from_coo(ngp_crs_data_, ngp_coo_data_);
+    impl::NgpCOOToCSRSynchronizerT<NgpMemSpace>::update_crs_from_coo(ngp_crs_data_, ngp_coo_data_);
     crs_modify_on_device();
   }
 
-  /// \brief Check consistency between the COO and CRS connectivity for the given selector
+  /// \brief Check consistency between the COO and CSR connectivity for the given selector
   ///
-  /// Relatively expensive check that verifies COO -> CRS and CRS -> COO consistency.
+  /// Relatively expensive check that verifies COO -> CSR and CSR -> COO consistency.
   ///
   /// \note The checks performed in this function are performed even in RELEASE mode.
   void check_crs_coo_consistency(const stk::mesh::Selector &selector) {
-    impl::NgpCOOToCRSSynchronizerT<NgpMemSpace>::check_crs_coo_consistency(ngp_crs_data_, ngp_coo_data_, selector);
+    impl::NgpCOOToCSRSynchronizerT<NgpMemSpace>::check_crs_coo_consistency(ngp_crs_data_, ngp_coo_data_, selector);
   }
 
-  /// \brief Check consistency between the COO and CRS connectivity for all links
+  /// \brief Check consistency between the COO and CSR connectivity for all links
   void check_crs_coo_consistency() {
-    impl::NgpCOOToCRSSynchronizerT<NgpMemSpace>::check_crs_coo_consistency(ngp_crs_data_, ngp_coo_data_);
+    impl::NgpCOOToCSRSynchronizerT<NgpMemSpace>::check_crs_coo_consistency(ngp_crs_data_, ngp_coo_data_);
   }
 
   /// \brief Rectify potentially stale data post-mesh modification.
@@ -308,7 +308,7 @@ class NgpLinkDataT {
 
   stk::mesh::EntityRank link_rank_;
   stk::mesh::NgpMesh ngp_mesh_;
-  NgpLinkCRSDataT<NgpMemSpace> ngp_crs_data_;
+  NgpLinkCSRDataT<NgpMemSpace> ngp_crs_data_;
   NgpLinkCOODataT<NgpMemSpace> ngp_coo_data_;
   //@}
 };  // NgpLinkDataT

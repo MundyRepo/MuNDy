@@ -18,28 +18,28 @@
 // **********************************************************************************************************************
 // @HEADER
 
-#ifndef MUNDY_MESH_LINKCRSPARTITION_HPP_
-#define MUNDY_MESH_LINKCRSPARTITION_HPP_
+#ifndef MUNDY_MESH_LINKCSRPARTITION_HPP_
+#define MUNDY_MESH_LINKCSRPARTITION_HPP_
 
-/// \file LinkCRSPartition.hpp
+/// \file LinkCSRPartition.hpp
 
 /*
 General comments as we go:
 
 - Partitions need to store their selector
-- We need to make sure that we are only updating the CRS for buckets that were marked as needing an update
-- I'm not sure we should call these partitions partitions since all they really do is help manage the CRS connectivity
-  It's just that the CRS connectivity can only be accessed for a given partition.
+- We need to make sure that we are only updating the CSR for buckets that were marked as needing an update
+- I'm not sure we should call these partitions partitions since all they really do is help manage the CSR connectivity
+  It's just that the CSR connectivity can only be accessed for a given partition.
 
-Can we hide this entire class from the user by making it internal? NgpPartitionedCRSConn
-How would they access the CRS connectivity then? Can we could give them a PartitionOrdinal instead of giving them an
+Can we hide this entire class from the user by making it internal? NgpPartitionedCSRConn
+How would they access the CSR connectivity then? Can we could give them a PartitionOrdinal instead of giving them an
 instance of this class? Well, if a user requests a partition, can we ever destroy it? No. I assume that's part of why
 STK chose to make partitions internal details.
 
 I guess we need to address the underlying question: when should we destroy a partition?
-After much deliberation, I think the answer is never. We'll allow users to request CRS connectivity for a given
-partition, and we will give them an ordinal that they can then use to access the CRS connectivity. In this fashion,
-users will interact with the CRS connectivity via the NgpLinkData class calling get_connected_links(p_ordinal, rank,
+After much deliberation, I think the answer is never. We'll allow users to request CSR connectivity for a given
+partition, and we will give them an ordinal that they can then use to access the CSR connectivity. In this fashion,
+users will interact with the CSR connectivity via the NgpLinkData class calling get_connected_links(p_ordinal, rank,
 entity_fmi), which will perform partitioned_crs_conn_vec_[p_ordinal].get_connected_links(rank, entity_fmi);
 
 update_crs_from_coo should be done for all partitions all at once and should be managed by the NgpLinkData.
@@ -49,7 +49,7 @@ rank, dimensionality, and vector of linked buckets per rank. Of these rank and d
 
 What we actually need to store is:
 - [rank][partition_id][linked_bucket_id][entity_offset] -> NgpLinkedBucket
-  Array of Kokkos::View<LinkCRSBucketConnT<MemSpace> **, stk::ngp::UVMMemSpace>
+  Array of Kokkos::View<LinkCSRBucketConnT<MemSpace> **, stk::ngp::UVMMemSpace>
 - [partition_id] -> PartitionKey
   std::vector<PartitionKey>
 - [partition_key] -> partition_id
@@ -76,7 +76,7 @@ be better to use a contiguous vector of partitions indexed by contiguous i
 
 // Mundy libs
 #include <mundy_core/throw_assert.hpp>       // for MUNDY_THROW_ASSERT
-#include <mundy_mesh/LinkCRSBucketConn.hpp>  // for mundy::mesh::LinkCRSBucketConn
+#include <mundy_mesh/LinkCSRBucketConn.hpp>  // for mundy::mesh::LinkCSRBucketConn
 
 namespace mundy {
 
@@ -86,7 +86,7 @@ using PartitionKey = std::vector<stk::mesh::PartOrdinal>;  // sorted view of par
 using NgpPartitionKey = stk::mesh::PartOrdinalViewType;    // sorted view of part ordinals
 
 template <typename MemSpace>
-class LinkCRSPartitionT {  // Raw data in any space.
+class LinkCSRPartitionT {  // Raw data in any space.
  public:
   //! \name Aliases
   //@{
@@ -95,8 +95,8 @@ class LinkCRSPartitionT {  // Raw data in any space.
   using memory_space = MemSpace;
   using execution_space = typename MemSpace::execution_space;
 
-  using LinkCRSBucketConn = LinkCRSBucketConnT<MemSpace>;
-  using LinkCRSBucketConnView = Kokkos::View<LinkCRSBucketConn *, stk::ngp::UVMMemSpace>;
+  using LinkCSRBucketConn = LinkCSRBucketConnT<MemSpace>;
+  using LinkCSRBucketConnView = Kokkos::View<LinkCSRBucketConn *, stk::ngp::UVMMemSpace>;
   using ConnectedEntities = stk::util::StridedArray<const stk::mesh::Entity>;
   //@}
 
@@ -104,14 +104,14 @@ class LinkCRSPartitionT {  // Raw data in any space.
   //@{
 
   KOKKOS_DEFAULTED_FUNCTION
-  LinkCRSPartitionT() = default;
+  LinkCSRPartitionT() = default;
 
-  LinkCRSPartitionT(const stk::mesh::Ordinal &partition_id, const PartitionKey key,
+  LinkCSRPartitionT(const stk::mesh::Ordinal &partition_id, const PartitionKey key,
                     const stk::mesh::EntityRank &link_rank, const unsigned link_dimensionality,
                     const stk::mesh::BulkData &bulk_data)
       : id_(partition_id), link_rank_(link_rank), link_dimensionality_(link_dimensionality) {
     // Map host key to ngp key
-    ngp_key_ = NgpPartitionKey("NgpCRSPartitionKey", key.size());
+    ngp_key_ = NgpPartitionKey("NgpCSRPartitionKey", key.size());
     auto ngp_key_host = Kokkos::create_mirror_view(ngp_key_);
     for (size_t i = 0; i < key.size(); ++i) {
       ngp_key_host(i) = key[i];
@@ -133,19 +133,19 @@ class LinkCRSPartitionT {  // Raw data in any space.
       size_t num_buckets = buckets.size();
 
       linked_buckets_[rank] =
-          LinkCRSBucketConnView(Kokkos::view_alloc(Kokkos::WithoutInitializing, "LinkedBuckets"), num_buckets);
+          LinkCSRBucketConnView(Kokkos::view_alloc(Kokkos::WithoutInitializing, "LinkedBuckets"), num_buckets);
       for (size_t i = 0; i < num_buckets; ++i) {
-        new (&linked_buckets_[rank][i]) LinkCRSBucketConn(*buckets[i]);
+        new (&linked_buckets_[rank][i]) LinkCSRBucketConn(*buckets[i]);
       }
     }
   }
 
-  KOKKOS_DEFAULTED_FUNCTION LinkCRSPartitionT(const LinkCRSPartitionT &other) = default;
-  KOKKOS_DEFAULTED_FUNCTION LinkCRSPartitionT(LinkCRSPartitionT &&other) = default;
-  KOKKOS_DEFAULTED_FUNCTION LinkCRSPartitionT &operator=(const LinkCRSPartitionT &other) = default;
-  KOKKOS_DEFAULTED_FUNCTION LinkCRSPartitionT &operator=(LinkCRSPartitionT &&other) = default;
+  KOKKOS_DEFAULTED_FUNCTION LinkCSRPartitionT(const LinkCSRPartitionT &other) = default;
+  KOKKOS_DEFAULTED_FUNCTION LinkCSRPartitionT(LinkCSRPartitionT &&other) = default;
+  KOKKOS_DEFAULTED_FUNCTION LinkCSRPartitionT &operator=(const LinkCSRPartitionT &other) = default;
+  KOKKOS_DEFAULTED_FUNCTION LinkCSRPartitionT &operator=(LinkCSRPartitionT &&other) = default;
 
-  KOKKOS_FUNCTION virtual ~LinkCRSPartitionT() {
+  KOKKOS_FUNCTION virtual ~LinkCSRPartitionT() {
     clear_buckets_and_views();
     // delete selector_ptr_;
   }
@@ -201,10 +201,10 @@ class LinkCRSPartitionT {  // Raw data in any space.
   }
   //@}
 
-  //! \name CRS connectivity
+  //! \name CSR connectivity
   //@{
 
-  /// \brief If any of our linkers connect to an entity in the given bucket within the CRS connectivity.
+  /// \brief If any of our linkers connect to an entity in the given bucket within the CSR connectivity.
   KOKKOS_INLINE_FUNCTION
   bool connects_to(stk::mesh::EntityRank rank, const unsigned &bucket_id) const {
     MUNDY_THROW_ASSERT(rank < stk::topology::NUM_RANKS, std::invalid_argument,
@@ -224,7 +224,7 @@ class LinkCRSPartitionT {  // Raw data in any space.
 
   /// \brief Get the linked bucket for a given rank and bucket id.
   KOKKOS_INLINE_FUNCTION
-  LinkCRSBucketConn &get_crs_bucket_conn(stk::mesh::EntityRank rank, unsigned bucket_id) {
+  LinkCSRBucketConn &get_crs_bucket_conn(stk::mesh::EntityRank rank, unsigned bucket_id) {
     MUNDY_THROW_ASSERT(rank < stk::topology::NUM_RANKS, std::invalid_argument,
                        "Bucket rank is out of bounds for this partition.");
     MUNDY_THROW_ASSERT(bucket_id < linked_buckets_[rank].size(), std::invalid_argument,
@@ -232,7 +232,7 @@ class LinkCRSPartitionT {  // Raw data in any space.
     return linked_buckets_[rank](bucket_id);
   }
   KOKKOS_INLINE_FUNCTION
-  const LinkCRSBucketConn &get_crs_bucket_conn(stk::mesh::EntityRank rank, unsigned bucket_id) const {
+  const LinkCSRBucketConn &get_crs_bucket_conn(stk::mesh::EntityRank rank, unsigned bucket_id) const {
     MUNDY_THROW_ASSERT(rank < stk::topology::NUM_RANKS, std::invalid_argument,
                        "Bucket rank is out of bounds for this partition.");
     MUNDY_THROW_ASSERT(bucket_id < linked_buckets_[rank].size(), std::invalid_argument,
@@ -240,7 +240,7 @@ class LinkCRSPartitionT {  // Raw data in any space.
     return linked_buckets_[rank](bucket_id);
   }
 
-  /// \brief Get all links in the current partition that connect to the given entity in the CRS connectivity.
+  /// \brief Get all links in the current partition that connect to the given entity in the CSR connectivity.
   KOKKOS_INLINE_FUNCTION
   ConnectedEntities get_connected_links(stk::mesh::EntityRank rank,
                                         const stk::mesh::FastMeshIndex &entity_index) const {
@@ -253,7 +253,7 @@ class LinkCRSPartitionT {  // Raw data in any space.
     return linked_buckets_[rank](entity_index.bucket_id).get_connected_links(entity_index.bucket_ord);
   }
 
-  /// \brief Get the number of links in the current partition that connect to the given entity in the CRS connectivity.
+  /// \brief Get the number of links in the current partition that connect to the given entity in the CSR connectivity.
   KOKKOS_INLINE_FUNCTION
   unsigned num_connected_links(stk::mesh::EntityRank rank, const stk::mesh::FastMeshIndex &entity_index) const {
     MUNDY_THROW_ASSERT(rank < stk::topology::NUM_RANKS, std::invalid_argument,
@@ -271,7 +271,7 @@ class LinkCRSPartitionT {  // Raw data in any space.
   //@{
 
   template <typename MemSpace1, typename MemSpace2>
-  friend void deep_copy(LinkCRSPartitionT<MemSpace1> &dest, const LinkCRSPartitionT<MemSpace2> &src);
+  friend void deep_copy(LinkCSRPartitionT<MemSpace1> &dest, const LinkCSRPartitionT<MemSpace2> &src);
 
   KOKKOS_FUNCTION
   bool is_last_bucket_reference(stk::mesh::EntityRank rank = stk::topology::NODE_RANK) const {
@@ -285,7 +285,7 @@ class LinkCRSPartitionT {  // Raw data in any space.
     KOKKOS_IF_ON_HOST((if (is_last_bucket_reference()) {
       for (stk::mesh::EntityRank rank = stk::topology::NODE_RANK; rank < stk::topology::NUM_RANKS; rank++) {
         for (unsigned iBucket = 0; iBucket < linked_buckets_[rank].size(); ++iBucket) {
-          linked_buckets_[rank][iBucket].~LinkCRSBucketConnT<MemSpace>();
+          linked_buckets_[rank][iBucket].~LinkCSRBucketConnT<MemSpace>();
         }
       }
     }))
@@ -301,18 +301,18 @@ class LinkCRSPartitionT {  // Raw data in any space.
                                      ///< constructable, copiable, movable on the device so we use a pointer.
   stk::mesh::EntityRank link_rank_;  ///< Rank of the linkers in this partition.
   unsigned link_dimensionality_;     ///< Maximum dimensionality of the parts contained in this partition.
-  LinkCRSBucketConnView linked_buckets_[stk::topology::NUM_RANKS];  ///< Bucketized CRS connectivity for each rank.
+  LinkCSRBucketConnView linked_buckets_[stk::topology::NUM_RANKS];  ///< Bucketized CSR connectivity for each rank.
   //@}
 };
 
 // Following STK's default naming convention, to make return statements of our functions more readable.
-using LinkCRSPartition = LinkCRSPartitionT<stk::ngp::HostMemSpace>;
+using LinkCSRPartition = LinkCSRPartitionT<stk::ngp::HostMemSpace>;
 template <typename NgpMemSpace>
-using NgpLinkCRSPartitionT = LinkCRSPartitionT<NgpMemSpace>;
-using NgpLinkCRSPartition = LinkCRSPartitionT<stk::ngp::MemSpace>;
+using NgpLinkCSRPartitionT = LinkCSRPartitionT<NgpMemSpace>;
+using NgpLinkCSRPartition = LinkCSRPartitionT<stk::ngp::MemSpace>;
 
 template <typename MemSpace1, typename MemSpace2>
-void deep_copy(LinkCRSPartitionT<MemSpace1> &dest, const LinkCRSPartitionT<MemSpace2> &src) {
+void deep_copy(LinkCSRPartitionT<MemSpace1> &dest, const LinkCSRPartitionT<MemSpace2> &src) {
   // Destination must at least be default constructed.
   dest.id_ = src.id_;
   dest.ngp_key_ = src.ngp_key_;
@@ -325,7 +325,7 @@ void deep_copy(LinkCRSPartitionT<MemSpace1> &dest, const LinkCRSPartitionT<MemSp
       Kokkos::resize(Kokkos::WithoutInitializing, dest.linked_buckets_[rank], src.linked_buckets_[rank].extent(0));
     }
     for (unsigned i = 0; i < src.linked_buckets_[rank].extent(0); ++i) {
-      new (&dest.linked_buckets_[rank][i]) LinkCRSBucketConnT<MemSpace1>();
+      new (&dest.linked_buckets_[rank][i]) LinkCSRBucketConnT<MemSpace1>();
       deep_copy(dest.linked_buckets_[rank](i), src.linked_buckets_[rank](i));
     }
   }
@@ -335,4 +335,4 @@ void deep_copy(LinkCRSPartitionT<MemSpace1> &dest, const LinkCRSPartitionT<MemSp
 
 }  // namespace mundy
 
-#endif  // MUNDY_MESH_LINKCRSPARTITION_HPP_
+#endif  // MUNDY_MESH_LINKCSRPARTITION_HPP_
