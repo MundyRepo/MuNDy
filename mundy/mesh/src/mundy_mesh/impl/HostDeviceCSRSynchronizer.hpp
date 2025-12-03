@@ -18,11 +18,11 @@
 // **********************************************************************************************************************
 // @HEADER
 
-#ifndef MUNDY_MESH_IMPL_HOSTDEVICECRSSYNCHRONIZER_HPP_
-#define MUNDY_MESH_IMPL_HOSTDEVICECRSSYNCHRONIZER_HPP_
+#ifndef MUNDY_MESH_IMPL_HOSTDEVICECSRSYNCHRONIZER_HPP_
+#define MUNDY_MESH_IMPL_HOSTDEVICECSRSYNCHRONIZER_HPP_
 
-/// \file LinkCRSDataSynchronizerT.hpp
-/// \brief Declaration of the LinkCRSDataSynchronizerT class
+/// \file LinkCSRDataSynchronizerT.hpp
+/// \brief Declaration of the LinkCSRDataSynchronizerT class
 
 // C++ core libs
 #include <any>  // for std::any
@@ -36,7 +36,7 @@
 // Mundy libs
 #include <mundy_core/throw_assert.hpp>                 // for MUNDY_THROW_ASSERT
 #include <mundy_mesh/LinkCOOData.hpp>                  // for mundy::mesh::LinkCOOData/NgpLinkCOOData
-#include <mundy_mesh/LinkCRSData.hpp>                  // for mundy::mesh::LinkCRSData/NgpLinkCRSData
+#include <mundy_mesh/LinkCSRData.hpp>                  // for mundy::mesh::LinkCSRData/NgpLinkCSRData
 #include <mundy_mesh/LinkMetaData.hpp>                 // for mundy::mesh::LinkMetaData
 #include <mundy_mesh/MetaData.hpp>                     // for mundy::mesh::MetaData
 #include <mundy_mesh/Types.hpp>                        // for mundy::mesh::NgpDataAccessTag
@@ -49,13 +49,13 @@ namespace mesh {
 namespace impl {
 
 template <typename NgpMemSpace>
-class LinkCRSDataSynchronizerT : public HostDeviceSynchronizer {
+class LinkCSRDataSynchronizerT : public HostDeviceSynchronizer {
  public:
-  LinkCRSDataSynchronizerT(LinkCRSData &crs_data, NgpLinkCRSDataT<NgpMemSpace> &ngp_crs_data)
+  LinkCSRDataSynchronizerT(LinkCSRData &crs_data, NgpLinkCSRDataT<NgpMemSpace> &ngp_crs_data)
       : crs_data_(crs_data), ngp_crs_data_(ngp_crs_data) {
   }
 
-  virtual ~LinkCRSDataSynchronizerT() = default;
+  virtual ~LinkCSRDataSynchronizerT() = default;
 
   virtual void modify_on_host() override {
     // We have been informed of a modification. Nothing to do.
@@ -77,16 +77,16 @@ class LinkCRSDataSynchronizerT : public HostDeviceSynchronizer {
     // No-op for now
     //
     // There are a bunch of synchronization steps that we need to figure out how to handle
-    // once we make it possible to keep the CRS data up to date during mesh modifications.
+    // once we make it possible to keep the CSR data up to date during mesh modifications.
     //
-    // For now, we will just rebuild the CRS data from the COO data after mesh modifications
-    // std::cout << "WARNING: update_post_mesh_mod() is a currently a no-op for LinkCRSDataSynchronizerT" << std::endl;
+    // For now, we will just rebuild the CSR data from the COO data after mesh modifications
+    // std::cout << "WARNING: update_post_mesh_mod() is a currently a no-op for LinkCSRDataSynchronizerT" << std::endl;
   }
 
  private:
-  LinkCRSData &crs_data_;
-  NgpLinkCRSDataT<NgpMemSpace> &ngp_crs_data_;
-};  // LinkCRSDataSynchronizerT
+  LinkCSRData &crs_data_;
+  NgpLinkCSRDataT<NgpMemSpace> &ngp_crs_data_;
+};  // LinkCSRDataSynchronizerT
 
 }  // namespace impl
 
@@ -94,4 +94,4 @@ class LinkCRSDataSynchronizerT : public HostDeviceSynchronizer {
 
 }  // namespace mundy
 
-#endif  // MUNDY_MESH_IMPL_HOSTDEVICECRSSYNCHRONIZER_HPP_
+#endif  // MUNDY_MESH_IMPL_HOSTDEVICECSRSYNCHRONIZER_HPP_

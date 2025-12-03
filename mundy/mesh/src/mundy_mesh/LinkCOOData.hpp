@@ -181,7 +181,7 @@ class LinkCOOData {  // Host only | Valid during mesh modifications
     auto &linked_e_bucket_ords_field = impl::get_linked_entity_bucket_ords_field(link_meta_data());
     auto &link_needs_updated_field = impl::get_link_crs_needs_updated_field(link_meta_data());
 
-    // Intentionally avoids updating the CRS linked entities field so that we can properly detect deletions.
+    // Intentionally avoids updating the CSR linked entities field so that we can properly detect deletions.
     stk::mesh::field_data(linked_es_field, linker)[link_ordinal] = stk::mesh::Entity().local_offset();
     stk::mesh::field_data(linked_e_ids_field, linker)[link_ordinal] = stk::mesh::EntityId();
     stk::mesh::field_data(linked_e_ranks_field, linker)[link_ordinal] =
@@ -248,7 +248,7 @@ class LinkCOOData {  // Host only | Valid during mesh modifications
   //@}
 
  protected:
-  /// \brief Get the linked entity for a given linker and link ordinal (as last seen by the CRS connectivity).
+  /// \brief Get the linked entity for a given linker and link ordinal (as last seen by the CSR connectivity).
   ///
   /// \param linker [in] The linker (must be valid and of the correct rank).
   /// \param link_ordinal [in] The ordinal of the linked entity.
@@ -261,7 +261,7 @@ class LinkCOOData {  // Host only | Valid during mesh modifications
     return stk::mesh::Entity(stk::mesh::field_data(linked_es_crs_field, linker)[link_ordinal]);
   }
 
-  /// \brief Get if the CRS connectivity for a link needs to be updated.
+  /// \brief Get if the CSR connectivity for a link needs to be updated.
   inline bool get_link_crs_needs_updated(const stk::mesh::Entity &linker) const {
     MUNDY_THROW_ASSERT(link_meta_data().link_rank() == bulk_data().entity_rank(linker), std::invalid_argument,
                        "Linker is not of the correct rank.");
@@ -291,7 +291,7 @@ template <typename NgpMemSpace>
 stk::mesh::NgpMesh &get_ngp_mesh(NgpLinkCOODataT<NgpMemSpace> &ngp_coo_data);
 
 template <typename NgpMemSpace>
-class NgpCOOToCRSSynchronizerT;
+class NgpCOOToCSRSynchronizerT;
 }  // namespace impl
 
 template <typename NgpMemSpace>
@@ -512,7 +512,7 @@ class NgpLinkCOODataT {  // Device only | Invalid during mesh modifications | Ca
     return ngp_mesh_;
   }
 
-  /// \brief Get the linked entity for a given linker and link ordinal (as last seen by the CRS connectivity).
+  /// \brief Get the linked entity for a given linker and link ordinal (as last seen by the CSR connectivity).
   ///
   /// \param linker [in] The linker (must be valid and of the correct rank).
   /// \param link_ordinal [in] The ordinal of the linked entity.
@@ -525,7 +525,7 @@ class NgpLinkCOODataT {  // Device only | Invalid during mesh modifications | Ca
     return get_linked_entity_crs(ngp_mesh_.fast_mesh_index(linker), link_ordinal);
   }
 
-  /// \brief Get if the CRS connectivity for a link needs to be updated.
+  /// \brief Get if the CSR connectivity for a link needs to be updated.
   KOKKOS_INLINE_FUNCTION
   bool get_link_crs_needs_updated(const stk::mesh::FastMeshIndex &linker_index) const {
     return ngp_link_meta_data_.ngp_link_crs_needs_updated_field()(linker_index, 0);
@@ -543,7 +543,7 @@ class NgpLinkCOODataT {  // Device only | Invalid during mesh modifications | Ca
   friend stk::mesh::NgpMesh &impl::get_ngp_mesh(NgpLinkCOODataT<T> &ngp_coo_data);
 
   template <typename T>
-  friend class impl::NgpCOOToCRSSynchronizerT;
+  friend class impl::NgpCOOToCSRSynchronizerT;
 
   //! \name Internal members (host only)
   //@{

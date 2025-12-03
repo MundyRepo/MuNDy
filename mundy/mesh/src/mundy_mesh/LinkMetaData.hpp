@@ -100,14 +100,14 @@ class LinkMetaData {
         meta_data_(meta_data),
         link_rank_(link_rank),
         linked_entities_field_(meta_data.declare_field<entity_value_t>(link_rank_, "MUNDY_LINKED_ENTITIES")),
-        linked_entities_crs_field_(meta_data.declare_field<entity_value_t>(link_rank_, "MUNDY_LINKED_ENTITIES_CRS")),
+        linked_entities_crs_field_(meta_data.declare_field<entity_value_t>(link_rank_, "MUNDY_LINKED_ENTITIES_CSR")),
         linked_entity_ids_field_(meta_data.declare_field<entity_id_value_t>(link_rank_, "MUNDY_LINKED_ENTITY_IDS")),
         linked_entity_ranks_field_(
             meta_data.declare_field<entity_rank_value_t>(link_rank_, "MUNDY_LINKED_ENTITY_RANKS")),
         linked_entity_bucket_ids_field_(meta_data.declare_field<unsigned>(link_rank_, "MUNDY_LINKED_ENTITY_BUCKET_ID")),
         linked_entity_bucket_ords_field_(
             meta_data.declare_field<unsigned>(link_rank_, "MUNDY_LINKED_ENTITY_BUCKET_ORD")),
-        link_crs_needs_updated_field_(meta_data.declare_field<int>(link_rank_, "MUNDY_LINK_CRS_NEEDS_UPDATED")),
+        link_crs_needs_updated_field_(meta_data.declare_field<int>(link_rank_, "MUNDY_LINK_CSR_NEEDS_UPDATED")),
         link_marked_for_destruction_field_(
             meta_data.declare_field<unsigned>(link_rank_, "MUNDY_LINK_MARKED_FOR_DESTRUCTION")),
         universal_link_part_(meta_data.declare_part(std::string("MUNDY_UNIVERSAL_") + our_name + "_" + rank_to_string(link_rank_), link_rank_)) {
@@ -251,7 +251,7 @@ class LinkMetaData {
     return linked_entities_field_;
   }
 
-  /// \brief Fetch the linked entities field (as last seen by the CRS).
+  /// \brief Fetch the linked entities field (as last seen by the CSR).
   inline const linked_entities_field_t &linked_entities_crs_field() const noexcept {
     return linked_entities_crs_field_;
   }

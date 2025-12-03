@@ -195,7 +195,7 @@ class NgpLinkMetaDataT {
     return ngp_linked_entities_field_;
   }
 
-  /// \brief Fetch the linked entities field (as last seen by the CRS).
+  /// \brief Fetch the linked entities field (as last seen by the CSR).
   KOKKOS_INLINE_FUNCTION
   const ngp_linked_entities_field_t &ngp_linked_entities_crs_field() const noexcept {
     return ngp_linked_entities_crs_field_;

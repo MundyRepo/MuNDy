@@ -39,7 +39,7 @@
 // Mundy libs
 #include <mundy_core/throw_assert.hpp>                 // for MUNDY_THROW_ASSERT
 #include <mundy_mesh/LinkCOOData.hpp>                  // for mundy::mesh::LinkCOOData/NgpLinkCOOData
-#include <mundy_mesh/LinkCRSData.hpp>                  // for mundy::mesh::LinkCRSData/NgpLinkCRSData
+#include <mundy_mesh/LinkCSRData.hpp>                  // for mundy::mesh::LinkCSRData/NgpLinkCSRData
 #include <mundy_mesh/LinkMetaData.hpp>                 // for mundy::mesh::LinkMetaData
 #include <mundy_mesh/Types.hpp>                        // for mundy::mesh::NgpDataAccessTag
 #include <mundy_mesh/impl/HostDeviceSynchronizer.hpp>  // for mundy::mesh::impl::HostDeviceSynchronizer
@@ -147,11 +147,11 @@ void set_crs_synchronizer(const LinkData &link_data, std::shared_ptr<impl::HostD
 ///
 /// \note To Devs: Hi! Welcome. If you want to better understand the LinkData or our links in general, I recommend
 /// looking at it as maintaining two connectivity structures: a COO-like structure providing access from a linker to its
-/// linked entities and a CRS-like structure providing access from a linked entity to its linkers. The COO is the
-/// dynamic "driver" that is trivial to modify (even in parallel) and the CRS is a more heavy-weight sparse data
+/// linked entities and a CSR-like structure providing access from a linked entity to its linkers. The COO is the
+/// dynamic "driver" that is trivial to modify (even in parallel) and the CSR is a more heavy-weight sparse data
 /// structure that is non-trivial to modify in parallel since it often requires memory allocation. The
-/// update_crs_from_coo function is responsible for mapping all of the modifications to the COO structure to the CRS
-/// structure. There are some operations that fundamentally require a CRS-like structure such as maintaining parallel
+/// update_crs_from_coo function is responsible for mapping all of the modifications to the COO structure to the CSR
+/// structure. There are some operations that fundamentally require a CSR-like structure such as maintaining parallel
 /// consistency as entities are removed from the mesh or performing operations that require a serial loop over each
 /// linker that connects to a given linked entity.
 ///
@@ -271,26 +271,26 @@ class LinkData {
   }
   //@}
 
-  //! \name CRS interface
+  //! \name CSR interface
   //@{
 
-  LinkCRSData &crs_data() noexcept {
+  LinkCSRData &crs_data() noexcept {
     return crs_data_;
   }
-  const LinkCRSData &crs_data() const noexcept {
+  const LinkCSRData &crs_data() const noexcept {
     return crs_data_;
   }
   void crs_modify_on_host() {
     MUNDY_THROW_REQUIRE(false, std::invalid_argument,
-                        "The host CRS is a read-only copy of the device CRS and may not be modified directly.");
+                        "The host CSR is a read-only copy of the device CSR and may not be modified directly.");
     if (crs_has_device_data()) {
       crs_synchronizer_->modify_on_host();
     }
   }
   void crs_modify_on_device() {
     MUNDY_THROW_REQUIRE(crs_modified_on_host_ == false, std::invalid_argument,
-                        "The device CRS may not be modified while the host CRS is modified."
-                        "Either sync the host CRS to device or clear the host modification state.");
+                        "The device CSR may not be modified while the host CSR is modified."
+                        "Either sync the host CSR to device or clear the host modification state.");
     crs_modified_on_device_ = true;
     if (crs_has_device_data()) {
       crs_synchronizer_->modify_on_device();
@@ -309,7 +309,7 @@ class LinkData {
       } else {
         MUNDY_THROW_REQUIRE(
             false, std::logic_error,
-            "Why has sync_crs_to_host been called on a LinkData with no device CRS that somehow needs synced to host?");
+            "Why has sync_crs_to_host been called on a LinkData with no device CSR that somehow needs synced to host?");
       }
       crs_increment_num_syncs_to_host();
       crs_clear_device_sync_state();
@@ -322,7 +322,7 @@ class LinkData {
         crs_synchronizer_->sync_to_device();
       } else {
         MUNDY_THROW_REQUIRE(false, std::logic_error,
-                            "Why has crs_sync_to_device been called on a LinkData with no device CRS that somehow "
+                            "Why has crs_sync_to_device been called on a LinkData with no device CSR that somehow "
                             "needs synced to host?");
       }
       crs_increment_num_syncs_to_device();
@@ -422,7 +422,7 @@ class LinkData {
   }
   //@}
 
-  //! \name CRS/COO interactions
+  //! \name CSR/COO interactions
   //@{
 
   /// \brief Rectify potentially stale data post-mesh modification.
@@ -483,7 +483,7 @@ class LinkData {
   LinkMetaData *link_meta_data_ptr_;
 
   LinkCOOData coo_data_;
-  LinkCRSData crs_data_;
+  LinkCSRData crs_data_;
   mutable std::shared_ptr<impl::HostDeviceSynchronizer> coo_synchronizer_;
   mutable std::shared_ptr<impl::HostDeviceSynchronizer> crs_synchronizer_;
   mutable std::any any_ngp_link_data_;

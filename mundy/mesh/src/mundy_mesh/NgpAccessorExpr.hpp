@@ -684,15 +684,15 @@ class ConnectedEntitiesExpr : public EntityExprBase<ConnectedEntitiesExpr<PrevEn
   }
 
   void flag_read_write(const NgpEvalContext& /*context*/) {
-    std::cout
-        << "Warning: Attempting to write to the return type of an entity expression, which returns a temporary value."
-        << std::endl;
+    MUNDY_THROW_ASSERT(
+        false, std::logic_error,
+        "Attempting to write to the return type of an entity expression, which returns a temporary value.");
   }
 
   void flag_overwrite_all(const NgpEvalContext& /*context*/) {
-    std::cout
-        << "Warning: Attempting to write to the return type of an entity expression, which returns a temporary value."
-        << std::endl;
+    MUNDY_THROW_ASSERT(
+        false, std::logic_error,
+        "Attempting to write to the return type of an entity expression, which returns a temporary value.");
   }
 
   const auto driver() const {
@@ -767,15 +767,15 @@ class EntityExpr : public EntityExprBase<EntityExpr<NumEntities, Ord, DriverType
   }
 
   void flag_read_write(const NgpEvalContext& /*context*/) {
-    std::cout
-        << "Warning: Attempting to write to the return type of an entity expression, which returns a temporary value."
-        << std::endl;
+    MUNDY_THROW_ASSERT(
+        false, std::logic_error,
+        "Attempting to write to the return type of an entity expression, which returns a temporary value.");
   }
 
   void flag_overwrite_all(const NgpEvalContext& /*context*/) {
-    std::cout
-        << "Warning: Attempting to write to the return type of an entity expression, which returns a temporary value."
-        << std::endl;
+    MUNDY_THROW_ASSERT(
+        false, std::logic_error,
+        "Attempting to write to the return type of an entity expression, which returns a temporary value.");
   }
 
   const DriverType* driver() const {
@@ -784,6 +784,76 @@ class EntityExpr : public EntityExprBase<EntityExpr<NumEntities, Ord, DriverType
 
  private:
   stk::mesh::EntityRank rank_;
+  const DriverType* driver_;
+};
+
+// The goal of this class is to allow for the creation of EntityExpr from an array of entities.
+// This class is not, itself, an EntityExpr, but allows for the creation of one.
+template <size_t NumEntities, typename DriverType>
+class IntermediaryEntityArray {
+ public:
+  static constexpr size_t num_entities = NumEntities;
+
+  KOKKOS_INLINE_FUNCTION
+  IntermediaryEntityArray(const Kokkos::Array<stk::mesh::EntityRank, NumEntities>& ranks, const DriverType* driver)
+      : ranks_(ranks), driver_(driver) {
+  }
+
+  template <size_t Ord>
+  KOKKOS_INLINE_FUNCTION
+  EntityExpr<NumEntities, Ord, DriverType> get() const {
+    static_assert(Ord < NumEntities, "EntityExpr ordinal must be less than NumEntities");
+    return EntityExpr<NumEntities, Ord, DriverType>(ranks_[Ord], driver_);
+  }
+
+  const DriverType* driver() const {
+    return driver_;
+  }
+
+ private:
+  Kokkos::Array<stk::mesh::EntityRank, NumEntities> ranks_;
+  const DriverType* driver_;
+};
+
+template <typename DriverType>
+class EntityPair {
+ public:
+  static constexpr size_t num_entities = 2;
+
+  KOKKOS_INLINE_FUNCTION
+  EntityPair(const stk::mesh::EntityRank& first_rank, const stk::mesh::EntityRank& second_rank,
+             const DriverType* driver)
+      : first_rank_(first_rank), second_rank_(second_rank), driver_(driver) {
+  }
+
+  template <size_t Ord>
+  KOKKOS_INLINE_FUNCTION
+  EntityExpr<2, Ord, DriverType> get() const {
+    static_assert(Ord < 2, "EntityExpr ordinal must be less than 2");
+    if constexpr (Ord == 0) {
+      return EntityExpr<2, Ord, DriverType>(first_rank_, driver_);
+    } else {
+      return EntityExpr<2, Ord, DriverType>(second_rank_, driver_);
+    }
+  }
+
+  KOKKOS_INLINE_FUNCTION
+  EntityExpr<2, 0, DriverType> first() const {
+    return EntityExpr<2, 0, DriverType>(first_rank_, driver_);
+  }
+
+  KOKKOS_INLINE_FUNCTION
+  EntityExpr<2, 1, DriverType> second() const {
+    return EntityExpr<2, 1, DriverType>(second_rank_, driver_);
+  }
+
+  const DriverType* driver() const {
+    return driver_;
+  }
+
+ private:
+  stk::mesh::EntityRank first_rank_;
+  stk::mesh::EntityRank second_rank_;
   const DriverType* driver_;
 };
 
@@ -903,6 +973,123 @@ class NgpForEachEntityExprDriver {
   ExecSpace exec_space_;
 };
 
+template <typename PairView, typename FMIExtractor, typename ExecSpace = stk::ngp::ExecSpace>
+class NgpForEachEntityPairExprDriver {
+ public:
+  NgpForEachEntityPairExprDriver(const stk::mesh::BulkData& bulk_data, const PairView& pair_view,
+                                 const ExecSpace& exec_space = ExecSpace())
+      : bulk_data_ptr_(&bulk_data), pair_view_(pair_view), exec_space_(exec_space) {
+  }
+
+  // Default copy/move constructor and assignment operator are fine
+  NgpForEachEntityPairExprDriver(const NgpForEachEntityPairExprDriver&) = default;
+  NgpForEachEntityPairExprDriver(NgpForEachEntityPairExprDriver&&) = default;
+  NgpForEachEntityPairExprDriver& operator=(const NgpForEachEntityPairExprDriver&) = default;
+  NgpForEachEntityPairExprDriver& operator=(NgpForEachEntityPairExprDriver&&) = default;
+  virtual ~NgpForEachEntityPairExprDriver() = default;
+
+  const stk::mesh::BulkData& bulk_data() const {
+    MUNDY_THROW_REQUIRE(bulk_data_ptr_ != nullptr, std::logic_error,
+                        "NgpForEachEntityPairExprDriver has a null BulkData pointer");
+    return *bulk_data_ptr_;
+  }
+
+  ExecSpace exec_space() const {
+    return exec_space_;
+  }
+
+  template <typename Expr>
+  void run(CachableExprBase<Expr>& expr_base) const {
+    // Copy to derived expression type for lambda capture
+    auto expr = expr_base.self();
+
+    // Get the up-to-date NGP mesh
+    stk::mesh::NgpMesh& ngp_mesh = get_updated_ngp_mesh(bulk_data());
+
+    // Sync all fields to the appropriate space and mark modified where necessary
+    NgpEvalContext evaluation_context(ngp_mesh);
+    expr.propagate_synchronize(evaluation_context);
+
+    // Perform the evaluation
+    Kokkos::parallel_for(
+        "NgpForEachEntityPairExprDriver::run", Kokkos::RangePolicy<ExecSpace>(exec_space(), 0, pair_view_.extent(0)),
+        KOKKOS_LAMBDA(const int i) {
+          auto entity_pair = pair_view_(i);
+          stk::mesh::FastMeshIndex left_fmi = FMIExtractor::get_left_index(entity_pair);
+          stk::mesh::FastMeshIndex right_fmi = FMIExtractor::get_right_index(entity_pair);
+
+          // Non-cached eval
+          // expr.eval(Kokkos::Array<stk::mesh::FastMeshIndex, 2>{left_fmi, right_fmi}, evaluation_context);
+
+          // Sum the counts of each expression in the tree
+          constexpr auto empty_eval_counts = core::make_aggregate();
+          constexpr auto eval_counts =
+              Expr::template increment_eval_counts<decltype(empty_eval_counts), empty_eval_counts>();
+
+          // Perform the eval
+          auto empty_cache = core::make_aggregate();
+          expr.template cached_eval<decltype(eval_counts), eval_counts>(
+              Kokkos::Array<stk::mesh::FastMeshIndex, 2>{left_fmi, right_fmi}, empty_cache, evaluation_context);
+        });
+  }
+
+  template <typename Expr, typename ReductionOp>
+  void reduce_local(CachableExprBase<Expr>& expr_base, ReductionOp& reduction) const {
+    // Copy to derived expression type for lambda capture
+    auto expr = expr_base.self();
+
+    // Get the up-to-date NGP mesh
+    stk::mesh::NgpMesh& ngp_mesh = get_updated_ngp_mesh(bulk_data());
+
+    // Sync all fields to the appropriate space and mark modified where necessary
+    NgpEvalContext evaluation_context(ngp_mesh);
+    expr.propagate_synchronize(evaluation_context);
+
+    // Perform the evaluation
+    using value_type = typename ReductionOp::value_type;
+    Kokkos::parallel_reduce(
+        "NgpForEachEntityPairExprDriver::reduce_local",
+        Kokkos::RangePolicy<ExecSpace>(exec_space(), 0, pair_view_.extent(0)),
+        KOKKOS_LAMBDA(const int i, value_type& value) {
+          auto entity_pair = pair_view_(i);
+          stk::mesh::FastMeshIndex left_fmi = FMIExtractor::get_left_index(entity_pair);
+          stk::mesh::FastMeshIndex right_fmi = FMIExtractor::get_right_index(entity_pair);
+
+          // Sum the counts of each expression in the tree
+          constexpr auto empty_eval_counts = core::make_aggregate();
+          constexpr auto eval_counts =
+              Expr::template increment_eval_counts<decltype(empty_eval_counts), empty_eval_counts>();
+
+          // Perform the eval
+          auto empty_cache = core::make_aggregate();
+          auto [val, final_cache] = expr.template cached_eval<decltype(eval_counts), eval_counts>(
+              Kokkos::Array<stk::mesh::FastMeshIndex, 2>{left_fmi, right_fmi}, empty_cache, evaluation_context);
+
+          // Combine into the reduction
+          // To avoid CUDA being CUDA, we must "touch" the reduction
+          [[maybe_unused]] auto meaningless_return_to_make_cuda_happy = reduction.reference();
+          using val_t = decltype(val);
+
+          if constexpr (std::is_same_v<val_t, value_type>) {
+            // Directly compatible types; just combine
+            reduction.join(value, val);
+          }
+          if constexpr (math::is_scalar_wrapper_v<val_t>) {
+            // val is a scalar wrapper; extract the underlying value and combine
+            reduction.join(value, val[0]);
+          } else {
+            // Unknown return type, attempt to use it directly
+            reduction.join(value, val);
+          }
+        });
+  }
+
+ private:
+  const stk::mesh::BulkData* bulk_data_ptr_;
+  PairView pair_view_;
+  ExecSpace exec_space_;
+};
+
 template <typename ExecSpace = stk::ngp::ExecSpace>
 auto make_entity_expr(stk::mesh::BulkData& bulk_data, const stk::mesh::Selector& selector,
                       const stk::mesh::EntityRank& rank, const ExecSpace& exec_space = ExecSpace()) {
@@ -933,6 +1120,40 @@ auto make_entity_expr(stk::mesh::BulkData& bulk_data, const stk::mesh::Selector&
   }
 
   return EntityExpr<1, 0, driver_t>(rank, driver_ptr);
+}
+
+template <typename PairView, typename FMIExtractor, typename ExecSpace = stk::ngp::ExecSpace>
+auto make_pairwise_entity_expr(stk::mesh::BulkData& bulk_data,                                    //
+                               const stk::mesh::EntityRank& left_rank,                            //
+                               const stk::mesh::EntityRank& right_rank,                           //
+                               const PairView& pair_view, const FMIExtractor& /*fmi_extractor*/,  //
+                               const ExecSpace& exec_space = ExecSpace()) {
+  using driver_t = NgpForEachEntityPairExprDriver<PairView, FMIExtractor, ExecSpace>;
+  using driver_map_t = impl::AnyRankSelectorMap<core::make_string_literal("NgpPairExprDrivers")>;
+  stk::mesh::MetaData& meta_data = bulk_data.mesh_meta_data();
+  driver_map_t* driver_map = const_cast<driver_map_t*>(meta_data.get_attribute<driver_map_t>());
+  if (driver_map == nullptr) {
+    const driver_map_t* new_driver_map = new driver_map_t();
+    driver_map = const_cast<driver_map_t*>(meta_data.declare_attribute_with_delete(new_driver_map));
+  }
+
+  // Stash our driver in the map if it doesn't already exist
+  const driver_t* driver_ptr;
+  stk::mesh::EntityRank dummy_rank = stk::topology::NODE_RANK;  // Rank is irrelevant for pairwise drivers
+  stk::mesh::Selector dummy_selector = stk::mesh::Selector();   // Selector is irrelevant for pairwise drivers
+  if (driver_map->contains(dummy_rank, dummy_selector)) {
+    // Driver already exists; reuse it
+    driver_t& existing_driver = driver_map->at<driver_t>(dummy_rank, dummy_selector);
+    driver_ptr = &existing_driver;
+  } else {
+    // Driver doesn't exist yet; create and insert it
+    driver_t new_driver(bulk_data, pair_view);
+    driver_map->insert<driver_t>(dummy_rank, dummy_selector, std::move(new_driver));
+    const driver_t& inserted_driver = driver_map->at<driver_t>(dummy_rank, dummy_selector);
+    driver_ptr = &inserted_driver;
+  }
+
+  return EntityPair(left_rank, right_rank, driver_ptr);
 }
 //@}
 
@@ -993,11 +1214,11 @@ class ConstantMathExpr : public MathExprBase<ConstantMathExpr<ConstantType>> {
   }
 
   void flag_read_write(const NgpEvalContext& /*context*/) {
-    std::cout << "Warning: Attempting to write to a constant expression." << std::endl;
+    MUNDY_THROW_ASSERT(false, std::logic_error, "Attempting to write to a constant expression.");
   }
 
   void flag_overwrite_all(const NgpEvalContext& /*context*/) {
-    std::cout << "Warning: Attempting to write to a constant expression." << std::endl;
+    MUNDY_THROW_ASSERT(false, std::logic_error, "Attempting to write to a constant expression.");
   }
 
   auto driver() const {
