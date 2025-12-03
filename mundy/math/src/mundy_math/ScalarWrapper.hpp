@@ -103,9 +103,114 @@ concept ValidScalarWrapperType = is_scalar_wrapper_v<std::decay_t<ScalarWrapperT
 template <typename U, typename T, ValidAccessor<U> Accessor1, typename Ownership1, ValidAccessor<T> Accessor2,
           typename Ownership2>
 KOKKOS_INLINE_FUNCTION constexpr auto operator*(const AScalarWrapper<U, Accessor1, Ownership1>& a,
-                                                  const AScalarWrapper<T, Accessor2, Ownership2>& b)
+                                                const AScalarWrapper<T, Accessor2, Ownership2>& b)
     -> AScalarWrapper<std::common_type_t<T, U>> {
   return AScalarWrapper<std::common_type_t<T, U>>{a[0] * b[0]};
+}
+//@}
+
+//! \name atomic_load/store. Atomic memory management operations.
+//
+// \note Atomics are covered by Vector naturally, so we're using this space to make our atomic operations on
+// scalars forward to Kokkos atomics. This way, we can always call mundy::math::atomic_add regardless of whether we're
+// dealing with a scalar or a vector/matrix.
+//
+//@{
+
+/// \brief Atomic s_copy = s.
+template <typename T>
+KOKKOS_INLINE_FUNCTION T atomic_load(T* const s) {
+  return Kokkos::atomic_load(s);
+}
+
+/// \brief Atomic s = value.
+template <typename T, typename U>
+KOKKOS_INLINE_FUNCTION void atomic_store(T* const s, const U& value) {
+  Kokkos::atomic_store(s, static_cast<T>(value));
+}
+//@}
+
+//! \name atomic_[op] Atomic operation which don’t return anything. [op] might be add, sub, mul, div.
+//@{
+
+/// \brief Atomic s += value.
+template <typename T, typename U>
+KOKKOS_INLINE_FUNCTION void atomic_add(T* const s, const U& value) {
+  Kokkos::atomic_add(s, static_cast<T>(value));
+}
+
+/// \brief Atomic s -= value.
+template <typename T, typename U>
+KOKKOS_INLINE_FUNCTION void atomic_sub(T* const s, const U& value) {
+  Kokkos::atomic_sub(s, static_cast<T>(value));
+}
+
+/// \brief Atomic s *= value.
+template <typename T, typename U>
+KOKKOS_INLINE_FUNCTION void atomic_mul(T* const s, const U& value) {
+  Kokkos::atomic_mul(s, static_cast<T>(value));
+}
+
+/// \brief Atomic s /= value.
+template <typename T, typename U>
+KOKKOS_INLINE_FUNCTION void atomic_div(T* const s, const U& value) {
+  Kokkos::atomic_div(s, static_cast<T>(value));
+}
+//@}
+
+//! \name atomic_fetch_[op] Various atomic operations which return the old value. [op] might be add, sub, mul, div.
+//@{
+
+/// \brief Atomic s += value (returns old s)
+template <typename T, typename U>
+KOKKOS_INLINE_FUNCTION T atomic_fetch_add(T* const s, const U& value) {
+  return Kokkos::atomic_fetch_add(s, static_cast<T>(value));
+}
+
+/// \brief Atomic s -= value (returns old s)
+template <typename T, typename U>
+KOKKOS_INLINE_FUNCTION T atomic_fetch_sub(T* const s, const U& value) {
+  return Kokkos::atomic_fetch_sub(s, static_cast<T>(value));
+}
+
+/// \brief Atomic s *= value (returns old s)
+template <typename T, typename U>
+KOKKOS_INLINE_FUNCTION T atomic_fetch_mul(T* const s, const U& value) {
+  return Kokkos::atomic_fetch_mul(s, static_cast<T>(value));
+}
+
+/// \brief Atomic s /= value (returns old s)
+template <typename T, typename U>
+KOKKOS_INLINE_FUNCTION T atomic_fetch_div(T* const s, const U& value) {
+  return Kokkos::atomic_fetch_div(s, static_cast<T>(value));
+}
+//@}
+
+//! \name atomic_[op]_fetch Various atomic operations which return the new value. [op] might be add, sub, mul, div.
+//@{
+
+/// \brief Atomic s += value (returns new s)
+template <typename T, typename U>
+KOKKOS_INLINE_FUNCTION T atomic_add_fetch(T* const s, const U& value) {
+  return Kokkos::atomic_add_fetch(s, static_cast<T>(value));
+}
+
+/// \brief Atomic s -= value (returns new s)
+template <typename T, typename U>
+KOKKOS_INLINE_FUNCTION T atomic_sub_fetch(T* const s, const U& value) {
+  return Kokkos::atomic_sub_fetch(s, static_cast<T>(value));
+}
+
+/// \brief Atomic s *= value (returns new s)
+template <typename T, typename U>
+KOKKOS_INLINE_FUNCTION T atomic_mul_fetch(T* const s, const U& value) {
+  return Kokkos::atomic_mul_fetch(s, static_cast<T>(value));
+}
+
+/// \brief Atomic s /= value (returns new s)
+template <typename T, typename U>
+KOKKOS_INLINE_FUNCTION T atomic_div_fetch(T* const s, const U& value) {
+  return Kokkos::atomic_div_fetch(s, static_cast<T>(value));
 }
 //@}
 
