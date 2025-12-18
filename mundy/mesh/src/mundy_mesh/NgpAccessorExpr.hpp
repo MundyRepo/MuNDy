@@ -883,6 +883,7 @@ class NgpForEachEntityExprDriver {
     return selector_;
   }
 
+  KOKKOS_INLINE_FUNCTION
   stk::mesh::EntityRank rank() const {
     return rank_;
   }

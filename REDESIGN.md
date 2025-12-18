@@ -1,10 +1,147 @@
+# Declare entities on the GPU
+
+Wants:
+  - The ability to have delayed declaration/deletion of an entity and/or connections on the GPU
+
+How to:
+  - DEVICE may be CPU or GPU. We'll use a dual-view-like design to make this possible.
+  - Phases: 
+    0. Setup 
+      a. Create a modification helper which owns the lifetime of all smaller declaration helpers
+      b. Spawn a declaration helper per set of parts
+        - Use a flag within the helper to state if non-owning entities should be ghosted or not
+          Default is NO. This way, users can "tell us" about entities we don't own so we can use them for
+          determining sharing.
+      c. Spawn an entity destruction helper
+    1. Count | DEVICE
+     If the counts are unknown
+      a. Count requests (device for)
+        - how many to declare (per each set of parts)
+        - how many new connections
+        - how many deletions
+        - how many connections to break
+      b. Comm counts to CPU
+      c. Atomically recieve a ticket for each (becomes effectively serial under heavy contention)
+      d. Allocate space for entity, connection, and deletion
+     If the counts are known
+      a. Specify the counts | the objects can be accessed using tickets in [start, start + count)
+      b. Allocate space for entity, connection, and deletion
+    2. Request | DEVICE
+      a. Provide the necessary information about requested entities, connections, deletions
+        - Entities require an owning proc and (optionally) an ID.
+        - Creating connections requires a pair of entities or future entities (via ticket IDs)
+        - Deleting connections requires a pair of entities
+        - Deletion requires an entity
+    3. Process | CPU
+      a. Comm create/delete connection requests to the CPU
+      b. Crack open a mod cycle
+      c. Batch declare the entities and batch change their parts
+      d. Determine if new connections necessitate that an entity be marked shared
+      e. Create/delete connections between entities and mark sharing (host serial for)
+      f. Delete the given entities (host serial for)
+      g. Close the mod cycle
+      h. Comm the new entities to the DEVICE
+    4. Use | DEVICE
+      a. Use your tickets to update the data of the given entities (device for)
+
+For users this is three phases
+  1. Count
+  2. Request
+  3. Process
+
+Cost wise:
+(if needed) Device parallel for + comm counts to host
+Host/device dual-view memory allocation
+Device parallel for
+Open a mod cycle
+(if needed) Host parallel map creation
+Host serial for
+Host serial for
+Close the mod cycle
+Comm new entities to the DEVICE
+
+## Design 
+
+TicketRange<SizeT>:
+  using ticket_id = SizeT;
+  KOKKOS_FUNCTION begin() -> SizeT
+  KOKKOS_FUNCTION end() -> SizeT
+  KOKKOS_FUNCTION count() -> SizeT
+ private:
+  begin_
+  count_ 
+
+TicketIssuer<SizeT>:
+  using ticket_id = SizeT;
+
+  // Control plane (HOST only)
+  // Exactly one memory space is allowed to claim tickets/fetch counts at a time.
+  // Activation is a phase boundary. It fences and synchronizes ticket state
+  activate_host()   -> void   // switches active writer to host; syncs if needed
+  activate_device() -> void   // switches active writer to device; syncs if needed
+
+  // Data plane (HOST or DEVICE)
+  KOKKOS_FUNCTION claim(n: SizeT) -> TicketRange<SizeT>  // (atomic)
+  KOKKOS_FUNCTION claim() -> SizeT                       // (atomic)
+  KOKKOS_FUNCTION count() -> uint32_t                    // (atomic)
+
+ private:
+  active_space_host_view_ 
+  active_space_dev_view_ 
+  ticket_counter_host_view_ 
+  ticket_counter_dev_view_
+
+
+NgpModRequests<MemSpace>:
+  /// clears all helpers + internal allocations; ready for a fresh cycle
+  reset() -> void
+ 
+  /// Sync counts to the host and allocate memory. Users may no longer claim tickets.
+  finalize_counts() -> void
+
+  /// The user has finished making their requests and wants us to process the requests
+  /// If you are not in a mod cycle, this will open one
+  process_requests() -> void
+
+
+  /// opts.ghost_nonowned = false by default
+  request_entities(parts: span<PartOrd>, opts = {}) -> NgpRequestEntities<MemSpace>&
+  destroy_entities(opts = {}) -> NgpDestroyEntities<MemSpace>&
+  request_connections(opts = {}) -> NgpRequestConnections<MemSpace>&
+  destroy_connections(opts = {}) -> NgpDestroyConnections<MemSpace>&
+
+
+NgpRequestEntities<MemSpace>:
+  KOKKOS_FUNCTION tickets() -> TicketIssuer<size_t>
+  KOKKOS_FUNCTION request(ticket, OwningProc) -> NgpRequestEntities<MemSpace>&
+  KOKKOS_FUNCTION request(ticket, OwningProc, EntityId) -> NgpRequestEntities<MemSpace>&
+
+NgpDestroyEntities<MemSpace>:
+  KOKKOS_FUNCTION tickets() -> TicketIssuer<size_t>
+  KOKKOS_FUNCTION request(ticket, Entity) -> NgpDestroyEntities<MemSpace>&
+
+NgpRequestConnections<MemSpace>:
+  KOKKOS_FUNCTION tickets() -> TicketIssuer<size_t>
+  KOKKOS_FUNCTION request(ticket, FromEntity, ToEntity) -> NgpRequestConnections<MemSpace>&
+  KOKKOS_FUNCTION request(ticket, FromEntity, ToEntityFuture) -> NgpRequestConnections<MemSpace>&
+  KOKKOS_FUNCTION request(ticket, FromEntityFuture, ToEntity) -> NgpRequestConnections<MemSpace>&
+  KOKKOS_FUNCTION request(ticket, FromEntityFuture, ToEntityFuture) -> NgpRequestConnections<MemSpace>&
+
+NgpDestroyConnections<MemSpace>:
+  KOKKOS_FUNCTION tickets() -> TicketIssuer<size_t>
+  KOKKOS_FUNCTION request(ticket, FromEntity, ToEntity) -> NgpRequestConnections<MemSpace>&
+
+
+
+
+
 # Needs EntityExpr ready in Nov/24
   - Non-static branches
+  - Ability to access linked entities in an entity expression
   - Tagging accessors needs simplified
   - STK aggregates need replaced by core::aggregate
   - NeighborEntityExpr
   - AggregateEntityExpr
-  - Ability to access linked entities in an entity expression
   - Atomics! Also, how to correctly perform += for a fused assign w/ atomic?
   - RNGEntityExpr
   - Our quaternion is backwards. 
@@ -17,7 +154,6 @@ CONCLUSIONS:
  - We will NOT offer a to_sphere function or something along those lines
    since it is a users responsibility to construct an aggregate with the
    desired subset of data.
- - Entity
 
 
 
