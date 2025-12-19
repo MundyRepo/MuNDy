@@ -57,8 +57,7 @@ class NgpEntityPoolT : public core::NgpPoolT<stk::mesh::Entity, MemorySpace, Siz
   using our_size_t = SizeType;
   using base_t = core::NgpPoolT<stk::mesh::Entity, MemorySpace, SizeType>;
 
-  // No default constructor. How would you set the rank?
-  NgpEntityPoolT() = delete;
+  NgpEntityPoolT() = default;
 
   // Constructor for empty pool
   NgpEntityPoolT(stk::mesh::BulkData& bulk_data, stk::mesh::EntityRank rank)
@@ -81,6 +80,9 @@ class NgpEntityPoolT : public core::NgpPoolT<stk::mesh::Entity, MemorySpace, Siz
 
   void reserve_and_declare(our_size_t requested_capacity) {
     MUNDY_THROW_ASSERT(
+        rank_ != stk::topology::INVALID_RANK, std::runtime_error,
+        "Cannot reserve and declare entities in NgpEntityPoolT without a valid entity rank.");
+    MUNDY_THROW_ASSERT(
         bulk_data_.in_modifiable_state(), std::runtime_error,
         "Cannot reserve and declare entities in NgpEntityPoolT when the mesh is not in a modifiable state.");
     base_t::reserve(requested_capacity);
@@ -101,7 +103,7 @@ class NgpEntityPoolT : public core::NgpPoolT<stk::mesh::Entity, MemorySpace, Siz
 
  private:
   stk::mesh::BulkData& bulk_data_;
-  const stk::mesh::EntityRank rank_;
+  const stk::mesh::EntityRank rank_ == stk::topology::INVALID_RANK;
 };  // NgpEntityPoolT
 
 /// \brief Our default NgpEntityPool type for use in Mundy.

@@ -101,7 +101,7 @@ NgpModRequests<MemSpace>:
 
   /// The user has finished making their requests and wants us to process the requests
   /// If you are not in a mod cycle, this will open one
-  process_requests() -> void
+  process_requests(stk::mesh::BulkData& bulk_data) -> void
 
 
   /// opts.ghost_nonowned = false by default
@@ -110,7 +110,6 @@ NgpModRequests<MemSpace>:
   request_connections(opts = {}) -> NgpRequestConnections<MemSpace>&
   destroy_connections(opts = {}) -> NgpDestroyConnections<MemSpace>&
 
-
 NgpRequestEntities<MemSpace>:
   KOKKOS_FUNCTION tickets() -> TicketIssuer<size_t>
   KOKKOS_FUNCTION request(ticket, OwningProc) -> NgpRequestEntities<MemSpace>&
@@ -118,7 +117,7 @@ NgpRequestEntities<MemSpace>:
 
 NgpDestroyEntities<MemSpace>:
   KOKKOS_FUNCTION tickets() -> TicketIssuer<size_t>
-  KOKKOS_FUNCTION request(ticket, Entity) -> NgpDestroyEntities<MemSpace>&
+  KOKKOS_FUNCTION destroy(ticket, Entity) -> NgpDestroyEntities<MemSpace>&
 
 NgpRequestConnections<MemSpace>:
   KOKKOS_FUNCTION tickets() -> TicketIssuer<size_t>
@@ -129,7 +128,7 @@ NgpRequestConnections<MemSpace>:
 
 NgpDestroyConnections<MemSpace>:
   KOKKOS_FUNCTION tickets() -> TicketIssuer<size_t>
-  KOKKOS_FUNCTION request(ticket, FromEntity, ToEntity) -> NgpRequestConnections<MemSpace>&
+  KOKKOS_FUNCTION destroy(ticket, FromEntity, ToEntity) -> NgpRequestConnections<MemSpace>&
 
 
 
