@@ -50,10 +50,10 @@ rank, dimensionality, and vector of linked buckets per rank. Of these rank and d
 What we actually need to store is:
 - [rank][partition_id][linked_bucket_id][entity_offset] -> NgpLinkedBucket
   Array of Kokkos::View<LinkCSRBucketConnT<MemSpace> **, stk::ngp::UVMMemSpace>
-- [partition_id] -> PartitionKey
-  std::vector<PartitionKey>
+- [partition_id] -> impl::PartitionKey
+  std::vector<impl::PartitionKey>
 - [partition_key] -> partition_id
-  std::unordered_map<PartitionKey, PartitionOrdinal>
+  std::unordered_map<impl::PartitionKey, PartitionOrdinal>
 
 Previously we used a map from key to partition. I don't think we really care about the partition key that much. It would
 be better to use a contiguous vector of partitions indexed by contiguous i
@@ -77,13 +77,11 @@ be better to use a contiguous vector of partitions indexed by contiguous i
 // Mundy libs
 #include <mundy_core/throw_assert.hpp>       // for MUNDY_THROW_ASSERT
 #include <mundy_mesh/LinkCSRBucketConn.hpp>  // for mundy::mesh::LinkCSRBucketConn
+#include <mundy_mesh/impl/PartitionKey.hpp>  // for mundy::mesh::impl::PartitionKey, mundy::mesh::impl::get_partition_key
 
 namespace mundy {
 
 namespace mesh {
-
-using PartitionKey = std::vector<stk::mesh::PartOrdinal>;  // sorted view of part ordinals
-using NgpPartitionKey = stk::mesh::PartOrdinalViewType;    // sorted view of part ordinals
 
 template <typename MemSpace>
 class LinkCSRPartitionT {  // Raw data in any space.
@@ -106,12 +104,12 @@ class LinkCSRPartitionT {  // Raw data in any space.
   KOKKOS_DEFAULTED_FUNCTION
   LinkCSRPartitionT() = default;
 
-  LinkCSRPartitionT(const stk::mesh::Ordinal &partition_id, const PartitionKey key,
+  LinkCSRPartitionT(const stk::mesh::Ordinal &partition_id, const impl::PartitionKey key,
                     const stk::mesh::EntityRank &link_rank, const unsigned link_dimensionality,
                     const stk::mesh::BulkData &bulk_data)
       : id_(partition_id), link_rank_(link_rank), link_dimensionality_(link_dimensionality) {
     // Map host key to ngp key
-    ngp_key_ = NgpPartitionKey("NgpCSRPartitionKey", key.size());
+    ngp_key_ = Ngpimpl::PartitionKey("NgpCSRimpl::PartitionKey", key.size());
     auto ngp_key_host = Kokkos::create_mirror_view(ngp_key_);
     for (size_t i = 0; i < key.size(); ++i) {
       ngp_key_host(i) = key[i];
@@ -156,7 +154,7 @@ class LinkCSRPartitionT {  // Raw data in any space.
 
   /// \brief Fetch the partition key.
   KOKKOS_INLINE_FUNCTION
-  const NgpPartitionKey &ngp_key() const noexcept {
+  const impl::NgpPartitionKey &ngp_key() const noexcept {
     return ngp_key_;
   }
 
@@ -296,7 +294,7 @@ class LinkCSRPartitionT {  // Raw data in any space.
   //@{
 
   stk::mesh::Ordinal id_;    ///< Unique identifier for this partition.
-  NgpPartitionKey ngp_key_;  ///< Sorted view of the part ordinals that this partition contains, in NGP memory space.
+  impl::NgpPartitionKey ngp_key_;  ///< Sorted view of the part ordinals that this partition contains, in NGP memory space.
   stk::mesh::Selector selector_;     ///< Selector for this partition, derived from the ngp_key_. Must be default
                                      ///< constructable, copiable, movable on the device so we use a pointer.
   stk::mesh::EntityRank link_rank_;  ///< Rank of the linkers in this partition.

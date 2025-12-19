@@ -47,6 +47,7 @@
 #include <mundy_core/throw_assert.hpp>      // for MUNDY_THROW_ASSERT
 #include <mundy_mesh/LinkCSRPartition.hpp>  // for mundy::mesh::LinkCSRPartition
 #include <mundy_mesh/LinkMetaData.hpp>      // for mundy::mesh::LinkMetaData
+#include <mundy_mesh/impl/PartitionKey.hpp>  // for mundy::mesh::impl::PartitionKey, mundy::mesh::impl::get_partition_key
 
 namespace mundy {
 
@@ -196,10 +197,10 @@ class LinkCSRDataT {  // Raw data in any space
           bulk_data().get_buckets(link_meta_data().link_rank(), link_subset_selector);
 
       // 2. Sort and unique the keys for each buckets
-      std::set<PartitionKey> new_keys;
-      std::set<PartitionKey> old_keys;
+      std::set<impl::PartitionKey> new_keys;
+      std::set<impl::PartitionKey> old_keys;
       for (const stk::mesh::Bucket *bucket : selected_buckets) {
-        PartitionKey key = get_partition_key(*bucket);
+        impl::PartitionKey key = impl::get_partition_key(*bucket);
         if (partition_key_to_id_map_.find(key) == partition_key_to_id_map_.end()) {
           new_keys.insert(key);
         } else {
@@ -217,7 +218,7 @@ class LinkCSRDataT {  // Raw data in any space
         // 4. Create a new LinkCSRPartition (for each unique new key) and store it within the all_crs_partitions_ view
         stk::mesh::Ordinal partition_id = static_cast<stk::mesh::Ordinal>(num_previous_partitions);
         Kokkos::Timer timer;
-        for (const PartitionKey &key : new_keys) {
+        for (const impl::PartitionKey &key : new_keys) {
           new (&all_crs_partitions_(partition_id))
               LinkCSRPartition(partition_id, key, link_rank(), get_linker_dimensionality(key), bulk_data());
           partition_key_to_id_map_[key] = partition_id;
@@ -234,7 +235,7 @@ class LinkCSRDataT {  // Raw data in any space
       // 6. Copy the corresponding LinkCSRPartition from the all_crs_partitions_ view to the new view using the key to
       // partition_id map
       unsigned count = 0;
-      for (const PartitionKey &key : old_keys) {
+      for (const impl::PartitionKey &key : old_keys) {
         auto it = partition_key_to_id_map_.find(key);
         if (it != partition_key_to_id_map_.end()) {
           stk::mesh::Ordinal partition_id = it->second;
@@ -245,7 +246,7 @@ class LinkCSRDataT {  // Raw data in any space
                              "Partition key not found in partition key to id map. This should never happen.");
         }
       }
-      for (const PartitionKey &key : new_keys) {
+      for (const impl::PartitionKey &key : new_keys) {
         auto it = partition_key_to_id_map_.find(key);
         if (it != partition_key_to_id_map_.end()) {
           stk::mesh::Ordinal partition_id = it->second;
@@ -290,7 +291,7 @@ class LinkCSRDataT {  // Raw data in any space
 
     // Loop over each bucket, get its partition key, map the key to an id, and store the id in the map.
     for (const stk::mesh::Bucket *bucket : all_link_buckets) {
-      PartitionKey key = get_partition_key(*bucket);
+      impl::PartitionKey key = impl::get_partition_key(*bucket);
 
       auto it = partition_key_to_id_map_.find(key);
       if (it != partition_key_to_id_map_.end()) {
@@ -378,7 +379,7 @@ class LinkCSRDataT {  // Raw data in any space
   }
 
   /// \brief Get the dimensionality of a linker partition
-  inline unsigned get_linker_dimensionality(const PartitionKey &partition_key) const {
+  inline unsigned get_linker_dimensionality(const impl::PartitionKey &partition_key) const {
     MUNDY_THROW_REQUIRE(partition_key.size() > 0, std::invalid_argument, "Partition key is empty.");
 
     // Fetch the parts
@@ -392,17 +393,6 @@ class LinkCSRDataT {  // Raw data in any space
     const stk::mesh::FieldRestriction &restriction =
         stk::mesh::find_restriction(linked_es_field, link_meta_data().link_rank(), parts);
     return restriction.num_scalars_per_entity();
-  }
-  /// \brief Get the partition key for a given set of link parts (independent of their order, host only)
-  PartitionKey get_partition_key(const stk::mesh::PartVector &link_parts) const {
-    stk::mesh::OrdinalVector link_parts_and_supersets;
-    stk::mesh::impl::fill_add_parts_and_supersets(link_parts, link_parts_and_supersets);
-    return link_parts_and_supersets;
-  }
-
-  /// \brief Get the partition key for a given link bucket (host only)
-  PartitionKey get_partition_key(const stk::mesh::Bucket &link_bucket) const {
-    return get_partition_key(link_bucket.supersets());
   }
 
   void sort_partitions_by_id() {
@@ -442,10 +432,10 @@ class LinkCSRDataT {  // Raw data in any space
   LinkMetaData *link_meta_data_ptr_;
 
   using SelectorToPartitionsMap = std::map<stk::mesh::Selector, LinkCSRPartitionView>;
-  using PartitionKeyToIdMap = std::map<PartitionKey, unsigned>;
+  using impl::PartitionKeyToIdMap = std::map<impl::PartitionKey, unsigned>;
   mutable SelectorToPartitionsMap selector_to_partitions_map_;  // NEEDS to be a VIEW data type. Right now, our copies
                                                                 // may be modified without us knowing.
-  mutable PartitionKeyToIdMap partition_key_to_id_map_;
+  mutable impl::PartitionKeyToIdMap partition_key_to_id_map_;
   //@}
 
   //! \name Internal members (device compatible)
