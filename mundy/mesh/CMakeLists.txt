@@ -32,6 +32,7 @@ SET(NOINSTALLHEADERS
   src/mundy_mesh/impl/NgpCOOToCSRSynchronizer.hpp
   src/mundy_mesh/impl/NgpFieldBLASImpl.hpp
   src/mundy_mesh/impl/NgpLinkMetaData.hpp
+  src/mundy_mesh/impl/PartitionKey.hpp
   src/mundy_mesh/impl/SelectorEval.hpp
   src/mundy_mesh/impl/SelectorLexem.hpp
   src/mundy_mesh/impl/SelectorNode.hpp
@@ -51,6 +52,7 @@ SET(NOINSTALLHEADERS
   src/mundy_mesh/NgpFieldBLAS.hpp
   src/mundy_mesh/NgpForEachLink.hpp
   src/mundy_mesh/NgpLinkData.hpp
+  # src/mundy_mesh/NgpModRequests.hpp
   src/mundy_mesh/NgpUtils.hpp
   src/mundy_mesh/StringToSelector.hpp
   src/mundy_mesh/StringToTopology.hpp
@@ -59,6 +61,7 @@ SET(NOINSTALLHEADERS
 
 SET(SOURCES 
   src/mundy_mesh/DeclareEntities.cpp
+  src/mundy_mesh/impl/PartitionKey.cpp
   src/mundy_mesh/impl/SelectorEval.cpp
   src/mundy_mesh/impl/SelectorLexem.cpp
   src/mundy_mesh/impl/SelectorNode.cpp

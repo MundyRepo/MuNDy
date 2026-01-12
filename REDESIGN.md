@@ -1,3 +1,75 @@
+# User-declared multibody types | Our highest level API | Multibody dynamics engine
+
+Want:
+
+Users need to be able to give us a runtime-tagged variant aggregate representing a set of multibody objects,
+which we can then store within the bulk data. This way, we know explicitly the set of enabled multibody objects.
+
+Users need to be able to perform actions on ALL enabled multibody types. This was our previous meta method dispatch.
+There needs to be functions like 
+  - detect neighbors,
+  - constrained time integration, 
+  - mobility evaluation,
+  - brownian dynamics,
+  - force evaluation/reduction, 
+  - dynamic binding/unbinding
+that can be performed for all enabled multibody types. More specifically, we need something like selectors that
+users can use to perform any of these functions on a desired subset such as having contact spheres and hydrodynamics
+spheres
+
+Users should be able to assemble parts + accessors into multibody 
+types, register those types with mundy, and then fetch a single aggregate for acting on those objects. It should have 
+the minimal complexity accessors possible. 
+
+During registration they need to tell us the role of the collection. Some collections exist for contact, some for
+hydro, some for dynamic binding and unbinding.
+
+We need to throw if an invariant is violated such as a set of contact with spheres that are also rods
+
+
+Primitives:
+  - Shapes:
+    - Point
+    - Line
+    - LineSegment
+    - VSegment
+    - Plane
+    - Tri_3
+    - Quad_4
+    - Sphere
+    - Ellipsoid
+    - Spherocylinder
+    - SpherocylinderSegment
+    - Ring
+  - Constraints:
+    - Spring2 + EnergyFunctional
+    - Spring3 + EnergyFunctional
+    - Hinge
+    - Fixed (point)
+    - Sliding (point)
+    - Fuse
+    - Colinear
+
+Mobility:
+  - Inertia:
+    - Works for any object with a mass and a moment of inertia matrix
+  - Over-damped:
+    - Local drag:
+      - Sphere
+      - Ellipsoid
+      - Spherocylinder
+      - SpherocylinderSegment
+    - Stokes flow:
+      - Point (All the different kernels)
+      - Sphere (All the different kernels + MFS + machine learned)
+      - Spherocylinder (Multiblob + slender body theory)
+      - SpherocylinderSegment (Multiblob + slender body theory)
+      - Ring (Multiblob + slender body theory)
+
+
+
+
+
 # Declare entities on the GPU
 
 Wants:

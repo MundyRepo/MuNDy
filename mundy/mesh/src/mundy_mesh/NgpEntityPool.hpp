@@ -103,7 +103,7 @@ class NgpEntityPoolT : public core::NgpPoolT<stk::mesh::Entity, MemorySpace, Siz
 
  private:
   stk::mesh::BulkData& bulk_data_;
-  const stk::mesh::EntityRank rank_ == stk::topology::INVALID_RANK;
+  const stk::mesh::EntityRank rank_ = stk::topology::INVALID_RANK;
 };  // NgpEntityPoolT
 
 /// \brief Our default NgpEntityPool type for use in Mundy.
