@@ -432,10 +432,10 @@ class LinkCSRDataT {  // Raw data in any space
   LinkMetaData *link_meta_data_ptr_;
 
   using SelectorToPartitionsMap = std::map<stk::mesh::Selector, LinkCSRPartitionView>;
-  using impl::PartitionKeyToIdMap = std::map<impl::PartitionKey, unsigned>;
+  using PartitionKeyToIdMap = std::map<impl::PartitionKey, unsigned>;
   mutable SelectorToPartitionsMap selector_to_partitions_map_;  // NEEDS to be a VIEW data type. Right now, our copies
                                                                 // may be modified without us knowing.
-  mutable impl::PartitionKeyToIdMap partition_key_to_id_map_;
+  mutable PartitionKeyToIdMap partition_key_to_id_map_;
   //@}
 
   //! \name Internal members (device compatible)

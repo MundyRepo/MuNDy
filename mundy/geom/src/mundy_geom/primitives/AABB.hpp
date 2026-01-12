@@ -165,7 +165,6 @@ class AABB {
   KOKKOS_FUNCTION constexpr AABB<scalar_t, min_point_t, max_point_t>& operator=(const OtherAABBType& other)
     requires(!std::is_same_v<OtherAABBType, AABB<scalar_t, min_point_t, max_point_t>>)
   {
-    MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     min_corner_ = other.min_corner_;
     max_corner_ = other.max_corner_;
     return *this;
@@ -185,7 +184,6 @@ class AABB {
   KOKKOS_FUNCTION constexpr AABB<scalar_t, min_point_t, max_point_t>& operator=(OtherAABBType&& other)
     requires(!std::is_same_v<OtherAABBType, AABB<scalar_t, min_point_t, max_point_t>>)
   {
-    MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     min_corner_ = std::move(other.min_corner_);
     max_corner_ = std::move(other.max_corner_);
     return *this;

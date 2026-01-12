@@ -109,7 +109,7 @@ class LinkCSRPartitionT {  // Raw data in any space.
                     const stk::mesh::BulkData &bulk_data)
       : id_(partition_id), link_rank_(link_rank), link_dimensionality_(link_dimensionality) {
     // Map host key to ngp key
-    ngp_key_ = Ngpimpl::PartitionKey("NgpCSRimpl::PartitionKey", key.size());
+    ngp_key_ = impl::NgpPartitionKey("NgpCSRimpl::PartitionKey", key.size());
     auto ngp_key_host = Kokkos::create_mirror_view(ngp_key_);
     for (size_t i = 0; i < key.size(); ++i) {
       ngp_key_host(i) = key[i];

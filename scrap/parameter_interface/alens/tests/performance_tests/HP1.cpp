@@ -357,7 +357,6 @@ namespace alens {
 
 namespace hp1 {
 
-// Forward declare the enums and declare their fmt formatters.
 class HP1 {
  public:
   using DeviceExecutionSpace = Kokkos::DefaultExecutionSpace;

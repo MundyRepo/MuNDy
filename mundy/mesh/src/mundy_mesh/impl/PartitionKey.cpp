@@ -18,10 +18,6 @@
 // **********************************************************************************************************************
 // @HEADER
 
-#ifndef MUNDY_MESH_IMPL_PARTITIONKEY_HPP_
-#define MUNDY_MESH_IMPL_PARTITIONKEY_HPP_
-
-
 // C++ core
 #include <stdexcept>
 #include <vector>
@@ -33,10 +29,11 @@
 #include <stk_mesh/base/BulkData.hpp>
 #include <stk_mesh/base/Types.hpp>
 #include <stk_util/ngp/NgpSpaces.hpp>
-#include <stk_mesh/base/NgpTypes.hpp>     // for stk::mesh::PartOrdinalViewType
+#include <stk_mesh/baseImpl/PartVectorUtils.hpp>  // for stk::mesh::impl::fill_add_parts_and_supersets
 
 // Mundy
 #include <mundy_core/throw_assert.hpp>
+#include <mundy_mesh/impl/PartitionKey.hpp>
 
 namespace mundy {
 
@@ -44,19 +41,18 @@ namespace mesh {
 
 namespace impl {
 
-using PartitionKey = std::vector<stk::mesh::PartOrdinal>;  // sorted view of part ordinals
-using NgpPartitionKey = stk::mesh::PartOrdinalViewType;    // sorted view of part ordinals
+PartitionKey get_partition_key(const stk::mesh::PartVector &parts) {
+stk::mesh::OrdinalVector parts_and_supersets;
+stk::mesh::impl::fill_add_parts_and_supersets(parts, parts_and_supersets);
+return parts_and_supersets;
+}
 
-/// \brief Get the partition key for a given set of link parts (independent of their order, host only)
-PartitionKey get_partition_key(const stk::mesh::PartVector &parts);
-
-/// \brief Get the partition key for a given link bucket (host only)
-PartitionKey get_partition_key(const stk::mesh::Bucket &link_bucket);
+PartitionKey get_partition_key(const stk::mesh::Bucket &link_bucket) {
+return get_partition_key(link_bucket.supersets());
+}
 
 }  // namespace impl
 
 }  // namespace mesh
 
 }  // namespace mundy
-
-#endif  // MUNDY_MESH_IMPL_PARTITIONKEY_HPP_

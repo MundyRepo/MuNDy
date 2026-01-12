@@ -114,7 +114,167 @@ NgpRequestConnections<MemSpace>:
 NgpDestroyConnections<MemSpace>:
   KOKKOS_FUNCTION tickets() -> TicketIssuer<size_t>
   KOKKOS_FUNCTION request(ticket, FromEntity, ToEntity) -> NgpRequestConnections<MemSpace>&
+
+// Notes:
+ - NgpModRequests should prefer view semantics over returning references to internal data members
+   This avoids the issue of users either holding onto references too long or accidentally creating copies
+ - request_entities should have an overload that takes a single Part&
+ - request_entities() should default to the universal part
+ - I prefer if request allow for the form request(ticket, struct) so that we can use named parameters.
+ - request should return a future.
+
+
+
+// Example usage 1: Create N spheres (N elems + N nodes)
+size_t num_spheres = ...;
+unsigned our_proc_id = bulk_data.parallel_rank();
+
+NgpModRequests reqs;
+auto req_spheres = reqs.request_entities(sphere_part);
+auto req_nodes = reqs.request_entities();
+auto req_conns = reqs.request_connections();
+
+// Stage 1: Claim tickets
+reqs.activate_host();  // Ensures that claim can be called from host
+req_spheres.tickets().claim(num_spheres);
+req_nodes.tickets().claim(num_spheres);
+req_conns.tickets().claim(num_spheres);
+reqs.finalize_counts();
+
+// Stage 2: Request
+reqs.activate_device();  // Ensures that request can be made from device
+Kokkos::parallel_for(
+    "RequestSpheres", Kokkos::RangePolicy<>(0, num_spheres), KOKKOS_LAMBDA(size_t ticket) {
+      auto future_sphere = req_spheres.request(ticket, our_proc_id);
+      auto future_node = req_nodes.request(ticket, our_proc_id);
+      req_conns.request(ticket, future_sphere, future_node);
+    });
+reqs.process_requests();
+
+// Stage 3: Fetch
+Kokkos::parallel_for(
+    "UseSpheres", Kokkos::RangePolicy<>(0, num_spheres), KOKKOS_LAMBDA(size_t ticket) {
+      stk::mesh::Entity sphere = req_spheres.get_entity(ticket);
+      stk::mesh::Entity node = req_nodes.get_entity(ticket);
+
+      // Do something with sphere and its node...
+    });
+
+
+// Example usage 2: Divide all bacteria that exceeds twice the starting length into two bacteria
+// Bacteria are spherocylinder segments (PARTICLE topology elements with a single node at their center)
+// They have a "length", "radius", and "orientation" field
+// Their center nodes have a "coords" field
+//
+// Because division is delayed, we also need bacteria to store the ticket for fetching their new child later
+//
+// We will assume that these are already declared and that you have wrapped them into a single bacteria aggregate
+auto ngp_bacteria_data = get_updated_ngp_aggregate(bacteria_data);
+
+size_t num_bacteria = ...;  // total number of bacteria
+double starting_length = ...;
+
+NgpModRequests reqs;
+auto req_bacteria = reqs.request_entities(bacteria_part);
+auto req_nodes = reqs.request_entities();
+auto req_conns = reqs.request_connections();
+
+// Stage 1: Claim tickets
+reqs.activate_device();
+stk::mesh::for_each_entity_run(
+    ngp_mesh, stk::topology::ELEM_RANK, ngp_bacteria_data.get<SELECTOR>(),
+    KOKKOS_LAMBDA(stk::mesh::FastMeshIndex bacteria_index) {
+      double centerline_length = ngp_bacteria_data.get<LENGTH>(bacteria_index);
+      double radius = ngp_bacteria_data.get<RADIUS>(bacteria_index);
+      double total_length = centerline_length + 2.0 * radius;
+      if (total_length > 2.0 * starting_length) {
+        size_t ticket = req_bacteria.tickets().claim();
+        req_nodes.tickets().claim();
+        req_conns.tickets().claim();
+
+        // Store the ticket for later use
+        ngp_bacteria_data.get<CHILD_TICKET>(bacteria_index) = ticket;
+      }
+    });
+reqs.finalize_counts();
+
+// Stage 2: Request
+stk::mesh::for_each_entity_run(
+    ngp_mesh, stk::topology::ELEM_RANK, ngp_bacteria_data.get<SELECTOR>(),
+    KOKKOS_LAMBDA(stk::mesh::FastMeshIndex bacteria_index) {
+      double centerline_length = ngp_bacteria_data.get<LENGTH>(bacteria_index);
+      double radius = ngp_bacteria_data.get<RADIUS>(bacteria_index);
+      double total_length = centerline_length + 2.0 * radius;
+      if (total_length > 2.0 * starting_length) {
+        // One new bacteria since the parent becomes one of the children
+        auto future_bacteria = req_bacteria.request(ticket, ngp_mesh.parallel_rank());
+        auto future_node = req_nodes.request(ticket, ngp_mesh.parallel_rank());
+        req_conns.request(ticket, future_bacteria, future_node);
+      }
+    });
+reqs.process_requests();
+
+// Stage 3: Fetch
+stk::mesh::for_each_entity_run(
+    ngp_mesh, stk::topology::ELEM_RANK, ngp_bacteria_data.get<SELECTOR>(),
+    KOKKOS_LAMBDA(stk::mesh::FastMeshIndex bacteria_index) {
+      double centerline_length = ngp_bacteria_data.get<LENGTH>(bacteria_index);
+      double radius = ngp_bacteria_data.get<RADIUS>(bacteria_index);
+      double total_length = centerline_length + 2.0 * radius;
+      if (total_length > 2.0 * starting_length) {
+        size_t ticket = ngp_bacteria_data.get<CHILD_TICKET>(bacteria_index);
+
+        stk::mesh::Entity new_bacteria = req_bacteria.get_entity(ticket);
+        stk::mesh::Entity center_node = req_nodes.get_entity(ticket);
+
+        // The parent becomes the leftmost child and the new bacteria is the rightmost child
+        //
+        // New length = length / 2 - radius
+        // New centers = old center +/- (tangent * (new length / 2 + radius))
+        // ...
+      }
+    });
 */
+
+// void foo() {
+// # Example usage 1 (but in python): Create N spheres (N elems + N nodes)
+// num_spheres = ...
+// our_proc_id = bulk_data.parallel_rank()
+
+// reqs = NgpModRequests()
+// req_spheres = reqs.request_entities(sphere_part)
+// req_nodes = reqs.request_entities()
+// req_conns = reqs.request_connections()
+
+// # Stage 1: Claim tickets
+// with reqs.host():
+//   req_spheres.tickets().claim(num_spheres)
+//   req_nodes.tickets().claim(num_spheres)
+//   req_conns.tickets().claim(num_spheres)
+
+// reqs.finalize_counts()
+
+// # Stage 2: Request
+// with reqs.device():
+//   plan = reqs.plan()  # collects device ops that must be executed
+
+//   t = req_spheres.tickets().range(num_spheres)  # 0..num_spheres-1, typed object
+//   future_spheres = req_spheres.request(t, our_proc_id)
+//   future_nodes = req_nodes.request(t, our_proc_id)
+//   req_conns.request(t, future_spheres, future_nodes)
+//   ticket_expr1.exec()
+
+// reqs.process_requests();
+
+// # Stage 3: Fetch
+// with reqs.device():
+//   ticket_expr2 = make_ticket_expr(0, num_spheres)
+//   spheres = req_spheres.get_entity(ticket_expr2)
+//   nodes = req_nodes.get_entity(ticket_expr2)
+//   center(nodes) = ...
+//   radius(spheres) = ...
+//   ticket_expr2.exec()
+// }
 
 /// \brief A range of tickets issued by a TicketIssuer.
 template <typename SizeT>
@@ -399,13 +559,18 @@ class NgpRequestEntitiesT {
   //! \name Actions
   //@{
 
+  /// \brief Get our unique index among multiple request helpers.
+  unsigned id() const noexcept {
+    return index_;
+  }
+
   /// \brief Get the ticket issuer for entity requests.
   KOKKOS_INLINE_FUNCTION TicketIssuer<NgpMemSpace, our_size_t>& tickets() {
     return ticket_issuer_;
   }
 
   /// \brief Record an entity creation request
-  KOKKOS_INLINE_FUNCTION NgpRequestEntitiesT<NgpMemSpace>& request(our_size_t ticket, int owning_proc) {
+  KOKKOS_INLINE_FUNCTION FutureEntity request(our_size_t ticket, int owning_proc) {
     constexpr auto name = core::make_string_literal("NgpRequestEntitiesT::request");
     assert_active_space<name>();
     assert_ticket_out_of_range<name>(ticket);
@@ -413,36 +578,31 @@ class NgpRequestEntitiesT {
     KOKKOS_IF_ON_HOST(requests_.view_host()(ticket).owning_proc = owning_proc;)
     KOKKOS_IF_ON_DEVICE(requests_.view_device()(ticket).owning_proc = owning_proc;)
 
-    return *this;
+    return FutureEntity{.ticket = ticket, .request_helper_index = index_};
   }
 
   /// \brief Record an entity creation request with a specified entity ID.
-  KOKKOS_INLINE_FUNCTION NgpRequestEntitiesT<NgpMemSpace>& request(our_size_t ticket,  //
-                                                                   int owning_proc, stk::mesh::EntityId entity_id) {
+  KOKKOS_INLINE_FUNCTION FutureEntity request(our_size_t ticket,  //
+                                              int owning_proc, stk::mesh::EntityId entity_id) {
     constexpr auto name = core::make_string_literal("NgpRequestEntitiesT::request");
     assert_active_space<name>();
     assert_ticket_out_of_range<name>(ticket);
 
-    KOKKOS_IF_ON_HOST(auto& req = requests_.view_host()(ticket); req.owning_proc = owning_proc;
-                      req.entity_id = entity_id; req.has_entity_id = true;)
-    KOKKOS_IF_ON_DEVICE(auto& req = requests_.view_device()(ticket); req.owning_proc = owning_proc;
-                        req.entity_id = entity_id; req.has_entity_id = true;)
+    KOKKOS_IF_ON_HOST(auto& req = requests_.view_host()(ticket);  //
+                      req.owning_proc = owning_proc;              //
+                      req.entity_id = entity_id;                  //
+                      req.has_entity_id = true;)
+    KOKKOS_IF_ON_DEVICE(auto& req = requests_.view_device()(ticket);  //
+                        req.owning_proc = owning_proc;                //
+                        req.entity_id = entity_id;                    //
+                        req.has_entity_id = true;)
 
-    return *this;
-  }
-
-  /// \brief Turn a ticket into a future entity.
-  KOKKOS_INLINE_FUNCTION FutureEntity make_future_entity(our_size_t ticket) const {
-    constexpr auto name = core::make_string_literal("NgpRequestEntitiesT::make_future_entity");
-    assert_ticket_out_of_range<name>(ticket);
-
-    FutureEntity future_entity{.ticket = ticket, .request_helper_index = index_};
-    return future_entity;
+    return FutureEntity{.ticket = ticket, .request_helper_index = index_};
   }
 
   /// \brief Fetch the requested entity using the given ticket.
   /// After process_requests, this can be called on either host or device.
-  KOKKOS_INLINE_FUNCTION stk::mesh::Entity get_requested_entity(our_size_t ticket) const {
+  KOKKOS_INLINE_FUNCTION stk::mesh::Entity get_entity(our_size_t ticket) const {
     constexpr auto name = core::make_string_literal("NgpRequestEntitiesT::get_requested_entity");
     assert_ticket_out_of_range<name>(ticket);
 
@@ -492,6 +652,9 @@ class NgpRequestEntitiesT {
   //! \name Member variables
   //@{
 
+  // Our unique ID among multiple request helpers
+  unsigned index_{0};
+
   /// @brief Internal struct representing a single entity request.
   /// Requests must always specify the owning processor, but entity ID is optional.
   struct EntityRequest {
@@ -513,6 +676,11 @@ class NgpRequestEntitiesT {
   entity_view_t created_entities_;
   //@}
 };  // NgpRequestEntitiesT
+
+struct FutureConnection {
+  our_size_t ticket;
+  unsigned request_helper_index;
+};
 
 template <typename NgpMemSpace, typename SizeT = size_t>
 class NgpRequestConnectionT {
@@ -585,6 +753,11 @@ class NgpRequestConnectionT {
   //! \name Actions
   //@{
 
+  /// \brief Get our unique index among multiple request helpers.
+  unsigned id() const noexcept {
+    return index_;
+  }
+
   /// \brief Get the ticket issuer for entity requests.
   KOKKOS_INLINE_FUNCTION TicketIssuer<NgpMemSpace, our_size_t>& tickets() {
     return ticket_issuer_;
@@ -592,7 +765,7 @@ class NgpRequestConnectionT {
 
   /// \brief Record a connection between two entities (from_entity -> to_entity).
   /// Both entities may be either real entities or future entities.
-  KOKKOS_INLINE_FUNCTION NgpRequestConnectionT<NgpMemSpace>& request(
+  KOKKOS_INLINE_FUNCTION FutureConnection request(
       our_size_t ticket, core::variant<stk::mesh::Entity, FutureEntity> from_entity,
       core::variant<stk::mesh::Entity, FutureEntity> to_entity) {
     constexpr auto name = core::make_string_literal("NgpRequestConnectionT::request");
@@ -604,17 +777,7 @@ class NgpRequestConnectionT {
     KOKKOS_IF_ON_DEVICE(auto& req = requests_.view_device()(ticket); req.from_entity = from_entity;
                         req.to_entity = to_entity;)
 
-    return *this;
-  }
-
-  /// \brief Fetch the requested entity using the given ticket.
-  /// After process_requests, this can be called on either host or device.
-  KOKKOS_INLINE_FUNCTION stk::mesh::Entity get_requested_entity(our_size_t ticket) const {
-    constexpr auto name = core::make_string_literal("NgpRequestConnectionT::get_requested_entity");
-    assert_ticket_out_of_range<name>(ticket);
-
-    KOKKOS_IF_ON_HOST(return created_entities_.view_host()(ticket);)
-    KOKKOS_IF_ON_DEVICE(return created_entities_.view_device()(ticket);)
+    return FutureConnection{.ticket = ticket, .request_helper_index = index_};
   }
   //@}
 
@@ -659,10 +822,8 @@ class NgpRequestConnectionT {
   //! \name Member variables
   //@{
 
-  struct FutureEntity {
-    our_size_t ticket;
-    int entity_request_helper_id;
-  };
+  // Our unique ID among multiple request helpers
+  unsigned index_{0};
 
   /// @brief Internal struct representing a single connection request.
   /// Requests must specify a pair of entities to connect. These may either be a real entity or a future entity (by
@@ -680,11 +841,13 @@ class NgpRequestConnectionT {
 
   using request_view_t = core::NgpViewT<ConnectionRequest*, NgpMemSpace>;
   request_view_t requests_;
-
-  using entity_view_t = core::NgpViewT<stk::mesh::Entity*, NgpMemSpace>;
-  entity_view_t created_entities_;
   //@}
 };  // NgpRequestConnectionT
+
+struct FutureDestroyEntity {
+  our_size_t ticket;
+  unsigned request_helper_index;
+};
 
 template <typename NgpMemSpace, typename SizeT = size_t>
 class NgpDestroyEntityT {
@@ -757,13 +920,18 @@ class NgpDestroyEntityT {
   //! \name Actions
   //@{
 
+  /// \brief Get our unique index among multiple request helpers.
+  unsigned id() const noexcept {
+    return index_;
+  }
+
   /// \brief Get the ticket issuer for entity requests.
   KOKKOS_INLINE_FUNCTION TicketIssuer<NgpMemSpace, our_size_t>& tickets() const noexcept {
     return ticket_issuer_;
   }
 
   /// \brief Record an entity destruction request
-  KOKKOS_INLINE_FUNCTION NgpDestroyEntityT<NgpMemSpace>& destroy(our_size_t ticket, stk::mesh::Entity entity) {
+  KOKKOS_INLINE_FUNCTION FutureDestroyEntity destroy(our_size_t ticket, stk::mesh::Entity entity) {
     constexpr auto name = core::make_spring_literal("NgpDestroyEntityT::destroy");
     assert_active_space<name>();
     assert_ticket_out_of_range<name>(ticket);
@@ -771,7 +939,7 @@ class NgpDestroyEntityT {
     KOKKOS_IF_ON_HOST(requests_.view_host()(ticket) = entity;)
     KOKKOS_IF_ON_DEVICE(requests_.view_device()(ticket) = entity;)
 
-    return *this;
+    return FutureDestroyEntity{.ticket = ticket, .request_helper_index = index_};
   }
   //@}
 
@@ -816,6 +984,9 @@ class NgpDestroyEntityT {
   //! \name Member variables
   //@{
 
+  // Our unique ID among multiple request helpers
+  unsigned index_{0};
+
   using bool_view_t = Kokkos::View<bool, memory_space>;
   bool_view_t active_space_dev_view_;
   bool_view_t::HostMirror active_space_host_view_;
@@ -829,6 +1000,175 @@ class NgpDestroyEntityT {
   entity_view_t created_entities_;
   //@}
 };  // NgpDestroyEntityT
+
+
+struct FutureDestroyConnection {
+  our_size_t ticket;
+  unsigned request_helper_index;
+};
+
+template <typename NgpMemSpace, typename SizeT = size_t>
+class NgpDestroyConnectionT {
+ public:
+  using memory_space = NgpMemSpace;
+  using our_size_t = SizeT;
+
+  //! \name Constructors / Destructors
+  //@{
+
+  /// \brief Default constructor.
+  NgpDestroyConnectionT()
+      : active_space_dev_view_("NgpDestroyConnectionT::active_space_dev_view"),
+        active_space_host_view_(Kokkos::create_mirror_view(active_space_dev_view_)),
+        ticket_issuer_(),
+        requests_("NgpDestroyConnectionT::requests", 0),
+        created_entities_("NgpDestroyConnectionT::created_entities", 0) {
+    // Initialize to device active
+    active_space_host_view_() = true;
+    Kokkos::deep_copy(active_space_dev_view_, active_space_host_view_);
+  }
+
+  KOKKOS_DEFAULTED_FUNCTION NgpDestroyConnectionT(const NgpDestroyConnectionT&) = default;
+  KOKKOS_DEFAULTED_FUNCTION NgpDestroyConnectionT& operator=(const NgpDestroyConnectionT&) = default;
+  KOKKOS_DEFAULTED_FUNCTION NgpDestroyConnectionT(NgpDestroyConnectionT&&) = default;
+  KOKKOS_DEFAULTED_FUNCTION NgpDestroyConnectionT& operator=(NgpDestroyConnectionT&&) = default;
+
+  KOKKOS_DEFAULTED_FUNCTION ~NgpDestroyConnectionT() = default;
+  //@}
+
+  //! \name Control plane (HOST only)
+  //@{
+
+  /// \brief Sets the active memory space to host and synchronizes if needed.
+  /// While active, both request and the ticket issuer will throw if used from device
+  void activate_host() {
+    auto device_is_active = active_space_host_view_();
+    if (device_is_active) {  // No-op if host is already active
+      Kokkos::fence();
+      active_space_host_view_() = false;
+      Kokkos::deep_copy(active_space_dev_view_, active_space_host_view_);
+    }
+  }
+
+  /// \brief Sets the active memory space to host and synchronizes if needed.
+  /// While active, both request and the ticket issuer will throw if used from host
+  void activate_device() {
+    auto host_is_active = !active_space_host_view_();
+    if (host_is_active) {  // No-op if device is already active
+      Kokkos::fence();
+      active_space_host_view_() = true;
+      Kokkos::deep_copy(active_space_dev_view_, active_space_host_view_);
+    }
+  }
+
+  /// \brief Synchronize between active and inactive memory spaces.
+  void sync() {
+    Kokkos::fence();
+    bool device_is_active = active_space_host_view_();
+    if (device_is_active) {
+      ticket_issuer_.sync();
+      Kokkos::deep_copy(requests_.view_host(), requests_.view_device());
+    } else {
+      ticket_issuer_.sync();
+      Kokkos::deep_copy(requests_.view_device(), requests_.view_host());
+    }
+  }
+  //@}
+
+  //! \name Actions
+  //@{
+
+  /// \brief Get our unique index among multiple request helpers.
+  unsigned id() const noexcept {
+    return index_;
+  }
+
+  /// \brief Get the ticket issuer for entity requests.
+  KOKKOS_INLINE_FUNCTION TicketIssuer<NgpMemSpace, our_size_t>& tickets() {
+    return ticket_issuer_;
+  }
+
+  /// \brief Record a connection between two entities (from_entity -> to_entity).
+  /// Both entities may be either real entities or future entities.
+  KOKKOS_INLINE_FUNCTION FutureDestroyConnection request(
+      our_size_t ticket, core::variant<stk::mesh::Entity, FutureEntity> from_entity,
+      core::variant<stk::mesh::Entity, FutureEntity> to_entity) {
+    constexpr auto name = core::make_string_literal("NgpDestroyConnectionT::request");
+    assert_active_space<name>();
+    assert_ticket_out_of_range<name>(ticket);
+
+    KOKKOS_IF_ON_HOST(auto& req = requests_.view_host()(ticket); req.from_entity = from_entity;
+                      req.to_entity = to_entity;)
+    KOKKOS_IF_ON_DEVICE(auto& req = requests_.view_device()(ticket); req.from_entity = from_entity;
+                        req.to_entity = to_entity;)
+
+    return FutureDestroyConnection{.ticket = ticket, .request_helper_index = index_};
+  }
+  //@}
+
+  //! \name Mod cycle management
+  //@{
+
+  /// \brief Clears all internal request data to prepare for a fresh modification cycle.
+  void reset() {
+    /// Instead of resizing, we'll just zero out the existing requests to avoid reallocations.
+    ticket_issuer_.reset();
+    Kokkos::deep_copy(requests_.view_host(), EntityRequest{});
+    Kokkos::deep_copy(requests_.view_device(), EntityRequest{});
+  }
+
+  /// \brief Finalize counts for this request class. Users may no longer claim tickets after this call.
+  our_size_t finalize_count() {
+    our_size_t count = ticket_issuer_.finalize_count();
+    if (requests_.extent(0) < count) {
+      Kokkos::resize(requests_, count);
+    }
+  }
+  //@}
+
+ private:
+  //! \name Helper functions
+  //@{
+
+  template <core::StringLiteral name>
+  KOKKOS_INLINE_FUNCTION void assert_active_space() const {
+    KOKKOS_IF_ON_HOST(bool host_is_active = active_space_host_view_(); MUNDY_THROW_ASSERT(
+                          host_is_active, std::runtime_error, name + " called from host when device is active.");)
+    KOKKOS_IF_ON_DEVICE(bool device_is_active = active_space_dev_view_(); MUNDY_THROW_ASSERT(
+                            device_is_active, std::runtime_error, name + " called from device when host is active.");)
+  }
+
+  template <core::StringLiteral name>
+  KOKKOS_INLINE_FUNCTION void assert_ticket_out_of_range(our_size_t ticket) const {
+    MUNDY_THROW_ASSERT(ticket < ticket_issuer_.count(), std::out_of_range, name + " called with invalid ticket.");
+  }
+  //@}
+
+  //! \name Member variables
+  //@{
+
+  // Our unique ID among multiple request helpers
+  unsigned index_{0};
+
+  /// @brief Internal struct representing a single connection request.
+  /// Requests must specify a pair of entities to connect. These may either be a real entity or a future entity (by
+  /// ticket and request helper).
+  struct DestroyConnectionRequest {
+    core::variant<stk::mesh::Entity, FutureEntity> from_entity;
+    core::variant<stk::mesh::Entity, FutureEntity> to_entity;
+  };
+
+  using bool_view_t = Kokkos::View<bool, memory_space>;
+  bool_view_t active_space_dev_view_;
+  bool_view_t::HostMirror active_space_host_view_;
+
+  TicketIssuer<NgpMemSpace, our_size_t> ticket_issuer_;
+
+  using request_view_t = core::NgpViewT<DestroyConnectionRequest*, NgpMemSpace>;
+  request_view_t requests_;
+  //@}
+};  // NgpDestroyConnectionT
+
 
 /// \brief Manages all modification requests in a given NGP memory space.
 template <typename NgpMemSpace, typename SizeT = size_t>
