@@ -343,6 +343,14 @@ class AABB {
   //@}
 
  private:
+  //! \name Friends <3
+  //@{
+
+  // We must be friends with other AABB types to access their private members
+  template <typename, ValidPointType, ValidPointType>
+  friend class AABB;
+  //@}
+
   //! \name Private helpers
   //@{
 
