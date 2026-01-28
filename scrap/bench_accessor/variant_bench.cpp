@@ -983,8 +983,8 @@ class Accessor {
   // const variant_t our_type_;
   // using actual_variant_t = variant<double, std::vector<double>>;
   // const actual_variant_t variant_;
-  double shared_value_;
-  NonOwningVector<double> vector_;
+  const double shared_value_;
+  const NonOwningVector<double> vector_;
   const bool is_shared_;
 };
 
@@ -1568,7 +1568,7 @@ static double time_avg_ns(Fn&& fn, int iters) {
 
 int main(int argc, char** argv) {
   // Parameters
-  std::size_t length = 10000000;  // elements
+  std::size_t length = 10000;  // elements
   int iters = 100;                 // timing iterations
   if (argc > 1) {
     length = static_cast<std::size_t>(std::stoull(argv[1]));
