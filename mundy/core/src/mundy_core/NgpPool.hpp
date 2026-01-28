@@ -29,9 +29,6 @@
 // Kokkos
 #include <Kokkos_Core.hpp>
 
-// STK
-#include <stk_util/ngp/NgpSpaces.hpp>
-
 // Mundy
 #include <mundy_core/NgpView.hpp>
 #include <mundy_core/throw_assert.hpp>
@@ -194,7 +191,7 @@ class NgpPoolT {
     pool_view_t out("NgpPoolT::acquire", n);
     auto local_pool = pool_;
 
-    using range_policy = stk::ngp::RangePolicy<execution_space>;
+    using range_policy = Kokkos::RangePolicy<execution_space>;
     Kokkos::parallel_for(
         range_policy(0, n), KOKKOS_LAMBDA(const our_size_t i) {
           out.view_device()(i) = local_pool.view_device()(old_size - i - 1);
@@ -239,7 +236,7 @@ class NgpPoolT {
     auto local_pool = pool_;
     p.sync_to_device();  // Ensure the device view is up to date
 
-    using range_policy = stk::ngp::RangePolicy<execution_space>;
+    using range_policy = Kokkos::RangePolicy<execution_space>;
     Kokkos::parallel_for(
         range_policy(0, p.extent(0)),
         KOKKOS_LAMBDA(const our_size_t i) { local_pool.view_device()(old_size + i) = p.view_device()(i); });
@@ -255,7 +252,7 @@ class NgpPoolT {
 
     auto local_pool = pool_;
 
-    using range_policy = stk::ngp::HostRangePolicy;
+    using range_policy = Kokkos::RangePolicy<Kokkos::DefaultHostExecutionSpace>;
     Kokkos::parallel_for(
         range_policy(0, p.size()), KOKKOS_LAMBDA(const our_size_t i) { local_pool.view_host()(old_size + i) = p[i]; });
 
@@ -343,10 +340,10 @@ class NgpPoolT {
 
 /// \brief Our default NgpPool type for use in Mundy.
 ///
-/// Unlike NgpPoolT, we follow stk::ngp conventions by using stk::ngp::ExecSpace as our
+/// Unlike NgpPoolT, we follow stk::ngp conventions by using Kokkos::DefaultExecutionSpace as our
 /// chosen device space.
 template <class DataType, typename SizeType = long int>
-using NgpPool = NgpPoolT<DataType, typename stk::ngp::ExecSpace::memory_space, SizeType>;
+using NgpPool = NgpPoolT<DataType, typename Kokkos::DefaultExecutionSpace::memory_space, SizeType>;
 
 }  // namespace core
 

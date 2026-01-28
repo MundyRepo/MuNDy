@@ -22,9 +22,15 @@
 #define MUNDY_MATH_CONVEX_HPP_
 
 // Kokkos:
+#include <Kokkos_Core.hpp>
+
+
+// KokkosKernels
+#include <MundyMath_config.hpp>  // for HAVE_MUNDYMATH_*
+#ifdef HAVE_MUNDYMATH_KOKKOSKERNELS
 #include <KokkosBlas.hpp>
 #include <KokkosBlas_gesv.hpp>
-#include <Kokkos_Core.hpp>
+#endif
 
 // Mundy core:
 #include <mundy_core/throw_assert.hpp>
@@ -163,6 +169,7 @@ struct KokkosBackend {
     Kokkos::deep_copy(dest, src);
   }
 
+#ifdef HAVE_MUNDYMATH_KOKKOSKERNELS
   // Path 1: If op is a dense 2D Kokkos::View, call BLAS gemv.
   // y = A*x
   template <class LinearOp>
@@ -182,6 +189,7 @@ struct KokkosBackend {
     MUNDY_THROW_ASSERT(A.extent(0) == y.extent(0), std::invalid_argument, "gemv: dimension mismatch A(0,:) vs y");
     KokkosBlas::gemv(exec_space{}, "N", alpha, A, x, beta, y);
   }
+#endif  // HAVE_MUNDYMATH_KOKKOSKERNELS
 
   // Path 2: If op has member `apply(x,y)`
   template <class LinearOp>
