@@ -754,6 +754,7 @@ class AVector<T, N, Accessor, Ownership::Owns> {
   /// \brief AVector-scalar addition
   /// \param[in] scalar The scalar.
   template <typename U>
+      requires std::is_arithmetic_v<U>
   KOKKOS_INLINE_FUNCTION constexpr auto operator+(const U& scalar) const {
     return impl::vector_scalar_add_impl(std::make_index_sequence<N>{}, *this, scalar);
   }
@@ -761,6 +762,7 @@ class AVector<T, N, Accessor, Ownership::Owns> {
   /// \brief Self-scalar addition
   /// \param[in] scalar The scalar.
   template <typename U>
+      requires std::is_arithmetic_v<U>
   KOKKOS_INLINE_FUNCTION constexpr AVector<T, N, Accessor, Ownership::Owns>& operator+=(const U& scalar)
     requires HasNonConstAccessOperator<Accessor, T>
   {
@@ -771,6 +773,7 @@ class AVector<T, N, Accessor, Ownership::Owns> {
   /// \brief AVector-scalar subtraction
   /// \param[in] scalar The scalar.
   template <typename U>
+      requires std::is_arithmetic_v<U>
   KOKKOS_INLINE_FUNCTION constexpr auto operator-(const U& scalar) const {
     return impl::vector_scalar_subtraction_impl(std::make_index_sequence<N>{}, *this, scalar);
   }
@@ -778,6 +781,7 @@ class AVector<T, N, Accessor, Ownership::Owns> {
   /// \brief AVector-scalar subtraction
   /// \param[in] scalar The scalar.
   template <typename U>
+      requires std::is_arithmetic_v<U>
   KOKKOS_INLINE_FUNCTION constexpr AVector<T, N, Accessor, Ownership::Owns>& operator-=(const U& scalar)
     requires HasNonConstAccessOperator<Accessor, T>
   {
@@ -799,6 +803,7 @@ class AVector<T, N, Accessor, Ownership::Owns> {
   /// \brief Self-scalar multiplication
   /// \param[in] scalar The scalar.
   template <typename U>
+      requires std::is_arithmetic_v<U>
   KOKKOS_INLINE_FUNCTION constexpr AVector<T, N, Accessor, Ownership::Owns>& operator*=(const U& scalar)
     requires HasNonConstAccessOperator<Accessor, T>
   {
@@ -809,6 +814,7 @@ class AVector<T, N, Accessor, Ownership::Owns> {
   /// \brief AVector-scalar division. (Type promotes the result to a double if the scalar is not a floating point.)
   /// \param[in] scalar The scalar.
   template <typename U>
+      requires std::is_arithmetic_v<U>
   KOKKOS_INLINE_FUNCTION constexpr auto operator/(const U& scalar) const {
     return impl::vector_scalar_division_impl(std::make_index_sequence<N>{}, *this, scalar);
   }
@@ -817,6 +823,7 @@ class AVector<T, N, Accessor, Ownership::Owns> {
   /// \note Because there is no type promotion, this will perform integer division if the scalar is an integer.
   /// \param[in] scalar The scalar.
   template <typename U>
+      requires std::is_arithmetic_v<U>
   KOKKOS_INLINE_FUNCTION constexpr AVector<T, N, Accessor, Ownership::Owns>& operator/=(const U& scalar)
     requires HasNonConstAccessOperator<Accessor, T>
   {
@@ -982,6 +989,7 @@ KOKKOS_INLINE_FUNCTION constexpr bool is_approx_close(
 /// \param[in] scalar The scalar.
 /// \param[in] vec The vector.
 template <size_t N, typename U, typename T, ValidAccessor<T> Accessor, typename OwnershipType>
+    requires std::is_arithmetic_v<U>
 KOKKOS_INLINE_FUNCTION constexpr auto operator+(const U& scalar, const AVector<T, N, Accessor, OwnershipType>& vec)
     -> AVector<std::common_type_t<T, U>, N> {
   return vec + scalar;
@@ -991,6 +999,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto operator+(const U& scalar, const AVector<T
 /// \param[in] scalar The scalar.
 /// \param[in] vec The vector.
 template <size_t N, typename U, typename T, ValidAccessor<T> Accessor, typename OwnershipType>
+    requires std::is_arithmetic_v<U>
 KOKKOS_INLINE_FUNCTION constexpr auto operator-(const U& scalar, const AVector<T, N, Accessor, OwnershipType>& vec)
     -> AVector<std::common_type_t<T, U>, N> {
   return -vec + scalar;
@@ -1004,6 +1013,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto operator-(const U& scalar, const AVector<T
 /// \param[in] scalar The scalar.
 /// \param[in] vec The vector.
 template <size_t N, typename U, typename T, ValidAccessor<T> Accessor, typename OwnershipType>
+    requires std::is_arithmetic_v<U>
 KOKKOS_INLINE_FUNCTION constexpr auto operator*(const U& scalar, const AVector<T, N, Accessor, OwnershipType>& vec)
     -> AVector<std::common_type_t<T, U>, N> {
   return vec * scalar;

@@ -35,7 +35,7 @@
 #include <mundy_mesh/LinkData.hpp>                        // for mundy::mesh::LinkData
 #include <mundy_mesh/NgpLinkData.hpp>                     // for mundy::mesh::NgpLinkDataT
 #include <mundy_mesh/impl/HostDeviceCOOSynchronizer.hpp>  // for mundy::mesh::impl::HostDeviceCOOSynchronizer
-#include <mundy_mesh/impl/HostDeviceCRSSynchronizer.hpp>  // for mundy::mesh::impl::HostDeviceCRSSynchronizer
+#include <mundy_mesh/impl/HostDeviceCSRSynchronizer.hpp>  // for mundy::mesh::impl::HostDeviceCSRSynchronizer
 #include <mundy_mesh/impl/HostDeviceSynchronizer.hpp>     // for mundy::mesh::impl::HostDeviceSynchronizer
 
 namespace mundy {
@@ -66,12 +66,12 @@ NgpLinkDataT<NgpMemSpace>& get_updated_ngp_link_data(const LinkData& link_data) 
 
     // Setup the synchronizers
     LinkCOOData& coo_data = const_cast<LinkCOOData&>(link_data.coo_data());
-    LinkCRSData& crs_data = const_cast<LinkCRSData&>(link_data.crs_data());
+    LinkCSRData& crs_data = const_cast<LinkCSRData&>(link_data.crs_data());
     NgpLinkCOOData& ngp_coo_data = ngp_link_data.coo_data();
-    NgpLinkCRSData& ngp_crs_data = ngp_link_data.crs_data();
+    NgpLinkCSRData& ngp_crs_data = ngp_link_data.crs_data();
 
     impl::set_crs_synchronizer(
-        link_data, std::move(std::make_shared<impl::LinkCRSDataSynchronizerT<NgpMemSpace>>(crs_data, ngp_crs_data)));
+        link_data, std::move(std::make_shared<impl::LinkCSRDataSynchronizerT<NgpMemSpace>>(crs_data, ngp_crs_data)));
     impl::set_coo_synchronizer(
         link_data, std::move(std::make_shared<impl::LinkCOODataSynchronizerT<NgpMemSpace>>(coo_data, ngp_coo_data)));
   } else {

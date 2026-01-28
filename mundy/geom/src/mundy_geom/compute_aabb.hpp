@@ -52,6 +52,10 @@ KOKKOS_FUNCTION AABB<typename PointType::scalar_t> compute_aabb(const PointType&
   const scalar_t z = point[2];
   return AABB<scalar_t>{x, y, z, x, y, z};
 }
+template <ValidPointType PointType, typename Metric>
+KOKKOS_FUNCTION AABB<typename PointType::scalar_t> compute_aabb(const PointType& point, const Metric& /*metric*/) {
+  return compute_aabb(point);
+}
 
 /// @brief Compute the axis-aligned bounding box of a line segment
 template <ValidLineSegmentType LineSegmentType>
@@ -67,6 +71,11 @@ KOKKOS_FUNCTION AABB<typename LineSegmentType::scalar_t> compute_aabb(const Line
   const scalar_t max_z = Kokkos::max(start[2], end[2]);
   return AABB<scalar_t>{min_x, min_y, min_z, max_x, max_y, max_z};
 }
+template <ValidLineSegmentType LineSegmentType, typename Metric>
+KOKKOS_FUNCTION AABB<typename LineSegmentType::scalar_t> compute_aabb(
+    const LineSegmentType& line_segment, const Metric& metric) {
+  return compute_aabb(unwrap_points_to_ref(line_segment, metric, reference_point(line_segment)));
+}
 
 /// @brief Compute the axis-aligned bounding box of a sphere
 template <ValidSphereType SphereType>
@@ -77,6 +86,11 @@ KOKKOS_FUNCTION AABB<typename SphereType::scalar_t> compute_aabb(const SphereTyp
   const mundy::math::Vector3<scalar_t> min_corner = sphere.center() - ones * sphere.radius();
   const mundy::math::Vector3<scalar_t> max_corner = sphere.center() + ones * sphere.radius();
   return AABB<scalar_t>{min_corner, max_corner};
+}
+template <ValidSphereType SphereType, typename Metric>
+KOKKOS_FUNCTION AABB<typename SphereType::scalar_t> compute_aabb(const SphereType& sphere,
+                                                                   const Metric& /*metric*/) {
+  return compute_aabb(sphere);
 }
 
 /// @brief Compute the axis-aligned bounding box of an ellipsoid
@@ -100,6 +114,11 @@ KOKKOS_FUNCTION AABB<typename EllipsoidType::scalar_t> compute_aabb(const Ellips
   const scalar_t max_y = Kokkos::max(obb_min_corner[1], obb_max_corner[1]);
   const scalar_t max_z = Kokkos::max(obb_min_corner[2], obb_max_corner[2]);
   return AABB<scalar_t>{min_x, min_y, min_z, max_x, max_y, max_z};
+}
+template <ValidEllipsoidType EllipsoidType, typename Metric>
+KOKKOS_FUNCTION AABB<typename EllipsoidType::scalar_t> compute_aabb(const EllipsoidType& ellipsoid,
+                                                                      const Metric& /*metric*/) {
+  return compute_aabb(ellipsoid);
 }
 
 /// @brief Compute the axis-aligned bounding box of a spherocylinder
@@ -125,6 +144,11 @@ KOKKOS_FUNCTION AABB<typename SpherocylinderType::scalar_t> compute_aabb(const S
   const scalar_t max_z = Kokkos::max(obb_centerline_min_corner[2], obb_centerline_max_corner[2]) + radius;
   return AABB<scalar_t>{min_x, min_y, min_z, max_x, max_y, max_z};
 }
+template <ValidSpherocylinderType SpherocylinderType, typename Metric>
+KOKKOS_FUNCTION AABB<typename SpherocylinderType::scalar_t> compute_aabb(
+    const SpherocylinderType& spherocylinder, const Metric& /*metric*/) {
+  return compute_aabb(spherocylinder);
+}
 
 /// @brief Compute the axis-aligned bounding box of a spherocylinder segment
 template <ValidSpherocylinderSegmentType SegmentType>
@@ -140,6 +164,11 @@ KOKKOS_FUNCTION AABB<typename SegmentType::scalar_t> compute_aabb(const SegmentT
   const scalar_t max_y = Kokkos::max(start[1], end[1]) + radius;
   const scalar_t max_z = Kokkos::max(start[2], end[2]) + radius;
   return AABB<scalar_t>{min_x, min_y, min_z, max_x, max_y, max_z};
+}
+template <ValidSpherocylinderSegmentType SegmentType, typename Metric>
+KOKKOS_FUNCTION AABB<typename SegmentType::scalar_t> compute_aabb(const SegmentType& segment,
+                                                                    const Metric& metric) {
+  return compute_aabb(unwrap_points_to_ref(segment, metric, reference_point(segment)));
 }
 
 }  // namespace geom

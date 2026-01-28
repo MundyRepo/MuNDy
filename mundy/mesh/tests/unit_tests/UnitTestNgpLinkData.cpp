@@ -156,7 +156,7 @@ void declare_and_validate_relations(const TestContext& context,
 
   NgpLinkData& ngp_link_data = get_updated_ngp_link_data(link_data);
   EXPECT_FALSE(ngp_link_data.is_crs_up_to_date())
-      << "The modification should have dirtied the CRS connectivity and we should detect that, despite the host being "
+      << "The modification should have dirtied the CSR connectivity and we should detect that, despite the host being "
          "modified and not the device.";
 }
 
@@ -269,7 +269,7 @@ void modify_ngp_link_data(const TestContext& context, LinkData& link_data) {
   ngp_link_data.coo_modify_on_device();
 
   EXPECT_FALSE(ngp_link_data.is_crs_up_to_date())
-      << "The modification should have dirtied the CRS connectivity on the device.";
+      << "The modification should have dirtied the CSR connectivity on the device.";
 }
 
 template <size_t Dimensionality>
@@ -279,7 +279,7 @@ void validate_crs_connectivity(const TestContext& context, LinkInitializationDat
   ngp_link_data.update_crs_from_coo();
   EXPECT_TRUE(ngp_link_data.is_crs_up_to_date());
 
-  // Invert the LinkInitializationData struct to store expected CRS connectivity
+  // Invert the LinkInitializationData struct to store expected CSR connectivity
   std::map<stk::mesh::Entity, std::vector<stk::mesh::Entity>> expected_crs_conn;  // Entity to links map
   for (const auto& entities : link_init_data.link_and_linked_entities) {
     stk::mesh::Entity link = entities[0];
@@ -303,10 +303,10 @@ void validate_crs_connectivity(const TestContext& context, LinkInitializationDat
             const std::vector<stk::mesh::Entity>& expected_links = it->second;
             std::set<stk::mesh::Entity> expected_link_set(expected_links.begin(), expected_links.end());
 
-            // Fetch the actual connected links from the CRS connectivity
+            // Fetch the actual connected links from the CSR connectivity
             std::set<stk::mesh::Entity> actual_link_set;
             for (unsigned partition_id = 0; partition_id < crs_partition_view.extent(0); ++partition_id) {
-              const LinkCRSPartition& partition = crs_partition_view(partition_id);
+              const LinkCSRPartition& partition = crs_partition_view(partition_id);
               const stk::mesh::FastMeshIndex entity_index{bulk_data.bucket(entity).bucket_id(),
                                                           bulk_data.bucket_ordinal(entity)};
 
@@ -377,7 +377,7 @@ void basic_usage_test() {
   modify_ngp_link_data(context, link_data);
   validate_ngp_link_data(context, link_data);
 
-  // Check the CRS connectivity
+  // Check the CSR connectivity
   validate_crs_connectivity(context, link_init_data_a, link_data);
   validate_crs_connectivity(context, link_init_data_b, link_data);
 }

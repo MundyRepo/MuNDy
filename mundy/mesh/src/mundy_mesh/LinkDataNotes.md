@@ -1,14 +1,14 @@
 TODO(palmerb4): Cyclic dependency refactor:
-LinkData is just a thin interface over LinkDataCRSManager and LinkDataCOOManager.
-LinkDataCRSManager need not depend pn the LinkData itself. It can instead depend on LinkDataCOOManager.
+LinkData is just a thin interface over LinkDataCSRManager and LinkDataCOOManager.
+LinkDataCSRManager need not depend pn the LinkData itself. It can instead depend on LinkDataCOOManager.
 
 The only issue that I'm having is that the LinkDataCOOManager has functions that must be called inside of
 kernels. For example, declare_relation.
 
-The current design of NgpLinkDataCRSManager is nice in that, we have a single class that works for any 
-memory space with LinkDataCRSManager in charge of wrangling multiple memory spaces.
+The current design of NgpLinkDataCSRManager is nice in that, we have a single class that works for any 
+memory space with LinkDataCSRManager in charge of wrangling multiple memory spaces.
 
-This works because the user touches the CRS connectivity via the partitions, which contain efficient inlined
+This works because the user touches the CSR connectivity via the partitions, which contain efficient inlined
 functions. The same is not true for the COO connectivity, since the user simply interacts with functions like
 declare_relation, which modify stk::mesh::Fields. We could employ the new strategy of fields
 
@@ -19,7 +19,7 @@ That's why LinkData currently implements a custom non-ngp interface.
 
 Ok, what about:
 
-LinkData.crs_data<READ_WRITE>(mem_space) -> NgpLinkCRSDataT<MemSpace>                          
+LinkData.crs_data<READ_WRITE>(mem_space) -> NgpLinkCSRDataT<MemSpace>                          
 LinkData.synchronize_crs(mem_space) -> void
 
 LinkData.coo_data<READ_WRITE>(mem_space) -> NgpLinkCOODataT<MemSpace>                     
@@ -72,7 +72,7 @@ NgpMemSpace. get_updated_ngp_link_data will handle the logic of creating the Ngp
 What we really want is the ability to have a single 
 
 If we remove the ngp_mesh from the following
-    CRSBucketConn, CRSPartitionView, LinkCRSData
+    CSRBucketConn, CSRPartitionView, LinkCSRData
 then they may live in any memory space, as they are really just pure data. They can become
 stale as a result of mesh modifications and can be updated with deep_copy(trg_space, src_space).
 
@@ -81,21 +81,21 @@ are stale, that doesn't mean we can't touch the regular host fields during mod c
 brings us to a more dual-view-like approach, where we have a host-only mod_safe_declare_relation 
 function.
 
-The problem with this design is that it makes the LinkCRSData not offering a dual-view design 
+The problem with this design is that it makes the LinkCSRData not offering a dual-view design 
 feel weird/inconsistent. It feels less weird if we label mod_safe_declare_relation as host-only
 for now... I take that back, it still feels weird. We have a declare_relation, which can only
 modify data in the given MemSpace and a mod_safe_declare_relation, which can only modify data
 on the host. mod_safe_* makes it seem like its the same operation but safe to call during mod
 cycles. We would be forced to call these host_declare_relation, as we do currently. This again
-makes LinkCRSData feel weird for not offering host_* functions.
+makes LinkCSRData feel weird for not offering host_* functions.
 
-LocalLinkData calls update_crs_from_coo, which then calls impl::COOtoCRSSynchronizer. This class
+LocalLinkData calls update_crs_from_coo, which then calls impl::COOtoCSRSynchronizer. This class
 relies on the NgpMesh, which lives in the NgpMeshSpace. Consequently, either we attempt to fetch
 the NgpMesh in MemSpace, which will fail when MemSpace doesn't equal every other NgpMemSpace, or
 we fetch NgpMesh in the default NgpMeshSpace, and accept an exec space that must have SpaceAccessible.
 
 I'm not going to add Const vs non-const to start. We'll refactor for that after. The user will have 
-the ability to modify the CRS data even though its really just a copy and they shouldn't
+the ability to modify the CSR data even though its really just a copy and they shouldn't
 
 Side note, to avoid needing to use friendship to hide content, have LinkMetaData be friends with
 impl:: non-member functions for getting its internal fields.
@@ -163,7 +163,7 @@ impl::NgpLinkMetaDataT<NgpMemSpace>:
 impl::get_updated_ngp_link_meta_data<NgpMemSpace>(link_meta_data) 
   -> impl::NgpLinkMetaDataT<NgpMemSpace>
 
-LinkCRSBucketConnT<MemSpace>:  // Raw data in any space
+LinkCSRBucketConnT<MemSpace>:  // Raw data in any space
   public:
   // Getters
   bucket_id() -> unsigned
@@ -177,10 +177,10 @@ LinkCRSBucketConnT<MemSpace>:  // Raw data in any space
   dump() -> void
 
 // For those using default STK spaces
-using LinkCRSBucketConn = LinkCRSBucketConnT<stk::ngp::HostMemSpace>;
-using NgpLinkCRSBucketConn = LinkCRSBucketConnT<stk::ngp::MemSpace>;
+using LinkCSRBucketConn = LinkCSRBucketConnT<stk::ngp::HostMemSpace>;
+using NgpLinkCSRBucketConn = LinkCSRBucketConnT<stk::ngp::MemSpace>;
 
-LinkCRSPartitionT<MemSpace>: // Raw data in any space
+LinkCSRPartitionT<MemSpace>: // Raw data in any space
   public:
   // Getters
   id() -> unsigned
@@ -194,14 +194,14 @@ LinkCRSPartitionT<MemSpace>: // Raw data in any space
   initialize_attributes(id, key, rank, dim, bulk_data) -> void
   connects_to(rank, bucket_id) -> bool
   num_buckets(rank) -> unsigned
-  get_crs_bucket_conn(rank, bucket_id) -> LinkCRSBucketConnT<MemSpace>&
+  get_crs_bucket_conn(rank, bucket_id) -> LinkCSRBucketConnT<MemSpace>&
   get_connected_links(rank, entity_index) -> ConnectedEntities
   num_connected_links(rank, entity_index) -> unsigned
 
-using LinkCRSPartition = LinkCRSPartitionT<stk::ngp::HostMemSpace>;
-using NgpLinkCRSPartition = LinkCRSPartitionT<stk::ngp::MemSpace>;
+using LinkCSRPartition = LinkCSRPartitionT<stk::ngp::HostMemSpace>;
+using NgpLinkCSRPartition = LinkCSRPartitionT<stk::ngp::MemSpace>;
 
-(Const)LinkCRSDataT<MemSpace>:  // Raw data in any space
+(Const)LinkCSRDataT<MemSpace>:  // Raw data in any space
   public:
   // Getters
   is_valid() -> bool
@@ -209,14 +209,14 @@ using NgpLinkCRSPartition = LinkCRSPartitionT<stk::ngp::MemSpace>;
   bulk_data() -> BulkData
 
   // Actions
-  get_all_partitions() -> const (Const)CRSPartitionViewT<MemSpace>&
-  get_or_create_partitions(selector) -> const (Const)CRSPartitionViewT<MemSpace>&
+  get_all_partitions() -> const (Const)CSRPartitionViewT<MemSpace>&
+  get_or_create_partitions(selector) -> const (Const)CSRPartitionViewT<MemSpace>&
   select_all_partitions() -> Selector
   private:
   sort_partitions_by_id() -> void
 
-using (Const)LinkCRSData = (Const)LinkCRSDataT<stk::ngp::HostMemSpace>;
-using (Const)NgpLinkCRSData = (Const)LinkCRSDataT<stk::ngp::MemSpace>;
+using (Const)LinkCSRData = (Const)LinkCSRDataT<stk::ngp::HostMemSpace>;
+using (Const)NgpLinkCSRData = (Const)LinkCSRDataT<stk::ngp::MemSpace>;
 
 ConstLinkCOOData:  // Host only | Valid during mesh modifications
   public:
@@ -268,9 +268,9 @@ NgpLinkCOODataT<NgpMemSpace> : ConstLinkCOOData:  // Device only | Invalid durin
 
 using (Const)NgpLinkCOOData = (Const)NgpLinkCOODataT<stk::ngp::MemSpace>;
 
-impl::NgpCOOtoCRSSynchronizerT<NgpMemSpace>:  // Not valid during mesh modifications | NgpMemSpace only
+impl::NgpCOOtoCSRSynchronizerT<NgpMemSpace>:  // Not valid during mesh modifications | NgpMemSpace only
   public:
-  NgpCOOtoCRSSynchronizerT(ConstLinkCRSDataT<NgpMemSpace>, ConstLinkCOODataT<NgpMemSpace>, Selector)
+  NgpCOOtoCSRSynchronizerT(ConstLinkCSRDataT<NgpMemSpace>, ConstLinkCOODataT<NgpMemSpace>, Selector)
   is_crs_up_to_date() -> bool
   update_crs_from_coo() -> void
   check_crs_coo_consistency() -> void
@@ -337,8 +337,8 @@ LinkData : public LinkDataBase:
   bulk_data() -> BulkData
   link_rank() -> EntityRank
 
-  // COO and CRS on the host
-  crs_data<DataAccess>() -> LinkCRSData<HostMemSpace>& or ConstLinkCRSData<HostMemSpace>&
+  // COO and CSR on the host
+  crs_data<DataAccess>() -> LinkCSRData<HostMemSpace>& or ConstLinkCSRData<HostMemSpace>&
   coo_data<DataAccess>() -> LinkCOOData<HostMemSpace>& or ConstLinkCOOData<HostMemSpace>&
 
   check_crs_coo_consistency(exec_space, selector) -> void
@@ -376,11 +376,11 @@ NgpLinkDataT<NgpMemSpace> : public LinkDataBase:
   bulk_data() -> BulkData
   link_rank() -> EntityRank
 
-  // COO and CRS within MemSpace
-  crs_data<DataAccess>() -> LinkCRSData<NgpMemSpace>& or ConstLinkCRSData<NgpMemSpace>&
+  // COO and CSR within MemSpace
+  crs_data<DataAccess>() -> LinkCSRData<NgpMemSpace>& or ConstLinkCSRData<NgpMemSpace>&
   coo_data<DataAccess>() -> LinkCOOData<NgpMemSpace>& or ConstLinkCOOData<NgpMemSpace>&
 
-  // CRS and COO synchronization | device only | not valid during mesh modifications
+  // CSR and COO synchronization | device only | not valid during mesh modifications
   update_crs_from_coo(exec_space) -> void
   update_crs_from_coo()           -> void
 
@@ -470,11 +470,11 @@ LocalLinkData<MemSpace>:  // Memory-space "local". Doesn't care about other memo
   bulk_data() -> BulkData
   link_rank() -> EntityRank
 
-  // COO and CRS within MemSpace
-  crs_data() -> LinkCRSDataT<MemSpace>& or ConstLinkCRSDataT<MemSpace>&
+  // COO and CSR within MemSpace
+  crs_data() -> LinkCSRDataT<MemSpace>& or ConstLinkCSRDataT<MemSpace>&
   coo_data() -> LinkCOODataT<MemSpace>& or ConstLinkCOODataT<MemSpace>&
 
-  // CRS and COO synchronization | not valid during mesh modifications
+  // CSR and COO synchronization | not valid during mesh modifications
   update_crs_from_coo(exec_space) -> void
   update_crs_from_coo()           -> void
 

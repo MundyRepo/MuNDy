@@ -75,11 +75,11 @@ Test setup:
     - id_sigma: Standard deviation of the Gaussian distribution for entity id selection
 
 Desired questions:
-  CRS and COO creation/updating performance:
+  CSR and COO creation/updating performance:
   - Does the number of entities in each rank affect performance vs having the same number of entities in a single rank?
   - Does link rank affect performance?
   - How many clock cycles to declare a new link relation? Is this influenced by any external factors?
-  - How does the cost of checking the status of the CRS and subsequently updating it scale with the
+  - How does the cost of checking the status of the CSR and subsequently updating it scale with the
     - link rank/dimensionality?
     - number of links?
     - distribution of links across partitions?
@@ -104,7 +104,7 @@ spring constant and rest length.
 can just declare N link parts within the same link data and add the requested number of links to each.
 get_or_create_crs_partitions(universal_part()) should then return N partitions, one for each link part.
 
-- For CRS connectivity tests, link/entity declaration is tricky. We will use the following formula to allow for
+- For CSR connectivity tests, link/entity declaration is tricky. We will use the following formula to allow for
 controllable locality:
   1. Generate a collection of num_entities entities,
   2. For partition i, generate num_links_per_partition[i] links.
@@ -693,13 +693,13 @@ void connect_entities_and_links(TestContext& context, const TestParameters& para
 The trick here is to choose an operation that has the same computational cost for all three linked entity types.
 I don't see how this can be done since the locality will differ even if they all have the same fields.
 
-Honestly, this part of the test isn't so much about how the entity ranks compare but how things like COO vs CRS impact
+Honestly, this part of the test isn't so much about how the entity ranks compare but how things like COO vs CSR impact
 performance.
 
-We'll use a different function per LinkedEntityRanksType and per COO vs CRS but COO vs CRS should perform the same
+We'll use a different function per LinkedEntityRanksType and per COO vs CSR but COO vs CSR should perform the same
 operation.
 
--  Same is easy for pairwise operations to do both COO and CRS. The issue with the CRS is double counting since we will
+-  Same is easy for pairwise operations to do both COO and CSR. The issue with the CSR is double counting since we will
 loop over both objects and only act on the one with the smallest ID. Doing something like only acting on the one in
 the first ordinal slot isn't feasible since the check has a computational cost of number of link dimensionality
 squared.
@@ -998,10 +998,10 @@ void mark_one_bucket_per_partition_per_rank_as_modified(TestContext& context, co
   auto& crs_partitions =
       ngp_link_data.crs_data().get_or_create_crs_partitions(context.link_meta_data->universal_link_part());
   for (unsigned partition_id = 0; partition_id < crs_partitions.extent(0); ++partition_id) {
-    NgpLinkCRSPartition& crs_partition =
+    NgpLinkCSRPartition& crs_partition =
         crs_partitions(partition_id);  // Even though the partitions are on the device, we can access a subset of their
-                                       // data on the host. Only the NgpLinkCRSPartitions should be modified. Never the
-                                       // host side LinkCRSPartitions.
+                                       // data on the host. Only the NgpLinkCSRPartitions should be modified. Never the
+                                       // host side LinkCSRPartitions.
 
     // Fetch the crs bucket conn for this rank and bucket
     for (stk::topology::rank_t rank = stk::topology::NODE_RANK; rank < stk::topology::NUM_RANKS; ++rank) {
@@ -1024,7 +1024,7 @@ void randomly_mark_buckets_per_partition_per_rank_as_modified(TestContext& conte
   auto& crs_partitions =
       ngp_link_data.crs_data().get_or_create_crs_partitions(context.link_meta_data->universal_link_part());
   for (unsigned partition_id = 0; partition_id < crs_partitions.extent(0); ++partition_id) {
-    NgpLinkCRSPartition& crs_partition = crs_partitions(partition_id);
+    NgpLinkCSRPartition& crs_partition = crs_partitions(partition_id);
 
     // Fetch the crs bucket conn for this rank and bucket
     for (stk::topology::rank_t rank = stk::topology::NODE_RANK; rank < stk::topology::NUM_RANKS; ++rank) {
@@ -1088,7 +1088,7 @@ void run_test(ankerl::nanobench::Bench& bench, const TestParameters& params) {
   timer.reset();
   bool is_up_to_date = ngp_link_data.is_crs_up_to_date();
   MUNDY_THROW_REQUIRE(!is_up_to_date, std::logic_error,
-                      "We have created COO connectivity but not updated the CRS, so is_crs_up_to_date() "
+                      "We have created COO connectivity but not updated the CSR, so is_crs_up_to_date() "
                       "should return false.");
   std::cout << "is_crs_up_to_date() time: " << timer.seconds() << " seconds." << std::endl;
 

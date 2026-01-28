@@ -37,7 +37,7 @@
 // Mundy libs
 #include <mundy_core/throw_assert.hpp>                 // for MUNDY_THROW_ASSERT
 #include <mundy_mesh/LinkCOOData.hpp>                  // for mundy::mesh::LinkCOOData/NgpLinkCOOData
-#include <mundy_mesh/LinkCRSData.hpp>                  // for mundy::mesh::LinkCRSData/NgpLinkCRSData
+#include <mundy_mesh/LinkCSRData.hpp>                  // for mundy::mesh::LinkCSRData/NgpLinkCSRData
 #include <mundy_mesh/LinkMetaData.hpp>                 // for mundy::mesh::LinkMetaData
 #include <mundy_mesh/MetaData.hpp>                     // for mundy::mesh::MetaData
 #include <mundy_mesh/Types.hpp>                        // for mundy::mesh::NgpDataAccessTag
@@ -139,7 +139,7 @@ class LinkCOODataSynchronizerT : public HostDeviceSynchronizer {
 
   LinkCOOData &coo_data_;
   NgpLinkCOODataT<NgpMemSpace> &ngp_coo_data_;
-};  // LinkCRSDataSynchronizerT
+};  // LinkCSRDataSynchronizerT
 
 }  // namespace impl
 

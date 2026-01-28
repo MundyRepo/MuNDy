@@ -18,10 +18,10 @@
 // **********************************************************************************************************************
 // @HEADER
 
-#ifndef MUNDY_MESH_LINKCRSBUCKETCONN_HPP_
-#define MUNDY_MESH_LINKCRSBUCKETCONN_HPP_
+#ifndef MUNDY_MESH_LINKCSRBUCKETCONN_HPP_
+#define MUNDY_MESH_LINKCSRBUCKETCONN_HPP_
 
-/// \file LinkCRSBucketConn.hpp
+/// \file LinkCSRBucketConn.hpp
 
 // Trilinos libs
 #include <Kokkos_Core.hpp>             // for Kokkos::View, KOKKOS_INLINE_FUNCTION
@@ -38,53 +38,53 @@ namespace mundy {
 namespace mesh {
 
 template <typename MemSpace>
-class LinkCRSBucketConnT;
+class LinkCSRBucketConnT;
 namespace impl {
 template <typename MemSpace>
-KOKKOS_INLINE_FUNCTION int &get_dirty_flag(LinkCRSBucketConnT<MemSpace> &bucket_conn);
+KOKKOS_INLINE_FUNCTION int &get_dirty_flag(LinkCSRBucketConnT<MemSpace> &bucket_conn);
 
 template <typename MemSpace>
-KOKKOS_INLINE_FUNCTION const int &get_dirty_flag(const LinkCRSBucketConnT<MemSpace> &bucket_conn);
+KOKKOS_INLINE_FUNCTION const int &get_dirty_flag(const LinkCSRBucketConnT<MemSpace> &bucket_conn);
 
 template <typename MemSpace>
-KOKKOS_INLINE_FUNCTION unsigned &get_total_num_connected_links(LinkCRSBucketConnT<MemSpace> &bucket_conn);
+KOKKOS_INLINE_FUNCTION unsigned &get_total_num_connected_links(LinkCSRBucketConnT<MemSpace> &bucket_conn);
 
 template <typename MemSpace>
-KOKKOS_INLINE_FUNCTION const unsigned &get_total_num_connected_links(const LinkCRSBucketConnT<MemSpace> &bucket_conn);
+KOKKOS_INLINE_FUNCTION const unsigned &get_total_num_connected_links(const LinkCSRBucketConnT<MemSpace> &bucket_conn);
 
 template <typename MemSpace>
 KOKKOS_INLINE_FUNCTION Kokkos::View<unsigned *, MemSpace> &get_num_connected_links(
-    LinkCRSBucketConnT<MemSpace> &bucket_conn);
+    LinkCSRBucketConnT<MemSpace> &bucket_conn);
 
 template <typename MemSpace>
 KOKKOS_INLINE_FUNCTION const Kokkos::View<unsigned *, MemSpace> &get_num_connected_links(
-    const LinkCRSBucketConnT<MemSpace> &bucket_conn);
+    const LinkCSRBucketConnT<MemSpace> &bucket_conn);
 
 template <typename MemSpace>
 KOKKOS_INLINE_FUNCTION Kokkos::View<unsigned *, MemSpace> &get_sparse_connectivity_offsets(
-    LinkCRSBucketConnT<MemSpace> &bucket_conn);
+    LinkCSRBucketConnT<MemSpace> &bucket_conn);
 
 template <typename MemSpace>
 KOKKOS_INLINE_FUNCTION const Kokkos::View<unsigned *, MemSpace> &get_sparse_connectivity_offsets(
-    const LinkCRSBucketConnT<MemSpace> &bucket_conn);
+    const LinkCSRBucketConnT<MemSpace> &bucket_conn);
 
 template <typename MemSpace>
 KOKKOS_INLINE_FUNCTION Kokkos::View<stk::mesh::Entity *, MemSpace> &get_sparse_connectivity(
-    LinkCRSBucketConnT<MemSpace> &bucket_conn);
+    LinkCSRBucketConnT<MemSpace> &bucket_conn);
 
 template <typename MemSpace>
 KOKKOS_INLINE_FUNCTION const Kokkos::View<stk::mesh::Entity *, MemSpace> &get_sparse_connectivity(
-    const LinkCRSBucketConnT<MemSpace> &bucket_conn);
+    const LinkCSRBucketConnT<MemSpace> &bucket_conn);
 }  // namespace impl
 
 template <typename MemSpace>
-class LinkCRSBucketConnT {  // Raw data in any space.
+class LinkCSRBucketConnT {  // Raw data in any space.
  public:
   using BucketConnectivityType = Kokkos::View<stk::mesh::Entity *, MemSpace>;
   using UnsignedViewType = Kokkos::View<unsigned *, MemSpace>;
   using ConnectedEntities = stk::util::StridedArray<const stk::mesh::Entity>;
 
-  LinkCRSBucketConnT()
+  LinkCSRBucketConnT()
       : dirty_(false),
         bucket_size_(0),
         bucket_capacity_(0),
@@ -96,7 +96,7 @@ class LinkCRSBucketConnT {  // Raw data in any space.
         sparse_connectivity_("sparse_connectivity", 0) {
   }
 
-  LinkCRSBucketConnT(const stk::mesh::Bucket &bucket)
+  LinkCSRBucketConnT(const stk::mesh::Bucket &bucket)
       : dirty_(false),
         bucket_size_(static_cast<unsigned>(bucket.size())),
         bucket_capacity_(static_cast<unsigned>(bucket.capacity())),
@@ -175,17 +175,17 @@ class LinkCRSBucketConnT {  // Raw data in any space.
 
  private:
   // clang-format off
-  template <typename MS1, typename MS2> friend void deep_copy(LinkCRSBucketConnT<MS1> &dest, const LinkCRSBucketConnT<MS2> &src);
-  template <typename MS> friend       int &impl::get_dirty_flag(      LinkCRSBucketConnT<MS> &bucket_conn);
-  template <typename MS> friend const int &impl::get_dirty_flag(const LinkCRSBucketConnT<MS> &bucket_conn);
-  template <typename MS> friend       unsigned &impl::get_total_num_connected_links(      LinkCRSBucketConnT<MS> &bucket_conn);
-  template <typename MS> friend const unsigned &impl::get_total_num_connected_links(const LinkCRSBucketConnT<MS> &bucket_conn);
-  template <typename MS> friend       Kokkos::View<unsigned*, MS> &impl::get_num_connected_links(      LinkCRSBucketConnT<MS> &bucket_conn);
-  template <typename MS> friend const Kokkos::View<unsigned*, MS> &impl::get_num_connected_links(const LinkCRSBucketConnT<MS> &bucket_conn);
-  template <typename MS> friend       Kokkos::View<unsigned*, MS> &impl::get_sparse_connectivity_offsets(      LinkCRSBucketConnT<MS> &bucket_conn);
-  template <typename MS> friend const Kokkos::View<unsigned*, MS> &impl::get_sparse_connectivity_offsets(const LinkCRSBucketConnT<MS> &bucket_conn);
-  template <typename MS> friend       Kokkos::View<stk::mesh::Entity*, MS> &impl::get_sparse_connectivity(      LinkCRSBucketConnT<MS> &bucket_conn);
-  template <typename MS> friend const Kokkos::View<stk::mesh::Entity*, MS> &impl::get_sparse_connectivity(const LinkCRSBucketConnT<MS> &bucket_conn);
+  template <typename MS1, typename MS2> friend void deep_copy(LinkCSRBucketConnT<MS1> &dest, const LinkCSRBucketConnT<MS2> &src);
+  template <typename MS> friend       int &impl::get_dirty_flag(      LinkCSRBucketConnT<MS> &bucket_conn);
+  template <typename MS> friend const int &impl::get_dirty_flag(const LinkCSRBucketConnT<MS> &bucket_conn);
+  template <typename MS> friend       unsigned &impl::get_total_num_connected_links(      LinkCSRBucketConnT<MS> &bucket_conn);
+  template <typename MS> friend const unsigned &impl::get_total_num_connected_links(const LinkCSRBucketConnT<MS> &bucket_conn);
+  template <typename MS> friend       Kokkos::View<unsigned*, MS> &impl::get_num_connected_links(      LinkCSRBucketConnT<MS> &bucket_conn);
+  template <typename MS> friend const Kokkos::View<unsigned*, MS> &impl::get_num_connected_links(const LinkCSRBucketConnT<MS> &bucket_conn);
+  template <typename MS> friend       Kokkos::View<unsigned*, MS> &impl::get_sparse_connectivity_offsets(      LinkCSRBucketConnT<MS> &bucket_conn);
+  template <typename MS> friend const Kokkos::View<unsigned*, MS> &impl::get_sparse_connectivity_offsets(const LinkCSRBucketConnT<MS> &bucket_conn);
+  template <typename MS> friend       Kokkos::View<stk::mesh::Entity*, MS> &impl::get_sparse_connectivity(      LinkCSRBucketConnT<MS> &bucket_conn);
+  template <typename MS> friend const Kokkos::View<stk::mesh::Entity*, MS> &impl::get_sparse_connectivity(const LinkCSRBucketConnT<MS> &bucket_conn);
   // clang-format on
 
   int dirty_;  ///< Whether this bucket's connectivity has been modified since the last update.
@@ -197,14 +197,14 @@ class LinkCRSBucketConnT {  // Raw data in any space.
   UnsignedViewType num_connected_links_;
   UnsignedViewType sparse_connectivity_offsets_;
   BucketConnectivityType sparse_connectivity_;
-};  // LinkCRSBucketConnT
+};  // LinkCSRBucketConnT
 
 // Following STK's default naming convention, to make return statements of our functions more readable.
-using LinkCRSBucketConn = LinkCRSBucketConnT<stk::ngp::HostMemSpace>;
-using NgpLinkCRSBucketConn = LinkCRSBucketConnT<stk::ngp::MemSpace>;
+using LinkCSRBucketConn = LinkCSRBucketConnT<stk::ngp::HostMemSpace>;
+using NgpLinkCSRBucketConn = LinkCSRBucketConnT<stk::ngp::MemSpace>;
 
 template <typename MemSpace1, typename MemSpace2>
-void deep_copy(LinkCRSBucketConnT<MemSpace1> &dest, const LinkCRSBucketConnT<MemSpace2> &src) {
+void deep_copy(LinkCSRBucketConnT<MemSpace1> &dest, const LinkCSRBucketConnT<MemSpace2> &src) {
   dest.dirty_ = src.dirty_;
   dest.bucket_size_ = src.bucket_size_;
   dest.bucket_capacity_ = src.bucket_capacity_;
@@ -221,58 +221,58 @@ void deep_copy(LinkCRSBucketConnT<MemSpace1> &dest, const LinkCRSBucketConnT<Mem
 
 namespace impl {
 template <typename MemSpace>
-KOKKOS_INLINE_FUNCTION int &get_dirty_flag(LinkCRSBucketConnT<MemSpace> &bucket_conn) {
+KOKKOS_INLINE_FUNCTION int &get_dirty_flag(LinkCSRBucketConnT<MemSpace> &bucket_conn) {
   return bucket_conn.dirty_;
 }
 
 template <typename MemSpace>
-KOKKOS_INLINE_FUNCTION const int &get_dirty_flag(const LinkCRSBucketConnT<MemSpace> &bucket_conn) {
+KOKKOS_INLINE_FUNCTION const int &get_dirty_flag(const LinkCSRBucketConnT<MemSpace> &bucket_conn) {
   return bucket_conn.dirty_;
 }
 
 template <typename MemSpace>
-KOKKOS_INLINE_FUNCTION unsigned &get_total_num_connected_links(LinkCRSBucketConnT<MemSpace> &bucket_conn) {
+KOKKOS_INLINE_FUNCTION unsigned &get_total_num_connected_links(LinkCSRBucketConnT<MemSpace> &bucket_conn) {
   return bucket_conn.total_num_connected_links_;
 }
 
 template <typename MemSpace>
-KOKKOS_INLINE_FUNCTION const unsigned &get_total_num_connected_links(const LinkCRSBucketConnT<MemSpace> &bucket_conn) {
+KOKKOS_INLINE_FUNCTION const unsigned &get_total_num_connected_links(const LinkCSRBucketConnT<MemSpace> &bucket_conn) {
   return bucket_conn.total_num_connected_links_;
 }
 
 template <typename MemSpace>
 KOKKOS_INLINE_FUNCTION Kokkos::View<unsigned *, MemSpace> &get_num_connected_links(
-    LinkCRSBucketConnT<MemSpace> &bucket_conn) {
+    LinkCSRBucketConnT<MemSpace> &bucket_conn) {
   return bucket_conn.num_connected_links_;
 }
 
 template <typename MemSpace>
 KOKKOS_INLINE_FUNCTION const Kokkos::View<unsigned *, MemSpace> &get_num_connected_links(
-    const LinkCRSBucketConnT<MemSpace> &bucket_conn) {
+    const LinkCSRBucketConnT<MemSpace> &bucket_conn) {
   return bucket_conn.num_connected_links_;
 }
 
 template <typename MemSpace>
 KOKKOS_INLINE_FUNCTION Kokkos::View<unsigned *, MemSpace> &get_sparse_connectivity_offsets(
-    LinkCRSBucketConnT<MemSpace> &bucket_conn) {
+    LinkCSRBucketConnT<MemSpace> &bucket_conn) {
   return bucket_conn.sparse_connectivity_offsets_;
 }
 
 template <typename MemSpace>
 KOKKOS_INLINE_FUNCTION const Kokkos::View<unsigned *, MemSpace> &get_sparse_connectivity_offsets(
-    const LinkCRSBucketConnT<MemSpace> &bucket_conn) {
+    const LinkCSRBucketConnT<MemSpace> &bucket_conn) {
   return bucket_conn.sparse_connectivity_offsets_;
 }
 
 template <typename MemSpace>
 KOKKOS_INLINE_FUNCTION Kokkos::View<stk::mesh::Entity *, MemSpace> &get_sparse_connectivity(
-    LinkCRSBucketConnT<MemSpace> &bucket_conn) {
+    LinkCSRBucketConnT<MemSpace> &bucket_conn) {
   return bucket_conn.sparse_connectivity_;
 }
 
 template <typename MemSpace>
 KOKKOS_INLINE_FUNCTION const Kokkos::View<stk::mesh::Entity *, MemSpace> &get_sparse_connectivity(
-    const LinkCRSBucketConnT<MemSpace> &bucket_conn) {
+    const LinkCSRBucketConnT<MemSpace> &bucket_conn) {
   return bucket_conn.sparse_connectivity_;
 }
 }  // namespace impl
@@ -281,4 +281,4 @@ KOKKOS_INLINE_FUNCTION const Kokkos::View<stk::mesh::Entity *, MemSpace> &get_sp
 
 }  // namespace mundy
 
-#endif  // MUNDY_MESH_LINKCRSBUCKETCONN_HPP_
+#endif  // MUNDY_MESH_LINKCSRBUCKETCONN_HPP_
