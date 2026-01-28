@@ -19,7 +19,8 @@ git clone --depth=1 "https://github.com/google/googletest.git" $BUILD_DIR
 cd $BUILD_DIR
 
 # Create a build directory
-mkdir build && cd build
+mkdir build 
+cd build
 
 # Configure, build, and install the project with CMake
 cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS="-O3 -march=native" -DCMAKE_INSTALL_PREFIX=$INSTALL_DIR

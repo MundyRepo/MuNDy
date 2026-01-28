@@ -1,11 +1,8 @@
-# Install mundy
-git clone https://github.com/MundyRepo/MuNDy.git -b install_test --recursive
-cd MuNDy
-
 TPL_ROOT_DIR=$PWD/dep/tpls
 echo "Using TPL dir: ${TPL_ROOT_DIR}"
 
 # Install third-party libraries (TPLs) | fmt, Kokkos, OpenRAND, GTEST
+source ./load_new.sh
 cd ./dep
 bash ./install_fmt.sh ${TPL_ROOT_DIR}
 bash ./install_kokkos.sh ${TPL_ROOT_DIR}
