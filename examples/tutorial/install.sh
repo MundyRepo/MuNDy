@@ -1,5 +1,5 @@
 # Install mundy
-git clone https://github.com/MundyRepo/MuNDy.git --recursive
+git clone https://github.com/MundyRepo/MuNDy.git -b install_test --recursive
 cd MuNDy
 
 TPL_ROOT_DIR=$PWD/dep/tpls

@@ -1,9 +1,0 @@
-#ifndef MUNDY_CONFIG_HPP_
-#define MUNDY_CONFIG_HPP_
-
-// Declare special variables, especially those related to optional features, TPLs, and workarounds.
-
-// Optional packages
-/* #undef HAVE_MUNDY_STK */
-
-#endif  // MUNDY_CONFIG_HPP_
