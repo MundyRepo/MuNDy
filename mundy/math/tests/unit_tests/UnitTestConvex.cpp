@@ -32,6 +32,9 @@
 #include <mundy_math/Vector.hpp>  // for mundy::math::Vector
 #include <mundy_math/convex.hpp>  // for mundy::math::solve_lcp/solve_cqpp
 
+#include <MundyMath_config.hpp>  // for HAVE_MUNDYMATH_*
+
+
 namespace mundy {
 
 namespace math {
@@ -231,9 +234,9 @@ struct RandomLCP {
 }  // namespace math_backend
 //@}
 
+#ifdef HAVE_MUNDYMATH_KOKKOSKERNELS
 //! \name Kokkos backend test problems (single process)
 //@{
-
 namespace kokkos_backend {
 
 struct UnconstrainedSPD1Problem {
@@ -525,6 +528,7 @@ struct RandomLCP {
 
 }  // namespace kokkos_backend
 //@}
+#endif  // HAVE_MUNDYMATH_KOKKOSKERNELS
 
 void run_mundy_math_test(const auto& test) {
   // Problem setup
@@ -560,6 +564,7 @@ void run_mundy_math_test(const auto& test) {
   }
 }
 
+#ifdef HAVE_MUNDYMATH_KOKKOSKERNELS
 void run_kokkos_test(const auto& test) {
   // Problem setup
   auto exec_space = test.get_exec_space();
@@ -604,6 +609,7 @@ void run_kokkos_test(const auto& test) {
     EXPECT_NEAR(x_host[i], x_exact_host[i], 10 * cfg.tol);
   }
 }
+#endif  // HAVE_MUNDYMATH_KOKKOSKERNELS
 
 TEST(Convex, MundyMathAnalyticalSolutions) {
   auto test_cases = std::make_tuple(math_backend::UnconstrainedSPD1Problem{},          //
@@ -614,6 +620,7 @@ TEST(Convex, MundyMathAnalyticalSolutions) {
   std::apply([](auto&&... test_case) { (run_mundy_math_test(test_case), ...); }, test_cases);
 }
 
+#ifdef HAVE_MUNDYMATH_KOKKOSKERNELS
 TEST(Convex, KokkosAnalyticalSolutions) {
   auto test_cases = std::make_tuple(kokkos_backend::UnconstrainedSPD1Problem{},          //
                                     kokkos_backend::InactiveBoxConstrainedSPDProblem{},  //
@@ -623,6 +630,7 @@ TEST(Convex, KokkosAnalyticalSolutions) {
                                     kokkos_backend::RandomLCP{200});
   std::apply([](auto&&... test_case) { (run_kokkos_test(test_case), ...); }, test_cases);
 }
+#endif  // HAVE_MUNDYMATH_KOKKOSKERNELS
 
 }  // namespace
 

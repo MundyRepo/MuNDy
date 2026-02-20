@@ -3,4 +3,7 @@
 
 // Declare special variables, especially those related to optional features, TPLs, and workarounds.
 
+// Optional packages
+#cmakedefine HAVE_MUNDYMATH_KOKKOSKERNELS
+
 #endif  // MUNDYMATH_CONFIG_HPP_

@@ -28,9 +28,6 @@
 #include <Kokkos_Core.hpp>
 #include <Kokkos_DualView.hpp>
 
-// STK
-#include <stk_util/ngp/NgpSpaces.hpp>
-
 namespace mundy {
 
 namespace core {
@@ -221,10 +218,10 @@ class NgpViewT : public Kokkos::DualView<DataType, Properties...> {
 
 /// \brief Our default NgpView type for use in Mundy.
 ///
-/// Unlike NgpViewT, we follow stk::ngp conventions by using stk::ngp::ExecSpace as our
+/// Unlike NgpViewT, we follow stk::ngp conventions by using Kokkos::DefaultExecutionSpace as our
 /// chosen device space.
 template <class DataType, class... Properties>
-using NgpView = NgpViewT<DataType, Properties..., typename stk::ngp::ExecSpace::memory_space>;
+using NgpView = NgpViewT<DataType, Properties..., typename Kokkos::DefaultExecutionSpace::memory_space>;
 
 }  // namespace core
 

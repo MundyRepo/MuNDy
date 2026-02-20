@@ -155,7 +155,7 @@ TEST(NgpViewTest, Functionality) {
 
   // For power users, if you really want to use our NgpView with a different memory space, you can do so.
   // Just use NgpViewT directly.
-  NgpViewT<int**, Kokkos::LayoutLeft, stk::ngp::ExecSpace> ngp_view4("ngp_view4", 10, 3);
+  NgpViewT<int**, Kokkos::LayoutLeft, Kokkos::DefaultExecutionSpace> ngp_view4("ngp_view4", 10, 3);
 }
 
 }  // namespace
