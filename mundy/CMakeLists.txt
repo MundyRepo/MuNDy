@@ -14,8 +14,6 @@ GLOBAL_SET(MUNDY_DEFAULT_INTEGRATION_TEST_MAIN
 # if they are not needed.
 GLOBAL_SET(Mundy_ENABLE_ALL_OPTIONAL_PACKAGES ON)
 
-tribits_configure_file(../mundy/cmake/Mundy_config.hpp)
-
 tribits_add_test_directories(${PACKAGE_SOURCE_DIR}/mundy/tests)
 
 tribits_process_subpackages()
