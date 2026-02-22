@@ -50,7 +50,7 @@ struct is_vector_impl : std::false_type {};
 template <typename T, size_t N, typename Accessor, typename OwnershipType>
 struct is_vector_impl<AVector<T, N, Accessor, OwnershipType>> : std::true_type {};
 
-/// \brief Type trait to determine if a type is a AVector
+/// \brief Type trait to determine if a type is an AVector
 template <typename T>
 struct is_vector : public is_vector_impl<std::decay_t<T>> {};
 //
@@ -80,16 +80,16 @@ concept ValidVectorType =
 /// The goal of AVector is to be a lightweight class that can be used with Kokkos to perform mathematical operations on
 /// vectors in R3. It does not own the data, but rather it is templated on an Accessor type that provides access to the
 /// underlying data. This allows us to use AVector with Kokkos Ownership::Views, raw pointers, or any other type that
-/// meets the ValidAccessor requirements without copying the data. This is especially important for GPU-compatable code.
+/// meets the ValidAccessor requirements without copying the data. This is especially important for GPU-compatible code.
 ///
 /// AVectors can be constructed by passing an accessor to the constructor. However, if the accessor has a N-argument
 /// constructor, then the AVector can also be constructed by passing the elements directly to the constructor.
 /// Similarly, if the accessor has an initializer list constructor, then the AVector can be constructed by passing an
 /// initializer list to the constructor. This is a convenience feature which makes working with the default accessor
-/// (Array<T, N>) easier. For example, the following are all valid ways to construct a AVector:
+/// (Array<T, N>) easier. For example, the following are all valid ways to construct an AVector:
 ///
 /// \code{.cpp}
-///   // Constructs a AVector with the default accessor (Array<int, N>)
+///   // Constructs an AVector with the default accessor (Array<int, N>)
 ///   AVector<int, 3> vec1({1, 2, 3});
 ///   AVector<int, 3> vec2(1, 2, 3);
 ///   AVector<int, 3> vec3(Array<int, 3>({1, 2, 3}));
@@ -161,7 +161,7 @@ class AVector<T, N, Accessor, Ownership::Views> {
   KOKKOS_DEFAULTED_FUNCTION
   constexpr ~AVector() = default;
 
-  // Default copy/move constructors and assignment operators when interacting with a AVector of the same type
+  // Default copy/move constructors and assignment operators when interacting with an AVector of the same type
 
   /// \brief Default copy constructor (shallow copy)
   KOKKOS_DEFAULTED_FUNCTION
@@ -173,20 +173,21 @@ class AVector<T, N, Accessor, Ownership::Views> {
 
   /// \brief Default copy assignment operator (deep copy)
   KOKKOS_INLINE_FUNCTION
-  constexpr AVector<T, N, Accessor, Ownership::Views>& operator=(const AVector<T, N, Accessor, Ownership::Views>&other ) {
+  constexpr AVector<T, N, Accessor, Ownership::Views>& operator=(
+      const AVector<T, N, Accessor, Ownership::Views>& other) {
     impl::deep_copy_impl(std::make_index_sequence<N>{}, *this, other);
     return *this;
   }
 
   /// \brief Default move assignment operator (deep move)
   KOKKOS_INLINE_FUNCTION
-  constexpr AVector<T, N, Accessor, Ownership::Views>& operator=(AVector<T, N, Accessor, Ownership::Views>&&other) {
+  constexpr AVector<T, N, Accessor, Ownership::Views>& operator=(AVector<T, N, Accessor, Ownership::Views>&& other) {
     impl::deep_copy_impl(std::make_index_sequence<N>{}, *this, other);
     return *this;
   }
 
-  // Custom copy/move constructors and assignment operators when interacting with a AVector of a different type
-  // We do not allow copy/move construction from a AVector of a different type. This is undefined behavior.
+  // Custom assignment operators when interacting with an AVector of a different type.
+  // In this non-owning specialization, we intentionally only provide assignment (no cross-type copy/move constructors).
 
   /// \brief Deep copy assignment operator with different accessor or ownership
   /// \details Copies the data from the other vector to our data. This is only enabled if T is not const.
@@ -222,7 +223,9 @@ class AVector<T, N, Accessor, Ownership::Views> {
   }
 
   /// \brief Allow for automatic conversion of a length 1 vector to a scalar
-  KOKKOS_INLINE_FUNCTION constexpr operator T() requires(N == 1) {
+  KOKKOS_INLINE_FUNCTION constexpr operator T()
+    requires(N == 1)
+  {
     return accessor_[0];
   }
   //@}
@@ -234,10 +237,12 @@ class AVector<T, N, Accessor, Ownership::Views> {
   /// \param[in] index The index of the element.
   KOKKOS_INLINE_FUNCTION
   constexpr T& operator[](size_t index) {
+    MUNDY_THROW_ASSERT(index < N, std::out_of_range, "AVector index out of bounds.");
     return accessor_[index];
   }
   KOKKOS_INLINE_FUNCTION
   constexpr const T& operator[](size_t index) const {
+    MUNDY_THROW_ASSERT(index < N, std::out_of_range, "AVector index out of bounds.");
     return accessor_[index];
   }
 
@@ -245,10 +250,12 @@ class AVector<T, N, Accessor, Ownership::Views> {
   /// \param[in] index The index of the element.
   KOKKOS_INLINE_FUNCTION
   constexpr T& operator()(size_t index) {
+    MUNDY_THROW_ASSERT(index < N, std::out_of_range, "AVector index out of bounds.");
     return accessor_[index];
   }
   KOKKOS_INLINE_FUNCTION
   constexpr const T& operator()(size_t index) const {
+    MUNDY_THROW_ASSERT(index < N, std::out_of_range, "AVector index out of bounds.");
     return accessor_[index];
   }
 
@@ -287,7 +294,7 @@ class AVector<T, N, Accessor, Ownership::Views> {
 
   /// \brief Set all elements of the vector using an accessor
   /// \param[in] accessor A valid accessor.
-  /// \note A AVector is also a valid accessor.
+  /// \note An AVector is also a valid accessor.
   template <ValidAccessor<T> OtherAccessor>
   KOKKOS_INLINE_FUNCTION constexpr void set(const OtherAccessor& accessor)
     requires HasNonConstAccessOperator<Accessor, T>
@@ -363,6 +370,7 @@ class AVector<T, N, Accessor, Ownership::Views> {
   /// \brief AVector-scalar addition
   /// \param[in] scalar The scalar.
   template <typename U>
+    requires std::is_arithmetic_v<U>
   KOKKOS_INLINE_FUNCTION constexpr auto operator+(const U& scalar) const {
     return impl::vector_scalar_add_impl(std::make_index_sequence<N>{}, *this, scalar);
   }
@@ -370,6 +378,7 @@ class AVector<T, N, Accessor, Ownership::Views> {
   /// \brief Self-scalar addition
   /// \param[in] scalar The scalar.
   template <typename U>
+    requires std::is_arithmetic_v<U>
   KOKKOS_INLINE_FUNCTION constexpr AVector<T, N, Accessor, Ownership::Views>& operator+=(const U& scalar)
     requires HasNonConstAccessOperator<Accessor, T>
   {
@@ -380,6 +389,7 @@ class AVector<T, N, Accessor, Ownership::Views> {
   /// \brief AVector-scalar subtraction
   /// \param[in] scalar The scalar.
   template <typename U>
+    requires std::is_arithmetic_v<U>
   KOKKOS_INLINE_FUNCTION constexpr auto operator-(const U& scalar) const {
     return impl::vector_scalar_subtraction_impl(std::make_index_sequence<N>{}, *this, scalar);
   }
@@ -387,6 +397,7 @@ class AVector<T, N, Accessor, Ownership::Views> {
   /// \brief AVector-scalar subtraction
   /// \param[in] scalar The scalar.
   template <typename U>
+    requires std::is_arithmetic_v<U>
   KOKKOS_INLINE_FUNCTION constexpr AVector<T, N, Accessor, Ownership::Views>& operator-=(const U& scalar)
     requires HasNonConstAccessOperator<Accessor, T>
   {
@@ -408,7 +419,7 @@ class AVector<T, N, Accessor, Ownership::Views> {
   /// \brief AVector-scalar multiplication
   /// \param[in] scalar The scalar.
   template <typename U>
-    requires HasNonConstAccessOperator<Accessor, T>
+    requires HasNonConstAccessOperator<Accessor, T> && std::is_arithmetic_v<U>
   KOKKOS_INLINE_FUNCTION constexpr AVector<T, N, Accessor, Ownership::Views>& operator*=(const U& scalar) {
     impl::self_scalar_multiplication_impl(std::make_index_sequence<N>{}, *this, scalar);
     return *this;
@@ -417,6 +428,7 @@ class AVector<T, N, Accessor, Ownership::Views> {
   /// \brief AVector-scalar division. (Type promotes the result to a double if the scalar is not a floating point.)
   /// \param[in] scalar The scalar.
   template <typename U>
+    requires std::is_arithmetic_v<U>
   KOKKOS_INLINE_FUNCTION constexpr auto operator/(const U& scalar) const {
     return impl::vector_scalar_division_impl(std::make_index_sequence<N>{}, *this, scalar);
   }
@@ -425,7 +437,7 @@ class AVector<T, N, Accessor, Ownership::Views> {
   /// \note Because there is no type promotion, this will perform integer division if the scalar is an integer.
   /// \param[in] scalar The scalar.
   template <typename U>
-    requires HasNonConstAccessOperator<Accessor, T>
+    requires HasNonConstAccessOperator<Accessor, T> && std::is_arithmetic_v<U>
   KOKKOS_INLINE_FUNCTION constexpr AVector<T, N, Accessor, Ownership::Views>& operator/=(const U& scalar) {
     impl::self_scalar_division_impl(std::make_index_sequence<N>{}, *this, scalar);
     return *this;
@@ -516,8 +528,8 @@ class AVector<T, N, Accessor, Ownership::Owns> {
   /// Requires the number of arguments to be N and the type of each to be T.
   /// Only enabled if the Accessor has a N-argument constructor.
   template <typename... Args>
-    requires(sizeof...(Args) == N) && (N != 1) &&
-            (std::is_convertible_v<Args, T> && ...) && HasNArgConstructor<Accessor, T, N>
+    requires(sizeof...(Args) == N) && (N != 1) && (std::is_convertible_v<Args, T> && ...) &&
+            HasNArgConstructor<Accessor, T, N>
   KOKKOS_INLINE_FUNCTION constexpr explicit AVector(Args&&... args)
       : accessor_{static_cast<T>(std::forward<Args>(args))...} {
   }
@@ -533,7 +545,7 @@ class AVector<T, N, Accessor, Ownership::Owns> {
   KOKKOS_DEFAULTED_FUNCTION
   constexpr ~AVector() = default;
 
-  // Default copy/move constructors and assignment operators when interacting with a AVector of the same type
+  // Default copy/move constructors and assignment operators when interacting with an AVector of the same type
 
   /// \brief Default copy constructor (deep copies the accessor, not necessarily the data)
   KOKKOS_DEFAULTED_FUNCTION
@@ -543,21 +555,21 @@ class AVector<T, N, Accessor, Ownership::Owns> {
   KOKKOS_DEFAULTED_FUNCTION
   constexpr AVector(AVector<T, N, Accessor, Ownership::Owns>&&) = default;
 
-  /// \brief Default copy assignment operator (deep copys the data)
+  /// \brief Default copy assignment operator (deep copies the data)
   KOKKOS_INLINE_FUNCTION
-  constexpr AVector<T, N, Accessor, Ownership::Owns>& operator=(const AVector<T, N, Accessor, Ownership::Owns>&other) {
+  constexpr AVector<T, N, Accessor, Ownership::Owns>& operator=(const AVector<T, N, Accessor, Ownership::Owns>& other) {
     impl::deep_copy_impl(std::make_index_sequence<N>{}, *this, other);
     return *this;
   }
 
   /// \brief Default move assignment operator (deep copies the data)
   KOKKOS_INLINE_FUNCTION
-  constexpr AVector<T, N, Accessor, Ownership::Owns>& operator=(AVector<T, N, Accessor, Ownership::Owns>&&other) {
+  constexpr AVector<T, N, Accessor, Ownership::Owns>& operator=(AVector<T, N, Accessor, Ownership::Owns>&& other) {
     impl::deep_copy_impl(std::make_index_sequence<N>{}, *this, other);
     return *this;
   }
 
-  // Custom copy/move constructors and assignment operators when interacting with a AVector of a different type
+  // Custom copy/move constructors and assignment operators when interacting with an AVector of a different type
 
   /// \brief Deep copy constructor with different accessor or ownership
   template <ValidVectorType OtherVectorType>
@@ -613,7 +625,9 @@ class AVector<T, N, Accessor, Ownership::Owns> {
   }
 
   /// \brief Allow for automatic conversion of a length 1 vector to a scalar
-  KOKKOS_INLINE_FUNCTION constexpr operator T() requires(N == 1) {
+  KOKKOS_INLINE_FUNCTION constexpr operator T()
+    requires(N == 1)
+  {
     return accessor_[0];
   }
   //@}
@@ -625,10 +639,12 @@ class AVector<T, N, Accessor, Ownership::Owns> {
   /// \param[in] index The index of the element.
   KOKKOS_INLINE_FUNCTION
   constexpr T& operator[](size_t index) {
+    MUNDY_THROW_ASSERT(index < N, std::out_of_range, "AVector index out of bounds.");
     return accessor_[index];
   }
   KOKKOS_INLINE_FUNCTION
   constexpr const T& operator[](size_t index) const {
+    MUNDY_THROW_ASSERT(index < N, std::out_of_range, "AVector index out of bounds.");
     return accessor_[index];
   }
 
@@ -636,10 +652,12 @@ class AVector<T, N, Accessor, Ownership::Owns> {
   /// \param[in] index The index of the element.
   KOKKOS_INLINE_FUNCTION
   constexpr T& operator()(size_t index) {
+    MUNDY_THROW_ASSERT(index < N, std::out_of_range, "AVector index out of bounds.");
     return accessor_[index];
   }
   KOKKOS_INLINE_FUNCTION
   constexpr const T& operator()(size_t index) const {
+    MUNDY_THROW_ASSERT(index < N, std::out_of_range, "AVector index out of bounds.");
     return accessor_[index];
   }
 
@@ -654,7 +672,7 @@ class AVector<T, N, Accessor, Ownership::Owns> {
   }
 
   /// \brief Get a deep copy of the vector
-  KOKKOS_INLINE_FUNCTION 
+  KOKKOS_INLINE_FUNCTION
   constexpr deep_copy_t copy() const {
     return *this;
   }
@@ -678,7 +696,7 @@ class AVector<T, N, Accessor, Ownership::Owns> {
 
   /// \brief Set all elements of the vector using an accessor
   /// \param[in] accessor A valid accessor.
-  /// \note A AVector is also a valid accessor.
+  /// \note An AVector is also a valid accessor.
   template <ValidAccessor<T> OtherAccessor>
   KOKKOS_INLINE_FUNCTION constexpr void set(const OtherAccessor& accessor)
     requires HasNonConstAccessOperator<Accessor, T>
@@ -754,7 +772,7 @@ class AVector<T, N, Accessor, Ownership::Owns> {
   /// \brief AVector-scalar addition
   /// \param[in] scalar The scalar.
   template <typename U>
-      requires std::is_arithmetic_v<U>
+    requires std::is_arithmetic_v<U>
   KOKKOS_INLINE_FUNCTION constexpr auto operator+(const U& scalar) const {
     return impl::vector_scalar_add_impl(std::make_index_sequence<N>{}, *this, scalar);
   }
@@ -762,7 +780,7 @@ class AVector<T, N, Accessor, Ownership::Owns> {
   /// \brief Self-scalar addition
   /// \param[in] scalar The scalar.
   template <typename U>
-      requires std::is_arithmetic_v<U>
+    requires std::is_arithmetic_v<U>
   KOKKOS_INLINE_FUNCTION constexpr AVector<T, N, Accessor, Ownership::Owns>& operator+=(const U& scalar)
     requires HasNonConstAccessOperator<Accessor, T>
   {
@@ -773,7 +791,7 @@ class AVector<T, N, Accessor, Ownership::Owns> {
   /// \brief AVector-scalar subtraction
   /// \param[in] scalar The scalar.
   template <typename U>
-      requires std::is_arithmetic_v<U>
+    requires std::is_arithmetic_v<U>
   KOKKOS_INLINE_FUNCTION constexpr auto operator-(const U& scalar) const {
     return impl::vector_scalar_subtraction_impl(std::make_index_sequence<N>{}, *this, scalar);
   }
@@ -781,7 +799,7 @@ class AVector<T, N, Accessor, Ownership::Owns> {
   /// \brief AVector-scalar subtraction
   /// \param[in] scalar The scalar.
   template <typename U>
-      requires std::is_arithmetic_v<U>
+    requires std::is_arithmetic_v<U>
   KOKKOS_INLINE_FUNCTION constexpr AVector<T, N, Accessor, Ownership::Owns>& operator-=(const U& scalar)
     requires HasNonConstAccessOperator<Accessor, T>
   {
@@ -803,7 +821,7 @@ class AVector<T, N, Accessor, Ownership::Owns> {
   /// \brief Self-scalar multiplication
   /// \param[in] scalar The scalar.
   template <typename U>
-      requires std::is_arithmetic_v<U>
+    requires std::is_arithmetic_v<U>
   KOKKOS_INLINE_FUNCTION constexpr AVector<T, N, Accessor, Ownership::Owns>& operator*=(const U& scalar)
     requires HasNonConstAccessOperator<Accessor, T>
   {
@@ -814,7 +832,7 @@ class AVector<T, N, Accessor, Ownership::Owns> {
   /// \brief AVector-scalar division. (Type promotes the result to a double if the scalar is not a floating point.)
   /// \param[in] scalar The scalar.
   template <typename U>
-      requires std::is_arithmetic_v<U>
+    requires std::is_arithmetic_v<U>
   KOKKOS_INLINE_FUNCTION constexpr auto operator/(const U& scalar) const {
     return impl::vector_scalar_division_impl(std::make_index_sequence<N>{}, *this, scalar);
   }
@@ -823,7 +841,7 @@ class AVector<T, N, Accessor, Ownership::Owns> {
   /// \note Because there is no type promotion, this will perform integer division if the scalar is an integer.
   /// \param[in] scalar The scalar.
   template <typename U>
-      requires std::is_arithmetic_v<U>
+    requires std::is_arithmetic_v<U>
   KOKKOS_INLINE_FUNCTION constexpr AVector<T, N, Accessor, Ownership::Owns>& operator/=(const U& scalar)
     requires HasNonConstAccessOperator<Accessor, T>
   {
@@ -989,7 +1007,7 @@ KOKKOS_INLINE_FUNCTION constexpr bool is_approx_close(
 /// \param[in] scalar The scalar.
 /// \param[in] vec The vector.
 template <size_t N, typename U, typename T, ValidAccessor<T> Accessor, typename OwnershipType>
-    requires std::is_arithmetic_v<U>
+  requires std::is_arithmetic_v<U>
 KOKKOS_INLINE_FUNCTION constexpr auto operator+(const U& scalar, const AVector<T, N, Accessor, OwnershipType>& vec)
     -> AVector<std::common_type_t<T, U>, N> {
   return vec + scalar;
@@ -999,7 +1017,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto operator+(const U& scalar, const AVector<T
 /// \param[in] scalar The scalar.
 /// \param[in] vec The vector.
 template <size_t N, typename U, typename T, ValidAccessor<T> Accessor, typename OwnershipType>
-    requires std::is_arithmetic_v<U>
+  requires std::is_arithmetic_v<U>
 KOKKOS_INLINE_FUNCTION constexpr auto operator-(const U& scalar, const AVector<T, N, Accessor, OwnershipType>& vec)
     -> AVector<std::common_type_t<T, U>, N> {
   return -vec + scalar;
@@ -1013,7 +1031,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto operator-(const U& scalar, const AVector<T
 /// \param[in] scalar The scalar.
 /// \param[in] vec The vector.
 template <size_t N, typename U, typename T, ValidAccessor<T> Accessor, typename OwnershipType>
-    requires std::is_arithmetic_v<U>
+  requires std::is_arithmetic_v<U>
 KOKKOS_INLINE_FUNCTION constexpr auto operator*(const U& scalar, const AVector<T, N, Accessor, OwnershipType>& vec)
     -> AVector<std::common_type_t<T, U>, N> {
   return vec * scalar;
@@ -1143,18 +1161,25 @@ KOKKOS_INLINE_FUNCTION constexpr auto apply(Func&& func, const AVector<T, N, Acc
 //! \name AVector norms
 //@{
 
+/// \brief AVector component-wise absolute value
+/// \param[in] vec The vector.
+template <size_t N, typename T, ValidAccessor<T> Accessor, typename OwnershipType>
+KOKKOS_INLINE_FUNCTION constexpr auto abs(const AVector<T, N, Accessor, OwnershipType>& vec) {
+  return impl::abs_impl(std::make_index_sequence<N>{}, vec);
+}
+
 /// \brief AVector infinity norm
 /// \param[in] vec The vector.
 template <size_t N, typename T, ValidAccessor<T> Accessor, typename OwnershipType>
 KOKKOS_INLINE_FUNCTION constexpr auto inf_norm(const AVector<T, N, Accessor, OwnershipType>& vec) {
-  return max(vec);
+  return max(abs(vec));
 }
 
 /// \brief AVector 1-norm
 /// \param[in] vec The vector.
 template <size_t N, typename T, ValidAccessor<T> Accessor, typename OwnershipType>
 KOKKOS_INLINE_FUNCTION constexpr auto one_norm(const AVector<T, N, Accessor, OwnershipType>& vec) {
-  return sum(vec);
+  return sum(abs(vec));
 }
 
 /// \brief AVector 2-norm (Returns a double if T is an integral type, otherwise returns T)
@@ -1162,7 +1187,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto one_norm(const AVector<T, N, Accessor, Own
 template <size_t N, typename T, ValidAccessor<T> Accessor, typename OwnershipType,
           typename OutputType = std::conditional_t<std::is_integral_v<T>, double, T>>
 KOKKOS_INLINE_FUNCTION constexpr OutputType two_norm(const AVector<T, N, Accessor, OwnershipType>& vec) {
-  return std::sqrt(static_cast<OutputType>(dot(vec, vec)));
+  return Kokkos::sqrt(static_cast<OutputType>(dot(vec, vec)));
 }
 
 /// \brief AVector 2-norm (Returns a float if T is an integral type, otherwise returns T)
@@ -1210,8 +1235,17 @@ template <size_t N, typename U, typename T, ValidAccessor<U> Accessor1, typename
           typename Ownership2, typename OutputType = std::conditional_t<std::is_integral_v<T>, double, T>>
 KOKKOS_INLINE_FUNCTION constexpr OutputType minor_angle(const AVector<U, N, Accessor1, Ownership1>& a,
                                                         const AVector<T, N, Accessor2, Ownership2>& b) {
-  return std::acos(static_cast<OutputType>(dot(a, b)) /
-                   (static_cast<OutputType>(two_norm(a)) * static_cast<OutputType>(two_norm(b))));
+  OutputType norm_product = static_cast<OutputType>(two_norm(a)) * static_cast<OutputType>(two_norm(b));
+
+  // Avoid division by zero when a and b are norm zero
+  norm_product = is_close(norm_product, OutputType(0)) ? OutputType(1) : norm_product;
+  OutputType cosine = static_cast<OutputType>(dot(a, b)) / norm_product;
+  if (cosine > OutputType(1)) {
+    cosine = OutputType(1);
+  } else if (cosine < OutputType(-1)) {
+    cosine = OutputType(-1);
+  }
+  return Kokkos::acos(cosine);
 }
 
 /// \brief Minor angle between two vectors (returns a float if T is an integral type, otherwise returns T)
@@ -1231,7 +1265,7 @@ template <size_t N, typename U, typename T, ValidAccessor<U> Accessor1, typename
           typename Ownership2, typename OutputType = std::conditional_t<std::is_integral_v<T>, double, T>>
 KOKKOS_INLINE_FUNCTION constexpr OutputType major_angle(const AVector<U, N, Accessor1, Ownership1>& a,
                                                         const AVector<T, N, Accessor2, Ownership2>& b) {
-  return OutputType(M_PI) - minor_angle(a, b);
+  return Kokkos::numbers::pi_v<OutputType> - minor_angle(a, b);
 }
 
 /// \brief Major angle between two vectors (returns a float if T is an integral type, otherwise returns T)
@@ -1272,18 +1306,18 @@ KOKKOS_INLINE_FUNCTION void atomic_store(AVector<T1, N, A1, OT1>* const v1, cons
 //! \name atomic_[op] Atomic operation which don’t return anything. [op] might be add, sub, mul, div.
 //@{
 
-#define MUNDY_MATH_VECTOR_SCALAR_ATOMIC_OP(op_name)                                                     \
-  template <size_t N, typename T1, ValidAccessor<T1> A1, typename OT1, typename T2>                     \
-  KOKKOS_INLINE_FUNCTION void atomic_##op_name(AVector<T1, N, A1, OT1>* const v, const T2& s) {         \
-    impl::atomic_vector_scalar_##op_name##_impl(std::make_index_sequence<N>{}, v, s);                   \
-  }                                                                                                     
+#define MUNDY_MATH_VECTOR_SCALAR_ATOMIC_OP(op_name)                                             \
+  template <size_t N, typename T1, ValidAccessor<T1> A1, typename OT1, typename T2>             \
+  KOKKOS_INLINE_FUNCTION void atomic_##op_name(AVector<T1, N, A1, OT1>* const v, const T2& s) { \
+    impl::atomic_vector_scalar_##op_name##_impl(std::make_index_sequence<N>{}, v, s);           \
+  }
 
 #define MUNDY_MATH_VECTOR_VECTOR_ATOMIC_OP(op_name)                                                                    \
   template <size_t N, typename T1, ValidAccessor<T1> A1, typename OT1, typename T2, ValidAccessor<T2> A2,              \
             typename OT2>                                                                                              \
   KOKKOS_INLINE_FUNCTION void atomic_##op_name(AVector<T1, N, A1, OT1>* const v1, const AVector<T2, N, A2, OT2>& v2) { \
     impl::atomic_vector_vector_##op_name##_impl(std::make_index_sequence<N>{}, v1, v2);                                \
-  }                                                                                                                    
+  }
 
 /// \brief Atomic v[i] += s
 MUNDY_MATH_VECTOR_SCALAR_ATOMIC_OP(add)

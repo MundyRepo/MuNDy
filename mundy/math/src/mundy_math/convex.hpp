@@ -24,7 +24,6 @@
 // Kokkos:
 #include <Kokkos_Core.hpp>
 
-
 // KokkosKernels
 #include <MundyMath_config.hpp>  // for HAVE_MUNDYMATH_*
 #ifdef HAVE_MUNDYMATH_KOKKOSKERNELS
@@ -184,7 +183,7 @@ struct KokkosBackend {
   // y = alpha * A * x + beta * y
   template <class LinearOp>
     requires(impl::DenseMatView<LinearOp, scalar_t>)
-  static void apply(double alpha, const LinearOp& A, const vector_t& x, double beta, vector_t& y) {
+  static void apply(scalar_t alpha, const LinearOp& A, const vector_t& x, scalar_t beta, vector_t& y) {
     MUNDY_THROW_ASSERT(A.extent(1) == x.extent(0), std::invalid_argument, "gemv: dimension mismatch A(:,1) vs x");
     MUNDY_THROW_ASSERT(A.extent(0) == y.extent(0), std::invalid_argument, "gemv: dimension mismatch A(0,:) vs y");
     KokkosBlas::gemv(exec_space{}, "N", alpha, A, x, beta, y);
@@ -251,7 +250,7 @@ struct KokkosBackend {
     } else {
       Kokkos::parallel_for(
           "wrapped_axpbyz", Kokkos::RangePolicy<exec_space>(0, x.extent(0)),
-          KOKKOS_LAMBDA(const int i) { z(i) = wrapper(0.0); });
+          KOKKOS_LAMBDA(const int i) { z(i) = wrapper(scalar_t(0)); });
     }
   }
 
@@ -430,7 +429,7 @@ class LCPProblem {
 };  // LCPProblem
 
 template <class Backend, class LinearOp>
-auto to_cqpp(const LCPProblem<Backend, LinearOp>& P) {
+KOKKOS_INLINE_FUNCTION auto to_cqpp(const LCPProblem<Backend, LinearOp>& P) {
   static constexpr space::LowerBound Rn_plus{static_cast<typename Backend::scalar_t>(0)};
   return CQPPProblem(P.backend(), P.A(), P.q(), Rn_plus);
 }
@@ -458,7 +457,7 @@ struct LinfNormProjectedGradientResidual {  // LCP only
 
           scalar_t abs_projected_grad;
           if (x_i < get_zero_tolerance<scalar_t>()) {
-            abs_projected_grad = Kokkos::max(0.0, grad_i);
+            abs_projected_grad = Kokkos::max(scalar_t(0), grad_i);
           } else {
             abs_projected_grad = Kokkos::abs(grad_i);
           }
@@ -484,7 +483,7 @@ struct LinfNormProjectedDiffResidual {
     // This res comes from line 17 and Eq 25 of Mazhar 2015
     // res =  1.0 / (3 * num_unknowns * gd) * norm_inf(xk - proj(xk - gd * gk))
     size_t num_unknowns = Backend::vector_size(x);
-    constexpr scalar_t small_step_size = 1e-6;
+    constexpr scalar_t small_step_size = static_cast<scalar_t>(1e-6);
     scalar_t largest_abs_diff;
     Backend::reduce_max(
         num_unknowns,
@@ -516,7 +515,7 @@ struct BBStepStrategy {
     scalar_t denom = Backend::diff_dot(x, x_old, grad, grad_old);  // (x - x_old) dot (grad - grad_old)
 
     // Avoid division by zero
-    constexpr scalar_t eps = get_zero_tolerance<scalar_t>() * 10;
+    constexpr scalar_t eps = get_zero_tolerance<scalar_t>() * static_cast<scalar_t>(10);
     denom += eps * (Kokkos::abs(denom) < eps);
 
     return num / denom;
@@ -632,14 +631,16 @@ class PGDStrategy {
 
     // Dai-Fletcher Sec. 5 initial step
     state.residual() = resid_(Backend{}, state.x_tmp(), state.grad_tmp(), prob.space());
-    state.step_size() = one / state.residual();
 
     // Initialize iteration state (allow for early exit)
     state.iter() = 0;
     state.converged() = (state.residual() <= static_cast<scalar_t>(cfg_.tol));
     if (state.converged()) {
+      state.step_size() = one;
       // If already converged, copy grad_tmp to grad
       Backend::deep_copy(state.grad(), state.grad_tmp());
+    } else {
+      state.step_size() = one / state.residual();
     }
   }
 
@@ -689,13 +690,13 @@ class PGDStrategy {
 };
 
 template <class Strategy, class Problem>
-concept CQPPSolverStrategy = requires(Strategy& s, const Problem& prob) {
+concept CQPPSolverStrategy = requires(const Strategy& s, const Problem& prob, typename Strategy::state_t& state) {
   typename Strategy::state_t;
   typename Strategy::result_t;
-  { s.initialize(prob) } -> std::same_as<void>;
-  { s.iterate(prob) } -> std::same_as<bool>;
-  { s.done() } -> std::same_as<bool>;
-  { s.result() } -> std::same_as<typename Strategy::result_t>;
+  { s.initialize(prob, state) } -> std::same_as<void>;
+  { s.iterate(prob, state) } -> std::same_as<bool>;
+  { s.done(state) } -> std::same_as<bool>;
+  { s.result(state) } -> std::same_as<typename Strategy::result_t>;
 };
 
 //! \name Deduction guides
@@ -795,6 +796,7 @@ KOKKOS_INLINE_FUNCTION auto make_pgd_state(const Backend& backend,             /
 /// \param state The state to use for the solution strategy, which will be modified during the solve.
 /// \return The result of the solve (contents are defined by the strategy).
 template <class Problem, class Strategy>
+  requires convex::CQPPSolverStrategy<Strategy, Problem>
 KOKKOS_INLINE_FUNCTION auto solve_cqpp(const Problem& prob, const Strategy& strat, typename Strategy::state_t& state) ->
     typename Strategy::result_t {
   strat.initialize(prob, state);
@@ -845,6 +847,9 @@ KOKKOS_INLINE_FUNCTION auto solve_cqpp(const Problem& prob, const Strategy& stra
 /// \param state The state to use for the solution strategy, which will be modified during the solve.
 /// \return The result of the solve (contents are defined by the strategy).
 template <class Problem, class Strategy>
+  requires requires(const Problem& p) {
+    { to_cqpp(p) };
+  }
 KOKKOS_INLINE_FUNCTION auto solve_lcp(const Problem& prob, const Strategy& strat, typename Strategy::state_t& state) ->
     typename Strategy::result_t {
   // Convert LCP to CQPP

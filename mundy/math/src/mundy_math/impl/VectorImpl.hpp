@@ -281,6 +281,16 @@ KOKKOS_INLINE_FUNCTION constexpr bool is_close_impl(std::index_sequence<Is...>,
   return ((Kokkos::abs(static_cast<V>(vec1[Is]) - static_cast<V>(vec2[Is])) <= tol) && ...);
 }
 
+/// \brief Component-wise absolute value
+template <size_t... Is, size_t N, typename T, ValidAccessor<T> Accessor, typename OwnershipType>
+KOKKOS_INLINE_FUNCTION constexpr auto abs_impl(std::index_sequence<Is...>,
+                                               const AVector<T, N, Accessor, OwnershipType>& vec) {
+  using OutputType = std::remove_cv_t<decltype(Kokkos::abs(vec[0]))>;
+  AVector<OutputType, N> result;
+  ((result[Is] = Kokkos::abs(vec[Is])), ...);
+  return result;
+}
+
 /// \brief Sum of all elements
 template <size_t... Is, size_t N, typename T, ValidAccessor<T> Accessor, typename OwnershipType>
 KOKKOS_INLINE_FUNCTION T constexpr sum_impl(std::index_sequence<Is...>,

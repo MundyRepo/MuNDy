@@ -28,6 +28,7 @@
 #include <future>
 #include <map>        // for std::map
 #include <memory>     // for std::shared_ptr, std::unique_ptr
+#include <sstream>
 #include <stdexcept>  // for std::logic_error, std::invalid_argument
 #include <string>     // for std::string
 #include <thread>
@@ -127,7 +128,7 @@ struct TypePair {
   using T2 = U2;
 };
 
-/// \brief GTETS typed test fixture so we can run tests on multiple pairs of types
+/// \brief GTEST typed test fixture so we can run tests on multiple pairs of types
 /// \tparam Pair The pair of types to run the tests on
 template <typename Pair>
 class VectorPairwiseTypeTest : public ::testing::Test {};  // VectorPairwiseTypeTest
@@ -299,6 +300,40 @@ TYPED_TEST(VectorSingleTypeTest, Accessors) {
   is_close_debug(v3[1], 5);
   is_close_debug(v3[2], 6);
 }
+
+TYPED_TEST(VectorSingleTypeTest, ConstAccessors) {
+  const Vector3<TypeParam> owning(1, 2, 3);
+  is_close_debug(owning[0], 1, "Const owning operator[] failed.");
+  is_close_debug(owning[1], 2, "Const owning operator[] failed.");
+  is_close_debug(owning(2), 3, "Const owning operator() failed.");
+
+  Kokkos::Array<TypeParam, 3> array{4, 5, 6};
+  const auto view = get_vector_view<TypeParam, 3>(array);
+  is_close_debug(view[0], 4, "Const view operator[] failed.");
+  is_close_debug(view[1], 5, "Const view operator[] failed.");
+  is_close_debug(view(2), 6, "Const view operator() failed.");
+}
+
+// These tests are only valid in debug mode
+#ifndef NDEBUG
+TYPED_TEST(VectorSingleTypeTest, AccessorsThrowOnOutOfBoundsOwning) {
+  Vector1<TypeParam> v1(1);
+  EXPECT_THROW(static_cast<void>(v1[1]), std::out_of_range);
+  EXPECT_THROW(static_cast<void>(v1(1)), std::out_of_range);
+
+  Vector3<TypeParam> v3(1, 2, 3);
+  EXPECT_THROW(static_cast<void>(v3[3]), std::out_of_range);
+  EXPECT_THROW(static_cast<void>(v3(3)), std::out_of_range);
+}
+
+TYPED_TEST(VectorSingleTypeTest, AccessorsThrowOnOutOfBoundsView) {
+  Kokkos::Array<TypeParam, 3> array{1, 2, 3};
+  auto view = get_vector_view<TypeParam, 3>(array);
+
+  EXPECT_THROW(static_cast<void>(view[3]), std::out_of_range);
+  EXPECT_THROW(static_cast<void>(view(3)), std::out_of_range);
+}
+#endif
 //@}
 
 //! \name Vector Setters
@@ -604,6 +639,140 @@ TYPED_TEST(VectorPairwiseTypeTest, SpecialOperations) {
                  "Minor angle failed.");
   is_close_debug(major_angle(v5, v6), static_cast<C>(M_PI - std::acos(32.0 / (std::sqrt(14.0) * std::sqrt(77.0)))),
                  "Major angle failed.");
+}
+
+TYPED_TEST(VectorSingleTypeTest, SpecialOperationsWithNegativeValues) {
+  using C = decltype(get_comparison_tolerance_promote_ints<TypeParam, TypeParam>());
+
+  Vector3<TypeParam> v(-1, -2, 3);
+  is_close_debug(inf_norm(v), static_cast<C>(3.0), "Infinity norm with negatives failed.");
+  is_close_debug(one_norm(v), static_cast<C>(6.0), "One norm with negatives failed.");
+}
+
+TYPED_TEST(VectorSingleTypeTest, AngleEdgeCasesWithZeroVectors) {
+  using C = decltype(get_comparison_tolerance_promote_ints<TypeParam, TypeParam>());
+
+  Vector3<TypeParam> z1(0, 0, 0);
+  Vector3<TypeParam> z2(0, 0, 0);
+
+  ASSERT_NO_THROW(minor_angle(z1, z2));
+  ASSERT_NO_THROW(major_angle(z1, z2));
+
+  const auto minor = minor_angle(z1, z2);
+  const auto major = major_angle(z1, z2);
+
+  is_close_debug(minor, static_cast<C>(Kokkos::numbers::pi_v<C> / static_cast<C>(2.0)),
+                 "Minor angle for zero vectors failed.");
+  is_close_debug(major, static_cast<C>(Kokkos::numbers::pi_v<C> / static_cast<C>(2.0)),
+                 "Major angle for zero vectors failed.");
+}
+
+TYPED_TEST(VectorSingleTypeTest, AngleOppositeVectors) {
+  using C = decltype(get_comparison_tolerance_promote_ints<TypeParam, TypeParam>());
+
+  Vector3<TypeParam> a(1, 0, 0);
+  Vector3<TypeParam> b(-1, 0, 0);
+
+  is_close_debug(minor_angle(a, b), static_cast<C>(Kokkos::numbers::pi_v<C>),
+                 "Minor angle for opposite vectors failed.");
+  is_close_debug(major_angle(a, b), static_cast<C>(0), "Major angle for opposite vectors failed.");
+}
+
+TYPED_TEST(VectorSingleTypeTest, ScalarConversionLengthOne) {
+  Vector1<TypeParam> owning(7);
+  TypeParam scalar_from_owning = owning;
+  is_close_debug(scalar_from_owning, static_cast<TypeParam>(7), "Implicit scalar conversion for owning Vector1 failed.");
+
+  Kokkos::Array<TypeParam, 1> array{9};
+  auto view = get_vector_view<TypeParam, 1>(array);
+  TypeParam scalar_from_view = view;
+  is_close_debug(scalar_from_view, static_cast<TypeParam>(9), "Implicit scalar conversion for VectorView<1> failed.");
+}
+
+TYPED_TEST(VectorSingleTypeTest, OstreamFormatting) {
+  std::ostringstream os1;
+  os1 << Vector1<TypeParam>(1);
+  EXPECT_FALSE(os1.str().empty()) << "operator<< for Vector1 produced empty output.";
+
+  std::ostringstream os3;
+  os3 << Vector3<TypeParam>(1, 2, 3);
+  EXPECT_FALSE(os3.str().empty()) << "operator<< for Vector3 produced empty output.";
+  EXPECT_EQ(os3.str().front(), '(') << "operator<< should start with '('";
+  EXPECT_EQ(os3.str().back(), ')') << "operator<< should end with ')'";
+}
+
+TYPED_TEST(VectorSingleTypeTest, FloatConvenienceNormAndAngleFunctions) {
+  using C = decltype(get_comparison_tolerance_promote_ints<TypeParam, TypeParam>());
+
+  Vector3<TypeParam> a(1, -2, 3);
+  Vector3<TypeParam> b(4, 5, -6);
+
+  is_close_debug(norm_f(a), static_cast<float>(norm(a)), "norm_f mismatch.");
+  is_close_debug(two_norm_f(a), static_cast<float>(two_norm(a)), "two_norm_f mismatch.");
+  is_close_debug(minor_angle_f(a, b), static_cast<float>(minor_angle(a, b)), "minor_angle_f mismatch.");
+  is_close_debug(major_angle_f(a, b), static_cast<float>(major_angle(a, b)), "major_angle_f mismatch.");
+
+  is_close_debug(mean_f(a), static_cast<float>(mean(a)), "mean_f mismatch.");
+  is_close_debug(variance_f(a), static_cast<float>(variance(a)), "variance_f mismatch.");
+  is_close_debug(stddev_f(a), static_cast<float>(stddev(a)), "stddev_f mismatch.");
+
+  is_close_debug(inf_norm(a), static_cast<C>(3.0), "inf_norm regression check failed.");
+  is_close_debug(one_norm(a), static_cast<C>(6.0), "one_norm regression check failed.");
+}
+
+TYPED_TEST(VectorSingleTypeTest, CopyAndCastHelpers) {
+  Vector3<TypeParam> v(1, 2, 3);
+
+  auto member_copy = v.copy();
+  auto free_copy = copy(v);
+  is_close_debug(member_copy, v, "Member copy() failed.");
+  is_close_debug(free_copy, v, "Free copy(...) failed.");
+
+  auto casted = v.template cast<double>();
+  static_assert(std::is_same_v<typename decltype(casted)::scalar_t, double>, "cast<double> scalar type mismatch");
+  is_close_debug(casted, Vector3<double>(1.0, 2.0, 3.0), "cast<double>() values mismatch.");
+}
+
+TYPED_TEST(VectorSingleTypeTest, ElementwiseOperations) {
+  Vector3<TypeParam> a(1, 2, 3);
+  Vector3<TypeParam> b(4, 5, 6);
+
+  auto mul = elementwise_mul(a, b);
+  auto div = elementwise_div(b, a);
+
+  is_close_debug(mul, Vector3<typename decltype(mul)::scalar_t>(4, 10, 18), "elementwise_mul failed.");
+  is_close_debug(div, Vector3<typename decltype(div)::scalar_t>(4, 2.5, 2), "elementwise_div failed.");
+}
+
+TYPED_TEST(VectorSingleTypeTest, DataAccessorAndGetOwningVectorHelpers) {
+  // owning.data() should provide mutable accessor reference
+  Vector3<TypeParam> owning(1, 2, 3);
+  auto &own_data = owning.data();
+  own_data[0] = static_cast<TypeParam>(9);
+  is_close_debug(owning[0], static_cast<TypeParam>(9), "Owning data() mutable access failed.");
+
+  // pointer-view data() should return the pointer itself
+  Kokkos::Array<TypeParam, 3> backing{1, 2, 3};
+  auto view = get_vector_view<TypeParam, 3>(backing.data());
+  auto view_ptr = view.data();
+  EXPECT_EQ(view_ptr, backing.data()) << "View data() pointer mismatch.";
+
+  // get_owning_vector from array accessor should copy values and not alias
+  auto owning_from_array = get_owning_vector<TypeParam, 3>(backing);
+  backing[0] = static_cast<TypeParam>(42);
+  is_close_debug(owning_from_array[0], static_cast<TypeParam>(1), "get_owning_vector should not alias source array.");
+}
+
+TYPED_TEST(VectorSingleTypeTest, AtomicLoadStoreSmoke) {
+  Vector2<TypeParam> v(0, 0);
+
+  atomic_store(&v, static_cast<TypeParam>(3));
+  auto loaded_scalar = atomic_load(&v);
+  is_close_debug(loaded_scalar, Vector2<TypeParam>(3, 3), "atomic_store scalar overload failed.");
+
+  atomic_store(&v, Vector2<TypeParam>(4, 5));
+  auto loaded_vector = atomic_load(&v);
+  is_close_debug(loaded_vector, Vector2<TypeParam>(4, 5), "atomic_store vector overload failed.");
 }
 //@}
 

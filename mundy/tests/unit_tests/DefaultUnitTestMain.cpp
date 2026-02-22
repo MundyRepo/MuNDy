@@ -57,7 +57,8 @@ int main(int argc, char** argv) {
   // If STK is MPI enabled, then we're MPI enabled. As such, Mundy doesn't directly depend on or interact with MPI.
   // However, if tests are to be run in parallel, then TPL_ENABLE_MPI must be set to ON in the TriBITS configuration.
 
-#ifdef HAVE_MUNDY_STK
+#ifdef HAVE_MUNDYCORE_STK
+  std::cout << "Initializing STK Parallel Machine..." << std::endl;
   stk::parallel_machine_init(&argc, &argv);
 #endif
   Kokkos::initialize(argc, argv);
@@ -67,7 +68,8 @@ int main(int argc, char** argv) {
   int return_val = RUN_ALL_TESTS();
 
   Kokkos::finalize();
-#ifdef HAVE_MUNDY_STK
+#ifdef HAVE_MUNDYCORE_STK
+  std::cout << "Finalizing STK Parallel Machine..." << std::endl;
   stk::parallel_machine_finalize();
 #endif
 

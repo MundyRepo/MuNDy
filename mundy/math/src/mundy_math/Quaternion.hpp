@@ -42,14 +42,14 @@ namespace mundy {
 
 namespace math {
 
-/// \brief (Implementation) Type trait to determine if a type is a AQuaternion
+/// \brief (Implementation) Type trait to determine if a type is an AQuaternion
 template <typename TypeToCheck>
 struct is_quaternion_impl : std::false_type {};
 //
 template <typename T, typename Accessor, typename OwnershipType>
 struct is_quaternion_impl<AQuaternion<T, Accessor, OwnershipType>> : std::true_type {};
 
-/// \brief Type trait to determine if a type is a AQuaternion
+/// \brief Type trait to determine if a type is an AQuaternion
 template <typename T>
 struct is_quaternion : is_quaternion_impl<std::decay_t<T>> {};
 //
@@ -90,7 +90,7 @@ concept ValidQuaternionType =
 /// \brief Get the norm of a quaternion
 /// \param[in] quat The quaternion.
 template <typename T, ValidAccessor<T> Accessor, typename OwnershipType>
-KOKKOS_INLINE_FUNCTION constexpr auto norm(const AQuaternion<T, Accessor, OwnershipType> &quat);
+KOKKOS_INLINE_FUNCTION constexpr auto norm(const AQuaternion<T, Accessor, OwnershipType>& quat);
 //@}
 
 /// \brief AQuaternion class with floating point entries (an integer-valued quaternion doesn't make much sense)
@@ -103,23 +103,23 @@ KOKKOS_INLINE_FUNCTION constexpr auto norm(const AQuaternion<T, Accessor, Owners
 /// The goal of AQuaternion is to be a lightweight class that can be used with Kokkos to perform mathematical operations
 /// on vectors in R3. It does not own the data, but rather it is templated on an Accessor type that provides access to
 /// the underlying data. This allows us to use AQuaternion with Kokkos Views, raw pointers, or any other type that meets
-/// the ValidAccessor requirements without copying the data. This is especially important for GPU-compatable code.
+/// the ValidAccessor requirements without copying the data. This is especially important for GPU-compatible code.
 ///
 /// AQuaternions can be constructed by passing an accessor to the constructor. However, if the accessor has a 4-argument
 /// constructor, then the AQuaternion can also be constructed by passing the elements directly to the constructor.
 /// Similarly, if the accessor has an initializer list constructor, then the AQuaternion can be constructed by passing
 /// an initializer list to the constructor. This is a convenience feature which makes working with the default accessor
-/// (Array<T, 4>) easier. For example, the following are all valid ways to construct a AQuaternion:
+/// (Array<T, 4>) easier. For example, the following are all valid ways to construct an AQuaternion:
 ///
 /// \code{.cpp}
-///   // Constructs a AQuaternion with the default accessor (Array<int, 4>)
+///   // Constructs an AQuaternion with the default accessor (Array<double, 4>)
 ///   AQuaternion<double> quat1({1.0, 2.0, 3.0, 4.0});
 ///   AQuaternion<double> quat2(1.0, 2.0, 3.0, 4.0);
-///   AQuaternion<double> quat3(Array<int, 3>({1.0, 2.0, 3.0, 4.0}));
+///   AQuaternion<double> quat3(Array<double, 4>({1.0, 2.0, 3.0, 4.0}));
 ///   AQuaternion<double> quat4;
 ///   quat4.set(1.0, 2.0, 3.0, 4.0);
 ///
-///   // Construct a AQuaternion from a double array
+///   // Construct an AQuaternion from a double array
 ///   double data[4] = {1.0, 2.0, 3.0, 4.0};
 ///   AQuaternion<double, double*> quat5(data);
 ///   AQuaternion<double, double*> quat6{1.0, 2.0, 3.0, 4.0};
@@ -138,7 +138,7 @@ class AQuaternion<T, Accessor, Ownership::Views> {
   //@{
 
   /// \brief A reference or a pointer to an external data accessor.
-  std::conditional_t<std::is_pointer_v<Accessor>, Accessor, Accessor &> accessor_;
+  std::conditional_t<std::is_pointer_v<Accessor>, Accessor, Accessor&> accessor_;
   //@}
 
   //! \name Type aliases
@@ -165,7 +165,7 @@ class AQuaternion<T, Accessor, Ownership::Views> {
 
   /// \brief Constructor for reference accessors
   KOKKOS_INLINE_FUNCTION
-  explicit AQuaternion(Accessor &data)
+  explicit AQuaternion(Accessor& data)
     requires(!std::is_pointer_v<Accessor>)
       : accessor_(data) {
   }
@@ -181,34 +181,34 @@ class AQuaternion<T, Accessor, Ownership::Views> {
   KOKKOS_DEFAULTED_FUNCTION
   constexpr ~AQuaternion() = default;
 
-  // Default copy/move constructors and assignment operators when interacting with a AQuaternion of the same type
+  // Default copy/move constructors and assignment operators when interacting with an AQuaternion of the same type
 
   /// \brief Default copy constructor (shallow copy)
   KOKKOS_DEFAULTED_FUNCTION
-  constexpr AQuaternion(const AQuaternion<T, Accessor, Ownership::Views> &) = default;
+  constexpr AQuaternion(const AQuaternion<T, Accessor, Ownership::Views>&) = default;
 
   /// \brief Default move constructor (shallow move)
   KOKKOS_DEFAULTED_FUNCTION
-  constexpr AQuaternion(AQuaternion<T, Accessor, Ownership::Views> &&) = default;
+  constexpr AQuaternion(AQuaternion<T, Accessor, Ownership::Views>&&) = default;
 
   /// \brief Default copy assignment operator (shallow copy)
   KOKKOS_DEFAULTED_FUNCTION
-  constexpr AQuaternion<T, Accessor, Ownership::Views> &operator=(const AQuaternion<T, Accessor, Ownership::Views> &) =
+  constexpr AQuaternion<T, Accessor, Ownership::Views>& operator=(const AQuaternion<T, Accessor, Ownership::Views>&) =
       default;
 
   /// \brief Default move assignment operator (shallow move)
   KOKKOS_DEFAULTED_FUNCTION
-  constexpr AQuaternion<T, Accessor, Ownership::Views> &operator=(AQuaternion<T, Accessor, Ownership::Views> &&) =
+  constexpr AQuaternion<T, Accessor, Ownership::Views>& operator=(AQuaternion<T, Accessor, Ownership::Views>&&) =
       default;
 
-  // Custom copy/move constructors and assignment operators when interacting with a AQuaternion of a different type
-  // We do not allow copy/move construction from a AQuaternion of a different type. This is undefined behavior.
+  // Custom assignment operators when interacting with an AQuaternion of a different type.
+  // In this non-owning specialization, we intentionally only provide assignment (no cross-type copy/move constructors).
 
   /// \brief Deep copy assignment operator with different accessor or ownership
   /// \details Copies the data from the other vector to our data. This is only enabled if T is not const.
   template <ValidQuaternionType OtherQuaternionType>
-  KOKKOS_INLINE_FUNCTION constexpr AQuaternion<T, Accessor, Ownership::Views> &operator=(
-      const OtherQuaternionType &other)
+  KOKKOS_INLINE_FUNCTION constexpr AQuaternion<T, Accessor, Ownership::Views>& operator=(
+      const OtherQuaternionType& other)
     requires(!std::is_same_v<OtherQuaternionType, AQuaternion<T, Accessor, Ownership::Views>>) &&
             (std::is_same_v<typename OtherQuaternionType::scalar_t, T>) && HasNonConstAccessOperator<Accessor, T>
   {
@@ -219,7 +219,7 @@ class AQuaternion<T, Accessor, Ownership::Views> {
   /// \brief Deep move assignment operator with different accessor or ownership
   /// \details Moves the data from the other vector to our data. This is only enabled if T is not const.
   template <ValidQuaternionType OtherQuaternionType>
-  KOKKOS_INLINE_FUNCTION constexpr AQuaternion<T, Accessor, Ownership::Views> &operator=(OtherQuaternionType &&other)
+  KOKKOS_INLINE_FUNCTION constexpr AQuaternion<T, Accessor, Ownership::Views>& operator=(OtherQuaternionType&& other)
     requires(!std::is_same_v<OtherQuaternionType, AQuaternion<T, Accessor, Ownership::Views>>) &&
             (std::is_same_v<typename OtherQuaternionType::scalar_t, T>) && HasNonConstAccessOperator<Accessor, T>
   {
@@ -234,88 +234,92 @@ class AQuaternion<T, Accessor, Ownership::Views> {
   /// \brief Element access operator via a single index
   /// \param[in] index The index of the element.
   KOKKOS_INLINE_FUNCTION
-  constexpr T &operator[](int index) {
+  constexpr T& operator[](size_t index) {
+    MUNDY_THROW_ASSERT(index < 4, std::out_of_range, "AQuaternion index out of bounds.");
     return accessor_[index];
   }
 
   /// \brief Const element access operator via a single index
   /// \param[in] index The index of the element.
   KOKKOS_INLINE_FUNCTION
-  constexpr const T &operator[](int index) const {
+  constexpr const T& operator[](size_t index) const {
+    MUNDY_THROW_ASSERT(index < 4, std::out_of_range, "AQuaternion index out of bounds.");
     return accessor_[index];
   }
 
   /// \brief Element access operator via a single index
   /// \param[in] index The index of the element.
   KOKKOS_INLINE_FUNCTION
-  constexpr T &operator()(int index) {
+  constexpr T& operator()(size_t index) {
+    MUNDY_THROW_ASSERT(index < 4, std::out_of_range, "AQuaternion index out of bounds.");
     return accessor_[index];
   }
 
   /// \brief Const element access operator via a single index
   /// \param[in] index The index of the element.
   KOKKOS_INLINE_FUNCTION
-  constexpr const T &operator()(int index) const {
+  constexpr const T& operator()(size_t index) const {
+    MUNDY_THROW_ASSERT(index < 4, std::out_of_range, "AQuaternion index out of bounds.");
     return accessor_[index];
   }
 
   /// \brief Get a reference to the scalar component
   KOKKOS_INLINE_FUNCTION
-  constexpr T &w() {
+  constexpr T& w() {
     return accessor_[0];
   }
 
   /// \brief Get a reference to the scalar component
   KOKKOS_INLINE_FUNCTION
-  constexpr const T &w() const {
+  constexpr const T& w() const {
     return accessor_[0];
   }
 
   /// \brief Get a reference to the x component
   KOKKOS_INLINE_FUNCTION
-  constexpr T &x() {
+  constexpr T& x() {
     return accessor_[1];
   }
 
   /// \brief Get a reference to the x component
   KOKKOS_INLINE_FUNCTION
-  constexpr const T &x() const {
+  constexpr const T& x() const {
     return accessor_[1];
   }
 
   /// \brief Get a reference to the y component
   KOKKOS_INLINE_FUNCTION
-  constexpr T &y() {
+  constexpr T& y() {
     return accessor_[2];
   }
 
   /// \brief Get a reference to the y component
   KOKKOS_INLINE_FUNCTION
-  constexpr const T &y() const {
+  constexpr const T& y() const {
     return accessor_[2];
   }
 
   /// \brief Get a reference to the z component
   KOKKOS_INLINE_FUNCTION
-  constexpr T &z() {
+  constexpr T& z() {
     return accessor_[3];
   }
 
   /// \brief Get a reference to the z component
   KOKKOS_INLINE_FUNCTION
-  constexpr const T &z() const {
+  constexpr const T& z() const {
     return accessor_[3];
   }
 
   /// \brief Get the internal data accessor
   KOKKOS_INLINE_FUNCTION
-  constexpr Accessor data() {
+  constexpr std::conditional_t<std::is_pointer_v<Accessor>, Accessor, Accessor&> data() {
     return accessor_;
   }
 
   /// \brief Get the internal data accessor
   KOKKOS_INLINE_FUNCTION
-  constexpr const Accessor data() const {
+  constexpr const std::conditional_t<std::is_pointer_v<Accessor>, Accessor, Accessor&> data() const {
     return accessor_;
   }
 
@@ -358,7 +362,7 @@ class AQuaternion<T, Accessor, Ownership::Views> {
   /// \param[in] y The y component.
   /// \param[in] z The z component.
   KOKKOS_INLINE_FUNCTION
-  constexpr void set(const T &w, const T &x, const T &y, const T &z)
+  constexpr void set(const T& w, const T& x, const T& y, const T& z)
     requires HasNonConstAccessOperator<Accessor, T>
   {
     accessor_[0] = w;
@@ -371,7 +375,7 @@ class AQuaternion<T, Accessor, Ownership::Views> {
   /// \param[in] w The scalar component.
   /// \param[in] vec The vector component.
   KOKKOS_INLINE_FUNCTION
-  constexpr void set(const T &w, const AVector3<T> &vec)
+  constexpr void set(const T& w, const AVector3<T>& vec)
     requires HasNonConstAccessOperator<Accessor, T>
   {
     accessor_[0] = w;
@@ -382,9 +386,9 @@ class AQuaternion<T, Accessor, Ownership::Views> {
 
   /// \brief Set all elements of the vector using an accessor
   /// \param[in] accessor A valid accessor.
-  /// \note A AQuaternion is also a valid accessor.
+  /// \note An AQuaternion is also a valid accessor.
   template <ValidAccessor<T> OtherAccessor>
-  KOKKOS_INLINE_FUNCTION constexpr void set(const OtherAccessor &accessor)
+  KOKKOS_INLINE_FUNCTION constexpr void set(const OtherAccessor& accessor)
     requires HasNonConstAccessOperator<Accessor, T>
   {
     accessor_[0] = accessor[0];
@@ -396,7 +400,7 @@ class AQuaternion<T, Accessor, Ownership::Views> {
   /// \brief Set the quaternion vector component
   /// \param[in] vec The vector.
   KOKKOS_INLINE_FUNCTION
-  constexpr void set_vector(const AVector3<T> &vec)
+  constexpr void set_vector(const AVector3<T>& vec)
     requires HasNonConstAccessOperator<Accessor, T>
   {
     accessor_[1] = vec[0];
@@ -409,7 +413,9 @@ class AQuaternion<T, Accessor, Ownership::Views> {
   constexpr void normalize()
     requires HasNonConstAccessOperator<Accessor, T>
   {
-    const T inv_norm = T(1) / norm(*this);
+    const T quat_norm = norm(*this);
+    MUNDY_THROW_ASSERT(!is_close(quat_norm, T(0)), std::runtime_error, "AQuaternion: Cannot normalize zero norm.");
+    const T inv_norm = T(1) / quat_norm;
     accessor_[0] *= inv_norm;
     accessor_[1] *= inv_norm;
     accessor_[2] *= inv_norm;
@@ -431,8 +437,10 @@ class AQuaternion<T, Accessor, Ownership::Views> {
   constexpr void invert()
     requires HasNonConstAccessOperator<Accessor, T>
   {
-    const T inv_norm_squared = T(1) / (accessor_[0] * accessor_[0] + accessor_[1] * accessor_[1] +
-                                       accessor_[2] * accessor_[2] + accessor_[3] * accessor_[3]);
+    const T quat_norm_squared = accessor_[0] * accessor_[0] + accessor_[1] * accessor_[1] +
+                                accessor_[2] * accessor_[2] + accessor_[3] * accessor_[3];
+    MUNDY_THROW_ASSERT(!is_close(quat_norm_squared, T(0)), std::runtime_error, "AQuaternion: Cannot invert zero norm.");
+    const T inv_norm_squared = T(1) / quat_norm_squared;
     conjugate();
     accessor_[0] *= inv_norm_squared;
     accessor_[1] *= inv_norm_squared;
@@ -464,15 +472,15 @@ class AQuaternion<T, Accessor, Ownership::Views> {
   /// \param[in] other The other quaternion.
   template <typename U, ValidAccessor<U> OtherAccessor, typename OtherOwnershipType>
   KOKKOS_INLINE_FUNCTION constexpr auto operator+(
-      const AQuaternion<U, OtherAccessor, OtherOwnershipType> &other) const {
+      const AQuaternion<U, OtherAccessor, OtherOwnershipType>& other) const {
     return impl::quat_quat_addition_impl(*this, other);
   }
 
   /// \brief AQuaternion-quaternion addition
   /// \param[in] other The other quaternion.
   template <typename U, ValidAccessor<U> OtherAccessor, typename OtherOwnershipType>
-  KOKKOS_INLINE_FUNCTION constexpr AQuaternion<T, Accessor, Ownership::Views> &operator+=(
-      const AQuaternion<U, OtherAccessor, OtherOwnershipType> &other)
+  KOKKOS_INLINE_FUNCTION constexpr AQuaternion<T, Accessor, Ownership::Views>& operator+=(
+      const AQuaternion<U, OtherAccessor, OtherOwnershipType>& other)
     requires HasNonConstAccessOperator<Accessor, T>
   {
     impl::self_quat_addition_impl(*this, other);
@@ -483,15 +491,15 @@ class AQuaternion<T, Accessor, Ownership::Views> {
   /// \param[in] other The other quaternion.
   template <typename U, ValidAccessor<U> OtherAccessor, typename OtherOwnershipType>
   KOKKOS_INLINE_FUNCTION constexpr auto operator-(
-      const AQuaternion<U, OtherAccessor, OtherOwnershipType> &other) const {
+      const AQuaternion<U, OtherAccessor, OtherOwnershipType>& other) const {
     return impl::quat_quat_subtraction_impl(*this, other);
   }
 
   /// \brief AQuaternion-quaternion subtraction
   /// \param[in] other The other quaternion.
   template <typename U, ValidAccessor<U> OtherAccessor, typename OtherOwnershipType>
-  KOKKOS_INLINE_FUNCTION constexpr AQuaternion<T, Accessor, Ownership::Views> &operator-=(
-      const AQuaternion<U, OtherAccessor, OtherOwnershipType> &other)
+  KOKKOS_INLINE_FUNCTION constexpr AQuaternion<T, Accessor, Ownership::Views>& operator-=(
+      const AQuaternion<U, OtherAccessor, OtherOwnershipType>& other)
     requires HasNonConstAccessOperator<Accessor, T>
   {
     impl::self_quat_subtraction_impl(*this, other);
@@ -506,15 +514,15 @@ class AQuaternion<T, Accessor, Ownership::Views> {
   /// \param[in] other The other quaternion.
   template <typename U, ValidAccessor<U> OtherAccessor, typename OtherOwnershipType>
   KOKKOS_INLINE_FUNCTION constexpr auto operator*(
-      const AQuaternion<U, OtherAccessor, OtherOwnershipType> &other) const {
+      const AQuaternion<U, OtherAccessor, OtherOwnershipType>& other) const {
     return impl::quat_quat_multiplication_impl(*this, other);
   }
 
   /// \brief AQuaternion-quaternion multiplication
   /// \param[in] other The other quaternion.
   template <typename U, ValidAccessor<U> OtherAccessor, typename OtherOwnershipType>
-  KOKKOS_INLINE_FUNCTION constexpr AQuaternion<T, Accessor, Ownership::Views> &operator*=(
-      const AQuaternion<U, OtherAccessor, OtherOwnershipType> &other)
+  KOKKOS_INLINE_FUNCTION constexpr AQuaternion<T, Accessor, Ownership::Views>& operator*=(
+      const AQuaternion<U, OtherAccessor, OtherOwnershipType>& other)
     requires HasNonConstAccessOperator<Accessor, T>
   {
     impl::self_quat_multiplication_impl(*this, other);
@@ -524,30 +532,30 @@ class AQuaternion<T, Accessor, Ownership::Views> {
   /// \brief AQuaternion-vector multiplication (same as R * v)
   /// \param[in] vec The vector.
   template <typename U, ValidAccessor<U> OtherAccessor, typename OtherOwnershipType>
-  KOKKOS_INLINE_FUNCTION constexpr auto operator*(const AVector3<U, OtherAccessor, OtherOwnershipType> &vec) const {
+  KOKKOS_INLINE_FUNCTION constexpr auto operator*(const AVector3<U, OtherAccessor, OtherOwnershipType>& vec) const {
     return impl::quat_vec_multiplication_impl(*this, vec);
   }
 
   /// \brief AQuaternion-matrix multiplication
   /// \param[in] other The other matrix.
   template <typename U, ValidAccessor<U> OtherAccessor, typename OtherOwnershipType>
-  KOKKOS_INLINE_FUNCTION constexpr auto operator*(const AMatrix3<U, OtherAccessor, OtherOwnershipType> &mat) const {
+  KOKKOS_INLINE_FUNCTION constexpr auto operator*(const AMatrix3<U, OtherAccessor, OtherOwnershipType>& mat) const {
     return impl::quat_mat_multiplication_impl(*this, mat);
   }
 
   /// \brief AQuaternion-scalar multiplication
   /// \param[in] scalar The scalar.
   template <typename U>
-  KOKKOS_INLINE_FUNCTION constexpr auto operator*(const U &scalar) const {
+    requires std::is_arithmetic_v<U>
+  KOKKOS_INLINE_FUNCTION constexpr auto operator*(const U& scalar) const {
     return impl::quat_scalar_multiplication_impl(*this, scalar);
   }
 
   /// \brief Self-scalar multiplication
   /// \param[in] scalar The scalar.
   template <typename U>
-  KOKKOS_INLINE_FUNCTION constexpr AQuaternion<T, Accessor, Ownership::Views> &operator*=(const U &scalar)
-    requires HasNonConstAccessOperator<Accessor, T>
-  {
+    requires HasNonConstAccessOperator<Accessor, T> && std::is_arithmetic_v<U>
+  KOKKOS_INLINE_FUNCTION constexpr AQuaternion<T, Accessor, Ownership::Views>& operator*=(const U& scalar) {
     impl::self_scalar_multiplication_impl(*this, scalar);
     return *this;
   }
@@ -555,16 +563,16 @@ class AQuaternion<T, Accessor, Ownership::Views> {
   /// \brief AQuaternion-scalar division
   /// \param[in] scalar The scalar.
   template <typename U>
-  KOKKOS_INLINE_FUNCTION constexpr auto operator/(const U &scalar) const {
+    requires std::is_arithmetic_v<U>
+  KOKKOS_INLINE_FUNCTION constexpr auto operator/(const U& scalar) const {
     return impl::quat_scalar_division_impl(*this, scalar);
   }
 
   /// \brief Self-scalar division
   /// \param[in] scalar The scalar.
   template <typename U>
-  KOKKOS_INLINE_FUNCTION constexpr AQuaternion<T, Accessor, Ownership::Views> &operator/=(const U &scalar)
-    requires HasNonConstAccessOperator<Accessor, T>
-  {
+    requires HasNonConstAccessOperator<Accessor, T> && std::is_arithmetic_v<U>
+  KOKKOS_INLINE_FUNCTION constexpr AQuaternion<T, Accessor, Ownership::Views>& operator/=(const U& scalar) {
     impl::self_scalar_division_impl(*this, scalar);
     return *this;
   }
@@ -575,7 +583,7 @@ class AQuaternion<T, Accessor, Ownership::Views> {
 
   // Declare the << operator as a friend
   template <typename U, ValidAccessor<U> OtherAccessor, typename OtherOwnershipType>
-  friend std::ostream &operator<<(std::ostream &os, const AQuaternion<U, OtherAccessor, OtherOwnershipType> &quat);
+  friend std::ostream& operator<<(std::ostream& os, const AQuaternion<U, OtherAccessor, OtherOwnershipType>& quat);
 
   // We are friends with all AQuaternions regardless of their Accessor or type
   template <typename U, ValidAccessor<U> OtherAccessor, typename OtherOwnershipType>
@@ -624,7 +632,7 @@ class AQuaternion<T, Accessor, Ownership::Owns> {
   /// \brief Constructor from a given accessor
   /// \param[in] data The accessor.
   KOKKOS_INLINE_FUNCTION
-  explicit constexpr AQuaternion(const Accessor &data)
+  explicit constexpr AQuaternion(const Accessor& data)
     requires std::is_copy_constructible_v<Accessor>
       : accessor_(data) {
   }
@@ -634,15 +642,15 @@ class AQuaternion<T, Accessor, Ownership::Owns> {
   /// \param[in] x The x component.
   /// \param[in] y The y component.
   /// \param[in] z The z component.
-  /// \note This constructor is only enabled if the Accessor has a 3-argument constructor.
-  KOKKOS_INLINE_FUNCTION constexpr AQuaternion(const T &w, const T &x, const T &y, const T &z)
+  /// \note This constructor is only enabled if the Accessor has a 4-argument constructor.
+  KOKKOS_INLINE_FUNCTION constexpr AQuaternion(const T& w, const T& x, const T& y, const T& z)
     requires HasNArgConstructor<Accessor, T, 4>
       : accessor_(w, x, y, z) {
   }
 
   /// \brief Constructor to initialize all elements via initializer list
   /// \param[in] list The initializer list.
-  KOKKOS_INLINE_FUNCTION constexpr AQuaternion(const std::initializer_list<T> &list)
+  KOKKOS_INLINE_FUNCTION constexpr AQuaternion(const std::initializer_list<T>& list)
     requires HasInitializerListConstructor<Accessor, T>
       : accessor_(list) {
     MUNDY_THROW_ASSERT(list.size() == 4, std::invalid_argument, "AQuaternion: Initializer list must have 4 elements.");
@@ -652,31 +660,30 @@ class AQuaternion<T, Accessor, Ownership::Owns> {
   KOKKOS_DEFAULTED_FUNCTION
   constexpr ~AQuaternion() = default;
 
-  // Default copy/move constructors and assignment operators when interacting with a AQuaternion of the same type
+  // Default copy/move constructors and assignment operators when interacting with an AQuaternion of the same type
 
   /// \brief Default copy constructor
   KOKKOS_DEFAULTED_FUNCTION
-  constexpr AQuaternion(const AQuaternion<T, Accessor, Ownership::Owns> &) = default;
+  constexpr AQuaternion(const AQuaternion<T, Accessor, Ownership::Owns>&) = default;
 
   /// \brief Default move constructor
   KOKKOS_DEFAULTED_FUNCTION
-  constexpr AQuaternion(AQuaternion<T, Accessor, Ownership::Owns> &&) = default;
+  constexpr AQuaternion(AQuaternion<T, Accessor, Ownership::Owns>&&) = default;
 
   /// \brief Default copy assignment operator
   KOKKOS_DEFAULTED_FUNCTION
-  constexpr AQuaternion<T, Accessor, Ownership::Owns> &operator=(const AQuaternion<T, Accessor, Ownership::Owns> &) =
+  constexpr AQuaternion<T, Accessor, Ownership::Owns>& operator=(const AQuaternion<T, Accessor, Ownership::Owns>&) =
       default;
 
   /// \brief Default move assignment operator
   KOKKOS_DEFAULTED_FUNCTION
-  constexpr AQuaternion<T, Accessor, Ownership::Owns> &operator=(AQuaternion<T, Accessor, Ownership::Owns> &&) =
-      default;
+  constexpr AQuaternion<T, Accessor, Ownership::Owns>& operator=(AQuaternion<T, Accessor, Ownership::Owns>&&) = default;
 
-  // Custom copy/move constructors and assignment operators when interacting with a AQuaternion of a different type
+  // Custom copy/move constructors and assignment operators when interacting with an AQuaternion of a different type
 
   /// \brief Deep copy constructor with different accessor or ownership
   template <ValidQuaternionType OtherQuaternionType>
-  KOKKOS_INLINE_FUNCTION constexpr AQuaternion(const OtherQuaternionType &other)
+  KOKKOS_INLINE_FUNCTION constexpr AQuaternion(const OtherQuaternionType& other)
     requires(!std::is_same_v<OtherQuaternionType, AQuaternion<T, Accessor, Ownership::Owns>>) &&
             (std::is_same_v<typename OtherQuaternionType::scalar_t, T>)
       : accessor_() {
@@ -685,7 +692,7 @@ class AQuaternion<T, Accessor, Ownership::Owns> {
 
   /// \brief Deep move constructor with different accessor or ownership
   template <ValidQuaternionType OtherQuaternionType>
-  KOKKOS_INLINE_FUNCTION constexpr AQuaternion(OtherQuaternionType &&other)
+  KOKKOS_INLINE_FUNCTION constexpr AQuaternion(OtherQuaternionType&& other)
     requires(!std::is_same_v<OtherQuaternionType, AQuaternion<T, Accessor, Ownership::Owns>>) &&
             (std::is_same_v<typename OtherQuaternionType::scalar_t, T>)
       : accessor_() {
@@ -695,8 +702,8 @@ class AQuaternion<T, Accessor, Ownership::Owns> {
   /// \brief Deep copy assignment operator with different accessor or ownership
   /// \details Copies the data from the other vector to our data. This is only enabled if T is not const.
   template <ValidQuaternionType OtherQuaternionType>
-  KOKKOS_INLINE_FUNCTION constexpr AQuaternion<T, Accessor, Ownership::Owns> &operator=(
-      const OtherQuaternionType &other)
+  KOKKOS_INLINE_FUNCTION constexpr AQuaternion<T, Accessor, Ownership::Owns>& operator=(
+      const OtherQuaternionType& other)
     requires(!std::is_same_v<OtherQuaternionType, AQuaternion<T, Accessor, Ownership::Owns>>) &&
             (std::is_same_v<typename OtherQuaternionType::scalar_t, T>) && HasNonConstAccessOperator<Accessor, T>
   {
@@ -707,7 +714,7 @@ class AQuaternion<T, Accessor, Ownership::Owns> {
   /// \brief Deep move assignment operator with different accessor or ownership
   /// \details Moves the data from the other vector to our data. This is only enabled if T is not const.
   template <ValidQuaternionType OtherQuaternionType>
-  KOKKOS_INLINE_FUNCTION constexpr AQuaternion<T, Accessor, Ownership::Owns> &operator=(OtherQuaternionType &&other)
+  KOKKOS_INLINE_FUNCTION constexpr AQuaternion<T, Accessor, Ownership::Owns>& operator=(OtherQuaternionType&& other)
     requires(!std::is_same_v<OtherQuaternionType, AQuaternion<T, Accessor, Ownership::Owns>>) &&
             (std::is_same_v<typename OtherQuaternionType::scalar_t, T>) && HasNonConstAccessOperator<Accessor, T>
   {
@@ -722,88 +729,92 @@ class AQuaternion<T, Accessor, Ownership::Owns> {
   /// \brief Element access operator via a single index
   /// \param[in] index The index of the element.
   KOKKOS_INLINE_FUNCTION
-  constexpr T &operator[](int index) {
+  constexpr T& operator[](size_t index) {
+    MUNDY_THROW_ASSERT(index < 4, std::out_of_range, "AQuaternion index out of bounds.");
     return accessor_[index];
   }
 
   /// \brief Const element access operator via a single index
   /// \param[in] index The index of the element.
   KOKKOS_INLINE_FUNCTION
-  constexpr const T &operator[](int index) const {
+  constexpr const T& operator[](size_t index) const {
+    MUNDY_THROW_ASSERT(index < 4, std::out_of_range, "AQuaternion index out of bounds.");
     return accessor_[index];
   }
 
   /// \brief Element access operator via a single index
   /// \param[in] index The index of the element.
   KOKKOS_INLINE_FUNCTION
-  constexpr T &operator()(int index) {
+  constexpr T& operator()(size_t index) {
+    MUNDY_THROW_ASSERT(index < 4, std::out_of_range, "AQuaternion index out of bounds.");
     return accessor_[index];
   }
 
   /// \brief Const element access operator via a single index
   /// \param[in] index The index of the element.
   KOKKOS_INLINE_FUNCTION
-  constexpr const T &operator()(int index) const {
+  constexpr const T& operator()(size_t index) const {
+    MUNDY_THROW_ASSERT(index < 4, std::out_of_range, "AQuaternion index out of bounds.");
     return accessor_[index];
   }
 
   /// \brief Get a reference to the scalar component
   KOKKOS_INLINE_FUNCTION
-  constexpr T &w() {
+  constexpr T& w() {
     return accessor_[0];
   }
 
   /// \brief Get a reference to the scalar component
   KOKKOS_INLINE_FUNCTION
-  constexpr const T &w() const {
+  constexpr const T& w() const {
     return accessor_[0];
   }
 
   /// \brief Get a reference to the x component
   KOKKOS_INLINE_FUNCTION
-  constexpr T &x() {
+  constexpr T& x() {
     return accessor_[1];
   }
 
   /// \brief Get a reference to the x component
   KOKKOS_INLINE_FUNCTION
-  constexpr const T &x() const {
+  constexpr const T& x() const {
     return accessor_[1];
   }
 
   /// \brief Get a reference to the y component
   KOKKOS_INLINE_FUNCTION
-  constexpr T &y() {
+  constexpr T& y() {
     return accessor_[2];
   }
 
   /// \brief Get a reference to the y component
   KOKKOS_INLINE_FUNCTION
-  constexpr const T &y() const {
+  constexpr const T& y() const {
     return accessor_[2];
   }
 
   /// \brief Get a reference to the z component
   KOKKOS_INLINE_FUNCTION
-  constexpr T &z() {
+  constexpr T& z() {
     return accessor_[3];
   }
 
   /// \brief Get a reference to the z component
   KOKKOS_INLINE_FUNCTION
-  constexpr const T &z() const {
+  constexpr const T& z() const {
     return accessor_[3];
   }
 
   /// \brief Get the internal data accessor
   KOKKOS_INLINE_FUNCTION
-  constexpr Accessor &data() {
+  constexpr Accessor& data() {
     return accessor_;
   }
 
   /// \brief Get the internal data accessor
   KOKKOS_INLINE_FUNCTION
-  constexpr const Accessor &data() const {
+  constexpr const Accessor& data() const {
     return accessor_;
   }
 
@@ -846,7 +857,7 @@ class AQuaternion<T, Accessor, Ownership::Owns> {
   /// \param[in] y The y component.
   /// \param[in] z The z component.
   KOKKOS_INLINE_FUNCTION
-  constexpr void set(const T &w, const T &x, const T &y, const T &z)
+  constexpr void set(const T& w, const T& x, const T& y, const T& z)
     requires HasNonConstAccessOperator<Accessor, T>
   {
     accessor_[0] = w;
@@ -859,7 +870,7 @@ class AQuaternion<T, Accessor, Ownership::Owns> {
   /// \param[in] w The scalar component.
   /// \param[in] vec The vector component.
   KOKKOS_INLINE_FUNCTION
-  constexpr void set(const T &w, const AVector3<T> &vec)
+  constexpr void set(const T& w, const AVector3<T>& vec)
     requires HasNonConstAccessOperator<Accessor, T>
   {
     accessor_[0] = w;
@@ -870,9 +881,9 @@ class AQuaternion<T, Accessor, Ownership::Owns> {
 
   /// \brief Set all elements of the vector using an accessor
   /// \param[in] accessor A valid accessor.
-  /// \note A AQuaternion is also a valid accessor.
+  /// \note An AQuaternion is also a valid accessor.
   template <ValidAccessor<T> OtherAccessor>
-  KOKKOS_INLINE_FUNCTION constexpr void set(const OtherAccessor &accessor)
+  KOKKOS_INLINE_FUNCTION constexpr void set(const OtherAccessor& accessor)
     requires HasNonConstAccessOperator<Accessor, T>
   {
     accessor_[0] = accessor[0];
@@ -884,7 +895,7 @@ class AQuaternion<T, Accessor, Ownership::Owns> {
   /// \brief Set the quaternion vector component
   /// \param[in] vec The vector.
   KOKKOS_INLINE_FUNCTION
-  constexpr void set_vector(const AVector3<T> &vec)
+  constexpr void set_vector(const AVector3<T>& vec)
     requires HasNonConstAccessOperator<Accessor, T>
   {
     accessor_[1] = vec[0];
@@ -897,7 +908,9 @@ class AQuaternion<T, Accessor, Ownership::Owns> {
   constexpr void normalize()
     requires HasNonConstAccessOperator<Accessor, T>
   {
-    const T inv_norm = T(1) / norm(*this);
+    const T quat_norm = norm(*this);
+    MUNDY_THROW_ASSERT(!is_close(quat_norm, T(0)), std::runtime_error, "AQuaternion: Cannot normalize zero norm.");
+    const T inv_norm = T(1) / quat_norm;
     accessor_[0] *= inv_norm;
     accessor_[1] *= inv_norm;
     accessor_[2] *= inv_norm;
@@ -919,8 +932,10 @@ class AQuaternion<T, Accessor, Ownership::Owns> {
   constexpr void invert()
     requires HasNonConstAccessOperator<Accessor, T>
   {
-    const T inv_norm_squared = T(1) / (accessor_[0] * accessor_[0] + accessor_[1] * accessor_[1] +
-                                       accessor_[2] * accessor_[2] + accessor_[3] * accessor_[3]);
+    const T quat_norm_squared = accessor_[0] * accessor_[0] + accessor_[1] * accessor_[1] +
+                                accessor_[2] * accessor_[2] + accessor_[3] * accessor_[3];
+    MUNDY_THROW_ASSERT(!is_close(quat_norm_squared, T(0)), std::runtime_error, "AQuaternion: Cannot invert zero norm.");
+    const T inv_norm_squared = T(1) / quat_norm_squared;
     conjugate();
     accessor_[0] *= inv_norm_squared;
     accessor_[1] *= inv_norm_squared;
@@ -952,15 +967,15 @@ class AQuaternion<T, Accessor, Ownership::Owns> {
   /// \param[in] other The other quaternion.
   template <typename U, ValidAccessor<U> OtherAccessor, typename OtherOwnershipType>
   KOKKOS_INLINE_FUNCTION constexpr auto operator+(
-      const AQuaternion<U, OtherAccessor, OtherOwnershipType> &other) const {
+      const AQuaternion<U, OtherAccessor, OtherOwnershipType>& other) const {
     return impl::quat_quat_addition_impl(*this, other);
   }
 
   /// \brief AQuaternion-quaternion addition
   /// \param[in] other The other quaternion.
   template <typename U, ValidAccessor<U> OtherAccessor, typename OtherOwnershipType>
-  KOKKOS_INLINE_FUNCTION constexpr AQuaternion<T, Accessor, Ownership::Owns> &operator+=(
-      const AQuaternion<U, OtherAccessor, OtherOwnershipType> &other)
+  KOKKOS_INLINE_FUNCTION constexpr AQuaternion<T, Accessor, Ownership::Owns>& operator+=(
+      const AQuaternion<U, OtherAccessor, OtherOwnershipType>& other)
     requires HasNonConstAccessOperator<Accessor, T>
   {
     impl::self_quat_addition_impl(*this, other);
@@ -971,15 +986,15 @@ class AQuaternion<T, Accessor, Ownership::Owns> {
   /// \param[in] other The other quaternion.
   template <typename U, ValidAccessor<U> OtherAccessor, typename OtherOwnershipType>
   KOKKOS_INLINE_FUNCTION constexpr auto operator-(
-      const AQuaternion<U, OtherAccessor, OtherOwnershipType> &other) const {
+      const AQuaternion<U, OtherAccessor, OtherOwnershipType>& other) const {
     return impl::quat_quat_subtraction_impl(*this, other);
   }
 
   /// \brief AQuaternion-quaternion subtraction
   /// \param[in] other The other quaternion.
   template <typename U, ValidAccessor<U> OtherAccessor, typename OtherOwnershipType>
-  KOKKOS_INLINE_FUNCTION constexpr AQuaternion<T, Accessor, Ownership::Owns> &operator-=(
-      const AQuaternion<U, OtherAccessor, OtherOwnershipType> &other)
+  KOKKOS_INLINE_FUNCTION constexpr AQuaternion<T, Accessor, Ownership::Owns>& operator-=(
+      const AQuaternion<U, OtherAccessor, OtherOwnershipType>& other)
     requires HasNonConstAccessOperator<Accessor, T>
   {
     impl::self_quat_subtraction_impl(*this, other);
@@ -994,15 +1009,15 @@ class AQuaternion<T, Accessor, Ownership::Owns> {
   /// \param[in] other The other quaternion.
   template <typename U, ValidAccessor<U> OtherAccessor, typename OtherOwnershipType>
   KOKKOS_INLINE_FUNCTION constexpr auto operator*(
-      const AQuaternion<U, OtherAccessor, OtherOwnershipType> &other) const {
+      const AQuaternion<U, OtherAccessor, OtherOwnershipType>& other) const {
     return impl::quat_quat_multiplication_impl(*this, other);
   }
 
   /// \brief AQuaternion-quaternion multiplication
   /// \param[in] other The other quaternion.
   template <typename U, ValidAccessor<U> OtherAccessor, typename OtherOwnershipType>
-  KOKKOS_INLINE_FUNCTION constexpr AQuaternion<T, Accessor, Ownership::Owns> &operator*=(
-      const AQuaternion<U, OtherAccessor, OtherOwnershipType> &other)
+  KOKKOS_INLINE_FUNCTION constexpr AQuaternion<T, Accessor, Ownership::Owns>& operator*=(
+      const AQuaternion<U, OtherAccessor, OtherOwnershipType>& other)
     requires HasNonConstAccessOperator<Accessor, T>
   {
     impl::self_quat_multiplication_impl(*this, other);
@@ -1012,30 +1027,30 @@ class AQuaternion<T, Accessor, Ownership::Owns> {
   /// \brief AQuaternion-vector multiplication (same as R * v)
   /// \param[in] vec The vector.
   template <typename U, ValidAccessor<U> OtherAccessor, typename OtherOwnershipType>
-  KOKKOS_INLINE_FUNCTION constexpr auto operator*(const AVector3<U, OtherAccessor, OtherOwnershipType> &vec) const {
+  KOKKOS_INLINE_FUNCTION constexpr auto operator*(const AVector3<U, OtherAccessor, OtherOwnershipType>& vec) const {
     return impl::quat_vec_multiplication_impl(*this, vec);
   }
 
   /// \brief AQuaternion-matrix multiplication
   /// \param[in] other The other matrix.
   template <typename U, ValidAccessor<U> OtherAccessor, typename OtherOwnershipType>
-  KOKKOS_INLINE_FUNCTION constexpr auto operator*(const AMatrix3<U, OtherAccessor, OtherOwnershipType> &mat) const {
+  KOKKOS_INLINE_FUNCTION constexpr auto operator*(const AMatrix3<U, OtherAccessor, OtherOwnershipType>& mat) const {
     return impl::quat_mat_multiplication_impl(*this, mat);
   }
 
   /// \brief AQuaternion-scalar multiplication
   /// \param[in] scalar The scalar.
   template <typename U>
-  KOKKOS_INLINE_FUNCTION constexpr auto operator*(const U &scalar) const {
+    requires std::is_arithmetic_v<U>
+  KOKKOS_INLINE_FUNCTION constexpr auto operator*(const U& scalar) const {
     return impl::quat_scalar_multiplication_impl(*this, scalar);
   }
 
   /// \brief Self-scalar multiplication
   /// \param[in] scalar The scalar.
   template <typename U>
-  KOKKOS_INLINE_FUNCTION constexpr AQuaternion<T, Accessor, Ownership::Owns> &operator*=(const U &scalar)
-    requires HasNonConstAccessOperator<Accessor, T>
-  {
+    requires HasNonConstAccessOperator<Accessor, T> && std::is_arithmetic_v<U>
+  KOKKOS_INLINE_FUNCTION constexpr AQuaternion<T, Accessor, Ownership::Owns>& operator*=(const U& scalar) {
     impl::self_scalar_multiplication_impl(*this, scalar);
     return *this;
   }
@@ -1043,16 +1058,16 @@ class AQuaternion<T, Accessor, Ownership::Owns> {
   /// \brief AQuaternion-scalar division
   /// \param[in] scalar The scalar.
   template <typename U>
-  KOKKOS_INLINE_FUNCTION constexpr auto operator/(const U &scalar) const {
+    requires std::is_arithmetic_v<U>
+  KOKKOS_INLINE_FUNCTION constexpr auto operator/(const U& scalar) const {
     return impl::quat_scalar_division_impl(*this, scalar);
   }
 
   /// \brief Self-scalar division
   /// \param[in] scalar The scalar.
   template <typename U>
-  KOKKOS_INLINE_FUNCTION constexpr AQuaternion<T, Accessor, Ownership::Owns> &operator/=(const U &scalar)
-    requires HasNonConstAccessOperator<Accessor, T>
-  {
+    requires HasNonConstAccessOperator<Accessor, T> && std::is_arithmetic_v<U>
+  KOKKOS_INLINE_FUNCTION constexpr AQuaternion<T, Accessor, Ownership::Owns>& operator/=(const U& scalar) {
     impl::self_scalar_division_impl(*this, scalar);
     return *this;
   }
@@ -1073,7 +1088,7 @@ class AQuaternion<T, Accessor, Ownership::Owns> {
 
   // Declare the << operator as a friend
   template <typename U, ValidAccessor<U> OtherAccessor, typename OtherOwnershipType>
-  friend std::ostream &operator<<(std::ostream &os, const AQuaternion<U, OtherAccessor, OtherOwnershipType> &quat);
+  friend std::ostream& operator<<(std::ostream& os, const AQuaternion<U, OtherAccessor, OtherOwnershipType>& quat);
 
   // We are friends with all AQuaternions regardless of their Accessor or type
   template <typename U, ValidAccessor<U> OtherAccessor, typename OtherOwnershipType>
@@ -1110,7 +1125,7 @@ static_assert(is_quaternion_v<Quaternion<double>>, "Odd, AQuaternionAVector is n
 /// \param[in] os The output stream.
 /// \param[in] quat The quaternion.
 template <typename T, ValidAccessor<T> Accessor, typename OwnershipType>
-std::ostream &operator<<(std::ostream &os, const AQuaternion<T, Accessor, OwnershipType> &quat) {
+std::ostream& operator<<(std::ostream& os, const AQuaternion<T, Accessor, OwnershipType>& quat) {
   os << "(" << quat[0] << ", " << quat[1] << ", " << quat[2] << ", " << quat[3] << ")";
   return os;
 }
@@ -1126,8 +1141,8 @@ std::ostream &operator<<(std::ostream &os, const AQuaternion<T, Accessor, Owners
 template <typename U, typename T, ValidAccessor<U> Accessor1, typename OwnershipType1, ValidAccessor<T> Accessor2,
           typename OwnershipType2>
 KOKKOS_INLINE_FUNCTION constexpr bool is_close(
-    const AQuaternion<U, Accessor1, OwnershipType1> &quat1, const AQuaternion<T, Accessor2, OwnershipType2> &quat2,
-    const decltype(get_comparison_tolerance<T, U>()) &tol = get_comparison_tolerance<T, U>()) {
+    const AQuaternion<U, Accessor1, OwnershipType1>& quat1, const AQuaternion<T, Accessor2, OwnershipType2>& quat2,
+    const decltype(get_comparison_tolerance<T, U>())& tol = get_comparison_tolerance<T, U>()) {
   using Tol = decltype(tol);
   return Kokkos::abs(static_cast<Tol>(quat1[0]) - static_cast<Tol>(quat2[0])) <= tol &&
          Kokkos::abs(static_cast<Tol>(quat1[1]) - static_cast<Tol>(quat2[1])) <= tol &&
@@ -1142,8 +1157,8 @@ KOKKOS_INLINE_FUNCTION constexpr bool is_close(
 template <typename U, typename T, ValidAccessor<U> Accessor1, typename OwnershipType1, ValidAccessor<T> Accessor2,
           typename OwnershipType2>
 KOKKOS_INLINE_FUNCTION constexpr bool is_approx_close(
-    const AQuaternion<U, Accessor1, OwnershipType1> &quat1, const AQuaternion<T, Accessor2, OwnershipType2> &quat2,
-    const decltype(get_relaxed_comparison_tolerance<T, U>()) &tol = get_relaxed_comparison_tolerance<T, U>()) {
+    const AQuaternion<U, Accessor1, OwnershipType1>& quat1, const AQuaternion<T, Accessor2, OwnershipType2>& quat2,
+    const decltype(get_relaxed_comparison_tolerance<T, U>())& tol = get_relaxed_comparison_tolerance<T, U>()) {
   return is_close(quat1, quat2, tol);
 }
 //@}
@@ -1155,7 +1170,8 @@ KOKKOS_INLINE_FUNCTION constexpr bool is_approx_close(
 /// \param[in] scalar The scalar.
 /// \param[in] quat The quaternion.
 template <typename U, typename T, ValidAccessor<T> Accessor, typename OwnershipType>
-KOKKOS_INLINE_FUNCTION constexpr auto operator*(const U &scalar, const AQuaternion<T, Accessor, OwnershipType> &quat)
+  requires std::is_arithmetic_v<U>
+KOKKOS_INLINE_FUNCTION constexpr auto operator*(const U& scalar, const AQuaternion<T, Accessor, OwnershipType>& quat)
     -> AQuaternion<std::common_type_t<T, U>> {
   return quat * scalar;
 }
@@ -1165,8 +1181,8 @@ KOKKOS_INLINE_FUNCTION constexpr auto operator*(const U &scalar, const AQuaterni
 /// \param[in] quat The quaternion.
 template <typename U, typename T, ValidAccessor<U> Accessor1, typename OwnershipType1, ValidAccessor<T> Accessor2,
           typename OwnershipType2>
-KOKKOS_INLINE_FUNCTION constexpr auto operator*(const AVector3<U, Accessor1, OwnershipType1> &vec,
-                                                const AQuaternion<T, Accessor2, OwnershipType2> &quat)
+KOKKOS_INLINE_FUNCTION constexpr auto operator*(const AVector3<U, Accessor1, OwnershipType1>& vec,
+                                                const AQuaternion<T, Accessor2, OwnershipType2>& quat)
     -> AVector3<std::common_type_t<T, U>> {
   return impl::vec_quat_multiplication_impl(vec, quat);
 }
@@ -1176,8 +1192,8 @@ KOKKOS_INLINE_FUNCTION constexpr auto operator*(const AVector3<U, Accessor1, Own
 /// \param[in] quat The quaternion.
 template <typename U, typename T, ValidAccessor<U> Accessor1, typename OwnershipType1, ValidAccessor<T> Accessor2,
           typename OwnershipType2>
-KOKKOS_INLINE_FUNCTION constexpr auto operator*(const AMatrix3<U, Accessor1, OwnershipType1> &mat,
-                                                const AQuaternion<T, Accessor2, OwnershipType2> &quat) {
+KOKKOS_INLINE_FUNCTION constexpr auto operator*(const AMatrix3<U, Accessor1, OwnershipType1>& mat,
+                                                const AQuaternion<T, Accessor2, OwnershipType2>& quat) {
   return impl::mat_quat_multiplication_impl(mat, quat);
 }
 //@}
@@ -1196,8 +1212,8 @@ KOKKOS_INLINE_FUNCTION constexpr auto copy(const QuaternionType& q) {
 /// \param[in] q2 The second quaternion.
 template <typename U, typename T, ValidAccessor<U> Accessor1, typename OwnershipType1, ValidAccessor<T> Accessor2,
           typename OwnershipType2>
-KOKKOS_INLINE_FUNCTION constexpr auto dot(const AQuaternion<U, Accessor1, OwnershipType1> &q1,
-                                          const AQuaternion<T, Accessor2, OwnershipType2> &q2) {
+KOKKOS_INLINE_FUNCTION constexpr auto dot(const AQuaternion<U, Accessor1, OwnershipType1>& q1,
+                                          const AQuaternion<T, Accessor2, OwnershipType2>& q2) {
   using CommonType = std::common_type_t<U, T>;
   return static_cast<CommonType>(q1[0]) * static_cast<CommonType>(q2[0]) +
          static_cast<CommonType>(q1[1]) * static_cast<CommonType>(q2[1]) +
@@ -1209,7 +1225,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto dot(const AQuaternion<U, Accessor1, Owners
 /// \param[in] quat The quaternion.
 template <typename T, ValidAccessor<T> Accessor, typename OwnershipType>
 KOKKOS_INLINE_FUNCTION constexpr AQuaternion<std::remove_const_t<T>> conjugate(
-    const AQuaternion<T, Accessor, OwnershipType> &quat) {
+    const AQuaternion<T, Accessor, OwnershipType>& quat) {
   AQuaternion<std::remove_const_t<T>> result;
   result[0] = quat[0];
   result[1] = -quat[1];
@@ -1222,22 +1238,24 @@ KOKKOS_INLINE_FUNCTION constexpr AQuaternion<std::remove_const_t<T>> conjugate(
 /// \param[in] quat The quaternion.
 template <typename T, ValidAccessor<T> Accessor, typename OwnershipType>
 KOKKOS_INLINE_FUNCTION constexpr AQuaternion<std::remove_const_t<T>> inverse(
-    const AQuaternion<T, Accessor, OwnershipType> &quat) {
-  const T inv_norm_squared = T(1) / (quat[0] * quat[0] + quat[1] * quat[1] + quat[2] * quat[2] + quat[3] * quat[3]);
+    const AQuaternion<T, Accessor, OwnershipType>& quat) {
+  const T quat_norm_squared = quat[0] * quat[0] + quat[1] * quat[1] + quat[2] * quat[2] + quat[3] * quat[3];
+  MUNDY_THROW_ASSERT(!is_close(quat_norm_squared, T(0)), std::runtime_error, "AQuaternion: Cannot invert zero norm.");
+  const T inv_norm_squared = T(1) / quat_norm_squared;
   return conjugate(quat) * inv_norm_squared;
 }
 
 /// \brief Get the norm of a quaternion
 /// \param[in] quat The quaternion.
 template <typename T, ValidAccessor<T> Accessor, typename OwnershipType>
-KOKKOS_INLINE_FUNCTION constexpr auto norm(const AQuaternion<T, Accessor, OwnershipType> &quat) {
+KOKKOS_INLINE_FUNCTION constexpr auto norm(const AQuaternion<T, Accessor, OwnershipType>& quat) {
   return Kokkos::sqrt(quat[0] * quat[0] + quat[1] * quat[1] + quat[2] * quat[2] + quat[3] * quat[3]);
 }
 
 /// \brief Get the squared norm of a quaternion
 /// \param[in] quat The quaternion.
 template <typename T, ValidAccessor<T> Accessor, typename OwnershipType>
-KOKKOS_INLINE_FUNCTION constexpr auto norm_squared(const AQuaternion<T, Accessor, OwnershipType> &quat) {
+KOKKOS_INLINE_FUNCTION constexpr auto norm_squared(const AQuaternion<T, Accessor, OwnershipType>& quat) {
   return quat[0] * quat[0] + quat[1] * quat[1] + quat[2] * quat[2] + quat[3] * quat[3];
 }
 
@@ -1245,8 +1263,10 @@ KOKKOS_INLINE_FUNCTION constexpr auto norm_squared(const AQuaternion<T, Accessor
 /// \param[in] quat The quaternion.
 template <typename T, ValidAccessor<T> Accessor, typename OwnershipType>
 KOKKOS_INLINE_FUNCTION constexpr AQuaternion<std::remove_const_t<T>> normalize(
-    const AQuaternion<T, Accessor, OwnershipType> &quat) {
-  const T inv_norm = static_cast<T>(1) / norm(quat);
+    const AQuaternion<T, Accessor, OwnershipType>& quat) {
+  const T quat_norm = norm(quat);
+  MUNDY_THROW_ASSERT(!is_close(quat_norm, T(0)), std::runtime_error, "AQuaternion: Cannot normalize zero norm.");
+  const T inv_norm = static_cast<T>(1) / quat_norm;
   return quat * inv_norm;
 }
 
@@ -1257,8 +1277,8 @@ KOKKOS_INLINE_FUNCTION constexpr AQuaternion<std::remove_const_t<T>> normalize(
 template <typename U, typename T, typename V, ValidAccessor<U> Accessor1, typename OwnershipType1,
           ValidAccessor<T> Accessor2, typename OwnershipType2>
   requires std::is_arithmetic_v<V>
-KOKKOS_INLINE_FUNCTION constexpr auto slerp(const AQuaternion<U, Accessor1, OwnershipType1> &q1,
-                                            const AQuaternion<T, Accessor2, OwnershipType2> &q2, const V t)
+KOKKOS_INLINE_FUNCTION constexpr auto slerp(const AQuaternion<U, Accessor1, OwnershipType1>& q1,
+                                            const AQuaternion<T, Accessor2, OwnershipType2>& q2, const V t)
     -> AQuaternion<std::common_type_t<U, T, V>> {
   using CommonType = std::common_type_t<U, T, V>;
   const CommonType epsilon = get_relaxed_zero_tolerance<CommonType>();  // Threshold for linear interpolation
@@ -1275,6 +1295,13 @@ KOKKOS_INLINE_FUNCTION constexpr auto slerp(const AQuaternion<U, Accessor1, Owne
     q2_adjusted *= -1;
   }
 
+  // Clamp the dot product to avoid numerical issues with acos
+  if (dot_q12 > static_cast<CommonType>(1)) {
+    dot_q12 = static_cast<CommonType>(1);
+  } else if (dot_q12 < static_cast<CommonType>(-1)) {
+    dot_q12 = static_cast<CommonType>(-1);
+  }
+
   // Check for near-parallel case
   if (static_cast<CommonType>(1) - dot_q12 < epsilon) {
     // Linear Interpolation as fallback
@@ -1289,11 +1316,14 @@ KOKKOS_INLINE_FUNCTION constexpr auto slerp(const AQuaternion<U, Accessor1, Owne
             static_cast<CommonType>(t) * (static_cast<CommonType>(q2_adjusted[3]) - static_cast<CommonType>(q1[3]))};
   } else {
     // Spherical Interpolation
-    const CommonType theta = std::acos(dot_q12);
-    const CommonType sin_theta = std::sin(theta);
+    const CommonType theta = Kokkos::acos(dot_q12);
+    const CommonType sin_theta = Kokkos::sin(theta);
+    MUNDY_THROW_ASSERT(!is_close(sin_theta, CommonType(0)), std::runtime_error,
+                       "AQuaternion: slerp undefined for sin(theta) near zero.");
     const CommonType inv_sin_theta = static_cast<CommonType>(1) / sin_theta;
-    const CommonType s1 = std::sin((static_cast<CommonType>(1) - static_cast<CommonType>(t)) * theta) * inv_sin_theta;
-    const CommonType s2 = std::sin(static_cast<CommonType>(t) * theta) * inv_sin_theta;
+    const CommonType s1 =
+        Kokkos::sin((static_cast<CommonType>(1) - static_cast<CommonType>(t)) * theta) * inv_sin_theta;
+    const CommonType s2 = Kokkos::sin(static_cast<CommonType>(t) * theta) * inv_sin_theta;
 
     return AQuaternion<CommonType>{(static_cast<CommonType>(s1) * static_cast<CommonType>(q1[0])) +
                                        (static_cast<CommonType>(s2) * static_cast<CommonType>(q2_adjusted[0])),
@@ -1364,8 +1394,8 @@ KOKKOS_INLINE_FUNCTION constexpr auto slerp(const AQuaternion<U, Accessor1, Owne
 /// \param omega The angular velocity
 /// \param dt The time
 template <ValidQuaternionType QuaternionType, ValidVectorType VectorType>
-KOKKOS_INLINE_FUNCTION constexpr void rotate_quaternion(QuaternionType &quat, const VectorType &omega,
-                                                        const double &dt) {
+KOKKOS_INLINE_FUNCTION constexpr void rotate_quaternion(QuaternionType& quat, const VectorType& omega,
+                                                        const double& dt) {
   const double w = norm(omega);
   if (w < get_zero_tolerance<double>()) {
     // Omega is zero, no rotation
@@ -1391,8 +1421,8 @@ KOKKOS_INLINE_FUNCTION constexpr void rotate_quaternion(QuaternionType &quat, co
 /// \param[in] angle The angle.
 template <typename T, typename U, ValidAccessor<T> Accessor, typename OwnershipType>
   requires std::is_arithmetic_v<U>
-KOKKOS_INLINE_FUNCTION constexpr auto axis_angle_to_quaternion(const AVector3<T, Accessor, OwnershipType> &axis,
-                                                               const U &angle)
+KOKKOS_INLINE_FUNCTION constexpr auto axis_angle_to_quaternion(const AVector3<T, Accessor, OwnershipType>& axis,
+                                                               const U& angle)
     -> AQuaternion<std::common_type_t<T, U>> {
   using CommonType = std::common_type_t<T, U>;
   const auto half_angle = U(0.5) * angle;
@@ -1408,7 +1438,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto axis_angle_to_quaternion(const AVector3<T,
 /// \param[in] rot_mat The rotation matrix.
 template <typename T, ValidAccessor<T> Accessor, typename OwnershipType>
 KOKKOS_INLINE_FUNCTION constexpr AQuaternion<T> rotation_matrix_to_quaternion(
-    const AMatrix3<T, Accessor, OwnershipType> &rot_mat) {
+    const AMatrix3<T, Accessor, OwnershipType>& rot_mat) {
   // Source: https://www.euclideanspace.com/maths/geometry/rotations/conversions/matrixToAQuaternion/
   AQuaternion<T> quat;
 
@@ -1430,7 +1460,7 @@ KOKKOS_INLINE_FUNCTION constexpr AQuaternion<T> rotation_matrix_to_quaternion(
 /// \param[in] quat The quaternion.
 template <typename T, ValidAccessor<T> Accessor, typename OwnershipType>
 KOKKOS_INLINE_FUNCTION constexpr AMatrix3<std::remove_const_t<T>> quaternion_to_rotation_matrix(
-    const AQuaternion<T, Accessor, OwnershipType> &quat) {
+    const AQuaternion<T, Accessor, OwnershipType>& quat) {
   AMatrix3<std::remove_const_t<T>> rot_mat;
   rot_mat(0, 0) = T(1) - T(2) * quat.y() * quat.y() - T(2) * quat.z() * quat.z();
   rot_mat(0, 1) = T(2) * quat.x() * quat.y() - T(2) * quat.w() * quat.z();
@@ -1486,8 +1516,8 @@ KOKKOS_INLINE_FUNCTION constexpr AQuaternion<std::remove_const_t<T>> euler_to_qu
 template <typename U, typename T, ValidAccessor<U> Accessor1, typename OwnershipType1, ValidAccessor<T> Accessor2,
           typename OwnershipType2>
   requires(std::is_arithmetic_v<T> && std::is_arithmetic_v<U>)
-KOKKOS_INLINE_FUNCTION constexpr auto quat_from_parallel_transport(const AVector3<U, Accessor1, OwnershipType1> &v_from,
-                                                                   const AVector3<T, Accessor2, OwnershipType2> &v_to)
+KOKKOS_INLINE_FUNCTION constexpr auto quat_from_parallel_transport(const AVector3<U, Accessor1, OwnershipType1>& v_from,
+                                                                   const AVector3<T, Accessor2, OwnershipType2>& v_to)
     -> AQuaternion<decltype(U() * T())> {
   // Get the quaternion that performs parallel transport from vector v_from to vector v_to
   using CommonType = decltype(U() * T());
@@ -1554,22 +1584,22 @@ MUNDY_MATH_QUATERNION_TYPE_SPECIALIZATION(Quaternionf, quaternionf, float)
 ///   auto quat = get_quaternion_view<T>(data);
 /// \endcode
 template <typename T, typename Accessor>
-KOKKOS_INLINE_FUNCTION constexpr auto get_quaternion_view(const Accessor &data) {
+KOKKOS_INLINE_FUNCTION constexpr auto get_quaternion_view(const Accessor& data) {
   return QuaternionView<T, Accessor>(data);
 }
 
 template <typename T, typename Accessor>
-KOKKOS_INLINE_FUNCTION constexpr auto get_quaternion_view(Accessor &&data) {
+KOKKOS_INLINE_FUNCTION constexpr auto get_quaternion_view(Accessor&& data) {
   return QuaternionView<T, Accessor>(std::move(data));
 }
 
 template <typename T, typename Accessor>
-KOKKOS_INLINE_FUNCTION constexpr auto get_owning_quaternion(const Accessor &data) {
+KOKKOS_INLINE_FUNCTION constexpr auto get_owning_quaternion(const Accessor& data) {
   return OwningQuaternion<T, Accessor>(data);
 }
 
 template <typename T, typename Accessor>
-KOKKOS_INLINE_FUNCTION constexpr auto get_owning_quaternion(Accessor &&data) {
+KOKKOS_INLINE_FUNCTION constexpr auto get_owning_quaternion(Accessor&& data) {
   return OwningQuaternion<T, Accessor>(std::move(data));
 }
 //@}
