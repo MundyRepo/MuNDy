@@ -369,9 +369,9 @@ class AMatrix<T, N, M, Accessor, Ownership::Views> {
   /// \brief Get a view into the diagonal of the matrix
   KOKKOS_INLINE_FUNCTION
   constexpr auto view_diagonal() {
-    // To explain, because the data is stored in row-major order, we need to stride by N+1 to access the contents of the
+    // To explain, because the data is stored in row-major order, we need to stride by M+1 to access the contents of the
     // diagonal.
-    constexpr size_t stride = N + 1;
+    constexpr size_t stride = M + 1;
     auto strided_data_accessor = get_strided_view<T, stride>(accessor_);
     return get_owning_vector<T, Kokkos::min(N, M)>(std::move(strided_data_accessor));
   }
@@ -379,9 +379,9 @@ class AMatrix<T, N, M, Accessor, Ownership::Views> {
   /// \brief Get a view into the diagonal of the matrix
   KOKKOS_INLINE_FUNCTION
   constexpr auto view_diagonal() const {
-    // To explain, because the data is stored in row-major order, we need to stride by N+1 to access the contents of the
+    // To explain, because the data is stored in row-major order, we need to stride by M+1 to access the contents of the
     // diagonal.
-    constexpr size_t stride = N + 1;
+    constexpr size_t stride = M + 1;
     auto strided_data_accessor = get_strided_view<T, stride>(accessor_);
     return get_owning_vector<T, Kokkos::min(N, M)>(std::move(strided_data_accessor));
   }
@@ -635,8 +635,7 @@ class AMatrix<T, N, M, Accessor, Ownership::Views> {
   /// \param[in] other The other vector.
   template <typename U, typename OtherAccessor, typename OtherOwnershipType>
   KOKKOS_INLINE_FUNCTION constexpr auto operator*(const AVector<U, M, OtherAccessor, OtherOwnershipType>& other) const {
-    // Pass in index sequence for the vector size
-    return impl::matrix_vector_multiplication_impl(std::make_index_sequence<M>{}, *this, other);
+    return impl::matrix_vector_multiplication_impl(std::make_index_sequence<N>{}, *this, other);
   }
 
   /// \brief AMatrix-scalar multiplication
@@ -975,7 +974,7 @@ class AMatrix<T, N, M, Accessor, Ownership::Owns> {
   constexpr auto view_diagonal() {
     // To explain, because the data is stored in row-major order, we need to stride by N+1 to access the contents of the
     // diagonal.
-    constexpr size_t stride = N + 1;
+    constexpr size_t stride = M + 1;
     auto strided_data_accessor = get_strided_view<T, stride>(accessor_);
     return get_owning_vector<T, Kokkos::min(N, M)>(std::move(strided_data_accessor));
   }
@@ -985,7 +984,7 @@ class AMatrix<T, N, M, Accessor, Ownership::Owns> {
   constexpr auto view_diagonal() const {
     // To explain, because the data is stored in row-major order, we need to stride by N+1 to access the contents of the
     // diagonal.
-    constexpr size_t stride = N + 1;
+    constexpr size_t stride = M + 1;
     auto strided_data_accessor = get_strided_view<T, stride>(accessor_);
     return get_owning_vector<T, Kokkos::min(N, M)>(std::move(strided_data_accessor));
   }
@@ -1230,7 +1229,7 @@ class AMatrix<T, N, M, Accessor, Ownership::Owns> {
   /// \param[in] other The other vector.
   template <typename U, ValidAccessor<U> OtherAccessor, typename OtherOwnershipType>
   KOKKOS_INLINE_FUNCTION constexpr auto operator*(const AVector<U, M, OtherAccessor, OtherOwnershipType>& other) const {
-    return impl::matrix_vector_multiplication_impl(std::make_index_sequence<M>{}, *this, other);
+    return impl::matrix_vector_multiplication_impl(std::make_index_sequence<N>{}, *this, other);
   }
 
   /// \brief AMatrix-scalar multiplication

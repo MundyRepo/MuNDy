@@ -66,7 +66,7 @@ namespace impl {
 
 /// \brief Deep copy assignment operator with (potentially) different accessor
 /// \details Copies the data from the other quaternion to our data. This is only enabled if T is not const.
-template <size_t... Is, typename T, ValidAccessor<T> Accessor, typename OwnershipType, ValidAccessor<T> OtherAccessor,
+template <typename T, ValidAccessor<T> Accessor, typename OwnershipType, ValidAccessor<T> OtherAccessor,
           typename OtherOwnershipType>
   requires HasNonConstAccessOperator<Accessor, T>
 KOKKOS_INLINE_FUNCTION constexpr void deep_copy_impl(AQuaternion<T, Accessor, OwnershipType> &quat,

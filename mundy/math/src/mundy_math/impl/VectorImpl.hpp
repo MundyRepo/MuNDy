@@ -58,6 +58,7 @@ template <size_t... Is, typename T, size_t N, ValidAccessor<T> Accessor, typenam
 KOKKOS_INLINE_FUNCTION constexpr void deep_copy_impl(std::index_sequence<Is...>,
                                                      AVector<T, N, Accessor, OwnershipType>& vec,
                                                      const AVector<T, N, OtherAccessor, OtherOwnershipType>& other) {
+  static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");
   ((vec[Is] = other[Is]), ...);
 }
 
@@ -68,6 +69,7 @@ template <size_t... Is, typename T, size_t N, ValidAccessor<T> Accessor, typenam
   requires HasNonConstAccessOperator<Accessor, T>
 KOKKOS_INLINE_FUNCTION constexpr void move_impl(std::index_sequence<Is...>, AVector<T, N, Accessor, OwnershipType>& vec,
                                                 AVector<T, N, OtherAccessor, Ownership::Owns>&& other) {
+  static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");
   ((vec[Is] = other[Is]), ...);
 }
 
@@ -76,6 +78,7 @@ template <size_t... Is, typename T, size_t N, ValidAccessor<T> Accessor, typenam
   requires HasNonConstAccessOperator<Accessor, T>
 KOKKOS_INLINE_FUNCTION constexpr void set_from_args_impl(std::index_sequence<Is...>,
                                                          AVector<T, N, Accessor, OwnershipType>& vec, Args&&... args) {
+  static_assert(sizeof...(Is) == N, "Number of arguments must match number of elements in the vector.");
   ((vec[Is] = std::forward<Args>(args)), ...);
 }
 
@@ -88,6 +91,7 @@ template <size_t... Is, typename T, size_t N, ValidAccessor<T> Accessor, typenam
 KOKKOS_INLINE_FUNCTION constexpr void set_from_accessor_impl(std::index_sequence<Is...>,
                                                              AVector<T, N, Accessor, OwnershipType>& vec,
                                                              const OtherAccessor& accessor) {
+  static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");
   ((vec[Is] = accessor[Is]), ...);
 }
 
@@ -97,12 +101,14 @@ template <size_t... Is, typename T, size_t N, ValidAccessor<T> Accessor, typenam
   requires HasNonConstAccessOperator<Accessor, T>
 KOKKOS_INLINE_FUNCTION constexpr void fill_impl(std::index_sequence<Is...>, AVector<T, N, Accessor, OwnershipType>& vec,
                                                 const T& value) {
+  static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");
   ((vec[Is] = value), ...);
 }
 
 /// \brief Cast (and copy) the vector to a different type
 template <typename U, size_t... Is, typename T, size_t N, ValidAccessor<T> Accessor, typename OwnershipType>
 KOKKOS_INLINE_FUNCTION auto cast_impl(std::index_sequence<Is...>, const AVector<T, N, Accessor, OwnershipType>& vec) {
+  static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");
   return AVector<U, N>{static_cast<U>(vec[Is])...};
 }
 
@@ -110,6 +116,7 @@ KOKKOS_INLINE_FUNCTION auto cast_impl(std::index_sequence<Is...>, const AVector<
 template <size_t... Is, typename T, size_t N, ValidAccessor<T> Accessor, typename OwnershipType>
 KOKKOS_INLINE_FUNCTION constexpr AVector<T, N> unary_minus_impl(std::index_sequence<Is...>,
                                                                 const AVector<T, N, Accessor, OwnershipType>& vec) {
+  static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");
   AVector<T, N> result;
   ((result[Is] = -vec[Is]), ...);
   return result;
@@ -122,6 +129,7 @@ template <size_t... Is, typename U, typename T, size_t N, ValidAccessor<T> Acces
 KOKKOS_INLINE_FUNCTION constexpr auto vector_vector_add_impl(
     std::index_sequence<Is...>, const AVector<T, N, Accessor, OwnershipType>& vec,
     const AVector<U, N, OtherAccessor, OtherOwnershipType>& other) -> AVector<std::common_type_t<T, U>, N> {
+  static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");
   using CommonType = std::common_type_t<T, U>;
   AVector<CommonType, N> result;
   ((result[Is] = static_cast<CommonType>(vec[Is]) + static_cast<CommonType>(other[Is])), ...);
@@ -137,6 +145,7 @@ KOKKOS_INLINE_FUNCTION constexpr void self_vector_add_impl(
     const AVector<U, N, OtherAccessor, OtherOwnershipType>& other)
   requires HasNonConstAccessOperator<Accessor, T>
 {
+  static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");
   ((vec[Is] += static_cast<T>(other[Is])), ...);
 }
 
@@ -147,6 +156,7 @@ template <size_t... Is, typename T, size_t N, typename U, ValidAccessor<T> Acces
 KOKKOS_INLINE_FUNCTION constexpr auto vector_vector_subtraction_impl(
     std::index_sequence<Is...>, const AVector<T, N, Accessor, OwnershipType>& vec,
     const AVector<U, N, OtherAccessor, OtherOwnershipType>& other) -> AVector<std::common_type_t<T, U>, N> {
+  static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");
   using CommonType = std::common_type_t<T, U>;
   AVector<CommonType, N> result;
   ((result[Is] = static_cast<CommonType>(vec[Is]) - static_cast<CommonType>(other[Is])), ...);
@@ -162,6 +172,7 @@ KOKKOS_INLINE_FUNCTION constexpr void self_vector_subtraction_impl(
     const AVector<U, N, OtherAccessor, OtherOwnershipType>& other)
   requires HasNonConstAccessOperator<Accessor, T>
 {
+  static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");
   ((vec[Is] -= static_cast<T>(other[Is])), ...);
 }
 
@@ -171,6 +182,7 @@ template <size_t... Is, typename T, size_t N, typename U, ValidAccessor<T> Acces
 KOKKOS_INLINE_FUNCTION constexpr auto vector_scalar_add_impl(std::index_sequence<Is...>,
                                                              const AVector<T, N, Accessor, OwnershipType>& vec,
                                                              const U& scalar) -> AVector<std::common_type_t<T, U>, N> {
+  static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");
   using CommonType = std::common_type_t<T, U>;
   AVector<CommonType, N> result;
   ((result[Is] = static_cast<CommonType>(vec[Is]) + static_cast<CommonType>(scalar)), ...);
@@ -184,6 +196,7 @@ KOKKOS_INLINE_FUNCTION constexpr void self_scalar_add_impl(std::index_sequence<I
                                                            AVector<T, N, Accessor, OwnershipType>& vec, const U& scalar)
   requires HasNonConstAccessOperator<Accessor, T>
 {
+  static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");
   ((vec[Is] += static_cast<T>(scalar)), ...);
 }
 
@@ -194,6 +207,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto vector_scalar_subtraction_impl(std::index_
                                                                      const AVector<T, N, Accessor, OwnershipType>& vec,
                                                                      const U& scalar)
     -> AVector<std::common_type_t<T, U>, N> {
+  static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");
   using CommonType = std::common_type_t<T, U>;
   AVector<CommonType, N> result;
   ((result[Is] = static_cast<CommonType>(vec[Is]) - static_cast<CommonType>(scalar)), ...);
@@ -208,6 +222,7 @@ KOKKOS_INLINE_FUNCTION constexpr void self_scalar_subtraction_impl(std::index_se
                                                                    const U& scalar)
   requires HasNonConstAccessOperator<Accessor, T>
 {
+  static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");
   ((vec[Is] -= static_cast<T>(scalar)), ...);
 }
 
@@ -217,6 +232,7 @@ template <size_t... Is, typename T, size_t N, typename U, ValidAccessor<T> Acces
 KOKKOS_INLINE_FUNCTION constexpr auto vector_scalar_multiplication_impl(
     std::index_sequence<Is...>, const AVector<T, N, Accessor, OwnershipType>& vec, const U& scalar)
     -> AVector<std::common_type_t<T, U>, N> {
+  static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");
   using CommonType = std::common_type_t<T, U>;
   AVector<CommonType, N> result;
   ((result[Is] = static_cast<CommonType>(vec[Is]) * static_cast<CommonType>(scalar)), ...);
@@ -231,6 +247,7 @@ KOKKOS_INLINE_FUNCTION constexpr void self_scalar_multiplication_impl(std::index
                                                                       const U& scalar)
   requires HasNonConstAccessOperator<Accessor, T>
 {
+  static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");
   ((vec[Is] *= static_cast<T>(scalar)), ...);
 }
 
@@ -240,6 +257,7 @@ template <size_t... Is, typename T, size_t N, typename U, ValidAccessor<T> Acces
 KOKKOS_INLINE_FUNCTION constexpr auto vector_scalar_division_impl(std::index_sequence<Is...>,
                                                                   const AVector<T, N, Accessor, OwnershipType>& vec,
                                                                   const U& scalar) {
+  static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");
   if constexpr (std::is_integral_v<T> && std::is_integral_v<U>) {
     using CommonType = double;
     AVector<CommonType, N> result;
@@ -263,6 +281,7 @@ KOKKOS_INLINE_FUNCTION constexpr void self_scalar_division_impl(std::index_seque
                                                                 const U& scalar)
   requires HasNonConstAccessOperator<decltype(vec), T>
 {
+  static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");
   ((vec[Is] /= static_cast<T>(scalar)), ...);
 }
 
@@ -277,6 +296,7 @@ KOKKOS_INLINE_FUNCTION constexpr bool is_close_impl(std::index_sequence<Is...>,
                                                     const AVector<U, N, Accessor, OwnershipType>& vec1,
                                                     const AVector<T, N, OtherAccessor, OtherOwnershipType>& vec2,
                                                     const V& tol) {
+  static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");
   // Use the type of the tolerance to determine the comparison type
   return ((Kokkos::abs(static_cast<V>(vec1[Is]) - static_cast<V>(vec2[Is])) <= tol) && ...);
 }
@@ -285,6 +305,7 @@ KOKKOS_INLINE_FUNCTION constexpr bool is_close_impl(std::index_sequence<Is...>,
 template <size_t... Is, size_t N, typename T, ValidAccessor<T> Accessor, typename OwnershipType>
 KOKKOS_INLINE_FUNCTION constexpr auto abs_impl(std::index_sequence<Is...>,
                                                const AVector<T, N, Accessor, OwnershipType>& vec) {
+  static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");
   using OutputType = std::remove_cv_t<decltype(Kokkos::abs(vec[0]))>;
   AVector<OutputType, N> result;
   ((result[Is] = Kokkos::abs(vec[Is])), ...);
@@ -295,6 +316,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto abs_impl(std::index_sequence<Is...>,
 template <size_t... Is, size_t N, typename T, ValidAccessor<T> Accessor, typename OwnershipType>
 KOKKOS_INLINE_FUNCTION T constexpr sum_impl(std::index_sequence<Is...>,
                                             const AVector<T, N, Accessor, OwnershipType>& vec) {
+  static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");
   return (vec[Is] + ...);
 }
 
@@ -302,6 +324,7 @@ KOKKOS_INLINE_FUNCTION T constexpr sum_impl(std::index_sequence<Is...>,
 template <size_t... Is, size_t N, typename T, ValidAccessor<T> Accessor, typename OwnershipType>
 KOKKOS_INLINE_FUNCTION T constexpr product_impl(std::index_sequence<Is...>,
                                                 const AVector<T, N, Accessor, OwnershipType>& vec) {
+  static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");
   return (vec[Is] * ...);
 }
 
@@ -309,6 +332,7 @@ KOKKOS_INLINE_FUNCTION T constexpr product_impl(std::index_sequence<Is...>,
 template <size_t... Is, size_t N, typename T, ValidAccessor<T> Accessor, typename OwnershipType>
 KOKKOS_INLINE_FUNCTION T constexpr min_impl(std::index_sequence<Is...>,
                                             const AVector<T, N, Accessor, OwnershipType>& vec) {
+  static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");
   // Initialize min_value with the first element
   T min_value = vec[0];
   ((min_value = (vec[Is] < min_value ? vec[Is] : min_value)), ...);
@@ -319,6 +343,7 @@ KOKKOS_INLINE_FUNCTION T constexpr min_impl(std::index_sequence<Is...>,
 template <size_t... Is, size_t N, typename T, ValidAccessor<T> Accessor, typename OwnershipType>
 KOKKOS_INLINE_FUNCTION T constexpr max_impl(std::index_sequence<Is...>,
                                             const AVector<T, N, Accessor, OwnershipType>& vec) {
+  static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");
   // Initialize max_value with the first element
   T max_value = vec[0];
   ((max_value = (vec[Is] > max_value ? vec[Is] : max_value)), ...);
@@ -330,6 +355,7 @@ template <size_t... Is, size_t N, typename T, ValidAccessor<T> Accessor, typenam
           typename OutputType = std::conditional_t<std::is_integral_v<T>, double, T>>
 KOKKOS_INLINE_FUNCTION constexpr OutputType variance_impl(std::index_sequence<Is...>,
                                                           const AVector<T, N, Accessor, OwnershipType>& vec) {
+  static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");
   OutputType inv_N = static_cast<OutputType>(1.0) / static_cast<OutputType>(N);
   OutputType vec_mean = inv_N * sum_impl(std::make_index_sequence<N>{}, vec);
   return (((static_cast<OutputType>(vec[Is]) - vec_mean) * (static_cast<OutputType>(vec[Is]) - vec_mean)) + ...) *
@@ -340,6 +366,7 @@ KOKKOS_INLINE_FUNCTION constexpr OutputType variance_impl(std::index_sequence<Is
 template <size_t... Is, size_t N, typename T, ValidAccessor<T> Accessor, typename OwnershipType>
 KOKKOS_INLINE_FUNCTION constexpr auto standard_deviation_impl(std::index_sequence<Is...>,
                                                               const AVector<T, N, Accessor, OwnershipType>& vec) {
+  static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");
   return Kokkos::sqrt(variance_impl(std::make_index_sequence<N>{}, vec));
 }
 
@@ -349,6 +376,7 @@ template <size_t... Is, size_t N, typename U, typename T, ValidAccessor<U> Acces
 KOKKOS_INLINE_FUNCTION constexpr auto dot_product_impl(std::index_sequence<Is...>,
                                                        const AVector<U, N, Accessor, OwnershipType>& vec1,
                                                        const AVector<T, N, OtherAccessor, OtherOwnershipType>& vec2) {
+  static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");
   using CommonType = std::common_type_t<U, T>;
   return ((static_cast<CommonType>(vec1[Is]) * static_cast<CommonType>(vec2[Is])) + ...);
 }
@@ -359,6 +387,7 @@ template <size_t... Is, size_t N, typename U, typename T, ValidAccessor<U> Acces
 KOKKOS_INLINE_FUNCTION constexpr auto vector_vector_elementwise_mul_impl(
     std::index_sequence<Is...>, const AVector<U, N, Accessor1, Ownership1>& a,
     const AVector<T, N, Accessor2, Ownership2>& b) {
+  static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");
   using CommonType = std::common_type_t<U, T>;
   AVector<CommonType, N> result;
   ((result[Is] = static_cast<CommonType>(a[Is]) * static_cast<CommonType>(b[Is])), ...);
@@ -371,6 +400,7 @@ template <size_t... Is, size_t N, typename U, typename T, ValidAccessor<U> Acces
 KOKKOS_INLINE_FUNCTION constexpr auto vector_vector_elementwise_div_impl(
     std::index_sequence<Is...>, const AVector<U, N, Accessor1, Ownership1>& a,
     const AVector<T, N, Accessor2, Ownership2>& b) {
+  static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");
   using CommonType = std::common_type_t<U, T>;
   AVector<CommonType, N> result;
   ((result[Is] = static_cast<CommonType>(a[Is]) / static_cast<CommonType>(b[Is])), ...);
@@ -382,6 +412,7 @@ template <size_t... Is, typename Func, typename T, size_t N, ValidAccessor<T> Ac
 KOKKOS_INLINE_FUNCTION constexpr auto apply_impl(std::index_sequence<Is...>, const Func& func,
                                                  const AVector<T, N, Accessor, OwnershipType>& vec)
     -> AVector<std::invoke_result_t<Func, T>, N> {
+  static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");
   using result_type = std::invoke_result_t<Func, T>;
   AVector<result_type, N> result;
   ((result[Is] = func(vec[Is])), ...);
@@ -394,6 +425,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto apply_impl(std::index_sequence<Is...>, con
 template <size_t... Is, size_t N, typename T, ValidAccessor<T> A, typename OT>
 KOKKOS_INLINE_FUNCTION AVector<T, N> atomic_vector_load_impl(std::index_sequence<Is...>,
                                                              AVector<T, N, A, OT>* const v) {
+  static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");
   AVector<T, N> result;
   ((result[Is] = Kokkos::atomic_load(&((*v)[Is]))), ...);
   return result;
@@ -403,6 +435,7 @@ KOKKOS_INLINE_FUNCTION AVector<T, N> atomic_vector_load_impl(std::index_sequence
 template <size_t... Is, size_t N, typename T1, ValidAccessor<T1> A, typename OT, typename T2>
 KOKKOS_INLINE_FUNCTION void atomic_vector_scalar_store_impl(std::index_sequence<Is...>, AVector<T1, N, A, OT>* const v,
                                                             const T2& s) {
+  static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");
   ((Kokkos::atomic_store(&((*v)[Is]), static_cast<T1>(s))), ...);
 }
 
@@ -412,6 +445,7 @@ template <size_t... Is, size_t N, typename T1, ValidAccessor<T1> A1, typename OT
 KOKKOS_INLINE_FUNCTION void atomic_vector_vector_store_impl(std::index_sequence<Is...>,
                                                             AVector<T1, N, A1, OT1>* const v1,
                                                             const AVector<T2, N, A2, OT2>& v2) {
+  static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");
   ((Kokkos::atomic_store(&((*v1)[Is]), v2[Is])), ...);
 }
 
@@ -419,6 +453,7 @@ KOKKOS_INLINE_FUNCTION void atomic_vector_vector_store_impl(std::index_sequence<
   template <size_t... Is, size_t N, typename T1, ValidAccessor<T1> A1, typename OT1, typename T2>                    \
   KOKKOS_INLINE_FUNCTION void atomic_vector_scalar_##op_name##_impl(std::index_sequence<Is...>,                      \
                                                                     AVector<T1, N, A1, OT1>* const v, const T2& s) { \
+    static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");            \
     ((atomic_op(&((*v)[Is]), static_cast<T1>(s))), ...);                                                             \
   }
 
@@ -427,6 +462,7 @@ KOKKOS_INLINE_FUNCTION void atomic_vector_vector_store_impl(std::index_sequence<
             ValidAccessor<T2> A2, typename OT2>                                                           \
   KOKKOS_INLINE_FUNCTION void atomic_vector_vector_##op_name##_impl(                                      \
       std::index_sequence<Is...>, AVector<T1, N, A1, OT1>* const v1, const AVector<T2, N, A2, OT2>& v2) { \
+    static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");   \
     ((atomic_op(&((*v1)[Is]), static_cast<T1>(v2[Is]))), ...);                                            \
   }
 
@@ -458,6 +494,7 @@ MUNDY_MATH_VECTOR_VECTOR_ATOMIC_OP_IMPL(elementwise_div, Kokkos::atomic_div)
   template <size_t... Is, size_t N, typename T1, ValidAccessor<T1> A1, typename OT1, typename T2> \
   KOKKOS_INLINE_FUNCTION auto vector_scalar_atomic_fetch_##op_name##_impl(                        \
       std::index_sequence<Is...>, AVector<T1, N, A1, OT1>* const v, const T2& s) {                \
+    static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector."); \
     AVector<T1, N> result;                                                                        \
     ((result[Is] = atomic_fetch_op(&((*v)[Is]), static_cast<T1>(s))), ...);                       \
     return result;                                                                                \
@@ -468,6 +505,7 @@ MUNDY_MATH_VECTOR_VECTOR_ATOMIC_OP_IMPL(elementwise_div, Kokkos::atomic_div)
             ValidAccessor<T2> A2, typename OT2>                                                           \
   KOKKOS_INLINE_FUNCTION auto vector_vector_atomic_fetch_##op_name##_impl(                                \
       std::index_sequence<Is...>, AVector<T1, N, A1, OT1>* const v1, const AVector<T2, N, A2, OT2>& v2) { \
+    static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");   \
     AVector<T1, N> result;                                                                                \
     ((result[Is] = atomic_fetch_op(&((*v1)[Is]), static_cast<T1>(v2[Is]))), ...);                         \
     return result;                                                                                        \
@@ -477,6 +515,7 @@ MUNDY_MATH_VECTOR_VECTOR_ATOMIC_OP_IMPL(elementwise_div, Kokkos::atomic_div)
   template <size_t... Is, size_t N, typename T1, ValidAccessor<T1> A1, typename OT1, typename T2> \
   KOKKOS_INLINE_FUNCTION auto vector_scalar_atomic_##op_name##_fetch_impl(                        \
       std::index_sequence<Is...>, AVector<T1, N, A1, OT1>* const v, const T2& s) {                \
+    static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector."); \
     AVector<T1, N> result;                                                                        \
     ((result[Is] = atomic_op_fetch(&((*v)[Is]), static_cast<T1>(s))), ...);                       \
     return result;                                                                                \
@@ -487,6 +526,7 @@ MUNDY_MATH_VECTOR_VECTOR_ATOMIC_OP_IMPL(elementwise_div, Kokkos::atomic_div)
             ValidAccessor<T2> A2, typename OT2>                                                           \
   KOKKOS_INLINE_FUNCTION auto vector_vector_atomic_##op_name##_fetch_impl(                                \
       std::index_sequence<Is...>, AVector<T1, N, A1, OT1>* const v1, const AVector<T2, N, A2, OT2>& v2) { \
+    static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");   \
     AVector<T1, N> result;                                                                                \
     ((result[Is] = atomic_op_fetch(&((*v1)[Is]), static_cast<T1>(v2[Is]))), ...);                         \
     return result;                                                                                        \

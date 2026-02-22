@@ -45,12 +45,14 @@ namespace impl {
 template <size_t... Is, typename T, size_t N>
 KOKKOS_INLINE_FUNCTION constexpr void deep_copy_impl(std::index_sequence<Is...>, Array<T, N>& array,
                                                      const Array<T, N>& other) {
+  static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the array.");
   ((array[Is] = other[Is]), ...);
 }
 
 /// \brief Fill implementation for Array
 template <size_t... Is, typename T, size_t N>
 KOKKOS_INLINE_FUNCTION constexpr void fill_impl(std::index_sequence<Is...>, Array<T, N>& array, const T& value) {
+  static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the array.");
   ((array[Is] = value), ...);
 }
 
@@ -58,6 +60,7 @@ KOKKOS_INLINE_FUNCTION constexpr void fill_impl(std::index_sequence<Is...>, Arra
 template <size_t... Is, typename Func, typename T, size_t N>
 KOKKOS_INLINE_FUNCTION constexpr auto apply_impl(std::index_sequence<Is...>, const Func& func, const Array<T, N>& array)
     -> Array<std::invoke_result_t<Func, T>, N> {
+  static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the array.");
   using result_type = std::invoke_result_t<Func, T>;
   Array<result_type, N> result;
   ((result[Is] = func(array[Is])), ...);
