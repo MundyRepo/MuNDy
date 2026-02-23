@@ -28,12 +28,10 @@
 #include <ostream>  // for std::cout
 
 // Mundy libs
+#include <MundyMath_config.hpp>   // for HAVE_MUNDYMATH_*
 #include <mundy_math/Matrix.hpp>  // for mundy::math::Matrix
 #include <mundy_math/Vector.hpp>  // for mundy::math::Vector
 #include <mundy_math/convex.hpp>  // for mundy::math::solve_lcp/solve_cqpp
-
-#include <MundyMath_config.hpp>  // for HAVE_MUNDYMATH_*
-
 
 namespace mundy {
 
@@ -230,6 +228,65 @@ struct RandomLCP {
   vector_t x_star_;
   vector_t grad_star_;
 };
+
+namespace congruent {
+
+template <class NonCongruentProblem>
+struct CongruentLCPProblemWrapper {
+  // D = I
+  using scalar_t = typename NonCongruentProblem::scalar_t;
+  using vector_t = typename NonCongruentProblem::vector_t;
+  using linear_op_t = typename NonCongruentProblem::linear_op_t;
+  using backend_t = typename NonCongruentProblem::backend_t;
+
+  std::string name() const {
+    return "CongruentLCPProblemWrapper<" + cdp.name() + ">";
+  }
+
+  KOKKOS_INLINE_FUNCTION
+  auto get_space() const {
+    return cdp.get_space();
+  }
+
+  KOKKOS_INLINE_FUNCTION
+  vector_t get_x_exact() const {
+    return cdp.get_exact_solution();
+  }
+
+  KOKKOS_INLINE_FUNCTION
+  vector_t get_f_exact() const {
+    return cdp.get_exact_solution();
+  }
+
+  KOKKOS_INLINE_FUNCTION
+  vector_t get_u_exact() const {
+    return get_M() * get_x_exact();
+  }
+
+  KOKKOS_INLINE_FUNCTION
+  linear_op_t get_D() const {
+    return linear_op_t::identity();
+  }
+
+  KOKKOS_INLINE_FUNCTION
+  linear_op_t get_M() const {
+    return cdp.get_A();
+  }
+
+  KOKKOS_INLINE_FUNCTION
+  linear_op_t get_DT() const {
+    return linear_op_t::identity();
+  }
+
+  KOKKOS_INLINE_FUNCTION
+  vector_t get_q() const {
+    return cdp.get_q();
+  }
+
+  NonCongruentProblem cdp;
+};
+
+}  // namespace congruent
 
 }  // namespace math_backend
 //@}
@@ -526,6 +583,81 @@ struct RandomLCP {
   vector_t grad_star_;
 };
 
+namespace congruent {
+
+template <class NonCongruentProblem>
+struct CongruentLCPProblemWrapper {
+  // D = I
+  using exec_space = Kokkos::DefaultExecutionSpace;
+  using mem_space = exec_space::memory_space;
+
+  using scalar_t = typename NonCongruentProblem::scalar_t;
+  using layout_t = typename NonCongruentProblem::layout_t;
+  using vector_t = typename NonCongruentProblem::vector_t;
+  using linear_op_t = typename NonCongruentProblem::linear_op_t;
+  using backend_t = typename NonCongruentProblem::backend_t;
+
+  std::string name() const {
+    return "CongruentLCPProblemWrapper<" + cdp.name() + ">";
+  }
+
+  unsigned size() const {
+    return cdp.size();
+  }
+
+  KOKKOS_INLINE_FUNCTION
+  auto get_space() const {
+    return cdp.get_space();
+  }
+
+  KOKKOS_INLINE_FUNCTION
+  vector_t get_x_exact() const {
+    return cdp.get_exact_solution();
+  }
+
+  KOKKOS_INLINE_FUNCTION
+  vector_t get_f_exact() const {
+    return cdp.get_exact_solution();
+  }
+
+  KOKKOS_INLINE_FUNCTION
+  vector_t get_u_exact() const {
+    return get_M() * get_x_exact();
+  }
+
+  KOKKOS_INLINE_FUNCTION
+  linear_op_t get_D() const {
+    return gen_identity(size());
+  }
+
+  KOKKOS_INLINE_FUNCTION
+  linear_op_t get_M() const {
+    return cdp.get_A();
+  }
+
+  KOKKOS_INLINE_FUNCTION
+  linear_op_t get_DT() const {
+    return gen_identity(size());
+  }
+
+  KOKKOS_INLINE_FUNCTION
+  vector_t get_q() const {
+    return cdp.get_q();
+  }
+
+  linear_op_t gen_identity(unsigned size) {
+    linear_op_t mat(Kokkos::view_alloc(Kokkos::WithoutInitializing, "mat"), size, size);
+    Kokkos::deep_copy(mat, 0.0);
+    Kokkos::parallel_for(
+        "gen_identity", Kokkos::RangePolicy<exec_space>(0, size), KOKKOS_LAMBDA(const size_t i) { mat(i, i) = 1.0; });
+    return mat;
+  }
+
+  NonCongruentProblem cdp;
+};
+
+}  // namespace congruent
+
 }  // namespace kokkos_backend
 //@}
 #endif  // HAVE_MUNDYMATH_KOKKOSKERNELS
@@ -561,6 +693,46 @@ void run_mundy_math_test(const auto& test) {
   EXPECT_LE(result.num_iters, cfg.max_iters);
   for (size_t i = 0; i < vector_t::size; ++i) {
     EXPECT_NEAR(x[i], x_exact[i], 10 * cfg.tol);
+  }
+}
+
+void run_mundy_math_congruent_test(const auto& test) {
+  // Problem setup
+  auto D = test.get_D();
+  auto M = test.get_M();
+  auto DT = test.get_DT();
+  auto q = test.get_q();
+  auto space = test.get_space();
+  auto x_exact = test.get_x_exact();
+  auto f_exact = test.get_f_exact();
+  auto u_exact = test.get_u_exact();
+
+  using vector_t = decltype(x_exact);
+  vector_t x{}, grad{}, f{}, u{}, x_tmp{}, grad_tmp{};
+
+  x.fill(99.99);  // use a bad initial guess to force more iterations
+
+  // Build the problem
+  const auto cqpp = make_mundy_math_cqpp(D, M, DT, q, space);
+
+  // Reuse the backend token from the problem
+  const auto backend = cqpp.backend();
+
+  // Strategy + state
+  convex::CongruentPGDConfig<double> cfg{.max_iters = 1000, .tol = 1e-6};
+  auto pgd = make_pgd_solution_strategy(backend, cfg);
+  auto pgd_state = make_pgd_state(backend, x, grad, f, u, x_tmp, grad_tmp);
+
+  // Solve (can reuse "cqpp" and "pgd" across many states)
+  auto result = solve_cqpp(cqpp, pgd, pgd_state);
+
+  // Check results
+  EXPECT_TRUE(result.converged);
+  EXPECT_LE(result.num_iters, cfg.max_iters);
+  for (size_t i = 0; i < vector_t::size; ++i) {
+    EXPECT_NEAR(x[i], x_exact[i], 10 * cfg.tol);
+    EXPECT_NEAR(f[i], f_exact[i], 10 * cfg.tol);
+    EXPECT_NEAR(u[i], u_exact[i], 10 * cfg.tol);
   }
 }
 
@@ -609,6 +781,67 @@ void run_kokkos_test(const auto& test) {
     EXPECT_NEAR(x_host[i], x_exact_host[i], 10 * cfg.tol);
   }
 }
+
+void run_kokkos_congruent_test(const auto& test) {
+  // Problem setup
+  auto exec_space = test.get_exec_space();
+  auto D = test.get_D();
+  auto M = test.get_M();
+  auto DT = test.get_DT();
+  auto q = test.get_q();
+  auto space = test.get_space();
+  auto x_exact = test.get_x_exact();
+  auto f_exact = test.get_f_exact();
+  auto u_exact = test.get_u_exact();
+  unsigned size = test.size();
+
+  using vector_t = decltype(x_exact);
+  vector_t x(Kokkos::view_alloc(Kokkos::WithoutInitializing, "x"), size);
+  vector_t grad(Kokkos::view_alloc(Kokkos::WithoutInitializing, "grad"), size);
+  vector_t f(Kokkos::view_alloc(Kokkos::WithoutInitializing, "f"), size);
+  vector_t u(Kokkos::view_alloc(Kokkos::WithoutInitializing, "u"), size);
+  vector_t x_tmp(Kokkos::view_alloc(Kokkos::WithoutInitializing, "x_tmp"), size);
+  vector_t grad_tmp(Kokkos::view_alloc(Kokkos::WithoutInitializing, "grad_tmp"), size);
+
+  Kokkos::deep_copy(x, 99.99);  // use a bad initial guess to force more iterations
+
+  // Build the problem
+  const auto cqpp = make_kokkos_cqpp(exec_space, D, M, DT, q, space);
+
+  // Reuse the backend token from the problem
+  const auto backend = cqpp.backend();
+
+  // Strategy + state
+  convex::CongruentPGDConfig<double> cfg{.max_iters = 1000, .tol = 1e-6};
+  auto pgd = make_pgd_solution_strategy(backend, cfg);
+  auto pgd_state = make_pgd_state(backend, x, grad, f, u, x_tmp, grad_tmp);
+
+  // Solve (can reuse "cqpp" and "pgd" across many states)
+  auto result = solve_cqpp(cqpp, pgd, pgd_state);
+
+  // Check results
+  EXPECT_TRUE(result.converged);
+  EXPECT_LE(result.num_iters, cfg.max_iters);
+
+  // Copy x to host for comparison
+  auto x_host = Kokkos::create_mirror_view(x);
+  auto f_host = Kokkos::create_mirror_view(f);
+  auto u_host = Kokkos::create_mirror_view(u);
+  auto x_exact_host = Kokkos::create_mirror_view(x_exact);
+  auto f_exact_host = Kokkos::create_mirror_view(f_exact);
+  auto u_exact_host = Kokkos::create_mirror_view(u_exact);
+  Kokkos::deep_copy(x_host, x);
+  Kokkos::deep_copy(f_host, f);
+  Kokkos::deep_copy(u_host, u);
+  Kokkos::deep_copy(x_exact_host, x_exact);
+  Kokkos::deep_copy(f_exact_host, f_exact);
+  Kokkos::deep_copy(u_exact_host, u_exact);
+  for (size_t i = 0; i < size; ++i) {
+    EXPECT_NEAR(x_host[i], x_exact_host[i], 10 * cfg.tol);
+    EXPECT_NEAR(f_host[i], f_exact_host[i], 10 * cfg.tol);
+    EXPECT_NEAR(u_host[i], u_exact_host[i], 10 * cfg.tol);
+  }
+}
 #endif  // HAVE_MUNDYMATH_KOKKOSKERNELS
 
 TEST(Convex, MundyMathAnalyticalSolutions) {
@@ -620,6 +853,16 @@ TEST(Convex, MundyMathAnalyticalSolutions) {
   std::apply([](auto&&... test_case) { (run_mundy_math_test(test_case), ...); }, test_cases);
 }
 
+TEST(Convex, MundyMathCongruentAnalyticalSolutions) {
+  using math_backend::congruent::CongruentLCPProblemWrapper;
+  auto test_cases = std::make_tuple(CongruentLCPProblemWrapper{math_backend::UnconstrainedSPD1Problem{}},          //
+                                    CongruentLCPProblemWrapper{math_backend::InactiveBoxConstrainedSPDProblem{}},  //
+                                    CongruentLCPProblemWrapper{math_backend::ActiveBoxConstrainedSPDProblem{}},    //
+                                    CongruentLCPProblemWrapper{math_backend::RandomLCP<3>{}},                      //
+                                    CongruentLCPProblemWrapper{math_backend::RandomLCP<7>{}});
+  std::apply([](auto&&... test_case) { (run_mundy_math_congruent_test(test_case), ...); }, test_cases);
+}
+
 #ifdef HAVE_MUNDYMATH_KOKKOSKERNELS
 TEST(Convex, KokkosAnalyticalSolutions) {
   auto test_cases = std::make_tuple(kokkos_backend::UnconstrainedSPD1Problem{},          //
@@ -629,6 +872,17 @@ TEST(Convex, KokkosAnalyticalSolutions) {
                                     kokkos_backend::RandomLCP{7},                        //
                                     kokkos_backend::RandomLCP{200});
   std::apply([](auto&&... test_case) { (run_kokkos_test(test_case), ...); }, test_cases);
+}
+
+TEST(Convex, KokkosCongruentAnalyticalSolutions) {
+  using kokkos_backend::congruent::CongruentLCPProblemWrapper;
+  auto test_cases = std::make_tuple(CongruentLCPProblemWrapper{kokkos_backend::UnconstrainedSPD1Problem{}},          //
+                                    CongruentLCPProblemWrapper{kokkos_backend::InactiveBoxConstrainedSPDProblem{}},  //
+                                    CongruentLCPProblemWrapper{kokkos_backend::ActiveBoxConstrainedSPDProblem{}},    //
+                                    CongruentLCPProblemWrapper{kokkos_backend::RandomLCP{3}},                        //
+                                    CongruentLCPProblemWrapper{kokkos_backend::RandomLCP{7}},                        //
+                                    CongruentLCPProblemWrapper{kokkos_backend::RandomLCP{200}});
+  std::apply([](auto&&... test_case) { (run_kokkos_congruent_test(test_case), ...); }, test_cases);
 }
 #endif  // HAVE_MUNDYMATH_KOKKOSKERNELS
 

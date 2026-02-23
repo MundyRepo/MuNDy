@@ -394,6 +394,52 @@ class CQPPProblem {
   const space_t& space_;
 };  // CQPPProblem
 
+/// \brief Constrained quadratic programming problem (CQPP) formulation, congruent to a symmetric positive definite
+/// matrix
+///
+/// This is for a constrained quadratic programming problem of the form:
+///   x^* = argmin_{x in Omega} 0.5 x^T A x + q^T x, A := D^T M D
+/// where M is a symmetric positive definite matrix, D is a matrix, q is a vector, and Omega is a convex space.
+///
+/// For problems of this form, f = D x^* and u = M f are unique.
+///
+///
+/// \tparam Backend The backend to use for operations (e.g., KokkosBackend, MundyMathBackend)
+template <typename Backend, typename LinearOpD, typename LinearOpDT, typename LinearOpM, typename ConvexSpace>
+class CongruentCQPPProblem {
+ public:
+  using backend_t = Backend;
+  using linear_op_d_t = LinearOpD;
+  using linear_op_dt_t = LinearOpDT;
+  using linear_op_m_t = LinearOpM;
+  using space_t = ConvexSpace;
+  using scalar_t = typename Backend::scalar_t;
+  using vector_t = typename Backend::vector_t;
+
+  KOKKOS_INLINE_FUNCTION
+  CongruentCQPPProblem(Backend, const linear_op_dt_t& DT, const linear_op_m_t& M, const linear_op_d_t& D,
+                       const vector_t& q, const space_t& space)
+      : DT_(DT), M_(M), D_(D), q_(q), space_(space) {
+  }
+
+  // Accessors — all const to preserve the problem definition
+  // clang-format off
+  KOKKOS_INLINE_FUNCTION Backend backend() const { return Backend{}; }
+  KOKKOS_INLINE_FUNCTION const linear_op_dt_t& DT() const { return DT_; }
+  KOKKOS_INLINE_FUNCTION const linear_op_m_t& M() const { return M_; }
+  KOKKOS_INLINE_FUNCTION const linear_op_d_t& D() const { return D_; }
+  KOKKOS_INLINE_FUNCTION const vector_t& q() const { return q_; }
+  KOKKOS_INLINE_FUNCTION const space_t& space() const { return space_; }
+  // clang-format on
+
+ private:
+  const linear_op_dt_t& DT_;
+  const linear_op_m_t& M_;
+  const linear_op_d_t& D_;
+  const vector_t& q_;
+  const space_t& space_;
+};  // CongruentCQPPProblem
+
 /// \brief Linear complementarity problem (LCP) formulation
 ///
 /// This is for a linear complementarity problem of the form:
@@ -428,10 +474,60 @@ class LCPProblem {
   const vector_t& q_;
 };  // LCPProblem
 
+/// \brief Linear complementarity problem (LCP) formulation congruent to a symmetric positive definite matrix
+///
+/// This is for a linear complementarity problem of the form:
+///   0 <= A x + q _|_ x >= 0, A := D^T M D
+/// where M is a symmetric positive definite matrix, D is a matrix, q is a vector, and x is the solution vector.
+///
+/// This is equivalent to solving the following constrained quadratic programming problem:
+///   x^* = argmin 0.5 x^T A x + q^T x
+///          s.t  x in R^n, x >= 0
+///
+/// For problems of this form, f = D x^* and u = M f are unique.
+///
+/// \tparam Backend The backend to use for operations (e.g., KokkosBackend, MundyMathBackend)
+template <typename Backend, typename LinearOpD, typename LinearOpDT, typename LinearOpM>
+class CongruentLCPProblem {
+ public:
+  using backend_t = Backend;
+  using linear_op_d_t = LinearOpD;
+  using linear_op_dt_t = LinearOpDT;
+  using linear_op_m_t = LinearOpM;
+  using scalar_t = typename Backend::scalar_t;
+  using vector_t = typename Backend::vector_t;
+
+  KOKKOS_INLINE_FUNCTION
+  CongruentLCPProblem(Backend, const linear_op_dt_t& DT, const linear_op_m_t& M, const linear_op_d_t& D,
+                      const vector_t& q)
+      : DT_(DT), M_(M), D_(D), q_(q) {
+  }
+
+  // clang-format off
+  KOKKOS_INLINE_FUNCTION Backend backend() const { return Backend{}; }
+  KOKKOS_INLINE_FUNCTION const linear_op_dt_t& DT() const { return DT_; }
+  KOKKOS_INLINE_FUNCTION const linear_op_m_t& M() const { return M_; }
+  KOKKOS_INLINE_FUNCTION const linear_op_d_t& D() const { return D_; }
+  KOKKOS_INLINE_FUNCTION const vector_t& q() const { return q_; }
+  // clang-format on
+
+ private:
+  const linear_op_dt_t& DT_;
+  const linear_op_m_t& M_;
+  const linear_op_d_t& D_;
+  const vector_t& q_;
+};  // CongruentLCPProblem
+
 template <class Backend, class LinearOp>
 KOKKOS_INLINE_FUNCTION auto to_cqpp(const LCPProblem<Backend, LinearOp>& P) {
   static constexpr space::LowerBound Rn_plus{static_cast<typename Backend::scalar_t>(0)};
   return CQPPProblem(P.backend(), P.A(), P.q(), Rn_plus);
+}
+
+template <class Backend, class LinearOpD, class LinearOpDT, class LinearOpM>
+KOKKOS_INLINE_FUNCTION auto to_cqpp(const CongruentLCPProblem<Backend, LinearOpD, LinearOpDT, LinearOpM>& P) {
+  static constexpr space::LowerBound Rn_plus{static_cast<typename Backend::scalar_t>(0)};
+  return CongruentCQPPProblem(P.backend(), P.DT(), P.M(), P.D(), P.q(), Rn_plus);
 }
 //@}
 
@@ -531,6 +627,14 @@ struct PGDConfig {
   Scalar tol{get_relaxed_zero_tolerance<Scalar>()};
 };
 
+template <typename Scalar>
+struct CongruentPGDConfig {
+  using scalar_t = Scalar;
+
+  unsigned max_iters{1000};
+  Scalar tol{get_relaxed_zero_tolerance<Scalar>()};
+};
+
 template <class Scalar>
 struct SolveResult {
   using scalar_t = Scalar;
@@ -588,6 +692,62 @@ class PGDState {
  private:
   vector_t& x_;
   vector_t& g_;
+  vector_t& x_tmp_;
+  vector_t& g_tmp_;
+  unsigned iter_{0};
+  bool converged_{false};
+  scalar_t residual_{0};
+  scalar_t step_size_{1};
+};
+
+template <class Backend>
+class CongruentPGDState {
+ public:
+  using backend_t = Backend;
+  using vector_t = typename Backend::vector_t;
+  using scalar_t = typename Backend::scalar_t;
+
+  KOKKOS_INLINE_FUNCTION
+  CongruentPGDState(const Backend&, vector_t& x, vector_t& g, vector_t& f, vector_t& u, vector_t& x_tmp,
+                    vector_t& g_tmp)
+      : x_(x), g_(g), f_(f), u_(u), x_tmp_(x_tmp), g_tmp_(g_tmp) {
+  }
+
+  // Accessors (const/non-const as needed)
+  // clang-format off
+  KOKKOS_INLINE_FUNCTION Backend backend() const { return Backend{}; }
+  KOKKOS_INLINE_FUNCTION       vector_t& x()      { return x_; }
+  KOKKOS_INLINE_FUNCTION const vector_t& x() const{ return x_; }
+  KOKKOS_INLINE_FUNCTION       vector_t& grad()      { return g_; }
+  KOKKOS_INLINE_FUNCTION const vector_t& grad() const{ return g_; }
+  KOKKOS_INLINE_FUNCTION       vector_t& f()      { return f_; }
+  KOKKOS_INLINE_FUNCTION const vector_t& f() const{ return f_; }
+  KOKKOS_INLINE_FUNCTION       vector_t& u()      { return u_; }
+  KOKKOS_INLINE_FUNCTION const vector_t& u() const{ return u_; }
+  KOKKOS_INLINE_FUNCTION       vector_t& x_tmp()      { return x_tmp_; }
+  KOKKOS_INLINE_FUNCTION const vector_t& x_tmp() const{ return x_tmp_; }
+  KOKKOS_INLINE_FUNCTION       vector_t& grad_tmp()      { return g_tmp_; }
+  KOKKOS_INLINE_FUNCTION const vector_t& grad_tmp() const{ return g_tmp_; }
+  // clang-format on
+
+  // Iteration locals with accessors
+  // clang-format off
+  KOKKOS_INLINE_FUNCTION unsigned& iter()         { return iter_; }
+  KOKKOS_INLINE_FUNCTION bool&     converged()    { return converged_; }
+  KOKKOS_INLINE_FUNCTION scalar_t& residual()     { return residual_; }
+  KOKKOS_INLINE_FUNCTION scalar_t& step_size()        { return step_size_; }
+
+  KOKKOS_INLINE_FUNCTION unsigned  iter()    const { return iter_; }
+  KOKKOS_INLINE_FUNCTION bool      converged() const { return converged_; }
+  KOKKOS_INLINE_FUNCTION scalar_t  residual() const  { return residual_; }
+  KOKKOS_INLINE_FUNCTION scalar_t  step_size()    const  { return step_size_; }
+  // clang-format on
+
+ private:
+  vector_t& x_;
+  vector_t& g_;
+  vector_t& f_;
+  vector_t& u_;
   vector_t& x_tmp_;
   vector_t& g_tmp_;
   unsigned iter_{0};
@@ -689,6 +849,107 @@ class PGDStrategy {
   config_t cfg_;
 };
 
+template <class Backend, class StepPolicy, class ResidualPolicy>
+class CongruentPGDStrategy {
+ public:
+  using backend_t = Backend;
+  using scalar_t = typename Backend::scalar_t;
+  using vector_t = typename Backend::vector_t;
+
+  using step_policy_t = StepPolicy;
+  using residual_policy_t = ResidualPolicy;
+  using config_t = CongruentPGDConfig<scalar_t>;
+  using state_t = CongruentPGDState<Backend>;
+  using result_t = SolveResult<scalar_t>;
+
+  KOKKOS_INLINE_FUNCTION
+  CongruentPGDStrategy(backend_t, step_policy_t step, residual_policy_t resid, config_t cfg = {})
+      : step_(step), resid_(resid), cfg_(cfg) {
+  }
+
+  KOKKOS_INLINE_FUNCTION Backend backend() const {
+    return Backend{};
+  }
+
+  template <class Problem>
+  KOKKOS_INLINE_FUNCTION void initialize(const Problem& prob, state_t& state) const {
+    constexpr scalar_t one = static_cast<scalar_t>(1);
+
+    // x_tmp = x
+    Backend::deep_copy(state.x_tmp(), state.x());
+
+    // f = D x_tmp
+    // u = M f
+    // grad_tmp = D^T u + q
+    Backend::apply(prob.D(), state.x_tmp(), state.f());
+    Backend::apply(prob.M(), state.f(), state.u());
+    Backend::apply(prob.DT(), state.u(), state.grad_tmp());
+    Backend::axpby(one, prob.q(), one, state.grad_tmp());
+
+    // Dai-Fletcher Sec. 5 initial step
+    state.residual() = resid_(Backend{}, state.x_tmp(), state.grad_tmp(), prob.space());
+
+    // Initialize iteration state (allow for early exit)
+    state.iter() = 0;
+    state.converged() = (state.residual() <= static_cast<scalar_t>(cfg_.tol));
+    if (state.converged()) {
+      state.step_size() = one;
+      // If already converged, copy grad_tmp to grad
+      Backend::deep_copy(state.grad(), state.grad_tmp());
+    } else {
+      state.step_size() = one / state.residual();
+    }
+  }
+
+  template <class Problem>
+  KOKKOS_INLINE_FUNCTION bool iterate(const Problem& prob, state_t& state) const {
+    constexpr scalar_t one = static_cast<scalar_t>(1);
+
+    if (state.converged() || state.iter() >= cfg_.max_iters) {
+      return state.converged();
+    }
+
+    // x = Proj(x_tmp - step_size * grad_tmp)
+    Backend::wrapped_axpbyz(one, state.x_tmp(), -state.step_size(), state.grad_tmp(), state.x(), prob.space());
+
+    // f = D x
+    // u = M f
+    // grad = D^T u + q
+    Backend::apply(prob.D(), state.x(), state.f());
+    Backend::apply(prob.M(), state.f(), state.u());
+    Backend::apply(prob.DT(), state.u(), state.grad());
+    Backend::axpby(one, prob.q(), one, state.grad());
+
+    // residual & test
+    state.residual() = resid_(Backend{}, state.x(), state.grad(), prob.space());
+    if (state.residual() <= static_cast<scalar_t>(cfg_.tol)) {
+      state.converged() = true;
+      return true;
+    }
+
+    // update step size and roll x_tmp/grad_tmp forward
+    state.step_size() = step_(Backend{}, state.x_tmp(), state.grad_tmp(), state.x(), state.grad());
+    Backend::deep_copy(state.x_tmp(), state.x());
+    Backend::deep_copy(state.grad_tmp(), state.grad());
+    ++state.iter();
+    return false;
+  }
+
+  KOKKOS_INLINE_FUNCTION
+  bool done(const state_t& state) const {
+    return state.converged() || state.iter() >= cfg_.max_iters;
+  }
+
+  KOKKOS_INLINE_FUNCTION result_t result(const state_t& state) const {
+    return {state.iter(), state.residual(), state.converged()};
+  }
+
+ private:
+  step_policy_t step_;
+  residual_policy_t resid_;
+  config_t cfg_;
+};
+
 template <class Strategy, class Problem>
 concept CQPPSolverStrategy = requires(const Strategy& s, const Problem& prob, typename Strategy::state_t& state) {
   typename Strategy::state_t;
@@ -734,11 +995,25 @@ KOKKOS_INLINE_FUNCTION auto make_mundy_math_cqpp(const LinearOp& A, const Vector
   using backend_t = convex::MundyMathBackend<Scalar, N>;
   return convex::CQPPProblem(backend_t{}, A, q, space);
 }
+//
+template <typename LinearOpD, typename LinearOpDT, typename LinearOpM, typename ConvexSpace, typename Scalar, size_t N>
+KOKKOS_INLINE_FUNCTION auto make_mundy_math_cqpp(const LinearOpDT& DT, const LinearOpM& M, const LinearOpD& D,
+                                                 const Vector<Scalar, N>& q, const ConvexSpace& space) {
+  using backend_t = convex::MundyMathBackend<Scalar, N>;
+  return convex::CongruentCQPPProblem(backend_t{}, DT, M, D, q, space);
+}
 
 template <typename LinearOp, typename Scalar, size_t N>
 KOKKOS_INLINE_FUNCTION auto make_mundy_math_lcp(const LinearOp& A, const Vector<Scalar, N>& q) {
   using backend_t = convex::MundyMathBackend<Scalar, N>;
   return convex::LCPProblem(backend_t{}, A, q);
+}
+//
+template <typename LinearOpD, typename LinearOpDT, typename LinearOpM, typename Scalar, size_t N>
+KOKKOS_INLINE_FUNCTION auto make_mundy_math_lcp(const LinearOpDT& DT, const LinearOpM& M, const LinearOpD& D,
+                                                const Vector<Scalar, N>& q) {
+  using backend_t = convex::MundyMathBackend<Scalar, N>;
+  return convex::CongruentLCPProblem(backend_t{}, DT, M, D, q);
 }
 
 template <typename LinearOp, typename ConvexSpace, typename DoubleVectorView, typename ExecSpace>
@@ -750,6 +1025,16 @@ KOKKOS_INLINE_FUNCTION auto make_kokkos_cqpp(const ExecSpace& /*exec_space*/,  /
   using backend_t = convex::KokkosBackend<scalar_t, DoubleVectorView, ExecSpace>;
   return convex::CQPPProblem(backend_t{}, A, q, space);
 }
+//
+template <typename LinearOpD, typename LinearOpDT, typename LinearOpM, typename ConvexSpace, typename DoubleVectorView,
+          typename ExecSpace>
+KOKKOS_INLINE_FUNCTION auto make_kokkos_cqpp(const ExecSpace& /*exec_space*/,  //
+                                             const LinearOpDT& DT, const LinearOpM& M, const LinearOpD& D,
+                                             const DoubleVectorView& q, const ConvexSpace& space) {
+  using scalar_t = DoubleVectorView::non_const_value_type;
+  using backend_t = convex::KokkosBackend<scalar_t, DoubleVectorView, ExecSpace>;
+  return convex::CongruentCQPPProblem(backend_t{}, DT, M, D, q, space);
+}
 
 template <typename LinearOp, typename DoubleVectorView, typename ExecSpace>
 KOKKOS_INLINE_FUNCTION auto make_kokkos_lcp(const ExecSpace& /*exec_space*/,  //
@@ -759,6 +1044,15 @@ KOKKOS_INLINE_FUNCTION auto make_kokkos_lcp(const ExecSpace& /*exec_space*/,  //
   using backend_t = convex::KokkosBackend<scalar_t, DoubleVectorView, ExecSpace>;
   return convex::LCPProblem(backend_t{}, A, q);
 }
+//
+template <typename LinearOpD, typename LinearOpDT, typename LinearOpM, typename DoubleVectorView, typename ExecSpace>
+KOKKOS_INLINE_FUNCTION auto make_kokkos_lcp(const ExecSpace& /*exec_space*/,  //
+                                            const LinearOpDT& DT, const LinearOpM& M, const LinearOpD& D,
+                                            const DoubleVectorView& q) {
+  using scalar_t = DoubleVectorView::non_const_value_type;
+  using backend_t = convex::KokkosBackend<scalar_t, DoubleVectorView, ExecSpace>;
+  return convex::CongruentLCPProblem(backend_t{}, DT, M, D, q);
+}
 
 template <class Backend, class StepPolicy, class ResidualPolicy>
 KOKKOS_INLINE_FUNCTION auto make_pgd_solution_strategy(const Backend& backend,                 //
@@ -767,6 +1061,14 @@ KOKKOS_INLINE_FUNCTION auto make_pgd_solution_strategy(const Backend& backend,  
                                                        const convex::PGDConfig<typename Backend::scalar_t>& cfg = {}) {
   return convex::PGDStrategy(backend, step_policy, residual_policy, cfg);
 }
+//
+template <class Backend, class StepPolicy, class ResidualPolicy>
+KOKKOS_INLINE_FUNCTION auto make_pgd_solution_strategy(const Backend& backend,                 //
+                                                       const StepPolicy& step_policy,          //
+                                                       const ResidualPolicy& residual_policy,  //
+                                                       const convex::CongruentPGDConfig<typename Backend::scalar_t>& cfg = {}) {
+  return convex::CongruentPGDStrategy(backend, step_policy, residual_policy, cfg);
+}
 
 template <class Backend>
 KOKKOS_INLINE_FUNCTION auto make_pgd_solution_strategy(const Backend& backend,  //
@@ -774,6 +1076,14 @@ KOKKOS_INLINE_FUNCTION auto make_pgd_solution_strategy(const Backend& backend,  
   using DefaultStepPolicy = convex::BBStepStrategy;
   using DefaultResidualPolicy = convex::LinfNormProjectedDiffResidual;
   return convex::PGDStrategy(backend, DefaultStepPolicy{}, DefaultResidualPolicy{}, cfg);
+}
+//
+template <class Backend>
+KOKKOS_INLINE_FUNCTION auto make_pgd_solution_strategy(const Backend& backend,  //
+                                                       const convex::CongruentPGDConfig<typename Backend::scalar_t>& cfg = {}) {
+  using DefaultStepPolicy = convex::BBStepStrategy;
+  using DefaultResidualPolicy = convex::LinfNormProjectedDiffResidual;
+  return convex::CongruentPGDStrategy(backend, DefaultStepPolicy{}, DefaultResidualPolicy{}, cfg);
 }
 
 template <class Backend>
@@ -784,12 +1094,19 @@ KOKKOS_INLINE_FUNCTION auto make_pgd_state(const Backend& backend,             /
                                            typename Backend::vector_t& grad_tmp) {
   return convex::PGDState(backend, x, grad, x_tmp, grad_tmp);
 }
+//
+template <class Backend>
+KOKKOS_INLINE_FUNCTION auto make_pgd_state(const Backend& backend,             //
+                                           typename Backend::vector_t& x,      //
+                                           typename Backend::vector_t& grad,   //
+                                           typename Backend::vector_t& f,      //
+                                           typename Backend::vector_t& u,      //
+                                           typename Backend::vector_t& x_tmp,  //
+                                           typename Backend::vector_t& grad_tmp) {
+  return convex::CongruentPGDState(backend, x, grad, f, u, x_tmp, grad_tmp);
+}
 
 /// \brief Solve a constrained quadratic programming problem (CQPP)
-///
-/// This is for a constrained quadratic programming problem of the form:
-///   x^* = argmin_{x in Omega} 0.5 x^T A x + q^T x
-/// where A is a symmetric positive semi-definite matrix, q is a vector, and Omega is a convex space.
 ///
 /// \param prob The constrained quadratic programming problem to solve.
 /// \param strat The solution strategy to use.
@@ -806,6 +1123,40 @@ KOKKOS_INLINE_FUNCTION auto solve_cqpp(const Problem& prob, const Strategy& stra
   return strat.result(state);
 }
 
+/// \brief Solve a mixed constrained convex quadratic programming problem (MCQPP)
+///
+/// This is for a mixed constrained convex quadratic programming problem of the form:
+///   x^*, y^* = argmin_{x in Omega_x, y in R^m} c^T x + b^T y + 0.5 (Cx + By)^T M (Cx + By) + 0.5 y^T K^{-1} y
+/// where M and K^{-1} are symmetric positive definite matrices, C and B are linear operators,
+/// c and b are vectors, and Omega_x is a convex space.
+///
+/// This can be mapped onto a reduced CQPP in x alone via the Schur complement.
+/// Define:
+///   A := B^T M B + K^{-1} (symmetric positive definite)
+///   H := C^T M C - C^T M B A^{-1} B^T M C
+///   g := c - C^T M B A^{-1} b
+/// Then the reduced CQPP is:
+///   x^* = argmin_{x in Omega_x} 0.5 x^T H x + g^T x
+///   y^* = -A^{-1}(b + B^T M C x^*)
+///
+/// We never actually evaluate A, only apply A^{-1} to vectors, so it's the users responsibility to provide the
+/// following linear operators for the solve:
+///   - Mixed terms: B, B^T, A^{-1}
+///   - CQPP terms: C, C^T, M
+///
+/// \param prob The mixed constrained convex quadratic programming problem to solve.
+/// \param strat The solution strategy to use (for the reduced CQPP in x and the linear solve in y).
+/// \param state The state to use for the solution strategy, which will be modified during the solve.
+/// \return The result of the solve (contents are defined by the strategy).
+///
+/// TODO(palmerb4): finish implementing this after we build the CongruentLCPProblem
+///
+// template <class Problem, class Strategy>
+//   requires convex::MCQPPSolverStrategy<Strategy, Problem>
+// KOKKOS_INLINE_FUNCTION auto solve_mcqpp(const Problem& prob, const Strategy& strat, typename Strategy::state_t&
+// state)
+//     -> typename Strategy::result_t;
+
 /// \brief Solve a linear complementarity problem (LCP) using a constrained quadratic programming solver
 ///
 /// This is for a linear complementarity problem of the form:
@@ -816,7 +1167,7 @@ KOKKOS_INLINE_FUNCTION auto solve_cqpp(const Problem& prob, const Strategy& stra
 ///   x^* = argmin 0.5 x^T A x + q^T x
 ///          s.t  x in R^n, x >= 0
 ///
-/// Example usage:
+/// Example 1:
 /// \code{.cpp}
 ///    // Problem setup
 ///    Matrix3d A = {/*...*/};
@@ -837,6 +1188,30 @@ KOKKOS_INLINE_FUNCTION auto solve_cqpp(const Problem& prob, const Strategy& stra
 ///    // auto pgd = make_pgd_solution_strategy(             //
 ///        backend, MyStepStrat{}, MyResidualStrat{}, cfg);  // Custom step/residual strategies
 ///    auto pgd_state = make_pgd_state(backend, x, grad, x_tmp, grad_tmp);
+///
+///    // Solve (can reuse "lcp" and "pgd" across many states)
+///    auto result = solve_lcp(lcp, pgd, pgd_state);
+/// \endcode
+///
+/// Example 2: Congruent LCP
+/// \code{.cpp}
+///    // Problem setup
+///    Matrix3d D = {/*...*/};
+///    Matrix3d M = {/*...*/};
+///    Vector3d q = {/*...*/};
+///    Vector3d x{/* initial_guess */}, grad{}, f{}, u{}, x_tmp{}, grad_tmp{};
+///
+///    // Build the problem (no template args at callsite)
+///    const auto lcp = make_mundy_math_lcp(D.view_transpose(), M, D, q);
+///
+///   // Reuse the backend token from the problem
+///    const auto backend = lcp.backend();
+///
+///    // Strategy + state
+///    PGDConfig cfg{1000, 1e-6};
+///
+///    auto pgd = make_pgd_solution_strategy(backend, cfg);
+///    auto pgd_state = make_pgd_state(backend, x, grad, f, u, x_tmp, grad_tmp);
 ///
 ///    // Solve (can reuse "lcp" and "pgd" across many states)
 ///    auto result = solve_lcp(lcp, pgd, pgd_state);
