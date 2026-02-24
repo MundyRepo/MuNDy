@@ -706,35 +706,68 @@ void run_mundy_math_congruent_test(const auto& test) {
   auto f_exact = test.get_f_exact();
   auto u_exact = test.get_u_exact();
 
-  std::cout << "DT:\n" << DT << "\nM:\n" << M << "\nD:\n" << D << "\nq:\n" << q << std::endl;
+  // Solving via explicit quadratic form
+  {
+    using vector_t = decltype(x_exact);
+    vector_t x{}, grad{}, x_tmp{}, grad_tmp{};
+    vector_t f{}, u{};
 
-  using vector_t = decltype(x_exact);
-  vector_t x{}, grad{}, x_tmp{}, grad_tmp{};
-  vector_t f{}, u{};
+    x.fill(99.99);  // use a bad initial guess to force more iterations
 
-  x.fill(99.99);  // use a bad initial guess to force more iterations
+    // Build quadratic form operator + user-owned workspace, then the problem
+    const auto A = make_quadratic_form<convex::MundyMathBackend>(DT, M, D);
+    auto workspace = A.make_workspace(f, u);  // intermediate variables f = D x, u = M f
+    const auto cqpp = make_cqpp<convex::MundyMathBackend>(A, q, space, workspace);
 
-  // Build quadratic form operator + user-owned workspace, then the problem
-  const auto A = convex::make_quadratic_form<convex::MundyMathBackend>(DT, M, D);
-  auto workspace = A.make_workspace(f, u);  // intermediate variables f = D x, u = M f
-  const auto cqpp = make_cqpp<convex::MundyMathBackend>(A, q, space, workspace);
+    // Strategy + state
+    convex::PGDConfig<double> cfg{.max_iters = 1000, .tol = 1e-6};
+    auto pgd = make_pgd_solution_strategy(cfg);
+    auto pgd_state = make_pgd_state(x, grad, x_tmp, grad_tmp);
 
-  // Strategy + state
-  convex::PGDConfig<double> cfg{.max_iters = 1000, .tol = 1e-6};
-  auto pgd = make_pgd_solution_strategy(cfg);
-  auto pgd_state = make_pgd_state(x, grad, x_tmp, grad_tmp);
+    // Solve (can reuse "cqpp" and "pgd" across many states)
+    auto result = solve_cqpp(cqpp, pgd, pgd_state);
 
-  // Solve (can reuse "cqpp" and "pgd" across many states)
-  auto result = solve_cqpp(cqpp, pgd, pgd_state);
+    // Check results
+    EXPECT_TRUE(result.converged);
+    EXPECT_LE(result.num_iters, cfg.max_iters);
+    EXPECT_TRUE(cqpp.workspace().is_committed());
+    for (size_t i = 0; i < vector_t::size; ++i) {
+      EXPECT_NEAR(x[i], x_exact[i], 10 * cfg.tol);
+      EXPECT_NEAR(f[i], f_exact[i], 10 * cfg.tol);
+      EXPECT_NEAR(u[i], u_exact[i], 10 * cfg.tol);
+    }
+  }
 
-  // Check results
-  EXPECT_TRUE(result.converged);
-  EXPECT_LE(result.num_iters, cfg.max_iters);
-  EXPECT_TRUE(cqpp.workspace().is_committed());
-  for (size_t i = 0; i < vector_t::size; ++i) {
-    EXPECT_NEAR(x[i], x_exact[i], 10 * cfg.tol);
-    EXPECT_NEAR(f[i], f_exact[i], 10 * cfg.tol);
-    EXPECT_NEAR(u[i], u_exact[i], 10 * cfg.tol);
+  // Solving via quadratic form helper
+  {
+    using vector_t = decltype(x_exact);
+    vector_t x{}, grad{}, x_tmp{}, grad_tmp{};
+    vector_t f{}, u{};
+
+    x.fill(99.99);  // use a bad initial guess to force more iterations
+
+    // Build the cqpp directly
+    // Use f = D x and u = M f as intermediate variables to avoid redundant computations in the PGD iterations
+    // The final values of f and u post-solve are guaranteed to be f(x^*) and u(x^*).
+    const auto cqpp = make_cqpp<convex::MundyMathBackend>(DT, M, D, q, f, u, space);
+
+    // Strategy + state
+    convex::PGDConfig<double> cfg{.max_iters = 1000, .tol = 1e-6};
+    auto pgd = make_pgd_solution_strategy(cfg);
+    auto pgd_state = make_pgd_state(x, grad, x_tmp, grad_tmp);
+
+    // Solve (can reuse "cqpp" and "pgd" across many states)
+    auto result = solve_cqpp(cqpp, pgd, pgd_state);
+
+    // Check results
+    EXPECT_TRUE(result.converged);
+    EXPECT_LE(result.num_iters, cfg.max_iters);
+    EXPECT_TRUE(cqpp.workspace().is_committed());
+    for (size_t i = 0; i < vector_t::size; ++i) {
+      EXPECT_NEAR(x[i], x_exact[i], 10 * cfg.tol);
+      EXPECT_NEAR(f[i], f_exact[i], 10 * cfg.tol);
+      EXPECT_NEAR(u[i], u_exact[i], 10 * cfg.tol);
+    }
   }
 }
 
