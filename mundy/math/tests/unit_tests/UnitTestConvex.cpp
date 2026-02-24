@@ -48,7 +48,7 @@ struct UnconstrainedSPD1Problem {
   using scalar_t = double;
   using vector_t = Vector3d;
   using linear_op_t = Matrix3d;
-  using backend_t = convex::MundyMathBackend<scalar_t, 3>;
+  using backend_t = convex::MundyMathBackend;
 
   std::string name() const {
     return "UnconstrainedSPD1Problem";
@@ -81,7 +81,7 @@ struct InactiveBoxConstrainedSPDProblem {
   using scalar_t = double;
   using vector_t = Vector3d;
   using linear_op_t = Matrix3d;
-  using backend_t = convex::MundyMathBackend<scalar_t, 3>;
+  using backend_t = convex::MundyMathBackend;
 
   std::string name() const {
     return "InactiveBoxConstrainedSPDProblem";
@@ -114,7 +114,7 @@ struct ActiveBoxConstrainedSPDProblem {
   using scalar_t = double;
   using vector_t = Vector3d;
   using linear_op_t = Matrix3d;
-  using backend_t = convex::MundyMathBackend<scalar_t, 3>;
+  using backend_t = convex::MundyMathBackend;
 
   std::string name() const {
     return "ActiveBoxConstrainedSPDProblem";
@@ -148,7 +148,7 @@ struct RandomLCP {
   using scalar_t = double;
   using vector_t = Vector<scalar_t, N>;
   using linear_op_t = Matrix<scalar_t, N, N>;
-  using backend_t = convex::MundyMathBackend<scalar_t, N>;
+  using backend_t = convex::MundyMathBackend;
 
   std::string name() const {
     return "RandomLCP" + std::to_string(N);
@@ -304,7 +304,7 @@ struct UnconstrainedSPD1Problem {
   using layout_t = Kokkos::View<scalar_t*, mem_space>::array_layout;
   using vector_t = Kokkos::View<scalar_t*, layout_t, mem_space>;
   using linear_op_t = Kokkos::View<scalar_t**, layout_t, mem_space>;
-  using backend_t = convex::KokkosBackend<scalar_t, vector_t, exec_space>;
+  using backend_t = convex::KokkosBackend<exec_space>;
 
   std::string name() const {
     return "UnconstrainedSPD1Problem";
@@ -363,7 +363,7 @@ struct InactiveBoxConstrainedSPDProblem {
   using layout_t = Kokkos::View<scalar_t*, mem_space>::array_layout;
   using vector_t = Kokkos::View<scalar_t*, layout_t, mem_space>;
   using linear_op_t = Kokkos::View<scalar_t**, layout_t, mem_space>;
-  using backend_t = convex::KokkosBackend<scalar_t, vector_t, exec_space>;
+  using backend_t = convex::KokkosBackend<exec_space>;
 
   std::string name() const {
     return "InactiveBoxConstrainedSPDProblem";
@@ -422,7 +422,7 @@ struct ActiveBoxConstrainedSPDProblem {
   using layout_t = Kokkos::View<scalar_t*, mem_space>::array_layout;
   using vector_t = Kokkos::View<scalar_t*, layout_t, mem_space>;
   using linear_op_t = Kokkos::View<scalar_t**, layout_t, mem_space>;
-  using backend_t = convex::KokkosBackend<scalar_t, vector_t, exec_space>;
+  using backend_t = convex::KokkosBackend<exec_space>;
 
   std::string name() const {
     return "ActiveBoxConstrainedSPDProblem";
@@ -481,7 +481,7 @@ struct RandomLCP {
   using layout_t = Kokkos::View<scalar_t*, mem_space>::array_layout;
   using vector_t = Kokkos::View<scalar_t*, layout_t, mem_space>;
   using linear_op_t = Kokkos::View<scalar_t**, layout_t, mem_space>;
-  using backend_t = convex::KokkosBackend<scalar_t, vector_t, exec_space>;
+  using backend_t = convex::KokkosBackend<exec_space>;
 
   std::string name() const {
     return "RandomLCP" + std::to_string(size_);
@@ -663,6 +663,7 @@ struct CongruentLCPProblemWrapper {
 #endif  // HAVE_MUNDYMATH_KOKKOSKERNELS
 
 void run_mundy_math_test(const auto& test) {
+  std::cout << "Running test: " << test.name() << std::endl;
   // Problem setup
   auto A = test.get_A();
   auto q = test.get_q();
@@ -675,15 +676,12 @@ void run_mundy_math_test(const auto& test) {
   x.fill(99.99);  // use a bad initial guess to force more iterations
 
   // Build the problem
-  const auto cqpp = make_mundy_math_cqpp(A, q, space);
-
-  // Reuse the backend token from the problem
-  const auto backend = cqpp.backend();
+  const auto cqpp = make_cqpp<convex::MundyMathBackend>(A, q, space);
 
   // Strategy + state
   convex::PGDConfig<double> cfg{.max_iters = 1000, .tol = 1e-6};
-  auto pgd = make_pgd_solution_strategy(backend, cfg);
-  auto pgd_state = make_pgd_state(backend, x, grad, x_tmp, grad_tmp);
+  auto pgd = make_pgd_solution_strategy(cfg);
+  auto pgd_state = make_pgd_state(x, grad, x_tmp, grad_tmp);
 
   // Solve (can reuse "cqpp" and "pgd" across many states)
   auto result = solve_cqpp(cqpp, pgd, pgd_state);
@@ -697,31 +695,34 @@ void run_mundy_math_test(const auto& test) {
 }
 
 void run_mundy_math_congruent_test(const auto& test) {
+  std::cout << "Running congruent test: " << test.name() << std::endl;
   // Problem setup
-  auto D = test.get_D();
-  auto M = test.get_M();
   auto DT = test.get_DT();
+  auto M = test.get_M();
+  auto D = test.get_D();
   auto q = test.get_q();
   auto space = test.get_space();
   auto x_exact = test.get_x_exact();
   auto f_exact = test.get_f_exact();
   auto u_exact = test.get_u_exact();
 
+  std::cout << "DT:\n" << DT << "\nM:\n" << M << "\nD:\n" << D << "\nq:\n" << q << std::endl;
+
   using vector_t = decltype(x_exact);
-  vector_t x{}, grad{}, f{}, u{}, x_tmp{}, grad_tmp{};
+  vector_t x{}, grad{}, x_tmp{}, grad_tmp{};
+  vector_t f{}, u{};
 
   x.fill(99.99);  // use a bad initial guess to force more iterations
 
-  // Build the problem
-  const auto cqpp = make_mundy_math_cqpp(D, M, DT, q, space);
-
-  // Reuse the backend token from the problem
-  const auto backend = cqpp.backend();
+  // Build quadratic form operator + user-owned workspace, then the problem
+  const auto A = convex::make_quadratic_form<convex::MundyMathBackend>(DT, M, D);
+  auto workspace = A.make_workspace(f, u);  // intermediate variables f = D x, u = M f
+  const auto cqpp = make_cqpp<convex::MundyMathBackend>(A, q, space, workspace);
 
   // Strategy + state
-  convex::CongruentPGDConfig<double> cfg{.max_iters = 1000, .tol = 1e-6};
-  auto pgd = make_pgd_solution_strategy(backend, cfg);
-  auto pgd_state = make_pgd_state(backend, x, grad, f, u, x_tmp, grad_tmp);
+  convex::PGDConfig<double> cfg{.max_iters = 1000, .tol = 1e-6};
+  auto pgd = make_pgd_solution_strategy(cfg);
+  auto pgd_state = make_pgd_state(x, grad, x_tmp, grad_tmp);
 
   // Solve (can reuse "cqpp" and "pgd" across many states)
   auto result = solve_cqpp(cqpp, pgd, pgd_state);
@@ -729,6 +730,7 @@ void run_mundy_math_congruent_test(const auto& test) {
   // Check results
   EXPECT_TRUE(result.converged);
   EXPECT_LE(result.num_iters, cfg.max_iters);
+  EXPECT_TRUE(cqpp.workspace().is_committed());
   for (size_t i = 0; i < vector_t::size; ++i) {
     EXPECT_NEAR(x[i], x_exact[i], 10 * cfg.tol);
     EXPECT_NEAR(f[i], f_exact[i], 10 * cfg.tol);
@@ -755,15 +757,12 @@ void run_kokkos_test(const auto& test) {
   Kokkos::deep_copy(x, 99.99);  // use a bad initial guess to force more iterations
 
   // Build the problem
-  const auto cqpp = make_kokkos_cqpp(exec_space, A, q, space);
-
-  // Reuse the backend token from the problem
-  const auto backend = cqpp.backend();
+  const auto cqpp = make_cqpp<convex::KokkosBackend<decltype(exec_space)>>(A, q, space);
 
   // Strategy + state
   convex::PGDConfig<double> cfg{.max_iters = 1000, .tol = 1e-6};
-  auto pgd = make_pgd_solution_strategy(backend, cfg);
-  auto pgd_state = make_pgd_state(backend, x, grad, x_tmp, grad_tmp);
+  auto pgd = make_pgd_solution_strategy(cfg);
+  auto pgd_state = make_pgd_state(x, grad, x_tmp, grad_tmp);
 
   // Solve (can reuse "cqpp" and "pgd" across many states)
   auto result = solve_cqpp(cqpp, pgd, pgd_state);
@@ -798,23 +797,22 @@ void run_kokkos_congruent_test(const auto& test) {
   using vector_t = decltype(x_exact);
   vector_t x(Kokkos::view_alloc(Kokkos::WithoutInitializing, "x"), size);
   vector_t grad(Kokkos::view_alloc(Kokkos::WithoutInitializing, "grad"), size);
-  vector_t f(Kokkos::view_alloc(Kokkos::WithoutInitializing, "f"), size);
-  vector_t u(Kokkos::view_alloc(Kokkos::WithoutInitializing, "u"), size);
   vector_t x_tmp(Kokkos::view_alloc(Kokkos::WithoutInitializing, "x_tmp"), size);
   vector_t grad_tmp(Kokkos::view_alloc(Kokkos::WithoutInitializing, "grad_tmp"), size);
+  vector_t f(Kokkos::view_alloc(Kokkos::WithoutInitializing, "f"), size);
+  vector_t u(Kokkos::view_alloc(Kokkos::WithoutInitializing, "u"), size);
 
   Kokkos::deep_copy(x, 99.99);  // use a bad initial guess to force more iterations
 
-  // Build the problem
-  const auto cqpp = make_kokkos_cqpp(exec_space, D, M, DT, q, space);
-
-  // Reuse the backend token from the problem
-  const auto backend = cqpp.backend();
+  // Build quadratic form operator + user-owned workspace, then the problem
+  const auto A = convex::make_quadratic_form<convex::KokkosBackend<decltype(exec_space)>>(DT, M, D);
+  auto workspace = A.make_workspace(f, u);  // intermediate variables f = D x, u = M f
+  const auto cqpp = make_cqpp<convex::KokkosBackend<decltype(exec_space)>>(A, q, space, workspace);
 
   // Strategy + state
-  convex::CongruentPGDConfig<double> cfg{.max_iters = 1000, .tol = 1e-6};
-  auto pgd = make_pgd_solution_strategy(backend, cfg);
-  auto pgd_state = make_pgd_state(backend, x, grad, f, u, x_tmp, grad_tmp);
+  convex::PGDConfig<double> cfg{.max_iters = 1000, .tol = 1e-6};
+  auto pgd = make_pgd_solution_strategy(cfg);
+  auto pgd_state = make_pgd_state(x, grad, x_tmp, grad_tmp);
 
   // Solve (can reuse "cqpp" and "pgd" across many states)
   auto result = solve_cqpp(cqpp, pgd, pgd_state);
@@ -822,6 +820,7 @@ void run_kokkos_congruent_test(const auto& test) {
   // Check results
   EXPECT_TRUE(result.converged);
   EXPECT_LE(result.num_iters, cfg.max_iters);
+  EXPECT_TRUE(cqpp.workspace().is_committed());
 
   // Copy x to host for comparison
   auto x_host = Kokkos::create_mirror_view(x);
