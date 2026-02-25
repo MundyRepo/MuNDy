@@ -14,7 +14,7 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_CXX_COMPILER": "mpicxx",
-        "CMAKE_CXX_FLAGS": "-O0 -march=native -g --coverage",
+        "CMAKE_CXX_FLAGS": "-O3 -march=native",
         "CMAKE_INSTALL_PREFIX": "${env:TPL_ROOT_DIR}",
 
         "TPL_ENABLE_MPI": "ON",

@@ -39,6 +39,7 @@
 
 // Mundy core:
 #include <mundy_core/throw_assert.hpp>
+#include <mundy_core/reference_wrapper.hpp>
 
 // Mundy math:
 #include <mundy_math/Tolerance.hpp>  // for mundy::math::get_zero_tolerance<T>
@@ -143,7 +144,7 @@ template <class T>
 struct is_reference_wrapper : std::false_type {};
 
 template <class U>
-struct is_reference_wrapper<std::reference_wrapper<U>> : std::true_type {};
+struct is_reference_wrapper<::mundy::core::reference_wrapper<U>> : std::true_type {};
 
 template <class T>
 inline constexpr bool is_reference_wrapper_v = is_reference_wrapper<std::remove_cvref_t<T>>::value;
@@ -270,7 +271,7 @@ KOKKOS_INLINE_FUNCTION auto to_storage(T&& value) {
     return std::forward<T>(value);
   } else if constexpr (std::is_lvalue_reference_v<T>) {  // value is an lvalue reference but not a reference wrapper, so
                                                          // wrap it in a reference wrapper
-    return std::ref(value);
+    return ::mundy::core::ref(value);
   } else {
     return std::forward<T>(value);  // value is an rvalue, so just return it as is (will be moved if possible)
   }
