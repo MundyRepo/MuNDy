@@ -23,3 +23,10 @@ tribits_add_executable(
     ReferenceWrapperVsExplicitReference.cpp
     CATEGORIES PERFORMANCE
     )
+
+tribits_add_executable(
+  NgpReferenceWrapperVsExplicitReference
+    SOURCES
+    NgpReferenceWrapperVsExplicitReference.cpp
+    CATEGORIES PERFORMANCE
+    )
