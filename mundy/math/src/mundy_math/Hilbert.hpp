@@ -49,14 +49,14 @@ size_t hilbert_3d(size_t s, size_t i, std::vector<mundy::math::Vector3d> &positi
                   mundy::math::Vector3d current_position, mundy::math::Vector3d dr1, mundy::math::Vector3d dr2,
                   mundy::math::Vector3d dr3) {
   // Check to make sure we've been passed in a power of two
-  MUNDY_THROW_REQUIRE(s != 0 && (s & (s - 1)) == 0, std::logic_error, "s must be a power of 2");
+  MUNDY_THROW_ASSERT(s != 0 && (s & (s - 1)) == 0, std::logic_error, "hilbert_3d: s must be a power of 2");
   if (s == 1) {
     position_array[i] = current_position;
     return i + 1;
   }
 
   size_t snew = static_cast<size_t>(std::floor(s / 2));
-  MUNDY_THROW_REQUIRE(snew > 0, std::logic_error, "snew must be greater than 0");
+  MUNDY_THROW_ASSERT(snew > 0, std::logic_error, "hilbert_3d: snew must be greater than 0");
 
   mundy::math::Vector3 current_position_new = current_position;
   mundy::math::Vector3 dr1_new = dr1;

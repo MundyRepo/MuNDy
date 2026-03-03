@@ -38,8 +38,8 @@
 #endif
 
 // Mundy core:
-#include <mundy_core/throw_assert.hpp>
 #include <mundy_core/reference_wrapper.hpp>
+#include <mundy_core/throw_assert.hpp>
 
 // Mundy math:
 #include <mundy_math/Tolerance.hpp>  // for mundy::math::get_zero_tolerance<T>
@@ -126,6 +126,24 @@ struct Bounded {
   }
 };
 
+/// \brief Concept for a valid space
+template <class Space>
+concept ValidConvexSpace =
+  requires {
+    typename std::remove_cvref_t<Space>::scalar_t; // make the nested type check explicit
+  } &&
+  requires (const std::remove_cvref_t<Space>& s,
+            typename std::remove_cvref_t<Space>::scalar_t x) {
+    { s.project(x) } -> std::same_as<typename std::remove_cvref_t<Space>::scalar_t>;
+    { s(x) }         -> std::same_as<typename std::remove_cvref_t<Space>::scalar_t>;
+  };
+
+/// \brief Assert that all of our spaces are valid convex spaces
+static_assert(ValidConvexSpace<Unconstrained<double>>, "Unconstrained<double> does not satisfy ValidConvexSpace");
+static_assert(ValidConvexSpace<LowerBound<double>>, "LowerBound<double> does not satisfy ValidConvexSpace");
+static_assert(ValidConvexSpace<UpperBound<double>>, "UpperBound<double> does not satisfy ValidConvexSpace");
+static_assert(ValidConvexSpace<Bounded<double>>, "Bounded<double> does not satisfy ValidConvexSpace");
+
 }  // namespace space
 
 //! \name Backends
@@ -178,6 +196,26 @@ concept HasApplyMember = requires(const Op& op, const X& x, Y& y) {
 template <class Op, typename X, typename Y, typename Workspace>
 concept HasApplyMemberWithWorkspace = requires(const Op& op, const X& x, Y& y, Workspace& workspace) {
   { op.apply(x, y, workspace) } -> std::same_as<void>;
+};
+
+template <class Op>
+concept HasDomainSizeMember = requires(const Op& op) {
+  { op.domain_size() } -> std::convertible_to<size_t>;
+};
+
+template <class Op>
+concept HasRangeSizeMember = requires(const Op& op) {
+  { op.range_size() } -> std::convertible_to<size_t>;
+};
+
+template <class Op>
+concept HasMakeDomainVectorMember = requires(const Op& op) {
+  { op.make_domain_vector() };
+};
+
+template <class Op>
+concept HasMakeRangeVectorMember = requires(const Op& op) {
+  { op.make_range_vector() };
 };
 
 template <class Workspace>
@@ -236,17 +274,25 @@ concept HasMakeWorkspaceMember = requires(const Op& op, const Vector& q) {
   { op.make_workspace(impl::unwrap(q)) };
 };
 
-template <class LinearOp, class Vector>
-auto make_workspace(LinearOp&& op, Vector&& q) {
-  if constexpr (HasMakeWorkspaceMember<LinearOp, Vector>) {
-    return std::forward<LinearOp>(op).make_workspace(impl::unwrap(std::forward<Vector>(q)));
+template <class Op>
+concept HasMakeWorkspaceNoArgMember = requires(const Op& op) {
+  { op.make_workspace() };
+};
+
+template <class...>
+inline constexpr bool dependent_false_v = false;
+
+template <class LinearOp>
+auto make_workspace(LinearOp&& op) {
+  if constexpr (HasMakeWorkspaceNoArgMember<LinearOp>) {
+    return std::forward<LinearOp>(op).make_workspace();
   } else {
     return NoWorkspace();
   }
 }
 
-template <class LinearOp, class Vector>
-using workspace_for_t = decltype(make_workspace(std::declval<LinearOp>(), std::declval<Vector>()));
+template <class LinearOp>
+using workspace_for_t = decltype(make_workspace(std::declval<LinearOp>()));
 
 template <class Vector>
 using vector_scalar_t = std::remove_cvref_t<decltype(std::declval<const std::remove_reference_t<Vector>&>()(size_t{}))>;
@@ -279,6 +325,8 @@ KOKKOS_INLINE_FUNCTION auto to_storage(T&& value) {
 
 }  // namespace impl
 
+/// TODO(palmerb4): How to handle this on a GPU when make_domain_vector is device compatable for mundy math but not
+/// kokkos
 template <class Backend, class LinearOpDTStorage, class LinearOpMStorage, class LinearOpDStorage>
 class QuadraticFormOp {
  public:
@@ -322,12 +370,28 @@ class QuadraticFormOp {
   KOKKOS_INLINE_FUNCTION const auto& DT() const { return impl::unwrap(DT_storage_); }
   KOKKOS_INLINE_FUNCTION const auto& M() const { return impl::unwrap(M_storage_); }
   KOKKOS_INLINE_FUNCTION const auto& D() const { return impl::unwrap(D_storage_); }
+  KOKKOS_INLINE_FUNCTION
   // clang-format on
 
-  template <class QVector>
-  auto make_workspace(QVector&& q) const {
-    auto f_storage = impl::to_storage(Backend::make_vector_like(q));
-    auto u_storage = impl::to_storage(Backend::make_vector_like(q));
+  size_t domain_size() const {
+    return Backend::domain_size(D());
+  }
+
+  size_t range_size() const {
+    return Backend::range_size(DT());
+  }
+
+  auto make_domain_vector() const {
+    return Backend::make_domain_vector(D());
+  }
+
+  auto make_range_vector() const {
+    return Backend::make_range_vector(DT());
+  }
+
+  auto make_workspace() const {
+    auto f_storage = impl::to_storage(Backend::make_domain_vector(impl::unwrap(M_storage_)));
+    auto u_storage = impl::to_storage(Backend::make_range_vector(impl::unwrap(M_storage_)));
     using f_storage_t = decltype(f_storage);
     using u_storage_t = decltype(u_storage);
     return Workspace<f_storage_t, u_storage_t>(std::move(f_storage), std::move(u_storage), false);
@@ -350,12 +414,19 @@ class QuadraticFormOp {
     Backend::apply(impl::unwrap(DT_storage_), workspace.u(), y);
   }
 
+  template <class XVector, class YVector, class WorkspaceType>
+  KOKKOS_INLINE_FUNCTION void apply(const XVector& x, YVector& y) const {
+    auto tmp_workspace = make_workspace();
+    apply(x, y, tmp_workspace);
+  }
+
  private:
   linear_op_dt_storage_t DT_storage_;
   linear_op_m_storage_t M_storage_;
   linear_op_d_storage_t D_storage_;
 };
 
+/// \brief The operator that perform Op x for Op := A (I - L A)
 template <class Backend, class LinearOpAStorage, class LinearOpLStorage>
 class MixedReducedOp {
  public:
@@ -415,19 +486,35 @@ class MixedReducedOp {
   MixedReducedOp(backend_t, linear_op_a_storage_t A_storage, linear_op_l_storage_t L_storage)
       : A_storage_(std::move(A_storage)), L_storage_(std::move(L_storage)) {
   }
+  // Accessors
+  // clang-format off
+  KOKKOS_INLINE_FUNCTION Backend backend() const { return Backend{}; }
+  KOKKOS_INLINE_FUNCTION const auto& A() const { return impl::unwrap(A_storage_); }
+  KOKKOS_INLINE_FUNCTION const auto& L() const { return impl::unwrap(L_storage_); }
+  KOKKOS_INLINE_FUNCTION
+  // clang-format on
 
-  KOKKOS_INLINE_FUNCTION Backend backend() const {
-    return Backend{};
+  size_t domain_size() const {
+    return Backend::domain_size(A());
   }
 
-  // TODO: make_workspace(q) is fragile since it assumes that the temporaries can be constructed using only a single
-  // known vector type. What if ax and lax have different sizes?
-  template <class QVector>
-  auto make_workspace(QVector&& q, bool committed = false) const {
-    auto ax_storage = impl::to_storage(Backend::make_vector_like(impl::unwrap(std::forward<QVector>(q))));
-    auto lax_storage = impl::to_storage(Backend::make_vector_like(impl::unwrap(std::forward<QVector>(q))));
-    auto a_workspace_storage = impl::make_workspace(impl::unwrap(A_storage_), ax_storage);
-    auto l_workspace_storage = impl::make_workspace(impl::unwrap(L_storage_), ax_storage);
+  size_t range_size() const {
+    return Backend::range_size(A());
+  }
+
+  auto make_domain_vector() const {
+    return Backend::make_domain_vector(A());
+  }
+
+  auto make_range_vector() const {
+    return Backend::make_range_vector(A());
+  }
+
+  auto make_workspace(bool committed = false) const {
+    auto ax_storage = impl::to_storage(Backend::make_range_vector(A()));
+    auto lax_storage = impl::to_storage(Backend::make_range_vector(L()));
+    auto a_workspace_storage = impl::make_workspace(A());
+    auto l_workspace_storage = impl::make_workspace(L());
 
     using ax_storage_t = decltype(ax_storage);
     using lax_storage_t = decltype(lax_storage);
@@ -435,7 +522,8 @@ class MixedReducedOp {
     using l_workspace_storage_t = decltype(l_workspace_storage);
 
     return Workspace<ax_storage_t, lax_storage_t, a_workspace_storage_t, l_workspace_storage_t>(
-      std::move(ax_storage), std::move(lax_storage), std::move(a_workspace_storage), std::move(l_workspace_storage), committed);
+        std::move(ax_storage), std::move(lax_storage), std::move(a_workspace_storage), std::move(l_workspace_storage),
+        committed);
   }
 
   template <class AxVector, class LAxVector, class AWorkspace, class LWorkspace>
@@ -450,21 +538,224 @@ class MixedReducedOp {
     using a_workspace_storage_t = decltype(a_workspace_storage);
     using l_workspace_storage_t = decltype(l_workspace_storage);
     return Workspace<ax_storage_t, lax_storage_t, a_workspace_storage_t, l_workspace_storage_t>(
-        std::move(ax_storage), std::move(lax_storage), std::move(a_workspace_storage), std::move(l_workspace_storage), committed);
+        std::move(ax_storage), std::move(lax_storage), std::move(a_workspace_storage), std::move(l_workspace_storage),
+        committed);
   }
 
   template <class XVector, class YVector, class WorkspaceType>
   KOKKOS_INLINE_FUNCTION void apply(const XVector& x, YVector& y, WorkspaceType& workspace) const {
     impl::workspace_invalidate(workspace);
     constexpr auto one = static_cast<impl::vector_scalar_t<XVector>>(1);
-    Backend::apply(impl::unwrap(A_storage_), x, workspace.ax(), workspace.a_workspace());
+    // workspace.ax = A x
+    Backend::apply(A(), x, workspace.ax(), workspace.a_workspace());
+
+    // workspace.lax = L (A x)
     Backend::apply(impl::unwrap(L_storage_), workspace.ax(), workspace.lax(), workspace.l_workspace());
+
+    // workspace.lax = x - L (A x) = (I - L A) x
     Backend::axpby(one, x, -one, workspace.lax());
+
+    // y = A (I - L A) x
     Backend::apply(impl::unwrap(A_storage_), workspace.lax(), y, workspace.a_workspace());
+  }
+
+  template <class XVector, class YVector, class WorkspaceType>
+  KOKKOS_INLINE_FUNCTION void apply(const XVector& x, YVector& y) const {
+    auto tmp_workspace = make_workspace();
+    apply(x, y, tmp_workspace);
   }
 
  private:
   linear_op_a_storage_t A_storage_;
+  linear_op_l_storage_t L_storage_;
+};
+
+/// \brief The operator that performs Op x for Op := D^T M (D - L M D)
+template <class Backend, class LinearOpDTStorage, class LinearOpMStorage, class LinearOpDStorage,
+          class LinearOpLStorage>
+class CongruentMixedReducedOp {
+ public:
+  using backend_t = Backend;
+  using linear_op_dt_storage_t = LinearOpDTStorage;
+  using linear_op_m_storage_t = LinearOpMStorage;
+  using linear_op_d_storage_t = LinearOpDStorage;
+  using linear_op_l_storage_t = LinearOpLStorage;
+
+  template <class DxVectorStorage, class MDxVectorStorage, class LMDxVectorStorage, class DTWorkspaceStorage,
+            class MWorkspaceStorage, class DWorkspaceStorage, class LWorkspaceStorage>
+  struct Workspace {
+    KOKKOS_INLINE_FUNCTION
+    Workspace(DxVectorStorage dx_storage, MDxVectorStorage mdx_storage, LMDxVectorStorage lmdx_storage,
+              DTWorkspaceStorage dt_workspace_storage, MWorkspaceStorage m_workspace_storage,
+              DWorkspaceStorage d_workspace_storage, LWorkspaceStorage l_workspace_storage, bool committed = false)
+        : dx_storage_(std::move(dx_storage)),
+          mdx_storage_(std::move(mdx_storage)),
+          lmdx_storage_(std::move(lmdx_storage)),
+          dt_workspace_storage_(std::move(dt_workspace_storage)),
+          m_workspace_storage_(std::move(m_workspace_storage)),
+          d_workspace_storage_(std::move(d_workspace_storage)),
+          l_workspace_storage_(std::move(l_workspace_storage)),
+          committed_(committed) {
+    }
+
+    // clang-format off
+    KOKKOS_INLINE_FUNCTION Backend backend() const { return Backend{}; }
+    KOKKOS_INLINE_FUNCTION       auto& dx()       { return impl::unwrap(dx_storage_); }
+    KOKKOS_INLINE_FUNCTION const auto& dx() const { return impl::unwrap(dx_storage_); }
+    KOKKOS_INLINE_FUNCTION       auto& mdx()       { return impl::unwrap(mdx_storage_); }
+    KOKKOS_INLINE_FUNCTION const auto& mdx() const { return impl::unwrap(mdx_storage_); }
+    KOKKOS_INLINE_FUNCTION       auto& lmdx()       { return impl::unwrap(lmdx_storage_); }
+    KOKKOS_INLINE_FUNCTION const auto& lmdx() const { return impl::unwrap(lmdx_storage_); }
+    KOKKOS_INLINE_FUNCTION       auto& dt_workspace()       { return impl::unwrap(dt_workspace_storage_); }
+    KOKKOS_INLINE_FUNCTION const auto& dt_workspace() const { return impl::unwrap(dt_workspace_storage_); }
+    KOKKOS_INLINE_FUNCTION       auto& m_workspace()       { return impl::unwrap(m_workspace_storage_); }
+    KOKKOS_INLINE_FUNCTION const auto& m_workspace() const { return impl::unwrap(m_workspace_storage_); }
+    KOKKOS_INLINE_FUNCTION       auto& d_workspace()       { return impl::unwrap(d_workspace_storage_); }
+    KOKKOS_INLINE_FUNCTION const auto& d_workspace() const { return impl::unwrap(d_workspace_storage_); }
+    KOKKOS_INLINE_FUNCTION       auto& l_workspace()       { return impl::unwrap(l_workspace_storage_); }
+    KOKKOS_INLINE_FUNCTION const auto& l_workspace() const { return impl::unwrap(l_workspace_storage_); }
+    // clang-format on
+
+    KOKKOS_INLINE_FUNCTION void commit() {
+      committed_ = true;
+      impl::workspace_commit(dt_workspace());
+      impl::workspace_commit(m_workspace());
+      impl::workspace_commit(d_workspace());
+      impl::workspace_commit(l_workspace());
+    }
+
+    KOKKOS_INLINE_FUNCTION void invalidate() {
+      committed_ = false;
+      impl::workspace_invalidate(dt_workspace());
+      impl::workspace_invalidate(m_workspace());
+      impl::workspace_invalidate(d_workspace());
+      impl::workspace_invalidate(l_workspace());
+    }
+
+    KOKKOS_INLINE_FUNCTION bool is_committed() const {
+      return committed_ && impl::workspace_is_committed(dt_workspace()) &&
+             impl::workspace_is_committed(m_workspace()) && impl::workspace_is_committed(d_workspace()) &&
+             impl::workspace_is_committed(l_workspace());
+    }
+
+   private:
+    DxVectorStorage dx_storage_;
+    MDxVectorStorage mdx_storage_;
+    LMDxVectorStorage lmdx_storage_;
+    DTWorkspaceStorage dt_workspace_storage_;
+    MWorkspaceStorage m_workspace_storage_;
+    DWorkspaceStorage d_workspace_storage_;
+    LWorkspaceStorage l_workspace_storage_;
+    bool committed_{false};
+  };
+
+  KOKKOS_INLINE_FUNCTION
+  CongruentMixedReducedOp(backend_t, linear_op_dt_storage_t DT_storage, linear_op_m_storage_t M_storage,
+                          linear_op_d_storage_t D_storage, linear_op_l_storage_t L_storage)
+      : DT_storage_(std::move(DT_storage)),
+        M_storage_(std::move(M_storage)),
+        D_storage_(std::move(D_storage)),
+        L_storage_(std::move(L_storage)) {
+  }
+
+  // Accessors
+  // clang-format off
+  KOKKOS_INLINE_FUNCTION Backend backend() const { return Backend{}; }
+  KOKKOS_INLINE_FUNCTION const auto& DT() const { return impl::unwrap(DT_storage_); }
+  KOKKOS_INLINE_FUNCTION const auto& M() const { return impl::unwrap(M_storage_); }
+  KOKKOS_INLINE_FUNCTION const auto& D() const { return impl::unwrap(D_storage_); }
+  KOKKOS_INLINE_FUNCTION const auto& L() const { return impl::unwrap(L_storage_); }
+  KOKKOS_INLINE_FUNCTION
+  // clang-format on
+
+  size_t domain_size() const {
+    return Backend::domain_size(D());
+  }
+
+  size_t range_size() const {
+    return Backend::range_size(DT());
+  }
+
+  auto make_domain_vector() const {
+    return Backend::make_domain_vector(D());
+  }
+
+  auto make_range_vector() const {
+    return Backend::make_range_vector(DT());
+  }
+
+  auto make_workspace(bool committed = false) const {
+    auto dx_storage = impl::to_storage(Backend::make_range_vector(D()));
+    auto mdx_storage = impl::to_storage(Backend::make_range_vector(M()));
+    auto lmdx_storage = impl::to_storage(Backend::make_range_vector(L()));
+    auto dt_workspace_storage = impl::make_workspace(DT());
+    auto m_workspace_storage = impl::make_workspace(M());
+    auto d_workspace_storage = impl::make_workspace(D());
+    auto l_workspace_storage = impl::make_workspace(L());
+
+    using dx_storage_t = decltype(dx_storage);
+    using mdx_storage_t = decltype(mdx_storage);
+    using lmdx_storage_t = decltype(lmdx_storage);
+    using dt_workspace_storage_t = decltype(dt_workspace_storage);
+    using m_workspace_storage_t = decltype(m_workspace_storage);
+    using d_workspace_storage_t = decltype(d_workspace_storage);
+    using l_workspace_storage_t = decltype(l_workspace_storage);
+
+    return Workspace<dx_storage_t, mdx_storage_t, lmdx_storage_t, dt_workspace_storage_t, m_workspace_storage_t,
+                     d_workspace_storage_t, l_workspace_storage_t>(
+        std::move(dx_storage), std::move(mdx_storage), std::move(lmdx_storage), std::move(dt_workspace_storage),
+        std::move(m_workspace_storage), std::move(d_workspace_storage), std::move(l_workspace_storage), committed);
+  }
+
+  template <class DxVector, class MDxVector, class LMDxVector, class DTWorkspace, class MWorkspace, class DWorkspace,
+            class LWorkspace>
+  auto make_workspace(DxVector&& dx, MDxVector&& mdx, LMDxVector&& lmdx, DTWorkspace&& dt_workspace,
+                      MWorkspace&& m_workspace, DWorkspace&& d_workspace, LWorkspace&& l_workspace,
+                      bool committed = false) const {
+    auto dx_storage = impl::to_storage(std::forward<DxVector>(dx));
+    auto mdx_storage = impl::to_storage(std::forward<MDxVector>(mdx));
+    auto lmdx_storage = impl::to_storage(std::forward<LMDxVector>(lmdx));
+    auto dt_workspace_storage = impl::to_storage(std::forward<DTWorkspace>(dt_workspace));
+    auto m_workspace_storage = impl::to_storage(std::forward<MWorkspace>(m_workspace));
+    auto d_workspace_storage = impl::to_storage(std::forward<DWorkspace>(d_workspace));
+    auto l_workspace_storage = impl::to_storage(std::forward<LWorkspace>(l_workspace));
+
+    using dx_storage_t = decltype(dx_storage);
+    using mdx_storage_t = decltype(mdx_storage);
+    using lmdx_storage_t = decltype(lmdx_storage);
+    using dt_workspace_storage_t = decltype(dt_workspace_storage);
+    using m_workspace_storage_t = decltype(m_workspace_storage);
+    using d_workspace_storage_t = decltype(d_workspace_storage);
+    using l_workspace_storage_t = decltype(l_workspace_storage);
+
+    return Workspace<dx_storage_t, mdx_storage_t, lmdx_storage_t, dt_workspace_storage_t, m_workspace_storage_t,
+                     d_workspace_storage_t, l_workspace_storage_t>(
+        std::move(dx_storage), std::move(mdx_storage), std::move(lmdx_storage), std::move(dt_workspace_storage),
+        std::move(m_workspace_storage), std::move(d_workspace_storage), std::move(l_workspace_storage), committed);
+  }
+
+  template <class XVector, class YVector, class WorkspaceType>
+  KOKKOS_INLINE_FUNCTION void apply(const XVector& x, YVector& y, WorkspaceType& workspace) const {
+    impl::workspace_invalidate(workspace);
+    constexpr auto one = static_cast<impl::vector_scalar_t<XVector>>(1);
+    Backend::apply(D(), x, workspace.dx(), workspace.d_workspace());
+    Backend::apply(M(), workspace.dx(), workspace.mdx(), workspace.m_workspace());
+    Backend::apply(L(), workspace.mdx(), workspace.lmdx(), workspace.l_workspace());
+    Backend::axpby(one, workspace.dx(), -one, workspace.lmdx());
+    Backend::apply(M(), workspace.lmdx(), workspace.mdx(), workspace.m_workspace());
+    Backend::apply(DT(), workspace.mdx(), y, workspace.dt_workspace());
+  }
+
+  template <class XVector, class YVector>
+  KOKKOS_INLINE_FUNCTION void apply(const XVector& x, YVector& y) const {
+    auto tmp_workspace = make_workspace();
+    apply(x, y, tmp_workspace);
+  }
+
+ private:
+  linear_op_dt_storage_t DT_storage_;
+  linear_op_m_storage_t M_storage_;
+  linear_op_d_storage_t D_storage_;
   linear_op_l_storage_t L_storage_;
 };
 
@@ -476,25 +767,104 @@ struct KokkosBackend {
 
  public:
   template <class Vector>
-  static auto make_vector_like(Vector&& q) {
+  static auto make_vector_like(const Vector& q) {
     return Vector(
-        impl::unwrap(std::forward<Vector>(q))
-            .extent(0));  // assumes Vector has a constructor that takes a size, and that the size is given by extent(0)
+        q.extent(0));  // assumes Vector has a constructor that takes a size, and that the size is given by extent(0)
+  }
+
+  template <class LinearOp>
+  static auto make_domain_vector(const LinearOp& op) {
+    if constexpr (impl::HasMakeDomainVectorMember<LinearOp>) {
+      return op.make_domain_vector();
+    } else if constexpr (impl::DenseMatView<LinearOp>) {
+      using op_t = std::remove_reference_t<LinearOp>;
+      using scalar_t = typename op_t::non_const_value_type;
+      using mem_space = typename op_t::memory_space;
+      using layout_t = typename Kokkos::View<scalar_t*, mem_space>::array_layout;
+      using vector_t = Kokkos::View<scalar_t*, layout_t, mem_space>;
+      return vector_t(Kokkos::view_alloc(Kokkos::WithoutInitializing, "domain_vector"), domain_size(op));
+    } else {
+      static_assert(impl::dependent_false_v<LinearOp>,
+                    "KokkosBackend::make_domain_vector requires DenseMatView or op.make_domain_vector().");
+    }
+  }
+
+  template <class LinearOp>
+  static auto make_range_vector(const LinearOp& op) {
+    if constexpr (impl::HasMakeRangeVectorMember<LinearOp>) {
+      return op.make_range_vector();
+    } else if constexpr (impl::DenseMatView<LinearOp>) {
+      using op_t = std::remove_reference_t<LinearOp>;
+      using scalar_t = typename op_t::non_const_value_type;
+      using mem_space = typename op_t::memory_space;
+      using layout_t = typename Kokkos::View<scalar_t*, mem_space>::array_layout;
+      using vector_t = Kokkos::View<scalar_t*, layout_t, mem_space>;
+      return vector_t(Kokkos::view_alloc(Kokkos::WithoutInitializing, "range_vector"), range_size(op));
+    } else {
+      static_assert(impl::dependent_false_v<LinearOp>,
+                    "KokkosBackend::make_range_vector requires DenseMatView or op.make_range_vector().");
+    }
+  }
+
+  template <class LinearOp>
+  static auto make_workspace(const LinearOp& op) {
+    return impl::make_workspace(op);
   }
 
   template <class Vector>
-  KOKKOS_INLINE_FUNCTION static size_t vector_size(Vector&& x) {
-    return impl::unwrap(std::forward<Vector>(x)).extent(0);
+  KOKKOS_INLINE_FUNCTION static size_t size(Vector& x) {
+    return x.extent(0);
+  }
+
+  template <class LinearOp>
+    requires(impl::DenseMatView<LinearOp>)
+  KOKKOS_INLINE_FUNCTION static size_t domain_size(LinearOp& op) {
+    return op.extent(1);
+  }
+  //
+  template <class LinearOp>
+    requires(!impl::DenseMatView<LinearOp> && impl::HasDomainSizeMember<LinearOp>)
+  KOKKOS_INLINE_FUNCTION static size_t domain_size(LinearOp& op) {
+    return op.domain_size();
+  }
+  //
+  template <class LinearOp>
+    requires(!impl::DenseMatView<LinearOp> && !impl::HasDomainSizeMember<LinearOp>)
+  KOKKOS_INLINE_FUNCTION static size_t domain_size(LinearOp&) {
+    MUNDY_THROW_REQUIRE(
+        false, std::logic_error,
+        "KokkosBackend::domain_size: op must be a rank-2 Kokkos::View or provide size_t domain_size().");
+    return 0;
+  }
+
+  template <class LinearOp>
+    requires(impl::DenseMatView<LinearOp>)
+  KOKKOS_INLINE_FUNCTION static size_t range_size(LinearOp& op) {
+    return op.extent(0);
+  }
+  //
+  template <class LinearOp>
+    requires(!impl::DenseMatView<LinearOp> && impl::HasRangeSizeMember<LinearOp>)
+  KOKKOS_INLINE_FUNCTION static size_t range_size(LinearOp& op) {
+    return op.range_size();
+  }
+  //
+  template <class LinearOp>
+    requires(!impl::DenseMatView<LinearOp> && !impl::HasRangeSizeMember<LinearOp>)
+  KOKKOS_INLINE_FUNCTION static size_t range_size(LinearOp&) {
+    MUNDY_THROW_REQUIRE(false, std::logic_error,
+                        "KokkosBackend::range_size: op must be a rank-2 Kokkos::View or provide size_t range_size().");
+    return 0;
   }
 
   template <class Vector>
-  KOKKOS_INLINE_FUNCTION static decltype(auto) vector_data(Vector&& x, size_t i) {
-    return impl::unwrap(std::forward<Vector>(x))(i);
+  KOKKOS_INLINE_FUNCTION static decltype(auto) vector_data(Vector& x, size_t i) {
+    return x(i);
   }
 
   template <class DestVector, class SrcVector>
   static void deep_copy(DestVector& dest, const SrcVector& src) {
-    Kokkos::deep_copy(impl::unwrap(dest), impl::unwrap(src));
+    Kokkos::deep_copy(dest, src);
   }
 
 #ifdef HAVE_MUNDYMATH_KOKKOSKERNELS
@@ -667,9 +1037,87 @@ struct MundyMathBackend {
     return Vector();
   }
 
+  template <class LinearOp>
+  static auto make_domain_vector(const LinearOp& op) {
+    if constexpr (impl::HasMakeDomainVectorMember<LinearOp>) {
+      return op.make_domain_vector();
+    } else if constexpr (requires {
+                           typename std::remove_reference_t<LinearOp>::scalar_t;
+                           std::remove_reference_t<LinearOp>::num_cols;
+                         }) {
+      using op_t = std::remove_reference_t<LinearOp>;
+      return Vector<typename op_t::scalar_t, op_t::num_cols>{};
+    } else {
+      static_assert(impl::dependent_false_v<LinearOp>,
+                    "MundyMathBackend::make_domain_vector requires static matrix metadata or op.make_domain_vector().");
+    }
+  }
+
+  template <class LinearOp>
+  static auto make_range_vector(const LinearOp& op) {
+    if constexpr (impl::HasMakeRangeVectorMember<LinearOp>) {
+      return op.make_range_vector();
+    } else if constexpr (requires {
+                           typename std::remove_reference_t<LinearOp>::scalar_t;
+                           std::remove_reference_t<LinearOp>::num_rows;
+                         }) {
+      using op_t = std::remove_reference_t<LinearOp>;
+      return Vector<typename op_t::scalar_t, op_t::num_rows>{};
+    } else {
+      static_assert(impl::dependent_false_v<LinearOp>,
+                    "MundyMathBackend::make_range_vector requires static matrix metadata or op.make_range_vector().");
+    }
+  }
+
+  template <class LinearOp>
+  static auto make_workspace(const LinearOp& op) {
+    return impl::make_workspace(op);
+  }
+
   template <class Vector>
-  KOKKOS_INLINE_FUNCTION static size_t vector_size(const Vector& /*x*/) {
+  KOKKOS_INLINE_FUNCTION static size_t size(const Vector& /*x*/) {
     return std::remove_reference_t<Vector>::size;
+  }
+
+  template <class LinearOp>
+    requires(is_matrix_v<LinearOp>)
+  KOKKOS_INLINE_FUNCTION static size_t domain_size(LinearOp& op) {
+    return std::remove_reference_t<LinearOp>::num_cols;
+  }
+  //
+  template <class LinearOp>
+    requires(!is_matrix_v<LinearOp> && impl::HasDomainSizeMember<LinearOp>)
+  KOKKOS_INLINE_FUNCTION static size_t domain_size(LinearOp& op) {
+    return op.domain_size();
+  }
+  //
+  template <class LinearOp>
+    requires(!is_matrix_v<LinearOp> && !impl::HasDomainSizeMember<LinearOp>)
+  KOKKOS_INLINE_FUNCTION static size_t domain_size(LinearOp&) {
+    MUNDY_THROW_REQUIRE(
+        false, std::logic_error,
+        "KokkosBackend::domain_size: op must be a rank-2 Kokkos::View or provide size_t domain_size().");
+    return 0;
+  }
+
+  template <class LinearOp>
+    requires(is_matrix_v<LinearOp>)
+  KOKKOS_INLINE_FUNCTION static size_t range_size(LinearOp& op) {
+    return std::remove_reference_t<LinearOp>::num_rows;
+  }
+  //
+  template <class LinearOp>
+    requires(!is_matrix_v<LinearOp> && impl::HasRangeSizeMember<LinearOp>)
+  KOKKOS_INLINE_FUNCTION static size_t range_size(LinearOp& op) {
+    return op.range_size();
+  }
+  //
+  template <class LinearOp>
+    requires(!is_matrix_v<LinearOp> && !impl::HasRangeSizeMember<LinearOp>)
+  KOKKOS_INLINE_FUNCTION static size_t range_size(LinearOp&) {
+    MUNDY_THROW_REQUIRE(false, std::logic_error,
+                        "MundyBackend::range_size: op must be a mundy::math::Matrix or provide size_t range_size().");
+    return 0;
   }
 
   template <class Vector>
@@ -689,7 +1137,11 @@ struct MundyMathBackend {
 
   template <typename LinearOp, class XVector, class YVector>
   KOKKOS_INLINE_FUNCTION static void apply(const LinearOp& op, const XVector& x, YVector& y) {
-    y = op * x;
+    if constexpr (impl::HasApplyMember<LinearOp, XVector, YVector>) {
+      op.apply(x, y);
+    } else {
+      y = op * x;
+    }
   }
 
   template <typename LinearOp, class XVector, class YVector, typename Workspace>
@@ -756,9 +1208,8 @@ struct MundyMathBackend {
 /// where A is a symmetric positive semi-definite matrix, q is a vector, and Omega is a convex space.
 ///
 /// \tparam Backend The backend to use for operations (e.g., KokkosBackend, MundyMathBackend)
-template <typename Backend, typename LinearOpStorage, typename QVectorStorage, typename ConvexSpace,
-          typename Workspace = impl::workspace_for_t<impl::unwrapped_storage_t<LinearOpStorage>,
-                                                     impl::unwrapped_storage_t<QVectorStorage>>>
+template <typename Backend, typename LinearOpStorage, typename QVectorStorage, space::ValidConvexSpace ConvexSpace,
+          typename Workspace = impl::workspace_for_t<impl::unwrapped_storage_t<LinearOpStorage>>>
 class CQPPProblem {
  public:
   using backend_t = Backend;
@@ -771,7 +1222,7 @@ class CQPPProblem {
   using scalar_t = impl::vector_scalar_t<vector_t>;
 
   CQPPProblem(Backend, linear_op_storage_t A, vector_storage_t q, const space_t& space)
-      : A_(std::move(A)), q_(std::move(q)), space_(space), workspace_(impl::make_workspace(impl::unwrap(A_), q_)) {
+      : A_(std::move(A)), q_(std::move(q)), space_(space), workspace_(impl::make_workspace(impl::unwrap(A_))) {
   }
 
   CQPPProblem(Backend, linear_op_storage_t A, vector_storage_t q, const space_t& space, workspace_t workspace)
@@ -832,13 +1283,10 @@ class CQPPProblem {
 /// q, BT, S, B, b).
 ///
 /// TODO(palmerb4): The workspaces here need to be of a storge type.
-template <
-    typename Backend, typename LinearOpAStorage, typename QVectorStorage, typename LinearOpLStorage,
-    typename FVectorStorage, typename ConvexSpace,
-    typename WorkspaceA =
-        impl::workspace_for_t<impl::unwrapped_storage_t<LinearOpAStorage>, impl::unwrapped_storage_t<QVectorStorage>>,
-    typename WorkspaceL =
-        impl::workspace_for_t<impl::unwrapped_storage_t<LinearOpLStorage>, impl::unwrapped_storage_t<FVectorStorage>>>
+template <typename Backend, typename LinearOpAStorage, typename QVectorStorage, typename LinearOpLStorage,
+          typename FVectorStorage, space::ValidConvexSpace ConvexSpace,
+          typename WorkspaceA = impl::workspace_for_t<impl::unwrapped_storage_t<LinearOpAStorage>>,
+          typename WorkspaceL = impl::workspace_for_t<impl::unwrapped_storage_t<LinearOpLStorage>>>
 class MCQPPProblem {
  public:
   using backend_t = Backend;
@@ -860,8 +1308,8 @@ class MCQPPProblem {
         L_(std::move(L)),
         f_b_(std::move(f_b)),
         space_(space),
-        a_workspace_(impl::make_workspace(impl::unwrap(A_), q_)),
-        l_workspace_(impl::make_workspace(impl::unwrap(L_), f_b_)) {
+        a_workspace_(impl::make_workspace(impl::unwrap(A_))),
+        l_workspace_(impl::make_workspace(impl::unwrap(L_))) {
   }
 
   MCQPPProblem(Backend, linear_op_storage_a_t A, q_vector_storage_t q, linear_op_storage_l_t L, f_vector_storage_t f_b,
@@ -897,6 +1345,92 @@ class MCQPPProblem {
   mutable l_workspace_t l_workspace_;
 };
 
+template <typename Backend, typename LinearOpDTStorage, typename LinearOpMStorage, typename LinearOpDStorage,
+          typename QVectorStorage, typename LinearOpLStorage, typename FVectorStorage,
+          space::ValidConvexSpace ConvexSpace,
+          typename WorkspaceDT = impl::workspace_for_t<impl::unwrapped_storage_t<LinearOpDTStorage>>,
+          typename WorkspaceM = impl::workspace_for_t<impl::unwrapped_storage_t<LinearOpMStorage>>,
+          typename WorkspaceD = impl::workspace_for_t<impl::unwrapped_storage_t<LinearOpDStorage>>,
+          typename WorkspaceL = impl::workspace_for_t<impl::unwrapped_storage_t<LinearOpLStorage>>>
+class CongruentMCQPPProblem {
+ public:
+  using backend_t = Backend;
+  using linear_op_storage_dt_t = LinearOpDTStorage;
+  using linear_op_storage_m_t = LinearOpMStorage;
+  using linear_op_storage_d_t = LinearOpDStorage;
+  using q_vector_storage_t = QVectorStorage;
+  using linear_op_storage_l_t = LinearOpLStorage;
+  using f_vector_storage_t = FVectorStorage;
+  using q_vector_t = impl::unwrapped_storage_t<q_vector_storage_t>;
+  using space_t = ConvexSpace;
+  using dt_workspace_t = WorkspaceDT;
+  using m_workspace_t = WorkspaceM;
+  using d_workspace_t = WorkspaceD;
+  using l_workspace_t = WorkspaceL;
+  using scalar_t = impl::vector_scalar_t<q_vector_t>;
+
+  CongruentMCQPPProblem(Backend, linear_op_storage_dt_t DT, linear_op_storage_m_t M, linear_op_storage_d_t D,
+                        q_vector_storage_t q, linear_op_storage_l_t L, f_vector_storage_t f_b, const space_t& space)
+      : DT_(std::move(DT)),
+        M_(std::move(M)),
+        D_(std::move(D)),
+        q_(std::move(q)),
+        L_(std::move(L)),
+        f_b_(std::move(f_b)),
+        space_(space),
+        dt_workspace_(impl::make_workspace(impl::unwrap(DT_))),
+        m_workspace_(impl::make_workspace(impl::unwrap(M_))),
+        d_workspace_(impl::make_workspace(impl::unwrap(D_))),
+        l_workspace_(impl::make_workspace(impl::unwrap(L_))) {
+  }
+
+  CongruentMCQPPProblem(Backend, linear_op_storage_dt_t DT, linear_op_storage_m_t M, linear_op_storage_d_t D,
+                        q_vector_storage_t q, linear_op_storage_l_t L, f_vector_storage_t f_b, const space_t& space,
+                        dt_workspace_t dt_workspace, m_workspace_t m_workspace, d_workspace_t d_workspace,
+                        l_workspace_t l_workspace)
+      : DT_(std::move(DT)),
+        M_(std::move(M)),
+        D_(std::move(D)),
+        q_(std::move(q)),
+        L_(std::move(L)),
+        f_b_(std::move(f_b)),
+        space_(space),
+        dt_workspace_(std::move(dt_workspace)),
+        m_workspace_(std::move(m_workspace)),
+        d_workspace_(std::move(d_workspace)),
+        l_workspace_(std::move(l_workspace)) {
+  }
+
+  // Accessors — all const to preserve the problem definition
+  // clang-format off
+  KOKKOS_INLINE_FUNCTION Backend backend() const { return Backend{}; }
+  KOKKOS_INLINE_FUNCTION const auto& DT() const { return impl::unwrap(DT_); }
+  KOKKOS_INLINE_FUNCTION const auto& M() const { return impl::unwrap(M_); }
+  KOKKOS_INLINE_FUNCTION const auto& D() const { return impl::unwrap(D_); }
+  KOKKOS_INLINE_FUNCTION const auto& q() const { return impl::unwrap(q_); }
+  KOKKOS_INLINE_FUNCTION const auto& L() const { return impl::unwrap(L_); }
+  KOKKOS_INLINE_FUNCTION const auto& f_b() const { return impl::unwrap(f_b_); }
+  KOKKOS_INLINE_FUNCTION const space_t& space() const { return space_; }
+  KOKKOS_INLINE_FUNCTION dt_workspace_t& dt_workspace() const { return dt_workspace_; }
+  KOKKOS_INLINE_FUNCTION m_workspace_t& m_workspace() const { return m_workspace_; }
+  KOKKOS_INLINE_FUNCTION d_workspace_t& d_workspace() const { return d_workspace_; }
+  KOKKOS_INLINE_FUNCTION l_workspace_t& l_workspace() const { return l_workspace_; }
+  // clang-format on
+
+ private:
+  linear_op_storage_dt_t DT_;
+  linear_op_storage_m_t M_;
+  linear_op_storage_d_t D_;
+  q_vector_storage_t q_;
+  linear_op_storage_l_t L_;
+  f_vector_storage_t f_b_;
+  const space_t& space_;
+  mutable dt_workspace_t dt_workspace_;
+  mutable m_workspace_t m_workspace_;
+  mutable d_workspace_t d_workspace_;
+  mutable l_workspace_t l_workspace_;
+};
+
 /// \brief Linear complementarity problem (LCP) formulation
 ///
 /// This is for a linear complementarity problem of the form:
@@ -909,8 +1443,7 @@ class MCQPPProblem {
 ///
 /// 	param Backend The backend to use for operations (e.g., KokkosBackend, MundyMathBackend)
 template <typename Backend, typename LinearOpStorage, typename QVectorStorage,
-          typename Workspace = impl::workspace_for_t<impl::unwrapped_storage_t<LinearOpStorage>,
-                                                     impl::unwrapped_storage_t<QVectorStorage>>>
+          typename Workspace = impl::workspace_for_t<impl::unwrapped_storage_t<LinearOpStorage>>>
 class LCPProblem {
  public:
   using backend_t = Backend;
@@ -922,7 +1455,7 @@ class LCPProblem {
   using scalar_t = impl::vector_scalar_t<q_vector_t>;
 
   LCPProblem(Backend, linear_op_storage_t A, q_vector_storage_t q)
-      : A_(std::move(A)), q_(std::move(q)), workspace_(impl::make_workspace(impl::unwrap(A_), impl::unwrap(q_))) {
+      : A_(std::move(A)), q_(std::move(q)), workspace_(impl::make_workspace(impl::unwrap(A_))) {
   }
 
   LCPProblem(Backend, linear_op_storage_t A, q_vector_storage_t q, workspace_t workspace)
@@ -953,7 +1486,8 @@ template <class Backend, class LinearOpAStorage, class QVectorStorage, class Lin
           class ConvexSpace, class AWorkspace, class LWorkspace>
 KOKKOS_INLINE_FUNCTION auto to_cqpp(const MCQPPProblem<Backend, LinearOpAStorage, QVectorStorage, LinearOpLStorage,
                                                        FVectorStorage, ConvexSpace, AWorkspace, LWorkspace>& P) {
-  using scalar_t = decltype(P)::scalar_t;
+  // get the type of P no ref
+  using scalar_t = std::remove_reference_t<decltype(P)>::scalar_t;
 
   auto backend = P.backend();
   using backend_t = decltype(backend);
@@ -966,10 +1500,53 @@ KOKKOS_INLINE_FUNCTION auto to_cqpp(const MCQPPProblem<Backend, LinearOpAStorage
   auto l_workspace = P.l_workspace();
 
   impl::workspace_invalidate(a_workspace);
-  backend_t::apply(P.A(), P.f_b(), g, a_workspace);
-  backend_t::axpby(static_cast<scalar_t>(1), P.q(), static_cast<scalar_t>(-1), g);
+  backend_t::apply(P.A(), P.f_b(), g, a_workspace);                                 // g = A f_b
+  backend_t::axpby(static_cast<scalar_t>(1), P.q(), static_cast<scalar_t>(-1), g);  // g = q - A f_b
 
-  auto workspace = H.make_workspace(P.q(), a_workspace, l_workspace);
+  auto ax = backend_t::make_range_vector(P.A());
+  auto lax = backend_t::make_range_vector(P.L());
+  auto workspace = H.make_workspace(std::move(ax), std::move(lax), std::move(a_workspace), std::move(l_workspace));
+  return CQPPProblem(backend_t{}, H, g, P.space(), workspace);
+}
+
+template <class Backend, class LinearOpDTStorage, class LinearOpMStorage, class LinearOpDStorage, class QVectorStorage,
+          class LinearOpLStorage, class FVectorStorage, class ConvexSpace, class DTWorkspace, class MWorkspace,
+          class DWorkspace, class LWorkspace>
+KOKKOS_INLINE_FUNCTION auto to_cqpp(
+    const CongruentMCQPPProblem<Backend, LinearOpDTStorage, LinearOpMStorage, LinearOpDStorage, QVectorStorage,
+                                LinearOpLStorage, FVectorStorage, ConvexSpace, DTWorkspace, MWorkspace, DWorkspace,
+                                LWorkspace>& P) {
+  using scalar_t = std::remove_reference_t<decltype(P)>::scalar_t;
+
+  auto backend = P.backend();
+  using backend_t = decltype(backend);
+
+  auto H =
+      CongruentMixedReducedOp<backend_t, std::remove_cvref_t<decltype(P.DT())>, std::remove_cvref_t<decltype(P.M())>,
+                              std::remove_cvref_t<decltype(P.D())>, std::remove_cvref_t<decltype(P.L())>>(
+          backend_t{}, P.DT(), P.M(), P.D(), P.L());
+
+  auto g = backend_t::make_vector_like(P.q());
+  auto m_f_b = backend_t::make_range_vector(P.M());
+  auto dt_workspace = P.dt_workspace();
+  auto m_workspace = P.m_workspace();
+  auto d_workspace = P.d_workspace();
+  auto l_workspace = P.l_workspace();
+
+  impl::workspace_invalidate(dt_workspace);
+  impl::workspace_invalidate(m_workspace);
+  impl::workspace_invalidate(d_workspace);
+  impl::workspace_invalidate(l_workspace);
+
+  backend_t::apply(P.M(), P.f_b(), m_f_b, m_workspace);
+  backend_t::apply(P.DT(), m_f_b, g, dt_workspace);                                 // g = D^T M f_b
+  backend_t::axpby(static_cast<scalar_t>(1), P.q(), static_cast<scalar_t>(-1), g);  // g = q - D^T M f_b
+
+  auto dx = backend_t::make_range_vector(P.D());
+  auto mdx = backend_t::make_range_vector(P.M());
+  auto lmdx = backend_t::make_range_vector(P.L());
+  auto workspace = H.make_workspace(std::move(dx), std::move(mdx), std::move(lmdx), std::move(dt_workspace),
+                                    std::move(m_workspace), std::move(d_workspace), std::move(l_workspace));
   return CQPPProblem(backend_t{}, H, g, P.space(), workspace);
 }
 //@}
@@ -977,16 +1554,19 @@ KOKKOS_INLINE_FUNCTION auto to_cqpp(const MCQPPProblem<Backend, LinearOpAStorage
 //! \name Policies
 //@{
 
-struct LinfNormProjectedGradientResidual {  // LCP only
-  template <typename Backend, typename XVector, typename GradVector, typename ConvexSpace,
+struct LinfNormProjectedGradientResidual {  // Lower bound only for non-negativity constraints
+  template <typename Backend, typename XVector, typename GradVector,
             typename ReductionScalar = impl::vector_scalar_t<GradVector>>
   KOKKOS_INLINE_FUNCTION ReductionScalar operator()([[maybe_unused]] const Backend& backend,  //
                                                     const XVector& x,                         //
                                                     const GradVector& grad,                   //
-                                                    const ConvexSpace& convex_space) const {
+                                                    const space::LowerBound<ReductionScalar>& convex_space) const {
+    MUNDY_THROW_REQUIRE(convex_space.bound() == static_cast<ReductionScalar>(0), std::invalid_argument,
+                        "LinfNormProjectedGradientResidual is only implemented for non-negativity constraints.");
+
     using scalar_t = ReductionScalar;
 
-    size_t n = Backend::vector_size(x);
+    size_t n = Backend::size(x);
     scalar_t largest_abs_gradient;
     Backend::template reduce_max<scalar_t>(
         x, n,
@@ -1013,7 +1593,7 @@ struct LinfNormProjectedGradientResidual {  // LCP only
 };
 
 struct LinfNormProjectedDiffResidual {
-  template <typename Backend, typename XVector, typename GradVector, typename ConvexSpace,
+  template <typename Backend, typename XVector, typename GradVector, space::ValidConvexSpace ConvexSpace,
             typename ReductionScalar = impl::vector_scalar_t<GradVector>>
   KOKKOS_INLINE_FUNCTION ReductionScalar operator()([[maybe_unused]] const Backend& backend,  //
                                                     const XVector& x,                         //
@@ -1023,7 +1603,7 @@ struct LinfNormProjectedDiffResidual {
 
     // This res comes from line 17 and Eq 25 of Mazhar 2015
     // res =  1.0 / (3 * num_unknowns * gd) * norm_inf(xk - proj(xk - gd * gk))
-    size_t num_unknowns = Backend::vector_size(x);
+    size_t num_unknowns = Backend::size(x);
     constexpr scalar_t small_step_size = static_cast<scalar_t>(1e-6);
     scalar_t largest_abs_diff;
     Backend::template reduce_max<scalar_t>(
@@ -1089,7 +1669,8 @@ std::ostream& operator<<(std::ostream& os, const SolveResult<Scalar> result) {
   return os;
 }
 
-template <class Scalar, class XVectorStorage, class GradVectorStorage, class XTmpVectorStorage, class GradTmpVectorStorage>
+template <class Scalar, class XVectorStorage, class GradVectorStorage, class XTmpVectorStorage,
+          class GradTmpVectorStorage>
 class PGDState {
  public:
   using scalar_t = Scalar;
@@ -1249,11 +1830,12 @@ concept CQPPSolverStrategy = requires(const Strategy& s, const Problem& prob, St
 //@{
 
 /// \brief Deduction guide for CQPPProblem
-template <typename Backend, typename LinearOp, typename QVector, typename ConvexSpace>
+template <typename Backend, typename LinearOp, typename QVector, space::ValidConvexSpace ConvexSpace>
 CQPPProblem(Backend, const LinearOp&, const QVector&, const ConvexSpace&)
     -> CQPPProblem<Backend, LinearOp, QVector, ConvexSpace>;
 
-template <typename Backend, typename LinearOp, typename QVector, typename ConvexSpace, typename Workspace>
+template <typename Backend, typename LinearOp, typename QVector, space::ValidConvexSpace ConvexSpace,
+          typename Workspace>
 CQPPProblem(Backend, const LinearOp&, const QVector&, const ConvexSpace&, const Workspace&)
     -> CQPPProblem<Backend, LinearOp, QVector, ConvexSpace, Workspace>;
 
@@ -1267,15 +1849,30 @@ LCPProblem(Backend, const LinearOp&, const QVector&, const Workspace&)
 
 /// \brief Deduction guide for MCQPPProblem
 template <typename Backend, typename LinearOpA, typename QVector, typename LinearOpL, typename FVector,
-          typename ConvexSpace>
+          space::ValidConvexSpace ConvexSpace>
 MCQPPProblem(Backend, const LinearOpA&, const QVector&, const LinearOpL&, const FVector&, const ConvexSpace&)
     -> MCQPPProblem<Backend, LinearOpA, QVector, LinearOpL, FVector, ConvexSpace>;
 
 template <typename Backend, typename LinearOpA, typename QVector, typename LinearOpL, typename FVector,
-          typename ConvexSpace, typename AWorkspace, typename LWorkspace>
+          space::ValidConvexSpace ConvexSpace, typename AWorkspace, typename LWorkspace>
 MCQPPProblem(Backend, const LinearOpA&, const QVector&, const LinearOpL&, const FVector&, const ConvexSpace&,
              const AWorkspace&, const LWorkspace&)
     -> MCQPPProblem<Backend, LinearOpA, QVector, LinearOpL, FVector, ConvexSpace, AWorkspace, LWorkspace>;
+
+template <typename Backend, typename LinearOpDT, typename LinearOpM, typename LinearOpD, typename QVector,
+          typename LinearOpL, typename FVector, space::ValidConvexSpace ConvexSpace>
+CongruentMCQPPProblem(Backend, const LinearOpDT&, const LinearOpM&, const LinearOpD&, const QVector&, const LinearOpL&,
+                      const FVector&, const ConvexSpace&)
+    -> CongruentMCQPPProblem<Backend, LinearOpDT, LinearOpM, LinearOpD, QVector, LinearOpL, FVector, ConvexSpace>;
+
+template <typename Backend, typename LinearOpDT, typename LinearOpM, typename LinearOpD, typename QVector,
+          typename LinearOpL, typename FVector, space::ValidConvexSpace ConvexSpace, typename DTWorkspace,
+          typename MWorkspace, typename DWorkspace, typename LWorkspace>
+CongruentMCQPPProblem(Backend, const LinearOpDT&, const LinearOpM&, const LinearOpD&, const QVector&, const LinearOpL&,
+                      const FVector&, const ConvexSpace&, const DTWorkspace&, const MWorkspace&, const DWorkspace&,
+                      const LWorkspace&)
+    -> CongruentMCQPPProblem<Backend, LinearOpDT, LinearOpM, LinearOpD, QVector, LinearOpL, FVector, ConvexSpace,
+                             DTWorkspace, MWorkspace, DWorkspace, LWorkspace>;
 
 /// \brief Deduction guide for PGDConfig
 template <typename Scalar>
@@ -1301,7 +1898,7 @@ KOKKOS_INLINE_FUNCTION auto make_quadratic_form(LinearOpDT&& DT, LinearOpM&& M, 
   return convex::QuadraticFormOp(Backend{}, std::move(DT_storage), std::move(M_storage), std::move(D_storage));
 }
 
-template <typename Backend, typename LinearOp, typename QVector, typename ConvexSpace>
+template <typename Backend, typename LinearOp, typename QVector, convex::space::ValidConvexSpace ConvexSpace>
 KOKKOS_INLINE_FUNCTION auto make_cqpp(LinearOp&& A, QVector&& q, ConvexSpace&& space) {
   auto A_storage = convex::impl::to_storage(std::forward<LinearOp>(A));
   auto q_storage = convex::impl::to_storage(std::forward<QVector>(q));
@@ -1309,7 +1906,7 @@ KOKKOS_INLINE_FUNCTION auto make_cqpp(LinearOp&& A, QVector&& q, ConvexSpace&& s
 }
 
 template <typename Backend, typename LinearOpDT, typename LinearOpM, typename LinearOpD, typename QVector,
-          typename ConvexSpace>
+          convex::space::ValidConvexSpace ConvexSpace>
 KOKKOS_INLINE_FUNCTION auto make_cqpp(LinearOpDT&& DT, LinearOpM&& M, LinearOpD&& D, QVector&& q, ConvexSpace&& space) {
   auto DT_storage = convex::impl::to_storage(std::forward<LinearOpDT>(DT));
   auto M_storage = convex::impl::to_storage(std::forward<LinearOpM>(M));
@@ -1320,7 +1917,7 @@ KOKKOS_INLINE_FUNCTION auto make_cqpp(LinearOpDT&& DT, LinearOpM&& M, LinearOpD&
 }
 
 template <typename Backend, typename LinearOpDT, typename LinearOpM, typename LinearOpD, typename QVector,
-          typename ConvexSpace, typename FVector, typename UVector>
+          convex::space::ValidConvexSpace ConvexSpace, typename FVector, typename UVector>
 KOKKOS_INLINE_FUNCTION auto make_cqpp(LinearOpDT&& DT, LinearOpM&& M, LinearOpD&& D, QVector&& q, FVector&& f,
                                       UVector&& u, ConvexSpace&& space) {
   auto DT_storage = convex::impl::to_storage(std::forward<LinearOpDT>(DT));
@@ -1336,7 +1933,8 @@ KOKKOS_INLINE_FUNCTION auto make_cqpp(LinearOpDT&& DT, LinearOpM&& M, LinearOpD&
                              std::move(workspace));
 }
 
-template <typename Backend, typename LinearOp, typename QVector, typename ConvexSpace, typename Workspace>
+template <typename Backend, typename LinearOp, typename QVector, convex::space::ValidConvexSpace ConvexSpace,
+          typename Workspace>
 KOKKOS_INLINE_FUNCTION auto make_cqpp(LinearOp&& A, QVector&& q, ConvexSpace&& space, Workspace&& workspace) {
   auto A_storage = convex::impl::to_storage(std::forward<LinearOp>(A));
   auto q_storage = convex::impl::to_storage(std::forward<QVector>(q));
@@ -1385,7 +1983,7 @@ KOKKOS_INLINE_FUNCTION auto make_lcp(LinearOp&& A, QVector&& q, Workspace&& work
 }
 
 template <typename Backend, typename LinearOpA, typename QVector, typename LinearOpL, typename FVector,
-          typename ConvexSpace>
+          convex::space::ValidConvexSpace ConvexSpace>
 KOKKOS_INLINE_FUNCTION auto make_mixed_cqpp(LinearOpA&& A, QVector&& q, LinearOpL&& L, FVector&& f_b,
                                             ConvexSpace&& space) {
   auto A_storage = convex::impl::to_storage(std::forward<LinearOpA>(A));
@@ -1398,7 +1996,7 @@ KOKKOS_INLINE_FUNCTION auto make_mixed_cqpp(LinearOpA&& A, QVector&& q, LinearOp
 }
 
 template <typename Backend, typename LinearOpA, typename QVector, typename LinearOpL, typename FVector,
-          typename ConvexSpace, typename AWorkspace, typename LWorkspace>
+          convex::space::ValidConvexSpace ConvexSpace, typename AWorkspace, typename LWorkspace>
 KOKKOS_INLINE_FUNCTION auto make_mixed_cqpp(LinearOpA&& A, QVector&& q,    //
                                             LinearOpL&& L, FVector&& f_b,  //
                                             ConvexSpace&& space,           //
@@ -1417,7 +2015,24 @@ KOKKOS_INLINE_FUNCTION auto make_mixed_cqpp(LinearOpA&& A, QVector&& q,    //
 }
 
 template <typename Backend, typename LinearOpDT, typename LinearOpM, typename LinearOpD, typename QVector,
-          typename LinearOpB, typename LinearOpS, typename LinearOpBT, typename BVector, typename ConvexSpace>
+          typename LinearOpL, typename FVector, convex::space::ValidConvexSpace ConvexSpace>
+KOKKOS_INLINE_FUNCTION auto make_mixed_cqpp(LinearOpDT&& DT, LinearOpM&& M, LinearOpD&& D, QVector&& q, LinearOpL&& L,
+                                            FVector&& f_b, ConvexSpace&& space) {
+  auto DT_storage = convex::impl::to_storage(std::forward<LinearOpDT>(DT));
+  auto M_storage = convex::impl::to_storage(std::forward<LinearOpM>(M));
+  auto D_storage = convex::impl::to_storage(std::forward<LinearOpD>(D));
+  auto q_storage = convex::impl::to_storage(std::forward<QVector>(q));
+  auto L_storage = convex::impl::to_storage(std::forward<LinearOpL>(L));
+  auto f_b_storage = convex::impl::to_storage(std::forward<FVector>(f_b));
+
+  return convex::CongruentMCQPPProblem(Backend{}, std::move(DT_storage), std::move(M_storage), std::move(D_storage),
+                                       std::move(q_storage), std::move(L_storage), std::move(f_b_storage),
+                                       std::forward<ConvexSpace>(space));
+}
+
+template <typename Backend, typename LinearOpDT, typename LinearOpM, typename LinearOpD, typename QVector,
+          typename LinearOpB, typename LinearOpS, typename LinearOpBT, typename BVector,
+          convex::space::ValidConvexSpace ConvexSpace>
 KOKKOS_INLINE_FUNCTION auto make_mixed_cqpp(LinearOpDT&& DT, LinearOpM&& M, LinearOpD&& D, QVector&& q, LinearOpB&& B,
                                             LinearOpS&& S, LinearOpBT&& BT, BVector&& b, ConvexSpace&& space) {
   auto DT_storage = convex::impl::to_storage(std::forward<LinearOpDT>(DT));
@@ -1430,26 +2045,23 @@ KOKKOS_INLINE_FUNCTION auto make_mixed_cqpp(LinearOpDT&& DT, LinearOpM&& M, Line
   auto b_storage = convex::impl::to_storage(std::forward<BVector>(b));
 
   using backend_t = Backend;
-  auto A = make_quadratic_form<backend_t>(std::move(DT_storage), std::move(M_storage), std::move(D_storage));
+  auto tmp = backend_t::make_range_vector(convex::impl::unwrap(S_storage));
+  auto f_b = backend_t::make_range_vector(convex::impl::unwrap(B_storage));
+  backend_t::apply(convex::impl::unwrap(S_storage), convex::impl::unwrap(b_storage), tmp);
+  backend_t::apply(convex::impl::unwrap(B_storage), tmp, f_b);
+
   auto L = make_quadratic_form<backend_t>(std::move(B_storage), std::move(S_storage), std::move(BT_storage));
 
-  auto f_b_tmp = backend_t::make_vector_like(convex::impl::unwrap(b_storage));
-  auto f_b = backend_t::make_vector_like(convex::impl::unwrap(q_storage));
-  backend_t::apply(convex::impl::unwrap(S_storage), convex::impl::unwrap(b_storage), f_b_tmp);
-  backend_t::apply(convex::impl::unwrap(B_storage), f_b_tmp, f_b);
-
-  auto a_workspace = A.make_workspace(convex::impl::unwrap(q_storage));
-  auto l_workspace = L.make_workspace(convex::impl::unwrap(q_storage));
-  return convex::MCQPPProblem(backend_t{}, std::move(A), std::move(q_storage), std::move(L), std::move(f_b),
-                              std::forward<ConvexSpace>(space), std::move(a_workspace), std::move(l_workspace));
+  return convex::CongruentMCQPPProblem(backend_t{}, std::move(DT_storage), std::move(M_storage), std::move(D_storage),
+                                       std::move(q_storage), std::move(L), std::move(f_b),
+                                       std::forward<ConvexSpace>(space));
 }
 
 template <class StepPolicy, class ResidualPolicy, class Scalar>
 KOKKOS_INLINE_FUNCTION auto make_pgd_solution_strategy(StepPolicy&& step_policy,          //
                                                        ResidualPolicy&& residual_policy,  //
                                                        const convex::PGDConfig<Scalar>& cfg = {}) {
-  return convex::PGDStrategy(std::forward<StepPolicy>(step_policy), std::forward<ResidualPolicy>(residual_policy),
-                             cfg);
+  return convex::PGDStrategy(std::forward<StepPolicy>(step_policy), std::forward<ResidualPolicy>(residual_policy), cfg);
 }
 //
 template <class Scalar>

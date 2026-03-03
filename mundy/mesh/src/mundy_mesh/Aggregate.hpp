@@ -974,7 +974,7 @@ class NgpTaggedComponent {
   ///   EntityExpr all_nodes(node_selector, stk::topology::NODE_RANK);
   ///   auto get_v3_expr = v3_accessor(all_nodes);
   template <class EntityExpr>
-  KOKKOS_INLINE_FUNCTION auto operator()(const EntityExprBase<EntityExpr>& e) const {
+  auto operator()(const EntityExprBase<EntityExpr>& e) const {
     MUNDY_THROW_REQUIRE(e.rank() == rank, std::runtime_error,
                         fmt::format("Attempting to access field of rank {} on entity expression of rank {}",
                                     rank, e.rank()));

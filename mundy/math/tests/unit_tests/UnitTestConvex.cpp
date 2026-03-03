@@ -288,6 +288,173 @@ struct CongruentLCPProblemWrapper {
 
 }  // namespace congruent
 
+namespace mixed {
+
+/// The following problem is a randomly generated instance of the following mixed CCQP:
+///   x^*, y^* = argmin_{x in Omega_x, y in R^m} q^T x + b^T y + 0.5 (Dx + By)^T M (Dx + By) + 0.5 y^T K^{-1} y
+///
+/// We refactor this into the desired form by defining:
+///   S := (B^T M B + K^{-1})^{-1} (symmetric positive definite)
+///
+///  M is size NZ x NZ, 
+///  B is NZ x NY, 
+///  Kinv is NY x NY, 
+///  D is NZ x NX, 
+///  q is NX, 
+///  b is NY,
+///  x* in R^NX,
+///  y* in R^NY.
+///
+/// NX: num unilateral constraints
+/// NY: num bilateral constraints
+/// NZ: num configurational variables (in the intermediate space)
+template <size_t NX, size_t NY, size_t NZ>
+struct RandomMixedCongruentCCQP {
+  using scalar_t = double;
+  using vecx_t = Vector<scalar_t, NX>;
+  using vecy_t = Vector<scalar_t, NY>;
+  using vecz_t = Vector<scalar_t, NZ>;
+  using matxx_t = Matrix<scalar_t, NX, NX>;
+  using matxy_t = Matrix<scalar_t, NX, NY>;
+  using matxz_t = Matrix<scalar_t, NX, NZ>;
+  using matyx_t = Matrix<scalar_t, NY, NX>;
+  using matyy_t = Matrix<scalar_t, NY, NY>;
+  using matyz_t = Matrix<scalar_t, NY, NZ>;
+  using matzx_t = Matrix<scalar_t, NZ, NX>;
+  using matzy_t = Matrix<scalar_t, NZ, NY>;
+  using matzz_t = Matrix<scalar_t, NZ, NZ>;
+
+  RandomMixedCongruentCCQP(unsigned seed = 1) {
+    srand(seed);
+    build();
+  }
+
+  std::string name() const {
+    return "RandomMixedCongruentCCQP<" + std::to_string(NX) + "," + std::to_string(NY) + "," + std::to_string(NZ) + ">";
+  }
+
+  // clang-format off
+  KOKKOS_INLINE_FUNCTION auto get_space_x() const { return convex::space::LowerBound<scalar_t>(0.0); }
+  KOKKOS_INLINE_FUNCTION vecx_t get_exact_x() const { return x_star_; }
+  KOKKOS_INLINE_FUNCTION vecy_t get_exact_y() const { return y_star_; }
+  KOKKOS_INLINE_FUNCTION matxz_t get_DT() const { return transpose(get_D()); }
+  KOKKOS_INLINE_FUNCTION matzz_t get_M() const { return M_; }
+  KOKKOS_INLINE_FUNCTION matzx_t get_D() const { return D_; }
+  KOKKOS_INLINE_FUNCTION vecx_t get_q() const { return q_; }
+  KOKKOS_INLINE_FUNCTION matyz_t get_BT() const { return transpose(B_); }
+  KOKKOS_INLINE_FUNCTION matyy_t get_S() const { return S_; }
+  KOKKOS_INLINE_FUNCTION matzy_t get_B() const { return B_; }
+  KOKKOS_INLINE_FUNCTION vecy_t get_b() const { return b_; }
+  // clang-format on
+
+  // Helper: random in [-1,1]
+  static scalar_t urand() {
+    return scalar_t(1.0) - scalar_t(2.0) * (scalar_t(rand()) / RAND_MAX);
+  }
+
+  matzz_t gen_spd_zz(scalar_t diag_boost = 5.0) {
+    matzz_t R;
+    for (size_t i = 0; i < NZ; ++i) {
+      for (size_t j = 0; j < NZ; ++j) {
+        R(i, j) = urand();
+      }
+    }
+    matzz_t A = transpose(R) * R;
+    for (size_t i = 0; i < NZ; ++i) {
+      A(i, i) += diag_boost;
+    }
+    return A;
+  }
+
+  void make_D_full_rank() {
+    // NZ >= NX assumed. Force full column rank by embedding I.
+    for (size_t i = 0; i < NZ; ++i) {
+      for (size_t j = 0; j < NX; ++j) {
+        D_(i, j) = urand();
+      }
+    }
+    for (size_t j = 0; j < NX; ++j) {
+      D_(j, j) += 3.0;  // strong diagonal injection
+    }
+  }
+
+  void build() {
+    // 1) Choose M SPD, Kinv SPD, and random B,D (with D full rank)
+    M_ = gen_spd_zz(/*diag_boost=*/10.0);
+
+    make_D_full_rank();
+
+    for (size_t i = 0; i < NZ; ++i) {
+      for (size_t j = 0; j < NY; ++j) {
+        B_(i, j) = 0.2 * urand();  // small-ish coupling
+      }
+    }
+
+    Kinv_ = matyy_t{};
+    for (size_t i = 0; i < NY; ++i) {
+      Kinv_(i, i) = 10.0 + std::abs(urand());  // big diag -> A well-conditioned
+    }
+
+    // 2) Build S = (B^T M B + Kinv)^{-1} (SPD)
+    S_ = inverse(transpose(B_) * M_ * B_ + Kinv_);
+
+    // 3) Choose x_star with random active set, and choose slack s_star
+    vecx_t s_star;
+    for (size_t i = 0; i < NX; ++i) {
+      bool active = (double(rand()) / RAND_MAX) < 0.5;
+      if (active) {
+        x_star_[i] = 0.1 + 0.9 * (double(rand()) / RAND_MAX);
+        s_star[i] = 0.0;
+      } else {
+        x_star_[i] = 0.0;
+        s_star[i] = 0.1 + 0.9 * (double(rand()) / RAND_MAX);
+      }
+    }
+
+    // 4) Optionally choose nonzero b
+    for (size_t i = 0; i < NY; ++i) {
+      b_[i] = 0.3 * urand();
+    }
+
+    // 5) Compute H and g via solves
+    //    T := S * (B^T M D)  => NY x NX
+    matyx_t BTC = transpose(B_) * M_ * D_;
+    matyx_t T = S_ * BTC;
+
+    matxx_t H = transpose(D_) * M_ * D_ - (transpose(D_) * M_ * B_) * T;
+
+    // g := s_star - H x_star
+    vecx_t g = s_star - H * x_star_;
+
+    // 6) Set c so that reduced gradient is g:
+    // g = c - D^T M B S b  => c = g + D^T M B S b
+    vecy_t u = S_ * b_;  // mundy-math problems are small enough to use a direct inverse
+    q_ = g + (transpose(D_) * M_ * B_) * u;
+
+    // 7) y_star = -S (b + B^T M D x_star)
+    vecy_t rhs = b_ + BTC * x_star_;
+    y_star_ = -S_ * rhs;
+  }
+
+ private:
+  // Problem data
+  matzz_t M_;  // SPD
+  matzx_t D_;
+  matzy_t B_;
+  matyy_t Kinv_;  // SPD
+  vecx_t q_;
+  vecy_t b_;
+
+  // Refactored form data
+  matyy_t S_;
+
+  // Planted solution
+  vecx_t x_star_;
+  vecy_t y_star_;
+};
+
+}  // namespace mixed
+
 }  // namespace math_backend
 //@}
 
@@ -771,6 +938,75 @@ void run_mundy_math_congruent_test(const auto& test) {
   }
 }
 
+void run_mundy_math_mixed_congruent_test(const auto& test) {
+  std::cout << "Running test: " << test.name() << std::endl;
+  // Problem setup
+  auto DT = test.get_DT();
+  auto M = test.get_M();
+  auto D = test.get_D();
+  auto q = test.get_q();
+  auto B = test.get_B();
+  auto S = test.get_S();
+  auto BT = test.get_BT();
+  auto b = test.get_b();
+  auto space = test.get_space_x();
+  auto x_exact = test.get_exact_x();
+  auto y_exact = test.get_exact_y();
+
+  using vector_t = decltype(x_exact);
+  vector_t x{}, grad{}, x_tmp{}, grad_tmp{};
+
+  x.fill(99.99);  // use a bad initial guess to force more iterations
+
+  // Double check sizes:
+  ASSERT_EQ(M.num_rows, M.num_cols) << "M should be square";  
+  ASSERT_EQ(DT.num_rows, D.num_cols) << "DT and D are supposed to be transposes of each other";
+  ASSERT_EQ(DT.num_cols, D.num_rows) << "DT and D are supposed to be transposes of each other";
+  ASSERT_EQ(DT.num_cols, M.num_rows) << "DT * M should be well-defined";
+  ASSERT_EQ(M.num_cols, D.num_rows) << "M * D should be well-defined";
+  ASSERT_EQ(M.num_cols, B.num_rows) << "M * B should be well-defined";
+  ASSERT_EQ(BT.num_cols, M.num_rows) << "B^T * M should be well-defined";
+  
+  ASSERT_EQ(D.num_cols, x_exact.size) << "D * x should be well-defined";
+  ASSERT_EQ(B.num_cols, y_exact.size) << "B * y should be well-defined";
+  ASSERT_EQ(S.num_cols, BT.num_rows) << "S * BT should be well-defined";
+  ASSERT_EQ(B.num_cols, S.num_rows) << "B * S should be well-defined";
+  ASSERT_EQ(q.size, x_exact.size) << "q should be same size as x_exact";
+  ASSERT_EQ(b.size, y_exact.size) << "b should be same size as y_exact";
+
+  // Build the problem
+  const auto mixed_cqpp = make_mixed_cqpp<convex::MundyMathBackend>(DT, M, D, q, B, S, BT, b, space);
+
+  auto DT_op = mixed_cqpp.DT();
+  auto M_op = mixed_cqpp.M();
+  auto f_b = mixed_cqpp.f_b();
+
+  ASSERT_EQ(convex::MundyMathBackend::domain_size(M_op), convex::MundyMathBackend::size(f_b))
+    << "M and f_b should be compatible for multiplication";
+  ASSERT_EQ(convex::MundyMathBackend::domain_size(DT_op), convex::MundyMathBackend::range_size(M_op))
+    << "DT and M should be compatible for DT * M";
+
+  
+  // auto a_workspace = A.make_workspace();
+  // convex::MundyMathBackend::apply(A, f_b, q, a_workspace);
+
+  // const auto equiv_cqpp = to_cqpp(mixed_cqpp);
+  // // Strategy + state
+  // convex::PGDConfig<double> cfg{.max_iters = 1000, .tol = 1e-6};
+  // auto pgd = make_pgd_solution_strategy(cfg);
+  // auto pgd_state = make_pgd_state(x, grad, x_tmp, grad_tmp);
+
+  // // Solve
+  // auto result = solve_mixed_cqpp(mixed_cqpp, pgd, pgd_state);
+
+  // // Check results
+  // EXPECT_TRUE(result.converged);
+  // EXPECT_LE(result.num_iters, cfg.max_iters);
+  // for (size_t i = 0; i < vector_t::size; ++i) {
+  //   EXPECT_NEAR(x[i], x_exact[i], 10 * cfg.tol);
+  // }
+}
+
 #ifdef HAVE_MUNDYMATH_KOKKOSKERNELS
 void run_kokkos_test(const auto& test) {
   // Problem setup
@@ -893,6 +1129,12 @@ TEST(Convex, MundyMathCongruentAnalyticalSolutions) {
                                     CongruentLCPProblemWrapper{math_backend::RandomLCP<3>{}},                      //
                                     CongruentLCPProblemWrapper{math_backend::RandomLCP<7>{}});
   std::apply([](auto&&... test_case) { (run_mundy_math_congruent_test(test_case), ...); }, test_cases);
+}
+
+TEST(Convex, MundyMathMixedCongruentAnalyticalSolutions) {
+  auto test_cases = std::make_tuple(math_backend::mixed::RandomMixedCongruentCCQP<5,4,3>{},  //
+                                    math_backend::mixed::RandomMixedCongruentCCQP<3,4,5>{});
+  std::apply([](auto&&... test_case) { (run_mundy_math_mixed_congruent_test(test_case), ...); }, test_cases);
 }
 
 #ifdef HAVE_MUNDYMATH_KOKKOSKERNELS
