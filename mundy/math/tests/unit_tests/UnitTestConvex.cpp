@@ -23,6 +23,8 @@
 #include <openrand/philox.h>  // for openrand::Philox
 
 #include <Kokkos_Core.hpp>  // for Kokkos::Array
+#include <KokkosBlas.hpp>
+#include <KokkosBlas_gesv.hpp>
 
 // C++ core libs
 #include <ostream>  // for std::cout
@@ -773,6 +775,11 @@ struct CongruentLCPProblemWrapper {
   }
 
   KOKKOS_INLINE_FUNCTION
+  auto get_exec_space() const {
+    return exec_space{};
+  }
+
+  KOKKOS_INLINE_FUNCTION
   auto get_space() const {
     return cdp.get_space();
   }
@@ -789,7 +796,10 @@ struct CongruentLCPProblemWrapper {
 
   KOKKOS_INLINE_FUNCTION
   vector_t get_u_exact() const {
-    return get_M() * get_x_exact();
+    vector_t u_exact(Kokkos::view_alloc(Kokkos::WithoutInitializing, "u_exact"), size());
+    Kokkos::deep_copy(u_exact, 0.0);
+    backend_t::apply(get_M(), get_x_exact(), u_exact);
+    return u_exact;
   }
 
   KOKKOS_INLINE_FUNCTION
@@ -812,7 +822,7 @@ struct CongruentLCPProblemWrapper {
     return cdp.get_q();
   }
 
-  linear_op_t gen_identity(unsigned size) {
+  linear_op_t gen_identity(unsigned size) const {
     linear_op_t mat(Kokkos::view_alloc(Kokkos::WithoutInitializing, "mat"), size, size);
     Kokkos::deep_copy(mat, 0.0);
     Kokkos::parallel_for(
@@ -824,6 +834,261 @@ struct CongruentLCPProblemWrapper {
 };
 
 }  // namespace congruent
+
+namespace mixed {
+
+template <size_t NX, size_t NY, size_t NZ>
+struct RandomMixedCongruentCCQP {
+  using exec_space = Kokkos::DefaultExecutionSpace;
+  using mem_space = exec_space::memory_space;
+
+  using scalar_t = double;
+  using layout_t = Kokkos::View<scalar_t*, mem_space>::array_layout;
+  using vecx_t = Kokkos::View<scalar_t*, layout_t, mem_space>;
+  using vecy_t = Kokkos::View<scalar_t*, layout_t, mem_space>;
+  using matxx_t = Kokkos::View<scalar_t**, layout_t, mem_space>;
+  using matxy_t = Kokkos::View<scalar_t**, layout_t, mem_space>;
+  using matxz_t = Kokkos::View<scalar_t**, layout_t, mem_space>;
+  using matyx_t = Kokkos::View<scalar_t**, layout_t, mem_space>;
+  using matyy_t = Kokkos::View<scalar_t**, layout_t, mem_space>;
+  using matyz_t = Kokkos::View<scalar_t**, layout_t, mem_space>;
+  using matzx_t = Kokkos::View<scalar_t**, layout_t, mem_space>;
+  using matzy_t = Kokkos::View<scalar_t**, layout_t, mem_space>;
+  using matzz_t = Kokkos::View<scalar_t**, layout_t, mem_space>;
+  using backend_t = convex::KokkosBackend<exec_space>;
+
+  RandomMixedCongruentCCQP(unsigned seed = 1) {
+    seed_ = seed;
+
+    M_ = matzz_t(Kokkos::view_alloc(Kokkos::WithoutInitializing, "M"), NZ, NZ);
+    D_ = matzx_t(Kokkos::view_alloc(Kokkos::WithoutInitializing, "D"), NZ, NX);
+    DT_ = matxz_t(Kokkos::view_alloc(Kokkos::WithoutInitializing, "DT"), NX, NZ);
+    q_ = vecx_t(Kokkos::view_alloc(Kokkos::WithoutInitializing, "q"), NX);
+    B_ = matzy_t(Kokkos::view_alloc(Kokkos::WithoutInitializing, "B"), NZ, NY);
+    Kinv_ = matyy_t(Kokkos::view_alloc(Kokkos::WithoutInitializing, "Kinv"), NY, NY);
+    S_ = matyy_t(Kokkos::view_alloc(Kokkos::WithoutInitializing, "S"), NY, NY);
+    BT_ = matyz_t(Kokkos::view_alloc(Kokkos::WithoutInitializing, "BT"), NY, NZ);
+    b_ = vecy_t(Kokkos::view_alloc(Kokkos::WithoutInitializing, "b"), NY);
+    x_star_ = vecx_t(Kokkos::view_alloc(Kokkos::WithoutInitializing, "x_star"), NX);
+    y_star_ = vecy_t(Kokkos::view_alloc(Kokkos::WithoutInitializing, "y_star"), NY);
+
+    build();
+  }
+
+  std::string name() const {
+    return "RandomMixedCongruentCCQP<" + std::to_string(NX) + "," + std::to_string(NY) + "," + std::to_string(NZ) + ">";
+  }
+
+  auto get_exec_space() const {
+    return exec_space{};
+  }
+
+  auto get_space_x() const {
+    return convex::space::LowerBound<scalar_t>(0.0);
+  }
+
+  vecx_t get_exact_x() const {
+    return x_star_;
+  }
+
+  vecy_t get_exact_y() const {
+    return y_star_;
+  }
+
+  matxz_t get_DT() const {
+    return DT_;
+  }
+
+  matzz_t get_M() const {
+    return M_;
+  }
+
+  matzx_t get_D() const {
+    return D_;
+  }
+
+  vecx_t get_q() const {
+    return q_;
+  }
+
+  matyz_t get_BT() const {
+    return BT_;
+  }
+
+  matyy_t get_S() const {
+    return S_;
+  }
+
+  matzy_t get_B() const {
+    return B_;
+  }
+
+  vecy_t get_b() const {
+    return b_;
+  }
+
+ private:
+  static scalar_t urand(uint64_t a, uint64_t b) {
+    openrand::Philox rng(a, b);
+    return rng.uniform<double>(-1.0, 1.0);
+  }
+
+  static void fill_identity(const matyy_t& mat) {
+    Kokkos::deep_copy(mat, 0.0);
+    Kokkos::parallel_for(
+        "fill_identity_yy", Kokkos::RangePolicy<exec_space>(0, NY), KOKKOS_LAMBDA(const size_t i) { mat(i, i) = 1.0; });
+  }
+
+  static void transpose_zy_to_yz(const matzy_t& src, const matyz_t& dst) {
+    Kokkos::parallel_for(
+        "transpose_zy_to_yz", Kokkos::MDRangePolicy<Kokkos::Rank<2>>({0, 0}, {NY, NZ}),
+        KOKKOS_LAMBDA(const size_t i, const size_t j) { dst(i, j) = src(j, i); });
+  }
+
+  static void transpose_zx_to_xz(const matzx_t& src, const matxz_t& dst) {
+    Kokkos::parallel_for(
+        "transpose_zx_to_xz", Kokkos::MDRangePolicy<Kokkos::Rank<2>>({0, 0}, {NX, NZ}),
+        KOKKOS_LAMBDA(const size_t i, const size_t j) { dst(i, j) = src(j, i); });
+  }
+
+  matzz_t gen_spd_zz(scalar_t diag_boost = 5.0) {
+    matzz_t R(Kokkos::view_alloc(Kokkos::WithoutInitializing, "R"), NZ, NZ);
+    const auto seed = seed_;
+    Kokkos::parallel_for(
+        "fill_random_matrix_zz", Kokkos::MDRangePolicy<Kokkos::Rank<2>>({0, 0}, {NZ, NZ}),
+        KOKKOS_LAMBDA(const size_t i, const size_t j) {
+          R(i, j) = urand(static_cast<uint64_t>(i + seed + 101), static_cast<uint64_t>(j + 17 * (seed + 101)));
+        });
+
+    matzz_t A(Kokkos::view_alloc(Kokkos::WithoutInitializing, "A"), NZ, NZ);
+    KokkosBlas::gemm("T", "N", 1.0, R, R, 0.0, A);
+    Kokkos::parallel_for(
+        "spd_diag_boost", Kokkos::RangePolicy<exec_space>(0, NZ), KOKKOS_LAMBDA(const size_t i) { A(i, i) += diag_boost; });
+    return A;
+  }
+
+  void make_D_full_rank() {
+    const auto seed = seed_;
+    Kokkos::parallel_for(
+        "fill_random_matrix_zx", Kokkos::MDRangePolicy<Kokkos::Rank<2>>({0, 0}, {NZ, NX}),
+        KOKKOS_LAMBDA(const size_t i, const size_t j) {
+          D_(i, j) = urand(static_cast<uint64_t>(i + seed + 211), static_cast<uint64_t>(j + 11 * (seed + 211)));
+        });
+
+    constexpr size_t diag_n = (NZ < NX ? NZ : NX);
+    Kokkos::parallel_for(
+        "inject_d_diag", Kokkos::RangePolicy<exec_space>(0, diag_n), KOKKOS_LAMBDA(const size_t i) { D_(i, i) += 3.0; });
+
+    transpose_zx_to_xz(D_, DT_);
+  }
+
+  void fill_B() {
+    const auto seed = seed_;
+    Kokkos::parallel_for(
+        "fill_random_matrix_zy", Kokkos::MDRangePolicy<Kokkos::Rank<2>>({0, 0}, {NZ, NY}),
+        KOKKOS_LAMBDA(const size_t i, const size_t j) {
+          B_(i, j) = 0.2 * urand(static_cast<uint64_t>(i + seed + 307), static_cast<uint64_t>(j + 13 * (seed + 307)));
+        });
+    transpose_zy_to_yz(B_, BT_);
+  }
+
+  void build() {
+    const auto seed = seed_;
+    matzz_t R(Kokkos::view_alloc(Kokkos::WithoutInitializing, "R"), NZ, NZ);
+    M_ = gen_spd_zz(/*diag_boost=*/10.0);
+    make_D_full_rank();
+    fill_B();
+    Kokkos::deep_copy(Kinv_, 0.0);
+    Kokkos::parallel_for(
+        "init_kinv_diag", Kokkos::RangePolicy<exec_space>(0, NY), KOKKOS_LAMBDA(const size_t i) {
+          openrand::Philox rng(static_cast<uint64_t>(i + seed_ + 401), static_cast<uint64_t>(911));
+          Kinv_(i, i) = 10.0 + Kokkos::abs(urand(static_cast<uint64_t>(i + seed + 401), static_cast<uint64_t>(911)));
+        });
+
+    matzy_t MB(Kokkos::view_alloc(Kokkos::WithoutInitializing, "MB"), NZ, NY);
+    matyy_t BTMB(Kokkos::view_alloc(Kokkos::WithoutInitializing, "BTMB"), NY, NY);
+    KokkosBlas::gemm("N", "N", 1.0, M_, B_, 0.0, MB);
+    KokkosBlas::gemm("N", "N", 1.0, BT_, MB, 0.0, BTMB);
+    Kokkos::deep_copy(S_, BTMB);
+    KokkosBlas::axpy(1.0, Kinv_, S_);
+
+    matyy_t S_lu(Kokkos::view_alloc(Kokkos::WithoutInitializing, "S_lu"), NY, NY);
+    Kokkos::deep_copy(S_lu, S_);
+    fill_identity(S_);
+    Kokkos::View<int*, layout_t, mem_space> pivots(Kokkos::view_alloc(Kokkos::WithoutInitializing, "pivots"), NY);
+    KokkosBlas::gesv(S_lu, S_, pivots);
+
+    vecx_t s_star(Kokkos::view_alloc(Kokkos::WithoutInitializing, "s_star"), NX);
+    Kokkos::parallel_for(
+        "init_xs", Kokkos::RangePolicy<exec_space>(0, NX), KOKKOS_LAMBDA(const size_t i) {
+          openrand::Philox rng(static_cast<uint64_t>(i + seed + 503), static_cast<uint64_t>(1337));
+          const double u0 = rng.uniform<double>(0.0, 1.0);
+          const double u1 = rng.uniform<double>(0.0, 1.0);
+          const bool active = u0 < 0.5;
+          if (active) {
+            x_star_(i) = 0.1 + 0.9 * u1;
+            s_star(i) = 0.0;
+          } else {
+            x_star_(i) = 0.0;
+            s_star(i) = 0.1 + 0.9 * u1;
+          }
+        });
+
+    Kokkos::parallel_for(
+        "init_b", Kokkos::RangePolicy<exec_space>(0, NY), KOKKOS_LAMBDA(const size_t i) {
+          b_(i) = 0.3 * urand(static_cast<uint64_t>(i + seed + 607), static_cast<uint64_t>(2027));
+        });
+
+    matzx_t MD(Kokkos::view_alloc(Kokkos::WithoutInitializing, "MD"), NZ, NX);
+    matyx_t BTC(Kokkos::view_alloc(Kokkos::WithoutInitializing, "BTC"), NY, NX);
+    matyx_t T(Kokkos::view_alloc(Kokkos::WithoutInitializing, "T"), NY, NX);
+    KokkosBlas::gemm("N", "N", 1.0, M_, D_, 0.0, MD);
+    KokkosBlas::gemm("N", "N", 1.0, BT_, MD, 0.0, BTC);
+    KokkosBlas::gemm("N", "N", 1.0, S_, BTC, 0.0, T);
+
+    matxx_t DtMD(Kokkos::view_alloc(Kokkos::WithoutInitializing, "DtMD"), NX, NX);
+    matzx_t MB2(Kokkos::view_alloc(Kokkos::WithoutInitializing, "MB2"), NZ, NY);
+    matxy_t DtMB(Kokkos::view_alloc(Kokkos::WithoutInitializing, "DtMB"), NX, NY);
+    matxx_t Htmp(Kokkos::view_alloc(Kokkos::WithoutInitializing, "Htmp"), NX, NX);
+    KokkosBlas::gemm("N", "N", 1.0, M_, D_, 0.0, MD);
+    KokkosBlas::gemm("N", "N", 1.0, DT_, MD, 0.0, DtMD);
+    KokkosBlas::gemm("N", "N", 1.0, M_, B_, 0.0, MB2);
+    KokkosBlas::gemm("N", "N", 1.0, DT_, MB2, 0.0, DtMB);
+    KokkosBlas::gemm("N", "N", 1.0, DtMB, T, 0.0, Htmp);
+
+    vecx_t Hx(Kokkos::view_alloc(Kokkos::WithoutInitializing, "Hx"), NX);
+    KokkosBlas::gemv("N", 1.0, DtMD, x_star_, 0.0, Hx);
+    KokkosBlas::gemv("N", -1.0, Htmp, x_star_, 1.0, Hx);
+    Kokkos::deep_copy(q_, s_star);
+    KokkosBlas::axpy(-1.0, Hx, q_);
+
+    vecy_t u(Kokkos::view_alloc(Kokkos::WithoutInitializing, "u"), NY);
+    vecx_t DtMBu(Kokkos::view_alloc(Kokkos::WithoutInitializing, "DtMBu"), NX);
+    KokkosBlas::gemv("N", 1.0, S_, b_, 0.0, u);
+    KokkosBlas::gemv("N", 1.0, DtMB, u, 0.0, DtMBu);
+    KokkosBlas::axpy(1.0, DtMBu, q_);
+
+    vecy_t rhs(Kokkos::view_alloc(Kokkos::WithoutInitializing, "rhs"), NY);
+    Kokkos::deep_copy(rhs, b_);
+    KokkosBlas::gemv("N", 1.0, BTC, x_star_, 1.0, rhs);
+    KokkosBlas::gemv("N", -1.0, S_, rhs, 0.0, y_star_);
+  }
+
+  unsigned seed_ = 1;
+  matzz_t M_;
+  matzx_t D_;
+  matyy_t Kinv_;
+  matxz_t DT_;
+  vecx_t q_;
+  matzy_t B_;
+  matyy_t S_;
+  matyz_t BT_;
+  vecy_t b_;
+  vecx_t x_star_;
+  vecy_t y_star_;
+};
+
+}  // namespace mixed
 
 }  // namespace kokkos_backend
 //@}
@@ -1074,7 +1339,7 @@ void run_kokkos_congruent_test(const auto& test) {
   Kokkos::deep_copy(x, 99.99);  // use a bad initial guess to force more iterations
 
   // Build quadratic form operator + user-owned workspace, then the problem
-  const auto A = convex::make_quadratic_form<convex::KokkosBackend<decltype(exec_space)>>(DT, M, D);
+  const auto A = make_quadratic_form<convex::KokkosBackend<decltype(exec_space)>>(DT, M, D);
   auto workspace = A.make_workspace(f, u);  // intermediate variables f = D x, u = M f
   const auto cqpp = make_cqpp<convex::KokkosBackend<decltype(exec_space)>>(A, q, space, workspace);
 
@@ -1109,6 +1374,51 @@ void run_kokkos_congruent_test(const auto& test) {
     EXPECT_NEAR(f_host[i], f_exact_host[i], 10 * cfg.tol);
     EXPECT_NEAR(u_host[i], u_exact_host[i], 10 * cfg.tol);
   }
+}
+
+void run_kokkos_mixed_congruent_test(const auto& test) {
+  auto exec_space = test.get_exec_space();
+
+  // Problem setup
+  auto DT = test.get_DT();
+  auto M = test.get_M();
+  auto D = test.get_D();
+  auto q = test.get_q();
+  auto B = test.get_B();
+  auto S = test.get_S();
+  auto BT = test.get_BT();
+  auto b = test.get_b();
+  auto space = test.get_space_x();
+  auto x_exact = test.get_exact_x();
+  auto y_exact = test.get_exact_y();
+
+  // Double check sizes:
+  ASSERT_EQ(M.extent(0), M.extent(1)) << "M should be square";
+  ASSERT_EQ(DT.extent(0), D.extent(1)) << "DT and D are supposed to be transposes of each other";
+  ASSERT_EQ(DT.extent(1), D.extent(0)) << "DT and D are supposed to be transposes of each other";
+  ASSERT_EQ(DT.extent(1), M.extent(0)) << "DT * M should be well-defined";
+  ASSERT_EQ(M.extent(1), D.extent(0)) << "M * D should be well-defined";
+  ASSERT_EQ(M.extent(1), B.extent(0)) << "M * B should be well-defined";
+  ASSERT_EQ(BT.extent(1), M.extent(0)) << "B^T * M should be well-defined";
+
+  ASSERT_EQ(D.extent(1), x_exact.extent(0)) << "D * x should be well-defined";
+  ASSERT_EQ(B.extent(1), y_exact.extent(0)) << "B * y should be well-defined";
+  ASSERT_EQ(S.extent(1), BT.extent(0)) << "S * BT should be well-defined";
+  ASSERT_EQ(B.extent(1), S.extent(0)) << "B * S should be well-defined";
+  ASSERT_EQ(q.extent(0), x_exact.extent(0)) << "q should be same size as x_exact";
+  ASSERT_EQ(b.extent(0), y_exact.extent(0)) << "b should be same size as y_exact";
+
+  // Build the problem
+  const auto mixed_cqpp =
+      make_mixed_cqpp<convex::KokkosBackend<decltype(exec_space)>>(DT, M, D, q, B, S, BT, b, space);
+
+  auto DT_op = mixed_cqpp.DT();
+  auto M_op = mixed_cqpp.M();
+  auto f_b = mixed_cqpp.f_b();
+
+  using backend_t = convex::KokkosBackend<decltype(exec_space)>;
+  ASSERT_EQ(backend_t::domain_size(M_op), backend_t::size(f_b)) << "M and f_b should be compatible for multiplication";
+  ASSERT_EQ(backend_t::domain_size(DT_op), backend_t::range_size(M_op)) << "DT and M should be compatible for DT * M";
 }
 #endif  // HAVE_MUNDYMATH_KOKKOSKERNELS
 
@@ -1157,6 +1467,12 @@ TEST(Convex, KokkosCongruentAnalyticalSolutions) {
                                     CongruentLCPProblemWrapper{kokkos_backend::RandomLCP{7}},                        //
                                     CongruentLCPProblemWrapper{kokkos_backend::RandomLCP{200}});
   std::apply([](auto&&... test_case) { (run_kokkos_congruent_test(test_case), ...); }, test_cases);
+}
+
+TEST(Convex, KokkosMixedCongruentAnalyticalSolutions) {
+  auto test_cases = std::make_tuple(kokkos_backend::mixed::RandomMixedCongruentCCQP<5,4,3>{},  //
+                                    kokkos_backend::mixed::RandomMixedCongruentCCQP<3,4,5>{});
+  std::apply([](auto&&... test_case) { (run_kokkos_mixed_congruent_test(test_case), ...); }, test_cases);
 }
 #endif  // HAVE_MUNDYMATH_KOKKOSKERNELS
 
