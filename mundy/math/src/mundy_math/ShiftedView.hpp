@@ -77,13 +77,13 @@ class ShiftedAccessor<T, shift, Accessor, Ownership::Views> {
   /// \brief Element access operator
   /// \param[in] idx The index of the element.
   KOKKOS_INLINE_FUNCTION constexpr decltype(auto) operator[](size_t idx) {
-    return accessor_[idx + shift];
+    return impl::access_at(accessor_, idx + shift);
   }
 
   /// \brief Element access operator
   /// \param[in] idx The index of the element.
   KOKKOS_INLINE_FUNCTION constexpr decltype(auto) operator[](size_t idx) const {
-    return accessor_[idx + shift];
+    return impl::access_at(accessor_, idx + shift);
   }
 };  // class ShiftedAccessor
 
@@ -119,13 +119,13 @@ class ShiftedAccessor<T, shift, Accessor, Ownership::Owns> {
   /// \brief Element access operator
   /// \param[in] idx The index of the element.
   KOKKOS_INLINE_FUNCTION constexpr decltype(auto) operator[](size_t idx) {
-    return accessor_[idx + shift];
+    return impl::access_at(accessor_, idx + shift);
   }
 
   /// \brief Element access operator
   /// \param[in] idx The index of the element.
   KOKKOS_INLINE_FUNCTION constexpr decltype(auto) operator[](size_t idx) const {
-    return accessor_[idx + shift];
+    return impl::access_at(accessor_, idx + shift);
   }
 };  // class ShiftedAccessor
 

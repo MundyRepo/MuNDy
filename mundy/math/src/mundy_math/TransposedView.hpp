@@ -87,7 +87,7 @@ class TransposedAccessor<T, N, M, Accessor, Ownership::Views> {
     const size_t i = idx / N;
     const size_t j = idx % N;
     const size_t matrix_idx = j * M + i;
-    return accessor_[matrix_idx];
+    return impl::access_at(accessor_, matrix_idx);
   }
 };  // class TransposedAccessor
 
@@ -129,7 +129,7 @@ class TransposedAccessor<T, N, M, Accessor, Ownership::Owns> {
     const size_t i = idx / N;
     const size_t j = idx % N;
     const size_t matrix_idx = j * M + i;
-    return accessor_[matrix_idx];
+    return impl::access_at(accessor_, matrix_idx);
   }
 };  // class TransposedAccessor
 

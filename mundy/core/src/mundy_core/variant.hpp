@@ -27,6 +27,7 @@
 #include <iostream>
 #include <type_traits>
 #include <utility>
+#include <stdexcept>
 
 // Kokkos
 #include <Kokkos_Core.hpp>
@@ -34,6 +35,7 @@
 // Mundy
 #include <mundy_core/tuple.hpp>        // for mundy::core::tuple
 #include <mundy_core/type_traits.hpp>  // for mundy::core::index_finder, contains_type
+#include <mundy_core/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
 
 namespace mundy {
 
@@ -105,14 +107,14 @@ struct variant {
   template <class T>
   KOKKOS_FUNCTION constexpr T& get() {
     static_assert(contains_type_v<T, Alts...>, "Type is not in variant.");
-    assert(holds_alternative<T>() && "Incorrect type access");
+    MUNDY_THROW_ASSERT(holds_alternative<T>(), std::runtime_error, "Incorrect type access");
     constexpr size_t index_of_t = index_of<T>();
     return storage_.template get<index_of_t>();
   }
   template <class T>
   KOKKOS_FUNCTION constexpr const T& get() const {
     static_assert(contains_type_v<T, Alts...>, "Type is not in variant.");
-    assert(holds_alternative<T>() && "Incorrect type access");
+    MUNDY_THROW_ASSERT(holds_alternative<T>(), std::runtime_error, "Incorrect type access");
     constexpr size_t index_of_t = index_of<T>();
     return storage_.template get<index_of_t>();
   }
@@ -121,13 +123,13 @@ struct variant {
   template <size_t ActiveIdx>
   KOKKOS_FUNCTION constexpr auto get() -> alternative_t<ActiveIdx>& {
     using Alt = alternative_t<ActiveIdx>;
-    assert(holds_alternative<Alt>() && "Incorrect type access using active index");
+    MUNDY_THROW_ASSERT(holds_alternative<Alt>(), std::runtime_error, "Incorrect type access using active index");
     return storage_.template get<ActiveIdx>();
   }
   template <size_t ActiveIdx>
   KOKKOS_FUNCTION constexpr auto get() const -> const alternative_t<ActiveIdx>& {
     using Alt = alternative_t<ActiveIdx>;
-    assert(holds_alternative<Alt>() && "Incorrect type access using active index");
+    MUNDY_THROW_ASSERT(holds_alternative<Alt>(), std::runtime_error, "Incorrect type access using active index");
     return storage_.template get<ActiveIdx>();
   }
 

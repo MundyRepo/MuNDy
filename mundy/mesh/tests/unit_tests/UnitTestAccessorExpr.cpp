@@ -111,7 +111,6 @@ inline void set_field_data_on_host(const stk::mesh::BulkData& stk_mesh, const st
 template <size_t NumComponents>
 inline void check_field_data_on_host_func(const std::string& message_to_throw, const stk::mesh::BulkData& stk_mesh,
                                           const stk::mesh::FieldBase& stk_field, const stk::mesh::Selector& selector,
-                                          const std::vector<const stk::mesh::FieldBase*>& other_fields,
                                           std::function<std::vector<double>(const double*)> func) {
   const stk::mesh::FieldBase& coord_field = *stk_mesh.mesh_meta_data().coordinate_field();
 
@@ -345,14 +344,15 @@ class UnitTestAccessorExprFixture : public ::testing::Test {
     bulk_data_ptr_->modification_end();
   }
 
-  void setup_hex_mesh(const stk::mesh::EntityRank& entity_rank, stk::mesh::BulkData::AutomaticAuraOption aura_option,
+  void setup_hex_mesh(stk::mesh::BulkData::AutomaticAuraOption aura_option,
 #if TRILINOS_MAJOR_MINOR_VERSION >= 160000
                       std::unique_ptr<stk::mesh::FieldDataManager> field_data_manager,
 #else
                       stk::mesh::FieldDataManager* field_data_manager,
 #endif
                       unsigned initial_bucket_capacity = stk::mesh::get_default_initial_bucket_capacity(),
-                      unsigned maximum_bucket_capacity = stk::mesh::get_default_maximum_bucket_capacity()) {
+                      unsigned maximum_bucket_capacity = stk::mesh::get_default_maximum_bucket_capacity(),
+                      bool unit_test_setup = true) {
     stk::mesh::MeshBuilder builder(communicator_);
     builder.set_spatial_dimension(spatial_dimension_);
     builder.set_entity_rank_names(entity_rank_names_);
@@ -405,8 +405,11 @@ class UnitTestAccessorExprFixture : public ::testing::Test {
     field2_ptr_ = create_field_on_parts("field2", stk::topology::NODE_RANK, scalars_per_entity, {block2_part_ptr_});
     field3_ptr_ = create_field_on_parts("field3", stk::topology::NODE_RANK, scalars_per_entity, {block3_part_ptr_});
 
-    declare_five_hexes();
-    // declare_N_hexes_per_dimension(100);
+    if (unit_test_setup) {
+      declare_five_hexes();
+    } else {
+      declare_N_hexes_per_dimension(100);
+    }
     reset_field_values();
   }
 
@@ -455,15 +458,15 @@ TEST_F(UnitTestAccessorExprFixture, field_fill) {
   const int we_know_there_are_five_ranks = 5;
 #if TRILINOS_MAJOR_MINOR_VERSION >= 160000
   auto field_data_manager = std::make_unique<stk::mesh::DefaultFieldDataManager>(we_know_there_are_five_ranks);
-  setup_hex_mesh(stk::topology::NODE_RANK, stk::mesh::BulkData::AUTO_AURA, std::move(field_data_manager));
+  setup_hex_mesh(stk::mesh::BulkData::AUTO_AURA, std::move(field_data_manager));
 #else
   stk::mesh::DefaultFieldDataManager* field_data_manager_ptr =
       new stk::mesh::DefaultFieldDataManager(we_know_there_are_five_ranks);
-  setup_hex_mesh(stk::topology::NODE_RANK, stk::mesh::BulkData::AUTO_AURA, field_data_manager_ptr);
+  setup_hex_mesh(stk::mesh::BulkData::AUTO_AURA, field_data_manager_ptr);
 #endif
 
   const double fill_value = 3.14159;
-  auto expected_value_func = [fill_value](const double* entity_coords) { return std::vector<double>{fill_value}; };
+  auto expected_value_func = [fill_value](const double* /*entity_coords*/) { return std::vector<double>{fill_value}; };
 
   stk::mesh::Selector b1_not_b2 = block1_selector_ - block2_selector_;
   auto x = make_tagged_component<XTag, stk::topology::NODE_RANK>(ScalarFieldComponent(*field_x_ptr_));
@@ -473,9 +476,9 @@ TEST_F(UnitTestAccessorExprFixture, field_fill) {
     x(es) = fill_value;
   }
 
-  check_field_data_on_host_func<1>("fill_field does not fill.", get_bulk(), *field_x_ptr_, b1_not_b2, {},
+  check_field_data_on_host_func<1>("fill_field does not fill.", get_bulk(), *field_x_ptr_, b1_not_b2,
                                    expected_value_func);
-  check_field_data_on_host_func<1>("fill_field does not respect selector.", get_bulk(), *field_x_ptr_, !b1_not_b2, {},
+  check_field_data_on_host_func<1>("fill_field does not respect selector.", get_bulk(), *field_x_ptr_, !b1_not_b2,
                                    get_field_x_func());
 }
 
@@ -487,11 +490,11 @@ TEST_F(UnitTestAccessorExprFixture, field_copy) {
   const int we_know_there_are_five_ranks = 5;
 #if TRILINOS_MAJOR_MINOR_VERSION >= 160000
   auto field_data_manager = std::make_unique<stk::mesh::DefaultFieldDataManager>(we_know_there_are_five_ranks);
-  setup_hex_mesh(stk::topology::NODE_RANK, stk::mesh::BulkData::AUTO_AURA, std::move(field_data_manager));
+  setup_hex_mesh(stk::mesh::BulkData::AUTO_AURA, std::move(field_data_manager));
 #else
   stk::mesh::DefaultFieldDataManager* field_data_manager_ptr =
       new stk::mesh::DefaultFieldDataManager(we_know_there_are_five_ranks);
-  setup_hex_mesh(stk::topology::NODE_RANK, stk::mesh::BulkData::AUTO_AURA, field_data_manager_ptr);
+  setup_hex_mesh(stk::mesh::BulkData::AUTO_AURA, field_data_manager_ptr);
 #endif
 
   stk::mesh::Selector b1_not_b2 = block1_selector_ - block2_selector_;
@@ -503,13 +506,11 @@ TEST_F(UnitTestAccessorExprFixture, field_copy) {
     x(es) = y(es);
   }
 
-  check_field_data_on_host_func<1>("field copy error. x", get_bulk(), *field_x_ptr_, b1_not_b2, {}, get_field_y_func());
-  check_field_data_on_host_func<1>("field copy error. y", get_bulk(), *field_y_ptr_, b1_not_b2, {}, get_field_y_func());
+  check_field_data_on_host_func<1>("field copy error. x", get_bulk(), *field_x_ptr_, b1_not_b2, get_field_y_func());
+  check_field_data_on_host_func<1>("field copy error. y", get_bulk(), *field_y_ptr_, b1_not_b2, get_field_y_func());
 
-  check_field_data_on_host_func<1>("field subset error. x", get_bulk(), *field_x_ptr_, !b1_not_b2, {},
-                                   get_field_x_func());
-  check_field_data_on_host_func<1>("field subset error. y", get_bulk(), *field_y_ptr_, !b1_not_b2, {},
-                                   get_field_y_func());
+  check_field_data_on_host_func<1>("field subset error. x", get_bulk(), *field_x_ptr_, !b1_not_b2, get_field_x_func());
+  check_field_data_on_host_func<1>("field subset error. y", get_bulk(), *field_y_ptr_, !b1_not_b2, get_field_y_func());
 }
 
 TEST_F(UnitTestAccessorExprFixture, field_swap) {
@@ -520,11 +521,11 @@ TEST_F(UnitTestAccessorExprFixture, field_swap) {
   const int we_know_there_are_five_ranks = 5;
 #if TRILINOS_MAJOR_MINOR_VERSION >= 160000
   auto field_data_manager = std::make_unique<stk::mesh::DefaultFieldDataManager>(we_know_there_are_five_ranks);
-  setup_hex_mesh(stk::topology::NODE_RANK, stk::mesh::BulkData::AUTO_AURA, std::move(field_data_manager));
+  setup_hex_mesh(stk::mesh::BulkData::AUTO_AURA, std::move(field_data_manager));
 #else
   stk::mesh::DefaultFieldDataManager* field_data_manager_ptr =
       new stk::mesh::DefaultFieldDataManager(we_know_there_are_five_ranks);
-  setup_hex_mesh(stk::topology::NODE_RANK, stk::mesh::BulkData::AUTO_AURA, field_data_manager_ptr);
+  setup_hex_mesh(stk::mesh::BulkData::AUTO_AURA, field_data_manager_ptr);
 #endif
 
   stk::mesh::Selector b1_not_b2 = block1_selector_ - block2_selector_;
@@ -554,13 +555,11 @@ TEST_F(UnitTestAccessorExprFixture, field_swap) {
                  y(es), /*=*/copy(x(es)));
   }
 
-  check_field_data_on_host_func<1>("field_swap error. x", get_bulk(), *field_x_ptr_, b1_not_b2, {}, get_field_y_func());
-  check_field_data_on_host_func<1>("field_swap error. y", get_bulk(), *field_y_ptr_, b1_not_b2, {}, get_field_x_func());
+  check_field_data_on_host_func<1>("field_swap error. x", get_bulk(), *field_x_ptr_, b1_not_b2, get_field_y_func());
+  check_field_data_on_host_func<1>("field_swap error. y", get_bulk(), *field_y_ptr_, b1_not_b2, get_field_x_func());
 
-  check_field_data_on_host_func<1>("field subset error. x", get_bulk(), *field_x_ptr_, !b1_not_b2, {},
-                                   get_field_x_func());
-  check_field_data_on_host_func<1>("field subset error. y", get_bulk(), *field_y_ptr_, !b1_not_b2, {},
-                                   get_field_y_func());
+  check_field_data_on_host_func<1>("field subset error. x", get_bulk(), *field_x_ptr_, !b1_not_b2, get_field_x_func());
+  check_field_data_on_host_func<1>("field subset error. y", get_bulk(), *field_y_ptr_, !b1_not_b2, get_field_y_func());
 }
 
 TEST_F(UnitTestAccessorExprFixture, field_scale) {
@@ -571,11 +570,11 @@ TEST_F(UnitTestAccessorExprFixture, field_scale) {
   const int we_know_there_are_five_ranks = 5;
 #if TRILINOS_MAJOR_MINOR_VERSION >= 160000
   auto field_data_manager = std::make_unique<stk::mesh::DefaultFieldDataManager>(we_know_there_are_five_ranks);
-  setup_hex_mesh(stk::topology::NODE_RANK, stk::mesh::BulkData::AUTO_AURA, std::move(field_data_manager));
+  setup_hex_mesh(stk::mesh::BulkData::AUTO_AURA, std::move(field_data_manager));
 #else
   stk::mesh::DefaultFieldDataManager* field_data_manager_ptr =
       new stk::mesh::DefaultFieldDataManager(we_know_there_are_five_ranks);
-  setup_hex_mesh(stk::topology::NODE_RANK, stk::mesh::BulkData::AUTO_AURA, field_data_manager_ptr);
+  setup_hex_mesh(stk::mesh::BulkData::AUTO_AURA, field_data_manager_ptr);
 #endif
 
   const double alpha = 3.14159;
@@ -592,9 +591,9 @@ TEST_F(UnitTestAccessorExprFixture, field_scale) {
     x(es) *= alpha;
   }
 
-  check_field_data_on_host_func<1>("field_scale does not fill.", get_bulk(), *field_x_ptr_, b1_not_b2, {},
+  check_field_data_on_host_func<1>("field_scale does not fill.", get_bulk(), *field_x_ptr_, b1_not_b2,
                                    expected_value_func);
-  check_field_data_on_host_func<1>("field_scale does not respect selector.", get_bulk(), *field_x_ptr_, !b1_not_b2, {},
+  check_field_data_on_host_func<1>("field_scale does not respect selector.", get_bulk(), *field_x_ptr_, !b1_not_b2,
                                    get_field_x_func());
 }
 
@@ -606,11 +605,11 @@ TEST_F(UnitTestAccessorExprFixture, field_product) {
   const int we_know_there_are_five_ranks = 5;
 #if TRILINOS_MAJOR_MINOR_VERSION >= 160000
   auto field_data_manager = std::make_unique<stk::mesh::DefaultFieldDataManager>(we_know_there_are_five_ranks);
-  setup_hex_mesh(stk::topology::NODE_RANK, stk::mesh::BulkData::AUTO_AURA, std::move(field_data_manager));
+  setup_hex_mesh(stk::mesh::BulkData::AUTO_AURA, std::move(field_data_manager));
 #else
   stk::mesh::DefaultFieldDataManager* field_data_manager_ptr =
       new stk::mesh::DefaultFieldDataManager(we_know_there_are_five_ranks);
-  setup_hex_mesh(stk::topology::NODE_RANK, stk::mesh::BulkData::AUTO_AURA, field_data_manager_ptr);
+  setup_hex_mesh(stk::mesh::BulkData::AUTO_AURA, field_data_manager_ptr);
 #endif
 
   auto field_x_func = get_field_x_func();
@@ -629,19 +628,13 @@ TEST_F(UnitTestAccessorExprFixture, field_product) {
     z(es) = x(es) * y(es);
   }
 
-  check_field_data_on_host_func<1>("field_product error. x", get_bulk(), *field_x_ptr_, b1_not_b2, {},
-                                   get_field_x_func());
-  check_field_data_on_host_func<1>("field_product error. y", get_bulk(), *field_y_ptr_, b1_not_b2, {},
-                                   get_field_y_func());
-  check_field_data_on_host_func<1>("field_product error. z", get_bulk(), *field_z_ptr_, b1_not_b2, {},
-                                   expected_value_func);
+  check_field_data_on_host_func<1>("field_product error. x", get_bulk(), *field_x_ptr_, b1_not_b2, get_field_x_func());
+  check_field_data_on_host_func<1>("field_product error. y", get_bulk(), *field_y_ptr_, b1_not_b2, get_field_y_func());
+  check_field_data_on_host_func<1>("field_product error. z", get_bulk(), *field_z_ptr_, b1_not_b2, expected_value_func);
 
-  check_field_data_on_host_func<1>("field subset error. x", get_bulk(), *field_x_ptr_, !b1_not_b2, {},
-                                   get_field_x_func());
-  check_field_data_on_host_func<1>("field subset error. y", get_bulk(), *field_y_ptr_, !b1_not_b2, {},
-                                   get_field_y_func());
-  check_field_data_on_host_func<1>("field subset error. z", get_bulk(), *field_z_ptr_, !b1_not_b2, {},
-                                   get_field_z_func());
+  check_field_data_on_host_func<1>("field subset error. x", get_bulk(), *field_x_ptr_, !b1_not_b2, get_field_x_func());
+  check_field_data_on_host_func<1>("field subset error. y", get_bulk(), *field_y_ptr_, !b1_not_b2, get_field_y_func());
+  check_field_data_on_host_func<1>("field subset error. z", get_bulk(), *field_z_ptr_, !b1_not_b2, get_field_z_func());
 }
 
 TEST_F(UnitTestAccessorExprFixture, field_axpby) {
@@ -652,11 +645,11 @@ TEST_F(UnitTestAccessorExprFixture, field_axpby) {
   const int we_know_there_are_five_ranks = 5;
 #if TRILINOS_MAJOR_MINOR_VERSION >= 160000
   auto field_data_manager = std::make_unique<stk::mesh::DefaultFieldDataManager>(we_know_there_are_five_ranks);
-  setup_hex_mesh(stk::topology::NODE_RANK, stk::mesh::BulkData::AUTO_AURA, std::move(field_data_manager));
+  setup_hex_mesh(stk::mesh::BulkData::AUTO_AURA, std::move(field_data_manager));
 #else
   stk::mesh::DefaultFieldDataManager* field_data_manager_ptr =
       new stk::mesh::DefaultFieldDataManager(we_know_there_are_five_ranks);
-  setup_hex_mesh(stk::topology::NODE_RANK, stk::mesh::BulkData::AUTO_AURA, field_data_manager_ptr);
+  setup_hex_mesh(stk::mesh::BulkData::AUTO_AURA, field_data_manager_ptr);
 #endif
 
   const double alpha = 3.14159;
@@ -676,15 +669,11 @@ TEST_F(UnitTestAccessorExprFixture, field_axpby) {
     y(es) = alpha * x(es) + beta * y(es);
   }
 
-  check_field_data_on_host_func<1>("field_axpby error. x", get_bulk(), *field_x_ptr_, b1_not_b2, {},
-                                   get_field_x_func());
-  check_field_data_on_host_func<1>("field_axpby error. y", get_bulk(), *field_y_ptr_, b1_not_b2, {},
-                                   expected_value_func);
+  check_field_data_on_host_func<1>("field_axpby error. x", get_bulk(), *field_x_ptr_, b1_not_b2, get_field_x_func());
+  check_field_data_on_host_func<1>("field_axpby error. y", get_bulk(), *field_y_ptr_, b1_not_b2, expected_value_func);
 
-  check_field_data_on_host_func<1>("field subset error. x", get_bulk(), *field_x_ptr_, !b1_not_b2, {},
-                                   get_field_x_func());
-  check_field_data_on_host_func<1>("field subset error. y", get_bulk(), *field_y_ptr_, !b1_not_b2, {},
-                                   get_field_y_func());
+  check_field_data_on_host_func<1>("field subset error. x", get_bulk(), *field_x_ptr_, !b1_not_b2, get_field_x_func());
+  check_field_data_on_host_func<1>("field subset error. y", get_bulk(), *field_y_ptr_, !b1_not_b2, get_field_y_func());
 }
 
 template <size_t NumComponents>
@@ -845,11 +834,11 @@ TEST_F(UnitTestAccessorExprFixture, field_dot) {
   const int we_know_there_are_five_ranks = 5;
 #if TRILINOS_MAJOR_MINOR_VERSION >= 160000
   auto field_data_manager = std::make_unique<stk::mesh::DefaultFieldDataManager>(we_know_there_are_five_ranks);
-  setup_hex_mesh(stk::topology::NODE_RANK, stk::mesh::BulkData::AUTO_AURA, std::move(field_data_manager));
+  setup_hex_mesh(stk::mesh::BulkData::AUTO_AURA, std::move(field_data_manager));
 #else
   stk::mesh::DefaultFieldDataManager* field_data_manager_ptr =
       new stk::mesh::DefaultFieldDataManager(we_know_there_are_five_ranks);
-  setup_hex_mesh(stk::topology::NODE_RANK, stk::mesh::BulkData::AUTO_AURA, field_data_manager_ptr);
+  setup_hex_mesh(stk::mesh::BulkData::AUTO_AURA, field_data_manager_ptr);
 #endif
 
   stk::mesh::Selector b1_not_b2 = block1_selector_ - block2_selector_;
@@ -870,11 +859,11 @@ TEST_F(UnitTestAccessorExprFixture, quick_perf_test_against_blas) {
   const int we_know_there_are_five_ranks = 5;
 #if TRILINOS_MAJOR_MINOR_VERSION >= 160000
   auto field_data_manager = std::make_unique<stk::mesh::DefaultFieldDataManager>(we_know_there_are_five_ranks);
-  setup_hex_mesh(stk::topology::NODE_RANK, stk::mesh::BulkData::AUTO_AURA, std::move(field_data_manager));
+  setup_hex_mesh(stk::mesh::BulkData::AUTO_AURA, std::move(field_data_manager));
 #else
   stk::mesh::DefaultFieldDataManager* field_data_manager_ptr =
       new stk::mesh::DefaultFieldDataManager(we_know_there_are_five_ranks);
-  setup_hex_mesh(stk::topology::NODE_RANK, stk::mesh::BulkData::AUTO_AURA, field_data_manager_ptr);
+  setup_hex_mesh(stk::mesh::BulkData::AUTO_AURA, field_data_manager_ptr);
 #endif
 
   stk::mesh::Selector b1_not_b2 = block1_selector_ - block2_selector_;

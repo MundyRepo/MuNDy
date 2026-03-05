@@ -334,8 +334,9 @@ TYPED_TEST(NonSquareMatrixShapeTest, Arithmetic) {
   for (size_t i = 0; i < R * C; ++i) {
     is_close_debug(plus(i), a(i) + b(i), "Matrix addition failed.");
     is_close_debug(minus(i), b(i) - a(i), "Matrix subtraction failed.");
-    is_close_debug(scaled(i), T(2) * a(i), "Matrix scalar multiplication failed.");
-    is_close_debug(shifted(i), T(3) + a(i), "Scalar-matrix addition failed.");
+    const T a_i = static_cast<T>(a(i));
+    is_close_debug(scaled(i), static_cast<T>(T(2) * a_i), "Matrix scalar multiplication failed.");
+    is_close_debug(shifted(i), static_cast<T>(T(3) + a_i), "Scalar-matrix addition failed.");
     is_close_debug(emul(i), a(i) * b(i), "Elementwise multiplication failed.");
     is_close_debug(ediv(i), T(2), "Elementwise division failed.");
   }
@@ -345,7 +346,7 @@ TYPED_TEST(NonSquareMatrixShapeTest, Arithmetic) {
   for (size_t i = 0; i < R; ++i) {
     T expected = T(0);
     for (size_t j = 0; j < C; ++j) {
-      expected += a(i, j) * v_right[j];
+      expected = static_cast<T>(expected + static_cast<T>(a(i, j)) * static_cast<T>(v_right[j]));
     }
     is_close_debug(mv[i], expected, "Matrix-vector multiplication failed.");
   }
@@ -355,7 +356,7 @@ TYPED_TEST(NonSquareMatrixShapeTest, Arithmetic) {
   for (size_t j = 0; j < C; ++j) {
     T expected = T(0);
     for (size_t i = 0; i < R; ++i) {
-      expected += v_left[i] * a(i, j);
+      expected = static_cast<T>(expected + static_cast<T>(v_left[i]) * static_cast<T>(a(i, j)));
     }
     is_close_debug(vm[j], expected, "Vector-matrix multiplication failed.");
   }
@@ -400,13 +401,13 @@ TYPED_TEST(NonSquareMatrixShapeTest, Apply) {
   auto col_applied = apply_column(non_square_apply_vector_functor{}, a);
 
   for (size_t i = 0; i < R * C; ++i) {
-    is_close_debug(applied(i), a(i) + T(1), "Apply to elements failed.");
+    is_close_debug(applied(i), static_cast<T>(static_cast<T>(a(i)) + T(1)), "Apply to elements failed.");
   }
 
   for (size_t i = 0; i < R; ++i) {
     T row_sum = T(0);
     for (size_t j = 0; j < C; ++j) {
-      row_sum += a(i, j);
+      row_sum = static_cast<T>(row_sum + static_cast<T>(a(i, j)));
     }
     for (size_t j = 0; j < C; ++j) {
       is_close_debug(row_applied(i, j), row_sum, "Apply to rows failed.");
@@ -416,7 +417,7 @@ TYPED_TEST(NonSquareMatrixShapeTest, Apply) {
   for (size_t j = 0; j < C; ++j) {
     T col_sum = T(0);
     for (size_t i = 0; i < R; ++i) {
-      col_sum += a(i, j);
+      col_sum = static_cast<T>(col_sum + static_cast<T>(a(i, j)));
     }
     for (size_t i = 0; i < R; ++i) {
       is_close_debug(col_applied(i, j), col_sum, "Apply to columns failed.");

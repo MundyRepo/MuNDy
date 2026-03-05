@@ -224,7 +224,7 @@ class EuclideanMetric {
   template <ValidPointType PointT, typename Integer>
     requires std::is_same_v<typename PointT::scalar_t, Scalar>
   KOKKOS_INLINE_FUNCTION constexpr OurPoint shift_image(
-      const PointT& point, [[maybe_unused]] const math::Vector3<Integer>& num_images) const {
+      const PointT& point, const math::Vector3<Integer>& /*num_images*/) const {
     return point;
   }
 };  // EuclideanMetric
@@ -992,7 +992,7 @@ KOKKOS_INLINE_FUNCTION void wrap_rigid_inplace(PointT& point, const Metric& metr
 
 /// \brief Rigidly wrap a line into a given space (invalid operation)
 template <ValidLineType LineT, typename Metric>
-KOKKOS_INLINE_FUNCTION Line<typename LineT::scalar_t> wrap_rigid(const LineT& line, const Metric& metric) {
+KOKKOS_INLINE_FUNCTION Line<typename LineT::scalar_t> wrap_rigid(const LineT& line, const Metric& /*metric*/) {
   MUNDY_THROW_REQUIRE(false, std::invalid_argument,
                       "Not implemented error: wrapping a line into a periodic space does not make sense, as it is "
                       "infinite in length and could fill the space.")
@@ -1001,7 +1001,7 @@ KOKKOS_INLINE_FUNCTION Line<typename LineT::scalar_t> wrap_rigid(const LineT& li
 
 /// brief Rigidly wrap a line into a given space (invalid operation | inplace)
 template <ValidLineType LineT, typename Metric>
-KOKKOS_INLINE_FUNCTION void wrap_rigid_inplace(LineT& line, const Metric& metric) {
+KOKKOS_INLINE_FUNCTION void wrap_rigid_inplace(LineT& /*line*/, const Metric& /*metric*/) {
   MUNDY_THROW_REQUIRE(false, std::invalid_argument,
                       "Not implemented error: wrapping a line into a periodic space does not make sense, as it is "
                       "infinite in length and could fill the space.")
@@ -1168,7 +1168,7 @@ KOKKOS_INLINE_FUNCTION void wrap_points_inplace(PointT& point, const Metric& met
 
 /// \brief Wrap all points of a line into a periodic space (invalid operation)
 template <ValidLineType LineT, typename Metric>
-KOKKOS_INLINE_FUNCTION Line<typename LineT::scalar_t> wrap_points(const LineT& line, const Metric& metric) {
+KOKKOS_INLINE_FUNCTION Line<typename LineT::scalar_t> wrap_points(const LineT& line, const Metric& /*metric*/) {
   MUNDY_THROW_REQUIRE(false, std::invalid_argument,
                       "Not implemented error: wrapping a line into a periodic space does not make sense, as it is "
                       "infinite in length and could fill the space.")
@@ -1177,7 +1177,7 @@ KOKKOS_INLINE_FUNCTION Line<typename LineT::scalar_t> wrap_points(const LineT& l
 
 /// \brief Wrap all points of a line into a periodic space (invalid operation | inplace)
 template <ValidLineType LineT, typename Metric>
-KOKKOS_INLINE_FUNCTION void wrap_points_inplace(LineT& line, const Metric& metric) {
+KOKKOS_INLINE_FUNCTION void wrap_points_inplace(LineT& /*line*/, const Metric& /*metric*/) {
   MUNDY_THROW_REQUIRE(false, std::invalid_argument,
                       "Not implemented error: wrapping a line into a periodic space does not make sense, as it is "
                       "infinite in length and could fill the space.")
@@ -1338,8 +1338,8 @@ KOKKOS_INLINE_FUNCTION void unwrap_points_to_ref_inplace(PointT& point, const Me
 
 /// \brief Unwrap all points of a line to be within one image of the reference point
 template <ValidLineType LineT, ValidPointType PointT, typename Metric>
-KOKKOS_INLINE_FUNCTION Line<typename PointT::scalar_t> unwrap_points_to_ref(const LineT& line, const Metric& metric,
-                                                                            const PointT& ref_point) {
+KOKKOS_INLINE_FUNCTION Line<typename PointT::scalar_t> unwrap_points_to_ref(const LineT& line, const Metric& /*metric*/,
+                                                                            const PointT& /*ref_point*/) {
   MUNDY_THROW_REQUIRE(false, std::invalid_argument,
                       "Not implemented error: unwrapping a line into a periodic space does not make sense, as it is "
                       "infinite in length and could fill the space.")
@@ -1348,7 +1348,7 @@ KOKKOS_INLINE_FUNCTION Line<typename PointT::scalar_t> unwrap_points_to_ref(cons
 
 /// \brief Unwrap all points of a line to be within one image of the reference point (inplace)
 template <ValidLineType LineT, ValidPointType PointT, typename Metric>
-KOKKOS_INLINE_FUNCTION void unwrap_points_to_ref_inplace(LineT& line, const Metric& metric, const PointT& ref_point) {
+KOKKOS_INLINE_FUNCTION void unwrap_points_to_ref_inplace(LineT& /*line*/, const Metric& /*metric*/, const PointT& /*ref_point*/) {
   MUNDY_THROW_REQUIRE(false, std::invalid_argument,
                       "Not implemented error: unwrapping a line into a periodic space does not make sense, as it is "
                       "infinite in length and could fill the space.")

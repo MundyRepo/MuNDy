@@ -358,7 +358,7 @@ KOKKOS_INLINE_FUNCTION constexpr OutputType variance_impl(std::index_sequence<Is
                                                           const AVector<T, N, Accessor, OwnershipType>& vec) {
   static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");
   OutputType inv_N = static_cast<OutputType>(1.0) / static_cast<OutputType>(N);
-  OutputType vec_mean = inv_N * sum_impl(std::make_index_sequence<N>{}, vec);
+  OutputType vec_mean = inv_N * static_cast<OutputType>(sum_impl(std::make_index_sequence<N>{}, vec));
   return (((static_cast<OutputType>(vec[Is]) - vec_mean) * (static_cast<OutputType>(vec[Is]) - vec_mean)) + ...) *
          inv_N;
 }
@@ -369,7 +369,7 @@ KOKKOS_INLINE_FUNCTION constexpr OutputType variance_f_impl(std::index_sequence<
                                                           const AVector<T, N, Accessor, OwnershipType>& vec) {
   static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");
   OutputType inv_N = static_cast<OutputType>(1.0) / static_cast<OutputType>(N);
-  OutputType vec_mean = inv_N * sum_impl(std::make_index_sequence<N>{}, vec);
+  OutputType vec_mean = inv_N * static_cast<OutputType>(sum_impl(std::make_index_sequence<N>{}, vec));
   return (((static_cast<OutputType>(vec[Is]) - vec_mean) * (static_cast<OutputType>(vec[Is]) - vec_mean)) + ...) *
          inv_N;
 }

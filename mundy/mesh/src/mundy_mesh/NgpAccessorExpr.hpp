@@ -883,10 +883,11 @@ class NgpForEachEntityPairExprDriver {
     expr.propagate_synchronize(evaluation_context);
 
     // Perform the evaluation
+    auto pair_view = pair_view_;  // Make a local copy for lambda capture
     Kokkos::parallel_for(
-        "NgpForEachEntityPairExprDriver::run", Kokkos::RangePolicy<ExecSpace>(exec_space(), 0, pair_view_.extent(0)),
+        "NgpForEachEntityPairExprDriver::run", Kokkos::RangePolicy<ExecSpace>(exec_space(), 0, pair_view.extent(0)),
         KOKKOS_LAMBDA(const int i) {
-          auto entity_pair = pair_view_(i);
+          auto entity_pair = pair_view(i);
           stk::mesh::FastMeshIndex left_fmi = FMIExtractor::get_left_index(entity_pair);
           stk::mesh::FastMeshIndex right_fmi = FMIExtractor::get_right_index(entity_pair);
 
@@ -918,12 +919,13 @@ class NgpForEachEntityPairExprDriver {
     expr.propagate_synchronize(evaluation_context);
 
     // Perform the evaluation
+    auto pair_view = pair_view_;  // Make a local copy for lambda capture
     using value_type = typename ReductionOp::value_type;
     Kokkos::parallel_reduce(
         "NgpForEachEntityPairExprDriver::reduce_local",
-        Kokkos::RangePolicy<ExecSpace>(exec_space(), 0, pair_view_.extent(0)),
+        Kokkos::RangePolicy<ExecSpace>(exec_space(), 0, pair_view.extent(0)),
         KOKKOS_LAMBDA(const int i, value_type& value) {
-          auto entity_pair = pair_view_(i);
+          auto entity_pair = pair_view(i);
           stk::mesh::FastMeshIndex left_fmi = FMIExtractor::get_left_index(entity_pair);
           stk::mesh::FastMeshIndex right_fmi = FMIExtractor::get_right_index(entity_pair);
 
@@ -964,7 +966,7 @@ class NgpForEachEntityPairExprDriver {
 
 template <typename ExecSpace = stk::ngp::ExecSpace>
 auto make_entity_expr(stk::mesh::BulkData& bulk_data, const stk::mesh::Selector& selector,
-                      const stk::mesh::EntityRank& rank, const ExecSpace& exec_space = ExecSpace()) {
+                      const stk::mesh::EntityRank& rank, const ExecSpace& /*exec_space*/ = ExecSpace()) {
   // To ensure that all expressions have the same driver, we store a persistent driver manager
   // on the meta data and use it to memoize the driver for the given rank and selector.
 
@@ -999,7 +1001,7 @@ auto make_pairwise_entity_expr(stk::mesh::BulkData& bulk_data,                  
                                const stk::mesh::EntityRank& left_rank,                            //
                                const stk::mesh::EntityRank& right_rank,                           //
                                const PairView& pair_view, const FMIExtractor& /*fmi_extractor*/,  //
-                               const ExecSpace& exec_space = ExecSpace()) {
+                               const ExecSpace& /*exec_space*/ = ExecSpace()) {
   using driver_t = NgpForEachEntityPairExprDriver<PairView, FMIExtractor, ExecSpace>;
   using driver_map_t = impl::AnyRankSelectorMap<core::make_string_literal("NgpPairExprDrivers")>;
   stk::mesh::MetaData& meta_data = bulk_data.mesh_meta_data();
@@ -1567,7 +1569,7 @@ class AssignExpr : public MathExprBase<AssignExpr<TargetExpr, SourceExpr>> {
     requires(is_crtp_base_of_v<MathExprBase, LeftExpr> && !is_crtp_base_of_v<MathExprBase, RightT>)                   \
   auto FuncName(const MathExprBase<LeftExpr>& left_expr, const RightT& right_const) {                                 \
     using RightExpr = ConstantMathExpr<RightT>;                                                                       \
-    auto right_expr = RightExpr(right_const);                                                                         \
+    RightExpr right_expr(right_const);                                                                         \
     return ExprClassName##Expr<LeftExpr, RightExpr>(left_expr.self(), right_expr);                                    \
   }                                                                                                                   \
   /* On a constant and an expression */                                                                               \
@@ -1575,7 +1577,7 @@ class AssignExpr : public MathExprBase<AssignExpr<TargetExpr, SourceExpr>> {
     requires(!is_crtp_base_of_v<MathExprBase, LeftT> && is_crtp_base_of_v<MathExprBase, RightExpr>)                   \
   auto FuncName(const LeftT& left_const, const MathExprBase<RightExpr>& right_expr) {                                 \
     using LeftExpr = ConstantMathExpr<LeftT>;                                                                         \
-    auto left_expr = LeftExpr(left_const);                                                                            \
+    LeftExpr left_expr(left_const);                                                                            \
     return ExprClassName##Expr<LeftExpr, RightExpr>(left_expr, right_expr.self());                                    \
   }                                                                                                                   \
   /* On two constants (not allowed) */                                                                                \
@@ -1770,7 +1772,7 @@ class AssignExpr : public MathExprBase<AssignExpr<TargetExpr, SourceExpr>> {
     requires(is_crtp_base_of_v<MathExprBase, LeftExpr> && !is_crtp_base_of_v<MathExprBase, RightT>)                    \
   auto AtomicName(const MathExprBase<LeftExpr>& left_expr, const RightT& right_const) {                                \
     using RightExpr = ConstantMathExpr<RightT>;                                                                        \
-    auto right_expr = RightExpr(right_const);                                                                          \
+    RightExpr right_expr(right_const);                                                                                  \
     return ExprClassName##Expr<LeftExpr, RightExpr>(left_expr.self(), right_expr);                                     \
   }                                                                                                                    \
   /* On a constant and an expression */                                                                                \
@@ -1778,7 +1780,7 @@ class AssignExpr : public MathExprBase<AssignExpr<TargetExpr, SourceExpr>> {
     requires(!is_crtp_base_of_v<MathExprBase, LeftT> && is_crtp_base_of_v<MathExprBase, RightExpr>)                    \
   auto AtomicName(const LeftT& left_const, const MathExprBase<RightExpr>& right_expr) {                                \
     using LeftExpr = ConstantMathExpr<LeftT>;                                                                          \
-    auto left_expr = LeftExpr(left_const);                                                                             \
+    LeftExpr left_expr(left_const);                                                                                     \
     return ExprClassName##Expr<LeftExpr, RightExpr>(left_expr, right_expr.self());                                     \
   }                                                                                                                    \
   /* On two constants (not allowed) */                                                                                 \
@@ -1797,49 +1799,49 @@ class AssignExpr : public MathExprBase<AssignExpr<TargetExpr, SourceExpr>> {
   template <typename ConstantType, typename SubPrevMathExpr>                                                   \
     requires(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                   \
   auto operator+(const ConstantType& c, const ExprClassName##Expr<SubPrevMathExpr>& expr) {                    \
-    auto constant_expr = ConstantMathExpr<ConstantType>(c);                                                    \
+    ConstantMathExpr<ConstantType> constant_expr(c);                                                        \
     return AddExpr<ConstantMathExpr<ConstantType>, ExprClassName##Expr<SubPrevMathExpr>>(constant_expr, expr); \
   }                                                                                                            \
   template <typename ConstantType, typename SubPrevMathExpr>                                                   \
     requires(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                   \
   auto operator-(const ConstantType& c, const ExprClassName##Expr<SubPrevMathExpr>& expr) {                    \
-    auto constant_expr = ConstantMathExpr<ConstantType>(c);                                                    \
+    ConstantMathExpr<ConstantType> constant_expr(c);                                                        \
     return SubExpr<ConstantMathExpr<ConstantType>, ExprClassName##Expr<SubPrevMathExpr>>(constant_expr, expr); \
   }                                                                                                            \
   template <typename ConstantType, typename SubPrevMathExpr>                                                   \
     requires(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                   \
   auto operator*(const ConstantType& c, const ExprClassName##Expr<SubPrevMathExpr>& expr) {                    \
-    auto constant_expr = ConstantMathExpr<ConstantType>(c);                                                    \
+    ConstantMathExpr<ConstantType> constant_expr(c);                                                        \
     return MulExpr<ConstantMathExpr<ConstantType>, ExprClassName##Expr<SubPrevMathExpr>>(constant_expr, expr); \
   }                                                                                                            \
   template <typename ConstantType, typename SubPrevMathExpr>                                                   \
     requires(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                   \
   auto operator/(const ConstantType& c, const ExprClassName##Expr<SubPrevMathExpr>& expr) {                    \
-    auto constant_expr = ConstantMathExpr<ConstantType>(c);                                                    \
+    ConstantMathExpr<ConstantType> constant_expr(c);                                                        \
     return DivExpr<ConstantMathExpr<ConstantType>, ExprClassName##Expr<SubPrevMathExpr>>(constant_expr, expr); \
   }                                                                                                            \
   template <typename ConstantType, typename SubPrevMathExpr>                                                   \
     requires(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                   \
   auto operator+(const ExprClassName##Expr<SubPrevMathExpr>& expr, const ConstantType& c) {                    \
-    auto constant_expr = ConstantMathExpr<ConstantType>(c);                                                    \
+    ConstantMathExpr<ConstantType> constant_expr(c);                                                        \
     return AddExpr<ExprClassName##Expr<SubPrevMathExpr>, ConstantMathExpr<ConstantType>>(expr, constant_expr); \
   }                                                                                                            \
   template <typename ConstantType, typename SubPrevMathExpr>                                                   \
     requires(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                   \
   auto operator-(const ExprClassName##Expr<SubPrevMathExpr>& expr, const ConstantType& c) {                    \
-    auto constant_expr = ConstantMathExpr<ConstantType>(c);                                                    \
+    ConstantMathExpr<ConstantType> constant_expr(c);                                                        \
     return SubExpr<ExprClassName##Expr<SubPrevMathExpr>, ConstantMathExpr<ConstantType>>(expr, constant_expr); \
   }                                                                                                            \
   template <typename ConstantType, typename SubPrevMathExpr>                                                   \
     requires(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                   \
   auto operator*(const ExprClassName##Expr<SubPrevMathExpr>& expr, const ConstantType& c) {                    \
-    auto constant_expr = ConstantMathExpr<ConstantType>(c);                                                    \
+    ConstantMathExpr<ConstantType> constant_expr(c);                                                        \
     return MulExpr<ExprClassName##Expr<SubPrevMathExpr>, ConstantMathExpr<ConstantType>>(expr, constant_expr); \
   }                                                                                                            \
   template <typename ConstantType, typename SubPrevMathExpr>                                                   \
     requires(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                   \
   auto operator/(const ExprClassName##Expr<SubPrevMathExpr>& expr, const ConstantType& c) {                    \
-    auto constant_expr = ConstantMathExpr<ConstantType>(c);                                                    \
+    ConstantMathExpr<ConstantType> constant_expr(c);                                                        \
     return DivExpr<ExprClassName##Expr<SubPrevMathExpr>, ConstantMathExpr<ConstantType>>(expr, constant_expr); \
   }
 
@@ -1848,56 +1850,56 @@ class AssignExpr : public MathExprBase<AssignExpr<TargetExpr, SourceExpr>> {
   template <typename ConstantType, typename SubLeftExpr, typename SubRightExpr>                                    \
     requires(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                       \
   auto operator+(const ConstantType& c, const ExprClassName##Expr<SubLeftExpr, SubRightExpr>& expr) {              \
-    auto constant_expr = ConstantMathExpr<ConstantType>(c);                                                        \
+    ConstantMathExpr<ConstantType> constant_expr(c);                                                        \
     return AddExpr<ConstantMathExpr<ConstantType>, ExprClassName##Expr<SubLeftExpr, SubRightExpr>>(constant_expr,  \
                                                                                                    expr);          \
   }                                                                                                                \
   template <typename ConstantType, typename SubLeftExpr, typename SubRightExpr>                                    \
     requires(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                       \
   auto operator-(const ConstantType& c, const ExprClassName##Expr<SubLeftExpr, SubRightExpr>& expr) {              \
-    auto constant_expr = ConstantMathExpr<ConstantType>(c);                                                        \
+    ConstantMathExpr<ConstantType> constant_expr(c);                                                        \
     return SubExpr<ConstantMathExpr<ConstantType>, ExprClassName##Expr<SubLeftExpr, SubRightExpr>>(constant_expr,  \
                                                                                                    expr);          \
   }                                                                                                                \
   template <typename ConstantType, typename SubLeftExpr, typename SubRightExpr>                                    \
     requires(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                       \
   auto operator*(const ConstantType& c, const ExprClassName##Expr<SubLeftExpr, SubRightExpr>& expr) {              \
-    auto constant_expr = ConstantMathExpr<ConstantType>(c);                                                        \
+    ConstantMathExpr<ConstantType> constant_expr(c);                                                        \
     return MulExpr<ConstantMathExpr<ConstantType>, ExprClassName##Expr<SubLeftExpr, SubRightExpr>>(constant_expr,  \
                                                                                                    expr);          \
   }                                                                                                                \
   template <typename ConstantType, typename SubLeftExpr, typename SubRightExpr>                                    \
     requires(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                       \
   auto operator/(const ConstantType& c, const ExprClassName##Expr<SubLeftExpr, SubRightExpr>& expr) {              \
-    auto constant_expr = ConstantMathExpr<ConstantType>(c);                                                        \
+    ConstantMathExpr<ConstantType> constant_expr(c);                                                        \
     return DivExpr<ConstantMathExpr<ConstantType>, ExprClassName##Expr<SubLeftExpr, SubRightExpr>>(constant_expr,  \
                                                                                                    expr);          \
   }                                                                                                                \
   template <typename ConstantType, typename SubLeftExpr, typename SubRightExpr>                                    \
     requires(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                       \
   auto operator+(const ExprClassName##Expr<SubLeftExpr, SubRightExpr>& expr, const ConstantType& c) {              \
-    auto constant_expr = ConstantMathExpr<ConstantType>(c);                                                        \
+    ConstantMathExpr<ConstantType> constant_expr(c);                                                        \
     return AddExpr<ExprClassName##Expr<SubLeftExpr, SubRightExpr>, ConstantMathExpr<ConstantType>>(expr,           \
                                                                                                    constant_expr); \
   }                                                                                                                \
   template <typename ConstantType, typename SubLeftExpr, typename SubRightExpr>                                    \
     requires(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                       \
   auto operator-(const ExprClassName##Expr<SubLeftExpr, SubRightExpr>& expr, const ConstantType& c) {              \
-    auto constant_expr = ConstantMathExpr<ConstantType>(c);                                                        \
+    ConstantMathExpr<ConstantType> constant_expr(c);                                                        \
     return SubExpr<ExprClassName##Expr<SubLeftExpr, SubRightExpr>, ConstantMathExpr<ConstantType>>(expr,           \
                                                                                                    constant_expr); \
   }                                                                                                                \
   template <typename ConstantType, typename SubLeftExpr, typename SubRightExpr>                                    \
     requires(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                       \
   auto operator*(const ExprClassName##Expr<SubLeftExpr, SubRightExpr>& expr, const ConstantType& c) {              \
-    auto constant_expr = ConstantMathExpr<ConstantType>(c);                                                        \
+    ConstantMathExpr<ConstantType> constant_expr(c);                                                        \
     return MulExpr<ExprClassName##Expr<SubLeftExpr, SubRightExpr>, ConstantMathExpr<ConstantType>>(expr,           \
                                                                                                    constant_expr); \
   }                                                                                                                \
   template <typename ConstantType, typename SubLeftExpr, typename SubRightExpr>                                    \
     requires(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                       \
   auto operator/(const ExprClassName##Expr<SubLeftExpr, SubRightExpr>& expr, const ConstantType& c) {              \
-    auto constant_expr = ConstantMathExpr<ConstantType>(c);                                                        \
+    ConstantMathExpr<ConstantType> constant_expr(c);                                                        \
     return DivExpr<ExprClassName##Expr<SubLeftExpr, SubRightExpr>, ConstantMathExpr<ConstantType>>(expr,           \
                                                                                                    constant_expr); \
   }
@@ -2038,22 +2040,28 @@ class AccessorExpr : public MathExprBase<AccessorExpr<TaggedAccessorT, PrevEntit
       : tagged_accessor_(tagged_accessor), prev_entity_expr_(prev_entity_expr_base.self()) {
   }
 
+  KOKKOS_DEFAULTED_FUNCTION
+  AccessorExpr(const our_t&) = default;
+
+  KOKKOS_DEFAULTED_FUNCTION
+  AccessorExpr(our_t&&) = default;
+
   auto operator=(const our_t& other) {
-    auto expr = AssignExpr<our_t, our_t>(*this, other);
+    AssignExpr<our_t, our_t> expr(*this, other);
     expr.driver()->run(expr);
   }
 
   template <typename OtherExpr>
     requires(!std::is_same_v<OtherExpr, our_t>)
   auto operator=(const MathExprBase<OtherExpr>& other) {
-    auto expr = AssignExpr<our_t, OtherExpr>(*this, other.self());
+    AssignExpr<our_t, OtherExpr> expr(*this, other.self());
     expr.driver()->run(expr);
   }
 
   template <typename OtherExpr>
     requires(!std::is_same_v<OtherExpr, our_t>)
   auto operator=(const EntityExprBase<OtherExpr>& other) {
-    auto expr = AssignExpr<our_t, OtherExpr>(*this, other.self());
+    AssignExpr<our_t, OtherExpr> expr(*this, other.self());
     expr.driver()->run(expr);
   }
 
@@ -2079,65 +2087,65 @@ class AccessorExpr : public MathExprBase<AccessorExpr<TaggedAccessorT, PrevEntit
 
   template <typename OtherExpr>
   void operator+=(const MathExprBase<OtherExpr>& other) {
-    auto expr = AddEqualsExpr<our_t, OtherExpr>(*this, other.self());
+    AddEqualsExpr<our_t, OtherExpr> expr(*this, other.self());
     expr.driver()->run(expr);
   }
 
   template <typename OtherExpr>
   void operator-=(const MathExprBase<OtherExpr>& other) {
-    auto expr = SubEqualsExpr<our_t, OtherExpr>(*this, other.self());
+    SubEqualsExpr<our_t, OtherExpr> expr(*this, other.self());
     expr.driver()->run(expr);
   }
 
   template <typename OtherExpr>
   void operator*=(const MathExprBase<OtherExpr>& other) {
-    auto expr = MulEqualsExpr<our_t, OtherExpr>(*this, other.self());
+    MulEqualsExpr<our_t, OtherExpr> expr(*this, other.self());
     expr.driver()->run(expr);
   }
 
   template <typename OtherExpr>
   void operator/=(const MathExprBase<OtherExpr>& other) {
-    auto expr = DivEqualsExpr<our_t, OtherExpr>(*this, other.self());
+    DivEqualsExpr<our_t, OtherExpr> expr(*this, other.self());
     expr.driver()->run(expr);
   }
 
   template <typename ConstantType>
     requires(!is_crtp_base_of_v<MathExprBase, ConstantType> && !is_crtp_base_of_v<EntityExprBase, ConstantType>)
   auto operator=(const ConstantType& c) {
-    auto constant_expr = ConstantMathExpr<ConstantType>(c);
-    auto expr = AssignExpr<our_t, ConstantMathExpr<ConstantType>>(*this, constant_expr);
+    ConstantMathExpr<ConstantType> constant_expr(c);
+    AssignExpr<our_t, ConstantMathExpr<ConstantType>> expr(*this, constant_expr);
     expr.driver()->run(expr);
   }
 
   template <typename ConstantType>
     requires(!is_crtp_base_of_v<MathExprBase, ConstantType> && !is_crtp_base_of_v<EntityExprBase, ConstantType>)
   auto operator+=(const ConstantType& c) {
-    auto constant_expr = ConstantMathExpr<ConstantType>(c);
-    auto expr = AddEqualsExpr<our_t, ConstantMathExpr<ConstantType>>(*this, constant_expr);
+    ConstantMathExpr<ConstantType> constant_expr(c);
+    AddEqualsExpr<our_t, ConstantMathExpr<ConstantType>> expr(*this, constant_expr);
     expr.driver()->run(expr);
   }
 
   template <typename ConstantType>
     requires(!is_crtp_base_of_v<MathExprBase, ConstantType> && !is_crtp_base_of_v<EntityExprBase, ConstantType>)
   auto operator-=(const ConstantType& c) {
-    auto constant_expr = ConstantMathExpr<ConstantType>(c);
-    auto expr = SubEqualsExpr<our_t, ConstantMathExpr<ConstantType>>(*this, constant_expr);
+    ConstantMathExpr<ConstantType> constant_expr(c);
+    SubEqualsExpr<our_t, ConstantMathExpr<ConstantType>> expr(*this, constant_expr);
     expr.driver()->run(expr);
   }
 
   template <typename ConstantType>
     requires(!is_crtp_base_of_v<MathExprBase, ConstantType> && !is_crtp_base_of_v<EntityExprBase, ConstantType>)
   auto operator*=(const ConstantType& c) {
-    auto constant_expr = ConstantMathExpr<ConstantType>(c);
-    auto expr = MulEqualsExpr<our_t, ConstantMathExpr<ConstantType>>(*this, constant_expr);
+    ConstantMathExpr<ConstantType> constant_expr(c);
+    MulEqualsExpr<our_t, ConstantMathExpr<ConstantType>> expr(*this, constant_expr);
     expr.driver()->run(expr);
   }
 
   template <typename ConstantType>
     requires(!is_crtp_base_of_v<MathExprBase, ConstantType> && !is_crtp_base_of_v<EntityExprBase, ConstantType>)
   auto operator/=(const ConstantType& c) {
-    auto constant_expr = ConstantMathExpr<ConstantType>(c);
-    auto expr = DivEqualsExpr<our_t, ConstantMathExpr<ConstantType>>(*this, constant_expr);
+    ConstantMathExpr<ConstantType> constant_expr(c);
+    DivEqualsExpr<our_t, ConstantMathExpr<ConstantType>> expr(*this, constant_expr);
     expr.driver()->run(expr);
   }
 

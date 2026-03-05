@@ -22,7 +22,10 @@
 #define MUNDY_MATH_ACCESSOR_HPP_
 
 // C++ core libs
+#include <cstddef>
 #include <concepts>
+#include <initializer_list>
+#include <utility>
 
 // Mundy
 #include <mundy_math/impl/AccessorImpl.hpp>
@@ -78,13 +81,25 @@ namespace math {
 template <typename Accessor, typename T>
 concept HasConstAccessOperator = requires(Accessor a, size_t idx) {
   { a[idx] } -> std::convertible_to<const T&>;
+} || requires(Accessor a, size_t idx) {
+  { a(idx) } -> std::convertible_to<const T&>;
 };
 
 /// \brief A concept that checks if Accessor has a non-const [] operator
 template <typename Accessor, typename T>
 concept HasNonConstAccessOperator = requires(Accessor a, size_t idx) {
   { a[idx] } -> std::convertible_to<T&>;
+} || requires(Accessor a, size_t idx) {
+  { a(idx) } -> std::convertible_to<T&>;
 };
+
+/// \brief A concept that checks if Accessor has a [] operator regardless of constness
+template <typename Accessor>
+concept HasSubscriptOperator = requires(Accessor a, size_t idx) { a[idx]; };
+
+/// \brief A concept that checks if Accessor has a () operator regardless of constness
+template <typename Accessor>
+concept HasCallOperator = requires(Accessor a, size_t idx) { a(idx); };
 
 /// \brief A concept that checks if Accessor has a copy constructor
 template <typename Accessor>
@@ -119,6 +134,21 @@ struct Views {};
 struct Mixed {};
 struct Invalid {};
 }  // namespace Ownership
+
+namespace impl {
+
+/// \brief Unified index accessor with [] preferred over () if both are available.
+template <typename Accessor>
+KOKKOS_INLINE_FUNCTION constexpr decltype(auto) access_at(Accessor&& accessor, size_t idx) {
+  if constexpr (HasSubscriptOperator<Accessor>) {
+    return std::forward<Accessor>(accessor)[idx];
+  } else {
+    static_assert(HasCallOperator<Accessor>, "Accessor must support either operator[] or operator().");
+    return std::forward<Accessor>(accessor)(idx);
+  }
+}
+
+}  // namespace impl
 
 }  // namespace math
 

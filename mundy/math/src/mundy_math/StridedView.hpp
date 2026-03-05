@@ -77,7 +77,7 @@ class StridedAccessor<T, stride, Accessor, Ownership::Views> {
   /// \brief Element access operator
   /// \param[in] idx The index of the element.
   KOKKOS_INLINE_FUNCTION constexpr auto& operator[](size_t idx) const {
-    return accessor_[idx * stride];
+    return impl::access_at(accessor_, idx * stride);
   }
 };  // class StridedAccessor
 
@@ -113,7 +113,7 @@ class StridedAccessor<T, stride, Accessor, Ownership::Owns> {
   /// \brief Element access operator
   /// \param[in] idx The index of the element.
   KOKKOS_INLINE_FUNCTION constexpr auto& operator[](size_t idx) const {
-    return accessor_[idx * stride];
+    return impl::access_at(accessor_, idx * stride);
   }
 };  // class StridedAccessor
 

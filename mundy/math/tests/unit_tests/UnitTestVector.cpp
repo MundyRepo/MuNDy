@@ -103,6 +103,23 @@ void is_different_debug(const AVector<U, N, OtherAccessor, OtherOwnershipType>& 
 }
 //@}
 
+template <typename T>
+struct CallableOnlyAccessor {
+  T* data_;
+
+  explicit CallableOnlyAccessor(T* data)
+      : data_(data) {
+  }
+
+  KOKKOS_INLINE_FUNCTION T& operator()(size_t idx) {
+    return data_[idx];
+  }
+
+  KOKKOS_INLINE_FUNCTION const T& operator()(size_t idx) const {
+    return data_[idx];
+  }
+};
+
 //! \name GTEST typed test fixtures
 //@{
 
@@ -1457,6 +1474,36 @@ TYPED_TEST(VectorSingleTypeTest, Views) {
     is_close_debug(v3[1], 5, "3D array view somehow not a view.");
     is_close_debug(v3[2], 6, "3D array view somehow not a view.");
   }
+}
+
+TYPED_TEST(VectorSingleTypeTest, ViewsWithCallableOnlyAccessor) {
+  std::vector<TypeParam> backing{0, 0, 1, 2, 3, 0, 0};
+  CallableOnlyAccessor<TypeParam> accessor(backing.data() + 2);
+
+  auto view = get_vector_view<TypeParam, 3>(accessor);
+  is_close_debug(view[0], 1, "3D callable-only accessor view failed.");
+  is_close_debug(view[1], 2, "3D callable-only accessor view failed.");
+  is_close_debug(view[2], 3, "3D callable-only accessor view failed.");
+
+  backing[2] = static_cast<TypeParam>(4);
+  backing[3] = static_cast<TypeParam>(5);
+  backing[4] = static_cast<TypeParam>(6);
+  is_close_debug(view[0], 4, "Callable-only accessor view did not reflect backing updates.");
+  is_close_debug(view[1], 5, "Callable-only accessor view did not reflect backing updates.");
+  is_close_debug(view[2], 6, "Callable-only accessor view did not reflect backing updates.");
+
+  view[0] = static_cast<TypeParam>(7);
+  view(1) = static_cast<TypeParam>(8);
+  view[2] = static_cast<TypeParam>(9);
+  is_close_debug(backing[2], 7, "Callable-only accessor view write-through failed.");
+  is_close_debug(backing[3], 8, "Callable-only accessor view write-through failed.");
+  is_close_debug(backing[4], 9, "Callable-only accessor view write-through failed.");
+
+  const CallableOnlyAccessor<TypeParam> const_accessor(backing.data() + 2);
+  const auto const_view = get_vector_view<TypeParam, 3>(const_accessor);
+  is_close_debug(const_view[0], 7, "Const callable-only accessor view failed.");
+  is_close_debug(const_view[1], 8, "Const callable-only accessor view failed.");
+  is_close_debug(const_view(2), 9, "Const callable-only accessor view failed.");
 }
 //@}
 

@@ -226,7 +226,7 @@ class AVector<T, N, Accessor, Ownership::Views> {
   KOKKOS_INLINE_FUNCTION constexpr operator T()
     requires(N == 1)
   {
-    return accessor_[0];
+    return impl::access_at(accessor_, 0);
   }
   //@}
 
@@ -238,12 +238,12 @@ class AVector<T, N, Accessor, Ownership::Views> {
   KOKKOS_INLINE_FUNCTION
   constexpr T& operator[](size_t index) {
     MUNDY_THROW_ASSERT(index < N, std::out_of_range, "AVector index out of bounds.");
-    return accessor_[index];
+    return impl::access_at(accessor_, index);
   }
   KOKKOS_INLINE_FUNCTION
   constexpr const T& operator[](size_t index) const {
     MUNDY_THROW_ASSERT(index < N, std::out_of_range, "AVector index out of bounds.");
-    return accessor_[index];
+    return impl::access_at(accessor_, index);
   }
 
   /// \brief Element access operator via a single index
@@ -251,12 +251,12 @@ class AVector<T, N, Accessor, Ownership::Views> {
   KOKKOS_INLINE_FUNCTION
   constexpr T& operator()(size_t index) {
     MUNDY_THROW_ASSERT(index < N, std::out_of_range, "AVector index out of bounds.");
-    return accessor_[index];
+    return impl::access_at(accessor_, index);
   }
   KOKKOS_INLINE_FUNCTION
   constexpr const T& operator()(size_t index) const {
     MUNDY_THROW_ASSERT(index < N, std::out_of_range, "AVector index out of bounds.");
-    return accessor_[index];
+    return impl::access_at(accessor_, index);
   }
 
   /// \brief Get the internal data accessor
@@ -629,7 +629,7 @@ class AVector<T, N, Accessor, Ownership::Owns> {
   KOKKOS_INLINE_FUNCTION constexpr operator T()
     requires(N == 1)
   {
-    return accessor_[0];
+    return impl::access_at(accessor_, 0);
   }
   //@}
 
@@ -641,12 +641,12 @@ class AVector<T, N, Accessor, Ownership::Owns> {
   KOKKOS_INLINE_FUNCTION
   constexpr T& operator[](size_t index) {
     MUNDY_THROW_ASSERT(index < N, std::out_of_range, "AVector index out of bounds.");
-    return accessor_[index];
+    return impl::access_at(accessor_, index);
   }
   KOKKOS_INLINE_FUNCTION
   constexpr const T& operator[](size_t index) const {
     MUNDY_THROW_ASSERT(index < N, std::out_of_range, "AVector index out of bounds.");
-    return accessor_[index];
+    return impl::access_at(accessor_, index);
   }
 
   /// \brief Element access operator via a single index
@@ -654,12 +654,12 @@ class AVector<T, N, Accessor, Ownership::Owns> {
   KOKKOS_INLINE_FUNCTION
   constexpr T& operator()(size_t index) {
     MUNDY_THROW_ASSERT(index < N, std::out_of_range, "AVector index out of bounds.");
-    return accessor_[index];
+    return impl::access_at(accessor_, index);
   }
   KOKKOS_INLINE_FUNCTION
   constexpr const T& operator()(size_t index) const {
     MUNDY_THROW_ASSERT(index < N, std::out_of_range, "AVector index out of bounds.");
-    return accessor_[index];
+    return impl::access_at(accessor_, index);
   }
 
   /// \brief Get the internal data accessor
@@ -1274,7 +1274,8 @@ template <size_t N, typename U, typename T, ValidAccessor<U> Accessor1, typename
                                                    std::common_type_t<U, T>>>
 KOKKOS_INLINE_FUNCTION constexpr OutputType major_angle(const AVector<U, N, Accessor1, Ownership1>& a,
                                                         const AVector<T, N, Accessor2, Ownership2>& b) {
-  return Kokkos::numbers::pi_v<OutputType> - minor_angle(a, b);
+  return Kokkos::numbers::pi_v<OutputType> -
+         minor_angle<N, U, T, Accessor1, Ownership1, Accessor2, Ownership2, OutputType>(a, b);
 }
 
 /// \brief Major angle between two vectors (returns a float if common_type_t<U, T> is integral, otherwise common_type_t<U, T>)

@@ -54,6 +54,7 @@
 #include <stk_mesh/base/NgpReductions.hpp>
 #include <stk_mesh/base/Selector.hpp>
 #include <stk_mesh/base/Types.hpp>
+#include <stk_mesh/base/EntitySorterBase.hpp>  // for stk::mesh::EntitySorterBase
 
 // STK Search
 #include <stk_search/BoxIdent.hpp>
@@ -75,6 +76,7 @@
 
 // Mundy
 #include <mundy_math/Vector3.hpp>  // for Vector3
+#include <mundy_math/zmort.hpp>      // for mundy::math::zmorton_less(Vector3, Vector3)
 
 using DeviceExecutionSpace = Kokkos::DefaultExecutionSpace;
 using DeviceMemorySpace = typename DeviceExecutionSpace::memory_space;
@@ -1021,6 +1023,43 @@ class RcbSettings : public stk::balance::BalanceSettings {
     return false;
   }
 };  // RcbSettings
+//@}
+
+//! \name Sorting
+//@{
+
+class EntityLessZMortonCoords {
+  public:
+  EntityLessZMortonCoords(const stk::mesh::BulkData &bulk)
+      : mesh(bulk), coords_base(bulk.mesh_meta_data().coordinate_field()) {
+  }
+
+  bool operator()(stk::mesh::Entity a, stk::mesh::Entity b) {
+    if (mesh.entity_rank(a) != stk::topology::NODE_RANK) {
+      return stk::mesh::EntityLess(mesh)(a, b);
+    }
+    double *a_coords = static_cast<double *>(stk::mesh::field_data(*coords_base, a));
+    double *b_coords = static_cast<double *>(stk::mesh::field_data(*coords_base, b));
+    mundy::math::Vector3d a_vec(a_coords[0], a_coords[1], a_coords[2]);
+    mundy::math::Vector3d b_vec(b_coords[0], b_coords[1], b_coords[2]);
+    return mundy::math::zmorton_less(a_vec, b_vec);
+  }
+
+  private:
+  const stk::mesh::BulkData &mesh;
+  const stk::mesh::FieldBase *coords_base;
+};
+
+class ZMortonSorter : public stk::mesh::EntitySorterBase {
+  public:
+  ZMortonSorter() {
+  }
+  virtual ~ZMortonSorter() {
+  }
+  virtual void sort(stk::mesh::BulkData &bulk, stk::mesh::EntityVector &entity_vector) const {
+    std::sort(entity_vector.begin(), entity_vector.end(), EntityLessZMortonCoords(bulk));
+  }
+};
 //@}
 
 int main(int argc, char **argv) {

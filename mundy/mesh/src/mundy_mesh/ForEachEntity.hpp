@@ -87,7 +87,7 @@ inline void for_each_entity_run(const Mesh& mesh, stk::topology::rank_t rank, co
                                 const AlgorithmPerEntity& functor) {
   const stk::mesh::BucketVector& buckets = mesh.get_buckets(rank, selector);
   using team_policy = Kokkos::TeamPolicy<Kokkos::DefaultHostExecutionSpace>;
-  const size_t n_buckets = buckets.size();
+  const unsigned n_buckets = static_cast<unsigned>(buckets.size());
   TeamFunctor<Mesh, AlgorithmPerEntity> team_functor(mesh, buckets, functor);
 
   Kokkos::parallel_for("for_each_entity_run", team_policy(n_buckets, Kokkos::AUTO), team_functor);

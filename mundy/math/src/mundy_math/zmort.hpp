@@ -116,7 +116,7 @@ KOKKOS_INLINE_FUNCTION auto FloatSig(uint64_t xi) -> decltype(xi) {
 
 constexpr int8_t log0_nan = Kokkos::Experimental::finite_min_v<int8_t>;
 
-static constexpr decltype(log0_nan) log_base2_table[256] = {
+static constexpr int8_t log_base2_table[256] = {
     log0_nan, 0, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
     5,        5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5,
     6,        6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6,
@@ -126,10 +126,10 @@ static constexpr decltype(log0_nan) log_base2_table[256] = {
     7,        7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7,
     7,        7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7};
 
-KOKKOS_INLINE_FUNCTION auto UIntLogBase2(uint32_t x) -> decltype(log0_nan) {
+KOKKOS_INLINE_FUNCTION int8_t UIntLogBase2(uint32_t x) {
   MUNDY_THROW_ASSERT(x != 0, std::invalid_argument, "x must not be zero");
 
-  auto log_base2 = log0_nan;
+  int8_t log_base2 = log0_nan;
   auto x16 = x >> 16;
 
   if (x16) {
@@ -143,10 +143,9 @@ KOKKOS_INLINE_FUNCTION auto UIntLogBase2(uint32_t x) -> decltype(log0_nan) {
   return log_base2;
 }
 
-KOKKOS_INLINE_FUNCTION auto UIntLogBase2(uint64_t x) -> decltype(log0_nan) {
+KOKKOS_INLINE_FUNCTION int8_t UIntLogBase2(uint64_t x) {
   auto x32 = static_cast<uint32_t>(x >> 32);
-  auto log_base2 = (x32) ? UIntLogBase2(x32) + 32 : UIntLogBase2(static_cast<uint32_t>(x));
-
+  int8_t log_base2 = (x32) ? UIntLogBase2(x32) + 32 : UIntLogBase2(static_cast<uint32_t>(x));
   return log_base2;
 }
 

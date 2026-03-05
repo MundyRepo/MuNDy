@@ -418,7 +418,6 @@ TEST(DistanceBetweenLineSegments, PositiveResult) {
 TEST(DistanceBetweenLineSegments, APeskyEdgeCase) {
   // The following pesky edge case is for a colinear rod that caused an untested edge case.
   // TODO(palmerb4): We'll need colinear rods that give each of the 4 possible cases.
-  openrand::Philox rng = core::make_philox(generate_test_seed(), 0);
   Point<double> a1, a2, b1, b2, a12_expected, a12_actual, b12_expected, b12_actual;
   mundy::math::Vector3d sep_actual;
 
@@ -451,11 +450,9 @@ TEST(DistanceBetweenLineSegments, APeskyEdgeCase) {
 TEST(DistanceBetweenLineSegments, APeskyEdgeCaseCollinear) {
   // The following pesky edge case is for a colinear rod that caused an untested edge case.
   // TODO(palmerb4): We'll need colinear rods that give each of the 4 possible cases.
-  openrand::Philox rng = core::make_philox(generate_test_seed(), 0);
   Point<double> a1, a2, b1, b2;
-  mundy::math::Vector3d sep_actual;
 
-  double u_expected, v_expected, u_actual, v_actual, dist_expected, dist_actual;
+  double dist_expected, dist_actual;
   // Hardcoding a case that I know is wrong.
   a1 = {9.64101615137754, 6, 3.18961417478521};
   b1 = {10.39230484541326, 6, 0.6472696138825587};

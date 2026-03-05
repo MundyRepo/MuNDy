@@ -237,7 +237,7 @@ class AMatrix<T, N, M, Accessor, Ownership::Views> {
   KOKKOS_INLINE_FUNCTION
   constexpr T& operator[](size_t index) {
     MUNDY_THROW_ASSERT(index < N * M, std::out_of_range, "AMatrix flat index out of bounds.");
-    return accessor_[index];
+    return impl::access_at(accessor_, index);
   }
 
   /// \brief Const element access operator via flat index
@@ -245,7 +245,7 @@ class AMatrix<T, N, M, Accessor, Ownership::Views> {
   KOKKOS_INLINE_FUNCTION
   constexpr const T& operator[](size_t index) const {
     MUNDY_THROW_ASSERT(index < N * M, std::out_of_range, "AMatrix flat index out of bounds.");
-    return accessor_[index];
+    return impl::access_at(accessor_, index);
   }
 
   /// \brief Element access operator via flat index
@@ -253,7 +253,7 @@ class AMatrix<T, N, M, Accessor, Ownership::Views> {
   KOKKOS_INLINE_FUNCTION
   constexpr T& operator()(size_t index) {
     MUNDY_THROW_ASSERT(index < N * M, std::out_of_range, "AMatrix flat index out of bounds.");
-    return accessor_[index];
+    return impl::access_at(accessor_, index);
   }
 
   /// \brief Const element access operator via flat index
@@ -261,7 +261,7 @@ class AMatrix<T, N, M, Accessor, Ownership::Views> {
   KOKKOS_INLINE_FUNCTION
   constexpr const T& operator()(size_t index) const {
     MUNDY_THROW_ASSERT(index < N * M, std::out_of_range, "AMatrix flat index out of bounds.");
-    return accessor_[index];
+    return impl::access_at(accessor_, index);
   }
 
   /// \brief Element access operator via row and column indices
@@ -272,7 +272,7 @@ class AMatrix<T, N, M, Accessor, Ownership::Views> {
   constexpr T& operator()(size_t row, size_t col) {
     MUNDY_THROW_ASSERT(row < N, std::out_of_range, "AMatrix row index out of bounds.");
     MUNDY_THROW_ASSERT(col < M, std::out_of_range, "AMatrix column index out of bounds.");
-    return accessor_[row * M + col];
+    return impl::access_at(accessor_, row * M + col);
   }
 
   /// \brief Const element access operators
@@ -283,7 +283,7 @@ class AMatrix<T, N, M, Accessor, Ownership::Views> {
   constexpr const T& operator()(size_t row, size_t col) const {
     MUNDY_THROW_ASSERT(row < N, std::out_of_range, "AMatrix row index out of bounds.");
     MUNDY_THROW_ASSERT(col < M, std::out_of_range, "AMatrix column index out of bounds.");
-    return accessor_[row * M + col];
+    return impl::access_at(accessor_, row * M + col);
   }
 
   /// \brief Get the internal data accessor
@@ -845,7 +845,7 @@ class AMatrix<T, N, M, Accessor, Ownership::Owns> {
   KOKKOS_INLINE_FUNCTION
   constexpr T& operator[](size_t index) {
     MUNDY_THROW_ASSERT(index < N * M, std::out_of_range, "AMatrix flat index out of bounds.");
-    return accessor_[index];
+    return impl::access_at(accessor_, index);
   }
 
   /// \brief Const element access operator via flat index
@@ -853,7 +853,7 @@ class AMatrix<T, N, M, Accessor, Ownership::Owns> {
   KOKKOS_INLINE_FUNCTION
   constexpr const T& operator[](size_t index) const {
     MUNDY_THROW_ASSERT(index < N * M, std::out_of_range, "AMatrix flat index out of bounds.");
-    return accessor_[index];
+    return impl::access_at(accessor_, index);
   }
 
   /// \brief Element access operator via flat index
@@ -861,7 +861,7 @@ class AMatrix<T, N, M, Accessor, Ownership::Owns> {
   KOKKOS_INLINE_FUNCTION
   constexpr T& operator()(size_t index) {
     MUNDY_THROW_ASSERT(index < N * M, std::out_of_range, "AMatrix flat index out of bounds.");
-    return accessor_[index];
+    return impl::access_at(accessor_, index);
   }
 
   /// \brief Const element access operator via flat index
@@ -869,7 +869,7 @@ class AMatrix<T, N, M, Accessor, Ownership::Owns> {
   KOKKOS_INLINE_FUNCTION
   constexpr const T& operator()(size_t index) const {
     MUNDY_THROW_ASSERT(index < N * M, std::out_of_range, "AMatrix flat index out of bounds.");
-    return accessor_[index];
+    return impl::access_at(accessor_, index);
   }
 
   /// \brief Element access operator via row and column indices
@@ -881,7 +881,7 @@ class AMatrix<T, N, M, Accessor, Ownership::Owns> {
     MUNDY_THROW_ASSERT(row < N, std::out_of_range, "AMatrix row index out of bounds.");
     MUNDY_THROW_ASSERT(col < M, std::out_of_range, "AMatrix column index out of bounds.");
     // Row-major access
-    return accessor_[row * M + col];
+    return impl::access_at(accessor_, row * M + col);
   }
 
   /// \brief Const element access operators
@@ -892,7 +892,7 @@ class AMatrix<T, N, M, Accessor, Ownership::Owns> {
   constexpr const T& operator()(size_t row, size_t col) const {
     MUNDY_THROW_ASSERT(row < N, std::out_of_range, "AMatrix row index out of bounds.");
     MUNDY_THROW_ASSERT(col < M, std::out_of_range, "AMatrix column index out of bounds.");
-    return accessor_[row * M + col];
+    return impl::access_at(accessor_, row * M + col);
   }
 
   /// \brief Get the internal data accessor

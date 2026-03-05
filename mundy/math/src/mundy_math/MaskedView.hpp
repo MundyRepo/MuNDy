@@ -103,7 +103,7 @@ class MaskedAccessor<T, N, mask, Accessor, Ownership::Views> {
   /// \brief Element access operator
   /// \param[in] idx The index of the element.
   KOKKOS_INLINE_FUNCTION constexpr const auto& operator[](size_t idx) const {
-    return accessor_[map_index(idx)];
+    return impl::access_at(accessor_, map_index(idx));
   }
 };  // class MaskedAccessor
 
@@ -164,7 +164,7 @@ class MaskedAccessor<T, N, mask, Accessor, Ownership::Owns> {
   /// \brief Element access operator
   /// \param[in] idx The index of the element.
   KOKKOS_INLINE_FUNCTION constexpr const auto& operator[](size_t idx) const {
-    return accessor_[map_index(idx)];
+    return impl::access_at(accessor_, map_index(idx));
   }
 };  // class MaskedAccessor
 

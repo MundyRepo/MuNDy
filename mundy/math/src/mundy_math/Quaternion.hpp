@@ -236,7 +236,7 @@ class AQuaternion<T, Accessor, Ownership::Views> {
   KOKKOS_INLINE_FUNCTION
   constexpr T& operator[](size_t index) {
     MUNDY_THROW_ASSERT(index < 4, std::out_of_range, "AQuaternion index out of bounds.");
-    return accessor_[index];
+    return impl::access_at(accessor_, index);
   }
 
   /// \brief Const element access operator via a single index
@@ -244,7 +244,7 @@ class AQuaternion<T, Accessor, Ownership::Views> {
   KOKKOS_INLINE_FUNCTION
   constexpr const T& operator[](size_t index) const {
     MUNDY_THROW_ASSERT(index < 4, std::out_of_range, "AQuaternion index out of bounds.");
-    return accessor_[index];
+    return impl::access_at(accessor_, index);
   }
 
   /// \brief Element access operator via a single index
@@ -252,7 +252,7 @@ class AQuaternion<T, Accessor, Ownership::Views> {
   KOKKOS_INLINE_FUNCTION
   constexpr T& operator()(size_t index) {
     MUNDY_THROW_ASSERT(index < 4, std::out_of_range, "AQuaternion index out of bounds.");
-    return accessor_[index];
+    return impl::access_at(accessor_, index);
   }
 
   /// \brief Const element access operator via a single index
@@ -260,55 +260,55 @@ class AQuaternion<T, Accessor, Ownership::Views> {
   KOKKOS_INLINE_FUNCTION
   constexpr const T& operator()(size_t index) const {
     MUNDY_THROW_ASSERT(index < 4, std::out_of_range, "AQuaternion index out of bounds.");
-    return accessor_[index];
+    return impl::access_at(accessor_, index);
   }
 
   /// \brief Get a reference to the scalar component
   KOKKOS_INLINE_FUNCTION
   constexpr T& w() {
-    return accessor_[0];
+    return impl::access_at(accessor_, 0);
   }
 
   /// \brief Get a reference to the scalar component
   KOKKOS_INLINE_FUNCTION
   constexpr const T& w() const {
-    return accessor_[0];
+    return impl::access_at(accessor_, 0);
   }
 
   /// \brief Get a reference to the x component
   KOKKOS_INLINE_FUNCTION
   constexpr T& x() {
-    return accessor_[1];
+    return impl::access_at(accessor_, 1);
   }
 
   /// \brief Get a reference to the x component
   KOKKOS_INLINE_FUNCTION
   constexpr const T& x() const {
-    return accessor_[1];
+    return impl::access_at(accessor_, 1);
   }
 
   /// \brief Get a reference to the y component
   KOKKOS_INLINE_FUNCTION
   constexpr T& y() {
-    return accessor_[2];
+    return impl::access_at(accessor_, 2);
   }
 
   /// \brief Get a reference to the y component
   KOKKOS_INLINE_FUNCTION
   constexpr const T& y() const {
-    return accessor_[2];
+    return impl::access_at(accessor_, 2);
   }
 
   /// \brief Get a reference to the z component
   KOKKOS_INLINE_FUNCTION
   constexpr T& z() {
-    return accessor_[3];
+    return impl::access_at(accessor_, 3);
   }
 
   /// \brief Get a reference to the z component
   KOKKOS_INLINE_FUNCTION
   constexpr const T& z() const {
-    return accessor_[3];
+    return impl::access_at(accessor_, 3);
   }
 
   /// \brief Get the internal data accessor
@@ -346,10 +346,10 @@ class AQuaternion<T, Accessor, Ownership::Views> {
   /// \brief Cast (and copy) the quaternion to a different type
   template <typename U>
   KOKKOS_INLINE_FUNCTION constexpr auto cast() const {
-    return AQuaternion<U>{static_cast<U>(accessor_[0]),  //
-                          static_cast<U>(accessor_[1]),  //
-                          static_cast<U>(accessor_[2]),  //
-                          static_cast<U>(accessor_[3])};
+    return AQuaternion<U>{static_cast<U>(impl::access_at(accessor_, 0)),  //
+                          static_cast<U>(impl::access_at(accessor_, 1)),  //
+                          static_cast<U>(impl::access_at(accessor_, 2)),  //
+                          static_cast<U>(impl::access_at(accessor_, 3))};
   }
   //@}
 
@@ -365,10 +365,10 @@ class AQuaternion<T, Accessor, Ownership::Views> {
   constexpr void set(const T& w, const T& x, const T& y, const T& z)
     requires HasNonConstAccessOperator<Accessor, T>
   {
-    accessor_[0] = w;
-    accessor_[1] = x;
-    accessor_[2] = y;
-    accessor_[3] = z;
+    impl::access_at(accessor_, 0) = w;
+    impl::access_at(accessor_, 1) = x;
+    impl::access_at(accessor_, 2) = y;
+    impl::access_at(accessor_, 3) = z;
   }
 
   /// \brief Set all elements of the quaternion
@@ -378,10 +378,10 @@ class AQuaternion<T, Accessor, Ownership::Views> {
   constexpr void set(const T& w, const AVector3<T>& vec)
     requires HasNonConstAccessOperator<Accessor, T>
   {
-    accessor_[0] = w;
-    accessor_[1] = vec[0];
-    accessor_[2] = vec[1];
-    accessor_[3] = vec[2];
+    impl::access_at(accessor_, 0) = w;
+    impl::access_at(accessor_, 1) = vec[0];
+    impl::access_at(accessor_, 2) = vec[1];
+    impl::access_at(accessor_, 3) = vec[2];
   }
 
   /// \brief Set all elements of the vector using an accessor
@@ -391,10 +391,10 @@ class AQuaternion<T, Accessor, Ownership::Views> {
   KOKKOS_INLINE_FUNCTION constexpr void set(const OtherAccessor& accessor)
     requires HasNonConstAccessOperator<Accessor, T>
   {
-    accessor_[0] = accessor[0];
-    accessor_[1] = accessor[1];
-    accessor_[2] = accessor[2];
-    accessor_[3] = accessor[3];
+    impl::access_at(accessor_, 0) = impl::access_at(accessor, 0);
+    impl::access_at(accessor_, 1) = impl::access_at(accessor, 1);
+    impl::access_at(accessor_, 2) = impl::access_at(accessor, 2);
+    impl::access_at(accessor_, 3) = impl::access_at(accessor, 3);
   }
 
   /// \brief Set the quaternion vector component
@@ -403,9 +403,9 @@ class AQuaternion<T, Accessor, Ownership::Views> {
   constexpr void set_vector(const AVector3<T>& vec)
     requires HasNonConstAccessOperator<Accessor, T>
   {
-    accessor_[1] = vec[0];
-    accessor_[2] = vec[1];
-    accessor_[3] = vec[2];
+    impl::access_at(accessor_, 1) = vec[0];
+    impl::access_at(accessor_, 2) = vec[1];
+    impl::access_at(accessor_, 3) = vec[2];
   }
 
   /// \brief Normalize the quaternion in place
@@ -416,10 +416,10 @@ class AQuaternion<T, Accessor, Ownership::Views> {
     const T quat_norm = norm(*this);
     MUNDY_THROW_ASSERT(!is_close(quat_norm, T(0)), std::runtime_error, "AQuaternion: Cannot normalize zero norm.");
     const T inv_norm = T(1) / quat_norm;
-    accessor_[0] *= inv_norm;
-    accessor_[1] *= inv_norm;
-    accessor_[2] *= inv_norm;
-    accessor_[3] *= inv_norm;
+    impl::access_at(accessor_, 0) *= inv_norm;
+    impl::access_at(accessor_, 1) *= inv_norm;
+    impl::access_at(accessor_, 2) *= inv_norm;
+    impl::access_at(accessor_, 3) *= inv_norm;
   }
 
   /// \brief Conjugate the quaternion in place
@@ -427,9 +427,9 @@ class AQuaternion<T, Accessor, Ownership::Views> {
   constexpr void conjugate()
     requires HasNonConstAccessOperator<Accessor, T>
   {
-    accessor_[1] = -accessor_[1];
-    accessor_[2] = -accessor_[2];
-    accessor_[3] = -accessor_[3];
+    impl::access_at(accessor_, 1) = -impl::access_at(accessor_, 1);
+    impl::access_at(accessor_, 2) = -impl::access_at(accessor_, 2);
+    impl::access_at(accessor_, 3) = -impl::access_at(accessor_, 3);
   }
 
   /// \brief Invert the quaternion in place
@@ -437,15 +437,17 @@ class AQuaternion<T, Accessor, Ownership::Views> {
   constexpr void invert()
     requires HasNonConstAccessOperator<Accessor, T>
   {
-    const T quat_norm_squared = accessor_[0] * accessor_[0] + accessor_[1] * accessor_[1] +
-                                accessor_[2] * accessor_[2] + accessor_[3] * accessor_[3];
+    const T quat_norm_squared = impl::access_at(accessor_, 0) * impl::access_at(accessor_, 0) +
+                                impl::access_at(accessor_, 1) * impl::access_at(accessor_, 1) +
+                                impl::access_at(accessor_, 2) * impl::access_at(accessor_, 2) +
+                                impl::access_at(accessor_, 3) * impl::access_at(accessor_, 3);
     MUNDY_THROW_ASSERT(!is_close(quat_norm_squared, T(0)), std::runtime_error, "AQuaternion: Cannot invert zero norm.");
     const T inv_norm_squared = T(1) / quat_norm_squared;
     conjugate();
-    accessor_[0] *= inv_norm_squared;
-    accessor_[1] *= inv_norm_squared;
-    accessor_[2] *= inv_norm_squared;
-    accessor_[3] *= inv_norm_squared;
+    impl::access_at(accessor_, 0) *= inv_norm_squared;
+    impl::access_at(accessor_, 1) *= inv_norm_squared;
+    impl::access_at(accessor_, 2) *= inv_norm_squared;
+    impl::access_at(accessor_, 3) *= inv_norm_squared;
   }
   //@}
 
@@ -455,13 +457,15 @@ class AQuaternion<T, Accessor, Ownership::Views> {
   /// \brief Unary plus operator
   KOKKOS_INLINE_FUNCTION
   constexpr AQuaternion<T> operator+() const {
-    return AQuaternion<T>(+accessor_[0], +accessor_[1], +accessor_[2], +accessor_[3]);
+    return AQuaternion<T>(+impl::access_at(accessor_, 0), +impl::access_at(accessor_, 1),
+                          +impl::access_at(accessor_, 2), +impl::access_at(accessor_, 3));
   }
 
   /// \brief Unary minus operator
   KOKKOS_INLINE_FUNCTION
   constexpr AQuaternion<T> operator-() const {
-    return AQuaternion<T>(-accessor_[0], -accessor_[1], -accessor_[2], -accessor_[3]);
+    return AQuaternion<T>(-impl::access_at(accessor_, 0), -impl::access_at(accessor_, 1),
+                          -impl::access_at(accessor_, 2), -impl::access_at(accessor_, 3));
   }
   //@}
 
@@ -731,7 +735,7 @@ class AQuaternion<T, Accessor, Ownership::Owns> {
   KOKKOS_INLINE_FUNCTION
   constexpr T& operator[](size_t index) {
     MUNDY_THROW_ASSERT(index < 4, std::out_of_range, "AQuaternion index out of bounds.");
-    return accessor_[index];
+    return impl::access_at(accessor_, index);
   }
 
   /// \brief Const element access operator via a single index
@@ -739,7 +743,7 @@ class AQuaternion<T, Accessor, Ownership::Owns> {
   KOKKOS_INLINE_FUNCTION
   constexpr const T& operator[](size_t index) const {
     MUNDY_THROW_ASSERT(index < 4, std::out_of_range, "AQuaternion index out of bounds.");
-    return accessor_[index];
+    return impl::access_at(accessor_, index);
   }
 
   /// \brief Element access operator via a single index
@@ -747,7 +751,7 @@ class AQuaternion<T, Accessor, Ownership::Owns> {
   KOKKOS_INLINE_FUNCTION
   constexpr T& operator()(size_t index) {
     MUNDY_THROW_ASSERT(index < 4, std::out_of_range, "AQuaternion index out of bounds.");
-    return accessor_[index];
+    return impl::access_at(accessor_, index);
   }
 
   /// \brief Const element access operator via a single index
@@ -755,55 +759,55 @@ class AQuaternion<T, Accessor, Ownership::Owns> {
   KOKKOS_INLINE_FUNCTION
   constexpr const T& operator()(size_t index) const {
     MUNDY_THROW_ASSERT(index < 4, std::out_of_range, "AQuaternion index out of bounds.");
-    return accessor_[index];
+    return impl::access_at(accessor_, index);
   }
 
   /// \brief Get a reference to the scalar component
   KOKKOS_INLINE_FUNCTION
   constexpr T& w() {
-    return accessor_[0];
+    return impl::access_at(accessor_, 0);
   }
 
   /// \brief Get a reference to the scalar component
   KOKKOS_INLINE_FUNCTION
   constexpr const T& w() const {
-    return accessor_[0];
+    return impl::access_at(accessor_, 0);
   }
 
   /// \brief Get a reference to the x component
   KOKKOS_INLINE_FUNCTION
   constexpr T& x() {
-    return accessor_[1];
+    return impl::access_at(accessor_, 1);
   }
 
   /// \brief Get a reference to the x component
   KOKKOS_INLINE_FUNCTION
   constexpr const T& x() const {
-    return accessor_[1];
+    return impl::access_at(accessor_, 1);
   }
 
   /// \brief Get a reference to the y component
   KOKKOS_INLINE_FUNCTION
   constexpr T& y() {
-    return accessor_[2];
+    return impl::access_at(accessor_, 2);
   }
 
   /// \brief Get a reference to the y component
   KOKKOS_INLINE_FUNCTION
   constexpr const T& y() const {
-    return accessor_[2];
+    return impl::access_at(accessor_, 2);
   }
 
   /// \brief Get a reference to the z component
   KOKKOS_INLINE_FUNCTION
   constexpr T& z() {
-    return accessor_[3];
+    return impl::access_at(accessor_, 3);
   }
 
   /// \brief Get a reference to the z component
   KOKKOS_INLINE_FUNCTION
   constexpr const T& z() const {
-    return accessor_[3];
+    return impl::access_at(accessor_, 3);
   }
 
   /// \brief Get the internal data accessor
@@ -841,10 +845,10 @@ class AQuaternion<T, Accessor, Ownership::Owns> {
   /// \brief Cast (and copy) the quaternion to a different type
   template <typename U>
   KOKKOS_INLINE_FUNCTION constexpr auto cast() const {
-    return AQuaternion<U>{static_cast<U>(accessor_[0]),  //
-                          static_cast<U>(accessor_[1]),  //
-                          static_cast<U>(accessor_[2]),  //
-                          static_cast<U>(accessor_[3])};
+    return AQuaternion<U>{static_cast<U>(impl::access_at(accessor_, 0)),  //
+                          static_cast<U>(impl::access_at(accessor_, 1)),  //
+                          static_cast<U>(impl::access_at(accessor_, 2)),  //
+                          static_cast<U>(impl::access_at(accessor_, 3))};
   }
   //@}
 
@@ -860,10 +864,10 @@ class AQuaternion<T, Accessor, Ownership::Owns> {
   constexpr void set(const T& w, const T& x, const T& y, const T& z)
     requires HasNonConstAccessOperator<Accessor, T>
   {
-    accessor_[0] = w;
-    accessor_[1] = x;
-    accessor_[2] = y;
-    accessor_[3] = z;
+    impl::access_at(accessor_, 0) = w;
+    impl::access_at(accessor_, 1) = x;
+    impl::access_at(accessor_, 2) = y;
+    impl::access_at(accessor_, 3) = z;
   }
 
   /// \brief Set all elements of the quaternion
@@ -873,10 +877,10 @@ class AQuaternion<T, Accessor, Ownership::Owns> {
   constexpr void set(const T& w, const AVector3<T>& vec)
     requires HasNonConstAccessOperator<Accessor, T>
   {
-    accessor_[0] = w;
-    accessor_[1] = vec[0];
-    accessor_[2] = vec[1];
-    accessor_[3] = vec[2];
+    impl::access_at(accessor_, 0) = w;
+    impl::access_at(accessor_, 1) = vec[0];
+    impl::access_at(accessor_, 2) = vec[1];
+    impl::access_at(accessor_, 3) = vec[2];
   }
 
   /// \brief Set all elements of the vector using an accessor
@@ -886,10 +890,10 @@ class AQuaternion<T, Accessor, Ownership::Owns> {
   KOKKOS_INLINE_FUNCTION constexpr void set(const OtherAccessor& accessor)
     requires HasNonConstAccessOperator<Accessor, T>
   {
-    accessor_[0] = accessor[0];
-    accessor_[1] = accessor[1];
-    accessor_[2] = accessor[2];
-    accessor_[3] = accessor[3];
+    impl::access_at(accessor_, 0) = impl::access_at(accessor, 0);
+    impl::access_at(accessor_, 1) = impl::access_at(accessor, 1);
+    impl::access_at(accessor_, 2) = impl::access_at(accessor, 2);
+    impl::access_at(accessor_, 3) = impl::access_at(accessor, 3);
   }
 
   /// \brief Set the quaternion vector component
@@ -898,9 +902,9 @@ class AQuaternion<T, Accessor, Ownership::Owns> {
   constexpr void set_vector(const AVector3<T>& vec)
     requires HasNonConstAccessOperator<Accessor, T>
   {
-    accessor_[1] = vec[0];
-    accessor_[2] = vec[1];
-    accessor_[3] = vec[2];
+    impl::access_at(accessor_, 1) = vec[0];
+    impl::access_at(accessor_, 2) = vec[1];
+    impl::access_at(accessor_, 3) = vec[2];
   }
 
   /// \brief Normalize the quaternion in place
@@ -911,10 +915,10 @@ class AQuaternion<T, Accessor, Ownership::Owns> {
     const T quat_norm = norm(*this);
     MUNDY_THROW_ASSERT(!is_close(quat_norm, T(0)), std::runtime_error, "AQuaternion: Cannot normalize zero norm.");
     const T inv_norm = T(1) / quat_norm;
-    accessor_[0] *= inv_norm;
-    accessor_[1] *= inv_norm;
-    accessor_[2] *= inv_norm;
-    accessor_[3] *= inv_norm;
+    impl::access_at(accessor_, 0) *= inv_norm;
+    impl::access_at(accessor_, 1) *= inv_norm;
+    impl::access_at(accessor_, 2) *= inv_norm;
+    impl::access_at(accessor_, 3) *= inv_norm;
   }
 
   /// \brief Conjugate the quaternion in place
@@ -922,9 +926,9 @@ class AQuaternion<T, Accessor, Ownership::Owns> {
   constexpr void conjugate()
     requires HasNonConstAccessOperator<Accessor, T>
   {
-    accessor_[1] = -accessor_[1];
-    accessor_[2] = -accessor_[2];
-    accessor_[3] = -accessor_[3];
+    impl::access_at(accessor_, 1) = -impl::access_at(accessor_, 1);
+    impl::access_at(accessor_, 2) = -impl::access_at(accessor_, 2);
+    impl::access_at(accessor_, 3) = -impl::access_at(accessor_, 3);
   }
 
   /// \brief Invert the quaternion in place
@@ -932,15 +936,17 @@ class AQuaternion<T, Accessor, Ownership::Owns> {
   constexpr void invert()
     requires HasNonConstAccessOperator<Accessor, T>
   {
-    const T quat_norm_squared = accessor_[0] * accessor_[0] + accessor_[1] * accessor_[1] +
-                                accessor_[2] * accessor_[2] + accessor_[3] * accessor_[3];
+    const T quat_norm_squared = impl::access_at(accessor_, 0) * impl::access_at(accessor_, 0) +
+                                impl::access_at(accessor_, 1) * impl::access_at(accessor_, 1) +
+                                impl::access_at(accessor_, 2) * impl::access_at(accessor_, 2) +
+                                impl::access_at(accessor_, 3) * impl::access_at(accessor_, 3);
     MUNDY_THROW_ASSERT(!is_close(quat_norm_squared, T(0)), std::runtime_error, "AQuaternion: Cannot invert zero norm.");
     const T inv_norm_squared = T(1) / quat_norm_squared;
     conjugate();
-    accessor_[0] *= inv_norm_squared;
-    accessor_[1] *= inv_norm_squared;
-    accessor_[2] *= inv_norm_squared;
-    accessor_[3] *= inv_norm_squared;
+    impl::access_at(accessor_, 0) *= inv_norm_squared;
+    impl::access_at(accessor_, 1) *= inv_norm_squared;
+    impl::access_at(accessor_, 2) *= inv_norm_squared;
+    impl::access_at(accessor_, 3) *= inv_norm_squared;
   }
   //@}
 
@@ -950,13 +956,15 @@ class AQuaternion<T, Accessor, Ownership::Owns> {
   /// \brief Unary plus operator
   KOKKOS_INLINE_FUNCTION
   constexpr AQuaternion<T> operator+() const {
-    return AQuaternion<T>(+accessor_[0], +accessor_[1], +accessor_[2], +accessor_[3]);
+    return AQuaternion<T>(+impl::access_at(accessor_, 0), +impl::access_at(accessor_, 1),
+                          +impl::access_at(accessor_, 2), +impl::access_at(accessor_, 3));
   }
 
   /// \brief Unary minus operator
   KOKKOS_INLINE_FUNCTION
   constexpr AQuaternion<T> operator-() const {
-    return AQuaternion<T>(-accessor_[0], -accessor_[1], -accessor_[2], -accessor_[3]);
+    return AQuaternion<T>(-impl::access_at(accessor_, 0), -impl::access_at(accessor_, 1),
+                          -impl::access_at(accessor_, 2), -impl::access_at(accessor_, 3));
   }
   //@}
 

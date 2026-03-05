@@ -198,7 +198,6 @@ struct TestObjectTraits;
 template <>
 struct TestObjectTraits<TestObjectType::POINT> {
   using type = Point<double>;
-  static constexpr TestObjectType object_type = TestObjectType::POINT;
   static constexpr unsigned num_points = 1;
 
   // Function to generate a random point within a given bounding box
@@ -221,7 +220,6 @@ struct TestObjectTraits<TestObjectType::POINT> {
 template <>
 struct TestObjectTraits<TestObjectType::LINE> {
   using type = Line<double>;
-  static constexpr TestObjectType object_type = TestObjectType::LINE;
   static constexpr unsigned num_points = 1;
 
   // Function to generate a random line within a given bounding box
@@ -244,7 +242,6 @@ struct TestObjectTraits<TestObjectType::LINE> {
 template <>
 struct TestObjectTraits<TestObjectType::LINE_SEGMENT> {
   using type = LineSegment<double>;
-  static constexpr TestObjectType object_type = TestObjectType::LINE_SEGMENT;
   static constexpr unsigned num_points = 2;
 
   // Function to generate a random line segment within a given bounding box
@@ -268,7 +265,6 @@ struct TestObjectTraits<TestObjectType::LINE_SEGMENT> {
 template <>
 struct TestObjectTraits<TestObjectType::SPHERE> {
   using type = Sphere<double>;
-  static constexpr TestObjectType object_type = TestObjectType::SPHERE;
   static constexpr unsigned num_points = 1;
 
   // Function to generate a random sphere within a given bounding box
@@ -296,7 +292,6 @@ struct TestObjectTraits<TestObjectType::SPHERE> {
 template <>
 struct TestObjectTraits<TestObjectType::ELLIPSOID> {
   using type = Ellipsoid<double>;
-  static constexpr TestObjectType object_type = TestObjectType::ELLIPSOID;
   static constexpr unsigned num_points = 1;
 
   // Function to generate a random ellipsoid within a given bounding box
@@ -325,7 +320,6 @@ struct TestObjectTraits<TestObjectType::ELLIPSOID> {
 template <>
 struct TestObjectTraits<TestObjectType::CIRCLE_3D> {
   using type = Circle3D<double>;
-  static constexpr TestObjectType object_type = TestObjectType::CIRCLE_3D;
   static constexpr unsigned num_points = 1;
 
   // Function to generate a random circle3D within a given bounding box
@@ -878,7 +872,6 @@ TEST(PeriodicMetric, UnwrapPointsSpanning) {
   auto disjoint_box = translate(box, math::Vector3<double>{domain_width, domain_width, domain_width});
 
   auto periodic_metric = periodic_metric_from_unit_cell(cell_size);
-  auto periodic_metric_scale_only = periodic_scaled_metric_from_unit_cell(cell_size);
 
   for (size_t t = 0; t < num_trials; ++t) {
     MUNDY_THROW_ASSERT(counter <= std::numeric_limits<uint32_t>::max(), std::overflow_error,

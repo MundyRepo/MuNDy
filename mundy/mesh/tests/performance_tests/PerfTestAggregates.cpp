@@ -56,7 +56,7 @@ namespace mesh {
 namespace {
 
 void test_direct(const stk::mesh::BulkData& bulk_data, stk::mesh::Part& sphere_part,
-                 stk::mesh::Field<double>& node_center_field, stk::mesh::Field<double>& node_force_field,
+                 stk::mesh::Field<double>& node_force_field,
                  stk::mesh::Field<double>& node_velocity_field, stk::mesh::Field<double>& elem_radius_field) {
   double viscosity = 0.1;
   constexpr double pi = Kokkos::numbers::pi_v<double>;
@@ -81,7 +81,7 @@ void test_direct(const stk::mesh::BulkData& bulk_data, stk::mesh::Part& sphere_p
 }
 
 void test_aggregate(const stk::mesh::BulkData& bulk_data, stk::mesh::Part& sphere_part,
-                    stk::mesh::Field<double>& node_center_field, stk::mesh::Field<double>& node_force_field,
+                    stk::mesh::Field<double>& node_force_field,
                     stk::mesh::Field<double>& node_velocity_field, stk::mesh::Field<double>& elem_radius_field) {
   double viscosity = 0.1;
   constexpr double pi = Kokkos::numbers::pi_v<double>;
@@ -89,14 +89,12 @@ void test_aggregate(const stk::mesh::BulkData& bulk_data, stk::mesh::Part& spher
   const double one_over_6pi_mu = one_over_6pi / viscosity;
 
   // Create the accessors
-  auto center_accessor = Vector3FieldComponent(node_center_field);
   auto force_accessor = Vector3FieldComponent(node_force_field);
   auto velocity_accessor = Vector3FieldComponent(node_velocity_field);
   auto radius_accessor = ScalarFieldComponent(elem_radius_field);
 
   // Create an aggregate for the spheres
   const auto sphere_data = make_aggregate<stk::topology::PARTICLE>(bulk_data, sphere_part)
-                               .add_component<CENTER, stk::topology::NODE_RANK>(center_accessor)
                                .add_component<FORCE, stk::topology::NODE_RANK>(force_accessor)
                                .add_component<VELOCITY, stk::topology::NODE_RANK>(velocity_accessor)
                                .add_component<RADIUS, stk::topology::ELEM_RANK>(radius_accessor);
@@ -115,7 +113,7 @@ void test_aggregate(const stk::mesh::BulkData& bulk_data, stk::mesh::Part& spher
 }
 
 void run_test() {
-  // The aggregate will be a sphere with elem radius, node center, node velocity, and node force.
+  // The aggregate will be a sphere with elem radius, node velocity, and node force.
   // We will apply a random force to each sphere, use it to compute their velocity according to drag,
   // and then we will move the spheres according to their velocity.
 
@@ -134,14 +132,12 @@ void run_test() {
   stk::mesh::BulkData& bulk_data = *bulk_data_ptr;
 
   using DoubleField = stk::mesh::Field<double>;
-  DoubleField& node_center_field = meta_data.declare_field<double>(stk::topology::NODE_RANK, "CENTER");
   DoubleField& node_force_field = meta_data.declare_field<double>(stk::topology::NODE_RANK, "FORCE");
   DoubleField& node_velocity_field = meta_data.declare_field<double>(stk::topology::NODE_RANK, "VELOCITY");
   DoubleField& elem_radius_field = meta_data.declare_field<double>(stk::topology::ELEM_RANK, "RADIUS");
 
   stk::mesh::Part& sphere_part = meta_data.declare_part_with_topology("SPHERES", stk::topology::PARTICLE);
 
-  stk::mesh::put_field_on_mesh(node_center_field, meta_data.universal_part(), 3, nullptr);
   stk::mesh::put_field_on_mesh(node_force_field, meta_data.universal_part(), 3, nullptr);
   stk::mesh::put_field_on_mesh(node_velocity_field, meta_data.universal_part(), 3, nullptr);
   stk::mesh::put_field_on_mesh(elem_radius_field, meta_data.universal_part(), 1, nullptr);
@@ -156,7 +152,6 @@ void run_test() {
     bulk_data.declare_relation(elem, node, 0);
 
     // Populate the fields
-    vector3_field_data(node_center_field, node).set(1.1 * static_cast<double>(i), 2.2 * static_cast<double>(i), 3.3);
     vector3_field_data(node_force_field, node).set(5.0, 6.0, 7.0);
     vector3_field_data(node_velocity_field, node).set(1.0, 2.0, 3.0);
     scalar_field_data(elem_radius_field, elem).set(0.5);
@@ -168,10 +163,10 @@ void run_test() {
   bench.relative(true).title("Agg").unit("op").performanceCounters(true).minEpochIterations(1000);
 
   bench.run("direct", [&] {
-    test_direct(bulk_data, sphere_part, node_center_field, node_force_field, node_velocity_field, elem_radius_field);
+    test_direct(bulk_data, sphere_part, node_force_field, node_velocity_field, elem_radius_field);
   });
   bench.run("aggregates", [&] {
-    test_aggregate(bulk_data, sphere_part, node_center_field, node_force_field, node_velocity_field, elem_radius_field);
+    test_aggregate(bulk_data, sphere_part, node_force_field, node_velocity_field, elem_radius_field);
   });
 }
 
