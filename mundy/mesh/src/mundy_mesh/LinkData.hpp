@@ -443,7 +443,7 @@ class LinkData {
   /// If the global number of requests is non-zero, this function will enter a modification cycle if not already in one.
   ///
   /// \param assume_fully_consistent [in] If we should assume that the requests are fully consistent or not.
-  void process_requests(bool assume_fully_consistent = false) {
+  void process_requests(bool /*assume_fully_consistent*/ = false) {
     MUNDY_THROW_REQUIRE(false, std::invalid_argument, "Processing requests not implemented yet.");
   }
   //@}

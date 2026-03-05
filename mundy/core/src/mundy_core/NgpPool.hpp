@@ -141,7 +141,7 @@ class NgpPoolT {
     // For those not familiar with atomic_fetch_sub, it returns the value before the subtraction.
     our_size_t old_size = Kokkos::atomic_fetch_sub(&ngp_size_.view_host()(), 1);
 
-    if (old_size - 1 < 0) {
+    if (old_size == 0) {
       MUNDY_THROW_ASSERT(false, std::runtime_error, "Attempting to acquire an object from an empty pool.");
       return value_type();
     }

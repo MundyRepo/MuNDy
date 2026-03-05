@@ -63,9 +63,6 @@ struct RegistrationStringValueWrapper {
   /// \brief The string literal's content.
   char value_[StrSize];
 
-  /// \brief The string literal's size.
-  static constexpr size_t size = StrSize;
-
   /// \brief Compile-time concatenation with another RegistrationStringValueWrapper.
   /// \param rhs The right-hand side of the concatenation
   /// \return A new RegistrationStringValueWrapper with the combined content of the two input

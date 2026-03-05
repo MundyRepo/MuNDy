@@ -177,6 +177,39 @@ KOKKOS_INLINE_FUNCTION constexpr StringLiteral<N> make_string_literal(const char
   return StringLiteral<N>(str);
 }
 
+template <typename T>
+struct is_char_array : std::false_type {
+};
+
+template <size_t N>
+struct is_char_array<char[N]> : std::true_type {
+};
+
+template <size_t N>
+struct is_char_array<const char[N]> : std::true_type {
+};
+
+template <typename T>
+inline constexpr bool is_char_array_v = is_char_array<std::remove_cvref_t<T>>::value;
+
+template <typename T>
+struct is_string_literal : is_char_array<T> {
+};
+
+template <typename T>
+inline constexpr bool is_string_literal_v = is_string_literal<std::remove_cvref_t<T>>::value;
+
+template <typename T>
+struct is_our_string_literal : std::false_type {
+};
+
+template <size_t N>
+struct is_our_string_literal<StringLiteral<N>> : std::true_type {
+};
+
+template <typename T>
+inline constexpr bool is_our_string_literal_v = is_our_string_literal<std::remove_cvref_t<T>>::value;
+
 }  // namespace core
 
 }  // namespace mundy
@@ -185,7 +218,10 @@ KOKKOS_INLINE_FUNCTION constexpr StringLiteral<N> make_string_literal(const char
 //@{
 
 #define MUNDY_IS_CHAR_ARRAY(x) \
-  ([&]<class __T = char>() constexpr { return std::is_same_v<__T const(&)[sizeof(x)], decltype(x)>; }())
+  ([&]() constexpr {                      \
+    static_cast<void>(sizeof(x));         \
+    return ::mundy::core::is_char_array_v<decltype(x)>; \
+  }())
 
 #define MUNDY_IS_STRING_LITERAL(x)                                          \
   ([&]<class __mundy_T = char>() constexpr {                                \
@@ -194,7 +230,10 @@ KOKKOS_INLINE_FUNCTION constexpr StringLiteral<N> make_string_literal(const char
   }())
 
 #define MUNDY_IS_OUR_STRING_LITERAL(x) \
-  (std::is_same_v<mundy::core::StringLiteral<sizeof(x)>, std::decay_t<decltype(x)>>)
+  ([&]() constexpr {                              \
+    static_cast<void>(sizeof(x));                 \
+    return ::mundy::core::is_our_string_literal_v<decltype(x)>; \
+  }())
 //@}
 
 #endif  // MUNDY_CORE_STRINGLITERAL_HPP_

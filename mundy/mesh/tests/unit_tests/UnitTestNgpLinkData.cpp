@@ -142,7 +142,7 @@ void declare_and_validate_relations(const TestContext& context,
 
     // Declare relations
     for (size_t j = 0; j < Dimensionality; ++j) {
-      link_data.coo_data().declare_relation(entities[0], entities[j + 1], j);
+      link_data.coo_data().declare_relation(entities[0], entities[j + size_t(1)], j);
 
       // Validate linked entity, rank, and ID
       EXPECT_EQ(link_data.coo_data().get_linked_entity(entities[0], j), entities[j + 1]);
@@ -273,7 +273,7 @@ void modify_ngp_link_data(const TestContext& context, LinkData& link_data) {
 }
 
 template <size_t Dimensionality>
-void validate_crs_connectivity(const TestContext& context, LinkInitializationData<Dimensionality>& link_init_data,
+void validate_crs_connectivity(const TestContext& /*context*/, LinkInitializationData<Dimensionality>& link_init_data,
                                LinkData& link_data) {
   NgpLinkData& ngp_link_data = get_updated_ngp_link_data(link_data);
   ngp_link_data.update_crs_from_coo();

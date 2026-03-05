@@ -41,6 +41,14 @@ namespace {
 TEST(ThrowAssert, Predicates) {
   // These are all the language features we need to be true for MUNDY_THROW_REQUIRE to operate as expected.
 
+  // Check type-trait interfaces.
+  static_assert(is_char_array_v<const char[3]>);
+  static_assert(!is_char_array_v<const char*>);
+  static_assert(is_string_literal_v<const char[3]>);
+  static_assert(!is_string_literal_v<int>);
+  static_assert(!is_our_string_literal_v<const char[3]>);
+  static_assert(is_our_string_literal_v<decltype(make_string_literal("b"))>);
+
   // Check that is_string_literal works as expected
   static_assert(MUNDY_IS_STRING_LITERAL("string literal"));
   static_assert(!MUNDY_IS_STRING_LITERAL(42));

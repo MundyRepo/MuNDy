@@ -25,9 +25,12 @@
 #include <cstddef>
 #include <concepts>
 #include <initializer_list>
+#include <stdexcept>
+#include <type_traits>
 #include <utility>
 
 // Mundy
+#include <mundy_core/throw_assert.hpp>
 #include <mundy_math/impl/AccessorImpl.hpp>
 
 namespace mundy {
@@ -137,14 +140,106 @@ struct Invalid {};
 
 namespace impl {
 
+struct SizeTOnly {
+  constexpr operator std::size_t() const {
+    return 0;
+  }
+  constexpr operator unsigned() const = delete;
+  constexpr operator long int() const = delete;
+  constexpr operator int() const = delete;
+};
+
+struct UnsignedOnly {
+  constexpr operator unsigned() const {
+    return 0u;
+  }
+  constexpr operator std::size_t() const = delete;
+  constexpr operator long int() const = delete;
+  constexpr operator int() const = delete;
+};
+
+struct LongIntOnly {
+  constexpr operator long int() const {
+    return 0l;
+  }
+  constexpr operator std::size_t() const = delete;
+  constexpr operator unsigned() const = delete;
+  constexpr operator int() const = delete;
+};
+
+struct IntOnly {
+  constexpr operator int() const {
+    return 0;
+  }
+  constexpr operator std::size_t() const = delete;
+  constexpr operator unsigned() const = delete;
+  constexpr operator long int() const = delete;
+};
+
+template <typename Accessor>
+concept SubscriptTakesSizeT = requires { std::declval<Accessor>()[SizeTOnly{}]; };
+
+template <typename Accessor>
+concept SubscriptTakesUnsigned = requires { std::declval<Accessor>()[UnsignedOnly{}]; };
+
+template <typename Accessor>
+concept SubscriptTakesLongInt = requires { std::declval<Accessor>()[LongIntOnly{}]; };
+
+template <typename Accessor>
+concept SubscriptTakesInt = requires { std::declval<Accessor>()[IntOnly{}]; };
+
+template <typename Accessor>
+concept CallTakesSizeT = requires { std::declval<Accessor>()(SizeTOnly{}); };
+
+template <typename Accessor>
+concept CallTakesUnsigned = requires { std::declval<Accessor>()(UnsignedOnly{}); };
+
+template <typename Accessor>
+concept CallTakesLongInt = requires { std::declval<Accessor>()(LongIntOnly{}); };
+
+template <typename Accessor>
+concept CallTakesInt = requires { std::declval<Accessor>()(IntOnly{}); };
+
+template <typename T>
+inline constexpr bool dependent_false_v = false;
+
+template <typename IndexType>
+KOKKOS_INLINE_FUNCTION constexpr IndexType checked_index_cast(const size_t idx) {
+  MUNDY_THROW_ASSERT(idx <= static_cast<size_t>(Kokkos::Experimental::finite_max_v<IndexType>), std::out_of_range,
+                     "Accessor index exceeds maximum representable index type.");
+  return static_cast<IndexType>(idx);
+}
+
 /// \brief Unified index accessor with [] preferred over () if both are available.
 template <typename Accessor>
 KOKKOS_INLINE_FUNCTION constexpr decltype(auto) access_at(Accessor&& accessor, size_t idx) {
   if constexpr (HasSubscriptOperator<Accessor>) {
-    return std::forward<Accessor>(accessor)[idx];
+    if constexpr (SubscriptTakesSizeT<Accessor&&>) {
+      return std::forward<Accessor>(accessor)[checked_index_cast<size_t>(idx)];
+    } else if constexpr (SubscriptTakesUnsigned<Accessor&&>) {
+      return std::forward<Accessor>(accessor)[checked_index_cast<unsigned>(idx)];
+    } else if constexpr (SubscriptTakesLongInt<Accessor&&>) {
+      return std::forward<Accessor>(accessor)[checked_index_cast<long int>(idx)];
+    } else if constexpr (SubscriptTakesInt<Accessor&&>) {
+      return std::forward<Accessor>(accessor)[checked_index_cast<int>(idx)];
+    } else {
+      static_assert(dependent_false_v<Accessor>,
+                    "Accessor operator[] must accept one of: size_t, unsigned, long int, int.");
+    }
   } else {
     static_assert(HasCallOperator<Accessor>, "Accessor must support either operator[] or operator().");
-    return std::forward<Accessor>(accessor)(idx);
+    if constexpr (CallTakesSizeT<Accessor&&>) {
+      return std::forward<Accessor>(accessor)(checked_index_cast<size_t>(idx));
+    } else if constexpr (CallTakesUnsigned<Accessor&&>) {
+      return std::forward<Accessor>(accessor)(checked_index_cast<unsigned>(idx));
+    } else if constexpr (CallTakesLongInt<Accessor&&>) {
+      return std::forward<Accessor>(accessor)(checked_index_cast<long int>(idx));
+    } else if constexpr (CallTakesInt<Accessor&&>) {
+      return std::forward<Accessor>(accessor)(checked_index_cast<int>(idx));
+    } else {
+      static_assert(dependent_false_v<Accessor>,
+                    "Accessor operator() must accept one of: size_t, unsigned, long int, int.");
+    }
   }
 }
 

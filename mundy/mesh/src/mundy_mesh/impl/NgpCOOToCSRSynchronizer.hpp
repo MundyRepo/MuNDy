@@ -114,7 +114,7 @@ class NgpCOOToCSRSynchronizerT {
   ///  1. A reduction over all selected partitions to check if any of the CSR buckets are dirty.
   ///  2. A reduction over all selected links to check if any of the links are dirty.
   /// These aren't expensive operations and they're designed to be fast/GPU-compatible, but they aren't free.
-  static bool is_crs_up_to_date(NgpLinkCSRDataT<NgpMemSpace>& crs_data, NgpLinkCOODataT<NgpMemSpace>& coo_data,
+  static bool is_crs_up_to_date(NgpLinkCSRDataT<NgpMemSpace>& crs_data, NgpLinkCOODataT<NgpMemSpace>& /*coo_data*/,
                                 const stk::mesh::Selector& selector) {
     Kokkos::Profiling::pushRegion("NgpCOOToCSRSynchronizerT::is_crs_up_to_date");
 
@@ -128,11 +128,11 @@ class NgpCOOToCSRSynchronizerT {
     const NgpLinkCSRPartitionView& partitions = crs_data.get_or_create_crs_partitions(link_subset_selector);
     size_t num_partitions = partitions.extent(0);
     bool crs_buckets_up_to_date = true;
-    for (unsigned i = 0; i < num_partitions; ++i) {
+    for (size_t i = 0; i < num_partitions; ++i) {
       const NgpLinkCSRPartitionT<NgpMemSpace>& partition = partitions(i);
       for (stk::topology::rank_t rank = stk::topology::NODE_RANK; rank < stk::topology::NUM_RANKS; ++rank) {
-        const unsigned num_buckets = partition.num_buckets(rank);
-        for (unsigned bucket_index = 0; bucket_index < num_buckets; ++bucket_index) {
+        const size_t num_buckets = partition.num_buckets(rank);
+        for (size_t bucket_index = 0; bucket_index < num_buckets; ++bucket_index) {
           const auto& crs_bucket_conn = partition.get_crs_bucket_conn(rank, bucket_index);
           if (impl::get_dirty_flag(crs_bucket_conn)) {
             crs_buckets_up_to_date = false;
@@ -305,12 +305,12 @@ class NgpCOOToCSRSynchronizerT {
           // Fetch our bucket
           const unsigned bucket_id = bucket_ids.get<stk::mesh::NgpMesh::MeshExecSpace>(team.league_rank());
           const stk::mesh::NgpMesh::BucketType& bucket = ngp_mesh.get_bucket(link_rank, bucket_id);
-          unsigned num_links = bucket.size();
+          unsigned num_links = static_cast<unsigned>(bucket.size());
 
           // Fetch the partition for this bucket
           MUNDY_THROW_ASSERT(stk_link_bucket_to_partition_id_map.exists(bucket_id), std::out_of_range,
                              "Bucket ID not found in the link bucket to partition ID map.");
-          size_t map_index = stk_link_bucket_to_partition_id_map.find(bucket_id);
+          unsigned map_index = static_cast<unsigned>(stk_link_bucket_to_partition_id_map.find(bucket_id));
           stk::mesh::Ordinal partition_id = stk_link_bucket_to_partition_id_map.value_at(map_index);
 
           MUNDY_THROW_ASSERT(partition_id < crs_partitions.extent(0), std::out_of_range,
@@ -335,8 +335,8 @@ class NgpCOOToCSRSynchronizerT {
                     const stk::mesh::FastMeshIndex linked_entity_crs_index =
                         ngp_mesh.fast_mesh_index(linked_entity_crs);
                     const stk::mesh::EntityRank linked_entity_crs_rank = ngp_mesh.entity_rank(linked_entity_crs);
-                    auto& crs_bucket_conn =
-                        crs_partition.get_crs_bucket_conn(linked_entity_crs_rank, linked_entity_crs_index.bucket_id);
+                    auto& crs_bucket_conn = crs_partition.get_crs_bucket_conn(
+                        linked_entity_crs_rank, static_cast<unsigned>(linked_entity_crs_index.bucket_id));
                     Kokkos::atomic_store(&impl::get_dirty_flag(crs_bucket_conn),
                                          true);  // TODO: This should be a protected function (flag_as_dirty_atomically)
                   }
@@ -360,7 +360,7 @@ class NgpCOOToCSRSynchronizerT {
     Kokkos::Profiling::popRegion();
   }
 
-  static void reset_dirty_linked_buckets(NgpLinkCSRDataT<NgpMemSpace>& crs_data, NgpLinkCOODataT<NgpMemSpace>& coo_data,
+  static void reset_dirty_linked_buckets(NgpLinkCSRDataT<NgpMemSpace>& crs_data, NgpLinkCOODataT<NgpMemSpace>& /*coo_data*/,
                                          const stk::mesh::Selector& selector) {
     Kokkos::Profiling::pushRegion("NgpLinkPartitionT::reset_dirty_linked_buckets");
 
@@ -383,7 +383,7 @@ class NgpCOOToCSRSynchronizerT {
           "reset_dirty_linked_buckets", team_policy, KOKKOS_LAMBDA(const TeamHandleType& team) {
             // Fetch our bucket
             const stk::mesh::NgpMesh::BucketType& bucket = ngp_mesh.get_bucket(rank, team.league_rank());
-            unsigned bucket_size = bucket.size();
+            unsigned bucket_size = static_cast<unsigned>(bucket.size());
 
             // Serial loop over the partitions
             for (size_t partition_id = 0; partition_id < crs_partitions.extent(0); ++partition_id) {
@@ -431,13 +431,13 @@ class NgpCOOToCSRSynchronizerT {
           // Fetch our bucket
           const unsigned bucket_id = bucket_ids.get<stk::mesh::NgpMesh::MeshExecSpace>(team.league_rank());
           const stk::mesh::NgpMesh::BucketType& bucket = ngp_mesh.get_bucket(link_rank, bucket_id);
-          unsigned num_links = bucket.size();
+          unsigned num_links = static_cast<unsigned>(bucket.size());
 
           // Fetch the partition for this bucket
           MUNDY_THROW_ASSERT(stk_link_bucket_to_partition_id_map.exists(bucket_id), std::out_of_range,
                              "Bucket ID not found in the link bucket to partition ID map.");
 
-          size_t map_index = stk_link_bucket_to_partition_id_map.find(bucket_id);
+          unsigned map_index = static_cast<unsigned>(stk_link_bucket_to_partition_id_map.find(bucket_id));
           stk::mesh::Ordinal partition_id = stk_link_bucket_to_partition_id_map.value_at(map_index);
           MUNDY_THROW_ASSERT(partition_id < crs_partitions.extent(0), std::out_of_range,
                              "Partition ID is out of range for the number of CSR partitions.");
@@ -470,7 +470,8 @@ class NgpCOOToCSRSynchronizerT {
     Kokkos::Profiling::popRegion();
   }
 
-  static void gather_part_2_partial_sum(NgpLinkCSRDataT<NgpMemSpace>& crs_data, NgpLinkCOODataT<NgpMemSpace>& coo_data,
+  static void gather_part_2_partial_sum(NgpLinkCSRDataT<NgpMemSpace>& crs_data,
+                                        NgpLinkCOODataT<NgpMemSpace>& /*coo_data*/,
                                         const stk::mesh::Selector& selector) {
     Kokkos::Profiling::pushRegion("NgpLinkPartitionT::gather_part_2_partial_sum");
 
@@ -493,7 +494,7 @@ class NgpCOOToCSRSynchronizerT {
           "gather_part_2_partial_sum", team_policy, KOKKOS_LAMBDA(const TeamHandleType& team) {
             // Fetch our bucket
             const stk::mesh::NgpMesh::BucketType& bucket = ngp_mesh.get_bucket(rank, team.league_rank());
-            unsigned bucket_size = bucket.size();
+            unsigned bucket_size = static_cast<unsigned>(bucket.size());
 
             // Serial loop over the partitions
             for (size_t partition_id = 0; partition_id < crs_partitions.extent(0); ++partition_id) {
@@ -594,13 +595,13 @@ class NgpCOOToCSRSynchronizerT {
           // Fetch our bucket
           const unsigned bucket_id = bucket_ids.get<stk::mesh::NgpMesh::MeshExecSpace>(team.league_rank());
           const stk::mesh::NgpMesh::BucketType& bucket = ngp_mesh.get_bucket(link_rank, bucket_id);
-          unsigned num_links = bucket.size();
+          unsigned num_links = static_cast<unsigned>(bucket.size());
 
           // Fetch the partition for this bucket
           MUNDY_THROW_ASSERT(stk_link_bucket_to_partition_id_map.exists(bucket_id), std::out_of_range,
                              "Bucket ID not found in the link bucket to partition ID map.");
 
-          size_t map_index = stk_link_bucket_to_partition_id_map.find(bucket_id);
+          unsigned map_index = static_cast<unsigned>(stk_link_bucket_to_partition_id_map.find(bucket_id));
           stk::mesh::Ordinal partition_id = stk_link_bucket_to_partition_id_map.value_at(map_index);
           MUNDY_THROW_ASSERT(partition_id < crs_partitions.extent(0), std::out_of_range,
                              "Partition ID is out of range for the number of CSR partitions.");
@@ -637,7 +638,7 @@ class NgpCOOToCSRSynchronizerT {
     Kokkos::Profiling::popRegion();
   }
 
-  static void finalize_crs_update(NgpLinkCSRDataT<NgpMemSpace>& crs_data, NgpLinkCOODataT<NgpMemSpace>& coo_data,
+  static void finalize_crs_update(NgpLinkCSRDataT<NgpMemSpace>& crs_data, NgpLinkCOODataT<NgpMemSpace>& /*coo_data*/,
                                   const stk::mesh::Selector& selector) {
     Kokkos::Profiling::pushRegion("NgpLinkPartitionT::scatter_part_3_finalize");
 
@@ -826,7 +827,7 @@ class NgpCOOToCSRSynchronizerT {
             // Fetch our bucket
             const unsigned bucket_id = bucket_ids.get<stk::mesh::NgpMesh::MeshExecSpace>(team.league_rank());
             const stk::mesh::NgpMesh::BucketType& bucket = ngp_mesh.get_bucket(rank, bucket_id);
-            unsigned num_entities = bucket.size();
+            unsigned num_entities = static_cast<unsigned>(bucket.size());
 
             // Serial loop over each partition
             size_t num_partitions = partitions.extent(0);

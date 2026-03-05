@@ -103,23 +103,6 @@ void is_different_debug(const AVector<U, N, OtherAccessor, OtherOwnershipType>& 
 }
 //@}
 
-template <typename T>
-struct CallableOnlyAccessor {
-  T* data_;
-
-  explicit CallableOnlyAccessor(T* data)
-      : data_(data) {
-  }
-
-  KOKKOS_INLINE_FUNCTION T& operator()(size_t idx) {
-    return data_[idx];
-  }
-
-  KOKKOS_INLINE_FUNCTION const T& operator()(size_t idx) const {
-    return data_[idx];
-  }
-};
-
 //! \name GTEST typed test fixtures
 //@{
 
@@ -1475,6 +1458,24 @@ TYPED_TEST(VectorSingleTypeTest, Views) {
     is_close_debug(v3[2], 6, "3D array view somehow not a view.");
   }
 }
+
+template <typename T>
+struct CallableOnlyAccessor {
+  T* data_;
+
+  KOKKOS_INLINE_FUNCTION
+  explicit CallableOnlyAccessor(T* data)
+      : data_(data) {
+  }
+
+  KOKKOS_INLINE_FUNCTION T& operator()(size_t idx) {
+    return data_[idx];
+  }
+
+  KOKKOS_INLINE_FUNCTION const T& operator()(size_t idx) const {
+    return data_[idx];
+  }
+};
 
 TYPED_TEST(VectorSingleTypeTest, ViewsWithCallableOnlyAccessor) {
   std::vector<TypeParam> backing{0, 0, 1, 2, 3, 0, 0};
