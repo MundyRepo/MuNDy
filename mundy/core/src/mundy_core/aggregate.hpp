@@ -549,7 +549,7 @@ class aggregate {
     return impl::find_component<Tag>(tagged_components_).component();
   }
 
-  MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_PUSH;
+  MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_PUSH
 
   /// \brief Get tagged object of the given args: Perform get<I'th tag>()(args...) with syntactic sugar
   template <size_t I, typename... Args>
@@ -579,7 +579,7 @@ class aggregate {
     return get<Tag>()(std::forward<Args>(args)...);
   }
 
-  MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_POP;
+  MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_POP
 
   /// \brief Check if we have a component with the given Tag
   template <typename Tag>

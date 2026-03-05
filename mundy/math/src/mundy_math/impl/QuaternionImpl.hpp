@@ -66,15 +66,15 @@ namespace impl {
 
 /// \brief Deep copy assignment operator with (potentially) different accessor
 /// \details Copies the data from the other quaternion to our data. This is only enabled if T is not const.
-template <typename T, ValidAccessor<T> Accessor, typename OwnershipType, ValidAccessor<T> OtherAccessor,
+template <typename T, ValidAccessor<T> Accessor, typename OwnershipType, typename U, ValidAccessor<U> OtherAccessor,
           typename OtherOwnershipType>
-  requires HasNonConstAccessOperator<Accessor, T>
+  requires HasNonConstAccessOperator<Accessor, T> && std::is_convertible_v<U, T>
 KOKKOS_INLINE_FUNCTION constexpr void deep_copy_impl(AQuaternion<T, Accessor, OwnershipType>& quat,
-                                                     const AQuaternion<T, OtherAccessor, OtherOwnershipType>& other) {
-  quat[0] = other[0];
-  quat[1] = other[1];
-  quat[2] = other[2];
-  quat[3] = other[3];
+                                                     const AQuaternion<U, OtherAccessor, OtherOwnershipType>& other) {
+  quat[0] = static_cast<T>(other[0]);
+  quat[1] = static_cast<T>(other[1]);
+  quat[2] = static_cast<T>(other[2]);
+  quat[3] = static_cast<T>(other[3]);
 }
 
 /// \brief AQuaternion-quaternion addition
@@ -195,7 +195,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto quat_vec_multiplication_impl(
   // 1. The vector is converted to a quaternion with a scalar component of 0
   // 2. The quaternion-quaternion multiplication is performed
   // 3. The quaternion is converted back to a vector
-  const AQuaternion<U> vec_quat(0.0, vec[0], vec[1], vec[2]);
+  const AQuaternion<U> vec_quat(U(0), vec[0], vec[1], vec[2]);
   const auto quat_inv = inverse(quat);
   const auto quat_result = quat * vec_quat * quat_inv;
   return AVector3<std::common_type_t<T, U>>(quat_result[1], quat_result[2], quat_result[3]);
@@ -212,7 +212,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto vec_quat_multiplication_impl(
   // 1. The vector is converted to a quaternion with a scalar component of 0
   // 2. The quaternion-quaternion multiplication is performed
   // 3. The quaternion is converted back to a vector
-  const AQuaternion<T> vec_quat(0.0, vec[0], vec[1], vec[2]);
+  const AQuaternion<T> vec_quat(T(0), vec[0], vec[1], vec[2]);
   const auto quat_inv = inverse(quat);
   const auto quat_result = quat_inv * vec_quat * quat;
   return AVector3<std::common_type_t<T, U>>(quat_result[1], quat_result[2], quat_result[3]);
@@ -278,7 +278,6 @@ KOKKOS_INLINE_FUNCTION constexpr void self_scalar_multiplication_impl(AQuaternio
 /// \brief AQuaternion-scalar division
 /// \param[in] scalar The scalar.
 template <typename T, typename U, ValidAccessor<T> Accessor, typename OwnershipType>
-  requires HasNonConstAccessOperator<Accessor, T>
 KOKKOS_INLINE_FUNCTION constexpr auto quat_scalar_division_impl(const AQuaternion<T, Accessor, OwnershipType>& quat,
                                                                 const U& scalar)
     -> AQuaternion<std::common_type_t<T, U>> {

@@ -201,7 +201,7 @@ class AMatrix<T, N, M, Accessor, Ownership::Views> {
   KOKKOS_INLINE_FUNCTION constexpr AMatrix<T, N, M, Accessor, Ownership::Views>& operator=(const OtherMatrixType& other)
     requires(!std::is_same_v<OtherMatrixType, AMatrix<T, N, M, Accessor, Ownership::Views>>) &&
             (OtherMatrixType::num_rows == N) && (OtherMatrixType::num_cols == M) &&
-            (std::is_same_v<typename OtherMatrixType::scalar_t, T>) && HasNonConstAccessOperator<Accessor, T>
+            (std::is_convertible_v<typename OtherMatrixType::scalar_t, T>) && HasNonConstAccessOperator<Accessor, T>
   {
     impl::deep_copy_impl(std::make_index_sequence<N * M>{}, *this, other);
     return *this;
@@ -213,7 +213,7 @@ class AMatrix<T, N, M, Accessor, Ownership::Views> {
   KOKKOS_INLINE_FUNCTION constexpr AMatrix<T, N, M, Accessor, Ownership::Views>& operator=(OtherMatrixType&& other)
     requires(!std::is_same_v<OtherMatrixType, AMatrix<T, N, M, Accessor, Ownership::Views>>) &&
             (OtherMatrixType::num_rows == N) && (OtherMatrixType::num_cols == M) &&
-            (std::is_same_v<typename OtherMatrixType::scalar_t, T>) && HasNonConstAccessOperator<Accessor, T>
+            (std::is_convertible_v<typename OtherMatrixType::scalar_t, T>) && HasNonConstAccessOperator<Accessor, T>
   {
     impl::deep_copy_impl(std::make_index_sequence<N * M>{}, *this, std::move(other));
     return *this;
@@ -788,7 +788,7 @@ class AMatrix<T, N, M, Accessor, Ownership::Owns> {
   KOKKOS_INLINE_FUNCTION constexpr AMatrix(const OtherMatrixType& other)
     requires(!std::is_same_v<OtherMatrixType, AMatrix<T, N, M, Accessor, Ownership::Owns>>) &&
             (OtherMatrixType::num_rows == N) && (OtherMatrixType::num_cols == M) &&
-            (std::is_same_v<typename OtherMatrixType::scalar_t, T>)
+            (std::is_convertible_v<typename OtherMatrixType::scalar_t, T>)
       : accessor_() {
     impl::deep_copy_impl(std::make_index_sequence<N * M>{}, *this, other);
   }
@@ -798,7 +798,7 @@ class AMatrix<T, N, M, Accessor, Ownership::Owns> {
   KOKKOS_INLINE_FUNCTION constexpr AMatrix(OtherMatrixType&& other)
     requires(!std::is_same_v<OtherMatrixType, AMatrix<T, N, M, Accessor, Ownership::Owns>>) &&
             (OtherMatrixType::num_rows == N) && (OtherMatrixType::num_cols == M) &&
-            (std::is_same_v<typename OtherMatrixType::scalar_t, T>)
+            (std::is_convertible_v<typename OtherMatrixType::scalar_t, T>)
       : accessor_() {
     impl::deep_copy_impl(std::make_index_sequence<N * M>{}, *this, std::move(other));
   }
@@ -809,7 +809,7 @@ class AMatrix<T, N, M, Accessor, Ownership::Owns> {
   KOKKOS_INLINE_FUNCTION constexpr AMatrix<T, N, M, Accessor, Ownership::Owns>& operator=(const OtherMatrixType& other)
     requires(!std::is_same_v<OtherMatrixType, AMatrix<T, N, M, Accessor, Ownership::Owns>>) &&
             (OtherMatrixType::num_rows == N) && (OtherMatrixType::num_cols == M) &&
-            (std::is_same_v<typename OtherMatrixType::scalar_t, T>) && HasNonConstAccessOperator<Accessor, T>
+            (std::is_convertible_v<typename OtherMatrixType::scalar_t, T>) && HasNonConstAccessOperator<Accessor, T>
   {
     impl::deep_copy_impl(std::make_index_sequence<N * M>{}, *this, other);
     return *this;
@@ -821,7 +821,7 @@ class AMatrix<T, N, M, Accessor, Ownership::Owns> {
   KOKKOS_INLINE_FUNCTION constexpr AMatrix<T, N, M, Accessor, Ownership::Owns>& operator=(OtherMatrixType&& other)
     requires(!std::is_same_v<OtherMatrixType, AMatrix<T, N, M, Accessor, Ownership::Owns>>) &&
             (OtherMatrixType::num_rows == N) && (OtherMatrixType::num_cols == M) &&
-            (std::is_same_v<typename OtherMatrixType::scalar_t, T>) && HasNonConstAccessOperator<Accessor, T>
+            (std::is_convertible_v<typename OtherMatrixType::scalar_t, T>) && HasNonConstAccessOperator<Accessor, T>
   {
     impl::deep_copy_impl(std::make_index_sequence<N * M>{}, *this, std::move(other));
     return *this;

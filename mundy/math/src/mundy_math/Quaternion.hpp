@@ -210,7 +210,7 @@ class AQuaternion<T, Accessor, Ownership::Views> {
   KOKKOS_INLINE_FUNCTION constexpr AQuaternion<T, Accessor, Ownership::Views>& operator=(
       const OtherQuaternionType& other)
     requires(!std::is_same_v<OtherQuaternionType, AQuaternion<T, Accessor, Ownership::Views>>) &&
-            (std::is_same_v<typename OtherQuaternionType::scalar_t, T>) && HasNonConstAccessOperator<Accessor, T>
+            (std::is_convertible_v<typename OtherQuaternionType::scalar_t, T>) && HasNonConstAccessOperator<Accessor, T>
   {
     impl::deep_copy_impl(*this, other);
     return *this;
@@ -221,7 +221,7 @@ class AQuaternion<T, Accessor, Ownership::Views> {
   template <ValidQuaternionType OtherQuaternionType>
   KOKKOS_INLINE_FUNCTION constexpr AQuaternion<T, Accessor, Ownership::Views>& operator=(OtherQuaternionType&& other)
     requires(!std::is_same_v<OtherQuaternionType, AQuaternion<T, Accessor, Ownership::Views>>) &&
-            (std::is_same_v<typename OtherQuaternionType::scalar_t, T>) && HasNonConstAccessOperator<Accessor, T>
+            (std::is_convertible_v<typename OtherQuaternionType::scalar_t, T>) && HasNonConstAccessOperator<Accessor, T>
   {
     impl::deep_copy_impl(*this, std::move(other));
     return *this;
@@ -685,7 +685,7 @@ class AQuaternion<T, Accessor, Ownership::Owns> {
   template <ValidQuaternionType OtherQuaternionType>
   KOKKOS_INLINE_FUNCTION constexpr AQuaternion(const OtherQuaternionType& other)
     requires(!std::is_same_v<OtherQuaternionType, AQuaternion<T, Accessor, Ownership::Owns>>) &&
-            (std::is_same_v<typename OtherQuaternionType::scalar_t, T>)
+            (std::is_convertible_v<typename OtherQuaternionType::scalar_t, T>)
       : accessor_() {
     impl::deep_copy_impl(*this, other);
   }
@@ -694,7 +694,7 @@ class AQuaternion<T, Accessor, Ownership::Owns> {
   template <ValidQuaternionType OtherQuaternionType>
   KOKKOS_INLINE_FUNCTION constexpr AQuaternion(OtherQuaternionType&& other)
     requires(!std::is_same_v<OtherQuaternionType, AQuaternion<T, Accessor, Ownership::Owns>>) &&
-            (std::is_same_v<typename OtherQuaternionType::scalar_t, T>)
+            (std::is_convertible_v<typename OtherQuaternionType::scalar_t, T>)
       : accessor_() {
     impl::deep_copy_impl(*this, std::move(other));
   }
@@ -705,7 +705,7 @@ class AQuaternion<T, Accessor, Ownership::Owns> {
   KOKKOS_INLINE_FUNCTION constexpr AQuaternion<T, Accessor, Ownership::Owns>& operator=(
       const OtherQuaternionType& other)
     requires(!std::is_same_v<OtherQuaternionType, AQuaternion<T, Accessor, Ownership::Owns>>) &&
-            (std::is_same_v<typename OtherQuaternionType::scalar_t, T>) && HasNonConstAccessOperator<Accessor, T>
+            (std::is_convertible_v<typename OtherQuaternionType::scalar_t, T>) && HasNonConstAccessOperator<Accessor, T>
   {
     impl::deep_copy_impl(*this, other);
     return *this;
@@ -716,7 +716,7 @@ class AQuaternion<T, Accessor, Ownership::Owns> {
   template <ValidQuaternionType OtherQuaternionType>
   KOKKOS_INLINE_FUNCTION constexpr AQuaternion<T, Accessor, Ownership::Owns>& operator=(OtherQuaternionType&& other)
     requires(!std::is_same_v<OtherQuaternionType, AQuaternion<T, Accessor, Ownership::Owns>>) &&
-            (std::is_same_v<typename OtherQuaternionType::scalar_t, T>) && HasNonConstAccessOperator<Accessor, T>
+            (std::is_convertible_v<typename OtherQuaternionType::scalar_t, T>) && HasNonConstAccessOperator<Accessor, T>
   {
     impl::deep_copy_impl(*this, std::move(other));
     return *this;

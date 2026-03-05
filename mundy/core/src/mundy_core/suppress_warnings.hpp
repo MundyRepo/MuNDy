@@ -111,11 +111,11 @@
 // This macro is intentionally conservative: it suppresses what is known, and
 // leaves room for you to add site-local extra ignores.
 #define MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_PUSH \
-  MUNDY_DIAG_PUSH;                                      \
+  MUNDY_DIAG_PUSH                                       \
   /* NVCC */                                            \
-  MUNDY_NV_DIAG_SUPPRESS(20013);                        \
-  MUNDY_NV_DIAG_SUPPRESS(20014);                        \
-  MUNDY_NV_DIAG_SUPPRESS(20015);                        \
+  MUNDY_NV_DIAG_SUPPRESS(20013)                         \
+  MUNDY_NV_DIAG_SUPPRESS(20014)                         \
+  MUNDY_NV_DIAG_SUPPRESS(20015)                         \
   /* clang-cuda */                                      \
   MUNDY_CLANG_DIAG_IGNORE("-Wcudacall-from-host")
 

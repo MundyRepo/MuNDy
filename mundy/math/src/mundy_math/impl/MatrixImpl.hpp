@@ -33,16 +33,16 @@
 #include <utility>
 
 // Mundy
-#include <mundy_core/throw_assert.hpp>    // for MUNDY_THROW_ASSERT
-#include <mundy_math/Accessor.hpp>        // for mundy::math::ValidAccessor
-#include <mundy_math/Array.hpp>           // for mundy::math::Array
-#include <mundy_math/MaskedView.hpp>      // for mundy::math::MaskedView
-#include <mundy_math/ShiftedView.hpp>     // for mundy::math::ShiftedView
-#include <mundy_math/StridedView.hpp>     // for mundy::math::StridedView
-#include <mundy_math/Tolerance.hpp>       // for mundy::math::get_zero_tolerance
-#include <mundy_math/TransposedView.hpp>  // for mundy::math::TransposedView
-#include <mundy_math/Vector.hpp>          // for mundy::math::AVector
 #include <mundy_core/suppress_warnings.hpp>  // for MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_PUSH/POP
+#include <mundy_core/throw_assert.hpp>       // for MUNDY_THROW_ASSERT
+#include <mundy_math/Accessor.hpp>           // for mundy::math::ValidAccessor
+#include <mundy_math/Array.hpp>              // for mundy::math::Array
+#include <mundy_math/MaskedView.hpp>         // for mundy::math::MaskedView
+#include <mundy_math/ShiftedView.hpp>        // for mundy::math::ShiftedView
+#include <mundy_math/StridedView.hpp>        // for mundy::math::StridedView
+#include <mundy_math/Tolerance.hpp>          // for mundy::math::get_zero_tolerance
+#include <mundy_math/TransposedView.hpp>     // for mundy::math::TransposedView
+#include <mundy_math/Vector.hpp>             // for mundy::math::AVector
 
 namespace mundy {
 
@@ -59,13 +59,13 @@ namespace impl {
 
 /// \brief Deep copy assignment operator with (potentially) different accessor
 /// \details Copies the data from the other matrix to our data. This is only enabled if T is not const.
-template <size_t... Is, typename T, size_t N, size_t M, ValidAccessor<T> Accessor, typename OwnershipType,
-          ValidAccessor<T> OtherAccessor, typename OtherOwnershipType>
-  requires HasNonConstAccessOperator<Accessor, T>
+template <size_t... Is, typename T, size_t N, size_t M, ValidAccessor<T> Accessor, typename OwnershipType, typename U,
+          ValidAccessor<U> OtherAccessor, typename OtherOwnershipType>
+  requires HasNonConstAccessOperator<Accessor, T> && std::is_convertible_v<U, T>
 KOKKOS_INLINE_FUNCTION void deep_copy_impl(std::index_sequence<Is...>, AMatrix<T, N, M, Accessor, OwnershipType>& mat,
-                                           const AMatrix<T, N, M, OtherAccessor, OtherOwnershipType>& other) {
+                                           const AMatrix<U, N, M, OtherAccessor, OtherOwnershipType>& other) {
   static_assert(sizeof...(Is) == N * M, "Number of indices must match number of elements in the matrix.");
-  ((mat[Is] = other[Is]), ...);
+  ((mat[Is] = static_cast<T>(other[Is])), ...);
 }
 
 /// \brief Move assignment operator with same accessor
