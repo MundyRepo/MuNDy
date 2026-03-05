@@ -64,6 +64,7 @@ We'll need two MetaMethods: one for computing the brownian motion and one for ta
 #include <mundy_meta/PartReqs.hpp>  // for mundy::meta::PartReqs
 #include <mundy_meta/utils/MeshGeneration.hpp>  // for mundy::meta::utils::generate_class_instance_and_mesh_from_meta_class_requirements
 #include <mundy_shapes/Spheres.hpp>  // for mundy::shapes::Spheres
+#include <mundy_core/rng.hpp>              // for mundy::core::make_philox
 
 class NodeEuler
     : public mundy::meta::MetaKernelDispatcher<NodeEuler, mundy::meta::make_registration_string("NODE_EULER")> {
@@ -587,7 +588,7 @@ class ComputeBrownianVelocitySphere : public mundy::meta::MetaKernel<> {
           const stk::mesh::EntityId sphere_node_gid = bulk_data.identifier(sphere_node);
           unsigned *node_rng_counter = stk::mesh::field_data(node_rng_counter_field, sphere_node);
 
-          openrand::Philox rng(sphere_node_gid, node_rng_counter[0]);
+          openrand::Philox rng = core::make_philox(sphere_node_gid, node_rng_counter[0]);
           node_brownian_velocity[0] = alpha * std::sqrt(2.0 * diffusion_coeff / time_step_size) * rng.randn<double>() +
                                       beta * node_brownian_velocity[0];
           node_brownian_velocity[1] = alpha * std::sqrt(2.0 * diffusion_coeff / time_step_size) * rng.randn<double>() +
@@ -772,7 +773,7 @@ int main(int argc, char **argv) {
     unsigned *node_rng_counter = stk::mesh::field_data(*node_rng_counter_field_ptr, node_i);
     // Do the RNG based on the GID of the sphere
     const stk::mesh::EntityId sphere_node_gid = bulk_data_ptr->identifier(node_i);
-    openrand::Philox rng(sphere_node_gid, 0);
+    openrand::Philox rng = core::make_philox(sphere_node_gid, 0);
     node_coords[0] = length_of_domain * rng.rand<double>();
     node_coords[1] = length_of_domain * rng.rand<double>();
     node_coords[2] = length_of_domain * rng.rand<double>();

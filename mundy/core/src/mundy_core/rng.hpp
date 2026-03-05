@@ -6,7 +6,7 @@
 //
 // Developed under support from the NSF Graduate Research Fellowship Program.
 //
-// Mundy is empty software: you can redistribute it and/or modify it under the terms of the GNU General Public License
+// Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
 // as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
 //
 // Mundy is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty
@@ -18,44 +18,37 @@
 // **********************************************************************************************************************
 // @HEADER
 
-#ifndef MUNDY_MESH_IMPL_PARTITIONKEY_HPP_
-#define MUNDY_MESH_IMPL_PARTITIONKEY_HPP_
+#ifndef MUNDY_CORE_RNG_HPP_
+#define MUNDY_CORE_RNG_HPP_
 
 // C++ core
 #include <stdexcept>
-#include <vector>
+
+// External
+#include <openrand/philox.h>  // for openrand::Philox
 
 // Kokkos
 #include <Kokkos_Core.hpp>
 
-// STK
-#include <stk_mesh/base/BulkData.hpp>
-#include <stk_mesh/base/NgpTypes.hpp>  // for stk::mesh::PartOrdinalViewType
-#include <stk_mesh/base/Types.hpp>
-#include <stk_util/ngp/NgpSpaces.hpp>
-
 // Mundy
-#include <mundy_core/throw_assert.hpp>
+#include <mundy_core/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
 
 namespace mundy {
 
-namespace mesh {
+namespace core {
 
-namespace impl {
+KOKKOS_INLINE_FUNCTION
+openrand::Philox make_philox(size_t seed, size_t counter) {
+  // Philox uses uint64_t seed, uint32_t counter
+  MUNDY_THROW_ASSERT(seed <= Kokkos::Experimental::finite_max_v<uint64_t>, std::out_of_range,
+                     "Seed value is too large for Philox.");
+  MUNDY_THROW_ASSERT(counter <= Kokkos::Experimental::finite_max_v<uint32_t>, std::out_of_range,
+                     "Counter value is too large for Philox.");
+  return openrand::Philox(static_cast<uint64_t>(seed), static_cast<uint32_t>(counter));
+}
 
-using PartitionKey = std::vector<stk::mesh::PartOrdinal>;  // sorted view of part ordinals
-using NgpPartitionKey = stk::mesh::PartOrdinalViewType;    // sorted view of part ordinals
-
-/// \brief Get the partition key for a given set of link parts (independent of their order, host only)
-PartitionKey get_partition_key(const stk::mesh::PartVector& parts);
-
-/// \brief Get the partition key for a given link bucket (host only)
-PartitionKey get_partition_key(const stk::mesh::Bucket& link_bucket);
-
-}  // namespace impl
-
-}  // namespace mesh
+}  // namespace core
 
 }  // namespace mundy
 
-#endif  // MUNDY_MESH_IMPL_PARTITIONKEY_HPP_
+#endif  // MUNDY_CORE_RNG_HPP_

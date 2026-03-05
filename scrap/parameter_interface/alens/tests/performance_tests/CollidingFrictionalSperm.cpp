@@ -68,6 +68,7 @@ The goal of this example is to simulate the swimming motion of a multiple, colli
 #include <mundy_meta/MeshReqs.hpp>                  // for mundy::meta::MeshReqs
 #include <mundy_meta/PartReqs.hpp>                  // for mundy::meta::PartReqs
 #include <mundy_shapes/ComputeAABB.hpp>             // for mundy::shapes::ComputeAABB
+#include <mundy_core/rng.hpp>              // for mundy::core::make_philox
 
 // #define DEBUG
 
@@ -1062,7 +1063,7 @@ class SpermSimulation {
           // Propogate the rest curvature
           // To avoid syncronized states, we add a random number to the phase of the sine wave for each sperm.
           // The same RNG is used for all time.
-          openrand::Philox rng(node_sperm_id, 0);
+          openrand::Philox rng = core::make_philox(node_sperm_id, 0);
           const double phase = 2.0 * M_PI * rng.rand<double>();
           // const double phase = 0.0;
 

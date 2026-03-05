@@ -123,7 +123,7 @@ void construction_test() {
   });
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
   stk::parallel_machine_init(&argc, &argv);
   Kokkos::initialize(argc, argv);
   {

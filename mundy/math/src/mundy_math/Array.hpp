@@ -21,17 +21,17 @@
 #ifndef MUNDY_MATH_ARRAY_HPP_
 #define MUNDY_MATH_ARRAY_HPP_
 
-// External libs
+// External
 #include <Kokkos_Core.hpp>
 
-// C++ core libs
+// C++ core
 #include <cmath>
 #include <concepts>
 #include <initializer_list>
 #include <iostream>
 #include <type_traits>
 
-// Our libs
+// Mundy
 #include <mundy_core/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
 #include <mundy_math/Tolerance.hpp>     // for mundy::math::get_zero_tolerance
 #include <mundy_math/impl/ArrayImpl.hpp>

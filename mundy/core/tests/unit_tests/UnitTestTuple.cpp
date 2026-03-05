@@ -73,7 +73,7 @@ TEST(TupleTest, ConstTuple) {
 }
 
 TEST(TupleTest, EmptyTuple) {
-  auto t = ::mundy::core::make_tuple();
+  [[maybe_unused]] auto t = ::mundy::core::make_tuple();
   EXPECT_EQ(sizeof(t), 1);  // Empty tuple should have size 1 due to empty base optimization
 }
 

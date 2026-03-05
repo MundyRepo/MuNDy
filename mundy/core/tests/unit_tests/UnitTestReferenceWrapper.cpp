@@ -41,9 +41,8 @@ template <class T>
 concept can_cref = requires(T&& t) { ::mundy::core::cref(static_cast<T&&>(t)); };
 
 template <class T>
-concept can_construct_wrapper = requires(T&& t) {
-  ::mundy::core::reference_wrapper<std::remove_reference_t<T>>(static_cast<T&&>(t));
-};
+concept can_construct_wrapper =
+    requires(T&& t) { ::mundy::core::reference_wrapper<std::remove_reference_t<T>>(static_cast<T&&>(t)); };
 
 KOKKOS_FUNCTION constexpr bool constexpr_get_and_conversion_work() {
   int value = 2;
@@ -63,15 +62,14 @@ KOKKOS_FUNCTION constexpr bool constexpr_ref_and_cref_work() {
   return value == 13 && wrapped.get() == 13 && const_wrapped.get() == 9;
 }
 
+struct Callable {
+  int bias;
+  KOKKOS_FUNCTION constexpr int operator()(int x) const {
+    return x + bias;
+  }
+};
+
 KOKKOS_FUNCTION constexpr bool constexpr_callable_forwarding_works() {
-  struct Callable {
-    int bias;
-
-    KOKKOS_FUNCTION constexpr int operator()(int x) const {
-      return x + bias;
-    }
-  };
-
   Callable callable{6};
   auto wrapped = ::mundy::core::ref(callable);
   return wrapped(4) == 10;

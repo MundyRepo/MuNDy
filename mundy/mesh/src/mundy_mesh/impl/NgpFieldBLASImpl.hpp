@@ -54,6 +54,7 @@
 #include <stk_mesh/base/Selector.hpp>
 
 // Mundy
+#include <mundy_core/rng.hpp>           // for mundy::core::make_philox
 #include <mundy_core/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
 #include <mundy_mesh/BulkData.hpp>      // for mundy::mesh::BulkData
 #include <mundy_mesh/NgpUtils.hpp>  // is_(ngp|device|host)_field, is_(ngp|device|host)_mesh, ngp_ngp_field_and_mesh_compatible
@@ -124,7 +125,7 @@ struct FieldRandomize {
   KOKKOS_INLINE_FUNCTION
   void operator()(const stk::mesh::FastMeshIndex& f) const {
     auto& counter = counter_field_(f, 0);
-    openrand::Philox rng(seed_, counter);
+    openrand::Philox rng = core::make_philox(seed_, counter);
 
     const int num_components = field_.get_num_components_per_entity(f);
     for (int d = 0; d < num_components; ++d) {
@@ -154,7 +155,7 @@ struct FieldRandomizeMinMax {
   KOKKOS_INLINE_FUNCTION
   void operator()(const stk::mesh::FastMeshIndex& f) const {
     auto& counter = counter_field_(f, 0);
-    openrand::Philox rng(seed_, counter);
+    openrand::Philox rng = core::make_philox(seed_, counter);
 
     const int num_components = field_.get_num_components_per_entity(f);
     for (int d = 0; d < num_components; ++d) {
@@ -189,7 +190,7 @@ struct FieldRandomizeComponent {
                        fmt::format("Component index {} is out of bounds for field {}", component_, field_.get_name()));
 
     auto& counter = counter_field_(f, 0);
-    openrand::Philox rng(seed_, counter);
+    openrand::Philox rng = core::make_philox(seed_, counter);
 
     field_(f, component_) = rng.rand<value_type>();
     counter++;
@@ -220,7 +221,7 @@ struct FieldRandomizeComponentMinMax {
                        fmt::format("Component index {} is out of bounds for field {}", component_, field_.get_name()));
 
     auto& counter = counter_field_(f, 0);
-    openrand::Philox rng(seed_, counter);
+    openrand::Philox rng = core::make_philox(seed_, counter);
 
     field_(f, component_) = rng.uniform<value_type>(min_, max_);
     counter++;

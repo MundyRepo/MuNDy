@@ -48,9 +48,9 @@
 /// \brief A helper macro for defining the get_XXX() functions without code duplication.
 #define MUNDY_DEFINE_GET_BLAH(TYPE, TYPE_NAME, CONVERT_NUMBER_USING_FUNC, CONVERT_STRING_USING_FUNC)                \
   TYPE OurAnyNumberParameterEntryValidator::MUNDY_CONCAT2(get_, TYPE_NAME)(                                         \
-      const Teuchos::ParameterEntry &entry, const std::string &param_name, const std::string &sublist_name,         \
+      const Teuchos::ParameterEntry& entry, const std::string& param_name, const std::string& sublist_name,         \
       const bool active_query) const {                                                                              \
-    const Teuchos::any &any_value = entry.getAny(active_query);                                                     \
+    const Teuchos::any& any_value = entry.getAny(active_query);                                                     \
     TYPE output;                                                                                                    \
     if (accepted_types_.is_short_allowed() && any_value.type() == typeid(short)) {                                  \
       output = CONVERT_NUMBER_USING_FUNC(Teuchos::any_cast<short>(any_value));                                      \
@@ -82,8 +82,8 @@
     return output;                                                                                                  \
   }                                                                                                                 \
   TYPE OurAnyNumberParameterEntryValidator::MUNDY_CONCAT2(get_, TYPE_NAME)(                                         \
-      Teuchos::ParameterList & param_list, const std::string &param_name, const TYPE &default_value) const {        \
-    const Teuchos::ParameterEntry *entry = param_list.getEntryPtr(param_name);                                      \
+      Teuchos::ParameterList & param_list, const std::string& param_name, const TYPE& default_value) const {        \
+    const Teuchos::ParameterEntry* entry = param_list.getEntryPtr(param_name);                                      \
     if (entry) return MUNDY_CONCAT2(get_, TYPE_NAME)(*entry, param_name, param_list.name(), true);                  \
     return param_list.get(param_name, default_value);                                                               \
   }
@@ -95,7 +95,7 @@
 
 // Inline helper functions
 template <typename ConvertToType>
-inline ConvertToType convert_string_using_stoi(const std::string &str) {
+inline ConvertToType convert_string_using_stoi(const std::string& str) {
   const int i = std::stoi(str);
 
   // Check if the integer is negative but the target type is unsigned
@@ -116,7 +116,7 @@ inline ConvertToType convert_string_using_stoi(const std::string &str) {
 }
 
 template <typename ConvertToType>
-inline ConvertToType convert_string_using_stoll(const std::string &str) {
+inline ConvertToType convert_string_using_stoll(const std::string& str) {
   const long long ll = std::stoll(str);
 
   // Check if the long integer is negative but the target type is unsigned
@@ -137,7 +137,7 @@ inline ConvertToType convert_string_using_stoll(const std::string &str) {
 }
 
 template <typename ConvertToType>
-inline ConvertToType convert_string_using_stod(const std::string &str) {
+inline ConvertToType convert_string_using_stod(const std::string& str) {
   const long double d = std::stod(str);
 
   if ((d < static_cast<long double>(std::numeric_limits<ConvertToType>::min())) ||
@@ -148,7 +148,7 @@ inline ConvertToType convert_string_using_stod(const std::string &str) {
 }
 
 template <typename ConvertToType>
-inline ConvertToType convert_string_using_nothing(const std::string &str) {
+inline ConvertToType convert_string_using_nothing(const std::string& str) {
   return str;
 }
 
@@ -164,7 +164,7 @@ OurAnyNumberParameterEntryValidator::OurAnyNumberParameterEntryValidator()
 }
 
 OurAnyNumberParameterEntryValidator::OurAnyNumberParameterEntryValidator(EPreferredType const preferred_type,
-                                                                         AcceptedTypes const &accepted_types)
+                                                                         AcceptedTypes const& accepted_types)
     : preferred_type_(preferred_type), accepted_types_(accepted_types) {
   finish_initialization();
 }
@@ -208,7 +208,7 @@ const std::string OurAnyNumberParameterEntryValidator::getXMLTypeName() const {
   return "OurAnyNumberValidator";
 }
 
-void OurAnyNumberParameterEntryValidator::printDoc(std::string const &docString, std::ostream &out) const {
+void OurAnyNumberParameterEntryValidator::printDoc(std::string const& docString, std::ostream& out) const {
   Teuchos::StrUtils::printLines(out, "# ", docString);
   out << "#  Accepted types: " << accepted_types_string_ << ".\n";
 }
@@ -217,8 +217,8 @@ Teuchos::ParameterEntryValidator::ValidStringsList OurAnyNumberParameterEntryVal
   return Teuchos::null;
 }
 
-void OurAnyNumberParameterEntryValidator::validate(Teuchos::ParameterEntry const &entry, std::string const &param_name,
-                                                   std::string const &sublist_name) const {
+void OurAnyNumberParameterEntryValidator::validate(Teuchos::ParameterEntry const& entry, std::string const& param_name,
+                                                   std::string const& sublist_name) const {
   // Validate that the parameter exists and can be converted to a double.
   // NOTE: Even if the target type will be an 'int', we don't know that here
   // so it will be better to assert that a 'double' can be created.  The type
@@ -227,9 +227,9 @@ void OurAnyNumberParameterEntryValidator::validate(Teuchos::ParameterEntry const
   get_double(entry, param_name, sublist_name, false);
 }
 
-void OurAnyNumberParameterEntryValidator::validateAndModify(std::string const &param_name,
-                                                            std::string const &sublist_name,
-                                                            Teuchos::ParameterEntry *entry) const {
+void OurAnyNumberParameterEntryValidator::validateAndModify(std::string const& param_name,
+                                                            std::string const& sublist_name,
+                                                            Teuchos::ParameterEntry* entry) const {
   TEUCHOS_TEST_FOR_EXCEPT(0 == entry);
   constexpr bool is_default = false;
   constexpr bool active_query = false;
@@ -339,10 +339,10 @@ void OurAnyNumberParameterEntryValidator::finish_initialization() {
   accepted_types_string_ = oss.str();
 }
 
-void OurAnyNumberParameterEntryValidator::throw_type_error(Teuchos::ParameterEntry const &entry,
-                                                           std::string const &param_name,
-                                                           std::string const &sublist_name) const {
-  const std::string &entry_name = entry.getAny(false).typeName();
+void OurAnyNumberParameterEntryValidator::throw_type_error(Teuchos::ParameterEntry const& entry,
+                                                           std::string const& param_name,
+                                                           std::string const& sublist_name) const {
+  const std::string& entry_name = entry.getAny(false).typeName();
   TEUCHOS_TEST_FOR_EXCEPTION_PURE_MSG(true, Teuchos::Exceptions::InvalidParameterType,
                                       "Error, the parameter {param_name=\""
                                           << param_name

@@ -80,6 +80,7 @@ We'll need two MetaMethods: one for computing the brownian motion and one for ta
 #include <mundy_shapes/ComputeAABB.hpp>           // for mundy::shapes::ComputeAABB
 #include <mundy_shapes/DeclareAndInitShapes.hpp>  // for mundy::shapes::DeclareAndInitShapes
 #include <mundy_shapes/Spheres.hpp>               // for mundy::shapes::Spheres
+#include <mundy_core/rng.hpp>              // for mundy::core::make_philox
 
 /*// A macro for a block of stuff
 #define TIME_BLOCK(thing_to_time, rank, message)                          \
@@ -599,7 +600,7 @@ class ComputeBrownianVelocitySphere : public mundy::meta::MetaKernel<> {
           const stk::mesh::EntityId sphere_node_gid = bulk_data.identifier(sphere_node);
           unsigned *node_rng_counter = stk::mesh::field_data(node_rng_counter_field, sphere_node);
 
-          openrand::Philox rng(sphere_node_gid, node_rng_counter[0]);
+          openrand::Philox rng = core::make_philox(sphere_node_gid, node_rng_counter[0]);
           node_brownian_velocity[0] = alpha * std::sqrt(2.0 * diffusion_coeff / time_step_size) * rng.randn<double>() +
                                       beta * node_brownian_velocity[0];
           node_brownian_velocity[1] = alpha * std::sqrt(2.0 * diffusion_coeff / time_step_size) * rng.randn<double>() +

@@ -84,7 +84,7 @@ typename BBox<Point>::Scalar BoundFromPointsBase2(std::vector<Point> const& poin
 
   Scalar abs_pj_max{0};
   for (auto const& p : points) {
-    for (std::size_t j{0}; j < Point::size; ++j) {
+    for (size_t j{0}; j < Point::size; ++j) {
       abs_pj_max = std::max(abs_pj_max, std::abs(p[j]));
     }
   }
@@ -97,15 +97,14 @@ template <typename Point>
 void SortZOrder(std::vector<Point>& points) {
   // double the obtained bound to prevent SortZOrder() from failing from
   // points located on the boundary
-  constexpr std::size_t d = Point::size;
+  constexpr size_t d = Point::size;
   using Scalar = typename BBox<Point>::Scalar;
   constexpr auto two = static_cast<Scalar>(2.0);
   SortZOrder(points, 0, points.size(), d - 1, BBox<Point>(two * BoundFromPointsBase2<Point>(points)));
 }
 
 template <typename Point>
-void SortZOrder(std::vector<Point>& points, std::size_t begin, std::size_t end, std::size_t k,
-                BBox<Point> const& bbox) {
+void SortZOrder(std::vector<Point>& points, size_t begin, size_t end, size_t k, BBox<Point> const& bbox) {
   assert(end >= begin);
   assert(bbox.p_min[0] <= bbox.p_max[0]);
   assert(bbox.p_min[1] <= bbox.p_max[1]);
@@ -124,16 +123,16 @@ void SortZOrder(std::vector<Point>& points, std::size_t begin, std::size_t end, 
   bbox_upper.p_min[k] = split_k;
 
   // sort points into halfspaces
-  std::size_t b(begin), e(end);
+  size_t b(begin), e(end);
 
-  for (std::size_t i{b}; i < e; ++i) {
+  for (size_t i{b}; i < e; ++i) {
     if (points[i][k] >= bbox_lower.p_min[k] && points[i][k] < bbox_lower.p_max[k]) {
       std::swap(points[b], points[i]);
       ++b;
     }
   }
 
-  for (std::size_t i{e}; i-- > b;) {
+  for (size_t i{e}; i-- > b;) {
     if (points[i][k] > bbox_upper.p_min[k] && points[i][k] <= bbox_upper.p_max[k]) {
       std::swap(points[e - 1], points[i]);
       --e;
@@ -152,7 +151,7 @@ void SortZOrder(std::vector<Point>& points, std::size_t begin, std::size_t end, 
   }
 
   // recurse along k1-axis
-  constexpr std::size_t d = Point::size;
+  constexpr size_t d = Point::size;
   auto k1 = (k + d - 1) % d;
 
   SortZOrder(points, begin, b, k1, bbox_lower);
@@ -170,7 +169,7 @@ void GenerateRandomPoints(std::vector<Point>& points) {
 
   std::generate(points.begin(), points.end(), [&] {
     Point p;
-    for (std::size_t i = 0; i < Point::size; ++i) {
+    for (size_t i = 0; i < Point::size; ++i) {
       p[i] = dist(e2);
     }
     return p;
@@ -181,23 +180,23 @@ template <typename Point>
 void TestLessRandom(std::vector<Point> const& points) {
   std::vector<Point> points1(points), points2(points);
 
-  constexpr std::size_t d = Point::size;
+  constexpr size_t d = Point::size;
   std::sort(points1.begin(), points1.end(), zorder_knn::Less<Point, d>());
 
   SortZOrder(points2);
 
-  for (std::size_t i{0}; i < points1.size(); ++i) {
-    for (std::size_t j{0}; j < Point::size; ++j) {
+  for (size_t i{0}; i < points1.size(); ++i) {
+    for (size_t j{0}; j < Point::size; ++j) {
       EXPECT_EQ(points1[i][j], points2[i][j]);
     }
   }
 }
 
-template <std::size_t d>
+template <size_t d>
 std::vector<Vector<float, d>> CastDoubleToFloat(std::vector<Vector<double, d>> const& points_double) {
   std::vector<Vector<float, d>> points_float(points_double.size());
-  for (std::size_t i{0}; i < points_double.size(); ++i) {
-    for (std::size_t j{0}; j < d; ++j) {
+  for (size_t i{0}; i < points_double.size(); ++i) {
+    for (size_t j{0}; j < d; ++j) {
       points_float[i][j] = static_cast<float>(points_double[i][j]);
     }
   }
@@ -205,7 +204,7 @@ std::vector<Vector<float, d>> CastDoubleToFloat(std::vector<Vector<double, d>> c
   return points_float;
 }
 
-template <std::size_t n, std::size_t d>
+template <size_t n, size_t d>
 void TestLessRandom() {
   std::vector<Vector<double, d>> points(n);
   GenerateRandomPoints(points);

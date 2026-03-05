@@ -54,27 +54,27 @@ void neuron() {
   builder.set_aura_option(stk::mesh::BulkData::AUTO_AURA);
 
   std::shared_ptr<stk::mesh::MetaData> meta_data_ptr = builder.create_meta_data();
-  auto &meta_data = *meta_data_ptr;
+  auto& meta_data = *meta_data_ptr;
   meta_data.use_simple_fields();
   meta_data.set_coordinate_field_name("coordinates");
 
   std::shared_ptr<stk::mesh::BulkData> bulk_data_ptr = builder.create(meta_data_ptr);
-  auto &bulk_data = *bulk_data_ptr;
+  auto& bulk_data = *bulk_data_ptr;
 
   // Declare a triangle part with a triangle topology
-  stk::mesh::Part &triangle_part = meta_data.declare_part_with_topology("triangle_part", stk::topology::SHELL_TRI_3);
+  stk::mesh::Part& triangle_part = meta_data.declare_part_with_topology("triangle_part", stk::topology::SHELL_TRI_3);
   stk::io::put_io_part_attribute(triangle_part);
 
   // Add a node and element-rank color field
-  stk::mesh::Field<int> &node_rgb_field = meta_data.declare_field<int>(stk::topology::NODE_RANK, "rgb");
-  stk::mesh::Field<int> &element_rgb_field = meta_data.declare_field<int>(stk::topology::ELEMENT_RANK, "rgb");
+  stk::mesh::Field<int>& node_rgb_field = meta_data.declare_field<int>(stk::topology::NODE_RANK, "rgb");
+  stk::mesh::Field<int>& element_rgb_field = meta_data.declare_field<int>(stk::topology::ELEMENT_RANK, "rgb");
   stk::io::set_field_role(node_rgb_field, Ioss::Field::TRANSIENT);
   stk::io::set_field_role(element_rgb_field, Ioss::Field::TRANSIENT);
   stk::io::set_field_output_type(node_rgb_field, stk::io::FieldOutputType::VECTOR_3D);
   stk::io::set_field_output_type(element_rgb_field, stk::io::FieldOutputType::VECTOR_3D);
 
   // Add the node coordinates field
-  stk::mesh::Field<double> &node_coords_field =
+  stk::mesh::Field<double>& node_coords_field =
       meta_data.declare_field<double>(stk::topology::NODE_RANK, "coordinates");
 
   // Put the fields on the mesh
@@ -133,16 +133,16 @@ void neuron() {
   bulk_data.modification_end();
 
   // Write the mesh to file
-  size_t step = 1;  // Step = 0 doesn't write out fields...
+  int step = 1;  // Step = 0 doesn't write out fields...
   stk::io::write_mesh_with_fields("neuron.exo", bulk_data, step);
 }
 
 class Helix {
  public:
   /// Constructor
-  Helix(const size_t &num_nodes, const double &radius, const double &pitch, const double &distance_between_nodes,
-        const double &start_x, const double &start_y, const double &start_z, const double &axis_x, const double &axis_y,
-        const double &axis_z)
+  Helix(const size_t& num_nodes, const double& radius, const double& pitch, const double& distance_between_nodes,
+        const double& start_x, const double& start_y, const double& start_z, const double& axis_x, const double& axis_y,
+        const double& axis_z)
       : num_nodes_(num_nodes),
         num_edges_(num_nodes - 1),
         radius_(radius),
@@ -194,7 +194,7 @@ class Helix {
   /// \brief Get the grid coordinate corresponding to a given grid index.
   /// \param archlength_index The archlength index in [0 to num_nodes-1].
   /// \return The corresponding coordinate.
-  std::array<double, 3> get_grid_coordinate(const size_t &archlength_index) const {
+  std::array<double, 3> get_grid_coordinate(const size_t& archlength_index) const {
     // t = delta_t * archlength_index
     // x_ref = a * cos(t)
     // y_ref = a * sin(t)
@@ -235,18 +235,18 @@ void ciliated_sphere() {
   builder.set_aura_option(stk::mesh::BulkData::AUTO_AURA);
 
   std::shared_ptr<stk::mesh::MetaData> meta_data_ptr = builder.create_meta_data();
-  auto &meta_data = *meta_data_ptr;
+  auto& meta_data = *meta_data_ptr;
   meta_data.use_simple_fields();
   meta_data.set_coordinate_field_name("coordinates");
 
   std::shared_ptr<stk::mesh::BulkData> bulk_data_ptr = builder.create(meta_data_ptr);
-  auto &bulk_data = *bulk_data_ptr;
+  auto& bulk_data = *bulk_data_ptr;
 
   // Declare a triangle part with a triangle topology
-  stk::mesh::Part &fixed_nodes_part = meta_data.declare_part_with_topology("fixed_nodes_part", stk::topology::NODE);
-  stk::mesh::Part &triangle_part = meta_data.declare_part_with_topology("triangle_part", stk::topology::SHELL_TRI_3);
-  stk::mesh::Part &segment_part = meta_data.declare_part_with_topology("segment_part", stk::topology::BEAM_2);
-  stk::mesh::Part &angular_spring_part =
+  stk::mesh::Part& fixed_nodes_part = meta_data.declare_part_with_topology("fixed_nodes_part", stk::topology::NODE);
+  stk::mesh::Part& triangle_part = meta_data.declare_part_with_topology("triangle_part", stk::topology::SHELL_TRI_3);
+  stk::mesh::Part& segment_part = meta_data.declare_part_with_topology("segment_part", stk::topology::BEAM_2);
+  stk::mesh::Part& angular_spring_part =
       meta_data.declare_part_with_topology("angular_spring_part", stk::topology::SHELL_TRI_3);
   stk::io::put_io_part_attribute(fixed_nodes_part);
   stk::io::put_io_part_attribute(triangle_part);
@@ -254,20 +254,20 @@ void ciliated_sphere() {
   stk::io::put_io_part_attribute(angular_spring_part);
 
   // Add a node and element-rank color field
-  stk::mesh::Field<double> &node_mass_field =  //
+  stk::mesh::Field<double>& node_mass_field =  //
       meta_data.declare_field<double>(stk::topology::NODE_RANK, "mass");
-  stk::mesh::Field<double> &node_velocity_field =  //
+  stk::mesh::Field<double>& node_velocity_field =  //
       meta_data.declare_field<double>(stk::topology::NODE_RANK, "velocity");
-  stk::mesh::Field<double> &node_acceleration_field =  //
+  stk::mesh::Field<double>& node_acceleration_field =  //
       meta_data.declare_field<double>(stk::topology::NODE_RANK, "acceleration");
-  stk::mesh::Field<double> &node_force_field =  //
+  stk::mesh::Field<double>& node_force_field =  //
       meta_data.declare_field<double>(stk::topology::NODE_RANK, "force");
 
-  stk::mesh::Field<double> &element_radius =  //
+  stk::mesh::Field<double>& element_radius =  //
       meta_data.declare_field<double>(stk::topology::ELEMENT_RANK, "radius");
-  stk::mesh::Field<double> &element_spring_constant =  //
+  stk::mesh::Field<double>& element_spring_constant =  //
       meta_data.declare_field<double>(stk::topology::ELEMENT_RANK, "spring_constant");
-  stk::mesh::Field<double> &element_angular_spring_constant =  //
+  stk::mesh::Field<double>& element_angular_spring_constant =  //
       meta_data.declare_field<double>(stk::topology::ELEMENT_RANK, "angular_spring_constant");
 
   stk::io::set_field_role(node_mass_field, Ioss::Field::TRANSIENT);
@@ -289,7 +289,7 @@ void ciliated_sphere() {
   stk::io::set_field_output_type(element_angular_spring_constant, stk::io::FieldOutputType::SCALAR);
 
   // Add the node coordinates field
-  stk::mesh::Field<double> &node_coords_field =
+  stk::mesh::Field<double>& node_coords_field =
       meta_data.declare_field<double>(stk::topology::NODE_RANK, "coordinates");
 
   // Put the fields on the mesh
@@ -399,14 +399,14 @@ void ciliated_sphere() {
   bulk_data.modification_end();
 
   // Write the mesh to file
-  size_t step = 1;  // Step = 0 doesn't write out fields...
+  int step = 1;  // Step = 0 doesn't write out fields...
   stk::io::write_mesh_with_fields("ciliated_sphere.exo", bulk_data, step);
 }
 
-double distance_sq_from_point_to_line_segment(const mundy::math::Vector3d &x, const mundy::math::Vector3d &p1,
-                                              const mundy::math::Vector3d &p2,
-                                              mundy::math::Vector3d *const closest_point = nullptr,
-                                              double *const t = nullptr) {
+double distance_sq_from_point_to_line_segment(const mundy::math::Vector3d& x, const mundy::math::Vector3d& p1,
+                                              const mundy::math::Vector3d& p2,
+                                              mundy::math::Vector3d* const closest_point = nullptr,
+                                              double* const t = nullptr) {
   // Define some temporary variables
   mundy::math::Vector3d closest_point_tmp;
   double t_tmp;
@@ -472,31 +472,31 @@ void bacteria_in_a_porous_media() {
   builder.set_aura_option(stk::mesh::BulkData::AUTO_AURA);
 
   std::shared_ptr<stk::mesh::MetaData> meta_data_ptr = builder.create_meta_data();
-  auto &meta_data = *meta_data_ptr;
+  auto& meta_data = *meta_data_ptr;
   meta_data.use_simple_fields();
   meta_data.set_coordinate_field_name("coordinates");
 
   std::shared_ptr<stk::mesh::BulkData> bulk_data_ptr = builder.create(meta_data_ptr);
-  auto &bulk_data = *bulk_data_ptr;
+  auto& bulk_data = *bulk_data_ptr;
 
   // Declare the rod and sphere parts
-  stk::mesh::Part &rod_part = meta_data.declare_part_with_topology("rod_part", stk::topology::BEAM_2);
-  stk::mesh::Part &sphere_part = meta_data.declare_part_with_topology("sphere_part", stk::topology::PARTICLE);
+  stk::mesh::Part& rod_part = meta_data.declare_part_with_topology("rod_part", stk::topology::BEAM_2);
+  stk::mesh::Part& sphere_part = meta_data.declare_part_with_topology("sphere_part", stk::topology::PARTICLE);
   stk::io::put_io_part_attribute(rod_part);
   stk::io::put_io_part_attribute(sphere_part);
 
   // The rods have element radius and node velocity
-  stk::mesh::Field<double> &rod_radius_field =  //
+  stk::mesh::Field<double>& rod_radius_field =  //
       meta_data.declare_field<double>(stk::topology::ELEMENT_RANK, "radius");
-  stk::mesh::Field<double> &node_velocity_field =  //
+  stk::mesh::Field<double>& node_velocity_field =  //
       meta_data.declare_field<double>(stk::topology::NODE_RANK, "velocity");
 
   // The spheres have element radius
-  stk::mesh::Field<double> &sphere_radius_field =  //
+  stk::mesh::Field<double>& sphere_radius_field =  //
       meta_data.declare_field<double>(stk::topology::ELEMENT_RANK, "radius");
 
   // The nodes have coordinates
-  stk::mesh::Field<double> &node_coords_field =
+  stk::mesh::Field<double>& node_coords_field =
       meta_data.declare_field<double>(stk::topology::NODE_RANK, "coordinates");
 
   // Declare the field io roles and output types
@@ -631,20 +631,20 @@ void bacteria_in_a_porous_media() {
   bulk_data.modification_end();
 
   // Write the mesh to file
-  size_t step = 1;  // Step = 0 doesn't write out fields...
+  int step = 1;  // Step = 0 doesn't write out fields...
   stk::io::write_mesh_with_fields("bacteria_in_a_porous_media.exo", bulk_data, step);
 }
 
-bool is_point_inside_ellipsoid(const mundy::math::Vector3d &point, const mundy::math::Vector3d &center,
-                               const mundy::math::Vector3d &radii) {
+bool is_point_inside_ellipsoid(const mundy::math::Vector3d& point, const mundy::math::Vector3d& center,
+                               const mundy::math::Vector3d& radii) {
   const double x = (point[0] - center[0]) / radii[0];
   const double y = (point[1] - center[1]) / radii[1];
   const double z = (point[2] - center[2]) / radii[2];
   return x * x + y * y + z * z <= 1.0;
 }
 
-mundy::math::Vector3d random_point_inside_ellipsoid(const mundy::math::Vector3d &center,
-                                                    const mundy::math::Vector3d &radii) {
+mundy::math::Vector3d random_point_inside_ellipsoid(const mundy::math::Vector3d& center,
+                                                    const mundy::math::Vector3d& radii) {
   // Generate random points within the bounding box of the ellipsoid
   // And reject points that are not within the ellipsoid until we get a winner
   const size_t max_num_attempts = 100000;
@@ -661,9 +661,9 @@ mundy::math::Vector3d random_point_inside_ellipsoid(const mundy::math::Vector3d 
   return center;  // Failed to find a point. Return the center.
 }
 
-std::vector<mundy::math::Vector3d> random_walk_inside_ellipsoid(const mundy::math::Vector3d &start,
-                                                                const mundy::math::Vector3d &center,
-                                                                const mundy::math::Vector3d &radii,
+std::vector<mundy::math::Vector3d> random_walk_inside_ellipsoid(const mundy::math::Vector3d& start,
+                                                                const mundy::math::Vector3d& center,
+                                                                const mundy::math::Vector3d& radii,
                                                                 const size_t num_steps, const double step_length) {
   std::vector<mundy::math::Vector3d> walk(num_steps);
   walk[0] = start;
@@ -704,21 +704,21 @@ void chromatin() {
   builder.set_aura_option(stk::mesh::BulkData::AUTO_AURA);
 
   std::shared_ptr<stk::mesh::MetaData> meta_data_ptr = builder.create_meta_data();
-  auto &meta_data = *meta_data_ptr;
+  auto& meta_data = *meta_data_ptr;
   meta_data.use_simple_fields();
   meta_data.set_coordinate_field_name("coordinates");
 
   std::shared_ptr<stk::mesh::BulkData> bulk_data_ptr = builder.create(meta_data_ptr);
-  auto &bulk_data = *bulk_data_ptr;
+  auto& bulk_data = *bulk_data_ptr;
 
   // Declare te parts
-  stk::mesh::Part &nucleus_part = meta_data.declare_part_with_topology("nucleus", stk::topology::SHELL_TRI_3);
-  stk::mesh::Part &chromatin_segment_part =
+  stk::mesh::Part& nucleus_part = meta_data.declare_part_with_topology("nucleus", stk::topology::SHELL_TRI_3);
+  stk::mesh::Part& chromatin_segment_part =
       meta_data.declare_part_with_topology("chromatin_segment", stk::topology::BEAM_2);
-  stk::mesh::Part &euchromatin_part = meta_data.declare_part_with_topology("euchromatin", stk::topology::PARTICLE);
-  stk::mesh::Part &heterochromatin_part =
+  stk::mesh::Part& euchromatin_part = meta_data.declare_part_with_topology("euchromatin", stk::topology::PARTICLE);
+  stk::mesh::Part& heterochromatin_part =
       meta_data.declare_part_with_topology("heterochromatin", stk::topology::PARTICLE);
-  stk::mesh::Part &nucleus_binding_site_part = meta_data.declare_part_with_topology(
+  stk::mesh::Part& nucleus_binding_site_part = meta_data.declare_part_with_topology(
       "nucleus_binding_site",
       stk::topology::PARTICLE);  // It looks like these need to be particles for the exodus output
   stk::io::put_io_part_attribute(nucleus_part);
@@ -728,23 +728,23 @@ void chromatin() {
   stk::io::put_io_part_attribute(nucleus_binding_site_part);
 
   // The segments will store a radius and spring constant
-  stk::mesh::Field<double> &segment_radius_field =  //
+  stk::mesh::Field<double>& segment_radius_field =  //
       meta_data.declare_field<double>(stk::topology::ELEMENT_RANK, "radius");
-  stk::mesh::Field<double> &segment_spring_constant_field =  //
+  stk::mesh::Field<double>& segment_spring_constant_field =  //
       meta_data.declare_field<double>(stk::topology::ELEMENT_RANK, "spring_constant");
 
   // The euchromatin/heterochromatin will store a hydrodynamic radius
-  stk::mesh::Field<double> &hydrodynamic_radius_field =  //
+  stk::mesh::Field<double>& hydrodynamic_radius_field =  //
       meta_data.declare_field<double>(stk::topology::ELEMENT_RANK, "hydrodynamic");
 
   // The nodes within the chromatin segments will store a velocity and a force
-  stk::mesh::Field<double> &node_velocity_field =  //
+  stk::mesh::Field<double>& node_velocity_field =  //
       meta_data.declare_field<double>(stk::topology::NODE_RANK, "velocity");
-  stk::mesh::Field<double> &node_force_field =  //
+  stk::mesh::Field<double>& node_force_field =  //
       meta_data.declare_field<double>(stk::topology::NODE_RANK, "force");
 
   // All nodes have a coordinate field
-  stk::mesh::Field<double> &node_coords_field =
+  stk::mesh::Field<double>& node_coords_field =
       meta_data.declare_field<double>(stk::topology::NODE_RANK, "coordinates");
 
   // Assign the field roles
@@ -969,13 +969,13 @@ void chromatin() {
   bulk_data.modification_end();
 
   // Write the mesh to file
-  size_t step = 1;  // Step = 0 doesn't write out fields...
+  int step = 1;  // Step = 0 doesn't write out fields...
   stk::io::write_mesh_with_fields("chromatin.exo", bulk_data, step);
 }
 
-bool line_segment_intersects_triangle(const mundy::math::Vector3d &p1, const mundy::math::Vector3d &p2,
-                                      const mundy::math::Vector3d &v1, const mundy::math::Vector3d &v2,
-                                      const mundy::math::Vector3d &v3) {
+bool line_segment_intersects_triangle(const mundy::math::Vector3d& p1, const mundy::math::Vector3d& p2,
+                                      const mundy::math::Vector3d& v1, const mundy::math::Vector3d& v2,
+                                      const mundy::math::Vector3d& v3) {
   // Tolerance for floating-point comparisons
   constexpr double epsilon = 1e-12;
 
@@ -1020,9 +1020,9 @@ bool line_segment_intersects_triangle(const mundy::math::Vector3d &p1, const mun
   return (t >= 0.0 && t <= 1.0);
 }
 
-double line_segment_signed_distance_to_triangle(const mundy::math::Vector3d &p1, const mundy::math::Vector3d &p2,
-                                                const mundy::math::Vector3d &v1, const mundy::math::Vector3d &v2,
-                                                const mundy::math::Vector3d &v3) {
+double line_segment_signed_distance_to_triangle(const mundy::math::Vector3d& p1, const mundy::math::Vector3d& p2,
+                                                const mundy::math::Vector3d& v1, const mundy::math::Vector3d& v2,
+                                                const mundy::math::Vector3d& v3) {
   // Tolerance for floating-point comparisons
   constexpr double epsilon = 1e-12;
 
@@ -1082,30 +1082,30 @@ void bee_hive() {
   builder.set_aura_option(stk::mesh::BulkData::AUTO_AURA);
 
   std::shared_ptr<stk::mesh::MetaData> meta_data_ptr = builder.create_meta_data();
-  auto &meta_data = *meta_data_ptr;
+  auto& meta_data = *meta_data_ptr;
   meta_data.use_simple_fields();
   meta_data.set_coordinate_field_name("coordinates");
 
   std::shared_ptr<stk::mesh::BulkData> bulk_data_ptr = builder.create(meta_data_ptr);
-  auto &bulk_data = *bulk_data_ptr;
+  auto& bulk_data = *bulk_data_ptr;
 
   // Declare the rod and sphere parts
-  stk::mesh::Part &rod_part = meta_data.declare_part_with_topology("rod_part", stk::topology::BEAM_2);
-  stk::mesh::Part &triangle_part = meta_data.declare_part_with_topology("triangle_part", stk::topology::SHELL_TRI_3);
-  stk::mesh::Part &binding_site_part =
+  stk::mesh::Part& rod_part = meta_data.declare_part_with_topology("rod_part", stk::topology::BEAM_2);
+  stk::mesh::Part& triangle_part = meta_data.declare_part_with_topology("triangle_part", stk::topology::SHELL_TRI_3);
+  stk::mesh::Part& binding_site_part =
       meta_data.declare_part_with_topology("binding_site_part", stk::topology::PARTICLE);
   stk::io::put_io_part_attribute(rod_part);
   stk::io::put_io_part_attribute(triangle_part);
   stk::io::put_io_part_attribute(binding_site_part);
 
   // The rods have element radius and node velocity
-  stk::mesh::Field<double> &rod_radius_field =  //
+  stk::mesh::Field<double>& rod_radius_field =  //
       meta_data.declare_field<double>(stk::topology::ELEMENT_RANK, "radius");
-  stk::mesh::Field<double> &node_velocity_field =  //
+  stk::mesh::Field<double>& node_velocity_field =  //
       meta_data.declare_field<double>(stk::topology::NODE_RANK, "velocity");
 
   // The nodes have coordinates
-  stk::mesh::Field<double> &node_coords_field =
+  stk::mesh::Field<double>& node_coords_field =
       meta_data.declare_field<double>(stk::topology::NODE_RANK, "coordinates");
 
   // Declare the field io roles and output types
@@ -1288,11 +1288,11 @@ void bee_hive() {
   bulk_data.modification_end();
 
   // Write the mesh to file
-  size_t step = 1;  // Step = 0 doesn't write out fields...
+  int step = 1;  // Step = 0 doesn't write out fields...
   stk::io::write_mesh_with_fields("bee_hive.exo", bulk_data, step);
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
   stk::parallel_machine_init(&argc, &argv);
   Kokkos::initialize(argc, argv);
 

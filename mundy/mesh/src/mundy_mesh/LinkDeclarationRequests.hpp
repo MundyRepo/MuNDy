@@ -66,7 +66,7 @@ class LinkDeclarationRequestsT {  // Raw data in any space
   LinkDeclarationRequestsT() = default;
 
   /// \brief Canonical constructor.
-  LinkDeclarationRequestsT(const LinkMetaData &link_meta_data, const stk::mesh::PartVector &add_parts,
+  LinkDeclarationRequestsT(const LinkMetaData& link_meta_data, const stk::mesh::PartVector& add_parts,
                            unsigned link_dimensionality, unsigned initial_capacity)
       : link_meta_data_ptr_(&link_meta_data),
         link_parts_(add_parts),
@@ -94,13 +94,13 @@ class LinkDeclarationRequestsT {  // Raw data in any space
   }
 
   /// \brief Default copy/move constructors/operators.
-  LinkDeclarationRequestsT(const LinkDeclarationRequestsT &) = default;
-  LinkDeclarationRequestsT(LinkDeclarationRequestsT &&) = default;
-  LinkDeclarationRequestsT &operator=(const LinkDeclarationRequestsT &) = default;
-  LinkDeclarationRequestsT &operator=(LinkDeclarationRequestsT &&) = default;
+  LinkDeclarationRequestsT(const LinkDeclarationRequestsT&) = default;
+  LinkDeclarationRequestsT(LinkDeclarationRequestsT&&) = default;
+  LinkDeclarationRequestsT& operator=(const LinkDeclarationRequestsT&) = default;
+  LinkDeclarationRequestsT& operator=(LinkDeclarationRequestsT&&) = default;
 
   /// \brief Fetch the link meta data.
-  const LinkMetaData &link_meta_data() const {
+  const LinkMetaData& link_meta_data() const {
     MUNDY_THROW_ASSERT(link_meta_data_ptr_ != nullptr, std::runtime_error,
                        "Attempting to access link meta data before it has been set.");
     return *link_meta_data_ptr_;
@@ -108,7 +108,7 @@ class LinkDeclarationRequestsT {  // Raw data in any space
 
   /// \brief Fetch the part vector within which the links will be declared.
   KOKKOS_INLINE_FUNCTION
-  const stk::mesh::PartVector &get_link_parts() const {
+  const stk::mesh::PartVector& get_link_parts() const {
     return link_parts_;
   }
 
@@ -182,7 +182,7 @@ class LinkDeclarationRequestsT {  // Raw data in any space
   /// \param linked_entities [in] Any number of entities to link.
   template <typename... LinkedEntities>
     requires(std::is_same_v<std::decay_t<LinkedEntities>, stk::mesh::Entity> && ...)
-  KOKKOS_INLINE_FUNCTION void request_link(LinkedEntities &&...linked_entities) const {
+  KOKKOS_INLINE_FUNCTION void request_link(LinkedEntities&&... linked_entities) const {
     MUNDY_THROW_ASSERT(link_dimensionality() >= sizeof...(linked_entities), std::invalid_argument,
                        "The number of linked entities cannot exceed the link dimensionality.");
 
@@ -196,7 +196,7 @@ class LinkDeclarationRequestsT {  // Raw data in any space
   }
   template <typename... LinkedEntities>
     requires(std::is_same_v<std::decay_t<LinkedEntities>, stk::mesh::Entity> && ...)
-  inline void request_link_host(LinkedEntities &&...linked_entities) const {
+  inline void request_link_host(LinkedEntities&&... linked_entities) const {
     MUNDY_THROW_ASSERT(link_dimensionality() >= sizeof...(linked_entities), std::invalid_argument,
                        "The number of linked entities cannot exceed the link dimensionality.");
 
@@ -214,22 +214,22 @@ class LinkDeclarationRequestsT {  // Raw data in any space
   //@{
 
   /// \brief Get the dimensionality for a collection of linker parts
-  inline unsigned get_linker_dimensionality_host(const stk::mesh::PartVector &parts) const {
+  inline unsigned get_linker_dimensionality_host(const stk::mesh::PartVector& parts) const {
     // The restriction may be empty if the parts are not a subset of the universal link part.
-    auto &linked_es_field = impl::get_linked_entities_field(link_meta_data);
-    const stk::mesh::FieldRestriction &restriction = stk::mesh::find_restriction(linked_es_field, link_rank_, parts);
+    auto& linked_es_field = impl::get_linked_entities_field(link_meta_data);
+    const stk::mesh::FieldRestriction& restriction = stk::mesh::find_restriction(linked_es_field, link_rank_, parts);
     return restriction.num_scalars_per_entity();
   }
 
   /// \brief Unrole the entities into the requested links view.
   template <size_t... Is, typename... LinkedEntities>
   KOKKOS_INLINE_FUNCTION void insert_request(std::index_sequence<Is...>, size_t request_index,
-                                             LinkedEntities &&...linked_entities) const {
+                                             LinkedEntities&&... linked_entities) const {
     ((requests_.view_device()(request_index, Is) = std::forward<LinkedEntities>(linked_entities)), ...);
   }
   template <size_t... Is, typename... LinkedEntities>
   inline void insert_request_host(std::index_sequence<Is...>, size_t request_index,
-                                  LinkedEntities &&...linked_entities) const {
+                                  LinkedEntities&&... linked_entities) const {
     ((requests_.view_host()(request_index, Is) = std::forward<LinkedEntities>(linked_entities)), ...);
   }
   //@}
@@ -238,10 +238,10 @@ class LinkDeclarationRequestsT {  // Raw data in any space
   //@{
 
   using SizeDualView = core::NgpViewT<size_t, MemSpace>;
-  using RequestsDualView = core::NgpViewT<stk::mesh::Entity **, MemSpace>;
+  using RequestsDualView = core::NgpViewT<stk::mesh::Entity**, MemSpace>;
 
   // Core data
-  const LinkMetaData *link_meta_data_ptr_;
+  const LinkMetaData* link_meta_data_ptr_;
   stk::mesh::PartVector link_parts_;
   stk::mesh::EntityRank link_rank_;
   unsigned link_dimensionality_;

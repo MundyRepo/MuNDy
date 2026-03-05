@@ -28,17 +28,17 @@
 #include <fmt/format.h>  // for fmt::format
 
 // C++ core
-#include <iostream>       // for std::ostream
-#include <stdexcept>      // for std::runtime_error
-#include <vector>         // for std::vector
+#include <iostream>   // for std::ostream
+#include <stdexcept>  // for std::runtime_error
+#include <vector>     // for std::vector
 
 // Trilinos
-#include <stk_mesh/base/MetaData.hpp>  // for stk::mesh::MetaData
-#include <stk_mesh/base/Field.hpp>     // for stk::mesh::Field
 #include <stk_io/StkMeshIoBroker.hpp>  // for stk::io::StkMeshIoBroker
+#include <stk_mesh/base/Field.hpp>     // for stk::mesh::Field
+#include <stk_mesh/base/MetaData.hpp>  // for stk::mesh::MetaData
 
 // Mundy
-#include <mundy_core/throw_assert.hpp>   // for MUNDY_THROW_REQUIRE
+#include <mundy_core/throw_assert.hpp>  // for MUNDY_THROW_REQUIRE
 
 namespace mundy {
 
@@ -48,15 +48,16 @@ namespace mesh {
 ///
 /// This class is used to aid the declaration of a field on the mesh with reduced boilerplate.
 /// It uses a fluent interface to set the field properties and then declare the field.
-/// 
+///
 /// For example, to create a transient vector3 field on nodes called "velocity":
 /// \code{.cpp}
 ///   FieldDeclarationHelper field_decl(meta_data);
-///   stk::mesh::Field<double> &node_velocity_field = 
+///   stk::mesh::Field<double> &node_velocity_field =
 ///      field_decl.type<double>().role(TRANSIENT).output_type(VECTOR_3D).rank(NODE_RANK).name("velocity").declare();
 /// \endcode
 ///
-/// These setters may be called in any order. Role and output type are optional, but type(), rank(), and name() must be called before declare().
+/// These setters may be called in any order. Role and output type are optional, but type(), rank(), and name() must be
+/// called before declare().
 ///
 /// You may also reuse the same FieldDeclarationHelper to declare multiple fields with similar properties:
 /// \code{.cpp}
@@ -73,7 +74,7 @@ class FieldDeclarationHelperT {
   //@{
 
   /// \brief Canonical constructor
-  FieldDeclarationHelperT(stk::mesh::MetaData &meta_data)
+  FieldDeclarationHelperT(stk::mesh::MetaData& meta_data)
       : meta_data_(meta_data),
         field_has_rank_(false),
         field_has_name_(false),
@@ -82,10 +83,10 @@ class FieldDeclarationHelperT {
   }
 
   /// \brief Copy/Move constructors and assignment operators
-  FieldDeclarationHelperT(const FieldDeclarationHelperT &) = default;
-  FieldDeclarationHelperT(FieldDeclarationHelperT &&) = default;
-  FieldDeclarationHelperT &operator=(const FieldDeclarationHelperT &) = default;
-  FieldDeclarationHelperT &operator=(FieldDeclarationHelperT &&) = default;
+  FieldDeclarationHelperT(const FieldDeclarationHelperT&) = default;
+  FieldDeclarationHelperT(FieldDeclarationHelperT&&) = default;
+  FieldDeclarationHelperT& operator=(const FieldDeclarationHelperT&) = default;
+  FieldDeclarationHelperT& operator=(FieldDeclarationHelperT&&) = default;
   //@}
 
   //! \name Fluent interface
@@ -99,7 +100,7 @@ class FieldDeclarationHelperT {
   }
 
   /// \brief Set the name of the field (must be called before declare())
-  FieldDeclarationHelperT name(const std::string &field_name) {
+  FieldDeclarationHelperT name(const std::string& field_name) {
     field_has_name_ = true;
     field_name_ = field_name;
     return *this;
@@ -149,7 +150,7 @@ class FieldDeclarationHelperT {
   ///
   /// The output type for a field defines how its individual components are subscripted.
   /// For example a vector2 field with name "velocity" will have components velocity_x, velocity_y.
-  /// 
+  ///
   /// The possible output types and their resulting subscripting are:
   ///  SCALAR,           //  []
   ///  VECTOR_2D,        //  [x, y]
@@ -180,13 +181,13 @@ class FieldDeclarationHelperT {
   }
 
   /// \brief Declare a field with the given stk output type and role.
-  stk::mesh::Field<T> &declare() {
+  stk::mesh::Field<T>& declare() {
     // Validate that required parameters have been set
     MUNDY_THROW_REQUIRE(field_has_name_, std::logic_error, "Field name must be set before declaring a field.");
     MUNDY_THROW_REQUIRE(field_has_rank_, std::logic_error, "Field rank must be set before declaring a field.");
 
     // Declare the field
-    stk::mesh::Field<T> &field = meta_data_.declare_field<T>(rank_, field_name_);
+    stk::mesh::Field<T>& field = meta_data_.declare_field<T>(rank_, field_name_);
 
     // Set optional role and output type
     if (field_has_role_) {
@@ -200,7 +201,7 @@ class FieldDeclarationHelperT {
   }
 
  private:
-  stk::mesh::MetaData &meta_data_;
+  stk::mesh::MetaData& meta_data_;
 
   bool field_has_rank_;
   bool field_has_name_;
@@ -219,7 +220,7 @@ class FieldDeclarationHelper {
   //@{
 
   /// \brief Canonical constructor
-  FieldDeclarationHelper(stk::mesh::MetaData &meta_data)
+  FieldDeclarationHelper(stk::mesh::MetaData& meta_data)
       : meta_data_(meta_data),
         field_has_rank_(false),
         field_has_name_(false),
@@ -228,11 +229,10 @@ class FieldDeclarationHelper {
   }
 
   /// \brief Copy/Move constructors and assignment operators
-  FieldDeclarationHelper(const FieldDeclarationHelper &) = default;
-  FieldDeclarationHelper(FieldDeclarationHelper &&) = default;
-  FieldDeclarationHelper &operator=(const FieldDeclarationHelper &) = default;
-  FieldDeclarationHelper &operator=(FieldDeclarationHelper &&) = default;
-
+  FieldDeclarationHelper(const FieldDeclarationHelper&) = default;
+  FieldDeclarationHelper(FieldDeclarationHelper&&) = default;
+  FieldDeclarationHelper& operator=(const FieldDeclarationHelper&) = default;
+  FieldDeclarationHelper& operator=(FieldDeclarationHelper&&) = default;
 
   //! \name Fluent interface
   //@{
@@ -264,7 +264,7 @@ class FieldDeclarationHelper {
   }
 
   /// \brief Set the name of the field (must be called before declare())
-  FieldDeclarationHelper name(const std::string &field_name) {
+  FieldDeclarationHelper name(const std::string& field_name) {
     field_has_name_ = true;
     field_name_ = field_name;
     return *this;
@@ -293,7 +293,7 @@ class FieldDeclarationHelper {
   }
 
  private:
-  stk::mesh::MetaData &meta_data_;
+  stk::mesh::MetaData& meta_data_;
 
   bool field_has_rank_;
   bool field_has_name_;

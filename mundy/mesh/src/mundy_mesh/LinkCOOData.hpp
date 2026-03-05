@@ -64,13 +64,13 @@ class LinkCOOData {  // Host only | Valid during mesh modifications
   LinkCOOData() = default;
 
   /// \brief Default copy or move constructors/operators.
-  KOKKOS_DEFAULTED_FUNCTION LinkCOOData(const LinkCOOData &) = default;
-  KOKKOS_DEFAULTED_FUNCTION LinkCOOData(LinkCOOData &&) = default;
-  KOKKOS_DEFAULTED_FUNCTION LinkCOOData &operator=(const LinkCOOData &) = default;
-  KOKKOS_DEFAULTED_FUNCTION LinkCOOData &operator=(LinkCOOData &&) = default;
+  KOKKOS_DEFAULTED_FUNCTION LinkCOOData(const LinkCOOData&) = default;
+  KOKKOS_DEFAULTED_FUNCTION LinkCOOData(LinkCOOData&&) = default;
+  KOKKOS_DEFAULTED_FUNCTION LinkCOOData& operator=(const LinkCOOData&) = default;
+  KOKKOS_DEFAULTED_FUNCTION LinkCOOData& operator=(LinkCOOData&&) = default;
 
   /// \brief Canonical constructor.
-  explicit LinkCOOData(stk::mesh::BulkData &bulk_data, LinkMetaData &link_meta_data)
+  explicit LinkCOOData(stk::mesh::BulkData& bulk_data, LinkMetaData& link_meta_data)
       : bulk_data_ptr_(&bulk_data), link_meta_data_ptr_(&link_meta_data) {
     MUNDY_THROW_ASSERT(bulk_data_ptr_ != nullptr, std::invalid_argument, "Bulk data is not set.");
     MUNDY_THROW_ASSERT(link_meta_data_ptr_ != nullptr, std::invalid_argument, "Link meta data is not set.");
@@ -90,25 +90,25 @@ class LinkCOOData {  // Host only | Valid during mesh modifications
   }
 
   /// \brief Fetch the link meta data manager
-  inline const LinkMetaData &link_meta_data() const {
+  inline const LinkMetaData& link_meta_data() const {
     MUNDY_THROW_ASSERT(link_meta_data_ptr_ != nullptr, std::invalid_argument, "Link meta data is not set.");
     return *link_meta_data_ptr_;
   }
 
   /// \brief Fetch the link meta data manager
-  inline LinkMetaData &link_meta_data() {
+  inline LinkMetaData& link_meta_data() {
     MUNDY_THROW_ASSERT(link_meta_data_ptr_ != nullptr, std::invalid_argument, "Link meta data is not set.");
     return *link_meta_data_ptr_;
   }
 
   /// \brief Fetch the bulk data manager we extend
-  inline const stk::mesh::BulkData &bulk_data() const {
+  inline const stk::mesh::BulkData& bulk_data() const {
     MUNDY_THROW_ASSERT(bulk_data_ptr_ != nullptr, std::invalid_argument, "Bulk data is not set.");
     return *bulk_data_ptr_;
   }
 
   /// \brief Fetch the bulk data manager we extend
-  inline stk::mesh::BulkData &bulk_data() {
+  inline stk::mesh::BulkData& bulk_data() {
     MUNDY_THROW_ASSERT(bulk_data_ptr_ != nullptr, std::invalid_argument, "Bulk data is not set.");
     return *bulk_data_ptr_;
   }
@@ -143,18 +143,18 @@ class LinkCOOData {  // Host only | Valid during mesh modifications
   /// \param linker [in] The linker (must be valid and of the correct rank).
   /// \param linked_entity [in] The linked entity (may be invalid).
   /// \param link_ordinal [in] The ordinal of the linked entity.
-  inline void declare_relation(const stk::mesh::Entity &linker, const stk::mesh::Entity &linked_entity,
+  inline void declare_relation(const stk::mesh::Entity& linker, const stk::mesh::Entity& linked_entity,
                                unsigned link_ordinal) const {
     MUNDY_THROW_ASSERT(link_rank() == bulk_data().entity_rank(linker), std::invalid_argument,
                        "Linker is not of the correct rank.");
     MUNDY_THROW_ASSERT(bulk_data().is_valid(linker), std::invalid_argument, "Linker is not valid.");
 
-    auto &linked_es_field = impl::get_linked_entities_field(link_meta_data());
-    auto &linked_e_ids_field = impl::get_linked_entity_ids_field(link_meta_data());
-    auto &linked_e_ranks_field = impl::get_linked_entity_ranks_field(link_meta_data());
-    auto &linked_e_bucket_ids_field = impl::get_linked_entity_bucket_ids_field(link_meta_data());
-    auto &linked_e_bucket_ords_field = impl::get_linked_entity_bucket_ords_field(link_meta_data());
-    auto &link_needs_updated_field = impl::get_link_crs_needs_updated_field(link_meta_data());
+    auto& linked_es_field = impl::get_linked_entities_field(link_meta_data());
+    auto& linked_e_ids_field = impl::get_linked_entity_ids_field(link_meta_data());
+    auto& linked_e_ranks_field = impl::get_linked_entity_ranks_field(link_meta_data());
+    auto& linked_e_bucket_ids_field = impl::get_linked_entity_bucket_ids_field(link_meta_data());
+    auto& linked_e_bucket_ords_field = impl::get_linked_entity_bucket_ords_field(link_meta_data());
+    auto& link_needs_updated_field = impl::get_link_crs_needs_updated_field(link_meta_data());
 
     stk::mesh::field_data(linked_es_field, linker)[link_ordinal] = linked_entity.local_offset();
     stk::mesh::field_data(linked_e_ids_field, linker)[link_ordinal] = bulk_data().identifier(linked_entity);
@@ -169,17 +169,17 @@ class LinkCOOData {  // Host only | Valid during mesh modifications
   ///
   /// \param linker [in] The linker (must be valid and of the correct rank).
   /// \param link_ordinal [in] The ordinal of the linked entity.
-  inline void destroy_relation(const stk::mesh::Entity &linker, unsigned link_ordinal) const {
+  inline void destroy_relation(const stk::mesh::Entity& linker, unsigned link_ordinal) const {
     MUNDY_THROW_ASSERT(link_rank() == bulk_data().entity_rank(linker), std::invalid_argument,
                        "Linker is not of the correct rank.");
     MUNDY_THROW_ASSERT(bulk_data().is_valid(linker), std::invalid_argument, "Linker is not valid.");
 
-    auto &linked_es_field = impl::get_linked_entities_field(link_meta_data());
-    auto &linked_e_ids_field = impl::get_linked_entity_ids_field(link_meta_data());
-    auto &linked_e_ranks_field = impl::get_linked_entity_ranks_field(link_meta_data());
-    auto &linked_e_bucket_ids_field = impl::get_linked_entity_bucket_ids_field(link_meta_data());
-    auto &linked_e_bucket_ords_field = impl::get_linked_entity_bucket_ords_field(link_meta_data());
-    auto &link_needs_updated_field = impl::get_link_crs_needs_updated_field(link_meta_data());
+    auto& linked_es_field = impl::get_linked_entities_field(link_meta_data());
+    auto& linked_e_ids_field = impl::get_linked_entity_ids_field(link_meta_data());
+    auto& linked_e_ranks_field = impl::get_linked_entity_ranks_field(link_meta_data());
+    auto& linked_e_bucket_ids_field = impl::get_linked_entity_bucket_ids_field(link_meta_data());
+    auto& linked_e_bucket_ords_field = impl::get_linked_entity_bucket_ords_field(link_meta_data());
+    auto& link_needs_updated_field = impl::get_link_crs_needs_updated_field(link_meta_data());
 
     // Intentionally avoids updating the CSR linked entities field so that we can properly detect deletions.
     stk::mesh::field_data(linked_es_field, linker)[link_ordinal] = stk::mesh::Entity().local_offset();
@@ -195,12 +195,12 @@ class LinkCOOData {  // Host only | Valid during mesh modifications
   ///
   /// \param linker [in] The linker (must be valid and of the correct rank).
   /// \param link_ordinal [in] The ordinal of the linked entity.
-  inline stk::mesh::Entity get_linked_entity(const stk::mesh::Entity &linker, unsigned link_ordinal) const {
+  inline stk::mesh::Entity get_linked_entity(const stk::mesh::Entity& linker, unsigned link_ordinal) const {
     MUNDY_THROW_ASSERT(link_rank() == bulk_data().entity_rank(linker), std::invalid_argument,
                        "Linker is not of the correct rank.");
     MUNDY_THROW_ASSERT(bulk_data().is_valid(linker), std::invalid_argument, "Linker is not valid.");
 
-    auto &linked_es_field = impl::get_linked_entities_field(link_meta_data());
+    auto& linked_es_field = impl::get_linked_entities_field(link_meta_data());
     return stk::mesh::Entity(stk::mesh::field_data(linked_es_field, linker)[link_ordinal]);
   }
 
@@ -208,14 +208,14 @@ class LinkCOOData {  // Host only | Valid during mesh modifications
   ///
   /// \param linker [in] The linker (must be valid and of the correct rank).
   /// \param link_ordinal [in] The ordinal of the linked entity.
-  inline stk::mesh::FastMeshIndex get_linked_entity_index(const stk::mesh::Entity &linker,
+  inline stk::mesh::FastMeshIndex get_linked_entity_index(const stk::mesh::Entity& linker,
                                                           unsigned link_ordinal) const {
     MUNDY_THROW_ASSERT(link_rank() == bulk_data().entity_rank(linker), std::invalid_argument,
                        "Linker is not of the correct rank.");
     MUNDY_THROW_ASSERT(bulk_data().is_valid(linker), std::invalid_argument, "Linker is not valid.");
 
-    auto &linked_e_bucket_ids_field = impl::get_linked_entity_bucket_ids_field(link_meta_data());
-    auto &linked_e_bucket_ords_field = impl::get_linked_entity_bucket_ords_field(link_meta_data());
+    auto& linked_e_bucket_ids_field = impl::get_linked_entity_bucket_ids_field(link_meta_data());
+    auto& linked_e_bucket_ords_field = impl::get_linked_entity_bucket_ords_field(link_meta_data());
     return stk::mesh::FastMeshIndex(stk::mesh::field_data(linked_e_bucket_ids_field, linker)[link_ordinal],
                                     stk::mesh::field_data(linked_e_bucket_ords_field, linker)[link_ordinal]);
   }
@@ -224,12 +224,12 @@ class LinkCOOData {  // Host only | Valid during mesh modifications
   ///
   /// \param linker [in] The linker (must be valid and of the correct rank).
   /// \param link_ordinal [in] The ordinal of the linked entity.
-  inline stk::mesh::EntityId get_linked_entity_id(const stk::mesh::Entity &linker, unsigned link_ordinal) const {
+  inline stk::mesh::EntityId get_linked_entity_id(const stk::mesh::Entity& linker, unsigned link_ordinal) const {
     MUNDY_THROW_ASSERT(link_rank() == bulk_data().entity_rank(linker), std::invalid_argument,
                        "Linker is not of the correct rank.");
     MUNDY_THROW_ASSERT(bulk_data().is_valid(linker), std::invalid_argument, "Linker is not valid.");
 
-    auto &linked_e_ids_field = impl::get_linked_entity_ids_field(link_meta_data());
+    auto& linked_e_ids_field = impl::get_linked_entity_ids_field(link_meta_data());
     return stk::mesh::field_data(linked_e_ids_field, linker)[link_ordinal];
   }
 
@@ -237,12 +237,12 @@ class LinkCOOData {  // Host only | Valid during mesh modifications
   ///
   /// \param linker [in] The linker (must be valid and of the correct rank).
   /// \param link_ordinal [in] The ordinal of the linked entity.
-  inline stk::mesh::EntityRank get_linked_entity_rank(const stk::mesh::Entity &linker, unsigned link_ordinal) const {
+  inline stk::mesh::EntityRank get_linked_entity_rank(const stk::mesh::Entity& linker, unsigned link_ordinal) const {
     MUNDY_THROW_ASSERT(link_rank() == bulk_data().entity_rank(linker), std::invalid_argument,
                        "Linker is not of the correct rank.");
     MUNDY_THROW_ASSERT(bulk_data().is_valid(linker), std::invalid_argument, "Linker is not valid.");
 
-    auto &linked_e_ranks_field = impl::get_linked_entity_ranks_field(link_meta_data());
+    auto& linked_e_ranks_field = impl::get_linked_entity_ranks_field(link_meta_data());
     return static_cast<stk::mesh::EntityRank>(stk::mesh::field_data(linked_e_ranks_field, linker)[link_ordinal]);
   }
   //@}
@@ -252,22 +252,22 @@ class LinkCOOData {  // Host only | Valid during mesh modifications
   ///
   /// \param linker [in] The linker (must be valid and of the correct rank).
   /// \param link_ordinal [in] The ordinal of the linked entity.
-  inline stk::mesh::Entity get_linked_entity_crs(const stk::mesh::Entity &linker, unsigned link_ordinal) const {
+  inline stk::mesh::Entity get_linked_entity_crs(const stk::mesh::Entity& linker, unsigned link_ordinal) const {
     MUNDY_THROW_ASSERT(link_meta_data().link_rank() == bulk_data().entity_rank(linker), std::invalid_argument,
                        "Linker is not of the correct rank.");
     MUNDY_THROW_ASSERT(bulk_data().is_valid(linker), std::invalid_argument, "Linker is not valid.");
 
-    auto &linked_es_crs_field = impl::get_linked_entities_crs_field(link_meta_data());
+    auto& linked_es_crs_field = impl::get_linked_entities_crs_field(link_meta_data());
     return stk::mesh::Entity(stk::mesh::field_data(linked_es_crs_field, linker)[link_ordinal]);
   }
 
   /// \brief Get if the CSR connectivity for a link needs to be updated.
-  inline bool get_link_crs_needs_updated(const stk::mesh::Entity &linker) const {
+  inline bool get_link_crs_needs_updated(const stk::mesh::Entity& linker) const {
     MUNDY_THROW_ASSERT(link_meta_data().link_rank() == bulk_data().entity_rank(linker), std::invalid_argument,
                        "Linker is not of the correct rank.");
     MUNDY_THROW_ASSERT(bulk_data().is_valid(linker), std::invalid_argument, "Linker is not valid.");
 
-    auto &link_needs_updated_field = impl::get_link_crs_needs_updated_field(link_meta_data());
+    auto& link_needs_updated_field = impl::get_link_crs_needs_updated_field(link_meta_data());
     return static_cast<bool>(stk::mesh::field_data(link_needs_updated_field, linker)[0]);
   }
 
@@ -275,8 +275,8 @@ class LinkCOOData {  // Host only | Valid during mesh modifications
   //! \name Internal members (host only)
   //@{
 
-  stk::mesh::BulkData *bulk_data_ptr_;
-  LinkMetaData *link_meta_data_ptr_;
+  stk::mesh::BulkData* bulk_data_ptr_;
+  LinkMetaData* link_meta_data_ptr_;
   //@}
 };  // LinkCOOData
 
@@ -285,10 +285,10 @@ class NgpLinkCOODataT;
 
 namespace impl {
 template <typename NgpMemSpace>
-NgpLinkMetaDataT<NgpMemSpace> &get_ngp_link_meta_data(NgpLinkCOODataT<NgpMemSpace> &ngp_coo_data);
+NgpLinkMetaDataT<NgpMemSpace>& get_ngp_link_meta_data(NgpLinkCOODataT<NgpMemSpace>& ngp_coo_data);
 
 template <typename NgpMemSpace>
-stk::mesh::NgpMesh &get_ngp_mesh(NgpLinkCOODataT<NgpMemSpace> &ngp_coo_data);
+stk::mesh::NgpMesh& get_ngp_mesh(NgpLinkCOODataT<NgpMemSpace>& ngp_coo_data);
 
 template <typename NgpMemSpace>
 class NgpCOOToCSRSynchronizerT;
@@ -305,13 +305,13 @@ class NgpLinkCOODataT {  // Device only | Invalid during mesh modifications | Ca
   NgpLinkCOODataT() = default;
 
   /// \brief Default copy or move constructors/operators.
-  KOKKOS_DEFAULTED_FUNCTION NgpLinkCOODataT(const NgpLinkCOODataT &) = default;
-  KOKKOS_DEFAULTED_FUNCTION NgpLinkCOODataT(NgpLinkCOODataT &&) = default;
-  KOKKOS_DEFAULTED_FUNCTION NgpLinkCOODataT &operator=(const NgpLinkCOODataT &) = default;
-  KOKKOS_DEFAULTED_FUNCTION NgpLinkCOODataT &operator=(NgpLinkCOODataT &&) = default;
+  KOKKOS_DEFAULTED_FUNCTION NgpLinkCOODataT(const NgpLinkCOODataT&) = default;
+  KOKKOS_DEFAULTED_FUNCTION NgpLinkCOODataT(NgpLinkCOODataT&&) = default;
+  KOKKOS_DEFAULTED_FUNCTION NgpLinkCOODataT& operator=(const NgpLinkCOODataT&) = default;
+  KOKKOS_DEFAULTED_FUNCTION NgpLinkCOODataT& operator=(NgpLinkCOODataT&&) = default;
 
   /// \brief Canonical constructor.
-  explicit NgpLinkCOODataT(stk::mesh::BulkData &bulk_data, LinkMetaData &link_meta_data)
+  explicit NgpLinkCOODataT(stk::mesh::BulkData& bulk_data, LinkMetaData& link_meta_data)
       : bulk_data_ptr_(&bulk_data),
         link_meta_data_ptr_(&link_meta_data),
         ngp_mesh_(stk::mesh::get_updated_ngp_mesh(bulk_data)),
@@ -322,7 +322,7 @@ class NgpLinkCOODataT {  // Device only | Invalid during mesh modifications | Ca
 
   /// \brief Construct from a LinkCOOData.
   /// Does NOT perform a deep copy. Simply steals their pointers to the bulk data and meta data.
-  explicit NgpLinkCOODataT(LinkCOOData &host_other)
+  explicit NgpLinkCOODataT(LinkCOOData& host_other)
       : bulk_data_ptr_(&host_other.bulk_data()),
         link_meta_data_ptr_(&host_other.link_meta_data()),
         ngp_mesh_(stk::mesh::get_updated_ngp_mesh(host_other.bulk_data())),
@@ -345,25 +345,25 @@ class NgpLinkCOODataT {  // Device only | Invalid during mesh modifications | Ca
   }
 
   /// \brief Fetch the link meta data manager
-  inline const LinkMetaData &link_meta_data() const {
+  inline const LinkMetaData& link_meta_data() const {
     MUNDY_THROW_ASSERT(link_meta_data_ptr_ != nullptr, std::invalid_argument, "Link meta data is not set.");
     return *link_meta_data_ptr_;
   }
 
   /// \brief Fetch the link meta data manager
-  inline LinkMetaData &link_meta_data() {
+  inline LinkMetaData& link_meta_data() {
     MUNDY_THROW_ASSERT(link_meta_data_ptr_ != nullptr, std::invalid_argument, "Link meta data is not set.");
     return *link_meta_data_ptr_;
   }
 
   /// \brief Fetch the bulk data manager we extend
-  inline const stk::mesh::BulkData &bulk_data() const {
+  inline const stk::mesh::BulkData& bulk_data() const {
     MUNDY_THROW_ASSERT(bulk_data_ptr_ != nullptr, std::invalid_argument, "Bulk data is not set.");
     return *bulk_data_ptr_;
   }
 
   /// \brief Fetch the bulk data manager we extend
-  inline stk::mesh::BulkData &bulk_data() {
+  inline stk::mesh::BulkData& bulk_data() {
     MUNDY_THROW_ASSERT(bulk_data_ptr_ != nullptr, std::invalid_argument, "Bulk data is not set.");
     return *bulk_data_ptr_;
   }
@@ -400,9 +400,9 @@ class NgpLinkCOODataT {  // Device only | Invalid during mesh modifications | Ca
   /// \param linked_entity [in] The linked entity (may be invalid).
   /// \param link_ordinal [in] The ordinal of the linked entity.
   KOKKOS_INLINE_FUNCTION
-  void declare_relation(const stk::mesh::FastMeshIndex &linker_index,         //
-                        const stk::mesh::EntityRank &linked_entity_rank,      //
-                        const stk::mesh::FastMeshIndex &linked_entity_index,  //
+  void declare_relation(const stk::mesh::FastMeshIndex& linker_index,         //
+                        const stk::mesh::EntityRank& linked_entity_rank,      //
+                        const stk::mesh::FastMeshIndex& linked_entity_index,  //
                         unsigned link_ordinal) const {
     stk::mesh::Entity linked_entity = ngp_mesh_.get_entity(linked_entity_rank, linked_entity_index);
     stk::mesh::EntityKey linked_entity_key = ngp_mesh_.entity_key(linked_entity);
@@ -417,8 +417,8 @@ class NgpLinkCOODataT {  // Device only | Invalid during mesh modifications | Ca
     ngp_link_meta_data_.ngp_link_crs_needs_updated_field()(linker_index, 0) = true;
   }
   KOKKOS_INLINE_FUNCTION
-  void declare_relation(const stk::mesh::Entity &linker,         //
-                        const stk::mesh::Entity &linked_entity,  //
+  void declare_relation(const stk::mesh::Entity& linker,         //
+                        const stk::mesh::Entity& linked_entity,  //
                         unsigned link_ordinal) const {
     declare_relation(ngp_mesh_.fast_mesh_index(linker), ngp_mesh_.entity_rank(linked_entity),
                      ngp_mesh_.fast_mesh_index(linked_entity), link_ordinal);
@@ -429,7 +429,7 @@ class NgpLinkCOODataT {  // Device only | Invalid during mesh modifications | Ca
   /// \param linker [in] The linker (must be valid and of the correct rank).
   /// \param link_ordinal [in] The ordinal of the linked entity.
   KOKKOS_INLINE_FUNCTION
-  void destroy_relation(const stk::mesh::FastMeshIndex &linker_index, unsigned link_ordinal) const {
+  void destroy_relation(const stk::mesh::FastMeshIndex& linker_index, unsigned link_ordinal) const {
     ngp_link_meta_data_.ngp_linked_entities_field()(linker_index, link_ordinal) = stk::mesh::Entity().local_offset();
     ngp_link_meta_data_.ngp_linked_entity_ids_field()(linker_index, link_ordinal) = stk::mesh::EntityId();
     ngp_link_meta_data_.ngp_linked_entity_ranks_field()(linker_index, link_ordinal) =
@@ -439,7 +439,7 @@ class NgpLinkCOODataT {  // Device only | Invalid during mesh modifications | Ca
     ngp_link_meta_data_.ngp_link_crs_needs_updated_field()(linker_index, 0) = true;
   }
   KOKKOS_INLINE_FUNCTION
-  void destroy_relation(const stk::mesh::Entity &linker, unsigned link_ordinal) const {
+  void destroy_relation(const stk::mesh::Entity& linker, unsigned link_ordinal) const {
     destroy_relation(ngp_mesh_.fast_mesh_index(linker), link_ordinal);
   }
 
@@ -448,11 +448,11 @@ class NgpLinkCOODataT {  // Device only | Invalid during mesh modifications | Ca
   /// \param linker [in] The linker (must be valid and of the correct rank).
   /// \param link_ordinal [in] The ordinal of the linked entity.
   KOKKOS_INLINE_FUNCTION
-  stk::mesh::Entity get_linked_entity(const stk::mesh::FastMeshIndex &linker_index, unsigned link_ordinal) const {
+  stk::mesh::Entity get_linked_entity(const stk::mesh::FastMeshIndex& linker_index, unsigned link_ordinal) const {
     return stk::mesh::Entity(ngp_link_meta_data_.ngp_linked_entities_field()(linker_index, link_ordinal));
   }
   KOKKOS_INLINE_FUNCTION
-  stk::mesh::Entity get_linked_entity(const stk::mesh::Entity &linker, unsigned link_ordinal) const {
+  stk::mesh::Entity get_linked_entity(const stk::mesh::Entity& linker, unsigned link_ordinal) const {
     return get_linked_entity(ngp_mesh_.fast_mesh_index(linker), link_ordinal);
   }
 
@@ -461,14 +461,14 @@ class NgpLinkCOODataT {  // Device only | Invalid during mesh modifications | Ca
   /// \param linker [in] The linker (must be valid and of the correct rank).
   /// \param link_ordinal [in] The ordinal of the linked entity.
   KOKKOS_INLINE_FUNCTION
-  stk::mesh::FastMeshIndex get_linked_entity_index(const stk::mesh::FastMeshIndex &linker_index,
+  stk::mesh::FastMeshIndex get_linked_entity_index(const stk::mesh::FastMeshIndex& linker_index,
                                                    unsigned link_ordinal) const {
     return stk::mesh::FastMeshIndex(
         ngp_link_meta_data_.ngp_linked_entity_bucket_ids_field()(linker_index, link_ordinal),
         ngp_link_meta_data_.ngp_linked_entity_bucket_ords_field()(linker_index, link_ordinal));
   }
   KOKKOS_INLINE_FUNCTION
-  stk::mesh::FastMeshIndex get_linked_entity_index(const stk::mesh::Entity &linker, unsigned link_ordinal) const {
+  stk::mesh::FastMeshIndex get_linked_entity_index(const stk::mesh::Entity& linker, unsigned link_ordinal) const {
     return get_linked_entity_index(ngp_mesh_.fast_mesh_index(linker), link_ordinal);
   }
 
@@ -477,11 +477,11 @@ class NgpLinkCOODataT {  // Device only | Invalid during mesh modifications | Ca
   /// \param linker [in] The linker (must be valid and of the correct rank).
   /// \param link_ordinal [in] The ordinal of the linked entity.
   KOKKOS_INLINE_FUNCTION
-  stk::mesh::EntityId get_linked_entity_id(const stk::mesh::FastMeshIndex &linker_index, unsigned link_ordinal) const {
+  stk::mesh::EntityId get_linked_entity_id(const stk::mesh::FastMeshIndex& linker_index, unsigned link_ordinal) const {
     return ngp_link_meta_data_.ngp_linked_entity_ids_field()(linker_index, link_ordinal);
   }
   KOKKOS_INLINE_FUNCTION
-  stk::mesh::EntityId get_linked_entity_id(const stk::mesh::Entity &linker, unsigned link_ordinal) const {
+  stk::mesh::EntityId get_linked_entity_id(const stk::mesh::Entity& linker, unsigned link_ordinal) const {
     return get_linked_entity_id(ngp_mesh_.fast_mesh_index(linker), link_ordinal);
   }
 
@@ -490,13 +490,13 @@ class NgpLinkCOODataT {  // Device only | Invalid during mesh modifications | Ca
   /// \param linker [in] The linker (must be valid and of the correct rank).
   /// \param link_ordinal [in] The ordinal of the linked entity.
   KOKKOS_INLINE_FUNCTION
-  stk::mesh::EntityRank get_linked_entity_rank(const stk::mesh::FastMeshIndex &linker_index,
+  stk::mesh::EntityRank get_linked_entity_rank(const stk::mesh::FastMeshIndex& linker_index,
                                                unsigned link_ordinal) const {
     return static_cast<stk::mesh::EntityRank>(
         ngp_link_meta_data_.ngp_linked_entity_ranks_field()(linker_index, link_ordinal));
   }
   KOKKOS_INLINE_FUNCTION
-  stk::mesh::EntityRank get_linked_entity_rank(const stk::mesh::Entity &linker, unsigned link_ordinal) const {
+  stk::mesh::EntityRank get_linked_entity_rank(const stk::mesh::Entity& linker, unsigned link_ordinal) const {
     return get_linked_entity_rank(ngp_mesh_.fast_mesh_index(linker), link_ordinal);
   }
   //@}
@@ -504,11 +504,11 @@ class NgpLinkCOODataT {  // Device only | Invalid during mesh modifications | Ca
  protected:
   /// \brief Fetch the ngp mesh
   KOKKOS_INLINE_FUNCTION
-  const stk::mesh::NgpMesh &ngp_mesh() const noexcept {
+  const stk::mesh::NgpMesh& ngp_mesh() const noexcept {
     return ngp_mesh_;
   }
   KOKKOS_INLINE_FUNCTION
-  stk::mesh::NgpMesh &ngp_mesh() noexcept {
+  stk::mesh::NgpMesh& ngp_mesh() noexcept {
     return ngp_mesh_;
   }
 
@@ -517,30 +517,30 @@ class NgpLinkCOODataT {  // Device only | Invalid during mesh modifications | Ca
   /// \param linker [in] The linker (must be valid and of the correct rank).
   /// \param link_ordinal [in] The ordinal of the linked entity.
   KOKKOS_INLINE_FUNCTION
-  stk::mesh::Entity get_linked_entity_crs(const stk::mesh::FastMeshIndex &linker_index, unsigned link_ordinal) const {
+  stk::mesh::Entity get_linked_entity_crs(const stk::mesh::FastMeshIndex& linker_index, unsigned link_ordinal) const {
     return stk::mesh::Entity(ngp_link_meta_data_.ngp_linked_entities_crs_field()(linker_index, link_ordinal));
   }
   KOKKOS_INLINE_FUNCTION
-  stk::mesh::Entity get_linked_entity_crs(const stk::mesh::Entity &linker, unsigned link_ordinal) const {
+  stk::mesh::Entity get_linked_entity_crs(const stk::mesh::Entity& linker, unsigned link_ordinal) const {
     return get_linked_entity_crs(ngp_mesh_.fast_mesh_index(linker), link_ordinal);
   }
 
   /// \brief Get if the CSR connectivity for a link needs to be updated.
   KOKKOS_INLINE_FUNCTION
-  bool get_link_crs_needs_updated(const stk::mesh::FastMeshIndex &linker_index) const {
+  bool get_link_crs_needs_updated(const stk::mesh::FastMeshIndex& linker_index) const {
     return ngp_link_meta_data_.ngp_link_crs_needs_updated_field()(linker_index, 0);
   }
   KOKKOS_INLINE_FUNCTION
-  bool get_link_crs_needs_updated(const stk::mesh::Entity &linker) const {
+  bool get_link_crs_needs_updated(const stk::mesh::Entity& linker) const {
     return get_link_crs_needs_updated(ngp_mesh_.fast_mesh_index(linker));
   }
 
  private:
   template <typename T>
-  friend impl::NgpLinkMetaDataT<T> &impl::get_ngp_link_meta_data(NgpLinkCOODataT<T> &ngp_coo_data);
+  friend impl::NgpLinkMetaDataT<T>& impl::get_ngp_link_meta_data(NgpLinkCOODataT<T>& ngp_coo_data);
 
   template <typename T>
-  friend stk::mesh::NgpMesh &impl::get_ngp_mesh(NgpLinkCOODataT<T> &ngp_coo_data);
+  friend stk::mesh::NgpMesh& impl::get_ngp_mesh(NgpLinkCOODataT<T>& ngp_coo_data);
 
   template <typename T>
   friend class impl::NgpCOOToCSRSynchronizerT;
@@ -548,8 +548,8 @@ class NgpLinkCOODataT {  // Device only | Invalid during mesh modifications | Ca
   //! \name Internal members (host only)
   //@{
 
-  stk::mesh::BulkData *bulk_data_ptr_;
-  LinkMetaData *link_meta_data_ptr_;
+  stk::mesh::BulkData* bulk_data_ptr_;
+  LinkMetaData* link_meta_data_ptr_;
   //@}
 
   //! \name Internal members (device compatible)
@@ -565,11 +565,11 @@ using NgpLinkCOOData = NgpLinkCOODataT<stk::ngp::MemSpace>;
 
 namespace impl {
 template <typename NgpMemSpace>
-NgpLinkMetaDataT<NgpMemSpace> &get_ngp_link_meta_data(NgpLinkCOODataT<NgpMemSpace> &ngp_coo_data) {
+NgpLinkMetaDataT<NgpMemSpace>& get_ngp_link_meta_data(NgpLinkCOODataT<NgpMemSpace>& ngp_coo_data) {
   return ngp_coo_data.ngp_link_meta_data_;
 }
 template <typename NgpMemSpace>
-stk::mesh::NgpMesh &get_ngp_mesh(NgpLinkCOODataT<NgpMemSpace> &ngp_coo_data) {
+stk::mesh::NgpMesh& get_ngp_mesh(NgpLinkCOODataT<NgpMemSpace>& ngp_coo_data) {
   return ngp_coo_data.ngp_mesh_;
 }
 }  // namespace impl

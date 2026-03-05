@@ -513,7 +513,7 @@ class DeclareEntitiesHelper {
     /// \param linked_entity_rank The entity rank of the entity to link to.
     /// \param ordinal The slot/ordinal to link the entity at.
     ElementBuilder& links_to(LinkData* const link_data_ptr, const stk::mesh::EntityId linked_entity_id,
-                          const stk::mesh::EntityRank linked_entity_rank, const unsigned ordinal) {
+                             const stk::mesh::EntityRank linked_entity_rank, const unsigned ordinal) {
       MUNDY_THROW_ASSERT(link_data_ptr != nullptr, std::invalid_argument, "LinkData pointer is null.");
       const std::string& link_meta_data_name = link_data_ptr->link_meta_data().name();
       auto& link_info = elem_info_.link_info_map[link_meta_data_name];

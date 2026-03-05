@@ -69,6 +69,7 @@
 #include <mundy_meta/MeshReqs.hpp>                  // for mundy::meta::MeshReqs
 #include <mundy_meta/PartReqs.hpp>                  // for mundy::meta::PartReqs
 #include <mundy_shapes/ComputeAABB.hpp>             // for mundy::shapes::ComputeAABB
+#include <mundy_core/rng.hpp>              // for mundy::core::make_philox
 
 namespace impl {
 
@@ -783,7 +784,7 @@ class FilamentSim {
 
           size_t *node_rng_counter = stk::mesh::field_data(node_rng_counter_field, node2);
           const size_t node_gid = bulk_data.identifier(node2);
-          openrand::Philox rng(node_gid, node_rng_counter[0]);
+          openrand::Philox rng = core::make_philox(node_gid, node_rng_counter[0]);
 
           // Apply a very small random orientational kick to keep filament from growing in a circle
           const double max_kick = 0.8;

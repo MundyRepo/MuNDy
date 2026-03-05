@@ -22,15 +22,16 @@
 #include <gtest/gtest.h>      // for TEST, ASSERT_NO_THROW, etc
 #include <openrand/philox.h>  // for openrand::Philox
 
-#include <Kokkos_Core.hpp>  // for Kokkos::Array
 #include <KokkosBlas.hpp>
 #include <KokkosBlas_gesv.hpp>
+#include <Kokkos_Core.hpp>  // for Kokkos::Array
 
 // C++ core libs
 #include <ostream>  // for std::cout
 
 // Mundy libs
 #include <MundyMath_config.hpp>   // for HAVE_MUNDYMATH_*
+#include <mundy_core/rng.hpp>     // for mundy::core::make_philox
 #include <mundy_math/Matrix.hpp>  // for mundy::math::Matrix
 #include <mundy_math/Vector.hpp>  // for mundy::math::Vector
 #include <mundy_math/convex.hpp>  // for mundy::math::solve_lcp/solve_cqpp
@@ -298,11 +299,11 @@ namespace mixed {
 /// We refactor this into the desired form by defining:
 ///   S := (B^T M B + K^{-1})^{-1} (symmetric positive definite)
 ///
-///  M is size NZ x NZ, 
-///  B is NZ x NY, 
-///  Kinv is NY x NY, 
-///  D is NZ x NX, 
-///  q is NX, 
+///  M is size NZ x NZ,
+///  B is NZ x NY,
+///  Kinv is NY x NY,
+///  D is NZ x NX,
+///  q is NX,
 ///  b is NY,
 ///  x* in R^NX,
 ///  y* in R^NY.
@@ -717,7 +718,7 @@ struct RandomLCP {
     Kokkos::parallel_for(
         "gen_random_matrix", Kokkos::MDRangePolicy<Kokkos::Rank<2>>({0, 0}, {size, size}),
         KOKKOS_LAMBDA(const size_t i, const size_t j) {
-          openrand::Philox rng(i, j);
+          openrand::Philox rng = core::make_philox(i, j);
           mat(i, j) = rng.uniform<double>(-1.0, 1.0);
         });
 
@@ -927,9 +928,9 @@ struct RandomMixedCongruentCCQP {
     return b_;
   }
 
- private:
+  KOKKOS_INLINE_FUNCTION
   static scalar_t urand(uint64_t a, uint64_t b) {
-    openrand::Philox rng(a, b);
+    openrand::Philox rng = core::make_philox(a, b);
     return rng.uniform<double>(-1.0, 1.0);
   }
 
@@ -963,7 +964,8 @@ struct RandomMixedCongruentCCQP {
     matzz_t A(Kokkos::view_alloc(Kokkos::WithoutInitializing, "A"), NZ, NZ);
     KokkosBlas::gemm("T", "N", 1.0, R, R, 0.0, A);
     Kokkos::parallel_for(
-        "spd_diag_boost", Kokkos::RangePolicy<exec_space>(0, NZ), KOKKOS_LAMBDA(const size_t i) { A(i, i) += diag_boost; });
+        "spd_diag_boost", Kokkos::RangePolicy<exec_space>(0, NZ),
+        KOKKOS_LAMBDA(const size_t i) { A(i, i) += diag_boost; });
     return A;
   }
 
@@ -977,7 +979,8 @@ struct RandomMixedCongruentCCQP {
 
     constexpr size_t diag_n = (NZ < NX ? NZ : NX);
     Kokkos::parallel_for(
-        "inject_d_diag", Kokkos::RangePolicy<exec_space>(0, diag_n), KOKKOS_LAMBDA(const size_t i) { D_(i, i) += 3.0; });
+        "inject_d_diag", Kokkos::RangePolicy<exec_space>(0, diag_n),
+        KOKKOS_LAMBDA(const size_t i) { D_(i, i) += 3.0; });
 
     transpose_zx_to_xz(D_, DT_);
   }
@@ -1001,7 +1004,7 @@ struct RandomMixedCongruentCCQP {
     Kokkos::deep_copy(Kinv_, 0.0);
     Kokkos::parallel_for(
         "init_kinv_diag", Kokkos::RangePolicy<exec_space>(0, NY), KOKKOS_LAMBDA(const size_t i) {
-          openrand::Philox rng(static_cast<uint64_t>(i + seed_ + 401), static_cast<uint64_t>(911));
+          openrand::Philox rng = core::make_philox(static_cast<uint64_t>(i + seed + 401), static_cast<uint64_t>(911));
           Kinv_(i, i) = 10.0 + Kokkos::abs(urand(static_cast<uint64_t>(i + seed + 401), static_cast<uint64_t>(911)));
         });
 
@@ -1021,7 +1024,7 @@ struct RandomMixedCongruentCCQP {
     vecx_t s_star(Kokkos::view_alloc(Kokkos::WithoutInitializing, "s_star"), NX);
     Kokkos::parallel_for(
         "init_xs", Kokkos::RangePolicy<exec_space>(0, NX), KOKKOS_LAMBDA(const size_t i) {
-          openrand::Philox rng(static_cast<uint64_t>(i + seed + 503), static_cast<uint64_t>(1337));
+          openrand::Philox rng = core::make_philox(static_cast<uint64_t>(i + seed + 503), static_cast<uint64_t>(1337));
           const double u0 = rng.uniform<double>(0.0, 1.0);
           const double u1 = rng.uniform<double>(0.0, 1.0);
           const bool active = u0 < 0.5;
@@ -1074,6 +1077,7 @@ struct RandomMixedCongruentCCQP {
     KokkosBlas::gemv("N", -1.0, S_, rhs, 0.0, y_star_);
   }
 
+ private:
   unsigned seed_ = 1;
   matzz_t M_;
   matzx_t D_;
@@ -1224,14 +1228,14 @@ void run_mundy_math_mixed_congruent_test(const auto& test) {
   x.fill(99.99);  // use a bad initial guess to force more iterations
 
   // Double check sizes:
-  ASSERT_EQ(M.num_rows, M.num_cols) << "M should be square";  
+  ASSERT_EQ(M.num_rows, M.num_cols) << "M should be square";
   ASSERT_EQ(DT.num_rows, D.num_cols) << "DT and D are supposed to be transposes of each other";
   ASSERT_EQ(DT.num_cols, D.num_rows) << "DT and D are supposed to be transposes of each other";
   ASSERT_EQ(DT.num_cols, M.num_rows) << "DT * M should be well-defined";
   ASSERT_EQ(M.num_cols, D.num_rows) << "M * D should be well-defined";
   ASSERT_EQ(M.num_cols, B.num_rows) << "M * B should be well-defined";
   ASSERT_EQ(BT.num_cols, M.num_rows) << "B^T * M should be well-defined";
-  
+
   ASSERT_EQ(D.num_cols, x_exact.size) << "D * x should be well-defined";
   ASSERT_EQ(B.num_cols, y_exact.size) << "B * y should be well-defined";
   ASSERT_EQ(S.num_cols, BT.num_rows) << "S * BT should be well-defined";
@@ -1247,11 +1251,10 @@ void run_mundy_math_mixed_congruent_test(const auto& test) {
   auto f_b = mixed_cqpp.f_b();
 
   ASSERT_EQ(convex::MundyMathBackend::domain_size(M_op), convex::MundyMathBackend::size(f_b))
-    << "M and f_b should be compatible for multiplication";
+      << "M and f_b should be compatible for multiplication";
   ASSERT_EQ(convex::MundyMathBackend::domain_size(DT_op), convex::MundyMathBackend::range_size(M_op))
-    << "DT and M should be compatible for DT * M";
+      << "DT and M should be compatible for DT * M";
 
-  
   // auto a_workspace = A.make_workspace();
   // convex::MundyMathBackend::apply(A, f_b, q, a_workspace);
 
@@ -1409,8 +1412,7 @@ void run_kokkos_mixed_congruent_test(const auto& test) {
   ASSERT_EQ(b.extent(0), y_exact.extent(0)) << "b should be same size as y_exact";
 
   // Build the problem
-  const auto mixed_cqpp =
-      make_mixed_cqpp<convex::KokkosBackend<decltype(exec_space)>>(DT, M, D, q, B, S, BT, b, space);
+  const auto mixed_cqpp = make_mixed_cqpp<convex::KokkosBackend<decltype(exec_space)>>(DT, M, D, q, B, S, BT, b, space);
 
   auto DT_op = mixed_cqpp.DT();
   auto M_op = mixed_cqpp.M();
@@ -1442,8 +1444,8 @@ TEST(Convex, MundyMathCongruentAnalyticalSolutions) {
 }
 
 TEST(Convex, MundyMathMixedCongruentAnalyticalSolutions) {
-  auto test_cases = std::make_tuple(math_backend::mixed::RandomMixedCongruentCCQP<5,4,3>{},  //
-                                    math_backend::mixed::RandomMixedCongruentCCQP<3,4,5>{});
+  auto test_cases = std::make_tuple(math_backend::mixed::RandomMixedCongruentCCQP<5, 4, 3>{},  //
+                                    math_backend::mixed::RandomMixedCongruentCCQP<3, 4, 5>{});
   std::apply([](auto&&... test_case) { (run_mundy_math_mixed_congruent_test(test_case), ...); }, test_cases);
 }
 
@@ -1470,8 +1472,8 @@ TEST(Convex, KokkosCongruentAnalyticalSolutions) {
 }
 
 TEST(Convex, KokkosMixedCongruentAnalyticalSolutions) {
-  auto test_cases = std::make_tuple(kokkos_backend::mixed::RandomMixedCongruentCCQP<5,4,3>{},  //
-                                    kokkos_backend::mixed::RandomMixedCongruentCCQP<3,4,5>{});
+  auto test_cases = std::make_tuple(kokkos_backend::mixed::RandomMixedCongruentCCQP<5, 4, 3>{},  //
+                                    kokkos_backend::mixed::RandomMixedCongruentCCQP<3, 4, 5>{});
   std::apply([](auto&&... test_case) { (run_kokkos_mixed_congruent_test(test_case), ...); }, test_cases);
 }
 #endif  // HAVE_MUNDYMATH_KOKKOSKERNELS

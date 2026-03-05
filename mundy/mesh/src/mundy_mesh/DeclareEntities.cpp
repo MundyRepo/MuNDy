@@ -217,7 +217,8 @@ DeclareEntitiesHelper& DeclareEntitiesHelper::declare_entities(stk::mesh::BulkDa
             }
           }
 
-          bulk_data.declare_relation(element, node, i, perm, scratch1, scratch2, scratch3);
+          bulk_data.declare_relation(element, node, static_cast<stk::mesh::RelationIdentifier>(i), perm, scratch1,
+                                     scratch2, scratch3);
 
           // If the current element is owned by a different processor than the node, we (the element's owning process)
           // need to share the node with the node's owning processor.

@@ -45,7 +45,7 @@ namespace math {
 ///
 /// The non-reference passing of the current_position, dr1, dr2, and dr3 is intentional. This is because the
 /// we do some math when passing the values to the next recursive call.
-size_t hilbert_3d(size_t s, size_t i, std::vector<mundy::math::Vector3d> &position_array,
+size_t hilbert_3d(size_t s, size_t i, std::vector<mundy::math::Vector3d>& position_array,
                   mundy::math::Vector3d current_position, mundy::math::Vector3d dr1, mundy::math::Vector3d dr2,
                   mundy::math::Vector3d dr3) {
   // Check to make sure we've been passed in a power of two
@@ -63,7 +63,7 @@ size_t hilbert_3d(size_t s, size_t i, std::vector<mundy::math::Vector3d> &positi
   mundy::math::Vector3 dr2_new = dr2;
   mundy::math::Vector3 dr3_new = dr3;
 
-  for (auto &dr : {dr1_new, dr2_new, dr3_new}) {
+  for (auto& dr : {dr1_new, dr2_new, dr3_new}) {
     mundy::math::Vector3d dr_stencil = {dr[0] < 0.0 ? 1.0 : 0.0, dr[1] < 0.0 ? 1.0 : 0.0, dr[2] < 0.0 ? 1.0 : 0.0};
     current_position_new -= static_cast<double>(snew) * elementwise_mul(dr_stencil, dr);
   }

@@ -84,6 +84,7 @@
 #include <mundy_meta/utils/MeshGeneration.hpp>  // for mundy::meta::utils::generate_class_instance_and_mesh_from_meta_class_requirements
 #include <mundy_shapes/ComputeAABB.hpp>  // for mundy::shapes::ComputeAABB
 #include <mundy_shapes/Spheres.hpp>      // for mundy::shapes::Spheres
+#include <mundy_core/rng.hpp>              // for mundy::core::make_philox
 
 /*
 I think users should define what they expect the internal variable to be called.
@@ -444,7 +445,7 @@ MUNDY_METHOD(mundy::alens, InitializeChromosomePositionsGrid) {
     // loop so we can go by node index, rather than ID.
     if (bulk_data_ptr_->parallel_rank() == 0) {
       for (size_t j = 0; j < num_chromosomes; j++) {
-        openrand::Philox rng(j, 0);
+        openrand::Philox rng = core::make_philox(j, 0);
         double jdouble = static_cast<double>(j);
         mundy::math::Vector3<double> r_start(2.0 * j, 0.0, 0.0);
         // Add a tiny random change in X to make sure we don't wind up in perfectly
@@ -500,7 +501,7 @@ MUNDY_METHOD(mundy::alens, InitializeChromosomePositionsRandomUnitCell) {
       for (size_t j = 0; j < num_chromosomes_; j++) {
         // Find a random place within the unit cell with a random orientation for the
         // chain.
-        openrand::Philox rng(j, 0);
+        openrand::Philox rng = core::make_philox(j, 0);
         mundy::math::Vector3<double> r_start(rng.uniform<double>(-0.5 * unit_cell_size[0], 0.5 * unit_cell_size[0]),
                                              rng.uniform<double>(-0.5 * unit_cell_size[1], 0.5 * unit_cell_size[1]),
                                              rng.uniform<double>(-0.5 * unit_cell_size[2], 0.5 * unit_cell_size[2]));
@@ -576,7 +577,7 @@ MUNDY_METHOD(mundy::alens, InitializeChromosomePositionsHilbertRandomUnitCell) {
 
         // Generate a random unit vector (will be used for creating the location of the
         // nodes, the random position in the unit cell will be handled later).
-        openrand::Philox rng(ichromosome, 0);
+        openrand::Philox rng = core::make_philox(ichromosome, 0);
         const double zrand = rng.rand<double>() - 1.0;
         const double wrand = std::sqrt(1.0 - zrand * zrand);
         const double trand = 2.0 * M_PI * rng.rand<double>();
@@ -772,7 +773,7 @@ MUNDY_METHOD(mundy::alens, DeclareAndInitializeRandomSphericalPeripheryBindSites
 
     // Initialize the binding site positions
     if (bulk_data_ptr_->parallel_rank() == 0) {
-      openrand::Philox rng(1234, 0);
+      openrand::Philox rng = core::make_philox(1234, 0);
       for (size_t i = 0; i < num_bind_sites; i++) {
         const stk::mesh::Entity &node_i = requested_entities[i];
         const stk::mesh::Entity &sphere_i = requested_entities[num_bind_sites + i];
@@ -1182,7 +1183,7 @@ MUNDY_METHOD(mundy::alens, KMCSpringLeftToDoubly) {
           // Fetch the RNG state, get a random number out of it, and increment
           unsigned *element_rng_counter = stk::mesh::field_data(element_rng_field, spring);
           const stk::mesh::EntityId spring_gid = bulk_data.identifier(spring);
-          openrand::Philox rng(spring_gid, element_rng_counter[0]);
+          openrand::Philox rng = core::make_philox(spring_gid, element_rng_counter[0]);
           const double randu01 = rng.rand<double>();
           element_rng_counter[0]++;
 
@@ -1263,7 +1264,7 @@ MUNDY_METHOD(mundy::alens, KMCSpringDoublyToRight) {
           // Fetch the RNG state, get a random number out of it, and increment
           unsigned *element_rng_counter = stk::mesh::field_data(element_rng_field, spring);
           const stk::mesh::EntityId spring_gid = bulk_data.identifier(spring);
-          openrand::Philox rng(spring_gid, element_rng_counter[0]);
+          openrand::Philox rng = core::make_philox(spring_gid, element_rng_counter[0]);
           const double randu01 = rng.rand<double>();
           element_rng_counter[0]++;
 
@@ -1879,7 +1880,7 @@ MUNDY_METHOD(mundy::alens, ComputeBrownianVelocitySpheres) {
           unsigned *node_rng_counter = stk::mesh::field_data(node_rng_field, sphere_node);
 
           // U_brown = sqrt(2 * kt * gamma / dt) * randn / gamma
-          openrand::Philox rng(sphere_node_gid, node_rng_counter[0]);
+          openrand::Philox rng = core::make_philox(sphere_node_gid, node_rng_counter[0]);
           const double coeff = std::sqrt(2.0 * brownian_kt * sphere_drag_coeff / timestep_size) * inv_drag_coeff;
           node_velocity[0] += coeff * rng.randn<double>();
           node_velocity[1] += coeff * rng.randn<double>();

@@ -521,8 +521,8 @@ TEST_F(UnitTestFieldBLAS, field_product) {
       std::vector<double> field1_values = field1_func(entity_coords);
       std::vector<double> field2_values = field2_func(entity_coords);
       std::vector<double> field3_values = field3_func(entity_coords);
-      const unsigned min_size = std::min({field1_values.size(), field2_values.size(), field3_values.size()});
-      for (unsigned i = 0; i < min_size; ++i) {
+      const size_t min_size = std::min({field1_values.size(), field2_values.size(), field3_values.size()});
+      for (size_t i = 0; i < min_size; ++i) {
         field3_values[i] = field1_values[i] * field2_values[i];
       }
       return field3_values;
@@ -556,8 +556,8 @@ TEST_F(UnitTestFieldBLAS, field_axpy) {
     auto expected_value_func = [&alpha, &field1_func, &field2_func](const double* entity_coords) {
       std::vector<double> field1_values = field1_func(entity_coords);
       std::vector<double> field2_values = field2_func(entity_coords);
-      const unsigned min_size = std::min(field1_values.size(), field2_values.size());
-      for (unsigned i = 0; i < min_size; ++i) {
+      const size_t min_size = std::min(field1_values.size(), field2_values.size());
+      for (size_t i = 0; i < min_size; ++i) {
         field2_values[i] += alpha * field1_values[i];
       }
       return field2_values;
@@ -591,8 +591,8 @@ TEST_F(UnitTestFieldBLAS, field_axpby) {
     auto expected_value_func = [&alpha, &beta, &field1_func, &field2_func](const double* entity_coords) {
       std::vector<double> field1_values = field1_func(entity_coords);
       std::vector<double> field2_values = field2_func(entity_coords);
-      const unsigned min_size = std::min(field1_values.size(), field2_values.size());
-      for (unsigned i = 0; i < min_size; ++i) {
+      const size_t min_size = std::min(field1_values.size(), field2_values.size());
+      for (size_t i = 0; i < min_size; ++i) {
         field2_values[i] = alpha * field1_values[i] + beta * field2_values[i];
       }
       return field2_values;
@@ -628,8 +628,8 @@ TEST_F(UnitTestFieldBLAS, field_axpbyz) {
       std::vector<double> field1_values = field1_func(entity_coords);
       std::vector<double> field2_values = field2_func(entity_coords);
       std::vector<double> field3_values = field3_func(entity_coords);
-      const unsigned min_size = std::min({field1_values.size(), field2_values.size(), field3_values.size()});
-      for (unsigned i = 0; i < min_size; ++i) {
+      const size_t min_size = std::min({field1_values.size(), field2_values.size(), field3_values.size()});
+      for (size_t i = 0; i < min_size; ++i) {
         field3_values[i] = alpha * field1_values[i] + beta * field2_values[i];
       }
       return field3_values;

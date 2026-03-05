@@ -32,6 +32,7 @@
 #include <Kokkos_Core.hpp>  // for Kokkos::numbers::pi
 
 // Mundy
+#include <mundy_core/rng.hpp>         // for mundy::core::make_philox
 #include <mundy_geom/distance.hpp>    // for mundy::geom::distance
 #include <mundy_geom/primitives.hpp>  // for mundy::geom::Point, mundy::geom::LineSegment
 #include <mundy_math/Tolerance.hpp>   // for mundy::math::get_zero_tolerance
@@ -351,7 +352,7 @@ void generate_line_at_known_distance(RngType& rng, Point<double>& a1, Point<doub
 //@{
 
 TEST(DistanceBetweenLines, PositiveResult) {
-  openrand::Philox rng(generate_test_seed(), 0);
+  openrand::Philox rng = core::make_philox(generate_test_seed(), 0);
   unsigned nTests = MUNDY_GEOM_TESTS_UNIT_TESTS_SEGMENT_SEGMENT_DISTANCE_NUM_SAMPLES_PER_TEST;
 
   Point<double> a1, a2, b1, b2, a12_expected, a12_actual, b12_expected, b12_actual;
@@ -390,7 +391,7 @@ TEST(DistanceBetweenLines, PositiveResult) {
 }
 
 TEST(DistanceBetweenLineSegments, PositiveResult) {
-  openrand::Philox rng(generate_test_seed(), 0);
+  openrand::Philox rng = core::make_philox(generate_test_seed(), 0);
   unsigned nTests = MUNDY_GEOM_TESTS_UNIT_TESTS_SEGMENT_SEGMENT_DISTANCE_NUM_SAMPLES_PER_TEST;
 
   Point<double> a1, a2, b1, b2, a12_expected, a12_actual, b12_expected, b12_actual;
@@ -417,7 +418,7 @@ TEST(DistanceBetweenLineSegments, PositiveResult) {
 TEST(DistanceBetweenLineSegments, APeskyEdgeCase) {
   // The following pesky edge case is for a colinear rod that caused an untested edge case.
   // TODO(palmerb4): We'll need colinear rods that give each of the 4 possible cases.
-  openrand::Philox rng(generate_test_seed(), 0);
+  openrand::Philox rng = core::make_philox(generate_test_seed(), 0);
   Point<double> a1, a2, b1, b2, a12_expected, a12_actual, b12_expected, b12_actual;
   mundy::math::Vector3d sep_actual;
 
@@ -450,7 +451,7 @@ TEST(DistanceBetweenLineSegments, APeskyEdgeCase) {
 TEST(DistanceBetweenLineSegments, APeskyEdgeCaseCollinear) {
   // The following pesky edge case is for a colinear rod that caused an untested edge case.
   // TODO(palmerb4): We'll need colinear rods that give each of the 4 possible cases.
-  openrand::Philox rng(generate_test_seed(), 0);
+  openrand::Philox rng = core::make_philox(generate_test_seed(), 0);
   Point<double> a1, a2, b1, b2;
   mundy::math::Vector3d sep_actual;
 
@@ -472,7 +473,7 @@ TEST(DistanceBetweenLineSegments, APeskyEdgeCaseCollinear) {
 }
 
 TEST(DistanceToLine, PositiveResult) {
-  openrand::Philox rng(generate_test_seed(), 0);
+  openrand::Philox rng = core::make_philox(generate_test_seed(), 0);
   unsigned nTests = MUNDY_GEOM_TESTS_UNIT_TESTS_SEGMENT_SEGMENT_DISTANCE_NUM_SAMPLES_PER_TEST;
 
   Point<double> a1, a2, a12_actual, a12_expected, p;

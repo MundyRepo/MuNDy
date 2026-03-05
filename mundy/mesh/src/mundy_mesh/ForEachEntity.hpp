@@ -42,15 +42,15 @@ namespace mesh {
 
 template <typename Mesh, typename AlgorithmPerEntity>
   requires(!std::is_base_of_v<stk::mesh::BulkData, Mesh> && !std::is_base_of_v<::mundy::mesh::BulkData, Mesh>)
-inline void for_each_entity_run(Mesh &mesh, stk::topology::rank_t rank, const stk::mesh::Selector &selector,
-                                const AlgorithmPerEntity &functor) {
+inline void for_each_entity_run(Mesh& mesh, stk::topology::rank_t rank, const stk::mesh::Selector& selector,
+                                const AlgorithmPerEntity& functor) {
   stk::mesh::for_each_entity_run(mesh, rank, selector, functor);
 }
 
 template <typename Mesh, typename AlgorithmPerEntity, typename EXEC_SPACE>
   requires(!std::is_base_of_v<stk::mesh::BulkData, Mesh>)
-inline void for_each_entity_run(Mesh &mesh, stk::topology::rank_t rank, const stk::mesh::Selector &selector,
-                                const AlgorithmPerEntity &functor, const EXEC_SPACE &exec_space) {
+inline void for_each_entity_run(Mesh& mesh, stk::topology::rank_t rank, const stk::mesh::Selector& selector,
+                                const AlgorithmPerEntity& functor, const EXEC_SPACE& exec_space) {
   stk::mesh::for_each_entity_run(mesh, rank, selector, functor, exec_space);
 }
 
@@ -60,15 +60,15 @@ struct TeamFunctor {
   using team_policy_t = Kokkos::TeamPolicy<Kokkos::DefaultHostExecutionSpace>;
   using team_member_t = typename team_policy_t::member_type;
 
-  TeamFunctor(const Mesh &m, const stk::mesh::BucketVector &bs, const AlgorithmPerEntity &f)
+  TeamFunctor(const Mesh& m, const stk::mesh::BucketVector& bs, const AlgorithmPerEntity& f)
       : mesh(m), buckets(bs), functor(f) {
   }
 
-  void operator()(const team_member_t &team_member) const {
-    stk::mesh::Bucket *bucket = buckets[team_member.league_rank()];
+  void operator()(const team_member_t& team_member) const {
+    stk::mesh::Bucket* bucket = buckets[team_member.league_rank()];
     const int bucket_size = static_cast<int>(bucket->size());
     Kokkos::parallel_for(Kokkos::TeamThreadRange(team_member, bucket_size), [&](const int i) {
-      if constexpr (std::is_invocable_v<AlgorithmPerEntity, const Mesh &, const stk::mesh::MeshIndex &>) {
+      if constexpr (std::is_invocable_v<AlgorithmPerEntity, const Mesh&, const stk::mesh::MeshIndex&>) {
         functor(mesh, stk::mesh::MeshIndex({bucket, i}));
       } else {
         functor(mesh, (*bucket)[i]);
@@ -76,16 +76,16 @@ struct TeamFunctor {
     });
   }
 
-  const Mesh &mesh;
-  const stk::mesh::BucketVector &buckets;
-  const AlgorithmPerEntity &functor;
+  const Mesh& mesh;
+  const stk::mesh::BucketVector& buckets;
+  const AlgorithmPerEntity& functor;
 };
 
 template <typename Mesh, typename AlgorithmPerEntity>
   requires(std::is_base_of_v<stk::mesh::BulkData, Mesh> || std::is_base_of_v<BulkData, Mesh>)
-inline void for_each_entity_run(const Mesh &mesh, stk::topology::rank_t rank, const stk::mesh::Selector &selector,
-                                const AlgorithmPerEntity &functor) {
-  const stk::mesh::BucketVector &buckets = mesh.get_buckets(rank, selector);
+inline void for_each_entity_run(const Mesh& mesh, stk::topology::rank_t rank, const stk::mesh::Selector& selector,
+                                const AlgorithmPerEntity& functor) {
+  const stk::mesh::BucketVector& buckets = mesh.get_buckets(rank, selector);
   using team_policy = Kokkos::TeamPolicy<Kokkos::DefaultHostExecutionSpace>;
   const size_t n_buckets = buckets.size();
   TeamFunctor<Mesh, AlgorithmPerEntity> team_functor(mesh, buckets, functor);
@@ -95,7 +95,7 @@ inline void for_each_entity_run(const Mesh &mesh, stk::topology::rank_t rank, co
 
 template <typename Mesh, typename AlgorithmPerEntity>
   requires(std::is_base_of_v<stk::mesh::BulkData, Mesh> || std::is_base_of_v<BulkData, Mesh>)
-inline void for_each_entity_run(const Mesh &mesh, stk::topology::rank_t rank, const AlgorithmPerEntity &functor) {
+inline void for_each_entity_run(const Mesh& mesh, stk::topology::rank_t rank, const AlgorithmPerEntity& functor) {
   stk::mesh::Selector selectAll = mesh.mesh_meta_data().universal_part();
   for_each_entity_run(mesh, rank, selectAll, functor);
 }

@@ -89,6 +89,7 @@ We'll need two MetaMethods: one for computing the brownian motion and one for ta
 #include <mundy_meta/utils/MeshGeneration.hpp>  // for mundy::meta::utils::generate_class_instance_and_mesh_from_meta_class_requirements
 #include <mundy_shapes/ComputeAABB.hpp>  // for mundy::shapes::ComputeAABB
 #include <mundy_shapes/Spheres.hpp>      // for mundy::shapes::Spheres
+#include <mundy_core/rng.hpp>              // for mundy::core::make_philox
 
 class NodeEuler
     : public mundy::meta::MetaKernelDispatcher<NodeEuler, mundy::meta::make_registration_string("NODE_EULER")> {
@@ -574,7 +575,7 @@ class ComputeBrownianVelocitySphere : public mundy::meta::MetaKernel<> {
           const stk::mesh::EntityId sphere_node_gid = bulk_data.identifier(sphere_node);
           unsigned *node_rng_counter = stk::mesh::field_data(node_rng_counter_field, sphere_node);
 
-          openrand::Philox rng(sphere_node_gid, node_rng_counter[0]);
+          openrand::Philox rng = core::make_philox(sphere_node_gid, node_rng_counter[0]);
           const double coeff = std::sqrt(2.0 * diffusion_coeff / timestep_size);
           node_brownian_velocity[0] += coeff * rng.randn<double>();
           node_brownian_velocity[1] += coeff * rng.randn<double>();

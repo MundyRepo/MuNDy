@@ -230,24 +230,24 @@ struct tuple_size;  // primary
 //
 template <class... Es>
 struct tuple_size<tuple<Es...>> {
-  static constexpr std::size_t value = sizeof...(Es);
+  static constexpr size_t value = sizeof...(Es);
 };
 //
 template <class T>
-static constexpr std::size_t tuple_size_v = tuple_size<T>::value;
+static constexpr size_t tuple_size_v = tuple_size<T>::value;
 
 // **********************************************************************************************************************
 /// \brief An element of a tuple
-template <std::size_t I, class T>
+template <size_t I, class T>
 struct tuple_element;  // primary
 //
-template <std::size_t I, class... Es>
+template <size_t I, class... Es>
 struct tuple_element<I, tuple<Es...>> {
   static_assert(I < sizeof...(Es), "tuple_element index out of bounds");
   using type = type_at_index_t<I, Es...>;  // your existing meta util; OK with incomplete types
 };
 //
-template <std::size_t I, class T>
+template <size_t I, class T>
 using tuple_element_t = typename tuple_element<I, T>::type;
 
 // **********************************************************************************************************************
@@ -260,7 +260,7 @@ tuple(Elements...) -> tuple<Elements...>;
 namespace impl {
 
 /// \brief Concatenate two tuples using index sequences
-template <class FirstTuple, class SecondTuple, std::size_t... FirstIndices, std::size_t... SecondIndices>
+template <class FirstTuple, class SecondTuple, size_t... FirstIndices, size_t... SecondIndices>
 KOKKOS_FUNCTION constexpr auto tuple_cat_impl(const FirstTuple& first, const SecondTuple& second,
                                               std::index_sequence<FirstIndices...>,
                                               std::index_sequence<SecondIndices...>) {

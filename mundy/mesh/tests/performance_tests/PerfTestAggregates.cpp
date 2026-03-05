@@ -156,7 +156,7 @@ void run_test() {
     bulk_data.declare_relation(elem, node, 0);
 
     // Populate the fields
-    vector3_field_data(node_center_field, node).set(1.1 * i, 2.2 * i, 3.3);
+    vector3_field_data(node_center_field, node).set(1.1 * static_cast<double>(i), 2.2 * static_cast<double>(i), 3.3);
     vector3_field_data(node_force_field, node).set(5.0, 6.0, 7.0);
     vector3_field_data(node_velocity_field, node).set(1.0, 2.0, 3.0);
     scalar_field_data(elem_radius_field, elem).set(0.5);

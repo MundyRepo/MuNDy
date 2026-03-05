@@ -51,7 +51,7 @@ namespace impl {
 template <typename NgpMemSpace>
 class LinkCSRDataSynchronizerT : public HostDeviceSynchronizer {
  public:
-  LinkCSRDataSynchronizerT(LinkCSRData &crs_data, NgpLinkCSRDataT<NgpMemSpace> &ngp_crs_data)
+  LinkCSRDataSynchronizerT(LinkCSRData& crs_data, NgpLinkCSRDataT<NgpMemSpace>& ngp_crs_data)
       : crs_data_(crs_data), ngp_crs_data_(ngp_crs_data) {
   }
 
@@ -84,8 +84,8 @@ class LinkCSRDataSynchronizerT : public HostDeviceSynchronizer {
   }
 
  private:
-  LinkCSRData &crs_data_;
-  NgpLinkCSRDataT<NgpMemSpace> &ngp_crs_data_;
+  LinkCSRData& crs_data_;
+  NgpLinkCSRDataT<NgpMemSpace>& ngp_crs_data_;
 };  // LinkCSRDataSynchronizerT
 
 }  // namespace impl

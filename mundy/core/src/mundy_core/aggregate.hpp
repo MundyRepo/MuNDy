@@ -35,6 +35,7 @@
 #include <mundy_core/tuple.hpp>        // for mundy::core::tuple
 #include <mundy_core/type_traits.hpp>  // for core::count_type_v
 #include <mundy_core/variant.hpp>      // for mundy::core::variant
+#include <mundy_core/suppress_warnings.hpp>  // for MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_PUSH/POP
 
 namespace mundy {
 
@@ -55,7 +56,7 @@ KOKKOS_FUNCTION static constexpr const auto& find_const_component_recurse_impl(c
 }
 
 /// \brief Fetch the component corresponding to the given Tag using an index sequence
-template <typename Tag, typename... Components, std::size_t... Is>
+template <typename Tag, typename... Components, size_t... Is>
 KOKKOS_FUNCTION static constexpr auto& find_const_component_impl(const core::tuple<Components...>& tuple,
                                                                  std::index_sequence<Is...>) {
   // Unpack into the
@@ -74,7 +75,7 @@ KOKKOS_FUNCTION static constexpr auto& find_component_recurse_impl(First& first,
 }
 
 /// \brief Fetch the component corresponding to the given Tag using an index sequence
-template <typename Tag, typename... Components, std::size_t... Is>
+template <typename Tag, typename... Components, size_t... Is>
 KOKKOS_FUNCTION static constexpr auto& find_component_impl(core::tuple<Components...>& tuple,
                                                            std::index_sequence<Is...>) {
   // Unpack into the
@@ -210,7 +211,7 @@ class runtime_aggregate {
 
   /// \brief Get the number of components in this runtime_aggregate
   size_t size() {
-    return component_map_.size();
+    return static_cast<size_t>(component_map_.size());
   }
 
   //! \name Private members (no touch)
@@ -430,7 +431,7 @@ concept callable_with = requires(T t, Args... args) { t(std::forward<Args>(args)
 ///   auto cfg = make_aggregate()
 ///       .append<DT>(0.01)
 ///       .append<MAX_ITERS>(1000);
-///  
+///
 ///   double dt     = cfg.get<DT>();
 ///   size_t it_max = cfg.get<MAX_ITERS>();
 ///   // double dt  = cfg.get<DT>(0);  // error: DT is not callable
@@ -441,7 +442,7 @@ concept callable_with = requires(T t, Args... args) { t(std::forward<Args>(args)
 ///   auto spheres = make_aggregate()
 ///       .append<CENTER>(center_accessor)
 ///       .append<RADIUS>(radius_accessor);
-///   
+///
 ///   auto c = spheres.get<CENTER>(10);
 ///   auto r = spheres.get<RADIUS>(3);
 ///
@@ -462,7 +463,7 @@ concept callable_with = requires(T t, Args... args) { t(std::forward<Args>(args)
 ///   auto algs = make_aggregate()
 ///       .append<SORT>(SortAlgorithm{})
 ///       .append<FILTER>(FilterAlgorithm{});
-///   
+///
 ///   algs.get<SORT>(data);
 ///   auto filtered = algs.get<FILTER>(data);
 /// \endcode
@@ -473,7 +474,7 @@ concept callable_with = requires(T t, Args... args) { t(std::forward<Args>(args)
 ///       .append<POS>(pos_accessor)
 ///       .append<VEL>(vel_accessor)
 ///       .append<DT>(0.01);
-///   
+///
 ///   agg.get<POS>(i) += agg.get<VEL>(i) * agg.get<DT>();
 /// \endcode
 ///
@@ -548,14 +549,16 @@ class aggregate {
     return impl::find_component<Tag>(tagged_components_).component();
   }
 
+  MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_PUSH;
+
   /// \brief Get tagged object of the given args: Perform get<I'th tag>()(args...) with syntactic sugar
-  template<size_t I, typename... Args>
+  template <size_t I, typename... Args>
   KOKKOS_INLINE_FUNCTION constexpr decltype(auto) get(Args&&... args) const {
     static_assert(impl::callable_with<decltype(get<I>()), Args...>,
                   "The I'th component is not callable with the given arguments.");
     return get<I>()(std::forward<Args>(args)...);
   }
-  template<size_t I, typename... Args>
+  template <size_t I, typename... Args>
   KOKKOS_INLINE_FUNCTION constexpr decltype(auto) get(Args&&... args) {
     static_assert(impl::callable_with<decltype(get<I>()), Args...>,
                   "The I'th component is not callable with the given arguments.");
@@ -563,18 +566,20 @@ class aggregate {
   }
 
   /// \brief Get tagged object of the given args: Perform get<TAG>()(args...) with syntactic sugar
-  template<typename Tag, typename... Args>
+  template <typename Tag, typename... Args>
   KOKKOS_INLINE_FUNCTION constexpr decltype(auto) get(Args&&... args) const {
     static_assert(impl::callable_with<decltype(get<Tag>()), Args...>,
                   "The component with the given Tag is not callable with the given arguments.");
     return get<Tag>()(std::forward<Args>(args)...);
   }
-  template<typename Tag, typename... Args>
+  template <typename Tag, typename... Args>
   KOKKOS_INLINE_FUNCTION constexpr decltype(auto) get(Args&&... args) {
     static_assert(impl::callable_with<decltype(get<Tag>()), Args...>,
                   "The component with the given Tag is not callable with the given arguments.");
     return get<Tag>()(std::forward<Args>(args)...);
   }
+
+  MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_POP;
 
   /// \brief Check if we have a component with the given Tag
   template <typename Tag>
@@ -684,7 +689,7 @@ constexpr unsigned long long binom(unsigned int n, unsigned int k) {
 }
 
 /// \brief Unrank R-combination (no replacement) in colex
-template <std::size_t R>
+template <size_t R>
 constexpr std::array<int, R> unrank_comb_norep(unsigned int M, unsigned long long k) {
   std::array<int, R> b{};
   int x = static_cast<int>(M);
@@ -700,7 +705,7 @@ constexpr std::array<int, R> unrank_comb_norep(unsigned int M, unsigned long lon
 }
 
 /// \brief All weakly-increasing R-tuples over [0..N-1] (with replacement)
-template <int N, std::size_t R>
+template <int N, size_t R>
 consteval auto all_multicomb_indices() {
   constexpr auto CNT = binom(N + R - 1, R);
   constexpr unsigned int M = static_cast<unsigned int>(N + R - 1);
@@ -715,15 +720,15 @@ consteval auto all_multicomb_indices() {
 }
 
 /// \brief Cache the indices table per (N choose R)
-template <std::size_t N, std::size_t R>
+template <size_t N, size_t R>
 struct multicomb_index_table {
   static constexpr auto idxs = all_multicomb_indices<N, R>();
-  static constexpr std::size_t size = idxs.size();
-  static constexpr std::size_t n = N;
-  static constexpr std::size_t r = R;
+  static constexpr size_t size = idxs.size();
+  static constexpr size_t n = N;
+  static constexpr size_t r = R;
 };
 
-template <typename VariantAggregateType, std::array<int, VariantAggregateType::size()> active_ids, std::size_t... Is>
+template <typename VariantAggregateType, std::array<int, VariantAggregateType::size()> active_ids, size_t... Is>
 auto make_aggregate_from_active_impl(const VariantAggregateType& v_agg,
                                      const std::array<size_t, VariantAggregateType::size()>& reorder_map,
                                      std::index_sequence<Is...>) {
@@ -744,10 +749,10 @@ auto make_aggregate_from_active(const VariantAggregateType& v_agg,
 }
 
 /// \brief Compare active indices of vs against the I-th pattern
-template <std::size_t I, typename VariantType, typename... Tags>
+template <size_t I, typename VariantType, typename... Tags>
 bool match_active(const variant_aggregate<VariantType, Tags...>& v_agg,
                   const std::array<size_t, sizeof...(Tags)>& reorder_map) {
-  constexpr std::size_t R = sizeof...(Tags);
+  constexpr size_t R = sizeof...(Tags);
   std::cout << "match_active: ";
   // multicomb_index_table assumes that the variants are sorted by active index.
   for (int j = 0; j < R; ++j) {
@@ -764,10 +769,10 @@ bool match_active(const variant_aggregate<VariantType, Tags...>& v_agg,
 
 /// \brief Try the I-th multichoose; on match, call f(tuple_of_refs)
 /// \return true if matched.
-template <std::size_t I, typename VariantType, typename... Tags, typename Visitor>
+template <size_t I, typename VariantType, typename... Tags, typename Visitor>
 bool try_one(const variant_aggregate<VariantType, Tags...>& v_agg,
              const std::array<size_t, sizeof...(Tags)>& reorder_map, const Visitor& visitor) {
-  constexpr std::size_t R = sizeof...(Tags);
+  constexpr size_t R = sizeof...(Tags);
   if (match_active<I>(v_agg, reorder_map)) {
     // Success! multicomb_index_table<N, R>::idxs[I] gives the std::array<int, R> of active indices
     constexpr std::array<int, R> active_ids = multicomb_index_table<VariantType::size(), R>::idxs[I];
@@ -779,7 +784,7 @@ bool try_one(const variant_aggregate<VariantType, Tags...>& v_agg,
 }
 
 /// \brief Visit over all patterns until a match
-template <typename VariantType, typename... Tags, typename Visitor, std::size_t... I>
+template <typename VariantType, typename... Tags, typename Visitor, size_t... I>
 void visit_impl(const variant_aggregate<VariantType, Tags...>& v_agg,
                 const std::array<size_t, sizeof...(Tags)>& reorder_map, const Visitor& visitor,
                 std::index_sequence<I...>) {

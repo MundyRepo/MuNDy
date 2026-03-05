@@ -21,10 +21,10 @@
 #ifndef MUNDY_MATH_IMPL_MATRIXIMPL_HPP_
 #define MUNDY_MATH_IMPL_MATRIXIMPL_HPP_
 
-// External libs
+// External
 #include <Kokkos_Core.hpp>
 
-// C++ core libs
+// C++ core
 #include <cmath>
 #include <concepts>
 #include <initializer_list>
@@ -32,7 +32,7 @@
 #include <type_traits>  // for std::decay_t
 #include <utility>
 
-// Our libs
+// Mundy
 #include <mundy_core/throw_assert.hpp>    // for MUNDY_THROW_ASSERT
 #include <mundy_math/Accessor.hpp>        // for mundy::math::ValidAccessor
 #include <mundy_math/Array.hpp>           // for mundy::math::Array
@@ -42,6 +42,7 @@
 #include <mundy_math/Tolerance.hpp>       // for mundy::math::get_zero_tolerance
 #include <mundy_math/TransposedView.hpp>  // for mundy::math::TransposedView
 #include <mundy_math/Vector.hpp>          // for mundy::math::AVector
+#include <mundy_core/suppress_warnings.hpp>  // for MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_PUSH/POP
 
 namespace mundy {
 
@@ -319,8 +320,7 @@ KOKKOS_INLINE_FUNCTION auto matrix_matrix_multiplication_impl(
     std::index_sequence<Is...>, const AMatrix<T, N, M, Accessor, OwnershipType>& mat,
     const AMatrix<U, OtherN, OtherM, OtherAccessor, OtherOwnershipType>& other)
     -> AMatrix<std::common_type_t<T, U>, N, OtherM> {
-  static_assert(sizeof...(Is) == N * OtherM,
-                "Number of indices must match the shared dimension of the result matrix.");
+  static_assert(sizeof...(Is) == N * OtherM, "Number of indices must match the shared dimension of the result matrix.");
   static_assert(M == OtherN,
                 "AMatrix-matrix multiplication requires the number of columns in the first matrix to be equal to the "
                 "number of rows in the second matrix.");
@@ -329,8 +329,8 @@ KOKKOS_INLINE_FUNCTION auto matrix_matrix_multiplication_impl(
   // with each column of the second matrix via view symmantics.
   using CommonType = std::common_type_t<T, U>;
   AMatrix<CommonType, N, OtherM> result;
-  (...,
-   (result(Is / OtherM, Is % OtherM) = dot(mat.template view_row<Is / OtherM>(), other.template view_column<Is % OtherM>())));
+  (..., (result(Is / OtherM, Is % OtherM) =
+             dot(mat.template view_row<Is / OtherM>(), other.template view_column<Is % OtherM>())));
   return result;
 }
 
@@ -361,7 +361,9 @@ KOKKOS_INLINE_FUNCTION auto matrix_vector_multiplication_impl(
     const AVector<U, M, OtherAccessor, OtherOwnershipType>& other) -> AVector<std::common_type_t<T, U>, N> {
   // The size of the sequence must match the number of rows in the matrix
   static_assert(sizeof...(Is) == N, "Number of indices must match the number of rows in the matrix.");
-  static_assert(M == other.size, "AMatrix-vector multiplication requires the number of columns in the matrix to be equal to the size of the vector.");
+  static_assert(M == other.size,
+                "AMatrix-vector multiplication requires the number of columns in the matrix to be equal to the size of "
+                "the vector.");
   using CommonType = std::common_type_t<T, U>;
   AVector<CommonType, N> result;
   (..., (result[Is] = dot(mat.template view_row<Is>(), other)));
@@ -561,7 +563,7 @@ KOKKOS_INLINE_FUNCTION auto outer_product_impl(std::index_sequence<Is...>,
 /// \brief Infinity norm
 template <size_t... Is, typename T, size_t N, size_t M, ValidAccessor<T> Accessor, typename OwnershipType>
 KOKKOS_INLINE_FUNCTION T inf_norm_impl(std::index_sequence<Is...>,
-                                            const AMatrix<T, N, M, Accessor, OwnershipType>& mat) {
+                                       const AMatrix<T, N, M, Accessor, OwnershipType>& mat) {
   static_assert(sizeof...(Is) == N, "Number of indices must match number of rows in the matrix.");
   T max_value = Kokkos::abs(sum(mat.template view_row<0>()));
   ((max_value = Kokkos::max(max_value, Kokkos::abs(sum(mat.template view_row<Is>())))), ...);
@@ -605,6 +607,8 @@ KOKKOS_INLINE_FUNCTION constexpr auto matrix_matrix_elementwise_div_impl(
   return result;
 }
 
+MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_PUSH
+
 /// \brief Apply a function to each element of the matrix
 template <size_t... Is, typename Func, typename T, size_t N, size_t M, ValidAccessor<T> Accessor,
           typename OwnershipType>
@@ -644,6 +648,8 @@ KOKKOS_INLINE_FUNCTION auto apply_column_impl(std::index_sequence<Is...>, const 
   return result;
 }
 
+MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_POP
+
 /// \brief Atomic m_copy = m.
 ///
 /// Note: Even if the input is a view, the return is a plain owning matrix.
@@ -674,12 +680,12 @@ KOKKOS_INLINE_FUNCTION void atomic_matrix_matrix_store_impl(std::index_sequence<
   ((Kokkos::atomic_store(&((*m1)[Is]), m2[Is])), ...);
 }
 
-#define MUNDY_MATH_MATRIX_SCALAR_ATOMIC_OP_IMPL(op_name, atomic_op)                                         \
-  template <size_t... Is, size_t N, size_t M, typename T1, ValidAccessor<T1> A1, typename OT1, typename T2> \
-  KOKKOS_INLINE_FUNCTION void atomic_matrix_scalar_##op_name##_impl(                                        \
-      std::index_sequence<Is...>, AMatrix<T1, N, M, A1, OT1>* const m, const T2& s) {                       \
+#define MUNDY_MATH_MATRIX_SCALAR_ATOMIC_OP_IMPL(op_name, atomic_op)                                          \
+  template <size_t... Is, size_t N, size_t M, typename T1, ValidAccessor<T1> A1, typename OT1, typename T2>  \
+  KOKKOS_INLINE_FUNCTION void atomic_matrix_scalar_##op_name##_impl(                                         \
+      std::index_sequence<Is...>, AMatrix<T1, N, M, A1, OT1>* const m, const T2& s) {                        \
     static_assert(sizeof...(Is) == N * M, "Number of indices must match number of elements in the matrix."); \
-    ((atomic_op(&((*m)[Is]), static_cast<T1>(s))), ...);                                                    \
+    ((atomic_op(&((*m)[Is]), static_cast<T1>(s))), ...);                                                     \
   }
 
 #define MUNDY_MATH_MATRIX_MATRIX_ATOMIC_OP_IMPL(op_name, atomic_op)                                             \
@@ -687,7 +693,7 @@ KOKKOS_INLINE_FUNCTION void atomic_matrix_matrix_store_impl(std::index_sequence<
             ValidAccessor<T2> A2, typename OT2>                                                                 \
   KOKKOS_INLINE_FUNCTION void atomic_matrix_matrix_##op_name##_impl(                                            \
       std::index_sequence<Is...>, AMatrix<T1, N, M, A1, OT1>* const m1, const AMatrix<T2, N, M, A2, OT2>& m2) { \
-    static_assert(sizeof...(Is) == N * M, "Number of indices must match number of elements in the matrix.");   \
+    static_assert(sizeof...(Is) == N * M, "Number of indices must match number of elements in the matrix.");    \
     ((atomic_op(&((*m1)[Is]), static_cast<T1>(m2[Is]))), ...);                                                  \
   }
 
@@ -715,14 +721,14 @@ MUNDY_MATH_MATRIX_MATRIX_ATOMIC_OP_IMPL(elementwise_mul, Kokkos::atomic_mul)
 /// \brief Atomic m1[i, j] /= m2[i, j]
 MUNDY_MATH_MATRIX_MATRIX_ATOMIC_OP_IMPL(elementwise_div, Kokkos::atomic_div)
 
-#define MUNDY_MATH_MATRIX_SCALAR_ATOMIC_FETCH_OP_IMPL(op_name, atomic_fetch_op)                             \
-  template <size_t... Is, size_t N, size_t M, typename T1, ValidAccessor<T1> A1, typename OT1, typename T2> \
-  KOKKOS_INLINE_FUNCTION auto matrix_scalar_atomic_fetch_##op_name##_impl(                                  \
-      std::index_sequence<Is...>, AMatrix<T1, N, M, A1, OT1>* const m, const T2& s) {                       \
+#define MUNDY_MATH_MATRIX_SCALAR_ATOMIC_FETCH_OP_IMPL(op_name, atomic_fetch_op)                              \
+  template <size_t... Is, size_t N, size_t M, typename T1, ValidAccessor<T1> A1, typename OT1, typename T2>  \
+  KOKKOS_INLINE_FUNCTION auto matrix_scalar_atomic_fetch_##op_name##_impl(                                   \
+      std::index_sequence<Is...>, AMatrix<T1, N, M, A1, OT1>* const m, const T2& s) {                        \
     static_assert(sizeof...(Is) == N * M, "Number of indices must match number of elements in the matrix."); \
-    AMatrix<T1, N, M> result;                                                                               \
-    ((result[Is] = atomic_fetch_op(&((*m)[Is]), static_cast<T1>(s))), ...);                                 \
-    return result;                                                                                          \
+    AMatrix<T1, N, M> result;                                                                                \
+    ((result[Is] = atomic_fetch_op(&((*m)[Is]), static_cast<T1>(s))), ...);                                  \
+    return result;                                                                                           \
   }
 
 #define MUNDY_MATH_MATRIX_MATRIX_ATOMIC_FETCH_OP_IMPL(op_name, atomic_fetch_op)                                 \
@@ -730,20 +736,20 @@ MUNDY_MATH_MATRIX_MATRIX_ATOMIC_OP_IMPL(elementwise_div, Kokkos::atomic_div)
             ValidAccessor<T2> A2, typename OT2>                                                                 \
   KOKKOS_INLINE_FUNCTION auto matrix_matrix_atomic_fetch_##op_name##_impl(                                      \
       std::index_sequence<Is...>, AMatrix<T1, N, M, A1, OT1>* const m1, const AMatrix<T2, N, M, A2, OT2>& m2) { \
-    static_assert(sizeof...(Is) == N * M, "Number of indices must match number of elements in the matrix.");   \
+    static_assert(sizeof...(Is) == N * M, "Number of indices must match number of elements in the matrix.");    \
     AMatrix<T1, N, M> result;                                                                                   \
     ((result[Is] = atomic_fetch_op(&((*m1)[Is]), static_cast<T1>(m2[Is]))), ...);                               \
     return result;                                                                                              \
   }
 
-#define MUNDY_MATH_MATRIX_SCALAR_ATOMIC_OP_FETCH_IMPL(op_name, atomic_op_fetch)                             \
-  template <size_t... Is, size_t N, size_t M, typename T1, ValidAccessor<T1> A1, typename OT1, typename T2> \
-  KOKKOS_INLINE_FUNCTION auto matrix_scalar_atomic_##op_name##_fetch_impl(                                  \
-      std::index_sequence<Is...>, AMatrix<T1, N, M, A1, OT1>* const m, const T2& s) {                       \
+#define MUNDY_MATH_MATRIX_SCALAR_ATOMIC_OP_FETCH_IMPL(op_name, atomic_op_fetch)                              \
+  template <size_t... Is, size_t N, size_t M, typename T1, ValidAccessor<T1> A1, typename OT1, typename T2>  \
+  KOKKOS_INLINE_FUNCTION auto matrix_scalar_atomic_##op_name##_fetch_impl(                                   \
+      std::index_sequence<Is...>, AMatrix<T1, N, M, A1, OT1>* const m, const T2& s) {                        \
     static_assert(sizeof...(Is) == N * M, "Number of indices must match number of elements in the matrix."); \
-    AMatrix<T1, N, M> result;                                                                               \
-    ((result[Is] = atomic_op_fetch(&((*m)[Is]), static_cast<T1>(s))), ...);                                 \
-    return result;                                                                                          \
+    AMatrix<T1, N, M> result;                                                                                \
+    ((result[Is] = atomic_op_fetch(&((*m)[Is]), static_cast<T1>(s))), ...);                                  \
+    return result;                                                                                           \
   }
 
 #define MUNDY_MATH_MATRIX_MATRIX_ATOMIC_OP_FETCH_IMPL(op_name, atomic_op_fetch)                                 \
@@ -751,7 +757,7 @@ MUNDY_MATH_MATRIX_MATRIX_ATOMIC_OP_IMPL(elementwise_div, Kokkos::atomic_div)
             ValidAccessor<T2> A2, typename OT2>                                                                 \
   KOKKOS_INLINE_FUNCTION auto matrix_matrix_atomic_##op_name##_fetch_impl(                                      \
       std::index_sequence<Is...>, AMatrix<T1, N, M, A1, OT1>* const m1, const AMatrix<T2, N, M, A2, OT2>& m2) { \
-    static_assert(sizeof...(Is) == N * M, "Number of indices must match number of elements in the matrix.");   \
+    static_assert(sizeof...(Is) == N * M, "Number of indices must match number of elements in the matrix.");    \
     AMatrix<T1, N, M> result;                                                                                   \
     ((result[Is] = atomic_op_fetch(&((*m1)[Is]), static_cast<T1>(m2[Is]))), ...);                               \
     return result;                                                                                              \

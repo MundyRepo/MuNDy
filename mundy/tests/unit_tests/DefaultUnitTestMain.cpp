@@ -43,10 +43,9 @@
 #include <gtest/gtest.h>  // for TEST, ASSERT_NO_THROW, etc
 
 // Trilinos libs
-#include <Kokkos_Core.hpp>  // for Kokkos::initialize, Kokkos::finalize
-#include <iostream>
-
+#include <Kokkos_Core.hpp>       // for Kokkos::initialize, Kokkos::finalize
 #include <MundyCore_config.hpp>  // for HAVE_MUNDYCORE_*
+#include <iostream>
 #ifdef HAVE_MUNDYCORE_STK
 #include <stk_util/parallel/Parallel.hpp>  // for stk::parallel_machine_init, stk::parallel_machine_finalize
 #endif

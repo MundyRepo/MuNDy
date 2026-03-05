@@ -28,8 +28,8 @@
 // STK
 #include <stk_mesh/base/BulkData.hpp>
 #include <stk_mesh/base/Types.hpp>
-#include <stk_util/ngp/NgpSpaces.hpp>
 #include <stk_mesh/baseImpl/PartVectorUtils.hpp>  // for stk::mesh::impl::fill_add_parts_and_supersets
+#include <stk_util/ngp/NgpSpaces.hpp>
 
 // Mundy
 #include <mundy_core/throw_assert.hpp>
@@ -41,14 +41,14 @@ namespace mesh {
 
 namespace impl {
 
-PartitionKey get_partition_key(const stk::mesh::PartVector &parts) {
-stk::mesh::OrdinalVector parts_and_supersets;
-stk::mesh::impl::fill_add_parts_and_supersets(parts, parts_and_supersets);
-return parts_and_supersets;
+PartitionKey get_partition_key(const stk::mesh::PartVector& parts) {
+  stk::mesh::OrdinalVector parts_and_supersets;
+  stk::mesh::impl::fill_add_parts_and_supersets(parts, parts_and_supersets);
+  return parts_and_supersets;
 }
 
-PartitionKey get_partition_key(const stk::mesh::Bucket &link_bucket) {
-return get_partition_key(link_bucket.supersets());
+PartitionKey get_partition_key(const stk::mesh::Bucket& link_bucket) {
+  return get_partition_key(link_bucket.supersets());
 }
 
 }  // namespace impl

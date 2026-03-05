@@ -54,7 +54,7 @@ namespace mesh {
 MetaData::MetaData() : stk::mesh::MetaData() {
 }
 
-MetaData::MetaData(size_t spatial_dimension, const std::vector<std::string> &rank_names)
+MetaData::MetaData(size_t spatial_dimension, const std::vector<std::string>& rank_names)
     : stk::mesh::MetaData(spatial_dimension, rank_names) {
 }
 
@@ -66,8 +66,8 @@ MetaData::~MetaData() {
 // \name Actions
 //{
 
-void MetaData::declare_attribute(const stk::mesh::FieldBase &field, const std::string &attribute_name,
-                                 const std::any &attribute_data) {
+void MetaData::declare_attribute(const stk::mesh::FieldBase& field, const std::string& attribute_name,
+                                 const std::any& attribute_data) {
   const unsigned field_id = field.mesh_meta_data_ordinal();
 
   const bool field_has_attributes = (field_to_field_attributes_map_.count(field_id) != 0);
@@ -86,8 +86,8 @@ void MetaData::declare_attribute(const stk::mesh::FieldBase &field, const std::s
   field_to_field_attributes_map_[field_id].insert(std::make_pair(attribute_name, attribute_data));
 }
 
-void MetaData::declare_attribute(const stk::mesh::FieldBase &field, const std::string &attribute_name,
-                                 const std::any &&attribute_data) {
+void MetaData::declare_attribute(const stk::mesh::FieldBase& field, const std::string& attribute_name,
+                                 const std::any&& attribute_data) {
   const unsigned field_id = field.mesh_meta_data_ordinal();
 
   const bool field_has_attributes = (field_to_field_attributes_map_.count(field_id) != 0);
@@ -106,8 +106,8 @@ void MetaData::declare_attribute(const stk::mesh::FieldBase &field, const std::s
   field_to_field_attributes_map_[field_id].insert(std::make_pair(attribute_name, std::move(attribute_data)));
 }
 
-void MetaData::declare_attribute(const stk::mesh::Part &part, const std::string &attribute_name,
-                                 const std::any &attribute_data) {
+void MetaData::declare_attribute(const stk::mesh::Part& part, const std::string& attribute_name,
+                                 const std::any& attribute_data) {
   const unsigned part_id = part.mesh_meta_data_ordinal();
 
   const bool part_has_attributes = (part_to_part_attributes_map_.count(part_id) != 0);
@@ -127,8 +127,8 @@ void MetaData::declare_attribute(const stk::mesh::Part &part, const std::string 
   part_to_part_attributes_map_[part_id].insert(std::make_pair(attribute_name, attribute_data));
 }
 
-void MetaData::declare_attribute(const stk::mesh::Part &part, const std::string &attribute_name,
-                                 const std::any &&attribute_data) {
+void MetaData::declare_attribute(const stk::mesh::Part& part, const std::string& attribute_name,
+                                 const std::any&& attribute_data) {
   const unsigned part_id = part.mesh_meta_data_ordinal();
 
   const bool part_has_attributes = (part_to_part_attributes_map_.count(part_id) != 0);
@@ -148,7 +148,7 @@ void MetaData::declare_attribute(const stk::mesh::Part &part, const std::string 
   part_to_part_attributes_map_[part_id].insert(std::make_pair(attribute_name, std::move(attribute_data)));
 }
 
-void MetaData::declare_attribute(const std::string &attribute_name, const std::any &attribute_data) {
+void MetaData::declare_attribute(const std::string& attribute_name, const std::any& attribute_data) {
   const bool attribute_is_unique = (mesh_attributes_map_.count(attribute_name) == 0);
   MUNDY_THROW_REQUIRE(attribute_is_unique, std::invalid_argument,
                       fmt::format("MetaData: An attribute with the same type as the provided attribute already "
@@ -159,7 +159,7 @@ void MetaData::declare_attribute(const std::string &attribute_name, const std::a
   mesh_attributes_map_.insert(std::make_pair(attribute_name, attribute_data));
 }
 
-void MetaData::declare_attribute(const std::string &attribute_name, const std::any &&attribute_data) {
+void MetaData::declare_attribute(const std::string& attribute_name, const std::any&& attribute_data) {
   const bool attribute_is_unique = (mesh_attributes_map_.count(attribute_name) == 0);
   MUNDY_THROW_REQUIRE(attribute_is_unique, std::invalid_argument,
                       fmt::format("MetaData: An attribute with the same type as the provided attribute already "
@@ -173,7 +173,7 @@ void MetaData::declare_attribute(const std::string &attribute_name, const std::a
 // \name Actions
 //{
 
-bool MetaData::remove_attribute(const stk::mesh::FieldBase &field, const std::string &attribute_name) {
+bool MetaData::remove_attribute(const stk::mesh::FieldBase& field, const std::string& attribute_name) {
   const unsigned field_id = field.mesh_meta_data_ordinal();
 
   const bool field_has_attributes = (field_to_field_attributes_map_.count(field_id) != 0);
@@ -192,7 +192,7 @@ bool MetaData::remove_attribute(const stk::mesh::FieldBase &field, const std::st
   }
 }
 
-bool MetaData::remove_attribute(const stk::mesh::Part &part, const std::string &attribute_name) {
+bool MetaData::remove_attribute(const stk::mesh::Part& part, const std::string& attribute_name) {
   const unsigned part_id = part.mesh_meta_data_ordinal();
 
   // TODO(palmerb4): Attributes should be inherited. Check if any of our parents are in the list.
@@ -212,7 +212,7 @@ bool MetaData::remove_attribute(const stk::mesh::Part &part, const std::string &
   }
 }
 
-bool MetaData::remove_attribute(const std::string &attribute_name) {
+bool MetaData::remove_attribute(const std::string& attribute_name) {
   const bool attribute_exists = (mesh_attributes_map_.count(attribute_name) != 0);
   if (attribute_exists) {
     mesh_attributes_map_.erase(attribute_name);
@@ -223,7 +223,7 @@ bool MetaData::remove_attribute(const std::string &attribute_name) {
   }
 }
 
-std::any *MetaData::get_attribute(const stk::mesh::FieldBase &field, const std::string &attribute_name) {
+std::any* MetaData::get_attribute(const stk::mesh::FieldBase& field, const std::string& attribute_name) {
   const unsigned field_id = field.mesh_meta_data_ordinal();
   const bool field_has_attributes = (field_to_field_attributes_map_.count(field_id) != 0);
   if (field_has_attributes) {
@@ -238,7 +238,7 @@ std::any *MetaData::get_attribute(const stk::mesh::FieldBase &field, const std::
   return nullptr;
 }
 
-std::any *MetaData::get_attribute(const stk::mesh::Part &part, const std::string &attribute_name) {
+std::any* MetaData::get_attribute(const stk::mesh::Part& part, const std::string& attribute_name) {
   const unsigned part_id = part.mesh_meta_data_ordinal();
   const bool part_has_attributes = (part_to_part_attributes_map_.count(part_id) != 0);
   if (part_has_attributes) {
@@ -253,7 +253,7 @@ std::any *MetaData::get_attribute(const stk::mesh::Part &part, const std::string
   return nullptr;
 }
 
-std::any *MetaData::get_attribute(const std::string &attribute_name) {
+std::any* MetaData::get_attribute(const std::string& attribute_name) {
   const bool attribute_exists = (mesh_attributes_map_.count(attribute_name) != 0);
   if (attribute_exists) {
     // Return a pointer to the attribute.

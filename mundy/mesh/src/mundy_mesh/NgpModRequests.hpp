@@ -765,9 +765,9 @@ class NgpRequestConnectionT {
 
   /// \brief Record a connection between two entities (from_entity -> to_entity).
   /// Both entities may be either real entities or future entities.
-  KOKKOS_INLINE_FUNCTION FutureConnection request(
-      our_size_t ticket, core::variant<stk::mesh::Entity, FutureEntity> from_entity,
-      core::variant<stk::mesh::Entity, FutureEntity> to_entity) {
+  KOKKOS_INLINE_FUNCTION FutureConnection request(our_size_t ticket,
+                                                  core::variant<stk::mesh::Entity, FutureEntity> from_entity,
+                                                  core::variant<stk::mesh::Entity, FutureEntity> to_entity) {
     constexpr auto name = core::make_string_literal("NgpRequestConnectionT::request");
     assert_active_space<name>();
     assert_ticket_out_of_range<name>(ticket);
@@ -1001,7 +1001,6 @@ class NgpDestroyEntityT {
   //@}
 };  // NgpDestroyEntityT
 
-
 struct FutureDestroyConnection {
   our_size_t ticket;
   unsigned request_helper_index;
@@ -1090,9 +1089,9 @@ class NgpDestroyConnectionT {
 
   /// \brief Record a connection between two entities (from_entity -> to_entity).
   /// Both entities may be either real entities or future entities.
-  KOKKOS_INLINE_FUNCTION FutureDestroyConnection request(
-      our_size_t ticket, core::variant<stk::mesh::Entity, FutureEntity> from_entity,
-      core::variant<stk::mesh::Entity, FutureEntity> to_entity) {
+  KOKKOS_INLINE_FUNCTION FutureDestroyConnection request(our_size_t ticket,
+                                                         core::variant<stk::mesh::Entity, FutureEntity> from_entity,
+                                                         core::variant<stk::mesh::Entity, FutureEntity> to_entity) {
     constexpr auto name = core::make_string_literal("NgpDestroyConnectionT::request");
     assert_active_space<name>();
     assert_ticket_out_of_range<name>(ticket);
@@ -1168,7 +1167,6 @@ class NgpDestroyConnectionT {
   request_view_t requests_;
   //@}
 };  // NgpDestroyConnectionT
-
 
 /// \brief Manages all modification requests in a given NGP memory space.
 template <typename NgpMemSpace, typename SizeT = size_t>

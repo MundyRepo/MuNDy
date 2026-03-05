@@ -799,14 +799,14 @@ bool check_matrix_atomic_op_add_sub_mul_div_or_false_positive_1d() {
   }
 
   // Verify the result
-  bool ms_add_false_positive = (ms_add_neg[0] == num_threads * num_iterations);
-  bool mm_add_false_positive = (mm_add_neg[0] == num_threads * num_iterations);
-  bool ms_sub_false_positive = (ms_sub_neg[0] == -num_threads * num_iterations);
-  bool mm_sub_false_positive = (mm_sub_neg[0] == -num_threads * num_iterations);
-  bool ms_mul_div_false_positive = (ms_mul_div_neg[0] == std::pow(2, num_threads));
-  bool mm_mul_div_false_positive = (mm_mul_div_neg[0] == std::pow(2, num_threads));
-  return ms_add_false_positive || mm_add_false_positive || ms_sub_false_positive ||
-         mm_sub_false_positive || ms_mul_div_false_positive || mm_mul_div_false_positive;
+  bool ms_add_false_positive = (ms_add_neg[0] == static_cast<TypeParam>(num_threads * num_iterations));
+  bool mm_add_false_positive = (mm_add_neg[0] == static_cast<TypeParam>(num_threads * num_iterations));
+  bool ms_sub_false_positive = (ms_sub_neg[0] == static_cast<TypeParam>(-num_threads * num_iterations));
+  bool mm_sub_false_positive = (mm_sub_neg[0] == static_cast<TypeParam>(-num_threads * num_iterations));
+  bool ms_mul_div_false_positive = (ms_mul_div_neg[0] == static_cast<TypeParam>(std::pow(2, num_threads)));
+  bool mm_mul_div_false_positive = (mm_mul_div_neg[0] == static_cast<TypeParam>(std::pow(2, num_threads)));
+  return ms_add_false_positive || mm_add_false_positive || ms_sub_false_positive || mm_sub_false_positive ||
+         ms_mul_div_false_positive || mm_mul_div_false_positive;
 }
 
 TYPED_TEST(Matrix3SingleTypeTest, AtomicOpTestAddSubMulDiv1D) {
@@ -906,7 +906,7 @@ TYPED_TEST(Matrix3SingleTypeTest, AtomicFetchOpTestAddSubMulDiv1D) {
   std::vector<int> ms_add_neg_counts(num_iterations * num_threads, 0);
   std::vector<int> mm_add_pos_counts(num_iterations * num_threads, 0);
   std::vector<int> mm_add_neg_counts(num_iterations * num_threads, 0);
-  
+
   std::vector<int> ms_sub_pos_counts(num_iterations * num_threads, 0);
   std::vector<int> ms_sub_neg_counts(num_iterations * num_threads, 0);
   std::vector<int> mm_sub_pos_counts(num_iterations * num_threads, 0);
@@ -1080,17 +1080,26 @@ TYPED_TEST(Matrix3SingleTypeTest, AtomicFetchOpTestAddSubMulDiv1D) {
   EXPECT_TRUE(mm_add_pos_fetch_passed) << "Atomic fetch add failed to properly return old value.";
   EXPECT_TRUE(ms_sub_pos_fetch_passed) << "Atomic fetch sub failed to properly return old value.";
   EXPECT_TRUE(mm_sub_pos_fetch_passed) << "Atomic fetch sub failed to properly return old value.";
-  EXPECT_FALSE(ms_add_neg_fetch_passed) << "False positive: Atomic fetch add somehow returned old value correctly in non-atomic operation.";
-  EXPECT_FALSE(mm_add_neg_fetch_passed) << "False positive: Atomic fetch add somehow returned old value correctly in non-atomic operation.";  
-  EXPECT_FALSE(ms_sub_neg_fetch_passed) << "False positive: Atomic fetch sub somehow returned old value correctly in non-atomic operation.";
-  EXPECT_FALSE(mm_sub_neg_fetch_passed) << "False positive: Atomic fetch sub somehow returned old value correctly in non-atomic operation.";
+  EXPECT_FALSE(ms_add_neg_fetch_passed)
+      << "False positive: Atomic fetch add somehow returned old value correctly in non-atomic operation.";
+  EXPECT_FALSE(mm_add_neg_fetch_passed)
+      << "False positive: Atomic fetch add somehow returned old value correctly in non-atomic operation.";
+  EXPECT_FALSE(ms_sub_neg_fetch_passed)
+      << "False positive: Atomic fetch sub somehow returned old value correctly in non-atomic operation.";
+  EXPECT_FALSE(mm_sub_neg_fetch_passed)
+      << "False positive: Atomic fetch sub somehow returned old value correctly in non-atomic operation.";
 
-  // Addition and multiplication are communicative operations, so the best we can do is check the total number of operations.
+  // Addition and multiplication are communicative operations, so the best we can do is check the total number of
+  // operations.
   int expected_num_occurrences = num_threads * num_iterations;
-  EXPECT_EQ(total_ms_mul_div_pos_count, expected_num_occurrences) << "Atomic fetch mul/div failed to properly return old value.";
-  EXPECT_EQ(total_mm_mul_div_pos_count, expected_num_occurrences) << "Atomic fetch mul/div failed to properly return old value.";
-  EXPECT_NE(total_ms_mul_div_neg_count, expected_num_occurrences) << "False positive: Atomic fetch mul/div somehow returned old value correctly in non-atomic operation.";
-  EXPECT_NE(total_mm_mul_div_neg_count, expected_num_occurrences) << "False positive: Atomic fetch mul/div somehow returned old value correctly in non-atomic operation.";
+  EXPECT_EQ(total_ms_mul_div_pos_count, expected_num_occurrences)
+      << "Atomic fetch mul/div failed to properly return old value.";
+  EXPECT_EQ(total_mm_mul_div_pos_count, expected_num_occurrences)
+      << "Atomic fetch mul/div failed to properly return old value.";
+  EXPECT_NE(total_ms_mul_div_neg_count, expected_num_occurrences)
+      << "False positive: Atomic fetch mul/div somehow returned old value correctly in non-atomic operation.";
+  EXPECT_NE(total_mm_mul_div_neg_count, expected_num_occurrences)
+      << "False positive: Atomic fetch mul/div somehow returned old value correctly in non-atomic operation.";
 }
 //@}
 

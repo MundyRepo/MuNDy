@@ -96,7 +96,7 @@ class TEUCHOSPARAMETERLIST_LIB_DLL_EXPORT OurAnyNumberParameterEntryValidator
     //@{
 
     /// \brief Set allow all integer types or not
-    AcceptedTypes &allow_all_integer_types(bool should_allow_all_integer_types) {
+    AcceptedTypes& allow_all_integer_types(bool should_allow_all_integer_types) {
       allow_short_ = should_allow_all_integer_types;
       allow_unsigned_short_ = should_allow_all_integer_types;
       allow_int_ = should_allow_all_integer_types;
@@ -109,7 +109,7 @@ class TEUCHOSPARAMETERLIST_LIB_DLL_EXPORT OurAnyNumberParameterEntryValidator
     }
 
     /// \brief Set allow all floating point types or not
-    AcceptedTypes &allow_all_floating_point_types(bool should_allow_all_floating_point_types) {
+    AcceptedTypes& allow_all_floating_point_types(bool should_allow_all_floating_point_types) {
       allow_float_ = should_allow_all_floating_point_types;
       allow_double_ = should_allow_all_floating_point_types;
       allow_long_double_ = should_allow_all_floating_point_types;
@@ -117,73 +117,73 @@ class TEUCHOSPARAMETERLIST_LIB_DLL_EXPORT OurAnyNumberParameterEntryValidator
     }
 
     /// \brief Set allow a <tt>short</tt> value or not
-    AcceptedTypes &allow_short(bool should_allow_short) {
+    AcceptedTypes& allow_short(bool should_allow_short) {
       allow_short_ = should_allow_short;
       return *this;
     }
 
     /// \brief Set allow an <tt>unsigned short</tt> value or not
-    AcceptedTypes &allow_unsigned_short(bool should_allow_unsigned_short) {
+    AcceptedTypes& allow_unsigned_short(bool should_allow_unsigned_short) {
       allow_unsigned_short_ = should_allow_unsigned_short;
       return *this;
     }
 
     /// \brief Set allow an <tt>int</tt> value or not
-    AcceptedTypes &allow_int(bool should_allow_int) {
+    AcceptedTypes& allow_int(bool should_allow_int) {
       allow_int_ = should_allow_int;
       return *this;
     }
 
     /// \brief Set allow an <tt>unsigned int</tt> value or not
-    AcceptedTypes &allow_unsigned_int(bool should_allow_unsigned_int) {
+    AcceptedTypes& allow_unsigned_int(bool should_allow_unsigned_int) {
       allow_unsigned_int_ = should_allow_unsigned_int;
       return *this;
     }
 
     /// \brief Set allow an <tt>long</tt> value or not
-    AcceptedTypes &allow_long(bool should_allow_long) {
+    AcceptedTypes& allow_long(bool should_allow_long) {
       allow_long_ = should_allow_long;
       return *this;
     }
 
     /// \brief Set allow an <tt>unsigned long</tt> value or not
-    AcceptedTypes &allow_unsigned_long(bool should_allow_unsigned_long) {
+    AcceptedTypes& allow_unsigned_long(bool should_allow_unsigned_long) {
       allow_unsigned_long_ = should_allow_unsigned_long;
       return *this;
     }
 
     /// \brief Set allow an <tt>long long</tt> value or not
-    AcceptedTypes &allow_long_long(bool should_allow_long_long) {
+    AcceptedTypes& allow_long_long(bool should_allow_long_long) {
       allow_long_long_ = should_allow_long_long;
       return *this;
     }
 
     /// \brief Set allow an <tt>unsigned long long</tt> value or not
-    AcceptedTypes &allow_unsigned_long_long(bool should_allow_unsigned_long_long) {
+    AcceptedTypes& allow_unsigned_long_long(bool should_allow_unsigned_long_long) {
       allow_unsigned_long_long_ = should_allow_unsigned_long_long;
       return *this;
     }
 
     /// \brief Set allow a <tt>float</tt> value or not
-    AcceptedTypes &allow_float(bool should_allow_float) {
+    AcceptedTypes& allow_float(bool should_allow_float) {
       allow_float_ = should_allow_float;
       return *this;
     }
 
     /// \brief Set allow a <tt>double</tt> value or not
-    AcceptedTypes &allow_double(bool should_allow_double) {
+    AcceptedTypes& allow_double(bool should_allow_double) {
       allow_double_ = should_allow_double;
       return *this;
     }
 
     /// \brief Set allow a <tt>long double</tt> value or not
-    AcceptedTypes &allow_long_double(bool should_allow_long_double) {
+    AcceptedTypes& allow_long_double(bool should_allow_long_double) {
       allow_long_double_ = should_allow_long_double;
       return *this;
     }
 
     /// \brief Set allow a <tt>std::string</tt> value or not
-    AcceptedTypes &allow_string(bool should_allow_string) {
+    AcceptedTypes& allow_string(bool should_allow_string) {
       allow_string_ = should_allow_string;
       return *this;
     }
@@ -279,7 +279,7 @@ class TEUCHOSPARAMETERLIST_LIB_DLL_EXPORT OurAnyNumberParameterEntryValidator
   /// \param preferred_type [in] Determines the preferred type.  This enum value is used to set the default value in the
   /// override <tt>validateAndModify()</tt>.
   /// \param accepted_types [in] Determines the types that are allowed in the parameter list.
-  OurAnyNumberParameterEntryValidator(EPreferredType const preferred_type, AcceptedTypes const &accepted_types);
+  OurAnyNumberParameterEntryValidator(EPreferredType const preferred_type, AcceptedTypes const& accepted_types);
   //@}
 
   /// \name Local non-virtual validated lookup functions
@@ -287,97 +287,97 @@ class TEUCHOSPARAMETERLIST_LIB_DLL_EXPORT OurAnyNumberParameterEntryValidator
 
   /// \brief Get a short value from a parameter entry.
   /// Will call std::stoi.
-  short get_short(const Teuchos::ParameterEntry &entry, const std::string &param_name = "",
-                  const std::string &sublist_name = "", const bool active_query = true) const;
+  short get_short(const Teuchos::ParameterEntry& entry, const std::string& param_name = "",
+                  const std::string& sublist_name = "", const bool active_query = true) const;
 
   /// \brief Get an unsigned short value from a parameter entry.
   /// Will call std::stoi.
-  unsigned short get_unsigned_short(const Teuchos::ParameterEntry &entry, const std::string &param_name = "",
-                                    const std::string &sublist_name = "", const bool active_query = true) const;
+  unsigned short get_unsigned_short(const Teuchos::ParameterEntry& entry, const std::string& param_name = "",
+                                    const std::string& sublist_name = "", const bool active_query = true) const;
 
   /// \brief Get an int value from a parameter entry.
   /// Will call std::stoi.
-  int get_int(const Teuchos::ParameterEntry &entry, const std::string &param_name = "",
-              const std::string &sublist_name = "", const bool active_query = true) const;
+  int get_int(const Teuchos::ParameterEntry& entry, const std::string& param_name = "",
+              const std::string& sublist_name = "", const bool active_query = true) const;
 
-  unsigned int get_unsigned_int(const Teuchos::ParameterEntry &entry, const std::string &param_name = "",
-                                const std::string &sublist_name = "", const bool active_query = true) const;
+  unsigned int get_unsigned_int(const Teuchos::ParameterEntry& entry, const std::string& param_name = "",
+                                const std::string& sublist_name = "", const bool active_query = true) const;
 
   /// \brief Get a long value from a parameter entry.
-  long get_long(const Teuchos::ParameterEntry &entry, const std::string &param_name = "",
-                const std::string &sublist_name = "", const bool active_query = true) const;
+  long get_long(const Teuchos::ParameterEntry& entry, const std::string& param_name = "",
+                const std::string& sublist_name = "", const bool active_query = true) const;
 
   /// \brief Get an unsigned long value from a parameter entry.
-  unsigned long get_unsigned_long(const Teuchos::ParameterEntry &entry, const std::string &param_name = "",
-                                  const std::string &sublist_name = "", const bool active_query = true) const;
+  unsigned long get_unsigned_long(const Teuchos::ParameterEntry& entry, const std::string& param_name = "",
+                                  const std::string& sublist_name = "", const bool active_query = true) const;
 
   /// \brief Get a long long value from a parameter entry.
-  long long get_long_long(const Teuchos::ParameterEntry &entry, const std::string &param_name = "",
-                          const std::string &sublist_name = "", const bool active_query = true) const;
+  long long get_long_long(const Teuchos::ParameterEntry& entry, const std::string& param_name = "",
+                          const std::string& sublist_name = "", const bool active_query = true) const;
 
   /// \brief Get an unsigned long long value from a parameter entry.
-  unsigned long long get_unsigned_long_long(const Teuchos::ParameterEntry &entry, const std::string &param_name = "",
-                                            const std::string &sublist_name = "", const bool active_query = true) const;
+  unsigned long long get_unsigned_long_long(const Teuchos::ParameterEntry& entry, const std::string& param_name = "",
+                                            const std::string& sublist_name = "", const bool active_query = true) const;
 
   /// \brief Get a float value from a parameter entry.
-  float get_float(const Teuchos::ParameterEntry &entry, const std::string &param_name = "",
-                  const std::string &sublist_name = "", const bool active_query = true) const;
+  float get_float(const Teuchos::ParameterEntry& entry, const std::string& param_name = "",
+                  const std::string& sublist_name = "", const bool active_query = true) const;
 
   /// \brief Get a double value from a parameter entry.
-  double get_double(const Teuchos::ParameterEntry &entry, const std::string &param_name = "",
-                    const std::string &sublist_name = "", const bool active_query = true) const;
+  double get_double(const Teuchos::ParameterEntry& entry, const std::string& param_name = "",
+                    const std::string& sublist_name = "", const bool active_query = true) const;
 
   /// \brief Get a long double value from a parameter entry.
-  long double get_long_double(const Teuchos::ParameterEntry &entry, const std::string &param_name = "",
-                              const std::string &sublist_name = "", const bool active_query = true) const;
+  long double get_long_double(const Teuchos::ParameterEntry& entry, const std::string& param_name = "",
+                              const std::string& sublist_name = "", const bool active_query = true) const;
 
   /// \brief Get a std::string value from a parameter entry.
-  std::string get_string(const Teuchos::ParameterEntry &entry, const std::string &param_name = "",
-                         const std::string &sublist_name = "", const bool active_query = true) const;
+  std::string get_string(const Teuchos::ParameterEntry& entry, const std::string& param_name = "",
+                         const std::string& sublist_name = "", const bool active_query = true) const;
 
   /// \brief Lookup parameter from a parameter list and return as a short value.
-  short get_short(Teuchos::ParameterList &param_list, const std::string &param_name, const short &default_value) const;
+  short get_short(Teuchos::ParameterList& param_list, const std::string& param_name, const short& default_value) const;
 
   /// \brief Lookup parameter from a parameter list and return as an unsigned short value.
-  unsigned short get_unsigned_short(Teuchos::ParameterList &param_list, const std::string &param_name,
-                                    const unsigned short &default_value) const;
+  unsigned short get_unsigned_short(Teuchos::ParameterList& param_list, const std::string& param_name,
+                                    const unsigned short& default_value) const;
 
   /// \brief Lookup parameter from a parameter list and return as an int value.
-  int get_int(Teuchos::ParameterList &param_list, const std::string &param_name, const int &default_value) const;
+  int get_int(Teuchos::ParameterList& param_list, const std::string& param_name, const int& default_value) const;
 
   /// \brief Lookup parameter from a parameter list and return as an unsigned int value.
-  unsigned int get_unsigned_int(Teuchos::ParameterList &param_list, const std::string &param_name,
-                                const unsigned int &default_value) const;
+  unsigned int get_unsigned_int(Teuchos::ParameterList& param_list, const std::string& param_name,
+                                const unsigned int& default_value) const;
 
   /// \brief Lookup parameter from a parameter list and return as a long value.
-  long get_long(Teuchos::ParameterList &param_list, const std::string &param_name, const long &default_value) const;
+  long get_long(Teuchos::ParameterList& param_list, const std::string& param_name, const long& default_value) const;
 
   /// \brief Lookup parameter from a parameter list and return as an unsigned long value.
-  unsigned long get_unsigned_long(Teuchos::ParameterList &param_list, const std::string &param_name,
-                                  const unsigned long &default_value) const;
+  unsigned long get_unsigned_long(Teuchos::ParameterList& param_list, const std::string& param_name,
+                                  const unsigned long& default_value) const;
 
   /// \brief Lookup parameter from a parameter list and return as a long long value.
-  long long get_long_long(Teuchos::ParameterList &param_list, const std::string &param_name,
-                          const long long &default_value) const;
+  long long get_long_long(Teuchos::ParameterList& param_list, const std::string& param_name,
+                          const long long& default_value) const;
 
   /// \brief Lookup parameter from a parameter list and return as an unsigned long long value.
-  unsigned long long get_unsigned_long_long(Teuchos::ParameterList &param_list, const std::string &param_name,
-                                            const unsigned long long &default_value) const;
+  unsigned long long get_unsigned_long_long(Teuchos::ParameterList& param_list, const std::string& param_name,
+                                            const unsigned long long& default_value) const;
 
   /// \brief Lookup parameter from a parameter list and return as a float value.
-  float get_float(Teuchos::ParameterList &param_list, const std::string &param_name, const float &default_value) const;
+  float get_float(Teuchos::ParameterList& param_list, const std::string& param_name, const float& default_value) const;
 
   /// \brief Lookup parameter from a parameter list and return as a double value.
-  double get_double(Teuchos::ParameterList &param_list, const std::string &param_name,
-                    const double &default_value) const;
+  double get_double(Teuchos::ParameterList& param_list, const std::string& param_name,
+                    const double& default_value) const;
 
   /// \brief Lookup parameter from a parameter list and return as a long double value.
-  long double get_long_double(Teuchos::ParameterList &param_list, const std::string &param_name,
-                              const long double &default_value) const;
+  long double get_long_double(Teuchos::ParameterList& param_list, const std::string& param_name,
+                              const long double& default_value) const;
 
   /// \brief Lookup parameter from a parameter list and return as an std::string value.
-  std::string get_string(Teuchos::ParameterList &param_list, const std::string &param_name,
-                         const std::string &default_value) const;
+  std::string get_string(Teuchos::ParameterList& param_list, const std::string& param_name,
+                         const std::string& default_value) const;
 
   /// \brief Lookup whether or not shorts are allowed.
   bool is_short_allowed() const;
@@ -419,7 +419,7 @@ class TEUCHOSPARAMETERLIST_LIB_DLL_EXPORT OurAnyNumberParameterEntryValidator
   EPreferredType get_preferred_type() const;
 
   /// \brief Gets the string representation of a given preferred type enum.
-  static const std::string &get_preffered_type_string(EPreferredType enum_value) {
+  static const std::string& get_preffered_type_string(EPreferredType enum_value) {
     switch (enum_value) {
       case PREFER_SHORT:
         return get_short_enum_string();
@@ -452,7 +452,7 @@ class TEUCHOSPARAMETERLIST_LIB_DLL_EXPORT OurAnyNumberParameterEntryValidator
   }
 
   /// \brief Gets the preferred type enum associated with a give string.
-  static EPreferredType get_preffered_type_string_enum(const std::string &enum_string) {
+  static EPreferredType get_preffered_type_string_enum(const std::string& enum_string) {
     if (enum_string == get_short_enum_string()) {
       return PREFER_SHORT;
     } else if (enum_string == get_unsigned_short_enum_string()) {
@@ -490,18 +490,18 @@ class TEUCHOSPARAMETERLIST_LIB_DLL_EXPORT OurAnyNumberParameterEntryValidator
   const std::string getXMLTypeName() const;
 
   /// \brief
-  void printDoc(std::string const &docString, std::ostream &out) const;
+  void printDoc(std::string const& docString, std::ostream& out) const;
 
   /// \brief
   ValidStringsList validStringValues() const;
 
   /// \brief
-  void validate(Teuchos::ParameterEntry const &entry, std::string const &param_name,
-                std::string const &sublist_name) const;
+  void validate(Teuchos::ParameterEntry const& entry, std::string const& param_name,
+                std::string const& sublist_name) const;
 
   /// \brief
-  void validateAndModify(std::string const &param_name, std::string const &sublist_name,
-                         Teuchos::ParameterEntry *entry) const;
+  void validateAndModify(std::string const& param_name, std::string const& sublist_name,
+                         Teuchos::ParameterEntry* entry) const;
   //@}
 
  private:
@@ -525,81 +525,81 @@ class TEUCHOSPARAMETERLIST_LIB_DLL_EXPORT OurAnyNumberParameterEntryValidator
   // Private member functions
 
   /// \brief Gets the string representing the "short" preferred type enum
-  static const std::string &get_short_enum_string() {
+  static const std::string& get_short_enum_string() {
     static const std::string short_enum_string_ = Teuchos::TypeNameTraits<short>::name();
     return short_enum_string_;
   }
 
   /// \brief Gets the string representing the "unsigned short" preferred type enum
-  static const std::string &get_unsigned_short_enum_string() {
+  static const std::string& get_unsigned_short_enum_string() {
     static const std::string unsigned_short_enum_string_ = Teuchos::TypeNameTraits<unsigned short>::name();
     return unsigned_short_enum_string_;
   }
 
   /// \brief Gets the string representing the "int" preferred type enum
-  static const std::string &get_int_enum_string() {
+  static const std::string& get_int_enum_string() {
     static const std::string int_enum_string_ = Teuchos::TypeNameTraits<int>::name();
     return int_enum_string_;
   }
 
   /// \brief Gets the string representing the "unsigned int" preferred type enum
-  static const std::string &get_unsigned_int_enum_string() {
+  static const std::string& get_unsigned_int_enum_string() {
     static const std::string unsigned_int_enum_string_ = Teuchos::TypeNameTraits<unsigned int>::name();
     return unsigned_int_enum_string_;
   }
 
   /// \brief Gets the string representing the "long" preferred type enum
-  static const std::string &get_long_enum_string() {
+  static const std::string& get_long_enum_string() {
     static const std::string long_enum_string_ = Teuchos::TypeNameTraits<long>::name();
     return long_enum_string_;
   }
 
   /// \brief Gets the string representing the "unsigned long" preferred type enum
-  static const std::string &get_unsigned_long_enum_string() {
+  static const std::string& get_unsigned_long_enum_string() {
     static const std::string unsigned_long_enum_string_ = Teuchos::TypeNameTraits<unsigned long>::name();
     return unsigned_long_enum_string_;
   }
 
   /// \brief Gets the string representing the "long long" preferred type enum
-  static const std::string &get_long_long_enum_string() {
+  static const std::string& get_long_long_enum_string() {
     static const std::string long_long_enum_string_ = Teuchos::TypeNameTraits<long long>::name();
     return long_long_enum_string_;
   }
 
   /// \brief Gets the string representing the "unsigned long long" preferred type enum
-  static const std::string &get_unsigned_long_long_enum_string() {
+  static const std::string& get_unsigned_long_long_enum_string() {
     static const std::string unsigned_long_long_enum_string_ = Teuchos::TypeNameTraits<unsigned long long>::name();
     return unsigned_long_long_enum_string_;
   }
 
   /// \brief Gets the string representing the "float" preferred type enum
-  static const std::string &get_float_enum_string() {
+  static const std::string& get_float_enum_string() {
     static const std::string float_enum_string_ = Teuchos::TypeNameTraits<float>::name();
     return float_enum_string_;
   }
 
   /// \brief Gets the string representing the "double" preferred type enum
-  static const std::string &get_double_enum_string() {
+  static const std::string& get_double_enum_string() {
     static const std::string double_enum_string_ = Teuchos::TypeNameTraits<double>::name();
     return double_enum_string_;
   }
 
   /// \brief Gets the string representing the "long double" preferred type enum
-  static const std::string &get_long_double_enum_string() {
+  static const std::string& get_long_double_enum_string() {
     static const std::string long_double_enum_string_ = Teuchos::TypeNameTraits<long double>::name();
     return long_double_enum_string_;
   }
 
   /// \brief Gets the string representing the "string" preferred type enum
-  static const std::string &get_string_enum_string() {
+  static const std::string& get_string_enum_string() {
     static const std::string string_enum_string_ = Teuchos::TypeNameTraits<std::string>::name();
     return string_enum_string_;
   }
 
   void finish_initialization();
 
-  void throw_type_error(Teuchos::ParameterEntry const &entry, std::string const &param_name,
-                        std::string const &sublist_name) const;
+  void throw_type_error(Teuchos::ParameterEntry const& entry, std::string const& param_name,
+                        std::string const& sublist_name) const;
 };  // class OurAnyNumberParameterEntryValidator
 
 }  // namespace core

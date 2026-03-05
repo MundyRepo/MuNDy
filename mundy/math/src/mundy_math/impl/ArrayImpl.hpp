@@ -21,15 +21,18 @@
 #ifndef MUNDY_MATH_IMPL_ARRAYIMPL_HPP_
 #define MUNDY_MATH_IMPL_ARRAYIMPL_HPP_
 
-// External libs
+// External
 #include <Kokkos_Core.hpp>
 
-// C++ core libs
+// C++ core
 #include <cmath>
 #include <concepts>
 #include <initializer_list>
 #include <iostream>
 #include <type_traits>
+
+// Mundy
+#include <mundy_core/suppress_warnings.hpp>  // for MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_PUSH/POP
 
 namespace mundy {
 
@@ -56,6 +59,8 @@ KOKKOS_INLINE_FUNCTION constexpr void fill_impl(std::index_sequence<Is...>, Arra
   ((array[Is] = value), ...);
 }
 
+MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_PUSH
+
 /// \brief Apply implementation for Array
 template <size_t... Is, typename Func, typename T, size_t N>
 KOKKOS_INLINE_FUNCTION constexpr auto apply_impl(std::index_sequence<Is...>, const Func& func, const Array<T, N>& array)
@@ -66,6 +71,8 @@ KOKKOS_INLINE_FUNCTION constexpr auto apply_impl(std::index_sequence<Is...>, con
   ((result[Is] = func(array[Is])), ...);
   return result;
 }
+
+MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_POP
 
 }  // namespace impl
 

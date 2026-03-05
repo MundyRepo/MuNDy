@@ -22,6 +22,7 @@
 
 // C++ core libs
 #include <algorithm>    // for std::max
+#include <cstdint>      // for uint32_t
 #include <map>          // for std::map
 #include <memory>       // for std::shared_ptr, std::unique_ptr
 #include <queue>        // for std::priority_queue
@@ -44,6 +45,7 @@
 #include <stk_mesh/base/Selector.hpp>
 
 // Mundy libs
+#include <mundy_core/rng.hpp>             // for mundy::core::make_philox
 #include <mundy_math/Tolerance.hpp>       // for mundy::math::get_zero_tolerance
 #include <mundy_math/Vector3.hpp>         // for mundy::math::Vector3
 #include <mundy_mesh/BulkData.hpp>        // for mundy::mesh::BulkData
@@ -479,7 +481,9 @@ void connect_entities_and_links(TestContext& context, const TestParameters& para
 
     // 2.1. For each link bucket, preselect L entity buckets to maybe draw from.
     stk::mesh::BucketVector buckets_to_maybe_draw_from[stk::topology::NUM_RANKS];
-    openrand::Philox bucket_rng(seed, link_bucket_id);
+    MUNDY_THROW_ASSERT(link_bucket_id <= std::numeric_limits<uint32_t>::max(), std::overflow_error,
+                       "Counter exceeds uint32_t max for openrand::Philox.");
+    openrand::Philox bucket_rng = core::make_philox(seed, link_bucket_id);
 
     for (size_t i = 0; i < stk::topology::NUM_RANKS; ++i) {
       const size_t num_entity_buckets = rank_buckets[i].size();
@@ -512,7 +516,9 @@ void connect_entities_and_links(TestContext& context, const TestParameters& para
     size_t num_links_in_bucket = link_bucket.size();
     for (size_t link_ord = 0; link_ord < num_links_in_bucket; ++link_ord) {
       stk::mesh::Entity link_entity = link_bucket[link_ord];
-      openrand::Philox link_rng(seed, link_ord);
+      MUNDY_THROW_ASSERT(link_ord <= std::numeric_limits<uint32_t>::max(), std::overflow_error,
+                         "Counter exceeds uint32_t max for openrand::Philox.");
+      openrand::Philox link_rng = core::make_philox(seed, link_ord);
 
       // Choose the ranks for each downward linked entity. The modes are
       //   same: All entities of NODE_RANK
@@ -544,16 +550,19 @@ void connect_entities_and_links(TestContext& context, const TestParameters& para
         MUNDY_THROW_ASSERT(selected_nodes.size() <= link_dimensionality, std::logic_error,
                            "Selected nodes size must not exceed link dimensionality. It may be less when there aren't "
                            "enough nodes in the mesh.");
-        for (unsigned d = 0; d < selected_nodes.size(); ++d) {
+        for (size_t d = 0; d < selected_nodes.size(); ++d) {
           stk::mesh::Entity selected_node = selected_nodes[d];
           MUNDY_THROW_ASSERT(bulk_data.is_valid(selected_node), std::logic_error, "Selected entity is not valid.");
 
-          openrand::Philox entity_bucket_rng(seed, bulk_data.bucket(selected_node).bucket_id());
+          const auto selected_node_bucket_id = bulk_data.bucket(selected_node).bucket_id();
+          MUNDY_THROW_ASSERT(selected_node_bucket_id <= std::numeric_limits<uint32_t>::max(), std::overflow_error,
+                             "Counter exceeds uint32_t max for openrand::Philox.");
+          openrand::Philox entity_bucket_rng = core::make_philox(seed, selected_node_bucket_id);
           if (entity_bucket_rng.rand<double>() > entity_bucket_selection_percentage) {
             break;  // If the entity fails the entity bucket selection, skip the rest.
           }
           if (bucket_rng.rand<double>() < link_selection_percentage) {
-            link_data.coo_data().declare_relation(link_entity, selected_node, d);
+            link_data.coo_data().declare_relation(link_entity, selected_node, static_cast<unsigned>(d));
           }
         }
 
@@ -593,17 +602,21 @@ void connect_entities_and_links(TestContext& context, const TestParameters& para
           MUNDY_THROW_ASSERT(selected_entities.size() <= num_entities_per_rank[i], std::logic_error,
                              "Selected entities size must not exceed number of entities per rank. It may be less when "
                              "there aren't enough entities in the mesh.");
-          for (unsigned j = 0; j < selected_entities.size();
+          for (size_t j = 0; j < selected_entities.size();
                ++j) {  // We might end up with holes in the downward connections.
             stk::mesh::Entity selected_entity = selected_entities[j];
             MUNDY_THROW_ASSERT(bulk_data.is_valid(selected_entity), std::logic_error, "Selected entity is not valid.");
 
-            openrand::Philox entity_bucket_rng(seed, bulk_data.bucket(selected_entity).bucket_id());
+            const auto selected_entity_bucket_id = bulk_data.bucket(selected_entity).bucket_id();
+            MUNDY_THROW_ASSERT(selected_entity_bucket_id <= std::numeric_limits<uint32_t>::max(), std::overflow_error,
+                               "Counter exceeds uint32_t max for openrand::Philox.");
+            openrand::Philox entity_bucket_rng = core::make_philox(seed, selected_entity_bucket_id);
             if (entity_bucket_rng.rand<double>() > entity_bucket_selection_percentage) {
               break;  // If the entity fails the entity bucket selection, skip the rest.
             }
             if (bucket_rng.rand<double>() < link_selection_percentage) {
-              link_data.coo_data().declare_relation(link_entity, selected_entity, j + num_entities_per_rank_shift[i]);
+              link_data.coo_data().declare_relation(link_entity, selected_entity,
+                                                    static_cast<unsigned>(j + num_entities_per_rank_shift[i]));
             }
           }
         }
@@ -643,7 +656,10 @@ void connect_entities_and_links(TestContext& context, const TestParameters& para
         stk::mesh::Entity selected_elem = selected_elems[0];
         MUNDY_THROW_ASSERT(bulk_data.is_valid(selected_elem), std::logic_error, "Selected entity is not valid.");
 
-        openrand::Philox elem_bucket_rng(seed, bulk_data.bucket(selected_elem).bucket_id());
+        const auto selected_elem_bucket_id = bulk_data.bucket(selected_elem).bucket_id();
+        MUNDY_THROW_ASSERT(selected_elem_bucket_id <= std::numeric_limits<uint32_t>::max(), std::overflow_error,
+                           "Counter exceeds uint32_t max for openrand::Philox.");
+        openrand::Philox elem_bucket_rng = core::make_philox(seed, selected_elem_bucket_id);
         if (elem_bucket_rng.rand<double>() > entity_bucket_selection_percentage) {
           continue;  // If the element fails the entity bucket selection, skip the rest.
         }
@@ -656,17 +672,20 @@ void connect_entities_and_links(TestContext& context, const TestParameters& para
         MUNDY_THROW_ASSERT(selected_nodes.size() <= link_dimensionality - 1, std::logic_error,
                            "Number of selected nodes must not exceed link dimensionality - 1. It may be less when "
                            "there aren't enough nodes in the mesh.");
-        for (unsigned j = 0; j < selected_nodes.size(); ++j) {
+        for (size_t j = 0; j < selected_nodes.size(); ++j) {
           stk::mesh::Entity selected_node = selected_nodes[j];
           MUNDY_THROW_ASSERT(bulk_data.is_valid(selected_node), std::logic_error, "Selected entity is not valid.");
 
-          openrand::Philox entity_bucket_rng(seed, bulk_data.bucket(selected_node).bucket_id());
+          const auto selected_node_bucket_id = bulk_data.bucket(selected_node).bucket_id();
+          MUNDY_THROW_ASSERT(selected_node_bucket_id <= std::numeric_limits<uint32_t>::max(), std::overflow_error,
+                             "Counter exceeds uint32_t max for openrand::Philox.");
+          openrand::Philox entity_bucket_rng = core::make_philox(seed, selected_node_bucket_id);
           if (entity_bucket_rng.rand<double>() > entity_bucket_selection_percentage) {
             break;  // If any of the nodes fail the entity bucket selection, skip the rest.
           }
           if (bucket_rng.rand<double>() < link_selection_percentage) {
             link_data.coo_data().declare_relation(link_entity, selected_node,
-                                                  j + 1);  // Start at 1 since 0 is the element.
+                                                  static_cast<unsigned>(j + 1));  // Start at 1 since 0 is the element.
           }
         }
 
@@ -1030,7 +1049,10 @@ void randomly_mark_buckets_per_partition_per_rank_as_modified(TestContext& conte
     for (stk::topology::rank_t rank = stk::topology::NODE_RANK; rank < stk::topology::NUM_RANKS; ++rank) {
       for (size_t bucket_idx = 0; bucket_idx < crs_partition.num_buckets(rank); ++bucket_idx) {
         auto& crs_bucket_conn = crs_partition.get_crs_bucket_conn(rank, bucket_idx);
-        openrand::Philox rng(rank, crs_bucket_conn.bucket_id());
+        const auto bucket_id = crs_bucket_conn.bucket_id();
+        MUNDY_THROW_ASSERT(bucket_id <= std::numeric_limits<uint32_t>::max(), std::overflow_error,
+                           "Counter exceeds uint32_t max for openrand::Philox.");
+        openrand::Philox rng = core::make_philox(rank, bucket_id);
         impl::get_dirty_flag(crs_bucket_conn) = rng.rand<double>() < percentage;
         count += impl::get_dirty_flag(crs_bucket_conn);
       }

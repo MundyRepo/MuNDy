@@ -38,7 +38,7 @@ namespace mundy {
 namespace core {
 
 /// \brief NgpPoolT is a Kokkos-compatible pool of default constructable objects.
-template <class DataType, typename MemorySpace, typename SizeType = long int>
+template <class DataType, typename MemorySpace, typename SizeType = size_t>
 class NgpPoolT {
  public:
   // Type aliases
@@ -60,7 +60,7 @@ class NgpPoolT {
   NgpPoolT() : NgpPoolT(0) {
   }
 
-  NgpPoolT(size_t capacity)
+  NgpPoolT(our_size_t capacity)
       : ngp_size_("NgpPoolT::ngp_size"), ngp_capacity_("NgpPoolT::ngp_capacity"), pool_("NgpPoolT::pool", capacity) {
     // Initialize size/capacity
     ngp_size_.view_host()() = 0;
@@ -96,11 +96,11 @@ class NgpPoolT {
   }
 
   KOKKOS_FUNCTION
-  size_t size() const {
+  our_size_t size() const {
     return ngp_size_.view_device()();
   }
 
-  size_t size_host() const {
+  our_size_t size_host() const {
     return ngp_size_.view_host()();
   }
 
@@ -180,7 +180,7 @@ class NgpPoolT {
   /// Results are returned in an NgpViewT<ValueType, MemorySpace>.
   pool_view_t batch_acquire(our_size_t n) {
     sync_to_device();
-    size_t old_size = ngp_size_.view_host()();
+    our_size_t old_size = ngp_size_.view_host()();
     ngp_size_.view_host()() -= n;
     Kokkos::deep_copy(ngp_size_.view_device(), ngp_size_.view_host());
 
@@ -227,7 +227,7 @@ class NgpPoolT {
   /// \brief Add N objects into the pool. Modifies on device and marks as modified.
   void batch_add(pool_view_t p) {
     sync_to_host();
-    size_t old_size = ngp_size_.view_host()();
+    our_size_t old_size = ngp_size_.view_host()();
     ngp_size_.view_host()() += p.extent(0);
     Kokkos::deep_copy(ngp_size_.view_device(), ngp_size_.view_host());
     MUNDY_THROW_ASSERT(old_size + p.extent(0) <= ngp_capacity_.view_host()(), std::runtime_error,
@@ -342,7 +342,7 @@ class NgpPoolT {
 ///
 /// Unlike NgpPoolT, we follow stk::ngp conventions by using Kokkos::DefaultExecutionSpace as our
 /// chosen device space.
-template <class DataType, typename SizeType = long int>
+template <class DataType, typename SizeType = size_t>
 using NgpPool = NgpPoolT<DataType, typename Kokkos::DefaultExecutionSpace::memory_space, SizeType>;
 
 }  // namespace core

@@ -46,6 +46,7 @@
 #include <mundy_mesh/ForEachEntity.hpp>    // for mundy::mesh::for_each_entity_run
 #include <mundy_mesh/NgpAccessorExpr.hpp>  // for mundy::mesh::AccessorExpr and EntityExprBase
 #include <mundy_mesh/fmt_stk_types.hpp>    // for STK-compatible fmt::format
+#include <mundy_core/suppress_warnings.hpp>  // for MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_PUSH/POP
 
 namespace mundy {
 
@@ -939,7 +940,7 @@ class TaggedComponent {
       std::declval<stk::mesh::Entity>()));
 };  // TaggedComponent
 
-template<typename Tag, stk::topology::rank_t our_rank, typename ComponentType>
+template <typename Tag, stk::topology::rank_t our_rank, typename ComponentType>
 TaggedComponent<Tag, our_rank, ComponentType> make_tagged_component(ComponentType component) {
   return TaggedComponent<Tag, our_rank, ComponentType>(component);
 }
@@ -975,9 +976,9 @@ class NgpTaggedComponent {
   ///   auto get_v3_expr = v3_accessor(all_nodes);
   template <class EntityExpr>
   auto operator()(const EntityExprBase<EntityExpr>& e) const {
-    MUNDY_THROW_REQUIRE(e.rank() == rank, std::runtime_error,
-                        fmt::format("Attempting to access field of rank {} on entity expression of rank {}",
-                                    rank, e.rank()));
+    MUNDY_THROW_REQUIRE(
+        e.rank() == rank, std::runtime_error,
+        fmt::format("Attempting to access field of rank {} on entity expression of rank {}", rank, e.rank()));
     return AccessorExpr<our_t, EntityExpr>(*this, e.self());
   }
 
@@ -1078,10 +1079,10 @@ decltype(auto) get_updated_ngp_component(const TaggedComponent<Tag, our_rank, Co
 template <typename Tag, stk::topology::rank_t our_rank, typename ComponentType>
 template <class EntityExpr>
 auto TaggedComponent<Tag, our_rank, ComponentType>::operator()(const EntityExprBase<EntityExpr>& e) const {
-  MUNDY_THROW_REQUIRE(e.rank() == rank, std::runtime_error,
-                      fmt::format("Attempting to access field of rank {} on entity expression of rank {}",
-                                  rank, e.rank()));
-  
+  MUNDY_THROW_REQUIRE(
+      e.rank() == rank, std::runtime_error,
+      fmt::format("Attempting to access field of rank {} on entity expression of rank {}", rank, e.rank()));
+
   // Entity expressions are (currently) always on the device, so we need to get the NGP tagged component
   // TODO(palmerb4): Allow for exec_spaces that aren't simply the default execution space (need Tril 16.1+)
   auto ngp_this = get_updated_ngp_component(*this);
@@ -1103,7 +1104,7 @@ KOKKOS_FUNCTION static constexpr const auto& find_const_component_recurse_impl(c
 }
 
 /// \brief Fetch the component corresponding to the given Tag using an index sequence
-template <typename Tag, typename... Components, std::size_t... Is>
+template <typename Tag, typename... Components, size_t... Is>
 KOKKOS_FUNCTION static constexpr auto& find_const_component_impl(const core::tuple<Components...>& tuple,
                                                                  std::index_sequence<Is...>) {
   // Unpack into the
@@ -1122,7 +1123,7 @@ KOKKOS_FUNCTION static constexpr auto& find_component_recurse_impl(First& first,
 }
 
 /// \brief Fetch the component corresponding to the given Tag using an index sequence
-template <typename Tag, typename... Components, std::size_t... Is>
+template <typename Tag, typename... Components, size_t... Is>
 KOKKOS_FUNCTION static constexpr auto& find_component_impl(core::tuple<Components...>& tuple,
                                                            std::index_sequence<Is...>) {
   // Unpack into the
@@ -1140,7 +1141,7 @@ KOKKOS_FUNCTION static constexpr bool has_rank_recurse_impl(const First& first, 
 }
 
 /// \brief Determine if any components in a tuple have a given rank using an index sequence
-template <stk::topology::rank_t rank, typename... Components, std::size_t... Is>
+template <stk::topology::rank_t rank, typename... Components, size_t... Is>
 KOKKOS_FUNCTION static constexpr bool has_rank_impl(const core::tuple<Components...>& tuple,
                                                     std::index_sequence<Is...>) {
   return has_rank_recurse_impl<rank>(core::get<Is>(tuple)...);
@@ -1157,7 +1158,7 @@ KOKKOS_FUNCTION static constexpr bool all_have_rank_recurse_impl(const First& fi
 }
 
 /// \brief Determine if ~all~ components in a tuple have a given rank
-template <stk::topology::rank_t rank, typename... Components, std::size_t... Is>
+template <stk::topology::rank_t rank, typename... Components, size_t... Is>
 KOKKOS_FUNCTION static constexpr bool all_have_rank_impl(const core::tuple<Components...>& tuple,
                                                          std::index_sequence<Is...>) {
   return all_have_rank_recurse_impl<rank>(core::get<Components>(tuple)...);
@@ -1170,11 +1171,17 @@ class NgpFunctorWrapper {
   NgpFunctorWrapper(NgpAggregateType agg, const FunctorType& functor) : agg_(agg), functor_{functor} {
   }
 
+  // Ignore the fact that functor may be a host function and yet operator is device compatable.
+  // So long as operator() is evaluated on the host, all should be well.
+  MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_PUSH
+
   KOKKOS_FUNCTION
   void operator()(stk::mesh::FastMeshIndex entity_index) const {
     auto view = agg_.get_view(entity_index);
     functor_(view);
   }
+
+  MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_POP
 
  private:
   NgpAggregateType agg_;
@@ -1237,7 +1244,6 @@ KOKKOS_FUNCTION static constexpr bool all_have_rank(const core::tuple<Components
 }
 
 }  // namespace agg_impl
-
 
 /// Forward declarations:
 template <stk::topology::topology_t OurTopology, stk::topology::rank_t OurRank, typename... Components>

@@ -202,6 +202,7 @@ Order of operations:
 #include <mundy_meta/utils/MeshGeneration.hpp>  // for mundy::meta::utils::generate_class_instance_and_mesh_from_meta_class_requirements
 #include <mundy_shapes/ComputeAABB.hpp>  // for mundy::shapes::ComputeAABB
 #include <mundy_shapes/Spheres.hpp>      // for mundy::shapes::Spheres
+#include <mundy_core/rng.hpp>              // for mundy::core::make_philox
 
 namespace mundy {
 
@@ -1196,7 +1197,7 @@ class StickySettings {
           // Fetch the RNG state, get a random number out of it, and increment
           unsigned *element_rng_counter = stk::mesh::field_data(element_rng_field, crosslinker);
           const stk::mesh::EntityId crosslinker_gid = bulk_data.identifier(crosslinker);
-          openrand::Philox rng(crosslinker_gid, element_rng_counter[0]);
+          openrand::Philox rng = core::make_philox(crosslinker_gid, element_rng_counter[0]);
           const double randu01 = rng.rand<double>();
           element_rng_counter[0]++;
 
@@ -1268,7 +1269,7 @@ class StickySettings {
           // Fetch the RNG state, get a random number out of it, and increment
           unsigned *element_rng_counter = stk::mesh::field_data(element_rng_field, crosslinker);
           const stk::mesh::EntityId crosslinker_gid = bulk_data.identifier(crosslinker);
-          openrand::Philox rng(crosslinker_gid, element_rng_counter[0]);
+          openrand::Philox rng = core::make_philox(crosslinker_gid, element_rng_counter[0]);
           double randZ = rng.rand<double>() * Z_tot;
           double cumsum = 0.0;
           element_rng_counter[0]++;
@@ -1458,7 +1459,7 @@ class StickySettings {
           unsigned *node_rng_counter = stk::mesh::field_data(node_rng_field, sphere_node);
 
           // U_brown = sqrt(2 * kt * gamma / dt) * randn
-          openrand::Philox rng(sphere_node_gid, node_rng_counter[0]);
+          openrand::Philox rng = core::make_philox(sphere_node_gid, node_rng_counter[0]);
           const double coeff = std::sqrt(2.0 * kt * sphere_drag_coeff / timestep_size) * inv_drag_coeff;
           node_velocity[0] += coeff * rng.randn<double>();
           node_velocity[1] += coeff * rng.randn<double>();

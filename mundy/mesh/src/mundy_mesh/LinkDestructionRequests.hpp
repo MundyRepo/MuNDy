@@ -64,7 +64,7 @@ class LinkDestructionRequests {  // Host only | Valid during mesh modifications
   LinkDestructionRequests() = default;
 
   /// \brief Canonical constructor.
-  LinkDestructionRequests(const LinkMetaData &link_meta_data, const stk::mesh::PartVector &add_parts,
+  LinkDestructionRequests(const LinkMetaData& link_meta_data, const stk::mesh::PartVector& add_parts,
                           unsigned link_dimensionality, unsigned initial_capacity)
       : link_meta_data_ptr_(&link_meta_data),
         link_parts_(add_parts),
@@ -92,18 +92,18 @@ class LinkDestructionRequests {  // Host only | Valid during mesh modifications
   }
 
   /// \brief Default copy/move constructors/operators.
-  LinkDestructionRequests(const LinkDestructionRequests &) = default;
-  LinkDestructionRequests(LinkDestructionRequests &&) = default;
-  LinkDestructionRequests &operator=(const LinkDestructionRequests &) = default;
-  LinkDestructionRequests &operator=(LinkDestructionRequests &&) = default;
+  LinkDestructionRequests(const LinkDestructionRequests&) = default;
+  LinkDestructionRequests(LinkDestructionRequests&&) = default;
+  LinkDestructionRequests& operator=(const LinkDestructionRequests&) = default;
+  LinkDestructionRequests& operator=(LinkDestructionRequests&&) = default;
 
   /// \brief Request the destruction of a link. This will be processed in the next process_requests call.
-  inline void request_destruction(const stk::mesh::Entity &linker) const {
+  inline void request_destruction(const stk::mesh::Entity& linker) const {
     MUNDY_THROW_ASSERT(link_meta_data().link_rank() == bulk_data().entity_rank(linker), std::invalid_argument,
                        "Linker is not of the correct rank.");
     MUNDY_THROW_ASSERT(bulk_data().is_valid(linker), std::invalid_argument, "Linker is not valid.");
 
-    auto &link_marked_for_destruction_field = impl::get_link_marked_for_destruction_field(link_meta_data());
+    auto& link_marked_for_destruction_field = impl::get_link_marked_for_destruction_field(link_meta_data());
     stk::mesh::field_data(link_marked_for_destruction_field, linker)[0] = true;
   }
 
@@ -117,7 +117,7 @@ class NgpLinkDestructionRequestsT {  // Device only | Invalid during mesh modifi
   NgpLinkDestructionRequestsT() = default;
 
   /// \brief Canonical constructor.
-  NgpLinkDestructionRequestsT(const LinkMetaData &link_meta_data, const stk::mesh::PartVector &add_parts,
+  NgpLinkDestructionRequestsT(const LinkMetaData& link_meta_data, const stk::mesh::PartVector& add_parts,
                               unsigned link_dimensionality, unsigned initial_capacity)
       : link_meta_data_ptr_(&link_meta_data),
         link_parts_(add_parts),
@@ -145,18 +145,18 @@ class NgpLinkDestructionRequestsT {  // Device only | Invalid during mesh modifi
   }
 
   /// \brief Default copy/move constructors/operators.
-  NgpLinkDestructionRequestsT(const NgpLinkDestructionRequestsT &) = default;
-  NgpLinkDestructionRequestsT(NgpLinkDestructionRequestsT &&) = default;
-  NgpLinkDestructionRequestsT &operator=(const NgpLinkDestructionRequestsT &) = default;
-  NgpLinkDestructionRequestsT &operator=(NgpLinkDestructionRequestsT &&) = default;
+  NgpLinkDestructionRequestsT(const NgpLinkDestructionRequestsT&) = default;
+  NgpLinkDestructionRequestsT(NgpLinkDestructionRequestsT&&) = default;
+  NgpLinkDestructionRequestsT& operator=(const NgpLinkDestructionRequestsT&) = default;
+  NgpLinkDestructionRequestsT& operator=(NgpLinkDestructionRequestsT&&) = default;
 
   /// \brief Request the destruction of a link. This will be processed in the next process_requests call.
-  inline void request_destruction(const stk::mesh::Entity &linker) const {
+  inline void request_destruction(const stk::mesh::Entity& linker) const {
     MUNDY_THROW_ASSERT(link_meta_data().link_rank() == bulk_data().entity_rank(linker), std::invalid_argument,
                        "Linker is not of the correct rank.");
     MUNDY_THROW_ASSERT(bulk_data().is_valid(linker), std::invalid_argument, "Linker is not valid.");
 
-    auto &link_marked_for_destruction_field = impl::get_link_marked_for_destruction_field(link_meta_data());
+    auto& link_marked_for_destruction_field = impl::get_link_marked_for_destruction_field(link_meta_data());
     stk::mesh::field_data(link_marked_for_destruction_field, linker)[0] = true;
   }
 };  // NgpLinkDestructionRequestsT

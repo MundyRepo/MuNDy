@@ -31,15 +31,15 @@ namespace impl {
 
 using LexemIterator = SelectorLexemVector::const_iterator;
 
-SelectorNode *parse_statements(SelectorEval &eval, LexemIterator from, LexemIterator to);
-SelectorNode *parse_statement(SelectorEval &eval, LexemIterator from, LexemIterator to);
-SelectorNode *parse_expression(SelectorEval &eval, LexemIterator from, LexemIterator to);
-SelectorNode *parse_term(SelectorEval &eval, LexemIterator from, LexemIterator term, LexemIterator to);
-SelectorNode *parse_arythmatic(SelectorEval &eval, LexemIterator from, LexemIterator term, LexemIterator to);
-SelectorNode *parse_unary(SelectorEval &eval, LexemIterator from, LexemIterator unary, LexemIterator to);
-SelectorNode *parse_rvalue(SelectorEval &eval, LexemIterator from, LexemIterator to);
+SelectorNode* parse_statements(SelectorEval& eval, LexemIterator from, LexemIterator to);
+SelectorNode* parse_statement(SelectorEval& eval, LexemIterator from, LexemIterator to);
+SelectorNode* parse_expression(SelectorEval& eval, LexemIterator from, LexemIterator to);
+SelectorNode* parse_term(SelectorEval& eval, LexemIterator from, LexemIterator term, LexemIterator to);
+SelectorNode* parse_arythmatic(SelectorEval& eval, LexemIterator from, LexemIterator term, LexemIterator to);
+SelectorNode* parse_unary(SelectorEval& eval, LexemIterator from, LexemIterator unary, LexemIterator to);
+SelectorNode* parse_rvalue(SelectorEval& eval, LexemIterator from, LexemIterator to);
 
-SelectorNode *parse_statements(SelectorEval &eval, LexemIterator from, LexemIterator to) {
+SelectorNode* parse_statements(SelectorEval& eval, LexemIterator from, LexemIterator to) {
   if ((*from).getToken() == TOKEN_END) {
     std::cout << "Nothing to parse" << std::endl;
     return nullptr;
@@ -49,7 +49,7 @@ SelectorNode *parse_statements(SelectorEval &eval, LexemIterator from, LexemIter
   for (it = from; (*it).getToken() != TOKEN_END; ++it) {
   }
 
-  SelectorNode *statement = eval.new_node(OPCODE_STATEMENT);
+  SelectorNode* statement = eval.new_node(OPCODE_STATEMENT);
   statement->left_node_ptr_ = parse_statement(eval, from, it);
 
   if ((*it).getToken() != TOKEN_END) {
@@ -59,11 +59,11 @@ SelectorNode *parse_statements(SelectorEval &eval, LexemIterator from, LexemIter
   return statement;
 }
 
-SelectorNode *parse_statement(SelectorEval &eval, LexemIterator from, LexemIterator to) {
+SelectorNode* parse_statement(SelectorEval& eval, LexemIterator from, LexemIterator to) {
   return parse_expression(eval, from, to);
 }
 
-SelectorNode *parse_expression(SelectorEval &eval, LexemIterator from, LexemIterator to) {
+SelectorNode* parse_expression(SelectorEval& eval, LexemIterator from, LexemIterator to) {
   int paren_level = 0;                 // Paren level
   LexemIterator lparen_open_it = to;   // First open paren
   LexemIterator lparen_close_it = to;  // Corresponding close paren
@@ -174,8 +174,8 @@ SelectorNode *parse_expression(SelectorEval &eval, LexemIterator from, LexemIter
   return parse_rvalue(eval, from, to);
 }
 
-SelectorNode *parse_arythmatic(SelectorEval &eval, LexemIterator from, LexemIterator arythmetic_it, LexemIterator to) {
-  SelectorNode *arythmetic = eval.new_node(
+SelectorNode* parse_arythmatic(SelectorEval& eval, LexemIterator from, LexemIterator arythmetic_it, LexemIterator to) {
+  SelectorNode* arythmetic = eval.new_node(
       ((*arythmetic_it).getToken() == TOKEN_ARITHMETIC_AND ? OPCODE_ARITHMETIC_AND : OPCODE_ARITHMETIC_OR));
 
   arythmetic->left_node_ptr_ = parse_expression(eval, from, arythmetic_it);
@@ -184,8 +184,8 @@ SelectorNode *parse_arythmatic(SelectorEval &eval, LexemIterator from, LexemIter
   return arythmetic;
 }
 
-SelectorNode *parse_term(SelectorEval &eval, LexemIterator from, LexemIterator term_it, LexemIterator to) {
-  SelectorNode *term = eval.new_node(OPCODE_SUBTRACT);
+SelectorNode* parse_term(SelectorEval& eval, LexemIterator from, LexemIterator term_it, LexemIterator to) {
+  SelectorNode* term = eval.new_node(OPCODE_SUBTRACT);
 
   term->left_node_ptr_ = parse_expression(eval, from, term_it);
   term->right_node_ptr_ = parse_expression(eval, term_it + 1, to);
@@ -193,11 +193,11 @@ SelectorNode *parse_term(SelectorEval &eval, LexemIterator from, LexemIterator t
   return term;
 }
 
-SelectorNode *parse_unary(SelectorEval &eval, [[maybe_unused]] LexemIterator from, LexemIterator unary_it,
+SelectorNode* parse_unary(SelectorEval& eval, [[maybe_unused]] LexemIterator from, LexemIterator unary_it,
                           LexemIterator to) {
   /* If it is a positive, just parse the internal of it */
   if ((*unary_it).getToken() == TOKEN_NOT) {
-    SelectorNode *unary = eval.new_node(OPCODE_UNARY_NOT);
+    SelectorNode* unary = eval.new_node(OPCODE_UNARY_NOT);
     unary->right_node_ptr_ = parse_expression(eval, unary_it + 1, to);
     return unary;
   } else {
@@ -205,7 +205,7 @@ SelectorNode *parse_unary(SelectorEval &eval, [[maybe_unused]] LexemIterator fro
   }
 }
 
-SelectorNode *parse_rvalue(SelectorEval &eval, LexemIterator from, LexemIterator to) {
+SelectorNode* parse_rvalue(SelectorEval& eval, LexemIterator from, LexemIterator to) {
   if (from + 1 != to) {
     throw std::runtime_error(std::string("r-value not allowed following ") + (*from).getString());
   }
@@ -213,7 +213,7 @@ SelectorNode *parse_rvalue(SelectorEval &eval, LexemIterator from, LexemIterator
   switch ((*from).getToken()) {
     case TOKEN_IDENTIFIER: {
       // Define a constant using some string data.
-      SelectorNode *constant = eval.new_node(OPCODE_CONSTANT, (*from).getString());
+      SelectorNode* constant = eval.new_node(OPCODE_CONSTANT, (*from).getString());
       return constant;
     }
 

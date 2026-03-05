@@ -37,6 +37,7 @@
 #include <mundy_mesh/BulkData.hpp>                                          // for mundy::mesh::BulkData
 #include <mundy_mesh/ForEachEntity.hpp>                                     // for mundy::mesh::for_each_entity_run
 #include <mundy_shapes/Spheres.hpp>                                         // for mundy::shapes::Spheres
+#include <mundy_core/rng.hpp>              // for mundy::core::make_philox
 
 namespace mundy {
 
@@ -116,7 +117,7 @@ void SpheresKernel::execute(const stk::mesh::Selector &sphere_selector) {
         const stk::mesh::EntityId sphere_node_gid = bulk_data.identifier(sphere_node);
         unsigned *node_rng_counter = stk::mesh::field_data(node_rng_counter_field, sphere_node);
 
-        openrand::Philox rng(sphere_node_gid, node_rng_counter[0]);
+        openrand::Philox rng = core::make_philox(sphere_node_gid, node_rng_counter[0]);
         node_brownian_velocity[0] += std::sqrt(2.0 * diffusion_coeff / time_step_size) * rng.randn<double>();
         node_brownian_velocity[1] += std::sqrt(2.0 * diffusion_coeff / time_step_size) * rng.randn<double>();
         node_brownian_velocity[2] += std::sqrt(2.0 * diffusion_coeff / time_step_size) * rng.randn<double>();

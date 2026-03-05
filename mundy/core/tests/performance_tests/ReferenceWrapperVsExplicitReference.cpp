@@ -47,7 +47,7 @@ struct WorkspaceWrapper {
   mundy::core::reference_wrapper<scalar_t> z;
 
   KOKKOS_INLINE_FUNCTION
-  constexpr void step(const scalar_t alpha, const scalar_t beta, const std::size_t i, const std::size_t round) {
+  constexpr void step(const scalar_t alpha, const scalar_t beta, const size_t i, const size_t round) {
     scalar_t& x_ref = x;  // intentionally exercise implicit conversion
     scalar_t& y_ref = y;
     scalar_t& z_ref = z;
@@ -67,7 +67,7 @@ struct WorkspaceExplicit {
   scalar_t& z;
 
   KOKKOS_INLINE_FUNCTION
-  constexpr void step(const scalar_t alpha, const scalar_t beta, const std::size_t i, const std::size_t round) {
+  constexpr void step(const scalar_t alpha, const scalar_t beta, const size_t i, const size_t round) {
     const scalar_t wave = static_cast<scalar_t>((i % 11) + 1) + static_cast<scalar_t>((round % 7) + 1);
     const scalar_t t0 = x + beta * y;
     const scalar_t t1 = y - alpha * z + 0.125 * wave;
@@ -84,7 +84,7 @@ void fill_deterministic(vec_t& x, vec_t& y, vec_t& z) {
     return static_cast<scalar_t>(seed & 0xFFFFULL) / static_cast<scalar_t>(0x10000ULL);
   };
 
-  for (std::size_t i = 0; i < x.size(); ++i) {
+  for (size_t i = 0; i < x.size(); ++i) {
     x[i] = 0.1 + next_unit();
     y[i] = 0.2 + next_unit();
     z[i] = 0.3 + next_unit();
@@ -93,16 +93,16 @@ void fill_deterministic(vec_t& x, vec_t& y, vec_t& z) {
 
 scalar_t compute_checksum(const vec_t& x, const vec_t& y, const vec_t& z) {
   scalar_t checksum = 0.0;
-  for (std::size_t i = 0; i < x.size(); i += 7) {
+  for (size_t i = 0; i < x.size(); i += 7) {
     checksum += x[i] * 0.5 + y[i] * 0.25 + z[i] * 0.125;
   }
   return checksum;
 }
 
 scalar_t run_with_wrapper(vec_t& x, vec_t& y, vec_t& z, const scalar_t alpha, const scalar_t beta,
-                          const std::size_t rounds) {
-  for (std::size_t round = 0; round < rounds; ++round) {
-    for (std::size_t i = 0; i < x.size(); ++i) {
+                          const size_t rounds) {
+  for (size_t round = 0; round < rounds; ++round) {
+    for (size_t i = 0; i < x.size(); ++i) {
       WorkspaceWrapper workspace{mundy::core::ref(x[i]), mundy::core::ref(y[i]), mundy::core::ref(z[i])};
       workspace.step(alpha, beta, i, round);
     }
@@ -111,9 +111,9 @@ scalar_t run_with_wrapper(vec_t& x, vec_t& y, vec_t& z, const scalar_t alpha, co
 }
 
 scalar_t run_with_explicit_ref(vec_t& x, vec_t& y, vec_t& z, const scalar_t alpha, const scalar_t beta,
-                               const std::size_t rounds) {
-  for (std::size_t round = 0; round < rounds; ++round) {
-    for (std::size_t i = 0; i < x.size(); ++i) {
+                               const size_t rounds) {
+  for (size_t round = 0; round < rounds; ++round) {
+    for (size_t i = 0; i < x.size(); ++i) {
       WorkspaceExplicit workspace{x[i], y[i], z[i]};
       workspace.step(alpha, beta, i, round);
     }
@@ -121,9 +121,9 @@ scalar_t run_with_explicit_ref(vec_t& x, vec_t& y, vec_t& z, const scalar_t alph
   return compute_checksum(x, y, z);
 }
 
-scalar_t run_direct(vec_t& x, vec_t& y, vec_t& z, const scalar_t alpha, const scalar_t beta, const std::size_t rounds) {
-  for (std::size_t round = 0; round < rounds; ++round) {
-    for (std::size_t i = 0; i < x.size(); ++i) {
+scalar_t run_direct(vec_t& x, vec_t& y, vec_t& z, const scalar_t alpha, const scalar_t beta, const size_t rounds) {
+  for (size_t round = 0; round < rounds; ++round) {
+    for (size_t i = 0; i < x.size(); ++i) {
       const scalar_t wave = static_cast<scalar_t>((i % 11) + 1) + static_cast<scalar_t>((round % 7) + 1);
       const scalar_t t0 = x[i] + beta * y[i];
       const scalar_t t1 = y[i] - alpha * z[i] + 0.125 * wave;
@@ -153,8 +153,8 @@ void run_case(ankerl::nanobench::Bench& bench, const std::string& name, const ve
 int main(int argc, char** argv) {
   Kokkos::initialize(argc, argv);
   {
-    constexpr std::size_t num_entries = 200000;
-    constexpr std::size_t rounds = 8;
+    constexpr size_t num_entries = 200000;
+    constexpr size_t rounds = 8;
     constexpr scalar_t alpha = 1.75;
     constexpr scalar_t beta = 0.65;
 

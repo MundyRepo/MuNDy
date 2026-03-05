@@ -156,7 +156,7 @@ TEST(AggregateTest, HasTag) {
   EXPECT_FALSE(has<CENTER>(agg));
 }
 
-// 
+//
 
 }  // namespace
 

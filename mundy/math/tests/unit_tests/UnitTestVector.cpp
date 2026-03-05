@@ -26,8 +26,8 @@
 #include <atomic>
 #include <barrier>
 #include <future>
-#include <map>        // for std::map
-#include <memory>     // for std::shared_ptr, std::unique_ptr
+#include <map>     // for std::map
+#include <memory>  // for std::shared_ptr, std::unique_ptr
 #include <sstream>
 #include <stdexcept>  // for std::logic_error, std::invalid_argument
 #include <string>     // for std::string
@@ -681,7 +681,8 @@ TYPED_TEST(VectorSingleTypeTest, AngleOppositeVectors) {
 TYPED_TEST(VectorSingleTypeTest, ScalarConversionLengthOne) {
   Vector1<TypeParam> owning(7);
   TypeParam scalar_from_owning = owning;
-  is_close_debug(scalar_from_owning, static_cast<TypeParam>(7), "Implicit scalar conversion for owning Vector1 failed.");
+  is_close_debug(scalar_from_owning, static_cast<TypeParam>(7),
+                 "Implicit scalar conversion for owning Vector1 failed.");
 
   Kokkos::Array<TypeParam, 1> array{9};
   auto view = get_vector_view<TypeParam, 1>(array);
@@ -747,7 +748,7 @@ TYPED_TEST(VectorSingleTypeTest, ElementwiseOperations) {
 TYPED_TEST(VectorSingleTypeTest, DataAccessorAndGetOwningVectorHelpers) {
   // owning.data() should provide mutable accessor reference
   Vector3<TypeParam> owning(1, 2, 3);
-  auto &own_data = owning.data();
+  auto& own_data = owning.data();
   own_data[0] = static_cast<TypeParam>(9);
   is_close_debug(owning[0], static_cast<TypeParam>(9), "Owning data() mutable access failed.");
 
@@ -1018,12 +1019,12 @@ bool check_vector_atomic_op_add_sub_mul_div_or_false_positive_1d() {
   }
 
   // Verify the result
-  bool vs_add_false_positive = (vs_add_neg[0] == num_threads * num_iterations);
-  bool vv_add_false_positive = (vv_add_neg[0] == num_threads * num_iterations);
-  bool vs_sub_false_positive = (vs_sub_neg[0] == -num_threads * num_iterations);
-  bool vv_sub_false_positive = (vv_sub_neg[0] == -num_threads * num_iterations);
-  bool vs_mul_div_false_positive = (vs_mul_div_neg[0] == std::pow(2, num_threads));
-  bool vv_mul_div_false_positive = (vv_mul_div_neg[0] == std::pow(2, num_threads));
+  bool vs_add_false_positive = (vs_add_neg[0] == static_cast<TypeParam>(num_threads * num_iterations));
+  bool vv_add_false_positive = (vv_add_neg[0] == static_cast<TypeParam>(num_threads * num_iterations));
+  bool vs_sub_false_positive = (vs_sub_neg[0] == static_cast<TypeParam>(-num_threads * num_iterations));
+  bool vv_sub_false_positive = (vv_sub_neg[0] == static_cast<TypeParam>(-num_threads * num_iterations));
+  bool vs_mul_div_false_positive = (vs_mul_div_neg[0] == static_cast<TypeParam>(std::pow(2, num_threads)));
+  bool vv_mul_div_false_positive = (vv_mul_div_neg[0] == static_cast<TypeParam>(std::pow(2, num_threads)));
   return vs_add_false_positive || vv_add_false_positive || vs_sub_false_positive || vv_sub_false_positive ||
          vs_mul_div_false_positive || vv_mul_div_false_positive;
 }
@@ -1083,10 +1084,10 @@ TYPED_TEST(VectorSingleTypeTest, AtomicOpTestAddSubMulDiv1D) {
   // Verify the result
   EXPECT_EQ(vs_add_pos[0], num_threads * num_iterations) << "Atomic add failed.";
   EXPECT_EQ(vv_add_pos[0], num_threads * num_iterations) << "Atomic add failed.";
-  EXPECT_EQ(vs_sub_pos[0], -num_threads * num_iterations) << "Atomic sub failed.";
-  EXPECT_EQ(vv_sub_pos[0], -num_threads * num_iterations) << "Atomic sub failed.";
-  EXPECT_EQ(vs_mul_div_pos[0], std::pow(2, num_threads)) << "Atomic mul/div failed.";
-  EXPECT_EQ(vv_mul_div_pos[0], std::pow(2, num_threads)) << "Atomic mul/div failed.";
+  EXPECT_EQ(vs_sub_pos[0], static_cast<TypeParam>(-num_threads * num_iterations)) << "Atomic sub failed.";
+  EXPECT_EQ(vv_sub_pos[0], static_cast<TypeParam>(-num_threads * num_iterations)) << "Atomic sub failed.";
+  EXPECT_EQ(vs_mul_div_pos[0], static_cast<TypeParam>(std::pow(2, num_threads))) << "Atomic mul/div failed.";
+  EXPECT_EQ(vv_mul_div_pos[0], static_cast<TypeParam>(std::pow(2, num_threads))) << "Atomic mul/div failed.";
 }
 
 TYPED_TEST(VectorSingleTypeTest, AtomicOpTestAddSubMulDiv3D) {
@@ -1142,29 +1143,29 @@ TYPED_TEST(VectorSingleTypeTest, AtomicOpTestAddSubMulDiv3D) {
   }
 
   // Verify the result
-  EXPECT_EQ(vs_add_pos[0], 0 + num_threads * num_iterations) << "Atomic add failed.";
-  EXPECT_EQ(vs_add_pos[1], 1 + num_threads * num_iterations) << "Atomic add failed.";
-  EXPECT_EQ(vs_add_pos[2], 2 + num_threads * num_iterations) << "Atomic add failed.";
+  EXPECT_EQ(vs_add_pos[0], static_cast<TypeParam>(0 + num_threads * num_iterations)) << "Atomic add failed.";
+  EXPECT_EQ(vs_add_pos[1], static_cast<TypeParam>(1 + num_threads * num_iterations)) << "Atomic add failed.";
+  EXPECT_EQ(vs_add_pos[2], static_cast<TypeParam>(2 + num_threads * num_iterations)) << "Atomic add failed.";
 
-  EXPECT_EQ(vv_add_pos[0], 0 + 1 * num_threads * num_iterations) << "Atomic add failed.";
-  EXPECT_EQ(vv_add_pos[1], 1 + 2 * num_threads * num_iterations) << "Atomic add failed.";
-  EXPECT_EQ(vv_add_pos[2], 2 + 3 * num_threads * num_iterations) << "Atomic add failed.";
+  EXPECT_EQ(vv_add_pos[0], static_cast<TypeParam>(0 + 1 * num_threads * num_iterations)) << "Atomic add failed.";
+  EXPECT_EQ(vv_add_pos[1], static_cast<TypeParam>(1 + 2 * num_threads * num_iterations)) << "Atomic add failed.";
+  EXPECT_EQ(vv_add_pos[2], static_cast<TypeParam>(2 + 3 * num_threads * num_iterations)) << "Atomic add failed.";
 
-  EXPECT_EQ(vs_sub_pos[0], 0 - num_threads * num_iterations) << "Atomic sub failed.";
-  EXPECT_EQ(vs_sub_pos[1], 1 - num_threads * num_iterations) << "Atomic sub failed.";
-  EXPECT_EQ(vs_sub_pos[2], 2 - num_threads * num_iterations) << "Atomic sub failed.";
+  EXPECT_EQ(vs_sub_pos[0], static_cast<TypeParam>(0 - num_threads * num_iterations)) << "Atomic sub failed.";
+  EXPECT_EQ(vs_sub_pos[1], static_cast<TypeParam>(1 - num_threads * num_iterations)) << "Atomic sub failed.";
+  EXPECT_EQ(vs_sub_pos[2], static_cast<TypeParam>(2 - num_threads * num_iterations)) << "Atomic sub failed.";
 
-  EXPECT_EQ(vv_sub_pos[0], 0 - 1 * num_threads * num_iterations) << "Atomic sub failed.";
-  EXPECT_EQ(vv_sub_pos[1], 1 - 2 * num_threads * num_iterations) << "Atomic sub failed.";
-  EXPECT_EQ(vv_sub_pos[2], 2 - 3 * num_threads * num_iterations) << "Atomic sub failed.";
+  EXPECT_EQ(vv_sub_pos[0], static_cast<TypeParam>(0 - 1 * num_threads * num_iterations)) << "Atomic sub failed.";
+  EXPECT_EQ(vv_sub_pos[1], static_cast<TypeParam>(1 - 2 * num_threads * num_iterations)) << "Atomic sub failed.";
+  EXPECT_EQ(vv_sub_pos[2], static_cast<TypeParam>(2 - 3 * num_threads * num_iterations)) << "Atomic sub failed.";
 
-  EXPECT_EQ(vs_mul_div_pos[0], 1 * std::pow(2, num_threads)) << "Atomic mul/div failed.";
-  EXPECT_EQ(vs_mul_div_pos[1], 2 * std::pow(2, num_threads)) << "Atomic mul/div failed.";
-  EXPECT_EQ(vs_mul_div_pos[2], 3 * std::pow(2, num_threads)) << "Atomic mul/div failed.";
+  EXPECT_EQ(vs_mul_div_pos[0], static_cast<TypeParam>(1 * std::pow(2, num_threads))) << "Atomic mul/div failed.";
+  EXPECT_EQ(vs_mul_div_pos[1], static_cast<TypeParam>(2 * std::pow(2, num_threads))) << "Atomic mul/div failed.";
+  EXPECT_EQ(vs_mul_div_pos[2], static_cast<TypeParam>(3 * std::pow(2, num_threads))) << "Atomic mul/div failed.";
 
-  EXPECT_EQ(vv_mul_div_pos[0], 1 * std::pow(2, num_threads)) << "Atomic mul/div failed.";
-  EXPECT_EQ(vv_mul_div_pos[1], 2 * std::pow(3, num_threads)) << "Atomic mul/div failed.";
-  EXPECT_EQ(vv_mul_div_pos[2], 3 * std::pow(4, num_threads)) << "Atomic mul/div failed.";
+  EXPECT_EQ(vv_mul_div_pos[0], static_cast<TypeParam>(1 * std::pow(2, num_threads))) << "Atomic mul/div failed.";
+  EXPECT_EQ(vv_mul_div_pos[1], static_cast<TypeParam>(2 * std::pow(3, num_threads))) << "Atomic mul/div failed.";
+  EXPECT_EQ(vv_mul_div_pos[2], static_cast<TypeParam>(3 * std::pow(4, num_threads))) << "Atomic mul/div failed.";
 }
 
 TYPED_TEST(VectorSingleTypeTest, AtomicFetchOpTestAddSubMulDiv1D) {
@@ -1258,12 +1259,12 @@ TYPED_TEST(VectorSingleTypeTest, AtomicFetchOpTestAddSubMulDiv1D) {
   }
 
   // Verify the results
-  EXPECT_EQ(vs_add_pos[0], num_threads * num_iterations) << "Atomic fetch add failed.";
-  EXPECT_EQ(vv_add_pos[0], num_threads * num_iterations) << "Atomic fetch add failed.";
-  EXPECT_EQ(vs_sub_pos[0], -num_threads * num_iterations) << "Atomic fetch sub failed.";
-  EXPECT_EQ(vv_sub_pos[0], -num_threads * num_iterations) << "Atomic fetch sub failed.";
-  EXPECT_EQ(vs_mul_div_pos[0], std::pow(2, num_threads)) << "Atomic fetch mul/div failed.";
-  EXPECT_EQ(vv_mul_div_pos[0], std::pow(2, num_threads)) << "Atomic fetch mul/div failed.";
+  EXPECT_EQ(vs_add_pos[0], static_cast<TypeParam>(num_threads * num_iterations)) << "Atomic fetch add failed.";
+  EXPECT_EQ(vv_add_pos[0], static_cast<TypeParam>(num_threads * num_iterations)) << "Atomic fetch add failed.";
+  EXPECT_EQ(vs_sub_pos[0], static_cast<TypeParam>(-num_threads * num_iterations)) << "Atomic fetch sub failed.";
+  EXPECT_EQ(vv_sub_pos[0], static_cast<TypeParam>(-num_threads * num_iterations)) << "Atomic fetch sub failed.";
+  EXPECT_EQ(vs_mul_div_pos[0], static_cast<TypeParam>(std::pow(2, num_threads))) << "Atomic fetch mul/div failed.";
+  EXPECT_EQ(vv_mul_div_pos[0], static_cast<TypeParam>(std::pow(2, num_threads))) << "Atomic fetch mul/div failed.";
 
   // Verify the fetch counts
   bool vs_add_pos_fetch_passed = true;
@@ -1356,29 +1357,29 @@ TYPED_TEST(VectorSingleTypeTest, AtomicFetchOpTestAddSubMulDiv3D) {
   }
 
   // Verify the result
-  EXPECT_EQ(vs_add_pos[0], 0 + num_threads * num_iterations) << "Atomic fetch add failed.";
-  EXPECT_EQ(vs_add_pos[1], 1 + num_threads * num_iterations) << "Atomic fetch add failed.";
-  EXPECT_EQ(vs_add_pos[2], 2 + num_threads * num_iterations) << "Atomic fetch add failed.";
+  EXPECT_EQ(vs_add_pos[0], static_cast<TypeParam>(0 + num_threads * num_iterations)) << "Atomic fetch add failed.";
+  EXPECT_EQ(vs_add_pos[1], static_cast<TypeParam>(1 + num_threads * num_iterations)) << "Atomic fetch add failed.";
+  EXPECT_EQ(vs_add_pos[2], static_cast<TypeParam>(2 + num_threads * num_iterations)) << "Atomic fetch add failed.";
 
-  EXPECT_EQ(vv_add_pos[0], 0 + 1 * num_threads * num_iterations) << "Atomic fetch add failed.";
-  EXPECT_EQ(vv_add_pos[1], 1 + 2 * num_threads * num_iterations) << "Atomic fetch add failed.";
-  EXPECT_EQ(vv_add_pos[2], 2 + 3 * num_threads * num_iterations) << "Atomic fetch add failed.";
+  EXPECT_EQ(vv_add_pos[0], static_cast<TypeParam>(0 + 1 * num_threads * num_iterations)) << "Atomic fetch add failed.";
+  EXPECT_EQ(vv_add_pos[1], static_cast<TypeParam>(1 + 2 * num_threads * num_iterations)) << "Atomic fetch add failed.";
+  EXPECT_EQ(vv_add_pos[2], static_cast<TypeParam>(2 + 3 * num_threads * num_iterations)) << "Atomic fetch add failed.";
 
-  EXPECT_EQ(vs_sub_pos[0], 0 - num_threads * num_iterations) << "Atomic fetch sub failed.";
-  EXPECT_EQ(vs_sub_pos[1], 1 - num_threads * num_iterations) << "Atomic fetch sub failed.";
-  EXPECT_EQ(vs_sub_pos[2], 2 - num_threads * num_iterations) << "Atomic fetch sub failed.";
+  EXPECT_EQ(vs_sub_pos[0], static_cast<TypeParam>(0 - num_threads * num_iterations)) << "Atomic fetch sub failed.";
+  EXPECT_EQ(vs_sub_pos[1], static_cast<TypeParam>(1 - num_threads * num_iterations)) << "Atomic fetch sub failed.";
+  EXPECT_EQ(vs_sub_pos[2], static_cast<TypeParam>(2 - num_threads * num_iterations)) << "Atomic fetch sub failed.";
 
-  EXPECT_EQ(vv_sub_pos[0], 0 - 1 * num_threads * num_iterations) << "Atomic fetch sub failed.";
-  EXPECT_EQ(vv_sub_pos[1], 1 - 2 * num_threads * num_iterations) << "Atomic fetch sub failed.";
-  EXPECT_EQ(vv_sub_pos[2], 2 - 3 * num_threads * num_iterations) << "Atomic fetch sub failed.";
+  EXPECT_EQ(vv_sub_pos[0], static_cast<TypeParam>(0 - 1 * num_threads * num_iterations)) << "Atomic fetch sub failed.";
+  EXPECT_EQ(vv_sub_pos[1], static_cast<TypeParam>(1 - 2 * num_threads * num_iterations)) << "Atomic fetch sub failed.";
+  EXPECT_EQ(vv_sub_pos[2], static_cast<TypeParam>(2 - 3 * num_threads * num_iterations)) << "Atomic fetch sub failed.";
 
-  EXPECT_EQ(vs_mul_div_pos[0], 1 * std::pow(2, num_threads)) << "Atomic fetch mul/div failed.";
-  EXPECT_EQ(vs_mul_div_pos[1], 2 * std::pow(2, num_threads)) << "Atomic fetch mul/div failed.";
-  EXPECT_EQ(vs_mul_div_pos[2], 3 * std::pow(2, num_threads)) << "Atomic fetch mul/div failed.";
+  EXPECT_EQ(vs_mul_div_pos[0], static_cast<TypeParam>(1 * std::pow(2, num_threads))) << "Atomic fetch mul/div failed.";
+  EXPECT_EQ(vs_mul_div_pos[1], static_cast<TypeParam>(2 * std::pow(2, num_threads))) << "Atomic fetch mul/div failed.";
+  EXPECT_EQ(vs_mul_div_pos[2], static_cast<TypeParam>(3 * std::pow(2, num_threads))) << "Atomic fetch mul/div failed.";
 
-  EXPECT_EQ(vv_mul_div_pos[0], 1 * std::pow(2, num_threads)) << "Atomic fetch mul/div failed.";
-  EXPECT_EQ(vv_mul_div_pos[1], 2 * std::pow(3, num_threads)) << "Atomic fetch mul/div failed.";
-  EXPECT_EQ(vv_mul_div_pos[2], 3 * std::pow(4, num_threads)) << "Atomic fetch mul/div failed.";
+  EXPECT_EQ(vv_mul_div_pos[0], static_cast<TypeParam>(1 * std::pow(2, num_threads))) << "Atomic fetch mul/div failed.";
+  EXPECT_EQ(vv_mul_div_pos[1], static_cast<TypeParam>(2 * std::pow(3, num_threads))) << "Atomic fetch mul/div failed.";
+  EXPECT_EQ(vv_mul_div_pos[2], static_cast<TypeParam>(3 * std::pow(4, num_threads))) << "Atomic fetch mul/div failed.";
 }
 //@}
 

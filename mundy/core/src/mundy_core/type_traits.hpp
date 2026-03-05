@@ -31,7 +31,6 @@
 // Kokkos
 #include <Kokkos_Core.hpp>
 
-
 namespace mundy {
 
 namespace core {
@@ -86,19 +85,19 @@ static constexpr size_t index_finder_v = index_finder<T, Ts...>::value;
 
 // **********************************************************************************************************************
 /// \brief Get the I'th type in a variadic list of types
-template <std::size_t I, typename... Ts>
+template <size_t I, typename... Ts>
 struct type_at_index;
 //
-template <std::size_t I, typename Head, typename... Tail>
+template <size_t I, typename Head, typename... Tail>
 struct type_at_index<I, Head, Tail...> {
-    static_assert(I < 1 + sizeof...(Tail), "Index out of bounds in type_at_index");
-    using type = typename type_at_index<I - 1, Tail...>::type;
+  static_assert(I < 1 + sizeof...(Tail), "Index out of bounds in type_at_index");
+  using type = typename type_at_index<I - 1, Tail...>::type;
 };
 //
 // Specialization for the base case (I = 0)
 template <typename Head, typename... Tail>
 struct type_at_index<0, Head, Tail...> {
-    using type = Head;
+  using type = Head;
 };
 //
 template <size_t I, class... Ts>

@@ -25,6 +25,7 @@
 // C++ core
 #include <algorithm>   // for std::max
 #include <concepts>    // for std::convertible_to
+#include <cstdint>     // for uint32_t
 #include <functional>  // for std::hash
 #include <string>      // for std::string
 
@@ -32,12 +33,14 @@
 #include <Kokkos_Core.hpp>  // for Kokkos::numbers::pi
 
 // Mundy
-#include <mundy_geom/periodicity.hpp>  // for mundy::geom::PeriodicMetric, ...
-#include <mundy_geom/primitives.hpp>   // for mundy::geom::Point, mundy::geom::LineSegment
-#include <mundy_geom/randomize.hpp>    // for mundy::geom::generate_random_point, ...
-#include <mundy_geom/transform.hpp>    // for mundy::geom::translate
-#include <mundy_math/Tolerance.hpp>    // for mundy::math::get_zero_tolerance
-#include <mundy_math/Vector3.hpp>      // for mundy::math::Vector3
+#include <mundy_core/rng.hpp>           // for mundy::core::make_philox
+#include <mundy_core/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
+#include <mundy_geom/periodicity.hpp>   // for mundy::geom::PeriodicMetric, ...
+#include <mundy_geom/primitives.hpp>    // for mundy::geom::Point, mundy::geom::LineSegment
+#include <mundy_geom/randomize.hpp>     // for mundy::geom::generate_random_point, ...
+#include <mundy_geom/transform.hpp>     // for mundy::geom::translate
+#include <mundy_math/Tolerance.hpp>     // for mundy::math::get_zero_tolerance
+#include <mundy_math/Vector3.hpp>       // for mundy::math::Vector3
 
 namespace mundy {
 
@@ -452,7 +455,7 @@ struct test_wrap_points_impl {
                                                 const AABB<double>& disjoint_box, RNG& rng,
                                                 const Metric& metric) const {
     // Generate a random shape outside the primary box and wrap it to the primary box
-    auto s = ShapeTraits::generate(disjoint_box, rng); // All points fall within disjoint_box
+    auto s = ShapeTraits::generate(disjoint_box, rng);  // All points fall within disjoint_box
     s = wrap_points(s, metric);
 
     bool all_in_primary_domain = true;
@@ -477,7 +480,7 @@ struct test_unwrap_to_ref_impl {
     constexpr unsigned num_points = ShapeTraits::num_points;
     Kokkos::Array<math::Vector3<double>, num_points> original_displacements;
     Kokkos::Array<math::Vector3<double>, num_points> shifted_displacements;
-    
+
     auto s = ShapeTraits::generate(primary_box, rng);  // All points fall within primary_box
     Point<double> ref_point = generate_random_point<double>(disjoint_box, rng);
 
@@ -507,20 +510,19 @@ struct test_unwrap_to_ref_impl {
     // The separation vector between reference_point(s) and ref_point should be less than half the box size
     // in each dimension (not necessarily in magnitude) that is periodic.
     math::Vector3<double> box_lengths{primary_box.x_max() - primary_box.x_min(),
-                                       primary_box.y_max() - primary_box.y_min(),
-                                       primary_box.z_max() - primary_box.z_min()};
+                                      primary_box.y_max() - primary_box.y_min(),
+                                      primary_box.z_max() - primary_box.z_min()};
     bool shape_ref_point_within_half_box = true;
     for (int d = 0; d < 3; ++d) {
       if (metric.is_periodic(d)) {
-        bool this_dimension_within_half_box =
-            Kokkos::abs(reference_point(s)[d] - ref_point[d]) <= 0.5 * box_lengths[d];
+        bool this_dimension_within_half_box = Kokkos::abs(reference_point(s)[d] - ref_point[d]) <= 0.5 * box_lengths[d];
         if (!this_dimension_within_half_box) {
           shape_ref_point_within_half_box = false;
           break;
         }
       }
     }
-    
+
     return shape_ref_point_within_half_box && all_displacements_equal;
   }
 };
@@ -578,7 +580,9 @@ template <typename Metric>
 KOKKOS_INLINE_FUNCTION bool test_wrap_rigid(TestObjectType type, const AABB<double>& primary_box,
                                             const AABB<double>& other_box, size_t seed, size_t counter,
                                             const Metric& metric) {
-  openrand::Philox rng(seed, counter);
+  MUNDY_THROW_ASSERT(counter <= std::numeric_limits<uint32_t>::max(), std::overflow_error,
+                     "Counter exceeds uint32_t max for openrand::Philox.");
+  openrand::Philox rng = core::make_philox(seed, counter);
 
   using Functor = test_wrap_rigid_impl;
   apply_functor<Functor> apply;
@@ -589,7 +593,9 @@ template <typename Metric>
 KOKKOS_INLINE_FUNCTION bool test_wrap_points(TestObjectType type, const AABB<double>& primary_box,
                                              const AABB<double>& disjoint_box, size_t seed, size_t counter,
                                              const Metric& metric) {
-  openrand::Philox rng(seed, counter);
+  MUNDY_THROW_ASSERT(counter <= std::numeric_limits<uint32_t>::max(), std::overflow_error,
+                     "Counter exceeds uint32_t max for openrand::Philox.");
+  openrand::Philox rng = core::make_philox(seed, counter);
 
   using Functor = test_wrap_points_impl;
   apply_functor<Functor> apply;
@@ -600,7 +606,9 @@ template <typename Metric>
 KOKKOS_INLINE_FUNCTION bool test_unwrap_to_ref(TestObjectType type, const AABB<double>& primary_box,
                                                const AABB<double>& disjoint_box, size_t seed, size_t counter,
                                                const Metric& metric) {
-  openrand::Philox rng(seed, counter);
+  MUNDY_THROW_ASSERT(counter <= std::numeric_limits<uint32_t>::max(), std::overflow_error,
+                     "Counter exceeds uint32_t max for openrand::Philox.");
+  openrand::Philox rng = core::make_philox(seed, counter);
   using Functor = test_unwrap_to_ref_impl;
   apply_functor<Functor> apply;
   return apply(type, primary_box, disjoint_box, rng, metric);
@@ -610,7 +618,9 @@ template <typename Metric>
 KOKKOS_INLINE_FUNCTION bool test_shift_image(TestObjectType type, const AABB<double>& box,
                                              const math::Vector3<int>& lattice_vector,  //
                                              size_t seed, size_t counter, const Metric& metric) {
-  openrand::Philox rng(seed, counter);
+  MUNDY_THROW_ASSERT(counter <= std::numeric_limits<uint32_t>::max(), std::overflow_error,
+                     "Counter exceeds uint32_t max for openrand::Philox.");
+  openrand::Philox rng = core::make_philox(seed, counter);
 
   using Functor = test_shift_image_impl;
   apply_functor<Functor> apply;
@@ -631,7 +641,9 @@ TEST(PeriodicMetric, MinImageDirectVsPeriodic) {
   EuclideanMetric<double> euclidean_metric{};
 
   for (size_t t = 0; t < num_samples; ++t) {
-    openrand::Philox rng(seed, t);
+    MUNDY_THROW_ASSERT(t <= std::numeric_limits<uint32_t>::max(), std::overflow_error,
+                       "Counter exceeds uint32_t max for openrand::Philox.");
+    openrand::Philox rng = core::make_philox(seed, t);
 
     // Generate two random points within the bounding box
     Point<double> point1 = generate_random_point<double>(box, rng);
@@ -808,7 +820,9 @@ TEST(PeriodicMetric, WrapPointsSpanning) {
   EuclideanMetric<double> euclidean_metric{};
 
   for (size_t t = 0; t < num_trials; ++t) {
-    openrand::Philox rng(seed, counter);
+    MUNDY_THROW_ASSERT(counter <= std::numeric_limits<uint32_t>::max(), std::overflow_error,
+                       "Counter exceeds uint32_t max for openrand::Philox.");
+    openrand::Philox rng = core::make_philox(seed, counter);
 
     // Generate a random line segment with one end in the primary box and the other in the disjoint box
     LineSegment<double> line_segment =
@@ -867,7 +881,9 @@ TEST(PeriodicMetric, UnwrapPointsSpanning) {
   auto periodic_metric_scale_only = periodic_scaled_metric_from_unit_cell(cell_size);
 
   for (size_t t = 0; t < num_trials; ++t) {
-    openrand::Philox rng(seed, counter);
+    MUNDY_THROW_ASSERT(counter <= std::numeric_limits<uint32_t>::max(), std::overflow_error,
+                       "Counter exceeds uint32_t max for openrand::Philox.");
+    openrand::Philox rng = core::make_philox(seed, counter);
 
     // Generate a random line segment with one end in the primary box and the other in the disjoint box
     LineSegment<double> line_segment =
@@ -926,7 +942,9 @@ TEST(PeriodicMetric, ShiftImage) {
   for (const auto& type : test_types) {
     for (size_t t = 0; t < num_trials; ++t) {
       // Generate a random lattice vector between -10 and 10 in each direction
-      openrand::Philox rng(seed, counter);
+      MUNDY_THROW_ASSERT(counter <= std::numeric_limits<uint32_t>::max(), std::overflow_error,
+                         "Counter exceeds uint32_t max for openrand::Philox.");
+      openrand::Philox rng = core::make_philox(seed, counter);
       math::Vector3<int> lattice_vector{rng.uniform<int>(-10, 10), rng.uniform<int>(-10, 10),
                                         rng.uniform<int>(-10, 10)};
       EXPECT_TRUE(test_shift_image(type, disjoint_box, lattice_vector, seed, counter, periodic_metric))

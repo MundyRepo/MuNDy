@@ -26,9 +26,6 @@
 // Kokkos
 #include <Kokkos_Core.hpp>  // for KOKKOS_LAMBDA, etc.
 
-// OpenRAND
-#include <openrand/philox.h>  // for openrand::Philox
-
 // STK mesh
 #include <stk_mesh/base/BulkData.hpp>            // for stk::mesh::BulkData
 #include <stk_mesh/base/Entity.hpp>              // for stk::mesh::Entity
@@ -44,6 +41,7 @@
 // Mundy
 #include <mundy_core/StringLiteral.hpp>  // for mundy::core::StringLiteral
 #include <mundy_core/aggregate.hpp>      // for mundy::core::aggregate
+#include <mundy_core/rng.hpp>            // for mundy::core::make_philox
 #include <mundy_core/throw_assert.hpp>   // for MUNDY_THROW_ASSERT
 #include <mundy_core/tuple.hpp>          // for mundy::core::tuple
 #include <mundy_math/Matrix.hpp>         // for mundy::math::Matrix
@@ -78,7 +76,6 @@ an inlined expression list:
   // Performs a different kernel launch, recomputes tmp_mat3 for each rods, and finds its global min.
   Vector3<double> min_vel = reduce_min(tmp_mat3);
 
-
 Expressions are evaluated upon assignment to an lvalue or when passed to a reduction operation. The following will all
 perform evals
   - accessor(entity_expr) = expr;
@@ -86,10 +83,21 @@ perform evals
   - fused_assign(accessor1, expr1, accessor2, expr2, ...);
   - auto result = reduce_op(expr);
 
-
 Upon evaluation, but before looping over the entities, all fields involved in the expression are synchronized to the
 appropriate space and marked modified where necessary. The expression tree "knows" which fields are read and written.
 
+# Caching:
+
+Something important to consider here is that our design is carefully setup to ensure that identical sub-expressions in
+the tree will always return the same result given the same input. That is, if you can identify a subset of the tree
+(from a given node all the way to its leaves) that matches another subset, then they are compatible with reuse. Because
+our reuse is based on "if constexpr" they have zero overhead and do not introduce branching. As such, it seems like your
+tag system can be done using the collective type of the sub-expressions. So, we basically want our expression system to
+use a tagged bag (aka Aggregate). To then decide what to cache, we need to perform something similar to update_is_cached
+but instead of setting equal to true, we count the total number of occurrences of each tag in the bag. Then, whenever
+ANYTHING in the tree is evaluated, we conditionally cache the result if the number of occurrences of that tag is > 1.
+This way, the user never marks anything as reused, but rather the system automatically determines what to cache. The
+fact that we are using "if constexpr" means that there is no runtime overhead to this approach.
 
 Special functions
  -reuse: Flag an expression to be reused by multiple other expressions in a single fused kernel. Its return is memoized
@@ -97,144 +105,6 @@ instead of being re-evaluated.
 
  -fused_assign: Fuse N assignment operations into a single kernel to avoid either multiple evaluations of shared
 sub-expressions or multiple kernel launches.
-
-Some notes on caches:
-  - Each expression cannot "know" the type of the cache it is given.
-    - Cache type is propagated from leaf to root expressions at compile-time during construction.
-    - The collective cache is created by the root and passed down to leaf expressions during eval where each leaf
-      knows its compile-time offset into the cache.
-
-  - Cache type is accumulated from past expressions and only known at the root expression that is evaluated.
-    - This means that eval must be templated by its given cache type and the compile-time offset into the cache.
-    - Each expression stores (as a static constexpr) the number of cache entries it needs.
-
-FusedExpr is the one that's in charge of setting up the cache and forwarding it to the sub-expressions. It's the fused
-root of the expression tree.
-
-The thing I'm worrying about is the runtime if statement on the memoized return of ReusedExpr. I want to know if it
-can be done at compile-time instead. We would need the expressions to be able to map an array of bools stating if
-a given cached type is set or not (pre-eval) to an array of bools stating if a given cached type is set or not
-(post-eval).
-
-
-template <std::size_t Start, std::size_t Count, std::size_t M>
-constexpr void set_true(Vector<bool, M>& a) {
-  static_assert(Start + Count <= M, "range out of bounds");
-  // unrolled at compile-time
-  [&]<std::size_t... I>(std::index_sequence<I...>) {
-    ((a[Start + I] = true), ...);
-  }(std::make_index_sequence<Count>{});
-}
-
-// Cache is just a mundy::core::tuple of types.
-// IsCached is a math::Vector<bool, N>, so it's compatable with compile-time vector operations <3!!!
-
-auto dot.eval<CacheOffset, CacheSize, IsCached>(fmas, cache, context)
-  auto lhs_res = lhs.eval<CacheOffset, CacheSize, IsCached>(fmas, cache, context);
-
-  // Evaluating the LHS may have changed the cache, so we need to update IsCached for the RHS
-  constexpr auto updated_is_cached = LeftExpr::update_is_cached<CacheOffset, CacheSize, IsCached>();
-  auto rhs_res = rhs.eval<CacheOffset + LeftExpr::num_cached_types, updated_is_cached>(fmas, cache, context));
-
-  return dot(lhs_res, rhs_res);
-
-auto reuse.eval<CacheOffset, CacheSize, IsCached>(fmas, cache, context) {
-  // The cache offset is for us and all of our sub-expressions. Our cached object is the last one in that range.
-  // Basically read from right to left in the cache when traversing via eval.
-  //   [  unrelated expr cache | our sub-expr cache  |  our cache  | unrelated expr cache ]
-  //                           ^                     ^
-  //                      CacheOffset     CacheOffset + PrevExpr::num_cached_types
-  constexpr size_t our_cache_offset = CacheOffset + PrevExpr::num_cached_types;
-  if constexpr (IsCached[our_cache_offset]) {
-    return get<our_cache_offset>(cache);
-  } else {
-    auto val = prev_expr_.eval<CacheOffset, CacheSize, IsCached>(fmas, cache, context);
-    get<CacheOffset>(cache) = val;
-    return val;
-  }
-}
-
-void fuse.eval<CacheOffset, CacheSize, IsCached>(fmas, cache, context) {
-  // Let's assume that this fuse is for three expressions expr1, expr2, expr3
-
-  constexpr size_t expr1_offset = CacheOffset;
-  constexpr size_t expr2_offset = CacheOffset + Expr1::num_cached_types;
-  constexpr size_t expr3_offset = CacheOffset + Expr1::num_cached_types + Expr2::num_cached_types;
-
-  constexpr auto is_cached_pre_expr1 = IsCached;
-  constexpr auto is_cached_pre_expr2 = Expr1::update_is_cached<CacheOffset, is_cached_pre_expr1>();
-  constexpr auto is_cached_pre_expr3 = Expr2::update_is_cached<CacheOffset + Expr1::num_cached_types,
-is_cached_pre_expr2>();
-
-  expr1.eval<expr1_offset, is_cached_pre_expr1>(fmas, cache, context);
-  expr2.eval<expr2_offset, is_cached_pre_expr2>(fmas, cache, context);
-  expr3.eval<expr3_offset, is_cached_pre_expr3>(fmas, cache, context);
-}
-
-constexpr void ReuseEval::update_is_cached<CacheOffset, IsCached>() {
-  // Deep copy the IsCached array and set our cache entry to true
-  auto updated_flags = IsCached;
-  updated_flags = PreviousExpr::update_is_cached<CacheOffset, updated_flags>();
-  updated_flags[CacheOffset + PrevExpr::num_cached_types] = true;
-  return updated_flags;
-}
-
-constexpr void DotExpr::update_is_cached<CacheOffset, IsCached>() {
-  // Deep copy the IsCached array and set our cache entries to the union of our sub-expressions
-  auto updated_flags = IsCached;
-  updated_flags = LeftExpr::update_is_cached<CacheOffset, updated_flags>();
-  updated_flags = RightExpr::update_is_cached<CacheOffset + LeftExpr::num_cached_types, updated_flags>();
-  return updated_flags;
-}
-
-auto expr.init_cache() {
-  return cache_t{};
-}
-
-for_each_entity_eval_expr(Expr expr) {
-  static_assert(EntityExpr::num_entities == 1,
-                "for_each_entity_evaluate_expr only works with single-entity expressions");
-  stk::mesh::EntityRank rank = expr.rank();
-  stk::mesh::Selector selector = expr.selector();
-  stk::mesh::NgpMesh ngp_mesh = expr.ngp_mesh();
-
-  // Sync all fields to the appropriate space and mark modified where necessary
-  NgpEvalContext evaluation_context(ngp_mesh);
-  expr.propagate_synchronize(evaluation_context);
-
-  // Perform the evaluation
-  ::mundy::mesh::for_each_entity_run(
-      ngp_mesh, selector, rank, KOKKOS_LAMBDA(const stk::mesh::FastMeshIndex &entity_index) {
-        auto cache = expr.init_cache();
-        constexpr auto is_cached = Expr::init_is_cached();
-        constexpr size_t cache_offset = 0;
-        expr.template eval<cache_offset, is_cached>(entity_index, cache, evaluation_context);
-      });
-}
-
-// A comment on make_entity_expr. The entire tree must use one and only one EntityExpr. It can be reused
-throughout the tree but there can only be one. It is what decides how to perform the for_each_entity_run.
-
-// A step back. Part of the reason for this is to allow access to the rank of all involved entities, their selector,
-and the mesh. We used the execution context to pass the mesh through the evals but also sadly had EntityExpr return
-ngp mesh, making this separation of concerns invalid.
-
-// The problem here is that all expressions need to access the same execution context within which we have the
-// mesh, ranks, and selectors. Technically, the execution context of the ngp mesh could be separated from the selectors
-// and ranks. If this is the case, then we still have an execution context that must be passed through all evals but
-// we also have an additional ~thing~ that the entire expression must agree on. This ~thing~ is what we are calling
-// the EntityExpr, which is a poor name since it is closer to the EntityContext. This is as apposed to the
-ExecutionContext.
-// But like, just loop that all together into Context and be done with it. We can still type specialize the evals on
-// a template of the class, so there's no loss of functionality.
-
-I think we're looking for something like a driver or evaluator or manager that we store a pointer to and only access on
-the host.
-
-/////////
-We should allow for expressions to be flagged as having non-static return type. If they do, then their result will not
-be cached. So an accessor(entity_expr) will cache its result only if entity_expr says that its return type is
-static. If the return type is static or not is always known at compile-time.
 */
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -305,7 +175,7 @@ namespace impl {
 template <template <class> class B, class E>
 struct is_crtp_base_of_impl : std::is_base_of<B<E>, E> {};
 
-template <typename EvalCountsType, EvalCountsType eval_counts, std::size_t I = 0, class ExprTuple, size_t NumEntities,
+template <typename EvalCountsType, EvalCountsType eval_counts, size_t I = 0, class ExprTuple, size_t NumEntities,
           class CacheType, class Ctx>
 KOKKOS_FUNCTION auto cached_expr_chain_impl(const ExprTuple& exprs,
                                             const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities>& fmis,
@@ -336,7 +206,7 @@ KOKKOS_FUNCTION auto cached_expr_chain_impl(const ExprTuple& exprs,
   }
 }
 
-template <std::size_t I = 0, class ExprTuple, size_t NumEntities, class Ctx>
+template <size_t I = 0, class ExprTuple, size_t NumEntities, class Ctx>
 KOKKOS_FUNCTION auto expr_chain_impl(const ExprTuple& exprs,
                                      const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities>& fmis, const Ctx& ctx) {
   constexpr size_t num_expr = ExprTuple::size();
@@ -2457,10 +2327,10 @@ class MathExprBase : public CachableExprBase<DerivedMathExpr> {
 //@{
 
 /// RNG.rand<double>()
-template <typename RNGExpr, typename T, typename RNGType>
-class RandomDistributionExpr : public MathExprBase<RandomDistributionExpr<RNGExpr, T, RNGType>> {
+template <typename RNGExpr, typename T>
+class RandomDistributionExpr : public MathExprBase<RandomDistributionExpr<RNGExpr, T>> {
  public:
-  using our_t = RandomDistributionExpr<RNGExpr, T, RNGType>;
+  using our_t = RandomDistributionExpr<RNGExpr, T>;
   using our_tag = typename MathExprBase<our_t>::our_tag;
   using sub_expressions_t = core::tuple<RNGExpr>;
   static constexpr bool constrains_num_entities = false;
@@ -2536,10 +2406,10 @@ class RandomDistributionExpr : public MathExprBase<RandomDistributionExpr<RNGExp
 };
 
 // RNG.uniform<double>(low, high)
-template <typename RNGExpr, typename T, typename LowExpr, typename HighExpr, typename RNGType>
-class UniformDistributionExpr : public MathExprBase<UniformDistributionExpr<RNGExpr, T, LowExpr, HighExpr, RNGType>> {
+template <typename RNGExpr, typename T, typename LowExpr, typename HighExpr>
+class UniformDistributionExpr : public MathExprBase<UniformDistributionExpr<RNGExpr, T, LowExpr, HighExpr>> {
  public:
-  using our_t = UniformDistributionExpr<RNGExpr, T, LowExpr, HighExpr, RNGType>;
+  using our_t = UniformDistributionExpr<RNGExpr, T, LowExpr, HighExpr>;
   using our_tag = typename MathExprBase<our_t>::our_tag;
   using sub_expressions_t = core::tuple<RNGExpr, LowExpr, HighExpr>;
   static constexpr bool constrains_num_entities = false;
@@ -2643,11 +2513,11 @@ class UniformDistributionExpr : public MathExprBase<UniformDistributionExpr<RNGE
 
 /// \brief An expression for generating random number generator based on a given seed and counter expression
 /// This class is then used to generate expressions for drawing random numbers from various distributions
-template <typename SeedExpr, typename CounterExpr, typename CounterBasedRandomGenerator>
+template <typename SeedExpr, typename CounterExpr, typename RNGType, RNGType (*make_counter_based_rng)(size_t, size_t)>
 class CounterBasedRNGExpr
-    : public MathExprBase<CounterBasedRNGExpr<SeedExpr, CounterExpr, CounterBasedRandomGenerator>> {
+    : public MathExprBase<CounterBasedRNGExpr<SeedExpr, CounterExpr, RNGType, make_counter_based_rng>> {
  public:
-  using our_t = CounterBasedRNGExpr<SeedExpr, CounterExpr, CounterBasedRandomGenerator>;
+  using our_t = CounterBasedRNGExpr<SeedExpr, CounterExpr, RNGType, make_counter_based_rng>;
   using our_tag = typename MathExprBase<our_t>::our_tag;
   using sub_expressions_t = core::tuple<SeedExpr, CounterExpr>;
   static constexpr bool constrains_num_entities = false;
@@ -2662,7 +2532,7 @@ class CounterBasedRNGExpr
                                    const NgpEvalContext& context) const {
     auto seed = seed_expr_.eval(fmis, context);
     auto counter = counter_expr_.eval(fmis, context);
-    return CounterBasedRandomGenerator(seed, counter);
+    return make_counter_based_rng(seed, counter);
   }
 
   template <typename EvalCountsType, EvalCountsType eval_counts, size_t NumEntities, typename OldCacheType>
@@ -2684,7 +2554,7 @@ class CounterBasedRNGExpr
             counter_expr_.template cached_eval<EvalCountsType, eval_counts>(fmis, std::move(new_cache), context);
 
         // Our eval result needs cached, but is not yet cached
-        auto val = CounterBasedRandomGenerator(seed, counter);
+        auto val = make_counter_based_rng(seed, counter);
         auto newest_cache = append<our_tag>(std::move(newer_cache), val);
         return Kokkos::make_pair(val, newest_cache);
       }
@@ -2694,7 +2564,7 @@ class CounterBasedRNGExpr
           fmis, std::forward<OldCacheType>(old_cache), context);
       auto [counter, newer_cache] =
           counter_expr_.template cached_eval<EvalCountsType, eval_counts>(fmis, std::move(new_cache), context);
-      auto val = CounterBasedRandomGenerator(seed, counter);
+      auto val = make_counter_based_rng(seed, counter);
       return Kokkos::make_pair(val, newer_cache);
     }
   }
@@ -2702,7 +2572,7 @@ class CounterBasedRNGExpr
   // Allow the user to rand_gen_expr.rand<double>() to get an expression for generating random doubles between 0 and 1
   template <typename T>
   auto rand() const {
-    return RandomDistributionExpr<our_t, T, CounterBasedRandomGenerator>(*this);
+    return RandomDistributionExpr<our_t, T>(*this);
   }
 
   // Allow the user to rand_gen_expr.uniform(low, high) to get an expression for generating random numbers between low
@@ -2710,8 +2580,7 @@ class CounterBasedRNGExpr
   template <typename T, typename LowExpr, typename HighExpr>
     requires(is_crtp_base_of_v<MathExprBase, LowExpr> && is_crtp_base_of_v<MathExprBase, HighExpr>)
   auto uniform(const LowExpr& low_expr, const HighExpr& high_expr) const {
-    return UniformDistributionExpr<our_t, T, LowExpr, HighExpr, CounterBasedRandomGenerator>(*this, low_expr,
-                                                                                             high_expr);
+    return UniformDistributionExpr<our_t, T, LowExpr, HighExpr>(*this, low_expr, high_expr);
   }
   // Low is an expression but high is a constant
   template <typename T, typename LowExpr, typename HighT>
@@ -2790,29 +2659,33 @@ class CounterBasedRNGExpr
 
 /// \brief Create a counter-based random number generator using the given seed and counter
 /// Seed and counter are expressions
-template <typename SeedExpr, typename CounterExpr, typename CounterBasedRandomGenerator = openrand::Philox>
+template <typename SeedExpr, typename CounterExpr, typename RNGType = openrand::Philox,
+          RNGType (*make_counter_based_rng)(size_t, size_t) = core::make_philox>
   requires(is_crtp_base_of_v<MathExprBase, SeedExpr> && is_crtp_base_of_v<MathExprBase, CounterExpr>)
 auto rng(const SeedExpr& seed_expr, const CounterExpr& counter_expr) {
-  return CounterBasedRNGExpr<SeedExpr, CounterExpr, CounterBasedRandomGenerator>(seed_expr, counter_expr);
+  return CounterBasedRNGExpr<SeedExpr, CounterExpr, RNGType, make_counter_based_rng>(seed_expr, counter_expr);
 }
 /// Seed is an expression but counter is a constant
-template <typename SeedExpr, typename CounterT, typename CounterBasedRandomGenerator = openrand::Philox>
+template <typename SeedExpr, typename CounterT, typename RNGType = openrand::Philox,
+          RNGType (*make_counter_based_rng)(size_t, size_t) = core::make_philox>
   requires(is_crtp_base_of_v<MathExprBase, SeedExpr> && !is_crtp_base_of_v<MathExprBase, CounterT>)
 auto rng(const SeedExpr& seed_expr, const CounterT& counter) {
   using CounterExpr = ConstantMathExpr<CounterT>;
   auto counter_expr = CounterExpr(counter);
-  return rng<SeedExpr, CounterExpr, CounterBasedRandomGenerator>(seed_expr, counter_expr);
+  return rng<SeedExpr, CounterExpr, RNGType, make_counter_based_rng>(seed_expr, counter_expr);
 }
 /// Seed is a constant but counter is an expression
-template <typename SeedT, typename CounterExpr, typename CounterBasedRandomGenerator = openrand::Philox>
+template <typename SeedT, typename CounterExpr, typename RNGType = openrand::Philox,
+          RNGType (*make_counter_based_rng)(size_t, size_t) = core::make_philox>
   requires(!is_crtp_base_of_v<MathExprBase, SeedT> && is_crtp_base_of_v<MathExprBase, CounterExpr>)
 auto rng(const SeedT& seed, const CounterExpr& counter_expr) {
   using SeedExpr = ConstantMathExpr<SeedT>;
   auto seed_expr = SeedExpr(seed);
-  return rng<SeedExpr, CounterExpr, CounterBasedRandomGenerator>(seed_expr, counter_expr);
+  return rng<SeedExpr, CounterExpr, RNGType, make_counter_based_rng>(seed_expr, counter_expr);
 }
 /// Both seed and counter are constants (not allowed)
-template <typename SeedT, typename CounterT, typename CounterBasedRandomGenerator = openrand::Philox>
+template <typename SeedT, typename CounterT, typename RNGType = openrand::Philox,
+          RNGType (*make_counter_based_rng)(size_t, size_t) = core::make_philox>
   requires(!is_crtp_base_of_v<MathExprBase, SeedT> && !is_crtp_base_of_v<MathExprBase, CounterT>)
 void rng(const SeedT& seed, const CounterT& counter) {
   MUNDY_THROW_REQUIRE(false, std::logic_error,
@@ -3007,138 +2880,6 @@ auto all_reduce_min(Expr&& expr) {
   stk::all_reduce_min(driver->bulk_data().parallel(), &local_min, &global_min, 1);
   return global_min;
 }
-
-/*
-I have some problems without cache system that I want to discuss and fledge out here.
-First and foremost, if a math expression concatenates the cache of the left and the right, then there
-can be no reuse between the two. If, instead, it uses the cache of the left and passes it to the right, then
-there is no possibility for the right operation to add objects to the cache that the left isn't aware of.
-
-Something important to consider here is that our design is carefully setup to ensure that identical sub-expressions in
-the tree will always return the same result given the same input. That is, if you can identify a subset of the tree
-(from a given node all the way to its leaves) that matches another subset, then they are compatible with reuse. Because
-our reuse is based on "if constexpr" they have zero overhead and do not introduce branching. As such, it seems like your
-tag system can be done using the collective type of the sub-expressions. So, we basically want our expression system to
-use a tagged bag (aka Aggregate). To then decide what to cache, we need to perform something similar to update_is_cached
-but instead of setting equal to true, we count the total number of occurrences of each tag in the bag. Then, whenever
-ANYTHING in the tree is evaluated, we conditionally cache the result if the number of occurrences of that tag is > 1.
-This way, the user never marks anything as reused, but rather the system automatically determines what to cache. The
-fact that we are using "if constexpr" means that there is no runtime overhead to this approach.
-
-How do we then construct the initial aggregate?
- - Every uniquely typed expression contributes a count to the eval_counts aggregate.
- - We only want the cache aggregate and is_cached aggregate to store types for which eval_count.get<TAG>() > 1.
- - A single init_cache<eval_counts>() function that returns a default constructed aggregate containing only TAGs for
-    which eval_count.get<TAG>() > 1.
-
-New interface:
-
-/// \brief Evaluate the expression
-auto eval<EvalCountsType, eval_counts, CacheType>(fmis, cache, context) const {
-  static_assert(has<our_tag>(eval_counts), "eval_counts must contain our tag");
-
-  if constexpr (get<our_tag>(eval_counts) > 1) {
-    if constexpr (core::has<our_tag, std::remove_reference_t<OldCacheType>>()) {
-      // The fact that our tag exists in the old cache means that our eval has cached its result before. means that our
-eval has cached its result before.
-      // Return the cached value
-      return get<our_tag>(cache);
-    } else {
-      // Our eval result needs cached, but is not yet cached
-      auto val = ... compute the value ...;
-      get<our_tag>(cache) = val;
-      return val;
-    }
-  } else {
-    // We don't need to cache our value, so just compute and return it
-    return ... compute the value ...;
-  }
-}
-
-/// \brief Default construct eval_counts with our tag and our sub-expressions tags set to 0
-template <OldEvalCountsType, old_eval_counts>
-static constexpr auto default_init_eval_counts() {
-  if constexpr (has<our_tag>(old_eval_counts)) {
-    // Our tag already exists, which also means that the tags of our sub-expressions already exist.
-    // Nothing to do here.
-    return old_eval_counts;
-  } else {
-    // Our tag doesn't exist in the old eval_counts, so we need to add it
-    constexpr auto new_eval_counts = old_eval_counts.append<our_tag>(0);
-
-    // Propagate the tags from our sub-expressions
-    auto newer_eval_counts =
-        PrevExpr::default_init_eval_counts<decltype(new_eval_counts), new_eval_counts>();
-    return newer_eval_counts;
-  }
-}
-
-/// \brief Update is_cached if our eval cached its result.
-template <OldIsCachedType, old_is_cached, EvalCountsType, eval_counts>
-static constexpr auto update_is_cached() {
-  static_assert(has<our_tag>(eval_counts), "eval_counts must contain our tag");
-
-  if constexpr (get<our_tag>(eval_counts) > 1) {
-    if constexpr (has<our_tag>(old_is_cached)) {
-      // The fact that our tag exists in old_is_cached means that our eval has cached its result before.
-      // Nothing to do here.
-      return old_is_cached;
-    } else {
-      // Our eval result needs cached, but is not yet cached, so it's our responsibility to add it
-      constexpr auto new_is_cached = old_is_cached.append<our_tag>(true);
-
-      // Propagate the tags from our sub-expressions
-      auto newer_is_cached =
-          PrevExpr::update_is_cached<decltype(new_is_cached), new_is_cached, EvalCountsType, eval_counts>();
-      return newer_is_cached;
-    }
-  } else {
-    // We don't need to cache our value, so just propagate the tags from our sub-expressions
-    return PrevExpr::update_is_cached<OldIsCachedType, old_is_cached, EvalCountsType, eval_counts>();
-  }
-}
-
-/// \brief Fill the cache with default constructed objects for each reused object that needs to be cached
-auto init_cache<EvalCountsType, eval_counts, OldCacheType>(old_cache) {
-  static_assert(has<our_tag>(eval_counts), "The eval_counts type must contain our tag");
-
-  if constexpr (get<our_tag>(eval_counts) > 1) {
-    // We need to use our cache, either we are the evaluator or we are the recipient of a cached value
-    if constexpr (has<our_tag>(OldCacheType)) {
-      // Our tag already exists, which also means that the tags of our sub-expressions already exist.
-      // Nothing to do here.
-      return old_cache;
-    } else {
-      // Our tag doesn't exist in the old cache, so we need to add it
-      auto new_cache = append<our_tag>(old_cache, ...default value...);
-
-      // Propagate the tags from our sub-expressions
-      auto newer_cache = PrevExpr::init_cache<eval_counts>(new_cache);
-      return newer_cache;
-    }
-  } else {
-    // We don't need to cache our value, so just propagate the tags from our sub-expressions
-    return PrevExpr::init_cache<eval_counts>(old_cache);
-  }
-}
-
-
-Final logic issue (hopefully):
-Views are not always default constructable, meaning that we cannot construct an emtpy aggregate cache
-and then populate it via copy assignment. Instead, if we intend to cache our result, we need to take in the old_cache
-and return a new_cache, otherwise, we can just return our eval result.
-
-
-
-AHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
-
-Well, I made a mistake in my cache logic above. Accessor expressions do not return a static value. They are the only
-type with that property. The only way you can cache an accessor is if it is a tagged accessor. The reason is that the
-tag says ensures that no two accessors with the same tag can ever return different values, effectively making
-AccessorExpr's eval function static.
-
-*/
-
 //@}
 
 }  // namespace mesh

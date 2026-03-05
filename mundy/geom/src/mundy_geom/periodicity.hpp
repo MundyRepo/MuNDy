@@ -130,7 +130,6 @@
 //     mundy::geom::
 // };
 
-
 namespace mundy {
 
 namespace geom {
@@ -161,7 +160,7 @@ class EuclideanMetric {
   using OurPoint = Point<Scalar>;
 
   /// \brief Get if the given dimension is periodic
-  template<unsigned dimension>
+  template <unsigned dimension>
   KOKKOS_INLINE_FUNCTION static constexpr bool is_periodic() {
     return false;
   }
@@ -256,7 +255,7 @@ class PeriodicMetric {
   }
 
   /// \brief Get if the given dimension is periodic
-  template<unsigned dimension>
+  template <unsigned dimension>
   KOKKOS_INLINE_FUNCTION static constexpr bool is_periodic() {
     return true;
   }
@@ -331,7 +330,6 @@ class PeriodicMetric {
   OurMatrix3 h_inv_;  ///< Inverse of the unit cell matrix
 };  // PeriodicMetric
 
-
 template <typename Scalar>
 class PeriodicMetricX {
  public:
@@ -346,12 +344,13 @@ class PeriodicMetricX {
 
   /// \brief Constructor with unit cell matrix
   KOKKOS_INLINE_FUNCTION
-  explicit constexpr PeriodicMetricX(const double width_x) : scale_{width_x, 1.0, 1.0}, inv_scale_{1.0 / width_x, 1.0, 1.0} {
+  explicit constexpr PeriodicMetricX(const double width_x)
+      : scale_{width_x, 1.0, 1.0}, inv_scale_{1.0 / width_x, 1.0, 1.0} {
     MUNDY_THROW_ASSERT(width_x > 0, std::invalid_argument, "Cell dimensions must be positive");
   }
 
   /// \brief Get if the given dimension is periodic
-  template<unsigned dimension>
+  template <unsigned dimension>
   KOKKOS_INLINE_FUNCTION static constexpr bool is_periodic() {
     return dimension == 0;
   }
@@ -384,19 +383,15 @@ class PeriodicMetricX {
   KOKKOS_INLINE_FUNCTION constexpr math::Vector3<typename Vector3T::scalar_t> frac_minimum_image(
       const Vector3T& fractional_vec) const {
     OurVector3 min_image{
-      fractional_vec[0] - static_cast<Scalar>(static_cast<Integer>(Kokkos::round(fractional_vec[0]))),
-      fractional_vec[1],
-      fractional_vec[2]};
+        fractional_vec[0] - static_cast<Scalar>(static_cast<Integer>(Kokkos::round(fractional_vec[0]))),
+        fractional_vec[1], fractional_vec[2]};
     return min_image;
   }
 
   template <typename Integer, math::ValidVector3Type Vector3T>
   KOKKOS_INLINE_FUNCTION constexpr math::Vector3<typename Vector3T::scalar_t> frac_wrap_to_unit_cell(
       const Vector3T& fractional_vec) const {
-    OurVector3 wrapped{
-      impl::safe_unit_mod1<Integer>(fractional_vec[0]),
-      fractional_vec[1],
-      fractional_vec[2]};
+    OurVector3 wrapped{impl::safe_unit_mod1<Integer>(fractional_vec[0]), fractional_vec[1], fractional_vec[2]};
     return wrapped;
   }
 
@@ -448,12 +443,13 @@ class PeriodicMetricY {
 
   /// \brief Constructor with unit cell matrix
   KOKKOS_INLINE_FUNCTION
-  explicit constexpr PeriodicMetricY(const double width_y) : scale_{1.0, width_y, 1.0}, inv_scale_{1.0, 1.0 / width_y, 1.0} {
+  explicit constexpr PeriodicMetricY(const double width_y)
+      : scale_{1.0, width_y, 1.0}, inv_scale_{1.0, 1.0 / width_y, 1.0} {
     MUNDY_THROW_ASSERT(width_y > 0, std::invalid_argument, "Cell dimensions must be positive");
   }
 
   /// \brief Get if the given dimension is periodic
-  template<unsigned dimension>
+  template <unsigned dimension>
   KOKKOS_INLINE_FUNCTION static constexpr bool is_periodic() {
     return dimension == 1;
   }
@@ -486,19 +482,16 @@ class PeriodicMetricY {
   KOKKOS_INLINE_FUNCTION constexpr math::Vector3<typename Vector3T::scalar_t> frac_minimum_image(
       const Vector3T& fractional_vec) const {
     OurVector3 min_image{
-      fractional_vec[0],
-      fractional_vec[1] - static_cast<Scalar>(static_cast<Integer>(Kokkos::round(fractional_vec[1]))),
-      fractional_vec[2]};
+        fractional_vec[0],
+        fractional_vec[1] - static_cast<Scalar>(static_cast<Integer>(Kokkos::round(fractional_vec[1]))),
+        fractional_vec[2]};
     return min_image;
   }
 
   template <typename Integer, math::ValidVector3Type Vector3T>
   KOKKOS_INLINE_FUNCTION constexpr math::Vector3<typename Vector3T::scalar_t> frac_wrap_to_unit_cell(
       const Vector3T& fractional_vec) const {
-    OurVector3 wrapped{
-      fractional_vec[0],
-      impl::safe_unit_mod1<Integer>(fractional_vec[1]),
-      fractional_vec[2]};
+    OurVector3 wrapped{fractional_vec[0], impl::safe_unit_mod1<Integer>(fractional_vec[1]), fractional_vec[2]};
     return wrapped;
   }
 
@@ -550,12 +543,13 @@ class PeriodicMetricXY {
 
   /// \brief Constructor with unit cell matrix
   KOKKOS_INLINE_FUNCTION
-  explicit constexpr PeriodicMetricXY(const double width_x, const double width_y) : scale_{width_x, width_y, 1.0}, inv_scale_{1.0 / width_x, 1.0 / width_y, 1.0} {
+  explicit constexpr PeriodicMetricXY(const double width_x, const double width_y)
+      : scale_{width_x, width_y, 1.0}, inv_scale_{1.0 / width_x, 1.0 / width_y, 1.0} {
     MUNDY_THROW_ASSERT(width_x > 0 && width_y > 0, std::invalid_argument, "Cell dimensions must be positive");
   }
 
   /// \brief Get if the given dimension is periodic
-  template<unsigned dimension>
+  template <unsigned dimension>
   KOKKOS_INLINE_FUNCTION static constexpr bool is_periodic() {
     return dimension == 0 || dimension == 1;
   }
@@ -588,19 +582,17 @@ class PeriodicMetricXY {
   KOKKOS_INLINE_FUNCTION constexpr math::Vector3<typename Vector3T::scalar_t> frac_minimum_image(
       const Vector3T& fractional_vec) const {
     OurVector3 min_image{
-      fractional_vec[0] - static_cast<Scalar>(static_cast<Integer>(Kokkos::round(fractional_vec[0]))),
-      fractional_vec[1] - static_cast<Scalar>(static_cast<Integer>(Kokkos::round(fractional_vec[1]))),
-      fractional_vec[2]};
+        fractional_vec[0] - static_cast<Scalar>(static_cast<Integer>(Kokkos::round(fractional_vec[0]))),
+        fractional_vec[1] - static_cast<Scalar>(static_cast<Integer>(Kokkos::round(fractional_vec[1]))),
+        fractional_vec[2]};
     return min_image;
   }
 
   template <typename Integer, math::ValidVector3Type Vector3T>
   KOKKOS_INLINE_FUNCTION constexpr math::Vector3<typename Vector3T::scalar_t> frac_wrap_to_unit_cell(
       const Vector3T& fractional_vec) const {
-    OurVector3 wrapped{
-      impl::safe_unit_mod1<Integer>(fractional_vec[0]),
-      impl::safe_unit_mod1<Integer>(fractional_vec[1]),
-      fractional_vec[2]};
+    OurVector3 wrapped{impl::safe_unit_mod1<Integer>(fractional_vec[0]),
+                       impl::safe_unit_mod1<Integer>(fractional_vec[1]), fractional_vec[2]};
     return wrapped;
   }
 
@@ -652,12 +644,13 @@ class PeriodicMetricYZ {
 
   /// \brief Constructor with unit cell matrix
   KOKKOS_INLINE_FUNCTION
-  explicit constexpr PeriodicMetricYZ(const double width_y, const double width_z) : scale_{1.0, width_y, width_z}, inv_scale_{1.0, 1.0 / width_y, 1.0 / width_z} {
+  explicit constexpr PeriodicMetricYZ(const double width_y, const double width_z)
+      : scale_{1.0, width_y, width_z}, inv_scale_{1.0, 1.0 / width_y, 1.0 / width_z} {
     MUNDY_THROW_ASSERT(width_y > 0 && width_z > 0, std::invalid_argument, "Cell dimensions must be positive");
   }
 
   /// \brief Get if the given dimension is periodic
-  template<unsigned dimension>
+  template <unsigned dimension>
   KOKKOS_INLINE_FUNCTION static constexpr bool is_periodic() {
     return dimension == 1 || dimension == 2;
   }
@@ -690,19 +683,17 @@ class PeriodicMetricYZ {
   KOKKOS_INLINE_FUNCTION constexpr math::Vector3<typename Vector3T::scalar_t> frac_minimum_image(
       const Vector3T& fractional_vec) const {
     OurVector3 min_image{
-      fractional_vec[0],
-      fractional_vec[1] - static_cast<Scalar>(static_cast<Integer>(Kokkos::round(fractional_vec[1]))),
-      fractional_vec[2] - static_cast<Scalar>(static_cast<Integer>(Kokkos::round(fractional_vec[2])))};
+        fractional_vec[0],
+        fractional_vec[1] - static_cast<Scalar>(static_cast<Integer>(Kokkos::round(fractional_vec[1]))),
+        fractional_vec[2] - static_cast<Scalar>(static_cast<Integer>(Kokkos::round(fractional_vec[2])))};
     return min_image;
   }
 
   template <typename Integer, math::ValidVector3Type Vector3T>
   KOKKOS_INLINE_FUNCTION constexpr math::Vector3<typename Vector3T::scalar_t> frac_wrap_to_unit_cell(
       const Vector3T& fractional_vec) const {
-    OurVector3 wrapped{
-      fractional_vec[0],
-      impl::safe_unit_mod1<Integer>(fractional_vec[1]),
-     impl::safe_unit_mod1<Integer>(fractional_vec[2])};
+    OurVector3 wrapped{fractional_vec[0], impl::safe_unit_mod1<Integer>(fractional_vec[1]),
+                       impl::safe_unit_mod1<Integer>(fractional_vec[2])};
     return wrapped;
   }
 
@@ -766,7 +757,7 @@ class PeriodicScaledMetric {
   }
 
   /// \brief Get if the given dimension is periodic
-  template<unsigned dimension>
+  template <unsigned dimension>
   KOKKOS_INLINE_FUNCTION static constexpr bool is_periodic() {
     return true;
   }

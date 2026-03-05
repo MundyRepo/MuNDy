@@ -72,8 +72,8 @@ KOKKOS_FUNCTION AABB<typename LineSegmentType::scalar_t> compute_aabb(const Line
   return AABB<scalar_t>{min_x, min_y, min_z, max_x, max_y, max_z};
 }
 template <ValidLineSegmentType LineSegmentType, typename Metric>
-KOKKOS_FUNCTION AABB<typename LineSegmentType::scalar_t> compute_aabb(
-    const LineSegmentType& line_segment, const Metric& metric) {
+KOKKOS_FUNCTION AABB<typename LineSegmentType::scalar_t> compute_aabb(const LineSegmentType& line_segment,
+                                                                      const Metric& metric) {
   return compute_aabb(unwrap_points_to_ref(line_segment, metric, reference_point(line_segment)));
 }
 
@@ -88,8 +88,7 @@ KOKKOS_FUNCTION AABB<typename SphereType::scalar_t> compute_aabb(const SphereTyp
   return AABB<scalar_t>{min_corner, max_corner};
 }
 template <ValidSphereType SphereType, typename Metric>
-KOKKOS_FUNCTION AABB<typename SphereType::scalar_t> compute_aabb(const SphereType& sphere,
-                                                                   const Metric& /*metric*/) {
+KOKKOS_FUNCTION AABB<typename SphereType::scalar_t> compute_aabb(const SphereType& sphere, const Metric& /*metric*/) {
   return compute_aabb(sphere);
 }
 
@@ -117,7 +116,7 @@ KOKKOS_FUNCTION AABB<typename EllipsoidType::scalar_t> compute_aabb(const Ellips
 }
 template <ValidEllipsoidType EllipsoidType, typename Metric>
 KOKKOS_FUNCTION AABB<typename EllipsoidType::scalar_t> compute_aabb(const EllipsoidType& ellipsoid,
-                                                                      const Metric& /*metric*/) {
+                                                                    const Metric& /*metric*/) {
   return compute_aabb(ellipsoid);
 }
 
@@ -145,8 +144,8 @@ KOKKOS_FUNCTION AABB<typename SpherocylinderType::scalar_t> compute_aabb(const S
   return AABB<scalar_t>{min_x, min_y, min_z, max_x, max_y, max_z};
 }
 template <ValidSpherocylinderType SpherocylinderType, typename Metric>
-KOKKOS_FUNCTION AABB<typename SpherocylinderType::scalar_t> compute_aabb(
-    const SpherocylinderType& spherocylinder, const Metric& /*metric*/) {
+KOKKOS_FUNCTION AABB<typename SpherocylinderType::scalar_t> compute_aabb(const SpherocylinderType& spherocylinder,
+                                                                         const Metric& /*metric*/) {
   return compute_aabb(spherocylinder);
 }
 
@@ -166,8 +165,7 @@ KOKKOS_FUNCTION AABB<typename SegmentType::scalar_t> compute_aabb(const SegmentT
   return AABB<scalar_t>{min_x, min_y, min_z, max_x, max_y, max_z};
 }
 template <ValidSpherocylinderSegmentType SegmentType, typename Metric>
-KOKKOS_FUNCTION AABB<typename SegmentType::scalar_t> compute_aabb(const SegmentType& segment,
-                                                                    const Metric& metric) {
+KOKKOS_FUNCTION AABB<typename SegmentType::scalar_t> compute_aabb(const SegmentType& segment, const Metric& metric) {
   return compute_aabb(unwrap_points_to_ref(segment, metric, reference_point(segment)));
 }
 

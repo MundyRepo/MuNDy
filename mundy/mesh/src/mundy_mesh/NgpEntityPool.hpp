@@ -79,18 +79,20 @@ class NgpEntityPoolT : public core::NgpPoolT<stk::mesh::Entity, MemorySpace, Siz
   NgpEntityPoolT& operator=(NgpEntityPoolT&&) = default;
 
   void reserve_and_declare(our_size_t requested_capacity) {
-    MUNDY_THROW_ASSERT(
-        rank_ != stk::topology::INVALID_RANK, std::runtime_error,
-        "Cannot reserve and declare entities in NgpEntityPoolT without a valid entity rank.");
+    MUNDY_THROW_ASSERT(rank_ != stk::topology::INVALID_RANK, std::runtime_error,
+                       "Cannot reserve and declare entities in NgpEntityPoolT without a valid entity rank.");
     MUNDY_THROW_ASSERT(
         bulk_data_.in_modifiable_state(), std::runtime_error,
         "Cannot reserve and declare entities in NgpEntityPoolT when the mesh is not in a modifiable state.");
+    MUNDY_THROW_ASSERT(requested_capacity >= 0, std::runtime_error,
+                       "Cannot reserve and declare entities in NgpEntityPoolT with negative capacity.");
     base_t::reserve(requested_capacity);
 
-    if (requested_capacity > this->size()) {
-      const our_size_t num_new_entities = requested_capacity - this->size();
+    const our_size_t current_size = this->size();
+    if (requested_capacity > current_size) {
+      const our_size_t num_new_entities = requested_capacity - current_size;
       std::vector<size_t> requests(bulk_data_.mesh_meta_data().entity_rank_count(), 0);
-      requests[rank_] = num_new_entities;
+      requests[rank_] = static_cast<size_t>(num_new_entities);
 
       std::vector<stk::mesh::Entity> requested_entities;
       bulk_data_.generate_new_entities(requests, requested_entities);

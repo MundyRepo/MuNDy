@@ -195,7 +195,7 @@ class AVector<T, N, Accessor, Ownership::Views> {
   KOKKOS_INLINE_FUNCTION constexpr AVector<T, N, Accessor, Ownership::Views>& operator=(const OtherVectorType& other)
     requires(!std::is_same_v<OtherVectorType, AVector<T, N, Accessor, Ownership::Views>>) &&
             (OtherVectorType::size == N) &&
-            (std::is_same_v<typename OtherVectorType::scalar_t, T>) && HasNonConstAccessOperator<Accessor, T>
+            (std::is_convertible_v<typename OtherVectorType::scalar_t, T>) && HasNonConstAccessOperator<Accessor, T>
   {
     impl::deep_copy_impl(std::make_index_sequence<N>{}, *this, other);
     return *this;
@@ -207,7 +207,7 @@ class AVector<T, N, Accessor, Ownership::Views> {
   KOKKOS_INLINE_FUNCTION constexpr AVector<T, N, Accessor, Ownership::Views>& operator=(OtherVectorType&& other)
     requires(!std::is_same_v<OtherVectorType, AVector<T, N, Accessor, Ownership::Views>>) &&
             (OtherVectorType::size == N) &&
-            (std::is_same_v<typename OtherVectorType::scalar_t, T>) && HasNonConstAccessOperator<Accessor, T>
+            (std::is_convertible_v<typename OtherVectorType::scalar_t, T>) && HasNonConstAccessOperator<Accessor, T>
   {
     impl::deep_copy_impl(std::make_index_sequence<N>{}, *this, other);
     return *this;
@@ -412,6 +412,7 @@ class AVector<T, N, Accessor, Ownership::Views> {
   /// \brief AVector-scalar multiplication
   /// \param[in] scalar The scalar.
   template <typename U>
+    requires std::is_arithmetic_v<U>
   KOKKOS_INLINE_FUNCTION constexpr auto operator*(const U& scalar) const {
     return impl::vector_scalar_multiplication_impl(std::make_index_sequence<N>{}, *this, scalar);
   }
@@ -425,7 +426,7 @@ class AVector<T, N, Accessor, Ownership::Views> {
     return *this;
   }
 
-  /// \brief AVector-scalar division. (Type promotes the result to a double if the scalar is not a floating point.)
+  /// \brief AVector-scalar division. (Type promotes the result to a double if both vector and scalar are integral.)
   /// \param[in] scalar The scalar.
   template <typename U>
     requires std::is_arithmetic_v<U>
@@ -576,7 +577,7 @@ class AVector<T, N, Accessor, Ownership::Owns> {
   KOKKOS_INLINE_FUNCTION constexpr AVector(const OtherVectorType& other)
     requires(!std::is_same_v<OtherVectorType, AVector<T, N, Accessor, Ownership::Owns>>) &&
             (OtherVectorType::size == N) &&
-            (std::is_same_v<typename OtherVectorType::scalar_t, T>) && HasDefaultConstructor<Accessor>
+            (std::is_convertible_v<typename OtherVectorType::scalar_t, T>) && HasDefaultConstructor<Accessor>
       : accessor_() {
     impl::deep_copy_impl(std::make_index_sequence<N>{}, *this, other);
   }
@@ -586,7 +587,7 @@ class AVector<T, N, Accessor, Ownership::Owns> {
   KOKKOS_INLINE_FUNCTION constexpr AVector(OtherVectorType&& other)
     requires(!std::is_same_v<OtherVectorType, AVector<T, N, Accessor, Ownership::Owns>>) &&
             (OtherVectorType::size == N) &&
-            (std::is_same_v<typename OtherVectorType::scalar_t, T>) && HasDefaultConstructor<Accessor>
+            (std::is_convertible_v<typename OtherVectorType::scalar_t, T>) && HasDefaultConstructor<Accessor>
       : accessor_() {
     impl::deep_copy_impl(std::make_index_sequence<N>{}, *this, std::move(other));
   }
@@ -597,7 +598,7 @@ class AVector<T, N, Accessor, Ownership::Owns> {
   KOKKOS_INLINE_FUNCTION constexpr AVector<T, N, Accessor, Ownership::Owns>& operator=(const OtherVectorType& other)
     requires(!std::is_same_v<OtherVectorType, AVector<T, N, Accessor, Ownership::Owns>>) &&
             (OtherVectorType::size == N) &&
-            (std::is_same_v<typename OtherVectorType::scalar_t, T>) && HasNonConstAccessOperator<Accessor, T>
+            (std::is_convertible_v<typename OtherVectorType::scalar_t, T>) && HasNonConstAccessOperator<Accessor, T>
   {
     impl::deep_copy_impl(std::make_index_sequence<N>{}, *this, other);
     return *this;
@@ -609,7 +610,7 @@ class AVector<T, N, Accessor, Ownership::Owns> {
   KOKKOS_INLINE_FUNCTION constexpr AVector<T, N, Accessor, Ownership::Owns>& operator=(OtherVectorType&& other)
     requires(!std::is_same_v<OtherVectorType, AVector<T, N, Accessor, Ownership::Owns>>) &&
             (OtherVectorType::size == N) &&
-            (std::is_same_v<typename OtherVectorType::scalar_t, T>) && HasNonConstAccessOperator<Accessor, T>
+            (std::is_convertible_v<typename OtherVectorType::scalar_t, T>) && HasNonConstAccessOperator<Accessor, T>
   {
     impl::deep_copy_impl(std::make_index_sequence<N>{}, *this, std::move(other));
     return *this;
@@ -814,6 +815,7 @@ class AVector<T, N, Accessor, Ownership::Owns> {
   /// \brief AVector-scalar multiplication
   /// \param[in] scalar The scalar.
   template <typename U>
+    requires std::is_arithmetic_v<U>
   KOKKOS_INLINE_FUNCTION constexpr auto operator*(const U& scalar) const {
     return impl::vector_scalar_multiplication_impl(std::make_index_sequence<N>{}, *this, scalar);
   }
@@ -829,7 +831,7 @@ class AVector<T, N, Accessor, Ownership::Owns> {
     return *this;
   }
 
-  /// \brief AVector-scalar division. (Type promotes the result to a double if the scalar is not a floating point.)
+  /// \brief AVector-scalar division. (Type promotes the result to a double if both vector and scalar are integral.)
   /// \param[in] scalar The scalar.
   template <typename U>
     requires std::is_arithmetic_v<U>
@@ -979,8 +981,8 @@ KOKKOS_INLINE_FUNCTION constexpr bool is_approx_close(
 /// \param[in] vec1 The first vector.
 /// \param[in] vec2 The second vector.
 /// \param[in] tol The tolerance (default is determined by the given type).
-template <size_t N, typename U, typename T, ValidAccessor<U> Accessor1, typename Ownership1, ValidAccessor<T> Accessor2,
-          typename Ownership2>
+template <size_t N, typename U, typename T, ValidAccessor<U> Accessor1, typename Ownership1,
+          ValidAccessor<T> Accessor2, typename Ownership2>
 KOKKOS_INLINE_FUNCTION constexpr bool is_close(
     const AVector<U, N, Accessor1, Ownership1>& vec1, const AVector<T, N, Accessor2, Ownership2>& vec2,
     const decltype(get_comparison_tolerance<T, U>())& tol = get_comparison_tolerance<T, U>()) {
@@ -991,8 +993,8 @@ KOKKOS_INLINE_FUNCTION constexpr bool is_close(
 /// \param[in] vec1 The first vector.
 /// \param[in] vec2 The second vector.
 /// \param[in] tol The tolerance (default is determined by the given type).
-template <size_t N, typename U, typename T, ValidAccessor<U> Accessor1, typename Ownership1, ValidAccessor<T> Accessor2,
-          typename Ownership2>
+template <size_t N, typename U, typename T, ValidAccessor<U> Accessor1, typename Ownership1,
+          ValidAccessor<T> Accessor2, typename Ownership2>
 KOKKOS_INLINE_FUNCTION constexpr bool is_approx_close(
     const AVector<U, N, Accessor1, Ownership1>& vec1, const AVector<T, N, Accessor2, Ownership2>& vec2,
     const decltype(get_relaxed_comparison_tolerance<T, U>())& tol = get_relaxed_comparison_tolerance<T, U>()) {
@@ -1077,7 +1079,7 @@ KOKKOS_INLINE_FUNCTION constexpr OutputType mean(const AVector<T, N, Accessor, O
 template <size_t N, typename T, ValidAccessor<T> Accessor, typename OwnershipType,
           typename OutputType = std::conditional_t<std::is_integral_v<T>, float, T>>
 KOKKOS_INLINE_FUNCTION constexpr OutputType mean_f(const AVector<T, N, Accessor, OwnershipType>& vec) {
-  return mean(vec);
+  return mean<N, T, Accessor, OwnershipType, OutputType>(vec);
 }
 
 /// \brief Variance of all elements (returns a double if T is an integral type, otherwise returns T)
@@ -1091,7 +1093,7 @@ KOKKOS_INLINE_FUNCTION constexpr OutputType variance(const AVector<T, N, Accesso
 template <size_t N, typename T, ValidAccessor<T> Accessor, typename OwnershipType,
           typename OutputType = std::conditional_t<std::is_integral_v<T>, float, T>>
 KOKKOS_INLINE_FUNCTION constexpr OutputType variance_f(const AVector<T, N, Accessor, OwnershipType>& vec) {
-  return variance(vec);
+  return impl::variance_f_impl(std::make_index_sequence<N>{}, vec);
 }
 
 /// \brief Standard deviation of all elements (returns a double if T is an integral type, otherwise returns T)
@@ -1105,7 +1107,7 @@ KOKKOS_INLINE_FUNCTION constexpr OutputType stddev(const AVector<T, N, Accessor,
 template <size_t N, typename T, ValidAccessor<T> Accessor, typename OwnershipType,
           typename OutputType = std::conditional_t<std::is_integral_v<T>, float, T>>
 KOKKOS_INLINE_FUNCTION constexpr OutputType stddev_f(const AVector<T, N, Accessor, OwnershipType>& vec) {
-  return stddev(vec);
+  return impl::standard_deviation_f_impl(std::make_index_sequence<N>{}, vec);
 }
 //@}
 
@@ -1121,8 +1123,8 @@ KOKKOS_INLINE_FUNCTION constexpr auto copy(const VectorType& v) {
 /// \brief Dot product of two vectors
 /// \param[in] a The first vector.
 /// \param[in] b The second vector.
-template <size_t N, typename U, typename T, ValidAccessor<U> Accessor1, typename Ownership1, ValidAccessor<T> Accessor2,
-          typename Ownership2>
+template <size_t N, typename U, typename T, ValidAccessor<U> Accessor1, typename Ownership1,
+          ValidAccessor<T> Accessor2, typename Ownership2>
 KOKKOS_INLINE_FUNCTION constexpr auto dot(const AVector<U, N, Accessor1, Ownership1>& a,
                                           const AVector<T, N, Accessor2, Ownership2>& b) -> std::common_type_t<T, U> {
   return impl::dot_product_impl(std::make_index_sequence<N>{}, a, b);
@@ -1131,8 +1133,8 @@ KOKKOS_INLINE_FUNCTION constexpr auto dot(const AVector<U, N, Accessor1, Ownersh
 /// \brief Element-wise product
 /// \param[in] a The first vector.
 /// \param[in] b The second vector.
-template <size_t N, typename U, typename T, ValidAccessor<U> Accessor1, typename Ownership1, ValidAccessor<T> Accessor2,
-          typename Ownership2>
+template <size_t N, typename U, typename T, ValidAccessor<U> Accessor1, typename Ownership1,
+          ValidAccessor<T> Accessor2, typename Ownership2>
 KOKKOS_INLINE_FUNCTION constexpr auto elementwise_mul(const AVector<U, N, Accessor1, Ownership1>& a,
                                                       const AVector<T, N, Accessor2, Ownership2>& b) {
   return impl::vector_vector_elementwise_mul_impl(std::make_index_sequence<N>{}, a, b);
@@ -1141,8 +1143,8 @@ KOKKOS_INLINE_FUNCTION constexpr auto elementwise_mul(const AVector<U, N, Access
 /// \brief Element-wise division
 /// \param[in] a The first vector.
 /// \param[in] b The second vector.
-template <size_t N, typename U, typename T, ValidAccessor<U> Accessor1, typename Ownership1, ValidAccessor<T> Accessor2,
-          typename Ownership2>
+template <size_t N, typename U, typename T, ValidAccessor<U> Accessor1, typename Ownership1,
+          ValidAccessor<T> Accessor2, typename Ownership2>
 KOKKOS_INLINE_FUNCTION constexpr auto elementwise_div(const AVector<U, N, Accessor1, Ownership1>& a,
                                                       const AVector<T, N, Accessor2, Ownership2>& b) {
   return impl::vector_vector_elementwise_div_impl(std::make_index_sequence<N>{}, a, b);
@@ -1195,7 +1197,7 @@ KOKKOS_INLINE_FUNCTION constexpr OutputType two_norm(const AVector<T, N, Accesso
 template <size_t N, typename T, ValidAccessor<T> Accessor, typename OwnershipType,
           typename OutputType = std::conditional_t<std::is_integral_v<T>, float, T>>
 KOKKOS_INLINE_FUNCTION constexpr OutputType two_norm_f(const AVector<T, N, Accessor, OwnershipType>& vec) {
-  return two_norm(vec);
+  return two_norm<N, T, Accessor, OwnershipType, OutputType>(vec);
 }
 
 /// \brief AVector squared 2-norm
@@ -1210,7 +1212,8 @@ KOKKOS_INLINE_FUNCTION constexpr auto two_norm_squared(const AVector<T, N, Acces
 template <size_t N, typename T, ValidAccessor<T> Accessor, typename OwnershipType,
           typename OutputType = std::conditional_t<std::is_integral_v<T>, double, T>>
 KOKKOS_INLINE_FUNCTION constexpr OutputType norm(const AVector<T, N, Accessor, OwnershipType>& vec) {
-  return two_norm(vec);
+  // Forward the output type to two_norm to ensure consistent type promotion of integral types
+  return two_norm<N, T, Accessor, OwnershipType, OutputType>(vec);
 }
 
 /// \brief Default vector norm (2-norm, returns a float if T is an integral type, otherwise returns T)
@@ -1218,7 +1221,7 @@ KOKKOS_INLINE_FUNCTION constexpr OutputType norm(const AVector<T, N, Accessor, O
 template <size_t N, typename T, ValidAccessor<T> Accessor, typename OwnershipType,
           typename OutputType = std::conditional_t<std::is_integral_v<T>, float, T>>
 KOKKOS_INLINE_FUNCTION constexpr OutputType norm_f(const AVector<T, N, Accessor, OwnershipType>& vec) {
-  return norm(vec);
+  return norm<N, T, Accessor, OwnershipType, OutputType>(vec);
 }
 
 /// \brief Default vector norm squared (2-norm)
@@ -1228,11 +1231,13 @@ KOKKOS_INLINE_FUNCTION constexpr auto norm_squared(const AVector<T, N, Accessor,
   return two_norm_squared(vec);
 }
 
-/// \brief Minor angle between two vectors (returns a double if T is an integral type, otherwise returns T)
+/// \brief Minor angle between two vectors (returns a double if common_type_t<U, T> is integral, otherwise common_type_t<U, T>)
 /// \param[in] a The first vector.
 /// \param[in] b The second vector.
-template <size_t N, typename U, typename T, ValidAccessor<U> Accessor1, typename Ownership1, ValidAccessor<T> Accessor2,
-          typename Ownership2, typename OutputType = std::conditional_t<std::is_integral_v<T>, double, T>>
+template <size_t N, typename U, typename T, ValidAccessor<U> Accessor1, typename Ownership1,
+          ValidAccessor<T> Accessor2, typename Ownership2,
+          typename OutputType = std::conditional_t<std::is_integral_v<std::common_type_t<U, T>>, double,
+                                                   std::common_type_t<U, T>>>
 KOKKOS_INLINE_FUNCTION constexpr OutputType minor_angle(const AVector<U, N, Accessor1, Ownership1>& a,
                                                         const AVector<T, N, Accessor2, Ownership2>& b) {
   OutputType norm_product = static_cast<OutputType>(two_norm(a)) * static_cast<OutputType>(two_norm(b));
@@ -1248,34 +1253,40 @@ KOKKOS_INLINE_FUNCTION constexpr OutputType minor_angle(const AVector<U, N, Acce
   return Kokkos::acos(cosine);
 }
 
-/// \brief Minor angle between two vectors (returns a float if T is an integral type, otherwise returns T)
+/// \brief Minor angle between two vectors (returns a float if common_type_t<U, T> is integral, otherwise common_type_t<U, T>)
 /// \param[in] a The first vector.
 /// \param[in] b The second vector.
-template <size_t N, typename U, typename T, ValidAccessor<U> Accessor1, typename Ownership1, ValidAccessor<T> Accessor2,
-          typename Ownership2, typename OutputType = std::conditional_t<std::is_integral_v<T>, float, T>>
+template <size_t N, typename U, typename T, ValidAccessor<U> Accessor1, typename Ownership1,
+          ValidAccessor<T> Accessor2, typename Ownership2,
+          typename OutputType = std::conditional_t<std::is_integral_v<std::common_type_t<U, T>>, float,
+                                                   std::common_type_t<U, T>>>
 KOKKOS_INLINE_FUNCTION constexpr OutputType minor_angle_f(const AVector<U, N, Accessor1, Ownership1>& a,
                                                           const AVector<T, N, Accessor2, Ownership2>& b) {
-  return minor_angle(a, b);
+  return minor_angle<N, U, T, Accessor1, Ownership1, Accessor2, Ownership2, OutputType>(a, b);
 }
 
-/// \brief Major angle between two vectors (returns a double if T is an integral type, otherwise returns T)
+/// \brief Major angle between two vectors (returns a double if common_type_t<U, T> is integral, otherwise common_type_t<U, T>)
 /// \param[in] a The first vector.
 /// \param[in] b The second vector.
-template <size_t N, typename U, typename T, ValidAccessor<U> Accessor1, typename Ownership1, ValidAccessor<T> Accessor2,
-          typename Ownership2, typename OutputType = std::conditional_t<std::is_integral_v<T>, double, T>>
+template <size_t N, typename U, typename T, ValidAccessor<U> Accessor1, typename Ownership1,
+          ValidAccessor<T> Accessor2, typename Ownership2,
+          typename OutputType = std::conditional_t<std::is_integral_v<std::common_type_t<U, T>>, double,
+                                                   std::common_type_t<U, T>>>
 KOKKOS_INLINE_FUNCTION constexpr OutputType major_angle(const AVector<U, N, Accessor1, Ownership1>& a,
                                                         const AVector<T, N, Accessor2, Ownership2>& b) {
   return Kokkos::numbers::pi_v<OutputType> - minor_angle(a, b);
 }
 
-/// \brief Major angle between two vectors (returns a float if T is an integral type, otherwise returns T)
+/// \brief Major angle between two vectors (returns a float if common_type_t<U, T> is integral, otherwise common_type_t<U, T>)
 /// \param[in] a The first vector.
 /// \param[in] b The second vector.
-template <size_t N, typename U, typename T, ValidAccessor<U> Accessor1, typename Ownership1, ValidAccessor<T> Accessor2,
-          typename Ownership2, typename OutputType = std::conditional_t<std::is_integral_v<T>, float, T>>
+template <size_t N, typename U, typename T, ValidAccessor<U> Accessor1, typename Ownership1,
+          ValidAccessor<T> Accessor2, typename Ownership2,
+          typename OutputType = std::conditional_t<std::is_integral_v<std::common_type_t<U, T>>, float,
+                                                   std::common_type_t<U, T>>>
 KOKKOS_INLINE_FUNCTION constexpr OutputType major_angle_f(const AVector<U, N, Accessor1, Ownership1>& a,
                                                           const AVector<T, N, Accessor2, Ownership2>& b) {
-  return major_angle(a, b);
+  return major_angle<N, U, T, Accessor1, Ownership1, Accessor2, Ownership2, OutputType>(a, b);
 }
 //@}
 
@@ -1297,7 +1308,8 @@ KOKKOS_INLINE_FUNCTION void atomic_store(AVector<T1, N, A, OT>* const v, const T
 }
 
 /// \brief Atomic v1[i] = v2[i].
-template <size_t N, typename T1, ValidAccessor<T1> A1, typename OT1, typename T2, ValidAccessor<T2> A2, typename OT2>
+template <size_t N, typename T1, ValidAccessor<T1> A1, typename OT1, typename T2,
+          ValidAccessor<T2> A2, typename OT2>
 KOKKOS_INLINE_FUNCTION void atomic_store(AVector<T1, N, A1, OT1>* const v1, const AVector<T2, N, A2, OT2>& v2) {
   impl::atomic_vector_vector_store_impl(std::make_index_sequence<N>{}, v1, v2);
 }
@@ -1306,15 +1318,15 @@ KOKKOS_INLINE_FUNCTION void atomic_store(AVector<T1, N, A1, OT1>* const v1, cons
 //! \name atomic_[op] Atomic operation which don’t return anything. [op] might be add, sub, mul, div.
 //@{
 
-#define MUNDY_MATH_VECTOR_SCALAR_ATOMIC_OP(op_name)                                             \
-  template <size_t N, typename T1, ValidAccessor<T1> A1, typename OT1, typename T2>             \
-  KOKKOS_INLINE_FUNCTION void atomic_##op_name(AVector<T1, N, A1, OT1>* const v, const T2& s) { \
-    impl::atomic_vector_scalar_##op_name##_impl(std::make_index_sequence<N>{}, v, s);           \
+#define MUNDY_MATH_VECTOR_SCALAR_ATOMIC_OP(op_name)                                                    \
+  template <size_t N, typename T1, ValidAccessor<T1> A1, typename OT1, typename T2> \
+  KOKKOS_INLINE_FUNCTION void atomic_##op_name(AVector<T1, N, A1, OT1>* const v, const T2& s) {        \
+    impl::atomic_vector_scalar_##op_name##_impl(std::make_index_sequence<N>{}, v, s);                  \
   }
 
 #define MUNDY_MATH_VECTOR_VECTOR_ATOMIC_OP(op_name)                                                                    \
-  template <size_t N, typename T1, ValidAccessor<T1> A1, typename OT1, typename T2, ValidAccessor<T2> A2,              \
-            typename OT2>                                                                                              \
+  template <size_t N, typename T1, ValidAccessor<T1> A1, typename OT1, typename T2,                 \
+            ValidAccessor<T2> A2, typename OT2>                                                                        \
   KOKKOS_INLINE_FUNCTION void atomic_##op_name(AVector<T1, N, A1, OT1>* const v1, const AVector<T2, N, A2, OT2>& v2) { \
     impl::atomic_vector_vector_##op_name##_impl(std::make_index_sequence<N>{}, v1, v2);                                \
   }
@@ -1349,18 +1361,18 @@ MUNDY_MATH_VECTOR_VECTOR_ATOMIC_OP(elementwise_div)
 // Note: Even if the input is a view, the return is a plain owning vector.
 //@{
 
-#define MUNDY_MATH_VECTOR_SCALAR_ATOMIC_FETCH_OP(op_name)                                             \
-  template <size_t N, typename T1, ValidAccessor<T1> A1, typename OT1, typename T2>                   \
-  KOKKOS_INLINE_FUNCTION auto atomic_fetch_##op_name(AVector<T1, N, A1, OT1>* const v, const T2& s) { \
-    return impl::vector_scalar_atomic_fetch_##op_name##_impl(std::make_index_sequence<N>{}, v, s);    \
+#define MUNDY_MATH_VECTOR_SCALAR_ATOMIC_FETCH_OP(op_name)                                              \
+  template <size_t N, typename T1, ValidAccessor<T1> A1, typename OT1, typename T2> \
+  KOKKOS_INLINE_FUNCTION auto atomic_fetch_##op_name(AVector<T1, N, A1, OT1>* const v, const T2& s) {  \
+    return impl::vector_scalar_atomic_fetch_##op_name##_impl(std::make_index_sequence<N>{}, v, s);     \
   }
 
-#define MUNDY_MATH_VECTOR_VECTOR_ATOMIC_FETCH_OP(op_name)                                                 \
-  template <size_t N, typename T1, ValidAccessor<T1> A1, typename OT1, typename T2, ValidAccessor<T2> A2, \
-            typename OT2>                                                                                 \
-  KOKKOS_INLINE_FUNCTION auto atomic_fetch_##op_name(AVector<T1, N, A1, OT1>* const v1,                   \
-                                                     const AVector<T2, N, A2, OT2>& v2) {                 \
-    return impl::vector_vector_atomic_fetch_##op_name##_impl(std::make_index_sequence<N>{}, v1, v2);      \
+#define MUNDY_MATH_VECTOR_VECTOR_ATOMIC_FETCH_OP(op_name)                                              \
+  template <size_t N, typename T1, ValidAccessor<T1> A1, typename OT1, typename T2, \
+            ValidAccessor<T2> A2, typename OT2>                                                        \
+  KOKKOS_INLINE_FUNCTION auto atomic_fetch_##op_name(AVector<T1, N, A1, OT1>* const v1,                \
+                                                     const AVector<T2, N, A2, OT2>& v2) {              \
+    return impl::vector_vector_atomic_fetch_##op_name##_impl(std::make_index_sequence<N>{}, v1, v2);   \
   }
 
 /// \brief Atomic v[i] += s (returns old v)
@@ -1394,17 +1406,17 @@ MUNDY_MATH_VECTOR_VECTOR_ATOMIC_FETCH_OP(elementwise_div)
 //@{
 
 #define MUNDY_MATH_VECTOR_SCALAR_ATOMIC_OP_FETCH(op_name)                                               \
-  template <size_t N, typename T1, ValidAccessor<T1> A1, typename OT1, typename T2>                     \
+  template <size_t N, typename T1, ValidAccessor<T1> A1, typename OT1, typename T2>  \
   KOKKOS_INLINE_FUNCTION auto atomic_##op_name##_fetch(AVector<T1, N, A1, OT1>* const v, const T2& s) { \
     return impl::vector_scalar_atomic_##op_name##_fetch_impl(std::make_index_sequence<N>{}, v, s);      \
   }
 
-#define MUNDY_MATH_VECTOR_VECTOR_ATOMIC_OP_FETCH(op_name)                                                 \
-  template <size_t N, typename T1, ValidAccessor<T1> A1, typename OT1, typename T2, ValidAccessor<T2> A2, \
-            typename OT2>                                                                                 \
-  KOKKOS_INLINE_FUNCTION auto atomic_##op_name##_fetch(AVector<T1, N, A1, OT1>* const v1,                 \
-                                                       const AVector<T2, N, A2, OT2>& v2) {               \
-    return impl::vector_vector_atomic_##op_name##_fetch_impl(std::make_index_sequence<N>{}, v1, v2);      \
+#define MUNDY_MATH_VECTOR_VECTOR_ATOMIC_OP_FETCH(op_name)                                              \
+  template <size_t N, typename T1, ValidAccessor<T1> A1, typename OT1, typename T2, \
+            ValidAccessor<T2> A2, typename OT2>                                                        \
+  KOKKOS_INLINE_FUNCTION auto atomic_##op_name##_fetch(AVector<T1, N, A1, OT1>* const v1,              \
+                                                       const AVector<T2, N, A2, OT2>& v2) {            \
+    return impl::vector_vector_atomic_##op_name##_fetch_impl(std::make_index_sequence<N>{}, v1, v2);   \
   }
 
 /// \brief Atomic v[i] += s (returns new v)

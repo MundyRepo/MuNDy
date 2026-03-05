@@ -79,6 +79,7 @@ We'll need two MetaMethods: one for computing the brownian motion and one for ta
 #include <mundy_meta/utils/MeshGeneration.hpp>  // for mundy::meta::utils::generate_class_instance_and_mesh_from_meta_class_requirements
 #include <mundy_shapes/ComputeAABB.hpp>  // for mundy::shapes::ComputeAABB
 #include <mundy_shapes/Spheres.hpp>      // for mundy::shapes::Spheres
+#include <mundy_core/rng.hpp>              // for mundy::core::make_philox
 
 /*// A macro for a block of stuff
 #define TIME_BLOCK(thing_to_time, rank, message)                          \
@@ -598,7 +599,7 @@ class ComputeBrownianVelocitySphere : public mundy::meta::MetaKernel<> {
           const stk::mesh::EntityId sphere_node_gid = bulk_data.identifier(sphere_node);
           unsigned *node_rng_counter = stk::mesh::field_data(node_rng_counter_field, sphere_node);
 
-          openrand::Philox rng(sphere_node_gid, node_rng_counter[0]);
+          openrand::Philox rng = core::make_philox(sphere_node_gid, node_rng_counter[0]);
           node_brownian_velocity[0] = alpha * std::sqrt(2.0 * diffusion_coeff / timestep_size) * rng.randn<double>() +
                                       beta * node_brownian_velocity[0];
           node_brownian_velocity[1] = alpha * std::sqrt(2.0 * diffusion_coeff / timestep_size) * rng.randn<double>() +
@@ -1667,7 +1668,7 @@ int main(int argc, char **argv) {
   const size_t sphere_id_start = rank * spheres_per_rank + std::min(rank, remainder) + 1;
   const size_t sphere_id_end = sphere_id_start + spheres_per_rank + (rank < remainder ? 1 : 0);
   bulk_data_ptr->modification_begin();
-  openrand::Philox rng(1, 0);
+  openrand::Philox rng = core::make_philox(1, 0);
 
   // Spheres first.
   for (size_t i = sphere_id_start; i < sphere_id_end; ++i) {

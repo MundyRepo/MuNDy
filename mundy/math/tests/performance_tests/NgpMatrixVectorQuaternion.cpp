@@ -55,9 +55,9 @@ quaternions. We will then perform the following operations on each set of data:
   Quaternion rotation: q3 = q1 * q2
 */
 
-using View1D = Kokkos::View<double *, Kokkos::DefaultExecutionSpace>;
+using View1D = Kokkos::View<double*, Kokkos::DefaultExecutionSpace>;
 
-void randomize(View1D &x) {
+void randomize(View1D& x) {
   // Host view to fill with random values
   auto host_view = Kokkos::create_mirror_view(x);
   for (size_t i = 0; i < x.extent(0); ++i) {
@@ -67,7 +67,7 @@ void randomize(View1D &x) {
   Kokkos::deep_copy(x, host_view);
 }
 
-void test_vector3_blas(const double alpha, const View1D &x, const double beta, View1D &y) {
+void test_vector3_blas(const double alpha, const View1D& x, const double beta, View1D& y) {
   const size_t num_entities = x.extent(0) / 3;
   Kokkos::parallel_for(
       "test_vector3_blas", Kokkos::RangePolicy<>(0, num_entities), KOKKOS_LAMBDA(const size_t i) {
@@ -79,7 +79,7 @@ void test_vector3_blas(const double alpha, const View1D &x, const double beta, V
   ankerl::nanobench::doNotOptimizeAway(y);  // Prevent optimization of the result
 }
 
-void test_vector3_blas_no_views(const double alpha, const View1D &x, const double beta, View1D &y) {
+void test_vector3_blas_no_views(const double alpha, const View1D& x, const double beta, View1D& y) {
   const size_t num_entities = x.extent(0) / 3;
   Kokkos::parallel_for(
       "test_vector3_blas_no_views", Kokkos::RangePolicy<>(0, num_entities), KOKKOS_LAMBDA(const size_t i) {
@@ -97,7 +97,7 @@ void test_vector3_blas_no_views(const double alpha, const View1D &x, const doubl
   ankerl::nanobench::doNotOptimizeAway(y);  // Prevent optimization of the result
 }
 
-void test_vector3_blas_direct(const double alpha, const View1D &x, const double beta, View1D &y) {
+void test_vector3_blas_direct(const double alpha, const View1D& x, const double beta, View1D& y) {
   const size_t num_entities = x.extent(0) / 3;
   Kokkos::parallel_for(
       "test_vector3_blas_direct", Kokkos::RangePolicy<>(0, num_entities), KOKKOS_LAMBDA(const size_t i) {
@@ -118,7 +118,7 @@ void test_vector3_blas_direct(const double alpha, const View1D &x, const double 
   ankerl::nanobench::doNotOptimizeAway(y);  // Prevent optimization of the result
 }
 
-void test_matrix3_blas(const double alpha, const View1D &x, const double beta, View1D &y) {
+void test_matrix3_blas(const double alpha, const View1D& x, const double beta, View1D& y) {
   const size_t num_entities = x.extent(0) / 9;
   Kokkos::parallel_for(
       "test_matrix3_blas", Kokkos::RangePolicy<>(0, num_entities), KOKKOS_LAMBDA(const size_t i) {
@@ -130,7 +130,7 @@ void test_matrix3_blas(const double alpha, const View1D &x, const double beta, V
   ankerl::nanobench::doNotOptimizeAway(y);  // Prevent optimization of the result
 }
 
-void test_matrix3_blas_no_views(const double alpha, const View1D &x, const double beta, View1D &y) {
+void test_matrix3_blas_no_views(const double alpha, const View1D& x, const double beta, View1D& y) {
   const size_t num_entities = x.extent(0) / 9;
   Kokkos::parallel_for(
       "test_matrix3_blas_no_views", Kokkos::RangePolicy<>(0, num_entities), KOKKOS_LAMBDA(const size_t i) {
@@ -157,7 +157,7 @@ void test_matrix3_blas_no_views(const double alpha, const View1D &x, const doubl
   ankerl::nanobench::doNotOptimizeAway(y);  // Prevent optimization of the result
 }
 
-void test_matrix3_blas_direct(const double alpha, const View1D &x, const double beta, View1D &y) {
+void test_matrix3_blas_direct(const double alpha, const View1D& x, const double beta, View1D& y) {
   const size_t num_entities = x.extent(0) / 9;
   Kokkos::parallel_for(
       "test_matrix3_blas_direct", Kokkos::RangePolicy<>(0, num_entities), KOKKOS_LAMBDA(const size_t i) {
@@ -196,7 +196,7 @@ void test_matrix3_blas_direct(const double alpha, const View1D &x, const double 
   ankerl::nanobench::doNotOptimizeAway(y);  // Prevent optimization of the result
 }
 
-void test_quaternion_blas(const double alpha, const View1D &x, const double beta, View1D &y) {
+void test_quaternion_blas(const double alpha, const View1D& x, const double beta, View1D& y) {
   const size_t num_entities = x.extent(0) / 4;
   Kokkos::parallel_for(
       "test_quaternion_blas", Kokkos::RangePolicy<>(0, num_entities), KOKKOS_LAMBDA(const size_t i) {
@@ -208,7 +208,7 @@ void test_quaternion_blas(const double alpha, const View1D &x, const double beta
   ankerl::nanobench::doNotOptimizeAway(y);  // Prevent optimization of the result
 }
 
-void test_quaternion_blas_no_views(const double alpha, const View1D &x, const double beta, View1D &y) {
+void test_quaternion_blas_no_views(const double alpha, const View1D& x, const double beta, View1D& y) {
   const size_t num_entities = x.extent(0) / 4;
   Kokkos::parallel_for(
       "test_quaternion_blas_no_views", Kokkos::RangePolicy<>(0, num_entities), KOKKOS_LAMBDA(const size_t i) {
@@ -227,7 +227,7 @@ void test_quaternion_blas_no_views(const double alpha, const View1D &x, const do
   ankerl::nanobench::doNotOptimizeAway(y);  // Prevent optimization of the result
 }
 
-void test_quaternion_blas_direct(const double alpha, const View1D &x, const double beta, View1D &y) {
+void test_quaternion_blas_direct(const double alpha, const View1D& x, const double beta, View1D& y) {
   const size_t num_entities = x.extent(0) / 4;
   Kokkos::parallel_for(
       "test_quaternion_blas_direct", Kokkos::RangePolicy<>(0, num_entities), KOKKOS_LAMBDA(const size_t i) {
@@ -251,7 +251,7 @@ void test_quaternion_blas_direct(const double alpha, const View1D &x, const doub
   ankerl::nanobench::doNotOptimizeAway(y);  // Prevent optimization of the result
 }
 
-void test_mat_vec(const View1D &m, const View1D &v, View1D &result) {
+void test_mat_vec(const View1D& m, const View1D& v, View1D& result) {
   const size_t num_entities = m.extent(0) / 9;
   Kokkos::parallel_for(
       "test_mat_vec", Kokkos::RangePolicy<>(0, num_entities), KOKKOS_LAMBDA(const size_t i) {
@@ -264,7 +264,7 @@ void test_mat_vec(const View1D &m, const View1D &v, View1D &result) {
   ankerl::nanobench::doNotOptimizeAway(result);  // Prevent optimization of the result
 }
 
-void test_mat_vec_no_views(const View1D &m, const View1D &v, View1D &result) {
+void test_mat_vec_no_views(const View1D& m, const View1D& v, View1D& result) {
   const size_t num_entities = m.extent(0) / 9;
   Kokkos::parallel_for(
       "test_mat_vec_no_views", Kokkos::RangePolicy<>(0, num_entities), KOKKOS_LAMBDA(const size_t i) {
@@ -284,7 +284,7 @@ void test_mat_vec_no_views(const View1D &m, const View1D &v, View1D &result) {
   ankerl::nanobench::doNotOptimizeAway(result);  // Prevent optimization of the result
 }
 
-void test_mat_vec_direct(const View1D &m, const View1D &v, View1D &result) {
+void test_mat_vec_direct(const View1D& m, const View1D& v, View1D& result) {
   const size_t num_entities = m.extent(0) / 9;
   Kokkos::parallel_for(
       "test_mat_vec_direct", Kokkos::RangePolicy<>(0, num_entities), KOKKOS_LAMBDA(const size_t i) {
@@ -310,7 +310,7 @@ void test_mat_vec_direct(const View1D &m, const View1D &v, View1D &result) {
   ankerl::nanobench::doNotOptimizeAway(result);  // Prevent optimization of the result
 }
 
-void test_complex_vector_ops(const View1D &v1, const View1D &v2, View1D &v3) {
+void test_complex_vector_ops(const View1D& v1, const View1D& v2, View1D& v3) {
   const size_t num_entities = v1.extent(0) / 3;
   Kokkos::parallel_for(
       "test_complex_vector_ops", Kokkos::RangePolicy<>(0, num_entities), KOKKOS_LAMBDA(const size_t i) {
@@ -323,7 +323,7 @@ void test_complex_vector_ops(const View1D &v1, const View1D &v2, View1D &v3) {
   ankerl::nanobench::doNotOptimizeAway(v3);  // Prevent optimization of the result
 }
 
-void test_complex_vector_ops_no_views(const View1D &v1, const View1D &v2, View1D &v3) {
+void test_complex_vector_ops_no_views(const View1D& v1, const View1D& v2, View1D& v3) {
   const size_t num_entities = v1.extent(0) / 3;
   Kokkos::parallel_for(
       "test_complex_vector_ops_no_views", Kokkos::RangePolicy<>(0, num_entities), KOKKOS_LAMBDA(const size_t i) {
@@ -342,7 +342,7 @@ void test_complex_vector_ops_no_views(const View1D &v1, const View1D &v2, View1D
   ankerl::nanobench::doNotOptimizeAway(v3);  // Prevent optimization of the result
 }
 
-void test_complex_vector_ops_direct(const View1D &v1, const View1D &v2, View1D &v3) {
+void test_complex_vector_ops_direct(const View1D& v1, const View1D& v2, View1D& v3) {
   const size_t num_entities = v1.extent(0) / 3;
   Kokkos::parallel_for(
       "test_complex_vector_ops_direct", Kokkos::RangePolicy<>(0, num_entities), KOKKOS_LAMBDA(const size_t i) {
@@ -367,7 +367,7 @@ void test_complex_vector_ops_direct(const View1D &v1, const View1D &v2, View1D &
   ankerl::nanobench::doNotOptimizeAway(v3);  // Prevent optimization of the result
 }
 
-void test_quaternion_rotation(const View1D &q1, const View1D &q2, View1D &q3) {
+void test_quaternion_rotation(const View1D& q1, const View1D& q2, View1D& q3) {
   const size_t num_entities = q1.extent(0) / 4;
   Kokkos::parallel_for(
       "test_quaternion_rotation", Kokkos::RangePolicy<>(0, num_entities), KOKKOS_LAMBDA(const size_t i) {
@@ -380,7 +380,7 @@ void test_quaternion_rotation(const View1D &q1, const View1D &q2, View1D &q3) {
   ankerl::nanobench::doNotOptimizeAway(q3);  // Prevent optimization of the result
 }
 
-void test_quaternion_rotation_no_views(const View1D &q1, const View1D &q2, View1D &q3) {
+void test_quaternion_rotation_no_views(const View1D& q1, const View1D& q2, View1D& q3) {
   const size_t num_entities = q1.extent(0) / 4;
   Kokkos::parallel_for(
       "test_quaternion_rotation_no_views", Kokkos::RangePolicy<>(0, num_entities), KOKKOS_LAMBDA(const size_t i) {
@@ -399,7 +399,7 @@ void test_quaternion_rotation_no_views(const View1D &q1, const View1D &q2, View1
   ankerl::nanobench::doNotOptimizeAway(q3);  // Prevent optimization of the result
 }
 
-void test_quaternion_rotation_direct(const View1D &q1, const View1D &q2, View1D &q3) {
+void test_quaternion_rotation_direct(const View1D& q1, const View1D& q2, View1D& q3) {
   const size_t num_entities = q1.extent(0) / 4;
   Kokkos::parallel_for(
       "test_quaternion_rotation_direct", Kokkos::RangePolicy<>(0, num_entities), KOKKOS_LAMBDA(const size_t i) {
@@ -421,8 +421,8 @@ void test_quaternion_rotation_direct(const View1D &q1, const View1D &q2, View1D 
 }
 
 template <typename OurViewFunc, typename OurNoViewFunc, typename DirectFunc>
-void time_test(const std::string &test_name, const OurViewFunc &our_view_func, const OurNoViewFunc &our_no_view_func,
-               const DirectFunc &direct_func) {
+void time_test(const std::string& test_name, const OurViewFunc& our_view_func, const OurNoViewFunc& our_no_view_func,
+               const DirectFunc& direct_func) {
   ankerl::nanobench::Bench bench;
   bench.relative(true).title(test_name).unit("op").performanceCounters(true).minEpochIterations(1000);
 
@@ -442,7 +442,7 @@ void time_test(const std::string &test_name, const OurViewFunc &our_view_func, c
   });
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
   stk::parallel_machine_init(&argc, &argv);
   Kokkos::initialize(argc, argv);
   {

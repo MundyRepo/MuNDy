@@ -46,7 +46,7 @@ namespace math {
 namespace {
 
 TEST(Views, ShiftedView) {
-  auto run_test_nonconst_size_3 = [](auto &shifted_data, const auto &original_data) {
+  auto run_test_nonconst_size_3 = [](auto& shifted_data, const auto& original_data) {
     ASSERT_EQ(shifted_data[0], original_data[1]);
     ASSERT_EQ(shifted_data[1], original_data[2]);
     shifted_data[0] = 4.0;
@@ -55,7 +55,7 @@ TEST(Views, ShiftedView) {
     ASSERT_EQ(original_data[2], 5.0);
   };
 
-  auto run_test_const_size_3 = [](auto &shifted_data, const auto &original_data) {
+  auto run_test_const_size_3 = [](auto& shifted_data, const auto& original_data) {
     ASSERT_EQ(shifted_data[0], original_data[1]);
     ASSERT_EQ(shifted_data[1], original_data[2]);
     const bool is_data_const = std::is_const_v<std::remove_reference_t<decltype(shifted_data[0])>>;
@@ -121,7 +121,7 @@ TEST(Views, OwningShiftedAccessor) {
 }
 
 TEST(Views, StridedView) {
-  auto run_test_nonconst_size_6 = [](auto &strided_data, const auto &original_data) {
+  auto run_test_nonconst_size_6 = [](auto& strided_data, const auto& original_data) {
     ASSERT_EQ(strided_data[0], original_data[0]);
     ASSERT_EQ(strided_data[1], original_data[2]);
     ASSERT_EQ(strided_data[2], original_data[4]);
@@ -133,7 +133,7 @@ TEST(Views, StridedView) {
     ASSERT_EQ(original_data[4], 9.0);
   };
 
-  auto run_test_const_size_6 = [](auto &strided_data, const auto &original_data) {
+  auto run_test_const_size_6 = [](auto& strided_data, const auto& original_data) {
     ASSERT_EQ(strided_data[0], original_data[0]);
     ASSERT_EQ(strided_data[1], original_data[2]);
     ASSERT_EQ(strided_data[2], original_data[4]);
@@ -190,7 +190,7 @@ TEST(Views, OwningStridedAccessor) {
 }
 
 TEST(Views, TransposedView) {
-  auto run_test_nonconst_size_3x3 = [](auto &transposed_data, const auto &original_data) {
+  auto run_test_nonconst_size_3x3 = [](auto& transposed_data, const auto& original_data) {
     ASSERT_EQ(transposed_data[0], original_data[0]);
     ASSERT_EQ(transposed_data[1], original_data[3]);
     ASSERT_EQ(transposed_data[2], original_data[6]);
@@ -221,7 +221,7 @@ TEST(Views, TransposedView) {
     ASSERT_EQ(original_data[8], 10.0);
   };
 
-  auto run_test_const_size_3x3 = [](auto &transposed_data, const auto &original_data) {
+  auto run_test_const_size_3x3 = [](auto& transposed_data, const auto& original_data) {
     ASSERT_EQ(transposed_data[0], original_data[0]);
     ASSERT_EQ(transposed_data[1], original_data[3]);
     ASSERT_EQ(transposed_data[2], original_data[6]);

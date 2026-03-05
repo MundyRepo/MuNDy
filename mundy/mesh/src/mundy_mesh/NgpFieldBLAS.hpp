@@ -60,36 +60,36 @@ List of available field operations:
 /// \brief Fill a component of a field with a scalar value
 template <typename Scalar, typename ExecSpace>
 void field_fill(const Scalar alpha,                   //
-                stk::mesh::FieldBase &field,          //
+                stk::mesh::FieldBase& field,          //
                 int component,                        //
-                const stk::mesh::Selector &selector,  //
-                const ExecSpace &exec_space) {
+                const stk::mesh::Selector& selector,  //
+                const ExecSpace& exec_space) {
   impl::ngp_field_fill_component(alpha, field, component, &selector, exec_space);
 }
 
 /// \brief Fill a component of a field with a scalar value
 template <typename Scalar, typename ExecSpace>
 void field_fill(const Scalar alpha,           //
-                stk::mesh::FieldBase &field,  //
+                stk::mesh::FieldBase& field,  //
                 int component,                //
-                const ExecSpace &exec_space) {
+                const ExecSpace& exec_space) {
   impl::ngp_field_fill_component(alpha, field, component, nullptr, exec_space);
 }
 
 /// \brief Fill all components of a field with a scalar value
 template <typename Scalar, typename ExecSpace>
 void field_fill(const Scalar alpha,                   //
-                stk::mesh::FieldBase &field,          //
-                const stk::mesh::Selector &selector,  //
-                const ExecSpace &exec_space) {
+                stk::mesh::FieldBase& field,          //
+                const stk::mesh::Selector& selector,  //
+                const ExecSpace& exec_space) {
   impl::ngp_field_fill(alpha, field, &selector, exec_space);
 }
 
 /// \brief Fill all components of a field with a scalar value
 template <typename Scalar, typename ExecSpace>
 void field_fill(const Scalar alpha,           //
-                stk::mesh::FieldBase &field,  //
-                const ExecSpace &exec_space) {
+                stk::mesh::FieldBase& field,  //
+                const ExecSpace& exec_space) {
   impl::ngp_field_fill(alpha, field, nullptr, exec_space);
 }
 
@@ -99,40 +99,40 @@ void field_fill(const Scalar alpha,           //
 ///   entities in the selector that own the field.
 template <typename Scalar, typename ExecSpace>
 void field_randomize(size_t seed,                          //
-                     stk::mesh::FieldBase &counter_field,  //
-                     stk::mesh::FieldBase &field,          //
+                     stk::mesh::FieldBase& counter_field,  //
+                     stk::mesh::FieldBase& field,          //
                      int component,                        //
-                     const stk::mesh::Selector &selector,  //
-                     const ExecSpace &exec_space) {
+                     const stk::mesh::Selector& selector,  //
+                     const ExecSpace& exec_space) {
   impl::ngp_field_randomize_component(seed, counter_field, field, component, &selector, exec_space);
 }
 
 /// \brief Randomize a component of a field (uniform between 0 and 1)
 template <typename Scalar, typename ExecSpace>
 void field_randomize(size_t seed,                          //
-                     stk::mesh::FieldBase &counter_field,  //
-                     stk::mesh::FieldBase &field,          //
+                     stk::mesh::FieldBase& counter_field,  //
+                     stk::mesh::FieldBase& field,          //
                      int component,                        //
-                     const ExecSpace &exec_space) {
+                     const ExecSpace& exec_space) {
   impl::ngp_field_randomize_component(seed, counter_field, field, component, nullptr, exec_space);
 }
 
 /// \brief Randomize all components of a field (uniform between 0 and 1)
 template <typename Scalar, typename ExecSpace>
 void field_randomize(size_t seed,                          //
-                     stk::mesh::FieldBase &counter_field,  //
-                     stk::mesh::FieldBase &field,          //
-                     const stk::mesh::Selector &selector,  //
-                     const ExecSpace &exec_space) {
+                     stk::mesh::FieldBase& counter_field,  //
+                     stk::mesh::FieldBase& field,          //
+                     const stk::mesh::Selector& selector,  //
+                     const ExecSpace& exec_space) {
   impl::ngp_field_randomize(seed, counter_field, field, &selector, exec_space);
 }
 
 /// \brief Randomize all components of a field (uniform between 0 and 1)
 template <typename Scalar, typename ExecSpace>
 void field_randomize(size_t seed,                          //
-                     stk::mesh::FieldBase &counter_field,  //
-                     stk::mesh::FieldBase &field,          //
-                     const ExecSpace &exec_space) {
+                     stk::mesh::FieldBase& counter_field,  //
+                     stk::mesh::FieldBase& field,          //
+                     const ExecSpace& exec_space) {
   impl::ngp_field_randomize(seed, counter_field, field, nullptr, exec_space);
 }
 
@@ -140,11 +140,11 @@ void field_randomize(size_t seed,                          //
 template <typename Scalar, typename ExecSpace>
 void field_randomize(size_t seed,                          //
                      Scalar min, Scalar max,               //
-                     stk::mesh::FieldBase &counter_field,  //
-                     stk::mesh::FieldBase &field,          //
+                     stk::mesh::FieldBase& counter_field,  //
+                     stk::mesh::FieldBase& field,          //
                      int component,                        //
-                     const stk::mesh::Selector &selector,  //
-                     const ExecSpace &exec_space) {
+                     const stk::mesh::Selector& selector,  //
+                     const ExecSpace& exec_space) {
   impl::ngp_field_randomize_component(seed, min, max, counter_field, field, component, &selector, exec_space);
 }
 
@@ -152,10 +152,10 @@ void field_randomize(size_t seed,                          //
 template <typename Scalar, typename ExecSpace>
 void field_randomize(size_t seed,                          //
                      Scalar min, Scalar max,               //
-                     stk::mesh::FieldBase &counter_field,  //
-                     stk::mesh::FieldBase &field,          //
+                     stk::mesh::FieldBase& counter_field,  //
+                     stk::mesh::FieldBase& field,          //
                      int component,                        //
-                     const ExecSpace &exec_space) {
+                     const ExecSpace& exec_space) {
   impl::ngp_field_randomize_component(seed, min, max, counter_field, field, component, nullptr, exec_space);
 }
 
@@ -163,10 +163,10 @@ void field_randomize(size_t seed,                          //
 template <typename Scalar, typename ExecSpace>
 void field_randomize(size_t seed,                          //
                      Scalar min, Scalar max,               //
-                     stk::mesh::FieldBase &counter_field,  //
-                     stk::mesh::FieldBase &field,          //
-                     const stk::mesh::Selector &selector,  //
-                     const ExecSpace &exec_space) {
+                     stk::mesh::FieldBase& counter_field,  //
+                     stk::mesh::FieldBase& field,          //
+                     const stk::mesh::Selector& selector,  //
+                     const ExecSpace& exec_space) {
   impl::ngp_field_randomize(seed, min, max, counter_field, field, &selector, exec_space);
 }
 
@@ -174,89 +174,89 @@ void field_randomize(size_t seed,                          //
 template <typename Scalar, typename ExecSpace>
 void field_randomize(size_t seed,                          //
                      Scalar min, Scalar max,               //
-                     stk::mesh::FieldBase &counter_field,  //
-                     stk::mesh::FieldBase &field,          //
-                     const ExecSpace &exec_space) {
+                     stk::mesh::FieldBase& counter_field,  //
+                     stk::mesh::FieldBase& field,          //
+                     const ExecSpace& exec_space) {
   impl::ngp_field_randomize(seed, min, max, counter_field, field, nullptr, exec_space);
 }
 
 /// \brief Deep copy y = x
 template <typename Scalar, typename ExecSpace>
-void field_copy(stk::mesh::FieldBase &x,              //
-                stk::mesh::FieldBase &y,              //
-                const stk::mesh::Selector &selector,  //
-                const ExecSpace &exec_space) {
+void field_copy(stk::mesh::FieldBase& x,              //
+                stk::mesh::FieldBase& y,              //
+                const stk::mesh::Selector& selector,  //
+                const ExecSpace& exec_space) {
   impl::ngp_field_copy<Scalar>(x, y, &selector, exec_space);
 }
 
 /// \brief Deep copy y = x
 template <typename Scalar, typename ExecSpace>
-void field_copy(stk::mesh::FieldBase &x,  //
-                stk::mesh::FieldBase &y,  //
-                const ExecSpace &exec_space) {
+void field_copy(stk::mesh::FieldBase& x,  //
+                stk::mesh::FieldBase& y,  //
+                const ExecSpace& exec_space) {
   impl::ngp_field_copy<Scalar>(x, y, nullptr, exec_space);
 }
 
 /// \brief Swap the contents of two fields
 template <typename Scalar, typename ExecSpace>
-void field_swap(stk::mesh::FieldBase &x,              //
-                stk::mesh::FieldBase &y,              //
-                const stk::mesh::Selector &selector,  //
-                const ExecSpace &exec_space) {
+void field_swap(stk::mesh::FieldBase& x,              //
+                stk::mesh::FieldBase& y,              //
+                const stk::mesh::Selector& selector,  //
+                const ExecSpace& exec_space) {
   impl::ngp_field_swap<Scalar>(x, y, &selector, exec_space);
 }
 
 /// \brief Swap the contents of two fields
 template <typename Scalar, typename ExecSpace>
-void field_swap(stk::mesh::FieldBase &x,  //
-                stk::mesh::FieldBase &y,  //
-                const ExecSpace &exec_space) {
+void field_swap(stk::mesh::FieldBase& x,  //
+                stk::mesh::FieldBase& y,  //
+                const ExecSpace& exec_space) {
   impl::ngp_field_swap<Scalar>(x, y, nullptr, exec_space);
 }
 
 /// \brief Scale a field by a scalar x = alpha x
 template <typename Scalar, typename ExecSpace>
 void field_scale(const Scalar alpha,                   //
-                 stk::mesh::FieldBase &x,              //
-                 const stk::mesh::Selector &selector,  //
-                 const ExecSpace &exec_space) {
+                 stk::mesh::FieldBase& x,              //
+                 const stk::mesh::Selector& selector,  //
+                 const ExecSpace& exec_space) {
   impl::ngp_field_scale(alpha, x, &selector, exec_space);
 }
 
 /// \brief Scale a field by a scalar x = alpha x
 template <typename Scalar, typename ExecSpace>
 void field_scale(const Scalar alpha,       //
-                 stk::mesh::FieldBase &x,  //
-                 const ExecSpace &exec_space) {
+                 stk::mesh::FieldBase& x,  //
+                 const ExecSpace& exec_space) {
   impl::ngp_field_scale(alpha, x, nullptr, exec_space);
 }
 
 /// \brief Compute the element-wise product of two fields z = x * y
 template <typename Scalar, typename ExecSpace>
-void field_product(stk::mesh::FieldBase &x,              //
-                   stk::mesh::FieldBase &y,              //
-                   stk::mesh::FieldBase &z,              //
-                   const stk::mesh::Selector &selector,  //
-                   const ExecSpace &exec_space) {
+void field_product(stk::mesh::FieldBase& x,              //
+                   stk::mesh::FieldBase& y,              //
+                   stk::mesh::FieldBase& z,              //
+                   const stk::mesh::Selector& selector,  //
+                   const ExecSpace& exec_space) {
   impl::ngp_field_product<Scalar>(x, y, z, &selector, exec_space);
 }
 
 /// \brief Compute the element-wise product of two fields z = x * y
 template <typename Scalar, typename ExecSpace>
-void field_product(stk::mesh::FieldBase &x,  //
-                   stk::mesh::FieldBase &y,  //
-                   stk::mesh::FieldBase &z,  //
-                   const ExecSpace &exec_space) {
+void field_product(stk::mesh::FieldBase& x,  //
+                   stk::mesh::FieldBase& y,  //
+                   stk::mesh::FieldBase& z,  //
+                   const ExecSpace& exec_space) {
   impl::ngp_field_product<Scalar>(x, y, z, nullptr, exec_space);
 }
 
 /// \brief Compute the element-wise sum of two fields y += alpha x
 template <typename Scalar, typename ExecSpace>
 void field_axpy(const Scalar alpha,                   //
-                stk::mesh::FieldBase &x,              //
-                stk::mesh::FieldBase &y,              //
-                const stk::mesh::Selector &selector,  //
-                const ExecSpace &exec_space) {
+                stk::mesh::FieldBase& x,              //
+                stk::mesh::FieldBase& y,              //
+                const stk::mesh::Selector& selector,  //
+                const ExecSpace& exec_space) {
   Scalar beta = 1;
   impl::ngp_field_axpbyz(alpha, x, beta, y, y, &selector, exec_space);
 }
@@ -264,9 +264,9 @@ void field_axpy(const Scalar alpha,                   //
 /// \brief Compute the element-wise sum of two fields y += alpha x
 template <typename Scalar, typename ExecSpace>
 void field_axpy(const Scalar alpha,       //
-                stk::mesh::FieldBase &x,  //
-                stk::mesh::FieldBase &y,  //
-                const ExecSpace &exec_space) {
+                stk::mesh::FieldBase& x,  //
+                stk::mesh::FieldBase& y,  //
+                const ExecSpace& exec_space) {
   Scalar beta = 1;
   impl::ngp_field_axpbyz(alpha, x, beta, y, y, nullptr, exec_space);
 }
@@ -274,191 +274,191 @@ void field_axpy(const Scalar alpha,       //
 /// \brief Compute the element-wise sum of two fields y = alpha x + beta y
 template <typename Scalar, typename ExecSpace>
 void field_axpby(const Scalar alpha,                   //
-                 stk::mesh::FieldBase &x,              //
+                 stk::mesh::FieldBase& x,              //
                  const Scalar beta,                    //
-                 stk::mesh::FieldBase &y,              //
-                 const stk::mesh::Selector &selector,  //
-                 const ExecSpace &exec_space) {
+                 stk::mesh::FieldBase& y,              //
+                 const stk::mesh::Selector& selector,  //
+                 const ExecSpace& exec_space) {
   impl::ngp_field_axpbyz(alpha, x, beta, y, y, &selector, exec_space);
 }
 
 /// \brief Compute the element-wise sum of two fields y = alpha x + beta y
 template <typename Scalar, typename ExecSpace>
 void field_axpby(const Scalar alpha,       //
-                 stk::mesh::FieldBase &x,  //
+                 stk::mesh::FieldBase& x,  //
                  const Scalar beta,        //
-                 stk::mesh::FieldBase &y,  //
-                 const ExecSpace &exec_space) {
+                 stk::mesh::FieldBase& y,  //
+                 const ExecSpace& exec_space) {
   impl::ngp_field_axpbyz(alpha, x, beta, y, y, nullptr, exec_space);
 }
 
 /// \brief Compute the element-wise sum of three fields z = alpha x + beta y
 template <typename Scalar, typename ExecSpace>
 void field_axpbyz(const Scalar alpha,                   //
-                  stk::mesh::FieldBase &x,              //
+                  stk::mesh::FieldBase& x,              //
                   const Scalar beta,                    //
-                  stk::mesh::FieldBase &y,              //
-                  stk::mesh::FieldBase &z,              //
-                  const stk::mesh::Selector &selector,  //
-                  const ExecSpace &exec_space) {
+                  stk::mesh::FieldBase& y,              //
+                  stk::mesh::FieldBase& z,              //
+                  const stk::mesh::Selector& selector,  //
+                  const ExecSpace& exec_space) {
   impl::ngp_field_axpbyz(alpha, x, beta, y, z, &selector, exec_space);
 }
 
 /// \brief Compute the element-wise sum of three fields z = alpha x + beta y
 template <typename Scalar, typename ExecSpace>
 void field_axpbyz(const Scalar alpha,       //
-                  stk::mesh::FieldBase &x,  //
+                  stk::mesh::FieldBase& x,  //
                   const Scalar beta,        //
-                  stk::mesh::FieldBase &y,  //
-                  stk::mesh::FieldBase &z,  //
-                  const ExecSpace &exec_space) {
+                  stk::mesh::FieldBase& y,  //
+                  stk::mesh::FieldBase& z,  //
+                  const ExecSpace& exec_space) {
   impl::ngp_field_axpbyz(alpha, x, beta, y, z, nullptr, exec_space);
 }
 
 /// \brief Compute the element-wise sum of three fields z = alpha x + beta y + gamma z
 template <typename Scalar, typename ExecSpace>
 void field_axpbygz(const Scalar alpha,                   //
-                   stk::mesh::FieldBase &x,              //
+                   stk::mesh::FieldBase& x,              //
                    const Scalar beta,                    //
-                   stk::mesh::FieldBase &y,              //
+                   stk::mesh::FieldBase& y,              //
                    const Scalar gamma,                   //
-                   stk::mesh::FieldBase &z,              //
-                   const stk::mesh::Selector &selector,  //
-                   const ExecSpace &exec_space) {
+                   stk::mesh::FieldBase& z,              //
+                   const stk::mesh::Selector& selector,  //
+                   const ExecSpace& exec_space) {
   impl::ngp_field_axpbygz(alpha, x, beta, y, gamma, z, &selector, exec_space);
 }
 
 /// \brief Compute the element-wise sum of three fields z = alpha x + beta y + gamma z
 template <typename Scalar, typename ExecSpace>
 void field_axpbygz(const Scalar alpha,       //
-                   stk::mesh::FieldBase &x,  //
+                   stk::mesh::FieldBase& x,  //
                    const Scalar beta,        //
-                   stk::mesh::FieldBase &y,  //
+                   stk::mesh::FieldBase& y,  //
                    const Scalar gamma,       //
-                   stk::mesh::FieldBase &z,  //
-                   const ExecSpace &exec_space) {
+                   stk::mesh::FieldBase& z,  //
+                   const ExecSpace& exec_space) {
   impl::ngp_field_axpbygz(alpha, x, beta, y, gamma, z, nullptr, exec_space);
 }
 
 /// \brief Compute the dot product of two fields
 template <typename Scalar, typename ExecSpace>
-inline Scalar field_dot(stk::mesh::FieldBase &x,              //
-                        stk::mesh::FieldBase &y,              //
-                        const stk::mesh::Selector &selector,  //
-                        const ExecSpace &exec_space) {
+inline Scalar field_dot(stk::mesh::FieldBase& x,              //
+                        stk::mesh::FieldBase& y,              //
+                        const stk::mesh::Selector& selector,  //
+                        const ExecSpace& exec_space) {
   return impl::ngp_field_dot<Scalar>(x, y, &selector, exec_space);
 }
 
 /// \brief Compute the dot product of two fields
 template <typename Scalar, typename ExecSpace>
-inline Scalar field_dot(stk::mesh::FieldBase &x,  //
-                        stk::mesh::FieldBase &y,  //
-                        const ExecSpace &exec_space) {
+inline Scalar field_dot(stk::mesh::FieldBase& x,  //
+                        stk::mesh::FieldBase& y,  //
+                        const ExecSpace& exec_space) {
   return impl::ngp_field_dot<Scalar>(x, y, nullptr, exec_space);
 }
 
 /// \brief Compute the 2-norm of a field
 template <typename Scalar, typename ExecSpace>
-inline Scalar field_nrm2(stk::mesh::FieldBase &x,              //
-                         const stk::mesh::Selector &selector,  //
-                         const ExecSpace &exec_space) {
+inline Scalar field_nrm2(stk::mesh::FieldBase& x,              //
+                         const stk::mesh::Selector& selector,  //
+                         const ExecSpace& exec_space) {
   return impl::ngp_field_nrm2<Scalar>(x, &selector, exec_space);
 }
 
 /// \brief Compute the 2-norm of a field
 template <typename Scalar, typename ExecSpace>
-inline Scalar field_nrm2(stk::mesh::FieldBase &x,  //
-                         const ExecSpace &exec_space) {
+inline Scalar field_nrm2(stk::mesh::FieldBase& x,  //
+                         const ExecSpace& exec_space) {
   return impl::ngp_field_nrm2<Scalar>(x, nullptr, exec_space);
 }
 
 /// \brief Compute the sum of a field
 template <typename Scalar, typename ExecSpace>
-inline Scalar field_sum(stk::mesh::FieldBase &x,              //
-                        const stk::mesh::Selector &selector,  //
-                        const ExecSpace &exec_space) {
+inline Scalar field_sum(stk::mesh::FieldBase& x,              //
+                        const stk::mesh::Selector& selector,  //
+                        const ExecSpace& exec_space) {
   return impl::ngp_field_sum<Scalar>(x, &selector, exec_space);
 }
 
 /// \brief Compute the sum of a field
 template <typename Scalar, typename ExecSpace>
-inline Scalar field_sum(stk::mesh::FieldBase &x,  //
-                        const ExecSpace &exec_space) {
+inline Scalar field_sum(stk::mesh::FieldBase& x,  //
+                        const ExecSpace& exec_space) {
   return impl::ngp_field_sum<Scalar>(x, nullptr, exec_space);
 }
 
 /// \brief Compute the 1-norm of a field
 template <typename Scalar, typename ExecSpace>
-inline Scalar field_asum(stk::mesh::FieldBase &x,              //
-                         const stk::mesh::Selector &selector,  //
-                         const ExecSpace &exec_space) {
+inline Scalar field_asum(stk::mesh::FieldBase& x,              //
+                         const stk::mesh::Selector& selector,  //
+                         const ExecSpace& exec_space) {
   return impl::ngp_field_asum<Scalar>(x, &selector, exec_space);
 }
 
 /// \brief Compute the 1-norm of a field
 template <typename Scalar, typename ExecSpace>
-inline Scalar field_asum(stk::mesh::FieldBase &x,  //
-                         const ExecSpace &exec_space) {
+inline Scalar field_asum(stk::mesh::FieldBase& x,  //
+                         const ExecSpace& exec_space) {
   return impl::ngp_field_asum<Scalar>(x, nullptr, exec_space);
 }
 
 /// \brief Compute the maximum value of a field
 template <typename Scalar, typename ExecSpace>
-inline Scalar field_max(stk::mesh::FieldBase &x,              //
-                        const stk::mesh::Selector &selector,  //
-                        const ExecSpace &exec_space) {
+inline Scalar field_max(stk::mesh::FieldBase& x,              //
+                        const stk::mesh::Selector& selector,  //
+                        const ExecSpace& exec_space) {
   return impl::ngp_field_max<Scalar>(x, &selector, exec_space);
 }
 
 /// \brief Compute the maximum value of a field
 template <typename Scalar, typename ExecSpace>
-inline Scalar field_max(stk::mesh::FieldBase &x,  //
-                        const ExecSpace &exec_space) {
+inline Scalar field_max(stk::mesh::FieldBase& x,  //
+                        const ExecSpace& exec_space) {
   return impl::ngp_field_max<Scalar>(x, nullptr, exec_space);
 }
 
 /// \brief Compute the maximum absolute value of a field
 template <typename Scalar, typename ExecSpace>
-inline Scalar field_amax(stk::mesh::FieldBase &x,              //
-                         const stk::mesh::Selector &selector,  //
-                         const ExecSpace &exec_space) {
+inline Scalar field_amax(stk::mesh::FieldBase& x,              //
+                         const stk::mesh::Selector& selector,  //
+                         const ExecSpace& exec_space) {
   return impl::ngp_field_amax<Scalar>(x, &selector, exec_space);
 }
 
 /// \brief Compute the maximum absolute value of a field
 template <typename Scalar, typename ExecSpace>
-inline Scalar field_amax(stk::mesh::FieldBase &x,  //
-                         const ExecSpace &exec_space) {
+inline Scalar field_amax(stk::mesh::FieldBase& x,  //
+                         const ExecSpace& exec_space) {
   return impl::ngp_field_amax<Scalar>(x, nullptr, exec_space);
 }
 
 /// \brief Compute the minimum value of a field
 template <typename Scalar, typename ExecSpace>
-inline Scalar field_min(stk::mesh::FieldBase &x,              //
-                        const stk::mesh::Selector &selector,  //
-                        const ExecSpace &exec_space) {
+inline Scalar field_min(stk::mesh::FieldBase& x,              //
+                        const stk::mesh::Selector& selector,  //
+                        const ExecSpace& exec_space) {
   return impl::ngp_field_min<Scalar>(x, &selector, exec_space);
 }
 
 /// \brief Compute the minimum value of a field
 template <typename Scalar, typename ExecSpace>
-inline Scalar field_min(stk::mesh::FieldBase &x,  //
-                        const ExecSpace &exec_space) {
+inline Scalar field_min(stk::mesh::FieldBase& x,  //
+                        const ExecSpace& exec_space) {
   return impl::ngp_field_min<Scalar>(x, nullptr, exec_space);
 }
 
 /// \brief Compute the minimum absolute value of a field
 template <typename Scalar, typename ExecSpace>
-inline Scalar field_amin(stk::mesh::FieldBase &x,              //
-                         const stk::mesh::Selector &selector,  //
-                         const ExecSpace &exec_space) {
+inline Scalar field_amin(stk::mesh::FieldBase& x,              //
+                         const stk::mesh::Selector& selector,  //
+                         const ExecSpace& exec_space) {
   return impl::ngp_field_amin<Scalar>(x, &selector, exec_space);
 }
 
 /// \brief Compute the minimum absolute value of a field
 template <typename Scalar, typename ExecSpace>
-inline Scalar field_amin(stk::mesh::FieldBase &x,  //
-                         const ExecSpace &exec_space) {
+inline Scalar field_amin(stk::mesh::FieldBase& x,  //
+                         const ExecSpace& exec_space) {
   return impl::ngp_field_amin<Scalar>(x, nullptr, exec_space);
 }
 

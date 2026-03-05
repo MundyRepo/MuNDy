@@ -32,6 +32,7 @@
 #include <Kokkos_Core.hpp>  // for Kokkos::numbers::pi
 
 // Mundy
+#include <mundy_core/rng.hpp>         // for core::make_philox
 #include <mundy_geom/distance.hpp>    // for mundy::geom::distance(ellipsoid, ellipsoid)
 #include <mundy_geom/primitives.hpp>  // for mundy::geom::Ellipsoid
 #include <mundy_math/Tolerance.hpp>   // for mundy::math::get_zero_tolerance
@@ -73,7 +74,7 @@ TEST(SharedNormalDistanceBetweenEllipsoidAndPoint, AnalyticalSphereTestCases) {
     ASSERT_NEAR(shared_normal_ssd, expected_ssd, TEST_DOUBLE_EPSILON);
   };
 
-  openrand::Philox rng(generate_test_seed(), 0);
+  openrand::Philox rng = core::make_philox(generate_test_seed(), 0);
   const double min_xyz = -10.0;
   const double max_xyz = 10.0;
   const double range_xyz = max_xyz - min_xyz;
@@ -114,7 +115,7 @@ TEST(SharedNormalDistanceBetweenEllipsoids, AnalyticalSphereTestCases) {
     ASSERT_NEAR(shared_normal_ssd, expected_ssd, TEST_DOUBLE_EPSILON);
   };
 
-  openrand::Philox rng(generate_test_seed(), 0);
+  openrand::Philox rng = core::make_philox(generate_test_seed(), 0);
   const double min_xyz = -10.0;
   const double max_xyz = 10.0;
   const double range_xyz = max_xyz - min_xyz;

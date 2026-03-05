@@ -45,7 +45,7 @@ struct WorkspaceWrapper {
   mundy::core::reference_wrapper<scalar_t> z;
 
   KOKKOS_INLINE_FUNCTION
-  void step(const scalar_t alpha, const scalar_t beta, const std::size_t i, const std::size_t round) {
+  void step(const scalar_t alpha, const scalar_t beta, const size_t i, const size_t round) {
     scalar_t& x_ref = x;  // intentionally exercise implicit conversion
     scalar_t& y_ref = y;
     scalar_t& z_ref = z;
@@ -65,7 +65,7 @@ struct WorkspaceExplicit {
   scalar_t& z;
 
   KOKKOS_INLINE_FUNCTION
-  void step(const scalar_t alpha, const scalar_t beta, const std::size_t i, const std::size_t round) {
+  void step(const scalar_t alpha, const scalar_t beta, const size_t i, const size_t round) {
     const scalar_t wave = static_cast<scalar_t>((i % 11) + 1) + static_cast<scalar_t>((round % 7) + 1);
     const scalar_t t0 = x + beta * y;
     const scalar_t t1 = y - alpha * z + 0.125 * wave;
@@ -76,9 +76,9 @@ struct WorkspaceExplicit {
 };
 
 void fill_deterministic(View1D x, View1D y, View1D z) {
-  const std::size_t n = x.extent(0);
+  const size_t n = x.extent(0);
   Kokkos::parallel_for(
-      "fill_deterministic", Kokkos::RangePolicy<>(0, n), KOKKOS_LAMBDA(const std::size_t i) {
+      "fill_deterministic", Kokkos::RangePolicy<>(0, n), KOKKOS_LAMBDA(const size_t i) {
         x(i) = 0.1 + static_cast<scalar_t>((17 * i + 13) % 1024) / 1024.0;
         y(i) = 0.2 + static_cast<scalar_t>((31 * i + 7) % 1024) / 1024.0;
         z(i) = 0.3 + static_cast<scalar_t>((43 * i + 19) % 1024) / 1024.0;
@@ -88,10 +88,10 @@ void fill_deterministic(View1D x, View1D y, View1D z) {
 
 scalar_t compute_checksum(const View1D x, const View1D y, const View1D z) {
   scalar_t checksum = 0.0;
-  const std::size_t n = x.extent(0);
+  const size_t n = x.extent(0);
   Kokkos::parallel_reduce(
       "checksum", Kokkos::RangePolicy<>(0, n),
-      KOKKOS_LAMBDA(const std::size_t i, scalar_t& local_sum) {
+      KOKKOS_LAMBDA(const size_t i, scalar_t& local_sum) {
         if ((i % 7) == 0) {
           local_sum += x(i) * 0.5 + y(i) * 0.25 + z(i) * 0.125;
         }
@@ -101,11 +101,12 @@ scalar_t compute_checksum(const View1D x, const View1D y, const View1D z) {
   return checksum;
 }
 
-scalar_t run_with_wrapper(View1D x, View1D y, View1D z, const scalar_t alpha, const scalar_t beta, const std::size_t rounds) {
-  const std::size_t n = x.extent(0);
-  for (std::size_t round = 0; round < rounds; ++round) {
+scalar_t run_with_wrapper(View1D x, View1D y, View1D z, const scalar_t alpha, const scalar_t beta,
+                          const size_t rounds) {
+  const size_t n = x.extent(0);
+  for (size_t round = 0; round < rounds; ++round) {
     Kokkos::parallel_for(
-        "run_with_wrapper", Kokkos::RangePolicy<>(0, n), KOKKOS_LAMBDA(const std::size_t i) {
+        "run_with_wrapper", Kokkos::RangePolicy<>(0, n), KOKKOS_LAMBDA(const size_t i) {
           WorkspaceWrapper workspace{mundy::core::ref(x(i)), mundy::core::ref(y(i)), mundy::core::ref(z(i))};
           workspace.step(alpha, beta, i, round);
         });
@@ -115,11 +116,11 @@ scalar_t run_with_wrapper(View1D x, View1D y, View1D z, const scalar_t alpha, co
 }
 
 scalar_t run_with_explicit_ref(View1D x, View1D y, View1D z, const scalar_t alpha, const scalar_t beta,
-                               const std::size_t rounds) {
-  const std::size_t n = x.extent(0);
-  for (std::size_t round = 0; round < rounds; ++round) {
+                               const size_t rounds) {
+  const size_t n = x.extent(0);
+  for (size_t round = 0; round < rounds; ++round) {
     Kokkos::parallel_for(
-        "run_with_explicit_ref", Kokkos::RangePolicy<>(0, n), KOKKOS_LAMBDA(const std::size_t i) {
+        "run_with_explicit_ref", Kokkos::RangePolicy<>(0, n), KOKKOS_LAMBDA(const size_t i) {
           WorkspaceExplicit workspace{x(i), y(i), z(i)};
           workspace.step(alpha, beta, i, round);
         });
@@ -128,11 +129,11 @@ scalar_t run_with_explicit_ref(View1D x, View1D y, View1D z, const scalar_t alph
   return compute_checksum(x, y, z);
 }
 
-scalar_t run_direct(View1D x, View1D y, View1D z, const scalar_t alpha, const scalar_t beta, const std::size_t rounds) {
-  const std::size_t n = x.extent(0);
-  for (std::size_t round = 0; round < rounds; ++round) {
+scalar_t run_direct(View1D x, View1D y, View1D z, const scalar_t alpha, const scalar_t beta, const size_t rounds) {
+  const size_t n = x.extent(0);
+  for (size_t round = 0; round < rounds; ++round) {
     Kokkos::parallel_for(
-        "run_direct", Kokkos::RangePolicy<>(0, n), KOKKOS_LAMBDA(const std::size_t i) {
+        "run_direct", Kokkos::RangePolicy<>(0, n), KOKKOS_LAMBDA(const size_t i) {
           const scalar_t wave = static_cast<scalar_t>((i % 11) + 1) + static_cast<scalar_t>((round % 7) + 1);
           const scalar_t t0 = x(i) + beta * y(i);
           const scalar_t t1 = y(i) - alpha * z(i) + 0.125 * wave;
@@ -146,8 +147,8 @@ scalar_t run_direct(View1D x, View1D y, View1D z, const scalar_t alpha, const sc
 }
 
 template <typename Func>
-void run_case(ankerl::nanobench::Bench& bench, const std::string& name, const View1D x0, const View1D y0, const View1D z0,
-              const View1D x, const View1D y, const View1D z, Func&& func) {
+void run_case(ankerl::nanobench::Bench& bench, const std::string& name, const View1D x0, const View1D y0,
+              const View1D z0, const View1D x, const View1D y, const View1D z, Func&& func) {
   bench.run(name, [&] {
     Kokkos::deep_copy(x, x0);
     Kokkos::deep_copy(y, y0);
@@ -164,8 +165,8 @@ void run_case(ankerl::nanobench::Bench& bench, const std::string& name, const Vi
 int main(int argc, char** argv) {
   Kokkos::initialize(argc, argv);
   {
-    constexpr std::size_t num_entries = 200000;
-    constexpr std::size_t rounds = 8;
+    constexpr size_t num_entries = 200000;
+    constexpr size_t rounds = 8;
     constexpr scalar_t alpha = 1.75;
     constexpr scalar_t beta = 0.65;
 
@@ -195,10 +196,9 @@ int main(int argc, char** argv) {
                return run_with_explicit_ref(x_view, y_view, z_view, alpha, beta, rounds);
              });
 
-    run_case(bench, "direct-update", x0, y0, z0, x, y, z,
-             [&](View1D x_view, View1D y_view, View1D z_view) {
-               return run_direct(x_view, y_view, z_view, alpha, beta, rounds);
-             });
+    run_case(bench, "direct-update", x0, y0, z0, x, y, z, [&](View1D x_view, View1D y_view, View1D z_view) {
+      return run_direct(x_view, y_view, z_view, alpha, beta, rounds);
+    });
 
     std::cout << "NGP reference wrapper benchmark completed." << std::endl;
   }

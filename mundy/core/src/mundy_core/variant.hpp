@@ -32,7 +32,7 @@
 #include <Kokkos_Core.hpp>
 
 // Mundy
-#include <mundy_core/tuple.hpp>  // for mundy::core::tuple
+#include <mundy_core/tuple.hpp>        // for mundy::core::tuple
 #include <mundy_core/type_traits.hpp>  // for mundy::core::index_finder, contains_type
 
 namespace mundy {
@@ -131,7 +131,6 @@ struct variant {
     return storage_.template get<ActiveIdx>();
   }
 
-
   /// \brief Set a new active type, default-constructing the previous type
   template <class T>
     requires(contains_type_v<T, Alts...>)
@@ -171,7 +170,7 @@ KOKKOS_FUNCTION constexpr const T& get(const variant<Alts...>& var) {
   return var.template get<T>();
 }
 
-  /// \brief Get the value of the active type based on the active index
+/// \brief Get the value of the active type based on the active index
 template <size_t ActiveIdx, class... Alts>
 KOKKOS_FUNCTION constexpr auto& get(variant<Alts...>& var) {
   return var.template get<ActiveIdx>();
@@ -182,15 +181,16 @@ KOKKOS_FUNCTION constexpr const auto& get(const variant<Alts...>& var) {
 }
 
 // -------- variant_size
-template<class T> struct variant_size; // primary
+template <class T>
+struct variant_size;  // primary
 
-template<class... Alts>
+template <class... Alts>
 struct variant_size<variant<Alts...>> {
-  static constexpr std::size_t value = sizeof...(Alts);
+  static constexpr size_t value = sizeof...(Alts);
 };
 
-template<class T>
-static constexpr std::size_t variant_size_v = variant_size<T>::value;
+template <class T>
+static constexpr size_t variant_size_v = variant_size<T>::value;
 
 //@}
 

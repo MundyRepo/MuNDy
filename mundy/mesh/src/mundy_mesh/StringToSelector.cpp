@@ -35,7 +35,7 @@ namespace mundy {
 
 namespace mesh {
 
-stk::mesh::Selector string_to_selector(const BulkData &bulk_data, const std::string &selector_string) {
+stk::mesh::Selector string_to_selector(const BulkData& bulk_data, const std::string& selector_string) {
   auto eval = impl::SelectorEval(bulk_data, selector_string);
   eval.parse();
   return eval.evaluate();

@@ -53,6 +53,7 @@
 #include <mundy_meta/MetaFactory.hpp>  // for mundy::meta::MetaMethodFactory and mundy::meta::HasMeshReqsAndIsRegisterable
 #include <mundy_meta/utils/MeshGeneration.hpp>  // for mundy::meta::utils::generate_class_instance_and_mesh_from_meta_class_requirements
 #include <mundy_shapes/ComputeAABB.hpp>  // for mundy::shapes::ComputeAABB
+#include <mundy_core/rng.hpp>              // for mundy::core::make_philox
 
 namespace mundy {
 
@@ -526,7 +527,7 @@ TEST(GenerateNeighborLinkers, PerformsNeighborLinkerGenerationCorrectlyForSphere
   bulk_data_ptr->modification_end();
 
   // Set the sphere's position and radius
-  openrand::Philox rng(bulk_data_ptr->parallel_rank(), 0);
+  openrand::Philox rng = core::make_philox(bulk_data_ptr->parallel_rank(), 0);
   for (int i = 0; i < num_spheres_per_process; i++) {
     stk::mesh::Entity node_i = requested_entities[i];
     stk::mesh::Entity sphere_i = requested_entities[num_spheres_per_process + i];
@@ -641,7 +642,7 @@ TEST(GenerateNeighborLinkers, PerformsNeighborLinkerGenerationCorrectlyForSegs) 
   bulk_data_ptr->modification_end();
 
   // Set the seg's position and radius
-  openrand::Philox rng(bulk_data_ptr->parallel_rank(), 0);
+  openrand::Philox rng = core::make_philox(bulk_data_ptr->parallel_rank(), 0);
   for (int i = 0; i < num_segs_per_process; i++) {
     stk::mesh::Entity node0_i = requested_entities[2 * i + 0];
     stk::mesh::Entity node1_i = requested_entities[2 * i + 1];

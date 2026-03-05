@@ -49,13 +49,13 @@ quaternions. We will then perform the following operations on each set of data:
   Quaternion rotation: q3 = q1 * q2
 */
 
-void randomize(std::vector<double> &x) {
-  for (auto &val : x) {
+void randomize(std::vector<double>& x) {
+  for (auto& val : x) {
     val = static_cast<double>(rand()) / RAND_MAX;
   }
 }
 
-void test_vector3_blas(const double alpha, const std::vector<double> &x, const double beta, std::vector<double> &y) {
+void test_vector3_blas(const double alpha, const std::vector<double>& x, const double beta, std::vector<double>& y) {
   const size_t num_entities = x.size() / 3;
   for (size_t i = 0; i < num_entities; ++i) {
     const auto x_view = mundy::math::get_vector_view<double, 3>(x.data() + 3 * i);
@@ -64,8 +64,8 @@ void test_vector3_blas(const double alpha, const std::vector<double> &x, const d
   }
 }
 
-void test_vector3_blas_no_views(const double alpha, const std::vector<double> &x, const double beta,
-                                std::vector<double> &y) {
+void test_vector3_blas_no_views(const double alpha, const std::vector<double>& x, const double beta,
+                                std::vector<double>& y) {
   const size_t num_entities = x.size() / 3;
   for (size_t i = 0; i < num_entities; ++i) {
     // Copy into vectors
@@ -80,8 +80,8 @@ void test_vector3_blas_no_views(const double alpha, const std::vector<double> &x
   }
 }
 
-void test_vector3_blas_direct(const double alpha, const std::vector<double> &x, const double beta,
-                              std::vector<double> &y) {
+void test_vector3_blas_direct(const double alpha, const std::vector<double>& x, const double beta,
+                              std::vector<double>& y) {
   const size_t num_entities = x.size() / 3;
   for (size_t i = 0; i < num_entities; ++i) {
     y[3 * i + 0] = alpha * x[3 * i + 0] + beta * y[3 * i + 0];
@@ -90,7 +90,7 @@ void test_vector3_blas_direct(const double alpha, const std::vector<double> &x, 
   }
 }
 
-void test_matrix3_blas(const double alpha, const std::vector<double> &x, const double beta, std::vector<double> &y) {
+void test_matrix3_blas(const double alpha, const std::vector<double>& x, const double beta, std::vector<double>& y) {
   const size_t num_entities = x.size() / 9;
   for (size_t i = 0; i < num_entities; ++i) {
     const auto x_view = mundy::math::get_matrix_view<double, 3, 3>(x.data() + 9 * i);
@@ -99,8 +99,8 @@ void test_matrix3_blas(const double alpha, const std::vector<double> &x, const d
   }
 }
 
-void test_matrix3_blas_no_views(const double alpha, const std::vector<double> &x, const double beta,
-                                std::vector<double> &y) {
+void test_matrix3_blas_no_views(const double alpha, const std::vector<double>& x, const double beta,
+                                std::vector<double>& y) {
   const size_t num_entities = x.size() / 9;
   for (size_t i = 0; i < num_entities; ++i) {
     // Copy into matrices
@@ -123,8 +123,8 @@ void test_matrix3_blas_no_views(const double alpha, const std::vector<double> &x
   }
 }
 
-void test_matrix3_blas_direct(const double alpha, const std::vector<double> &x, const double beta,
-                              std::vector<double> &y) {
+void test_matrix3_blas_direct(const double alpha, const std::vector<double>& x, const double beta,
+                              std::vector<double>& y) {
   const size_t num_entities = x.size() / 9;
   for (size_t i = 0; i < num_entities; ++i) {
     y[9 * i + 0] = alpha * x[9 * i + 0] + beta * y[9 * i + 0];
@@ -139,7 +139,7 @@ void test_matrix3_blas_direct(const double alpha, const std::vector<double> &x, 
   }
 }
 
-void test_quaternion_blas(const double alpha, const std::vector<double> &x, const double beta, std::vector<double> &y) {
+void test_quaternion_blas(const double alpha, const std::vector<double>& x, const double beta, std::vector<double>& y) {
   const size_t num_entities = x.size() / 4;
   for (size_t i = 0; i < num_entities; ++i) {
     const auto x_view = mundy::math::get_quaternion_view<double>(x.data() + 4 * i);
@@ -148,8 +148,8 @@ void test_quaternion_blas(const double alpha, const std::vector<double> &x, cons
   }
 }
 
-void test_quaternion_blas_no_views(const double alpha, const std::vector<double> &x, const double beta,
-                                   std::vector<double> &y) {
+void test_quaternion_blas_no_views(const double alpha, const std::vector<double>& x, const double beta,
+                                   std::vector<double>& y) {
   const size_t num_entities = x.size() / 4;
   for (size_t i = 0; i < num_entities; ++i) {
     // Copy into quaternions
@@ -165,8 +165,8 @@ void test_quaternion_blas_no_views(const double alpha, const std::vector<double>
   }
 }
 
-void test_quaternion_blas_direct(const double alpha, const std::vector<double> &x, const double beta,
-                                 std::vector<double> &y) {
+void test_quaternion_blas_direct(const double alpha, const std::vector<double>& x, const double beta,
+                                 std::vector<double>& y) {
   const size_t num_entities = x.size() / 4;
   for (size_t i = 0; i < num_entities; ++i) {
     y[4 * i + 0] = alpha * x[4 * i + 0] + beta * y[4 * i + 0];
@@ -176,7 +176,7 @@ void test_quaternion_blas_direct(const double alpha, const std::vector<double> &
   }
 }
 
-void test_mat_vec(const std::vector<double> &m, const std::vector<double> &v, std::vector<double> &result) {
+void test_mat_vec(const std::vector<double>& m, const std::vector<double>& v, std::vector<double>& result) {
   const size_t num_entities = m.size() / 9;
   for (size_t i = 0; i < num_entities; ++i) {
     const auto m_view = mundy::math::get_matrix_view<double, 3, 3>(m.data() + 9 * i);
@@ -186,7 +186,7 @@ void test_mat_vec(const std::vector<double> &m, const std::vector<double> &v, st
   }
 }
 
-void test_mat_vec_no_views(const std::vector<double> &m, const std::vector<double> &v, std::vector<double> &result) {
+void test_mat_vec_no_views(const std::vector<double>& m, const std::vector<double>& v, std::vector<double>& result) {
   const size_t num_entities = m.size() / 9;
   for (size_t i = 0; i < num_entities; ++i) {
     // Copy into matrices and vectors
@@ -202,7 +202,7 @@ void test_mat_vec_no_views(const std::vector<double> &m, const std::vector<doubl
   }
 }
 
-void test_mat_vec_direct(const std::vector<double> &m, const std::vector<double> &v, std::vector<double> &result) {
+void test_mat_vec_direct(const std::vector<double>& m, const std::vector<double>& v, std::vector<double>& result) {
   const size_t num_entities = m.size() / 9;
   for (size_t i = 0; i < num_entities; ++i) {
     result[3 * i + 0] = m[9 * i + 0] * v[3 * i + 0] + m[9 * i + 1] * v[3 * i + 1] + m[9 * i + 2] * v[3 * i + 2];
@@ -211,7 +211,7 @@ void test_mat_vec_direct(const std::vector<double> &m, const std::vector<double>
   }
 }
 
-void test_complex_vector_ops(const std::vector<double> &v1, const std::vector<double> &v2, std::vector<double> &v3) {
+void test_complex_vector_ops(const std::vector<double>& v1, const std::vector<double>& v2, std::vector<double>& v3) {
   const size_t num_entities = v1.size() / 3;
   for (size_t i = 0; i < num_entities; ++i) {
     const auto v1_view = mundy::math::get_vector_view<double, 3>(v1.data() + 3 * i);
@@ -221,8 +221,8 @@ void test_complex_vector_ops(const std::vector<double> &v1, const std::vector<do
   }
 }
 
-void test_complex_vector_ops_no_views(const std::vector<double> &v1, const std::vector<double> &v2,
-                                      std::vector<double> &v3) {
+void test_complex_vector_ops_no_views(const std::vector<double>& v1, const std::vector<double>& v2,
+                                      std::vector<double>& v3) {
   const size_t num_entities = v1.size() / 3;
   for (size_t i = 0; i < num_entities; ++i) {
     // Copy into vectors
@@ -237,8 +237,8 @@ void test_complex_vector_ops_no_views(const std::vector<double> &v1, const std::
   }
 }
 
-void test_complex_vector_ops_direct(const std::vector<double> &v1, const std::vector<double> &v2,
-                                    std::vector<double> &v3) {
+void test_complex_vector_ops_direct(const std::vector<double>& v1, const std::vector<double>& v2,
+                                    std::vector<double>& v3) {
   const size_t num_entities = v1.size() / 3;
   for (size_t i = 0; i < num_entities; ++i) {
     //   Complex vector ops: v3 = v2.cross(v1.dot(v2) * v1)
@@ -252,7 +252,7 @@ void test_complex_vector_ops_direct(const std::vector<double> &v1, const std::ve
   }
 }
 
-void test_quaternion_rotation(const std::vector<double> &q1, const std::vector<double> &q2, std::vector<double> &q3) {
+void test_quaternion_rotation(const std::vector<double>& q1, const std::vector<double>& q2, std::vector<double>& q3) {
   const size_t num_entities = q1.size() / 4;
   for (size_t i = 0; i < num_entities; ++i) {
     const auto q1_view = mundy::math::get_quaternion_view<double>(q1.data() + 4 * i);
@@ -262,8 +262,8 @@ void test_quaternion_rotation(const std::vector<double> &q1, const std::vector<d
   }
 }
 
-void test_quaternion_rotation_no_views(const std::vector<double> &q1, const std::vector<double> &q2,
-                                       std::vector<double> &q3) {
+void test_quaternion_rotation_no_views(const std::vector<double>& q1, const std::vector<double>& q2,
+                                       std::vector<double>& q3) {
   const size_t num_entities = q1.size() / 4;
   for (size_t i = 0; i < num_entities; ++i) {
     // Copy into a quaternion
@@ -279,8 +279,8 @@ void test_quaternion_rotation_no_views(const std::vector<double> &q1, const std:
   }
 }
 
-void test_quaternion_rotation_direct(const std::vector<double> &q1, const std::vector<double> &q2,
-                                     std::vector<double> &q3) {
+void test_quaternion_rotation_direct(const std::vector<double>& q1, const std::vector<double>& q2,
+                                     std::vector<double>& q3) {
   const size_t num_entities = q1.size() / 4;
   for (size_t i = 0; i < num_entities; ++i) {
     const double q1_w = q1[4 * i + 0];
@@ -299,8 +299,8 @@ void test_quaternion_rotation_direct(const std::vector<double> &q1, const std::v
 }
 
 template <typename OurViewFunc, typename OurNoViewFunc, typename DirectFunc>
-void time_test(const std::string &test_name, const OurViewFunc &our_view_func, const OurNoViewFunc &our_no_view_func,
-               const DirectFunc &direct_func) {
+void time_test(const std::string& test_name, const OurViewFunc& our_view_func, const OurNoViewFunc& our_no_view_func,
+               const DirectFunc& direct_func) {
   std::cout << "Timing " << test_name << std::endl;
   Kokkos::Timer timer;
   our_view_func();
@@ -321,7 +321,7 @@ void time_test(const std::string &test_name, const OurViewFunc &our_view_func, c
   std::cout << "  Our no view time / Direct time: " << our_no_view_time / direct_time << std::endl;
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
   stk::parallel_machine_init(&argc, &argv);
   Kokkos::initialize(argc, argv);
 

@@ -28,6 +28,9 @@
 // Kokkos
 #include <Kokkos_Core.hpp>
 
+// Mundy
+#include <mundy_core/suppress_warnings.hpp>  // for MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_PUSH/POP
+
 namespace mundy {
 
 namespace core {
@@ -35,19 +38,26 @@ namespace core {
 namespace impl {
 
 template <class T>
-struct is_reference_wrapper : std::false_type {
-};
+struct is_reference_wrapper : std::false_type {};
 
 template <class T>
-KOKKOS_FUNCTION constexpr T* addressof(T& value) noexcept {
+KOKKOS_INLINE_FUNCTION constexpr T* addressof(T& value) noexcept {
   return __builtin_addressof(value);
 }
 
+MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_PUSH
+
 template <class F, class... Args>
-KOKKOS_FUNCTION constexpr decltype(auto) invoke(F&& f, Args&&... args)
-  noexcept(noexcept(static_cast<F&&>(f)(static_cast<Args&&>(args)...))) {
-  return static_cast<F&&>(f)(static_cast<Args&&>(args)...);
+KOKKOS_INLINE_FUNCTION constexpr decltype(auto) invoke(F&& f, Args&&... args) noexcept(
+    noexcept(std::forward<F>(f)(std::forward<Args>(args)...))) {
+  return std::forward<F>(f)(std::forward<Args>(args)...);
 }
+
+MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_POP
+
+/// \brief Is invocable concept
+template <class F, class... Args>
+concept invocable = requires(F&& f, Args&&... args) { impl::invoke(std::forward<F>(f), std::forward<Args>(args)...); };
 
 }  // namespace impl
 
@@ -87,9 +97,7 @@ class reference_wrapper {
 
   template <class... Args>
   KOKKOS_FUNCTION constexpr decltype(auto) operator()(Args&&... args) const
-    requires requires(T& callable, Args&&... invoke_args) {
-      impl::invoke(callable, std::forward<Args>(invoke_args)...);
-    }
+    requires impl::invocable<T&, Args&&...>
   {
     return impl::invoke(*m_ptr, std::forward<Args>(args)...);
   }
@@ -104,24 +112,21 @@ reference_wrapper(T&) -> reference_wrapper<T>;
 namespace impl {
 
 template <class T>
-struct is_reference_wrapper<reference_wrapper<T>> : std::true_type {
-};
+struct is_reference_wrapper<reference_wrapper<T>> : std::true_type {};
 
 }  // namespace impl
 
 /// \brief Detect if a type is mundy::core::reference_wrapper<...>.
 template <class T>
-struct is_reference_wrapper : impl::is_reference_wrapper<std::remove_cv_t<T>> {
-};
+struct is_reference_wrapper : impl::is_reference_wrapper<std::remove_cv_t<T>> {};
 
 template <class T>
 static constexpr bool is_reference_wrapper_v = is_reference_wrapper<T>::value;
 
 /// \brief Make a mutable reference wrapper.
 template <class T>
-KOKKOS_FUNCTION constexpr auto ref(T&& t) noexcept
-  -> reference_wrapper<std::remove_reference_t<T>>
-  requires(std::is_lvalue_reference_v<T&&> && !is_reference_wrapper_v<std::remove_cvref_t<T>>)
+KOKKOS_FUNCTION constexpr auto ref(T&& t) noexcept -> reference_wrapper<std::remove_reference_t<T>>
+  requires(std::is_lvalue_reference_v<T &&> && !is_reference_wrapper_v<std::remove_cvref_t<T>>)
 {
   return reference_wrapper<std::remove_reference_t<T>>(t);
 }
@@ -133,9 +138,8 @@ KOKKOS_FUNCTION constexpr reference_wrapper<T> ref(reference_wrapper<T> t) noexc
 
 /// \brief Make a const reference wrapper.
 template <class T>
-KOKKOS_FUNCTION constexpr auto cref(T&& t) noexcept
-  -> reference_wrapper<const std::remove_reference_t<T>>
-  requires(std::is_lvalue_reference_v<T&&> && !is_reference_wrapper_v<std::remove_cvref_t<T>>)
+KOKKOS_FUNCTION constexpr auto cref(T&& t) noexcept -> reference_wrapper<const std::remove_reference_t<T>>
+  requires(std::is_lvalue_reference_v<T &&> && !is_reference_wrapper_v<std::remove_cvref_t<T>>)
 {
   return reference_wrapper<const std::remove_reference_t<T>>(t);
 }

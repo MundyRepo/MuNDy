@@ -192,17 +192,17 @@ KOKKOS_INLINE_FUNCTION auto FloatXorMsb(Scalar p, Scalar q) -> decltype(FloatExp
 // The relative z-order of two points is determined by the pair of
 // coordinates who have the first differing bit with the highest
 // exponent.
-template <typename Point, std::size_t d>
+template <typename Point, size_t d>
 struct Less {
   bool operator()(Point const& p, Point const& q) const {
     using Scalar = decltype(p[0]);
     constexpr auto zero = Scalar(0.0);
 
     auto x = Kokkos::Experimental::finite_min_v<int>;
-    std::size_t k{0};
+    size_t k{0};
 
     // Starting from j = 0 generates a N- instead of a Z-curve.
-    for (std::size_t j{d}; j-- > 0;) {
+    for (size_t j{d}; j-- > 0;) {
       if ((p[j] < zero) != (q[j] < zero)) {
         return p[j] < q[j];
       }
@@ -238,7 +238,7 @@ bool zmorton_less(const Vector3Type1& p, const Vector3Type2& q) {
 
   // Determine the most significant bit (only valid if signs are the same)
   int x = Kokkos::Experimental::finite_min_v<int>;
-  std::size_t k{0};
+  size_t k{0};
   auto y0 = zorder_knn::detail::FloatXorMsb(p[0], q[0]);
   auto y1 = zorder_knn::detail::FloatXorMsb(p[1], q[1]);
   auto y2 = zorder_knn::detail::FloatXorMsb(p[2], q[2]);

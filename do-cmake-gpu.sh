@@ -10,7 +10,6 @@ MUNDY_SOURCE_DIR=$3
 
 
 # bash ../do-cmake-gpu.sh /mnt/sw/nix/store/6wikgk3cr5f1s9dj7rq6ai1ik6f3ncb1-trilinos-14.2.0/ ~/envs/GPUMundyScratch/ ../
-# bash ../do-cmake-gpu.sh /mnt/ceph/users/bpalmer/envs/spack/opt/spack/linux-rocky8-cascadelake/gcc-11.4.0/trilinos-16.0.0-wms6rcs5kbxydtaydwbum7ypy3esleak ~/envs/GPUMundyScratch/ ../
 echo "Using Trilinos dir: $TRILINOS_ROOT_DIR"
 echo "Using TPL dir: $TPL_ROOT_DIR"
 echo "Using STK test-app dir: $MUNDY_SOURCE_DIR"
@@ -58,6 +57,7 @@ cmake \
 -DMPI_EXEC_MAX_NUMPROCS=1\
 -DMundy_ENABLE_STKFMM=OFF \
 -DMundy_ENABLE_PVFMM=OFF \
+-DMundy_ENABLE_KokkosKernels=ON \
 -DMundy_TEST_CATEGORIES="BASIC;CONTINUOUS;NIGHTLY;HEAVY;PERFORMANCE" \
 -DTPL_GTest_DIR:PATH=${TPL_ROOT_DIR}/lib64/cmake/GTest/ \
 -DTPL_OpenRAND_DIR:PATH=${TPL_ROOT_DIR} \

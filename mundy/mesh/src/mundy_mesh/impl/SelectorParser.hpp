@@ -38,7 +38,7 @@ class SelectorEval;
 /// \param eval The SelectorEval object that we will populate with the parsed statements
 /// \param from The beginning of the lexem vector which we should parse
 /// \param to The end of the lexem vector which we should parse
-SelectorNode *parse_statements(SelectorEval &eval, SelectorLexemVector::const_iterator from,
+SelectorNode* parse_statements(SelectorEval& eval, SelectorLexemVector::const_iterator from,
                                SelectorLexemVector::const_iterator to);
 
 }  // namespace impl

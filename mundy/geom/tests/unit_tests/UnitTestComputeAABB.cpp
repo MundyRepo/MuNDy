@@ -19,8 +19,7 @@
 // @HEADER
 
 // External libs
-#include <gtest/gtest.h>      // for TEST, ASSERT_NO_THROW, etc
-#include <openrand/philox.h>  // for openrand::Philox
+#include <gtest/gtest.h>  // for TEST, ASSERT_NO_THROW, etc
 
 // C++ core
 #include <algorithm>   // for std::max

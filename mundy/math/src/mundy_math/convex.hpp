@@ -44,6 +44,7 @@
 // Mundy math:
 #include <mundy_math/Tolerance.hpp>  // for mundy::math::get_zero_tolerance<T>
 #include <mundy_math/Vector.hpp>     // for mundy::math::Vector
+#include <mundy_core/suppress_warnings.hpp>  // for MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_PUSH/POP
 
 namespace mundy {
 
@@ -128,15 +129,12 @@ struct Bounded {
 
 /// \brief Concept for a valid space
 template <class Space>
-concept ValidConvexSpace =
-  requires {
-    typename std::remove_cvref_t<Space>::scalar_t; // make the nested type check explicit
-  } &&
-  requires (const std::remove_cvref_t<Space>& s,
-            typename std::remove_cvref_t<Space>::scalar_t x) {
-    { s.project(x) } -> std::same_as<typename std::remove_cvref_t<Space>::scalar_t>;
-    { s(x) }         -> std::same_as<typename std::remove_cvref_t<Space>::scalar_t>;
-  };
+concept ValidConvexSpace = requires {
+  typename std::remove_cvref_t<Space>::scalar_t;  // make the nested type check explicit
+} && requires(const std::remove_cvref_t<Space>& s, typename std::remove_cvref_t<Space>::scalar_t x) {
+  { s.project(x) } -> std::same_as<typename std::remove_cvref_t<Space>::scalar_t>;
+  { s(x) } -> std::same_as<typename std::remove_cvref_t<Space>::scalar_t>;
+};
 
 /// \brief Assert that all of our spaces are valid convex spaces
 static_assert(ValidConvexSpace<Unconstrained<double>>, "Unconstrained<double> does not satisfy ValidConvexSpace");
@@ -325,8 +323,6 @@ KOKKOS_INLINE_FUNCTION auto to_storage(T&& value) {
 
 }  // namespace impl
 
-/// TODO(palmerb4): How to handle this on a GPU when make_domain_vector is device compatable for mundy math but not
-/// kokkos
 template <class Backend, class LinearOpDTStorage, class LinearOpMStorage, class LinearOpDStorage>
 class QuadraticFormOp {
  public:
@@ -772,6 +768,10 @@ struct KokkosBackend {
         q.extent(0));  // assumes Vector has a constructor that takes a size, and that the size is given by extent(0)
   }
 
+  // make_domain/range_vector is host only, but may be called from KOKKOS_FUNCTION code being called on the host
+  // This will cause warnings, but is otherwise perfectly valid, so we suppress the warnings for these functions
+  MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_PUSH
+
   template <class LinearOp>
   static auto make_domain_vector(const LinearOp& op) {
     if constexpr (impl::HasMakeDomainVectorMember<LinearOp>) {
@@ -805,6 +805,8 @@ struct KokkosBackend {
                     "KokkosBackend::make_range_vector requires DenseMatView or op.make_range_vector().");
     }
   }
+
+  MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_POP
 
   template <class LinearOp>
   static auto make_workspace(const LinearOp& op) {

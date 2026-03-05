@@ -36,7 +36,7 @@ namespace mundy {
 
 namespace mesh {
 
-stk::topology::rank_t string_to_rank(const std::string &rank_string) {
+stk::topology::rank_t string_to_rank(const std::string& rank_string) {
   if (rank_string == "NODE_RANK") {
     return stk::topology::NODE_RANK;
   } else if (rank_string == "EDGE_RANK") {
@@ -57,7 +57,7 @@ stk::topology::rank_t string_to_rank(const std::string &rank_string) {
   return stk::topology::INVALID_RANK;  // Should never be reached.
 }
 
-stk::topology string_to_topology(const std::string &topology_string) {
+stk::topology string_to_topology(const std::string& topology_string) {
   if (topology_string == "INVALID_TOPOLOGY") {
     return stk::topology::INVALID_TOPOLOGY;
   } else if (topology_string == "NODE") {

@@ -84,6 +84,7 @@
 #include <mundy_meta/utils/MeshGeneration.hpp>  // for mundy::meta::utils::generate_class_instance_and_mesh_from_meta_class_requirements
 #include <mundy_shapes/ComputeAABB.hpp>  // for mundy::shapes::ComputeAABB
 #include <mundy_shapes/Spheres.hpp>      // for mundy::shapes::Spheres
+#include <mundy_core/rng.hpp>              // for mundy::core::make_philox
 
 /*
 I think users should define what they expect the internal variable to be called.
@@ -281,7 +282,7 @@ void kmc_spring_left_to_doubly(const DynamicHookeanSprings& dynamic_hookean_spri
         // Fetch the RNG state, get a random number out of it, and increment
         unsigned *element_rng_counter = stk::mesh::field_data(el_rng_field, spring);
         const stk::mesh::EntityId spring_gid = bulk_data.identifier(spring);
-        openrand::Philox rng(spring_gid, element_rng_counter[0]);
+        openrand::Philox rng = core::make_philox(spring_gid, element_rng_counter[0]);
         const double randu01 = rng.rand<double>();
         element_rng_counter[0]++;
 
@@ -352,7 +353,7 @@ void kmc_spring_doubly_to_right(const stk::mesh::Selector &doubly_bound_spring_s
         // Fetch the RNG state, get a random number out of it, and increment
         unsigned *element_rng_counter = stk::mesh::field_data(el_rng_field, spring);
         const stk::mesh::EntityId spring_gid = bulk_data.identifier(spring);
-        openrand::Philox rng(spring_gid, element_rng_counter[0]);
+        openrand::Philox rng = core::make_philox(spring_gid, element_rng_counter[0]);
         const double randu01 = rng.rand<double>();
         element_rng_counter[0]++;
 
@@ -827,7 +828,7 @@ void compute_brownian_velocity_spheres(stk::mesh::BulkData &bulk_data, const stk
         unsigned *node_rng_counter = stk::mesh::field_data(n_rng_field, sphere_node);
 
         // U_brown = sqrt(2 * kt * gamma / dt) * randn / gamma
-        openrand::Philox rng(sphere_node_gid, node_rng_counter[0]);
+        openrand::Philox rng = core::make_philox(sphere_node_gid, node_rng_counter[0]);
         const double coeff = std::sqrt(2.0 * brownian_kt * sphere_drag_coeff / timestep_size) * inv_drag_coeff;
         node_velocity[0] += coeff * rng.randn<double>();
         node_velocity[1] += coeff * rng.randn<double>();

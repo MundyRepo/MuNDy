@@ -83,6 +83,7 @@ Interactions:
 #include <mundy_core/OurAnyNumberParameterEntryValidator.hpp>  // for mundy::core::OurAnyNumberParameterEntryValidator
 #include <mundy_core/StringLiteral.hpp>  // for mundy::core::StringLiteral and mundy::core::make_string_literal
 #include <mundy_core/throw_assert.hpp>   // for MUNDY_THROW_ASSERT
+#include <mundy_core/rng.hpp>              // for mundy::core::make_philox
 
 // Mundy math
 #include <mundy_math/Hilbert.hpp>                      // for mundy::math::create_hilbert_positions_and_directors
@@ -2217,7 +2218,7 @@ class HP1 {
     // for the creation step. Do this inside a modification loop so we can go by node index, rather than ID.
     if (bulk_data_ptr_->parallel_rank() == 0) {
       for (size_t j = 0; j < num_chromosomes_; j++) {
-        openrand::Philox rng(j, 0);
+        openrand::Philox rng = core::make_philox(j, 0);
         double jdouble = static_cast<double>(j);
         mundy::math::Vector3d r_start(2.0 * jdouble, 0.0, 0.0);
         // Add a tiny random change in X to make sure we don't wind up in perfectly parallel pathological states
@@ -2252,7 +2253,7 @@ class HP1 {
     if (bulk_data_ptr_->parallel_rank() == 0) {
       for (size_t j = 0; j < num_chromosomes_; j++) {
         // Find a random place within the unit cell with a random orientation for the chain.
-        openrand::Philox rng(j, 0);
+        openrand::Philox rng = core::make_philox(j, 0);
         mundy::math::Vector3d r_start(rng.uniform<double>(-0.5 * unit_cell_size_[0], 0.5 * unit_cell_size_[0]),
                                       rng.uniform<double>(-0.5 * unit_cell_size_[1], 0.5 * unit_cell_size_[1]),
                                       rng.uniform<double>(-0.5 * unit_cell_size_[2], 0.5 * unit_cell_size_[2]));
@@ -2401,7 +2402,7 @@ class HP1 {
 
         // Generate a random unit vector (will be used for creating the locatino of the nodes, the random position in
         // the unit cell will be handled later).
-        openrand::Philox rng(ichromosome, 0);
+        openrand::Philox rng = core::make_philox(ichromosome, 0);
         const double zrand = rng.rand<double>() - 1.0;
         const double wrand = std::sqrt(1.0 - zrand * zrand);
         const double trand = 2.0 * M_PI * rng.rand<double>();
@@ -2560,7 +2561,7 @@ class HP1 {
                                   (iz + 0.5) * lattice_spacing - 0.5 * max_lattice_side_length);
 
         // Generate a random orientation for the chromosome
-        openrand::Philox rng(ichromosome, 0);
+        openrand::Philox rng = core::make_philox(ichromosome, 0);
         const double zrand = rng.rand<double>() - 1.0;
         const double wrand = std::sqrt(1.0 - zrand * zrand);
         const double trand = 2.0 * M_PI * rng.rand<double>();
@@ -2654,7 +2655,7 @@ class HP1 {
         const mundy::math::Vector3d center{chromosome_centers[3 * ichromosome], chromosome_centers[3 * ichromosome + 1],
                                            chromosome_centers[3 * ichromosome + 2]};
         // Generate a random orientation for the chromosome
-        openrand::Philox rng(ichromosome, 0);
+        openrand::Philox rng = core::make_philox(ichromosome, 0);
         const double zrand = rng.rand<double>() - 1.0;
         const double wrand = std::sqrt(1.0 - zrand * zrand);
         const double trand = 2.0 * M_PI * rng.rand<double>();
@@ -2816,7 +2817,7 @@ class HP1 {
           local_euchromatin_state[0] = 0u;
 
           const stk::mesh::EntityId euchromatin_spring_gid = bulk_data.identifier(euchromatin_spring);
-          openrand::Philox rng(euchromatin_spring_gid, element_rng_counter[0]);
+          openrand::Philox rng = core::make_philox(euchromatin_spring_gid, element_rng_counter[0]);
           const double randu01 = rng.rand<double>();
           element_rng_counter[0]++;
 
@@ -2905,7 +2906,7 @@ class HP1 {
     // Initialize second
     if (periphery_bind_sites_type_ == PERIPHERY_BIND_SITES_TYPE::RANDOM) {
       // Sample the bind sites randomly on the surface of the periphery
-      openrand::Philox rng(1234, 0);
+      openrand::Philox rng = core::make_philox(1234, 0);
       if (periphery_collision_shape_ == PERIPHERY_SHAPE::SPHERE) {
         if (bulk_data_ptr_->parallel_rank() == 0) {
           for (size_t i = 0; i < periphery_num_bind_sites_; i++) {
@@ -3485,7 +3486,7 @@ class HP1 {
           // Fetch the RNG state, get a random number out of it, and increment
           unsigned *element_rng_counter = stk::mesh::field_data(element_rng_field, crosslinker);
           const stk::mesh::EntityId crosslinker_gid = bulk_data.identifier(crosslinker);
-          openrand::Philox rng(crosslinker_gid, element_rng_counter[0]);
+          openrand::Philox rng = core::make_philox(crosslinker_gid, element_rng_counter[0]);
           const double randu01 = rng.rand<double>();
           element_rng_counter[0]++;
 
@@ -3558,7 +3559,7 @@ class HP1 {
           // Fetch the RNG state, get a random number out of it, and increment
           unsigned *element_rng_counter = stk::mesh::field_data(element_rng_field, crosslinker);
           const stk::mesh::EntityId crosslinker_gid = bulk_data.identifier(crosslinker);
-          openrand::Philox rng(crosslinker_gid, element_rng_counter[0]);
+          openrand::Philox rng = core::make_philox(crosslinker_gid, element_rng_counter[0]);
           double randZ = rng.rand<double>() * Z_tot;
           double cumsum = 0.0;
           element_rng_counter[0]++;
@@ -3797,7 +3798,7 @@ class HP1 {
           if (elapsed_time[0] >= next_time[0]) {
             // Need a random number no matter what
             const stk::mesh::EntityId euchromatin_spring_gid = bulk_data.identifier(euchromatin_spring);
-            openrand::Philox rng(euchromatin_spring_gid, element_rng_counter[0]);
+            openrand::Philox rng = core::make_philox(euchromatin_spring_gid, element_rng_counter[0]);
             const double randu01 = rng.rand<double>();
             element_rng_counter[0]++;
 
@@ -4539,7 +4540,7 @@ class HP1 {
           unsigned *node_rng_counter = stk::mesh::field_data(node_rng_field, sphere_node);
 
           // U_brown = sqrt(2 * kt * gamma / dt) * randn / gamma
-          openrand::Philox rng(sphere_node_gid, node_rng_counter[0]);
+          openrand::Philox rng = core::make_philox(sphere_node_gid, node_rng_counter[0]);
           const double coeff = std::sqrt(2.0 * kt * sphere_drag_coeff / timestep_size) * inv_drag_coeff;
           node_velocity[0] += coeff * rng.randn<double>();
           node_velocity[1] += coeff * rng.randn<double>();

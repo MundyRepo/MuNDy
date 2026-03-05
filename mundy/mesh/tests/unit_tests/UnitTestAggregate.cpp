@@ -58,7 +58,7 @@ namespace {
 //   /// \brief Apply this functor to a single sphere object
 //   void operator()(auto& sphere_view) const {
 //     // We'll fetch the index
-//     std::size_t i = sphere_view.entity();
+//     size_t i = sphere_view.entity();
 
 //     // We'll fetch the center
 //     double& c = sphere_view.template get<Center>(0);
