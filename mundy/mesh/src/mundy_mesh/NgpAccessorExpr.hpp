@@ -2389,17 +2389,17 @@ class RandomDistributionExpr : public MathExprBase<RandomDistributionExpr<RNGExp
     rng_expr_.propagate_synchronize(context);
   }
 
-  void flag_read_only(const NgpEvalContext& context) {
+  void flag_read_only(const NgpEvalContext& /*context*/) {
     // Our return type is naturally read-only. Nothing to do here.
   }
 
-  void flag_read_write(const NgpEvalContext& context) {
+  void flag_read_write(const NgpEvalContext& /*context*/) {
     MUNDY_THROW_ASSERT(false, std::logic_error,
                        "Attempting to mark a random number generator expression as read-write, but the return type is "
                        "a temporary value.");
   }
 
-  void flag_overwrite_all(const NgpEvalContext& context) {
+  void flag_overwrite_all(const NgpEvalContext& /*context*/) {
     MUNDY_THROW_ASSERT(false, std::logic_error,
                        "Attempting to mark a random number generator expression as overwrite-all, but the return type "
                        "is a temporary value.");
@@ -2478,7 +2478,7 @@ class UniformDistributionExpr : public MathExprBase<UniformDistributionExpr<RNGE
     rng_expr_.propagate_synchronize(context);
   }
 
-  void flag_read_only(const NgpEvalContext& context) {
+  void flag_read_only(const NgpEvalContext& /*context*/) {
     // Our return type is naturally read-only. Nothing to do here.
   }
 
@@ -2617,7 +2617,7 @@ class CounterBasedRNGExpr
     return uniform<T, LowExpr, HighExpr>(low_expr, high_expr);
   }
 
-  void flag_read_only(const NgpEvalContext& context) {
+  void flag_read_only(const NgpEvalContext& /*context*/) {
     // Our return type is naturally read-only. Nothing to do here.
   }
 

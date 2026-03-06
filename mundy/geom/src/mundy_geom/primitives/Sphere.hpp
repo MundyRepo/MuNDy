@@ -87,7 +87,7 @@ class Sphere {
   /// \brief Constructor to initialize the center and radius.
   /// \param[in] center The center of the Sphere.
   /// \param[in] radius The radius of the Sphere.
-  template <typename OtherPointType>
+  template <ValidPointType OtherPointType>
   KOKKOS_FUNCTION constexpr Sphere(const OtherPointType& center, const scalar_t& radius)
     requires(!std::is_same_v<OtherPointType, point_t>)
       : center_(center), radius_(radius) {

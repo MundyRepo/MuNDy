@@ -775,27 +775,22 @@ struct CongruentLCPProblemWrapper {
     return cdp.size();
   }
 
-  KOKKOS_INLINE_FUNCTION
   auto get_exec_space() const {
     return exec_space{};
   }
 
-  KOKKOS_INLINE_FUNCTION
   auto get_space() const {
     return cdp.get_space();
   }
 
-  KOKKOS_INLINE_FUNCTION
   vector_t get_x_exact() const {
     return cdp.get_exact_solution();
   }
 
-  KOKKOS_INLINE_FUNCTION
   vector_t get_f_exact() const {
     return cdp.get_exact_solution();
   }
 
-  KOKKOS_INLINE_FUNCTION
   vector_t get_u_exact() const {
     vector_t u_exact(Kokkos::view_alloc(Kokkos::WithoutInitializing, "u_exact"), size());
     Kokkos::deep_copy(u_exact, 0.0);
@@ -803,22 +798,18 @@ struct CongruentLCPProblemWrapper {
     return u_exact;
   }
 
-  KOKKOS_INLINE_FUNCTION
   linear_op_t get_D() const {
     return gen_identity(size());
   }
 
-  KOKKOS_INLINE_FUNCTION
   linear_op_t get_M() const {
     return cdp.get_A();
   }
 
-  KOKKOS_INLINE_FUNCTION
   linear_op_t get_DT() const {
     return gen_identity(size());
   }
 
-  KOKKOS_INLINE_FUNCTION
   vector_t get_q() const {
     return cdp.get_q();
   }
@@ -971,41 +962,47 @@ struct RandomMixedCongruentCCQP {
 
   void make_D_full_rank() {
     const auto seed = seed_;
+    auto D = D_;
+    auto DT = DT_;
     Kokkos::parallel_for(
         "fill_random_matrix_zx", Kokkos::MDRangePolicy<Kokkos::Rank<2>>({0, 0}, {NZ, NX}),
         KOKKOS_LAMBDA(const size_t i, const size_t j) {
-          D_(i, j) = urand(static_cast<uint64_t>(i + seed + 211), static_cast<uint64_t>(j + 11 * (seed + 211)));
+          D(i, j) = urand(static_cast<uint64_t>(i + seed + 211), static_cast<uint64_t>(j + 11 * (seed + 211)));
         });
 
     constexpr size_t diag_n = (NZ < NX ? NZ : NX);
     Kokkos::parallel_for(
         "inject_d_diag", Kokkos::RangePolicy<exec_space>(0, diag_n),
-        KOKKOS_LAMBDA(const size_t i) { D_(i, i) += 3.0; });
+        KOKKOS_LAMBDA(const size_t i) { D(i, i) += 3.0; });
 
-    transpose_zx_to_xz(D_, DT_);
+    transpose_zx_to_xz(D, DT);
   }
 
   void fill_B() {
     const auto seed = seed_;
+    auto B = B_;
+    auto BT = BT_;
     Kokkos::parallel_for(
         "fill_random_matrix_zy", Kokkos::MDRangePolicy<Kokkos::Rank<2>>({0, 0}, {NZ, NY}),
         KOKKOS_LAMBDA(const size_t i, const size_t j) {
-          B_(i, j) = 0.2 * urand(static_cast<uint64_t>(i + seed + 307), static_cast<uint64_t>(j + 13 * (seed + 307)));
+          B(i, j) = 0.2 * urand(static_cast<uint64_t>(i + seed + 307), static_cast<uint64_t>(j + 13 * (seed + 307)));
         });
-    transpose_zy_to_yz(B_, BT_);
+    transpose_zy_to_yz(B, BT);
   }
 
   void build() {
     const auto seed = seed_;
     matzz_t R(Kokkos::view_alloc(Kokkos::WithoutInitializing, "R"), NZ, NZ);
+    auto Kinv = Kinv_;
+    auto x_star = x_star_;
+    auto b = b_;
     M_ = gen_spd_zz(/*diag_boost=*/10.0);
     make_D_full_rank();
     fill_B();
-    Kokkos::deep_copy(Kinv_, 0.0);
+    Kokkos::deep_copy(Kinv, 0.0);
     Kokkos::parallel_for(
         "init_kinv_diag", Kokkos::RangePolicy<exec_space>(0, NY), KOKKOS_LAMBDA(const size_t i) {
-          openrand::Philox rng = core::make_philox(static_cast<uint64_t>(i + seed + 401), static_cast<uint64_t>(911));
-          Kinv_(i, i) = 10.0 + Kokkos::abs(urand(static_cast<uint64_t>(i + seed + 401), static_cast<uint64_t>(911)));
+          Kinv(i, i) = 10.0 + Kokkos::abs(urand(static_cast<uint64_t>(i + seed + 401), static_cast<uint64_t>(911)));
         });
 
     matzy_t MB(Kokkos::view_alloc(Kokkos::WithoutInitializing, "MB"), NZ, NY);
@@ -1029,17 +1026,17 @@ struct RandomMixedCongruentCCQP {
           const double u1 = rng.uniform<double>(0.0, 1.0);
           const bool active = u0 < 0.5;
           if (active) {
-            x_star_(i) = 0.1 + 0.9 * u1;
+            x_star(i) = 0.1 + 0.9 * u1;
             s_star(i) = 0.0;
           } else {
-            x_star_(i) = 0.0;
+            x_star(i) = 0.0;
             s_star(i) = 0.1 + 0.9 * u1;
           }
         });
 
     Kokkos::parallel_for(
         "init_b", Kokkos::RangePolicy<exec_space>(0, NY), KOKKOS_LAMBDA(const size_t i) {
-          b_(i) = 0.3 * urand(static_cast<uint64_t>(i + seed + 607), static_cast<uint64_t>(2027));
+          b(i) = 0.3 * urand(static_cast<uint64_t>(i + seed + 607), static_cast<uint64_t>(2027));
         });
 
     matzx_t MD(Kokkos::view_alloc(Kokkos::WithoutInitializing, "MD"), NZ, NX);
@@ -1100,6 +1097,7 @@ struct RandomMixedCongruentCCQP {
 
 void run_mundy_math_test(const auto& test) {
   std::cout << "Running test: " << test.name() << std::endl;
+
   // Problem setup
   auto A = test.get_A();
   auto q = test.get_q();
@@ -1132,6 +1130,7 @@ void run_mundy_math_test(const auto& test) {
 
 void run_mundy_math_congruent_test(const auto& test) {
   std::cout << "Running congruent test: " << test.name() << std::endl;
+
   // Problem setup
   auto DT = test.get_DT();
   auto M = test.get_M();
@@ -1209,6 +1208,7 @@ void run_mundy_math_congruent_test(const auto& test) {
 
 void run_mundy_math_mixed_congruent_test(const auto& test) {
   std::cout << "Running test: " << test.name() << std::endl;
+
   // Problem setup
   auto DT = test.get_DT();
   auto M = test.get_M();
@@ -1277,6 +1277,8 @@ void run_mundy_math_mixed_congruent_test(const auto& test) {
 
 #ifdef HAVE_MUNDYMATH_KOKKOSKERNELS
 void run_kokkos_test(const auto& test) {
+  std::cout << "Running test: " << test.name() << std::endl;
+
   // Problem setup
   auto exec_space = test.get_exec_space();
   auto A = test.get_A();
@@ -1319,6 +1321,8 @@ void run_kokkos_test(const auto& test) {
 }
 
 void run_kokkos_congruent_test(const auto& test) {
+  std::cout << "Running test: " << test.name() << std::endl;
+
   // Problem setup
   auto exec_space = test.get_exec_space();
   auto D = test.get_D();
@@ -1380,6 +1384,8 @@ void run_kokkos_congruent_test(const auto& test) {
 }
 
 void run_kokkos_mixed_congruent_test(const auto& test) {
+  std::cout << "Running test: " << test.name() << std::endl;
+
   auto exec_space = test.get_exec_space();
 
   // Problem setup

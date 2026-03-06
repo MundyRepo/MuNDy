@@ -1074,7 +1074,7 @@ void randomly_modify_links(TestContext& context, const TestParameters& params) {
 }
 
 /// \brief The driver for a single performance test given a set of parameters.
-void run_test(ankerl::nanobench::Bench& bench, const TestParameters& params) {
+void run_test(ankerl::nanobench::Bench& /*bench*/, const TestParameters& params) {
   TestContext context;
   setup_mesh_and_metadata(context, params);
   declare_link_parts(context, params);

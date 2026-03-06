@@ -120,7 +120,7 @@ void run_simple_host_device_test() {
 
     // Insert some values into the pool
     int value = 42;
-    Kokkos::parallel_for("Fill pool", capacity, KOKKOS_LAMBDA(const size_t i) { pool.add(value); });
+    Kokkos::parallel_for("Fill pool", capacity, KOKKOS_LAMBDA(const size_t /*i*/) { pool.add(value); });
     Kokkos::fence();
 
     // Because we haven't synced the device to the host, the host data should be untouched.
@@ -155,12 +155,12 @@ void run_simple_host_device_test() {
 
     // If we push back a value, the size should increase.
     int value_to_push_back = 42;
-    Kokkos::parallel_for("Fill pool", 1, KOKKOS_LAMBDA(const size_t i) { pool.add(value_to_push_back); });
+    Kokkos::parallel_for("Fill pool", 1, KOKKOS_LAMBDA(const size_t /*i*/) { pool.add(value_to_push_back); });
     Kokkos::fence();
     EXPECT_EQ(pool.size_host(), 0) << "Host should be untouched";
 
     Kokkos::parallel_for(
-        "Check pool", 1, KOKKOS_LAMBDA(const size_t i) {
+        "Check pool", 1, KOKKOS_LAMBDA(const size_t /*i*/) {
           MUNDY_THROW_REQUIRE(pool.size() == 1, std::runtime_error, "Size should be 1");
           MUNDY_THROW_REQUIRE(pool.capacity() == capacity, std::runtime_error, "Capacity should be 10");
           MUNDY_THROW_REQUIRE(pool.acquire() == 42, std::runtime_error, "Acquire should be 42");
@@ -172,7 +172,7 @@ void run_simple_host_device_test() {
     EXPECT_EQ(pool.acquire_host(), 42);
 
     Kokkos::parallel_for(
-        "Device should be untouched", 1, KOKKOS_LAMBDA(const size_t i) {
+        "Device should be untouched", 1, KOKKOS_LAMBDA(const size_t /*i*/) {
           MUNDY_THROW_REQUIRE(pool.size() == 0, std::runtime_error, "Size should be 0");
           MUNDY_THROW_REQUIRE(pool.capacity() == capacity, std::runtime_error, "Capacity should be 10");
         });
@@ -185,7 +185,7 @@ void run_simple_host_device_test() {
     pool.sync_to_device();
     EXPECT_EQ(pool.size_host(), 2);
     Kokkos::parallel_for(
-        "Check pool", 1, KOKKOS_LAMBDA(const size_t i) {
+        "Check pool", 1, KOKKOS_LAMBDA(const size_t /*i*/) {
           MUNDY_THROW_REQUIRE(pool.size() == 2, std::runtime_error, "Size should be 2");
           MUNDY_THROW_REQUIRE(pool.capacity() == capacity, std::runtime_error, "Capacity should be 10");
           auto first_value = pool.acquire();

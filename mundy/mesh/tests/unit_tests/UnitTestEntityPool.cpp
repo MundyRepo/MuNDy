@@ -119,6 +119,7 @@ void basic_usage_test() {
   stk::mesh::Entity node = node_pool.acquire();  // Size 49. Capacity 100.
   EXPECT_EQ(node_pool.size(), 49);
   EXPECT_EQ(node_pool.capacity(), 100);
+  EXPECT_NE(node, stk::mesh::Entity());  // Acquired entity should not be default constructed.
 
   //  b. acquire entities from the pool in bulk via acquire(N) or acquire_host(N)
   auto ten_nodes = node_pool.batch_acquire(10);  // Size 39. Capacity 100.
@@ -205,7 +206,7 @@ void thread_safety_test() {
     Kokkos::deep_copy(node_exists.view_device(), false);
 
     Kokkos::parallel_for(
-        "UnitTestEntityPool:ThreadSafety", num_entities, KOKKOS_LAMBDA(const size_t i) {
+        "UnitTestEntityPool:ThreadSafety", num_entities, KOKKOS_LAMBDA(const size_t /*i*/) {
           stk::mesh::Entity node = node_pool.acquire();
           ASSERT_TRUE(node != stk::mesh::Entity());
 

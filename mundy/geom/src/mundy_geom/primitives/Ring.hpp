@@ -223,13 +223,13 @@ class Ring {
   /// \brief Accessor for the major radius
   KOKKOS_FUNCTION
   constexpr const scalar_t& major_radius() const {
-    return center_circle_.major_radius();
+    return center_circle_.radius();
   }
 
   /// \brief Accessor for the major radius
   KOKKOS_FUNCTION
   constexpr scalar_t& major_radius() {
-    return center_circle_.major_radius();
+    return center_circle_.radius();
   }
 
   /// \brief Accessor for the minor radius
@@ -285,7 +285,7 @@ class Ring {
   /// \param[in] major_radius The new major radius.
   KOKKOS_FUNCTION
   constexpr void set_major_radius(const scalar_t& major_radius) {
-    center_circle_.set_major_radius(major_radius);
+    center_circle_.set_radius(major_radius);
   }
 
   /// \brief Set the minor radius

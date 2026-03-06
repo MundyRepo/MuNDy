@@ -22,12 +22,9 @@
 #define MUNDY_CORE_AGGREGATE_HPP_
 
 // C++ core
-#include <map>
-#include <string>
 #include <array>
 #include <cstddef>
 #include <iostream>
-#include <typeinfo>
 #include <type_traits>
 #include <utility>
 
@@ -58,11 +55,6 @@ KOKKOS_FUNCTION static constexpr const auto& find_const_component_recurse_impl(c
   }
 }
 
-template <typename Tag, typename First>
-KOKKOS_FUNCTION static constexpr const auto& find_const_component_recurse_impl(const First& first) {
-  return first;
-}
-
 /// \brief Fetch the component corresponding to the given Tag using an index sequence
 template <typename Tag, typename... Components, size_t... Is>
 KOKKOS_FUNCTION static constexpr auto& find_const_component_impl(const core::tuple<Components...>& tuple,
@@ -80,11 +72,6 @@ KOKKOS_FUNCTION static constexpr auto& find_component_recurse_impl(First& first,
   } else {
     return find_component_recurse_impl<Tag>(rest...);
   }
-}
-
-template <typename Tag, typename First>
-KOKKOS_FUNCTION static constexpr auto& find_component_recurse_impl(First& first) {
-  return first;
 }
 
 /// \brief Fetch the component corresponding to the given Tag using an index sequence
@@ -203,8 +190,8 @@ class runtime_aggregate {
   //@}
 
   /// \brief Add a component (fluent interface):
-  runtime_aggregate<VariantType>& append(const std::string& tag, variant_t new_component) {
-    component_map_.insert_or_assign(tag, std::move(new_component));
+  runtime_aggregate<VariantType>& append(const std::string& tag, variant_t new_component) const {
+    component_map_.emplace(tag, std::move(new_component));
     return *this;
   }
 
@@ -212,17 +199,18 @@ class runtime_aggregate {
   const variant_t& get(const std::string& tag) const {
     return component_map_.at(tag);
   }
+  template <typename Tag>
   variant_t& get(const std::string& tag) {
     return component_map_.at(tag);
   }
 
   /// \brief Check if we have a component with the given Tag
-  bool has(const std::string& tag) const {
+  bool has(const std::string& tag) {
     return component_map_.find(tag) != component_map_.end();
   }
 
   /// \brief Get the number of components in this runtime_aggregate
-  size_t size() const {
+  size_t size() {
     return static_cast<size_t>(component_map_.size());
   }
 
@@ -274,8 +262,6 @@ class variant_aggregate {
   /// \brief Add a component (fluent interface):
   template <typename Tag>
   KOKKOS_FUNCTION constexpr auto append(variant_t new_variant) const {
-    static_assert(!contains_type_v<Tag, Tags...>, "variant_aggregate::append called with duplicate Tag");
-
     // Copy the old variants into a new array with one extra slot
     Kokkos::Array<variant_t, N + 1> new_variants;
     for (size_t i = 0; i < N; ++i) {
@@ -345,6 +331,19 @@ class variant_aggregate {
   Kokkos::Array<variant_t, N> variants_;
   //@}
 };  // variant_aggregate
+
+namespace impl {
+
+template <typename VariantType, typename... Tags>
+std::array<size_t, sizeof...(Tags)> build_reorder_map(const variant_aggregate<VariantType, Tags...>& v_agg) {
+  std::array<size_t, sizeof...(Tags)> map_from_sorted_to_original{};
+  std::iota(map_from_sorted_to_original.begin(), map_from_sorted_to_original.end(), 0);
+  std::sort(map_from_sorted_to_original.begin(), map_from_sorted_to_original.end(),
+            [&v_agg](size_t a, size_t b) { return v_agg.template get<a>().index() < v_agg.template get<b>().index(); });
+  return map_from_sorted_to_original;
+}
+
+}  // namespace impl
 
 /// \brief Canonical way to construct a variant_aggregate
 template <typename VariantType>
@@ -522,8 +521,6 @@ class aggregate {
   /// \brief Add a component (fluent interface):
   template <typename Tag, typename NewComponent>
   KOKKOS_FUNCTION constexpr auto append(NewComponent new_component) const {
-    static_assert(!impl::has_component_v<Tag, TaggedComponents...>, "aggregate::append called with duplicate Tag");
-
     impl::TaggedComponent<Tag, NewComponent> new_tagged_comp(std::move(new_component));
     auto new_tuple = core::tuple_cat(tagged_components_, core::make_tuple(new_tagged_comp));
 
@@ -678,7 +675,6 @@ template <typename... Components>
 std::ostream& operator<<(std::ostream& os, const aggregate<Components...>& agg) {
   // Print the (tag, val) pairs
   os << "aggregate{";
-  size_t i = 0;
   ((os << typeid(typename Components::tag_type).name() << ": " << agg.template get<typename Components::tag_type>()
        << (sizeof...(Components) > 1 ? ", " : "")),
    ...);
@@ -686,6 +682,144 @@ std::ostream& operator<<(std::ostream& os, const aggregate<Components...>& agg) 
   return os;
 }
 //@}
+
+namespace impl {
+
+/// \brief Compile-time binomial
+constexpr unsigned long long binom(unsigned int n, unsigned int k) {
+  if (k > n) return 0ULL;
+  if (k > n - k) k = n - k;
+  unsigned long long r = 1;
+  for (unsigned int i = 1; i <= k; ++i) r = (r * (n - k + i)) / i;
+  return r;
+}
+
+/// \brief Unrank R-combination (no replacement) in colex
+template <size_t R>
+constexpr std::array<int, R> unrank_comb_norep(unsigned int M, unsigned long long k) {
+  std::array<int, R> b{};
+  int x = static_cast<int>(M);
+  for (int i = R; i >= 1; --i) {
+    while (binom(x, static_cast<unsigned>(i)) > k) {
+      --x;
+    }
+    b[i - 1] = x;
+    k -= binom(x, static_cast<unsigned>(i));
+    --x;
+  }
+  return b;
+}
+
+/// \brief All weakly-increasing R-tuples over [0..N-1] (with replacement)
+template <int N, size_t R>
+consteval auto all_multicomb_indices() {
+  constexpr auto CNT = binom(N + R - 1, R);
+  constexpr unsigned int M = static_cast<unsigned int>(N + R - 1);
+  std::array<std::array<int, R>, CNT> out{};
+  for (unsigned long long k = 0; k < CNT; ++k) {
+    auto b = unrank_comb_norep<R>(M, k);
+    for (int i = 0; i < R; ++i) {
+      out[k][i] = b[i] - i;  // weakly increasing 0..N-1
+    }
+  }
+  return out;
+}
+
+/// \brief Cache the indices table per (N choose R)
+template <size_t N, size_t R>
+struct multicomb_index_table {
+  static constexpr auto idxs = all_multicomb_indices<N, R>();
+  static constexpr size_t size = idxs.size();
+  static constexpr size_t n = N;
+  static constexpr size_t r = R;
+};
+
+template <typename VariantAggregateType, std::array<int, VariantAggregateType::size()> active_ids, size_t... Is>
+auto make_aggregate_from_active_impl(const VariantAggregateType& v_agg,
+                                     const std::array<size_t, VariantAggregateType::size()>& reorder_map,
+                                     std::index_sequence<Is...>) {
+  using variant_t = typename VariantAggregateType::variant_t;
+  using AggregateType = aggregate<impl::TaggedComponent<typename VariantAggregateType::template tag_t<Is>,
+                                                        variant_alternative_t<active_ids[Is], variant_t>>...>;
+  return AggregateType(
+      core::make_tuple(impl::apply_tag</* I'th tag */ variant_aggregate_tag_t<Is, VariantAggregateType>>(
+          /* I'th object */ get<active_ids[Is]>(/* I'th variant*/ v_agg.get(reorder_map[Is])))...));
+}
+
+/// \brief Construct a concrete aggregate from the active indices of a variant_aggregate
+template <typename VariantAggregateType, std::array<int, VariantAggregateType::size()> active_ids>
+auto make_aggregate_from_active(const VariantAggregateType& v_agg,
+                                const std::array<size_t, VariantAggregateType::size()>& reorder_map) {
+  return make_aggregate_from_active_impl<VariantAggregateType, active_ids>(
+      v_agg, reorder_map, std::make_index_sequence<VariantAggregateType::size()>{});
+}
+
+/// \brief Compare active indices of vs against the I-th pattern
+template <size_t I, typename VariantType, typename... Tags>
+bool match_active(const variant_aggregate<VariantType, Tags...>& v_agg,
+                  const std::array<size_t, sizeof...(Tags)>& reorder_map) {
+  constexpr size_t R = sizeof...(Tags);
+  std::cout << "match_active: ";
+  // multicomb_index_table assumes that the variants are sorted by active index.
+  for (int j = 0; j < R; ++j) {
+    const VariantType& v = v_agg.get(reorder_map[j]);
+    if (v.index() != multicomb_index_table<VariantType::size(), R>::idxs[I][j]) {
+      std::cout << "0" << std::endl;
+      return false;
+    }
+    std::cout << "1";
+  }
+  std::cout << std::endl;
+  return true;
+}
+
+/// \brief Try the I-th multichoose; on match, call f(tuple_of_refs)
+/// \return true if matched.
+template <size_t I, typename VariantType, typename... Tags, typename Visitor>
+bool try_one(const variant_aggregate<VariantType, Tags...>& v_agg,
+             const std::array<size_t, sizeof...(Tags)>& reorder_map, const Visitor& visitor) {
+  constexpr size_t R = sizeof...(Tags);
+  if (match_active<I>(v_agg, reorder_map)) {
+    // Success! multicomb_index_table<N, R>::idxs[I] gives the std::array<int, R> of active indices
+    constexpr std::array<int, R> active_ids = multicomb_index_table<VariantType::size(), R>::idxs[I];
+    auto agg = make_aggregate_from_active<variant_aggregate<VariantType, Tags...>, active_ids>(v_agg, reorder_map);
+    visitor(agg);
+    return true;
+  }
+  return false;
+}
+
+/// \brief Visit over all patterns until a match
+template <typename VariantType, typename... Tags, typename Visitor, size_t... I>
+void visit_impl(const variant_aggregate<VariantType, Tags...>& v_agg,
+                const std::array<size_t, sizeof...(Tags)>& reorder_map, const Visitor& visitor,
+                std::index_sequence<I...>) {
+  bool done = false;
+  ((done = done || try_one<I>(v_agg, reorder_map, visitor)), ...);
+  std::cout << "Done? " << (done ? "yes" : "no") << std::endl;
+  assert(done && "Internal error: no matching type combo found in visit.");
+}
+
+}  // namespace impl
+
+/// \brief Visit all active types within a variant_aggregate
+///
+/// Example usage:
+/// \code{.cpp}
+///   auto v_agg = core::make_variant_aggregate<int, double, std::string>()
+///                .append<Tag1>(123)                    // Tag1 -> int
+///                .append<Tag2>(std::string("hello"));  // Tag2 -> std::string
+///                .append<Tag3>(3.14);                  // Tag3 -> double
+///   core::visit(v_agg, [](const auto& agg) {
+///      std::cout << agg.get<Tag1>() << " " << agg.get<Tag2>() << " " << agg.get<Tag3>() << std::endl;
+///   });
+/// \endcode
+template <typename VariantType, typename... Tags, typename Visitor>
+void visit(const variant_aggregate<VariantType, Tags...>& v_agg, const Visitor& visitor) {
+  using cached_table = impl::multicomb_index_table<VariantType::size(), sizeof...(Tags)>;
+  std::array<size_t, sizeof...(Tags)> reorder_map = impl::build_reorder_map(v_agg);
+  impl::visit_impl(v_agg, reorder_map, visitor, std::make_index_sequence<cached_table::size>{});
+}
 
 }  // namespace core
 

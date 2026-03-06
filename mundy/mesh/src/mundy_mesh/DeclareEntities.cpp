@@ -321,7 +321,8 @@ DeclareEntitiesHelper& DeclareEntitiesHelper::declare_entities(stk::mesh::BulkDa
         MUNDY_THROW_REQUIRE(link_data_ptr != nullptr, std::runtime_error,
                             fmt::format("Element {} has link info for link data '{}' that does not exist",
                                         element_info.id, link_data_name));
-        for (size_t ordinal = 0; ordinal < link_info.linked_entity_ids.size(); ++ordinal) {
+        unsigned num_links = static_cast<unsigned>(link_info.linked_entity_ids.size());
+        for (unsigned ordinal = 0; ordinal < num_links; ++ordinal) {
           // If the linked entity id is invalid, skip it
           stk::mesh::EntityId linked_entity_id = link_info.linked_entity_ids[ordinal];
           if (linked_entity_id == stk::mesh::InvalidEntityId) {

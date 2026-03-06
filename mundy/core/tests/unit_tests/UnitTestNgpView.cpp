@@ -54,7 +54,8 @@ void run_some_host_func(SomeNgpView ngp_view) {
 
   auto h_view = ngp_view.view_host();
   for (size_t i = 0; i < h_view.extent(0); ++i) {
-    h_view(i) = std::sqrt(h_view(i));  // Some host-bound operation
+    // Call some host only func
+    h_view(i) = std::abs(h_view(i));
   }
 
   ngp_view.modify_on_host();  // Of course, if you don't modify the data, you don't need to call this.
@@ -82,7 +83,7 @@ TEST(NgpViewTest, SimpleUsage) {
 
   // Modify the host view
   auto h_view = ngp_view.view_host();
-  for (size_t i = 0; i < 10; ++i) {
+  for (int i = 0; i < 10; ++i) {
     h_view(i) = i;
   }
 
@@ -130,7 +131,7 @@ TEST(NgpViewTest, Functionality) {
 
   // Initialize the view
   auto h_view = ngp_view.view_host();
-  for (size_t i = 0; i < 10; ++i) {
+  for (int i = 0; i < 10; ++i) {
     h_view(i) = i;
   }
 
@@ -142,8 +143,8 @@ TEST(NgpViewTest, Functionality) {
   // Use a 2D view
   NgpView<int**, Kokkos::LayoutLeft> ngp_view2("ngp_view2", 10, 3);
   auto h_view2 = ngp_view2.view_host();
-  for (size_t i = 0; i < 10; ++i) {
-    for (size_t j = 0; j < 3; ++j) {
+  for (int i = 0; i < 10; ++i) {
+    for (int j = 0; j < 3; ++j) {
       h_view2(i, j) = i + j;
     }
   }

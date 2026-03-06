@@ -113,6 +113,7 @@
 #define MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_PUSH \
   MUNDY_DIAG_PUSH                                       \
   /* NVCC */                                            \
+  MUNDY_NV_DIAG_SUPPRESS(20011)                         \
   MUNDY_NV_DIAG_SUPPRESS(20013)                         \
   MUNDY_NV_DIAG_SUPPRESS(20014)                         \
   MUNDY_NV_DIAG_SUPPRESS(20015)                         \

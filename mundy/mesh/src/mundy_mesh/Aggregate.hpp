@@ -140,30 +140,31 @@ class NgpFieldComponentBase {
   NgpFieldComponentBase& operator=(NgpFieldComponentBase&&) = default;
 
   void sync_to_device() {
-    host_field_base_->sync_to_device();
+    host_field_base().sync_to_device();
   }
 
   void sync_to_host() {
-    host_field_base_->sync_to_host();
+    host_field_base().sync_to_host();
   }
 
   void modify_on_device() {
-    host_field_base_->modify_on_device();
+    host_field_base().modify_on_device();
   }
 
   void modify_on_host() {
-    host_field_base_->modify_on_host();
+    host_field_base().modify_on_host();
   }
 
   void clear_host_sync_state() {
-    host_field_base_->clear_host_sync_state();
+    host_field_base().clear_host_sync_state();
   }
 
   void clear_device_sync_state() {
-    host_field_base_->clear_device_sync_state();
+    host_field_base().clear_device_sync_state();
   }
 
   const stk::mesh::FieldBase& host_field_base() {
+    MUNDY_THROW_ASSERT(host_field_base_, std::runtime_error, "host_field_base_ is null");
     return *host_field_base_;
   }
 
@@ -1103,6 +1104,11 @@ KOKKOS_FUNCTION static constexpr const auto& find_const_component_recurse_impl(c
   }
 }
 
+template <typename Tag, typename First>
+KOKKOS_FUNCTION static constexpr const auto& find_const_component_recurse_impl(const First& first) {
+  return first;
+}
+
 /// \brief Fetch the component corresponding to the given Tag using an index sequence
 template <typename Tag, typename... Components, size_t... Is>
 KOKKOS_FUNCTION static constexpr auto& find_const_component_impl(const core::tuple<Components...>& tuple,
@@ -1120,6 +1126,11 @@ KOKKOS_FUNCTION static constexpr auto& find_component_recurse_impl(First& first,
   } else {
     return find_component_recurse_impl<Tag>(rest...);
   }
+}
+
+template <typename Tag, typename First>
+KOKKOS_FUNCTION static constexpr auto& find_component_recurse_impl(First& first) {
+  return first;
 }
 
 /// \brief Fetch the component corresponding to the given Tag using an index sequence
@@ -1140,6 +1151,11 @@ KOKKOS_FUNCTION static constexpr bool has_rank_recurse_impl(const First& first, 
   }
 }
 
+template <stk::topology::rank_t rank, typename First>
+KOKKOS_FUNCTION static constexpr bool has_rank_recurse_impl(const First& first) {
+  return First::rank == rank;
+}
+
 /// \brief Determine if any components in a tuple have a given rank using an index sequence
 template <stk::topology::rank_t rank, typename... Components, size_t... Is>
 KOKKOS_FUNCTION static constexpr bool has_rank_impl(const core::tuple<Components...>& tuple,
@@ -1157,11 +1173,16 @@ KOKKOS_FUNCTION static constexpr bool all_have_rank_recurse_impl(const First& fi
   }
 }
 
+template <stk::topology::rank_t rank, typename First>
+KOKKOS_FUNCTION static constexpr bool all_have_rank_recurse_impl(const First& first) {
+  return First::rank == rank;
+}
+
 /// \brief Determine if ~all~ components in a tuple have a given rank
 template <stk::topology::rank_t rank, typename... Components, size_t... Is>
 KOKKOS_FUNCTION static constexpr bool all_have_rank_impl(const core::tuple<Components...>& tuple,
                                                          std::index_sequence<Is...>) {
-  return all_have_rank_recurse_impl<rank>(core::get<Components>(tuple)...);
+  return all_have_rank_recurse_impl<rank>(core::get<Is>(tuple)...);
 }
 
 /// \brief A helper class for wrapping a functor(view) with an operator()(FastMeshIndex)

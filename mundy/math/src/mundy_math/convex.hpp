@@ -773,6 +773,7 @@ struct KokkosBackend {
   MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_PUSH
 
   template <class LinearOp>
+  KOKKOS_INLINE_FUNCTION
   static auto make_domain_vector(const LinearOp& op) {
     if constexpr (impl::HasMakeDomainVectorMember<LinearOp>) {
       return op.make_domain_vector();
@@ -790,6 +791,7 @@ struct KokkosBackend {
   }
 
   template <class LinearOp>
+  KOKKOS_INLINE_FUNCTION
   static auto make_range_vector(const LinearOp& op) {
     if constexpr (impl::HasMakeRangeVectorMember<LinearOp>) {
       return op.make_range_vector();
@@ -1035,12 +1037,13 @@ struct KokkosBackend {
 /// \brief Backend for Mundy math within a kernel
 struct MundyMathBackend {
   template <class Vector>
-  static auto make_vector_like(const Vector&) {
+  KOKKOS_INLINE_FUNCTION
+  static auto make_vector_like(const Vector& /*x*/) {
     return Vector();
   }
 
   template <class LinearOp>
-  static auto make_domain_vector(const LinearOp& op) {
+  KOKKOS_INLINE_FUNCTION static auto make_domain_vector(const LinearOp& op) {
     if constexpr (impl::HasMakeDomainVectorMember<LinearOp>) {
       return op.make_domain_vector();
     } else if constexpr (requires {
@@ -1056,7 +1059,7 @@ struct MundyMathBackend {
   }
 
   template <class LinearOp>
-  static auto make_range_vector(const LinearOp& op) {
+  KOKKOS_INLINE_FUNCTION static auto make_range_vector(const LinearOp& op) {
     if constexpr (impl::HasMakeRangeVectorMember<LinearOp>) {
       return op.make_range_vector();
     } else if constexpr (requires {
@@ -1072,7 +1075,7 @@ struct MundyMathBackend {
   }
 
   template <class LinearOp>
-  static auto make_workspace(const LinearOp& op) {
+  KOKKOS_INLINE_FUNCTION static auto make_workspace(const LinearOp& op) {
     return impl::make_workspace(op);
   }
 
@@ -1083,7 +1086,7 @@ struct MundyMathBackend {
 
   template <class LinearOp>
     requires(is_matrix_v<LinearOp>)
-  KOKKOS_INLINE_FUNCTION static size_t domain_size(LinearOp& op) {
+  KOKKOS_INLINE_FUNCTION static size_t domain_size(LinearOp& /*op*/) {
     return std::remove_reference_t<LinearOp>::num_cols;
   }
   //
@@ -1095,7 +1098,7 @@ struct MundyMathBackend {
   //
   template <class LinearOp>
     requires(!is_matrix_v<LinearOp> && !impl::HasDomainSizeMember<LinearOp>)
-  KOKKOS_INLINE_FUNCTION static size_t domain_size(LinearOp&) {
+  KOKKOS_INLINE_FUNCTION static size_t domain_size(LinearOp& /*op*/) {
     MUNDY_THROW_REQUIRE(
         false, std::logic_error,
         "KokkosBackend::domain_size: op must be a rank-2 Kokkos::View or provide size_t domain_size().");
@@ -1104,7 +1107,7 @@ struct MundyMathBackend {
 
   template <class LinearOp>
     requires(is_matrix_v<LinearOp>)
-  KOKKOS_INLINE_FUNCTION static size_t range_size(LinearOp& op) {
+  KOKKOS_INLINE_FUNCTION static size_t range_size(LinearOp& /*op*/) {
     return std::remove_reference_t<LinearOp>::num_rows;
   }
   //
@@ -1116,7 +1119,7 @@ struct MundyMathBackend {
   //
   template <class LinearOp>
     requires(!is_matrix_v<LinearOp> && !impl::HasRangeSizeMember<LinearOp>)
-  KOKKOS_INLINE_FUNCTION static size_t range_size(LinearOp&) {
+  KOKKOS_INLINE_FUNCTION static size_t range_size(LinearOp& /*op*/) {
     MUNDY_THROW_REQUIRE(false, std::logic_error,
                         "MundyBackend::range_size: op must be a mundy::math::Matrix or provide size_t range_size().");
     return 0;
