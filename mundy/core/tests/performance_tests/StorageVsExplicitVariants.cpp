@@ -133,7 +133,8 @@ scalar_t compute_checksum(const vec_t& x, const vec_t& y, const vec_t& z) {
   return checksum;
 }
 
-scalar_t run_explicit_owned(vec_t& x, vec_t& y, vec_t& z, const scalar_t alpha, const scalar_t beta, const size_t rounds) {
+scalar_t run_explicit_owned(vec_t& x, vec_t& y, vec_t& z, const scalar_t alpha, const scalar_t beta,
+                            const size_t rounds) {
   for (size_t round = 0; round < rounds; ++round) {
     for (size_t i = 0; i < x.size(); ++i) {
       WorkspaceExplicitOwned workspace{x[i], y[i], z[i]};
@@ -146,7 +147,8 @@ scalar_t run_explicit_owned(vec_t& x, vec_t& y, vec_t& z, const scalar_t alpha, 
   return compute_checksum(x, y, z);
 }
 
-scalar_t run_storage_owned(vec_t& x, vec_t& y, vec_t& z, const scalar_t alpha, const scalar_t beta, const size_t rounds) {
+scalar_t run_storage_owned(vec_t& x, vec_t& y, vec_t& z, const scalar_t alpha, const scalar_t beta,
+                           const size_t rounds) {
   for (size_t round = 0; round < rounds; ++round) {
     for (size_t i = 0; i < x.size(); ++i) {
       WorkspaceStorage workspace{mundy::core::store(scalar_t{x[i]}), mundy::core::store(scalar_t{y[i]}),

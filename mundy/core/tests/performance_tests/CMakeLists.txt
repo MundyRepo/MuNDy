@@ -37,3 +37,10 @@ tribits_add_executable(
     StorageVsExplicitVariants.cpp
     CATEGORIES PERFORMANCE
     )
+
+tribits_add_executable(
+  NgpStorageVsExplicitVariants
+    SOURCES
+    NgpStorageVsExplicitVariants.cpp
+    CATEGORIES PERFORMANCE
+    )

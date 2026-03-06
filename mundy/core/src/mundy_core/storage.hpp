@@ -22,6 +22,7 @@
 #define MUNDY_CORE_STORAGE_HPP_
 
 // C++ core
+#include <concepts>
 #include <type_traits>
 #include <utility>
 
@@ -35,24 +36,67 @@ namespace mundy {
 
 namespace core {
 
+template <class T>
+class storage;
+
 namespace impl {
+
+template <class T>
+struct is_storage : std::false_type {};
+
+template <class T>
+struct is_storage<storage<T>> : std::true_type {};
+
+template <class T>
+static constexpr bool is_storage_v = is_storage<std::remove_cv_t<T>>::value;
+
+template <class T>
+struct storage_underlying_type {
+  using type = T;
+};
+
+template <class T>
+  requires is_storage_v<T>
+struct storage_underlying_type<T> {
+  using type = typename T::stored_type;
+};
+
+template <class T>
+using storage_underlying_type_t = typename storage_underlying_type<T>::type;
 
 template <class T>
 struct storage_type {
  private:
   using no_ref_t = std::remove_reference_t<T>;
+  using bare_t = std::remove_cv_t<no_ref_t>;
+  using no_cvref_t = std::remove_cvref_t<T>;
+  using storage_unwrapped_t = storage_underlying_type_t<no_cvref_t>;
 
  public:
-  using type =
-      std::conditional_t<is_reference_wrapper_v<std::remove_cvref_t<T>>, std::remove_cv_t<no_ref_t>,
-                         std::conditional_t<std::is_pointer_v<no_ref_t>, std::remove_cv_t<no_ref_t>,
-                                            std::conditional_t<std::is_lvalue_reference_v<T>,
-                                                               reference_wrapper<std::remove_reference_t<T>>,
-                                                               std::remove_cvref_t<T>>>>;
+  using type = std::conditional_t<is_storage_v<no_cvref_t>, storage_unwrapped_t,
+                                  std::conditional_t<is_reference_wrapper_v<no_cvref_t>, bare_t,
+                                                     std::conditional_t<std::is_pointer_v<no_ref_t>, bare_t,
+                                                                        std::conditional_t<std::is_lvalue_reference_v<T>,
+                                                                                           reference_wrapper<no_ref_t>,
+                                                                                           no_cvref_t>>>>;
+};
+
+template <class T>
+struct store_input_type {
+  using type = T;
+};
+
+template <class T>
+  requires is_storage_v<std::remove_cvref_t<T>>
+struct store_input_type<T> {
+  using type = typename std::remove_cvref_t<T>::input_type;
 };
 
 template <class T>
 using storage_type_t = typename storage_type<T>::type;
+
+template <class T>
+using store_input_type_t = typename store_input_type<T>::type;
 
 template <class Stored>
 KOKKOS_FUNCTION constexpr decltype(auto) storage_get(Stored& value) noexcept {
@@ -119,13 +163,10 @@ storage(T&&) -> storage<T>;
 
 /// \brief Create a storage object from a forwarding reference.
 template <class T>
-KOKKOS_FUNCTION constexpr auto store(T&& value) noexcept(noexcept(storage<T>(std::forward<T>(value)))) -> storage<T> {
-  return storage<T>(std::forward<T>(value));
-}
-
-template <class T>
-KOKKOS_FUNCTION constexpr storage<T> store(storage<T> value) noexcept {
-  return value;
+KOKKOS_FUNCTION constexpr auto store(T&& value) noexcept(
+    noexcept(storage<impl::store_input_type_t<T>>(std::forward<T>(value)))) -> storage<impl::store_input_type_t<T>> {
+  using input_t = impl::store_input_type_t<T>;
+  return storage<input_t>(std::forward<T>(value));
 }
 
 }  // namespace core

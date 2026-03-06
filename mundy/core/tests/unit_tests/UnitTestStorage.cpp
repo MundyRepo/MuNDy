@@ -147,10 +147,32 @@ TEST(StorageTest, StoreStorageReturnsSameType) {
   auto stash = ::mundy::core::store(value);
   auto again = ::mundy::core::store(stash);
 
-  static_assert(std::is_same_v<decltype(again), decltype(stash)>, "store(storage<T>) should return storage<T>");
+  using stash_t = decltype(stash);
+  using again_t = decltype(again);
+  static_assert(std::is_same_v<stash_t, again_t>, "store(storage<T>) should return the same storage type");
+  static_assert(std::is_same_v<typename stash_t::stored_type, typename again_t::stored_type>,
+                "storage type should have the same stored_type");
 
   again.get() = 101;
   EXPECT_EQ(value, 101);
+}
+
+TEST(StorageTest, StorageTypeNormalizationRules) {
+  using wrapper_t = ::mundy::core::reference_wrapper<int>;
+  using storage_ref_t = ::mundy::core::storage<int&>;
+
+  static_assert(std::is_same_v<::mundy::core::impl::storage_type_t<int>, int>,
+                "value type should store as value");
+  static_assert(std::is_same_v<::mundy::core::impl::storage_type_t<int&>, wrapper_t>,
+                "lvalue reference should store as reference_wrapper<T>");
+  static_assert(std::is_same_v<::mundy::core::impl::storage_type_t<int*>, int*>,
+                "pointer should store as pointer");
+  static_assert(std::is_same_v<::mundy::core::impl::storage_type_t<const int* const&>, const int*>,
+                "pointer cv/ref should normalize to pointer with pointee cv preserved");
+  static_assert(std::is_same_v<::mundy::core::impl::storage_type_t<wrapper_t&>, wrapper_t>,
+                "reference_wrapper should store as the wrapper type itself");
+  static_assert(std::is_same_v<::mundy::core::impl::storage_type_t<storage_ref_t&>, typename storage_ref_t::stored_type>,
+                "storage<T> input should normalize to storage<T>::stored_type");
 }
 
 TEST(StorageTest, ConstructibilityContracts) {
