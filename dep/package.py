@@ -18,9 +18,18 @@
 # **********************************************************************************************************************
 # @HEADER
 
-from spack_repo.builtin.build_systems.cmake import CMakePackage
-from spack_repo.builtin.build_systems.cuda import CudaPackage
+import os
+import sys
+
+from spack.build_environment import dso_suffix
+from spack.error import NoHeadersError
+from spack.operating_systems.mac_os import macos_version
 from spack.package import *
+from spack.pkg.builtin.kokkos import Kokkos
+
+def _debug(msg):
+    if os.environ.get("MUNDY_SPACK_DEBUG", "0") not in ("0", "", "false", "False", "no", "No"):
+        print("[Mundy Spack debug] {0}".format(msg), file=sys.stderr)
 
 class Mundy(CMakePackage, CudaPackage):
     """MuNDy: Multibody Nonlocal Dynamics.
@@ -33,14 +42,14 @@ class Mundy(CMakePackage, CudaPackage):
     git      = "https://github.com/MundyRepo/MuNDy.git"
     url      = "https://github.com/MundyRepo/MuNDy/archive/refs/tags/v#.#.#.tar.gz"  # Doesn't yet exist
 
-    maintainers("brycepalmer")  # change if desired
-    license("BSD-3-Clause")     # change if needed
+    maintainers("palmerb4")
+    license("GPL-3.0-or-later")
+    tags = ["???"]
 
     version("main",    branch="main")
+    version("dev",     branch="polishing")
     # version("develop", branch="develop")
     # version("#.#.#", sha256="<fill-me-in>")
-
-    generator("Ninja", "Unix Makefiles")
 
     #
     # Common build variants
@@ -117,8 +126,8 @@ class Mundy(CMakePackage, CudaPackage):
     #
     # TPL requirements implied by selected internal packages
     #
-    conflicts("+core", when="~kokkos", msg="MundyCore requires Kokkos")  # defensive
-    conflicts("+core", when="~fmt",    msg="MundyCore requires fmt")     # defensive
+    # conflicts("+core", when="~kokkos", msg="MundyCore requires Kokkos")  # defensive
+    # conflicts("+core", when="~fmt",    msg="MundyCore requires fmt")     # defensive
     conflicts("+math", when="~core",   msg="MundyMath requires MundyCore")
     conflicts("+geom", when="~core",   msg="MundyGeom requires MundyCore")
     conflicts("+mesh", when="~stk",    msg="MundyMesh requires STK")
@@ -128,7 +137,15 @@ class Mundy(CMakePackage, CudaPackage):
     #
     # CUDA-related dependency propagation
     #
-    for arch in CudaPackage.cuda_arch_values:
+    _cuda_arch_values = CudaPackage.cuda_arch_values
+    _debug("CudaPackage.cuda_arch_values type={0} value={1}".format(type(_cuda_arch_values).__name__, _cuda_arch_values))
+
+    if _cuda_arch_values is None:
+        _debug("cuda_arch_values is None at class-eval time; using empty list to avoid parse crash")
+        _cuda_arch_values = []
+
+    for arch in _cuda_arch_values:
+        _debug("Registering CUDA arch dependency for arch={0}".format(arch))
         depends_on(
             "kokkos+cuda cuda_arch={0}".format(arch),
             when="+cuda cuda_arch={0}".format(arch),
@@ -148,6 +165,8 @@ class Mundy(CMakePackage, CudaPackage):
     def cmake_args(self):
         spec = self.spec
         args = []
+
+        _debug("cmake_args called with spec={0}".format(spec))
 
         def onoff(cond):
             return "ON" if cond else "OFF"
@@ -193,6 +212,7 @@ class Mundy(CMakePackage, CudaPackage):
         args.append(self.define("TPL_ENABLE_CUDA", "+cuda" in spec))
         if "+cuda" in spec:
             # Works with modern CMake / Spack CUDA handling
+            _debug("CUDA enabled: cuda_arch={0} cuda_prefix={1}".format(spec.variants["cuda_arch"].value, spec["cuda"].prefix))
             args.append(self.define("CMAKE_CUDA_ARCHITECTURES", spec.variants["cuda_arch"].value))
             args.append(self.define("CUDAToolkit_ROOT", spec["cuda"].prefix))
 
