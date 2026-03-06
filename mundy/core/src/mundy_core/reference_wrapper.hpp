@@ -53,11 +53,21 @@ KOKKOS_INLINE_FUNCTION constexpr decltype(auto) invoke(F&& f, Args&&... args) no
   return std::forward<F>(f)(std::forward<Args>(args)...);
 }
 
+template <class T, class Index>
+KOKKOS_INLINE_FUNCTION constexpr decltype(auto) subscript(T&& t, Index&& idx) noexcept(
+    noexcept(std::forward<T>(t)[std::forward<Index>(idx)])) {
+  return std::forward<T>(t)[std::forward<Index>(idx)];
+}
+
 MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_POP
 
 /// \brief Is invocable concept
 template <class F, class... Args>
-concept invocable = requires(F&& f, Args&&... args) { impl::invoke(std::forward<F>(f), std::forward<Args>(args)...); };
+concept invocable = requires(F&& f, Args&&... args) { invoke(std::forward<F>(f), std::forward<Args>(args)...); };
+
+/// \brief Is subscriptable concept
+template <class T, class Index>
+concept subscriptable = requires(T&& t, Index&& idx) { subscript(std::forward<T>(t), std::forward<Index>(idx)); };
 
 }  // namespace impl
 
@@ -100,6 +110,13 @@ class reference_wrapper {
     requires impl::invocable<T&, Args&&...>
   {
     return impl::invoke(*m_ptr, std::forward<Args>(args)...);
+  }
+
+  template <class Index>
+  KOKKOS_FUNCTION constexpr decltype(auto) operator[](Index&& idx) const
+    requires impl::subscriptable<T&, Index&&>
+  {
+    return impl::subscript(*m_ptr, std::forward<Index>(idx));
   }
 
  private:

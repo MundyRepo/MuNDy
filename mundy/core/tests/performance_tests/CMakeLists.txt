@@ -30,3 +30,10 @@ tribits_add_executable(
     NgpReferenceWrapperVsExplicitReference.cpp
     CATEGORIES PERFORMANCE
     )
+
+tribits_add_executable(
+  StorageVsExplicitVariants
+    SOURCES
+    StorageVsExplicitVariants.cpp
+    CATEGORIES PERFORMANCE
+    )

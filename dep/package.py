@@ -1,7 +1,22 @@
-# Copyright 2013-2024 Lawrence Livermore National Security, LLC and other
-# Spack Project Developers. See the top-level COPYRIGHT file for details.
+# @HEADER
+# **********************************************************************************************************************
 #
-# SPDX-License-Identifier: (Apache-2.0 OR MIT)
+#                                          Mundy: Multi-body Nonlocal Dynamics
+#                                              Copyright 2024 Bryce Palmer
+#
+# Developed under support from the NSF Graduate Research Fellowship Program.
+#
+# Mundy is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
+#
+# Mundy is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty
+# of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along with Mundy. If not, see
+# <https://www.gnu.org/licenses/>.
+#
+# **********************************************************************************************************************
+# @HEADER
 
 import os
 import pathlib
@@ -13,16 +28,6 @@ from spack.error import NoHeadersError
 from spack.operating_systems.mac_os import macos_version
 from spack.package import *
 from spack.pkg.builtin.kokkos import Kokkos
-
-# Trilinos is complicated to build, as an inspiration a couple of links to
-# other repositories which build it:
-# https://github.com/hpcugent/easybuild-easyblocks/blob/master/easybuild/easyblocks/t/trilinos.py#L111
-# https://github.com/koecher/candi/blob/master/deal.II-toolchain/packages/trilinos.package
-# https://gitlab.com/configurations/cluster-config/blob/master/trilinos.sh
-# https://github.com/Homebrew/homebrew-science/blob/master/trilinos.rb and some
-# relevant documentation/examples:
-# https://github.com/trilinos/Trilinos/issues/175
-
 
 class Trilinos(CMakePackage, CudaPackage, ROCmPackage):
     """The Trilinos Project is an effort to develop algorithms and enabling
@@ -41,8 +46,7 @@ class Trilinos(CMakePackage, CudaPackage, ROCmPackage):
 
     # ###################### Versions ##########################
 
-    version("master", branch="master")
-    version("develop", branch="develop")
+    version("main", branch="main")
     version("16.0.0", sha256="46bfc40419ed2aa2db38c144fb8e61d4aa8170eaa654a88d833ba6b92903f309")
     version("15.1.1", sha256="2108d633d2208ed261d09b2d6b2fbae7a9cdc455dd963c9c94412d38d8aaefe4")
     version("15.0.0", sha256="5651f1f967217a807f2c418a73b7e649532824dbf2742fa517951d6cc11518fb")

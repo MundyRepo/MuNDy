@@ -40,6 +40,7 @@
 #include <mundy_math/Array.hpp>      // for mundy::math::Array
 #include <mundy_math/Tolerance.hpp>  // for mundy::math::get_relaxed_tolerance
 #include <mundy_math/Vector.hpp>     // for mundy::math::Vector
+#include <mundy_core/reference_wrapper.hpp>  // for mundy::core::reference_wrapper
 
 // Note, these tests are meant to look like real use cases for the Vector class. As a result, we use implicit type
 // conversions rather than being explicit about types. This is to ensure that the Vector class can be used in a
