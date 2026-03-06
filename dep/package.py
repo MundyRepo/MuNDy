@@ -27,10 +27,6 @@ from spack.operating_systems.mac_os import macos_version
 from spack.package import *
 from spack.pkg.builtin.kokkos import Kokkos
 
-def _debug(msg):
-    if os.environ.get("MUNDY_SPACK_DEBUG", "0") not in ("0", "", "false", "False", "no", "No"):
-        print("[Mundy Spack debug] {0}".format(msg), file=sys.stderr)
-
 class Mundy(CMakePackage, CudaPackage):
     """MuNDy: Multibody Nonlocal Dynamics.
 
@@ -76,6 +72,27 @@ class Mundy(CMakePackage, CudaPackage):
     variant("mech", default=True, description="Enable MundyMech")
 
     #
+    # Internal package hierarchy
+    #
+    with when("~core"):
+        conflicts("+math", msg="MundyMath requires MundyCore")
+        conflicts("+geom", msg="MundyGeom requires MundyCore")
+        conflicts("+mesh", msg="MundyMesh requires MundyCore")
+        conflicts("+mech", msg="MundyMech requires MundyCore")
+
+    with when("~math"):
+        conflicts("+geom", msg="MundyGeom requires MundyMath")
+        conflicts("+mesh", msg="MundyMesh requires MundyMath")
+        conflicts("+mech", msg="MundyMech requires MundyMath")
+
+    with when("~geom"):
+        conflicts("+mesh", msg="MundyMesh requires MundyGeom")
+        conflicts("+mech", msg="MundyMech requires MundyGeom")
+
+    with when("~mesh"):
+        conflicts("+mech", msg="MundyMech requires MundyMesh")
+
+    #
     # Optional TPL / feature variants
     #
     variant("mpi", default=False, description="Enable MPI support")
@@ -96,19 +113,44 @@ class Mundy(CMakePackage, CudaPackage):
     #
     # Always-required TPLs from your dependency tables
     #
-    depends_on("kokkos")
+    depends_on("kokkos@4.3.1:")
     depends_on("fmt")
 
     #
     # Optional TPLs
     #
     depends_on("mpi", when="+mpi")
-    depends_on("trilinos+teuchos", when="+teuchos")
-    depends_on("trilinos+stk", when="+stk")
+    depends_on("trilinos@16.0.0+teuchos", when="+teuchos")
+    depends_on("trilinos@16.0.0+stk", when="+stk")
     depends_on("kokkos-kernels", when="+kokkos-kernels")
     depends_on("openrand", when="+openrand")
     depends_on("nanobench", when="+nanobench")
-    depends_on("googletest", when="+tests")
+    depends_on("googletest@1.16.0:", when="+tests")
+
+    #
+    # Optional TPL requirements induced by selected MuNDy packages
+    #
+    with when("~stk"):
+        conflicts("+mesh", msg="MundyMesh requires STK support")
+
+    with when("~teuchos"):
+        conflicts("+mesh", msg="MundyMesh requires Teuchos support")
+
+    with when("~openrand"):
+        conflicts("+mech", msg="MundyMech requires OpenRAND support")
+
+    #
+    # Test dependency requirements
+    #
+    with when("+tests"):
+        with when("~nanobench"):
+            conflicts("+math", msg="MundyMath tests require nanobench")
+            conflicts("+geom", msg="MundyGeom tests require nanobench")
+            conflicts("+mesh", msg="MundyMesh tests require nanobench")
+
+        with when("~openrand"):
+            conflicts("+math", msg="MundyMath tests require OpenRAND")
+            conflicts("+mech", msg="MundyMech requires OpenRAND support")
 
     #
     # Package-specific implication dependencies from the MuNDy hierarchy
@@ -138,14 +180,11 @@ class Mundy(CMakePackage, CudaPackage):
     # CUDA-related dependency propagation
     #
     _cuda_arch_values = CudaPackage.cuda_arch_values
-    _debug("CudaPackage.cuda_arch_values type={0} value={1}".format(type(_cuda_arch_values).__name__, _cuda_arch_values))
 
     if _cuda_arch_values is None:
-        _debug("cuda_arch_values is None at class-eval time; using empty list to avoid parse crash")
         _cuda_arch_values = []
 
     for arch in _cuda_arch_values:
-        _debug("Registering CUDA arch dependency for arch={0}".format(arch))
         depends_on(
             "kokkos+cuda cuda_arch={0}".format(arch),
             when="+cuda cuda_arch={0}".format(arch),
@@ -155,7 +194,11 @@ class Mundy(CMakePackage, CudaPackage):
             when="+kokkos-kernels +cuda cuda_arch={0}".format(arch),
         )
         depends_on(
-            "trilinos+stk+cuda cuda_arch={0}".format(arch),
+            "trilinos@16.0.0+teuchos+cuda cuda_arch={0}".format(arch),
+            when="+teuchos +cuda cuda_arch={0}".format(arch),
+        )
+        depends_on(
+            "trilinos@16.0.0+stk+cuda cuda_arch={0}".format(arch),
             when="+stk +cuda cuda_arch={0}".format(arch),
         )
 
@@ -165,8 +208,6 @@ class Mundy(CMakePackage, CudaPackage):
     def cmake_args(self):
         spec = self.spec
         args = []
-
-        _debug("cmake_args called with spec={0}".format(spec))
 
         def onoff(cond):
             return "ON" if cond else "OFF"
@@ -212,7 +253,6 @@ class Mundy(CMakePackage, CudaPackage):
         args.append(self.define("TPL_ENABLE_CUDA", "+cuda" in spec))
         if "+cuda" in spec:
             # Works with modern CMake / Spack CUDA handling
-            _debug("CUDA enabled: cuda_arch={0} cuda_prefix={1}".format(spec.variants["cuda_arch"].value, spec["cuda"].prefix))
             args.append(self.define("CMAKE_CUDA_ARCHITECTURES", spec.variants["cuda_arch"].value))
             args.append(self.define("CUDAToolkit_ROOT", spec["cuda"].prefix))
 
