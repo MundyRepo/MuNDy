@@ -1,4 +1,3 @@
 tribits_repository_define_packages(
-  Mundy              mundy/core         PT
-  MundyMesh          mundy/mesh         PT
-  )
+    Mundy mundy PT
+)

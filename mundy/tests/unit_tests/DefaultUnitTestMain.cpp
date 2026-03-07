@@ -18,42 +18,58 @@
 // **********************************************************************************************************************
 // @HEADER
 
-//! \file UnitTestTest.cpp
-/// Validate that tests are actually running as expected.
-/// You may assume that simply because you ran
+//! \file DefaultUnitTestMain.cpp
+/// \brief Main function for unit tests within MundyCore and other Mundy packages
+/// This file is meant to reduce code duplication in unit tests. It is meant to be used in combination with TriBITS.
+/// For example, a unit test file might look like this:
+/// \code
+/// tribits_add_executable_and_test(
+///     TestName
+///     SOURCES
+///       TestName.cpp
+///       ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+///     COMM serial mpi
+///     )
+///  \endcode
+///
+///  Here, Mundy_DEFAULT_UNIT_TEST_MAIN is set to this file, DefaultUnitTestMain.cpp. TestName.cpp contains a collection
+///  of GTEST-based unit tests. The above code will compile TestName.cpp and DefaultUnitTestMain.cpp into an executable
+///  called TestName. When the executable is run, it will run all of the unit tests in TestName.cpp in serial and MPI
+///  with one process. If the test was only meant to run in parallel, then COMM should be set to mpi. Conversely, if the
+///  test was only meant to run in serial, then COMM should be set to serial.
+
+// External libs
 #include <gmock/gmock.h>  // for EXPECT_THAT, HasSubstr, etc
 #include <gtest/gtest.h>  // for TEST, ASSERT_NO_THROW, etc
 
+// Trilinos libs
 #include <Kokkos_Core.hpp>       // for Kokkos::initialize, Kokkos::finalize
-#include <MundyCore_config.hpp>  // for HAVE_MUNDYCORE_*
+#include <Mundy_config.hpp>  // for HAVE_MUNDY_*
 #include <iostream>
-#ifdef HAVE_MUNDYCORE_STK
+#ifdef HAVE_MUNDY_STK
 #include <stk_util/parallel/Parallel.hpp>  // for stk::parallel_machine_init, stk::parallel_machine_finalize
 #endif
-
-TEST(UnitTest, test) {
-  std::cout << "EXAMPLE TEST PASSED" << std::endl;
-  std::cout << "  If you every don't see this message. There's a problem." << std::endl;
-}
 
 int main(int argc, char** argv) {
   // Initialize MPI and Kokkos
   // Note, we mitigate our interaction with MPI through STK's stk::ParallelMachine.
   // If STK is MPI enabled, then we're MPI enabled. As such, Mundy doesn't directly depend on or interact with MPI.
   // However, if tests are to be run in parallel, then TPL_ENABLE_MPI must be set to ON in the TriBITS configuration.
-
-#ifdef HAVE_MUNDYCORE_STK
+#ifdef HAVE_MUNDY_STK
+  std::cout << "Initializing STK Parallel Machine..." << std::endl;
   stk::parallel_machine_init(&argc, &argv);
+#else
+  std::cout << "STK not enabled. Running in serial..." << std::endl;
 #endif
   Kokkos::initialize(argc, argv);
+  Kokkos::print_configuration(std::cout);
 
   testing::InitGoogleMock(&argc, argv);
   int return_val = RUN_ALL_TESTS();
 
-  std::cout << return_val << std::endl;
-
   Kokkos::finalize();
-#ifdef HAVE_MUNDYCORE_STK
+#ifdef HAVE_MUNDY_STK
+  std::cout << "Finalizing STK Parallel Machine..." << std::endl;
   stk::parallel_machine_finalize();
 #endif
 

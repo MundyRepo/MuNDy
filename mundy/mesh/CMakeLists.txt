@@ -1,9 +1,7 @@
 #
-# A) Define the package
+# A) Define the subpackage
 #
-tribits_package_decl(MundyMesh)
-
-tribits_add_debug_option()
+tribits_subpackage(Mesh)
 
 #
 # B) Define the header and source files
@@ -93,9 +91,7 @@ mundy_tribits_add_library(
 
 tribits_add_test_directories(tests)
 
-tribits_package_def()
-
 #
 # D) Do standard post processing
 #
-tribits_package_postprocess()
+tribits_subpackage_postprocess()

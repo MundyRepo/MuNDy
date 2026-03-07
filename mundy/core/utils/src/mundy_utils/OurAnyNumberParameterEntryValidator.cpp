@@ -20,9 +20,9 @@
 // @HEADER
 
 // Mundy
-#include <MundyCore_config.hpp>  // for HAVE_MUNDYCORE_*
+#include <Mundy_config.hpp>  // for HAVE_MUNDY_*
 
-#ifdef HAVE_MUNDYCORE_TEUCHOS
+#ifdef HAVE_MUNDY_TEUCHOS
 
 // C++ core
 #include <limits>     // for std::numeric_limits

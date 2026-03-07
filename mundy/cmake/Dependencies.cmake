@@ -10,9 +10,9 @@ tribits_package_define_dependencies(
   TEST_REQUIRED_TPLS GTest
   TEST_OPTIONAL_TPLS
   SUBPACKAGES_DIRS_CLASSIFICATIONS_OPTREQS
-  Utils utils PT OPTIONAL
-  Math math PT OPTIONAL
-  Geom geom PT OPTIONAL
-  Mech mech PT OPTIONAL
+  Utils core/utils PT OPTIONAL
+  Math  core/math PT OPTIONAL
+  Geom  core/geom PT OPTIONAL
+  Mesh  mesh PT OPTIONAL
   REGRESSION_EMAIL_LIST brycepalmer96@gmail.com
 )

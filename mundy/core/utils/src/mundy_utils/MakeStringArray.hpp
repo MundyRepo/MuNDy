@@ -25,9 +25,9 @@
 /// \brief Declaration of the make_string_array helper function.
 
 // Mundy
-#include <MundyCore_config.hpp>  // for HAVE_MUNDYCORE_*
+#include <Mundy_config.hpp>  // for HAVE_MUNDY_*
 
-#ifdef HAVE_MUNDYCORE_TEUCHOS
+#ifdef HAVE_MUNDY_TEUCHOS
 // C++ core
 #include <concepts>  // for std::convertible_to
 #include <string>    // for std::string
