@@ -52,7 +52,7 @@ class TransposedAccessor;
 template <typename T, size_t N, size_t M, ValidAccessor<T> Accessor>
 class TransposedAccessor<T, N, M, Accessor, Ownership::Views> {
  public:
-  std::conditional_t<std::is_pointer_v<Accessor>, Accessor, Accessor&> accessor_;
+  core::storage<Accessor> accessor_;
 
   /// \brief Constructor for reference accessors
   KOKKOS_INLINE_FUNCTION
@@ -81,7 +81,16 @@ class TransposedAccessor<T, N, M, Accessor, Ownership::Views> {
 
   /// \brief Element access operator
   /// \param[in] idx The index of the element.
-  KOKKOS_INLINE_FUNCTION constexpr auto& operator[](size_t idx) const {
+  KOKKOS_INLINE_FUNCTION constexpr decltype(auto) operator[](size_t idx) {
+    // This idx is the contiguous index into the theoretical row-major transpose. We need to convert it to the
+    // row-major index of the original matrix.
+    const size_t i = idx / N;
+    const size_t j = idx % N;
+    const size_t matrix_idx = j * M + i;
+    return impl::access_at(accessor_, matrix_idx);
+  }
+  //
+  KOKKOS_INLINE_FUNCTION constexpr decltype(auto) operator[](size_t idx) const {
     // This idx is the contiguous index into the theoretical row-major transpose. We need to convert it to the
     // row-major index of the original matrix.
     const size_t i = idx / N;
@@ -94,7 +103,7 @@ class TransposedAccessor<T, N, M, Accessor, Ownership::Views> {
 template <typename T, size_t N, size_t M, ValidAccessor<T> Accessor>
 class TransposedAccessor<T, N, M, Accessor, Ownership::Owns> {
  public:
-  Accessor accessor_;
+  core::storage<Accessor> accessor_;
 
   /// \brief Default constructor.
   /// \note This constructor is only enabled if the Accessor has a default constructor.
@@ -123,7 +132,16 @@ class TransposedAccessor<T, N, M, Accessor, Ownership::Owns> {
 
   /// \brief Element access operator
   /// \param[in] idx The index of the element.
-  KOKKOS_INLINE_FUNCTION constexpr auto& operator[](size_t idx) const {
+  KOKKOS_INLINE_FUNCTION constexpr decltype(auto) operator[](size_t idx) {
+    // This idx is the contiguous index into the theoretical row-major transpose. We need to convert it to the
+    // row-major index of the original matrix.
+    const size_t i = idx / N;
+    const size_t j = idx % N;
+    const size_t matrix_idx = j * M + i;
+    return impl::access_at(accessor_, matrix_idx);
+  }
+  //
+  KOKKOS_INLINE_FUNCTION constexpr decltype(auto) operator[](size_t idx) const {
     // This idx is the contiguous index into the theoretical row-major transpose. We need to convert it to the
     // row-major index of the original matrix.
     const size_t i = idx / N;
@@ -156,23 +174,15 @@ using OwningTransposedAccessor = TransposedAccessor<T, N, M, Accessor, Ownership
 ///   auto transposed_data = get_transposed_view<T, N, M>(data);
 /// \endcode
 template <typename T, size_t N, size_t M, ValidAccessor<T> Accessor>
-KOKKOS_INLINE_FUNCTION constexpr auto get_transposed_view(Accessor& data) {
-  return TransposedView<T, N, M, Accessor>(data);
-}
-
-template <typename T, size_t N, size_t M, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto get_transposed_view(Accessor&& data) {
-  return TransposedView<T, N, M, Accessor>(std::forward<Accessor>(data));
-}
-
-template <typename T, size_t N, size_t M, ValidAccessor<T> Accessor>
-KOKKOS_INLINE_FUNCTION constexpr auto get_owning_transposed_accessor(Accessor& data) {
-  return OwningTransposedAccessor<T, N, M, Accessor>(data);
+  auto data_storage = core::store(impl::unwrap_accessor(std::forward<Accessor>(data)));
+  return TransposedView<T, N, M, decltype(data_storage)>(data_storage);
 }
 
 template <typename T, size_t N, size_t M, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto get_owning_transposed_accessor(Accessor&& data) {
-  return OwningTransposedAccessor<T, N, M, Accessor>(std::forward<Accessor>(data));
+  auto data_storage = core::store(impl::unwrap_accessor(std::move(data)));
+  return OwningTransposedAccessor<T, N, M, decltype(data_storage)>(data_storage);
 }
 
 //@}

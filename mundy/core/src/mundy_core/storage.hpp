@@ -48,7 +48,7 @@ template <class T>
 struct is_storage<storage<T>> : std::true_type {};
 
 template <class T>
-static constexpr bool is_storage_v = is_storage<std::remove_cv_t<T>>::value;
+static constexpr bool is_storage_v = is_storage<std::remove_cvref_t<T>>::value;
 
 template <class T>
 struct storage_underlying_type {
@@ -100,7 +100,9 @@ using store_input_type_t = typename store_input_type<T>::type;
 
 template <class Stored>
 KOKKOS_FUNCTION constexpr decltype(auto) storage_get(Stored& value) noexcept {
-  if constexpr (is_reference_wrapper_v<Stored>) {
+  if constexpr (is_storage_v<Stored>) {
+    return value.get();
+  } else if constexpr (is_reference_wrapper_v<Stored>) {
     return value.get();
   } else if constexpr (std::is_pointer_v<Stored>) {
     return static_cast<std::remove_cv_t<Stored>>(value);
@@ -111,7 +113,9 @@ KOKKOS_FUNCTION constexpr decltype(auto) storage_get(Stored& value) noexcept {
 
 template <class Stored>
 KOKKOS_FUNCTION constexpr decltype(auto) storage_get(const Stored& value) noexcept {
-  if constexpr (is_reference_wrapper_v<Stored>) {
+  if constexpr (is_storage_v<Stored>) {
+    return value.get();
+  } else if constexpr (is_reference_wrapper_v<Stored>) {
     return value.get();
   } else if constexpr (std::is_pointer_v<Stored>) {
     return static_cast<std::remove_cv_t<Stored>>(value);
@@ -135,15 +139,20 @@ class storage {
   using input_type = T;
   using stored_type = impl::storage_type_t<T>;
 
+  KOKKOS_DEFAULTED_FUNCTION constexpr storage()
+    requires std::default_initializable<stored_type>
+  = default;
+
   KOKKOS_DEFAULTED_FUNCTION constexpr storage(const storage&) = default;
   KOKKOS_DEFAULTED_FUNCTION constexpr storage(storage&&) = default;
   KOKKOS_DEFAULTED_FUNCTION constexpr storage& operator=(const storage&) = default;
   KOKKOS_DEFAULTED_FUNCTION constexpr storage& operator=(storage&&) = default;
 
   template <class U>
-    requires std::constructible_from<stored_type, U&&>
-  KOKKOS_FUNCTION constexpr explicit storage(U&& value) noexcept(std::is_nothrow_constructible_v<stored_type, U&&>)
-      : m_storage(std::forward<U>(value)) {
+    requires std::constructible_from<stored_type, decltype(impl::storage_get(std::declval<U&&>()))>
+  KOKKOS_FUNCTION constexpr explicit storage(U&& value) noexcept(
+      std::is_nothrow_constructible_v<stored_type, decltype(impl::storage_get(std::declval<U&&>()))>)
+      : m_storage(impl::storage_get(std::forward<U>(value))) {
   }
 
   KOKKOS_FUNCTION constexpr decltype(auto) get() noexcept {

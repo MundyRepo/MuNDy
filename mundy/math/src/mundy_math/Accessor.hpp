@@ -30,12 +30,48 @@
 #include <utility>
 
 // Mundy
+#include <mundy_core/storage.hpp>
 #include <mundy_core/throw_assert.hpp>
 #include <mundy_math/impl/AccessorImpl.hpp>
 
 namespace mundy {
 
 namespace math {
+
+namespace impl {
+
+template <typename Accessor>
+struct is_stored_accessor : std::false_type {};
+
+template <typename T>
+struct is_stored_accessor<core::storage<T>> : std::true_type {};
+
+template <typename Accessor>
+inline constexpr bool is_stored_accessor_v = is_stored_accessor<std::remove_cvref_t<Accessor>>::value;
+
+template <typename Accessor>
+struct accessor_underlying_type {
+  using type = std::remove_cvref_t<Accessor>;
+};
+
+template <typename T>
+struct accessor_underlying_type<core::storage<T>> {
+  using type = std::remove_cvref_t<decltype(std::declval<core::storage<T>&>().get())>;
+};
+
+template <typename Accessor>
+using accessor_underlying_type_t = typename accessor_underlying_type<std::remove_cvref_t<Accessor>>::type;
+
+template <typename Accessor>
+KOKKOS_INLINE_FUNCTION constexpr decltype(auto) unwrap_accessor(Accessor&& accessor) {
+  if constexpr (is_stored_accessor_v<Accessor>) {
+    return std::forward<Accessor>(accessor).get();
+  } else {
+    return std::forward<Accessor>(accessor);
+  }
+}
+
+}  // namespace impl
 
 // Separation of Concerns: Vectors, Matrices, and Quaternions shouldn't care about memory access patterns.
 // They should be able to work with any type of memory access pattern, whether it is contiguous or strided, owned or
@@ -83,26 +119,42 @@ namespace math {
 /// \brief A concept that checks if Accessor has a const [] operator
 template <typename Accessor, typename T>
 concept HasConstAccessOperator = requires(Accessor a, size_t idx) {
-  { a[idx] } -> std::convertible_to<const T&>;
+  { impl::unwrap_accessor(a)[idx] } -> std::convertible_to<const T&>;
 } || requires(Accessor a, size_t idx) {
-  { a(idx) } -> std::convertible_to<const T&>;
+  { impl::unwrap_accessor(a)(idx) } -> std::convertible_to<const T&>;
 };
 
 /// \brief A concept that checks if Accessor has a non-const [] operator
 template <typename Accessor, typename T>
 concept HasNonConstAccessOperator = requires(Accessor a, size_t idx) {
-  { a[idx] } -> std::convertible_to<T&>;
+  { impl::unwrap_accessor(a)[idx] } -> std::convertible_to<T&>;
 } || requires(Accessor a, size_t idx) {
-  { a(idx) } -> std::convertible_to<T&>;
+  { impl::unwrap_accessor(a)(idx) } -> std::convertible_to<T&>;
 };
 
 /// \brief A concept that checks if Accessor has a [] operator regardless of constness
 template <typename Accessor>
-concept HasSubscriptOperator = requires(Accessor a, size_t idx) { a[idx]; };
+concept HasSubscriptOperator = requires(Accessor a, size_t idx) { impl::unwrap_accessor(a)[idx]; };
 
 /// \brief A concept that checks if Accessor has a () operator regardless of constness
 template <typename Accessor>
-concept HasCallOperator = requires(Accessor a, size_t idx) { a(idx); };
+concept HasCallOperator = requires(Accessor a, size_t idx) { impl::unwrap_accessor(a)(idx); };
+
+/// \brief A concept that checks if Accessor is wrapped in core::storage
+template <typename Accessor>
+concept StoredAccessor = impl::is_stored_accessor_v<Accessor>;
+
+/// \brief A type alias for the underlying accessor type for raw or stored accessors
+template <typename Accessor>
+using accessor_underlying_type_t = impl::accessor_underlying_type_t<Accessor>;
+
+/// \brief A concept that checks if a stored accessor provides const access to T
+template <typename Accessor, typename T>
+concept HasConstStoredAccessOperator = StoredAccessor<Accessor> && HasConstAccessOperator<Accessor, T>;
+
+/// \brief A concept that checks if a stored accessor provides non-const access to T
+template <typename Accessor, typename T>
+concept HasNonConstStoredAccessOperator = StoredAccessor<Accessor> && HasNonConstAccessOperator<Accessor, T>;
 
 /// \brief A concept that checks if Accessor has a copy constructor
 template <typename Accessor>
@@ -177,28 +229,28 @@ struct IntOnly {
 };
 
 template <typename Accessor>
-concept SubscriptTakesSizeT = requires { std::declval<Accessor>()[SizeTOnly{}]; };
+concept SubscriptTakesSizeT = requires { unwrap_accessor(std::declval<Accessor>())[SizeTOnly{}]; };
 
 template <typename Accessor>
-concept SubscriptTakesUnsigned = requires { std::declval<Accessor>()[UnsignedOnly{}]; };
+concept SubscriptTakesUnsigned = requires { unwrap_accessor(std::declval<Accessor>())[UnsignedOnly{}]; };
 
 template <typename Accessor>
-concept SubscriptTakesLongInt = requires { std::declval<Accessor>()[LongIntOnly{}]; };
+concept SubscriptTakesLongInt = requires { unwrap_accessor(std::declval<Accessor>())[LongIntOnly{}]; };
 
 template <typename Accessor>
-concept SubscriptTakesInt = requires { std::declval<Accessor>()[IntOnly{}]; };
+concept SubscriptTakesInt = requires { unwrap_accessor(std::declval<Accessor>())[IntOnly{}]; };
 
 template <typename Accessor>
-concept CallTakesSizeT = requires { std::declval<Accessor>()(SizeTOnly{}); };
+concept CallTakesSizeT = requires { unwrap_accessor(std::declval<Accessor>())(SizeTOnly{}); };
 
 template <typename Accessor>
-concept CallTakesUnsigned = requires { std::declval<Accessor>()(UnsignedOnly{}); };
+concept CallTakesUnsigned = requires { unwrap_accessor(std::declval<Accessor>())(UnsignedOnly{}); };
 
 template <typename Accessor>
-concept CallTakesLongInt = requires { std::declval<Accessor>()(LongIntOnly{}); };
+concept CallTakesLongInt = requires { unwrap_accessor(std::declval<Accessor>())(LongIntOnly{}); };
 
 template <typename Accessor>
-concept CallTakesInt = requires { std::declval<Accessor>()(IntOnly{}); };
+concept CallTakesInt = requires { unwrap_accessor(std::declval<Accessor>())(IntOnly{}); };
 
 template <typename T>
 inline constexpr bool dependent_false_v = false;
@@ -213,29 +265,32 @@ KOKKOS_INLINE_FUNCTION constexpr IndexType checked_index_cast(const size_t idx) 
 /// \brief Unified index accessor with [] preferred over () if both are available.
 template <typename Accessor>
 KOKKOS_INLINE_FUNCTION constexpr decltype(auto) access_at(Accessor&& accessor, size_t idx) {
-  if constexpr (HasSubscriptOperator<Accessor>) {
-    if constexpr (SubscriptTakesSizeT<Accessor&&>) {
-      return std::forward<Accessor>(accessor)[checked_index_cast<size_t>(idx)];
-    } else if constexpr (SubscriptTakesUnsigned<Accessor&&>) {
-      return std::forward<Accessor>(accessor)[checked_index_cast<unsigned>(idx)];
-    } else if constexpr (SubscriptTakesLongInt<Accessor&&>) {
-      return std::forward<Accessor>(accessor)[checked_index_cast<long int>(idx)];
-    } else if constexpr (SubscriptTakesInt<Accessor&&>) {
-      return std::forward<Accessor>(accessor)[checked_index_cast<int>(idx)];
+  auto&& unwrapped_accessor = unwrap_accessor(std::forward<Accessor>(accessor));
+  using unwrapped_accessor_t = decltype(unwrapped_accessor);
+
+  if constexpr (HasSubscriptOperator<unwrapped_accessor_t>) {
+    if constexpr (SubscriptTakesSizeT<unwrapped_accessor_t>) {
+      return std::forward<unwrapped_accessor_t>(unwrapped_accessor)[checked_index_cast<size_t>(idx)];
+    } else if constexpr (SubscriptTakesUnsigned<unwrapped_accessor_t>) {
+      return std::forward<unwrapped_accessor_t>(unwrapped_accessor)[checked_index_cast<unsigned>(idx)];
+    } else if constexpr (SubscriptTakesLongInt<unwrapped_accessor_t>) {
+      return std::forward<unwrapped_accessor_t>(unwrapped_accessor)[checked_index_cast<long int>(idx)];
+    } else if constexpr (SubscriptTakesInt<unwrapped_accessor_t>) {
+      return std::forward<unwrapped_accessor_t>(unwrapped_accessor)[checked_index_cast<int>(idx)];
     } else {
       static_assert(dependent_false_v<Accessor>,
                     "Accessor operator[] must accept one of: size_t, unsigned, long int, int.");
     }
   } else {
-    static_assert(HasCallOperator<Accessor>, "Accessor must support either operator[] or operator().");
-    if constexpr (CallTakesSizeT<Accessor&&>) {
-      return std::forward<Accessor>(accessor)(checked_index_cast<size_t>(idx));
-    } else if constexpr (CallTakesUnsigned<Accessor&&>) {
-      return std::forward<Accessor>(accessor)(checked_index_cast<unsigned>(idx));
-    } else if constexpr (CallTakesLongInt<Accessor&&>) {
-      return std::forward<Accessor>(accessor)(checked_index_cast<long int>(idx));
-    } else if constexpr (CallTakesInt<Accessor&&>) {
-      return std::forward<Accessor>(accessor)(checked_index_cast<int>(idx));
+    static_assert(HasCallOperator<unwrapped_accessor_t>, "Accessor must support either operator[] or operator().");
+    if constexpr (CallTakesSizeT<unwrapped_accessor_t>) {
+      return std::forward<unwrapped_accessor_t>(unwrapped_accessor)(checked_index_cast<size_t>(idx));
+    } else if constexpr (CallTakesUnsigned<unwrapped_accessor_t>) {
+      return std::forward<unwrapped_accessor_t>(unwrapped_accessor)(checked_index_cast<unsigned>(idx));
+    } else if constexpr (CallTakesLongInt<unwrapped_accessor_t>) {
+      return std::forward<unwrapped_accessor_t>(unwrapped_accessor)(checked_index_cast<long int>(idx));
+    } else if constexpr (CallTakesInt<unwrapped_accessor_t>) {
+      return std::forward<unwrapped_accessor_t>(unwrapped_accessor)(checked_index_cast<int>(idx));
     } else {
       static_assert(dependent_false_v<Accessor>,
                     "Accessor operator() must accept one of: size_t, unsigned, long int, int.");

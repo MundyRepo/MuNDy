@@ -119,6 +119,20 @@ class reference_wrapper {
     return impl::subscript(*m_ptr, std::forward<Index>(idx));
   }
 
+  template <class... Args>
+  KOKKOS_FUNCTION constexpr decltype(auto) operator()(Args&&... args)
+    requires impl::invocable<T&, Args&&...>
+  {
+    return impl::invoke(*m_ptr, std::forward<Args>(args)...);
+  }
+
+  template <class Index>
+  KOKKOS_FUNCTION constexpr decltype(auto) operator[](Index&& idx)
+    requires impl::subscriptable<T&, Index&&>
+  {
+    return impl::subscript(*m_ptr, std::forward<Index>(idx));
+  }
+
  private:
   T* m_ptr;
 };

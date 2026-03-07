@@ -114,8 +114,8 @@ class AVector<T, N, Accessor, Ownership::Views> {
   //! \name Internal data
   //@{
 
-  /// \brief A reference or a pointer to an external data accessor.
-  std::conditional_t<std::is_pointer_v<Accessor>, Accessor, Accessor&> accessor_;
+  /// \brief Stored accessor via core::storage.
+  core::storage<Accessor> accessor_;
   //@}
 
   //! \name Type aliases
@@ -261,12 +261,12 @@ class AVector<T, N, Accessor, Ownership::Views> {
 
   /// \brief Get the internal data accessor
   KOKKOS_INLINE_FUNCTION
-  constexpr std::conditional_t<std::is_pointer_v<Accessor>, Accessor, Accessor&> data() {
-    return accessor_;
+  constexpr decltype(auto) data() {
+    return accessor_.get();
   }
   KOKKOS_INLINE_FUNCTION
-  constexpr const std::conditional_t<std::is_pointer_v<Accessor>, Accessor, Accessor&> data() const {
-    return accessor_;
+  constexpr decltype(auto) data() const {
+    return accessor_.get();
   }
 
   /// \brief Get a deep copy of the vector
@@ -467,7 +467,7 @@ class AVector<T, N, Accessor, Ownership::Owns> {
   //@{
 
   /// \brief Our data accessor. Owning
-  Accessor accessor_;
+  core::storage<Accessor> accessor_;
   //@}
 
   //! \name Type aliases
@@ -532,7 +532,7 @@ class AVector<T, N, Accessor, Ownership::Owns> {
     requires(sizeof...(Args) == N) && (N != 1) && (std::is_convertible_v<Args, T> && ...) &&
             HasNArgConstructor<Accessor, T, N>
   KOKKOS_INLINE_FUNCTION constexpr explicit AVector(Args&&... args)
-      : accessor_{static_cast<T>(std::forward<Args>(args))...} {
+      : accessor_(Accessor{static_cast<T>(std::forward<Args>(args))...}) {
   }
 
   /// \brief Constructor to initialize all elements via initializer list
@@ -664,12 +664,12 @@ class AVector<T, N, Accessor, Ownership::Owns> {
 
   /// \brief Get the internal data accessor
   KOKKOS_INLINE_FUNCTION
-  constexpr Accessor& data() {
-    return accessor_;
+  constexpr decltype(auto) data() {
+    return accessor_.get();
   }
   KOKKOS_INLINE_FUNCTION
-  constexpr const Accessor& data() const {
-    return accessor_;
+  constexpr decltype(auto) data() const {
+    return accessor_.get();
   }
 
   /// \brief Get a deep copy of the vector
@@ -1539,23 +1539,15 @@ MUNDY_MATH_VECTOR_TYPE_AND_SIZE_SPECIALIZATION(Vector6i, vector6i, int, 6)
 ///   auto vec = get_vector_view<T>(data);
 /// \endcode
 template <typename T, size_t N, ValidAccessor<T> Accessor>
-KOKKOS_INLINE_FUNCTION constexpr auto get_vector_view(Accessor& data) {
-  return VectorView<T, N, Accessor>(data);
-}
-
-template <typename T, size_t N, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto get_vector_view(Accessor&& data) {
-  return VectorView<T, N, Accessor>(std::forward<Accessor>(data));
-}
-
-template <typename T, size_t N, ValidAccessor<T> Accessor>
-KOKKOS_INLINE_FUNCTION constexpr auto get_owning_vector(Accessor& data) {
-  return OwningVector<T, N, Accessor>(data);
+  auto data_storage = core::store(std::forward<Accessor>(data));
+  return VectorView<T, N, decltype(data_storage)>(data_storage);
 }
 
 template <typename T, size_t N, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto get_owning_vector(Accessor&& data) {
-  return OwningVector<T, N, Accessor>(std::forward<Accessor>(data));
+  auto data_storage = core::store(std::move(data));  // Move not forward since we want to take ownership
+  return OwningVector<T, N, decltype(data_storage)>(data_storage);
 }
 //@}
 

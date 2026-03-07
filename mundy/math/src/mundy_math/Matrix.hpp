@@ -122,8 +122,8 @@ class AMatrix<T, N, M, Accessor, Ownership::Views> {
   //! \name Internal data
   //@{
 
-  /// \brief A reference or a pointer to an external data accessor.
-  std::conditional_t<std::is_pointer_v<Accessor>, Accessor, Accessor&> accessor_;
+  /// \brief Stored accessor via core::storage.
+  core::storage<Accessor> accessor_;
   //@}
 
   //! \name Type aliases
@@ -288,14 +288,14 @@ class AMatrix<T, N, M, Accessor, Ownership::Views> {
 
   /// \brief Get the internal data accessor
   KOKKOS_INLINE_FUNCTION
-  constexpr std::conditional_t<std::is_pointer_v<Accessor>, Accessor, Accessor&> data() {
-    return accessor_;
+  constexpr decltype(auto) data() {
+    return accessor_.get();
   }
 
   /// \brief Get the internal data accessor
   KOKKOS_INLINE_FUNCTION
-  constexpr std::conditional_t<std::is_pointer_v<Accessor>, Accessor, Accessor&> data() const {
-    return accessor_;
+  constexpr decltype(auto) data() const {
+    return accessor_.get();
   }
 
   /// \brief Get a copy of a certain column of the matrix
@@ -695,8 +695,8 @@ class AMatrix<T, N, M, Accessor, Ownership::Owns> {
   //! \name Internal data
   //@{
 
-  /// \brief Our data accessor. Owning
-  Accessor accessor_;
+  /// \brief Stored accessor via core::storage.
+  core::storage<Accessor> accessor_;
   //@}
 
   //! \name Type aliases
@@ -745,7 +745,7 @@ class AMatrix<T, N, M, Accessor, Ownership::Owns> {
     requires(sizeof...(Args) == N * M) && (std::is_convertible_v<Args, T> && ...) &&
             HasNArgConstructor<Accessor, T, N * M>
   KOKKOS_INLINE_FUNCTION explicit constexpr AMatrix(Args&&... args)
-      : accessor_{static_cast<T>(std::forward<Args>(args))...} {
+      : accessor_(Accessor{static_cast<T>(std::forward<Args>(args))...}) {
   }
 
   /// \brief Constructor to initialize all elements via initializer list
@@ -897,14 +897,14 @@ class AMatrix<T, N, M, Accessor, Ownership::Owns> {
 
   /// \brief Get the internal data accessor
   KOKKOS_INLINE_FUNCTION
-  constexpr Accessor& data() {
-    return accessor_;
+  constexpr decltype(auto) data() {
+    return accessor_.get();
   }
 
   /// \brief Get the internal data accessor
   KOKKOS_INLINE_FUNCTION
-  constexpr const Accessor& data() const {
-    return accessor_;
+  constexpr decltype(auto) data() const {
+    return accessor_.get();
   }
 
   /// \brief Get a copy of a certain column of the matrix
@@ -2012,26 +2012,16 @@ MUNDY_MATH_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(Matrix6i, matrix6i, int, 6, 
 ///   auto mat = get_matrix3_view<T>(data);
 /// \endcode
 template <typename T, size_t N, size_t M, ValidAccessor<T> Accessor>
-KOKKOS_INLINE_FUNCTION constexpr auto get_matrix_view(Accessor& data) {
-  return MatrixView<T, N, M, Accessor>(data);
-}
-
-template <typename T, size_t N, size_t M, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto get_matrix_view(Accessor&& data) {
-  return MatrixView<T, N, M, Accessor>(std::forward<Accessor>(data));
-}
-
-template <typename T, size_t N, size_t M, ValidAccessor<T> Accessor>
-KOKKOS_INLINE_FUNCTION constexpr auto get_owning_matrix(Accessor& data) {
-  return OwningMatrix<T, N, M, Accessor>(data);
+  auto data_storage = core::store(std::forward<Accessor>(data));
+  return MatrixView<T, N, M, decltype(data_storage)>(data_storage);
 }
 
 template <typename T, size_t N, size_t M, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto get_owning_matrix(Accessor&& data) {
-  return OwningMatrix<T, N, M, Accessor>(std::forward<Accessor>(data));
+  auto data_storage = core::store(std::move(data));
+  return OwningMatrix<T, N, M, decltype(data_storage)>(data_storage);
 }
-//@}
-
 //@}
 
 }  // namespace math

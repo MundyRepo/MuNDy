@@ -137,8 +137,8 @@ class AQuaternion<T, Accessor, Ownership::Views> {
   //! \name Internal data
   //@{
 
-  /// \brief A reference or a pointer to an external data accessor.
-  std::conditional_t<std::is_pointer_v<Accessor>, Accessor, Accessor&> accessor_;
+  /// \brief Stored accessor via core::storage.
+  core::storage<Accessor> accessor_;
   //@}
 
   //! \name Type aliases
@@ -313,14 +313,14 @@ class AQuaternion<T, Accessor, Ownership::Views> {
 
   /// \brief Get the internal data accessor
   KOKKOS_INLINE_FUNCTION
-  constexpr std::conditional_t<std::is_pointer_v<Accessor>, Accessor, Accessor&> data() {
-    return accessor_;
+  constexpr decltype(auto) data() {
+    return accessor_.get();
   }
 
   /// \brief Get the internal data accessor
   KOKKOS_INLINE_FUNCTION
-  constexpr const std::conditional_t<std::is_pointer_v<Accessor>, Accessor, Accessor&> data() const {
-    return accessor_;
+  constexpr decltype(auto) data() const {
+    return accessor_.get();
   }
 
   /// \brief Get a view of the quaternion vector component
@@ -603,8 +603,8 @@ class AQuaternion<T, Accessor, Ownership::Owns> {
   //! \name Internal data
   //@{
 
-  /// \brief Our data accessor. Owning
-  Accessor accessor_;
+  /// \brief Stored accessor via core::storage.
+  core::storage<Accessor> accessor_;
   //@}
 
   //! \name Type aliases
@@ -649,7 +649,7 @@ class AQuaternion<T, Accessor, Ownership::Owns> {
   /// \note This constructor is only enabled if the Accessor has a 4-argument constructor.
   KOKKOS_INLINE_FUNCTION constexpr AQuaternion(const T& w, const T& x, const T& y, const T& z)
     requires HasNArgConstructor<Accessor, T, 4>
-      : accessor_(w, x, y, z) {
+      : accessor_(Accessor{w, x, y, z}) {
   }
 
   /// \brief Constructor to initialize all elements via initializer list
@@ -812,14 +812,14 @@ class AQuaternion<T, Accessor, Ownership::Owns> {
 
   /// \brief Get the internal data accessor
   KOKKOS_INLINE_FUNCTION
-  constexpr Accessor& data() {
-    return accessor_;
+  constexpr decltype(auto) data() {
+    return accessor_.get();
   }
 
   /// \brief Get the internal data accessor
   KOKKOS_INLINE_FUNCTION
-  constexpr const Accessor& data() const {
-    return accessor_;
+  constexpr decltype(auto) data() const {
+    return accessor_.get();
   }
 
   /// \brief Get a view of the quaternion vector component
@@ -1592,23 +1592,15 @@ MUNDY_MATH_QUATERNION_TYPE_SPECIALIZATION(Quaternionf, quaternionf, float)
 ///   auto quat = get_quaternion_view<T>(data);
 /// \endcode
 template <typename T, typename Accessor>
-KOKKOS_INLINE_FUNCTION constexpr auto get_quaternion_view(const Accessor& data) {
-  return QuaternionView<T, Accessor>(data);
-}
-
-template <typename T, typename Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto get_quaternion_view(Accessor&& data) {
-  return QuaternionView<T, Accessor>(std::move(data));
-}
-
-template <typename T, typename Accessor>
-KOKKOS_INLINE_FUNCTION constexpr auto get_owning_quaternion(const Accessor& data) {
-  return OwningQuaternion<T, Accessor>(data);
+  auto data_storage = core::store(std::forward<Accessor>(data));
+  return QuaternionView<T, decltype(data_storage)>(data_storage);
 }
 
 template <typename T, typename Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto get_owning_quaternion(Accessor&& data) {
-  return OwningQuaternion<T, Accessor>(std::move(data));
+  auto data_storage = core::store(std::move(data));
+  return OwningQuaternion<T, decltype(data_storage)>(data_storage);
 }
 //@}
 
