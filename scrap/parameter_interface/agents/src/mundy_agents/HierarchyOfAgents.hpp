@@ -40,7 +40,7 @@
 
 // Mundy libs
 #include <mundy_agents/IsAgentType.hpp>  // for mundy::agents::IsAgentType
-#include <mundy_core/throw_assert.hpp>   // for MUNDY_THROW_ASSERT
+#include <mundy_utils/throw_assert.hpp>   // for MUNDY_THROW_ASSERT
 
 namespace mundy {
 

@@ -34,7 +34,7 @@
 // Mundy libs
 #include <mundy_agents/Agents.hpp>          // for mundy::agents::Agents
 #include <mundy_agents/RankedAssembly.hpp>  // for mundy::agents::RankedAssembly
-#include <mundy_core/StringLiteral.hpp>     // for mundy::core::StringLiteral and mundy::core::make_string_literal
+#include <mundy_utils/StringLiteral.hpp>     // for mundy::utils::StringLiteral and mundy::utils::make_string_literal
 #include <mundy_meta/FieldReqs.hpp>         // for mundy::meta::FieldReqs
 #include <mundy_meta/MeshReqs.hpp>          // for mundy::meta::MeshReqs
 #include <mundy_meta/PartReqs.hpp>          // for mundy::meta::PartReqs
@@ -59,7 +59,7 @@ namespace shapes {
 /// The design of this class is in accordance with the static interface requirements of mundy::agents::AgentFactory.
 ///
 /// \note This class is an element rank assembly part containing all shapes. It is a subset of the Agents part.
-class Shapes : public mundy::agents::RankedAssembly<mundy::core::make_string_literal("SHAPES"),
+class Shapes : public mundy::agents::RankedAssembly<mundy::utils::make_string_literal("SHAPES"),
                                                     stk::topology::ELEMENT_RANK, mundy::agents::Agents> {};  // Shapes
 
 }  // namespace shapes

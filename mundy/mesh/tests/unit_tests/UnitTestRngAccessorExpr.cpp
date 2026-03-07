@@ -41,8 +41,8 @@
 #include <stk_topology/topology.hpp>
 
 // Mundy libs
-#include <mundy_core/rng.hpp>           // for mundy::core::make_philox
-#include <mundy_core/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
+#include <mundy_utils/rng.hpp>           // for mundy::utils::make_philox
+#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
 #include <mundy_mesh/Aggregate.hpp>     // for mundy::mesh::Aggregate
 #include <mundy_mesh/BulkData.hpp>      // for mundy::mesh::BulkData
 #include <mundy_mesh/ForEachEntity.hpp>
@@ -413,17 +413,17 @@ void randomize_test(stk::mesh::BulkData& bulk_data,           //
 
         MUNDY_THROW_ASSERT(local_counter <= std::numeric_limits<uint32_t>::max(), std::overflow_error,
                            "Counter exceeds uint32_t max for openrand::Philox.");
-        openrand::Philox rng_d = core::make_philox(local_seed, local_counter);
+        openrand::Philox rng_d = utils::make_philox(local_seed, local_counter);
         double actual_value_d = double_accessor(e);
         double expected_value_d = rng_d.rand<double>();
         EXPECT_DOUBLE_EQ(actual_value_d, expected_value_d);
 
-        openrand::Philox rng_f = core::make_philox(local_seed, local_counter);
+        openrand::Philox rng_f = utils::make_philox(local_seed, local_counter);
         float actual_value_f = float_accessor(e);
         float expected_value_f = rng_f.rand<float>();
         EXPECT_FLOAT_EQ(actual_value_f, expected_value_f);
 
-        openrand::Philox rng_i = core::make_philox(local_seed, local_counter);
+        openrand::Philox rng_i = utils::make_philox(local_seed, local_counter);
         int actual_value_i = int_accessor(e);
         int expected_value_i = rng_i.rand<int>();
         EXPECT_EQ(actual_value_i, expected_value_i);
@@ -526,21 +526,21 @@ void randomize_uniform_test(stk::mesh::BulkData& bulk_data,             //
 
         MUNDY_THROW_ASSERT(local_counter <= std::numeric_limits<uint32_t>::max(), std::overflow_error,
                            "Counter exceeds uint32_t max for openrand::Philox.");
-        openrand::Philox rng_d = core::make_philox(local_seed, local_counter);
+        openrand::Philox rng_d = utils::make_philox(local_seed, local_counter);
         double actual_value_d = double_accessor(e);
         double lb_d = use_lower_bound_expr ? double_lb_accessor(e) : double_fixed_lb;
         double ub_d = use_upper_bound_expr ? double_ub_accessor(e) : double_fixed_ub;
         double expected_value_d = rng_d.uniform<double>(lb_d, ub_d);
         EXPECT_DOUBLE_EQ(actual_value_d, expected_value_d);
 
-        openrand::Philox rng_f = core::make_philox(local_seed, local_counter);
+        openrand::Philox rng_f = utils::make_philox(local_seed, local_counter);
         float actual_value_f = float_accessor(e);
         float lb_f = use_lower_bound_expr ? float_lb_accessor(e) : float_fixed_lb;
         float ub_f = use_upper_bound_expr ? float_ub_accessor(e) : float_fixed_ub;
         float expected_value_f = rng_f.uniform<float>(lb_f, ub_f);
         EXPECT_FLOAT_EQ(actual_value_f, expected_value_f);
 
-        openrand::Philox rng_i = core::make_philox(local_seed, local_counter);
+        openrand::Philox rng_i = utils::make_philox(local_seed, local_counter);
         int actual_value_i = int_accessor(e);
         int lb_i = use_lower_bound_expr ? int_lb_accessor(e) : int_fixed_lb;
         int ub_i = use_upper_bound_expr ? int_ub_accessor(e) : int_fixed_ub;

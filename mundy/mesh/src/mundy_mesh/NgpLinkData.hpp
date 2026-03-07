@@ -31,7 +31,7 @@
 #include <stk_mesh/base/Types.hpp>   // for stk::mesh::EntityRank
 
 // Mundy libs
-#include <mundy_core/throw_assert.hpp>                  // for MUNDY_THROW_ASSERT
+#include <mundy_utils/throw_assert.hpp>                  // for MUNDY_THROW_ASSERT
 #include <mundy_mesh/BulkData.hpp>                      // for mundy::mesh::BulkData
 #include <mundy_mesh/LinkCOOData.hpp>                   // for mundy::mesh::LinkCOOData/NgpLinkCOOData
 #include <mundy_mesh/LinkCSRData.hpp>                   // for mundy::mesh::LinkCSRData/NgpLinkCSRData

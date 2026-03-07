@@ -39,9 +39,6 @@ include("${${PROJECT_NAME}_TRIBITS_DIR}/TriBITS.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/MundyTribitsInstallDirectories.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/MundyTribitsAddLibrary.cmake")
 
-# Mundy only has one project so just enable it :-)
-set(${PROJECT_NAME}_ENABLE_Mundy ON CACHE BOOL "" FORCE)
-
 # Define some global flags
 set(${PROJECT_NAME}_CMAKE_CXX_STANDARD_DEFAULT 20)
 set(${PROJECT_NAME}_CMAKE_CXX_STANDARDS_ALLOWED "(20|23)")

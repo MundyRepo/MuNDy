@@ -29,7 +29,7 @@
 #include <cmath>  // for std::sin, std::cos, std::sqrt
 
 // Mundy includes
-#include <mundy_core/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
+#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
 #include <mundy_math/Matrix3.hpp>       // for mundy::math::Matrix3
 #include <mundy_math/Quaternion.hpp>    // for mundy::math::Quaternion
 #include <mundy_math/Vector3.hpp>       // for mundy::math::Vector3

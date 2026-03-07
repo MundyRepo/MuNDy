@@ -46,7 +46,7 @@
 #include <mundy_constraints/FENESprings.hpp>               // for mundy::constraints::FENESprings
 #include <mundy_constraints/FENEWCASprings.hpp>            // for mundy::constraints::FENEWCASprings
 #include <mundy_constraints/HookeanSprings.hpp>            // for mundy::constraints::HookeanSprings
-#include <mundy_core/MakeStringArray.hpp>                  // for mundy::core::make_string_array
+#include <mundy_utils/MakeStringArray.hpp>                  // for mundy::utils::make_string_array
 #include <mundy_mesh/BulkData.hpp>                         // for mundy::mesh::BulkData
 #include <mundy_mesh/FieldViews.hpp>                       // for mundy::mesh::vector3_field_data
 #include <mundy_mesh/MeshBuilder.hpp>                      // for mundy::mesh::MeshBuilder
@@ -72,9 +72,9 @@ TEST(FENESprings, FENESpringsKernel) {
   // Create an instance of FENESprings based on committed mesh that meets the
   // default requirements for FENESprings.
   auto fene_springs_fixed_params =
-      Teuchos::ParameterList().set("enabled_kernel_names", mundy::core::make_string_array("FENE_SPRINGS"));
+      Teuchos::ParameterList().set("enabled_kernel_names", mundy::utils::make_string_array("FENE_SPRINGS"));
   fene_springs_fixed_params.sublist("FENE_SPRINGS")
-      .set("valid_entity_part_names", mundy::core::make_string_array("SPHEROCYLINDER_SEGMENTS"));
+      .set("valid_entity_part_names", mundy::utils::make_string_array("SPHEROCYLINDER_SEGMENTS"));
 
   auto [compute_constraint_forcing_ptr, bulk_data_ptr] =
       mundy::meta::utils::generate_class_instance_and_mesh_from_meta_class_requirements<ComputeConstraintForcing>(
@@ -197,9 +197,9 @@ TEST(FENEWCASprings, FENEWCASpringsKernel) {
   // Create an instance of FENESprings based on committed mesh that meets the
   // default requirements for FENESprings.
   auto fenewca_springs_fixed_params =
-      Teuchos::ParameterList().set("enabled_kernel_names", mundy::core::make_string_array("FENEWCA_SPRINGS"));
+      Teuchos::ParameterList().set("enabled_kernel_names", mundy::utils::make_string_array("FENEWCA_SPRINGS"));
   fenewca_springs_fixed_params.sublist("FENEWCA_SPRINGS")
-      .set("valid_entity_part_names", mundy::core::make_string_array("SPHEROCYLINDER_SEGMENTS"));
+      .set("valid_entity_part_names", mundy::utils::make_string_array("SPHEROCYLINDER_SEGMENTS"));
 
   auto [compute_constraint_forcing_ptr, bulk_data_ptr] =
       mundy::meta::utils::generate_class_instance_and_mesh_from_meta_class_requirements<ComputeConstraintForcing>(

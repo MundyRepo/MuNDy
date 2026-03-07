@@ -74,9 +74,9 @@ integrated into Mundy and runnable via our Configurator/Driver system.
 #include <mundy_constraints/ComputeConstraintForcing.hpp>   // for mundy::constraints::ComputeConstraintForcing
 #include <mundy_constraints/DeclareAndInitConstraints.hpp>  // for mundy::constraints::DeclareAndInitConstraints
 #include <mundy_constraints/HookeanSprings.hpp>             // for mundy::constraints::HookeanSprings
-#include <mundy_core/MakeStringArray.hpp>                   // for mundy::core::make_string_array
-#include <mundy_core/StringLiteral.hpp>  // for mundy::core::StringLiteral and mundy::core::make_string_literal
-#include <mundy_core/throw_assert.hpp>   // for MUNDY_THROW_ASSERT
+#include <mundy_utils/MakeStringArray.hpp>                   // for mundy::utils::make_string_array
+#include <mundy_utils/StringLiteral.hpp>  // for mundy::utils::StringLiteral and mundy::utils::make_string_literal
+#include <mundy_utils/throw_assert.hpp>   // for MUNDY_THROW_ASSERT
 #include <mundy_linkers/ComputeSignedSeparationDistanceAndContactNormal.hpp>  // for mundy::linkers::ComputeSignedSeparationDistanceAndContactNormal
 #include <mundy_linkers/DestroyNeighborLinkers.hpp>                  // for mundy::linkers::DestroyNeighborLinkers
 #include <mundy_linkers/EvaluateLinkerPotentials.hpp>                // for mundy::linkers::EvaluateLinkerPotentials
@@ -818,36 +818,36 @@ int main(int argc, char **argv) {
   // ComputeConstraintForcing fixed parameters
   Teuchos::ParameterList compute_constraint_forcing_fixed_params;
   compute_constraint_forcing_fixed_params.set(
-      "enabled_kernel_names", mundy::core::make_string_array(mundy::constraints::HookeanSprings::get_name()));
+      "enabled_kernel_names", mundy::utils::make_string_array(mundy::constraints::HookeanSprings::get_name()));
 
   // ComputeSignedSeparationDistanceAndContactNormal fixed parameters
   Teuchos::ParameterList compute_ssd_and_cn_fixed_params;
   compute_ssd_and_cn_fixed_params.set(
-      "enabled_kernel_names", mundy::core::make_string_array("SPHEROCYLINDER_SEGMENT_SPHEROCYLINDER_SEGMENT_LINKER"));
+      "enabled_kernel_names", mundy::utils::make_string_array("SPHEROCYLINDER_SEGMENT_SPHEROCYLINDER_SEGMENT_LINKER"));
 
   // ComputeAABB fixed parameters
   Teuchos::ParameterList compute_aabb_fixed_params;
-  compute_aabb_fixed_params.set("enabled_kernel_names", mundy::core::make_string_array("SPHEROCYLINDER_SEGMENT"));
+  compute_aabb_fixed_params.set("enabled_kernel_names", mundy::utils::make_string_array("SPHEROCYLINDER_SEGMENT"));
 
   // GenerateNeighborLinkers fixed parameters
   Teuchos::ParameterList generate_neighbor_linkers_fixed_params;
   generate_neighbor_linkers_fixed_params.set("enabled_technique_name", "STK_SEARCH")
       .set("specialized_neighbor_linkers_part_names",
-           mundy::core::make_string_array("SPHEROCYLINDER_SEGMENT_SPHEROCYLINDER_SEGMENT_LINKERS"));
+           mundy::utils::make_string_array("SPHEROCYLINDER_SEGMENT_SPHEROCYLINDER_SEGMENT_LINKERS"));
   generate_neighbor_linkers_fixed_params.sublist("STK_SEARCH")
-      .set("valid_source_entity_part_names", mundy::core::make_string_array("SPHEROCYLINDER_SEGMENTS"))
-      .set("valid_target_entity_part_names", mundy::core::make_string_array("SPHEROCYLINDER_SEGMENTS"));
+      .set("valid_source_entity_part_names", mundy::utils::make_string_array("SPHEROCYLINDER_SEGMENTS"))
+      .set("valid_target_entity_part_names", mundy::utils::make_string_array("SPHEROCYLINDER_SEGMENTS"));
 
   // EvaluateLinkerPotentials fixed parameters
   Teuchos::ParameterList evaluate_linker_potentials_fixed_params;
   evaluate_linker_potentials_fixed_params.set(
       "enabled_kernel_names",
-      mundy::core::make_string_array("SPHEROCYLINDER_SEGMENT_SPHEROCYLINDER_SEGMENT_HERTZIAN_CONTACT"));
+      mundy::utils::make_string_array("SPHEROCYLINDER_SEGMENT_SPHEROCYLINDER_SEGMENT_HERTZIAN_CONTACT"));
 
   // LinkerPotentialForceReduction fixed parameters
   Teuchos::ParameterList linker_potential_force_reduction_fixed_params;
   linker_potential_force_reduction_fixed_params.set("enabled_kernel_names",
-                                                              mundy::core::make_string_array("SPHEROCYLINDER_SEGMENT"));
+                                                              mundy::utils::make_string_array("SPHEROCYLINDER_SEGMENT"));
 
   // DestroyNeighborLinkers fixed parameters
   Teuchos::ParameterList destroy_neighbor_linkers_fixed_params = Teuchos::ParameterList();
@@ -857,11 +857,11 @@ int main(int argc, char **argv) {
   Teuchos::ParameterList declare_and_init_constraints_fixed_params;
   declare_and_init_constraints_fixed_params.set("enabled_technique_name", "CHAIN_OF_SPRINGS")
       .sublist("CHAIN_OF_SPRINGS")
-      .set("hookean_springs_part_names", mundy::core::make_string_array(mundy::constraints::HookeanSprings::get_name()))
-      .set("angular_springs_part_names", mundy::core::make_string_array(mundy::constraints::AngularSprings::get_name()))
-      .set("sphere_part_names", mundy::core::make_string_array(mundy::shapes::Spheres::get_name()))
+      .set("hookean_springs_part_names", mundy::utils::make_string_array(mundy::constraints::HookeanSprings::get_name()))
+      .set("angular_springs_part_names", mundy::utils::make_string_array(mundy::constraints::AngularSprings::get_name()))
+      .set("sphere_part_names", mundy::utils::make_string_array(mundy::shapes::Spheres::get_name()))
       .set("spherocylinder_segment_part_names",
-           mundy::core::make_string_array(mundy::shapes::SpherocylinderSegments::get_name()))
+           mundy::utils::make_string_array(mundy::shapes::SpherocylinderSegments::get_name()))
       .set<bool>("generate_hookean_springs", true)
       .set<bool>("generate_angular_springs", false)
       .set<bool>("generate_spheres_at_nodes", false)

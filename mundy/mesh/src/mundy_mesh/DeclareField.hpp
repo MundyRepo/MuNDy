@@ -38,7 +38,7 @@
 #include <stk_mesh/base/MetaData.hpp>  // for stk::mesh::MetaData
 
 // Mundy
-#include <mundy_core/throw_assert.hpp>  // for MUNDY_THROW_REQUIRE
+#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_REQUIRE
 
 namespace mundy {
 

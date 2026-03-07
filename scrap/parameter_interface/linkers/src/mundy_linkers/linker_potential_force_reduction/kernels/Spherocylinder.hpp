@@ -36,7 +36,7 @@
 #include <stk_topology/topology.hpp>  // for stk::topology
 
 // Mundy libs
-#include <mundy_core/MakeStringArray.hpp>     // for mundy::core::make_string_array
+#include <mundy_utils/MakeStringArray.hpp>     // for mundy::utils::make_string_array
 #include <mundy_linkers/NeighborLinkers.hpp>  // for mundy::linkers::NeighborLinkers
 #include <mundy_mesh/BulkData.hpp>            // for mundy::mesh::BulkData
 #include <mundy_mesh/MetaData.hpp>            // for mundy::mesh::MetaData
@@ -144,7 +144,7 @@ class Spherocylinder : public mundy::meta::MetaKernel<> {
   static Teuchos::ParameterList get_valid_fixed_params() {
     static Teuchos::ParameterList default_parameter_list =
         Teuchos::ParameterList()
-            .set("valid_entity_part_names", mundy::core::make_string_array("SPHEROCYLINDERS"),
+            .set("valid_entity_part_names", mundy::utils::make_string_array("SPHEROCYLINDERS"),
                  "List of valid entity part names for the kernel.")
             .set("name_of_linker_part_to_reduce_over", std::string(default_name_of_linker_part_to_reduce_over_),
                  "The name of the linker part that we will reduce over.")

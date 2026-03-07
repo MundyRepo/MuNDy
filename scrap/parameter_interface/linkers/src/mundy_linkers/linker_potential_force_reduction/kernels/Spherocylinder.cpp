@@ -32,7 +32,7 @@
 #include <stk_mesh/base/Field.hpp>    // for stk::mesh::Field, stl::mesh::field_data
 
 // Mundy libs
-#include <mundy_core/throw_assert.hpp>                                                // for MUNDY_THROW_ASSERT
+#include <mundy_utils/throw_assert.hpp>                                                // for MUNDY_THROW_ASSERT
 #include <mundy_linkers/linker_potential_force_reduction/kernels/Spherocylinder.hpp>  // for mundy::linkers::...::kernels::Spherocylinder
 #include <mundy_math/Vector3.hpp>                                                     // for mundy::math::Vector3
 #include <mundy_mesh/BulkData.hpp>                                                    // for mundy::mesh::BulkData

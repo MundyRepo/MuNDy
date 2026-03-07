@@ -26,7 +26,7 @@
 #include <stk_topology/topology.hpp>  // for stk::topology
 
 // Mundy
-#include <mundy_core/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
+#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
 #include <mundy_math/Vector3.hpp>       // for mundy::math::Vector3
 #include <mundy_mesh/BulkData.hpp>      // for mundy::mesh::BulkData
 #include <mundy_mesh/FieldViews.hpp>    // for mundy::mesh::vector3_field_data

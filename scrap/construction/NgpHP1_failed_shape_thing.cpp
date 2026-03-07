@@ -57,10 +57,10 @@
 #include <mundy_constraints/ComputeConstraintForcing.hpp>      // for mundy::constraints::ComputeConstraintForcing
 #include <mundy_constraints/DeclareAndInitConstraints.hpp>     // for mundy::constraints::DeclareAndInitConstraints
 #include <mundy_constraints/HookeanSprings.hpp>                // for mundy::constraints::HookeanSprings
-#include <mundy_core/MakeStringArray.hpp>                      // for mundy::core::make_string_array
-#include <mundy_core/OurAnyNumberParameterEntryValidator.hpp>  // for mundy::core::OurAnyNumberParameterEntryValidator
-#include <mundy_core/StringLiteral.hpp>  // for mundy::core::StringLiteral and mundy::core::make_string_literal
-#include <mundy_core/throw_assert.hpp>   // for MUNDY_THROW_ASSERT
+#include <mundy_utils/MakeStringArray.hpp>                      // for mundy::utils::make_string_array
+#include <mundy_utils/OurAnyNumberParameterEntryValidator.hpp>  // for mundy::utils::OurAnyNumberParameterEntryValidator
+#include <mundy_utils/StringLiteral.hpp>  // for mundy::utils::StringLiteral and mundy::utils::make_string_literal
+#include <mundy_utils/throw_assert.hpp>   // for MUNDY_THROW_ASSERT
 #include <mundy_io/IOBroker.hpp>         // for mundy::io::IOBroker
 #include <mundy_linkers/ComputeSignedSeparationDistanceAndContactNormal.hpp>  // for mundy::linkers::ComputeSignedSeparationDistanceAndContactNormal
 #include <mundy_linkers/DestroyNeighborLinkers.hpp>         // for mundy::linkers::DestroyNeighborLinkers
@@ -87,7 +87,7 @@
 #include <mundy_meta/utils/MeshGeneration.hpp>  // for mundy::meta::utils::generate_class_instance_and_mesh_from_meta_class_requirements
 #include <mundy_shapes/ComputeAABB.hpp>  // for mundy::shapes::ComputeAABB
 #include <mundy_shapes/Spheres.hpp>      // for mundy::shapes::Spheres
-#include <mundy_core/rng.hpp>              // for mundy::core::make_philox
+#include <mundy_utils/rng.hpp>              // for mundy::utils::make_philox
 
 namespace mundy {
 
@@ -639,12 +639,12 @@ void setup_mundy_io() {
   // IO fixed parameters
   auto fixed_params_iobroker =
       Teuchos::ParameterList()
-          .set("enabled_io_parts", mundy::core::make_string_array("E", "H", "BS", "EESPRINGS", "EHSPRINGS", "HHSPRINGS",
+          .set("enabled_io_parts", mundy::utils::make_string_array("E", "H", "BS", "EESPRINGS", "EHSPRINGS", "HHSPRINGS",
                                                                   "LEFT_HP1", "DOUBLY_HP1_H", "DOUBLY_HP1_BS"))
           .set("enabled_io_fields_node_rank",
-               mundy::core::make_string_array("NODE_VELOCITY", "NODE_FORCE", "NODE_RNG_COUNTER"))
+               mundy::utils::make_string_array("NODE_VELOCITY", "NODE_FORCE", "NODE_RNG_COUNTER"))
           .set("enabled_io_fields_element_rank",
-               mundy::core::make_string_array("ELEMENT_RADIUS", "ELEMENT_RNG_COUNTER", "ELEMENT_REALIZED_BINDING_RATES",
+               mundy::utils::make_string_array("ELEMENT_RADIUS", "ELEMENT_RNG_COUNTER", "ELEMENT_REALIZED_BINDING_RATES",
                                               "ELEMENT_REALIZED_UNBINDING_RATES", "ELEMENT_PERFORM_STATE_CHANGE",
                                               "EUCHROMATIN_STATE", "EUCHROMATIN_STATE_CHANGE_NEXT_TIME",
                                               "EUCHROMATIN_STATE_CHANGE_ELAPSED_TIME", "ELEMENT_CHAINID"))
@@ -756,7 +756,7 @@ std::vector<std::vector<mundy::geom::Point<double>>> get_chromosome_positions_gr
   const mundy::math::Vector3d alignment_dir{0.0, 0.0, 1.0};
   for (size_t j = 0; j < num_chromosomes; j++) {
     all_chromosome_positions[j].reserve(num_nodes_per_chromosome);
-    openrand::Philox rng = core::make_philox(j, 0);
+    openrand::Philox rng = utils::make_philox(j, 0);
     mundy::math::Vector3d start_pos(2.0 * static_cast<double>(j), 0.0, 0.0);
     for (size_t i = 0; i < num_nodes_per_chromosome; ++i) {
       const auto pos = start_pos + static_cast<double>(i) * segment_length * alignment_dir;
@@ -773,7 +773,7 @@ std::vector<std::vector<mundy::geom::Point<double>>> get_chromosome_positions_ra
     all_chromosome_positions[j].reserve(num_nodes_per_chromosome);
 
     // Find a random place within the unit cell with a random orientation for the chain.
-    openrand::Philox rng = core::make_philox(j, 0);
+    openrand::Philox rng = utils::make_philox(j, 0);
     mundy::math::Vector3d r_start {
       rng.uniform<double>(domain_low[0], domain_high[0]), rng.uniform<double>(domain_low[1], domain_high[1]),
           rng.uniform<double>(domain_low[2], domain_high[2])
@@ -811,7 +811,7 @@ std::vector<std::vector<mundy::geom::Point<double>>> get_chromosome_positions_hi
 
     // Generate a random unit vector (will be used for creating the locatino of the nodes, the random position in
     // the unit cell will be handled later).
-    openrand::Philox rng = core::make_philox(ichromosome, 0);
+    openrand::Philox rng = utils::make_philox(ichromosome, 0);
     const double zrand = rng.rand<double>() - 1.0;
     const double wrand = std::sqrt(1.0 - zrand * zrand);
     const double trand = 2.0 * M_PI * rng.rand<double>();
@@ -998,23 +998,23 @@ struct HP1ParamParser {
     // Create a paramater entity validator for our large integers to allow for both int and long long.
     auto prefer_size_t = []() {
       if (std::is_same_v<size_t, unsigned short>) {
-        return mundy::core::OurAnyNumberParameterEntryValidator::PREFER_UNSIGNED_SHORT;
+        return mundy::utils::OurAnyNumberParameterEntryValidator::PREFER_UNSIGNED_SHORT;
       } else if (std::is_same_v<size_t, unsigned int>) {
-        return mundy::core::OurAnyNumberParameterEntryValidator::PREFER_UNSIGNED_INT;
+        return mundy::utils::OurAnyNumberParameterEntryValidator::PREFER_UNSIGNED_INT;
       } else if (std::is_same_v<size_t, unsigned long>) {
-        return mundy::core::OurAnyNumberParameterEntryValidator::PREFER_UNSIGNED_LONG;
+        return mundy::utils::OurAnyNumberParameterEntryValidator::PREFER_UNSIGNED_LONG;
       } else if (std::is_same_v<size_t, unsigned long long>) {
-        return mundy::core::OurAnyNumberParameterEntryValidator::PREFER_UNSIGNED_LONG_LONG;
+        return mundy::utils::OurAnyNumberParameterEntryValidator::PREFER_UNSIGNED_LONG_LONG;
       } else {
         throw std::runtime_error("Unknown size_t type.");
-        return mundy::core::OurAnyNumberParameterEntryValidator::PREFER_UNSIGNED_INT;
+        return mundy::utils::OurAnyNumberParameterEntryValidator::PREFER_UNSIGNED_INT;
       }
     }();
     const bool allow_all_types_by_default = false;
-    mundy::core::OurAnyNumberParameterEntryValidator::AcceptedTypes accept_int(allow_all_types_by_default);
+    mundy::utils::OurAnyNumberParameterEntryValidator::AcceptedTypes accept_int(allow_all_types_by_default);
     accept_int.allow_all_integer_types(true);
     auto make_new_validator = [](const auto &preferred_type, const auto &accepted_types) {
-      return Teuchos::rcp(new mundy::core::OurAnyNumberParameterEntryValidator(preferred_type, accepted_types));
+      return Teuchos::rcp(new mundy::utils::OurAnyNumberParameterEntryValidator(preferred_type, accepted_types));
     };
 
     static Teuchos::ParameterList valid_parameter_list;
@@ -2393,7 +2393,7 @@ class HP1 {
           // Fetch the RNG state, get a random number out of it, and increment
           unsigned *element_rng_counter = stk::mesh::field_data(element_rng_field, crosslinker);
           const stk::mesh::EntityId crosslinker_gid = bulk_data.identifier(crosslinker);
-          openrand::Philox rng = core::make_philox(crosslinker_gid, element_rng_counter[0]);
+          openrand::Philox rng = utils::make_philox(crosslinker_gid, element_rng_counter[0]);
           const double randu01 = rng.rand<double>();
           element_rng_counter[0]++;
 
@@ -2465,7 +2465,7 @@ class HP1 {
           // Fetch the RNG state, get a random number out of it, and increment
           unsigned *element_rng_counter = stk::mesh::field_data(element_rng_field, crosslinker);
           const stk::mesh::EntityId crosslinker_gid = bulk_data.identifier(crosslinker);
-          openrand::Philox rng = core::make_philox(crosslinker_gid, element_rng_counter[0]);
+          openrand::Philox rng = utils::make_philox(crosslinker_gid, element_rng_counter[0]);
           double randZ = rng.rand<double>() * Z_tot;
           double cumsum = 0.0;
           element_rng_counter[0]++;
@@ -2649,7 +2649,7 @@ class HP1 {
           if (elapsed_time[0] >= next_time[0]) {
             // Need a random number no matter what
             const stk::mesh::EntityId euchromatin_spring_gid = bulk_data.identifier(euchromatin_spring);
-            openrand::Philox rng = core::make_philox(euchromatin_spring_gid, element_rng_counter[0]);
+            openrand::Philox rng = utils::make_philox(euchromatin_spring_gid, element_rng_counter[0]);
             const double randu01 = rng.rand<double>();
             element_rng_counter[0]++;
 
@@ -3229,7 +3229,7 @@ class HP1 {
           unsigned *node_rng_counter = stk::mesh::field_data(node_rng_field, sphere_node);
 
           // U_brown = sqrt(2 * kt * gamma / dt) * randn / gamma
-          openrand::Philox rng = core::make_philox(sphere_node_gid, node_rng_counter[0]);
+          openrand::Philox rng = utils::make_philox(sphere_node_gid, node_rng_counter[0]);
           const double coeff = std::sqrt(2.0 * kt * sphere_drag_coeff / timestep_size) * inv_drag_coeff;
           node_velocity[0] += coeff * rng.randn<double>();
           node_velocity[1] += coeff * rng.randn<double>();

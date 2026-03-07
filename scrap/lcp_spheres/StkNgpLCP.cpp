@@ -58,7 +58,7 @@
 #include <stk_util/parallel/Parallel.hpp>  // for MPI_Comm, MPI_COMM_WORLD
 
 // Mundy
-#include <mundy_core/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
+#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
 #include <mundy_math/Vector3.hpp>
 
 using DeviceExecutionSpace = Kokkos::DefaultExecutionSpace;

@@ -55,10 +55,10 @@
 #include <mundy_constraints/ComputeConstraintForcing.hpp>      // for mundy::constraints::ComputeConstraintForcing
 #include <mundy_constraints/DeclareAndInitConstraints.hpp>     // for mundy::constraints::DeclareAndInitConstraints
 #include <mundy_constraints/HookeanSprings.hpp>                // for mundy::constraints::HookeanSprings
-#include <mundy_core/MakeStringArray.hpp>                      // for mundy::core::make_string_array
-#include <mundy_core/OurAnyNumberParameterEntryValidator.hpp>  // for mundy::core::OurAnyNumberParameterEntryValidator
-#include <mundy_core/StringLiteral.hpp>  // for mundy::core::StringLiteral and mundy::core::make_string_literal
-#include <mundy_core/throw_assert.hpp>   // for MUNDY_THROW_ASSERT
+#include <mundy_utils/MakeStringArray.hpp>                      // for mundy::utils::make_string_array
+#include <mundy_utils/OurAnyNumberParameterEntryValidator.hpp>  // for mundy::utils::OurAnyNumberParameterEntryValidator
+#include <mundy_utils/StringLiteral.hpp>  // for mundy::utils::StringLiteral and mundy::utils::make_string_literal
+#include <mundy_utils/throw_assert.hpp>   // for MUNDY_THROW_ASSERT
 #include <mundy_io/IOBroker.hpp>         // for mundy::io::IOBroker
 #include <mundy_linkers/ComputeSignedSeparationDistanceAndContactNormal.hpp>  // for mundy::linkers::ComputeSignedSeparationDistanceAndContactNormal
 #include <mundy_linkers/DestroyNeighborLinkers.hpp>         // for mundy::linkers::DestroyNeighborLinkers
@@ -84,7 +84,7 @@
 #include <mundy_meta/utils/MeshGeneration.hpp>  // for mundy::meta::utils::generate_class_instance_and_mesh_from_meta_class_requirements
 #include <mundy_shapes/ComputeAABB.hpp>  // for mundy::shapes::ComputeAABB
 #include <mundy_shapes/Spheres.hpp>      // for mundy::shapes::Spheres
-#include <mundy_core/rng.hpp>              // for mundy::core::make_philox
+#include <mundy_utils/rng.hpp>              // for mundy::utils::make_philox
 
 namespace mundy {
 
@@ -251,7 +251,7 @@ void kmc_choose_state_left_bound(const double timestep_size, const stk::mesh::Se
         // Fetch the RNG state, get a random number out of it, and increment
         unsigned *element_rng_counter = stk::mesh::field_data(el_rng_field, spring);
         const stk::mesh::EntityId spring_gid = bulk_data.identifier(spring);
-        openrand::Philox rng = core::make_philox(spring_gid, element_rng_counter[0]);
+        openrand::Philox rng = utils::make_philox(spring_gid, element_rng_counter[0]);
         const double randu01 = rng.rand<double>();
         element_rng_counter[0]++;
 
@@ -318,7 +318,7 @@ void kmc_choose_state_doubly_bound(const stk::mesh::Selector &doubly_bound_sprin
         // Fetch the RNG state, get a random number out of it, and increment
         unsigned *element_rng_counter = stk::mesh::field_data(el_rng_field, spring);
         const stk::mesh::EntityId spring_gid = bulk_data.identifier(spring);
-        openrand::Philox rng = core::make_philox(spring_gid, element_rng_counter[0]);
+        openrand::Philox rng = utils::make_philox(spring_gid, element_rng_counter[0]);
         const double randu01 = rng.rand<double>();
         element_rng_counter[0]++;
 
@@ -774,7 +774,7 @@ void compute_brownian_motion(const double &timestep_size, const double &viscosit
         unsigned *node_rng_counter = stk::mesh::field_data(n_rng_field, sphere_node);
 
         // U_brown = sqrt(2 * kt * gamma / dt) * randn / gamma
-        openrand::Philox rng = core::make_philox(sphere_node_gid, node_rng_counter[0]);
+        openrand::Philox rng = utils::make_philox(sphere_node_gid, node_rng_counter[0]);
         const double coeff = std::sqrt(2.0 * brownian_kt * sphere_drag_coeff / timestep_size) * inv_drag_coeff;
         node_velocity[0] += coeff * rng.randn<double>();
         node_velocity[1] += coeff * rng.randn<double>();
@@ -844,23 +844,23 @@ Teuchos::ParameterList get_valid_hp1_params() {
   // long long.
   auto prefer_size_t = []() {
     if (std::is_same_v<size_t, unsigned short>) {
-      return mundy::core::OurAnyNumberParameterEntryValidator::PREFER_UNSIGNED_SHORT;
+      return mundy::utils::OurAnyNumberParameterEntryValidator::PREFER_UNSIGNED_SHORT;
     } else if (std::is_same_v<size_t, unsigned int>) {
-      return mundy::core::OurAnyNumberParameterEntryValidator::PREFER_UNSIGNED_INT;
+      return mundy::utils::OurAnyNumberParameterEntryValidator::PREFER_UNSIGNED_INT;
     } else if (std::is_same_v<size_t, unsigned long>) {
-      return mundy::core::OurAnyNumberParameterEntryValidator::PREFER_UNSIGNED_LONG;
+      return mundy::utils::OurAnyNumberParameterEntryValidator::PREFER_UNSIGNED_LONG;
     } else if (std::is_same_v<size_t, unsigned long long>) {
-      return mundy::core::OurAnyNumberParameterEntryValidator::PREFER_UNSIGNED_LONG_LONG;
+      return mundy::utils::OurAnyNumberParameterEntryValidator::PREFER_UNSIGNED_LONG_LONG;
     } else {
       throw std::runtime_error("Unknown size_t type.");
-      return mundy::core::OurAnyNumberParameterEntryValidator::PREFER_UNSIGNED_INT;
+      return mundy::utils::OurAnyNumberParameterEntryValidator::PREFER_UNSIGNED_INT;
     }
   }();
   const bool allow_all_types_by_default = false;
-  mundy::core::OurAnyNumberParameterEntryValidator::AcceptedTypes accept_int(allow_all_types_by_default);
+  mundy::utils::OurAnyNumberParameterEntryValidator::AcceptedTypes accept_int(allow_all_types_by_default);
   accept_int.allow_all_integer_types(true);
   auto make_new_validator = [](const auto &preferred_type, const auto &accepted_types) {
-    return Teuchos::rcp(new mundy::core::OurAnyNumberParameterEntryValidator(preferred_type, accepted_types));
+    return Teuchos::rcp(new mundy::utils::OurAnyNumberParameterEntryValidator(preferred_type, accepted_types));
   };
 
   // Default values are hard-coded. Trust me, this is the clearest way.

@@ -31,7 +31,7 @@
 
 // Mundy libs
 #include <mundy_agents/HierarchyOfAgents.hpp>   // for mundy::agents::HierarchyOfAgents
-#include <mundy_core/attribute_unused.hpp>  // for MUNDY_ATTRIBUTE_UNUSED
+#include <mundy_utils/attribute_unused.hpp>  // for MUNDY_ATTRIBUTE_UNUSED
 
 /// \brief A helper macro for registering a \c Agent with \c HierarchyOfAgents.
 ///

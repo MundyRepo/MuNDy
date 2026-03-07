@@ -40,11 +40,11 @@
 #include <stk_search/SearchMethod.hpp>    // for stk::search::KDTREE
 
 // Mundy libs
-#include <mundy_core/throw_assert.hpp>                                                     // for MUNDY_THROW_ASSERT
+#include <mundy_utils/throw_assert.hpp>                                                     // for MUNDY_THROW_ASSERT
 #include <mundy_mesh/BulkData.hpp>                                                         // for mundy::mesh::BulkData
 #include <mundy_shapes/Spheres.hpp>                                                        // for mundy::shapes::Spheres
 #include <mundy_shapes/declare_and_initialize_shapes/techniques/AttachSpheresToNodes.hpp>  // for mundy::shapes::...::AttachSpheresToNodes
-#include <mundy_core/rng.hpp>              // for mundy::core::make_philox
+#include <mundy_utils/rng.hpp>              // for mundy::utils::make_philox
 
 namespace mundy {
 
@@ -144,7 +144,7 @@ void AttachSpheresToNodes::execute(const stk::mesh::Selector &node_selector) {
 
   // Set the sphere radii.
   // TODO(palmerb4): Need to think about how to consistently handle RNG counters for particles.
-  openrand::Philox rng = core::make_philox(1, 0);
+  openrand::Philox rng = utils::make_philox(1, 0);
   for (size_t i = 0; i < num_nodes_local; ++i) {
     stk::mesh::Entity sphere = requested_entities[i];
     double *const sphere_radius = stk::mesh::field_data(*element_radius_field_ptr_, sphere);

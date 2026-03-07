@@ -97,7 +97,7 @@ TEST(EvaluateLinkerPotentials, PerformsHertzianContactCalculationCorrectlyForSph
   // default requirements for EvaluateLinkerPotentials.
   auto hertzian_contact_fixed_params = Teuchos::ParameterList().set(
       "enabled_kernel_names",
-      mundy::core::make_string_array("SPHERE_SPHERE_HERTZIAN_CONTACT", "SPHERE_SPHEROCYLINDER_HERTZIAN_CONTACT",
+      mundy::utils::make_string_array("SPHERE_SPHERE_HERTZIAN_CONTACT", "SPHERE_SPHEROCYLINDER_HERTZIAN_CONTACT",
                                      "SPHERE_SPHEROCYLINDER_SEGMENT_HERTZIAN_CONTACT",
                                      "SPHEROCYLINDER_SEGMENT_SPHEROCYLINDER_SEGMENT_HERTZIAN_CONTACT",
                                      "SPHEROCYLINDER_SPHEROCYLINDER_HERTZIAN_CONTACT",

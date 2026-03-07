@@ -39,9 +39,9 @@
 #include <stk_topology/topology.hpp>      // for stk::topology::topology_t
 
 // Mundy
-#include <mundy_core/suppress_warnings.hpp>  // for MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_PUSH/POP
-#include <mundy_core/throw_assert.hpp>       // for MUNDY_THROW_ASSERT
-#include <mundy_core/tuple.hpp>              // for mundy::core::tuple
+#include <mundy_utils/suppress_warnings.hpp>  // for MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_PUSH/POP
+#include <mundy_utils/throw_assert.hpp>       // for MUNDY_THROW_ASSERT
+#include <mundy_utils/tuple.hpp>              // for mundy::utils::tuple
 #include <mundy_mesh/BulkData.hpp>           // for mundy::mesh::BulkData
 #include <mundy_mesh/FieldViews.hpp>         // for mundy::mesh::vector3_field_data, mundy::mesh::quaternion_field_data
 #include <mundy_mesh/ForEachEntity.hpp>      // for mundy::mesh::for_each_entity_run
@@ -1111,10 +1111,10 @@ KOKKOS_FUNCTION static constexpr const auto& find_const_component_recurse_impl(c
 
 /// \brief Fetch the component corresponding to the given Tag using an index sequence
 template <typename Tag, typename... Components, size_t... Is>
-KOKKOS_FUNCTION static constexpr auto& find_const_component_impl(const core::tuple<Components...>& tuple,
+KOKKOS_FUNCTION static constexpr auto& find_const_component_impl(const utils::tuple<Components...>& tuple,
                                                                  std::index_sequence<Is...>) {
   // Unpack into the
-  return find_const_component_recurse_impl<Tag>(core::get<Is>(tuple)...);
+  return find_const_component_recurse_impl<Tag>(utils::get<Is>(tuple)...);
 }
 
 /// \brief Helper function to locate the component that matches a Tag
@@ -1135,10 +1135,10 @@ KOKKOS_FUNCTION static constexpr auto& find_component_recurse_impl(First& first)
 
 /// \brief Fetch the component corresponding to the given Tag using an index sequence
 template <typename Tag, typename... Components, size_t... Is>
-KOKKOS_FUNCTION static constexpr auto& find_component_impl(core::tuple<Components...>& tuple,
+KOKKOS_FUNCTION static constexpr auto& find_component_impl(utils::tuple<Components...>& tuple,
                                                            std::index_sequence<Is...>) {
   // Unpack into the
-  return find_component_recurse_impl<Tag>(core::get<Is>(tuple)...);
+  return find_component_recurse_impl<Tag>(utils::get<Is>(tuple)...);
 }
 
 /// \brief Helper function to determine if any components in a tuple have a given rank
@@ -1158,9 +1158,9 @@ KOKKOS_FUNCTION static constexpr bool has_rank_recurse_impl(const First& first) 
 
 /// \brief Determine if any components in a tuple have a given rank using an index sequence
 template <stk::topology::rank_t rank, typename... Components, size_t... Is>
-KOKKOS_FUNCTION static constexpr bool has_rank_impl(const core::tuple<Components...>& tuple,
+KOKKOS_FUNCTION static constexpr bool has_rank_impl(const utils::tuple<Components...>& tuple,
                                                     std::index_sequence<Is...>) {
-  return has_rank_recurse_impl<rank>(core::get<Is>(tuple)...);
+  return has_rank_recurse_impl<rank>(utils::get<Is>(tuple)...);
 }
 
 /// \brief Helper function to determine if ~all~ components in a tuple have a given rank
@@ -1180,9 +1180,9 @@ KOKKOS_FUNCTION static constexpr bool all_have_rank_recurse_impl(const First& fi
 
 /// \brief Determine if ~all~ components in a tuple have a given rank
 template <stk::topology::rank_t rank, typename... Components, size_t... Is>
-KOKKOS_FUNCTION static constexpr bool all_have_rank_impl(const core::tuple<Components...>& tuple,
+KOKKOS_FUNCTION static constexpr bool all_have_rank_impl(const utils::tuple<Components...>& tuple,
                                                          std::index_sequence<Is...>) {
-  return all_have_rank_recurse_impl<rank>(core::get<Is>(tuple)...);
+  return all_have_rank_recurse_impl<rank>(utils::get<Is>(tuple)...);
 }
 
 /// \brief A helper class for wrapping a functor(view) with an operator()(FastMeshIndex)
@@ -1235,7 +1235,7 @@ static constexpr bool has_component_v = has_component<Tag, Components...>::value
 
 /// \brief Fetch the component corresponding to the given Tag (returns a const reference since the tuple is const)
 template <typename Tag, typename... Components>
-KOKKOS_FUNCTION static constexpr const auto& find_component(const core::tuple<Components...>& tuple) {
+KOKKOS_FUNCTION static constexpr const auto& find_component(const utils::tuple<Components...>& tuple) {
   static_assert(all_have_tags<Components...>, "All of the given components must have tags.");
   static_assert(has_component_v<Tag, Components...>,
                 "Attempting to find a component that does not exist in the given tuple");
@@ -1244,7 +1244,7 @@ KOKKOS_FUNCTION static constexpr const auto& find_component(const core::tuple<Co
 
 /// \brief Fetch the component corresponding to the given Tag
 template <typename Tag, typename... Components>
-KOKKOS_FUNCTION static constexpr auto& find_component(core::tuple<Components...>& tuple) {
+KOKKOS_FUNCTION static constexpr auto& find_component(utils::tuple<Components...>& tuple) {
   static_assert(all_have_tags<Components...>, "All of the given components must have tags.");
   static_assert(has_component_v<Tag, Components...>,
                 "Attempting to find a component that does not exist in the given tuple");
@@ -1253,13 +1253,13 @@ KOKKOS_FUNCTION static constexpr auto& find_component(core::tuple<Components...>
 
 /// \brief Determine if any components in a tuple have a given rank
 template <stk::topology::rank_t rank, typename... Components>
-KOKKOS_FUNCTION static constexpr bool has_rank(const core::tuple<Components...>& tuple) {
+KOKKOS_FUNCTION static constexpr bool has_rank(const utils::tuple<Components...>& tuple) {
   static_assert(all_have_tags<Components...>, "All of the given components must have tags.");
   return agg_impl::has_rank_impl<rank>(tuple, std::make_index_sequence<sizeof...(Components)>{});
 }
 /// \brief Determine if ~all~ components in a tuple have a given rank
 template <stk::topology::rank_t rank, typename... Components>
-KOKKOS_FUNCTION static constexpr bool all_have_rank(const core::tuple<Components...>& tuple) {
+KOKKOS_FUNCTION static constexpr bool all_have_rank(const utils::tuple<Components...>& tuple) {
   static_assert(all_have_tags<Components...>, "All of the given components must have tags.");
   return agg_impl::all_have_rank_impl<rank>(tuple, std::make_index_sequence<sizeof...(Components)>{});
 }
@@ -1475,7 +1475,7 @@ template <stk::topology::topology_t OurTopology, stk::topology::rank_t OurRank, 
 class Aggregate {
  public:
   static_assert(agg_impl::all_have_tags<Components...>, "All of the given components must have tags.");
-  using ComponentsTuple = core::tuple<Components...>;
+  using ComponentsTuple = utils::tuple<Components...>;
 
   //! \name Constructors
   //@{
@@ -1522,7 +1522,7 @@ class Aggregate {
   template <typename Tag, stk::topology::rank_t component_rank, typename NewComponent>
   auto add_component(NewComponent new_component) const {
     auto new_tagged_comp = TaggedComponent<Tag, component_rank, NewComponent>{std::move(new_component)};
-    auto new_tuple = core::tuple_cat(components_, core::make_tuple(new_tagged_comp));
+    auto new_tuple = utils::tuple_cat(components_, utils::make_tuple(new_tagged_comp));
 
     // Form the new type that has the old components plus the new appended
     // one.
@@ -1614,7 +1614,7 @@ class Aggregate {
 template <stk::topology::topology_t OurTopology, stk::topology::rank_t OurRank, typename... NgpComponents>
 class NgpAggregate {
  public:
-  using NgpComponentsTuple = core::tuple<NgpComponents...>;
+  using NgpComponentsTuple = utils::tuple<NgpComponents...>;
   static_assert(agg_impl::all_have_tags<NgpComponents...>, "All of the given components must have tags.");
 
   //! \name Constructors
@@ -1693,7 +1693,7 @@ class NgpAggregate {
   template <typename Tag, stk::topology::rank_t component_rank, typename NewNgpComponent>
   auto add_component(NewNgpComponent new_ngp_component) const {
     auto new_ngp_tagged_comp = NgpTaggedComponent<Tag, component_rank, NewNgpComponent>{std::move(new_ngp_component)};
-    auto new_tuple = core::tuple_cat(ngp_components_, core::make_tuple(new_ngp_tagged_comp));
+    auto new_tuple = utils::tuple_cat(ngp_components_, utils::make_tuple(new_ngp_tagged_comp));
 
     // Form the new type that has the old components plus the new appended
     // one.
@@ -1905,7 +1905,7 @@ class EntityView {
 template <stk::topology::topology_t OurTopology, stk::topology::rank_t OurRank, typename... NgpComponents>
 class NgpEntityView {
  public:
-  using NgpComponentsTuple = core::tuple<NgpComponents...>;
+  using NgpComponentsTuple = utils::tuple<NgpComponents...>;
 
   /// \brief Construct an EntityView for the given entity
   /// TODO(palmerb4) Optimize for reuse of connectivity.
@@ -2104,7 +2104,7 @@ template <stk::topology::topology_t OurTopology, stk::topology::rank_t OurRank, 
 auto get_updated_ngp_aggregate(const Aggregate<OurTopology, OurRank, TaggedComponents...>& aggregate) {
   auto ngp_mesh = stk::mesh::get_updated_ngp_mesh(aggregate.bulk_data());
 
-  auto ngp_components = core::make_tuple(
+  auto ngp_components = utils::make_tuple(
       get_updated_ngp_component(aggregate.template get_component<typename TaggedComponents::tag_type>())...);
 
   return NgpAggregate<OurTopology, OurRank,

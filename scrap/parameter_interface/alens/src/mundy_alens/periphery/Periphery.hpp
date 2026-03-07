@@ -58,7 +58,7 @@ a single GPU.
 
 // Mundy
 #include <mundy_alens/periphery/Gauss_Legendre_Nodes_and_Weights.hpp>  // for Gauss_Legendre_Nodes_and_Weights
-#include <mundy_core/throw_assert.hpp>                                 // for MUNDY_THROW_ASSERT
+#include <mundy_utils/throw_assert.hpp>                                 // for MUNDY_THROW_ASSERT
 #include <mundy_math/Vector3.hpp>                                      // for mundy::math::Vector3
 #define DOUBLE_ZERO 1.0e-12
 

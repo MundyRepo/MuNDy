@@ -41,7 +41,7 @@
 // Mundy
 #include <mundy_agents/Agents.hpp>          // for mundy::agents::Agents
 #include <mundy_agents/RankedAssembly.hpp>  // for mundy::agents::RankedAssembly
-#include <mundy_core/StringLiteral.hpp>     // for mundy::core::StringLiteral and mundy::core::make_string_literal
+#include <mundy_utils/StringLiteral.hpp>     // for mundy::utils::StringLiteral and mundy::utils::make_string_literal
 #include <mundy_linkers/Linkers.hpp>        // for mundy::linkers::fixup_linker_node_sharing
 #include <mundy_mesh/ForEachEntity.hpp>     // for mundy::mesh::for_each_entity_run
 #include <mundy_mesh/fmt_stk_types.hpp>     // adds fmt::format for stk types

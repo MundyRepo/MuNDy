@@ -35,7 +35,7 @@
 // Mundy libs
 #include <mundy_constraints/AngularSprings.hpp>  // for mundy::constraints::AngularSprings
 #include <mundy_constraints/compute_constraint_forcing/kernels/AngularSpringsKernel.hpp>  // for mundy::constraints::compute_constraint_forcing::kernels::AngularSpringsKernel
-#include <mundy_core/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
+#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
 #include <mundy_math/Vector3.hpp>       // for mundy::math::Vector3
 #include <mundy_mesh/BulkData.hpp>      // for mundy::mesh::BulkData
 #include <mundy_mesh/FieldViews.hpp>  // for mundy::mesh::vector3_field_data, mundy::mesh::quaternion_field_data, mundy::mesh::matrix3_field_data

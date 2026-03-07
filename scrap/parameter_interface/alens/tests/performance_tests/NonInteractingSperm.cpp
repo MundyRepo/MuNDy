@@ -45,8 +45,8 @@ The goal of this example is to simulate the swimming motion of a multiple, non-i
 #include <stk_util/parallel/Parallel.hpp>        // for stk::parallel_machine_init, stk::parallel_machine_finalize
 
 // Mundy libs
-#include <mundy_core/MakeStringArray.hpp>  // for mundy::core::make_string_array
-#include <mundy_core/throw_assert.hpp>     // for MUNDY_THROW_ASSERT
+#include <mundy_utils/MakeStringArray.hpp>  // for mundy::utils::make_string_array
+#include <mundy_utils/throw_assert.hpp>     // for MUNDY_THROW_ASSERT
 #include <mundy_math/Matrix3.hpp>          // for mundy::math::Matrix3
 #include <mundy_math/Quaternion.hpp>       // for mundy::math::Quaternion, mundy::math::quat_from_parallel_transport
 #include <mundy_math/Vector3.hpp>          // for mundy::math::Vector3

@@ -32,7 +32,7 @@
 #include <Teuchos_ParameterList.hpp>  // for Teuchos::ParameterList
 
 // Mundy libs
-#include <mundy_core/StringLiteral.hpp>                       // for mundy::core::make_string_literal
+#include <mundy_utils/StringLiteral.hpp>                       // for mundy::utils::make_string_literal
 #include <mundy_mesh/BulkData.hpp>                            // for mundy::mesh::BulkData
 #include <mundy_meta/MetaMethodSubsetExecutionInterface.hpp>  // for mundy::meta::MetaMethodSubsetExecutionInterface
 #include <mundy_meta/MetaRegistry.hpp>                        // for MUNDY_REGISTER_METACLASS
@@ -53,7 +53,7 @@ namespace rigid_body_motion {
 /// \brief Method for mapping the body force on a rigid body to the rigid body velocity.
 class MapRigidBodyForceToRigidBodyVelocity
     : public mundy::meta::MetaMethodSubsetExecutionDispatcher<MapRigidBodyForceToRigidBodyVelocity,
-                                                              mundy::core::make_string_literal(
+                                                              mundy::utils::make_string_literal(
                                                                   "MAP_RIGID_BODY_FORCE_TO_RIGID_BODY_VELOCITY")> {
  public:
   //! \name Constructors and destructor

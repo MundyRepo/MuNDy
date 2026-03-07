@@ -30,8 +30,8 @@
 #include <utility>      // for std::pair
 
 // Mundy libs
-#include <mundy_core/attribute_unused.hpp>                    // for MUNDY_ATTRIBUTE_UNUSED
-#include <mundy_core/throw_assert.hpp>                        // for MUNDY_THROW_ASSERT
+#include <mundy_utils/attribute_unused.hpp>                    // for MUNDY_ATTRIBUTE_UNUSED
+#include <mundy_utils/throw_assert.hpp>                        // for MUNDY_THROW_ASSERT
 #include <mundy_meta/MetaFactory.hpp>                         // for mundy::meta::MetaMethodFactory
 #include <mundy_meta/MetaKernel.hpp>                          // for mundy::meta::MetaKernel
 #include <mundy_meta/MetaMethodSubsetExecutionInterface.hpp>  // for mundy::meta::MetaMethodSubsetExecutionInterface

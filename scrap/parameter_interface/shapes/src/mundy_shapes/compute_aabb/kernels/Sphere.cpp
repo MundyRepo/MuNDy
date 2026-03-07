@@ -32,7 +32,7 @@
 #include <stk_mesh/base/Field.hpp>    // for stk::mesh::Field, stl::mesh::field_data
 
 // Mundy libs
-#include <mundy_core/throw_assert.hpp>                   // for MUNDY_THROW_ASSERT
+#include <mundy_utils/throw_assert.hpp>                   // for MUNDY_THROW_ASSERT
 #include <mundy_mesh/BulkData.hpp>                       // for mundy::mesh::BulkData
 #include <mundy_mesh/ForEachEntity.hpp>                  // for mundy::mesh::for_each_entity_run
 #include <mundy_shapes/Spheres.hpp>                      // for mundy::shapes::Spheres

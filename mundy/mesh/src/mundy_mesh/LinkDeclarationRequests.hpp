@@ -47,8 +47,8 @@
 #include <stk_mesh/baseImpl/PartVectorUtils.hpp>  // for stk::mesh::impl::fill_add_parts_and_supersets
 
 // Mundy libs
-#include <mundy_core/NgpView.hpp>        // for mundy::core::NgpView
-#include <mundy_core/throw_assert.hpp>   // for MUNDY_THROW_ASSERT
+#include <mundy_utils/NgpView.hpp>        // for mundy::utils::NgpView
+#include <mundy_utils/throw_assert.hpp>   // for MUNDY_THROW_ASSERT
 #include <mundy_mesh/BulkData.hpp>       // for mundy::mesh::BulkData
 #include <mundy_mesh/ForEachEntity.hpp>  // for mundy::mesh::for_each_entity_run
 #include <mundy_mesh/MetaData.hpp>       // for mundy::mesh::MetaData
@@ -237,8 +237,8 @@ class LinkDeclarationRequestsT {  // Raw data in any space
   //! \name Internal members
   //@{
 
-  using SizeDualView = core::NgpViewT<size_t, MemSpace>;
-  using RequestsDualView = core::NgpViewT<stk::mesh::Entity**, MemSpace>;
+  using SizeDualView = utils::NgpViewT<size_t, MemSpace>;
+  using RequestsDualView = utils::NgpViewT<stk::mesh::Entity**, MemSpace>;
 
   // Core data
   const LinkMetaData* link_meta_data_ptr_;

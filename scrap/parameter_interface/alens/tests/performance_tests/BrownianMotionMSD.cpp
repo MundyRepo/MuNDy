@@ -49,9 +49,9 @@ We'll need two MetaMethods: one for computing the brownian motion and one for ta
 #include <stk_util/parallel/Parallel.hpp>  // for stk::parallel_machine_init, stk::parallel_machine_finalize
 
 // Mundy libs
-#include <mundy_core/MakeStringArray.hpp>       // for mundy::core::make_string_array
-#include <mundy_core/StringLiteral.hpp>         // for mundy::core::StringLiteral and mundy::core::make_string_literal
-#include <mundy_core/throw_assert.hpp>          // for MUNDY_THROW_ASSERT
+#include <mundy_utils/MakeStringArray.hpp>       // for mundy::utils::make_string_array
+#include <mundy_utils/StringLiteral.hpp>         // for mundy::utils::StringLiteral and mundy::utils::make_string_literal
+#include <mundy_utils/throw_assert.hpp>          // for MUNDY_THROW_ASSERT
 #include <mundy_mesh/BulkData.hpp>              // for mundy::mesh::BulkData
 #include <mundy_mesh/ForEachEntity.hpp>         // for mundy::mesh::for_each_entity_run
 #include <mundy_mesh/MetaData.hpp>              // for mundy::mesh::MetaData
@@ -64,7 +64,7 @@ We'll need two MetaMethods: one for computing the brownian motion and one for ta
 #include <mundy_meta/PartReqs.hpp>  // for mundy::meta::PartReqs
 #include <mundy_meta/utils/MeshGeneration.hpp>  // for mundy::meta::utils::generate_class_instance_and_mesh_from_meta_class_requirements
 #include <mundy_shapes/Spheres.hpp>  // for mundy::shapes::Spheres
-#include <mundy_core/rng.hpp>              // for mundy::core::make_philox
+#include <mundy_utils/rng.hpp>              // for mundy::utils::make_philox
 
 class NodeEuler
     : public mundy::meta::MetaKernelDispatcher<NodeEuler, mundy::meta::make_registration_string("NODE_EULER")> {
@@ -219,7 +219,7 @@ class NodeEulerSphere : public mundy::meta::MetaKernel<> {
   /// \brief Get the valid fixed parameters for this class and their defaults.
   static Teuchos::ParameterList get_valid_fixed_params() {
     static Teuchos::ParameterList default_parameter_list;
-    default_parameter_list.set("valid_entity_part_names", mundy::core::make_string_array(default_part_name_),
+    default_parameter_list.set("valid_entity_part_names", mundy::utils::make_string_array(default_part_name_),
                                "Name of the parts associated with this kernel.");
     default_parameter_list.set(
         "node_velocity_field_name", std::string(default_node_velocity_field_name_),
@@ -504,7 +504,7 @@ class ComputeBrownianVelocitySphere : public mundy::meta::MetaKernel<> {
   /// \brief Get the valid fixed parameters for this class and their defaults.
   static Teuchos::ParameterList get_valid_fixed_params() {
     static Teuchos::ParameterList default_parameter_list;
-    default_parameter_list.set("valid_entity_part_names", mundy::core::make_string_array(default_part_name_),
+    default_parameter_list.set("valid_entity_part_names", mundy::utils::make_string_array(default_part_name_),
                                "Name of the parts associated with this kernel.");
     default_parameter_list.set(
         "node_brownian_velocity_field_name", std::string(default_node_brownian_velocity_field_name_),
@@ -588,7 +588,7 @@ class ComputeBrownianVelocitySphere : public mundy::meta::MetaKernel<> {
           const stk::mesh::EntityId sphere_node_gid = bulk_data.identifier(sphere_node);
           unsigned *node_rng_counter = stk::mesh::field_data(node_rng_counter_field, sphere_node);
 
-          openrand::Philox rng = core::make_philox(sphere_node_gid, node_rng_counter[0]);
+          openrand::Philox rng = utils::make_philox(sphere_node_gid, node_rng_counter[0]);
           node_brownian_velocity[0] = alpha * std::sqrt(2.0 * diffusion_coeff / time_step_size) * rng.randn<double>() +
                                       beta * node_brownian_velocity[0];
           node_brownian_velocity[1] = alpha * std::sqrt(2.0 * diffusion_coeff / time_step_size) * rng.randn<double>() +
@@ -683,18 +683,18 @@ int main(int argc, char **argv) {
   mesh_reqs_ptr->set_entity_rank_names({"NODE", "EDGE", "FACE", "ELEMENT", "CONSTRAINT"});
 
   Teuchos::ParameterList compute_brownian_velocity_fixed_params;
-  compute_brownian_velocity_fixed_params.set("enabled_kernel_names", mundy::core::make_string_array("SPHERE"))
+  compute_brownian_velocity_fixed_params.set("enabled_kernel_names", mundy::utils::make_string_array("SPHERE"))
       .set("node_rng_counter_field_name", "NODE_RNG_COUNTER")
       .set("node_brownian_velocity_field_name", "NODE_BROWNIAN_VELOCITY");
   compute_brownian_velocity_fixed_params.sublist("SPHERE").set("valid_entity_part_names",
-                                                               mundy::core::make_string_array("SPHERES"));
+                                                               mundy::utils::make_string_array("SPHERES"));
   mesh_reqs_ptr->sync(ComputeBrownianVelocity::get_mesh_requirements(compute_brownian_velocity_fixed_params));
 
   Teuchos::ParameterList node_euler_fixed_params;
-  node_euler_fixed_params.set("enabled_kernel_names", mundy::core::make_string_array("SPHERE"))
+  node_euler_fixed_params.set("enabled_kernel_names", mundy::utils::make_string_array("SPHERE"))
       .set("node_velocity_field_name", "NODE_BROWNIAN_VELOCITY")
       .set("node_original_position_field_name", "NODE_ORIGINAL_POSITION");
-  node_euler_fixed_params.sublist("SPHERE").set("valid_entity_part_names", mundy::core::make_string_array("SPHERES"));
+  node_euler_fixed_params.sublist("SPHERE").set("valid_entity_part_names", mundy::utils::make_string_array("SPHERES"));
   mesh_reqs_ptr->sync(NodeEuler::get_mesh_requirements(node_euler_fixed_params));
 
   std::shared_ptr<mundy::mesh::BulkData> bulk_data_ptr = mesh_reqs_ptr->declare_mesh();
@@ -773,7 +773,7 @@ int main(int argc, char **argv) {
     unsigned *node_rng_counter = stk::mesh::field_data(*node_rng_counter_field_ptr, node_i);
     // Do the RNG based on the GID of the sphere
     const stk::mesh::EntityId sphere_node_gid = bulk_data_ptr->identifier(node_i);
-    openrand::Philox rng = core::make_philox(sphere_node_gid, 0);
+    openrand::Philox rng = utils::make_philox(sphere_node_gid, 0);
     node_coords[0] = length_of_domain * rng.rand<double>();
     node_coords[1] = length_of_domain * rng.rand<double>();
     node_coords[2] = length_of_domain * rng.rand<double>();

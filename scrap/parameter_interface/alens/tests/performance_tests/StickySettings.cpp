@@ -174,9 +174,9 @@ Order of operations:
 #include <mundy_constraints/ComputeConstraintForcing.hpp>   // for mundy::constraints::ComputeConstraintForcing
 #include <mundy_constraints/DeclareAndInitConstraints.hpp>  // for mundy::constraints::DeclareAndInitConstraints
 #include <mundy_constraints/HookeanSprings.hpp>             // for mundy::constraints::HookeanSprings
-#include <mundy_core/MakeStringArray.hpp>                   // for mundy::core::make_string_array
-#include <mundy_core/StringLiteral.hpp>  // for mundy::core::StringLiteral and mundy::core::make_string_literal
-#include <mundy_core/throw_assert.hpp>   // for MUNDY_THROW_ASSERT
+#include <mundy_utils/MakeStringArray.hpp>                   // for mundy::utils::make_string_array
+#include <mundy_utils/StringLiteral.hpp>  // for mundy::utils::StringLiteral and mundy::utils::make_string_literal
+#include <mundy_utils/throw_assert.hpp>   // for MUNDY_THROW_ASSERT
 #include <mundy_io/IOBroker.hpp>         // for mundy::io::IOBroker
 #include <mundy_linkers/ComputeSignedSeparationDistanceAndContactNormal.hpp>  // for mundy::linkers::ComputeSignedSeparationDistanceAndContactNormal
 #include <mundy_linkers/DestroyNeighborLinkers.hpp>         // for mundy::linkers::DestroyNeighborLinkers
@@ -202,7 +202,7 @@ Order of operations:
 #include <mundy_meta/utils/MeshGeneration.hpp>  // for mundy::meta::utils::generate_class_instance_and_mesh_from_meta_class_requirements
 #include <mundy_shapes/ComputeAABB.hpp>  // for mundy::shapes::ComputeAABB
 #include <mundy_shapes/Spheres.hpp>      // for mundy::shapes::Spheres
-#include <mundy_core/rng.hpp>              // for mundy::core::make_philox
+#include <mundy_utils/rng.hpp>              // for mundy::utils::make_philox
 
 namespace mundy {
 
@@ -503,56 +503,56 @@ class StickySettings {
     // When we eventually switch to the configurator, these individual fixed params will become sublists within a single
     // master parameter list. Note, sublist will return a reference to the sublist with the given name.
     compute_constraint_forcing_fixed_params_ =
-        Teuchos::ParameterList().set("enabled_kernel_names", mundy::core::make_string_array("HOOKEAN_SPRINGS"));
+        Teuchos::ParameterList().set("enabled_kernel_names", mundy::utils::make_string_array("HOOKEAN_SPRINGS"));
     compute_constraint_forcing_fixed_params_.sublist("HOOKEAN_SPRINGS")
-        .set("valid_entity_part_names", mundy::core::make_string_array("HOOKEAN_SPRINGS", "CROSSLINKERS"));
+        .set("valid_entity_part_names", mundy::utils::make_string_array("HOOKEAN_SPRINGS", "CROSSLINKERS"));
 
     compute_ssd_and_cn_fixed_params_ = Teuchos::ParameterList().set(
         "enabled_kernel_names",
-        mundy::core::make_string_array("SPHERE_SPHERE_LINKER", "SPHERE_SPHEROCYLINDER_SEGMENT_LINKER"));
+        mundy::utils::make_string_array("SPHERE_SPHERE_LINKER", "SPHERE_SPHEROCYLINDER_SEGMENT_LINKER"));
 
     compute_aabb_fixed_params_ = Teuchos::ParameterList().set(
-        "enabled_kernel_names", mundy::core::make_string_array("SPHERE", "SPHEROCYLINDER_SEGMENT"));
+        "enabled_kernel_names", mundy::utils::make_string_array("SPHERE", "SPHEROCYLINDER_SEGMENT"));
     compute_aabb_fixed_params_.sublist("SPHEROCYLINDER_SEGMENT")
-        .set("valid_entity_part_names", mundy::core::make_string_array("CROSSLINKERS"));
+        .set("valid_entity_part_names", mundy::utils::make_string_array("CROSSLINKERS"));
 
     generate_sphere_sphere_neighbor_linkers_fixed_params_ =
         Teuchos::ParameterList()
             .set("enabled_technique_name", "STK_SEARCH")
-            .set("specialized_neighbor_linkers_part_names", mundy::core::make_string_array("SPHERE_SPHERE_LINKERS"));
+            .set("specialized_neighbor_linkers_part_names", mundy::utils::make_string_array("SPHERE_SPHERE_LINKERS"));
     generate_sphere_sphere_neighbor_linkers_fixed_params_.sublist("STK_SEARCH")
-        .set("valid_source_entity_part_names", mundy::core::make_string_array("SPHERES"))
-        .set("valid_target_entity_part_names", mundy::core::make_string_array("SPHERES"));
+        .set("valid_source_entity_part_names", mundy::utils::make_string_array("SPHERES"))
+        .set("valid_target_entity_part_names", mundy::utils::make_string_array("SPHERES"));
 
     generate_crosslinker_sphere_neighbor_linkers_fixed_params_ =
         Teuchos::ParameterList()
             .set("enabled_technique_name", "STK_SEARCH")
             .set("specialized_neighbor_linkers_part_names",
-                 mundy::core::make_string_array("CROSSLINKER_SPHERE_LINKERS"));
+                 mundy::utils::make_string_array("CROSSLINKER_SPHERE_LINKERS"));
     generate_crosslinker_sphere_neighbor_linkers_fixed_params_.sublist("STK_SEARCH")
-        .set("valid_source_entity_part_names", mundy::core::make_string_array(std::string("CROSSLINKERS")))
-        .set("valid_target_entity_part_names", mundy::core::make_string_array("SPHERES"));
+        .set("valid_source_entity_part_names", mundy::utils::make_string_array(std::string("CROSSLINKERS")))
+        .set("valid_target_entity_part_names", mundy::utils::make_string_array("SPHERES"));
 
     evaluate_linker_potentials_fixed_params_ = Teuchos::ParameterList().set(
-        "enabled_kernel_names", mundy::core::make_string_array("SPHERE_SPHERE_HERTZIAN_CONTACT"));
+        "enabled_kernel_names", mundy::utils::make_string_array("SPHERE_SPHERE_HERTZIAN_CONTACT"));
 
     linker_potential_force_reduction_fixed_params_ =
         Teuchos::ParameterList()
-            .set("enabled_kernel_names", mundy::core::make_string_array("SPHERE"))
+            .set("enabled_kernel_names", mundy::utils::make_string_array("SPHERE"))
             .set("name_of_linker_part_to_reduce_over", "SPHERE_SPHERE_LINKERS");
 
     destroy_neighbor_linkers_fixed_params_ =
         Teuchos::ParameterList().set("enabled_technique_name", "DESTROY_DISTANT_NEIGHBORS");
     destroy_neighbor_linkers_fixed_params_.sublist("DESTROY_DISTANT_NEIGHBORS")
-        .set("valid_entity_part_names", mundy::core::make_string_array("NEIGHBOR_LINKERS"))
+        .set("valid_entity_part_names", mundy::utils::make_string_array("NEIGHBOR_LINKERS"))
         .set("valid_connected_source_and_target_part_names",
-             mundy::core::make_string_array(std::string("SPHERES"), std::string("CROSSLINKERS")));
+             mundy::utils::make_string_array(std::string("SPHERES"), std::string("CROSSLINKERS")));
 
     declare_and_init_constraints_fixed_params_ =
         Teuchos::ParameterList().set("enabled_technique_name", "CHAIN_OF_SPRINGS");
     declare_and_init_constraints_fixed_params_.sublist("CHAIN_OF_SPRINGS")
-        .set("hookean_springs_part_names", mundy::core::make_string_array("BACKBONE_SPRINGS"))
-        .set("sphere_part_names", mundy::core::make_string_array("SPHERES"))
+        .set("hookean_springs_part_names", mundy::utils::make_string_array("BACKBONE_SPRINGS"))
+        .set("sphere_part_names", mundy::utils::make_string_array("SPHERES"))
         .set<bool>("generate_hookean_springs", true)
         .set<bool>("generate_spheres_at_nodes", true);
 
@@ -708,12 +708,12 @@ class StickySettings {
     auto fixed_params_iobroker =
         Teuchos::ParameterList()
             .set("enabled_io_parts",
-                 mundy::core::make_string_array("SPHERES", "BACKBONE_SPRINGS", "LEFT_BOUND_CROSSLINKERS",
+                 mundy::utils::make_string_array("SPHERES", "BACKBONE_SPRINGS", "LEFT_BOUND_CROSSLINKERS",
                                                 "RIGHT_BOUND_CROSSLINKERS", "DOUBLY_BOUND_CROSSLINKERS"))
             .set("enabled_io_fields_node_rank",
-                 mundy::core::make_string_array("NODE_VELOCITY", "NODE_FORCE", "NODE_RNG_COUNTER"))
+                 mundy::utils::make_string_array("NODE_VELOCITY", "NODE_FORCE", "NODE_RNG_COUNTER"))
             .set("enabled_io_fields_element_rank",
-                 mundy::core::make_string_array(
+                 mundy::utils::make_string_array(
                      "ELEMENT_RADIUS", "ELEMENT_HOOKEAN_SPRING_CONSTANT", "ELEMENT_HOOKEAN_SPRING_REST_LENGTH",
                      "ELEMENT_YOUNGS_MODULUS", "ELEMENT_POISSONS_RATIO", "ELEMENT_RNG_COUNTER", "ELEMENT_BINDING_RATES",
                      "ELEMENT_UNBINDING_RATES", "ELEMENT_PERFORM_STATE_CHANGE"))
@@ -1197,7 +1197,7 @@ class StickySettings {
           // Fetch the RNG state, get a random number out of it, and increment
           unsigned *element_rng_counter = stk::mesh::field_data(element_rng_field, crosslinker);
           const stk::mesh::EntityId crosslinker_gid = bulk_data.identifier(crosslinker);
-          openrand::Philox rng = core::make_philox(crosslinker_gid, element_rng_counter[0]);
+          openrand::Philox rng = utils::make_philox(crosslinker_gid, element_rng_counter[0]);
           const double randu01 = rng.rand<double>();
           element_rng_counter[0]++;
 
@@ -1269,7 +1269,7 @@ class StickySettings {
           // Fetch the RNG state, get a random number out of it, and increment
           unsigned *element_rng_counter = stk::mesh::field_data(element_rng_field, crosslinker);
           const stk::mesh::EntityId crosslinker_gid = bulk_data.identifier(crosslinker);
-          openrand::Philox rng = core::make_philox(crosslinker_gid, element_rng_counter[0]);
+          openrand::Philox rng = utils::make_philox(crosslinker_gid, element_rng_counter[0]);
           double randZ = rng.rand<double>() * Z_tot;
           double cumsum = 0.0;
           element_rng_counter[0]++;
@@ -1459,7 +1459,7 @@ class StickySettings {
           unsigned *node_rng_counter = stk::mesh::field_data(node_rng_field, sphere_node);
 
           // U_brown = sqrt(2 * kt * gamma / dt) * randn
-          openrand::Philox rng = core::make_philox(sphere_node_gid, node_rng_counter[0]);
+          openrand::Philox rng = utils::make_philox(sphere_node_gid, node_rng_counter[0]);
           const double coeff = std::sqrt(2.0 * kt * sphere_drag_coeff / timestep_size) * inv_drag_coeff;
           node_velocity[0] += coeff * rng.randn<double>();
           node_velocity[1] += coeff * rng.randn<double>();

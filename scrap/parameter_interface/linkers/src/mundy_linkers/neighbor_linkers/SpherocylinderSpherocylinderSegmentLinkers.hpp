@@ -52,7 +52,7 @@ namespace neighbor_linkers {
 /// \note This class is a constraint rank assembly part containing neighbor linkers between a spherocylinders and
 /// spherocylinder segments. It is a subset of the NeighborLinkers agent.
 class SpherocylinderSpherocylinderSegmentLinkers
-    : public mundy::agents::RankedAssembly<mundy::core::make_string_literal(
+    : public mundy::agents::RankedAssembly<mundy::utils::make_string_literal(
                                                "SPHEROCYLINDER_SPHEROCYLINDER_SEGMENT_LINKERS"),
                                            stk::topology::CONSTRAINT_RANK, mundy::linkers::NeighborLinkers> {
 };  // SpherocylinderSpherocylinderSegmentLinkers

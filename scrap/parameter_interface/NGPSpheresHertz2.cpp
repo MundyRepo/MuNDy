@@ -55,7 +55,7 @@
 #include <stk_util/parallel/Parallel.hpp>  // for stk::parallel_machine_init, stk::parallel_machine_finalize
 
 // Mundy
-#include <mundy_core/throw_assert.hpp>             // for MUNDY_THROW_ASSERT
+#include <mundy_utils/throw_assert.hpp>             // for MUNDY_THROW_ASSERT
 #include <mundy_mesh/Aggregate.hpp>                // for mundy::mesh::Aggregate
 #include <mundy_mesh/BulkData.hpp>                 // for mundy::mesh::BulkData
 #include <mundy_mesh/DeclareEntities.hpp>          // for mundy::mesh::DeclareEntitiesHelper

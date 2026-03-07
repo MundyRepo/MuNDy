@@ -33,7 +33,7 @@
 
 // Mundy libs
 #include <mundy_alens/compute_brownian_velicity/kernels/SpheresKernel.hpp>  // for mundy::alens::compute_brownian_velocity::kernels::Sphere
-#include <mundy_core/StringLiteral.hpp>         // for mundy::core::StringLiteral and mundy::core::make_string_literal
+#include <mundy_utils/StringLiteral.hpp>         // for mundy::utils::StringLiteral and mundy::utils::make_string_literal
 #include <mundy_mesh/BulkData.hpp>              // for mundy::mesh::BulkData
 #include <mundy_meta/MetaKernelDispatcher.hpp>  // for mundy::meta::MetaKernelDispatcher
 #include <mundy_meta/MetaRegistry.hpp>          // for MUNDY_REGISTER_METACLASS

@@ -44,12 +44,12 @@
 #include <mundy_constraints/HookeanSprings.hpp>  // for mundy::constraints::HookeanSprings
 #include <mundy_constraints/declare_and_initialize_constraints/techniques/ArchlengthCoordinateMapping.hpp>  // for mundy::constraints::...::ArchlengthCoordinateMapping
 #include <mundy_constraints/declare_and_initialize_constraints/techniques/ChainOfSprings.hpp>  // for mundy::constraints::...::ChainOfSprings
-#include <mundy_core/throw_assert.hpp>                                                         // for MUNDY_THROW_ASSERT
+#include <mundy_utils/throw_assert.hpp>                                                         // for MUNDY_THROW_ASSERT
 #include <mundy_mesh/BulkData.hpp>                  // for mundy::mesh::BulkData
 #include <mundy_mesh/fmt_stk_types.hpp>             // adds fmt::format for stk types
 #include <mundy_shapes/Spheres.hpp>                 // for mundy::shapes::Spheres
 #include <mundy_shapes/SpherocylinderSegments.hpp>  // for mundy::shapes::SpherocylinderSegments
-#include <mundy_core/rng.hpp>              // for mundy::core::make_philox
+#include <mundy_utils/rng.hpp>              // for mundy::utils::make_philox
 
 namespace mundy {
 
@@ -320,7 +320,7 @@ void ChainOfSprings::execute() {
                       "ChainOfSprings: No parts were added to the elements.");
 
   bulk_data_ptr_->modification_begin();
-  openrand::Philox rng = core::make_philox(1, 0);
+  openrand::Philox rng = utils::make_philox(1, 0);
   for (size_t i = start_node_index; i < end_node_index + 1; ++i) {
     // Create the node.
     stk::mesh::EntityId our_node_id = get_node_id(i);

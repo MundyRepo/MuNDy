@@ -80,7 +80,7 @@
 #include <mundy_math/Vector3.hpp>       // for mundy::math::Vector3
 #include <mundy_mesh/FieldViews.hpp>    // for mundy::mesh::vector3_field_data, mundy::mesh::quaternion_field_data
 #include <mundy_mesh/NgpFieldBLAS.hpp>  // for mundy::mesh::field_fill
-#include <mundy_core/rng.hpp>              // for mundy::core::make_philox
+#include <mundy_utils/rng.hpp>              // for mundy::utils::make_philox
 
 using ExecSpace = stk::ngp::ExecSpace;
 using IdentProc = stk::search::IdentProc<stk::mesh::EntityId, int>;
@@ -166,7 +166,7 @@ void randomize_position_and_orientation(const stk::mesh::NgpMesh &ngp_mesh, cons
         // Use the ID of the elem as the seed and choose an arbitrary counter.
         stk::mesh::Entity elem = ngp_mesh.get_entity(stk::topology::ELEM_RANK, elem_index);
         stk::mesh::EntityId elem_id = ngp_mesh.identifier(elem);
-        openrand::Philox rng = core::make_philox(elem_id, some_counter);
+        openrand::Philox rng = utils::make_philox(elem_id, some_counter);
 
         // Randomize the position of the node
         auto node_position = mundy::mesh::vector3_field_data(node_coords, node_index);

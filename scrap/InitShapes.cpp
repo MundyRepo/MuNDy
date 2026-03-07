@@ -40,7 +40,7 @@
 
 // Mundy libs
 #include <mundy_mesh/fmt_stk_types.hpp>                                     // adds fmt::format for stk types
-#include <mundy_core/throw_assert.hpp>                             // for MUNDY_THROW_ASSERT
+#include <mundy_utils/throw_assert.hpp>                             // for MUNDY_THROW_ASSERT
 #include <mundy_constraints/GenerateCollisionConstraints.hpp>  // for mundy::constraint::GenerateCollisionConstraints
 #include <mundy_mesh/BulkData.hpp>                            // for mundy::mesh::BulkData
 #include <mundy_meta/MetaFactory.hpp>                         // for mundy::meta::MetaKernelFactory

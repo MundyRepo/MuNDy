@@ -29,7 +29,7 @@
 #include <stk_topology/topology.hpp>  // for stk::topology
 
 // Mundy libs
-#include <mundy_core/throw_assert.hpp>      // for MUNDY_THROW_ASSERT
+#include <mundy_utils/throw_assert.hpp>      // for MUNDY_THROW_ASSERT
 #include <mundy_mesh/StringToTopology.hpp>  // for mundy::mesh::string_to_rank and mundy::mesh::string_to_topology
 
 namespace mundy {

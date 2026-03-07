@@ -25,7 +25,7 @@
 #include <Teuchos_ParameterList.hpp>  // for Teuchos::ParameterList
 
 // Mundy libs
-#include <mundy_core/StringLiteral.hpp>            // for mundy::core::make_string_literal
+#include <mundy_utils/StringLiteral.hpp>            // for mundy::utils::make_string_literal
 #include <mundy_mesh/BulkData.hpp>                 // for mundy::mesh::BulkData
 #include <mundy_meta/MetaTechniqueDispatcher.hpp>  // for mundy::meta::MetaMethodSubsetExecutionDispatcher
 #include <mundy_motion/ResolveConstraints.hpp>     // for mundy::motion::ResolveConstraints

@@ -47,7 +47,7 @@
 #include <stk_mesh/baseImpl/PartVectorUtils.hpp>  // for stk::mesh::impl::fill_add_parts_and_supersets
 
 // Mundy libs
-#include <mundy_core/throw_assert.hpp>           // for MUNDY_THROW_ASSERT
+#include <mundy_utils/throw_assert.hpp>           // for MUNDY_THROW_ASSERT
 #include <mundy_mesh/BulkData.hpp>               // for mundy::mesh::BulkData
 #include <mundy_mesh/ForEachEntity.hpp>          // for mundy::mesh::for_each_entity_run
 #include <mundy_mesh/MetaData.hpp>               // for mundy::mesh::MetaData
@@ -60,14 +60,14 @@ namespace mesh {
 
 /// \brief Get the local fast mesh indices for a set of entities as an NgpView.
 template <typename OurExecSpace>
-core::NgpView<stk::mesh::FastMeshIndex*, OurExecSpace> get_local_entity_indices(const stk::mesh::BulkData& bulk_data,
+utils::NgpView<stk::mesh::FastMeshIndex*, OurExecSpace> get_local_entity_indices(const stk::mesh::BulkData& bulk_data,
                                                                                 stk::mesh::EntityRank rank,
                                                                                 const stk::mesh::Selector& selector,
                                                                                 const OurExecSpace& exec_space) {
   std::vector<stk::mesh::Entity> local_entities;
   stk::mesh::get_entities(bulk_data, rank, selector, local_entities);
 
-  core::NgpView<stk::mesh::FastMeshIndex*, OurExecSpace> ngp_local_entity_indices("local_entity_indices",
+  utils::NgpView<stk::mesh::FastMeshIndex*, OurExecSpace> ngp_local_entity_indices("local_entity_indices",
                                                                                   local_entities.size());
 
   Kokkos::parallel_for(stk::ngp::HostRangePolicy(0, local_entities.size()),
@@ -408,7 +408,7 @@ class GenNeighborLinks {
   //@{
 
   // Three internal vectors that store the search accumulators, checkers, and specializations
-  using ngp_local_entity_indices_t = core::NgpView<stk::mesh::FastMeshIndex*, exec_space_t>;
+  using ngp_local_entity_indices_t = utils::NgpView<stk::mesh::FastMeshIndex*, exec_space_t>;
   using search_accumulator_t = std::function<search_spheres_view_t(const ngp_local_entity_indices_t&, double)>;
   using search_checker_t =
       std::function<bool(const ngp_local_entity_indices_t&, const type_info_t::search_spheres_view_t&, double)>;

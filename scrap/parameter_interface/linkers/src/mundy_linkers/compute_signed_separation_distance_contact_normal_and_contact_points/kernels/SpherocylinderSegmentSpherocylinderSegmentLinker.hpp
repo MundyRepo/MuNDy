@@ -37,7 +37,7 @@
 #include <stk_topology/topology.hpp>  // for stk::topology
 
 // Mundy libs
-#include <mundy_core/MakeStringArray.hpp>  // for mundy::core::make_string_array
+#include <mundy_utils/MakeStringArray.hpp>  // for mundy::utils::make_string_array
 #include <mundy_linkers/neighbor_linkers/SpherocylinderSegmentSpherocylinderSegmentLinkers.hpp>  // for mundy::linkers::neighbor_linkers::SpherocylinderSegmentSpherocylinderSegmentLinkers
 #include <mundy_mesh/BulkData.hpp>      // for mundy::mesh::BulkData
 #include <mundy_mesh/MetaData.hpp>      // for mundy::mesh::MetaData
@@ -151,11 +151,11 @@ class SpherocylinderSegmentSpherocylinderSegmentLinker : public mundy::meta::Met
     static Teuchos::ParameterList default_parameter_list =
         Teuchos::ParameterList()
             .set("valid_entity_part_names",
-                 mundy::core::make_string_array(
+                 mundy::utils::make_string_array(
                      neighbor_linkers::SpherocylinderSegmentSpherocylinderSegmentLinkers::get_name()),
                  "List of valid entity part names for the kernel.")
             .set("valid_spherocylinder_segment_part_names",
-                 mundy::core::make_string_array(mundy::shapes::SpherocylinderSegments::get_name()),
+                 mundy::utils::make_string_array(mundy::shapes::SpherocylinderSegments::get_name()),
                  "List of valid spherocylinder_segment part names for the kernel.")
             .set("linker_signed_separation_distance_field_name",
                  std::string(default_linker_signed_separation_distance_field_name_),

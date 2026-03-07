@@ -62,7 +62,7 @@
 #include <stk_util/parallel/Parallel.hpp>  // for MPI_Comm, MPI_COMM_WORLD
 
 // Mundy
-#include <mundy_core/throw_assert.hpp>  // for MUNDY_THROW_REQUIRE
+#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_REQUIRE
 #include <mundy_mesh/NgpFieldBLAS.hpp>  // for mundy::mesh::field_fill, mundy::mesh::field_copy, etc
 
 namespace mundy {

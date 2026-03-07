@@ -43,7 +43,7 @@
 
 // Mundy libs
 #include <MundyLinkers_config.hpp>                    // for HAVE_MUNDYLINKERS_MUNDYSHAPES
-#include <mundy_core/MakeStringArray.hpp>             // for mundy::core::make_string_array
+#include <mundy_utils/MakeStringArray.hpp>             // for mundy::utils::make_string_array
 #include <mundy_linkers/GenerateNeighborLinkers.hpp>  // for mundy::linkers::GenerateNeighborLinkers
 #include <mundy_linkers/Linkers.hpp>   // for mundy::linkers::Linker and  mundy::linkers::declare_family_tree_relation
 #include <mundy_mesh/BulkData.hpp>     // for mundy::mesh::BulkData
@@ -53,7 +53,7 @@
 #include <mundy_meta/MetaFactory.hpp>  // for mundy::meta::MetaMethodFactory and mundy::meta::HasMeshReqsAndIsRegisterable
 #include <mundy_meta/utils/MeshGeneration.hpp>  // for mundy::meta::utils::generate_class_instance_and_mesh_from_meta_class_requirements
 #include <mundy_shapes/ComputeAABB.hpp>  // for mundy::shapes::ComputeAABB
-#include <mundy_core/rng.hpp>              // for mundy::core::make_philox
+#include <mundy_utils/rng.hpp>              // for mundy::utils::make_philox
 
 namespace mundy {
 
@@ -477,7 +477,7 @@ TEST(GenerateNeighborLinkers, PerformsNeighborLinkerGenerationCorrectlyForSphere
   Teuchos::ParameterList compute_aabb_fixed_params = Teuchos::ParameterList();  // Use default parameters.
   Teuchos::ParameterList neighbor_linkers_fixed_params = Teuchos::ParameterList();
   neighbor_linkers_fixed_params.set("specialized_neighbor_linkers_part_names",
-                                    mundy::core::make_string_array("SPHERE_SPHERE_LINKERS"));
+                                    mundy::utils::make_string_array("SPHERE_SPHERE_LINKERS"));
   auto [compute_aabb_ptr, generate_neighbor_linkers_ptr, bulk_data_ptr] =
       mundy::meta::utils::generate_class_instance_and_mesh_from_meta_class_requirements<mundy::shapes::ComputeAABB,
                                                                                         GenerateNeighborLinkers>(
@@ -527,7 +527,7 @@ TEST(GenerateNeighborLinkers, PerformsNeighborLinkerGenerationCorrectlyForSphere
   bulk_data_ptr->modification_end();
 
   // Set the sphere's position and radius
-  openrand::Philox rng = core::make_philox(bulk_data_ptr->parallel_rank(), 0);
+  openrand::Philox rng = utils::make_philox(bulk_data_ptr->parallel_rank(), 0);
   for (int i = 0; i < num_spheres_per_process; i++) {
     stk::mesh::Entity node_i = requested_entities[i];
     stk::mesh::Entity sphere_i = requested_entities[num_spheres_per_process + i];
@@ -589,7 +589,7 @@ TEST(GenerateNeighborLinkers, PerformsNeighborLinkerGenerationCorrectlyForSegs) 
   Teuchos::ParameterList neighbor_linkers_fixed_params = Teuchos::ParameterList();
   neighbor_linkers_fixed_params.set(
       "specialized_neighbor_linkers_part_names",
-      mundy::core::make_string_array("SPHEROCYLINDER_SEGMENT_SPHEROCYLINDER_SEGMENT_LINKERS"));
+      mundy::utils::make_string_array("SPHEROCYLINDER_SEGMENT_SPHEROCYLINDER_SEGMENT_LINKERS"));
   auto [compute_aabb_ptr, generate_neighbor_linkers_ptr, bulk_data_ptr] =
       mundy::meta::utils::generate_class_instance_and_mesh_from_meta_class_requirements<mundy::shapes::ComputeAABB,
                                                                                         GenerateNeighborLinkers>(
@@ -642,7 +642,7 @@ TEST(GenerateNeighborLinkers, PerformsNeighborLinkerGenerationCorrectlyForSegs) 
   bulk_data_ptr->modification_end();
 
   // Set the seg's position and radius
-  openrand::Philox rng = core::make_philox(bulk_data_ptr->parallel_rank(), 0);
+  openrand::Philox rng = utils::make_philox(bulk_data_ptr->parallel_rank(), 0);
   for (int i = 0; i < num_segs_per_process; i++) {
     stk::mesh::Entity node0_i = requested_entities[2 * i + 0];
     stk::mesh::Entity node1_i = requested_entities[2 * i + 1];

@@ -56,7 +56,7 @@
 #include <stk_util/parallel/CommNeighbors.hpp>  // for stk::CommNeighbors
 
 // Mundy libs
-#include <mundy_core/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
+#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
 #include <mundy_linkers/Linkers.hpp>    // for mundy::linkers::declare_constraint_relations_to_family_tree_with_sharing
 #include <mundy_linkers/generate_neighbor_linkers/techniques/STKSearch.hpp>  // for mundy::linkers::...::STKSearch
 #include <mundy_mesh/BulkData.hpp>                                           // for mundy::mesh::BulkData

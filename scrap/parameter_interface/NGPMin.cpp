@@ -69,10 +69,10 @@
 #include <stk_balance/balance.hpp>  // for balanceStkMesh
 
 // Mundy
-#include <mundy_core/throw_assert.hpp>     // for MUNDY_THROW_REQUIRE
+#include <mundy_utils/throw_assert.hpp>     // for MUNDY_THROW_REQUIRE
 #include <mundy_math/Vector3.hpp>          // for Vector3
 #include <mundy_mesh/DeclareEntities.hpp>  // for mundy::mesh::DeclareEntitiesHelper
-#include <mundy_core/rng.hpp>              // for mundy::core::make_philox
+#include <mundy_utils/rng.hpp>              // for mundy::utils::make_philox
 
 using DeviceExecutionSpace = Kokkos::DefaultExecutionSpace;
 using DeviceMemorySpace = typename DeviceExecutionSpace::memory_space;
@@ -1337,7 +1337,7 @@ int main(int argc, char **argv) {
 
     // Generate nodes with unique IDs
     std::map<std::tuple<size_t, size_t>, size_t> grid_to_node_id_map;
-    openrand::Philox rng = core::make_philox(0, 0);
+    openrand::Philox rng = utils::make_philox(0, 0);
     for (size_t i = 0; i < num_spheres_x; ++i) {
       for (size_t j = 0; j < num_spheres_y; ++j) {
         double x = static_cast<double>(i) * grid_spacing;

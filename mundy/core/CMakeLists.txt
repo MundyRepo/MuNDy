@@ -1,56 +1,22 @@
-#
-# A) Define the subpackage
-#
-tribits_subpackage(Core)
+tribits_package_decl(Mundy)
 
-# By default we enable all optional packages. They can be disabled by the user if they are not needed.
-GLOBAL_SET(${PACKAGE_NAME}_ENABLE_ALL_OPTIONAL_PACKAGES ON)
+tribits_add_debug_option()
 
-#
-# B) Define the header and source files
-#
+# For some odd reason, our PACKAGE_SOURCE_DIR is not the current directory. It's ../ ??
+GLOBAL_SET(MUNDY_DEFAULT_UNIT_TEST_MAIN
+  "${PACKAGE_SOURCE_DIR}/mundy/core/tests/unit_tests/DefaultUnitTestMain.cpp")
+GLOBAL_SET(MUNDY_DEFAULT_INTEGRATION_TEST_MAIN
+  "${PACKAGE_SOURCE_DIR}/mundy/core/tests/integration_tests/DefaultIntegrationTestMain.cpp")
 
-# Headers are relative to the tribits_include_directory
-# We don't recommend typing these by hand. Use
-# find src/ -type f -name "*.hpp" | sed 's/^.\/\///' | sort
-# find src/ -type f -name "*.cpp" | sed 's/^.\/\///' | sort
-SET(NOINSTALLHEADERS
-  src/mundy_core/aggregate.hpp
-  src/mundy_core/attribute_unused.hpp
-  src/mundy_core/MakeStringArray.hpp
-  src/mundy_core/NgpPool.hpp
-  src/mundy_core/NgpView.hpp
-  src/mundy_core/OurAnyNumberParameterEntryValidator.hpp
-  src/mundy_core/StringLiteral.hpp
-  src/mundy_core/throw_assert.hpp
-  src/mundy_core/tuple.hpp
-)
 
-SET(SOURCES
-  src/mundy_core/OurAnyNumberParameterEntryValidator.cpp
-)
+# For now, we enable all subpackages of Mundy by default. They can be disabled by the user
+# if they are not needed.
+GLOBAL_SET(Mundy_ENABLE_ALL_OPTIONAL_PACKAGES ON)
 
-tribits_configure_file(${PACKAGE_NAME}_config.hpp)
-tribits_include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src)
-tribits_include_directories(${CMAKE_CURRENT_BINARY_DIR})
+tribits_add_test_directories("${PACKAGE_SOURCE_DIR}/mundy/core/tests/unit_tests")
 
-#
-# C) Add the libraries, tests, and examples
-#
+tribits_process_subpackages()
 
-# Add a standard library
-mundy_tribits_add_library(
-  mundy_core
-  HEADERS ${CMAKE_CURRENT_BINARY_DIR}/${PACKAGE_NAME}_config.hpp
-  NOINSTALLHEADERS ${NOINSTALLHEADERS}
-  DIRECTORIES src/mundy_core
-  FILES_MATCHING PATTERN "*.hpp"
-  SOURCES ${SOURCES}
-)
+tribits_package_def()
 
-tribits_add_test_directories(tests)
-
-#
-# D) Do standard post processing
-#
-tribits_subpackage_postprocess()
+tribits_package_postprocess()

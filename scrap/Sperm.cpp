@@ -73,8 +73,8 @@ integrated into Mundy and runnable via our Configurator/Driver system.
 
 // Mundy libs
 #include <mundy_constraints/DeclareAndInitConstraints.hpp>  // for mundy::constraints::DeclareAndInitConstraints
-#include <mundy_core/MakeStringArray.hpp>                   // for mundy::core::make_string_array
-#include <mundy_core/throw_assert.hpp>                      // for MUNDY_THROW_ASSERT
+#include <mundy_utils/MakeStringArray.hpp>                   // for mundy::utils::make_string_array
+#include <mundy_utils/throw_assert.hpp>                      // for MUNDY_THROW_ASSERT
 #include <mundy_linkers/ComputeSignedSeparationDistanceAndContactNormal.hpp>  // for mundy::linkers::ComputeSignedSeparationDistanceAndContactNormal
 #include <mundy_linkers/DestroyNeighborLinkers.hpp>                  // for mundy::linkers::DestroyNeighborLinkers
 #include <mundy_linkers/EvaluateLinkerPotentials.hpp>                // for mundy::linkers::EvaluateLinkerPotentials
@@ -314,13 +314,13 @@ class SpermSimulation {
 
     // ComputeSignedSeparationDistanceAndContactNormal fixed parameters
     auto compute_ssd_and_cn_fixed_params = Teuchos::ParameterList().set(
-        "enabled_kernel_names", mundy::core::make_string_array("SPHEROCYLINDER_SEGMENT_SPHEROCYLINDER_SEGMENT_LINKER"));
+        "enabled_kernel_names", mundy::utils::make_string_array("SPHEROCYLINDER_SEGMENT_SPHEROCYLINDER_SEGMENT_LINKER"));
     mesh_reqs_ptr_->sync(mundy::linkers::ComputeSignedSeparationDistanceAndContactNormal::get_mesh_requirements(
         compute_ssd_and_cn_fixed_params));
 
     // ComputeAABB fixed parameters
     auto compute_aabb_fixed_params =
-        Teuchos::ParameterList().set("enabled_kernel_names", mundy::core::make_string_array("SPHEROCYLINDER_SEGMENT"));
+        Teuchos::ParameterList().set("enabled_kernel_names", mundy::utils::make_string_array("SPHEROCYLINDER_SEGMENT"));
     mesh_reqs_ptr_->sync(mundy::shapes::ComputeAABB::get_mesh_requirements(compute_aabb_fixed_params));
 
     // GenerateNeighborLinkers fixed parameters
@@ -328,23 +328,23 @@ class SpermSimulation {
         Teuchos::ParameterList()
             .set("enabled_technique_name", "STK_SEARCH")
             .set("specialized_neighbor_linkers_part_names",
-                 mundy::core::make_string_array("SPHEROCYLINDER_SEGMENT_SPHEROCYLINDER_SEGMENT_LINKERS"))
+                 mundy::utils::make_string_array("SPHEROCYLINDER_SEGMENT_SPHEROCYLINDER_SEGMENT_LINKERS"))
             .sublist("STK_SEARCH")
-            .set("valid_source_entity_part_names", mundy::core::make_string_array("SPHEROCYLINDER_SEGMENTS"))
-            .set("valid_target_entity_part_names", mundy::core::make_string_array("SPHEROCYLINDER_SEGMENTS"));
+            .set("valid_source_entity_part_names", mundy::utils::make_string_array("SPHEROCYLINDER_SEGMENTS"))
+            .set("valid_target_entity_part_names", mundy::utils::make_string_array("SPHEROCYLINDER_SEGMENTS"));
     mesh_reqs_ptr_->sync(
         mundy::linkers::GenerateNeighborLinkers::get_mesh_requirements(generate_neighbor_linkers_fixed_params));
 
     // EvaluateLinkerPotentials fixed parameters
     auto evaluate_linker_potentials_fixed_params = Teuchos::ParameterList().set(
         "enabled_kernel_names",
-        mundy::core::make_string_array("SPHEROCYLINDER_SEGMENT_SPHEROCYLINDER_SEGMENT_HERTZIAN_CONTACT"));
+        mundy::utils::make_string_array("SPHEROCYLINDER_SEGMENT_SPHEROCYLINDER_SEGMENT_HERTZIAN_CONTACT"));
     mesh_reqs_ptr_->sync(
         mundy::linkers::EvaluateLinkerPotentials::get_mesh_requirements(evaluate_linker_potentials_fixed_params));
 
     // LinkerPotentialForceReduction fixed parameters
     auto linker_potential_force_reduction_fixed_params =
-        Teuchos::ParameterList().set("enabled_kernel_names", mundy::core::make_string_array("SPHEROCYLINDER_SEGMENT"));
+        Teuchos::ParameterList().set("enabled_kernel_names", mundy::utils::make_string_array("SPHEROCYLINDER_SEGMENT"));
     mesh_reqs_ptr_->sync(mundy::linkers::LinkerPotentialForceReduction::get_mesh_requirements(
         linker_potential_force_reduction_fixed_params));
 
@@ -360,12 +360,12 @@ class SpermSimulation {
             .set("enabled_technique_name", "CHAIN_OF_SPRINGS")
             .sublist("CHAIN_OF_SPRINGS")
             .set("hookean_springs_part_names",
-                 mundy::core::make_string_array(mundy::constraints::HookeanSprings::get_name()))
+                 mundy::utils::make_string_array(mundy::constraints::HookeanSprings::get_name()))
             .set("angular_springs_part_names",
-                 mundy::core::make_string_array(mundy::constraints::AngularSprings::get_name()))
-            .set("sphere_part_names", mundy::core::make_string_array(mundy::shapes::Spheres::get_name()))
+                 mundy::utils::make_string_array(mundy::constraints::AngularSprings::get_name()))
+            .set("sphere_part_names", mundy::utils::make_string_array(mundy::shapes::Spheres::get_name()))
             .set("spherocylinder_segment_part_names",
-                 mundy::core::make_string_array(mundy::shapes::SpherocylinderSegments::get_name()))
+                 mundy::utils::make_string_array(mundy::shapes::SpherocylinderSegments::get_name()))
             .set<bool>("generate_hookean_springs", true)
             .set<bool>("generate_angular_springs", false)
             .set<bool>("generate_spheres_at_nodes", false)

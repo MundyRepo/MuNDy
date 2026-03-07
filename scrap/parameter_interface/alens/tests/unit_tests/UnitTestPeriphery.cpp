@@ -35,7 +35,7 @@
 // Mundy
 #include <mundy_alens/periphery/Periphery.hpp>  // for gen_sphere_quadrature
 #include <mundy_math/Vector3.hpp>               // for Vector3
-#include <mundy_core/rng.hpp>              // for mundy::core::make_philox
+#include <mundy_utils/rng.hpp>              // for mundy::utils::make_philox
 
 namespace mundy {
 
@@ -363,7 +363,7 @@ struct ApplyResistanceWrapper {
   ApplyResistanceWrapper(const double &sphere_radius, const size_t num_bulk_points)
       : num_bulk_points_(num_bulk_points), bulk_points_("bulk_points", 3 * num_bulk_points) {
     // Generate random bulk points
-    openrand::Philox rng = core::make_philox(0, 0);
+    openrand::Philox rng = utils::make_philox(0, 0);
     for (size_t i = 0; i < num_bulk_points; ++i) {
       const double theta = rng.uniform(0.0, 2.0 * M_PI);
       const double phi = rng.uniform(0.0, M_PI);
@@ -580,7 +580,7 @@ TEST(PeripheryTest, KokkosInvertMatrix) {
 
   size_t seed = 1234;
   size_t counter = 0;
-  openrand::Philox rng = core::make_philox(seed, counter);
+  openrand::Philox rng = utils::make_philox(seed, counter);
   for (int i = 0; i < matrix_size; ++i) {
     for (int j = 0; j < matrix_size; ++j) {
       matrix_scratch(i, j) = rng.randn<double>();
@@ -618,7 +618,7 @@ TEST(PeripheryTest, ReadWriteKokkosMatrixToFromFile) {
 
   size_t seed = 1234;
   size_t counter = 0;
-  openrand::Philox rng = core::make_philox(seed, counter);
+  openrand::Philox rng = utils::make_philox(seed, counter);
   for (int i = 0; i < matrix_size; ++i) {
     for (int j = 0; j < matrix_size; ++j) {
       matrix(i, j) = rng.randn<double>();
@@ -650,7 +650,7 @@ TEST(PeripheryTest, ReadWriteKokkosVectorToFromFile) {
 
   size_t seed = 1234;
   size_t counter = 0;
-  openrand::Philox rng = core::make_philox(seed, counter);
+  openrand::Philox rng = utils::make_philox(seed, counter);
   for (int i = 0; i < vector_size; ++i) {
     vector(i) = rng.randn<double>();
   }
@@ -1200,7 +1200,7 @@ TEST(PeripheryTest, SKFIERigidBodyMotion) {
 
   // size_t seed = 1234;
   // size_t counter = 0;
-  // openrand::Philox rng = core::make_philox(seed, counter);
+  // openrand::Philox rng = utils::make_philox(seed, counter);
   // for (size_t i = 0; i < num_bulk_points; ++i) {
   //   const double theta = rng.uniform(0.0, 2.0 * M_PI);
   //   const double phi = rng.uniform(0.0, M_PI);
@@ -1424,7 +1424,7 @@ TEST(PeripheryTest, SKFIESelfConvFromFile) {
   Kokkos::View<double *, Kokkos::LayoutLeft, Kokkos::HostSpace> bulk_forces("bulk_forces", 3 * num_bulk_points);
   size_t seed = 1234;
   size_t counter = 0;
-  openrand::Philox rng = core::make_philox(seed, counter);
+  openrand::Philox rng = utils::make_philox(seed, counter);
   for (size_t i = 0; i < num_bulk_points; ++i) {
     const double theta = rng.uniform(0.0, 2.0 * M_PI);
     const double phi = rng.uniform(0.0, M_PI);
@@ -1630,7 +1630,7 @@ TEST(PeripheryRPYC, SphereQuadPeripheryRPYC) {
       // If the test is the random one, pick a quadrature point at random to look at
       int random_index = 0;
       if (itest == 3) {
-        openrand::Philox rng = core::make_philox(0, 0);
+        openrand::Philox rng = utils::make_philox(0, 0);
         random_index = rng.uniform(0, static_cast<int>(num_surface_nodes) - 1);
       }
       for (double r = periphery_radius - 5.0; r < periphery_radius; r += dr) {
@@ -1735,7 +1735,7 @@ TEST(PeripheryRPYC, ExternalQuadPeripheryRPYC) {
       // If the test is the random one, pick a quadrature point at random to look at
       int random_index = 0;
       if (itest == 3) {
-        openrand::Philox rng = core::make_philox(0, 0);
+        openrand::Philox rng = utils::make_philox(0, 0);
         random_index = rng.uniform(0, static_cast<int>(external_num_quadrature_points[itype]) - 1);
       }
       for (double r = periphery_radius - 5.0; r < periphery_radius; r += dr) {

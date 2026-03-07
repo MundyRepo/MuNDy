@@ -37,7 +37,7 @@
 
 // Mundy libs
 #include <mundy_constraints/FENEWCASprings.hpp>  // for FENEWCASprings
-#include <mundy_core/MakeStringArray.hpp>        // for mundy::core::make_string_array
+#include <mundy_utils/MakeStringArray.hpp>        // for mundy::utils::make_string_array
 #include <mundy_mesh/BulkData.hpp>               // for mundy::mesh::BulkData
 #include <mundy_mesh/MetaData.hpp>               // for mundy::mesh::MetaData
 #include <mundy_meta/FieldReqs.hpp>              // for mundy::meta::FieldReqs
@@ -117,7 +117,7 @@ class FENEWCASpringsKernel : public mundy::meta::MetaKernel<> {
   static Teuchos::ParameterList get_valid_fixed_params() {
     static Teuchos::ParameterList default_parameter_list =
         Teuchos::ParameterList()
-            .set("valid_entity_part_names", mundy::core::make_string_array(FENEWCASprings::get_name()),
+            .set("valid_entity_part_names", mundy::utils::make_string_array(FENEWCASprings::get_name()),
                  "Name of the parts associated with this kernel.")
             .set("node_force_field_name", std::string(default_node_force_field_name_),
                  "Name of the node force field to be used for storing the computed spring force.");

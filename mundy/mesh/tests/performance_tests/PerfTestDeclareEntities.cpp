@@ -39,7 +39,7 @@
 #include <stk_topology/topology.hpp>
 
 // Mundy
-#include <mundy_core/throw_assert.hpp>     // for MUNDY_THROW_REQUIRE
+#include <mundy_utils/throw_assert.hpp>     // for MUNDY_THROW_REQUIRE
 #include <mundy_math/Vector3.hpp>          // for mundy::math::Vector3
 #include <mundy_mesh/DeclareEntities.hpp>  // for mundy::mesh::DeclareEntitiesHelper
 

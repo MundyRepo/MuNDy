@@ -1,10 +1,9 @@
 #
-# A) Define the subpackage
+# A) Define the package
 #
-tribits_subpackage(Mesh)
+tribits_package_decl(Mesh)
 
-# By default we enable all optional packages. They can be disabled by the user if they are not needed.
-GLOBAL_SET(${PACKAGE_NAME}_ENABLE_ALL_OPTIONAL_PACKAGES ON)
+tribits_add_debug_option()
 
 #
 # B) Define the header and source files
@@ -94,7 +93,9 @@ mundy_tribits_add_library(
 
 tribits_add_test_directories(tests)
 
+tribits_package_def()
+
 #
 # D) Do standard post processing
 #
-tribits_subpackage_postprocess()
+tribits_package_postprocess()
