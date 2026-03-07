@@ -9,7 +9,6 @@ class Openrand(CMakePackage):
     license("MIT")
 
     version("main", branch="main")
-    version("develop", branch="develop")
 
     variant("tests", default=False, description="Build tests")
     variant("examples", default=False, description="Build examples")

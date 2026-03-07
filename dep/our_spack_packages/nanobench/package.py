@@ -10,8 +10,6 @@ class Nanobench(CMakePackage):
     license("MIT")
 
     version("master", branch="master")
-    version("main", branch="main")
-    version("develop", branch="develop")
 
     variant("cxxstd", default="17", values=("11", "14", "17", "20", "23"),
             multi=False, description="C++ standard for standalone nanobench build")

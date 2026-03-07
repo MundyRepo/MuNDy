@@ -19,28 +19,28 @@
 
 tribits_add_executable(
   ReferenceWrapperVsExplicitReference
-    SOURCES
-    ReferenceWrapperVsExplicitReference.cpp
-    CATEGORIES PERFORMANCE
-    )
+  SOURCES
+  ReferenceWrapperVsExplicitReference.cpp
+  CATEGORIES PERFORMANCE
+)
 
 tribits_add_executable(
   NgpReferenceWrapperVsExplicitReference
-    SOURCES
-    NgpReferenceWrapperVsExplicitReference.cpp
-    CATEGORIES PERFORMANCE
-    )
+  SOURCES
+  NgpReferenceWrapperVsExplicitReference.cpp
+  CATEGORIES PERFORMANCE
+)
 
 tribits_add_executable(
   StorageVsExplicitVariants
-    SOURCES
-    StorageVsExplicitVariants.cpp
-    CATEGORIES PERFORMANCE
-    )
+  SOURCES
+  StorageVsExplicitVariants.cpp
+  CATEGORIES PERFORMANCE
+)
 
 tribits_add_executable(
   NgpStorageVsExplicitVariants
-    SOURCES
-    NgpStorageVsExplicitVariants.cpp
-    CATEGORIES PERFORMANCE
-    )
+  SOURCES
+  NgpStorageVsExplicitVariants.cpp
+  CATEGORIES PERFORMANCE
+)

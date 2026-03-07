@@ -11,10 +11,10 @@ GLOBAL_SET(${PACKAGE_NAME}_ENABLE_ALL_OPTIONAL_PACKAGES ON)
 #
 
 # Headers are relative to the tribits_include_directory
-# We don't recommend typing these by hand. Use 
+# We don't recommend typing these by hand. Use
 # find src/ -type f -name "*.hpp" | sed 's/^.\/\///' | sort
 # find src/ -type f -name "*.cpp" | sed 's/^.\/\///' | sort
-SET(NOINSTALLHEADERS 
+SET(NOINSTALLHEADERS
   src/mundy_mesh/Aggregate.hpp
   src/mundy_mesh/BulkData.hpp
   src/mundy_mesh/DeclareEntities.hpp
@@ -23,6 +23,7 @@ SET(NOINSTALLHEADERS
   src/mundy_mesh/FieldViews.hpp
   src/mundy_mesh/fmt_stk_types.hpp
   src/mundy_mesh/ForEachEntity.hpp
+
   # src/mundy_mesh/GenNeighborLinkers.hpp
   src/mundy_mesh/GetNgpLinkData.hpp
   src/mundy_mesh/impl/HostDeviceCOOSynchronizer.hpp
@@ -52,14 +53,15 @@ SET(NOINSTALLHEADERS
   src/mundy_mesh/NgpFieldBLAS.hpp
   src/mundy_mesh/NgpForEachLink.hpp
   src/mundy_mesh/NgpLinkData.hpp
+
   # src/mundy_mesh/NgpModRequests.hpp
   src/mundy_mesh/NgpUtils.hpp
   src/mundy_mesh/StringToSelector.hpp
   src/mundy_mesh/StringToTopology.hpp
   src/mundy_mesh/Types.hpp
-  )
+)
 
-SET(SOURCES 
+SET(SOURCES
   src/mundy_mesh/DeclareEntities.cpp
   src/mundy_mesh/impl/PartitionKey.cpp
   src/mundy_mesh/impl/SelectorEval.cpp
@@ -70,7 +72,7 @@ SET(SOURCES
   src/mundy_mesh/MetaData.cpp
   src/mundy_mesh/StringToSelector.cpp
   src/mundy_mesh/StringToTopology.cpp
-  )
+)
 
 tribits_configure_file(${PACKAGE_NAME}_config.hpp)
 tribits_include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src)
@@ -88,7 +90,7 @@ mundy_tribits_add_library(
   DIRECTORIES src/mundy_mesh
   FILES_MATCHING PATTERN "*.hpp"
   SOURCES ${SOURCES}
-  )
+)
 
 tribits_add_test_directories(tests)
 

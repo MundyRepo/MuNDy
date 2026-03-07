@@ -42,10 +42,9 @@ class Mundy(CMakePackage, CudaPackage):
     license("GPL-3.0-or-later")
     tags = ["???"]
 
-    version("main",    branch="main")
-    version("dev",     branch="polishing")
-    # version("develop", branch="develop")
-    # version("#.#.#", sha256="<fill-me-in>")
+    version("main", branch="main", submodules=True)
+    version("dev", branch="polishing", submodules=True)
+    # version("#.#.#", sha256="<fill-me-in>", submodules=True)
 
     #
     # Common build variants

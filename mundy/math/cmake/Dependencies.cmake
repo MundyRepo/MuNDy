@@ -7,4 +7,4 @@ tribits_package_define_dependencies(
   LIB_OPTIONAL_TPLS MPI KokkosKernels
   TEST_REQUIRED_TPLS GTest OpenRAND nanobench
   TEST_OPTIONAL_TPLS CUDA
-  )
+)

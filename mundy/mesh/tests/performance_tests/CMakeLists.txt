@@ -22,46 +22,46 @@ tribits_add_executable(
     SOURCES
     PerfTestDeclareEntities.cpp
     CATEGORIES PERFORMANCE
-    )
+)
 tribits_copy_files_to_binary_dir(
     PerfTestDeclareEntitiesCopyFiles
     SOURCE_FILES
-        2013_03_06_cell08_876_H41_05_Cell2_cell-axon.ply
-        sphere.ply
-        ellipsoid.ply
-        cube.ply
-        bee_hive.ply
-        EXEDEPS PerfTestDeclareEntities
-        CATEGORIES PERFORMANCE
-    )
+    2013_03_06_cell08_876_H41_05_Cell2_cell-axon.ply
+    sphere.ply
+    ellipsoid.ply
+    cube.ply
+    bee_hive.ply
+    EXEDEPS PerfTestDeclareEntities
+    CATEGORIES PERFORMANCE
+)
 
 tribits_add_executable(
     PerfTestAccessors
     SOURCES
     PerfTestAccessors.cpp
     CATEGORIES PERFORMANCE
-    )
+)
 
 tribits_add_executable(
     PerfTestAggregates
     SOURCES
     PerfTestAggregates.cpp
     CATEGORIES PERFORMANCE
-    )
+)
 
 tribits_add_executable(
     PerfTestNgpAggregates
     SOURCES
     PerfTestNgpAggregates.cpp
     CATEGORIES PERFORMANCE
-    )
+)
 
 tribits_add_executable(
     PerfTestNgpLinkData
     SOURCES
     PerfTestNgpLinkData.cpp
     CATEGORIES PERFORMANCE
-    )
+)
 
 # These tests require Trilinos 16.0.0 or later
 # They still get built but will simply print a warning and return
@@ -70,4 +70,4 @@ tribits_add_executable(
     SOURCES
     PerfTestFieldBLAS.cpp
     CATEGORIES PERFORMANCE
-    )
+)

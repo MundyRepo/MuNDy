@@ -1,0 +1,29 @@
+# Unified cmake-format configuration for MuNDy.
+# Uses conservative settings to keep existing command/keyword casing and
+# avoid intrusive rewrites while standardizing whitespace and wrapping.
+
+with section("format"):
+  line_width = 120
+  tab_size = 2
+  use_tabchars = False
+  fractional_tab_policy = "use-space"
+
+  max_subgroups_hwrap = 2
+  max_pargs_hwrap = 6
+  max_rows_cmdline = 2
+  max_lines_hwrap = 2
+
+  dangle_parens = True
+  dangle_align = "prefix"
+
+  separate_ctrl_name_with_space = True
+  separate_fn_name_with_space = False
+
+  command_case = "unchanged"
+  keyword_case = "unchanged"
+
+  autosort = False
+  require_valid_layout = False
+
+with section("markup"):
+  enable_markup = False

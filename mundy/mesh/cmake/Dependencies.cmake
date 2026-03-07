@@ -7,4 +7,4 @@ tribits_package_define_dependencies(
   LIB_OPTIONAL_TPLS MPI CUDA
   TEST_REQUIRED_TPLS GTest nanobench
   TEST_OPTIONAL_TPLS
-  )
+)

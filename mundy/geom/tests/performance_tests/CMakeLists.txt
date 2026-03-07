@@ -22,4 +22,4 @@ tribits_add_executable(
     SOURCES
     PerfTestGeomMetric.cpp
     CATEGORIES PERFORMANCE
-    )
+)

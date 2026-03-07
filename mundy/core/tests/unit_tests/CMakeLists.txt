@@ -17,70 +17,69 @@
 # **********************************************************************************************************************
 # @HEADER
 
-# Here, we attempt to organize unit tests logically by dependencies (not by spelling). Simple classes are tested first 
-# and more complex classes are tested later. This is not a hard and fast rule, but it is a good guideline to follow, 
+# Here, we attempt to organize unit tests logically by dependencies (not by spelling). Simple classes are tested first
+# and more complex classes are tested later. This is not a hard and fast rule, but it is a good guideline to follow,
 # as it produces more logical error messages when a test fails.
 tribits_add_executable_and_test(
   UnitTestThrowAssert
   SOURCES
-    UnitTestThrowAssert.cpp
-    ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
+  UnitTestThrowAssert.cpp
+  ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1-4
-  )
+)
 
 tribits_add_executable_and_test(
   UnitTestStringLiteral
   SOURCES
   UnitTestStringLiteral.cpp
-    ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
+  ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1-4
-  )
+)
 
 tribits_add_executable_and_test(
   UnitTestTuple
   SOURCES
   UnitTestTuple.cpp
-    ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
+  ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1-4
-  )
+)
 
 tribits_add_executable_and_test(
   UnitTestAggregate
   SOURCES
   UnitTestAggregate.cpp
-    ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
+  ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1-4
-  )
+)
 
 tribits_add_executable_and_test(
   UnitTestReferenceWrapper
   SOURCES
   UnitTestReferenceWrapper.cpp
-    ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
+  ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1-4
-  )
+)
 
 tribits_add_executable_and_test(
   UnitTestStorage
   SOURCES
   UnitTestStorage.cpp
-    ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
+  ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1-4
-  )
+)
 
-  
 tribits_add_executable_and_test(
   UnitTestNgpView
   SOURCES
   UnitTestNgpView.cpp
-    ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
+  ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1-4
-  )
-  
+)
+
 tribits_add_executable_and_test(
   UnitTestNgpPool
   SOURCES
   UnitTestNgpPool.cpp
-    ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
+  ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1-4
-  )
+)

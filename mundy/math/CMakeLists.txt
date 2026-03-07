@@ -11,10 +11,10 @@ GLOBAL_SET(${PACKAGE_NAME}_ENABLE_ALL_OPTIONAL_PACKAGES ON)
 #
 
 # Headers are relative to the tribits_include_directory
-# We don't recommend typing these by hand. Use 
+# We don't recommend typing these by hand. Use
 # find src/ -type f -name "*.hpp" | sed 's/^.\/\///' | sort
 # find src/ -type f -name "*.cpp" | sed 's/^.\/\///' | sort
-SET(NOINSTALLHEADERS 
+SET(NOINSTALLHEADERS
   src/mundy_math/Accessor.hpp
   src/mundy_math/Array.hpp
   src/mundy_math/convex.hpp
@@ -38,11 +38,11 @@ SET(NOINSTALLHEADERS
   src/mundy_math/Vector3.hpp
   src/mundy_math/Vector.hpp
   src/mundy_math/zmort.hpp
-  )
+)
 
-SET(SOURCES 
+SET(SOURCES
   src/mundy_math/a_necessary_empty_file.cpp
-  )
+)
 
 tribits_configure_file(${PACKAGE_NAME}_config.hpp)
 tribits_include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src)
@@ -60,7 +60,7 @@ mundy_tribits_add_library(
   DIRECTORIES src/mundy_math
   FILES_MATCHING PATTERN "*.hpp"
   SOURCES ${SOURCES}
-  )
+)
 
 tribits_add_test_directories(tests)
 
