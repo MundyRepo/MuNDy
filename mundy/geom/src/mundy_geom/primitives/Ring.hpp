@@ -132,8 +132,7 @@ class Ring {
 
   /// \brief Copy assignment operator
   KOKKOS_FUNCTION
-    constexpr Ring<scalar_t, point_t, orientation_t>& operator=(
-      const Ring<scalar_t, point_t, orientation_t>& other) {
+  constexpr Ring<scalar_t, point_t, orientation_t>& operator=(const Ring<scalar_t, point_t, orientation_t>& other) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     center_circle_ = other.center_circle_;
     minor_radius_ = other.minor_radius_;
@@ -153,8 +152,7 @@ class Ring {
 
   /// \brief Move assignment operator
   KOKKOS_FUNCTION
-    constexpr Ring<scalar_t, point_t, orientation_t>& operator=(
-      Ring<scalar_t, point_t, orientation_t>&& other) {
+  constexpr Ring<scalar_t, point_t, orientation_t>& operator=(Ring<scalar_t, point_t, orientation_t>&& other) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     center_circle_ = std::move(other.center_circle_);
     minor_radius_ = std::move(other.minor_radius_);

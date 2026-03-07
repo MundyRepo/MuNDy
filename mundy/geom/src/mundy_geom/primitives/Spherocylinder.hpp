@@ -39,7 +39,7 @@ namespace mundy {
 namespace geom {
 
 template <typename Scalar, ValidPointType PointType = Point<Scalar>,
-      math::ValidQuaternionType QuaternionType = math::Quaternion<Scalar>>
+          math::ValidQuaternionType QuaternionType = math::Quaternion<Scalar>>
 class Spherocylinder {
   static_assert(
       std::is_same_v<typename PointType::scalar_t, Scalar> && std::is_same_v<typename QuaternionType::scalar_t, Scalar>,
@@ -140,7 +140,7 @@ class Spherocylinder {
 
   /// \brief Copy assignment operator
   KOKKOS_FUNCTION
-    constexpr Spherocylinder<scalar_t, point_t, orientation_t>& operator=(
+  constexpr Spherocylinder<scalar_t, point_t, orientation_t>& operator=(
       const Spherocylinder<scalar_t, point_t, orientation_t>& other) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     center_ = other.center_;
@@ -166,7 +166,7 @@ class Spherocylinder {
 
   /// \brief Move assignment operator
   KOKKOS_FUNCTION
-    constexpr Spherocylinder<scalar_t, point_t, orientation_t>& operator=(
+  constexpr Spherocylinder<scalar_t, point_t, orientation_t>& operator=(
       Spherocylinder<scalar_t, point_t, orientation_t>&& other) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     center_ = std::move(other.center_);
@@ -178,8 +178,7 @@ class Spherocylinder {
 
   /// \brief Move assignment operator
   template <typename OtherSpherocylinderType>
-  KOKKOS_FUNCTION constexpr Spherocylinder<scalar_t, point_t, orientation_t>& operator=(
-      OtherSpherocylinderType&& other)
+  KOKKOS_FUNCTION constexpr Spherocylinder<scalar_t, point_t, orientation_t>& operator=(OtherSpherocylinderType&& other)
     requires(!std::is_same_v<OtherSpherocylinderType, Spherocylinder<scalar_t, point_t, orientation_t>>)
   {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");

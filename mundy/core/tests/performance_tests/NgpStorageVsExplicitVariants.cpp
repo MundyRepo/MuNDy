@@ -273,35 +273,29 @@ int main(int argc, char** argv) {
         .performanceCounters(true)
         .minEpochIterations(60);
 
-    run_case(bench, "explicit/owned", x0, y0, z0, x, y, z,
-             [&](View1D x_view, View1D y_view, View1D z_view) {
-               return run_explicit_owned(x_view, y_view, z_view, alpha, beta, rounds);
-             });
+    run_case(bench, "explicit/owned", x0, y0, z0, x, y, z, [&](View1D x_view, View1D y_view, View1D z_view) {
+      return run_explicit_owned(x_view, y_view, z_view, alpha, beta, rounds);
+    });
 
-    run_case(bench, "storage/owned", x0, y0, z0, x, y, z,
-             [&](View1D x_view, View1D y_view, View1D z_view) {
-               return run_storage_owned(x_view, y_view, z_view, alpha, beta, rounds);
-             });
+    run_case(bench, "storage/owned", x0, y0, z0, x, y, z, [&](View1D x_view, View1D y_view, View1D z_view) {
+      return run_storage_owned(x_view, y_view, z_view, alpha, beta, rounds);
+    });
 
-    run_case(bench, "explicit/pointer", x0, y0, z0, x, y, z,
-             [&](View1D x_view, View1D y_view, View1D z_view) {
-               return run_explicit_pointer(x_view, y_view, z_view, alpha, beta, rounds);
-             });
+    run_case(bench, "explicit/pointer", x0, y0, z0, x, y, z, [&](View1D x_view, View1D y_view, View1D z_view) {
+      return run_explicit_pointer(x_view, y_view, z_view, alpha, beta, rounds);
+    });
 
-    run_case(bench, "storage/pointer", x0, y0, z0, x, y, z,
-             [&](View1D x_view, View1D y_view, View1D z_view) {
-               return run_storage_pointer(x_view, y_view, z_view, alpha, beta, rounds);
-             });
+    run_case(bench, "storage/pointer", x0, y0, z0, x, y, z, [&](View1D x_view, View1D y_view, View1D z_view) {
+      return run_storage_pointer(x_view, y_view, z_view, alpha, beta, rounds);
+    });
 
-    run_case(bench, "explicit/reference", x0, y0, z0, x, y, z,
-             [&](View1D x_view, View1D y_view, View1D z_view) {
-               return run_explicit_reference(x_view, y_view, z_view, alpha, beta, rounds);
-             });
+    run_case(bench, "explicit/reference", x0, y0, z0, x, y, z, [&](View1D x_view, View1D y_view, View1D z_view) {
+      return run_explicit_reference(x_view, y_view, z_view, alpha, beta, rounds);
+    });
 
-    run_case(bench, "storage/reference", x0, y0, z0, x, y, z,
-             [&](View1D x_view, View1D y_view, View1D z_view) {
-               return run_storage_reference(x_view, y_view, z_view, alpha, beta, rounds);
-             });
+    run_case(bench, "storage/reference", x0, y0, z0, x, y, z, [&](View1D x_view, View1D y_view, View1D z_view) {
+      return run_storage_reference(x_view, y_view, z_view, alpha, beta, rounds);
+    });
 
     std::cout << "NGP storage benchmark completed." << std::endl;
   }

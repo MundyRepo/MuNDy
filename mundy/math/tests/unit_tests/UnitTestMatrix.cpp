@@ -59,8 +59,7 @@ void is_close_debug(const U& a, const T& b, const std::string& message_if_fail =
   EXPECT_TRUE(is_approx_close(a, b)) << message_if_fail;
 }
 
-template <typename U, size_t R1, size_t C1, ValidAccessor<U> A1, typename T, size_t R2, size_t C2,
-          ValidAccessor<T> A2>
+template <typename U, size_t R1, size_t C1, ValidAccessor<U> A1, typename T, size_t R2, size_t C2, ValidAccessor<T> A2>
 void is_close_debug(const AMatrix<U, R1, C1, A1>& m1, const AMatrix<T, R2, C2, A2>& m2,
                     const std::string& message_if_fail = "") {
   EXPECT_TRUE(is_approx_close(m1, m2)) << message_if_fail;

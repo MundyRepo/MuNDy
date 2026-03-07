@@ -90,8 +90,7 @@ class Line {
 
   /// \brief Deep copy constructor
   KOKKOS_FUNCTION
-  constexpr Line(const Line<scalar_t, point_t>& other)
-      : center_(other.center_), direction_(other.direction_) {
+  constexpr Line(const Line<scalar_t, point_t>& other) : center_(other.center_), direction_(other.direction_) {
   }
 
   /// \brief Deep copy constructor
@@ -249,7 +248,6 @@ inline constexpr bool is_line_v = is_line<T>::value;
 /// @brief Concept to check if a type is a valid Line type
 template <typename LineType>
 concept ValidLineType = is_line_v<LineType>;
-
 
 //! \name Non-member functions for ValidLineType objects
 //@{

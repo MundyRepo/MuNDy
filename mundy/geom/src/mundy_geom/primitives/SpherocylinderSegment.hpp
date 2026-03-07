@@ -119,8 +119,7 @@ class SpherocylinderSegment {
 
   /// \brief Copy assignment operator
   KOKKOS_FUNCTION
-    constexpr SpherocylinderSegment<scalar_t, point_t>& operator=(
-      const SpherocylinderSegment<scalar_t, point_t>& other) {
+  constexpr SpherocylinderSegment<scalar_t, point_t>& operator=(const SpherocylinderSegment<scalar_t, point_t>& other) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     start_ = other.start_;
     end_ = other.end_;
@@ -143,8 +142,7 @@ class SpherocylinderSegment {
 
   /// \brief Move assignment operator
   KOKKOS_FUNCTION
-    constexpr SpherocylinderSegment<scalar_t, point_t>& operator=(
-      SpherocylinderSegment<scalar_t, point_t>&& other) {
+  constexpr SpherocylinderSegment<scalar_t, point_t>& operator=(SpherocylinderSegment<scalar_t, point_t>&& other) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     start_ = std::move(other.start_);
     end_ = std::move(other.end_);
@@ -154,8 +152,7 @@ class SpherocylinderSegment {
 
   /// \brief Move assignment operator
   template <typename OtherSpherocylinderSegmentType>
-  KOKKOS_FUNCTION constexpr SpherocylinderSegment<scalar_t, point_t>& operator=(
-      OtherSpherocylinderSegmentType&& other)
+  KOKKOS_FUNCTION constexpr SpherocylinderSegment<scalar_t, point_t>& operator=(OtherSpherocylinderSegmentType&& other)
     requires(!std::is_same_v<OtherSpherocylinderSegmentType, SpherocylinderSegment<scalar_t, point_t>>)
   {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");

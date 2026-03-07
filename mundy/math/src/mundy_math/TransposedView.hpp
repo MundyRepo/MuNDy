@@ -66,8 +66,7 @@ class TransposedView {
   }
 
   /// \brief Shallow copy constructor.
-  KOKKOS_INLINE_FUNCTION constexpr TransposedView(
-      const TransposedView<T, N, M, Accessor>& other)
+  KOKKOS_INLINE_FUNCTION constexpr TransposedView(const TransposedView<T, N, M, Accessor>& other)
       : accessor_(other.accessor_) {
   }
 

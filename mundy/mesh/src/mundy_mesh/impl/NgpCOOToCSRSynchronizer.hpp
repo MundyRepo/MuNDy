@@ -360,7 +360,8 @@ class NgpCOOToCSRSynchronizerT {
     Kokkos::Profiling::popRegion();
   }
 
-  static void reset_dirty_linked_buckets(NgpLinkCSRDataT<NgpMemSpace>& crs_data, NgpLinkCOODataT<NgpMemSpace>& /*coo_data*/,
+  static void reset_dirty_linked_buckets(NgpLinkCSRDataT<NgpMemSpace>& crs_data,
+                                         NgpLinkCOODataT<NgpMemSpace>& /*coo_data*/,
                                          const stk::mesh::Selector& selector) {
     Kokkos::Profiling::pushRegion("NgpLinkPartitionT::reset_dirty_linked_buckets");
 

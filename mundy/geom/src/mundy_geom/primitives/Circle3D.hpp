@@ -40,7 +40,7 @@ namespace mundy {
 namespace geom {
 
 template <typename Scalar, ValidPointType PointType = Point<Scalar>,
-      math::ValidQuaternionType QuaternionType = math::Quaternion<Scalar>>
+          math::ValidQuaternionType QuaternionType = math::Quaternion<Scalar>>
 class Circle3D {
   static_assert(std::is_same_v<typename PointType::scalar_t, Scalar> &&
                     std::is_same_v<typename QuaternionType::scalar_t, Scalar>,
@@ -68,8 +68,7 @@ class Circle3D {
   KOKKOS_FUNCTION
   constexpr Circle3D()
     requires(math::HasDefaultConstructor<point_t> && math::HasDefaultConstructor<orientation_t>)
-      : center_(), orientation_(),
-        radius_(static_cast<scalar_t>(-1)) {
+      : center_(), orientation_(), radius_(static_cast<scalar_t>(-1)) {
   }
 
   /// \brief Constructor to initialize the circle3d.
@@ -134,7 +133,7 @@ class Circle3D {
 
   /// \brief Copy assignment operator
   KOKKOS_FUNCTION
-    constexpr Circle3D<scalar_t, point_t, orientation_t>& operator=(
+  constexpr Circle3D<scalar_t, point_t, orientation_t>& operator=(
       const Circle3D<scalar_t, point_t, orientation_t>& other) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     center_ = other.center_;
@@ -145,8 +144,7 @@ class Circle3D {
 
   /// \brief Copy assignment operator
   template <typename OtherCircle3DType>
-  KOKKOS_FUNCTION constexpr Circle3D<scalar_t, point_t, orientation_t>& operator=(
-      const OtherCircle3DType& other)
+  KOKKOS_FUNCTION constexpr Circle3D<scalar_t, point_t, orientation_t>& operator=(const OtherCircle3DType& other)
     requires(!std::is_same_v<OtherCircle3DType, Circle3D<scalar_t, point_t, orientation_t>>)
   {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
@@ -158,8 +156,7 @@ class Circle3D {
 
   /// \brief Move assignment operator
   KOKKOS_FUNCTION
-    constexpr Circle3D<scalar_t, point_t, orientation_t>& operator=(
-      Circle3D<scalar_t, point_t, orientation_t>&& other) {
+  constexpr Circle3D<scalar_t, point_t, orientation_t>& operator=(Circle3D<scalar_t, point_t, orientation_t>&& other) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     center_ = std::move(other.center_);
     orientation_ = std::move(other.orientation_);
@@ -169,8 +166,7 @@ class Circle3D {
 
   /// \brief Move assignment operator
   template <typename OtherCircle3DType>
-  KOKKOS_FUNCTION constexpr Circle3D<scalar_t, point_t, orientation_t>& operator=(
-      OtherCircle3DType&& other)
+  KOKKOS_FUNCTION constexpr Circle3D<scalar_t, point_t, orientation_t>& operator=(OtherCircle3DType&& other)
     requires(!std::is_same_v<OtherCircle3DType, Circle3D<scalar_t, point_t, orientation_t>>)
   {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");

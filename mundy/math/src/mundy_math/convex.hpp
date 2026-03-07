@@ -42,9 +42,9 @@
 #include <mundy_core/throw_assert.hpp>
 
 // Mundy math:
-#include <mundy_math/Tolerance.hpp>  // for mundy::math::get_zero_tolerance<T>
-#include <mundy_math/Vector.hpp>     // for mundy::math::Vector
 #include <mundy_core/suppress_warnings.hpp>  // for MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_PUSH/POP
+#include <mundy_math/Tolerance.hpp>          // for mundy::math::get_zero_tolerance<T>
+#include <mundy_math/Vector.hpp>             // for mundy::math::Vector
 
 namespace mundy {
 
@@ -773,8 +773,7 @@ struct KokkosBackend {
   MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_PUSH
 
   template <class LinearOp>
-  KOKKOS_INLINE_FUNCTION
-  static auto make_domain_vector(const LinearOp& op) {
+  KOKKOS_INLINE_FUNCTION static auto make_domain_vector(const LinearOp& op) {
     if constexpr (impl::HasMakeDomainVectorMember<LinearOp>) {
       return op.make_domain_vector();
     } else if constexpr (impl::DenseMatView<LinearOp>) {
@@ -791,8 +790,7 @@ struct KokkosBackend {
   }
 
   template <class LinearOp>
-  KOKKOS_INLINE_FUNCTION
-  static auto make_range_vector(const LinearOp& op) {
+  KOKKOS_INLINE_FUNCTION static auto make_range_vector(const LinearOp& op) {
     if constexpr (impl::HasMakeRangeVectorMember<LinearOp>) {
       return op.make_range_vector();
     } else if constexpr (impl::DenseMatView<LinearOp>) {
@@ -1037,8 +1035,7 @@ struct KokkosBackend {
 /// \brief Backend for Mundy math within a kernel
 struct MundyMathBackend {
   template <class Vector>
-  KOKKOS_INLINE_FUNCTION
-  static auto make_vector_like(const Vector& /*x*/) {
+  KOKKOS_INLINE_FUNCTION static auto make_vector_like(const Vector& /*x*/) {
     return Vector();
   }
 

@@ -101,8 +101,8 @@ void is_close_debug(const AVector3<U, Accessor1>& v1, const AVector3<T, Accessor
 /// \param[in] q2 The second Quaternion
 /// \param[in] message_if_fail The message to print if the test fails
 template <typename U, typename T, ValidAccessor<U> Accessor1, ValidAccessor<T> Accessor2>
-void is_close_debug(const AQuaternion<U, Accessor1>& q1,
-                    const AQuaternion<T, Accessor2>& q2, const std::string& message_if_fail = "") {
+void is_close_debug(const AQuaternion<U, Accessor1>& q1, const AQuaternion<T, Accessor2>& q2,
+                    const std::string& message_if_fail = "") {
   if (!is_approx_close(q1, q2)) {
     std::cout << "q1 = " << q1 << std::endl;
     std::cout << "q2 = " << q2 << std::endl;
@@ -115,8 +115,8 @@ void is_close_debug(const AQuaternion<U, Accessor1>& q1,
 /// \param[in] m2 The second AMatrix3
 /// \param[in] message_if_fail The message to print if the test fails
 template <typename U, typename T, ValidAccessor<U> Accessor1, ValidAccessor<T> Accessor2>
-void is_different_debug(const AMatrix3<U, Accessor1>& m1,
-                        const AMatrix3<T, Accessor2>& m2, const std::string& message_if_fail = "") {
+void is_different_debug(const AMatrix3<U, Accessor1>& m1, const AMatrix3<T, Accessor2>& m2,
+                        const std::string& message_if_fail = "") {
   if (is_approx_close(m1, m2)) {
     std::cout << "m1 = " << m1 << std::endl;
     std::cout << "m2 = " << m2 << std::endl;
@@ -129,8 +129,8 @@ void is_different_debug(const AMatrix3<U, Accessor1>& m1,
 /// \param[in] v2 The second Vector3
 /// \param[in] message_if_fail The message to print if the test fails
 template <typename U, typename T, ValidAccessor<U> Accessor1, ValidAccessor<T> Accessor2>
-void is_different_debug(const AVector3<U, Accessor1>& v1,
-                        const AVector3<T, Accessor2>& v2, const std::string& message_if_fail = "") {
+void is_different_debug(const AVector3<U, Accessor1>& v1, const AVector3<T, Accessor2>& v2,
+                        const std::string& message_if_fail = "") {
   if (is_approx_close(v1, v2)) {
     std::cout << "v1 = " << v1 << std::endl;
     std::cout << "v2 = " << v2 << std::endl;
@@ -143,8 +143,8 @@ void is_different_debug(const AVector3<U, Accessor1>& v1,
 /// \param[in] q2 The second Quaternion
 /// \param[in] message_if_fail The message to print if the test fails
 template <typename U, typename T, ValidAccessor<U> Accessor1, ValidAccessor<T> Accessor2>
-void is_different_debug(const AQuaternion<U, Accessor1>& q1,
-                        const AQuaternion<T, Accessor2>& q2, const std::string& message_if_fail = "") {
+void is_different_debug(const AQuaternion<U, Accessor1>& q1, const AQuaternion<T, Accessor2>& q2,
+                        const std::string& message_if_fail = "") {
   if (is_approx_close(q1, q2)) {
     std::cout << "q1 = " << q1 << std::endl;
     std::cout << "q2 = " << q2 << std::endl;

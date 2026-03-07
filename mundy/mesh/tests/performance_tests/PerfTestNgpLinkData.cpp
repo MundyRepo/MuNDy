@@ -916,7 +916,8 @@ different ranks).
 //     for (size_t i = 0; i < stk::topology::NUM_RANKS; ++i) {
 //       stk::topology::rank_t rank = static_cast<stk::topology::rank_t>(i);
 //       entity_force_fields_[i] =
-//           &context.meta_data->declare_field<double>(rank, ("entity_force_fields_rank_" + std::to_string(rank)).c_str());
+//           &context.meta_data->declare_field<double>(rank, ("entity_force_fields_rank_" +
+//           std::to_string(rank)).c_str());
 //
 //       stk::mesh::put_field_on_mesh(*entity_force_fields_[i], context.bulk_data->mesh_meta_data().universal_part(), 3,
 //                                    vector3_initial_value_);
@@ -975,12 +976,14 @@ different ranks).
 //   }
 //
 //   void assert_invariants() {
-//     MUNDY_THROW_REQUIRE(params_.linked_entity_ranks_type == LinkedEntityRanksType::ONE_TO_MANY, std::invalid_argument,
+//     MUNDY_THROW_REQUIRE(params_.linked_entity_ranks_type == LinkedEntityRanksType::ONE_TO_MANY,
+//     std::invalid_argument,
 //                         "Linked entity ranks type must be SAME for eval_force_reduction_one_to_many.");
 //   }
 //
 //   void run_coo() {
-//     // Loop over all links, fetch their linked entities, atomically sum their force field into the first linked entity's
+//     // Loop over all links, fetch their linked entities, atomically sum their force field into the first linked
+//     entity's
 //     // force field.
 //   }
 //
@@ -1013,7 +1016,11 @@ COO. The twp factors that should control the performance is the number of entity
 of links marked as modified.
 */
 
-enum class ModificationPattern { ONE_BUCKET_PER_PARTITION_PER_RANK, RANDOM_BUCKETS_PER_PARTITION_PER_RANK, RANDOM_LINKS };
+enum class ModificationPattern {
+  ONE_BUCKET_PER_PARTITION_PER_RANK,
+  RANDOM_BUCKETS_PER_PARTITION_PER_RANK,
+  RANDOM_LINKS
+};
 
 void mark_one_bucket_per_partition_per_rank_as_modified(TestContext& context, const TestParameters& /*params*/) {
   int count = 0;
@@ -1137,8 +1144,8 @@ void run_test(ankerl::nanobench::Bench& /*bench*/, const TestParameters& params)
   } else if (modification_pattern == ModificationPattern::RANDOM_LINKS) {
     randomly_modify_links(context, params);
   } else {
-    MUNDY_THROW_REQUIRE(false, std::invalid_argument, "Unsupported modification pattern: " +
-                                                      std::to_string(static_cast<int>(modification_pattern)));
+    MUNDY_THROW_REQUIRE(false, std::invalid_argument,
+                        "Unsupported modification pattern: " + std::to_string(static_cast<int>(modification_pattern)));
   }
   context.link_data.coo_sync_to_device();
 

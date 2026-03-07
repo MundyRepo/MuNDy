@@ -85,8 +85,7 @@ class LineSegment {
 
   /// \brief Deep copy constructor
   KOKKOS_FUNCTION
-  constexpr LineSegment(const LineSegment<scalar_t, point_t>& other)
-      : start_(other.start_), end_(other.end_) {
+  constexpr LineSegment(const LineSegment<scalar_t, point_t>& other) : start_(other.start_), end_(other.end_) {
   }
 
   /// \brief Deep copy constructor
@@ -115,8 +114,7 @@ class LineSegment {
 
   /// \brief Copy assignment operator
   KOKKOS_FUNCTION
-    constexpr LineSegment<scalar_t, point_t>& operator=(
-      const LineSegment<scalar_t, point_t>& other) {
+  constexpr LineSegment<scalar_t, point_t>& operator=(const LineSegment<scalar_t, point_t>& other) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     start_ = other.start_;
     end_ = other.end_;
@@ -136,8 +134,7 @@ class LineSegment {
 
   /// \brief Move assignment operator
   KOKKOS_FUNCTION
-    constexpr LineSegment<scalar_t, point_t>& operator=(
-      LineSegment<scalar_t, point_t>&& other) {
+  constexpr LineSegment<scalar_t, point_t>& operator=(LineSegment<scalar_t, point_t>&& other) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     start_ = std::move(other.start_);
     end_ = std::move(other.end_);

@@ -120,7 +120,7 @@ class Mundy(CMakePackage, CudaPackage):
     # Optional TPLs
     #
     depends_on("mpi", when="+mpi")
-    depends_on("trilinos@16.0.0+teuchos", when="+teuchos")
+    depends_on("trilinos@16.0.0", when="+teuchos")
     depends_on("trilinos@16.0.0+stk", when="+stk")
     depends_on("kokkos-kernels", when="+kokkos-kernels")
     depends_on("openrand", when="+openrand")
@@ -194,7 +194,7 @@ class Mundy(CMakePackage, CudaPackage):
             when="+kokkos-kernels +cuda cuda_arch={0}".format(arch),
         )
         depends_on(
-            "trilinos@16.0.0+teuchos+cuda cuda_arch={0}".format(arch),
+            "trilinos@16.0.0+cuda cuda_arch={0}".format(arch),
             when="+teuchos +cuda cuda_arch={0}".format(arch),
         )
         depends_on(

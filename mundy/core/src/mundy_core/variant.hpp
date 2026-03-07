@@ -25,17 +25,17 @@
 #include <array>
 #include <cstddef>
 #include <iostream>
+#include <stdexcept>
 #include <type_traits>
 #include <utility>
-#include <stdexcept>
 
 // Kokkos
 #include <Kokkos_Core.hpp>
 
 // Mundy
-#include <mundy_core/tuple.hpp>        // for mundy::core::tuple
-#include <mundy_core/type_traits.hpp>  // for mundy::core::index_finder, contains_type
 #include <mundy_core/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
+#include <mundy_core/tuple.hpp>         // for mundy::core::tuple
+#include <mundy_core/type_traits.hpp>   // for mundy::core::index_finder, contains_type
 
 namespace mundy {
 

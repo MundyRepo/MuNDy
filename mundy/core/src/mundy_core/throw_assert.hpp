@@ -138,8 +138,7 @@ KOKKOS_INLINE_FUNCTION void abort_require(
     if constexpr (std::is_same_v<std::remove_const<decltype(message_to_print)>, std::string>) {
       Kokkos::abort(
           get_throw_require_device_string(assertion_string, message_to_print, file_string, line_string).c_str());
-    } else if constexpr (core::is_char_array_v<MessageStringType> ||
-                         core::is_our_string_literal_v<MessageStringType>) {
+    } else if constexpr (core::is_char_array_v<MessageStringType> || core::is_our_string_literal_v<MessageStringType>) {
       Kokkos::abort(
           get_throw_require_device_string(assertion_string, message_to_print, file_string, line_string).value);
     } else {

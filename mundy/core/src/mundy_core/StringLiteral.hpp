@@ -178,34 +178,28 @@ KOKKOS_INLINE_FUNCTION constexpr StringLiteral<N> make_string_literal(const char
 }
 
 template <typename T>
-struct is_char_array : std::false_type {
-};
+struct is_char_array : std::false_type {};
 
 template <size_t N>
-struct is_char_array<char[N]> : std::true_type {
-};
+struct is_char_array<char[N]> : std::true_type {};
 
 template <size_t N>
-struct is_char_array<const char[N]> : std::true_type {
-};
+struct is_char_array<const char[N]> : std::true_type {};
 
 template <typename T>
 inline constexpr bool is_char_array_v = is_char_array<std::remove_cvref_t<T>>::value;
 
 template <typename T>
-struct is_string_literal : is_char_array<T> {
-};
+struct is_string_literal : is_char_array<T> {};
 
 template <typename T>
 inline constexpr bool is_string_literal_v = is_string_literal<std::remove_cvref_t<T>>::value;
 
 template <typename T>
-struct is_our_string_literal : std::false_type {
-};
+struct is_our_string_literal : std::false_type {};
 
 template <size_t N>
-struct is_our_string_literal<StringLiteral<N>> : std::true_type {
-};
+struct is_our_string_literal<StringLiteral<N>> : std::true_type {};
 
 template <typename T>
 inline constexpr bool is_our_string_literal_v = is_our_string_literal<std::remove_cvref_t<T>>::value;
@@ -217,9 +211,9 @@ inline constexpr bool is_our_string_literal_v = is_our_string_literal<std::remov
 //! \name Helpers for determining if an object is a string literal (type traits fails for string literals)
 //@{
 
-#define MUNDY_IS_CHAR_ARRAY(x) \
-  ([&]() constexpr {                      \
-    static_cast<void>(sizeof(x));         \
+#define MUNDY_IS_CHAR_ARRAY(x)                          \
+  ([&]() constexpr {                                    \
+    static_cast<void>(sizeof(x));                       \
     return ::mundy::core::is_char_array_v<decltype(x)>; \
   }())
 
@@ -229,9 +223,9 @@ inline constexpr bool is_our_string_literal_v = is_our_string_literal<std::remov
            requires { std::type_identity_t<__mundy_T[sizeof(x) + 1]>{x}; }; \
   }())
 
-#define MUNDY_IS_OUR_STRING_LITERAL(x) \
-  ([&]() constexpr {                              \
-    static_cast<void>(sizeof(x));                 \
+#define MUNDY_IS_OUR_STRING_LITERAL(x)                          \
+  ([&]() constexpr {                                            \
+    static_cast<void>(sizeof(x));                               \
     return ::mundy::core::is_our_string_literal_v<decltype(x)>; \
   }())
 //@}

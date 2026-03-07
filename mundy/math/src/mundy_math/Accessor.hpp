@@ -22,8 +22,8 @@
 #define MUNDY_MATH_ACCESSOR_HPP_
 
 // C++ core libs
-#include <cstddef>
 #include <concepts>
+#include <cstddef>
 #include <initializer_list>
 #include <stdexcept>
 #include <type_traits>

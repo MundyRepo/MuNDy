@@ -223,8 +223,8 @@ class EuclideanMetric {
   /// \brief Shift a point by a given number of lattice images in each direction (free space does nothing)
   template <ValidPointType PointT, typename Integer>
     requires std::is_same_v<typename PointT::scalar_t, Scalar>
-  KOKKOS_INLINE_FUNCTION constexpr OurPoint shift_image(
-      const PointT& point, const math::Vector3<Integer>& /*num_images*/) const {
+  KOKKOS_INLINE_FUNCTION constexpr OurPoint shift_image(const PointT& point,
+                                                        const math::Vector3<Integer>& /*num_images*/) const {
     return point;
   }
 };  // EuclideanMetric
@@ -1348,7 +1348,8 @@ KOKKOS_INLINE_FUNCTION Line<typename PointT::scalar_t> unwrap_points_to_ref(cons
 
 /// \brief Unwrap all points of a line to be within one image of the reference point (inplace)
 template <ValidLineType LineT, ValidPointType PointT, typename Metric>
-KOKKOS_INLINE_FUNCTION void unwrap_points_to_ref_inplace(LineT& /*line*/, const Metric& /*metric*/, const PointT& /*ref_point*/) {
+KOKKOS_INLINE_FUNCTION void unwrap_points_to_ref_inplace(LineT& /*line*/, const Metric& /*metric*/,
+                                                         const PointT& /*ref_point*/) {
   MUNDY_THROW_REQUIRE(false, std::invalid_argument,
                       "Not implemented error: unwrapping a line into a periodic space does not make sense, as it is "
                       "infinite in length and could fill the space.")

@@ -972,8 +972,7 @@ struct RandomMixedCongruentCCQP {
 
     constexpr size_t diag_n = (NZ < NX ? NZ : NX);
     Kokkos::parallel_for(
-        "inject_d_diag", Kokkos::RangePolicy<exec_space>(0, diag_n),
-        KOKKOS_LAMBDA(const size_t i) { D(i, i) += 3.0; });
+        "inject_d_diag", Kokkos::RangePolicy<exec_space>(0, diag_n), KOKKOS_LAMBDA(const size_t i) { D(i, i) += 3.0; });
 
     transpose_zx_to_xz(D, DT);
   }

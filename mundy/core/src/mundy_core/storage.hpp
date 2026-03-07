@@ -73,12 +73,12 @@ struct storage_type {
   using storage_unwrapped_t = storage_underlying_type_t<no_cvref_t>;
 
  public:
-  using type = std::conditional_t<is_storage_v<no_cvref_t>, storage_unwrapped_t,
-                                  std::conditional_t<is_reference_wrapper_v<no_cvref_t>, bare_t,
-                                                     std::conditional_t<std::is_pointer_v<no_ref_t>, bare_t,
-                                                                        std::conditional_t<std::is_lvalue_reference_v<T>,
-                                                                                           reference_wrapper<no_ref_t>,
-                                                                                           no_cvref_t>>>>;
+  using type = std::conditional_t<
+      is_storage_v<no_cvref_t>, storage_unwrapped_t,
+      std::conditional_t<is_reference_wrapper_v<no_cvref_t>, bare_t,
+                         std::conditional_t<std::is_pointer_v<no_ref_t>, bare_t,
+                                            std::conditional_t<std::is_lvalue_reference_v<T>,
+                                                               reference_wrapper<no_ref_t>, no_cvref_t>>>>;
 };
 
 template <class T>

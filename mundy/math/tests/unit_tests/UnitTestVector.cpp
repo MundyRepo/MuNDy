@@ -37,10 +37,10 @@
 #include <vector>       // for std::vector
 
 // Mundy libs
-#include <mundy_math/Array.hpp>      // for mundy::math::Array
-#include <mundy_math/Tolerance.hpp>  // for mundy::math::get_relaxed_tolerance
-#include <mundy_math/Vector.hpp>     // for mundy::math::Vector
 #include <mundy_core/reference_wrapper.hpp>  // for mundy::core::reference_wrapper
+#include <mundy_math/Array.hpp>              // for mundy::math::Array
+#include <mundy_math/Tolerance.hpp>          // for mundy::math::get_relaxed_tolerance
+#include <mundy_math/Vector.hpp>             // for mundy::math::Vector
 
 // Note, these tests are meant to look like real use cases for the Vector class. As a result, we use implicit type
 // conversions rather than being explicit about types. This is to ensure that the Vector class can be used in a
@@ -78,8 +78,8 @@ void is_close_debug(const U& a, const T& b, const std::string& message_if_fail =
 /// \param[in] v2 The second Vector
 /// \param[in] message_if_fail The message to print if the test fails
 template <size_t N, typename U, typename OtherAccessor, typename T, typename Accessor>
-void is_close_debug(const AVector<U, N, OtherAccessor>& v1,
-                    const AVector<T, N, Accessor>& v2, const std::string& message_if_fail = "") {
+void is_close_debug(const AVector<U, N, OtherAccessor>& v1, const AVector<T, N, Accessor>& v2,
+                    const std::string& message_if_fail = "") {
   if (!is_approx_close(v1, v2)) {
     std::cout << "v1 = " << v1 << std::endl;
     std::cout << "v2 = " << v2 << std::endl;
@@ -92,8 +92,8 @@ void is_close_debug(const AVector<U, N, OtherAccessor>& v1,
 /// \param[in] v2 The second Vector
 /// \param[in] message_if_fail The message to print if the test fails
 template <size_t N, typename U, typename OtherAccessor, typename T, typename Accessor>
-void is_different_debug(const AVector<U, N, OtherAccessor>& v1,
-                        const AVector<T, N, Accessor>& v2, const std::string& message_if_fail = "") {
+void is_different_debug(const AVector<U, N, OtherAccessor>& v1, const AVector<T, N, Accessor>& v2,
+                        const std::string& message_if_fail = "") {
   if (is_approx_close(v1, v2)) {
     std::cout << "v1 = " << v1 << std::endl;
     std::cout << "v2 = " << v2 << std::endl;
@@ -1463,8 +1463,7 @@ struct CallableOnlyAccessor {
   T* data_;
 
   KOKKOS_INLINE_FUNCTION
-  explicit CallableOnlyAccessor(T* data)
-      : data_(data) {
+  explicit CallableOnlyAccessor(T* data) : data_(data) {
   }
 
   KOKKOS_INLINE_FUNCTION T& operator()(size_t idx) {

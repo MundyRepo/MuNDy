@@ -758,7 +758,7 @@ class AMatrix {
   /// \brief Get a diagonal matrix from a vector
   template <size_t... Is, typename U, size_t OtherN, typename OtherAccessor>
   KOKKOS_INLINE_FUNCTION static constexpr AMatrix<T, N, M> diagonal_impl(std::index_sequence<Is...>,
-                                                                        const AVector<U, OtherN, OtherAccessor>& vec) {
+                                                                         const AVector<U, OtherN, OtherAccessor>& vec) {
     // Is should be of length min(N, M). As should the vec.
     constexpr size_t min_dim = M < N ? M : N;
     static_assert(OtherN == min_dim,
@@ -774,7 +774,6 @@ class AMatrix {
 static_assert(is_matrix_v<AMatrix<int, 3, 4>>, "Odd, default matrix is not a matrix.");
 static_assert(is_matrix_v<AMatrix<int, 3, 4, Array<int, 12>>>,
               "Odd, default matrix with Array accessor is not a matrix.");
-
 
 /// \brief Shorthand name for AMatrix with default accessor
 template <typename T, size_t N, size_t M>
@@ -1093,7 +1092,8 @@ KOKKOS_INLINE_FUNCTION constexpr auto apply_column(Func&& func, const AMatrix<T,
 /// \param[in] a The first vector.
 /// \param[in] b The second vector.
 template <size_t N, size_t M, typename U, typename T, ValidAccessor<U> Accessor1, ValidAccessor<T> Accessor2>
-KOKKOS_INLINE_FUNCTION constexpr auto outer_product(const AVector<U, N, Accessor1>& a, const AVector<T, M, Accessor2>& b)
+KOKKOS_INLINE_FUNCTION constexpr auto outer_product(const AVector<U, N, Accessor1>& a,
+                                                    const AVector<T, M, Accessor2>& b)
     -> AMatrix<std::common_type_t<T, U>, N, M> {
   return impl::outer_product_impl(std::make_index_sequence<N * M>{}, a, b);
 }
@@ -1155,16 +1155,16 @@ KOKKOS_INLINE_FUNCTION void atomic_store(AMatrix<T1, N, M, A1>* const m1, const 
 //! elementwise_div.
 //@{
 
-#define MUNDY_MATH_MATRIX_SCALAR_ATOMIC_OP(op_name)                                          \
-  template <size_t N, size_t M, typename T1, ValidAccessor<T1> A1, typename T2>              \
+#define MUNDY_MATH_MATRIX_SCALAR_ATOMIC_OP(op_name)                                           \
+  template <size_t N, size_t M, typename T1, ValidAccessor<T1> A1, typename T2>               \
   KOKKOS_INLINE_FUNCTION void atomic_##op_name(AMatrix<T1, N, M, A1>* const m, const T2& s) { \
-    impl::atomic_matrix_scalar_##op_name##_impl(std::make_index_sequence<N * M>{}, m, s);    \
+    impl::atomic_matrix_scalar_##op_name##_impl(std::make_index_sequence<N * M>{}, m, s);     \
   }
 
-#define MUNDY_MATH_MATRIX_MATRIX_ATOMIC_OP(op_name)                                                              \
-  template <size_t N, size_t M, typename T1, ValidAccessor<T1> A1, typename T2, ValidAccessor<T2> A2>            \
+#define MUNDY_MATH_MATRIX_MATRIX_ATOMIC_OP(op_name)                                                                \
+  template <size_t N, size_t M, typename T1, ValidAccessor<T1> A1, typename T2, ValidAccessor<T2> A2>              \
   KOKKOS_INLINE_FUNCTION void atomic_##op_name(AMatrix<T1, N, M, A1>* const m1, const AMatrix<T2, N, M, A2>& m2) { \
-    impl::atomic_matrix_matrix_##op_name##_impl(std::make_index_sequence<N * M>{}, m1, m2);                      \
+    impl::atomic_matrix_matrix_##op_name##_impl(std::make_index_sequence<N * M>{}, m1, m2);                        \
   }
 
 /// \brief Atomic m[i, j] += s
@@ -1200,14 +1200,15 @@ MUNDY_MATH_MATRIX_MATRIX_ATOMIC_OP(elementwise_div)
 
 #define MUNDY_MATH_MATRIX_SCALAR_ATOMIC_FETCH_OP(op_name)                                              \
   template <size_t N, size_t M, typename T1, ValidAccessor<T1> A1, typename T2>                        \
-  KOKKOS_INLINE_FUNCTION auto atomic_fetch_##op_name(AMatrix<T1, N, M, A1>* const m, const T2& s) {     \
+  KOKKOS_INLINE_FUNCTION auto atomic_fetch_##op_name(AMatrix<T1, N, M, A1>* const m, const T2& s) {    \
     return impl::matrix_scalar_atomic_fetch_##op_name##_impl(std::make_index_sequence<N * M>{}, m, s); \
   }
 
-#define MUNDY_MATH_MATRIX_MATRIX_ATOMIC_FETCH_OP(op_name)                                                              \
-  template <size_t N, size_t M, typename T1, ValidAccessor<T1> A1, typename T2, ValidAccessor<T2> A2>                  \
-  KOKKOS_INLINE_FUNCTION auto atomic_fetch_##op_name(AMatrix<T1, N, M, A1>* const m1, const AMatrix<T2, N, M, A2>& m2) { \
-    return impl::matrix_matrix_atomic_fetch_##op_name##_impl(std::make_index_sequence<N * M>{}, m1, m2);               \
+#define MUNDY_MATH_MATRIX_MATRIX_ATOMIC_FETCH_OP(op_name)                                                \
+  template <size_t N, size_t M, typename T1, ValidAccessor<T1> A1, typename T2, ValidAccessor<T2> A2>    \
+  KOKKOS_INLINE_FUNCTION auto atomic_fetch_##op_name(AMatrix<T1, N, M, A1>* const m1,                    \
+                                                     const AMatrix<T2, N, M, A2>& m2) {                  \
+    return impl::matrix_matrix_atomic_fetch_##op_name##_impl(std::make_index_sequence<N * M>{}, m1, m2); \
   }
 
 /// \brief Atomic m[i, j] += s (returns old m)
@@ -1243,14 +1244,14 @@ MUNDY_MATH_MATRIX_MATRIX_ATOMIC_FETCH_OP(elementwise_div)
 
 #define MUNDY_MATH_MATRIX_SCALAR_ATOMIC_OP_FETCH(op_name)                                              \
   template <size_t N, size_t M, typename T1, ValidAccessor<T1> A1, typename T2>                        \
-  KOKKOS_INLINE_FUNCTION auto atomic_##op_name##_fetch(AMatrix<T1, N, M, A1>* const m, const T2& s) {   \
+  KOKKOS_INLINE_FUNCTION auto atomic_##op_name##_fetch(AMatrix<T1, N, M, A1>* const m, const T2& s) {  \
     return impl::matrix_scalar_atomic_##op_name##_fetch_impl(std::make_index_sequence<N * M>{}, m, s); \
   }
 
 #define MUNDY_MATH_MATRIX_MATRIX_ATOMIC_OP_FETCH(op_name)                                                \
   template <size_t N, size_t M, typename T1, ValidAccessor<T1> A1, typename T2, ValidAccessor<T2> A2>    \
-  KOKKOS_INLINE_FUNCTION auto atomic_##op_name##_fetch(AMatrix<T1, N, M, A1>* const m1,                   \
-                                                       const AMatrix<T2, N, M, A2>& m2) {                 \
+  KOKKOS_INLINE_FUNCTION auto atomic_##op_name##_fetch(AMatrix<T1, N, M, A1>* const m1,                  \
+                                                       const AMatrix<T2, N, M, A2>& m2) {                \
     return impl::matrix_matrix_atomic_##op_name##_fetch_impl(std::make_index_sequence<N * M>{}, m1, m2); \
   }
 
@@ -1291,14 +1292,14 @@ static_assert(std::is_move_constructible_v<AMatrix<double, 3, 3>>);
 #define MUNDY_MATH_MATRIX_SIZE_SPECIALIZATION_IMPL(alias, alias_lower, N, M)              \
   template <typename T, ValidAccessor<T> Accessor = Array<T, N * M>>                      \
     requires std::is_arithmetic_v<T>                                                      \
-  using A##alias = AMatrix<T, N, M, Accessor>;                                                \
-  template <typename T>                      \
+  using A##alias = AMatrix<T, N, M, Accessor>;                                            \
+  template <typename T>                                                                   \
     requires std::is_arithmetic_v<T>                                                      \
-  using alias = A##alias<T>;                                                \
+  using alias = A##alias<T>;                                                              \
   template <typename TypeToCheck>                                                         \
   struct is_##alias_lower##_impl : std::false_type {};                                    \
   template <typename T, typename Accessor>                                                \
-  struct is_##alias_lower##_impl<A##alias<T, Accessor>> : std::true_type {};                 \
+  struct is_##alias_lower##_impl<A##alias<T, Accessor>> : std::true_type {};              \
   template <typename TypeToCheck>                                                         \
   struct is_##alias_lower : public is_##alias_lower##_impl<std::decay_t<TypeToCheck>> {}; \
   template <typename TypeToCheck>                                                         \
@@ -1306,12 +1307,12 @@ static_assert(std::is_move_constructible_v<AMatrix<double, 3, 3>>);
 
 #define MUNDY_MATH_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(alias, alias_lower, T, N, M)  \
   template <ValidAccessor<T> Accessor = Array<T, N * M>>                                  \
-  using A##alias = AMatrix<T, N, M, Accessor>;                                                \
-  using alias = A##alias<>;                                                \
+  using A##alias = AMatrix<T, N, M, Accessor>;                                            \
+  using alias = A##alias<>;                                                               \
   template <typename TypeToCheck>                                                         \
   struct is_##alias_lower##_impl : std::false_type {};                                    \
   template <typename Accessor>                                                            \
-  struct is_##alias_lower##_impl<A##alias<Accessor>> : std::true_type {};                    \
+  struct is_##alias_lower##_impl<A##alias<Accessor>> : std::true_type {};                 \
   template <typename TypeToCheck>                                                         \
   struct is_##alias_lower : public is_##alias_lower##_impl<std::decay_t<TypeToCheck>> {}; \
   template <typename TypeToCheck>                                                         \
@@ -1320,7 +1321,7 @@ static_assert(std::is_move_constructible_v<AMatrix<double, 3, 3>>);
 #define MUNDY_MATH_MATRIX_SIZE_SPECIALIZATION(N, M) \
   MUNDY_MATH_MATRIX_SIZE_SPECIALIZATION_IMPL(AMatrix##N##M, matrix##N##M, N, M)
 
-#define MUNDY_MATH_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_FLOAT_DOUBLE(N, M)                            \
+#define MUNDY_MATH_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_FLOAT_DOUBLE(N, M)                             \
   MUNDY_MATH_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(AMatrix##N##M##f, matrix##N##M##f, float, N, M) \
   MUNDY_MATH_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(AMatrix##N##M##d, matrix##N##M##d, double, N, M)
 

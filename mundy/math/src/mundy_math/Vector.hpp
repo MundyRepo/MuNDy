@@ -1078,11 +1078,11 @@ MUNDY_MATH_VECTOR_VECTOR_ATOMIC_OP_FETCH(elementwise_div)
   using A##alias = AVector<T, N, Accessor>;                                               \
   template <typename T>                                                                   \
     requires std::is_arithmetic_v<T>                                                      \
-  using alias = A##alias<T>;                                                           \
+  using alias = A##alias<T>;                                                              \
   template <typename TypeToCheck>                                                         \
   struct is_##alias_lower##_impl : std::false_type {};                                    \
   template <typename T, typename Accessor>                                                \
-  struct is_##alias_lower##_impl<A##alias<T, Accessor>> : std::true_type {};                 \
+  struct is_##alias_lower##_impl<A##alias<T, Accessor>> : std::true_type {};              \
   template <typename TypeToCheck>                                                         \
   struct is_##alias_lower : public is_##alias_lower##_impl<std::decay_t<TypeToCheck>> {}; \
   template <typename TypeToCheck>                                                         \
@@ -1090,12 +1090,12 @@ MUNDY_MATH_VECTOR_VECTOR_ATOMIC_OP_FETCH(elementwise_div)
 
 #define MUNDY_MATH_VECTOR_TYPE_AND_SIZE_SPECIALIZATION(alias, alias_lower, T, N)          \
   template <ValidAccessor<T> Accessor = Array<T, N>>                                      \
-  using A##alias = AVector<T, N, Accessor>;                                                  \
-  using alias = A##alias<>;                                                           \
+  using A##alias = AVector<T, N, Accessor>;                                               \
+  using alias = A##alias<>;                                                               \
   template <typename TypeToCheck>                                                         \
   struct is_##alias_lower##_impl : std::false_type {};                                    \
   template <typename Accessor>                                                            \
-  struct is_##alias_lower##_impl<A##alias<Accessor>> : std::true_type {};                    \
+  struct is_##alias_lower##_impl<A##alias<Accessor>> : std::true_type {};                 \
   template <typename TypeToCheck>                                                         \
   struct is_##alias_lower : public is_##alias_lower##_impl<std::decay_t<TypeToCheck>> {}; \
   template <typename TypeToCheck>                                                         \

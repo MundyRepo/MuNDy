@@ -166,7 +166,7 @@ class Ellipsoid {
 
   /// \brief Copy assignment operator
   KOKKOS_FUNCTION
-    constexpr Ellipsoid<scalar_t, point_t, orientation_t>& operator=(
+  constexpr Ellipsoid<scalar_t, point_t, orientation_t>& operator=(
       const Ellipsoid<scalar_t, point_t, orientation_t>& other) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     center_ = other.center_;
@@ -177,8 +177,7 @@ class Ellipsoid {
 
   /// \brief Copy assignment operator with different ellipsoid type
   template <typename OtherEllipsoidType>
-  KOKKOS_FUNCTION constexpr Ellipsoid<scalar_t, point_t, orientation_t>& operator=(
-      const OtherEllipsoidType& other)
+  KOKKOS_FUNCTION constexpr Ellipsoid<scalar_t, point_t, orientation_t>& operator=(const OtherEllipsoidType& other)
     requires(!std::is_same_v<OtherEllipsoidType, Ellipsoid<scalar_t, point_t, orientation_t>>)
   {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
@@ -190,7 +189,7 @@ class Ellipsoid {
 
   /// \brief Move assignment operator
   KOKKOS_FUNCTION
-    constexpr Ellipsoid<scalar_t, point_t, orientation_t>& operator=(
+  constexpr Ellipsoid<scalar_t, point_t, orientation_t>& operator=(
       Ellipsoid<scalar_t, point_t, orientation_t>&& other) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     center_ = std::move(other.center_);
@@ -201,8 +200,7 @@ class Ellipsoid {
 
   /// \brief Move assignment operator with different ellipsoid type
   template <typename OtherEllipsoidType>
-  KOKKOS_FUNCTION constexpr Ellipsoid<scalar_t, point_t, orientation_t>& operator=(
-      OtherEllipsoidType&& other)
+  KOKKOS_FUNCTION constexpr Ellipsoid<scalar_t, point_t, orientation_t>& operator=(OtherEllipsoidType&& other)
     requires(!std::is_same_v<OtherEllipsoidType, Ellipsoid<scalar_t, point_t, orientation_t>>)
   {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
@@ -442,7 +440,7 @@ KOKKOS_FUNCTION constexpr Point<typename EllipsoidType::scalar_t> map_body_frame
 
 template <typename Scalar, math::ValidAccessor<Scalar> Accessor1, ValidEllipsoidType EllipsoidType>
 KOKKOS_FUNCTION constexpr math::Vector3<Scalar> map_surface_normal_to_foot_point_on_ellipsoid(
-  const math::AVector3<Scalar, Accessor1>& lab_frame_ellipsoid_nhat, const EllipsoidType& ellipsoid) {
+    const math::AVector3<Scalar, Accessor1>& lab_frame_ellipsoid_nhat, const EllipsoidType& ellipsoid) {
   const auto body_frame_nhat = conjugate(ellipsoid.orientation()) * lab_frame_ellipsoid_nhat;
   const auto body_frame_foot_point = map_body_frame_normal_to_ellipsoid(body_frame_nhat, ellipsoid);
   return ellipsoid.orientation() * body_frame_foot_point + ellipsoid.center();

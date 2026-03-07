@@ -404,30 +404,30 @@ void randomize_test(stk::mesh::BulkData& bulk_data,           //
   float_accessor.sync_to_host();
   int_accessor.sync_to_host();
 
-  ::mundy::mesh::for_each_entity_run(bulk_data, stk::topology::NODE_RANK, selector,
-                                     [&double_accessor, &float_accessor, &int_accessor, &seed, &counter, fixed_seed,
-                                      fixed_counter](const stk::mesh::BulkData& /*bulk_data*/, const stk::mesh::Entity& e) {
-                                       size_t local_seed = use_seed_expr ? seed(e) : fixed_seed;
-                                       size_t local_counter = use_counter_expr ? counter(e) : fixed_counter;
+  ::mundy::mesh::for_each_entity_run(
+      bulk_data, stk::topology::NODE_RANK, selector,
+      [&double_accessor, &float_accessor, &int_accessor, &seed, &counter, fixed_seed, fixed_counter](
+          const stk::mesh::BulkData& /*bulk_data*/, const stk::mesh::Entity& e) {
+        size_t local_seed = use_seed_expr ? seed(e) : fixed_seed;
+        size_t local_counter = use_counter_expr ? counter(e) : fixed_counter;
 
-                                       MUNDY_THROW_ASSERT(local_counter <= std::numeric_limits<uint32_t>::max(),
-                                                          std::overflow_error,
-                                                          "Counter exceeds uint32_t max for openrand::Philox.");
-                                       openrand::Philox rng_d = core::make_philox(local_seed, local_counter);
-                                       double actual_value_d = double_accessor(e);
-                                       double expected_value_d = rng_d.rand<double>();
-                                       EXPECT_DOUBLE_EQ(actual_value_d, expected_value_d);
+        MUNDY_THROW_ASSERT(local_counter <= std::numeric_limits<uint32_t>::max(), std::overflow_error,
+                           "Counter exceeds uint32_t max for openrand::Philox.");
+        openrand::Philox rng_d = core::make_philox(local_seed, local_counter);
+        double actual_value_d = double_accessor(e);
+        double expected_value_d = rng_d.rand<double>();
+        EXPECT_DOUBLE_EQ(actual_value_d, expected_value_d);
 
-                                       openrand::Philox rng_f = core::make_philox(local_seed, local_counter);
-                                       float actual_value_f = float_accessor(e);
-                                       float expected_value_f = rng_f.rand<float>();
-                                       EXPECT_FLOAT_EQ(actual_value_f, expected_value_f);
+        openrand::Philox rng_f = core::make_philox(local_seed, local_counter);
+        float actual_value_f = float_accessor(e);
+        float expected_value_f = rng_f.rand<float>();
+        EXPECT_FLOAT_EQ(actual_value_f, expected_value_f);
 
-                                       openrand::Philox rng_i = core::make_philox(local_seed, local_counter);
-                                       int actual_value_i = int_accessor(e);
-                                       int expected_value_i = rng_i.rand<int>();
-                                       EXPECT_EQ(actual_value_i, expected_value_i);
-                                     });
+        openrand::Philox rng_i = core::make_philox(local_seed, local_counter);
+        int actual_value_i = int_accessor(e);
+        int expected_value_i = rng_i.rand<int>();
+        EXPECT_EQ(actual_value_i, expected_value_i);
+      });
 }
 
 TEST_F(UnitTestRngAccessorExprFixture, field_rand) {

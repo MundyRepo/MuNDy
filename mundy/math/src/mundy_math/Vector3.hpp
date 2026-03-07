@@ -89,8 +89,7 @@ concept ValidVector3Type = is_vector3_v<std::decay_t<Vector3Type>> &&
 /// \param[in] a The first vector.
 /// \param[in] b The second vector.
 template <typename U, typename T, ValidAccessor<U> Accessor1, ValidAccessor<T> Accessor2>
-KOKKOS_INLINE_FUNCTION constexpr auto cross(const AVector3<U, Accessor1>& a,
-                                            const AVector3<T, Accessor2>& b)
+KOKKOS_INLINE_FUNCTION constexpr auto cross(const AVector3<U, Accessor1>& a, const AVector3<T, Accessor2>& b)
     -> AVector3<std::common_type_t<T, U>> {
   using CommonType = std::common_type_t<T, U>;
   AVector3<CommonType> result;

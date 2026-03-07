@@ -22,23 +22,23 @@
 #define MUNDY_CORE_AGGREGATE_HPP_
 
 // C++ core
-#include <map>
-#include <string>
 #include <array>
 #include <cstddef>
 #include <iostream>
-#include <typeinfo>
+#include <map>
+#include <string>
 #include <type_traits>
+#include <typeinfo>
 #include <utility>
 
 // Kokkos
 #include <Kokkos_Core.hpp>
 
 // Mundy
-#include <mundy_core/tuple.hpp>        // for mundy::core::tuple
-#include <mundy_core/type_traits.hpp>  // for core::count_type_v
-#include <mundy_core/variant.hpp>      // for mundy::core::variant
 #include <mundy_core/suppress_warnings.hpp>  // for MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_PUSH/POP
+#include <mundy_core/tuple.hpp>              // for mundy::core::tuple
+#include <mundy_core/type_traits.hpp>        // for core::count_type_v
+#include <mundy_core/variant.hpp>            // for mundy::core::variant
 
 namespace mundy {
 

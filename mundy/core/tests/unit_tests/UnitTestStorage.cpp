@@ -116,7 +116,8 @@ TEST(StorageTest, StorePointerStoresPointerAndGetReturnsPointer) {
 
   static_assert(std::is_same_v<decltype(stash), ::mundy::core::storage<int*&>>,
                 "store(pointer lvalue) should produce storage<T*&>");
-  static_assert(std::is_same_v<typename decltype(stash)::stored_type, int*>, "pointer storage should store raw pointer");
+  static_assert(std::is_same_v<typename decltype(stash)::stored_type, int*>,
+                "pointer storage should store raw pointer");
   static_assert(std::is_same_v<decltype(stash.get()), int*>, "get() should return int* for pointer storage");
 
   static_assert(std::is_same_v<typename decltype(const_stash)::stored_type, const int*>,
@@ -161,18 +162,17 @@ TEST(StorageTest, StorageTypeNormalizationRules) {
   using wrapper_t = ::mundy::core::reference_wrapper<int>;
   using storage_ref_t = ::mundy::core::storage<int&>;
 
-  static_assert(std::is_same_v<::mundy::core::impl::storage_type_t<int>, int>,
-                "value type should store as value");
+  static_assert(std::is_same_v<::mundy::core::impl::storage_type_t<int>, int>, "value type should store as value");
   static_assert(std::is_same_v<::mundy::core::impl::storage_type_t<int&>, wrapper_t>,
                 "lvalue reference should store as reference_wrapper<T>");
-  static_assert(std::is_same_v<::mundy::core::impl::storage_type_t<int*>, int*>,
-                "pointer should store as pointer");
+  static_assert(std::is_same_v<::mundy::core::impl::storage_type_t<int*>, int*>, "pointer should store as pointer");
   static_assert(std::is_same_v<::mundy::core::impl::storage_type_t<const int* const&>, const int*>,
                 "pointer cv/ref should normalize to pointer with pointee cv preserved");
   static_assert(std::is_same_v<::mundy::core::impl::storage_type_t<wrapper_t&>, wrapper_t>,
                 "reference_wrapper should store as the wrapper type itself");
-  static_assert(std::is_same_v<::mundy::core::impl::storage_type_t<storage_ref_t&>, typename storage_ref_t::stored_type>,
-                "storage<T> input should normalize to storage<T>::stored_type");
+  static_assert(
+      std::is_same_v<::mundy::core::impl::storage_type_t<storage_ref_t&>, typename storage_ref_t::stored_type>,
+      "storage<T> input should normalize to storage<T>::stored_type");
 }
 
 TEST(StorageTest, ConstructibilityContracts) {

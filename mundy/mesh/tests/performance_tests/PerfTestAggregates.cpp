@@ -56,8 +56,8 @@ namespace mesh {
 namespace {
 
 void test_direct(const stk::mesh::BulkData& bulk_data, stk::mesh::Part& sphere_part,
-                 stk::mesh::Field<double>& node_force_field,
-                 stk::mesh::Field<double>& node_velocity_field, stk::mesh::Field<double>& elem_radius_field) {
+                 stk::mesh::Field<double>& node_force_field, stk::mesh::Field<double>& node_velocity_field,
+                 stk::mesh::Field<double>& elem_radius_field) {
   double viscosity = 0.1;
   constexpr double pi = Kokkos::numbers::pi_v<double>;
   constexpr double one_over_6pi = 1.0 / (6.0 * pi);
@@ -81,8 +81,8 @@ void test_direct(const stk::mesh::BulkData& bulk_data, stk::mesh::Part& sphere_p
 }
 
 void test_aggregate(const stk::mesh::BulkData& bulk_data, stk::mesh::Part& sphere_part,
-                    stk::mesh::Field<double>& node_force_field,
-                    stk::mesh::Field<double>& node_velocity_field, stk::mesh::Field<double>& elem_radius_field) {
+                    stk::mesh::Field<double>& node_force_field, stk::mesh::Field<double>& node_velocity_field,
+                    stk::mesh::Field<double>& elem_radius_field) {
   double viscosity = 0.1;
   constexpr double pi = Kokkos::numbers::pi_v<double>;
   constexpr double one_over_6pi = 1.0 / (6.0 * pi);
@@ -162,12 +162,10 @@ void run_test() {
   ankerl::nanobench::Bench bench;
   bench.relative(true).title("Agg").unit("op").performanceCounters(true).minEpochIterations(1000);
 
-  bench.run("direct", [&] {
-    test_direct(bulk_data, sphere_part, node_force_field, node_velocity_field, elem_radius_field);
-  });
-  bench.run("aggregates", [&] {
-    test_aggregate(bulk_data, sphere_part, node_force_field, node_velocity_field, elem_radius_field);
-  });
+  bench.run("direct",
+            [&] { test_direct(bulk_data, sphere_part, node_force_field, node_velocity_field, elem_radius_field); });
+  bench.run("aggregates",
+            [&] { test_aggregate(bulk_data, sphere_part, node_force_field, node_velocity_field, elem_radius_field); });
 }
 
 }  // namespace
