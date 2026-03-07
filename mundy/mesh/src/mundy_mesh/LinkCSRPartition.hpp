@@ -75,9 +75,9 @@ be better to use a contiguous vector of partitions indexed by contiguous i
 #include <stk_util/ngp/NgpSpaces.hpp>  // for stk::ngp::HostMemSpace, stk::ngp::UVMMemSpace
 
 // Mundy libs
-#include <mundy_utils/throw_assert.hpp>       // for MUNDY_THROW_ASSERT
 #include <mundy_mesh/LinkCSRBucketConn.hpp>  // for mundy::mesh::LinkCSRBucketConn
 #include <mundy_mesh/impl/PartitionKey.hpp>  // for mundy::mesh::impl::PartitionKey, mundy::mesh::impl::get_partition_key
+#include <mundy_utils/throw_assert.hpp>      // for MUNDY_THROW_ASSERT
 
 namespace mundy {
 

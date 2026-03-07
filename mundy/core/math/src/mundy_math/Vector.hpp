@@ -33,15 +33,13 @@
 #include <utility>
 
 // Mundy
-#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
-#include <mundy_math/Accessor.hpp>      // for mundy::math::ValidAccessor
-#include <mundy_math/Array.hpp>         // for mundy::math::Array
-#include <mundy_math/Tolerance.hpp>     // for mundy::math::get_zero_tolerance
+#include <mundy_math/Accessor.hpp>   // for mundy::ValidAccessor
+#include <mundy_math/Array.hpp>      // for mundy::Array
+#include <mundy_math/Tolerance.hpp>  // for mundy::get_zero_tolerance
 #include <mundy_math/impl/VectorImpl.hpp>
+#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
 
 namespace mundy {
-
-namespace math {
 
 /// \brief (Implementation) Type trait to determine if a type is a vector
 template <typename TypeToCheck>
@@ -101,7 +99,7 @@ concept ValidVectorType =
 ///   AVector<double, 3, double*> vec5(data);
 ///
 ///   // Do math with Vectors that have different accessors without copying the data
-///   double mundy::math::dot(vec1, vec5);
+///   double mundy::dot(vec1, vec5);
 /// \endcode
 ///
 /// \note Accessors may be owning or non-owning, that is irrelevant to the AVector class; however, these accessors
@@ -115,7 +113,7 @@ class AVector {
   //@{
 
   /// \brief Our data accessor
-  utils::storage<Accessor> accessor_;
+  storage<Accessor> accessor_;
   //@}
 
   //! \name Type aliases
@@ -1148,20 +1146,18 @@ MUNDY_MATH_VECTOR_TYPE_AND_SIZE_SPECIALIZATION(Vector6i, vector6i, int, 6)
 /// \endcode
 template <typename T, size_t N, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto get_vector_view(Accessor&& data) {
-  auto data_storage = utils::store(std::forward<Accessor>(data));
+  auto data_storage = store(std::forward<Accessor>(data));
   return AVector<T, N, decltype(data_storage)>(data_storage);
 }
 
 template <typename T, size_t N, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto get_owning_vector(Accessor&& data) {
-  auto data_storage = utils::store(std::move(data));  // Move not forward since we want to take ownership
+  auto data_storage = store(std::move(data));  // Move not forward since we want to take ownership
   return AVector<T, N, decltype(data_storage)>(data_storage);
 }
 //@}
 
 //@}
-
-}  // namespace math
 
 }  // namespace mundy
 

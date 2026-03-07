@@ -27,7 +27,7 @@
 
 // Mundy
 #include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
-#include <mundy_math/Vector3.hpp>       // for mundy::math::Vector3
+#include <mundy_math/Vector3.hpp>       // for mundy::Vector3
 #include <mundy_mesh/BulkData.hpp>      // for mundy::mesh::BulkData
 #include <mundy_mesh/FieldViews.hpp>    // for mundy::mesh::vector3_field_data
 #include <mundy_mesh/MetaData.hpp>      // for mundy::mesh::MetaData

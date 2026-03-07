@@ -30,15 +30,13 @@
 #include <utility>
 
 // Mundy
-#include <mundy_geom/primitives/VSegment.hpp>  // for mundy::geom::VSegment
+#include <mundy_geom/primitives/VSegment.hpp>  // for mundy::VSegment
 
 namespace mundy {
 
-namespace mech {
-
 /// \brief A hookean spring between two points with a rest angle and spring constant
-template <typename Scalar, mundy::geom::ValidVSegmentType VSegmentType = mundy::geom::VSegment<Scalar>,
-          typename OwnershipType = mundy::math::Ownership::Owns>
+template <typename Scalar, mundy::ValidVSegmentType VSegmentType = mundy::VSegment<Scalar>,
+          typename OwnershipType = mundy::Ownership::Owns>
 class TorsionalSpring {
   static_assert(std::is_same_v<typename VSegmentType::scalar_t, Scalar>,
                 "The scalar_t of the VSegmentType must match the Scalar type.");
@@ -65,14 +63,14 @@ class TorsionalSpring {
   /// constant and rest angle to -1.
   KOKKOS_FUNCTION
   TorsionalSpring()
-    requires std::is_same_v<OwnershipType, mundy::math::Ownership::Owns>
+    requires std::is_same_v<OwnershipType, mundy::Ownership::Owns>
       : v_segment_(), rest_angle_(static_cast<scalar_t>(-1)), spring_constant_(static_cast<scalar_t>(-1)) {
   }
 
   /// \brief No default constructor for viewing TorsionalSpringss.
   KOKKOS_FUNCTION
   TorsionalSpring()
-    requires std::is_same_v<OwnershipType, mundy::math::Ownership::Views>
+    requires std::is_same_v<OwnershipType, mundy::Ownership::Views>
   = delete;
 
   /// \brief Constructor to initialize the line segment, rest angle, and spring constant.
@@ -84,7 +82,7 @@ class TorsionalSpring {
   /// \brief Constructor to initialize the start and end points.
   /// \param[in] start The start of the TorsionalSpring.
   /// \param[in] end The end of the TorsionalSpring.
-  template <mundy::geom::ValidVSegmentType OtherVSegmentType>
+  template <mundy::ValidVSegmentType OtherVSegmentType>
   KOKKOS_FUNCTION TorsionalSpring(const OtherVSegmentType& v_segment, const scalar_t& rest_angle,
                                   const scalar_t& spring_constant)
     requires(!std::is_same_v<OtherVSegmentType, v_segment_t>)
@@ -221,7 +219,7 @@ class TorsionalSpring {
 
   /// \brief Set the line segment
   /// \param[in] v_segment The new line segment.
-  template <mundy::geom::ValidVSegmentType OtherVSegmentType>
+  template <mundy::ValidVSegmentType OtherVSegmentType>
   KOKKOS_FUNCTION void set_v_segment(const OtherVSegmentType& v_segment) {
     v_segment_ = v_segment;
   }
@@ -243,18 +241,18 @@ class TorsionalSpring {
 
  private:
   v_segment_t v_segment_;
-  std::conditional_t<std::is_same_v<ownership_t, mundy::math::Ownership::Owns>, scalar_t, scalar_t&> rest_angle_;
-  std::conditional_t<std::is_same_v<ownership_t, mundy::math::Ownership::Owns>, scalar_t, scalar_t&> spring_constant_;
+  std::conditional_t<std::is_same_v<ownership_t, mundy::Ownership::Owns>, scalar_t, scalar_t&> rest_angle_;
+  std::conditional_t<std::is_same_v<ownership_t, mundy::Ownership::Owns>, scalar_t, scalar_t&> spring_constant_;
 };  // class TorsionalSpring
 
 /// @brief Type trait to determine if a type is a TorsionalSpring
 template <typename T>
 struct is_torsional_spring : std::false_type {};
 //
-template <typename Scalar, mundy::geom::ValidVSegmentType VSegmentType, typename OwnershipType>
+template <typename Scalar, mundy::ValidVSegmentType VSegmentType, typename OwnershipType>
 struct is_torsional_spring<TorsionalSpring<Scalar, VSegmentType, OwnershipType>> : std::true_type {};
 //
-template <typename Scalar, mundy::geom::ValidVSegmentType VSegmentType, typename OwnershipType>
+template <typename Scalar, mundy::ValidVSegmentType VSegmentType, typename OwnershipType>
 struct is_torsional_spring<const TorsionalSpring<Scalar, VSegmentType, OwnershipType>> : std::true_type {};
 //
 template <typename T>
@@ -262,15 +260,13 @@ inline constexpr bool is_torsional_spring_v = is_torsional_spring<T>::value;
 
 /// @brief Concept to check if a type is a valid TorsionalSpring type
 template <typename TorsionalSpringType>
-concept ValidTorsionalSpringType = mundy::geom::ValidTorsionalSpringType<TorsionalSpringType>;
+concept ValidTorsionalSpringType = mundy::ValidTorsionalSpringType<TorsionalSpringType>;
 
 static_assert(ValidTorsionalSpringType<TorsionalSpring<float>> &&
                   ValidTorsionalSpringType<const TorsionalSpring<float>> &&
                   ValidTorsionalSpringType<TorsionalSpring<double>> &&
                   ValidTorsionalSpringType<const TorsionalSpring<double>>,
               "TorsionalSpring should satisfy the ValidTorsionalSpringType concept");
-
-}  // namespace mech
 
 }  // namespace mundy
 

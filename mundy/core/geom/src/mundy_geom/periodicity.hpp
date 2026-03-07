@@ -30,13 +30,13 @@
 #include <utility>
 
 // Mundy
+#include <mundy_geom/primitives.hpp>     // for mundy::Point, mundy::LineSegment, ...
+#include <mundy_geom/transform.hpp>      // for mundy::translate
+#include <mundy_math/Matrix3.hpp>        // for mundy::Matrix3
+#include <mundy_math/Quaternion.hpp>     // for mundy::Quaternion
+#include <mundy_math/Tolerance.hpp>      // for mundy::get_zero_tolerance
+#include <mundy_math/Vector3.hpp>        // for mundy::Vector3
 #include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
-#include <mundy_geom/primitives.hpp>    // for mundy::geom::Point, mundy::geom::LineSegment, ...
-#include <mundy_geom/transform.hpp>     // for mundy::geom::translate
-#include <mundy_math/Matrix3.hpp>       // for mundy::math::Matrix3
-#include <mundy_math/Quaternion.hpp>    // for mundy::math::Quaternion
-#include <mundy_math/Tolerance.hpp>     // for mundy::math::get_zero_tolerance
-#include <mundy_math/Vector3.hpp>       // for mundy::math::Vector3
 
 // Need a runtime metric with a visit function that can turn into a concrete metric.
 // This needs to be finitely enumerable, so like stk::topology, we must use an enum for distinct metric types.
@@ -126,20 +126,18 @@
 
 //  private:
 //   metric_t value_ = INVALID_METRIC;
-//   using metric_variant_t = mundy::utils::variant<
-//     mundy::geom::
+//   using metric_variant_t = mundy::variant<
+//     mundy::
 // };
 
 namespace mundy {
-
-namespace geom {
 
 namespace impl {
 
 template <typename Integer, typename Scalar>
 KOKKOS_INLINE_FUNCTION constexpr Scalar safe_unit_mod1(Scalar s) {
   // Map to [0,1); guard s ≈ 1 to avoid returning 0 due to FP noise.
-  const Scalar tol = math::get_zero_tolerance<Scalar>();
+  const Scalar tol = get_zero_tolerance<Scalar>();
   const Scalar k = static_cast<Scalar>(static_cast<Integer>(Kokkos::floor(s)));
   Scalar t = s - k;
   if (Kokkos::fabs(t - Scalar(1)) < tol) {
@@ -155,8 +153,8 @@ class EuclideanMetric {
  public:
   /// \brief Type aliases
   using scalar_t = Scalar;
-  using OurVector3 = math::Vector3<Scalar>;
-  using OurMatrix3 = math::Matrix3<Scalar>;
+  using OurVector3 = Vector3<Scalar>;
+  using OurMatrix3 = Matrix3<Scalar>;
   using OurPoint = Point<Scalar>;
 
   /// \brief Get if the given dimension is periodic
@@ -189,14 +187,14 @@ class EuclideanMetric {
     return point_frac;
   }
 
-  template <typename Integer, math::ValidVector3Type Vector3T>
-  KOKKOS_INLINE_FUNCTION constexpr math::Vector3<typename Vector3T::scalar_t> frac_minimum_image(
+  template <typename Integer, ValidVector3Type Vector3T>
+  KOKKOS_INLINE_FUNCTION constexpr Vector3<typename Vector3T::scalar_t> frac_minimum_image(
       const Vector3T& fractional_vec) const {
     return fractional_vec;
   }
 
-  template <typename Integer, math::ValidVector3Type Vector3T>
-  KOKKOS_INLINE_FUNCTION constexpr math::Vector3<typename Vector3T::scalar_t> frac_wrap_to_unit_cell(
+  template <typename Integer, ValidVector3Type Vector3T>
+  KOKKOS_INLINE_FUNCTION constexpr Vector3<typename Vector3T::scalar_t> frac_wrap_to_unit_cell(
       const Vector3T& fractional_vec) const {
     return fractional_vec;
   }
@@ -224,7 +222,7 @@ class EuclideanMetric {
   template <ValidPointType PointT, typename Integer>
     requires std::is_same_v<typename PointT::scalar_t, Scalar>
   KOKKOS_INLINE_FUNCTION constexpr OurPoint shift_image(const PointT& point,
-                                                        const math::Vector3<Integer>& /*num_images*/) const {
+                                                        const Vector3<Integer>& /*num_images*/) const {
     return point;
   }
 };  // EuclideanMetric
@@ -234,8 +232,8 @@ class PeriodicMetric {
  public:
   /// \brief Type aliases
   using scalar_t = Scalar;
-  using OurVector3 = math::Vector3<Scalar>;
-  using OurMatrix3 = math::Matrix3<Scalar>;
+  using OurVector3 = Vector3<Scalar>;
+  using OurMatrix3 = Matrix3<Scalar>;
   using OurPoint = Point<Scalar>;
 
   /// \brief Default constructor
@@ -244,14 +242,14 @@ class PeriodicMetric {
 
   /// \brief Constructor with unit cell matrix
   KOKKOS_INLINE_FUNCTION
-  explicit constexpr PeriodicMetric(const OurMatrix3& h) : h_(h), h_inv_(math::inverse(h)) {
+  explicit constexpr PeriodicMetric(const OurMatrix3& h) : h_(h), h_inv_(inverse(h)) {
   }
 
   /// \brief Set the unit cell matrix
   KOKKOS_INLINE_FUNCTION
   void constexpr set_unit_cell_matrix(const OurMatrix3& h) {
     h_ = h;
-    h_inv_ = math::inverse(h_);
+    h_inv_ = inverse(h_);
   }
 
   /// \brief Get if the given dimension is periodic
@@ -284,15 +282,15 @@ class PeriodicMetric {
     return h_ * point_frac;
   }
 
-  template <typename Integer, math::ValidVector3Type Vector3T>
-  KOKKOS_INLINE_FUNCTION constexpr math::Vector3<typename Vector3T::scalar_t> frac_minimum_image(
+  template <typename Integer, ValidVector3Type Vector3T>
+  KOKKOS_INLINE_FUNCTION constexpr Vector3<typename Vector3T::scalar_t> frac_minimum_image(
       const Vector3T& fractional_vec) const {
     return apply([](Scalar x) { return x - static_cast<Scalar>(static_cast<Integer>(Kokkos::round(x))); },
                  fractional_vec);
   }
 
-  template <typename Integer, math::ValidVector3Type Vector3T>
-  KOKKOS_INLINE_FUNCTION constexpr math::Vector3<typename Vector3T::scalar_t> frac_wrap_to_unit_cell(
+  template <typename Integer, ValidVector3Type Vector3T>
+  KOKKOS_INLINE_FUNCTION constexpr Vector3<typename Vector3T::scalar_t> frac_wrap_to_unit_cell(
       const Vector3T& fractional_vec) const {
     return apply([](Scalar x) { return impl::safe_unit_mod1<Integer>(x); }, fractional_vec);
   }
@@ -320,8 +318,7 @@ class PeriodicMetric {
   /// \brief Shift a point by a given number of lattice images in each direction
   template <ValidPointType PointT, typename Integer>
     requires std::is_same_v<typename PointT::scalar_t, Scalar>
-  KOKKOS_INLINE_FUNCTION constexpr OurPoint shift_image(const PointT& point,
-                                                        const math::Vector3<Integer>& num_images) const {
+  KOKKOS_INLINE_FUNCTION constexpr OurPoint shift_image(const PointT& point, const Vector3<Integer>& num_images) const {
     return translate(point, h_ * num_images);
   }
 
@@ -335,7 +332,7 @@ class PeriodicMetricX {
  public:
   /// \brief Type aliases
   using scalar_t = Scalar;
-  using OurVector3 = math::Vector3<Scalar>;
+  using OurVector3 = Vector3<Scalar>;
   using OurPoint = Point<Scalar>;
 
   /// \brief Default constructor
@@ -369,18 +366,18 @@ class PeriodicMetricX {
   template <ValidPointType PointT>
     requires std::is_same_v<typename PointT::scalar_t, Scalar>
   KOKKOS_INLINE_FUNCTION constexpr OurPoint to_fractional(const PointT& point) const {
-    return math::elementwise_mul(inv_scale_, point);
+    return elementwise_mul(inv_scale_, point);
   }
 
   /// \brief Map a point from fractional coordinates to real space
   template <ValidPointType PointT>
     requires std::is_same_v<typename PointT::scalar_t, Scalar>
   KOKKOS_INLINE_FUNCTION constexpr OurPoint from_fractional(const PointT& point_frac) const {
-    return math::elementwise_mul(scale_, point_frac);
+    return elementwise_mul(scale_, point_frac);
   }
 
-  template <typename Integer, math::ValidVector3Type Vector3T>
-  KOKKOS_INLINE_FUNCTION constexpr math::Vector3<typename Vector3T::scalar_t> frac_minimum_image(
+  template <typename Integer, ValidVector3Type Vector3T>
+  KOKKOS_INLINE_FUNCTION constexpr Vector3<typename Vector3T::scalar_t> frac_minimum_image(
       const Vector3T& fractional_vec) const {
     OurVector3 min_image{
         fractional_vec[0] - static_cast<Scalar>(static_cast<Integer>(Kokkos::round(fractional_vec[0]))),
@@ -388,8 +385,8 @@ class PeriodicMetricX {
     return min_image;
   }
 
-  template <typename Integer, math::ValidVector3Type Vector3T>
-  KOKKOS_INLINE_FUNCTION constexpr math::Vector3<typename Vector3T::scalar_t> frac_wrap_to_unit_cell(
+  template <typename Integer, ValidVector3Type Vector3T>
+  KOKKOS_INLINE_FUNCTION constexpr Vector3<typename Vector3T::scalar_t> frac_wrap_to_unit_cell(
       const Vector3T& fractional_vec) const {
     OurVector3 wrapped{impl::safe_unit_mod1<Integer>(fractional_vec[0]), fractional_vec[1], fractional_vec[2]};
     return wrapped;
@@ -419,8 +416,7 @@ class PeriodicMetricX {
   /// \brief Shift a point by a given number of lattice images in each direction
   template <ValidPointType PointT, typename Integer>
     requires std::is_same_v<typename PointT::scalar_t, Scalar>
-  KOKKOS_INLINE_FUNCTION constexpr OurPoint shift_image(const PointT& point,
-                                                        const math::Vector3<Integer>& num_images) const {
+  KOKKOS_INLINE_FUNCTION constexpr OurPoint shift_image(const PointT& point, const Vector3<Integer>& num_images) const {
     return translate(point, from_fractional(num_images.template cast<Scalar>()));
   }
 
@@ -434,7 +430,7 @@ class PeriodicMetricY {
  public:
   /// \brief Type aliases
   using scalar_t = Scalar;
-  using OurVector3 = math::Vector3<Scalar>;
+  using OurVector3 = Vector3<Scalar>;
   using OurPoint = Point<Scalar>;
 
   /// \brief Default constructor
@@ -468,18 +464,18 @@ class PeriodicMetricY {
   template <ValidPointType PointT>
     requires std::is_same_v<typename PointT::scalar_t, Scalar>
   KOKKOS_INLINE_FUNCTION constexpr OurPoint to_fractional(const PointT& point) const {
-    return math::elementwise_mul(inv_scale_, point);
+    return elementwise_mul(inv_scale_, point);
   }
 
   /// \brief Map a point from fractional coordinates to real space
   template <ValidPointType PointT>
     requires std::is_same_v<typename PointT::scalar_t, Scalar>
   KOKKOS_INLINE_FUNCTION constexpr OurPoint from_fractional(const PointT& point_frac) const {
-    return math::elementwise_mul(scale_, point_frac);
+    return elementwise_mul(scale_, point_frac);
   }
 
-  template <typename Integer, math::ValidVector3Type Vector3T>
-  KOKKOS_INLINE_FUNCTION constexpr math::Vector3<typename Vector3T::scalar_t> frac_minimum_image(
+  template <typename Integer, ValidVector3Type Vector3T>
+  KOKKOS_INLINE_FUNCTION constexpr Vector3<typename Vector3T::scalar_t> frac_minimum_image(
       const Vector3T& fractional_vec) const {
     OurVector3 min_image{
         fractional_vec[0],
@@ -488,8 +484,8 @@ class PeriodicMetricY {
     return min_image;
   }
 
-  template <typename Integer, math::ValidVector3Type Vector3T>
-  KOKKOS_INLINE_FUNCTION constexpr math::Vector3<typename Vector3T::scalar_t> frac_wrap_to_unit_cell(
+  template <typename Integer, ValidVector3Type Vector3T>
+  KOKKOS_INLINE_FUNCTION constexpr Vector3<typename Vector3T::scalar_t> frac_wrap_to_unit_cell(
       const Vector3T& fractional_vec) const {
     OurVector3 wrapped{fractional_vec[0], impl::safe_unit_mod1<Integer>(fractional_vec[1]), fractional_vec[2]};
     return wrapped;
@@ -519,8 +515,7 @@ class PeriodicMetricY {
   /// \brief Shift a point by a given number of lattice images in each direction
   template <ValidPointType PointT, typename Integer>
     requires std::is_same_v<typename PointT::scalar_t, Scalar>
-  KOKKOS_INLINE_FUNCTION constexpr OurPoint shift_image(const PointT& point,
-                                                        const math::Vector3<Integer>& num_images) const {
+  KOKKOS_INLINE_FUNCTION constexpr OurPoint shift_image(const PointT& point, const Vector3<Integer>& num_images) const {
     return translate(point, from_fractional(num_images.template cast<Scalar>()));
   }
 
@@ -534,7 +529,7 @@ class PeriodicMetricXY {
  public:
   /// \brief Type aliases
   using scalar_t = Scalar;
-  using OurVector3 = math::Vector3<Scalar>;
+  using OurVector3 = Vector3<Scalar>;
   using OurPoint = Point<Scalar>;
 
   /// \brief Default constructor
@@ -568,18 +563,18 @@ class PeriodicMetricXY {
   template <ValidPointType PointT>
     requires std::is_same_v<typename PointT::scalar_t, Scalar>
   KOKKOS_INLINE_FUNCTION constexpr OurPoint to_fractional(const PointT& point) const {
-    return math::elementwise_mul(inv_scale_, point);
+    return elementwise_mul(inv_scale_, point);
   }
 
   /// \brief Map a point from fractional coordinates to real space
   template <ValidPointType PointT>
     requires std::is_same_v<typename PointT::scalar_t, Scalar>
   KOKKOS_INLINE_FUNCTION constexpr OurPoint from_fractional(const PointT& point_frac) const {
-    return math::elementwise_mul(scale_, point_frac);
+    return elementwise_mul(scale_, point_frac);
   }
 
-  template <typename Integer, math::ValidVector3Type Vector3T>
-  KOKKOS_INLINE_FUNCTION constexpr math::Vector3<typename Vector3T::scalar_t> frac_minimum_image(
+  template <typename Integer, ValidVector3Type Vector3T>
+  KOKKOS_INLINE_FUNCTION constexpr Vector3<typename Vector3T::scalar_t> frac_minimum_image(
       const Vector3T& fractional_vec) const {
     OurVector3 min_image{
         fractional_vec[0] - static_cast<Scalar>(static_cast<Integer>(Kokkos::round(fractional_vec[0]))),
@@ -588,8 +583,8 @@ class PeriodicMetricXY {
     return min_image;
   }
 
-  template <typename Integer, math::ValidVector3Type Vector3T>
-  KOKKOS_INLINE_FUNCTION constexpr math::Vector3<typename Vector3T::scalar_t> frac_wrap_to_unit_cell(
+  template <typename Integer, ValidVector3Type Vector3T>
+  KOKKOS_INLINE_FUNCTION constexpr Vector3<typename Vector3T::scalar_t> frac_wrap_to_unit_cell(
       const Vector3T& fractional_vec) const {
     OurVector3 wrapped{impl::safe_unit_mod1<Integer>(fractional_vec[0]),
                        impl::safe_unit_mod1<Integer>(fractional_vec[1]), fractional_vec[2]};
@@ -620,8 +615,7 @@ class PeriodicMetricXY {
   /// \brief Shift a point by a given number of lattice images in each direction
   template <ValidPointType PointT, typename Integer>
     requires std::is_same_v<typename PointT::scalar_t, Scalar>
-  KOKKOS_INLINE_FUNCTION constexpr OurPoint shift_image(const PointT& point,
-                                                        const math::Vector3<Integer>& num_images) const {
+  KOKKOS_INLINE_FUNCTION constexpr OurPoint shift_image(const PointT& point, const Vector3<Integer>& num_images) const {
     return translate(point, from_fractional(num_images.template cast<Scalar>()));
   }
 
@@ -635,7 +629,7 @@ class PeriodicMetricYZ {
  public:
   /// \brief Type aliases
   using scalar_t = Scalar;
-  using OurVector3 = math::Vector3<Scalar>;
+  using OurVector3 = Vector3<Scalar>;
   using OurPoint = Point<Scalar>;
 
   /// \brief Default constructor
@@ -669,18 +663,18 @@ class PeriodicMetricYZ {
   template <ValidPointType PointT>
     requires std::is_same_v<typename PointT::scalar_t, Scalar>
   KOKKOS_INLINE_FUNCTION constexpr OurPoint to_fractional(const PointT& point) const {
-    return math::elementwise_mul(inv_scale_, point);
+    return elementwise_mul(inv_scale_, point);
   }
 
   /// \brief Map a point from fractional coordinates to real space
   template <ValidPointType PointT>
     requires std::is_same_v<typename PointT::scalar_t, Scalar>
   KOKKOS_INLINE_FUNCTION constexpr OurPoint from_fractional(const PointT& point_frac) const {
-    return math::elementwise_mul(scale_, point_frac);
+    return elementwise_mul(scale_, point_frac);
   }
 
-  template <typename Integer, math::ValidVector3Type Vector3T>
-  KOKKOS_INLINE_FUNCTION constexpr math::Vector3<typename Vector3T::scalar_t> frac_minimum_image(
+  template <typename Integer, ValidVector3Type Vector3T>
+  KOKKOS_INLINE_FUNCTION constexpr Vector3<typename Vector3T::scalar_t> frac_minimum_image(
       const Vector3T& fractional_vec) const {
     OurVector3 min_image{
         fractional_vec[0],
@@ -689,8 +683,8 @@ class PeriodicMetricYZ {
     return min_image;
   }
 
-  template <typename Integer, math::ValidVector3Type Vector3T>
-  KOKKOS_INLINE_FUNCTION constexpr math::Vector3<typename Vector3T::scalar_t> frac_wrap_to_unit_cell(
+  template <typename Integer, ValidVector3Type Vector3T>
+  KOKKOS_INLINE_FUNCTION constexpr Vector3<typename Vector3T::scalar_t> frac_wrap_to_unit_cell(
       const Vector3T& fractional_vec) const {
     OurVector3 wrapped{fractional_vec[0], impl::safe_unit_mod1<Integer>(fractional_vec[1]),
                        impl::safe_unit_mod1<Integer>(fractional_vec[2])};
@@ -721,8 +715,7 @@ class PeriodicMetricYZ {
   /// \brief Shift a point by a given number of lattice images in each direction
   template <ValidPointType PointT, typename Integer>
     requires std::is_same_v<typename PointT::scalar_t, Scalar>
-  KOKKOS_INLINE_FUNCTION constexpr OurPoint shift_image(const PointT& point,
-                                                        const math::Vector3<Integer>& num_images) const {
+  KOKKOS_INLINE_FUNCTION constexpr OurPoint shift_image(const PointT& point, const Vector3<Integer>& num_images) const {
     return translate(point, from_fractional(num_images.template cast<Scalar>()));
   }
 
@@ -735,8 +728,8 @@ template <typename Scalar>
 class PeriodicScaledMetric {
  public:
   /// \brief Type aliases
-  using OurVector3 = math::Vector3<Scalar>;
-  using OurMatrix3 = math::Matrix3<Scalar>;
+  using OurVector3 = Vector3<Scalar>;
+  using OurMatrix3 = Matrix3<Scalar>;
   using OurPoint = Point<Scalar>;
 
   /// \brief Default constructor
@@ -776,25 +769,25 @@ class PeriodicScaledMetric {
   template <ValidPointType PointT>
     requires std::is_same_v<typename PointT::scalar_t, Scalar>
   KOKKOS_INLINE_FUNCTION constexpr OurPoint to_fractional(const PointT& point) const {
-    return math::elementwise_mul(scale_inv_, point);
+    return elementwise_mul(scale_inv_, point);
   }
 
   /// \brief Map a point from fractional coordinates to real space
   template <ValidPointType PointT>
     requires std::is_same_v<typename PointT::scalar_t, Scalar>
   KOKKOS_INLINE_FUNCTION constexpr OurPoint from_fractional(const PointT& point_frac) const {
-    return math::elementwise_mul(scale_, point_frac);
+    return elementwise_mul(scale_, point_frac);
   }
 
-  template <typename Integer, math::ValidVector3Type Vector3T>
-  KOKKOS_INLINE_FUNCTION constexpr math::Vector3<typename Vector3T::scalar_t> frac_minimum_image(
+  template <typename Integer, ValidVector3Type Vector3T>
+  KOKKOS_INLINE_FUNCTION constexpr Vector3<typename Vector3T::scalar_t> frac_minimum_image(
       const Vector3T& fractional_vec) const {
     return apply([](Scalar x) { return x - static_cast<Scalar>(static_cast<Integer>(Kokkos::round(x))); },
                  fractional_vec);
   }
 
-  template <typename Integer, math::ValidVector3Type Vector3T>
-  KOKKOS_INLINE_FUNCTION constexpr math::Vector3<typename Vector3T::scalar_t> frac_wrap_to_unit_cell(
+  template <typename Integer, ValidVector3Type Vector3T>
+  KOKKOS_INLINE_FUNCTION constexpr Vector3<typename Vector3T::scalar_t> frac_wrap_to_unit_cell(
       const Vector3T& fractional_vec) const {
     return apply([](Scalar x) { return impl::safe_unit_mod1<Integer>(x); }, fractional_vec);
   }
@@ -821,9 +814,8 @@ class PeriodicScaledMetric {
   /// \brief Shift a point by a given number of lattice images in each direction
   template <ValidPointType PointT, typename Integer>
     requires std::is_same_v<typename PointT::scalar_t, Scalar>
-  KOKKOS_INLINE_FUNCTION constexpr OurPoint shift_image(const PointT& point,
-                                                        const math::Vector3<Integer>& num_images) const {
-    return translate(point, math::elementwise_mul(scale_, num_images));
+  KOKKOS_INLINE_FUNCTION constexpr OurPoint shift_image(const PointT& point, const Vector3<Integer>& num_images) const {
+    return translate(point, elementwise_mul(scale_, num_images));
   }
 
  private:
@@ -837,8 +829,8 @@ class PeriodicScaledMetric {
 /// \brief Create a periodic space metric from a unit cell size
 template <typename Scalar>
 KOKKOS_INLINE_FUNCTION constexpr PeriodicMetric<Scalar> periodic_metric_from_unit_cell(
-    const math::Vector3<Scalar>& cell_size) {
-  auto h = math::Matrix3<Scalar>::identity();
+    const Vector3<Scalar>& cell_size) {
+  auto h = Matrix3<Scalar>::identity();
   h(0, 0) = cell_size[0];
   h(1, 1) = cell_size[1];
   h(2, 2) = cell_size[2];
@@ -847,10 +839,10 @@ KOKKOS_INLINE_FUNCTION constexpr PeriodicMetric<Scalar> periodic_metric_from_uni
 
 /// \brief Create a periodic space metric from domain min and max corners
 template <typename Scalar>
-KOKKOS_INLINE_FUNCTION constexpr PeriodicMetric<Scalar> periodic_metric_from_domain(
-    const math::Vector3<Scalar>& domain_min, const math::Vector3<Scalar>& domain_max) {
+KOKKOS_INLINE_FUNCTION constexpr PeriodicMetric<Scalar> periodic_metric_from_domain(const Vector3<Scalar>& domain_min,
+                                                                                    const Vector3<Scalar>& domain_max) {
   auto cell_size = domain_max - domain_min;
-  auto h = math::Matrix3<Scalar>::identity();
+  auto h = Matrix3<Scalar>::identity();
   h(0, 0) = cell_size[0];
   h(1, 1) = cell_size[1];
   h(2, 2) = cell_size[2];
@@ -860,7 +852,7 @@ KOKKOS_INLINE_FUNCTION constexpr PeriodicMetric<Scalar> periodic_metric_from_dom
 /// \brief Create a periodic scaled space metric from a unit cell size
 template <typename Scalar>
 KOKKOS_INLINE_FUNCTION constexpr PeriodicScaledMetric<Scalar> periodic_scaled_metric_from_unit_cell(
-    const math::Vector3<Scalar>& cell_size) {
+    const Vector3<Scalar>& cell_size) {
   return PeriodicScaledMetric<Scalar>{cell_size};
 }
 //@}
@@ -946,8 +938,8 @@ KOKKOS_INLINE_FUNCTION Point<typename EllipsoidT::scalar_t> reference_point(cons
 
 /// \brief Shift an object by a lattice vector (returns a new object, owning its own memory)
 template <typename Integer, typename Object, typename Metric>
-KOKKOS_INLINE_FUNCTION auto shift_image(const Object& obj,                             //
-                                        const math::Vector3<Integer>& lattice_vector,  //
+KOKKOS_INLINE_FUNCTION auto shift_image(const Object& obj,                       //
+                                        const Vector3<Integer>& lattice_vector,  //
                                         const Metric& metric) {
   auto shift_disp = metric.shift_image(reference_point(obj), lattice_vector) - reference_point(obj);
   return translate(obj, shift_disp);
@@ -1563,8 +1555,6 @@ KOKKOS_INLINE_FUNCTION void unwrap_points_to_ref_inplace(EllipsoidT& ellipsoid, 
   unwrap_points_to_ref_inplace(ellipsoid.center(), metric, ref_point);
 }
 //@}
-
-}  // namespace geom
 
 }  // namespace mundy
 

@@ -35,7 +35,7 @@
 
 // Mundy
 #include <mundy_alens/periphery/Periphery.hpp>  // for gen_sphere_quadrature
-#include <mundy_utils/rng.hpp>              // for mundy::utils::make_philox
+#include <mundy_utils/rng.hpp>              // for mundy::make_philox
 
 using DeviceExecutionSpace = Kokkos::DefaultExecutionSpace;
 using DeviceMemorySpace = typename DeviceExecutionSpace::memory_space;
@@ -60,7 +60,7 @@ void init_spheres_on_device(const double periphery_radius, const double sphere_r
   Kokkos::parallel_for(
       "init_spheres", Kokkos::RangePolicy<Kokkos::DefaultExecutionSpace>(0, num_spheres),
       KOKKOS_LAMBDA(const size_t i) {
-        openrand::Philox rng = utils::make_philox(seed, i);
+        openrand::Philox rng = make_philox(seed, i);
         double distance_from_origin_sq = 2 * periphery_radius_sq;
         while (distance_from_origin_sq > periphery_radius_sq) {
           sphere_positions(3 * i) = (2 * rng.rand<double>() - 1.0) * periphery_radius;
@@ -372,7 +372,7 @@ int main(int argc, char **argv) {
     // Setup the spheres
     size_t seed = 1234;
     size_t counter = 0;
-    openrand::Philox rng = utils::make_philox(seed, counter);
+    openrand::Philox rng = make_philox(seed, counter);
     Kokkos::View<double *, Kokkos::LayoutLeft, DeviceMemorySpace> sphere_positions("sphere_positions", 3 * num_spheres);
     Kokkos::View<double *, Kokkos::LayoutLeft, DeviceMemorySpace> sphere_velocities("sphere_velocities",
                                                                                     3 * num_spheres);

@@ -30,7 +30,6 @@
 #include <utility>
 
 // Our libs
-#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
 #include <mundy_geom/primitives/AABB.hpp>
 #include <mundy_geom/primitives/Ellipsoid.hpp>
 #include <mundy_geom/primitives/LineSegment.hpp>
@@ -38,10 +37,9 @@
 #include <mundy_geom/primitives/Sphere.hpp>
 #include <mundy_geom/primitives/Spherocylinder.hpp>
 #include <mundy_geom/primitives/SpherocylinderSegment.hpp>
+#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
 
 namespace mundy {
-
-namespace geom {
 
 /// @brief Compute the axis-aligned bounding box of a point
 template <ValidPointType PointType>
@@ -81,10 +79,9 @@ KOKKOS_FUNCTION AABB<typename LineSegmentType::scalar_t> compute_aabb(const Line
 template <ValidSphereType SphereType>
 KOKKOS_FUNCTION AABB<typename SphereType::scalar_t> compute_aabb(const SphereType& sphere) {
   using scalar_t = typename SphereType::scalar_t;
-  constexpr mundy::math::Vector3<scalar_t> ones{static_cast<scalar_t>(1), static_cast<scalar_t>(1),
-                                                static_cast<scalar_t>(1)};
-  const mundy::math::Vector3<scalar_t> min_corner = sphere.center() - ones * sphere.radius();
-  const mundy::math::Vector3<scalar_t> max_corner = sphere.center() + ones * sphere.radius();
+  constexpr mundy::Vector3<scalar_t> ones{static_cast<scalar_t>(1), static_cast<scalar_t>(1), static_cast<scalar_t>(1)};
+  const mundy::Vector3<scalar_t> min_corner = sphere.center() - ones * sphere.radius();
+  const mundy::Vector3<scalar_t> max_corner = sphere.center() + ones * sphere.radius();
   return AABB<scalar_t>{min_corner, max_corner};
 }
 template <ValidSphereType SphereType, typename Metric>
@@ -130,8 +127,8 @@ KOKKOS_FUNCTION AABB<typename SpherocylinderType::scalar_t> compute_aabb(const S
   const auto& radius = spherocylinder.radius();
   const auto& length = spherocylinder.length();
 
-  constexpr mundy::math::Vector3<scalar_t> z_axis = {static_cast<scalar_t>(0), static_cast<scalar_t>(0),
-                                                     static_cast<scalar_t>(1)};
+  constexpr mundy::Vector3<scalar_t> z_axis = {static_cast<scalar_t>(0), static_cast<scalar_t>(0),
+                                               static_cast<scalar_t>(1)};
   const point_t scaled_dir = static_cast<scalar_t>(0.5) * length * (orientation * z_axis);
   const point_t obb_centerline_min_corner = center - scaled_dir;
   const point_t obb_centerline_max_corner = center + scaled_dir;
@@ -168,8 +165,6 @@ template <ValidSpherocylinderSegmentType SegmentType, typename Metric>
 KOKKOS_FUNCTION AABB<typename SegmentType::scalar_t> compute_aabb(const SegmentType& segment, const Metric& metric) {
   return compute_aabb(unwrap_points_to_ref(segment, metric, reference_point(segment)));
 }
-
-}  // namespace geom
 
 }  // namespace mundy
 

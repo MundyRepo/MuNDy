@@ -46,7 +46,7 @@
 #include <mundy_shapes/ComputeOBB.hpp>   // for mundy::shapes::ComputeOBB
 
 // Mundy test libs
-#include <mundy_meta/utils/MeshGeneration.hpp>  // for mundy::meta::utils::generate_class_instance_and_mesh_from_meta_class_requirements
+#include <mundy_meta/utils/MeshGeneration.hpp>  // for mundy::meta::generate_class_instance_and_mesh_from_meta_class_requirements
 
 namespace mundy {
 
@@ -65,7 +65,7 @@ TEST(ComputeOBB, PerformsOBBCalculationCorrectlyForSphere) {
 
   // Create an instance of ComputeOBB based on committed mesh that meets the requirements for ComputeOBB.
   auto [compute_obb_ptr, bulk_data_ptr] =
-      mundy::meta::utils::generate_class_instance_and_mesh_from_meta_class_requirements<ComputeOBB>();
+      mundy::meta::generate_class_instance_and_mesh_from_meta_class_requirements<ComputeOBB>();
   ASSERT_TRUE(compute_obb_ptr != nullptr);
   ASSERT_TRUE(bulk_data_ptr != nullptr);
   auto meta_data_ptr = bulk_data_ptr->mesh_meta_data_ptr();

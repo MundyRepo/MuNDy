@@ -35,8 +35,8 @@
 // Mundy libs
 #include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
 #include <mundy_linkers/compute_signed_separation_distance_contact_normal_and_contact_points/kernels/SpherocylinderSegmentSpherocylinderSegmentLinker.hpp>  // for mundy::linkers::...::kernels::SpherocylinderSegmentSpherocylinderSegmentLinker
-#include <mundy_math/Vector3.hpp>                   // for mundy::math::Vector3
-#include <mundy_math/distance/SegmentSegment.hpp>   // for mundy::math::distance::distance_sq_between_line_segments
+#include <mundy_math/Vector3.hpp>                   // for mundy::Vector3
+#include <mundy_math/distance/SegmentSegment.hpp>   // for mundy::distance::distance_sq_between_line_segments
 #include <mundy_mesh/BulkData.hpp>                  // for mundy::mesh::BulkData
 #include <mundy_mesh/ForEachEntity.hpp>             // for mundy::mesh::for_each_entity_run
 #include <mundy_shapes/SpherocylinderSegments.hpp>  // for mundy::shapes::SpherocylinderSegments
@@ -191,22 +191,22 @@ void SpherocylinderSegmentSpherocylinderSegmentLinker::execute(
         const double spherocylinder_segment2_radius =
             stk::mesh::field_data(element_radius_field, spherocylinder_segment2_element)[0];
 
-        const auto spherocylinder_segment1_left_endpt = mundy::math::get_vector3_view<double>(
+        const auto spherocylinder_segment1_left_endpt = mundy::get_vector3_view<double>(
             stk::mesh::field_data(node_coord_field, spherocylinder_segment1_left_node));
-        const auto spherocylinder_segment2_left_endpt = mundy::math::get_vector3_view<double>(
+        const auto spherocylinder_segment2_left_endpt = mundy::get_vector3_view<double>(
             stk::mesh::field_data(node_coord_field, spherocylinder_segment2_left_node));
 
-        const auto spherocylinder_segment1_right_endpt = mundy::math::get_vector3_view<double>(
+        const auto spherocylinder_segment1_right_endpt = mundy::get_vector3_view<double>(
             stk::mesh::field_data(node_coord_field, spherocylinder_segment1_right_node));
-        const auto spherocylinder_segment2_right_endpt = mundy::math::get_vector3_view<double>(
+        const auto spherocylinder_segment2_right_endpt = mundy::get_vector3_view<double>(
             stk::mesh::field_data(node_coord_field, spherocylinder_segment2_right_node));
 
         // Compute the separation distance and contact point along the center line of each spherocylinder_segment
-        mundy::math::Vector3d closest_point1;
-        mundy::math::Vector3d closest_point2;
+        mundy::Vector3d closest_point1;
+        mundy::Vector3d closest_point2;
         double t1;
         double t2;
-        const double distance = Kokkos::sqrt(mundy::math::distance::distance_sq_between_line_segments(
+        const double distance = Kokkos::sqrt(mundy::distance::distance_sq_between_line_segments(
             spherocylinder_segment1_left_endpt, spherocylinder_segment1_right_endpt, spherocylinder_segment2_left_endpt,
             spherocylinder_segment2_right_endpt, closest_point1, closest_point2, t1, t2));
 
@@ -219,11 +219,11 @@ void SpherocylinderSegmentSpherocylinderSegmentLinker::execute(
         // Set the separation distance and contact normal
         // Notice that the contact normal points from the left sphere to the right sphere
         // It is the normal to the left sphere and negative the normal of the right sphere.
-        auto contact_normal = mundy::math::get_vector3_view<double>(
+        auto contact_normal = mundy::get_vector3_view<double>(
             stk::mesh::field_data(linker_contact_normal_field, spherocylinder_segment_spherocylinder_segment_linker));
-        auto spherocylinder_segment1_contact_point = mundy::math::get_vector3_view<double>(
+        auto spherocylinder_segment1_contact_point = mundy::get_vector3_view<double>(
             stk::mesh::field_data(linker_contact_points_field, spherocylinder_segment_spherocylinder_segment_linker));
-        auto spherocylinder_segment2_contact_point = mundy::math::get_vector3_view<double>(
+        auto spherocylinder_segment2_contact_point = mundy::get_vector3_view<double>(
             stk::mesh::field_data(linker_contact_points_field, spherocylinder_segment_spherocylinder_segment_linker) +
             3);
         double *signed_separation_distance = stk::mesh::field_data(

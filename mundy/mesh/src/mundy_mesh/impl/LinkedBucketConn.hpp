@@ -53,8 +53,8 @@
 #include <stk_util/util/StridedArray.hpp>
 
 // Mundy
-#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
 #include <mundy_mesh/fmt_stk_types.hpp>
+#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
 
 #define BUCKET_ORDINAL_ERROR_MESSAGE(function_name, bucket_ord, bucket_size)                                   \
   MUNDY_THROW_ASSERT(bucket_ord < bucket_size, std::invalid_argument,                                          \

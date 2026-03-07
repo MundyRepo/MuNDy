@@ -31,8 +31,6 @@
 
 namespace mundy {
 
-namespace utils {
-
 namespace {
 
 //! \name Throw assert tests
@@ -168,7 +166,5 @@ TEST(ThrowAssert, ThrowsCorrectMessage) {
 //@}
 
 }  // namespace
-
-}  // namespace utils
 
 }  // namespace mundy

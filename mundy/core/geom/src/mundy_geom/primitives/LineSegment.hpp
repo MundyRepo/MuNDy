@@ -30,12 +30,10 @@
 #include <utility>
 
 // Our libs
-#include <mundy_utils/throw_assert.hpp>      // for MUNDY_THROW_ASSERT
-#include <mundy_geom/primitives/Point.hpp>  // for mundy::geom::Point
+#include <mundy_geom/primitives/Point.hpp>  // for mundy::Point
+#include <mundy_utils/throw_assert.hpp>     // for MUNDY_THROW_ASSERT
 
 namespace mundy {
-
-namespace geom {
 
 template <typename Scalar, ValidPointType PointType = Point<Scalar>>
 class LineSegment {
@@ -60,7 +58,7 @@ class LineSegment {
   /// \brief Default constructor for owning LineSegments. Default initialize the start and end points.
   KOKKOS_FUNCTION
   constexpr LineSegment()
-    requires math::HasNArgConstructor<point_t, scalar_t, 3>
+    requires HasNArgConstructor<point_t, scalar_t, 3>
       : start_(scalar_t(), scalar_t(), scalar_t()), end_(scalar_t(), scalar_t(), scalar_t()) {
   }
 
@@ -271,8 +269,6 @@ std::ostream& operator<<(std::ostream& os, const LineSegmentType& line_segment) 
   os << "{" << line_segment.start() << "->" << line_segment.end() << "}";
   return os;
 }
-
-}  // namespace geom
 
 }  // namespace mundy
 

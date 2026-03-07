@@ -44,7 +44,7 @@
 #include <stk_mesh/base/Part.hpp>     // for stk::mesh::Part
 
 // Mundy libs
-#include <mundy_utils/StringLiteral.hpp>                       // for mundy::utils::StringLiteral
+#include <mundy_utils/StringLiteral.hpp>                       // for mundy::StringLiteral
 #include <mundy_utils/throw_assert.hpp>                        // for MUNDY_THROW_ASSERT
 #include <mundy_mesh/BulkData.hpp>                            // for mundy::mesh::BulkData
 #include <mundy_mesh/fmt_stk_types.hpp>                       // adds fmt::format for stk types

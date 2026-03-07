@@ -35,8 +35,6 @@
 
 namespace mundy {
 
-namespace utils {
-
 /// \brief NgpPoolT is a Kokkos-compatible pool of default constructable objects.
 template <class DataType, typename MemorySpace, typename SizeType = size_t>
 class NgpPoolT {
@@ -344,8 +342,6 @@ class NgpPoolT {
 /// chosen device space.
 template <class DataType, typename SizeType = size_t>
 using NgpPool = NgpPoolT<DataType, typename Kokkos::DefaultExecutionSpace::memory_space, SizeType>;
-
-}  // namespace utils
 
 }  // namespace mundy
 

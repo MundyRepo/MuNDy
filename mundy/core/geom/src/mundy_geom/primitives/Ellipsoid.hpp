@@ -30,17 +30,15 @@
 #include <utility>
 
 // Our libs
-#include <mundy_utils/throw_assert.hpp>      // for MUNDY_THROW_ASSERT
-#include <mundy_geom/primitives/Point.hpp>  // for mundy::geom::Point
-#include <mundy_math/Quaternion.hpp>        // for mundy::math::Quaternion
-#include <mundy_math/Tolerance.hpp>         // for mundy::math::get_zero_tolerance
+#include <mundy_geom/primitives/Point.hpp>  // for mundy::Point
+#include <mundy_math/Quaternion.hpp>        // for mundy::Quaternion
+#include <mundy_math/Tolerance.hpp>         // for mundy::get_zero_tolerance
+#include <mundy_utils/throw_assert.hpp>     // for MUNDY_THROW_ASSERT
 
 namespace mundy {
 
-namespace geom {
-
 template <typename Scalar, ValidPointType PointType = Point<Scalar>,
-          math::ValidQuaternionType OrientationType = math::Quaternion<Scalar>>
+          ValidQuaternionType OrientationType = Quaternion<Scalar>>
 class Ellipsoid {
   static_assert(std::is_same_v<typename PointType::scalar_t, Scalar> &&
                     std::is_same_v<typename OrientationType::scalar_t, Scalar>,
@@ -67,7 +65,7 @@ class Ellipsoid {
   /// \brief Default constructor. Default initializes center/orientation and sets axis radii to invalid values.
   KOKKOS_FUNCTION
   constexpr Ellipsoid()
-    requires(math::HasDefaultConstructor<point_t> && math::HasDefaultConstructor<orientation_t>)
+    requires(HasDefaultConstructor<point_t> && HasDefaultConstructor<orientation_t>)
       : center_(), orientation_(), radii_() {
     radii_[0] = static_cast<scalar_t>(-1);
     radii_[1] = static_cast<scalar_t>(-1);
@@ -82,7 +80,7 @@ class Ellipsoid {
   KOKKOS_FUNCTION
   constexpr Ellipsoid(const point_t& center, const scalar_t& radius_1, const scalar_t& radius_2,
                       const scalar_t& radius_3)
-    requires(math::HasNArgConstructor<orientation_t, scalar_t, 4> && math::HasNArgConstructor<point_t, scalar_t, 3>)
+    requires(HasNArgConstructor<orientation_t, scalar_t, 4> && HasNArgConstructor<point_t, scalar_t, 3>)
       : center_(center),
         orientation_{static_cast<scalar_t>(1), static_cast<scalar_t>(0), static_cast<scalar_t>(0),
                      static_cast<scalar_t>(0)},
@@ -104,7 +102,7 @@ class Ellipsoid {
   constexpr Ellipsoid(const scalar_t& x, const scalar_t& y, const scalar_t& z, const scalar_t& qw, const scalar_t& qx,
                       const scalar_t& qy, const scalar_t& qz, const scalar_t& radius_1, const scalar_t& radius_2,
                       const scalar_t& radius_3)
-    requires(math::HasNArgConstructor<point_t, scalar_t, 3> && math::HasNArgConstructor<orientation_t, scalar_t, 4>)
+    requires(HasNArgConstructor<point_t, scalar_t, 3> && HasNArgConstructor<orientation_t, scalar_t, 4>)
       : center_(x, y, z), orientation_(qw, qx, qy, qz), radii_{radius_1, radius_2, radius_3} {
   }
 
@@ -122,7 +120,7 @@ class Ellipsoid {
   KOKKOS_FUNCTION
   constexpr Ellipsoid(const point_t& center, const orientation_t& orientation, const scalar_t& radius_1,
                       const scalar_t& radius_2, const scalar_t& radius_3)
-    requires math::HasNArgConstructor<point_t, scalar_t, 3>
+    requires HasNArgConstructor<point_t, scalar_t, 3>
       : center_(center), orientation_(orientation), radii_(radius_1, radius_2, radius_3) {
   }
 
@@ -357,7 +355,7 @@ class Ellipsoid {
 template <typename T>
 struct impl_is_ellipsoid : std::false_type {};
 //
-template <typename Scalar, ValidPointType PointType, math::ValidQuaternionType OrientationType>
+template <typename Scalar, ValidPointType PointType, ValidQuaternionType OrientationType>
 struct impl_is_ellipsoid<Ellipsoid<Scalar, PointType, OrientationType>> : std::true_type {};
 //
 
@@ -398,7 +396,7 @@ std::ostream& operator<<(std::ostream& os, const EllipsoidType& ellipsoid) {
 
 template <ValidEllipsoidType EllipsoidType>
 KOKKOS_FUNCTION constexpr Point<typename EllipsoidType::scalar_t> map_body_frame_normal_to_ellipsoid(
-    const math::Vector3<typename EllipsoidType::scalar_t>& body_frame_nhat, const EllipsoidType& ellipsoid) {
+    const Vector3<typename EllipsoidType::scalar_t>& body_frame_nhat, const EllipsoidType& ellipsoid) {
   using Scalar = typename EllipsoidType::scalar_t;
   constexpr Scalar half = static_cast<Scalar>(0.5);
   constexpr Scalar one = static_cast<Scalar>(1.0);
@@ -413,13 +411,13 @@ KOKKOS_FUNCTION constexpr Point<typename EllipsoidType::scalar_t> map_body_frame
   const Scalar sign2 = Kokkos::copysign(one, body_frame_nhat[2]);
 
   Scalar alpha1, alpha2;
-  if (sign0 * body_frame_nhat[0] > math::get_zero_tolerance<Scalar>()) {
+  if (sign0 * body_frame_nhat[0] > get_zero_tolerance<Scalar>()) {
     const Scalar tmp0 = one / (r1 * body_frame_nhat[0]);
     const Scalar tmp1 = tmp0 * r2 * body_frame_nhat[1];
     const Scalar tmp2 = tmp0 * r3 * body_frame_nhat[2];
     alpha1 = one / (one + tmp1 * tmp1);
     alpha2 = one / (one + tmp2 * tmp2 * alpha1);
-  } else if (sign1 * body_frame_nhat[1] > math::get_zero_tolerance<Scalar>()) {
+  } else if (sign1 * body_frame_nhat[1] > get_zero_tolerance<Scalar>()) {
     const Scalar tmp = r3 * body_frame_nhat[2] / (r2 * body_frame_nhat[1]);
     alpha1 = zero;
     alpha2 = one / (one + tmp * tmp);
@@ -438,16 +436,14 @@ KOKKOS_FUNCTION constexpr Point<typename EllipsoidType::scalar_t> map_body_frame
   return Point<Scalar>(x, y, z);
 }
 
-template <typename Scalar, math::ValidAccessor<Scalar> Accessor1, ValidEllipsoidType EllipsoidType>
-KOKKOS_FUNCTION constexpr math::Vector3<Scalar> map_surface_normal_to_foot_point_on_ellipsoid(
-    const math::AVector3<Scalar, Accessor1>& lab_frame_ellipsoid_nhat, const EllipsoidType& ellipsoid) {
+template <typename Scalar, ValidAccessor<Scalar> Accessor1, ValidEllipsoidType EllipsoidType>
+KOKKOS_FUNCTION constexpr Vector3<Scalar> map_surface_normal_to_foot_point_on_ellipsoid(
+    const AVector3<Scalar, Accessor1>& lab_frame_ellipsoid_nhat, const EllipsoidType& ellipsoid) {
   const auto body_frame_nhat = conjugate(ellipsoid.orientation()) * lab_frame_ellipsoid_nhat;
   const auto body_frame_foot_point = map_body_frame_normal_to_ellipsoid(body_frame_nhat, ellipsoid);
   return ellipsoid.orientation() * body_frame_foot_point + ellipsoid.center();
 }
 //@}
-
-}  // namespace geom
 
 }  // namespace mundy
 

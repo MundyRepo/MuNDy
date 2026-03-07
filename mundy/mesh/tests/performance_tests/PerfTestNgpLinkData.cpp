@@ -45,9 +45,8 @@
 #include <stk_mesh/base/Selector.hpp>
 
 // Mundy libs
-#include <mundy_utils/rng.hpp>             // for mundy::utils::make_philox
-#include <mundy_math/Tolerance.hpp>       // for mundy::math::get_zero_tolerance
-#include <mundy_math/Vector3.hpp>         // for mundy::math::Vector3
+#include <mundy_math/Tolerance.hpp>       // for mundy::get_zero_tolerance
+#include <mundy_math/Vector3.hpp>         // for mundy::Vector3
 #include <mundy_mesh/BulkData.hpp>        // for mundy::mesh::BulkData
 #include <mundy_mesh/GetNgpLinkData.hpp>  // for mundy::mesh::get_updated_ngp_link_data
 #include <mundy_mesh/LinkData.hpp>        // for mundy::mesh::LinkData
@@ -55,6 +54,7 @@
 #include <mundy_mesh/MeshBuilder.hpp>     // for mundy::mesh::MeshBuilder
 #include <mundy_mesh/MetaData.hpp>        // for mundy::mesh::MetaData
 #include <mundy_mesh/NgpLinkData.hpp>     // for mundy::mesh::NgpLinkData
+#include <mundy_utils/rng.hpp>            // for mundy::make_philox
 
 namespace mundy {
 
@@ -415,7 +415,7 @@ class WeightedSampler {
 
     // Draw U ~ (0,1); clamp away from 0 to avoid log(0).
     double u = rng.template rand<double>();
-    const double tiny = math::get_zero_tolerance<double>() * 10;
+    const double tiny = get_zero_tolerance<double>() * 10;
     if (u <= tiny) u = tiny;
 
     const double key = -std::log(u) / weight;  // smaller is better
@@ -483,7 +483,7 @@ void connect_entities_and_links(TestContext& context, const TestParameters& para
     stk::mesh::BucketVector buckets_to_maybe_draw_from[stk::topology::NUM_RANKS];
     MUNDY_THROW_ASSERT(link_bucket_id <= std::numeric_limits<uint32_t>::max(), std::overflow_error,
                        "Counter exceeds uint32_t max for openrand::Philox.");
-    openrand::Philox bucket_rng = utils::make_philox(seed, link_bucket_id);
+    openrand::Philox bucket_rng = make_philox(seed, link_bucket_id);
 
     for (size_t i = 0; i < stk::topology::NUM_RANKS; ++i) {
       const size_t num_entity_buckets = rank_buckets[i].size();
@@ -518,7 +518,7 @@ void connect_entities_and_links(TestContext& context, const TestParameters& para
       stk::mesh::Entity link_entity = link_bucket[link_ord];
       MUNDY_THROW_ASSERT(link_ord <= std::numeric_limits<uint32_t>::max(), std::overflow_error,
                          "Counter exceeds uint32_t max for openrand::Philox.");
-      openrand::Philox link_rng = utils::make_philox(seed, link_ord);
+      openrand::Philox link_rng = make_philox(seed, link_ord);
 
       // Choose the ranks for each downward linked entity. The modes are
       //   same: All entities of NODE_RANK
@@ -557,7 +557,7 @@ void connect_entities_and_links(TestContext& context, const TestParameters& para
           const auto selected_node_bucket_id = bulk_data.bucket(selected_node).bucket_id();
           MUNDY_THROW_ASSERT(selected_node_bucket_id <= std::numeric_limits<uint32_t>::max(), std::overflow_error,
                              "Counter exceeds uint32_t max for openrand::Philox.");
-          openrand::Philox entity_bucket_rng = utils::make_philox(seed, selected_node_bucket_id);
+          openrand::Philox entity_bucket_rng = make_philox(seed, selected_node_bucket_id);
           if (entity_bucket_rng.rand<double>() > entity_bucket_selection_percentage) {
             break;  // If the entity fails the entity bucket selection, skip the rest.
           }
@@ -610,7 +610,7 @@ void connect_entities_and_links(TestContext& context, const TestParameters& para
             const auto selected_entity_bucket_id = bulk_data.bucket(selected_entity).bucket_id();
             MUNDY_THROW_ASSERT(selected_entity_bucket_id <= std::numeric_limits<uint32_t>::max(), std::overflow_error,
                                "Counter exceeds uint32_t max for openrand::Philox.");
-            openrand::Philox entity_bucket_rng = utils::make_philox(seed, selected_entity_bucket_id);
+            openrand::Philox entity_bucket_rng = make_philox(seed, selected_entity_bucket_id);
             if (entity_bucket_rng.rand<double>() > entity_bucket_selection_percentage) {
               break;  // If the entity fails the entity bucket selection, skip the rest.
             }
@@ -659,7 +659,7 @@ void connect_entities_and_links(TestContext& context, const TestParameters& para
         const auto selected_elem_bucket_id = bulk_data.bucket(selected_elem).bucket_id();
         MUNDY_THROW_ASSERT(selected_elem_bucket_id <= std::numeric_limits<uint32_t>::max(), std::overflow_error,
                            "Counter exceeds uint32_t max for openrand::Philox.");
-        openrand::Philox elem_bucket_rng = utils::make_philox(seed, selected_elem_bucket_id);
+        openrand::Philox elem_bucket_rng = make_philox(seed, selected_elem_bucket_id);
         if (elem_bucket_rng.rand<double>() > entity_bucket_selection_percentage) {
           continue;  // If the element fails the entity bucket selection, skip the rest.
         }
@@ -679,7 +679,7 @@ void connect_entities_and_links(TestContext& context, const TestParameters& para
           const auto selected_node_bucket_id = bulk_data.bucket(selected_node).bucket_id();
           MUNDY_THROW_ASSERT(selected_node_bucket_id <= std::numeric_limits<uint32_t>::max(), std::overflow_error,
                              "Counter exceeds uint32_t max for openrand::Philox.");
-          openrand::Philox entity_bucket_rng = utils::make_philox(seed, selected_node_bucket_id);
+          openrand::Philox entity_bucket_rng = make_philox(seed, selected_node_bucket_id);
           if (entity_bucket_rng.rand<double>() > entity_bucket_selection_percentage) {
             break;  // If any of the nodes fail the entity bucket selection, skip the rest.
           }
@@ -1063,7 +1063,7 @@ void randomly_mark_buckets_per_partition_per_rank_as_modified(TestContext& conte
         const auto bucket_id = crs_bucket_conn.bucket_id();
         MUNDY_THROW_ASSERT(bucket_id <= std::numeric_limits<uint32_t>::max(), std::overflow_error,
                            "Counter exceeds uint32_t max for openrand::Philox.");
-        openrand::Philox rng = utils::make_philox(rank, bucket_id);
+        openrand::Philox rng = make_philox(rank, bucket_id);
         impl::get_dirty_flag(crs_bucket_conn) = rng.rand<double>() < percentage;
         count += impl::get_dirty_flag(crs_bucket_conn);
       }

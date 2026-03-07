@@ -27,11 +27,9 @@
 #include <stdexcept>  // for logic_error, invalid_argument, etc
 
 // Mundy libs
-#include <mundy_utils/StringLiteral.hpp>  // for mundy::utils::StringLiteral and mundy::utils::make_string_literal
+#include <mundy_utils/StringLiteral.hpp>  // for mundy::StringLiteral and mundy::make_string_literal
 
 namespace mundy {
-
-namespace utils {
 
 namespace {
 
@@ -164,7 +162,5 @@ TEST(StringLiteral, StringLiteralWorks) {
 }
 
 }  // namespace
-
-}  // namespace utils
 
 }  // namespace mundy

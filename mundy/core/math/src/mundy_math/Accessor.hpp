@@ -30,13 +30,11 @@
 #include <utility>
 
 // Mundy
+#include <mundy_math/impl/AccessorImpl.hpp>
 #include <mundy_utils/storage.hpp>
 #include <mundy_utils/throw_assert.hpp>
-#include <mundy_math/impl/AccessorImpl.hpp>
 
 namespace mundy {
-
-namespace math {
 
 namespace impl {
 
@@ -44,7 +42,7 @@ template <typename Accessor>
 struct is_stored_accessor : std::false_type {};
 
 template <typename T>
-struct is_stored_accessor<utils::storage<T>> : std::true_type {};
+struct is_stored_accessor<storage<T>> : std::true_type {};
 
 template <typename Accessor>
 inline constexpr bool is_stored_accessor_v = is_stored_accessor<std::remove_cvref_t<Accessor>>::value;
@@ -55,8 +53,8 @@ struct accessor_underlying_type {
 };
 
 template <typename T>
-struct accessor_underlying_type<utils::storage<T>> {
-  using type = std::remove_cvref_t<decltype(std::declval<utils::storage<T>&>().get())>;
+struct accessor_underlying_type<storage<T>> {
+  using type = std::remove_cvref_t<decltype(std::declval<storage<T>&>().get())>;
 };
 
 template <typename Accessor>
@@ -140,7 +138,7 @@ concept HasSubscriptOperator = requires(Accessor a, size_t idx) { impl::unwrap_a
 template <typename Accessor>
 concept HasCallOperator = requires(Accessor a, size_t idx) { impl::unwrap_accessor(a)(idx); };
 
-/// \brief A concept that checks if Accessor is wrapped in utils::storage
+/// \brief A concept that checks if Accessor is wrapped in storage
 template <typename Accessor>
 concept StoredAccessor = impl::is_stored_accessor_v<Accessor>;
 
@@ -299,8 +297,6 @@ KOKKOS_INLINE_FUNCTION constexpr decltype(auto) access_at(Accessor&& accessor, s
 }
 
 }  // namespace impl
-
-}  // namespace math
 
 }  // namespace mundy
 

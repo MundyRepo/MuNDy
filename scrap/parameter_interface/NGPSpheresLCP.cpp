@@ -76,7 +76,7 @@
 
 // Mundy
 #include <mundy_math/Vector3.hpp>  // for Vector3
-#include <mundy_math/zmort.hpp>      // for mundy::math::zmorton_less(Vector3, Vector3)
+#include <mundy_math/zmort.hpp>      // for mundy::zmorton_less(Vector3, Vector3)
 
 using DeviceExecutionSpace = Kokkos::DefaultExecutionSpace;
 using DeviceMemorySpace = typename DeviceExecutionSpace::memory_space;
@@ -449,7 +449,7 @@ struct DiffDotsReducer {
  public:
   // Required
   typedef DiffDotsReducer reducer;
-  typedef mundy::math::Vector3d value_type;
+  typedef mundy::Vector3d value_type;
   typedef Kokkos::View<value_type *, Space, Kokkos::MemoryUnmanaged> result_view_type;
 
  private:
@@ -494,13 +494,13 @@ void compute_diff_dots(const stk::ParallelMachine parallel,
                        const Kokkos::View<double *, DeviceMemorySpace> &signed_sep_dot_tmp, const double dt,
                        double &dot_xkdiff_xkdiff, double &dot_xkdiff_gkdiff, double &dot_gkdiff_gkdiff) {
   // Local variables to store dot products
-  mundy::math::Vector3d local_xx_xg_gg_diff = {0.0, 0.0, 0.0};
+  mundy::Vector3d local_xx_xg_gg_diff = {0.0, 0.0, 0.0};
 
   // Perform parallel reduction to compute the dot products
   using range_policy = Kokkos::RangePolicy<DeviceExecutionSpace>;
   Kokkos::parallel_reduce(
       "ComputeDiffDots", range_policy(0, lagrange_multipliers.extent(0)),
-      KOKKOS_LAMBDA(const int i, mundy::math::Vector3d &acc_xx_xg_gg_diff) {
+      KOKKOS_LAMBDA(const int i, mundy::Vector3d &acc_xx_xg_gg_diff) {
         const double lag_mult = lagrange_multipliers(i);
         const double lag_mult_tmp = lagrange_multipliers_tmp(i);
         const double sep_dot = signed_sep_dot(i);
@@ -1040,9 +1040,9 @@ class EntityLessZMortonCoords {
     }
     double *a_coords = static_cast<double *>(stk::mesh::field_data(*coords_base, a));
     double *b_coords = static_cast<double *>(stk::mesh::field_data(*coords_base, b));
-    mundy::math::Vector3d a_vec(a_coords[0], a_coords[1], a_coords[2]);
-    mundy::math::Vector3d b_vec(b_coords[0], b_coords[1], b_coords[2]);
-    return mundy::math::zmorton_less(a_vec, b_vec);
+    mundy::Vector3d a_vec(a_coords[0], a_coords[1], a_coords[2]);
+    mundy::Vector3d b_vec(b_coords[0], b_coords[1], b_coords[2]);
+    return mundy::zmorton_less(a_vec, b_vec);
   }
 
   private:

@@ -88,7 +88,7 @@ struct Quaternion {
   double z;
 
   // constructors
-  Quaternion(const stk::math::Vec<double, 4> &q) {
+  Quaternion(const stk::Vec<double, 4> &q) {
     w = q[0];
     x = q[1];
     y = q[2];
@@ -102,11 +102,11 @@ struct Quaternion {
     z = qz;
   }
 
-  Quaternion(const stk::math::Vec<double, 3> &v, const double sina_2, const double cosa_2) {
+  Quaternion(const stk::Vec<double, 3> &v, const double sina_2, const double cosa_2) {
     from_rot(v, sina_2, cosa_2);
   }
 
-  Quaternion(const stk::math::Vec<double, 3> &v, const double angle) {
+  Quaternion(const stk::Vec<double, 3> &v, const double angle) {
     from_rot(v, angle);
   }
 
@@ -119,7 +119,7 @@ struct Quaternion {
   }
 
   // quaternion from rotation around a given axis (given sine and cosine of HALF the rotation angle)
-  void from_rot(const stk::math::Vec<double, 3> &v, const double sina_2, const double cosa_2) {
+  void from_rot(const stk::Vec<double, 3> &v, const double sina_2, const double cosa_2) {
     w = cosa_2;
     x = sina_2 * v[0];
     y = sina_2 * v[1];
@@ -127,7 +127,7 @@ struct Quaternion {
   }
 
   // rotation around a given axis (angle without range restriction)
-  void from_rot(const stk::math::Vec<double, 3> &v, const double angle) {
+  void from_rot(const stk::Vec<double, 3> &v, const double angle) {
     const double sina_2 = sin(angle / 2);
     const double cosa_2 = cos(angle / 2);
     w = cosa_2;
@@ -173,7 +173,7 @@ struct Quaternion {
 
   // rotate a point v in 3D space around the origin using this quaternion
   // see EN Wikipedia on Quaternions and spatial rotation
-  stk::math::Vec<double, 3> rotate(const stk::math::Vec<double, 3> &v) const {
+  stk::Vec<double, 3> rotate(const stk::Vec<double, 3> &v) const {
     const double t2 = x * y;
     const double t3 = x * z;
     const double t4 = x * w;
@@ -183,14 +183,14 @@ struct Quaternion {
     const double t8 = -z * z;
     const double t9 = z * w;
     const double t10 = -w * w;
-    return stk::math::Vec<double, 3>({double(2.0) * ((t8 + t10) * v[0] + (t6 - t4) * v[1] + (t3 + t7) * v[2]) + v[0],
+    return stk::Vec<double, 3>({double(2.0) * ((t8 + t10) * v[0] + (t6 - t4) * v[1] + (t3 + t7) * v[2]) + v[0],
                                       double(2.0) * ((t4 + t6) * v[0] + (t5 + t10) * v[1] + (t9 - t2) * v[2]) + v[1],
                                       double(2.0) * ((t7 - t3) * v[0] + (t2 + t9) * v[1] + (t5 + t8) * v[2]) + v[2]});
   }
 
   // rotate a point v in 3D space around a given point p using this quaternion
-  stk::math::Vec<double, 3> rotate_around_point(const stk::math::Vec<double, 3> &v,
-                                                const stk::math::Vec<double, 3> &p) {
+  stk::Vec<double, 3> rotate_around_point(const stk::Vec<double, 3> &v,
+                                                const stk::Vec<double, 3> &p) {
     return rotate(v - p) + p;
   }
 
@@ -202,7 +202,7 @@ struct Quaternion {
    * \param omega rotational velocity
    * \param dt time interval
    */
-  void rotate_self(const stk::math::Vec<double, 3> &rot_vel, const double dt) {
+  void rotate_self(const stk::Vec<double, 3> &rot_vel, const double dt) {
     const double rot_vel_norm = sqrt(rot_vel[0] * rot_vel[0] + rot_vel[1] * rot_vel[1] + rot_vel[2] * rot_vel[2]);
     if (rot_vel_norm < std::numeric_limits<double>::epsilon()) {
       return;
@@ -563,9 +563,9 @@ void generate_collision_constraints(stk::mesh::BulkData &bulkData, const SearchI
       const double *const radiusI = stk::mesh::field_data(particleRadiusField, particleI);
       const double *const radiusJ = stk::mesh::field_data(particleRadiusField, particleJ);
 
-      const stk::math::Vec<double, 3> distIJ({posJ[0] - posI[0], posJ[1] - posI[1], posJ[2] - posI[2]});
+      const stk::Vec<double, 3> distIJ({posJ[0] - posI[0], posJ[1] - posI[1], posJ[2] - posI[2]});
       const double com_sep = sqrt(distIJ[0] * distIJ[0] + distIJ[1] * distIJ[1] + distIJ[2] * distIJ[2]);
-      const stk::math::Vec<double, 3> normIJ = distIJ / com_sep;
+      const stk::Vec<double, 3> normIJ = distIJ / com_sep;
 
       stk::mesh::field_data(linkerSignedSepField, linker_i)[0] = com_sep - radiusI[0] - radiusJ[0];
       stk::mesh::field_data(linkerSignedSepDotField, linker_i)[0] = 0.0;
@@ -708,7 +708,7 @@ void compute_the_mobility_problem(stk::mesh::BulkData &bulkData,
       Quaternion quat(particle_orientation[0], particle_orientation[1], particle_orientation[2],
                       particle_orientation[3]);
 
-      const stk::math::Vec<double, 3> q = quat.rotate(stk::math::Vec<double, 3>({0, 0, 1}));
+      const stk::Vec<double, 3> q = quat.rotate(stk::Vec<double, 3>({0, 0, 1}));
       const double qq[3][3] = {{q[0] * q[0], q[0] * q[1], q[0] * q[2]},
                                {q[1] * q[0], q[1] * q[1], q[1] * q[2]},
                                {q[2] * q[0], q[2] * q[1], q[2] * q[2]}};
@@ -782,8 +782,8 @@ void compute_rate_of_change_of_sep(stk::mesh::BulkData &bulkData, const stk::mes
 
       // sep_dot = -con_normI dot (com_velocityI + com_omegaI x con_posI)
       //           -con_normJ dot (com_velocityJ + com_omegaJ x con_posJ)
-      stk::math::Vec<double, 3> com_velocityI;
-      stk::math::Vec<double, 3> com_velocityJ;
+      stk::Vec<double, 3> com_velocityI;
+      stk::Vec<double, 3> com_velocityJ;
       com_velocityI[0] = *(stk::mesh::field_data(nodeVelocityField, nodes[0]) + 0);
       com_velocityI[1] = *(stk::mesh::field_data(nodeVelocityField, nodes[0]) + 1);
       com_velocityI[2] = *(stk::mesh::field_data(nodeVelocityField, nodes[0]) + 2);
@@ -791,8 +791,8 @@ void compute_rate_of_change_of_sep(stk::mesh::BulkData &bulkData, const stk::mes
       com_velocityJ[1] = *(stk::mesh::field_data(nodeVelocityField, nodes[1]) + 1);
       com_velocityJ[2] = *(stk::mesh::field_data(nodeVelocityField, nodes[1]) + 2);
 
-      stk::math::Vec<double, 3> com_omegaI;
-      stk::math::Vec<double, 3> com_omegaJ;
+      stk::Vec<double, 3> com_omegaI;
+      stk::Vec<double, 3> com_omegaJ;
       com_omegaI[0] = *(stk::mesh::field_data(nodeOmegaField, nodes[0]) + 0);
       com_omegaI[1] = *(stk::mesh::field_data(nodeOmegaField, nodes[0]) + 1);
       com_omegaI[2] = *(stk::mesh::field_data(nodeOmegaField, nodes[0]) + 2);
@@ -800,8 +800,8 @@ void compute_rate_of_change_of_sep(stk::mesh::BulkData &bulkData, const stk::mes
       com_omegaJ[1] = *(stk::mesh::field_data(nodeOmegaField, nodes[1]) + 1);
       com_omegaJ[2] = *(stk::mesh::field_data(nodeOmegaField, nodes[1]) + 2);
 
-      stk::math::Vec<double, 3> con_posI;
-      stk::math::Vec<double, 3> con_posJ;
+      stk::Vec<double, 3> con_posI;
+      stk::Vec<double, 3> con_posJ;
       con_posI[0] = *(stk::mesh::field_data(conLocField, linker) + 0);
       con_posI[1] = *(stk::mesh::field_data(conLocField, linker) + 1);
       con_posI[2] = *(stk::mesh::field_data(conLocField, linker) + 2);
@@ -809,8 +809,8 @@ void compute_rate_of_change_of_sep(stk::mesh::BulkData &bulkData, const stk::mes
       con_posJ[1] = *(stk::mesh::field_data(conLocField, linker) + 4);
       con_posJ[2] = *(stk::mesh::field_data(conLocField, linker) + 5);
 
-      stk::math::Vec<double, 3> con_normI;
-      stk::math::Vec<double, 3> con_normJ;
+      stk::Vec<double, 3> con_normI;
+      stk::Vec<double, 3> con_normJ;
       con_normI[0] = *(stk::mesh::field_data(conNormField, linker) + 0);
       con_normI[1] = *(stk::mesh::field_data(conNormField, linker) + 1);
       con_normI[2] = *(stk::mesh::field_data(conNormField, linker) + 2);
@@ -819,8 +819,8 @@ void compute_rate_of_change_of_sep(stk::mesh::BulkData &bulkData, const stk::mes
       con_normJ[2] = *(stk::mesh::field_data(conNormField, linker) + 5);
 
       // compute D^T U
-      const stk::math::Vec<double, 3> con_velI = com_velocityI + Cross(com_omegaI, con_posI);
-      const stk::math::Vec<double, 3> con_velJ = com_velocityJ + Cross(com_omegaJ, con_posJ);
+      const stk::Vec<double, 3> con_velI = com_velocityI + Cross(com_omegaI, con_posI);
+      const stk::Vec<double, 3> con_velJ = com_velocityJ + Cross(com_omegaJ, con_posJ);
       stk::mesh::field_data(linkerSignedSepDotField, linker)[0] = -Dot(con_normI, con_velI) - Dot(con_normJ, con_velJ);
     }
   }

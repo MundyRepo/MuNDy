@@ -26,27 +26,25 @@
 #include <type_traits>
 
 // Mundy
-#include <mundy_utils/reference_wrapper.hpp>  // for mundy::utils::reference_wrapper
+#include <mundy_utils/reference_wrapper.hpp>  // for mundy::reference_wrapper
 
 namespace mundy {
-
-namespace utils {
 
 namespace {
 
 template <class T>
-concept can_ref = requires(T&& t) { ::mundy::utils::ref(static_cast<T&&>(t)); };
+concept can_ref = requires(T&& t) { ::mundy::ref(static_cast<T&&>(t)); };
 
 template <class T>
-concept can_cref = requires(T&& t) { ::mundy::utils::cref(static_cast<T&&>(t)); };
+concept can_cref = requires(T&& t) { ::mundy::cref(static_cast<T&&>(t)); };
 
 template <class T>
 concept can_construct_wrapper =
-    requires(T&& t) { ::mundy::utils::reference_wrapper<std::remove_reference_t<T>>(static_cast<T&&>(t)); };
+    requires(T&& t) { ::mundy::reference_wrapper<std::remove_reference_t<T>>(static_cast<T&&>(t)); };
 
 KOKKOS_FUNCTION constexpr bool constexpr_get_and_conversion_work() {
   int value = 2;
-  ::mundy::utils::reference_wrapper<int> wrapper(value);
+  ::mundy::reference_wrapper<int> wrapper(value);
   int& as_ref = wrapper;
   as_ref += 5;
   return wrapper.get() == 7 && value == 7;
@@ -54,11 +52,11 @@ KOKKOS_FUNCTION constexpr bool constexpr_get_and_conversion_work() {
 
 KOKKOS_FUNCTION constexpr bool constexpr_ref_and_cref_work() {
   int value = 10;
-  auto wrapped = ::mundy::utils::ref(value);
+  auto wrapped = ::mundy::ref(value);
   wrapped.get() += 3;
 
   const int const_value = 9;
-  auto const_wrapped = ::mundy::utils::cref(const_value);
+  auto const_wrapped = ::mundy::cref(const_value);
   return value == 13 && wrapped.get() == 13 && const_wrapped.get() == 9;
 }
 
@@ -71,21 +69,21 @@ struct Callable {
 
 KOKKOS_FUNCTION constexpr bool constexpr_callable_forwarding_works() {
   Callable callable{6};
-  auto wrapped = ::mundy::utils::ref(callable);
+  auto wrapped = ::mundy::ref(callable);
   return wrapped(4) == 10;
 }
 
-KOKKOS_FUNCTION constexpr ::mundy::utils::reference_wrapper<int> make_wrapper_from_scope(int& value) {
-  return ::mundy::utils::ref(value);
+KOKKOS_FUNCTION constexpr ::mundy::reference_wrapper<int> make_wrapper_from_scope(int& value) {
+  return ::mundy::ref(value);
 }
 
-KOKKOS_FUNCTION constexpr ::mundy::utils::reference_wrapper<const int> make_const_wrapper_from_scope(const int& value) {
-  return ::mundy::utils::cref(value);
+KOKKOS_FUNCTION constexpr ::mundy::reference_wrapper<const int> make_const_wrapper_from_scope(const int& value) {
+  return ::mundy::cref(value);
 }
 
 TEST(ReferenceWrapperTest, BasicGetAndConversionMutatesOriginal) {
   int value = 3;
-  ::mundy::utils::reference_wrapper<int> wrapper(value);
+  ::mundy::reference_wrapper<int> wrapper(value);
 
   EXPECT_EQ(wrapper.get(), 3);
 
@@ -99,44 +97,44 @@ TEST(ReferenceWrapperTest, BasicGetAndConversionMutatesOriginal) {
 
 TEST(ReferenceWrapperTest, RefAndCrefHelpersWrapLvalues) {
   int value = 5;
-  auto mutable_wrapper = ::mundy::utils::ref(value);
-  static_assert(std::is_same_v<decltype(mutable_wrapper), ::mundy::utils::reference_wrapper<int>>,
+  auto mutable_wrapper = ::mundy::ref(value);
+  static_assert(std::is_same_v<decltype(mutable_wrapper), ::mundy::reference_wrapper<int>>,
                 "ref(int&) should produce reference_wrapper<int>");
 
   mutable_wrapper.get() = 9;
   EXPECT_EQ(value, 9);
 
-  auto const_wrapper = ::mundy::utils::cref(value);
-  static_assert(std::is_same_v<decltype(const_wrapper), ::mundy::utils::reference_wrapper<const int>>,
+  auto const_wrapper = ::mundy::cref(value);
+  static_assert(std::is_same_v<decltype(const_wrapper), ::mundy::reference_wrapper<const int>>,
                 "cref(int&) should produce reference_wrapper<const int>");
   EXPECT_EQ(const_wrapper.get(), 9);
 }
 
 TEST(ReferenceWrapperTest, RefAndCrefFromExistingWrappersPreserveReference) {
   int value = 4;
-  auto wrapper = ::mundy::utils::ref(value);
+  auto wrapper = ::mundy::ref(value);
 
-  auto wrapper_again = ::mundy::utils::ref(wrapper);
+  auto wrapper_again = ::mundy::ref(wrapper);
   wrapper_again.get() = 12;
   EXPECT_EQ(value, 12);
 
-  auto const_from_wrapper = ::mundy::utils::cref(wrapper);
+  auto const_from_wrapper = ::mundy::cref(wrapper);
   EXPECT_EQ(const_from_wrapper.get(), 12);
 
-  auto const_from_const_wrapper = ::mundy::utils::cref(const_from_wrapper);
+  auto const_from_const_wrapper = ::mundy::cref(const_from_wrapper);
   EXPECT_EQ(const_from_const_wrapper.get(), 12);
 }
 
 TEST(ReferenceWrapperTest, WrapperCopySemanticsStillReferenceSameObject) {
   int value = 21;
-  ::mundy::utils::reference_wrapper<int> first(value);
-  ::mundy::utils::reference_wrapper<int> second(first);
+  ::mundy::reference_wrapper<int> first(value);
+  ::mundy::reference_wrapper<int> second(first);
 
   second.get() = 42;
   EXPECT_EQ(value, 42);
 
   int other = -1;
-  ::mundy::utils::reference_wrapper<int> third(other);
+  ::mundy::reference_wrapper<int> third(other);
   third = first;
   third.get() = 77;
   EXPECT_EQ(value, 77);
@@ -154,7 +152,7 @@ TEST(ReferenceWrapperTest, CallableForwardingWorksForMutableCallable) {
   };
 
   Accumulator accumulator{};
-  auto wrapped = ::mundy::utils::ref(accumulator);
+  auto wrapped = ::mundy::ref(accumulator);
 
   EXPECT_EQ(wrapped(1, 2), 3);
   EXPECT_EQ(wrapped(5, 4), 12);
@@ -162,24 +160,24 @@ TEST(ReferenceWrapperTest, CallableForwardingWorksForMutableCallable) {
 }
 
 TEST(ReferenceWrapperTest, TypeTraitsAndDeductionGuide) {
-  static_assert(::mundy::utils::is_reference_wrapper_v<::mundy::utils::reference_wrapper<int>>,
+  static_assert(::mundy::is_reference_wrapper_v<::mundy::reference_wrapper<int>>,
                 "reference_wrapper<T> should be detected as a wrapper");
-  static_assert(!::mundy::utils::is_reference_wrapper_v<int>, "non-wrapper types should not be detected as wrappers");
+  static_assert(!::mundy::is_reference_wrapper_v<int>, "non-wrapper types should not be detected as wrappers");
 
   int value = 8;
-  ::mundy::utils::reference_wrapper deduced(value);
-  static_assert(std::is_same_v<decltype(deduced), ::mundy::utils::reference_wrapper<int>>,
+  ::mundy::reference_wrapper deduced(value);
+  static_assert(std::is_same_v<decltype(deduced), ::mundy::reference_wrapper<int>>,
                 "CTAD should deduce reference_wrapper<int>");
 
   EXPECT_EQ(deduced.get(), 8);
 }
 
 TEST(ReferenceWrapperTest, ConversionAndConstructibilityContracts) {
-  static_assert(std::is_convertible_v<::mundy::utils::reference_wrapper<int>, int&>,
+  static_assert(std::is_convertible_v<::mundy::reference_wrapper<int>, int&>,
                 "reference_wrapper<int> should be implicitly convertible to int&");
-  static_assert(std::is_convertible_v<::mundy::utils::reference_wrapper<const int>, const int&>,
+  static_assert(std::is_convertible_v<::mundy::reference_wrapper<const int>, const int&>,
                 "reference_wrapper<const int> should be implicitly convertible to const int&");
-  static_assert(!std::is_convertible_v<::mundy::utils::reference_wrapper<const int>, int&>,
+  static_assert(!std::is_convertible_v<::mundy::reference_wrapper<const int>, int&>,
                 "reference_wrapper<const int> should not convert to mutable reference");
 
   static_assert(can_construct_wrapper<int&>, "wrapper should construct from lvalue reference");
@@ -196,13 +194,13 @@ TEST(ReferenceWrapperTest, DeletedRvalueRefAndCrefOverloadsAreNotCallable) {
 
 TEST(ReferenceWrapperTest, ConstWrapperAllowsReadOnlyAccess) {
   int value = 13;
-  const ::mundy::utils::reference_wrapper<int> wrapper(value);
+  const ::mundy::reference_wrapper<int> wrapper(value);
 
   EXPECT_EQ(wrapper.get(), 13);
   wrapper.get() = 14;
   EXPECT_EQ(value, 14);
 
-  const auto const_wrapper = ::mundy::utils::cref(value);
+  const auto const_wrapper = ::mundy::cref(value);
   EXPECT_EQ(const_wrapper.get(), 14);
 }
 
@@ -238,13 +236,13 @@ TEST(ReferenceWrapperTest, CallableForwardingSupportsReferenceReturnAndConstCall
   };
 
   RefReturningCallable callable{};
-  auto wrapped = ::mundy::utils::ref(callable);
+  auto wrapped = ::mundy::ref(callable);
 
   int& mutable_result = wrapped(3);
   mutable_result += 7;
   EXPECT_EQ(callable.stored, 10);
 
-  const auto const_wrapped = ::mundy::utils::cref(callable);
+  const auto const_wrapped = ::mundy::cref(callable);
   const int& const_result = const_wrapped(5);
   EXPECT_EQ(const_result, 15);
   EXPECT_EQ(callable.stored, 15);
@@ -262,7 +260,5 @@ TEST(ReferenceWrapperTest, ConstexprCoreOperations) {
 }
 
 }  // namespace
-
-}  // namespace utils
 
 }  // namespace mundy

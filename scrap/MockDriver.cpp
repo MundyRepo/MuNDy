@@ -84,7 +84,7 @@
 
 
 We should keep agents but add helper functions to expose bits of the lambda function to the user.
-Just like mundy::math::utils::distance offers signed separation distnace utility functions, so to
+Just like mundy::distance offers signed separation distnace utility functions, so to
 should we offer helper functions for computing the AABB's, bounding spheres, etc. The creation of
 MetaMethods just needs streamlined, so that they are less intimidating to work with.
 */

@@ -33,16 +33,14 @@
 #include <utility>
 
 // Mundy
+#include <mundy_math/Accessor.hpp>       // for mundy::ValidAccessor
+#include <mundy_math/Array.hpp>          // for mundy::Array
+#include <mundy_math/Matrix3.hpp>        // for mundy::Matrix3
+#include <mundy_math/Tolerance.hpp>      // for mundy::get_zero_tolerance
+#include <mundy_math/Vector.hpp>         // for mundy::Vector
 #include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
-#include <mundy_math/Accessor.hpp>      // for mundy::math::ValidAccessor
-#include <mundy_math/Array.hpp>         // for mundy::math::Array
-#include <mundy_math/Matrix3.hpp>       // for mundy::math::Matrix3
-#include <mundy_math/Tolerance.hpp>     // for mundy::math::get_zero_tolerance
-#include <mundy_math/Vector.hpp>        // for mundy::math::Vector
 
 namespace mundy {
-
-namespace math {
 
 /// \brief A temporary concept to check if a type is a valid AVector3 type
 /// TODO(palmerb4): Extend this concept to contain all shared setters and getters for our vectors.
@@ -121,20 +119,18 @@ KOKKOS_INLINE_FUNCTION constexpr auto cross(const AVector3<U, Accessor1>& a, con
 /// \endcode
 template <typename T, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto get_vector3_view(Accessor&& data) {
-  auto data_storage = utils::store(impl::unwrap_accessor(std::forward<Accessor>(data)));
+  auto data_storage = store(impl::unwrap_accessor(std::forward<Accessor>(data)));
   return AVector3<T, decltype(data_storage)>(data_storage);
 }
 
 template <typename T, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto get_owning_vector3(Accessor&& data) {
-  auto data_storage = utils::store(impl::unwrap_accessor(std::move(data)));
+  auto data_storage = store(impl::unwrap_accessor(std::move(data)));
   return AVector3<T, decltype(data_storage)>(data_storage);
 }
 //@}
 
 //@}
-
-}  // namespace math
 
 }  // namespace mundy
 

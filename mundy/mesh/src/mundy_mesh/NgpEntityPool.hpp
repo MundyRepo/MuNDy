@@ -47,15 +47,15 @@ namespace mesh {
 /// Unlike a regular NgpPool, we offer a reserve and declare method to both reserve space within the pool
 /// and fill that space with entities from a given mesh.
 template <typename MemorySpace, typename SizeType = long int>
-class NgpEntityPoolT : public utils::NgpPoolT<stk::mesh::Entity, MemorySpace, SizeType> {
+class NgpEntityPoolT : public NgpPoolT<stk::mesh::Entity, MemorySpace, SizeType> {
  public:
   // Type aliases
   using memory_space = MemorySpace;
   using execution_space = typename MemorySpace::execution_space;
   using entity_vector_t = std::vector<stk::mesh::Entity>;
-  using entity_view_t = utils::NgpViewT<stk::mesh::Entity*, MemorySpace>;
+  using entity_view_t = NgpViewT<stk::mesh::Entity*, MemorySpace>;
   using our_size_t = SizeType;
-  using base_t = utils::NgpPoolT<stk::mesh::Entity, MemorySpace, SizeType>;
+  using base_t = NgpPoolT<stk::mesh::Entity, MemorySpace, SizeType>;
 
   NgpEntityPoolT() = default;
 

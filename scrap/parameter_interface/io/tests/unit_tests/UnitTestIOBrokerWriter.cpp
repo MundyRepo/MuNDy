@@ -53,7 +53,7 @@
 #include <mundy_mesh/MetaData.hpp>     // for mundy::mesh::MetaData
 #include <mundy_meta/FieldReqs.hpp>    // for mundy::meta::FieldReqs
 #include <mundy_meta/MetaFactory.hpp>  // for mundy::meta::MetaMethodFactory and mundy::meta::HasMeshReqsAndIsRegisterable
-#include <mundy_meta/utils/MeshGeneration.hpp>  // for mundy::meta::utils::generate_class_instance_and_mesh_from_meta_class_requirements
+#include <mundy_meta/utils/MeshGeneration.hpp>  // for mundy::meta::generate_class_instance_and_mesh_from_meta_class_requirements
 #include <mundy_shapes/ComputeAABB.hpp>  // for mundy::shapes::ComputeAABB
 
 namespace mundy {

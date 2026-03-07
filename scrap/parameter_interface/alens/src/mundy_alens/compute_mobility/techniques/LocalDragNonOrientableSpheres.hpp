@@ -36,7 +36,7 @@
 #include <stk_topology/topology.hpp>  // for stk::topology
 
 // Mundy libs
-#include <mundy_utils/MakeStringArray.hpp>  // for mundy::utils::make_string_array
+#include <mundy_utils/MakeStringArray.hpp>  // for mundy::make_string_array
 #include <mundy_mesh/BulkData.hpp>         // for mundy::mesh::BulkData
 #include <mundy_mesh/MetaData.hpp>         // for mundy::mesh::MetaData
 #include <mundy_meta/FieldReqs.hpp>        // for mundy::meta::FieldReqs
@@ -140,7 +140,7 @@ class LocalDragNonorientableSpheres : public mundy::meta::MetaKernel<> {
   /// \brief Get the valid fixed parameters for this class and their defaults.
   static Teuchos::ParameterList get_valid_fixed_params() {
     static Teuchos::ParameterList default_parameter_list;
-    default_parameter_list.set("valid_entity_part_names", mundy::utils::make_string_array(default_part_name_),
+    default_parameter_list.set("valid_entity_part_names", mundy::make_string_array(default_part_name_),
                                "Name of the parts associated with this kernel.");
     default_parameter_list.set("node_force_field_name", std::string(default_node_force_field_name_),
                                "Name of the node force field.");

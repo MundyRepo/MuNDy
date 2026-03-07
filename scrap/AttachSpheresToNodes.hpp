@@ -38,7 +38,7 @@
 #include <stk_topology/topology.hpp>        // for stk::topology
 
 // Mundy libs
-#include <mundy_utils/StringLiteral.hpp>                       // for mundy::utils::StringLiteral
+#include <mundy_utils/StringLiteral.hpp>                       // for mundy::StringLiteral
 #include <mundy_utils/throw_assert.hpp>                        // for MUNDY_THROW_ASSERT
 #include <mundy_mesh/BulkData.hpp>                            // for mundy::mesh::BulkData
 #include <mundy_mesh/MetaData.hpp>                            // for mundy::mesh::MetaData
@@ -49,7 +49,7 @@
 #include <mundy_meta/MetaRegistry.hpp>                        // for MUNDY_REGISTER_METACLASS
 #include <mundy_meta/ParameterValidationHelpers.hpp>  // for mundy::meta::check_parameter_and_set_default and mundy::meta::check_required_parameter
 #include <mundy_shapes/Spheres.hpp>  // for mundy::shapes::Spheres
-#include <mundy_utils/MakeStringArray.hpp>    // for mundy::utils::make_string_array
+#include <mundy_utils/MakeStringArray.hpp>    // for mundy::make_string_array
 
 namespace mundy {
 
@@ -117,7 +117,7 @@ class AttachSpheresToNodes : public mundy::meta::MetaMethodSubsetExecutionInterf
   static Teuchos::ParameterList get_valid_fixed_params() {
     static Teuchos::ParameterList default_parameter_list;
     default_parameter_list.set(
-        "sphere_part_names", mundy::utils::make_string_array(mundy::shapes::Spheres::get_name()),
+        "sphere_part_names", mundy::make_string_array(mundy::shapes::Spheres::get_name()),
         "The names of the parts to which we will add the generated spheres.");
     return default_parameter_list;
   }

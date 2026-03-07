@@ -48,7 +48,7 @@
 #include <mundy_mesh/MetaData.hpp>       // for mundy::mesh::MetaData
 #include <mundy_meta/FieldReqs.hpp>      // for mundy::meta::FieldReqs
 #include <mundy_meta/FieldReqsBase.hpp>  // for mundy::meta::FieldReqsBase
-#include <mundy_meta/utils/MeshGeneration.hpp>  // for mundy::meta::utils::generate_class_instance_and_mesh_from_meta_class_requirements
+#include <mundy_meta/utils/MeshGeneration.hpp>  // for mundy::meta::generate_class_instance_and_mesh_from_meta_class_requirements
 #include <mundy_shapes/Spheres.hpp>                 // for mundy::shapes::Spheres
 #include <mundy_shapes/SpherocylinderSegments.hpp>  // for mundy::shapes::SpherocylinderSegments
 
@@ -75,7 +75,7 @@ void declare_linear_and_angular_springs_and_dump_mesh(const Teuchos::ParameterLi
   // Create an instance of DeclareAndInitConstraints based on committed mesh that meets the requirements for
   // DeclareAndInitConstraints.
   auto [declare_and_init_constraints_ptr, bulk_data_ptr] =
-      mundy::meta::utils::generate_class_instance_and_mesh_from_meta_class_requirements<DeclareAndInitConstraints>(
+      mundy::meta::generate_class_instance_and_mesh_from_meta_class_requirements<DeclareAndInitConstraints>(
           {fixed_params});
   ASSERT_TRUE(declare_and_init_constraints_ptr != nullptr);
   ASSERT_TRUE(bulk_data_ptr != nullptr);

@@ -39,16 +39,16 @@
 #include <stk_util/parallel/ParallelReduce.hpp>  // for stk::all_reduce_*
 
 // Mundy
-#include <mundy_utils/StringLiteral.hpp>  // for mundy::utils::StringLiteral
-#include <mundy_utils/aggregate.hpp>      // for mundy::utils::aggregate
-#include <mundy_utils/rng.hpp>            // for mundy::utils::make_philox
+#include <mundy_math/Matrix.hpp>          // for mundy::Matrix
+#include <mundy_math/Quaternion.hpp>      // for mundy::Quaternion
+#include <mundy_math/ScalarWrapper.hpp>   // for mundy::ScalarWrapper
+#include <mundy_math/Vector.hpp>          // for mundy::Vector
+#include <mundy_mesh/ForEachEntity.hpp>   // for mundy::mesh::for_each_entity_run
+#include <mundy_utils/StringLiteral.hpp>  // for mundy::StringLiteral
+#include <mundy_utils/aggregate.hpp>      // for mundy::aggregate
+#include <mundy_utils/rng.hpp>            // for mundy::make_philox
 #include <mundy_utils/throw_assert.hpp>   // for MUNDY_THROW_ASSERT
-#include <mundy_utils/tuple.hpp>          // for mundy::utils::tuple
-#include <mundy_math/Matrix.hpp>         // for mundy::math::Matrix
-#include <mundy_math/Quaternion.hpp>     // for mundy::math::Quaternion
-#include <mundy_math/ScalarWrapper.hpp>  // for mundy::math::ScalarWrapper
-#include <mundy_math/Vector.hpp>         // for mundy::math::Vector
-#include <mundy_mesh/ForEachEntity.hpp>  // for mundy::mesh::for_each_entity_run
+#include <mundy_utils/tuple.hpp>          // for mundy::tuple
 
 namespace mundy {
 
@@ -183,16 +183,16 @@ KOKKOS_FUNCTION auto cached_expr_chain_impl(const ExprTuple& exprs,
   constexpr size_t num_expr = ExprTuple::size();
   if constexpr (num_expr == 1) {
     // Single expr; just eval it and return its value and the current cache
-    auto& expr = utils::get<0>(exprs);
+    auto& expr = get<0>(exprs);
     auto [val, next_cache] =
         expr.template cached_eval<EvalCountsType, eval_counts>(fmis, std::forward<CacheType>(cache), ctx);
-    return Kokkos::make_pair(utils::tuple{val}, next_cache);
+    return Kokkos::make_pair(tuple{val}, next_cache);
   } else if constexpr (I == num_expr) {
     // No more exprs; return empty values tuple and the current cache
-    return Kokkos::make_pair(utils::tuple<>{}, std::forward<CacheType>(cache));
+    return Kokkos::make_pair(tuple<>{}, std::forward<CacheType>(cache));
   } else {
     // Evaluate current expr with the current cache
-    auto& expr = utils::get<I>(exprs);
+    auto& expr = get<I>(exprs);
     auto [val_i, next_cache] =
         expr.template cached_eval<EvalCountsType, eval_counts>(fmis, std::forward<CacheType>(cache), ctx);
 
@@ -201,7 +201,7 @@ KOKKOS_FUNCTION auto cached_expr_chain_impl(const ExprTuple& exprs,
         cached_expr_chain_impl<EvalCountsType, eval_counts, I + 1>(exprs, fmis, std::move(next_cache), ctx);
 
     // Prepend this value to the tuple of later values
-    auto vals_all = utils::tuple_cat(utils::tuple{std::move(val_i)}, std::move(vals_tail));
+    auto vals_all = tuple_cat(tuple{std::move(val_i)}, std::move(vals_tail));
     return Kokkos::make_pair(vals_all, final_cache);
   }
 }
@@ -212,20 +212,20 @@ KOKKOS_FUNCTION auto expr_chain_impl(const ExprTuple& exprs,
   constexpr size_t num_expr = ExprTuple::size();
   if constexpr (num_expr == 1) {
     // Single expr; just eval it and return its value and the current cache
-    auto val = utils::get<0>(exprs).eval(fmis, ctx);
-    return utils::tuple{std::move(val)};
+    auto val = get<0>(exprs).eval(fmis, ctx);
+    return tuple{std::move(val)};
   } else if constexpr (I == num_expr) {
     // No more exprs; return empty values tuple and the current cache
-    return utils::tuple<>{};
+    return tuple<>{};
   } else {
     // Evaluate current expr with the current cache
-    auto val_i = utils::get<I>(exprs).eval(fmis, ctx);
+    auto val_i = get<I>(exprs).eval(fmis, ctx);
 
     // Recurse for the rest, threading the updated cache
     auto vals_tail = expr_chain_impl<I + 1>(exprs, fmis, ctx);
 
     // Prepend this value to the tuple of later values
-    auto vals_all = utils::tuple_cat(utils::tuple{std::move(val_i)}, std::move(vals_tail));
+    auto vals_all = tuple_cat(tuple{std::move(val_i)}, std::move(vals_tail));
     return vals_all;
   }
 }
@@ -247,7 +247,7 @@ KOKKOS_INLINE_FUNCTION auto expr_chain(const ExprTuple& exprs,
 }
 
 // A map from rank and selector to an std::any
-template <utils::StringLiteral map_name>
+template <StringLiteral map_name>
 class AnyRankSelectorMap {
  public:
   AnyRankSelectorMap() = default;
@@ -330,7 +330,7 @@ class CachableExprBase {
  private:
   template <typename Tag, typename AggregateType, AggregateType agg>
   KOKKOS_INLINE_FUNCTION static constexpr auto increment_tag_count() {
-    if constexpr (utils::aggregate_has_v<Tag, AggregateType>) {
+    if constexpr (aggregate_has_v<Tag, AggregateType>) {
       auto new_agg = agg;
       get<Tag>(new_agg) += 1;
       return new_agg;
@@ -342,7 +342,7 @@ class CachableExprBase {
   template <typename SubExprTuple, size_t I, typename OldEvalCountsType, OldEvalCountsType old_eval_counts>
   KOKKOS_INLINE_FUNCTION static constexpr auto increment_eval_counts_recurse() {
     if constexpr (I < SubExprTuple::size()) {
-      using sub_expr_t = utils::tuple_element_t<I, SubExprTuple>;
+      using sub_expr_t = tuple_element_t<I, SubExprTuple>;
       // Recurse into the sub-expression
       constexpr auto updated_eval_counts =
           sub_expr_t::template increment_eval_counts<OldEvalCountsType, old_eval_counts>();
@@ -484,7 +484,7 @@ class ConnectedEntitiesExpr : public EntityExprBase<ConnectedEntitiesExpr<PrevEn
  public:
   using our_t = ConnectedEntitiesExpr<PrevEntityExpr>;
   using our_tag = typename EntityExprBase<ConnectedEntitiesExpr<PrevEntityExpr>>::our_tag;
-  using sub_expressions_t = utils::tuple<PrevEntityExpr>;
+  using sub_expressions_t = tuple<PrevEntityExpr>;
   using ConnectedEntities = stk::mesh::NgpMesh::ConnectedEntities;
   static constexpr bool constrains_num_entities = false;
 
@@ -517,7 +517,7 @@ class ConnectedEntitiesExpr : public EntityExprBase<ConnectedEntitiesExpr<PrevEn
     static_assert(has<our_tag>(eval_counts), "eval_counts must contain our tag");
 
     if constexpr (get<our_tag>(eval_counts) > 1) {
-      if constexpr (utils::aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>) {
+      if constexpr (aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>) {
         // The fact that our tag exists in the old cache means that our eval has cached its result before.
         // Return the cached value and the old cache
         auto cache = std::forward<OldCacheType>(old_cache);
@@ -582,7 +582,7 @@ class EntityExpr : public EntityExprBase<EntityExpr<NumEntities, Ord, DriverType
  public:
   using our_t = EntityExpr<NumEntities, Ord, DriverType>;
   using our_tag = typename EntityExprBase<EntityExpr<NumEntities, Ord, DriverType>>::our_tag;
-  using sub_expressions_t = utils::tuple<>;
+  using sub_expressions_t = tuple<>;
   static constexpr size_t num_entities = NumEntities;
 
   KOKKOS_INLINE_FUNCTION
@@ -607,7 +607,7 @@ class EntityExpr : public EntityExprBase<EntityExpr<NumEntities, Ord, DriverType
     static_assert(has<our_tag>(eval_counts), "eval_counts must contain our tag");
 
     if constexpr (get<our_tag>(eval_counts) > 1) {
-      if constexpr (utils::aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>) {
+      if constexpr (aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>) {
         // The fact that our tag exists in the old cache means that our eval has cached its result before. means that
         // our eval has cached its result before. Return the cached value
         auto cache = std::forward<OldCacheType>(old_cache);
@@ -781,12 +781,12 @@ class NgpForEachEntityExprDriver {
           // expr.eval(Kokkos::Array<stk::mesh::FastMeshIndex, 1>{entity_index}, evaluation_context);
 
           // Sum the counts of each expression in the tree
-          constexpr auto empty_eval_counts = utils::make_aggregate();
+          constexpr auto empty_eval_counts = make_aggregate();
           constexpr auto eval_counts =
               Expr::template increment_eval_counts<decltype(empty_eval_counts), empty_eval_counts>();
 
           // Perform the eval
-          auto empty_cache = utils::make_aggregate();
+          auto empty_cache = make_aggregate();
           expr.template cached_eval<decltype(eval_counts), eval_counts>(
               Kokkos::Array<stk::mesh::FastMeshIndex, 1>{entity_index}, empty_cache, evaluation_context);
         });
@@ -810,12 +810,12 @@ class NgpForEachEntityExprDriver {
         ngp_mesh, rank_, selector_, reduction,
         KOKKOS_LAMBDA(const stk::mesh::FastMeshIndex& entity_index, value_type& value) {
           // Sum the counts of each expression in the tree
-          constexpr auto empty_eval_counts = utils::make_aggregate();
+          constexpr auto empty_eval_counts = make_aggregate();
           constexpr auto eval_counts =
               Expr::template increment_eval_counts<decltype(empty_eval_counts), empty_eval_counts>();
 
           // Perform the eval
-          auto empty_cache = utils::make_aggregate();
+          auto empty_cache = make_aggregate();
           auto [val, final_cache] = expr.template cached_eval<decltype(eval_counts), eval_counts>(
               Kokkos::Array<stk::mesh::FastMeshIndex, 1>{entity_index}, empty_cache, evaluation_context);
 
@@ -828,7 +828,7 @@ class NgpForEachEntityExprDriver {
             // Directly compatible types; just combine
             reduction.join(value, val);
           }
-          if constexpr (math::is_scalar_wrapper_v<val_t>) {
+          if constexpr (is_scalar_wrapper_v<val_t>) {
             // val is a scalar wrapper; extract the underlying value and combine
             reduction.join(value, val[0]);
           } else {
@@ -895,12 +895,12 @@ class NgpForEachEntityPairExprDriver {
           // expr.eval(Kokkos::Array<stk::mesh::FastMeshIndex, 2>{left_fmi, right_fmi}, evaluation_context);
 
           // Sum the counts of each expression in the tree
-          constexpr auto empty_eval_counts = utils::make_aggregate();
+          constexpr auto empty_eval_counts = make_aggregate();
           constexpr auto eval_counts =
               Expr::template increment_eval_counts<decltype(empty_eval_counts), empty_eval_counts>();
 
           // Perform the eval
-          auto empty_cache = utils::make_aggregate();
+          auto empty_cache = make_aggregate();
           expr.template cached_eval<decltype(eval_counts), eval_counts>(
               Kokkos::Array<stk::mesh::FastMeshIndex, 2>{left_fmi, right_fmi}, empty_cache, evaluation_context);
         });
@@ -930,12 +930,12 @@ class NgpForEachEntityPairExprDriver {
           stk::mesh::FastMeshIndex right_fmi = FMIExtractor::get_right_index(entity_pair);
 
           // Sum the counts of each expression in the tree
-          constexpr auto empty_eval_counts = utils::make_aggregate();
+          constexpr auto empty_eval_counts = make_aggregate();
           constexpr auto eval_counts =
               Expr::template increment_eval_counts<decltype(empty_eval_counts), empty_eval_counts>();
 
           // Perform the eval
-          auto empty_cache = utils::make_aggregate();
+          auto empty_cache = make_aggregate();
           auto [val, final_cache] = expr.template cached_eval<decltype(eval_counts), eval_counts>(
               Kokkos::Array<stk::mesh::FastMeshIndex, 2>{left_fmi, right_fmi}, empty_cache, evaluation_context);
 
@@ -948,7 +948,7 @@ class NgpForEachEntityPairExprDriver {
             // Directly compatible types; just combine
             reduction.join(value, val);
           }
-          if constexpr (math::is_scalar_wrapper_v<val_t>) {
+          if constexpr (is_scalar_wrapper_v<val_t>) {
             // val is a scalar wrapper; extract the underlying value and combine
             reduction.join(value, val[0]);
           } else {
@@ -971,7 +971,7 @@ auto make_entity_expr(stk::mesh::BulkData& bulk_data, const stk::mesh::Selector&
   // on the meta data and use it to memoize the driver for the given rank and selector.
 
   using driver_t = NgpForEachEntityExprDriver<ExecSpace>;
-  using driver_map_t = impl::AnyRankSelectorMap<utils::make_string_literal("NgpExprDrivers")>;
+  using driver_map_t = impl::AnyRankSelectorMap<make_string_literal("NgpExprDrivers")>;
   stk::mesh::MetaData& meta_data = bulk_data.mesh_meta_data();
   driver_map_t* driver_map = const_cast<driver_map_t*>(meta_data.get_attribute<driver_map_t>());
   if (driver_map == nullptr) {
@@ -1003,7 +1003,7 @@ auto make_pairwise_entity_expr(stk::mesh::BulkData& bulk_data,                  
                                const PairView& pair_view, const FMIExtractor& /*fmi_extractor*/,  //
                                const ExecSpace& /*exec_space*/ = ExecSpace()) {
   using driver_t = NgpForEachEntityPairExprDriver<PairView, FMIExtractor, ExecSpace>;
-  using driver_map_t = impl::AnyRankSelectorMap<utils::make_string_literal("NgpPairExprDrivers")>;
+  using driver_map_t = impl::AnyRankSelectorMap<make_string_literal("NgpPairExprDrivers")>;
   stk::mesh::MetaData& meta_data = bulk_data.mesh_meta_data();
   driver_map_t* driver_map = const_cast<driver_map_t*>(meta_data.get_attribute<driver_map_t>());
   if (driver_map == nullptr) {
@@ -1057,7 +1057,7 @@ class ConstantMathExpr : public MathExprBase<ConstantMathExpr<ConstantType>> {
  public:
   using our_t = ConstantMathExpr<ConstantType>;
   using our_tag = typename MathExprBase<ConstantMathExpr<ConstantType>>::our_tag;
-  using sub_expressions_t = utils::tuple<>;
+  using sub_expressions_t = tuple<>;
   static constexpr bool constrains_num_entities = false;
 
   KOKKOS_INLINE_FUNCTION
@@ -1074,7 +1074,7 @@ class ConstantMathExpr : public MathExprBase<ConstantMathExpr<ConstantType>> {
   KOKKOS_INLINE_FUNCTION auto cached_eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities>& /*fmis*/,
                                           OldCacheType&& old_cache, const NgpEvalContext& /*context*/) const {
     static_assert(
-        !utils::aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>,
+        !aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>,
         "The cache somehow contains our tag, but our eval returns a constant and should never cache anything.");
     return Kokkos::make_pair(value_, std::forward<OldCacheType>(old_cache));
   }
@@ -1108,7 +1108,7 @@ class AssignExpr : public MathExprBase<AssignExpr<TargetExpr, SourceExpr>> {
  public:
   using our_t = AssignExpr<TargetExpr, SourceExpr>;
   using our_tag = typename MathExprBase<AssignExpr<TargetExpr, SourceExpr>>::our_tag;
-  using sub_expressions_t = utils::tuple<TargetExpr, SourceExpr>;
+  using sub_expressions_t = tuple<TargetExpr, SourceExpr>;
   static constexpr bool constrains_num_entities = false;
 
   KOKKOS_INLINE_FUNCTION
@@ -1124,7 +1124,7 @@ class AssignExpr : public MathExprBase<AssignExpr<TargetExpr, SourceExpr>> {
   template <typename EvalCountsType, EvalCountsType eval_counts, size_t NumEntities, typename OldCacheType>
   KOKKOS_INLINE_FUNCTION void cached_eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities>& fmis,
                                           OldCacheType&& old_cache, const NgpEvalContext& context) const {
-    static_assert(!utils::aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>,
+    static_assert(!aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>,
                   "The cache somehow contains our tag, but our eval returns void and should never cache anything.");
 
     // Eval our subexpressions first, allowing them to cache their results if necessary
@@ -1188,7 +1188,7 @@ class AssignExpr : public MathExprBase<AssignExpr<TargetExpr, SourceExpr>> {
    public:                                                                                                            \
     using our_t = OpName##Expr<LeftMathExpr, RightMathExpr>;                                                          \
     using our_tag = typename MathExprBase<OpName##Expr<LeftMathExpr, RightMathExpr>>::our_tag;                        \
-    using sub_expressions_t = utils::tuple<LeftMathExpr, RightMathExpr>;                                               \
+    using sub_expressions_t = tuple<LeftMathExpr, RightMathExpr>;                                                     \
     static constexpr bool constrains_num_entities = false;                                                            \
                                                                                                                       \
     KOKKOS_INLINE_FUNCTION                                                                                            \
@@ -1212,7 +1212,7 @@ class AssignExpr : public MathExprBase<AssignExpr<TargetExpr, SourceExpr>> {
       static_assert(has<our_tag>(eval_counts), "eval_counts must contain our tag");                                   \
                                                                                                                       \
       if constexpr (get<our_tag>(eval_counts) > 1) {                                                                  \
-        if constexpr (utils::aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>) {                        \
+        if constexpr (aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>) {                              \
           /* The fact that our tag exists in the old cache means that our eval has cached its result before.*/        \
           /* Return the cached value */                                                                               \
           auto cache = std::forward<OldCacheType>(old_cache);                                                         \
@@ -1324,7 +1324,7 @@ class AssignExpr : public MathExprBase<AssignExpr<TargetExpr, SourceExpr>> {
    public:                                                                                                         \
     using our_t = ExprClassName##Expr<PrevMathExpr>;                                                               \
     using our_tag = typename MathExprBase<ExprClassName##Expr<PrevMathExpr>>::our_tag;                             \
-    using sub_expressions_t = utils::tuple<PrevMathExpr>;                                                           \
+    using sub_expressions_t = tuple<PrevMathExpr>;                                                                 \
     static constexpr bool constrains_num_entities = true;                                                          \
                                                                                                                    \
     KOKKOS_INLINE_FUNCTION                                                                                         \
@@ -1368,7 +1368,7 @@ class AssignExpr : public MathExprBase<AssignExpr<TargetExpr, SourceExpr>> {
       static_assert(has<our_tag>(eval_counts), "eval_counts must contain our tag");                                \
                                                                                                                    \
       if constexpr (get<our_tag>(eval_counts) > 1) {                                                               \
-        if constexpr (utils::aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>) {                     \
+        if constexpr (aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>) {                           \
           /* The fact that our tag exists in the old cache means that our eval has cached its result before, means \
            * that */                                                                                               \
           /* our eval has cached its result before. Return the cached value */                                     \
@@ -1435,7 +1435,7 @@ class AssignExpr : public MathExprBase<AssignExpr<TargetExpr, SourceExpr>> {
    public:                                                                                                            \
     using our_t = ExprClassName##Expr<LeftMathExpr, RightMathExpr>;                                                   \
     using our_tag = typename MathExprBase<ExprClassName##Expr<LeftMathExpr, RightMathExpr>>::our_tag;                 \
-    using sub_expressions_t = utils::tuple<LeftMathExpr, RightMathExpr>;                                               \
+    using sub_expressions_t = tuple<LeftMathExpr, RightMathExpr>;                                                     \
     static constexpr bool constrains_num_entities = false;                                                            \
                                                                                                                       \
     KOKKOS_INLINE_FUNCTION                                                                                            \
@@ -1479,7 +1479,7 @@ class AssignExpr : public MathExprBase<AssignExpr<TargetExpr, SourceExpr>> {
       static_assert(has<our_tag>(eval_counts), "eval_counts must contain our tag");                                   \
                                                                                                                       \
       if constexpr (get<our_tag>(eval_counts) > 1) {                                                                  \
-        if constexpr (utils::aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>) {                        \
+        if constexpr (aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>) {                              \
           /* The fact that our tag exists in the old cache means that our eval has cached its result before.*/        \
           /* Return the cached value */                                                                               \
           auto cache = std::forward<OldCacheType>(old_cache);                                                         \
@@ -1597,7 +1597,7 @@ class AssignExpr : public MathExprBase<AssignExpr<TargetExpr, SourceExpr>> {
    public:                                                                                                             \
     using our_t = OpName##EqualsExpr<LeftMathExpr, RightMathExpr>;                                                     \
     using our_tag = typename MathExprBase<OpName##EqualsExpr<LeftMathExpr, RightMathExpr>>::our_tag;                   \
-    using sub_expressions_t = utils::tuple<LeftMathExpr, RightMathExpr>;                                                \
+    using sub_expressions_t = tuple<LeftMathExpr, RightMathExpr>;                                                      \
     static constexpr bool constrains_num_entities = false;                                                             \
                                                                                                                        \
     KOKKOS_INLINE_FUNCTION                                                                                             \
@@ -1618,7 +1618,7 @@ class AssignExpr : public MathExprBase<AssignExpr<TargetExpr, SourceExpr>> {
     template <typename EvalCountsType, EvalCountsType eval_counts, size_t NumEntities, typename OldCacheType>          \
     KOKKOS_INLINE_FUNCTION void cached_eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities>& fmis,          \
                                             OldCacheType&& old_cache, const NgpEvalContext& context) const {           \
-      static_assert(!utils::aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>,                            \
+      static_assert(!aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>,                                  \
                     "The cache somehow contains our tag, but our eval returns void and should never cache anything."); \
       /* Eval our subexpressions first, allowing them to cache their results if necessary */                           \
       auto [left_val, new_cache] = left_.template cached_eval<EvalCountsType, eval_counts>(fmis, old_cache, context);  \
@@ -1681,7 +1681,7 @@ class AssignExpr : public MathExprBase<AssignExpr<TargetExpr, SourceExpr>> {
    public:                                                                                                             \
     using our_t = ExprClassName##Expr<LeftMathExpr, RightMathExpr>;                                                    \
     using our_tag = typename MathExprBase<ExprClassName##Expr<LeftMathExpr, RightMathExpr>>::our_tag;                  \
-    using sub_expressions_t = utils::tuple<LeftMathExpr, RightMathExpr>;                                                \
+    using sub_expressions_t = tuple<LeftMathExpr, RightMathExpr>;                                                      \
     static constexpr bool constrains_num_entities = false;                                                             \
                                                                                                                        \
     KOKKOS_INLINE_FUNCTION                                                                                             \
@@ -1704,7 +1704,7 @@ class AssignExpr : public MathExprBase<AssignExpr<TargetExpr, SourceExpr>> {
     template <typename EvalCountsType, EvalCountsType eval_counts, size_t NumEntities, typename OldCacheType>          \
     KOKKOS_INLINE_FUNCTION void cached_eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities>& fmis,          \
                                             OldCacheType&& old_cache, const NgpEvalContext& context) const {           \
-      static_assert(!utils::aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>,                            \
+      static_assert(!aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>,                                  \
                     "The cache somehow contains our tag, but our eval returns void and should never cache anything."); \
       /* Eval our subexpressions first, allowing them to cache their results if necessary */                           \
       auto [left_val, new_cache] = left_.template cached_eval<EvalCountsType, eval_counts>(fmis, old_cache, context);  \
@@ -1936,37 +1936,37 @@ MUNDY_ACCESSOR_EXPR_OP_EQUALS(Add, +=)
 MUNDY_ACCESSOR_EXPR_OP_EQUALS(Sub, -=)
 MUNDY_ACCESSOR_EXPR_OP_EQUALS(Div, /=)
 MUNDY_ACCESSOR_EXPR_OP_EQUALS(Mul, *=)
-MUNDY_ACCESSOR_EXPR_ATOMIC_OP(AtomicAdd, atomic_add, ::mundy::math::atomic_add)
-MUNDY_ACCESSOR_EXPR_ATOMIC_OP(AtomicSub, atomic_sub, ::mundy::math::atomic_sub)
-MUNDY_ACCESSOR_EXPR_ATOMIC_OP(AtomicMul, atomic_mul, ::mundy::math::atomic_mul)
-MUNDY_ACCESSOR_EXPR_ATOMIC_OP(AtomicDiv, atomic_div, ::mundy::math::atomic_div)
+MUNDY_ACCESSOR_EXPR_ATOMIC_OP(AtomicAdd, atomic_add, ::mundy::atomic_add)
+MUNDY_ACCESSOR_EXPR_ATOMIC_OP(AtomicSub, atomic_sub, ::mundy::atomic_sub)
+MUNDY_ACCESSOR_EXPR_ATOMIC_OP(AtomicMul, atomic_mul, ::mundy::atomic_mul)
+MUNDY_ACCESSOR_EXPR_ATOMIC_OP(AtomicDiv, atomic_div, ::mundy::atomic_div)
 
 // Vector/Matrix/Quaternion functions
-MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(Copy, copy, copy)                                      // v, q, m
-MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(Sum, sum, sum)                                         // v, q, m
-MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(Product, product, ::mundy::math::product)              // Vector/Matrix/Quaternion
-MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(Min, min, ::mundy::math::min)                          // Vector/Matrix/Quaternion
-MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(Max, max, ::mundy::math::max)                          // Vector/Matrix/Quaternion
-MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(Mean, mean, ::mundy::math::mean)                       // Vector/Matrix/Quaternion
-MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(Variance, variance, ::mundy::math::variance)           // Vector/Matrix/Quaternion
-MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(StdDev, stddev, ::mundy::math::stddev)                 // Vector/Matrix/Quaternion
-MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(Norm, norm, ::mundy::math::norm)                       // v, q, m
-MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(OneNorm, one_norm, ::mundy::math::one_norm)            // v, m
-MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(InfNorm, inf_norm, ::mundy::math::inf_norm)            // v, m
-MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(TwoNorm, two_norm, ::mundy::math::two_norm)            // v, m
-MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(Inverse, inverse, ::mundy::math::inverse)              // m, q
-MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(Conjugate, conjugate, ::mundy::math::conjugate)        // q
-MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(Normalize, normalize, ::mundy::math::normalize)        // q
-MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(Trace, trace, ::mundy::math::trace)                    // m
-MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(Transpose, transpose, ::mundy::math::transpose)        // m
-MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(Determinant, determinant, ::mundy::math::determinant)  // m
-MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(Adjugate, adjugate, ::mundy::math::adjugate)           // m
-MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(Cofactors, cofactors, ::mundy::math::cofactors)        // m
-MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_2(Dot, dot, ::mundy::math::dot)                          // v-v, q-q
-MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_2(Cross, cross, ::mundy::math::cross)                    // v-v
-MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_2(ElementwiseMul, elementwise_mul, ::mundy::math::elementwise_mul)  // v-v, m-m
-MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_2(ElementwiseDiv, elementwise_div, ::mundy::math::elementwise_div)  // v-v, m-m
-MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_2(Slerp, slerp, ::mundy::math::slerp)                               // q-q
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(Copy, copy, copy)                                // v, q, m
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(Sum, sum, sum)                                   // v, q, m
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(Product, product, ::mundy::product)              // Vector/Matrix/Quaternion
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(Min, min, ::mundy::min)                          // Vector/Matrix/Quaternion
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(Max, max, ::mundy::max)                          // Vector/Matrix/Quaternion
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(Mean, mean, ::mundy::mean)                       // Vector/Matrix/Quaternion
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(Variance, variance, ::mundy::variance)           // Vector/Matrix/Quaternion
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(StdDev, stddev, ::mundy::stddev)                 // Vector/Matrix/Quaternion
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(Norm, norm, ::mundy::norm)                       // v, q, m
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(OneNorm, one_norm, ::mundy::one_norm)            // v, m
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(InfNorm, inf_norm, ::mundy::inf_norm)            // v, m
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(TwoNorm, two_norm, ::mundy::two_norm)            // v, m
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(Inverse, inverse, ::mundy::inverse)              // m, q
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(Conjugate, conjugate, ::mundy::conjugate)        // q
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(Normalize, normalize, ::mundy::normalize)        // q
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(Trace, trace, ::mundy::trace)                    // m
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(Transpose, transpose, ::mundy::transpose)        // m
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(Determinant, determinant, ::mundy::determinant)  // m
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(Adjugate, adjugate, ::mundy::adjugate)           // m
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(Cofactors, cofactors, ::mundy::cofactors)        // m
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_2(Dot, dot, ::mundy::dot)                          // v-v, q-q
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_2(Cross, cross, ::mundy::cross)                    // v-v
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_2(ElementwiseMul, elementwise_mul, ::mundy::elementwise_mul)  // v-v, m-m
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_2(ElementwiseDiv, elementwise_div, ::mundy::elementwise_div)  // v-v, m-m
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_2(Slerp, slerp, ::mundy::slerp)                               // q-q
 
 // Scalar functions
 MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(Abs, abs, Kokkos::abs)
@@ -2027,7 +2027,7 @@ class AccessorExpr : public MathExprBase<AccessorExpr<TaggedAccessorT, PrevEntit
  public:
   using our_t = AccessorExpr<TaggedAccessorT, PrevEntityExpr>;
   using our_tag = typename MathExprBase<our_t>::our_tag;
-  using sub_expressions_t = utils::tuple<PrevEntityExpr>;
+  using sub_expressions_t = tuple<PrevEntityExpr>;
   static constexpr bool constrains_num_entities = false;
 
   KOKKOS_INLINE_FUNCTION
@@ -2162,7 +2162,7 @@ class AccessorExpr : public MathExprBase<AccessorExpr<TaggedAccessorT, PrevEntit
     static_assert(has<our_tag>(eval_counts), "eval_counts must contain our tag");
 
     if constexpr (get<our_tag>(eval_counts) > 1) {
-      if constexpr (utils::aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>) {
+      if constexpr (aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>) {
         // The fact that our tag exists in the old cache means that our eval has cached its result before.
         // Return the cached value and the old cache
         auto cache = std::forward<OldCacheType>(old_cache);
@@ -2340,7 +2340,7 @@ class RandomDistributionExpr : public MathExprBase<RandomDistributionExpr<RNGExp
  public:
   using our_t = RandomDistributionExpr<RNGExpr, T>;
   using our_tag = typename MathExprBase<our_t>::our_tag;
-  using sub_expressions_t = utils::tuple<RNGExpr>;
+  using sub_expressions_t = tuple<RNGExpr>;
   static constexpr bool constrains_num_entities = false;
 
   KOKKOS_INLINE_FUNCTION
@@ -2360,7 +2360,7 @@ class RandomDistributionExpr : public MathExprBase<RandomDistributionExpr<RNGExp
     static_assert(has<our_tag>(eval_counts), "eval_counts must contain our tag");
 
     if constexpr (get<our_tag>(eval_counts) > 1) {
-      if constexpr (utils::aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>) {
+      if constexpr (aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>) {
         // The fact that our tag exists in the old cache means that our eval has cached its result before.
         // Return the cached value and the old cache
         auto cache = std::forward<OldCacheType>(old_cache);
@@ -2419,7 +2419,7 @@ class UniformDistributionExpr : public MathExprBase<UniformDistributionExpr<RNGE
  public:
   using our_t = UniformDistributionExpr<RNGExpr, T, LowExpr, HighExpr>;
   using our_tag = typename MathExprBase<our_t>::our_tag;
-  using sub_expressions_t = utils::tuple<RNGExpr, LowExpr, HighExpr>;
+  using sub_expressions_t = tuple<RNGExpr, LowExpr, HighExpr>;
   static constexpr bool constrains_num_entities = false;
 
   KOKKOS_INLINE_FUNCTION
@@ -2442,7 +2442,7 @@ class UniformDistributionExpr : public MathExprBase<UniformDistributionExpr<RNGE
     static_assert(has<our_tag>(eval_counts), "eval_counts must contain our tag");
 
     if constexpr (get<our_tag>(eval_counts) > 1) {
-      if constexpr (utils::aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>) {
+      if constexpr (aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>) {
         // The fact that our tag exists in the old cache means that our eval has cached its result before.
         // Return the cached value and the old cache
         auto cache = std::forward<OldCacheType>(old_cache);
@@ -2527,7 +2527,7 @@ class CounterBasedRNGExpr
  public:
   using our_t = CounterBasedRNGExpr<SeedExpr, CounterExpr, RNGType, make_counter_based_rng>;
   using our_tag = typename MathExprBase<our_t>::our_tag;
-  using sub_expressions_t = utils::tuple<SeedExpr, CounterExpr>;
+  using sub_expressions_t = tuple<SeedExpr, CounterExpr>;
   static constexpr bool constrains_num_entities = false;
 
   KOKKOS_INLINE_FUNCTION
@@ -2549,7 +2549,7 @@ class CounterBasedRNGExpr
     static_assert(has<our_tag>(eval_counts), "eval_counts must contain our tag");
 
     if constexpr (get<our_tag>(eval_counts) > 1) {
-      if constexpr (utils::aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>) {
+      if constexpr (aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>) {
         // The fact that our tag exists in the old cache means that our eval has cached its result before.
         // Return the cached value and the old cache
         auto cache = std::forward<OldCacheType>(old_cache);
@@ -2668,14 +2668,14 @@ class CounterBasedRNGExpr
 /// \brief Create a counter-based random number generator using the given seed and counter
 /// Seed and counter are expressions
 template <typename SeedExpr, typename CounterExpr, typename RNGType = openrand::Philox,
-          RNGType (*make_counter_based_rng)(size_t, size_t) = utils::make_philox>
+          RNGType (*make_counter_based_rng)(size_t, size_t) = make_philox>
   requires(is_crtp_base_of_v<MathExprBase, SeedExpr> && is_crtp_base_of_v<MathExprBase, CounterExpr>)
 auto rng(const SeedExpr& seed_expr, const CounterExpr& counter_expr) {
   return CounterBasedRNGExpr<SeedExpr, CounterExpr, RNGType, make_counter_based_rng>(seed_expr, counter_expr);
 }
 /// Seed is an expression but counter is a constant
 template <typename SeedExpr, typename CounterT, typename RNGType = openrand::Philox,
-          RNGType (*make_counter_based_rng)(size_t, size_t) = utils::make_philox>
+          RNGType (*make_counter_based_rng)(size_t, size_t) = make_philox>
   requires(is_crtp_base_of_v<MathExprBase, SeedExpr> && !is_crtp_base_of_v<MathExprBase, CounterT>)
 auto rng(const SeedExpr& seed_expr, const CounterT& counter) {
   using CounterExpr = ConstantMathExpr<CounterT>;
@@ -2684,7 +2684,7 @@ auto rng(const SeedExpr& seed_expr, const CounterT& counter) {
 }
 /// Seed is a constant but counter is an expression
 template <typename SeedT, typename CounterExpr, typename RNGType = openrand::Philox,
-          RNGType (*make_counter_based_rng)(size_t, size_t) = utils::make_philox>
+          RNGType (*make_counter_based_rng)(size_t, size_t) = make_philox>
   requires(!is_crtp_base_of_v<MathExprBase, SeedT> && is_crtp_base_of_v<MathExprBase, CounterExpr>)
 auto rng(const SeedT& seed, const CounterExpr& counter_expr) {
   using SeedExpr = ConstantMathExpr<SeedT>;
@@ -2693,7 +2693,7 @@ auto rng(const SeedT& seed, const CounterExpr& counter_expr) {
 }
 /// Both seed and counter are constants (not allowed)
 template <typename SeedT, typename CounterT, typename RNGType = openrand::Philox,
-          RNGType (*make_counter_based_rng)(size_t, size_t) = utils::make_philox>
+          RNGType (*make_counter_based_rng)(size_t, size_t) = make_philox>
   requires(!is_crtp_base_of_v<MathExprBase, SeedT> && !is_crtp_base_of_v<MathExprBase, CounterT>)
 void rng(const SeedT& seed, const CounterT& counter) {
   MUNDY_THROW_REQUIRE(false, std::logic_error,
@@ -2711,14 +2711,14 @@ class FusedAssignExpr : public MathExprBase<FusedAssignExpr<TrgSrcExprPairs...>>
  public:
   using our_t = FusedAssignExpr<TrgSrcExprPairs...>;
   using our_tag = typename MathExprBase<FusedAssignExpr<TrgSrcExprPairs...>>::our_tag;
-  using sub_expressions_t = utils::tuple<TrgSrcExprPairs...>;
+  using sub_expressions_t = tuple<TrgSrcExprPairs...>;
   static constexpr size_t num_pairs = sizeof...(TrgSrcExprPairs) / 2;
   static_assert(sizeof...(TrgSrcExprPairs) % 2 == 0,
                 "The number of target/source expression pairs in FusedAssignExpr must be even.");
   static constexpr bool constrains_num_entities = false;
 
   KOKKOS_INLINE_FUNCTION
-  FusedAssignExpr(const TrgSrcExprPairs&... exprs) : exprs_(utils::make_tuple(exprs...)) {
+  FusedAssignExpr(const TrgSrcExprPairs&... exprs) : exprs_(make_tuple(exprs...)) {
   }
 
   template <size_t NumEntities>
@@ -2734,7 +2734,7 @@ class FusedAssignExpr : public MathExprBase<FusedAssignExpr<TrgSrcExprPairs...>>
   template <typename EvalCountsType, EvalCountsType eval_counts, size_t NumEntities, typename OldCacheType>
   KOKKOS_INLINE_FUNCTION void cached_eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities>& fmis,
                                           OldCacheType&& old_cache, const NgpEvalContext& context) const {
-    static_assert(!utils::aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>,
+    static_assert(!aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>,
                   "The cache somehow contains our tag, but our eval returns void and should never cache anything.");
 
     // Eval all expressions, storing their results for later.
@@ -2766,7 +2766,7 @@ class FusedAssignExpr : public MathExprBase<FusedAssignExpr<TrgSrcExprPairs...>>
 
   const auto driver() const {
     // TODO(palmerb4): Check that all drivers are the same.
-    return utils::get<0>(exprs_).driver();
+    return get<0>(exprs_).driver();
   }
 
   //  private:
@@ -2783,7 +2783,7 @@ class FusedAssignExpr : public MathExprBase<FusedAssignExpr<TrgSrcExprPairs...>>
     // 1 % 2 -> 1
     // 2 % 2 -> 0
     if constexpr (I % 2 == 0) {
-      utils::get<I>(all_values) = utils::get<I + 1>(all_values);
+      get<I>(all_values) = get<I + 1>(all_values);
     }
   }
 
@@ -2792,15 +2792,15 @@ class FusedAssignExpr : public MathExprBase<FusedAssignExpr<TrgSrcExprPairs...>>
     static_assert(sizeof...(Is) == num_pairs, "Index sequence size must match number of target/source pairs.");
 
     // Flag all right hand sides as read-only and all left hand sides as overwrite-all.
-    (utils::get<2 * Is + 1>(exprs_).flag_read_only(context), ...);
-    (utils::get<2 * Is>(exprs_).flag_overwrite_all(context), ...);
+    (get<2 * Is + 1>(exprs_).flag_read_only(context), ...);
+    (get<2 * Is>(exprs_).flag_overwrite_all(context), ...);
 
     // Propagate synchronize to all expressions.
-    (utils::get<2 * Is + 1>(exprs_).propagate_synchronize(context), ...);
-    (utils::get<2 * Is>(exprs_).propagate_synchronize(context), ...);
+    (get<2 * Is + 1>(exprs_).propagate_synchronize(context), ...);
+    (get<2 * Is>(exprs_).propagate_synchronize(context), ...);
   }
 
-  utils::tuple<TrgSrcExprPairs...> exprs_;
+  tuple<TrgSrcExprPairs...> exprs_;
 };
 
 /// \brief Perform a fused assignment operation

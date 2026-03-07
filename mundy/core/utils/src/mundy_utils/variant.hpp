@@ -34,12 +34,10 @@
 
 // Mundy
 #include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
-#include <mundy_utils/tuple.hpp>         // for mundy::utils::tuple
-#include <mundy_utils/type_traits.hpp>   // for mundy::utils::index_finder, contains_type
+#include <mundy_utils/tuple.hpp>         // for mundy::tuple
+#include <mundy_utils/type_traits.hpp>   // for mundy::index_finder, contains_type
 
 namespace mundy {
-
-namespace utils {
 
 template <class... Alts>
 struct variant {
@@ -195,8 +193,6 @@ template <class T>
 static constexpr size_t variant_size_v = variant_size<T>::value;
 
 //@}
-
-}  // namespace utils
 
 }  // namespace mundy
 

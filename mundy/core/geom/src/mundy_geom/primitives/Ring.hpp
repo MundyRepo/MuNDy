@@ -30,18 +30,16 @@
 #include <utility>
 
 // Our libs
-#include <mundy_utils/throw_assert.hpp>         // for MUNDY_THROW_ASSERT
-#include <mundy_geom/primitives/Circle3D.hpp>  // for mundy::geom::Circle3D
-#include <mundy_geom/primitives/Point.hpp>     // for mundy::geom::Point
-#include <mundy_math/Quaternion.hpp>           // for mundy::math::Quaternion
-#include <mundy_math/Vector3.hpp>              // for mundy::math::Vector3
+#include <mundy_geom/primitives/Circle3D.hpp>  // for mundy::Circle3D
+#include <mundy_geom/primitives/Point.hpp>     // for mundy::Point
+#include <mundy_math/Quaternion.hpp>           // for mundy::Quaternion
+#include <mundy_math/Vector3.hpp>              // for mundy::Vector3
+#include <mundy_utils/throw_assert.hpp>        // for MUNDY_THROW_ASSERT
 
 namespace mundy {
 
-namespace geom {
-
 template <typename Scalar, ValidPointType PointType = Point<Scalar>,
-          math::ValidQuaternionType QuaternionType = math::Quaternion<Scalar>>
+          ValidQuaternionType QuaternionType = Quaternion<Scalar>>
 class Ring {
   static_assert(std::is_same_v<typename PointType::scalar_t, Scalar> &&
                     std::is_same_v<typename QuaternionType::scalar_t, Scalar>,
@@ -69,7 +67,7 @@ class Ring {
   /// invalid value of -1
   KOKKOS_FUNCTION
   constexpr Ring()
-    requires(math::HasDefaultConstructor<point_t> && math::HasDefaultConstructor<orientation_t>)
+    requires(HasDefaultConstructor<point_t> && HasDefaultConstructor<orientation_t>)
       : center_circle_(), minor_radius_(static_cast<scalar_t>(-1)) {
   }
 
@@ -89,7 +87,7 @@ class Ring {
   /// \param[in] orientation The orientation of the Ring (as a quaternion).
   /// \param[in] major_radius The radius of the center circle of the Ring.
   /// \param[in] minor_radius The radius of the tube around said circle.
-  template <ValidPointType OtherPointType, math::ValidQuaternionType OtherQuaternionType>
+  template <ValidPointType OtherPointType, ValidQuaternionType OtherQuaternionType>
   KOKKOS_FUNCTION constexpr Ring(const OtherPointType& center, const OtherQuaternionType& orientation,
                                  const scalar_t& major_radius, const scalar_t& minor_radius)
     requires(!std::is_same_v<OtherPointType, point_t> || !std::is_same_v<OtherQuaternionType, orientation_t>)
@@ -289,7 +287,7 @@ class Ring {
 template <typename T>
 struct impl_is_ring : std::false_type {};
 //
-template <typename Scalar, ValidPointType PointType, math::ValidQuaternionType QuaternionType>
+template <typename Scalar, ValidPointType PointType, ValidQuaternionType QuaternionType>
 struct impl_is_ring<Ring<Scalar, PointType, QuaternionType>> : std::true_type {};
 
 /// @brief Type trait to determine if a type is a Ring
@@ -332,8 +330,6 @@ std::ostream& operator<<(std::ostream& os, const RingType& ring) {
   return os;
 }
 //@}
-
-}  // namespace geom
 
 }  // namespace mundy
 

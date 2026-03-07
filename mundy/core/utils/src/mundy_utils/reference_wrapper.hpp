@@ -33,8 +33,6 @@
 
 namespace mundy {
 
-namespace utils {
-
 namespace impl {
 
 template <class T>
@@ -147,7 +145,7 @@ struct is_reference_wrapper<reference_wrapper<T>> : std::true_type {};
 
 }  // namespace impl
 
-/// \brief Detect if a type is mundy::utils::reference_wrapper<...>.
+/// \brief Detect if a type is mundy::reference_wrapper<...>.
 template <class T>
 struct is_reference_wrapper : impl::is_reference_wrapper<std::remove_cv_t<T>> {};
 
@@ -184,8 +182,6 @@ template <class T>
 KOKKOS_FUNCTION constexpr reference_wrapper<const T> cref(reference_wrapper<const T> t) noexcept {
   return t;
 }
-
-}  // namespace utils
 
 }  // namespace mundy
 

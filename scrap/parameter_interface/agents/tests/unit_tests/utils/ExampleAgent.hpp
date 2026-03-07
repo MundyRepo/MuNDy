@@ -41,8 +41,6 @@ namespace mundy {
 
 namespace agents {
 
-namespace utils {
-
 /// \class ExampleAgent
 /// \brief The static interface for all of Mundy's ExampleAgent objects.
 template <int I>
@@ -239,8 +237,6 @@ class ExampleAgent {
   }();
   //@}
 };  // ExampleAgent
-
-}  // namespace utils
 
 }  // namespace agents
 

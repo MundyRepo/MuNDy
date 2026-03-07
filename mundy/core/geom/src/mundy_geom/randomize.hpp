@@ -30,14 +30,12 @@
 #include <utility>
 
 // Our libs
+#include <mundy_geom/primitives.hpp>     // for mundy::Point, mundy::Line, ...
+#include <mundy_math/Quaternion.hpp>     // for mundy::Quaternion
+#include <mundy_math/Vector3.hpp>        // for mundy::Vector3
 #include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
-#include <mundy_geom/primitives.hpp>    // for mundy::geom::Point, mundy::geom::Line, ...
-#include <mundy_math/Quaternion.hpp>    // for mundy::math::Quaternion
-#include <mundy_math/Vector3.hpp>       // for mundy::math::Vector3
 
 namespace mundy {
-
-namespace geom {
 /*
 Supported shapes:
   - Point
@@ -72,15 +70,15 @@ KOKKOS_INLINE_FUNCTION Point<Scalar> generate_random_unit_vector(RNG& rng) {
   const Scalar wrand = Kokkos::sqrt(static_cast<Scalar>(1) - zrand * zrand);
   const Scalar trand = two_pi * rng.template rand<Scalar>();
 
-  return math::Vector3<Scalar>{wrand * Kokkos::cos(trand), wrand * Kokkos::sin(trand), zrand};
+  return Vector3<Scalar>{wrand * Kokkos::cos(trand), wrand * Kokkos::sin(trand), zrand};
 }
 
 /// \brief Generate a random unit quaternion mapping the z-axis to a random unit vector via parallel transport
 template <typename Scalar, typename RNG>
-KOKKOS_INLINE_FUNCTION math::Quaternion<Scalar> generate_random_unit_quaternion(RNG& rng) {
-  constexpr math::Vector3<Scalar> z_hat{0.0, 0.0, 1.0};
-  math::Vector3<Scalar> u_hat = generate_random_unit_vector<Scalar>(rng);
-  return math::quat_from_parallel_transport(z_hat, u_hat);
+KOKKOS_INLINE_FUNCTION Quaternion<Scalar> generate_random_unit_quaternion(RNG& rng) {
+  constexpr Vector3<Scalar> z_hat{0.0, 0.0, 1.0};
+  Vector3<Scalar> u_hat = generate_random_unit_vector<Scalar>(rng);
+  return quat_from_parallel_transport(z_hat, u_hat);
 }
 
 /// \brief Generate a random line with a center point within a given bounding box and a random direction
@@ -88,7 +86,7 @@ template <typename Scalar, typename RNG>
 KOKKOS_INLINE_FUNCTION Line<Scalar> generate_random_line(const AABB<Scalar>& box, RNG& rng) {
   // Generate random point in the domain and a random direction
   Point<Scalar> center = generate_random_point<Scalar>(box, rng);
-  math::Vector3<Scalar> direction = generate_random_unit_vector<Scalar>(rng);
+  Vector3<Scalar> direction = generate_random_unit_vector<Scalar>(rng);
   return Line<Scalar>(center, direction);
 }
 
@@ -110,7 +108,7 @@ KOKKOS_INLINE_FUNCTION LineSegment<Scalar> generate_random_line_segment(const AA
   Point<Scalar> center = generate_random_point<Scalar>(box, rng);
 
   // Generate random tangent
-  math::Vector3<Scalar> tangent = generate_random_unit_vector<Scalar>(rng);
+  Vector3<Scalar> tangent = generate_random_unit_vector<Scalar>(rng);
 
   // Generate random length
   Scalar length = rng.uniform(min_length, max_length);
@@ -141,8 +139,8 @@ KOKKOS_INLINE_FUNCTION VSegment<Scalar> generate_random_vsegment(const AABB<Scal
   Point<Scalar> middle = generate_random_point<Scalar>(box, rng);
 
   // Generate two random tangents
-  math::Vector3<Scalar> tangent1 = generate_random_unit_vector<Scalar>(rng);
-  math::Vector3<Scalar> tangent2 = generate_random_unit_vector<Scalar>(rng);
+  Vector3<Scalar> tangent1 = generate_random_unit_vector<Scalar>(rng);
+  Vector3<Scalar> tangent2 = generate_random_unit_vector<Scalar>(rng);
 
   // Generate two random lengths
   Scalar length1 = rng.uniform(min_length, max_length);
@@ -185,9 +183,8 @@ KOKKOS_INLINE_FUNCTION AABB<Scalar> generate_random_aabb(const AABB<Scalar>& box
 
 /// \brief Generate a random AABB with random size and center point inside the box
 template <typename Scalar, typename RNG>
-KOKKOS_INLINE_FUNCTION AABB<Scalar> generate_random_aabb(const AABB<Scalar>& box,
-                                                         const math::Vector3<Scalar>& min_sizes,
-                                                         const math::Vector3<Scalar>& max_sizes, RNG& rng) {
+KOKKOS_INLINE_FUNCTION AABB<Scalar> generate_random_aabb(const AABB<Scalar>& box, const Vector3<Scalar>& min_sizes,
+                                                         const Vector3<Scalar>& max_sizes, RNG& rng) {
   // Generate a random center point within the bounding box
   Point<Scalar> center = generate_random_point<Scalar>(box, rng);
 
@@ -197,8 +194,8 @@ KOKKOS_INLINE_FUNCTION AABB<Scalar> generate_random_aabb(const AABB<Scalar>& box
   Scalar size_z = rng.uniform(min_sizes[2], max_sizes[2]);
 
   // Compute min and max corners
-  Point<Scalar> min_corner = center - 0.5 * math::Vector3<Scalar>(size_x, size_y, size_z);
-  Point<Scalar> max_corner = center + 0.5 * math::Vector3<Scalar>(size_x, size_y, size_z);
+  Point<Scalar> min_corner = center - 0.5 * Vector3<Scalar>(size_x, size_y, size_z);
+  Point<Scalar> max_corner = center + 0.5 * Vector3<Scalar>(size_x, size_y, size_z);
 
   return AABB<Scalar>(min_corner, max_corner);
 }
@@ -222,11 +219,11 @@ KOKKOS_INLINE_FUNCTION Spherocylinder<Scalar> generate_random_spherocylinder(con
 
   // Convert them into a unit tangent and use that to get a quaternion
   auto tangent = p2 - p1;
-  Scalar length = math::norm(tangent);
+  Scalar length = norm(tangent);
   tangent /= length;
 
-  constexpr math::Vector3<Scalar> z_hat{0.0, 0.0, 1.0};
-  auto quaternion = math::quat_from_parallel_transport(z_hat, tangent);
+  constexpr Vector3<Scalar> z_hat{0.0, 0.0, 1.0};
+  auto quaternion = quat_from_parallel_transport(z_hat, tangent);
 
   // Generate a random radius (between min_radius and max_radius)
   Scalar radius = rng.uniform(min_radius, max_radius);
@@ -288,8 +285,8 @@ KOKKOS_INLINE_FUNCTION Ring<Scalar> generate_random_ring(const AABB<Scalar>& box
 /// \brief Generate a random ellipsoid with center point within a given bounding box, random semi-axis radii, and random
 /// orientation
 template <typename Scalar, typename RNG>
-Ellipsoid<Scalar> generate_random_ellipsoid(const AABB<Scalar>& box, const math::Vector3<Scalar>& min_radii,
-                                            const math::Vector3<Scalar>& max_radii, RNG& rng) {
+Ellipsoid<Scalar> generate_random_ellipsoid(const AABB<Scalar>& box, const Vector3<Scalar>& min_radii,
+                                            const Vector3<Scalar>& max_radii, RNG& rng) {
   Point<Scalar> center = generate_random_point<Scalar>(box, rng);
   Scalar r0 = rng.uniform(min_radii[0], max_radii[0]);
   Scalar r1 = rng.uniform(min_radii[1], max_radii[1]);
@@ -298,8 +295,6 @@ Ellipsoid<Scalar> generate_random_ellipsoid(const AABB<Scalar>& box, const math:
 
   return Ellipsoid<Scalar>(center, random_quaternion, r0, r1, r2);
 }
-
-}  // namespace geom
 
 }  // namespace mundy
 

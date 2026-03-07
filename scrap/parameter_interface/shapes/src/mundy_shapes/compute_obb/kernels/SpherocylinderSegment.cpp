@@ -32,8 +32,8 @@
 #include <stk_mesh/base/Field.hpp>    // for stk::mesh::Field, stl::mesh::field_data
 
 // Mundy libs
-#include <mundy_math/Quaternion.hpp>  // for mundy::math::Quaternion
-#include <mundy_math/Vector3.hpp>     // for mundy::math::Vector3
+#include <mundy_math/Quaternion.hpp>  // for mundy::Quaternion
+#include <mundy_math/Vector3.hpp>     // for mundy::Vector3
 #include <mundy_mesh/BulkData.hpp>    // for mundy::mesh::BulkData
 #include <mundy_mesh/FieldViews.hpp>  // for mundy::mesh::vector3_field_data, mundy::mesh::quaternion_field_data, mundy::mesh::matrix3_field_data
 #include <mundy_mesh/ForEachEntity.hpp>                                // for mundy::mesh::for_each_entity_run
@@ -148,22 +148,22 @@ void SpherocylinderSegment::execute(const stk::mesh::Selector &spherocylinder_se
         const auto right_node_coord = mundy::mesh::vector3_field_data(node_coord_field, right_node);
 
         // Compute the orientation of the spherocylinder segment.
-        const mundy::math::Vector3d element_orientation_vec = right_node_coord - left_node_coord;
+        const mundy::Vector3d element_orientation_vec = right_node_coord - left_node_coord;
 
         // Find any two orthonormal vectors to the orientation vector.
-        const mundy::math::Vector3d x_axis(1.0, 0.0, 0.0);
-        const mundy::math::Vector3d y_axis(0.0, 1.0, 0.0);
-        const mundy::math::Vector3d z_axis(0.0, 0.0, 1.0);
+        const mundy::Vector3d x_axis(1.0, 0.0, 0.0);
+        const mundy::Vector3d y_axis(0.0, 1.0, 0.0);
+        const mundy::Vector3d z_axis(0.0, 0.0, 1.0);
         auto perp_vector0 =
-            mundy::math::norm(mundy::math::cross(element_orientation_vec, x_axis)) > 1.0e-12 ? x_axis : y_axis;
-        auto perp_vector1 = mundy::math::cross(element_orientation_vec, perp_vector0);
-        perp_vector0 /= mundy::math::norm(perp_vector0);
-        perp_vector1 /= mundy::math::norm(perp_vector1);
+            mundy::norm(mundy::cross(element_orientation_vec, x_axis)) > 1.0e-12 ? x_axis : y_axis;
+        auto perp_vector1 = mundy::cross(element_orientation_vec, perp_vector0);
+        perp_vector0 /= mundy::norm(perp_vector0);
+        perp_vector1 /= mundy::norm(perp_vector1);
 
         // Populate the OBB.
         double *obb = stk::mesh::field_data(element_obb_field, spherocylinder_segment_element);
-        auto bottom_left = mundy::math::get_vector3_view<double>(obb);
-        auto top_right = mundy::math::get_vector3_view<double>(obb + 3);
+        auto bottom_left = mundy::get_vector3_view<double>(obb);
+        auto top_right = mundy::get_vector3_view<double>(obb + 3);
 
         bottom_left =
             left_node_coord - buffer_distance * radius * perp_vector0 - buffer_distance * radius * perp_vector1;

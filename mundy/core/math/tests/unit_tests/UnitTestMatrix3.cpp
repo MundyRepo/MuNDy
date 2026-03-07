@@ -36,9 +36,9 @@
 #include <vector>       // for std::vector
 
 // Mundy libs
-#include <mundy_math/Matrix3.hpp>    // for mundy::math::Matrix3
-#include <mundy_math/Tolerance.hpp>  // for mundy::math::get_relaxed_zero_tolerance
-#include <mundy_math/Vector3.hpp>    // for mundy::math::Vector3
+#include <mundy_math/Matrix3.hpp>    // for mundy::Matrix3
+#include <mundy_math/Tolerance.hpp>  // for mundy::get_relaxed_zero_tolerance
+#include <mundy_math/Vector3.hpp>    // for mundy::Vector3
 
 // Note, these tests are meant to look like real use cases for the Matrix3 class. As a result, we use implicit type
 // conversions rather than being explicit about types. This is to ensure that the Matrix3 class can be used in a
@@ -46,8 +46,6 @@
 // warnings. We will not however, locally disable these warning.
 
 namespace mundy {
-
-namespace math {
 
 namespace {
 
@@ -1136,7 +1134,5 @@ TYPED_TEST(Matrix3SingleTypeTest, Views) {
 //@}
 
 }  // namespace
-
-}  // namespace math
 
 }  // namespace mundy

@@ -30,17 +30,15 @@
 #include <utility>
 
 // Our libs
-#include <mundy_utils/throw_assert.hpp>      // for MUNDY_THROW_ASSERT
-#include <mundy_geom/primitives/Point.hpp>  // for mundy::geom::Point
-#include <mundy_math/Quaternion.hpp>        // for mundy::math::Quaternion
-#include <mundy_math/Vector3.hpp>           // for mundy::math::Vector3
+#include <mundy_geom/primitives/Point.hpp>  // for mundy::Point
+#include <mundy_math/Quaternion.hpp>        // for mundy::Quaternion
+#include <mundy_math/Vector3.hpp>           // for mundy::Vector3
+#include <mundy_utils/throw_assert.hpp>     // for MUNDY_THROW_ASSERT
 
 namespace mundy {
 
-namespace geom {
-
 template <typename Scalar, ValidPointType PointType = Point<Scalar>,
-          math::ValidQuaternionType QuaternionType = math::Quaternion<Scalar>>
+          ValidQuaternionType QuaternionType = Quaternion<Scalar>>
 class Circle3D {
   static_assert(std::is_same_v<typename PointType::scalar_t, Scalar> &&
                     std::is_same_v<typename QuaternionType::scalar_t, Scalar>,
@@ -67,7 +65,7 @@ class Circle3D {
   /// \brief Default constructor. Initializes as invalid.
   KOKKOS_FUNCTION
   constexpr Circle3D()
-    requires(math::HasDefaultConstructor<point_t> && math::HasDefaultConstructor<orientation_t>)
+    requires(HasDefaultConstructor<point_t> && HasDefaultConstructor<orientation_t>)
       : center_(), orientation_(), radius_(static_cast<scalar_t>(-1)) {
   }
 
@@ -86,7 +84,7 @@ class Circle3D {
   /// \param[in] orientation The quaternion orientation mapping a circle with normal in the z-direction to the lab
   /// frame.
   /// \param[in] radius The radius of the circle.
-  template <ValidPointType OtherPointType, math::ValidQuaternionType OtherQuaternionType>
+  template <ValidPointType OtherPointType, ValidQuaternionType OtherQuaternionType>
   KOKKOS_FUNCTION constexpr Circle3D(const OtherPointType& center, const OtherQuaternionType& orientation,
                                      const scalar_t& radius)
     requires(!std::is_same_v<OtherPointType, point_t> || !std::is_same_v<OtherQuaternionType, orientation_t>)
@@ -249,7 +247,7 @@ class Circle3D {
 template <typename T>
 struct is_circle3d_impl : std::false_type {};
 //
-template <typename Scalar, ValidPointType PointType, math::ValidQuaternionType QuaternionType>
+template <typename Scalar, ValidPointType PointType, ValidQuaternionType QuaternionType>
 struct is_circle3d_impl<Circle3D<Scalar, PointType, QuaternionType>> : std::true_type {};
 
 /// @brief Type trait to determine if a type is a Circle3d
@@ -287,8 +285,6 @@ std::ostream& operator<<(std::ostream& os, const Circle3DType& circle3d) {
   return os;
 }
 //@}
-
-}  // namespace geom
 
 }  // namespace mundy
 

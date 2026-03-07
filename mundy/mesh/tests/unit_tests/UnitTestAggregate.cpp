@@ -41,7 +41,7 @@
 #include <stk_mesh/base/Selector.hpp>
 
 // Mundy libs
-#include <mundy_math/Vector3.hpp>      // for mundy::math::Vector3
+#include <mundy_math/Vector3.hpp>      // for mundy::Vector3
 #include <mundy_mesh/Aggregate.hpp>    // for mundy::mesh::Aggregate
 #include <mundy_mesh/BulkData.hpp>     // for mundy::mesh::BulkData
 #include <mundy_mesh/MeshBuilder.hpp>  // for mundy::mesh::MeshBuilder
@@ -203,7 +203,7 @@ TEST(UnitTestAggregate, BasicUsage) {
   bulk_data.modification_end();
 
   // Populate the center and radius
-  math::Vector3d expected_center{1.0, 2.0, 3.0};
+  Vector3d expected_center{1.0, 2.0, 3.0};
   double expected_radius = 0.5;
   stk::mesh::field_data(node_center_field, node1)[0] = expected_center[0];
   stk::mesh::field_data(node_center_field, node1)[1] = expected_center[1];

@@ -34,8 +34,6 @@
 
 namespace mundy {
 
-namespace utils {
-
 namespace {
 
 template <typename SomeNgpView>
@@ -160,7 +158,5 @@ TEST(NgpViewTest, Functionality) {
 }
 
 }  // namespace
-
-}  // namespace utils
 
 }  // namespace mundy

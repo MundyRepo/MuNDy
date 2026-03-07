@@ -28,11 +28,9 @@
 #include <concepts>
 
 // Mundy
-#include <mundy_math/Accessor.hpp>  // for mundy::math::ValidAccessor
+#include <mundy_math/Accessor.hpp>  // for mundy::ValidAccessor
 
 namespace mundy {
-
-namespace math {
 
 /// \brief An accessor that represents the transpose of a row-major (NxM) matrix represented by a contiguous
 /// accessor
@@ -49,7 +47,7 @@ namespace math {
 template <typename T, size_t N, size_t M, ValidAccessor<T> Accessor>
 class TransposedView {
  public:
-  utils::storage<Accessor> accessor_;
+  storage<Accessor> accessor_;
 
   /// \brief Constructor from a given accessor
   KOKKOS_INLINE_FUNCTION
@@ -114,18 +112,16 @@ class TransposedView {
 /// \endcode
 template <typename T, size_t N, size_t M, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto get_transposed_view(Accessor&& data) {
-  auto data_storage = utils::store(impl::unwrap_accessor(std::forward<Accessor>(data)));
+  auto data_storage = store(impl::unwrap_accessor(std::forward<Accessor>(data)));
   return TransposedView<T, N, M, decltype(data_storage)>(data_storage);
 }
 
 template <typename T, size_t N, size_t M, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto get_owning_transposed_accessor(Accessor&& data) {
-  auto data_storage = utils::store(impl::unwrap_accessor(std::move(data)));
+  auto data_storage = store(impl::unwrap_accessor(std::move(data)));
   return TransposedView<T, N, M, decltype(data_storage)>(data_storage);
 }
 //@}
-
-}  // namespace math
 
 }  // namespace mundy
 

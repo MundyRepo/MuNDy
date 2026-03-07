@@ -35,8 +35,6 @@
 
 namespace mundy {
 
-namespace utils {
-
 KOKKOS_INLINE_FUNCTION
 openrand::Philox make_philox(size_t seed, size_t counter) {
   // Philox uses uint64_t seed, uint32_t counter
@@ -46,8 +44,6 @@ openrand::Philox make_philox(size_t seed, size_t counter) {
                      "Counter value is too large for Philox.");
   return openrand::Philox(static_cast<uint64_t>(seed), static_cast<uint32_t>(counter));
 }
-
-}  // namespace utils
 
 }  // namespace mundy
 

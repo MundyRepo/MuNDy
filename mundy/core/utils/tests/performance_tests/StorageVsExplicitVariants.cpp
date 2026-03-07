@@ -19,7 +19,7 @@
 // @HEADER
 
 //! \file StorageVsExplicitVariants.cpp
-/// \brief Performance test: explicit owned/pointer/reference workspaces vs mundy::utils::storage variants.
+/// \brief Performance test: explicit owned/pointer/reference workspaces vs mundy::storage variants.
 #define ANKERL_NANOBENCH_IMPLEMENT
 
 // C++ core
@@ -151,8 +151,8 @@ scalar_t run_storage_owned(vec_t& x, vec_t& y, vec_t& z, const scalar_t alpha, c
                            const size_t rounds) {
   for (size_t round = 0; round < rounds; ++round) {
     for (size_t i = 0; i < x.size(); ++i) {
-      WorkspaceStorage workspace{mundy::utils::store(scalar_t{x[i]}), mundy::utils::store(scalar_t{y[i]}),
-                                 mundy::utils::store(scalar_t{z[i]})};
+      WorkspaceStorage workspace{mundy::store(scalar_t{x[i]}), mundy::store(scalar_t{y[i]}),
+                                 mundy::store(scalar_t{z[i]})};
       workspace.step(alpha, beta, i, round);
       x[i] = workspace.x_storage.get();
       y[i] = workspace.y_storage.get();
@@ -177,7 +177,7 @@ scalar_t run_storage_pointer(vec_t& x, vec_t& y, vec_t& z, const scalar_t alpha,
                              const size_t rounds) {
   for (size_t round = 0; round < rounds; ++round) {
     for (size_t i = 0; i < x.size(); ++i) {
-      WorkspaceStorage workspace{mundy::utils::store(&x[i]), mundy::utils::store(&y[i]), mundy::utils::store(&z[i])};
+      WorkspaceStorage workspace{mundy::store(&x[i]), mundy::store(&y[i]), mundy::store(&z[i])};
       workspace.step(alpha, beta, i, round);
     }
   }
@@ -199,7 +199,7 @@ scalar_t run_storage_reference(vec_t& x, vec_t& y, vec_t& z, const scalar_t alph
                                const size_t rounds) {
   for (size_t round = 0; round < rounds; ++round) {
     for (size_t i = 0; i < x.size(); ++i) {
-      WorkspaceStorage workspace{mundy::utils::store(x[i]), mundy::utils::store(y[i]), mundy::utils::store(z[i])};
+      WorkspaceStorage workspace{mundy::store(x[i]), mundy::store(y[i]), mundy::store(z[i])};
       workspace.step(alpha, beta, i, round);
     }
   }

@@ -30,8 +30,6 @@
 
 namespace mundy {
 
-namespace utils {
-
 /// \brief NgpViewT is an enhanced DualView with a slightly expanded interface.
 ///
 /// NgpViewT inherits from Kokkos::DualView, exposing all its functionality while
@@ -222,8 +220,6 @@ class NgpViewT : public Kokkos::DualView<DataType, Properties...> {
 /// chosen device space.
 template <class DataType, class... Properties>
 using NgpView = NgpViewT<DataType, Properties..., typename Kokkos::DefaultExecutionSpace::memory_space>;
-
-}  // namespace utils
 
 }  // namespace mundy
 

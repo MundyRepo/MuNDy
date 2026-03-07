@@ -33,8 +33,6 @@
 
 namespace mundy {
 
-namespace utils {
-
 /* What all do we offer
 
   - contains_type<T, Types...>   : check if T is in Types...
@@ -103,8 +101,6 @@ struct type_at_index<0, Head, Tail...> {
 template <size_t I, class... Ts>
   requires(I < sizeof...(Ts))
 using type_at_index_t = typename type_at_index<I, Ts...>::type;
-
-}  // namespace utils
 
 }  // namespace mundy
 

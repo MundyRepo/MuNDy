@@ -32,11 +32,9 @@
 #include <iostream>
 
 // Mundy
-#include <mundy_math/Vector.hpp>  // for mundy::math::Vector
+#include <mundy_math/Vector.hpp>  // for mundy::Vector
 
 namespace mundy {
-
-namespace math {
 
 namespace impl {
 
@@ -597,8 +595,6 @@ KOKKOS_FUNCTION double find_min_using_approximate_derivatives(search_strategy_ty
 }
 
 }  // namespace impl
-
-}  // namespace math
 
 }  // namespace mundy
 

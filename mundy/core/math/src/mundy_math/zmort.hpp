@@ -222,8 +222,6 @@ struct Less {
 
 namespace mundy {
 
-namespace math {
-
 template <ValidVector3Type Vector3Type1, ValidVector3Type Vector3Type2>
 bool zmorton_less(const Vector3Type1& p, const Vector3Type2& q) {
   using Scalar = typename Vector3Type1::scalar_t;
@@ -262,8 +260,6 @@ bool zmorton_less(const Vector3Type1& p, const Vector3Type2& q) {
              : ((signed_less_than[1] != -1) ? signed_less_than[1]
                                             : ((signed_less_than[0] != -1) ? signed_less_than[0] : (p[k] < q[k])));
 }
-
-}  // namespace math
 
 }  // namespace mundy
 

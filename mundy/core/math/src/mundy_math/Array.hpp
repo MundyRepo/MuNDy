@@ -32,13 +32,11 @@
 #include <type_traits>
 
 // Mundy
-#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
-#include <mundy_math/Tolerance.hpp>     // for mundy::math::get_zero_tolerance
+#include <mundy_math/Tolerance.hpp>  // for mundy::get_zero_tolerance
 #include <mundy_math/impl/ArrayImpl.hpp>
+#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
 
 namespace mundy {
-
-namespace math {
 
 /// \brief A simplistic array type with a fixed size and type
 template <typename T, size_t N>
@@ -206,8 +204,6 @@ std::ostream& operator<<(std::ostream& os, const Array<T, N>& a) {
   os << ")";
   return os;
 }
-
-}  // namespace math
 
 }  // namespace mundy
 

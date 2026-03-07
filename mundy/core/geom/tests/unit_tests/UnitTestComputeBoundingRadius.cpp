@@ -31,13 +31,11 @@
 #include <Kokkos_Core.hpp>  // for Kokkos::numbers::pi
 
 // Mundy
-#include <mundy_geom/compute_bounding_radius.hpp>  // for mundy::geom::compute_bounding_radius
-#include <mundy_geom/primitives.hpp>               // for mundy::geom::Ellipsoid...
-#include <mundy_math/Tolerance.hpp>                // for mundy::math::get_zero_tolerance
+#include <mundy_geom/compute_bounding_radius.hpp>  // for mundy::compute_bounding_radius
+#include <mundy_geom/primitives.hpp>               // for mundy::Ellipsoid...
+#include <mundy_math/Tolerance.hpp>                // for mundy::get_zero_tolerance
 
 namespace mundy {
-
-namespace geom {
 
 namespace {
 
@@ -55,7 +53,7 @@ struct PointTestCase {
   Scalar expected_bounding_radius;
   void check() const {
     const auto actual_bounding_radius = compute_bounding_radius(point);
-    const double tol = mundy::math::get_relaxed_zero_tolerance<Scalar>();
+    const double tol = mundy::get_relaxed_zero_tolerance<Scalar>();
     ASSERT_NEAR(expected_bounding_radius, actual_bounding_radius, tol) << "Failed test case: " << name;
   }
 };
@@ -67,7 +65,7 @@ struct LineSegmentTestCase {
   Scalar expected_bounding_radius;
   void check() const {
     const auto actual_bounding_radius = compute_bounding_radius(segment);
-    const double tol = mundy::math::get_relaxed_zero_tolerance<Scalar>();
+    const double tol = mundy::get_relaxed_zero_tolerance<Scalar>();
     ASSERT_NEAR(expected_bounding_radius, actual_bounding_radius, tol) << "Failed test case: " << name;
   }
 };
@@ -79,7 +77,7 @@ struct SphereTestCase {
   Scalar expected_bounding_radius;
   void check() const {
     const auto actual_bounding_radius = compute_bounding_radius(sphere);
-    const double tol = mundy::math::get_relaxed_zero_tolerance<Scalar>();
+    const double tol = mundy::get_relaxed_zero_tolerance<Scalar>();
     ASSERT_NEAR(expected_bounding_radius, actual_bounding_radius, tol) << "Failed test case: " << name;
   }
 };
@@ -91,7 +89,7 @@ struct EllipsoidTestCase {
   Scalar expected_bounding_radius;
   void check() const {
     const auto actual_bounding_radius = compute_bounding_radius(ellipsoid);
-    const double tol = mundy::math::get_relaxed_zero_tolerance<Scalar>();
+    const double tol = mundy::get_relaxed_zero_tolerance<Scalar>();
     ASSERT_NEAR(expected_bounding_radius, actual_bounding_radius, tol) << "Failed test case: " << name;
   }
 };
@@ -103,7 +101,7 @@ struct SpherocylinderTestCase {
   Scalar expected_bounding_radius;
   void check() const {
     const auto actual_bounding_radius = compute_bounding_radius(spherocylinder);
-    const double tol = mundy::math::get_relaxed_zero_tolerance<Scalar>();
+    const double tol = mundy::get_relaxed_zero_tolerance<Scalar>();
     ASSERT_NEAR(expected_bounding_radius, actual_bounding_radius, tol) << "Failed test case: " << name;
   }
 };
@@ -115,7 +113,7 @@ struct SpherocylinderSegmentTestCase {
   Scalar expected_bounding_radius;
   void check() const {
     const auto actual_bounding_radius = compute_bounding_radius(spherocylinder_segment);
-    const double tol = mundy::math::get_relaxed_zero_tolerance<Scalar>();
+    const double tol = mundy::get_relaxed_zero_tolerance<Scalar>();
     ASSERT_NEAR(expected_bounding_radius, actual_bounding_radius, tol) << "Failed test case: " << name;
   }
 };
@@ -135,7 +133,7 @@ std::vector<PointTestCase<double>> point_test_cases() {
 std::vector<LineSegmentTestCase<double>> line_segment_test_cases() {
   // The bounding radius for a line segment, given by two its start and end points, is just the
   // half-length of the line segment.
-  using mundy::math::Vector3;
+  using mundy::Vector3;
   std::vector<LineSegmentTestCase<double>> test_cases;
   test_cases.push_back(
       LineSegmentTestCase{.name = std::string("length 0"),                                                   //
@@ -166,8 +164,8 @@ std::vector<SphereTestCase<double>> sphere_test_cases() {
 
 std::vector<EllipsoidTestCase<double>> ellipsoid_test_cases() {
   // The bounding radius of an ellipsoid is the maximum of its radii.
-  using mundy::math::Quaterniond;
-  using mundy::math::Vector3d;
+  using mundy::Quaterniond;
+  using mundy::Vector3d;
   std::vector<EllipsoidTestCase<double>> test_cases;
 
   // Bounding radius is independent of orientation
@@ -189,8 +187,8 @@ std::vector<EllipsoidTestCase<double>> ellipsoid_test_cases() {
 std::vector<SpherocylinderTestCase<double>> spherocylinder_test_cases() {
   // Our spherocylinders have a center, a radius, a length, and a quaternion orientation
   // Their bounding radius is just the 0.5 length + radius
-  using mundy::math::Quaterniond;
-  using mundy::math::Vector3;
+  using mundy::Quaterniond;
+  using mundy::Vector3;
   std::vector<SpherocylinderTestCase<double>> test_cases;
 
   // Bounding radius is independent of orientation
@@ -216,7 +214,7 @@ std::vector<SpherocylinderTestCase<double>> spherocylinder_test_cases() {
 std::vector<SpherocylinderSegmentTestCase<double>> spherocylinder_segment_test_cases() {
   // Our spherocylinder segments have two endpoints and a radius.
   // Their bounding radius is just the 0.5 length + radius
-  using mundy::math::Vector3;
+  using mundy::Vector3;
   std::vector<SpherocylinderSegmentTestCase<double>> test_cases;
 
   test_cases.push_back(SpherocylinderSegmentTestCase{
@@ -260,7 +258,5 @@ TEST(ComputeBoundingRadius, HardCodedTestCases) {
 }
 
 }  // namespace
-
-}  // namespace geom
 
 }  // namespace mundy

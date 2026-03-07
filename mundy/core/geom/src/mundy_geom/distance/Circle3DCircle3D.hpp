@@ -25,21 +25,19 @@
 #include <Kokkos_Core.hpp>
 
 // Mundy math
-#include <mundy_math/Quaternion.hpp>  // for mundy::math::Quaternion
-#include <mundy_math/Tolerance.hpp>   // for mundy::math::get_zero_tolerance
-#include <mundy_math/Vector3.hpp>     // for mundy::math::Vector3
-#include <mundy_math/minimize.hpp>    // for mundy::math::find_min_using_approximate_derivatives
+#include <mundy_math/Quaternion.hpp>  // for mundy::Quaternion
+#include <mundy_math/Tolerance.hpp>   // for mundy::get_zero_tolerance
+#include <mundy_math/Vector3.hpp>     // for mundy::Vector3
+#include <mundy_math/minimize.hpp>    // for mundy::find_min_using_approximate_derivatives
 
 // Mundy geom
-#include <mundy_geom/distance/DistanceMetrics.hpp>  // for mundy::geom::FreeSpaceMetric
-#include <mundy_geom/distance/PointPoint.hpp>       // for mundy::geom::distance(Point, Point)
-#include <mundy_geom/distance/Types.hpp>            // for mundy::geom::SharedNormalSigned
-#include <mundy_geom/primitives/Circle3D.hpp>       // for mundy::geom::Circle3D
-#include <mundy_geom/primitives/Point.hpp>          // for mundy::geom::Point
+#include <mundy_geom/distance/DistanceMetrics.hpp>  // for mundy::FreeSpaceMetric
+#include <mundy_geom/distance/PointPoint.hpp>       // for mundy::distance(Point, Point)
+#include <mundy_geom/distance/Types.hpp>            // for mundy::SharedNormalSigned
+#include <mundy_geom/primitives/Circle3D.hpp>       // for mundy::Circle3D
+#include <mundy_geom/primitives/Point.hpp>          // for mundy::Point
 
 namespace mundy {
-
-namespace geom {
 
 //! \name Free space distance calculations
 //@{
@@ -56,8 +54,8 @@ KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const Euclidean distance_type, 
                                 const Circle3D<Scalar>& circle3d2) {
   Point<Scalar> closest_point1;
   Point<Scalar> closest_point2;
-  mundy::math::Vector3<Scalar> shared_normal1;
-  mundy::math::Vector3<Scalar> shared_normal2;
+  mundy::Vector3<Scalar> shared_normal1;
+  mundy::Vector3<Scalar> shared_normal2;
   return distance(distance_type, circle3d1, circle3d2,  //
                   closest_point1, closest_point2, shared_normal1, shared_normal2);
 }
@@ -66,11 +64,11 @@ template <typename Scalar>
 class Circle3DCircle3DObjective {
  public:
   KOKKOS_FUNCTION
-  Circle3DCircle3DObjective(const Circle3D<Scalar>& circle3d0,             //
-                            const Circle3D<Scalar>& circle3d1,             //
-                            mundy::math::Vector3<Scalar>& shared_normal0,  //
-                            mundy::math::Vector3<Scalar>& shared_normal1,  //
-                            Point<Scalar>& foot_point0,                    //
+  Circle3DCircle3DObjective(const Circle3D<Scalar>& circle3d0,       //
+                            const Circle3D<Scalar>& circle3d1,       //
+                            mundy::Vector3<Scalar>& shared_normal0,  //
+                            mundy::Vector3<Scalar>& shared_normal1,  //
+                            Point<Scalar>& foot_point0,              //
                             Point<Scalar>& foot_point1)
       : circle3d0_(circle3d0),
         circle3d1_(circle3d1),
@@ -87,14 +85,14 @@ class Circle3DCircle3DObjective {
     return p_global;
   }
 
-  KOKKOS_FUNCTION Scalar operator()(const mundy::math::Vector<Scalar, 2>& theta1_theta2) const {
+  KOKKOS_FUNCTION Scalar operator()(const mundy::Vector<Scalar, 2>& theta1_theta2) const {
     foot_point0_ = theta_to_foot_point_on_circle3d(theta1_theta2[0], circle3d0_);
     foot_point1_ = theta_to_foot_point_on_circle3d(theta1_theta2[1], circle3d1_);
 
     shared_normal0_ = foot_point1_ - foot_point0_;
 
-    const double norm = mundy::math::norm(shared_normal0_);
-    shared_normal0_ /= (norm > mundy::math::get_zero_tolerance<Scalar>() ? norm : 1.0);
+    const double norm = mundy::norm(shared_normal0_);
+    shared_normal0_ /= (norm > mundy::get_zero_tolerance<Scalar>() ? norm : 1.0);
     shared_normal1_ = -shared_normal0_;
 
     return norm;
@@ -103,8 +101,8 @@ class Circle3DCircle3DObjective {
  private:
   const Circle3D<Scalar>& circle3d0_;
   const Circle3D<Scalar>& circle3d1_;
-  mundy::math::Vector3<Scalar>& shared_normal0_;
-  mundy::math::Vector3<Scalar>& shared_normal1_;
+  mundy::Vector3<Scalar>& shared_normal0_;
+  mundy::Vector3<Scalar>& shared_normal1_;
   Point<Scalar>& foot_point0_;
   Point<Scalar>& foot_point1_;
 };
@@ -115,12 +113,12 @@ KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const Euclidean distance_type, 
                                 const Circle3D<Scalar>& circle3d2,               //
                                 Point<Scalar>& closest_point1,                   //
                                 Point<Scalar>& closest_point2,                   //
-                                mundy::math::Vector3<Scalar>& shared_normal1,    //
-                                mundy::math::Vector3<Scalar>& shared_normal2) {
+                                mundy::Vector3<Scalar>& shared_normal1,          //
+                                mundy::Vector3<Scalar>& shared_normal2) {
   // Setup the minimization
   // Note, the actual error is not guaranteed to be less than min_objective_delta due to the use of approximate
   // derivatives. Instead, we saw that the error was typically less than the square root of min_objective_delta.
-  constexpr Scalar min_objective_delta = mundy::math::get_relaxed_zero_tolerance<Scalar>();
+  constexpr Scalar min_objective_delta = mundy::get_relaxed_zero_tolerance<Scalar>();
   constexpr size_t lbfgs_max_memory_size = 10;
 
   // Reuse the solution space rather than re-allocating it each time
@@ -135,8 +133,8 @@ KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const Euclidean distance_type, 
   constexpr Kokkos::Array<Scalar, 3> theta_guesses{one_third_pi, pi, five_third_pi};
 
   Scalar global_dist = Kokkos::Experimental::infinity_v<Scalar>;
-  mundy::math::Vector<Scalar, 2> theta1_theta2_sol{zero, zero};
-  mundy::math::Vector<Scalar, 2> global_theta1_theta2_sol{zero, zero};
+  mundy::Vector<Scalar, 2> theta1_theta2_sol{zero, zero};
+  mundy::Vector<Scalar, 2> global_theta1_theta2_sol{zero, zero};
   for (size_t t_idx = 0; t_idx < 3; ++t_idx) {
     for (size_t p_idx = 0; p_idx < 3; ++p_idx) {
       theta1_theta2_sol = {theta_guesses[t_idx], theta_guesses[p_idx]};
@@ -154,8 +152,6 @@ KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const Euclidean distance_type, 
   return global_dist;
 }
 //@}
-
-}  // namespace geom
 
 }  // namespace mundy
 

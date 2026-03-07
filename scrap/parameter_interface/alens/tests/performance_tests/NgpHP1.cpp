@@ -78,18 +78,18 @@
 #include <stk_io/WriteMesh.hpp>   // for stk::io::write_mesh
 
 // Mundy core
-#include <mundy_utils/OurAnyNumberParameterEntryValidator.hpp>  // for mundy::utils::OurAnyNumberParameterEntryValidator
+#include <mundy_utils/OurAnyNumberParameterEntryValidator.hpp>  // for mundy::OurAnyNumberParameterEntryValidator
 #include <mundy_utils/throw_assert.hpp>                         // for MUNDY_THROW_ASSERT
-#include <mundy_utils/rng.hpp>              // for mundy::utils::make_philox
+#include <mundy_utils/rng.hpp>              // for mundy::make_philox
 
 // Mundy math
-#include <mundy_math/Hilbert.hpp>                      // for mundy::math::create_hilbert_positions_and_directors
-#include <mundy_math/Vector3.hpp>                      // for mundy::math::Vector3
-#include <mundy_math/distance/EllipsoidEllipsoid.hpp>  // for mundy::math::distance::ellipsoid_ellipsoid
+#include <mundy_math/Hilbert.hpp>                      // for mundy::create_hilbert_positions_and_directors
+#include <mundy_math/Vector3.hpp>                      // for mundy::Vector3
+#include <mundy_math/distance/EllipsoidEllipsoid.hpp>  // for mundy::distance::ellipsoid_ellipsoid
 
 // Mundy geom
-#include <mundy_geom/distance.hpp>    // for mundy::geom::distance(primA, primB)
-#include <mundy_geom/primitives.hpp>  // for all geometric primitives mundy::geom::Point, Line, Sphere, Ellipsoid...
+#include <mundy_geom/distance.hpp>    // for mundy::distance(primA, primB)
+#include <mundy_geom/primitives.hpp>  // for all geometric primitives mundy::Point, Line, Sphere, Ellipsoid...
 
 // Mundy mesh
 #include <mundy_mesh/BulkData.hpp>         // for mundy::mesh::BulkData
@@ -99,7 +99,7 @@
 #include <mundy_mesh/MetaData.hpp>         // for mundy::mesh::MetaData
 #include <mundy_mesh/NgpFieldBLAS.hpp>     // for mundy::mesh::field_fill, mundy::mesh::field_copy, etc
 #include <mundy_mesh/fmt_stk_types.hpp>    // adds fmt::format for stk types
-#include <mundy_mesh/utils/FillFieldWithValue.hpp>  // for mundy::mesh::utils::fill_field_with_value
+#include <mundy_mesh/utils/FillFieldWithValue.hpp>  // for mundy::mesh::fill_field_with_value
 
 // aLENS
 #include <mundy_alens/periphery/Periphery.hpp>  // for gen_sphere_quadrature
@@ -189,14 +189,12 @@ void print_field(const stk::mesh::Field<FieldDataType> &field) {
 
 }  // namespace mesh
 
-namespace mech {
-
 //! \name Search
 //@{
 
 LocalResultViewType get_local_neighbor_indices(const stk::mesh::BulkData &bulk_data, stk::mesh::EntityRank rank,
                                                const ResultViewType &search_results) {
-  Kokkos::Profiling::pushRegion("mundy::mech::get_local_neighbor_indices");
+  Kokkos::Profiling::pushRegion("mundy::get_local_neighbor_indices");
 
   auto host_search_results = Kokkos::create_mirror_view_and_copy(Kokkos::DefaultHostExecutionSpace{}, search_results);
 
@@ -302,7 +300,7 @@ void ghost_neighbors(stk::mesh::BulkData &bulk_data, const ResultViewType &searc
 
 void check_max_overlap_with_periphery(stk::mesh::NgpMesh ngp_mesh,                         //
                                       const double &max_allowed_overlap,                   //
-                                      const mundy::geom::Sphere<double> &periphery_shape,  //
+                                      const mundy::Sphere<double> &periphery_shape,  //
                                       stk::mesh::NgpField<double> &node_coords_field,      //
                                       stk::mesh::NgpField<double> &elem_radius_field,      //
                                       const stk::mesh::Selector &selector) {
@@ -319,7 +317,7 @@ void check_max_overlap_with_periphery(stk::mesh::NgpMesh ngp_mesh,              
         const auto node_coords = mundy::mesh::vector3_field_data(node_coords_field, node_index);
         const double sphere_radius = elem_radius_field(sphere_index, 0);
         const bool overlap_exceeds_threshold =
-            mundy::math::norm(node_coords) + sphere_radius > shifted_periphery_hydro_radius;
+            mundy::norm(node_coords) + sphere_radius > shifted_periphery_hydro_radius;
         MUNDY_THROW_REQUIRE(!overlap_exceeds_threshold, std::runtime_error,
                             "Sphere overlaps with peruphery beyond max extent allowed.");
       });
@@ -327,7 +325,7 @@ void check_max_overlap_with_periphery(stk::mesh::NgpMesh ngp_mesh,              
 
 void check_max_overlap_with_periphery(stk::mesh::NgpMesh &ngp_mesh,                           //
                                       const double &max_allowed_overlap,                      //
-                                      const mundy::geom::Ellipsoid<double> &periphery_shape,  //
+                                      const mundy::Ellipsoid<double> &periphery_shape,  //
                                       stk::mesh::NgpField<double> &node_coords_field,         //
                                       stk::mesh::NgpField<double> &elem_radius_field,         //
                                       const stk::mesh::Selector &selector) {
@@ -415,7 +413,7 @@ class NoSlipPeripheryBuilder {
   }
 
   NoSlipPeripheryBuilder &setup_quadrature_using_gauss_legendre(
-      // const mundy::geom::Point<double> &center,  // For now, we center at zero
+      // const mundy::Point<double> &center,  // For now, we center at zero
       const double radius, const unsigned spectral_order) {
     std::vector<double> points_vec;
     std::vector<double> weights_vec;
@@ -642,10 +640,10 @@ struct KokkosSphereData {
 };
 
 /// \brief Create the Kokkos data for a collection of spheres
-template <mundy::geom::ValidNgpSphereDataType NgpSphereDataType>
+template <mundy::ValidNgpSphereDataType NgpSphereDataType>
 KokkosSphereData create_kokkos_sphere_data(stk::mesh::NgpMesh &ngp_mesh, NgpSphereDataType &ngp_sphere_data,
                                            stk::NgpVector<stk::mesh::Entity> &ngp_sphere_entities) {
-  Kokkos::Profiling::pushRegion("mundy::mech::create_kokkos_sphere_data");
+  Kokkos::Profiling::pushRegion("mundy::create_kokkos_sphere_data");
   const size_t num_spheres = ngp_sphere_entities.size();
   Double1DView positions("sphere_positions", 3 * num_spheres);
   Double1DView radii("sphere_radii", num_spheres);
@@ -655,7 +653,7 @@ KokkosSphereData create_kokkos_sphere_data(stk::mesh::NgpMesh &ngp_mesh, NgpSphe
       stk::ngp::DeviceRangePolicy(0, num_spheres), KOKKOS_LAMBDA(const unsigned &vector_index) {
         stk::mesh::Entity sphere = ngp_sphere_entities.device_get(vector_index);
         auto sphere_index = ngp_mesh.fast_mesh_index(sphere);
-        auto &sphere_view = mundy::geom::create_ngp_sphere_entity_view(ngp_sphere_data, sphere_index);
+        auto &sphere_view = mundy::create_ngp_sphere_entity_view(ngp_sphere_data, sphere_index);
         positions(vector_index * 3 + 0) = sphere_view.center()[0];
         positions(vector_index * 3 + 1) = sphere_view.center()[1];
         positions(vector_index * 3 + 2) = sphere_view.center()[2];
@@ -813,7 +811,7 @@ struct SphereLocalDragMobilityOp {
   }
 
   void apply(stk::mesh::NgpField<double> &node_force_field, stk::mesh::NgpField<double> &node_velocity_field) {
-    Kokkos::Profiling::pushRegion("mundy::mech::SphereLocalDragMobilityOp::apply");
+    Kokkos::Profiling::pushRegion("mundy::SphereLocalDragMobilityOp::apply");
     node_force_field.sync_to_device();
     node_velocity_field.sync_to_device();
 
@@ -870,7 +868,7 @@ struct SphereRpyMobilityOp {
   }
 
   void apply(stk::mesh::NgpField<double> &node_force_field, stk::mesh::NgpField<double> &node_velocity_field) {
-    Kokkos::Profiling::pushRegion("mundy::mech::SphereRpyMobilityOp::apply");
+    Kokkos::Profiling::pushRegion("mundy::SphereRpyMobilityOp::apply");
 
     node_force_field.sync_to_device();
     node_velocity_field.sync_to_device();
@@ -965,7 +963,7 @@ struct SphereConfinedRpyMobilityOp {
   }
 
   void apply(stk::mesh::NgpField<double> &node_force_field, stk::mesh::NgpField<double> &node_velocity_field) {
-    Kokkos::Profiling::pushRegion("mundy::mech::SphereRpyMobilityOp::apply");
+    Kokkos::Profiling::pushRegion("mundy::SphereRpyMobilityOp::apply");
 
     node_force_field.sync_to_device();
     node_velocity_field.sync_to_device();
@@ -1033,7 +1031,7 @@ void compute_hookean_spring_forces(stk::mesh::NgpMesh &ngp_mesh,                
                                    stk::mesh::NgpField<double> &spring_constant_field,     //
                                    stk::mesh::NgpField<double> &spring_rest_length_field,  //
                                    const stk::mesh::Selector &selector) {
-  Kokkos::Profiling::pushRegion("mundy::mech::compute_hookean_spring_forces");
+  Kokkos::Profiling::pushRegion("mundy::compute_hookean_spring_forces");
 
   node_coords_field.sync_to_device();
   node_force_field.sync_to_device();
@@ -1083,7 +1081,7 @@ void compute_fene_spring_forces(stk::mesh::NgpMesh &ngp_mesh,                   
                                 stk::mesh::NgpField<double> &spring_constant_field,    //
                                 stk::mesh::NgpField<double> &spring_max_length_field,  //
                                 const stk::mesh::Selector &selector) {
-  Kokkos::Profiling::pushRegion("mundy::mech::compute_fene_spring_forces");
+  Kokkos::Profiling::pushRegion("mundy::compute_fene_spring_forces");
 
   node_coords_field.sync_to_device();
   node_force_field.sync_to_device();
@@ -1139,7 +1137,7 @@ void compute_signed_separation_distance_and_contact_normal(stk::mesh::NgpMesh &n
                                                            stk::mesh::NgpField<double> &elem_radius_field,   //
                                                            const Double1DView &signed_sep_dist,              //
                                                            const Double2DView &con_normals_ij) {
-  Kokkos::Profiling::pushRegion("mundy::mech::compute_signed_separation_distance_and_contact_normal");
+  Kokkos::Profiling::pushRegion("mundy::compute_signed_separation_distance_and_contact_normal");
 
   // Each neighbor pair will generate a constraint between the two spheres
   // Loop over each neighbor id pair, fetch each sphere's position, and compute the signed separation distance
@@ -1198,7 +1196,7 @@ void compute_max_abs_projected_sep(const stk::ParallelMachine parallel,       //
                                    const Double1DView &signed_sep_dot,        //
                                    const double dt,                           //
                                    double &max_abs_projected_sep) {
-  Kokkos::Profiling::pushRegion("mundy::mech::compute_max_abs_projected_sep");
+  Kokkos::Profiling::pushRegion("mundy::compute_max_abs_projected_sep");
 
   // Perform parallel reduction over all linker indices
   double local_max_abs_projected_sep = -1.0;
@@ -1238,7 +1236,7 @@ struct DiffDotsReducer {
  public:
   // Required
   typedef DiffDotsReducer reducer;
-  typedef mundy::math::Vector3d value_type;
+  typedef mundy::Vector3d value_type;
   typedef Kokkos::View<value_type *, Space, Kokkos::MemoryUnmanaged> result_view_type;
 
  private:
@@ -1285,16 +1283,16 @@ void compute_diff_dots(const stk::ParallelMachine parallel,           //
                        double &dot_xkdiff_xkdiff,                     //
                        double &dot_xkdiff_gkdiff,                     //
                        double &dot_gkdiff_gkdiff) {
-  Kokkos::Profiling::pushRegion("mundy::mech::compute_diff_dots");
+  Kokkos::Profiling::pushRegion("mundy::compute_diff_dots");
 
   // Local variables to store dot products
-  mundy::math::Vector3d local_xx_xg_gg_diff = {0.0, 0.0, 0.0};
+  mundy::Vector3d local_xx_xg_gg_diff = {0.0, 0.0, 0.0};
 
   // Perform parallel reduction to compute the dot products
   using range_policy = Kokkos::RangePolicy<stk::ngp::ExecSpace>;
   Kokkos::parallel_reduce(
       "ComputeDiffDots", range_policy(0, lagrange_multipliers.extent(0)),
-      KOKKOS_LAMBDA(const int i, mundy::math::Vector3d &acc_xx_xg_gg_diff) {
+      KOKKOS_LAMBDA(const int i, mundy::Vector3d &acc_xx_xg_gg_diff) {
         const double lag_mult = lagrange_multipliers(i);
         const double lag_mult_tmp = lagrange_multipliers_tmp(i);
         const double sep_dot = signed_sep_dot(i);
@@ -1326,7 +1324,7 @@ void sum_collision_force(stk::mesh::NgpMesh &ngp_mesh,                     //
                          const Double2DView &con_normal_ij,                //
                          const Double1DView &lagrange_multipliers,         //
                          stk::mesh::NgpField<double> &node_force_field) {
-  Kokkos::Profiling::pushRegion("mundy::mech::sum_collision_force");
+  Kokkos::Profiling::pushRegion("mundy::sum_collision_force");
 
   node_force_field.sync_to_device();
 
@@ -1378,7 +1376,7 @@ void compute_rate_of_change_of_sep(stk::mesh::NgpMesh &ngp_mesh,                
                                    stk::mesh::NgpField<double> &node_velocity_field,  //
                                    const Double2DView &con_normal_ij,                 //
                                    const Double1DView &signed_sep_dot) {
-  Kokkos::Profiling::pushRegion("mundy::mech::compute_rate_of_change_of_sep");
+  Kokkos::Profiling::pushRegion("mundy::compute_rate_of_change_of_sep");
 
   node_velocity_field.sync_to_device();
 
@@ -1425,7 +1423,7 @@ void update_con_gammas(const Double1DView &lagrange_multipliers,      //
                        const Double1DView &signed_sep_dot,            //
                        const double dt,                               //
                        const double alpha) {
-  Kokkos::Profiling::pushRegion("mundy::mech::update_con_gammas");
+  Kokkos::Profiling::pushRegion("mundy::update_con_gammas");
 
   using range_policy = Kokkos::RangePolicy<stk::ngp::ExecSpace>;
   Kokkos::parallel_for(
@@ -1469,7 +1467,7 @@ struct FieldSpeedReductionFunctor {
 template <typename Mesh, typename Field>
 double get_max_speed(Mesh &ngp_mesh, Field &vel_field,  //
                      const stk::mesh::Selector &selector) {
-  Kokkos::Profiling::pushRegion("mundy::mech::get_max_speed");
+  Kokkos::Profiling::pushRegion("mundy::get_max_speed");
 
   vel_field.sync_to_device();
 
@@ -1501,7 +1499,7 @@ CollisionResult resolve_collisions(stk::mesh::NgpMesh &ngp_mesh,                
                                    const Double2DView &con_normal_ij,                           //
                                    const Double1DView &lagrange_multipliers,                    //
                                    const stk::mesh::Selector &selector) {
-  Kokkos::Profiling::pushRegion("mundy::mech::resolve_collisions");
+  Kokkos::Profiling::pushRegion("mundy::resolve_collisions");
 
   // Matrix-free BBPGD
   int ite_count = 0;
@@ -1650,7 +1648,7 @@ void check_overlap(const stk::mesh::BulkData &bulk_data,               //
                    const stk::mesh::Field<double> &node_coords_field,  //
                    const stk::mesh::Field<double> &elem_radius_field,  //
                    const stk::mesh::Selector &selector) {
-  Kokkos::Profiling::pushRegion("mundy::mech::check_overlap");
+  Kokkos::Profiling::pushRegion("mundy::check_overlap");
   // Do the check on host for easier printing
   // Loop over all pairs of spheres via the element buckets
   bool no_overlap = true;
@@ -1715,8 +1713,6 @@ void check_overlap(const stk::mesh::BulkData &bulk_data,               //
   Kokkos::Profiling::popRegion();
 }
 //@}
-
-}  // namespace mech
 
 namespace alens {
 
@@ -2012,7 +2008,7 @@ void kmc_perform_state_change_left_bound(mundy::mesh::BulkData &bulk_data,      
     // Fetch the RNG state, get a random number out of it, and increment
     unsigned *rng_counter = stk::mesh::field_data(el_rng_field, left_bound_spring);
     const stk::mesh::EntityId spring_gid = bulk_data.identifier(left_bound_spring);
-    openrand::Philox rng = utils::make_philox(spring_gid, rng_counter[0]);
+    openrand::Philox rng = make_philox(spring_gid, rng_counter[0]);
     const double randu01 = rng.rand<double>();
     rng_counter[0]++;
 
@@ -2094,7 +2090,7 @@ void kmc_perform_state_change_doubly_bound(
     // Fetch the RNG state, get a random number out of it, and increment
     unsigned *rng_counter = stk::mesh::field_data(el_rng_field, doubly_bound_spring);
     const stk::mesh::EntityId spring_gid = bulk_data.identifier(doubly_bound_spring);
-    openrand::Philox rng = utils::make_philox(spring_gid, rng_counter[0]);
+    openrand::Philox rng = make_philox(spring_gid, rng_counter[0]);
     const double randu01 = rng.rand<double>();
     rng_counter[0]++;
 
@@ -2172,7 +2168,7 @@ void compute_brownian_velocity(stk::mesh::NgpMesh &ngp_mesh,                    
         const stk::mesh::Entity sphere = ngp_mesh.get_entity(stk::topology::ELEM_RANK, sphere_index);
         const stk::mesh::EntityId sphere_gid = ngp_mesh.identifier(sphere);
         auto rng_counter = elem_rng_field(sphere_index);
-        openrand::Philox rng = utils::make_philox(sphere_gid, rng_counter[0]);
+        openrand::Philox rng = make_philox(sphere_gid, rng_counter[0]);
 
         // U_brown = sqrt(2 * kt * gamma / dt) * randn / gamma
         // for drag coeff gamma = 6 * pi * mu * r
@@ -2229,7 +2225,7 @@ class RcbSettings : public stk::balance::BalanceSettings {
 //! \name Chromatin position generators
 //@{
 
-std::vector<std::vector<mundy::geom::Point<double>>> get_chromosome_positions_from_file(
+std::vector<std::vector<mundy::Point<double>>> get_chromosome_positions_from_file(
     const std::string &file_name, const unsigned num_chromosomes) {
   // The file should be formatted as follows:
   // chromosome_id x y z
@@ -2243,7 +2239,7 @@ std::vector<std::vector<mundy::geom::Point<double>>> get_chromosome_positions_fr
   //
   // And so on for each chromosome. The total number of chromosomes should match the expected total, lest we throw an
   // exception.
-  std::vector<std::vector<mundy::geom::Point<double>>> all_chromosome_positions(num_chromosomes);
+  std::vector<std::vector<mundy::Point<double>>> all_chromosome_positions(num_chromosomes);
   std::ifstream infile(file_name);
   MUNDY_THROW_REQUIRE(infile.is_open(), std::invalid_argument, fmt::format("Could not open file {}", file_name));
 
@@ -2272,14 +2268,14 @@ std::vector<std::vector<mundy::geom::Point<double>>> get_chromosome_positions_fr
   return all_chromosome_positions;
 }
 
-std::vector<std::vector<mundy::geom::Point<double>>> get_chromosome_positions_grid(
+std::vector<std::vector<mundy::Point<double>>> get_chromosome_positions_grid(
     const unsigned num_chromosomes, const unsigned num_nodes_per_chromosome, const double segment_length) {
-  std::vector<std::vector<mundy::geom::Point<double>>> all_chromosome_positions(num_chromosomes);
-  const mundy::math::Vector3d alignment_dir{0.0, 0.0, 1.0};
+  std::vector<std::vector<mundy::Point<double>>> all_chromosome_positions(num_chromosomes);
+  const mundy::Vector3d alignment_dir{0.0, 0.0, 1.0};
   for (size_t j = 0; j < num_chromosomes; j++) {
     all_chromosome_positions[j].reserve(num_nodes_per_chromosome);
-    openrand::Philox rng = utils::make_philox(j, 0);
-    mundy::math::Vector3d start_pos(2.0 * static_cast<double>(j), 0.0, 0.0);
+    openrand::Philox rng = make_philox(j, 0);
+    mundy::Vector3d start_pos(2.0 * static_cast<double>(j), 0.0, 0.0);
     for (size_t i = 0; i < num_nodes_per_chromosome; ++i) {
       const auto pos = start_pos + static_cast<double>(i) * segment_length * alignment_dir;
       all_chromosome_positions[j].emplace_back(pos);
@@ -2289,19 +2285,19 @@ std::vector<std::vector<mundy::geom::Point<double>>> get_chromosome_positions_gr
   return all_chromosome_positions;
 }
 
-std::vector<std::vector<mundy::geom::Point<double>>> get_chromosome_positions_random_unit_cell(
+std::vector<std::vector<mundy::Point<double>>> get_chromosome_positions_random_unit_cell(
     const unsigned num_chromosomes,           //
     const unsigned num_nodes_per_chromosome,  //
     const double segment_length,              //
     const double domain_low[3],               //
     const double domain_high[3]) {
-  std::vector<std::vector<mundy::geom::Point<double>>> all_chromosome_positions(num_chromosomes);
+  std::vector<std::vector<mundy::Point<double>>> all_chromosome_positions(num_chromosomes);
   for (size_t j = 0; j < num_chromosomes; j++) {
     all_chromosome_positions[j].reserve(num_nodes_per_chromosome);
 
     // Find a random place within the unit cell with a random orientation for the chain.
-    openrand::Philox rng = utils::make_philox(j, 0);
-    mundy::math::Vector3d pos_start{rng.uniform<double>(domain_low[0], domain_high[0]),
+    openrand::Philox rng = make_philox(j, 0);
+    mundy::Vector3d pos_start{rng.uniform<double>(domain_low[0], domain_high[0]),
                                     rng.uniform<double>(domain_low[1], domain_high[1]),
                                     rng.uniform<double>(domain_low[2], domain_high[2])};
 
@@ -2309,7 +2305,7 @@ std::vector<std::vector<mundy::geom::Point<double>>> get_chromosome_positions_ra
     const double zrand = rng.rand<double>() - 1.0;
     const double wrand = std::sqrt(1.0 - zrand * zrand);
     const double trand = 2.0 * M_PI * rng.rand<double>();
-    mundy::math::Vector3d u_hat{wrand * std::cos(trand), wrand * std::sin(trand), zrand};
+    mundy::Vector3d u_hat{wrand * std::cos(trand), wrand * std::sin(trand), zrand};
 
     for (size_t i = 0; i < num_nodes_per_chromosome; ++i) {
       auto pos = pos_start + static_cast<double>(i) * segment_length * u_hat;
@@ -2320,44 +2316,44 @@ std::vector<std::vector<mundy::geom::Point<double>>> get_chromosome_positions_ra
   return all_chromosome_positions;
 }
 
-std::vector<std::vector<mundy::geom::Point<double>>> get_chromosome_positions_hilbert_random_unit_cell(
+std::vector<std::vector<mundy::Point<double>>> get_chromosome_positions_hilbert_random_unit_cell(
     const unsigned num_chromosomes,           //
     const unsigned num_nodes_per_chromosome,  //
     const double segment_length,              //
     const double domain_low[3],               //
     const double domain_high[3]) {
-  std::vector<std::vector<mundy::geom::Point<double>>> all_chromosome_positions(num_chromosomes);
-  std::vector<mundy::geom::Point<double>> chromosome_centers_array(num_chromosomes);
+  std::vector<std::vector<mundy::Point<double>>> all_chromosome_positions(num_chromosomes);
+  std::vector<mundy::Point<double>> chromosome_centers_array(num_chromosomes);
   std::vector<double> chromosome_radii_array(num_chromosomes);
   for (size_t ichromosome = 0; ichromosome < num_chromosomes; ichromosome++) {
     // Generate a random unit vector (will be used for creating the location of the nodes, the random position in
     // the unit cell will be handled later).
-    openrand::Philox rng = utils::make_philox(ichromosome, 0);
+    openrand::Philox rng = make_philox(ichromosome, 0);
     const double zrand = rng.rand<double>() - 1.0;
     const double wrand = std::sqrt(1.0 - zrand * zrand);
     const double trand = 2.0 * M_PI * rng.rand<double>();
-    mundy::math::Vector3d u_hat(wrand * std::cos(trand), wrand * std::sin(trand), zrand);
+    mundy::Vector3d u_hat(wrand * std::cos(trand), wrand * std::sin(trand), zrand);
 
     // Once we have the number of chromosome spheres we can get the hilbert curve set up. This will be at some
     // orientation and then have sides with a length of initial_chromosome_separation.
     auto [hilbert_position_array, hilbert_directors] =
-        mundy::math::create_hilbert_positions_and_directors(num_nodes_per_chromosome, u_hat, segment_length);
+        mundy::create_hilbert_positions_and_directors(num_nodes_per_chromosome, u_hat, segment_length);
 
     // Create the local positions of the spheres
-    std::vector<mundy::math::Vector3d> sphere_position_array;
+    std::vector<mundy::Vector3d> sphere_position_array;
     for (size_t isphere = 0; isphere < num_nodes_per_chromosome; isphere++) {
       sphere_position_array.push_back(hilbert_position_array[isphere]);
     }
 
     // Figure out where the center of the chromosome is, and its radius, in its own local space
-    mundy::math::Vector3d r_chromosome_center_local(0.0, 0.0, 0.0);
+    mundy::Vector3d r_chromosome_center_local(0.0, 0.0, 0.0);
     double r_max = 0.0;
     for (size_t i = 0; i < sphere_position_array.size(); i++) {
       r_chromosome_center_local += sphere_position_array[i];
     }
     r_chromosome_center_local /= static_cast<double>(sphere_position_array.size());
     for (size_t i = 0; i < sphere_position_array.size(); i++) {
-      r_max = std::max(r_max, mundy::math::two_norm(r_chromosome_center_local - sphere_position_array[i]));
+      r_max = std::max(r_max, mundy::two_norm(r_chromosome_center_local - sphere_position_array[i]));
     }
 
     // Do max_trials number of insertion attempts to get a random position and orientation within the unit cell that
@@ -2367,14 +2363,14 @@ std::vector<std::vector<mundy::geom::Point<double>>> get_chromosome_positions_hi
     bool chromosome_inserted = false;
     while (itrial <= max_trials) {
       // Generate a random position within the unit cell.
-      mundy::math::Vector3d r_start(rng.uniform<double>(domain_low[0], domain_high[0]),
+      mundy::Vector3d r_start(rng.uniform<double>(domain_low[0], domain_high[0]),
                                     rng.uniform<double>(domain_low[1], domain_high[1]),
                                     rng.uniform<double>(domain_low[2], domain_high[2]));
 
       // Check for overlaps with existing chromosomes
       bool found_overlap = false;
       for (size_t jchromosome = 0; jchromosome < chromosome_centers_array.size(); ++jchromosome) {
-        double r_chromosome_distance = mundy::math::two_norm(chromosome_centers_array[jchromosome] - r_start);
+        double r_chromosome_distance = mundy::two_norm(chromosome_centers_array[jchromosome] - r_start);
         if (r_chromosome_distance < (r_max + chromosome_radii_array[jchromosome])) {
           found_overlap = true;
           break;
@@ -2409,7 +2405,7 @@ std::vector<std::vector<mundy::geom::Point<double>>> get_chromosome_positions_hi
 
 void compute_periphery_collision_forces(stk::mesh::NgpMesh &ngp_mesh,                        //
                                         const double &periphery_collision_spring_constant,   //
-                                        const mundy::geom::Sphere<double> &periphery_shape,  //
+                                        const mundy::Sphere<double> &periphery_shape,  //
                                         stk::mesh::NgpField<double> &node_coords_field,      //
                                         stk::mesh::NgpField<double> &node_force_field,       //
                                         stk::mesh::NgpField<double> &elem_radius_field,      //
@@ -2427,7 +2423,7 @@ void compute_periphery_collision_forces(stk::mesh::NgpMesh &ngp_mesh,           
         const stk::mesh::FastMeshIndex node_index = ngp_mesh.fast_mesh_index(node);
         const auto node_coords = mundy::mesh::vector3_field_data(node_coords_field, node_index);
         const double sphere_radius = elem_radius_field(node_index, 0);
-        const double node_coords_norm = mundy::math::two_norm(node_coords);
+        const double node_coords_norm = mundy::two_norm(node_coords);
         const double shared_normal_ssd = periphery_shape.radius() - node_coords_norm - sphere_radius;
         if (shared_normal_ssd < 0.0) {
           auto node_force = mundy::mesh::vector3_field_data(node_force_field, node_index);
@@ -2444,7 +2440,7 @@ void compute_periphery_collision_forces(stk::mesh::NgpMesh &ngp_mesh,           
 
 void compute_periphery_collision_forces(stk::mesh::NgpMesh &ngp_mesh,                           //
                                         const double &periphery_collision_spring_constant,      //
-                                        const mundy::geom::Ellipsoid<double> &periphery_shape,  //
+                                        const mundy::Ellipsoid<double> &periphery_shape,  //
                                         stk::mesh::NgpField<double> &node_coords_field,         //
                                         stk::mesh::NgpField<double> &node_force_field,          //
                                         stk::mesh::NgpField<double> &elem_radius_field,         //
@@ -2459,9 +2455,9 @@ void compute_periphery_collision_forces(stk::mesh::NgpMesh &ngp_mesh,           
   const double inv_a2 = 1.0 / (a * a);
   const double inv_b2 = 1.0 / (b * b);
   const double inv_c2 = 1.0 / (c * c);
-  auto level_set = [&inv_a2, &inv_b2, &inv_c2, &periphery_shape](const mundy::math::Vector3d &point) -> double {
+  auto level_set = [&inv_a2, &inv_b2, &inv_c2, &periphery_shape](const mundy::Vector3d &point) -> double {
     const auto body_frame_point =
-        mundy::math::conjugate(periphery_shape.orientation()) * (point - periphery_shape.center());
+        mundy::conjugate(periphery_shape.orientation()) * (point - periphery_shape.center());
     return (body_frame_point[0] * body_frame_point[0] * inv_a2 + body_frame_point[1] * body_frame_point[1] * inv_b2 +
             body_frame_point[2] * body_frame_point[2] * inv_c2) -
            1;
@@ -2482,14 +2478,14 @@ void compute_periphery_collision_forces(stk::mesh::NgpMesh &ngp_mesh,           
         const double &z1 = aabb[5];
 
         // Compute all 8 corners of the AABB
-        const auto bottom_left_front = mundy::math::Vector3d(x0, y0, z0);
-        const auto bottom_right_front = mundy::math::Vector3d(x1, y0, z0);
-        const auto top_left_front = mundy::math::Vector3d(x0, y1, z0);
-        const auto top_right_front = mundy::math::Vector3d(x1, y1, z0);
-        const auto bottom_left_back = mundy::math::Vector3d(x0, y0, z1);
-        const auto bottom_right_back = mundy::math::Vector3d(x1, y0, z1);
-        const auto top_left_back = mundy::math::Vector3d(x0, y1, z1);
-        const auto top_right_back = mundy::math::Vector3d(x1, y1, z1);
+        const auto bottom_left_front = mundy::Vector3d(x0, y0, z0);
+        const auto bottom_right_front = mundy::Vector3d(x1, y0, z0);
+        const auto top_left_front = mundy::Vector3d(x0, y1, z0);
+        const auto top_right_front = mundy::Vector3d(x1, y1, z0);
+        const auto bottom_left_back = mundy::Vector3d(x0, y0, z1);
+        const auto bottom_right_back = mundy::Vector3d(x1, y0, z1);
+        const auto top_left_back = mundy::Vector3d(x0, y1, z1);
+        const auto top_right_back = mundy::Vector3d(x1, y1, z1);
         const double all_points_inside_periphery =
             level_set(bottom_left_front) < 0.0 && level_set(bottom_right_front) < 0.0 &&
             level_set(top_left_front) < 0.0 && level_set(top_right_front) < 0.0 && level_set(bottom_left_back) < 0.0 &&
@@ -2505,9 +2501,9 @@ void compute_periphery_collision_forces(stk::mesh::NgpMesh &ngp_mesh,           
 
           // Note, the ellipsoid for the ssd calc has outward normal, whereas the periphery has inward normal.
           // Hence, the sign flip.
-          mundy::math::Vector3d contact_point;
-          mundy::math::Vector3d ellipsoid_nhat;
-          const double shared_normal_ssd = -mundy::math::distance::shared_normal_ssd_between_ellipsoid_and_point(
+          mundy::Vector3d contact_point;
+          mundy::Vector3d ellipsoid_nhat;
+          const double shared_normal_ssd = -mundy::distance::shared_normal_ssd_between_ellipsoid_and_point(
                                                periphery_shape.center(), periphery_shape.orientation(), a, b, c,
                                                node_coords, contact_point, ellipsoid_nhat) -
                                            sphere_radius;
@@ -2562,7 +2558,7 @@ void compute_brownian_velocity(stk::mesh::NgpMesh &ngp_mesh,                    
         const stk::mesh::Entity sphere = ngp_mesh.get_entity(stk::topology::ELEM_RANK, sphere_index);
         const stk::mesh::EntityId sphere_gid = ngp_mesh.identifier(sphere);
         auto rng_counter = elem_rng_field(sphere_index);
-        openrand::Philox rng = utils::make_philox(sphere_gid, rng_counter[0]);
+        openrand::Philox rng = make_philox(sphere_gid, rng_counter[0]);
 
         // U_brown = sqrt(2 * kt * gamma / dt) * randn / gamma
         // for drag coeff gamma = 6 * pi * mu * r
@@ -2714,23 +2710,23 @@ struct HP1ParamParser {
     // Create a paramater entity validator for our large integers to allow for both int and long long.
     auto prefer_size_t = []() {
       if (std::is_same_v<size_t, unsigned short>) {
-        return mundy::utils::OurAnyNumberParameterEntryValidator::PREFER_UNSIGNED_SHORT;
+        return mundy::OurAnyNumberParameterEntryValidator::PREFER_UNSIGNED_SHORT;
       } else if (std::is_same_v<size_t, unsigned int>) {
-        return mundy::utils::OurAnyNumberParameterEntryValidator::PREFER_UNSIGNED_INT;
+        return mundy::OurAnyNumberParameterEntryValidator::PREFER_UNSIGNED_INT;
       } else if (std::is_same_v<size_t, unsigned long>) {
-        return mundy::utils::OurAnyNumberParameterEntryValidator::PREFER_UNSIGNED_LONG;
+        return mundy::OurAnyNumberParameterEntryValidator::PREFER_UNSIGNED_LONG;
       } else if (std::is_same_v<size_t, unsigned long long>) {
-        return mundy::utils::OurAnyNumberParameterEntryValidator::PREFER_UNSIGNED_LONG_LONG;
+        return mundy::OurAnyNumberParameterEntryValidator::PREFER_UNSIGNED_LONG_LONG;
       } else {
         throw std::runtime_error("Unknown size_t type.");
-        return mundy::utils::OurAnyNumberParameterEntryValidator::PREFER_UNSIGNED_INT;
+        return mundy::OurAnyNumberParameterEntryValidator::PREFER_UNSIGNED_INT;
       }
     }();
     const bool allow_all_types_by_default = false;
-    mundy::utils::OurAnyNumberParameterEntryValidator::AcceptedTypes accept_int(allow_all_types_by_default);
+    mundy::OurAnyNumberParameterEntryValidator::AcceptedTypes accept_int(allow_all_types_by_default);
     accept_int.allow_all_integer_types(true);
     auto make_new_validator = [](const auto &preferred_type, const auto &accepted_types) {
-      return Teuchos::rcp(new mundy::utils::OurAnyNumberParameterEntryValidator(preferred_type, accepted_types));
+      return Teuchos::rcp(new mundy::OurAnyNumberParameterEntryValidator(preferred_type, accepted_types));
     };
 
     static Teuchos::ParameterList valid_parameter_list;
@@ -3342,7 +3338,7 @@ void run(int argc, char **argv) {
       if (bind_sites_type == "RANDOM") {
         const size_t num_bind_sites = periphery_binding_params.get<size_t>("num_bind_sites");
         const std::string periphery_shape = periphery_binding_params.get<std::string>("shape");
-        openrand::Philox rng = utils::make_philox(0, 0);
+        openrand::Philox rng = make_philox(0, 0);
         if (periphery_shape == "SPHERE") {
           const double radius = periphery_binding_params.get<double>("radius");
 
@@ -3369,7 +3365,7 @@ void run(int argc, char **argv) {
           const double b = periphery_binding_params.get<double>("axis_radius2");
           const double c = periphery_binding_params.get<double>("axis_radius3");
           const double inv_mu_max = 1.0 / std::max({b * c, a * c, a * b});
-          openrand::Philox rng = utils::make_philox(0, 0);
+          openrand::Philox rng = make_philox(0, 0);
           auto keep = [&a, &b, &c, &inv_mu_max, &rng](double x, double y, double z) {
             const double mu_xyz =
                 std::sqrt((b * c * x) * (b * c * x) + (a * c * y) * (a * c * y) + (a * b * z) * (a * b * z));
@@ -3420,7 +3416,7 @@ void run(int argc, char **argv) {
       const size_t num_nodes_per_chromosome = num_he_blocks * (num_h_per_block + num_e_per_block);
       const double segment_length = sim_params.get<double>("initial_chromosome_separation");
 
-      std::vector<std::vector<mundy::geom::Point<double>>> all_chromosome_positions;
+      std::vector<std::vector<mundy::Point<double>>> all_chromosome_positions;
       if (sim_params.get<std::string>("initialization_type") == "GRID") {
         all_chromosome_positions =
             get_chromosome_positions_grid(num_chromosomes, num_nodes_per_chromosome, segment_length);
@@ -3644,7 +3640,7 @@ void run(int argc, char **argv) {
   ////////////////////////////////
   // Setup the mobility problem //
   ////////////////////////////////
-  mundy::mech::SphereLocalDragMobilityOp sphere_mobility_op(ngp_mesh, viscosity, ngp_elem_hydrodynamic_radius_field,
+  mundy::SphereLocalDragMobilityOp sphere_mobility_op(ngp_mesh, viscosity, ngp_elem_hydrodynamic_radius_field,
                                                             spheres_part);
 
   // Allocate the hydro vectors/matrices
@@ -3847,7 +3843,7 @@ void run(int argc, char **argv) {
     if (rebuild_neighbors) {
       std::cout << "Rebuilding neighbors..." << std::endl;
       Kokkos::Timer search_timer;
-      search_spheres = mundy::mech::create_search_spheres(bulk_data, ngp_mesh, search_buffer, ngp_node_coords_field,
+      search_spheres = mundy::create_search_spheres(bulk_data, ngp_mesh, search_buffer, ngp_node_coords_field,
                                                           ngp_elem_collision_radius_field, spheres_part);
 
       // Perform the backbone sphere to backbone sphere search
@@ -3860,11 +3856,11 @@ void run(int argc, char **argv) {
       num_neighbor_pairs = search_results.extent(0);
 
       // Ghost the non-owned spheres
-      mundy::mech::ghost_neighbors(bulk_data, search_results);
+      mundy::ghost_neighbors(bulk_data, search_results);
 
       // Create local neighbor indices
       local_search_results =
-          mundy::mech::get_local_neighbor_indices(bulk_data, stk::topology::ELEM_RANK, search_results);
+          mundy::get_local_neighbor_indices(bulk_data, stk::topology::ELEM_RANK, search_results);
 
       // TODO(palmerb4): Store the local neighbors within a field to allow the fetching of all neighbors of a given
       //  element. We need to validate if it is better for us to use the same neighbor list for both the sphere-sphere
@@ -3910,11 +3906,11 @@ void run(int argc, char **argv) {
     if (enable_backbone_springs) {
       const std::string spring_type = backbone_springs_params.get<std::string>("spring_type");
       if (spring_type == "HOOKEAN") {
-        mundy::mech::compute_hookean_spring_forces(ngp_mesh, ngp_node_coords_field, ngp_node_force_field,
+        mundy::compute_hookean_spring_forces(ngp_mesh, ngp_node_coords_field, ngp_node_force_field,
                                                    ngp_elem_spring_constant_field, ngp_elem_spring_r0_field,
                                                    backbone_segs_part);
       } else if (spring_type == "FENE") {
-        mundy::mech::compute_fene_spring_forces(ngp_mesh, ngp_node_coords_field, ngp_node_force_field,
+        mundy::compute_fene_spring_forces(ngp_mesh, ngp_node_coords_field, ngp_node_force_field,
                                                 ngp_elem_spring_constant_field, ngp_elem_spring_r0_field,
                                                 backbone_segs_part);
       } else {
@@ -3953,7 +3949,7 @@ void run(int argc, char **argv) {
       // Initialize and solve the constraints //
       //////////////////////////////////////////
       Kokkos::Timer collision_timer;
-      mundy::mech::compute_signed_separation_distance_and_contact_normal(
+      mundy::compute_signed_separation_distance_and_contact_normal(
           ngp_mesh, local_search_results, ngp_node_coords_field, ngp_elem_collision_radius_field, signed_sep_dist,
           con_normal_ij);
 
@@ -3961,7 +3957,7 @@ void run(int argc, char **argv) {
       const double max_allowable_overlap = backbone_collision_params.get<double>("max_allowable_overlap");
       const size_t max_collision_iterations = backbone_collision_params.get<size_t>("max_collision_iterations");
       Kokkos::deep_copy(lagrange_multipliers, 0.0);                                                    // initial guess
-      mundy::mech::CollisionResult result = mundy::mech::resolve_collisions(ngp_mesh,                  //
+      mundy::CollisionResult result = mundy::resolve_collisions(ngp_mesh,                  //
                                                                             viscosity,                 //
                                                                             timestep_size,             //
                                                                             max_allowable_overlap,     //
@@ -4000,7 +3996,7 @@ void run(int argc, char **argv) {
     //   node_coords_field.sync_to_host();
     //   elem_collision_radius_field.sync_to_host();
     //   const double max_allowable_overlap = backbone_collision_params.get<double>("max_allowable_overlap");
-    //   mundy::mech::check_overlap(bulk_data, max_allowable_overlap, node_coords_field, elem_collision_radius_field,
+    //   mundy::check_overlap(bulk_data, max_allowable_overlap, node_coords_field, elem_collision_radius_field,
     //                              spheres_part);
     // }
   }

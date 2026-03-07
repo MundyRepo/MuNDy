@@ -39,13 +39,11 @@
 #include <mundy_mesh/BulkData.hpp>                      // for mundy::mesh::BulkData
 #include <mundy_mesh/MetaData.hpp>                      // for mundy::mesh::MetaData
 #include <mundy_mesh/fmt_stk_types.hpp>                 // adds fmt::format for stk types
-#include <mundy_mesh/utils/DestroyFlaggedEntities.hpp>  // for mundy::mesh::utils::destroy_flagged_entities
+#include <mundy_mesh/utils/DestroyFlaggedEntities.hpp>  // for mundy::mesh::destroy_flagged_entities
 
 namespace mundy {
 
 namespace mesh {
-
-namespace utils {
 
 void destroy_flagged_entities(BulkData &bulk_data, const stk::mesh::EntityVector &entities_to_maybe_destroy,
                               const stk::mesh::Field<int> &flag_field, const int &deletion_flag_value) {
@@ -73,8 +71,6 @@ void destroy_flagged_entities(BulkData &bulk_data, const stk::topology::rank_t &
   stk::mesh::get_selected_entities(selector, bulk_data.buckets(entity_rank), entities_to_maybe_destroy);
   destroy_flagged_entities(bulk_data, entities_to_maybe_destroy, flag_field, deletion_flag_value);
 }
-
-}  // namespace utils
 
 }  // namespace mesh
 

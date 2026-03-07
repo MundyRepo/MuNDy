@@ -30,12 +30,10 @@
 #include <utility>
 
 // Our libs
-#include <mundy_utils/throw_assert.hpp>      // for MUNDY_THROW_ASSERT
-#include <mundy_geom/primitives/Point.hpp>  // for mundy::geom::Point
+#include <mundy_geom/primitives/Point.hpp>  // for mundy::Point
+#include <mundy_utils/throw_assert.hpp>     // for MUNDY_THROW_ASSERT
 
 namespace mundy {
-
-namespace geom {
 
 template <typename Scalar, ValidPointType PointType = Point<Scalar>>
 class VSegment {
@@ -60,7 +58,7 @@ class VSegment {
   /// \brief Default constructor for owning VSegments. Default initialize the start, middle, and end points.
   KOKKOS_FUNCTION
   constexpr VSegment()
-    requires math::HasNArgConstructor<point_t, scalar_t, 3>
+    requires HasNArgConstructor<point_t, scalar_t, 3>
       : start_(scalar_t(), scalar_t(), scalar_t()),
         middle_(scalar_t(), scalar_t(), scalar_t()),
         end_(scalar_t(), scalar_t(), scalar_t()) {
@@ -313,8 +311,6 @@ std::ostream& operator<<(std::ostream& os, const VSegmentType& v_segment) {
   os << "{" << v_segment.start() << "->" << v_segment.middle() << "->" << v_segment.end() << "}";
   return os;
 }
-
-}  // namespace geom
 
 }  // namespace mundy
 

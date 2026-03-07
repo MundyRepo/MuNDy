@@ -30,12 +30,10 @@
 #include <utility>
 
 // Our libs
-#include <mundy_utils/throw_assert.hpp>      // for MUNDY_THROW_ASSERT
-#include <mundy_geom/primitives/Point.hpp>  // for mundy::geom::Point
+#include <mundy_geom/primitives/Point.hpp>  // for mundy::Point
+#include <mundy_utils/throw_assert.hpp>     // for MUNDY_THROW_ASSERT
 
 namespace mundy {
-
-namespace geom {
 
 template <typename Scalar, ValidPointType MinPointType = Point<Scalar>, ValidPointType MaxPointType = Point<Scalar>>
 class AABB {
@@ -64,7 +62,7 @@ class AABB {
   /// Initializes the aabb inside-out so nothing can be inside this aabb.
   KOKKOS_FUNCTION
   constexpr AABB()
-    requires(math::HasDefaultConstructor<min_point_t> && math::HasDefaultConstructor<max_point_t>)
+    requires(HasDefaultConstructor<min_point_t> && HasDefaultConstructor<max_point_t>)
       : min_corner_(), max_corner_() {
     min_corner_[0] = scalar_max();
     min_corner_[1] = scalar_max();
@@ -100,7 +98,7 @@ class AABB {
   /// \param[in] z_max The maximum z-coordinate.
   KOKKOS_FUNCTION
   constexpr AABB(scalar_t x_min, scalar_t y_min, scalar_t z_min, scalar_t x_max, scalar_t y_max, scalar_t z_max)
-    requires(math::HasNArgConstructor<min_point_t, scalar_t, 3> && math::HasNArgConstructor<max_point_t, scalar_t, 3>)
+    requires(HasNArgConstructor<min_point_t, scalar_t, 3> && HasNArgConstructor<max_point_t, scalar_t, 3>)
       : min_corner_(x_min, y_min, z_min), max_corner_(x_max, y_max, z_max) {
   }
 
@@ -342,8 +340,6 @@ KOKKOS_FUNCTION constexpr bool intersects(const AABBType1& aabb1, const AABBType
   return !disjoint2;
 }
 //@}
-
-}  // namespace geom
 
 }  // namespace mundy
 

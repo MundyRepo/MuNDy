@@ -42,8 +42,6 @@ namespace mundy {
 
 namespace mesh {
 
-namespace utils {
-
 /* Methodology:
 
 Destroying entities must occur within a modification cycle. We'll assert this.
@@ -69,8 +67,6 @@ void destroy_flagged_entities(BulkData &bulk_data, const stk::mesh::EntityVector
 void destroy_flagged_entities(BulkData &bulk_data, const stk::topology::rank_t &entity_rank,
                               const stk::mesh::Selector &selector, const stk::mesh::Field<int> &flag_field,
                               const int &deletion_flag_value);
-
-}  // namespace utils
 
 }  // namespace mesh
 

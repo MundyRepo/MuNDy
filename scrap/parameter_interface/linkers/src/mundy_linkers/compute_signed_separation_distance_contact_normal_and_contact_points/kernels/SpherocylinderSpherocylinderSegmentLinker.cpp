@@ -35,9 +35,9 @@
 // Mundy libs
 #include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
 #include <mundy_linkers/compute_signed_separation_distance_contact_normal_and_contact_points/kernels/SpherocylinderSpherocylinderSegmentLinker.hpp>  // for mundy::linkers::...::kernels::SpherocylinderSpherocylinderSegmentLinker
-#include <mundy_math/Quaternion.hpp>               // for mundy::math::Quaternion
-#include <mundy_math/Vector3.hpp>                  // for mundy::math::Vector3
-#include <mundy_math/distance/SegmentSegment.hpp>  // for mundy::math::distance::distance_sq_between_line_segments
+#include <mundy_math/Quaternion.hpp>               // for mundy::Quaternion
+#include <mundy_math/Vector3.hpp>                  // for mundy::Vector3
+#include <mundy_math/distance/SegmentSegment.hpp>  // for mundy::distance::distance_sq_between_line_segments
 #include <mundy_mesh/BulkData.hpp>                 // for mundy::mesh::BulkData
 #include <mundy_mesh/FieldViews.hpp>  // for mundy::mesh::vector3_field_data, mundy::mesh::quaternion_field_data, mundy::mesh::matrix3_field_data
 #include <mundy_mesh/ForEachEntity.hpp>             // for mundy::mesh::for_each_entity_run
@@ -203,21 +203,21 @@ void SpherocylinderSpherocylinderSegmentLinker::execute(
         const auto spherocylinder_center_coord = mundy::mesh::vector3_field_data(node_coord_field, spherocylinder_node);
         const double spherocylinder_radius = stk::mesh::field_data(element_radius_field, spherocylinder_element)[0];
         const double spherocylinder_length = stk::mesh::field_data(element_length_field, spherocylinder_element)[0];
-        const auto spherocylinder_orientation = mundy::math::get_quaternion_view<double>(
+        const auto spherocylinder_orientation = mundy::get_quaternion_view<double>(
             stk::mesh::field_data(element_orientation_field, spherocylinder_element));
 
         // Get the spherocylinder_segment data
         const double spherocylinder_segment_radius =
             stk::mesh::field_data(element_radius_field, spherocylinder_segment_element)[0];
-        const auto spherocylinder_segment_left_endpt = mundy::math::get_vector3_view<double>(
+        const auto spherocylinder_segment_left_endpt = mundy::get_vector3_view<double>(
             stk::mesh::field_data(node_coord_field, spherocylinder_segment_left_node));
-        const auto spherocylinder_segment_right_endpt = mundy::math::get_vector3_view<double>(
+        const auto spherocylinder_segment_right_endpt = mundy::get_vector3_view<double>(
             stk::mesh::field_data(node_coord_field, spherocylinder_segment_right_node));
 
         // Find the endpoints of the spherocylinder
         // Note, the orientation maps the reference configuration to the current configuration and in the reference
         // configuration the spherocylinder is aligned with the x-axis.
-        const auto tangent_vector = spherocylinder_orientation * mundy::math::Vector3d(1.0, 0.0, 0.0);
+        const auto tangent_vector = spherocylinder_orientation * mundy::Vector3d(1.0, 0.0, 0.0);
         const auto spherocylinder_left_endpt =
             spherocylinder_center_coord - 0.5 * tangent_vector * spherocylinder_length;
         const auto spherocylinder_right_endpt =
@@ -225,11 +225,11 @@ void SpherocylinderSpherocylinderSegmentLinker::execute(
 
         // Compute the separation distance and contact point along the center line of the spherocylinder and the
         // spherocylinder_segment
-        mundy::math::Vector3d closest_point1;
-        mundy::math::Vector3d closest_point2;
+        mundy::Vector3d closest_point1;
+        mundy::Vector3d closest_point2;
         double t1;
         double t2;
-        const double distance = Kokkos::sqrt(mundy::math::distance::distance_sq_between_line_segments(
+        const double distance = Kokkos::sqrt(mundy::distance::distance_sq_between_line_segments(
             spherocylinder_left_endpt, spherocylinder_right_endpt, spherocylinder_segment_left_endpt,
             spherocylinder_segment_right_endpt, closest_point1, closest_point2, t1, t2));
 
@@ -242,11 +242,11 @@ void SpherocylinderSpherocylinderSegmentLinker::execute(
         // Set the separation distance and contact normal
         // Notice that the contact normal points from the left sphere to the right sphere
         // It is the normal to the left sphere and negative the normal of the right sphere.
-        auto contact_normal = mundy::math::get_vector3_view<double>(
+        auto contact_normal = mundy::get_vector3_view<double>(
             stk::mesh::field_data(linker_contact_normal_field, spherocylinder_spherocylinder_segment_linker));
-        auto spherocylinder_contact_point = mundy::math::get_vector3_view<double>(
+        auto spherocylinder_contact_point = mundy::get_vector3_view<double>(
             stk::mesh::field_data(linker_contact_points_field, spherocylinder_spherocylinder_segment_linker));
-        auto spherocylinder_segment_contact_point = mundy::math::get_vector3_view<double>(
+        auto spherocylinder_segment_contact_point = mundy::get_vector3_view<double>(
             stk::mesh::field_data(linker_contact_points_field, spherocylinder_spherocylinder_segment_linker) + 3);
         double *signed_separation_distance = stk::mesh::field_data(linker_signed_separation_distance_field,
                                                                    spherocylinder_spherocylinder_segment_linker);

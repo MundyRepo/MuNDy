@@ -30,17 +30,15 @@
 #include <utility>
 
 // Mundy
-#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
-#include <mundy_math/Accessor.hpp>      // for mundy::math::ValidAccessor
-#include <mundy_math/Array.hpp>         // for mundy::math::Array
-#include <mundy_math/Matrix3.hpp>       // for mundy::math::Matrix3
-#include <mundy_math/Tolerance.hpp>     // for mundy::math::get_zero_tolerance
-#include <mundy_math/Vector3.hpp>       // for mundy::math::Vector3
+#include <mundy_math/Accessor.hpp>   // for mundy::ValidAccessor
+#include <mundy_math/Array.hpp>      // for mundy::Array
+#include <mundy_math/Matrix3.hpp>    // for mundy::Matrix3
+#include <mundy_math/Tolerance.hpp>  // for mundy::get_zero_tolerance
+#include <mundy_math/Vector3.hpp>    // for mundy::Vector3
 #include <mundy_math/impl/QuaternionImpl.hpp>
+#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
 
 namespace mundy {
-
-namespace math {
 
 /// \brief (Implementation) Type trait to determine if a type is an AQuaternion
 template <typename TypeToCheck>
@@ -137,8 +135,8 @@ class AQuaternion {
   //! \name Internal data
   //@{
 
-  /// \brief Stored accessor via utils::storage.
-  utils::storage<Accessor> accessor_;
+  /// \brief Stored accessor via storage.
+  storage<Accessor> accessor_;
   //@}
 
   //! \name Type aliases
@@ -1087,20 +1085,18 @@ MUNDY_MATH_QUATERNION_TYPE_SPECIALIZATION(Quaternionf, quaternionf, float)
 /// \endcode
 template <typename T, typename Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto get_quaternion_view(Accessor&& data) {
-  auto data_storage = utils::store(std::forward<Accessor>(data));
+  auto data_storage = store(std::forward<Accessor>(data));
   return AQuaternion<T, decltype(data_storage)>(data_storage);
 }
 
 template <typename T, typename Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto get_owning_quaternion(Accessor&& data) {
-  auto data_storage = utils::store(std::move(data));
+  auto data_storage = store(std::move(data));
   return AQuaternion<T, decltype(data_storage)>(data_storage);
 }
 //@}
 
 //@}
-
-}  // namespace math
 
 }  // namespace mundy
 

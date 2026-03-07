@@ -32,11 +32,9 @@
 #include <Kokkos_Core.hpp>
 
 // Mundy
-#include <mundy_utils/type_traits.hpp>  // for utils::count_type_v
+#include <mundy_utils/type_traits.hpp>  // for count_type_v
 
 namespace mundy {
-
-namespace utils {
 
 namespace impl {
 
@@ -296,8 +294,6 @@ template <class... Elements>
 KOKKOS_FUNCTION constexpr auto make_tuple(Elements... vals) {
   return tuple<Elements...>{vals...};
 }
-
-}  // namespace utils
 
 }  // namespace mundy
 

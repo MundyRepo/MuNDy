@@ -47,12 +47,12 @@
 #include <stk_mesh/baseImpl/PartVectorUtils.hpp>  // for stk::mesh::impl::fill_add_parts_and_supersets
 
 // Mundy libs
-#include <mundy_utils/throw_assert.hpp>           // for MUNDY_THROW_ASSERT
 #include <mundy_mesh/BulkData.hpp>               // for mundy::mesh::BulkData
 #include <mundy_mesh/ForEachEntity.hpp>          // for mundy::mesh::for_each_entity_run
 #include <mundy_mesh/MetaData.hpp>               // for mundy::mesh::MetaData
 #include <mundy_mesh/NgpFieldBLAS.hpp>           // for mundy::mesh::field_copy
 #include <mundy_mesh/impl/LinkedBucketConn.hpp>  // for mundy::mesh::impl::LinkedBucketConn
+#include <mundy_utils/throw_assert.hpp>          // for MUNDY_THROW_ASSERT
 
 namespace mundy {
 
@@ -60,15 +60,15 @@ namespace mesh {
 
 /// \brief Get the local fast mesh indices for a set of entities as an NgpView.
 template <typename OurExecSpace>
-utils::NgpView<stk::mesh::FastMeshIndex*, OurExecSpace> get_local_entity_indices(const stk::mesh::BulkData& bulk_data,
-                                                                                stk::mesh::EntityRank rank,
-                                                                                const stk::mesh::Selector& selector,
-                                                                                const OurExecSpace& exec_space) {
+NgpView<stk::mesh::FastMeshIndex*, OurExecSpace> get_local_entity_indices(const stk::mesh::BulkData& bulk_data,
+                                                                          stk::mesh::EntityRank rank,
+                                                                          const stk::mesh::Selector& selector,
+                                                                          const OurExecSpace& exec_space) {
   std::vector<stk::mesh::Entity> local_entities;
   stk::mesh::get_entities(bulk_data, rank, selector, local_entities);
 
-  utils::NgpView<stk::mesh::FastMeshIndex*, OurExecSpace> ngp_local_entity_indices("local_entity_indices",
-                                                                                  local_entities.size());
+  NgpView<stk::mesh::FastMeshIndex*, OurExecSpace> ngp_local_entity_indices("local_entity_indices",
+                                                                            local_entities.size());
 
   Kokkos::parallel_for(stk::ngp::HostRangePolicy(0, local_entities.size()),
                        [&bulk_data, &local_entities, &host_mesh_indices](const int i) {
@@ -408,7 +408,7 @@ class GenNeighborLinks {
   //@{
 
   // Three internal vectors that store the search accumulators, checkers, and specializations
-  using ngp_local_entity_indices_t = utils::NgpView<stk::mesh::FastMeshIndex*, exec_space_t>;
+  using ngp_local_entity_indices_t = NgpView<stk::mesh::FastMeshIndex*, exec_space_t>;
   using search_accumulator_t = std::function<search_spheres_view_t(const ngp_local_entity_indices_t&, double)>;
   using search_checker_t =
       std::function<bool(const ngp_local_entity_indices_t&, const type_info_t::search_spheres_view_t&, double)>;
@@ -435,7 +435,7 @@ class GenNeighborLinks {
             stk::mesh::Entity sphere = ngp_mesh.get_entity(spheres.rank(), sphere_indices(i));
             stk::mesh::FastMeshIndex sphere_index = ngp_mesh.fast_mesh_index(sphere);
 
-            geom::Sphere<double> sphere = gen(sphere_index);
+            Sphere<double> sphere = gen(sphere_index);
             stk::search::Point<double> center(sphere.center[0], sphere.center[1], sphere.center[2]);
             search_spheres(i) =
                 type_info_t::sphere_ident_proc_t{stk::search::Sphere<double>(center, sphere.radius + search_buffer),

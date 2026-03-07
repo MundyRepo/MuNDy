@@ -51,12 +51,12 @@
 #include <stk_util/ngp/NgpSpaces.hpp>             // for stk::ngp::HostMemSpace, stk::ngp::UVMMemSpace
 
 // Mundy libs
-#include <mundy_utils/throw_assert.hpp>      // for MUNDY_THROW_ASSERT
 #include <mundy_mesh/ForEachEntity.hpp>     // for mundy::mesh::for_each_entity_run
 #include <mundy_mesh/LinkCSRPartition.hpp>  // for mundy::mesh::LinkCSRPartition
 #include <mundy_mesh/LinkMetaData.hpp>      // for mundy::mesh::LinkMetaData
 #include <mundy_mesh/MetaData.hpp>          // for mundy::mesh::MetaData
 #include <mundy_mesh/NgpFieldBLAS.hpp>      // for mundy::mesh::field_copy
+#include <mundy_utils/throw_assert.hpp>     // for MUNDY_THROW_ASSERT
 
 namespace mundy {
 

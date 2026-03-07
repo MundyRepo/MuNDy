@@ -30,15 +30,13 @@
 #include <utility>
 
 // Mundy
-#include <mundy_geom/primitives/LineSegment.hpp>  // for mundy::geom::LineSegment
+#include <mundy_geom/primitives/LineSegment.hpp>  // for mundy::LineSegment
 
 namespace mundy {
 
-namespace mech {
-
 /// \brief A hookean spring between two points with a rest length and spring constant
-template <typename Scalar, mundy::geom::ValidLineSegmentType LineSegmentType = mundy::geom::LineSegment<Scalar>,
-          typename OwnershipType = mundy::math::Ownership::Owns>
+template <typename Scalar, mundy::ValidLineSegmentType LineSegmentType = mundy::LineSegment<Scalar>,
+          typename OwnershipType = mundy::Ownership::Owns>
 class HookeanSpring {
   static_assert(std::is_same_v<typename LineSegmentType::scalar_t, Scalar>,
                 "The scalar_t of the LineSegmentType must match the Scalar type.");
@@ -65,14 +63,14 @@ class HookeanSpring {
   /// constant and rest length to -1.
   KOKKOS_FUNCTION
   HookeanSpring()
-    requires std::is_same_v<OwnershipType, mundy::math::Ownership::Owns>
+    requires std::is_same_v<OwnershipType, mundy::Ownership::Owns>
       : line_segment_(), rest_length_(static_cast<scalar_t>(-1)), spring_constant_(static_cast<scalar_t>(-1)) {
   }
 
   /// \brief No default constructor for viewing HookeanSpringss.
   KOKKOS_FUNCTION
   HookeanSpring()
-    requires std::is_same_v<OwnershipType, mundy::math::Ownership::Views>
+    requires std::is_same_v<OwnershipType, mundy::Ownership::Views>
   = delete;
 
   /// \brief Constructor to initialize the line segment, rest length, and spring constant.
@@ -84,7 +82,7 @@ class HookeanSpring {
   /// \brief Constructor to initialize the start and end points.
   /// \param[in] start The start of the HookeanSpring.
   /// \param[in] end The end of the HookeanSpring.
-  template <mundy::geom::ValidLineSegmentType OtherLineSegmentType>
+  template <mundy::ValidLineSegmentType OtherLineSegmentType>
   KOKKOS_FUNCTION HookeanSpring(const OtherLineSegmentType& line_segment, const scalar_t& rest_length,
                                 const scalar_t& spring_constant)
     requires(!std::is_same_v<OtherLineSegmentType, line_segment_t>)
@@ -221,7 +219,7 @@ class HookeanSpring {
 
   /// \brief Set the line segment
   /// \param[in] line_segment The new line segment.
-  template <mundy::geom::ValidLineSegmentType OtherLineSegmentType>
+  template <mundy::ValidLineSegmentType OtherLineSegmentType>
   KOKKOS_FUNCTION void set_line_segment(const OtherLineSegmentType& line_segment) {
     line_segment_ = line_segment;
   }
@@ -243,18 +241,18 @@ class HookeanSpring {
 
  private:
   line_segment_t line_segment_;
-  std::conditional_t<std::is_same_v<ownership_t, mundy::math::Ownership::Owns>, scalar_t, scalar_t&> rest_length_;
-  std::conditional_t<std::is_same_v<ownership_t, mundy::math::Ownership::Owns>, scalar_t, scalar_t&> spring_constant_;
+  std::conditional_t<std::is_same_v<ownership_t, mundy::Ownership::Owns>, scalar_t, scalar_t&> rest_length_;
+  std::conditional_t<std::is_same_v<ownership_t, mundy::Ownership::Owns>, scalar_t, scalar_t&> spring_constant_;
 };  // class HookeanSpring
 
 /// @brief Type trait to determine if a type is a HookeanSpring
 template <typename T>
 struct is_hookean_spring : std::false_type {};
 //
-template <typename Scalar, mundy::geom::ValidLineSegmentType LineSegmentType, typename OwnershipType>
+template <typename Scalar, mundy::ValidLineSegmentType LineSegmentType, typename OwnershipType>
 struct is_hookean_spring<HookeanSpring<Scalar, LineSegmentType, OwnershipType>> : std::true_type {};
 //
-template <typename Scalar, mundy::geom::ValidLineSegmentType LineSegmentType, typename OwnershipType>
+template <typename Scalar, mundy::ValidLineSegmentType LineSegmentType, typename OwnershipType>
 struct is_hookean_spring<const HookeanSpring<Scalar, LineSegmentType, OwnershipType>> : std::true_type {};
 //
 template <typename T>
@@ -262,13 +260,11 @@ inline constexpr bool is_hookean_spring_v = is_hookean_spring<T>::value;
 
 /// @brief Concept to check if a type is a valid HookeanSpring type
 template <typename HookeanSpringType>
-concept ValidHookeanSpringType = mundy::geom::ValidHookeanSpringType<HookeanSpringType>;
+concept ValidHookeanSpringType = mundy::ValidHookeanSpringType<HookeanSpringType>;
 
 static_assert(ValidHookeanSpringType<HookeanSpring<float>> && ValidHookeanSpringType<const HookeanSpring<float>> &&
                   ValidHookeanSpringType<HookeanSpring<double>> && ValidHookeanSpringType<const HookeanSpring<double>>,
               "HookeanSpring should satisfy the ValidHookeanSpringType concept");
-
-}  // namespace mech
 
 }  // namespace mundy
 

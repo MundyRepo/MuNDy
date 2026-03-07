@@ -33,7 +33,7 @@
 #include <stk_topology/topology.hpp>  // for stk::topology
 
 // Mundy includes
-#include <mundy_utils/StringLiteral.hpp>  // for mundy::utils::StringLiteral and mundy::utils::make_string_literal
+#include <mundy_utils/StringLiteral.hpp>  // for mundy::StringLiteral and mundy::make_string_literal
 #include <mundy_meta/FieldReqs.hpp>      // for mundy::meta::FieldReqs
 #include <mundy_meta/MeshReqs.hpp>       // for mundy::meta::MeshReqs
 #include <mundy_meta/PartReqs.hpp>       // for mundy::meta::PartReqs
@@ -54,7 +54,7 @@ namespace agents {
 /// \tparam name The name of our part (as a compile-time StringLiteral).
 /// \tparam rank The rank of our part.
 /// \tparam ParentAgentTypes Any number of agents that are parents of this agent. Can be empty.
-template <mundy::utils::StringLiteral name, stk::topology::rank_t rank, typename... ParentAgentTypes>
+template <mundy::StringLiteral name, stk::topology::rank_t rank, typename... ParentAgentTypes>
 class RankedAssembly {
  public:
   //! \name Getters

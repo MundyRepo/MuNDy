@@ -120,7 +120,7 @@ class Collision : public mundy::meta::MetaKernel<> {
     mundy::meta::check_parameter_and_set_default(
         fixed_params_ptr, mundy::meta::ParamConfig<Teuchos::Array<std::string>>{
                               .name = "valid_entity_part_names",
-                              .default_value = mundy::utils::make_string_array(default_part_name_),
+                              .default_value = mundy::make_string_array(default_part_name_),
                               .doc_string = "Name of the parts associated with this kernel."});
 
     mundy::meta::check_parameter_and_set_default(

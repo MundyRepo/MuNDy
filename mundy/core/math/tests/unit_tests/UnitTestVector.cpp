@@ -37,10 +37,10 @@
 #include <vector>       // for std::vector
 
 // Mundy libs
-#include <mundy_utils/reference_wrapper.hpp>  // for mundy::utils::reference_wrapper
-#include <mundy_math/Array.hpp>              // for mundy::math::Array
-#include <mundy_math/Tolerance.hpp>          // for mundy::math::get_relaxed_tolerance
-#include <mundy_math/Vector.hpp>             // for mundy::math::Vector
+#include <mundy_math/Array.hpp>               // for mundy::Array
+#include <mundy_math/Tolerance.hpp>           // for mundy::get_relaxed_tolerance
+#include <mundy_math/Vector.hpp>              // for mundy::Vector
+#include <mundy_utils/reference_wrapper.hpp>  // for mundy::reference_wrapper
 
 // Note, these tests are meant to look like real use cases for the Vector class. As a result, we use implicit type
 // conversions rather than being explicit about types. This is to ensure that the Vector class can be used in a
@@ -48,8 +48,6 @@
 // warnings. We will not however, locally disable these warnings.
 
 namespace mundy {
-
-namespace math {
 
 namespace {
 
@@ -1507,7 +1505,5 @@ TYPED_TEST(VectorSingleTypeTest, ViewsWithCallableOnlyAccessor) {
 //@}
 
 }  // namespace
-
-}  // namespace math
 
 }  // namespace mundy

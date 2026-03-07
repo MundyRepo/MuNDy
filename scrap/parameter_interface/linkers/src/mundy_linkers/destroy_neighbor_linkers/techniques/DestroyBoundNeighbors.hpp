@@ -38,13 +38,13 @@
 #include <stk_topology/topology.hpp>        // for stk::topology
 
 // Mundy libs
-#include <mundy_utils/MakeStringArray.hpp>                     // for mundy::utils::make_string_array
-#include <mundy_utils/StringLiteral.hpp>                       // for mundy::utils::StringLiteral
+#include <mundy_utils/MakeStringArray.hpp>                     // for mundy::make_string_array
+#include <mundy_utils/StringLiteral.hpp>                       // for mundy::StringLiteral
 #include <mundy_utils/throw_assert.hpp>                        // for MUNDY_THROW_ASSERT
 #include <mundy_linkers/NeighborLinkers.hpp>                  // for mundy::linkers::NeighborLinkers
 #include <mundy_mesh/BulkData.hpp>                            // for mundy::mesh::BulkData
 #include <mundy_mesh/MetaData.hpp>                            // for mundy::mesh::MetaData
-#include <mundy_mesh/utils/DestroyFlaggedEntities.hpp>        // for mundy::mesh::utils::destroy_flagged_entities
+#include <mundy_mesh/utils/DestroyFlaggedEntities.hpp>        // for mundy::mesh::destroy_flagged_entities
 #include <mundy_meta/MeshReqs.hpp>                            // for mundy::meta::MeshReqs
 #include <mundy_meta/MetaFactory.hpp>                         // for mundy::meta::MetaMethodFactory
 #include <mundy_meta/MetaKernel.hpp>                          // for mundy::meta::MetaKernel
@@ -145,10 +145,10 @@ class DestroyBoundNeighbors : public mundy::meta::MetaMethodSubsetExecutionInter
     static Teuchos::ParameterList default_parameter_list =
         Teuchos::ParameterList()
             .set("valid_entity_part_names",
-                 mundy::utils::make_string_array(std::string(default_neighbor_linkers_part_name_)),
+                 mundy::make_string_array(std::string(default_neighbor_linkers_part_name_)),
                  "Name of the linker entity parts potentially acted on by this meta method.")
             .set("valid_connected_source_and_target_part_names",
-                 mundy::utils::make_string_array(std::string(universal_part_name_)),
+                 mundy::make_string_array(std::string(universal_part_name_)),
                  "Name of the source and target parts that linker may connect to.")
             .set<std::string>("linker_destroy_flag_field_name", std::string(default_linker_destroy_flag_field_name_),
                               "Name of the field used to flag linkers for destruction.");

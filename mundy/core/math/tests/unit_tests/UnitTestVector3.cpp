@@ -32,9 +32,9 @@
 #include <vector>       // for std::vector
 
 // Mundy libs
-#include <mundy_math/Array.hpp>      // for mundy::math::Array
-#include <mundy_math/Tolerance.hpp>  // for mundy::math::get_relaxed_tolerance
-#include <mundy_math/Vector3.hpp>    // for mundy::math::Vector3
+#include <mundy_math/Array.hpp>      // for mundy::Array
+#include <mundy_math/Tolerance.hpp>  // for mundy::get_relaxed_tolerance
+#include <mundy_math/Vector3.hpp>    // for mundy::Vector3
 
 // Note, these tests are meant to look like real use cases for the Vector3 class. As a result, we use implicit type
 // conversions rather than being explicit about types. This is to ensure that the Vector3 class can be used in a
@@ -42,8 +42,6 @@
 // warnings. We will not however, locally disable these warnings.
 
 namespace mundy {
-
-namespace math {
 
 namespace {
 
@@ -132,7 +130,5 @@ TYPED_TEST(Vector3PairwiseTypeTest, SpecialOperations) {
 //@}
 
 }  // namespace
-
-}  // namespace math
 
 }  // namespace mundy

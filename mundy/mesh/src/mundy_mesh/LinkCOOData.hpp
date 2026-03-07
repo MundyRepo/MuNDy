@@ -43,9 +43,9 @@
 #include <stk_util/ngp/NgpSpaces.hpp>             // for stk::ngp::HostMemSpace, stk::ngp::UVMMemSpace
 
 // Mundy libs
-#include <mundy_utils/throw_assert.hpp>          // for MUNDY_THROW_ASSERT
 #include <mundy_mesh/LinkMetaData.hpp>          // for mundy::mesh::LinkMetaData
 #include <mundy_mesh/impl/NgpLinkMetaData.hpp>  // for mundy::mesh::impl::NgpLinkMetaDataT
+#include <mundy_utils/throw_assert.hpp>         // for MUNDY_THROW_ASSERT
 
 namespace mundy {
 

@@ -32,8 +32,8 @@
 #include <stk_mesh/base/Field.hpp>    // for stk::mesh::Field, stl::mesh::field_data
 
 // Mundy libs
-#include <mundy_math/Quaternion.hpp>  // for mundy::math::Quaternion
-#include <mundy_math/Vector3.hpp>     // for mundy::math::Vector3
+#include <mundy_math/Quaternion.hpp>  // for mundy::Quaternion
+#include <mundy_math/Vector3.hpp>     // for mundy::Vector3
 #include <mundy_mesh/BulkData.hpp>    // for mundy::mesh::BulkData
 #include <mundy_mesh/FieldViews.hpp>  // for mundy::mesh::vector3_field_data, mundy::mesh::quaternion_field_data, mundy::mesh::matrix3_field_data
 #include <mundy_mesh/ForEachEntity.hpp>                         // for mundy::mesh::for_each_entity_run
@@ -152,7 +152,7 @@ void Spherocylinder::execute(const stk::mesh::Selector &spherocylinder_selector)
         // Element data
         const double radius = stk::mesh::field_data(element_radius_field, spherocylinder_element)[0];
         const double length = stk::mesh::field_data(element_length_field, spherocylinder_element)[0];
-        const auto element_orientation = mundy::math::get_quaternion_view<double>(
+        const auto element_orientation = mundy::get_quaternion_view<double>(
             stk::mesh::field_data(element_orientation_field, spherocylinder_element));
 
         // Node data
@@ -162,7 +162,7 @@ void Spherocylinder::execute(const stk::mesh::Selector &spherocylinder_selector)
         // Find the endpoints.
         // Note, the orientation maps the reference configuration to the current configuration and in the reference
         // configuration the spherocylinder is aligned with the x-axis.
-        const auto tangent_vector = element_orientation * mundy::math::Vector3d(1.0, 0.0, 0.0);
+        const auto tangent_vector = element_orientation * mundy::Vector3d(1.0, 0.0, 0.0);
         const auto left_endpoint = node_coord - 0.5 * tangent_vector * length;
         const auto right_endpoint = node_coord + 0.5 * tangent_vector * length;
 
@@ -170,12 +170,12 @@ void Spherocylinder::execute(const stk::mesh::Selector &spherocylinder_selector)
         // Note, the OBB is just the AABB in the reference configuration rotated by the orientation and then shifted by
         // the center of the spherocylinder.
         double *obb = stk::mesh::field_data(element_obb_field, spherocylinder_element);
-        auto bottom_left = mundy::math::get_vector3_view<double>(obb);
-        auto top_right = mundy::math::get_vector3_view<double>(obb + 3);
+        auto bottom_left = mundy::get_vector3_view<double>(obb);
+        auto top_right = mundy::get_vector3_view<double>(obb + 3);
 
-        const mundy::math::Vector3d bottom_left_ref_config(-radius - buffer_distance, -radius - buffer_distance,
+        const mundy::Vector3d bottom_left_ref_config(-radius - buffer_distance, -radius - buffer_distance,
                                                            -0.5 * length - buffer_distance);
-        const mundy::math::Vector3d top_right_ref_config(radius + buffer_distance, radius + buffer_distance,
+        const mundy::Vector3d top_right_ref_config(radius + buffer_distance, radius + buffer_distance,
                                                          0.5 * length + buffer_distance);
         bottom_left = element_orientation * bottom_left_ref_config + node_coord;
         top_right = element_orientation * top_right_ref_config + node_coord;

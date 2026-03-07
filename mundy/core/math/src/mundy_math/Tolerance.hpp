@@ -27,8 +27,6 @@
 
 namespace mundy {
 
-namespace math {
-
 /// \brief Function to get the zero tolerance for a type. That is, the smallest value that we will consider non-zero.
 /// We use approximately 10 * std::numeric_limits<T>::epsilon() as the default tolerance for floats and doubles and 0
 /// for integer types. To make this code GPU-compatable, we'll directly evaluate the epsilon instead of using
@@ -132,8 +130,6 @@ KOKKOS_INLINE_FUNCTION constexpr auto get_relaxed_comparison_tolerance_promote_i
     return get_relaxed_comparison_tolerance<T1, T2>();
   }
 }
-
-}  // namespace math
 
 }  // namespace mundy
 

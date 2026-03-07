@@ -43,7 +43,7 @@
 #include <stk_mesh/base/Selector.hpp>
 
 // Mundy libs
-#include <mundy_math/Vector3.hpp>      // for mundy::math::Vector3
+#include <mundy_math/Vector3.hpp>      // for mundy::Vector3
 #include <mundy_mesh/Aggregate.hpp>    // for mundy::mesh::Aggregate
 #include <mundy_mesh/BulkData.hpp>     // for mundy::mesh::BulkData
 #include <mundy_mesh/MeshBuilder.hpp>  // for mundy::mesh::MeshBuilder

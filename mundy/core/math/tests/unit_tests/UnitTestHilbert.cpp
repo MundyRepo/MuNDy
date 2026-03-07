@@ -32,13 +32,11 @@
 #include <vector>       // for std::vector
 
 // Mundy libs
-#include <mundy_math/Hilbert.hpp>  // for mundy::math::hilbert_3d
+#include <mundy_math/Hilbert.hpp>  // for mundy::hilbert_3d
 
 // Test hilbert3d space filling curves
 
 namespace mundy {
-
-namespace math {
 
 namespace {
 
@@ -48,18 +46,18 @@ namespace {
 TEST(Hilbert3D, Cube2) {
   size_t s = 2;
   size_t ind = 0;
-  std::vector<mundy::math::Vector3d> position_array(s * s * s);
-  mundy::math::Vector3d current_position(0.0, 0.0, 0.0);
-  mundy::math::Vector3d dr1(1.0, 0.0, 0.0);
-  mundy::math::Vector3d dr2(0.0, 1.0, 0.0);
-  mundy::math::Vector3d dr3(0.0, 0.0, 1.0);
+  std::vector<mundy::Vector3d> position_array(s * s * s);
+  mundy::Vector3d current_position(0.0, 0.0, 0.0);
+  mundy::Vector3d dr1(1.0, 0.0, 0.0);
+  mundy::Vector3d dr2(0.0, 1.0, 0.0);
+  mundy::Vector3d dr3(0.0, 0.0, 1.0);
 
   ind = hilbert_3d(s, ind, position_array, current_position, dr1, dr2, dr3);
 
-  std::vector<mundy::math::Vector3d> expected_position_array = {
-      mundy::math::Vector3d(0.0, 0.0, 0.0), mundy::math::Vector3d(1.0, 0.0, 0.0), mundy::math::Vector3d(1.0, 1.0, 0.0),
-      mundy::math::Vector3d(0.0, 1.0, 0.0), mundy::math::Vector3d(0.0, 1.0, 1.0), mundy::math::Vector3d(1.0, 1.0, 1.0),
-      mundy::math::Vector3d(1.0, 0.0, 1.0), mundy::math::Vector3d(0.0, 0.0, 1.0)};
+  std::vector<mundy::Vector3d> expected_position_array = {
+      mundy::Vector3d(0.0, 0.0, 0.0), mundy::Vector3d(1.0, 0.0, 0.0), mundy::Vector3d(1.0, 1.0, 0.0),
+      mundy::Vector3d(0.0, 1.0, 0.0), mundy::Vector3d(0.0, 1.0, 1.0), mundy::Vector3d(1.0, 1.0, 1.0),
+      mundy::Vector3d(1.0, 0.0, 1.0), mundy::Vector3d(0.0, 0.0, 1.0)};
   for (size_t i = 0; i < s * s * s; ++i) {
     ASSERT_TRUE(is_close(position_array[i], expected_position_array[i]));
   }
@@ -68,37 +66,37 @@ TEST(Hilbert3D, Cube2) {
 TEST(Hilbert3D, Cube4) {
   size_t s = 4;
   size_t ind = 0;
-  std::vector<mundy::math::Vector3d> position_array(s * s * s);
-  mundy::math::Vector3d current_position(0.0, 0.0, 0.0);
-  mundy::math::Vector3d dr1(1.0, 0.0, 0.0);
-  mundy::math::Vector3d dr2(0.0, 1.0, 0.0);
-  mundy::math::Vector3d dr3(0.0, 0.0, 1.0);
+  std::vector<mundy::Vector3d> position_array(s * s * s);
+  mundy::Vector3d current_position(0.0, 0.0, 0.0);
+  mundy::Vector3d dr1(1.0, 0.0, 0.0);
+  mundy::Vector3d dr2(0.0, 1.0, 0.0);
+  mundy::Vector3d dr3(0.0, 0.0, 1.0);
 
   ind = hilbert_3d(s, ind, position_array, current_position, dr1, dr2, dr3);
 
-  std::vector<mundy::math::Vector3d> expected_position_array = {
-      mundy::math::Vector3d(0.0, 0.0, 0.0), mundy::math::Vector3d(0.0, 1.0, 0.0), mundy::math::Vector3d(0.0, 1.0, 1.0),
-      mundy::math::Vector3d(0.0, 0.0, 1.0), mundy::math::Vector3d(1.0, 0.0, 1.0), mundy::math::Vector3d(1.0, 1.0, 1.0),
-      mundy::math::Vector3d(1.0, 1.0, 0.0), mundy::math::Vector3d(1.0, 0.0, 0.0), mundy::math::Vector3d(2.0, 0.0, 0.0),
-      mundy::math::Vector3d(2.0, 0.0, 1.0), mundy::math::Vector3d(3.0, 0.0, 1.0), mundy::math::Vector3d(3.0, 0.0, 0.0),
-      mundy::math::Vector3d(3.0, 1.0, 0.0), mundy::math::Vector3d(3.0, 1.0, 1.0), mundy::math::Vector3d(2.0, 1.0, 1.0),
-      mundy::math::Vector3d(2.0, 1.0, 0.0), mundy::math::Vector3d(2.0, 2.0, 0.0), mundy::math::Vector3d(2.0, 2.0, 1.0),
-      mundy::math::Vector3d(3.0, 2.0, 1.0), mundy::math::Vector3d(3.0, 2.0, 0.0), mundy::math::Vector3d(3.0, 3.0, 0.0),
-      mundy::math::Vector3d(3.0, 3.0, 1.0), mundy::math::Vector3d(2.0, 3.0, 1.0), mundy::math::Vector3d(2.0, 3.0, 0.0),
-      mundy::math::Vector3d(1.0, 3.0, 0.0), mundy::math::Vector3d(0.0, 3.0, 0.0), mundy::math::Vector3d(0.0, 2.0, 0.0),
-      mundy::math::Vector3d(1.0, 2.0, 0.0), mundy::math::Vector3d(1.0, 2.0, 1.0), mundy::math::Vector3d(0.0, 2.0, 1.0),
-      mundy::math::Vector3d(0.0, 3.0, 1.0), mundy::math::Vector3d(1.0, 3.0, 1.0), mundy::math::Vector3d(1.0, 3.0, 2.0),
-      mundy::math::Vector3d(0.0, 3.0, 2.0), mundy::math::Vector3d(0.0, 2.0, 2.0), mundy::math::Vector3d(1.0, 2.0, 2.0),
-      mundy::math::Vector3d(1.0, 2.0, 3.0), mundy::math::Vector3d(0.0, 2.0, 3.0), mundy::math::Vector3d(0.0, 3.0, 3.0),
-      mundy::math::Vector3d(1.0, 3.0, 3.0), mundy::math::Vector3d(2.0, 3.0, 3.0), mundy::math::Vector3d(2.0, 3.0, 2.0),
-      mundy::math::Vector3d(3.0, 3.0, 2.0), mundy::math::Vector3d(3.0, 3.0, 3.0), mundy::math::Vector3d(3.0, 2.0, 3.0),
-      mundy::math::Vector3d(3.0, 2.0, 2.0), mundy::math::Vector3d(2.0, 2.0, 2.0), mundy::math::Vector3d(2.0, 2.0, 3.0),
-      mundy::math::Vector3d(2.0, 1.0, 3.0), mundy::math::Vector3d(2.0, 1.0, 2.0), mundy::math::Vector3d(3.0, 1.0, 2.0),
-      mundy::math::Vector3d(3.0, 1.0, 3.0), mundy::math::Vector3d(3.0, 0.0, 3.0), mundy::math::Vector3d(3.0, 0.0, 2.0),
-      mundy::math::Vector3d(2.0, 0.0, 2.0), mundy::math::Vector3d(2.0, 0.0, 3.0), mundy::math::Vector3d(1.0, 0.0, 3.0),
-      mundy::math::Vector3d(1.0, 1.0, 3.0), mundy::math::Vector3d(1.0, 1.0, 2.0), mundy::math::Vector3d(1.0, 0.0, 2.0),
-      mundy::math::Vector3d(0.0, 0.0, 2.0), mundy::math::Vector3d(0.0, 1.0, 2.0), mundy::math::Vector3d(0.0, 1.0, 3.0),
-      mundy::math::Vector3d(0.0, 0.0, 3.0)};
+  std::vector<mundy::Vector3d> expected_position_array = {
+      mundy::Vector3d(0.0, 0.0, 0.0), mundy::Vector3d(0.0, 1.0, 0.0), mundy::Vector3d(0.0, 1.0, 1.0),
+      mundy::Vector3d(0.0, 0.0, 1.0), mundy::Vector3d(1.0, 0.0, 1.0), mundy::Vector3d(1.0, 1.0, 1.0),
+      mundy::Vector3d(1.0, 1.0, 0.0), mundy::Vector3d(1.0, 0.0, 0.0), mundy::Vector3d(2.0, 0.0, 0.0),
+      mundy::Vector3d(2.0, 0.0, 1.0), mundy::Vector3d(3.0, 0.0, 1.0), mundy::Vector3d(3.0, 0.0, 0.0),
+      mundy::Vector3d(3.0, 1.0, 0.0), mundy::Vector3d(3.0, 1.0, 1.0), mundy::Vector3d(2.0, 1.0, 1.0),
+      mundy::Vector3d(2.0, 1.0, 0.0), mundy::Vector3d(2.0, 2.0, 0.0), mundy::Vector3d(2.0, 2.0, 1.0),
+      mundy::Vector3d(3.0, 2.0, 1.0), mundy::Vector3d(3.0, 2.0, 0.0), mundy::Vector3d(3.0, 3.0, 0.0),
+      mundy::Vector3d(3.0, 3.0, 1.0), mundy::Vector3d(2.0, 3.0, 1.0), mundy::Vector3d(2.0, 3.0, 0.0),
+      mundy::Vector3d(1.0, 3.0, 0.0), mundy::Vector3d(0.0, 3.0, 0.0), mundy::Vector3d(0.0, 2.0, 0.0),
+      mundy::Vector3d(1.0, 2.0, 0.0), mundy::Vector3d(1.0, 2.0, 1.0), mundy::Vector3d(0.0, 2.0, 1.0),
+      mundy::Vector3d(0.0, 3.0, 1.0), mundy::Vector3d(1.0, 3.0, 1.0), mundy::Vector3d(1.0, 3.0, 2.0),
+      mundy::Vector3d(0.0, 3.0, 2.0), mundy::Vector3d(0.0, 2.0, 2.0), mundy::Vector3d(1.0, 2.0, 2.0),
+      mundy::Vector3d(1.0, 2.0, 3.0), mundy::Vector3d(0.0, 2.0, 3.0), mundy::Vector3d(0.0, 3.0, 3.0),
+      mundy::Vector3d(1.0, 3.0, 3.0), mundy::Vector3d(2.0, 3.0, 3.0), mundy::Vector3d(2.0, 3.0, 2.0),
+      mundy::Vector3d(3.0, 3.0, 2.0), mundy::Vector3d(3.0, 3.0, 3.0), mundy::Vector3d(3.0, 2.0, 3.0),
+      mundy::Vector3d(3.0, 2.0, 2.0), mundy::Vector3d(2.0, 2.0, 2.0), mundy::Vector3d(2.0, 2.0, 3.0),
+      mundy::Vector3d(2.0, 1.0, 3.0), mundy::Vector3d(2.0, 1.0, 2.0), mundy::Vector3d(3.0, 1.0, 2.0),
+      mundy::Vector3d(3.0, 1.0, 3.0), mundy::Vector3d(3.0, 0.0, 3.0), mundy::Vector3d(3.0, 0.0, 2.0),
+      mundy::Vector3d(2.0, 0.0, 2.0), mundy::Vector3d(2.0, 0.0, 3.0), mundy::Vector3d(1.0, 0.0, 3.0),
+      mundy::Vector3d(1.0, 1.0, 3.0), mundy::Vector3d(1.0, 1.0, 2.0), mundy::Vector3d(1.0, 0.0, 2.0),
+      mundy::Vector3d(0.0, 0.0, 2.0), mundy::Vector3d(0.0, 1.0, 2.0), mundy::Vector3d(0.0, 1.0, 3.0),
+      mundy::Vector3d(0.0, 0.0, 3.0)};
 
   for (size_t i = 0; i < expected_position_array.size(); ++i) {
     ASSERT_TRUE(is_close(position_array[i], expected_position_array[i]));
@@ -108,186 +106,186 @@ TEST(Hilbert3D, Cube4) {
 TEST(Hilbert3D, Cube8) {
   size_t s = 8;
   size_t ind = 0;
-  std::vector<mundy::math::Vector3d> position_array(s * s * s);
-  mundy::math::Vector3d current_position(0.0, 0.0, 0.0);
-  mundy::math::Vector3d dr1(1.0, 0.0, 0.0);
-  mundy::math::Vector3d dr2(0.0, 1.0, 0.0);
-  mundy::math::Vector3d dr3(0.0, 0.0, 1.0);
+  std::vector<mundy::Vector3d> position_array(s * s * s);
+  mundy::Vector3d current_position(0.0, 0.0, 0.0);
+  mundy::Vector3d dr1(1.0, 0.0, 0.0);
+  mundy::Vector3d dr2(0.0, 1.0, 0.0);
+  mundy::Vector3d dr3(0.0, 0.0, 1.0);
 
   ind = hilbert_3d(s, ind, position_array, current_position, dr1, dr2, dr3);
 
-  std::vector<mundy::math::Vector3d> expected_position_array = {
-      mundy::math::Vector3d(0.0, 0.0, 0.0), mundy::math::Vector3d(0.0, 0.0, 1.0), mundy::math::Vector3d(1.0, 0.0, 1.0),
-      mundy::math::Vector3d(1.0, 0.0, 0.0), mundy::math::Vector3d(1.0, 1.0, 0.0), mundy::math::Vector3d(1.0, 1.0, 1.0),
-      mundy::math::Vector3d(0.0, 1.0, 1.0), mundy::math::Vector3d(0.0, 1.0, 0.0), mundy::math::Vector3d(0.0, 2.0, 0.0),
-      mundy::math::Vector3d(1.0, 2.0, 0.0), mundy::math::Vector3d(1.0, 3.0, 0.0), mundy::math::Vector3d(0.0, 3.0, 0.0),
-      mundy::math::Vector3d(0.0, 3.0, 1.0), mundy::math::Vector3d(1.0, 3.0, 1.0), mundy::math::Vector3d(1.0, 2.0, 1.0),
-      mundy::math::Vector3d(0.0, 2.0, 1.0), mundy::math::Vector3d(0.0, 2.0, 2.0), mundy::math::Vector3d(1.0, 2.0, 2.0),
-      mundy::math::Vector3d(1.0, 3.0, 2.0), mundy::math::Vector3d(0.0, 3.0, 2.0), mundy::math::Vector3d(0.0, 3.0, 3.0),
-      mundy::math::Vector3d(1.0, 3.0, 3.0), mundy::math::Vector3d(1.0, 2.0, 3.0), mundy::math::Vector3d(0.0, 2.0, 3.0),
-      mundy::math::Vector3d(0.0, 1.0, 3.0), mundy::math::Vector3d(0.0, 0.0, 3.0), mundy::math::Vector3d(0.0, 0.0, 2.0),
-      mundy::math::Vector3d(0.0, 1.0, 2.0), mundy::math::Vector3d(1.0, 1.0, 2.0), mundy::math::Vector3d(1.0, 0.0, 2.0),
-      mundy::math::Vector3d(1.0, 0.0, 3.0), mundy::math::Vector3d(1.0, 1.0, 3.0), mundy::math::Vector3d(2.0, 1.0, 3.0),
-      mundy::math::Vector3d(2.0, 0.0, 3.0), mundy::math::Vector3d(2.0, 0.0, 2.0), mundy::math::Vector3d(2.0, 1.0, 2.0),
-      mundy::math::Vector3d(3.0, 1.0, 2.0), mundy::math::Vector3d(3.0, 0.0, 2.0), mundy::math::Vector3d(3.0, 0.0, 3.0),
-      mundy::math::Vector3d(3.0, 1.0, 3.0), mundy::math::Vector3d(3.0, 2.0, 3.0), mundy::math::Vector3d(2.0, 2.0, 3.0),
-      mundy::math::Vector3d(2.0, 3.0, 3.0), mundy::math::Vector3d(3.0, 3.0, 3.0), mundy::math::Vector3d(3.0, 3.0, 2.0),
-      mundy::math::Vector3d(2.0, 3.0, 2.0), mundy::math::Vector3d(2.0, 2.0, 2.0), mundy::math::Vector3d(3.0, 2.0, 2.0),
-      mundy::math::Vector3d(3.0, 2.0, 1.0), mundy::math::Vector3d(2.0, 2.0, 1.0), mundy::math::Vector3d(2.0, 3.0, 1.0),
-      mundy::math::Vector3d(3.0, 3.0, 1.0), mundy::math::Vector3d(3.0, 3.0, 0.0), mundy::math::Vector3d(2.0, 3.0, 0.0),
-      mundy::math::Vector3d(2.0, 2.0, 0.0), mundy::math::Vector3d(3.0, 2.0, 0.0), mundy::math::Vector3d(3.0, 1.0, 0.0),
-      mundy::math::Vector3d(3.0, 1.0, 1.0), mundy::math::Vector3d(2.0, 1.0, 1.0), mundy::math::Vector3d(2.0, 1.0, 0.0),
-      mundy::math::Vector3d(2.0, 0.0, 0.0), mundy::math::Vector3d(2.0, 0.0, 1.0), mundy::math::Vector3d(3.0, 0.0, 1.0),
-      mundy::math::Vector3d(3.0, 0.0, 0.0), mundy::math::Vector3d(4.0, 0.0, 0.0), mundy::math::Vector3d(5.0, 0.0, 0.0),
-      mundy::math::Vector3d(5.0, 1.0, 0.0), mundy::math::Vector3d(4.0, 1.0, 0.0), mundy::math::Vector3d(4.0, 1.0, 1.0),
-      mundy::math::Vector3d(5.0, 1.0, 1.0), mundy::math::Vector3d(5.0, 0.0, 1.0), mundy::math::Vector3d(4.0, 0.0, 1.0),
-      mundy::math::Vector3d(4.0, 0.0, 2.0), mundy::math::Vector3d(4.0, 1.0, 2.0), mundy::math::Vector3d(4.0, 1.0, 3.0),
-      mundy::math::Vector3d(4.0, 0.0, 3.0), mundy::math::Vector3d(5.0, 0.0, 3.0), mundy::math::Vector3d(5.0, 1.0, 3.0),
-      mundy::math::Vector3d(5.0, 1.0, 2.0), mundy::math::Vector3d(5.0, 0.0, 2.0), mundy::math::Vector3d(6.0, 0.0, 2.0),
-      mundy::math::Vector3d(6.0, 1.0, 2.0), mundy::math::Vector3d(6.0, 1.0, 3.0), mundy::math::Vector3d(6.0, 0.0, 3.0),
-      mundy::math::Vector3d(7.0, 0.0, 3.0), mundy::math::Vector3d(7.0, 1.0, 3.0), mundy::math::Vector3d(7.0, 1.0, 2.0),
-      mundy::math::Vector3d(7.0, 0.0, 2.0), mundy::math::Vector3d(7.0, 0.0, 1.0), mundy::math::Vector3d(7.0, 0.0, 0.0),
-      mundy::math::Vector3d(6.0, 0.0, 0.0), mundy::math::Vector3d(6.0, 0.0, 1.0), mundy::math::Vector3d(6.0, 1.0, 1.0),
-      mundy::math::Vector3d(6.0, 1.0, 0.0), mundy::math::Vector3d(7.0, 1.0, 0.0), mundy::math::Vector3d(7.0, 1.0, 1.0),
-      mundy::math::Vector3d(7.0, 2.0, 1.0), mundy::math::Vector3d(7.0, 2.0, 0.0), mundy::math::Vector3d(6.0, 2.0, 0.0),
-      mundy::math::Vector3d(6.0, 2.0, 1.0), mundy::math::Vector3d(6.0, 3.0, 1.0), mundy::math::Vector3d(6.0, 3.0, 0.0),
-      mundy::math::Vector3d(7.0, 3.0, 0.0), mundy::math::Vector3d(7.0, 3.0, 1.0), mundy::math::Vector3d(7.0, 3.0, 2.0),
-      mundy::math::Vector3d(7.0, 2.0, 2.0), mundy::math::Vector3d(7.0, 2.0, 3.0), mundy::math::Vector3d(7.0, 3.0, 3.0),
-      mundy::math::Vector3d(6.0, 3.0, 3.0), mundy::math::Vector3d(6.0, 2.0, 3.0), mundy::math::Vector3d(6.0, 2.0, 2.0),
-      mundy::math::Vector3d(6.0, 3.0, 2.0), mundy::math::Vector3d(5.0, 3.0, 2.0), mundy::math::Vector3d(5.0, 2.0, 2.0),
-      mundy::math::Vector3d(5.0, 2.0, 3.0), mundy::math::Vector3d(5.0, 3.0, 3.0), mundy::math::Vector3d(4.0, 3.0, 3.0),
-      mundy::math::Vector3d(4.0, 2.0, 3.0), mundy::math::Vector3d(4.0, 2.0, 2.0), mundy::math::Vector3d(4.0, 3.0, 2.0),
-      mundy::math::Vector3d(4.0, 3.0, 1.0), mundy::math::Vector3d(5.0, 3.0, 1.0), mundy::math::Vector3d(5.0, 2.0, 1.0),
-      mundy::math::Vector3d(4.0, 2.0, 1.0), mundy::math::Vector3d(4.0, 2.0, 0.0), mundy::math::Vector3d(5.0, 2.0, 0.0),
-      mundy::math::Vector3d(5.0, 3.0, 0.0), mundy::math::Vector3d(4.0, 3.0, 0.0), mundy::math::Vector3d(4.0, 4.0, 0.0),
-      mundy::math::Vector3d(5.0, 4.0, 0.0), mundy::math::Vector3d(5.0, 5.0, 0.0), mundy::math::Vector3d(4.0, 5.0, 0.0),
-      mundy::math::Vector3d(4.0, 5.0, 1.0), mundy::math::Vector3d(5.0, 5.0, 1.0), mundy::math::Vector3d(5.0, 4.0, 1.0),
-      mundy::math::Vector3d(4.0, 4.0, 1.0), mundy::math::Vector3d(4.0, 4.0, 2.0), mundy::math::Vector3d(4.0, 5.0, 2.0),
-      mundy::math::Vector3d(4.0, 5.0, 3.0), mundy::math::Vector3d(4.0, 4.0, 3.0), mundy::math::Vector3d(5.0, 4.0, 3.0),
-      mundy::math::Vector3d(5.0, 5.0, 3.0), mundy::math::Vector3d(5.0, 5.0, 2.0), mundy::math::Vector3d(5.0, 4.0, 2.0),
-      mundy::math::Vector3d(6.0, 4.0, 2.0), mundy::math::Vector3d(6.0, 5.0, 2.0), mundy::math::Vector3d(6.0, 5.0, 3.0),
-      mundy::math::Vector3d(6.0, 4.0, 3.0), mundy::math::Vector3d(7.0, 4.0, 3.0), mundy::math::Vector3d(7.0, 5.0, 3.0),
-      mundy::math::Vector3d(7.0, 5.0, 2.0), mundy::math::Vector3d(7.0, 4.0, 2.0), mundy::math::Vector3d(7.0, 4.0, 1.0),
-      mundy::math::Vector3d(7.0, 4.0, 0.0), mundy::math::Vector3d(6.0, 4.0, 0.0), mundy::math::Vector3d(6.0, 4.0, 1.0),
-      mundy::math::Vector3d(6.0, 5.0, 1.0), mundy::math::Vector3d(6.0, 5.0, 0.0), mundy::math::Vector3d(7.0, 5.0, 0.0),
-      mundy::math::Vector3d(7.0, 5.0, 1.0), mundy::math::Vector3d(7.0, 6.0, 1.0), mundy::math::Vector3d(7.0, 6.0, 0.0),
-      mundy::math::Vector3d(6.0, 6.0, 0.0), mundy::math::Vector3d(6.0, 6.0, 1.0), mundy::math::Vector3d(6.0, 7.0, 1.0),
-      mundy::math::Vector3d(6.0, 7.0, 0.0), mundy::math::Vector3d(7.0, 7.0, 0.0), mundy::math::Vector3d(7.0, 7.0, 1.0),
-      mundy::math::Vector3d(7.0, 7.0, 2.0), mundy::math::Vector3d(7.0, 6.0, 2.0), mundy::math::Vector3d(7.0, 6.0, 3.0),
-      mundy::math::Vector3d(7.0, 7.0, 3.0), mundy::math::Vector3d(6.0, 7.0, 3.0), mundy::math::Vector3d(6.0, 6.0, 3.0),
-      mundy::math::Vector3d(6.0, 6.0, 2.0), mundy::math::Vector3d(6.0, 7.0, 2.0), mundy::math::Vector3d(5.0, 7.0, 2.0),
-      mundy::math::Vector3d(5.0, 6.0, 2.0), mundy::math::Vector3d(5.0, 6.0, 3.0), mundy::math::Vector3d(5.0, 7.0, 3.0),
-      mundy::math::Vector3d(4.0, 7.0, 3.0), mundy::math::Vector3d(4.0, 6.0, 3.0), mundy::math::Vector3d(4.0, 6.0, 2.0),
-      mundy::math::Vector3d(4.0, 7.0, 2.0), mundy::math::Vector3d(4.0, 7.0, 1.0), mundy::math::Vector3d(5.0, 7.0, 1.0),
-      mundy::math::Vector3d(5.0, 6.0, 1.0), mundy::math::Vector3d(4.0, 6.0, 1.0), mundy::math::Vector3d(4.0, 6.0, 0.0),
-      mundy::math::Vector3d(5.0, 6.0, 0.0), mundy::math::Vector3d(5.0, 7.0, 0.0), mundy::math::Vector3d(4.0, 7.0, 0.0),
-      mundy::math::Vector3d(3.0, 7.0, 0.0), mundy::math::Vector3d(3.0, 6.0, 0.0), mundy::math::Vector3d(3.0, 6.0, 1.0),
-      mundy::math::Vector3d(3.0, 7.0, 1.0), mundy::math::Vector3d(2.0, 7.0, 1.0), mundy::math::Vector3d(2.0, 6.0, 1.0),
-      mundy::math::Vector3d(2.0, 6.0, 0.0), mundy::math::Vector3d(2.0, 7.0, 0.0), mundy::math::Vector3d(1.0, 7.0, 0.0),
-      mundy::math::Vector3d(1.0, 7.0, 1.0), mundy::math::Vector3d(0.0, 7.0, 1.0), mundy::math::Vector3d(0.0, 7.0, 0.0),
-      mundy::math::Vector3d(0.0, 6.0, 0.0), mundy::math::Vector3d(0.0, 6.0, 1.0), mundy::math::Vector3d(1.0, 6.0, 1.0),
-      mundy::math::Vector3d(1.0, 6.0, 0.0), mundy::math::Vector3d(1.0, 5.0, 0.0), mundy::math::Vector3d(1.0, 5.0, 1.0),
-      mundy::math::Vector3d(0.0, 5.0, 1.0), mundy::math::Vector3d(0.0, 5.0, 0.0), mundy::math::Vector3d(0.0, 4.0, 0.0),
-      mundy::math::Vector3d(0.0, 4.0, 1.0), mundy::math::Vector3d(1.0, 4.0, 1.0), mundy::math::Vector3d(1.0, 4.0, 0.0),
-      mundy::math::Vector3d(2.0, 4.0, 0.0), mundy::math::Vector3d(3.0, 4.0, 0.0), mundy::math::Vector3d(3.0, 5.0, 0.0),
-      mundy::math::Vector3d(2.0, 5.0, 0.0), mundy::math::Vector3d(2.0, 5.0, 1.0), mundy::math::Vector3d(3.0, 5.0, 1.0),
-      mundy::math::Vector3d(3.0, 4.0, 1.0), mundy::math::Vector3d(2.0, 4.0, 1.0), mundy::math::Vector3d(2.0, 4.0, 2.0),
-      mundy::math::Vector3d(3.0, 4.0, 2.0), mundy::math::Vector3d(3.0, 5.0, 2.0), mundy::math::Vector3d(2.0, 5.0, 2.0),
-      mundy::math::Vector3d(2.0, 5.0, 3.0), mundy::math::Vector3d(3.0, 5.0, 3.0), mundy::math::Vector3d(3.0, 4.0, 3.0),
-      mundy::math::Vector3d(2.0, 4.0, 3.0), mundy::math::Vector3d(1.0, 4.0, 3.0), mundy::math::Vector3d(1.0, 4.0, 2.0),
-      mundy::math::Vector3d(0.0, 4.0, 2.0), mundy::math::Vector3d(0.0, 4.0, 3.0), mundy::math::Vector3d(0.0, 5.0, 3.0),
-      mundy::math::Vector3d(0.0, 5.0, 2.0), mundy::math::Vector3d(1.0, 5.0, 2.0), mundy::math::Vector3d(1.0, 5.0, 3.0),
-      mundy::math::Vector3d(1.0, 6.0, 3.0), mundy::math::Vector3d(1.0, 6.0, 2.0), mundy::math::Vector3d(0.0, 6.0, 2.0),
-      mundy::math::Vector3d(0.0, 6.0, 3.0), mundy::math::Vector3d(0.0, 7.0, 3.0), mundy::math::Vector3d(0.0, 7.0, 2.0),
-      mundy::math::Vector3d(1.0, 7.0, 2.0), mundy::math::Vector3d(1.0, 7.0, 3.0), mundy::math::Vector3d(2.0, 7.0, 3.0),
-      mundy::math::Vector3d(2.0, 6.0, 3.0), mundy::math::Vector3d(2.0, 6.0, 2.0), mundy::math::Vector3d(2.0, 7.0, 2.0),
-      mundy::math::Vector3d(3.0, 7.0, 2.0), mundy::math::Vector3d(3.0, 6.0, 2.0), mundy::math::Vector3d(3.0, 6.0, 3.0),
-      mundy::math::Vector3d(3.0, 7.0, 3.0), mundy::math::Vector3d(3.0, 7.0, 4.0), mundy::math::Vector3d(3.0, 6.0, 4.0),
-      mundy::math::Vector3d(3.0, 6.0, 5.0), mundy::math::Vector3d(3.0, 7.0, 5.0), mundy::math::Vector3d(2.0, 7.0, 5.0),
-      mundy::math::Vector3d(2.0, 6.0, 5.0), mundy::math::Vector3d(2.0, 6.0, 4.0), mundy::math::Vector3d(2.0, 7.0, 4.0),
-      mundy::math::Vector3d(1.0, 7.0, 4.0), mundy::math::Vector3d(1.0, 7.0, 5.0), mundy::math::Vector3d(0.0, 7.0, 5.0),
-      mundy::math::Vector3d(0.0, 7.0, 4.0), mundy::math::Vector3d(0.0, 6.0, 4.0), mundy::math::Vector3d(0.0, 6.0, 5.0),
-      mundy::math::Vector3d(1.0, 6.0, 5.0), mundy::math::Vector3d(1.0, 6.0, 4.0), mundy::math::Vector3d(1.0, 5.0, 4.0),
-      mundy::math::Vector3d(1.0, 5.0, 5.0), mundy::math::Vector3d(0.0, 5.0, 5.0), mundy::math::Vector3d(0.0, 5.0, 4.0),
-      mundy::math::Vector3d(0.0, 4.0, 4.0), mundy::math::Vector3d(0.0, 4.0, 5.0), mundy::math::Vector3d(1.0, 4.0, 5.0),
-      mundy::math::Vector3d(1.0, 4.0, 4.0), mundy::math::Vector3d(2.0, 4.0, 4.0), mundy::math::Vector3d(3.0, 4.0, 4.0),
-      mundy::math::Vector3d(3.0, 5.0, 4.0), mundy::math::Vector3d(2.0, 5.0, 4.0), mundy::math::Vector3d(2.0, 5.0, 5.0),
-      mundy::math::Vector3d(3.0, 5.0, 5.0), mundy::math::Vector3d(3.0, 4.0, 5.0), mundy::math::Vector3d(2.0, 4.0, 5.0),
-      mundy::math::Vector3d(2.0, 4.0, 6.0), mundy::math::Vector3d(3.0, 4.0, 6.0), mundy::math::Vector3d(3.0, 5.0, 6.0),
-      mundy::math::Vector3d(2.0, 5.0, 6.0), mundy::math::Vector3d(2.0, 5.0, 7.0), mundy::math::Vector3d(3.0, 5.0, 7.0),
-      mundy::math::Vector3d(3.0, 4.0, 7.0), mundy::math::Vector3d(2.0, 4.0, 7.0), mundy::math::Vector3d(1.0, 4.0, 7.0),
-      mundy::math::Vector3d(1.0, 4.0, 6.0), mundy::math::Vector3d(0.0, 4.0, 6.0), mundy::math::Vector3d(0.0, 4.0, 7.0),
-      mundy::math::Vector3d(0.0, 5.0, 7.0), mundy::math::Vector3d(0.0, 5.0, 6.0), mundy::math::Vector3d(1.0, 5.0, 6.0),
-      mundy::math::Vector3d(1.0, 5.0, 7.0), mundy::math::Vector3d(1.0, 6.0, 7.0), mundy::math::Vector3d(1.0, 6.0, 6.0),
-      mundy::math::Vector3d(0.0, 6.0, 6.0), mundy::math::Vector3d(0.0, 6.0, 7.0), mundy::math::Vector3d(0.0, 7.0, 7.0),
-      mundy::math::Vector3d(0.0, 7.0, 6.0), mundy::math::Vector3d(1.0, 7.0, 6.0), mundy::math::Vector3d(1.0, 7.0, 7.0),
-      mundy::math::Vector3d(2.0, 7.0, 7.0), mundy::math::Vector3d(2.0, 6.0, 7.0), mundy::math::Vector3d(2.0, 6.0, 6.0),
-      mundy::math::Vector3d(2.0, 7.0, 6.0), mundy::math::Vector3d(3.0, 7.0, 6.0), mundy::math::Vector3d(3.0, 6.0, 6.0),
-      mundy::math::Vector3d(3.0, 6.0, 7.0), mundy::math::Vector3d(3.0, 7.0, 7.0), mundy::math::Vector3d(4.0, 7.0, 7.0),
-      mundy::math::Vector3d(5.0, 7.0, 7.0), mundy::math::Vector3d(5.0, 6.0, 7.0), mundy::math::Vector3d(4.0, 6.0, 7.0),
-      mundy::math::Vector3d(4.0, 6.0, 6.0), mundy::math::Vector3d(5.0, 6.0, 6.0), mundy::math::Vector3d(5.0, 7.0, 6.0),
-      mundy::math::Vector3d(4.0, 7.0, 6.0), mundy::math::Vector3d(4.0, 7.0, 5.0), mundy::math::Vector3d(4.0, 6.0, 5.0),
-      mundy::math::Vector3d(4.0, 6.0, 4.0), mundy::math::Vector3d(4.0, 7.0, 4.0), mundy::math::Vector3d(5.0, 7.0, 4.0),
-      mundy::math::Vector3d(5.0, 6.0, 4.0), mundy::math::Vector3d(5.0, 6.0, 5.0), mundy::math::Vector3d(5.0, 7.0, 5.0),
-      mundy::math::Vector3d(6.0, 7.0, 5.0), mundy::math::Vector3d(6.0, 6.0, 5.0), mundy::math::Vector3d(6.0, 6.0, 4.0),
-      mundy::math::Vector3d(6.0, 7.0, 4.0), mundy::math::Vector3d(7.0, 7.0, 4.0), mundy::math::Vector3d(7.0, 6.0, 4.0),
-      mundy::math::Vector3d(7.0, 6.0, 5.0), mundy::math::Vector3d(7.0, 7.0, 5.0), mundy::math::Vector3d(7.0, 7.0, 6.0),
-      mundy::math::Vector3d(7.0, 7.0, 7.0), mundy::math::Vector3d(6.0, 7.0, 7.0), mundy::math::Vector3d(6.0, 7.0, 6.0),
-      mundy::math::Vector3d(6.0, 6.0, 6.0), mundy::math::Vector3d(6.0, 6.0, 7.0), mundy::math::Vector3d(7.0, 6.0, 7.0),
-      mundy::math::Vector3d(7.0, 6.0, 6.0), mundy::math::Vector3d(7.0, 5.0, 6.0), mundy::math::Vector3d(7.0, 5.0, 7.0),
-      mundy::math::Vector3d(6.0, 5.0, 7.0), mundy::math::Vector3d(6.0, 5.0, 6.0), mundy::math::Vector3d(6.0, 4.0, 6.0),
-      mundy::math::Vector3d(6.0, 4.0, 7.0), mundy::math::Vector3d(7.0, 4.0, 7.0), mundy::math::Vector3d(7.0, 4.0, 6.0),
-      mundy::math::Vector3d(7.0, 4.0, 5.0), mundy::math::Vector3d(7.0, 5.0, 5.0), mundy::math::Vector3d(7.0, 5.0, 4.0),
-      mundy::math::Vector3d(7.0, 4.0, 4.0), mundy::math::Vector3d(6.0, 4.0, 4.0), mundy::math::Vector3d(6.0, 5.0, 4.0),
-      mundy::math::Vector3d(6.0, 5.0, 5.0), mundy::math::Vector3d(6.0, 4.0, 5.0), mundy::math::Vector3d(5.0, 4.0, 5.0),
-      mundy::math::Vector3d(5.0, 5.0, 5.0), mundy::math::Vector3d(5.0, 5.0, 4.0), mundy::math::Vector3d(5.0, 4.0, 4.0),
-      mundy::math::Vector3d(4.0, 4.0, 4.0), mundy::math::Vector3d(4.0, 5.0, 4.0), mundy::math::Vector3d(4.0, 5.0, 5.0),
-      mundy::math::Vector3d(4.0, 4.0, 5.0), mundy::math::Vector3d(4.0, 4.0, 6.0), mundy::math::Vector3d(5.0, 4.0, 6.0),
-      mundy::math::Vector3d(5.0, 5.0, 6.0), mundy::math::Vector3d(4.0, 5.0, 6.0), mundy::math::Vector3d(4.0, 5.0, 7.0),
-      mundy::math::Vector3d(5.0, 5.0, 7.0), mundy::math::Vector3d(5.0, 4.0, 7.0), mundy::math::Vector3d(4.0, 4.0, 7.0),
-      mundy::math::Vector3d(4.0, 3.0, 7.0), mundy::math::Vector3d(5.0, 3.0, 7.0), mundy::math::Vector3d(5.0, 2.0, 7.0),
-      mundy::math::Vector3d(4.0, 2.0, 7.0), mundy::math::Vector3d(4.0, 2.0, 6.0), mundy::math::Vector3d(5.0, 2.0, 6.0),
-      mundy::math::Vector3d(5.0, 3.0, 6.0), mundy::math::Vector3d(4.0, 3.0, 6.0), mundy::math::Vector3d(4.0, 3.0, 5.0),
-      mundy::math::Vector3d(4.0, 2.0, 5.0), mundy::math::Vector3d(4.0, 2.0, 4.0), mundy::math::Vector3d(4.0, 3.0, 4.0),
-      mundy::math::Vector3d(5.0, 3.0, 4.0), mundy::math::Vector3d(5.0, 2.0, 4.0), mundy::math::Vector3d(5.0, 2.0, 5.0),
-      mundy::math::Vector3d(5.0, 3.0, 5.0), mundy::math::Vector3d(6.0, 3.0, 5.0), mundy::math::Vector3d(6.0, 2.0, 5.0),
-      mundy::math::Vector3d(6.0, 2.0, 4.0), mundy::math::Vector3d(6.0, 3.0, 4.0), mundy::math::Vector3d(7.0, 3.0, 4.0),
-      mundy::math::Vector3d(7.0, 2.0, 4.0), mundy::math::Vector3d(7.0, 2.0, 5.0), mundy::math::Vector3d(7.0, 3.0, 5.0),
-      mundy::math::Vector3d(7.0, 3.0, 6.0), mundy::math::Vector3d(7.0, 3.0, 7.0), mundy::math::Vector3d(6.0, 3.0, 7.0),
-      mundy::math::Vector3d(6.0, 3.0, 6.0), mundy::math::Vector3d(6.0, 2.0, 6.0), mundy::math::Vector3d(6.0, 2.0, 7.0),
-      mundy::math::Vector3d(7.0, 2.0, 7.0), mundy::math::Vector3d(7.0, 2.0, 6.0), mundy::math::Vector3d(7.0, 1.0, 6.0),
-      mundy::math::Vector3d(7.0, 1.0, 7.0), mundy::math::Vector3d(6.0, 1.0, 7.0), mundy::math::Vector3d(6.0, 1.0, 6.0),
-      mundy::math::Vector3d(6.0, 0.0, 6.0), mundy::math::Vector3d(6.0, 0.0, 7.0), mundy::math::Vector3d(7.0, 0.0, 7.0),
-      mundy::math::Vector3d(7.0, 0.0, 6.0), mundy::math::Vector3d(7.0, 0.0, 5.0), mundy::math::Vector3d(7.0, 1.0, 5.0),
-      mundy::math::Vector3d(7.0, 1.0, 4.0), mundy::math::Vector3d(7.0, 0.0, 4.0), mundy::math::Vector3d(6.0, 0.0, 4.0),
-      mundy::math::Vector3d(6.0, 1.0, 4.0), mundy::math::Vector3d(6.0, 1.0, 5.0), mundy::math::Vector3d(6.0, 0.0, 5.0),
-      mundy::math::Vector3d(5.0, 0.0, 5.0), mundy::math::Vector3d(5.0, 1.0, 5.0), mundy::math::Vector3d(5.0, 1.0, 4.0),
-      mundy::math::Vector3d(5.0, 0.0, 4.0), mundy::math::Vector3d(4.0, 0.0, 4.0), mundy::math::Vector3d(4.0, 1.0, 4.0),
-      mundy::math::Vector3d(4.0, 1.0, 5.0), mundy::math::Vector3d(4.0, 0.0, 5.0), mundy::math::Vector3d(4.0, 0.0, 6.0),
-      mundy::math::Vector3d(5.0, 0.0, 6.0), mundy::math::Vector3d(5.0, 1.0, 6.0), mundy::math::Vector3d(4.0, 1.0, 6.0),
-      mundy::math::Vector3d(4.0, 1.0, 7.0), mundy::math::Vector3d(5.0, 1.0, 7.0), mundy::math::Vector3d(5.0, 0.0, 7.0),
-      mundy::math::Vector3d(4.0, 0.0, 7.0), mundy::math::Vector3d(3.0, 0.0, 7.0), mundy::math::Vector3d(3.0, 0.0, 6.0),
-      mundy::math::Vector3d(2.0, 0.0, 6.0), mundy::math::Vector3d(2.0, 0.0, 7.0), mundy::math::Vector3d(2.0, 1.0, 7.0),
-      mundy::math::Vector3d(2.0, 1.0, 6.0), mundy::math::Vector3d(3.0, 1.0, 6.0), mundy::math::Vector3d(3.0, 1.0, 7.0),
-      mundy::math::Vector3d(3.0, 2.0, 7.0), mundy::math::Vector3d(2.0, 2.0, 7.0), mundy::math::Vector3d(2.0, 3.0, 7.0),
-      mundy::math::Vector3d(3.0, 3.0, 7.0), mundy::math::Vector3d(3.0, 3.0, 6.0), mundy::math::Vector3d(2.0, 3.0, 6.0),
-      mundy::math::Vector3d(2.0, 2.0, 6.0), mundy::math::Vector3d(3.0, 2.0, 6.0), mundy::math::Vector3d(3.0, 2.0, 5.0),
-      mundy::math::Vector3d(2.0, 2.0, 5.0), mundy::math::Vector3d(2.0, 3.0, 5.0), mundy::math::Vector3d(3.0, 3.0, 5.0),
-      mundy::math::Vector3d(3.0, 3.0, 4.0), mundy::math::Vector3d(2.0, 3.0, 4.0), mundy::math::Vector3d(2.0, 2.0, 4.0),
-      mundy::math::Vector3d(3.0, 2.0, 4.0), mundy::math::Vector3d(3.0, 1.0, 4.0), mundy::math::Vector3d(3.0, 0.0, 4.0),
-      mundy::math::Vector3d(3.0, 0.0, 5.0), mundy::math::Vector3d(3.0, 1.0, 5.0), mundy::math::Vector3d(2.0, 1.0, 5.0),
-      mundy::math::Vector3d(2.0, 0.0, 5.0), mundy::math::Vector3d(2.0, 0.0, 4.0), mundy::math::Vector3d(2.0, 1.0, 4.0),
-      mundy::math::Vector3d(1.0, 1.0, 4.0), mundy::math::Vector3d(1.0, 0.0, 4.0), mundy::math::Vector3d(1.0, 0.0, 5.0),
-      mundy::math::Vector3d(1.0, 1.0, 5.0), mundy::math::Vector3d(0.0, 1.0, 5.0), mundy::math::Vector3d(0.0, 0.0, 5.0),
-      mundy::math::Vector3d(0.0, 0.0, 4.0), mundy::math::Vector3d(0.0, 1.0, 4.0), mundy::math::Vector3d(0.0, 2.0, 4.0),
-      mundy::math::Vector3d(1.0, 2.0, 4.0), mundy::math::Vector3d(1.0, 3.0, 4.0), mundy::math::Vector3d(0.0, 3.0, 4.0),
-      mundy::math::Vector3d(0.0, 3.0, 5.0), mundy::math::Vector3d(1.0, 3.0, 5.0), mundy::math::Vector3d(1.0, 2.0, 5.0),
-      mundy::math::Vector3d(0.0, 2.0, 5.0), mundy::math::Vector3d(0.0, 2.0, 6.0), mundy::math::Vector3d(1.0, 2.0, 6.0),
-      mundy::math::Vector3d(1.0, 3.0, 6.0), mundy::math::Vector3d(0.0, 3.0, 6.0), mundy::math::Vector3d(0.0, 3.0, 7.0),
-      mundy::math::Vector3d(1.0, 3.0, 7.0), mundy::math::Vector3d(1.0, 2.0, 7.0), mundy::math::Vector3d(0.0, 2.0, 7.0),
-      mundy::math::Vector3d(0.0, 1.0, 7.0), mundy::math::Vector3d(0.0, 1.0, 6.0), mundy::math::Vector3d(1.0, 1.0, 6.0),
-      mundy::math::Vector3d(1.0, 1.0, 7.0), mundy::math::Vector3d(1.0, 0.0, 7.0), mundy::math::Vector3d(1.0, 0.0, 6.0),
-      mundy::math::Vector3d(0.0, 0.0, 6.0), mundy::math::Vector3d(0.0, 0.0, 7.0)};
+  std::vector<mundy::Vector3d> expected_position_array = {
+      mundy::Vector3d(0.0, 0.0, 0.0), mundy::Vector3d(0.0, 0.0, 1.0), mundy::Vector3d(1.0, 0.0, 1.0),
+      mundy::Vector3d(1.0, 0.0, 0.0), mundy::Vector3d(1.0, 1.0, 0.0), mundy::Vector3d(1.0, 1.0, 1.0),
+      mundy::Vector3d(0.0, 1.0, 1.0), mundy::Vector3d(0.0, 1.0, 0.0), mundy::Vector3d(0.0, 2.0, 0.0),
+      mundy::Vector3d(1.0, 2.0, 0.0), mundy::Vector3d(1.0, 3.0, 0.0), mundy::Vector3d(0.0, 3.0, 0.0),
+      mundy::Vector3d(0.0, 3.0, 1.0), mundy::Vector3d(1.0, 3.0, 1.0), mundy::Vector3d(1.0, 2.0, 1.0),
+      mundy::Vector3d(0.0, 2.0, 1.0), mundy::Vector3d(0.0, 2.0, 2.0), mundy::Vector3d(1.0, 2.0, 2.0),
+      mundy::Vector3d(1.0, 3.0, 2.0), mundy::Vector3d(0.0, 3.0, 2.0), mundy::Vector3d(0.0, 3.0, 3.0),
+      mundy::Vector3d(1.0, 3.0, 3.0), mundy::Vector3d(1.0, 2.0, 3.0), mundy::Vector3d(0.0, 2.0, 3.0),
+      mundy::Vector3d(0.0, 1.0, 3.0), mundy::Vector3d(0.0, 0.0, 3.0), mundy::Vector3d(0.0, 0.0, 2.0),
+      mundy::Vector3d(0.0, 1.0, 2.0), mundy::Vector3d(1.0, 1.0, 2.0), mundy::Vector3d(1.0, 0.0, 2.0),
+      mundy::Vector3d(1.0, 0.0, 3.0), mundy::Vector3d(1.0, 1.0, 3.0), mundy::Vector3d(2.0, 1.0, 3.0),
+      mundy::Vector3d(2.0, 0.0, 3.0), mundy::Vector3d(2.0, 0.0, 2.0), mundy::Vector3d(2.0, 1.0, 2.0),
+      mundy::Vector3d(3.0, 1.0, 2.0), mundy::Vector3d(3.0, 0.0, 2.0), mundy::Vector3d(3.0, 0.0, 3.0),
+      mundy::Vector3d(3.0, 1.0, 3.0), mundy::Vector3d(3.0, 2.0, 3.0), mundy::Vector3d(2.0, 2.0, 3.0),
+      mundy::Vector3d(2.0, 3.0, 3.0), mundy::Vector3d(3.0, 3.0, 3.0), mundy::Vector3d(3.0, 3.0, 2.0),
+      mundy::Vector3d(2.0, 3.0, 2.0), mundy::Vector3d(2.0, 2.0, 2.0), mundy::Vector3d(3.0, 2.0, 2.0),
+      mundy::Vector3d(3.0, 2.0, 1.0), mundy::Vector3d(2.0, 2.0, 1.0), mundy::Vector3d(2.0, 3.0, 1.0),
+      mundy::Vector3d(3.0, 3.0, 1.0), mundy::Vector3d(3.0, 3.0, 0.0), mundy::Vector3d(2.0, 3.0, 0.0),
+      mundy::Vector3d(2.0, 2.0, 0.0), mundy::Vector3d(3.0, 2.0, 0.0), mundy::Vector3d(3.0, 1.0, 0.0),
+      mundy::Vector3d(3.0, 1.0, 1.0), mundy::Vector3d(2.0, 1.0, 1.0), mundy::Vector3d(2.0, 1.0, 0.0),
+      mundy::Vector3d(2.0, 0.0, 0.0), mundy::Vector3d(2.0, 0.0, 1.0), mundy::Vector3d(3.0, 0.0, 1.0),
+      mundy::Vector3d(3.0, 0.0, 0.0), mundy::Vector3d(4.0, 0.0, 0.0), mundy::Vector3d(5.0, 0.0, 0.0),
+      mundy::Vector3d(5.0, 1.0, 0.0), mundy::Vector3d(4.0, 1.0, 0.0), mundy::Vector3d(4.0, 1.0, 1.0),
+      mundy::Vector3d(5.0, 1.0, 1.0), mundy::Vector3d(5.0, 0.0, 1.0), mundy::Vector3d(4.0, 0.0, 1.0),
+      mundy::Vector3d(4.0, 0.0, 2.0), mundy::Vector3d(4.0, 1.0, 2.0), mundy::Vector3d(4.0, 1.0, 3.0),
+      mundy::Vector3d(4.0, 0.0, 3.0), mundy::Vector3d(5.0, 0.0, 3.0), mundy::Vector3d(5.0, 1.0, 3.0),
+      mundy::Vector3d(5.0, 1.0, 2.0), mundy::Vector3d(5.0, 0.0, 2.0), mundy::Vector3d(6.0, 0.0, 2.0),
+      mundy::Vector3d(6.0, 1.0, 2.0), mundy::Vector3d(6.0, 1.0, 3.0), mundy::Vector3d(6.0, 0.0, 3.0),
+      mundy::Vector3d(7.0, 0.0, 3.0), mundy::Vector3d(7.0, 1.0, 3.0), mundy::Vector3d(7.0, 1.0, 2.0),
+      mundy::Vector3d(7.0, 0.0, 2.0), mundy::Vector3d(7.0, 0.0, 1.0), mundy::Vector3d(7.0, 0.0, 0.0),
+      mundy::Vector3d(6.0, 0.0, 0.0), mundy::Vector3d(6.0, 0.0, 1.0), mundy::Vector3d(6.0, 1.0, 1.0),
+      mundy::Vector3d(6.0, 1.0, 0.0), mundy::Vector3d(7.0, 1.0, 0.0), mundy::Vector3d(7.0, 1.0, 1.0),
+      mundy::Vector3d(7.0, 2.0, 1.0), mundy::Vector3d(7.0, 2.0, 0.0), mundy::Vector3d(6.0, 2.0, 0.0),
+      mundy::Vector3d(6.0, 2.0, 1.0), mundy::Vector3d(6.0, 3.0, 1.0), mundy::Vector3d(6.0, 3.0, 0.0),
+      mundy::Vector3d(7.0, 3.0, 0.0), mundy::Vector3d(7.0, 3.0, 1.0), mundy::Vector3d(7.0, 3.0, 2.0),
+      mundy::Vector3d(7.0, 2.0, 2.0), mundy::Vector3d(7.0, 2.0, 3.0), mundy::Vector3d(7.0, 3.0, 3.0),
+      mundy::Vector3d(6.0, 3.0, 3.0), mundy::Vector3d(6.0, 2.0, 3.0), mundy::Vector3d(6.0, 2.0, 2.0),
+      mundy::Vector3d(6.0, 3.0, 2.0), mundy::Vector3d(5.0, 3.0, 2.0), mundy::Vector3d(5.0, 2.0, 2.0),
+      mundy::Vector3d(5.0, 2.0, 3.0), mundy::Vector3d(5.0, 3.0, 3.0), mundy::Vector3d(4.0, 3.0, 3.0),
+      mundy::Vector3d(4.0, 2.0, 3.0), mundy::Vector3d(4.0, 2.0, 2.0), mundy::Vector3d(4.0, 3.0, 2.0),
+      mundy::Vector3d(4.0, 3.0, 1.0), mundy::Vector3d(5.0, 3.0, 1.0), mundy::Vector3d(5.0, 2.0, 1.0),
+      mundy::Vector3d(4.0, 2.0, 1.0), mundy::Vector3d(4.0, 2.0, 0.0), mundy::Vector3d(5.0, 2.0, 0.0),
+      mundy::Vector3d(5.0, 3.0, 0.0), mundy::Vector3d(4.0, 3.0, 0.0), mundy::Vector3d(4.0, 4.0, 0.0),
+      mundy::Vector3d(5.0, 4.0, 0.0), mundy::Vector3d(5.0, 5.0, 0.0), mundy::Vector3d(4.0, 5.0, 0.0),
+      mundy::Vector3d(4.0, 5.0, 1.0), mundy::Vector3d(5.0, 5.0, 1.0), mundy::Vector3d(5.0, 4.0, 1.0),
+      mundy::Vector3d(4.0, 4.0, 1.0), mundy::Vector3d(4.0, 4.0, 2.0), mundy::Vector3d(4.0, 5.0, 2.0),
+      mundy::Vector3d(4.0, 5.0, 3.0), mundy::Vector3d(4.0, 4.0, 3.0), mundy::Vector3d(5.0, 4.0, 3.0),
+      mundy::Vector3d(5.0, 5.0, 3.0), mundy::Vector3d(5.0, 5.0, 2.0), mundy::Vector3d(5.0, 4.0, 2.0),
+      mundy::Vector3d(6.0, 4.0, 2.0), mundy::Vector3d(6.0, 5.0, 2.0), mundy::Vector3d(6.0, 5.0, 3.0),
+      mundy::Vector3d(6.0, 4.0, 3.0), mundy::Vector3d(7.0, 4.0, 3.0), mundy::Vector3d(7.0, 5.0, 3.0),
+      mundy::Vector3d(7.0, 5.0, 2.0), mundy::Vector3d(7.0, 4.0, 2.0), mundy::Vector3d(7.0, 4.0, 1.0),
+      mundy::Vector3d(7.0, 4.0, 0.0), mundy::Vector3d(6.0, 4.0, 0.0), mundy::Vector3d(6.0, 4.0, 1.0),
+      mundy::Vector3d(6.0, 5.0, 1.0), mundy::Vector3d(6.0, 5.0, 0.0), mundy::Vector3d(7.0, 5.0, 0.0),
+      mundy::Vector3d(7.0, 5.0, 1.0), mundy::Vector3d(7.0, 6.0, 1.0), mundy::Vector3d(7.0, 6.0, 0.0),
+      mundy::Vector3d(6.0, 6.0, 0.0), mundy::Vector3d(6.0, 6.0, 1.0), mundy::Vector3d(6.0, 7.0, 1.0),
+      mundy::Vector3d(6.0, 7.0, 0.0), mundy::Vector3d(7.0, 7.0, 0.0), mundy::Vector3d(7.0, 7.0, 1.0),
+      mundy::Vector3d(7.0, 7.0, 2.0), mundy::Vector3d(7.0, 6.0, 2.0), mundy::Vector3d(7.0, 6.0, 3.0),
+      mundy::Vector3d(7.0, 7.0, 3.0), mundy::Vector3d(6.0, 7.0, 3.0), mundy::Vector3d(6.0, 6.0, 3.0),
+      mundy::Vector3d(6.0, 6.0, 2.0), mundy::Vector3d(6.0, 7.0, 2.0), mundy::Vector3d(5.0, 7.0, 2.0),
+      mundy::Vector3d(5.0, 6.0, 2.0), mundy::Vector3d(5.0, 6.0, 3.0), mundy::Vector3d(5.0, 7.0, 3.0),
+      mundy::Vector3d(4.0, 7.0, 3.0), mundy::Vector3d(4.0, 6.0, 3.0), mundy::Vector3d(4.0, 6.0, 2.0),
+      mundy::Vector3d(4.0, 7.0, 2.0), mundy::Vector3d(4.0, 7.0, 1.0), mundy::Vector3d(5.0, 7.0, 1.0),
+      mundy::Vector3d(5.0, 6.0, 1.0), mundy::Vector3d(4.0, 6.0, 1.0), mundy::Vector3d(4.0, 6.0, 0.0),
+      mundy::Vector3d(5.0, 6.0, 0.0), mundy::Vector3d(5.0, 7.0, 0.0), mundy::Vector3d(4.0, 7.0, 0.0),
+      mundy::Vector3d(3.0, 7.0, 0.0), mundy::Vector3d(3.0, 6.0, 0.0), mundy::Vector3d(3.0, 6.0, 1.0),
+      mundy::Vector3d(3.0, 7.0, 1.0), mundy::Vector3d(2.0, 7.0, 1.0), mundy::Vector3d(2.0, 6.0, 1.0),
+      mundy::Vector3d(2.0, 6.0, 0.0), mundy::Vector3d(2.0, 7.0, 0.0), mundy::Vector3d(1.0, 7.0, 0.0),
+      mundy::Vector3d(1.0, 7.0, 1.0), mundy::Vector3d(0.0, 7.0, 1.0), mundy::Vector3d(0.0, 7.0, 0.0),
+      mundy::Vector3d(0.0, 6.0, 0.0), mundy::Vector3d(0.0, 6.0, 1.0), mundy::Vector3d(1.0, 6.0, 1.0),
+      mundy::Vector3d(1.0, 6.0, 0.0), mundy::Vector3d(1.0, 5.0, 0.0), mundy::Vector3d(1.0, 5.0, 1.0),
+      mundy::Vector3d(0.0, 5.0, 1.0), mundy::Vector3d(0.0, 5.0, 0.0), mundy::Vector3d(0.0, 4.0, 0.0),
+      mundy::Vector3d(0.0, 4.0, 1.0), mundy::Vector3d(1.0, 4.0, 1.0), mundy::Vector3d(1.0, 4.0, 0.0),
+      mundy::Vector3d(2.0, 4.0, 0.0), mundy::Vector3d(3.0, 4.0, 0.0), mundy::Vector3d(3.0, 5.0, 0.0),
+      mundy::Vector3d(2.0, 5.0, 0.0), mundy::Vector3d(2.0, 5.0, 1.0), mundy::Vector3d(3.0, 5.0, 1.0),
+      mundy::Vector3d(3.0, 4.0, 1.0), mundy::Vector3d(2.0, 4.0, 1.0), mundy::Vector3d(2.0, 4.0, 2.0),
+      mundy::Vector3d(3.0, 4.0, 2.0), mundy::Vector3d(3.0, 5.0, 2.0), mundy::Vector3d(2.0, 5.0, 2.0),
+      mundy::Vector3d(2.0, 5.0, 3.0), mundy::Vector3d(3.0, 5.0, 3.0), mundy::Vector3d(3.0, 4.0, 3.0),
+      mundy::Vector3d(2.0, 4.0, 3.0), mundy::Vector3d(1.0, 4.0, 3.0), mundy::Vector3d(1.0, 4.0, 2.0),
+      mundy::Vector3d(0.0, 4.0, 2.0), mundy::Vector3d(0.0, 4.0, 3.0), mundy::Vector3d(0.0, 5.0, 3.0),
+      mundy::Vector3d(0.0, 5.0, 2.0), mundy::Vector3d(1.0, 5.0, 2.0), mundy::Vector3d(1.0, 5.0, 3.0),
+      mundy::Vector3d(1.0, 6.0, 3.0), mundy::Vector3d(1.0, 6.0, 2.0), mundy::Vector3d(0.0, 6.0, 2.0),
+      mundy::Vector3d(0.0, 6.0, 3.0), mundy::Vector3d(0.0, 7.0, 3.0), mundy::Vector3d(0.0, 7.0, 2.0),
+      mundy::Vector3d(1.0, 7.0, 2.0), mundy::Vector3d(1.0, 7.0, 3.0), mundy::Vector3d(2.0, 7.0, 3.0),
+      mundy::Vector3d(2.0, 6.0, 3.0), mundy::Vector3d(2.0, 6.0, 2.0), mundy::Vector3d(2.0, 7.0, 2.0),
+      mundy::Vector3d(3.0, 7.0, 2.0), mundy::Vector3d(3.0, 6.0, 2.0), mundy::Vector3d(3.0, 6.0, 3.0),
+      mundy::Vector3d(3.0, 7.0, 3.0), mundy::Vector3d(3.0, 7.0, 4.0), mundy::Vector3d(3.0, 6.0, 4.0),
+      mundy::Vector3d(3.0, 6.0, 5.0), mundy::Vector3d(3.0, 7.0, 5.0), mundy::Vector3d(2.0, 7.0, 5.0),
+      mundy::Vector3d(2.0, 6.0, 5.0), mundy::Vector3d(2.0, 6.0, 4.0), mundy::Vector3d(2.0, 7.0, 4.0),
+      mundy::Vector3d(1.0, 7.0, 4.0), mundy::Vector3d(1.0, 7.0, 5.0), mundy::Vector3d(0.0, 7.0, 5.0),
+      mundy::Vector3d(0.0, 7.0, 4.0), mundy::Vector3d(0.0, 6.0, 4.0), mundy::Vector3d(0.0, 6.0, 5.0),
+      mundy::Vector3d(1.0, 6.0, 5.0), mundy::Vector3d(1.0, 6.0, 4.0), mundy::Vector3d(1.0, 5.0, 4.0),
+      mundy::Vector3d(1.0, 5.0, 5.0), mundy::Vector3d(0.0, 5.0, 5.0), mundy::Vector3d(0.0, 5.0, 4.0),
+      mundy::Vector3d(0.0, 4.0, 4.0), mundy::Vector3d(0.0, 4.0, 5.0), mundy::Vector3d(1.0, 4.0, 5.0),
+      mundy::Vector3d(1.0, 4.0, 4.0), mundy::Vector3d(2.0, 4.0, 4.0), mundy::Vector3d(3.0, 4.0, 4.0),
+      mundy::Vector3d(3.0, 5.0, 4.0), mundy::Vector3d(2.0, 5.0, 4.0), mundy::Vector3d(2.0, 5.0, 5.0),
+      mundy::Vector3d(3.0, 5.0, 5.0), mundy::Vector3d(3.0, 4.0, 5.0), mundy::Vector3d(2.0, 4.0, 5.0),
+      mundy::Vector3d(2.0, 4.0, 6.0), mundy::Vector3d(3.0, 4.0, 6.0), mundy::Vector3d(3.0, 5.0, 6.0),
+      mundy::Vector3d(2.0, 5.0, 6.0), mundy::Vector3d(2.0, 5.0, 7.0), mundy::Vector3d(3.0, 5.0, 7.0),
+      mundy::Vector3d(3.0, 4.0, 7.0), mundy::Vector3d(2.0, 4.0, 7.0), mundy::Vector3d(1.0, 4.0, 7.0),
+      mundy::Vector3d(1.0, 4.0, 6.0), mundy::Vector3d(0.0, 4.0, 6.0), mundy::Vector3d(0.0, 4.0, 7.0),
+      mundy::Vector3d(0.0, 5.0, 7.0), mundy::Vector3d(0.0, 5.0, 6.0), mundy::Vector3d(1.0, 5.0, 6.0),
+      mundy::Vector3d(1.0, 5.0, 7.0), mundy::Vector3d(1.0, 6.0, 7.0), mundy::Vector3d(1.0, 6.0, 6.0),
+      mundy::Vector3d(0.0, 6.0, 6.0), mundy::Vector3d(0.0, 6.0, 7.0), mundy::Vector3d(0.0, 7.0, 7.0),
+      mundy::Vector3d(0.0, 7.0, 6.0), mundy::Vector3d(1.0, 7.0, 6.0), mundy::Vector3d(1.0, 7.0, 7.0),
+      mundy::Vector3d(2.0, 7.0, 7.0), mundy::Vector3d(2.0, 6.0, 7.0), mundy::Vector3d(2.0, 6.0, 6.0),
+      mundy::Vector3d(2.0, 7.0, 6.0), mundy::Vector3d(3.0, 7.0, 6.0), mundy::Vector3d(3.0, 6.0, 6.0),
+      mundy::Vector3d(3.0, 6.0, 7.0), mundy::Vector3d(3.0, 7.0, 7.0), mundy::Vector3d(4.0, 7.0, 7.0),
+      mundy::Vector3d(5.0, 7.0, 7.0), mundy::Vector3d(5.0, 6.0, 7.0), mundy::Vector3d(4.0, 6.0, 7.0),
+      mundy::Vector3d(4.0, 6.0, 6.0), mundy::Vector3d(5.0, 6.0, 6.0), mundy::Vector3d(5.0, 7.0, 6.0),
+      mundy::Vector3d(4.0, 7.0, 6.0), mundy::Vector3d(4.0, 7.0, 5.0), mundy::Vector3d(4.0, 6.0, 5.0),
+      mundy::Vector3d(4.0, 6.0, 4.0), mundy::Vector3d(4.0, 7.0, 4.0), mundy::Vector3d(5.0, 7.0, 4.0),
+      mundy::Vector3d(5.0, 6.0, 4.0), mundy::Vector3d(5.0, 6.0, 5.0), mundy::Vector3d(5.0, 7.0, 5.0),
+      mundy::Vector3d(6.0, 7.0, 5.0), mundy::Vector3d(6.0, 6.0, 5.0), mundy::Vector3d(6.0, 6.0, 4.0),
+      mundy::Vector3d(6.0, 7.0, 4.0), mundy::Vector3d(7.0, 7.0, 4.0), mundy::Vector3d(7.0, 6.0, 4.0),
+      mundy::Vector3d(7.0, 6.0, 5.0), mundy::Vector3d(7.0, 7.0, 5.0), mundy::Vector3d(7.0, 7.0, 6.0),
+      mundy::Vector3d(7.0, 7.0, 7.0), mundy::Vector3d(6.0, 7.0, 7.0), mundy::Vector3d(6.0, 7.0, 6.0),
+      mundy::Vector3d(6.0, 6.0, 6.0), mundy::Vector3d(6.0, 6.0, 7.0), mundy::Vector3d(7.0, 6.0, 7.0),
+      mundy::Vector3d(7.0, 6.0, 6.0), mundy::Vector3d(7.0, 5.0, 6.0), mundy::Vector3d(7.0, 5.0, 7.0),
+      mundy::Vector3d(6.0, 5.0, 7.0), mundy::Vector3d(6.0, 5.0, 6.0), mundy::Vector3d(6.0, 4.0, 6.0),
+      mundy::Vector3d(6.0, 4.0, 7.0), mundy::Vector3d(7.0, 4.0, 7.0), mundy::Vector3d(7.0, 4.0, 6.0),
+      mundy::Vector3d(7.0, 4.0, 5.0), mundy::Vector3d(7.0, 5.0, 5.0), mundy::Vector3d(7.0, 5.0, 4.0),
+      mundy::Vector3d(7.0, 4.0, 4.0), mundy::Vector3d(6.0, 4.0, 4.0), mundy::Vector3d(6.0, 5.0, 4.0),
+      mundy::Vector3d(6.0, 5.0, 5.0), mundy::Vector3d(6.0, 4.0, 5.0), mundy::Vector3d(5.0, 4.0, 5.0),
+      mundy::Vector3d(5.0, 5.0, 5.0), mundy::Vector3d(5.0, 5.0, 4.0), mundy::Vector3d(5.0, 4.0, 4.0),
+      mundy::Vector3d(4.0, 4.0, 4.0), mundy::Vector3d(4.0, 5.0, 4.0), mundy::Vector3d(4.0, 5.0, 5.0),
+      mundy::Vector3d(4.0, 4.0, 5.0), mundy::Vector3d(4.0, 4.0, 6.0), mundy::Vector3d(5.0, 4.0, 6.0),
+      mundy::Vector3d(5.0, 5.0, 6.0), mundy::Vector3d(4.0, 5.0, 6.0), mundy::Vector3d(4.0, 5.0, 7.0),
+      mundy::Vector3d(5.0, 5.0, 7.0), mundy::Vector3d(5.0, 4.0, 7.0), mundy::Vector3d(4.0, 4.0, 7.0),
+      mundy::Vector3d(4.0, 3.0, 7.0), mundy::Vector3d(5.0, 3.0, 7.0), mundy::Vector3d(5.0, 2.0, 7.0),
+      mundy::Vector3d(4.0, 2.0, 7.0), mundy::Vector3d(4.0, 2.0, 6.0), mundy::Vector3d(5.0, 2.0, 6.0),
+      mundy::Vector3d(5.0, 3.0, 6.0), mundy::Vector3d(4.0, 3.0, 6.0), mundy::Vector3d(4.0, 3.0, 5.0),
+      mundy::Vector3d(4.0, 2.0, 5.0), mundy::Vector3d(4.0, 2.0, 4.0), mundy::Vector3d(4.0, 3.0, 4.0),
+      mundy::Vector3d(5.0, 3.0, 4.0), mundy::Vector3d(5.0, 2.0, 4.0), mundy::Vector3d(5.0, 2.0, 5.0),
+      mundy::Vector3d(5.0, 3.0, 5.0), mundy::Vector3d(6.0, 3.0, 5.0), mundy::Vector3d(6.0, 2.0, 5.0),
+      mundy::Vector3d(6.0, 2.0, 4.0), mundy::Vector3d(6.0, 3.0, 4.0), mundy::Vector3d(7.0, 3.0, 4.0),
+      mundy::Vector3d(7.0, 2.0, 4.0), mundy::Vector3d(7.0, 2.0, 5.0), mundy::Vector3d(7.0, 3.0, 5.0),
+      mundy::Vector3d(7.0, 3.0, 6.0), mundy::Vector3d(7.0, 3.0, 7.0), mundy::Vector3d(6.0, 3.0, 7.0),
+      mundy::Vector3d(6.0, 3.0, 6.0), mundy::Vector3d(6.0, 2.0, 6.0), mundy::Vector3d(6.0, 2.0, 7.0),
+      mundy::Vector3d(7.0, 2.0, 7.0), mundy::Vector3d(7.0, 2.0, 6.0), mundy::Vector3d(7.0, 1.0, 6.0),
+      mundy::Vector3d(7.0, 1.0, 7.0), mundy::Vector3d(6.0, 1.0, 7.0), mundy::Vector3d(6.0, 1.0, 6.0),
+      mundy::Vector3d(6.0, 0.0, 6.0), mundy::Vector3d(6.0, 0.0, 7.0), mundy::Vector3d(7.0, 0.0, 7.0),
+      mundy::Vector3d(7.0, 0.0, 6.0), mundy::Vector3d(7.0, 0.0, 5.0), mundy::Vector3d(7.0, 1.0, 5.0),
+      mundy::Vector3d(7.0, 1.0, 4.0), mundy::Vector3d(7.0, 0.0, 4.0), mundy::Vector3d(6.0, 0.0, 4.0),
+      mundy::Vector3d(6.0, 1.0, 4.0), mundy::Vector3d(6.0, 1.0, 5.0), mundy::Vector3d(6.0, 0.0, 5.0),
+      mundy::Vector3d(5.0, 0.0, 5.0), mundy::Vector3d(5.0, 1.0, 5.0), mundy::Vector3d(5.0, 1.0, 4.0),
+      mundy::Vector3d(5.0, 0.0, 4.0), mundy::Vector3d(4.0, 0.0, 4.0), mundy::Vector3d(4.0, 1.0, 4.0),
+      mundy::Vector3d(4.0, 1.0, 5.0), mundy::Vector3d(4.0, 0.0, 5.0), mundy::Vector3d(4.0, 0.0, 6.0),
+      mundy::Vector3d(5.0, 0.0, 6.0), mundy::Vector3d(5.0, 1.0, 6.0), mundy::Vector3d(4.0, 1.0, 6.0),
+      mundy::Vector3d(4.0, 1.0, 7.0), mundy::Vector3d(5.0, 1.0, 7.0), mundy::Vector3d(5.0, 0.0, 7.0),
+      mundy::Vector3d(4.0, 0.0, 7.0), mundy::Vector3d(3.0, 0.0, 7.0), mundy::Vector3d(3.0, 0.0, 6.0),
+      mundy::Vector3d(2.0, 0.0, 6.0), mundy::Vector3d(2.0, 0.0, 7.0), mundy::Vector3d(2.0, 1.0, 7.0),
+      mundy::Vector3d(2.0, 1.0, 6.0), mundy::Vector3d(3.0, 1.0, 6.0), mundy::Vector3d(3.0, 1.0, 7.0),
+      mundy::Vector3d(3.0, 2.0, 7.0), mundy::Vector3d(2.0, 2.0, 7.0), mundy::Vector3d(2.0, 3.0, 7.0),
+      mundy::Vector3d(3.0, 3.0, 7.0), mundy::Vector3d(3.0, 3.0, 6.0), mundy::Vector3d(2.0, 3.0, 6.0),
+      mundy::Vector3d(2.0, 2.0, 6.0), mundy::Vector3d(3.0, 2.0, 6.0), mundy::Vector3d(3.0, 2.0, 5.0),
+      mundy::Vector3d(2.0, 2.0, 5.0), mundy::Vector3d(2.0, 3.0, 5.0), mundy::Vector3d(3.0, 3.0, 5.0),
+      mundy::Vector3d(3.0, 3.0, 4.0), mundy::Vector3d(2.0, 3.0, 4.0), mundy::Vector3d(2.0, 2.0, 4.0),
+      mundy::Vector3d(3.0, 2.0, 4.0), mundy::Vector3d(3.0, 1.0, 4.0), mundy::Vector3d(3.0, 0.0, 4.0),
+      mundy::Vector3d(3.0, 0.0, 5.0), mundy::Vector3d(3.0, 1.0, 5.0), mundy::Vector3d(2.0, 1.0, 5.0),
+      mundy::Vector3d(2.0, 0.0, 5.0), mundy::Vector3d(2.0, 0.0, 4.0), mundy::Vector3d(2.0, 1.0, 4.0),
+      mundy::Vector3d(1.0, 1.0, 4.0), mundy::Vector3d(1.0, 0.0, 4.0), mundy::Vector3d(1.0, 0.0, 5.0),
+      mundy::Vector3d(1.0, 1.0, 5.0), mundy::Vector3d(0.0, 1.0, 5.0), mundy::Vector3d(0.0, 0.0, 5.0),
+      mundy::Vector3d(0.0, 0.0, 4.0), mundy::Vector3d(0.0, 1.0, 4.0), mundy::Vector3d(0.0, 2.0, 4.0),
+      mundy::Vector3d(1.0, 2.0, 4.0), mundy::Vector3d(1.0, 3.0, 4.0), mundy::Vector3d(0.0, 3.0, 4.0),
+      mundy::Vector3d(0.0, 3.0, 5.0), mundy::Vector3d(1.0, 3.0, 5.0), mundy::Vector3d(1.0, 2.0, 5.0),
+      mundy::Vector3d(0.0, 2.0, 5.0), mundy::Vector3d(0.0, 2.0, 6.0), mundy::Vector3d(1.0, 2.0, 6.0),
+      mundy::Vector3d(1.0, 3.0, 6.0), mundy::Vector3d(0.0, 3.0, 6.0), mundy::Vector3d(0.0, 3.0, 7.0),
+      mundy::Vector3d(1.0, 3.0, 7.0), mundy::Vector3d(1.0, 2.0, 7.0), mundy::Vector3d(0.0, 2.0, 7.0),
+      mundy::Vector3d(0.0, 1.0, 7.0), mundy::Vector3d(0.0, 1.0, 6.0), mundy::Vector3d(1.0, 1.0, 6.0),
+      mundy::Vector3d(1.0, 1.0, 7.0), mundy::Vector3d(1.0, 0.0, 7.0), mundy::Vector3d(1.0, 0.0, 6.0),
+      mundy::Vector3d(0.0, 0.0, 6.0), mundy::Vector3d(0.0, 0.0, 7.0)};
 
   for (size_t i = 0; i < expected_position_array.size(); ++i) {
     ASSERT_TRUE(is_close(position_array[i], expected_position_array[i]));
@@ -298,16 +296,16 @@ TEST(Hilbert3D, DirectorLinks8) {
   size_t num_links = 8;
 
   // Use structureed bindings to make our life easier
-  auto [position_array, directors] = mundy::math::create_hilbert_positions_and_directors(num_links);
+  auto [position_array, directors] = mundy::create_hilbert_positions_and_directors(num_links);
 
-  std::vector<mundy::math::Vector3d> expected_position_array = {
-      mundy::math::Vector3d(0.0, 0.0, 0.0), mundy::math::Vector3d(1.0, 0.0, 0.0), mundy::math::Vector3d(1.0, 1.0, 0.0),
-      mundy::math::Vector3d(0.0, 1.0, 0.0), mundy::math::Vector3d(0.0, 1.0, 1.0), mundy::math::Vector3d(1.0, 1.0, 1.0),
-      mundy::math::Vector3d(1.0, 0.0, 1.0), mundy::math::Vector3d(0.0, 0.0, 1.0)};
-  std::vector<mundy::math::Vector3d> expected_directors = {
-      mundy::math::Vector3d(1.0, 0.0, 0.0), mundy::math::Vector3d(0.0, 1.0, 0.0), mundy::math::Vector3d(-1.0, 0.0, 0.0),
-      mundy::math::Vector3d(0.0, 0.0, 1.0), mundy::math::Vector3d(1.0, 0.0, 0.0), mundy::math::Vector3d(0.0, -1.0, 0.0),
-      mundy::math::Vector3d(-1.0, 0.0, 0.0)};
+  std::vector<mundy::Vector3d> expected_position_array = {
+      mundy::Vector3d(0.0, 0.0, 0.0), mundy::Vector3d(1.0, 0.0, 0.0), mundy::Vector3d(1.0, 1.0, 0.0),
+      mundy::Vector3d(0.0, 1.0, 0.0), mundy::Vector3d(0.0, 1.0, 1.0), mundy::Vector3d(1.0, 1.0, 1.0),
+      mundy::Vector3d(1.0, 0.0, 1.0), mundy::Vector3d(0.0, 0.0, 1.0)};
+  std::vector<mundy::Vector3d> expected_directors = {mundy::Vector3d(1.0, 0.0, 0.0),  mundy::Vector3d(0.0, 1.0, 0.0),
+                                                     mundy::Vector3d(-1.0, 0.0, 0.0), mundy::Vector3d(0.0, 0.0, 1.0),
+                                                     mundy::Vector3d(1.0, 0.0, 0.0),  mundy::Vector3d(0.0, -1.0, 0.0),
+                                                     mundy::Vector3d(-1.0, 0.0, 0.0)};
   for (size_t i = 0; i < expected_position_array.size(); ++i) {
     ASSERT_TRUE(is_close(position_array[i], expected_position_array[i]));
   }
@@ -320,64 +318,53 @@ TEST(Hilbert3D, DirectorLinks9) {
   size_t num_links = 9;
 
   // Use structureed bindings to make our life easier
-  auto [position_array, directors] = mundy::math::create_hilbert_positions_and_directors(num_links);
+  auto [position_array, directors] = mundy::create_hilbert_positions_and_directors(num_links);
 
-  std::vector<mundy::math::Vector3d> expected_position_array = {
-      mundy::math::Vector3d(0.0, 0.0, 0.0), mundy::math::Vector3d(0.0, 1.0, 0.0), mundy::math::Vector3d(0.0, 1.0, 1.0),
-      mundy::math::Vector3d(0.0, 0.0, 1.0), mundy::math::Vector3d(1.0, 0.0, 1.0), mundy::math::Vector3d(1.0, 1.0, 1.0),
-      mundy::math::Vector3d(1.0, 1.0, 0.0), mundy::math::Vector3d(1.0, 0.0, 0.0), mundy::math::Vector3d(2.0, 0.0, 0.0),
-      mundy::math::Vector3d(2.0, 0.0, 1.0), mundy::math::Vector3d(3.0, 0.0, 1.0), mundy::math::Vector3d(3.0, 0.0, 0.0),
-      mundy::math::Vector3d(3.0, 1.0, 0.0), mundy::math::Vector3d(3.0, 1.0, 1.0), mundy::math::Vector3d(2.0, 1.0, 1.0),
-      mundy::math::Vector3d(2.0, 1.0, 0.0), mundy::math::Vector3d(2.0, 2.0, 0.0), mundy::math::Vector3d(2.0, 2.0, 1.0),
-      mundy::math::Vector3d(3.0, 2.0, 1.0), mundy::math::Vector3d(3.0, 2.0, 0.0), mundy::math::Vector3d(3.0, 3.0, 0.0),
-      mundy::math::Vector3d(3.0, 3.0, 1.0), mundy::math::Vector3d(2.0, 3.0, 1.0), mundy::math::Vector3d(2.0, 3.0, 0.0),
-      mundy::math::Vector3d(1.0, 3.0, 0.0), mundy::math::Vector3d(0.0, 3.0, 0.0), mundy::math::Vector3d(0.0, 2.0, 0.0),
-      mundy::math::Vector3d(1.0, 2.0, 0.0), mundy::math::Vector3d(1.0, 2.0, 1.0), mundy::math::Vector3d(0.0, 2.0, 1.0),
-      mundy::math::Vector3d(0.0, 3.0, 1.0), mundy::math::Vector3d(1.0, 3.0, 1.0), mundy::math::Vector3d(1.0, 3.0, 2.0),
-      mundy::math::Vector3d(0.0, 3.0, 2.0), mundy::math::Vector3d(0.0, 2.0, 2.0), mundy::math::Vector3d(1.0, 2.0, 2.0),
-      mundy::math::Vector3d(1.0, 2.0, 3.0), mundy::math::Vector3d(0.0, 2.0, 3.0), mundy::math::Vector3d(0.0, 3.0, 3.0),
-      mundy::math::Vector3d(1.0, 3.0, 3.0), mundy::math::Vector3d(2.0, 3.0, 3.0), mundy::math::Vector3d(2.0, 3.0, 2.0),
-      mundy::math::Vector3d(3.0, 3.0, 2.0), mundy::math::Vector3d(3.0, 3.0, 3.0), mundy::math::Vector3d(3.0, 2.0, 3.0),
-      mundy::math::Vector3d(3.0, 2.0, 2.0), mundy::math::Vector3d(2.0, 2.0, 2.0), mundy::math::Vector3d(2.0, 2.0, 3.0),
-      mundy::math::Vector3d(2.0, 1.0, 3.0), mundy::math::Vector3d(2.0, 1.0, 2.0), mundy::math::Vector3d(3.0, 1.0, 2.0),
-      mundy::math::Vector3d(3.0, 1.0, 3.0), mundy::math::Vector3d(3.0, 0.0, 3.0), mundy::math::Vector3d(3.0, 0.0, 2.0),
-      mundy::math::Vector3d(2.0, 0.0, 2.0), mundy::math::Vector3d(2.0, 0.0, 3.0), mundy::math::Vector3d(1.0, 0.0, 3.0),
-      mundy::math::Vector3d(1.0, 1.0, 3.0), mundy::math::Vector3d(1.0, 1.0, 2.0), mundy::math::Vector3d(1.0, 0.0, 2.0),
-      mundy::math::Vector3d(0.0, 0.0, 2.0), mundy::math::Vector3d(0.0, 1.0, 2.0), mundy::math::Vector3d(0.0, 1.0, 3.0),
-      mundy::math::Vector3d(0.0, 0.0, 3.0)};
-  std::vector<mundy::math::Vector3d> expected_directors = {
-      mundy::math::Vector3d(0.0, 1.0, 0.0),  mundy::math::Vector3d(0.0, 0.0, 1.0),
-      mundy::math::Vector3d(0.0, -1.0, 0.0), mundy::math::Vector3d(1.0, 0.0, 0.0),
-      mundy::math::Vector3d(0.0, 1.0, 0.0),  mundy::math::Vector3d(0.0, 0.0, -1.0),
-      mundy::math::Vector3d(0.0, -1.0, 0.0), mundy::math::Vector3d(1.0, 0.0, 0.0),
-      mundy::math::Vector3d(0.0, 0.0, 1.0),  mundy::math::Vector3d(1.0, 0.0, 0.0),
-      mundy::math::Vector3d(0.0, 0.0, -1.0), mundy::math::Vector3d(0.0, 1.0, 0.0),
-      mundy::math::Vector3d(0.0, 0.0, 1.0),  mundy::math::Vector3d(-1.0, 0.0, 0.0),
-      mundy::math::Vector3d(0.0, 0.0, -1.0), mundy::math::Vector3d(0.0, 1.0, 0.0),
-      mundy::math::Vector3d(0.0, 0.0, 1.0),  mundy::math::Vector3d(1.0, 0.0, 0.0),
-      mundy::math::Vector3d(0.0, 0.0, -1.0), mundy::math::Vector3d(0.0, 1.0, 0.0),
-      mundy::math::Vector3d(0.0, 0.0, 1.0),  mundy::math::Vector3d(-1.0, 0.0, 0.0),
-      mundy::math::Vector3d(0.0, 0.0, -1.0), mundy::math::Vector3d(-1.0, 0.0, 0.0),
-      mundy::math::Vector3d(-1.0, 0.0, 0.0), mundy::math::Vector3d(0.0, -1.0, 0.0),
-      mundy::math::Vector3d(1.0, 0.0, 0.0),  mundy::math::Vector3d(0.0, 0.0, 1.0),
-      mundy::math::Vector3d(-1.0, 0.0, 0.0), mundy::math::Vector3d(0.0, 1.0, 0.0),
-      mundy::math::Vector3d(1.0, 0.0, 0.0),  mundy::math::Vector3d(0.0, 0.0, 1.0),
-      mundy::math::Vector3d(-1.0, 0.0, 0.0), mundy::math::Vector3d(0.0, -1.0, 0.0),
-      mundy::math::Vector3d(1.0, 0.0, 0.0),  mundy::math::Vector3d(0.0, 0.0, 1.0),
-      mundy::math::Vector3d(-1.0, 0.0, 0.0), mundy::math::Vector3d(0.0, 1.0, 0.0),
-      mundy::math::Vector3d(1.0, 0.0, 0.0),  mundy::math::Vector3d(1.0, 0.0, 0.0),
-      mundy::math::Vector3d(0.0, 0.0, -1.0), mundy::math::Vector3d(1.0, 0.0, 0.0),
-      mundy::math::Vector3d(0.0, 0.0, 1.0),  mundy::math::Vector3d(0.0, -1.0, 0.0),
-      mundy::math::Vector3d(0.0, 0.0, -1.0), mundy::math::Vector3d(-1.0, 0.0, 0.0),
-      mundy::math::Vector3d(0.0, 0.0, 1.0),  mundy::math::Vector3d(0.0, -1.0, 0.0),
-      mundy::math::Vector3d(0.0, 0.0, -1.0), mundy::math::Vector3d(1.0, 0.0, 0.0),
-      mundy::math::Vector3d(0.0, 0.0, 1.0),  mundy::math::Vector3d(0.0, -1.0, 0.0),
-      mundy::math::Vector3d(0.0, 0.0, -1.0), mundy::math::Vector3d(-1.0, 0.0, 0.0),
-      mundy::math::Vector3d(0.0, 0.0, 1.0),  mundy::math::Vector3d(-1.0, 0.0, 0.0),
-      mundy::math::Vector3d(0.0, 1.0, 0.0),  mundy::math::Vector3d(0.0, 0.0, -1.0),
-      mundy::math::Vector3d(0.0, -1.0, 0.0), mundy::math::Vector3d(-1.0, 0.0, 0.0),
-      mundy::math::Vector3d(0.0, 1.0, 0.0),  mundy::math::Vector3d(0.0, 0.0, 1.0),
-      mundy::math::Vector3d(0.0, -1.0, 0.0)};
+  std::vector<mundy::Vector3d> expected_position_array = {
+      mundy::Vector3d(0.0, 0.0, 0.0), mundy::Vector3d(0.0, 1.0, 0.0), mundy::Vector3d(0.0, 1.0, 1.0),
+      mundy::Vector3d(0.0, 0.0, 1.0), mundy::Vector3d(1.0, 0.0, 1.0), mundy::Vector3d(1.0, 1.0, 1.0),
+      mundy::Vector3d(1.0, 1.0, 0.0), mundy::Vector3d(1.0, 0.0, 0.0), mundy::Vector3d(2.0, 0.0, 0.0),
+      mundy::Vector3d(2.0, 0.0, 1.0), mundy::Vector3d(3.0, 0.0, 1.0), mundy::Vector3d(3.0, 0.0, 0.0),
+      mundy::Vector3d(3.0, 1.0, 0.0), mundy::Vector3d(3.0, 1.0, 1.0), mundy::Vector3d(2.0, 1.0, 1.0),
+      mundy::Vector3d(2.0, 1.0, 0.0), mundy::Vector3d(2.0, 2.0, 0.0), mundy::Vector3d(2.0, 2.0, 1.0),
+      mundy::Vector3d(3.0, 2.0, 1.0), mundy::Vector3d(3.0, 2.0, 0.0), mundy::Vector3d(3.0, 3.0, 0.0),
+      mundy::Vector3d(3.0, 3.0, 1.0), mundy::Vector3d(2.0, 3.0, 1.0), mundy::Vector3d(2.0, 3.0, 0.0),
+      mundy::Vector3d(1.0, 3.0, 0.0), mundy::Vector3d(0.0, 3.0, 0.0), mundy::Vector3d(0.0, 2.0, 0.0),
+      mundy::Vector3d(1.0, 2.0, 0.0), mundy::Vector3d(1.0, 2.0, 1.0), mundy::Vector3d(0.0, 2.0, 1.0),
+      mundy::Vector3d(0.0, 3.0, 1.0), mundy::Vector3d(1.0, 3.0, 1.0), mundy::Vector3d(1.0, 3.0, 2.0),
+      mundy::Vector3d(0.0, 3.0, 2.0), mundy::Vector3d(0.0, 2.0, 2.0), mundy::Vector3d(1.0, 2.0, 2.0),
+      mundy::Vector3d(1.0, 2.0, 3.0), mundy::Vector3d(0.0, 2.0, 3.0), mundy::Vector3d(0.0, 3.0, 3.0),
+      mundy::Vector3d(1.0, 3.0, 3.0), mundy::Vector3d(2.0, 3.0, 3.0), mundy::Vector3d(2.0, 3.0, 2.0),
+      mundy::Vector3d(3.0, 3.0, 2.0), mundy::Vector3d(3.0, 3.0, 3.0), mundy::Vector3d(3.0, 2.0, 3.0),
+      mundy::Vector3d(3.0, 2.0, 2.0), mundy::Vector3d(2.0, 2.0, 2.0), mundy::Vector3d(2.0, 2.0, 3.0),
+      mundy::Vector3d(2.0, 1.0, 3.0), mundy::Vector3d(2.0, 1.0, 2.0), mundy::Vector3d(3.0, 1.0, 2.0),
+      mundy::Vector3d(3.0, 1.0, 3.0), mundy::Vector3d(3.0, 0.0, 3.0), mundy::Vector3d(3.0, 0.0, 2.0),
+      mundy::Vector3d(2.0, 0.0, 2.0), mundy::Vector3d(2.0, 0.0, 3.0), mundy::Vector3d(1.0, 0.0, 3.0),
+      mundy::Vector3d(1.0, 1.0, 3.0), mundy::Vector3d(1.0, 1.0, 2.0), mundy::Vector3d(1.0, 0.0, 2.0),
+      mundy::Vector3d(0.0, 0.0, 2.0), mundy::Vector3d(0.0, 1.0, 2.0), mundy::Vector3d(0.0, 1.0, 3.0),
+      mundy::Vector3d(0.0, 0.0, 3.0)};
+  std::vector<mundy::Vector3d> expected_directors = {
+      mundy::Vector3d(0.0, 1.0, 0.0),  mundy::Vector3d(0.0, 0.0, 1.0),  mundy::Vector3d(0.0, -1.0, 0.0),
+      mundy::Vector3d(1.0, 0.0, 0.0),  mundy::Vector3d(0.0, 1.0, 0.0),  mundy::Vector3d(0.0, 0.0, -1.0),
+      mundy::Vector3d(0.0, -1.0, 0.0), mundy::Vector3d(1.0, 0.0, 0.0),  mundy::Vector3d(0.0, 0.0, 1.0),
+      mundy::Vector3d(1.0, 0.0, 0.0),  mundy::Vector3d(0.0, 0.0, -1.0), mundy::Vector3d(0.0, 1.0, 0.0),
+      mundy::Vector3d(0.0, 0.0, 1.0),  mundy::Vector3d(-1.0, 0.0, 0.0), mundy::Vector3d(0.0, 0.0, -1.0),
+      mundy::Vector3d(0.0, 1.0, 0.0),  mundy::Vector3d(0.0, 0.0, 1.0),  mundy::Vector3d(1.0, 0.0, 0.0),
+      mundy::Vector3d(0.0, 0.0, -1.0), mundy::Vector3d(0.0, 1.0, 0.0),  mundy::Vector3d(0.0, 0.0, 1.0),
+      mundy::Vector3d(-1.0, 0.0, 0.0), mundy::Vector3d(0.0, 0.0, -1.0), mundy::Vector3d(-1.0, 0.0, 0.0),
+      mundy::Vector3d(-1.0, 0.0, 0.0), mundy::Vector3d(0.0, -1.0, 0.0), mundy::Vector3d(1.0, 0.0, 0.0),
+      mundy::Vector3d(0.0, 0.0, 1.0),  mundy::Vector3d(-1.0, 0.0, 0.0), mundy::Vector3d(0.0, 1.0, 0.0),
+      mundy::Vector3d(1.0, 0.0, 0.0),  mundy::Vector3d(0.0, 0.0, 1.0),  mundy::Vector3d(-1.0, 0.0, 0.0),
+      mundy::Vector3d(0.0, -1.0, 0.0), mundy::Vector3d(1.0, 0.0, 0.0),  mundy::Vector3d(0.0, 0.0, 1.0),
+      mundy::Vector3d(-1.0, 0.0, 0.0), mundy::Vector3d(0.0, 1.0, 0.0),  mundy::Vector3d(1.0, 0.0, 0.0),
+      mundy::Vector3d(1.0, 0.0, 0.0),  mundy::Vector3d(0.0, 0.0, -1.0), mundy::Vector3d(1.0, 0.0, 0.0),
+      mundy::Vector3d(0.0, 0.0, 1.0),  mundy::Vector3d(0.0, -1.0, 0.0), mundy::Vector3d(0.0, 0.0, -1.0),
+      mundy::Vector3d(-1.0, 0.0, 0.0), mundy::Vector3d(0.0, 0.0, 1.0),  mundy::Vector3d(0.0, -1.0, 0.0),
+      mundy::Vector3d(0.0, 0.0, -1.0), mundy::Vector3d(1.0, 0.0, 0.0),  mundy::Vector3d(0.0, 0.0, 1.0),
+      mundy::Vector3d(0.0, -1.0, 0.0), mundy::Vector3d(0.0, 0.0, -1.0), mundy::Vector3d(-1.0, 0.0, 0.0),
+      mundy::Vector3d(0.0, 0.0, 1.0),  mundy::Vector3d(-1.0, 0.0, 0.0), mundy::Vector3d(0.0, 1.0, 0.0),
+      mundy::Vector3d(0.0, 0.0, -1.0), mundy::Vector3d(0.0, -1.0, 0.0), mundy::Vector3d(-1.0, 0.0, 0.0),
+      mundy::Vector3d(0.0, 1.0, 0.0),  mundy::Vector3d(0.0, 0.0, 1.0),  mundy::Vector3d(0.0, -1.0, 0.0)};
   for (size_t i = 0; i < expected_position_array.size(); ++i) {
     ASSERT_TRUE(is_close(position_array[i], expected_position_array[i]));
   }
@@ -388,7 +375,5 @@ TEST(Hilbert3D, DirectorLinks9) {
 //@}
 
 }  // namespace
-
-}  // namespace math
 
 }  // namespace mundy

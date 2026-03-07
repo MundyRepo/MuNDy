@@ -26,8 +26,6 @@
 
 namespace mundy {
 
-namespace geom {
-
 /// \brief The distance types
 ///
 /// These types are uses for function overloading of our distance functions.
@@ -37,8 +35,6 @@ namespace geom {
 /// All of our distance functions default to SharedNormalSigned distance.
 struct Euclidean {};
 struct SharedNormalSigned {};
-
-}  // namespace geom
 
 }  // namespace mundy
 

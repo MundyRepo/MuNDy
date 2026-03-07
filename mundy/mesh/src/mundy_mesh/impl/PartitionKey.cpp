@@ -32,8 +32,8 @@
 #include <stk_util/ngp/NgpSpaces.hpp>
 
 // Mundy
-#include <mundy_utils/throw_assert.hpp>
 #include <mundy_mesh/impl/PartitionKey.hpp>
+#include <mundy_utils/throw_assert.hpp>
 
 namespace mundy {
 

@@ -38,7 +38,7 @@
 #include <Teuchos_any.hpp>                       // for Teuchos::any
 
 // Our variant of Teuchos::AnyNumberParameterEntryValidator
-#include <mundy_utils/OurAnyNumberParameterEntryValidator.hpp>  // for mundy::utils::OurAnyNumberParameterEntryValidator
+#include <mundy_utils/OurAnyNumberParameterEntryValidator.hpp>  // for mundy::OurAnyNumberParameterEntryValidator
 
 /// \brief Helper function for concatinating strings
 #define MUNDY_CONCAT(a, b) a##b
@@ -153,8 +153,6 @@ inline ConvertToType convert_string_using_nothing(const std::string& str) {
 }
 
 namespace mundy {
-
-namespace utils {
 
 // Constructors
 
@@ -352,8 +350,6 @@ void OurAnyNumberParameterEntryValidator::throw_type_error(Teuchos::ParameterEnt
                                           << "\nhas the wrong type."
                                           << "\n\nThe accepted types are: " << accepted_types_string_;);
 }
-
-}  // namespace utils
 
 }  // namespace mundy
 

@@ -49,8 +49,6 @@
 /// parameter value makes it easier to write error-free validated code.
 namespace mundy {
 
-namespace utils {
-
 class TEUCHOSPARAMETERLIST_LIB_DLL_EXPORT OurAnyNumberParameterEntryValidator
     : public Teuchos::ParameterEntryValidator {
  public:
@@ -601,8 +599,6 @@ class TEUCHOSPARAMETERLIST_LIB_DLL_EXPORT OurAnyNumberParameterEntryValidator
   void throw_type_error(Teuchos::ParameterEntry const& entry, std::string const& param_name,
                         std::string const& sublist_name) const;
 };  // class OurAnyNumberParameterEntryValidator
-
-}  // namespace utils
 
 }  // namespace mundy
 

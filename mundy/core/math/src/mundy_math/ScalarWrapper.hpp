@@ -33,15 +33,13 @@
 #include <utility>
 
 // Mundy
+#include <mundy_math/Accessor.hpp>       // for mundy::ValidAccessor
+#include <mundy_math/Array.hpp>          // for mundy::Array
+#include <mundy_math/Tolerance.hpp>      // for mundy::get_zero_tolerance
+#include <mundy_math/Vector.hpp>         // for mundy::Vector
 #include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
-#include <mundy_math/Accessor.hpp>      // for mundy::math::ValidAccessor
-#include <mundy_math/Array.hpp>         // for mundy::math::Array
-#include <mundy_math/Tolerance.hpp>     // for mundy::math::get_zero_tolerance
-#include <mundy_math/Vector.hpp>        // for mundy::math::Vector
 
 namespace mundy {
-
-namespace math {
 
 /// \brief An owning/viewing scalar type
 ///
@@ -103,7 +101,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto operator*(const ScalarWrapper<U, Accessor1
 //! \name atomic_load/store. Atomic memory management operations.
 //
 // \note Atomics are covered by Vector naturally, so we're using this space to make our atomic operations on
-// scalars forward to Kokkos atomics. This way, we can always call mundy::math::atomic_add regardless of whether we're
+// scalars forward to Kokkos atomics. This way, we can always call mundy::atomic_add regardless of whether we're
 // dealing with a scalar or a vector/matrix.
 //
 //@{
@@ -223,20 +221,18 @@ KOKKOS_INLINE_FUNCTION T atomic_div_fetch(T* const s, const U& value) {
 /// \endcode
 template <typename T, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto get_scalar_view(Accessor&& data) {
-  auto data_storage = utils::store(impl::unwrap_accessor(std::forward<Accessor>(data)));
+  auto data_storage = store(impl::unwrap_accessor(std::forward<Accessor>(data)));
   return ScalarWrapper<T, decltype(data_storage)>(data_storage);
 }
 
 template <typename T, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto get_owning_scalar(Accessor&& data) {
-  auto data_storage = utils::store(impl::unwrap_accessor(std::forward<Accessor>(data)));
+  auto data_storage = store(impl::unwrap_accessor(std::forward<Accessor>(data)));
   return ScalarWrapper<T, decltype(data_storage)>(data_storage);
 }
 //@}
 
 //@}
-
-}  // namespace math
 
 }  // namespace mundy
 

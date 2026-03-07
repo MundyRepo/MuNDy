@@ -37,17 +37,17 @@
 #include <stk_util/parallel/Parallel.hpp>  // for stk::parallel_machine_init, stk::parallel_machine_finalize
 
 // Mundy
-#include <mundy_geom/distance/DistanceMetrics.hpp>     // for mundy::geom::FreeSpaceMetric
-#include <mundy_geom/distance/OldDistanceMetrics.hpp>  // for mundy::geom::OldFreeSpaceMetric
-#include <mundy_math/Array.hpp>                        // for mundy::math::Array
-#include <mundy_math/Matrix.hpp>                       // for mundy::math::Matrix
-#include <mundy_math/Quaternion.hpp>                   // for mundy::math::Quaternion
-#include <mundy_math/Tolerance.hpp>                    // for mundy::math::get_relaxed_tolerance
-#include <mundy_math/Vector.hpp>                       // for mundy::math::Vector
+#include <mundy_geom/distance/DistanceMetrics.hpp>     // for mundy::FreeSpaceMetric
+#include <mundy_geom/distance/OldDistanceMetrics.hpp>  // for mundy::OldFreeSpaceMetric
+#include <mundy_math/Array.hpp>                        // for mundy::Array
+#include <mundy_math/Matrix.hpp>                       // for mundy::Matrix
+#include <mundy_math/Quaternion.hpp>                   // for mundy::Quaternion
+#include <mundy_math/Tolerance.hpp>                    // for mundy::get_relaxed_tolerance
+#include <mundy_math/Vector.hpp>                       // for mundy::Vector
 
-mundy::math::Vector3d random_vector() {
-  return mundy::math::Vector3d{static_cast<double>(rand()) / RAND_MAX, static_cast<double>(rand()) / RAND_MAX,
-                               static_cast<double>(rand()) / RAND_MAX};
+mundy::Vector3d random_vector() {
+  return mundy::Vector3d{static_cast<double>(rand()) / RAND_MAX, static_cast<double>(rand()) / RAND_MAX,
+                         static_cast<double>(rand()) / RAND_MAX};
 }
 
 void speed_test() {
@@ -61,16 +61,16 @@ void speed_test() {
       .minEpochTime(std::chrono::microseconds(200))  // run long enough per epoch
       .minEpochIterations(100000);
 
-  mundy::math::Vector3d cell_size = random_vector();
-  mundy::math::Vector3d point1 = random_vector();
-  mundy::math::Vector3d point2 = random_vector();
+  mundy::Vector3d cell_size = random_vector();
+  mundy::Vector3d point1 = random_vector();
+  mundy::Vector3d point2 = random_vector();
 
   // New constructor
-  auto new_periodic_space_metric = mundy::geom::periodic_metric_from_unit_cell(cell_size);
-  auto new_periodic_scaled_space_metric = mundy::geom::periodic_scaled_metric_from_unit_cell(cell_size);
+  auto new_periodic_space_metric = mundy::periodic_metric_from_unit_cell(cell_size);
+  auto new_periodic_scaled_space_metric = mundy::periodic_scaled_metric_from_unit_cell(cell_size);
 
   // Old constructor
-  mundy::geom::OldPeriodicSpaceMetric<double> old_periodic_space_metric;
+  mundy::OldPeriodicSpaceMetric<double> old_periodic_space_metric;
   old_unit_cell_box(old_periodic_space_metric, cell_size);
 
   bench.run("Old Periodic Metric | Loops", [&] {
@@ -98,26 +98,26 @@ void construction_test() {
       .minEpochTime(std::chrono::microseconds(200))  // run long enough per epoch
       .minEpochIterations(100000);
 
-  mundy::math::Vector3d cell_size = random_vector();
-  mundy::math::Vector3d point1 = random_vector();
-  mundy::math::Vector3d point2 = random_vector();
+  mundy::Vector3d cell_size = random_vector();
+  mundy::Vector3d point1 = random_vector();
+  mundy::Vector3d point2 = random_vector();
 
   bench.run("Old Periodic Metric | Loops", [&] {
     // Old constructor
-    mundy::geom::OldPeriodicSpaceMetric<double> old_periodic_space_metric;
+    mundy::OldPeriodicSpaceMetric<double> old_periodic_space_metric;
     old_unit_cell_box(old_periodic_space_metric, cell_size);
     auto sep = old_periodic_space_metric(point1, point2);
     ankerl::nanobench::doNotOptimizeAway(sep);
   });
   bench.run("New Periodic Metric | No Loops", [&] {
     // New constructor
-    auto new_periodic_space_metric = mundy::geom::periodic_metric_from_unit_cell(cell_size);
+    auto new_periodic_space_metric = mundy::periodic_metric_from_unit_cell(cell_size);
     auto sep = new_periodic_space_metric(point1, point2);
     ankerl::nanobench::doNotOptimizeAway(sep);
   });
   bench.run("New Periodic Metric | No Loops | Scale only", [&] {
     // New constructor | scale only
-    auto new_periodic_scaled_space_metric = mundy::geom::periodic_scaled_metric_from_unit_cell(cell_size);
+    auto new_periodic_scaled_space_metric = mundy::periodic_scaled_metric_from_unit_cell(cell_size);
     auto sep = new_periodic_scaled_space_metric(point1, point2);
     ankerl::nanobench::doNotOptimizeAway(sep);
   });

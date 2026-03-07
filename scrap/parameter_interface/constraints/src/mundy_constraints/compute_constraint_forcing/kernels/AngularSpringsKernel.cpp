@@ -36,7 +36,7 @@
 #include <mundy_constraints/AngularSprings.hpp>  // for mundy::constraints::AngularSprings
 #include <mundy_constraints/compute_constraint_forcing/kernels/AngularSpringsKernel.hpp>  // for mundy::constraints::compute_constraint_forcing::kernels::AngularSpringsKernel
 #include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
-#include <mundy_math/Vector3.hpp>       // for mundy::math::Vector3
+#include <mundy_math/Vector3.hpp>       // for mundy::Vector3
 #include <mundy_mesh/BulkData.hpp>      // for mundy::mesh::BulkData
 #include <mundy_mesh/FieldViews.hpp>  // for mundy::mesh::vector3_field_data, mundy::mesh::quaternion_field_data, mundy::mesh::matrix3_field_data
 #include <mundy_mesh/ForEachEntity.hpp>  // for mundy::mesh::for_each_entity_run
@@ -145,14 +145,14 @@ void AngularSpringsKernel::execute(const stk::mesh::Selector &spring_selector) {
         const auto vec_from_3_to_2 = node2_coord - node3_coord;
 
         // Get the necessary magnitudes (and square magnitudes) of the vectors.
-        const double dist_sq_from_3_to_1 = mundy::math::dot(vec_from_3_to_1, vec_from_3_to_1);
-        const double dist_sq_from_3_to_2 = mundy::math::dot(vec_from_3_to_2, vec_from_3_to_2);
+        const double dist_sq_from_3_to_1 = mundy::dot(vec_from_3_to_1, vec_from_3_to_1);
+        const double dist_sq_from_3_to_2 = mundy::dot(vec_from_3_to_2, vec_from_3_to_2);
         const double dist_from_3_to_1 = std::sqrt(dist_sq_from_3_to_1);
         const double dist_from_3_to_2 = std::sqrt(dist_sq_from_3_to_2);
 
         // Get the minor angle between lines 31 and 32.
         const double cos_of_angle =
-            mundy::math::dot(vec_from_3_to_1, vec_from_3_to_2) / (dist_from_3_to_1 * dist_from_3_to_2);
+            mundy::dot(vec_from_3_to_1, vec_from_3_to_2) / (dist_from_3_to_1 * dist_from_3_to_2);
 
         // Compute the spring torque.
         const double torque_about_3 = element_spring_constant * (cos_of_angle - std::cos(element_rest_angle));

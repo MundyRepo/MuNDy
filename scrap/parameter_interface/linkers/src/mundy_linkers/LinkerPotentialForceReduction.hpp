@@ -32,7 +32,7 @@
 #include <Teuchos_ParameterList.hpp>  // for Teuchos::ParameterList
 
 // Mundy libs
-#include <mundy_utils/StringLiteral.hpp>  // for mundy::utils::StringLiteral and mundy::utils::make_string_literal
+#include <mundy_utils/StringLiteral.hpp>  // for mundy::StringLiteral and mundy::make_string_literal
 #include <mundy_linkers/linker_potential_force_reduction/kernels/Sphere.hpp>  // for mundy::linkers::...::kernels::Sphere
 #include <mundy_linkers/linker_potential_force_reduction/kernels/Spherocylinder.hpp>  // for mundy::linkers::...::kernels::Spherocylinder
 #include <mundy_linkers/linker_potential_force_reduction/kernels/SpherocylinderSegment.hpp>  // for mundy::linkers::...::kernels::SpherocylinderSegment

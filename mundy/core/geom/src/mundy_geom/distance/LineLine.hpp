@@ -25,16 +25,14 @@
 #include <Kokkos_Core.hpp>
 
 // Mundy
-#include <mundy_geom/distance/DistanceMetrics.hpp>  // for mundy::geom::FreeSpaceMetric
+#include <mundy_geom/distance/DistanceMetrics.hpp>  // for mundy::FreeSpaceMetric
 #include <mundy_geom/distance/PointPoint.hpp>       // for distance(Point, Point)
-#include <mundy_geom/distance/Types.hpp>            // for mundy::geom::SharedNormalSigned
-#include <mundy_geom/primitives/Line.hpp>           // for mundy::geom::Line
-#include <mundy_geom/primitives/Point.hpp>          // for mundy::geom::Point
-#include <mundy_math/Tolerance.hpp>                 // for mundy::math::get_zero_tolerance
+#include <mundy_geom/distance/Types.hpp>            // for mundy::SharedNormalSigned
+#include <mundy_geom/primitives/Line.hpp>           // for mundy::Line
+#include <mundy_geom/primitives/Point.hpp>          // for mundy::Point
+#include <mundy_math/Tolerance.hpp>                 // for mundy::get_zero_tolerance
 
 namespace mundy {
-
-namespace geom {
 
 //! \name Free space distance calculations
 //@{
@@ -60,16 +58,16 @@ KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distan
                                 const Line<Scalar>& line2) {
   // Part of this function was adapted from VTK, which, in turn adapted part of it from "GeometryAlgorithms.com"
   const auto center_center = line1.center() - line2.center();
-  const Scalar a = mundy::math::dot(line1.direction(), line1.direction());
-  const Scalar b = mundy::math::dot(line1.direction(), line2.direction());
-  const Scalar c = mundy::math::dot(line2.direction(), line2.direction());
-  const Scalar d = mundy::math::dot(line1.direction(), center_center);
-  const Scalar e = mundy::math::dot(line2.direction(), center_center);
+  const Scalar a = mundy::dot(line1.direction(), line1.direction());
+  const Scalar b = mundy::dot(line1.direction(), line2.direction());
+  const Scalar c = mundy::dot(line2.direction(), line2.direction());
+  const Scalar d = mundy::dot(line1.direction(), center_center);
+  const Scalar e = mundy::dot(line2.direction(), center_center);
   const Scalar D = a * c - b * b;  // always >= 0
 
   // Check if the lines are colinear
   // Two infinite colinear lines intersect at all points.
-  if (D < mundy::math::get_zero_tolerance<Scalar>()) {
+  if (D < mundy::get_zero_tolerance<Scalar>()) {
     return static_cast<Scalar>(0.0);
   }
 
@@ -108,7 +106,7 @@ KOKKOS_FUNCTION Scalar distance(const Line<Scalar>& line1,      //
                                 Point<Scalar>& closest_point2,  //
                                 Scalar& arch_length1,           //
                                 Scalar& arch_length2,           //
-                                mundy::math::Vector3<Scalar>& sep) {
+                                mundy::Vector3<Scalar>& sep) {
   return distance(SharedNormalSigned{}, line1, line2,  //
                   closest_point1, closest_point2, arch_length1, arch_length2, sep);
 }
@@ -131,19 +129,19 @@ KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distan
                                 Point<Scalar>& closest_point2,                            //
                                 Scalar& arch_length1,                                     //
                                 Scalar& arch_length2,                                     //
-                                mundy::math::Vector3<Scalar>& sep) {
+                                mundy::Vector3<Scalar>& sep) {
   // Part of this function was adapted from VTK, which, in turn adapted part of it from "GeometryAlgorithms.com"
   const auto center_center = line1.center() - line2.center();
-  const Scalar a = mundy::math::dot(line1.direction(), line1.direction());
-  const Scalar b = mundy::math::dot(line1.direction(), line2.direction());
-  const Scalar c = mundy::math::dot(line2.direction(), line2.direction());
-  const Scalar d = mundy::math::dot(line1.direction(), center_center);
-  const Scalar e = mundy::math::dot(line2.direction(), center_center);
+  const Scalar a = mundy::dot(line1.direction(), line1.direction());
+  const Scalar b = mundy::dot(line1.direction(), line2.direction());
+  const Scalar c = mundy::dot(line2.direction(), line2.direction());
+  const Scalar d = mundy::dot(line1.direction(), center_center);
+  const Scalar e = mundy::dot(line2.direction(), center_center);
   const Scalar D = a * c - b * b;  // always >= 0
 
   // Check if the lines are colinear
   // Two infinite colinear lines intersect at all points.
-  if (D < mundy::math::get_zero_tolerance<Scalar>()) {
+  if (D < mundy::get_zero_tolerance<Scalar>()) {
     sep = {0.0, 0.0, 0.0};
     return static_cast<Scalar>(0.0);
   }
@@ -157,8 +155,6 @@ KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distan
   return distance(closest_point1, closest_point2, sep);
 }
 //@}
-
-}  // namespace geom
 
 }  // namespace mundy
 

@@ -68,7 +68,7 @@ class NonSmoothLCP : public mundy::meta::MetaMethodSubsetExecutionInterface<void
   // TODO(palmerb4): MetaMethodFactory should be able to spawn multiple factories for a single class.
   // Below, we see why this is necessary. Even though we have different aliases for the various factories,
   // three of them are actually the same type. To me, this tells me that RegistryIdentifier_t should be replaced with
-  // compile-time strings via mundy::utils::Stringliteral.
+  // compile-time strings via mundy::Stringliteral.
 
   using PolymorphicBaseType = mundy::meta::MetaMethodSubsetExecutionInterface<void>;
   using OurConstraintForcingMethodFactory = mundy::meta::MetaMethodFactory<void, NonSmoothLCP>;

@@ -28,17 +28,15 @@
 #include <Kokkos_Core.hpp>
 
 // Mundy
-#include <mundy_geom/distance/DistanceMetrics.hpp>   // for mundy::geom::FreeSpaceMetric
-#include <mundy_geom/distance/PointLineSegment.hpp>  // for mundy::geom::distance(Point, LineSegment)
-#include <mundy_geom/distance/PointPoint.hpp>        // for mundy::geom::distance(Point, Point)
-#include <mundy_geom/distance/Types.hpp>             // for mundy::geom::SharedNormalSigned
-#include <mundy_geom/primitives/LineSegment.hpp>     // for mundy::geom::LineSegment
-#include <mundy_geom/primitives/Point.hpp>           // for mundy::geom::Point
-#include <mundy_math/Tolerance.hpp>                  // for mundy::math::get_zero_tolerance
+#include <mundy_geom/distance/DistanceMetrics.hpp>   // for mundy::FreeSpaceMetric
+#include <mundy_geom/distance/PointLineSegment.hpp>  // for mundy::distance(Point, LineSegment)
+#include <mundy_geom/distance/PointPoint.hpp>        // for mundy::distance(Point, Point)
+#include <mundy_geom/distance/Types.hpp>             // for mundy::SharedNormalSigned
+#include <mundy_geom/primitives/LineSegment.hpp>     // for mundy::LineSegment
+#include <mundy_geom/primitives/Point.hpp>           // for mundy::Point
+#include <mundy_math/Tolerance.hpp>                  // for mundy::get_zero_tolerance
 
 namespace mundy {
-
-namespace geom {
 
 //! \name Free space distance calculations
 //@{
@@ -83,15 +81,15 @@ KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distan
   const auto u = l1 - l0;
   const auto v = m1 - m0;
   const auto w = l0 - m0;
-  const Scalar a = mundy::math::dot(u, u);
-  const Scalar b = mundy::math::dot(u, v);
-  const Scalar c = mundy::math::dot(v, v);
-  const Scalar d = mundy::math::dot(u, w);
-  const Scalar e = mundy::math::dot(v, w);
+  const Scalar a = mundy::dot(u, u);
+  const Scalar b = mundy::dot(u, v);
+  const Scalar c = mundy::dot(v, v);
+  const Scalar d = mundy::dot(u, w);
+  const Scalar e = mundy::dot(v, w);
   const Scalar D = a * c - b * b;  // always >= 0
 
   // Compute the line parameters of the two closest points
-  if (D < Kokkos::sqrt(mundy::math::get_zero_tolerance<Scalar>())) {
+  if (D < Kokkos::sqrt(mundy::get_zero_tolerance<Scalar>())) {
     // CASE 1: The lines are colinear. Therefore, one of the four endpoints is the
     // point of closest approach. We'll directly compute the 4 distances and the closest point on the line.
     const Scalar dist1 = distance(l0, line_segment2);
@@ -148,9 +146,9 @@ KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distan
 
   // Finally, get the arch-length parameters, the corresponding closest points, and their distance.
   const Scalar arch_length1 =
-      (Kokkos::fabs(sN) < mundy::math::get_zero_tolerance<Scalar>()) ? static_cast<Scalar>(0.0) : sN / sD;
+      (Kokkos::fabs(sN) < mundy::get_zero_tolerance<Scalar>()) ? static_cast<Scalar>(0.0) : sN / sD;
   const Scalar arch_length2 =
-      (Kokkos::fabs(tN) < mundy::math::get_zero_tolerance<Scalar>()) ? static_cast<Scalar>(0.0) : tN / tD;
+      (Kokkos::fabs(tN) < mundy::get_zero_tolerance<Scalar>()) ? static_cast<Scalar>(0.0) : tN / tD;
   const auto closest_point1 = l0 + arch_length1 * u;
   const auto closest_point2 = m0 + arch_length2 * v;
   return distance(closest_point1, closest_point2);
@@ -172,7 +170,7 @@ KOKKOS_FUNCTION Scalar distance(const LineSegment<Scalar>& line_segment1,  //
                                 Point<Scalar>& closest_point2,             //
                                 Scalar& arch_length1,                      //
                                 Scalar& arch_length2,                      //
-                                mundy::math::Vector3<Scalar>& sep) {
+                                mundy::Vector3<Scalar>& sep) {
   return distance(SharedNormalSigned{}, line_segment1, line_segment2,  //
                   closest_point1, closest_point2, arch_length1, arch_length2, sep);
 }
@@ -194,7 +192,7 @@ KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distan
                                 Point<Scalar>& closest_point2,                            //
                                 Scalar& arch_length1,                                     //
                                 Scalar& arch_length2,                                     //
-                                mundy::math::Vector3<Scalar>& sep) {
+                                mundy::Vector3<Scalar>& sep) {
   // Part of this function was adapted from VTK, which, in turn adapted part of it from "GeometryAlgorithms.com"
   const auto& l0 = line_segment1.start();
   const auto& l1 = line_segment1.end();
@@ -204,15 +202,15 @@ KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distan
   const auto u = l1 - l0;
   const auto v = m1 - m0;
   const auto w = l0 - m0;
-  const Scalar a = mundy::math::dot(u, u);
-  const Scalar b = mundy::math::dot(u, v);
-  const Scalar c = mundy::math::dot(v, v);
-  const Scalar d = mundy::math::dot(u, w);
-  const Scalar e = mundy::math::dot(v, w);
+  const Scalar a = mundy::dot(u, u);
+  const Scalar b = mundy::dot(u, v);
+  const Scalar c = mundy::dot(v, v);
+  const Scalar d = mundy::dot(u, w);
+  const Scalar e = mundy::dot(v, w);
   const Scalar D = a * c - b * b;  // always >= 0
 
   // Compute the line parameters of the two closest points
-  if (D < Kokkos::sqrt(mundy::math::get_zero_tolerance<Scalar>())) {
+  if (D < Kokkos::sqrt(mundy::get_zero_tolerance<Scalar>())) {
     // CASE 1: The lines are colinear. Therefore, one of the four endpoints is the
     // point of closest approach. We'll directly compute the 4 distances and the closest point on the line.
     Point<Scalar> closest_point_tmp1;
@@ -223,10 +221,10 @@ KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distan
     Scalar arch_length_tmp2;
     Scalar arch_length_tmp3;
     Scalar arch_length_tmp4;
-    mundy::math::Vector3<Scalar> sep_tmp1;
-    mundy::math::Vector3<Scalar> sep_tmp2;
-    mundy::math::Vector3<Scalar> sep_tmp3;
-    mundy::math::Vector3<Scalar> sep_tmp4;
+    mundy::Vector3<Scalar> sep_tmp1;
+    mundy::Vector3<Scalar> sep_tmp2;
+    mundy::Vector3<Scalar> sep_tmp3;
+    mundy::Vector3<Scalar> sep_tmp4;
     const Scalar dist1 = distance(l0, line_segment2, closest_point_tmp1, arch_length_tmp1, sep_tmp1);
     const Scalar dist2 = distance(l1, line_segment2, closest_point_tmp2, arch_length_tmp2, sep_tmp2);
     const Scalar dist3 = distance(m0, line_segment1, closest_point_tmp3, arch_length_tmp3, sep_tmp3);
@@ -310,8 +308,8 @@ KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distan
   }
 
   // Finally, get the arch-length parameters, the corresponding closest points, and their distance.
-  arch_length1 = (Kokkos::fabs(sN) < mundy::math::get_zero_tolerance<Scalar>()) ? static_cast<Scalar>(0.0) : sN / sD;
-  arch_length2 = (Kokkos::fabs(tN) < mundy::math::get_zero_tolerance<Scalar>()) ? static_cast<Scalar>(0.0) : tN / tD;
+  arch_length1 = (Kokkos::fabs(sN) < mundy::get_zero_tolerance<Scalar>()) ? static_cast<Scalar>(0.0) : sN / sD;
+  arch_length2 = (Kokkos::fabs(tN) < mundy::get_zero_tolerance<Scalar>()) ? static_cast<Scalar>(0.0) : tN / tD;
   closest_point1 = l0 + arch_length1 * u;
   closest_point2 = m0 + arch_length2 * v;
   return distance(closest_point1, closest_point2, sep);
@@ -334,13 +332,11 @@ KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const Euclidean distance_type, 
                                 Point<Scalar>& closest_point2,                   //
                                 Scalar& arch_length1,                            //
                                 Scalar& arch_length2,                            //
-                                mundy::math::Vector3<Scalar>& sep) {
+                                mundy::Vector3<Scalar>& sep) {
   return distance(SharedNormalSigned{}, line_segment1, line_segment2,  //
                   closest_point1, closest_point2, arch_length1, arch_length2, sep);
 }
 //@}
-
-}  // namespace geom
 
 }  // namespace mundy
 

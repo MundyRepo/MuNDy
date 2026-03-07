@@ -30,13 +30,11 @@
 #include <utility>
 
 // Our libs
-#include <mundy_utils/throw_assert.hpp>      // for MUNDY_THROW_ASSERT
-#include <mundy_geom/primitives/Point.hpp>  // for mundy::geom::Point
-#include <mundy_math/Vector3.hpp>           // for mundy::math::Vector3
+#include <mundy_geom/primitives/Point.hpp>  // for mundy::Point
+#include <mundy_math/Vector3.hpp>           // for mundy::Vector3
+#include <mundy_utils/throw_assert.hpp>     // for MUNDY_THROW_ASSERT
 
 namespace mundy {
-
-namespace geom {
 
 template <typename Scalar, ValidPointType PointType = Point<Scalar>>
 class Line {
@@ -64,7 +62,7 @@ class Line {
   /// \brief Default constructor for owning Lines. Default initialize the
   KOKKOS_FUNCTION
   constexpr Line()
-    requires(math::HasNArgConstructor<point_t, scalar_t, 3> && math::HasNArgConstructor<vector_t, scalar_t, 3>)
+    requires(HasNArgConstructor<point_t, scalar_t, 3> && HasNArgConstructor<vector_t, scalar_t, 3>)
       : center_(scalar_t(), scalar_t(), scalar_t()), direction_(scalar_t(), scalar_t(), scalar_t()) {
   }
 
@@ -78,7 +76,7 @@ class Line {
   /// \brief Constructor to initialize the center and radius.
   /// \param[in] center The center of the Line.
   /// \param[in] direction The direction of the Line.
-  template <ValidPointType OtherPointType, math::ValidVectorType OtherVectorType>
+  template <ValidPointType OtherPointType, ValidVectorType OtherVectorType>
   KOKKOS_FUNCTION constexpr Line(const OtherPointType& center, const OtherVectorType& direction)
     requires(!std::is_same_v<OtherPointType, point_t> || !std::is_same_v<OtherVectorType, vector_t>)
       : center_(center), direction_(direction) {
@@ -209,7 +207,7 @@ class Line {
 
   /// \brief Set the direction
   /// \param[in] direction The new direction.
-  template <math::ValidVectorType OtherVectorType>
+  template <ValidVectorType OtherVectorType>
   KOKKOS_FUNCTION constexpr void set_direction(const OtherVectorType& direction) {
     direction_ = direction;
   }
@@ -271,8 +269,6 @@ std::ostream& operator<<(std::ostream& os, const LineType& line) {
   return os;
 }
 //@}
-
-}  // namespace geom
 
 }  // namespace mundy
 

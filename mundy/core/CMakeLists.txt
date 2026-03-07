@@ -8,7 +8,6 @@ GLOBAL_SET(MUNDY_DEFAULT_UNIT_TEST_MAIN
 GLOBAL_SET(MUNDY_DEFAULT_INTEGRATION_TEST_MAIN
   "${PACKAGE_SOURCE_DIR}/mundy/core/tests/integration_tests/DefaultIntegrationTestMain.cpp")
 
-
 # For now, we enable all subpackages of Mundy by default. They can be disabled by the user
 # if they are not needed.
 GLOBAL_SET(Mundy_ENABLE_ALL_OPTIONAL_PACKAGES ON)

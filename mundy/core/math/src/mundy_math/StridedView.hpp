@@ -28,11 +28,9 @@
 #include <concepts>
 
 // Mundy
-#include <mundy_math/Accessor.hpp>  // for mundy::math::ValidAccessor
+#include <mundy_math/Accessor.hpp>  // for mundy::ValidAccessor
 
 namespace mundy {
-
-namespace math {
 
 /// \brief Get a strided accessor into a contiguous accessor
 ///
@@ -45,7 +43,7 @@ namespace math {
 template <typename T, size_t stride, ValidAccessor<T> Accessor>
 class StridedView {
  public:
-  utils::storage<Accessor> accessor_;
+  storage<Accessor> accessor_;
 
   /// \brief Constructor from a given accessor
   KOKKOS_INLINE_FUNCTION
@@ -99,18 +97,16 @@ class StridedView {
 /// \endcode
 template <typename T, size_t stride, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto get_strided_view(Accessor&& data) {
-  auto data_storage = utils::store(impl::unwrap_accessor(std::forward<Accessor>(data)));
+  auto data_storage = store(impl::unwrap_accessor(std::forward<Accessor>(data)));
   return StridedView<T, stride, decltype(data_storage)>(data_storage);
 }
 
 template <typename T, size_t stride, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto get_owning_strided_accessor(Accessor&& data) {
-  auto data_storage = utils::store(impl::unwrap_accessor(std::move(data)));
+  auto data_storage = store(impl::unwrap_accessor(std::move(data)));
   return StridedView<T, stride, decltype(data_storage)>(data_storage);
 }
 //@}
-
-}  // namespace math
 
 }  // namespace mundy
 

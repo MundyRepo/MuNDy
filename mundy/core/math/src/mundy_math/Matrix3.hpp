@@ -31,15 +31,13 @@
 #include <type_traits>  // for std::decay_t
 
 // Our libs
+#include <mundy_math/Accessor.hpp>       // for mundy::ValidAccessor
+#include <mundy_math/Array.hpp>          // for mundy::Array
+#include <mundy_math/Matrix.hpp>         // for mundy::Matrix
+#include <mundy_math/Tolerance.hpp>      // for mundy::get_zero_tolerance
 #include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
-#include <mundy_math/Accessor.hpp>      // for mundy::math::ValidAccessor
-#include <mundy_math/Array.hpp>         // for mundy::math::Array
-#include <mundy_math/Matrix.hpp>        // for mundy::math::Matrix
-#include <mundy_math/Tolerance.hpp>     // for mundy::math::get_zero_tolerance
 
 namespace mundy {
-
-namespace math {
 
 /// \brief Get the lower triangular matrix of the Cholesky decomposition of a symmetric positive definite matrix
 /// \param A The symmetric positive definite matrix
@@ -220,20 +218,18 @@ static_assert(is_matrix3_v<AMatrix3<int, Array<int, 9>>>, "Odd, default matrix3 
 /// \endcode
 template <typename T, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto get_matrix3_view(Accessor&& data) {
-  auto data_storage = utils::store(impl::unwrap_accessor(std::forward<Accessor>(data)));
+  auto data_storage = store(impl::unwrap_accessor(std::forward<Accessor>(data)));
   return AMatrix3<T, decltype(data_storage)>(data_storage);
 }
 
 template <typename T, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto get_owning_matrix3(Accessor&& data) {
-  auto data_storage = utils::store(impl::unwrap_accessor(std::move(data)));
+  auto data_storage = store(impl::unwrap_accessor(std::move(data)));
   return AMatrix3<T, decltype(data_storage)>(data_storage);
 }
 //@}
 
 //@}
-
-}  // namespace math
 
 }  // namespace mundy
 

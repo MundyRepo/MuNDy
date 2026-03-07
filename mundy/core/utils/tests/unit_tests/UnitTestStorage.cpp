@@ -31,12 +31,10 @@
 
 namespace mundy {
 
-namespace utils {
-
 namespace {
 
 template <class T>
-concept can_store = requires(T&& t) { ::mundy::utils::store(static_cast<T&&>(t)); };
+concept can_store = requires(T&& t) { ::mundy::store(static_cast<T&&>(t)); };
 
 struct LifetimeTracked {
   static inline int live_count = 0;
@@ -63,16 +61,15 @@ struct LifetimeTracked {
 
 auto make_owned_tracked_storage(int value) {
   LifetimeTracked local(value);
-  return ::mundy::utils::store(std::move(local));
+  return ::mundy::store(std::move(local));
 }
 
 TEST(StorageTest, StoreLvalueUsesReferenceWrapperStorage) {
   int value = 7;
-  auto stash = ::mundy::utils::store(value);
+  auto stash = ::mundy::store(value);
 
-  static_assert(std::is_same_v<decltype(stash), ::mundy::utils::storage<int&>>,
-                "store(lvalue) should produce storage<T&>");
-  static_assert(std::is_same_v<typename decltype(stash)::stored_type, ::mundy::utils::reference_wrapper<int>>,
+  static_assert(std::is_same_v<decltype(stash), ::mundy::storage<int&>>, "store(lvalue) should produce storage<T&>");
+  static_assert(std::is_same_v<typename decltype(stash)::stored_type, ::mundy::reference_wrapper<int>>,
                 "storage<int&> should store reference_wrapper<int>");
   static_assert(std::is_same_v<decltype(stash.get()), int&>, "get() should return int& for lvalue storage");
 
@@ -82,11 +79,11 @@ TEST(StorageTest, StoreLvalueUsesReferenceWrapperStorage) {
 
 TEST(StorageTest, StoreConstLvalueKeepsConstReferenceSemantics) {
   const int value = 11;
-  auto stash = ::mundy::utils::store(value);
+  auto stash = ::mundy::store(value);
 
-  static_assert(std::is_same_v<decltype(stash), ::mundy::utils::storage<const int&>>,
+  static_assert(std::is_same_v<decltype(stash), ::mundy::storage<const int&>>,
                 "store(const lvalue) should produce storage<const T&>");
-  static_assert(std::is_same_v<typename decltype(stash)::stored_type, ::mundy::utils::reference_wrapper<const int>>,
+  static_assert(std::is_same_v<typename decltype(stash)::stored_type, ::mundy::reference_wrapper<const int>>,
                 "const lvalue should store reference_wrapper<const T>");
   static_assert(std::is_same_v<decltype(stash.get()), const int&>, "get() should return const int&");
 
@@ -94,10 +91,9 @@ TEST(StorageTest, StoreConstLvalueKeepsConstReferenceSemantics) {
 }
 
 TEST(StorageTest, StoreRvalueOwnsValue) {
-  auto stash = ::mundy::utils::store(42);
+  auto stash = ::mundy::store(42);
 
-  static_assert(std::is_same_v<decltype(stash), ::mundy::utils::storage<int>>,
-                "store(rvalue) should produce storage<T>");
+  static_assert(std::is_same_v<decltype(stash), ::mundy::storage<int>>, "store(rvalue) should produce storage<T>");
   static_assert(std::is_same_v<typename decltype(stash)::stored_type, int>, "storage<int> should store int");
   static_assert(std::is_same_v<decltype(stash.get()), int&>, "mutable get() should return int&");
 
@@ -111,10 +107,10 @@ TEST(StorageTest, StorePointerStoresPointerAndGetReturnsPointer) {
   int* pointer = &value;
   const int* const_pointer = &value;
 
-  auto stash = ::mundy::utils::store(pointer);
-  auto const_stash = ::mundy::utils::store(const_pointer);
+  auto stash = ::mundy::store(pointer);
+  auto const_stash = ::mundy::store(const_pointer);
 
-  static_assert(std::is_same_v<decltype(stash), ::mundy::utils::storage<int*&>>,
+  static_assert(std::is_same_v<decltype(stash), ::mundy::storage<int*&>>,
                 "store(pointer lvalue) should produce storage<T*&>");
   static_assert(std::is_same_v<typename decltype(stash)::stored_type, int*>,
                 "pointer storage should store raw pointer");
@@ -130,12 +126,12 @@ TEST(StorageTest, StorePointerStoresPointerAndGetReturnsPointer) {
 
 TEST(StorageTest, StoreReferenceWrapperKeepsWrapperTypeAndReference) {
   int value = 3;
-  auto wrapped = ::mundy::utils::ref(value);
-  auto stash = ::mundy::utils::store(wrapped);
+  auto wrapped = ::mundy::ref(value);
+  auto stash = ::mundy::store(wrapped);
 
-  static_assert(std::is_same_v<decltype(stash), ::mundy::utils::storage<::mundy::utils::reference_wrapper<int>&>>,
+  static_assert(std::is_same_v<decltype(stash), ::mundy::storage<::mundy::reference_wrapper<int>&>>,
                 "store(reference_wrapper lvalue) should preserve wrapper semantics");
-  static_assert(std::is_same_v<typename decltype(stash)::stored_type, ::mundy::utils::reference_wrapper<int>>,
+  static_assert(std::is_same_v<typename decltype(stash)::stored_type, ::mundy::reference_wrapper<int>>,
                 "wrapper storage should directly store reference_wrapper<T>");
   static_assert(std::is_same_v<decltype(stash.get()), int&>, "get() should unwrap to T&");
 
@@ -145,8 +141,8 @@ TEST(StorageTest, StoreReferenceWrapperKeepsWrapperTypeAndReference) {
 
 TEST(StorageTest, StoreStorageReturnsSameType) {
   int value = 100;
-  auto stash = ::mundy::utils::store(value);
-  auto again = ::mundy::utils::store(stash);
+  auto stash = ::mundy::store(value);
+  auto again = ::mundy::store(stash);
 
   using stash_t = decltype(stash);
   using again_t = decltype(again);
@@ -159,20 +155,19 @@ TEST(StorageTest, StoreStorageReturnsSameType) {
 }
 
 TEST(StorageTest, StorageTypeNormalizationRules) {
-  using wrapper_t = ::mundy::utils::reference_wrapper<int>;
-  using storage_ref_t = ::mundy::utils::storage<int&>;
+  using wrapper_t = ::mundy::reference_wrapper<int>;
+  using storage_ref_t = ::mundy::storage<int&>;
 
-  static_assert(std::is_same_v<::mundy::utils::impl::storage_type_t<int>, int>, "value type should store as value");
-  static_assert(std::is_same_v<::mundy::utils::impl::storage_type_t<int&>, wrapper_t>,
+  static_assert(std::is_same_v<::mundy::impl::storage_type_t<int>, int>, "value type should store as value");
+  static_assert(std::is_same_v<::mundy::impl::storage_type_t<int&>, wrapper_t>,
                 "lvalue reference should store as reference_wrapper<T>");
-  static_assert(std::is_same_v<::mundy::utils::impl::storage_type_t<int*>, int*>, "pointer should store as pointer");
-  static_assert(std::is_same_v<::mundy::utils::impl::storage_type_t<const int* const&>, const int*>,
+  static_assert(std::is_same_v<::mundy::impl::storage_type_t<int*>, int*>, "pointer should store as pointer");
+  static_assert(std::is_same_v<::mundy::impl::storage_type_t<const int* const&>, const int*>,
                 "pointer cv/ref should normalize to pointer with pointee cv preserved");
-  static_assert(std::is_same_v<::mundy::utils::impl::storage_type_t<wrapper_t&>, wrapper_t>,
+  static_assert(std::is_same_v<::mundy::impl::storage_type_t<wrapper_t&>, wrapper_t>,
                 "reference_wrapper should store as the wrapper type itself");
-  static_assert(
-      std::is_same_v<::mundy::utils::impl::storage_type_t<storage_ref_t&>, typename storage_ref_t::stored_type>,
-      "storage<T> input should normalize to storage<T>::stored_type");
+  static_assert(std::is_same_v<::mundy::impl::storage_type_t<storage_ref_t&>, typename storage_ref_t::stored_type>,
+                "storage<T> input should normalize to storage<T>::stored_type");
 }
 
 TEST(StorageTest, ConstructibilityContracts) {
@@ -187,7 +182,7 @@ TEST(StorageTest, RvalueStorageOwnsObjectAcrossSourceScopeExit) {
   {
     auto stash = make_owned_tracked_storage(33);
 
-    static_assert(std::is_same_v<decltype(stash), ::mundy::utils::storage<LifetimeTracked>>,
+    static_assert(std::is_same_v<decltype(stash), ::mundy::storage<LifetimeTracked>>,
                   "store(std::move(local)) should own LifetimeTracked by value");
     EXPECT_EQ(LifetimeTracked::live_count, 1);
     EXPECT_EQ(stash.get().value, 33);
@@ -201,7 +196,7 @@ TEST(StorageTest, RvalueStorageOwnsObjectAcrossSourceScopeExit) {
 
 TEST(StorageTest, ReferenceStorageIsSafeWhenReferentOutlivesStorage) {
   int owner = 10;
-  ::mundy::utils::storage<int&> stash = ::mundy::utils::store(owner);
+  ::mundy::storage<int&> stash = ::mundy::store(owner);
 
   {
     int& alias = stash.get();
@@ -214,7 +209,5 @@ TEST(StorageTest, ReferenceStorageIsSafeWhenReferentOutlivesStorage) {
 }
 
 }  // namespace
-
-}  // namespace utils
 
 }  // namespace mundy

@@ -30,11 +30,9 @@
 #include <utility>
 
 // Mundy
-#include <mundy_geom/primitives/LineSegment.hpp>  // for mundy::geom::LineSegment
+#include <mundy_geom/primitives/LineSegment.hpp>  // for mundy::LineSegment
 
 namespace mundy {
-
-namespace mech {
 
 /// \brief A ball-and-socket joint between two points
 ///
@@ -42,8 +40,8 @@ namespace mech {
 /// It does not have any physical properties beyond those of its underlying geometry. Although,
 /// depending on the use case, it will be augmented to include a finite spring constant (if imposed as a soft
 /// constraint) or three Lagrange multipliers (if imposed as a hard constraint).
-template <typename Scalar, mundy::geom::ValidLineSegmentType LineSegmentType = mundy::geom::LineSegment<Scalar>,
-          typename OwnershipType = mundy::math::Ownership::Owns>
+template <typename Scalar, mundy::ValidLineSegmentType LineSegmentType = mundy::LineSegment<Scalar>,
+          typename OwnershipType = mundy::Ownership::Owns>
 class BallJoint {
   static_assert(std::is_same_v<typename LineSegmentType::scalar_t, Scalar>,
                 "The scalar_t of the LineSegmentType must match the Scalar type.");
@@ -69,14 +67,14 @@ class BallJoint {
   /// \brief Default constructor for owning BallJoints. Default initialize the line segment.
   KOKKOS_FUNCTION
   BallJoint()
-    requires std::is_same_v<OwnershipType, mundy::math::Ownership::Owns>
+    requires std::is_same_v<OwnershipType, mundy::Ownership::Owns>
       : line_segment_() {
   }
 
   /// \brief No default constructor for viewing BallJointss.
   KOKKOS_FUNCTION
   BallJoint()
-    requires std::is_same_v<OwnershipType, mundy::math::Ownership::Views>
+    requires std::is_same_v<OwnershipType, mundy::Ownership::Views>
   = delete;
 
   /// \brief Constructor to initialize the underlying line segment.
@@ -85,7 +83,7 @@ class BallJoint {
   }
 
   /// \brief Constructor to initialize the underlying line segment.
-  template <mundy::geom::ValidLineSegmentType OtherLineSegmentType>
+  template <mundy::ValidLineSegmentType OtherLineSegmentType>
   KOKKOS_FUNCTION BallJoint(const OtherLineSegmentType& line_segment)
     requires(!std::is_same_v<OtherLineSegmentType, line_segment_t>)
       : line_segment_(line_segment) {
@@ -183,7 +181,7 @@ class BallJoint {
 
   /// \brief Set the line segment
   /// \param[in] line_segment The new line segment.
-  template <mundy::geom::ValidLineSegmentType OtherLineSegmentType>
+  template <mundy::ValidLineSegmentType OtherLineSegmentType>
   KOKKOS_FUNCTION void set_line_segment(const OtherLineSegmentType& line_segment) {
     line_segment_ = line_segment;
   }
@@ -197,10 +195,10 @@ class BallJoint {
 template <typename T>
 struct is_ball_joint : std::false_type {};
 //
-template <typename Scalar, mundy::geom::ValidLineSegmentType LineSegmentType, typename OwnershipType>
+template <typename Scalar, mundy::ValidLineSegmentType LineSegmentType, typename OwnershipType>
 struct is_ball_joint<BallJoint<Scalar, LineSegmentType, OwnershipType>> : std::true_type {};
 //
-template <typename Scalar, mundy::geom::ValidLineSegmentType LineSegmentType, typename OwnershipType>
+template <typename Scalar, mundy::ValidLineSegmentType LineSegmentType, typename OwnershipType>
 struct is_ball_joint<const BallJoint<Scalar, LineSegmentType, OwnershipType>> : std::true_type {};
 //
 template <typename T>
@@ -208,13 +206,11 @@ inline constexpr bool is_ball_joint_v = is_ball_joint<T>::value;
 
 /// @brief Concept to check if a type is a valid BallJoint type
 template <typename BallJointType>
-concept ValidBallJointType = mundy::geom::ValidLineSegmentType<BallJointType>;
+concept ValidBallJointType = mundy::ValidLineSegmentType<BallJointType>;
 
 static_assert(ValidBallJointType<BallJoint<float>> && ValidBallJointType<const BallJoint<float>> &&
                   ValidBallJointType<BallJoint<double>> && ValidBallJointType<const BallJoint<double>>,
               "BallJoint should satisfy the ValidBallJointType concept");
-
-}  // namespace mech
 
 }  // namespace mundy
 

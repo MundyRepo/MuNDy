@@ -32,10 +32,10 @@
 #include <Kokkos_Core.hpp>  // for Kokkos::numbers::pi
 
 // Mundy
-#include <mundy_utils/rng.hpp>         // for mundy::utils::make_philox
-#include <mundy_geom/distance.hpp>    // for mundy::geom::distance
-#include <mundy_geom/primitives.hpp>  // for mundy::geom::Point, mundy::geom::LineSegment
-#include <mundy_math/Tolerance.hpp>   // for mundy::math::get_zero_tolerance
+#include <mundy_geom/distance.hpp>    // for mundy::distance
+#include <mundy_geom/primitives.hpp>  // for mundy::Point, mundy::LineSegment
+#include <mundy_math/Tolerance.hpp>   // for mundy::get_zero_tolerance
+#include <mundy_utils/rng.hpp>        // for mundy::make_philox
 
 /// \brief The following global is used to control the number of samples per test.
 /// For unit tests, this number should be kept low to ensure fast test times, but to still give an immediate warning if
@@ -45,8 +45,6 @@
 #endif
 
 namespace mundy {
-
-namespace geom {
 
 namespace {
 
@@ -92,11 +90,11 @@ void generate_intersecting_line_segments(RngType& rng, Point<double>& a1, Point<
   a2 = a1 + (intersection - a1) * (1. + ratio1);
   b2 = b1 + (intersection - b1) * (1. + ratio2);
 
-  const double len_a = mundy::math::norm(a2 - a1);
-  const double len_b = mundy::math::norm(b2 - b1);
+  const double len_a = mundy::norm(a2 - a1);
+  const double len_b = mundy::norm(b2 - b1);
 
-  const double len_a1_to_intersection = mundy::math::norm(a1 - intersection);
-  const double len_b1_to_intersection = mundy::math::norm(b1 - intersection);
+  const double len_a1_to_intersection = mundy::norm(a1 - intersection);
+  const double len_b1_to_intersection = mundy::norm(b1 - intersection);
 
   u = len_a1_to_intersection / len_a;
   v = len_b1_to_intersection / len_b;
@@ -195,8 +193,8 @@ void generate_lines_at_known_distance(RngType& rng, double& line_dist, Point<dou
 
   // Because v1 and v2 may be equal, care needs to be taken when determining the line distance along v3.
   // Instead of normalizing v3, we'll scale it randomly by [0, 1] such that its norm is the desired line distance.
-  const Point<double> v3 = mundy::math::cross(v1, v2) * rng.template rand<double>();
-  const double norm_v3 = mundy::math::norm(v3);
+  const Point<double> v3 = mundy::cross(v1, v2) * rng.template rand<double>();
+  const double norm_v3 = mundy::norm(v3);
   line_dist = norm_v3;
 
   // Now that we have the unit orientations, the separation vector, and the separation distance, we need to decide the
@@ -260,8 +258,8 @@ void generate_line_segments_at_known_distance(RngType& rng, double& line_dist, P
 
   // Because v1 and v2 may be equal, care needs to be taken when determining the line distance along v3.
   // Instead of normalizing v3, we'll scale it randomly by [0, 1] such that its norm is the desired line distance.
-  const Point<double> v3 = mundy::math::cross(v1, v2) * rng.template rand<double>();
-  const double norm_v3 = mundy::math::norm(v3);
+  const Point<double> v3 = mundy::cross(v1, v2) * rng.template rand<double>();
+  const double norm_v3 = mundy::norm(v3);
   line_dist = norm_v3;
 
   // Now that we have the unit orientations, the separation vector, and the separation distance, we need to decide the
@@ -290,8 +288,8 @@ void generate_line_segments_at_known_distance(RngType& rng, double& line_dist, P
     b2[i] = b12[i] + b12_to_b2 * v2[i];
   }
 
-  const bool is_a_degenerate = (a1_to_a12 + a12_to_a2) < mundy::math::get_zero_tolerance<double>();
-  const bool is_b_degenerate = (b1_to_b12 + b12_to_b2) < mundy::math::get_zero_tolerance<double>();
+  const bool is_a_degenerate = (a1_to_a12 + a12_to_a2) < mundy::get_zero_tolerance<double>();
+  const bool is_b_degenerate = (b1_to_b12 + b12_to_b2) < mundy::get_zero_tolerance<double>();
   u = is_a_degenerate ? 0. : a1_to_a12 / (a1_to_a12 + a12_to_a2);
   v = is_b_degenerate ? 0. : b1_to_b12 / (b1_to_b12 + b12_to_b2);
 }
@@ -329,9 +327,9 @@ void generate_line_at_known_distance(RngType& rng, Point<double>& a1, Point<doub
   // At this point, v2 is not orthogonal to v1. We'll use the orthogonal projection formula to make it so.
   // Specifically, v2 = v2 - (v2 dot v1) * v1.
   // Instead of normalizing v3, we'll scale it randomly by [0, 1] such that its norm is the desired line distance.
-  v2 -= mundy::math::dot(v2, v1) * v1;
+  v2 -= mundy::dot(v2, v1) * v1;
   v2 *= rng.template rand<double>();
-  dist = mundy::math::norm(v2);
+  dist = mundy::norm(v2);
 
   // Hardcode one degeneracy at a time.
   bool force_a1_equals_a12 = false;
@@ -352,11 +350,11 @@ void generate_line_at_known_distance(RngType& rng, Point<double>& a1, Point<doub
 //@{
 
 TEST(DistanceBetweenLines, PositiveResult) {
-  openrand::Philox rng = utils::make_philox(generate_test_seed(), 0);
+  openrand::Philox rng = make_philox(generate_test_seed(), 0);
   unsigned nTests = MUNDY_GEOM_TESTS_UNIT_TESTS_SEGMENT_SEGMENT_DISTANCE_NUM_SAMPLES_PER_TEST;
 
   Point<double> a1, a2, b1, b2, a12_expected, a12_actual, b12_expected, b12_actual;
-  mundy::math::Vector3d sep_actual;
+  mundy::Vector3d sep_actual;
   double u_expected, v_expected, u_actual, v_actual, dist_expected, dist_actual;
   for (unsigned i = 0; i < nTests; i++) {
     // (a1, a2) and (b1, b2) are points on the lines and u and v are the archlength measured from the left endpoint.
@@ -366,8 +364,8 @@ TEST(DistanceBetweenLines, PositiveResult) {
 
     const auto center_a = 0.5 * (a1 + a2);
     const auto center_b = 0.5 * (b1 + b2);
-    const double len_a = mundy::math::norm(a2 - a1);
-    const double len_b = mundy::math::norm(b2 - b1);
+    const double len_a = mundy::norm(a2 - a1);
+    const double len_b = mundy::norm(b2 - b1);
     const auto dir_a = (a2 - a1) / len_a;
     const auto dir_b = (b2 - b1) / len_b;
     const Line<double> line_a(center_a, dir_a);
@@ -391,11 +389,11 @@ TEST(DistanceBetweenLines, PositiveResult) {
 }
 
 TEST(DistanceBetweenLineSegments, PositiveResult) {
-  openrand::Philox rng = utils::make_philox(generate_test_seed(), 0);
+  openrand::Philox rng = make_philox(generate_test_seed(), 0);
   unsigned nTests = MUNDY_GEOM_TESTS_UNIT_TESTS_SEGMENT_SEGMENT_DISTANCE_NUM_SAMPLES_PER_TEST;
 
   Point<double> a1, a2, b1, b2, a12_expected, a12_actual, b12_expected, b12_actual;
-  mundy::math::Vector3d sep_actual;
+  mundy::Vector3d sep_actual;
   double u_expected, v_expected, u_actual, v_actual, dist_expected, dist_actual;
   for (unsigned i = 0; i < nTests; i++) {
     generate_line_segments_at_known_distance(rng, dist_expected, a1, a2, b1, b2, a12_expected, b12_expected, u_expected,
@@ -419,7 +417,7 @@ TEST(DistanceBetweenLineSegments, APeskyEdgeCase) {
   // The following pesky edge case is for a colinear rod that caused an untested edge case.
   // TODO(palmerb4): We'll need colinear rods that give each of the 4 possible cases.
   Point<double> a1, a2, b1, b2, a12_expected, a12_actual, b12_expected, b12_actual;
-  mundy::math::Vector3d sep_actual;
+  mundy::Vector3d sep_actual;
 
   double u_expected, v_expected, u_actual, v_actual, dist_expected, dist_actual;
   // Hardcoding a case that I know is wrong.
@@ -470,12 +468,12 @@ TEST(DistanceBetweenLineSegments, APeskyEdgeCaseCollinear) {
 }
 
 TEST(DistanceToLine, PositiveResult) {
-  openrand::Philox rng = utils::make_philox(generate_test_seed(), 0);
+  openrand::Philox rng = make_philox(generate_test_seed(), 0);
   unsigned nTests = MUNDY_GEOM_TESTS_UNIT_TESTS_SEGMENT_SEGMENT_DISTANCE_NUM_SAMPLES_PER_TEST;
 
   Point<double> a1, a2, a12_actual, a12_expected, p;
   double dist_expected, dist_actual, u_actual;
-  mundy::math::Vector3d sep_actual;
+  mundy::Vector3d sep_actual;
   for (unsigned i = 0; i < nTests; i++) {
     generate_line_at_known_distance<openrand::Philox>(rng, a1, a2, a12_expected, p, dist_expected);
     const LineSegment<double> line_segment(a1, a2);
@@ -490,7 +488,5 @@ TEST(DistanceToLine, PositiveResult) {
 }
 
 }  // namespace
-
-}  // namespace geom
 
 }  // namespace mundy

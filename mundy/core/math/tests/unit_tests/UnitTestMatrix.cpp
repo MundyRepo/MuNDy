@@ -39,13 +39,11 @@
 #include <vector>       // for std::vector
 
 // Mundy libs
-#include <mundy_math/Matrix.hpp>     // for mundy::math::Matrix
-#include <mundy_math/Tolerance.hpp>  // for mundy::math::get_relaxed_zero_tolerance
-#include <mundy_math/Vector.hpp>     // for mundy::math::Vector
+#include <mundy_math/Matrix.hpp>     // for mundy::Matrix
+#include <mundy_math/Tolerance.hpp>  // for mundy::get_relaxed_zero_tolerance
+#include <mundy_math/Vector.hpp>     // for mundy::Vector
 
 namespace mundy {
-
-namespace math {
 
 namespace {
 
@@ -591,7 +589,5 @@ TYPED_TEST(MatrixPairwiseTypeTest, NonSquareMatrixVectorAndMatrixMatrixMixedType
 //@}
 
 }  // namespace
-
-}  // namespace math
 
 }  // namespace mundy

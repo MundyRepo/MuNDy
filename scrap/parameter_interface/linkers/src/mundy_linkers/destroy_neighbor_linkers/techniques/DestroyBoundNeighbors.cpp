@@ -41,7 +41,7 @@
 #include <mundy_linkers/destroy_neighbor_linkers/techniques/DestroyBoundNeighbors.hpp>  // for mundy::linkers::...::DestroyBoundNeighbors
 #include <mundy_mesh/BulkData.hpp>                                                      // for mundy::mesh::BulkData
 #include <mundy_mesh/ForEachEntity.hpp>                 // for mundy::mesh::for_each_entity_run
-#include <mundy_mesh/utils/DestroyFlaggedEntities.hpp>  // for mundy::mesh::utils::destroy_flagged_entities
+#include <mundy_mesh/utils/DestroyFlaggedEntities.hpp>  // for mundy::mesh::destroy_flagged_entities
 
 namespace mundy {
 
@@ -173,7 +173,7 @@ void DestroyBoundNeighbors::execute(const stk::mesh::Selector &input_selector) {
   // Step 2: Destroy the linkers marked for destruction.
   bulk_data_ptr_->modification_begin();
   const int value_that_indicates_destruction = 1;
-  mundy::mesh::utils::destroy_flagged_entities(*bulk_data_ptr_, stk::topology::CONSTRAINT_RANK, input_selector,
+  mundy::mesh::destroy_flagged_entities(*bulk_data_ptr_, stk::topology::CONSTRAINT_RANK, input_selector,
                                                linker_destroy_flag_field, value_that_indicates_destruction);
   bulk_data_ptr_->modification_end();
 }

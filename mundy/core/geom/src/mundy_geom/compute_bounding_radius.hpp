@@ -30,17 +30,15 @@
 #include <utility>
 
 // Our libs
-#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
 #include <mundy_geom/primitives/Ellipsoid.hpp>
 #include <mundy_geom/primitives/LineSegment.hpp>
 #include <mundy_geom/primitives/Point.hpp>
 #include <mundy_geom/primitives/Sphere.hpp>
 #include <mundy_geom/primitives/Spherocylinder.hpp>
 #include <mundy_geom/primitives/SpherocylinderSegment.hpp>
+#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
 
 namespace mundy {
-
-namespace geom {
 
 /// @brief Compute the bounding radius of a point
 template <ValidPointType PointType>
@@ -54,7 +52,7 @@ KOKKOS_FUNCTION typename LineSegmentType::scalar_t compute_bounding_radius(const
   using scalar_t = typename LineSegmentType::scalar_t;
   const auto& start = line_segment.start();
   const auto& end = line_segment.end();
-  const scalar_t length = mundy::math::norm(end - start);
+  const scalar_t length = mundy::norm(end - start);
   return static_cast<scalar_t>(0.5) * length;
 }
 
@@ -67,7 +65,7 @@ KOKKOS_FUNCTION typename SphereType::scalar_t compute_bounding_radius(const Sphe
 /// @brief Compute the bounding radius of an ellipsoid
 template <ValidEllipsoidType EllipsoidType>
 KOKKOS_FUNCTION EllipsoidType::scalar_t compute_bounding_radius(const EllipsoidType& ellipsoid) {
-  return mundy::math::max(ellipsoid.radii());
+  return mundy::max(ellipsoid.radii());
 }
 
 /// @brief Compute the bounding radius of a spherocylinder
@@ -87,11 +85,9 @@ KOKKOS_FUNCTION typename SegmentType::scalar_t compute_bounding_radius(const Seg
   const auto& start = segment.start();
   const auto& end = segment.end();
   const auto& radius = segment.radius();
-  const scalar_t length = mundy::math::norm(end - start);
+  const scalar_t length = mundy::norm(end - start);
   return static_cast<scalar_t>(0.5) * length + radius;
 }
-
-}  // namespace geom
 
 }  // namespace mundy
 

@@ -32,8 +32,8 @@
 #include <stk_mesh/base/Field.hpp>    // for stk::mesh::Field, stl::mesh::field_data
 
 // Mundy libs
-#include <mundy_math/Quaternion.hpp>  // for mundy::math::Quaternion
-#include <mundy_math/Vector3.hpp>     // for mundy::math::Vector3
+#include <mundy_math/Quaternion.hpp>  // for mundy::Quaternion
+#include <mundy_math/Vector3.hpp>     // for mundy::Vector3
 #include <mundy_mesh/BulkData.hpp>    // for mundy::mesh::BulkData
 #include <mundy_mesh/FieldViews.hpp>  // for mundy::mesh::vector3_field_data, mundy::mesh::quaternion_field_data, mundy::mesh::matrix3_field_data
 #include <mundy_mesh/ForEachEntity.hpp>                                 // for mundy::mesh::for_each_entity_run
@@ -150,8 +150,8 @@ void SpherocylinderSegment::execute(const stk::mesh::Selector &spherocylinder_se
 
         // Populate the AABB.
         double *aabb = stk::mesh::field_data(element_aabb_field, spherocylinder_segment_element);
-        auto min_xyz = mundy::math::get_vector3_view<double>(aabb);
-        auto max_xyz = mundy::math::get_vector3_view<double>(aabb + 3);
+        auto min_xyz = mundy::get_vector3_view<double>(aabb);
+        auto max_xyz = mundy::get_vector3_view<double>(aabb + 3);
 
         min_xyz[0] = std::min(left_node_coord[0], right_node_coord[0]) - radius - buffer_distance;
         min_xyz[1] = std::min(left_node_coord[1], right_node_coord[1]) - radius - buffer_distance;

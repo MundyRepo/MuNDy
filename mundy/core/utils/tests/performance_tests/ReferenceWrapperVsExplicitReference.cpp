@@ -19,7 +19,7 @@
 // @HEADER
 
 //! \file ReferenceWrapperVsExplicitReference.cpp
-/// \brief Performance test the use of mundy::utils::reference_wrapper vs explicit references in a workspace struct.
+/// \brief Performance test the use of mundy::reference_wrapper vs explicit references in a workspace struct.
 #define ANKERL_NANOBENCH_IMPLEMENT
 
 // C++ core
@@ -36,15 +36,15 @@
 #include <Kokkos_Core.hpp>  // for Kokkos::initialize, Kokkos::finalize
 
 // Mundy
-#include <mundy_utils/reference_wrapper.hpp>  // for mundy::utils::reference_wrapper, mundy::utils::ref
+#include <mundy_utils/reference_wrapper.hpp>  // for mundy::reference_wrapper, mundy::ref
 
 using scalar_t = double;
 using vec_t = std::vector<scalar_t>;
 
 struct WorkspaceWrapper {
-  mundy::utils::reference_wrapper<scalar_t> x;
-  mundy::utils::reference_wrapper<scalar_t> y;
-  mundy::utils::reference_wrapper<scalar_t> z;
+  mundy::reference_wrapper<scalar_t> x;
+  mundy::reference_wrapper<scalar_t> y;
+  mundy::reference_wrapper<scalar_t> z;
 
   KOKKOS_INLINE_FUNCTION
   constexpr void step(const scalar_t alpha, const scalar_t beta, const size_t i, const size_t round) {
@@ -103,7 +103,7 @@ scalar_t run_with_wrapper(vec_t& x, vec_t& y, vec_t& z, const scalar_t alpha, co
                           const size_t rounds) {
   for (size_t round = 0; round < rounds; ++round) {
     for (size_t i = 0; i < x.size(); ++i) {
-      WorkspaceWrapper workspace{mundy::utils::ref(x[i]), mundy::utils::ref(y[i]), mundy::utils::ref(z[i])};
+      WorkspaceWrapper workspace{mundy::ref(x[i]), mundy::ref(y[i]), mundy::ref(z[i])};
       workspace.step(alpha, beta, i, round);
     }
   }

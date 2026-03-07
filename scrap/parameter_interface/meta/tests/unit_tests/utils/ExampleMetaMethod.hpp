@@ -49,8 +49,6 @@ namespace mundy {
 
 namespace meta {
 
-namespace utils {
-
 /// \class ExampleMetaMethod
 /// \brief Method for computing the axis aligned boundary box of different parts.
 ///
@@ -223,8 +221,6 @@ class ExampleMetaMethod : public mundy::meta::MetaMethodSubsetExecutionInterface
 };  // ExampleMetaMethod
 
 using DefaultExampleMetaMethod = ExampleMetaMethod<mundy::meta::make_registration_string("DEFAULT")>;
-
-}  // namespace utils
 
 }  // namespace meta
 

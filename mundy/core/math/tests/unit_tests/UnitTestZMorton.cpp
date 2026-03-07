@@ -32,12 +32,10 @@
 #include <gtest/gtest.h>  // for TEST, ASSERT_NO_THROW, etc
 
 // Mundy libs
-#include <mundy_math/Vector3.hpp>  // for mundy::math::Vector3
-#include <mundy_math/zmort.hpp>    // for mundy::math::zmorton_less(Vector3, Vector3)
+#include <mundy_math/Vector3.hpp>  // for mundy::Vector3
+#include <mundy_math/zmort.hpp>    // for mundy::zmorton_less(Vector3, Vector3)
 
 namespace mundy {
-
-namespace math {
 
 namespace {
 
@@ -379,7 +377,5 @@ TEST(ZMortonFloatXorMsb, DifferingSignificand) {
 }
 
 }  // namespace
-
-}  // namespace math
 
 }  // namespace mundy

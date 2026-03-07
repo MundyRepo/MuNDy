@@ -34,7 +34,7 @@
 // Mundy libs
 #include <mundy_utils/throw_assert.hpp>                                                       // for MUNDY_THROW_ASSERT
 #include <mundy_linkers/linker_potential_force_reduction/kernels/SpherocylinderSegment.hpp>  // for mundy::linkers::...::kernels::SpherocylinderSegment
-#include <mundy_math/Vector3.hpp>                                                            // for mundy::math::Vector3
+#include <mundy_math/Vector3.hpp>                                                            // for mundy::Vector3
 #include <mundy_mesh/BulkData.hpp>  // for mundy::mesh::BulkData
 #include <mundy_mesh/FieldViews.hpp>  // for mundy::mesh::vector3_field_data, mundy::mesh::quaternion_field_data, mundy::mesh::matrix3_field_data
 #include <mundy_mesh/ForEachEntity.hpp>             // for mundy::mesh::for_each_entity_run
@@ -193,19 +193,19 @@ void SpherocylinderSegment::execute(const stk::mesh::Selector &spherocylinder_se
             const auto potential_force =
                 sign * mundy::mesh::vector3_field_data(linker_potential_force_field, connected_linker);
 
-            auto contact_point = mundy::math::get_vector3_view<double>(
+            auto contact_point = mundy::get_vector3_view<double>(
                 stk::mesh::field_data(linker_contact_points_field, connected_linker) + 3 * !is_left_seg);
 
             // For now, we ignore the contribution to twist torque.
             const auto left_to_cp = contact_point - pos0;
             const auto left_to_right = pos1 - pos0;
-            const double length = mundy::math::norm(left_to_right);
+            const double length = mundy::norm(left_to_right);
             const double inv_length = 1.0 / length;
             const auto tangent = left_to_right * inv_length;
 
-            const auto term1 = mundy::math::dot(tangent, potential_force) * left_to_cp * inv_length;
-            const auto term2 = mundy::math::dot(left_to_cp, tangent) *
-                               (potential_force + mundy::math::dot(tangent, potential_force) * tangent) * inv_length;
+            const auto term1 = mundy::dot(tangent, potential_force) * left_to_cp * inv_length;
+            const auto term2 = mundy::dot(left_to_cp, tangent) *
+                               (potential_force + mundy::dot(tangent, potential_force) * tangent) * inv_length;
             const auto sum = term2 - term1;
 #pragma omp atomic
             force0[0] += potential_force[0] - sum[0];

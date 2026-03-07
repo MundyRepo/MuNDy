@@ -36,8 +36,6 @@
 
 namespace mundy {
 
-namespace math {
-
 /// \brief A simplistic array type with a fixed size and type
 template <typename T, size_t N>
 class Array;
@@ -75,8 +73,6 @@ KOKKOS_INLINE_FUNCTION constexpr auto apply_impl(std::index_sequence<Is...>, con
 MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_POP
 
 }  // namespace impl
-
-}  // namespace math
 
 }  // namespace mundy
 

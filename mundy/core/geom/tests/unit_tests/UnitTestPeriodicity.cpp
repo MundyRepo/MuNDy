@@ -33,18 +33,16 @@
 #include <Kokkos_Core.hpp>  // for Kokkos::numbers::pi
 
 // Mundy
-#include <mundy_utils/rng.hpp>           // for mundy::utils::make_philox
+#include <mundy_geom/periodicity.hpp>    // for mundy::PeriodicMetric, ...
+#include <mundy_geom/primitives.hpp>     // for mundy::Point, mundy::LineSegment
+#include <mundy_geom/randomize.hpp>      // for mundy::generate_random_point, ...
+#include <mundy_geom/transform.hpp>      // for mundy::translate
+#include <mundy_math/Tolerance.hpp>      // for mundy::get_zero_tolerance
+#include <mundy_math/Vector3.hpp>        // for mundy::Vector3
+#include <mundy_utils/rng.hpp>           // for mundy::make_philox
 #include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
-#include <mundy_geom/periodicity.hpp>   // for mundy::geom::PeriodicMetric, ...
-#include <mundy_geom/primitives.hpp>    // for mundy::geom::Point, mundy::geom::LineSegment
-#include <mundy_geom/randomize.hpp>     // for mundy::geom::generate_random_point, ...
-#include <mundy_geom/transform.hpp>     // for mundy::geom::translate
-#include <mundy_math/Tolerance.hpp>     // for mundy::math::get_zero_tolerance
-#include <mundy_math/Vector3.hpp>       // for mundy::math::Vector3
 
 namespace mundy {
-
-namespace geom {
 
 namespace {
 
@@ -68,14 +66,14 @@ namespace {
 //   const Scalar wrand = Kokkos::sqrt(static_cast<Scalar>(1) - zrand * zrand);
 //   const Scalar trand = two_pi * rng.template rand<Scalar>();
 
-//   return math::Vector3<Scalar>{wrand * Kokkos::cos(trand), wrand * Kokkos::sin(trand), zrand};
+//   return Vector3<Scalar>{wrand * Kokkos::cos(trand), wrand * Kokkos::sin(trand), zrand};
 // }
 
 // template <typename Scalar, typename RNG>
 // Line<Scalar> generate_random_line(const AABB<Scalar>& box, RNG& rng) {
 //   // Generate random point in the domain and a random direction
 //   Point<Scalar> center = generate_random_point<Scalar>(box, rng);
-//   math::Vector3<Scalar> direction = generate_random_unit_vector<Scalar>(box, rng);
+//   Vector3<Scalar> direction = generate_random_unit_vector<Scalar>(box, rng);
 //   return Line<Scalar>(center, direction);
 // }
 
@@ -125,9 +123,9 @@ namespace {
 //   Scalar r2 = rng.uniform(0.0, 0.25 * min_width);
 
 //   // Random orientation
-//   math::Vector3<Scalar> z_hat{0.0, 0.0, 1.0};
-//   math::Vector3<Scalar> u_hat = generate_random_unit_vector<Scalar>(box, rng);
-//   auto random_quaternion = math::quat_from_parallel_transport(z_hat, u_hat);
+//   Vector3<Scalar> z_hat{0.0, 0.0, 1.0};
+//   Vector3<Scalar> u_hat = generate_random_unit_vector<Scalar>(box, rng);
+//   auto random_quaternion = quat_from_parallel_transport(z_hat, u_hat);
 
 //   return Ellipsoid<Scalar>(center, random_quaternion, r0, r1, r2);
 // }
@@ -143,9 +141,9 @@ namespace {
 //   Scalar radius = rng.uniform(0.0, 0.25 * min_width);
 
 //   // Generate a random quaternion orientation rotating the circle's normal from z-axis to a random unit vector
-//   math::Vector3<Scalar> z_hat{0.0, 0.0, 1.0};
-//   math::Vector3<Scalar> u_hat = generate_random_unit_vector<Scalar>(box, rng);
-//   auto random_quaternion = math::quat_from_parallel_transport(z_hat, u_hat);
+//   Vector3<Scalar> z_hat{0.0, 0.0, 1.0};
+//   Vector3<Scalar> u_hat = generate_random_unit_vector<Scalar>(box, rng);
+//   auto random_quaternion = quat_from_parallel_transport(z_hat, u_hat);
 
 //   return Circle3D<Scalar>(center, random_quaternion, radius);
 // }
@@ -300,8 +298,8 @@ struct TestObjectTraits<TestObjectType::ELLIPSOID> {
         Kokkos::min(Kokkos::min(box.x_max() - box.x_min(), box.y_max() - box.y_min()), box.z_max() - box.z_min());
     double min_radius = 0.0;
     double max_radius = 0.25 * min_box_width;
-    return generate_random_ellipsoid<double>(box, math::Vector3<double>{min_radius, min_radius, min_radius},
-                                             math::Vector3<double>{max_radius, max_radius, max_radius}, rng);
+    return generate_random_ellipsoid<double>(box, Vector3<double>{min_radius, min_radius, min_radius},
+                                             Vector3<double>{max_radius, max_radius, max_radius}, rng);
   }
 
   // Function to fetch the reference point
@@ -405,8 +403,8 @@ struct test_wrap_rigid_impl {
     // The reference point should end up within the primary box and all others should maintain the same relative
     // positions
     constexpr unsigned num_points = ShapeTraits::num_points;
-    Kokkos::Array<math::Vector3<double>, num_points> original_displacements;
-    Kokkos::Array<math::Vector3<double>, num_points> wrapped_displacements;
+    Kokkos::Array<Vector3<double>, num_points> original_displacements;
+    Kokkos::Array<Vector3<double>, num_points> wrapped_displacements;
 
     auto s = ShapeTraits::generate(other_box, rng);  // All points fall within other_box
     Point<double> ref_point = ShapeTraits::reference_point(s);
@@ -431,8 +429,7 @@ struct test_wrap_rigid_impl {
     // Check that all displacements are the same before and after wrapping
     bool all_displacements_equal = true;
     for (unsigned j = 0; j < num_points; ++j) {
-      if (math::norm(original_displacements[j] - wrapped_displacements[j]) >
-          math::get_relaxed_zero_tolerance<double>()) {
+      if (norm(original_displacements[j] - wrapped_displacements[j]) > get_relaxed_zero_tolerance<double>()) {
         all_displacements_equal = false;
       }
     }
@@ -472,8 +469,8 @@ struct test_unwrap_to_ref_impl {
     // Generate a random shape within the primary box and unwrap it to a reference point
     // outside the primary box
     constexpr unsigned num_points = ShapeTraits::num_points;
-    Kokkos::Array<math::Vector3<double>, num_points> original_displacements;
-    Kokkos::Array<math::Vector3<double>, num_points> shifted_displacements;
+    Kokkos::Array<Vector3<double>, num_points> original_displacements;
+    Kokkos::Array<Vector3<double>, num_points> shifted_displacements;
 
     auto s = ShapeTraits::generate(primary_box, rng);  // All points fall within primary_box
     Point<double> ref_point = generate_random_point<double>(disjoint_box, rng);
@@ -495,17 +492,15 @@ struct test_unwrap_to_ref_impl {
     // Check that all displacements are the same before and after wrapping
     bool all_displacements_equal = true;
     for (unsigned j = 0; j < num_points; ++j) {
-      if (math::norm(original_displacements[j] - shifted_displacements[j]) >
-          math::get_relaxed_zero_tolerance<double>()) {
+      if (norm(original_displacements[j] - shifted_displacements[j]) > get_relaxed_zero_tolerance<double>()) {
         all_displacements_equal = false;
       }
     }
 
     // The separation vector between reference_point(s) and ref_point should be less than half the box size
     // in each dimension (not necessarily in magnitude) that is periodic.
-    math::Vector3<double> box_lengths{primary_box.x_max() - primary_box.x_min(),
-                                      primary_box.y_max() - primary_box.y_min(),
-                                      primary_box.z_max() - primary_box.z_min()};
+    Vector3<double> box_lengths{primary_box.x_max() - primary_box.x_min(), primary_box.y_max() - primary_box.y_min(),
+                                primary_box.z_max() - primary_box.z_min()};
     bool shape_ref_point_within_half_box = true;
     for (int d = 0; d < 3; ++d) {
       if (metric.is_periodic(d)) {
@@ -525,14 +520,14 @@ struct test_shift_image_impl {
   using return_type = bool;
 
   template <typename ShapeTraits, typename RNG, typename Metric>
-  KOKKOS_INLINE_FUNCTION return_type operator()(ShapeTraits,                               //
-                                                const AABB<double>& box,                   //
-                                                const math::Vector3<int>& lattice_vector,  //
-                                                RNG& rng,                                  //
+  KOKKOS_INLINE_FUNCTION return_type operator()(ShapeTraits,                         //
+                                                const AABB<double>& box,             //
+                                                const Vector3<int>& lattice_vector,  //
+                                                RNG& rng,                            //
                                                 const Metric& metric) const {
     constexpr unsigned num_points = ShapeTraits::num_points;
-    Kokkos::Array<math::Vector3<double>, num_points> original_displacements;
-    Kokkos::Array<math::Vector3<double>, num_points> shifted_displacements;
+    Kokkos::Array<Vector3<double>, num_points> original_displacements;
+    Kokkos::Array<Vector3<double>, num_points> shifted_displacements;
 
     auto s = ShapeTraits::generate(box, rng);
     Point<double> ref_point = ShapeTraits::reference_point(s);
@@ -549,7 +544,7 @@ struct test_shift_image_impl {
     auto shifted_ref_displacement = shifted_ref_point - ref_point;
     auto expected_displacement = metric.shift_image(ref_point, lattice_vector) - ref_point;
     bool displacements_match =
-        math::norm(shifted_ref_displacement - expected_displacement) < math::get_relaxed_zero_tolerance<double>();
+        norm(shifted_ref_displacement - expected_displacement) < get_relaxed_zero_tolerance<double>();
 
     i = 0;
     ShapeTraits::for_each_point(s, [&](const auto& point) {
@@ -560,8 +555,7 @@ struct test_shift_image_impl {
     // Check that all displacements are the same before and after wrapping
     bool all_displacements_equal = true;
     for (unsigned j = 0; j < num_points; ++j) {
-      if (math::norm(original_displacements[j] - shifted_displacements[j]) >
-          math::get_relaxed_zero_tolerance<double>()) {
+      if (norm(original_displacements[j] - shifted_displacements[j]) > get_relaxed_zero_tolerance<double>()) {
         all_displacements_equal = false;
       }
     }
@@ -576,7 +570,7 @@ KOKKOS_INLINE_FUNCTION bool test_wrap_rigid(TestObjectType type, const AABB<doub
                                             const Metric& metric) {
   MUNDY_THROW_ASSERT(counter <= std::numeric_limits<uint32_t>::max(), std::overflow_error,
                      "Counter exceeds uint32_t max for openrand::Philox.");
-  openrand::Philox rng = utils::make_philox(seed, counter);
+  openrand::Philox rng = make_philox(seed, counter);
 
   using Functor = test_wrap_rigid_impl;
   apply_functor<Functor> apply;
@@ -589,7 +583,7 @@ KOKKOS_INLINE_FUNCTION bool test_wrap_points(TestObjectType type, const AABB<dou
                                              const Metric& metric) {
   MUNDY_THROW_ASSERT(counter <= std::numeric_limits<uint32_t>::max(), std::overflow_error,
                      "Counter exceeds uint32_t max for openrand::Philox.");
-  openrand::Philox rng = utils::make_philox(seed, counter);
+  openrand::Philox rng = make_philox(seed, counter);
 
   using Functor = test_wrap_points_impl;
   apply_functor<Functor> apply;
@@ -602,7 +596,7 @@ KOKKOS_INLINE_FUNCTION bool test_unwrap_to_ref(TestObjectType type, const AABB<d
                                                const Metric& metric) {
   MUNDY_THROW_ASSERT(counter <= std::numeric_limits<uint32_t>::max(), std::overflow_error,
                      "Counter exceeds uint32_t max for openrand::Philox.");
-  openrand::Philox rng = utils::make_philox(seed, counter);
+  openrand::Philox rng = make_philox(seed, counter);
   using Functor = test_unwrap_to_ref_impl;
   apply_functor<Functor> apply;
   return apply(type, primary_box, disjoint_box, rng, metric);
@@ -610,11 +604,11 @@ KOKKOS_INLINE_FUNCTION bool test_unwrap_to_ref(TestObjectType type, const AABB<d
 
 template <typename Metric>
 KOKKOS_INLINE_FUNCTION bool test_shift_image(TestObjectType type, const AABB<double>& box,
-                                             const math::Vector3<int>& lattice_vector,  //
+                                             const Vector3<int>& lattice_vector,  //
                                              size_t seed, size_t counter, const Metric& metric) {
   MUNDY_THROW_ASSERT(counter <= std::numeric_limits<uint32_t>::max(), std::overflow_error,
                      "Counter exceeds uint32_t max for openrand::Philox.");
-  openrand::Philox rng = utils::make_philox(seed, counter);
+  openrand::Philox rng = make_philox(seed, counter);
 
   using Functor = test_shift_image_impl;
   apply_functor<Functor> apply;
@@ -628,7 +622,7 @@ TEST(PeriodicMetric, MinImageDirectVsPeriodic) {
   size_t seed = 1234;
   size_t num_samples = 100000;
 
-  math::Vector3<double> cell_size{100.0, 100.0, 100.0};
+  Vector3<double> cell_size{100.0, 100.0, 100.0};
   AABB<double> box{0.0, 0.0, 0.0, 100.0, 100.0, 100.0};
   auto periodic_metric = periodic_metric_from_unit_cell(cell_size);
   auto periodic_metric_scale_only = periodic_scaled_metric_from_unit_cell(cell_size);
@@ -637,19 +631,19 @@ TEST(PeriodicMetric, MinImageDirectVsPeriodic) {
   for (size_t t = 0; t < num_samples; ++t) {
     MUNDY_THROW_ASSERT(t <= std::numeric_limits<uint32_t>::max(), std::overflow_error,
                        "Counter exceeds uint32_t max for openrand::Philox.");
-    openrand::Philox rng = utils::make_philox(seed, t);
+    openrand::Philox rng = make_philox(seed, t);
 
     // Generate two random points within the bounding box
     Point<double> point1 = generate_random_point<double>(box, rng);
     Point<double> point2 = generate_random_point<double>(box, rng);
 
     // Compute the minimum image distance using the free-space metric and the 27 periodic images
-    math::Vector<double, 27> min_image_distances;
+    Vector<double, 27> min_image_distances;
     for (int i = 0; i < 3; ++i) {
       for (int j = 0; j < 3; ++j) {
         for (int k = 0; k < 3; ++k) {
           // Shift obj2 by the box dimensions in each direction
-          math::Vector3<double> disp((i - 1) * cell_size[0], (j - 1) * cell_size[1], (k - 1) * cell_size[2]);
+          Vector3<double> disp((i - 1) * cell_size[0], (j - 1) * cell_size[1], (k - 1) * cell_size[2]);
           min_image_distances(i * 9 + j * 3 + k) = norm(euclidean_metric.sep(point1, point2 + disp));
         }
       }
@@ -658,9 +652,9 @@ TEST(PeriodicMetric, MinImageDirectVsPeriodic) {
     double min_image_distance = min(min_image_distances);
     double periodic_distance = norm(periodic_metric.sep(point1, point2));
     double periodic_distance_scale_only = norm(periodic_metric_scale_only.sep(point1, point2));
-    ASSERT_NEAR(min_image_distance, periodic_distance, math::get_relaxed_zero_tolerance<double>())
+    ASSERT_NEAR(min_image_distance, periodic_distance, get_relaxed_zero_tolerance<double>())
         << "Minimum image distance does not match periodic distance.";
-    ASSERT_NEAR(min_image_distance, periodic_distance_scale_only, math::get_relaxed_zero_tolerance<double>())
+    ASSERT_NEAR(min_image_distance, periodic_distance_scale_only, get_relaxed_zero_tolerance<double>())
         << "Minimum image distance does not match periodic distance (scale only).";
   }
 }
@@ -670,9 +664,9 @@ TEST(PeriodicMetric, WrapRigid) {
   size_t counter = 0;
   size_t num_trials = 1000;  // Number of trials for each pair
 
-  math::Vector3<double> cell_size{100.0, 100.0, 100.0};
+  Vector3<double> cell_size{100.0, 100.0, 100.0};
   AABB<double> box{0.0, 0.0, 0.0, 100.0, 100.0, 100.0};
-  auto overlapping_box = translate(box, math::Vector3<double>{50.0, 50.0, 50.0});
+  auto overlapping_box = translate(box, Vector3<double>{50.0, 50.0, 50.0});
 
   auto periodic_metric = periodic_metric_from_unit_cell(cell_size);
   auto periodic_metric_scale_only = periodic_scaled_metric_from_unit_cell(cell_size);
@@ -709,7 +703,7 @@ TEST(PeriodicMetric, WrapPoints) {
   size_t counter = 0;
   size_t num_trials = 1000;  // Number of trials for each pair
 
-  math::Vector3<double> cell_size{100.0, 100.0, 100.0};
+  Vector3<double> cell_size{100.0, 100.0, 100.0};
   AABB<double> box{0.0, 0.0, 0.0, 100.0, 100.0, 100.0};
   AABB<double> disjoint_box{900.0, 900.0, 900.0, 1000.0, 1000.0, 1000.0};
 
@@ -748,7 +742,7 @@ TEST(PeriodicMetric, UnwrapPointsToRef) {
   size_t counter = 0;
   size_t num_trials = 2;  // Number of trials for each pair
 
-  math::Vector3<double> cell_size{100.0, 100.0, 100.0};
+  Vector3<double> cell_size{100.0, 100.0, 100.0};
   AABB<double> box{0.0, 0.0, 0.0, 100.0, 100.0, 100.0};
   AABB<double> disjoint_box{900.0, 900.0, 900.0, 1000.0, 1000.0, 1000.0};
 
@@ -790,7 +784,7 @@ LineSegment<double> generate_spanning_line_segment_with_length_limit(const AABB<
     Point<double> p1 = generate_random_point<double>(box1, rng);
     Point<double> p2 = generate_random_point<double>(box2, rng);
     LineSegment<double> segment(p1, p2);
-    if (math::norm(p1 - p2) <= max_length) {
+    if (norm(p1 - p2) <= max_length) {
       return segment;
     }
   }
@@ -805,9 +799,9 @@ TEST(PeriodicMetric, WrapPointsSpanning) {
   size_t num_trials = 1000;  // Number of trials for each pair
 
   double domain_width = 100.0;
-  math::Vector3<double> cell_size{domain_width, domain_width, domain_width};
+  Vector3<double> cell_size{domain_width, domain_width, domain_width};
   AABB<double> box{0.0, 0.0, 0.0, domain_width, domain_width, domain_width};
-  auto disjoint_box = translate(box, math::Vector3<double>{domain_width, domain_width, domain_width});
+  auto disjoint_box = translate(box, Vector3<double>{domain_width, domain_width, domain_width});
 
   auto periodic_metric = periodic_metric_from_unit_cell(cell_size);
   auto periodic_metric_scale_only = periodic_scaled_metric_from_unit_cell(cell_size);
@@ -816,7 +810,7 @@ TEST(PeriodicMetric, WrapPointsSpanning) {
   for (size_t t = 0; t < num_trials; ++t) {
     MUNDY_THROW_ASSERT(counter <= std::numeric_limits<uint32_t>::max(), std::overflow_error,
                        "Counter exceeds uint32_t max for openrand::Philox.");
-    openrand::Philox rng = utils::make_philox(seed, counter);
+    openrand::Philox rng = make_philox(seed, counter);
 
     // Generate a random line segment with one end in the primary box and the other in the disjoint box
     LineSegment<double> line_segment =
@@ -826,35 +820,31 @@ TEST(PeriodicMetric, WrapPointsSpanning) {
     auto expected_periodic_start = wrap_points(line_segment.start(), periodic_metric);
     auto expected_periodic_end = wrap_points(line_segment.end(), periodic_metric);
 
-    ASSERT_TRUE(math::norm(expected_periodic_start - expected_periodic_end) >
-                math::norm(line_segment.start() - line_segment.end()))
+    ASSERT_TRUE(norm(expected_periodic_start - expected_periodic_end) > norm(line_segment.start() - line_segment.end()))
         << "Test setup failure: Wrapping the segment should have caused it to have a MUCH longer euclidean length.";
 
     // Periodic check
     auto line_segment_periodic = wrap_points(line_segment, periodic_metric);
-    EXPECT_NEAR(math::norm(line_segment_periodic.start() - expected_periodic_start), 0.0,
-                math::get_relaxed_zero_tolerance<double>())
+    EXPECT_NEAR(norm(line_segment_periodic.start() - expected_periodic_start), 0.0,
+                get_relaxed_zero_tolerance<double>())
         << "Wrapped line segment start point does not match expected value.";
-    EXPECT_NEAR(math::norm(line_segment_periodic.end() - expected_periodic_end), 0.0,
-                math::get_relaxed_zero_tolerance<double>())
+    EXPECT_NEAR(norm(line_segment_periodic.end() - expected_periodic_end), 0.0, get_relaxed_zero_tolerance<double>())
         << "Wrapped line segment end point does not match expected value.";
 
     // Periodic check (scale only)
     auto line_segment_periodic_scale_only = wrap_points(line_segment, periodic_metric_scale_only);
-    EXPECT_NEAR(math::norm(line_segment_periodic_scale_only.start() - expected_periodic_start), 0.0,
-                math::get_relaxed_zero_tolerance<double>())
+    EXPECT_NEAR(norm(line_segment_periodic_scale_only.start() - expected_periodic_start), 0.0,
+                get_relaxed_zero_tolerance<double>())
         << "Wrapped line segment start point does not match expected value (scale only).";
-    EXPECT_NEAR(math::norm(line_segment_periodic_scale_only.end() - expected_periodic_end), 0.0,
-                math::get_relaxed_zero_tolerance<double>())
+    EXPECT_NEAR(norm(line_segment_periodic_scale_only.end() - expected_periodic_end), 0.0,
+                get_relaxed_zero_tolerance<double>())
         << "Wrapped line segment end point does not match expected value (scale only).";
 
     // Aperiodic check (should be unchanged)
     auto line_segment_aperiodic = wrap_points(line_segment, euclidean_metric);
-    EXPECT_NEAR(math::norm(line_segment_aperiodic.start() - line_segment.start()), 0.0,
-                math::get_relaxed_zero_tolerance<double>())
+    EXPECT_NEAR(norm(line_segment_aperiodic.start() - line_segment.start()), 0.0, get_relaxed_zero_tolerance<double>())
         << "Wrapped line segment start point does not match original value for the free space metric.";
-    EXPECT_NEAR(math::norm(line_segment_aperiodic.end() - line_segment.end()), 0.0,
-                math::get_relaxed_zero_tolerance<double>())
+    EXPECT_NEAR(norm(line_segment_aperiodic.end() - line_segment.end()), 0.0, get_relaxed_zero_tolerance<double>())
         << "Wrapped line segment end point does not match original value for the free space metric.";
 
     ++counter;
@@ -867,16 +857,16 @@ TEST(PeriodicMetric, UnwrapPointsSpanning) {
   size_t num_trials = 1000;  // Number of trials for each pair
 
   double domain_width = 100.0;
-  math::Vector3<double> cell_size{domain_width, domain_width, domain_width};
+  Vector3<double> cell_size{domain_width, domain_width, domain_width};
   AABB<double> box{0.0, 0.0, 0.0, domain_width, domain_width, domain_width};
-  auto disjoint_box = translate(box, math::Vector3<double>{domain_width, domain_width, domain_width});
+  auto disjoint_box = translate(box, Vector3<double>{domain_width, domain_width, domain_width});
 
   auto periodic_metric = periodic_metric_from_unit_cell(cell_size);
 
   for (size_t t = 0; t < num_trials; ++t) {
     MUNDY_THROW_ASSERT(counter <= std::numeric_limits<uint32_t>::max(), std::overflow_error,
                        "Counter exceeds uint32_t max for openrand::Philox.");
-    openrand::Philox rng = utils::make_philox(seed, counter);
+    openrand::Philox rng = make_philox(seed, counter);
 
     // Generate a random line segment with one end in the primary box and the other in the disjoint box
     LineSegment<double> line_segment =
@@ -884,31 +874,29 @@ TEST(PeriodicMetric, UnwrapPointsSpanning) {
 
     // No-op check (should be unchanged)
     auto line_segment_unwrapped = unwrap_points_to_ref(line_segment, periodic_metric, line_segment.start());
-    EXPECT_NEAR(math::norm(line_segment_unwrapped.start() - line_segment.start()), 0.0,
-                math::get_relaxed_zero_tolerance<double>())
+    EXPECT_NEAR(norm(line_segment_unwrapped.start() - line_segment.start()), 0.0, get_relaxed_zero_tolerance<double>())
         << "Unwrapped line segment start point should not change.";
-    EXPECT_NEAR(math::norm(line_segment_unwrapped.end() - line_segment.end()), 0.0,
-                math::get_relaxed_zero_tolerance<double>())
+    EXPECT_NEAR(norm(line_segment_unwrapped.end() - line_segment.end()), 0.0, get_relaxed_zero_tolerance<double>())
         << "Unwrapped line segment end point should not change.";
 
     // Wrap points to break the length. Then unwrap to get back to the original segment
-    double expected_length = math::norm(line_segment.start() - line_segment.end());
+    double expected_length = norm(line_segment.start() - line_segment.end());
     auto line_segment_wrapped = wrap_points(line_segment, periodic_metric);
-    double wrapped_length = math::norm(line_segment_wrapped.start() - line_segment_wrapped.end());
+    double wrapped_length = norm(line_segment_wrapped.start() - line_segment_wrapped.end());
     auto line_segment_unwrapped_again =
         unwrap_points_to_ref(line_segment_wrapped, periodic_metric, line_segment.start());
-    double unwrapped_length = math::norm(line_segment_unwrapped_again.start() - line_segment_unwrapped_again.end());
+    double unwrapped_length = norm(line_segment_unwrapped_again.start() - line_segment_unwrapped_again.end());
     EXPECT_TRUE(expected_length < wrapped_length)
         << "Test setup failure: Wrapping the segment should have caused it to have a MUCH longer euclidean length.";
-    EXPECT_NEAR(expected_length, unwrapped_length, math::get_relaxed_zero_tolerance<double>())
+    EXPECT_NEAR(expected_length, unwrapped_length, get_relaxed_zero_tolerance<double>())
         << "Unwrapped line segment length does not match the original length.";
 
     // Because our reference point starts in the domain our initial and final segments should match
-    EXPECT_NEAR(math::norm(line_segment_unwrapped_again.start() - line_segment.start()), 0.0,
-                math::get_relaxed_zero_tolerance<double>())
+    EXPECT_NEAR(norm(line_segment_unwrapped_again.start() - line_segment.start()), 0.0,
+                get_relaxed_zero_tolerance<double>())
         << "Unwrapped line segment start point does not match original value.";
-    EXPECT_NEAR(math::norm(line_segment_unwrapped_again.end() - line_segment.end()), 0.0,
-                math::get_relaxed_zero_tolerance<double>())
+    EXPECT_NEAR(norm(line_segment_unwrapped_again.end() - line_segment.end()), 0.0,
+                get_relaxed_zero_tolerance<double>())
         << "Unwrapped line segment end point does not match original value.";
 
     ++counter;
@@ -920,9 +908,9 @@ TEST(PeriodicMetric, ShiftImage) {
   size_t counter = 0;
   size_t num_trials = 1;  // Number of trials for each pair
 
-  math::Vector3<double> cell_size{100.0, 100.0, 100.0};
+  Vector3<double> cell_size{100.0, 100.0, 100.0};
   AABB<double> box{0.0, 0.0, 0.0, 100.0, 100.0, 100.0};
-  auto disjoint_box = translate(box, math::Vector3<double>{100.0, 100.0, 100.0});
+  auto disjoint_box = translate(box, Vector3<double>{100.0, 100.0, 100.0});
 
   auto periodic_metric = periodic_metric_from_unit_cell(cell_size);
   auto periodic_metric_scale_only = periodic_scaled_metric_from_unit_cell(cell_size);
@@ -937,9 +925,8 @@ TEST(PeriodicMetric, ShiftImage) {
       // Generate a random lattice vector between -10 and 10 in each direction
       MUNDY_THROW_ASSERT(counter <= std::numeric_limits<uint32_t>::max(), std::overflow_error,
                          "Counter exceeds uint32_t max for openrand::Philox.");
-      openrand::Philox rng = utils::make_philox(seed, counter);
-      math::Vector3<int> lattice_vector{rng.uniform<int>(-10, 10), rng.uniform<int>(-10, 10),
-                                        rng.uniform<int>(-10, 10)};
+      openrand::Philox rng = make_philox(seed, counter);
+      Vector3<int> lattice_vector{rng.uniform<int>(-10, 10), rng.uniform<int>(-10, 10), rng.uniform<int>(-10, 10)};
       EXPECT_TRUE(test_shift_image(type, disjoint_box, lattice_vector, seed, counter, periodic_metric))
           << "Shift image for type " << type << " failed. For the periodic metric.";
       EXPECT_TRUE(test_shift_image(type, disjoint_box, lattice_vector, seed, counter, periodic_metric_scale_only))
@@ -953,7 +940,5 @@ TEST(PeriodicMetric, ShiftImage) {
 }
 
 }  // namespace
-
-}  // namespace geom
 
 }  // namespace mundy

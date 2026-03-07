@@ -32,7 +32,7 @@
 #include <Teuchos_ParameterList.hpp>  // for Teuchos::ParameterList
 
 // Mundy libs
-#include <mundy_utils/StringLiteral.hpp>  // for mundy::utils::StringLiteral and mundy::utils::make_string_literal
+#include <mundy_utils/StringLiteral.hpp>  // for mundy::StringLiteral and mundy::make_string_literal
 #include <mundy_linkers/compute_signed_separation_distance_contact_normal_and_contact_points/kernels/SphereSphereLinker.hpp>  // for mundy::...::SphereSphereLinker
 #include <mundy_linkers/compute_signed_separation_distance_contact_normal_and_contact_points/kernels/SphereSpherocylinderLinker.hpp>  // for mundy::...::SphereSpherocylinderLinker
 #include <mundy_linkers/compute_signed_separation_distance_contact_normal_and_contact_points/kernels/SphereSpherocylinderSegmentLinker.hpp>  // for mundy::...::SphereSpherocylinderSegmentLinker

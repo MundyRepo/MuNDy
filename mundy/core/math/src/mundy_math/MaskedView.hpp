@@ -28,11 +28,9 @@
 #include <concepts>
 
 // Mundy
-#include <mundy_math/Accessor.hpp>  // for mundy::math::ValidAccessor
+#include <mundy_math/Accessor.hpp>  // for mundy::ValidAccessor
 
 namespace mundy {
-
-namespace math {
 
 /// \brief Get a masked accessor into a contiguous accessor
 ///
@@ -70,7 +68,7 @@ class MaskedView {
   //! \name Internal data
   //@{
 
-  utils::storage<Accessor> accessor_;
+  storage<Accessor> accessor_;
   //@}
 
   /// \brief Constructor from a given accessor
@@ -126,18 +124,16 @@ class MaskedView {
 /// \endcode
 template <typename T, size_t N, Kokkos::Array<bool, N> mask, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto get_masked_view(Accessor&& accessor) {
-  auto accessor_storage = utils::store(impl::unwrap_accessor(std::forward<Accessor>(accessor)));
+  auto accessor_storage = store(impl::unwrap_accessor(std::forward<Accessor>(accessor)));
   return MaskedView<T, N, mask, decltype(accessor_storage)>(accessor_storage);
 }
 
 template <typename T, size_t N, Kokkos::Array<bool, N> mask, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto get_owning_masked_accessor(Accessor&& accessor) {
-  auto accessor_storage = utils::store(impl::unwrap_accessor(std::move(accessor)));
+  auto accessor_storage = store(impl::unwrap_accessor(std::move(accessor)));
   return MaskedView<T, N, mask, decltype(accessor_storage)>(accessor_storage);
 }
 //@}
-
-}  // namespace math
 
 }  // namespace mundy
 

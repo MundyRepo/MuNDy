@@ -32,12 +32,10 @@
 #include <iostream>
 
 // Mundy
-#include <mundy_math/Vector.hpp>  // for mundy::math::Vector
+#include <mundy_math/Vector.hpp>  // for mundy::Vector
 #include <mundy_math/impl/minimize_impl.hpp>
 
 namespace mundy {
-
-namespace math {
 
 template <size_t max_size, size_t N, typename CostFunctionType>
 KOKKOS_FUNCTION double find_min_using_approximate_derivatives(
@@ -49,8 +47,6 @@ KOKKOS_FUNCTION double find_min_using_approximate_derivatives(
   return impl::find_min_using_approximate_derivatives<max_size, N>(search_strategy, stop_strategy, cost_func, x,
                                                                    min_alowable_cost, derivative_eps);
 }
-
-}  // namespace math
 
 }  // namespace mundy
 

@@ -25,14 +25,12 @@
 #include <Kokkos_Core.hpp>
 
 // Mundy
-#include <mundy_geom/distance/Types.hpp>    // for mundy::geom::SharedNormalSigned, Euclidean
-#include <mundy_geom/primitives/Point.hpp>  // for mundy::geom::Point
-#include <mundy_math/Matrix3.hpp>           // for mundy::math::Matrix3
-#include <mundy_math/Vector3.hpp>           // for mundy::math::Vector3
+#include <mundy_geom/distance/Types.hpp>    // for mundy::SharedNormalSigned, Euclidean
+#include <mundy_geom/primitives/Point.hpp>  // for mundy::Point
+#include <mundy_math/Matrix3.hpp>           // for mundy::Matrix3
+#include <mundy_math/Vector3.hpp>           // for mundy::Vector3
 
 namespace mundy {
-
-namespace geom {
 
 /// \brief Distance metrics
 ///
@@ -68,8 +66,8 @@ struct OldPeriodicSpaceMetric {
   KOKKOS_INLINE_FUNCTION
   Point<Scalar> operator()(const Point<Scalar>& point1, const Point<Scalar>& point2) const {
     // Convert to fractional coordinates
-    mundy::math::Vector3<Scalar> point1_scaled = point1 * h_inv;
-    mundy::math::Vector3<Scalar> point2_scaled = point2 * h_inv;
+    mundy::Vector3<Scalar> point1_scaled = point1 * h_inv;
+    mundy::Vector3<Scalar> point2_scaled = point2 * h_inv;
 
     // Wrap the scaled coordinates back into the unit cell
     for (size_t i = 0; i < 3; ++i) {
@@ -77,16 +75,16 @@ struct OldPeriodicSpaceMetric {
       point2_scaled[i] -= old_pbc_floor<int64_t, double>(point2_scaled[i]);
 
       // Guard against numerical errors that may cause the scaled coordinates to be exactly 1.0
-      if (Kokkos::fabs(point1_scaled[i] - 1.0) < mundy::math::get_zero_tolerance<Scalar>()) {
+      if (Kokkos::fabs(point1_scaled[i] - 1.0) < mundy::get_zero_tolerance<Scalar>()) {
         point1_scaled[i] = 0.0;
       }
-      if (Kokkos::fabs(point2_scaled[i] - 1.0) < mundy::math::get_zero_tolerance<Scalar>()) {
+      if (Kokkos::fabs(point2_scaled[i] - 1.0) < mundy::get_zero_tolerance<Scalar>()) {
         point2_scaled[i] = 0.0;
       }
     }
 
     // Now we can do the separation vector from the scaled coordinates and put it back in real space at the end.
-    mundy::math::Vector3<Scalar> ds = point2_scaled - point1_scaled;
+    mundy::Vector3<Scalar> ds = point2_scaled - point1_scaled;
     for (size_t i = 0; i < 3; ++i) {
       ds[i] -= old_pbc_floor<int64_t, double>(ds[i]);
     }
@@ -94,21 +92,19 @@ struct OldPeriodicSpaceMetric {
     return ds * h;
   }
 
-  mundy::math::Matrix3<Scalar> h;      ///< Unit cell matrix
-  mundy::math::Matrix3<Scalar> h_inv;  ///< Inverse of the unit cell matrix
+  mundy::Matrix3<Scalar> h;      ///< Unit cell matrix
+  mundy::Matrix3<Scalar> h_inv;  ///< Inverse of the unit cell matrix
 };
 
 template <typename Scalar>
 KOKKOS_INLINE_FUNCTION constexpr void old_unit_cell_box(OldPeriodicSpaceMetric<Scalar>& metric,  //
-                                                        const mundy::math::Vector3<Scalar>& cell_size) {
-  metric.h = mundy::math::Matrix3<Scalar>::identity();
+                                                        const mundy::Vector3<Scalar>& cell_size) {
+  metric.h = mundy::Matrix3<Scalar>::identity();
   metric.h(0, 0) = cell_size[0];
   metric.h(1, 1) = cell_size[1];
   metric.h(2, 2) = cell_size[2];
-  metric.h_inv = mundy::math::inverse(metric.h);
+  metric.h_inv = mundy::inverse(metric.h);
 }
-
-}  // namespace geom
 
 }  // namespace mundy
 

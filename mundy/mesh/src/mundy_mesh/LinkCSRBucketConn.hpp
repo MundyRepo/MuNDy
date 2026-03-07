@@ -30,8 +30,8 @@
 #include <stk_util/ngp/NgpSpaces.hpp>  // for stk::ngp::HostMemSpace, stk::ngp::UVMMemSpace
 
 // Mundy libs
+#include <mundy_mesh/Types.hpp>          // for stk::ngp::HostMemSpace
 #include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
-#include <mundy_mesh/Types.hpp>         // for stk::ngp::HostMemSpace
 
 namespace mundy {
 

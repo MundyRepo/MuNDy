@@ -31,12 +31,12 @@
 #include <stk_util/ngp/NgpSpaces.hpp>  // for stk::ngp::HostMemSpace, stk::ngp::UVMMemSpace
 
 // Mundy
-#include <mundy_utils/throw_assert.hpp>                    // for MUNDY_THROW_ASSERT
 #include <mundy_mesh/LinkData.hpp>                        // for mundy::mesh::LinkData
 #include <mundy_mesh/NgpLinkData.hpp>                     // for mundy::mesh::NgpLinkDataT
 #include <mundy_mesh/impl/HostDeviceCOOSynchronizer.hpp>  // for mundy::mesh::impl::HostDeviceCOOSynchronizer
 #include <mundy_mesh/impl/HostDeviceCSRSynchronizer.hpp>  // for mundy::mesh::impl::HostDeviceCSRSynchronizer
 #include <mundy_mesh/impl/HostDeviceSynchronizer.hpp>     // for mundy::mesh::impl::HostDeviceSynchronizer
+#include <mundy_utils/throw_assert.hpp>                   // for MUNDY_THROW_ASSERT
 
 namespace mundy {
 

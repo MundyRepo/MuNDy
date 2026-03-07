@@ -33,15 +33,13 @@
 #include <utility>
 
 // Mundy
+#include <mundy_math/Accessor.hpp>            // for mundy::ValidAccessor
+#include <mundy_math/Array.hpp>               // for mundy::Array
+#include <mundy_math/Tolerance.hpp>           // for mundy::get_zero_tolerance
 #include <mundy_utils/suppress_warnings.hpp>  // for MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_PUSH/POP
 #include <mundy_utils/throw_assert.hpp>       // for MUNDY_THROW_ASSERT
-#include <mundy_math/Accessor.hpp>           // for mundy::math::ValidAccessor
-#include <mundy_math/Array.hpp>              // for mundy::math::Array
-#include <mundy_math/Tolerance.hpp>          // for mundy::math::get_zero_tolerance
 
 namespace mundy {
-
-namespace math {
 
 template <typename T, size_t N, ValidAccessor<T> Accessor = Array<T, N>>
   requires std::is_arithmetic_v<T>
@@ -561,8 +559,6 @@ MUNDY_MATH_VECTOR_VECTOR_ATOMIC_OP_FETCH_IMPL(elementwise_div, Kokkos::atomic_di
 //@}
 
 }  // namespace impl
-
-}  // namespace math
 
 }  // namespace mundy
 

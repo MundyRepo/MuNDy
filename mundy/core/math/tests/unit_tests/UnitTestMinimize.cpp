@@ -34,12 +34,10 @@
 #include <vector>       // for std::vector
 
 // Mundy libs
-#include <mundy_math/Vector.hpp>    // for mundy::math::Vector
-#include <mundy_math/minimize.hpp>  // for mundy::math::find_min_using_approximate_derivatives
+#include <mundy_math/Vector.hpp>    // for mundy::Vector
+#include <mundy_math/minimize.hpp>  // for mundy::find_min_using_approximate_derivatives
 
 namespace mundy {
-
-namespace math {
 
 namespace {
 
@@ -104,7 +102,5 @@ TEST(Minimize, ComplexFunctions) {
 }
 
 }  // namespace
-
-}  // namespace math
 
 }  // namespace mundy

@@ -19,7 +19,7 @@
 // @HEADER
 
 //! \file NgpReferenceWrapperVsExplicitReference.cpp
-/// \brief Performance test for mundy::utils::reference_wrapper vs explicit references using Kokkos views/kernels.
+/// \brief Performance test for mundy::reference_wrapper vs explicit references using Kokkos views/kernels.
 #define ANKERL_NANOBENCH_IMPLEMENT
 
 // C++ core
@@ -34,15 +34,15 @@
 #include <Kokkos_Core.hpp>  // for Kokkos::initialize, Kokkos::finalize
 
 // Mundy
-#include <mundy_utils/reference_wrapper.hpp>  // for mundy::utils::reference_wrapper, mundy::utils::ref
+#include <mundy_utils/reference_wrapper.hpp>  // for mundy::reference_wrapper, mundy::ref
 
 using scalar_t = double;
 using View1D = Kokkos::View<scalar_t*, Kokkos::DefaultExecutionSpace>;
 
 struct WorkspaceWrapper {
-  mundy::utils::reference_wrapper<scalar_t> x;
-  mundy::utils::reference_wrapper<scalar_t> y;
-  mundy::utils::reference_wrapper<scalar_t> z;
+  mundy::reference_wrapper<scalar_t> x;
+  mundy::reference_wrapper<scalar_t> y;
+  mundy::reference_wrapper<scalar_t> z;
 
   KOKKOS_INLINE_FUNCTION
   void step(const scalar_t alpha, const scalar_t beta, const size_t i, const size_t round) {
@@ -107,7 +107,7 @@ scalar_t run_with_wrapper(View1D x, View1D y, View1D z, const scalar_t alpha, co
   for (size_t round = 0; round < rounds; ++round) {
     Kokkos::parallel_for(
         "run_with_wrapper", Kokkos::RangePolicy<>(0, n), KOKKOS_LAMBDA(const size_t i) {
-          WorkspaceWrapper workspace{mundy::utils::ref(x(i)), mundy::utils::ref(y(i)), mundy::utils::ref(z(i))};
+          WorkspaceWrapper workspace{mundy::ref(x(i)), mundy::ref(y(i)), mundy::ref(z(i))};
           workspace.step(alpha, beta, i, round);
         });
   }

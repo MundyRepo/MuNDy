@@ -30,11 +30,9 @@
 #include <Kokkos_Core.hpp>
 
 // Mundy
-#include <mundy_utils/reference_wrapper.hpp>  // for mundy::utils::reference_wrapper, ref, is_reference_wrapper_v
+#include <mundy_utils/reference_wrapper.hpp>  // for mundy::reference_wrapper, ref, is_reference_wrapper_v
 
 namespace mundy {
-
-namespace utils {
 
 template <class T>
 class storage;
@@ -129,9 +127,9 @@ KOKKOS_FUNCTION constexpr decltype(auto) storage_get(const Stored& value) noexce
 /// \brief Own or view a value using a simple normalized storage policy.
 ///
 /// Storage policy for `T`:
-///  - if `T` is (or refers to) `utils::reference_wrapper<U>`, store `utils::reference_wrapper<U>`
+///  - if `T` is (or refers to) `reference_wrapper<U>`, store `reference_wrapper<U>`
 ///  - else if `T` is (or refers to) a pointer type `U*`, store `U*`
-///  - else if `T` is an lvalue reference `U&`, store `utils::reference_wrapper<U>`
+///  - else if `T` is an lvalue reference `U&`, store `reference_wrapper<U>`
 ///  - otherwise, store `std::remove_cvref_t<T>` by value
 template <class T>
 class storage {
@@ -177,8 +175,6 @@ KOKKOS_FUNCTION constexpr auto store(T&& value) noexcept(
   using input_t = impl::store_input_type_t<T>;
   return storage<input_t>(std::forward<T>(value));
 }
-
-}  // namespace utils
 
 }  // namespace mundy
 

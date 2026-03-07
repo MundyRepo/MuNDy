@@ -39,11 +39,11 @@
 #include <stk_mesh/base/FEMHelpers.hpp>  // for stk::mesh::declare_element
 
 // Mundy
-#include <mundy_utils/throw_assert.hpp>     // for MUNDY_THROW_REQUIRE
 #include <mundy_mesh/DeclareEntities.hpp>  // for mundy::mesh::DeclareEntitiesHelper
 #include <mundy_mesh/LinkData.hpp>         // for mundy::mesh::get_link_data, mundy::mesh::LinkData
 #include <mundy_mesh/LinkMetaData.hpp>     // for mundy::mesh::LinkMetaData
 #include <mundy_mesh/fmt_stk_types.hpp>    // adds fmt::format for stk types
+#include <mundy_utils/throw_assert.hpp>    // for MUNDY_THROW_REQUIRE
 
 namespace mundy {
 

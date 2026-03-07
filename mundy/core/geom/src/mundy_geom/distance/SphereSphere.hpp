@@ -25,14 +25,12 @@
 #include <Kokkos_Core.hpp>
 
 // Mundy
-#include <mundy_geom/distance/DistanceMetrics.hpp>  // for mundy::geom::FreeSpaceMetric
+#include <mundy_geom/distance/DistanceMetrics.hpp>  // for mundy::FreeSpaceMetric
 #include <mundy_geom/distance/PointPoint.hpp>       // for distance(Point, Point)
-#include <mundy_geom/distance/Types.hpp>            // for mundy::geom::SharedNormalSigned
-#include <mundy_geom/primitives/Sphere.hpp>         // for mundy::geom::Sphere
+#include <mundy_geom/distance/Types.hpp>            // for mundy::SharedNormalSigned
+#include <mundy_geom/primitives/Sphere.hpp>         // for mundy::Sphere
 
 namespace mundy {
-
-namespace geom {
 
 //! \name Free space distance calculations
 //@{
@@ -66,7 +64,7 @@ KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distan
 template <typename Scalar>
 KOKKOS_FUNCTION Scalar distance(const Sphere<Scalar>& sphere1,  //
                                 const Sphere<Scalar>& sphere2,  //
-                                mundy::math::Vector3<Scalar>& sep) {
+                                mundy::Vector3<Scalar>& sep) {
   const Scalar center_center_distance = distance(sphere1.center(), sphere2.center(), sep);
 
   // Rescale the separation vector to the surface of the sphere
@@ -75,8 +73,6 @@ KOKKOS_FUNCTION Scalar distance(const Sphere<Scalar>& sphere1,  //
   return surface_distance;
 }
 //@}
-
-}  // namespace geom
 
 }  // namespace mundy
 

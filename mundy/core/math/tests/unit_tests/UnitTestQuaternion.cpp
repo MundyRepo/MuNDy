@@ -32,10 +32,10 @@
 #include <vector>       // for std::vector
 
 // Mundy libs
-#include <mundy_math/Matrix3.hpp>     // for mundy::math::Matrix3
+#include <mundy_math/Matrix3.hpp>     // for mundy::Matrix3
 #include <mundy_math/Quaternion.hpp>  // for mundy_math::Quaternion
-#include <mundy_math/Tolerance.hpp>   // for mundy::math::get_relaxed_tolerance
-#include <mundy_math/Vector3.hpp>     // for mundy::math::Vector3
+#include <mundy_math/Tolerance.hpp>   // for mundy::get_relaxed_tolerance
+#include <mundy_math/Vector3.hpp>     // for mundy::Vector3
 
 // Note, these tests are meant to look like real use cases for the Quaternion class. As a result, we use implicit type
 // conversions rather than being explicit about types. This is to ensure that the Quaternion class can be used in a
@@ -43,8 +43,6 @@
 // warnings. We will not however, locally disable these warning.
 
 namespace mundy {
-
-namespace math {
 
 namespace {
 
@@ -732,7 +730,5 @@ TYPED_TEST(QuaternionSingleTypeTest, Views) {
 //@}
 
 }  // namespace
-
-}  // namespace math
 
 }  // namespace mundy

@@ -36,8 +36,6 @@
 
 namespace mundy {
 
-namespace utils {
-
 namespace {
 
 TEST(NgpPoolTest, DefaultConstruction) {
@@ -300,7 +298,5 @@ TEST(NgpPoolTest, BatchedAdditionsFetches) {
 }
 
 }  // namespace
-
-}  // namespace utils
 
 }  // namespace mundy

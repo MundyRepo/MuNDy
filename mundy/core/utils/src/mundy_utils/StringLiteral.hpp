@@ -37,8 +37,6 @@ static_assert(__cplusplus >= 202002L, "This code requires C++20 or later");
 
 namespace mundy {
 
-namespace utils {
-
 /// \brief Literal class type that wraps a constant expression string.
 ///
 /// The StringLiteral struct allows templates to accept constant strings,
@@ -204,17 +202,15 @@ struct is_our_string_literal<StringLiteral<N>> : std::true_type {};
 template <typename T>
 inline constexpr bool is_our_string_literal_v = is_our_string_literal<std::remove_cvref_t<T>>::value;
 
-}  // namespace utils
-
 }  // namespace mundy
 
 //! \name Helpers for determining if an object is a string literal (type traits fails for string literals)
 //@{
 
-#define MUNDY_IS_CHAR_ARRAY(x)                          \
-  ([&]() constexpr {                                    \
-    static_cast<void>(sizeof(x));                       \
-    return ::mundy::utils::is_char_array_v<decltype(x)>; \
+#define MUNDY_IS_CHAR_ARRAY(x)                    \
+  ([&]() constexpr {                              \
+    static_cast<void>(sizeof(x));                 \
+    return ::mundy::is_char_array_v<decltype(x)>; \
   }())
 
 #define MUNDY_IS_STRING_LITERAL(x)                                          \
@@ -223,10 +219,10 @@ inline constexpr bool is_our_string_literal_v = is_our_string_literal<std::remov
            requires { std::type_identity_t<__mundy_T[sizeof(x) + 1]>{x}; }; \
   }())
 
-#define MUNDY_IS_OUR_STRING_LITERAL(x)                          \
-  ([&]() constexpr {                                            \
-    static_cast<void>(sizeof(x));                               \
-    return ::mundy::utils::is_our_string_literal_v<decltype(x)>; \
+#define MUNDY_IS_OUR_STRING_LITERAL(x)                    \
+  ([&]() constexpr {                                      \
+    static_cast<void>(sizeof(x));                         \
+    return ::mundy::is_our_string_literal_v<decltype(x)>; \
   }())
 //@}
 

@@ -25,14 +25,12 @@
 #include <Kokkos_Core.hpp>
 
 // Mundy
-#include <mundy_geom/distance/DistanceMetrics.hpp>  // for mundy::geom::FreeSpaceMetric
-#include <mundy_geom/distance/Types.hpp>            // for mundy::geom::SharedNormalSigned
-#include <mundy_geom/primitives/Line.hpp>           // for mundy::geom::Line
-#include <mundy_geom/primitives/Point.hpp>          // for mundy::geom::Point
+#include <mundy_geom/distance/DistanceMetrics.hpp>  // for mundy::FreeSpaceMetric
+#include <mundy_geom/distance/Types.hpp>            // for mundy::SharedNormalSigned
+#include <mundy_geom/primitives/Line.hpp>           // for mundy::Line
+#include <mundy_geom/primitives/Point.hpp>          // for mundy::Point
 
 namespace mundy {
-
-namespace geom {
 
 //! \name Free space distance calculations
 //@{
@@ -57,7 +55,7 @@ KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distan
                                 const Line<Scalar>& line) {
   // Compute the projection of the vector onto the line's direction
   auto line_to_point = point - line.center();
-  Scalar projection = mundy::math::dot(line_to_point, line.direction());
+  Scalar projection = mundy::dot(line_to_point, line.direction());
 
   // Compute the magnitude of the component of the vector perpendicular to the line
   return distance(projection * line.direction(), line_to_point);
@@ -75,7 +73,7 @@ KOKKOS_FUNCTION Scalar distance(const Point<Scalar>& point,    //
                                 const Line<Scalar>& line,      //
                                 Point<Scalar>& closest_point,  //
                                 Scalar& arch_length,           //
-                                mundy::math::Vector3<Scalar>& sep) {
+                                mundy::Vector3<Scalar>& sep) {
   // No difference between distance types for points and lines
   return distance(SharedNormalSigned{}, point, line, closest_point, arch_length, sep);
 }
@@ -93,18 +91,16 @@ KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distan
                                 const Line<Scalar>& line,                                 //
                                 Point<Scalar>& closest_point,                             //
                                 Scalar& arch_length,                                      //
-                                mundy::math::Vector3<Scalar>& sep) {
+                                mundy::Vector3<Scalar>& sep) {
   // Compute the projection of the vector onto the line's direction
   auto line_to_point = point - line.center();
-  arch_length = mundy::math::dot(line_to_point, line.direction());
+  arch_length = mundy::dot(line_to_point, line.direction());
   closest_point = line.center() + arch_length * line.direction();
 
   // Compute the magnitude of the component of the vector perpendicular to the line
   return distance(arch_length * line.direction(), line_to_point);
 }
 //@}
-
-}  // namespace geom
 
 }  // namespace mundy
 

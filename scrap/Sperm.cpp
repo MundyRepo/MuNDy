@@ -73,7 +73,7 @@ integrated into Mundy and runnable via our Configurator/Driver system.
 
 // Mundy libs
 #include <mundy_constraints/DeclareAndInitConstraints.hpp>  // for mundy::constraints::DeclareAndInitConstraints
-#include <mundy_utils/MakeStringArray.hpp>                   // for mundy::utils::make_string_array
+#include <mundy_utils/MakeStringArray.hpp>                   // for mundy::make_string_array
 #include <mundy_utils/throw_assert.hpp>                      // for MUNDY_THROW_ASSERT
 #include <mundy_linkers/ComputeSignedSeparationDistanceAndContactNormal.hpp>  // for mundy::linkers::ComputeSignedSeparationDistanceAndContactNormal
 #include <mundy_linkers/DestroyNeighborLinkers.hpp>                  // for mundy::linkers::DestroyNeighborLinkers
@@ -82,13 +82,13 @@ integrated into Mundy and runnable via our Configurator/Driver system.
 #include <mundy_linkers/LinkerPotentialForceReduction.hpp>  // for mundy::linkers::LinkerPotentialForceReduction
 #include <mundy_linkers/NeighborLinkers.hpp>                         // for mundy::linkers::NeighborLinkers
 #include <mundy_linkers/neighbor_linkers/SpherocylinderSegmentSpherocylinderSegmentLinkers.hpp>  // for mundy::...::SpherocylinderSegmentSpherocylinderSegmentLinkers
-#include <mundy_math/Matrix3.hpp>     // for mundy::math::Matrix3
-#include <mundy_math/Quaternion.hpp>  // for mundy::math::Quaternion
-#include <mundy_math/Vector3.hpp>     // for mundy::math::Vector3
+#include <mundy_math/Matrix3.hpp>     // for mundy::Matrix3
+#include <mundy_math/Quaternion.hpp>  // for mundy::Quaternion
+#include <mundy_math/Vector3.hpp>     // for mundy::Vector3
 #include <mundy_mesh/BulkData.hpp>    // for mundy::mesh::BulkData
 #include <mundy_mesh/FieldViews.hpp>  // for mundy::mesh::vector3_field_data, mundy::mesh::quaternion_field_data, mundy::mesh::matrix3_field_data
 #include <mundy_mesh/MetaData.hpp>                            // for mundy::mesh::MetaData
-#include <mundy_mesh/utils/FillFieldWithValue.hpp>            // for mundy::mesh::utils::fill_field_with_value
+#include <mundy_mesh/utils/FillFieldWithValue.hpp>            // for mundy::mesh::fill_field_with_value
 #include <mundy_meta/MetaKernel.hpp>                          // for mundy::meta::MetaKernel
 #include <mundy_meta/MetaKernelDispatcher.hpp>                // for mundy::meta::MetaKernelDispatcher
 #include <mundy_meta/MetaMethodSubsetExecutionInterface.hpp>  // for mundy::meta::MetaMethodSubsetExecutionInterface
@@ -314,13 +314,13 @@ class SpermSimulation {
 
     // ComputeSignedSeparationDistanceAndContactNormal fixed parameters
     auto compute_ssd_and_cn_fixed_params = Teuchos::ParameterList().set(
-        "enabled_kernel_names", mundy::utils::make_string_array("SPHEROCYLINDER_SEGMENT_SPHEROCYLINDER_SEGMENT_LINKER"));
+        "enabled_kernel_names", mundy::make_string_array("SPHEROCYLINDER_SEGMENT_SPHEROCYLINDER_SEGMENT_LINKER"));
     mesh_reqs_ptr_->sync(mundy::linkers::ComputeSignedSeparationDistanceAndContactNormal::get_mesh_requirements(
         compute_ssd_and_cn_fixed_params));
 
     // ComputeAABB fixed parameters
     auto compute_aabb_fixed_params =
-        Teuchos::ParameterList().set("enabled_kernel_names", mundy::utils::make_string_array("SPHEROCYLINDER_SEGMENT"));
+        Teuchos::ParameterList().set("enabled_kernel_names", mundy::make_string_array("SPHEROCYLINDER_SEGMENT"));
     mesh_reqs_ptr_->sync(mundy::shapes::ComputeAABB::get_mesh_requirements(compute_aabb_fixed_params));
 
     // GenerateNeighborLinkers fixed parameters
@@ -328,23 +328,23 @@ class SpermSimulation {
         Teuchos::ParameterList()
             .set("enabled_technique_name", "STK_SEARCH")
             .set("specialized_neighbor_linkers_part_names",
-                 mundy::utils::make_string_array("SPHEROCYLINDER_SEGMENT_SPHEROCYLINDER_SEGMENT_LINKERS"))
+                 mundy::make_string_array("SPHEROCYLINDER_SEGMENT_SPHEROCYLINDER_SEGMENT_LINKERS"))
             .sublist("STK_SEARCH")
-            .set("valid_source_entity_part_names", mundy::utils::make_string_array("SPHEROCYLINDER_SEGMENTS"))
-            .set("valid_target_entity_part_names", mundy::utils::make_string_array("SPHEROCYLINDER_SEGMENTS"));
+            .set("valid_source_entity_part_names", mundy::make_string_array("SPHEROCYLINDER_SEGMENTS"))
+            .set("valid_target_entity_part_names", mundy::make_string_array("SPHEROCYLINDER_SEGMENTS"));
     mesh_reqs_ptr_->sync(
         mundy::linkers::GenerateNeighborLinkers::get_mesh_requirements(generate_neighbor_linkers_fixed_params));
 
     // EvaluateLinkerPotentials fixed parameters
     auto evaluate_linker_potentials_fixed_params = Teuchos::ParameterList().set(
         "enabled_kernel_names",
-        mundy::utils::make_string_array("SPHEROCYLINDER_SEGMENT_SPHEROCYLINDER_SEGMENT_HERTZIAN_CONTACT"));
+        mundy::make_string_array("SPHEROCYLINDER_SEGMENT_SPHEROCYLINDER_SEGMENT_HERTZIAN_CONTACT"));
     mesh_reqs_ptr_->sync(
         mundy::linkers::EvaluateLinkerPotentials::get_mesh_requirements(evaluate_linker_potentials_fixed_params));
 
     // LinkerPotentialForceReduction fixed parameters
     auto linker_potential_force_reduction_fixed_params =
-        Teuchos::ParameterList().set("enabled_kernel_names", mundy::utils::make_string_array("SPHEROCYLINDER_SEGMENT"));
+        Teuchos::ParameterList().set("enabled_kernel_names", mundy::make_string_array("SPHEROCYLINDER_SEGMENT"));
     mesh_reqs_ptr_->sync(mundy::linkers::LinkerPotentialForceReduction::get_mesh_requirements(
         linker_potential_force_reduction_fixed_params));
 
@@ -360,12 +360,12 @@ class SpermSimulation {
             .set("enabled_technique_name", "CHAIN_OF_SPRINGS")
             .sublist("CHAIN_OF_SPRINGS")
             .set("hookean_springs_part_names",
-                 mundy::utils::make_string_array(mundy::constraints::HookeanSprings::get_name()))
+                 mundy::make_string_array(mundy::constraints::HookeanSprings::get_name()))
             .set("angular_springs_part_names",
-                 mundy::utils::make_string_array(mundy::constraints::AngularSprings::get_name()))
-            .set("sphere_part_names", mundy::utils::make_string_array(mundy::shapes::Spheres::get_name()))
+                 mundy::make_string_array(mundy::constraints::AngularSprings::get_name()))
+            .set("sphere_part_names", mundy::make_string_array(mundy::shapes::Spheres::get_name()))
             .set("spherocylinder_segment_part_names",
-                 mundy::utils::make_string_array(mundy::shapes::SpherocylinderSegments::get_name()))
+                 mundy::make_string_array(mundy::shapes::SpherocylinderSegments::get_name()))
             .set<bool>("generate_hookean_springs", true)
             .set<bool>("generate_angular_springs", false)
             .set<bool>("generate_spheres_at_nodes", false)
@@ -534,9 +534,9 @@ class SpermSimulation {
       declare_and_init_constraints_ptr_->execute();
     }
 
-    mundy::mesh::utils::fill_field_with_value<double>(*element_youngs_modulus_field_ptr_,
+    mundy::mesh::fill_field_with_value<double>(*element_youngs_modulus_field_ptr_,
                                                       std::array<double, 1>{sperm_youngs_modulus_});
-    mundy::mesh::utils::fill_field_with_value<double>(*element_poissons_ratio_field_ptr_,
+    mundy::mesh::fill_field_with_value<double>(*element_poissons_ratio_field_ptr_,
                                                       std::array<double, 1>{sperm_poissons_ratio_});
   }
 
@@ -667,12 +667,12 @@ class SpermSimulation {
 
           // Compute the un-normalized edge tangent
           edge_tangent = node_ip1_coords - node_i_coords;
-          edge_length[0] = mundy::math::norm(edge_tangent);
+          edge_length[0] = mundy::norm(edge_tangent);
           edge_tangent /= edge_length[0];
 
           // Compute the edge binormal
-          edge_binormal = (2.0 * mundy::math::cross(edge_tangent_old, edge_tangent)) /
-                          (1.0 + mundy::math::dot(edge_tangent_old, edge_tangent));
+          edge_binormal = (2.0 * mundy::cross(edge_tangent_old, edge_tangent)) /
+                          (1.0 + mundy::dot(edge_tangent_old, edge_tangent));
         });
   }
 
@@ -717,7 +717,7 @@ class SpermSimulation {
               mundy::mesh::quaternion_field_data(node_rotation_gradient_field, element_nodes[1]);
 
           // Compute the node curvature
-          node_rotation_gradient = mundy::math::conj(edge_im1_orientation) * edge_i_orientation;
+          node_rotation_gradient = mundy::conj(edge_im1_orientation) * edge_i_orientation;
           node_curvature = 2.0 * node_rotation_gradient.vector();
         });
   }
@@ -795,25 +795,25 @@ class SpermSimulation {
 
           // Compute the torque induced by the curvature
           // To start, the torque is in the lagrangian frame.
-          auto bending_modulus = mundy::math::Matrix3::identity();  // TODO(palmerb4): Replace with Kirchhoff rod model
+          auto bending_modulus = mundy::Matrix3::identity();  // TODO(palmerb4): Replace with Kirchhoff rod model
           auto bending_torque = bending_modulus * (node_i_curvature - node_i_rest_curvature);
 
           // We'll use the bending torque as a placeholder for the rotated bending torque
           bending_torque =
               edge_im1_orientation * (node_i_rotation_gradient.w() * bending_torque +
-                                      mundy::math::cross(node_i_rotation_gradient.vector(), bending_torque));
+                                      mundy::cross(node_i_rotation_gradient.vector(), bending_torque));
 
           // Compute the force and torque on the nodes
           const auto tmp_force_ip1 = 1.0 / edge_i_length *
-                                     (mundy::math::cross(bending_torque, edge_i_tangent) +
-                                      0.5 * mundy::math::dot(edge_i_tangent, bending_torque) *
-                                          (mundy::math::dot(edge_i_tangent, edge_i_binormal) * edge_i_tangent) -
+                                     (mundy::cross(bending_torque, edge_i_tangent) +
+                                      0.5 * mundy::dot(edge_i_tangent, bending_torque) *
+                                          (mundy::dot(edge_i_tangent, edge_i_binormal) * edge_i_tangent) -
                                       edge_i_binormal);
           const auto tmp_force_im1 =
               1.0 / edge_im1_length *
-              (mundy::math::cross(bending_torque, edge_im1_tangent) +
-               0.5 * mundy::math::dot(edge_im1_tangent, bending_torque) *
-                   (mundy::math::dot(edge_im1_tangent, edge_im1_binormal) * edge_im1_tangent - edge_im1_binormal));
+              (mundy::cross(bending_torque, edge_im1_tangent) +
+               0.5 * mundy::dot(edge_im1_tangent, bending_torque) *
+                   (mundy::dot(edge_im1_tangent, edge_im1_binormal) * edge_im1_tangent - edge_im1_binormal));
 
 #pragma omp atomic
           node_i_twist_torque[0] += edge_i_tangent.dot(bending_torque);
@@ -884,13 +884,13 @@ class SpermSimulation {
 
   void zero_out_transient_node_fields() {
     debug_print("Zeroing out the transient node fields.");
-    mundy::mesh::utils::fill_field_with_value<double>(*node_velocity_field_ptr_, std::array<double, 3>{0.0, 0.0, 0.0});
-    mundy::mesh::utils::fill_field_with_value<double>(*node_force_field_ptr_, std::array<double, 3>{0.0, 0.0, 0.0});
-    mundy::mesh::utils::fill_field_with_value<double>(*node_acceleration_field_ptr_,
+    mundy::mesh::fill_field_with_value<double>(*node_velocity_field_ptr_, std::array<double, 3>{0.0, 0.0, 0.0});
+    mundy::mesh::fill_field_with_value<double>(*node_force_field_ptr_, std::array<double, 3>{0.0, 0.0, 0.0});
+    mundy::mesh::fill_field_with_value<double>(*node_acceleration_field_ptr_,
                                                       std::array<double, 3>{0.0, 0.0, 0.0});
-    mundy::mesh::utils::fill_field_with_value<double>(*node_twist_velocity_field_ptr_, std::array<double, 1>{0.0});
-    mundy::mesh::utils::fill_field_with_value<double>(*node_twist_torque_field_ptr_, std::array<double, 1>{0.0});
-    mundy::mesh::utils::fill_field_with_value<double>(*node_twist_acceleration_field_ptr_, std::array<double, 1>{0.0});
+    mundy::mesh::fill_field_with_value<double>(*node_twist_velocity_field_ptr_, std::array<double, 1>{0.0});
+    mundy::mesh::fill_field_with_value<double>(*node_twist_torque_field_ptr_, std::array<double, 1>{0.0});
+    mundy::mesh::fill_field_with_value<double>(*node_twist_acceleration_field_ptr_, std::array<double, 1>{0.0});
   }
 
   void compute_hertzian_contact_force() {

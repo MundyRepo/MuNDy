@@ -175,7 +175,7 @@ class attractive_abc_flow {
     const auto coords = get<Position>(node_view);
     auto force = get<Force>(node_view);
 
-    const double r = math::norm(coords);
+    const double r = norm(coords);
     const double inv_r = 1.0 / r;
 
     force[0] += a_ * Kokkos::sin(coords[2]) + c_ * Kokkos::cos(coords[1]) - attraction_coeff_ * coords[0] * inv_r;
@@ -277,8 +277,8 @@ int main(int argc, char **argv) {
     const double force_c = Kokkos::sqrt(3.0);
     const double force_attraction_coeff = 2.0;
 
-    const math::Vector3d unit_cell_bottom_left = {-50.0, -50.0, -50.0};
-    const math::Vector3d unit_cell_top_right = {50.0, 50.0, 50.0};
+    const Vector3d unit_cell_bottom_left = {-50.0, -50.0, -50.0};
+    const Vector3d unit_cell_top_right = {50.0, 50.0, 50.0};
     const double time_step_size = 0.00001;
     const size_t num_time_steps = 1000 / time_step_size;
     const size_t io_frequency = std::round(0.1 / time_step_size);
@@ -409,7 +409,7 @@ int main(int argc, char **argv) {
     // Setup our neighbor search manager
     auto gen_neighbors = create_gen_neighbor_links(link_data, stk::ngp::ExecSpace{});
     auto search_sphere_gen = [&sphere_data](autp &sphere_view) {
-      return geom::Sphere<double>(get<CENTER>(sphere_view), get<RADIUS>(sphere_view)[0]);
+      return Sphere<double>(get<CENTER>(sphere_view), get<RADIUS>(sphere_view)[0]);
     };
     gen_neighbors
         .set_source_target_rank(ELEM_RANK, ELEM_RANK)                                                 //

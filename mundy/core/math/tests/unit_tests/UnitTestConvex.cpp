@@ -18,27 +18,29 @@
 // **********************************************************************************************************************
 // @HEADER
 
-// External libs
+// External
 #include <gtest/gtest.h>      // for TEST, ASSERT_NO_THROW, etc
 #include <openrand/philox.h>  // for openrand::Philox
 
-#include <KokkosBlas.hpp>
-#include <KokkosBlas_gesv.hpp>
 #include <Kokkos_Core.hpp>  // for Kokkos::Array
 
-// C++ core libs
+// KokkosKernels
+#include <MundyMath_config.hpp>  // for HAVE_MUNDYMATH_*
+#ifdef HAVE_MUNDYMATH_KOKKOSKERNELS
+#include <KokkosBlas.hpp>
+#include <KokkosBlas_gesv.hpp>
+#endif
+
+// C++ core
 #include <ostream>  // for std::cout
 
-// Mundy libs
-#include <MundyMath_config.hpp>   // for HAVE_MUNDYMATH_*
-#include <mundy_utils/rng.hpp>     // for mundy::utils::make_philox
-#include <mundy_math/Matrix.hpp>  // for mundy::math::Matrix
-#include <mundy_math/Vector.hpp>  // for mundy::math::Vector
-#include <mundy_math/convex.hpp>  // for mundy::math::solve_lcp/solve_cqpp
+// Mundy
+#include <mundy_math/Matrix.hpp>  // for mundy::Matrix
+#include <mundy_math/Vector.hpp>  // for mundy::Vector
+#include <mundy_math/convex.hpp>  // for mundy::solve_lcp/solve_cqpp
+#include <mundy_utils/rng.hpp>    // for mundy::make_philox
 
 namespace mundy {
-
-namespace math {
 
 namespace {
 
@@ -718,7 +720,7 @@ struct RandomLCP {
     Kokkos::parallel_for(
         "gen_random_matrix", Kokkos::MDRangePolicy<Kokkos::Rank<2>>({0, 0}, {size, size}),
         KOKKOS_LAMBDA(const size_t i, const size_t j) {
-          openrand::Philox rng = utils::make_philox(i, j);
+          openrand::Philox rng = make_philox(i, j);
           mat(i, j) = rng.uniform<double>(-1.0, 1.0);
         });
 
@@ -921,7 +923,7 @@ struct RandomMixedCongruentCCQP {
 
   KOKKOS_INLINE_FUNCTION
   static scalar_t urand(uint64_t a, uint64_t b) {
-    openrand::Philox rng = utils::make_philox(a, b);
+    openrand::Philox rng = make_philox(a, b);
     return rng.uniform<double>(-1.0, 1.0);
   }
 
@@ -1020,7 +1022,7 @@ struct RandomMixedCongruentCCQP {
     vecx_t s_star(Kokkos::view_alloc(Kokkos::WithoutInitializing, "s_star"), NX);
     Kokkos::parallel_for(
         "init_xs", Kokkos::RangePolicy<exec_space>(0, NX), KOKKOS_LAMBDA(const size_t i) {
-          openrand::Philox rng = utils::make_philox(static_cast<uint64_t>(i + seed + 503), static_cast<uint64_t>(1337));
+          openrand::Philox rng = make_philox(static_cast<uint64_t>(i + seed + 503), static_cast<uint64_t>(1337));
           const double u0 = rng.uniform<double>(0.0, 1.0);
           const double u1 = rng.uniform<double>(0.0, 1.0);
           const bool active = u0 < 0.5;
@@ -1484,7 +1486,5 @@ TEST(Convex, KokkosMixedCongruentAnalyticalSolutions) {
 #endif  // HAVE_MUNDYMATH_KOKKOSKERNELS
 
 }  // namespace
-
-}  // namespace math
 
 }  // namespace mundy

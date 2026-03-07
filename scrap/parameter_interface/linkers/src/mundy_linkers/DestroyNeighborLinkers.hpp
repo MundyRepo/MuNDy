@@ -32,7 +32,7 @@
 #include <Teuchos_ParameterList.hpp>  // for Teuchos::ParameterList
 
 // Mundy libs
-#include <mundy_utils/StringLiteral.hpp>  // for mundy::utils::make_string_literal
+#include <mundy_utils/StringLiteral.hpp>  // for mundy::make_string_literal
 #include <mundy_linkers/destroy_neighbor_linkers/techniques/DestroyBoundNeighbors.hpp>  // for mundy::linkers::destroy_neighbor_linkers::techniques::DestroyBoundNeighbors
 #include <mundy_linkers/destroy_neighbor_linkers/techniques/DestroyDistantNeighbors.hpp>  // for mundy::linkers::destroy_neighbor_linkers::techniques::DestroyDistantNeighbors
 #include <mundy_mesh/BulkData.hpp>                                                        // for mundy::mesh::BulkData

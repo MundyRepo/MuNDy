@@ -37,8 +37,6 @@
 
 namespace mundy {
 
-namespace utils {
-
 template <typename T>
 concept StringConvertible = requires(T a) {
   { std::string(a) } -> std::convertible_to<std::string>;
@@ -52,8 +50,6 @@ template <StringConvertible... Args>
 Teuchos::Array<std::string> make_string_array(Args&&... args) {
   return Teuchos::tuple<std::string>(std::string(std::forward<Args>(args))...);
 }
-
-}  // namespace utils
 
 }  // namespace mundy
 

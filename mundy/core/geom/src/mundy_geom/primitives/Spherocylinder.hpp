@@ -30,16 +30,14 @@
 #include <utility>
 
 // Our libs
-#include <mundy_utils/throw_assert.hpp>      // for MUNDY_THROW_ASSERT
-#include <mundy_geom/primitives/Point.hpp>  // for mundy::geom::Point
-#include <mundy_math/Quaternion.hpp>        // for mundy::math::Quaternion
+#include <mundy_geom/primitives/Point.hpp>  // for mundy::Point
+#include <mundy_math/Quaternion.hpp>        // for mundy::Quaternion
+#include <mundy_utils/throw_assert.hpp>     // for MUNDY_THROW_ASSERT
 
 namespace mundy {
 
-namespace geom {
-
 template <typename Scalar, ValidPointType PointType = Point<Scalar>,
-          math::ValidQuaternionType QuaternionType = math::Quaternion<Scalar>>
+          ValidQuaternionType QuaternionType = Quaternion<Scalar>>
 class Spherocylinder {
   static_assert(
       std::is_same_v<typename PointType::scalar_t, Scalar> && std::is_same_v<typename QuaternionType::scalar_t, Scalar>,
@@ -67,7 +65,7 @@ class Spherocylinder {
   /// invalid value of -1
   KOKKOS_FUNCTION
   constexpr Spherocylinder()
-    requires(math::HasNArgConstructor<point_t, scalar_t, 3> && math::HasNArgConstructor<orientation_t, scalar_t, 4>)
+    requires(HasNArgConstructor<point_t, scalar_t, 3> && HasNArgConstructor<orientation_t, scalar_t, 4>)
       : center_(scalar_t(), scalar_t(), scalar_t()),
         orientation_(static_cast<scalar_t>(1), static_cast<scalar_t>(0), static_cast<scalar_t>(0),
                      static_cast<scalar_t>(0)),
@@ -91,7 +89,7 @@ class Spherocylinder {
   /// \param[in] orientation The orientation of the Spherocylinder (as a quaternion).
   /// \param[in] radius The radius of the Spherocylinder.
   /// \param[in] length The length of the Spherocylinder.
-  template <ValidPointType OtherPointType, math::ValidQuaternionType OtherQuaternionType>
+  template <ValidPointType OtherPointType, ValidQuaternionType OtherQuaternionType>
   KOKKOS_FUNCTION constexpr Spherocylinder(const OtherPointType& center, const OtherQuaternionType& orientation,
                                            const scalar_t& radius, const scalar_t& length)
     requires(!std::is_same_v<OtherPointType, point_t> || !std::is_same_v<OtherQuaternionType, orientation_t>)
@@ -309,7 +307,7 @@ class Spherocylinder {
 template <typename T>
 struct impl_is_spherocylinder : std::false_type {};
 //
-template <typename Scalar, ValidPointType PointType, math::ValidQuaternionType QuaternionType>
+template <typename Scalar, ValidPointType PointType, ValidQuaternionType QuaternionType>
 struct impl_is_spherocylinder<Spherocylinder<Scalar, PointType, QuaternionType>> : std::true_type {};
 
 /// \brief Type trait to determine if a type is a Spherocylinder
@@ -359,8 +357,6 @@ std::ostream& operator<<(std::ostream& os, const SpherocylinderType& spherocylin
   return os;
 }
 //@}
-
-}  // namespace geom
 
 }  // namespace mundy
 

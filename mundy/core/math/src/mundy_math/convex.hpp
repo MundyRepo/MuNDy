@@ -42,13 +42,11 @@
 #include <mundy_utils/throw_assert.hpp>
 
 // Mundy math:
+#include <mundy_math/Tolerance.hpp>           // for mundy::get_zero_tolerance<T>
+#include <mundy_math/Vector.hpp>              // for mundy::Vector
 #include <mundy_utils/suppress_warnings.hpp>  // for MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_PUSH/POP
-#include <mundy_math/Tolerance.hpp>          // for mundy::math::get_zero_tolerance<T>
-#include <mundy_math/Vector.hpp>             // for mundy::math::Vector
 
 namespace mundy {
-
-namespace math {
 
 namespace convex {
 
@@ -160,7 +158,7 @@ template <class T>
 struct is_reference_wrapper : std::false_type {};
 
 template <class U>
-struct is_reference_wrapper<::mundy::utils::reference_wrapper<U>> : std::true_type {};
+struct is_reference_wrapper<::mundy::reference_wrapper<U>> : std::true_type {};
 
 template <class T>
 inline constexpr bool is_reference_wrapper_v = is_reference_wrapper<std::remove_cvref_t<T>>::value;
@@ -315,7 +313,7 @@ KOKKOS_INLINE_FUNCTION auto to_storage(T&& value) {
     return std::forward<T>(value);
   } else if constexpr (std::is_lvalue_reference_v<T>) {  // value is an lvalue reference but not a reference wrapper, so
                                                          // wrap it in a reference wrapper
-    return ::mundy::utils::ref(value);
+    return ::mundy::ref(value);
   } else {
     return std::forward<T>(value);  // value is an rvalue, so just return it as is (will be moved if possible)
   }
@@ -1118,7 +1116,7 @@ struct MundyMathBackend {
     requires(!is_matrix_v<LinearOp> && !impl::HasRangeSizeMember<LinearOp>)
   KOKKOS_INLINE_FUNCTION static size_t range_size(LinearOp& /*op*/) {
     MUNDY_THROW_REQUIRE(false, std::logic_error,
-                        "MundyBackend::range_size: op must be a mundy::math::Matrix or provide size_t range_size().");
+                        "MundyBackend::range_size: op must be a mundy::Matrix or provide size_t range_size().");
     return 0;
   }
 
@@ -1165,7 +1163,7 @@ struct MundyMathBackend {
   template <typename Wrapper, class Scalar, class XVector, class YVector, class ZVector>
   KOKKOS_INLINE_FUNCTION static void wrapped_axpbyz(const Scalar alpha, const XVector& x, const Scalar beta,
                                                     const YVector& y, ZVector& z, const Wrapper& wrapper) {
-    z = ::mundy::math::apply(wrapper, alpha * x + beta * y);
+    z = ::mundy::apply(wrapper, alpha * x + beta * y);
   }
 
   template <class ReductionScalar, class XVector, class YVector>
@@ -2242,8 +2240,6 @@ KOKKOS_INLINE_FUNCTION auto solve_lcp(const Problem& prob, const Strategy& strat
   auto ccpp_prob = to_cqpp(prob);
   return solve_cqpp(ccpp_prob, strat, state);
 }
-
-}  // namespace math
 
 }  // namespace mundy
 

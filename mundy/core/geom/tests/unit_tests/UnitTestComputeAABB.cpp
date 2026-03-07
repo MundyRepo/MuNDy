@@ -31,13 +31,11 @@
 #include <Kokkos_Core.hpp>  // for Kokkos::numbers::pi
 
 // Mundy
-#include <mundy_geom/compute_aabb.hpp>  // for mundy::geom::compute_aabb
-#include <mundy_geom/primitives.hpp>    // for mundy::geom::Ellipsoid...
-#include <mundy_math/Tolerance.hpp>     // for mundy::math::get_zero_tolerance
+#include <mundy_geom/compute_aabb.hpp>  // for mundy::compute_aabb
+#include <mundy_geom/primitives.hpp>    // for mundy::Ellipsoid...
+#include <mundy_math/Tolerance.hpp>     // for mundy::get_zero_tolerance
 
 namespace mundy {
-
-namespace geom {
 
 namespace {
 
@@ -49,16 +47,16 @@ namespace {
 //   - SpherocylinderSegment
 
 // A custom macro that wraps GTEST for checking if two AABBs are nearly equal
-#define ASSERT_NEAR_AABB(expected, actual, tol)                                   \
-  ASSERT_NEAR(mundy::math::norm(expected.min_corner() - actual.min_corner()) +    \
-                  mundy::math::norm(expected.max_corner() - actual.max_corner()), \
+#define ASSERT_NEAR_AABB(expected, actual, tol)                             \
+  ASSERT_NEAR(mundy::norm(expected.min_corner() - actual.min_corner()) +    \
+                  mundy::norm(expected.max_corner() - actual.max_corner()), \
               0.0, tol)
 
 /// \brief Get the quaternion corresponding to a 90 deg rotation about the x-axis
 template <typename T>
-mundy::math::Quaternion<T> get_quaternion_x_90() {
-  return mundy::math::Quaternion<T>(static_cast<T>(1.0 / std::sqrt(2.0)), static_cast<T>(1.0 / std::sqrt(2.0)),
-                                    static_cast<T>(0.0), static_cast<T>(0.0));
+mundy::Quaternion<T> get_quaternion_x_90() {
+  return mundy::Quaternion<T>(static_cast<T>(1.0 / std::sqrt(2.0)), static_cast<T>(1.0 / std::sqrt(2.0)),
+                              static_cast<T>(0.0), static_cast<T>(0.0));
 }
 
 template <typename Scalar>
@@ -68,7 +66,7 @@ struct PointTestCase {
   AABB<Scalar> expected_aabb;
   void check() const {
     const auto actual_aabb = compute_aabb(point);
-    const double tol = mundy::math::get_relaxed_zero_tolerance<Scalar>();
+    const double tol = mundy::get_relaxed_zero_tolerance<Scalar>();
     ASSERT_NEAR_AABB(expected_aabb, actual_aabb, tol) << "Failed test case: " << name;
   }
 };
@@ -80,7 +78,7 @@ struct LineSegmentTestCase {
   AABB<Scalar> expected_aabb;
   void check() const {
     const auto actual_aabb = compute_aabb(segment);
-    const double tol = mundy::math::get_relaxed_zero_tolerance<Scalar>();
+    const double tol = mundy::get_relaxed_zero_tolerance<Scalar>();
     ASSERT_NEAR_AABB(expected_aabb, actual_aabb, tol) << "Failed test case: " << name;
   }
 };
@@ -92,7 +90,7 @@ struct SphereTestCase {
   AABB<Scalar> expected_aabb;
   void check() const {
     const auto actual_aabb = compute_aabb(sphere);
-    const double tol = mundy::math::get_relaxed_zero_tolerance<Scalar>();
+    const double tol = mundy::get_relaxed_zero_tolerance<Scalar>();
     ASSERT_NEAR_AABB(expected_aabb, actual_aabb, tol) << "Failed test case: " << name;
   }
 };
@@ -104,7 +102,7 @@ struct EllipsoidTestCase {
   AABB<Scalar> expected_aabb;
   void check() const {
     const auto actual_aabb = compute_aabb(ellipsoid);
-    const double tol = mundy::math::get_relaxed_zero_tolerance<Scalar>();
+    const double tol = mundy::get_relaxed_zero_tolerance<Scalar>();
     ASSERT_NEAR_AABB(expected_aabb, actual_aabb, tol) << "Failed test case: " << name;
   }
 };
@@ -116,7 +114,7 @@ struct SpherocylinderTestCase {
   AABB<Scalar> expected_aabb;
   void check() const {
     const auto actual_aabb = compute_aabb(spherocylinder);
-    const double tol = mundy::math::get_relaxed_zero_tolerance<Scalar>();
+    const double tol = mundy::get_relaxed_zero_tolerance<Scalar>();
     ASSERT_NEAR_AABB(expected_aabb, actual_aabb, tol) << "Failed test case: " << name;
   }
 };
@@ -128,7 +126,7 @@ struct SpherocylinderSegmentTestCase {
   AABB<Scalar> expected_aabb;
   void check() const {
     const auto actual_aabb = compute_aabb(spherocylinder_segment);
-    const double tol = mundy::math::get_relaxed_zero_tolerance<Scalar>();
+    const double tol = mundy::get_relaxed_zero_tolerance<Scalar>();
     ASSERT_NEAR_AABB(expected_aabb, actual_aabb, tol) << "Failed test case: " << name;
   }
 };
@@ -148,7 +146,7 @@ std::vector<PointTestCase<double>> point_test_cases() {
 std::vector<LineSegmentTestCase<double>> line_segment_test_cases() {
   // The AABB for a line segment, given by two its start and end points, is just the
   // min_x/y/z and max_x/y/z of those points
-  using mundy::math::Vector3;
+  using mundy::Vector3;
   std::vector<LineSegmentTestCase<double>> test_cases;
   test_cases.push_back(
       LineSegmentTestCase{.name = std::string("length 0"),                                                   //
@@ -180,8 +178,8 @@ std::vector<SphereTestCase<double>> sphere_test_cases() {
 std::vector<EllipsoidTestCase<double>> ellipsoid_test_cases() {
   // Our ellipsoids have a center, 3 radii, and a quaternion orientation
   // Lets start by testing unit orientation
-  using mundy::math::Quaterniond;
-  using mundy::math::Vector3d;
+  using mundy::Quaterniond;
+  using mundy::Vector3d;
   std::vector<EllipsoidTestCase<double>> test_cases;
 
   // Rotate 90 degrees about the x-axis
@@ -209,8 +207,8 @@ std::vector<EllipsoidTestCase<double>> ellipsoid_test_cases() {
 std::vector<SpherocylinderTestCase<double>> spherocylinder_test_cases() {
   // Our spherocylinders have a center, a radius, a length, and a quaternion orientation
   // Lets start by testing unit orientation
-  using mundy::math::Quaterniond;
-  using mundy::math::Vector3;
+  using mundy::Quaterniond;
+  using mundy::Vector3;
   std::vector<SpherocylinderTestCase<double>> test_cases;
 
   const Quaterniond x_90_rot = get_quaternion_x_90<double>();
@@ -237,7 +235,7 @@ std::vector<SpherocylinderTestCase<double>> spherocylinder_test_cases() {
 std::vector<SpherocylinderSegmentTestCase<double>> spherocylinder_segment_test_cases() {
   // Our spherocylinder segments have two endpoints and a radius
   // Same test cases as a spherocylinder except with endpoints
-  using mundy::math::Vector3;
+  using mundy::Vector3;
   std::vector<SpherocylinderSegmentTestCase<double>> test_cases;
 
   test_cases.push_back(SpherocylinderSegmentTestCase{
@@ -281,7 +279,5 @@ TEST(ComputeAABB, HardCodedTestCases) {
 }
 
 }  // namespace
-
-}  // namespace geom
 
 }  // namespace mundy

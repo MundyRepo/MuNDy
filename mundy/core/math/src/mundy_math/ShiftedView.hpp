@@ -28,11 +28,9 @@
 #include <concepts>
 
 // Mundy
-#include <mundy_math/Accessor.hpp>  // for mundy::math::ValidAccessor
+#include <mundy_math/Accessor.hpp>  // for mundy::ValidAccessor
 
 namespace mundy {
-
-namespace math {
 
 /// \brief Get a shifted accessor into a contiguous accessor
 ///
@@ -45,7 +43,7 @@ namespace math {
 template <typename T, size_t shift, ValidAccessor<T> Accessor>
 class ShiftedView {
  public:
-  utils::storage<Accessor> accessor_;
+  storage<Accessor> accessor_;
 
   /// \brief Constructor from a given accessor
   KOKKOS_INLINE_FUNCTION
@@ -101,18 +99,16 @@ class ShiftedView {
 /// \endcode
 template <typename T, size_t shift, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto get_shifted_view(Accessor&& data) {
-  auto data_storage = utils::store(impl::unwrap_accessor(std::forward<Accessor>(data)));
+  auto data_storage = store(impl::unwrap_accessor(std::forward<Accessor>(data)));
   return ShiftedView<T, shift, decltype(data_storage)>(data_storage);
 }
 
 template <typename T, size_t shift, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto get_owning_shifted_accessor(Accessor&& data) {
-  auto data_storage = utils::store(impl::unwrap_accessor(std::move(data)));
+  auto data_storage = store(impl::unwrap_accessor(std::move(data)));
   return ShiftedView<T, shift, decltype(data_storage)>(data_storage);
 }
 //@}
-
-}  // namespace math
 
 }  // namespace mundy
 

@@ -79,17 +79,17 @@ Interactions:
 #include <stk_mesh/base/FieldParallel.hpp>     // for stk::mesh::parallel_sum
 
 // Mundy core
-#include <mundy_utils/MakeStringArray.hpp>                      // for mundy::utils::make_string_array
-#include <mundy_utils/OurAnyNumberParameterEntryValidator.hpp>  // for mundy::utils::OurAnyNumberParameterEntryValidator
-#include <mundy_utils/StringLiteral.hpp>  // for mundy::utils::StringLiteral and mundy::utils::make_string_literal
+#include <mundy_utils/MakeStringArray.hpp>                      // for mundy::make_string_array
+#include <mundy_utils/OurAnyNumberParameterEntryValidator.hpp>  // for mundy::OurAnyNumberParameterEntryValidator
+#include <mundy_utils/StringLiteral.hpp>  // for mundy::StringLiteral and mundy::make_string_literal
 #include <mundy_utils/throw_assert.hpp>   // for MUNDY_THROW_ASSERT
-#include <mundy_utils/rng.hpp>              // for mundy::utils::make_philox
+#include <mundy_utils/rng.hpp>              // for mundy::make_philox
 
 // Mundy math
-#include <mundy_math/Hilbert.hpp>                      // for mundy::math::create_hilbert_positions_and_directors
-#include <mundy_math/Vector3.hpp>                      // for mundy::math::Vector3
-#include <mundy_math/distance/EllipsoidEllipsoid.hpp>  // for mundy::math::distance::ellipsoid_ellipsoid
-#include <mundy_math/zmort.hpp>                        // for mundy::math::zmorton_less(Vector3, Vector3)
+#include <mundy_math/Hilbert.hpp>                      // for mundy::create_hilbert_positions_and_directors
+#include <mundy_math/Vector3.hpp>                      // for mundy::Vector3
+#include <mundy_math/distance/EllipsoidEllipsoid.hpp>  // for mundy::distance::ellipsoid_ellipsoid
+#include <mundy_math/zmort.hpp>                        // for mundy::zmorton_less(Vector3, Vector3)
 
 // Mundy meta
 #include <mundy_meta/MetaFactory.hpp>                         // for mundy::meta::MetaKernelFactory
@@ -99,15 +99,15 @@ Interactions:
 #include <mundy_meta/MetaRegistry.hpp>                        // for mundy::meta::MetaMethodRegistry
 #include <mundy_meta/ParameterValidationHelpers.hpp>  // for mundy::meta::check_parameter_and_set_default and mundy::meta::check_required_parameter
 #include <mundy_meta/PartReqs.hpp>  // for mundy::meta::PartReqs
-#include <mundy_meta/utils/MeshGeneration.hpp>  // for mundy::meta::utils::generate_class_instance_and_mesh_from_meta_class_requirements
+#include <mundy_meta/utils/MeshGeneration.hpp>  // for mundy::meta::generate_class_instance_and_mesh_from_meta_class_requirements
 
 // Mundy mesh
 #include <mundy_mesh/BulkData.hpp>       // for mundy::mesh::BulkData
 #include <mundy_mesh/FieldViews.hpp>     // for mundy::mesh::vector3_field_data, mundy::mesh::quaternion_field_data
 #include <mundy_mesh/MetaData.hpp>       // for mundy::mesh::MetaData
 #include <mundy_mesh/fmt_stk_types.hpp>  // adds fmt::format for stk types
-#include <mundy_mesh/utils/DestroyFlaggedEntities.hpp>  // for mundy::mesh::utils::destroy_flagged_entities
-#include <mundy_mesh/utils/FillFieldWithValue.hpp>      // for mundy::mesh::utils::fill_field_with_value
+#include <mundy_mesh/utils/DestroyFlaggedEntities.hpp>  // for mundy::mesh::destroy_flagged_entities
+#include <mundy_mesh/utils/FillFieldWithValue.hpp>      // for mundy::mesh::fill_field_with_value
 
 // Mundy shapes
 #include <mundy_shapes/ComputeAABB.hpp>  // for mundy::shapes::ComputeAABB
@@ -737,23 +737,23 @@ class HP1 {
     // Create a paramater entity validator for our large integers to allow for both int and long long.
     auto prefer_size_t = []() {
       if (std::is_same_v<size_t, unsigned short>) {
-        return mundy::utils::OurAnyNumberParameterEntryValidator::PREFER_UNSIGNED_SHORT;
+        return mundy::OurAnyNumberParameterEntryValidator::PREFER_UNSIGNED_SHORT;
       } else if (std::is_same_v<size_t, unsigned int>) {
-        return mundy::utils::OurAnyNumberParameterEntryValidator::PREFER_UNSIGNED_INT;
+        return mundy::OurAnyNumberParameterEntryValidator::PREFER_UNSIGNED_INT;
       } else if (std::is_same_v<size_t, unsigned long>) {
-        return mundy::utils::OurAnyNumberParameterEntryValidator::PREFER_UNSIGNED_LONG;
+        return mundy::OurAnyNumberParameterEntryValidator::PREFER_UNSIGNED_LONG;
       } else if (std::is_same_v<size_t, unsigned long long>) {
-        return mundy::utils::OurAnyNumberParameterEntryValidator::PREFER_UNSIGNED_LONG_LONG;
+        return mundy::OurAnyNumberParameterEntryValidator::PREFER_UNSIGNED_LONG_LONG;
       } else {
         throw std::runtime_error("Unknown size_t type.");
-        return mundy::utils::OurAnyNumberParameterEntryValidator::PREFER_UNSIGNED_INT;
+        return mundy::OurAnyNumberParameterEntryValidator::PREFER_UNSIGNED_INT;
       }
     }();
     const bool allow_all_types_by_default = false;
-    mundy::utils::OurAnyNumberParameterEntryValidator::AcceptedTypes accept_int(allow_all_types_by_default);
+    mundy::OurAnyNumberParameterEntryValidator::AcceptedTypes accept_int(allow_all_types_by_default);
     accept_int.allow_all_integer_types(true);
     auto make_new_validator = [](const auto &preferred_type, const auto &accepted_types) {
-      return Teuchos::rcp(new mundy::utils::OurAnyNumberParameterEntryValidator(preferred_type, accepted_types));
+      return Teuchos::rcp(new mundy::OurAnyNumberParameterEntryValidator(preferred_type, accepted_types));
     };
 
     static Teuchos::ParameterList valid_parameter_list;
@@ -1154,12 +1154,12 @@ class HP1 {
     auto fixed_params_iobroker =
         Teuchos::ParameterList()
             .set("enabled_io_parts",
-                 mundy::utils::make_string_array("E", "H", "BS", "EESPRINGS", "EHSPRINGS", "HHSPRINGS", "LEFT_HP1",
+                 mundy::make_string_array("E", "H", "BS", "EESPRINGS", "EHSPRINGS", "HHSPRINGS", "LEFT_HP1",
                                                 "DOUBLY_HP1_H", "DOUBLY_HP1_BS"))
             .set("enabled_io_fields_node_rank",
-                 mundy::utils::make_string_array("NODE_VELOCITY", "NODE_FORCE", "NODE_RNG_COUNTER"))
+                 mundy::make_string_array("NODE_VELOCITY", "NODE_FORCE", "NODE_RNG_COUNTER"))
             .set("enabled_io_fields_element_rank",
-                 mundy::utils::make_string_array(
+                 mundy::make_string_array(
                      "ELEMENT_RADIUS", "ELEMENT_RNG_COUNTER", "ELEMENT_REALIZED_BINDING_RATES",
                      "ELEMENT_REALIZED_UNBINDING_RATES", "ELEMENT_PERFORM_STATE_CHANGE", "EUCHROMATIN_STATE",
                      "EUCHROMATIN_PERFORM_STATE_CHANGE", "EUCHROMATIN_STATE_CHANGE_NEXT_TIME",
@@ -1343,33 +1343,33 @@ class HP1 {
     // Compute constraint (bonded) forces for the the BACKBONE_SEGMENTS and HP1S parts
     if (backbone_spring_type_ == BOND_TYPE::HARMONIC && crosslinker_spring_type_ == BOND_TYPE::HARMONIC) {
       compute_constraint_forcing_fixed_params_ =
-          Teuchos::ParameterList().set("enabled_kernel_names", mundy::utils::make_string_array("HOOKEAN_SPRINGS"));
+          Teuchos::ParameterList().set("enabled_kernel_names", mundy::make_string_array("HOOKEAN_SPRINGS"));
       compute_constraint_forcing_fixed_params_.sublist("HOOKEAN_SPRINGS")
-          .set("valid_entity_part_names", mundy::utils::make_string_array("BACKBONE_SEGMENTS", "HP1S"));
+          .set("valid_entity_part_names", mundy::make_string_array("BACKBONE_SEGMENTS", "HP1S"));
     } else if (backbone_spring_type_ == BOND_TYPE::FENE && crosslinker_spring_type_ == BOND_TYPE::HARMONIC) {
       compute_constraint_forcing_fixed_params_ = Teuchos::ParameterList().set(
-          "enabled_kernel_names", mundy::utils::make_string_array("HOOKEAN_SPRINGS", "FENE_SPRINGS"));
+          "enabled_kernel_names", mundy::make_string_array("HOOKEAN_SPRINGS", "FENE_SPRINGS"));
       compute_constraint_forcing_fixed_params_.sublist("HOOKEAN_SPRINGS")
-          .set("valid_entity_part_names", mundy::utils::make_string_array("HP1S"));
+          .set("valid_entity_part_names", mundy::make_string_array("HP1S"));
       compute_constraint_forcing_fixed_params_.sublist("FENE_SPRINGS")
-          .set("valid_entity_part_names", mundy::utils::make_string_array("BACKBONE_SEGMENTS"));
+          .set("valid_entity_part_names", mundy::make_string_array("BACKBONE_SEGMENTS"));
     } else if (backbone_spring_type_ == BOND_TYPE::HARMONIC && crosslinker_spring_type_ == BOND_TYPE::FENE) {
       compute_constraint_forcing_fixed_params_ = Teuchos::ParameterList().set(
-          "enabled_kernel_names", mundy::utils::make_string_array("HOOKEAN_SPRINGS", "FENE_SPRINGS"));
+          "enabled_kernel_names", mundy::make_string_array("HOOKEAN_SPRINGS", "FENE_SPRINGS"));
       compute_constraint_forcing_fixed_params_.sublist("HOOKEAN_SPRINGS")
-          .set("valid_entity_part_names", mundy::utils::make_string_array("BACKBONE_SEGMENTS"));
+          .set("valid_entity_part_names", mundy::make_string_array("BACKBONE_SEGMENTS"));
       compute_constraint_forcing_fixed_params_.sublist("FENE_SPRINGS")
-          .set("valid_entity_part_names", mundy::utils::make_string_array("HP1S"));
+          .set("valid_entity_part_names", mundy::make_string_array("HP1S"));
     } else if (backbone_spring_type_ == BOND_TYPE::FENE && crosslinker_spring_type_ == BOND_TYPE::FENE) {
       compute_constraint_forcing_fixed_params_ =
-          Teuchos::ParameterList().set("enabled_kernel_names", mundy::utils::make_string_array("FENE_SPRINGS"));
+          Teuchos::ParameterList().set("enabled_kernel_names", mundy::make_string_array("FENE_SPRINGS"));
       compute_constraint_forcing_fixed_params_.sublist("FENE_SPRINGS")
-          .set("valid_entity_part_names", mundy::utils::make_string_array("BACKBONE_SEGMENTS", "HP1S"));
+          .set("valid_entity_part_names", mundy::make_string_array("BACKBONE_SEGMENTS", "HP1S"));
     } else if (backbone_spring_type_ == BOND_TYPE::FENEWCA && crosslinker_spring_type_ == BOND_TYPE::FENEWCA) {
       compute_constraint_forcing_fixed_params_ =
-          Teuchos::ParameterList().set("enabled_kernel_names", mundy::utils::make_string_array("FENEWCA_SPRINGS"));
+          Teuchos::ParameterList().set("enabled_kernel_names", mundy::make_string_array("FENEWCA_SPRINGS"));
       compute_constraint_forcing_fixed_params_.sublist("FENEWCA_SPRINGS")
-          .set("valid_entity_part_names", mundy::utils::make_string_array("BACKBONE_SEGMENTS", "HP1S"));
+          .set("valid_entity_part_names", mundy::make_string_array("BACKBONE_SEGMENTS", "HP1S"));
     } else {
       MUNDY_THROW_REQUIRE(false, std::invalid_argument,
                           std::string("Something went wrong with the combination of backbone and crosslinker spring "
@@ -1379,77 +1379,77 @@ class HP1 {
     // Compute the minimum distance for the SCS-SCS, HP1-H, HP1-BS interactions (SCS-SCS, S-SCS, S-SCS)
     // Try to be as explicit as possible with the parts that are associated with each of the interactions.
     compute_ssd_and_cn_fixed_params_ = Teuchos::ParameterList().set(
-        "enabled_kernel_names", mundy::utils::make_string_array("SPHEROCYLINDER_SEGMENT_SPHEROCYLINDER_SEGMENT_LINKER",
+        "enabled_kernel_names", mundy::make_string_array("SPHEROCYLINDER_SEGMENT_SPHEROCYLINDER_SEGMENT_LINKER",
                                                                "SPHERE_SPHEROCYLINDER_SEGMENT_LINKER"));
     compute_ssd_and_cn_fixed_params_.sublist("SPHERE_SPHEROCYLINDER_SEGMENT_LINKER")
-        .set("valid_entity_part_names", mundy::utils::make_string_array("HP1_H_NEIGHBOR_GENXS", "HP1_BS_NEIGHBOR_GENXS"))
-        .set("valid_sphere_part_names", mundy::utils::make_string_array("H", "BS"))
-        .set("valid_spherocylinder_segment_part_names", mundy::utils::make_string_array("HP1S"));
+        .set("valid_entity_part_names", mundy::make_string_array("HP1_H_NEIGHBOR_GENXS", "HP1_BS_NEIGHBOR_GENXS"))
+        .set("valid_sphere_part_names", mundy::make_string_array("H", "BS"))
+        .set("valid_spherocylinder_segment_part_names", mundy::make_string_array("HP1S"));
     compute_ssd_and_cn_fixed_params_.sublist("SPHEROCYLINDER_SEGMENT_SPHEROCYLINDER_SEGMENT_LINKER")
-        .set("valid_entity_part_names", mundy::utils::make_string_array("BACKBONE_BACKBONE_NEIGHBOR_GENXS"))
-        .set("valid_spherocylinder_segment_part_names", mundy::utils::make_string_array("BACKBONE_SEGMENTS"));
+        .set("valid_entity_part_names", mundy::make_string_array("BACKBONE_BACKBONE_NEIGHBOR_GENXS"))
+        .set("valid_spherocylinder_segment_part_names", mundy::make_string_array("BACKBONE_SEGMENTS"));
 
     // Set up the AABB for the system
     compute_aabb_fixed_params_ = Teuchos::ParameterList().set(
-        "enabled_kernel_names", mundy::utils::make_string_array("SPHERE", "SPHEROCYLINDER_SEGMENT"));
+        "enabled_kernel_names", mundy::make_string_array("SPHERE", "SPHEROCYLINDER_SEGMENT"));
     compute_aabb_fixed_params_.sublist("SPHEROCYLINDER_SEGMENT")
-        .set("valid_entity_part_names", mundy::utils::make_string_array("HP1S", "BACKBONE_SEGMENTS"));
+        .set("valid_entity_part_names", mundy::make_string_array("HP1S", "BACKBONE_SEGMENTS"));
 
     // Generate the GENX neighbor linkers between spherocylinder segments
     generate_scs_scs_neighbor_linkers_fixed_params_ =
         Teuchos::ParameterList()
             .set("enabled_technique_name", "STK_SEARCH")
             .set("specialized_neighbor_linkers_part_names",
-                 mundy::utils::make_string_array("BACKBONE_BACKBONE_NEIGHBOR_GENXS"));
+                 mundy::make_string_array("BACKBONE_BACKBONE_NEIGHBOR_GENXS"));
     generate_scs_scs_neighbor_linkers_fixed_params_.sublist("STK_SEARCH")
-        .set("valid_source_entity_part_names", mundy::utils::make_string_array("BACKBONE_SEGMENTS"))
-        .set("valid_target_entity_part_names", mundy::utils::make_string_array("BACKBONE_SEGMENTS"));
+        .set("valid_source_entity_part_names", mundy::make_string_array("BACKBONE_SEGMENTS"))
+        .set("valid_target_entity_part_names", mundy::make_string_array("BACKBONE_SEGMENTS"));
 
     // Generate the GENX neighbor linkers between HP1 and H
     generate_hp1_h_neighbor_linkers_fixed_params_ =
         Teuchos::ParameterList()
             .set("enabled_technique_name", "STK_SEARCH")
-            .set("specialized_neighbor_linkers_part_names", mundy::utils::make_string_array("HP1_H_NEIGHBOR_GENXS"));
+            .set("specialized_neighbor_linkers_part_names", mundy::make_string_array("HP1_H_NEIGHBOR_GENXS"));
     generate_hp1_h_neighbor_linkers_fixed_params_.sublist("STK_SEARCH")
-        .set("valid_source_entity_part_names", mundy::utils::make_string_array(std::string("HP1S")))
-        .set("valid_target_entity_part_names", mundy::utils::make_string_array("H"));
+        .set("valid_source_entity_part_names", mundy::make_string_array(std::string("HP1S")))
+        .set("valid_target_entity_part_names", mundy::make_string_array("H"));
 
     // Generate the GENX neighbor linkers between HP1 and BS
     generate_hp1_bs_neighbor_linkers_fixed_params_ =
         Teuchos::ParameterList()
             .set("enabled_technique_name", "STK_SEARCH")
-            .set("specialized_neighbor_linkers_part_names", mundy::utils::make_string_array("HP1_BS_NEIGHBOR_GENXS"));
+            .set("specialized_neighbor_linkers_part_names", mundy::make_string_array("HP1_BS_NEIGHBOR_GENXS"));
     generate_hp1_bs_neighbor_linkers_fixed_params_.sublist("STK_SEARCH")
-        .set("valid_source_entity_part_names", mundy::utils::make_string_array(std::string("HP1S")))
-        .set("valid_target_entity_part_names", mundy::utils::make_string_array("BS"));
+        .set("valid_source_entity_part_names", mundy::make_string_array(std::string("HP1S")))
+        .set("valid_target_entity_part_names", mundy::make_string_array("BS"));
 
     // Evaluate the scs-scs contacts (hertzian or WCA)
     if (backbone_collision_type_ == COLLISION_TYPE::HERTZIAN) {
       evaluate_linker_potentials_fixed_params_ = Teuchos::ParameterList().set(
           "enabled_kernel_names",
-          mundy::utils::make_string_array("SPHEROCYLINDER_SEGMENT_SPHEROCYLINDER_SEGMENT_HERTZIAN_CONTACT"));
+          mundy::make_string_array("SPHEROCYLINDER_SEGMENT_SPHEROCYLINDER_SEGMENT_HERTZIAN_CONTACT"));
       evaluate_linker_potentials_fixed_params_.sublist("SPHEROCYLINDER_SEGMENT_SPHEROCYLINDER_SEGMENT_HERTZIAN_CONTACT")
-          .set("valid_spherocylinder_segment_part_names", mundy::utils::make_string_array("BACKBONE_SEGMENTS"));
+          .set("valid_spherocylinder_segment_part_names", mundy::make_string_array("BACKBONE_SEGMENTS"));
     } else if (backbone_collision_type_ == COLLISION_TYPE::WCA) {
       evaluate_linker_potentials_fixed_params_ = Teuchos::ParameterList().set(
-          "enabled_kernel_names", mundy::utils::make_string_array("SPHEROCYLINDER_SEGMENT_SPHEROCYLINDER_SEGMENT_WCA"));
+          "enabled_kernel_names", mundy::make_string_array("SPHEROCYLINDER_SEGMENT_SPHEROCYLINDER_SEGMENT_WCA"));
       evaluate_linker_potentials_fixed_params_.sublist("SPHEROCYLINDER_SEGMENT_SPHEROCYLINDER_SEGMENT_WCA")
-          .set("valid_spherocylinder_segment_part_names", mundy::utils::make_string_array("BACKBONE_SEGMENTS"));
+          .set("valid_spherocylinder_segment_part_names", mundy::make_string_array("BACKBONE_SEGMENTS"));
     }
 
     // Reduce the forces on the spherocylinder segments
     linker_potential_force_reduction_fixed_params_ =
         Teuchos::ParameterList()
-            .set("enabled_kernel_names", mundy::utils::make_string_array("SPHEROCYLINDER_SEGMENT"))
+            .set("enabled_kernel_names", mundy::make_string_array("SPHEROCYLINDER_SEGMENT"))
             .set("name_of_linker_part_to_reduce_over", "BACKBONE_BACKBONE_NEIGHBOR_GENXS");
 
     // Destroy the distant neighbors over time
     destroy_neighbor_linkers_fixed_params_ =
         Teuchos::ParameterList().set("enabled_technique_name", "DESTROY_DISTANT_NEIGHBORS");
     destroy_neighbor_linkers_fixed_params_.sublist("DESTROY_DISTANT_NEIGHBORS")
-        .set("valid_entity_part_names", mundy::utils::make_string_array("NEIGHBOR_LINKERS"))
+        .set("valid_entity_part_names", mundy::make_string_array("NEIGHBOR_LINKERS"))
         .set("valid_connected_source_and_target_part_names",
-             mundy::utils::make_string_array(std::string("SPHEROCYLINDER_SEGMENTS"), std::string("HP1S")));
+             mundy::make_string_array(std::string("SPHEROCYLINDER_SEGMENTS"), std::string("HP1S")));
 
     // Destroy bound linkers to prevent pathological behavior along a chain
     destroy_bound_neighbor_linkers_fixed_params_ =
@@ -2218,12 +2218,12 @@ class HP1 {
     // for the creation step. Do this inside a modification loop so we can go by node index, rather than ID.
     if (bulk_data_ptr_->parallel_rank() == 0) {
       for (size_t j = 0; j < num_chromosomes_; j++) {
-        openrand::Philox rng = utils::make_philox(j, 0);
+        openrand::Philox rng = make_philox(j, 0);
         double jdouble = static_cast<double>(j);
-        mundy::math::Vector3d r_start(2.0 * jdouble, 0.0, 0.0);
+        mundy::Vector3d r_start(2.0 * jdouble, 0.0, 0.0);
         // Add a tiny random change in X to make sure we don't wind up in perfectly parallel pathological states
-        mundy::math::Vector3d u_hat(rng.uniform<double>(0.0, 0.001), 0.0, 1.0);
-        u_hat = u_hat / mundy::math::two_norm(u_hat);
+        mundy::Vector3d u_hat(rng.uniform<double>(0.0, 0.001), 0.0, 1.0);
+        u_hat = u_hat / mundy::two_norm(u_hat);
 
         // Figure out which nodes we are doing
         const size_t num_heterochromatin_spheres = num_chromatin_repeats_ / 2 * num_heterochromatin_per_repeat_ +
@@ -2238,7 +2238,7 @@ class HP1 {
                              fmt::format("Node {} is not valid", i));
 
           // Assign the node coordinates
-          mundy::math::Vector3d r =
+          mundy::Vector3d r =
               r_start + static_cast<double>(i - start_node_index) * initial_chromosome_separation_ * u_hat;
           stk::mesh::field_data(*node_coord_field_ptr_, node)[0] = r[0];
           stk::mesh::field_data(*node_coord_field_ptr_, node)[1] = r[1];
@@ -2253,15 +2253,15 @@ class HP1 {
     if (bulk_data_ptr_->parallel_rank() == 0) {
       for (size_t j = 0; j < num_chromosomes_; j++) {
         // Find a random place within the unit cell with a random orientation for the chain.
-        openrand::Philox rng = utils::make_philox(j, 0);
-        mundy::math::Vector3d r_start(rng.uniform<double>(-0.5 * unit_cell_size_[0], 0.5 * unit_cell_size_[0]),
+        openrand::Philox rng = make_philox(j, 0);
+        mundy::Vector3d r_start(rng.uniform<double>(-0.5 * unit_cell_size_[0], 0.5 * unit_cell_size_[0]),
                                       rng.uniform<double>(-0.5 * unit_cell_size_[1], 0.5 * unit_cell_size_[1]),
                                       rng.uniform<double>(-0.5 * unit_cell_size_[2], 0.5 * unit_cell_size_[2]));
         // Find a random unit vector direction
         const double zrand = rng.rand<double>() - 1.0;
         const double wrand = std::sqrt(1.0 - zrand * zrand);
         const double trand = 2.0 * M_PI * rng.rand<double>();
-        mundy::math::Vector3d u_hat(wrand * std::cos(trand), wrand * std::sin(trand), zrand);
+        mundy::Vector3d u_hat(wrand * std::cos(trand), wrand * std::sin(trand), zrand);
 
         // Figure out which nodes we are doing
         const size_t num_heterochromatin_spheres = num_chromatin_repeats_ / 2 * num_heterochromatin_per_repeat_ +
@@ -2276,7 +2276,7 @@ class HP1 {
                              fmt::format("Node {} is not valid", i));
 
           // Assign the node coordinates
-          mundy::math::Vector3d r =
+          mundy::Vector3d r =
               r_start + static_cast<double>(i - start_node_index) * initial_chromosome_separation_ * u_hat;
           stk::mesh::field_data(*node_coord_field_ptr_, node)[0] = r[0];
           stk::mesh::field_data(*node_coord_field_ptr_, node)[1] = r[1];
@@ -2294,17 +2294,17 @@ class HP1 {
       for (size_t j = 0; j < num_chromosomes_; j++) {
         // Start like we are pretending to be on a grid
         double jdouble = static_cast<double>(j);
-        mundy::math::Vector3d r_start(2.0 * jdouble, 0.0, 0.0);
-        mundy::math::Vector3d u_hat(0.0, 0.0, 1.0);
+        mundy::Vector3d r_start(2.0 * jdouble, 0.0, 0.0);
+        mundy::Vector3d u_hat(0.0, 0.0, 1.0);
 
         // If num_chromosomes == 2, then try to do the crosshatch for a timestep?
         if (num_chromosomes_ == 2) {
           if (j == 0) {
-            r_start = mundy::math::Vector3d(0.0, 0.0, 0.0);
-            u_hat = mundy::math::Vector3d(0.0, 0.0, 1.0);
+            r_start = mundy::Vector3d(0.0, 0.0, 0.0);
+            u_hat = mundy::Vector3d(0.0, 0.0, 1.0);
           } else if (j == 1) {
-            r_start = mundy::math::Vector3d(-5.0, 0.25, 5.0);
-            u_hat = mundy::math::Vector3d(1.0, 0.0, 0.0);
+            r_start = mundy::Vector3d(-5.0, 0.25, 5.0);
+            u_hat = mundy::Vector3d(1.0, 0.0, 0.0);
           }
         }
 
@@ -2321,7 +2321,7 @@ class HP1 {
                              fmt::format("Node {} is not valid", i));
 
           // Assign the node coordinates
-          mundy::math::Vector3d r =
+          mundy::Vector3d r =
               r_start + static_cast<double>(i - start_node_index) * initial_chromosome_separation_ * u_hat;
           stk::mesh::field_data(*node_coord_field_ptr_, node)[0] = r[0];
           stk::mesh::field_data(*node_coord_field_ptr_, node)[1] = r[1];
@@ -2359,7 +2359,7 @@ class HP1 {
                            fmt::format("Node {} is not valid.", i));
 
         // Assign the node coordinates
-        mundy::math::Vector3d r(0.0, 0.0, 0.0);
+        mundy::Vector3d r(0.0, 0.0, 0.0);
         if (i == start_node_index) {
           r[0] = -0.5 * initial_chromosome_separation_;
           r[1] = initial_chromosome_separation_;
@@ -2389,7 +2389,7 @@ class HP1 {
     // We need to get which chromosome this rank is responsible for initializing, luckily, should follow what was done
     // for the creation step. Do this inside a modification loop so we can go by node index, rather than ID.
     if (bulk_data_ptr_->parallel_rank() == 0) {
-      std::vector<mundy::math::Vector3d> chromosome_centers_array;
+      std::vector<mundy::Vector3d> chromosome_centers_array;
       std::vector<double> chromosome_radii_array;
       for (size_t ichromosome = 0; ichromosome < num_chromosomes_; ichromosome++) {
         // Figure out which nodes we are doing
@@ -2402,32 +2402,32 @@ class HP1 {
 
         // Generate a random unit vector (will be used for creating the locatino of the nodes, the random position in
         // the unit cell will be handled later).
-        openrand::Philox rng = utils::make_philox(ichromosome, 0);
+        openrand::Philox rng = make_philox(ichromosome, 0);
         const double zrand = rng.rand<double>() - 1.0;
         const double wrand = std::sqrt(1.0 - zrand * zrand);
         const double trand = 2.0 * M_PI * rng.rand<double>();
-        mundy::math::Vector3d u_hat(wrand * std::cos(trand), wrand * std::sin(trand), zrand);
+        mundy::Vector3d u_hat(wrand * std::cos(trand), wrand * std::sin(trand), zrand);
 
         // Once we have the number of chromosome spheres we can get the hilbert curve set up. This will be at some
         // orientation and then have sides with a length of initial_chromosome_separation.
-        auto [hilbert_position_array, hilbert_directors] = mundy::math::create_hilbert_positions_and_directors(
+        auto [hilbert_position_array, hilbert_directors] = mundy::create_hilbert_positions_and_directors(
             num_nodes_per_chromosome, u_hat, initial_chromosome_separation_);
 
         // Create the local positions of the spheres
-        std::vector<mundy::math::Vector3d> sphere_position_array;
+        std::vector<mundy::Vector3d> sphere_position_array;
         for (size_t isphere = 0; isphere < num_nodes_per_chromosome; isphere++) {
           sphere_position_array.push_back(hilbert_position_array[isphere]);
         }
 
         // Figure out where the center of the chromosome is, and its radius, in its own local space
-        mundy::math::Vector3d r_chromosome_center_local(0.0, 0.0, 0.0);
+        mundy::Vector3d r_chromosome_center_local(0.0, 0.0, 0.0);
         double r_max = 0.0;
         for (size_t i = 0; i < sphere_position_array.size(); i++) {
           r_chromosome_center_local += sphere_position_array[i];
         }
         r_chromosome_center_local /= static_cast<double>(sphere_position_array.size());
         for (size_t i = 0; i < sphere_position_array.size(); i++) {
-          r_max = std::max(r_max, mundy::math::two_norm(r_chromosome_center_local - sphere_position_array[i]));
+          r_max = std::max(r_max, mundy::two_norm(r_chromosome_center_local - sphere_position_array[i]));
         }
 
         // Do max_trials number of insertion attempts to get a random position and orientation within the unit cell that
@@ -2437,14 +2437,14 @@ class HP1 {
         bool chromosome_inserted = false;
         while (itrial <= max_trials) {
           // Generate a random position within the unit cell.
-          mundy::math::Vector3d r_start(rng.uniform<double>(-0.5 * unit_cell_size_[0], 0.5 * unit_cell_size_[0]),
+          mundy::Vector3d r_start(rng.uniform<double>(-0.5 * unit_cell_size_[0], 0.5 * unit_cell_size_[0]),
                                         rng.uniform<double>(-0.5 * unit_cell_size_[1], 0.5 * unit_cell_size_[1]),
                                         rng.uniform<double>(-0.5 * unit_cell_size_[2], 0.5 * unit_cell_size_[2]));
 
           // Check for overlaps with existing chromosomes
           bool found_overlap = false;
           for (size_t jchromosome = 0; jchromosome < chromosome_centers_array.size(); ++jchromosome) {
-            double r_chromosome_distance = mundy::math::two_norm(chromosome_centers_array[jchromosome] - r_start);
+            double r_chromosome_distance = mundy::two_norm(chromosome_centers_array[jchromosome] - r_start);
             if (r_chromosome_distance < (r_max + chromosome_radii_array[jchromosome])) {
               found_overlap = true;
               break;
@@ -2463,7 +2463,7 @@ class HP1 {
                             fmt::format("Failed to insert chromosome after {} trials.", max_trials));
 
         // Generate all the positions along the curve due to the placement in the global space
-        std::vector<mundy::math::Vector3d> new_position_array;
+        std::vector<mundy::Vector3d> new_position_array;
         for (size_t i = 0; i < sphere_position_array.size(); i++) {
           new_position_array.push_back(chromosome_centers_array.back() + r_chromosome_center_local -
                                        sphere_position_array[i]);
@@ -2502,12 +2502,12 @@ class HP1 {
 
       // Because all chromosomes are the same, we can create a single hilbert curve and then place it in the lattice
       // for each chromosome.
-      const mundy::math::Vector3d x_hat(1.0, 0.0, 0.0);
-      auto [hilbert_position_array, hilbert_directors] = mundy::math::create_hilbert_positions_and_directors(
+      const mundy::Vector3d x_hat(1.0, 0.0, 0.0);
+      auto [hilbert_position_array, hilbert_directors] = mundy::create_hilbert_positions_and_directors(
           num_nodes_per_chromosome, x_hat, initial_chromosome_separation_);
 
       // Determine the center and bounding radius of the hilbert curve
-      mundy::math::Vector3d hilbert_center(0.0, 0.0, 0.0);
+      mundy::Vector3d hilbert_center(0.0, 0.0, 0.0);
       for (size_t i = 0; i < num_nodes_per_chromosome; i++) {
         hilbert_center += hilbert_position_array[i];
       }
@@ -2515,7 +2515,7 @@ class HP1 {
       double hilbert_bounding_radius = 0.0;
       for (size_t i = 0; i < num_nodes_per_chromosome; i++) {
         hilbert_bounding_radius =
-            std::max(hilbert_bounding_radius, mundy::math::two_norm(hilbert_center - hilbert_position_array[i]));
+            std::max(hilbert_bounding_radius, mundy::two_norm(hilbert_center - hilbert_position_array[i]));
       }
       std::cout << "Hilbert curve center: " << hilbert_center << " bounding radius: " << hilbert_bounding_radius
                 << std::endl;
@@ -2544,7 +2544,7 @@ class HP1 {
                                       "length is {} and the bounding radius is {}.",
                                       max_lattice_side_length, num_chromosomes_per_side * hilbert_bounding_radius));
 
-      std::vector<mundy::math::Vector3d> chromosome_centers_array;
+      std::vector<mundy::Vector3d> chromosome_centers_array;
       std::vector<double> chromosome_radii_array;
       for (size_t ichromosome = 0; ichromosome < num_chromosomes_; ichromosome++) {
         // Figure out which nodes we are doing
@@ -2555,18 +2555,18 @@ class HP1 {
         const size_t ix = ichromosome % num_chromosomes_per_side;
         const size_t iy = (ichromosome / num_chromosomes_per_side) % num_chromosomes_per_side;
         const size_t iz = ichromosome / (num_chromosomes_per_side * num_chromosomes_per_side);
-        const mundy::math::Vector3d center =
-            mundy::math::Vector3d((ix + 0.5) * lattice_spacing - 0.5 * max_lattice_side_length,
+        const mundy::Vector3d center =
+            mundy::Vector3d((ix + 0.5) * lattice_spacing - 0.5 * max_lattice_side_length,
                                   (iy + 0.5) * lattice_spacing - 0.5 * max_lattice_side_length,
                                   (iz + 0.5) * lattice_spacing - 0.5 * max_lattice_side_length);
 
         // Generate a random orientation for the chromosome
-        openrand::Philox rng = utils::make_philox(ichromosome, 0);
+        openrand::Philox rng = make_philox(ichromosome, 0);
         const double zrand = rng.rand<double>() - 1.0;
         const double wrand = std::sqrt(1.0 - zrand * zrand);
         const double trand = 2.0 * M_PI * rng.rand<double>();
-        mundy::math::Vector3d u_hat(wrand * std::cos(trand), wrand * std::sin(trand), zrand);
-        mundy::math::Quaterniond quat = mundy::math::quat_from_parallel_transport(x_hat, u_hat);
+        mundy::Vector3d u_hat(wrand * std::cos(trand), wrand * std::sin(trand), zrand);
+        mundy::Quaterniond quat = mundy::quat_from_parallel_transport(x_hat, u_hat);
 
         std::cout << "Chromosome " << ichromosome << " center: " << center << " orientation: " << quat
                   << " radius: " << hilbert_bounding_radius << std::endl;
@@ -2632,11 +2632,11 @@ class HP1 {
       const size_t num_nodes_per_chromosome = num_heterochromatin_spheres + num_euchromatin_spheres;
       // Because all chromosomes are the same, we can create a single hilbert curve and then place it in the lattice
       // for each chromosome.
-      const mundy::math::Vector3d x_hat(1.0, 0.0, 0.0);
-      auto [hilbert_position_array, hilbert_directors] = mundy::math::create_hilbert_positions_and_directors(
+      const mundy::Vector3d x_hat(1.0, 0.0, 0.0);
+      auto [hilbert_position_array, hilbert_directors] = mundy::create_hilbert_positions_and_directors(
           num_nodes_per_chromosome, x_hat, initial_chromosome_separation_);
       // Determine the center and bounding radius of the hilbert curve
-      mundy::math::Vector3d hilbert_center(0.0, 0.0, 0.0);
+      mundy::Vector3d hilbert_center(0.0, 0.0, 0.0);
       for (size_t i = 0; i < num_nodes_per_chromosome; i++) {
         hilbert_center += hilbert_position_array[i];
       }
@@ -2644,7 +2644,7 @@ class HP1 {
       double hilbert_bounding_radius = 0.0;
       for (size_t i = 0; i < num_nodes_per_chromosome; i++) {
         hilbert_bounding_radius =
-            std::max(hilbert_bounding_radius, mundy::math::two_norm(hilbert_center - hilbert_position_array[i]));
+            std::max(hilbert_bounding_radius, mundy::two_norm(hilbert_center - hilbert_position_array[i]));
       }
       std::cout << "Hilbert curve center: " << hilbert_center << " bounding radius: " << hilbert_bounding_radius
                 << std::endl;
@@ -2652,15 +2652,15 @@ class HP1 {
         // Figure out which nodes we are doing
         size_t start_node_index = num_nodes_per_chromosome * ichromosome + 1u;
         size_t end_node_index = num_nodes_per_chromosome * (ichromosome + 1) + 1u;
-        const mundy::math::Vector3d center{chromosome_centers[3 * ichromosome], chromosome_centers[3 * ichromosome + 1],
+        const mundy::Vector3d center{chromosome_centers[3 * ichromosome], chromosome_centers[3 * ichromosome + 1],
                                            chromosome_centers[3 * ichromosome + 2]};
         // Generate a random orientation for the chromosome
-        openrand::Philox rng = utils::make_philox(ichromosome, 0);
+        openrand::Philox rng = make_philox(ichromosome, 0);
         const double zrand = rng.rand<double>() - 1.0;
         const double wrand = std::sqrt(1.0 - zrand * zrand);
         const double trand = 2.0 * M_PI * rng.rand<double>();
-        mundy::math::Vector3d u_hat(wrand * std::cos(trand), wrand * std::sin(trand), zrand);
-        mundy::math::Quaterniond quat = mundy::math::quat_from_parallel_transport(x_hat, u_hat);
+        mundy::Vector3d u_hat(wrand * std::cos(trand), wrand * std::sin(trand), zrand);
+        mundy::Quaterniond quat = mundy::quat_from_parallel_transport(x_hat, u_hat);
         std::cout << "Chromosome " << ichromosome << " center: " << center << " orientation: " << quat
                   << " radius: " << hilbert_bounding_radius << std::endl;
         // Update the coordinates for this chromosome
@@ -2712,51 +2712,51 @@ class HP1 {
     // Initialize the backbone springs (EE, EH, HH)
     const stk::mesh::Selector backbone_segments = *ee_springs_part_ptr_ | *eh_springs_part_ptr_ | *hh_springs_part_ptr_;
     if (backbone_collision_type_ == COLLISION_TYPE::HERTZIAN) {
-      mundy::mesh::utils::fill_field_with_value(backbone_segments, *element_youngs_modulus_field_ptr_,
+      mundy::mesh::fill_field_with_value(backbone_segments, *element_youngs_modulus_field_ptr_,
                                                 std::array<double, 1>{backbone_youngs_modulus_});
-      mundy::mesh::utils::fill_field_with_value(backbone_segments, *element_poissons_ratio_field_ptr_,
+      mundy::mesh::fill_field_with_value(backbone_segments, *element_poissons_ratio_field_ptr_,
                                                 std::array<double, 1>{backbone_poissons_ratio_});
     }
-    mundy::mesh::utils::fill_field_with_value(backbone_segments, *element_radius_field_ptr_,
+    mundy::mesh::fill_field_with_value(backbone_segments, *element_radius_field_ptr_,
                                               std::array<double, 1>{backbone_excluded_volume_radius_});
-    mundy::mesh::utils::fill_field_with_value(backbone_segments, *element_spring_constant_field_ptr_,
+    mundy::mesh::fill_field_with_value(backbone_segments, *element_spring_constant_field_ptr_,
                                               std::array<double, 1>{backbone_spring_constant_});
-    mundy::mesh::utils::fill_field_with_value(backbone_segments, *element_spring_r0_field_ptr_,
+    mundy::mesh::fill_field_with_value(backbone_segments, *element_spring_r0_field_ptr_,
                                               std::array<double, 1>{backbone_spring_r0_});
 
     // Initialize the EE springs (euchromatin activity)
     if (!restart_performed_) {
-      mundy::mesh::utils::fill_field_with_value(*ee_springs_part_ptr_, *element_rng_field_ptr_,
+      mundy::mesh::fill_field_with_value(*ee_springs_part_ptr_, *element_rng_field_ptr_,
                                                 std::array<unsigned, 1>{simid_ * num_time_steps_});
-      mundy::mesh::utils::fill_field_with_value(*ee_springs_part_ptr_, *euchromatin_state_field_ptr_,
+      mundy::mesh::fill_field_with_value(*ee_springs_part_ptr_, *euchromatin_state_field_ptr_,
                                                 std::array<unsigned, 1>{0});
-      mundy::mesh::utils::fill_field_with_value(*ee_springs_part_ptr_, *euchromatin_perform_state_change_field_ptr_,
+      mundy::mesh::fill_field_with_value(*ee_springs_part_ptr_, *euchromatin_perform_state_change_field_ptr_,
                                                 std::array<unsigned, 1>{0});
-      mundy::mesh::utils::fill_field_with_value(*ee_springs_part_ptr_, *euchromatin_state_change_next_time_field_ptr_,
+      mundy::mesh::fill_field_with_value(*ee_springs_part_ptr_, *euchromatin_state_change_next_time_field_ptr_,
                                                 std::array<double, 1>{0});
-      mundy::mesh::utils::fill_field_with_value(
+      mundy::mesh::fill_field_with_value(
           *ee_springs_part_ptr_, *euchromatin_state_change_elapsed_time_field_ptr_, std::array<double, 1>{0});
     }
 
     // Initialize HP1 springs
-    mundy::mesh::utils::fill_field_with_value(*hp1_part_ptr_, *element_spring_constant_field_ptr_,
+    mundy::mesh::fill_field_with_value(*hp1_part_ptr_, *element_spring_constant_field_ptr_,
                                               std::array<double, 1>{crosslinker_spring_constant_});
-    mundy::mesh::utils::fill_field_with_value(*hp1_part_ptr_, *element_spring_r0_field_ptr_,
+    mundy::mesh::fill_field_with_value(*hp1_part_ptr_, *element_spring_r0_field_ptr_,
                                               std::array<double, 1>{crosslinker_r0_});
     if (!restart_performed_) {
-      mundy::mesh::utils::fill_field_with_value(*hp1_part_ptr_, *element_rng_field_ptr_,
+      mundy::mesh::fill_field_with_value(*hp1_part_ptr_, *element_rng_field_ptr_,
                                                 std::array<unsigned, 1>{simid_ * num_time_steps_});
     }
-    mundy::mesh::utils::fill_field_with_value(*hp1_part_ptr_, *element_radius_field_ptr_,
+    mundy::mesh::fill_field_with_value(*hp1_part_ptr_, *element_radius_field_ptr_,
                                               std::array<double, 1>{crosslinker_cutoff_radius_});
 
     // Initialize the hydrodynamic spheres
     const stk::mesh::Selector chromatin_spheres = *e_part_ptr_ | *h_part_ptr_;
-    mundy::mesh::utils::fill_field_with_value(chromatin_spheres, *element_radius_field_ptr_,
+    mundy::mesh::fill_field_with_value(chromatin_spheres, *element_radius_field_ptr_,
                                               std::array<double, 1>{backbone_sphere_hydrodynamic_radius_});
     // Set the RNG counter for the spheres
     if (!restart_performed_) {
-      mundy::mesh::utils::fill_field_with_value(chromatin_spheres, *node_rng_field_ptr_,
+      mundy::mesh::fill_field_with_value(chromatin_spheres, *node_rng_field_ptr_,
                                                 std::array<unsigned, 1>{simid_ * num_time_steps_});
     }
 
@@ -2817,7 +2817,7 @@ class HP1 {
           local_euchromatin_state[0] = 0u;
 
           const stk::mesh::EntityId euchromatin_spring_gid = bulk_data.identifier(euchromatin_spring);
-          openrand::Philox rng = utils::make_philox(euchromatin_spring_gid, element_rng_counter[0]);
+          openrand::Philox rng = make_philox(euchromatin_spring_gid, element_rng_counter[0]);
           const double randu01 = rng.rand<double>();
           element_rng_counter[0]++;
 
@@ -2906,7 +2906,7 @@ class HP1 {
     // Initialize second
     if (periphery_bind_sites_type_ == PERIPHERY_BIND_SITES_TYPE::RANDOM) {
       // Sample the bind sites randomly on the surface of the periphery
-      openrand::Philox rng = utils::make_philox(1234, 0);
+      openrand::Philox rng = make_philox(1234, 0);
       if (periphery_collision_shape_ == PERIPHERY_SHAPE::SPHERE) {
         if (bulk_data_ptr_->parallel_rank() == 0) {
           for (size_t i = 0; i < periphery_num_bind_sites_; i++) {
@@ -3021,32 +3021,32 @@ class HP1 {
   }
 
   void zero_out_transient_node_fields() {
-    mundy::mesh::utils::fill_field_with_value<double>(*node_velocity_field_ptr_, std::array<double, 3>{0.0, 0.0, 0.0});
-    mundy::mesh::utils::fill_field_with_value<double>(*node_force_field_ptr_, std::array<double, 3>{0.0, 0.0, 0.0});
+    mundy::mesh::fill_field_with_value<double>(*node_velocity_field_ptr_, std::array<double, 3>{0.0, 0.0, 0.0});
+    mundy::mesh::fill_field_with_value<double>(*node_force_field_ptr_, std::array<double, 3>{0.0, 0.0, 0.0});
   }
 
   void zero_out_transient_element_fields() {
-    mundy::mesh::utils::fill_field_with_value<double>(*element_binding_rates_field_ptr_,
+    mundy::mesh::fill_field_with_value<double>(*element_binding_rates_field_ptr_,
                                                       std::array<double, 2>{0.0, 0.0});
-    mundy::mesh::utils::fill_field_with_value<double>(*element_unbinding_rates_field_ptr_,
+    mundy::mesh::fill_field_with_value<double>(*element_unbinding_rates_field_ptr_,
                                                       std::array<double, 2>{0.0, 0.0});
-    mundy::mesh::utils::fill_field_with_value<unsigned>(*element_perform_state_change_field_ptr_,
+    mundy::mesh::fill_field_with_value<unsigned>(*element_perform_state_change_field_ptr_,
                                                         std::array<unsigned, 1>{0u});
-    mundy::mesh::utils::fill_field_with_value<unsigned>(*euchromatin_perform_state_change_field_ptr_,
+    mundy::mesh::fill_field_with_value<unsigned>(*euchromatin_perform_state_change_field_ptr_,
                                                         std::array<unsigned, 1>{0u});
   }
 
   void zero_out_transient_constraint_fields() {
-    mundy::mesh::utils::fill_field_with_value<unsigned>(*constraint_perform_state_change_field_ptr_,
+    mundy::mesh::fill_field_with_value<unsigned>(*constraint_perform_state_change_field_ptr_,
                                                         std::array<unsigned, 1>{0u});
-    mundy::mesh::utils::fill_field_with_value<double>(*constraint_state_change_rate_field_ptr_,
+    mundy::mesh::fill_field_with_value<double>(*constraint_state_change_rate_field_ptr_,
                                                       std::array<double, 1>{0.0});
-    mundy::mesh::utils::fill_field_with_value<double>(*constraint_potential_force_field_ptr_,
+    mundy::mesh::fill_field_with_value<double>(*constraint_potential_force_field_ptr_,
                                                       std::array<double, 3>{0.0, 0.0, 0.0});
   }
 
   void zero_out_accumulator_fields() {
-    mundy::mesh::utils::fill_field_with_value<double>(*element_corner_displacement_field_ptr_,
+    mundy::mesh::fill_field_with_value<double>(*element_corner_displacement_field_ptr_,
                                                       std::array<double, 6>{0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
   }
 
@@ -3306,7 +3306,7 @@ class HP1 {
           if (bulk_data.bucket(crosslinker).member(left_hp1_part) && !is_self_interaction) {
             const auto dr = mundy::mesh::vector3_field_data(node_coord_field, sphere_node) -
                             mundy::mesh::vector3_field_data(node_coord_field, bulk_data.begin_nodes(crosslinker)[0]);
-            const double dr_mag = mundy::math::norm(dr);
+            const double dr_mag = mundy::norm(dr);
 
             // Compute the Z-partition score
             if (crosslinker_spring_type == BOND_TYPE::HARMONIC) {
@@ -3366,7 +3366,7 @@ class HP1 {
             if (bulk_data.bucket(crosslinker).member(left_hp1_part)) {
               const auto dr = mundy::mesh::vector3_field_data(node_coord_field, sphere_node) -
                               mundy::mesh::vector3_field_data(node_coord_field, bulk_data.begin_nodes(crosslinker)[0]);
-              const double dr_mag = mundy::math::norm(dr);
+              const double dr_mag = mundy::norm(dr);
 
               // Compute the Z-partition score
               if (crosslinker_spring_type == BOND_TYPE::HARMONIC) {
@@ -3486,7 +3486,7 @@ class HP1 {
           // Fetch the RNG state, get a random number out of it, and increment
           unsigned *element_rng_counter = stk::mesh::field_data(element_rng_field, crosslinker);
           const stk::mesh::EntityId crosslinker_gid = bulk_data.identifier(crosslinker);
-          openrand::Philox rng = utils::make_philox(crosslinker_gid, element_rng_counter[0]);
+          openrand::Philox rng = make_philox(crosslinker_gid, element_rng_counter[0]);
           const double randu01 = rng.rand<double>();
           element_rng_counter[0]++;
 
@@ -3559,7 +3559,7 @@ class HP1 {
           // Fetch the RNG state, get a random number out of it, and increment
           unsigned *element_rng_counter = stk::mesh::field_data(element_rng_field, crosslinker);
           const stk::mesh::EntityId crosslinker_gid = bulk_data.identifier(crosslinker);
-          openrand::Philox rng = utils::make_philox(crosslinker_gid, element_rng_counter[0]);
+          openrand::Philox rng = make_philox(crosslinker_gid, element_rng_counter[0]);
           double randZ = rng.rand<double>() * Z_tot;
           double cumsum = 0.0;
           element_rng_counter[0]++;
@@ -3798,7 +3798,7 @@ class HP1 {
           if (elapsed_time[0] >= next_time[0]) {
             // Need a random number no matter what
             const stk::mesh::EntityId euchromatin_spring_gid = bulk_data.identifier(euchromatin_spring);
-            openrand::Philox rng = utils::make_philox(euchromatin_spring_gid, element_rng_counter[0]);
+            openrand::Philox rng = make_philox(euchromatin_spring_gid, element_rng_counter[0]);
             const double randu01 = rng.rand<double>();
             element_rng_counter[0]++;
 
@@ -3877,14 +3877,14 @@ class HP1 {
             const auto node_coords = mundy::mesh::vector3_field_data(node_coord_field, sphere_node);
             const double sphere_radius = stk::mesh::field_data(element_hydro_radius_field, sphere_element)[0];
             const bool overlap_exceeds_threshold =
-                mundy::math::norm(node_coords) + sphere_radius > shifted_periphery_hydro_radius;
+                mundy::norm(node_coords) + sphere_radius > shifted_periphery_hydro_radius;
             if (overlap_exceeds_threshold) {
 #pragma omp critical
               {
                 std::cout << "Sphere node " << bulk_data.identifier(sphere_node)
                           << " overlaps with the periphery more than the allowable threshold." << std::endl;
                 std::cout << "  node_coords: " << node_coords << std::endl;
-                std::cout << "  norm(node_coords): " << mundy::math::norm(node_coords) << std::endl;
+                std::cout << "  norm(node_coords): " << mundy::norm(node_coords) << std::endl;
               }
               MUNDY_THROW_REQUIRE(false, std::runtime_error, "Sphere node outside hydrodynamic periphery.");
             }
@@ -4069,9 +4069,9 @@ class HP1 {
     const double inv_a2 = 1.0 / (a * a);
     const double inv_b2 = 1.0 / (b * b);
     const double inv_c2 = 1.0 / (c * c);
-    const mundy::math::Vector3d center(0.0, 0.0, 0.0);
-    const auto orientation = mundy::math::Quaterniond::identity();
-    auto level_set = [&inv_a2, &inv_b2, &inv_c2, &center, &orientation](const mundy::math::Vector3d &point) -> double {
+    const mundy::Vector3d center(0.0, 0.0, 0.0);
+    const auto orientation = mundy::Quaterniond::identity();
+    auto level_set = [&inv_a2, &inv_b2, &inv_c2, &center, &orientation](const mundy::Vector3d &point) -> double {
       // const auto body_frame_point = conjugate(orientation) * (point - center);
       const auto body_frame_point = point - center;
       return (body_frame_point[0] * body_frame_point[0] * inv_a2 + body_frame_point[1] * body_frame_point[1] * inv_b2 +
@@ -4103,14 +4103,14 @@ class HP1 {
           const double z1 = sphere_aabb[5];
 
           // Compute all 8 corners of the AABB
-          const auto bottom_left_front = mundy::math::Vector3d(x0, y0, z0);
-          const auto bottom_right_front = mundy::math::Vector3d(x1, y0, z0);
-          const auto top_left_front = mundy::math::Vector3d(x0, y1, z0);
-          const auto top_right_front = mundy::math::Vector3d(x1, y1, z0);
-          const auto bottom_left_back = mundy::math::Vector3d(x0, y0, z1);
-          const auto bottom_right_back = mundy::math::Vector3d(x1, y0, z1);
-          const auto top_left_back = mundy::math::Vector3d(x0, y1, z1);
-          const auto top_right_back = mundy::math::Vector3d(x1, y1, z1);
+          const auto bottom_left_front = mundy::Vector3d(x0, y0, z0);
+          const auto bottom_right_front = mundy::Vector3d(x1, y0, z0);
+          const auto top_left_front = mundy::Vector3d(x0, y1, z0);
+          const auto top_right_front = mundy::Vector3d(x1, y1, z0);
+          const auto bottom_left_back = mundy::Vector3d(x0, y0, z1);
+          const auto bottom_right_back = mundy::Vector3d(x1, y0, z1);
+          const auto top_left_back = mundy::Vector3d(x0, y1, z1);
+          const auto top_right_back = mundy::Vector3d(x1, y1, z1);
           const double all_points_inside_periphery =
               level_set(bottom_left_front) < 0.0 && level_set(bottom_right_front) < 0.0 &&
               level_set(top_left_front) < 0.0 && level_set(top_right_front) < 0.0 &&
@@ -4125,10 +4125,10 @@ class HP1 {
 
             // Note, the ellipsoid for the ssd calc has outward normal, whereas the periphery has inward normal.
             // Hence, the sign flip.
-            mundy::math::Vector3d contact_point;
-            mundy::math::Vector3d ellipsoid_nhat;
+            mundy::Vector3d contact_point;
+            mundy::Vector3d ellipsoid_nhat;
             const double shared_normal_ssd =
-                -mundy::math::distance::shared_normal_ssd_between_ellipsoid_and_point(
+                -mundy::distance::shared_normal_ssd_between_ellipsoid_and_point(
                     center, orientation, a, b, c, node_coords, contact_point, ellipsoid_nhat) -
                 sphere_radius;
 
@@ -4152,8 +4152,8 @@ class HP1 {
     const double a = periphery_collision_axis_radius1_;
     const double b = periphery_collision_axis_radius2_;
     const double c = periphery_collision_axis_radius3_;
-    const mundy::math::Vector3d center(0.0, 0.0, 0.0);
-    const auto orientation = mundy::math::Quaterniond::identity();
+    const mundy::Vector3d center(0.0, 0.0, 0.0);
+    const auto orientation = mundy::Quaterniond::identity();
     auto level_set = [&a, &b, &c, &center, &orientation](const double &radius, const auto &point) -> double {
       // const auto body_frame_point = conjugate(orientation) * (point - center);
       const auto body_frame_point = point - center;
@@ -4166,12 +4166,12 @@ class HP1 {
     };
     // Fast compute of the outward 'normal' at the point
     auto outward_normal = [&a, &b, &c, &center, &orientation](const double &radius,
-                                                              const auto &point) -> mundy::math::Vector3d {
+                                                              const auto &point) -> mundy::Vector3d {
       const auto body_frame_point = point - center;
       const double inv_a2 = 1.0 / ((a - radius) * (a - radius));
       const double inv_b2 = 1.0 / ((b - radius) * (b - radius));
       const double inv_c2 = 1.0 / ((c - radius) * (c - radius));
-      return mundy::math::Vector3d(2.0 * body_frame_point[0] * inv_a2, 2.0 * body_frame_point[1] * inv_b2,
+      return mundy::Vector3d(2.0 * body_frame_point[0] * inv_a2, 2.0 * body_frame_point[1] * inv_b2,
                                    2.0 * body_frame_point[2] * inv_c2);
     };
 
@@ -4223,7 +4223,7 @@ class HP1 {
           const stk::mesh::Entity sphere_node = bulk_data.begin_nodes(sphere_element)[0];
           const auto node_coords = mundy::mesh::vector3_field_data(node_coord_field, sphere_node);
 
-          const double node_coords_norm = mundy::math::two_norm(node_coords);
+          const double node_coords_norm = mundy::two_norm(node_coords);
           const double sphere_radius = stk::mesh::field_data(element_radius_field, sphere_element)[0];
           const double shared_normal_ssd = periphery_collision_radius - node_coords_norm - sphere_radius;
           const bool sphere_collides_with_periphery = shared_normal_ssd < 0.0;
@@ -4251,7 +4251,7 @@ class HP1 {
             const stk::mesh::BulkData &bulk_data, const stk::mesh::Entity &sphere_element) {
           const stk::mesh::Entity sphere_node = bulk_data.begin_nodes(sphere_element)[0];
           auto node_coords = mundy::mesh::vector3_field_data(node_coord_field, sphere_node);
-          const double node_coords_norm = mundy::math::two_norm(node_coords);
+          const double node_coords_norm = mundy::two_norm(node_coords);
           const double sphere_radius = stk::mesh::field_data(element_radius_field, sphere_element)[0];
           const double shared_normal_ssd = periphery_collision_radius - node_coords_norm - sphere_radius;
           const bool sphere_collides_with_periphery = shared_normal_ssd < 0.0;
@@ -4540,7 +4540,7 @@ class HP1 {
           unsigned *node_rng_counter = stk::mesh::field_data(node_rng_field, sphere_node);
 
           // U_brown = sqrt(2 * kt * gamma / dt) * randn / gamma
-          openrand::Philox rng = utils::make_philox(sphere_node_gid, node_rng_counter[0]);
+          openrand::Philox rng = make_philox(sphere_node_gid, node_rng_counter[0]);
           const double coeff = std::sqrt(2.0 * kt * sphere_drag_coeff / timestep_size) * inv_drag_coeff;
           node_velocity[0] += coeff * rng.randn<double>();
           node_velocity[1] += coeff * rng.randn<double>();
@@ -4592,7 +4592,7 @@ class HP1 {
         [&node_velocity_field, &max_allowable_speed, &maximum_speed_exceeded](
             [[maybe_unused]] const stk::mesh::BulkData &bulk_data, const stk::mesh::Entity &sphere_node) {
           auto node_velocity = mundy::mesh::vector3_field_data(node_velocity_field, sphere_node);
-          const auto speed = mundy::math::norm(node_velocity);
+          const auto speed = mundy::norm(node_velocity);
           if (speed > max_allowable_speed) {
             maximum_speed_exceeded = true;
           }
@@ -5031,9 +5031,9 @@ class HP1 {
       }
       double *a_coords = static_cast<double *>(stk::mesh::field_data(*coords_base, a));
       double *b_coords = static_cast<double *>(stk::mesh::field_data(*coords_base, b));
-      math::Vector3d a_vec(a_coords[0], a_coords[1], a_coords[2]);
-      math::Vector3d b_vec(b_coords[0], b_coords[1], b_coords[2]);
-      return math::zmorton_less(a_vec, b_vec);
+      Vector3d a_vec(a_coords[0], a_coords[1], a_coords[2]);
+      Vector3d b_vec(b_coords[0], b_coords[1], b_coords[2]);
+      return zmorton_less(a_vec, b_vec);
     }
 
    private:

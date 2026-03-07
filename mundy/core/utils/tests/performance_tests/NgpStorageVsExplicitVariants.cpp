@@ -19,7 +19,7 @@
 // @HEADER
 
 //! \file NgpStorageVsExplicitVariants.cpp
-/// \brief Performance test: explicit owned/pointer/reference workspaces vs mundy::utils::storage variants using
+/// \brief Performance test: explicit owned/pointer/reference workspaces vs mundy::storage variants using
 /// Kokkos views/kernels.
 #define ANKERL_NANOBENCH_IMPLEMENT
 
@@ -158,8 +158,8 @@ scalar_t run_storage_owned(View1D x, View1D y, View1D z, const scalar_t alpha, c
   for (size_t round = 0; round < rounds; ++round) {
     Kokkos::parallel_for(
         "run_storage_owned", Kokkos::RangePolicy<>(0, n), KOKKOS_LAMBDA(const size_t i) {
-          WorkspaceStorage workspace{mundy::utils::store(scalar_t{x(i)}), mundy::utils::store(scalar_t{y(i)}),
-                                     mundy::utils::store(scalar_t{z(i)})};
+          WorkspaceStorage workspace{mundy::store(scalar_t{x(i)}), mundy::store(scalar_t{y(i)}),
+                                     mundy::store(scalar_t{z(i)})};
           workspace.step(alpha, beta, i, round);
           x(i) = workspace.x_storage.get();
           y(i) = workspace.y_storage.get();
@@ -196,8 +196,7 @@ scalar_t run_storage_pointer(View1D x, View1D y, View1D z, const scalar_t alpha,
   for (size_t round = 0; round < rounds; ++round) {
     Kokkos::parallel_for(
         "run_storage_pointer", Kokkos::RangePolicy<>(0, n), KOKKOS_LAMBDA(const size_t i) {
-          WorkspaceStorage workspace{mundy::utils::store(x_data + i), mundy::utils::store(y_data + i),
-                                     mundy::utils::store(z_data + i)};
+          WorkspaceStorage workspace{mundy::store(x_data + i), mundy::store(y_data + i), mundy::store(z_data + i)};
           workspace.step(alpha, beta, i, round);
         });
   }
@@ -225,7 +224,7 @@ scalar_t run_storage_reference(View1D x, View1D y, View1D z, const scalar_t alph
   for (size_t round = 0; round < rounds; ++round) {
     Kokkos::parallel_for(
         "run_storage_reference", Kokkos::RangePolicy<>(0, n), KOKKOS_LAMBDA(const size_t i) {
-          WorkspaceStorage workspace{mundy::utils::store(x(i)), mundy::utils::store(y(i)), mundy::utils::store(z(i))};
+          WorkspaceStorage workspace{mundy::store(x(i)), mundy::store(y(i)), mundy::store(z(i))};
           workspace.step(alpha, beta, i, round);
         });
   }

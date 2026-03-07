@@ -25,19 +25,17 @@
 #include <Kokkos_Core.hpp>
 
 // Mundy
-#include <mundy_geom/distance/DistanceMetrics.hpp>  // for mundy::geom::FreeSpaceMetric
-#include <mundy_geom/distance/PointPoint.hpp>       // for mundy::geom::distance(Point, Point)
-#include <mundy_geom/distance/Types.hpp>            // for mundy::geom::SharedNormalSigned
-#include <mundy_geom/primitives/Ellipsoid.hpp>      // for mundy::geom::Ellipsoid
-#include <mundy_geom/primitives/Point.hpp>          // for mundy::geom::Point
-#include <mundy_math/Quaternion.hpp>                // for mundy::math::Quaternion
-#include <mundy_math/Tolerance.hpp>                 // for mundy::math::get_zero_tolerance
-#include <mundy_math/Vector3.hpp>                   // for mundy::math::Vector3
-#include <mundy_math/minimize.hpp>                  // for mundy::math::find_min_using_approximate_derivatives
+#include <mundy_geom/distance/DistanceMetrics.hpp>  // for mundy::FreeSpaceMetric
+#include <mundy_geom/distance/PointPoint.hpp>       // for mundy::distance(Point, Point)
+#include <mundy_geom/distance/Types.hpp>            // for mundy::SharedNormalSigned
+#include <mundy_geom/primitives/Ellipsoid.hpp>      // for mundy::Ellipsoid
+#include <mundy_geom/primitives/Point.hpp>          // for mundy::Point
+#include <mundy_math/Quaternion.hpp>                // for mundy::Quaternion
+#include <mundy_math/Tolerance.hpp>                 // for mundy::get_zero_tolerance
+#include <mundy_math/Vector3.hpp>                   // for mundy::Vector3
+#include <mundy_math/minimize.hpp>                  // for mundy::find_min_using_approximate_derivatives
 
 namespace mundy {
-
-namespace geom {
 
 //! \name Free space distance calculations
 //@{
@@ -53,7 +51,7 @@ KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distan
                                 const Point<Scalar>& point,                               //
                                 const Ellipsoid<Scalar>& ellipsoid) {
   Point<Scalar> closest_point;
-  mundy::math::Vector3<Scalar> ellipsoid_normal;
+  mundy::Vector3<Scalar> ellipsoid_normal;
   return distance(distance_type, point, ellipsoid,  //
                   closest_point, ellipsoid_normal);
 }
@@ -62,14 +60,14 @@ template <typename Scalar>
 class PointEllipsoidObjective {
  public:
   KOKKOS_FUNCTION
-  PointEllipsoidObjective(const Point<Scalar>& point,                   //
-                          const Ellipsoid<Scalar>& ellipsoid,           //
-                          mundy::math::Vector3<Scalar>& shared_normal,  //
+  PointEllipsoidObjective(const Point<Scalar>& point,             //
+                          const Ellipsoid<Scalar>& ellipsoid,     //
+                          mundy::Vector3<Scalar>& shared_normal,  //
                           Point<Scalar>& foot_point)
       : point_(point), ellipsoid_(ellipsoid), shared_normal_(shared_normal), foot_point_(foot_point) {
   }
 
-  KOKKOS_FUNCTION Scalar operator()(const mundy::math::Vector<Scalar, 2>& theta_phi) const {
+  KOKKOS_FUNCTION Scalar operator()(const mundy::Vector<Scalar, 2>& theta_phi) const {
     // Map theta and phi to the lab frame normal vector
     const Scalar sin_theta = std::sin(theta_phi[0]);
     const Scalar cos_theta = std::cos(theta_phi[0]);
@@ -87,7 +85,7 @@ class PointEllipsoidObjective {
  private:
   const Point<Scalar>& point_;
   const Ellipsoid<Scalar>& ellipsoid_;
-  mundy::math::Vector3<Scalar>& shared_normal_;
+  mundy::Vector3<Scalar>& shared_normal_;
   Point<Scalar>& foot_point_;
 };
 
@@ -96,11 +94,11 @@ KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distan
                                 const Point<Scalar>& point,                               //
                                 const Ellipsoid<Scalar>& ellipsoid,                       //
                                 Point<Scalar>& closest_point,                             //
-                                mundy::math::Vector3<Scalar>& ellipsoid_normal) {
+                                mundy::Vector3<Scalar>& ellipsoid_normal) {
   // Setup the minimization
   // Note, the actual error is not guaranteed to be less than min_objective_delta due to the use of approximate
   // derivatives. Instead, we saw that the error was typically less than the square root of min_objective_delta.
-  constexpr Scalar min_objective_delta = mundy::math::get_relaxed_zero_tolerance<Scalar>();
+  constexpr Scalar min_objective_delta = mundy::get_relaxed_zero_tolerance<Scalar>();
   constexpr size_t lbfgs_max_memory_size = 10;
 
   // Reuse the solution space rather than re-allocating it each time
@@ -111,16 +109,16 @@ KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distan
   constexpr Scalar half_pi = static_cast<Scalar>(0.5) * pi;
   constexpr Scalar one_third_pi = pi / static_cast<Scalar>(3.0);
   constexpr Scalar five_third_pi = static_cast<Scalar>(5.0) * one_third_pi;
-  constexpr mundy::math::Vector<Scalar, 3> theta_guesses{zero, half_pi, pi};
-  constexpr mundy::math::Vector<Scalar, 3> phi_guesses{one_third_pi, pi, five_third_pi};
+  constexpr mundy::Vector<Scalar, 3> theta_guesses{zero, half_pi, pi};
+  constexpr mundy::Vector<Scalar, 3> phi_guesses{one_third_pi, pi, five_third_pi};
 
   Scalar global_dist = Kokkos::Experimental::infinity_v<Scalar>;
-  mundy::math::Vector<Scalar, 2> theta_phi_sol{zero, zero};
-  mundy::math::Vector<Scalar, 2> global_theta_phi_sol{zero, zero};
+  mundy::Vector<Scalar, 2> theta_phi_sol{zero, zero};
+  mundy::Vector<Scalar, 2> global_theta_phi_sol{zero, zero};
   for (size_t t_idx = 0; t_idx < 3; ++t_idx) {
     for (size_t p_idx = 0; p_idx < 3; ++p_idx) {
       theta_phi_sol = {theta_guesses[t_idx], phi_guesses[p_idx]};
-      const Scalar dist = mundy::math::find_min_using_approximate_derivatives<lbfgs_max_memory_size>(
+      const Scalar dist = mundy::find_min_using_approximate_derivatives<lbfgs_max_memory_size>(
           shared_normal_objective, theta_phi_sol, min_objective_delta);
       if (dist < global_dist) {
         global_dist = dist;
@@ -131,11 +129,9 @@ KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distan
 
   // Evaluating the objective updates the shared normal and foot points
   shared_normal_objective(global_theta_phi_sol);
-  return mundy::math::dot(point - closest_point, ellipsoid_normal);
+  return mundy::dot(point - closest_point, ellipsoid_normal);
 }
 //@}
-
-}  // namespace geom
 
 }  // namespace mundy
 

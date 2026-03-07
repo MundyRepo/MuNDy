@@ -26,8 +26,6 @@
 
 namespace mundy {
 
-namespace math {
-
 namespace impl {
 
 // Helper for generating a tuple with T repeated N times
@@ -55,8 +53,6 @@ constexpr bool can_construct_from_unpacked_tuple() {
 }
 
 }  // namespace impl
-
-}  // namespace math
 
 }  // namespace mundy
 

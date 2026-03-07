@@ -31,11 +31,11 @@
 #include <stk_util/parallel/Parallel.hpp>  // for stk::parallel_machine_init, stk::parallel_machine_finalize
 
 // Mundy
-#include <mundy_math/Array.hpp>       // for mundy::math::Array
-#include <mundy_math/Matrix.hpp>      // for mundy::math::Matrix
-#include <mundy_math/Quaternion.hpp>  // for mundy::math::Quaternion
-#include <mundy_math/Tolerance.hpp>   // for mundy::math::get_relaxed_tolerance
-#include <mundy_math/Vector.hpp>      // for mundy::math::Vector
+#include <mundy_math/Array.hpp>       // for mundy::Array
+#include <mundy_math/Matrix.hpp>      // for mundy::Matrix
+#include <mundy_math/Quaternion.hpp>  // for mundy::Quaternion
+#include <mundy_math/Tolerance.hpp>   // for mundy::get_relaxed_tolerance
+#include <mundy_math/Vector.hpp>      // for mundy::Vector
 
 /* Test design.
 Compare the performance of performing different operations between matrices, vectors, and quaternions against
@@ -58,8 +58,8 @@ void randomize(std::vector<double>& x) {
 void test_vector3_blas(const double alpha, const std::vector<double>& x, const double beta, std::vector<double>& y) {
   const size_t num_entities = x.size() / 3;
   for (size_t i = 0; i < num_entities; ++i) {
-    const auto x_view = mundy::math::get_vector_view<double, 3>(x.data() + 3 * i);
-    auto y_view = mundy::math::get_vector_view<double, 3>(y.data() + 3 * i);
+    const auto x_view = mundy::get_vector_view<double, 3>(x.data() + 3 * i);
+    auto y_view = mundy::get_vector_view<double, 3>(y.data() + 3 * i);
     y_view = alpha * x_view + beta * y_view;
   }
 }
@@ -69,8 +69,8 @@ void test_vector3_blas_no_views(const double alpha, const std::vector<double>& x
   const size_t num_entities = x.size() / 3;
   for (size_t i = 0; i < num_entities; ++i) {
     // Copy into vectors
-    const mundy::math::Vector<double, 3> x_vec(x[3 * i + 0], x[3 * i + 1], x[3 * i + 2]);
-    mundy::math::Vector<double, 3> y_vec(y[3 * i + 0], y[3 * i + 1], y[3 * i + 2]);
+    const mundy::Vector<double, 3> x_vec(x[3 * i + 0], x[3 * i + 1], x[3 * i + 2]);
+    mundy::Vector<double, 3> y_vec(y[3 * i + 0], y[3 * i + 1], y[3 * i + 2]);
     y_vec = alpha * x_vec + beta * y_vec;
 
     // Copy back into the result
@@ -93,8 +93,8 @@ void test_vector3_blas_direct(const double alpha, const std::vector<double>& x, 
 void test_matrix3_blas(const double alpha, const std::vector<double>& x, const double beta, std::vector<double>& y) {
   const size_t num_entities = x.size() / 9;
   for (size_t i = 0; i < num_entities; ++i) {
-    const auto x_view = mundy::math::get_matrix_view<double, 3, 3>(x.data() + 9 * i);
-    auto y_view = mundy::math::get_matrix_view<double, 3, 3>(y.data() + 9 * i);
+    const auto x_view = mundy::get_matrix_view<double, 3, 3>(x.data() + 9 * i);
+    auto y_view = mundy::get_matrix_view<double, 3, 3>(y.data() + 9 * i);
     y_view = alpha * x_view + beta * y_view;
   }
 }
@@ -104,10 +104,10 @@ void test_matrix3_blas_no_views(const double alpha, const std::vector<double>& x
   const size_t num_entities = x.size() / 9;
   for (size_t i = 0; i < num_entities; ++i) {
     // Copy into matrices
-    const mundy::math::Matrix<double, 3, 3> x_mat(x[9 * i + 0], x[9 * i + 1], x[9 * i + 2], x[9 * i + 3], x[9 * i + 4],
-                                                  x[9 * i + 5], x[9 * i + 6], x[9 * i + 7], x[9 * i + 8]);
-    mundy::math::Matrix<double, 3, 3> y_mat(y[9 * i + 0], y[9 * i + 1], y[9 * i + 2], y[9 * i + 3], y[9 * i + 4],
-                                            y[9 * i + 5], y[9 * i + 6], y[9 * i + 7], y[9 * i + 8]);
+    const mundy::Matrix<double, 3, 3> x_mat(x[9 * i + 0], x[9 * i + 1], x[9 * i + 2], x[9 * i + 3], x[9 * i + 4],
+                                            x[9 * i + 5], x[9 * i + 6], x[9 * i + 7], x[9 * i + 8]);
+    mundy::Matrix<double, 3, 3> y_mat(y[9 * i + 0], y[9 * i + 1], y[9 * i + 2], y[9 * i + 3], y[9 * i + 4],
+                                      y[9 * i + 5], y[9 * i + 6], y[9 * i + 7], y[9 * i + 8]);
     y_mat = alpha * x_mat + beta * y_mat;
 
     // Copy back into the result
@@ -142,8 +142,8 @@ void test_matrix3_blas_direct(const double alpha, const std::vector<double>& x, 
 void test_quaternion_blas(const double alpha, const std::vector<double>& x, const double beta, std::vector<double>& y) {
   const size_t num_entities = x.size() / 4;
   for (size_t i = 0; i < num_entities; ++i) {
-    const auto x_view = mundy::math::get_quaternion_view<double>(x.data() + 4 * i);
-    auto y_view = mundy::math::get_quaternion_view<double>(y.data() + 4 * i);
+    const auto x_view = mundy::get_quaternion_view<double>(x.data() + 4 * i);
+    auto y_view = mundy::get_quaternion_view<double>(y.data() + 4 * i);
     y_view = alpha * x_view + beta * y_view;
   }
 }
@@ -153,8 +153,8 @@ void test_quaternion_blas_no_views(const double alpha, const std::vector<double>
   const size_t num_entities = x.size() / 4;
   for (size_t i = 0; i < num_entities; ++i) {
     // Copy into quaternions
-    const mundy::math::Quaterniond x_quat(x[4 * i + 0], x[4 * i + 1], x[4 * i + 2], x[4 * i + 3]);
-    mundy::math::Quaterniond y_quat(y[4 * i + 0], y[4 * i + 1], y[4 * i + 2], y[4 * i + 3]);
+    const mundy::Quaterniond x_quat(x[4 * i + 0], x[4 * i + 1], x[4 * i + 2], x[4 * i + 3]);
+    mundy::Quaterniond y_quat(y[4 * i + 0], y[4 * i + 1], y[4 * i + 2], y[4 * i + 3]);
     y_quat = alpha * x_quat + beta * y_quat;
 
     // Copy back into the result
@@ -179,9 +179,9 @@ void test_quaternion_blas_direct(const double alpha, const std::vector<double>& 
 void test_mat_vec(const std::vector<double>& m, const std::vector<double>& v, std::vector<double>& result) {
   const size_t num_entities = m.size() / 9;
   for (size_t i = 0; i < num_entities; ++i) {
-    const auto m_view = mundy::math::get_matrix_view<double, 3, 3>(m.data() + 9 * i);
-    const auto v_view = mundy::math::get_vector_view<double, 3>(v.data() + 3 * i);
-    auto result_view = mundy::math::get_vector_view<double, 3>(result.data() + 3 * i);
+    const auto m_view = mundy::get_matrix_view<double, 3, 3>(m.data() + 9 * i);
+    const auto v_view = mundy::get_vector_view<double, 3>(v.data() + 3 * i);
+    auto result_view = mundy::get_vector_view<double, 3>(result.data() + 3 * i);
     result_view = m_view * v_view;
   }
 }
@@ -190,10 +190,10 @@ void test_mat_vec_no_views(const std::vector<double>& m, const std::vector<doubl
   const size_t num_entities = m.size() / 9;
   for (size_t i = 0; i < num_entities; ++i) {
     // Copy into matrices and vectors
-    const mundy::math::Matrix<double, 3, 3> m_mat(m[9 * i + 0], m[9 * i + 1], m[9 * i + 2], m[9 * i + 3], m[9 * i + 4],
-                                                  m[9 * i + 5], m[9 * i + 6], m[9 * i + 7], m[9 * i + 8]);
-    const mundy::math::Vector<double, 3> v_vec(v[3 * i + 0], v[3 * i + 1], v[3 * i + 2]);
-    mundy::math::Vector<double, 3> result_vec = m_mat * v_vec;
+    const mundy::Matrix<double, 3, 3> m_mat(m[9 * i + 0], m[9 * i + 1], m[9 * i + 2], m[9 * i + 3], m[9 * i + 4],
+                                            m[9 * i + 5], m[9 * i + 6], m[9 * i + 7], m[9 * i + 8]);
+    const mundy::Vector<double, 3> v_vec(v[3 * i + 0], v[3 * i + 1], v[3 * i + 2]);
+    mundy::Vector<double, 3> result_vec = m_mat * v_vec;
 
     // Copy back into the result
     result[3 * i + 0] = result_vec[0];
@@ -214,10 +214,10 @@ void test_mat_vec_direct(const std::vector<double>& m, const std::vector<double>
 void test_complex_vector_ops(const std::vector<double>& v1, const std::vector<double>& v2, std::vector<double>& v3) {
   const size_t num_entities = v1.size() / 3;
   for (size_t i = 0; i < num_entities; ++i) {
-    const auto v1_view = mundy::math::get_vector_view<double, 3>(v1.data() + 3 * i);
-    const auto v2_view = mundy::math::get_vector_view<double, 3>(v2.data() + 3 * i);
-    auto v3_view = mundy::math::get_vector_view<double, 3>(v3.data() + 3 * i);
-    v3_view = mundy::math::cross(v2_view, mundy::math::dot(v1_view, v2_view) * v1_view);
+    const auto v1_view = mundy::get_vector_view<double, 3>(v1.data() + 3 * i);
+    const auto v2_view = mundy::get_vector_view<double, 3>(v2.data() + 3 * i);
+    auto v3_view = mundy::get_vector_view<double, 3>(v3.data() + 3 * i);
+    v3_view = mundy::cross(v2_view, mundy::dot(v1_view, v2_view) * v1_view);
   }
 }
 
@@ -226,9 +226,9 @@ void test_complex_vector_ops_no_views(const std::vector<double>& v1, const std::
   const size_t num_entities = v1.size() / 3;
   for (size_t i = 0; i < num_entities; ++i) {
     // Copy into vectors
-    const mundy::math::Vector<double, 3> v1_vec(v1[3 * i + 0], v1[3 * i + 1], v1[3 * i + 2]);
-    const mundy::math::Vector<double, 3> v2_vec(v2[3 * i + 0], v2[3 * i + 1], v2[3 * i + 2]);
-    const mundy::math::Vector<double, 3> v3_vec = mundy::math::cross(v2_vec, mundy::math::dot(v1_vec, v2_vec) * v1_vec);
+    const mundy::Vector<double, 3> v1_vec(v1[3 * i + 0], v1[3 * i + 1], v1[3 * i + 2]);
+    const mundy::Vector<double, 3> v2_vec(v2[3 * i + 0], v2[3 * i + 1], v2[3 * i + 2]);
+    const mundy::Vector<double, 3> v3_vec = mundy::cross(v2_vec, mundy::dot(v1_vec, v2_vec) * v1_vec);
 
     // Copy back into the result
     v3[3 * i + 0] = v3_vec[0];
@@ -255,9 +255,9 @@ void test_complex_vector_ops_direct(const std::vector<double>& v1, const std::ve
 void test_quaternion_rotation(const std::vector<double>& q1, const std::vector<double>& q2, std::vector<double>& q3) {
   const size_t num_entities = q1.size() / 4;
   for (size_t i = 0; i < num_entities; ++i) {
-    const auto q1_view = mundy::math::get_quaternion_view<double>(q1.data() + 4 * i);
-    const auto q2_view = mundy::math::get_quaternion_view<double>(q2.data() + 4 * i);
-    auto q3_view = mundy::math::get_quaternion_view<double>(q3.data() + 4 * i);
+    const auto q1_view = mundy::get_quaternion_view<double>(q1.data() + 4 * i);
+    const auto q2_view = mundy::get_quaternion_view<double>(q2.data() + 4 * i);
+    auto q3_view = mundy::get_quaternion_view<double>(q3.data() + 4 * i);
     q3_view = q1_view * q2_view;
   }
 }
@@ -267,9 +267,9 @@ void test_quaternion_rotation_no_views(const std::vector<double>& q1, const std:
   const size_t num_entities = q1.size() / 4;
   for (size_t i = 0; i < num_entities; ++i) {
     // Copy into a quaternion
-    const mundy::math::Quaterniond q1_quat(q1[4 * i + 0], q1[4 * i + 1], q1[4 * i + 2], q1[4 * i + 3]);
-    const mundy::math::Quaterniond q2_quat(q2[4 * i + 0], q2[4 * i + 1], q2[4 * i + 2], q2[4 * i + 3]);
-    const mundy::math::Quaterniond q3_quat = q1_quat * q2_quat;
+    const mundy::Quaterniond q1_quat(q1[4 * i + 0], q1[4 * i + 1], q1[4 * i + 2], q1[4 * i + 3]);
+    const mundy::Quaterniond q2_quat(q2[4 * i + 0], q2[4 * i + 1], q2[4 * i + 2], q2[4 * i + 3]);
+    const mundy::Quaterniond q3_quat = q1_quat * q2_quat;
 
     // Copy back into the result
     q3[4 * i + 0] = q3_quat[0];

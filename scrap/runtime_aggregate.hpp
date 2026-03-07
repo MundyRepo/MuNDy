@@ -32,14 +32,12 @@
 #include <Kokkos_Core.hpp>
 
 // Mundy
-#include <mundy_utils/tuple.hpp>        // for mundy::utils::tuple
-#include <mundy_utils/type_traits.hpp>  // for utils::count_type_v
-#include <mundy_utils/variant.hpp>      // for mundy::utils::variant
+#include <mundy_utils/tuple.hpp>        // for mundy::tuple
+#include <mundy_utils/type_traits.hpp>  // for count_type_v
+#include <mundy_utils/variant.hpp>      // for mundy::variant
 #include <mundy_utils/suppress_warnings.hpp>  // for MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_PUSH/POP
 
 namespace mundy {
-
-namespace utils {
 
 namespace impl {
 
@@ -57,10 +55,10 @@ KOKKOS_FUNCTION static constexpr const auto& find_const_component_recurse_impl(c
 
 /// \brief Fetch the component corresponding to the given Tag using an index sequence
 template <typename Tag, typename... Components, size_t... Is>
-KOKKOS_FUNCTION static constexpr auto& find_const_component_impl(const utils::tuple<Components...>& tuple,
+KOKKOS_FUNCTION static constexpr auto& find_const_component_impl(const tuple<Components...>& tuple,
                                                                  std::index_sequence<Is...>) {
   // Unpack into the
-  return find_const_component_recurse_impl<Tag>(utils::get<Is>(tuple)...);
+  return find_const_component_recurse_impl<Tag>(get<Is>(tuple)...);
 }
 
 /// \brief Helper function to locate the component that matches a Tag
@@ -76,10 +74,10 @@ KOKKOS_FUNCTION static constexpr auto& find_component_recurse_impl(First& first,
 
 /// \brief Fetch the component corresponding to the given Tag using an index sequence
 template <typename Tag, typename... Components, size_t... Is>
-KOKKOS_FUNCTION static constexpr auto& find_component_impl(utils::tuple<Components...>& tuple,
+KOKKOS_FUNCTION static constexpr auto& find_component_impl(tuple<Components...>& tuple,
                                                            std::index_sequence<Is...>) {
   // Unpack into the
-  return find_component_recurse_impl<Tag>(utils::get<Is>(tuple)...);
+  return find_component_recurse_impl<Tag>(get<Is>(tuple)...);
 }
 
 // A concept to check if a single component has a tag_type
@@ -108,7 +106,7 @@ static constexpr bool has_component_v = has_component<Tag, Components...>::value
 
 /// \brief Fetch the component corresponding to the given Tag (returns a const reference since the tuple is const)
 template <typename Tag, typename... Components>
-KOKKOS_FUNCTION static constexpr const auto& find_component(const utils::tuple<Components...>& tuple) {
+KOKKOS_FUNCTION static constexpr const auto& find_component(const tuple<Components...>& tuple) {
   static_assert(all_have_tags<Components...>, "All of the given components must have tags.");
   static_assert(has_component_v<Tag, Components...>,
                 "Attempting to find a component that does not exist in the given tuple");
@@ -117,7 +115,7 @@ KOKKOS_FUNCTION static constexpr const auto& find_component(const utils::tuple<C
 
 /// \brief Fetch the component corresponding to the given Tag
 template <typename Tag, typename... Components>
-KOKKOS_FUNCTION static constexpr auto& find_component(utils::tuple<Components...>& tuple) {
+KOKKOS_FUNCTION static constexpr auto& find_component(tuple<Components...>& tuple) {
   static_assert(all_have_tags<Components...>, "All of the given components must have tags.");
   static_assert(has_component_v<Tag, Components...>,
                 "Attempting to find a component that does not exist in the given tuple");
@@ -167,7 +165,7 @@ KOKKOS_INLINE_FUNCTION constexpr TaggedComponent<Tag, Type> apply_tag(Type t) {
 /// Construct an runtime_aggregate via a fluent interface:
 /// \code{.cpp}
 ///   using VariantType = variant<Type1, Type2, Type3>;
-///   auto ragg = mundy::utils::make_runtime_aggregate<VariantType>()
+///   auto ragg = mundy::make_runtime_aggregate<VariantType>()
 ///       .append("Tag1", variant_component1)
 ///       .append("Tag2", variant_component2);
 /// \endcode
@@ -237,7 +235,7 @@ template <typename VariantType, typename... Tags>
 class variant_aggregate {
  public:
   using variant_t = VariantType;
-  using TagsTuple = utils::tuple<Tags...>;
+  using TagsTuple = tuple<Tags...>;
   static constexpr size_t N = sizeof...(Tags);
 
   //! \name Constructors
@@ -424,7 +422,7 @@ concept callable_with = requires(T t, Args... args) { t(std::forward<Args>(args)
 ///
 /// Construct an aggregate via a fluent interface:
 /// \code{.cpp}
-///   auto agg = mundy::utils::make_aggregate()
+///   auto agg = mundy::make_aggregate()
 ///       .append<Tag1>(component1)
 ///       .append<Tag2>(component2);
 /// \endcode
@@ -495,7 +493,7 @@ template <typename... TaggedComponents>
 class aggregate {
  public:
   static_assert(impl::all_have_tags<TaggedComponents...>, "All of the given components must have tags.");
-  using TaggedComponentsTuple = utils::tuple<TaggedComponents...>;
+  using TaggedComponentsTuple = tuple<TaggedComponents...>;
 
   //! \name Constructors
   //@{
@@ -522,7 +520,7 @@ class aggregate {
   template <typename Tag, typename NewComponent>
   KOKKOS_FUNCTION constexpr auto append(NewComponent new_component) const {
     impl::TaggedComponent<Tag, NewComponent> new_tagged_comp(std::move(new_component));
-    auto new_tuple = utils::tuple_cat(tagged_components_, utils::make_tuple(new_tagged_comp));
+    auto new_tuple = tuple_cat(tagged_components_, make_tuple(new_tagged_comp));
 
     // Form the new type that has the old components plus the new appended
     // one.
@@ -742,7 +740,7 @@ auto make_aggregate_from_active_impl(const VariantAggregateType& v_agg,
   using AggregateType = aggregate<impl::TaggedComponent<typename VariantAggregateType::template tag_t<Is>,
                                                         variant_alternative_t<active_ids[Is], variant_t>>...>;
   return AggregateType(
-      utils::make_tuple(impl::apply_tag</* I'th tag */ variant_aggregate_tag_t<Is, VariantAggregateType>>(
+      make_tuple(impl::apply_tag</* I'th tag */ variant_aggregate_tag_t<Is, VariantAggregateType>>(
           /* I'th object */ get<active_ids[Is]>(/* I'th variant*/ v_agg.get(reorder_map[Is])))...));
 }
 
@@ -806,11 +804,11 @@ void visit_impl(const variant_aggregate<VariantType, Tags...>& v_agg,
 ///
 /// Example usage:
 /// \code{.cpp}
-///   auto v_agg = utils::make_variant_aggregate<int, double, std::string>()
+///   auto v_agg = make_variant_aggregate<int, double, std::string>()
 ///                .append<Tag1>(123)                    // Tag1 -> int
 ///                .append<Tag2>(std::string("hello"));  // Tag2 -> std::string
 ///                .append<Tag3>(3.14);                  // Tag3 -> double
-///   utils::visit(v_agg, [](const auto& agg) {
+///   visit(v_agg, [](const auto& agg) {
 ///      std::cout << agg.get<Tag1>() << " " << agg.get<Tag2>() << " " << agg.get<Tag3>() << std::endl;
 ///   });
 /// \endcode
@@ -820,8 +818,6 @@ void visit(const variant_aggregate<VariantType, Tags...>& v_agg, const Visitor& 
   std::array<size_t, sizeof...(Tags)> reorder_map = impl::build_reorder_map(v_agg);
   impl::visit_impl(v_agg, reorder_map, visitor, std::make_index_sequence<cached_table::size>{});
 }
-
-}  // namespace utils
 
 }  // namespace mundy
 

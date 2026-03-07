@@ -44,8 +44,6 @@ namespace mundy {
 
 namespace meta {
 
-namespace utils {
-
 template <typename MetaClass>
 Teuchos::ParameterList get_validated_and_default_set_fixed_params(const Teuchos::ParameterList &fixed_params) {
   // Ensure that the given type has the correct static interface.
@@ -118,8 +116,6 @@ generate_class_instance_and_mesh_from_meta_class_requirements(
 
   return std::tuple_cat(class_ptrs, std::make_tuple(bulk_data_ptr));
 }
-
-}  // namespace utils
 
 }  // namespace meta
 

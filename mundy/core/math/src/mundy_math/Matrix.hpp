@@ -33,20 +33,18 @@
 #include <utility>
 
 // Our libs
-#include <mundy_utils/throw_assert.hpp>    // for MUNDY_THROW_ASSERT
-#include <mundy_math/Accessor.hpp>        // for mundy::math::ValidAccessor
-#include <mundy_math/Array.hpp>           // for mundy::math::Array
-#include <mundy_math/MaskedView.hpp>      // for mundy::math::MaskedView
-#include <mundy_math/ShiftedView.hpp>     // for mundy::math::ShiftedView
-#include <mundy_math/StridedView.hpp>     // for mundy::math::StridedView
-#include <mundy_math/Tolerance.hpp>       // for mundy::math::get_zero_tolerance
-#include <mundy_math/TransposedView.hpp>  // for mundy::math::TransposedView
-#include <mundy_math/Vector.hpp>          // for mundy::math::Vector
+#include <mundy_math/Accessor.hpp>        // for mundy::ValidAccessor
+#include <mundy_math/Array.hpp>           // for mundy::Array
+#include <mundy_math/MaskedView.hpp>      // for mundy::MaskedView
+#include <mundy_math/ShiftedView.hpp>     // for mundy::ShiftedView
+#include <mundy_math/StridedView.hpp>     // for mundy::StridedView
+#include <mundy_math/Tolerance.hpp>       // for mundy::get_zero_tolerance
+#include <mundy_math/TransposedView.hpp>  // for mundy::TransposedView
+#include <mundy_math/Vector.hpp>          // for mundy::Vector
 #include <mundy_math/impl/MatrixImpl.hpp>
+#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
 
 namespace mundy {
-
-namespace math {
 
 /// \brief (Implementation) Type trait to determine if a type is an AMatrix
 template <typename TypeToCheck>
@@ -122,8 +120,8 @@ class AMatrix {
   //! \name Internal data
   //@{
 
-  /// \brief Stored accessor via utils::storage.
-  utils::storage<Accessor> accessor_;
+  /// \brief Stored accessor via storage.
+  storage<Accessor> accessor_;
   //@}
 
   //! \name Type aliases
@@ -1394,18 +1392,16 @@ MUNDY_MATH_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(Matrix6i, matrix6i, int, 6, 
 /// \endcode
 template <typename T, size_t N, size_t M, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto get_matrix_view(Accessor&& data) {
-  auto data_storage = utils::store(std::forward<Accessor>(data));
+  auto data_storage = store(std::forward<Accessor>(data));
   return AMatrix<T, N, M, decltype(data_storage)>(data_storage);
 }
 
 template <typename T, size_t N, size_t M, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto get_owning_matrix(Accessor&& data) {
-  auto data_storage = utils::store(std::move(data));
+  auto data_storage = store(std::move(data));
   return AMatrix<T, N, M, decltype(data_storage)>(data_storage);
 }
 //@}
-
-}  // namespace math
 
 }  // namespace mundy
 

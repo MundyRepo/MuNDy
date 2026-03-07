@@ -46,7 +46,7 @@
 #include <mundy_shapes/ComputeAABB.hpp>  // for mundy::shapes::ComputeAABB
 
 // Mundy test libs
-#include <mundy_meta/utils/MeshGeneration.hpp>  // for mundy::meta::utils::generate_class_instance_and_mesh_from_meta_class_requirements
+#include <mundy_meta/utils/MeshGeneration.hpp>  // for mundy::meta::generate_class_instance_and_mesh_from_meta_class_requirements
 
 namespace mundy {
 
@@ -141,7 +141,7 @@ TEST(ComputeAABB, PerformsAABBCalculationCorrectlyForSphere) {
 
   // Create an instance of ComputeAABB based on committed mesh that meets the requirements for ComputeAABB.
   auto [compute_aabb_ptr, bulk_data_ptr] =
-      mundy::meta::utils::generate_class_instance_and_mesh_from_meta_class_requirements<ComputeAABB>();
+      mundy::meta::generate_class_instance_and_mesh_from_meta_class_requirements<ComputeAABB>();
   auto meta_data_ptr = bulk_data_ptr->mesh_meta_data_ptr();
 
   ComputeAABB::get_mesh_requirements(Teuchos::ParameterList())->print();

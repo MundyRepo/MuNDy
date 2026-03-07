@@ -27,12 +27,10 @@
 #include <stdexcept>  // for logic_error, invalid_argument, etc
 
 // Mundy libs
-#include <mundy_utils/aggregate.hpp>  // for mundy::utils::aggregate
-#include <mundy_utils/tuple.hpp>      // for mundy::utils::tuple
+#include <mundy_utils/aggregate.hpp>  // for mundy::aggregate
+#include <mundy_utils/tuple.hpp>      // for mundy::tuple
 
 namespace mundy {
-
-namespace utils {
 
 namespace {
 
@@ -159,7 +157,5 @@ TEST(AggregateTest, HasTag) {
 //
 
 }  // namespace
-
-}  // namespace utils
 
 }  // namespace mundy
