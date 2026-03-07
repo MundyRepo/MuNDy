@@ -1,7 +1,7 @@
 #
 # A) Define the package
 #
-tribits_package_decl(Mesh)
+tribits_package_decl(MundyMesh)
 
 tribits_add_debug_option()
 

@@ -39,6 +39,10 @@ include("${${PROJECT_NAME}_TRIBITS_DIR}/TriBITS.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/MundyTribitsInstallDirectories.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/MundyTribitsAddLibrary.cmake")
 
+# Enable Mundy's Mundy and Mesh packages by default. They can be disabled by the user if they are not needed.
+set(${PROJECT_NAME}_ENABLE_Mundy ON CACHE BOOL "" FORCE)
+set(${PROJECT_NAME}_ENABLE_MundyMesh ON CACHE BOOL "" FORCE)
+
 # Define some global flags
 set(${PROJECT_NAME}_CMAKE_CXX_STANDARD_DEFAULT 20)
 set(${PROJECT_NAME}_CMAKE_CXX_STANDARDS_ALLOWED "(20|23)")

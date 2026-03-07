@@ -24,33 +24,33 @@ tribits_add_executable_and_test(
   UnitTestSegmentSegment
   SOURCES
   UnitTestSegmentSegment.cpp
-  ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
+  ${Mundy_DEFAULT_UNIT_TEST_MAIN}
 )
 
 tribits_add_executable_and_test(
   UnitTestEllipsoidEllipsoid
   SOURCES
   UnitTestEllipsoidEllipsoid.cpp
-  ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
+  ${Mundy_DEFAULT_UNIT_TEST_MAIN}
 )
 
 tribits_add_executable_and_test(
   UnitTestComputeAABB
   SOURCES
   UnitTestComputeAABB.cpp
-  ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
+  ${Mundy_DEFAULT_UNIT_TEST_MAIN}
 )
 
 tribits_add_executable_and_test(
   UnitTestComputeBoundingRadius
   SOURCES
   UnitTestComputeBoundingRadius.cpp
-  ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
+  ${Mundy_DEFAULT_UNIT_TEST_MAIN}
 )
 
 tribits_add_executable_and_test(
   UnitTestPeriodicity
   SOURCES
   UnitTestPeriodicity.cpp
-  ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
+  ${Mundy_DEFAULT_UNIT_TEST_MAIN}
 )

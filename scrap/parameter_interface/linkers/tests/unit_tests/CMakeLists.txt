@@ -24,7 +24,7 @@ tribits_add_executable_and_test(
   UnitTestLinkers
   SOURCES
     UnitTestLinkers.cpp
-    ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
+    ${Mundy_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 2
 )
 
@@ -32,7 +32,7 @@ tribits_add_executable_and_test(
   UnitTestGenerateNeighborLinkers
   SOURCES
     UnitTestGenerateNeighborLinkers.cpp
-    ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
+    ${Mundy_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1-4
 )
 
@@ -40,7 +40,7 @@ tribits_add_executable_and_test(
   UnitTestDestroyNeighborLinkers
   SOURCES
     UnitTestDestroyNeighborLinkers.cpp
-    ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
+    ${Mundy_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1-4
 )
 
@@ -48,7 +48,7 @@ tribits_add_executable_and_test(
   UnitTestComputeSignedSeparationDistanceAndContactNormal
   SOURCES
     UnitTestComputeSignedSeparationDistanceAndContactNormal.cpp
-    ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
+    ${Mundy_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 2
 )
 
@@ -56,7 +56,7 @@ tribits_add_executable_and_test(
   UnitTestEvaluateLinkerPotentials
   SOURCES
     UnitTestEvaluateLinkerPotentials.cpp
-    ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
+    ${Mundy_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 2
 )
 
@@ -64,6 +64,6 @@ tribits_add_executable_and_test(
   UnitTestLinkerPotentialForceReduction
   SOURCES
     UnitTestLinkerPotentialForceReduction.cpp
-    ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
+    ${Mundy_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1-4
 )

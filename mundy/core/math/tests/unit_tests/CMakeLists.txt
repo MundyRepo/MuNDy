@@ -24,7 +24,7 @@ tribits_add_executable_and_test(
   UnitTestViews
   SOURCES
   UnitTestViews.cpp
-  ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
+  ${Mundy_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1-4
 )
 
@@ -32,7 +32,7 @@ tribits_add_executable_and_test(
   UnitTestVector
   SOURCES
   UnitTestVector.cpp
-  ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
+  ${Mundy_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1-4
 )
 
@@ -40,7 +40,7 @@ tribits_add_executable_and_test(
   UnitTestMatrix
   SOURCES
   UnitTestMatrix.cpp
-  ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
+  ${Mundy_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1-4
 )
 
@@ -48,7 +48,7 @@ tribits_add_executable_and_test(
   UnitTestVector3
   SOURCES
   UnitTestVector3.cpp
-  ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
+  ${Mundy_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1-4
 )
 
@@ -56,7 +56,7 @@ tribits_add_executable_and_test(
   UnitTestMatrix3
   SOURCES
   UnitTestMatrix3.cpp
-  ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
+  ${Mundy_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1-4
 )
 
@@ -64,7 +64,7 @@ tribits_add_executable_and_test(
   UnitTestQuaternion
   SOURCES
   UnitTestQuaternion.cpp
-  ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
+  ${Mundy_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1-4
 )
 
@@ -72,7 +72,7 @@ tribits_add_executable_and_test(
   UnitTestMinimize
   SOURCES
   UnitTestMinimize.cpp
-  ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
+  ${Mundy_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1-4
 )
 
@@ -80,7 +80,7 @@ tribits_add_executable_and_test(
   UnitTestHilbert
   SOURCES
   UnitTestHilbert.cpp
-  ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
+  ${Mundy_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1-4
 )
 
@@ -88,7 +88,7 @@ tribits_add_executable_and_test(
   UnitTestZMorton
   SOURCES
   UnitTestZMorton.cpp
-  ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
+  ${Mundy_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1-4
 )
 
@@ -96,6 +96,6 @@ tribits_add_executable_and_test(
   UnitTestConvex
   SOURCES
   UnitTestConvex.cpp
-  ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
+  ${Mundy_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1
 )

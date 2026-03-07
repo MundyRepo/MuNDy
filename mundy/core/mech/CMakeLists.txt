@@ -21,7 +21,7 @@ SET(SOURCES
   src/mundy_mech/a_necessary_empty_file.cpp
 )
 
-tribits_configure_file(${PACKAGE_NAME}_config.hpp)
+tribits_configure_file(MundyMech_config.hpp)
 tribits_include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src)
 tribits_include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
@@ -32,7 +32,7 @@ tribits_include_directories(${CMAKE_CURRENT_BINARY_DIR})
 # Add a standard library
 mundy_tribits_add_library(
   mundy_mech
-  HEADERS ${CMAKE_CURRENT_BINARY_DIR}/${PACKAGE_NAME}_config.hpp
+  HEADERS ${CMAKE_CURRENT_BINARY_DIR}/MundyMech_config.hpp
   NOINSTALLHEADERS ${NOINSTALLHEADERS}
   DIRECTORIES src/mundy_mech
   FILES_MATCHING PATTERN "*.hpp"

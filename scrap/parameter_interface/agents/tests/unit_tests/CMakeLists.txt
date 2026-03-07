@@ -26,7 +26,7 @@ tribits_add_executable_and_test(
   UnitTestHierarchyOfAgents
   SOURCES
     UnitTestHierarchyOfAgents.cpp
-    ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
+    ${Mundy_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1-4
 )
 
@@ -34,6 +34,6 @@ tribits_add_executable_and_test(
   UnitTestAgentRegistry
   SOURCES
     UnitTestAgentRegistry.cpp
-    ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
+    ${Mundy_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1-4
 )

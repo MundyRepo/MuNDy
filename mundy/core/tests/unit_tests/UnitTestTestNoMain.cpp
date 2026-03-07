@@ -18,7 +18,7 @@
 // **********************************************************************************************************************
 // @HEADER
 
-//! \file UnitTestTest
+//! \file UnitTestTest.cpp
 /// Validate that tests are actually running as expected.
 /// You may assume that simply because you ran
 #include <gmock/gmock.h>  // for EXPECT_THAT, HasSubstr, etc

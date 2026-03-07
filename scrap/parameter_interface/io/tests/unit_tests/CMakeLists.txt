@@ -24,6 +24,6 @@ tribits_add_executable_and_test(
   UnitTestIOBrokerWriterSingleTest
   SOURCES
     UnitTestIOBrokerWriter.cpp
-    ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
+    ${Mundy_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1
 )

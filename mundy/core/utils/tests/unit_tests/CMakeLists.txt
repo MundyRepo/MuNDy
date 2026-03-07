@@ -24,7 +24,7 @@ tribits_add_executable_and_test(
   UnitTestThrowAssert
   SOURCES
   UnitTestThrowAssert.cpp
-  ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
+  ${Mundy_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1-4
 )
 
@@ -32,7 +32,7 @@ tribits_add_executable_and_test(
   UnitTestStringLiteral
   SOURCES
   UnitTestStringLiteral.cpp
-  ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
+  ${Mundy_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1-4
 )
 
@@ -40,7 +40,7 @@ tribits_add_executable_and_test(
   UnitTestTuple
   SOURCES
   UnitTestTuple.cpp
-  ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
+  ${Mundy_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1-4
 )
 
@@ -48,7 +48,7 @@ tribits_add_executable_and_test(
   UnitTestAggregate
   SOURCES
   UnitTestAggregate.cpp
-  ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
+  ${Mundy_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1-4
 )
 
@@ -56,7 +56,7 @@ tribits_add_executable_and_test(
   UnitTestReferenceWrapper
   SOURCES
   UnitTestReferenceWrapper.cpp
-  ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
+  ${Mundy_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1-4
 )
 
@@ -64,7 +64,7 @@ tribits_add_executable_and_test(
   UnitTestStorage
   SOURCES
   UnitTestStorage.cpp
-  ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
+  ${Mundy_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1-4
 )
 
@@ -72,7 +72,7 @@ tribits_add_executable_and_test(
   UnitTestNgpView
   SOURCES
   UnitTestNgpView.cpp
-  ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
+  ${Mundy_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1-4
 )
 
@@ -80,6 +80,6 @@ tribits_add_executable_and_test(
   UnitTestNgpPool
   SOURCES
   UnitTestNgpPool.cpp
-  ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
+  ${Mundy_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1-4
 )

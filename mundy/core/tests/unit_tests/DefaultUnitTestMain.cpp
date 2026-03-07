@@ -27,12 +27,12 @@
 ///     TestName
 ///     SOURCES
 ///       TestName.cpp
-///       ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
+///       ${Mundy_DEFAULT_UNIT_TEST_MAIN}
 ///     COMM serial mpi
 ///     )
 ///  \endcode
 ///
-///  Here, MUNDY_DEFAULT_UNIT_TEST_MAIN is set to this file, DefaultUnitTestMain.cpp. TestName.cpp contains a collection
+///  Here, Mundy_DEFAULT_UNIT_TEST_MAIN is set to this file, DefaultUnitTestMain.cpp. TestName.cpp contains a collection
 ///  of GTEST-based unit tests. The above code will compile TestName.cpp and DefaultUnitTestMain.cpp into an executable
 ///  called TestName. When the executable is run, it will run all of the unit tests in TestName.cpp in serial and MPI
 ///  with one process. If the test was only meant to run in parallel, then COMM should be set to mpi. Conversely, if the
