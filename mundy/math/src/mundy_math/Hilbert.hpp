@@ -58,10 +58,10 @@ size_t hilbert_3d(size_t s, size_t i, std::vector<mundy::math::Vector3d>& positi
   size_t snew = static_cast<size_t>(std::floor(s / 2));
   MUNDY_THROW_ASSERT(snew > 0, std::logic_error, "hilbert_3d: snew must be greater than 0");
 
-  mundy::math::Vector3 current_position_new = current_position;
-  mundy::math::Vector3 dr1_new = dr1;
-  mundy::math::Vector3 dr2_new = dr2;
-  mundy::math::Vector3 dr3_new = dr3;
+  mundy::math::Vector3d current_position_new = current_position;
+  mundy::math::Vector3d dr1_new = dr1;
+  mundy::math::Vector3d dr2_new = dr2;
+  mundy::math::Vector3d dr3_new = dr3;
 
   for (auto& dr : {dr1_new, dr2_new, dr3_new}) {
     mundy::math::Vector3d dr_stencil = {dr[0] < 0.0 ? 1.0 : 0.0, dr[1] < 0.0 ? 1.0 : 0.0, dr[2] < 0.0 ? 1.0 : 0.0};

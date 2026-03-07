@@ -42,76 +42,33 @@ namespace math {
 /// \tparam T The type of the elements
 /// \tparam stride The stride between elements
 /// \tparam Accessor The type of the contiguous accessor
-template <typename T, size_t stride, ValidAccessor<T> Accessor, typename OwnershipType>
-class StridedAccessor;
-
 template <typename T, size_t stride, ValidAccessor<T> Accessor>
-class StridedAccessor<T, stride, Accessor, Ownership::Views> {
+class StridedView {
  public:
   core::storage<Accessor> accessor_;
-
-  /// \brief Constructor for reference accessors
-  KOKKOS_INLINE_FUNCTION
-  explicit constexpr StridedAccessor(Accessor& accessor)
-    requires(!std::is_pointer_v<Accessor>)
-      : accessor_(accessor) {
-  }
-
-  /// \brief Constructor for pointer accessors
-  KOKKOS_INLINE_FUNCTION
-  explicit constexpr StridedAccessor(Accessor accessor)
-    requires std::is_pointer_v<Accessor>
-      : accessor_(accessor) {
-  }
-
-  /// \brief Shallow copy constructor.
-  KOKKOS_INLINE_FUNCTION constexpr StridedAccessor(const StridedAccessor<T, stride, Accessor, Ownership::Views>& other)
-      : accessor_(other.accessor_) {
-  }
-
-  /// \brief Shallow move constructor.
-  KOKKOS_INLINE_FUNCTION constexpr StridedAccessor(StridedAccessor<T, stride, Accessor, Ownership::Views>&& other)
-      : accessor_(other.accessor_) {
-  }
-
-  /// \brief Element access operator
-  /// \param[in] idx The index of the element.
-  KOKKOS_INLINE_FUNCTION constexpr decltype(auto) operator[](size_t idx) {
-    return impl::access_at(accessor_, idx * stride);
-  }
-  //
-  KOKKOS_INLINE_FUNCTION constexpr decltype(auto) operator[](size_t idx) const {
-    return impl::access_at(accessor_, idx * stride);
-  }
-};  // class StridedAccessor
-
-template <typename T, size_t stride, ValidAccessor<T> Accessor>
-class StridedAccessor<T, stride, Accessor, Ownership::Owns> {
- public:
-  core::storage<Accessor> accessor_;
-
-  /// \brief Default constructor.
-  /// \note This constructor is only enabled if the Accessor has a default constructor.
-  KOKKOS_DEFAULTED_FUNCTION constexpr StridedAccessor()
-    requires HasDefaultConstructor<Accessor>
-  = default;
 
   /// \brief Constructor from a given accessor
-  /// \param[in] data The accessor.
   KOKKOS_INLINE_FUNCTION
-  explicit constexpr StridedAccessor(const Accessor& accessor)
+  explicit constexpr StridedView(const Accessor& accessor)
     requires std::is_copy_constructible_v<Accessor>
       : accessor_(accessor) {
   }
 
+  /// \brief Constructor from a given accessor
+  KOKKOS_INLINE_FUNCTION
+  explicit constexpr StridedView(Accessor&& accessor)
+    requires(std::is_copy_constructible_v<Accessor> || std::is_move_constructible_v<Accessor>)
+      : accessor_(std::forward<Accessor>(accessor)) {
+  }
+
   /// \brief Shallow copy constructor.
-  KOKKOS_INLINE_FUNCTION constexpr StridedAccessor(const StridedAccessor<T, stride, Accessor, Ownership::Owns>& other)
+  KOKKOS_INLINE_FUNCTION constexpr StridedView(const StridedView<T, stride, Accessor>& other)
       : accessor_(other.accessor_) {
   }
 
   /// \brief Shallow move constructor.
-  KOKKOS_INLINE_FUNCTION constexpr StridedAccessor(StridedAccessor<T, stride, Accessor, Ownership::Owns>&& other)
-      : accessor_(std::move(other.accessor_)) {
+  KOKKOS_INLINE_FUNCTION constexpr StridedView(StridedView<T, stride, Accessor>&& other)
+      : accessor_(other.accessor_) {
   }
 
   /// \brief Element access operator
@@ -123,25 +80,19 @@ class StridedAccessor<T, stride, Accessor, Ownership::Owns> {
   KOKKOS_INLINE_FUNCTION constexpr decltype(auto) operator[](size_t idx) const {
     return impl::access_at(accessor_, idx * stride);
   }
-};  // class StridedAccessor
+};  // class StridedView
 
-template <typename T, size_t stride, ValidAccessor<T> Accessor>
-using StridedView = StridedAccessor<T, stride, Accessor, Ownership::Views>;
-
-template <typename T, size_t stride, ValidAccessor<T> Accessor>
-using OwningStridedAccessor = StridedAccessor<T, stride, Accessor, Ownership::Owns>;
-
-//! \name StridedAccessor views
+//! \name StridedView views
 //@{
 
-/// \brief A helper function to create a StridedAccessor<T, stride, Accessor> based on a given accessor.
+/// \brief A helper function to create a StridedView<T, stride, Accessor> based on a given accessor.
 /// \param[in] data The data accessor.
 ///
 /// In practice, this function is syntactic sugar to avoid having to specify the template parameters
-/// when creating a StridedAccessor<T, stride, Accessor> from a data accessor.
+/// when creating a StridedView<T, stride, Accessor> from a data accessor.
 /// Instead of writing
 /// \code
-///   StridedAccessor<T, stride, Accessor> vec(data);
+///   StridedView<T, stride, Accessor> vec(data);
 /// \endcode
 /// you can write
 /// \code
@@ -156,7 +107,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto get_strided_view(Accessor&& data) {
 template <typename T, size_t stride, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto get_owning_strided_accessor(Accessor&& data) {
   auto data_storage = core::store(impl::unwrap_accessor(std::move(data)));
-  return OwningStridedAccessor<T, stride, decltype(data_storage)>(data_storage);
+  return StridedView<T, stride, decltype(data_storage)>(data_storage);
 }
 //@}
 

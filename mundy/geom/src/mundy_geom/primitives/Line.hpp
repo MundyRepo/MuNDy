@@ -38,14 +38,10 @@ namespace mundy {
 
 namespace geom {
 
-template <typename Scalar, ValidPointType PointType = Point<Scalar>, typename OwnershipType = math::Ownership::Owns>
+template <typename Scalar, ValidPointType PointType = Point<Scalar>>
 class Line {
   static_assert(std::is_same_v<typename PointType::scalar_t, Scalar>,
                 "The scalar_t of the PointType must match the Scalar type.");
-  static_assert(std::is_same_v<typename PointType::ownership_t, OwnershipType>,
-                "The ownership type of the PointType must match the OwnershipType.\n"
-                "This is somewhat restrictive, and we may want to relax this constraint in the future.\n"
-                "If you need to use a different ownership type, please let us know and we'll remove this restriction.");
 
  public:
   //! \name Type aliases
@@ -60,8 +56,6 @@ class Line {
   /// \brief Our vector type
   using vector_t = PointType;
 
-  /// \brief Our ownership type
-  using ownership_t = OwnershipType;
   //@}
 
   //! \name Constructors and destructor
@@ -70,15 +64,9 @@ class Line {
   /// \brief Default constructor for owning Lines. Default initialize the
   KOKKOS_FUNCTION
   constexpr Line()
-    requires std::is_same_v<OwnershipType, math::Ownership::Owns>
+    requires(math::HasNArgConstructor<point_t, scalar_t, 3> && math::HasNArgConstructor<vector_t, scalar_t, 3>)
       : center_(scalar_t(), scalar_t(), scalar_t()), direction_(scalar_t(), scalar_t(), scalar_t()) {
   }
-
-  /// \brief No default constructor for viewing Lines.
-  KOKKOS_FUNCTION
-  constexpr Line()
-    requires std::is_same_v<OwnershipType, math::Ownership::Views>
-  = delete;
 
   /// \brief Constructor to initialize the center and radius.
   /// \param[in] center The center of the Line.
@@ -102,27 +90,27 @@ class Line {
 
   /// \brief Deep copy constructor
   KOKKOS_FUNCTION
-  constexpr Line(const Line<scalar_t, point_t, ownership_t>& other)
+  constexpr Line(const Line<scalar_t, point_t>& other)
       : center_(other.center_), direction_(other.direction_) {
   }
 
   /// \brief Deep copy constructor
   template <typename OtherLineType>
   KOKKOS_FUNCTION constexpr Line(const OtherLineType& other)
-    requires(!std::is_same_v<OtherLineType, Line<scalar_t, point_t, ownership_t>>)
+    requires(!std::is_same_v<OtherLineType, Line<scalar_t, point_t>>)
       : center_(other.center_), direction_(other.direction_) {
   }
 
   /// \brief Deep move constructor
   KOKKOS_FUNCTION
-  constexpr Line(Line<scalar_t, point_t, ownership_t>&& other)
+  constexpr Line(Line<scalar_t, point_t>&& other)
       : center_(std::move(other.center_)), direction_(std::move(other.direction_)) {
   }
 
   /// \brief Deep move constructor
   template <typename OtherLineType>
   KOKKOS_FUNCTION constexpr Line(OtherLineType&& other)
-    requires(!std::is_same_v<OtherLineType, Line<scalar_t, point_t, ownership_t>>)
+    requires(!std::is_same_v<OtherLineType, Line<scalar_t, point_t>>)
       : center_(std::move(other.center_)), direction_(std::move(other.direction_)) {
   }
   //@}
@@ -132,7 +120,7 @@ class Line {
 
   /// \brief Copy assignment operator
   KOKKOS_FUNCTION
-  constexpr Line<scalar_t, point_t, ownership_t>& operator=(const Line<scalar_t, point_t, ownership_t>& other) {
+  constexpr Line<scalar_t, point_t>& operator=(const Line<scalar_t, point_t>& other) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     center_ = other.center_;
     direction_ = other.direction_;
@@ -141,8 +129,8 @@ class Line {
 
   /// \brief Copy assignment operator
   template <typename OtherLineType>
-  KOKKOS_FUNCTION constexpr Line<scalar_t, point_t, ownership_t>& operator=(const OtherLineType& other)
-    requires(!std::is_same_v<OtherLineType, Line<scalar_t, point_t, ownership_t>>)
+  KOKKOS_FUNCTION constexpr Line<scalar_t, point_t>& operator=(const OtherLineType& other)
+    requires(!std::is_same_v<OtherLineType, Line<scalar_t, point_t>>)
   {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     center_ = other.center_;
@@ -152,7 +140,7 @@ class Line {
 
   /// \brief Move assignment operator
   KOKKOS_FUNCTION
-  constexpr Line<scalar_t, point_t, ownership_t>& operator=(Line<scalar_t, point_t, ownership_t>&& other) {
+  constexpr Line<scalar_t, point_t>& operator=(Line<scalar_t, point_t>&& other) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     center_ = std::move(other.center_);
     direction_ = std::move(other.direction_);
@@ -161,8 +149,8 @@ class Line {
 
   /// \brief Move assignment operator
   template <typename OtherLineType>
-  KOKKOS_FUNCTION constexpr Line<scalar_t, point_t, ownership_t>& operator=(OtherLineType&& other)
-    requires(!std::is_same_v<OtherLineType, Line<scalar_t, point_t, ownership_t>>)
+  KOKKOS_FUNCTION constexpr Line<scalar_t, point_t>& operator=(OtherLineType&& other)
+    requires(!std::is_same_v<OtherLineType, Line<scalar_t, point_t>>)
   {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     center_ = std::move(other.center_);
@@ -248,8 +236,8 @@ class Line {
 template <typename T>
 struct impl_is_line : std::false_type {};
 //
-template <typename Scalar, ValidPointType PointType, typename OwnershipType>
-struct impl_is_line<Line<Scalar, PointType, OwnershipType>> : std::true_type {};
+template <typename Scalar, typename PointType>
+struct impl_is_line<Line<Scalar, PointType>> : std::true_type {};
 
 /// \brief Type trait to determine if a type is a Line
 template <typename T>
@@ -262,9 +250,6 @@ inline constexpr bool is_line_v = is_line<T>::value;
 template <typename LineType>
 concept ValidLineType = is_line_v<LineType>;
 
-static_assert(ValidLineType<Line<float>> && ValidLineType<const Line<float>> && ValidLineType<Line<double>> &&
-                  ValidLineType<const Line<double>>,
-              "Line should satisfy the ValidLineType concept");
 
 //! \name Non-member functions for ValidLineType objects
 //@{

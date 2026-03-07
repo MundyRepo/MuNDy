@@ -43,11 +43,8 @@ namespace math {
 /// \tparam T The type of the elements
 /// \tparam N The size of the accessor
 /// \tparam Accessor The type of the contiguous accessor
-template <typename T, size_t N, Kokkos::Array<bool, N> mask, ValidAccessor<T> Accessor, typename OwnershipType>
-class MaskedAccessor;
-
 template <typename T, size_t N, Kokkos::Array<bool, N> mask, ValidAccessor<T> Accessor>
-class MaskedAccessor<T, N, mask, Accessor, Ownership::Views> {
+class MaskedView {
  private:
   KOKKOS_INLINE_FUNCTION
   static constexpr Kokkos::Array<size_t, N> create_index_array() {
@@ -76,27 +73,27 @@ class MaskedAccessor<T, N, mask, Accessor, Ownership::Views> {
   core::storage<Accessor> accessor_;
   //@}
 
-  /// \brief Constructor for reference accessors
+  /// \brief Constructor from a given accessor
   KOKKOS_INLINE_FUNCTION
-  explicit constexpr MaskedAccessor(Accessor& accessor)
-    requires(!std::is_pointer_v<Accessor>)
+  explicit constexpr MaskedView(const Accessor& accessor)
+    requires std::is_copy_constructible_v<Accessor>
       : accessor_(accessor) {
   }
 
-  /// \brief Constructor for pointer accessors
+  /// \brief Constructor from a given accessor
   KOKKOS_INLINE_FUNCTION
-  explicit constexpr MaskedAccessor(Accessor accessor)
-    requires std::is_pointer_v<Accessor>
-      : accessor_(accessor) {
+  explicit constexpr MaskedView(Accessor&& accessor)
+    requires(std::is_copy_constructible_v<Accessor> || std::is_move_constructible_v<Accessor>)
+      : accessor_(std::forward<Accessor>(accessor)) {
   }
 
   /// \brief Shallow copy constructor.
-  KOKKOS_INLINE_FUNCTION constexpr MaskedAccessor(const MaskedAccessor<T, N, mask, Accessor, Ownership::Views>& other)
+  KOKKOS_INLINE_FUNCTION constexpr MaskedView(const MaskedView<T, N, mask, Accessor>& other)
       : accessor_(other.accessor_) {
   }
 
   /// \brief Shallow move constructor.
-  KOKKOS_INLINE_FUNCTION constexpr MaskedAccessor(MaskedAccessor<T, N, mask, Accessor, Ownership::Views>&& other)
+  KOKKOS_INLINE_FUNCTION constexpr MaskedView(MaskedView<T, N, mask, Accessor>&& other)
       : accessor_(std::move(other.accessor_)) {
   }
 
@@ -109,90 +106,19 @@ class MaskedAccessor<T, N, mask, Accessor, Ownership::Views> {
   KOKKOS_INLINE_FUNCTION constexpr decltype(auto) operator[](size_t idx) const {
     return impl::access_at(accessor_, map_index(idx));
   }
-};  // class MaskedAccessor
+};  // class MaskedView
 
-template <typename T, size_t N, Kokkos::Array<bool, N> mask, ValidAccessor<T> Accessor>
-class MaskedAccessor<T, N, mask, Accessor, Ownership::Owns> {
- private:
-  KOKKOS_INLINE_FUNCTION
-  static constexpr Kokkos::Array<size_t, N> create_index_array() {
-    Kokkos::Array<size_t, N> indices{};
-    size_t idx = 0;
-    for (size_t i = 0; i < N; ++i) {
-      if (mask[i]) {
-        indices[idx++] = i;
-      }
-    }
-    return indices;
-  }
-
-  /// \brief CUDA doesn't like static constexpr internal variables, so we use a constexpr variable in a static
-  /// function instead
-  KOKKOS_INLINE_FUNCTION
-  static constexpr size_t map_index(size_t k) {
-    constexpr Kokkos::Array<size_t, N> valid_indices = create_index_array();
-    return valid_indices[k];
-  }
-
- public:
-  //! \name Internal data
-  //@{
-
-  core::storage<Accessor> accessor_;
-  //@}
-
-  /// \brief Default constructor.
-  /// \note This constructor is only enabled if the Accessor has a default constructor.
-  KOKKOS_DEFAULTED_FUNCTION constexpr MaskedAccessor()
-    requires HasDefaultConstructor<Accessor>
-  = default;
-
-  /// \brief Constructor from a given accessor
-  /// \param[in] accessor The accessor.
-  KOKKOS_INLINE_FUNCTION
-  explicit constexpr MaskedAccessor(const Accessor& accessor)
-    requires std::is_copy_constructible_v<Accessor>
-      : accessor_(accessor) {
-  }
-
-  /// \brief Shallow copy constructor.
-  KOKKOS_INLINE_FUNCTION constexpr MaskedAccessor(const MaskedAccessor<T, N, mask, Accessor, Ownership::Owns>& other)
-      : accessor_(other.accessor_) {
-  }
-
-  /// \brief Shallow move constructor.
-  KOKKOS_INLINE_FUNCTION constexpr MaskedAccessor(MaskedAccessor<T, N, mask, Accessor, Ownership::Owns>&& other)
-      : accessor_(other.accessor_) {
-  }
-
-  /// \brief Element access operator
-  /// \param[in] idx The index of the element.
-  KOKKOS_INLINE_FUNCTION constexpr decltype(auto) operator[](size_t idx) {
-    return impl::access_at(accessor_, map_index(idx));
-  }
-  //
-  KOKKOS_INLINE_FUNCTION constexpr decltype(auto) operator[](size_t idx) const {
-    return impl::access_at(accessor_, map_index(idx));
-  }
-};  // class MaskedAccessor
-
-template <typename T, size_t N, Kokkos::Array<bool, N> mask, ValidAccessor<T> Accessor>
-using MaskedView = MaskedAccessor<T, N, mask, Accessor, Ownership::Views>;
-
-template <typename T, size_t N, Kokkos::Array<bool, N> mask, ValidAccessor<T> Accessor>
-using OwningMaskedAccessor = MaskedAccessor<T, N, mask, Accessor, Ownership::Owns>;
-
-//! \name MaskedAccessor views
+//! \name MaskedView views
 //@{
 
-/// \brief A helper function to create a MaskedAccessor<T, N, Accessor> based on a given accessor.
+/// \brief A helper function to create a MaskedView<T, N, Accessor> based on a given accessor.
 /// \param[in] accessor The accessor accessor.
 ///
 /// In practice, this function is syntactic sugar to avoid having to specify the template parameters
-/// when creating a MaskedAccessor<T, stride, Accessor> from a accessor accessor.
+/// when creating a MaskedView<T, stride, Accessor> from a accessor accessor.
 /// Instead of writing
 /// \code
-///   MaskedAccessor<T, N, mask, Accessor> vec(accessor);
+///   MaskedView<T, N, mask, Accessor> vec(accessor);
 /// \endcode
 /// you can write
 /// \code
@@ -207,7 +133,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto get_masked_view(Accessor&& accessor) {
 template <typename T, size_t N, Kokkos::Array<bool, N> mask, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto get_owning_masked_accessor(Accessor&& accessor) {
   auto accessor_storage = core::store(impl::unwrap_accessor(std::move(accessor)));
-  return OwningMaskedAccessor<T, N, mask, decltype(accessor_storage)>(accessor_storage);
+  return MaskedView<T, N, mask, decltype(accessor_storage)>(accessor_storage);
 }
 //@}
 

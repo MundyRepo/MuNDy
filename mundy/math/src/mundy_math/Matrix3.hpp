@@ -44,9 +44,9 @@ namespace math {
 /// \brief Get the lower triangular matrix of the Cholesky decomposition of a symmetric positive definite matrix
 /// \param A The symmetric positive definite matrix
 /// \return The lower triangular matrix of the Cholesky decomposition
-template <typename T, ValidAccessor<T> Accessor, typename OwnershipType,
+template <typename T, ValidAccessor<T> Accessor,
           typename OutputType = std::conditional_t<std::is_integral_v<T>, double, T>>
-KOKKOS_INLINE_FUNCTION auto cholesky(const AMatrix3<T, Accessor, OwnershipType>& A) -> Matrix3<OutputType> {
+KOKKOS_INLINE_FUNCTION auto cholesky(const AMatrix3<T, Accessor>& A) -> Matrix3<OutputType> {
   const OutputType tol = get_zero_tolerance<OutputType>();
   const OutputType a00 = static_cast<OutputType>(A(0, 0));
   const OutputType a10 = static_cast<OutputType>(A(1, 0));
@@ -72,10 +72,10 @@ KOKKOS_INLINE_FUNCTION auto cholesky(const AMatrix3<T, Accessor, OwnershipType>&
   return Matrix3<OutputType>(l11, OutputType(0), OutputType(0), l21, l22, OutputType(0), l31, l32, l33);
 }
 //
-template <typename T, ValidAccessor<T> Accessor, typename OwnershipType,
+template <typename T, ValidAccessor<T> Accessor,
           typename OutputType = std::conditional_t<std::is_integral_v<T>, float, T>>
-KOKKOS_INLINE_FUNCTION auto cholesky_f(const AMatrix3<T, Accessor, OwnershipType>& A) -> Matrix3<OutputType> {
-  return cholesky<T, Accessor, OwnershipType, OutputType>(A);
+KOKKOS_INLINE_FUNCTION auto cholesky_f(const AMatrix3<T, Accessor>& A) -> Matrix3<OutputType> {
+  return cholesky<T, Accessor, OutputType>(A);
 }
 
 /// \brief A temporary concept to check if a type is a valid Matrix3 type
@@ -199,45 +199,35 @@ concept ValidMatrix3Type = is_matrix3_v<std::decay_t<Matrix3Type>> &&
                              } -> std::convertible_to<const typename std::decay_t<Matrix3Type>::scalar_t>;
                            };  // ValidMatrix3Type
 
-static_assert(is_matrix3_v<AMatrix3<int>>, "Odd, default matrix3 is not a matrix3.");
+static_assert(is_matrix3_v<Matrix3<int>>, "Odd, default matrix3 is not a matrix3.");
 static_assert(is_matrix3_v<AMatrix3<int, Array<int, 9>>>, "Odd, default matrix3 with Array accessor is not a matrix3.");
-static_assert(is_matrix3_v<Matrix3View<int>>, "Odd, Matrix3View is not a matrix3.");
-static_assert(is_matrix3_v<Matrix3<int>>, "Odd, OwningMatrix3 is not a matrix3.");
 
-//! \name Matrix3<T, Accessor> views
+//! \name AMatrix3<T, Accessor> views
 //@{
 
-/// \brief A helper function to create a Matrix3<T, Accessor> based on a given (valid) accessor.
+/// \brief A helper function to create a AMatrix3<T, Accessor> based on a given (valid) accessor.
 /// \param[in] data The data accessor.
 ///
 /// In practice, this function is syntactic sugar to avoid having to specify the template parameters
-/// when creating a Matrix3<T, Accessor> from a data accessor.
+/// when creating a AMatrix3<T, Accessor> from a data accessor.
 /// Instead of writing
 /// \code
-///   Matrix3<T, Accessor> mat(data);
+///   AMatrix3<T, Accessor> mat(data);
 /// \endcode
 /// you can write
 /// \code
 ///   auto mat = get_matrix3_view<T>(data);
 /// \endcode
 template <typename T, ValidAccessor<T> Accessor>
-KOKKOS_INLINE_FUNCTION constexpr auto get_matrix3_view(Accessor& data) {
-  return Matrix3View<T, Accessor>(data);
-}
-
-template <typename T, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto get_matrix3_view(Accessor&& data) {
-  return Matrix3View<T, Accessor>(std::forward<Accessor>(data));
-}
-
-template <typename T, ValidAccessor<T> Accessor>
-KOKKOS_INLINE_FUNCTION constexpr auto get_owning_matrix3(Accessor& data) {
-  return OwningMatrix3<T, Accessor>(data);
+  auto data_storage = core::store(impl::unwrap_accessor(std::forward<Accessor>(data)));
+  return AMatrix3<T, decltype(data_storage)>(data_storage);
 }
 
 template <typename T, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto get_owning_matrix3(Accessor&& data) {
-  return OwningMatrix3<T, Accessor>(std::forward<Accessor>(data));
+  auto data_storage = core::store(impl::unwrap_accessor(std::move(data)));
+  return AMatrix3<T, decltype(data_storage)>(data_storage);
 }
 //@}
 

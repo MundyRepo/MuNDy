@@ -37,14 +37,10 @@ namespace mundy {
 
 namespace geom {
 
-template <typename Scalar, ValidPointType PointType = Point<Scalar>, typename OwnershipType = math::Ownership::Owns>
+template <typename Scalar, ValidPointType PointType = Point<Scalar>>
 class Sphere {
   static_assert(std::is_same_v<typename PointType::scalar_t, Scalar>,
                 "The scalar type of the PointType must match the scalar type of the Sphere.");
-  static_assert(std::is_same_v<typename PointType::ownership_t, OwnershipType>,
-                "The ownership type of the PointType must match the ownership type of the Sphere.\n"
-                "This is somewhat restrictive, and we may want to relax this constraint in the future.\n"
-                "If you need to use a different ownership type, please let us know and we'll remove this restriction.");
 
  public:
   //! \name Type aliases
@@ -56,8 +52,6 @@ class Sphere {
   /// \brief Our point type
   using point_t = PointType;
 
-  /// \brief Our ownership type
-  using ownership_t = OwnershipType;
   //@}
 
   //! \name Constructors and destructor
@@ -67,15 +61,9 @@ class Sphere {
   /// value of -1
   KOKKOS_FUNCTION
   constexpr Sphere()
-    requires std::is_same_v<OwnershipType, math::Ownership::Owns>
+    requires math::HasNArgConstructor<point_t, scalar_t, 3>
       : center_(scalar_t(), scalar_t(), scalar_t()), radius_(static_cast<scalar_t>(-1)) {
   }
-
-  /// \brief No default constructor for viewing Spheres.
-  KOKKOS_FUNCTION
-  constexpr Sphere()
-    requires std::is_same_v<OwnershipType, math::Ownership::Views>
-  = delete;
 
   /// \brief Constructor to initialize the center and radius.
   /// \param[in] center The center of the Sphere.
@@ -99,27 +87,27 @@ class Sphere {
 
   /// \brief Deep copy constructor
   KOKKOS_FUNCTION
-  constexpr Sphere(const Sphere<scalar_t, point_t, ownership_t>& other)
+  constexpr Sphere(const Sphere<scalar_t, point_t>& other)
       : center_(other.center_), radius_(other.radius_) {
   }
 
   /// \brief Deep copy constructor with different sphere type
   template <typename OtherSphereType>
   KOKKOS_FUNCTION constexpr Sphere(const OtherSphereType& other)
-    requires(!std::is_same_v<OtherSphereType, Sphere<scalar_t, point_t, ownership_t>>)
+    requires(!std::is_same_v<OtherSphereType, Sphere<scalar_t, point_t>>)
       : center_(other.center_), radius_(other.radius_) {
   }
 
   /// \brief Deep move constructor
   KOKKOS_FUNCTION
-  constexpr Sphere(Sphere<scalar_t, point_t, ownership_t>&& other)
+  constexpr Sphere(Sphere<scalar_t, point_t>&& other)
       : center_(std::move(other.center_)), radius_(std::move(other.radius_)) {
   }
 
   /// \brief Deep move constructor
   template <typename OtherSphereType>
   KOKKOS_FUNCTION constexpr Sphere(OtherSphereType&& other)
-    requires(!std::is_same_v<OtherSphereType, Sphere<scalar_t, point_t, ownership_t>>)
+    requires(!std::is_same_v<OtherSphereType, Sphere<scalar_t, point_t>>)
       : center_(std::move(other.center_)), radius_(std::move(other.radius_)) {
   }
   //@}
@@ -129,7 +117,7 @@ class Sphere {
 
   /// \brief Copy assignment operator
   KOKKOS_FUNCTION
-  constexpr Sphere<scalar_t, point_t, ownership_t>& operator=(const Sphere<scalar_t, point_t, ownership_t>& other) {
+  constexpr Sphere<scalar_t, point_t>& operator=(const Sphere<scalar_t, point_t>& other) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     center_ = other.center_;
     radius_ = other.radius_;
@@ -138,8 +126,8 @@ class Sphere {
 
   /// \brief Copy assignment operator
   template <typename OtherSphereType>
-  KOKKOS_FUNCTION constexpr Sphere<scalar_t, point_t, ownership_t>& operator=(const OtherSphereType& other)
-    requires(!std::is_same_v<OtherSphereType, Sphere<scalar_t, point_t, ownership_t>>)
+  KOKKOS_FUNCTION constexpr Sphere<scalar_t, point_t>& operator=(const OtherSphereType& other)
+    requires(!std::is_same_v<OtherSphereType, Sphere<scalar_t, point_t>>)
   {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     center_ = other.center_;
@@ -149,7 +137,7 @@ class Sphere {
 
   /// \brief Move assignment operator
   KOKKOS_FUNCTION
-  constexpr Sphere<scalar_t, point_t, ownership_t>& operator=(Sphere<scalar_t, point_t, ownership_t>&& other) {
+  constexpr Sphere<scalar_t, point_t>& operator=(Sphere<scalar_t, point_t>&& other) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     center_ = std::move(other.center_);
     radius_ = std::move(other.radius_);
@@ -158,8 +146,8 @@ class Sphere {
 
   /// \brief Move assignment operator
   template <typename OtherSphereType>
-  KOKKOS_FUNCTION constexpr Sphere<scalar_t, point_t, ownership_t>& operator=(OtherSphereType&& other)
-    requires(!std::is_same_v<OtherSphereType, Sphere<scalar_t, point_t, ownership_t>>)
+  KOKKOS_FUNCTION constexpr Sphere<scalar_t, point_t>& operator=(OtherSphereType&& other)
+    requires(!std::is_same_v<OtherSphereType, Sphere<scalar_t, point_t>>)
   {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     center_ = std::move(other.center_);
@@ -227,15 +215,15 @@ class Sphere {
 
  private:
   point_t center_;
-  std::conditional_t<std::is_same_v<ownership_t, math::Ownership::Owns>, scalar_t, scalar_t&> radius_;
+  scalar_t radius_;
 };
 
 /// @brief (Implementation) Type trait to determine if a type is a Sphere
 template <typename T>
 struct is_sphere_impl : std::false_type {};
 //
-template <typename Scalar, ValidPointType PointType, typename OwnershipType>
-struct is_sphere_impl<Sphere<Scalar, PointType, OwnershipType>> : std::true_type {};
+template <typename Scalar, ValidPointType PointType>
+struct is_sphere_impl<Sphere<Scalar, PointType>> : std::true_type {};
 
 /// \brief Type trait to determine if a type is a Sphere
 template <typename T>

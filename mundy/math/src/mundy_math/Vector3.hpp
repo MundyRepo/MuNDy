@@ -44,7 +44,7 @@ namespace mundy {
 
 namespace math {
 
-/// \brief A temporary concept to check if a type is a valid Vector3 type
+/// \brief A temporary concept to check if a type is a valid AVector3 type
 /// TODO(palmerb4): Extend this concept to contain all shared setters and getters for our vectors.
 template <typename Vector3Type>
 concept ValidVector3Type = is_vector3_v<std::decay_t<Vector3Type>> &&
@@ -88,13 +88,12 @@ concept ValidVector3Type = is_vector3_v<std::decay_t<Vector3Type>> &&
 /// \brief Cross product
 /// \param[in] a The first vector.
 /// \param[in] b The second vector.
-template <typename U, typename T, ValidAccessor<U> Accessor1, typename Ownership1, ValidAccessor<T> Accessor2,
-          typename Ownership2>
-KOKKOS_INLINE_FUNCTION constexpr auto cross(const AVector3<U, Accessor1, Ownership1>& a,
-                                            const AVector3<T, Accessor2, Ownership2>& b)
-    -> Vector3<std::common_type_t<T, U>> {
+template <typename U, typename T, ValidAccessor<U> Accessor1, ValidAccessor<T> Accessor2>
+KOKKOS_INLINE_FUNCTION constexpr auto cross(const AVector3<U, Accessor1>& a,
+                                            const AVector3<T, Accessor2>& b)
+    -> AVector3<std::common_type_t<T, U>> {
   using CommonType = std::common_type_t<T, U>;
-  Vector3<CommonType> result;
+  AVector3<CommonType> result;
   result[0] = static_cast<CommonType>(a[1]) * static_cast<CommonType>(b[2]) -
               static_cast<CommonType>(a[2]) * static_cast<CommonType>(b[1]);
   result[1] = static_cast<CommonType>(a[2]) * static_cast<CommonType>(b[0]) -
@@ -105,40 +104,32 @@ KOKKOS_INLINE_FUNCTION constexpr auto cross(const AVector3<U, Accessor1, Ownersh
 }
 //@}
 
-//! \name Vector3<T, Accessor> views
+//! \name AVector3<T, Accessor> views
 //@{
 
-/// \brief A helper function to create a Vector3<T, Accessor> based on a given accessor.
+/// \brief A helper function to create a AVector3<T, Accessor> based on a given accessor.
 /// \param[in] data The data accessor.
 ///
 /// In practice, this function is syntactic sugar to avoid having to specify the template parameters
-/// when creating a Vector3<T, Accessor> from a data accessor.
+/// when creating a AVector3<T, Accessor> from a data accessor.
 /// Instead of writing
 /// \code
-///   Vector3<T, Accessor> vec(data);
+///   AVector3<T, Accessor> vec(data);
 /// \endcode
 /// you can write
 /// \code
 ///   auto vec = get_vector3_view<T>(data);
 /// \endcode
 template <typename T, ValidAccessor<T> Accessor>
-KOKKOS_INLINE_FUNCTION constexpr auto get_vector3_view(Accessor& data) {
-  return Vector3View<T, Accessor>(data);
-}
-
-template <typename T, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto get_vector3_view(Accessor&& data) {
-  return Vector3View<T, Accessor>(std::forward<Accessor>(data));
-}
-
-template <typename T, ValidAccessor<T> Accessor>
-KOKKOS_INLINE_FUNCTION constexpr auto get_owning_vector3(Accessor& data) {
-  return OwningVector3<T, Accessor>(data);
+  auto data_storage = core::store(impl::unwrap_accessor(std::forward<Accessor>(data)));
+  return AVector3<T, decltype(data_storage)>(data_storage);
 }
 
 template <typename T, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto get_owning_vector3(Accessor&& data) {
-  return OwningVector3<T, Accessor>(std::forward<Accessor>(data));
+  auto data_storage = core::store(impl::unwrap_accessor(std::move(data)));
+  return AVector3<T, decltype(data_storage)>(data_storage);
 }
 //@}
 

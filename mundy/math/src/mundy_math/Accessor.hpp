@@ -111,7 +111,7 @@ KOKKOS_INLINE_FUNCTION constexpr decltype(auto) unwrap_accessor(Accessor&& acces
 //
 // To give our accessors names, we will use the following naming convention:
 //   - Vector3Data, Matrix3Data, or QuaternionData: contain non-strided arrays of the correct sizes templated by type
-//   - Vector3View, Matrix3View, or QuaternionView: contain Kokkos::Views templated by type and layout
+//   - Vector3, Matrix3View, or Quaternion: contain Kokkos::Views templated by type and layout
 // Note that there are no inherent requirements on the types within the accessors, simply requirements on lengths. It's
 // up to Vector3, Matrix3, and Quaternion to enforce their type requirements. As a result, the Data and View classes can
 // all be consistently named as Arrays and Views, respectively and templated by their size.

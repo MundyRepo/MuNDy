@@ -72,9 +72,8 @@ void is_close_debug(const U& a, const T& b, const std::string& message_if_fail =
 /// \param[in] m1 The first Matrix3
 /// \param[in] m2 The second Matrix3
 /// \param[in] message_if_fail The message to print if the test fails
-template <typename U, typename T, ValidAccessor<U> Accessor1, typename OwnershipType1, ValidAccessor<T> Accessor2,
-          typename OwnershipType2>
-void is_close_debug(const AMatrix3<U, Accessor1, OwnershipType1>& m1, const AMatrix3<T, Accessor2, OwnershipType2>& m2,
+template <typename U, typename T, ValidAccessor<U> Accessor1, ValidAccessor<T> Accessor2>
+void is_close_debug(const AMatrix3<U, Accessor1>& m1, const AMatrix3<T, Accessor2>& m2,
                     const std::string& message_if_fail = "") {
   if (!is_approx_close(m1, m2)) {
     std::cout << "m1 = " << m1 << std::endl;
@@ -87,9 +86,8 @@ void is_close_debug(const AMatrix3<U, Accessor1, OwnershipType1>& m1, const AMat
 /// \param[in] v1 The first Vector3
 /// \param[in] v2 The second Vector3
 /// \param[in] message_if_fail The message to print if the test fails
-template <typename U, typename T, ValidAccessor<U> Accessor1, typename OwnershipType1, ValidAccessor<T> Accessor2,
-          typename OwnershipType2>
-void is_close_debug(const AVector3<U, Accessor1, OwnershipType1>& v1, const AVector3<T, Accessor2, OwnershipType2>& v2,
+template <typename U, typename T, ValidAccessor<U> Accessor1, ValidAccessor<T> Accessor2>
+void is_close_debug(const AVector3<U, Accessor1>& v1, const AVector3<T, Accessor2>& v2,
                     const std::string& message_if_fail = "") {
   if (!is_approx_close(v1, v2)) {
     std::cout << "v1 = " << v1 << std::endl;
@@ -102,10 +100,9 @@ void is_close_debug(const AVector3<U, Accessor1, OwnershipType1>& v1, const AVec
 /// \param[in] q1 The first Quaternion
 /// \param[in] q2 The second Quaternion
 /// \param[in] message_if_fail The message to print if the test fails
-template <typename U, typename T, ValidAccessor<U> Accessor1, typename OwnershipType1, ValidAccessor<T> Accessor2,
-          typename OwnershipType2>
-void is_close_debug(const AQuaternion<U, Accessor1, OwnershipType1>& q1,
-                    const AQuaternion<T, Accessor2, OwnershipType2>& q2, const std::string& message_if_fail = "") {
+template <typename U, typename T, ValidAccessor<U> Accessor1, ValidAccessor<T> Accessor2>
+void is_close_debug(const AQuaternion<U, Accessor1>& q1,
+                    const AQuaternion<T, Accessor2>& q2, const std::string& message_if_fail = "") {
   if (!is_approx_close(q1, q2)) {
     std::cout << "q1 = " << q1 << std::endl;
     std::cout << "q2 = " << q2 << std::endl;
@@ -114,13 +111,12 @@ void is_close_debug(const AQuaternion<U, Accessor1, OwnershipType1>& q1,
 }
 
 //// \brief Test that two Matrix3s are different
-/// \param[in] m1 The first Matrix3
-/// \param[in] m2 The second Matrix3
+/// \param[in] m1 The first AMatrix3
+/// \param[in] m2 The second AMatrix3
 /// \param[in] message_if_fail The message to print if the test fails
-template <typename U, typename T, ValidAccessor<U> Accessor1, typename OwnershipType1, ValidAccessor<T> Accessor2,
-          typename OwnershipType2>
-void is_different_debug(const AMatrix3<U, Accessor1, OwnershipType1>& m1,
-                        const AMatrix3<T, Accessor2, OwnershipType2>& m2, const std::string& message_if_fail = "") {
+template <typename U, typename T, ValidAccessor<U> Accessor1, ValidAccessor<T> Accessor2>
+void is_different_debug(const AMatrix3<U, Accessor1>& m1,
+                        const AMatrix3<T, Accessor2>& m2, const std::string& message_if_fail = "") {
   if (is_approx_close(m1, m2)) {
     std::cout << "m1 = " << m1 << std::endl;
     std::cout << "m2 = " << m2 << std::endl;
@@ -132,10 +128,9 @@ void is_different_debug(const AMatrix3<U, Accessor1, OwnershipType1>& m1,
 /// \param[in] v1 The first Vector3
 /// \param[in] v2 The second Vector3
 /// \param[in] message_if_fail The message to print if the test fails
-template <typename U, typename T, ValidAccessor<U> Accessor1, typename OwnershipType1, ValidAccessor<T> Accessor2,
-          typename OwnershipType2>
-void is_different_debug(const AVector3<U, Accessor1, OwnershipType1>& v1,
-                        const AVector3<T, Accessor2, OwnershipType2>& v2, const std::string& message_if_fail = "") {
+template <typename U, typename T, ValidAccessor<U> Accessor1, ValidAccessor<T> Accessor2>
+void is_different_debug(const AVector3<U, Accessor1>& v1,
+                        const AVector3<T, Accessor2>& v2, const std::string& message_if_fail = "") {
   if (is_approx_close(v1, v2)) {
     std::cout << "v1 = " << v1 << std::endl;
     std::cout << "v2 = " << v2 << std::endl;
@@ -147,10 +142,9 @@ void is_different_debug(const AVector3<U, Accessor1, OwnershipType1>& v1,
 /// \param[in] q1 The first Quaternion
 /// \param[in] q2 The second Quaternion
 /// \param[in] message_if_fail The message to print if the test fails
-template <typename U, typename T, ValidAccessor<U> Accessor1, typename OwnershipType1, ValidAccessor<T> Accessor2,
-          typename OwnershipType2>
-void is_different_debug(const AQuaternion<U, Accessor1, OwnershipType1>& q1,
-                        const AQuaternion<T, Accessor2, OwnershipType2>& q2, const std::string& message_if_fail = "") {
+template <typename U, typename T, ValidAccessor<U> Accessor1, ValidAccessor<T> Accessor2>
+void is_different_debug(const AQuaternion<U, Accessor1>& q1,
+                        const AQuaternion<T, Accessor2>& q2, const std::string& message_if_fail = "") {
   if (is_approx_close(q1, q2)) {
     std::cout << "q1 = " << q1 << std::endl;
     std::cout << "q2 = " << q2 << std::endl;

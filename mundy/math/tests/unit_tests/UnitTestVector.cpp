@@ -77,10 +77,9 @@ void is_close_debug(const U& a, const T& b, const std::string& message_if_fail =
 /// \param[in] v1 The first Vector
 /// \param[in] v2 The second Vector
 /// \param[in] message_if_fail The message to print if the test fails
-template <size_t N, typename U, typename OtherAccessor, typename OtherOwnershipType, typename T, typename Accessor,
-          typename OwnershipType>
-void is_close_debug(const AVector<U, N, OtherAccessor, OtherOwnershipType>& v1,
-                    const AVector<T, N, Accessor, OwnershipType>& v2, const std::string& message_if_fail = "") {
+template <size_t N, typename U, typename OtherAccessor, typename T, typename Accessor>
+void is_close_debug(const AVector<U, N, OtherAccessor>& v1,
+                    const AVector<T, N, Accessor>& v2, const std::string& message_if_fail = "") {
   if (!is_approx_close(v1, v2)) {
     std::cout << "v1 = " << v1 << std::endl;
     std::cout << "v2 = " << v2 << std::endl;
@@ -92,10 +91,9 @@ void is_close_debug(const AVector<U, N, OtherAccessor, OtherOwnershipType>& v1,
 /// \param[in] v1 The first Vector
 /// \param[in] v2 The second Vector
 /// \param[in] message_if_fail The message to print if the test fails
-template <size_t N, typename U, typename OtherAccessor, typename OtherOwnershipType, typename T, typename Accessor,
-          typename OwnershipType>
-void is_different_debug(const AVector<U, N, OtherAccessor, OtherOwnershipType>& v1,
-                        const AVector<T, N, Accessor, OwnershipType>& v2, const std::string& message_if_fail = "") {
+template <size_t N, typename U, typename OtherAccessor, typename T, typename Accessor>
+void is_different_debug(const AVector<U, N, OtherAccessor>& v1,
+                        const AVector<T, N, Accessor>& v2, const std::string& message_if_fail = "") {
   if (is_approx_close(v1, v2)) {
     std::cout << "v1 = " << v1 << std::endl;
     std::cout << "v2 = " << v2 << std::endl;
@@ -688,7 +686,7 @@ TYPED_TEST(VectorSingleTypeTest, ScalarConversionLengthOne) {
   Kokkos::Array<TypeParam, 1> array{9};
   auto view = get_vector_view<TypeParam, 1>(array);
   TypeParam scalar_from_view = view;
-  is_close_debug(scalar_from_view, static_cast<TypeParam>(9), "Implicit scalar conversion for VectorView<1> failed.");
+  is_close_debug(scalar_from_view, static_cast<TypeParam>(9), "Implicit scalar conversion for Vector<1> failed.");
 }
 
 TYPED_TEST(VectorSingleTypeTest, OstreamFormatting) {

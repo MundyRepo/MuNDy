@@ -59,22 +59,21 @@ void is_close_debug(const U& a, const T& b, const std::string& message_if_fail =
   EXPECT_TRUE(is_approx_close(a, b)) << message_if_fail;
 }
 
-template <typename U, size_t R1, size_t C1, ValidAccessor<U> A1, typename O1, typename T, size_t R2, size_t C2,
-          ValidAccessor<T> A2, typename O2>
-void is_close_debug(const AMatrix<U, R1, C1, A1, O1>& m1, const AMatrix<T, R2, C2, A2, O2>& m2,
+template <typename U, size_t R1, size_t C1, ValidAccessor<U> A1, typename T, size_t R2, size_t C2,
+          ValidAccessor<T> A2>
+void is_close_debug(const AMatrix<U, R1, C1, A1>& m1, const AMatrix<T, R2, C2, A2>& m2,
                     const std::string& message_if_fail = "") {
   EXPECT_TRUE(is_approx_close(m1, m2)) << message_if_fail;
 }
 
-template <typename U, size_t N1, ValidAccessor<U> A1, typename O1, typename T, size_t N2, ValidAccessor<T> A2,
-          typename O2>
-void is_close_debug(const AVector<U, N1, A1, O1>& v1, const AVector<T, N2, A2, O2>& v2,
+template <typename U, size_t N1, ValidAccessor<U> A1, typename T, size_t N2, ValidAccessor<T> A2>
+void is_close_debug(const AVector<U, N1, A1>& v1, const AVector<T, N2, A2>& v2,
                     const std::string& message_if_fail = "") {
   EXPECT_TRUE(is_approx_close(v1, v2)) << message_if_fail;
 }
 
-template <typename T, size_t N, size_t M, ValidAccessor<T> A, typename O>
-void expect_matrix_close(const AMatrix<T, N, M, A, O>& m, const std::initializer_list<double>& expected) {
+template <typename T, size_t N, size_t M, ValidAccessor<T> A>
+void expect_matrix_close(const AMatrix<T, N, M, A>& m, const std::initializer_list<double>& expected) {
   ASSERT_EQ(expected.size(), N * M);
   size_t i = 0;
   for (double value : expected) {

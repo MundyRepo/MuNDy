@@ -55,37 +55,24 @@ class AABB {
 
   /// \brief Our point type for the max corner
   using max_point_t = MaxPointType;
-
-  /// \brief Our ownership type.
-  /// One of three values
-  ///  - math::Ownership::Owns: If both the min and max points own their data.
-  ///  - math::Ownership::Views: If both the min and max points are views into other data.
-  ///  - math::Ownership::Mixed: If the min and max points have different ownership types.
-  using OwnershipType = std::conditional_t<
-      std::is_same_v<typename min_point_t::ownership_t, math::Ownership::Owns> &&
-          std::is_same_v<typename max_point_t::ownership_t, math::Ownership::Owns>,
-      math::Ownership::Owns,
-      std::conditional_t<std::is_same_v<typename min_point_t::ownership_t, math::Ownership::Views> &&
-                             std::is_same_v<typename max_point_t::ownership_t, math::Ownership::Views>,
-                         math::Ownership::Views, math::Ownership::Mixed>>;
   //@}
 
   //! \name Constructors and destructor
   //@{
 
-  /// \brief Default constructor for owning AABBs. Initializes the aabb inside out and as large as possible.
-  /// Nothing can be inside this aabb.
+  /// \brief Default constructor (enabled when both points are default constructible).
+  /// Initializes the aabb inside-out so nothing can be inside this aabb.
   KOKKOS_FUNCTION
   constexpr AABB()
-    requires std::is_same_v<OwnershipType, math::Ownership::Owns>
-      : min_corner_(scalar_max(), scalar_max(), scalar_max()), max_corner_(scalar_min(), scalar_min(), scalar_min()) {
+    requires(math::HasDefaultConstructor<min_point_t> && math::HasDefaultConstructor<max_point_t>)
+      : min_corner_(), max_corner_() {
+    min_corner_[0] = scalar_max();
+    min_corner_[1] = scalar_max();
+    min_corner_[2] = scalar_max();
+    max_corner_[0] = scalar_min();
+    max_corner_[1] = scalar_min();
+    max_corner_[2] = scalar_min();
   }
-
-  /// \brief No default constructor for viewing/mixed AABBs.
-  KOKKOS_FUNCTION
-  constexpr AABB()
-    requires(!std::is_same_v<OwnershipType, math::Ownership::Owns>)
-  = delete;
 
   /// \brief Constructor to directly set the min and max corners.
   /// \param[in] min_corner The minimum corner of the aabb.
@@ -113,7 +100,7 @@ class AABB {
   /// \param[in] z_max The maximum z-coordinate.
   KOKKOS_FUNCTION
   constexpr AABB(scalar_t x_min, scalar_t y_min, scalar_t z_min, scalar_t x_max, scalar_t y_max, scalar_t z_max)
-    requires std::is_same_v<OwnershipType, math::Ownership::Owns>
+    requires(math::HasNArgConstructor<min_point_t, scalar_t, 3> && math::HasNArgConstructor<max_point_t, scalar_t, 3>)
       : min_corner_(x_min, y_min, z_min), max_corner_(x_max, y_max, z_max) {
   }
 
@@ -205,101 +192,24 @@ class AABB {
     return i < 3 ? min_corner_[i] : max_corner_[i - 3];
   }
 
-  /// \brief Accessor for the minimum corner
-  KOKKOS_FUNCTION
-  constexpr const min_point_t& min_corner() const {
-    return min_corner_;
-  }
-
-  /// \brief Accessor for the minimum corner
-  KOKKOS_FUNCTION
-  constexpr min_point_t& min_corner() {
-    return min_corner_;
-  }
-
-  /// \brief Accessor for the maximum corner
-  KOKKOS_FUNCTION
-  constexpr const max_point_t& max_corner() const {
-    return max_corner_;
-  }
-
-  /// \brief Accessor for the maximum corner
-  KOKKOS_FUNCTION
-  constexpr max_point_t& max_corner() {
-    return max_corner_;
-  }
-
-  /// \brief Accessor for x_min
-  KOKKOS_FUNCTION
-  constexpr const scalar_t& x_min() const {
-    return min_corner_[0];
-  }
-
-  /// \brief Accessor for x_min
-  KOKKOS_FUNCTION
-  constexpr scalar_t& x_min() {
-    return min_corner_[0];
-  }
-
-  /// \brief Accessor for y_min
-  KOKKOS_FUNCTION
-  constexpr const scalar_t& y_min() const {
-    return min_corner_[1];
-  }
-
-  /// \brief Accessor for y_min
-  KOKKOS_FUNCTION
-  constexpr scalar_t& y_min() {
-    return min_corner_[1];
-  }
-
-  /// \brief Accessor for z_min
-  KOKKOS_FUNCTION
-  constexpr const scalar_t& z_min() const {
-    return min_corner_[2];
-  }
-
-  /// \brief Accessor for z_min
-  KOKKOS_FUNCTION
-  constexpr scalar_t& z_min() {
-    return min_corner_[2];
-  }
-
-  /// \brief Accessor for x_max
-  KOKKOS_FUNCTION
-  constexpr const scalar_t& x_max() const {
-    return max_corner_[0];
-  }
-
-  /// \brief Accessor for x_max
-  KOKKOS_FUNCTION
-  constexpr scalar_t& x_max() {
-    return max_corner_[0];
-  }
-
-  /// \brief Accessor for y_max
-  KOKKOS_FUNCTION
-  constexpr const scalar_t& y_max() const {
-    return max_corner_[1];
-  }
-
-  /// \brief Accessor for y_max
-  KOKKOS_FUNCTION
-  constexpr scalar_t& y_max() {
-    return max_corner_[1];
-  }
-
-  /// \brief Accessor for z_max
-  KOKKOS_FUNCTION
-  constexpr const scalar_t& z_max() const {
-    return max_corner_[2];
-  }
-
-  /// \brief Accessor for z_max
-  KOKKOS_FUNCTION
-  constexpr scalar_t& z_max() {
-    return max_corner_[2];
-  }
+  // clang-format off
+  KOKKOS_FUNCTION constexpr const min_point_t& min_corner() const { return min_corner_; }
+  KOKKOS_FUNCTION constexpr       min_point_t& min_corner()       { return min_corner_; }
+  KOKKOS_FUNCTION constexpr const max_point_t& max_corner() const { return max_corner_; }
+  KOKKOS_FUNCTION constexpr       max_point_t& max_corner()       { return max_corner_; }
+  KOKKOS_FUNCTION constexpr const scalar_t& x_min() const { return min_corner_[0]; }
+  KOKKOS_FUNCTION constexpr       scalar_t& x_min()       { return min_corner_[0]; }
+  KOKKOS_FUNCTION constexpr const scalar_t& y_min() const { return min_corner_[1]; }
+  KOKKOS_FUNCTION constexpr       scalar_t& y_min()       { return min_corner_[1]; }
+  KOKKOS_FUNCTION constexpr const scalar_t& z_min() const { return min_corner_[2]; }
+  KOKKOS_FUNCTION constexpr       scalar_t& z_min()       { return min_corner_[2]; }
+  KOKKOS_FUNCTION constexpr const scalar_t& x_max() const { return max_corner_[0]; }
+  KOKKOS_FUNCTION constexpr       scalar_t& x_max()       { return max_corner_[0]; }
+  KOKKOS_FUNCTION constexpr const scalar_t& y_max() const { return max_corner_[1]; }
+  KOKKOS_FUNCTION constexpr       scalar_t& y_max()       { return max_corner_[1]; }
+  KOKKOS_FUNCTION constexpr const scalar_t& z_max() const { return max_corner_[2]; }
+  KOKKOS_FUNCTION constexpr       scalar_t& z_max()       { return max_corner_[2]; }
+  // clang-format on
   //@}
 
   //! \name Setters
@@ -382,7 +292,7 @@ AABB(MinPointType, MaxPointType) -> AABB<typename MaxPointType::scalar_t, MinPoi
 template <typename T>
 struct is_aabb_impl : std::false_type {};
 //
-template <typename Scalar, ValidPointType MinPointType, ValidPointType MaxPointType>
+template <typename Scalar, typename MinPointType, typename MaxPointType>
 struct is_aabb_impl<AABB<Scalar, MinPointType, MaxPointType>> : std::true_type {};
 
 /// @brief Type trait to determine if a type is an AABB
@@ -395,10 +305,6 @@ constexpr bool is_aabb_v = is_aabb<T>::value;
 /// @brief Concept to determine if a type is a valid AABB type
 template <typename AABBType>
 concept ValidAABBType = is_aabb_v<AABBType>;
-
-static_assert(ValidAABBType<AABB<float>> && ValidAABBType<const AABB<float>> && ValidAABBType<AABB<double>> &&
-                  ValidAABBType<const AABB<double>>,
-              "AABB should satisfy the ValidAABBType concept.");
 
 //! \name Non-member functions for ValidAABBType objects
 //@{

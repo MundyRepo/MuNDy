@@ -45,22 +45,18 @@ namespace geom {
 /// The following is a methodological choice to use the Vector3 class as the underlying data structure for the Point
 /// class. This is done to allow points to access the same mathematical operations as vectors (dot product, cross
 /// product, etc.). Had we created our own interface, we would have hidden the mathematical operations from the user.
-template <typename Scalar, math::ValidAccessor<Scalar> Accessor = math::Array<Scalar, 3>,
-          typename OwnershipType = math::Ownership::Owns>
-using Point = math::AVector3<Scalar, Accessor, OwnershipType>;
-//
 template <typename Scalar, math::ValidAccessor<Scalar> Accessor = math::Array<Scalar, 3>>
-using OwningPoint = Point<Scalar, Accessor, math::Ownership::Owns>;
+using APoint = math::AVector3<Scalar, Accessor>;
 //
-template <typename Scalar, math::ValidAccessor<Scalar> Accessor = math::Array<Scalar, 3>>
-using PointView = Point<Scalar, Accessor, math::Ownership::Views>;
+template <typename Scalar>
+using Point = APoint<Scalar>;
 
 /// @brief (Implementation) Type trait to determine if a type is an AABB
 template <typename T>
 struct is_point_impl : std::false_type {};
 //
-template <typename Scalar, math::ValidAccessor<Scalar> Accessor, typename OwnershipType>
-struct is_point_impl<Point<Scalar, Accessor, OwnershipType>> : std::true_type {};
+template <typename Scalar, math::ValidAccessor<Scalar> Accessor>
+struct is_point_impl<APoint<Scalar, Accessor>> : std::true_type {};
 
 /// @brief Type trait to determine if a type is a Point
 template <typename T>

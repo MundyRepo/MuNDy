@@ -39,18 +39,11 @@ namespace mundy {
 namespace geom {
 
 template <typename Scalar, ValidPointType PointType = Point<Scalar>,
-          math::ValidQuaternionType QuaternionType = math::Quaternion<Scalar>,
-          typename OwnershipType = math::Ownership::Owns>
+      math::ValidQuaternionType QuaternionType = math::Quaternion<Scalar>>
 class Spherocylinder {
   static_assert(
       std::is_same_v<typename PointType::scalar_t, Scalar> && std::is_same_v<typename QuaternionType::scalar_t, Scalar>,
       "The scalar type of the PointType and QuaternionType must match the scalar type of the Spherocylinder.");
-  static_assert(
-      std::is_same_v<typename PointType::ownership_t, OwnershipType> &&
-          std::is_same_v<typename QuaternionType::ownership_t, OwnershipType>,
-      "The ownership type of the PointType and QuaternionType must match the ownership type of the Spherocylinder.\n"
-      "This is somewhat restrictive, and we may want to relax this constraint in the future.\n"
-      "If you need to use a different ownership type, please let us know and we'll remove this restriction.");
 
  public:
   //! \name Type aliases
@@ -65,8 +58,6 @@ class Spherocylinder {
   /// \brief Our orientation type
   using orientation_t = QuaternionType;
 
-  /// \brief Our ownership type
-  using ownership_t = OwnershipType;
   //@}
 
   //! \name Constructors and destructor
@@ -76,19 +67,13 @@ class Spherocylinder {
   /// invalid value of -1
   KOKKOS_FUNCTION
   constexpr Spherocylinder()
-    requires std::is_same_v<OwnershipType, math::Ownership::Owns>
+    requires(math::HasNArgConstructor<point_t, scalar_t, 3> && math::HasNArgConstructor<orientation_t, scalar_t, 4>)
       : center_(scalar_t(), scalar_t(), scalar_t()),
         orientation_(static_cast<scalar_t>(1), static_cast<scalar_t>(0), static_cast<scalar_t>(0),
                      static_cast<scalar_t>(0)),
         radius_(static_cast<scalar_t>(-1)),
         length_(static_cast<scalar_t>(-1)) {
   }
-
-  /// \brief No default constructor for viewing Spherocylinders.
-  KOKKOS_FUNCTION
-  constexpr Spherocylinder()
-    requires std::is_same_v<OwnershipType, math::Ownership::Views>
-  = delete;
 
   /// \brief Constructor to initialize the center and radius.
   /// \param[in] center The center of the Spherocylinder.
@@ -119,20 +104,20 @@ class Spherocylinder {
 
   /// \brief Deep copy constructor
   KOKKOS_FUNCTION
-  constexpr Spherocylinder(const Spherocylinder<scalar_t, point_t, orientation_t, ownership_t>& other)
+  constexpr Spherocylinder(const Spherocylinder<scalar_t, point_t, orientation_t>& other)
       : center_(other.center_), orientation_(other.orientation_), radius_(other.radius_), length_(other.length_) {
   }
 
   /// \brief Deep copy constructor with different spherocylinder type
   template <typename OtherSpherocylinderType>
   KOKKOS_FUNCTION constexpr Spherocylinder(const OtherSpherocylinderType& other)
-    requires(!std::is_same_v<OtherSpherocylinderType, Spherocylinder<scalar_t, point_t, orientation_t, ownership_t>>)
+    requires(!std::is_same_v<OtherSpherocylinderType, Spherocylinder<scalar_t, point_t, orientation_t>>)
       : center_(other.center_), orientation_(other.orientation_), radius_(other.radius_), length_(other.length_) {
   }
 
   /// \brief Deep move constructor
   KOKKOS_FUNCTION
-  constexpr Spherocylinder(Spherocylinder<scalar_t, point_t, orientation_t, ownership_t>&& other)
+  constexpr Spherocylinder(Spherocylinder<scalar_t, point_t, orientation_t>&& other)
       : center_(std::move(other.center_)),
         orientation_{std::move(other.orientation_)},
         radius_(std::move(other.radius_)),
@@ -142,7 +127,7 @@ class Spherocylinder {
   /// \brief Deep move constructor
   template <typename OtherSpherocylinderType>
   KOKKOS_FUNCTION constexpr Spherocylinder(OtherSpherocylinderType&& other)
-    requires(!std::is_same_v<OtherSpherocylinderType, Spherocylinder<scalar_t, point_t, orientation_t, ownership_t>>)
+    requires(!std::is_same_v<OtherSpherocylinderType, Spherocylinder<scalar_t, point_t, orientation_t>>)
       : center_(std::move(other.center_)),
         orientation_{std::move(other.orientation_)},
         radius_(std::move(other.radius_)),
@@ -155,8 +140,8 @@ class Spherocylinder {
 
   /// \brief Copy assignment operator
   KOKKOS_FUNCTION
-  constexpr Spherocylinder<scalar_t, point_t, orientation_t, ownership_t>& operator=(
-      const Spherocylinder<scalar_t, point_t, orientation_t, ownership_t>& other) {
+    constexpr Spherocylinder<scalar_t, point_t, orientation_t>& operator=(
+      const Spherocylinder<scalar_t, point_t, orientation_t>& other) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     center_ = other.center_;
     orientation_ = other.orientation_;
@@ -167,9 +152,9 @@ class Spherocylinder {
 
   /// \brief Copy assignment operator
   template <typename OtherSpherocylinderType>
-  KOKKOS_FUNCTION constexpr Spherocylinder<scalar_t, point_t, orientation_t, ownership_t>& operator=(
+  KOKKOS_FUNCTION constexpr Spherocylinder<scalar_t, point_t, orientation_t>& operator=(
       const OtherSpherocylinderType& other)
-    requires(!std::is_same_v<OtherSpherocylinderType, Spherocylinder<scalar_t, point_t, orientation_t, ownership_t>>)
+    requires(!std::is_same_v<OtherSpherocylinderType, Spherocylinder<scalar_t, point_t, orientation_t>>)
   {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     center_ = other.center_;
@@ -181,8 +166,8 @@ class Spherocylinder {
 
   /// \brief Move assignment operator
   KOKKOS_FUNCTION
-  constexpr Spherocylinder<scalar_t, point_t, orientation_t, ownership_t>& operator=(
-      Spherocylinder<scalar_t, point_t, orientation_t, ownership_t>&& other) {
+    constexpr Spherocylinder<scalar_t, point_t, orientation_t>& operator=(
+      Spherocylinder<scalar_t, point_t, orientation_t>&& other) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     center_ = std::move(other.center_);
     orientation_ = std::move(other.orientation_);
@@ -193,9 +178,9 @@ class Spherocylinder {
 
   /// \brief Move assignment operator
   template <typename OtherSpherocylinderType>
-  KOKKOS_FUNCTION constexpr Spherocylinder<scalar_t, point_t, orientation_t, ownership_t>& operator=(
+  KOKKOS_FUNCTION constexpr Spherocylinder<scalar_t, point_t, orientation_t>& operator=(
       OtherSpherocylinderType&& other)
-    requires(!std::is_same_v<OtherSpherocylinderType, Spherocylinder<scalar_t, point_t, orientation_t, ownership_t>>)
+    requires(!std::is_same_v<OtherSpherocylinderType, Spherocylinder<scalar_t, point_t, orientation_t>>)
   {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     center_ = std::move(other.center_);
@@ -317,16 +302,16 @@ class Spherocylinder {
  private:
   point_t center_;
   orientation_t orientation_;
-  std::conditional_t<std::is_same_v<OwnershipType, math::Ownership::Owns>, scalar_t, scalar_t&> radius_;
-  std::conditional_t<std::is_same_v<OwnershipType, math::Ownership::Owns>, scalar_t, scalar_t&> length_;
+  scalar_t radius_;
+  scalar_t length_;
 };
 
 /// @brief (Implementation) Type trait to determine if a type is a Spherocylinder
 template <typename T>
 struct impl_is_spherocylinder : std::false_type {};
 //
-template <typename Scalar, ValidPointType PointType, math::ValidQuaternionType QuaternionType, typename OwnershipType>
-struct impl_is_spherocylinder<Spherocylinder<Scalar, PointType, QuaternionType, OwnershipType>> : std::true_type {};
+template <typename Scalar, ValidPointType PointType, math::ValidQuaternionType QuaternionType>
+struct impl_is_spherocylinder<Spherocylinder<Scalar, PointType, QuaternionType>> : std::true_type {};
 
 /// \brief Type trait to determine if a type is a Spherocylinder
 template <typename T>

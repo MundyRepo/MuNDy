@@ -41,17 +41,11 @@ namespace mundy {
 namespace geom {
 
 template <typename Scalar, ValidPointType PointType = Point<Scalar>,
-          math::ValidQuaternionType QuaternionType = math::Quaternion<Scalar>,
-          typename OwnershipType = math::Ownership::Owns>
+          math::ValidQuaternionType QuaternionType = math::Quaternion<Scalar>>
 class Ring {
   static_assert(std::is_same_v<typename PointType::scalar_t, Scalar> &&
                     std::is_same_v<typename QuaternionType::scalar_t, Scalar>,
                 "The scalar type of the PointType and QuaternionType must match the scalar type of the Ring.");
-  static_assert(std::is_same_v<typename PointType::ownership_t, OwnershipType> &&
-                    std::is_same_v<typename QuaternionType::ownership_t, OwnershipType>,
-                "The ownership type of the PointType and QuaternionType must match the ownership type of the Ring.\n"
-                "This is somewhat restrictive, and we may want to relax this constraint in the future.\n"
-                "If you need to use a different ownership type, please let us know and we'll remove this restriction.");
 
  public:
   //! \name Type aliases
@@ -66,8 +60,6 @@ class Ring {
   /// \brief Our orientation type
   using orientation_t = QuaternionType;
 
-  /// \brief Our ownership type
-  using ownership_t = OwnershipType;
   //@}
 
   //! \name Constructors and destructor
@@ -77,15 +69,9 @@ class Ring {
   /// invalid value of -1
   KOKKOS_FUNCTION
   constexpr Ring()
-    requires std::is_same_v<OwnershipType, math::Ownership::Owns>
+    requires(math::HasDefaultConstructor<point_t> && math::HasDefaultConstructor<orientation_t>)
       : center_circle_(), minor_radius_(static_cast<scalar_t>(-1)) {
   }
-
-  /// \brief No default constructor for viewing Rings.
-  KOKKOS_FUNCTION
-  constexpr Ring()
-    requires std::is_same_v<OwnershipType, math::Ownership::Views>
-  = delete;
 
   /// \brief Constructor to initialize the ring.
   /// \param[in] center The center of the Ring.
@@ -116,27 +102,27 @@ class Ring {
 
   /// \brief Deep copy constructor
   KOKKOS_FUNCTION
-  constexpr Ring(const Ring<scalar_t, point_t, orientation_t, ownership_t>& other)
+  constexpr Ring(const Ring<scalar_t, point_t, orientation_t>& other)
       : center_circle_(other.center_circle_), minor_radius_(other.minor_radius_) {
   }
 
   /// \brief Deep copy constructor with different ring type
   template <typename OtherRingType>
   KOKKOS_FUNCTION constexpr Ring(const OtherRingType& other)
-    requires(!std::is_same_v<OtherRingType, Ring<scalar_t, point_t, orientation_t, ownership_t>>)
+    requires(!std::is_same_v<OtherRingType, Ring<scalar_t, point_t, orientation_t>>)
       : center_circle_(other.center_circle_), minor_radius_(other.minor_radius_) {
   }
 
   /// \brief Deep move constructor
   KOKKOS_FUNCTION
-  constexpr Ring(Ring<scalar_t, point_t, orientation_t, ownership_t>&& other)
+  constexpr Ring(Ring<scalar_t, point_t, orientation_t>&& other)
       : center_circle_(std::move(other.center_circle_)), minor_radius_(std::move(other.minor_radius_)) {
   }
 
   /// \brief Deep move constructor
   template <typename OtherRingType>
   KOKKOS_FUNCTION constexpr Ring(OtherRingType&& other)
-    requires(!std::is_same_v<OtherRingType, Ring<scalar_t, point_t, orientation_t, ownership_t>>)
+    requires(!std::is_same_v<OtherRingType, Ring<scalar_t, point_t, orientation_t>>)
       : center_circle_(std::move(other.center_circle_)), minor_radius_(std::move(other.minor_radius_)) {
   }
   //@}
@@ -146,8 +132,8 @@ class Ring {
 
   /// \brief Copy assignment operator
   KOKKOS_FUNCTION
-  constexpr Ring<scalar_t, point_t, orientation_t, ownership_t>& operator=(
-      const Ring<scalar_t, point_t, orientation_t, ownership_t>& other) {
+    constexpr Ring<scalar_t, point_t, orientation_t>& operator=(
+      const Ring<scalar_t, point_t, orientation_t>& other) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     center_circle_ = other.center_circle_;
     minor_radius_ = other.minor_radius_;
@@ -156,8 +142,8 @@ class Ring {
 
   /// \brief Copy assignment operator
   template <typename OtherRingType>
-  KOKKOS_FUNCTION constexpr Ring<scalar_t, point_t, orientation_t, ownership_t>& operator=(const OtherRingType& other)
-    requires(!std::is_same_v<OtherRingType, Ring<scalar_t, point_t, orientation_t, ownership_t>>)
+  KOKKOS_FUNCTION constexpr Ring<scalar_t, point_t, orientation_t>& operator=(const OtherRingType& other)
+    requires(!std::is_same_v<OtherRingType, Ring<scalar_t, point_t, orientation_t>>)
   {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     center_circle_ = other.center_circle_;
@@ -167,8 +153,8 @@ class Ring {
 
   /// \brief Move assignment operator
   KOKKOS_FUNCTION
-  constexpr Ring<scalar_t, point_t, orientation_t, ownership_t>& operator=(
-      Ring<scalar_t, point_t, orientation_t, ownership_t>&& other) {
+    constexpr Ring<scalar_t, point_t, orientation_t>& operator=(
+      Ring<scalar_t, point_t, orientation_t>&& other) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     center_circle_ = std::move(other.center_circle_);
     minor_radius_ = std::move(other.minor_radius_);
@@ -177,8 +163,8 @@ class Ring {
 
   /// \brief Move assignment operator
   template <typename OtherRingType>
-  KOKKOS_FUNCTION constexpr Ring<scalar_t, point_t, orientation_t, ownership_t>& operator=(OtherRingType&& other)
-    requires(!std::is_same_v<OtherRingType, Ring<scalar_t, point_t, orientation_t, ownership_t>>)
+  KOKKOS_FUNCTION constexpr Ring<scalar_t, point_t, orientation_t>& operator=(OtherRingType&& other)
+    requires(!std::is_same_v<OtherRingType, Ring<scalar_t, point_t, orientation_t>>)
   {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     center_circle_ = std::move(other.center_circle_);
@@ -192,7 +178,7 @@ class Ring {
 
   /// \brief Accessor for the center line (a Circle3D)
   KOKKOS_FUNCTION
-  constexpr const Circle3D<scalar_t, point_t, orientation_t, ownership_t>& center_circle() const {
+  constexpr const Circle3D<scalar_t, point_t, orientation_t>& center_circle() const {
     return center_circle_;
   }
 
@@ -297,16 +283,16 @@ class Ring {
   //@}
 
  private:
-  Circle3D<scalar_t, point_t, orientation_t, ownership_t> center_circle_;
-  std::conditional_t<std::is_same_v<OwnershipType, math::Ownership::Owns>, scalar_t, scalar_t&> minor_radius_;
+  Circle3D<scalar_t, point_t, orientation_t> center_circle_;
+  scalar_t minor_radius_;
 };
 
 /// @brief (Implementation) Type trait to determine if a type is a Ring
 template <typename T>
 struct impl_is_ring : std::false_type {};
 //
-template <typename Scalar, ValidPointType PointType, math::ValidQuaternionType QuaternionType, typename OwnershipType>
-struct impl_is_ring<Ring<Scalar, PointType, QuaternionType, OwnershipType>> : std::true_type {};
+template <typename Scalar, ValidPointType PointType, math::ValidQuaternionType QuaternionType>
+struct impl_is_ring<Ring<Scalar, PointType, QuaternionType>> : std::true_type {};
 
 /// @brief Type trait to determine if a type is a Ring
 template <typename T>

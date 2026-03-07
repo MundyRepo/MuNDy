@@ -40,17 +40,11 @@ namespace mundy {
 namespace geom {
 
 template <typename Scalar, ValidPointType PointType = Point<Scalar>,
-          math::ValidQuaternionType OrientationType = math::Quaternion<Scalar>,
-          typename OwnershipType = math::Ownership::Owns>
+          math::ValidQuaternionType OrientationType = math::Quaternion<Scalar>>
 class Ellipsoid {
   static_assert(std::is_same_v<typename PointType::scalar_t, Scalar> &&
                     std::is_same_v<typename OrientationType::scalar_t, Scalar>,
                 "The scalar_t of the PointType and OrientationType must match the Scalar type.");
-  static_assert(std::is_same_v<typename PointType::ownership_t, OwnershipType> &&
-                    std::is_same_v<typename OrientationType::ownership_t, OwnershipType>,
-                "The ownership type of the PointType and OrientationType must match the OwnershipType.\n"
-                "This is somewhat restrictive, and we may want to relax this constraint in the future.\n"
-                "If you need to use a different ownership type, please let us know and we'll remove this restriction.");
 
  public:
   //! \name Type aliases
@@ -65,29 +59,20 @@ class Ellipsoid {
   /// \brief Our quaternion type
   using orientation_t = OrientationType;
 
-  /// \brief Our ownership type
-  using ownership_t = OwnershipType;
   //@}
 
   //! \name Constructors and destructor
   //@{
 
-  /// \brief Default constructor for owning ellipsoids. Default initializes the center and sets the axis radii to an
-  /// invalid value of -1
+  /// \brief Default constructor. Default initializes center/orientation and sets axis radii to invalid values.
   KOKKOS_FUNCTION
   constexpr Ellipsoid()
-    requires std::is_same_v<OwnershipType, math::Ownership::Owns>
-      : center_(scalar_t(), scalar_t(), scalar_t()),
-        orientation_{static_cast<scalar_t>(1), static_cast<scalar_t>(0), static_cast<scalar_t>(0),
-                     static_cast<scalar_t>(0)},
-        radii_{static_cast<scalar_t>(-1), static_cast<scalar_t>(-1), static_cast<scalar_t>(-1)} {
+    requires(math::HasDefaultConstructor<point_t> && math::HasDefaultConstructor<orientation_t>)
+      : center_(), orientation_(), radii_() {
+    radii_[0] = static_cast<scalar_t>(-1);
+    radii_[1] = static_cast<scalar_t>(-1);
+    radii_[2] = static_cast<scalar_t>(-1);
   }
-
-  /// \brief No default constructor for viewing ellipsoids.
-  KOKKOS_FUNCTION
-  constexpr Ellipsoid()
-    requires std::is_same_v<OwnershipType, math::Ownership::Views>
-  = delete;
 
   /// \brief Constructor to initialize the center and radii.
   /// \param[in] center The center of the Ellipsoid.
@@ -97,7 +82,7 @@ class Ellipsoid {
   KOKKOS_FUNCTION
   constexpr Ellipsoid(const point_t& center, const scalar_t& radius_1, const scalar_t& radius_2,
                       const scalar_t& radius_3)
-    requires std::is_same_v<OwnershipType, math::Ownership::Owns>
+    requires(math::HasNArgConstructor<orientation_t, scalar_t, 4> && math::HasNArgConstructor<point_t, scalar_t, 3>)
       : center_(center),
         orientation_{static_cast<scalar_t>(1), static_cast<scalar_t>(0), static_cast<scalar_t>(0),
                      static_cast<scalar_t>(0)},
@@ -119,7 +104,7 @@ class Ellipsoid {
   constexpr Ellipsoid(const scalar_t& x, const scalar_t& y, const scalar_t& z, const scalar_t& qw, const scalar_t& qx,
                       const scalar_t& qy, const scalar_t& qz, const scalar_t& radius_1, const scalar_t& radius_2,
                       const scalar_t& radius_3)
-    requires std::is_same_v<OwnershipType, math::Ownership::Owns>
+    requires(math::HasNArgConstructor<point_t, scalar_t, 3> && math::HasNArgConstructor<orientation_t, scalar_t, 4>)
       : center_(x, y, z), orientation_(qw, qx, qy, qz), radii_{radius_1, radius_2, radius_3} {
   }
 
@@ -137,7 +122,7 @@ class Ellipsoid {
   KOKKOS_FUNCTION
   constexpr Ellipsoid(const point_t& center, const orientation_t& orientation, const scalar_t& radius_1,
                       const scalar_t& radius_2, const scalar_t& radius_3)
-    requires std::is_same_v<OwnershipType, math::Ownership::Owns>
+    requires math::HasNArgConstructor<point_t, scalar_t, 3>
       : center_(center), orientation_(orientation), radii_(radius_1, radius_2, radius_3) {
   }
 
@@ -147,20 +132,20 @@ class Ellipsoid {
 
   /// \brief Deep copy constructor
   KOKKOS_FUNCTION
-  constexpr Ellipsoid(const Ellipsoid<scalar_t, point_t, orientation_t, ownership_t>& other)
+  constexpr Ellipsoid(const Ellipsoid<scalar_t, point_t, orientation_t>& other)
       : center_(other.center_), orientation_{other.orientation_}, radii_{other.radii_} {
   }
 
   /// \brief Deep copy constructor with different ellipsoid type
   template <typename OtherEllipsoidType>
   KOKKOS_FUNCTION constexpr Ellipsoid(const OtherEllipsoidType& other)
-    requires(!std::is_same_v<OtherEllipsoidType, Ellipsoid<scalar_t, point_t, orientation_t, ownership_t>>)
+    requires(!std::is_same_v<OtherEllipsoidType, Ellipsoid<scalar_t, point_t, orientation_t>>)
       : center_(other.center_), orientation_{other.orientation_}, radii_{other.radii_} {
   }
 
   /// \brief Deep move constructor
   KOKKOS_FUNCTION
-  constexpr Ellipsoid(Ellipsoid<scalar_t, point_t, orientation_t, ownership_t>&& other)
+  constexpr Ellipsoid(Ellipsoid<scalar_t, point_t, orientation_t>&& other)
       : center_(std::move(other.center_)),
         orientation_{std::move(other.orientation_)},
         radii_{std::move(other.radii_)} {
@@ -169,7 +154,7 @@ class Ellipsoid {
   /// \brief Deep move constructor with different ellipsoid type
   template <typename OtherEllipsoidType>
   KOKKOS_FUNCTION constexpr Ellipsoid(OtherEllipsoidType&& other)
-    requires(!std::is_same_v<OtherEllipsoidType, Ellipsoid<scalar_t, point_t, orientation_t, ownership_t>>)
+    requires(!std::is_same_v<OtherEllipsoidType, Ellipsoid<scalar_t, point_t, orientation_t>>)
       : center_(std::move(other.center_)),
         orientation_{std::move(other.orientation_)},
         radii_{std::move(other.radii_)} {
@@ -181,8 +166,8 @@ class Ellipsoid {
 
   /// \brief Copy assignment operator
   KOKKOS_FUNCTION
-  constexpr Ellipsoid<scalar_t, point_t, orientation_t, ownership_t>& operator=(
-      const Ellipsoid<scalar_t, point_t, orientation_t, ownership_t>& other) {
+    constexpr Ellipsoid<scalar_t, point_t, orientation_t>& operator=(
+      const Ellipsoid<scalar_t, point_t, orientation_t>& other) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     center_ = other.center_;
     orientation_ = other.orientation_;
@@ -192,9 +177,9 @@ class Ellipsoid {
 
   /// \brief Copy assignment operator with different ellipsoid type
   template <typename OtherEllipsoidType>
-  KOKKOS_FUNCTION constexpr Ellipsoid<scalar_t, point_t, orientation_t, ownership_t>& operator=(
+  KOKKOS_FUNCTION constexpr Ellipsoid<scalar_t, point_t, orientation_t>& operator=(
       const OtherEllipsoidType& other)
-    requires(!std::is_same_v<OtherEllipsoidType, Ellipsoid<scalar_t, point_t, orientation_t, ownership_t>>)
+    requires(!std::is_same_v<OtherEllipsoidType, Ellipsoid<scalar_t, point_t, orientation_t>>)
   {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     center_ = other.center_;
@@ -205,8 +190,8 @@ class Ellipsoid {
 
   /// \brief Move assignment operator
   KOKKOS_FUNCTION
-  constexpr Ellipsoid<scalar_t, point_t, orientation_t, ownership_t>& operator=(
-      Ellipsoid<scalar_t, point_t, orientation_t, ownership_t>&& other) {
+    constexpr Ellipsoid<scalar_t, point_t, orientation_t>& operator=(
+      Ellipsoid<scalar_t, point_t, orientation_t>&& other) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     center_ = std::move(other.center_);
     orientation_ = std::move(other.orientation_);
@@ -216,9 +201,9 @@ class Ellipsoid {
 
   /// \brief Move assignment operator with different ellipsoid type
   template <typename OtherEllipsoidType>
-  KOKKOS_FUNCTION constexpr Ellipsoid<scalar_t, point_t, orientation_t, ownership_t>& operator=(
+  KOKKOS_FUNCTION constexpr Ellipsoid<scalar_t, point_t, orientation_t>& operator=(
       OtherEllipsoidType&& other)
-    requires(!std::is_same_v<OtherEllipsoidType, Ellipsoid<scalar_t, point_t, orientation_t, ownership_t>>)
+    requires(!std::is_same_v<OtherEllipsoidType, Ellipsoid<scalar_t, point_t, orientation_t>>)
   {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     center_ = std::move(other.center_);
@@ -374,8 +359,8 @@ class Ellipsoid {
 template <typename T>
 struct impl_is_ellipsoid : std::false_type {};
 //
-template <typename Scalar, ValidPointType PointType, math::ValidQuaternionType OrientationType, typename OwnershipType>
-struct impl_is_ellipsoid<Ellipsoid<Scalar, PointType, OrientationType, OwnershipType>> : std::true_type {};
+template <typename Scalar, ValidPointType PointType, math::ValidQuaternionType OrientationType>
+struct impl_is_ellipsoid<Ellipsoid<Scalar, PointType, OrientationType>> : std::true_type {};
 //
 
 /// \brief Type trait to determine if a type is an Ellipsoid
@@ -388,10 +373,6 @@ inline constexpr bool is_ellipsoid_v = is_ellipsoid<T>::value;
 /// @brief Concept to check if a type is an Ellipsoid
 template <typename EllipsoidType>
 concept ValidEllipsoidType = is_ellipsoid_v<EllipsoidType>;
-
-static_assert(ValidEllipsoidType<Ellipsoid<float>> && ValidEllipsoidType<const Ellipsoid<float>> &&
-                  ValidEllipsoidType<Ellipsoid<double>> && ValidEllipsoidType<const Ellipsoid<double>>,
-              "Ellipsoid should satisfy the ValidEllipsoidType concept.");
 
 //! \name Non-member functions for ValidSphereType objects
 //@{
@@ -459,9 +440,9 @@ KOKKOS_FUNCTION constexpr Point<typename EllipsoidType::scalar_t> map_body_frame
   return Point<Scalar>(x, y, z);
 }
 
-template <typename Scalar, typename Accessor1, typename OwnershipType1, ValidEllipsoidType EllipsoidType>
+template <typename Scalar, math::ValidAccessor<Scalar> Accessor1, ValidEllipsoidType EllipsoidType>
 KOKKOS_FUNCTION constexpr math::Vector3<Scalar> map_surface_normal_to_foot_point_on_ellipsoid(
-    const math::AVector3<Scalar, Accessor1, OwnershipType1>& lab_frame_ellipsoid_nhat, const EllipsoidType& ellipsoid) {
+  const math::AVector3<Scalar, Accessor1>& lab_frame_ellipsoid_nhat, const EllipsoidType& ellipsoid) {
   const auto body_frame_nhat = conjugate(ellipsoid.orientation()) * lab_frame_ellipsoid_nhat;
   const auto body_frame_foot_point = map_body_frame_normal_to_ellipsoid(body_frame_nhat, ellipsoid);
   return ellipsoid.orientation() * body_frame_foot_point + ellipsoid.center();
