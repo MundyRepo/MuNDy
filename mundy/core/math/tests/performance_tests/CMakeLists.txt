@@ -19,7 +19,7 @@
 
 tribits_add_executable(
   MatrixVectorQuaternion
-  SOURCES
-  MatrixVectorQuaternion.cpp
+  SOURCES MatrixVectorQuaternion.cpp
+  INSTALLABLE
   CATEGORIES PERFORMANCE
 )

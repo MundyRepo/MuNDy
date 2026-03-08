@@ -22,6 +22,7 @@ tribits_add_executable_and_test(
   SOURCES
   UnitTestTest.cpp
   NUM_MPI_PROCS 1-4
+  INSTALLABLE
 )
 
 tribits_add_executable_and_test(
@@ -30,4 +31,5 @@ tribits_add_executable_and_test(
   UnitTestTestNoMain.cpp
   ${Mundy_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1-4
+  INSTALLABLE
 )

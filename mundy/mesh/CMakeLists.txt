@@ -11,64 +11,62 @@ tribits_subpackage(Mesh)
 # We don't recommend typing these by hand. Use
 # find src/ -type f -name "*.hpp" | sed 's/^.\/\///' | sort
 # find src/ -type f -name "*.cpp" | sed 's/^.\/\///' | sort
-SET(NOINSTALLHEADERS
-  src/mundy_mesh/Aggregate.hpp
-  src/mundy_mesh/BulkData.hpp
-  src/mundy_mesh/DeclareEntities.hpp
-  src/mundy_mesh/DeclareField.hpp
-  src/mundy_mesh/DeclarePart.hpp
-  src/mundy_mesh/FieldViews.hpp
-  src/mundy_mesh/fmt_stk_types.hpp
-  src/mundy_mesh/ForEachEntity.hpp
-
-  # src/mundy_mesh/GenNeighborLinkers.hpp
-  src/mundy_mesh/GetNgpLinkData.hpp
-  src/mundy_mesh/impl/HostDeviceCOOSynchronizer.hpp
-  src/mundy_mesh/impl/HostDeviceCSRSynchronizer.hpp
-  src/mundy_mesh/impl/HostDeviceSynchronizer.hpp
-  src/mundy_mesh/impl/LinkedBucketConn.hpp
-  src/mundy_mesh/impl/NgpCOOToCSRSynchronizer.hpp
-  src/mundy_mesh/impl/NgpFieldBLASImpl.hpp
-  src/mundy_mesh/impl/NgpLinkMetaData.hpp
-  src/mundy_mesh/impl/PartitionKey.hpp
-  src/mundy_mesh/impl/SelectorEval.hpp
-  src/mundy_mesh/impl/SelectorLexem.hpp
-  src/mundy_mesh/impl/SelectorNode.hpp
-  src/mundy_mesh/impl/SelectorParser.hpp
-  src/mundy_mesh/LinkCOOData.hpp
-  src/mundy_mesh/LinkCSRBucketConn.hpp
-  src/mundy_mesh/LinkCSRData.hpp
-  src/mundy_mesh/LinkCSRPartition.hpp
-  src/mundy_mesh/LinkData.hpp
-  src/mundy_mesh/LinkDeclarationRequests.hpp
-  src/mundy_mesh/LinkDestructionRequests.hpp
-  src/mundy_mesh/LinkMetaData.hpp
-  src/mundy_mesh/MeshBuilder.hpp
-  src/mundy_mesh/MetaData.hpp
-  src/mundy_mesh/NgpAccessorExpr.hpp
-  src/mundy_mesh/NgpEntityPool.hpp
-  src/mundy_mesh/NgpFieldBLAS.hpp
-  src/mundy_mesh/NgpForEachLink.hpp
-  src/mundy_mesh/NgpLinkData.hpp
-
-  # src/mundy_mesh/NgpModRequests.hpp
-  src/mundy_mesh/NgpUtils.hpp
-  src/mundy_mesh/StringToSelector.hpp
-  src/mundy_mesh/StringToTopology.hpp
-  src/mundy_mesh/Types.hpp
+set(NOINSTALLHEADERS
+    src/mundy_mesh/Aggregate.hpp
+    src/mundy_mesh/BulkData.hpp
+    src/mundy_mesh/DeclareEntities.hpp
+    src/mundy_mesh/DeclareField.hpp
+    src/mundy_mesh/DeclarePart.hpp
+    src/mundy_mesh/FieldViews.hpp
+    src/mundy_mesh/fmt_stk_types.hpp
+    src/mundy_mesh/ForEachEntity.hpp
+    # src/mundy_mesh/GenNeighborLinkers.hpp
+    src/mundy_mesh/GetNgpLinkData.hpp
+    src/mundy_mesh/impl/HostDeviceCOOSynchronizer.hpp
+    src/mundy_mesh/impl/HostDeviceCSRSynchronizer.hpp
+    src/mundy_mesh/impl/HostDeviceSynchronizer.hpp
+    src/mundy_mesh/impl/LinkedBucketConn.hpp
+    src/mundy_mesh/impl/NgpCOOToCSRSynchronizer.hpp
+    src/mundy_mesh/impl/NgpFieldBLASImpl.hpp
+    src/mundy_mesh/impl/NgpLinkMetaData.hpp
+    src/mundy_mesh/impl/PartitionKey.hpp
+    src/mundy_mesh/impl/SelectorEval.hpp
+    src/mundy_mesh/impl/SelectorLexem.hpp
+    src/mundy_mesh/impl/SelectorNode.hpp
+    src/mundy_mesh/impl/SelectorParser.hpp
+    src/mundy_mesh/LinkCOOData.hpp
+    src/mundy_mesh/LinkCSRBucketConn.hpp
+    src/mundy_mesh/LinkCSRData.hpp
+    src/mundy_mesh/LinkCSRPartition.hpp
+    src/mundy_mesh/LinkData.hpp
+    src/mundy_mesh/LinkDeclarationRequests.hpp
+    src/mundy_mesh/LinkDestructionRequests.hpp
+    src/mundy_mesh/LinkMetaData.hpp
+    src/mundy_mesh/MeshBuilder.hpp
+    src/mundy_mesh/MetaData.hpp
+    src/mundy_mesh/NgpAccessorExpr.hpp
+    src/mundy_mesh/NgpEntityPool.hpp
+    src/mundy_mesh/NgpFieldBLAS.hpp
+    src/mundy_mesh/NgpForEachLink.hpp
+    src/mundy_mesh/NgpLinkData.hpp
+    # src/mundy_mesh/NgpModRequests.hpp
+    src/mundy_mesh/NgpUtils.hpp
+    src/mundy_mesh/StringToSelector.hpp
+    src/mundy_mesh/StringToTopology.hpp
+    src/mundy_mesh/Types.hpp
 )
 
-SET(SOURCES
-  src/mundy_mesh/DeclareEntities.cpp
-  src/mundy_mesh/impl/PartitionKey.cpp
-  src/mundy_mesh/impl/SelectorEval.cpp
-  src/mundy_mesh/impl/SelectorLexem.cpp
-  src/mundy_mesh/impl/SelectorNode.cpp
-  src/mundy_mesh/impl/SelectorParser.cpp
-  src/mundy_mesh/MeshBuilder.cpp
-  src/mundy_mesh/MetaData.cpp
-  src/mundy_mesh/StringToSelector.cpp
-  src/mundy_mesh/StringToTopology.cpp
+set(SOURCES
+    src/mundy_mesh/DeclareEntities.cpp
+    src/mundy_mesh/impl/PartitionKey.cpp
+    src/mundy_mesh/impl/SelectorEval.cpp
+    src/mundy_mesh/impl/SelectorLexem.cpp
+    src/mundy_mesh/impl/SelectorNode.cpp
+    src/mundy_mesh/impl/SelectorParser.cpp
+    src/mundy_mesh/MeshBuilder.cpp
+    src/mundy_mesh/MetaData.cpp
+    src/mundy_mesh/StringToSelector.cpp
+    src/mundy_mesh/StringToTopology.cpp
 )
 
 tribits_configure_file(${PACKAGE_NAME}_config.hpp)
@@ -85,7 +83,8 @@ mundy_tribits_add_library(
   HEADERS ${CMAKE_CURRENT_BINARY_DIR}/${PACKAGE_NAME}_config.hpp
   NOINSTALLHEADERS ${NOINSTALLHEADERS}
   DIRECTORIES src/mundy_mesh
-  FILES_MATCHING PATTERN "*.hpp"
+  FILES_MATCHING
+  PATTERN "*.hpp"
   SOURCES ${SOURCES}
 )
 

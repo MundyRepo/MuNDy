@@ -26,6 +26,7 @@ tribits_add_executable_and_test(
     UnitTestDeclareAndInitConstraints.cpp
     ${Mundy_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1-4
+  INSTALLABLE
 )
 
 tribits_add_executable_and_test(

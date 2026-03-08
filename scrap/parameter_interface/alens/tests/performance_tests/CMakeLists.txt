@@ -44,53 +44,46 @@
 #     )
 
 tribits_add_executable(
-    PerformanceTestBrownianMotion
-    SOURCES
-    BrownianMotion.cpp
-    CATEGORIES PERFORMANCE
-    )
+  PerformanceTestBrownianMotion
+  SOURCES BrownianMotion.cpp
+  CATEGORIES PERFORMANCE
+)
 
 tribits_add_executable(
-    PerformanceTestBrownianMotionMSD
-    SOURCES
-    BrownianMotionMSD.cpp
-    CATEGORIES PERFORMANCE
-    )
+  PerformanceTestBrownianMotionMSD
+  SOURCES BrownianMotionMSD.cpp
+  CATEGORIES PERFORMANCE
+)
 
 tribits_add_executable(
-    PerformanceTestSphereBrownianMotionWithContactNew
-    SOURCES
-    SphereBrownianMotionWithContactNew.cpp
-    CATEGORIES PERFORMANCE
-    )
+  PerformanceTestSphereBrownianMotionWithContactNew
+  SOURCES SphereBrownianMotionWithContactNew.cpp
+  CATEGORIES PERFORMANCE
+)
 
 tribits_add_executable(
-    PerformanceTestSphereBrownianInteractingIO
-    SOURCES
-    SphereBrownianInteractingIO.cpp
-    CATEGORIES PERFORMANCE
-    )
+  PerformanceTestSphereBrownianInteractingIO
+  SOURCES SphereBrownianInteractingIO.cpp
+  CATEGORIES PERFORMANCE
+)
 
 tribits_add_executable(
-    Springs
-    SOURCES
-    Springs.cpp
-    CATEGORIES PERFORMANCE
-    )
+  Springs
+  SOURCES Springs.cpp
+  CATEGORIES PERFORMANCE
+)
 
 tribits_add_executable(
-    SpringsUpdated
-    SOURCES
-    SpringsUpdated.cpp
-    CATEGORIES PERFORMANCE
-    )
+  SpringsUpdated
+  SOURCES SpringsUpdated.cpp
+  CATEGORIES PERFORMANCE
+)
 
 tribits_add_executable(
-    StickySettings
-    SOURCES
-    StickySettings.cpp
-    CATEGORIES PERFORMANCE
-    )
+  StickySettings
+  SOURCES StickySettings.cpp
+  CATEGORIES PERFORMANCE
+)
 
 # tribits_add_executable(
 #     HP1
@@ -112,12 +105,11 @@ tribits_add_executable(
 #     )
 
 tribits_add_executable(
-    SpheresPerif
-    SOURCES
-    SpheresPerif.cpp
-    CATEGORIES PERFORMANCE
-    )
-      
+  SpheresPerif
+  SOURCES SpheresPerif.cpp
+  CATEGORIES PERFORMANCE
+)
+
 # tribits_add_executable(
 #     NgpHP1
 #     SOURCES
@@ -136,8 +128,7 @@ tribits_add_executable(
 #     )
 
 tribits_add_executable(
-    NGPSabastion
-    SOURCES
-    NGPSabastion.cpp
-    CATEGORIES PERFORMANCE
-    )
+  NGPSabastion
+  SOURCES NGPSabastion.cpp
+  CATEGORIES PERFORMANCE
+)

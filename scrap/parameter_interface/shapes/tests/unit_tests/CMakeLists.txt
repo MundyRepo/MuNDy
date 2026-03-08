@@ -26,6 +26,7 @@ tribits_add_executable_and_test(
     UnitTestComputeAABB.cpp
     ${Mundy_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1-4
+  INSTALLABLE
 )
 
 tribits_add_executable_and_test(
@@ -34,6 +35,7 @@ tribits_add_executable_and_test(
     UnitTestComputeBoundingRadius.cpp
     ${Mundy_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1-4
+  INSTALLABLE
 )
 
 tribits_add_executable_and_test(
@@ -42,6 +44,7 @@ tribits_add_executable_and_test(
     UnitTestComputeOBB.cpp
     ${Mundy_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1-4
+  INSTALLABLE
 )
 
 tribits_add_executable_and_test(
@@ -50,4 +53,5 @@ tribits_add_executable_and_test(
     UnitTestDeclareAndInitShapes.cpp
     ${Mundy_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1-4
+  INSTALLABLE
 )

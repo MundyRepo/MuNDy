@@ -18,8 +18,8 @@
 # @HEADER
 
 tribits_add_executable(
-    PerfTestGeomMetric
-    SOURCES
-    PerfTestGeomMetric.cpp
-    CATEGORIES PERFORMANCE
+  PerfTestGeomMetric
+  SOURCES PerfTestGeomMetric.cpp
+  INSTALLABLE
+  CATEGORIES PERFORMANCE
 )

@@ -22,35 +22,30 @@
 # as it produces more logical error messages when a test fails.
 tribits_add_executable_and_test(
   UnitTestSegmentSegment
-  SOURCES
-  UnitTestSegmentSegment.cpp
-  ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+  SOURCES UnitTestSegmentSegment.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+  INSTALLABLE
 )
 
 tribits_add_executable_and_test(
   UnitTestEllipsoidEllipsoid
-  SOURCES
-  UnitTestEllipsoidEllipsoid.cpp
-  ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+  SOURCES UnitTestEllipsoidEllipsoid.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+  INSTALLABLE
 )
 
 tribits_add_executable_and_test(
   UnitTestComputeAABB
-  SOURCES
-  UnitTestComputeAABB.cpp
-  ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+  SOURCES UnitTestComputeAABB.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+  INSTALLABLE
 )
 
 tribits_add_executable_and_test(
   UnitTestComputeBoundingRadius
-  SOURCES
-  UnitTestComputeBoundingRadius.cpp
-  ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+  SOURCES UnitTestComputeBoundingRadius.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+  INSTALLABLE
 )
 
 tribits_add_executable_and_test(
   UnitTestPeriodicity
-  SOURCES
-  UnitTestPeriodicity.cpp
-  ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+  SOURCES UnitTestPeriodicity.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+  INSTALLABLE
 )

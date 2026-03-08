@@ -21,7 +21,10 @@ cmake_minimum_required(VERSION 3.23.0 FATAL_ERROR)
 
 # Make CMake set WIN32 with CYGWIN for older CMake versions.  CMake requires
 # this to be in the top-level CMakeLists.txt file and not an include file :-(
-set(CMAKE_LEGACY_CYGWIN_WIN32 1 CACHE BOOL "" FORCE)
+set(CMAKE_LEGACY_CYGWIN_WIN32
+    1
+    CACHE BOOL "" FORCE
+)
 
 # Get and declare PROJECT_NAME
 include("${CMAKE_CURRENT_SOURCE_DIR}/ProjectName.cmake")
@@ -31,8 +34,9 @@ set(TRIBITS_HIDE_DEPRECATED_INCLUDE_DIRECTORIES_OVERRIDE TRUE)
 
 # Pull in the TriBITS system
 set(${PROJECT_NAME}_TRIBITS_DIR
-  "${CMAKE_CURRENT_SOURCE_DIR}/cmake/TriBITS/tribits" CACHE STRING
-  "TriBITS base directory (default assumes in TriBITS source tree)")
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/TriBITS/tribits"
+    CACHE STRING "TriBITS base directory (default assumes in TriBITS source tree)"
+)
 include("${${PROJECT_NAME}_TRIBITS_DIR}/TriBITS.cmake")
 
 # Pull in our custom TriBITS functions
@@ -40,19 +44,30 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/MundyTribitsInstallDirectories.cmake"
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/MundyTribitsAddLibrary.cmake")
 
 # Mundy only has one project so just enable it :-)
-set(${PROJECT_NAME}_ENABLE_Mundy ON CACHE BOOL "" FORCE)
+set(${PROJECT_NAME}_ENABLE_Mundy
+    ON
+    CACHE BOOL "" FORCE
+)
 
 # Define some global flags
 set(${PROJECT_NAME}_CMAKE_CXX_STANDARD_DEFAULT 20)
 set(${PROJECT_NAME}_CMAKE_CXX_STANDARDS_ALLOWED "(20|23)")
-advanced_set(CMAKE_CXX_STANDARD ${${PROJECT_NAME}_CMAKE_CXX_STANDARD_DEFAULT}
-  CACHE STRING
-  "C++ standard number with values ${${PROJECT_NAME}_CMAKE_CXX_STANDARDS_ALLOWED} (default ${${PROJECT_NAME}_CMAKE_CXX_STANDARD_DEFAULT})")
+advanced_set(
+  CMAKE_CXX_STANDARD
+  ${${PROJECT_NAME}_CMAKE_CXX_STANDARD_DEFAULT}
+  CACHE
+  STRING
+  "C++ standard number with values ${${PROJECT_NAME}_CMAKE_CXX_STANDARDS_ALLOWED} (default ${${PROJECT_NAME}_CMAKE_CXX_STANDARD_DEFAULT})"
+)
 
-if(NOT CMAKE_CXX_STANDARD MATCHES "^${${PROJECT_NAME}_CMAKE_CXX_STANDARDS_ALLOWED}$")
-  MESSAGE(FATAL_ERROR
-    "CMAKE_CXX_STANDARD=${CMAKE_CXX_STANDARD} is not in the allowed set "
-    "${${PROJECT_NAME}_CMAKE_CXX_STANDARDS_ALLOWED}")
+if(NOT
+   CMAKE_CXX_STANDARD
+   MATCHES
+   "^${${PROJECT_NAME}_CMAKE_CXX_STANDARDS_ALLOWED}$"
+)
+  message(FATAL_ERROR "CMAKE_CXX_STANDARD=${CMAKE_CXX_STANDARD} is not in the allowed set "
+                      "${${PROJECT_NAME}_CMAKE_CXX_STANDARDS_ALLOWED}"
+  )
 endif()
 
 # Print the CMAKE_CXX_FLAGS

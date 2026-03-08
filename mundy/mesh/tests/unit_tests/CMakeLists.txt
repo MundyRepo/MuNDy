@@ -22,42 +22,37 @@
 # as it produces more logical error messages when a test fails.
 tribits_add_executable_and_test(
   UnitTestMeshBuilder
-  SOURCES
-  UnitTestMeshBuilder.cpp
-  ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+  SOURCES UnitTestMeshBuilder.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1-4
+  INSTALLABLE
 )
 
 tribits_add_executable_and_test(
   UnitTestBulkData
-  SOURCES
-  UnitTestBulkData.cpp
-  ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+  SOURCES UnitTestBulkData.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1-4
+  INSTALLABLE
 )
 
 tribits_add_executable_and_test(
   UnitTestMetaData
-  SOURCES
-  UnitTestMetaData.cpp
-  ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+  SOURCES UnitTestMetaData.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1-4
+  INSTALLABLE
 )
 
 tribits_add_executable_and_test(
   UnitTestAccessorExpr
-  SOURCES
-  UnitTestAccessorExpr.cpp
-  ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+  SOURCES UnitTestAccessorExpr.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1-4
+  INSTALLABLE
 )
 
 tribits_add_executable_and_test(
   UnitTestRngAccessorExpr
-  SOURCES
-  UnitTestRngAccessorExpr.cpp
-  ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+  SOURCES UnitTestRngAccessorExpr.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1-4
+  INSTALLABLE
 )
 
 # tribits_add_executable_and_test(
@@ -69,46 +64,39 @@ tribits_add_executable_and_test(
 # )
 tribits_add_executable_and_test(
   UnitTestNgpLinkData
-  SOURCES
-  UnitTestNgpLinkData.cpp
-  ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+  SOURCES UnitTestNgpLinkData.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1-4
+  INSTALLABLE
 )
 
 tribits_add_executable_and_test(
   UnitTestStringToSelector
-  SOURCES
-  UnitTestStringToSelector.cpp
-  ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+  SOURCES UnitTestStringToSelector.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1-4
+  INSTALLABLE
 )
 
 tribits_add_executable_and_test(
   UnitTestDeclareEntities
-  SOURCES
-  UnitTestDeclareEntities.cpp
-  ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+  SOURCES UnitTestDeclareEntities.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+  INSTALLABLE
 )
 
 tribits_add_executable_and_test(
   UnitTestEntityPool
-  SOURCES
-  UnitTestEntityPool.cpp
-  ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+  SOURCES UnitTestEntityPool.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+  INSTALLABLE
 )
 
 tribits_add_executable_and_test(
   UnitTestFieldBLAS
-  SOURCES
-  UnitTestFieldBLAS.cpp
-  ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+  SOURCES UnitTestFieldBLAS.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+  INSTALLABLE
 )
 
 tribits_add_executable_and_test(
   UnitTestAggregate
-  SOURCES
-  UnitTestAggregate.cpp
-  ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+  SOURCES UnitTestAggregate.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1
 )
 

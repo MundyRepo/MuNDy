@@ -29,6 +29,7 @@ tribits_add_executable_and_test(
     UnitTestFieldReqs.cpp
     ${Mundy_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1-4
+  INSTALLABLE
 )
 
 tribits_add_executable_and_test(
@@ -37,6 +38,7 @@ tribits_add_executable_and_test(
     UnitTestPartReqs.cpp
     ${Mundy_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1-4
+  INSTALLABLE
 )
 
 tribits_add_executable_and_test(
@@ -45,6 +47,7 @@ tribits_add_executable_and_test(
     UnitTestMeshReqs.cpp
     ${Mundy_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1-4
+  INSTALLABLE
 )
 
 tribits_add_executable_and_test(
@@ -53,6 +56,7 @@ tribits_add_executable_and_test(
     UnitTestMetaFactory.cpp
     ${Mundy_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1-4
+  INSTALLABLE
 )
 
 tribits_add_executable_and_test(
@@ -61,4 +65,5 @@ tribits_add_executable_and_test(
     UnitTestMetaRegistry.cpp
     ${Mundy_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1-4
+  INSTALLABLE
 )
