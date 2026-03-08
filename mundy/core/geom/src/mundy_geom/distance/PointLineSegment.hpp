@@ -26,7 +26,6 @@
 
 // Mundy
 #include <mundy_geom/distance/DistanceMetrics.hpp>  // for mundy::FreeSpaceMetric, mundy::PeriodicSpaceMetric
-#include <mundy_geom/distance/DistanceMetrics.hpp>  // for mundy::FreeSpaceMetric
 #include <mundy_geom/distance/PointPoint.hpp>       // for mundy::distance(Point, Point)
 #include <mundy_geom/distance/Types.hpp>            // for mundy::SharedNormalSigned
 #include <mundy_geom/primitives/LineSegment.hpp>    // for mundy::LineSegment
