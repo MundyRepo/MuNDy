@@ -120,11 +120,19 @@ class NgpPoolT {
   /// acquire on the device impossible otherwise. This is why we mark size, capacity, and our internal pool as mutable.
   KOKKOS_INLINE_FUNCTION
   value_type acquire() const {
-    // For those not familiar with atomic_fetch_sub, it returns the value before the subtraction.
-    our_size_t old_size = Kokkos::atomic_fetch_sub(&ngp_size_.view_device()(), 1);
-    if (old_size == 0) {
-      MUNDY_THROW_ASSERT(false, std::runtime_error, "Attempting to acquire an object from an empty pool.");
-      return value_type();
+    our_size_t old_size = ngp_size_.view_device()();
+    while (true) {
+      MUNDY_THROW_ASSERT(old_size != 0, std::runtime_error, "Attempting to acquire an object from an empty pool.");
+      if (old_size == 0) {
+        return value_type();
+      }
+
+      const our_size_t observed = Kokkos::atomic_compare_exchange(&ngp_size_.view_device()(), old_size, old_size - 1);
+      if (observed == old_size) {
+        break;
+      }
+
+      old_size = observed;
     }
 
     // Eat the last value in the pool and replace it with a default constructed value.
@@ -136,12 +144,19 @@ class NgpPoolT {
   /// \brief Acquire a value from the pool. Returns by move. Modifies on host but does not mark as modified.
   /// It's up to you to mark the pool as modified on the host after using this.
   value_type acquire_host() const {
-    // For those not familiar with atomic_fetch_sub, it returns the value before the subtraction.
-    our_size_t old_size = Kokkos::atomic_fetch_sub(&ngp_size_.view_host()(), 1);
+    our_size_t old_size = ngp_size_.view_host()();
+    while (true) {
+      MUNDY_THROW_ASSERT(old_size != 0, std::runtime_error, "Attempting to acquire an object from an empty pool.");
+      if (old_size == 0) {
+        return value_type();
+      }
 
-    if (old_size == 0) {
-      MUNDY_THROW_ASSERT(false, std::runtime_error, "Attempting to acquire an object from an empty pool.");
-      return value_type();
+      const our_size_t observed = Kokkos::atomic_compare_exchange(&ngp_size_.view_host()(), old_size, old_size - 1);
+      if (observed == old_size) {
+        break;
+      }
+
+      old_size = observed;
     }
 
     // Eat the last value in the pool and replace it with a default constructed value.
@@ -206,9 +221,21 @@ class NgpPoolT {
   /// \brief Acquire N objects from the pool. Returns by move. Modifies on host and marks as modified.
   /// Results are returned in an std::vector<ValueType>.
   pool_vector_t batch_acquire_host(our_size_t n) {
-    our_size_t old_size = Kokkos::atomic_fetch_sub(&ngp_size_.view_host()(), n);
-    MUNDY_THROW_ASSERT(old_size - n >= 0, std::runtime_error,
-                       "Attempting to acquire more objects than are available in the pool.");
+    our_size_t old_size = ngp_size_.view_host()();
+    while (true) {
+      MUNDY_THROW_ASSERT(old_size >= n, std::runtime_error,
+                         "Attempting to acquire more objects than are available in the pool.");
+      if (old_size < n) {
+        return pool_vector_t();
+      }
+
+      const our_size_t observed = Kokkos::atomic_compare_exchange(&ngp_size_.view_host()(), old_size, old_size - n);
+      if (observed == old_size) {
+        break;
+      }
+
+      old_size = observed;
+    }
 
     // Eat the last n values in the pool and replace them with a default constructed value.
     pool_vector_t out(n);
