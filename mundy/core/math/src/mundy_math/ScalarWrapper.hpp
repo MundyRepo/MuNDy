@@ -227,7 +227,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto get_scalar_view(Accessor&& data) {
 
 template <typename T, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto get_owning_scalar(Accessor&& data) {
-  auto data_storage = store(impl::unwrap_accessor(std::forward<Accessor>(data)));
+  auto data_storage = store(impl::unwrap_accessor(std::move(data)));
   return ScalarWrapper<T, decltype(data_storage)>(data_storage);
 }
 //@}

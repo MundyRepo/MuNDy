@@ -70,11 +70,11 @@ class MaskedView {
   /// \brief CUDA doesn't like static constexpr internal variables, so we use a constexpr variable in a static
   /// function instead
   KOKKOS_INLINE_FUNCTION
-  static constexpr size_t map_index(size_t k) {
+  static constexpr size_t map_index(size_t continuous_reduced_idx) {
     constexpr size_t num_masked_elements = count_masked_elements();
-    static_assert(k < num_masked_elements, "Index out of bounds for masked view");
+    static_assert(continuous_reduced_idx < num_masked_elements, "Index out of bounds for masked view");
     constexpr Kokkos::Array<size_t, N> valid_indices = create_index_array();
-    return valid_indices[k];
+    return valid_indices[continuous_reduced_idx];
   }
 
  public:
