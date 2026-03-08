@@ -81,7 +81,7 @@ set(Mundy_TEST_CATEGORIES
     "BASIC;CONTINUOUS;NIGHTLY;HEAVY"
     CACHE
       STRING
-      "Comma-separated list of test categories to enable. Valid categories are BASIC, CONTINUOUS, NIGHTLY, HEAVY, and PERFORMANCE."
+      "Semicolon-separated list of test categories to enable (CMake list). Valid categories are BASIC, CONTINUOUS, NIGHTLY, HEAVY, and PERFORMANCE."
 )
 if(Mundy_ENABLE_TESTS)
   message("")
