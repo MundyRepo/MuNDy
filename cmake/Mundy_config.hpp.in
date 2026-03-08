@@ -3,10 +3,8 @@
 
 // Declare special variables, especially those related to optional features, TPLs, and workarounds.
 
-// Optional packages
-#cmakedefine HAVE_MUNDY_NANOBENCH
-#cmakedefine HAVE_MUNDY_TEUCHOS
-#cmakedefine HAVE_MUNDY_STK
-#cmakedefine HAVE_MUNDY_GTEST
+// Optional packages shared by all of mundy
+#cmakedefine HAVE_MUNDY_STK  // TODO(palmerb4): This only exists because we rely on stk's mpi interface for initializing and finalizing MPI.
+                             // We should eventually remove this dependency by making our own MPI initialization and finalization code.
 
 #endif  // MUNDY_CONFIG_HPP_

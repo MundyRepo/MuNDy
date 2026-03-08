@@ -22,9 +22,9 @@
 #define MUNDY_UTILS_OURANYNUMBERPARAMETERENTRYVALIDATOR_HPP_
 
 // Mundy
-#include <Mundy_config.hpp>  // for HAVE_MUNDY_*
+#include <MundyUtils_config.hpp>  // for HAVE_MUNDYUTILS_*
 
-#ifdef HAVE_MUNDY_TEUCHOS
+#ifdef HAVE_MUNDYUTILS_TEUCHOS
 
 // C++ core
 #include <stdexcept>  // for std::runtime_error

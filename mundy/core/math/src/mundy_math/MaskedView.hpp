@@ -24,8 +24,10 @@
 // External
 #include <Kokkos_Core.hpp>
 
-// C++ core libs
+// C++ core
 #include <concepts>
+#include <stdexcept>    // for std::out_of_range
+#include <type_traits>  // for std::is_copy_constructible_v
 
 // Mundy
 #include <mundy_math/Accessor.hpp>  // for mundy::ValidAccessor
@@ -72,8 +74,9 @@ class MaskedView {
   KOKKOS_INLINE_FUNCTION
   static constexpr size_t map_index(size_t continuous_reduced_idx) {
     constexpr size_t num_masked_elements = count_masked_elements();
-    static_assert(continuous_reduced_idx < num_masked_elements, "Index out of bounds for masked view");
     constexpr Kokkos::Array<size_t, N> valid_indices = create_index_array();
+    MUNDY_THROW_ASSERT(continuous_reduced_idx < num_masked_elements, std::out_of_range,
+                       "Index out of bounds for masked view");
     return valid_indices[continuous_reduced_idx];
   }
 
