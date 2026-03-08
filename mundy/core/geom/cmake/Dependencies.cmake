@@ -5,6 +5,6 @@ tribits_package_define_dependencies(
   TEST_OPTIONAL_PACKAGES
   LIB_REQUIRED_TPLS Kokkos fmt
   LIB_OPTIONAL_TPLS CUDA
-  TEST_REQUIRED_TPLS GTest nanobench
-  TEST_OPTIONAL_TPLS
+  TEST_REQUIRED_TPLS
+  TEST_OPTIONAL_TPLS GTest nanobench
 )

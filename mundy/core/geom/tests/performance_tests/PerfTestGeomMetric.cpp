@@ -20,6 +20,7 @@
 
 //! \file MatrixVectorQuaternion.cpp
 /// \brief Performance test the use of matrices, vectors, and quaternions.
+
 #define ANKERL_NANOBENCH_IMPLEMENT
 
 // C++ core

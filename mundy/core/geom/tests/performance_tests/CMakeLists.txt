@@ -17,9 +17,17 @@
 # **********************************************************************************************************************
 # @HEADER
 
-tribits_add_executable(
-  PerfTestGeomMetric
-  SOURCES PerfTestGeomMetric.cpp
-  INSTALLABLE
-  CATEGORIES PERFORMANCE
-)
+if (Mundy_ENABLE_TESTS AND Mundy_ENABLE_nanobench)
+  message(STATUS
+          "MundyGeom: Setting up performance tests since Mundy_ENABLE_TESTS=ON and Mundy_ENABLE_nanobench=ON")
+
+  tribits_add_executable(
+    PerfTestGeomMetric
+    SOURCES PerfTestGeomMetric.cpp
+    INSTALLABLE
+    CATEGORIES PERFORMANCE
+  )
+else()
+  message(STATUS
+          "MundyGeom: Skipping performance tests since Mundy_ENABLE_TESTS=OFF or Mundy_ENABLE_nanobench=OFF ...")
+endif()

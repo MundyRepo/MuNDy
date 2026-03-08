@@ -20,6 +20,7 @@
 
 //! \file StorageVsExplicitVariants.cpp
 /// \brief Performance test: explicit owned/pointer/reference workspaces vs mundy::storage variants.
+
 #define ANKERL_NANOBENCH_IMPLEMENT
 
 // C++ core

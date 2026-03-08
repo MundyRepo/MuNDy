@@ -21,10 +21,15 @@
 //! \file MatrixVectorQuaternion.cpp
 /// \brief Performance test the use of matrices, vectors, and quaternions.
 
+#define ANKERL_NANOBENCH_IMPLEMENT
+
 // C++ core
 #include <stdexcept>  // for std::logic_error, std::invalid_argument
 #include <string>     // for std::string
 #include <vector>     // for std::vector
+
+// External
+#include "nanobench.h"
 
 // Trilinos
 #include <Kokkos_Core.hpp>                 // for Kokkos::initialize, Kokkos::finalize
@@ -301,24 +306,20 @@ void test_quaternion_rotation_direct(const std::vector<double>& q1, const std::v
 template <typename OurViewFunc, typename OurNoViewFunc, typename DirectFunc>
 void time_test(const std::string& test_name, const OurViewFunc& our_view_func, const OurNoViewFunc& our_no_view_func,
                const DirectFunc& direct_func) {
-  std::cout << "Timing " << test_name << std::endl;
-  Kokkos::Timer timer;
-  our_view_func();
-  double our_view_time = timer.seconds();
+  ankerl::nanobench::Bench bench;
+  bench.relative(true).title(test_name).unit("op").performanceCounters(true).minEpochIterations(1000);
 
-  timer.reset();
-  our_no_view_func();
-  double our_no_view_time = timer.seconds();
+  bench.run("with views", [&] {
+    our_view_func();
+  });
 
-  timer.reset();
-  direct_func();
-  double direct_time = timer.seconds();
+  bench.run("no views", [&] {
+    our_no_view_func();
+  });
 
-  std::cout << "  Our view time:    " << our_view_time << std::endl;
-  std::cout << "  Our no view time: " << our_no_view_time << std::endl;
-  std::cout << "  Direct time:      " << direct_time << std::endl;
-  std::cout << "  Our time / Direct time:         " << our_view_time / direct_time << std::endl;
-  std::cout << "  Our no view time / Direct time: " << our_no_view_time / direct_time << std::endl;
+  bench.run("direct", [&] {
+    direct_func();
+  });
 }
 
 int main(int argc, char** argv) {

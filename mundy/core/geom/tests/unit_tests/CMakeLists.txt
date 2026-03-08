@@ -20,32 +20,37 @@
 # Here, we attempt to organize unit tests logically by dependencies (not by spelling). Simple classes are tested first
 # and more complex classes are tested later. This is not a hard and fast rule, but it is a good guideline to follow,
 # as it produces more logical error messages when a test fails.
-tribits_add_executable_and_test(
-  UnitTestSegmentSegment
-  SOURCES UnitTestSegmentSegment.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
-  INSTALLABLE
-)
+if (Mundy_ENABLE_TESTS AND Mundy_ENABLE_GTest)
+  message(STATUS "MundyGeom: Setting up unit tests since Mundy_ENABLE_TESTS=ON and Mundy_ENABLE_GTest=ON")
+  tribits_add_executable_and_test(
+    UnitTestSegmentSegment
+    SOURCES UnitTestSegmentSegment.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+    INSTALLABLE
+  )
 
-tribits_add_executable_and_test(
-  UnitTestEllipsoidEllipsoid
-  SOURCES UnitTestEllipsoidEllipsoid.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
-  INSTALLABLE
-)
+  tribits_add_executable_and_test(
+    UnitTestEllipsoidEllipsoid
+    SOURCES UnitTestEllipsoidEllipsoid.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+    INSTALLABLE
+  )
 
-tribits_add_executable_and_test(
-  UnitTestComputeAABB
-  SOURCES UnitTestComputeAABB.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
-  INSTALLABLE
-)
+  tribits_add_executable_and_test(
+    UnitTestComputeAABB
+    SOURCES UnitTestComputeAABB.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+    INSTALLABLE
+  )
 
-tribits_add_executable_and_test(
-  UnitTestComputeBoundingRadius
-  SOURCES UnitTestComputeBoundingRadius.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
-  INSTALLABLE
-)
+  tribits_add_executable_and_test(
+    UnitTestComputeBoundingRadius
+    SOURCES UnitTestComputeBoundingRadius.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+    INSTALLABLE
+  )
 
-tribits_add_executable_and_test(
-  UnitTestPeriodicity
-  SOURCES UnitTestPeriodicity.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
-  INSTALLABLE
-)
+  tribits_add_executable_and_test(
+    UnitTestPeriodicity
+    SOURCES UnitTestPeriodicity.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+    INSTALLABLE
+  )
+else()
+  message(STATUS "MundyGeom: Skipping unit tests since Mundy_ENABLE_TESTS=OFF or Mundy_ENABLE_GTest=OFF ...")
+endif()

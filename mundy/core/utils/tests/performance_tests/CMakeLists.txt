@@ -17,30 +17,38 @@
 # **********************************************************************************************************************
 # @HEADER
 
-tribits_add_executable(
-  ReferenceWrapperVsExplicitReference
-  SOURCES ReferenceWrapperVsExplicitReference.cpp
-  INSTALLABLE
-  CATEGORIES PERFORMANCE
-)
+if (Mundy_ENABLE_TESTS AND Mundy_ENABLE_nanobench)
+  message(STATUS
+          "MundyUtils: Setting up performance tests since Mundy_ENABLE_TESTS=ON and Mundy_ENABLE_nanobench=ON")
 
-tribits_add_executable(
-  NgpReferenceWrapperVsExplicitReference
-  SOURCES NgpReferenceWrapperVsExplicitReference.cpp
-  INSTALLABLE
-  CATEGORIES PERFORMANCE
-)
+  tribits_add_executable(
+    ReferenceWrapperVsExplicitReference
+    SOURCES ReferenceWrapperVsExplicitReference.cpp
+    INSTALLABLE
+    CATEGORIES PERFORMANCE
+  )
 
-tribits_add_executable(
-  StorageVsExplicitVariants
-  SOURCES StorageVsExplicitVariants.cpp
-  INSTALLABLE
-  CATEGORIES PERFORMANCE
-)
+  tribits_add_executable(
+    NgpReferenceWrapperVsExplicitReference
+    SOURCES NgpReferenceWrapperVsExplicitReference.cpp
+    INSTALLABLE
+    CATEGORIES PERFORMANCE
+  )
 
-tribits_add_executable(
-  NgpStorageVsExplicitVariants
-  SOURCES NgpStorageVsExplicitVariants.cpp
-  INSTALLABLE
-  CATEGORIES PERFORMANCE
-)
+  tribits_add_executable(
+    StorageVsExplicitVariants
+    SOURCES StorageVsExplicitVariants.cpp
+    INSTALLABLE
+    CATEGORIES PERFORMANCE
+  )
+
+  tribits_add_executable(
+    NgpStorageVsExplicitVariants
+    SOURCES NgpStorageVsExplicitVariants.cpp
+    INSTALLABLE
+    CATEGORIES PERFORMANCE
+  )
+else()
+  message(STATUS
+          "MundyUtils: Skipping performance tests since Mundy_ENABLE_TESTS=OFF or Mundy_ENABLE_nanobench=OFF ...")
+endif()

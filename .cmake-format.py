@@ -19,6 +19,7 @@ _exec_kwargs = {"SOURCES": "*",
 
 _cmdline = {"pargs": {"nargs": "+", "tags": ["cmdline"]}}
 _filelist = {"pargs": {"nargs": "+", "sortable": True}}
+_subpkg_quadruples = {"pargs": [{"nargs": 4, "repeat": True}]}
 
 _test_kwargs = {"NAME": "*",
                 "NAME_POSTFIX": "*",
@@ -80,6 +81,19 @@ _mundy_lib_kwargs = {"HEADERS": "*",
                      "ADDED_LIB_TARGET_NAME_OUT": "*"
                      }
 
+_pkg_define_deps_kwargs = {
+    "LIB_REQUIRED_PACKAGES": "*",
+    "LIB_OPTIONAL_PACKAGES": "*",
+    "TEST_REQUIRED_PACKAGES": "*",
+    "TEST_OPTIONAL_PACKAGES": "*",
+    "LIB_REQUIRED_TPLS": "*",
+    "LIB_OPTIONAL_TPLS": "*",
+    "TEST_REQUIRED_TPLS": "*",
+    "TEST_OPTIONAL_TPLS": "*",
+    "SUBPACKAGES_DIRS_CLASSIFICATIONS_OPTREQS": _subpkg_quadruples,
+    "REGRESSION_EMAIL_LIST": "*",
+}
+
 # -----------------------------
 # Options affecting parsing.
 # -----------------------------
@@ -119,6 +133,7 @@ with section("parse"):
                                                                            },
                                                                 "flags": ["NOEXEPREFIX", "NOEXESUFFIX"]},
                            "tribits_add_option_and_define": {"pargs": {"nargs": 4}},
+                           "tribits_package_define_dependencies": {"kwargs": _pkg_define_deps_kwargs},
                            }
 
 # -----------------------------
@@ -135,7 +150,14 @@ with section("format"):
 
     # If a positional argument group contains more than this many arguments, then
     # force it to a vertical layout.
-    max_pargs_hwrap = 3
+    max_pargs_hwrap = 8
+
+    # Prefer keeping short command lines horizontal, but once wrapping starts,
+    # avoid packing multiple keyword groups onto one continued line.
+    max_rows_cmdline = 1
+
+    # Keep wrapped layouts compact and keyword-oriented instead of token-packing.
+    max_lines_hwrap = 1
 
     # If a statement is wrapped to more than one line, than dangle the closing
     # parenthesis on its own line.

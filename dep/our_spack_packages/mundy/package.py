@@ -51,7 +51,13 @@ class Mundy(CMakePackage, CudaPackage):
     #
     variant("shared", default=True, description="Build shared libraries")
     variant("debug", default=False, description="Build with debug flags")
-    variant("tests", default=False, description="Enable tests")
+    variant("tests", default=False, description="Enable both unit and performance tests")
+    variant("unit_tests", default=False, description="Enable unit/regression tests")
+    variant(
+        "performance_tests",
+        default=False,
+        description="Enable PERFORMANCE tests",
+    )
     variant("examples", default=False, description="Enable examples")
     variant(
         "cxxstd",
@@ -96,7 +102,6 @@ class Mundy(CMakePackage, CudaPackage):
     variant("stk", default=False, description="Enable STK support")
     variant("kokkos-kernels", default=False, description="Enable KokkosKernels support")
     variant("openrand", default=False, description="Enable OpenRAND support")
-    variant("nanobench", default=False, description="Enable nanobench support")
 
     #
     # Build tools
@@ -120,8 +125,8 @@ class Mundy(CMakePackage, CudaPackage):
     depends_on("trilinos@16.0.0+stk", when="+stk")
     depends_on("kokkos-kernels", when="+kokkos-kernels")
     depends_on("openrand", when="+openrand")
-    depends_on("nanobench", when="+nanobench")
-    depends_on("googletest@1.16.0:", when="+tests")
+    depends_on("nanobench", when="+performance_tests")
+    depends_on("googletest@1.16.0:", when="+unit_tests")
 
     #
     # Optional TPL requirements induced by selected MuNDy packages
@@ -138,15 +143,17 @@ class Mundy(CMakePackage, CudaPackage):
     #
     # Test dependency requirements
     #
-    with when("+tests"):
-        with when("~nanobench"):
-            conflicts("+math", msg="MundyMath tests require nanobench")
-            conflicts("+geom", msg="MundyGeom tests require nanobench")
-            conflicts("+mesh", msg="MundyMesh tests require nanobench")
-
+    with when("+performance_tests"):
         with when("~openrand"):
             conflicts("+math", msg="MundyMath tests require OpenRAND")
             conflicts("+mech", msg="MundyMech requires OpenRAND support")
+
+    with when("+unit_tests"):
+        with when("~openrand"):
+            conflicts("+math", msg="MundyMath tests require OpenRAND")
+            conflicts("+mech", msg="MundyMech requires OpenRAND support")
+
+    conflicts("+tests", when="~performance_tests ~unit_tests", msg="Enabling 'tests' requires at least one of +unit_tests or +performance_tests")
 
     #
     # Package-specific implication dependencies from the MuNDy hierarchy
@@ -205,9 +212,6 @@ class Mundy(CMakePackage, CudaPackage):
         spec = self.spec
         args = []
 
-        def onoff(cond):
-            return "ON" if cond else "OFF"
-
         #
         # Generic CMake build options
         #
@@ -218,8 +222,19 @@ class Mundy(CMakePackage, CudaPackage):
         #
         # Project-wide feature toggles
         #
-        args.append(self.define("Mundy_ENABLE_TESTS", "+tests" in spec))
+        enable_unit_tests = "+tests" in spec or "+unit_tests" in spec
+        enable_performance_tests = "+tests" in spec or "+performance_tests" in spec
+        enable_any_tests = enable_unit_tests or enable_performance_tests
+
+        args.append(self.define("Mundy_ENABLE_TESTS", enable_any_tests))
         args.append(self.define("Mundy_ENABLE_EXAMPLES", "+examples" in spec))
+        if enable_any_tests:
+            categories = []
+            if enable_unit_tests:
+                categories.extend(["BASIC", "CONTINUOUS", "NIGHTLY", "HEAVY"])
+            if enable_performance_tests:
+                categories.append("PERFORMANCE")
+            args.append(self.define("Mundy_TEST_CATEGORIES", ";".join(categories)))
 
         #
         # Internal MuNDy packages
@@ -240,8 +255,8 @@ class Mundy(CMakePackage, CudaPackage):
         args.append(self.define("TPL_ENABLE_STK", "+stk" in spec))
         args.append(self.define("TPL_ENABLE_KokkosKernels", "+kokkos-kernels" in spec))
         args.append(self.define("TPL_ENABLE_OpenRAND", "+openrand" in spec))
-        args.append(self.define("TPL_ENABLE_nanobench", "+nanobench" in spec))
-        args.append(self.define("TPL_ENABLE_GTest", "+tests" in spec))
+        args.append(self.define("TPL_ENABLE_nanobench", enable_performance_tests))
+        args.append(self.define("TPL_ENABLE_GTest", enable_unit_tests))
 
         #
         # CUDA support

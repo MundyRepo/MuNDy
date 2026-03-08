@@ -4,7 +4,9 @@
 // Declare special variables, especially those related to optional features, TPLs, and workarounds.
 
 // Optional packages
+#cmakedefine HAVE_MUNDY_NANOBENCH
 #cmakedefine HAVE_MUNDY_TEUCHOS
 #cmakedefine HAVE_MUNDY_STK
+#cmakedefine HAVE_MUNDY_GTEST
 
 #endif  // MUNDY_CONFIG_HPP_

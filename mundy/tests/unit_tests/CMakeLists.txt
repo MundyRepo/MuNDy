@@ -17,19 +17,24 @@
 # **********************************************************************************************************************
 # @HEADER
 
-tribits_add_executable_and_test(
-  UnitTestTest
-  SOURCES
-  UnitTestTest.cpp
-  NUM_MPI_PROCS 1-4
-  INSTALLABLE
-)
+if (Mundy_ENABLE_TESTS AND Mundy_ENABLE_GTest)
+  message(STATUS "-- Setting up unit tests for Mundy package since Mundy_ENABLE_TESTS=ON and Mundy_ENABLE_GTest=ON")
+  tribits_add_executable_and_test(
+    UnitTestTest
+    SOURCES
+    UnitTestTest.cpp
+    NUM_MPI_PROCS 1-4
+    INSTALLABLE
+  )
 
-tribits_add_executable_and_test(
-  UnitTestTestNoMain
-  SOURCES
-  UnitTestTestNoMain.cpp
-  ${Mundy_DEFAULT_UNIT_TEST_MAIN}
-  NUM_MPI_PROCS 1-4
-  INSTALLABLE
-)
+  tribits_add_executable_and_test(
+    UnitTestTestNoMain
+    SOURCES
+    UnitTestTestNoMain.cpp
+    ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+    NUM_MPI_PROCS 1-4
+    INSTALLABLE
+  )
+else()
+  message(STATUS "-- Skipping unit tests for Mundy package since Mundy_ENABLE_TESTS=OFF or Mundy_ENABLE_GTest=OFF ...")
+endif()

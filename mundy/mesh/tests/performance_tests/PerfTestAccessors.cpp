@@ -18,8 +18,11 @@
 // **********************************************************************************************************************
 // @HEADER
 
+#define ANKERL_NANOBENCH_IMPLEMENT
+
 // C++ core libs
 #include <algorithm>    // for std::max
+#include <iostream>     // for std::cout
 #include <map>          // for std::map
 #include <memory>       // for std::shared_ptr, std::unique_ptr
 #include <stdexcept>    // for std::logic_error, std::invalid_argument
@@ -27,6 +30,9 @@
 #include <type_traits>  // for std::enable_if, std::is_base_of, std::conjunction, std::is_convertible
 #include <utility>      // for std::move, std::pair, std::make_pair
 #include <vector>       // for std::vector
+
+// External
+#include "nanobench.h"
 
 // Trilinos libs
 #include <stk_mesh/base/BulkData.hpp>
@@ -58,8 +64,6 @@ void run_test() {
   //   - create a vector of entities
   //   - loop over all entities and fetch the data directly, perform some operation.
   //   - loop over all entities and fetch the data via the accessor and perform the same operation.
-
-  size_t num_trials = 100;
 
   // Setup
   stk::mesh::MeshBuilder builder(MPI_COMM_WORLD);
@@ -120,149 +124,129 @@ void run_test() {
   auto quaternion_accessor = QuaternionFieldComponent(quaternion_field);
   auto aabb_accessor = AABBFieldComponent(aabb_field);
 
+  auto run_benchmark = [](const std::string& test_name, auto&& field_op, auto&& accessor_op) {
+    ankerl::nanobench::Bench bench;
+    bench.relative(true).title(test_name).unit("op").performanceCounters(true).minEpochIterations(200);
+
+    bench.run("field", [&] {
+      field_op();
+    });
+
+    bench.run("accessor", [&] {
+      accessor_op();
+    });
+  };
+
   ////////////
   // Scalar //
   ////////////
-  Kokkos::Timer scalar_field_timer;
-  for (size_t t = 0; t < num_trials; ++t) {
-    for (size_t i = 0; i < num_nodes; ++i) {
-      stk::mesh::Entity node = nodes[i];
-      double& scalar = stk::mesh::field_data(scalar_field, node)[0];
-      scalar += static_cast<double>(i);
-    }
-  }
-  double scalar_field_time = scalar_field_timer.seconds() / static_cast<double>(num_trials);
-
-  Kokkos::Timer scalar_accessor_timer;
-  for (size_t t = 0; t < num_trials; ++t) {
-    for (size_t i = 0; i < num_nodes; ++i) {
-      stk::mesh::Entity node = nodes[i];
-      auto scalar = scalar_accessor(node);
-      scalar[0] += static_cast<double>(i);
-    }
-  }
-  double scalar_accessor_time = scalar_accessor_timer.seconds() / static_cast<double>(num_trials);
-  std::cout << "Scalar field time: " << scalar_field_time << " vs Scalar accessor time: " << scalar_accessor_time
-            << std::endl;
-  std::cout << " Ratio (accessor/field): " << scalar_accessor_time / scalar_field_time << std::endl;
+  run_benchmark(
+      "Scalar", [&] {
+        for (size_t i = 0; i < num_nodes; ++i) {
+          stk::mesh::Entity node = nodes[i];
+          double& scalar = stk::mesh::field_data(scalar_field, node)[0];
+          scalar += static_cast<double>(i);
+        }
+      },
+      [&] {
+        for (size_t i = 0; i < num_nodes; ++i) {
+          stk::mesh::Entity node = nodes[i];
+          auto scalar = scalar_accessor(node);
+          scalar[0] += static_cast<double>(i);
+        }
+      });
 
   /////////////
   // Vector3 //
   /////////////
-  Kokkos::Timer vector3_field_timer;
-  for (size_t t = 0; t < num_trials; ++t) {
-    for (size_t i = 0; i < num_nodes; ++i) {
-      stk::mesh::Entity node = nodes[i];
-      for (size_t j = 0; j < 3; ++j) {
-        double& vector3 = stk::mesh::field_data(vector3_field, node)[j];
-        vector3 += static_cast<double>(i) * static_cast<double>(j);
-      }
-    }
-  }
-  double vector3_field_time = vector3_field_timer.seconds() / static_cast<double>(num_trials);
+  run_benchmark(
+      "Vector3", [&] {
+        for (size_t i = 0; i < num_nodes; ++i) {
+          stk::mesh::Entity node = nodes[i];
+          for (size_t j = 0; j < 3; ++j) {
+            double& vector3 = stk::mesh::field_data(vector3_field, node)[j];
+            vector3 += static_cast<double>(i) * static_cast<double>(j);
+          }
+        }
+      },
+      [&] {
+        for (size_t i = 0; i < num_nodes; ++i) {
+          stk::mesh::Entity node = nodes[i];
+          auto vector3 = vector3_accessor(node);
+          for (size_t j = 0; j < 3; ++j) {
+            vector3[j] += static_cast<double>(i) * static_cast<double>(j);
+          }
+        }
+      });
 
-  Kokkos::Timer vector3_accessor_timer;
-  for (size_t t = 0; t < num_trials; ++t) {
-    for (size_t i = 0; i < num_nodes; ++i) {
-      stk::mesh::Entity node = nodes[i];
-      auto vector3 = vector3_accessor(node);
-      for (size_t j = 0; j < 3; ++j) {
-        vector3[j] += static_cast<double>(i) * static_cast<double>(j);
-      }
-    }
-  }
-  double vector3_accessor_time = vector3_accessor_timer.seconds() / static_cast<double>(num_trials);
-  std::cout << "Vector3 field time: " << vector3_field_time << " vs Vector3 accessor time: " << vector3_accessor_time
-            << std::endl;
-  std::cout << " Ratio (accessor/field): " << vector3_accessor_time / vector3_field_time << std::endl;
   /////////////
   // Matrix3 //
   /////////////
-  Kokkos::Timer matrix3_field_timer;
-  for (size_t t = 0; t < num_trials; ++t) {
-    for (size_t i = 0; i < num_nodes; ++i) {
-      stk::mesh::Entity node = nodes[i];
-      for (size_t j = 0; j < 9; ++j) {
-        double& matrix3 = stk::mesh::field_data(matrix3_field, node)[j];
-        matrix3 += static_cast<double>(i) * static_cast<double>(j);
-      }
-    }
-  }
-  double matrix3_field_time = matrix3_field_timer.seconds() / static_cast<double>(num_trials);
-
-  Kokkos::Timer matrix3_accessor_timer;
-  for (size_t t = 0; t < num_trials; ++t) {
-    for (size_t i = 0; i < num_nodes; ++i) {
-      stk::mesh::Entity node = nodes[i];
-      auto matrix3 = matrix3_accessor(node);
-      for (size_t j = 0; j < 9; ++j) {
-        matrix3[j] += static_cast<double>(i) * static_cast<double>(j);
-      }
-    }
-  }
-  double matrix3_accessor_time = matrix3_accessor_timer.seconds() / static_cast<double>(num_trials);
-  std::cout << "Matrix3 field time: " << matrix3_field_time << " vs Matrix3 accessor time: " << matrix3_accessor_time
-            << std::endl;
-  std::cout << " Ratio (accessor/field): " << matrix3_accessor_time / matrix3_field_time << std::endl;
+  run_benchmark(
+      "Matrix3", [&] {
+        for (size_t i = 0; i < num_nodes; ++i) {
+          stk::mesh::Entity node = nodes[i];
+          for (size_t j = 0; j < 9; ++j) {
+            double& matrix3 = stk::mesh::field_data(matrix3_field, node)[j];
+            matrix3 += static_cast<double>(i) * static_cast<double>(j);
+          }
+        }
+      },
+      [&] {
+        for (size_t i = 0; i < num_nodes; ++i) {
+          stk::mesh::Entity node = nodes[i];
+          auto matrix3 = matrix3_accessor(node);
+          for (size_t j = 0; j < 9; ++j) {
+            matrix3[j] += static_cast<double>(i) * static_cast<double>(j);
+          }
+        }
+      });
 
   ////////////////
   // Quaternion //
   ////////////////
-  Kokkos::Timer quaternion_field_timer;
-  for (size_t t = 0; t < num_trials; ++t) {
-    for (size_t i = 0; i < num_nodes; ++i) {
-      stk::mesh::Entity node = nodes[i];
-      for (size_t j = 0; j < 4; ++j) {
-        double& quaternion = stk::mesh::field_data(quaternion_field, node)[j];
-        quaternion += static_cast<double>(i) * static_cast<double>(j);
-      }
-    }
-  }
-  double quaternion_field_time = quaternion_field_timer.seconds() / static_cast<double>(num_trials);
-
-  Kokkos::Timer quaternion_accessor_timer;
-  for (size_t t = 0; t < num_trials; ++t) {
-    for (size_t i = 0; i < num_nodes; ++i) {
-      stk::mesh::Entity node = nodes[i];
-      auto quaternion = quaternion_accessor(node);
-      for (size_t j = 0; j < 4; ++j) {
-        quaternion[j] += static_cast<double>(i) * static_cast<double>(j);
-      }
-    }
-  }
-  double quaternion_accessor_time = quaternion_accessor_timer.seconds() / static_cast<double>(num_trials);
-  std::cout << "Quaternion field time: " << quaternion_field_time
-            << " vs Quaternion accessor time: " << quaternion_accessor_time << std::endl;
-  std::cout << " Ratio (accessor/field): " << quaternion_accessor_time / quaternion_field_time << std::endl;
+  run_benchmark(
+      "Quaternion", [&] {
+        for (size_t i = 0; i < num_nodes; ++i) {
+          stk::mesh::Entity node = nodes[i];
+          for (size_t j = 0; j < 4; ++j) {
+            double& quaternion = stk::mesh::field_data(quaternion_field, node)[j];
+            quaternion += static_cast<double>(i) * static_cast<double>(j);
+          }
+        }
+      },
+      [&] {
+        for (size_t i = 0; i < num_nodes; ++i) {
+          stk::mesh::Entity node = nodes[i];
+          auto quaternion = quaternion_accessor(node);
+          for (size_t j = 0; j < 4; ++j) {
+            quaternion[j] += static_cast<double>(i) * static_cast<double>(j);
+          }
+        }
+      });
 
   //////////
   // AABB //
   //////////
-  Kokkos::Timer aabb_field_timer;
-  for (size_t t = 0; t < num_trials; ++t) {
-    for (size_t i = 0; i < num_nodes; ++i) {
-      stk::mesh::Entity node = nodes[i];
-      for (size_t j = 0; j < 6; ++j) {
-        double& aabb = stk::mesh::field_data(aabb_field, node)[j];
-        aabb += static_cast<double>(i) * static_cast<double>(j);
-      }
-    }
-  }
-  double aabb_field_time = aabb_field_timer.seconds() / static_cast<double>(num_trials);
-
-  Kokkos::Timer aabb_accessor_timer;
-  for (size_t t = 0; t < num_trials; ++t) {
-    for (size_t i = 0; i < num_nodes; ++i) {
-      stk::mesh::Entity node = nodes[i];
-      auto aabb = aabb_accessor(node);
-      for (size_t j = 0; j < 6; ++j) {
-        aabb[j] += static_cast<double>(i) * static_cast<double>(j);
-      }
-    }
-  }
-  double aabb_accessor_time = aabb_accessor_timer.seconds() / static_cast<double>(num_trials);
-  std::cout << "AABB field time: " << aabb_field_time << " vs AABB accessor time: " << aabb_accessor_time << std::endl;
-  std::cout << " Ratio (accessor/field): " << aabb_accessor_time / aabb_field_time << std::endl;
+  run_benchmark(
+      "AABB", [&] {
+        for (size_t i = 0; i < num_nodes; ++i) {
+          stk::mesh::Entity node = nodes[i];
+          for (size_t j = 0; j < 6; ++j) {
+            double& aabb = stk::mesh::field_data(aabb_field, node)[j];
+            aabb += static_cast<double>(i) * static_cast<double>(j);
+          }
+        }
+      },
+      [&] {
+        for (size_t i = 0; i < num_nodes; ++i) {
+          stk::mesh::Entity node = nodes[i];
+          auto aabb = aabb_accessor(node);
+          for (size_t j = 0; j < 6; ++j) {
+            aabb[j] += static_cast<double>(i) * static_cast<double>(j);
+          }
+        }
+      });
 }
 }  // namespace
 

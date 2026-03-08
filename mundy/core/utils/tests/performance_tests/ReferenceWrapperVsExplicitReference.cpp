@@ -20,6 +20,7 @@
 
 //! \file ReferenceWrapperVsExplicitReference.cpp
 /// \brief Performance test the use of mundy::reference_wrapper vs explicit references in a workspace struct.
+
 #define ANKERL_NANOBENCH_IMPLEMENT
 
 // C++ core

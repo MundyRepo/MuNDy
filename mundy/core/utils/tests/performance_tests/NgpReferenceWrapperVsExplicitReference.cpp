@@ -20,6 +20,7 @@
 
 //! \file NgpReferenceWrapperVsExplicitReference.cpp
 /// \brief Performance test for mundy::reference_wrapper vs explicit references using Kokkos views/kernels.
+
 #define ANKERL_NANOBENCH_IMPLEMENT
 
 // C++ core

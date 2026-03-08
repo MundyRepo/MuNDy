@@ -21,6 +21,7 @@
 //! \file NgpStorageVsExplicitVariants.cpp
 /// \brief Performance test: explicit owned/pointer/reference workspaces vs mundy::storage variants using
 /// Kokkos views/kernels.
+
 #define ANKERL_NANOBENCH_IMPLEMENT
 
 // C++ core
