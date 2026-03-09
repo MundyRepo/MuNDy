@@ -32,8 +32,8 @@
 #include <stk_mesh/base/Field.hpp>    // for stk::mesh::Field, stl::mesh::field_data
 
 // Mundy libs
-#include <mundy_math/Quaternion.hpp>  // for mundy::math::Quaternion
-#include <mundy_math/Vector3.hpp>     // for mundy::math::Vector3
+#include <mundy_math/Quaternion.hpp>  // for mundy::Quaternion
+#include <mundy_math/Vector3.hpp>     // for mundy::Vector3
 #include <mundy_mesh/BulkData.hpp>    // for mundy::mesh::BulkData
 #include <mundy_mesh/FieldViews.hpp>  // for mundy::mesh::vector3_field_data, mundy::mesh::quaternion_field_data, mundy::mesh::matrix3_field_data
 #include <mundy_mesh/ForEachEntity.hpp>             // for mundy::mesh::for_each_entity_run
@@ -152,7 +152,7 @@ void SpherocylinderSegment::execute(const stk::mesh::Selector &spherocylinder_se
 
         // Populate the buffer distance.
         double *bounding_radius = stk::mesh::field_data(element_bounding_radius_field, spherocylinder_segment_element);
-        const double segment_length = mundy::math::norm(right_node_coord - left_node_coord);
+        const double segment_length = mundy::norm(right_node_coord - left_node_coord);
         bounding_radius[0] = radius + 0.5 * segment_length + buffer_distance;
       });
 }

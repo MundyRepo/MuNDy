@@ -34,13 +34,13 @@
 #include <stk_mesh/base/Types.hpp>   // for stk::mesh::EntityRank
 
 // Mundy libs
-#include <mundy_core/throw_assert.hpp>                 // for MUNDY_THROW_ASSERT
 #include <mundy_mesh/LinkCOOData.hpp>                  // for mundy::mesh::LinkCOOData/NgpLinkCOOData
 #include <mundy_mesh/LinkCSRData.hpp>                  // for mundy::mesh::LinkCSRData/NgpLinkCSRData
 #include <mundy_mesh/LinkMetaData.hpp>                 // for mundy::mesh::LinkMetaData
 #include <mundy_mesh/MetaData.hpp>                     // for mundy::mesh::MetaData
 #include <mundy_mesh/Types.hpp>                        // for mundy::mesh::NgpDataAccessTag
 #include <mundy_mesh/impl/HostDeviceSynchronizer.hpp>  // for mundy::mesh::impl::HostDeviceSynchronizer
+#include <mundy_utils/throw_assert.hpp>                // for MUNDY_THROW_ASSERT
 
 namespace mundy {
 
@@ -51,7 +51,7 @@ namespace impl {
 template <typename NgpMemSpace>
 class LinkCSRDataSynchronizerT : public HostDeviceSynchronizer {
  public:
-  LinkCSRDataSynchronizerT(LinkCSRData &crs_data, NgpLinkCSRDataT<NgpMemSpace> &ngp_crs_data)
+  LinkCSRDataSynchronizerT(LinkCSRData& crs_data, NgpLinkCSRDataT<NgpMemSpace>& ngp_crs_data)
       : crs_data_(crs_data), ngp_crs_data_(ngp_crs_data) {
   }
 
@@ -84,8 +84,8 @@ class LinkCSRDataSynchronizerT : public HostDeviceSynchronizer {
   }
 
  private:
-  LinkCSRData &crs_data_;
-  NgpLinkCSRDataT<NgpMemSpace> &ngp_crs_data_;
+  LinkCSRData& crs_data_;
+  NgpLinkCSRDataT<NgpMemSpace>& ngp_crs_data_;
 };  // LinkCSRDataSynchronizerT
 
 }  // namespace impl

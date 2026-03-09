@@ -50,8 +50,8 @@
 #include <stk_util/parallel/Parallel.hpp>        // for stk::parallel_machine_init, stk::parallel_machine_finalize
 
 // Mundy libs
-#include <mundy_core/MakeStringArray.hpp>                                     // for mundy::core::make_string_array
-#include <mundy_core/throw_assert.hpp>                                        // for MUNDY_THROW_ASSERT
+#include <mundy_utils/MakeStringArray.hpp>                                     // for mundy::make_string_array
+#include <mundy_utils/throw_assert.hpp>                                        // for MUNDY_THROW_ASSERT
 #include <mundy_io/IOBroker.hpp>                                              // for mundy::io::IOBroker
 #include <mundy_linkers/ComputeSignedSeparationDistanceAndContactNormal.hpp>  // for mundy::linkers::ComputeSignedSeparationDistanceAndContactNormal
 #include <mundy_linkers/DestroyNeighborLinkers.hpp>         // for mundy::linkers::DestroyNeighborLinkers
@@ -60,13 +60,13 @@
 #include <mundy_linkers/LinkerPotentialForceReduction.hpp>  // for mundy::linkers::LinkerPotentialForceReduction
 #include <mundy_linkers/NeighborLinkers.hpp>                // for mundy::linkers::NeighborLinkers
 #include <mundy_linkers/neighbor_linkers/SpherocylinderSpherocylinderLinkers.hpp>  // for mundy::...::SpherocylinderSpherocylinderLinkers
-#include <mundy_math/Matrix3.hpp>                                                  // for mundy::math::Matrix3
-#include <mundy_math/Quaternion.hpp>  // for mundy::math::Quaternion, mundy::math::quat_from_parallel_transport
-#include <mundy_math/Vector3.hpp>     // for mundy::math::Vector3
+#include <mundy_math/Matrix3.hpp>                                                  // for mundy::Matrix3
+#include <mundy_math/Quaternion.hpp>  // for mundy::Quaternion, mundy::quat_from_parallel_transport
+#include <mundy_math/Vector3.hpp>     // for mundy::Vector3
 #include <mundy_mesh/BulkData.hpp>    // for mundy::mesh::BulkData
 #include <mundy_mesh/FieldViews.hpp>  // for mundy::mesh::vector3_field_data, mundy::mesh::quaternion_field_data
 #include <mundy_mesh/MetaData.hpp>    // for mundy::mesh::MetaData
-#include <mundy_mesh/utils/FillFieldWithValue.hpp>  // for mundy::mesh::utils::fill_field_with_value
+#include <mundy_mesh/utils/FillFieldWithValue.hpp>  // for mundy::mesh::fill_field_with_value
 #include <mundy_meta/FieldReqs.hpp>                 // for mundy::meta::FieldReqs
 #include <mundy_meta/MeshReqs.hpp>                  // for mundy::meta::MeshReqs
 #include <mundy_meta/PartReqs.hpp>                  // for mundy::meta::PartReqs
@@ -192,7 +192,7 @@ void subdivide_spherocylinders(stk::mesh::BulkData &bulk_data, const stk::mesh::
           // their length and coordinates. Length of children is parent length / 2 - parent radius Center of
           // children is parent center +/- parent tangent * (parent radius - child length / 2)
           const auto parent_orientation = mundy::mesh::quaternion_field_data(orientation_field, parent);
-          const auto parent_tangent = parent_orientation * mundy::math::Vector3d(1.0, 0.0, 0.0);
+          const auto parent_tangent = parent_orientation * mundy::Vector3d(1.0, 0.0, 0.0);
           auto parent_node_coords = mundy::mesh::vector3_field_data(coordinate_field, parent_node);
           auto child_node_coords = mundy::mesh::vector3_field_data(coordinate_field, child_node);
 
@@ -473,25 +473,25 @@ class BacteriaSim {
     // When we eventually switch to the configurator, these individual fixed params will become sublists within a single
     // master parameter list. Note, sublist will return a reference to the sublist with the given name.
     auto compute_ssd_and_cn_fixed_params = Teuchos::ParameterList().set(
-        "enabled_kernel_names", mundy::core::make_string_array("SPHEROCYLINDER_SPHEROCYLINDER_LINKER"));
+        "enabled_kernel_names", mundy::make_string_array("SPHEROCYLINDER_SPHEROCYLINDER_LINKER"));
     auto compute_aabb_fixed_params =
-        Teuchos::ParameterList().set("enabled_kernel_names", mundy::core::make_string_array("SPHEROCYLINDER"));
+        Teuchos::ParameterList().set("enabled_kernel_names", mundy::make_string_array("SPHEROCYLINDER"));
     compute_aabb_fixed_params.sublist("SPHEROCYLINDER")
-        .set("valid_entity_part_names", mundy::core::make_string_array("BACTERIA"));
+        .set("valid_entity_part_names", mundy::make_string_array("BACTERIA"));
     auto generate_neighbor_linkers_fixed_params =
         Teuchos::ParameterList()
             .set("enabled_technique_name", "STK_SEARCH")
             .set("specialized_neighbor_linkers_part_names",
-                 mundy::core::make_string_array("SPHEROCYLINDER_SPHEROCYLINDER_LINKERS"));
+                 mundy::make_string_array("SPHEROCYLINDER_SPHEROCYLINDER_LINKERS"));
     generate_neighbor_linkers_fixed_params.sublist("STK_SEARCH")
-        .set("valid_source_entity_part_names", mundy::core::make_string_array("BACTERIA"))
-        .set("valid_target_entity_part_names", mundy::core::make_string_array("BACTERIA"));
+        .set("valid_source_entity_part_names", mundy::make_string_array("BACTERIA"))
+        .set("valid_target_entity_part_names", mundy::make_string_array("BACTERIA"));
     auto evaluate_linker_potentials_fixed_params = Teuchos::ParameterList().set(
-        "enabled_kernel_names", mundy::core::make_string_array("SPHEROCYLINDER_SPHEROCYLINDER_HERTZIAN_CONTACT"));
+        "enabled_kernel_names", mundy::make_string_array("SPHEROCYLINDER_SPHEROCYLINDER_HERTZIAN_CONTACT"));
     auto linker_potential_force_reduction_fixed_params =
-        Teuchos::ParameterList().set("enabled_kernel_names", mundy::core::make_string_array("SPHEROCYLINDER"));
+        Teuchos::ParameterList().set("enabled_kernel_names", mundy::make_string_array("SPHEROCYLINDER"));
     linker_potential_force_reduction_fixed_params.sublist("SPHEROCYLINDER")
-        .set("valid_entity_part_names", mundy::core::make_string_array("BACTERIA"));
+        .set("valid_entity_part_names", mundy::make_string_array("BACTERIA"));
     auto destroy_distant_neighbor_linkers_fixed_params =
         Teuchos::ParameterList().set("enabled_technique_name", "DESTROY_DISTANT_NEIGHBORS");
 
@@ -598,12 +598,12 @@ class BacteriaSim {
     // Create a mundy io broker via it's fixed parameters
     auto fixed_params_iobroker =
         Teuchos::ParameterList()
-            .set("enabled_io_parts", mundy::core::make_string_array("BACTERIA"))
+            .set("enabled_io_parts", mundy::make_string_array("BACTERIA"))
             .set("enabled_io_fields_node_rank",
-                 mundy::core::make_string_array("NODE_VELOCITY", "NODE_OMEGA", "NODE_FORCE", "NODE_TORQUE",
+                 mundy::make_string_array("NODE_VELOCITY", "NODE_OMEGA", "NODE_FORCE", "NODE_TORQUE",
                                                 "NODE_RNG_COUNTER"))
             .set("enabled_io_fields_element_rank",
-                 mundy::core::make_string_array("ELEMENT_RADIUS", "ELEMENT_LENGTH", "ELEMENT_ORIENTATION",
+                 mundy::make_string_array("ELEMENT_RADIUS", "ELEMENT_LENGTH", "ELEMENT_ORIENTATION",
                                                 "ELEMENT_TANGENT", "ELEMENT_AABB", "ELEMENT_YOUNGS_MODULUS",
                                                 "ELEMENT_POISSONS_RATIO", "ELEMENT_MARKED_FOR_DIVISION"))
             .set("coordinate_field_name", "NODE_COORDS")
@@ -653,10 +653,10 @@ class BacteriaSim {
         stk::mesh::field_data(*element_youngs_modulus_field_ptr_, bacteria)[0] = bacteria_youngs_modulus_;
         stk::mesh::field_data(*element_poissons_ratio_field_ptr_, bacteria)[0] = bacteria_poissons_ratio_;
 
-        mundy::math::Vector3d current_tangent(1.0, 0.0, 0.0);
-        mundy::math::Vector3d x_axis(1.0, 0.0, 0.0);
+        mundy::Vector3d current_tangent(1.0, 0.0, 0.0);
+        mundy::Vector3d x_axis(1.0, 0.0, 0.0);
         mundy::mesh::quaternion_field_data(*element_orientation_field_ptr_, bacteria) =
-            mundy::math::quat_from_parallel_transport(x_axis, current_tangent);
+            mundy::quat_from_parallel_transport(x_axis, current_tangent);
         mundy::mesh::vector3_field_data(*element_tangent_field_ptr_, bacteria) = current_tangent;
       }
     }
@@ -674,11 +674,11 @@ class BacteriaSim {
 
   void zero_out_transient_node_fields() {
     debug_print("Zeroing out the transient node fields.");
-    mundy::mesh::utils::fill_field_with_value<double>(*node_velocity_field_ptr_, std::array<double, 3>{0.0, 0.0, 0.0});
-    mundy::mesh::utils::fill_field_with_value<double>(*node_omega_field_ptr_, std::array<double, 3>{0.0, 0.0, 0.0});
-    mundy::mesh::utils::fill_field_with_value<double>(*node_force_field_ptr_, std::array<double, 3>{0.0, 0.0, 0.0});
-    mundy::mesh::utils::fill_field_with_value<double>(*node_torque_field_ptr_, std::array<double, 3>{0.0, 0.0, 0.0});
-    mundy::mesh::utils::fill_field_with_value<double>(*linker_potential_force_field_ptr_,
+    mundy::mesh::fill_field_with_value<double>(*node_velocity_field_ptr_, std::array<double, 3>{0.0, 0.0, 0.0});
+    mundy::mesh::fill_field_with_value<double>(*node_omega_field_ptr_, std::array<double, 3>{0.0, 0.0, 0.0});
+    mundy::mesh::fill_field_with_value<double>(*node_force_field_ptr_, std::array<double, 3>{0.0, 0.0, 0.0});
+    mundy::mesh::fill_field_with_value<double>(*node_torque_field_ptr_, std::array<double, 3>{0.0, 0.0, 0.0});
+    mundy::mesh::fill_field_with_value<double>(*linker_potential_force_field_ptr_,
                                                       std::array<double, 3>{0.0, 0.0, 0.0});
   }
 
@@ -748,7 +748,7 @@ class BacteriaSim {
   }
 
   void zero_out_accumulator_fields() {
-    mundy::mesh::utils::fill_field_with_value<double>(*element_aabb_displacement_field_ptr_,
+    mundy::mesh::fill_field_with_value<double>(*element_aabb_displacement_field_ptr_,
                                                       std::array<double, 6>{0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
   }
 
@@ -880,17 +880,17 @@ class BacteriaSim {
           // Update the quaternion using Delong, JCP, 2015, Appendix A eq1, not linearized
           const auto omega = mundy::mesh::vector3_field_data(node_omega_field_old, node);
           const auto old_orientation = mundy::mesh::quaternion_field_data(element_orientation_field_old, element);
-          const double w = mundy::math::norm(omega);
+          const double w = mundy::norm(omega);
           if (w > std::numeric_limits<double>::epsilon()) {
             const double winv = 1 / w;
             const double sw = sin(w * timestep_size / 2);
             const double cw = cos(w * timestep_size / 2);
             const double s = old_orientation.w();
-            const mundy::math::Vector3d p(old_orientation.x(), old_orientation.y(), old_orientation.z());
-            const mundy::math::Vector3d xyz =
-                s * sw * omega * winv + cw * p + sw * winv * (mundy::math::cross(omega, p));
+            const mundy::Vector3d p(old_orientation.x(), old_orientation.y(), old_orientation.z());
+            const mundy::Vector3d xyz =
+                s * sw * omega * winv + cw * p + sw * winv * (mundy::cross(omega, p));
             mundy::mesh::quaternion_field_data(element_orientation_field, element).w() =
-                s * cw - (mundy::math::dot(p, omega)) * sw * winv;
+                s * cw - (mundy::dot(p, omega)) * sw * winv;
             mundy::mesh::quaternion_field_data(element_orientation_field, element).x() = xyz[0];
             mundy::mesh::quaternion_field_data(element_orientation_field, element).y() = xyz[1];
             mundy::mesh::quaternion_field_data(element_orientation_field, element).z() = xyz[2];
@@ -1006,7 +1006,7 @@ class BacteriaSim {
           const auto element_orientation = mundy::mesh::quaternion_field_data(element_orientation_field, bacteria);
 
           // Compute the tangent
-          element_tangent = element_orientation * mundy::math::Vector3d(1.0, 0.0, 0.0);
+          element_tangent = element_orientation * mundy::Vector3d(1.0, 0.0, 0.0);
         });
   }
 

@@ -32,7 +32,7 @@ namespace mesh {
 namespace impl {
 
 template <class T>
-T convert_cast(const std::string &s);
+T convert_cast(const std::string& s);
 
 /// \brief Valid token types within our Selector lexicon.
 enum SelectorStringToken {
@@ -60,10 +60,10 @@ class SelectorLexem {
  public:
   //! \name Constructors
   //@{
-  SelectorLexem(SelectorStringToken token, const char *from, const char *to) : m_token(token), m_value(from, to) {
+  SelectorLexem(SelectorStringToken token, const char* from, const char* to) : m_token(token), m_value(from, to) {
   }
 
-  SelectorLexem(SelectorStringToken token, const char *value) : m_token(token), m_value(value) {
+  SelectorLexem(SelectorStringToken token, const char* value) : m_token(token), m_value(value) {
   }
   //@}
 
@@ -76,7 +76,7 @@ class SelectorLexem {
   }
 
   /// \brief Get the string value of the lexem.
-  const std::string &getString() const {
+  const std::string& getString() const {
     return m_value;
   }
 
@@ -107,7 +107,7 @@ typedef std::vector<SelectorLexem> SelectorLexemVector;
 /// \brief Tokenize a selector string expression into a vector of lexems.
 ///
 /// \param expression The expression to tokenize.
-SelectorLexemVector tokenize(const std::string &expression);
+SelectorLexemVector tokenize(const std::string& expression);
 
 }  // namespace impl
 

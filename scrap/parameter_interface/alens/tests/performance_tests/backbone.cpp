@@ -18,8 +18,8 @@ double find_next_x(const double &x_prev, const double &segment_length, const dou
   };
 
   std::uintmax_t max_iter = 1000;
-  const boost::math::tools::eps_tolerance<double> double_tol(boost::math::tools::digits<double>());
-  auto [x_new, y_new] = boost::math::tools::toms748_solve(f, x_prev, x_prev + segment_length, double_tol, max_iter);
+  const boost::tools::eps_tolerance<double> double_tol(boost::tools::digits<double>());
+  auto [x_new, y_new] = boost::tools::toms748_solve(f, x_prev, x_prev + segment_length, double_tol, max_iter);
   return x_new;
 }
 
@@ -98,7 +98,7 @@ std::pair<std::vector<double>, std::vector<double>> segmentize_function(const st
                                                                         const double &segment_length,
                                                                         const std::uintmax_t &max_iter = 1000) {
   assert(num_segments > 0);
-  const boost::math::tools::eps_tolerance<double> double_tol(boost::math::tools::digits<double>());
+  const boost::tools::eps_tolerance<double> double_tol(boost::tools::digits<double>());
 
   std::vector<double> x_values(num_segments);
   std::vector<double> y_values(num_segments);
@@ -117,7 +117,7 @@ std::pair<std::vector<double>, std::vector<double>> segmentize_function(const st
       return current_ell - segment_length;
     };
     try {
-      [[maybe_unused]] auto [x_new, error] = boost::math::tools::toms748_solve(
+      [[maybe_unused]] auto [x_new, error] = boost::tools::toms748_solve(
           length_error_func, x_prev, x_prev + segment_length, double_tol, boost_max_iter);
       x_prev = x_new;
       y_prev = f(x_new);

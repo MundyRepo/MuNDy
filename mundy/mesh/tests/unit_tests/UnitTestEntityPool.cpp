@@ -42,8 +42,8 @@
 #include <stk_mesh/base/Selector.hpp>
 
 // Mundy
-#include <mundy_core/NgpView.hpp>        // for mundy::core::NgpView
 #include <mundy_mesh/NgpEntityPool.hpp>  // for mundy::mesh::NgpEntityPool
+#include <mundy_utils/NgpView.hpp>       // for mundy::NgpView
 
 namespace mundy {
 
@@ -119,6 +119,7 @@ void basic_usage_test() {
   stk::mesh::Entity node = node_pool.acquire();  // Size 49. Capacity 100.
   EXPECT_EQ(node_pool.size(), 49);
   EXPECT_EQ(node_pool.capacity(), 100);
+  EXPECT_NE(node, stk::mesh::Entity());  // Acquired entity should not be default constructed.
 
   //  b. acquire entities from the pool in bulk via acquire(N) or acquire_host(N)
   auto ten_nodes = node_pool.batch_acquire(10);  // Size 39. Capacity 100.
@@ -163,7 +164,7 @@ void thread_safety_test() {
   // Use enough entities for parallel contention to be possible
   size_t num_entities = 100000;
   bulk_data.modification_begin();
-  core::NgpView<stk::mesh::Entity*> nodes("nodes", num_entities);
+  NgpView<stk::mesh::Entity*> nodes("nodes", num_entities);
   for (size_t i = 0; i < num_entities; ++i) {
     nodes.view_host()(i) = bulk_data.declare_node(i + 1);  // IDs are 1 indexed
   }
@@ -201,11 +202,11 @@ void thread_safety_test() {
   // Fetch each of the entities from the pool in parallel and assert that they are not default constructed
   stk::mesh::NgpMesh ngp_mesh = stk::mesh::get_updated_ngp_mesh(bulk_data);
   auto perform_fetch = [&node_pool, &ngp_mesh, num_entities]() {
-    core::NgpView<bool*> node_exists("node_exists", num_entities);
+    NgpView<bool*> node_exists("node_exists", num_entities);
     Kokkos::deep_copy(node_exists.view_device(), false);
 
     Kokkos::parallel_for(
-        "UnitTestEntityPool:ThreadSafety", num_entities, KOKKOS_LAMBDA(const size_t i) {
+        "UnitTestEntityPool:ThreadSafety", num_entities, KOKKOS_LAMBDA(const size_t /*i*/) {
           stk::mesh::Entity node = node_pool.acquire();
           ASSERT_TRUE(node != stk::mesh::Entity());
 

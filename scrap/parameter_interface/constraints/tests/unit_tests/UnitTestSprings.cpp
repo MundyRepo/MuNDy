@@ -46,14 +46,14 @@
 #include <mundy_constraints/FENESprings.hpp>               // for mundy::constraints::FENESprings
 #include <mundy_constraints/FENEWCASprings.hpp>            // for mundy::constraints::FENEWCASprings
 #include <mundy_constraints/HookeanSprings.hpp>            // for mundy::constraints::HookeanSprings
-#include <mundy_core/MakeStringArray.hpp>                  // for mundy::core::make_string_array
+#include <mundy_utils/MakeStringArray.hpp>                  // for mundy::make_string_array
 #include <mundy_mesh/BulkData.hpp>                         // for mundy::mesh::BulkData
 #include <mundy_mesh/FieldViews.hpp>                       // for mundy::mesh::vector3_field_data
 #include <mundy_mesh/MeshBuilder.hpp>                      // for mundy::mesh::MeshBuilder
 #include <mundy_mesh/MetaData.hpp>                         // for mundy::mesh::MetaData
 #include <mundy_meta/FieldReqs.hpp>                        // for mundy::meta::FieldReqs
 #include <mundy_meta/FieldReqsBase.hpp>                    // for mundy::meta::FieldReqsBase
-#include <mundy_meta/utils/MeshGeneration.hpp>  // for mundy::meta::utils::generate_class_instance_and_mesh_from_meta_class_requirements
+#include <mundy_meta/utils/MeshGeneration.hpp>  // for mundy::meta::generate_class_instance_and_mesh_from_meta_class_requirements
 #include <mundy_shapes/SpherocylinderSegments.hpp>  // for mundy::shapes::SpherocylinderSegments
 
 namespace mundy {
@@ -72,12 +72,12 @@ TEST(FENESprings, FENESpringsKernel) {
   // Create an instance of FENESprings based on committed mesh that meets the
   // default requirements for FENESprings.
   auto fene_springs_fixed_params =
-      Teuchos::ParameterList().set("enabled_kernel_names", mundy::core::make_string_array("FENE_SPRINGS"));
+      Teuchos::ParameterList().set("enabled_kernel_names", mundy::make_string_array("FENE_SPRINGS"));
   fene_springs_fixed_params.sublist("FENE_SPRINGS")
-      .set("valid_entity_part_names", mundy::core::make_string_array("SPHEROCYLINDER_SEGMENTS"));
+      .set("valid_entity_part_names", mundy::make_string_array("SPHEROCYLINDER_SEGMENTS"));
 
   auto [compute_constraint_forcing_ptr, bulk_data_ptr] =
-      mundy::meta::utils::generate_class_instance_and_mesh_from_meta_class_requirements<ComputeConstraintForcing>(
+      mundy::meta::generate_class_instance_and_mesh_from_meta_class_requirements<ComputeConstraintForcing>(
           {fene_springs_fixed_params});
   ASSERT_TRUE(compute_constraint_forcing_ptr != nullptr);
   ASSERT_TRUE(bulk_data_ptr != nullptr);
@@ -166,7 +166,7 @@ TEST(FENESprings, FENESpringsKernel) {
                                                                  const std::string &message) {
     // Check that the result is as expected.
     const auto potential_force = mundy::mesh::vector3_field_data(*node_force_field_ptr, sphere_node);
-    const double potential_force_magnitude = mundy::math::norm(potential_force);
+    const double potential_force_magnitude = mundy::norm(potential_force);
 
     // The expected potential force is computed using FENE bonds without a repulsive term.
     const double expected_potential_force_magnitude = k * dr / (1.0 - dr * dr / (rmax * rmax));
@@ -197,12 +197,12 @@ TEST(FENEWCASprings, FENEWCASpringsKernel) {
   // Create an instance of FENESprings based on committed mesh that meets the
   // default requirements for FENESprings.
   auto fenewca_springs_fixed_params =
-      Teuchos::ParameterList().set("enabled_kernel_names", mundy::core::make_string_array("FENEWCA_SPRINGS"));
+      Teuchos::ParameterList().set("enabled_kernel_names", mundy::make_string_array("FENEWCA_SPRINGS"));
   fenewca_springs_fixed_params.sublist("FENEWCA_SPRINGS")
-      .set("valid_entity_part_names", mundy::core::make_string_array("SPHEROCYLINDER_SEGMENTS"));
+      .set("valid_entity_part_names", mundy::make_string_array("SPHEROCYLINDER_SEGMENTS"));
 
   auto [compute_constraint_forcing_ptr, bulk_data_ptr] =
-      mundy::meta::utils::generate_class_instance_and_mesh_from_meta_class_requirements<ComputeConstraintForcing>(
+      mundy::meta::generate_class_instance_and_mesh_from_meta_class_requirements<ComputeConstraintForcing>(
           {fenewca_springs_fixed_params});
   ASSERT_TRUE(compute_constraint_forcing_ptr != nullptr);
   ASSERT_TRUE(bulk_data_ptr != nullptr);
@@ -292,7 +292,7 @@ TEST(FENEWCASprings, FENEWCASpringsKernel) {
                               const double &epsilon, const double &sigma, const std::string &message) {
         // Check that the result is as expected.
         const auto potential_force = mundy::mesh::vector3_field_data(*node_force_field_ptr, sphere_node);
-        const double potential_force_magnitude = mundy::math::norm(potential_force);
+        const double potential_force_magnitude = mundy::norm(potential_force);
 
         // The expected potential force is computed using FENE bonds without a repulsive term.
         const double expected_potential_force_magnitude_spring = k * dr / (1.0 - dr * dr / (rmax * rmax));

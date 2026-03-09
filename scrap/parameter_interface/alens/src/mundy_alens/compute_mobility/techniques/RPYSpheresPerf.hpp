@@ -71,7 +71,7 @@ periphery.get_local_node_positions();
 #include <stk_topology/topology.hpp>  // for stk::topology
 
 // Mundy libs
-#include <mundy_core/MakeStringArray.hpp>  // for mundy::core::make_string_array
+#include <mundy_utils/MakeStringArray.hpp>  // for mundy::make_string_array
 #include <mundy_mesh/BulkData.hpp>         // for mundy::mesh::BulkData
 #include <mundy_mesh/MetaData.hpp>         // for mundy::mesh::MetaData
 #include <mundy_meta/FieldReqs.hpp>        // for mundy::meta::FieldReqs
@@ -179,7 +179,7 @@ class RPYSpheresPerf : public mundy::meta::MetaKernel<> {
   static Teuchos::ParameterList get_valid_fixed_params() {
     static auto default_parameter_list =
         Teuchos::ParameterList()
-            .set("valid_entity_part_names", mundy::core::make_string_array(default_part_name_),
+            .set("valid_entity_part_names", mundy::make_string_array(default_part_name_),
                  "Name of the parts associated with this kernel.")
             .set("node_force_field_name", std::string(default_node_force_field_name_), "Name of the node force field.")
             .set("node_velocity_field_name", std::string(default_node_velocity_field_name_),

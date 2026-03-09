@@ -42,7 +42,7 @@
 
 // Mundy libs
 #include <MundyLinkers_config.hpp>                    // for HAVE_MUNDYLINKERS_MUNDYSHAPES
-#include <mundy_core/MakeStringArray.hpp>             // for mundy::core::make_string_array
+#include <mundy_utils/MakeStringArray.hpp>             // for mundy::make_string_array
 #include <mundy_linkers/DestroyNeighborLinkers.hpp>   // for mundy::linkers::DestroyNeighborLinkers
 #include <mundy_linkers/GenerateNeighborLinkers.hpp>  // for mundy::linkers::GenerateNeighborLinkers
 #include <mundy_linkers/Linkers.hpp>     // for mundy::linkers::Linker and  mundy::linkers::declare_family_tree_relation
@@ -52,8 +52,9 @@
 #include <mundy_mesh/MetaData.hpp>       // for mundy::mesh::MetaData
 #include <mundy_meta/FieldReqs.hpp>      // for mundy::meta::FieldReqs
 #include <mundy_meta/MetaFactory.hpp>  // for mundy::meta::MetaMethodFactory and mundy::meta::HasMeshReqsAndIsRegisterable
-#include <mundy_meta/utils/MeshGeneration.hpp>  // for mundy::meta::utils::generate_class_instance_and_mesh_from_meta_class_requirements
+#include <mundy_meta/utils/MeshGeneration.hpp>  // for mundy::meta::generate_class_instance_and_mesh_from_meta_class_requirements
 #include <mundy_shapes/ComputeAABB.hpp>  // for mundy::shapes::ComputeAABB
+#include <mundy_utils/rng.hpp>              // for mundy::make_philox
 
 namespace mundy {
 
@@ -238,13 +239,13 @@ TEST(GenerateNeighborLinkers, PerformsNeighborLinkerDestructionCorrectlyForSpher
   Teuchos::ParameterList destroy_neighbor_linkers_fixed_params = Teuchos::ParameterList();
   destroy_neighbor_linkers_fixed_params.set("enabled_technique_name", "DESTROY_DISTANT_NEIGHBORS")
       .sublist("DESTROY_DISTANT_NEIGHBORS")
-      .set("valid_entity_part_names", mundy::core::make_string_array("NEIGHBOR_LINKERS"))
-      .set("valid_connected_source_and_target_part_names", mundy::core::make_string_array("SPHERES"))
+      .set("valid_entity_part_names", mundy::make_string_array("NEIGHBOR_LINKERS"))
+      .set("valid_connected_source_and_target_part_names", mundy::make_string_array("SPHERES"))
       .set("linker_destroy_flag_field_name", "LINKER_DESTROY_FLAG")
       .set("element_aabb_field_name", "ELEMENT_AABB");
 
   auto [generate_neighbor_linkers_ptr, destroy_neighbor_linkers_ptr, bulk_data_ptr] =
-      mundy::meta::utils::generate_class_instance_and_mesh_from_meta_class_requirements<GenerateNeighborLinkers,
+      mundy::meta::generate_class_instance_and_mesh_from_meta_class_requirements<GenerateNeighborLinkers,
                                                                                         DestroyNeighborLinkers>(
           std::array{generate_neighbor_linkers_fixed_params, destroy_neighbor_linkers_fixed_params});
   ASSERT_TRUE(bulk_data_ptr != nullptr) << "bulk_data_ptr cannot be null";
@@ -368,15 +369,15 @@ TEST(GenerateNeighborLinkers, PerformsNeighborLinkerDestructionCorrectlyForSpher
 //   Teuchos::ParameterList destroy_neighbor_linkers_fixed_params = Teuchos::ParameterList();
 //   destroy_neighbor_linkers_fixed_params.set("enabled_technique_name", "DESTROY_DISTANT_NEIGHBORS")
 //       .sublist("DESTROY_DISTANT_NEIGHBORS")
-//       .set("valid_entity_part_names", mundy::core::make_string_array("NEIGHBOR_LINKERS"))
-//       .set("valid_connected_source_and_target_part_names", mundy::core::make_string_array("SPHERES"))
+//       .set("valid_entity_part_names", mundy::make_string_array("NEIGHBOR_LINKERS"))
+//       .set("valid_connected_source_and_target_part_names", mundy::make_string_array("SPHERES"))
 //       .set("linker_destroy_flag_field_name", "LINKER_DESTROY_FLAG")
 //       .set("element_aabb_field_name", "ELEMENT_AABB");
 
 //   neighbor_linkers_fixed_params.set("specialized_neighbor_linkers_part_names",
-//                                     mundy::core::make_string_array("SPHERE_SPHERE_LINKERS"));
+//                                     mundy::make_string_array("SPHERE_SPHERE_LINKERS"));
 //   auto [compute_aabb_ptr, generate_neighbor_linkers_ptr, destroy_neighbor_linkers_ptr, bulk_data_ptr] =
-//       mundy::meta::utils::generate_class_instance_and_mesh_from_meta_class_requirements<
+//       mundy::meta::generate_class_instance_and_mesh_from_meta_class_requirements<
 //           mundy::shapes::ComputeAABB, GenerateNeighborLinkers, DestroyNeighborLinkers>(
 //           std::array{compute_aabb_fixed_params, neighbor_linkers_fixed_params,
 //           destroy_neighbor_linkers_fixed_params});
@@ -439,7 +440,7 @@ TEST(GenerateNeighborLinkers, PerformsNeighborLinkerDestructionCorrectlyForSpher
 //       std::cout << "Running at " << log_interval/ timer.seconds() << " cycles per second." << std::endl;
 //     }
 //     // Set the sphere's position and radius
-//     openrand::Philox rng(bulk_data_ptr->parallel_rank(), 0);
+//     openrand::Philox rng = make_philox(bulk_data_ptr->parallel_rank(), 0);
 //     for (int i = 0; i < num_spheres_per_process; i++) {
 //       stk::mesh::Entity node_i = requested_entities[i];
 //       stk::mesh::Entity sphere_i = requested_entities[num_spheres_per_process + i];
@@ -508,15 +509,15 @@ TEST(DestroyNeighborLinkers, RepeatedNeighborLinkerGenerationAndDestructionForSp
   Teuchos::ParameterList destroy_neighbor_linkers_fixed_params = Teuchos::ParameterList();
   destroy_neighbor_linkers_fixed_params.set("enabled_technique_name", "DESTROY_DISTANT_NEIGHBORS")
       .sublist("DESTROY_DISTANT_NEIGHBORS")
-      .set("valid_entity_part_names", mundy::core::make_string_array("NEIGHBOR_LINKERS"))
-      .set("valid_connected_source_and_target_part_names", mundy::core::make_string_array("SPHERES"))
+      .set("valid_entity_part_names", mundy::make_string_array("NEIGHBOR_LINKERS"))
+      .set("valid_connected_source_and_target_part_names", mundy::make_string_array("SPHERES"))
       .set("linker_destroy_flag_field_name", "LINKER_DESTROY_FLAG")
       .set("element_aabb_field_name", "ELEMENT_AABB");
 
   neighbor_linkers_fixed_params.set("specialized_neighbor_linkers_part_names",
-                                    mundy::core::make_string_array("SPHERE_SPHERE_LINKERS"));
+                                    mundy::make_string_array("SPHERE_SPHERE_LINKERS"));
   auto [compute_aabb_ptr, generate_neighbor_linkers_ptr, destroy_neighbor_linkers_ptr, bulk_data_ptr] =
-      mundy::meta::utils::generate_class_instance_and_mesh_from_meta_class_requirements<
+      mundy::meta::generate_class_instance_and_mesh_from_meta_class_requirements<
           mundy::shapes::ComputeAABB, GenerateNeighborLinkers, DestroyNeighborLinkers>(
           std::array{compute_aabb_fixed_params, neighbor_linkers_fixed_params, destroy_neighbor_linkers_fixed_params});
 
@@ -579,7 +580,7 @@ TEST(DestroyNeighborLinkers, RepeatedNeighborLinkerGenerationAndDestructionForSp
       timer.reset();
     }
     // Set the sphere's position and radius
-    openrand::Philox rng(bulk_data_ptr->parallel_rank(), 0);
+    openrand::Philox rng = make_philox(bulk_data_ptr->parallel_rank(), 0);
     for (int i = 0; i < num_spheres_per_process; i++) {
       stk::mesh::Entity node_i = requested_entities[i];
       stk::mesh::Entity sphere_i = requested_entities[num_spheres_per_process + i];

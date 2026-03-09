@@ -48,8 +48,8 @@
 #include <stk_util/parallel/Parallel.hpp>        // for stk::parallel_machine_init, stk::parallel_machine_finalize
 
 // Mundy libs
-#include <mundy_core/MakeStringArray.hpp>                                     // for mundy::core::make_string_array
-#include <mundy_core/throw_assert.hpp>                                        // for MUNDY_THROW_ASSERT
+#include <mundy_utils/MakeStringArray.hpp>                                     // for mundy::make_string_array
+#include <mundy_utils/throw_assert.hpp>                                        // for MUNDY_THROW_ASSERT
 #include <mundy_io/IOBroker.hpp>                                              // for mundy::io::IOBroker
 #include <mundy_linkers/ComputeSignedSeparationDistanceAndContactNormal.hpp>  // for mundy::linkers::ComputeSignedSeparationDistanceAndContactNormal
 #include <mundy_linkers/DestroyNeighborLinkers.hpp>         // for mundy::linkers::DestroyNeighborLinkers
@@ -58,17 +58,18 @@
 #include <mundy_linkers/LinkerPotentialForceReduction.hpp>  // for mundy::linkers::LinkerPotentialForceReduction
 #include <mundy_linkers/NeighborLinkers.hpp>                // for mundy::linkers::NeighborLinkers
 #include <mundy_linkers/neighbor_linkers/SpherocylinderSegmentSpherocylinderSegmentLinkers.hpp>
-#include <mundy_math/Matrix3.hpp>     // for mundy::math::Matrix3
-#include <mundy_math/Quaternion.hpp>  // for mundy::math::Quaternion, mundy::math::quat_from_parallel_transport
-#include <mundy_math/Vector3.hpp>     // for mundy::math::Vector3
+#include <mundy_math/Matrix3.hpp>     // for mundy::Matrix3
+#include <mundy_math/Quaternion.hpp>  // for mundy::Quaternion, mundy::quat_from_parallel_transport
+#include <mundy_math/Vector3.hpp>     // for mundy::Vector3
 #include <mundy_mesh/BulkData.hpp>    // for mundy::mesh::BulkData
 #include <mundy_mesh/FieldViews.hpp>  // for mundy::mesh::vector3_field_data, mundy::mesh::quaternion_field_data
 #include <mundy_mesh/MetaData.hpp>    // for mundy::mesh::MetaData
-#include <mundy_mesh/utils/FillFieldWithValue.hpp>  // for mundy::mesh::utils::fill_field_with_value
+#include <mundy_mesh/utils/FillFieldWithValue.hpp>  // for mundy::mesh::fill_field_with_value
 #include <mundy_meta/FieldReqs.hpp>                 // for mundy::meta::FieldReqs
 #include <mundy_meta/MeshReqs.hpp>                  // for mundy::meta::MeshReqs
 #include <mundy_meta/PartReqs.hpp>                  // for mundy::meta::PartReqs
 #include <mundy_shapes/ComputeAABB.hpp>             // for mundy::shapes::ComputeAABB
+#include <mundy_utils/rng.hpp>              // for mundy::make_philox
 
 namespace impl {
 
@@ -492,26 +493,26 @@ class FilamentSim {
     // When we eventually switch to the configurator, these individual fixed params will become sublists within a single
     // master parameter list. Note, sublist will return a reference to the sublist with the given name.
     auto compute_ssd_and_cn_fixed_params = Teuchos::ParameterList().set(
-        "enabled_kernel_names", mundy::core::make_string_array("SPHEROCYLINDER_SEGMENT_SPHEROCYLINDER_SEGMENT_LINKER"));
+        "enabled_kernel_names", mundy::make_string_array("SPHEROCYLINDER_SEGMENT_SPHEROCYLINDER_SEGMENT_LINKER"));
     auto compute_aabb_fixed_params =
-        Teuchos::ParameterList().set("enabled_kernel_names", mundy::core::make_string_array("SPHEROCYLINDER_SEGMENT"));
+        Teuchos::ParameterList().set("enabled_kernel_names", mundy::make_string_array("SPHEROCYLINDER_SEGMENT"));
     compute_aabb_fixed_params.sublist("SPHEROCYLINDER_SEGMENT")
-        .set("valid_entity_part_names", mundy::core::make_string_array("FILAMENT"));
+        .set("valid_entity_part_names", mundy::make_string_array("FILAMENT"));
     auto generate_neighbor_linkers_fixed_params =
         Teuchos::ParameterList()
             .set("enabled_technique_name", "STK_SEARCH")
             .set("specialized_neighbor_linkers_part_names",
-                 mundy::core::make_string_array("SPHEROCYLINDER_SEGMENT_SPHEROCYLINDER_SEGMENT_LINKERS"));
+                 mundy::make_string_array("SPHEROCYLINDER_SEGMENT_SPHEROCYLINDER_SEGMENT_LINKERS"));
     generate_neighbor_linkers_fixed_params.sublist("STK_SEARCH")
-        .set("valid_source_entity_part_names", mundy::core::make_string_array("FILAMENT"))
-        .set("valid_target_entity_part_names", mundy::core::make_string_array("FILAMENT"));
+        .set("valid_source_entity_part_names", mundy::make_string_array("FILAMENT"))
+        .set("valid_target_entity_part_names", mundy::make_string_array("FILAMENT"));
     auto evaluate_linker_potentials_fixed_params = Teuchos::ParameterList().set(
         "enabled_kernel_names",
-        mundy::core::make_string_array("SPHEROCYLINDER_SEGMENT_SPHEROCYLINDER_SEGMENT_HERTZIAN_CONTACT"));
+        mundy::make_string_array("SPHEROCYLINDER_SEGMENT_SPHEROCYLINDER_SEGMENT_HERTZIAN_CONTACT"));
     auto linker_potential_force_reduction_fixed_params =
-        Teuchos::ParameterList().set("enabled_kernel_names", mundy::core::make_string_array("SPHEROCYLINDER_SEGMENT"));
+        Teuchos::ParameterList().set("enabled_kernel_names", mundy::make_string_array("SPHEROCYLINDER_SEGMENT"));
     linker_potential_force_reduction_fixed_params.sublist("SPHEROCYLINDER_SEGMENT")
-        .set("valid_entity_part_names", mundy::core::make_string_array("FILAMENT"));
+        .set("valid_entity_part_names", mundy::make_string_array("FILAMENT"));
     auto destroy_distant_neighbor_linkers_fixed_params =
         Teuchos::ParameterList().set("enabled_technique_name", "DESTROY_DISTANT_NEIGHBORS");
 
@@ -619,12 +620,12 @@ class FilamentSim {
     // Create a mundy io broker via it's fixed parameters
     auto fixed_params_iobroker =
         Teuchos::ParameterList()
-            .set("enabled_io_parts", mundy::core::make_string_array("FILAMENT"))
+            .set("enabled_io_parts", mundy::make_string_array("FILAMENT"))
             .set("enabled_io_fields_node_rank",
-                 mundy::core::make_string_array("NODE_VELOCITY", "NODE_OMEGA", "NODE_FORCE", "NODE_TORQUE",
+                 mundy::make_string_array("NODE_VELOCITY", "NODE_OMEGA", "NODE_FORCE", "NODE_TORQUE",
                                                 "NODE_RNG_COUNTER"))
             .set("enabled_io_fields_element_rank",
-                 mundy::core::make_string_array("ELEMENT_RADIUS", "ELEMENT_LENGTH", "ELEMENT_ORIENTATION",
+                 mundy::make_string_array("ELEMENT_RADIUS", "ELEMENT_LENGTH", "ELEMENT_ORIENTATION",
                                                 "ELEMENT_TANGENT", "ELEMENT_AABB", "ELEMENT_YOUNGS_MODULUS",
                                                 "ELEMENT_POISSONS_RATIO", "ELEMENT_MARKED_FOR_DIVISION"))
             .set("coordinate_field_name", "NODE_COORDS")
@@ -687,10 +688,10 @@ class FilamentSim {
       stk::mesh::field_data(*element_youngs_modulus_field_ptr_, filament)[0] = filament_youngs_modulus_;
       stk::mesh::field_data(*element_poissons_ratio_field_ptr_, filament)[0] = filament_poissons_ratio_;
 
-      mundy::math::Vector3d current_tangent(1.0, 0.0, 0.0);
-      mundy::math::Vector3d x_axis(1.0, 0.0, 0.0);
+      mundy::Vector3d current_tangent(1.0, 0.0, 0.0);
+      mundy::Vector3d x_axis(1.0, 0.0, 0.0);
       mundy::mesh::quaternion_field_data(*element_orientation_field_ptr_, filament) =
-          mundy::math::quat_from_parallel_transport(x_axis, current_tangent);
+          mundy::quat_from_parallel_transport(x_axis, current_tangent);
       mundy::mesh::vector3_field_data(*element_tangent_field_ptr_, filament) = current_tangent;
     }
   }
@@ -707,11 +708,11 @@ class FilamentSim {
 
   void zero_out_transient_node_fields() {
     debug_print("Zeroing out the transient node fields.");
-    mundy::mesh::utils::fill_field_with_value<double>(*node_velocity_field_ptr_, std::array<double, 3>{0.0, 0.0, 0.0});
-    mundy::mesh::utils::fill_field_with_value<double>(*node_omega_field_ptr_, std::array<double, 3>{0.0, 0.0, 0.0});
-    mundy::mesh::utils::fill_field_with_value<double>(*node_force_field_ptr_, std::array<double, 3>{0.0, 0.0, 0.0});
-    mundy::mesh::utils::fill_field_with_value<double>(*node_torque_field_ptr_, std::array<double, 3>{0.0, 0.0, 0.0});
-    mundy::mesh::utils::fill_field_with_value<double>(*linker_potential_force_field_ptr_,
+    mundy::mesh::fill_field_with_value<double>(*node_velocity_field_ptr_, std::array<double, 3>{0.0, 0.0, 0.0});
+    mundy::mesh::fill_field_with_value<double>(*node_omega_field_ptr_, std::array<double, 3>{0.0, 0.0, 0.0});
+    mundy::mesh::fill_field_with_value<double>(*node_force_field_ptr_, std::array<double, 3>{0.0, 0.0, 0.0});
+    mundy::mesh::fill_field_with_value<double>(*node_torque_field_ptr_, std::array<double, 3>{0.0, 0.0, 0.0});
+    mundy::mesh::fill_field_with_value<double>(*linker_potential_force_field_ptr_,
                                                       std::array<double, 3>{0.0, 0.0, 0.0});
   }
 
@@ -783,7 +784,7 @@ class FilamentSim {
 
           size_t *node_rng_counter = stk::mesh::field_data(node_rng_counter_field, node2);
           const size_t node_gid = bulk_data.identifier(node2);
-          openrand::Philox rng(node_gid, node_rng_counter[0]);
+          openrand::Philox rng = make_philox(node_gid, node_rng_counter[0]);
 
           // Apply a very small random orientational kick to keep filament from growing in a circle
           const double max_kick = 0.8;
@@ -795,12 +796,12 @@ class FilamentSim {
           node2_velocity = filament_growth_rate * element_tangent;
 
           // Assume the filament is growing inside a sphere, so check if the filament has crossed the boundary.
-          const double distance_from_origin = sqrt(mundy::math::dot(node2_coords, node2_coords));
+          const double distance_from_origin = sqrt(mundy::dot(node2_coords, node2_coords));
           const double element_radius = stk::mesh::field_data(element_radius_field, element)[0];
           if (distance_from_origin + element_radius > boundary_radius) {
             // then adjust the positions and velocities of the node
             auto normal = node2_coords / distance_from_origin;
-            node2_velocity -= 2 * mundy::math::dot(node2_velocity, normal) * normal;
+            node2_velocity -= 2 * mundy::dot(node2_velocity, normal) * normal;
           }
         });
   }
@@ -842,7 +843,7 @@ class FilamentSim {
           node2_coords = node2_coords_old + timestep_size * node2_velocity_old;
 
           // Assume the filament is growing inside a sphere, so check if the filament has crossed the boundary.
-          const double distance_from_origin = sqrt(mundy::math::dot(node2_coords, node2_coords));
+          const double distance_from_origin = sqrt(mundy::dot(node2_coords, node2_coords));
           const double element_radius = stk::mesh::field_data(element_radius_field, element)[0];
           if (distance_from_origin + element_radius > boundary_radius) {
             // then adjust the positions of the node
@@ -856,7 +857,7 @@ class FilamentSim {
 
           // Compute the tangent and length
           const auto separation_vector = node2_coords - node1_coords;
-          const double separation_distance = sqrt(mundy::math::dot(separation_vector, separation_vector));
+          const double separation_distance = sqrt(mundy::dot(separation_vector, separation_vector));
           const auto unit_tangent = separation_vector / separation_distance;
           element_tangent = unit_tangent;
           element_length = separation_distance;
@@ -947,7 +948,7 @@ class FilamentSim {
 
           // Compute the tangent
           const auto separation_vector = node2_coords - node1_coords;
-          const double separation_distance = sqrt(mundy::math::dot(separation_vector, separation_vector));
+          const double separation_distance = sqrt(mundy::dot(separation_vector, separation_vector));
           const auto unit_tangent = separation_vector / separation_distance;
           element_tangent = unit_tangent;
         });

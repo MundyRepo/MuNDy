@@ -36,7 +36,7 @@
 #include <stk_topology/topology.hpp>  // for stk::topology
 
 // Mundy libs
-#include <mundy_core/MakeStringArray.hpp>                          // for mundy::core::make_string_array
+#include <mundy_utils/MakeStringArray.hpp>                          // for mundy::make_string_array
 #include <mundy_linkers/neighbor_linkers/SphereSphereLinkers.hpp>  // for mundy::linkers::neighbor_linkers::SphereSphereLinkers
 #include <mundy_mesh/BulkData.hpp>                                 // for mundy::mesh::BulkData
 #include <mundy_mesh/MetaData.hpp>                                 // for mundy::mesh::MetaData
@@ -194,9 +194,9 @@ class SphereSphereHertzianContact : public mundy::meta::MetaKernel<> {
     const static Teuchos::ParameterList default_parameter_list =
         Teuchos::ParameterList()
             .set("valid_entity_part_names",
-                 mundy::core::make_string_array(neighbor_linkers::SphereSphereLinkers::get_name()),
+                 mundy::make_string_array(neighbor_linkers::SphereSphereLinkers::get_name()),
                  "List of valid entity part names for the kernel.")
-            .set("valid_sphere_part_names", mundy::core::make_string_array(mundy::shapes::Spheres::get_name()),
+            .set("valid_sphere_part_names", mundy::make_string_array(mundy::shapes::Spheres::get_name()),
                  "List of valid sphere part names for the kernel.")
             .set("linker_potential_force_field_name", std::string(default_linker_potential_force_field_name_),
                  "Name of the constraint-rank field within which the linker's potential force will be written.")

@@ -41,7 +41,7 @@
 #include <mundy_constraints/ComputeConstraintProjection.hpp>  // for mundy::constraint::ComputeConstraintProjection
 #include <mundy_constraints/ComputeConstraintResidual.hpp>    // for mundy::constraint::ComputeConstraintResidual
 #include <mundy_constraints/ComputeConstraintViolation.hpp>   // for mundy::constraint::ComputeConstraintViolation
-#include <mundy_core/throw_assert.hpp>                        // for MUNDY_THROW_ASSERT
+#include <mundy_utils/throw_assert.hpp>                        // for MUNDY_THROW_ASSERT
 #include <mundy_mesh/BulkData.hpp>                            // for mundy::mesh::BulkData
 #include <mundy_mesh/MetaData.hpp>                            // for mundy::mesh::MetaData
 #include <mundy_meta/MetaFactory.hpp>                         // for mundy::meta::MetaKernelFactory
@@ -68,7 +68,7 @@ class NonSmoothLCP : public mundy::meta::MetaMethodSubsetExecutionInterface<void
   // TODO(palmerb4): MetaMethodFactory should be able to spawn multiple factories for a single class.
   // Below, we see why this is necessary. Even though we have different aliases for the various factories,
   // three of them are actually the same type. To me, this tells me that RegistryIdentifier_t should be replaced with
-  // compile-time strings via mundy::core::Stringliteral.
+  // compile-time strings via mundy::Stringliteral.
 
   using PolymorphicBaseType = mundy::meta::MetaMethodSubsetExecutionInterface<void>;
   using OurConstraintForcingMethodFactory = mundy::meta::MetaMethodFactory<void, NonSmoothLCP>;

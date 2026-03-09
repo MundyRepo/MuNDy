@@ -34,7 +34,7 @@ namespace mesh {
 namespace impl {
 
 template <class T>
-T convert_cast(const std::string &s) {
+T convert_cast(const std::string& s) {
   std::istringstream is(s.c_str());
   T t = 0;
 
@@ -49,14 +49,14 @@ T convert_cast(const std::string &s) {
   return t;
 }
 
-template double convert_cast<double>(const std::string &);
-template float convert_cast<float>(const std::string &);
-template int convert_cast<int>(const std::string &);
-template unsigned convert_cast<unsigned>(const std::string &);
-template long convert_cast<long>(const std::string &);
-template unsigned long convert_cast<unsigned long>(const std::string &);
+template double convert_cast<double>(const std::string&);
+template float convert_cast<float>(const std::string&);
+template int convert_cast<int>(const std::string&);
+template unsigned convert_cast<unsigned>(const std::string&);
+template long convert_cast<long>(const std::string&);
+template unsigned long convert_cast<unsigned long>(const std::string&);
 
-SelectorLexemVector tokenize(const std::string &expression) {
+SelectorLexemVector tokenize(const std::string& expression) {
   struct Graph {
     char ch;
     SelectorStringToken token;
@@ -67,21 +67,21 @@ SelectorLexemVector tokenize(const std::string &expression) {
 
   SelectorLexemVector lex_vector;
 
-  const char *it = expression.c_str();
+  const char* it = expression.c_str();
 
   while (*it != '\0') {
     if (std::isspace(*it) || ::iscntrl(*it)) {
       ++it;
     } else if (std::isalpha(*it)) {
       // Parse identifier [a-zA-Z][a-zA-Z0-9_.]*
-      const char *from = it;
+      const char* from = it;
       while (std::isalpha(*it) || std::isdigit(*it) || *it == '_' || *it == '.') {
         ++it;
       }
       lex_vector.push_back(SelectorLexem(TOKEN_IDENTIFIER, from, it));
     } else if (ispunct(*it)) {
       // Parse graphs
-      const char *from = it;
+      const char* from = it;
       for (size_t i = 0; i < sizeof(graph) / sizeof(graph[0]); ++i) {
         if (*it == graph[i].ch) {
           ++it;

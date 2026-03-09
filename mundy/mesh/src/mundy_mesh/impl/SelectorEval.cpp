@@ -22,7 +22,7 @@
 #include <queue>  // for std::queue
 
 // Mundy
-#include <mundy_mesh/BulkData.hpp>              // for mundy::mesh::BulkData
+#include <mundy_mesh/BulkData.hpp>             // for mundy::mesh::BulkData
 #include <mundy_mesh/impl/SelectorEval.hpp>    // for mundy::mesh::impl::SelectorEval
 #include <mundy_mesh/impl/SelectorLexem.hpp>   // for mundy::mesh::impl::SelectorLexem
 #include <mundy_mesh/impl/SelectorParser.hpp>  // for mundy::mesh::impl::SelectorParser
@@ -33,7 +33,7 @@ namespace mesh {
 
 namespace impl {
 
-SelectorEval::SelectorEval(const BulkData &bulk_data, const std::string &expression)
+SelectorEval::SelectorEval(const BulkData& bulk_data, const std::string& expression)
     : bulk_data_(bulk_data),
       expression_(expression),
       is_syntax_valid_(false),
@@ -41,7 +41,7 @@ SelectorEval::SelectorEval(const BulkData &bulk_data, const std::string &express
       head_node_ptr_(nullptr) {
 }
 
-SelectorEval::SelectorEval(const SelectorEval &otherEval)
+SelectorEval::SelectorEval(const SelectorEval& otherEval)
     : bulk_data_(otherEval.bulk_data_),
       expression_(otherEval.expression_),
       is_syntax_valid_(otherEval.is_syntax_valid_),
@@ -52,13 +52,13 @@ SelectorEval::SelectorEval(const SelectorEval &otherEval)
       result_buffer_(otherEval.result_buffer_) {
 }
 
-SelectorNode *SelectorEval::new_node(const int &opcode) {
+SelectorNode* SelectorEval::new_node(const int& opcode) {
   node_ptrs_.push_back(std::make_shared<SelectorNode>(static_cast<Opcode>(opcode), this));
   node_ptrs_.back().get()->current_node_index_ = static_cast<int>(node_ptrs_.size()) - 1;
   return node_ptrs_.back().get();
 }
 
-SelectorNode *SelectorEval::new_node(const int &opcode, const std::string &part_name) {
+SelectorNode* SelectorEval::new_node(const int& opcode, const std::string& part_name) {
   // Check if the part is a special, reserved part; otherwise, get the part from the meta data
   stk::mesh::Selector data;
   if (part_name == "UNIVERSAL") {
@@ -70,7 +70,7 @@ SelectorNode *SelectorEval::new_node(const int &opcode, const std::string &part_
   } else if (part_name == "AURA") {
     data = bulk_data_.mesh_meta_data().aura_part();
   } else {
-    stk::mesh::Part *part_ptr = bulk_data_.mesh_meta_data().get_part(part_name);
+    stk::mesh::Part* part_ptr = bulk_data_.mesh_meta_data().get_part(part_name);
     MUNDY_THROW_REQUIRE(part_ptr != nullptr, std::invalid_argument,
                         std::string("Could not find a part with name '") + part_name +
                             "' while parsing the expression\n" + expression_);
@@ -94,7 +94,7 @@ void SelectorEval::syntax() {
     head_node_ptr_ = parse_statements(*this, lex_vector.begin(), lex_vector.end());
 
     is_syntax_valid_ = true;
-  } catch (std::runtime_error &) {
+  } catch (std::runtime_error&) {
   }
 }
 
@@ -114,7 +114,7 @@ void SelectorEval::parse() {
     } else {
       throw std::runtime_error("The following expression has a syntax error in it.\n" + expression_);
     }
-  } catch (std::runtime_error &) {
+  } catch (std::runtime_error&) {
     throw;
   }
 }
@@ -130,14 +130,14 @@ stk::mesh::Selector SelectorEval::evaluate() const {
     if (head_node_ptr_) {
       int nodeIndex = evaluation_nodes_.front()->current_node_index_;
       while (nodeIndex >= 0) {
-        SelectorNode *node = node_ptrs_[nodeIndex].get();
+        SelectorNode* node = node_ptrs_[nodeIndex].get();
         node->eval();
         nodeIndex = node->get_next_node_index();
       }
       return_value = evaluation_nodes_.back()->get_result();
     }
 
-  } catch (expression_evaluation_exception &) {
+  } catch (expression_evaluation_exception&) {
     throw std::runtime_error(std::string("Expression '") + expression_ + "' did not evaluate successfully.");
   }
   return return_value;
@@ -155,7 +155,7 @@ int SelectorEval::get_last_node_index() const {
   return (!evaluation_nodes_.empty()) ? evaluation_nodes_.back()->current_node_index_ : -1;
 }
 
-SelectorEval &SelectorEval::set_expression(const std::string &expression) {
+SelectorEval& SelectorEval::set_expression(const std::string& expression) {
   expression_ = expression;
   did_parse_succeed_ = false;
   return *this;

@@ -45,8 +45,8 @@
 #include <stk_util/environment/LogWithTimeAndMemory.hpp>  // for stk::log_with_time_and_memory
 
 // Mundy libs
-#include <mundy_core/StringLiteral.hpp>     // for mundy::core::StringLiteral and mundy::core::make_string_literal
-#include <mundy_core/throw_assert.hpp>      // for MUNDY_THROW_ASSERT
+#include <mundy_utils/StringLiteral.hpp>     // for mundy::StringLiteral and mundy::make_string_literal
+#include <mundy_utils/throw_assert.hpp>      // for MUNDY_THROW_ASSERT
 #include <mundy_mesh/BulkData.hpp>          // for mundy::mesh::BulkData
 #include <mundy_mesh/MetaData.hpp>          // for mundy::mesh::MetaData
 #include <mundy_mesh/StringToTopology.hpp>  // for mundy::mesh::string_to_rank

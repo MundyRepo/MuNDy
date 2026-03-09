@@ -31,7 +31,7 @@ namespace mesh {
 
 namespace impl {
 
-SelectorNode::SelectorNode(Opcode opcode, SelectorEval *owner, const stk::mesh::Selector &data)
+SelectorNode::SelectorNode(Opcode opcode, SelectorEval* owner, const stk::mesh::Selector& data)
     : opcode_(opcode),
       data_(data),
       result_idx_(-1),
@@ -52,7 +52,7 @@ stk::mesh::Selector SelectorNode::get_result() const {
   return owner_ptr_->get_result_buffer_value(result_idx_);
 }
 
-stk::mesh::Selector &SelectorNode::set_result() {
+stk::mesh::Selector& SelectorNode::set_result() {
   return owner_ptr_->get_result_buffer_value(result_idx_);
 }
 
@@ -90,10 +90,10 @@ void SelectorNode::eval() {
   has_been_evaluated_ = true;
 }
 
-void SelectorNode::compute_node_weight(NodeWeightMap &node_weights) {
+void SelectorNode::compute_node_weight(NodeWeightMap& node_weights) {
   switch (opcode_) {
     case OPCODE_STATEMENT: {
-      for (SelectorNode *statement = this; statement; statement = statement->right_node_ptr_) {
+      for (SelectorNode* statement = this; statement; statement = statement->right_node_ptr_) {
         statement->left_node_ptr_->compute_node_weight(node_weights);
         node_weights[statement] = node_weights[left_node_ptr_];
       }
@@ -126,10 +126,10 @@ void SelectorNode::compute_node_weight(NodeWeightMap &node_weights) {
   }
 }
 
-void SelectorNode::eval_trace(const NodeWeightMap &node_weights, EvalNodesType &evaluation_nodes) {
+void SelectorNode::eval_trace(const NodeWeightMap& node_weights, EvalNodesType& evaluation_nodes) {
   switch (opcode_) {
     case OPCODE_STATEMENT: {
-      for (SelectorNode *statement = this; statement; statement = statement->right_node_ptr_) {
+      for (SelectorNode* statement = this; statement; statement = statement->right_node_ptr_) {
         statement->left_node_ptr_->eval_trace(node_weights, evaluation_nodes);
         evaluation_nodes.back()->next_node_index_ = statement->current_node_index_;
         evaluation_nodes.push_back(statement);

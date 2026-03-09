@@ -64,7 +64,7 @@ namespace mesh {
 ///
 /// \param bulk_data [in] BulkData object used to fetch the part names.
 /// \param selector_string [in] String containing valid selector math.
-stk::mesh::Selector string_to_selector(const BulkData &bulk_data, const std::string &selector_string);
+stk::mesh::Selector string_to_selector(const BulkData& bulk_data, const std::string& selector_string);
 
 }  // namespace mesh
 

@@ -59,11 +59,11 @@ class BoundingSphereGen {
   }
 
   KOKKOS_INLINE_FUNCTION
-  geom::Sphere<double> operator()(const stk::mesh::FastMeshIndex& sphere_index) const {
+  Sphere<double> operator()(const stk::mesh::FastMeshIndex& sphere_index) const {
     auto sphere_view = ngp_sphere_agg_.get_view(sphere_index);
     auto center = get<CENTER>(sphere_view, 0);
     double radius = get<RADIUS>(sphere_view)[0];
-    return geom::Sphere<double>(center, radius);
+    return Sphere<double>(center, radius);
   }
 
  private:

@@ -39,10 +39,10 @@
 #include <stk_util/parallel/Parallel.hpp>                          // for stk::ParallelMachine
 
 // Mundy libs
-#include <mundy_core/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
-#include <mundy_mesh/BulkData.hpp>      // for BulkData
-#include <mundy_mesh/MeshBuilder.hpp>   // for MeshBuilder
-#include <mundy_mesh/MetaData.hpp>      // for MetaData
+#include <mundy_mesh/BulkData.hpp>       // for BulkData
+#include <mundy_mesh/MeshBuilder.hpp>    // for MeshBuilder
+#include <mundy_mesh/MetaData.hpp>       // for MetaData
+#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
 
 namespace mundy {
 
@@ -81,61 +81,61 @@ MeshBuilder::MeshBuilder(stk::ParallelMachine comm)
 // @name Setters
 //{
 
-MeshBuilder &MeshBuilder::set_spatial_dimension(const unsigned spatial_dimension) {
+MeshBuilder& MeshBuilder::set_spatial_dimension(const unsigned spatial_dimension) {
   spatial_dimension_ = spatial_dimension;
   return *this;
 }
 
-MeshBuilder &MeshBuilder::set_entity_rank_names(const std::vector<std::string> &entity_rank_names) {
+MeshBuilder& MeshBuilder::set_entity_rank_names(const std::vector<std::string>& entity_rank_names) {
   entity_rank_names_ = entity_rank_names;
   return *this;
 }
 
-MeshBuilder &MeshBuilder::set_communicator(const stk::ParallelMachine &comm) {
+MeshBuilder& MeshBuilder::set_communicator(const stk::ParallelMachine& comm) {
   comm_ = comm;
   has_comm_ = true;
   return *this;
 }
 
-MeshBuilder &MeshBuilder::set_auto_aura_option(const BulkData::AutomaticAuraOption &auto_aura_option) {
+MeshBuilder& MeshBuilder::set_auto_aura_option(const BulkData::AutomaticAuraOption& auto_aura_option) {
   auto_aura_option_ = auto_aura_option;
   return *this;
 }
 
-MeshBuilder &MeshBuilder::set_add_fmwk_data_flag(bool add_fmwk_data_flag) {
+MeshBuilder& MeshBuilder::set_add_fmwk_data_flag(bool add_fmwk_data_flag) {
   add_fmwk_data_flag_ = add_fmwk_data_flag;
   return *this;
 }
 
 #if TRILINOS_MAJOR_MINOR_VERSION >= 160000
-MeshBuilder &MeshBuilder::set_field_data_manager(std::unique_ptr<stk::mesh::FieldDataManager> field_data_manager_ptr) {
+MeshBuilder& MeshBuilder::set_field_data_manager(std::unique_ptr<stk::mesh::FieldDataManager> field_data_manager_ptr) {
   field_data_manager_ptr_ = std::move(field_data_manager_ptr);
   return *this;
 }
 #else
-MeshBuilder &MeshBuilder::set_field_data_manager(stk::mesh::FieldDataManager *const field_data_manager_ptr) {
+MeshBuilder& MeshBuilder::set_field_data_manager(stk::mesh::FieldDataManager* const field_data_manager_ptr) {
   field_data_manager_ptr_ = field_data_manager_ptr;
   return *this;
 }
 #endif
 
-MeshBuilder &MeshBuilder::set_bucket_capacity(const unsigned bucket_capacity) {
+MeshBuilder& MeshBuilder::set_bucket_capacity(const unsigned bucket_capacity) {
   initial_bucket_capacity_ = bucket_capacity;
   maximum_bucket_capacity_ = bucket_capacity;
   return *this;
 }
 
-MeshBuilder &MeshBuilder::set_initial_bucket_capacity(const unsigned initial_bucket_capacity) {
+MeshBuilder& MeshBuilder::set_initial_bucket_capacity(const unsigned initial_bucket_capacity) {
   initial_bucket_capacity_ = initial_bucket_capacity;
   return *this;
 }
 
-MeshBuilder &MeshBuilder::set_maximum_bucket_capacity(const unsigned maximum_bucket_capacity) {
+MeshBuilder& MeshBuilder::set_maximum_bucket_capacity(const unsigned maximum_bucket_capacity) {
   maximum_bucket_capacity_ = maximum_bucket_capacity;
   return *this;
 }
 
-MeshBuilder &MeshBuilder::set_upward_connectivity_flag(const bool enable_upward_connectivity) {
+MeshBuilder& MeshBuilder::set_upward_connectivity_flag(const bool enable_upward_connectivity) {
   upward_connectivity_flag_ = enable_upward_connectivity;
   return *this;
 }

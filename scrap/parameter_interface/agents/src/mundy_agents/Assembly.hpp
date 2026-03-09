@@ -33,7 +33,7 @@
 #include <stk_topology/topology.hpp>  // for stk::topology
 
 // Mundy includes
-#include <mundy_core/StringLiteral.hpp>  // for mundy::core::StringLiteral and mundy::core::make_string_literal
+#include <mundy_utils/StringLiteral.hpp>  // for mundy::StringLiteral and mundy::make_string_literal
 #include <mundy_meta/FieldReqs.hpp>      // for mundy::meta::FieldReqs
 #include <mundy_meta/MeshReqs.hpp>       // for mundy::meta::MeshReqs
 #include <mundy_meta/PartReqs.hpp>       // for mundy::meta::PartReqs
@@ -55,7 +55,7 @@ namespace agents {
 /// \tparam name The name of our part (as a compile-time StringLiteral).
 /// \tparam parents_name The name of our parent part (as a compile-time StringLiteral).
 /// \tparam ParentAgentTypes Any number of agents that are parents of this agent. Can be empty.
-template <mundy::core::StringLiteral name, typename... ParentAgentTypes>
+template <mundy::StringLiteral name, typename... ParentAgentTypes>
 class Assembly {
  public:
   //! \name Getters

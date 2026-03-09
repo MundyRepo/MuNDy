@@ -47,7 +47,7 @@
 #include <mundy_mesh/MetaData.hpp>       // for mundy::mesh::MetaData
 #include <mundy_meta/FieldReqs.hpp>      // for mundy::meta::FieldReqs
 #include <mundy_meta/FieldReqsBase.hpp>  // for mundy::meta::FieldReqsBase
-#include <mundy_meta/utils/MeshGeneration.hpp>  // for mundy::meta::utils::generate_class_instance_and_mesh_from_meta_class_requirements
+#include <mundy_meta/utils/MeshGeneration.hpp>  // for mundy::meta::generate_class_instance_and_mesh_from_meta_class_requirements
 
 namespace mundy {
 
@@ -76,7 +76,7 @@ TEST(LinkerPotentialForceReduction, SumOverASubsetOfLinkersConnectedToASphere) {
   Teuchos::ParameterList fixed_params;
   fixed_params.set<std::string>("name_of_linker_part_to_reduce_over", "CUSTOM_LINKERS");
   auto [potential_force_magnitude_reduction_ptr, bulk_data_ptr] =
-      mundy::meta::utils::generate_class_instance_and_mesh_from_meta_class_requirements<LinkerPotentialForceReduction>(
+      mundy::meta::generate_class_instance_and_mesh_from_meta_class_requirements<LinkerPotentialForceReduction>(
           {fixed_params});
   ASSERT_TRUE(potential_force_magnitude_reduction_ptr != nullptr);
   ASSERT_TRUE(bulk_data_ptr != nullptr);
@@ -172,7 +172,7 @@ TEST(LinkerPotentialForceReduction, CorrectlyReducesOverGhostedLinkers) {
   // default requirements for LinkerPotentialForceReduction.
   Teuchos::ParameterList fixed_params;
   auto [potential_force_magnitude_reduction_ptr, bulk_data_ptr] =
-      mundy::meta::utils::generate_class_instance_and_mesh_from_meta_class_requirements<LinkerPotentialForceReduction>(
+      mundy::meta::generate_class_instance_and_mesh_from_meta_class_requirements<LinkerPotentialForceReduction>(
           {fixed_params});
   ASSERT_TRUE(potential_force_magnitude_reduction_ptr != nullptr);
   ASSERT_TRUE(bulk_data_ptr != nullptr);

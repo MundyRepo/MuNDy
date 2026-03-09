@@ -31,7 +31,6 @@
 #include <stk_mesh/base/Types.hpp>   // for stk::mesh::EntityRank
 
 // Mundy libs
-#include <mundy_core/throw_assert.hpp>                  // for MUNDY_THROW_ASSERT
 #include <mundy_mesh/BulkData.hpp>                      // for mundy::mesh::BulkData
 #include <mundy_mesh/LinkCOOData.hpp>                   // for mundy::mesh::LinkCOOData/NgpLinkCOOData
 #include <mundy_mesh/LinkCSRData.hpp>                   // for mundy::mesh::LinkCSRData/NgpLinkCSRData
@@ -40,6 +39,7 @@
 #include <mundy_mesh/MetaData.hpp>                      // for mundy::mesh::MetaData
 #include <mundy_mesh/Types.hpp>                         // for mundy::mesh::NgpDataAccessTag
 #include <mundy_mesh/impl/NgpCOOToCSRSynchronizer.hpp>  // for mundy::mesh::impl::NgpCOOToCSRSynchronizerT
+#include <mundy_utils/throw_assert.hpp>                 // for MUNDY_THROW_ASSERT
 
 namespace mundy {
 
@@ -61,15 +61,15 @@ class NgpLinkDataT {
   NgpLinkDataT() = default;
 
   /// \brief Default copy or move constructors/operators.
-  KOKKOS_DEFAULTED_FUNCTION NgpLinkDataT(const NgpLinkDataT &) = default;
-  KOKKOS_DEFAULTED_FUNCTION NgpLinkDataT(NgpLinkDataT &&) = default;
-  KOKKOS_DEFAULTED_FUNCTION NgpLinkDataT &operator=(const NgpLinkDataT &) = default;
-  KOKKOS_DEFAULTED_FUNCTION NgpLinkDataT &operator=(NgpLinkDataT &&) = default;
+  KOKKOS_DEFAULTED_FUNCTION NgpLinkDataT(const NgpLinkDataT&) = default;
+  KOKKOS_DEFAULTED_FUNCTION NgpLinkDataT(NgpLinkDataT&&) = default;
+  KOKKOS_DEFAULTED_FUNCTION NgpLinkDataT& operator=(const NgpLinkDataT&) = default;
+  KOKKOS_DEFAULTED_FUNCTION NgpLinkDataT& operator=(NgpLinkDataT&&) = default;
 
   /// \brief Canonical constructor.
   /// \param link_data The host link data to mirror in the given memory space.
-  explicit NgpLinkDataT(const LinkData &link_data)
-      : link_data_ptr_(const_cast<LinkData *>(&link_data)),
+  explicit NgpLinkDataT(const LinkData& link_data)
+      : link_data_ptr_(const_cast<LinkData*>(&link_data)),
         bulk_data_ptr_(&link_data_ptr_->bulk_data()),
         mesh_meta_data_ptr_(&link_data_ptr_->bulk_data().mesh_meta_data()),
         link_meta_data_ptr_(&link_data_ptr_->link_meta_data()),
@@ -92,43 +92,43 @@ class NgpLinkDataT {
   }
 
   /// \brief Fetch the bulk data's meta data manager
-  const stk::mesh::MetaData &mesh_meta_data() const {
+  const stk::mesh::MetaData& mesh_meta_data() const {
     MUNDY_THROW_ASSERT(mesh_meta_data_ptr_ != nullptr, std::invalid_argument, "Mesh meta data is not set.");
     return *mesh_meta_data_ptr_;
   }
 
   /// \brief Fetch the bulk data's meta data manager
-  stk::mesh::MetaData &mesh_meta_data() {
+  stk::mesh::MetaData& mesh_meta_data() {
     MUNDY_THROW_ASSERT(mesh_meta_data_ptr_ != nullptr, std::invalid_argument, "Mesh meta data is not set.");
     return *mesh_meta_data_ptr_;
   }
 
   /// \brief Fetch the link meta data manager
-  const LinkMetaData &link_meta_data() const {
+  const LinkMetaData& link_meta_data() const {
     MUNDY_THROW_ASSERT(link_meta_data_ptr_ != nullptr, std::invalid_argument, "Link meta data is not set.");
     return *link_meta_data_ptr_;
   }
 
   /// \brief Fetch the link meta data manager
-  LinkMetaData &link_meta_data() {
+  LinkMetaData& link_meta_data() {
     MUNDY_THROW_ASSERT(link_meta_data_ptr_ != nullptr, std::invalid_argument, "Link meta data is not set.");
     return *link_meta_data_ptr_;
   }
 
   /// \brief Fetch the bulk data manager we extend
-  const stk::mesh::BulkData &bulk_data() const {
+  const stk::mesh::BulkData& bulk_data() const {
     MUNDY_THROW_ASSERT(bulk_data_ptr_ != nullptr, std::invalid_argument, "Bulk data is not set.");
     return *bulk_data_ptr_;
   }
 
   /// \brief Fetch the bulk data manager we extend
-  stk::mesh::BulkData &bulk_data() {
+  stk::mesh::BulkData& bulk_data() {
     MUNDY_THROW_ASSERT(bulk_data_ptr_ != nullptr, std::invalid_argument, "Bulk data is not set.");
     return *bulk_data_ptr_;
   }
 
   /// \brief Fetch our link data on the host.
-  LinkData &link_data() {
+  LinkData& link_data() {
     MUNDY_THROW_ASSERT(link_data_ptr_ != nullptr, std::invalid_argument, "Link data is not set.");
     return *link_data_ptr_;
   }
@@ -141,11 +141,11 @@ class NgpLinkDataT {
 
   /// \brief Fetch the ngp mesh
   KOKKOS_INLINE_FUNCTION
-  const stk::mesh::NgpMesh &ngp_mesh() const noexcept {
+  const stk::mesh::NgpMesh& ngp_mesh() const noexcept {
     return ngp_mesh_;
   }
   KOKKOS_INLINE_FUNCTION
-  stk::mesh::NgpMesh &ngp_mesh() noexcept {
+  stk::mesh::NgpMesh& ngp_mesh() noexcept {
     return ngp_mesh_;
   }
   //@}
@@ -154,11 +154,11 @@ class NgpLinkDataT {
   //@{
 
   KOKKOS_FUNCTION
-  NgpLinkCSRDataT<NgpMemSpace> &crs_data() noexcept {
+  NgpLinkCSRDataT<NgpMemSpace>& crs_data() noexcept {
     return ngp_crs_data_;
   }
   KOKKOS_FUNCTION
-  const NgpLinkCSRDataT<NgpMemSpace> &crs_data() const noexcept {
+  const NgpLinkCSRDataT<NgpMemSpace>& crs_data() const noexcept {
     return ngp_crs_data_;
   }
   void crs_modify_on_host() {
@@ -191,11 +191,11 @@ class NgpLinkDataT {
   //@{
 
   KOKKOS_FUNCTION
-  NgpLinkCOODataT<NgpMemSpace> &coo_data() noexcept {
+  NgpLinkCOODataT<NgpMemSpace>& coo_data() noexcept {
     return ngp_coo_data_;
   }
   KOKKOS_FUNCTION
-  const NgpLinkCOODataT<NgpMemSpace> &coo_data() const noexcept {
+  const NgpLinkCOODataT<NgpMemSpace>& coo_data() const noexcept {
     return ngp_coo_data_;
   }
   void coo_modify_on_host() {
@@ -233,7 +233,7 @@ class NgpLinkDataT {
   ///  1. A reduction over all selected partitions to check if any of the CSR buckets are dirty.
   ///  2. A reduction over all selected links to check if any of the links are dirty.
   /// These aren't expensive operations and they're designed to be fast/GPU-compatible, but they aren't free.
-  bool is_crs_up_to_date(const stk::mesh::Selector &selector) {
+  bool is_crs_up_to_date(const stk::mesh::Selector& selector) {
     return impl::NgpCOOToCSRSynchronizerT<NgpMemSpace>::is_crs_up_to_date(ngp_crs_data_, ngp_coo_data_, selector);
   }
 
@@ -245,7 +245,7 @@ class NgpLinkDataT {
   /// \brief Propagate changes made to the COO connectivity to the CSR connectivity for the given link subset selector.
   /// This takes changes made via the declare/destroy_relation functions or request/destroy links and updates
   /// the CSR connectivity to reflect these changes.
-  void update_crs_from_coo(const stk::mesh::Selector &selector) {
+  void update_crs_from_coo(const stk::mesh::Selector& selector) {
     impl::NgpCOOToCSRSynchronizerT<NgpMemSpace>::update_crs_from_coo(ngp_crs_data_, ngp_coo_data_, selector);
     crs_modify_on_device();
   }
@@ -261,7 +261,7 @@ class NgpLinkDataT {
   /// Relatively expensive check that verifies COO -> CSR and CSR -> COO consistency.
   ///
   /// \note The checks performed in this function are performed even in RELEASE mode.
-  void check_crs_coo_consistency(const stk::mesh::Selector &selector) {
+  void check_crs_coo_consistency(const stk::mesh::Selector& selector) {
     impl::NgpCOOToCSRSynchronizerT<NgpMemSpace>::check_crs_coo_consistency(ngp_crs_data_, ngp_coo_data_, selector);
   }
 
@@ -297,10 +297,10 @@ class NgpLinkDataT {
   //! \name Internal members (host only)
   //@{
 
-  LinkData *link_data_ptr_;
-  stk::mesh::BulkData *bulk_data_ptr_;
-  stk::mesh::MetaData *mesh_meta_data_ptr_;
-  LinkMetaData *link_meta_data_ptr_;
+  LinkData* link_data_ptr_;
+  stk::mesh::BulkData* bulk_data_ptr_;
+  stk::mesh::MetaData* mesh_meta_data_ptr_;
+  LinkMetaData* link_meta_data_ptr_;
   //@}
 
   //! \name Internal members (device compatible)

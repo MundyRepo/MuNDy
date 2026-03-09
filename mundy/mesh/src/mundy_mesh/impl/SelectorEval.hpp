@@ -34,7 +34,7 @@
 #include <stk_mesh/base/Selector.hpp>  // for stk::mesh::Selector
 
 // Mundy
-#include <mundy_mesh/BulkData.hpp>            // for mundy::mesh::BulkData
+#include <mundy_mesh/BulkData.hpp>           // for mundy::mesh::BulkData
 #include <mundy_mesh/impl/SelectorNode.hpp>  // for mundy::mesh::impl::SelectorNode
 
 namespace mundy {
@@ -85,10 +85,10 @@ class SelectorEval {
   ///
   /// \param bulk_data [in] The bulk data object used to fetch the part names.
   /// \param expr [in] The selector expression to evaluate.
-  SelectorEval(const BulkData &bulk_data, const std::string &expr = "");
+  SelectorEval(const BulkData& bulk_data, const std::string& expr = "");
 
   /// \brief Copy constructor
-  SelectorEval(const SelectorEval &);
+  SelectorEval(const SelectorEval&);
 
   /// \brief Default destructor
   ~SelectorEval() = default;
@@ -96,7 +96,7 @@ class SelectorEval {
 
   //! \name Getters
   //@{
-  const std::string &get_expression() const {
+  const std::string& get_expression() const {
     return expression_;
   }
 
@@ -114,7 +114,7 @@ class SelectorEval {
 
   int get_last_node_index() const;
 
-  SelectorNode *get_node(int i) const {
+  SelectorNode* get_node(int i) const {
     return node_ptrs_[i].get();
   }
 
@@ -126,7 +126,7 @@ class SelectorEval {
     return did_parse_succeed_;
   }
 
-  stk::mesh::Selector &get_result_buffer_value(const int idx) {
+  stk::mesh::Selector& get_result_buffer_value(const int idx) {
     return result_buffer_[idx];
   }
   //@}
@@ -134,7 +134,7 @@ class SelectorEval {
   //! \name Setters
   //@{
 
-  SelectorEval &set_expression(const std::string &expression);
+  SelectorEval& set_expression(const std::string& expression);
   //@}
 
   //! \name Actions
@@ -150,13 +150,13 @@ class SelectorEval {
   /// \brief Create a new node that performs some operation
   ///
   /// \param op [in] The operation it performs
-  SelectorNode *new_node(const int &op);
+  SelectorNode* new_node(const int& op);
 
   /// \brief Create a new node that fetches a part given a name
   ///
   /// \param op [in] The operation it performs
   /// \param part_name [in] The name of the part to fetch
-  SelectorNode *new_node(const int &op, const std::string &part_name);
+  SelectorNode* new_node(const int& op, const std::string& part_name);
 
   /// \brief Check the syntax of the expression
   void syntax();
@@ -173,14 +173,14 @@ class SelectorEval {
   //@{
 
   /// \brief Assignment operator (hidden)
-  SelectorEval &operator=(const SelectorEval &);
+  SelectorEval& operator=(const SelectorEval&);
   //@}
 
   //! \name Private data
   //@{
 
   /// \brief The bulk data object used to fetch the part names
-  const BulkData &bulk_data_;
+  const BulkData& bulk_data_;
 
   /// \brief The selector expression to evaluate
   std::string expression_;
@@ -192,7 +192,7 @@ class SelectorEval {
   bool did_parse_succeed_;
 
   /// \brief The head node of the evaluation tree
-  SelectorNode *head_node_ptr_;
+  SelectorNode* head_node_ptr_;
 
   /// \brief The nodes in the evaluation tree
   std::vector<std::shared_ptr<SelectorNode>> node_ptrs_;
@@ -207,8 +207,8 @@ class SelectorEval {
   //! \name Friends <3
   //@{
 
-  friend void check_node_order(const std::string &expression);
-  friend void check_evaluation_node_order(const std::string &expression);
+  friend void check_node_order(const std::string& expression);
+  friend void check_evaluation_node_order(const std::string& expression);
   //@}
 };
 

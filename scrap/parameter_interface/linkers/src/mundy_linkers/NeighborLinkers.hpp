@@ -49,7 +49,7 @@ namespace linkers {
 ///
 /// \note This class is a constraint rank assembly part containing all neighbor linkers. It is a subset of the Linkers
 /// agent.
-class NeighborLinkers : public mundy::agents::RankedAssembly<mundy::core::make_string_literal("NEIGHBOR_LINKERS"),
+class NeighborLinkers : public mundy::agents::RankedAssembly<mundy::make_string_literal("NEIGHBOR_LINKERS"),
                                                              stk::topology::CONSTRAINT_RANK, mundy::linkers::Linkers> {
  public:
   static inline std::string get_linked_entities_field_name() {
@@ -63,7 +63,7 @@ class NeighborLinkers : public mundy::agents::RankedAssembly<mundy::core::make_s
   /// \brief Get our mesh requirements.
   static inline std::shared_ptr<mundy::meta::MeshReqs> get_mesh_requirements() {
     add_and_sync_part_reqs(additional_part_reqs_ptr_);
-    return mundy::agents::RankedAssembly<mundy::core::make_string_literal("NEIGHBOR_LINKERS"),
+    return mundy::agents::RankedAssembly<mundy::make_string_literal("NEIGHBOR_LINKERS"),
                                          stk::topology::CONSTRAINT_RANK,
                                          mundy::linkers::Linkers>::get_mesh_requirements();
   }

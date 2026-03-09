@@ -18,10 +18,12 @@
 // **********************************************************************************************************************
 // @HEADER
 
+
 #define ANKERL_NANOBENCH_IMPLEMENT
 
 // C++ core libs
 #include <algorithm>    // for std::max
+#include <cstdint>      // for uint32_t
 #include <map>          // for std::map
 #include <memory>       // for std::shared_ptr, std::unique_ptr
 #include <queue>        // for std::priority_queue
@@ -44,8 +46,8 @@
 #include <stk_mesh/base/Selector.hpp>
 
 // Mundy libs
-#include <mundy_math/Tolerance.hpp>       // for mundy::math::get_zero_tolerance
-#include <mundy_math/Vector3.hpp>         // for mundy::math::Vector3
+#include <mundy_math/Tolerance.hpp>       // for mundy::get_zero_tolerance
+#include <mundy_math/Vector3.hpp>         // for mundy::Vector3
 #include <mundy_mesh/BulkData.hpp>        // for mundy::mesh::BulkData
 #include <mundy_mesh/GetNgpLinkData.hpp>  // for mundy::mesh::get_updated_ngp_link_data
 #include <mundy_mesh/LinkData.hpp>        // for mundy::mesh::LinkData
@@ -53,6 +55,7 @@
 #include <mundy_mesh/MeshBuilder.hpp>     // for mundy::mesh::MeshBuilder
 #include <mundy_mesh/MetaData.hpp>        // for mundy::mesh::MetaData
 #include <mundy_mesh/NgpLinkData.hpp>     // for mundy::mesh::NgpLinkData
+#include <mundy_utils/rng.hpp>            // for mundy::make_philox
 
 namespace mundy {
 
@@ -257,7 +260,7 @@ struct TestParameters {
   LinkDistribution link_distribution;
   LinkedEntityRanksType linked_entity_ranks_type;
   stk::mesh::EntityRank link_rank;
-  size_t link_dimensionality;
+  unsigned link_dimensionality;
   size_t num_link_partitions;
   double id_locality;      ///< 0.0 = Gaussian, 1.0 = Uniform, in between = linear interpolation
   double id_sigma_bucket;  ///< Standard deviation of the Gaussian distribution for bucket id selection
@@ -413,7 +416,7 @@ class WeightedSampler {
 
     // Draw U ~ (0,1); clamp away from 0 to avoid log(0).
     double u = rng.template rand<double>();
-    const double tiny = math::get_zero_tolerance<double>() * 10;
+    const double tiny = get_zero_tolerance<double>() * 10;
     if (u <= tiny) u = tiny;
 
     const double key = -std::log(u) / weight;  // smaller is better
@@ -479,7 +482,9 @@ void connect_entities_and_links(TestContext& context, const TestParameters& para
 
     // 2.1. For each link bucket, preselect L entity buckets to maybe draw from.
     stk::mesh::BucketVector buckets_to_maybe_draw_from[stk::topology::NUM_RANKS];
-    openrand::Philox bucket_rng(seed, link_bucket_id);
+    MUNDY_THROW_ASSERT(link_bucket_id <= std::numeric_limits<uint32_t>::max(), std::overflow_error,
+                       "Counter exceeds uint32_t max for openrand::Philox.");
+    openrand::Philox bucket_rng = make_philox(seed, link_bucket_id);
 
     for (size_t i = 0; i < stk::topology::NUM_RANKS; ++i) {
       const size_t num_entity_buckets = rank_buckets[i].size();
@@ -512,7 +517,9 @@ void connect_entities_and_links(TestContext& context, const TestParameters& para
     size_t num_links_in_bucket = link_bucket.size();
     for (size_t link_ord = 0; link_ord < num_links_in_bucket; ++link_ord) {
       stk::mesh::Entity link_entity = link_bucket[link_ord];
-      openrand::Philox link_rng(seed, link_ord);
+      MUNDY_THROW_ASSERT(link_ord <= std::numeric_limits<uint32_t>::max(), std::overflow_error,
+                         "Counter exceeds uint32_t max for openrand::Philox.");
+      openrand::Philox link_rng = make_philox(seed, link_ord);
 
       // Choose the ranks for each downward linked entity. The modes are
       //   same: All entities of NODE_RANK
@@ -544,16 +551,19 @@ void connect_entities_and_links(TestContext& context, const TestParameters& para
         MUNDY_THROW_ASSERT(selected_nodes.size() <= link_dimensionality, std::logic_error,
                            "Selected nodes size must not exceed link dimensionality. It may be less when there aren't "
                            "enough nodes in the mesh.");
-        for (unsigned d = 0; d < selected_nodes.size(); ++d) {
+        for (size_t d = 0; d < selected_nodes.size(); ++d) {
           stk::mesh::Entity selected_node = selected_nodes[d];
           MUNDY_THROW_ASSERT(bulk_data.is_valid(selected_node), std::logic_error, "Selected entity is not valid.");
 
-          openrand::Philox entity_bucket_rng(seed, bulk_data.bucket(selected_node).bucket_id());
+          const auto selected_node_bucket_id = bulk_data.bucket(selected_node).bucket_id();
+          MUNDY_THROW_ASSERT(selected_node_bucket_id <= std::numeric_limits<uint32_t>::max(), std::overflow_error,
+                             "Counter exceeds uint32_t max for openrand::Philox.");
+          openrand::Philox entity_bucket_rng = make_philox(seed, selected_node_bucket_id);
           if (entity_bucket_rng.rand<double>() > entity_bucket_selection_percentage) {
             break;  // If the entity fails the entity bucket selection, skip the rest.
           }
           if (bucket_rng.rand<double>() < link_selection_percentage) {
-            link_data.coo_data().declare_relation(link_entity, selected_node, d);
+            link_data.coo_data().declare_relation(link_entity, selected_node, static_cast<unsigned>(d));
           }
         }
 
@@ -593,17 +603,21 @@ void connect_entities_and_links(TestContext& context, const TestParameters& para
           MUNDY_THROW_ASSERT(selected_entities.size() <= num_entities_per_rank[i], std::logic_error,
                              "Selected entities size must not exceed number of entities per rank. It may be less when "
                              "there aren't enough entities in the mesh.");
-          for (unsigned j = 0; j < selected_entities.size();
+          for (size_t j = 0; j < selected_entities.size();
                ++j) {  // We might end up with holes in the downward connections.
             stk::mesh::Entity selected_entity = selected_entities[j];
             MUNDY_THROW_ASSERT(bulk_data.is_valid(selected_entity), std::logic_error, "Selected entity is not valid.");
 
-            openrand::Philox entity_bucket_rng(seed, bulk_data.bucket(selected_entity).bucket_id());
+            const auto selected_entity_bucket_id = bulk_data.bucket(selected_entity).bucket_id();
+            MUNDY_THROW_ASSERT(selected_entity_bucket_id <= std::numeric_limits<uint32_t>::max(), std::overflow_error,
+                               "Counter exceeds uint32_t max for openrand::Philox.");
+            openrand::Philox entity_bucket_rng = make_philox(seed, selected_entity_bucket_id);
             if (entity_bucket_rng.rand<double>() > entity_bucket_selection_percentage) {
               break;  // If the entity fails the entity bucket selection, skip the rest.
             }
             if (bucket_rng.rand<double>() < link_selection_percentage) {
-              link_data.coo_data().declare_relation(link_entity, selected_entity, j + num_entities_per_rank_shift[i]);
+              link_data.coo_data().declare_relation(link_entity, selected_entity,
+                                                    static_cast<unsigned>(j + num_entities_per_rank_shift[i]));
             }
           }
         }
@@ -643,7 +657,10 @@ void connect_entities_and_links(TestContext& context, const TestParameters& para
         stk::mesh::Entity selected_elem = selected_elems[0];
         MUNDY_THROW_ASSERT(bulk_data.is_valid(selected_elem), std::logic_error, "Selected entity is not valid.");
 
-        openrand::Philox elem_bucket_rng(seed, bulk_data.bucket(selected_elem).bucket_id());
+        const auto selected_elem_bucket_id = bulk_data.bucket(selected_elem).bucket_id();
+        MUNDY_THROW_ASSERT(selected_elem_bucket_id <= std::numeric_limits<uint32_t>::max(), std::overflow_error,
+                           "Counter exceeds uint32_t max for openrand::Philox.");
+        openrand::Philox elem_bucket_rng = make_philox(seed, selected_elem_bucket_id);
         if (elem_bucket_rng.rand<double>() > entity_bucket_selection_percentage) {
           continue;  // If the element fails the entity bucket selection, skip the rest.
         }
@@ -656,17 +673,20 @@ void connect_entities_and_links(TestContext& context, const TestParameters& para
         MUNDY_THROW_ASSERT(selected_nodes.size() <= link_dimensionality - 1, std::logic_error,
                            "Number of selected nodes must not exceed link dimensionality - 1. It may be less when "
                            "there aren't enough nodes in the mesh.");
-        for (unsigned j = 0; j < selected_nodes.size(); ++j) {
+        for (size_t j = 0; j < selected_nodes.size(); ++j) {
           stk::mesh::Entity selected_node = selected_nodes[j];
           MUNDY_THROW_ASSERT(bulk_data.is_valid(selected_node), std::logic_error, "Selected entity is not valid.");
 
-          openrand::Philox entity_bucket_rng(seed, bulk_data.bucket(selected_node).bucket_id());
+          const auto selected_node_bucket_id = bulk_data.bucket(selected_node).bucket_id();
+          MUNDY_THROW_ASSERT(selected_node_bucket_id <= std::numeric_limits<uint32_t>::max(), std::overflow_error,
+                             "Counter exceeds uint32_t max for openrand::Philox.");
+          openrand::Philox entity_bucket_rng = make_philox(seed, selected_node_bucket_id);
           if (entity_bucket_rng.rand<double>() > entity_bucket_selection_percentage) {
             break;  // If any of the nodes fail the entity bucket selection, skip the rest.
           }
           if (bucket_rng.rand<double>() < link_selection_percentage) {
             link_data.coo_data().declare_relation(link_entity, selected_node,
-                                                  j + 1);  // Start at 1 since 0 is the element.
+                                                  static_cast<unsigned>(j + 1));  // Start at 1 since 0 is the element.
           }
         }
 
@@ -713,277 +733,282 @@ linked entities.
 different ranks).
 */
 
+// TODO (palmerb4): Finalize these operations, as their performance is critical to Mundy.
+//
 // Case 1: Same rank with dimensionality two: force potential between pairs of entities.
-class eval_force_potential_same_rank {
- public:
-  /// \brief Constructor that declares the necessary fields and sets up the data.
-  eval_force_potential_same_rank(TestContext& context, const TestParameters& params)
-      : context_(context),
-        params_(params),
-        position_field_(context.meta_data->declare_field<double>(stk::topology::NODE_RANK, "position")),
-        coo_force_field_(context.meta_data->declare_field<double>(stk::topology::NODE_RANK, "coo_force")),
-        crs_force_field_(context.meta_data->declare_field<double>(stk::topology::NODE_RANK, "crs_force")) {
-    stk::mesh::put_field_on_mesh(position_field_, context.bulk_data->mesh_meta_data().universal_part(), 3,
-                                 non_zero_vector3_initial_value_);
-    stk::mesh::put_field_on_mesh(coo_force_field_, context.bulk_data->mesh_meta_data().universal_part(), 3,
-                                 non_zero_vector3_initial_value_);
-    stk::mesh::put_field_on_mesh(crs_force_field_, context.bulk_data->mesh_meta_data().universal_part(), 3,
-                                 non_zero_vector3_initial_value_);
-    assert_invariants();
-  }
-
-  void assert_invariants() {
-    MUNDY_THROW_REQUIRE(params_.linked_entity_ranks_type == LinkedEntityRanksType::SAME, std::invalid_argument,
-                        "Linked entity ranks type must be SAME for eval_force_potential_same_rank.");
-    MUNDY_THROW_REQUIRE(params_.link_dimensionality == 2, std::invalid_argument,
-                        "Link dimensionality must be 2 for eval_force_potential_same_rank.");
-  }
-
-  void run_coo() {
-    // Loop over all links, fetch their two linked entities, compute the force between them based on a simple linear
-    // spring potential. Atomic sum the equal and opposite forces on each entity.
-  }
-
-  void run_crs() {
-    // Loop over each linked entity, fetch its links, for each downward linked entity that isn't itself, compute the
-    // force between them based on a simple linear spring potential. Sum that force onto the target entity. No atomic
-    // since we never loop over the same target entity twice.
-  }
-
-  void validate_coo_vs_crs() {
-    // Coo and crs should have identical force fields
-  }
-
- private:
-  TestContext& context_;
-  const TestParameters& params_;
-
-  // Internal fields
-  using DoubleField = stk::mesh::Field<double>;
-  DoubleField& position_field_;
-  DoubleField& coo_force_field_;
-  DoubleField& crs_force_field_;
-
-  static constexpr double non_zero_vector3_initial_value_[3] = {1.1, 2.2, 3.3};
-};
-
+// class eval_force_potential_same_rank {
+//  public:
+//   /// \brief Constructor that declares the necessary fields and sets up the data.
+//   eval_force_potential_same_rank(TestContext& context, const TestParameters& params)
+//       : context_(context),
+//         params_(params),
+//         position_field_(context.meta_data->declare_field<double>(stk::topology::NODE_RANK, "position")),
+//         coo_force_field_(context.meta_data->declare_field<double>(stk::topology::NODE_RANK, "coo_force")),
+//         crs_force_field_(context.meta_data->declare_field<double>(stk::topology::NODE_RANK, "crs_force")) {
+//     stk::mesh::put_field_on_mesh(position_field_, context.bulk_data->mesh_meta_data().universal_part(), 3,
+//                                  non_zero_vector3_initial_value_);
+//     stk::mesh::put_field_on_mesh(coo_force_field_, context.bulk_data->mesh_meta_data().universal_part(), 3,
+//                                  non_zero_vector3_initial_value_);
+//     stk::mesh::put_field_on_mesh(crs_force_field_, context.bulk_data->mesh_meta_data().universal_part(), 3,
+//                                  non_zero_vector3_initial_value_);
+//     assert_invariants();
+//   }
+//
+//   void assert_invariants() {
+//     MUNDY_THROW_REQUIRE(params_.linked_entity_ranks_type == LinkedEntityRanksType::SAME, std::invalid_argument,
+//                         "Linked entity ranks type must be SAME for eval_force_potential_same_rank.");
+//     MUNDY_THROW_REQUIRE(params_.link_dimensionality == 2, std::invalid_argument,
+//                         "Link dimensionality must be 2 for eval_force_potential_same_rank.");
+//   }
+//
+//   void run_coo() {
+//     // Loop over all links, fetch their two linked entities, compute the force between them based on a simple linear
+//     // spring potential. Atomic sum the equal and opposite forces on each entity.
+//   }
+//
+//   void run_crs() {
+//     // Loop over each linked entity, fetch its links, for each downward linked entity that isn't itself, compute the
+//     // force between them based on a simple linear spring potential. Sum that force onto the target entity. No atomic
+//     // since we never loop over the same target entity twice.
+//   }
+//
+//   void validate_coo_vs_crs() {
+//     // Coo and crs should have identical force fields
+//   }
+//
+//  private:
+//   TestContext& context_;
+//   const TestParameters& params_;
+//
+//   // Internal fields
+//   using DoubleField = stk::mesh::Field<double>;
+//   DoubleField& position_field_;
+//   DoubleField& coo_force_field_;
+//   DoubleField& crs_force_field_;
+//
+//   static constexpr double non_zero_vector3_initial_value_[3] = {1.1, 2.2, 3.3};
+// };
+//
 // Case 2: Random rank with dimensionality two
 // Details: force potential between pairs of entities (with fields of different ranks).
-class eval_force_potential_random_rank {
- public:
-  /// \brief Constructor that declares the necessary fields and sets up the data.
-  eval_force_potential_random_rank(TestContext& context, const TestParameters& params)
-      : context_(context), params_(params) {
-    for (size_t i = 0; i < stk::topology::NUM_RANKS; ++i) {
-      stk::topology::rank_t rank = static_cast<stk::topology::rank_t>(i);
-      position_fields_[i] =
-          &context.meta_data->declare_field<double>(rank, ("position_rank_" + std::to_string(rank)).c_str());
-      coo_force_fields_[i] =
-          &context.meta_data->declare_field<double>(rank, ("coo_force_rank_" + std::to_string(rank)).c_str());
-      crs_force_fields_[i] =
-          &context.meta_data->declare_field<double>(rank, ("crs_force_rank_" + std::to_string(rank)).c_str());
-
-      stk::mesh::put_field_on_mesh(*position_fields_[i], context.bulk_data->mesh_meta_data().universal_part(), 3,
-                                   vector3_initial_value_);
-      stk::mesh::put_field_on_mesh(*coo_force_fields_[i], context.bulk_data->mesh_meta_data().universal_part(), 3,
-                                   vector3_initial_value_);
-      stk::mesh::put_field_on_mesh(*crs_force_fields_[i], context.bulk_data->mesh_meta_data().universal_part(), 3,
-                                   vector3_initial_value_);
-    }
-
-    assert_invariants();
-  }
-
-  void assert_invariants() {
-    MUNDY_THROW_REQUIRE(params_.linked_entity_ranks_type == LinkedEntityRanksType::RANDOM, std::invalid_argument,
-                        "Linked entity ranks type must be RANDOM for eval_force_potential_random_rank.");
-    MUNDY_THROW_REQUIRE(params_.link_dimensionality == 2, std::invalid_argument,
-                        "Link dimensionality must be 2 for eval_force_potential_random_rank.");
-  }
-
-  void run_coo() {
-    // Loop over all links, fetch their two linked entities, compute the force between them based on a simple linear
-    // spring potential. Atomic sum the equal and opposite forces on each entity.
-  }
-
-  void run_crs() {
-    // Loop over each linked entity, fetch its links, for each downward linked entity that isn't itself, compute the
-    // force between them based on a simple linear spring potential. Sum that force onto the target entity. No atomic
-    // since we never loop over the same target entity twice.
-  }
-
-  void validate_coo_vs_crs() {
-    // Coo and crs should have identical force fields
-  }
-
- private:
-  TestContext& context_;
-  const TestParameters& params_;
-
-  // Internal fields
-  using DoubleField = stk::mesh::Field<double>;
-  DoubleField* position_fields_[stk::topology::NUM_RANKS];
-  DoubleField* coo_force_fields_[stk::topology::NUM_RANKS];
-  DoubleField* crs_force_fields_[stk::topology::NUM_RANKS];
-
-  static constexpr double vector3_initial_value_[3] = {1.1, 2.2, 3.3};
-};
-
+// class eval_force_potential_random_rank {
+//  public:
+//   /// \brief Constructor that declares the necessary fields and sets up the data.
+//   eval_force_potential_random_rank(TestContext& context, const TestParameters& params)
+//       : context_(context), params_(params) {
+//     for (size_t i = 0; i < stk::topology::NUM_RANKS; ++i) {
+//       stk::topology::rank_t rank = static_cast<stk::topology::rank_t>(i);
+//       position_fields_[i] =
+//           &context.meta_data->declare_field<double>(rank, ("position_rank_" + std::to_string(rank)).c_str());
+//       coo_force_fields_[i] =
+//           &context.meta_data->declare_field<double>(rank, ("coo_force_rank_" + std::to_string(rank)).c_str());
+//       crs_force_fields_[i] =
+//           &context.meta_data->declare_field<double>(rank, ("crs_force_rank_" + std::to_string(rank)).c_str());
+//
+//       stk::mesh::put_field_on_mesh(*position_fields_[i], context.bulk_data->mesh_meta_data().universal_part(), 3,
+//                                    vector3_initial_value_);
+//       stk::mesh::put_field_on_mesh(*coo_force_fields_[i], context.bulk_data->mesh_meta_data().universal_part(), 3,
+//                                    vector3_initial_value_);
+//       stk::mesh::put_field_on_mesh(*crs_force_fields_[i], context.bulk_data->mesh_meta_data().universal_part(), 3,
+//                                    vector3_initial_value_);
+//     }
+//
+//     assert_invariants();
+//   }
+//
+//   void assert_invariants() {
+//     MUNDY_THROW_REQUIRE(params_.linked_entity_ranks_type == LinkedEntityRanksType::RANDOM, std::invalid_argument,
+//                         "Linked entity ranks type must be RANDOM for eval_force_potential_random_rank.");
+//     MUNDY_THROW_REQUIRE(params_.link_dimensionality == 2, std::invalid_argument,
+//                         "Link dimensionality must be 2 for eval_force_potential_random_rank.");
+//   }
+//
+//   void run_coo() {
+//     // Loop over all links, fetch their two linked entities, compute the force between them based on a simple linear
+//     // spring potential. Atomic sum the equal and opposite forces on each entity.
+//   }
+//
+//   void run_crs() {
+//     // Loop over each linked entity, fetch its links, for each downward linked entity that isn't itself, compute the
+//     // force between them based on a simple linear spring potential. Sum that force onto the target entity. No atomic
+//     // since we never loop over the same target entity twice.
+//   }
+//
+//   void validate_coo_vs_crs() {
+//     // Coo and crs should have identical force fields
+//   }
+//
+//  private:
+//   TestContext& context_;
+//   const TestParameters& params_;
+//
+//   // Internal fields
+//   using DoubleField = stk::mesh::Field<double>;
+//   DoubleField* position_fields_[stk::topology::NUM_RANKS];
+//   DoubleField* coo_force_fields_[stk::topology::NUM_RANKS];
+//   DoubleField* crs_force_fields_[stk::topology::NUM_RANKS];
+//
+//   static constexpr double vector3_initial_value_[3] = {1.1, 2.2, 3.3};
+// };
+//
 // Case 3: Same rank with any dimensionality
 // Details: reduce the force of linked entities into its link.
-class eval_force_reduction_same_rank {
- public:
-  /// \brief Constructor that declares the necessary fields and sets up the data.
-  eval_force_reduction_same_rank(TestContext& context, const TestParameters& params)
-      : context_(context),
-        params_(params),
-        coo_link_force_field_(context.meta_data->declare_field<double>(params.link_rank, "coo_link_force")),
-        crs_link_force_field_(context.meta_data->declare_field<double>(params.link_rank, "crs_link_force")),
-        entity_force_field_(context.meta_data->declare_field<double>(stk::topology::NODE_RANK, "entity_force")) {
-    stk::mesh::put_field_on_mesh(coo_link_force_field_, context.link_meta_data->universal_link_part(), 3,
-                                 link_force_initial_value_);
-    stk::mesh::put_field_on_mesh(crs_link_force_field_, context.link_meta_data->universal_link_part(), 3,
-                                 link_force_initial_value_);
-    stk::mesh::put_field_on_mesh(entity_force_field_, context.bulk_data->mesh_meta_data().universal_part(), 3,
-                                 entity_force_initial_value_);
-    assert_invariants();
-  }
-
-  void assert_invariants() {
-    MUNDY_THROW_REQUIRE(params_.linked_entity_ranks_type == LinkedEntityRanksType::SAME, std::invalid_argument,
-                        "Linked entity ranks type must be SAME for eval_force_reduction_same_rank.");
-  }
-
-  void run_coo() {
-    // Loop over all links, fetch their linked entities, sum their force field into the link's force field. No atomic
-    // since we never loop over the same link twice.
-  }
-
-  void run_crs() {
-    // Loop over each linked entity, fetch its links and atomically sum the linked entity's force fields into said
-    // link's.
-  }
-
-  void validate_coo_vs_crs() {
-    // Coo and crs should have identical link force fields
-  }
-
- private:
-  TestContext& context_;
-  const TestParameters& params_;
-
-  // Internal fields
-  using DoubleField = stk::mesh::Field<double>;
-  DoubleField& coo_link_force_field_;
-  DoubleField& crs_link_force_field_;
-  DoubleField& entity_force_field_;
-
-  static constexpr double link_force_initial_value_[3] = {0.0, 0.0, 0.0};
-  static constexpr double entity_force_initial_value_[3] = {1.1, 2.2, 3.3};
-};
-
+// class eval_force_reduction_same_rank {
+//  public:
+//   /// \brief Constructor that declares the necessary fields and sets up the data.
+//   eval_force_reduction_same_rank(TestContext& context, const TestParameters& params)
+//       : context_(context),
+//         params_(params),
+//         coo_link_force_field_(context.meta_data->declare_field<double>(params.link_rank, "coo_link_force")),
+//         crs_link_force_field_(context.meta_data->declare_field<double>(params.link_rank, "crs_link_force")),
+//         entity_force_field_(context.meta_data->declare_field<double>(stk::topology::NODE_RANK, "entity_force")) {
+//     stk::mesh::put_field_on_mesh(coo_link_force_field_, context.link_meta_data->universal_link_part(), 3,
+//                                  link_force_initial_value_);
+//     stk::mesh::put_field_on_mesh(crs_link_force_field_, context.link_meta_data->universal_link_part(), 3,
+//                                  link_force_initial_value_);
+//     stk::mesh::put_field_on_mesh(entity_force_field_, context.bulk_data->mesh_meta_data().universal_part(), 3,
+//                                  entity_force_initial_value_);
+//     assert_invariants();
+//   }
+//
+//   void assert_invariants() {
+//     MUNDY_THROW_REQUIRE(params_.linked_entity_ranks_type == LinkedEntityRanksType::SAME, std::invalid_argument,
+//                         "Linked entity ranks type must be SAME for eval_force_reduction_same_rank.");
+//   }
+//
+//   void run_coo() {
+//     // Loop over all links, fetch their linked entities, sum their force field into the link's force field. No atomic
+//     // since we never loop over the same link twice.
+//   }
+//
+//   void run_crs() {
+//     // Loop over each linked entity, fetch its links and atomically sum the linked entity's force fields into said
+//     // link's.
+//   }
+//
+//   void validate_coo_vs_crs() {
+//     // Coo and crs should have identical link force fields
+//   }
+//
+//  private:
+//   TestContext& context_;
+//   const TestParameters& params_;
+//
+//   // Internal fields
+//   using DoubleField = stk::mesh::Field<double>;
+//   DoubleField& coo_link_force_field_;
+//   DoubleField& crs_link_force_field_;
+//   DoubleField& entity_force_field_;
+//
+//   static constexpr double link_force_initial_value_[3] = {0.0, 0.0, 0.0};
+//   static constexpr double entity_force_initial_value_[3] = {1.1, 2.2, 3.3};
+// };
+//
 // Case 4: Same random with any dimensionality
 // Details: reduce the force of linked entities into its link.
-class eval_force_reduction_random_rank {
- public:
-  /// \brief Constructor that declares the necessary fields and sets up the data.
-  eval_force_reduction_random_rank(TestContext& context, const TestParameters& params)
-      : context_(context),
-        params_(params),
-        coo_link_force_field_(context.meta_data->declare_field<double>(params.link_rank, "coo_link_force")),
-        crs_link_force_field_(context.meta_data->declare_field<double>(params.link_rank, "crs_link_force")) {
-    for (size_t i = 0; i < stk::topology::NUM_RANKS; ++i) {
-      stk::topology::rank_t rank = static_cast<stk::topology::rank_t>(i);
-      entity_force_fields_[i] =
-          &context.meta_data->declare_field<double>(rank, ("entity_force_fields_rank_" + std::to_string(rank)).c_str());
-
-      stk::mesh::put_field_on_mesh(*entity_force_fields_[i], context.bulk_data->mesh_meta_data().universal_part(), 3,
-                                   vector3_initial_value_);
-    }
-
-    assert_invariants();
-  }
-
-  void assert_invariants() {
-    MUNDY_THROW_REQUIRE(params_.linked_entity_ranks_type == LinkedEntityRanksType::SAME, std::invalid_argument,
-                        "Linked entity ranks type must be SAME for eval_force_reduction_random_rank.");
-  }
-
-  void run_coo() {
-    // Loop over all links, fetch their linked entities, sum their force field into the link's force field. No atomic
-    // since we never loop over the same link twice.
-  }
-
-  void run_crs() {
-    // Loop over each linked entity, fetch its links and atomically sum the linked entity's force fields into said
-    // link's.
-  }
-
-  void validate_coo_vs_crs() {
-    // Coo and crs should have identical force fields
-  }
-
- private:
-  TestContext& context_;
-  const TestParameters& params_;
-
-  // Internal fields
-  using DoubleField = stk::mesh::Field<double>;
-  DoubleField& coo_link_force_field_;
-  DoubleField& crs_link_force_field_;
-  DoubleField* entity_force_fields_[stk::topology::NUM_RANKS];
-
-  static constexpr double vector3_initial_value_[3] = {1.1, 2.2, 3.3};
-};
-
+// class eval_force_reduction_random_rank {
+//  public:
+//   /// \brief Constructor that declares the necessary fields and sets up the data.
+//   eval_force_reduction_random_rank(TestContext& context, const TestParameters& params)
+//       : context_(context),
+//         params_(params),
+//         coo_link_force_field_(context.meta_data->declare_field<double>(params.link_rank, "coo_link_force")),
+//         crs_link_force_field_(context.meta_data->declare_field<double>(params.link_rank, "crs_link_force")) {
+//     for (size_t i = 0; i < stk::topology::NUM_RANKS; ++i) {
+//       stk::topology::rank_t rank = static_cast<stk::topology::rank_t>(i);
+//       entity_force_fields_[i] =
+//           &context.meta_data->declare_field<double>(rank, ("entity_force_fields_rank_" +
+//           std::to_string(rank)).c_str());
+//
+//       stk::mesh::put_field_on_mesh(*entity_force_fields_[i], context.bulk_data->mesh_meta_data().universal_part(), 3,
+//                                    vector3_initial_value_);
+//     }
+//
+//     assert_invariants();
+//   }
+//
+//   void assert_invariants() {
+//     MUNDY_THROW_REQUIRE(params_.linked_entity_ranks_type == LinkedEntityRanksType::SAME, std::invalid_argument,
+//                         "Linked entity ranks type must be SAME for eval_force_reduction_random_rank.");
+//   }
+//
+//   void run_coo() {
+//     // Loop over all links, fetch their linked entities, sum their force field into the link's force field. No atomic
+//     // since we never loop over the same link twice.
+//   }
+//
+//   void run_crs() {
+//     // Loop over each linked entity, fetch its links and atomically sum the linked entity's force fields into said
+//     // link's.
+//   }
+//
+//   void validate_coo_vs_crs() {
+//     // Coo and crs should have identical force fields
+//   }
+//
+//  private:
+//   TestContext& context_;
+//   const TestParameters& params_;
+//
+//   // Internal fields
+//   using DoubleField = stk::mesh::Field<double>;
+//   DoubleField& coo_link_force_field_;
+//   DoubleField& crs_link_force_field_;
+//   DoubleField* entity_force_fields_[stk::topology::NUM_RANKS];
+//
+//   static constexpr double vector3_initial_value_[3] = {1.1, 2.2, 3.3};
+// };
+//
 // Case 5: One to many with any dimensionality (reduce sum)
 // Details: force reduction from the many to the one (with fields of different ranks).
-class eval_force_reduction_one_to_many {
- public:
-  /// \brief Constructor that declares the necessary fields and sets up the data.
-  eval_force_reduction_one_to_many(TestContext& context, const TestParameters& params)
-      : context_(context),
-        params_(params),
-        node_force_field_(context.meta_data->declare_field<double>(stk::topology::NODE_RANK, "node_force")),
-        elem_force_field_(context.meta_data->declare_field<double>(stk::topology::ELEM_RANK, "elem_force")) {
-    stk::mesh::put_field_on_mesh(node_force_field_, context.link_meta_data->universal_link_part(), 3,
-                                 non_zero_vector3_initial_value_);
-    stk::mesh::put_field_on_mesh(elem_force_field_, context.link_meta_data->universal_link_part(), 3,
-                                 zero_vector3_initial_value_);
-    assert_invariants();
-  }
-
-  void assert_invariants() {
-    MUNDY_THROW_REQUIRE(params_.linked_entity_ranks_type == LinkedEntityRanksType::ONE_TO_MANY, std::invalid_argument,
-                        "Linked entity ranks type must be SAME for eval_force_reduction_one_to_many.");
-  }
-
-  void run_coo() {
-    // Loop over all links, fetch their linked entities, atomically sum their force field into the first linked entity's
-    // force field.
-  }
-
-  void run_crs() {
-    // Loop over each element rank linked entity, fetch its links and sum the node-rank linked entity's force fields
-    // into the element's.
-  }
-
-  void validate_coo_vs_crs() {
-    // Coo and crs should have identical link force fields
-  }
-
- private:
-  TestContext& context_;
-  const TestParameters& params_;
-
-  // Internal fields
-  using DoubleField = stk::mesh::Field<double>;
-  DoubleField& node_force_field_;
-  DoubleField& elem_force_field_;
-
-  static constexpr double zero_vector3_initial_value_[3] = {0.0, 0.0, 0.0};
-  static constexpr double non_zero_vector3_initial_value_[3] = {1.1, 2.2, 3.3};
-};
+// class eval_force_reduction_one_to_many {
+//  public:
+//   /// \brief Constructor that declares the necessary fields and sets up the data.
+//   eval_force_reduction_one_to_many(TestContext& context, const TestParameters& params)
+//       : context_(context),
+//         params_(params),
+//         node_force_field_(context.meta_data->declare_field<double>(stk::topology::NODE_RANK, "node_force")),
+//         elem_force_field_(context.meta_data->declare_field<double>(stk::topology::ELEM_RANK, "elem_force")) {
+//     stk::mesh::put_field_on_mesh(node_force_field_, context.link_meta_data->universal_link_part(), 3,
+//                                  non_zero_vector3_initial_value_);
+//     stk::mesh::put_field_on_mesh(elem_force_field_, context.link_meta_data->universal_link_part(), 3,
+//                                  zero_vector3_initial_value_);
+//     assert_invariants();
+//   }
+//
+//   void assert_invariants() {
+//     MUNDY_THROW_REQUIRE(params_.linked_entity_ranks_type == LinkedEntityRanksType::ONE_TO_MANY,
+//     std::invalid_argument,
+//                         "Linked entity ranks type must be SAME for eval_force_reduction_one_to_many.");
+//   }
+//
+//   void run_coo() {
+//     // Loop over all links, fetch their linked entities, atomically sum their force field into the first linked
+//     entity's
+//     // force field.
+//   }
+//
+//   void run_crs() {
+//     // Loop over each element rank linked entity, fetch its links and sum the node-rank linked entity's force fields
+//     // into the element's.
+//   }
+//
+//   void validate_coo_vs_crs() {
+//     // Coo and crs should have identical link force fields
+//   }
+//
+//  private:
+//   TestContext& context_;
+//   const TestParameters& params_;
+//
+//   // Internal fields
+//   using DoubleField = stk::mesh::Field<double>;
+//   DoubleField& node_force_field_;
+//   DoubleField& elem_force_field_;
+//
+//   static constexpr double zero_vector3_initial_value_[3] = {0.0, 0.0, 0.0};
+//   static constexpr double non_zero_vector3_initial_value_[3] = {1.1, 2.2, 3.3};
+// };
 
 /* Modifications:
 
@@ -992,7 +1017,13 @@ COO. The twp factors that should control the performance is the number of entity
 of links marked as modified.
 */
 
-void mark_one_bucket_per_partition_per_rank_as_modified(TestContext& context, const TestParameters& params) {
+enum class ModificationPattern {
+  ONE_BUCKET_PER_PARTITION_PER_RANK,
+  RANDOM_BUCKETS_PER_PARTITION_PER_RANK,
+  RANDOM_LINKS
+};
+
+void mark_one_bucket_per_partition_per_rank_as_modified(TestContext& context, const TestParameters& /*params*/) {
   int count = 0;
   NgpLinkData& ngp_link_data = get_updated_ngp_link_data(context.link_data);
   auto& crs_partitions =
@@ -1016,7 +1047,7 @@ void mark_one_bucket_per_partition_per_rank_as_modified(TestContext& context, co
   std::cout << "count of modified buckets: " << count << std::endl;
 }
 
-void randomly_mark_buckets_per_partition_per_rank_as_modified(TestContext& context, const TestParameters& params) {
+void randomly_mark_buckets_per_partition_per_rank_as_modified(TestContext& context, const TestParameters& /*params*/) {
   double percentage = 1;  // Each bucket has a 10% chance of being marked dirty.
 
   int count = 0;
@@ -1030,7 +1061,10 @@ void randomly_mark_buckets_per_partition_per_rank_as_modified(TestContext& conte
     for (stk::topology::rank_t rank = stk::topology::NODE_RANK; rank < stk::topology::NUM_RANKS; ++rank) {
       for (size_t bucket_idx = 0; bucket_idx < crs_partition.num_buckets(rank); ++bucket_idx) {
         auto& crs_bucket_conn = crs_partition.get_crs_bucket_conn(rank, bucket_idx);
-        openrand::Philox rng(rank, crs_bucket_conn.bucket_id());
+        const auto bucket_id = crs_bucket_conn.bucket_id();
+        MUNDY_THROW_ASSERT(bucket_id <= std::numeric_limits<uint32_t>::max(), std::overflow_error,
+                           "Counter exceeds uint32_t max for openrand::Philox.");
+        openrand::Philox rng = make_philox(rank, bucket_id);
         impl::get_dirty_flag(crs_bucket_conn) = rng.rand<double>() < percentage;
         count += impl::get_dirty_flag(crs_bucket_conn);
       }
@@ -1048,7 +1082,7 @@ void randomly_modify_links(TestContext& context, const TestParameters& params) {
 }
 
 /// \brief The driver for a single performance test given a set of parameters.
-void run_test(ankerl::nanobench::Bench& bench, const TestParameters& params) {
+void run_test(ankerl::nanobench::Bench& /*bench*/, const TestParameters& params) {
   TestContext context;
   setup_mesh_and_metadata(context, params);
   declare_link_parts(context, params);
@@ -1103,7 +1137,17 @@ void run_test(ankerl::nanobench::Bench& bench, const TestParameters& params) {
   Kokkos::fence();
   std::cout << "Subsequent_update_crs_connectivity() time: " << timer.seconds() << " seconds." << std::endl;
 
-  randomly_modify_links(context, params);
+  ModificationPattern modification_pattern = ModificationPattern::RANDOM_LINKS;
+  if (modification_pattern == ModificationPattern::ONE_BUCKET_PER_PARTITION_PER_RANK) {
+    mark_one_bucket_per_partition_per_rank_as_modified(context, params);
+  } else if (modification_pattern == ModificationPattern::RANDOM_BUCKETS_PER_PARTITION_PER_RANK) {
+    randomly_mark_buckets_per_partition_per_rank_as_modified(context, params);
+  } else if (modification_pattern == ModificationPattern::RANDOM_LINKS) {
+    randomly_modify_links(context, params);
+  } else {
+    MUNDY_THROW_REQUIRE(false, std::invalid_argument,
+                        "Unsupported modification pattern: " + std::to_string(static_cast<int>(modification_pattern)));
+  }
   context.link_data.coo_sync_to_device();
 
   is_up_to_date = ngp_link_data.is_crs_up_to_date();

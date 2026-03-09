@@ -39,11 +39,11 @@
 #include <stk_mesh/base/FEMHelpers.hpp>  // for stk::mesh::declare_element
 
 // Mundy
-#include <mundy_core/throw_assert.hpp>     // for MUNDY_THROW_REQUIRE
 #include <mundy_mesh/DeclareEntities.hpp>  // for mundy::mesh::DeclareEntitiesHelper
 #include <mundy_mesh/LinkData.hpp>         // for mundy::mesh::get_link_data, mundy::mesh::LinkData
 #include <mundy_mesh/LinkMetaData.hpp>     // for mundy::mesh::LinkMetaData
 #include <mundy_mesh/fmt_stk_types.hpp>    // adds fmt::format for stk types
+#include <mundy_utils/throw_assert.hpp>    // for MUNDY_THROW_REQUIRE
 
 namespace mundy {
 
@@ -217,7 +217,8 @@ DeclareEntitiesHelper& DeclareEntitiesHelper::declare_entities(stk::mesh::BulkDa
             }
           }
 
-          bulk_data.declare_relation(element, node, i, perm, scratch1, scratch2, scratch3);
+          bulk_data.declare_relation(element, node, static_cast<stk::mesh::RelationIdentifier>(i), perm, scratch1,
+                                     scratch2, scratch3);
 
           // If the current element is owned by a different processor than the node, we (the element's owning process)
           // need to share the node with the node's owning processor.
@@ -320,7 +321,8 @@ DeclareEntitiesHelper& DeclareEntitiesHelper::declare_entities(stk::mesh::BulkDa
         MUNDY_THROW_REQUIRE(link_data_ptr != nullptr, std::runtime_error,
                             fmt::format("Element {} has link info for link data '{}' that does not exist",
                                         element_info.id, link_data_name));
-        for (size_t ordinal = 0; ordinal < link_info.linked_entity_ids.size(); ++ordinal) {
+        unsigned num_links = static_cast<unsigned>(link_info.linked_entity_ids.size());
+        for (unsigned ordinal = 0; ordinal < num_links; ++ordinal) {
           // If the linked entity id is invalid, skip it
           stk::mesh::EntityId linked_entity_id = link_info.linked_entity_ids[ordinal];
           if (linked_entity_id == stk::mesh::InvalidEntityId) {
@@ -362,7 +364,8 @@ DeclareEntitiesHelper& DeclareEntitiesHelper::declare_entities(stk::mesh::BulkDa
         MUNDY_THROW_REQUIRE(
             link_data_ptr != nullptr, std::runtime_error,
             fmt::format("Node {} has link info for link data '{}' that does not exist", node_info.id, link_data_name));
-        for (size_t ordinal = 0; ordinal < link_info.linked_entity_ids.size(); ++ordinal) {
+        unsigned num_links = static_cast<unsigned>(link_info.linked_entity_ids.size());
+        for (unsigned ordinal = 0; ordinal < num_links; ++ordinal) {
           // If the linked entity id is invalid, skip it
           stk::mesh::EntityId linked_entity_id = link_info.linked_entity_ids[ordinal];
           if (linked_entity_id == stk::mesh::InvalidEntityId) {

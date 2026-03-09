@@ -38,9 +38,9 @@
 #include <stk_topology/topology.hpp>        // for stk::topology
 
 // Mundy libs
-#include <mundy_core/MakeStringArray.hpp>                             // for mundy::core::make_string_array
-#include <mundy_core/StringLiteral.hpp>                               // for mundy::core::StringLiteral
-#include <mundy_core/throw_assert.hpp>                                // for MUNDY_THROW_ASSERT
+#include <mundy_utils/MakeStringArray.hpp>                             // for mundy::make_string_array
+#include <mundy_utils/StringLiteral.hpp>                               // for mundy::StringLiteral
+#include <mundy_utils/throw_assert.hpp>                                // for MUNDY_THROW_ASSERT
 #include <mundy_linkers/NeighborLinkers.hpp>                          // for mundy::linkers::NeighborLinkers
 #include <mundy_mesh/BulkData.hpp>                                    // for mundy::mesh::BulkData
 #include <mundy_mesh/MetaData.hpp>                                    // for mundy::mesh::MetaData
@@ -189,12 +189,12 @@ class STKSearch : public mundy::meta::MetaMethodPairwiseSubsetExecutionInterface
   static Teuchos::ParameterList get_valid_fixed_params() {
     static Teuchos::ParameterList default_parameter_list =
         Teuchos::ParameterList()
-            .set("valid_source_entity_part_names", mundy::core::make_string_array(universal_part_name_),
+            .set("valid_source_entity_part_names", mundy::make_string_array(universal_part_name_),
                  "Name of the source parts associated with this pairwise meta method.")
-            .set("valid_target_entity_part_names", mundy::core::make_string_array(universal_part_name_),
+            .set("valid_target_entity_part_names", mundy::make_string_array(universal_part_name_),
                  "Name of the target parts associated with this pairwise meta method.")
             .set("specialized_neighbor_linkers_part_names",
-                 mundy::core::make_string_array(default_specialized_neighbor_linkers_part_name_),
+                 mundy::make_string_array(default_specialized_neighbor_linkers_part_name_),
                  "The part names to which we will add the generated neighbor linkers. This should be a specialization "
                  "of the "
                  "neighbor linkers part or the neighbor linkers part itself.")

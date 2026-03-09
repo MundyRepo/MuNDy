@@ -45,7 +45,7 @@
 #include <mundy_meta/MetaFactory.hpp>    // for mundy::meta::MetaFactory
 
 // Mundy test libs
-#include "utils/ExampleMetaMethod.hpp"  // for mundy::meta::utils::ExampleMetaMethod
+#include "utils/ExampleMetaMethod.hpp"  // for mundy::meta::ExampleMetaMethod
 
 namespace mundy {
 
@@ -66,7 +66,7 @@ TEST(MetaFactoryRegistration, RegistrationWorksProperly) {
   // Create our example class to register.
   // Reset the test counter within our classes to register.
   // We'll use these counters to ensure that MetaFactory is properly calling our internal methods.
-  using ClassToRegister = utils::DefaultExampleMetaMethod;
+  using ClassToRegister = DefaultExampleMetaMethod;
   using PolymorphicBaseType = ClassToRegister::PolymorphicBaseType;
   ClassToRegister::reset_counters();
 
@@ -113,8 +113,8 @@ TEST(MetaFactoryRegistration, Reregistration) {
   // Create our example classes to register.
   // Reset the test counter within our classes to register.
   // We'll use these counters to ensure that MetaFactory is properly calling our internal methods.
-  using ClassToRegister1 = utils::ExampleMetaMethod<mundy::meta::make_registration_string("CLASS1")>;
-  using ClassToRegister2 = utils::ExampleMetaMethod<mundy::meta::make_registration_string("CLASS2")>;
+  using ClassToRegister1 = ExampleMetaMethod<mundy::meta::make_registration_string("CLASS1")>;
+  using ClassToRegister2 = ExampleMetaMethod<mundy::meta::make_registration_string("CLASS2")>;
   using PolymorphicBaseType = ClassToRegister1::PolymorphicBaseType;
   bool classes_are_different = !std::is_same_v<ClassToRegister1, ClassToRegister2>;
   ASSERT_TRUE(classes_are_different);
@@ -150,7 +150,7 @@ TEST(MetaFactoryRegistration, RegistrationWithDifferentRegistrationIdentifier) {
   // Create our example class to register.
   // Reset the test counter within our classes to register.
   // We'll use these counters to ensure that MetaFactory is properly calling our internal methods.
-  using ClassToRegister = utils::DefaultExampleMetaMethod;
+  using ClassToRegister = DefaultExampleMetaMethod;
   using PolymorphicBaseType = ClassToRegister::PolymorphicBaseType;
   ClassToRegister::reset_counters();
 

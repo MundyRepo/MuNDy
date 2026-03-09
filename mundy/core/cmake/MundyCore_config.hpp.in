@@ -1,9 +1,0 @@
-#ifndef MUNDYCORE_CONFIG_HPP_
-#define MUNDYCORE_CONFIG_HPP_
-
-// Declare special variables, especially those related to optional features, TPLs, and workarounds.
-
-// Optional packages
-#cmakedefine HAVE_MUNDYCORE_TEUCHOS
-
-#endif  // MUNDYCORE_CONFIG_HPP_

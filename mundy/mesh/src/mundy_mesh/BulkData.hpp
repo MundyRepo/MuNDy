@@ -41,7 +41,7 @@
 #include <stk_util/parallel/Parallel.hpp>      // for stk::ParallelMachine
 
 // Mundy libs
-#include <mundy_core/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
+#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
 #include <mundy_mesh/MetaData.hpp>      // for mundy::mesh::MetaData
 
 namespace mundy {
@@ -75,12 +75,12 @@ class BulkData : public stk::mesh::BulkData {
   //@{
 
   /// \brief Fetch the meta data manager for this bulk data manager.
-  const MetaData &mesh_meta_data() const {
+  const MetaData& mesh_meta_data() const {
     return *meta_data_ptr_;
   }
 
   /// \brief Fetch the meta data manager for this bulk data manager.
-  MetaData &mesh_meta_data() {
+  MetaData& mesh_meta_data() {
     return *meta_data_ptr_;
   }
 
@@ -116,7 +116,7 @@ class BulkData : public stk::mesh::BulkData {
 #if TRILINOS_MAJOR_MINOR_VERSION >= 160000
            std::unique_ptr<stk::mesh::FieldDataManager> field_data_manager_ptr = nullptr,
 #else
-           stk::mesh::FieldDataManager *const field_data_manager_ptr = nullptr,
+           stk::mesh::FieldDataManager* const field_data_manager_ptr = nullptr,
 #endif
            unsigned initial_bucket_capacity = stk::mesh::get_default_initial_bucket_capacity(),
            unsigned maximum_bucket_capacity = stk::mesh::get_default_maximum_bucket_capacity(),

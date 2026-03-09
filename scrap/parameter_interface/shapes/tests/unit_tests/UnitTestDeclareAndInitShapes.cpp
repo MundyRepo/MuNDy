@@ -48,7 +48,7 @@
 #include <mundy_shapes/declare_and_initialize_shapes/techniques/GridCoordinateMapping.hpp>  // for mundy::shapes::declare_and_initialize_shapes::techniques::GridCoordinateMapping
 
 // Mundy test libs
-#include <mundy_meta/utils/MeshGeneration.hpp>  // for mundy::meta::utils::generate_class_instance_and_mesh_from_meta_class_requirements
+#include <mundy_meta/utils/MeshGeneration.hpp>  // for mundy::meta::generate_class_instance_and_mesh_from_meta_class_requirements
 
 namespace mundy {
 
@@ -72,7 +72,7 @@ TEST(DeclareAndInitShapes, GridOfSpheresVisualInspection) {
   declare_and_init_shapes_fixed_params.set("enabled_technique_name", "GRID_OF_SPHERES");
 
   auto [declare_and_init_shapes_ptr, bulk_data_ptr] =
-      mundy::meta::utils::generate_class_instance_and_mesh_from_meta_class_requirements<DeclareAndInitShapes>(
+      mundy::meta::generate_class_instance_and_mesh_from_meta_class_requirements<DeclareAndInitShapes>(
           {declare_and_init_shapes_fixed_params});
   ASSERT_TRUE(declare_and_init_shapes_ptr != nullptr);
   ASSERT_TRUE(bulk_data_ptr != nullptr);

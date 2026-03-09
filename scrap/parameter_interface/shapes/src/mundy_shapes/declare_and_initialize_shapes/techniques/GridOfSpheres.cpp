@@ -40,11 +40,12 @@
 #include <stk_search/SearchMethod.hpp>    // for stk::search::KDTREE
 
 // Mundy libs
-#include <mundy_core/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
+#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
 #include <mundy_mesh/BulkData.hpp>      // for mundy::mesh::BulkData
 #include <mundy_shapes/Spheres.hpp>     // for mundy::shapes::Spheres
 #include <mundy_shapes/declare_and_initialize_shapes/techniques/GridCoordinateMapping.hpp>  // for mundy::shapes::...::GridCoordinateMapping
 #include <mundy_shapes/declare_and_initialize_shapes/techniques/GridOfSpheres.hpp>  // for mundy::shapes::...::GridOfSpheres
+#include <mundy_utils/rng.hpp>              // for mundy::make_philox
 
 namespace mundy {
 
@@ -263,7 +264,7 @@ void GridOfSpheres::execute() {
   const size_t start_column = rank * columns_per_rank + std::min(rank, remainder);
   const size_t end_column = start_column + columns_per_rank + (rank < remainder ? 1 : 0);
   bulk_data_ptr_->modification_begin();
-  openrand::Philox rng(1, 0);
+  openrand::Philox rng = make_philox(1, 0);
   for (size_t i = start_column; i < end_column; ++i) {
     for (size_t j = 0; j < num_spheres_y_; ++j) {
       for (size_t k = 0; k < num_spheres_z_; ++k) {

@@ -34,9 +34,9 @@
 #include <stk_util/ngp/NgpSpaces.hpp>
 
 // Mundy
-#include <mundy_core/NgpPool.hpp>
-#include <mundy_core/NgpView.hpp>
-#include <mundy_core/throw_assert.hpp>
+#include <mundy_utils/NgpPool.hpp>
+#include <mundy_utils/NgpView.hpp>
+#include <mundy_utils/throw_assert.hpp>
 
 namespace mundy {
 
@@ -47,15 +47,15 @@ namespace mesh {
 /// Unlike a regular NgpPool, we offer a reserve and declare method to both reserve space within the pool
 /// and fill that space with entities from a given mesh.
 template <typename MemorySpace, typename SizeType = long int>
-class NgpEntityPoolT : public core::NgpPoolT<stk::mesh::Entity, MemorySpace, SizeType> {
+class NgpEntityPoolT : public NgpPoolT<stk::mesh::Entity, MemorySpace, SizeType> {
  public:
   // Type aliases
   using memory_space = MemorySpace;
   using execution_space = typename MemorySpace::execution_space;
   using entity_vector_t = std::vector<stk::mesh::Entity>;
-  using entity_view_t = core::NgpViewT<stk::mesh::Entity*, MemorySpace>;
+  using entity_view_t = NgpViewT<stk::mesh::Entity*, MemorySpace>;
   using our_size_t = SizeType;
-  using base_t = core::NgpPoolT<stk::mesh::Entity, MemorySpace, SizeType>;
+  using base_t = NgpPoolT<stk::mesh::Entity, MemorySpace, SizeType>;
 
   NgpEntityPoolT() = default;
 
@@ -79,18 +79,20 @@ class NgpEntityPoolT : public core::NgpPoolT<stk::mesh::Entity, MemorySpace, Siz
   NgpEntityPoolT& operator=(NgpEntityPoolT&&) = default;
 
   void reserve_and_declare(our_size_t requested_capacity) {
-    MUNDY_THROW_ASSERT(
-        rank_ != stk::topology::INVALID_RANK, std::runtime_error,
-        "Cannot reserve and declare entities in NgpEntityPoolT without a valid entity rank.");
+    MUNDY_THROW_ASSERT(rank_ != stk::topology::INVALID_RANK, std::runtime_error,
+                       "Cannot reserve and declare entities in NgpEntityPoolT without a valid entity rank.");
     MUNDY_THROW_ASSERT(
         bulk_data_.in_modifiable_state(), std::runtime_error,
         "Cannot reserve and declare entities in NgpEntityPoolT when the mesh is not in a modifiable state.");
+    MUNDY_THROW_ASSERT(requested_capacity >= 0, std::runtime_error,
+                       "Cannot reserve and declare entities in NgpEntityPoolT with negative capacity.");
     base_t::reserve(requested_capacity);
 
-    if (requested_capacity > this->size()) {
-      const our_size_t num_new_entities = requested_capacity - this->size();
+    const our_size_t current_size = this->size();
+    if (requested_capacity > current_size) {
+      const our_size_t num_new_entities = requested_capacity - current_size;
       std::vector<size_t> requests(bulk_data_.mesh_meta_data().entity_rank_count(), 0);
-      requests[rank_] = num_new_entities;
+      requests[rank_] = static_cast<size_t>(num_new_entities);
 
       std::vector<stk::mesh::Entity> requested_entities;
       bulk_data_.generate_new_entities(requests, requested_entities);

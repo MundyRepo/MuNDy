@@ -29,14 +29,12 @@
 #include <random>  // for std::rand
 
 // Trilinos libs
-#include <stk_math/StkMath.hpp>    // for stk::math::cos, stk::math::sqrt, etc.
-#include <stk_math/StkVector.hpp>  // for stk::math::Vec
+#include <stk_math/StkMath.hpp>    // for stk::cos, stk::sqrt, etc.
+#include <stk_math/StkVector.hpp>  // for stk::Vec
 
 namespace mundy {
 
 namespace motion {
-
-namespace utils {
 
 /// \class Quaternion
 /// \brief A helper class for describing rotations using quaternions
@@ -52,7 +50,7 @@ struct Quaternion {
 
   /// \brief Construct from existing quaternion stored as a vector.
   /// \param q An existing quaternion satisfying q = q[0] + q[1]i + q[2]j + q[3]k.
-  explicit Quaternion(const stk::math::Vec<double, 4> &q) {
+  explicit Quaternion(const stk::Vec<double, 4> &q) {
     w = q[0];
     x = q[1];
     y = q[2];
@@ -75,7 +73,7 @@ struct Quaternion {
   /// \brief Construct from rotation around a given axis, given the rotation angle.
   /// \param v The axis to rotate about.
   /// \param angle The rotation angle (no range restriction).
-  Quaternion(const stk::math::Vec<double, 3> &v, const double angle) {
+  Quaternion(const stk::Vec<double, 3> &v, const double angle) {
     from_rot(v, angle);
   }
 
@@ -97,9 +95,9 @@ struct Quaternion {
   /// \brief Update the stored quaternion based on from rotation around a given axis, given the rotation angle.
   /// \param v The axis to rotate about.
   /// \param angle The rotation angle (no range restriction).
-  void from_rot(const stk::math::Vec<double, 3> &v, const double angle) {
-    const double sina_2 = stk::math::sin(angle / 2);
-    const double cosa_2 = stk::math::cos(angle / 2);
+  void from_rot(const stk::Vec<double, 3> &v, const double angle) {
+    const double sina_2 = stk::sin(angle / 2);
+    const double cosa_2 = stk::cos(angle / 2);
     w = cosa_2;
     x = sina_2 * v[0];
     y = sina_2 * v[1];
@@ -113,12 +111,12 @@ struct Quaternion {
   /// \param u3 A uniform random number sampled from U[0,1].
   void from_unit_random(const double u1, const double u2, const double u3) {
     constexpr double pi = 3.14159265358979323846;
-    const double a = stk::math::sqrt(1 - u1);
-    const double b = stk::math::sqrt(u1);
-    const double su2 = stk::math::sin(2 * pi * u2);
-    const double cu2 = stk::math::cos(2 * pi * u2);
-    const double su3 = stk::math::sin(2 * pi * u3);
-    const double cu3 = stk::math::cos(2 * pi * u3);
+    const double a = stk::sqrt(1 - u1);
+    const double b = stk::sqrt(u1);
+    const double su2 = stk::sin(2 * pi * u2);
+    const double cu2 = stk::cos(2 * pi * u2);
+    const double su3 = stk::sin(2 * pi * u3);
+    const double cu3 = stk::cos(2 * pi * u3);
     w = a * su2;
     x = a * cu2;
     y = b * su3;
@@ -145,7 +143,7 @@ struct Quaternion {
 
   // rotate a point v in 3D space around the origin using this quaternion
   // see EN Wikipedia on Quaternions and spatial rotation
-  stk::math::Vec<double, 3> rotate(const stk::math::Vec<double, 3> &v) const {
+  stk::Vec<double, 3> rotate(const stk::Vec<double, 3> &v) const {
     const double t2 = x * y;
     const double t3 = x * z;
     const double t4 = x * w;
@@ -155,14 +153,14 @@ struct Quaternion {
     const double t8 = -z * z;
     const double t9 = z * w;
     const double t10 = -w * w;
-    return stk::math::Vec<double, 3>({2.0 * ((t8 + t10) * v[0] + (t6 - t4) * v[1] + (t3 + t7) * v[2]) + v[0],
+    return stk::Vec<double, 3>({2.0 * ((t8 + t10) * v[0] + (t6 - t4) * v[1] + (t3 + t7) * v[2]) + v[0],
                                       2.0 * ((t4 + t6) * v[0] + (t5 + t10) * v[1] + (t9 - t2) * v[2]) + v[1],
                                       2.0 * ((t7 - t3) * v[0] + (t2 + t9) * v[1] + (t5 + t8) * v[2]) + v[2]});
   }
 
   // rotate a point v in 3D space around a given point p using this quaternion
-  stk::math::Vec<double, 3> rotate_around_point(const stk::math::Vec<double, 3> &v,
-                                                const stk::math::Vec<double, 3> &p) {
+  stk::Vec<double, 3> rotate_around_point(const stk::Vec<double, 3> &v,
+                                                const stk::Vec<double, 3> &p) {
     return rotate(v - p) + p;
   }
 
@@ -174,15 +172,15 @@ struct Quaternion {
    * \param omega rotational velocity
    * \param dt time interval
    */
-  void rotate_self(const stk::math::Vec<double, 3> &rot_vel, const double dt) {
+  void rotate_self(const stk::Vec<double, 3> &rot_vel, const double dt) {
     const double rot_vel_norm =
-        stk::math::sqrt(rot_vel[0] * rot_vel[0] + rot_vel[1] * rot_vel[1] + rot_vel[2] * rot_vel[2]);
+        stk::sqrt(rot_vel[0] * rot_vel[0] + rot_vel[1] * rot_vel[1] + rot_vel[2] * rot_vel[2]);
     if (rot_vel_norm < std::numeric_limits<double>::epsilon()) {
       return;
     }
     const double rot_vel_norm_inv = 1.0 / rot_vel_norm;
-    const double sw = stk::math::sin(rot_vel_norm * dt / 2);
-    const double cw = stk::math::cos(rot_vel_norm * dt / 2);
+    const double sw = stk::sin(rot_vel_norm * dt / 2);
+    const double cw = stk::cos(rot_vel_norm * dt / 2);
     const double rot_vel_cross_xyz_0 = rot_vel[1] * z - rot_vel[2] * y;
     const double rot_vel_cross_xyz_1 = rot_vel[2] * x - rot_vel[0] * z;
     const double rot_vel_cross_xyz_2 = rot_vel[0] * y - rot_vel[1] * x;
@@ -209,8 +207,8 @@ struct Quaternion {
       return;
     }
     const double rot_vel_norm_inv = 1.0 / rot_vel_norm;
-    const double sw = stk::math::sin(rot_vel_norm * dt / 2);
-    const double cw = stk::math::cos(rot_vel_norm * dt / 2);
+    const double sw = stk::sin(rot_vel_norm * dt / 2);
+    const double cw = stk::cos(rot_vel_norm * dt / 2);
     const double rot_vel_cross_xyz_0 = rot_vel_y * z - rot_vel_z * y;
     const double rot_vel_cross_xyz_1 = rot_vel_z * x - rot_vel_x * z;
     const double rot_vel_cross_xyz_2 = rot_vel_x * y - rot_vel_y * x;
@@ -223,8 +221,6 @@ struct Quaternion {
     normalize();
   }
 };  // Quaternion
-
-}  // namespace utils
 
 }  // namespace motion
 

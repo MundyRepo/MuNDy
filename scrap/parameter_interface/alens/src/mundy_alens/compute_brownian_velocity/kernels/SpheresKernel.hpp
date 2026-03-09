@@ -39,7 +39,7 @@
 #include <stk_topology/topology.hpp>  // for stk::topology
 
 // Mundy libs
-#include <mundy_core/MakeStringArray.hpp>  // for mundy::core::make_string_array
+#include <mundy_utils/MakeStringArray.hpp>  // for mundy::make_string_array
 #include <mundy_mesh/BulkData.hpp>         // for mundy::mesh::BulkData
 #include <mundy_mesh/MetaData.hpp>         // for mundy::mesh::MetaData
 #include <mundy_meta/FieldReqs.hpp>        // for mundy::meta::FieldReqs
@@ -120,7 +120,7 @@ class SpheresKernel : public mundy::meta::MetaKernel<> {
   static Teuchos::ParameterList get_valid_fixed_params() {
     static Teuchos::ParameterList default_parameter_list;
     default_parameter_list.set("valid_entity_part_names",
-                               mundy::core::make_string_array(mundy::shapes::Spheres::get_name()),
+                               mundy::make_string_array(mundy::shapes::Spheres::get_name()),
                                "Name of the parts associated with this kernel.");
     default_parameter_list.set("node_brownian_velocity_field_name",
                                std::string(default_node_brownian_velocity_field_name_),

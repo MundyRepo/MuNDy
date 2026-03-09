@@ -64,32 +64,32 @@ class MeshBuilder {
 
   /// \brief Set the spatial dimension of the mash.
   /// \param spatial_dimension [in] The dimension of the space within which the parts and entities reside.
-  MeshBuilder &set_spatial_dimension(const unsigned spatial_dimension);
+  MeshBuilder& set_spatial_dimension(const unsigned spatial_dimension);
 
   /// \brief Set the names assigned to each rank.
   /// \param entity_rank_names [in] The names assigned to each rank.
-  MeshBuilder &set_entity_rank_names(const std::vector<std::string> &entity_rank_names);
+  MeshBuilder& set_entity_rank_names(const std::vector<std::string>& entity_rank_names);
 
   /// \brief Set the MPI communicator to be used by STK.
   /// \param comm [in] The MPI communicator.
-  MeshBuilder &set_communicator(const stk::ParallelMachine &comm);
+  MeshBuilder& set_communicator(const stk::ParallelMachine& comm);
 
   /// \brief Set the chosen Aura option. For example, stk::mesh::BulkData::AUTO_AURA.
   /// \param auto_aura_option [in] The chosen Aura option.
-  MeshBuilder &set_auto_aura_option(const stk::mesh::BulkData::AutomaticAuraOption &auto_aura_option);
+  MeshBuilder& set_auto_aura_option(const stk::mesh::BulkData::AutomaticAuraOption& auto_aura_option);
 
   /// \brief Set the add framework data flag.
   /// \param add_fmwk_data_flag [in] A Siera-specific flag, whose purpose is unbeknownst to me.
-  MeshBuilder &set_add_fmwk_data_flag(bool add_fmwk_data_flag);
+  MeshBuilder& set_add_fmwk_data_flag(bool add_fmwk_data_flag);
 
 #if TRILINOS_MAJOR_MINOR_VERSION >= 160000
   /// \brief Set the field data manager.
   /// \param field_data_manager_ptr [in] Pointer to an existing field data manager.
-  MeshBuilder &set_field_data_manager(std::unique_ptr<stk::mesh::FieldDataManager> field_data_manager_ptr);
+  MeshBuilder& set_field_data_manager(std::unique_ptr<stk::mesh::FieldDataManager> field_data_manager_ptr);
 #else
   /// \brief Set the field data manager.
   /// \param field_data_manager_ptr [in] Pointer to an existing field data manager.
-  MeshBuilder &set_field_data_manager(stk::mesh::FieldDataManager *const field_data_manager_ptr);
+  MeshBuilder& set_field_data_manager(stk::mesh::FieldDataManager* const field_data_manager_ptr);
 #endif
 
   /// \brief Set the upper bound on the number of mesh entities that may be associated with a single bucket.
@@ -97,25 +97,25 @@ class MeshBuilder {
   /// Although subject to change, the maximum bucket capacity is currently 1024 and the default capacity is 512.
   ///
   /// \param bucket_capacity [in] The bucket capacity.
-  MeshBuilder &set_bucket_capacity(const unsigned bucket_capacity);
+  MeshBuilder& set_bucket_capacity(const unsigned bucket_capacity);
 
   /// \brief Set the initial upper bound on the number of mesh entities that may be associated with a single bucket.
   ///
   /// Although subject to change, the maximum bucket capacity is currently 1024 and the default capacity is 512.
   ///
   /// \param initial_bucket_capacity [in] The initial bucket capacity.
-  MeshBuilder &set_initial_bucket_capacity(const unsigned initial_bucket_capacity);
+  MeshBuilder& set_initial_bucket_capacity(const unsigned initial_bucket_capacity);
 
   /// \brief Set the maximum upper bound on the number of mesh entities that may be associated with a single bucket.
   ///
   /// Although subject to change, the maximum bucket capacity is currently 1024 and the default capacity is 512.
   ///
   /// \param bucket_capacity [in] The maximum bucket capacity.
-  MeshBuilder &set_maximum_bucket_capacity(const unsigned maximum_bucket_capacity);
+  MeshBuilder& set_maximum_bucket_capacity(const unsigned maximum_bucket_capacity);
 
   /// \brief Set the flag specifying if upward connectivity will be enabled or not.
   /// \param enable_upward_connectivity [in] A flag specifying if upward connectivity will be enabled or not.
-  MeshBuilder &set_upward_connectivity_flag(const bool enable_upward_connectivity);
+  MeshBuilder& set_upward_connectivity_flag(const bool enable_upward_connectivity);
   //@}
 
   //! @name Actions
@@ -158,7 +158,7 @@ class MeshBuilder {
 #if TRILINOS_MAJOR_MINOR_VERSION >= 160000
   std::unique_ptr<stk::mesh::FieldDataManager> field_data_manager_ptr_;
 #else
-  stk::mesh::FieldDataManager *field_data_manager_ptr_;
+  stk::mesh::FieldDataManager* field_data_manager_ptr_;
 #endif
 
   /// \brief Initial upper bound on the number of mesh entities that may be associated with a single bucket.

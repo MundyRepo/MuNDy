@@ -55,10 +55,10 @@
 #include <mundy_constraints/ComputeConstraintForcing.hpp>      // for mundy::constraints::ComputeConstraintForcing
 #include <mundy_constraints/DeclareAndInitConstraints.hpp>     // for mundy::constraints::DeclareAndInitConstraints
 #include <mundy_constraints/HookeanSprings.hpp>                // for mundy::constraints::HookeanSprings
-#include <mundy_core/MakeStringArray.hpp>                      // for mundy::core::make_string_array
-#include <mundy_core/OurAnyNumberParameterEntryValidator.hpp>  // for mundy::core::OurAnyNumberParameterEntryValidator
-#include <mundy_core/StringLiteral.hpp>  // for mundy::core::StringLiteral and mundy::core::make_string_literal
-#include <mundy_core/throw_assert.hpp>   // for MUNDY_THROW_ASSERT
+#include <mundy_utils/MakeStringArray.hpp>                      // for mundy::make_string_array
+#include <mundy_utils/OurAnyNumberParameterEntryValidator.hpp>  // for mundy::OurAnyNumberParameterEntryValidator
+#include <mundy_utils/StringLiteral.hpp>  // for mundy::StringLiteral and mundy::make_string_literal
+#include <mundy_utils/throw_assert.hpp>   // for MUNDY_THROW_ASSERT
 #include <mundy_io/IOBroker.hpp>         // for mundy::io::IOBroker
 #include <mundy_linkers/ComputeSignedSeparationDistanceAndContactNormal.hpp>  // for mundy::linkers::ComputeSignedSeparationDistanceAndContactNormal
 #include <mundy_linkers/DestroyNeighborLinkers.hpp>         // for mundy::linkers::DestroyNeighborLinkers
@@ -66,14 +66,14 @@
 #include <mundy_linkers/GenerateNeighborLinkers.hpp>        // for mundy::linkers::GenerateNeighborLinkers
 #include <mundy_linkers/LinkerPotentialForceReduction.hpp>  // for mundy::linkers::LinkerPotentialForceReduction
 #include <mundy_linkers/NeighborLinkers.hpp>                // for mundy::linkers::NeighborLinkers
-#include <mundy_math/Hilbert.hpp>                           // for mundy::math::create_hilbert_positions_and_directors
-#include <mundy_math/Vector3.hpp>                           // for mundy::math::Vector3
-#include <mundy_math/distance/EllipsoidEllipsoid.hpp>       // for mundy::math::distance::ellipsoid_ellipsoid
+#include <mundy_math/Hilbert.hpp>                           // for mundy::create_hilbert_positions_and_directors
+#include <mundy_math/Vector3.hpp>                           // for mundy::Vector3
+#include <mundy_math/distance/EllipsoidEllipsoid.hpp>       // for mundy::distance::ellipsoid_ellipsoid
 #include <mundy_mesh/BulkData.hpp>                          // for mundy::mesh::BulkData
 #include <mundy_mesh/FieldViews.hpp>  // for mundy::mesh::vector3_field_data, mundy::mesh::quaternion_field_data
 #include <mundy_mesh/MetaData.hpp>    // for mundy::mesh::MetaData
-#include <mundy_mesh/utils/DestroyFlaggedEntities.hpp>        // for mundy::mesh::utils::destroy_flagged_entities
-#include <mundy_mesh/utils/FillFieldWithValue.hpp>            // for mundy::mesh::utils::fill_field_with_value
+#include <mundy_mesh/utils/DestroyFlaggedEntities.hpp>        // for mundy::mesh::destroy_flagged_entities
+#include <mundy_mesh/utils/FillFieldWithValue.hpp>            // for mundy::mesh::fill_field_with_value
 #include <mundy_meta/MetaFactory.hpp>                         // for mundy::meta::MetaKernelFactory
 #include <mundy_meta/MetaKernel.hpp>                          // for mundy::meta::MetaKernel
 #include <mundy_meta/MetaKernelDispatcher.hpp>                // for mundy::meta::MetaKernelDispatcher
@@ -81,9 +81,10 @@
 #include <mundy_meta/MetaRegistry.hpp>                        // for mundy::meta::MetaMethodRegistry
 #include <mundy_meta/ParameterValidationHelpers.hpp>  // for mundy::meta::check_parameter_and_set_default and mundy::meta::check_required_parameter
 #include <mundy_meta/PartReqs.hpp>  // for mundy::meta::PartReqs
-#include <mundy_meta/utils/MeshGeneration.hpp>  // for mundy::meta::utils::generate_class_instance_and_mesh_from_meta_class_requirements
+#include <mundy_meta/utils/MeshGeneration.hpp>  // for mundy::meta::generate_class_instance_and_mesh_from_meta_class_requirements
 #include <mundy_shapes/ComputeAABB.hpp>  // for mundy::shapes::ComputeAABB
 #include <mundy_shapes/Spheres.hpp>      // for mundy::shapes::Spheres
+#include <mundy_utils/rng.hpp>              // for mundy::make_philox
 
 /*
 I think users should define what they expect the internal variable to be called.
@@ -233,7 +234,7 @@ void compute_bind_left_bound_harmonic_to_sphere_z_partition(const DynamicHookean
           if (!is_self_interaction) {
             const auto dr = mundy::mesh::vector3_field_data(n_coord_field, sphere_node) -
                             mundy::mesh::vector3_field_data(n_coord_field, bulk_data.begin_nodes(crosslinker)[0]);
-            const double dr_mag = mundy::math::norm(dr);
+            const double dr_mag = mundy::norm(dr);
 
             // Compute the Z-partition score
             // Z = A * exp(-0.5 * 1/kt * k * (dr - r0)^2)
@@ -281,7 +282,7 @@ void kmc_spring_left_to_doubly(const DynamicHookeanSprings& dynamic_hookean_spri
         // Fetch the RNG state, get a random number out of it, and increment
         unsigned *element_rng_counter = stk::mesh::field_data(el_rng_field, spring);
         const stk::mesh::EntityId spring_gid = bulk_data.identifier(spring);
-        openrand::Philox rng(spring_gid, element_rng_counter[0]);
+        openrand::Philox rng = make_philox(spring_gid, element_rng_counter[0]);
         const double randu01 = rng.rand<double>();
         element_rng_counter[0]++;
 
@@ -352,7 +353,7 @@ void kmc_spring_doubly_to_right(const stk::mesh::Selector &doubly_bound_spring_s
         // Fetch the RNG state, get a random number out of it, and increment
         unsigned *element_rng_counter = stk::mesh::field_data(el_rng_field, spring);
         const stk::mesh::EntityId spring_gid = bulk_data.identifier(spring);
-        openrand::Philox rng(spring_gid, element_rng_counter[0]);
+        openrand::Philox rng = make_philox(spring_gid, element_rng_counter[0]);
         const double randu01 = rng.rand<double>();
         element_rng_counter[0]++;
 
@@ -484,7 +485,7 @@ void check_max_overlap_with_spherical_periphery(stk::mesh::BulkData &bulk_data, 
         const auto node_coords = mundy::mesh::vector3_field_data(n_coord_field, sphere_node);
         const double sphere_radius = stk::mesh::field_data(element_radius_field, sphere_element)[0];
         const double ssd =
-            sign * mundy::math::norm(node_coords - target_sphere_center) - sphere_radius - target_sphere_radius;
+            sign * mundy::norm(node_coords - target_sphere_center) - sphere_radius - target_sphere_radius;
 
 #pragma omp critical
         local_min_ssd = std::min(local_min_ssd, ssd);
@@ -651,7 +652,7 @@ void compute_rpy_hydro(stk::mesh::BulkData &bulk_data, const double viscosity,
 void compute_ellipsoidal_periphery_collision_forces_with_spheres(
     stk::mesh::BulkData &bulk_data, const stk::mesh::Selector &spheres_selector, const double periphery_r1,
     const double periphery_r2, const double periphery_r3, const std::array<double, 3> &periphery_center,
-    const mundy::math::Quaternion<double> &periphery_orientation, const double collision_spring_constant,
+    const mundy::Quaternion<double> &periphery_orientation, const double collision_spring_constant,
     const stk::mesh::Field<double> &n_coord_field, const stk::mesh::Field<double> &element_radius_field,
     const stk::mesh::Field<double> &n_force_field) {
   // Setup the level set function for the ellipsoidal periphery
@@ -659,7 +660,7 @@ void compute_ellipsoidal_periphery_collision_forces_with_spheres(
   const double inv_periphery_r2_sq = 1.0 / (periphery_r2 * periphery_r2);
   const double inv_periphery_r3_sq = 1.0 / (periphery_r3 * periphery_r3);
   auto level_set = [&periphery_center, &periphery_orientation, &inv_periphery_r1_sq, &inv_periphery_r2_sq,
-                    &inv_periphery_r3_sq](const mundy::math::Vector3<double> &point) -> double {
+                    &inv_periphery_r3_sq](const mundy::Vector3<double> &point) -> double {
     const auto body_frame_point = conjugate(periphery_orientation) * (point - periphery_center);
     return (body_frame_point[0] * body_frame_point[0] * inv_periphery_r1_sq +
             body_frame_point[1] * body_frame_point[1] * inv_periphery_r2_sq +
@@ -685,14 +686,14 @@ void compute_ellipsoidal_periphery_collision_forces_with_spheres(
         const double z1 = sphere_aabb[5];
 
         // Compute all 8 corners of the AABB
-        const auto bottom_left_front = mundy::math::Vector3<double>(x0, y0, z0);
-        const auto bottom_right_front = mundy::math::Vector3<double>(x1, y0, z0);
-        const auto top_left_front = mundy::math::Vector3<double>(x0, y1, z0);
-        const auto top_right_front = mundy::math::Vector3<double>(x1, y1, z0);
-        const auto bottom_left_back = mundy::math::Vector3<double>(x0, y0, z1);
-        const auto bottom_right_back = mundy::math::Vector3<double>(x1, y0, z1);
-        const auto top_left_back = mundy::math::Vector3<double>(x0, y1, z1);
-        const auto top_right_back = mundy::math::Vector3<double>(x1, y1, z1);
+        const auto bottom_left_front = mundy::Vector3<double>(x0, y0, z0);
+        const auto bottom_right_front = mundy::Vector3<double>(x1, y0, z0);
+        const auto top_left_front = mundy::Vector3<double>(x0, y1, z0);
+        const auto top_right_front = mundy::Vector3<double>(x1, y1, z0);
+        const auto bottom_left_back = mundy::Vector3<double>(x0, y0, z1);
+        const auto bottom_right_back = mundy::Vector3<double>(x1, y0, z1);
+        const auto top_left_back = mundy::Vector3<double>(x0, y1, z1);
+        const auto top_right_back = mundy::Vector3<double>(x1, y1, z1);
         const double all_points_inside_periphery =
             level_set(bottom_left_front) < 0.0 && level_set(bottom_right_front) < 0.0 &&
             level_set(top_left_front) < 0.0 && level_set(top_right_front) < 0.0 && level_set(bottom_left_back) < 0.0 &&
@@ -706,9 +707,9 @@ void compute_ellipsoidal_periphery_collision_forces_with_spheres(
 
           // Note, the ellipsoid for the ssd calc has outward normal, whereas the
           // periphery has inward normal. Hence, the sign flip.
-          mundy::math::Vector3<double> contact_point;
-          mundy::math::Vector3<double> ellipsoid_nhat;
-          const double shared_normal_ssd = -mundy::math::distance::shared_normal_ssd_between_ellipsoid_and_point(
+          mundy::Vector3<double> contact_point;
+          mundy::Vector3<double> ellipsoid_nhat;
+          const double shared_normal_ssd = -mundy::distance::shared_normal_ssd_between_ellipsoid_and_point(
                                                periphery_center, periphery_orientation, periphery_r1, periphery_r2,
                                                periphery_r3, node_coords, &contact_point, &ellipsoid_nhat) -
                                            sphere_radius;
@@ -728,7 +729,7 @@ void compute_ellipsoidal_periphery_collision_forces_with_spheres(
 void compute_ellipsoidal_periphery_collision_forces_with_spheres_fast_approx(
     stk::mesh::BulkData &bulk_data, const stk::mesh::Selector &spheres_selector, const double periphery_r1,
     const double periphery_r2, const double periphery_r3, const std::array<double, 3> &periphery_center,
-    const mundy::math::Quaternion<double> &periphery_orientation, const double collision_spring_constant,
+    const mundy::Quaternion<double> &periphery_orientation, const double collision_spring_constant,
     const stk::mesh::Field<double> &n_coord_field, const stk::mesh::Field<double> &element_radius_field,
     const stk::mesh::Field<double> &n_force_field) {
   std::cout << "###### WARNING #######" << std::endl;
@@ -739,7 +740,7 @@ void compute_ellipsoidal_periphery_collision_forces_with_spheres_fast_approx(
   // Setup the level set function for the ellipsoidal periphery shifted inward by the
   // sphere radius
   auto level_set = [&periphery_r1, &periphery_r2, &periphery_r3, &periphery_center, &periphery_orientation](
-                       const double &radius, const mundy::math::Vector3<double> &point) -> double {
+                       const double &radius, const mundy::Vector3<double> &point) -> double {
     const auto body_frame_point = conjugate(periphery_orientation) * (point - periphery_center);
     const double inv_a2 = 1.0 / ((periphery_r1 - radius) * (periphery_r1 - radius));
     const double inv_b2 = 1.0 / ((periphery_r2 - radius) * (periphery_r2 - radius));
@@ -752,12 +753,12 @@ void compute_ellipsoidal_periphery_collision_forces_with_spheres_fast_approx(
   // Setup the outward normal function for the ellipsoidal periphery
   auto outward_normal = [&periphery_r1, &periphery_r2, &periphery_r3, &periphery_center, &periphery_orientation](
                             const double &radius,
-                            const mundy::math::Vector3<double> &point) -> mundy::math::Vector3<double> {
+                            const mundy::Vector3<double> &point) -> mundy::Vector3<double> {
     const auto body_frame_point = conjugate(periphery_orientation) * (point - periphery_center);
     const double inv_a2 = 1.0 / ((periphery_r1 - radius) * (periphery_r1 - radius));
     const double inv_b2 = 1.0 / ((periphery_r2 - radius) * (periphery_r2 - radius));
     const double inv_c2 = 1.0 / ((periphery_r3 - radius) * (periphery_r3 - radius));
-    return periphery_orientation * mundy::math::Vector3<double>(2.0 * body_frame_point[0] * inv_a2,
+    return periphery_orientation * mundy::Vector3<double>(2.0 * body_frame_point[0] * inv_a2,
                                                                 2.0 * body_frame_point[1] * inv_b2,
                                                                 2.0 * body_frame_point[2] * inv_c2);
   };
@@ -798,11 +799,11 @@ void compute_spherical_periphery_collision_forces_with_spheres(
         const auto node_coords = mundy::mesh::vector3_field_data(n_coord_field, sphere_node);
         const double sphere_radius = stk::mesh::field_data(element_radius_field, sphere_element)[0];
         const double shared_normal_ssd =
-            periphery_radius - mundy::math::norm(node_coords - periphery_center) - sphere_radius;
+            periphery_radius - mundy::norm(node_coords - periphery_center) - sphere_radius;
         const bool sphere_collides_with_periphery = shared_normal_ssd < 0.0;
         if (sphere_collides_with_periphery) {
           auto node_force = mundy::mesh::vector3_field_data(n_force_field, sphere_node);
-          auto inward_normal = (node_coords - periphery_center) / mundy::math::norm(node_coords - periphery_center);
+          auto inward_normal = (node_coords - periphery_center) / mundy::norm(node_coords - periphery_center);
           node_force[0] -= collision_spring_constant * inward_normal[0] * shared_normal_ssd;
           node_force[1] -= collision_spring_constant * inward_normal[1] * shared_normal_ssd;
           node_force[2] -= collision_spring_constant * inward_normal[2] * shared_normal_ssd;
@@ -827,7 +828,7 @@ void compute_brownian_velocity_spheres(stk::mesh::BulkData &bulk_data, const stk
         unsigned *node_rng_counter = stk::mesh::field_data(n_rng_field, sphere_node);
 
         // U_brown = sqrt(2 * kt * gamma / dt) * randn / gamma
-        openrand::Philox rng(sphere_node_gid, node_rng_counter[0]);
+        openrand::Philox rng = make_philox(sphere_node_gid, node_rng_counter[0]);
         const double coeff = std::sqrt(2.0 * brownian_kt * sphere_drag_coeff / timestep_size) * inv_drag_coeff;
         node_velocity[0] += coeff * rng.randn<double>();
         node_velocity[1] += coeff * rng.randn<double>();
@@ -900,23 +901,23 @@ Teuchos::ParameterList get_valid_hp1_params() {
   // long long.
   auto prefer_size_t = []() {
     if (std::is_same_v<size_t, unsigned short>) {
-      return mundy::core::OurAnyNumberParameterEntryValidator::PREFER_UNSIGNED_SHORT;
+      return mundy::OurAnyNumberParameterEntryValidator::PREFER_UNSIGNED_SHORT;
     } else if (std::is_same_v<size_t, unsigned int>) {
-      return mundy::core::OurAnyNumberParameterEntryValidator::PREFER_UNSIGNED_INT;
+      return mundy::OurAnyNumberParameterEntryValidator::PREFER_UNSIGNED_INT;
     } else if (std::is_same_v<size_t, unsigned long>) {
-      return mundy::core::OurAnyNumberParameterEntryValidator::PREFER_UNSIGNED_LONG;
+      return mundy::OurAnyNumberParameterEntryValidator::PREFER_UNSIGNED_LONG;
     } else if (std::is_same_v<size_t, unsigned long long>) {
-      return mundy::core::OurAnyNumberParameterEntryValidator::PREFER_UNSIGNED_LONG_LONG;
+      return mundy::OurAnyNumberParameterEntryValidator::PREFER_UNSIGNED_LONG_LONG;
     } else {
       throw std::runtime_error("Unknown size_t type.");
-      return mundy::core::OurAnyNumberParameterEntryValidator::PREFER_UNSIGNED_INT;
+      return mundy::OurAnyNumberParameterEntryValidator::PREFER_UNSIGNED_INT;
     }
   }();
   const bool allow_all_types_by_default = false;
-  mundy::core::OurAnyNumberParameterEntryValidator::AcceptedTypes accept_int(allow_all_types_by_default);
+  mundy::OurAnyNumberParameterEntryValidator::AcceptedTypes accept_int(allow_all_types_by_default);
   accept_int.allow_all_integer_types(true);
   auto make_new_validator = [](const auto &preferred_type, const auto &accepted_types) {
-    return Teuchos::rcp(new mundy::core::OurAnyNumberParameterEntryValidator(preferred_type, accepted_types));
+    return Teuchos::rcp(new mundy::OurAnyNumberParameterEntryValidator(preferred_type, accepted_types));
   };
 
   // Default values are hard-coded. Trust me, this is the clearest way.

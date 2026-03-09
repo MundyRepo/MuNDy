@@ -56,9 +56,9 @@ We'll need two MetaMethods: one for computing the brownian motion and one for ta
 #include <stk_util/parallel/Parallel.hpp>    // for stk::parallel_machine_init, stk::parallel_machine_finalize
 
 // Mundy libs
-#include <mundy_core/MakeStringArray.hpp>  // for mundy::core::make_string_array
-#include <mundy_core/StringLiteral.hpp>    // for mundy::core::StringLiteral and mundy::core::make_string_literal
-#include <mundy_core/throw_assert.hpp>     // for MUNDY_THROW_ASSERT
+#include <mundy_utils/MakeStringArray.hpp>  // for mundy::make_string_array
+#include <mundy_utils/StringLiteral.hpp>    // for mundy::StringLiteral and mundy::make_string_literal
+#include <mundy_utils/throw_assert.hpp>     // for MUNDY_THROW_ASSERT
 #include <mundy_io/IOBroker.hpp>           // for mundy::io::IOBroker
 #include <mundy_linkers/ComputeSignedSeparationDistanceAndContactNormal.hpp>  // for mundy::linkers::ComputeSignedSeparationDistanceAndContactNormal
 #include <mundy_linkers/DestroyNeighborLinkers.hpp>           // for mundy::linkers::DestroyNeighborLinkers
@@ -69,7 +69,7 @@ We'll need two MetaMethods: one for computing the brownian motion and one for ta
 #include <mundy_mesh/BulkData.hpp>                            // for mundy::mesh::BulkData
 #include <mundy_mesh/ForEachEntity.hpp>                       // for mundy::mesh::for_each_entity_run
 #include <mundy_mesh/MetaData.hpp>                            // for mundy::mesh::MetaData
-#include <mundy_mesh/utils/FillFieldWithValue.hpp>            // for mundy::mesh::utils::fill_field_with_value
+#include <mundy_mesh/utils/FillFieldWithValue.hpp>            // for mundy::mesh::fill_field_with_value
 #include <mundy_meta/MetaFactory.hpp>                         // for mundy::meta::MetaKernelFactory
 #include <mundy_meta/MetaKernel.hpp>                          // for mundy::meta::MetaKernel
 #include <mundy_meta/MetaKernelDispatcher.hpp>                // for mundy::meta::MetaKernelDispatcher
@@ -77,10 +77,11 @@ We'll need two MetaMethods: one for computing the brownian motion and one for ta
 #include <mundy_meta/MetaRegistry.hpp>                        // for mundy::meta::MetaMethodRegistry
 #include <mundy_meta/ParameterValidationHelpers.hpp>  // for mundy::meta::check_parameter_and_set_default and mundy::meta::check_required_parameter
 #include <mundy_meta/PartReqs.hpp>  // for mundy::meta::PartReqs
-#include <mundy_meta/utils/MeshGeneration.hpp>  // for mundy::meta::utils::generate_class_instance_and_mesh_from_meta_class_requirements
+#include <mundy_meta/utils/MeshGeneration.hpp>  // for mundy::meta::generate_class_instance_and_mesh_from_meta_class_requirements
 #include <mundy_shapes/ComputeAABB.hpp>           // for mundy::shapes::ComputeAABB
 #include <mundy_shapes/DeclareAndInitShapes.hpp>  // for mundy::shapes::DeclareAndInitShapes
 #include <mundy_shapes/Spheres.hpp>               // for mundy::shapes::Spheres
+#include <mundy_utils/rng.hpp>              // for mundy::make_philox
 
 /*// A macro for a block of stuff
 #define TIME_BLOCK(thing_to_time, rank, message)                          \
@@ -248,7 +249,7 @@ class NodeEulerSphere : public mundy::meta::MetaKernel<> {
   /// \brief Get the valid fixed parameters for this class and their defaults.
   static Teuchos::ParameterList get_valid_fixed_params() {
     static Teuchos::ParameterList default_parameter_list;
-    default_parameter_list.set("valid_entity_part_names", mundy::core::make_string_array(default_part_name_),
+    default_parameter_list.set("valid_entity_part_names", mundy::make_string_array(default_part_name_),
                                "Name of the parts associated with this kernel.");
     default_parameter_list.set(
         "node_velocity_field_name", std::string(default_node_velocity_field_name_),
@@ -521,7 +522,7 @@ class ComputeBrownianVelocitySphere : public mundy::meta::MetaKernel<> {
   /// \brief Get the valid fixed parameters for this class and their defaults.
   static Teuchos::ParameterList get_valid_fixed_params() {
     static Teuchos::ParameterList default_parameter_list;
-    default_parameter_list.set("valid_entity_part_names", mundy::core::make_string_array(default_part_name_),
+    default_parameter_list.set("valid_entity_part_names", mundy::make_string_array(default_part_name_),
                                "Name of the parts associated with this kernel.");
     default_parameter_list.set(
         "node_brownian_velocity_field_name", std::string(default_node_brownian_velocity_field_name_),
@@ -605,7 +606,7 @@ class ComputeBrownianVelocitySphere : public mundy::meta::MetaKernel<> {
           const stk::mesh::EntityId sphere_node_gid = bulk_data.identifier(sphere_node);
           unsigned *node_rng_counter = stk::mesh::field_data(node_rng_counter_field, sphere_node);
 
-          openrand::Philox rng(sphere_node_gid, node_rng_counter[0]);
+          openrand::Philox rng = make_philox(sphere_node_gid, node_rng_counter[0]);
           node_brownian_velocity[0] = alpha * std::sqrt(2.0 * diffusion_coeff / time_step_size) * rng.randn<double>() +
                                       beta * node_brownian_velocity[0];
           node_brownian_velocity[1] = alpha * std::sqrt(2.0 * diffusion_coeff / time_step_size) * rng.randn<double>() +
@@ -887,7 +888,7 @@ class LocalDragNonorientableSphere : public mundy::meta::MetaKernel<> {
   /// \brief Get the valid fixed parameters for this class and their defaults.
   static Teuchos::ParameterList get_valid_fixed_params() {
     static Teuchos::ParameterList default_parameter_list;
-    default_parameter_list.set("valid_entity_part_names", mundy::core::make_string_array(default_part_name_),
+    default_parameter_list.set("valid_entity_part_names", mundy::make_string_array(default_part_name_),
                                "Name of the parts associated with this kernel.");
     default_parameter_list.set("node_force_field_name", std::string(default_node_force_field_name_),
                                "Name of the node force field.");
@@ -1141,17 +1142,17 @@ int main(int argc, char **argv) {
 
   // ComputeBrownianVelocity fixed parameters
   Teuchos::ParameterList compute_brownian_velocity_fixed_params;
-  compute_brownian_velocity_fixed_params.set("enabled_kernel_names", mundy::core::make_string_array("SPHERE"))
+  compute_brownian_velocity_fixed_params.set("enabled_kernel_names", mundy::make_string_array("SPHERE"))
       .set("node_rng_counter_field_name", "NODE_RNG_COUNTER")
       .set("node_brownian_velocity_field_name", "NODE_VELOCITY");
   compute_brownian_velocity_fixed_params.sublist("SPHERE").set("valid_entity_part_names",
-                                                               mundy::core::make_string_array("SPHERES"));
+                                                               mundy::make_string_array("SPHERES"));
 
   // NodeEuler fixed parameters
   Teuchos::ParameterList node_euler_fixed_params;
-  node_euler_fixed_params.set("enabled_kernel_names", mundy::core::make_string_array("SPHERE"))
+  node_euler_fixed_params.set("enabled_kernel_names", mundy::make_string_array("SPHERE"))
       .set("node_velocity_field_name", "NODE_VELOCITY");
-  node_euler_fixed_params.sublist("SPHERE").set("valid_entity_part_names", mundy::core::make_string_array("SPHERES"));
+  node_euler_fixed_params.sublist("SPHERE").set("valid_entity_part_names", mundy::make_string_array("SPHERES"));
 
   // ComputeMobility fixed parameters
   Teuchos::ParameterList compute_mobility_fixed_params;
@@ -1159,10 +1160,10 @@ int main(int argc, char **argv) {
       .set("node_force_field_name", "NODE_FORCE")
       .set("node_velocity_field_name", "NODE_VELOCITY");
   compute_mobility_fixed_params.sublist("LOCAL_DRAG")
-      .set("enabled_kernel_names", mundy::core::make_string_array("NONORIENTABLE_SPHERE"));
+      .set("enabled_kernel_names", mundy::make_string_array("NONORIENTABLE_SPHERE"));
   compute_mobility_fixed_params.sublist("LOCAL_DRAG")
       .sublist("NONORIENTABLE_SPHERE")
-      .set("valid_entity_part_names", mundy::core::make_string_array("SPHERES"));
+      .set("valid_entity_part_names", mundy::make_string_array("SPHERES"));
 
   // DeclareAndInitShapes fixed parameters
   Teuchos::ParameterList declare_and_init_shapes_fixed_params;
@@ -1170,35 +1171,35 @@ int main(int argc, char **argv) {
 
   // ComputeSignedSeparationDistanceAndContactNormal fixed parameters
   Teuchos::ParameterList compute_ssd_and_cn_fixed_params;
-  compute_ssd_and_cn_fixed_params.set("enabled_kernel_names", mundy::core::make_string_array("SPHERE_SPHERE_LINKER"))
+  compute_ssd_and_cn_fixed_params.set("enabled_kernel_names", mundy::make_string_array("SPHERE_SPHERE_LINKER"))
       .set("linker_contact_normal_field_name", "LINKER_CONTACT_NORMAL")
       .set("linker_signed_separation_distance_field_name", "LINKER_SIGNED_SEPARATION_DISTANCE");
   compute_ssd_and_cn_fixed_params.sublist("SPHERE_SPHERE_LINKER")
-      .set("valid_entity_part_names", mundy::core::make_string_array("SPHERE_SPHERE_LINKERS"))
-      .set("valid_sphere_part_names", mundy::core::make_string_array("SPHERES"));
+      .set("valid_entity_part_names", mundy::make_string_array("SPHERE_SPHERE_LINKERS"))
+      .set("valid_sphere_part_names", mundy::make_string_array("SPHERES"));
 
   // ComputeAABB fixed parameters
   Teuchos::ParameterList compute_aabb_fixed_params;
-  compute_aabb_fixed_params.set("enabled_kernel_names", mundy::core::make_string_array("SPHERE"))
+  compute_aabb_fixed_params.set("enabled_kernel_names", mundy::make_string_array("SPHERE"))
       .set("element_aabb_field_name", "ELEMENT_AABB");
-  compute_aabb_fixed_params.sublist("SPHERE").set("valid_entity_part_names", mundy::core::make_string_array("SPHERES"));
+  compute_aabb_fixed_params.sublist("SPHERE").set("valid_entity_part_names", mundy::make_string_array("SPHERES"));
 
   // GenerateNeighborLinkers fixed parameters
   Teuchos::ParameterList generate_neighbor_linkers_fixed_params;
   generate_neighbor_linkers_fixed_params.set("enabled_technique_name", "STK_SEARCH")
-      .set("specialized_neighbor_linkers_part_names", mundy::core::make_string_array("SPHERE_SPHERE_LINKERS"));
+      .set("specialized_neighbor_linkers_part_names", mundy::make_string_array("SPHERE_SPHERE_LINKERS"));
   generate_neighbor_linkers_fixed_params.sublist("STK_SEARCH")
-      .set("valid_source_entity_part_names", mundy::core::make_string_array("SPHERES"))
-      .set("valid_target_entity_part_names", mundy::core::make_string_array("SPHERES"))
+      .set("valid_source_entity_part_names", mundy::make_string_array("SPHERES"))
+      .set("valid_target_entity_part_names", mundy::make_string_array("SPHERES"))
       .set("element_aabb_field_name", std::string("ELEMENT_AABB"));
 
   // EvaluateLinkerPotentials fixed parameters
   Teuchos::ParameterList evaluate_linker_potentials_fixed_params;
   evaluate_linker_potentials_fixed_params.set("enabled_kernel_names",
-                                              mundy::core::make_string_array("SPHERE_SPHERE_HERTZIAN_CONTACT"));
+                                              mundy::make_string_array("SPHERE_SPHERE_HERTZIAN_CONTACT"));
   evaluate_linker_potentials_fixed_params.sublist("SPHERE_SPHERE_HERTZIAN_CONTACT")
-      .set("valid_entity_part_names", mundy::core::make_string_array("SPHERE_SPHERE_LINKERS"))
-      .set("valid_sphere_part_names", mundy::core::make_string_array("SPHERES"))
+      .set("valid_entity_part_names", mundy::make_string_array("SPHERE_SPHERE_LINKERS"))
+      .set("valid_sphere_part_names", mundy::make_string_array("SPHERES"))
       .set("linker_potential_force_magnitude_field_name", "LINKER_POTENTIAL_FORCE")
       .set("linker_signed_separation_distance_field_name", "LINKER_SIGNED_SEPARATION_DISTANCE")
       .set("element_youngs_modulus_field_name", "ELEMENT_YOUNGS_MODULUS")
@@ -1206,19 +1207,19 @@ int main(int argc, char **argv) {
 
   // LinkerPotentialForceReduction fixed parameters
   Teuchos::ParameterList linker_potential_force_reduction_fixed_params;
-  linker_potential_force_reduction_fixed_params.set("enabled_kernel_names", mundy::core::make_string_array("SPHERE"))
+  linker_potential_force_reduction_fixed_params.set("enabled_kernel_names", mundy::make_string_array("SPHERE"))
       .set("name_of_linker_part_to_reduce_over", "SPHERE_SPHERE_LINKERS")
       .set("linker_potential_force_magnitude_field_name", "LINKER_POTENTIAL_FORCE")
       .set("linker_contact_normal_field_name", "LINKER_CONTACT_NORMAL");
   linker_potential_force_reduction_fixed_params.sublist("SPHERE")
-      .set("valid_entity_part_names", mundy::core::make_string_array("SPHERES"))
+      .set("valid_entity_part_names", mundy::make_string_array("SPHERES"))
       .set("node_force_field_name", "NODE_FORCE");
 
   Teuchos::ParameterList destroy_neighbor_linkers_fixed_params = Teuchos::ParameterList();
   destroy_neighbor_linkers_fixed_params.set("enabled_technique_name", "DESTROY_DISTANT_NEIGHBORS")
       .sublist("DESTROY_DISTANT_NEIGHBORS")
-      .set("valid_entity_part_names", mundy::core::make_string_array("NEIGHBOR_LINKERS"))
-      .set("valid_connected_source_and_target_part_names", mundy::core::make_string_array("SPHERES"))
+      .set("valid_entity_part_names", mundy::make_string_array("NEIGHBOR_LINKERS"))
+      .set("valid_connected_source_and_target_part_names", mundy::make_string_array("SPHERES"))
       .set("linker_destroy_flag_field_name", "LINKER_DESTROY_FLAG")
       .set("element_aabb_field_name", "ELEMENT_AABB");
 
@@ -1226,7 +1227,7 @@ int main(int argc, char **argv) {
   auto [compute_brownian_velocity_ptr, node_euler_ptr, compute_mobility_ptr, declare_and_init_shapes_ptr,
         compute_ssd_and_cn_ptr, compute_aabb_ptr, generate_neighbor_linkers_ptr, evaluate_linker_potentials_ptr,
         linker_potential_force_reduction_ptr, destroy_neighbor_linkers_ptr, bulk_data_ptr] =
-      mundy::meta::utils::generate_class_instance_and_mesh_from_meta_class_requirements<
+      mundy::meta::generate_class_instance_and_mesh_from_meta_class_requirements<
           ComputeBrownianVelocity, NodeEuler, ComputeMobility, mundy::shapes::DeclareAndInitShapes,
           mundy::linkers::ComputeSignedSeparationDistanceAndContactNormal, mundy::shapes::ComputeAABB,
           mundy::linkers::GenerateNeighborLinkers, mundy::linkers::EvaluateLinkerPotentials,
@@ -1539,8 +1540,8 @@ int main(int argc, char **argv) {
   //   //  - Compute the velocity induced by the node forces using local drag
   //   //  - Compute the brownian velocity for the nodes
   //   //  - Update the node positions using a first order Euler method
-  //   mundy::mesh::utils::fill_field_with_value<double>(*node_force_field_ptr, std::array{0.0, 0.0, 0.0});
-  //   mundy::mesh::utils::fill_field_with_value<double>(*node_velocity_field_ptr, std::array{0.0, 0.0, 0.0});
+  //   mundy::mesh::fill_field_with_value<double>(*node_force_field_ptr, std::array{0.0, 0.0, 0.0});
+  //   mundy::mesh::fill_field_with_value<double>(*node_velocity_field_ptr, std::array{0.0, 0.0, 0.0});
 
   //   compute_aabb_ptr->execute(spheres_part);
   //   dump_mesh_info("After compute_aabb_ptr->execute(spheres_part)");
@@ -1594,8 +1595,8 @@ int main(int argc, char **argv) {
     //  - Compute the velocity induced by the node forces using local drag
     //  - Compute the brownian velocity for the nodes
     //  - Update the node positions using a first order Euler method
-    mundy::mesh::utils::fill_field_with_value<double>(*node_force_field_ptr, std::array{0.0, 0.0, 0.0});
-    mundy::mesh::utils::fill_field_with_value<double>(*node_velocity_field_ptr, std::array{0.0, 0.0, 0.0});
+    mundy::mesh::fill_field_with_value<double>(*node_force_field_ptr, std::array{0.0, 0.0, 0.0});
+    mundy::mesh::fill_field_with_value<double>(*node_velocity_field_ptr, std::array{0.0, 0.0, 0.0});
 
     TIME_BLOCK(compute_ssd_and_cn_ptr->execute(sphere_sphere_linkers_part), rank, "compute_ssd_and_cn_ptr->execute")
     dump_mesh_info("After compute_ssd_and_cn_ptr->execute(sphere_sphere_linkers_part)");

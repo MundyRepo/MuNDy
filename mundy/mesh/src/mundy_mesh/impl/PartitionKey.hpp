@@ -21,7 +21,6 @@
 #ifndef MUNDY_MESH_IMPL_PARTITIONKEY_HPP_
 #define MUNDY_MESH_IMPL_PARTITIONKEY_HPP_
 
-
 // C++ core
 #include <stdexcept>
 #include <vector>
@@ -31,12 +30,12 @@
 
 // STK
 #include <stk_mesh/base/BulkData.hpp>
+#include <stk_mesh/base/NgpTypes.hpp>  // for stk::mesh::PartOrdinalViewType
 #include <stk_mesh/base/Types.hpp>
 #include <stk_util/ngp/NgpSpaces.hpp>
-#include <stk_mesh/base/NgpTypes.hpp>     // for stk::mesh::PartOrdinalViewType
 
 // Mundy
-#include <mundy_core/throw_assert.hpp>
+#include <mundy_utils/throw_assert.hpp>
 
 namespace mundy {
 
@@ -48,10 +47,10 @@ using PartitionKey = std::vector<stk::mesh::PartOrdinal>;  // sorted view of par
 using NgpPartitionKey = stk::mesh::PartOrdinalViewType;    // sorted view of part ordinals
 
 /// \brief Get the partition key for a given set of link parts (independent of their order, host only)
-PartitionKey get_partition_key(const stk::mesh::PartVector &parts);
+PartitionKey get_partition_key(const stk::mesh::PartVector& parts);
 
 /// \brief Get the partition key for a given link bucket (host only)
-PartitionKey get_partition_key(const stk::mesh::Bucket &link_bucket);
+PartitionKey get_partition_key(const stk::mesh::Bucket& link_bucket);
 
 }  // namespace impl
 

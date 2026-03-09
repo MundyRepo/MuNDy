@@ -77,7 +77,7 @@ void setup_mesh_and_metadata(TestContext& context) {
 }
 
 LinkMetaData declare_and_validate_link_metadata(TestContext& context, const std::string& name) {
-  LinkMetaData &link_meta_data = declare_link_meta_data(*context.meta_data, name, context.link_rank);
+  LinkMetaData& link_meta_data = declare_link_meta_data(*context.meta_data, name, context.link_rank);
   EXPECT_EQ(link_meta_data.link_rank(), context.link_rank);
   EXPECT_TRUE(link_meta_data.name() == name);
   EXPECT_EQ(link_meta_data.universal_link_part().primary_entity_rank(), context.link_rank);
@@ -98,7 +98,7 @@ void setup_parts_and_links(TestContext& context, LinkMetaData& link_meta_data) {
 }
 
 // Struct to organize link initialization data
-template <size_t Dimensionality>
+template <unsigned Dimensionality>
 struct LinkInitializationData {
   using LinkAndLinkedEntitiesArray = std::array<stk::mesh::Entity, Dimensionality + 1>;
   using LinkedEntityRanksArray = std::array<stk::mesh::EntityRank, Dimensionality>;
@@ -112,14 +112,15 @@ struct LinkInitializationData {
 };
 
 // Function to initialize links using the struct
-template <size_t Dimensionality>
+template <unsigned Dimensionality>
 void initialize_links(TestContext& context, LinkInitializationData<Dimensionality>& link_init_data) {
   stk::mesh::PartVector link_part_vector{link_init_data.link_part};
   stk::mesh::PartVector empty_part_vector;
   for (const auto& ranks : link_init_data.linked_entity_ranks) {
     std::array<stk::mesh::Entity, Dimensionality + 1> entities;
     entities[0] = context.bulk_data->declare_entity(context.link_rank, ++context.num_linked_entities, link_part_vector);
-    for (size_t i = 0; i < ranks.size(); ++i) {
+    unsigned num_ranks = static_cast<unsigned>(ranks.size());
+    for (unsigned i = 0; i < num_ranks; ++i) {
       entities[i + 1] =
           context.bulk_data->declare_entity(ranks[i], ++context.entity_counts[ranks[i]], empty_part_vector);
     }
@@ -127,11 +128,11 @@ void initialize_links(TestContext& context, LinkInitializationData<Dimensionalit
   }
 }
 
-template <size_t Dimensionality>
+template <unsigned Dimensionality>
 void declare_and_validate_relations(const TestContext& context,
                                     const LinkInitializationData<Dimensionality>& link_init_data, LinkData& link_data) {
-  unsigned num_links_this_part = link_init_data.link_and_linked_entities.size();
-  for (unsigned i = 0; i < num_links_this_part; ++i) {
+  size_t num_links_this_part = static_cast<size_t>(link_init_data.link_and_linked_entities.size());
+  for (size_t i = 0; i < num_links_this_part; ++i) {
     const auto& entities = link_init_data.link_and_linked_entities[i];
     const auto& entity_ranks = link_init_data.linked_entity_ranks[i];
 
@@ -141,8 +142,8 @@ void declare_and_validate_relations(const TestContext& context,
     }
 
     // Declare relations
-    for (size_t j = 0; j < Dimensionality; ++j) {
-      link_data.coo_data().declare_relation(entities[0], entities[j + 1], j);
+    for (unsigned j = 0; j < Dimensionality; ++j) {
+      link_data.coo_data().declare_relation(entities[0], entities[j + static_cast<unsigned>(1)], j);
 
       // Validate linked entity, rank, and ID
       EXPECT_EQ(link_data.coo_data().get_linked_entity(entities[0], j), entities[j + 1]);
@@ -272,8 +273,8 @@ void modify_ngp_link_data(const TestContext& context, LinkData& link_data) {
       << "The modification should have dirtied the CSR connectivity on the device.";
 }
 
-template <size_t Dimensionality>
-void validate_crs_connectivity(const TestContext& context, LinkInitializationData<Dimensionality>& link_init_data,
+template <unsigned Dimensionality>
+void validate_crs_connectivity(const TestContext& /*context*/, LinkInitializationData<Dimensionality>& link_init_data,
                                LinkData& link_data) {
   NgpLinkData& ngp_link_data = get_updated_ngp_link_data(link_data);
   ngp_link_data.update_crs_from_coo();
@@ -340,7 +341,7 @@ void basic_usage_test() {
   setup_parts_and_links(context, link_meta_data);
 
   // Declare and validate link data manager
-  LinkData &link_data = declare_link_data(*context.bulk_data, link_meta_data);
+  LinkData& link_data = declare_link_data(*context.bulk_data, link_meta_data);
   EXPECT_EQ(link_data.link_meta_data().link_rank(), link_meta_data.link_rank());
 
   // Declare some entities to connect and some links to place between them

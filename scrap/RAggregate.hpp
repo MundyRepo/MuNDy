@@ -39,8 +39,8 @@
 #include <stk_topology/topology.hpp>      // for stk::topology::topology_t
 
 // Mundy
-#include <mundy_core/throw_assert.hpp>   // for MUNDY_THROW_ASSERT
-#include <mundy_core/tuple.hpp>          // for mundy::core::tuple
+#include <mundy_utils/throw_assert.hpp>   // for MUNDY_THROW_ASSERT
+#include <mundy_utils/tuple.hpp>          // for mundy::tuple
 #include <mundy_mesh/BulkData.hpp>       // for mundy::mesh::BulkData
 #include <mundy_mesh/FieldViews.hpp>     // for mundy::mesh::vector3_field_data, mundy::mesh::quaternion_field_data
 #include <mundy_mesh/fmt_stk_types.hpp>  // for STK-compatible fmt::format
@@ -844,7 +844,7 @@ struct TaggedBagOfObjects {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Same logic, a new day.
 //
-// Mundy now formally offers core::aggregate as a generalized data structure that mimics a compile-time map from key to
+// Mundy now formally offers aggregate as a generalized data structure that mimics a compile-time map from key to
 // object similar in many ways to boost::hana::map. We'll call our TaggedBagOfVariants variant_aggregate and write it in
 // condensed form as v_agg.
 //

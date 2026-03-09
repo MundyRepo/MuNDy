@@ -34,15 +34,13 @@
 #include <Teuchos_ParameterList.hpp>  // for Teuchos::ParameterList
 
 // Mundy libs
-#include <mundy_core/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
+#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
 #include <mundy_mesh/BulkData.hpp>      // for mundy::mesh::BulkData
 #include <mundy_mesh/MetaData.hpp>      // for mundy::mesh::MetaData
 
 namespace mundy {
 
 namespace mesh {
-
-namespace utils {
 
 /* Methodology:
 
@@ -69,8 +67,6 @@ void destroy_flagged_entities(BulkData &bulk_data, const stk::mesh::EntityVector
 void destroy_flagged_entities(BulkData &bulk_data, const stk::topology::rank_t &entity_rank,
                               const stk::mesh::Selector &selector, const stk::mesh::Field<int> &flag_field,
                               const int &deletion_flag_value);
-
-}  // namespace utils
 
 }  // namespace mesh
 

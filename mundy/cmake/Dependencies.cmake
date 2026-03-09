@@ -7,12 +7,12 @@ tribits_package_define_dependencies(
   TEST_OPTIONAL_PACKAGES
   LIB_REQUIRED_TPLS fmt
   LIB_OPTIONAL_TPLS MPI STK
-  TEST_REQUIRED_TPLS GTest
-  TEST_OPTIONAL_TPLS
+  TEST_REQUIRED_TPLS
+  TEST_OPTIONAL_TPLS GTest nanobench
   SUBPACKAGES_DIRS_CLASSIFICATIONS_OPTREQS
-    Core         core        PT  OPTIONAL
-    Math         math        PT  OPTIONAL
-    Geom         geom        PT  OPTIONAL
-    Mesh         mesh        PT  OPTIONAL
+    Utils core/utils PT OPTIONAL
+    Math  core/math PT OPTIONAL
+    Geom  core/geom PT OPTIONAL
+    Mesh  mesh PT OPTIONAL
   REGRESSION_EMAIL_LIST brycepalmer96@gmail.com
-  )
+)

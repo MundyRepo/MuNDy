@@ -33,7 +33,7 @@
 
 // Mundy libs
 #include <mundy_agents/Assembly.hpp>     // for mundy::agents::Assembly
-#include <mundy_core/StringLiteral.hpp>  // for mundy::core::StringLiteral and mundy::core::make_string_literal
+#include <mundy_utils/StringLiteral.hpp>  // for mundy::StringLiteral and mundy::make_string_literal
 #include <mundy_meta/MeshReqs.hpp>       // for mundy::meta::MeshReqs
 #include <mundy_meta/PartReqs.hpp>       // for mundy::meta::PartReqs
 
@@ -48,7 +48,7 @@ namespace agents {
 ///
 /// \note This class is a assembly part containing all agents. It does not have a parent or a grandparent within the
 /// agent hierarchy.
-class Agents : public Assembly<mundy::core::make_string_literal("AGENTS")> {};  // Agents
+class Agents : public Assembly<mundy::make_string_literal("AGENTS")> {};  // Agents
 
 }  // namespace agents
 

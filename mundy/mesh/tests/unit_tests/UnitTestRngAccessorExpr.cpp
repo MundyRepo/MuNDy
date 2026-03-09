@@ -21,6 +21,9 @@
 // External libs
 #include <gtest/gtest.h>  // for TEST, ASSERT_NO_THROW, etc
 
+// C++ core
+#include <cstdint>  // for uint32_t
+
 // STK mesh
 #include <Trilinos_version.h>  // for TRILINOS_MAJOR_MINOR_VERSION
 
@@ -45,6 +48,8 @@
 #include <mundy_mesh/MetaData.hpp>         // for mundy::mesh::MetaData
 #include <mundy_mesh/NgpAccessorExpr.hpp>  // for accessor expressions
 #include <mundy_mesh/NgpFieldBLAS.hpp>     // for mundy::mesh::field_axpby, etc.
+#include <mundy_utils/rng.hpp>             // for mundy::make_philox
+#include <mundy_utils/throw_assert.hpp>    // for MUNDY_THROW_ASSERT
 
 namespace mundy {
 
@@ -221,14 +226,15 @@ class UnitTestRngAccessorExprFixture : public ::testing::Test {
     bulk_data_ptr_->modification_end();
   }
 
-  void setup_hex_mesh(const stk::mesh::EntityRank& entity_rank, stk::mesh::BulkData::AutomaticAuraOption aura_option,
+  void setup_hex_mesh(stk::mesh::BulkData::AutomaticAuraOption aura_option,
 #if TRILINOS_MAJOR_MINOR_VERSION >= 160000
                       std::unique_ptr<stk::mesh::FieldDataManager> field_data_manager,
 #else
                       stk::mesh::FieldDataManager* field_data_manager,
 #endif
                       unsigned initial_bucket_capacity = stk::mesh::get_default_initial_bucket_capacity(),
-                      unsigned maximum_bucket_capacity = stk::mesh::get_default_maximum_bucket_capacity()) {
+                      unsigned maximum_bucket_capacity = stk::mesh::get_default_maximum_bucket_capacity(),
+                      bool is_unit_test = true) {
     stk::mesh::MeshBuilder builder(communicator_);
     builder.set_spatial_dimension(spatial_dimension_);
     builder.set_entity_rank_names(entity_rank_names_);
@@ -296,8 +302,11 @@ class UnitTestRngAccessorExprFixture : public ::testing::Test {
     field3_ptr_ =
         create_field_on_parts<double>("field3", stk::topology::NODE_RANK, scalars_per_entity, {block3_part_ptr_});
 
-    declare_five_hexes();
-    // declare_N_hexes_per_dimension(100);
+    if (is_unit_test) {
+      declare_five_hexes();
+    } else {
+      declare_N_hexes_per_dimension(100);
+    }
     reset_field_values();
   }
 
@@ -395,27 +404,30 @@ void randomize_test(stk::mesh::BulkData& bulk_data,           //
   float_accessor.sync_to_host();
   int_accessor.sync_to_host();
 
-  ::mundy::mesh::for_each_entity_run(bulk_data, stk::topology::NODE_RANK, selector,
-                                     [&double_accessor, &float_accessor, &int_accessor, &seed, &counter, fixed_seed,
-                                      fixed_counter](const stk::mesh::BulkData& bulk_data, const stk::mesh::Entity& e) {
-                                       size_t local_seed = use_seed_expr ? seed(e) : fixed_seed;
-                                       size_t local_counter = use_counter_expr ? counter(e) : fixed_counter;
+  ::mundy::mesh::for_each_entity_run(
+      bulk_data, stk::topology::NODE_RANK, selector,
+      [&double_accessor, &float_accessor, &int_accessor, &seed, &counter, fixed_seed, fixed_counter](
+          const stk::mesh::BulkData& /*bulk_data*/, const stk::mesh::Entity& e) {
+        size_t local_seed = use_seed_expr ? seed(e) : fixed_seed;
+        size_t local_counter = use_counter_expr ? counter(e) : fixed_counter;
 
-                                       openrand::Philox rng_d(local_seed, local_counter);
-                                       double actual_value_d = double_accessor(e);
-                                       double expected_value_d = rng_d.rand<double>();
-                                       EXPECT_DOUBLE_EQ(actual_value_d, expected_value_d);
+        MUNDY_THROW_ASSERT(local_counter <= std::numeric_limits<uint32_t>::max(), std::overflow_error,
+                           "Counter exceeds uint32_t max for openrand::Philox.");
+        openrand::Philox rng_d = make_philox(local_seed, local_counter);
+        double actual_value_d = double_accessor(e);
+        double expected_value_d = rng_d.rand<double>();
+        EXPECT_DOUBLE_EQ(actual_value_d, expected_value_d);
 
-                                       openrand::Philox rng_f(local_seed, local_counter);
-                                       float actual_value_f = float_accessor(e);
-                                       float expected_value_f = rng_f.rand<float>();
-                                       EXPECT_FLOAT_EQ(actual_value_f, expected_value_f);
+        openrand::Philox rng_f = make_philox(local_seed, local_counter);
+        float actual_value_f = float_accessor(e);
+        float expected_value_f = rng_f.rand<float>();
+        EXPECT_FLOAT_EQ(actual_value_f, expected_value_f);
 
-                                       openrand::Philox rng_i(local_seed, local_counter);
-                                       int actual_value_i = int_accessor(e);
-                                       int expected_value_i = rng_i.rand<int>();
-                                       EXPECT_EQ(actual_value_i, expected_value_i);
-                                     });
+        openrand::Philox rng_i = make_philox(local_seed, local_counter);
+        int actual_value_i = int_accessor(e);
+        int expected_value_i = rng_i.rand<int>();
+        EXPECT_EQ(actual_value_i, expected_value_i);
+      });
 }
 
 TEST_F(UnitTestRngAccessorExprFixture, field_rand) {
@@ -426,11 +438,11 @@ TEST_F(UnitTestRngAccessorExprFixture, field_rand) {
   const int we_know_there_are_five_ranks = 5;
 #if TRILINOS_MAJOR_MINOR_VERSION >= 160000
   auto field_data_manager = std::make_unique<stk::mesh::DefaultFieldDataManager>(we_know_there_are_five_ranks);
-  setup_hex_mesh(stk::topology::NODE_RANK, stk::mesh::BulkData::AUTO_AURA, std::move(field_data_manager));
+  setup_hex_mesh(stk::mesh::BulkData::AUTO_AURA, std::move(field_data_manager));
 #else
   stk::mesh::DefaultFieldDataManager* field_data_manager_ptr =
       new stk::mesh::DefaultFieldDataManager(we_know_there_are_five_ranks);
-  setup_hex_mesh(stk::topology::NODE_RANK, stk::mesh::BulkData::AUTO_AURA, field_data_manager_ptr);
+  setup_hex_mesh(stk::mesh::BulkData::AUTO_AURA, field_data_manager_ptr);
 #endif
 
   stk::mesh::Selector b1_not_b2 = block1_selector_ - block2_selector_;
@@ -508,25 +520,27 @@ void randomize_uniform_test(stk::mesh::BulkData& bulk_data,             //
       [&double_accessor, &float_accessor, &int_accessor, &double_lb_accessor, &double_ub_accessor, &float_lb_accessor,
        &float_ub_accessor, &int_lb_accessor, &int_ub_accessor, &seed, &counter, double_fixed_lb, double_fixed_ub,
        float_fixed_lb, float_fixed_ub, int_fixed_lb,
-       int_fixed_ub](const stk::mesh::BulkData& bulk_data, const stk::mesh::Entity& e) {
+       int_fixed_ub](const stk::mesh::BulkData& /*bulk_data*/, const stk::mesh::Entity& e) {
         size_t local_seed = seed(e);
         size_t local_counter = counter(e);
 
-        openrand::Philox rng_d(local_seed, local_counter);
+        MUNDY_THROW_ASSERT(local_counter <= std::numeric_limits<uint32_t>::max(), std::overflow_error,
+                           "Counter exceeds uint32_t max for openrand::Philox.");
+        openrand::Philox rng_d = make_philox(local_seed, local_counter);
         double actual_value_d = double_accessor(e);
         double lb_d = use_lower_bound_expr ? double_lb_accessor(e) : double_fixed_lb;
         double ub_d = use_upper_bound_expr ? double_ub_accessor(e) : double_fixed_ub;
         double expected_value_d = rng_d.uniform<double>(lb_d, ub_d);
         EXPECT_DOUBLE_EQ(actual_value_d, expected_value_d);
 
-        openrand::Philox rng_f(local_seed, local_counter);
+        openrand::Philox rng_f = make_philox(local_seed, local_counter);
         float actual_value_f = float_accessor(e);
         float lb_f = use_lower_bound_expr ? float_lb_accessor(e) : float_fixed_lb;
         float ub_f = use_upper_bound_expr ? float_ub_accessor(e) : float_fixed_ub;
         float expected_value_f = rng_f.uniform<float>(lb_f, ub_f);
         EXPECT_FLOAT_EQ(actual_value_f, expected_value_f);
 
-        openrand::Philox rng_i(local_seed, local_counter);
+        openrand::Philox rng_i = make_philox(local_seed, local_counter);
         int actual_value_i = int_accessor(e);
         int lb_i = use_lower_bound_expr ? int_lb_accessor(e) : int_fixed_lb;
         int ub_i = use_upper_bound_expr ? int_ub_accessor(e) : int_fixed_ub;
@@ -543,11 +557,11 @@ TEST_F(UnitTestRngAccessorExprFixture, field_uniform) {
   const int we_know_there_are_five_ranks = 5;
 #if TRILINOS_MAJOR_MINOR_VERSION >= 160000
   auto field_data_manager = std::make_unique<stk::mesh::DefaultFieldDataManager>(we_know_there_are_five_ranks);
-  setup_hex_mesh(stk::topology::NODE_RANK, stk::mesh::BulkData::AUTO_AURA, std::move(field_data_manager));
+  setup_hex_mesh(stk::mesh::BulkData::AUTO_AURA, std::move(field_data_manager));
 #else
   stk::mesh::DefaultFieldDataManager* field_data_manager_ptr =
       new stk::mesh::DefaultFieldDataManager(we_know_there_are_five_ranks);
-  setup_hex_mesh(stk::topology::NODE_RANK, stk::mesh::BulkData::AUTO_AURA, field_data_manager_ptr);
+  setup_hex_mesh(stk::mesh::BulkData::AUTO_AURA, field_data_manager_ptr);
 #endif
 
   stk::mesh::Selector b1_not_b2 = block1_selector_ - block2_selector_;

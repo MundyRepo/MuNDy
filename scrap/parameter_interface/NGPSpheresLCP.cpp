@@ -54,6 +54,7 @@
 #include <stk_mesh/base/NgpReductions.hpp>
 #include <stk_mesh/base/Selector.hpp>
 #include <stk_mesh/base/Types.hpp>
+#include <stk_mesh/base/EntitySorterBase.hpp>  // for stk::mesh::EntitySorterBase
 
 // STK Search
 #include <stk_search/BoxIdent.hpp>
@@ -75,6 +76,7 @@
 
 // Mundy
 #include <mundy_math/Vector3.hpp>  // for Vector3
+#include <mundy_math/zmort.hpp>      // for mundy::zmorton_less(Vector3, Vector3)
 
 using DeviceExecutionSpace = Kokkos::DefaultExecutionSpace;
 using DeviceMemorySpace = typename DeviceExecutionSpace::memory_space;
@@ -447,7 +449,7 @@ struct DiffDotsReducer {
  public:
   // Required
   typedef DiffDotsReducer reducer;
-  typedef mundy::math::Vector3d value_type;
+  typedef mundy::Vector3d value_type;
   typedef Kokkos::View<value_type *, Space, Kokkos::MemoryUnmanaged> result_view_type;
 
  private:
@@ -492,13 +494,13 @@ void compute_diff_dots(const stk::ParallelMachine parallel,
                        const Kokkos::View<double *, DeviceMemorySpace> &signed_sep_dot_tmp, const double dt,
                        double &dot_xkdiff_xkdiff, double &dot_xkdiff_gkdiff, double &dot_gkdiff_gkdiff) {
   // Local variables to store dot products
-  mundy::math::Vector3d local_xx_xg_gg_diff = {0.0, 0.0, 0.0};
+  mundy::Vector3d local_xx_xg_gg_diff = {0.0, 0.0, 0.0};
 
   // Perform parallel reduction to compute the dot products
   using range_policy = Kokkos::RangePolicy<DeviceExecutionSpace>;
   Kokkos::parallel_reduce(
       "ComputeDiffDots", range_policy(0, lagrange_multipliers.extent(0)),
-      KOKKOS_LAMBDA(const int i, mundy::math::Vector3d &acc_xx_xg_gg_diff) {
+      KOKKOS_LAMBDA(const int i, mundy::Vector3d &acc_xx_xg_gg_diff) {
         const double lag_mult = lagrange_multipliers(i);
         const double lag_mult_tmp = lagrange_multipliers_tmp(i);
         const double sep_dot = signed_sep_dot(i);
@@ -1021,6 +1023,43 @@ class RcbSettings : public stk::balance::BalanceSettings {
     return false;
   }
 };  // RcbSettings
+//@}
+
+//! \name Sorting
+//@{
+
+class EntityLessZMortonCoords {
+  public:
+  EntityLessZMortonCoords(const stk::mesh::BulkData &bulk)
+      : mesh(bulk), coords_base(bulk.mesh_meta_data().coordinate_field()) {
+  }
+
+  bool operator()(stk::mesh::Entity a, stk::mesh::Entity b) {
+    if (mesh.entity_rank(a) != stk::topology::NODE_RANK) {
+      return stk::mesh::EntityLess(mesh)(a, b);
+    }
+    double *a_coords = static_cast<double *>(stk::mesh::field_data(*coords_base, a));
+    double *b_coords = static_cast<double *>(stk::mesh::field_data(*coords_base, b));
+    mundy::Vector3d a_vec(a_coords[0], a_coords[1], a_coords[2]);
+    mundy::Vector3d b_vec(b_coords[0], b_coords[1], b_coords[2]);
+    return mundy::zmorton_less(a_vec, b_vec);
+  }
+
+  private:
+  const stk::mesh::BulkData &mesh;
+  const stk::mesh::FieldBase *coords_base;
+};
+
+class ZMortonSorter : public stk::mesh::EntitySorterBase {
+  public:
+  ZMortonSorter() {
+  }
+  virtual ~ZMortonSorter() {
+  }
+  virtual void sort(stk::mesh::BulkData &bulk, stk::mesh::EntityVector &entity_vector) const {
+    std::sort(entity_vector.begin(), entity_vector.end(), EntityLessZMortonCoords(bulk));
+  }
+};
 //@}
 
 int main(int argc, char **argv) {

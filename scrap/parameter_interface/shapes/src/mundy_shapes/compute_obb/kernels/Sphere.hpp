@@ -36,7 +36,7 @@
 #include <stk_topology/topology.hpp>  // for stk::topology
 
 // Mundy libs
-#include <mundy_core/MakeStringArray.hpp>  // for mundy::core::make_string_array
+#include <mundy_utils/MakeStringArray.hpp>  // for mundy::make_string_array
 #include <mundy_mesh/BulkData.hpp>         // for mundy::mesh::BulkData
 #include <mundy_mesh/MetaData.hpp>         // for mundy::mesh::MetaData
 #include <mundy_meta/FieldReqs.hpp>        // for mundy::meta::FieldReqs
@@ -113,7 +113,7 @@ class Sphere : public mundy::meta::MetaKernel<> {
   static Teuchos::ParameterList get_valid_fixed_params() {
     static Teuchos::ParameterList default_parameter_list =
         Teuchos::ParameterList()
-            .set("valid_entity_part_names", mundy::core::make_string_array(default_part_name_),
+            .set("valid_entity_part_names", mundy::make_string_array(default_part_name_),
                  "Name of the parts associated with this kernel.")
             .set("element_obb_field_name", std::string(default_element_obb_field_name_),
                  "Element field within which the output object-aligned boundary boxes will be written.");

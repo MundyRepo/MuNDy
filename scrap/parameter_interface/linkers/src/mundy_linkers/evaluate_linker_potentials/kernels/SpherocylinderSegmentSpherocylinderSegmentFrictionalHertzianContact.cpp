@@ -33,10 +33,10 @@
 #include <stk_mesh/base/Field.hpp>    // for stk::mesh::Field, stl::mesh::field_data
 
 // Mundy libs
-#include <mundy_core/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
+#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
 #include <mundy_linkers/evaluate_linker_potentials/kernels/SpherocylinderSegmentSpherocylinderSegmentFrictionalHertzianContact.hpp>  // for mundy::linkers::...::kernels::SpherocylinderSegmentSpherocylinderSegmentFrictionalHertzianContact
-#include <mundy_math/Vector3.hpp>                  // for mundy::math::Vector3
-#include <mundy_math/distance/SegmentSegment.hpp>  // for mundy::math::distance::distance_sq_from_point_to_line_segment
+#include <mundy_math/Vector3.hpp>                  // for mundy::Vector3
+#include <mundy_math/distance/SegmentSegment.hpp>  // for mundy::distance::distance_sq_from_point_to_line_segment
 #include <mundy_mesh/BulkData.hpp>                 // for mundy::mesh::BulkData
 #include <mundy_mesh/FieldViews.hpp>     // for mundy::mesh::vector3_field_data, mundy::mesh::quaternion_field_data
 #include <mundy_mesh/ForEachEntity.hpp>  // for mundy::mesh::for_each_entity_run
@@ -355,8 +355,8 @@ void SpherocylinderSegmentSpherocylinderSegmentFrictionalHertzianContact::set_mu
 namespace {
 
 template <typename Accessor, typename OwnershipType>
-mundy::math::Vector3d get_contact_point_velocity(
-    const mundy::math::AVector3<double, Accessor, OwnershipType> &contact_point, const stk::mesh::Entity *nodes,
+mundy::Vector3d get_contact_point_velocity(
+    const mundy::AVector3<double, Accessor, OwnershipType> &contact_point, const stk::mesh::Entity *nodes,
     const stk::mesh::Field<double> &node_velocity_field, const stk::mesh::Field<double> &node_coords_field) {
   const auto pos0 = mundy::mesh::vector3_field_data(node_coords_field, nodes[0]);
   const auto pos1 = mundy::mesh::vector3_field_data(node_coords_field, nodes[1]);
@@ -369,13 +369,13 @@ mundy::math::Vector3d get_contact_point_velocity(
   const auto rel_vel = vel1 - vel0;
   const auto left_to_cp = contact_point - pos0;
   const auto left_to_right = pos1 - pos0;
-  const double length = mundy::math::norm(left_to_right);
+  const double length = mundy::norm(left_to_right);
   const double inv_length = 1.0 / length;
   const auto tangent = left_to_right * inv_length;
 
-  const auto term1 = mundy::math::dot(left_to_cp, rel_vel) * tangent * inv_length;
+  const auto term1 = mundy::dot(left_to_cp, rel_vel) * tangent * inv_length;
   const auto term2 =
-      mundy::math::dot(left_to_cp, tangent) * (rel_vel - mundy::math::dot(tangent, rel_vel) * tangent) * inv_length;
+      mundy::dot(left_to_cp, tangent) * (rel_vel - mundy::dot(tangent, rel_vel) * tangent) * inv_length;
   return vel0 + term1 + term2;
 }
 
@@ -455,9 +455,9 @@ void SpherocylinderSegmentSpherocylinderSegmentFrictionalHertzianContact::execut
           // Determine the velocity of the contact points
           const auto left_contact_normal =
               mundy::mesh::vector3_field_data(linker_contact_normal_field, sy_seg_sy_seg_linker);
-          const auto left_cp = mundy::math::get_vector3_view<double>(
+          const auto left_cp = mundy::get_vector3_view<double>(
               stk::mesh::field_data(linker_contact_points_field, sy_seg_sy_seg_linker));
-          const auto right_cp = mundy::math::get_vector3_view<double>(
+          const auto right_cp = mundy::get_vector3_view<double>(
               stk::mesh::field_data(linker_contact_points_field, sy_seg_sy_seg_linker) + 3);
           const auto left_cp_vel =
               get_contact_point_velocity(left_cp, left_sy_seg_nodes, node_velocity_field_old, node_coords_field);
@@ -466,14 +466,14 @@ void SpherocylinderSegmentSpherocylinderSegmentFrictionalHertzianContact::execut
 
           // Compute the relative normal and tangential velocities
           const auto rel_cp_vel = right_cp_vel - left_cp_vel;
-          const auto rel_vel_normal = mundy::math::dot(rel_cp_vel, left_contact_normal) * left_contact_normal;
+          const auto rel_vel_normal = mundy::dot(rel_cp_vel, left_contact_normal) * left_contact_normal;
           const auto rel_vel_tang = rel_cp_vel - rel_vel_normal;
 
           // Compute the tangential displacement (history variable)
           // First add on the current tangential displacement, then project onto the tangent plane.
           tang_disp += rel_vel_tang * time_step_size;
-          tang_disp -= mundy::math::dot(tang_disp, left_contact_normal) * left_contact_normal;
-          const double tang_disp_mag = mundy::math::norm(tang_disp);
+          tang_disp -= mundy::dot(tang_disp, left_contact_normal) * left_contact_normal;
+          const double tang_disp_mag = mundy::norm(tang_disp);
 
           // Compute the contact force
           // Note, for LAMMPS' delta is the negative of our signed separation distance.
@@ -496,8 +496,8 @@ void SpherocylinderSegmentSpherocylinderSegmentFrictionalHertzianContact::execut
 
           // Rescale frictional displacements and forces if needed to satisfy the Coulomb friction law
           // Ft = min(friction_coeff*Fn, Ft)
-          const double normal_force_mag = mundy::math::norm(normal_force);
-          const double tang_force_mag = mundy::math::norm(tang_force);
+          const double normal_force_mag = mundy::norm(normal_force);
+          const double tang_force_mag = mundy::norm(tang_force);
           const double scaled_normal_force_mag = friction_coeff * normal_force_mag;
           if (tang_force_mag > scaled_normal_force_mag) {
             if (tang_disp_mag != 0.0) {  // TODO(palmerb4): Exact comparison to 0.0 is bad. Use a tol.

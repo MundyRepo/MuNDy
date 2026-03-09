@@ -19,7 +19,7 @@
 
 
 // Mundy libs 
-#include <mundy_core/throw_assert.hpp>   // for MUNDY_THROW_ASSERT
+#include <mundy_utils/throw_assert.hpp>   // for MUNDY_THROW_ASSERT
 
 void verify_global_entity_count(size_t expected_total_num_nodes, size_t expected_total_num_edges,
                                 size_t expected_total_num_elements, const stk::mesh::BulkData &bulk_data) {

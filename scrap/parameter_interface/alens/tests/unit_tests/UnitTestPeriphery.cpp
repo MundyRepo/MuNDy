@@ -35,6 +35,7 @@
 // Mundy
 #include <mundy_alens/periphery/Periphery.hpp>  // for gen_sphere_quadrature
 #include <mundy_math/Vector3.hpp>               // for Vector3
+#include <mundy_utils/rng.hpp>              // for mundy::make_philox
 
 namespace mundy {
 
@@ -362,7 +363,7 @@ struct ApplyResistanceWrapper {
   ApplyResistanceWrapper(const double &sphere_radius, const size_t num_bulk_points)
       : num_bulk_points_(num_bulk_points), bulk_points_("bulk_points", 3 * num_bulk_points) {
     // Generate random bulk points
-    openrand::Philox rng(0, 0);
+    openrand::Philox rng = make_philox(0, 0);
     for (size_t i = 0; i < num_bulk_points; ++i) {
       const double theta = rng.uniform(0.0, 2.0 * M_PI);
       const double phi = rng.uniform(0.0, M_PI);
@@ -579,7 +580,7 @@ TEST(PeripheryTest, KokkosInvertMatrix) {
 
   size_t seed = 1234;
   size_t counter = 0;
-  openrand::Philox rng(seed, counter);
+  openrand::Philox rng = make_philox(seed, counter);
   for (int i = 0; i < matrix_size; ++i) {
     for (int j = 0; j < matrix_size; ++j) {
       matrix_scratch(i, j) = rng.randn<double>();
@@ -617,7 +618,7 @@ TEST(PeripheryTest, ReadWriteKokkosMatrixToFromFile) {
 
   size_t seed = 1234;
   size_t counter = 0;
-  openrand::Philox rng(seed, counter);
+  openrand::Philox rng = make_philox(seed, counter);
   for (int i = 0; i < matrix_size; ++i) {
     for (int j = 0; j < matrix_size; ++j) {
       matrix(i, j) = rng.randn<double>();
@@ -649,7 +650,7 @@ TEST(PeripheryTest, ReadWriteKokkosVectorToFromFile) {
 
   size_t seed = 1234;
   size_t counter = 0;
-  openrand::Philox rng(seed, counter);
+  openrand::Philox rng = make_philox(seed, counter);
   for (int i = 0; i < vector_size; ++i) {
     vector(i) = rng.randn<double>();
   }
@@ -1160,7 +1161,7 @@ TEST(PeripheryTest, SKFIERigidBodyMotion) {
   const double sphere_radius = 1.0;
   const double viscosity = 1.0;
   const size_t num_bulk_points = 8;
-  const mundy::math::Vector3d omega(0.0, 0.0, 1.0);
+  const mundy::Vector3d omega(0.0, 0.0, 1.0);
   const double cube_side_half_length = sphere_radius / 3;
 
   // Setup the bulk points at the corner of the cube with side length cude_side_length
@@ -1199,7 +1200,7 @@ TEST(PeripheryTest, SKFIERigidBodyMotion) {
 
   // size_t seed = 1234;
   // size_t counter = 0;
-  // openrand::Philox rng(seed, counter);
+  // openrand::Philox rng = make_philox(seed, counter);
   // for (size_t i = 0; i < num_bulk_points; ++i) {
   //   const double theta = rng.uniform(0.0, 2.0 * M_PI);
   //   const double phi = rng.uniform(0.0, M_PI);
@@ -1213,8 +1214,8 @@ TEST(PeripheryTest, SKFIERigidBodyMotion) {
     const double x = bulk_points(3 * i);
     const double y = bulk_points(3 * i + 1);
     const double z = bulk_points(3 * i + 2);
-    const mundy::math::Vector3d p(x, y, z);
-    const auto v = mundy::math::cross(omega, p);
+    const mundy::Vector3d p(x, y, z);
+    const auto v = mundy::cross(omega, p);
   }
 
   // Setup the test
@@ -1230,8 +1231,8 @@ TEST(PeripheryTest, SKFIERigidBodyMotion) {
           const double x = points(3 * i);
           const double y = points(3 * i + 1);
           const double z = points(3 * i + 2);
-          const mundy::math::Vector3d p(x, y, z);
-          const auto v = mundy::math::cross(omega, p);
+          const mundy::Vector3d p(x, y, z);
+          const auto v = mundy::cross(omega, p);
           input_field(3 * i) = v[0];
           input_field(3 * i + 1) = v[1];
           input_field(3 * i + 2) = v[2];
@@ -1249,8 +1250,8 @@ TEST(PeripheryTest, SKFIERigidBodyMotion) {
           const double x = bulk_points(3 * i);
           const double y = bulk_points(3 * i + 1);
           const double z = bulk_points(3 * i + 2);
-          const mundy::math::Vector3d b(x, y, z);
-          const auto v = mundy::math::cross(omega, b);
+          const mundy::Vector3d b(x, y, z);
+          const auto v = mundy::cross(omega, b);
           expected_results(3 * i) = v[0];
           expected_results(3 * i + 1) = v[1];
           expected_results(3 * i + 2) = v[2];
@@ -1292,7 +1293,7 @@ TEST(PeripheryTest, SKFIERigidBodyMotionFromFile) {
   const double sphere_radius = 28.0;
   const double viscosity = 1.0;
   const size_t num_bulk_points = 8;
-  const mundy::math::Vector3d omega(1.0, 1.0, 1.0);
+  const mundy::Vector3d omega(1.0, 1.0, 1.0);
   const double cube_side_half_length = sphere_radius / 3;
 
   // Setup the bulk points at the corner of the cube with side length cude_side_length
@@ -1335,8 +1336,8 @@ TEST(PeripheryTest, SKFIERigidBodyMotionFromFile) {
     const double x = bulk_points(3 * i);
     const double y = bulk_points(3 * i + 1);
     const double z = bulk_points(3 * i + 2);
-    const mundy::math::Vector3d b(x, y, z);
-    const auto v = mundy::math::cross(omega, b);
+    const mundy::Vector3d b(x, y, z);
+    const auto v = mundy::cross(omega, b);
     expected_bulk_velocity(3 * i) = v[0];
     expected_bulk_velocity(3 * i + 1) = v[1];
     expected_bulk_velocity(3 * i + 2) = v[2];
@@ -1378,8 +1379,8 @@ TEST(PeripheryTest, SKFIERigidBodyMotionFromFile) {
       const double x = points(3 * j);
       const double y = points(3 * j + 1);
       const double z = points(3 * j + 2);
-      const mundy::math::Vector3d p(x, y, z);
-      const auto v = mundy::math::cross(omega, p);
+      const mundy::Vector3d p(x, y, z);
+      const auto v = mundy::cross(omega, p);
       surface_slip_velocity(3 * j) = v[0];
       surface_slip_velocity(3 * j + 1) = v[1];
       surface_slip_velocity(3 * j + 2) = v[2];
@@ -1423,7 +1424,7 @@ TEST(PeripheryTest, SKFIESelfConvFromFile) {
   Kokkos::View<double *, Kokkos::LayoutLeft, Kokkos::HostSpace> bulk_forces("bulk_forces", 3 * num_bulk_points);
   size_t seed = 1234;
   size_t counter = 0;
-  openrand::Philox rng(seed, counter);
+  openrand::Philox rng = make_philox(seed, counter);
   for (size_t i = 0; i < num_bulk_points; ++i) {
     const double theta = rng.uniform(0.0, 2.0 * M_PI);
     const double phi = rng.uniform(0.0, M_PI);
@@ -1569,8 +1570,8 @@ auto run_periphery_rpyc(const double &viscosity, const int num_spheres,
       Kokkos::DefaultHostExecutionSpace(), viscosity, num_surface_nodes, num_spheres, surface_positions,
       sphere_positions, surface_normals, surface_weights, surface_forces, sphere_velocities);
 
-  mundy::math::Vector3d final_sphere_velocity(sphere_velocities(0), sphere_velocities(1), sphere_velocities(2));
-  mundy::math::Vector3d final_sphere_force(sphere_forces(0), sphere_forces(1), sphere_forces(2));
+  mundy::Vector3d final_sphere_velocity(sphere_velocities(0), sphere_velocities(1), sphere_velocities(2));
+  mundy::Vector3d final_sphere_force(sphere_forces(0), sphere_forces(1), sphere_forces(2));
   return std::make_tuple(final_sphere_velocity, final_sphere_force);
 }
 
@@ -1593,12 +1594,12 @@ TEST(PeripheryRPYC, SphereQuadPeripheryRPYC) {
 
   // Create a set of tests where we move the sphere towards the periphery in various directions
   std::vector<std::string> test_types = {"SphereQuadXFx", "SphereQuadYFy", "SphereQuadZFz", "Random"};
-  std::vector<mundy::math::Vector3d> director = {
-      mundy::math::Vector3d(1.0, 0.0, 0.0), mundy::math::Vector3d(0.0, 1.0, 0.0), mundy::math::Vector3d(0.0, 0.0, 1.0),
-      mundy::math::Vector3d(1.0, 1.0, 1.0)};
-  std::vector<mundy::math::Vector3d> force_director = {
-      mundy::math::Vector3d(1.0, 0.0, 0.0), mundy::math::Vector3d(0.0, 1.0, 0.0), mundy::math::Vector3d(0.0, 0.0, 1.0),
-      mundy::math::Vector3d(1.0, 1.0, 1.0)};
+  std::vector<mundy::Vector3d> director = {
+      mundy::Vector3d(1.0, 0.0, 0.0), mundy::Vector3d(0.0, 1.0, 0.0), mundy::Vector3d(0.0, 0.0, 1.0),
+      mundy::Vector3d(1.0, 1.0, 1.0)};
+  std::vector<mundy::Vector3d> force_director = {
+      mundy::Vector3d(1.0, 0.0, 0.0), mundy::Vector3d(0.0, 1.0, 0.0), mundy::Vector3d(0.0, 0.0, 1.0),
+      mundy::Vector3d(1.0, 1.0, 1.0)};
 
   mfile << "TestType, Order, NumSurfacePoints, Viscosity, SphereRadius, PeripheryRadius, X, Y, Z, Fx, Fy, Fz, Vx, "
            "Vy, Vz\n";
@@ -1629,7 +1630,7 @@ TEST(PeripheryRPYC, SphereQuadPeripheryRPYC) {
       // If the test is the random one, pick a quadrature point at random to look at
       int random_index = 0;
       if (itest == 3) {
-        openrand::Philox rng(0, 0);
+        openrand::Philox rng = make_philox(0, 0);
         random_index = rng.uniform(0, static_cast<int>(num_surface_nodes) - 1);
       }
       for (double r = periphery_radius - 5.0; r < periphery_radius; r += dr) {
@@ -1709,12 +1710,12 @@ TEST(PeripheryRPYC, ExternalQuadPeripheryRPYC) {
       "./sphere_triangle_weights_1280.dat", "./sphere_triangle_weights_3840.dat", "./sphere_triangle_weights_5120.dat"};
   std::vector<std::string> external_quadrature_normals_filename = {
       "./sphere_triangle_normals_1280.dat", "./sphere_triangle_normals_3840.dat", "./sphere_triangle_normals_5120.dat"};
-  std::vector<mundy::math::Vector3d> director = {
-      mundy::math::Vector3d(1.0, 0.0, 0.0), mundy::math::Vector3d(0.0, 1.0, 0.0), mundy::math::Vector3d(0.0, 0.0, 1.0),
-      mundy::math::Vector3d(1.0, 1.0, 1.0)};
-  std::vector<mundy::math::Vector3d> force_director = {
-      mundy::math::Vector3d(1.0, 0.0, 0.0), mundy::math::Vector3d(0.0, 1.0, 0.0), mundy::math::Vector3d(0.0, 0.0, 1.0),
-      mundy::math::Vector3d(1.0, 1.0, 1.0)};
+  std::vector<mundy::Vector3d> director = {
+      mundy::Vector3d(1.0, 0.0, 0.0), mundy::Vector3d(0.0, 1.0, 0.0), mundy::Vector3d(0.0, 0.0, 1.0),
+      mundy::Vector3d(1.0, 1.0, 1.0)};
+  std::vector<mundy::Vector3d> force_director = {
+      mundy::Vector3d(1.0, 0.0, 0.0), mundy::Vector3d(0.0, 1.0, 0.0), mundy::Vector3d(0.0, 0.0, 1.0),
+      mundy::Vector3d(1.0, 1.0, 1.0)};
 
   mfile << "TestType, QuadFile, NumSurfacePoints, Viscosity, SphereRadius, PeripheryRadius, X, Y, Z, Fx, Fy, Fz, Vx, "
            "Vy, Vz\n";
@@ -1734,7 +1735,7 @@ TEST(PeripheryRPYC, ExternalQuadPeripheryRPYC) {
       // If the test is the random one, pick a quadrature point at random to look at
       int random_index = 0;
       if (itest == 3) {
-        openrand::Philox rng(0, 0);
+        openrand::Philox rng = make_philox(0, 0);
         random_index = rng.uniform(0, static_cast<int>(external_num_quadrature_points[itype]) - 1);
       }
       for (double r = periphery_radius - 5.0; r < periphery_radius; r += dr) {

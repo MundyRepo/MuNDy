@@ -34,9 +34,9 @@
 #include <stk_util/ngp/NgpSpaces.hpp>
 
 // Mundy
-#include <mundy_core/StringLiteral.hpp>  // for mundy::core::StringLiteral, mundy::core::make_string_literal
-#include <mundy_core/throw_assert.hpp>
 #include <mundy_mesh/impl/PartitionKey.hpp>  // for mundy::mesh::impl::PartitionKey, mundy::mesh::impl::get_partition_key
+#include <mundy_utils/StringLiteral.hpp>     // for mundy::StringLiteral, mundy::make_string_literal
+#include <mundy_utils/throw_assert.hpp>
 
 namespace mundy {
 
@@ -455,7 +455,7 @@ class TicketIssuer {
   //! \name Helper functions
   //@{
 
-  template <core::StringLiteral name>
+  template <StringLiteral name>
   KOKKOS_INLINE_FUNCTION void assert_active_space() const {
     KOKKOS_IF_ON_HOST(bool host_is_active = active_space_host_view_(); MUNDY_THROW_ASSERT(
                           host_is_active, std::runtime_error, name + " called from host when device is active.");)
@@ -463,7 +463,7 @@ class TicketIssuer {
                             device_is_active, std::runtime_error, name + " called from device when host is active.");)
   }
 
-  template <core::StringLiteral name>
+  template <StringLiteral name>
   KOKKOS_INLINE_FUNCTION void assert_count_not_finalized() const {
     KOKKOS_IF_ON_HOST(MUNDY_THROW_ASSERT(!count_finalized_host_view_(), std::runtime_error,
                                          name + " called after finalize_count() on host.");)
@@ -571,7 +571,7 @@ class NgpRequestEntitiesT {
 
   /// \brief Record an entity creation request
   KOKKOS_INLINE_FUNCTION FutureEntity request(our_size_t ticket, int owning_proc) {
-    constexpr auto name = core::make_string_literal("NgpRequestEntitiesT::request");
+    constexpr auto name = make_string_literal("NgpRequestEntitiesT::request");
     assert_active_space<name>();
     assert_ticket_out_of_range<name>(ticket);
 
@@ -584,7 +584,7 @@ class NgpRequestEntitiesT {
   /// \brief Record an entity creation request with a specified entity ID.
   KOKKOS_INLINE_FUNCTION FutureEntity request(our_size_t ticket,  //
                                               int owning_proc, stk::mesh::EntityId entity_id) {
-    constexpr auto name = core::make_string_literal("NgpRequestEntitiesT::request");
+    constexpr auto name = make_string_literal("NgpRequestEntitiesT::request");
     assert_active_space<name>();
     assert_ticket_out_of_range<name>(ticket);
 
@@ -603,7 +603,7 @@ class NgpRequestEntitiesT {
   /// \brief Fetch the requested entity using the given ticket.
   /// After process_requests, this can be called on either host or device.
   KOKKOS_INLINE_FUNCTION stk::mesh::Entity get_entity(our_size_t ticket) const {
-    constexpr auto name = core::make_string_literal("NgpRequestEntitiesT::get_requested_entity");
+    constexpr auto name = make_string_literal("NgpRequestEntitiesT::get_requested_entity");
     assert_ticket_out_of_range<name>(ticket);
 
     KOKKOS_IF_ON_HOST(return created_entities_.view_host()(ticket);)
@@ -635,7 +635,7 @@ class NgpRequestEntitiesT {
   //! \name Helper functions
   //@{
 
-  template <core::StringLiteral name>
+  template <StringLiteral name>
   KOKKOS_INLINE_FUNCTION void assert_active_space() const {
     KOKKOS_IF_ON_HOST(bool host_is_active = active_space_host_view_(); MUNDY_THROW_ASSERT(
                           host_is_active, std::runtime_error, name + " called from host when device is active.");)
@@ -643,7 +643,7 @@ class NgpRequestEntitiesT {
                             device_is_active, std::runtime_error, name + " called from device when host is active.");)
   }
 
-  template <core::StringLiteral name>
+  template <StringLiteral name>
   KOKKOS_INLINE_FUNCTION void assert_ticket_out_of_range(our_size_t ticket) const {
     MUNDY_THROW_ASSERT(ticket < ticket_issuer_.count(), std::out_of_range, name + " called with invalid ticket.");
   }
@@ -669,10 +669,10 @@ class NgpRequestEntitiesT {
 
   TicketIssuer<NgpMemSpace, our_size_t> ticket_issuer_;
 
-  using request_view_t = core::NgpViewT<EntityRequest*, NgpMemSpace>;
+  using request_view_t = NgpViewT<EntityRequest*, NgpMemSpace>;
   request_view_t requests_;
 
-  using entity_view_t = core::NgpViewT<stk::mesh::Entity*, NgpMemSpace>;
+  using entity_view_t = NgpViewT<stk::mesh::Entity*, NgpMemSpace>;
   entity_view_t created_entities_;
   //@}
 };  // NgpRequestEntitiesT
@@ -765,10 +765,10 @@ class NgpRequestConnectionT {
 
   /// \brief Record a connection between two entities (from_entity -> to_entity).
   /// Both entities may be either real entities or future entities.
-  KOKKOS_INLINE_FUNCTION FutureConnection request(
-      our_size_t ticket, core::variant<stk::mesh::Entity, FutureEntity> from_entity,
-      core::variant<stk::mesh::Entity, FutureEntity> to_entity) {
-    constexpr auto name = core::make_string_literal("NgpRequestConnectionT::request");
+  KOKKOS_INLINE_FUNCTION FutureConnection request(our_size_t ticket,
+                                                  variant<stk::mesh::Entity, FutureEntity> from_entity,
+                                                  variant<stk::mesh::Entity, FutureEntity> to_entity) {
+    constexpr auto name = make_string_literal("NgpRequestConnectionT::request");
     assert_active_space<name>();
     assert_ticket_out_of_range<name>(ticket);
 
@@ -805,7 +805,7 @@ class NgpRequestConnectionT {
   //! \name Helper functions
   //@{
 
-  template <core::StringLiteral name>
+  template <StringLiteral name>
   KOKKOS_INLINE_FUNCTION void assert_active_space() const {
     KOKKOS_IF_ON_HOST(bool host_is_active = active_space_host_view_(); MUNDY_THROW_ASSERT(
                           host_is_active, std::runtime_error, name + " called from host when device is active.");)
@@ -813,7 +813,7 @@ class NgpRequestConnectionT {
                             device_is_active, std::runtime_error, name + " called from device when host is active.");)
   }
 
-  template <core::StringLiteral name>
+  template <StringLiteral name>
   KOKKOS_INLINE_FUNCTION void assert_ticket_out_of_range(our_size_t ticket) const {
     MUNDY_THROW_ASSERT(ticket < ticket_issuer_.count(), std::out_of_range, name + " called with invalid ticket.");
   }
@@ -829,8 +829,8 @@ class NgpRequestConnectionT {
   /// Requests must specify a pair of entities to connect. These may either be a real entity or a future entity (by
   /// ticket and request helper).
   struct ConnectionRequest {
-    core::variant<stk::mesh::Entity, FutureEntity> from_entity;
-    core::variant<stk::mesh::Entity, FutureEntity> to_entity;
+    variant<stk::mesh::Entity, FutureEntity> from_entity;
+    variant<stk::mesh::Entity, FutureEntity> to_entity;
   };
 
   using bool_view_t = Kokkos::View<bool, memory_space>;
@@ -839,7 +839,7 @@ class NgpRequestConnectionT {
 
   TicketIssuer<NgpMemSpace, our_size_t> ticket_issuer_;
 
-  using request_view_t = core::NgpViewT<ConnectionRequest*, NgpMemSpace>;
+  using request_view_t = NgpViewT<ConnectionRequest*, NgpMemSpace>;
   request_view_t requests_;
   //@}
 };  // NgpRequestConnectionT
@@ -932,7 +932,7 @@ class NgpDestroyEntityT {
 
   /// \brief Record an entity destruction request
   KOKKOS_INLINE_FUNCTION FutureDestroyEntity destroy(our_size_t ticket, stk::mesh::Entity entity) {
-    constexpr auto name = core::make_spring_literal("NgpDestroyEntityT::destroy");
+    constexpr auto name = make_spring_literal("NgpDestroyEntityT::destroy");
     assert_active_space<name>();
     assert_ticket_out_of_range<name>(ticket);
 
@@ -967,7 +967,7 @@ class NgpDestroyEntityT {
   //! \name Helper functions
   //@{
 
-  template <core::StringLiteral name>
+  template <StringLiteral name>
   KOKKOS_INLINE_FUNCTION void assert_active_space() const {
     KOKKOS_IF_ON_HOST(bool host_is_active = active_space_host_view_(); MUNDY_THROW_ASSERT(
                           host_is_active, std::runtime_error, name + " called from host when device is active.");)
@@ -975,7 +975,7 @@ class NgpDestroyEntityT {
                             device_is_active, std::runtime_error, name + " called from device when host is active.");)
   }
 
-  template <core::StringLiteral name>
+  template <StringLiteral name>
   KOKKOS_INLINE_FUNCTION void assert_ticket_out_of_range(our_size_t ticket) const {
     MUNDY_THROW_ASSERT(ticket < ticket_issuer_.count(), std::out_of_range, name + " called with invalid ticket.");
   }
@@ -993,14 +993,13 @@ class NgpDestroyEntityT {
 
   TicketIssuer<NgpMemSpace, our_size_t> ticket_issuer_;
 
-  using request_view_t = core::NgpViewT<stk::mesh::Entity*, NgpMemSpace>;
+  using request_view_t = NgpViewT<stk::mesh::Entity*, NgpMemSpace>;
   request_view_t requests_;
 
-  using entity_view_t = core::NgpViewT<stk::mesh::Entity*, NgpMemSpace>;
+  using entity_view_t = NgpViewT<stk::mesh::Entity*, NgpMemSpace>;
   entity_view_t created_entities_;
   //@}
 };  // NgpDestroyEntityT
-
 
 struct FutureDestroyConnection {
   our_size_t ticket;
@@ -1090,10 +1089,10 @@ class NgpDestroyConnectionT {
 
   /// \brief Record a connection between two entities (from_entity -> to_entity).
   /// Both entities may be either real entities or future entities.
-  KOKKOS_INLINE_FUNCTION FutureDestroyConnection request(
-      our_size_t ticket, core::variant<stk::mesh::Entity, FutureEntity> from_entity,
-      core::variant<stk::mesh::Entity, FutureEntity> to_entity) {
-    constexpr auto name = core::make_string_literal("NgpDestroyConnectionT::request");
+  KOKKOS_INLINE_FUNCTION FutureDestroyConnection request(our_size_t ticket,
+                                                         variant<stk::mesh::Entity, FutureEntity> from_entity,
+                                                         variant<stk::mesh::Entity, FutureEntity> to_entity) {
+    constexpr auto name = make_string_literal("NgpDestroyConnectionT::request");
     assert_active_space<name>();
     assert_ticket_out_of_range<name>(ticket);
 
@@ -1130,7 +1129,7 @@ class NgpDestroyConnectionT {
   //! \name Helper functions
   //@{
 
-  template <core::StringLiteral name>
+  template <StringLiteral name>
   KOKKOS_INLINE_FUNCTION void assert_active_space() const {
     KOKKOS_IF_ON_HOST(bool host_is_active = active_space_host_view_(); MUNDY_THROW_ASSERT(
                           host_is_active, std::runtime_error, name + " called from host when device is active.");)
@@ -1138,7 +1137,7 @@ class NgpDestroyConnectionT {
                             device_is_active, std::runtime_error, name + " called from device when host is active.");)
   }
 
-  template <core::StringLiteral name>
+  template <StringLiteral name>
   KOKKOS_INLINE_FUNCTION void assert_ticket_out_of_range(our_size_t ticket) const {
     MUNDY_THROW_ASSERT(ticket < ticket_issuer_.count(), std::out_of_range, name + " called with invalid ticket.");
   }
@@ -1154,8 +1153,8 @@ class NgpDestroyConnectionT {
   /// Requests must specify a pair of entities to connect. These may either be a real entity or a future entity (by
   /// ticket and request helper).
   struct DestroyConnectionRequest {
-    core::variant<stk::mesh::Entity, FutureEntity> from_entity;
-    core::variant<stk::mesh::Entity, FutureEntity> to_entity;
+    variant<stk::mesh::Entity, FutureEntity> from_entity;
+    variant<stk::mesh::Entity, FutureEntity> to_entity;
   };
 
   using bool_view_t = Kokkos::View<bool, memory_space>;
@@ -1164,11 +1163,10 @@ class NgpDestroyConnectionT {
 
   TicketIssuer<NgpMemSpace, our_size_t> ticket_issuer_;
 
-  using request_view_t = core::NgpViewT<DestroyConnectionRequest*, NgpMemSpace>;
+  using request_view_t = NgpViewT<DestroyConnectionRequest*, NgpMemSpace>;
   request_view_t requests_;
   //@}
 };  // NgpDestroyConnectionT
-
 
 /// \brief Manages all modification requests in a given NGP memory space.
 template <typename NgpMemSpace, typename SizeT = size_t>

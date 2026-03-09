@@ -85,7 +85,7 @@ class NgpLinkMetaDataT {
   NgpLinkMetaDataT() = default;
 
   /// \brief Canonical constructor.
-  NgpLinkMetaDataT(LinkMetaData &link_meta_data)
+  NgpLinkMetaDataT(LinkMetaData& link_meta_data)
       : link_meta_data_ptr_(&link_meta_data),
         link_rank_(link_meta_data.link_rank()),
         ngp_linked_entities_field_(stk::mesh::get_updated_ngp_field<linked_entities_field_t::value_type>(
@@ -114,10 +114,10 @@ class NgpLinkMetaDataT {
   virtual ~NgpLinkMetaDataT() = default;
 
   /// \brief Default copy/move constructors/operators.
-  NgpLinkMetaDataT(const NgpLinkMetaDataT &) = default;
-  NgpLinkMetaDataT(NgpLinkMetaDataT &&) = default;
-  NgpLinkMetaDataT &operator=(const NgpLinkMetaDataT &) = default;
-  NgpLinkMetaDataT &operator=(NgpLinkMetaDataT &&) = default;
+  NgpLinkMetaDataT(const NgpLinkMetaDataT&) = default;
+  NgpLinkMetaDataT(NgpLinkMetaDataT&&) = default;
+  NgpLinkMetaDataT& operator=(const NgpLinkMetaDataT&) = default;
+  NgpLinkMetaDataT& operator=(NgpLinkMetaDataT&&) = default;
   //@}
 
   //! \name Getters
@@ -129,17 +129,17 @@ class NgpLinkMetaDataT {
   }
 
   /// \brief Get the link meta data object (if valid).
-  const LinkMetaData &link_meta_data() const {
+  const LinkMetaData& link_meta_data() const {
     MUNDY_THROW_ASSERT(is_valid(), std::runtime_error, "Attempted to access an invalid link meta data.");
     return *link_meta_data_ptr_;
   }
-  LinkMetaData &link_meta_data() {
+  LinkMetaData& link_meta_data() {
     MUNDY_THROW_ASSERT(is_valid(), std::runtime_error, "Attempted to access an invalid link meta data.");
     return *link_meta_data_ptr_;
   }
 
   /// \brief Get the name of this link data.
-  const std::string &name() const {
+  const std::string& name() const {
     return link_meta_data().name();
   }
 
@@ -161,7 +161,7 @@ class NgpLinkMetaDataT {
   /// linked entities when doing things like post-processing the output EXO file, but it should be seen as read-only.
   /// Use declare/destroy_relation to modify it since they perform additional behind-the-scenes bookkeeping.
   KOKKOS_INLINE_FUNCTION
-  const ngp_linked_entity_ids_field_t &ngp_linked_entity_ids_field() const noexcept {
+  const ngp_linked_entity_ids_field_t& ngp_linked_entity_ids_field() const noexcept {
     return ngp_linked_entity_ids_field_;
   }
 
@@ -169,79 +169,79 @@ class NgpLinkMetaDataT {
   ///
   /// Same comment as linked_entity_ids_field. Treat this field as read-only.
   KOKKOS_INLINE_FUNCTION
-  const ngp_linked_entity_ranks_field_t &ngp_linked_entity_ranks_field() const noexcept {
+  const ngp_linked_entity_ranks_field_t& ngp_linked_entity_ranks_field() const noexcept {
     return ngp_linked_entity_ranks_field_;
   }
 
   /// \brief Fetch the linked entity ids field.
   KOKKOS_INLINE_FUNCTION
-  ngp_linked_entity_ids_field_t &ngp_linked_entity_ids_field() noexcept {
+  ngp_linked_entity_ids_field_t& ngp_linked_entity_ids_field() noexcept {
     return ngp_linked_entity_ids_field_;
   }
 
   /// \brief Fetch the linked entity ranks field.
   KOKKOS_INLINE_FUNCTION
-  ngp_linked_entity_ranks_field_t &ngp_linked_entity_ranks_field() noexcept {
+  ngp_linked_entity_ranks_field_t& ngp_linked_entity_ranks_field() noexcept {
     return ngp_linked_entity_ranks_field_;
   }
 
   /// \brief Fetch the linked entities field
   KOKKOS_INLINE_FUNCTION
-  const ngp_linked_entities_field_t &ngp_linked_entities_field() const noexcept {
+  const ngp_linked_entities_field_t& ngp_linked_entities_field() const noexcept {
     return ngp_linked_entities_field_;
   }
   KOKKOS_INLINE_FUNCTION
-  ngp_linked_entities_field_t &ngp_linked_entities_field() {
+  ngp_linked_entities_field_t& ngp_linked_entities_field() {
     return ngp_linked_entities_field_;
   }
 
   /// \brief Fetch the linked entities field (as last seen by the CSR).
   KOKKOS_INLINE_FUNCTION
-  const ngp_linked_entities_field_t &ngp_linked_entities_crs_field() const noexcept {
+  const ngp_linked_entities_field_t& ngp_linked_entities_crs_field() const noexcept {
     return ngp_linked_entities_crs_field_;
   }
   KOKKOS_INLINE_FUNCTION
-  ngp_linked_entities_field_t &ngp_linked_entities_crs_field() noexcept {
+  ngp_linked_entities_field_t& ngp_linked_entities_crs_field() noexcept {
     return ngp_linked_entities_crs_field_;
   }
 
   /// \brief Fetch the linked entity bucket id field.
   KOKKOS_INLINE_FUNCTION
-  const ngp_linked_entity_bucket_ids_field_t &ngp_linked_entity_bucket_ids_field() const noexcept {
+  const ngp_linked_entity_bucket_ids_field_t& ngp_linked_entity_bucket_ids_field() const noexcept {
     return ngp_linked_entity_bucket_ids_field_;
   }
   KOKKOS_INLINE_FUNCTION
-  ngp_linked_entity_bucket_ids_field_t &ngp_linked_entity_bucket_ids_field() noexcept {
+  ngp_linked_entity_bucket_ids_field_t& ngp_linked_entity_bucket_ids_field() noexcept {
     return ngp_linked_entity_bucket_ids_field_;
   }
 
   /// \brief Fetch the linked entity bucket ord field.
   KOKKOS_INLINE_FUNCTION
-  const ngp_linked_entity_bucket_ords_field_t &ngp_linked_entity_bucket_ords_field() const noexcept {
+  const ngp_linked_entity_bucket_ords_field_t& ngp_linked_entity_bucket_ords_field() const noexcept {
     return ngp_linked_entity_bucket_ords_field_;
   }
   KOKKOS_INLINE_FUNCTION
-  ngp_linked_entity_bucket_ords_field_t &ngp_linked_entity_bucket_ords_field() noexcept {
+  ngp_linked_entity_bucket_ords_field_t& ngp_linked_entity_bucket_ords_field() noexcept {
     return ngp_linked_entity_bucket_ords_field_;
   }
 
   /// \brief Fetch the link crs needs updated field.
   KOKKOS_INLINE_FUNCTION
-  const ngp_link_crs_needs_updated_field_t &ngp_link_crs_needs_updated_field() const noexcept {
+  const ngp_link_crs_needs_updated_field_t& ngp_link_crs_needs_updated_field() const noexcept {
     return ngp_link_crs_needs_updated_field_;
   }
   KOKKOS_INLINE_FUNCTION
-  ngp_link_crs_needs_updated_field_t &ngp_link_crs_needs_updated_field() noexcept {
+  ngp_link_crs_needs_updated_field_t& ngp_link_crs_needs_updated_field() noexcept {
     return ngp_link_crs_needs_updated_field_;
   }
 
   /// \brief Fetch the link marked for destruction field.
   KOKKOS_INLINE_FUNCTION
-  const ngp_link_marked_for_destruction_field_t &ngp_link_marked_for_destruction_field() const noexcept {
+  const ngp_link_marked_for_destruction_field_t& ngp_link_marked_for_destruction_field() const noexcept {
     return ngp_link_marked_for_destruction_field_;
   }
   KOKKOS_INLINE_FUNCTION
-  ngp_link_marked_for_destruction_field_t &ngp_link_marked_for_destruction_field() noexcept {
+  ngp_link_marked_for_destruction_field_t& ngp_link_marked_for_destruction_field() noexcept {
     return ngp_link_marked_for_destruction_field_;
   }
   //@}
@@ -250,7 +250,7 @@ class NgpLinkMetaDataT {
   //! \name Internal members
   //@{
 
-  LinkMetaData *link_meta_data_ptr_;
+  LinkMetaData* link_meta_data_ptr_;
   stk::mesh::EntityRank link_rank_;
   ngp_linked_entities_field_t ngp_linked_entities_field_;
   ngp_linked_entities_field_t ngp_linked_entities_crs_field_;
@@ -268,7 +268,7 @@ using NgpLinkMetaData = NgpLinkMetaDataT<stk::ngp::MemSpace>;
 
 /// \brief Get an updated ngp link meta data object.
 template <typename NgpMemSpace = stk::ngp::MemSpace>
-inline NgpLinkMetaDataT<NgpMemSpace> get_updated_ngp_link_meta_data(LinkMetaData &link_meta_data) {
+inline NgpLinkMetaDataT<NgpMemSpace> get_updated_ngp_link_meta_data(LinkMetaData& link_meta_data) {
   return NgpLinkMetaDataT<NgpMemSpace>(link_meta_data);
 }
 

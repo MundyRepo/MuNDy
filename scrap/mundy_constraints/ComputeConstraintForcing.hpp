@@ -33,7 +33,7 @@
 
 // Mundy libs
 #include <mundy_constraints/compute_constraint_forcing/kernels/Collision.hpp>
-#include <mundy_core/StringLiteral.hpp>         // for mundy::core::StringLiteral and mundy::core::make_string_literal
+#include <mundy_utils/StringLiteral.hpp>         // for mundy::StringLiteral and mundy::make_string_literal
 #include <mundy_mesh/BulkData.hpp>              // for mundy::mesh::BulkData
 #include <mundy_meta/MetaKernelDispatcher.hpp>  // for mundy::meta::MetaKernelDispatcher
 #include <mundy_meta/MetaRegistry.hpp>          // for mundy::meta::MetaMethodRegistry

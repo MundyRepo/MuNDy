@@ -53,16 +53,16 @@ std::unique_ptr<BulkData> create_bulk_data() {
   return builder.create_bulk_data();
 }
 
-std::pair<std::unique_ptr<BulkData>, std::vector<stk::mesh::Part *>> create_bulk_data_and_parts_with_names(
-    const std::vector<std::string> &part_names = {}) {
+std::pair<std::unique_ptr<BulkData>, std::vector<stk::mesh::Part*>> create_bulk_data_and_parts_with_names(
+    const std::vector<std::string>& part_names = {}) {
   // Create a dummy mesh.
   std::unique_ptr<BulkData> bulk_data_ptr = create_bulk_data();
-  MetaData &meta_data = bulk_data_ptr->mesh_meta_data();
+  MetaData& meta_data = bulk_data_ptr->mesh_meta_data();
 
   // Declare the parts and store them in a vector.
-  std::vector<stk::mesh::Part *> parts;
-  for (const std::string &part_name : part_names) {
-    stk::mesh::Part &part = meta_data.declare_part(part_name);
+  std::vector<stk::mesh::Part*> parts;
+  for (const std::string& part_name : part_names) {
+    stk::mesh::Part& part = meta_data.declare_part(part_name);
     parts.push_back(&part);
   }
   return std::make_pair(std::move(bulk_data_ptr), parts);
@@ -74,8 +74,8 @@ TEST(StringToSelector, SpecialParts) {
 
   // Declare a mesh with only default parts.
   auto bulk_data_ptr = create_bulk_data();
-  BulkData &bulk_data = *bulk_data_ptr.get();
-  MetaData &meta_data = bulk_data.mesh_meta_data();
+  BulkData& bulk_data = *bulk_data_ptr.get();
+  MetaData& meta_data = bulk_data.mesh_meta_data();
 
   // Fetch the special parts using selector strings
   auto universal_selector = string_to_selector(bulk_data, "UNIVERSAL");
@@ -100,16 +100,16 @@ TEST(StringToSelector, ValidOperations) {
   // Declare a mesh with a variety of named parts.
   std::vector<std::string> part_names = {"A", "B", "C", "A1", "A_X", "A_", "weird_yet_1_valid..."};
   auto [bulk_data_ptr, parts] = create_bulk_data_and_parts_with_names(part_names);
-  BulkData &bulk_data = *bulk_data_ptr.get();
+  BulkData& bulk_data = *bulk_data_ptr.get();
 
   // Name the parts and their corresponding selectors for easy access
-  stk::mesh::Part &p_A = *parts[0];
-  stk::mesh::Part &p_B = *parts[1];
-  stk::mesh::Part &p_C = *parts[2];
-  stk::mesh::Part &p_A1 = *parts[3];
-  stk::mesh::Part &p_A_X = *parts[4];
-  stk::mesh::Part &p_A_ = *parts[5];
-  stk::mesh::Part &p_weird_yet_valid = *parts[6];
+  stk::mesh::Part& p_A = *parts[0];
+  stk::mesh::Part& p_B = *parts[1];
+  stk::mesh::Part& p_C = *parts[2];
+  stk::mesh::Part& p_A1 = *parts[3];
+  stk::mesh::Part& p_A_X = *parts[4];
+  stk::mesh::Part& p_A_ = *parts[5];
+  stk::mesh::Part& p_weird_yet_valid = *parts[6];
 
   stk::mesh::Selector s_A = stk::mesh::Selector(p_A);
   stk::mesh::Selector s_B = stk::mesh::Selector(p_B);

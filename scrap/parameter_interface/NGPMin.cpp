@@ -69,9 +69,10 @@
 #include <stk_balance/balance.hpp>  // for balanceStkMesh
 
 // Mundy
-#include <mundy_core/throw_assert.hpp>     // for MUNDY_THROW_REQUIRE
+#include <mundy_utils/throw_assert.hpp>     // for MUNDY_THROW_REQUIRE
 #include <mundy_math/Vector3.hpp>          // for Vector3
 #include <mundy_mesh/DeclareEntities.hpp>  // for mundy::mesh::DeclareEntitiesHelper
+#include <mundy_utils/rng.hpp>              // for mundy::make_philox
 
 using DeviceExecutionSpace = Kokkos::DefaultExecutionSpace;
 using DeviceMemorySpace = typename DeviceExecutionSpace::memory_space;
@@ -301,7 +302,7 @@ struct DiffDotsReducer {
  public:
   // Required
   typedef DiffDotsReducer reducer;
-  typedef mundy::math::Vector3d value_type;
+  typedef mundy::Vector3d value_type;
   typedef Kokkos::View<value_type *, Space, Kokkos::MemoryUnmanaged> result_view_type;
 
  private:
@@ -346,13 +347,13 @@ void compute_diff_dots(const stk::ParallelMachine parallel,
                        const Kokkos::View<double *, DeviceMemorySpace> &signed_sep_dot_tmp, const double dt,
                        double &dot_xkdiff_xkdiff, double &dot_xkdiff_gkdiff, double &dot_gkdiff_gkdiff) {
   // Local variables to store dot products
-  mundy::math::Vector3d local_xx_xg_gg_diff = {0.0, 0.0, 0.0};
+  mundy::Vector3d local_xx_xg_gg_diff = {0.0, 0.0, 0.0};
 
   // Perform parallel reduction to compute the dot products
   using range_policy = Kokkos::RangePolicy<DeviceExecutionSpace>;
   Kokkos::parallel_reduce(
       "ComputeDiffDots", range_policy(0, lagrange_multipliers.extent(0)),
-      KOKKOS_LAMBDA(const int i, mundy::math::Vector3d &acc_xx_xg_gg_diff) {
+      KOKKOS_LAMBDA(const int i, mundy::Vector3d &acc_xx_xg_gg_diff) {
         const double lag_mult = lagrange_multipliers(i);
         const double lag_mult_tmp = lagrange_multipliers_tmp(i);
         const double sep_dot = signed_sep_dot(i);
@@ -1336,7 +1337,7 @@ int main(int argc, char **argv) {
 
     // Generate nodes with unique IDs
     std::map<std::tuple<size_t, size_t>, size_t> grid_to_node_id_map;
-    openrand::Philox rng(0, 0);
+    openrand::Philox rng = make_philox(0, 0);
     for (size_t i = 0; i < num_spheres_x; ++i) {
       for (size_t j = 0; j < num_spheres_y; ++j) {
         double x = static_cast<double>(i) * grid_spacing;

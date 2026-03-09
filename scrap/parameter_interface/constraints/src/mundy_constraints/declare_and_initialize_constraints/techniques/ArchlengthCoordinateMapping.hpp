@@ -29,10 +29,10 @@
 #include <cmath>  // for std::sin, std::cos, std::sqrt
 
 // Mundy includes
-#include <mundy_core/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
-#include <mundy_math/Matrix3.hpp>       // for mundy::math::Matrix3
-#include <mundy_math/Quaternion.hpp>    // for mundy::math::Quaternion
-#include <mundy_math/Vector3.hpp>       // for mundy::math::Vector3
+#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
+#include <mundy_math/Matrix3.hpp>       // for mundy::Matrix3
+#include <mundy_math/Quaternion.hpp>    // for mundy::Quaternion
+#include <mundy_math/Vector3.hpp>       // for mundy::Vector3
 
 namespace mundy {
 
@@ -135,18 +135,18 @@ class Helix : public ArchlengthCoordinateMapping {
     // d sin(phi) = b * delta_t -> delta_t = d * sin(phi) / b = d * sin( atan( b / a ) ) / b = d / sqrt( a^2 + b^2 )
 
     // Not that we don't trust you or anything, but we need to make sure the axis is normalized.
-    axis_ /= mundy::math::norm(axis_);
+    axis_ /= mundy::norm(axis_);
 
     // We need to find two orthonormal vectors to the axis of the helix.
     // We can do this by finding an arbitrary vector that is not parallel to the axis, taking the cross product
     // with the normal, and normalizing the result. This gives us a vector that is orthogonal to the axis.
     // By taking the cross product of the axis and this vector, we get a second vector that is orthogonal to both.
-    const mundy::math::Vector3d ihat(1.0, 0.0, 0.0);
-    const mundy::math::Vector3d jhat(0.0, 1.0, 0.0);
-    basis_vector0_ = mundy::math::norm(mundy::math::cross(axis_, ihat)) > 1.0e-12 ? ihat : jhat;
-    basis_vector0_ /= mundy::math::norm(basis_vector0_);
-    basis_vector1_ = mundy::math::cross(axis_, basis_vector0_);
-    basis_vector1_ /= mundy::math::norm(basis_vector1_);
+    const mundy::Vector3d ihat(1.0, 0.0, 0.0);
+    const mundy::Vector3d jhat(0.0, 1.0, 0.0);
+    basis_vector0_ = mundy::norm(mundy::cross(axis_, ihat)) > 1.0e-12 ? ihat : jhat;
+    basis_vector0_ /= mundy::norm(basis_vector0_);
+    basis_vector1_ = mundy::cross(axis_, basis_vector0_);
+    basis_vector1_ /= mundy::norm(basis_vector1_);
   }
 
   /// \brief Get the grid coordinate corresponding to a given grid index.
@@ -175,10 +175,10 @@ class Helix : public ArchlengthCoordinateMapping {
   double b_;
   double distance_between_nodes_;
   double delta_t_;
-  mundy::math::Vector3d start_;
-  mundy::math::Vector3d axis_;
-  mundy::math::Vector3d basis_vector0_;
-  mundy::math::Vector3d basis_vector1_;
+  mundy::Vector3d start_;
+  mundy::Vector3d axis_;
+  mundy::Vector3d basis_vector0_;
+  mundy::Vector3d basis_vector1_;
 };  // class Helix
 
 }  // namespace techniques

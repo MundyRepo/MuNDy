@@ -18,17 +18,16 @@
 // **********************************************************************************************************************
 // @HEADER
 
-//! \file UnitTestTest
+//! \file UnitTestTest.cpp
 /// Validate that tests are actually running as expected.
 /// You may assume that simply because you ran
 #include <gmock/gmock.h>  // for EXPECT_THAT, HasSubstr, etc
 #include <gtest/gtest.h>  // for TEST, ASSERT_NO_THROW, etc
 
-#include <Kokkos_Core.hpp>  // for Kokkos::initialize, Kokkos::finalize
+#include <Kokkos_Core.hpp>   // for Kokkos::initialize, Kokkos::finalize
+#include <Mundy_config.hpp>  // for HAVE_MUNDY_*
 #include <iostream>
-
-#include <MundyCore_config.hpp>  // for HAVE_MUNDYCORE_*
-#ifdef HAVE_MUNDYCORE_STK
+#ifdef HAVE_MUNDY_STK
 #include <stk_util/parallel/Parallel.hpp>  // for stk::parallel_machine_init, stk::parallel_machine_finalize
 #endif
 
@@ -42,9 +41,11 @@ int main(int argc, char** argv) {
   // Note, we mitigate our interaction with MPI through STK's stk::ParallelMachine.
   // If STK is MPI enabled, then we're MPI enabled. As such, Mundy doesn't directly depend on or interact with MPI.
   // However, if tests are to be run in parallel, then TPL_ENABLE_MPI must be set to ON in the TriBITS configuration.
-
 #ifdef HAVE_MUNDY_STK
+  std::cout << "Initializing STK Parallel Machine..." << std::endl;
   stk::parallel_machine_init(&argc, &argv);
+#else
+  std::cout << "STK not enabled. Running in serial..." << std::endl;
 #endif
   Kokkos::initialize(argc, argv);
 

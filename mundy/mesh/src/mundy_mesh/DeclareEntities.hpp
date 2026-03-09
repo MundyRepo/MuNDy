@@ -43,9 +43,9 @@
 #include <stk_mesh/base/FEMHelpers.hpp>  // for stk::mesh::declare_element
 
 // Mundy
-#include <mundy_core/throw_assert.hpp>   // for MUNDY_THROW_REQUIRE
 #include <mundy_mesh/LinkData.hpp>       // for mundy::mesh::LinkData
 #include <mundy_mesh/fmt_stk_types.hpp>  // adds fmt::format for stk types
+#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_REQUIRE
 
 namespace mundy {
 
@@ -406,7 +406,7 @@ class DeclareEntitiesHelper {
     /// \param ordinal The slot/ordinal to link the entity at.
     NodeBuilder& links_to(LinkData* const link_data_ptr, const stk::mesh::EntityId linked_entity_id,
                           const stk::mesh::EntityRank linked_entity_rank, const unsigned ordinal) {
-      MUNDY_THROW_REQUIRE(link_data_ptr != nullptr, std::invalid_argument, "LinkData pointer is null.");
+      MUNDY_THROW_ASSERT(link_data_ptr != nullptr, std::invalid_argument, "LinkData pointer is null.");
       const std::string& link_meta_data_name = link_data_ptr->link_meta_data().name();
       auto& link_info = node_info_.link_info_map[link_meta_data_name];
       if (link_info.linked_entity_ids.size() <= ordinal) {
@@ -513,8 +513,8 @@ class DeclareEntitiesHelper {
     /// \param linked_entity_rank The entity rank of the entity to link to.
     /// \param ordinal The slot/ordinal to link the entity at.
     ElementBuilder& links_to(LinkData* const link_data_ptr, const stk::mesh::EntityId linked_entity_id,
-                          const stk::mesh::EntityRank linked_entity_rank, const unsigned ordinal) {
-      MUNDY_THROW_REQUIRE(link_data_ptr != nullptr, std::invalid_argument, "LinkData pointer is null.");
+                             const stk::mesh::EntityRank linked_entity_rank, const unsigned ordinal) {
+      MUNDY_THROW_ASSERT(link_data_ptr != nullptr, std::invalid_argument, "LinkData pointer is null.");
       const std::string& link_meta_data_name = link_data_ptr->link_meta_data().name();
       auto& link_info = elem_info_.link_info_map[link_meta_data_name];
       if (link_info.linked_entity_ids.size() <= ordinal) {

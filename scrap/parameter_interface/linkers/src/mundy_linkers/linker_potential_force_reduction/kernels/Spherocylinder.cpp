@@ -32,9 +32,9 @@
 #include <stk_mesh/base/Field.hpp>    // for stk::mesh::Field, stl::mesh::field_data
 
 // Mundy libs
-#include <mundy_core/throw_assert.hpp>                                                // for MUNDY_THROW_ASSERT
+#include <mundy_utils/throw_assert.hpp>                                                // for MUNDY_THROW_ASSERT
 #include <mundy_linkers/linker_potential_force_reduction/kernels/Spherocylinder.hpp>  // for mundy::linkers::...::kernels::Spherocylinder
-#include <mundy_math/Vector3.hpp>                                                     // for mundy::math::Vector3
+#include <mundy_math/Vector3.hpp>                                                     // for mundy::Vector3
 #include <mundy_mesh/BulkData.hpp>                                                    // for mundy::mesh::BulkData
 #include <mundy_mesh/FieldViews.hpp>  // for mundy::mesh::vector3_field_data, mundy::mesh::quaternion_field_data, mundy::mesh::matrix3_field_data
 #include <mundy_mesh/ForEachEntity.hpp>      // for mundy::mesh::for_each_entity_run
@@ -187,12 +187,12 @@ void Spherocylinder::execute(const stk::mesh::Selector &spherocylinder_selector)
             const bool is_left_spherocylinder = (key_t_ptr[0] == bulk_data.entity_key(spherocylinder));
             const bool is_right_spherocylinder = (key_t_ptr[1] == bulk_data.entity_key(spherocylinder));
             const double sign = is_left_spherocylinder ? 1.0 : (is_right_spherocylinder ? -1.0 : 0.0);
-            auto contact_point = mundy::math::get_vector3_view<double>(
+            auto contact_point = mundy::get_vector3_view<double>(
                 stk::mesh::field_data(linker_contact_points_field, connected_linker) + 3 * !is_left_spherocylinder);
             const auto potential_force =
                 sign * mundy::mesh::vector3_field_data(linker_potential_force_field, connected_linker);
 
-            const auto local_torque = mundy::math::cross(contact_point - node_coord, potential_force);
+            const auto local_torque = mundy::cross(contact_point - node_coord, potential_force);
 #pragma omp atomic
             node_force[0] += potential_force[0];
 #pragma omp atomic

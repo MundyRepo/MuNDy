@@ -39,9 +39,9 @@
 #include <stk_topology/topology.hpp>
 
 // Mundy
-#include <mundy_core/throw_assert.hpp>     // for MUNDY_THROW_REQUIRE
-#include <mundy_math/Vector3.hpp>          // for mundy::math::Vector3
+#include <mundy_math/Vector3.hpp>          // for mundy::Vector3
 #include <mundy_mesh/DeclareEntities.hpp>  // for mundy::mesh::DeclareEntitiesHelper
+#include <mundy_utils/throw_assert.hpp>    // for MUNDY_THROW_REQUIRE
 
 void neuron() {
   // A neuron read in from a ply file
@@ -54,27 +54,27 @@ void neuron() {
   builder.set_aura_option(stk::mesh::BulkData::AUTO_AURA);
 
   std::shared_ptr<stk::mesh::MetaData> meta_data_ptr = builder.create_meta_data();
-  auto &meta_data = *meta_data_ptr;
+  auto& meta_data = *meta_data_ptr;
   meta_data.use_simple_fields();
   meta_data.set_coordinate_field_name("coordinates");
 
   std::shared_ptr<stk::mesh::BulkData> bulk_data_ptr = builder.create(meta_data_ptr);
-  auto &bulk_data = *bulk_data_ptr;
+  auto& bulk_data = *bulk_data_ptr;
 
   // Declare a triangle part with a triangle topology
-  stk::mesh::Part &triangle_part = meta_data.declare_part_with_topology("triangle_part", stk::topology::SHELL_TRI_3);
+  stk::mesh::Part& triangle_part = meta_data.declare_part_with_topology("triangle_part", stk::topology::SHELL_TRI_3);
   stk::io::put_io_part_attribute(triangle_part);
 
   // Add a node and element-rank color field
-  stk::mesh::Field<int> &node_rgb_field = meta_data.declare_field<int>(stk::topology::NODE_RANK, "rgb");
-  stk::mesh::Field<int> &element_rgb_field = meta_data.declare_field<int>(stk::topology::ELEMENT_RANK, "rgb");
+  stk::mesh::Field<int>& node_rgb_field = meta_data.declare_field<int>(stk::topology::NODE_RANK, "rgb");
+  stk::mesh::Field<int>& element_rgb_field = meta_data.declare_field<int>(stk::topology::ELEMENT_RANK, "rgb");
   stk::io::set_field_role(node_rgb_field, Ioss::Field::TRANSIENT);
   stk::io::set_field_role(element_rgb_field, Ioss::Field::TRANSIENT);
   stk::io::set_field_output_type(node_rgb_field, stk::io::FieldOutputType::VECTOR_3D);
   stk::io::set_field_output_type(element_rgb_field, stk::io::FieldOutputType::VECTOR_3D);
 
   // Add the node coordinates field
-  stk::mesh::Field<double> &node_coords_field =
+  stk::mesh::Field<double>& node_coords_field =
       meta_data.declare_field<double>(stk::topology::NODE_RANK, "coordinates");
 
   // Put the fields on the mesh
@@ -133,16 +133,16 @@ void neuron() {
   bulk_data.modification_end();
 
   // Write the mesh to file
-  size_t step = 1;  // Step = 0 doesn't write out fields...
+  int step = 1;  // Step = 0 doesn't write out fields...
   stk::io::write_mesh_with_fields("neuron.exo", bulk_data, step);
 }
 
 class Helix {
  public:
   /// Constructor
-  Helix(const size_t &num_nodes, const double &radius, const double &pitch, const double &distance_between_nodes,
-        const double &start_x, const double &start_y, const double &start_z, const double &axis_x, const double &axis_y,
-        const double &axis_z)
+  Helix(const size_t& num_nodes, const double& radius, const double& pitch, const double& distance_between_nodes,
+        const double& start_x, const double& start_y, const double& start_z, const double& axis_x, const double& axis_y,
+        const double& axis_z)
       : num_nodes_(num_nodes),
         num_edges_(num_nodes - 1),
         radius_(radius),
@@ -177,24 +177,24 @@ class Helix {
     // d sin(phi) = b * delta_t -> delta_t = d * sin(phi) / b = d * sin( atan( b / a ) ) / b = d / sqrt( a^2 + b^2 )
 
     // Not that we don't trust you or anything, but we need to make sure the axis is normalized.
-    axis_ /= mundy::math::norm(axis_);
+    axis_ /= mundy::norm(axis_);
 
     // We need to find two orthonormal vectors to the axis of the helix.
     // We can do this by finding an arbitrary vector that is not parallel to the axis, taking the cross product
     // with the normal, and normalizing the result. This gives us a vector that is orthogonal to the axis.
     // By taking the cross product of the axis and this vector, we get a second vector that is orthogonal to both.
-    const mundy::math::Vector3d ihat(1.0, 0.0, 0.0);
-    const mundy::math::Vector3d jhat(0.0, 1.0, 0.0);
-    basis_vector0_ = mundy::math::norm(mundy::math::cross(axis_, ihat)) > 1.0e-12 ? ihat : jhat;
-    basis_vector0_ /= mundy::math::norm(basis_vector0_);
-    basis_vector1_ = mundy::math::cross(axis_, basis_vector0_);
-    basis_vector1_ /= mundy::math::norm(basis_vector1_);
+    const mundy::Vector3d ihat(1.0, 0.0, 0.0);
+    const mundy::Vector3d jhat(0.0, 1.0, 0.0);
+    basis_vector0_ = mundy::norm(mundy::cross(axis_, ihat)) > 1.0e-12 ? ihat : jhat;
+    basis_vector0_ /= mundy::norm(basis_vector0_);
+    basis_vector1_ = mundy::cross(axis_, basis_vector0_);
+    basis_vector1_ /= mundy::norm(basis_vector1_);
   }
 
   /// \brief Get the grid coordinate corresponding to a given grid index.
   /// \param archlength_index The archlength index in [0 to num_nodes-1].
   /// \return The corresponding coordinate.
-  std::array<double, 3> get_grid_coordinate(const size_t &archlength_index) const {
+  std::array<double, 3> get_grid_coordinate(const size_t& archlength_index) const {
     // t = delta_t * archlength_index
     // x_ref = a * cos(t)
     // y_ref = a * sin(t)
@@ -217,10 +217,10 @@ class Helix {
   double b_;
   double distance_between_nodes_;
   double delta_t_;
-  mundy::math::Vector3d start_;
-  mundy::math::Vector3d axis_;
-  mundy::math::Vector3d basis_vector0_;
-  mundy::math::Vector3d basis_vector1_;
+  mundy::Vector3d start_;
+  mundy::Vector3d axis_;
+  mundy::Vector3d basis_vector0_;
+  mundy::Vector3d basis_vector1_;
 };  // class Helix
 
 void ciliated_sphere() {
@@ -235,18 +235,18 @@ void ciliated_sphere() {
   builder.set_aura_option(stk::mesh::BulkData::AUTO_AURA);
 
   std::shared_ptr<stk::mesh::MetaData> meta_data_ptr = builder.create_meta_data();
-  auto &meta_data = *meta_data_ptr;
+  auto& meta_data = *meta_data_ptr;
   meta_data.use_simple_fields();
   meta_data.set_coordinate_field_name("coordinates");
 
   std::shared_ptr<stk::mesh::BulkData> bulk_data_ptr = builder.create(meta_data_ptr);
-  auto &bulk_data = *bulk_data_ptr;
+  auto& bulk_data = *bulk_data_ptr;
 
   // Declare a triangle part with a triangle topology
-  stk::mesh::Part &fixed_nodes_part = meta_data.declare_part_with_topology("fixed_nodes_part", stk::topology::NODE);
-  stk::mesh::Part &triangle_part = meta_data.declare_part_with_topology("triangle_part", stk::topology::SHELL_TRI_3);
-  stk::mesh::Part &segment_part = meta_data.declare_part_with_topology("segment_part", stk::topology::BEAM_2);
-  stk::mesh::Part &angular_spring_part =
+  stk::mesh::Part& fixed_nodes_part = meta_data.declare_part_with_topology("fixed_nodes_part", stk::topology::NODE);
+  stk::mesh::Part& triangle_part = meta_data.declare_part_with_topology("triangle_part", stk::topology::SHELL_TRI_3);
+  stk::mesh::Part& segment_part = meta_data.declare_part_with_topology("segment_part", stk::topology::BEAM_2);
+  stk::mesh::Part& angular_spring_part =
       meta_data.declare_part_with_topology("angular_spring_part", stk::topology::SHELL_TRI_3);
   stk::io::put_io_part_attribute(fixed_nodes_part);
   stk::io::put_io_part_attribute(triangle_part);
@@ -254,20 +254,20 @@ void ciliated_sphere() {
   stk::io::put_io_part_attribute(angular_spring_part);
 
   // Add a node and element-rank color field
-  stk::mesh::Field<double> &node_mass_field =  //
+  stk::mesh::Field<double>& node_mass_field =  //
       meta_data.declare_field<double>(stk::topology::NODE_RANK, "mass");
-  stk::mesh::Field<double> &node_velocity_field =  //
+  stk::mesh::Field<double>& node_velocity_field =  //
       meta_data.declare_field<double>(stk::topology::NODE_RANK, "velocity");
-  stk::mesh::Field<double> &node_acceleration_field =  //
+  stk::mesh::Field<double>& node_acceleration_field =  //
       meta_data.declare_field<double>(stk::topology::NODE_RANK, "acceleration");
-  stk::mesh::Field<double> &node_force_field =  //
+  stk::mesh::Field<double>& node_force_field =  //
       meta_data.declare_field<double>(stk::topology::NODE_RANK, "force");
 
-  stk::mesh::Field<double> &element_radius =  //
+  stk::mesh::Field<double>& element_radius =  //
       meta_data.declare_field<double>(stk::topology::ELEMENT_RANK, "radius");
-  stk::mesh::Field<double> &element_spring_constant =  //
+  stk::mesh::Field<double>& element_spring_constant =  //
       meta_data.declare_field<double>(stk::topology::ELEMENT_RANK, "spring_constant");
-  stk::mesh::Field<double> &element_angular_spring_constant =  //
+  stk::mesh::Field<double>& element_angular_spring_constant =  //
       meta_data.declare_field<double>(stk::topology::ELEMENT_RANK, "angular_spring_constant");
 
   stk::io::set_field_role(node_mass_field, Ioss::Field::TRANSIENT);
@@ -289,7 +289,7 @@ void ciliated_sphere() {
   stk::io::set_field_output_type(element_angular_spring_constant, stk::io::FieldOutputType::SCALAR);
 
   // Add the node coordinates field
-  stk::mesh::Field<double> &node_coords_field =
+  stk::mesh::Field<double>& node_coords_field =
       meta_data.declare_field<double>(stk::topology::NODE_RANK, "coordinates");
 
   // Put the fields on the mesh
@@ -399,32 +399,31 @@ void ciliated_sphere() {
   bulk_data.modification_end();
 
   // Write the mesh to file
-  size_t step = 1;  // Step = 0 doesn't write out fields...
+  int step = 1;  // Step = 0 doesn't write out fields...
   stk::io::write_mesh_with_fields("ciliated_sphere.exo", bulk_data, step);
 }
 
-double distance_sq_from_point_to_line_segment(const mundy::math::Vector3d &x, const mundy::math::Vector3d &p1,
-                                              const mundy::math::Vector3d &p2,
-                                              mundy::math::Vector3d *const closest_point = nullptr,
-                                              double *const t = nullptr) {
+double distance_sq_from_point_to_line_segment(const mundy::Vector3d& x, const mundy::Vector3d& p1,
+                                              const mundy::Vector3d& p2, mundy::Vector3d* const closest_point = nullptr,
+                                              double* const t = nullptr) {
   // Define some temporary variables
-  mundy::math::Vector3d closest_point_tmp;
+  mundy::Vector3d closest_point_tmp;
   double t_tmp;
 
   // Determine appropriate vectors
   const auto p21 = p2 - p1;
 
   // Get parametric location
-  const double num = mundy::math::dot(p21, x - p1);
-  if ((num < mundy::math::get_zero_tolerance<double>()) & (num > -mundy::math::get_zero_tolerance<double>())) {
+  const double num = mundy::dot(p21, x - p1);
+  if ((num < mundy::get_zero_tolerance<double>()) & (num > -mundy::get_zero_tolerance<double>())) {
     // CASE 1: The vector from p1 to x is orthogonal to the line.
     // In this case, the closest point is p1 and the parametric coordinate is 0.
     t_tmp = 0.0;
     closest_point_tmp = p1;
   } else {
-    const double denom = mundy::math::dot(p21, p21);
+    const double denom = mundy::dot(p21, p21);
 
-    if (denom < mundy::math::get_zero_tolerance<double>()) {
+    if (denom < mundy::get_zero_tolerance<double>()) {
       // CASE 2: The line is degenerate (i.e., p1 and p2 are numerically the same point).
       // In this case, either point could really be the closest point. We'll arbitrarily pick p1 and set t to 0.
       closest_point_tmp = p1;
@@ -448,7 +447,7 @@ double distance_sq_from_point_to_line_segment(const mundy::math::Vector3d &x, co
     }
   }
 
-  const double distance_sq = mundy::math::two_norm_squared(closest_point_tmp - x);
+  const double distance_sq = mundy::two_norm_squared(closest_point_tmp - x);
   if (t != nullptr) {
     *t = t_tmp;
   }
@@ -472,31 +471,31 @@ void bacteria_in_a_porous_media() {
   builder.set_aura_option(stk::mesh::BulkData::AUTO_AURA);
 
   std::shared_ptr<stk::mesh::MetaData> meta_data_ptr = builder.create_meta_data();
-  auto &meta_data = *meta_data_ptr;
+  auto& meta_data = *meta_data_ptr;
   meta_data.use_simple_fields();
   meta_data.set_coordinate_field_name("coordinates");
 
   std::shared_ptr<stk::mesh::BulkData> bulk_data_ptr = builder.create(meta_data_ptr);
-  auto &bulk_data = *bulk_data_ptr;
+  auto& bulk_data = *bulk_data_ptr;
 
   // Declare the rod and sphere parts
-  stk::mesh::Part &rod_part = meta_data.declare_part_with_topology("rod_part", stk::topology::BEAM_2);
-  stk::mesh::Part &sphere_part = meta_data.declare_part_with_topology("sphere_part", stk::topology::PARTICLE);
+  stk::mesh::Part& rod_part = meta_data.declare_part_with_topology("rod_part", stk::topology::BEAM_2);
+  stk::mesh::Part& sphere_part = meta_data.declare_part_with_topology("sphere_part", stk::topology::PARTICLE);
   stk::io::put_io_part_attribute(rod_part);
   stk::io::put_io_part_attribute(sphere_part);
 
   // The rods have element radius and node velocity
-  stk::mesh::Field<double> &rod_radius_field =  //
+  stk::mesh::Field<double>& rod_radius_field =  //
       meta_data.declare_field<double>(stk::topology::ELEMENT_RANK, "radius");
-  stk::mesh::Field<double> &node_velocity_field =  //
+  stk::mesh::Field<double>& node_velocity_field =  //
       meta_data.declare_field<double>(stk::topology::NODE_RANK, "velocity");
 
   // The spheres have element radius
-  stk::mesh::Field<double> &sphere_radius_field =  //
+  stk::mesh::Field<double>& sphere_radius_field =  //
       meta_data.declare_field<double>(stk::topology::ELEMENT_RANK, "radius");
 
   // The nodes have coordinates
-  stk::mesh::Field<double> &node_coords_field =
+  stk::mesh::Field<double>& node_coords_field =
       meta_data.declare_field<double>(stk::topology::NODE_RANK, "coordinates");
 
   // Declare the field io roles and output types
@@ -536,13 +535,13 @@ void bacteria_in_a_porous_media() {
   double max_sphere_radius = 0.1;
 
   // Place the spheres
-  std::vector<mundy::math::Vector3d> sphere_centers(num_spheres);
+  std::vector<mundy::Vector3d> sphere_centers(num_spheres);
   std::vector<double> sphere_radii(num_spheres);
   for (size_t i = 0; i < num_spheres; ++i) {
     double sphere_radius = min_sphere_radius + (max_sphere_radius - min_sphere_radius) * rand() / RAND_MAX;
-    mundy::math::Vector3d sphere_center = {domain_min[0] + (domain_max[0] - domain_min[0]) * rand() / RAND_MAX,
-                                           domain_min[1] + (domain_max[1] - domain_min[1]) * rand() / RAND_MAX,
-                                           domain_min[2] + (domain_max[2] - domain_min[2]) * rand() / RAND_MAX};
+    mundy::Vector3d sphere_center = {domain_min[0] + (domain_max[0] - domain_min[0]) * rand() / RAND_MAX,
+                                     domain_min[1] + (domain_max[1] - domain_min[1]) * rand() / RAND_MAX,
+                                     domain_min[2] + (domain_max[2] - domain_min[2]) * rand() / RAND_MAX};
     sphere_centers[i] = sphere_center;
     sphere_radii[i] = sphere_radius;
 
@@ -570,18 +569,18 @@ void bacteria_in_a_porous_media() {
       double rod_length = min_rod_length + (max_rod_length - min_rod_length) * rand() / RAND_MAX;
 
       // Generate a random left node
-      mundy::math::Vector3d left_node_coord = {domain_min[0] + (domain_max[0] - domain_min[0]) * rand() / RAND_MAX,
-                                               domain_min[1] + (domain_max[1] - domain_min[1]) * rand() / RAND_MAX,
-                                               domain_min[2] + (domain_max[2] - domain_min[2]) * rand() / RAND_MAX};
+      mundy::Vector3d left_node_coord = {domain_min[0] + (domain_max[0] - domain_min[0]) * rand() / RAND_MAX,
+                                         domain_min[1] + (domain_max[1] - domain_min[1]) * rand() / RAND_MAX,
+                                         domain_min[2] + (domain_max[2] - domain_min[2]) * rand() / RAND_MAX};
 
       // Generate a random orientation
       const double u1 = static_cast<double>(rand()) / RAND_MAX;
       const double u2 = static_cast<double>(rand()) / RAND_MAX;
       const double theta = 2.0 * M_PI * u1;
       const double phi = std::acos(2.0 * u2 - 1.0);
-      mundy::math::Vector3d right_node_coord = {rod_length * std::sin(phi) * std::cos(theta) + left_node_coord[0],
-                                                rod_length * std::sin(phi) * std::sin(theta) + left_node_coord[1],
-                                                rod_length * std::cos(phi) + left_node_coord[2]};
+      mundy::Vector3d right_node_coord = {rod_length * std::sin(phi) * std::cos(theta) + left_node_coord[0],
+                                          rod_length * std::sin(phi) * std::sin(theta) + left_node_coord[1],
+                                          rod_length * std::cos(phi) + left_node_coord[2]};
 
       // Check if the rod intersects any spheres
       bool intersects = false;
@@ -631,28 +630,26 @@ void bacteria_in_a_porous_media() {
   bulk_data.modification_end();
 
   // Write the mesh to file
-  size_t step = 1;  // Step = 0 doesn't write out fields...
+  int step = 1;  // Step = 0 doesn't write out fields...
   stk::io::write_mesh_with_fields("bacteria_in_a_porous_media.exo", bulk_data, step);
 }
 
-bool is_point_inside_ellipsoid(const mundy::math::Vector3d &point, const mundy::math::Vector3d &center,
-                               const mundy::math::Vector3d &radii) {
+bool is_point_inside_ellipsoid(const mundy::Vector3d& point, const mundy::Vector3d& center,
+                               const mundy::Vector3d& radii) {
   const double x = (point[0] - center[0]) / radii[0];
   const double y = (point[1] - center[1]) / radii[1];
   const double z = (point[2] - center[2]) / radii[2];
   return x * x + y * y + z * z <= 1.0;
 }
 
-mundy::math::Vector3d random_point_inside_ellipsoid(const mundy::math::Vector3d &center,
-                                                    const mundy::math::Vector3d &radii) {
+mundy::Vector3d random_point_inside_ellipsoid(const mundy::Vector3d& center, const mundy::Vector3d& radii) {
   // Generate random points within the bounding box of the ellipsoid
   // And reject points that are not within the ellipsoid until we get a winner
   const size_t max_num_attempts = 100000;
   for (size_t i = 0; i < max_num_attempts; ++i) {
-    const mundy::math::Vector3d point = {
-        center[0] - radii[0] + 2.0 * radii[0] * static_cast<double>(rand()) / RAND_MAX,
-        center[1] - radii[1] + 2.0 * radii[1] * static_cast<double>(rand()) / RAND_MAX,
-        center[2] - radii[2] + 2.0 * radii[2] * static_cast<double>(rand()) / RAND_MAX};
+    const mundy::Vector3d point = {center[0] - radii[0] + 2.0 * radii[0] * static_cast<double>(rand()) / RAND_MAX,
+                                   center[1] - radii[1] + 2.0 * radii[1] * static_cast<double>(rand()) / RAND_MAX,
+                                   center[2] - radii[2] + 2.0 * radii[2] * static_cast<double>(rand()) / RAND_MAX};
     const bool inside = is_point_inside_ellipsoid(point, center, radii);
     if (inside) {
       return point;
@@ -661,11 +658,10 @@ mundy::math::Vector3d random_point_inside_ellipsoid(const mundy::math::Vector3d 
   return center;  // Failed to find a point. Return the center.
 }
 
-std::vector<mundy::math::Vector3d> random_walk_inside_ellipsoid(const mundy::math::Vector3d &start,
-                                                                const mundy::math::Vector3d &center,
-                                                                const mundy::math::Vector3d &radii,
-                                                                const size_t num_steps, const double step_length) {
-  std::vector<mundy::math::Vector3d> walk(num_steps);
+std::vector<mundy::Vector3d> random_walk_inside_ellipsoid(const mundy::Vector3d& start, const mundy::Vector3d& center,
+                                                          const mundy::Vector3d& radii, const size_t num_steps,
+                                                          const double step_length) {
+  std::vector<mundy::Vector3d> walk(num_steps);
   walk[0] = start;
   const size_t max_num_attempts = 100000;
   for (size_t i = 1; i < num_steps; ++i) {
@@ -674,9 +670,9 @@ std::vector<mundy::math::Vector3d> random_walk_inside_ellipsoid(const mundy::mat
       const double u2 = static_cast<double>(rand()) / RAND_MAX;
       const double theta = 2.0 * M_PI * u1;
       const double phi = std::acos(2.0 * u2 - 1.0);
-      walk[i] = walk[i - 1] + step_length * mundy::math::Vector3d{std::sin(phi) * std::cos(theta),  //
-                                                                  std::sin(phi) * std::sin(theta),  //
-                                                                  std::cos(phi)};
+      walk[i] = walk[i - 1] + step_length * mundy::Vector3d{std::sin(phi) * std::cos(theta),  //
+                                                            std::sin(phi) * std::sin(theta),  //
+                                                            std::cos(phi)};
       if (is_point_inside_ellipsoid(walk[i], center, radii)) {
         break;
       }
@@ -704,21 +700,21 @@ void chromatin() {
   builder.set_aura_option(stk::mesh::BulkData::AUTO_AURA);
 
   std::shared_ptr<stk::mesh::MetaData> meta_data_ptr = builder.create_meta_data();
-  auto &meta_data = *meta_data_ptr;
+  auto& meta_data = *meta_data_ptr;
   meta_data.use_simple_fields();
   meta_data.set_coordinate_field_name("coordinates");
 
   std::shared_ptr<stk::mesh::BulkData> bulk_data_ptr = builder.create(meta_data_ptr);
-  auto &bulk_data = *bulk_data_ptr;
+  auto& bulk_data = *bulk_data_ptr;
 
   // Declare te parts
-  stk::mesh::Part &nucleus_part = meta_data.declare_part_with_topology("nucleus", stk::topology::SHELL_TRI_3);
-  stk::mesh::Part &chromatin_segment_part =
+  stk::mesh::Part& nucleus_part = meta_data.declare_part_with_topology("nucleus", stk::topology::SHELL_TRI_3);
+  stk::mesh::Part& chromatin_segment_part =
       meta_data.declare_part_with_topology("chromatin_segment", stk::topology::BEAM_2);
-  stk::mesh::Part &euchromatin_part = meta_data.declare_part_with_topology("euchromatin", stk::topology::PARTICLE);
-  stk::mesh::Part &heterochromatin_part =
+  stk::mesh::Part& euchromatin_part = meta_data.declare_part_with_topology("euchromatin", stk::topology::PARTICLE);
+  stk::mesh::Part& heterochromatin_part =
       meta_data.declare_part_with_topology("heterochromatin", stk::topology::PARTICLE);
-  stk::mesh::Part &nucleus_binding_site_part = meta_data.declare_part_with_topology(
+  stk::mesh::Part& nucleus_binding_site_part = meta_data.declare_part_with_topology(
       "nucleus_binding_site",
       stk::topology::PARTICLE);  // It looks like these need to be particles for the exodus output
   stk::io::put_io_part_attribute(nucleus_part);
@@ -728,23 +724,23 @@ void chromatin() {
   stk::io::put_io_part_attribute(nucleus_binding_site_part);
 
   // The segments will store a radius and spring constant
-  stk::mesh::Field<double> &segment_radius_field =  //
+  stk::mesh::Field<double>& segment_radius_field =  //
       meta_data.declare_field<double>(stk::topology::ELEMENT_RANK, "radius");
-  stk::mesh::Field<double> &segment_spring_constant_field =  //
+  stk::mesh::Field<double>& segment_spring_constant_field =  //
       meta_data.declare_field<double>(stk::topology::ELEMENT_RANK, "spring_constant");
 
   // The euchromatin/heterochromatin will store a hydrodynamic radius
-  stk::mesh::Field<double> &hydrodynamic_radius_field =  //
+  stk::mesh::Field<double>& hydrodynamic_radius_field =  //
       meta_data.declare_field<double>(stk::topology::ELEMENT_RANK, "hydrodynamic");
 
   // The nodes within the chromatin segments will store a velocity and a force
-  stk::mesh::Field<double> &node_velocity_field =  //
+  stk::mesh::Field<double>& node_velocity_field =  //
       meta_data.declare_field<double>(stk::topology::NODE_RANK, "velocity");
-  stk::mesh::Field<double> &node_force_field =  //
+  stk::mesh::Field<double>& node_force_field =  //
       meta_data.declare_field<double>(stk::topology::NODE_RANK, "force");
 
   // All nodes have a coordinate field
-  stk::mesh::Field<double> &node_coords_field =
+  stk::mesh::Field<double>& node_coords_field =
       meta_data.declare_field<double>(stk::topology::NODE_RANK, "coordinates");
 
   // Assign the field roles
@@ -865,8 +861,8 @@ void chromatin() {
   }
 
   // Setup the chromatin fibers
-  const mundy::math::Vector3d nucleus_center = {0.0, 0.0, 0.0};
-  const mundy::math::Vector3d nucleus_radii = {a, b, c};
+  const mundy::Vector3d nucleus_center = {0.0, 0.0, 0.0};
+  const mundy::Vector3d nucleus_radii = {a, b, c};
   const size_t num_fibers = 100;
   const size_t num_hetero_euchromatin_repeats = 7;
   const size_t num_heterochromatin_per_repeat = 90;
@@ -881,8 +877,8 @@ void chromatin() {
 
   for (size_t f = 0; f < num_fibers; f++) {
     // Generate a random walk for the fiber starting from a random location in the nucleus
-    mundy::math::Vector3d start = random_point_inside_ellipsoid(nucleus_center, nucleus_radii);
-    std::vector<mundy::math::Vector3d> fiber_walk = random_walk_inside_ellipsoid(
+    mundy::Vector3d start = random_point_inside_ellipsoid(nucleus_center, nucleus_radii);
+    std::vector<mundy::Vector3d> fiber_walk = random_walk_inside_ellipsoid(
         start, nucleus_center, nucleus_radii, num_nodes_per_heterochromatin, segment_length);
 
     // Declare the nodes, segments, and heterochromatin/euchromatin
@@ -969,95 +965,94 @@ void chromatin() {
   bulk_data.modification_end();
 
   // Write the mesh to file
-  size_t step = 1;  // Step = 0 doesn't write out fields...
+  int step = 1;  // Step = 0 doesn't write out fields...
   stk::io::write_mesh_with_fields("chromatin.exo", bulk_data, step);
 }
 
-bool line_segment_intersects_triangle(const mundy::math::Vector3d &p1, const mundy::math::Vector3d &p2,
-                                      const mundy::math::Vector3d &v1, const mundy::math::Vector3d &v2,
-                                      const mundy::math::Vector3d &v3) {
+bool line_segment_intersects_triangle(const mundy::Vector3d& p1, const mundy::Vector3d& p2, const mundy::Vector3d& v1,
+                                      const mundy::Vector3d& v2, const mundy::Vector3d& v3) {
   // Tolerance for floating-point comparisons
   constexpr double epsilon = 1e-12;
 
   // Calculate the normal of the plane
   const auto edge1 = v2 - v1;
   const auto edge2 = v3 - v1;
-  const auto n = mundy::math::cross(edge1, edge2);
+  const auto n = mundy::cross(edge1, edge2);
 
   // Check if line segment endpoints are on opposite sides of the plane
   const auto s1 = p1 - v1;
   const auto s2 = p2 - v1;
-  double d1 = mundy::math::dot(n, s1);
-  double d2 = mundy::math::dot(n, s2);
+  double d1 = mundy::dot(n, s1);
+  double d2 = mundy::dot(n, s2);
 
   if (std::abs(d1) < epsilon || std::abs(d2) < epsilon) return false;  // Edge case: endpoint on plane
   if (d1 * d2 > 0.0) return false;                                     // Same side of the plane
 
   // Direction vector for the ray (p1 to p2)
   const auto dir = p2 - p1;
-  const auto h = mundy::math::cross(dir, edge2);
-  double a = mundy::math::dot(edge1, h);
+  const auto h = mundy::cross(dir, edge2);
+  double a = mundy::dot(edge1, h);
 
   // Check if the ray is parallel to the triangle plane
   if (std::abs(a) < epsilon) return false;  // Parallel: no intersection
 
   double inv_a = 1.0 / a;
-  double u = inv_a * mundy::math::dot(s1, h);
+  double u = inv_a * mundy::dot(s1, h);
 
   // Check if the intersection is outside the triangle
   if (u < 0.0 || u > 1.0) return false;
 
-  const auto q = mundy::math::cross(s1, edge1);
-  double v = inv_a * mundy::math::dot(dir, q);
+  const auto q = mundy::cross(s1, edge1);
+  double v = inv_a * mundy::dot(dir, q);
 
   // Check if the intersection is outside the triangle
   if (v < 0.0 || (u + v) > 1.0) return false;
 
   // At this stage, we know there is an intersection with the triangle plane
-  double t = inv_a * mundy::math::dot(edge2, q);
+  double t = inv_a * mundy::dot(edge2, q);
 
   // Check if the intersection lies on the segment (0 <= t <= 1)
   return (t >= 0.0 && t <= 1.0);
 }
 
-double line_segment_signed_distance_to_triangle(const mundy::math::Vector3d &p1, const mundy::math::Vector3d &p2,
-                                                const mundy::math::Vector3d &v1, const mundy::math::Vector3d &v2,
-                                                const mundy::math::Vector3d &v3) {
+double line_segment_signed_distance_to_triangle(const mundy::Vector3d& p1, const mundy::Vector3d& p2,
+                                                const mundy::Vector3d& v1, const mundy::Vector3d& v2,
+                                                const mundy::Vector3d& v3) {
   // Tolerance for floating-point comparisons
   constexpr double epsilon = 1e-12;
 
   // Calculate the normal of the plane
   const auto edge1 = v2 - v1;
   const auto edge2 = v3 - v1;
-  auto n = mundy::math::cross(edge1, edge2);
-  n /= mundy::math::norm(n);
+  auto n = mundy::cross(edge1, edge2);
+  n /= mundy::norm(n);
 
   // Signed distances from p1 and p2 to the plane of the triangle
   const auto s1 = p1 - v1;
   const auto s2 = p2 - v1;
-  double d1 = mundy::math::dot(n, s1);
-  double d2 = mundy::math::dot(n, s2);
+  double d1 = mundy::dot(n, s1);
+  double d2 = mundy::dot(n, s2);
 
   // Check if the endpoints are on opposite sides of the plane
   if (d1 * d2 <= 0.0) {
     // The line segment intersects the plane
     const auto dir = p2 - p1;
-    const auto h = mundy::math::cross(dir, edge2);
-    double a = mundy::math::dot(edge1, h);
+    const auto h = mundy::cross(dir, edge2);
+    double a = mundy::dot(edge1, h);
 
     if (std::abs(a) < epsilon) {
       return 0.0;  // Segment lies in plane (rare edge case)
     }
 
     double inv_a = 1.0 / a;
-    double u = inv_a * mundy::math::dot(s1, h);
+    double u = inv_a * mundy::dot(s1, h);
     if (u < 0.0 || u > 1.0) return std::min(d1, d2);  // Closest distance to plane if outside triangle bounds
 
-    const auto q = mundy::math::cross(s1, edge1);
-    double v = inv_a * mundy::math::dot(dir, q);
+    const auto q = mundy::cross(s1, edge1);
+    double v = inv_a * mundy::dot(dir, q);
     if (v < 0.0 || (u + v) > 1.0) return std::min(d1, d2);  // Closest distance to plane if outside triangle bounds
 
-    double t = inv_a * mundy::math::dot(edge2, q);
+    double t = inv_a * mundy::dot(edge2, q);
     if (t >= 0.0 && t <= 1.0) {
       return -std::min(std::abs(d1), std::abs(d2));  // Negative to indicate overlap
     }
@@ -1082,30 +1077,30 @@ void bee_hive() {
   builder.set_aura_option(stk::mesh::BulkData::AUTO_AURA);
 
   std::shared_ptr<stk::mesh::MetaData> meta_data_ptr = builder.create_meta_data();
-  auto &meta_data = *meta_data_ptr;
+  auto& meta_data = *meta_data_ptr;
   meta_data.use_simple_fields();
   meta_data.set_coordinate_field_name("coordinates");
 
   std::shared_ptr<stk::mesh::BulkData> bulk_data_ptr = builder.create(meta_data_ptr);
-  auto &bulk_data = *bulk_data_ptr;
+  auto& bulk_data = *bulk_data_ptr;
 
   // Declare the rod and sphere parts
-  stk::mesh::Part &rod_part = meta_data.declare_part_with_topology("rod_part", stk::topology::BEAM_2);
-  stk::mesh::Part &triangle_part = meta_data.declare_part_with_topology("triangle_part", stk::topology::SHELL_TRI_3);
-  stk::mesh::Part &binding_site_part =
+  stk::mesh::Part& rod_part = meta_data.declare_part_with_topology("rod_part", stk::topology::BEAM_2);
+  stk::mesh::Part& triangle_part = meta_data.declare_part_with_topology("triangle_part", stk::topology::SHELL_TRI_3);
+  stk::mesh::Part& binding_site_part =
       meta_data.declare_part_with_topology("binding_site_part", stk::topology::PARTICLE);
   stk::io::put_io_part_attribute(rod_part);
   stk::io::put_io_part_attribute(triangle_part);
   stk::io::put_io_part_attribute(binding_site_part);
 
   // The rods have element radius and node velocity
-  stk::mesh::Field<double> &rod_radius_field =  //
+  stk::mesh::Field<double>& rod_radius_field =  //
       meta_data.declare_field<double>(stk::topology::ELEMENT_RANK, "radius");
-  stk::mesh::Field<double> &node_velocity_field =  //
+  stk::mesh::Field<double>& node_velocity_field =  //
       meta_data.declare_field<double>(stk::topology::NODE_RANK, "velocity");
 
   // The nodes have coordinates
-  stk::mesh::Field<double> &node_coords_field =
+  stk::mesh::Field<double>& node_coords_field =
       meta_data.declare_field<double>(stk::topology::NODE_RANK, "coordinates");
 
   // Declare the field io roles and output types
@@ -1162,9 +1157,9 @@ void bee_hive() {
   // Setup the binding sites
   const size_t num_bind_sites_per_face = 100;
   for (size_t i = 0; i < num_faces; i++) {
-    const mundy::math::Vector3d coord1 = {x[face_ind[i][0]], y[face_ind[i][0]], z[face_ind[i][0]]};
-    const mundy::math::Vector3d coord2 = {x[face_ind[i][1]], y[face_ind[i][1]], z[face_ind[i][1]]};
-    const mundy::math::Vector3d coord3 = {x[face_ind[i][2]], y[face_ind[i][2]], z[face_ind[i][2]]};
+    const mundy::Vector3d coord1 = {x[face_ind[i][0]], y[face_ind[i][0]], z[face_ind[i][0]]};
+    const mundy::Vector3d coord2 = {x[face_ind[i][1]], y[face_ind[i][1]], z[face_ind[i][1]]};
+    const mundy::Vector3d coord3 = {x[face_ind[i][2]], y[face_ind[i][2]], z[face_ind[i][2]]};
 
     for (size_t j = 0; j < num_bind_sites_per_face; j++) {
       // Generate a random point on the triangle
@@ -1202,10 +1197,10 @@ void bee_hive() {
   const double max_rod_length = 8 * rod_radius;
 
   // Fill the domain min and max as the min and max of the vertices
-  mundy::math::Vector3d domain_min = {std::numeric_limits<double>::max(), std::numeric_limits<double>::max(),
-                                      std::numeric_limits<double>::max()};
-  mundy::math::Vector3d domain_max = {-std::numeric_limits<double>::max(), -std::numeric_limits<double>::max(),
-                                      -std::numeric_limits<double>::max()};
+  mundy::Vector3d domain_min = {std::numeric_limits<double>::max(), std::numeric_limits<double>::max(),
+                                std::numeric_limits<double>::max()};
+  mundy::Vector3d domain_max = {-std::numeric_limits<double>::max(), -std::numeric_limits<double>::max(),
+                                -std::numeric_limits<double>::max()};
   for (size_t i = 0; i < num_verts; ++i) {
     domain_min[0] = std::min(domain_min[0], x[i]);
     domain_min[1] = std::min(domain_min[1], y[i]);
@@ -1224,26 +1219,25 @@ void bee_hive() {
       double rod_length = min_rod_length + (max_rod_length - min_rod_length) * rand() / RAND_MAX;
 
       // Generate a random left node
-      const mundy::math::Vector3d left_node_coord = {
-          domain_min[0] + (domain_max[0] - domain_min[0]) * rand() / RAND_MAX,
-          domain_min[1] + (domain_max[1] - domain_min[1]) * rand() / RAND_MAX,
-          domain_min[2] + (domain_max[2] - domain_min[2]) * rand() / RAND_MAX};
+      const mundy::Vector3d left_node_coord = {domain_min[0] + (domain_max[0] - domain_min[0]) * rand() / RAND_MAX,
+                                               domain_min[1] + (domain_max[1] - domain_min[1]) * rand() / RAND_MAX,
+                                               domain_min[2] + (domain_max[2] - domain_min[2]) * rand() / RAND_MAX};
 
       // Generate a random orientation
       const double u1 = static_cast<double>(rand()) / RAND_MAX;
       const double u2 = static_cast<double>(rand()) / RAND_MAX;
       const double theta = 2.0 * M_PI * u1;
       const double phi = std::acos(2.0 * u2 - 1.0);
-      mundy::math::Vector3d right_node_coord = {rod_length * std::sin(phi) * std::cos(theta) + left_node_coord[0],
-                                                rod_length * std::sin(phi) * std::sin(theta) + left_node_coord[1],
-                                                rod_length * std::cos(phi) + left_node_coord[2]};
+      mundy::Vector3d right_node_coord = {rod_length * std::sin(phi) * std::cos(theta) + left_node_coord[0],
+                                          rod_length * std::sin(phi) * std::sin(theta) + left_node_coord[1],
+                                          rod_length * std::cos(phi) + left_node_coord[2]};
 
       // Check if the rod intersects any triangles TODO: This currently doesn't work!!
       bool intersects = false;
       // for (size_t j = 0; j < num_faces; ++j) {
-      //   const mundy::math::Vector3d coord1 = {x[face_ind[j][0]], y[face_ind[j][0]], z[face_ind[j][0]]};
-      //   const mundy::math::Vector3d coord2 = {x[face_ind[j][1]], y[face_ind[j][1]], z[face_ind[j][1]]};
-      //   const mundy::math::Vector3d coord3 = {x[face_ind[j][2]], y[face_ind[j][2]], z[face_ind[j][2]]};
+      //   const mundy::Vector3d coord1 = {x[face_ind[j][0]], y[face_ind[j][0]], z[face_ind[j][0]]};
+      //   const mundy::Vector3d coord2 = {x[face_ind[j][1]], y[face_ind[j][1]], z[face_ind[j][1]]};
+      //   const mundy::Vector3d coord3 = {x[face_ind[j][2]], y[face_ind[j][2]], z[face_ind[j][2]]};
 
       //   const double signed_sep = line_segment_signed_distance_to_triangle(left_node_coord, right_node_coord, coord1,
       //   coord2, coord3) - rod_radius; if (signed_sep < 0.0) {
@@ -1288,11 +1282,11 @@ void bee_hive() {
   bulk_data.modification_end();
 
   // Write the mesh to file
-  size_t step = 1;  // Step = 0 doesn't write out fields...
+  int step = 1;  // Step = 0 doesn't write out fields...
   stk::io::write_mesh_with_fields("bee_hive.exo", bulk_data, step);
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
   stk::parallel_machine_init(&argc, &argv);
   Kokkos::initialize(argc, argv);
 

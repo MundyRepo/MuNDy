@@ -36,7 +36,7 @@
 #include <stk_mesh/base/Selector.hpp>  // for stk::mesh::Selector
 
 // Mundy libs
-#include <mundy_core/throw_assert.hpp>   // for MUNDY_THROW_ASSERT
+#include <mundy_utils/throw_assert.hpp>   // for MUNDY_THROW_ASSERT
 #include <mundy_mesh/BulkData.hpp>       // for mundy::mesh::BulkData
 #include <mundy_mesh/ForEachEntity.hpp>  // for mundy::mesh::for_each_entity_run
 #include <mundy_mesh/MetaData.hpp>       // for mundy::mesh::MetaData
@@ -44,8 +44,6 @@
 namespace mundy {
 
 namespace mesh {
-
-namespace utils {
 
 /// \brief Helper function for filling a subset of a field with a given value.
 /// \param selector The selector for the entities to fill (we'll only fill entities that are in the selector and have
@@ -79,8 +77,6 @@ void fill_field_with_value(const stk::mesh::Field<value_t> &field, const std::ar
   stk::mesh::Selector field_selector = stk::mesh::selectField(field);
   fill_field_with_value(field_selector, field, value);
 }
-
-}  // namespace utils
 
 }  // namespace mesh
 

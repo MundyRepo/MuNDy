@@ -37,7 +37,7 @@
 // Mundy libs
 #include <mundy_agents/Agents.hpp>          // for mundy::agents::Agents
 #include <mundy_agents/RankedAssembly.hpp>  // for mundy::agents::RankedAssembly
-#include <mundy_core/StringLiteral.hpp>     // for mundy::core::StringLiteral and mundy::core::make_string_literal
+#include <mundy_utils/StringLiteral.hpp>     // for mundy::StringLiteral and mundy::make_string_literal
 #include <mundy_meta/FieldReqs.hpp>         // for mundy::meta::FieldReqs
 #include <mundy_meta/MeshReqs.hpp>          // for mundy::meta::MeshReqs
 #include <mundy_meta/PartReqs.hpp>          // for mundy::meta::PartReqs
@@ -117,7 +117,7 @@ namespace linkers {
 /// The design of this class is in accordance with the static interface requirements of mundy::agents::AgentFactory.
 ///
 /// \note This class is a constraint rank assembly part containing all linkers. It is a subset of the AGENTS part.
-class Linkers : public mundy::agents::RankedAssembly<mundy::core::make_string_literal("LINKERS"),
+class Linkers : public mundy::agents::RankedAssembly<mundy::make_string_literal("LINKERS"),
                                                      stk::topology::CONSTRAINT_RANK, mundy::agents::Agents> {
 };  // Linkers
 

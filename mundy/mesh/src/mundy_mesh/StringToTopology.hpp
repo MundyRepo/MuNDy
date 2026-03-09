@@ -31,7 +31,7 @@
 #include <stk_topology/topology.hpp>  // for stk::topology
 
 // Mundy libs
-#include <mundy_core/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
+#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
 
 namespace mundy {
 
@@ -48,7 +48,7 @@ namespace mesh {
 ///  - INVALID_RANK     -> stk::topology::INVALID_RANK
 ///
 /// \param rank_string [in] String containing a valid rank name.
-stk::topology::rank_t string_to_rank(const std::string &rank_string);
+stk::topology::rank_t string_to_rank(const std::string& rank_string);
 
 /// \brief Map a string with a valid topology name to the corresponding topology.
 ///
@@ -109,7 +109,7 @@ stk::topology::rank_t string_to_rank(const std::string &rank_string);
 ///     - SUPERFACE<N>                           -> create_superface_topology(N)
 ///     - SUPERELEMENT<N>                        -> create_superelement_topology(N)
 /// \param rank_string [in] String containing a valid rank name.
-stk::topology string_to_topology(const std::string &topology_string);
+stk::topology string_to_topology(const std::string& topology_string);
 
 }  // namespace mesh
 

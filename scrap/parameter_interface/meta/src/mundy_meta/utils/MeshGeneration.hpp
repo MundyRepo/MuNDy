@@ -34,7 +34,7 @@
 #include <Teuchos_ParameterList.hpp>  // for Teuchos::ParameterList
 
 // Mundy libs
-#include <mundy_core/throw_assert.hpp>                  // for MUNDY_THROW_ASSERT
+#include <mundy_utils/throw_assert.hpp>                  // for MUNDY_THROW_ASSERT
 #include <mundy_mesh/BulkData.hpp>                      // for mundy::mesh::BulkData
 #include <mundy_mesh/MetaData.hpp>                      // for mundy::mesh::MetaData
 #include <mundy_meta/HasMeshReqsAndIsRegisterable.hpp>  // for mundy::meta::HasMeshReqsAndIsRegisterable
@@ -43,8 +43,6 @@
 namespace mundy {
 
 namespace meta {
-
-namespace utils {
 
 template <typename MetaClass>
 Teuchos::ParameterList get_validated_and_default_set_fixed_params(const Teuchos::ParameterList &fixed_params) {
@@ -118,8 +116,6 @@ generate_class_instance_and_mesh_from_meta_class_requirements(
 
   return std::tuple_cat(class_ptrs, std::make_tuple(bulk_data_ptr));
 }
-
-}  // namespace utils
 
 }  // namespace meta
 

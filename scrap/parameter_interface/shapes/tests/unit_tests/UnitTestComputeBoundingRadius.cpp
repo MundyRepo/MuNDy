@@ -46,7 +46,7 @@
 #include <mundy_shapes/ComputeBoundingRadius.hpp>  // for mundy::shapes::ComputeBoundingRadius
 
 // Mundy test libs
-#include <mundy_meta/utils/MeshGeneration.hpp>  // for mundy::meta::utils::generate_class_instance_and_mesh_from_meta_class_requirements
+#include <mundy_meta/utils/MeshGeneration.hpp>  // for mundy::meta::generate_class_instance_and_mesh_from_meta_class_requirements
 
 namespace mundy {
 
@@ -65,7 +65,7 @@ TEST(ComputeBoundingRadius, PerformsBoundingRadiusCalculationCorrectlyForSphere)
   // Create an instance of ComputeBoundingRadius based on committed mesh that meets the requirements for
   // ComputeBoundingRadius.
   auto [compute_bounding_radius_ptr, bulk_data_ptr] =
-      mundy::meta::utils::generate_class_instance_and_mesh_from_meta_class_requirements<ComputeBoundingRadius>();
+      mundy::meta::generate_class_instance_and_mesh_from_meta_class_requirements<ComputeBoundingRadius>();
   auto meta_data_ptr = bulk_data_ptr->mesh_meta_data_ptr();
 
   // Fetch the multibody sphere part and add a single sphere to it.

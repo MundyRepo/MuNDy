@@ -27,38 +27,43 @@ tribits_add_executable_and_test(
   UnitTestFieldReqs
   SOURCES
     UnitTestFieldReqs.cpp
-    ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
+    ${Mundy_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1-4
+  INSTALLABLE
 )
 
 tribits_add_executable_and_test(
   UnitTestPartReqs
   SOURCES
     UnitTestPartReqs.cpp
-    ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
+    ${Mundy_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1-4
+  INSTALLABLE
 )
 
 tribits_add_executable_and_test(
   UnitTestMeshReqs
   SOURCES
     UnitTestMeshReqs.cpp
-    ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
+    ${Mundy_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1-4
+  INSTALLABLE
 )
 
 tribits_add_executable_and_test(
   UnitTestMetaFactory
   SOURCES
     UnitTestMetaFactory.cpp
-    ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
+    ${Mundy_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1-4
+  INSTALLABLE
 )
 
 tribits_add_executable_and_test(
   UnitTestMetaRegistry
   SOURCES
     UnitTestMetaRegistry.cpp
-    ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
+    ${Mundy_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1-4
+  INSTALLABLE
 )

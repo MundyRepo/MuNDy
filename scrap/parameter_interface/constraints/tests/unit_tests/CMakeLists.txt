@@ -24,14 +24,15 @@ tribits_add_executable_and_test(
   UnitTestDeclareAndInitConstraints
   SOURCES
     UnitTestDeclareAndInitConstraints.cpp
-    ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
+    ${Mundy_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1-4
+  INSTALLABLE
 )
 
 tribits_add_executable_and_test(
   UnitTestSprings
   SOURCES
     UnitTestSprings.cpp
-    ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
+    ${Mundy_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1-2
 )

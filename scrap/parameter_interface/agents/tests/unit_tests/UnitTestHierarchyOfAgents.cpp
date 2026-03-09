@@ -45,7 +45,7 @@
 #include <mundy_meta/FieldReqsBase.hpp>        // for mundy::meta::FieldReqsBase
 
 // Mundy test libs
-#include "utils/ExampleAgent.hpp"  // for mundy::agents::utils::ExampleAgent
+#include "utils/ExampleAgent.hpp"  // for mundy::agents::ExampleAgent
 
 namespace mundy {
 
@@ -59,7 +59,7 @@ namespace {
 TEST(HierarchyOfAgentsRegistration, RegistrationWorksProperly) {
   // Registration of a class with HierarchyOfAgents should allow access to the class's internal static methods.
   // This test checks that the registration was successful.
-  HierarchyOfAgents::register_new_class<mundy::agents::utils::ExampleAgent<3>>();
+  HierarchyOfAgents::register_new_class<mundy::agents::ExampleAgent<3>>();
 }
 //@}
 

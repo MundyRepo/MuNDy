@@ -47,12 +47,12 @@
 #include <stk_mesh/baseImpl/PartVectorUtils.hpp>  // for stk::mesh::impl::fill_add_parts_and_supersets
 
 // Mundy libs
-#include <mundy_core/throw_assert.hpp>           // for MUNDY_THROW_ASSERT
 #include <mundy_mesh/BulkData.hpp>               // for mundy::mesh::BulkData
 #include <mundy_mesh/ForEachEntity.hpp>          // for mundy::mesh::for_each_entity_run
 #include <mundy_mesh/MetaData.hpp>               // for mundy::mesh::MetaData
 #include <mundy_mesh/NgpFieldBLAS.hpp>           // for mundy::mesh::field_copy
 #include <mundy_mesh/impl/LinkedBucketConn.hpp>  // for mundy::mesh::impl::LinkedBucketConn
+#include <mundy_utils/throw_assert.hpp>          // for MUNDY_THROW_ASSERT
 
 namespace mundy {
 
@@ -60,19 +60,19 @@ namespace mesh {
 
 /// \brief Get the local fast mesh indices for a set of entities as an NgpView.
 template <typename OurExecSpace>
-core::NgpView<stk::mesh::FastMeshIndex *, OurExecSpace> get_local_entity_indices(const stk::mesh::BulkData &bulk_data,
-                                                                                 stk::mesh::EntityRank rank,
-                                                                                 const stk::mesh::Selector &selector,
-                                                                                 const OurExecSpace &exec_space) {
+NgpView<stk::mesh::FastMeshIndex*, OurExecSpace> get_local_entity_indices(const stk::mesh::BulkData& bulk_data,
+                                                                          stk::mesh::EntityRank rank,
+                                                                          const stk::mesh::Selector& selector,
+                                                                          const OurExecSpace& exec_space) {
   std::vector<stk::mesh::Entity> local_entities;
   stk::mesh::get_entities(bulk_data, rank, selector, local_entities);
 
-  core::NgpView<stk::mesh::FastMeshIndex *, OurExecSpace> ngp_local_entity_indices("local_entity_indices",
-                                                                                   local_entities.size());
+  NgpView<stk::mesh::FastMeshIndex*, OurExecSpace> ngp_local_entity_indices("local_entity_indices",
+                                                                            local_entities.size());
 
   Kokkos::parallel_for(stk::ngp::HostRangePolicy(0, local_entities.size()),
                        [&bulk_data, &local_entities, &host_mesh_indices](const int i) {
-                         const stk::mesh::MeshIndex &mesh_index = bulk_data.mesh_index(local_entities[i]);
+                         const stk::mesh::MeshIndex& mesh_index = bulk_data.mesh_index(local_entities[i]);
                          ngp_local_entity_indices.host_view()(i) =
                              stk::mesh::FastMeshIndex{mesh_index.bucket->bucket_id(), mesh_index.bucket_ordinal};
                        });
@@ -82,9 +82,9 @@ core::NgpView<stk::mesh::FastMeshIndex *, OurExecSpace> get_local_entity_indices
 }
 
 Kokkos::UnorderedMap<Kokkos::pair<stk::mesh::Entity, stk::mesh::Entity>, void, stk::ngp::ExecSpace>
-get_linked_neighbors_set(const LinkData &link_data, const stk::mesh::Selector &link_selector) {
-  auto &ngp_link_data = get_updated_ngp_data(link_data);
-  auto &ngp_mesh = link_data.ngp_mesh();
+get_linked_neighbors_set(const LinkData& link_data, const stk::mesh::Selector& link_selector) {
+  auto& ngp_link_data = get_updated_ngp_data(link_data);
+  auto& ngp_mesh = link_data.ngp_mesh();
 
   stk::mesh::Selector selected_links = link_selector & link_data.link_meta_data().universal_link_part();
   size_t num_linkers = stk::mesh::count_selected_entities(
@@ -96,7 +96,7 @@ get_linked_neighbors_set(const LinkData &link_data, const stk::mesh::Selector &l
 
   link_data.sync_to_device();
   for_each_link_run(
-      ngp_link_data, selected_links, KOKKOS_LAMBDA(const stk::mesh::FastMeshIndex &link_index) {
+      ngp_link_data, selected_links, KOKKOS_LAMBDA(const stk::mesh::FastMeshIndex& link_index) {
         stk::mesh::Entity source = ngp_link_data.get_linked_entity(link_index, 0);
         stk::mesh::Entity target = ngp_link_data.get_linked_entity(link_index, 1);
         linked_neighbors_set.insert(Kokkos::make_pair(source, target));
@@ -112,28 +112,28 @@ struct SearchTypes {
   // Host
   using ident_proc_t = stk::search::IdentProc<stk::mesh::EntityId, int>;
   using intersection_t = stk::search::IdentProcIntersection<ident_proc_t, ident_proc_t>;
-  using result_view_t = Kokkos::View<intersection_t *, exec_space_t>;
+  using result_view_t = Kokkos::View<intersection_t*, exec_space_t>;
 
   // Device
   using local_ident_proc_t = stk::search::IdentProc<stk::mesh::FastMeshIndex, int>;
   using local_intersection_t = stk::search::IdentProcIntersection<local_ident_proc_t, local_ident_proc_t>;
-  using local_result_view_t = Kokkos::View<local_intersection_t *, exec_space_t>;
+  using local_result_view_t = Kokkos::View<local_intersection_t*, exec_space_t>;
 
   // Box-base search
   using box_ident_proc_t = stk::search::BoxIdentProc<stk::search::Box<double>, ident_proc_t>;
-  using search_boxes_view_t = Kokkos::View<box_ident_proc_t *, exec_space_t>;
+  using search_boxes_view_t = Kokkos::View<box_ident_proc_t*, exec_space_t>;
 
   // Sphere-base search
   using sphere_ident_proc_t = stk::search::BoxIdentProc<stk::search::Sphere<double>, ident_proc_t>;
-  using search_spheres_view_t = Kokkos::View<sphere_ident_proc_t *, exec_space_t>;
+  using search_spheres_view_t = Kokkos::View<sphere_ident_proc_t*, exec_space_t>;
 };
 
 class SearchFilterBase {
  public:
-  using bool_view_t = Kokkos::View<bool *, stk::ngp::ExecSpace>;
+  using bool_view_t = Kokkos::View<bool*, stk::ngp::ExecSpace>;
   using search_types_t = SearchTypes<stk::ngp::ExecSpace>;
   virtual ~SearchFilterBase() = default;
-  virtual void apply(const search_types_t::result_view_t &search_results, const bool_view_t &mask) const = 0;
+  virtual void apply(const search_types_t::result_view_t& search_results, const bool_view_t& mask) const = 0;
 };
 
 /// \brief A helper class for generating and regenerating neighbor linkers
@@ -168,7 +168,7 @@ class GenNeighborLinks {
   //@{
 
   //! \brief Canonical constructor
-  GenNeighborLinks(const LinkData &link_data, [[maybe_unused]] const OurExecSpace &exec_space)
+  GenNeighborLinks(const LinkData& link_data, [[maybe_unused]] const OurExecSpace& exec_space)
       : link_data_(link_data),
         parallel_machine_(link_data_.bulk_data().parallel()),
         source_rank_(stk::topology::INVALID_RANK),
@@ -201,10 +201,10 @@ class GenNeighborLinks {
   }
 
   /// \brief Fetch the link data
-  const LinkData &get_link_data() const {
+  const LinkData& get_link_data() const {
     return link_data_;
   }
-  LinkData &get_link_data() {
+  LinkData& get_link_data() {
     return link_data_;
   }
 
@@ -252,7 +252,7 @@ class GenNeighborLinks {
   }
 
   /// \brief Get the search filter
-  const std::shared_ptr<SearchFilterBaseT<exec_space_t>> &get_search_filter() const {
+  const std::shared_ptr<SearchFilterBaseT<exec_space_t>>& get_search_filter() const {
     return search_filter_;
   }
   //@}
@@ -261,14 +261,14 @@ class GenNeighborLinks {
   //@{
 
   /// \brief Set the parallel machine
-  GenNeighborLinks &set_parallel_machine(stk::ParallelMachine parallel_machine) {
+  GenNeighborLinks& set_parallel_machine(stk::ParallelMachine parallel_machine) {
     MUNDY_THROW_REQUIRE(!is_concretized(), "Cannot set parallel machine after concretization.");
     parallel_machine_ = parallel_machine;
     return *this;
   }
 
   /// \brief Set the source and target ranks
-  GenNeighborLinks &set_source_target_rank(stk::mesh::EntityRank source_rank, stk::mesh::EntityRank target_rank) {
+  GenNeighborLinks& set_source_target_rank(stk::mesh::EntityRank source_rank, stk::mesh::EntityRank target_rank) {
     MUNDY_THROW_REQUIRE(is_not_concreteized(), "Cannot set source and target ranks after concretization.");
     MUNDY_THROW_REQUIRE(source_rank == stk::topology::ELEM_RANK && target_rank == stk::topology::ELEM_RANK,
                         "To start, we will only support element to element neighbor searches.");
@@ -279,42 +279,42 @@ class GenNeighborLinks {
   }
 
   /// \brief Set enforce source-target symmetry
-  GenNeighborLinks &set_enforce_source_target_symmetry(bool new_value) {
+  GenNeighborLinks& set_enforce_source_target_symmetry(bool new_value) {
     MUNDY_THROW_REQUIRE(!is_concretized(), "Cannot set enforce source-target symmetry after concretization.");
     enforce_source_target_symmetry_ = new_value;
     return *this;
   }
 
   /// \brief Set allow duplicate links
-  GenNeighborLinks &set_allow_duplicate_links(bool new_value) {
+  GenNeighborLinks& set_allow_duplicate_links(bool new_value) {
     MUNDY_THROW_REQUIRE(!is_concretized(), "Cannot set allow duplicate links after concretization.");
     allow_duplicate_links_ = new_value;
     return *this;
   }
 
   /// \brief Set sort search results
-  GenNeighborLinks &set_sort_search_results(bool new_value) {
+  GenNeighborLinks& set_sort_search_results(bool new_value) {
     MUNDY_THROW_REQUIRE(!is_concretized(), "Cannot set sort search results after concretization.");
     sort_search_results_ = new_value;
     return *this;
   }
 
   /// \brief Set search method
-  GenNeighborLinks &set_search_method(stk::search::SearchMethod search_method) {
+  GenNeighborLinks& set_search_method(stk::search::SearchMethod search_method) {
     MUNDY_THROW_REQUIRE(!is_concretized(), "Cannot set search method after concretization.");
     search_method_ = search_method;
     return *this;
   }
 
   /// \brief Set search buffer
-  GenNeighborLinks &set_search_buffer(double search_buffer) {
+  GenNeighborLinks& set_search_buffer(double search_buffer) {
     MUNDY_THROW_REQUIRE(!is_concretized(), "Cannot set search buffer after concretization.");
     search_buffer_ = search_buffer;
     return *this;
   }
 
   /// \brief Set search filter
-  GenNeighborLinks &set_search_filter(const std::shared_ptr<SearchFilter> &search_filter) {
+  GenNeighborLinks& set_search_filter(const std::shared_ptr<SearchFilter>& search_filter) {
     MUNDY_THROW_REQUIRE(!is_concretized(), "Cannot set search filter after concretization.");
     MUNDY_THROW_REQUIRE(search_filter == nullptr, "Search filtering not yet implemented.");
     search_filter_ = search_filter;
@@ -323,9 +323,9 @@ class GenNeighborLinks {
 
   /// \brief Inform us of a set of sources/targets to act on, their search generators, and their link specialization
   template <typename SourceAggregate, typename TargetAggregate, typename SourceGenerator, typename TargetGenerator>
-  GenNeighborLinks &acts_on(const SourceAggregate &source_agg, const TargetAggregate &target_agg,
-                            const SourceGenerator &source_generator, const TargetGenerator &target_generator,
-                            const stk::mesh::PartVector &link_parts) {
+  GenNeighborLinks& acts_on(const SourceAggregate& source_agg, const TargetAggregate& target_agg,
+                            const SourceGenerator& source_generator, const TargetGenerator& target_generator,
+                            const stk::mesh::PartVector& link_parts) {
     MUNDY_THROW_REQUIRE(!is_concretized(), "Cannot set source/targets after concretization.");
 
     // Each pair of objects we act on gets two function objects:
@@ -408,10 +408,10 @@ class GenNeighborLinks {
   //@{
 
   // Three internal vectors that store the search accumulators, checkers, and specializations
-  using ngp_local_entity_indices_t = core::NgpView<stk::mesh::FastMeshIndex *, exec_space_t>;
-  using search_accumulator_t = std::function<search_spheres_view_t(const ngp_local_entity_indices_t &, double)>;
+  using ngp_local_entity_indices_t = NgpView<stk::mesh::FastMeshIndex*, exec_space_t>;
+  using search_accumulator_t = std::function<search_spheres_view_t(const ngp_local_entity_indices_t&, double)>;
   using search_checker_t =
-      std::function<bool(const ngp_local_entity_indices_t &, const type_info_t::search_spheres_view_t &, double)>;
+      std::function<bool(const ngp_local_entity_indices_t&, const type_info_t::search_spheres_view_t&, double)>;
   using specialization_t = std::tuple<stk::mesh::Selector, stk::mesh::Selector, stk::mesh::PartVector>;
   using specialization_vec_t = std::vector<specialization_t>;
   //@}
@@ -421,21 +421,21 @@ class GenNeighborLinks {
 
   /// \brief Make a search accumulator
   template <typename Aggregate, typename Generator>
-  search_accumulator_t make_search_accumulator(const Aggregate &agg, const Generator &gen) {
-    return [&agg, &gen](const ngp_local_entity_indices_t &local_entity_indices, double search_buffer) {
+  search_accumulator_t make_search_accumulator(const Aggregate& agg, const Generator& gen) {
+    return [&agg, &gen](const ngp_local_entity_indices_t& local_entity_indices, double search_buffer) {
       auto ngp_agg = get_updated_ngp_data(agg);
-      auto &ngp_mesh = ngp_agg.ngp_mesh();
+      auto& ngp_mesh = ngp_agg.ngp_mesh();
       const int my_rank = agg.bulk_data().parallel_rank();
 
       size_t num_local_spheres = local_entity_indices.extent(0);
       type_info_t::search_spheres_view_t search_spheres("gen_neighbors_search_spheres", num_local_spheres);
 
       Kokkos::parallel_for(
-          stk::ngp::RangePolicy<exec_space_t>(0, num_local_spheres), KOKKOS_LAMBDA(const unsigned &i) {
+          stk::ngp::RangePolicy<exec_space_t>(0, num_local_spheres), KOKKOS_LAMBDA(const unsigned& i) {
             stk::mesh::Entity sphere = ngp_mesh.get_entity(spheres.rank(), sphere_indices(i));
             stk::mesh::FastMeshIndex sphere_index = ngp_mesh.fast_mesh_index(sphere);
 
-            geom::Sphere<double> sphere = gen(sphere_index);
+            Sphere<double> sphere = gen(sphere_index);
             stk::search::Point<double> center(sphere.center[0], sphere.center[1], sphere.center[2]);
             search_spheres(i) =
                 type_info_t::sphere_ident_proc_t{stk::search::Sphere<double>(center, sphere.radius + search_buffer),
@@ -448,11 +448,11 @@ class GenNeighborLinks {
 
   /// \brief Make a search checker
   template <typename Aggregate, typename Generator>
-  search_checker_t make_search_checker(const Aggregate &agg, const Generator &gen) {
-    return [&agg, &gen](const ngp_local_entity_indices_t &local_entity_indices,
-                        const type_info_t::search_spheres_view_t &old_search_spheres, double search_buffer) -> bool {
+  search_checker_t make_search_checker(const Aggregate& agg, const Generator& gen) {
+    return [&agg, &gen](const ngp_local_entity_indices_t& local_entity_indices,
+                        const type_info_t::search_spheres_view_t& old_search_spheres, double search_buffer) -> bool {
       auto ngp_agg = get_updated_ngp_data(agg);
-      auto &ngp_mesh = ngp_agg.ngp_mesh();
+      auto& ngp_mesh = ngp_agg.ngp_mesh();
       const int my_rank = agg.bulk_data().parallel_rank();
 
       local_entity_indices.sync_to<exec_space_t>();
@@ -460,7 +460,7 @@ class GenNeighborLinks {
       bool moved_too_much = false;
       Kokkos::parallel_reduce(
           "CheckSearchBufferViolation", stk::ngp::HostRangePolicy(0, num_local_spheres),
-          KOKKOS_LAMBDA(int i, bool &local_result) {
+          KOKKOS_LAMBDA(int i, bool& local_result) {
             stk::mesh::Entity sphere = ngp_mesh.get_entity(spheres.rank(), sphere_indices(i));
             stk::mesh::FastMeshIndex sphere_index = ngp_mesh.fast_mesh_index(sphere);
 
@@ -480,8 +480,8 @@ class GenNeighborLinks {
 
   void collect_local_entity_indices() {
     MUNDY_THROW_REQUIRE(specializations_.size() == 1, "Only one specialization is allowed for now.");
-    const stk::mesh::Selector &source_selector = std::get<0>(specializations_[0]);
-    const stk::mesh::Selector &target_selector = std::get<1>(specializations_[0]);
+    const stk::mesh::Selector& source_selector = std::get<0>(specializations_[0]);
+    const stk::mesh::Selector& target_selector = std::get<1>(specializations_[0]);
     source_local_entity_indices_ =
         get_local_entity_indices(link_data_.bulk_data(), source_rank_, source_selector, stk::ngp::ExecSpace{});
     target_local_entity_indices_ =
@@ -490,10 +490,10 @@ class GenNeighborLinks {
 
   void collect_search_spheres() {
     MUNDY_THROW_REQUIRE(specializations_.size() == 1, "Only one specialization is allowed for now.");
-    const stk::mesh::Selector &source_selector = std::get<0>(specializations_[0]);
-    const stk::mesh::Selector &target_selector = std::get<1>(specializations_[0]);
-    const auto &source_search_accumulator = source_search_accumulators_[0];
-    const auto &target_search_accumulator = target_search_accumulators_[0];
+    const stk::mesh::Selector& source_selector = std::get<0>(specializations_[0]);
+    const stk::mesh::Selector& target_selector = std::get<1>(specializations_[0]);
+    const auto& source_search_accumulator = source_search_accumulators_[0];
+    const auto& target_search_accumulator = target_search_accumulators_[0];
     source_search_spheres_ = source_search_accumulator(source_local_entity_indices_, search_buffer_);
     target_search_spheres_ = target_search_accumulator(target_local_entity_indices_, search_buffer_);
   }
@@ -521,7 +521,7 @@ class GenNeighborLinks {
 
   void ghost_neighbors() {
     MUNDY_THROW_REQUIRE(specializations_.size() == 1, "Only one specialization is allowed for now.");
-    BulkData &bulk_data = link_data_.bulk_data();
+    BulkData& bulk_data = link_data_.bulk_data();
     if (bulk_data.parallel_size() == 1) {
       return;
     }
@@ -536,7 +536,7 @@ class GenNeighborLinks {
     //  ghosted.
     const int my_parallel_rank = bulk_data.parallel_rank();
     bulk_data.modification_begin();
-    stk::mesh::Ghosting &neighbor_ghosting = bulk_data.create_ghosting("MUNDY_NEIGHBOR_LINKERS");
+    stk::mesh::Ghosting& neighbor_ghosting = bulk_data.create_ghosting("MUNDY_NEIGHBOR_LINKERS");
     std::vector<stk::mesh::EntityProc> elements_to_ghost;
 
     const size_t num_search_results = host_search_results_.size();
@@ -573,7 +573,7 @@ class GenNeighborLinks {
 
     stk::mesh::PartVector locally_owned_link_parts = std::get<2>(specializations_[0]);
     locally_owned_link_parts.push_back(&link_data_.bulk_data().mesh_meta_data().locally_owned_part());
-    LinkPartition &link_partition =
+    LinkPartition& link_partition =
         link_data_.get_link_partition(link_data_.get_partition_key(locally_owned_link_parts));
 
     size_t num_search_results = host_search_results_.size();
@@ -596,9 +596,9 @@ class GenNeighborLinks {
 
   bool indices_changed() {
     MUNDY_THROW_REQUIRE(specializations_.size() == 1, "Only one specialization is allowed for now.");
-    BulkData &bulk_data = link_data_.bulk_data();
-    const stk::mesh::Selector &source_selector = std::get<0>(specializations_[0]);
-    const stk::mesh::Selector &target_selector = std::get<1>(specializations_[0]);
+    BulkData& bulk_data = link_data_.bulk_data();
+    const stk::mesh::Selector& source_selector = std::get<0>(specializations_[0]);
+    const stk::mesh::Selector& target_selector = std::get<1>(specializations_[0]);
 
     std::vector<stk::mesh::Entity> local_source_entities;
     std::vector<stk::mesh::Entity> local_target_entities;
@@ -618,8 +618,8 @@ class GenNeighborLinks {
     bool local_indices_changed = false;
     Kokkos::parallel_reduce(
         "CheckIndexChangesSource", stk::ngp::HostRangePolicy(0, local_source_entities.size()),
-        KOKKOS_LAMBDA(int i, bool &local_result) {
-          const stk::mesh::MeshIndex &old_mesh_index = bulk_data.mesh_index(local_source_entities[i]);
+        KOKKOS_LAMBDA(int i, bool& local_result) {
+          const stk::mesh::MeshIndex& old_mesh_index = bulk_data.mesh_index(local_source_entities[i]);
           const stk::mesh::FastMeshIndex old_fast_mesh_index{old_mesh_index.bucket->bucket_id(),
                                                              old_mesh_index.bucket_ordinal};
           local_result = local_result || (old_fast_mesh_index != source_local_entity_indices(i));
@@ -628,8 +628,8 @@ class GenNeighborLinks {
 
     Kokkos::parallel_reduce(
         "CheckIndexChangesTarget", stk::ngp::HostRangePolicy(0, local_source_entities.size()),
-        KOKKOS_LAMBDA(int i, bool &local_result) {
-          const stk::mesh::MeshIndex &old_mesh_index = bulk_data.mesh_index(local_source_entities[i]);
+        KOKKOS_LAMBDA(int i, bool& local_result) {
+          const stk::mesh::MeshIndex& old_mesh_index = bulk_data.mesh_index(local_source_entities[i]);
           const stk::mesh::FastMeshIndex old_fast_mesh_index{old_mesh_index.bucket->bucket_id(),
                                                              old_mesh_index.bucket_ordinal};
           local_result = local_result || (old_fast_mesh_index != target_local_entity_indices(i));
@@ -645,9 +645,9 @@ class GenNeighborLinks {
 
   bool objects_moved_too_much() {
     MUNDY_THROW_REQUIRE(specializations_.size() == 1, "Only one specialization is allowed for now.");
-    BulkData &bulk_data = link_data_.bulk_data();
-    const stk::mesh::Selector &source_selector = std::get<0>(specializations_[0]);
-    const stk::mesh::Selector &target_selector = std::get<1>(specializations_[0]);
+    BulkData& bulk_data = link_data_.bulk_data();
+    const stk::mesh::Selector& source_selector = std::get<0>(specializations_[0]);
+    const stk::mesh::Selector& target_selector = std::get<1>(specializations_[0]);
     bool source_moved_too_much =
         source_search_checkers_[0](source_local_entity_indices_, source_search_spheres_, search_buffer_);
     bool target_moved_too_much =
@@ -667,7 +667,7 @@ class GenNeighborLinks {
   //! \name Internal members
   //@{
 
-  LinkData &link_data_;
+  LinkData& link_data_;
   stk::ParallelMachine parallel_machine_;
   stk::mesh::EntityRank source_rank_;
   stk::mesh::EntityRank target_rank_;

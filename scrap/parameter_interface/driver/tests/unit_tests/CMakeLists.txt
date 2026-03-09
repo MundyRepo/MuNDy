@@ -21,7 +21,7 @@ tribits_add_executable_and_test(
   UnitTestConfigurator
   SOURCES
     UnitTestConfigurator.cpp
-    ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
+    ${Mundy_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1
   CATEGORIES BASIC
 )
@@ -30,7 +30,7 @@ tribits_add_executable_and_test(
   UnitTestDriver
   SOURCES
     UnitTestDriver.cpp
-    ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
+    ${Mundy_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1
 )
 
@@ -38,7 +38,7 @@ tribits_add_executable_and_test(
   UnitTestTriggers
   SOURCES
     UnitTestTriggers.cpp
-    ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
+    ${Mundy_DEFAULT_UNIT_TEST_MAIN}
   NUM_MPI_PROCS 1
 )
 

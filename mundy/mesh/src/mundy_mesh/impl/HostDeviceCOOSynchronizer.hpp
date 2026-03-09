@@ -35,7 +35,6 @@
 #include <stk_mesh/base/Types.hpp>        // for stk::mesh::EntityRank
 
 // Mundy libs
-#include <mundy_core/throw_assert.hpp>                 // for MUNDY_THROW_ASSERT
 #include <mundy_mesh/LinkCOOData.hpp>                  // for mundy::mesh::LinkCOOData/NgpLinkCOOData
 #include <mundy_mesh/LinkCSRData.hpp>                  // for mundy::mesh::LinkCSRData/NgpLinkCSRData
 #include <mundy_mesh/LinkMetaData.hpp>                 // for mundy::mesh::LinkMetaData
@@ -43,6 +42,7 @@
 #include <mundy_mesh/Types.hpp>                        // for mundy::mesh::NgpDataAccessTag
 #include <mundy_mesh/impl/HostDeviceSynchronizer.hpp>  // for mundy::mesh::impl::HostDeviceSynchronizer
 #include <mundy_mesh/impl/NgpLinkMetaData.hpp>         // for mundy::mesh::impl::NgpLinkMetaDataT
+#include <mundy_utils/throw_assert.hpp>                // for MUNDY_THROW_ASSERT
 
 namespace mundy {
 
@@ -53,14 +53,14 @@ namespace impl {
 template <typename NgpMemSpace>
 class LinkCOODataSynchronizerT : public HostDeviceSynchronizer {
  public:
-  LinkCOODataSynchronizerT(LinkCOOData &coo_data, NgpLinkCOODataT<NgpMemSpace> &ngp_coo_data)
+  LinkCOODataSynchronizerT(LinkCOOData& coo_data, NgpLinkCOODataT<NgpMemSpace>& ngp_coo_data)
       : coo_data_(coo_data), ngp_coo_data_(ngp_coo_data) {
   }
 
   virtual ~LinkCOODataSynchronizerT() = default;
 
   virtual void modify_on_host() override {
-    LinkMetaData &lmd = coo_data_.link_meta_data();
+    LinkMetaData& lmd = coo_data_.link_meta_data();
     impl::get_linked_entities_field(lmd).modify_on_host();
     impl::get_linked_entities_crs_field(lmd).modify_on_host();
     impl::get_linked_entity_ids_field(lmd).modify_on_host();
@@ -72,7 +72,7 @@ class LinkCOODataSynchronizerT : public HostDeviceSynchronizer {
   }
 
   virtual void modify_on_device() override {
-    LinkMetaData &lmd = coo_data_.link_meta_data();
+    LinkMetaData& lmd = coo_data_.link_meta_data();
     impl::get_linked_entities_field(lmd).modify_on_device();
     impl::get_linked_entities_crs_field(lmd).modify_on_device();
     impl::get_linked_entity_ids_field(lmd).modify_on_device();
@@ -84,7 +84,7 @@ class LinkCOODataSynchronizerT : public HostDeviceSynchronizer {
   }
 
   virtual void sync_to_host() override {
-    LinkMetaData &lmd = coo_data_.link_meta_data();
+    LinkMetaData& lmd = coo_data_.link_meta_data();
     impl::get_linked_entities_field(lmd).sync_to_host();
     impl::get_linked_entities_crs_field(lmd).sync_to_host();
     impl::get_linked_entity_ids_field(lmd).sync_to_host();
@@ -96,7 +96,7 @@ class LinkCOODataSynchronizerT : public HostDeviceSynchronizer {
   }
 
   virtual void sync_to_device() override {
-    LinkMetaData &lmd = coo_data_.link_meta_data();
+    LinkMetaData& lmd = coo_data_.link_meta_data();
     impl::get_linked_entities_field(lmd).sync_to_device();
     impl::get_linked_entities_crs_field(lmd).sync_to_device();
     impl::get_linked_entity_ids_field(lmd).sync_to_device();
@@ -108,9 +108,9 @@ class LinkCOODataSynchronizerT : public HostDeviceSynchronizer {
   }
 
   virtual void update_post_mesh_mod() override {
-    stk::mesh::NgpMesh &ngp_mesh = impl::get_ngp_mesh(ngp_coo_data_);
-    NgpLinkMetaDataT<NgpMemSpace> &ngp_link_meta_data = impl::get_ngp_link_meta_data(ngp_coo_data_);
-    LinkMetaData &link_meta_data = coo_data_.link_meta_data();
+    stk::mesh::NgpMesh& ngp_mesh = impl::get_ngp_mesh(ngp_coo_data_);
+    NgpLinkMetaDataT<NgpMemSpace>& ngp_link_meta_data = impl::get_ngp_link_meta_data(ngp_coo_data_);
+    LinkMetaData& link_meta_data = coo_data_.link_meta_data();
     ngp_mesh.update_mesh();
 
     ngp_link_meta_data.ngp_linked_entities_field() =
@@ -133,12 +133,12 @@ class LinkCOODataSynchronizerT : public HostDeviceSynchronizer {
 
  private:
   template <typename T>
-  auto &our_get_updated_ngp_field(const stk::mesh::Field<T> &field) {
+  auto& our_get_updated_ngp_field(const stk::mesh::Field<T>& field) {
     return stk::mesh::get_updated_ngp_field<T>(field);
   }
 
-  LinkCOOData &coo_data_;
-  NgpLinkCOODataT<NgpMemSpace> &ngp_coo_data_;
+  LinkCOOData& coo_data_;
+  NgpLinkCOODataT<NgpMemSpace>& ngp_coo_data_;
 };  // LinkCSRDataSynchronizerT
 
 }  // namespace impl

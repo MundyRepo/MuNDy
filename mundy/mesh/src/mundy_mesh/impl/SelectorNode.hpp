@@ -43,11 +43,11 @@ struct expression_undefined_exception : public virtual std::exception {
     return rtnMsg.c_str();
   }
 
-  expression_undefined_exception(const char* msg, std::size_t numArgs) : m_msg(msg), m_numArgs(numArgs) {
+  expression_undefined_exception(const char* msg, size_t numArgs) : m_msg(msg), m_numArgs(numArgs) {
   }
 
   std::string m_msg;
-  std::size_t m_numArgs = 0;
+  size_t m_numArgs = 0;
 };
 
 namespace mundy {

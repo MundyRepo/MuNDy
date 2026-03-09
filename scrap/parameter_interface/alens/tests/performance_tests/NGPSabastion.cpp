@@ -74,12 +74,13 @@
 #include <stk_balance/balance.hpp>  // for balanceStkMesh
 
 // Mundy
-#include <mundy_geom/distance.hpp>      // for mundy::geom::distance
-#include <mundy_geom/primitives.hpp>    // for mundy::geom::Spherocylinder
-#include <mundy_math/Quaternion.hpp>    // for mundy::math::Quaternion
-#include <mundy_math/Vector3.hpp>       // for mundy::math::Vector3
+#include <mundy_geom/distance.hpp>      // for mundy::distance
+#include <mundy_geom/primitives.hpp>    // for mundy::Spherocylinder
+#include <mundy_math/Quaternion.hpp>    // for mundy::Quaternion
+#include <mundy_math/Vector3.hpp>       // for mundy::Vector3
 #include <mundy_mesh/FieldViews.hpp>    // for mundy::mesh::vector3_field_data, mundy::mesh::quaternion_field_data
 #include <mundy_mesh/NgpFieldBLAS.hpp>  // for mundy::mesh::field_fill
+#include <mundy_utils/rng.hpp>              // for mundy::make_philox
 
 using ExecSpace = stk::ngp::ExecSpace;
 using IdentProc = stk::search::IdentProc<stk::mesh::EntityId, int>;
@@ -146,14 +147,14 @@ void generate_particles(stk::mesh::BulkData &bulk_data, const size_t num_particl
 void randomize_position_and_orientation(const stk::mesh::NgpMesh &ngp_mesh, const stk::mesh::Selector &spherocylinders,
                                         stk::mesh::NgpField<double> &node_coords,
                                         stk::mesh::NgpField<double> &elem_orientation,
-                                        const mundy::math::Vector3d &domain_low,
-                                        const mundy::math::Vector3d &domain_high) {
+                                        const mundy::Vector3d &domain_low,
+                                        const mundy::Vector3d &domain_high) {
   node_coords.sync_to_device();
   elem_orientation.sync_to_device();
 
   // Note, we use z as the reference axis. The quaternion will take the z axis to the tangent of the spherocylinder.
   const size_t some_counter = 1234;
-  constexpr mundy::math::Vector3d z_hat(0.0, 0.0, 1.0);
+  constexpr mundy::Vector3d z_hat(0.0, 0.0, 1.0);
   constexpr double two_pi = 2.0 * Kokkos::numbers::pi_v<double>;
 
   stk::mesh::for_each_entity_run(
@@ -165,7 +166,7 @@ void randomize_position_and_orientation(const stk::mesh::NgpMesh &ngp_mesh, cons
         // Use the ID of the elem as the seed and choose an arbitrary counter.
         stk::mesh::Entity elem = ngp_mesh.get_entity(stk::topology::ELEM_RANK, elem_index);
         stk::mesh::EntityId elem_id = ngp_mesh.identifier(elem);
-        openrand::Philox rng(elem_id, some_counter);
+        openrand::Philox rng = make_philox(elem_id, some_counter);
 
         // Randomize the position of the node
         auto node_position = mundy::mesh::vector3_field_data(node_coords, node_index);
@@ -178,8 +179,8 @@ void randomize_position_and_orientation(const stk::mesh::NgpMesh &ngp_mesh, cons
         const double zrand = rng.rand<double>() - 1.0;
         const double wrand = std::sqrt(1.0 - zrand * zrand);
         const double trand = two_pi * rng.rand<double>();
-        mundy::math::Vector3d u_hat{wrand * Kokkos::cos(trand), wrand * Kokkos::sin(trand), zrand};
-        orientation = mundy::math::quat_from_parallel_transport(z_hat, u_hat);
+        mundy::Vector3d u_hat{wrand * Kokkos::cos(trand), wrand * Kokkos::sin(trand), zrand};
+        orientation = mundy::quat_from_parallel_transport(z_hat, u_hat);
       });
 
   node_coords.modify_on_device();
@@ -265,7 +266,7 @@ void compute_aabbs(stk::mesh::NgpMesh &ngp_mesh, const stk::mesh::Selector &sphe
 
         // The AABB for a spherocylinder
         const double half_length = 0.5 * length;
-        const auto unit_tangent = orientation * mundy::math::Vector3d{0.0, 0.0, 1.0};
+        const auto unit_tangent = orientation * mundy::Vector3d{0.0, 0.0, 1.0};
         const auto left_point = center - half_length * unit_tangent;
         const auto right_point = center + half_length * unit_tangent;
 
@@ -385,23 +386,23 @@ void apply_hertzian_contact_between_spherocylinders(
         const double target_radius = elem_radius(target_entity_index, 0);
         const double source_length = elem_length(source_entity_index, 0);
         const double target_length = elem_length(target_entity_index, 0);
-        const auto source_tangent = source_orientation * mundy::math::Vector3d(0, 0, 1);
-        const auto target_tangent = target_orientation * mundy::math::Vector3d(0, 0, 1);
+        const auto source_tangent = source_orientation * mundy::Vector3d(0, 0, 1);
+        const auto target_tangent = target_orientation * mundy::Vector3d(0, 0, 1);
 
         // The signed separation distance is the distance between the centerline of the two spherocylinders minus the
         // sum of their radii
-        mundy::geom::LineSegment<double> source_centerline{source_coords - 0.5 * source_length * source_tangent,
+        mundy::LineSegment<double> source_centerline{source_coords - 0.5 * source_length * source_tangent,
                                                            source_coords + 0.5 * source_length * source_tangent};
-        mundy::geom::LineSegment<double> target_centerline{target_coords - 0.5 * target_length * target_tangent,
+        mundy::LineSegment<double> target_centerline{target_coords - 0.5 * target_length * target_tangent,
                                                            target_coords + 0.5 * target_length * target_tangent};
 
-        mundy::geom::Point<double> source_centerline_contact_point;
-        mundy::geom::Point<double> target_centerline_contact_point;
+        mundy::Point<double> source_centerline_contact_point;
+        mundy::Point<double> target_centerline_contact_point;
         double source_contact_point_arch_length;
         double target_contact_point_arch_length;
-        mundy::math::Vector3d source_to_target_centerline_sep;
+        mundy::Vector3d source_to_target_centerline_sep;
         const double signed_sep_dist =
-            mundy::geom::distance(source_centerline, target_centerline,                                //
+            mundy::distance(source_centerline, target_centerline,                                //
                                   source_centerline_contact_point, target_centerline_contact_point,    //
                                   source_contact_point_arch_length, target_contact_point_arch_length,  //
                                   source_to_target_centerline_sep) -
@@ -421,9 +422,9 @@ void apply_hertzian_contact_between_spherocylinders(
           // Mind the signs. source to target is normal to the source and contact forces act along the negative normal
           source_force -= normal_force_magnitude_scaled * source_to_target_centerline_sep;
           target_force += normal_force_magnitude_scaled * source_to_target_centerline_sep;
-          source_torque += mundy::math::cross(source_centerline_contact_point - source_coords,  //
+          source_torque += mundy::cross(source_centerline_contact_point - source_coords,  //
                                               -normal_force_magnitude_scaled * source_to_target_centerline_sep);
-          target_torque += mundy::math::cross(target_centerline_contact_point - target_coords,  //
+          target_torque += mundy::cross(target_centerline_contact_point - target_coords,  //
                                               normal_force_magnitude_scaled * source_to_target_centerline_sep);
         }
       });
@@ -469,8 +470,8 @@ void compute_local_drag_mobility(stk::mesh::NgpMesh &ngp_mesh, const double visc
         const double inv_drag_perp = (b + 2) / (eight_pi * length) * inv_visc;
         const double inv_drag_rot = 3 * (b + 2) / (two_pi * length * length * length) * inv_visc;
 
-        const auto tangent = orientation * mundy::math::Vector3d(0, 0, 1);
-        const auto force_para = mundy::math::dot(force, tangent) * tangent;
+        const auto tangent = orientation * mundy::Vector3d(0, 0, 1);
+        const auto force_para = mundy::dot(force, tangent) * tangent;
         const auto force_perp = force - force_para;
         velocity += inv_drag_para * force_para + inv_drag_perp * force_perp;
         angular_velocity += inv_drag_rot * torque;
@@ -500,7 +501,7 @@ void move_spherocylinders(const stk::mesh::NgpMesh &ngp_mesh, const double dt, s
         auto omega = mundy::mesh::vector3_field_data(elem_angular_velocity, sp_index);
 
         center += dt * vel;
-        mundy::math::rotate_quaternion(orientation, omega, dt);
+        mundy::rotate_quaternion(orientation, omega, dt);
       });
 
   node_coords.modify_on_device();
@@ -521,7 +522,7 @@ void compute_swimming_velocity(const stk::mesh::NgpMesh &ngp_mesh, const double 
 
         auto vel = mundy::mesh::vector3_field_data(node_velocity, node_index);
         auto orientation = mundy::mesh::quaternion_field_data(elem_orientation, sp_index);
-        const auto tangent = orientation * mundy::math::Vector3d(0, 0, 1);
+        const auto tangent = orientation * mundy::Vector3d(0, 0, 1);
         vel += swimming_speed * tangent;
       });
 
@@ -537,7 +538,7 @@ void compute_tangent(const stk::mesh::NgpMesh &ngp_mesh, const stk::mesh::Select
       ngp_mesh, stk::topology::ELEM_RANK, spherocylinders, KOKKOS_LAMBDA(const stk::mesh::FastMeshIndex &sp_index) {
         auto orientation = mundy::mesh::quaternion_field_data(elem_orientation, sp_index);
         auto tangent = mundy::mesh::vector3_field_data(elem_tangent, sp_index);
-        tangent = orientation * mundy::math::Vector3d(0, 0, 1);
+        tangent = orientation * mundy::Vector3d(0, 0, 1);
       });
 
   elem_tangent.modify_on_device();
@@ -583,8 +584,8 @@ int main(int argc, char **argv) {
     const double radius = 0.1;
     const double length = 1.0;
     const double num_spherocyliners = 8000;
-    const mundy::geom::Point<double> domain_low{0.0, 0.0, 0.0};
-    const mundy::geom::Point<double> domain_high{10.0, 10.0, 10.0};
+    const mundy::Point<double> domain_low{0.0, 0.0, 0.0};
+    const mundy::Point<double> domain_high{10.0, 10.0, 10.0};
     const double time_step_size = 0.00001;
     const size_t num_time_steps = 10000;
     const size_t io_frequency = 1000;

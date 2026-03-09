@@ -38,8 +38,8 @@
 #include <stk_topology/topology.hpp>        // for stk::topology
 
 // Mundy
-#include <mundy_core/StringLiteral.hpp>                               // for mundy::core::StringLiteral
-#include <mundy_core/throw_assert.hpp>                                // for MUNDY_THROW_ASSERT
+#include <mundy_utils/StringLiteral.hpp>                               // for mundy::StringLiteral
+#include <mundy_utils/throw_assert.hpp>                                // for MUNDY_THROW_ASSERT
 #include <mundy_mesh/BulkData.hpp>                                    // for mundy::mesh::BulkData
 #include <mundy_mesh/MetaData.hpp>                                    // for mundy::mesh::MetaData
 #include <mundy_meta/MeshReqs.hpp>                                    // for mundy::meta::MeshReqs

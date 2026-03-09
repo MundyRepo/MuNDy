@@ -54,13 +54,13 @@ TEST(MetaDataAttributes, DeclareFetchAndRemoveFieldAttribute) {
   // Create a dummy mesh.
   MeshBuilder builder(MPI_COMM_WORLD);
   std::unique_ptr<BulkData> bulk_data_ptr = builder.create_bulk_data();
-  MetaData &meta_data = bulk_data_ptr->mesh_meta_data();
+  MetaData& meta_data = bulk_data_ptr->mesh_meta_data();
 
   // Create a dummy field.
   const std::string field_name = "field";
   const stk::topology::rank_t field_rank = stk::topology::NODE_RANK;
   const unsigned field_dimension = 1;
-  stk::mesh::Field<double> &field = meta_data.declare_field<double>(field_rank, field_name, field_dimension);
+  stk::mesh::Field<double>& field = meta_data.declare_field<double>(field_rank, field_name, field_dimension);
 
   // Create an attribute.
   std::string attribute1_name = "attribute1";
@@ -95,12 +95,12 @@ TEST(MetaDataAttributes, DeclareFetchAndRemovePartAttribute) {
   MeshBuilder builder(MPI_COMM_WORLD);
   builder.set_spatial_dimension(3);
   std::unique_ptr<BulkData> bulk_data_ptr = builder.create_bulk_data();
-  MetaData &meta_data = bulk_data_ptr->mesh_meta_data();
+  MetaData& meta_data = bulk_data_ptr->mesh_meta_data();
 
   // Create a dummy part.
   // Note, you cannot declare a ranked part unless the spatial dimension has been set.
   const std::string part_name = "part";
-  stk::mesh::Part &part = meta_data.declare_part(part_name, stk::topology::NODE_RANK);
+  stk::mesh::Part& part = meta_data.declare_part(part_name, stk::topology::NODE_RANK);
 
   // Create an attribute.
   std::string attribute1_name = "attribute1";
@@ -134,7 +134,7 @@ TEST(MetaDataAttributes, DeclareFetchAndRemoveMeshAttribute) {
   // Create a dummy mesh.
   MeshBuilder builder(MPI_COMM_WORLD);
   std::unique_ptr<BulkData> bulk_data_ptr = builder.create_bulk_data();
-  MetaData &meta_data = bulk_data_ptr->mesh_meta_data();
+  MetaData& meta_data = bulk_data_ptr->mesh_meta_data();
 
   // Create an attribute.
   std::string attribute1_name = "attribute1";
@@ -166,7 +166,7 @@ TEST(MetaDataAttributes, DeclareFetchAndRemoveMeshAttribute) {
 
 struct CountCopiesStruct {
   CountCopiesStruct() = default;  // Default constructable
-  CountCopiesStruct(const CountCopiesStruct &) {
+  CountCopiesStruct(const CountCopiesStruct&) {
     ++num_copies;
   }  // Copy constructable
 
@@ -186,13 +186,13 @@ TEST(MetaDataAttributes, DeclareFetchAndRemoveUncopiableFieldAttribute) {
   // Create a dummy mesh.
   MeshBuilder builder(MPI_COMM_WORLD);
   std::unique_ptr<BulkData> bulk_data_ptr = builder.create_bulk_data();
-  MetaData &meta_data = bulk_data_ptr->mesh_meta_data();
+  MetaData& meta_data = bulk_data_ptr->mesh_meta_data();
 
   // Create a dummy field.
   const std::string field_name = "field";
   const stk::topology::rank_t field_rank = stk::topology::NODE_RANK;
   const unsigned field_dimension = 1;
-  stk::mesh::Field<double> &field = meta_data.declare_field<double>(field_rank, field_name, field_dimension);
+  stk::mesh::Field<double>& field = meta_data.declare_field<double>(field_rank, field_name, field_dimension);
 
   // Create an uncopiable attribute.
   // Note, std::any requires that the element stored within it is copyable.
@@ -230,12 +230,12 @@ TEST(MetaDataAttributes, DeclareFetchAndRemoveUncopiablePartAttribute) {
   MeshBuilder builder(MPI_COMM_WORLD);
   builder.set_spatial_dimension(3);
   std::unique_ptr<BulkData> bulk_data_ptr = builder.create_bulk_data();
-  MetaData &meta_data = bulk_data_ptr->mesh_meta_data();
+  MetaData& meta_data = bulk_data_ptr->mesh_meta_data();
 
   // Create a dummy part.
   // Note, you cannot declare a ranked part unless the spatial dimension has been set.
   const std::string part_name = "part";
-  stk::mesh::Part &part = meta_data.declare_part(part_name, stk::topology::NODE_RANK);
+  stk::mesh::Part& part = meta_data.declare_part(part_name, stk::topology::NODE_RANK);
 
   // Create an uncopiable attribute.
   // Note, std::any requires that the element stored within it is copyable.
@@ -272,7 +272,7 @@ TEST(MetaDataAttributes, DeclareFetchAndRemoveUncopiableMeshAttribute) {
   // Create a dummy mesh.
   MeshBuilder builder(MPI_COMM_WORLD);
   std::unique_ptr<BulkData> bulk_data_ptr = builder.create_bulk_data();
-  MetaData &meta_data = bulk_data_ptr->mesh_meta_data();
+  MetaData& meta_data = bulk_data_ptr->mesh_meta_data();
 
   // Create an uncopiable attribute.
   // Note, std::any requires that the element stored within it is copyable.

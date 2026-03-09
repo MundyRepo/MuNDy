@@ -55,10 +55,10 @@
 #include <mundy_constraints/ComputeConstraintForcing.hpp>      // for mundy::constraints::ComputeConstraintForcing
 #include <mundy_constraints/DeclareAndInitConstraints.hpp>     // for mundy::constraints::DeclareAndInitConstraints
 #include <mundy_constraints/HookeanSprings.hpp>                // for mundy::constraints::HookeanSprings
-#include <mundy_core/MakeStringArray.hpp>                      // for mundy::core::make_string_array
-#include <mundy_core/OurAnyNumberParameterEntryValidator.hpp>  // for mundy::core::OurAnyNumberParameterEntryValidator
-#include <mundy_core/StringLiteral.hpp>  // for mundy::core::StringLiteral and mundy::core::make_string_literal
-#include <mundy_core/throw_assert.hpp>   // for MUNDY_THROW_ASSERT
+#include <mundy_utils/MakeStringArray.hpp>                      // for mundy::make_string_array
+#include <mundy_utils/OurAnyNumberParameterEntryValidator.hpp>  // for mundy::OurAnyNumberParameterEntryValidator
+#include <mundy_utils/StringLiteral.hpp>  // for mundy::StringLiteral and mundy::make_string_literal
+#include <mundy_utils/throw_assert.hpp>   // for MUNDY_THROW_ASSERT
 #include <mundy_io/IOBroker.hpp>         // for mundy::io::IOBroker
 #include <mundy_linkers/ComputeSignedSeparationDistanceAndContactNormal.hpp>  // for mundy::linkers::ComputeSignedSeparationDistanceAndContactNormal
 #include <mundy_linkers/DestroyNeighborLinkers.hpp>         // for mundy::linkers::DestroyNeighborLinkers
@@ -66,14 +66,14 @@
 #include <mundy_linkers/GenerateNeighborLinkers.hpp>        // for mundy::linkers::GenerateNeighborLinkers
 #include <mundy_linkers/LinkerPotentialForceReduction.hpp>  // for mundy::linkers::LinkerPotentialForceReduction
 #include <mundy_linkers/NeighborLinkers.hpp>                // for mundy::linkers::NeighborLinkers
-#include <mundy_math/Hilbert.hpp>                           // for mundy::math::create_hilbert_positions_and_directors
-#include <mundy_math/Vector3.hpp>                           // for mundy::math::Vector3
-#include <mundy_math/distance/EllipsoidEllipsoid.hpp>       // for mundy::math::distance::ellipsoid_ellipsoid
+#include <mundy_math/Hilbert.hpp>                           // for mundy::create_hilbert_positions_and_directors
+#include <mundy_math/Vector3.hpp>                           // for mundy::Vector3
+#include <mundy_math/distance/EllipsoidEllipsoid.hpp>       // for mundy::distance::ellipsoid_ellipsoid
 #include <mundy_mesh/BulkData.hpp>                          // for mundy::mesh::BulkData
 #include <mundy_mesh/FieldViews.hpp>  // for mundy::mesh::vector3_field_data, mundy::mesh::quaternion_field_data
 #include <mundy_mesh/MetaData.hpp>    // for mundy::mesh::MetaData
-#include <mundy_mesh/utils/DestroyFlaggedEntities.hpp>        // for mundy::mesh::utils::destroy_flagged_entities
-#include <mundy_mesh/utils/FillFieldWithValue.hpp>            // for mundy::mesh::utils::fill_field_with_value
+#include <mundy_mesh/utils/DestroyFlaggedEntities.hpp>        // for mundy::mesh::destroy_flagged_entities
+#include <mundy_mesh/utils/FillFieldWithValue.hpp>            // for mundy::mesh::fill_field_with_value
 #include <mundy_meta/MetaFactory.hpp>                         // for mundy::meta::MetaKernelFactory
 #include <mundy_meta/MetaKernel.hpp>                          // for mundy::meta::MetaKernel
 #include <mundy_meta/MetaKernelDispatcher.hpp>                // for mundy::meta::MetaKernelDispatcher
@@ -81,9 +81,10 @@
 #include <mundy_meta/MetaRegistry.hpp>                        // for mundy::meta::MetaMethodRegistry
 #include <mundy_meta/ParameterValidationHelpers.hpp>  // for mundy::meta::check_parameter_and_set_default and mundy::meta::check_required_parameter
 #include <mundy_meta/PartReqs.hpp>  // for mundy::meta::PartReqs
-#include <mundy_meta/utils/MeshGeneration.hpp>  // for mundy::meta::utils::generate_class_instance_and_mesh_from_meta_class_requirements
+#include <mundy_meta/utils/MeshGeneration.hpp>  // for mundy::meta::generate_class_instance_and_mesh_from_meta_class_requirements
 #include <mundy_shapes/ComputeAABB.hpp>  // for mundy::shapes::ComputeAABB
 #include <mundy_shapes/Spheres.hpp>      // for mundy::shapes::Spheres
+#include <mundy_utils/rng.hpp>              // for mundy::make_philox
 
 /*
 I think users should define what they expect the internal variable to be called.
@@ -444,13 +445,13 @@ MUNDY_METHOD(mundy::alens, InitializeChromosomePositionsGrid) {
     // loop so we can go by node index, rather than ID.
     if (bulk_data_ptr_->parallel_rank() == 0) {
       for (size_t j = 0; j < num_chromosomes; j++) {
-        openrand::Philox rng(j, 0);
+        openrand::Philox rng = make_philox(j, 0);
         double jdouble = static_cast<double>(j);
-        mundy::math::Vector3<double> r_start(2.0 * j, 0.0, 0.0);
+        mundy::Vector3<double> r_start(2.0 * j, 0.0, 0.0);
         // Add a tiny random change in X to make sure we don't wind up in perfectly
         // parallel pathological states
-        mundy::math::Vector3<double> u_hat(rng.uniform<double>(0.0, 0.001), 0.0, 1.0);
-        u_hat = u_hat / mundy::math::two_norm(u_hat);
+        mundy::Vector3<double> u_hat(rng.uniform<double>(0.0, 0.001), 0.0, 1.0);
+        u_hat = u_hat / mundy::two_norm(u_hat);
 
         // Figure out which nodes we are doing
         const size_t num_heterochromatin_spheres = num_chromatin_repeats / 2 * num_heterochromatin_per_repeat +
@@ -464,7 +465,7 @@ MUNDY_METHOD(mundy::alens, InitializeChromosomePositionsGrid) {
           MUNDY_THROW_ASSERT(bulk_data_ptr_->is_valid(node), "Node " << i << " is not valid.");
 
           // Assign the node coordinates
-          mundy::math::Vector3<double> r =
+          mundy::Vector3<double> r =
               r_start + static_cast<double>(i - start_node_index) * initial_chromosome_separation * u_hat;
           stk::mesh::field_data(node_coord_field, node)[0] = r[0];
           stk::mesh::field_data(node_coord_field, node)[1] = r[1];
@@ -482,7 +483,7 @@ MUNDY_METHOD(mundy::alens, InitializeChromosomePositionsRandomUnitCell) {
   MUNDY_METHOD_HAS_OBJECT(size_t, num_euchromatin_per_repeat);
   MUNDY_METHOD_HAS_OBJECT(size_t, num_heterochromatin_per_repeat);
   MUNDY_METHOD_HAS_OBJECT(double, initial_chromosome_separation);
-  MUNDY_METHOD_HAS_OBJECT(mundy::math::Vector3<double>, unit_cell_size);
+  MUNDY_METHOD_HAS_OBJECT(mundy::Vector3<double>, unit_cell_size);
   MUNDY_METHOD_HAS_FIELD(double, node_coord_field);
 
  public:
@@ -493,22 +494,22 @@ MUNDY_METHOD(mundy::alens, InitializeChromosomePositionsRandomUnitCell) {
     const size_t num_euchromatin_per_repeat = *num_euchromatin_per_repeat_ptr_;
     const size_t num_heterochromatin_per_repeat = *num_heterochromatin_per_repeat_ptr_;
     const double initial_chromosome_separation = *initial_chromosome_separation_ptr_;
-    const mundy::math::Vector3<double> unit_cell_size = *unit_cell_size_ptr_;
+    const mundy::Vector3<double> unit_cell_size = *unit_cell_size_ptr_;
     auto &node_coord_field = *node_coord_field_ptr_;
 
     if (bulk_data_ptr_->parallel_rank() == 0) {
       for (size_t j = 0; j < num_chromosomes_; j++) {
         // Find a random place within the unit cell with a random orientation for the
         // chain.
-        openrand::Philox rng(j, 0);
-        mundy::math::Vector3<double> r_start(rng.uniform<double>(-0.5 * unit_cell_size[0], 0.5 * unit_cell_size[0]),
+        openrand::Philox rng = make_philox(j, 0);
+        mundy::Vector3<double> r_start(rng.uniform<double>(-0.5 * unit_cell_size[0], 0.5 * unit_cell_size[0]),
                                              rng.uniform<double>(-0.5 * unit_cell_size[1], 0.5 * unit_cell_size[1]),
                                              rng.uniform<double>(-0.5 * unit_cell_size[2], 0.5 * unit_cell_size[2]));
         // Find a random unit vector direction
         const double zrand = rng.rand<double>() - 1.0;
         const double wrand = std::sqrt(1.0 - zrand * zrand);
         const double trand = 2.0 * M_PI * rng.rand<double>();
-        mundy::math::Vector3<double> u_hat(wrand * std::cos(trand), wrand * std::sin(trand), zrand);
+        mundy::Vector3<double> u_hat(wrand * std::cos(trand), wrand * std::sin(trand), zrand);
 
         // Figure out which nodes we are doing
         const size_t num_heterochromatin_spheres = num_chromatin_repeats / 2 * num_heterochromatin_per_repeat +
@@ -522,7 +523,7 @@ MUNDY_METHOD(mundy::alens, InitializeChromosomePositionsRandomUnitCell) {
           MUNDY_THROW_ASSERT(bulk_data_ptr_->is_valid(node), "Node " << i << " is not valid.");
 
           // Assign the node coordinates
-          mundy::math::Vector3<double> r =
+          mundy::Vector3<double> r =
               r_start + static_cast<double>(i - start_node_index) * initial_chromosome_separation * u_hat;
           stk::mesh::field_data(node_coord_field, node)[0] = r[0];
           stk::mesh::field_data(node_coord_field, node)[1] = r[1];
@@ -540,7 +541,7 @@ MUNDY_METHOD(mundy::alens, InitializeChromosomePositionsHilbertRandomUnitCell) {
   MUNDY_METHOD_HAS_OBJECT(size_t, num_euchromatin_per_repeat);
   MUNDY_METHOD_HAS_OBJECT(size_t, num_heterochromatin_per_repeat);
   MUNDY_METHOD_HAS_OBJECT(double, initial_chromosome_separation);
-  MUNDY_METHOD_HAS_OBJECT(mundy::math::Vector3<double>, unit_cell_size);
+  MUNDY_METHOD_HAS_OBJECT(mundy::Vector3<double>, unit_cell_size);
   MUNDY_METHOD_HAS_FIELD(double, node_coord_field);
 
  public:
@@ -551,7 +552,7 @@ MUNDY_METHOD(mundy::alens, InitializeChromosomePositionsHilbertRandomUnitCell) {
     const size_t num_euchromatin_per_repeat = *num_euchromatin_per_repeat_ptr_;
     const size_t num_heterochromatin_per_repeat = *num_heterochromatin_per_repeat_ptr_;
     const double initial_chromosome_separation = *initial_chromosome_separation_ptr_;
-    const mundy::math::Vector3<double> unit_cell_size = *unit_cell_size_ptr_;
+    const mundy::Vector3<double> unit_cell_size = *unit_cell_size_ptr_;
     auto &node_coord_field = *node_coord_field_ptr_;
 
     // We need to get which chromosome this rank is responsible for initializing, luckily,
@@ -563,7 +564,7 @@ MUNDY_METHOD(mundy::alens, InitializeChromosomePositionsHilbertRandomUnitCell) {
       // If we want to initialize uniformly inside a sphere packing, here are the
       // coordinates for a given number of spheres within a bigger sphere.
       // http://hydra.nat.uni-magdeburg.de/packing/ssp/ssp.html
-      std::vector<mundy::math::Vector3<double>> chromosome_centers_array;
+      std::vector<mundy::Vector3<double>> chromosome_centers_array;
       std::vector<double> chromosome_radii_array;
       for (size_t ichromosome = 0; ichromosome < num_chromosomes_; ichromosome++) {
         // Figure out which nodes we are doing
@@ -576,34 +577,34 @@ MUNDY_METHOD(mundy::alens, InitializeChromosomePositionsHilbertRandomUnitCell) {
 
         // Generate a random unit vector (will be used for creating the location of the
         // nodes, the random position in the unit cell will be handled later).
-        openrand::Philox rng(ichromosome, 0);
+        openrand::Philox rng = make_philox(ichromosome, 0);
         const double zrand = rng.rand<double>() - 1.0;
         const double wrand = std::sqrt(1.0 - zrand * zrand);
         const double trand = 2.0 * M_PI * rng.rand<double>();
-        mundy::math::Vector3<double> u_hat(wrand * std::cos(trand), wrand * std::sin(trand), zrand);
+        mundy::Vector3<double> u_hat(wrand * std::cos(trand), wrand * std::sin(trand), zrand);
 
         // Once we have the number of chromosome spheres we can get the hilbert curve set
         // up. This will be at some orientation and then have sides with a length of
         // initial_chromosome_separation.
-        auto [hilbert_position_array, hilbert_directors] = mundy::math::create_hilbert_positions_and_directors(
+        auto [hilbert_position_array, hilbert_directors] = mundy::create_hilbert_positions_and_directors(
             num_nodes_per_chromosome, u_hat, initial_chromosome_separation);
 
         // Create the local positions of the spheres
-        std::vector<mundy::math::Vector3<double>> sphere_position_array;
+        std::vector<mundy::Vector3<double>> sphere_position_array;
         for (size_t isphere = 0; isphere < num_nodes_per_chromosome; isphere++) {
           sphere_position_array.push_back(hilbert_position_array[isphere]);
         }
 
         // Figure out where the center of the chromosome is, and its radius, in its own
         // local space
-        mundy::math::Vector3<double> r_chromosome_center_local(0.0, 0.0, 0.0);
+        mundy::Vector3<double> r_chromosome_center_local(0.0, 0.0, 0.0);
         double r_max = 0.0;
         for (size_t i = 0; i < sphere_position_array.size(); i++) {
           r_chromosome_center_local += sphere_position_array[i];
         }
         r_chromosome_center_local /= static_cast<double>(sphere_position_array.size());
         for (size_t i = 0; i < sphere_position_array.size(); i++) {
-          r_max = std::max(r_max, mundy::math::two_norm(r_chromosome_center_local - sphere_position_array[i]));
+          r_max = std::max(r_max, mundy::two_norm(r_chromosome_center_local - sphere_position_array[i]));
         }
 
         // Do max_trials number of insertion attempts to get a random position and
@@ -613,14 +614,14 @@ MUNDY_METHOD(mundy::alens, InitializeChromosomePositionsHilbertRandomUnitCell) {
         bool chromosome_inserted = false;
         while (itrial <= max_trials) {
           // Generate a random position within the unit cell.
-          mundy::math::Vector3<double> r_start(rng.uniform<double>(-0.5 * unit_cell_size[0], 0.5 * unit_cell_size[0]),
+          mundy::Vector3<double> r_start(rng.uniform<double>(-0.5 * unit_cell_size[0], 0.5 * unit_cell_size[0]),
                                                rng.uniform<double>(-0.5 * unit_cell_size[1], 0.5 * unit_cell_size[1]),
                                                rng.uniform<double>(-0.5 * unit_cell_size[2], 0.5 * unit_cell_size[2]));
 
           // Check for overlaps with existing chromosomes
           bool found_overlap = false;
           for (size_t jchromosome = 0; jchromosome < chromosome_centers_array.size(); ++jchromosome) {
-            double r_chromosome_distance = mundy::math::two_norm(chromosome_centers_array[jchromosome] - r_start);
+            double r_chromosome_distance = mundy::two_norm(chromosome_centers_array[jchromosome] - r_start);
             if (r_chromosome_distance < (r_max + chromosome_radii_array[jchromosome])) {
               found_overlap = true;
               break;
@@ -639,7 +640,7 @@ MUNDY_METHOD(mundy::alens, InitializeChromosomePositionsHilbertRandomUnitCell) {
 
         // Generate all the positions along the curve due to the placement in the global
         // space
-        std::vector<mundy::math::Vector3<double>> new_position_array;
+        std::vector<mundy::Vector3<double>> new_position_array;
         for (size_t i = 0; i < sphere_position_array.size(); i++) {
           new_position_array.push_back(chromosome_centers_array.back() + r_chromosome_center_local -
                                        sphere_position_array[i]);
@@ -772,7 +773,7 @@ MUNDY_METHOD(mundy::alens, DeclareAndInitializeRandomSphericalPeripheryBindSites
 
     // Initialize the binding site positions
     if (bulk_data_ptr_->parallel_rank() == 0) {
-      openrand::Philox rng(1234, 0);
+      openrand::Philox rng = make_philox(1234, 0);
       for (size_t i = 0; i < num_bind_sites; i++) {
         const stk::mesh::Entity &node_i = requested_entities[i];
         const stk::mesh::Entity &sphere_i = requested_entities[num_bind_sites + i];
@@ -1115,7 +1116,7 @@ MUNDY_METHOD(mundy::alens, ComputeBindLeftBoundHarmonicToSphereZPartition) {
             if (!is_self_interaction) {
               const auto dr = mundy::mesh::vector3_field_data(node_coord_field, sphere_node) -
                               mundy::mesh::vector3_field_data(node_coord_field, bulk_data.begin_nodes(crosslinker)[0]);
-              const double dr_mag = mundy::math::norm(dr);
+              const double dr_mag = mundy::norm(dr);
 
               // Compute the Z-partition score
               // Z = A * exp(-0.5 * 1/kt * k * (dr - r0)^2)
@@ -1182,7 +1183,7 @@ MUNDY_METHOD(mundy::alens, KMCSpringLeftToDoubly) {
           // Fetch the RNG state, get a random number out of it, and increment
           unsigned *element_rng_counter = stk::mesh::field_data(element_rng_field, spring);
           const stk::mesh::EntityId spring_gid = bulk_data.identifier(spring);
-          openrand::Philox rng(spring_gid, element_rng_counter[0]);
+          openrand::Philox rng = make_philox(spring_gid, element_rng_counter[0]);
           const double randu01 = rng.rand<double>();
           element_rng_counter[0]++;
 
@@ -1263,7 +1264,7 @@ MUNDY_METHOD(mundy::alens, KMCSpringDoublyToRight) {
           // Fetch the RNG state, get a random number out of it, and increment
           unsigned *element_rng_counter = stk::mesh::field_data(element_rng_field, spring);
           const stk::mesh::EntityId spring_gid = bulk_data.identifier(spring);
-          openrand::Philox rng(spring_gid, element_rng_counter[0]);
+          openrand::Philox rng = make_philox(spring_gid, element_rng_counter[0]);
           const double randu01 = rng.rand<double>();
           element_rng_counter[0]++;
 
@@ -1422,7 +1423,7 @@ MUNDY_METHOD(mundy::alens, CheckMaxOverlapWithSphericalPeriphery) {
           const auto node_coords = mundy::mesh::vector3_field_data(node_coord_field, sphere_node);
           const double sphere_radius = stk::mesh::field_data(element_radius_field, sphere_element)[0];
           const double ssd =
-              sign * mundy::math::norm(node_coords - target_sphere_center) - sphere_radius - target_sphere_radius;
+              sign * mundy::norm(node_coords - target_sphere_center) - sphere_radius - target_sphere_radius;
 
 #pragma omp critical
           local_min_ssd = std::min(local_min_ssd, ssd);
@@ -1632,7 +1633,7 @@ MUNDY_METHOD(mundy::alens, ComputeEllipsoidalPeripheryCollisionForcesWithSpheres
   MUNDY_METHOD_HAS_OBJECT(double, periphery_r2);
   MUNDY_METHOD_HAS_OBJECT(double, periphery_r3);
   MUNDY_METHOD_HAS_OBJECT(std::array<double, 3>, periphery_center);
-  MUNDY_METHOD_HAS_OBJECT(mundy::math::Quaternion<double>, periphery_orientation);
+  MUNDY_METHOD_HAS_OBJECT(mundy::Quaternion<double>, periphery_orientation);
   MUNDY_METHOD_HAS_OBJECT(double, collision_spring_constant);
   MUNDY_METHOD_HAS_FIELD(double, node_coord_field);
   MUNDY_METHOD_HAS_FIELD(double, element_radius_field);
@@ -1657,7 +1658,7 @@ MUNDY_METHOD(mundy::alens, ComputeEllipsoidalPeripheryCollisionForcesWithSpheres
     const double inv_periphery_r2_sq = 1.0 / (periphery_r2 * periphery_r2);
     const double inv_periphery_r3_sq = 1.0 / (periphery_r3 * periphery_r3);
     auto level_set = [&periphery_center, &periphery_orientation, &inv_periphery_r1_sq, &inv_periphery_r2_sq,
-                      &inv_periphery_r3_sq](const mundy::math::Vector3<double> &point) -> double {
+                      &inv_periphery_r3_sq](const mundy::Vector3<double> &point) -> double {
       const auto body_frame_point = conjugate(periphery_orientation) * (point - periphery_center);
       return (body_frame_point[0] * body_frame_point[0] * inv_periphery_r1_sq +
               body_frame_point[1] * body_frame_point[1] * inv_periphery_r2_sq +
@@ -1683,14 +1684,14 @@ MUNDY_METHOD(mundy::alens, ComputeEllipsoidalPeripheryCollisionForcesWithSpheres
           const double z1 = sphere_aabb[5];
 
           // Compute all 8 corners of the AABB
-          const auto bottom_left_front = mundy::math::Vector3<double>(x0, y0, z0);
-          const auto bottom_right_front = mundy::math::Vector3<double>(x1, y0, z0);
-          const auto top_left_front = mundy::math::Vector3<double>(x0, y1, z0);
-          const auto top_right_front = mundy::math::Vector3<double>(x1, y1, z0);
-          const auto bottom_left_back = mundy::math::Vector3<double>(x0, y0, z1);
-          const auto bottom_right_back = mundy::math::Vector3<double>(x1, y0, z1);
-          const auto top_left_back = mundy::math::Vector3<double>(x0, y1, z1);
-          const auto top_right_back = mundy::math::Vector3<double>(x1, y1, z1);
+          const auto bottom_left_front = mundy::Vector3<double>(x0, y0, z0);
+          const auto bottom_right_front = mundy::Vector3<double>(x1, y0, z0);
+          const auto top_left_front = mundy::Vector3<double>(x0, y1, z0);
+          const auto top_right_front = mundy::Vector3<double>(x1, y1, z0);
+          const auto bottom_left_back = mundy::Vector3<double>(x0, y0, z1);
+          const auto bottom_right_back = mundy::Vector3<double>(x1, y0, z1);
+          const auto top_left_back = mundy::Vector3<double>(x0, y1, z1);
+          const auto top_right_back = mundy::Vector3<double>(x1, y1, z1);
           const double all_points_inside_periphery =
               level_set(bottom_left_front) < 0.0 && level_set(bottom_right_front) < 0.0 &&
               level_set(top_left_front) < 0.0 && level_set(top_right_front) < 0.0 &&
@@ -1705,9 +1706,9 @@ MUNDY_METHOD(mundy::alens, ComputeEllipsoidalPeripheryCollisionForcesWithSpheres
 
             // Note, the ellipsoid for the ssd calc has outward normal, whereas the
             // periphery has inward normal. Hence, the sign flip.
-            mundy::math::Vector3<double> contact_point;
-            mundy::math::Vector3<double> ellipsoid_nhat;
-            const double shared_normal_ssd = -mundy::math::distance::shared_normal_ssd_between_ellipsoid_and_point(
+            mundy::Vector3<double> contact_point;
+            mundy::Vector3<double> ellipsoid_nhat;
+            const double shared_normal_ssd = -mundy::distance::shared_normal_ssd_between_ellipsoid_and_point(
                                                  periphery_center, periphery_orientation, periphery_r1, periphery_r2,
                                                  periphery_r3, node_coords, &contact_point, &ellipsoid_nhat) -
                                              sphere_radius;
@@ -1731,7 +1732,7 @@ MUNDY_METHOD(mundy::alens, ComputeEllipsoidalPeripheryCollisionForcesWithSpheres
   MUNDY_METHOD_HAS_OBJECT(double, periphery_r2);
   MUNDY_METHOD_HAS_OBJECT(double, periphery_r3);
   MUNDY_METHOD_HAS_OBJECT(std::array<double, 3>, periphery_center);
-  MUNDY_METHOD_HAS_OBJECT(mundy::math::Quaternion<double>, periphery_orientation);
+  MUNDY_METHOD_HAS_OBJECT(mundy::Quaternion<double>, periphery_orientation);
   MUNDY_METHOD_HAS_OBJECT(double, collision_spring_constant);
   MUNDY_METHOD_HAS_FIELD(double, node_coord_field);
   MUNDY_METHOD_HAS_FIELD(double, element_radius_field);
@@ -1759,7 +1760,7 @@ MUNDY_METHOD(mundy::alens, ComputeEllipsoidalPeripheryCollisionForcesWithSpheres
     // Setup the level set function for the ellipsoidal periphery shifted inward by the
     // sphere radius
     auto level_set = [&periphery_r1, &periphery_r2, &periphery_r3, &periphery_center, &periphery_orientation](
-                         const double &radius, const mundy::math::Vector3<double> &point) -> double {
+                         const double &radius, const mundy::Vector3<double> &point) -> double {
       const auto body_frame_point = conjugate(periphery_orientation) * (point - periphery_center);
       const double inv_a2 = 1.0 / ((periphery_r1 - radius) * (periphery_r1 - radius));
       const double inv_b2 = 1.0 / ((periphery_r2 - radius) * (periphery_r2 - radius));
@@ -1772,12 +1773,12 @@ MUNDY_METHOD(mundy::alens, ComputeEllipsoidalPeripheryCollisionForcesWithSpheres
     // Setup the outward normal function for the ellipsoidal periphery
     auto outward_normal = [&periphery_r1, &periphery_r2, &periphery_r3, &periphery_center, &periphery_orientation](
                               const double &radius,
-                              const mundy::math::Vector3<double> &point) -> mundy::math::Vector3<double> {
+                              const mundy::Vector3<double> &point) -> mundy::Vector3<double> {
       const auto body_frame_point = conjugate(periphery_orientation) * (point - periphery_center);
       const double inv_a2 = 1.0 / ((periphery_r1 - radius) * (periphery_r1 - radius));
       const double inv_b2 = 1.0 / ((periphery_r2 - radius) * (periphery_r2 - radius));
       const double inv_c2 = 1.0 / ((periphery_r3 - radius) * (periphery_r3 - radius));
-      return periphery_orientation * mundy::math::Vector3<double>(2.0 * body_frame_point[0] * inv_a2,
+      return periphery_orientation * mundy::Vector3<double>(2.0 * body_frame_point[0] * inv_a2,
                                                                   2.0 * body_frame_point[1] * inv_b2,
                                                                   2.0 * body_frame_point[2] * inv_c2);
     };
@@ -1832,11 +1833,11 @@ MUNDY_METHOD(mundy::alens, ComputeSphericalPeripheryCollisionForcesWithSpheres) 
           const auto node_coords = mundy::mesh::vector3_field_data(node_coord_field, sphere_node);
           const double sphere_radius = stk::mesh::field_data(element_radius_field, sphere_element)[0];
           const double shared_normal_ssd =
-              periphery_radius - mundy::math::norm(node_coords - periphery_center) - sphere_radius;
+              periphery_radius - mundy::norm(node_coords - periphery_center) - sphere_radius;
           const bool sphere_collides_with_periphery = shared_normal_ssd < 0.0;
           if (sphere_collides_with_periphery) {
             auto node_force = mundy::mesh::vector3_field_data(node_force_field, sphere_node);
-            auto inward_normal = (node_coords - periphery_center) / mundy::math::norm(node_coords - periphery_center);
+            auto inward_normal = (node_coords - periphery_center) / mundy::norm(node_coords - periphery_center);
             node_force[0] -= collision_spring_constant * inward_normal[0] * shared_normal_ssd;
             node_force[1] -= collision_spring_constant * inward_normal[1] * shared_normal_ssd;
             node_force[2] -= collision_spring_constant * inward_normal[2] * shared_normal_ssd;
@@ -1879,7 +1880,7 @@ MUNDY_METHOD(mundy::alens, ComputeBrownianVelocitySpheres) {
           unsigned *node_rng_counter = stk::mesh::field_data(node_rng_field, sphere_node);
 
           // U_brown = sqrt(2 * kt * gamma / dt) * randn / gamma
-          openrand::Philox rng(sphere_node_gid, node_rng_counter[0]);
+          openrand::Philox rng = make_philox(sphere_node_gid, node_rng_counter[0]);
           const double coeff = std::sqrt(2.0 * brownian_kt * sphere_drag_coeff / timestep_size) * inv_drag_coeff;
           node_velocity[0] += coeff * rng.randn<double>();
           node_velocity[1] += coeff * rng.randn<double>();
@@ -1978,23 +1979,23 @@ Teuchos::ParameterList get_valid_hp1_params() {
   // long long.
   auto prefer_size_t = []() {
     if (std::is_same_v<size_t, unsigned short>) {
-      return mundy::core::OurAnyNumberParameterEntryValidator::PREFER_UNSIGNED_SHORT;
+      return mundy::OurAnyNumberParameterEntryValidator::PREFER_UNSIGNED_SHORT;
     } else if (std::is_same_v<size_t, unsigned int>) {
-      return mundy::core::OurAnyNumberParameterEntryValidator::PREFER_UNSIGNED_INT;
+      return mundy::OurAnyNumberParameterEntryValidator::PREFER_UNSIGNED_INT;
     } else if (std::is_same_v<size_t, unsigned long>) {
-      return mundy::core::OurAnyNumberParameterEntryValidator::PREFER_UNSIGNED_LONG;
+      return mundy::OurAnyNumberParameterEntryValidator::PREFER_UNSIGNED_LONG;
     } else if (std::is_same_v<size_t, unsigned long long>) {
-      return mundy::core::OurAnyNumberParameterEntryValidator::PREFER_UNSIGNED_LONG_LONG;
+      return mundy::OurAnyNumberParameterEntryValidator::PREFER_UNSIGNED_LONG_LONG;
     } else {
       throw std::runtime_error("Unknown size_t type.");
-      return mundy::core::OurAnyNumberParameterEntryValidator::PREFER_UNSIGNED_INT;
+      return mundy::OurAnyNumberParameterEntryValidator::PREFER_UNSIGNED_INT;
     }
   }();
   const bool allow_all_types_by_default = false;
-  mundy::core::OurAnyNumberParameterEntryValidator::AcceptedTypes accept_int(allow_all_types_by_default);
+  mundy::OurAnyNumberParameterEntryValidator::AcceptedTypes accept_int(allow_all_types_by_default);
   accept_int.allow_all_integer_types(true);
   auto make_new_validator = [](const auto &preferred_type, const auto &accepted_types) {
-    return Teuchos::rcp(new mundy::core::OurAnyNumberParameterEntryValidator(preferred_type, accepted_types));
+    return Teuchos::rcp(new mundy::OurAnyNumberParameterEntryValidator(preferred_type, accepted_types));
   };
 
   // Default values are hard-coded. Trust me, this is the clearest way.

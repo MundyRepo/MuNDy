@@ -27,7 +27,7 @@
 #   UnitTestPeriphery
 #   SOURCES
 #   UnitTestPeriphery.cpp
-#     ${MUNDY_DEFAULT_UNIT_TEST_MAIN}
+#     ${Mundy_DEFAULT_UNIT_TEST_MAIN}
 #   NUM_MPI_PROCS 1
 #   CATEGORIES HEAVY
 # )

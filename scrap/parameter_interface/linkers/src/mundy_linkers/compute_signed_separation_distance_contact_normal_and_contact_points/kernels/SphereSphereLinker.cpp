@@ -32,9 +32,9 @@
 #include <stk_mesh/base/Field.hpp>    // for stk::mesh::Field, stl::mesh::field_data
 
 // Mundy libs
-#include <mundy_core/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
+#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
 #include <mundy_linkers/compute_signed_separation_distance_contact_normal_and_contact_points/kernels/SphereSphereLinker.hpp>  // for mundy::linkers::...::kernels::SphereSphereLinker
-#include <mundy_math/Vector3.hpp>   // for mundy::math::Vector3
+#include <mundy_math/Vector3.hpp>   // for mundy::Vector3
 #include <mundy_mesh/BulkData.hpp>  // for mundy::mesh::BulkData
 #include <mundy_mesh/FieldViews.hpp>  // for mundy::mesh::vector3_field_data, mundy::mesh::quaternion_field_data, mundy::mesh::matrix3_field_data
 #include <mundy_mesh/ForEachEntity.hpp>  // for mundy::mesh::for_each_entity_run
@@ -179,18 +179,18 @@ void SphereSphereLinker::execute(const stk::mesh::Selector &sphere_sphere_linker
         const double left_radius = stk::mesh::field_data(element_radius_field, left_sphere_element)[0];
         const double right_radius = stk::mesh::field_data(element_radius_field, right_sphere_element)[0];
 
-        auto contact_normal = mundy::math::get_vector3_view<double>(
+        auto contact_normal = mundy::get_vector3_view<double>(
             stk::mesh::field_data(linker_contact_normal_field, sphere_sphere_linker));
-        auto left_contact_point = mundy::math::get_vector3_view<double>(
+        auto left_contact_point = mundy::get_vector3_view<double>(
             stk::mesh::field_data(linker_contact_points_field, sphere_sphere_linker));
-        auto right_contact_point = mundy::math::get_vector3_view<double>(
+        auto right_contact_point = mundy::get_vector3_view<double>(
             stk::mesh::field_data(linker_contact_points_field, sphere_sphere_linker) + 3);
         double *signed_separation_distance =
             stk::mesh::field_data(linker_signed_separation_distance_field, sphere_sphere_linker);
 
         // Compute the separation distance and contact normal
         const auto left_to_right_vector = right_coords - left_coords;
-        const double distance = mundy::math::norm(left_to_right_vector);
+        const double distance = mundy::norm(left_to_right_vector);
         const double radius_sum = left_radius + right_radius;
         const double separation_distance = distance - radius_sum;
         const double inv_distance = 1.0 / distance;
