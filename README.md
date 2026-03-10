@@ -1,4 +1,4 @@
-![MuNDy](doc/mundy_banner_logo.svg)
+![MuNDy](doc/mundy_banner_v2_t.png)
 
 # MuNDy: Multibody Nonlocal Dynamics
 
