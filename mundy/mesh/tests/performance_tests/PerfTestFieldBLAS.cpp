@@ -762,13 +762,13 @@ class FieldDotTest : public PerfTestFieldBLAS {
     const auto& exec_space = stk::ngp::ExecSpace();
     const stk::mesh::Selector selector = block1_selector_ - block2_selector_;
     for (size_t i = 0; i < num_iterations; ++i) {
-      double ngp_dot = field_dot<double>(*field1_ptr_, *field2_ptr_, selector, exec_space);
+      [[maybe_unused]] double ngp_dot = field_dot<double>(*field1_ptr_, *field2_ptr_, selector, exec_space);
     }
   }
 
   void run_stk(const size_t num_iterations = 1) {
     for (size_t i = 0; i < num_iterations; ++i) {
-      double stk_dot = stk::mesh::field_dot(*field1_ptr_, *field2_ptr_, block1_selector_ - block2_selector_);
+      [[maybe_unused]] double stk_dot = stk::mesh::field_dot(*field1_ptr_, *field2_ptr_, block1_selector_ - block2_selector_);
     }
   }
 
@@ -814,13 +814,13 @@ class FieldNorm2Test : public PerfTestFieldBLAS {
     const auto& exec_space = stk::ngp::ExecSpace();
     const stk::mesh::Selector selector = block1_selector_ - block2_selector_;
     for (size_t i = 0; i < num_iterations; ++i) {
-      double ngp_nrm2 = field_nrm2<double>(*field1_ptr_, selector, exec_space);
+      [[maybe_unused]] double ngp_nrm2 = field_nrm2<double>(*field1_ptr_, selector, exec_space);
     }
   }
 
   void run_stk(const size_t num_iterations = 1) {
     for (size_t i = 0; i < num_iterations; ++i) {
-      double stk_nrm2 = stk::mesh::field_nrm2(*field1_ptr_, block1_selector_ - block2_selector_);
+      [[maybe_unused]] double stk_nrm2 = stk::mesh::field_nrm2(*field1_ptr_, block1_selector_ - block2_selector_);
     }
   }
 
@@ -864,7 +864,7 @@ class FieldSumTest : public PerfTestFieldBLAS {
     const auto& exec_space = stk::ngp::ExecSpace();
     const stk::mesh::Selector selector = block1_selector_ - block2_selector_;
     for (size_t i = 0; i < num_iterations; ++i) {
-      double ngp_sum = field_sum<double>(*field1_ptr_, selector, exec_space);
+      [[maybe_unused]] double ngp_sum = field_sum<double>(*field1_ptr_, selector, exec_space);
     }
   }
 
@@ -873,7 +873,7 @@ class FieldSumTest : public PerfTestFieldBLAS {
     auto ngp_mesh = stk::mesh::get_updated_ngp_mesh(get_bulk());
     stk::mesh::NgpField<double>& ngp_field1 = stk::mesh::get_updated_ngp_field<double>(*field1_ptr_);
     for (size_t i = 0; i < num_iterations; ++i) {
-      double stk_sum = stk::mesh::get_field_sum(ngp_mesh, ngp_field1, selector);
+      [[maybe_unused]] double stk_sum = stk::mesh::get_field_sum(ngp_mesh, ngp_field1, selector);
     }
   }
 
@@ -916,13 +916,13 @@ class FieldAbsSumTest : public PerfTestFieldBLAS {
     const auto& exec_space = stk::ngp::ExecSpace();
     const stk::mesh::Selector selector = block1_selector_ - block2_selector_;
     for (size_t i = 0; i < num_iterations; ++i) {
-      double ngp_asum = field_asum<double>(*field1_ptr_, selector, exec_space);
+      [[maybe_unused]] double ngp_asum = field_asum<double>(*field1_ptr_, selector, exec_space);
     }
   }
 
   void run_stk(const size_t num_iterations = 1) {
     for (size_t i = 0; i < num_iterations; ++i) {
-      double stk_asum = stk::mesh::field_asum<double>(*field1_ptr_, block1_selector_ - block2_selector_);
+      [[maybe_unused]] double stk_asum = stk::mesh::field_asum<double>(*field1_ptr_, block1_selector_ - block2_selector_);
     }
   }
 
@@ -965,7 +965,7 @@ class FieldMaxTest : public PerfTestFieldBLAS {
     const auto& exec_space = stk::ngp::ExecSpace();
     const stk::mesh::Selector selector = block1_selector_ - block2_selector_;
     for (size_t i = 0; i < num_iterations; ++i) {
-      double ngp_max = field_max<double>(*field1_ptr_, selector, exec_space);
+      [[maybe_unused]] double ngp_max = field_max<double>(*field1_ptr_, selector, exec_space);
     }
   }
 
@@ -974,7 +974,7 @@ class FieldMaxTest : public PerfTestFieldBLAS {
     auto ngp_mesh = stk::mesh::get_updated_ngp_mesh(get_bulk());
     stk::mesh::NgpField<double>& ngp_field1 = stk::mesh::get_updated_ngp_field<double>(*field1_ptr_);
     for (size_t i = 0; i < num_iterations; ++i) {
-      double stk_max = stk::mesh::get_field_max(ngp_mesh, ngp_field1, block1_selector_ - block2_selector_);
+      [[maybe_unused]] double stk_max = stk::mesh::get_field_max(ngp_mesh, ngp_field1, block1_selector_ - block2_selector_);
     }
   }
 
@@ -1016,13 +1016,13 @@ class FieldAbsMaxTest : public PerfTestFieldBLAS {
     const auto& exec_space = stk::ngp::ExecSpace();
     const stk::mesh::Selector selector = block1_selector_ - block2_selector_;
     for (size_t i = 0; i < num_iterations; ++i) {
-      double ngp_amax = field_amax<double>(*field1_ptr_, selector, exec_space);
+      [[maybe_unused]] double ngp_amax = field_amax<double>(*field1_ptr_, selector, exec_space);
     }
   }
 
   void run_stk(const size_t num_iterations = 1) {
     for (size_t i = 0; i < num_iterations; ++i) {
-      double stk_amax = stk::mesh::field_amax(*field1_ptr_, block1_selector_ - block2_selector_);
+      [[maybe_unused]] double stk_amax = stk::mesh::field_amax(*field1_ptr_, block1_selector_ - block2_selector_);
     }
   }
 
@@ -1063,7 +1063,7 @@ class FieldMinTest : public PerfTestFieldBLAS {
     const auto& exec_space = stk::ngp::ExecSpace();
     const stk::mesh::Selector selector = block1_selector_ - block2_selector_;
     for (size_t i = 0; i < num_iterations; ++i) {
-      double ngp_min = field_min<double>(*field1_ptr_, selector, exec_space);
+      [[maybe_unused]] double ngp_min = field_min<double>(*field1_ptr_, selector, exec_space);
     }
   }
 
@@ -1072,7 +1072,7 @@ class FieldMinTest : public PerfTestFieldBLAS {
     auto ngp_mesh = stk::mesh::get_updated_ngp_mesh(get_bulk());
     stk::mesh::NgpField<double>& ngp_field1 = stk::mesh::get_updated_ngp_field<double>(*field1_ptr_);
     for (size_t i = 0; i < num_iterations; ++i) {
-      double stk_min = stk::mesh::get_field_min(ngp_mesh, ngp_field1, block1_selector_ - block2_selector_);
+      [[maybe_unused]] double stk_min = stk::mesh::get_field_min(ngp_mesh, ngp_field1, block1_selector_ - block2_selector_);
     }
   }
 
@@ -1113,13 +1113,13 @@ class FieldAbsMinTest : public PerfTestFieldBLAS {
     const auto& exec_space = stk::ngp::ExecSpace();
     const stk::mesh::Selector selector = block1_selector_ - block2_selector_;
     for (size_t i = 0; i < num_iterations; ++i) {
-      double ngp_amin = field_amin<double>(*field1_ptr_, selector, exec_space);
+      [[maybe_unused]] double ngp_amin = field_amin<double>(*field1_ptr_, selector, exec_space);
     }
   }
 
   void run_stk(const size_t num_iterations = 1) {
     for (size_t i = 0; i < num_iterations; ++i) {
-      double stk_amin = stk::mesh::field_amin(*field1_ptr_, block1_selector_ - block2_selector_);
+      [[maybe_unused]] double stk_amin = stk::mesh::field_amin(*field1_ptr_, block1_selector_ - block2_selector_);
     }
   }
 

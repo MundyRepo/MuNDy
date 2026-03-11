@@ -24,6 +24,7 @@
 // C++ core
 #include <array>
 #include <concepts>
+#include <deque>
 #include <memory>
 #include <stdexcept>
 #include <type_traits>
@@ -162,6 +163,7 @@ namespace mesh {
 ///         double total_length = centerline_length + 2.0 * radius;
 ///         if (total_length > 2.0 * starting_length) {
 ///           // One new bacteria since the parent becomes one of the children
+///           size_t ticket = ngp_bacteria_data.get<CHILD_TICKET>(bacteria_index);
 ///           auto future_bacteria = req_bacteria.request(ticket, ngp_mesh.parallel_rank());
 ///           auto future_node = req_nodes.request(ticket, ngp_mesh.parallel_rank());
 ///           req_conns.request(ticket, future_bacteria, future_node);
@@ -231,6 +233,8 @@ namespace mesh {
 ///     radius(spheres) = ...
 ///     ticket_expr2.exec()
 /// \endcode
+template <typename NgpMemSpace>
+class NgpModRequestsT;
 
 /// \brief A range of tickets issued by a TicketIssuer.
 class TicketRange {
@@ -422,10 +426,12 @@ class TicketIssuer {
 
   template <StringLiteral name>
   KOKKOS_INLINE_FUNCTION void assert_active_space() const {
-    KOKKOS_IF_ON_HOST(bool host_is_active = !active_space_host_view_(); MUNDY_THROW_ASSERT(
-                          host_is_active, std::runtime_error, name + " called from host when device is active.");)
-    KOKKOS_IF_ON_DEVICE(bool device_is_active = active_space_dev_view_(); MUNDY_THROW_ASSERT(
-                            device_is_active, std::runtime_error, name + " called from device when host is active.");)
+    KOKKOS_IF_ON_HOST(MUNDY_THROW_ASSERT(
+                          /*host_is_active =*/!active_space_host_view_(), std::runtime_error,
+                          name + " called from host when device is active.");)
+    KOKKOS_IF_ON_DEVICE(MUNDY_THROW_ASSERT(
+                            /*device_is_active =*/active_space_dev_view_(), std::runtime_error,
+                            name + " called from device when host is active.");)
   }
 
   template <StringLiteral name>
@@ -473,7 +479,7 @@ class NgpRequestEntitiesImplT {
         active_space_dev_view_("NgpRequestEntitiesImplT::active_space_dev_view"),
         active_space_host_view_(Kokkos::create_mirror_view(active_space_dev_view_)) {
     for (size_t rank = 0; rank < stk::topology::NUM_RANKS; ++rank) {
-      ticket_issuer_[rank] = ticket_issuer_t{/*activate_device*/ true};
+      ticket_issuer_[rank] = ticket_issuer_t(/*activate_device*/ true);
       if constexpr (HasKnownEntityId) {
         requests_[rank] = request_view_t("NgpRequestEntitiesImplT::requests", 0);
       }
@@ -692,15 +698,24 @@ class NgpRequestEntitiesImplT {
   //@}
 
  private:
+  //! \name Friends <3
+  //@{
+
+  template <typename>
+  friend class NgpModRequestsT;
+  //@}
+
   //! \name Helper functions
   //@{
 
   template <StringLiteral name>
   KOKKOS_INLINE_FUNCTION void assert_active_space() const {
-    KOKKOS_IF_ON_HOST(bool host_is_active = !active_space_host_view_(); MUNDY_THROW_ASSERT(
-                          host_is_active, std::runtime_error, name + " called from host when device is active.");)
-    KOKKOS_IF_ON_DEVICE(bool device_is_active = active_space_dev_view_(); MUNDY_THROW_ASSERT(
-                            device_is_active, std::runtime_error, name + " called from device when host is active.");)
+    KOKKOS_IF_ON_HOST(MUNDY_THROW_ASSERT(
+                          /*host_is_active =*/!active_space_host_view_(), std::runtime_error,
+                          name + " called from host when device is active.");)
+    KOKKOS_IF_ON_DEVICE(MUNDY_THROW_ASSERT(
+                            /*device_is_active =*/active_space_dev_view_(), std::runtime_error,
+                            name + " called from device when host is active.");)
   }
 
   template <StringLiteral name>
@@ -837,7 +852,10 @@ class NgpRequestConnectionsT {
   }
 
   /// \brief Get the ticket issuer for entity requests.
-  KOKKOS_INLINE_FUNCTION ticket_issuer_t& tickets() {
+  KOKKOS_INLINE_FUNCTION const ticket_issuer_t& tickets() const noexcept {
+    return ticket_issuer_;
+  }
+  KOKKOS_INLINE_FUNCTION ticket_issuer_t& tickets() noexcept {
     return ticket_issuer_;
   }
 
@@ -887,15 +905,24 @@ class NgpRequestConnectionsT {
   //@}
 
  private:
+  //! \name Friends <3
+  //@{
+
+  template <typename>
+  friend class NgpModRequestsT;
+  //@}
+
   //! \name Helper functions
   //@{
 
   template <StringLiteral name>
   KOKKOS_INLINE_FUNCTION void assert_active_space() const {
-    KOKKOS_IF_ON_HOST(bool host_is_active = !active_space_host_view_(); MUNDY_THROW_ASSERT(
-                          host_is_active, std::runtime_error, name + " called from host when device is active.");)
-    KOKKOS_IF_ON_DEVICE(bool device_is_active = active_space_dev_view_(); MUNDY_THROW_ASSERT(
-                            device_is_active, std::runtime_error, name + " called from device when host is active.");)
+    KOKKOS_IF_ON_HOST(MUNDY_THROW_ASSERT(
+                          /*host_is_active =*/!active_space_host_view_(), std::runtime_error,
+                          name + " called from host when device is active.");)
+    KOKKOS_IF_ON_DEVICE(MUNDY_THROW_ASSERT(
+                            /*device_is_active =*/active_space_dev_view_(), std::runtime_error,
+                            name + " called from device when host is active.");)
   }
 
   template <StringLiteral name>
@@ -1023,7 +1050,10 @@ class NgpDestroyEntitiesT {
   }
 
   /// \brief Get the ticket issuer for entity requests.
-  KOKKOS_INLINE_FUNCTION ticket_issuer_t& tickets() const noexcept {
+  KOKKOS_INLINE_FUNCTION const ticket_issuer_t& tickets() const noexcept {
+    return ticket_issuer_;
+  }
+  KOKKOS_INLINE_FUNCTION ticket_issuer_t& tickets() noexcept {
     return ticket_issuer_;
   }
 
@@ -1062,15 +1092,24 @@ class NgpDestroyEntitiesT {
   //@}
 
  private:
+  //! \name Friends <3
+  //@{
+
+  template <typename>
+  friend class NgpModRequestsT;
+  //@}
+
   //! \name Helper functions
   //@{
 
   template <StringLiteral name>
   KOKKOS_INLINE_FUNCTION void assert_active_space() const {
-    KOKKOS_IF_ON_HOST(bool host_is_active = !active_space_host_view_(); MUNDY_THROW_ASSERT(
-                          host_is_active, std::runtime_error, name + " called from host when device is active.");)
-    KOKKOS_IF_ON_DEVICE(bool device_is_active = active_space_dev_view_(); MUNDY_THROW_ASSERT(
-                            device_is_active, std::runtime_error, name + " called from device when host is active.");)
+    KOKKOS_IF_ON_HOST(MUNDY_THROW_ASSERT(
+                          /*host_is_active =*/!active_space_host_view_(), std::runtime_error,
+                          name + " called from host when device is active.");)
+    KOKKOS_IF_ON_DEVICE(MUNDY_THROW_ASSERT(
+                            /*device_is_active =*/active_space_dev_view_(), std::runtime_error,
+                            name + " called from device when host is active.");)
   }
 
   template <StringLiteral name>
@@ -1191,7 +1230,10 @@ class NgpDestroyConnectionsT {
   }
 
   /// \brief Get the ticket issuer for entity requests.
-  KOKKOS_INLINE_FUNCTION ticket_issuer_t& tickets() {
+  KOKKOS_INLINE_FUNCTION const ticket_issuer_t& tickets() const noexcept {
+    return ticket_issuer_;
+  }
+  KOKKOS_INLINE_FUNCTION ticket_issuer_t& tickets() noexcept {
     return ticket_issuer_;
   }
 
@@ -1235,15 +1277,24 @@ class NgpDestroyConnectionsT {
   //@}
 
  private:
+  //! \name Friends <3
+  //@{
+
+  template <typename>
+  friend class NgpModRequestsT;
+  //@}
+
   //! \name Helper functions
   //@{
 
   template <StringLiteral name>
   KOKKOS_INLINE_FUNCTION void assert_active_space() const {
-    KOKKOS_IF_ON_HOST(bool host_is_active = !active_space_host_view_(); MUNDY_THROW_ASSERT(
-                          host_is_active, std::runtime_error, name + " called from host when device is active.");)
-    KOKKOS_IF_ON_DEVICE(bool device_is_active = active_space_dev_view_(); MUNDY_THROW_ASSERT(
-                            device_is_active, std::runtime_error, name + " called from device when host is active.");)
+    KOKKOS_IF_ON_HOST(MUNDY_THROW_ASSERT(
+                          /*host_is_active =*/!active_space_host_view_(), std::runtime_error,
+                          name + " called from host when device is active.");)
+    KOKKOS_IF_ON_DEVICE(MUNDY_THROW_ASSERT(
+                            /*device_is_active =*/active_space_dev_view_(), std::runtime_error,
+                            name + " called from device when host is active.");)
   }
 
   template <StringLiteral name>
@@ -1291,6 +1342,7 @@ template <typename NgpMemSpace>
 class NgpModRequestsT {
  public:
   using memory_space = NgpMemSpace;
+  using ticket_id = size_t;
 
   //! \name Constructors / Destructors
   //@{
@@ -1320,7 +1372,9 @@ class NgpModRequestsT {
   }
   //
   NgpRequestEntitiesNewIdsT<NgpMemSpace>& request_entities_new_ids(const stk::mesh::Part& part) {
-    return get_or_create_entity_requests_new_ids(stk::mesh::PartVector{&part});
+    stk::mesh::PartVector part_vec(1);
+    part_vec[0] = const_cast<stk::mesh::Part*>(&part);
+    return get_or_create_entity_requests_new_ids(part_vec);
   }
 
   /// \brief Get the entity request class for the given partition key (for requests of entities with known Ids).
@@ -1330,7 +1384,9 @@ class NgpModRequestsT {
   }
   //
   NgpRequestEntitiesKnownIdsT<NgpMemSpace>& request_entities_known_ids(const stk::mesh::Part& part) {
-    return get_or_create_entity_requests_known_ids(stk::mesh::PartVector{&part});
+    stk::mesh::PartVector part_vec(1);
+    part_vec[0] = const_cast<stk::mesh::Part*>(&part);
+    return get_or_create_entity_requests_known_ids(part_vec);
   }
 
   /// \brief Get the destroy entity request class.
@@ -1424,12 +1480,12 @@ class NgpModRequestsT {
     // Determine if a modification cycle is even necessary, aka no requests were made.
     size_t total_requests = 0;
     for (auto& entry : get_entity_requests_new_ids_entries()) {
-      for (stk::mesh::EntityRank rank = 0; rank < stk::topology::NUM_RANKS; ++rank) {
+      for (stk::mesh::EntityRank rank = stk::topology::BEGIN_RANK; rank < stk::topology::NUM_RANKS; ++rank) {
         total_requests += entry.requests.tickets(rank).count();
       }
     }
     for (auto& entry : get_entity_requests_known_ids_entries()) {
-      for (stk::mesh::EntityRank rank = 0; rank < stk::topology::NUM_RANKS; ++rank) {
+      for (stk::mesh::EntityRank rank = stk::topology::BEGIN_RANK; rank < stk::topology::NUM_RANKS; ++rank) {
         total_requests += entry.requests.tickets(rank).count();
       }
     }
@@ -1454,20 +1510,20 @@ class NgpModRequestsT {
       stk::mesh::PartVector parts = impl::get_parts_for_partition_key(entry.partition_key, bulk_data.mesh_meta_data());
       size_t num_actual_ranks = bulk_data.mesh_meta_data().entity_rank_count();
       std::vector<size_t> num_requests_per_rank(num_actual_ranks, 0);
-      for (stk::mesh::EntityRank rank = 0; rank < stk::topology::NUM_RANKS; ++rank) {
+      for (size_t rank = stk::topology::BEGIN_RANK; rank < stk::topology::NUM_RANKS; ++rank) {
         if (rank < num_actual_ranks) {
-          num_requests_per_rank[rank] = entry.requests.tickets(rank).count();
+          num_requests_per_rank[rank] = entry.requests.tickets(static_cast<stk::mesh::EntityRank>(rank)).count();
         } else {
-          MUNDY_THROW_ASSERT(entry.requests.tickets(rank).count() == 0, std::logic_error,
-                             "Received requests for invalid entity rank " + std::to_string(rank));
+          MUNDY_THROW_ASSERT(entry.requests.tickets(static_cast<stk::mesh::EntityRank>(rank)).count() == 0,
+                             std::logic_error, "Received requests for invalid entity rank " + std::to_string(rank));
         }
       }
 
       std::vector<stk::mesh::EntityVector> requested_entities_per_rank(num_actual_ranks);
       our_generate_new_entities(bulk_data, num_requests_per_rank, parts, requested_entities_per_rank);
 
-      for (stk::mesh::EntityRank rank = 0; rank < stk::topology::NUM_RANKS; ++rank) {
-        auto created_entities_view = entry.requests.get_created_entity_view(rank);
+      for (size_t rank = stk::topology::BEGIN_RANK; rank < stk::topology::NUM_RANKS; ++rank) {
+        auto created_entities_view = entry.requests.get_created_entity_view(static_cast<stk::mesh::EntityRank>(rank));
         size_t count = num_requests_per_rank[rank];
         if (count == 0) {
           continue;
@@ -1487,17 +1543,19 @@ class NgpModRequestsT {
       for (auto& entry : get_entity_requests_known_ids_entries()) {
         stk::mesh::PartVector parts =
             impl::get_parts_for_partition_key(entry.partition_key, bulk_data.mesh_meta_data());
-        for (stk::mesh::EntityRank rank = 0; rank < stk::topology::NUM_RANKS; ++rank) {
-          size_t count = entry.requests.tickets(rank).count();
+        for (size_t rank = stk::topology::BEGIN_RANK; rank < stk::topology::NUM_RANKS; ++rank) {
+          size_t count = entry.requests.tickets(static_cast<stk::mesh::EntityRank>(rank)).count();
           if (count == 0) {
             continue;
           }
 
           // This simply has to be done in serial since declare_entity is not thread safe.
-          auto created_entities_view = entry.requests.get_created_entity_view(rank);
+          auto created_entities_view = entry.requests.get_created_entity_view(static_cast<stk::mesh::EntityRank>(rank));
           for (size_t ticket = 0; ticket < count; ++ticket) {
-            stk::mesh::EntityId entity_id = entry.requests.get_entity_id(ticket, rank);
-            stk::mesh::Entity entity = bulk_data.declare_entity(rank, entity_id, parts);
+            stk::mesh::EntityId entity_id =
+                entry.requests.get_entity_id(ticket, static_cast<stk::mesh::EntityRank>(rank));
+            stk::mesh::Entity entity =
+                bulk_data.declare_entity(static_cast<stk::mesh::EntityRank>(rank), entity_id, parts);
             created_entities_view.view_host()(ticket) = entity;
           }
         }
@@ -1577,8 +1635,8 @@ class NgpModRequestsT {
     NgpRequestEntitiesKnownIdsT<NgpMemSpace> requests;
   };
 
-  using entity_requests_new_ids_entries_t = std::vector<entity_requests_new_ids_entry_t>;
-  using entity_requests_known_ids_entries_t = std::vector<entity_requests_known_ids_entry_t>;
+  using entity_requests_new_ids_entries_t = std::deque<entity_requests_new_ids_entry_t>;
+  using entity_requests_known_ids_entries_t = std::deque<entity_requests_known_ids_entry_t>;
   using entity_requests_new_ids_index_map_t = std::map<impl::PartitionKey, unsigned>;
   using entity_requests_known_ids_index_map_t = std::map<impl::PartitionKey, unsigned>;
 

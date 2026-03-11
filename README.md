@@ -18,11 +18,11 @@ MuNDy is a C++ framework for high-performance simulation of **multibody nonlocal
 
 - [Organizational Overview](#organizational-overview)
 - [Subpackages](#subpackages)
-  - [MundyUtils: Centralized reusable utilities](#mundyutils:-centralized-reusable-utilities)
-  - [MundyMath: Constexpr, inline mathematics](#mundymath:-constexpr-inline-mathematics)
-  - [MundyGeom: Geometric primitives and utilities](#mundygeom:-geometric-primitives-and-utilities)
-  - [MundyMech: Mechanical primitives and utilities](#mundymech:-mechanical-primitives-and-utilities-under-construction)
-  - [MundyMesh: MuNDy’s extension to Trilinos/STK](#mundymesh:-mundys-extension-to-trilinosstk)
+  - [MundyUtils: Centralized reusable utilities](#mundyutils-centralized-reusable-utilities)
+  - [MundyMath: Constexpr, inline mathematics](#mundymath-constexpr-inline-mathematics)
+  - [MundyGeom: Geometric primitives and utilities](#mundygeom-geometric-primitives-and-utilities)
+  - [MundyMech: Mechanical primitives and utilities](#mundymech-mechanical-primitives-and-utilities-under-construction)
+  - [MundyMesh: MuNDy’s extension to Trilinos/STK](#mundymesh-mundys-extension-to-trilinosstk)
   - [Standalone Offshoots](#standalone-offshoots)
 - [Release Roadmap](#release-roadmap)
 
@@ -70,15 +70,21 @@ SUM:                  286        10983          17638        48020
 
 ### MundyUtils: Centralized reusable utilities
 
-Core, Kokkos-friendly building blocks for type-level plumbing, error handling, and device-aware data management.
+Centralized, Kokkos-friendly building blocks for type-level plumbing, error handling, and device-aware data management.
+- **`tuple` / `variant`**  
+  Reduced, Kokkos-compatible analogs of `std::tuple` / `std::variant` for default-constructible types.  
+  - `core::tuple` is NTTP-compatible and `constexpr`-friendly  
+
 - **`aggregate`**  
   Compile-time extensible “tagged bag of types” (conceptually similar to `boost::hana::map`).  
   - Kokkos-compatible  
   - `constexpr` and NTTP-compatible  
 
-- **`tuple` / `variant`**  
-  Reduced, Kokkos-compatible analogs of `std::tuple` / `std::variant` for default-constructible types.  
-  - `core::tuple` is NTTP-compatible and `constexpr`-friendly  
+- **`reference_wrapper`**  
+  Kokkos-compatible analog of `std::reference_wrapper` for non-const references.  
+
+- **`storage`**
+  Unified means to maybe own or maybe view a value using a simple normalized storage policy.
 
 - **`StringLiteral`**  
   `constexpr` string literals that are NTTP-compatible.  
@@ -86,8 +92,8 @@ Core, Kokkos-friendly building blocks for type-level plumbing, error handling, a
 
 - **`MUNDY_THROW_ASSERT` / `MUNDY_THROW_REQUIRE`**  
   Kokkos-compatible throw/assert helpers with diagnostics and detailed error context 
-  - On-device: abort  
-  - On-host: throw
+  - On-device: abort  |  On-host: throw
+  - Can be called within constexpr contexts
 
 - **`NgpPool` / `NgpView`**  
   Dual-view abstractions that follow MuNDy’s sync semantics plus a dual-view push/pop pool.  
@@ -110,7 +116,8 @@ Small, composable math utilities with view semantics that integrate naturally in
 - **`convex`**  
   Linear complementarity problem (LCP) and constrained convex quadratic programming (QP) solver.  
   - Kokkos-compatible  
-  - Can run inside a kernel or orchestrate kernel launches  
+  - Can run inside a kernel or orchestrate kernel launches
+  - Supports Mixed LCP/QP problems with equality and inequality constraints
 
 - **`Hilbert` / `zmort`**  
   Domain decomposition helpers for Hilbert space-filling curves and Z-morton ordering.  
@@ -169,6 +176,13 @@ Helpers and abstractions for integrating MuNDy with Trilinos/STK meshes and fiel
   - Entity declaration  
   - Field registration  
   - Part creation  
+
+* **`NgpModRequests`**
+  A ticket-based framework for staging mesh modification requests from the device and processing them on the host.
+    - Requesting new entities (with known or generated Ids)
+    - Requesting new connectivity (e.g. element-to-node relations) involving existing or future entities
+    - Requesting deletion of existing entities or connectivity
+    - Safe and efficient in the face of concurrent requests from multiple threads on the device
 
 - **`FieldViews`**  
   Helpers for extracting mathematical views into STK field types, both on host and device.  

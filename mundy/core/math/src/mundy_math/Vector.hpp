@@ -590,7 +590,7 @@ KOKKOS_INLINE_FUNCTION constexpr bool is_close(
     const decltype(get_comparison_tolerance<T, U>())& tol = get_comparison_tolerance<T, U>()) {
   // Use the tolerance type as the comparison type
   using ComparisonType = std::remove_reference_t<decltype(tol)>;
-  return std::abs(static_cast<ComparisonType>(scalar1) - static_cast<ComparisonType>(scalar2)) <= tol;
+  return Kokkos::abs(static_cast<ComparisonType>(scalar1) - static_cast<ComparisonType>(scalar2)) <= tol;
 }
 
 /// \brief Scalar-scalar equality (within a relaxed tolerance)
