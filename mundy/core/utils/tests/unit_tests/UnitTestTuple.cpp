@@ -27,7 +27,7 @@
 #include <stdexcept>  // for logic_error, invalid_argument, etc
 
 // Mundy libs
-#include <mundy_utils/tuple.hpp>  // for mundytuple, mundymake_tuple, etc
+#include <mundy_utils/tuple.hpp>  // for mundy::tuple, mundy::make_tuple, etc
 
 namespace mundy {
 

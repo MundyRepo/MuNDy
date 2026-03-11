@@ -49,7 +49,7 @@ set(NOINSTALLHEADERS
     src/mundy_mesh/NgpFieldBLAS.hpp
     src/mundy_mesh/NgpForEachLink.hpp
     src/mundy_mesh/NgpLinkData.hpp
-    # src/mundy_mesh/NgpModRequests.hpp
+    src/mundy_mesh/NgpModRequests.hpp
     src/mundy_mesh/NgpUtils.hpp
     src/mundy_mesh/StringToSelector.hpp
     src/mundy_mesh/StringToTopology.hpp

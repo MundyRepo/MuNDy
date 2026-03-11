@@ -79,6 +79,12 @@ if (Mundy_ENABLE_TESTS AND Mundy_ENABLE_GTest)
   )
 
   tribits_add_executable_and_test(
+    UnitTestNgpModRequests
+    SOURCES UnitTestNgpModRequests.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+    INSTALLABLE
+  )
+
+  tribits_add_executable_and_test(
     UnitTestDeclareEntities
     SOURCES UnitTestDeclareEntities.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
     INSTALLABLE

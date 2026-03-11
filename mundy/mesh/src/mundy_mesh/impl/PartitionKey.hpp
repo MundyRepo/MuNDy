@@ -30,6 +30,7 @@
 
 // STK
 #include <stk_mesh/base/BulkData.hpp>
+#include <stk_mesh/base/MetaData.hpp>
 #include <stk_mesh/base/NgpTypes.hpp>  // for stk::mesh::PartOrdinalViewType
 #include <stk_mesh/base/Types.hpp>
 #include <stk_util/ngp/NgpSpaces.hpp>
@@ -51,6 +52,9 @@ PartitionKey get_partition_key(const stk::mesh::PartVector& parts);
 
 /// \brief Get the partition key for a given link bucket (host only)
 PartitionKey get_partition_key(const stk::mesh::Bucket& link_bucket);
+
+/// \brief Map a partition key to a set of parts (host only)
+stk::mesh::PartVector get_parts_for_partition_key(const PartitionKey& key, const stk::mesh::MetaData& meta_data);
 
 }  // namespace impl
 

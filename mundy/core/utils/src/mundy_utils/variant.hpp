@@ -141,6 +141,43 @@ struct variant {
   }
 };
 
+namespace impl {
+
+template <class Visitor, class Variant, size_t ActiveIdx>
+using visit_result_t = decltype(std::declval<Visitor>()(get<ActiveIdx>(std::declval<Variant>())));
+
+template <class Visitor, class Variant, size_t... Ids>
+KOKKOS_FUNCTION constexpr bool visit_has_homogeneous_return_impl(std::index_sequence<Ids...>) {
+  using FirstReturnType = visit_result_t<Visitor, Variant, 0>;
+  return (std::is_same_v<FirstReturnType, visit_result_t<Visitor, Variant, Ids>> && ...);
+}
+
+template <class ReturnType>
+KOKKOS_FUNCTION constexpr ReturnType unreachable_visit_return() {
+  if constexpr (std::is_void_v<ReturnType>) {
+    return;
+  } else {
+    using ValueType = std::remove_reference_t<ReturnType>;
+    return *static_cast<ValueType*>(nullptr);
+  }
+}
+
+template <size_t ActiveIdx, size_t NumAlts, class ReturnType, class Visitor, class Variant>
+KOKKOS_FUNCTION constexpr ReturnType visit_dispatch(Visitor&& visitor, Variant&& var) {
+  if constexpr (ActiveIdx < NumAlts) {
+    if (var.index() == ActiveIdx) {
+      return static_cast<Visitor&&>(visitor)(get<ActiveIdx>(static_cast<Variant&&>(var)));
+    }
+    return visit_dispatch<ActiveIdx + 1, NumAlts, ReturnType>(static_cast<Visitor&&>(visitor),
+                                                               static_cast<Variant&&>(var));
+  } else {
+    MUNDY_THROW_ASSERT(false, std::runtime_error, "Invalid variant index in visit");
+    return unreachable_visit_return<ReturnType>();
+  }
+}
+
+}  // namespace impl
+
 //! \name Non-member functions
 //@{
 
@@ -178,6 +215,30 @@ KOKKOS_FUNCTION constexpr auto& get(variant<Alts...>& var) {
 template <size_t ActiveIdx, class... Alts>
 KOKKOS_FUNCTION constexpr const auto& get(const variant<Alts...>& var) {
   return var.template get<ActiveIdx>();
+}
+
+/// \brief Visit the active value in the variant
+template <class Visitor, class... Alts>
+KOKKOS_FUNCTION constexpr decltype(auto) visit(Visitor&& visitor, variant<Alts...>& var) {
+  static_assert(sizeof...(Alts) > 0, "variant must have at least one alternative.");
+  using VariantRef = variant<Alts...>&;
+  using ReturnType = impl::visit_result_t<Visitor&&, VariantRef, 0>;
+  static_assert(impl::visit_has_homogeneous_return_impl<Visitor&&, VariantRef>(
+                    std::make_index_sequence<sizeof...(Alts)>{}),
+                "Visitor return type must be the same for all alternatives.");
+  return impl::visit_dispatch<0, sizeof...(Alts), ReturnType>(static_cast<Visitor&&>(visitor), var);
+}
+
+/// \brief Visit the active value in the variant (const overload)
+template <class Visitor, class... Alts>
+KOKKOS_FUNCTION constexpr decltype(auto) visit(Visitor&& visitor, const variant<Alts...>& var) {
+  static_assert(sizeof...(Alts) > 0, "variant must have at least one alternative.");
+  using VariantRef = const variant<Alts...>&;
+  using ReturnType = impl::visit_result_t<Visitor&&, VariantRef, 0>;
+  static_assert(impl::visit_has_homogeneous_return_impl<Visitor&&, VariantRef>(
+                    std::make_index_sequence<sizeof...(Alts)>{}),
+                "Visitor return type must be the same for all alternatives.");
+  return impl::visit_dispatch<0, sizeof...(Alts), ReturnType>(static_cast<Visitor&&>(visitor), var);
 }
 
 // -------- variant_size
