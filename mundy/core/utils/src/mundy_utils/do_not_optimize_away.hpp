@@ -26,6 +26,9 @@
 ///
 /// Identical to nanobench's doNotOptimizeAway, which (in turn) is based on the same function in Google Benchmark.
 
+// C++ core
+#include <utility>
+
 namespace mundy {
 
 namespace impl {

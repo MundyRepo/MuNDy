@@ -1566,6 +1566,9 @@ class NgpModRequestsT {
           size_t count = entry.requests.tickets(static_cast<stk::mesh::EntityRank>(rank)).count();
           if (count == 0) {
             continue;
+          } else {
+            MUNDY_THROW_ASSERT(rank < static_cast<size_t>(bulk_data.mesh_meta_data().entity_rank_count()),
+                               std::logic_error, "Received requests for invalid entity rank " + std::to_string(rank));
           }
 
           // This simply has to be done in serial since declare_entity is not thread safe.

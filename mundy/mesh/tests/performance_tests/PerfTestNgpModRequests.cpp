@@ -25,6 +25,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <iostream>
 
 // External
 #include "nanobench.h"
@@ -37,6 +38,7 @@
 #include <stk_mesh/base/Entity.hpp>
 #include <stk_mesh/base/MetaData.hpp>
 #include <stk_mesh/base/Types.hpp>
+#include <stk_util/parallel/Parallel.hpp>  // for stk::parallel_machine_init, stk::parallel_machine_finalize
 
 // Mundy
 #include <mundy_mesh/BulkData.hpp>
