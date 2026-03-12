@@ -111,20 +111,21 @@ TEST(NgpModRequests, TicketIssuerWithinEachRequestClass) {
   NgpModRequestsRawFixture fixture;
 
   NgpModRequests reqs;
-  auto& req_new_ids1 = reqs.request_entities_new_ids(*fixture.elem_part_1);
-  auto& req_new_ids2 = reqs.request_entities_new_ids(*fixture.elem_part_2);
+  auto req_new_ids1 = reqs.request_entities_new_ids(*fixture.elem_part_1);
+  auto req_new_ids2 = reqs.request_entities_new_ids(*fixture.elem_part_2);
 
-  auto& req_known_ids1 = reqs.request_entities_known_ids(*fixture.elem_part_1);
-  auto& req_known_ids2 = reqs.request_entities_known_ids(*fixture.elem_part_2);
+  auto req_known_ids1 = reqs.request_entities_known_ids(*fixture.elem_part_1);
+  auto req_known_ids2 = reqs.request_entities_known_ids(*fixture.elem_part_2);
 
-  auto& req_conns = reqs.request_connections();
-  auto& req_destroy_entities = reqs.destroy_entities();
-  auto& req_destroy_conns = reqs.destroy_connections();
+  auto req_conns = reqs.request_connections();
+  auto req_destroy_entities = reqs.destroy_entities();
+  auto req_destroy_conns = reqs.destroy_connections();
 
   reqs.activate_host();
 
-  // Validate that we can claim tickets for each class and have them properly generate the ticket ids and increment the counts
-  auto claim_three_test = [](auto& issuer, const std::string &message) {
+  // Validate that we can claim tickets for each class and have them properly generate the ticket ids and increment the
+  // counts
+  auto claim_three_test = [](auto issuer, const std::string& message) {
     ASSERT_EQ(issuer.count(), 0u) << message;
     size_t t0 = issuer.claim();
     TicketRange range = issuer.claim(2);
@@ -141,7 +142,7 @@ TEST(NgpModRequests, TicketIssuerWithinEachRequestClass) {
     claim_three_test(req_known_ids1.tickets(rank), "req_known_ids1.tickets(" + std::to_string(rank) + ") failed");
     claim_three_test(req_known_ids2.tickets(rank), "req_known_ids2.tickets(" + std::to_string(rank) + ") failed");
   }
- 
+
   claim_three_test(req_conns.tickets(), "req_conns failed");
   claim_three_test(req_destroy_entities.tickets(), "req_destroy_entities failed");
   claim_three_test(req_destroy_conns.tickets(), "req_destroy_conns failed");
@@ -154,12 +155,12 @@ TEST(NgpModRequests, RequestEntitiesMemoizeByPartitionKey) {
   stk::mesh::PartVector parts_1{fixture.elem_part_1, fixture.elem_part_2};
   stk::mesh::PartVector parts_2{fixture.elem_part_2, fixture.elem_part_1, fixture.elem_part_1};
 
-  auto& new_ids_a = reqs.request_entities_new_ids(parts_1);
-  auto& new_ids_b = reqs.request_entities_new_ids(parts_2);
+  auto new_ids_a = reqs.request_entities_new_ids(parts_1);
+  auto new_ids_b = reqs.request_entities_new_ids(parts_2);
   EXPECT_EQ(new_ids_a.id(), new_ids_b.id());
 
-  auto& known_ids_a = reqs.request_entities_known_ids(parts_1);
-  auto& known_ids_b = reqs.request_entities_known_ids(parts_2);
+  auto known_ids_a = reqs.request_entities_known_ids(parts_1);
+  auto known_ids_b = reqs.request_entities_known_ids(parts_2);
   EXPECT_EQ(known_ids_a.id(), known_ids_b.id());
 }
 
@@ -169,8 +170,8 @@ TEST(NgpModRequests, CopyIsViewLikeForSharedState) {
   NgpModRequests reqs;
   NgpModRequests reqs_copy = reqs;
 
-  auto& helper_from_original = reqs.request_entities_new_ids(*fixture.elem_part_1);
-  auto& helper_from_copy = reqs_copy.request_entities_new_ids(*fixture.elem_part_1);
+  auto helper_from_original = reqs.request_entities_new_ids(*fixture.elem_part_1);
+  auto helper_from_copy = reqs_copy.request_entities_new_ids(*fixture.elem_part_1);
   EXPECT_EQ(helper_from_original.id(), helper_from_copy.id());
 
   reqs.activate_host();
@@ -184,21 +185,88 @@ TEST(NgpModRequests, CopyIsViewLikeForSharedState) {
   EXPECT_EQ(helper_from_original.element_tickets().count(), 3u);
 }
 
+TEST(NgpModRequests, EntityHelperTicketAccessorActsLikeView) {
+  NgpModRequestsRawFixture fixture;
+
+  NgpModRequests reqs;
+  auto helper = reqs.request_entities_new_ids(*fixture.elem_part_1);
+
+  reqs.activate_host();
+  auto issuer_copy = helper.element_tickets();
+  issuer_copy.claim();
+
+  EXPECT_EQ(helper.element_tickets().count(), 1u)
+      << "Claiming through a returned ticket issuer must mutate helper state.";
+}
+
+TEST(NgpModRequests, ReaccessedHelperSeesPriorMutations) {
+  NgpModRequestsRawFixture fixture;
+
+  NgpModRequests reqs;
+  auto helper_a = reqs.request_entities_new_ids(*fixture.elem_part_1);
+  auto helper_b = reqs.request_entities_new_ids(*fixture.elem_part_1);
+
+  reqs.activate_host();
+  helper_a.element_tickets().claim(2);
+
+  EXPECT_EQ(helper_b.element_tickets().count(), 2u)
+      << "Two returned helpers for the same partition key should share mutable state.";
+}
+
+TEST(NgpModRequests, SeparateConnectionHelperHandlesShareState) {
+  NgpModRequests reqs;
+  auto conn_a = reqs.request_connections();
+  auto conn_b = reqs.request_connections();
+
+  reqs.activate_host();
+  conn_a.tickets().claim(3);
+
+  EXPECT_EQ(conn_b.tickets().count(), 3u)
+      << "Connection helper accessor should return a lightweight view into shared state.";
+}
+
+TEST(NgpModRequests, FinalizeCountsDoesNotInvalidateHelpers) {
+  NgpModRequestsRawFixture fixture;
+
+  NgpModRequests reqs;
+  auto known_ids_pre_finalize = reqs.request_entities_known_ids(*fixture.elem_part_1);
+
+  reqs.activate_host();
+  size_t ticket = known_ids_pre_finalize.element_tickets().claim();
+  reqs.finalize_counts();
+
+  known_ids_pre_finalize.request_element(ticket, 4242);
+
+  auto known_ids_post_finalize = reqs.request_entities_known_ids(*fixture.elem_part_1);
+
+  // Both pre- and post-finalize helpers should see the same mutual state:
+  EXPECT_EQ(known_ids_pre_finalize.get_entity_id(ticket, stk::topology::ELEMENT_RANK), 4242u)
+      << "Pre-finalize helpers should 'see' all requests.";
+  EXPECT_EQ(known_ids_post_finalize.get_entity_id(ticket, stk::topology::ELEMENT_RANK), 4242u)
+      << "Post-finalize helpers should 'see' all requests.";
+
+  EXPECT_EQ(known_ids_pre_finalize.id(), known_ids_post_finalize.id());
+  EXPECT_EQ(known_ids_pre_finalize.element_tickets().count(), known_ids_post_finalize.element_tickets().count())
+      << "Pre- and post-finalize helpers should 'see' the same ticket state.";
+  EXPECT_EQ(known_ids_pre_finalize.element_tickets().count(), 1u);
+}
+
 TEST(NgpModRequests, HigherLevelCreateEntitiesAndConnectExistingToNew) {
   NgpModRequestsRawFixture fixture;
   BulkData& bulk = *fixture.bulk_data_ptr;
 
   bulk.modification_begin();
-  stk::mesh::Entity existing_elem = bulk.declare_entity(stk::topology::ELEMENT_RANK, /*id*/ 1, stk::mesh::PartVector{fixture.elem_part_1});
+  stk::mesh::Entity existing_elem =
+      bulk.declare_entity(stk::topology::ELEMENT_RANK, /*id*/ 1, stk::mesh::PartVector{fixture.elem_part_1});
   bulk.modification_end();
   ASSERT_TRUE(bulk.is_valid(existing_elem));
 
   NgpModRequests reqs;
   stk::mesh::PartVector no_parts{};
-  auto& req_new_elems = reqs.request_entities_new_ids(*fixture.elem_part_1);
-  auto& req_known_elems = reqs.request_entities_known_ids(*fixture.elem_part_2);
-  auto& req_new_nodes = reqs.request_entities_new_ids(no_parts);
-  auto& req_conns = reqs.request_connections();
+  auto req_new_elems = reqs.request_entities_new_ids(*fixture.elem_part_1);
+  auto req_known_elems = reqs.request_entities_known_ids(*fixture.elem_part_2);
+  auto req_new_nodes = reqs.request_entities_new_ids(no_parts);
+  auto req_conns = reqs.request_connections();
 
   reqs.activate_host();
   size_t new_elem_ticket = req_new_elems.element_tickets().claim();
@@ -235,7 +303,8 @@ TEST(NgpModRequests, HigherLevelDestroyConnectionAndEntity) {
   BulkData& bulk = *fixture.bulk_data_ptr;
 
   bulk.modification_begin();
-  stk::mesh::Entity elem = bulk.declare_entity(stk::topology::ELEMENT_RANK, /*id*/ 1, stk::mesh::PartVector{fixture.elem_part_1});
+  stk::mesh::Entity elem =
+      bulk.declare_entity(stk::topology::ELEMENT_RANK, /*id*/ 1, stk::mesh::PartVector{fixture.elem_part_1});
   stk::mesh::Entity node = bulk.declare_entity(stk::topology::NODE_RANK, /*id*/ 1, stk::mesh::PartVector{});
   bulk.declare_relation(elem, node, 0);
   bulk.modification_end();
@@ -243,8 +312,8 @@ TEST(NgpModRequests, HigherLevelDestroyConnectionAndEntity) {
   ASSERT_TRUE(bulk.is_valid(node));
 
   NgpModRequests reqs;
-  auto& destroy_conns = reqs.destroy_connections();
-  auto& destroy_entities = reqs.destroy_entities();
+  auto destroy_conns = reqs.destroy_connections();
+  auto destroy_entities = reqs.destroy_entities();
 
   reqs.activate_host();
   destroy_conns.tickets().claim(1);

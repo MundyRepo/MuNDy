@@ -25,6 +25,7 @@
 #include <array>
 #include <concepts>
 #include <deque>
+#include <map>
 #include <memory>
 #include <stdexcept>
 #include <type_traits>
@@ -48,12 +49,6 @@
 namespace mundy {
 
 namespace mesh {
-
-/*
- Notes:
- - NgpModRequests should prefer view semantics over returning references to internal data members
-   This avoids the issue of users either holding onto references too long or accidentally creating copies
-*/
 
 /// \brief A helper interface for requesting mesh modifications from the device.
 /// This is intended to be used in a three-stage command pattern:
@@ -426,12 +421,16 @@ class TicketIssuer {
 
   template <StringLiteral name>
   KOKKOS_INLINE_FUNCTION void assert_active_space() const {
-    KOKKOS_IF_ON_HOST(MUNDY_THROW_ASSERT(
-                          /*host_is_active =*/!active_space_host_view_(), std::runtime_error,
-                          name + " called from host when device is active.");)
-    KOKKOS_IF_ON_DEVICE(MUNDY_THROW_ASSERT(
-                            /*device_is_active =*/active_space_dev_view_(), std::runtime_error,
-                            name + " called from device when host is active.");)
+    constexpr bool has_separate_host_and_device_storage =
+        !Kokkos::SpaceAccessibility<Kokkos::HostSpace, memory_space>::accessible;
+    if constexpr (has_separate_host_and_device_storage) {
+      KOKKOS_IF_ON_HOST(MUNDY_THROW_ASSERT(
+                            /*host_is_active =*/!active_space_host_view_(), std::runtime_error,
+                            name + " called from host when device is active.");)
+      KOKKOS_IF_ON_DEVICE(MUNDY_THROW_ASSERT(
+                              /*device_is_active =*/active_space_dev_view_(), std::runtime_error,
+                              name + " called from device when host is active.");)
+    }
   }
 
   template <StringLiteral name>
@@ -462,6 +461,7 @@ template <typename NgpMemSpace, bool HasKnownEntityId>
 class NgpRequestEntitiesImplT {
  private:
   using entity_view_t = NgpViewT<stk::mesh::Entity*, NgpMemSpace>;
+  using control_space = Kokkos::SharedSpace;
 
  public:
   using memory_space = NgpMemSpace;
@@ -474,20 +474,20 @@ class NgpRequestEntitiesImplT {
   NgpRequestEntitiesImplT() = delete;
 
   /// \brief Constructor.
-  NgpRequestEntitiesImplT(unsigned helper_index)
-      : index_(helper_index),
-        active_space_dev_view_("NgpRequestEntitiesImplT::active_space_dev_view"),
-        active_space_host_view_(Kokkos::create_mirror_view(active_space_dev_view_)) {
+  NgpRequestEntitiesImplT(unsigned helper_index) : state_("NgpRequestEntitiesImplT::state") {
+    state_().index_ = helper_index;
+    state_().active_space_dev_view_ = bool_view_t("NgpRequestEntitiesImplT::active_space_dev_view");
+    state_().active_space_host_view_ = Kokkos::create_mirror_view(state_().active_space_dev_view_);
     for (size_t rank = 0; rank < stk::topology::NUM_RANKS; ++rank) {
-      ticket_issuer_[rank] = ticket_issuer_t(/*activate_device*/ true);
+      state_().ticket_issuer_[rank] = ticket_issuer_t(/*activate_device*/ true);
       if constexpr (HasKnownEntityId) {
-        requests_[rank] = request_view_t("NgpRequestEntitiesImplT::requests", 0);
+        state_().requests_[rank] = request_view_t("NgpRequestEntitiesImplT::requests", 0);
       }
-      created_entities_[rank] = entity_view_t("NgpRequestEntitiesImplT::created_entities", 0);
+      state_().created_entities_[rank] = entity_view_t("NgpRequestEntitiesImplT::created_entities", 0);
     }
     // Initialize to device active
-    active_space_host_view_() = true;
-    Kokkos::deep_copy(active_space_dev_view_, active_space_host_view_);
+    state_().active_space_host_view_() = true;
+    Kokkos::deep_copy(state_().active_space_dev_view_, state_().active_space_host_view_);
   }
 
   KOKKOS_DEFAULTED_FUNCTION NgpRequestEntitiesImplT(const NgpRequestEntitiesImplT&) = default;
@@ -504,13 +504,13 @@ class NgpRequestEntitiesImplT {
   /// \brief Sets the active memory space to host and synchronizes if needed.
   /// While active, both request and the ticket issuer will throw if used from device
   void activate_host() {
-    auto device_is_active = active_space_host_view_();
+    auto device_is_active = state_().active_space_host_view_();
     if (device_is_active) {  // No-op if host is already active
       Kokkos::fence();
-      active_space_host_view_() = false;
-      Kokkos::deep_copy(active_space_dev_view_, active_space_host_view_);
+      state_().active_space_host_view_() = false;
+      Kokkos::deep_copy(state_().active_space_dev_view_, state_().active_space_host_view_);
       for (size_t rank = 0; rank < stk::topology::NUM_RANKS; ++rank) {
-        ticket_issuer_[rank].activate_host();
+        state_().ticket_issuer_[rank].activate_host();
       }
     }
   }
@@ -518,13 +518,13 @@ class NgpRequestEntitiesImplT {
   /// \brief Sets the active memory space to host and synchronizes if needed.
   /// While active, both request and the ticket issuer will throw if used from host
   void activate_device() {
-    auto host_is_active = !active_space_host_view_();
+    auto host_is_active = !state_().active_space_host_view_();
     if (host_is_active) {  // No-op if device is already active
       Kokkos::fence();
-      active_space_host_view_() = true;
-      Kokkos::deep_copy(active_space_dev_view_, active_space_host_view_);
+      state_().active_space_host_view_() = true;
+      Kokkos::deep_copy(state_().active_space_dev_view_, state_().active_space_host_view_);
       for (size_t rank = 0; rank < stk::topology::NUM_RANKS; ++rank) {
-        ticket_issuer_[rank].activate_device();
+        state_().ticket_issuer_[rank].activate_device();
       }
     }
   }
@@ -532,22 +532,22 @@ class NgpRequestEntitiesImplT {
   /// \brief Synchronize between active and inactive memory spaces.
   void sync() {
     Kokkos::fence();
-    bool device_is_active = active_space_host_view_();
+    bool device_is_active = state_().active_space_host_view_();
     if (device_is_active) {
       for (size_t rank = 0; rank < stk::topology::NUM_RANKS; ++rank) {
-        ticket_issuer_[rank].sync();
+        state_().ticket_issuer_[rank].sync();
         if constexpr (HasKnownEntityId) {
-          Kokkos::deep_copy(requests_[rank].view_host(), requests_[rank].view_device());
+          Kokkos::deep_copy(state_().requests_[rank].view_host(), state_().requests_[rank].view_device());
         }
-        Kokkos::deep_copy(created_entities_[rank].view_host(), created_entities_[rank].view_device());
+        Kokkos::deep_copy(state_().created_entities_[rank].view_host(), state_().created_entities_[rank].view_device());
       }
     } else {
       for (size_t rank = 0; rank < stk::topology::NUM_RANKS; ++rank) {
-        ticket_issuer_[rank].sync();
+        state_().ticket_issuer_[rank].sync();
         if constexpr (HasKnownEntityId) {
-          Kokkos::deep_copy(requests_[rank].view_device(), requests_[rank].view_host());
+          Kokkos::deep_copy(state_().requests_[rank].view_device(), state_().requests_[rank].view_host());
         }
-        Kokkos::deep_copy(created_entities_[rank].view_device(), created_entities_[rank].view_host());
+        Kokkos::deep_copy(state_().created_entities_[rank].view_device(), state_().created_entities_[rank].view_host());
       }
     }
   }
@@ -558,27 +558,27 @@ class NgpRequestEntitiesImplT {
 
   /// \brief Get our unique index among multiple request helpers.
   unsigned id() const noexcept {
-    return index_;
+    return state_().index_;
   }
 
   /// \brief Get the ticket issuer for entity requests of a specific rank.
-  KOKKOS_INLINE_FUNCTION ticket_issuer_t& tickets(stk::mesh::EntityRank entity_rank) {
+  KOKKOS_INLINE_FUNCTION ticket_issuer_t& tickets(stk::mesh::EntityRank entity_rank) const {
     constexpr auto name = make_string_literal("NgpRequestEntitiesImplT::tickets");
     assert_valid_rank<name>(entity_rank);
-    return ticket_issuer_[entity_rank];
+    return state_().ticket_issuer_[entity_rank];
   }
 
   // clang-format off
-  KOKKOS_INLINE_FUNCTION ticket_issuer_t& node_tickets() { return tickets(stk::topology::NODE_RANK); }
-  KOKKOS_INLINE_FUNCTION ticket_issuer_t& edge_tickets() { return tickets(stk::topology::EDGE_RANK); }
-  KOKKOS_INLINE_FUNCTION ticket_issuer_t& face_tickets() { return tickets(stk::topology::FACE_RANK); }
-  KOKKOS_INLINE_FUNCTION ticket_issuer_t& element_tickets() { return tickets(stk::topology::ELEMENT_RANK); }
-  KOKKOS_INLINE_FUNCTION ticket_issuer_t& constraint_tickets() { return tickets(stk::topology::CONSTRAINT_RANK); }
+  KOKKOS_INLINE_FUNCTION ticket_issuer_t& node_tickets() const { return tickets(stk::topology::NODE_RANK); }
+  KOKKOS_INLINE_FUNCTION ticket_issuer_t& edge_tickets() const { return tickets(stk::topology::EDGE_RANK); }
+  KOKKOS_INLINE_FUNCTION ticket_issuer_t& face_tickets() const { return tickets(stk::topology::FACE_RANK); }
+  KOKKOS_INLINE_FUNCTION ticket_issuer_t& element_tickets() const { return tickets(stk::topology::ELEMENT_RANK); }
+  KOKKOS_INLINE_FUNCTION ticket_issuer_t& constraint_tickets() const { return tickets(stk::topology::CONSTRAINT_RANK); }
   // clang-format on
 
   /// \brief Record an entity creation request for the new-id variant.
   /// The current process will own the created entity. It will be assigned a new ID by the mesh.
-  KOKKOS_INLINE_FUNCTION FutureEntity request(size_t ticket, stk::mesh::EntityRank entity_rank)
+  KOKKOS_INLINE_FUNCTION FutureEntity request(size_t ticket, stk::mesh::EntityRank entity_rank) const
     requires(!HasKnownEntityId)
   {
     constexpr auto name = make_string_literal("NgpRequestEntitiesImplT::request");
@@ -596,22 +596,22 @@ class NgpRequestEntitiesImplT {
     // allow for more flexible claiming, allowing us to performance test the overhead of allowing for unused tickets.
 
     return FutureEntity{
-        .ticket = ticket, .request_helper_index = index_, .entity_rank = entity_rank, .has_known_id = false};
+        .ticket = ticket, .request_helper_index = state_().index_, .entity_rank = entity_rank, .has_known_id = false};
   }
 
   // clang-format off
-  KOKKOS_INLINE_FUNCTION FutureEntity request_node(size_t ticket) requires(!HasKnownEntityId) { return request(ticket, stk::topology::NODE_RANK); }
-  KOKKOS_INLINE_FUNCTION FutureEntity request_edge(size_t ticket) requires(!HasKnownEntityId) { return request(ticket, stk::topology::EDGE_RANK); }
-  KOKKOS_INLINE_FUNCTION FutureEntity request_face(size_t ticket) requires(!HasKnownEntityId) { return request(ticket, stk::topology::FACE_RANK); }
-  KOKKOS_INLINE_FUNCTION FutureEntity request_element(size_t ticket) requires(!HasKnownEntityId) { return request(ticket, stk::topology::ELEMENT_RANK); }
-  KOKKOS_INLINE_FUNCTION FutureEntity request_constraint(size_t ticket) requires(!HasKnownEntityId) { return request(ticket, stk::topology::CONSTRAINT_RANK); }
+  KOKKOS_INLINE_FUNCTION FutureEntity request_node(size_t ticket) const requires(!HasKnownEntityId) { return request(ticket, stk::topology::NODE_RANK); }
+  KOKKOS_INLINE_FUNCTION FutureEntity request_edge(size_t ticket) const requires(!HasKnownEntityId) { return request(ticket, stk::topology::EDGE_RANK); }
+  KOKKOS_INLINE_FUNCTION FutureEntity request_face(size_t ticket) const requires(!HasKnownEntityId) { return request(ticket, stk::topology::FACE_RANK); }
+  KOKKOS_INLINE_FUNCTION FutureEntity request_element(size_t ticket) const requires(!HasKnownEntityId) { return request(ticket, stk::topology::ELEMENT_RANK); }
+  KOKKOS_INLINE_FUNCTION FutureEntity request_constraint(size_t ticket) const requires(!HasKnownEntityId) { return request(ticket, stk::topology::CONSTRAINT_RANK); }
   // clang-format on
 
   /// \brief Record an entity creation request with a specified entity ID for the known-id variant.
   /// The current process will own the created entity. It will be assigned the given ID.
   KOKKOS_INLINE_FUNCTION FutureEntity request(size_t ticket,                      //
                                               stk::mesh::EntityRank entity_rank,  //
-                                              stk::mesh::EntityId entity_id)
+                                              stk::mesh::EntityId entity_id) const
     requires(HasKnownEntityId)
   {
     constexpr auto name = make_string_literal("NgpRequestEntitiesImplT::request");
@@ -619,25 +619,25 @@ class NgpRequestEntitiesImplT {
     assert_valid_rank<name>(entity_rank);
     assert_ticket_out_of_range<name>(ticket, entity_rank);
 
-    KOKKOS_IF_ON_HOST(auto& req = requests_[entity_rank].view_host()(ticket);  //
+    KOKKOS_IF_ON_HOST(auto& req = state_().requests_[entity_rank].view_host()(ticket);  //
                       req.entity_id = entity_id;)
-    KOKKOS_IF_ON_DEVICE(auto& req = requests_[entity_rank].view_device()(ticket);  //
+    KOKKOS_IF_ON_DEVICE(auto& req = state_().requests_[entity_rank].view_device()(ticket);  //
                         req.entity_id = entity_id;)
 
     return FutureEntity{
-        .ticket = ticket, .request_helper_index = index_, .entity_rank = entity_rank, .has_known_id = true};
+        .ticket = ticket, .request_helper_index = state_().index_, .entity_rank = entity_rank, .has_known_id = true};
   }
 
   // clang-format off
-  KOKKOS_INLINE_FUNCTION FutureEntity request_node(size_t ticket, stk::mesh::EntityId entity_id) requires(HasKnownEntityId) { return request(ticket, stk::topology::NODE_RANK, entity_id); }
-  KOKKOS_INLINE_FUNCTION FutureEntity request_edge(size_t ticket, stk::mesh::EntityId entity_id) requires(HasKnownEntityId) { return request(ticket, stk::topology::EDGE_RANK, entity_id); }
-  KOKKOS_INLINE_FUNCTION FutureEntity request_face(size_t ticket, stk::mesh::EntityId entity_id) requires(HasKnownEntityId) { return request(ticket, stk::topology::FACE_RANK, entity_id); }
-  KOKKOS_INLINE_FUNCTION FutureEntity request_element(size_t ticket, stk::mesh::EntityId entity_id) requires(HasKnownEntityId) { return request(ticket, stk::topology::ELEMENT_RANK, entity_id); }
-  KOKKOS_INLINE_FUNCTION FutureEntity request_constraint(size_t ticket, stk::mesh::EntityId entity_id) requires(HasKnownEntityId) { return request(ticket, stk::topology::CONSTRAINT_RANK, entity_id); }
+  KOKKOS_INLINE_FUNCTION FutureEntity request_node(size_t ticket, stk::mesh::EntityId entity_id) const requires(HasKnownEntityId) { return request(ticket, stk::topology::NODE_RANK, entity_id); }
+  KOKKOS_INLINE_FUNCTION FutureEntity request_edge(size_t ticket, stk::mesh::EntityId entity_id) const requires(HasKnownEntityId) { return request(ticket, stk::topology::EDGE_RANK, entity_id); }
+  KOKKOS_INLINE_FUNCTION FutureEntity request_face(size_t ticket, stk::mesh::EntityId entity_id) const requires(HasKnownEntityId) { return request(ticket, stk::topology::FACE_RANK, entity_id); }
+  KOKKOS_INLINE_FUNCTION FutureEntity request_element(size_t ticket, stk::mesh::EntityId entity_id) const requires(HasKnownEntityId) { return request(ticket, stk::topology::ELEMENT_RANK, entity_id); }
+  KOKKOS_INLINE_FUNCTION FutureEntity request_constraint(size_t ticket, stk::mesh::EntityId entity_id) const requires(HasKnownEntityId) { return request(ticket, stk::topology::CONSTRAINT_RANK, entity_id); }
   // clang-format on
 
   /// \brief Fetch the requested entity ID using the given ticket. Only valid for the known-id variant.
-  KOKKOS_INLINE_FUNCTION stk::mesh::EntityId get_entity_id(size_t ticket, stk::mesh::EntityRank entity_rank)
+  KOKKOS_INLINE_FUNCTION stk::mesh::EntityId get_entity_id(size_t ticket, stk::mesh::EntityRank entity_rank) const
     requires(HasKnownEntityId)
   {
     constexpr auto name = make_string_literal("NgpRequestEntitiesImplT::get_entity_id");
@@ -645,8 +645,8 @@ class NgpRequestEntitiesImplT {
     assert_valid_rank<name>(entity_rank);
     assert_ticket_out_of_range<name>(ticket, entity_rank);
 
-    KOKKOS_IF_ON_HOST(return requests_[entity_rank].view_host()(ticket).entity_id;)
-    KOKKOS_IF_ON_DEVICE(return requests_[entity_rank].view_device()(ticket).entity_id;)
+    KOKKOS_IF_ON_HOST(return state_().requests_[entity_rank].view_host()(ticket).entity_id;)
+    KOKKOS_IF_ON_DEVICE(return state_().requests_[entity_rank].view_device()(ticket).entity_id;)
   }
 
   /// \brief Fetch the requested entity using the given ticket.
@@ -656,8 +656,8 @@ class NgpRequestEntitiesImplT {
     assert_valid_rank<name>(entity_rank);
     assert_ticket_out_of_range<name>(ticket, entity_rank);
 
-    KOKKOS_IF_ON_HOST(return created_entities_[entity_rank].view_host()(ticket);)
-    KOKKOS_IF_ON_DEVICE(return created_entities_[entity_rank].view_device()(ticket);)
+    KOKKOS_IF_ON_HOST(return state_().created_entities_[entity_rank].view_host()(ticket);)
+    KOKKOS_IF_ON_DEVICE(return state_().created_entities_[entity_rank].view_device()(ticket);)
   }
   //@}
 
@@ -668,13 +668,13 @@ class NgpRequestEntitiesImplT {
   void reset() {
     /// Instead of resizing, we'll just zero out the existing requests to avoid reallocations.
     for (size_t rank = 0; rank < stk::topology::NUM_RANKS; ++rank) {
-      ticket_issuer_[rank].reset();
+      state_().ticket_issuer_[rank].reset();
       if constexpr (HasKnownEntityId) {
-        Kokkos::deep_copy(requests_[rank].view_host(), known_id_request_t{});
-        Kokkos::deep_copy(requests_[rank].view_device(), known_id_request_t{});
+        Kokkos::deep_copy(state_().requests_[rank].view_host(), known_id_request_t{});
+        Kokkos::deep_copy(state_().requests_[rank].view_device(), known_id_request_t{});
       }
-      Kokkos::deep_copy(created_entities_[rank].view_host(), stk::mesh::Entity{});
-      Kokkos::deep_copy(created_entities_[rank].view_device(), stk::mesh::Entity{});
+      Kokkos::deep_copy(state_().created_entities_[rank].view_host(), stk::mesh::Entity{});
+      Kokkos::deep_copy(state_().created_entities_[rank].view_device(), stk::mesh::Entity{});
     }
   }
 
@@ -682,15 +682,15 @@ class NgpRequestEntitiesImplT {
   size_t finalize_count() {
     size_t total_count = 0;
     for (size_t rank = 0; rank < stk::topology::NUM_RANKS; ++rank) {
-      size_t count = ticket_issuer_[rank].finalize_count();
+      size_t count = state_().ticket_issuer_[rank].finalize_count();
       total_count += count;
       if constexpr (HasKnownEntityId) {
-        if (requests_[rank].extent(0) < count) {
-          Kokkos::resize(requests_[rank], count);
+        if (state_().requests_[rank].extent(0) < count) {
+          Kokkos::resize(state_().requests_[rank], count);
         }
       }
-      if (created_entities_[rank].extent(0) < count) {
-        Kokkos::resize(created_entities_[rank], count);
+      if (state_().created_entities_[rank].extent(0) < count) {
+        Kokkos::resize(state_().created_entities_[rank], count);
       }
     }
     return total_count;
@@ -710,17 +710,21 @@ class NgpRequestEntitiesImplT {
 
   template <StringLiteral name>
   KOKKOS_INLINE_FUNCTION void assert_active_space() const {
-    KOKKOS_IF_ON_HOST(MUNDY_THROW_ASSERT(
-                          /*host_is_active =*/!active_space_host_view_(), std::runtime_error,
-                          name + " called from host when device is active.");)
-    KOKKOS_IF_ON_DEVICE(MUNDY_THROW_ASSERT(
-                            /*device_is_active =*/active_space_dev_view_(), std::runtime_error,
-                            name + " called from device when host is active.");)
+    constexpr bool has_separate_host_and_device_storage =
+        !Kokkos::SpaceAccessibility<Kokkos::HostSpace, memory_space>::accessible;
+    if constexpr (has_separate_host_and_device_storage) {
+      KOKKOS_IF_ON_HOST(MUNDY_THROW_ASSERT(
+                            /*host_is_active =*/!state_().active_space_host_view_(), std::runtime_error,
+                            name + " called from host when device is active.");)
+      KOKKOS_IF_ON_DEVICE(MUNDY_THROW_ASSERT(
+                              /*device_is_active =*/state_().active_space_dev_view_(), std::runtime_error,
+                              name + " called from device when host is active.");)
+    }
   }
 
   template <StringLiteral name>
   KOKKOS_INLINE_FUNCTION void assert_ticket_out_of_range(size_t ticket, stk::mesh::EntityRank entity_rank) const {
-    MUNDY_THROW_ASSERT(ticket < ticket_issuer_[entity_rank].count(), std::out_of_range,
+    MUNDY_THROW_ASSERT(ticket < state_().ticket_issuer_[entity_rank].count(), std::out_of_range,
                        name + " called with invalid ticket.");
   }
 
@@ -730,18 +734,15 @@ class NgpRequestEntitiesImplT {
                        name + " called with invalid entity rank.");
   }
 
-  entity_view_t get_created_entity_view(stk::mesh::EntityRank entity_rank) {
+  entity_view_t get_created_entity_view(stk::mesh::EntityRank entity_rank) const {
     constexpr auto name = make_string_literal("NgpRequestEntitiesImplT::get_created_entity_view");
     assert_valid_rank<name>(entity_rank);
-    return created_entities_[entity_rank];
+    return state_().created_entities_[entity_rank];
   }
   //@}
 
   //! \name Member variables
   //@{
-
-  // Our unique ID among multiple request helpers
-  unsigned index_{0};
 
   struct no_requests_t {};
 
@@ -750,16 +751,19 @@ class NgpRequestEntitiesImplT {
   };
 
   using bool_view_t = Kokkos::View<bool, memory_space>;
-  bool_view_t active_space_dev_view_;
-  bool_view_t::HostMirror active_space_host_view_;
-
-  ticket_issuer_t ticket_issuer_[stk::topology::NUM_RANKS];
-
   using request_view_t = NgpViewT<known_id_request_t*, NgpMemSpace>;
   using requests_storage_t = std::conditional_t<HasKnownEntityId, request_view_t, no_requests_t>;
-  requests_storage_t requests_[stk::topology::NUM_RANKS];
+  struct State {
+    unsigned index_{0};
+    bool_view_t active_space_dev_view_;
+    bool_view_t::HostMirror active_space_host_view_;
+    ticket_issuer_t ticket_issuer_[stk::topology::NUM_RANKS];
+    requests_storage_t requests_[stk::topology::NUM_RANKS];
+    entity_view_t created_entities_[stk::topology::NUM_RANKS];
+  };
 
-  entity_view_t created_entities_[stk::topology::NUM_RANKS];
+  using state_view_t = Kokkos::View<State, control_space>;
+  mutable state_view_t state_;
   //@}
 };  // NgpRequestEntitiesImplT
 
@@ -779,19 +783,20 @@ class NgpRequestConnectionsT {
  public:
   using memory_space = NgpMemSpace;
   using ticket_issuer_t = TicketIssuer<NgpMemSpace>;
+  using control_space = Kokkos::SharedSpace;
 
   //! \name Constructors / Destructors
   //@{
 
   /// \brief Default constructor.
-  NgpRequestConnectionsT()
-      : active_space_dev_view_("NgpRequestConnectionsT::active_space_dev_view"),
-        active_space_host_view_(Kokkos::create_mirror_view(active_space_dev_view_)),
-        ticket_issuer_(/*activate_device*/ true),
-        requests_("NgpRequestConnectionsT::requests", 0) {
+  NgpRequestConnectionsT() : state_("NgpRequestConnectionsT::state") {
+    state_().active_space_dev_view_ = bool_view_t("NgpRequestConnectionsT::active_space_dev_view");
+    state_().active_space_host_view_ = Kokkos::create_mirror_view(state_().active_space_dev_view_);
+    state_().ticket_issuer_ = ticket_issuer_t(/*activate_device*/ true);
+    state_().requests_ = request_view_t("NgpRequestConnectionsT::requests", 0);
     // Initialize to device active
-    active_space_host_view_() = true;
-    Kokkos::deep_copy(active_space_dev_view_, active_space_host_view_);
+    state_().active_space_host_view_() = true;
+    Kokkos::deep_copy(state_().active_space_dev_view_, state_().active_space_host_view_);
   }
 
   KOKKOS_DEFAULTED_FUNCTION NgpRequestConnectionsT(const NgpRequestConnectionsT&) = default;
@@ -808,37 +813,37 @@ class NgpRequestConnectionsT {
   /// \brief Sets the active memory space to host and synchronizes if needed.
   /// While active, both request and the ticket issuer will throw if used from device
   void activate_host() {
-    auto device_is_active = active_space_host_view_();
+    auto device_is_active = state_().active_space_host_view_();
     if (device_is_active) {  // No-op if host is already active
       Kokkos::fence();
-      active_space_host_view_() = false;
-      Kokkos::deep_copy(active_space_dev_view_, active_space_host_view_);
-      ticket_issuer_.activate_host();
+      state_().active_space_host_view_() = false;
+      Kokkos::deep_copy(state_().active_space_dev_view_, state_().active_space_host_view_);
+      state_().ticket_issuer_.activate_host();
     }
   }
 
   /// \brief Sets the active memory space to host and synchronizes if needed.
   /// While active, both request and the ticket issuer will throw if used from host
   void activate_device() {
-    auto host_is_active = !active_space_host_view_();
+    auto host_is_active = !state_().active_space_host_view_();
     if (host_is_active) {  // No-op if device is already active
       Kokkos::fence();
-      active_space_host_view_() = true;
-      Kokkos::deep_copy(active_space_dev_view_, active_space_host_view_);
-      ticket_issuer_.activate_device();
+      state_().active_space_host_view_() = true;
+      Kokkos::deep_copy(state_().active_space_dev_view_, state_().active_space_host_view_);
+      state_().ticket_issuer_.activate_device();
     }
   }
 
   /// \brief Synchronize between active and inactive memory spaces.
   void sync() {
     Kokkos::fence();
-    bool device_is_active = active_space_host_view_();
+    bool device_is_active = state_().active_space_host_view_();
     if (device_is_active) {
-      ticket_issuer_.sync();
-      Kokkos::deep_copy(requests_.view_host(), requests_.view_device());
+      state_().ticket_issuer_.sync();
+      Kokkos::deep_copy(state_().requests_.view_host(), state_().requests_.view_device());
     } else {
-      ticket_issuer_.sync();
-      Kokkos::deep_copy(requests_.view_device(), requests_.view_host());
+      state_().ticket_issuer_.sync();
+      Kokkos::deep_copy(state_().requests_.view_device(), state_().requests_.view_host());
     }
   }
   //@}
@@ -848,15 +853,14 @@ class NgpRequestConnectionsT {
 
   /// \brief Get our unique index among multiple request helpers.
   unsigned id() const noexcept {
-    return index_;
+    return state_().index_;
   }
 
   /// \brief Get the ticket issuer for entity requests.
-  KOKKOS_INLINE_FUNCTION const ticket_issuer_t& tickets() const noexcept {
-    return ticket_issuer_;
-  }
-  KOKKOS_INLINE_FUNCTION ticket_issuer_t& tickets() noexcept {
-    return ticket_issuer_;
+  ///
+  /// The lifetime of the tickets for this class should not exceed the class itself
+  KOKKOS_INLINE_FUNCTION ticket_issuer_t& tickets() const noexcept {
+    return state_().ticket_issuer_;
   }
 
   /// \brief Record a connection between two entities with the given ordinal.
@@ -869,17 +873,17 @@ class NgpRequestConnectionsT {
   ///   within a modification cycle. For now, all future entities are owned by the current process.
   KOKKOS_INLINE_FUNCTION FutureConnection request(size_t ticket, variant<stk::mesh::Entity, FutureEntity> from_entity,
                                                   variant<stk::mesh::Entity, FutureEntity> to_entity,
-                                                  const stk::mesh::RelationIdentifier ordinal) {
+                                                  const stk::mesh::RelationIdentifier ordinal) const {
     constexpr auto name = make_string_literal("NgpRequestConnectionsT::request");
     assert_active_space<name>();
     assert_ticket_out_of_range<name>(ticket);
 
-    KOKKOS_IF_ON_HOST(auto& req = requests_.view_host()(ticket); req.from_entity = from_entity;
+    KOKKOS_IF_ON_HOST(auto& req = state_().requests_.view_host()(ticket); req.from_entity = from_entity;
                       req.to_entity = to_entity; req.ordinal = ordinal;)
-    KOKKOS_IF_ON_DEVICE(auto& req = requests_.view_device()(ticket); req.from_entity = from_entity;
+    KOKKOS_IF_ON_DEVICE(auto& req = state_().requests_.view_device()(ticket); req.from_entity = from_entity;
                         req.to_entity = to_entity; req.ordinal = ordinal;)
 
-    return FutureConnection{.ticket = ticket, .request_helper_index = index_};
+    return FutureConnection{.ticket = ticket, .request_helper_index = state_().index_};
   }
   //@}
 
@@ -889,16 +893,16 @@ class NgpRequestConnectionsT {
   /// \brief Clears all internal request data to prepare for a fresh modification cycle.
   void reset() {
     /// Instead of resizing, we'll just zero out the existing requests to avoid reallocations.
-    ticket_issuer_.reset();
-    Kokkos::deep_copy(requests_.view_host(), ConnectionRequest{});
-    Kokkos::deep_copy(requests_.view_device(), ConnectionRequest{});
+    state_().ticket_issuer_.reset();
+    Kokkos::deep_copy(state_().requests_.view_host(), ConnectionRequest{});
+    Kokkos::deep_copy(state_().requests_.view_device(), ConnectionRequest{});
   }
 
   /// \brief Finalize counts for this request class. Users may no longer claim tickets after this call.
   size_t finalize_count() {
-    size_t count = ticket_issuer_.finalize_count();
-    if (requests_.extent(0) < count) {
-      Kokkos::resize(requests_, count);
+    size_t count = state_().ticket_issuer_.finalize_count();
+    if (state_().requests_.extent(0) < count) {
+      Kokkos::resize(state_().requests_, count);
     }
     return count;
   }
@@ -917,25 +921,27 @@ class NgpRequestConnectionsT {
 
   template <StringLiteral name>
   KOKKOS_INLINE_FUNCTION void assert_active_space() const {
-    KOKKOS_IF_ON_HOST(MUNDY_THROW_ASSERT(
-                          /*host_is_active =*/!active_space_host_view_(), std::runtime_error,
-                          name + " called from host when device is active.");)
-    KOKKOS_IF_ON_DEVICE(MUNDY_THROW_ASSERT(
-                            /*device_is_active =*/active_space_dev_view_(), std::runtime_error,
-                            name + " called from device when host is active.");)
+    constexpr bool has_separate_host_and_device_storage =
+        !Kokkos::SpaceAccessibility<Kokkos::HostSpace, memory_space>::accessible;
+    if constexpr (has_separate_host_and_device_storage) {
+      KOKKOS_IF_ON_HOST(MUNDY_THROW_ASSERT(
+                            /*host_is_active =*/!state_().active_space_host_view_(), std::runtime_error,
+                            name + " called from host when device is active.");)
+      KOKKOS_IF_ON_DEVICE(MUNDY_THROW_ASSERT(
+                              /*device_is_active =*/state_().active_space_dev_view_(), std::runtime_error,
+                              name + " called from device when host is active.");)
+    }
   }
 
   template <StringLiteral name>
   KOKKOS_INLINE_FUNCTION void assert_ticket_out_of_range(size_t ticket) const {
-    MUNDY_THROW_ASSERT(ticket < ticket_issuer_.count(), std::out_of_range, name + " called with invalid ticket.");
+    MUNDY_THROW_ASSERT(ticket < state_().ticket_issuer_.count(), std::out_of_range,
+                       name + " called with invalid ticket.");
   }
   //@}
 
   //! \name Member variables
   //@{
-
-  // Our unique ID among multiple request helpers
-  unsigned index_{0};
 
   /// @brief Internal struct representing a single connection request.
   /// Requests must specify a pair of entities to connect. These may either be a real entity or a future entity (by
@@ -951,18 +957,22 @@ class NgpRequestConnectionsT {
     assert_active_space<name>();
     assert_ticket_out_of_range<name>(ticket);
 
-    KOKKOS_IF_ON_HOST(return requests_.view_host()(ticket);)
-    KOKKOS_IF_ON_DEVICE(return requests_.view_device()(ticket);)
+    KOKKOS_IF_ON_HOST(return state_().requests_.view_host()(ticket);)
+    KOKKOS_IF_ON_DEVICE(return state_().requests_.view_device()(ticket);)
   }
 
-  using bool_view_t = Kokkos::View<bool, memory_space>;
-  bool_view_t active_space_dev_view_;
-  bool_view_t::HostMirror active_space_host_view_;
-
-  ticket_issuer_t ticket_issuer_;
-
   using request_view_t = NgpViewT<ConnectionRequest*, NgpMemSpace>;
-  request_view_t requests_;
+  using bool_view_t = Kokkos::View<bool, memory_space>;
+  struct State {
+    unsigned index_{0};
+    bool_view_t active_space_dev_view_;
+    bool_view_t::HostMirror active_space_host_view_;
+    ticket_issuer_t ticket_issuer_;
+    request_view_t requests_;
+  };
+
+  using state_view_t = Kokkos::View<State, control_space>;
+  mutable state_view_t state_;
   //@}
 };  // NgpRequestConnectionsT
 
@@ -976,20 +986,21 @@ class NgpDestroyEntitiesT {
  public:
   using memory_space = NgpMemSpace;
   using ticket_issuer_t = TicketIssuer<NgpMemSpace>;
+  using control_space = Kokkos::SharedSpace;
 
   //! \name Constructors / Destructors
   //@{
 
   /// \brief Default constructor.
-  NgpDestroyEntitiesT()
-      : active_space_dev_view_("NgpDestroyEntitiesT::active_space_dev_view"),
-        active_space_host_view_(Kokkos::create_mirror_view(active_space_dev_view_)),
-        ticket_issuer_(/*activate_device*/ true),
-        requests_("NgpDestroyEntitiesT::requests", 0),
-        created_entities_("NgpDestroyEntitiesT::created_entities", 0) {
+  NgpDestroyEntitiesT() : state_("NgpDestroyEntitiesT::state") {
+    state_().active_space_dev_view_ = bool_view_t("NgpDestroyEntitiesT::active_space_dev_view");
+    state_().active_space_host_view_ = Kokkos::create_mirror_view(state_().active_space_dev_view_);
+    state_().ticket_issuer_ = ticket_issuer_t(/*activate_device*/ true);
+    state_().requests_ = request_view_t("NgpDestroyEntitiesT::requests", 0);
+    state_().created_entities_ = entity_view_t("NgpDestroyEntitiesT::created_entities", 0);
     // Initialize to device active
-    active_space_host_view_() = true;
-    Kokkos::deep_copy(active_space_dev_view_, active_space_host_view_);
+    state_().active_space_host_view_() = true;
+    Kokkos::deep_copy(state_().active_space_dev_view_, state_().active_space_host_view_);
   }
 
   KOKKOS_DEFAULTED_FUNCTION NgpDestroyEntitiesT(const NgpDestroyEntitiesT&) = default;
@@ -1006,37 +1017,37 @@ class NgpDestroyEntitiesT {
   /// \brief Sets the active memory space to host and synchronizes if needed.
   /// While active, both request and the ticket issuer will throw if used from device
   void activate_host() {
-    auto device_is_active = active_space_host_view_();
+    auto device_is_active = state_().active_space_host_view_();
     if (device_is_active) {  // No-op if host is already active
       Kokkos::fence();
-      active_space_host_view_() = false;
-      Kokkos::deep_copy(active_space_dev_view_, active_space_host_view_);
-      ticket_issuer_.activate_host();
+      state_().active_space_host_view_() = false;
+      Kokkos::deep_copy(state_().active_space_dev_view_, state_().active_space_host_view_);
+      state_().ticket_issuer_.activate_host();
     }
   }
 
   /// \brief Sets the active memory space to host and synchronizes if needed.
   /// While active, both request and the ticket issuer will throw if used from host
   void activate_device() {
-    auto host_is_active = !active_space_host_view_();
+    auto host_is_active = !state_().active_space_host_view_();
     if (host_is_active) {  // No-op if device is already active
       Kokkos::fence();
-      active_space_host_view_() = true;
-      Kokkos::deep_copy(active_space_dev_view_, active_space_host_view_);
-      ticket_issuer_.activate_device();
+      state_().active_space_host_view_() = true;
+      Kokkos::deep_copy(state_().active_space_dev_view_, state_().active_space_host_view_);
+      state_().ticket_issuer_.activate_device();
     }
   }
 
   /// \brief Synchronize between active and inactive memory spaces.
   void sync() {
     Kokkos::fence();
-    bool device_is_active = active_space_host_view_();
+    bool device_is_active = state_().active_space_host_view_();
     if (device_is_active) {
-      ticket_issuer_.sync();
-      Kokkos::deep_copy(requests_.view_host(), requests_.view_device());
+      state_().ticket_issuer_.sync();
+      Kokkos::deep_copy(state_().requests_.view_host(), state_().requests_.view_device());
     } else {
-      ticket_issuer_.sync();
-      Kokkos::deep_copy(requests_.view_device(), requests_.view_host());
+      state_().ticket_issuer_.sync();
+      Kokkos::deep_copy(state_().requests_.view_device(), state_().requests_.view_host());
     }
   }
   //@}
@@ -1046,27 +1057,24 @@ class NgpDestroyEntitiesT {
 
   /// \brief Get our unique index among multiple request helpers.
   unsigned id() const noexcept {
-    return index_;
+    return state_().index_;
   }
 
   /// \brief Get the ticket issuer for entity requests.
-  KOKKOS_INLINE_FUNCTION const ticket_issuer_t& tickets() const noexcept {
-    return ticket_issuer_;
-  }
-  KOKKOS_INLINE_FUNCTION ticket_issuer_t& tickets() noexcept {
-    return ticket_issuer_;
+  KOKKOS_INLINE_FUNCTION ticket_issuer_t& tickets() const noexcept {
+    return state_().ticket_issuer_;
   }
 
   /// \brief Record an entity destruction request
-  KOKKOS_INLINE_FUNCTION FutureDestroyEntity destroy(size_t ticket, stk::mesh::Entity entity) {
+  KOKKOS_INLINE_FUNCTION FutureDestroyEntity destroy(size_t ticket, stk::mesh::Entity entity) const {
     constexpr auto name = make_string_literal("NgpDestroyEntitiesT::destroy");
     assert_active_space<name>();
     assert_ticket_out_of_range<name>(ticket);
 
-    KOKKOS_IF_ON_HOST(requests_.view_host()(ticket) = entity;)
-    KOKKOS_IF_ON_DEVICE(requests_.view_device()(ticket) = entity;)
+    KOKKOS_IF_ON_HOST(state_().requests_.view_host()(ticket) = entity;)
+    KOKKOS_IF_ON_DEVICE(state_().requests_.view_device()(ticket) = entity;)
 
-    return FutureDestroyEntity{.ticket = ticket, .request_helper_index = index_};
+    return FutureDestroyEntity{.ticket = ticket, .request_helper_index = state_().index_};
   }
   //@}
 
@@ -1076,16 +1084,16 @@ class NgpDestroyEntitiesT {
   /// \brief Clears all internal request data to prepare for a fresh modification cycle.
   void reset() {
     /// Instead of resizing, we'll just zero out the existing requests to avoid reallocations.
-    ticket_issuer_.reset();
-    Kokkos::deep_copy(requests_.view_host(), stk::mesh::Entity{});
-    Kokkos::deep_copy(requests_.view_device(), stk::mesh::Entity{});
+    state_().ticket_issuer_.reset();
+    Kokkos::deep_copy(state_().requests_.view_host(), stk::mesh::Entity{});
+    Kokkos::deep_copy(state_().requests_.view_device(), stk::mesh::Entity{});
   }
 
   /// \brief Finalize counts for this request class. Users may no longer claim tickets after this call.
   size_t finalize_count() {
-    size_t count = ticket_issuer_.finalize_count();
-    if (requests_.extent(0) < count) {
-      Kokkos::resize(requests_, count);
+    size_t count = state_().ticket_issuer_.finalize_count();
+    if (state_().requests_.extent(0) < count) {
+      Kokkos::resize(state_().requests_, count);
     }
     return count;
   }
@@ -1104,17 +1112,22 @@ class NgpDestroyEntitiesT {
 
   template <StringLiteral name>
   KOKKOS_INLINE_FUNCTION void assert_active_space() const {
-    KOKKOS_IF_ON_HOST(MUNDY_THROW_ASSERT(
-                          /*host_is_active =*/!active_space_host_view_(), std::runtime_error,
-                          name + " called from host when device is active.");)
-    KOKKOS_IF_ON_DEVICE(MUNDY_THROW_ASSERT(
-                            /*device_is_active =*/active_space_dev_view_(), std::runtime_error,
-                            name + " called from device when host is active.");)
+    constexpr bool has_separate_host_and_device_storage =
+        !Kokkos::SpaceAccessibility<Kokkos::HostSpace, memory_space>::accessible;
+    if constexpr (has_separate_host_and_device_storage) {
+      KOKKOS_IF_ON_HOST(MUNDY_THROW_ASSERT(
+                            /*host_is_active =*/!state_().active_space_host_view_(), std::runtime_error,
+                            name + " called from host when device is active.");)
+      KOKKOS_IF_ON_DEVICE(MUNDY_THROW_ASSERT(
+                              /*device_is_active =*/state_().active_space_dev_view_(), std::runtime_error,
+                              name + " called from device when host is active.");)
+    }
   }
 
   template <StringLiteral name>
   KOKKOS_INLINE_FUNCTION void assert_ticket_out_of_range(size_t ticket) const {
-    MUNDY_THROW_ASSERT(ticket < ticket_issuer_.count(), std::out_of_range, name + " called with invalid ticket.");
+    MUNDY_THROW_ASSERT(ticket < state_().ticket_issuer_.count(), std::out_of_range,
+                       name + " called with invalid ticket.");
   }
 
   KOKKOS_INLINE_FUNCTION stk::mesh::Entity get_entity_to_destroy(size_t ticket) const {
@@ -1122,28 +1135,28 @@ class NgpDestroyEntitiesT {
     assert_active_space<name>();
     assert_ticket_out_of_range<name>(ticket);
 
-    KOKKOS_IF_ON_HOST(return requests_.view_host()(ticket);)
-    KOKKOS_IF_ON_DEVICE(return requests_.view_device()(ticket);)
+    KOKKOS_IF_ON_HOST(return state_().requests_.view_host()(ticket);)
+    KOKKOS_IF_ON_DEVICE(return state_().requests_.view_device()(ticket);)
   }
   //@}
 
   //! \name Member variables
   //@{
 
-  // Our unique ID among multiple request helpers
-  unsigned index_{0};
-
-  using bool_view_t = Kokkos::View<bool, memory_space>;
-  bool_view_t active_space_dev_view_;
-  bool_view_t::HostMirror active_space_host_view_;
-
-  ticket_issuer_t ticket_issuer_;
-
   using request_view_t = NgpViewT<stk::mesh::Entity*, NgpMemSpace>;
-  request_view_t requests_;
-
   using entity_view_t = NgpViewT<stk::mesh::Entity*, NgpMemSpace>;
-  entity_view_t created_entities_;
+  using bool_view_t = Kokkos::View<bool, memory_space>;
+  struct State {
+    unsigned index_{0};
+    bool_view_t active_space_dev_view_;
+    bool_view_t::HostMirror active_space_host_view_;
+    ticket_issuer_t ticket_issuer_;
+    request_view_t requests_;
+    entity_view_t created_entities_;
+  };
+
+  using state_view_t = Kokkos::View<State, control_space>;
+  mutable state_view_t state_;
   //@}
 };  // NgpDestroyEntitiesT
 
@@ -1157,19 +1170,20 @@ class NgpDestroyConnectionsT {
  public:
   using memory_space = NgpMemSpace;
   using ticket_issuer_t = TicketIssuer<NgpMemSpace>;
+  using control_space = Kokkos::SharedSpace;
 
   //! \name Constructors / Destructors
   //@{
 
   /// \brief Default constructor.
-  NgpDestroyConnectionsT()
-      : active_space_dev_view_("NgpDestroyConnectionsT::active_space_dev_view"),
-        active_space_host_view_(Kokkos::create_mirror_view(active_space_dev_view_)),
-        ticket_issuer_(/*activate_device*/ true),
-        requests_("NgpDestroyConnectionsT::requests", 0) {
+  NgpDestroyConnectionsT() : state_("NgpDestroyConnectionsT::state") {
+    state_().active_space_dev_view_ = bool_view_t("NgpDestroyConnectionsT::active_space_dev_view");
+    state_().active_space_host_view_ = Kokkos::create_mirror_view(state_().active_space_dev_view_);
+    state_().ticket_issuer_ = ticket_issuer_t(/*activate_device*/ true);
+    state_().requests_ = request_view_t("NgpDestroyConnectionsT::requests", 0);
     // Initialize to device active
-    active_space_host_view_() = true;
-    Kokkos::deep_copy(active_space_dev_view_, active_space_host_view_);
+    state_().active_space_host_view_() = true;
+    Kokkos::deep_copy(state_().active_space_dev_view_, state_().active_space_host_view_);
   }
 
   KOKKOS_DEFAULTED_FUNCTION NgpDestroyConnectionsT(const NgpDestroyConnectionsT&) = default;
@@ -1186,37 +1200,37 @@ class NgpDestroyConnectionsT {
   /// \brief Sets the active memory space to host and synchronizes if needed.
   /// While active, both request and the ticket issuer will throw if used from device
   void activate_host() {
-    auto device_is_active = active_space_host_view_();
+    auto device_is_active = state_().active_space_host_view_();
     if (device_is_active) {  // No-op if host is already active
       Kokkos::fence();
-      active_space_host_view_() = false;
-      Kokkos::deep_copy(active_space_dev_view_, active_space_host_view_);
-      ticket_issuer_.activate_host();
+      state_().active_space_host_view_() = false;
+      Kokkos::deep_copy(state_().active_space_dev_view_, state_().active_space_host_view_);
+      state_().ticket_issuer_.activate_host();
     }
   }
 
   /// \brief Sets the active memory space to host and synchronizes if needed.
   /// While active, both request and the ticket issuer will throw if used from host
   void activate_device() {
-    auto host_is_active = !active_space_host_view_();
+    auto host_is_active = !state_().active_space_host_view_();
     if (host_is_active) {  // No-op if device is already active
       Kokkos::fence();
-      active_space_host_view_() = true;
-      Kokkos::deep_copy(active_space_dev_view_, active_space_host_view_);
-      ticket_issuer_.activate_device();
+      state_().active_space_host_view_() = true;
+      Kokkos::deep_copy(state_().active_space_dev_view_, state_().active_space_host_view_);
+      state_().ticket_issuer_.activate_device();
     }
   }
 
   /// \brief Synchronize between active and inactive memory spaces.
   void sync() {
     Kokkos::fence();
-    bool device_is_active = active_space_host_view_();
+    bool device_is_active = state_().active_space_host_view_();
     if (device_is_active) {
-      ticket_issuer_.sync();
-      Kokkos::deep_copy(requests_.view_host(), requests_.view_device());
+      state_().ticket_issuer_.sync();
+      Kokkos::deep_copy(state_().requests_.view_host(), state_().requests_.view_device());
     } else {
-      ticket_issuer_.sync();
-      Kokkos::deep_copy(requests_.view_device(), requests_.view_host());
+      state_().ticket_issuer_.sync();
+      Kokkos::deep_copy(state_().requests_.view_device(), state_().requests_.view_host());
     }
   }
   //@}
@@ -1226,32 +1240,29 @@ class NgpDestroyConnectionsT {
 
   /// \brief Get our unique index among multiple request helpers.
   unsigned id() const noexcept {
-    return index_;
+    return state_().index_;
   }
 
   /// \brief Get the ticket issuer for entity requests.
-  KOKKOS_INLINE_FUNCTION const ticket_issuer_t& tickets() const noexcept {
-    return ticket_issuer_;
-  }
-  KOKKOS_INLINE_FUNCTION ticket_issuer_t& tickets() noexcept {
-    return ticket_issuer_;
+  KOKKOS_INLINE_FUNCTION ticket_issuer_t& tickets() const noexcept {
+    return state_().ticket_issuer_;
   }
 
   /// \brief Record a connection destruction between two entities (from_entity -> to_entity).
   /// Both entities must be real entities.
   KOKKOS_INLINE_FUNCTION FutureDestroyConnection request(size_t ticket, stk::mesh::Entity from_entity,
                                                          stk::mesh::Entity to_entity,
-                                                         const stk::mesh::RelationIdentifier ordinal) {
+                                                         const stk::mesh::RelationIdentifier ordinal) const {
     constexpr auto name = make_string_literal("NgpDestroyConnectionsT::request");
     assert_active_space<name>();
     assert_ticket_out_of_range<name>(ticket);
 
-    KOKKOS_IF_ON_HOST(auto& req = requests_.view_host()(ticket); req.from_entity = from_entity;
+    KOKKOS_IF_ON_HOST(auto& req = state_().requests_.view_host()(ticket); req.from_entity = from_entity;
                       req.to_entity = to_entity; req.ordinal = ordinal;)
-    KOKKOS_IF_ON_DEVICE(auto& req = requests_.view_device()(ticket); req.from_entity = from_entity;
+    KOKKOS_IF_ON_DEVICE(auto& req = state_().requests_.view_device()(ticket); req.from_entity = from_entity;
                         req.to_entity = to_entity; req.ordinal = ordinal;)
 
-    return FutureDestroyConnection{.ticket = ticket, .request_helper_index = index_};
+    return FutureDestroyConnection{.ticket = ticket, .request_helper_index = state_().index_};
   }
   //@}
 
@@ -1261,16 +1272,16 @@ class NgpDestroyConnectionsT {
   /// \brief Clears all internal request data to prepare for a fresh modification cycle.
   void reset() {
     /// Instead of resizing, we'll just zero out the existing requests to avoid reallocations.
-    ticket_issuer_.reset();
-    Kokkos::deep_copy(requests_.view_host(), DestroyConnectionRequest{});
-    Kokkos::deep_copy(requests_.view_device(), DestroyConnectionRequest{});
+    state_().ticket_issuer_.reset();
+    Kokkos::deep_copy(state_().requests_.view_host(), DestroyConnectionRequest{});
+    Kokkos::deep_copy(state_().requests_.view_device(), DestroyConnectionRequest{});
   }
 
   /// \brief Finalize counts for this request class. Users may no longer claim tickets after this call.
   size_t finalize_count() {
-    size_t count = ticket_issuer_.finalize_count();
-    if (requests_.extent(0) < count) {
-      Kokkos::resize(requests_, count);
+    size_t count = state_().ticket_issuer_.finalize_count();
+    if (state_().requests_.extent(0) < count) {
+      Kokkos::resize(state_().requests_, count);
     }
     return count;
   }
@@ -1289,25 +1300,27 @@ class NgpDestroyConnectionsT {
 
   template <StringLiteral name>
   KOKKOS_INLINE_FUNCTION void assert_active_space() const {
-    KOKKOS_IF_ON_HOST(MUNDY_THROW_ASSERT(
-                          /*host_is_active =*/!active_space_host_view_(), std::runtime_error,
-                          name + " called from host when device is active.");)
-    KOKKOS_IF_ON_DEVICE(MUNDY_THROW_ASSERT(
-                            /*device_is_active =*/active_space_dev_view_(), std::runtime_error,
-                            name + " called from device when host is active.");)
+    constexpr bool has_separate_host_and_device_storage =
+        !Kokkos::SpaceAccessibility<Kokkos::HostSpace, memory_space>::accessible;
+    if constexpr (has_separate_host_and_device_storage) {
+      KOKKOS_IF_ON_HOST(MUNDY_THROW_ASSERT(
+                            /*host_is_active =*/!state_().active_space_host_view_(), std::runtime_error,
+                            name + " called from host when device is active.");)
+      KOKKOS_IF_ON_DEVICE(MUNDY_THROW_ASSERT(
+                              /*device_is_active =*/state_().active_space_dev_view_(), std::runtime_error,
+                              name + " called from device when host is active.");)
+    }
   }
 
   template <StringLiteral name>
   KOKKOS_INLINE_FUNCTION void assert_ticket_out_of_range(size_t ticket) const {
-    MUNDY_THROW_ASSERT(ticket < ticket_issuer_.count(), std::out_of_range, name + " called with invalid ticket.");
+    MUNDY_THROW_ASSERT(ticket < state_().ticket_issuer_.count(), std::out_of_range,
+                       name + " called with invalid ticket.");
   }
   //@}
 
   //! \name Member variables
   //@{
-
-  // Our unique ID among multiple request helpers
-  unsigned index_{0};
 
   /// @brief Internal struct representing a single connection destruction request.
   /// Requests must specify a pair of entities to destroy the connection between. Both entities must be real entities.
@@ -1322,18 +1335,22 @@ class NgpDestroyConnectionsT {
     assert_active_space<name>();
     assert_ticket_out_of_range<name>(ticket);
 
-    KOKKOS_IF_ON_HOST(return requests_.view_host()(ticket);)
-    KOKKOS_IF_ON_DEVICE(return requests_.view_device()(ticket);)
+    KOKKOS_IF_ON_HOST(return state_().requests_.view_host()(ticket);)
+    KOKKOS_IF_ON_DEVICE(return state_().requests_.view_device()(ticket);)
   }
 
-  using bool_view_t = Kokkos::View<bool, memory_space>;
-  bool_view_t active_space_dev_view_;
-  bool_view_t::HostMirror active_space_host_view_;
-
-  ticket_issuer_t ticket_issuer_;
-
   using request_view_t = NgpViewT<DestroyConnectionRequest*, NgpMemSpace>;
-  request_view_t requests_;
+  using bool_view_t = Kokkos::View<bool, memory_space>;
+  struct State {
+    unsigned index_{0};
+    bool_view_t active_space_dev_view_;
+    bool_view_t::HostMirror active_space_host_view_;
+    ticket_issuer_t ticket_issuer_;
+    request_view_t requests_;
+  };
+
+  using state_view_t = Kokkos::View<State, control_space>;
+  mutable state_view_t state_;
   //@}
 };  // NgpDestroyConnectionsT
 
@@ -1343,16 +1360,14 @@ class NgpModRequestsT {
  public:
   using memory_space = NgpMemSpace;
   using ticket_id = size_t;
+  using control_space = Kokkos::SharedSpace;
+  using host_state_space = Kokkos::HostSpace;
 
   //! \name Constructors / Destructors
   //@{
 
   /// \brief Default constructor.
-  NgpModRequestsT()
-      : entity_requests_new_ids_entries_(std::make_shared<entity_requests_new_ids_entries_t>()),
-        entity_requests_known_ids_entries_(std::make_shared<entity_requests_known_ids_entries_t>()),
-        entity_requests_new_ids_index_map_(std::make_shared<entity_requests_new_ids_index_map_t>()),
-        entity_requests_known_ids_index_map_(std::make_shared<entity_requests_known_ids_index_map_t>()) {
+  NgpModRequestsT() : shared_state_("NgpModRequestsT::shared_state"), host_state_("NgpModRequestsT::host_state") {
   }
 
   KOKKOS_DEFAULTED_FUNCTION NgpModRequestsT(const NgpModRequestsT&) = default;
@@ -1367,11 +1382,11 @@ class NgpModRequestsT {
   //@{
 
   /// \brief Get the entity request class for the given partition key (for requests of entities with new Ids).
-  NgpRequestEntitiesNewIdsT<NgpMemSpace>& request_entities_new_ids(const stk::mesh::PartVector& parts) {
+  NgpRequestEntitiesNewIdsT<NgpMemSpace> request_entities_new_ids(const stk::mesh::PartVector& parts) const {
     return get_or_create_entity_requests_new_ids(parts);
   }
   //
-  NgpRequestEntitiesNewIdsT<NgpMemSpace>& request_entities_new_ids(const stk::mesh::Part& part) {
+  NgpRequestEntitiesNewIdsT<NgpMemSpace> request_entities_new_ids(const stk::mesh::Part& part) const {
     stk::mesh::PartVector part_vec(1);
     part_vec[0] = const_cast<stk::mesh::Part*>(&part);
     return get_or_create_entity_requests_new_ids(part_vec);
@@ -1379,29 +1394,29 @@ class NgpModRequestsT {
 
   /// \brief Get the entity request class for the given partition key (for requests of entities with known Ids).
   /// Aka you assign the Id at request time instead of it being automatically generated by STK.
-  NgpRequestEntitiesKnownIdsT<NgpMemSpace>& request_entities_known_ids(const stk::mesh::PartVector& parts) {
+  NgpRequestEntitiesKnownIdsT<NgpMemSpace> request_entities_known_ids(const stk::mesh::PartVector& parts) const {
     return get_or_create_entity_requests_known_ids(parts);
   }
   //
-  NgpRequestEntitiesKnownIdsT<NgpMemSpace>& request_entities_known_ids(const stk::mesh::Part& part) {
+  NgpRequestEntitiesKnownIdsT<NgpMemSpace> request_entities_known_ids(const stk::mesh::Part& part) const {
     stk::mesh::PartVector part_vec(1);
     part_vec[0] = const_cast<stk::mesh::Part*>(&part);
     return get_or_create_entity_requests_known_ids(part_vec);
   }
 
   /// \brief Get the destroy entity request class.
-  NgpDestroyEntitiesT<NgpMemSpace>& destroy_entities() {
-    return destroy_entity_requests_;
+  NgpDestroyEntitiesT<NgpMemSpace> destroy_entities() const {
+    return shared_state_().destroy_entity_requests_;
   }
 
   /// \brief Get the connection request class.
-  NgpRequestConnectionsT<NgpMemSpace>& request_connections() {
-    return connection_requests_;
+  NgpRequestConnectionsT<NgpMemSpace> request_connections() const {
+    return shared_state_().connection_requests_;
   }
 
   /// \brief Get the destroy connection request class.
-  NgpDestroyConnectionsT<NgpMemSpace>& destroy_connections() {
-    return destroy_connection_requests_;
+  NgpDestroyConnectionsT<NgpMemSpace> destroy_connections() const {
+    return shared_state_().destroy_connection_requests_;
   }
   //@}
 
@@ -1416,9 +1431,9 @@ class NgpModRequestsT {
     for (auto& entry : get_entity_requests_known_ids_entries()) {
       entry.requests.activate_host();
     }
-    destroy_entity_requests_.activate_host();
-    connection_requests_.activate_host();
-    destroy_connection_requests_.activate_host();
+    shared_state_().destroy_entity_requests_.activate_host();
+    shared_state_().connection_requests_.activate_host();
+    shared_state_().destroy_connection_requests_.activate_host();
   }
 
   /// \brief Sets the active memory space to device for all request helpers and ticket issuers.
@@ -1429,9 +1444,9 @@ class NgpModRequestsT {
     for (auto& entry : get_entity_requests_known_ids_entries()) {
       entry.requests.activate_device();
     }
-    destroy_entity_requests_.activate_device();
-    connection_requests_.activate_device();
-    destroy_connection_requests_.activate_device();
+    shared_state_().destroy_entity_requests_.activate_device();
+    shared_state_().connection_requests_.activate_device();
+    shared_state_().destroy_connection_requests_.activate_device();
   }
   //@}
 
@@ -1446,9 +1461,9 @@ class NgpModRequestsT {
     for (auto& entry : get_entity_requests_known_ids_entries()) {
       entry.requests.reset();
     }
-    destroy_entity_requests_.reset();
-    connection_requests_.reset();
-    destroy_connection_requests_.reset();
+    shared_state_().destroy_entity_requests_.reset();
+    shared_state_().connection_requests_.reset();
+    shared_state_().destroy_connection_requests_.reset();
   }
 
   /// \brief Finalize counts for all request classes. Users may no longer claim tickets after this call.
@@ -1459,9 +1474,9 @@ class NgpModRequestsT {
     for (auto& entry : get_entity_requests_known_ids_entries()) {
       entry.requests.finalize_count();
     }
-    destroy_entity_requests_.finalize_count();
-    connection_requests_.finalize_count();
-    destroy_connection_requests_.finalize_count();
+    shared_state_().destroy_entity_requests_.finalize_count();
+    shared_state_().connection_requests_.finalize_count();
+    shared_state_().destroy_connection_requests_.finalize_count();
   }
 
   /// \brief Process all requests in all request classes.
@@ -1489,9 +1504,9 @@ class NgpModRequestsT {
         total_requests += entry.requests.tickets(rank).count();
       }
     }
-    total_requests += destroy_entity_requests_.tickets().count();
-    total_requests += connection_requests_.tickets().count();
-    total_requests += destroy_connection_requests_.tickets().count();
+    total_requests += shared_state_().destroy_entity_requests_.tickets().count();
+    total_requests += shared_state_().connection_requests_.tickets().count();
+    total_requests += shared_state_().destroy_connection_requests_.tickets().count();
     if (total_requests == 0) {
       return;
     }
@@ -1584,9 +1599,9 @@ class NgpModRequestsT {
       };
 
       // Must be done in serial since declare_relation is not thread safe.
-      size_t num_connection_requests = connection_requests_.tickets().count();
+      size_t num_connection_requests = shared_state_().connection_requests_.tickets().count();
       for (size_t ticket = 0; ticket < num_connection_requests; ++ticket) {
-        auto req = connection_requests_.get_request(ticket);
+        auto req = shared_state_().connection_requests_.get_request(ticket);
         stk::mesh::Entity from_entity = resolve_entity(req.from_entity);
         stk::mesh::Entity to_entity = resolve_entity(req.to_entity);
         bulk_data.declare_relation(from_entity, to_entity, req.ordinal, perm, scratch1, scratch2, scratch3);
@@ -1598,9 +1613,9 @@ class NgpModRequestsT {
     /////////////////////////////////
     {
       // Must be done in serial since destroy_relation is not thread safe.
-      size_t num_destroy_connection_requests = destroy_connection_requests_.tickets().count();
+      size_t num_destroy_connection_requests = shared_state_().destroy_connection_requests_.tickets().count();
       for (size_t ticket = 0; ticket < num_destroy_connection_requests; ++ticket) {
-        auto req = destroy_connection_requests_.get_request(ticket);
+        auto req = shared_state_().destroy_connection_requests_.get_request(ticket);
         bulk_data.destroy_relation(req.from_entity, req.to_entity, req.ordinal);
       }
     }
@@ -1610,9 +1625,9 @@ class NgpModRequestsT {
     /////////////////////////////
     {
       // Must be done in serial since destroy_entity is not thread safe.
-      size_t num_destroy_entity_requests = destroy_entity_requests_.tickets().count();
+      size_t num_destroy_entity_requests = shared_state_().destroy_entity_requests_.tickets().count();
       for (size_t ticket = 0; ticket < num_destroy_entity_requests; ++ticket) {
-        stk::mesh::Entity entity = destroy_entity_requests_.get_entity_to_destroy(ticket);
+        stk::mesh::Entity entity = shared_state_().destroy_entity_requests_.get_entity_to_destroy(ticket);
         bulk_data.destroy_entity(entity);
       }
     }
@@ -1640,67 +1655,49 @@ class NgpModRequestsT {
   using entity_requests_new_ids_index_map_t = std::map<impl::PartitionKey, unsigned>;
   using entity_requests_known_ids_index_map_t = std::map<impl::PartitionKey, unsigned>;
 
-  entity_requests_new_ids_entries_t& get_entity_requests_new_ids_entries() {
-    MUNDY_THROW_ASSERT(entity_requests_new_ids_entries_ != nullptr, std::runtime_error,
-                       "entity_requests_new_ids_entries_ must be non-null.");
-    return *entity_requests_new_ids_entries_;
+  struct SharedState {
+    NgpDestroyEntitiesT<NgpMemSpace> destroy_entity_requests_;
+    NgpRequestConnectionsT<NgpMemSpace> connection_requests_;
+    NgpDestroyConnectionsT<NgpMemSpace> destroy_connection_requests_;
+  };
+
+  struct HostState {
+    entity_requests_new_ids_entries_t entity_requests_new_ids_entries_;
+    entity_requests_known_ids_entries_t entity_requests_known_ids_entries_;
+    entity_requests_new_ids_index_map_t entity_requests_new_ids_index_map_;
+    entity_requests_known_ids_index_map_t entity_requests_known_ids_index_map_;
+  };
+
+  entity_requests_new_ids_entries_t& get_entity_requests_new_ids_entries() const {
+    return host_state_().entity_requests_new_ids_entries_;
   }
 
-  const entity_requests_new_ids_entries_t& get_entity_requests_new_ids_entries() const {
-    MUNDY_THROW_ASSERT(entity_requests_new_ids_entries_ != nullptr, std::runtime_error,
-                       "entity_requests_new_ids_entries_ must be non-null.");
-    return *entity_requests_new_ids_entries_;
+  entity_requests_known_ids_entries_t& get_entity_requests_known_ids_entries() const {
+    return host_state_().entity_requests_known_ids_entries_;
   }
 
-  entity_requests_known_ids_entries_t& get_entity_requests_known_ids_entries() {
-    MUNDY_THROW_ASSERT(entity_requests_known_ids_entries_ != nullptr, std::runtime_error,
-                       "entity_requests_known_ids_entries_ must be non-null.");
-    return *entity_requests_known_ids_entries_;
+  entity_requests_new_ids_index_map_t& get_entity_requests_new_ids_index_map() const {
+    return host_state_().entity_requests_new_ids_index_map_;
   }
 
-  const entity_requests_known_ids_entries_t& get_entity_requests_known_ids_entries() const {
-    MUNDY_THROW_ASSERT(entity_requests_known_ids_entries_ != nullptr, std::runtime_error,
-                       "entity_requests_known_ids_entries_ must be non-null.");
-    return *entity_requests_known_ids_entries_;
+  entity_requests_known_ids_index_map_t& get_entity_requests_known_ids_index_map() const {
+    return host_state_().entity_requests_known_ids_index_map_;
   }
 
-  entity_requests_new_ids_index_map_t& get_entity_requests_new_ids_index_map() {
-    MUNDY_THROW_ASSERT(entity_requests_new_ids_index_map_ != nullptr, std::runtime_error,
-                       "entity_requests_new_ids_index_map_ must be non-null.");
-    return *entity_requests_new_ids_index_map_;
-  }
-
-  const entity_requests_new_ids_index_map_t& get_entity_requests_new_ids_index_map() const {
-    MUNDY_THROW_ASSERT(entity_requests_new_ids_index_map_ != nullptr, std::runtime_error,
-                       "entity_requests_new_ids_index_map_ must be non-null.");
-    return *entity_requests_new_ids_index_map_;
-  }
-
-  entity_requests_known_ids_index_map_t& get_entity_requests_known_ids_index_map() {
-    MUNDY_THROW_ASSERT(entity_requests_known_ids_index_map_ != nullptr, std::runtime_error,
-                       "entity_requests_known_ids_index_map_ must be non-null.");
-    return *entity_requests_known_ids_index_map_;
-  }
-
-  const entity_requests_known_ids_index_map_t& get_entity_requests_known_ids_index_map() const {
-    MUNDY_THROW_ASSERT(entity_requests_known_ids_index_map_ != nullptr, std::runtime_error,
-                       "entity_requests_known_ids_index_map_ must be non-null.");
-    return *entity_requests_known_ids_index_map_;
-  }
-
-  NgpRequestEntitiesNewIdsT<NgpMemSpace>& get_entity_requests_new_ids_by_index(unsigned index) {
+  NgpRequestEntitiesNewIdsT<NgpMemSpace> get_entity_requests_new_ids_by_index(unsigned index) const {
     auto& entries = get_entity_requests_new_ids_entries();
     MUNDY_THROW_ASSERT(index < entries.size(), std::out_of_range, "new-id entity request helper index out of range.");
     return entries[index].requests;
   }
 
-  NgpRequestEntitiesKnownIdsT<NgpMemSpace>& get_entity_requests_known_ids_by_index(unsigned index) {
+  NgpRequestEntitiesKnownIdsT<NgpMemSpace> get_entity_requests_known_ids_by_index(unsigned index) const {
     auto& entries = get_entity_requests_known_ids_entries();
     MUNDY_THROW_ASSERT(index < entries.size(), std::out_of_range, "known-id entity request helper index out of range.");
     return entries[index].requests;
   }
 
-  NgpRequestEntitiesNewIdsT<NgpMemSpace>& get_or_create_entity_requests_new_ids(const stk::mesh::PartVector& parts) {
+  NgpRequestEntitiesNewIdsT<NgpMemSpace> get_or_create_entity_requests_new_ids(
+      const stk::mesh::PartVector& parts) const {
     impl::PartitionKey key = impl::get_partition_key(parts);
 
     // Map the key to a linearized index of existing request helpers.
@@ -1720,8 +1717,8 @@ class NgpModRequestsT {
     return entries.back().requests;
   }
 
-  NgpRequestEntitiesKnownIdsT<NgpMemSpace>& get_or_create_entity_requests_known_ids(
-      const stk::mesh::PartVector& parts) {
+  NgpRequestEntitiesKnownIdsT<NgpMemSpace> get_or_create_entity_requests_known_ids(
+      const stk::mesh::PartVector& parts) const {
     impl::PartitionKey key = impl::get_partition_key(parts);
 
     // Map the key to a linearized index of existing request helpers.
@@ -1744,7 +1741,7 @@ class NgpModRequestsT {
   /// Unpacked version of generate_new_entities to avoid a costly change of part post creation.
   void our_generate_new_entities(stk::mesh::BulkData& bulk_data, const std::vector<size_t>& num_requests_per_rank,
                                  stk::mesh::PartVector& add_parts,
-                                 std::vector<stk::mesh::EntityVector>& requested_entities_per_rank) {
+                                 std::vector<stk::mesh::EntityVector>& requested_entities_per_rank) const {
     size_t num_ranks = num_requests_per_rank.size();
     std::vector<std::vector<stk::mesh::EntityId>> requested_ids(num_ranks);
     for (size_t i = 0; i < num_ranks; ++i) {
@@ -1765,15 +1762,11 @@ class NgpModRequestsT {
 
   // Entity requests are mapped by the partition key that identifies their collection of parts.
   // We'll always append the locally owned part to the given part list to ensure ownership.
-  std::shared_ptr<entity_requests_new_ids_entries_t> entity_requests_new_ids_entries_;
-  std::shared_ptr<entity_requests_known_ids_entries_t> entity_requests_known_ids_entries_;
-  std::shared_ptr<entity_requests_new_ids_index_map_t> entity_requests_new_ids_index_map_;
-  std::shared_ptr<entity_requests_known_ids_index_map_t> entity_requests_known_ids_index_map_;
+  using shared_state_view_t = Kokkos::View<SharedState, control_space>;
+  using host_state_view_t = Kokkos::View<HostState, host_state_space>;
 
-  // All other request classes only require a single instance.
-  NgpDestroyEntitiesT<NgpMemSpace> destroy_entity_requests_;
-  NgpRequestConnectionsT<NgpMemSpace> connection_requests_;
-  NgpDestroyConnectionsT<NgpMemSpace> destroy_connection_requests_;
+  mutable shared_state_view_t shared_state_;
+  mutable host_state_view_t host_state_;
 };
 
 // Following STK's default naming convention for ngp classes in the default memory space
