@@ -1541,7 +1541,7 @@ class NgpModRequestsT {
       std::vector<stk::mesh::EntityVector> requested_entities_per_rank(num_actual_ranks);
       our_generate_new_entities(bulk_data, num_requests_per_rank, parts, requested_entities_per_rank);
 
-      for (size_t rank = stk::topology::BEGIN_RANK; rank < stk::topology::NUM_RANKS; ++rank) {
+      for (size_t rank = stk::topology::BEGIN_RANK; rank < num_actual_ranks; ++rank) {
         auto created_entities_view = entry.requests.get_created_entity_view(static_cast<stk::mesh::EntityRank>(rank));
         size_t count = num_requests_per_rank[rank];
         if (count == 0) {
