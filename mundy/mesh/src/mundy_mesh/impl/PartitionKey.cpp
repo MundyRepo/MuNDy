@@ -27,6 +27,7 @@
 
 // STK
 #include <stk_mesh/base/BulkData.hpp>
+#include <stk_mesh/base/MetaData.hpp>
 #include <stk_mesh/base/Types.hpp>
 #include <stk_mesh/baseImpl/PartVectorUtils.hpp>  // for stk::mesh::impl::fill_add_parts_and_supersets
 #include <stk_util/ngp/NgpSpaces.hpp>
@@ -49,6 +50,17 @@ PartitionKey get_partition_key(const stk::mesh::PartVector& parts) {
 
 PartitionKey get_partition_key(const stk::mesh::Bucket& link_bucket) {
   return get_partition_key(link_bucket.supersets());
+}
+
+stk::mesh::PartVector get_parts_for_partition_key(const PartitionKey& key, const stk::mesh::MetaData& meta_data) {
+  size_t num_parts = key.size();
+  stk::mesh::PartVector parts(num_parts);
+  for (size_t i = 0; i < num_parts; ++i) {
+    stk::mesh::PartOrdinal part_ordinal = key[i];
+    stk::mesh::Part& part = meta_data.get_part(part_ordinal);
+    parts[i] = &part;
+  }
+  return parts;
 }
 
 }  // namespace impl

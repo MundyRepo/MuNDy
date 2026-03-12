@@ -272,7 +272,7 @@ class NgpPoolT {
   /// \brief Add N objects into the pool. Modifies on host and marks as modified.
   void batch_add_host(pool_vector_t p) {
     our_size_t old_size = Kokkos::atomic_fetch_add(&ngp_size_.view_host()(), p.size());
-    MUNDY_THROW_ASSERT(old_size + p.size() <= ngp_capacity_.view_host()(), std::runtime_error,
+    MUNDY_THROW_ASSERT(old_size + static_cast<our_size_t>(p.size()) <= ngp_capacity_.view_host()(), std::runtime_error,
                        "Released objects would exceed pool capacity.");
 
     auto local_pool = pool_;

@@ -829,39 +829,46 @@ struct an_external_constexpr_functor {
   }
 };
 
+template<typename T>
+  requires std::is_arithmetic_v<T>
+constexpr T constexpr_abs(const T& x) {
+  return x < static_cast<T>(0) ? -x : x;
+}
+
+
 TYPED_TEST(VectorSingleTypeTest, ConstexprApply) {
-  // Using a lambda function
+  // Using a constexpr lambda function
   // Dim 1
   constexpr Vector1<TypeParam> v1(1);
-  constexpr auto v2 = apply([](auto x) { return x + 1; }, v1);
-  static_assert(std::abs(v2[0] - 2) < 1e-6, "Constexpr apply failed.");
+  constexpr auto v2 = apply([](auto x) constexpr { return x + 1; }, v1);
+  static_assert(constexpr_abs(v2[0] - 2) < 1e-6, "Constexpr apply failed.");
 
   // Dim 2
   constexpr Vector2<TypeParam> v3(1, 2);
-  constexpr auto v4 = apply([](auto x) { return x + 1; }, v3);
-  static_assert(std::abs(v4[0] - 2) < 1e-6 && std::abs(v4[1] - 3) < 1e-6, "Constexpr apply failed.");
+  constexpr auto v4 = apply([](auto x) constexpr { return x + 1; }, v3);
+  static_assert(constexpr_abs(v4[0] - 2) < 1e-6 && constexpr_abs(v4[1] - 3) < 1e-6, "Constexpr apply failed.");
 
   // Dim 3
   constexpr Vector3<TypeParam> v5(1, 2, 3);
-  constexpr auto v6 = apply([](auto x) { return x + 1; }, v5);
-  static_assert(std::abs(v6[0] - 2) < 1e-6 && std::abs(v6[1] - 3) < 1e-6 && std::abs(v6[2] - 4) < 1e-6,
+  constexpr auto v6 = apply([](auto x) constexpr { return x + 1; }, v5);
+  static_assert(constexpr_abs(v6[0] - 2) < 1e-6 && constexpr_abs(v6[1] - 3) < 1e-6 && constexpr_abs(v6[2] - 4) < 1e-6,
                 "Constexpr apply failed.");
 
   // Using an external function
   // Dim 1
   constexpr Vector1<TypeParam> v7(1);
   constexpr auto v8 = apply(an_external_constexpr_functor{}, v7);
-  static_assert(std::abs(v8[0] - 2) < 1e-6, "Constexpr apply failed.");
+  static_assert(constexpr_abs(v8[0] - 2) < 1e-6, "Constexpr apply failed.");
 
   // Dim 2
   constexpr Vector2<TypeParam> v9(1, 2);
   constexpr auto v10 = apply(an_external_constexpr_functor{}, v9);
-  static_assert(std::abs(v10[0] - 2) < 1e-6 && std::abs(v10[1] - 3) < 1e-6, "Constexpr apply failed.");
+  static_assert(constexpr_abs(v10[0] - 2) < 1e-6 && constexpr_abs(v10[1] - 3) < 1e-6, "Constexpr apply failed.");
 
   // Dim 3
   constexpr Vector3<TypeParam> v11(1, 2, 3);
   constexpr auto v12 = apply(an_external_constexpr_functor{}, v11);
-  static_assert(std::abs(v12[0] - 2) < 1e-6 && std::abs(v12[1] - 3) < 1e-6 && std::abs(v12[2] - 4) < 1e-6,
+  static_assert(constexpr_abs(v12[0] - 2) < 1e-6 && constexpr_abs(v12[1] - 3) < 1e-6 && constexpr_abs(v12[2] - 4) < 1e-6,
                 "Constexpr apply failed.");
 }
 //@}

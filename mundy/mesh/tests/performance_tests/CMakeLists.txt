@@ -67,6 +67,13 @@ if (Mundy_ENABLE_TESTS AND Mundy_ENABLE_nanobench)
     CATEGORIES PERFORMANCE
   )
 
+  tribits_add_executable(
+    PerfTestNgpModRequests
+    SOURCES PerfTestNgpModRequests.cpp
+    INSTALLABLE
+    CATEGORIES PERFORMANCE
+  )
+
   # These tests require Trilinos 16.0.0 or later
   # They still get built but will simply print a warning and return
   tribits_add_executable(

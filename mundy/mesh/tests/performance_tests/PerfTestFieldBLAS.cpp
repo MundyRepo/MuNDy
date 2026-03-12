@@ -18,7 +18,6 @@
 // **********************************************************************************************************************
 // @HEADER
 
-
 #define ANKERL_NANOBENCH_IMPLEMENT
 
 // C++ core
@@ -298,10 +297,14 @@ class FetchNgpObjTest : public PerfTestFieldBLAS {
 
   void run_mundy_ngp(const size_t num_iterations = 1) {
     for (size_t i = 0; i < num_iterations; ++i) {
-      [[maybe_unused]] auto ngp_mesh = stk::mesh::get_updated_ngp_mesh(get_bulk());
-      [[maybe_unused]] stk::mesh::NgpField<double>& ngp_field1 = stk::mesh::get_updated_ngp_field<double>(*field1_ptr_);
-      [[maybe_unused]] stk::mesh::NgpField<double>& ngp_field2 = stk::mesh::get_updated_ngp_field<double>(*field2_ptr_);
-      [[maybe_unused]] stk::mesh::NgpField<double>& ngp_field3 = stk::mesh::get_updated_ngp_field<double>(*field3_ptr_);
+      auto ngp_mesh = stk::mesh::get_updated_ngp_mesh(get_bulk());
+      stk::mesh::NgpField<double>& ngp_field1 = stk::mesh::get_updated_ngp_field<double>(*field1_ptr_);
+      stk::mesh::NgpField<double>& ngp_field2 = stk::mesh::get_updated_ngp_field<double>(*field2_ptr_);
+      stk::mesh::NgpField<double>& ngp_field3 = stk::mesh::get_updated_ngp_field<double>(*field3_ptr_);
+      ankerl::nanobench::doNotOptimizeAway(ngp_mesh);
+      ankerl::nanobench::doNotOptimizeAway(ngp_field1);
+      ankerl::nanobench::doNotOptimizeAway(ngp_field2);
+      ankerl::nanobench::doNotOptimizeAway(ngp_field3);
     }
   }
 };  // class FetchNgpObjTest
@@ -324,6 +327,7 @@ class FieldFillTest : public PerfTestFieldBLAS {
     for (size_t i = 0; i < num_iterations; ++i) {
       field_fill(fill_value, *field1_ptr_, selector, exec_space);
     }
+    ankerl::nanobench::doNotOptimizeAway(field1_ptr_);
   }
 
   void run_stk_ngp(const size_t num_iterations = 1) {
@@ -332,12 +336,14 @@ class FieldFillTest : public PerfTestFieldBLAS {
     for (size_t i = 0; i < num_iterations; ++i) {
       stk::mesh::field_fill(fill_value, *field1_base_ptr_, selector, exec_space);
     }
+    ankerl::nanobench::doNotOptimizeAway(field1_ptr_);
   }
 
   void run_stk(const size_t num_iterations = 1) {
     for (size_t i = 0; i < num_iterations; ++i) {
       stk::mesh::field_fill(fill_value, *field1_ptr_, block1_selector_ - block2_selector_);
     }
+    ankerl::nanobench::doNotOptimizeAway(field1_ptr_);
   }
 
   void run_our_stk_test(const size_t num_iterations = 1) {
@@ -357,6 +363,7 @@ class FieldFillTest : public PerfTestFieldBLAS {
                                        }
                                      });
     }
+    ankerl::nanobench::doNotOptimizeAway(field1_ptr_);
   }
 };  // class FieldFillTest
 
@@ -376,6 +383,7 @@ class FieldCopyTest : public PerfTestFieldBLAS {
     for (size_t i = 0; i < num_iterations; ++i) {
       field_copy<double>(*field1_ptr_, *field2_ptr_, selector, exec_space);
     }
+    ankerl::nanobench::doNotOptimizeAway(field2_ptr_);
   }
 
   void run_stk_ngp(const size_t num_iterations = 1) {
@@ -384,12 +392,14 @@ class FieldCopyTest : public PerfTestFieldBLAS {
     for (size_t i = 0; i < num_iterations; ++i) {
       stk::mesh::field_copy(*field1_base_ptr_, *field2_base_ptr_, selector, exec_space);
     }
+    ankerl::nanobench::doNotOptimizeAway(field2_ptr_);
   }
 
   void run_stk(const size_t num_iterations = 1) {
     for (size_t i = 0; i < num_iterations; ++i) {
       stk::mesh::field_copy(*field1_ptr_, *field2_ptr_, block1_selector_ - block2_selector_);
     }
+    ankerl::nanobench::doNotOptimizeAway(field2_ptr_);
   }
 
   void run_our_stk_test(const size_t num_iterations = 1) {
@@ -410,6 +420,7 @@ class FieldCopyTest : public PerfTestFieldBLAS {
             }
           });
     }
+    ankerl::nanobench::doNotOptimizeAway(field2_ptr_);
   }
 };  // class FieldCopyTest
 
@@ -429,6 +440,8 @@ class FieldSwapTest : public PerfTestFieldBLAS {
     for (size_t i = 0; i < num_iterations; ++i) {
       field_swap<double>(*field1_ptr_, *field2_ptr_, selector, exec_space);
     }
+    ankerl::nanobench::doNotOptimizeAway(field1_ptr_);
+    ankerl::nanobench::doNotOptimizeAway(field2_ptr_);
   }
 
   // TODO(palmerb4): Implemented after 16.0.0. Uncomment when available.
@@ -444,6 +457,8 @@ class FieldSwapTest : public PerfTestFieldBLAS {
     for (size_t i = 0; i < num_iterations; ++i) {
       stk::mesh::field_swap(*field1_ptr_, *field2_ptr_, block1_selector_ - block2_selector_);
     }
+    ankerl::nanobench::doNotOptimizeAway(field1_ptr_);
+    ankerl::nanobench::doNotOptimizeAway(field2_ptr_);
   }
 
   void run_our_stk_test(const size_t num_iterations = 1) {
@@ -466,6 +481,8 @@ class FieldSwapTest : public PerfTestFieldBLAS {
             }
           });
     }
+    ankerl::nanobench::doNotOptimizeAway(field1_ptr_);
+    ankerl::nanobench::doNotOptimizeAway(field2_ptr_);
   }
 };  // class FieldSwapTest
 
@@ -487,6 +504,7 @@ class FieldScaleTest : public PerfTestFieldBLAS {
     for (size_t i = 0; i < num_iterations; ++i) {
       field_scale(alpha, *field1_ptr_, selector, exec_space);
     }
+    ankerl::nanobench::doNotOptimizeAway(field1_ptr_);
   }
 
   // TODO(palmerb4): Implemented after 16.0.0. Uncomment when available.
@@ -496,12 +514,14 @@ class FieldScaleTest : public PerfTestFieldBLAS {
   //   for (size_t i = 0; i < num_iterations; ++i) {
   //     stk::mesh::field_scale(get_bulk(), alpha, *field1_base_ptr_, selector, exec_space);
   //   }
+  //   ankerl::nanobench::doNotOptimizeAway(field1_ptr_);
   // }
 
   void run_stk(const size_t num_iterations = 1) {
     for (size_t i = 0; i < num_iterations; ++i) {
       stk::mesh::field_scale(alpha, *field1_ptr_, block1_selector_ - block2_selector_);
     }
+    ankerl::nanobench::doNotOptimizeAway(field1_ptr_);
   }
 
   void run_our_stk_test(const size_t num_iterations = 1) {
@@ -520,6 +540,7 @@ class FieldScaleTest : public PerfTestFieldBLAS {
             }
           });
     }
+    ankerl::nanobench::doNotOptimizeAway(field1_ptr_);
   }
 };  // class FieldScaleTest
 
@@ -549,12 +570,14 @@ class FieldProductTest : public PerfTestFieldBLAS {
   //     stk::mesh::field_product(get_bulk(), *field1_base_ptr_, *field2_base_ptr_, *field3_ptr_, selector,
   //     exec_space);
   //   }
+  //   ankerl::nanobench::doNotOptimizeAway(field3_ptr_);
   // }
 
   void run_stk(const size_t num_iterations = 1) {
     for (size_t i = 0; i < num_iterations; ++i) {
       stk::mesh::field_product(*field1_ptr_, *field2_ptr_, *field3_ptr_, block1_selector_ - block2_selector_);
     }
+    ankerl::nanobench::doNotOptimizeAway(field3_ptr_);
   }
 
   void run_our_stk_test(const size_t num_iterations = 1) {
@@ -577,6 +600,7 @@ class FieldProductTest : public PerfTestFieldBLAS {
                                        }
                                      });
     }
+    ankerl::nanobench::doNotOptimizeAway(field3_ptr_);
   }
 };  // class FieldProductTest
 
@@ -598,6 +622,7 @@ class FieldAxpyTest : public PerfTestFieldBLAS {
     for (size_t i = 0; i < num_iterations; ++i) {
       field_axpy(alpha, *field1_ptr_, *field2_ptr_, selector, exec_space);
     }
+    ankerl::nanobench::doNotOptimizeAway(field2_ptr_);
   }
 
   // TODO(palmerb4): Implemented after 16.0.0. Uncomment when available.
@@ -613,6 +638,7 @@ class FieldAxpyTest : public PerfTestFieldBLAS {
     for (size_t i = 0; i < num_iterations; ++i) {
       stk::mesh::field_axpy(alpha, *field1_ptr_, *field2_ptr_, block1_selector_ - block2_selector_);
     }
+    ankerl::nanobench::doNotOptimizeAway(field2_ptr_);
   }
 
   void run_our_stk_test(const size_t num_iterations = 1) {
@@ -633,6 +659,7 @@ class FieldAxpyTest : public PerfTestFieldBLAS {
             }
           });
     }
+    ankerl::nanobench::doNotOptimizeAway(field2_ptr_);
   }
 };  // class FieldAxpyTest
 
@@ -670,6 +697,7 @@ class FieldAxpbyTest : public PerfTestFieldBLAS {
     for (size_t i = 0; i < num_iterations; ++i) {
       stk::mesh::field_axpby(alpha, *field1_ptr_, beta, *field2_ptr_, block1_selector_ - block2_selector_);
     }
+    ankerl::nanobench::doNotOptimizeAway(field2_ptr_);
   }
 
   void run_our_stk_test(const size_t num_iterations = 1) {
@@ -690,6 +718,7 @@ class FieldAxpbyTest : public PerfTestFieldBLAS {
             }
           });
     }
+    ankerl::nanobench::doNotOptimizeAway(field2_ptr_);
   }
 };  // class FieldAxpbyTest
 
@@ -712,6 +741,8 @@ class FieldAxpbyzTest : public PerfTestFieldBLAS {
     for (size_t i = 0; i < num_iterations; ++i) {
       field_axpbyz(alpha, *field1_ptr_, beta, *field2_ptr_, *field3_ptr_, selector, exec_space);
     }
+
+    ankerl::nanobench::doNotOptimizeAway(field3_ptr_);
   }
 
   // TODO(palmerb4): Implemented after 16.0.0. Uncomment when available.
@@ -723,6 +754,7 @@ class FieldAxpbyzTest : public PerfTestFieldBLAS {
   //     selector,
   //                           exec_space);
   //   }
+  //   ankerl::nanobench::doNotOptimizeAway(field3_ptr_);
   // }
 
   void run_our_stk_test(const size_t num_iterations = 1) {
@@ -745,6 +777,7 @@ class FieldAxpbyzTest : public PerfTestFieldBLAS {
                                        }
                                      });
     }
+    ankerl::nanobench::doNotOptimizeAway(field3_ptr_);
   }
 };  // class FieldAxpbyzTest
 
@@ -763,12 +796,14 @@ class FieldDotTest : public PerfTestFieldBLAS {
     const stk::mesh::Selector selector = block1_selector_ - block2_selector_;
     for (size_t i = 0; i < num_iterations; ++i) {
       double ngp_dot = field_dot<double>(*field1_ptr_, *field2_ptr_, selector, exec_space);
+      ankerl::nanobench::doNotOptimizeAway(ngp_dot);
     }
   }
 
   void run_stk(const size_t num_iterations = 1) {
     for (size_t i = 0; i < num_iterations; ++i) {
       double stk_dot = stk::mesh::field_dot(*field1_ptr_, *field2_ptr_, block1_selector_ - block2_selector_);
+      ankerl::nanobench::doNotOptimizeAway(stk_dot);
     }
   }
 
@@ -795,6 +830,7 @@ class FieldDotTest : public PerfTestFieldBLAS {
       // MPI reduction to get the global dot product
       double global_dot = 0;
       stk::all_reduce_sum(bulk.parallel(), &local_dot, &global_dot, 1);
+      ankerl::nanobench::doNotOptimizeAway(global_dot);
     }
   }
 
@@ -815,12 +851,14 @@ class FieldNorm2Test : public PerfTestFieldBLAS {
     const stk::mesh::Selector selector = block1_selector_ - block2_selector_;
     for (size_t i = 0; i < num_iterations; ++i) {
       double ngp_nrm2 = field_nrm2<double>(*field1_ptr_, selector, exec_space);
+      ankerl::nanobench::doNotOptimizeAway(ngp_nrm2);
     }
   }
 
   void run_stk(const size_t num_iterations = 1) {
     for (size_t i = 0; i < num_iterations; ++i) {
       double stk_nrm2 = stk::mesh::field_nrm2(*field1_ptr_, block1_selector_ - block2_selector_);
+      ankerl::nanobench::doNotOptimizeAway(stk_nrm2);
     }
   }
 
@@ -846,6 +884,7 @@ class FieldNorm2Test : public PerfTestFieldBLAS {
       double global_nrm2 = 0;
       stk::all_reduce_sum(bulk.parallel(), &local_nrm2, &global_nrm2, 1);
       global_nrm2 = std::sqrt(global_nrm2);
+      ankerl::nanobench::doNotOptimizeAway(global_nrm2);
     }
   }
 };  // class FieldNorm2Test
@@ -865,6 +904,7 @@ class FieldSumTest : public PerfTestFieldBLAS {
     const stk::mesh::Selector selector = block1_selector_ - block2_selector_;
     for (size_t i = 0; i < num_iterations; ++i) {
       double ngp_sum = field_sum<double>(*field1_ptr_, selector, exec_space);
+      ankerl::nanobench::doNotOptimizeAway(ngp_sum);
     }
   }
 
@@ -874,6 +914,7 @@ class FieldSumTest : public PerfTestFieldBLAS {
     stk::mesh::NgpField<double>& ngp_field1 = stk::mesh::get_updated_ngp_field<double>(*field1_ptr_);
     for (size_t i = 0; i < num_iterations; ++i) {
       double stk_sum = stk::mesh::get_field_sum(ngp_mesh, ngp_field1, selector);
+      ankerl::nanobench::doNotOptimizeAway(stk_sum);
     }
   }
 
@@ -898,6 +939,7 @@ class FieldSumTest : public PerfTestFieldBLAS {
       // MPI reduction to get the global sum
       double global_sum = 0;
       stk::all_reduce_sum(bulk.parallel(), &local_sum, &global_sum, 1);
+      ankerl::nanobench::doNotOptimizeAway(global_sum);
     }
   }
 };  // class FieldSumTest
@@ -917,12 +959,14 @@ class FieldAbsSumTest : public PerfTestFieldBLAS {
     const stk::mesh::Selector selector = block1_selector_ - block2_selector_;
     for (size_t i = 0; i < num_iterations; ++i) {
       double ngp_asum = field_asum<double>(*field1_ptr_, selector, exec_space);
+      ankerl::nanobench::doNotOptimizeAway(ngp_asum);
     }
   }
 
   void run_stk(const size_t num_iterations = 1) {
     for (size_t i = 0; i < num_iterations; ++i) {
       double stk_asum = stk::mesh::field_asum<double>(*field1_ptr_, block1_selector_ - block2_selector_);
+      ankerl::nanobench::doNotOptimizeAway(stk_asum);
     }
   }
 
@@ -947,6 +991,7 @@ class FieldAbsSumTest : public PerfTestFieldBLAS {
       // MPI reduction to get the global abs sum
       double global_asum = 0;
       stk::all_reduce_sum(bulk.parallel(), &local_asum, &global_asum, 1);
+      ankerl::nanobench::doNotOptimizeAway(global_asum);
     }
   }
 };  // class FieldAbsSumTest
@@ -966,6 +1011,7 @@ class FieldMaxTest : public PerfTestFieldBLAS {
     const stk::mesh::Selector selector = block1_selector_ - block2_selector_;
     for (size_t i = 0; i < num_iterations; ++i) {
       double ngp_max = field_max<double>(*field1_ptr_, selector, exec_space);
+      ankerl::nanobench::doNotOptimizeAway(ngp_max);
     }
   }
 
@@ -975,6 +1021,7 @@ class FieldMaxTest : public PerfTestFieldBLAS {
     stk::mesh::NgpField<double>& ngp_field1 = stk::mesh::get_updated_ngp_field<double>(*field1_ptr_);
     for (size_t i = 0; i < num_iterations; ++i) {
       double stk_max = stk::mesh::get_field_max(ngp_mesh, ngp_field1, block1_selector_ - block2_selector_);
+      ankerl::nanobench::doNotOptimizeAway(stk_max);
     }
   }
 
@@ -998,6 +1045,7 @@ class FieldMaxTest : public PerfTestFieldBLAS {
       // MPI reduction to get the global max
       double global_max = 0;
       stk::all_reduce_max(bulk.parallel(), &local_max, &global_max, 1);
+      ankerl::nanobench::doNotOptimizeAway(global_max);
     }
   }
 };  // class FieldMaxTest
@@ -1017,12 +1065,14 @@ class FieldAbsMaxTest : public PerfTestFieldBLAS {
     const stk::mesh::Selector selector = block1_selector_ - block2_selector_;
     for (size_t i = 0; i < num_iterations; ++i) {
       double ngp_amax = field_amax<double>(*field1_ptr_, selector, exec_space);
+      ankerl::nanobench::doNotOptimizeAway(ngp_amax);
     }
   }
 
   void run_stk(const size_t num_iterations = 1) {
     for (size_t i = 0; i < num_iterations; ++i) {
       double stk_amax = stk::mesh::field_amax(*field1_ptr_, block1_selector_ - block2_selector_);
+      ankerl::nanobench::doNotOptimizeAway(stk_amax);
     }
   }
 
@@ -1045,6 +1095,7 @@ class FieldAbsMaxTest : public PerfTestFieldBLAS {
       // MPI reduction to get the global abs max
       double global_amax = 0;
       stk::all_reduce_max(bulk.parallel(), &local_amax, &global_amax, 1);
+      ankerl::nanobench::doNotOptimizeAway(global_amax);
     }
   }
 };  // class FieldAbsMaxTest
@@ -1064,6 +1115,7 @@ class FieldMinTest : public PerfTestFieldBLAS {
     const stk::mesh::Selector selector = block1_selector_ - block2_selector_;
     for (size_t i = 0; i < num_iterations; ++i) {
       double ngp_min = field_min<double>(*field1_ptr_, selector, exec_space);
+      ankerl::nanobench::doNotOptimizeAway(ngp_min);
     }
   }
 
@@ -1073,6 +1125,7 @@ class FieldMinTest : public PerfTestFieldBLAS {
     stk::mesh::NgpField<double>& ngp_field1 = stk::mesh::get_updated_ngp_field<double>(*field1_ptr_);
     for (size_t i = 0; i < num_iterations; ++i) {
       double stk_min = stk::mesh::get_field_min(ngp_mesh, ngp_field1, block1_selector_ - block2_selector_);
+      ankerl::nanobench::doNotOptimizeAway(stk_min);
     }
   }
 
@@ -1095,6 +1148,7 @@ class FieldMinTest : public PerfTestFieldBLAS {
       // MPI reduction to get the global min
       double global_min = 0;
       stk::all_reduce_min(bulk.parallel(), &local_min, &global_min, 1);
+      ankerl::nanobench::doNotOptimizeAway(global_min);
     }
   }
 };  // class FieldMinTest
@@ -1114,12 +1168,14 @@ class FieldAbsMinTest : public PerfTestFieldBLAS {
     const stk::mesh::Selector selector = block1_selector_ - block2_selector_;
     for (size_t i = 0; i < num_iterations; ++i) {
       double ngp_amin = field_amin<double>(*field1_ptr_, selector, exec_space);
+      ankerl::nanobench::doNotOptimizeAway(ngp_amin);
     }
   }
 
   void run_stk(const size_t num_iterations = 1) {
     for (size_t i = 0; i < num_iterations; ++i) {
       double stk_amin = stk::mesh::field_amin(*field1_ptr_, block1_selector_ - block2_selector_);
+      ankerl::nanobench::doNotOptimizeAway(stk_amin);
     }
   }
 
@@ -1142,6 +1198,7 @@ class FieldAbsMinTest : public PerfTestFieldBLAS {
       // MPI reduction to get the global abs min
       double global_amin = 0;
       stk::all_reduce_min(bulk.parallel(), &local_amin, &global_amin, 1);
+      ankerl::nanobench::doNotOptimizeAway(global_amin);
     }
   }
 };  // class FieldAbsMinTest

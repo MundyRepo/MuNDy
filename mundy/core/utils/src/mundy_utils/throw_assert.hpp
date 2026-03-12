@@ -116,7 +116,7 @@ std::string get_throw_require_device_string(
 template <typename ExceptionType, typename MessageStringType, size_t AssertionStringSize, size_t FileStringSize,
           size_t LineStringSize>
   requires std::is_base_of_v<std::exception, ExceptionType>
-void throw_require(const bool assertion_value,                                                        //
+constexpr void throw_require(const bool assertion_value,                                                        //
                    const StringLiteral<AssertionStringSize>& assertion_string,                        //
                    const MessageStringType& message_to_print,                                         //
                    const StringLiteral<FileStringSize>& file_string = make_string_literal(__FILE__),  //
@@ -127,7 +127,7 @@ void throw_require(const bool assertion_value,                                  
 }
 
 template <typename MessageStringType, size_t AssertionStringSize, size_t FileStringSize, size_t LineStringSize>
-KOKKOS_INLINE_FUNCTION void abort_require(
+KOKKOS_INLINE_FUNCTION constexpr void abort_require(
     const bool assertion_value,                                                        //
     const StringLiteral<AssertionStringSize>& assertion_string,                        //
     const MessageStringType& message_to_print,                                         //
