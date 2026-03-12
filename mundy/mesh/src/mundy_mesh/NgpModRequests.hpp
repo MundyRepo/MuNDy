@@ -53,7 +53,7 @@ namespace mesh {
 /// \brief A helper interface for requesting mesh modifications from the device.
 /// This is intended to be used in a three-stage command pattern:
 /// ## Stage 1. Claim tickets
-///   Just like a ticketing system at a deli counter, you first claim tickets from a ticketing machine. You havn't
+///   Just like a ticketing system at a deli counter, you first claim tickets from a ticketing machine. You haven't
 ///   actually made any purchases yet but you have stated your intent to make a certain number of orders (requests).
 ///
 /// ## Stage 2. Make requests
@@ -71,41 +71,41 @@ namespace mesh {
 /// allowing you to mix and match requests as needed.
 ///
 /// \note For the time being, you must use each ticket you claim (aka, you cannot over-claim).
-/// s
+///
 /// \note You can claim tickets and make requests from either the host or device, but not both simultaneously.
 ///
 /// Example usage 1: Create N spheres (N elems + N nodes) and connect each sphere to its node
 /// \code{.cpp}
 ///  size_t num_spheres = ...;
-///  unsigned our_proc_id = bulk_data.parallel_rank();
+///  stk::mesh::BulkData& bulk_data = ...;
+///  stk::mesh::Part& sphere_part = ...;
 ///
 ///  NgpModRequests reqs;
-///  auto req_spheres = reqs.request_entities(sphere_part);
-///  auto req_nodes = reqs.request_entities();
+///  auto req_spheres = reqs.request_entities_new_ids(sphere_part);
 ///  auto req_conns = reqs.request_connections();
 ///
 ///  // Stage 1: Claim tickets
 ///  reqs.activate_host();  // Ensures that claim can be called from host
-///  req_spheres.tickets().claim(num_spheres);
-///  req_nodes.tickets().claim(num_spheres);
+///  req_spheres.element_tickets().claim(num_spheres);
+///  req_spheres.node_tickets().claim(num_spheres);
 ///  req_conns.tickets().claim(num_spheres);
 ///  reqs.finalize_counts();
 ///
 ///  // Stage 2: Request
 ///  reqs.activate_device();  // Ensures that request can be made from device
 ///  Kokkos::parallel_for(
-///      "RequestSpheres", Kokkos::RangePolicy<>(0, num_spheres), KOKKOS_LAMBDA(size_t ticket) {
-///        auto future_sphere = req_spheres.request(ticket, our_proc_id);
-///        auto future_node = req_nodes.request(ticket, our_proc_id);
-///        req_conns.request(ticket, future_sphere, future_node);
+///      "RequestSpheres", Kokkos::RangePolicy<size_t>(0, num_spheres), KOKKOS_LAMBDA(size_t ticket) {
+///        FutureEntity future_sphere = req_spheres.request_element(ticket);
+///        FutureEntity future_node = req_spheres.request_node(ticket);
+///        req_conns.request(ticket, future_sphere, future_node, 0);
 ///      });
-///  reqs.process_requests();
+///  reqs.process_requests(bulk_data);
 ///
 ///  // Stage 3: Fetch
 ///  Kokkos::parallel_for(
-///      "UseSpheres", Kokkos::RangePolicy<>(0, num_spheres), KOKKOS_LAMBDA(size_t ticket) {
-///        stk::mesh::Entity sphere = req_spheres.get_entity(ticket);
-///        stk::mesh::Entity node = req_nodes.get_entity(ticket);
+///      "UseSpheres", Kokkos::RangePolicy<size_t>(0, num_spheres), KOKKOS_LAMBDA(size_t ticket) {
+///        stk::mesh::Entity sphere = req_spheres.get_entity(ticket, stk::topology::ELEMENT_RANK);
+///        stk::mesh::Entity node = req_spheres.get_entity(ticket, stk::topology::NODE_RANK);
 ///
 ///        // Do something with sphere and its node...
 ///      });
@@ -121,13 +121,17 @@ namespace mesh {
 /// We will assume that these are already declared and that you have wrapped them into a single bacteria aggregate
 /// \code{.cpp}
 ///   auto ngp_bacteria_data = get_updated_ngp_aggregate(bacteria_data);
+///   auto ngp_mesh = /* refreshed NgpMesh view for your workflow */;
 ///
 ///   size_t num_bacteria = ...;  // total number of bacteria
 ///   double starting_length = ...;
+///   stk::mesh::BulkData& bulk_data = ...;
+///   stk::mesh::Part& bacteria_part = ...;
+///   stk::mesh::PartVector no_parts;
 ///
 ///   NgpModRequests reqs;
-///   auto req_bacteria = reqs.request_entities(bacteria_part);
-///   auto req_nodes = reqs.request_entities();
+///   auto req_bacteria = reqs.request_entities_new_ids(bacteria_part);
+///   auto req_nodes = reqs.request_entities_new_ids(no_parts);
 ///   auto req_conns = reqs.request_connections();
 ///
 ///   // Stage 1: Claim tickets
@@ -139,8 +143,8 @@ namespace mesh {
 ///         double radius = ngp_bacteria_data.get<RADIUS>(bacteria_index);
 ///         double total_length = centerline_length + 2.0 * radius;
 ///         if (total_length > 2.0 * starting_length) {
-///           size_t ticket = req_bacteria.tickets().claim();
-///           req_nodes.tickets().claim();
+///           size_t ticket = req_bacteria.element_tickets().claim();
+///           req_nodes.node_tickets().claim();
 ///           req_conns.tickets().claim();
 ///
 ///           // Store the ticket for later use
@@ -150,6 +154,7 @@ namespace mesh {
 ///   reqs.finalize_counts();
 ///
 ///   // Stage 2: Request
+///   reqs.activate_device();
 ///   stk::mesh::for_each_entity_run(
 ///       ngp_mesh, stk::topology::ELEM_RANK, ngp_bacteria_data.get<SELECTOR>(),
 ///       KOKKOS_LAMBDA(stk::mesh::FastMeshIndex bacteria_index) {
@@ -159,12 +164,12 @@ namespace mesh {
 ///         if (total_length > 2.0 * starting_length) {
 ///           // One new bacteria since the parent becomes one of the children
 ///           size_t ticket = ngp_bacteria_data.get<CHILD_TICKET>(bacteria_index);
-///           auto future_bacteria = req_bacteria.request(ticket, ngp_mesh.parallel_rank());
-///           auto future_node = req_nodes.request(ticket, ngp_mesh.parallel_rank());
-///           req_conns.request(ticket, future_bacteria, future_node);
+///           FutureEntity future_bacteria = req_bacteria.request_element(ticket);
+///           FutureEntity future_node = req_nodes.request_node(ticket);
+///           req_conns.request(ticket, future_bacteria, future_node, 0);
 ///         }
 ///       });
-///   reqs.process_requests();
+///   reqs.process_requests(bulk_data);
 ///
 ///   // Stage 3: Fetch
 ///   stk::mesh::for_each_entity_run(
@@ -176,8 +181,8 @@ namespace mesh {
 ///         if (total_length > 2.0 * starting_length) {
 ///           size_t ticket = ngp_bacteria_data.get<CHILD_TICKET>(bacteria_index);
 ///
-///           stk::mesh::Entity new_bacteria = req_bacteria.get_entity(ticket);
-///           stk::mesh::Entity center_node = req_nodes.get_entity(ticket);
+///           stk::mesh::Entity new_bacteria = req_bacteria.get_entity(ticket, stk::topology::ELEMENT_RANK);
+///           stk::mesh::Entity center_node = req_nodes.get_entity(ticket, stk::topology::NODE_RANK);
 ///
 ///           // The parent becomes the leftmost child and the new bacteria is the rightmost child
 ///           //
