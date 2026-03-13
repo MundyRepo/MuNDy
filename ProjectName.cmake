@@ -5,4 +5,4 @@
 set(PROJECT_NAME Mundy)
 
 # Turn on by default the generation of the export files
-set(${PROJECT_NAME}_ENABLE_INSTALL_CMAKE_CONFIG_FILES_DEFAULT ON)
+set(${PROJECT_NAME}_ENABLE_INSTALL_CMAKE_CONFIG_FILES_DEFAULT OFF)

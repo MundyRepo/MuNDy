@@ -11,6 +11,9 @@ FIND_PACKAGE(OpenRAND REQUIRED
       ${TPL_OpenRAND_DIR}
 )
 
+# Print out where OpenRAND was found
+message(STATUS "Found OpenRAND: ${OpenRAND_DIR}")
+
 tribits_extpkg_create_imported_all_libs_target_and_config_file(
   OpenRAND
   INNER_FIND_PACKAGE_NAME OpenRAND

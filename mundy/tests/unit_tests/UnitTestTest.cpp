@@ -48,6 +48,7 @@ int main(int argc, char** argv) {
   std::cout << "STK not enabled. Running in serial..." << std::endl;
 #endif
   Kokkos::initialize(argc, argv);
+  Kokkos::print_configuration(std::cout);
 
   testing::InitGoogleMock(&argc, argv);
   int return_val = RUN_ALL_TESTS();

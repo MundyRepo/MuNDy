@@ -5,6 +5,9 @@ FIND_PACKAGE(ArborX REQUIRED
       ${TPL_ArborX_DIR}
 )
 
+# Print out where ArborX was found
+message(STATUS "Found ArborX: ${ArborX_DIR}")
+
 tribits_extpkg_create_imported_all_libs_target_and_config_file(
   ArborX
   INNER_FIND_PACKAGE_NAME ArborX

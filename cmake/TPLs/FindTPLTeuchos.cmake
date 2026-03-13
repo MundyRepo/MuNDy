@@ -9,6 +9,9 @@ FIND_PACKAGE(Teuchos REQUIRED
       ${${PACKAGE_NAME}_Teuchos_OPTIONAL_COMPONENTS}
 )
 
+# Print out where Teuchos was found
+message(STATUS "Found Teuchos: ${Teuchos_DIR}")
+
 # Create the TriBITS-compliant <tplName>Config.cmake wrapper file
 # This appears to be the minimal requirement to load in a TriBITS-compliant TPL.
 tribits_extpkgwit_create_package_config_file(

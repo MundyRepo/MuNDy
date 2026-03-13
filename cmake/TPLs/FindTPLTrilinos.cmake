@@ -9,6 +9,9 @@ FIND_PACKAGE(Trilinos REQUIRED
       ${${PACKAGE_NAME}_Trilinos_OPTIONAL_COMPONENTS}
 )
 
+# Print out where Trilinos was found
+message(STATUS "Found Trilinos: ${Trilinos_DIR}")
+
 # Create the TriBITS-compliant <tplName>Config.cmake wrapper file
 # This appears to be the minimal requirement to load in a TriBITS-compliant TPL.
 tribits_extpkgwit_create_package_config_file(
