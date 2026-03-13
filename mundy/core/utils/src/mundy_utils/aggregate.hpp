@@ -617,6 +617,33 @@ class aggregate {
     static_assert(I < sizeof...(TaggedComponents), "Attempting to get a value with an index that is out of bounds");
   }
 
+  /// \brief Fetch the tagged object corresponding to the given Tag
+  template <typename Tag>
+    requires(contains_tag_v<Tag, TaggedComponents...>)
+  KOKKOS_INLINE_FUNCTION constexpr const auto& get_tagged() const {
+    constexpr size_t index = index_of_tag_v<Tag, TaggedComponents...>;
+    return tagged_components_.template get<index>();
+  }
+  template <typename Tag>
+    requires(contains_tag_v<Tag, TaggedComponents...>)
+  KOKKOS_INLINE_FUNCTION constexpr auto& get_tagged() {
+    constexpr size_t index = index_of_tag_v<Tag, TaggedComponents...>;
+    return tagged_components_.template get<index>();
+  }
+
+  template <typename Tag>
+    requires(!contains_tag_v<Tag, TaggedComponents...>)
+  KOKKOS_INLINE_FUNCTION constexpr void get_tagged() const {
+    static_assert(contains_tag_v<Tag, TaggedComponents...>,
+                  "Attempting to get a value that does not exist in the aggregate");
+  }
+  template <typename Tag>
+    requires(!contains_tag_v<Tag, TaggedComponents...>)
+  KOKKOS_INLINE_FUNCTION constexpr void get_tagged() {
+    static_assert(contains_tag_v<Tag, TaggedComponents...>,
+                  "Attempting to get a value that does not exist in the aggregate");
+  }
+
   /// \brief Fetch the value corresponding to the given Tag
   template <typename Tag>
     requires(contains_tag_v<Tag, TaggedComponents...>)
@@ -707,7 +734,7 @@ class aggregate {
              !impl::callable_with<const typename type_at_index_t<index_of_tag_v<Tag, TaggedComponents...>,
                                                                  TaggedComponents...>::value_type&,
                                   Args...>)
-  KOKKOS_INLINE_FUNCTION constexpr void aget(Args&&... /*args*/) const {
+  KOKKOS_INLINE_FUNCTION constexpr void get(Args&&... /*args*/) const {
     static_assert(
         impl::callable_with<
             const typename type_at_index_t<index_of_tag_v<Tag, TaggedComponents...>, TaggedComponents...>::value_type&,
@@ -761,7 +788,7 @@ constexpr auto make_aggregate() {
 template <typename... Tags, typename... Ts>
   requires((sizeof...(Tags) > 0) && (contains_tag_v<Tags, Ts...> && ...))
 KOKKOS_INLINE_FUNCTION constexpr auto project(aggregate<Ts...>& agg) {
-  return aggregate(::mundy::make_tuple(agg.template get<Tags>()...));
+  return aggregate(::mundy::make_tuple(agg.template get_tagged<Tags>()...));
 }
 
 template <typename... Tags, typename... Ts>
@@ -779,7 +806,7 @@ KOKKOS_INLINE_FUNCTION constexpr void project(aggregate<Ts...>& /*agg*/) {
 template <typename... Tags, typename... Ts>
   requires((sizeof...(Tags) > 0) && (contains_tag_v<Tags, Ts...> && ...))
 KOKKOS_INLINE_FUNCTION constexpr auto project(const aggregate<Ts...>& agg) {
-  return aggregate(::mundy::make_tuple(agg.template get<Tags>()...));
+  return aggregate(::mundy::make_tuple(agg.template get_tagged<Tags>()...));
 }
 
 template <typename... Tags, typename... Ts>

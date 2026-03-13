@@ -25,6 +25,7 @@
 // C++ core libs
 #include <iostream>
 #include <stdexcept>  // for logic_error, invalid_argument, etc
+#include <type_traits>
 
 // Mundy libs
 #include <mundy_utils/aggregate.hpp>  // for mundy::aggregate
@@ -45,6 +46,7 @@ struct SORT;
 struct FILTER;
 struct POS;
 struct VEL;
+struct COUNT;
 
 TEST(AggregateTest, CompileTimeExtensibleTuple) {
   auto cfg = make_aggregate()       //
@@ -152,6 +154,49 @@ TEST(AggregateTest, HasTag) {
   EXPECT_TRUE(has<DT>(agg));
   EXPECT_TRUE(has<MAX_ITERS>(agg));
   EXPECT_FALSE(has<CENTER>(agg));
+}
+
+TEST(AggregateTest, ProjectSelectsRequestedTagsAndPreservesOrder) {
+  auto agg = make_aggregate()       //
+                 .append<DT>(0.01)  //
+                 .append<MAX_ITERS>(1000)
+                 .append<CENTER>(7);
+
+  auto projected = project<MAX_ITERS, DT>(agg);
+
+  static_assert(aggregate_has_v<MAX_ITERS, decltype(projected)>);
+  static_assert(aggregate_has_v<DT, decltype(projected)>);
+  static_assert(!aggregate_has_v<CENTER, decltype(projected)>);
+  static_assert(std::is_same_v<aggregate_tag_t<0, decltype(projected)>, MAX_ITERS>);
+  static_assert(std::is_same_v<aggregate_tag_t<1, decltype(projected)>, DT>);
+
+  EXPECT_EQ(projected.get<MAX_ITERS>(), 1000);
+  EXPECT_DOUBLE_EQ(projected.get<DT>(), 0.01);
+}
+
+TEST(AggregateTest, ProjectWorksForConstAggregate) {
+  auto agg = make_aggregate()       //
+                 .append<DT>(0.02)  //
+                 .append<MAX_ITERS>(500)
+                 .append<CENTER>(42);
+  const auto& cagg = agg;
+
+  auto projected = project<DT, CENTER>(cagg);
+
+  EXPECT_DOUBLE_EQ(projected.get<DT>(), 0.02);
+  EXPECT_EQ(projected.get<CENTER>(), 42);
+}
+
+TEST(AggregateTest, ProjectCreatesValueCopy) {
+  auto agg = make_aggregate()        //
+                 .append<COUNT>(10)  //
+                 .append<DT>(0.1);
+
+  auto projected = project<COUNT>(agg);
+  agg.get<COUNT>() = 25;
+
+  EXPECT_EQ(projected.get<COUNT>(), 10);
+  EXPECT_EQ(agg.get<COUNT>(), 25);
 }
 
 }  // namespace
