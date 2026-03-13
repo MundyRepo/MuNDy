@@ -43,15 +43,19 @@
 namespace mundy {
 
 /// \brief A small helper type for tying a Tag to an underlying value.
+///
+/// TODO(palmerb4): While currently unneeded, we could allow T to be of storage type such that we can
+/// support non-owning values within an aggregate (e.g. T could be a pointer or reference wrapper). This isn't that
+/// heavy of a change but would require some thought to get the storage semantics right.
 template <typename Tag, typename T>
 class tagged {
  public:
   using tag_type = Tag;
   using value_type = T;
 
-  KOKKOS_INLINE_FUNCTION constexpr tagged(value_type value) : value_(value) {
+  KOKKOS_INLINE_FUNCTION constexpr tagged(value_type value) : value_(std::move(value)) {
   }
-
+  
   KOKKOS_DEFAULTED_FUNCTION constexpr tagged(const tagged&) = default;
   KOKKOS_DEFAULTED_FUNCTION constexpr tagged(tagged&&) = default;
   KOKKOS_DEFAULTED_FUNCTION constexpr tagged& operator=(const tagged&) = default;
@@ -72,8 +76,9 @@ class tagged {
 
 /// \brief Helper function to attach a tag to a type
 template <typename Tag, typename T>
-KOKKOS_INLINE_FUNCTION constexpr tagged<Tag, T> apply_tag(T value) {
-  return tagged<Tag, T>(value);
+KOKKOS_INLINE_FUNCTION constexpr auto apply_tag(T&& value) {
+  using ValueType = std::remove_cvref_t<T>;
+  return tagged<Tag, ValueType>(std::forward<T>(value));
 }
 
 /* What all do we offer
@@ -328,7 +333,7 @@ class variant_aggregate {
 
   template <typename Tag>
     requires(contains_type_v<Tag, Tags...>)
-  KOKKOS_FUNCTION constexpr void append(variant_t new_variant) const {
+  KOKKOS_FUNCTION constexpr void append(variant_t /*new_variant*/) const {
     static_assert(!contains_type_v<Tag, Tags...>, "variant_aggregate::append called with duplicate Tag");
   }
 
@@ -668,17 +673,18 @@ class aggregate {
 
   /// \brief Get tagged object of the given args: Perform get<TAG>()(args...) with syntactic sugar
   template <typename Tag, typename... Args>
-    requires(
-        contains_tag_v<Tag, TaggedComponents...> &&
-        impl::callable_with<
-            const typename type_at_index_t<index_of_tag_v<Tag, TaggedComponents...>, TaggedComponents...>::value_type&, Args...>)
+    requires(contains_tag_v<Tag, TaggedComponents...> &&
+             impl::callable_with<const typename type_at_index_t<index_of_tag_v<Tag, TaggedComponents...>,
+                                                                TaggedComponents...>::value_type&,
+                                 Args...>)
   KOKKOS_INLINE_FUNCTION constexpr decltype(auto) get(Args&&... args) const {
     return get<Tag>()(std::forward<Args>(args)...);
   }
   template <typename Tag, typename... Args>
     requires(contains_tag_v<Tag, TaggedComponents...> &&
              impl::callable_with<
-                 typename type_at_index_t<index_of_tag_v<Tag, TaggedComponents...>, TaggedComponents...>::value_type&, Args...>)
+                 typename type_at_index_t<index_of_tag_v<Tag, TaggedComponents...>, TaggedComponents...>::value_type&,
+                 Args...>)
   KOKKOS_INLINE_FUNCTION constexpr decltype(auto) get(Args&&... args) {
     return get<Tag>()(std::forward<Args>(args)...);
   }
@@ -697,24 +703,27 @@ class aggregate {
   }
 
   template <typename Tag, typename... Args>
-    requires(
-        contains_tag_v<Tag, TaggedComponents...> &&
-        !impl::callable_with<
-            const typename type_at_index_t<index_of_tag_v<Tag, TaggedComponents...>, TaggedComponents...>::value_type&, Args...>)
+    requires(contains_tag_v<Tag, TaggedComponents...> &&
+             !impl::callable_with<const typename type_at_index_t<index_of_tag_v<Tag, TaggedComponents...>,
+                                                                 TaggedComponents...>::value_type&,
+                                  Args...>)
   KOKKOS_INLINE_FUNCTION constexpr void aget(Args&&... /*args*/) const {
     static_assert(
         impl::callable_with<
-            const typename type_at_index_t<index_of_tag_v<Tag, TaggedComponents...>, TaggedComponents...>::value_type&, Args...>,
+            const typename type_at_index_t<index_of_tag_v<Tag, TaggedComponents...>, TaggedComponents...>::value_type&,
+            Args...>,
         "The value with the given Tag is not callable with the given arguments.");
   }
   template <typename Tag, typename... Args>
     requires(contains_tag_v<Tag, TaggedComponents...> &&
              !impl::callable_with<
-                 typename type_at_index_t<index_of_tag_v<Tag, TaggedComponents...>, TaggedComponents...>::value_type&, Args...>)
+                 typename type_at_index_t<index_of_tag_v<Tag, TaggedComponents...>, TaggedComponents...>::value_type&,
+                 Args...>)
   KOKKOS_INLINE_FUNCTION constexpr void get(Args&&... /*args*/) {
     static_assert(
-        impl::callable_with<typename type_at_index_t<index_of_tag_v<Tag, TaggedComponents...>, TaggedComponents...>::value_type&,
-                            Args...>,
+        impl::callable_with<
+            typename type_at_index_t<index_of_tag_v<Tag, TaggedComponents...>, TaggedComponents...>::value_type&,
+            Args...>,
         "The value with the given Tag is not callable with the given arguments.");
   }
 
