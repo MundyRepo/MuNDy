@@ -21,7 +21,7 @@ tribits_add_executable_and_test(
     IntegrationTestConfigureDriver
     SOURCES
       IntegrationTestConfigureDriver.cpp
-      ${MUNDY_DEFAULT_INTEGRATION_TEST_MAIN}
+      ${Mundy_DEFAULT_INTEGRATION_TEST_MAIN}
     NUM_MPI_PROCS 1
     CATEGORIES BASIC
     )

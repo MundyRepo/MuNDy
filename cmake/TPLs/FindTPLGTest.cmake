@@ -4,6 +4,9 @@ FIND_PACKAGE(GTest REQUIRED
       ${TPL_GTest_DIR}
 )
 
+# Print out where GTest was found
+message(STATUS "Found GTest: ${GTest_DIR}")
+
 tribits_extpkg_create_imported_all_libs_target_and_config_file(
   GTest
   INNER_FIND_PACKAGE_NAME GTest

@@ -6,6 +6,9 @@ FIND_PACKAGE(nanobench REQUIRED
       ${TPL_nanobench_DIR}
 )
 
+# Print out where nanobench was found
+message(STATUS "Found nanobench: ${nanobench_DIR}")
+
 tribits_extpkg_create_imported_all_libs_target_and_config_file(
   nanobench
   INNER_FIND_PACKAGE_NAME nanobench
