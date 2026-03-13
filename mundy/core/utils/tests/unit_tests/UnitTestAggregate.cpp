@@ -199,6 +199,87 @@ TEST(AggregateTest, ProjectCreatesValueCopy) {
   EXPECT_EQ(agg.get<COUNT>(), 25);
 }
 
+TEST(VariantAggregateTest, CompileTimeExtensibleTuple) {
+  using VariantType = variant<int, double>;
+
+  auto vagg = make_variant_aggregate<VariantType>()  //
+                  .append<DT>(VariantType(0.01))     //
+                  .append<MAX_ITERS>(VariantType(1000));
+
+  EXPECT_EQ(vagg.size(), 2u);
+  EXPECT_TRUE(vagg.get<DT>().template holds_alternative<double>());
+  EXPECT_DOUBLE_EQ(vagg.get<DT>().template get<double>(), 0.01);
+  EXPECT_TRUE(vagg.get<MAX_ITERS>().template holds_alternative<int>());
+  EXPECT_EQ(vagg.get<MAX_ITERS>().template get<int>(), 1000);
+  EXPECT_DOUBLE_EQ(vagg.get<0>().template get<double>(), 0.01);
+  EXPECT_EQ(vagg.get(1).template get<int>(), 1000);
+
+  EXPECT_TRUE(has<DT>(vagg));
+  EXPECT_TRUE(has<MAX_ITERS>(vagg));
+  EXPECT_FALSE(has<CENTER>(vagg));
+
+  static_assert(variant_aggregate_has_v<DT, decltype(vagg)>);
+  static_assert(variant_aggregate_has_v<MAX_ITERS, decltype(vagg)>);
+  static_assert(!variant_aggregate_has_v<CENTER, decltype(vagg)>);
+  static_assert(std::is_same_v<variant_aggregate_tag_t<0, decltype(vagg)>, DT>);
+  static_assert(std::is_same_v<variant_aggregate_tag_t<1, decltype(vagg)>, MAX_ITERS>);
+}
+
+TEST(VariantAggregateTest, NonMemberHelpersForwardToMemberApi) {
+  using VariantType = variant<int, double>;
+  auto vagg = make_variant_aggregate<VariantType>();
+
+  auto with_dt = append<DT>(vagg, VariantType(7));
+  EXPECT_EQ(get<DT>(with_dt).template get<int>(), 7);
+  EXPECT_EQ(get<0>(with_dt).template get<int>(), 7);
+}
+
+TEST(VariantAggregateTest, ProjectSelectsRequestedTagsAndPreservesOrder) {
+  using VariantType = variant<int, double>;
+  auto vagg = make_variant_aggregate<VariantType>()  //
+                  .append<DT>(VariantType(0.01))     //
+                  .append<MAX_ITERS>(VariantType(1000))
+                  .append<CENTER>(VariantType(7));
+
+  auto projected = project<MAX_ITERS, DT>(vagg);
+
+  static_assert(variant_aggregate_has_v<MAX_ITERS, decltype(projected)>);
+  static_assert(variant_aggregate_has_v<DT, decltype(projected)>);
+  static_assert(!variant_aggregate_has_v<CENTER, decltype(projected)>);
+  static_assert(std::is_same_v<variant_aggregate_tag_t<0, decltype(projected)>, MAX_ITERS>);
+  static_assert(std::is_same_v<variant_aggregate_tag_t<1, decltype(projected)>, DT>);
+
+  EXPECT_EQ(projected.get<MAX_ITERS>().template get<int>(), 1000);
+  EXPECT_DOUBLE_EQ(projected.get<DT>().template get<double>(), 0.01);
+}
+
+TEST(VariantAggregateTest, ProjectWorksForConstVariantAggregate) {
+  using VariantType = variant<int, double>;
+  auto vagg = make_variant_aggregate<VariantType>()  //
+                  .append<DT>(VariantType(0.02))     //
+                  .append<MAX_ITERS>(VariantType(500))
+                  .append<CENTER>(VariantType(42));
+  const auto& cvagg = vagg;
+
+  auto projected = project<DT, CENTER>(cvagg);
+
+  EXPECT_DOUBLE_EQ(projected.get<DT>().template get<double>(), 0.02);
+  EXPECT_EQ(projected.get<CENTER>().template get<int>(), 42);
+}
+
+TEST(VariantAggregateTest, ProjectCreatesValueCopy) {
+  using VariantType = variant<int, double>;
+  auto vagg = make_variant_aggregate<VariantType>()  //
+                  .append<COUNT>(VariantType(10))    //
+                  .append<DT>(VariantType(0.1));
+
+  auto projected = project<COUNT>(vagg);
+  vagg.get<COUNT>() = 25;
+
+  EXPECT_EQ(projected.get<COUNT>().template get<int>(), 10);
+  EXPECT_EQ(vagg.get<COUNT>().template get<int>(), 25);
+}
+
 }  // namespace
 
 }  // namespace mundy

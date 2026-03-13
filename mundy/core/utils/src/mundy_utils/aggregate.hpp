@@ -288,8 +288,18 @@ auto make_runtime_aggregate() {
 }
 //@}
 
-/// \brief A variant_aggregate: A bag of compile-time tagged variants
+/// \brief A variant_aggregate: A bag of compile-time tagged variants.
 /// In other words, a compile-time map of variants indexed by tag type.
+///
+/// Construct a variant_aggregate via a fluent interface:
+/// \code{.cpp}
+///   using VariantType = mundy::variant<int, double>;
+///   auto vagg = mundy::make_variant_aggregate<VariantType>()
+///       .append<Tag1>(VariantType(1))
+///       .append<Tag2>(VariantType(2.0));
+/// \endcode
+///
+/// Each Tag type must be unique within a variant_aggregate.
 template <typename VariantType, typename... Tags>
 class variant_aggregate {
  public:
@@ -339,17 +349,30 @@ class variant_aggregate {
 
   /// \brief The I'th tag type
   template <size_t I>
-    requires(sizeof...(Tags) > 0)
+    requires(sizeof...(Tags) > 0 && I < sizeof...(Tags))
   using tag_type = tuple_element_t<I, TagsTuple>;
 
   /// \brief Fetch the I'th value (compile-time index)
   template <size_t I>
+    requires(I < sizeof...(Tags))
   KOKKOS_INLINE_FUNCTION constexpr const variant_t& get() const {
     return variants_[I];
   }
   template <size_t I>
+    requires(I < sizeof...(Tags))
   KOKKOS_INLINE_FUNCTION constexpr variant_t& get() {
     return variants_[I];
+  }
+
+  template <size_t I>
+    requires(I >= sizeof...(Tags))
+  KOKKOS_INLINE_FUNCTION constexpr const void get() const {
+    static_assert(I < sizeof...(Tags), "Attempting to get a value with an index that is out of bounds");
+  }
+  template <size_t I>
+    requires(I >= sizeof...(Tags))
+  KOKKOS_INLINE_FUNCTION constexpr void get() {
+    static_assert(I < sizeof...(Tags), "Attempting to get a value with an index that is out of bounds");
   }
 
   /// \brief Fetch the I'th value (runtime index)
@@ -364,6 +387,7 @@ class variant_aggregate {
 
   /// \brief Fetch the value corresponding to the given Tag
   template <typename Tag>
+    requires(contains_type_v<Tag, Tags...>)
   KOKKOS_INLINE_FUNCTION constexpr const variant_t& get() const {
     constexpr size_t index = index_finder_v<Tag, Tags...>;
     return variants_[index];
@@ -371,9 +395,23 @@ class variant_aggregate {
 
   /// \brief Fetch the value corresponding to the given Tag
   template <typename Tag>
+    requires(contains_type_v<Tag, Tags...>)
   KOKKOS_INLINE_FUNCTION constexpr variant_t& get() {
     constexpr size_t index = index_finder_v<Tag, Tags...>;
     return variants_[index];
+  }
+
+  template <typename Tag>
+    requires(!contains_type_v<Tag, Tags...>)
+  KOKKOS_INLINE_FUNCTION constexpr void get() const {
+    static_assert(contains_type_v<Tag, Tags...>,
+                  "Attempting to get a value that does not exist in the variant_aggregate");
+  }
+  template <typename Tag>
+    requires(!contains_type_v<Tag, Tags...>)
+  KOKKOS_INLINE_FUNCTION constexpr void get() {
+    static_assert(contains_type_v<Tag, Tags...>,
+                  "Attempting to get a value that does not exist in the variant_aggregate");
   }
 
   /// \brief Check if we have a value with the given Tag
@@ -436,14 +474,14 @@ struct variant_aggregate_tag<I, variant_aggregate<VariantType, Tags...>> {
 template <size_t I, typename VarAggType>
 using variant_aggregate_tag_t = variant_aggregate_tag<I, VarAggType>::type;
 
-/// \brief Check if a variant_aggregate have a variant with the given Tag
+/// \brief Check if a variant_aggregate has a variant with the given Tag
 template <typename Tag, typename VariantType, typename... Tags>
 KOKKOS_INLINE_FUNCTION constexpr bool has(const variant_aggregate<VariantType, Tags...>& /*v_agg*/) {
   return variant_aggregate<VariantType, Tags...>::template has<Tag>();
 }
 
-/// \brief Check if a variant aggregate type has a value with the given Tag usage variant_aggregate_has_v<Tag,
-/// VarAggType>
+/// \brief Check whether a variant_aggregate type has a value with the given Tag.
+/// Usage: variant_aggregate_has_v<Tag, VarAggType>
 template <typename Tag, typename VarAggType>
 struct variant_aggregate_has {
   static constexpr bool value = VarAggType::template has<Tag>();
@@ -452,11 +490,51 @@ struct variant_aggregate_has {
 template <typename Tag, typename VarAggType>
 static constexpr bool variant_aggregate_has_v = variant_aggregate_has<Tag, VarAggType>::value;
 
-/// \brief Add a new value to an existing aggregate (fluent interface)
+/// \brief Add a new value to an existing variant_aggregate (fluent interface)
 template <typename Tag, typename VariantType, typename... Tags>
 KOKKOS_INLINE_FUNCTION constexpr auto append(const variant_aggregate<VariantType, Tags...>& v_agg,
                                              VariantType new_variant) {
   return v_agg.template append<Tag>(std::move(new_variant));
+}
+
+/// \brief Project selected tags from a variant_aggregate into a new variant_aggregate.
+/// Copies the corresponding variants and preserves the requested tag order.
+template <typename... SelectedTags, typename VariantType, typename... Tags>
+  requires((sizeof...(SelectedTags) > 0) && (contains_type_v<SelectedTags, Tags...> && ...))
+KOKKOS_INLINE_FUNCTION constexpr auto project(variant_aggregate<VariantType, Tags...>& v_agg) {
+  Kokkos::Array<VariantType, sizeof...(SelectedTags)> projected_variants = {v_agg.template get<SelectedTags>()...};
+  return variant_aggregate<VariantType, SelectedTags...>(std::move(projected_variants));
+}
+
+template <typename... SelectedTags, typename VariantType, typename... Tags>
+  requires(!((sizeof...(SelectedTags) > 0) && (contains_type_v<SelectedTags, Tags...> && ...)))
+KOKKOS_INLINE_FUNCTION constexpr void project(variant_aggregate<VariantType, Tags...>& /*v_agg*/) {
+  if constexpr (sizeof...(SelectedTags) == 0) {
+    static_assert(sizeof...(SelectedTags) > 0, "project<Tags...>(v_agg) requires at least one Tag.");
+  } else {
+    static_assert((contains_type_v<SelectedTags, Tags...> && ...),
+                  "project<Tags...>(v_agg) called with a Tag not present in v_agg.");
+  }
+}
+
+/// \brief Project selected tags from a const variant_aggregate into a new variant_aggregate.
+/// Copies the corresponding variants and preserves the requested tag order.
+template <typename... SelectedTags, typename VariantType, typename... Tags>
+  requires((sizeof...(SelectedTags) > 0) && (contains_type_v<SelectedTags, Tags...> && ...))
+KOKKOS_INLINE_FUNCTION constexpr auto project(const variant_aggregate<VariantType, Tags...>& v_agg) {
+  Kokkos::Array<VariantType, sizeof...(SelectedTags)> projected_variants = {v_agg.template get<SelectedTags>()...};
+  return variant_aggregate<VariantType, SelectedTags...>(std::move(projected_variants));
+}
+
+template <typename... SelectedTags, typename VariantType, typename... Tags>
+  requires(!((sizeof...(SelectedTags) > 0) && (contains_type_v<SelectedTags, Tags...> && ...)))
+KOKKOS_INLINE_FUNCTION constexpr void project(const variant_aggregate<VariantType, Tags...>& /*v_agg*/) {
+  if constexpr (sizeof...(SelectedTags) == 0) {
+    static_assert(sizeof...(SelectedTags) > 0, "project<Tags...>(v_agg) requires at least one Tag.");
+  } else {
+    static_assert((contains_type_v<SelectedTags, Tags...> && ...),
+                  "project<Tags...>(v_agg) called with a Tag not present in v_agg.");
+  }
 }
 
 namespace impl {
