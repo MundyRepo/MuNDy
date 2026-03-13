@@ -1426,7 +1426,7 @@ class Aggregate {
 
   template <typename Tag, stk::topology::rank_t component_rank, typename NewComponent>
     requires(!all_tags_unique_v<TaggedComponent<Tag, component_rank, NewComponent>, Components...>)
-  void add_component(NewComponent new_component) const {
+  void add_component(NewComponent /*new_component*/) const {
     static_assert(all_tags_unique_v<TaggedComponent<Tag, component_rank, NewComponent>, Components...>,
                   "The new component's tag must be unique from all existing component tags.");
   }
@@ -1798,7 +1798,8 @@ class EntityView {
   /// \brief Get the data marked by the given tag and fetched using the corresponding accessor
   /// Only works for components of a different rank then the entity
   template <typename Tag>
-    requires(contains_tag_v<Tag, Components...>)
+    requires(contains_tag_v<Tag, Components...> &&
+             !(type_at_index_t<index_of_tag_v<Tag, Components...>, Components...>::rank == OurRank))
   decltype(auto) get(unsigned connectivity_ordinal) {
     using TaggedComponentType = std::decay_t<decltype(parent_.template get_component<Tag>())>;
     static constexpr auto comp_rank = TaggedComponentType::rank;
@@ -1822,7 +1823,8 @@ class EntityView {
     return comp(connected_entity);
   }
   template <typename Tag>
-    requires(!contains_tag_v<Tag, Components...>)
+    requires(!contains_tag_v<Tag, Components...> ||
+             (type_at_index_t<index_of_tag_v<Tag, Components...>, Components...>::rank == OurRank))
   void get(unsigned /*connectivity_ordinal*/) {
     static_assert(contains_tag_v<Tag, Components...>, "EntityView::get(ordinal) called with a tag that does not exist");
   }
@@ -1830,7 +1832,8 @@ class EntityView {
   /// \brief Get the data marked by the given tag and fetched using the corresponding accessor
   /// Only works for components of a different rank then the entity
   template <typename Tag>
-    requires(contains_tag_v<Tag, Components...>)
+    requires(contains_tag_v<Tag, Components...> &&
+             !(type_at_index_t<index_of_tag_v<Tag, Components...>, Components...>::rank == OurRank))
   decltype(auto) get(unsigned connectivity_ordinal) const {
     using TaggedComponentType = std::decay_t<decltype(parent_.template get_component<Tag>())>;
     static constexpr auto comp_rank = TaggedComponentType::rank;
@@ -1852,9 +1855,14 @@ class EntityView {
     return comp(connected_entity);
   }
   template <typename Tag>
-    requires(!contains_tag_v<Tag, Components...>)
+    requires(!contains_tag_v<Tag, Components...> ||
+             (type_at_index_t<index_of_tag_v<Tag, Components...>, Components...>::rank == OurRank))
   void get(unsigned /*connectivity_ordinal*/) const {
     static_assert(contains_tag_v<Tag, Components...>, "EntityView::get(ordinal) called with a tag that does not exist");
+    static_assert(
+        (type_at_index_t<index_of_tag_v<Tag, Components...>, Components...>::rank == OurRank),
+        "EntityView::get(ordinal) called with a tag that does not correspond to a component of a different rank "
+        "than the entity");
   }
 };  // EntityView
 
@@ -1949,7 +1957,8 @@ class NgpEntityView {
   /// \brief Get the data marked by the given tag and fetched using the corresponding accessor
   /// Only works for components of a different rank then the entity
   template <typename Tag>
-    requires(contains_tag_v<Tag, NgpComponents...>)
+    requires(contains_tag_v<Tag, NgpComponents...> &&
+             !(type_at_index_t<index_of_tag_v<Tag, NgpComponents...>, NgpComponents...>::rank == OurRank))
   KOKKOS_INLINE_FUNCTION decltype(auto) get(unsigned connectivity_ordinal) {
     using TaggedComponentType = std::decay_t<decltype(::mundy::impl::find_component<Tag>(ngp_components_))>;
     static constexpr auto comp_rank = TaggedComponentType::rank;
@@ -1968,16 +1977,21 @@ class NgpEntityView {
     return comp(connected_entity_index);
   }
   template <typename Tag>
-    requires(!contains_tag_v<Tag, NgpComponents...>)
+    requires(!contains_tag_v<Tag, NgpComponents...> ||
+             (type_at_index_t<index_of_tag_v<Tag, NgpComponents...>, NgpComponents...>::rank == OurRank))
   KOKKOS_INLINE_FUNCTION void get(unsigned /*connectivity_ordinal*/) {
     static_assert(contains_tag_v<Tag, NgpComponents...>,
                   "NgpEntityView::get(ordinal) called with a tag that does not exist");
+    static_assert(
+        !(type_at_index_t<index_of_tag_v<Tag, NgpComponents...>, NgpComponents...>::rank == OurRank),
+        "NgpEntityView::get(ordinal) called with a tag that corresponds to a component of the same rank as the entity");
   }
 
   /// \brief Get the data marked by the given tag and fetched using the corresponding accessor
   /// Only works for components of a different rank then the entity
   template <typename Tag>
-    requires(contains_tag_v<Tag, NgpComponents...>)
+    requires(contains_tag_v<Tag, NgpComponents...> &&
+             !(type_at_index_t<index_of_tag_v<Tag, NgpComponents...>, NgpComponents...>::rank == OurRank))
   KOKKOS_INLINE_FUNCTION decltype(auto) get(unsigned connectivity_ordinal) const {
     using TaggedComponentType = std::decay_t<decltype(::mundy::impl::find_component<Tag>(ngp_components_))>;
     static constexpr auto comp_rank = TaggedComponentType::rank;
@@ -1993,10 +2007,14 @@ class NgpEntityView {
     return comp(connected_entity_index);
   }
   template <typename Tag>
-    requires(!contains_tag_v<Tag, NgpComponents...>)
+    requires(!contains_tag_v<Tag, NgpComponents...> ||
+             (type_at_index_t<index_of_tag_v<Tag, NgpComponents...>, NgpComponents...>::rank == OurRank))
   KOKKOS_INLINE_FUNCTION void get(unsigned /*connectivity_ordinal*/) const {
     static_assert(contains_tag_v<Tag, NgpComponents...>,
                   "NgpEntityView::get(ordinal) called with a tag that does not exist");
+    static_assert(
+        !(type_at_index_t<index_of_tag_v<Tag, NgpComponents...>, NgpComponents...>::rank == OurRank),
+        "NgpEntityView::get(ordinal) called with a tag that corresponds to a component of the same rank as the entity");
   }
 };  // NgpEntityView
 

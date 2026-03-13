@@ -55,7 +55,7 @@ class tagged {
 
   KOKKOS_INLINE_FUNCTION constexpr tagged(value_type value) : value_(std::move(value)) {
   }
-  
+
   KOKKOS_DEFAULTED_FUNCTION constexpr tagged(const tagged&) = default;
   KOKKOS_DEFAULTED_FUNCTION constexpr tagged(tagged&&) = default;
   KOKKOS_DEFAULTED_FUNCTION constexpr tagged& operator=(const tagged&) = default;
@@ -594,26 +594,26 @@ class aggregate {
     requires(sizeof...(TaggedComponents) > 0 && I < sizeof...(TaggedComponents))
   using tag_type = typename tuple_element_t<I, TaggedComponentsTuple>::tag_type;
 
-  /// \brief Fetch the I'th value
+  /// \brief Fetch the I'th tagged object
   template <size_t I>
     requires(I < sizeof...(TaggedComponents))
-  KOKKOS_INLINE_FUNCTION constexpr const auto& get() const {
-    return tagged_components_.template get<I>().get();
+  KOKKOS_INLINE_FUNCTION constexpr const auto& get_tagged() const {
+    return tagged_components_.template get<I>();
   }
   template <size_t I>
     requires(I < sizeof...(TaggedComponents))
-  KOKKOS_INLINE_FUNCTION constexpr auto& get() {
-    return tagged_components_.template get<I>().get();
+  KOKKOS_INLINE_FUNCTION constexpr auto& get_tagged() {
+    return tagged_components_.template get<I>();
   }
 
   template <size_t I>
     requires(I >= sizeof...(TaggedComponents))
-  KOKKOS_INLINE_FUNCTION constexpr const void get() const {
+  KOKKOS_INLINE_FUNCTION constexpr const void get_tagged() const {
     static_assert(I < sizeof...(TaggedComponents), "Attempting to get a value with an index that is out of bounds");
   }
   template <size_t I>
     requires(I >= sizeof...(TaggedComponents))
-  KOKKOS_INLINE_FUNCTION constexpr void get() {
+  KOKKOS_INLINE_FUNCTION constexpr void get_tagged() {
     static_assert(I < sizeof...(TaggedComponents), "Attempting to get a value with an index that is out of bounds");
   }
 
@@ -642,6 +642,29 @@ class aggregate {
   KOKKOS_INLINE_FUNCTION constexpr void get_tagged() {
     static_assert(contains_tag_v<Tag, TaggedComponents...>,
                   "Attempting to get a value that does not exist in the aggregate");
+  }
+
+  /// \brief Fetch the I'th value
+  template <size_t I>
+    requires(I < sizeof...(TaggedComponents))
+  KOKKOS_INLINE_FUNCTION constexpr const auto& get() const {
+    return tagged_components_.template get<I>().get();
+  }
+  template <size_t I>
+    requires(I < sizeof...(TaggedComponents))
+  KOKKOS_INLINE_FUNCTION constexpr auto& get() {
+    return tagged_components_.template get<I>().get();
+  }
+
+  template <size_t I>
+    requires(I >= sizeof...(TaggedComponents))
+  KOKKOS_INLINE_FUNCTION constexpr const void get() const {
+    static_assert(I < sizeof...(TaggedComponents), "Attempting to get a value with an index that is out of bounds");
+  }
+  template <size_t I>
+    requires(I >= sizeof...(TaggedComponents))
+  KOKKOS_INLINE_FUNCTION constexpr void get() {
+    static_assert(I < sizeof...(TaggedComponents), "Attempting to get a value with an index that is out of bounds");
   }
 
   /// \brief Fetch the value corresponding to the given Tag
