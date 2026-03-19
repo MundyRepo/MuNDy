@@ -270,27 +270,20 @@ TEST_F(UnitTestComponentFixture, NgpFieldComponentRoundTripDeviceMutations) {
 }
 
 static_assert(
-  std::is_same_v<decltype(SharedComponent(Kokkos::View<double*, Kokkos::HostSpace>("", 1))), SharedComponent<double>>,
-  "SharedComponent CTAD failed for host view."
-);
+    std::is_same_v<decltype(SharedComponent(Kokkos::View<double*, Kokkos::HostSpace>("", 1))), SharedComponent<double>>,
+    "SharedComponent CTAD failed for host view.");
 
 static_assert(
-  std::is_same_v<decltype(SharedComponent(Kokkos::View<double*, Kokkos::HostSpace>("", 1)))::view_t, double&>,
-  "SharedComponent type CTAD failed for host view."
-);
+    std::is_same_v<decltype(SharedComponent(Kokkos::View<double*, Kokkos::HostSpace>("", 1)))::view_t, double&>,
+    "SharedComponent type CTAD failed for host view.");
 
-static_assert(
-  std::is_same_v<decltype(SharedScalarComponent(Kokkos::View<double*, Kokkos::HostSpace>("", 1))),
-                 SharedScalarComponent<double>>,
-  "SharedScalarComponent CTAD failed for host view."
-);
+static_assert(std::is_same_v<decltype(SharedScalarComponent(Kokkos::View<double*, Kokkos::HostSpace>("", 1))),
+                             SharedScalarComponent<double>>,
+              "SharedScalarComponent CTAD failed for host view.");
 
-static_assert(
-  std::is_same_v<decltype(SharedScalarComponent(Kokkos::View<double*, Kokkos::HostSpace>("", 1)))::view_t,
-                 decltype(get_scalar_view<double>(std::declval<double*>()))>,
-  "SharedScalarComponent type CTAD failed for host view."
-);
-
+static_assert(std::is_same_v<decltype(SharedScalarComponent(Kokkos::View<double*, Kokkos::HostSpace>("", 1)))::view_t,
+                             decltype(get_scalar_view<double>(std::declval<double*>()))>,
+              "SharedScalarComponent type CTAD failed for host view.");
 
 TEST_F(UnitTestComponentFixture, SharedComponentSupportsOwnedAndAliasedConstruction) {
   Kokkos::View<double*, Kokkos::HostSpace> managed_view("managed_shared_value", 1);

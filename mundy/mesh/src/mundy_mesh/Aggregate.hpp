@@ -56,77 +56,6 @@ namespace mundy {
 
 namespace mesh {
 
-namespace impl {
-
-/* What all do we offer
-  - has_static_rank<T>: check if a tagged component defines a static rank member of type stk::topology::rank_t
-  - all_have_static_rank<Components...>: check if every tagged component defines a static rank member of type
-  stk::topology::rank_t
-
-*/
-
-// **********************************************************************************************************************
-/// \brief Check if a type defines a static rank member of type stk::topology::rank_t
-template <typename T, typename = void>
-struct has_static_rank : std::false_type {};
-//
-template <typename T>
-struct has_static_rank<T, std::void_t<decltype(T::rank)>>
-    : std::bool_constant<std::is_same_v<std::remove_cv_t<decltype(T::rank)>, stk::topology::rank_t> &&
-                         !std::is_member_object_pointer_v<decltype(&T::rank)>> {};
-//
-template <typename T>
-static constexpr bool has_static_rank_v = has_static_rank<T>::value;
-//
-template <typename T>
-concept has_static_rank_c = has_static_rank_v<T>;
-
-// **********************************************************************************************************************
-/// \brief Check if all types in a pack define a static rank member of type stk::topology::rank_t
-template <typename... Components>
-struct all_have_static_rank {
-  static constexpr bool value = (has_static_rank_v<Components> && ...);
-};
-
-template <typename... Components>
-static constexpr bool all_have_static_rank_v = all_have_static_rank<Components...>::value;
-
-template <typename... Components>
-concept all_have_static_rank_c = all_have_static_rank_v<Components...>;
-
-/// \brief A helper class for wrapping a functor(view) with an operator()(FastMeshIndex)
-template <typename NgpAggregateType, typename FunctorType>
-class NgpFunctorWrapper {
- public:
-  NgpFunctorWrapper(NgpAggregateType agg, const FunctorType& functor) : agg_(agg), functor_{functor} {
-  }
-
-  // Ignore the fact that functor may be a host function and yet operator is device compatable.
-  // So long as operator() is evaluated on the host, all should be well.
-  MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_PUSH
-
-  KOKKOS_FUNCTION
-  void operator()(stk::mesh::FastMeshIndex entity_index) const {
-    auto view = agg_.get_view(entity_index);
-    functor_(view);
-  }
-
-  MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_POP
-
- private:
-  NgpAggregateType agg_;
-  FunctorType functor_;
-};  // NgpFunctorWrapper
-
-}  // namespace impl
-
-/// Forward declarations:
-template <stk::topology::topology_t OurTopology, stk::topology::rank_t OurRank, typename... Components>
-class EntityView;
-
-template <stk::topology::topology_t OurTopology, stk::topology::rank_t OurRank, typename... NgpComponents>
-class NgpEntityView;
-
 /// \brief An aggregator of components
 ///
 /// # ECS Overview
@@ -235,27 +164,24 @@ class NgpEntityView;
 ///
 ///
 /// # Aggregates
-/// Aggregates are just collections of accessors(components) that can be accessed via a unified EntityView. The
-/// components are "tagged". That is, they are associated with some type that is used to fetch the data. That type is
-/// often nothing more than an emtpy struct, but it can be used to differentiate between components that have the same
-/// underlying type. This is opposed to creating a SphereAggregate which stores a radius_field and a center_field.
+/// Aggregates are just collections of accessors(components) that can be accessed via a unified tag-based interface.
+/// The components are "tagged". That is, they are associated with some type that is used to fetch the data. That type
+/// is often nothing more than an emtpy struct, but it can be used to differentiate between components that have the
+/// same underlying type. This is opposed to creating a SphereAggregate which stores a radius_field and a center_field.
 /// Instead, we can access the radius and center accessors via their tags.
 ///
-/// The Aggregate class can be constructed directly "Aggregate<topology, rank>(bulk_data, selector)", but we also offer
-/// some non-member helper functions to streamline this process.
-///   - Use "make_aggregate<topology>(bulk_data, selector)" to avoid the need to specify the rank redundantly.
-///   - Use "make_ranked_aggregate<rank>(bulk_data, selector)" if the entities don't have a topology.
+/// The Aggregate class can be constructed directly as "Aggregate<>(bulk_data, selector)", but we also offer
+/// a non-member helper function to streamline this process.
+///   - Use "make_aggregate(bulk_data, selector)" to create an empty aggregate.
 ///
 /// Adding components to an aggregate is done via the fluent interface "add_component<Tag>(accessor)",
 /// which returns a new aggregate with the added component. This allows for easy chaining of components,
 /// as seen in the below example.
 ///
-/// Aggregates can then be used to fetch an EntityView for a given entity, which can be used to access the entity's
-/// components. It offers basic information like the rank and topology of the entity, as well as the entity itself
-/// and access to its connections. To then fetch the components, use the get<Tag>() method for components of the
-/// same rank as the entity, or get<Tag>(connectivity_ordinal) for components of a lower rank then the entity. To then
-/// apply functors to all entities in the aggregate, use the for_each method. This method runs the given functor on the
-/// EntityView of each entity in the aggregate.
+/// Aggregates can then be used to fetch tagged data directly from entities or entity indices via get<Tag>(entity).
+/// Notably, connectivity is no longer hidden inside the aggregate access pattern. If you need the center node of a
+/// sphere, fetch that connected node explicitly via BulkData or NgpMesh and then pass the node entity/index into
+/// get<CENTER>(...). To apply functors, iterate directly on BulkData or NgpMesh with an explicit rank and selector.
 ///
 /// \note Accessors and aggregates are not a replacement for STK's Field and Part system. They are an abstraction layer
 ///   that sits above and beside it. We choose to use Aggregates to organize our data and Accessors to access it, but
@@ -276,7 +202,7 @@ class NgpEntityView;
 ///    double& radius = radius_accessor(node1);
 ///
 ///    // Create an aggregate for the spheres
-///    auto collision_sphere_data = make_aggregate<stk::topology::PARTICLE>(bulk_data, selector)
+///    auto collision_sphere_data = make_aggregate(bulk_data, selector)
 ///            .add_component<CENTER>(center_accessor)
 ///            .add_component<COLLISION_RADIUS>(radius_accessor);
 ///
@@ -290,27 +216,19 @@ class NgpEntityView;
 ///    collision_sphere_data.get_component<CENTER>().sync_to_device();
 ///    collision_sphere_data.get_component<COLLISION_RADIUS>().modify_on_device();
 ///
-///    // Get an accessor-independent view of the entity's data
-///    auto sphere_view = collision_sphere_data.get_view(entity1);
-///    sphere_view.entity();    // Returns entity1
-///    sphere_view.rank();      // Returns ELEM_RANK
-///    sphere_view.topology();  // Returns PARTICLE
-///    unsigned center_node_con_ordinal = 0;
-///    Vector3View<double> also_center = sphere_view.get<CENTER>(center_node_con_ordinal);
-///    double& also_radius = sphere_view.get<COLLISION_RADIUS>();
+///    // Fetch data directly through the aggregate
+///    Vector3View<double> also_center = collision_sphere_data.get<CENTER>(node1);
+///    double& also_radius = collision_sphere_data.get<COLLISION_RADIUS>(entity1);
 ///
 ///    // Apply a functor to all entities in the aggregate
-///    collision_sphere_data.for_each([](auto& other_sphere_view) {
-///        Vector3View<double> c = other_sphere_view.get<CENTER>();
-///        double& r = other_sphere_view.get<COLLISION_RADIUS>();
+///    mundy::mesh::for_each_entity_run(bulk_data, stk::topology::ELEM_RANK, collision_sphere_data.selector(),
+///                                     [&](stk::mesh::Entity sphere) {
+///        stk::mesh::Entity center_node =
+///            collision_sphere_data.bulk_data().begin(sphere, stk::topology::NODE_RANK)[0];
+///        Vector3View<double> c = collision_sphere_data.get<CENTER>(center_node);
+///        double& r = collision_sphere_data.get<COLLISION_RADIUS>(sphere);
 ///        std::cout << "Center = " << c << ", Radius = " << r << std::endl;
 ///    });
-///
-///    // Run a functor move_spheres<CenterTag, RadiusTag> on all entities in the aggregate
-///    collision_sphere_data.for_each(move_spheres<CENTER, COLLISION_RADIUS>{});
-///
-///   // Use a functor to move all spheres
-///   move_spheres<CENTER, COLLISION_RADIUS>{}.apply_to(collision_sphere_data);
 ///
 ///    // Directly use accessors without an aggregate
 ///    stk::mesh::for_each_entity_run(bulk_data, stk::topology::ELEM_RANK, selector,
@@ -323,10 +241,8 @@ class NgpEntityView;
 ///   // Directly pass accessors to a free-function move_spheres2 templated by the accessor types
 ///   move_spheres2(center_accessor, radius_accessor);
 /// \endcode
-template <stk::topology::topology_t OurTopology, stk::topology::rank_t OurRank, typename... Components>
-  requires(all_have_tags_v<Components...>                 /* All of the given components must have tags. */
-           && impl::all_have_static_rank_v<Components...> /* All components must have a static rank. */
-           && all_tags_unique_v<Components...> /* All tags in an Aggregate must be unique. */)
+template <typename... Components>
+  requires(all_have_tags_v<Components...> && all_tags_unique_v<Components...>)
 class Aggregate {
  public:
   using ComponentsTuple = tuple<Components...>;
@@ -355,12 +271,6 @@ class Aggregate {
   //! \name Accessors
   //@{
 
-  static constexpr stk::topology::topology_t topology() {
-    return OurTopology;
-  }
-  static constexpr stk::topology::rank_t rank() {
-    return OurRank;
-  }
   const stk::mesh::BulkData& bulk_data() const {
     return bulk_data_;
   }
@@ -372,43 +282,39 @@ class Aggregate {
   }
   //@}
 
-  /// \brief Add a component with the given tag and rank (fluent interface):
-  template <typename Tag, stk::topology::rank_t component_rank, typename NewComponent>
-    requires(
-        all_tags_unique_v<TaggedComponent<Tag, component_rank, NewComponent>,
-                          Components...> /* The new component's tag must be unique from all existing component tags */)
+  /// \brief Add a component with the given tag (fluent interface):
+  template <typename Tag, typename NewComponent>
+    requires(all_tags_unique_v<TaggedComponent<Tag, NewComponent>, Components...>)
   auto add_component(NewComponent new_component) const {
-    auto new_tagged_comp = TaggedComponent<Tag, component_rank, NewComponent>{std::move(new_component)};
+    auto new_tagged_comp = TaggedComponent<Tag, NewComponent>{std::move(new_component)};
     auto new_tuple = tuple_cat(components_, make_tuple(new_tagged_comp));
 
     // Form the new type that has the old components plus the new appended
     // one.
-    using NewType = Aggregate<OurTopology, OurRank, Components..., decltype(new_tagged_comp)>;
+    using NewType = Aggregate<Components..., decltype(new_tagged_comp)>;
     return NewType(bulk_data_, selector_, new_tuple);
   }
   //
-  template <typename Tag, stk::topology::rank_t component_rank, typename NewComponent>
-    requires(!all_tags_unique_v<TaggedComponent<Tag, component_rank, NewComponent>, Components...>)
+  template <typename Tag, typename NewComponent>
+    requires(!all_tags_unique_v<TaggedComponent<Tag, NewComponent>, Components...>)
   void add_component(NewComponent /*new_component*/) const {
-    static_assert(all_tags_unique_v<TaggedComponent<Tag, component_rank, NewComponent>, Components...>,
+    static_assert(all_tags_unique_v<TaggedComponent<Tag, NewComponent>, Components...>,
                   "The new component's tag must be unique from all existing component tags.");
   }
 
-  /// \brief Add a component that already has a tag and rank
+  /// \brief Add a component that already has a tag
   template <typename NewTaggedComponent>
     requires(all_have_tags_v<std::remove_cvref_t<NewTaggedComponent>> &&
-             impl::has_static_rank_v<std::remove_cvref_t<NewTaggedComponent>> &&
              all_tags_unique_v<std::remove_cvref_t<NewTaggedComponent>, Components...>)
   auto add_component(NewTaggedComponent new_component) const {
     using tagged_component_type = std::remove_cvref_t<NewTaggedComponent>;
     auto new_tuple = tuple_cat(components_, make_tuple(std::move(new_component)));
-    using NewType = Aggregate<OurTopology, OurRank, Components..., tagged_component_type>;
+    using NewType = Aggregate<Components..., tagged_component_type>;
     return NewType(bulk_data_, selector_, new_tuple);
   }
   //
   template <typename NewTaggedComponent>
     requires(all_have_tags_v<std::remove_cvref_t<NewTaggedComponent>> &&
-             impl::has_static_rank_v<std::remove_cvref_t<NewTaggedComponent>> &&
              !all_tags_unique_v<std::remove_cvref_t<NewTaggedComponent>, Components...>)
   void add_component(NewTaggedComponent /*new_component*/) const {
     static_assert(all_tags_unique_v<std::remove_cvref_t<NewTaggedComponent>, Components...>,
@@ -465,39 +371,32 @@ class Aggregate {
     (get_component<TagsToModify>().modify_on_host(), ...);
   }
 
-  /// \brief Get an EntityView for the given entity
-  EntityView<OurTopology, OurRank, Components...> get_view(stk::mesh::Entity entity) const {
-    return EntityView<OurTopology, OurRank, Components...>(*this, entity);
+  /// \brief Get the data tagged by the given tag for the given entity.
+  template <typename Tag>
+    requires(contains_tag_v<Tag, Components...>)
+  decltype(auto) get(stk::mesh::Entity entity) {
+    MUNDY_THROW_ASSERT(bulk_data_.is_valid(entity), std::runtime_error, "Aggregate::get() called with invalid entity");
+    return get_component<Tag>()(entity);
+  }
+  template <typename Tag>
+    requires(!contains_tag_v<Tag, Components...>)
+  void get(stk::mesh::Entity /*entity*/) {
+    static_assert(contains_tag_v<Tag, Components...>,
+                  "Attempting to get a component that does not exist in the aggregate");
   }
 
-  /// \brief Apply a functor on the EntityView of each entity in the current data aggregate that is also in the given
-  /// subset selector
-  template <typename Functor>
-  void for_each(const stk::mesh::Selector& subset_selector, const Functor& f) const {
-    // Only loop over the set intersection of the agg's selector and the subset selector
-    auto agg = *this;
-    stk::mesh::Selector sel = agg.selector() & subset_selector;
-
-    auto wrapped_functor = [&agg, &f](const stk::mesh::BulkData& bulk_data, const stk::mesh::Entity& entity) {
-      auto view = agg.get_view(entity);
-      f(view);
-    };
-
-    ::mundy::mesh::for_each_entity_run(agg.bulk_data(), agg.rank(), sel, wrapped_functor);
+  /// \brief Get the data tagged by the given tag for the given entity.
+  template <typename Tag>
+    requires(contains_tag_v<Tag, Components...>)
+  decltype(auto) get(stk::mesh::Entity entity) const {
+    MUNDY_THROW_ASSERT(bulk_data_.is_valid(entity), std::runtime_error, "Aggregate::get() called with invalid entity");
+    return get_component<Tag>()(entity);
   }
-
-  /// \brief Apply a functor on the EntityView of each entity in the current data aggregate
-  template <typename Functor>
-  void for_each(const Functor& f) const {
-    auto agg = *this;
-
-    auto wrapped_functor = [&agg, &f]([[maybe_unused]] const stk::mesh::BulkData& bulk_data,
-                                      const stk::mesh::Entity& entity) {
-      auto view = agg.get_view(entity);
-      f(view);
-    };
-
-    ::mundy::mesh::for_each_entity_run(agg.bulk_data(), agg.rank(), agg.selector(), wrapped_functor);
+  template <typename Tag>
+    requires(!contains_tag_v<Tag, Components...>)
+  void get(stk::mesh::Entity /*entity*/) const {
+    static_assert(contains_tag_v<Tag, Components...>,
+                  "Attempting to get a component that does not exist in the aggregate");
   }
 
  private:
@@ -510,7 +409,7 @@ class Aggregate {
   //@}
 };  // Aggregate
 
-template <stk::topology::topology_t OurTopology, stk::topology::rank_t OurRank, typename... NgpComponents>
+template <typename... NgpComponents>
   requires(::mundy::all_have_tags_v<NgpComponents...> /* All of the given components must have tags */
            && ::mundy::all_tags_unique_v<NgpComponents...> /* All tags in an NgpAggregate must be unique */)
 class NgpAggregate {
@@ -560,16 +459,6 @@ class NgpAggregate {
   //@{
 
   KOKKOS_INLINE_FUNCTION
-  static constexpr stk::topology::topology_t topology() {
-    return OurTopology;
-  }
-
-  KOKKOS_INLINE_FUNCTION
-  static constexpr stk::topology::rank_t rank() {
-    return OurRank;
-  }
-
-  KOKKOS_INLINE_FUNCTION
   const stk::mesh::NgpMesh& ngp_mesh() const {
     return ngp_mesh_;
   }
@@ -590,38 +479,36 @@ class NgpAggregate {
   /// \brief Add a component (fluent interface):
   /// TODO(palmerb4): If we do decide to use get_updated_ngp_aggregate with references, then this function will
   ///   need removed, as Aggregates managing the lifetime of NGP components means users should construct them
-  template <typename Tag, stk::topology::rank_t component_rank, typename NewNgpComponent>
-    requires(all_tags_unique_v<NgpTaggedComponent<Tag, component_rank, NewNgpComponent>, NgpComponents...>)
+  template <typename Tag, typename NewNgpComponent>
+    requires(all_tags_unique_v<NgpTaggedComponent<Tag, NewNgpComponent>, NgpComponents...>)
   auto add_component(NewNgpComponent new_ngp_component) const {
-    auto new_ngp_tagged_comp = NgpTaggedComponent<Tag, component_rank, NewNgpComponent>{std::move(new_ngp_component)};
+    auto new_ngp_tagged_comp = NgpTaggedComponent<Tag, NewNgpComponent>{std::move(new_ngp_component)};
     auto new_tuple = tuple_cat(ngp_components_, make_tuple(new_ngp_tagged_comp));
 
     // Form the new type that has the old components plus the new appended
     // one.
-    using NewType = NgpAggregate<OurTopology, OurRank, NgpComponents..., decltype(new_ngp_tagged_comp)>;
+    using NewType = NgpAggregate<NgpComponents..., decltype(new_ngp_tagged_comp)>;
     return NewType(ngp_mesh_, host_selector_, new_tuple);
   }
-  template <typename Tag, stk::topology::rank_t component_rank, typename NewNgpComponent>
-    requires(!all_tags_unique_v<NgpTaggedComponent<Tag, component_rank, NewNgpComponent>, NgpComponents...>)
+  template <typename Tag, typename NewNgpComponent>
+    requires(!all_tags_unique_v<NgpTaggedComponent<Tag, NewNgpComponent>, NgpComponents...>)
   void add_component(NewNgpComponent /*new_ngp_component*/) const {
-    static_assert(all_tags_unique_v<NgpTaggedComponent<Tag, component_rank, NewNgpComponent>, NgpComponents...>,
+    static_assert(all_tags_unique_v<NgpTaggedComponent<Tag, NewNgpComponent>, NgpComponents...>,
                   "The new component's tag must be unique from all existing component tags.");
   }
 
   template <typename NewNgpTaggedComponent>
     requires(all_have_tags_v<std::remove_cvref_t<NewNgpTaggedComponent>> &&
-             impl::has_static_rank_v<std::remove_cvref_t<NewNgpTaggedComponent>> &&
              all_tags_unique_v<std::remove_cvref_t<NewNgpTaggedComponent>, NgpComponents...>)
   auto add_component(NewNgpTaggedComponent new_ngp_component) const {
     using tagged_component_type = std::remove_cvref_t<NewNgpTaggedComponent>;
     auto new_tuple = tuple_cat(ngp_components_, make_tuple(std::move(new_ngp_component)));
-    using NewType = NgpAggregate<OurTopology, OurRank, NgpComponents..., tagged_component_type>;
+    using NewType = NgpAggregate<NgpComponents..., tagged_component_type>;
     return NewType(ngp_mesh_, host_selector_, new_tuple);
   }
 
   template <typename NewNgpTaggedComponent>
     requires(all_have_tags_v<std::remove_cvref_t<NewNgpTaggedComponent>> &&
-             impl::has_static_rank_v<std::remove_cvref_t<NewNgpTaggedComponent>> &&
              !all_tags_unique_v<std::remove_cvref_t<NewNgpTaggedComponent>, NgpComponents...>)
   void add_component(NewNgpTaggedComponent /*new_ngp_component*/) const {
     static_assert(all_tags_unique_v<std::remove_cvref_t<NewNgpTaggedComponent>, NgpComponents...>,
@@ -678,42 +565,58 @@ class NgpAggregate {
     (get_component<TagsToModify>().modify_on_host(), ...);
   }
 
-  /// \brief Get an EntityView for the given entity
-  KOKKOS_INLINE_FUNCTION
-  NgpEntityView<OurTopology, OurRank, NgpComponents...> get_view(stk::mesh::FastMeshIndex entity_index) const {
-    return NgpEntityView<OurTopology, OurRank, NgpComponents...>(ngp_mesh_, ngp_components_, entity_index);
+  /// \brief Get the data tagged by the given tag for the given entity index.
+  template <typename Tag>
+    requires(contains_tag_v<Tag, NgpComponents...>)
+  KOKKOS_INLINE_FUNCTION decltype(auto) get(stk::mesh::FastMeshIndex entity_index) {
+    auto& comp = get_component<Tag>();
+    return comp(entity_index);
+  }
+  template <typename Tag>
+    requires(!contains_tag_v<Tag, NgpComponents...>)
+  KOKKOS_INLINE_FUNCTION void get(stk::mesh::FastMeshIndex /*entity_index*/) {
+    static_assert(contains_tag_v<Tag, NgpComponents...>,
+                  "Attempting to get a component that does not exist in the NGP aggregate");
   }
 
-  /// \brief Get an EntityView for the given entity
-  KOKKOS_INLINE_FUNCTION
-  NgpEntityView<OurTopology, OurRank, NgpComponents...> get_view(stk::mesh::Entity entity) const {
-    stk::mesh::FastMeshIndex entity_index = ngp_mesh_.fast_mesh_index(entity);
-    return NgpEntityView<OurTopology, OurRank, NgpComponents...>(ngp_mesh_, ngp_components_, entity_index);
+  /// \brief Get the data tagged by the given tag for the given entity index.
+  template <typename Tag>
+    requires(contains_tag_v<Tag, NgpComponents...>)
+  KOKKOS_INLINE_FUNCTION decltype(auto) get(stk::mesh::FastMeshIndex entity_index) const {
+    auto& comp = get_component<Tag>();
+    return comp(entity_index);
+  }
+  template <typename Tag>
+    requires(!contains_tag_v<Tag, NgpComponents...>)
+  KOKKOS_INLINE_FUNCTION void get(stk::mesh::FastMeshIndex /*entity_index*/) const {
+    static_assert(contains_tag_v<Tag, NgpComponents...>,
+                  "Attempting to get a component that does not exist in the NGP aggregate");
   }
 
-  /// \brief Apply a functor on the EntityView of each entity in the current data aggregate that is also in the given
-  /// subset selector
-  template <typename Functor>
-  inline void for_each(const stk::mesh::Selector& subset_selector, const Functor& f) const {
-    // Only loop over the set intersection of the agg's selector and the subset selector
-    using our_t = NgpAggregate<OurTopology, OurRank, NgpComponents...>;
-    our_t agg = *this;
-
-    auto local_ngp_mesh = agg.ngp_mesh();
-    impl::NgpFunctorWrapper<our_t, Functor> wrapper(agg, f);
-    stk::mesh::Selector sel = agg.selector() & subset_selector;
-    ::mundy::mesh::for_each_entity_run(local_ngp_mesh, agg.rank(), sel, wrapper);
+  /// \brief Get the data tagged by the given tag for the given entity.
+  template <typename Tag>
+    requires(contains_tag_v<Tag, NgpComponents...>)
+  KOKKOS_INLINE_FUNCTION decltype(auto) get(stk::mesh::Entity entity) {
+    return get<Tag>(ngp_mesh_.fast_mesh_index(entity));
+  }
+  template <typename Tag>
+    requires(!contains_tag_v<Tag, NgpComponents...>)
+  KOKKOS_INLINE_FUNCTION void get(stk::mesh::Entity /*entity*/) {
+    static_assert(contains_tag_v<Tag, NgpComponents...>,
+                  "Attempting to get a component that does not exist in the NGP aggregate");
   }
 
-  /// \brief Apply a functor on the EntityView of each entity in the current data aggregate
-  template <typename Functor>
-  inline void for_each(const Functor& f) const {
-    using our_t = NgpAggregate<OurTopology, OurRank, NgpComponents...>;
-    our_t agg = *this;
-
-    auto local_ngp_mesh = agg.ngp_mesh();
-    impl::NgpFunctorWrapper<our_t, Functor> wrapper(agg, f);
-    ::mundy::mesh::for_each_entity_run(local_ngp_mesh, agg.rank(), agg.selector(), wrapper);
+  /// \brief Get the data tagged by the given tag for the given entity.
+  template <typename Tag>
+    requires(contains_tag_v<Tag, NgpComponents...>)
+  KOKKOS_INLINE_FUNCTION decltype(auto) get(stk::mesh::Entity entity) const {
+    return get<Tag>(ngp_mesh_.fast_mesh_index(entity));
+  }
+  template <typename Tag>
+    requires(!contains_tag_v<Tag, NgpComponents...>)
+  KOKKOS_INLINE_FUNCTION void get(stk::mesh::Entity /*entity*/) const {
+    static_assert(contains_tag_v<Tag, NgpComponents...>,
+                  "Attempting to get a component that does not exist in the NGP aggregate");
   }
 
  private:
@@ -726,392 +629,75 @@ class NgpAggregate {
   //@}
 };  // NgpAggregate
 
-/// \brief A view into the components, connections, and meta-information for an entity
-template <stk::topology::topology_t OurTopology, stk::topology::rank_t OurRank, typename... Components>
-class EntityView {
- public:
-  /// \brief Construct an EntityView for the given entity
-  /// TODO(palmerb4) Optimize for reuse of connectivity.
-  EntityView(const Aggregate<OurTopology, OurRank, Components...>& parent, stk::mesh::Entity entity)
-      : parent_(parent), entity_(entity) {
-    MUNDY_THROW_ASSERT(parent.bulk_data().is_valid(entity), std::runtime_error,
-                       "EntityView created with invalid entity");
-    MUNDY_THROW_ASSERT(parent.bulk_data().entity_rank(entity) == OurRank, std::runtime_error,
-                       fmt::format("EntityView created with entity of rank {} but aggregate has rank {}",
-                                   parent.bulk_data().entity_rank(entity), OurRank));
-  }
-
- private:
-  const Aggregate<OurTopology, OurRank, Components...>& parent_;
-  stk::mesh::Entity entity_;
-
- public:
-  /// \brief Fetch the entity that we view
-  stk::mesh::Entity entity() const {
-    return entity_;
-  }
-
-  /// \brief Fetch the rank of the entity that we view
-  static constexpr stk::topology::rank_t rank() {
-    return OurRank;
-  }
-
-  /// \brief Fetch the topology of the entity that we view
-  static constexpr stk::topology::topology_t topology() {
-    return OurTopology;
-  }
-
-  /// \brief Get the data marked by the given tag and fetched using the corresponding accessor
-  /// Only works for components of the same rank as the entity
-  template <typename Tag>
-    requires(contains_tag_v<Tag, Components...> &&
-             (type_at_index_t<index_of_tag_v<Tag, Components...>, Components...>::rank == OurRank))
-  decltype(auto) get() {
-    auto& comp = parent_.template get_component<Tag>();
-    return comp(entity_);
-  }
-  template <typename Tag>
-    requires(!contains_tag_v<Tag, Components...> ||
-             !(type_at_index_t<index_of_tag_v<Tag, Components...>, Components...>::rank == OurRank))
-  void get() {
-    static_assert(contains_tag_v<Tag, Components...>, "EntityView::get() called with a tag that does not exist");
-    static_assert((type_at_index_t<index_of_tag_v<Tag, Components...>, Components...>::rank == OurRank),
-                  "EntityView::get() called with a tag that does not correspond to a component of the same rank as "
-                  "the entity");
-  }
-
-  /// \brief Get the data marked by the given tag and fetched using the corresponding accessor
-  /// Only works for components of the same rank as the entity
-  template <typename Tag>
-    requires(contains_tag_v<Tag, Components...> &&
-             (type_at_index_t<index_of_tag_v<Tag, Components...>, Components...>::rank == OurRank))
-  decltype(auto) get() const {
-    auto& comp = parent_.template get_component<Tag>();
-    return comp(entity_);
-  }
-  template <typename Tag>
-    requires(!contains_tag_v<Tag, Components...> ||
-             !(type_at_index_t<index_of_tag_v<Tag, Components...>, Components...>::rank == OurRank))
-  void get() const {
-    static_assert(contains_tag_v<Tag, Components...>, "EntityView::get() called with a tag that does not exist");
-    static_assert((type_at_index_t<index_of_tag_v<Tag, Components...>, Components...>::rank == OurRank),
-                  "EntityView::get() called with a tag that does not correspond to a component of the same rank as "
-                  "the entity");
-  }
-
-  /// \brief Get the data marked by the given tag and fetched using the corresponding accessor
-  /// Only works for components of a different rank then the entity
-  template <typename Tag>
-    requires(contains_tag_v<Tag, Components...> &&
-             !(type_at_index_t<index_of_tag_v<Tag, Components...>, Components...>::rank == OurRank))
-  decltype(auto) get(unsigned connectivity_ordinal) {
-    using TaggedComponentType = std::decay_t<decltype(parent_.template get_component<Tag>())>;
-    static constexpr auto comp_rank = TaggedComponentType::rank;
-    auto& comp = parent_.template get_component<Tag>();
-
-    MUNDY_THROW_ASSERT(
-        parent_.bulk_data().num_connectivity(entity_, comp_rank) > connectivity_ordinal, std::runtime_error,
-        fmt::format("EntityView::get() called with connectivity_ordinal {} but entity has only {} "
-                    "connectivities of rank {}",
-                    connectivity_ordinal, parent_.bulk_data().num_connectivity(entity_, comp_rank), comp_rank));
-
-    // TODO: The following assumes that the entity is connected to all of its possible lower rank entities
-    // such that the list of connected entities can be indexed by the connectivity_ordinal.
-    const stk::mesh::Entity& connected_entity = parent_.bulk_data().begin(entity_, comp_rank)[connectivity_ordinal];
-
-    MUNDY_THROW_ASSERT(
-        parent_.bulk_data().is_valid(connected_entity), std::runtime_error,
-        fmt::format("EntityView::get() called with connectivity_ordinal {} but connected entity is invalid",
-                    connectivity_ordinal));
-
-    return comp(connected_entity);
-  }
-  template <typename Tag>
-    requires(!contains_tag_v<Tag, Components...> ||
-             (type_at_index_t<index_of_tag_v<Tag, Components...>, Components...>::rank == OurRank))
-  void get(unsigned /*connectivity_ordinal*/) {
-    static_assert(contains_tag_v<Tag, Components...>, "EntityView::get(ordinal) called with a tag that does not exist");
-  }
-
-  /// \brief Get the data marked by the given tag and fetched using the corresponding accessor
-  /// Only works for components of a different rank then the entity
-  template <typename Tag>
-    requires(contains_tag_v<Tag, Components...> &&
-             !(type_at_index_t<index_of_tag_v<Tag, Components...>, Components...>::rank == OurRank))
-  decltype(auto) get(unsigned connectivity_ordinal) const {
-    using TaggedComponentType = std::decay_t<decltype(parent_.template get_component<Tag>())>;
-    static constexpr auto comp_rank = TaggedComponentType::rank;
-    auto& comp = parent_.template get_component<Tag>();
-
-    MUNDY_THROW_ASSERT(
-        parent_.bulk_data().num_connectivity(entity_, comp_rank) > connectivity_ordinal, std::runtime_error,
-        fmt::format("EntityView::get() called with connectivity_ordinal {} but entity has only {} "
-                    "connectivities of rank {}",
-                    connectivity_ordinal, parent_.bulk_data().num_connectivity(entity_, comp_rank), comp_rank));
-
-    const stk::mesh::Entity& connected_entity = parent_.bulk_data().begin(entity_, comp_rank)[connectivity_ordinal];
-
-    MUNDY_THROW_ASSERT(
-        parent_.bulk_data().is_valid(connected_entity), std::runtime_error,
-        fmt::format("EntityView::get() called with connectivity_ordinal {} but connected entity is invalid",
-                    connectivity_ordinal));
-
-    return comp(connected_entity);
-  }
-  template <typename Tag>
-    requires(!contains_tag_v<Tag, Components...> ||
-             (type_at_index_t<index_of_tag_v<Tag, Components...>, Components...>::rank == OurRank))
-  void get(unsigned /*connectivity_ordinal*/) const {
-    static_assert(contains_tag_v<Tag, Components...>, "EntityView::get(ordinal) called with a tag that does not exist");
-    static_assert(
-        (type_at_index_t<index_of_tag_v<Tag, Components...>, Components...>::rank == OurRank),
-        "EntityView::get(ordinal) called with a tag that does not correspond to a component of a different rank "
-        "than the entity");
-  }
-};  // EntityView
-
-/// \brief A view into the components, connections, and meta-information for an entity
-template <stk::topology::topology_t OurTopology, stk::topology::rank_t OurRank, typename... NgpComponents>
-class NgpEntityView {
- public:
-  using NgpComponentsTuple = tuple<NgpComponents...>;
-
-  /// \brief Construct an EntityView for the given entity
-  /// TODO(palmerb4) Optimize for reuse of connectivity.
-  KOKKOS_INLINE_FUNCTION
-  NgpEntityView(const stk::mesh::NgpMesh& ngp_mesh, const NgpComponentsTuple& components,
-                stk::mesh::FastMeshIndex entity_index)
-      : ngp_mesh_(ngp_mesh), ngp_components_(components), entity_index_(entity_index) {
-  }
-
- private:
-  const stk::mesh::NgpMesh& ngp_mesh_;
-  const NgpComponentsTuple& ngp_components_;
-  stk::mesh::FastMeshIndex entity_index_;
-
- public:
-  /// \brief Fetch the entity that we view
-  KOKKOS_INLINE_FUNCTION
-  stk::mesh::FastMeshIndex entity_index() const {
-    return entity_index_;
-  }
-
-  /// \brief Fetch the identifier of the entity that we view
-  KOKKOS_INLINE_FUNCTION
-  stk::mesh::EntityId entity_id() const {
-    return ngp_mesh_.identifier(ngp_mesh_.get_entity(OurRank, entity_index_));
-  }
-
-  /// \brief Fetch the rank of the entity that we view
-  KOKKOS_INLINE_FUNCTION
-  static constexpr stk::topology::rank_t rank() {
-    return OurRank;
-  }
-
-  /// \brief Fetch the topology of the entity that we view
-  KOKKOS_INLINE_FUNCTION
-  static constexpr stk::topology::topology_t topology() {
-    return OurTopology;
-  }
-
-  /// \brief Fetch the ngp mesh
-  KOKKOS_INLINE_FUNCTION
-  const stk::mesh::NgpMesh& ngp_mesh() const {
-    return ngp_mesh_;
-  }
-
-  /// \brief Get the data marked by the given tag and fetched using the corresponding accessor
-  /// Only works for components of the same rank as the entity
-  template <typename Tag>
-    requires(contains_tag_v<Tag, NgpComponents...> &&
-             (type_at_index_t<index_of_tag_v<Tag, NgpComponents...>, NgpComponents...>::rank == OurRank))
-  KOKKOS_INLINE_FUNCTION decltype(auto) get() {
-    auto& comp = ::mundy::impl::find_component<Tag>(ngp_components_);
-    return comp(entity_index_);
-  }
-  template <typename Tag>
-    requires(!contains_tag_v<Tag, NgpComponents...> ||
-             !(type_at_index_t<index_of_tag_v<Tag, NgpComponents...>, NgpComponents...>::rank == OurRank))
-  KOKKOS_INLINE_FUNCTION void get() {
-    static_assert(contains_tag_v<Tag, NgpComponents...>, "NgpEntityView::get() called with a tag that does not exist");
-    static_assert((type_at_index_t<index_of_tag_v<Tag, NgpComponents...>, NgpComponents...>::rank == OurRank),
-                  "NgpEntityView::get() called with a tag that does not correspond to a component of the same rank "
-                  "as the entity");
-  }
-
-  /// \brief Get the data marked by the given tag and fetched using the corresponding accessor
-  /// Only works for components of the same rank as the entity
-  template <typename Tag>
-    requires(contains_tag_v<Tag, NgpComponents...> &&
-             (type_at_index_t<index_of_tag_v<Tag, NgpComponents...>, NgpComponents...>::rank == OurRank))
-  KOKKOS_INLINE_FUNCTION decltype(auto) get() const {
-    auto& comp = ::mundy::impl::find_component<Tag>(ngp_components_);
-    return comp(entity_index_);
-  }
-  template <typename Tag>
-    requires(!contains_tag_v<Tag, NgpComponents...> ||
-             !(type_at_index_t<index_of_tag_v<Tag, NgpComponents...>, NgpComponents...>::rank == OurRank))
-  KOKKOS_INLINE_FUNCTION void get() const {
-    static_assert(contains_tag_v<Tag, NgpComponents...>, "NgpEntityView::get() called with a tag that does not exist");
-    static_assert((type_at_index_t<index_of_tag_v<Tag, NgpComponents...>, NgpComponents...>::rank == OurRank),
-                  "NgpEntityView::get() called with a tag that does not correspond to a component of the same rank "
-                  "as the entity");
-  }
-
-  /// \brief Get the data marked by the given tag and fetched using the corresponding accessor
-  /// Only works for components of a different rank then the entity
-  template <typename Tag>
-    requires(contains_tag_v<Tag, NgpComponents...> &&
-             !(type_at_index_t<index_of_tag_v<Tag, NgpComponents...>, NgpComponents...>::rank == OurRank))
-  KOKKOS_INLINE_FUNCTION decltype(auto) get(unsigned connectivity_ordinal) {
-    using TaggedComponentType = std::decay_t<decltype(::mundy::impl::find_component<Tag>(ngp_components_))>;
-    static constexpr auto comp_rank = TaggedComponentType::rank;
-    auto& comp = ::mundy::impl::find_component<Tag>(ngp_components_);
-
-    // TODO: The following assumes that the entity is connected to all of its possible lower rank entities
-    // such that the list of connected entities can be indexed by the connectivity_ordinal.
-    const auto connected_entities = ngp_mesh_.get_connected_entities(OurRank, entity_index_, comp_rank);
-
-    MUNDY_THROW_ASSERT(connected_entities.size() > connectivity_ordinal, std::runtime_error,
-                       "EntityView::get() called with a connectivity ordinal that exceeds the number of connected "
-                       "entities of the tag rank");
-
-    const stk::mesh::FastMeshIndex connected_entity_index =
-        ngp_mesh_.fast_mesh_index(connected_entities[connectivity_ordinal]);
-    return comp(connected_entity_index);
-  }
-  template <typename Tag>
-    requires(!contains_tag_v<Tag, NgpComponents...> ||
-             (type_at_index_t<index_of_tag_v<Tag, NgpComponents...>, NgpComponents...>::rank == OurRank))
-  KOKKOS_INLINE_FUNCTION void get(unsigned /*connectivity_ordinal*/) {
-    static_assert(contains_tag_v<Tag, NgpComponents...>,
-                  "NgpEntityView::get(ordinal) called with a tag that does not exist");
-    static_assert(
-        !(type_at_index_t<index_of_tag_v<Tag, NgpComponents...>, NgpComponents...>::rank == OurRank),
-        "NgpEntityView::get(ordinal) called with a tag that corresponds to a component of the same rank as the entity");
-  }
-
-  /// \brief Get the data marked by the given tag and fetched using the corresponding accessor
-  /// Only works for components of a different rank then the entity
-  template <typename Tag>
-    requires(contains_tag_v<Tag, NgpComponents...> &&
-             !(type_at_index_t<index_of_tag_v<Tag, NgpComponents...>, NgpComponents...>::rank == OurRank))
-  KOKKOS_INLINE_FUNCTION decltype(auto) get(unsigned connectivity_ordinal) const {
-    using TaggedComponentType = std::decay_t<decltype(::mundy::impl::find_component<Tag>(ngp_components_))>;
-    static constexpr auto comp_rank = TaggedComponentType::rank;
-    auto& comp = ::mundy::impl::find_component<Tag>(ngp_components_);
-    const auto connected_entities = ngp_mesh_.get_connected_entities(OurRank, entity_index_, comp_rank);
-
-    MUNDY_THROW_ASSERT(connected_entities.size() > connectivity_ordinal, std::runtime_error,
-                       "EntityView::get() called with a connectivity ordinal that exceeds the number of connected "
-                       "entities of the tag rank");
-
-    const stk::mesh::FastMeshIndex connected_entity_index =
-        ngp_mesh_.fast_mesh_index(connected_entities[connectivity_ordinal]);
-    return comp(connected_entity_index);
-  }
-  template <typename Tag>
-    requires(!contains_tag_v<Tag, NgpComponents...> ||
-             (type_at_index_t<index_of_tag_v<Tag, NgpComponents...>, NgpComponents...>::rank == OurRank))
-  KOKKOS_INLINE_FUNCTION void get(unsigned /*connectivity_ordinal*/) const {
-    static_assert(contains_tag_v<Tag, NgpComponents...>,
-                  "NgpEntityView::get(ordinal) called with a tag that does not exist");
-    static_assert(
-        !(type_at_index_t<index_of_tag_v<Tag, NgpComponents...>, NgpComponents...>::rank == OurRank),
-        "NgpEntityView::get(ordinal) called with a tag that corresponds to a component of the same rank as the entity");
-  }
-};  // NgpEntityView
-
-/// \brief Make an aggregate for the given topology
-template <stk::topology::topology_t OurTopology>
+/// \brief Make an empty aggregate
 auto make_aggregate(const stk::mesh::BulkData& bulk_data, stk::mesh::Selector selector) {
-  static constexpr stk::topology::rank_t rank = stk::topology_detail::topology_data<OurTopology>::rank;
-  return Aggregate<OurTopology, rank>(bulk_data, selector);
-}
-
-/// \brief Make an aggregate for the given rank
-template <stk::topology::rank_t OurRank>
-auto make_ranked_aggregate(const stk::mesh::BulkData& bulk_data, stk::mesh::Selector selector) {
-  return Aggregate<stk::topology::INVALID_TOPOLOGY, OurRank>(bulk_data, selector);
+  return Aggregate<>(bulk_data, selector);
 }
 
 /// \brief Get a component of the given aggregate (const)
 /// This simply calls the get_component method of the given aggregate and solely exists so you don't need to write
 ///  "aggregate. template get_component<Tag>()" every time you want to fetch a component. Instead,
 /// you use "get_component<Tag>(aggregate)". Same concept as std::get<N>(tuple).
-template <typename Tag, stk::topology::topology_t OurTopology, stk::topology::rank_t OurRank, typename... Components>
-const auto& get_component(const Aggregate<OurTopology, OurRank, Components...>& aggregate) {
+template <typename Tag, typename... Components>
+const auto& get_component(const Aggregate<Components...>& aggregate) {
   return aggregate.template get_component<Tag>();
 }
 
 /// \brief Get a component of the given aggregate
-template <typename Tag, stk::topology::topology_t OurTopology, stk::topology::rank_t OurRank, typename... Components>
-auto& get_component(Aggregate<OurTopology, OurRank, Components...>& aggregate) {
+template <typename Tag, typename... Components>
+auto& get_component(Aggregate<Components...>& aggregate) {
   return aggregate.template get_component<Tag>();
 }
 
-/// \brief Get the data tagged by the given tag from the given entity view (const)
-template <typename Tag, stk::topology::topology_t OurTopology, stk::topology::rank_t OurRank, typename... Components>
-decltype(auto) get(const EntityView<OurTopology, OurRank, Components...>& entity_view) {
-  return entity_view.template get<Tag>();
+/// \brief Get the data tagged by the given tag from the given aggregate and entity (const)
+template <typename Tag, typename... Components>
+decltype(auto) get(const Aggregate<Components...>& aggregate, stk::mesh::Entity entity) {
+  return aggregate.template get<Tag>(entity);
 }
 
-/// \brief Get the data tagged by the given tag from the given entity view
-template <typename Tag, stk::topology::topology_t OurTopology, stk::topology::rank_t OurRank, typename... Components>
-decltype(auto) get(EntityView<OurTopology, OurRank, Components...>& entity_view) {
-  return entity_view.template get<Tag>();
+/// \brief Get the data tagged by the given tag from the given aggregate and entity
+template <typename Tag, typename... Components>
+decltype(auto) get(Aggregate<Components...>& aggregate, stk::mesh::Entity entity) {
+  return aggregate.template get<Tag>(entity);
 }
 
-/// \brief Get the data tagged by the given tag from the given entity view
-template <typename Tag, stk::topology::topology_t OurTopology, stk::topology::rank_t OurRank, typename... Components>
-decltype(auto) get(const EntityView<OurTopology, OurRank, Components...>& entity_view, unsigned connectivity_ordinal) {
-  return entity_view.template get<Tag>(connectivity_ordinal);
+/// \brief Get the data tagged by the given tag from the given aggregate and entity index (const)
+template <typename Tag, typename... Components>
+KOKKOS_INLINE_FUNCTION decltype(auto) get(const NgpAggregate<Components...>& aggregate,
+                                          stk::mesh::FastMeshIndex entity_index) {
+  return aggregate.template get<Tag>(entity_index);
 }
 
-/// \brief Get the data tagged by the given tag from the given entity view
-template <typename Tag, stk::topology::topology_t OurTopology, stk::topology::rank_t OurRank, typename... Components>
-decltype(auto) get(EntityView<OurTopology, OurRank, Components...>& entity_view, unsigned connectivity_ordinal) {
-  return entity_view.template get<Tag>(connectivity_ordinal);
+/// \brief Get the data tagged by the given tag from the given aggregate and entity index
+template <typename Tag, typename... Components>
+KOKKOS_INLINE_FUNCTION decltype(auto) get(NgpAggregate<Components...>& aggregate,
+                                          stk::mesh::FastMeshIndex entity_index) {
+  return aggregate.template get<Tag>(entity_index);
 }
 
-/// \brief Get the data tagged by the given tag from the given entity view (const)
-template <typename Tag, stk::topology::topology_t OurTopology, stk::topology::rank_t OurRank, typename... Components>
-KOKKOS_INLINE_FUNCTION decltype(auto) get(const NgpEntityView<OurTopology, OurRank, Components...>& entity_view) {
-  return entity_view.template get<Tag>();
+/// \brief Get the data tagged by the given tag from the given aggregate and entity (const)
+template <typename Tag, typename... Components>
+KOKKOS_INLINE_FUNCTION decltype(auto) get(const NgpAggregate<Components...>& aggregate, stk::mesh::Entity entity) {
+  return aggregate.template get<Tag>(entity);
 }
 
-/// \brief Get the data tagged by the given tag from the given entity view
-template <typename Tag, stk::topology::topology_t OurTopology, stk::topology::rank_t OurRank, typename... Components>
-KOKKOS_INLINE_FUNCTION decltype(auto) get(NgpEntityView<OurTopology, OurRank, Components...>& entity_view) {
-  return entity_view.template get<Tag>();
-}
-
-/// \brief Get the data tagged by the given tag from the given entity view
-template <typename Tag, stk::topology::topology_t OurTopology, stk::topology::rank_t OurRank, typename... Components>
-KOKKOS_INLINE_FUNCTION decltype(auto) get(const NgpEntityView<OurTopology, OurRank, Components...>& entity_view,
-                                          unsigned connectivity_ordinal) {
-  return entity_view.template get<Tag>(connectivity_ordinal);
-}
-
-/// \brief Get the data tagged by the given tag from the given entity view
-template <typename Tag, stk::topology::topology_t OurTopology, stk::topology::rank_t OurRank, typename... Components>
-KOKKOS_INLINE_FUNCTION decltype(auto) get(NgpEntityView<OurTopology, OurRank, Components...>& entity_view,
-                                          unsigned connectivity_ordinal) {
-  return entity_view.template get<Tag>(connectivity_ordinal);
+/// \brief Get the data tagged by the given tag from the given aggregate and entity
+template <typename Tag, typename... Components>
+KOKKOS_INLINE_FUNCTION decltype(auto) get(NgpAggregate<Components...>& aggregate, stk::mesh::Entity entity) {
+  return aggregate.template get<Tag>(entity);
 }
 
 /// \brief A helper function for getting the NGP aggregate from a regular aggregate
-template <stk::topology::topology_t OurTopology, stk::topology::rank_t OurRank, typename... TaggedComponents>
-auto get_updated_ngp_aggregate(const Aggregate<OurTopology, OurRank, TaggedComponents...>& aggregate) {
+template <typename... TaggedComponents>
+auto get_updated_ngp_aggregate(const Aggregate<TaggedComponents...>& aggregate) {
   auto ngp_mesh = stk::mesh::get_updated_ngp_mesh(aggregate.bulk_data());
 
   auto ngp_components =
       make_tuple(get_updated_ngp_component(aggregate.template get_component<typename TaggedComponents::tag_type>())...);
 
-  return NgpAggregate<OurTopology, OurRank,
-                      std::decay_t<decltype(get_updated_ngp_component(
-                          aggregate.template get_component<typename TaggedComponents::tag_type>()))>...>(
-      ngp_mesh, aggregate.selector(), ngp_components);
+  return NgpAggregate<std::decay_t<decltype(get_updated_ngp_component(
+      aggregate.template get_component<typename TaggedComponents::tag_type>()))>...>(ngp_mesh, aggregate.selector(),
+                                                                                     ngp_components);
 }
 
 }  // namespace mesh

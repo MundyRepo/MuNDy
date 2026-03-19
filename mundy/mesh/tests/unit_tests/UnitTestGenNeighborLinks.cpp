@@ -60,9 +60,11 @@ class BoundingSphereGen {
 
   KOKKOS_INLINE_FUNCTION
   Sphere<double> operator()(const stk::mesh::FastMeshIndex& sphere_index) const {
-    auto sphere_view = ngp_sphere_agg_.get_view(sphere_index);
-    auto center = get<CENTER>(sphere_view, 0);
-    double radius = get<RADIUS>(sphere_view)[0];
+    const auto connected_nodes = ngp_sphere_agg_.ngp_mesh().get_connected_entities(
+        stk::topology::ELEM_RANK, sphere_index, stk::topology::NODE_RANK);
+    const stk::mesh::FastMeshIndex center_node_index = ngp_sphere_agg_.ngp_mesh().fast_mesh_index(connected_nodes[0]);
+    auto center = ngp_sphere_agg_.template get<CENTER>(center_node_index);
+    double radius = ngp_sphere_agg_.template get<RADIUS>(sphere_index)[0];
     return Sphere<double>(center, radius);
   }
 
@@ -118,9 +120,9 @@ TEST(GenNeighborLinks, BasicUsage) {
   // Create a sphere aggregate
   auto coords_accessor = Vector3FieldComponent(node_coords_field);
   auto radius_accessor = ScalarFieldComponent(elem_radius_field);
-  auto spheres = make_aggregate<stk::topology::PARTICLE>(bulk_data, spheres_part)
-                     .add_component<CENTER, NODE_RANK>(coords_accessor)
-                     .add_component<RADIUS, ELEM_RANK>(radius_accessor);
+  auto spheres = make_aggregate(bulk_data, spheres_part)
+                     .add_component<CENTER>(coords_accessor)
+                     .add_component<RADIUS>(radius_accessor);
 
   // Create the generator
   auto bounding_sphere_gen = BoundingSphereGen(get_updated_ngp_aggregate(spheres));

@@ -469,7 +469,7 @@ TEST_F(UnitTestAccessorExprFixture, field_fill) {
   auto expected_value_func = [fill_value](const double* /*entity_coords*/) { return std::vector<double>{fill_value}; };
 
   stk::mesh::Selector b1_not_b2 = block1_selector_ - block2_selector_;
-  auto x = make_tagged_component<XTag, stk::topology::NODE_RANK>(ScalarFieldComponent(*field_x_ptr_));
+  auto x = make_tagged_component<XTag>(ScalarFieldComponent(*field_x_ptr_));
 
   {
     auto es = make_entity_expr(get_bulk(), b1_not_b2, stk::topology::NODE_RANK);
@@ -498,8 +498,8 @@ TEST_F(UnitTestAccessorExprFixture, field_copy) {
 #endif
 
   stk::mesh::Selector b1_not_b2 = block1_selector_ - block2_selector_;
-  auto x = make_tagged_component<XTag, stk::topology::NODE_RANK>(ScalarFieldComponent(*field_x_ptr_));
-  auto y = make_tagged_component<YTag, stk::topology::NODE_RANK>(ScalarFieldComponent(*field_y_ptr_));
+  auto x = make_tagged_component<XTag>(ScalarFieldComponent(*field_x_ptr_));
+  auto y = make_tagged_component<YTag>(ScalarFieldComponent(*field_y_ptr_));
 
   {
     auto es = make_entity_expr(get_bulk(), b1_not_b2, stk::topology::NODE_RANK);
@@ -529,8 +529,8 @@ TEST_F(UnitTestAccessorExprFixture, field_swap) {
 #endif
 
   stk::mesh::Selector b1_not_b2 = block1_selector_ - block2_selector_;
-  auto x = make_tagged_component<XTag, stk::topology::NODE_RANK>(ScalarFieldComponent(*field_x_ptr_));
-  auto y = make_tagged_component<YTag, stk::topology::NODE_RANK>(ScalarFieldComponent(*field_y_ptr_));
+  auto x = make_tagged_component<XTag>(ScalarFieldComponent(*field_x_ptr_));
+  auto y = make_tagged_component<YTag>(ScalarFieldComponent(*field_y_ptr_));
 
   {
     auto es = make_entity_expr(get_bulk(), b1_not_b2, stk::topology::NODE_RANK);
@@ -584,7 +584,7 @@ TEST_F(UnitTestAccessorExprFixture, field_scale) {
   };
 
   stk::mesh::Selector b1_not_b2 = block1_selector_ - block2_selector_;
-  auto x = make_tagged_component<XTag, stk::topology::NODE_RANK>(ScalarFieldComponent(*field_x_ptr_));
+  auto x = make_tagged_component<XTag>(ScalarFieldComponent(*field_x_ptr_));
 
   {
     auto es = make_entity_expr(get_bulk(), b1_not_b2, stk::topology::NODE_RANK);
@@ -619,9 +619,9 @@ TEST_F(UnitTestAccessorExprFixture, field_product) {
   };
 
   stk::mesh::Selector b1_not_b2 = block1_selector_ - block2_selector_;
-  auto x = make_tagged_component<XTag, stk::topology::NODE_RANK>(ScalarFieldComponent(*field_x_ptr_));
-  auto y = make_tagged_component<YTag, stk::topology::NODE_RANK>(ScalarFieldComponent(*field_y_ptr_));
-  auto z = make_tagged_component<ZTag, stk::topology::NODE_RANK>(ScalarFieldComponent(*field_z_ptr_));
+  auto x = make_tagged_component<XTag>(ScalarFieldComponent(*field_x_ptr_));
+  auto y = make_tagged_component<YTag>(ScalarFieldComponent(*field_y_ptr_));
+  auto z = make_tagged_component<ZTag>(ScalarFieldComponent(*field_z_ptr_));
 
   {
     auto es = make_entity_expr(get_bulk(), b1_not_b2, stk::topology::NODE_RANK);
@@ -661,8 +661,8 @@ TEST_F(UnitTestAccessorExprFixture, field_axpby) {
   };
 
   stk::mesh::Selector b1_not_b2 = block1_selector_ - block2_selector_;
-  auto x = make_tagged_component<XTag, stk::topology::NODE_RANK>(ScalarFieldComponent(*field_x_ptr_));
-  auto y = make_tagged_component<YTag, stk::topology::NODE_RANK>(ScalarFieldComponent(*field_y_ptr_));
+  auto x = make_tagged_component<XTag>(ScalarFieldComponent(*field_x_ptr_));
+  auto y = make_tagged_component<YTag>(ScalarFieldComponent(*field_y_ptr_));
 
   {
     auto es = make_entity_expr(get_bulk(), b1_not_b2, stk::topology::NODE_RANK);
@@ -842,8 +842,8 @@ TEST_F(UnitTestAccessorExprFixture, field_dot) {
 #endif
 
   stk::mesh::Selector b1_not_b2 = block1_selector_ - block2_selector_;
-  auto x = make_tagged_component<XTag, stk::topology::NODE_RANK>(ScalarFieldComponent(*field_x_ptr_));
-  auto y = make_tagged_component<YTag, stk::topology::NODE_RANK>(ScalarFieldComponent(*field_y_ptr_));
+  auto x = make_tagged_component<XTag>(ScalarFieldComponent(*field_x_ptr_));
+  auto y = make_tagged_component<YTag>(ScalarFieldComponent(*field_y_ptr_));
 
   auto es = make_entity_expr(get_bulk(), b1_not_b2, stk::topology::NODE_RANK);
   double actual_dot = all_reduce_sum<double>(x(es) * y(es));
@@ -867,8 +867,8 @@ TEST_F(UnitTestAccessorExprFixture, quick_perf_test_against_blas) {
 #endif
 
   stk::mesh::Selector b1_not_b2 = block1_selector_ - block2_selector_;
-  auto x = make_tagged_component<XTag, stk::topology::NODE_RANK>(ScalarFieldComponent(*field_x_ptr_));
-  auto y = make_tagged_component<YTag, stk::topology::NODE_RANK>(ScalarFieldComponent(*field_y_ptr_));
+  auto x = make_tagged_component<XTag>(ScalarFieldComponent(*field_x_ptr_));
+  auto y = make_tagged_component<YTag>(ScalarFieldComponent(*field_y_ptr_));
 
   auto es = make_entity_expr(get_bulk(), b1_not_b2, stk::topology::NODE_RANK);
 

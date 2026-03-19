@@ -31,12 +31,12 @@
 #include <mundy_math/Vector3.hpp>
 #include <mundy_mesh/Aggregate.hpp>
 #include <mundy_mesh/Component.hpp>
-#include <mundy_mesh/FieldComponent.hpp>
-#include <mundy_mesh/SharedComponent.hpp>
 #include <mundy_mesh/DeclareComponent.hpp>
 #include <mundy_mesh/DeclarePart.hpp>
+#include <mundy_mesh/FieldComponent.hpp>
 #include <mundy_mesh/FieldViews.hpp>
 #include <mundy_mesh/MeshBuilder.hpp>
+#include <mundy_mesh/SharedComponent.hpp>
 
 namespace mundy {
 
@@ -111,16 +111,14 @@ TEST(UnitTestComponentDeclaration, FieldAndSharedDeclarationsIntegrateWithAggreg
   vector3_field_data(coords.component().field(), elem1).set(1.0, 2.0, 3.0);
   coords.modify_on_host();
 
-  auto agg =
-      make_aggregate<stk::topology::PARTICLE>(bulk_data, particle_part).add_component(coords).add_component(speed);
+  auto agg = make_aggregate(bulk_data, particle_part).add_component(coords).add_component(speed);
 
   EXPECT_EQ(agg.get_component<DECLARED_COORDS>().component().field().mesh_meta_data_ordinal(),
             coords.component().field().mesh_meta_data_ordinal());
   EXPECT_EQ(stk::mesh::field_scalars_per_entity(coords.component().field(), elem1), 3u);
 
-  auto view = agg.get_view(elem1);
-  auto coords_view = view.template get<DECLARED_COORDS>();
-  auto speed_view = view.template get<DECLARED_SPEED>();
+  auto coords_view = agg.get<DECLARED_COORDS>(elem1);
+  auto speed_view = agg.get<DECLARED_SPEED>(elem1);
 
   EXPECT_DOUBLE_EQ(coords_view[0], 1.0);
   EXPECT_DOUBLE_EQ(coords_view[1], 2.0);

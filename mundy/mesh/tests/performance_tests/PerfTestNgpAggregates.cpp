@@ -18,7 +18,6 @@
 // **********************************************************************************************************************
 // @HEADER
 
-
 #define ANKERL_NANOBENCH_IMPLEMENT
 
 // C++ core libs
@@ -56,13 +55,19 @@ namespace mesh {
 
 namespace {
 
+template <typename NgpSphereAggregate>
 struct compute_velocity {
+  NgpSphereAggregate sphere_data;
   double one_over_6pi_mu;
+
   KOKKOS_INLINE_FUNCTION
-  void operator()(auto& sphere_view) const {
-    auto force = get<FORCE>(sphere_view, 0);
-    auto velocity = get<VELOCITY>(sphere_view, 0);
-    auto radius = get<RADIUS>(sphere_view);
+  void operator()(const stk::mesh::FastMeshIndex& sphere_index) const {
+    const auto connected_nodes =
+        sphere_data.ngp_mesh().get_connected_entities(stk::topology::ELEM_RANK, sphere_index, stk::topology::NODE_RANK);
+    const stk::mesh::FastMeshIndex node_index = sphere_data.ngp_mesh().fast_mesh_index(connected_nodes[0]);
+    auto force = sphere_data.template get<FORCE>(node_index);
+    auto velocity = sphere_data.template get<VELOCITY>(node_index);
+    auto radius = sphere_data.template get<RADIUS>(sphere_index);
     double inv_radius = 1.0 / radius[0];
     velocity = (one_over_6pi_mu * inv_radius) * force;
   }
@@ -123,17 +128,18 @@ void test_aggregate(const stk::mesh::BulkData& bulk_data, stk::mesh::Part& spher
   auto radius_accessor = ScalarFieldComponent(elem_radius_field);
 
   // Create an aggregate for the spheres
-  const auto sphere_data = make_aggregate<stk::topology::PARTICLE>(bulk_data, sphere_part)
-                               .add_component<CENTER, stk::topology::NODE_RANK>(center_accessor)
-                               .add_component<FORCE, stk::topology::NODE_RANK>(force_accessor)
-                               .add_component<VELOCITY, stk::topology::NODE_RANK>(velocity_accessor)
-                               .add_component<RADIUS, stk::topology::ELEM_RANK>(radius_accessor);
+  const auto sphere_data = make_aggregate(bulk_data, sphere_part)
+                               .add_component<CENTER>(center_accessor)
+                               .add_component<FORCE>(force_accessor)
+                               .add_component<VELOCITY>(velocity_accessor)
+                               .add_component<RADIUS>(radius_accessor);
 
   auto ngp_sphere_data = get_updated_ngp_aggregate(sphere_data);
   ngp_sphere_data.template sync_to_device<CENTER, FORCE, VELOCITY, RADIUS>();
 
   // Compute the velocity of each sphere according to drag v = f / (6 * pi * r * mu)
-  ngp_sphere_data.template for_each(compute_velocity{one_over_6pi_mu});
+  ::mundy::mesh::for_each_entity_run(ngp_sphere_data.ngp_mesh(), stk::topology::ELEM_RANK, ngp_sphere_data.selector(),
+                                     compute_velocity<decltype(ngp_sphere_data)>{ngp_sphere_data, one_over_6pi_mu});
 
   ngp_sphere_data.template modify_on_device<VELOCITY>();
   Kokkos::fence();

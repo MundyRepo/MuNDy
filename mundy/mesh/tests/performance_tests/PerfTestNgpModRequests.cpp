@@ -21,11 +21,11 @@
 #define ANKERL_NANOBENCH_IMPLEMENT
 
 // C++ core
+#include <iostream>
 #include <limits>
 #include <memory>
 #include <string>
 #include <vector>
-#include <iostream>
 
 // External
 #include "nanobench.h"

@@ -283,15 +283,15 @@ inline decltype(auto) component_backing_field(const ComponentType& component) {
   return component.field();
 }
 
-template <typename Tag, stk::topology::rank_t our_rank, typename ComponentType>
+template <typename Tag, typename ComponentType>
   requires requires(ComponentType& component) { component_backing_field(component); }
-inline decltype(auto) component_backing_field(TaggedComponent<Tag, our_rank, ComponentType>& tagged_component) {
+inline decltype(auto) component_backing_field(TaggedComponent<Tag, ComponentType>& tagged_component) {
   return component_backing_field(tagged_component.component());
 }
 
-template <typename Tag, stk::topology::rank_t our_rank, typename ComponentType>
+template <typename Tag, typename ComponentType>
   requires requires(const ComponentType& component) { component_backing_field(component); }
-inline decltype(auto) component_backing_field(const TaggedComponent<Tag, our_rank, ComponentType>& tagged_component) {
+inline decltype(auto) component_backing_field(const TaggedComponent<Tag, ComponentType>& tagged_component) {
   return component_backing_field(tagged_component.component());
 }
 

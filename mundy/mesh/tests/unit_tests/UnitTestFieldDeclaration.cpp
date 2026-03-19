@@ -81,10 +81,10 @@ TEST(UnitTestFieldDeclaration, RequiresTypeRankAndNameBeforeDeclare) {
 
   EXPECT_THROW((void)FieldDeclarationHelper(meta_data).rank(stk::topology::ELEM_RANK).name("MISSING_TYPE").declare(),
                std::logic_error);
-  EXPECT_THROW((void)FieldDeclarationHelper(meta_data).type<double>().name("MISSING_RANK").declare(),
-               std::logic_error);
-  EXPECT_THROW((void)FieldDeclarationHelper(meta_data).type<double>().rank(stk::topology::ELEM_RANK).declare(), // Missing name
-               std::logic_error);
+  EXPECT_THROW((void)FieldDeclarationHelper(meta_data).type<double>().name("MISSING_RANK").declare(), std::logic_error);
+  EXPECT_THROW(
+      (void)FieldDeclarationHelper(meta_data).type<double>().rank(stk::topology::ELEM_RANK).declare(),  // Missing name
+      std::logic_error);
 }
 
 }  // namespace

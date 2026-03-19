@@ -200,15 +200,14 @@ template <typename AccessLike>
 using canonical_component_access_t = typename canonical_component_access<AccessLike>::type;
 
 /// \brief A small helper type for tying a Tag to an underlying component
-template <typename Tag, stk::topology::rank_t our_rank, typename ComponentType>
+template <typename Tag, typename ComponentType>
 class TaggedComponent {
  public:
-  using our_t = TaggedComponent<Tag, our_rank, ComponentType>;
+  using our_t = TaggedComponent<Tag, ComponentType>;
   using view_t = typename ComponentType::view_t;
   using tag_type = Tag;
   using component_type = ComponentType;
   using canonical_access = typename component_type::canonical_access;
-  static constexpr stk::topology::rank_t rank = our_rank;
 
   TaggedComponent(component_type component) : component_(component) {
   }
@@ -268,26 +267,19 @@ class TaggedComponent {
   component_type component_;
 };  // TaggedComponent
 
-template <typename Tag, stk::topology::rank_t our_rank, typename ComponentType>
-TaggedComponent<Tag, our_rank, ComponentType> make_tagged_component(ComponentType component) {
-  return TaggedComponent<Tag, our_rank, ComponentType>(component);
-}
-
 template <typename Tag, typename ComponentType>
-  requires HasComponentTagTraits<Tag>
 auto make_tagged_component(ComponentType component) {
-  return TaggedComponent<Tag, component_tag_traits<Tag>::rank, ComponentType>(component);
+  return TaggedComponent<Tag, ComponentType>(component);
 }
 
 /// \brief A small helper type for tying a Tag to an underlying ngp-compatible component
-template <typename Tag, stk::topology::rank_t our_rank, typename NgpComponentType>
+template <typename Tag, typename NgpComponentType>
 class NgpTaggedComponent {
  public:
-  using our_t = NgpTaggedComponent<Tag, our_rank, NgpComponentType>;
+  using our_t = NgpTaggedComponent<Tag, NgpComponentType>;
   using view_t = typename NgpComponentType::view_t;
   using tag_type = Tag;
   using component_type = NgpComponentType;
-  static constexpr stk::topology::rank_t rank = our_rank;
 
   NgpTaggedComponent() = default;
   NgpTaggedComponent(component_type component) : component_(component) {
@@ -311,9 +303,6 @@ class NgpTaggedComponent {
   ///   auto get_v3_expr = v3_accessor(all_nodes);
   template <class EntityExpr>
   auto operator()(const EntityExprBase<EntityExpr>& e) const {
-    MUNDY_THROW_REQUIRE(
-        e.rank() == rank, std::runtime_error,
-        fmt::format("Attempting to access field of rank {} on entity expression of rank {}", rank, e.rank()));
     return AccessorExpr<our_t, EntityExpr>(*this, e.self());
   }
 
@@ -355,20 +344,16 @@ class NgpTaggedComponent {
   component_type component_;
 };  // NgpTaggedComponent
 
-template <typename Tag, stk::topology::rank_t our_rank, typename ComponentType>
-decltype(auto) get_updated_ngp_component(const TaggedComponent<Tag, our_rank, ComponentType>& tagged_component) {
+template <typename Tag, typename ComponentType>
+decltype(auto) get_updated_ngp_component(const TaggedComponent<Tag, ComponentType>& tagged_component) {
   auto ngp_component = get_updated_ngp_component(tagged_component.component());
   using ngp_component_type = std::remove_reference_t<decltype(ngp_component)>;
-  return NgpTaggedComponent<Tag, our_rank, ngp_component_type>(ngp_component);
+  return NgpTaggedComponent<Tag, ngp_component_type>(ngp_component);
 }
 
-template <typename Tag, stk::topology::rank_t our_rank, typename ComponentType>
+template <typename Tag, typename ComponentType>
 template <class EntityExpr>
-auto TaggedComponent<Tag, our_rank, ComponentType>::operator()(const EntityExprBase<EntityExpr>& e) const {
-  MUNDY_THROW_REQUIRE(
-      e.rank() == rank, std::runtime_error,
-      fmt::format("Attempting to access field of rank {} on entity expression of rank {}", rank, e.rank()));
-
+auto TaggedComponent<Tag, ComponentType>::operator()(const EntityExprBase<EntityExpr>& e) const {
   // Entity expressions are (currently) always on the device, so we need to get the NGP tagged component
   // TODO(palmerb4): Allow for exec_spaces that aren't simply the default execution space (need Tril 16.1+)
   auto ngp_this = get_updated_ngp_component(*this);

@@ -346,7 +346,7 @@ class TaggedFieldComponentDeclarationHelperT {
     if constexpr (std::is_void_v<Tag>) {
       return component;
     } else {
-      return make_tagged_component<Tag, Rank>(component);
+      return make_tagged_component<Tag>(component);
     }
   }
 
@@ -428,7 +428,7 @@ class TaggedSharedComponentDeclarationHelperT {
     if constexpr (std::is_void_v<Tag>) {
       return component;
     } else {
-      return make_tagged_component<Tag, Rank>(component);
+      return make_tagged_component<Tag>(component);
     }
   }
 
