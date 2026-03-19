@@ -29,6 +29,7 @@
 
 // C++ core
 #include <iostream>   // for std::ostream
+#include <memory>     // for std::shared_ptr
 #include <stdexcept>  // for std::runtime_error
 #include <vector>     // for std::vector
 
@@ -136,6 +137,31 @@ class PartDeclarationHelper {
     return *this;
   }
 
+  /// \brief Create a scalar-valued field restriction for this part (optional) with the given initial value
+  template <typename FieldType>
+  PartDeclarationHelper put_field(FieldType& field, const typename FieldType::value_type* init_value) {
+    field_restrictions_.push_back(std::make_shared<DeclareScalarFieldRestriction<FieldType>>(field, init_value));
+    return *this;
+  }
+
+  /// \brief Create a vector-valued field restriction for this part (optional) with the given initial value and n1
+  /// values per entity
+  template <typename FieldType>
+  PartDeclarationHelper put_field(FieldType& field, unsigned n1, const typename FieldType::value_type* init_value) {
+    field_restrictions_.push_back(std::make_shared<DeclareVectorFieldRestriction<FieldType>>(field, n1, init_value));
+    return *this;
+  }
+
+  /// \brief Create a tensor-valued field restriction for this part (optional) with the given initial value and n1 x n2
+  /// values per entity
+  template <typename FieldType>
+  PartDeclarationHelper put_field(FieldType& field, unsigned n1, unsigned n2,
+                                  const typename FieldType::value_type* init_value) {
+    field_restrictions_.push_back(
+        std::make_shared<DeclareTensorFieldRestriction<FieldType>>(field, n1, n2, init_value));
+    return *this;
+  }
+
   /// \brief Declare a part with the given properties.
   stk::mesh::Part& declare() {
     // Validate that required parameters have been set
@@ -205,6 +231,60 @@ class PartDeclarationHelper {
   //@}
 
  private:
+  struct DeclareFieldRestrictionBase {
+    virtual ~DeclareFieldRestrictionBase() = default;
+    virtual void apply(stk::mesh::Part& part) = 0;
+  };
+
+  template <typename FieldType>
+  struct DeclareScalarFieldRestriction : public DeclareFieldRestrictionBase {
+    DeclareScalarFieldRestriction(FieldType& field, const typename FieldType::value_type* init_value)
+        : field_(field), init_value_(init_value) {
+    }
+
+    void apply(stk::mesh::Part& part) override {
+      stk::mesh::put_field_on_mesh(field_, part, init_value_);
+    }
+
+   private:
+    FieldType& field_;
+    const typename FieldType::value_type* init_value_;
+  };
+
+  template <typename FieldType>
+  struct DeclareVectorFieldRestriction : public DeclareFieldRestrictionBase {
+    DeclareVectorFieldRestriction(FieldType& field, unsigned n1, const typename FieldType::value_type* init_value)
+        : field_(field), n1_(n1), init_value_(init_value) {
+    }
+
+    void apply(stk::mesh::Part& part) override {
+      stk::mesh::put_field_on_mesh(field_, part, n1_, init_value_);
+    }
+
+   private:
+    FieldType& field_;
+    unsigned n1_;
+    const typename FieldType::value_type* init_value_;
+  };
+
+  template <typename FieldType>
+  struct DeclareTensorFieldRestriction : public DeclareFieldRestrictionBase {
+    DeclareTensorFieldRestriction(FieldType& field, unsigned n1, unsigned n2,
+                                  const typename FieldType::value_type* init_value)
+        : field_(field), n1_(n1), n2_(n2), init_value_(init_value) {
+    }
+
+    void apply(stk::mesh::Part& part) override {
+      stk::mesh::put_field_on_mesh(field_, part, n1_, n2_, init_value_);
+    }
+
+   private:
+    FieldType& field_;
+    unsigned n1_;
+    unsigned n2_;
+    const typename FieldType::value_type* init_value_;
+  };
+
   void apply_optional_properties(stk::mesh::Part& part) {
     // Apply optional subparts
     if (part_has_subparts_) {
@@ -231,6 +311,11 @@ class PartDeclarationHelper {
           // Do nothing
           break;
       }
+    }
+
+    // Apply optional field restrictions
+    for (const auto& restriction : field_restrictions_) {
+      restriction->apply(part);
     }
   }
 
@@ -266,6 +351,7 @@ class PartDeclarationHelper {
   stk::topology::topology_t part_topology_;
   std::vector<unsigned> subset_part_ids_;
   IOPartRole part_role_;
+  std::vector<std::shared_ptr<DeclareFieldRestrictionBase>> field_restrictions_;
 };
 
 }  // namespace mesh

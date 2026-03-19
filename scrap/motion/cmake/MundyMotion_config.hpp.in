@@ -1,6 +1,0 @@
-#ifndef MUNDYMOTION_CONFIG_H
-#define MUNDYMOTION_CONFIG_H
-
-// Declare special variables, especially those related to optional features, TPLs, and workarounds.
-
-#endif  // MUNDYMOTION_CONFIG_H
