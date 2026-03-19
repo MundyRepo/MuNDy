@@ -13,6 +13,7 @@ tribits_package_define_dependencies(
     Utils core/utils PT OPTIONAL
     Math  core/math PT OPTIONAL
     Geom  core/geom PT OPTIONAL
+    Mech  core/mech PT OPTIONAL
     Mesh  mesh PT OPTIONAL
   REGRESSION_EMAIL_LIST brycepalmer96@gmail.com
 )

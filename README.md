@@ -9,13 +9,14 @@ MuNDy is a C++ framework for high-performance simulation of **multibody nonlocal
 ![Mesh-STK](https://img.shields.io/badge/mesh-Trilinos%2FSTK-4CAF50.svg)
 
 > [!IMPORTANT]  
-> **Project status (12/2/2025):** 
-> MuNDy is under active development. We have chosen to make development public as we move toward a first formal release targeted for **summer 2026**.
+> **Project status (3/18/2026):**
+> MuNDy is under active development. We have chosen to make development public as we move toward a first formal release targeted for **Late June 2026**.
 
 ---
 
 ## Table of Contents
 
+- [Installation via Spack](#installation-via-spack)
 - [Organizational Overview](#organizational-overview)
 - [Subpackages](#subpackages)
   - [MundyUtils: Centralized reusable utilities](#mundyutils-centralized-reusable-utilities)
@@ -27,6 +28,34 @@ MuNDy is a C++ framework for high-performance simulation of **multibody nonlocal
 - [Release Roadmap](#release-roadmap)
 
 ---
+
+## Installation via Spack
+
+If you already have Spack installed, start at `spack repo add`. Otherwise, from the MuNDy source tree:
+
+```bash
+git clone --depth=2 --branch=releases/v0.23 https://github.com/spack/spack.git ./spack
+. ./spack/share/spack/setup-env.sh
+
+# Add MuNDy's Spack package repository | Tells Spack where to find the MuNDy package recipes
+spack repo add ./dep/our_spack_packages
+```
+
+You only need to add the MuNDy package repository once per Spack installation. After that, install the configuration you want:
+
+```bash
+# MuNDy's reusable header-only core
+spack install --add mundy +core
+
+# Core + mesh support
+spack install --add mundy +core +mesh
+
+# Core + mesh support with CUDA (example: sm_90 / CUDA 12.3.107)
+spack install --add mundy +core +mesh +cuda cuda_arch=90 ^cuda@12.3.107
+```
+
+`+mesh` automatically pulls in the required Trilinos `Teuchos` and `STK` support. MuNDy's current subpackages also require `OpenRAND`, which is enabled by default in the Spack recipe.
+
 
 ## Organizational Overview
 

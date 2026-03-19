@@ -43,7 +43,7 @@ class Mundy(CMakePackage, CudaPackage):
     tags = ["???"]
 
     version("main", branch="main", submodules=True)
-    version("dev", branch="polishing", submodules=True)
+    version("dev", branch="main", submodules=True)
     # version("#.#.#", sha256="<fill-me-in>", submodules=True)
 
     #
@@ -70,29 +70,25 @@ class Mundy(CMakePackage, CudaPackage):
     #
     # Internal MuNDy package variants
     #
+    variant("core", default=True, description="Enable all of Mundy's core functionality (MundyUtils, MundyMath, MundyGeom, MundyMech)")
     variant("utils", default=True, description="Enable MundyUtils")
     variant("math", default=True, description="Enable MundyMath")
     variant("geom", default=True, description="Enable MundyGeom")
     variant("mech", default=True, description="Enable MundyMech")
-    variant("mesh", default=True, description="Enable MundyMesh")
+    variant("mesh", default=False, description="Enable MundyMesh")
 
     #
     # Internal package hierarchy
     #
-    with when("~utils"):
-        conflicts("+math", msg="MundyMath requires MundyUtils")
-        conflicts("+geom", msg="MundyGeom requires MundyUtils")
-        conflicts("+mech", msg="MundyMech requires MundyUtils")
-        conflicts("+mesh", msg="MundyMesh requires MundyUtils")
+    requires("+utils", when="+core", msg="Enabling +core requires MundyUtils")
+    requires("+math", when="+core", msg="Enabling +core requires MundyMath")
+    requires("+geom", when="+core", msg="Enabling +core requires MundyGeom")
+    requires("+mech", when="+core", msg="Enabling +core requires MundyMech")
 
-    with when("~math"):
-        conflicts("+geom", msg="MundyGeom requires MundyMath")
-        conflicts("+mech", msg="MundyMech requires MundyMath")
-        conflicts("+mesh", msg="MundyMesh requires MundyMath")
-
-    with when("~geom"):
-        conflicts("+mech", msg="MundyMech requires MundyGeom")
-        conflicts("+mesh", msg="MundyMesh requires MundyGeom")
+    requires("+utils", when="+math", msg="MundyMath requires MundyUtils")
+    requires("+math", when="+geom", msg="MundyGeom requires MundyMath")
+    requires("+geom", when="+mesh", msg="MundyMesh requires MundyGeom")
+    requires("+geom", when="+mech", msg="MundyMech requires MundyGeom")
 
     #
     # Optional TPL / feature variants
@@ -101,7 +97,7 @@ class Mundy(CMakePackage, CudaPackage):
     variant("teuchos", default=False, description="Enable Teuchos support")
     variant("stk", default=False, description="Enable STK support")
     variant("kokkos-kernels", default=False, description="Enable KokkosKernels support")
-    variant("openrand", default=False, description="Enable OpenRAND support")
+    variant("openrand", default=True, description="Enable OpenRAND support")
 
     #
     # Build tools
@@ -129,55 +125,14 @@ class Mundy(CMakePackage, CudaPackage):
     depends_on("googletest@1.16.0:", when="+unit_tests")
 
     #
-    # Optional TPL requirements induced by selected MuNDy packages
+    # Internal package implications for optional TPLs
     #
-    with when("~stk"):
-        conflicts("+mesh", msg="MundyMesh requires STK support")
-
-    with when("~teuchos"):
-        conflicts("+mesh", msg="MundyMesh requires Teuchos support")
-
-    with when("~openrand"):
-        conflicts("+mech", msg="MundyMech requires OpenRAND support")
-
-    #
-    # Test dependency requirements
-    #
-    with when("+performance_tests"):
-        with when("~openrand"):
-            conflicts("+math", msg="MundyMath tests require OpenRAND")
-            conflicts("+mech", msg="MundyMech requires OpenRAND support")
-
-    with when("+unit_tests"):
-        with when("~openrand"):
-            conflicts("+math", msg="MundyMath tests require OpenRAND")
-            conflicts("+mech", msg="MundyMech requires OpenRAND support")
+    requires("+openrand", when="+utils", msg="MuNDy packages currently require OpenRAND")
+    requires("+teuchos", when="+mesh", msg="MundyMesh requires Teuchos support")
+    requires("+stk", when="+mesh", msg="MundyMesh requires STK support")
+    requires("+teuchos", when="+stk", msg="STK support is expected to come with Teuchos")
 
     conflicts("+tests", when="~performance_tests ~unit_tests", msg="Enabling 'tests' requires at least one of +unit_tests or +performance_tests")
-
-    #
-    # Package-specific implication dependencies from the MuNDy hierarchy
-    #
-    conflicts("+math", when="~utils", msg="MundyMath requires MundyUtils")
-    conflicts("+geom", when="~math", msg="MundyGeom requires MundyMath")
-    conflicts("+mesh", when="~geom", msg="MundyMesh requires MundyGeom")
-    conflicts("+mesh", when="~math", msg="MundyMesh requires MundyMath")
-    conflicts("+mesh", when="~utils", msg="MundyMesh requires MundyUtils")
-    conflicts("+mech", when="~mesh", msg="MundyMech requires MundyMesh")
-    conflicts("+mech", when="~geom", msg="MundyMech requires MundyGeom")
-    conflicts("+mech", when="~math", msg="MundyMech requires MundyMath")
-    conflicts("+mech", when="~utils", msg="MundyMech requires MundyUtils")
-
-    #
-    # TPL requirements implied by selected internal packages
-    #
-    # conflicts("+utils", when="~kokkos", msg="MundyUtils requires Kokkos")  # defensive
-    # conflicts("+utils", when="~fmt",    msg="MundyUtils requires fmt")     # defensive
-    conflicts("+math", when="~utils",   msg="MundyMath requires MundyUtils")
-    conflicts("+geom", when="~utils",   msg="MundyGeom requires MundyUtils")
-    conflicts("+mesh", when="~stk",    msg="MundyMesh requires STK")
-    conflicts("+mesh", when="~teuchos", msg="MundyMesh requires Teuchos")
-    conflicts("+mech", when="~openrand", msg="MundyMech requires OpenRAND")
 
     #
     # CUDA-related dependency propagation
@@ -206,7 +161,6 @@ class Mundy(CMakePackage, CudaPackage):
         )
 
     conflicts("+cuda", when="~utils", msg="CUDA support requires at least MundyUtils")
-    conflicts("+stk", when="~teuchos", msg="STK support is expected to come with Teuchos")
 
     def cmake_args(self):
         spec = self.spec

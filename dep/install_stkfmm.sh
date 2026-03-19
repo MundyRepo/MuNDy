@@ -8,10 +8,10 @@ if [ "$#" -ne 1 ]; then
     exit 1
 fi
 
-# The directory where OpenRAND will be installed
+# The directory where STKFMM will be installed
 INSTALL_DIR=$1
 
-# Temporary directory for building OpenRAND
+# Temporary directory for building STKFMM
 BUILD_DIR="tmp_stkfmm"
 
 # Temporary directory for building

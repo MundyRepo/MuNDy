@@ -8,10 +8,10 @@ if [ "$#" -ne 1 ]; then
     exit 1
 fi
 
-# The directory where OpenRAND will be installed
+# The directory where PVFMM will be installed
 INSTALL_DIR=$1
 
-# Temporary directory for building OpenRAND
+# Temporary directory for building PVFMM
 BUILD_DIR="tmp_pvfmm"
 
 # Temporary directory for building
