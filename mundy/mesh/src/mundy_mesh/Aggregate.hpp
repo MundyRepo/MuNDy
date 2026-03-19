@@ -225,13 +225,11 @@ class NgpEntityView;
 ///   Matrix3FieldComponent                :  Field<scalar_t>                          ->  Matrix3View<scalar_t>
 ///   QuaternionFieldComponent             :  Field<scalar_t>                          ->  QuaternionView<scalar_t>
 ///   AABBFieldComponent                   :  Field<scalar_t>                          ->  AABBView<scalar_t>
-///   SharedViewComponent (size 1)         :  mundy::NgpVector<SharedType>             ->  SharedType&
+///   HostSharedComponent<SharedType>      :  SharedType                               ->  SharedType&
 ///   PartMappedComponent<OtherComponent>  :  Kokkos::Map<PartOrdinal, OtherComponent> -> OtherComponent's return type
 ///
-/// \note mundy::NgpVector is just a wrapper for a Kokkos::View and its host mirror with the necessary sync/modify
-/// methods. Just like Kokkos::Views, it takes ownership of the data it accesses. We cannot simply store a reference to
-/// the given SharedType, as we have no guarantee that the data will remain valid for the lifetime of the Accessor nor
-/// are we able to copy a reference to host memory to the device.
+/// \note HostSharedComponent may either alias a rank-1 Kokkos::View in HostSpace of extent 1 or copy a raw value into
+/// owned HostSpace storage.
 ///
 ///
 /// # Aggregates
@@ -269,7 +267,7 @@ class NgpEntityView;
 ///
 ///    // Create the accessors
 ///    auto center_accessor = make_scalar_field_accessor(center_field);
-///    auto radius_accessor = make_shared_view_accessor(mundy::NgpVector<float>{radius});  // Radius is copied
+///    auto radius_accessor = make_shared_view_accessor(radius);  // Copies radius into owned HostSpace storage
 ///
 ///    // Fetch the data for the entity via the accessor's operator()
 ///    Vector3View<double> center = center_accessor(elem1);

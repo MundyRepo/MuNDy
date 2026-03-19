@@ -22,6 +22,8 @@
 #define MUNDY_MESH_COMPONENTS_HPP_
 
 // C++ core
+#include <any>
+#include <memory>
 #include <tuple>
 #include <type_traits>  // for std::conditional_t, std::false_type, std::true_type
 #include <utility>      // for std::declval
@@ -38,13 +40,15 @@
 #include <stk_mesh/base/NgpField.hpp>     // for stk::mesh::NgpField
 #include <stk_mesh/base/NgpMesh.hpp>      // for stk::mesh::NgpMesh
 #include <stk_topology/topology.hpp>      // for stk::topology::topology_t
+#include <stk_util/ngp/NgpSpaces.hpp>     // for stk::ngp::MemSpace
 
 // Mundy
-#include <mundy_mesh/BulkData.hpp>            // for mundy::mesh::BulkData
-#include <mundy_mesh/FieldViews.hpp>          // for mundy::mesh::vector3_field_data, mundy::mesh::quaternion_field_data
-#include <mundy_mesh/ForEachEntity.hpp>       // for mundy::mesh::for_each_entity_run
-#include <mundy_mesh/NgpAccessorExpr.hpp>     // for mundy::mesh::AccessorExpr and EntityExprBase
-#include <mundy_mesh/fmt_stk_types.hpp>       // for STK-compatible fmt::format
+#include <mundy_mesh/BulkData.hpp>         // for mundy::mesh::BulkData
+#include <mundy_mesh/FieldViews.hpp>       // for mundy::mesh::vector3_field_data, mundy::mesh::quaternion_field_data
+#include <mundy_mesh/ForEachEntity.hpp>    // for mundy::mesh::for_each_entity_run
+#include <mundy_mesh/NgpAccessorExpr.hpp>  // for mundy::mesh::AccessorExpr and EntityExprBase
+#include <mundy_mesh/fmt_stk_types.hpp>    // for STK-compatible fmt::format
+#include <mundy_mesh/impl/HostDeviceSynchronizer.hpp>
 #include <mundy_utils/suppress_warnings.hpp>  // for MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_PUSH/POP
 #include <mundy_utils/throw_assert.hpp>       // for MUNDY_THROW_ASSERT
 #include <mundy_utils/tuple.hpp>              // for mundy::tuple
@@ -79,6 +83,12 @@ struct DENSITY;
 struct RNG_COUNTER;
 struct LINKED_ENTITIES;
 //@}
+
+template <typename SharedType>
+class HostSharedComponent;
+
+template <typename SharedType, typename NgpMemSpace>
+class NgpSharedComponent;
 
 //! \name Components
 //@{
@@ -142,6 +152,9 @@ class NgpFieldComponentBase {
 };  // NgpFieldComponentBase
 
 namespace impl {
+
+template <typename SharedType>
+class SharedComponentState;
 
 struct FieldDataAccessPolicy {
   template <typename FieldType>
@@ -219,6 +232,204 @@ struct AABBFieldAccessPolicy {
     return aabb_field_data(field, entity_index);
   }
 };
+
+template <typename SharedType>
+using shared_component_host_view_t =
+    Kokkos::View<SharedType*, Kokkos::HostSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged>>;
+
+template <typename SharedType>
+using owned_shared_component_host_view_t = Kokkos::View<SharedType*, Kokkos::HostSpace>;
+
+template <typename HostViewType, typename DeviceViewType, bool AliasesStorage>
+class SharedComponentSynchronizerT : public HostDeviceSynchronizer {
+ public:
+  SharedComponentSynchronizerT(HostViewType host_view, DeviceViewType device_view)
+      : host_view_(host_view), device_view_(device_view) {
+  }
+
+  void sync_to_device() override {
+    if constexpr (!AliasesStorage) {
+      Kokkos::deep_copy(device_view_, host_view_);
+    }
+  }
+
+  void sync_to_host() override {
+    if constexpr (!AliasesStorage) {
+      Kokkos::deep_copy(host_view_, device_view_);
+    }
+  }
+
+  void modify_on_host() override {
+  }
+
+  void modify_on_device() override {
+  }
+
+  void update_post_mesh_mod() override {
+  }
+
+ private:
+  HostViewType host_view_;
+  DeviceViewType device_view_;
+};  // SharedComponentSynchronizerT
+
+/// \brief Internal state shared by all shallow copies of a HostSharedComponent.
+///
+/// The public HostSharedComponent API intentionally hides this type. It exists so the host-side accessor can behave
+/// like a cheap view while still centralizing:
+///   - the canonical host representation of the shared value
+///   - lazy ownership/aliasing of the host storage
+///   - the cached ngp component stored in a std::any
+///   - the synchronizer and sync-state bookkeeping
+///
+/// Host-side access always goes through `host_view_`, which is a rank-1 unmanaged HostSpace view of extent 1. The
+/// underlying storage that `host_view_` aliases is kept alive by `host_owner_`:
+///   - if constructed from a raw value, we allocate an owned HostSpace view, stash it in `host_owner_`, and then point
+///   `host_view_` at that allocation
+///   - if constructed from a HostSpace Kokkos::View, we stash that exact view object in `host_owner_` and then point
+///   `host_view_` at its memory regardless of whether the given view was managed or unmanaged
+///
+/// This gives us one stable, non-owning HostSpace view for all downstream logic while preserving the lifetime semantics
+/// of the original input.
+template <typename SharedType>
+class SharedComponentState {
+ public:
+  static_assert(!std::is_reference_v<SharedType>, "SharedComponentState may not store a reference type.");
+
+  using shared_type = SharedType;
+  using host_view_type = shared_component_host_view_t<shared_type>;
+  using owned_host_view_type = owned_shared_component_host_view_t<shared_type>;
+
+  explicit SharedComponentState(shared_type host_value)
+      : host_view_(),
+        host_owner_(owned_host_view_type("host_shared_component_value", 1)),
+        any_ngp_component_(),
+        synchronizer_(nullptr),
+        modified_on_host_(false),
+        modified_on_device_(false) {
+    auto& owned_view = std::any_cast<owned_host_view_type&>(host_owner_);
+    owned_view(0) = std::move(host_value);
+    host_view_ = host_view_type(owned_view.data(), 1);
+  }
+
+  template <typename HostViewType>
+    requires requires {
+      requires Kokkos::is_view_v<std::remove_cvref_t<HostViewType>>;
+      typename std::remove_cvref_t<HostViewType>::value_type;
+      typename std::remove_cvref_t<HostViewType>::memory_space;
+      requires(std::remove_cvref_t<HostViewType>::rank == 1);
+      requires(std::is_same_v<typename std::remove_cvref_t<HostViewType>::memory_space, Kokkos::HostSpace>);
+      requires(std::is_same_v<typename std::remove_cvref_t<HostViewType>::value_type, shared_type>);
+    }
+  explicit SharedComponentState(HostViewType host_view)
+      : host_view_(),
+        host_owner_(std::move(host_view)),
+        any_ngp_component_(),
+        synchronizer_(nullptr),
+        modified_on_host_(false),
+        modified_on_device_(false) {
+    auto& host_owner_view = std::any_cast<std::remove_cvref_t<HostViewType>&>(host_owner_);
+    MUNDY_THROW_REQUIRE(host_owner_view.extent(0) == 1, std::invalid_argument,
+                        "HostSharedComponent requires a rank-1 HostSpace view with extent 1.");
+    host_view_ = host_view_type(host_owner_view.data(), 1);
+  }
+
+  shared_type& host_value() {
+    return host_view_(0);
+  }
+
+  const shared_type& host_value() const {
+    return host_view_(0);
+  }
+
+  host_view_type host_view() {
+    return host_view_;
+  }
+
+  host_view_type host_value_view() {
+    return host_view_;
+  }
+
+  void modify_on_host() {
+    MUNDY_THROW_REQUIRE(modified_on_device_ == false, std::invalid_argument,
+                        "The host shared value may not be modified while the device shared value is also modified. "
+                        "Either sync the device value to host or clear the device modification state.");
+    modified_on_host_ = true;
+    if (has_device_data()) {
+      synchronizer_->modify_on_host();
+    }
+  }
+
+  void modify_on_device() {
+    MUNDY_THROW_REQUIRE(modified_on_host_ == false, std::invalid_argument,
+                        "The device shared value may not be modified while the host shared value is also modified. "
+                        "Either sync the host value to device or clear the host modification state.");
+    modified_on_device_ = true;
+    if (has_device_data()) {
+      synchronizer_->modify_on_device();
+    }
+  }
+
+  bool need_sync_to_host() const {
+    return modified_on_device_;
+  }
+
+  bool need_sync_to_device() const {
+    return modified_on_host_;
+  }
+
+  void sync_to_host() {
+    if (need_sync_to_host()) {
+      if (has_device_data()) {
+        synchronizer_->sync_to_host();
+      } else {
+        MUNDY_THROW_REQUIRE(false, std::logic_error,
+                            "sync_to_host called on a HostSharedComponent with no device data.");
+      }
+      clear_device_sync_state();
+    }
+  }
+
+  void sync_to_device() {
+    if (need_sync_to_device()) {
+      if (has_device_data()) {
+        synchronizer_->sync_to_device();
+      } else {
+        MUNDY_THROW_REQUIRE(false, std::logic_error,
+                            "sync_to_device called on a HostSharedComponent with no device data.");
+      }
+      clear_host_sync_state();
+    }
+  }
+
+  void clear_host_sync_state() {
+    modified_on_host_ = false;
+  }
+
+  void clear_device_sync_state() {
+    modified_on_device_ = false;
+  }
+
+  bool has_device_data() const {
+    return synchronizer_ != nullptr;
+  }
+
+  std::any& any_ngp_component() {
+    return any_ngp_component_;
+  }
+
+  void set_synchronizer(std::shared_ptr<HostDeviceSynchronizer> synchronizer) {
+    synchronizer_ = std::move(synchronizer);
+  }
+
+ private:
+  host_view_type host_view_;
+  std::any host_owner_;
+  std::any any_ngp_component_;
+  std::shared_ptr<HostDeviceSynchronizer> synchronizer_;
+  bool modified_on_host_;
+  bool modified_on_device_;
+};  // SharedComponentState
 
 template <typename ScalarType, typename AccessPolicy>
 class HostFieldComponent : public FieldComponentBase {
@@ -467,6 +678,220 @@ class NgpAABBFieldComponent : public impl::NgpFieldComponent<NgpFieldType, impl:
   }
 };  // NgpAABBFieldComponent
 
+/// \brief A component that returns the same shared value for every entity.
+///
+/// Construct either from:
+///   - a raw `SharedType`, which is copied into owned HostSpace storage
+///   - a rank-1 Kokkos::View in HostSpace with extent 1, which is aliased exactly as given whether that view is
+///   managed or unmanaged
+template <typename SharedType>
+class HostSharedComponent {
+ public:
+  static_assert(!std::is_reference_v<SharedType>, "HostSharedComponent may not store a reference type.");
+
+  using our_t = HostSharedComponent<SharedType>;
+  using shared_type = SharedType;
+  using view_t = shared_type&;
+
+  HostSharedComponent() = default;
+  explicit HostSharedComponent(shared_type shared_value)
+      : state_(std::make_shared<state_type>(std::move(shared_value))) {
+  }
+
+  template <typename HostViewType>
+    requires requires {
+      requires Kokkos::is_view_v<std::remove_cvref_t<HostViewType>>;
+      typename std::remove_cvref_t<HostViewType>::value_type;
+      typename std::remove_cvref_t<HostViewType>::memory_space;
+      requires(std::remove_cvref_t<HostViewType>::rank == 1);
+      requires(std::is_same_v<typename std::remove_cvref_t<HostViewType>::memory_space, Kokkos::HostSpace>);
+      requires(std::is_same_v<typename std::remove_cvref_t<HostViewType>::value_type, shared_type>);
+    }
+  explicit HostSharedComponent(HostViewType host_view) : state_(std::make_shared<state_type>(std::move(host_view))) {
+  }
+
+  HostSharedComponent(const HostSharedComponent&) = default;
+  HostSharedComponent(HostSharedComponent&&) = default;
+  HostSharedComponent& operator=(const HostSharedComponent&) = default;
+  HostSharedComponent& operator=(HostSharedComponent&&) = default;
+
+  inline decltype(auto) operator()(stk::mesh::Entity /*entity*/) const {
+    return state().host_value();
+  }
+
+  // clang-format off
+  inline       shared_type& shared_value()       { return state().host_value(); }
+  inline const shared_type& shared_value() const { return state().host_value(); }
+  // clang-format on
+
+  void sync_to_device() {
+    state().sync_to_device();
+  }
+
+  void sync_to_host() {
+    state().sync_to_host();
+  }
+
+  void modify_on_device() {
+    state().modify_on_device();
+  }
+
+  void modify_on_host() {
+    state().modify_on_host();
+  }
+
+  void clear_host_sync_state() {
+    state().clear_host_sync_state();
+  }
+
+  void clear_device_sync_state() {
+    state().clear_device_sync_state();
+  }
+
+ private:
+  using state_type = impl::SharedComponentState<shared_type>;
+  using host_view_type = typename state_type::host_view_type;
+
+  state_type& state() const {
+    MUNDY_THROW_ASSERT(state_, std::runtime_error, "HostSharedComponent state is null");
+    return *state_;
+  }
+
+  host_view_type host_view() const {
+    return state().host_view();
+  }
+
+  std::any& any_ngp_component() const {
+    return state().any_ngp_component();
+  }
+
+  void set_synchronizer(std::shared_ptr<impl::HostDeviceSynchronizer> synchronizer) const {
+    state().set_synchronizer(std::move(synchronizer));
+  }
+
+  std::shared_ptr<state_type> state_;
+
+  template <typename NgpMemSpace, typename OtherSharedType>
+  friend NgpSharedComponent<OtherSharedType, NgpMemSpace>& get_updated_ngp_component(
+      const HostSharedComponent<OtherSharedType>& component);
+};  // HostSharedComponent
+
+template <typename SharedType>
+HostSharedComponent(SharedType) -> HostSharedComponent<SharedType>;
+
+template <typename HostViewType>
+  requires requires {
+    requires Kokkos::is_view_v<std::remove_cvref_t<HostViewType>>;
+    typename std::remove_cvref_t<HostViewType>::value_type;
+    typename std::remove_cvref_t<HostViewType>::memory_space;
+    requires(std::remove_cvref_t<HostViewType>::rank == 1);
+    requires(std::is_same_v<typename std::remove_cvref_t<HostViewType>::memory_space, Kokkos::HostSpace>);
+  }
+HostSharedComponent(HostViewType) -> HostSharedComponent<typename std::remove_cvref_t<HostViewType>::value_type>;
+
+template <typename SharedType, typename NgpMemSpace>
+class NgpSharedComponent {
+ public:
+  static_assert(!std::is_reference_v<SharedType>, "NgpSharedComponent may not store a reference type.");
+  static_assert(Kokkos::is_memory_space_v<NgpMemSpace>,
+                "NgpSharedComponent requires NgpMemSpace to be a Kokkos memory space.");
+
+  using our_t = NgpSharedComponent<SharedType, NgpMemSpace>;
+  using shared_type = SharedType;
+  using view_t = typename HostSharedComponent<shared_type>::view_t;
+
+  NgpSharedComponent() = default;
+  NgpSharedComponent(const NgpSharedComponent&) = default;
+  NgpSharedComponent(NgpSharedComponent&&) = default;
+  NgpSharedComponent& operator=(const NgpSharedComponent&) = default;
+  NgpSharedComponent& operator=(NgpSharedComponent&&) = default;
+
+  KOKKOS_INLINE_FUNCTION
+  decltype(auto) operator()(stk::mesh::FastMeshIndex /*entity_index*/) const {
+    return ngp_view_(0);
+  }
+
+  // clang-format off
+  KOKKOS_INLINE_FUNCTION       auto& ngp_view()       { return ngp_view_; }
+  KOKKOS_INLINE_FUNCTION const auto& ngp_view() const { return ngp_view_; }
+  // clang-format on
+
+  void sync_to_device() {
+    host_component().sync_to_device();
+  }
+
+  void sync_to_host() {
+    host_component().sync_to_host();
+  }
+
+  void modify_on_device() {
+    host_component().modify_on_device();
+  }
+
+  void modify_on_host() {
+    host_component().modify_on_host();
+  }
+
+  void clear_host_sync_state() {
+    host_component().clear_host_sync_state();
+  }
+
+  void clear_device_sync_state() {
+    host_component().clear_device_sync_state();
+  }
+
+ private:
+  using host_component_type = HostSharedComponent<shared_type>;
+  using host_view_type = impl::shared_component_host_view_t<shared_type>;
+  static constexpr bool aliases_host_storage = Kokkos::SpaceAccessibility<NgpMemSpace, Kokkos::HostSpace>::accessible;
+  using ngp_view_type =
+      std::conditional_t<aliases_host_storage, host_view_type, Kokkos::View<shared_type*, NgpMemSpace>>;
+
+  NgpSharedComponent(host_component_type& host_component, ngp_view_type ngp_view)
+      : host_component_(&host_component), ngp_view_(ngp_view) {
+  }
+
+  host_component_type& host_component() const {
+    MUNDY_THROW_ASSERT(host_component_ != nullptr, std::runtime_error, "NgpSharedComponent host component is null");
+    return *host_component_;
+  }
+
+  host_component_type* host_component_ = nullptr;
+  ngp_view_type ngp_view_;
+
+  template <typename OtherNgpMemSpace, typename OtherSharedType>
+  friend NgpSharedComponent<OtherSharedType, OtherNgpMemSpace>& get_updated_ngp_component(
+      const HostSharedComponent<OtherSharedType>& component);
+};  // NgpSharedComponent
+
+/// \brief Create a HostSharedComponent by copying a raw value into owned HostSpace storage.
+template <typename SharedType>
+  requires(!requires {
+    requires Kokkos::is_view_v<std::remove_cvref_t<SharedType>>;
+    typename std::remove_cvref_t<SharedType>::value_type;
+    typename std::remove_cvref_t<SharedType>::memory_space;
+    requires(std::remove_cvref_t<SharedType>::rank == 1);
+    requires(std::is_same_v<typename std::remove_cvref_t<SharedType>::memory_space, Kokkos::HostSpace>);
+  })
+auto make_shared_view_accessor(SharedType&& shared_value) {
+  using component_type = HostSharedComponent<std::decay_t<SharedType>>;
+  return component_type(std::forward<SharedType>(shared_value));
+}
+
+/// \brief Create a HostSharedComponent that aliases a rank-1 HostSpace view of extent 1.
+template <typename HostViewType>
+  requires requires {
+    requires Kokkos::is_view_v<std::remove_cvref_t<HostViewType>>;
+    typename std::remove_cvref_t<HostViewType>::value_type;
+    typename std::remove_cvref_t<HostViewType>::memory_space;
+    requires(std::remove_cvref_t<HostViewType>::rank == 1);
+    requires(std::is_same_v<typename std::remove_cvref_t<HostViewType>::memory_space, Kokkos::HostSpace>);
+  }
+auto make_shared_view_accessor(HostViewType host_view) {
+  using component_type = HostSharedComponent<typename std::remove_cvref_t<HostViewType>::value_type>;
+  return component_type(std::move(host_view));
+}
+
 /// \brief A small helper type for tying a Tag to an underlying component
 template <typename Tag, stk::topology::rank_t our_rank, typename ComponentType>
 class TaggedComponent {
@@ -616,18 +1041,52 @@ class NgpTaggedComponent {
   component_type component_;
 };  // NgpTaggedComponent
 
-/// \brief A helper function for getting the NGP component from a regular component
+/// \brief A helper function for getting the NGP component from a regular component.
 ///
-/// For now, we just create an NGP component here and return it by value. We'll need to test
-/// if we should do as STK does and store a pointer to the NGP component in the regular component
-/// and use this function to fetch it. If the pointer is nullptr, this function would create said
-/// NGP component, store it in the regular component. We could then fetch the NGP component and return it
-/// as a reference.
+/// Field-backed components simply wrap STK's updated ngp field and return the wrapper by value.
+/// HostSharedComponent follows the LinkData pattern instead, lazily materializing and caching a
+/// memspace-specific NgpSharedComponent in a std::any owned by the host component state.
 template <typename ScalarType, typename AccessPolicy>
 auto get_updated_ngp_component(const impl::HostFieldComponent<ScalarType, AccessPolicy>& component) {
   auto& ngp_field = stk::mesh::get_updated_ngp_field<ScalarType>(component.field());
   using ngp_field_type = std::remove_reference_t<decltype(ngp_field)>;
   return impl::NgpFieldComponent<ngp_field_type, AccessPolicy>(ngp_field);
+}
+
+template <typename NgpMemSpace = stk::ngp::MemSpace, typename SharedType>
+NgpSharedComponent<SharedType, NgpMemSpace>& get_updated_ngp_component(
+    const HostSharedComponent<SharedType>& component) {
+  static_assert(Kokkos::SpaceAccessibility<NgpMemSpace, stk::ngp::MemSpace>::accessible,
+                "get_updated_ngp_component requires a device-accessible memory space.");
+
+  using ngp_component_type = NgpSharedComponent<SharedType, NgpMemSpace>;
+  using host_view_type = impl::shared_component_host_view_t<SharedType>;
+  constexpr bool aliases_host_storage = Kokkos::SpaceAccessibility<NgpMemSpace, Kokkos::HostSpace>::accessible;
+  using ngp_view_type =
+      std::conditional_t<aliases_host_storage, host_view_type, Kokkos::View<SharedType*, NgpMemSpace>>;
+  using synchronizer_t =
+      impl::SharedComponentSynchronizerT<host_view_type, ngp_view_type, aliases_host_storage>;
+
+  std::any& any_ngp_component = component.any_ngp_component();
+
+  if (!any_ngp_component.has_value()) {
+    ngp_view_type ngp_view = [&component]() {
+      if constexpr (aliases_host_storage) {
+        return component.host_view();
+      } else {
+        return ngp_view_type(Kokkos::view_alloc(Kokkos::WithoutInitializing, "ngp_shared_component_value"), 1);
+      }
+    }();
+    if constexpr (!aliases_host_storage) {
+      Kokkos::deep_copy(ngp_view, component.host_view());
+    }
+
+    any_ngp_component = ngp_component_type(const_cast<HostSharedComponent<SharedType>&>(component), ngp_view);
+    ngp_component_type& ngp_component = std::any_cast<ngp_component_type&>(any_ngp_component);
+    component.set_synchronizer(std::make_shared<synchronizer_t>(component.host_view(), ngp_component.ngp_view()));
+  }
+
+  return std::any_cast<NgpSharedComponent<SharedType, NgpMemSpace>&>(any_ngp_component);
 }
 //
 template <typename Tag, stk::topology::rank_t our_rank, typename ComponentType>

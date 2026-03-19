@@ -88,6 +88,15 @@ struct MATRIX3_DATA {};
 struct QUATERNION_DATA {};
 struct AABB_DATA {};
 
+struct increment_shared_radius_on_device {
+  double delta;
+
+  KOKKOS_INLINE_FUNCTION
+  void operator()(auto& sphere_view) const {
+    sphere_view.template get<COLLISION_RADIUS>() += delta;
+  }
+};
+
 TEST(UnitTestAggregate, Accessors) {
   if (stk::parallel_machine_size(MPI_COMM_WORLD) != 1) {
     GTEST_SKIP();
@@ -276,6 +285,74 @@ TEST(UnitTestAggregate, BasicUsage) {
     EXPECT_EQ(other_sphere_view.rank(), stk::topology::ELEM_RANK);
     EXPECT_EQ(other_sphere_view.topology(), stk::topology::PARTICLE);
   });
+}
+
+TEST(UnitTestAggregate, SharedComponent) {
+  if (stk::parallel_machine_size(MPI_COMM_WORLD) != 1) {
+    GTEST_SKIP();
+  }
+
+  stk::mesh::MeshBuilder builder(MPI_COMM_WORLD);
+  builder.set_spatial_dimension(3);
+  builder.set_entity_rank_names({"NODE", "EDGE", "FACE", "ELEMENT", "CONSTRAINT"});
+  std::shared_ptr<stk::mesh::MetaData> meta_data_ptr = builder.create_meta_data();
+  stk::mesh::MetaData& meta_data = *meta_data_ptr;
+  meta_data.use_simple_fields();
+  std::shared_ptr<stk::mesh::BulkData> bulk_data_ptr = builder.create(meta_data_ptr);
+  stk::mesh::BulkData& bulk_data = *bulk_data_ptr;
+
+  stk::mesh::Part& sphere_part = meta_data.declare_part_with_topology("SHARED_SPHERES", stk::topology::PARTICLE);
+  stk::mesh::Field<double>& node_center_field = meta_data.declare_field<double>(stk::topology::NODE_RANK, "CENTER");
+  stk::mesh::put_field_on_mesh(node_center_field, meta_data.universal_part(), 3, nullptr);
+  meta_data.commit();
+
+  bulk_data.modification_begin();
+  stk::mesh::Entity node1 = bulk_data.declare_node(1);
+  stk::mesh::Entity elem1 = bulk_data.declare_element(1, stk::mesh::PartVector{&sphere_part});
+  bulk_data.declare_relation(elem1, node1, 0);
+  bulk_data.modification_end();
+
+  vector3_field_data(node_center_field, node1).set(1.0, 2.0, 3.0);
+
+  auto center_accessor = Vector3FieldComponent(node_center_field);
+  Kokkos::View<double*, Kokkos::HostSpace> shared_radius_view("shared_radius_view", 1);
+  shared_radius_view(0) = 0.5;
+  auto radius_accessor = make_shared_view_accessor(shared_radius_view);
+
+  double& host_radius = radius_accessor(elem1);
+  EXPECT_DOUBLE_EQ(host_radius, 0.5);
+  EXPECT_EQ(&host_radius, shared_radius_view.data());
+  host_radius = 1.25;
+  radius_accessor.modify_on_host();
+
+  auto& ngp_radius0 = get_updated_ngp_component(radius_accessor);
+  auto& ngp_radius1 = get_updated_ngp_component(radius_accessor);
+  EXPECT_EQ(&ngp_radius0, &ngp_radius1);
+  if constexpr (Kokkos::SpaceAccessibility<stk::ngp::MemSpace, Kokkos::HostSpace>::accessible) {
+    EXPECT_EQ(ngp_radius0.ngp_view().data(), shared_radius_view.data());
+  }
+
+  auto copied_radius_accessor = make_shared_view_accessor(3.25);
+  EXPECT_DOUBLE_EQ(copied_radius_accessor(elem1), 3.25);
+  copied_radius_accessor(elem1) = 4.0;
+  EXPECT_DOUBLE_EQ(copied_radius_accessor(elem1), 4.0);
+
+  auto sphere_data = make_aggregate<stk::topology::PARTICLE>(bulk_data, sphere_part)
+                         .add_component<CENTER, stk::topology::NODE_RANK>(center_accessor)
+                         .add_component<COLLISION_RADIUS, stk::topology::ELEM_RANK>(radius_accessor);
+
+  auto sphere_view = sphere_data.get_view(elem1);
+  double host_radius_from_view = sphere_view.template get<COLLISION_RADIUS>();
+  EXPECT_DOUBLE_EQ(host_radius_from_view, 1.25);
+
+  auto ngp_sphere_data = get_updated_ngp_aggregate(sphere_data);
+  ngp_sphere_data.template sync_to_device<COLLISION_RADIUS>();
+  ngp_sphere_data.template for_each(increment_shared_radius_on_device{0.75});
+  ngp_sphere_data.template modify_on_device<COLLISION_RADIUS>();
+
+  sphere_data.template sync_to_host<COLLISION_RADIUS>();
+  EXPECT_DOUBLE_EQ(radius_accessor(elem1), 2.0);
+  EXPECT_DOUBLE_EQ(shared_radius_view(0), 2.0);
 }
 
 struct a_non_lambda_functor {
