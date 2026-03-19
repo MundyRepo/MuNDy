@@ -39,16 +39,18 @@
 #include <stk_topology/topology.hpp>      // for stk::topology::topology_t
 
 // Mundy
-#include <mundy_mesh/BulkData.hpp>         // for mundy::mesh::BulkData
+#include <mundy_mesh/BulkData.hpp>  // for mundy::mesh::BulkData
+#include <mundy_mesh/Component.hpp>
+#include <mundy_mesh/FieldComponent.hpp>
 #include <mundy_mesh/FieldViews.hpp>       // for mundy::mesh::vector3_field_data, mundy::mesh::quaternion_field_data
 #include <mundy_mesh/ForEachEntity.hpp>    // for mundy::mesh::for_each_entity_run
 #include <mundy_mesh/NgpAccessorExpr.hpp>  // for mundy::mesh::AccessorExpr and EntityExprBase
-#include <mundy_mesh/fmt_stk_types.hpp>    // for STK-compatible fmt::format
-#include <mundy_utils/aggregate.hpp>  // for mundy::all_have_tags_v, mundy::all_tags_unique_v, mundy::contains_tag_v
+#include <mundy_mesh/SharedComponent.hpp>
+#include <mundy_mesh/fmt_stk_types.hpp>  // for STK-compatible fmt::format
+#include <mundy_utils/aggregate.hpp>     // for mundy::all_have_tags_v, mundy::all_tags_unique_v, mundy::contains_tag_v
 #include <mundy_utils/suppress_warnings.hpp>  // for MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_PUSH/POP
 #include <mundy_utils/throw_assert.hpp>       // for MUNDY_THROW_ASSERT
 #include <mundy_utils/tuple.hpp>              // for mundy::tuple
-#include <mundy_mesh/Components.hpp>         // for mundy::mesh::FieldComponent, mundy::mesh::Vector3FieldComponent, etc.
 
 namespace mundy {
 
@@ -225,10 +227,10 @@ class NgpEntityView;
 ///   Matrix3FieldComponent                :  Field<scalar_t>                          ->  Matrix3View<scalar_t>
 ///   QuaternionFieldComponent             :  Field<scalar_t>                          ->  QuaternionView<scalar_t>
 ///   AABBFieldComponent                   :  Field<scalar_t>                          ->  AABBView<scalar_t>
-///   HostSharedComponent<SharedType>      :  SharedType                               ->  SharedType&
+///   SharedComponent<SharedType>      :  SharedType                               ->  SharedType&
 ///   PartMappedComponent<OtherComponent>  :  Kokkos::Map<PartOrdinal, OtherComponent> -> OtherComponent's return type
 ///
-/// \note HostSharedComponent may either alias a rank-1 Kokkos::View in HostSpace of extent 1 or copy a raw value into
+/// \note SharedComponent may either alias a rank-1 Kokkos::View in HostSpace of extent 1 or copy a raw value into
 /// owned HostSpace storage.
 ///
 ///
@@ -266,8 +268,8 @@ class NgpEntityView;
 ///    //   with a NODE_RANK center_field and a shared ELEM_RANK radius. Both have double type.
 ///
 ///    // Create the accessors
-///    auto center_accessor = make_scalar_field_accessor(center_field);
-///    auto radius_accessor = make_shared_view_accessor(radius);  // Copies radius into owned HostSpace storage
+///    auto center_accessor = ScalarFieldComponent(center_field);
+///    auto radius_accessor = SharedScalarComponent(radius);  // Copies radius into owned HostSpace storage
 ///
 ///    // Fetch the data for the entity via the accessor's operator()
 ///    Vector3View<double> center = center_accessor(elem1);
@@ -370,7 +372,7 @@ class Aggregate {
   }
   //@}
 
-  /// \brief Add a component (fluent interface):
+  /// \brief Add a component with the given tag and rank (fluent interface):
   template <typename Tag, stk::topology::rank_t component_rank, typename NewComponent>
     requires(
         all_tags_unique_v<TaggedComponent<Tag, component_rank, NewComponent>,
@@ -384,11 +386,32 @@ class Aggregate {
     using NewType = Aggregate<OurTopology, OurRank, Components..., decltype(new_tagged_comp)>;
     return NewType(bulk_data_, selector_, new_tuple);
   }
-
+  //
   template <typename Tag, stk::topology::rank_t component_rank, typename NewComponent>
     requires(!all_tags_unique_v<TaggedComponent<Tag, component_rank, NewComponent>, Components...>)
   void add_component(NewComponent /*new_component*/) const {
     static_assert(all_tags_unique_v<TaggedComponent<Tag, component_rank, NewComponent>, Components...>,
+                  "The new component's tag must be unique from all existing component tags.");
+  }
+
+  /// \brief Add a component that already has a tag and rank
+  template <typename NewTaggedComponent>
+    requires(all_have_tags_v<std::remove_cvref_t<NewTaggedComponent>> &&
+             impl::has_static_rank_v<std::remove_cvref_t<NewTaggedComponent>> &&
+             all_tags_unique_v<std::remove_cvref_t<NewTaggedComponent>, Components...>)
+  auto add_component(NewTaggedComponent new_component) const {
+    using tagged_component_type = std::remove_cvref_t<NewTaggedComponent>;
+    auto new_tuple = tuple_cat(components_, make_tuple(std::move(new_component)));
+    using NewType = Aggregate<OurTopology, OurRank, Components..., tagged_component_type>;
+    return NewType(bulk_data_, selector_, new_tuple);
+  }
+  //
+  template <typename NewTaggedComponent>
+    requires(all_have_tags_v<std::remove_cvref_t<NewTaggedComponent>> &&
+             impl::has_static_rank_v<std::remove_cvref_t<NewTaggedComponent>> &&
+             !all_tags_unique_v<std::remove_cvref_t<NewTaggedComponent>, Components...>)
+  void add_component(NewTaggedComponent /*new_component*/) const {
+    static_assert(all_tags_unique_v<std::remove_cvref_t<NewTaggedComponent>, Components...>,
                   "The new component's tag must be unique from all existing component tags.");
   }
 
@@ -582,6 +605,26 @@ class NgpAggregate {
     requires(!all_tags_unique_v<NgpTaggedComponent<Tag, component_rank, NewNgpComponent>, NgpComponents...>)
   void add_component(NewNgpComponent /*new_ngp_component*/) const {
     static_assert(all_tags_unique_v<NgpTaggedComponent<Tag, component_rank, NewNgpComponent>, NgpComponents...>,
+                  "The new component's tag must be unique from all existing component tags.");
+  }
+
+  template <typename NewNgpTaggedComponent>
+    requires(all_have_tags_v<std::remove_cvref_t<NewNgpTaggedComponent>> &&
+             impl::has_static_rank_v<std::remove_cvref_t<NewNgpTaggedComponent>> &&
+             all_tags_unique_v<std::remove_cvref_t<NewNgpTaggedComponent>, NgpComponents...>)
+  auto add_component(NewNgpTaggedComponent new_ngp_component) const {
+    using tagged_component_type = std::remove_cvref_t<NewNgpTaggedComponent>;
+    auto new_tuple = tuple_cat(ngp_components_, make_tuple(std::move(new_ngp_component)));
+    using NewType = NgpAggregate<OurTopology, OurRank, NgpComponents..., tagged_component_type>;
+    return NewType(ngp_mesh_, host_selector_, new_tuple);
+  }
+
+  template <typename NewNgpTaggedComponent>
+    requires(all_have_tags_v<std::remove_cvref_t<NewNgpTaggedComponent>> &&
+             impl::has_static_rank_v<std::remove_cvref_t<NewNgpTaggedComponent>> &&
+             !all_tags_unique_v<std::remove_cvref_t<NewNgpTaggedComponent>, NgpComponents...>)
+  void add_component(NewNgpTaggedComponent /*new_ngp_component*/) const {
+    static_assert(all_tags_unique_v<std::remove_cvref_t<NewNgpTaggedComponent>, NgpComponents...>,
                   "The new component's tag must be unique from all existing component tags.");
   }
 

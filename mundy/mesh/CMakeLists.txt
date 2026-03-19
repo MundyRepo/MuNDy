@@ -15,6 +15,7 @@ set(NOINSTALLHEADERS
     src/mundy_mesh/Aggregate.hpp
     src/mundy_mesh/BulkData.hpp
     src/mundy_mesh/DeclareEntities.hpp
+    src/mundy_mesh/DeclareComponent.hpp
     src/mundy_mesh/DeclareField.hpp
     src/mundy_mesh/DeclarePart.hpp
     src/mundy_mesh/FieldViews.hpp

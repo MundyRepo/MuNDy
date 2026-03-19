@@ -24,6 +24,7 @@
 // C++ core
 #include <memory>
 #include <stdexcept>
+#include <type_traits>
 
 // Kokkos
 #include <Kokkos_Core.hpp>
@@ -39,11 +40,14 @@
 #include <stk_topology/topology.hpp>
 
 // Mundy libs
+#include <mundy_math/Vector3.hpp>
 #include <mundy_mesh/BulkData.hpp>
-#include <mundy_mesh/Components.hpp>
+#include <mundy_mesh/Component.hpp>
+#include <mundy_mesh/FieldComponent.hpp>
 #include <mundy_mesh/FieldViews.hpp>
 #include <mundy_mesh/MeshBuilder.hpp>
 #include <mundy_mesh/MetaData.hpp>
+#include <mundy_mesh/SharedComponent.hpp>
 
 namespace mundy {
 
@@ -51,7 +55,7 @@ namespace mesh {
 
 namespace {
 
-class UnitTestComponentsFixture : public ::testing::Test {
+class UnitTestComponentFixture : public ::testing::Test {
  protected:
   using DoubleField = stk::mesh::Field<double>;
 
@@ -106,8 +110,8 @@ class UnitTestComponentsFixture : public ::testing::Test {
     scalar_field_data(*scalar_field_ptr_, node).set(base + 0.0);
     vector3_field_data(*vector3_field_ptr_, node).set(base + 10.0, base + 11.0, base + 12.0);
     matrix3_field_data(*matrix3_field_ptr_, node)
-        .set(base + 20.0, base + 21.0, base + 22.0, base + 23.0, base + 24.0, base + 25.0, base + 26.0,
-             base + 27.0, base + 28.0);
+        .set(base + 20.0, base + 21.0, base + 22.0, base + 23.0, base + 24.0, base + 25.0, base + 26.0, base + 27.0,
+             base + 28.0);
     quaternion_field_data(*quaternion_field_ptr_, node).set(base + 30.0, base + 31.0, base + 32.0, base + 33.0);
 
     auto aabb = aabb_field_data(*aabb_field_ptr_, node);
@@ -138,7 +142,7 @@ class UnitTestComponentsFixture : public ::testing::Test {
   stk::mesh::Entity node2_ = stk::mesh::Entity();
 };
 
-TEST_F(UnitTestComponentsFixture, HostFieldComponentsExposeTypedViewsAndMutations) {
+TEST_F(UnitTestComponentFixture, FieldComponentExposeTypedViewsAndMutations) {
   FieldComponent<double> raw_accessor(*quaternion_field_ptr_);
   auto scalar_accessor = ScalarFieldComponent(*scalar_field_ptr_);
   auto vector3_accessor = Vector3FieldComponent(*vector3_field_ptr_);
@@ -193,7 +197,7 @@ TEST_F(UnitTestComponentsFixture, HostFieldComponentsExposeTypedViewsAndMutation
   EXPECT_DOUBLE_EQ(stk::mesh::field_data(*aabb_field_ptr_, node1_)[4], 77.0);
 }
 
-TEST_F(UnitTestComponentsFixture, NgpFieldComponentsRoundTripDeviceMutations) {
+TEST_F(UnitTestComponentFixture, NgpFieldComponentRoundTripDeviceMutations) {
   auto scalar_accessor = ScalarFieldComponent(*scalar_field_ptr_);
   auto vector3_accessor = Vector3FieldComponent(*vector3_field_ptr_);
   auto matrix3_accessor = Matrix3FieldComponent(*matrix3_field_ptr_);
@@ -265,39 +269,62 @@ TEST_F(UnitTestComponentsFixture, NgpFieldComponentsRoundTripDeviceMutations) {
   EXPECT_DOUBLE_EQ(aabb_field_data(*aabb_field_ptr_, node2_).z_max(), 146.0);
 }
 
-TEST_F(UnitTestComponentsFixture, HostSharedComponentSupportsOwnedAndAliasedConstruction) {
+static_assert(
+  std::is_same_v<decltype(SharedComponent(Kokkos::View<double*, Kokkos::HostSpace>("", 1))), SharedComponent<double>>,
+  "SharedComponent CTAD failed for host view."
+);
+
+static_assert(
+  std::is_same_v<decltype(SharedComponent(Kokkos::View<double*, Kokkos::HostSpace>("", 1)))::view_t, double&>,
+  "SharedComponent type CTAD failed for host view."
+);
+
+static_assert(
+  std::is_same_v<decltype(SharedScalarComponent(Kokkos::View<double*, Kokkos::HostSpace>("", 1))),
+                 SharedScalarComponent<double>>,
+  "SharedScalarComponent CTAD failed for host view."
+);
+
+static_assert(
+  std::is_same_v<decltype(SharedScalarComponent(Kokkos::View<double*, Kokkos::HostSpace>("", 1)))::view_t,
+                 decltype(get_scalar_view<double>(std::declval<double*>()))>,
+  "SharedScalarComponent type CTAD failed for host view."
+);
+
+
+TEST_F(UnitTestComponentFixture, SharedComponentSupportsOwnedAndAliasedConstruction) {
   Kokkos::View<double*, Kokkos::HostSpace> managed_view("managed_shared_value", 1);
   managed_view(0) = 0.5;
 
-  auto managed_component = make_shared_view_accessor(managed_view);
-  EXPECT_EQ(&managed_component(node1_), managed_view.data());
-  managed_component(node1_) = 1.25;
+  auto managed_component = SharedScalarComponent(managed_view);
+  EXPECT_EQ(&managed_component.shared_value(), managed_view.data());
+  managed_component(node1_)[0] = 1.25;
   EXPECT_DOUBLE_EQ(managed_view(0), 1.25);
 
   using unmanaged_host_view_t = Kokkos::View<double*, Kokkos::HostSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged>>;
   unmanaged_host_view_t unmanaged_view(managed_view.data(), 1);
-  auto unmanaged_component = make_shared_view_accessor(unmanaged_view);
-  EXPECT_EQ(&unmanaged_component(node2_), managed_view.data());
-  unmanaged_component(node2_) = 2.25;
+  auto unmanaged_component = SharedScalarComponent(unmanaged_view);
+  EXPECT_EQ(&unmanaged_component.shared_value(), managed_view.data());
+  unmanaged_component(node2_)[0] = 2.25;
   EXPECT_DOUBLE_EQ(managed_view(0), 2.25);
 
   double raw_value = 3.5;
-  auto owned_component = make_shared_view_accessor(raw_value);
+  auto owned_component = SharedScalarComponent(raw_value);
   EXPECT_NE(&owned_component.shared_value(), &raw_value);
-  EXPECT_DOUBLE_EQ(owned_component(node1_), 3.5);
+  EXPECT_DOUBLE_EQ(owned_component(node1_)[0], 3.5);
   raw_value = -1.0;
-  EXPECT_DOUBLE_EQ(owned_component(node2_), 3.5);
-  owned_component(node1_) = 4.5;
+  EXPECT_DOUBLE_EQ(owned_component(node2_)[0], 3.5);
+  owned_component(node1_)[0] = 4.5;
   EXPECT_DOUBLE_EQ(owned_component.shared_value(), 4.5);
   EXPECT_DOUBLE_EQ(raw_value, -1.0);
 }
 
-TEST_F(UnitTestComponentsFixture, HostSharedComponentRejectsBadViewsAndEnforcesSyncProtocol) {
+TEST_F(UnitTestComponentFixture, SharedComponentRejectsBadViewsAndEnforcesSyncProtocol) {
   Kokkos::View<double*, Kokkos::HostSpace> bad_view("bad_shared_value", 2);
-  EXPECT_THROW((void)make_shared_view_accessor(bad_view), std::invalid_argument);
+  EXPECT_THROW((void)SharedScalarComponent(bad_view), std::invalid_argument);
 
-  auto shared_component = make_shared_view_accessor(2.0);
-  auto& ngp_shared_component = get_updated_ngp_component(shared_component);
+  auto shared_component = SharedScalarComponent(2.0);
+  auto ngp_shared_component = get_updated_ngp_component(shared_component);
 
   shared_component.modify_on_host();
   EXPECT_THROW(shared_component.modify_on_device(), std::invalid_argument);
@@ -307,34 +334,34 @@ TEST_F(UnitTestComponentsFixture, HostSharedComponentRejectsBadViewsAndEnforcesS
   EXPECT_THROW(shared_component.modify_on_host(), std::invalid_argument);
 }
 
-TEST_F(UnitTestComponentsFixture, SharedComponentsAreShallowCopiesAndCacheNgpInstances) {
+TEST_F(UnitTestComponentFixture, SharedComponentAreShallowCopiesAndCacheNgpInstances) {
   Kokkos::View<double*, Kokkos::HostSpace> managed_view("cached_shared_value", 1);
   managed_view(0) = 0.75;
 
-  auto shared_component = make_shared_view_accessor(managed_view);
+  auto shared_component = SharedScalarComponent(managed_view);
   auto copied_component = shared_component;
 
-  copied_component(node2_) = 1.75;
-  EXPECT_DOUBLE_EQ(shared_component(node1_), 1.75);
+  copied_component(node2_)[0] = 1.75;
+  EXPECT_DOUBLE_EQ(shared_component(node1_)[0], 1.75);
   EXPECT_EQ(&shared_component.shared_value(), &copied_component.shared_value());
 
-  auto& ngp_shared_component0 = get_updated_ngp_component(shared_component);
-  auto& ngp_shared_component1 = get_updated_ngp_component(copied_component);
-  EXPECT_EQ(&ngp_shared_component0, &ngp_shared_component1);
+  auto ngp_shared_component0 = get_updated_ngp_component(shared_component);
+  auto ngp_shared_component1 = get_updated_ngp_component(copied_component);
+  EXPECT_EQ(ngp_shared_component0.ngp_view().data(), ngp_shared_component1.ngp_view().data());
 
   if constexpr (Kokkos::SpaceAccessibility<stk::ngp::MemSpace, Kokkos::HostSpace>::accessible) {
     EXPECT_EQ(ngp_shared_component0.ngp_view().data(), managed_view.data());
   }
 }
 
-TEST_F(UnitTestComponentsFixture, NgpSharedComponentsRoundTripHostAndDeviceMutations) {
+TEST_F(UnitTestComponentFixture, NgpSharedComponentRoundTripHostAndDeviceMutations) {
   Kokkos::View<double*, Kokkos::HostSpace> managed_view("roundtrip_shared_value", 1);
   managed_view(0) = 0.5;
 
-  auto shared_component = make_shared_view_accessor(managed_view);
-  auto& ngp_shared_component = get_updated_ngp_component(shared_component);
+  auto shared_component = SharedScalarComponent(managed_view);
+  auto ngp_shared_component = get_updated_ngp_component(shared_component);
 
-  shared_component(node1_) = 1.25;
+  shared_component(node1_)[0] = 1.25;
   shared_component.modify_on_host();
   shared_component.sync_to_device();
 
@@ -349,7 +376,7 @@ TEST_F(UnitTestComponentsFixture, NgpSharedComponentsRoundTripHostAndDeviceMutat
   ngp_shared_component.modify_on_device();
   shared_component.sync_to_host();
 
-  EXPECT_DOUBLE_EQ(shared_component(node2_), 2.0);
+  EXPECT_DOUBLE_EQ(shared_component(node2_)[0], 2.0);
   EXPECT_DOUBLE_EQ(managed_view(0), 2.0);
 }
 

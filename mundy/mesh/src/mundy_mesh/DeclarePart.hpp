@@ -31,7 +31,9 @@
 #include <iostream>   // for std::ostream
 #include <memory>     // for std::shared_ptr
 #include <stdexcept>  // for std::runtime_error
-#include <vector>     // for std::vector
+#include <type_traits>
+#include <utility>
+#include <vector>  // for std::vector
 
 // Trilinos
 #include <stk_io/StkMeshIoBroker.hpp>  // for stk::io::StkMeshIoBroker
@@ -39,7 +41,10 @@
 #include <stk_mesh/base/MetaData.hpp>  // for stk::mesh::MetaData
 
 // Mundy
-#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_REQUIRE
+#include <mundy_mesh/Component.hpp>
+#include <mundy_mesh/DeclareComponent.hpp>
+#include <mundy_mesh/impl/ComponentImpl.hpp>  // for mundy::mesh::impl::component_backing_field
+#include <mundy_utils/throw_assert.hpp>       // for MUNDY_THROW_REQUIRE
 
 namespace mundy {
 
@@ -160,6 +165,30 @@ class PartDeclarationHelper {
     field_restrictions_.push_back(
         std::make_shared<DeclareTensorFieldRestriction<FieldType>>(field, n1, n2, init_value));
     return *this;
+  }
+
+  /// \brief Create a field restriction directly from a field-backed component declaration.
+  template <typename ComponentType, typename BackingFieldType = std::remove_cvref_t<
+                                        decltype(impl::component_backing_field(std::declval<ComponentType&>()))>>
+    requires requires(ComponentType component) {
+      typename std::remove_cvref_t<ComponentType>::canonical_access;
+      { impl::component_backing_field(component) };
+    }
+  PartDeclarationHelper put_component(ComponentType component,
+                                      const typename BackingFieldType::value_type* init_value) {
+    using component_type = std::remove_cvref_t<ComponentType>;
+    using access_traits = component_access_traits<typename component_type::canonical_access>;
+    auto& field = impl::component_backing_field(component);
+
+    static_assert(access_traits::has_known_num_field_scalars,
+                  "put_component(...) requires a component whose access trait defines a fixed number of field scalars. "
+                  "Use put_field(...) for raw field components.");
+
+    if constexpr (access_traits::num_field_scalars == 1) {
+      return put_field(field, init_value);
+    } else {
+      return put_field(field, access_traits::num_field_scalars, init_value);
+    }
   }
 
   /// \brief Declare a part with the given properties.

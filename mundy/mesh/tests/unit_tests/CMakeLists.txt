@@ -51,8 +51,22 @@ if (Mundy_ENABLE_TESTS AND Mundy_ENABLE_GTest)
   )
 
   tribits_add_executable_and_test(
-    UnitTestComponents
-    SOURCES UnitTestComponents.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+    UnitTestComponent
+    SOURCES UnitTestComponent.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+    NUM_MPI_PROCS 1
+    INSTALLABLE
+  )
+
+  tribits_add_executable_and_test(
+    UnitTestComponentDeclaration
+    SOURCES UnitTestComponentDeclaration.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+    NUM_MPI_PROCS 1
+    INSTALLABLE
+  )
+
+  tribits_add_executable_and_test(
+    UnitTestFieldDeclaration
+    SOURCES UnitTestFieldDeclaration.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
     NUM_MPI_PROCS 1
     INSTALLABLE
   )

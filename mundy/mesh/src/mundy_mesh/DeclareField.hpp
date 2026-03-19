@@ -30,7 +30,9 @@
 // C++ core
 #include <iostream>   // for std::ostream
 #include <stdexcept>  // for std::runtime_error
-#include <vector>     // for std::vector
+#include <type_traits>
+#include <utility>
+#include <vector>  // for std::vector
 
 // Trilinos
 #include <stk_io/StkMeshIoBroker.hpp>  // for stk::io::StkMeshIoBroker
@@ -38,11 +40,16 @@
 #include <stk_mesh/base/MetaData.hpp>  // for stk::mesh::MetaData
 
 // Mundy
+#include <mundy_mesh/impl/DeclareFieldImpl.hpp>
 #include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_REQUIRE
 
 namespace mundy {
 
 namespace mesh {
+
+template <typename FieldScalarType, typename AccessLike, typename Tag = void,
+          stk::topology::rank_t Rank = stk::topology::INVALID_RANK>
+class TaggedFieldComponentDeclarationHelperT;
 
 /// \brief Helper class for declaring a field
 ///
@@ -70,6 +77,8 @@ class FieldDeclarationHelper;
 template <typename T>
 class FieldDeclarationHelperT {
  public:
+  using field_scalar_type = T;
+
   //! \name Constructors and Assignment Operators
   //@{
 
@@ -79,7 +88,11 @@ class FieldDeclarationHelperT {
         field_has_rank_(false),
         field_has_name_(false),
         field_has_role_(false),
-        field_has_output_type_(false) {
+        field_has_output_type_(false),
+        rank_(stk::topology::INVALID_RANK),
+        field_name_(),
+        field_role_(Ioss::Field::RoleType{}),
+        output_type_(stk::io::FieldOutputType::CUSTOM) {
   }
 
   /// \brief Copy/Move constructors and assignment operators
@@ -180,6 +193,11 @@ class FieldDeclarationHelperT {
     return *this;
   }
 
+  /// \brief Switch from field declaration to field-backed component declaration.
+  /// \note This member is defined in DeclareComponent.hpp.
+  template <typename AccessLike>
+  TaggedFieldComponentDeclarationHelperT<field_scalar_type, AccessLike> access() const;
+
   /// \brief Declare a field with the given stk output type and role.
   stk::mesh::Field<T>& declare() {
     // Validate that required parameters have been set
@@ -200,7 +218,36 @@ class FieldDeclarationHelperT {
     return field;
   }
 
+  // clang-format off
+  stk::mesh::MetaData& meta_data() const { return meta_data_; }
+  bool has_rank() const { return field_has_rank_; }
+  bool has_name() const { return field_has_name_; }
+  bool has_role() const { return field_has_role_; }
+  bool has_output_type() const { return field_has_output_type_; }
+  stk::mesh::EntityRank rank_value() const { return rank_; }
+  const std::string& name_value() const { return field_name_; }
+  Ioss::Field::RoleType role_value() const { return field_role_; }
+  stk::io::FieldOutputType output_type_value() const { return output_type_; }
+  // clang-format on
+
  private:
+  static stk::mesh::MetaData& get_meta_data_from_snapshot(const impl::FieldDeclarationSnapshot& snapshot) {
+    MUNDY_THROW_ASSERT(snapshot.meta_data != nullptr, std::logic_error, "Field declaration metadata is null.");
+    return *snapshot.meta_data;
+  }
+
+  explicit FieldDeclarationHelperT(const impl::FieldDeclarationSnapshot& snapshot)
+      : meta_data_(get_meta_data_from_snapshot(snapshot)),
+        field_has_rank_(snapshot.has_rank),
+        field_has_name_(snapshot.has_name),
+        field_has_role_(snapshot.has_role),
+        field_has_output_type_(snapshot.has_output_type),
+        rank_(snapshot.rank),
+        field_name_(snapshot.field_name),
+        field_role_(snapshot.field_role),
+        output_type_(snapshot.output_type) {
+  }
+
   stk::mesh::MetaData& meta_data_;
 
   bool field_has_rank_;
@@ -212,6 +259,10 @@ class FieldDeclarationHelperT {
   std::string field_name_;
   Ioss::Field::RoleType field_role_;
   stk::io::FieldOutputType output_type_;
+
+  friend class FieldDeclarationHelper;
+  template <typename OtherFieldScalarType, typename OtherAccessLike, typename OtherTag, stk::topology::rank_t OtherRank>
+  friend class TaggedFieldComponentDeclarationHelperT;
 };
 
 class FieldDeclarationHelper {
@@ -219,13 +270,19 @@ class FieldDeclarationHelper {
   //! \name Constructors and Assignment Operators
   //@{
 
+  using invalid_field_scalar_type = void;
+
   /// \brief Canonical constructor
   FieldDeclarationHelper(stk::mesh::MetaData& meta_data)
       : meta_data_(meta_data),
         field_has_rank_(false),
         field_has_name_(false),
         field_has_role_(false),
-        field_has_output_type_(false) {
+        field_has_output_type_(false),
+        rank_(stk::topology::INVALID_RANK),
+        field_name_(),
+        field_role_(Ioss::Field::RoleType{}),
+        output_type_(stk::io::FieldOutputType::CUSTOM) {
   }
 
   /// \brief Copy/Move constructors and assignment operators
@@ -240,20 +297,7 @@ class FieldDeclarationHelper {
   /// \brief Set the type of the field (must be called before declare())
   template <typename T>
   FieldDeclarationHelperT<T> type() {
-    FieldDeclarationHelperT<T> typed_builder(meta_data_);
-    if (field_has_rank_) {
-      typed_builder.rank(rank_);
-    }
-    if (field_has_name_) {
-      typed_builder.name(field_name_);
-    }
-    if (field_has_role_) {
-      typed_builder.role(field_role_);
-    }
-    if (field_has_output_type_) {
-      typed_builder.output_type(output_type_);
-    }
-    return typed_builder;
+    return FieldDeclarationHelperT<T>(impl::make_field_declaration_snapshot(*this));
   }
 
   /// \brief Set the entity rank of the field (must be called before declare())
@@ -284,6 +328,11 @@ class FieldDeclarationHelper {
     return *this;
   }
 
+  /// \brief Switch from field declaration to field-backed component declaration.
+  /// \note This member is defined in DeclareComponent.hpp.
+  template <typename AccessLike>
+  TaggedFieldComponentDeclarationHelperT<invalid_field_scalar_type, AccessLike> access() const;
+
   /// \brief Declare a field with the given stk output type and role.
   void declare() {
     // Validate that required parameters have been set
@@ -291,6 +340,18 @@ class FieldDeclarationHelper {
     MUNDY_THROW_REQUIRE(field_has_rank_, std::logic_error, "Field rank must be set before declaring a field.");
     MUNDY_THROW_REQUIRE(false, std::logic_error, "Field type must be set before declaring a field.");
   }
+
+  // clang-format off
+  stk::mesh::MetaData& meta_data() const { return meta_data_; }
+  bool has_rank() const { return field_has_rank_; }
+  bool has_name() const { return field_has_name_; }
+  bool has_role() const { return field_has_role_; }
+  bool has_output_type() const { return field_has_output_type_; }
+  stk::mesh::EntityRank rank_value() const { return rank_; }
+  const std::string& name_value() const { return field_name_; }
+  Ioss::Field::RoleType role_value() const { return field_role_; }
+  stk::io::FieldOutputType output_type_value() const { return output_type_; }
+  // clang-format on
 
  private:
   stk::mesh::MetaData& meta_data_;
