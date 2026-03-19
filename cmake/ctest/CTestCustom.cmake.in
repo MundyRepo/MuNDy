@@ -1,0 +1,7 @@
+#
+# Store enough output to make TriBITS/CDash submissions useful without pushing
+# unbounded XML payloads to the dashboard.
+#
+
+set(CTEST_CUSTOM_MAXIMUM_PASSED_TEST_OUTPUT_SIZE 500000)
+set(CTEST_CUSTOM_MAXIMUM_FAILED_TEST_OUTPUT_SIZE 5000000)

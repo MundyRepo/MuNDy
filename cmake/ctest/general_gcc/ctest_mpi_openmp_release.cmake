@@ -1,0 +1,56 @@
+include("${CMAKE_CURRENT_LIST_DIR}/../MundyCTestDriver.cmake")
+
+set(COMM_TYPE MPI)
+set(THREAD_TYPE OPENMP)
+set(BUILD_TYPE RELEASE)
+set(COMPILER_VERSION GCC)
+set(BUILD_DIR_NAME "${COMM_TYPE}_${THREAD_TYPE}_${BUILD_TYPE}")
+
+set_default_and_from_env(TRILINOS_ROOT_DIR "")
+set_default_and_from_env(TPL_ROOT_DIR "")
+set_default_and_from_env(MUNDY_CMAKE_CXX_COMPILER "mpicxx")
+set_default_and_from_env(MUNDY_CMAKE_CXX_FLAGS "-O3 -march=native")
+set_default_and_from_env(MUNDY_TEST_CATEGORIES "BASIC;CONTINUOUS;NIGHTLY")
+set_default_and_from_env(CTEST_BUILD_FLAGS "-j8")
+set_default_and_from_env(CTEST_PARALLEL_LEVEL "8")
+
+if(TRILINOS_ROOT_DIR STREQUAL "")
+  message(FATAL_ERROR "Set TRILINOS_ROOT_DIR before running this CTest driver.")
+endif()
+
+if(TPL_ROOT_DIR STREQUAL "")
+  message(FATAL_ERROR "Set TPL_ROOT_DIR before running this CTest driver.")
+endif()
+
+string(REPLACE ";" "\\;" MUNDY_TEST_CATEGORIES_ESCAPED "${MUNDY_TEST_CATEGORIES}")
+
+set(EXTRA_CONFIGURE_OPTIONS
+  "-DCMAKE_BUILD_TYPE:STRING=Release"
+  "-DCMAKE_CXX_COMPILER:STRING=${MUNDY_CMAKE_CXX_COMPILER}"
+  "-DCMAKE_CXX_FLAGS:STRING=${MUNDY_CMAKE_CXX_FLAGS}"
+  "-DTPL_ENABLE_MPI:BOOL=ON"
+  "-DMundy_ENABLE_TESTS:BOOL=ON"
+  "-DMundy_ENABLE_GTest:BOOL=ON"
+  "-DMundy_ENABLE_STKFMM:BOOL=OFF"
+  "-DMundy_ENABLE_PVFMM:BOOL=OFF"
+  "-DMundy_TEST_CATEGORIES:STRING=${MUNDY_TEST_CATEGORIES_ESCAPED}"
+  "-DTPL_GTest_DIR:PATH=${TPL_ROOT_DIR}"
+  "-DTPL_nanobench_DIR:PATH=${TPL_ROOT_DIR}"
+  "-DTPL_OpenRAND_DIR:PATH=${TPL_ROOT_DIR}"
+  "-DTPL_fmt_DIR:PATH=${TPL_ROOT_DIR}"
+  "-DTPL_Kokkos_DIR:PATH=${TRILINOS_ROOT_DIR}"
+  "-DTPL_KokkosKernels_DIR:PATH=${TRILINOS_ROOT_DIR}"
+  "-DTPL_STK_DIR:PATH=${TRILINOS_ROOT_DIR}"
+  "-DTPL_Teuchos_DIR:PATH=${TRILINOS_ROOT_DIR}"
+)
+
+set_default_and_from_env(MUNDY_CMAKE_INSTALL_PREFIX "")
+if(MUNDY_CMAKE_INSTALL_PREFIX)
+  list(APPEND EXTRA_CONFIGURE_OPTIONS
+    "-DCMAKE_INSTALL_PREFIX:PATH=${MUNDY_CMAKE_INSTALL_PREFIX}"
+  )
+endif()
+
+set(CTEST_TEST_TYPE Experimental)
+
+mundy_ctest_driver()
