@@ -102,6 +102,8 @@ KOKKOS_INLINE_FUNCTION constexpr auto norm(const AQuaternion<T, Accessor>& quat)
 /// on vectors in R3. It does not own the data, but rather it is templated on an Accessor type that provides access to
 /// the underlying data. This allows us to use AQuaternion with Kokkos Views, raw pointers, or any other type that meets
 /// the ValidAccessor requirements without copying the data. This is especially important for GPU-compatible code.
+/// The underlying data is stored in Eigen's coefficient order `(x, y, z, w)`, even though the semantic quaternion
+/// constructor and setters accept values in `(w, x, y, z)` order.
 ///
 /// Quaternions can be constructed by passing an accessor to the constructor. However, if the accessor has a 4-argument
 /// constructor, then the AQuaternion can also be constructed by passing the elements directly to the constructor.
@@ -113,12 +115,12 @@ KOKKOS_INLINE_FUNCTION constexpr auto norm(const AQuaternion<T, Accessor>& quat)
 ///   // Constructs an AQuaternion with the default accessor (Array<double, 4>)
 ///   AQuaternion<double> quat1({1.0, 2.0, 3.0, 4.0});
 ///   AQuaternion<double> quat2(1.0, 2.0, 3.0, 4.0);
-///   AQuaternion<double> quat3(Array<double, 4>({1.0, 2.0, 3.0, 4.0}));
+///   AQuaternion<double> quat3(Array<double, 4>({2.0, 3.0, 4.0, 1.0}));
 ///   AQuaternion<double> quat4;
 ///   quat4.set(1.0, 2.0, 3.0, 4.0);
 ///
-///   // Construct an AQuaternion from a double array
-///   double data[4] = {1.0, 2.0, 3.0, 4.0};
+///   // Construct an AQuaternion view from raw Eigen-style coefficient storage
+///   double data[4] = {2.0, 3.0, 4.0, 1.0};
 ///   AQuaternion<double, double*> quat5(data);
 ///   AQuaternion<double, double*> quat6{1.0, 2.0, 3.0, 4.0};
 ///   // Not allowed as double* doesn't have a 4-argument constructor
@@ -134,6 +136,11 @@ class AQuaternion {
  public:
   //! \name Internal data
   //@{
+
+  static constexpr size_t x_storage_index = 0;
+  static constexpr size_t y_storage_index = 1;
+  static constexpr size_t z_storage_index = 2;
+  static constexpr size_t w_storage_index = 3;
 
   /// \brief Stored accessor via storage.
   storage<Accessor> accessor_;
@@ -152,6 +159,28 @@ class AQuaternion {
   using deep_copy_t = AQuaternion<T>;
   //@}
 
+ private:
+  KOKKOS_INLINE_FUNCTION
+  static constexpr Accessor make_storage_from_semantic_components(const T& w, const T& x, const T& y, const T& z)
+    requires(HasNArgConstructor<Accessor, T, 4> || HasInitializerListConstructor<Accessor, T>)
+  {
+    return Accessor{x, y, z, w};
+  }
+
+  KOKKOS_INLINE_FUNCTION
+  static constexpr Accessor make_storage_from_semantic_components(const std::initializer_list<T>& list)
+    requires HasInitializerListConstructor<Accessor, T>
+  {
+    MUNDY_THROW_ASSERT(list.size() == 4, std::invalid_argument, "AQuaternion: Initializer list must have 4 elements.");
+    auto it = list.begin();
+    const T w = *it++;
+    const T x = *it++;
+    const T y = *it++;
+    const T z = *it++;
+    return make_storage_from_semantic_components(w, x, y, z);
+  }
+
+ public:
   //! \name Constructors and destructor
   //@{
 
@@ -176,17 +205,18 @@ class AQuaternion {
   /// \param[in] y The y component.
   /// \param[in] z The z component.
   /// \note This constructor is only enabled if the Accessor has a 4-argument constructor.
+  /// \note The underlying storage order is `(x, y, z, w)`.
   KOKKOS_INLINE_FUNCTION constexpr AQuaternion(const T& w, const T& x, const T& y, const T& z)
     requires HasNArgConstructor<Accessor, T, 4>
-      : accessor_(Accessor{w, x, y, z}) {
+      : accessor_(make_storage_from_semantic_components(w, x, y, z)) {
   }
 
   /// \brief Constructor to initialize all elements via initializer list
   /// \param[in] list The initializer list.
+  /// \note The initializer list is interpreted in `(w, x, y, z)` order.
   KOKKOS_INLINE_FUNCTION constexpr AQuaternion(const std::initializer_list<T>& list)
     requires HasInitializerListConstructor<Accessor, T>
-      : accessor_(list) {
-    MUNDY_THROW_ASSERT(list.size() == 4, std::invalid_argument, "AQuaternion: Initializer list must have 4 elements.");
+      : accessor_(make_storage_from_semantic_components(list)) {
   }
 
   /// \brief Destructor
@@ -259,6 +289,7 @@ class AQuaternion {
 
   /// \brief Element access operator via a single index
   /// \param[in] index The index of the element.
+  /// \note Indices follow the raw storage order `(x, y, z, w)`.
   KOKKOS_INLINE_FUNCTION
   constexpr T& operator[](size_t index) {
     MUNDY_THROW_ASSERT(index < 4, std::out_of_range, "AQuaternion index out of bounds.");
@@ -267,6 +298,7 @@ class AQuaternion {
 
   /// \brief Const element access operator via a single index
   /// \param[in] index The index of the element.
+  /// \note Indices follow the raw storage order `(x, y, z, w)`.
   KOKKOS_INLINE_FUNCTION
   constexpr const T& operator[](size_t index) const {
     MUNDY_THROW_ASSERT(index < 4, std::out_of_range, "AQuaternion index out of bounds.");
@@ -275,6 +307,7 @@ class AQuaternion {
 
   /// \brief Element access operator via a single index
   /// \param[in] index The index of the element.
+  /// \note Indices follow the raw storage order `(x, y, z, w)`.
   KOKKOS_INLINE_FUNCTION
   constexpr T& operator()(size_t index) {
     MUNDY_THROW_ASSERT(index < 4, std::out_of_range, "AQuaternion index out of bounds.");
@@ -283,6 +316,7 @@ class AQuaternion {
 
   /// \brief Const element access operator via a single index
   /// \param[in] index The index of the element.
+  /// \note Indices follow the raw storage order `(x, y, z, w)`.
   KOKKOS_INLINE_FUNCTION
   constexpr const T& operator()(size_t index) const {
     MUNDY_THROW_ASSERT(index < 4, std::out_of_range, "AQuaternion index out of bounds.");
@@ -292,58 +326,60 @@ class AQuaternion {
   /// \brief Get a reference to the scalar component
   KOKKOS_INLINE_FUNCTION
   constexpr T& w() {
-    return impl::access_at(accessor_, 0);
+    return impl::access_at(accessor_, w_storage_index);
   }
 
   /// \brief Get a reference to the scalar component
   KOKKOS_INLINE_FUNCTION
   constexpr const T& w() const {
-    return impl::access_at(accessor_, 0);
+    return impl::access_at(accessor_, w_storage_index);
   }
 
   /// \brief Get a reference to the x component
   KOKKOS_INLINE_FUNCTION
   constexpr T& x() {
-    return impl::access_at(accessor_, 1);
+    return impl::access_at(accessor_, x_storage_index);
   }
 
   /// \brief Get a reference to the x component
   KOKKOS_INLINE_FUNCTION
   constexpr const T& x() const {
-    return impl::access_at(accessor_, 1);
+    return impl::access_at(accessor_, x_storage_index);
   }
 
   /// \brief Get a reference to the y component
   KOKKOS_INLINE_FUNCTION
   constexpr T& y() {
-    return impl::access_at(accessor_, 2);
+    return impl::access_at(accessor_, y_storage_index);
   }
 
   /// \brief Get a reference to the y component
   KOKKOS_INLINE_FUNCTION
   constexpr const T& y() const {
-    return impl::access_at(accessor_, 2);
+    return impl::access_at(accessor_, y_storage_index);
   }
 
   /// \brief Get a reference to the z component
   KOKKOS_INLINE_FUNCTION
   constexpr T& z() {
-    return impl::access_at(accessor_, 3);
+    return impl::access_at(accessor_, z_storage_index);
   }
 
   /// \brief Get a reference to the z component
   KOKKOS_INLINE_FUNCTION
   constexpr const T& z() const {
-    return impl::access_at(accessor_, 3);
+    return impl::access_at(accessor_, z_storage_index);
   }
 
   /// \brief Get the internal data accessor
+  /// \note The returned accessor exposes the raw storage order `(x, y, z, w)`.
   KOKKOS_INLINE_FUNCTION
   constexpr decltype(auto) data() {
     return accessor_.get();
   }
 
   /// \brief Get the internal data accessor
+  /// \note The returned accessor exposes the raw storage order `(x, y, z, w)`.
   KOKKOS_INLINE_FUNCTION
   constexpr decltype(auto) data() const {
     return accessor_.get();
@@ -352,14 +388,14 @@ class AQuaternion {
   /// \brief Get a view of the quaternion vector component
   KOKKOS_INLINE_FUNCTION
   constexpr const auto vector() const {
-    auto shifted_accessor = get_shifted_view<T, 1>(accessor_);
+    auto shifted_accessor = get_shifted_view<T, x_storage_index>(accessor_);
     return get_owning_vector<T, 3>(std::move(shifted_accessor));
   }
 
   /// \brief Get a view of the quaternion vector component
   KOKKOS_INLINE_FUNCTION
   constexpr auto vector() {
-    auto shifted_accessor = get_shifted_view<T, 1>(accessor_);
+    auto shifted_accessor = get_shifted_view<T, x_storage_index>(accessor_);
     return get_owning_vector<T, 3>(std::move(shifted_accessor));
   }
 
@@ -372,10 +408,7 @@ class AQuaternion {
   /// \brief Cast (and copy) the quaternion to a different type
   template <typename U>
   KOKKOS_INLINE_FUNCTION constexpr auto cast() const {
-    return AQuaternion<U>{static_cast<U>(impl::access_at(accessor_, 0)),  //
-                          static_cast<U>(impl::access_at(accessor_, 1)),  //
-                          static_cast<U>(impl::access_at(accessor_, 2)),  //
-                          static_cast<U>(impl::access_at(accessor_, 3))};
+    return AQuaternion<U>{static_cast<U>(w()), static_cast<U>(x()), static_cast<U>(y()), static_cast<U>(z())};
   }
   //@}
 
@@ -391,10 +424,10 @@ class AQuaternion {
   constexpr void set(const T& w, const T& x, const T& y, const T& z)
     requires HasNonConstAccessOperator<Accessor, T>
   {
-    impl::access_at(accessor_, 0) = w;
-    impl::access_at(accessor_, 1) = x;
-    impl::access_at(accessor_, 2) = y;
-    impl::access_at(accessor_, 3) = z;
+    impl::access_at(accessor_, x_storage_index) = x;
+    impl::access_at(accessor_, y_storage_index) = y;
+    impl::access_at(accessor_, z_storage_index) = z;
+    impl::access_at(accessor_, w_storage_index) = w;
   }
 
   /// \brief Set all elements of the quaternion
@@ -404,10 +437,10 @@ class AQuaternion {
   constexpr void set(const T& w, const Vector3<T>& vec)
     requires HasNonConstAccessOperator<Accessor, T>
   {
-    impl::access_at(accessor_, 0) = w;
-    impl::access_at(accessor_, 1) = vec[0];
-    impl::access_at(accessor_, 2) = vec[1];
-    impl::access_at(accessor_, 3) = vec[2];
+    impl::access_at(accessor_, x_storage_index) = vec[0];
+    impl::access_at(accessor_, y_storage_index) = vec[1];
+    impl::access_at(accessor_, z_storage_index) = vec[2];
+    impl::access_at(accessor_, w_storage_index) = w;
   }
 
   /// \brief Set all elements of the vector using an accessor
@@ -429,9 +462,9 @@ class AQuaternion {
   constexpr void set_vector(const Vector3<T>& vec)
     requires HasNonConstAccessOperator<Accessor, T>
   {
-    impl::access_at(accessor_, 1) = vec[0];
-    impl::access_at(accessor_, 2) = vec[1];
-    impl::access_at(accessor_, 3) = vec[2];
+    impl::access_at(accessor_, x_storage_index) = vec[0];
+    impl::access_at(accessor_, y_storage_index) = vec[1];
+    impl::access_at(accessor_, z_storage_index) = vec[2];
   }
 
   /// \brief Normalize the quaternion in place
@@ -453,9 +486,9 @@ class AQuaternion {
   constexpr void conjugate()
     requires HasNonConstAccessOperator<Accessor, T>
   {
-    impl::access_at(accessor_, 1) = -impl::access_at(accessor_, 1);
-    impl::access_at(accessor_, 2) = -impl::access_at(accessor_, 2);
-    impl::access_at(accessor_, 3) = -impl::access_at(accessor_, 3);
+    impl::access_at(accessor_, x_storage_index) = -impl::access_at(accessor_, x_storage_index);
+    impl::access_at(accessor_, y_storage_index) = -impl::access_at(accessor_, y_storage_index);
+    impl::access_at(accessor_, z_storage_index) = -impl::access_at(accessor_, z_storage_index);
   }
 
   /// \brief Invert the quaternion in place
@@ -483,15 +516,13 @@ class AQuaternion {
   /// \brief Unary plus operator
   KOKKOS_INLINE_FUNCTION
   constexpr AQuaternion<T> operator+() const {
-    return AQuaternion<T>(+impl::access_at(accessor_, 0), +impl::access_at(accessor_, 1),
-                          +impl::access_at(accessor_, 2), +impl::access_at(accessor_, 3));
+    return AQuaternion<T>(+w(), +x(), +y(), +z());
   }
 
   /// \brief Unary minus operator
   KOKKOS_INLINE_FUNCTION
   constexpr AQuaternion<T> operator-() const {
-    return AQuaternion<T>(-impl::access_at(accessor_, 0), -impl::access_at(accessor_, 1),
-                          -impl::access_at(accessor_, 2), -impl::access_at(accessor_, 3));
+    return AQuaternion<T>(-w(), -x(), -y(), -z());
   }
   //@}
 
@@ -645,7 +676,7 @@ using Quaternion = AQuaternion<T, Array<T, 4>>;
 /// \param[in] quat The quaternion.
 template <typename T, ValidAccessor<T> Accessor>
 std::ostream& operator<<(std::ostream& os, const AQuaternion<T, Accessor>& quat) {
-  os << "(" << quat[0] << ", " << quat[1] << ", " << quat[2] << ", " << quat[3] << ")";
+  os << "(" << quat.w() << ", " << quat.x() << ", " << quat.y() << ", " << quat.z() << ")";
   return os;
 }
 //@}
@@ -662,10 +693,10 @@ KOKKOS_INLINE_FUNCTION constexpr bool is_close(
     const AQuaternion<U, Accessor1>& quat1, const AQuaternion<T, Accessor2>& quat2,
     const decltype(get_comparison_tolerance<T, U>())& tol = get_comparison_tolerance<T, U>()) {
   using Tol = decltype(tol);
-  return Kokkos::abs(static_cast<Tol>(quat1[0]) - static_cast<Tol>(quat2[0])) <= tol &&
-         Kokkos::abs(static_cast<Tol>(quat1[1]) - static_cast<Tol>(quat2[1])) <= tol &&
-         Kokkos::abs(static_cast<Tol>(quat1[2]) - static_cast<Tol>(quat2[2])) <= tol &&
-         Kokkos::abs(static_cast<Tol>(quat1[3]) - static_cast<Tol>(quat2[3])) <= tol;
+  return Kokkos::abs(static_cast<Tol>(quat1.w()) - static_cast<Tol>(quat2.w())) <= tol &&
+         Kokkos::abs(static_cast<Tol>(quat1.x()) - static_cast<Tol>(quat2.x())) <= tol &&
+         Kokkos::abs(static_cast<Tol>(quat1.y()) - static_cast<Tol>(quat2.y())) <= tol &&
+         Kokkos::abs(static_cast<Tol>(quat1.z()) - static_cast<Tol>(quat2.z())) <= tol;
 }
 
 /// \brief AQuaternion-quaternion equality (element-wise within a relaxed tolerance)
@@ -728,29 +759,24 @@ KOKKOS_INLINE_FUNCTION constexpr auto copy(const QuaternionType& q) {
 template <typename U, typename T, ValidAccessor<U> Accessor1, ValidAccessor<T> Accessor2>
 KOKKOS_INLINE_FUNCTION constexpr auto dot(const AQuaternion<U, Accessor1>& q1, const AQuaternion<T, Accessor2>& q2) {
   using CommonType = std::common_type_t<U, T>;
-  return static_cast<CommonType>(q1[0]) * static_cast<CommonType>(q2[0]) +
-         static_cast<CommonType>(q1[1]) * static_cast<CommonType>(q2[1]) +
-         static_cast<CommonType>(q1[2]) * static_cast<CommonType>(q2[2]) +
-         static_cast<CommonType>(q1[3]) * static_cast<CommonType>(q2[3]);
+  return static_cast<CommonType>(q1.w()) * static_cast<CommonType>(q2.w()) +
+         static_cast<CommonType>(q1.x()) * static_cast<CommonType>(q2.x()) +
+         static_cast<CommonType>(q1.y()) * static_cast<CommonType>(q2.y()) +
+         static_cast<CommonType>(q1.z()) * static_cast<CommonType>(q2.z());
 }
 
 /// \brief Get the conjugate of a quaternion
 /// \param[in] quat The quaternion.
 template <typename T, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr AQuaternion<std::remove_const_t<T>> conjugate(const AQuaternion<T, Accessor>& quat) {
-  AQuaternion<std::remove_const_t<T>> result;
-  result[0] = quat[0];
-  result[1] = -quat[1];
-  result[2] = -quat[2];
-  result[3] = -quat[3];
-  return result;
+  return AQuaternion<std::remove_const_t<T>>(quat.w(), -quat.x(), -quat.y(), -quat.z());
 }
 
 /// \brief Get the inverse of a quaternion
 /// \param[in] quat The quaternion.
 template <typename T, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr AQuaternion<std::remove_const_t<T>> inverse(const AQuaternion<T, Accessor>& quat) {
-  const T quat_norm_squared = quat[0] * quat[0] + quat[1] * quat[1] + quat[2] * quat[2] + quat[3] * quat[3];
+  const T quat_norm_squared = quat.w() * quat.w() + quat.x() * quat.x() + quat.y() * quat.y() + quat.z() * quat.z();
   MUNDY_THROW_ASSERT(!is_close(quat_norm_squared, T(0)), std::runtime_error, "AQuaternion: Cannot invert zero norm.");
   const T inv_norm_squared = T(1) / quat_norm_squared;
   return conjugate(quat) * inv_norm_squared;
@@ -760,14 +786,14 @@ KOKKOS_INLINE_FUNCTION constexpr AQuaternion<std::remove_const_t<T>> inverse(con
 /// \param[in] quat The quaternion.
 template <typename T, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto norm(const AQuaternion<T, Accessor>& quat) {
-  return Kokkos::sqrt(quat[0] * quat[0] + quat[1] * quat[1] + quat[2] * quat[2] + quat[3] * quat[3]);
+  return Kokkos::sqrt(quat.w() * quat.w() + quat.x() * quat.x() + quat.y() * quat.y() + quat.z() * quat.z());
 }
 
 /// \brief Get the squared norm of a quaternion
 /// \param[in] quat The quaternion.
 template <typename T, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto norm_squared(const AQuaternion<T, Accessor>& quat) {
-  return quat[0] * quat[0] + quat[1] * quat[1] + quat[2] * quat[2] + quat[3] * quat[3];
+  return quat.w() * quat.w() + quat.x() * quat.x() + quat.y() * quat.y() + quat.z() * quat.z();
 }
 
 /// \brief Get the normalized quaternion
@@ -814,14 +840,14 @@ KOKKOS_INLINE_FUNCTION constexpr auto slerp(const AQuaternion<U, Accessor1>& q1,
   if (static_cast<CommonType>(1) - dot_q12 < epsilon) {
     // Linear Interpolation as fallback
     return AQuaternion<CommonType>{
-        static_cast<CommonType>(q1[0]) +
-            static_cast<CommonType>(t) * (static_cast<CommonType>(q2_adjusted[0]) - static_cast<CommonType>(q1[0])),
-        static_cast<CommonType>(q1[1]) +
-            static_cast<CommonType>(t) * (static_cast<CommonType>(q2_adjusted[1]) - static_cast<CommonType>(q1[1])),
-        static_cast<CommonType>(q1[2]) +
-            static_cast<CommonType>(t) * (static_cast<CommonType>(q2_adjusted[2]) - static_cast<CommonType>(q1[2])),
-        static_cast<CommonType>(q1[3]) +
-            static_cast<CommonType>(t) * (static_cast<CommonType>(q2_adjusted[3]) - static_cast<CommonType>(q1[3]))};
+        static_cast<CommonType>(q1.w()) +
+            static_cast<CommonType>(t) * (static_cast<CommonType>(q2_adjusted.w()) - static_cast<CommonType>(q1.w())),
+        static_cast<CommonType>(q1.x()) +
+            static_cast<CommonType>(t) * (static_cast<CommonType>(q2_adjusted.x()) - static_cast<CommonType>(q1.x())),
+        static_cast<CommonType>(q1.y()) +
+            static_cast<CommonType>(t) * (static_cast<CommonType>(q2_adjusted.y()) - static_cast<CommonType>(q1.y())),
+        static_cast<CommonType>(q1.z()) +
+            static_cast<CommonType>(t) * (static_cast<CommonType>(q2_adjusted.z()) - static_cast<CommonType>(q1.z()))};
   } else {
     // Spherical Interpolation
     const CommonType theta = Kokkos::acos(dot_q12);
@@ -833,14 +859,14 @@ KOKKOS_INLINE_FUNCTION constexpr auto slerp(const AQuaternion<U, Accessor1>& q1,
         Kokkos::sin((static_cast<CommonType>(1) - static_cast<CommonType>(t)) * theta) * inv_sin_theta;
     const CommonType s2 = Kokkos::sin(static_cast<CommonType>(t) * theta) * inv_sin_theta;
 
-    return AQuaternion<CommonType>{(static_cast<CommonType>(s1) * static_cast<CommonType>(q1[0])) +
-                                       (static_cast<CommonType>(s2) * static_cast<CommonType>(q2_adjusted[0])),
-                                   (static_cast<CommonType>(s1) * static_cast<CommonType>(q1[1])) +
-                                       (static_cast<CommonType>(s2) * static_cast<CommonType>(q2_adjusted[1])),
-                                   (static_cast<CommonType>(s1) * static_cast<CommonType>(q1[2])) +
-                                       (static_cast<CommonType>(s2) * static_cast<CommonType>(q2_adjusted[2])),
-                                   (static_cast<CommonType>(s1) * static_cast<CommonType>(q1[3])) +
-                                       (static_cast<CommonType>(s2) * static_cast<CommonType>(q2_adjusted[3]))};
+    return AQuaternion<CommonType>{(static_cast<CommonType>(s1) * static_cast<CommonType>(q1.w())) +
+                                       (static_cast<CommonType>(s2) * static_cast<CommonType>(q2_adjusted.w())),
+                                   (static_cast<CommonType>(s1) * static_cast<CommonType>(q1.x())) +
+                                       (static_cast<CommonType>(s2) * static_cast<CommonType>(q2_adjusted.x())),
+                                   (static_cast<CommonType>(s1) * static_cast<CommonType>(q1.y())) +
+                                       (static_cast<CommonType>(s2) * static_cast<CommonType>(q2_adjusted.y())),
+                                   (static_cast<CommonType>(s1) * static_cast<CommonType>(q1.z())) +
+                                       (static_cast<CommonType>(s2) * static_cast<CommonType>(q2_adjusted.z()))};
   }
 }
 
@@ -954,9 +980,9 @@ KOKKOS_INLINE_FUNCTION constexpr AQuaternion<T> rotation_matrix_to_quaternion(co
   quat.z() = Kokkos::sqrt(Kokkos::max(T(0), T(1) - rot_mat(0, 0) - rot_mat(1, 1) + rot_mat(2, 2))) / T(2);
 
   // Correcting the signs
-  quat.x() = std::copysign(quat[1], rot_mat(2, 1) - rot_mat(1, 2));
-  quat.y() = std::copysign(quat[2], rot_mat(0, 2) - rot_mat(2, 0));
-  quat.z() = std::copysign(quat[3], rot_mat(1, 0) - rot_mat(0, 1));
+  quat.x() = std::copysign(quat.x(), rot_mat(2, 1) - rot_mat(1, 2));
+  quat.y() = std::copysign(quat.y(), rot_mat(0, 2) - rot_mat(2, 0));
+  quat.z() = std::copysign(quat.z(), rot_mat(1, 0) - rot_mat(0, 1));
 
   return quat;
 }
@@ -1072,6 +1098,7 @@ MUNDY_MATH_QUATERNION_TYPE_SPECIALIZATION(Quaternionf, quaternionf, float)
 
 /// \brief A helper function to create a AQuaternion<T, Accessor> based on a given accessor.
 /// \param[in] data The data accessor.
+/// \note The accessor is interpreted in the raw storage order `(x, y, z, w)`.
 ///
 /// In practice, this function is syntactic sugar to avoid having to specify the template parameters
 /// when creating a AQuaternion<T, Accessor> from a data accessor.

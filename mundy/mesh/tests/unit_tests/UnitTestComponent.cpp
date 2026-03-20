@@ -174,21 +174,21 @@ TEST_F(UnitTestComponentFixture, FieldComponentExposeTypedViewsAndMutations) {
   EXPECT_DOUBLE_EQ(stk::mesh::field_data(*matrix3_field_ptr_, node1_)[5], 123.0);
 
   auto raw_quaternion = raw_accessor(node1_);
-  EXPECT_DOUBLE_EQ(raw_quaternion[0], 31.0);
-  EXPECT_DOUBLE_EQ(raw_quaternion[1], 32.0);
-  EXPECT_DOUBLE_EQ(raw_quaternion[2], 33.0);
-  EXPECT_DOUBLE_EQ(raw_quaternion[3], 34.0);
+  EXPECT_DOUBLE_EQ(raw_quaternion[0], 32.0);
+  EXPECT_DOUBLE_EQ(raw_quaternion[1], 33.0);
+  EXPECT_DOUBLE_EQ(raw_quaternion[2], 34.0);
+  EXPECT_DOUBLE_EQ(raw_quaternion[3], 31.0);
   raw_quaternion[3] = 44.0;
   EXPECT_DOUBLE_EQ(stk::mesh::field_data(*quaternion_field_ptr_, node1_)[3], 44.0);
 
   auto quaternion1 = quaternion_accessor(node1_);
-  EXPECT_DOUBLE_EQ(quaternion1.w(), 31.0);
-  EXPECT_DOUBLE_EQ(quaternion1.z(), 44.0);
+  EXPECT_DOUBLE_EQ(quaternion1.w(), 44.0);
+  EXPECT_DOUBLE_EQ(quaternion1.z(), 34.0);
   quaternion1.set(0.1, 0.2, 0.3, 0.4);
-  EXPECT_DOUBLE_EQ(stk::mesh::field_data(*quaternion_field_ptr_, node1_)[0], 0.1);
-  EXPECT_DOUBLE_EQ(stk::mesh::field_data(*quaternion_field_ptr_, node1_)[1], 0.2);
-  EXPECT_DOUBLE_EQ(stk::mesh::field_data(*quaternion_field_ptr_, node1_)[2], 0.3);
-  EXPECT_DOUBLE_EQ(stk::mesh::field_data(*quaternion_field_ptr_, node1_)[3], 0.4);
+  EXPECT_DOUBLE_EQ(stk::mesh::field_data(*quaternion_field_ptr_, node1_)[0], 0.2);
+  EXPECT_DOUBLE_EQ(stk::mesh::field_data(*quaternion_field_ptr_, node1_)[1], 0.3);
+  EXPECT_DOUBLE_EQ(stk::mesh::field_data(*quaternion_field_ptr_, node1_)[2], 0.4);
+  EXPECT_DOUBLE_EQ(stk::mesh::field_data(*quaternion_field_ptr_, node1_)[3], 0.1);
 
   auto aabb1 = aabb_accessor(node1_);
   EXPECT_DOUBLE_EQ(aabb1.x_min(), 41.0);

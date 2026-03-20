@@ -85,7 +85,7 @@ void run_test() {
   double expected_scalar_data[1] = {1.0};
   double expected_vector3_data[3] = {1.0, 2.0, 3.0};
   double expected_matrix3_data[9] = {1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0};
-  double expected_quaternion_data[4] = {1.0, 2.0, 3.0, 4.0};
+  double expected_quaternion_data[4] = {2.0, 3.0, 4.0, 1.0};
   double expected_aabb_data[6] = {1.0, 2.0, 3.0, 4.0, 5.0, 6.0};
   stk::mesh::put_field_on_mesh(scalar_field, meta_data.universal_part(), 1, expected_scalar_data);
   stk::mesh::put_field_on_mesh(vector3_field, meta_data.universal_part(), 3, expected_vector3_data);
