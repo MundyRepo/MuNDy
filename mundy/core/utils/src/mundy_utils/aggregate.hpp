@@ -876,7 +876,7 @@ class aggregate {
   //@}
 };  // aggregate
 
-/// \brief A seduction guide to allow for aggregate() instead of aggregate<>() when constructing an aggregate with template argument deduction
+/// \brief A deduction guide to allow for aggregate() instead of aggregate<>()
 template <typename... TaggedComponents>
 aggregate(TaggedComponents...) -> aggregate<TaggedComponents...>;
 

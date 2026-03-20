@@ -111,7 +111,7 @@ TEST(UnitTestComponentDeclaration, FieldAndSharedDeclarationsIntegrateWithAggreg
   vector3_field_data(coords.component().field(), elem1).set(1.0, 2.0, 3.0);
   coords.modify_on_host();
 
-  auto agg = make_aggregate(bulk_data, particle_part).add_component(coords).add_component(speed);
+  auto agg = Aggregate(bulk_data, particle_part).add_component(coords).add_component(speed);
 
   EXPECT_EQ(agg.get_component<DECLARED_COORDS>().component().field().mesh_meta_data_ordinal(),
             coords.component().field().mesh_meta_data_ordinal());

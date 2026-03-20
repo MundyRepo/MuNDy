@@ -94,7 +94,7 @@ void test_aggregate(const stk::mesh::BulkData& bulk_data, stk::mesh::Part& spher
   auto radius_accessor = ScalarFieldComponent(elem_radius_field);
 
   // Create an aggregate for the spheres
-  const auto sphere_data = make_aggregate(bulk_data, sphere_part)
+  const auto sphere_data = Aggregate(bulk_data, sphere_part)
                                .add_component<FORCE>(force_accessor)
                                .add_component<VELOCITY>(velocity_accessor)
                                .add_component<RADIUS>(radius_accessor);

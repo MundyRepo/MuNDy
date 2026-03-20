@@ -410,12 +410,12 @@ The following isn't THAT bad as long as users know the right recipes. If they wa
 contact, they can.
   stk::mesh::Part &spheres = part_declarer.name("SPHERES").topology(stk::topology::PARTICLE).role(IOPartRole::IO).declare();
   auto assemble_contact_spheres_agg = [&spheres]() {
-    return make_aggregate<stk::topology::PARTICLE>(spheres)
+    return Aggregate<stk::topology::PARTICLE>(spheres)
       .append<CENTER>(center_field)
       .append<RADIUS>(contact_radius_field);
   };
   auto assemble_hydro_spheres_agg = [&spheres]() {
-    return make_aggregate<stk::topology::PARTICLE>(spheres)
+    return Aggregate:topology::PARTICLE>(spheres)
       .append<CENTER>(center_field)
       .append<RADIUS>(hydro_radius_field);
   };

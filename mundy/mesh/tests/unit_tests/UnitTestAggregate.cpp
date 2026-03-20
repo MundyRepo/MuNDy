@@ -132,7 +132,7 @@ TEST(UnitTestAggregate, BasicUsage) {
   EXPECT_DOUBLE_EQ(radius[0], expected_radius);
 
   // Create an aggregate for the spheres
-  const auto collision_sphere_data = make_aggregate(bulk_data, sphere_part)
+  const auto collision_sphere_data = Aggregate(bulk_data, sphere_part)
                                          .add_component<CENTER>(center_accessor)
                                          .add_component<COLLISION_RADIUS>(radius_accessor);
 
@@ -251,7 +251,7 @@ void run_canonical_test() {
   auto mass_accessor = ScalarFieldComponent(elem_mass_field);
 
   // Create an aggregate for the spheres
-  const auto sphere_data = make_aggregate(bulk_data, sphere_part)
+  const auto sphere_data = Aggregate(bulk_data, sphere_part)
                                .add_component<CENTER>(center_accessor)
                                .add_component<FORCE>(force_accessor)
                                .add_component<VELOCITY>(velocity_accessor)

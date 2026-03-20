@@ -172,7 +172,7 @@ namespace mesh {
 ///
 /// The Aggregate class can be constructed directly as "Aggregate<>(bulk_data, selector)", but we also offer
 /// a non-member helper function to streamline this process.
-///   - Use "make_aggregate(bulk_data, selector)" to create an empty aggregate.
+///   - Use "Aggregate(bulk_data, selector)" to create an empty aggregate.
 ///
 /// Adding components to an aggregate is done via the fluent interface "add_component<Tag>(accessor)",
 /// which returns a new aggregate with the added component. This allows for easy chaining of components,
@@ -202,7 +202,7 @@ namespace mesh {
 ///    double& radius = radius_accessor(node1);
 ///
 ///    // Create an aggregate for the spheres
-///    auto collision_sphere_data = make_aggregate(bulk_data, selector)
+///    auto collision_sphere_data = Aggregate(bulk_data, selector)
 ///            .add_component<CENTER>(center_accessor)
 ///            .add_component<COLLISION_RADIUS>(radius_accessor);
 ///
@@ -629,10 +629,9 @@ class NgpAggregate {
   //@}
 };  // NgpAggregate
 
-/// \brief Make an empty aggregate
-auto make_aggregate(const stk::mesh::BulkData& bulk_data, stk::mesh::Selector selector) {
-  return Aggregate<>(bulk_data, selector);
-}
+/// \brief A deduction guide to allow for Aggregate() instead of Aggregate<>()
+template <typename... TaggedComponents>
+Aggregate(TaggedComponents...) -> Aggregate<TaggedComponents...>;
 
 /// \brief Get a component of the given aggregate (const)
 /// This simply calls the get_component method of the given aggregate and solely exists so you don't need to write
