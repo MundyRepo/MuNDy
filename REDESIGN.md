@@ -261,7 +261,7 @@ Now, we have a design decision to make. How should the aggregates "look":
             center += radius[0];
 
             // or for fused operations.
-            auto sphere = make_aggregate().append<CENTER>(center).append<RADIUS>(radius);
+            auto sphere = aggregate().append<CENTER>(center).append<RADIUS>(radius);
             wrap_rigid(sphere);
           });
     - They don't offer for_each directly and don't necessarily store a selector, rank, or topology.

@@ -47,6 +47,25 @@ if (Mundy_ENABLE_TESTS AND Mundy_ENABLE_nanobench)
   )
 
   tribits_add_executable(
+    PerfTestSharedComponents
+    SOURCES
+      PerfTestSharedComponents.cpp
+      PerfTestSharedComponentsSupport.cpp
+      PerfTestSharedComponentsDrag.cpp
+      PerfTestSharedComponentsBodyMobility.cpp
+      PerfTestSharedComponentsComplex.cpp
+    INSTALLABLE
+    CATEGORIES PERFORMANCE
+  )
+
+  tribits_add_executable(
+    PerfTestShareIssue
+    SOURCES PerfTestShareIssue.cpp
+    INSTALLABLE
+    CATEGORIES PERFORMANCE
+  )
+
+  tribits_add_executable(
     PerfTestAggregates
     SOURCES PerfTestAggregates.cpp
     INSTALLABLE

@@ -781,12 +781,12 @@ class NgpForEachEntityExprDriver {
           // expr.eval(Kokkos::Array<stk::mesh::FastMeshIndex, 1>{entity_index}, evaluation_context);
 
           // Sum the counts of each expression in the tree
-          constexpr auto empty_eval_counts = make_aggregate();
+          constexpr auto empty_eval_counts = aggregate();
           constexpr auto eval_counts =
               Expr::template increment_eval_counts<decltype(empty_eval_counts), empty_eval_counts>();
 
           // Perform the eval
-          auto empty_cache = make_aggregate();
+          auto empty_cache = aggregate();
           expr.template cached_eval<decltype(eval_counts), eval_counts>(
               Kokkos::Array<stk::mesh::FastMeshIndex, 1>{entity_index}, empty_cache, evaluation_context);
         });
@@ -810,12 +810,12 @@ class NgpForEachEntityExprDriver {
         ngp_mesh, rank_, selector_, reduction,
         KOKKOS_LAMBDA(const stk::mesh::FastMeshIndex& entity_index, value_type& value) {
           // Sum the counts of each expression in the tree
-          constexpr auto empty_eval_counts = make_aggregate();
+          constexpr auto empty_eval_counts = aggregate();
           constexpr auto eval_counts =
               Expr::template increment_eval_counts<decltype(empty_eval_counts), empty_eval_counts>();
 
           // Perform the eval
-          auto empty_cache = make_aggregate();
+          auto empty_cache = aggregate();
           auto [val, final_cache] = expr.template cached_eval<decltype(eval_counts), eval_counts>(
               Kokkos::Array<stk::mesh::FastMeshIndex, 1>{entity_index}, empty_cache, evaluation_context);
 
@@ -895,12 +895,12 @@ class NgpForEachEntityPairExprDriver {
           // expr.eval(Kokkos::Array<stk::mesh::FastMeshIndex, 2>{left_fmi, right_fmi}, evaluation_context);
 
           // Sum the counts of each expression in the tree
-          constexpr auto empty_eval_counts = make_aggregate();
+          constexpr auto empty_eval_counts = aggregate();
           constexpr auto eval_counts =
               Expr::template increment_eval_counts<decltype(empty_eval_counts), empty_eval_counts>();
 
           // Perform the eval
-          auto empty_cache = make_aggregate();
+          auto empty_cache = aggregate();
           expr.template cached_eval<decltype(eval_counts), eval_counts>(
               Kokkos::Array<stk::mesh::FastMeshIndex, 2>{left_fmi, right_fmi}, empty_cache, evaluation_context);
         });
@@ -930,12 +930,12 @@ class NgpForEachEntityPairExprDriver {
           stk::mesh::FastMeshIndex right_fmi = FMIExtractor::get_right_index(entity_pair);
 
           // Sum the counts of each expression in the tree
-          constexpr auto empty_eval_counts = make_aggregate();
+          constexpr auto empty_eval_counts = aggregate();
           constexpr auto eval_counts =
               Expr::template increment_eval_counts<decltype(empty_eval_counts), empty_eval_counts>();
 
           // Perform the eval
-          auto empty_cache = make_aggregate();
+          auto empty_cache = aggregate();
           auto [val, final_cache] = expr.template cached_eval<decltype(eval_counts), eval_counts>(
               Kokkos::Array<stk::mesh::FastMeshIndex, 2>{left_fmi, right_fmi}, empty_cache, evaluation_context);
 

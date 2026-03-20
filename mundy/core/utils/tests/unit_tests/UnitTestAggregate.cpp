@@ -49,7 +49,7 @@ struct VEL;
 struct COUNT;
 
 TEST(AggregateTest, CompileTimeExtensibleTuple) {
-  auto cfg = make_aggregate()       //
+  auto cfg = aggregate()            //
                  .append<DT>(0.01)  //
                  .append<MAX_ITERS>(1000);
 
@@ -61,7 +61,7 @@ TEST(AggregateTest, CompileTimeExtensibleTuple) {
 }
 
 TEST(AggregateTest, ConstexprUsage) {
-  constexpr auto cfg = make_aggregate()       //
+  constexpr auto cfg = aggregate()            //
                            .append<DT>(0.02)  //
                            .append<MAX_ITERS>(500);
 
@@ -73,7 +73,7 @@ TEST(AggregateTest, AggregationOfAccessors) {
   auto center_accessor = [](int i) { return i * 2; };
   auto radius_accessor = [](int i) { return i + 1; };
 
-  auto spheres = make_aggregate()                      //
+  auto spheres = aggregate()                           //
                      .append<CENTER>(center_accessor)  //
                      .append<RADIUS>(radius_accessor);
 
@@ -98,7 +98,7 @@ TEST(AggregateTest, AggregationOfPolicies) {
     }
   };
 
-  auto solver_policies = make_aggregate()                     //
+  auto solver_policies = aggregate()                          //
                              .append<SOLVER>(SolverPolicy{})  //
                              .append<PRECONDITIONER>(PreconditionerPolicy{});
 
@@ -120,7 +120,7 @@ TEST(AggregateTest, AggregationOfAlgorithms) {
     }
   };
 
-  auto algs = make_aggregate()                    //
+  auto algs = aggregate()                         //
                   .append<SORT>(SortAlgorithm{})  //
                   .append<FILTER>(FilterAlgorithm{});
 
@@ -136,7 +136,7 @@ TEST(AggregateTest, MixedUsage) {
   auto pos_accessor = [](int i) { return i * 10; };
   auto vel_accessor = [](int i) { return i + 2; };
 
-  auto agg = make_aggregate()                //
+  auto agg = aggregate()                     //
                  .append<POS>(pos_accessor)  //
                  .append<VEL>(vel_accessor)  //
                  .append<DT>(0.01);
@@ -147,7 +147,7 @@ TEST(AggregateTest, MixedUsage) {
 }
 
 TEST(AggregateTest, HasTag) {
-  auto agg = make_aggregate()       //
+  auto agg = aggregate()            //
                  .append<DT>(0.01)  //
                  .append<MAX_ITERS>(1000);
 
@@ -157,7 +157,7 @@ TEST(AggregateTest, HasTag) {
 }
 
 TEST(AggregateTest, ProjectSelectsRequestedTagsAndPreservesOrder) {
-  auto agg = make_aggregate()       //
+  auto agg = aggregate()            //
                  .append<DT>(0.01)  //
                  .append<MAX_ITERS>(1000)
                  .append<CENTER>(7);
@@ -175,7 +175,7 @@ TEST(AggregateTest, ProjectSelectsRequestedTagsAndPreservesOrder) {
 }
 
 TEST(AggregateTest, ProjectWorksForConstAggregate) {
-  auto agg = make_aggregate()       //
+  auto agg = aggregate()            //
                  .append<DT>(0.02)  //
                  .append<MAX_ITERS>(500)
                  .append<CENTER>(42);
@@ -188,7 +188,7 @@ TEST(AggregateTest, ProjectWorksForConstAggregate) {
 }
 
 TEST(AggregateTest, ProjectCreatesValueCopy) {
-  auto agg = make_aggregate()        //
+  auto agg = aggregate()             //
                  .append<COUNT>(10)  //
                  .append<DT>(0.1);
 

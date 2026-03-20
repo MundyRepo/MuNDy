@@ -553,7 +553,7 @@ concept callable_with = requires(T t, Args... args) { t(std::forward<Args>(args)
 ///
 /// Construct an aggregate via a fluent interface:
 /// \code{.cpp}
-///   auto agg = mundy::make_aggregate()
+///   auto agg = aggregate()
 ///       .append<Tag1>(component1)
 ///       .append<Tag2>(component2);
 /// \endcode
@@ -563,7 +563,7 @@ concept callable_with = requires(T t, Args... args) { t(std::forward<Args>(args)
 ///
 /// 1. Compile-time extensible tuple:
 /// \code{.cpp}
-///   auto cfg = make_aggregate()
+///   auto cfg = aggregate()
 ///       .append<DT>(0.01)
 ///       .append<MAX_ITERS>(1000);
 ///
@@ -574,7 +574,7 @@ concept callable_with = requires(T t, Args... args) { t(std::forward<Args>(args)
 ///
 /// 2. Aggregation of accessors:
 /// \code{.cpp}
-///   auto spheres = make_aggregate()
+///   auto spheres = aggregate()
 ///       .append<CENTER>(center_accessor)
 ///       .append<RADIUS>(radius_accessor);
 ///
@@ -586,7 +586,7 @@ concept callable_with = requires(T t, Args... args) { t(std::forward<Args>(args)
 ///
 /// 3. Aggregation of policies/strategies:
 /// \code{.cpp}
-///   auto solver_policies = make_aggregate()
+///   auto solver_policies = aggregate()
 ///       .append<SOLVER>(solver_policy)
 ///       .append<PRECONDITIONER>(preconditioner_policy);
 ///
@@ -595,7 +595,7 @@ concept callable_with = requires(T t, Args... args) { t(std::forward<Args>(args)
 ///
 /// 4. Aggregation of algorithms/functors:
 /// \code{.cpp}
-///   auto algs = make_aggregate()
+///   auto algs = aggregate()
 ///       .append<SORT>(SortAlgorithm{})
 ///       .append<FILTER>(FilterAlgorithm{});
 ///
@@ -605,7 +605,7 @@ concept callable_with = requires(T t, Args... args) { t(std::forward<Args>(args)
 ///
 /// 5. Mixed usage:
 /// \code{.cpp}
-///   auto agg = make_aggregate()
+///   auto agg = aggregate()
 ///       .append<POS>(pos_accessor)
 ///       .append<VEL>(vel_accessor)
 ///       .append<DT>(0.01);
@@ -876,14 +876,12 @@ class aggregate {
   //@}
 };  // aggregate
 
+/// \brief A seduction guide to allow for aggregate() instead of aggregate<>() when constructing an aggregate with template argument deduction
+template <typename... TaggedComponents>
+aggregate(TaggedComponents...) -> aggregate<TaggedComponents...>;
+
 //! \name Non-member functions/helpers
 //@{
-
-/// \brief The type of aggregates is typically inferred, so this is the canonical way to construct one.
-KOKKOS_INLINE_FUNCTION
-constexpr auto make_aggregate() {
-  return aggregate<>();
-}
 
 /// \brief Project selected tags from an aggregate into a new aggregate (copies their corresponding components).
 template <typename... Tags, typename... Ts>

@@ -184,19 +184,19 @@ class SharedComponentState {
     host_view_ = host_view_type(host_owner_view.data(), 1);
   }
 
-  shared_type& host_value() {
+  inline shared_type& host_value() {
     return host_view_(0);
   }
 
-  const shared_type& host_value() const {
+  inline const shared_type& host_value() const {
     return host_view_(0);
   }
 
-  host_view_type host_view() {
+  inline host_view_type host_view() {
     return host_view_;
   }
 
-  host_view_type host_value_view() {
+  inline host_view_type host_value_view() {
     return host_view_;
   }
 
