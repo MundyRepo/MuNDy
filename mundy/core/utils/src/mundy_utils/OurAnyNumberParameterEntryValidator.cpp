@@ -21,6 +21,7 @@
 
 // Mundy
 #include <MundyUtils_config.hpp>  // for HAVE_MUNDYUTILS_*
+#include <mundy_utils/suppress_warnings.hpp>  // for MUNDY_SUPPRESS_MAYBE_UNINITIALIZED_PUSH/POP
 
 #ifdef HAVE_MUNDYUTILS_TEUCHOS
 
@@ -47,6 +48,8 @@
 
 /// \brief A helper macro for defining the get_XXX() functions without code duplication.
 #define MUNDY_DEFINE_GET_BLAH(TYPE, TYPE_NAME, CONVERT_NUMBER_USING_FUNC, CONVERT_STRING_USING_FUNC)                \
+  /* GCC can issue -Wmaybe-uninitialized during whole-function analysis. */                                          \
+  MUNDY_SUPPRESS_MAYBE_UNINITIALIZED_PUSH                                                                             \
   TYPE OurAnyNumberParameterEntryValidator::MUNDY_CONCAT2(get_, TYPE_NAME)(                                         \
       const Teuchos::ParameterEntry& entry, const std::string& param_name, const std::string& sublist_name,         \
       const bool active_query) const {                                                                              \
@@ -86,7 +89,8 @@
     const Teuchos::ParameterEntry* entry = param_list.getEntryPtr(param_name);                                      \
     if (entry) return MUNDY_CONCAT2(get_, TYPE_NAME)(*entry, param_name, param_list.name(), true);                  \
     return param_list.get(param_name, default_value);                                                               \
-  }
+  }                                                                                                                 \
+  MUNDY_SUPPRESS_MAYBE_UNINITIALIZED_POP
 
 #define MUNDY_DEFINE_IS_BLAH_ALLOWED(TYPE_NAME)                                               \
   bool OurAnyNumberParameterEntryValidator::MUNDY_CONCAT3(is_, TYPE_NAME, _allowed)() const { \
@@ -168,7 +172,6 @@ OurAnyNumberParameterEntryValidator::OurAnyNumberParameterEntryValidator(EPrefer
 }
 
 //  Local non-virtual validated lookup functions
-
 MUNDY_DEFINE_GET_BLAH(short, short, Teuchos::as<short>, convert_string_using_stoi)
 MUNDY_DEFINE_GET_BLAH(unsigned short, unsigned_short, Teuchos::as<unsigned short>, convert_string_using_stoi)
 MUNDY_DEFINE_GET_BLAH(int, int, Teuchos::as<int>, convert_string_using_stoi)
@@ -337,9 +340,9 @@ void OurAnyNumberParameterEntryValidator::finish_initialization() {
   accepted_types_string_ = oss.str();
 }
 
-void OurAnyNumberParameterEntryValidator::throw_type_error(Teuchos::ParameterEntry const& entry,
-                                                           std::string const& param_name,
-                                                           std::string const& sublist_name) const {
+[[noreturn]] void OurAnyNumberParameterEntryValidator::throw_type_error(Teuchos::ParameterEntry const& entry,
+                                                                         std::string const& param_name,
+                                                                         std::string const& sublist_name) const {
   const std::string& entry_name = entry.getAny(false).typeName();
   TEUCHOS_TEST_FOR_EXCEPTION_PURE_MSG(true, Teuchos::Exceptions::InvalidParameterType,
                                       "Error, the parameter {param_name=\""

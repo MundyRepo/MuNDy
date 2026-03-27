@@ -596,8 +596,8 @@ class TEUCHOSPARAMETERLIST_LIB_DLL_EXPORT OurAnyNumberParameterEntryValidator
 
   void finish_initialization();
 
-  void throw_type_error(Teuchos::ParameterEntry const& entry, std::string const& param_name,
-                        std::string const& sublist_name) const;
+  [[noreturn]] void throw_type_error(Teuchos::ParameterEntry const& entry, std::string const& param_name,
+                                     std::string const& sublist_name) const;
 };  // class OurAnyNumberParameterEntryValidator
 
 }  // namespace mundy
