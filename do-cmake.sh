@@ -34,7 +34,7 @@ cmake \
 -DMundy_ENABLE_MundyMesh=ON \
 -DMundy_ENABLE_MundyGeom=ON \
 -DMundy_ENABLE_MundyMeta=ON \
--DMundy_ENABLE_TESTS=OFF \
+-DMundy_ENABLE_TESTS=ON \
 -DMundy_ENABLE_GTest=ON \
 -DMundy_ENABLE_STKFMM=OFF \
 -DMundy_ENABLE_PVFMM=OFF \

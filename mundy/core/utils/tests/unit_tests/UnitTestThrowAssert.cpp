@@ -88,6 +88,17 @@ TEST(ThrowAssert, DoesNotThrowWhenTrue) {
 
   // Check that throw assert does not throw a range error
   ASSERT_NO_THROW(MUNDY_THROW_REQUIRE(true, std::range_error, "Range error"));
+
+  // Check that sink messages are not evaluated when the assertion is true.
+  {
+    int num_message_constructions = 0;
+    auto make_message = [&]() {
+      ++num_message_constructions;
+      return sink() << "Failure count " << num_message_constructions;
+    };
+    ASSERT_NO_THROW(MUNDY_THROW_REQUIRE(true, std::logic_error, make_message()));
+    EXPECT_EQ(num_message_constructions, 0);
+  }
 }
 
 TEST(ThrowAssert, ThrowsCorrectErrorType) {
@@ -151,13 +162,38 @@ TEST(ThrowAssert, ThrowsCorrectMessage) {
     }
   }
 
-  // Throws correct for message with pipe (on host)
+  // Throws correct for message with addition (given that we are on host)
   {
-    std::string expected_message = "Some error message with pipe";
-    ASSERT_THROW(MUNDY_THROW_REQUIRE(false, some_exception, std::string("Some error message ") + "with pipe"),
+    std::string expected_message = "Some error message with addition";
+    ASSERT_THROW(MUNDY_THROW_REQUIRE(false, some_exception, std::string("Some error message ") + "with addition"),
                  some_exception);
     try {
-      MUNDY_THROW_REQUIRE(false, some_exception, std::string("Some error message ") + "with pipe");
+      MUNDY_THROW_REQUIRE(false, some_exception, std::string("Some error message ") + "with addition");
+    } catch (const some_exception& e) {
+      EXPECT_THAT(e.what(), ::testing::HasSubstr(expected_message));
+    }
+  }
+
+  // Throws correctly for literal sink message.
+  {
+    constexpr auto sink_message = sink() << "Some sink " << "error message";
+    std::string expected_message = "Some sink error message";
+    ASSERT_THROW(MUNDY_THROW_REQUIRE(false, some_exception, sink_message), some_exception);
+    try {
+      MUNDY_THROW_REQUIRE(false, some_exception, sink_message);
+    } catch (const some_exception& e) {
+      EXPECT_THAT(e.what(), ::testing::HasSubstr(expected_message));
+    }
+  }
+
+  // Throws correctly for runtime sink message (given that we are on host).
+  {
+    int a = 2;
+    std::string expected_message = "Some error message with streaming 2";
+    ASSERT_THROW(MUNDY_THROW_REQUIRE(false, some_exception, sink() << "Some error message with streaming " << a),
+                 some_exception);
+    try {
+      MUNDY_THROW_REQUIRE(false, some_exception, sink() << "Some error message with streaming " << a);
     } catch (const some_exception& e) {
       EXPECT_THAT(e.what(), ::testing::HasSubstr(expected_message));
     }
