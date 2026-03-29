@@ -30,6 +30,19 @@ function(mundy_tribits_register_public_config_contract_test)
     return()
   endif()
 
+  # Match the same effective prerequisites that TriBITS uses before it writes
+  # the project-level install config files. If those files are not being
+  # generated, this contract test has nothing meaningful to validate.
+  if (NOT ${PROJECT_NAME}_ENABLE_INSTALL_CMAKE_CONFIG_FILES)
+    return()
+  endif()
+  if (${PROJECT_NAME}_ENABLE_INSTALLATION_TESTING)
+    return()
+  endif()
+  if (${PROJECT_NAME}_SKIP_INSTALL_PROJECT_CMAKE_CONFIG_FILES)
+    return()
+  endif()
+
   set(contractTestScript
     "${MUNDY_TRIBITS_OVERRIDES_DIR}/tests/VerifyPublicConfigContract.cmake")
   if (NOT EXISTS "${contractTestScript}")
