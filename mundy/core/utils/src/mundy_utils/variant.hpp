@@ -169,7 +169,7 @@ KOKKOS_FUNCTION constexpr ReturnType visit_dispatch(Visitor&& visitor, Variant&&
       return static_cast<Visitor&&>(visitor)(get<ActiveIdx>(static_cast<Variant&&>(var)));
     }
     return visit_dispatch<ActiveIdx + 1, NumAlts, ReturnType>(static_cast<Visitor&&>(visitor),
-                                                               static_cast<Variant&&>(var));
+                                                              static_cast<Variant&&>(var));
   } else {
     MUNDY_THROW_ASSERT(false, std::runtime_error, "Invalid variant index in visit");
     return unreachable_visit_return<ReturnType>();
@@ -223,9 +223,9 @@ KOKKOS_FUNCTION constexpr decltype(auto) visit(Visitor&& visitor, variant<Alts..
   static_assert(sizeof...(Alts) > 0, "variant must have at least one alternative.");
   using VariantRef = variant<Alts...>&;
   using ReturnType = impl::visit_result_t<Visitor&&, VariantRef, 0>;
-  static_assert(impl::visit_has_homogeneous_return_impl<Visitor&&, VariantRef>(
-                    std::make_index_sequence<sizeof...(Alts)>{}),
-                "Visitor return type must be the same for all alternatives.");
+  static_assert(
+      impl::visit_has_homogeneous_return_impl<Visitor&&, VariantRef>(std::make_index_sequence<sizeof...(Alts)>{}),
+      "Visitor return type must be the same for all alternatives.");
   return impl::visit_dispatch<0, sizeof...(Alts), ReturnType>(static_cast<Visitor&&>(visitor), var);
 }
 
@@ -235,9 +235,9 @@ KOKKOS_FUNCTION constexpr decltype(auto) visit(Visitor&& visitor, const variant<
   static_assert(sizeof...(Alts) > 0, "variant must have at least one alternative.");
   using VariantRef = const variant<Alts...>&;
   using ReturnType = impl::visit_result_t<Visitor&&, VariantRef, 0>;
-  static_assert(impl::visit_has_homogeneous_return_impl<Visitor&&, VariantRef>(
-                    std::make_index_sequence<sizeof...(Alts)>{}),
-                "Visitor return type must be the same for all alternatives.");
+  static_assert(
+      impl::visit_has_homogeneous_return_impl<Visitor&&, VariantRef>(std::make_index_sequence<sizeof...(Alts)>{}),
+      "Visitor return type must be the same for all alternatives.");
   return impl::visit_dispatch<0, sizeof...(Alts), ReturnType>(static_cast<Visitor&&>(visitor), var);
 }
 

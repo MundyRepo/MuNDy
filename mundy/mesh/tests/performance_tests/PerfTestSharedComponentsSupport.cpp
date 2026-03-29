@@ -73,8 +73,7 @@ RigidBodyPerfState::RigidBodyPerfState(const size_t num_entities)
   drag_scalar_field_ptr_ = &meta_data.declare_field<scalar_t>(stk::topology::NODE_RANK, "DRAG_SCALAR");
   ambient_field_ptr_ = &meta_data.declare_field<scalar_t>(stk::topology::NODE_RANK, "AMBIENT");
   drag_field_ptr_ = &meta_data.declare_field<scalar_t>(stk::topology::NODE_RANK, "DRAG");
-  target_orientation_field_ptr_ =
-      &meta_data.declare_field<scalar_t>(stk::topology::NODE_RANK, "TARGET_ORIENTATION");
+  target_orientation_field_ptr_ = &meta_data.declare_field<scalar_t>(stk::topology::NODE_RANK, "TARGET_ORIENTATION");
 
   stk::mesh::put_field_on_mesh(*force_field_ptr_, meta_data.universal_part(), 3, nullptr);
   stk::mesh::put_field_on_mesh(*torque_field_ptr_, meta_data.universal_part(), 3, nullptr);

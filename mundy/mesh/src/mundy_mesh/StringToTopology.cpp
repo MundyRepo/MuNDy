@@ -22,12 +22,12 @@
 /// \brief Definition of the StringToTopology class
 
 // C++ core libs
-#include <algorithm>   // for std::all_of
-#include <charconv>    // for std::from_chars
-#include <cctype>      // for std::isdigit
-#include <optional>    // for std::optional
-#include <string>      // for std::string
-#include <string_view> // for std::string_view
+#include <algorithm>    // for std::all_of
+#include <cctype>       // for std::isdigit
+#include <charconv>     // for std::from_chars
+#include <optional>     // for std::optional
+#include <string>       // for std::string
+#include <string_view>  // for std::string_view
 
 // Trilinos libs
 #include <stk_topology/topology.hpp>  // for stk::topology
@@ -39,7 +39,7 @@
 namespace {
 
 std::optional<int> parse_super_topology_num_nodes(const std::string& topology_string,
-                                                   const std::string_view topology_prefix) {
+                                                  const std::string_view topology_prefix) {
   const std::string_view topology_view(topology_string);
   if (!topology_view.starts_with(topology_prefix)) {
     return std::nullopt;

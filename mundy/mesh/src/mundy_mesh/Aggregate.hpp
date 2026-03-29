@@ -46,8 +46,7 @@
 #include <mundy_mesh/ForEachEntity.hpp>    // for mundy::mesh::for_each_entity_run
 #include <mundy_mesh/NgpAccessorExpr.hpp>  // for mundy::mesh::AccessorExpr and EntityExprBase
 #include <mundy_mesh/SharedComponent.hpp>
-#include <mundy_mesh/fmt_stk_types.hpp>  // for STK-compatible fmt::format
-#include <mundy_utils/aggregate.hpp>     // for mundy::all_have_tags_v, mundy::all_tags_unique_v, mundy::contains_tag_v
+#include <mundy_utils/aggregate.hpp>  // for mundy::all_have_tags_v, mundy::all_tags_unique_v, mundy::contains_tag_v
 #include <mundy_utils/suppress_warnings.hpp>  // for MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_PUSH/POP
 #include <mundy_utils/throw_assert.hpp>       // for MUNDY_THROW_ASSERT
 #include <mundy_utils/tuple.hpp>              // for mundy::tuple

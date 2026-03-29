@@ -20,18 +20,19 @@
 
 #define ANKERL_NANOBENCH_IMPLEMENT
 
+#include <Kokkos_Core.hpp>
 #include <algorithm>
 #include <cmath>
 #include <iostream>
 #include <memory>
+#include <mundy_math/Matrix3.hpp>
+#include <mundy_math/Quaternion.hpp>
+#include <mundy_math/Vector3.hpp>
+#include <mundy_mesh/FieldViews.hpp>
+#include <mundy_mesh/ForEachEntity.hpp>
+#include <mundy_mesh/MeshBuilder.hpp>
+#include <mundy_utils/throw_assert.hpp>
 #include <stdexcept>
-#include <string>
-#include <vector>
-
-#include "nanobench.h"
-
-#include <Kokkos_Core.hpp>
-
 #include <stk_mesh/base/BulkData.hpp>
 #include <stk_mesh/base/Entity.hpp>
 #include <stk_mesh/base/Field.hpp>
@@ -41,14 +42,10 @@
 #include <stk_mesh/base/NgpField.hpp>
 #include <stk_mesh/base/NgpMesh.hpp>
 #include <stk_mesh/base/Selector.hpp>
+#include <string>
+#include <vector>
 
-#include <mundy_math/Matrix3.hpp>
-#include <mundy_math/Quaternion.hpp>
-#include <mundy_math/Vector3.hpp>
-#include <mundy_mesh/FieldViews.hpp>
-#include <mundy_mesh/ForEachEntity.hpp>
-#include <mundy_mesh/MeshBuilder.hpp>
-#include <mundy_utils/throw_assert.hpp>
+#include "nanobench.h"
 
 namespace mundy {
 
@@ -92,7 +89,7 @@ KOKKOS_INLINE_FUNCTION void share_issue_step(const scalar_t dt, const AmbientTyp
   stress = updated_stress;
   orientation_out = trial_orientation;
   energy = dot(corrected_velocity, corrected_velocity) + 0.1 * dot(body_spin, body_spin) +
-              dot(trial_orientation, target_orientation);
+           dot(trial_orientation, target_orientation);
 }
 
 template <typename NgpFieldType>

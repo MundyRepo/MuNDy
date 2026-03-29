@@ -24,9 +24,6 @@
 /// \file DeclareEntities.hpp
 /// \brief A set of helper methods for declaring entities without worrying about parallel ownership and sharing.
 
-// External
-#include <fmt/format.h>  // for fmt::format
-
 // C++ core
 #include <iostream>       // for std::ostream
 #include <memory>         // for std::shared_ptr
@@ -44,7 +41,6 @@
 
 // Mundy
 #include <mundy_mesh/LinkData.hpp>       // for mundy::mesh::LinkData
-#include <mundy_mesh/fmt_stk_types.hpp>  // adds fmt::format for stk types
 #include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_REQUIRE
 
 namespace mundy {
@@ -750,21 +746,5 @@ class DeclareEntitiesHelper {
 }  // namespace mesh
 
 }  // namespace mundy
-
-// Add a fmt::format for DeclareEntitiesHelper
-template <>
-struct fmt::formatter<mundy::mesh::DeclareEntitiesHelper> : fmt::ostream_formatter {};
-
-template <>
-struct fmt::formatter<mundy::mesh::DeclareEntitiesHelper::NodeBuilder> : fmt::ostream_formatter {};
-
-template <>
-struct fmt::formatter<mundy::mesh::DeclareEntitiesHelper::ElementBuilder> : fmt::ostream_formatter {};
-
-template <>
-struct fmt::formatter<mundy::mesh::DeclareEntitiesHelper::DeclareNodeInfo> : fmt::ostream_formatter {};
-
-template <>
-struct fmt::formatter<mundy::mesh::DeclareEntitiesHelper::DeclareElementInfo> : fmt::ostream_formatter {};
 
 #endif  // MUNDY_MESH_DECLAREENTITIES_HPP_

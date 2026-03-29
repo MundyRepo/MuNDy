@@ -24,9 +24,6 @@
 /// \file DeclarePart.hpp
 /// \brief A set of helpers for declaring parts with reduced boilerplate code.
 
-// External
-#include <fmt/format.h>  // for fmt::format
-
 // C++ core
 #include <iostream>   // for std::ostream
 #include <memory>     // for std::shared_ptr
@@ -201,13 +198,12 @@ class PartDeclarationHelper {
     bool is_topological_part = part_has_name_ && !part_has_rank_ && part_has_topology_;
     MUNDY_THROW_REQUIRE(
         is_named_part || is_ranked_part || is_topological_part, std::logic_error,
-        fmt::format(
-            "Part with name ('{}') is not properly specified. You may either specify:\n"
-            "   1. A name (but no rank or topology)    -> meta_data.declare_part('name')\n"
-            "   2. A name and a rank (but no topology) -> meta_data.declare_part('name', rank)\n"
-            "   3. A name and a topology (but no rank) -> meta_data.declare_part_with_topology('name', topology)\n"
-            "However, you have specified both a rank and a topology.",
-            part_name_));
+        sink()
+            << "Part with name ('" << part_name_ << "') is not properly specified. You may either specify:\n"
+            << "   1. A name (but no rank or topology)    -> meta_data.declare_part('name')\n"
+            << "   2. A name and a rank (but no topology) -> meta_data.declare_part('name', rank)\n"
+            << "   3. A name and a topology (but no rank) -> meta_data.declare_part_with_topology('name', topology)\n"
+            << "However, you have specified both a rank and a topology.");
 
     if (is_named_part) {
       return internal_declare_named_part();

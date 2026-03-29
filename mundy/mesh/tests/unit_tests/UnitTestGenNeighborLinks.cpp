@@ -120,9 +120,8 @@ TEST(GenNeighborLinks, BasicUsage) {
   // Create a sphere aggregate
   auto coords_accessor = Vector3FieldComponent(node_coords_field);
   auto radius_accessor = ScalarFieldComponent(elem_radius_field);
-  auto spheres = Aggregate(bulk_data, spheres_part)
-                     .add_component<CENTER>(coords_accessor)
-                     .add_component<RADIUS>(radius_accessor);
+  auto spheres =
+      Aggregate(bulk_data, spheres_part).add_component<CENTER>(coords_accessor).add_component<RADIUS>(radius_accessor);
 
   // Create the generator
   auto bounding_sphere_gen = BoundingSphereGen(get_updated_ngp_aggregate(spheres));

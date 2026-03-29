@@ -20,7 +20,7 @@
 // @HEADER
 
 // Mundy
-#include <MundyUtils_config.hpp>  // for HAVE_MUNDYUTILS_*
+#include <MundyUtils_config.hpp>              // for HAVE_MUNDYUTILS_*
 #include <mundy_utils/suppress_warnings.hpp>  // for MUNDY_SUPPRESS_MAYBE_UNINITIALIZED_PUSH/POP
 
 #ifdef HAVE_MUNDYUTILS_TEUCHOS
@@ -48,8 +48,8 @@
 
 /// \brief A helper macro for defining the get_XXX() functions without code duplication.
 #define MUNDY_DEFINE_GET_BLAH(TYPE, TYPE_NAME, CONVERT_NUMBER_USING_FUNC, CONVERT_STRING_USING_FUNC)                \
-  /* GCC can issue -Wmaybe-uninitialized during whole-function analysis. */                                          \
-  MUNDY_SUPPRESS_MAYBE_UNINITIALIZED_PUSH                                                                             \
+  /* GCC can issue -Wmaybe-uninitialized during whole-function analysis. */                                         \
+  MUNDY_SUPPRESS_MAYBE_UNINITIALIZED_PUSH                                                                           \
   TYPE OurAnyNumberParameterEntryValidator::MUNDY_CONCAT2(get_, TYPE_NAME)(                                         \
       const Teuchos::ParameterEntry& entry, const std::string& param_name, const std::string& sublist_name,         \
       const bool active_query) const {                                                                              \
@@ -341,8 +341,8 @@ void OurAnyNumberParameterEntryValidator::finish_initialization() {
 }
 
 [[noreturn]] void OurAnyNumberParameterEntryValidator::throw_type_error(Teuchos::ParameterEntry const& entry,
-                                                                         std::string const& param_name,
-                                                                         std::string const& sublist_name) const {
+                                                                        std::string const& param_name,
+                                                                        std::string const& sublist_name) const {
   const std::string& entry_name = entry.getAny(false).typeName();
   TEUCHOS_TEST_FOR_EXCEPTION_PURE_MSG(true, Teuchos::Exceptions::InvalidParameterType,
                                       "Error, the parameter {param_name=\""

@@ -24,9 +24,6 @@
 /// \file DeclareFieldImpl.hpp
 /// \brief A set of helpers for declaring fields with reduced boilerplate code.
 
-// External
-#include <fmt/format.h>  // for fmt::format
-
 // C++ core
 #include <stdexcept>  // for std::runtime_error
 #include <utility>
@@ -112,7 +109,7 @@ template <stk::topology::rank_t Rank>
 void require_rank_matches_tag(stk::mesh::EntityRank rank) {
   if constexpr (Rank != stk::topology::INVALID_RANK) {
     MUNDY_THROW_REQUIRE(rank == Rank, std::invalid_argument,
-                        fmt::format("Component declaration rank {} does not match tag rank {}.", rank, Rank));
+                        sink() << "Component declaration rank " << rank << " does not match tag rank " << Rank << ".");
   }
 }
 

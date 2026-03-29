@@ -29,9 +29,6 @@
 #include <type_traits>
 #include <utility>
 
-// External
-#include <fmt/format.h>
-
 // Mundy
 #include <mundy_mesh/Component.hpp>
 #include <mundy_mesh/DeclareField.hpp>
@@ -210,7 +207,7 @@ std::string component_access_name(access::scalar<ScalarType>) {
 
 template <typename ScalarType, size_t N>
 std::string component_access_name(access::vector<ScalarType, N>) {
-  return fmt::format("vector{}", N);
+  return (sink() << "vector" << N).to_string();
 }
 
 template <typename ScalarType>
@@ -242,11 +239,11 @@ void apply_default_output_type_if_needed(FieldDeclarationSnapshot& snapshot) {
       snapshot.has_output_type = true;
       snapshot.output_type = access_traits::default_io_output_type;
     } else {
-      MUNDY_THROW_REQUIRE(
-          snapshot.output_type == access_traits::default_io_output_type, std::invalid_argument,
-          fmt::format("Field declaration for '{}' uses output type {} but access '{}' expects {}", snapshot.field_name,
-                      static_cast<int>(snapshot.output_type), component_access_name<CanonicalAccess>(),
-                      static_cast<int>(access_traits::default_io_output_type)));
+      MUNDY_THROW_REQUIRE(snapshot.output_type == access_traits::default_io_output_type, std::invalid_argument,
+                          sink() << "Field declaration for '" << snapshot.field_name << "' uses output type "
+                                 << static_cast<int>(snapshot.output_type) << " but access '"
+                                 << component_access_name<CanonicalAccess>() << "' expects "
+                                 << static_cast<int>(access_traits::default_io_output_type));
     }
   }
 }

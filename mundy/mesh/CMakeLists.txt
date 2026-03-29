@@ -19,7 +19,6 @@ set(NOINSTALLHEADERS
     src/mundy_mesh/DeclareField.hpp
     src/mundy_mesh/DeclarePart.hpp
     src/mundy_mesh/FieldViews.hpp
-    src/mundy_mesh/fmt_stk_types.hpp
     src/mundy_mesh/ForEachEntity.hpp
     # src/mundy_mesh/GenNeighborLinkers.hpp
     src/mundy_mesh/GetNgpLinkData.hpp

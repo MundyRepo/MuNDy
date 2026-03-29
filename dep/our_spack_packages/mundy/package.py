@@ -111,7 +111,6 @@ class Mundy(CMakePackage, CudaPackage):
     # Always-required TPLs from your dependency tables
     #
     depends_on("kokkos@4.3.1:")
-    depends_on("fmt")
 
     #
     # Optional TPLs

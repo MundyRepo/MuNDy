@@ -20,9 +20,8 @@
 
 #define ANKERL_NANOBENCH_IMPLEMENT
 
-#include "nanobench.h"
-
 #include "PerfTestSharedComponentsSupport.hpp"
+#include "nanobench.h"
 
 namespace mundy::mesh {
 

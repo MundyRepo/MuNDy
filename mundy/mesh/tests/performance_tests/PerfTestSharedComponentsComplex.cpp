@@ -19,7 +19,6 @@
 // @HEADER
 
 #include "PerfTestSharedComponentsSupport.hpp"
-
 #include "nanobench.h"
 
 namespace mundy::mesh::perf_test_shared_components {
@@ -273,19 +272,19 @@ void run_complex_benchmarks() {
 
   auto run_ngp_direct_mixed_owning_shared = [&] {
     sync_direct_ngp_complex_fields();
-    run_ngp_rigid_body_kernel(ngp_mesh, state.selector(), NgpOwningSharedAccessor<scalar_t>{state.shared_dt()},
-                              NgpVector3FieldAccessor<decltype(ngp_ambient_field)>{ngp_ambient_field},
-                              NgpOwningSharedAccessor<matrix3_t>{state.shared_drag()},
-                              NgpQuaternionFieldAccessor<decltype(ngp_target_orientation_field)>{
-                                  ngp_target_orientation_field},
-                              NgpVector3FieldAccessor<decltype(ngp_force_field)>{ngp_force_field},
-                              NgpVector3FieldAccessor<decltype(ngp_torque_field)>{ngp_torque_field},
-                              NgpQuaternionFieldAccessor<decltype(ngp_orientation_field)>{ngp_orientation_field},
-                              NgpMatrix3FieldAccessor<decltype(ngp_mobility_field)>{ngp_mobility_field},
-                              NgpVector3FieldAccessor<decltype(ngp_velocity_field)>{ngp_velocity_field},
-                              NgpMatrix3FieldAccessor<decltype(ngp_stress_field)>{ngp_stress_field},
-                              NgpQuaternionFieldAccessor<decltype(ngp_orientation_out_field)>{ngp_orientation_out_field},
-                              NgpScalarFieldAccessor<decltype(ngp_energy_field)>{ngp_energy_field});
+    run_ngp_rigid_body_kernel(
+        ngp_mesh, state.selector(), NgpOwningSharedAccessor<scalar_t>{state.shared_dt()},
+        NgpVector3FieldAccessor<decltype(ngp_ambient_field)>{ngp_ambient_field},
+        NgpOwningSharedAccessor<matrix3_t>{state.shared_drag()},
+        NgpQuaternionFieldAccessor<decltype(ngp_target_orientation_field)>{ngp_target_orientation_field},
+        NgpVector3FieldAccessor<decltype(ngp_force_field)>{ngp_force_field},
+        NgpVector3FieldAccessor<decltype(ngp_torque_field)>{ngp_torque_field},
+        NgpQuaternionFieldAccessor<decltype(ngp_orientation_field)>{ngp_orientation_field},
+        NgpMatrix3FieldAccessor<decltype(ngp_mobility_field)>{ngp_mobility_field},
+        NgpVector3FieldAccessor<decltype(ngp_velocity_field)>{ngp_velocity_field},
+        NgpMatrix3FieldAccessor<decltype(ngp_stress_field)>{ngp_stress_field},
+        NgpQuaternionFieldAccessor<decltype(ngp_orientation_out_field)>{ngp_orientation_out_field},
+        NgpScalarFieldAccessor<decltype(ngp_energy_field)>{ngp_energy_field});
     mark_direct_ngp_outputs_modified();
   };
 

@@ -19,7 +19,6 @@
 // @HEADER
 
 #include "PerfTestSharedComponentsSupport.hpp"
-
 #include "nanobench.h"
 
 namespace mundy::mesh::perf_test_shared_components {

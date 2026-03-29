@@ -50,7 +50,6 @@
 #include <mundy_mesh/FieldViews.hpp>       // for mundy::mesh::vector3_field_data, mundy::mesh::quaternion_field_data
 #include <mundy_mesh/ForEachEntity.hpp>    // for mundy::mesh::for_each_entity_run
 #include <mundy_mesh/NgpAccessorExpr.hpp>  // for mundy::mesh::AccessorExpr and EntityExprBase
-#include <mundy_mesh/fmt_stk_types.hpp>    // for STK-compatible fmt::format
 #include <mundy_mesh/impl/HostDeviceSynchronizer.hpp>
 #include <mundy_mesh/impl/SharedComponentImpl.hpp>
 #include <mundy_utils/suppress_warnings.hpp>  // for MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_PUSH/POP

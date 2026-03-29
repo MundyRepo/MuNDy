@@ -24,9 +24,6 @@
 /// \file DeclareField.hpp
 /// \brief A set of helpers for declaring fields with reduced boilerplate code.
 
-// External
-#include <fmt/format.h>  // for fmt::format
-
 // C++ core
 #include <iostream>   // for std::ostream
 #include <stdexcept>  // for std::runtime_error

@@ -20,25 +20,10 @@
 
 #pragma once
 
+#include <Kokkos_Core.hpp>
 #include <algorithm>
 #include <cmath>
 #include <memory>
-#include <stdexcept>
-#include <string>
-#include <vector>
-
-#include <Kokkos_Core.hpp>
-
-#include <stk_mesh/base/BulkData.hpp>
-#include <stk_mesh/base/Entity.hpp>
-#include <stk_mesh/base/Field.hpp>
-#include <stk_mesh/base/GetNgpField.hpp>
-#include <stk_mesh/base/GetNgpMesh.hpp>
-#include <stk_mesh/base/MetaData.hpp>
-#include <stk_mesh/base/NgpField.hpp>
-#include <stk_mesh/base/NgpMesh.hpp>
-#include <stk_mesh/base/Selector.hpp>
-
 #include <mundy_math/Matrix3.hpp>
 #include <mundy_math/Quaternion.hpp>
 #include <mundy_math/Vector3.hpp>
@@ -48,6 +33,18 @@
 #include <mundy_mesh/MeshBuilder.hpp>
 #include <mundy_mesh/SharedComponent.hpp>
 #include <mundy_utils/throw_assert.hpp>
+#include <stdexcept>
+#include <stk_mesh/base/BulkData.hpp>
+#include <stk_mesh/base/Entity.hpp>
+#include <stk_mesh/base/Field.hpp>
+#include <stk_mesh/base/GetNgpField.hpp>
+#include <stk_mesh/base/GetNgpMesh.hpp>
+#include <stk_mesh/base/MetaData.hpp>
+#include <stk_mesh/base/NgpField.hpp>
+#include <stk_mesh/base/NgpMesh.hpp>
+#include <stk_mesh/base/Selector.hpp>
+#include <string>
+#include <vector>
 
 namespace mundy::mesh::perf_test_shared_components {
 
@@ -104,7 +101,7 @@ KOKKOS_INLINE_FUNCTION void rigid_body_step(const scalar_t dt, const AmbientType
   stress = updated_stress;
   orientation_out = trial_orientation;
   energy = dot(corrected_velocity, corrected_velocity) + 0.1 * dot(body_spin, body_spin) +
-              dot(trial_orientation, target_orientation);
+           dot(trial_orientation, target_orientation);
 }
 
 template <typename FieldType>
@@ -265,25 +262,24 @@ void run_host_rigid_body_kernel(const stk::mesh::BulkData& bulk_data, const stk:
                                 MobilityAccessor mobility_accessor, VelocityAccessor velocity_accessor,
                                 StressAccessor stress_accessor, OrientationOutAccessor orientation_out_accessor,
                                 EnergyAccessor energy_accessor) {
-  for_each_entity_run(
-      bulk_data, stk::topology::NODE_RANK, selector,
-      [=](const stk::mesh::BulkData& /*bulk_data*/, const stk::mesh::Entity entity) {
-        rigid_body_step(dt_accessor(entity), ambient_accessor(entity), drag_accessor(entity), target_accessor(entity),
-                        force_accessor(entity), torque_accessor(entity), orientation_accessor(entity),
-                        mobility_accessor(entity), velocity_accessor(entity), stress_accessor(entity),
-                        orientation_out_accessor(entity), energy_accessor(entity));
-      });
+  for_each_entity_run(bulk_data, stk::topology::NODE_RANK, selector,
+                      [=](const stk::mesh::BulkData& /*bulk_data*/, const stk::mesh::Entity entity) {
+                        rigid_body_step(dt_accessor(entity), ambient_accessor(entity), drag_accessor(entity),
+                                        target_accessor(entity), force_accessor(entity), torque_accessor(entity),
+                                        orientation_accessor(entity), mobility_accessor(entity),
+                                        velocity_accessor(entity), stress_accessor(entity),
+                                        orientation_out_accessor(entity), energy_accessor(entity));
+                      });
 }
 
 template <typename DragAccessor, typename ForceAccessor, typename VelocityAccessor>
 void run_host_drag_velocity_kernel(const stk::mesh::BulkData& bulk_data, const stk::mesh::Selector& selector,
                                    DragAccessor drag_accessor, ForceAccessor force_accessor,
                                    VelocityAccessor velocity_accessor) {
-  for_each_entity_run(
-      bulk_data, stk::topology::NODE_RANK, selector,
-      [=](const stk::mesh::BulkData& /*bulk_data*/, const stk::mesh::Entity entity) {
-        drag_velocity_step(drag_accessor(entity), force_accessor(entity), velocity_accessor(entity));
-      });
+  for_each_entity_run(bulk_data, stk::topology::NODE_RANK, selector,
+                      [=](const stk::mesh::BulkData& /*bulk_data*/, const stk::mesh::Entity entity) {
+                        drag_velocity_step(drag_accessor(entity), force_accessor(entity), velocity_accessor(entity));
+                      });
 }
 
 template <typename AmbientAccessor, typename MobilityAccessor, typename ForceAccessor, typename OrientationAccessor,
@@ -292,12 +288,12 @@ void run_host_body_mobility_kernel(const stk::mesh::BulkData& bulk_data, const s
                                    AmbientAccessor ambient_accessor, MobilityAccessor mobility_accessor,
                                    ForceAccessor force_accessor, OrientationAccessor orientation_accessor,
                                    VelocityAccessor velocity_accessor) {
-  for_each_entity_run(
-      bulk_data, stk::topology::NODE_RANK, selector,
-      [=](const stk::mesh::BulkData& /*bulk_data*/, const stk::mesh::Entity entity) {
-        rigid_body_mobility_step(ambient_accessor(entity), mobility_accessor(entity), force_accessor(entity),
-                                 orientation_accessor(entity), velocity_accessor(entity));
-      });
+  for_each_entity_run(bulk_data, stk::topology::NODE_RANK, selector,
+                      [=](const stk::mesh::BulkData& /*bulk_data*/, const stk::mesh::Entity entity) {
+                        rigid_body_mobility_step(ambient_accessor(entity), mobility_accessor(entity),
+                                                 force_accessor(entity), orientation_accessor(entity),
+                                                 velocity_accessor(entity));
+                      });
 }
 
 template <typename DtAccessor, typename AmbientAccessor, typename DragAccessor, typename TargetAccessor,
@@ -352,31 +348,81 @@ class RigidBodyPerfState {
 
   explicit RigidBodyPerfState(size_t num_entities = kNumEntities);
 
-  stk::mesh::BulkData& bulk_data() const { return *bulk_data_ptr_; }
-  const stk::mesh::Selector& selector() const { return selector_; }
-  double_field_t& force_field() const { return *force_field_ptr_; }
-  double_field_t& torque_field() const { return *torque_field_ptr_; }
-  double_field_t& orientation_field() const { return *orientation_field_ptr_; }
-  double_field_t& mobility_field() const { return *mobility_field_ptr_; }
-  double_field_t& velocity_field() const { return *velocity_field_ptr_; }
-  double_field_t& stress_field() const { return *stress_field_ptr_; }
-  double_field_t& orientation_out_field() const { return *orientation_out_field_ptr_; }
-  double_field_t& energy_field() const { return *energy_field_ptr_; }
-  double_field_t& dt_field() const { return *dt_field_ptr_; }
-  double_field_t& drag_scalar_field() const { return *drag_scalar_field_ptr_; }
-  double_field_t& ambient_field() const { return *ambient_field_ptr_; }
-  double_field_t& drag_field() const { return *drag_field_ptr_; }
-  double_field_t& target_orientation_field() const { return *target_orientation_field_ptr_; }
-  const scalar_t& shared_dt() const { return shared_dt_; }
-  const scalar_t& shared_drag_scalar() const { return shared_drag_scalar_; }
-  const vector3_t& shared_ambient() const { return shared_ambient_; }
-  const matrix3_t& shared_drag() const { return shared_drag_; }
-  const quaternion_t& shared_target_orientation() const { return shared_target_orientation_; }
-  const ngp_scalar_view_t& ngp_dt_view() const { return ngp_dt_view_; }
-  const ngp_scalar_view_t& ngp_drag_scalar_view() const { return ngp_drag_scalar_view_; }
-  const ngp_scalar_view_t& ngp_ambient_view() const { return ngp_ambient_view_; }
-  const ngp_scalar_view_t& ngp_drag_view() const { return ngp_drag_view_; }
-  const ngp_scalar_view_t& ngp_target_orientation_view() const { return ngp_target_orientation_view_; }
+  stk::mesh::BulkData& bulk_data() const {
+    return *bulk_data_ptr_;
+  }
+  const stk::mesh::Selector& selector() const {
+    return selector_;
+  }
+  double_field_t& force_field() const {
+    return *force_field_ptr_;
+  }
+  double_field_t& torque_field() const {
+    return *torque_field_ptr_;
+  }
+  double_field_t& orientation_field() const {
+    return *orientation_field_ptr_;
+  }
+  double_field_t& mobility_field() const {
+    return *mobility_field_ptr_;
+  }
+  double_field_t& velocity_field() const {
+    return *velocity_field_ptr_;
+  }
+  double_field_t& stress_field() const {
+    return *stress_field_ptr_;
+  }
+  double_field_t& orientation_out_field() const {
+    return *orientation_out_field_ptr_;
+  }
+  double_field_t& energy_field() const {
+    return *energy_field_ptr_;
+  }
+  double_field_t& dt_field() const {
+    return *dt_field_ptr_;
+  }
+  double_field_t& drag_scalar_field() const {
+    return *drag_scalar_field_ptr_;
+  }
+  double_field_t& ambient_field() const {
+    return *ambient_field_ptr_;
+  }
+  double_field_t& drag_field() const {
+    return *drag_field_ptr_;
+  }
+  double_field_t& target_orientation_field() const {
+    return *target_orientation_field_ptr_;
+  }
+  const scalar_t& shared_dt() const {
+    return shared_dt_;
+  }
+  const scalar_t& shared_drag_scalar() const {
+    return shared_drag_scalar_;
+  }
+  const vector3_t& shared_ambient() const {
+    return shared_ambient_;
+  }
+  const matrix3_t& shared_drag() const {
+    return shared_drag_;
+  }
+  const quaternion_t& shared_target_orientation() const {
+    return shared_target_orientation_;
+  }
+  const ngp_scalar_view_t& ngp_dt_view() const {
+    return ngp_dt_view_;
+  }
+  const ngp_scalar_view_t& ngp_drag_scalar_view() const {
+    return ngp_drag_scalar_view_;
+  }
+  const ngp_scalar_view_t& ngp_ambient_view() const {
+    return ngp_ambient_view_;
+  }
+  const ngp_scalar_view_t& ngp_drag_view() const {
+    return ngp_drag_view_;
+  }
+  const ngp_scalar_view_t& ngp_target_orientation_view() const {
+    return ngp_target_orientation_view_;
+  }
 
   void sync_outputs_to_host() const;
   scalar_t checksum() const;

@@ -313,17 +313,11 @@ void time_test(const std::string& test_name, const OurViewFunc& our_view_func, c
   ankerl::nanobench::Bench bench;
   bench.relative(true).title(test_name).unit("op").performanceCounters(true).minEpochIterations(1000);
 
-  bench.run("with views", [&] {
-    our_view_func();
-  });
+  bench.run("with views", [&] { our_view_func(); });
 
-  bench.run("no views", [&] {
-    our_no_view_func();
-  });
+  bench.run("no views", [&] { our_no_view_func(); });
 
-  bench.run("direct", [&] {
-    direct_func();
-  });
+  bench.run("direct", [&] { direct_func(); });
 }
 
 int main(int argc, char** argv) {
