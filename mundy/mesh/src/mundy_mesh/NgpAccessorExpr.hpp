@@ -39,17 +39,17 @@
 #include <stk_util/parallel/ParallelReduce.hpp>  // for stk::all_reduce_*
 
 // Mundy
-#include <mundy_math/Matrix.hpp>          // for mundy::Matrix
-#include <mundy_math/Quaternion.hpp>      // for mundy::Quaternion
-#include <mundy_math/ScalarWrapper.hpp>   // for mundy::ScalarWrapper
-#include <mundy_math/Vector.hpp>          // for mundy::Vector
-#include <mundy_mesh/ForEachEntity.hpp>   // for mundy::mesh::for_each_entity_run
+#include <mundy_math/Matrix.hpp>         // for mundy::Matrix
+#include <mundy_math/Quaternion.hpp>     // for mundy::Quaternion
+#include <mundy_math/ScalarWrapper.hpp>  // for mundy::ScalarWrapper
+#include <mundy_math/Vector.hpp>         // for mundy::Vector
+#include <mundy_mesh/ForEachEntity.hpp>  // for mundy::mesh::for_each_entity_run
+#include <mundy_mesh/impl/NgpAccessorExprImpl.hpp>
 #include <mundy_utils/StringLiteral.hpp>  // for mundy::StringLiteral
 #include <mundy_utils/aggregate.hpp>      // for mundy::aggregate
 #include <mundy_utils/rng.hpp>            // for mundy::make_philox
 #include <mundy_utils/throw_assert.hpp>   // for MUNDY_THROW_ASSERT
 #include <mundy_utils/tuple.hpp>          // for mundy::tuple
-#include <mundy_mesh/impl/NgpAccessorExprImpl.hpp>
 
 namespace mundy {
 
@@ -99,6 +99,10 @@ but instead of setting equal to true, we count the total number of occurrences o
 ANYTHING in the tree is evaluated, we conditionally cache the result if the number of occurrences of that tag is > 1.
 This way, the user never marks anything as reused, but rather the system automatically determines what to cache. The
 fact that we are using "if constexpr" means that there is no runtime overhead to this approach.
+
+Type-based caching is only sound when a node's type fully determines its eval result within a tree. Each expression
+therefore exposes `static constexpr bool has_static_eval` to indicate whether two nodes with the same tag are
+guaranteed to evaluate to the same result for the same inputs. Automatic memoization is enabled only for such nodes.
 
 Special functions
  -reuse: Flag an expression to be reused by multiple other expressions in a single fused kernel. Its return is memoized
@@ -202,6 +206,22 @@ template <typename DerivedExpr>
 class CachableExprBase {
  public:
   using our_tag = DerivedExpr;
+
+  // Derived expressions must expose:
+  //   static constexpr bool has_static_eval;
+  //
+  // When true, the expression may participate in type-based memoization. When false, equal tags are not assumed to
+  // imply equal eval results, so cached_eval must recompute the value each time.
+  //
+  // The rigorous rule is:
+  //   - true only for pure expressions whose eval result is fully determined by the tag and their eval inputs
+  //   - false for expressions with side effects
+  //   - false for expressions whose eval depends on runtime state not represented by the tag
+  //
+  // Simply because an object has non-static members does not necessarily mean it must have has_static_eval=false. For
+  // example, an AccessorExpr has_static_eval=true since the fields are themselves tagged (basically a contract stating
+  // that each tag corresponds to a unique field).
+  static constexpr bool has_static_eval = DerivedExpr::has_static_eval;
 
  private:
   template <typename Tag, typename AggregateType, AggregateType agg>
@@ -363,6 +383,8 @@ class ConnectedEntitiesExpr : public EntityExprBase<ConnectedEntitiesExpr<PrevEn
   using sub_expressions_t = tuple<PrevEntityExpr>;
   using ConnectedEntities = stk::mesh::NgpMesh::ConnectedEntities;
   static constexpr bool constrains_num_entities = false;
+  // The connectivity rank is runtime state, so two nodes with the same type need not evaluate to the same result.
+  static constexpr bool has_static_eval = false;
 
   KOKKOS_INLINE_FUNCTION
   ConnectedEntitiesExpr(PrevEntityExpr prev_entity_expr, stk::mesh::EntityRank conn_rank)
@@ -392,7 +414,7 @@ class ConnectedEntitiesExpr : public EntityExprBase<ConnectedEntitiesExpr<PrevEn
                                           OldCacheType&& old_cache, const NgpEvalContext& context) const {
     static_assert(has<our_tag>(eval_counts), "eval_counts must contain our tag");
 
-    if constexpr (get<our_tag>(eval_counts) > 1) {
+    if constexpr (our_t::has_static_eval && get<our_tag>(eval_counts) > 1) {
       if constexpr (aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>) {
         // The fact that our tag exists in the old cache means that our eval has cached its result before.
         // Return the cached value and the old cache
@@ -460,6 +482,8 @@ class EntityExpr : public EntityExprBase<EntityExpr<NumEntities, Ord, DriverType
   using our_tag = typename EntityExprBase<EntityExpr<NumEntities, Ord, DriverType>>::our_tag;
   using sub_expressions_t = tuple<>;
   static constexpr size_t num_entities = NumEntities;
+  // Our eval result is just fmis[Ord]. The stored rank/driver affect metadata and execution, but not the returned FMI.
+  static constexpr bool has_static_eval = true;
 
   KOKKOS_INLINE_FUNCTION
   EntityExpr(const stk::mesh::EntityRank& rank, const DriverType* driver) : rank_(rank), driver_(driver) {
@@ -482,7 +506,7 @@ class EntityExpr : public EntityExprBase<EntityExpr<NumEntities, Ord, DriverType
                                           OldCacheType&& old_cache, const NgpEvalContext& /*context*/) const {
     static_assert(has<our_tag>(eval_counts), "eval_counts must contain our tag");
 
-    if constexpr (get<our_tag>(eval_counts) > 1) {
+    if constexpr (our_t::has_static_eval && get<our_tag>(eval_counts) > 1) {
       if constexpr (aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>) {
         // The fact that our tag exists in the old cache means that our eval has cached its result before. means that
         // our eval has cached its result before. Return the cached value
@@ -935,6 +959,8 @@ class ConstantMathExpr : public MathExprBase<ConstantMathExpr<ConstantType>> {
   using our_tag = typename MathExprBase<ConstantMathExpr<ConstantType>>::our_tag;
   using sub_expressions_t = tuple<>;
   static constexpr bool constrains_num_entities = false;
+  // The constant value is runtime state that affects the evaluation, so equal tags do not imply equal eval results.
+  static constexpr bool has_static_eval = false;
 
   KOKKOS_INLINE_FUNCTION
   ConstantMathExpr(ConstantType value) : value_(value) {
@@ -986,6 +1012,9 @@ class AssignExpr : public MathExprBase<AssignExpr<TargetExpr, SourceExpr>> {
   using our_tag = typename MathExprBase<AssignExpr<TargetExpr, SourceExpr>>::our_tag;
   using sub_expressions_t = tuple<TargetExpr, SourceExpr>;
   static constexpr bool constrains_num_entities = false;
+  // Assignment, in its current form, is side-effecting and its return type is void, so it always has non-static eval.
+  // In the future, we may wish to switch to a non-void return that changes from assignment as a sink to assignment as an expression.
+  static constexpr bool has_static_eval = false;
 
   KOKKOS_INLINE_FUNCTION
   AssignExpr(TargetExpr trg_expr, SourceExpr src_expr) : trg_expr_(trg_expr), src_expr_(src_expr) {
@@ -1066,6 +1095,8 @@ class AssignExpr : public MathExprBase<AssignExpr<TargetExpr, SourceExpr>> {
     using our_tag = typename MathExprBase<OpName##Expr<LeftMathExpr, RightMathExpr>>::our_tag;                        \
     using sub_expressions_t = tuple<LeftMathExpr, RightMathExpr>;                                                     \
     static constexpr bool constrains_num_entities = false;                                                            \
+    /* Pure binary operator: static iff both operands are static, since this node adds no runtime state. */           \
+    static constexpr bool has_static_eval = LeftMathExpr::has_static_eval && RightMathExpr::has_static_eval;          \
                                                                                                                       \
     KOKKOS_INLINE_FUNCTION                                                                                            \
     OpName##Expr(LeftMathExpr left, RightMathExpr right) : left_(left), right_(right) {                               \
@@ -1087,7 +1118,7 @@ class AssignExpr : public MathExprBase<AssignExpr<TargetExpr, SourceExpr>> {
                                             OldCacheType&& old_cache, const NgpEvalContext& context) const {          \
       static_assert(has<our_tag>(eval_counts), "eval_counts must contain our tag");                                   \
                                                                                                                       \
-      if constexpr (get<our_tag>(eval_counts) > 1) {                                                                  \
+      if constexpr (our_t::has_static_eval && get<our_tag>(eval_counts) > 1) {                                        \
         if constexpr (aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>) {                              \
           /* The fact that our tag exists in the old cache means that our eval has cached its result before.*/        \
           /* Return the cached value */                                                                               \
@@ -1202,6 +1233,8 @@ class AssignExpr : public MathExprBase<AssignExpr<TargetExpr, SourceExpr>> {
     using our_tag = typename MathExprBase<ExprClassName##Expr<PrevMathExpr>>::our_tag;                             \
     using sub_expressions_t = tuple<PrevMathExpr>;                                                                 \
     static constexpr bool constrains_num_entities = true;                                                          \
+    /* Pure unary function: static iff the argument is static, since this node adds no runtime state. */           \
+    static constexpr bool has_static_eval = PrevMathExpr::has_static_eval;                                         \
                                                                                                                    \
     KOKKOS_INLINE_FUNCTION                                                                                         \
     ExprClassName##Expr(const PrevMathExpr& prev_math_expr) : prev_math_expr_(prev_math_expr) {                    \
@@ -1243,7 +1276,7 @@ class AssignExpr : public MathExprBase<AssignExpr<TargetExpr, SourceExpr>> {
                                             OldCacheType&& old_cache, const NgpEvalContext& context) const {       \
       static_assert(has<our_tag>(eval_counts), "eval_counts must contain our tag");                                \
                                                                                                                    \
-      if constexpr (get<our_tag>(eval_counts) > 1) {                                                               \
+      if constexpr (our_t::has_static_eval && get<our_tag>(eval_counts) > 1) {                                     \
         if constexpr (aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>) {                           \
           /* The fact that our tag exists in the old cache means that our eval has cached its result before, means \
            * that */                                                                                               \
@@ -1313,6 +1346,8 @@ class AssignExpr : public MathExprBase<AssignExpr<TargetExpr, SourceExpr>> {
     using our_tag = typename MathExprBase<ExprClassName##Expr<LeftMathExpr, RightMathExpr>>::our_tag;                 \
     using sub_expressions_t = tuple<LeftMathExpr, RightMathExpr>;                                                     \
     static constexpr bool constrains_num_entities = false;                                                            \
+    /* Pure binary function: static iff both arguments are static, since this node adds no runtime state. */          \
+    static constexpr bool has_static_eval = LeftMathExpr::has_static_eval && RightMathExpr::has_static_eval;          \
                                                                                                                       \
     KOKKOS_INLINE_FUNCTION                                                                                            \
     ExprClassName##Expr(LeftMathExpr left, RightMathExpr right) : left_(left), right_(right) {                        \
@@ -1354,7 +1389,7 @@ class AssignExpr : public MathExprBase<AssignExpr<TargetExpr, SourceExpr>> {
                                             OldCacheType&& old_cache, const NgpEvalContext& context) const {          \
       static_assert(has<our_tag>(eval_counts), "eval_counts must contain our tag");                                   \
                                                                                                                       \
-      if constexpr (get<our_tag>(eval_counts) > 1) {                                                                  \
+      if constexpr (our_t::has_static_eval && get<our_tag>(eval_counts) > 1) {                                        \
         if constexpr (aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>) {                              \
           /* The fact that our tag exists in the old cache means that our eval has cached its result before.*/        \
           /* Return the cached value */                                                                               \
@@ -1475,6 +1510,8 @@ class AssignExpr : public MathExprBase<AssignExpr<TargetExpr, SourceExpr>> {
     using our_tag = typename MathExprBase<OpName##EqualsExpr<LeftMathExpr, RightMathExpr>>::our_tag;                   \
     using sub_expressions_t = tuple<LeftMathExpr, RightMathExpr>;                                                      \
     static constexpr bool constrains_num_entities = false;                                                             \
+    /* Assignment operator: never static, since it is always side-effecting and returns void. */                      \
+    static constexpr bool has_static_eval = false;                                                                     \
                                                                                                                        \
     KOKKOS_INLINE_FUNCTION                                                                                             \
     OpName##EqualsExpr(LeftMathExpr left, RightMathExpr right) : left_(left), right_(right) {                          \
@@ -1559,6 +1596,8 @@ class AssignExpr : public MathExprBase<AssignExpr<TargetExpr, SourceExpr>> {
     using our_tag = typename MathExprBase<ExprClassName##Expr<LeftMathExpr, RightMathExpr>>::our_tag;                  \
     using sub_expressions_t = tuple<LeftMathExpr, RightMathExpr>;                                                      \
     static constexpr bool constrains_num_entities = false;                                                             \
+    /* Atomic update is side-effecting and returns void, so it is never a static cached value. */                      \
+    static constexpr bool has_static_eval = false;                                                                     \
                                                                                                                        \
     KOKKOS_INLINE_FUNCTION                                                                                             \
     ExprClassName##Expr(LeftMathExpr left, RightMathExpr right) : left_(left), right_(right) {                         \
@@ -1905,6 +1944,8 @@ class AccessorExpr : public MathExprBase<AccessorExpr<TaggedAccessorT, PrevEntit
   using our_tag = typename MathExprBase<our_t>::our_tag;
   using sub_expressions_t = tuple<PrevEntityExpr>;
   static constexpr bool constrains_num_entities = false;
+  // Static under the tagged-accessor identity contract, given that the given entity is itself static.
+  static constexpr bool has_static_eval = PrevEntityExpr::has_static_eval;
 
   KOKKOS_INLINE_FUNCTION
   AccessorExpr(TaggedAccessorT tagged_accessor, const PrevEntityExpr& prev_entity_expr)
@@ -2037,7 +2078,7 @@ class AccessorExpr : public MathExprBase<AccessorExpr<TaggedAccessorT, PrevEntit
                                           OldCacheType&& old_cache, const NgpEvalContext& context) const {
     static_assert(has<our_tag>(eval_counts), "eval_counts must contain our tag");
 
-    if constexpr (get<our_tag>(eval_counts) > 1) {
+    if constexpr (our_t::has_static_eval && get<our_tag>(eval_counts) > 1) {
       if constexpr (aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>) {
         // The fact that our tag exists in the old cache means that our eval has cached its result before.
         // Return the cached value and the old cache
@@ -2218,6 +2259,8 @@ class RandomDistributionExpr : public MathExprBase<RandomDistributionExpr<RNGExp
   using our_tag = typename MathExprBase<our_t>::our_tag;
   using sub_expressions_t = tuple<RNGExpr>;
   static constexpr bool constrains_num_entities = false;
+  // Only static if the given RNG expression is itself static
+  static constexpr bool has_static_eval = RNGExpr::has_static_eval;
 
   KOKKOS_INLINE_FUNCTION
   RandomDistributionExpr(const RNGExpr& rng_expr) : rng_expr_(rng_expr) {
@@ -2235,7 +2278,7 @@ class RandomDistributionExpr : public MathExprBase<RandomDistributionExpr<RNGExp
                                           OldCacheType&& old_cache, const NgpEvalContext& context) const {
     static_assert(has<our_tag>(eval_counts), "eval_counts must contain our tag");
 
-    if constexpr (get<our_tag>(eval_counts) > 1) {
+    if constexpr (our_t::has_static_eval && get<our_tag>(eval_counts) > 1) {
       if constexpr (aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>) {
         // The fact that our tag exists in the old cache means that our eval has cached its result before.
         // Return the cached value and the old cache
@@ -2297,6 +2340,9 @@ class UniformDistributionExpr : public MathExprBase<UniformDistributionExpr<RNGE
   using our_tag = typename MathExprBase<our_t>::our_tag;
   using sub_expressions_t = tuple<RNGExpr, LowExpr, HighExpr>;
   static constexpr bool constrains_num_entities = false;
+  // Static iff the given RNG expression and the low and high expressions are themselves static
+  static constexpr bool has_static_eval =
+      RNGExpr::has_static_eval && LowExpr::has_static_eval && HighExpr::has_static_eval;
 
   KOKKOS_INLINE_FUNCTION
   UniformDistributionExpr(const RNGExpr& rng_expr, const LowExpr& low_expr, const HighExpr& high_expr)
@@ -2317,7 +2363,7 @@ class UniformDistributionExpr : public MathExprBase<UniformDistributionExpr<RNGE
                                           OldCacheType&& old_cache, const NgpEvalContext& context) const {
     static_assert(has<our_tag>(eval_counts), "eval_counts must contain our tag");
 
-    if constexpr (get<our_tag>(eval_counts) > 1) {
+    if constexpr (our_t::has_static_eval && get<our_tag>(eval_counts) > 1) {
       if constexpr (aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>) {
         // The fact that our tag exists in the old cache means that our eval has cached its result before.
         // Return the cached value and the old cache
@@ -2405,6 +2451,8 @@ class CounterBasedRNGExpr
   using our_tag = typename MathExprBase<our_t>::our_tag;
   using sub_expressions_t = tuple<SeedExpr, CounterExpr>;
   static constexpr bool constrains_num_entities = false;
+  // RNG construction is a pure function of seed and counter, so it is static iff both inputs are static.
+  static constexpr bool has_static_eval = SeedExpr::has_static_eval && CounterExpr::has_static_eval;
 
   KOKKOS_INLINE_FUNCTION
   CounterBasedRNGExpr(const SeedExpr& seed_expr, const CounterExpr& counter_expr)
@@ -2424,7 +2472,7 @@ class CounterBasedRNGExpr
                                           OldCacheType&& old_cache, const NgpEvalContext& context) const {
     static_assert(has<our_tag>(eval_counts), "eval_counts must contain our tag");
 
-    if constexpr (get<our_tag>(eval_counts) > 1) {
+    if constexpr (our_t::has_static_eval && get<our_tag>(eval_counts) > 1) {
       if constexpr (aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>) {
         // The fact that our tag exists in the old cache means that our eval has cached its result before.
         // Return the cached value and the old cache
@@ -2592,6 +2640,8 @@ class FusedAssignExpr : public MathExprBase<FusedAssignExpr<TrgSrcExprPairs...>>
   static_assert(sizeof...(TrgSrcExprPairs) % 2 == 0,
                 "The number of target/source expression pairs in FusedAssignExpr must be even.");
   static constexpr bool constrains_num_entities = false;
+  // Fused assignment is side-effecting and returns void, so it is never a static cached value.
+  static constexpr bool has_static_eval = false;
 
   KOKKOS_INLINE_FUNCTION
   FusedAssignExpr(const TrgSrcExprPairs&... exprs) : exprs_(make_tuple(exprs...)) {
