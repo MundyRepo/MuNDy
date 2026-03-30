@@ -26,6 +26,9 @@
 // Kokkos
 #include <Kokkos_Core.hpp>  // for KOKKOS_LAMBDA, etc.
 
+// STL
+#include <unordered_map>
+
 // STK mesh
 #include <stk_mesh/base/BulkData.hpp>            // for stk::mesh::BulkData
 #include <stk_mesh/base/Entity.hpp>              // for stk::mesh::Entity
@@ -214,6 +217,63 @@ class CachedTagGetter {
   KOKKOS_INLINE_FUNCTION constexpr decltype(auto) get(const CacheType& cache) const {
     return ::mundy::get<Tag>(cache);
   }
+};
+
+class RuntimeReuseValidator {
+ public:
+  RuntimeReuseValidator() = default;
+
+  template <typename EvalCountsType, EvalCountsType eval_counts, typename Expr>
+  void validate(const Expr& expr) {
+    static_assert(has<typename Expr::our_tag>(eval_counts), "eval_counts must contain the expression tag");
+    if constexpr (Expr::supports_runtime_reuse && !Expr::has_static_eval &&
+                  get<typename Expr::our_tag>(eval_counts) > 1) {
+      validate_or_track(expr);
+    }
+  }
+
+ private:
+  template <typename Expr>
+  void validate_or_track(const Expr& expr) {
+    using tag_t = typename Expr::our_tag;
+    auto [it, inserted] = first_expr_ptr_by_tag_.emplace(tag_key<tag_t>(), static_cast<const void*>(&expr));
+    if (!inserted) {
+      const auto* first_expr = static_cast<const Expr*>(it->second);
+      MUNDY_THROW_REQUIRE(
+          expr.runtime_reuse_equivalent(*first_expr), std::logic_error,
+          "Unsupported runtime reuse found in expression tree...\n"
+          "\n"
+          "Hi, you've surpassed mundy's current supported behavior related to runtime reuse in an expression tree.\n"
+          "This means that you managed to create two identical random number generator expressions with different "
+          "runtime seed/counter combos.\n"
+          "\n"
+          "For example:\n"
+          ">>>  auto rng_a = rng(seed(es) + 1.0, counter(es));\n"
+          ">>>  auto rng_b = rng(seed(es) + 2.0, counter(es));\n"
+          ">>>  fused_assign(first_draw(es), /*=*/rng_a.template rand<double>(),\n"
+          ">>>               second_draw(es), /*=*/rng_b.template rand<double>());\n"
+          "\n"
+          "This is worked around by changing the inputs to the random number generators to have different forms:\n"
+          "Example workaround 1 (change order of addition):\n"
+          ">>>  auto rng_a = rng(1.0 + seed(es), counter(es));\n"
+          ">>>  auto rng_b = rng(seed(es) + 2.0, counter(es));\n"
+          "\n"
+          "Example workaround 2 (add zero):\n"
+          ">>>  auto rng_a = rng(seed(es) + 1.0, counter(es) + 0.0);\n"
+          ">>>  auto rng_b = rng(seed(es) + 2.0, counter(es));\n"
+          "\n"
+          "If this remains a problem, let us know and we'll test an arbitrary runtime-reuse implementation.\n"
+          "It's fully possible, we simply haven't needed it yet.");
+    }
+  }
+
+  template <typename Tag>
+  static const void* tag_key() {
+    static const int key = 0;
+    return &key;
+  }
+
+  std::unordered_map<const void*, const void*> first_expr_ptr_by_tag_;
 };
 
 template <typename EvalCountsType, EvalCountsType eval_counts, size_t I = 0, class ExprTuple, size_t NumEntities,

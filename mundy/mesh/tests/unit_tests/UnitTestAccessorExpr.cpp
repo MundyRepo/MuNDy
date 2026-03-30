@@ -456,10 +456,25 @@ struct SecondDrawTag;
 
 using single_entity_expr_driver_t = NgpForEachEntityExprDriver<>;
 using single_entity_expr_t = EntityExpr<1, 0, single_entity_expr_driver_t>;
+using rng_contract_expr_t =
+    CounterBasedRNGExpr<ConstantMathExpr<size_t>, ConstantMathExpr<size_t>, openrand::Philox, make_philox>;
+using rng_draw_contract_expr_t = RandomDistributionExpr<rng_contract_expr_t, double>;
+using rng_uniform_contract_expr_t =
+    UniformDistributionExpr<rng_contract_expr_t, double, ConstantMathExpr<double>, ConstantMathExpr<double>>;
+using reusable_add_expr_t = AddExpr<rng_contract_expr_t, rng_contract_expr_t>;
+using nonreusable_add_expr_t = AddExpr<rng_draw_contract_expr_t, ConstantMathExpr<double>>;
 
 static_assert(single_entity_expr_t::has_static_eval);
 static_assert(!ConnectedEntitiesExpr<single_entity_expr_t>::has_static_eval);
+static_assert(!ConnectedEntitiesExpr<single_entity_expr_t>::supports_runtime_reuse);
 static_assert(!ConstantMathExpr<double>::has_static_eval);
+static_assert(!reusable_add_expr_t::supports_runtime_reuse);
+static_assert(!nonreusable_add_expr_t::supports_runtime_reuse);
+static_assert(rng_contract_expr_t::supports_runtime_reuse);
+static_assert(!rng_draw_contract_expr_t::has_static_eval);
+static_assert(!rng_draw_contract_expr_t::supports_runtime_reuse);
+static_assert(!rng_uniform_contract_expr_t::has_static_eval);
+static_assert(!rng_uniform_contract_expr_t::supports_runtime_reuse);
 
 TEST_F(UnitTestAccessorExprFixture, field_fill) {
   if (stk::parallel_machine_size(communicator_) > 2) {
@@ -718,7 +733,7 @@ TEST_F(UnitTestAccessorExprFixture, non_static_branches_do_not_share_cache) {
   auto z = make_tagged_component<ZTag>(ScalarFieldComponent(*field_z_ptr_));
 
   {
-    // x(es) + y_offset and x(es) + z_offset have the same type but different returns for the same eval input, 
+    // x(es) + y_offset and x(es) + z_offset have the same type but different returns for the same eval input,
     // so they should not cache their return type.
     auto es = make_entity_expr(get_bulk(), b1_not_b2, stk::topology::NODE_RANK);
     fused_assign(y(es), /*=*/x(es) + y_offset,  //
@@ -736,7 +751,7 @@ TEST_F(UnitTestAccessorExprFixture, non_static_branches_do_not_share_cache) {
 TEST_F(UnitTestAccessorExprFixture, repeated_calls_to_rng_expr_returns_new_values) {
   // This is the test that having our rng expressions cache their RNG instance doesn't mean that they return
   // the same random value on each call. That is, we want to guarantee regular behavior such as the following:
-  //   auto rng = make_philox(seed, counter); // create a random number generator
+  //   auto rng = make_philox(seed, counter);
   //   double a = rng.rand<double>();
   //   double b = rng.rand<double>();
   //   EXPECT_NE(a, b);
@@ -784,21 +799,25 @@ TEST_F(UnitTestAccessorExprFixture, repeated_calls_to_rng_expr_returns_new_value
     auto es = make_entity_expr(get_bulk(), b1_not_b2, stk::topology::NODE_RANK);
 
     if constexpr (non_static_seed && non_static_counter) {
-      auto our_rng = rng(seed(es) + 0.0, counter(es) + 0.0);
-      fused_assign(first_draw(es), /*=*/our_rng.template rand<double>(),  //
-                   second_draw(es), /*=*/our_rng.template rand<double>());
+      auto our_rng = rng(seed(es) + 0.0, 0.0 + counter(es));
+      EXPECT_NO_THROW(fused_assign(first_draw(es), /*=*/our_rng.template rand<double>(),  //
+                                   second_draw(es), /*=*/our_rng.template rand<double>()))
+          << "non-static seed/non-static counter case threw an error";
     } else if constexpr (non_static_seed) {
       auto our_rng = rng(seed(es) + 0.0, counter(es));
-      fused_assign(first_draw(es), /*=*/our_rng.template rand<double>(),  //
-                   second_draw(es), /*=*/our_rng.template rand<double>());
+      EXPECT_NO_THROW(fused_assign(first_draw(es), /*=*/our_rng.template rand<double>(),  //
+                                   second_draw(es), /*=*/our_rng.template rand<double>()))
+          << "non-static seed/static counter case threw an error";
     } else if constexpr (non_static_counter) {
       auto our_rng = rng(seed(es), counter(es) + 0.0);
-      fused_assign(first_draw(es), /*=*/our_rng.template rand<double>(),  //
-                   second_draw(es), /*=*/our_rng.template rand<double>());
+      EXPECT_NO_THROW(fused_assign(first_draw(es), /*=*/our_rng.template rand<double>(),  //
+                                   second_draw(es), /*=*/our_rng.template rand<double>()))
+          << "static seed/non-static counter case threw an error";
     } else {
       auto our_rng = rng(seed(es), counter(es));
-      fused_assign(first_draw(es), /*=*/our_rng.template rand<double>(),  //
-                   second_draw(es), /*=*/our_rng.template rand<double>());
+      EXPECT_NO_THROW(fused_assign(first_draw(es), /*=*/our_rng.template rand<double>(),  //
+                                   second_draw(es), /*=*/our_rng.template rand<double>()))
+          << "static seed/static counter case threw an error";
     }
 
     field_x_ptr_->sync_to_host();
@@ -832,6 +851,34 @@ TEST_F(UnitTestAccessorExprFixture, repeated_calls_to_rng_expr_returns_new_value
   run_case.template operator()<true, false>("non-static seed/static counter");
   run_case.template operator()<false, true>("static seed/non-static counter");
   run_case.template operator()<true, true>("non-static seed/non-static counter");
+}
+
+TEST_F(UnitTestAccessorExprFixture, runtime_reuse_validation_rejects_non_equivalent_rng_nodes) {
+  const int we_know_there_are_five_ranks = 5;
+#if TRILINOS_MAJOR_MINOR_VERSION >= 160000
+  auto field_data_manager = std::make_unique<stk::mesh::DefaultFieldDataManager>(we_know_there_are_five_ranks);
+  setup_hex_mesh(stk::mesh::BulkData::AUTO_AURA, std::move(field_data_manager));
+#else
+  stk::mesh::DefaultFieldDataManager* field_data_manager_ptr =
+      new stk::mesh::DefaultFieldDataManager(we_know_there_are_five_ranks);
+  setup_hex_mesh(stk::mesh::BulkData::AUTO_AURA, field_data_manager_ptr);
+#endif
+
+  stk::mesh::Selector b1_not_b2 = block1_selector_ - block2_selector_;
+  auto seed = make_tagged_component<SeedTag>(ScalarFieldComponent(*field_x_ptr_));
+  auto counter = make_tagged_component<CounterTag>(ScalarFieldComponent(*field_y_ptr_));
+  auto first_draw = make_tagged_component<FirstDrawTag>(ScalarFieldComponent(*field_xs_ptr_));
+  auto second_draw = make_tagged_component<SecondDrawTag>(ScalarFieldComponent(*field_ys_ptr_));
+  auto es = make_entity_expr(get_bulk(), b1_not_b2, stk::topology::NODE_RANK);
+
+  EXPECT_THROW(
+      {
+        auto rng_a = rng(seed(es) + 0.0, counter(es));
+        auto rng_b = rng(seed(es) + 1.0, counter(es));
+        fused_assign(first_draw(es), /*=*/rng_a.template rand<double>(),  //
+                     second_draw(es), /*=*/rng_b.template rand<double>());
+      },
+      std::logic_error);
 }
 
 template <size_t NumComponents>
