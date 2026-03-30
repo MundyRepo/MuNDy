@@ -166,46 +166,87 @@ namespace impl {
 template <template <class> class B, class E>
 struct is_crtp_base_of_impl : std::is_base_of<B<E>, E> {};
 
+// Cached eval cannot safely return a raw reference alongside a by-value cache object.
+// Instead, cached eval returns a Kokkos::pair<Handle, Cache>, where Handle either owns a temporary or names a tag in
+// the cache. Callers then resolve the handle against whichever cache object is currently live.
+template <typename ValueType>
+class OwnedCachedValue {
+ public:
+  using value_type = std::remove_cvref_t<ValueType>;
+
+  KOKKOS_DEFAULTED_FUNCTION
+  OwnedCachedValue() = default;
+
+  KOKKOS_FUNCTION
+  explicit OwnedCachedValue(const value_type& value) : value_(value) {
+  }
+
+  KOKKOS_FUNCTION
+  explicit OwnedCachedValue(value_type&& value) : value_(std::move(value)) {
+  }
+
+  template <typename CacheType>
+  KOKKOS_INLINE_FUNCTION constexpr value_type& get([[maybe_unused]] CacheType& cache) {
+    return value_;
+  }
+
+  template <typename CacheType>
+  KOKKOS_INLINE_FUNCTION constexpr const value_type& get([[maybe_unused]] const CacheType& cache) const {
+    return value_;
+  }
+
+ private:
+  value_type value_;
+};
+
+template <typename ValueType>
+OwnedCachedValue(ValueType&&) -> OwnedCachedValue<std::remove_cvref_t<ValueType>>;
+
+template <typename Tag>
+class CachedTagGetter {
+ public:
+  template <typename CacheType>
+  KOKKOS_INLINE_FUNCTION constexpr decltype(auto) get(CacheType& cache) const {
+    return ::mundy::get<Tag>(cache);
+  }
+
+  template <typename CacheType>
+  KOKKOS_INLINE_FUNCTION constexpr decltype(auto) get(const CacheType& cache) const {
+    return ::mundy::get<Tag>(cache);
+  }
+};
+
 template <typename EvalCountsType, EvalCountsType eval_counts, size_t I = 0, class ExprTuple, size_t NumEntities,
           class CacheType, class Ctx>
-KOKKOS_FUNCTION auto cached_expr_chain_impl(const ExprTuple& exprs,
-                                            const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities>& fmis,
-                                            CacheType&& cache, const Ctx& ctx) {
+KOKKOS_FUNCTION auto cached_expr_chain(const ExprTuple& exprs,
+                                       const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities>& fmis,
+                                       CacheType&& cache, const Ctx& ctx) {
   constexpr size_t num_expr = ExprTuple::size();
-  if constexpr (num_expr == 1) {
-    // Single expr; just eval it and return its value and the current cache
-    auto& expr = get<0>(exprs);
-    auto [val, next_cache] =
-        expr.template cached_eval<EvalCountsType, eval_counts>(fmis, std::forward<CacheType>(cache), ctx);
-    return Kokkos::make_pair(tuple{val}, next_cache);
-  } else if constexpr (I == num_expr) {
+  if constexpr (I == num_expr) {
     // No more exprs; return empty values tuple and the current cache
     return Kokkos::make_pair(tuple<>{}, std::forward<CacheType>(cache));
   } else {
     // Evaluate current expr with the current cache
     auto& expr = get<I>(exprs);
-    auto [val_i, next_cache] =
-        expr.template cached_eval<EvalCountsType, eval_counts>(fmis, std::forward<CacheType>(cache), ctx);
+    auto result_i = expr.template cached_eval<EvalCountsType, eval_counts>(fmis, std::forward<CacheType>(cache), ctx);
+    auto value_handle_i = std::move(result_i.first);
+    auto next_cache = std::move(result_i.second);
 
     // Recurse for the rest, threading the updated cache
     auto [vals_tail, final_cache] =
-        cached_expr_chain_impl<EvalCountsType, eval_counts, I + 1>(exprs, fmis, std::move(next_cache), ctx);
+        cached_expr_chain<EvalCountsType, eval_counts, I + 1>(exprs, fmis, std::move(next_cache), ctx);
 
-    // Prepend this value to the tuple of later values
-    auto vals_all = tuple_cat(tuple{std::move(val_i)}, std::move(vals_tail));
-    return Kokkos::make_pair(vals_all, final_cache);
+    // Prepend this value handle to the tuple of later value handles.
+    auto vals_all = tuple_cat(tuple{std::move(value_handle_i)}, std::move(vals_tail));
+    return Kokkos::make_pair(vals_all, std::move(final_cache));
   }
 }
 
 template <size_t I = 0, class ExprTuple, size_t NumEntities, class Ctx>
-KOKKOS_FUNCTION auto expr_chain_impl(const ExprTuple& exprs,
-                                     const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities>& fmis, const Ctx& ctx) {
+KOKKOS_FUNCTION auto expr_chain(const ExprTuple& exprs,
+                                const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities>& fmis, const Ctx& ctx) {
   constexpr size_t num_expr = ExprTuple::size();
-  if constexpr (num_expr == 1) {
-    // Single expr; just eval it and return its value and the current cache
-    auto val = get<0>(exprs).eval(fmis, ctx);
-    return tuple{std::move(val)};
-  } else if constexpr (I == num_expr) {
+  if constexpr (I == num_expr) {
     // No more exprs; return empty values tuple and the current cache
     return tuple<>{};
   } else {
@@ -213,28 +254,12 @@ KOKKOS_FUNCTION auto expr_chain_impl(const ExprTuple& exprs,
     auto val_i = get<I>(exprs).eval(fmis, ctx);
 
     // Recurse for the rest, threading the updated cache
-    auto vals_tail = expr_chain_impl<I + 1>(exprs, fmis, ctx);
+    auto vals_tail = expr_chain<I + 1>(exprs, fmis, ctx);
 
     // Prepend this value to the tuple of later values
     auto vals_all = tuple_cat(tuple{std::move(val_i)}, std::move(vals_tail));
     return vals_all;
   }
-}
-
-// Public interface
-template <typename EvalCountsType, EvalCountsType eval_counts, class ExprTuple, size_t NumEntities, class CacheType,
-          class Ctx>
-KOKKOS_INLINE_FUNCTION auto cached_expr_chain(const ExprTuple& exprs,
-                                              const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities>& fmis,
-                                              CacheType&& cache0, const Ctx& ctx) {
-  return cached_expr_chain_impl<EvalCountsType, eval_counts>(exprs, fmis, std::forward<CacheType>(cache0), ctx);
-}
-
-template <class ExprTuple, size_t NumEntities, class Ctx>
-KOKKOS_INLINE_FUNCTION auto expr_chain(const ExprTuple& exprs,
-                                       const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities>& fmis,
-                                       const Ctx& ctx) {
-  return expr_chain_impl(exprs, fmis, ctx);
 }
 
 // A map from rank and selector to an std::any

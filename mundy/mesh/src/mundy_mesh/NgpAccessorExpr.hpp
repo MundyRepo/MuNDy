@@ -417,27 +417,29 @@ class ConnectedEntitiesExpr : public EntityExprBase<ConnectedEntitiesExpr<PrevEn
     if constexpr (our_t::has_static_eval && get<our_tag>(eval_counts) > 1) {
       if constexpr (aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>) {
         // The fact that our tag exists in the old cache means that our eval has cached its result before.
-        // Return the cached value and the old cache
-        auto cache = std::forward<OldCacheType>(old_cache);
-        return Kokkos::make_pair(get<our_tag>(cache), cache);
+        return Kokkos::make_pair(impl::CachedTagGetter<our_tag>{}, std::forward<OldCacheType>(old_cache));
       } else {
         // Eval our subexpressions first
-        auto [entity_index, new_cache] = prev_entity_expr_.template cached_eval<EvalCountsType, eval_counts>(
+        auto entity_result = prev_entity_expr_.template cached_eval<EvalCountsType, eval_counts>(
             fmis, std::forward<OldCacheType>(old_cache), context);
+        auto entity_value = std::move(entity_result.first);
 
         // Our eval result needs cached, but is not yet cached
         stk::mesh::EntityRank entity_rank = prev_entity_expr_.rank();
-        auto val = context.ngp_mesh().get_connected_entities(entity_rank, entity_index, conn_rank_);
-        auto newest_cache = append<our_tag>(new_cache, val);
-        return Kokkos::make_pair(val, newest_cache);
+        auto val =
+            context.ngp_mesh().get_connected_entities(entity_rank, entity_value.get(entity_result.second), conn_rank_);
+        auto newest_cache = append<our_tag>(std::move(entity_result.second), val);
+        return Kokkos::make_pair(impl::CachedTagGetter<our_tag>{}, std::move(newest_cache));
       }
     } else {
       // We don't need to cache our value, so just compute and return it
       stk::mesh::EntityRank entity_rank = prev_entity_expr_.rank();
-      auto [entity_index, new_cache] = prev_entity_expr_.template cached_eval<EvalCountsType, eval_counts>(
+      auto entity_result = prev_entity_expr_.template cached_eval<EvalCountsType, eval_counts>(
           fmis, std::forward<OldCacheType>(old_cache), context);
-      auto val = context.ngp_mesh().get_connected_entities(entity_rank, entity_index, conn_rank_);
-      return Kokkos::make_pair(val, new_cache);
+      auto entity_value = std::move(entity_result.first);
+      auto val =
+          context.ngp_mesh().get_connected_entities(entity_rank, entity_value.get(entity_result.second), conn_rank_);
+      return Kokkos::make_pair(impl::OwnedCachedValue{std::move(val)}, std::move(entity_result.second));
     }
   }
 
@@ -508,21 +510,18 @@ class EntityExpr : public EntityExprBase<EntityExpr<NumEntities, Ord, DriverType
 
     if constexpr (our_t::has_static_eval && get<our_tag>(eval_counts) > 1) {
       if constexpr (aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>) {
-        // The fact that our tag exists in the old cache means that our eval has cached its result before. means that
-        // our eval has cached its result before. Return the cached value
-        auto cache = std::forward<OldCacheType>(old_cache);
-        auto val = get<our_tag>(cache);
-        return Kokkos::make_pair(val, cache);
+        // The fact that our tag exists in the old cache means that our eval has cached its result before.
+        return Kokkos::make_pair(impl::CachedTagGetter<our_tag>{}, std::forward<OldCacheType>(old_cache));
       } else {
         // Our eval result needs cached, but is not yet cached
         auto val = fmis[Ord];
         auto new_cache = append<our_tag>(std::forward<OldCacheType>(old_cache), val);
-        return Kokkos::make_pair(val, new_cache);
+        return Kokkos::make_pair(impl::CachedTagGetter<our_tag>{}, std::move(new_cache));
       }
     } else {
       // We don't need to cache our value, so just compute and return it
       auto val = fmis[Ord];
-      return Kokkos::make_pair(val, old_cache);
+      return Kokkos::make_pair(impl::OwnedCachedValue{val}, std::forward<OldCacheType>(old_cache));
     }
   }
 
@@ -677,7 +676,7 @@ class NgpForEachEntityExprDriver {
     // Perform the evaluation
     ::mundy::mesh::for_each_entity_run(
         ngp_mesh, rank_, selector_, KOKKOS_LAMBDA(const stk::mesh::FastMeshIndex& entity_index) {
-          // Non-cached eval
+          // Non-cached eval for debugging
           // expr.eval(Kokkos::Array<stk::mesh::FastMeshIndex, 1>{entity_index}, evaluation_context);
 
           // Sum the counts of each expression in the tree
@@ -716,24 +715,24 @@ class NgpForEachEntityExprDriver {
 
           // Perform the eval
           auto empty_cache = aggregate();
-          auto [val, final_cache] = expr.template cached_eval<decltype(eval_counts), eval_counts>(
+          auto result = expr.template cached_eval<decltype(eval_counts), eval_counts>(
               Kokkos::Array<stk::mesh::FastMeshIndex, 1>{entity_index}, empty_cache, evaluation_context);
 
           // Combine into the reduction
           // To avoid CUDA being CUDA, we must "touch" the reduction
           [[maybe_unused]] auto meaningless_return_to_make_cuda_happy = reduction.reference();
-          using val_t = decltype(val);
+          auto&& val_ref = result.first.get(result.second);
+          using val_t = std::remove_cvref_t<decltype(val_ref)>;
 
           if constexpr (std::is_same_v<val_t, value_type>) {
             // Directly compatible types; just combine
-            reduction.join(value, val);
-          }
-          if constexpr (is_scalar_wrapper_v<val_t>) {
+            reduction.join(value, val_ref);
+          } else if constexpr (is_scalar_wrapper_v<val_t>) {
             // val is a scalar wrapper; extract the underlying value and combine
-            reduction.join(value, val[0]);
+            reduction.join(value, val_ref[0]);
           } else {
             // Unknown return type, attempt to use it directly
-            reduction.join(value, val);
+            reduction.join(value, val_ref);
           }
         });
   }
@@ -836,24 +835,24 @@ class NgpForEachEntityPairExprDriver {
 
           // Perform the eval
           auto empty_cache = aggregate();
-          auto [val, final_cache] = expr.template cached_eval<decltype(eval_counts), eval_counts>(
+          auto result = expr.template cached_eval<decltype(eval_counts), eval_counts>(
               Kokkos::Array<stk::mesh::FastMeshIndex, 2>{left_fmi, right_fmi}, empty_cache, evaluation_context);
 
           // Combine into the reduction
           // To avoid CUDA being CUDA, we must "touch" the reduction
           [[maybe_unused]] auto meaningless_return_to_make_cuda_happy = reduction.reference();
-          using val_t = decltype(val);
+          auto&& val_ref = result.first.get(result.second);
+          using val_t = std::remove_cvref_t<decltype(val_ref)>;
 
           if constexpr (std::is_same_v<val_t, value_type>) {
             // Directly compatible types; just combine
-            reduction.join(value, val);
-          }
-          if constexpr (is_scalar_wrapper_v<val_t>) {
+            reduction.join(value, val_ref);
+          } else if constexpr (is_scalar_wrapper_v<val_t>) {
             // val is a scalar wrapper; extract the underlying value and combine
-            reduction.join(value, val[0]);
+            reduction.join(value, val_ref[0]);
           } else {
             // Unknown return type, attempt to use it directly
-            reduction.join(value, val);
+            reduction.join(value, val_ref);
           }
         });
   }
@@ -978,7 +977,7 @@ class ConstantMathExpr : public MathExprBase<ConstantMathExpr<ConstantType>> {
     static_assert(
         !aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>,
         "The cache somehow contains our tag, but our eval returns a constant and should never cache anything.");
-    return Kokkos::make_pair(value_, std::forward<OldCacheType>(old_cache));
+    return Kokkos::make_pair(impl::OwnedCachedValue{value_}, std::forward<OldCacheType>(old_cache));
   }
 
   void propagate_synchronize(const NgpEvalContext& /*context*/) {
@@ -1013,7 +1012,8 @@ class AssignExpr : public MathExprBase<AssignExpr<TargetExpr, SourceExpr>> {
   using sub_expressions_t = tuple<TargetExpr, SourceExpr>;
   static constexpr bool constrains_num_entities = false;
   // Assignment, in its current form, is side-effecting and its return type is void, so it always has non-static eval.
-  // In the future, we may wish to switch to a non-void return that changes from assignment as a sink to assignment as an expression.
+  // In the future, we may wish to switch to a non-void return that changes from assignment as a sink to assignment as
+  // an expression.
   static constexpr bool has_static_eval = false;
 
   KOKKOS_INLINE_FUNCTION
@@ -1033,11 +1033,14 @@ class AssignExpr : public MathExprBase<AssignExpr<TargetExpr, SourceExpr>> {
                   "The cache somehow contains our tag, but our eval returns void and should never cache anything.");
 
     // Eval our subexpressions first, allowing them to cache their results if necessary
-    auto [trg_val, new_cache] = trg_expr_.template cached_eval<EvalCountsType, eval_counts>(
+    auto trg_result = trg_expr_.template cached_eval<EvalCountsType, eval_counts>(
         fmis, std::forward<OldCacheType>(old_cache), context);
-    auto [src_val, newer_cache] =
-        src_expr_.template cached_eval<EvalCountsType, eval_counts>(fmis, std::move(new_cache), context);
-    trg_val = src_val;
+    auto trg_value = std::move(trg_result.first);
+    auto src_result =
+        src_expr_.template cached_eval<EvalCountsType, eval_counts>(fmis, std::move(trg_result.second), context);
+    auto&& trg_ref = trg_value.get(src_result.second);
+    auto&& src_ref = src_result.first.get(src_result.second);
+    trg_ref = src_ref;
   }
 
   void propagate_synchronize(const NgpEvalContext& context) {
@@ -1120,33 +1123,32 @@ class AssignExpr : public MathExprBase<AssignExpr<TargetExpr, SourceExpr>> {
                                                                                                                       \
       if constexpr (our_t::has_static_eval && get<our_tag>(eval_counts) > 1) {                                        \
         if constexpr (aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>) {                              \
-          /* The fact that our tag exists in the old cache means that our eval has cached its result before.*/        \
-          /* Return the cached value */                                                                               \
-          auto cache = std::forward<OldCacheType>(old_cache);                                                         \
-          auto val = get<our_tag>(cache);                                                                             \
-          return Kokkos::make_pair(val, cache);                                                                       \
+          /* The fact that our tag exists in the old cache means that our eval has cached its result before. */       \
+          return Kokkos::make_pair(impl::CachedTagGetter<our_tag>{}, std::forward<OldCacheType>(old_cache));          \
         } else {                                                                                                      \
           /* Eval our subexpressions first, allowing them to cache their results if necessary */                      \
-          auto [left_val, new_cache] = left_.template cached_eval<EvalCountsType, eval_counts>(                       \
+          auto left_result = left_.template cached_eval<EvalCountsType, eval_counts>(                                 \
               fmis, std::forward<OldCacheType>(old_cache), context);                                                  \
-          auto [right_val, newer_cache] =                                                                             \
-              right_.template cached_eval<EvalCountsType, eval_counts>(fmis, std::move(new_cache), context);          \
+          auto left_value = std::move(left_result.first);                                                             \
+          auto right_result =                                                                                         \
+              right_.template cached_eval<EvalCountsType, eval_counts>(fmis, std::move(left_result.second), context); \
                                                                                                                       \
           /* Our eval result needs cached, but is not yet cached */                                                   \
-          auto val = left_val op right_val;                                                                           \
-          auto newest_cache = append<our_tag>(std::move(newer_cache), val);                                           \
-          return Kokkos::make_pair(val, newest_cache);                                                                \
+          auto val = left_value.get(right_result.second) op right_result.first.get(right_result.second);              \
+          auto newest_cache = append<our_tag>(std::move(right_result.second), val);                                   \
+          return Kokkos::make_pair(impl::CachedTagGetter<our_tag>{}, std::move(newest_cache));                        \
         }                                                                                                             \
       } else {                                                                                                        \
         /* Eval our subexpressions first, allowing them to cache their results if necessary */                        \
-        auto [left_val, new_cache] = left_.template cached_eval<EvalCountsType, eval_counts>(                         \
+        auto left_result = left_.template cached_eval<EvalCountsType, eval_counts>(                                   \
             fmis, std::forward<OldCacheType>(old_cache), context);                                                    \
-        auto [right_val, newer_cache] =                                                                               \
-            right_.template cached_eval<EvalCountsType, eval_counts>(fmis, std::move(new_cache), context);            \
+        auto left_value = std::move(left_result.first);                                                               \
+        auto right_result =                                                                                           \
+            right_.template cached_eval<EvalCountsType, eval_counts>(fmis, std::move(left_result.second), context);   \
                                                                                                                       \
         /* Don't cache our result */                                                                                  \
-        auto val = left_val op right_val;                                                                             \
-        return Kokkos::make_pair(val, newer_cache);                                                                   \
+        auto val = left_value.get(right_result.second) op right_result.first.get(right_result.second);                \
+        return Kokkos::make_pair(impl::OwnedCachedValue{std::move(val)}, std::move(right_result.second));             \
       }                                                                                                               \
     }                                                                                                                 \
                                                                                                                       \
@@ -1225,115 +1227,113 @@ class AssignExpr : public MathExprBase<AssignExpr<TargetExpr, SourceExpr>> {
 
 /// \brief Create an expression for applying a function on the read only result of a math expression
 /// Single argument version
-#define MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(ExprClassName, FuncName, Func)                                          \
-  template <typename PrevMathExpr>                                                                                 \
-  class ExprClassName##Expr : public MathExprBase<ExprClassName##Expr<PrevMathExpr>> {                             \
-   public:                                                                                                         \
-    using our_t = ExprClassName##Expr<PrevMathExpr>;                                                               \
-    using our_tag = typename MathExprBase<ExprClassName##Expr<PrevMathExpr>>::our_tag;                             \
-    using sub_expressions_t = tuple<PrevMathExpr>;                                                                 \
-    static constexpr bool constrains_num_entities = true;                                                          \
-    /* Pure unary function: static iff the argument is static, since this node adds no runtime state. */           \
-    static constexpr bool has_static_eval = PrevMathExpr::has_static_eval;                                         \
-                                                                                                                   \
-    KOKKOS_INLINE_FUNCTION                                                                                         \
-    ExprClassName##Expr(const PrevMathExpr& prev_math_expr) : prev_math_expr_(prev_math_expr) {                    \
-    }                                                                                                              \
-                                                                                                                   \
-    KOKKOS_INLINE_FUNCTION                                                                                         \
-    ExprClassName##Expr(const EntityExprBase<PrevMathExpr>& prev_math_expr_base)                                   \
-        : prev_math_expr_(prev_math_expr_base.self()) {                                                            \
-    }                                                                                                              \
-                                                                                                                   \
-    template <typename OtherExpr>                                                                                  \
-    auto operator+(const MathExprBase<OtherExpr>& other) const {                                                   \
-      return AddExpr<our_t, OtherExpr>(*this, other.self());                                                       \
-    }                                                                                                              \
-                                                                                                                   \
-    template <typename OtherExpr>                                                                                  \
-    auto operator-(const MathExprBase<OtherExpr>& other) const {                                                   \
-      return SubExpr<our_t, OtherExpr>(*this, other.self());                                                       \
-    }                                                                                                              \
-                                                                                                                   \
-    template <typename OtherExpr>                                                                                  \
-    auto operator*(const MathExprBase<OtherExpr>& other) const {                                                   \
-      return MulExpr<our_t, OtherExpr>(*this, other.self());                                                       \
-    }                                                                                                              \
-                                                                                                                   \
-    template <typename OtherExpr>                                                                                  \
-    auto operator/(const MathExprBase<OtherExpr>& other) const {                                                   \
-      return DivExpr<our_t, OtherExpr>(*this, other.self());                                                       \
-    }                                                                                                              \
-                                                                                                                   \
-    template <size_t NumEntities>                                                                                  \
-    KOKKOS_INLINE_FUNCTION auto eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities>& fmis,             \
-                                     const NgpEvalContext& context) const {                                        \
-      return Func(prev_math_expr_.eval(fmis, context));                                                            \
-    }                                                                                                              \
-                                                                                                                   \
-    template <typename EvalCountsType, EvalCountsType eval_counts, size_t NumEntities, typename OldCacheType>      \
-    KOKKOS_INLINE_FUNCTION auto cached_eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities>& fmis,      \
-                                            OldCacheType&& old_cache, const NgpEvalContext& context) const {       \
-      static_assert(has<our_tag>(eval_counts), "eval_counts must contain our tag");                                \
-                                                                                                                   \
-      if constexpr (our_t::has_static_eval && get<our_tag>(eval_counts) > 1) {                                     \
-        if constexpr (aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>) {                           \
-          /* The fact that our tag exists in the old cache means that our eval has cached its result before, means \
-           * that */                                                                                               \
-          /* our eval has cached its result before. Return the cached value */                                     \
-          auto cache = std::forward<OldCacheType>(old_cache);                                                      \
-          auto val = get<our_tag>(cache);                                                                          \
-          return Kokkos::make_pair(val, cache);                                                                    \
-        } else {                                                                                                   \
-          /* Eval our subexpressions first, allowing them to cache their results if necessary */                   \
-          auto [arg, new_cache] = prev_math_expr_.template cached_eval<EvalCountsType, eval_counts>(               \
-              fmis, std::forward<OldCacheType>(old_cache), context);                                               \
-          auto val = Func(arg);                                                                                    \
-          auto newer_cache = append<our_tag>(std::move(new_cache), val);                                           \
-          return Kokkos::make_pair(val, newer_cache);                                                              \
-        }                                                                                                          \
-      } else {                                                                                                     \
-        /* Eval our subexpressions first, allowing them to cache their results if necessary */                     \
-        auto [arg, new_cache] = prev_math_expr_.template cached_eval<EvalCountsType, eval_counts>(                 \
-            fmis, std::forward<OldCacheType>(old_cache), context);                                                 \
-        auto val = Func(arg);                                                                                      \
-        return Kokkos::make_pair(val, new_cache);                                                                  \
-      }                                                                                                            \
-    }                                                                                                              \
-                                                                                                                   \
-    void propagate_synchronize(const NgpEvalContext& context) {                                                    \
-      prev_math_expr_.flag_read_only(context);                                                                     \
-      prev_math_expr_.propagate_synchronize(context);                                                              \
-    }                                                                                                              \
-                                                                                                                   \
-    void flag_read_only(const NgpEvalContext& /*context*/) {                                                       \
-      /* Nothing to do here */                                                                                     \
-    }                                                                                                              \
-                                                                                                                   \
-    void flag_read_write(const NgpEvalContext& /*context*/) {                                                      \
-      MUNDY_THROW_ASSERT(                                                                                          \
-          false, std::logic_error,                                                                                 \
-          "Attempting to write to the return type of a copy expression, which returns a temporary value.");        \
-    }                                                                                                              \
-                                                                                                                   \
-    void flag_overwrite_all(const NgpEvalContext& /*context*/) {                                                   \
-      MUNDY_THROW_ASSERT(                                                                                          \
-          false, std::logic_error,                                                                                 \
-          "Attempting to write to the return type of a copy expression, which returns a temporary value.");        \
-    }                                                                                                              \
-                                                                                                                   \
-    auto driver() const {                                                                                          \
-      return prev_math_expr_.driver();                                                                             \
-    }                                                                                                              \
-                                                                                                                   \
-   private:                                                                                                        \
-    PrevMathExpr prev_math_expr_;                                                                                  \
-  };                                                                                                               \
-                                                                                                                   \
-  /* Evaluate the given function on an expression */                                                               \
-  template <typename Expr>                                                                                         \
-  auto FuncName(const MathExprBase<Expr>& expr) {                                                                  \
-    return ExprClassName##Expr<Expr>(expr.self());                                                                 \
+#define MUNDY_ACCESSOR_EXPR_FORWARD_FUNC_1(ExprClassName, FuncName, Func)                                       \
+  template <typename PrevMathExpr>                                                                              \
+  class ExprClassName##Expr : public MathExprBase<ExprClassName##Expr<PrevMathExpr>> {                          \
+   public:                                                                                                      \
+    using our_t = ExprClassName##Expr<PrevMathExpr>;                                                            \
+    using our_tag = typename MathExprBase<ExprClassName##Expr<PrevMathExpr>>::our_tag;                          \
+    using sub_expressions_t = tuple<PrevMathExpr>;                                                              \
+    static constexpr bool constrains_num_entities = true;                                                       \
+    /* Pure unary function: static iff the argument is static, since this node adds no runtime state. */        \
+    static constexpr bool has_static_eval = PrevMathExpr::has_static_eval;                                      \
+                                                                                                                \
+    KOKKOS_INLINE_FUNCTION                                                                                      \
+    ExprClassName##Expr(const PrevMathExpr& prev_math_expr) : prev_math_expr_(prev_math_expr) {                 \
+    }                                                                                                           \
+                                                                                                                \
+    KOKKOS_INLINE_FUNCTION                                                                                      \
+    ExprClassName##Expr(const EntityExprBase<PrevMathExpr>& prev_math_expr_base)                                \
+        : prev_math_expr_(prev_math_expr_base.self()) {                                                         \
+    }                                                                                                           \
+                                                                                                                \
+    template <typename OtherExpr>                                                                               \
+    auto operator+(const MathExprBase<OtherExpr>& other) const {                                                \
+      return AddExpr<our_t, OtherExpr>(*this, other.self());                                                    \
+    }                                                                                                           \
+                                                                                                                \
+    template <typename OtherExpr>                                                                               \
+    auto operator-(const MathExprBase<OtherExpr>& other) const {                                                \
+      return SubExpr<our_t, OtherExpr>(*this, other.self());                                                    \
+    }                                                                                                           \
+                                                                                                                \
+    template <typename OtherExpr>                                                                               \
+    auto operator*(const MathExprBase<OtherExpr>& other) const {                                                \
+      return MulExpr<our_t, OtherExpr>(*this, other.self());                                                    \
+    }                                                                                                           \
+                                                                                                                \
+    template <typename OtherExpr>                                                                               \
+    auto operator/(const MathExprBase<OtherExpr>& other) const {                                                \
+      return DivExpr<our_t, OtherExpr>(*this, other.self());                                                    \
+    }                                                                                                           \
+                                                                                                                \
+    template <size_t NumEntities>                                                                               \
+    KOKKOS_INLINE_FUNCTION auto eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities>& fmis,          \
+                                     const NgpEvalContext& context) const {                                     \
+      return Func(prev_math_expr_.eval(fmis, context));                                                         \
+    }                                                                                                           \
+                                                                                                                \
+    template <typename EvalCountsType, EvalCountsType eval_counts, size_t NumEntities, typename OldCacheType>   \
+    KOKKOS_INLINE_FUNCTION auto cached_eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities>& fmis,   \
+                                            OldCacheType&& old_cache, const NgpEvalContext& context) const {    \
+      static_assert(has<our_tag>(eval_counts), "eval_counts must contain our tag");                             \
+                                                                                                                \
+      if constexpr (our_t::has_static_eval && get<our_tag>(eval_counts) > 1) {                                  \
+        if constexpr (aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>) {                        \
+          /* The fact that our tag exists in the old cache means that our eval has cached its result before. */ \
+          return Kokkos::make_pair(impl::CachedTagGetter<our_tag>{}, std::forward<OldCacheType>(old_cache));    \
+        } else {                                                                                                \
+          /* Eval our subexpressions first, allowing them to cache their results if necessary */                \
+          auto arg_result = prev_math_expr_.template cached_eval<EvalCountsType, eval_counts>(                  \
+              fmis, std::forward<OldCacheType>(old_cache), context);                                            \
+          auto arg_value = std::move(arg_result.first);                                                         \
+          auto val = Func(arg_value.get(arg_result.second));                                                    \
+          auto newer_cache = append<our_tag>(std::move(arg_result.second), val);                                \
+          return Kokkos::make_pair(impl::CachedTagGetter<our_tag>{}, std::move(newer_cache));                   \
+        }                                                                                                       \
+      } else {                                                                                                  \
+        /* Eval our subexpressions first, allowing them to cache their results if necessary */                  \
+        auto arg_result = prev_math_expr_.template cached_eval<EvalCountsType, eval_counts>(                    \
+            fmis, std::forward<OldCacheType>(old_cache), context);                                              \
+        auto arg_value = std::move(arg_result.first);                                                           \
+        auto val = Func(arg_value.get(arg_result.second));                                                      \
+        return Kokkos::make_pair(impl::OwnedCachedValue{std::move(val)}, std::move(arg_result.second));         \
+      }                                                                                                         \
+    }                                                                                                           \
+                                                                                                                \
+    void propagate_synchronize(const NgpEvalContext& context) {                                                 \
+      prev_math_expr_.flag_read_only(context);                                                                  \
+      prev_math_expr_.propagate_synchronize(context);                                                           \
+    }                                                                                                           \
+                                                                                                                \
+    void flag_read_only(const NgpEvalContext& /*context*/) {                                                    \
+      /* Nothing to do here */                                                                                  \
+    }                                                                                                           \
+                                                                                                                \
+    void flag_read_write(const NgpEvalContext& /*context*/) {                                                   \
+      MUNDY_THROW_ASSERT(                                                                                       \
+          false, std::logic_error,                                                                              \
+          "Attempting to write to the return type of a copy expression, which returns a temporary value.");     \
+    }                                                                                                           \
+                                                                                                                \
+    void flag_overwrite_all(const NgpEvalContext& /*context*/) {                                                \
+      MUNDY_THROW_ASSERT(                                                                                       \
+          false, std::logic_error,                                                                              \
+          "Attempting to write to the return type of a copy expression, which returns a temporary value.");     \
+    }                                                                                                           \
+                                                                                                                \
+    auto driver() const {                                                                                       \
+      return prev_math_expr_.driver();                                                                          \
+    }                                                                                                           \
+                                                                                                                \
+   private:                                                                                                     \
+    PrevMathExpr prev_math_expr_;                                                                               \
+  };                                                                                                            \
+                                                                                                                \
+  /* Evaluate the given function on an expression */                                                            \
+  template <typename Expr>                                                                                      \
+  auto FuncName(const MathExprBase<Expr>& expr) {                                                               \
+    return ExprClassName##Expr<Expr>(expr.self());                                                              \
   }
 
 /// \brief Create an expression for applying a function on the read only result of two math expressions
@@ -1391,33 +1391,32 @@ class AssignExpr : public MathExprBase<AssignExpr<TargetExpr, SourceExpr>> {
                                                                                                                       \
       if constexpr (our_t::has_static_eval && get<our_tag>(eval_counts) > 1) {                                        \
         if constexpr (aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>) {                              \
-          /* The fact that our tag exists in the old cache means that our eval has cached its result before.*/        \
-          /* Return the cached value */                                                                               \
-          auto cache = std::forward<OldCacheType>(old_cache);                                                         \
-          auto val = get<our_tag>(cache);                                                                             \
-          return Kokkos::make_pair(val, cache);                                                                       \
+          /* The fact that our tag exists in the old cache means that our eval has cached its result before. */       \
+          return Kokkos::make_pair(impl::CachedTagGetter<our_tag>{}, std::forward<OldCacheType>(old_cache));          \
         } else {                                                                                                      \
           /* Eval our subexpressions first, allowing them to cache their results if necessary */                      \
-          auto [left_val, new_cache] = left_.template cached_eval<EvalCountsType, eval_counts>(                       \
+          auto left_result = left_.template cached_eval<EvalCountsType, eval_counts>(                                 \
               fmis, std::forward<OldCacheType>(old_cache), context);                                                  \
-          auto [right_val, newer_cache] =                                                                             \
-              right_.template cached_eval<EvalCountsType, eval_counts>(fmis, std::move(new_cache), context);          \
+          auto left_value = std::move(left_result.first);                                                             \
+          auto right_result =                                                                                         \
+              right_.template cached_eval<EvalCountsType, eval_counts>(fmis, std::move(left_result.second), context); \
                                                                                                                       \
           /* Our eval result needs cached, but is not yet cached */                                                   \
-          auto val = Func(left_val, right_val);                                                                       \
-          auto newest_cache = append<our_tag>(std::move(newer_cache), val);                                           \
-          return Kokkos::make_pair(val, newest_cache);                                                                \
+          auto val = Func(left_value.get(right_result.second), right_result.first.get(right_result.second));          \
+          auto newest_cache = append<our_tag>(std::move(right_result.second), val);                                   \
+          return Kokkos::make_pair(impl::CachedTagGetter<our_tag>{}, std::move(newest_cache));                        \
         }                                                                                                             \
       } else {                                                                                                        \
         /* Eval our subexpressions first, allowing them to cache their results if necessary */                        \
-        auto [left_val, new_cache] = left_.template cached_eval<EvalCountsType, eval_counts>(                         \
+        auto left_result = left_.template cached_eval<EvalCountsType, eval_counts>(                                   \
             fmis, std::forward<OldCacheType>(old_cache), context);                                                    \
-        auto [right_val, newer_cache] =                                                                               \
-            right_.template cached_eval<EvalCountsType, eval_counts>(fmis, std::move(new_cache), context);            \
+        auto left_value = std::move(left_result.first);                                                               \
+        auto right_result =                                                                                           \
+            right_.template cached_eval<EvalCountsType, eval_counts>(fmis, std::move(left_result.second), context);   \
                                                                                                                       \
         /* Don't cache our result */                                                                                  \
-        auto val = Func(left_val, right_val);                                                                         \
-        return Kokkos::make_pair(val, newer_cache);                                                                   \
+        auto val = Func(left_value.get(right_result.second), right_result.first.get(right_result.second));            \
+        return Kokkos::make_pair(impl::OwnedCachedValue{std::move(val)}, std::move(right_result.second));             \
       }                                                                                                               \
     }                                                                                                                 \
                                                                                                                       \
@@ -1510,7 +1509,7 @@ class AssignExpr : public MathExprBase<AssignExpr<TargetExpr, SourceExpr>> {
     using our_tag = typename MathExprBase<OpName##EqualsExpr<LeftMathExpr, RightMathExpr>>::our_tag;                   \
     using sub_expressions_t = tuple<LeftMathExpr, RightMathExpr>;                                                      \
     static constexpr bool constrains_num_entities = false;                                                             \
-    /* Assignment operator: never static, since it is always side-effecting and returns void. */                      \
+    /* Assignment operator: never static, since it is always side-effecting and returns void. */                       \
     static constexpr bool has_static_eval = false;                                                                     \
                                                                                                                        \
     KOKKOS_INLINE_FUNCTION                                                                                             \
@@ -1534,10 +1533,14 @@ class AssignExpr : public MathExprBase<AssignExpr<TargetExpr, SourceExpr>> {
       static_assert(!aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>,                                  \
                     "The cache somehow contains our tag, but our eval returns void and should never cache anything."); \
       /* Eval our subexpressions first, allowing them to cache their results if necessary */                           \
-      auto [left_val, new_cache] = left_.template cached_eval<EvalCountsType, eval_counts>(fmis, old_cache, context);  \
-      auto [right_val, newer_cache] =                                                                                  \
-          right_.template cached_eval<EvalCountsType, eval_counts>(fmis, new_cache, context);                          \
-      left_val op_equals right_val;                                                                                    \
+      auto left_result = left_.template cached_eval<EvalCountsType, eval_counts>(                                      \
+          fmis, std::forward<OldCacheType>(old_cache), context);                                                       \
+      auto left_value = std::move(left_result.first);                                                                  \
+      auto right_result =                                                                                              \
+          right_.template cached_eval<EvalCountsType, eval_counts>(fmis, std::move(left_result.second), context);      \
+      auto&& left_ref = left_value.get(right_result.second);                                                           \
+      auto&& right_ref = right_result.first.get(right_result.second);                                                  \
+      left_ref op_equals right_ref;                                                                                    \
     }                                                                                                                  \
                                                                                                                        \
     void propagate_synchronize(const NgpEvalContext& context) {                                                        \
@@ -1613,7 +1616,9 @@ class AssignExpr : public MathExprBase<AssignExpr<TargetExpr, SourceExpr>> {
                                      const NgpEvalContext& context) const {                                            \
       auto left_val = left_.eval(fmis, context);                                                                       \
       auto right_val = right_.eval(fmis, context);                                                                     \
-      atomic_op(&left_val, right_val);                                                                                 \
+      auto&& left_ref = left_val;                                                                                      \
+      auto&& right_ref = right_val;                                                                                    \
+      atomic_op(&left_ref, right_ref);                                                                                 \
     }                                                                                                                  \
                                                                                                                        \
     template <typename EvalCountsType, EvalCountsType eval_counts, size_t NumEntities, typename OldCacheType>          \
@@ -1622,10 +1627,14 @@ class AssignExpr : public MathExprBase<AssignExpr<TargetExpr, SourceExpr>> {
       static_assert(!aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>,                                  \
                     "The cache somehow contains our tag, but our eval returns void and should never cache anything."); \
       /* Eval our subexpressions first, allowing them to cache their results if necessary */                           \
-      auto [left_val, new_cache] = left_.template cached_eval<EvalCountsType, eval_counts>(fmis, old_cache, context);  \
-      auto [right_val, newer_cache] =                                                                                  \
-          right_.template cached_eval<EvalCountsType, eval_counts>(fmis, new_cache, context);                          \
-      atomic_op(&left_val, right_val);                                                                                 \
+      auto left_result = left_.template cached_eval<EvalCountsType, eval_counts>(                                      \
+          fmis, std::forward<OldCacheType>(old_cache), context);                                                       \
+      auto left_value = std::move(left_result.first);                                                                  \
+      auto right_result =                                                                                              \
+          right_.template cached_eval<EvalCountsType, eval_counts>(fmis, std::move(left_result.second), context);      \
+      auto&& left_ref = left_value.get(right_result.second);                                                           \
+      auto&& right_ref = right_result.first.get(right_result.second);                                                  \
+      atomic_op(&left_ref, right_ref);                                                                                 \
     }                                                                                                                  \
                                                                                                                        \
     void propagate_synchronize(const NgpEvalContext& context) {                                                        \
@@ -2081,25 +2090,25 @@ class AccessorExpr : public MathExprBase<AccessorExpr<TaggedAccessorT, PrevEntit
     if constexpr (our_t::has_static_eval && get<our_tag>(eval_counts) > 1) {
       if constexpr (aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>) {
         // The fact that our tag exists in the old cache means that our eval has cached its result before.
-        // Return the cached value and the old cache
-        auto cache = std::forward<OldCacheType>(old_cache);
-        return Kokkos::make_pair(get<our_tag>(cache), cache);
+        return Kokkos::make_pair(impl::CachedTagGetter<our_tag>{}, std::forward<OldCacheType>(old_cache));
       } else {
         // Eval our subexpressions first
-        auto [entity_index, new_cache] = prev_entity_expr_.template cached_eval<EvalCountsType, eval_counts>(
+        auto entity_result = prev_entity_expr_.template cached_eval<EvalCountsType, eval_counts>(
             fmis, std::forward<OldCacheType>(old_cache), context);
+        auto entity_value = std::move(entity_result.first);
 
         // Our eval result needs cached, but is not yet cached
-        auto val = tagged_accessor_(entity_index);
-        auto newest_cache = append<our_tag>(std::move(new_cache), val);
-        return Kokkos::make_pair(val, newest_cache);
+        auto val = tagged_accessor_(entity_value.get(entity_result.second));
+        auto newest_cache = append<our_tag>(std::move(entity_result.second), val);
+        return Kokkos::make_pair(impl::CachedTagGetter<our_tag>{}, std::move(newest_cache));
       }
     } else {
       // We don't need to cache our value, so just compute and return it
-      auto [entity_index, new_cache] = prev_entity_expr_.template cached_eval<EvalCountsType, eval_counts>(
+      auto entity_result = prev_entity_expr_.template cached_eval<EvalCountsType, eval_counts>(
           fmis, std::forward<OldCacheType>(old_cache), context);
-      auto val = tagged_accessor_(entity_index);
-      return Kokkos::make_pair(val, new_cache);
+      auto entity_value = std::move(entity_result.first);
+      auto val = tagged_accessor_(entity_value.get(entity_result.second));
+      return Kokkos::make_pair(impl::OwnedCachedValue{std::move(val)}, std::move(entity_result.second));
     }
   }
 
@@ -2259,8 +2268,9 @@ class RandomDistributionExpr : public MathExprBase<RandomDistributionExpr<RNGExp
   using our_tag = typename MathExprBase<our_t>::our_tag;
   using sub_expressions_t = tuple<RNGExpr>;
   static constexpr bool constrains_num_entities = false;
-  // Only static if the given RNG expression is itself static
-  static constexpr bool has_static_eval = RNGExpr::has_static_eval;
+  
+  // This method has a side effect on the RNG stream, so repeated uses must re-enter the RNG subtree rather than reuse a cached draw.
+  static constexpr bool has_static_eval = false;
 
   KOKKOS_INLINE_FUNCTION
   RandomDistributionExpr(const RNGExpr& rng_expr) : rng_expr_(rng_expr) {
@@ -2281,25 +2291,27 @@ class RandomDistributionExpr : public MathExprBase<RandomDistributionExpr<RNGExp
     if constexpr (our_t::has_static_eval && get<our_tag>(eval_counts) > 1) {
       if constexpr (aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>) {
         // The fact that our tag exists in the old cache means that our eval has cached its result before.
-        // Return the cached value and the old cache
-        auto cache = std::forward<OldCacheType>(old_cache);
-        return Kokkos::make_pair(get<our_tag>(cache), cache);
+        return Kokkos::make_pair(impl::CachedTagGetter<our_tag>{}, std::forward<OldCacheType>(old_cache));
       } else {
         // Eval our subexpressions first
-        auto [rng, new_cache] = rng_expr_.template cached_eval<EvalCountsType, eval_counts>(
+        auto rng_result = rng_expr_.template cached_eval<EvalCountsType, eval_counts>(
             fmis, std::forward<OldCacheType>(old_cache), context);
+        auto rng_value = std::move(rng_result.first);
 
         // Our eval result needs cached, but is not yet cached
-        auto val = rng.template rand<T>();
-        auto newest_cache = append<our_tag>(std::move(new_cache), val);
-        return Kokkos::make_pair(val, newest_cache);
+        auto&& rng_ref = rng_value.get(rng_result.second);
+        auto val = rng_ref.template rand<T>();
+        auto newest_cache = append<our_tag>(std::move(rng_result.second), val);
+        return Kokkos::make_pair(impl::CachedTagGetter<our_tag>{}, std::move(newest_cache));
       }
     } else {
       // We don't need to cache our value, so just compute and return it
-      auto [rng, new_cache] = rng_expr_.template cached_eval<EvalCountsType, eval_counts>(
+      auto rng_result = rng_expr_.template cached_eval<EvalCountsType, eval_counts>(
           fmis, std::forward<OldCacheType>(old_cache), context);
-      auto val = rng.template rand<T>();
-      return Kokkos::make_pair(val, new_cache);
+      auto rng_value = std::move(rng_result.first);
+      auto&& rng_ref = rng_value.get(rng_result.second);
+      auto val = rng_ref.template rand<T>();
+      return Kokkos::make_pair(impl::OwnedCachedValue{std::move(val)}, std::move(rng_result.second));
     }
   }
 
@@ -2340,9 +2352,9 @@ class UniformDistributionExpr : public MathExprBase<UniformDistributionExpr<RNGE
   using our_tag = typename MathExprBase<our_t>::our_tag;
   using sub_expressions_t = tuple<RNGExpr, LowExpr, HighExpr>;
   static constexpr bool constrains_num_entities = false;
-  // Static iff the given RNG expression and the low and high expressions are themselves static
-  static constexpr bool has_static_eval =
-      RNGExpr::has_static_eval && LowExpr::has_static_eval && HighExpr::has_static_eval;
+
+  // This method has a side effect on the RNG stream, so repeated uses must re-enter the RNG subtree rather than reuse a cached draw.
+  static constexpr bool has_static_eval = false;
 
   KOKKOS_INLINE_FUNCTION
   UniformDistributionExpr(const RNGExpr& rng_expr, const LowExpr& low_expr, const HighExpr& high_expr)
@@ -2366,32 +2378,38 @@ class UniformDistributionExpr : public MathExprBase<UniformDistributionExpr<RNGE
     if constexpr (our_t::has_static_eval && get<our_tag>(eval_counts) > 1) {
       if constexpr (aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>) {
         // The fact that our tag exists in the old cache means that our eval has cached its result before.
-        // Return the cached value and the old cache
-        auto cache = std::forward<OldCacheType>(old_cache);
-        return Kokkos::make_pair(get<our_tag>(cache), cache);
+        return Kokkos::make_pair(impl::CachedTagGetter<our_tag>{}, std::forward<OldCacheType>(old_cache));
       } else {
         // Eval our subexpressions first
-        auto [rng, new_cache] = rng_expr_.template cached_eval<EvalCountsType, eval_counts>(
+        auto rng_result = rng_expr_.template cached_eval<EvalCountsType, eval_counts>(
             fmis, std::forward<OldCacheType>(old_cache), context);
-        auto [low, newer_cache] =
-            low_expr_.template cached_eval<EvalCountsType, eval_counts>(fmis, std::move(new_cache), context);
-        auto [high, newest_cache] =
-            high_expr_.template cached_eval<EvalCountsType, eval_counts>(fmis, std::move(newer_cache), context);
+        auto rng_value = std::move(rng_result.first);
+        auto low_result =
+            low_expr_.template cached_eval<EvalCountsType, eval_counts>(fmis, std::move(rng_result.second), context);
+        auto low_value = std::move(low_result.first);
+        auto high_result =
+            high_expr_.template cached_eval<EvalCountsType, eval_counts>(fmis, std::move(low_result.second), context);
         // Our eval result needs cached, but is not yet cached
-        auto val = rng.template uniform<T>(low, high);
-        auto final_cache = append<our_tag>(std::move(newest_cache), val);
-        return Kokkos::make_pair(val, final_cache);
+        auto&& rng_ref = rng_value.get(high_result.second);
+        auto val =
+            rng_ref.template uniform<T>(low_value.get(high_result.second), high_result.first.get(high_result.second));
+        auto final_cache = append<our_tag>(std::move(high_result.second), val);
+        return Kokkos::make_pair(impl::CachedTagGetter<our_tag>{}, std::move(final_cache));
       }
     } else {
       // We don't need to cache our value, so just compute and return it
-      auto [rng, new_cache] = rng_expr_.template cached_eval<EvalCountsType, eval_counts>(
+      auto rng_result = rng_expr_.template cached_eval<EvalCountsType, eval_counts>(
           fmis, std::forward<OldCacheType>(old_cache), context);
-      auto [low, newer_cache] =
-          low_expr_.template cached_eval<EvalCountsType, eval_counts>(fmis, std::move(new_cache), context);
-      auto [high, newest_cache] =
-          high_expr_.template cached_eval<EvalCountsType, eval_counts>(fmis, std::move(newer_cache), context);
-      auto val = rng.template uniform<T>(low, high);
-      return Kokkos::make_pair(val, newest_cache);
+      auto rng_value = std::move(rng_result.first);
+      auto low_result =
+          low_expr_.template cached_eval<EvalCountsType, eval_counts>(fmis, std::move(rng_result.second), context);
+      auto low_value = std::move(low_result.first);
+      auto high_result =
+          high_expr_.template cached_eval<EvalCountsType, eval_counts>(fmis, std::move(low_result.second), context);
+      auto&& rng_ref = rng_value.get(high_result.second);
+      auto val =
+          rng_ref.template uniform<T>(low_value.get(high_result.second), high_result.first.get(high_result.second));
+      return Kokkos::make_pair(impl::OwnedCachedValue{std::move(val)}, std::move(high_result.second));
     }
   }
 
@@ -2475,29 +2493,31 @@ class CounterBasedRNGExpr
     if constexpr (our_t::has_static_eval && get<our_tag>(eval_counts) > 1) {
       if constexpr (aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>) {
         // The fact that our tag exists in the old cache means that our eval has cached its result before.
-        // Return the cached value and the old cache
-        auto cache = std::forward<OldCacheType>(old_cache);
-        return Kokkos::make_pair(get<our_tag>(cache), cache);
+        return Kokkos::make_pair(impl::CachedTagGetter<our_tag>{}, std::forward<OldCacheType>(old_cache));
       } else {
         // Eval our subexpressions first
-        auto [seed, new_cache] = seed_expr_.template cached_eval<EvalCountsType, eval_counts>(
+        auto seed_result = seed_expr_.template cached_eval<EvalCountsType, eval_counts>(
             fmis, std::forward<OldCacheType>(old_cache), context);
-        auto [counter, newer_cache] =
-            counter_expr_.template cached_eval<EvalCountsType, eval_counts>(fmis, std::move(new_cache), context);
+        auto seed_value = std::move(seed_result.first);
+        auto counter_result = counter_expr_.template cached_eval<EvalCountsType, eval_counts>(
+            fmis, std::move(seed_result.second), context);
 
         // Our eval result needs cached, but is not yet cached
-        auto val = make_counter_based_rng(seed, counter);
-        auto newest_cache = append<our_tag>(std::move(newer_cache), val);
-        return Kokkos::make_pair(val, newest_cache);
+        auto val = make_counter_based_rng(seed_value.get(counter_result.second),
+                                          counter_result.first.get(counter_result.second));
+        auto newest_cache = append<our_tag>(std::move(counter_result.second), val);
+        return Kokkos::make_pair(impl::CachedTagGetter<our_tag>{}, std::move(newest_cache));
       }
     } else {
       // We don't need to cache our value, so just compute and return it
-      auto [seed, new_cache] = seed_expr_.template cached_eval<EvalCountsType, eval_counts>(
+      auto seed_result = seed_expr_.template cached_eval<EvalCountsType, eval_counts>(
           fmis, std::forward<OldCacheType>(old_cache), context);
-      auto [counter, newer_cache] =
-          counter_expr_.template cached_eval<EvalCountsType, eval_counts>(fmis, std::move(new_cache), context);
-      auto val = make_counter_based_rng(seed, counter);
-      return Kokkos::make_pair(val, newer_cache);
+      auto seed_value = std::move(seed_result.first);
+      auto counter_result =
+          counter_expr_.template cached_eval<EvalCountsType, eval_counts>(fmis, std::move(seed_result.second), context);
+      auto val = make_counter_based_rng(seed_value.get(counter_result.second),
+                                        counter_result.first.get(counter_result.second));
+      return Kokkos::make_pair(impl::OwnedCachedValue{std::move(val)}, std::move(counter_result.second));
     }
   }
 
@@ -2668,7 +2688,7 @@ class FusedAssignExpr : public MathExprBase<FusedAssignExpr<TrgSrcExprPairs...>>
         exprs_, fmis, std::forward<OldCacheType>(old_cache), context);
 
     // Set all right hand sides to their corresponding left hand sides.
-    set_impl(all_values, std::make_index_sequence<2 * num_pairs>{});
+    set_impl(all_values, final_cache, std::make_index_sequence<2 * num_pairs>{});
   }
 
   void flag_read_only(const NgpEvalContext& /*context*/) {
@@ -2702,14 +2722,27 @@ class FusedAssignExpr : public MathExprBase<FusedAssignExpr<TrgSrcExprPairs...>>
     (set_i_impl<Is>(all_values), ...);
   }
 
+  template <typename AllValuesType, typename CacheType, size_t... Is>
+  KOKKOS_INLINE_FUNCTION static void set_impl(AllValuesType& all_values, CacheType& cache, std::index_sequence<Is...>) {
+    static_assert(sizeof...(Is) == 2 * num_pairs, "Index sequence size must match number of target + source exprs.");
+    (set_i_impl<Is>(all_values, cache), ...);
+  }
+
   template <size_t I, typename AllValuesType>
   KOKKOS_INLINE_FUNCTION static void set_i_impl(AllValuesType& all_values) {
-    // I = 0, 1, 2, 3
-    // 0 % 2 -> 0
-    // 1 % 2 -> 1
-    // 2 % 2 -> 0
     if constexpr (I % 2 == 0) {
-      get<I>(all_values) = get<I + 1>(all_values);
+      auto&& trg_ref = get<I>(all_values);
+      auto&& src_ref = get<I + 1>(all_values);
+      trg_ref = src_ref;
+    }
+  }
+
+  template <size_t I, typename AllValuesType, typename CacheType>
+  KOKKOS_INLINE_FUNCTION static void set_i_impl(AllValuesType& all_values, CacheType& cache) {
+    if constexpr (I % 2 == 0) {
+      auto&& trg_ref = get<I>(all_values).get(cache);
+      auto&& src_ref = get<I + 1>(all_values).get(cache);
+      trg_ref = src_ref;
     }
   }
 
