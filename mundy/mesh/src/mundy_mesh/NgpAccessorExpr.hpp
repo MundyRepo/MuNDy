@@ -49,6 +49,7 @@
 #include <mundy_utils/rng.hpp>            // for mundy::make_philox
 #include <mundy_utils/throw_assert.hpp>   // for MUNDY_THROW_ASSERT
 #include <mundy_utils/tuple.hpp>          // for mundy::tuple
+#include <mundy_mesh/impl/NgpAccessorExprImpl.hpp>
 
 namespace mundy {
 
@@ -161,8 +162,6 @@ sub-expressions or multiple kernel launches.
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-namespace impl {
-
 /// \brief is_crtp_base_of<B, E>
 ///
 /// Resembles std::is_base_of, but addresses the problem of whether _some_ instantiation
@@ -171,129 +170,6 @@ namespace impl {
 /// this implementation deals with either CRTP final classes (checks for inheritance
 /// with E as the CRTP parameter of B) or CRTP base classes (which are singly templated
 /// by the most derived class, and that's pulled out to use as a template parameter for B).
-
-template <template <class> class B, class E>
-struct is_crtp_base_of_impl : std::is_base_of<B<E>, E> {};
-
-template <typename EvalCountsType, EvalCountsType eval_counts, size_t I = 0, class ExprTuple, size_t NumEntities,
-          class CacheType, class Ctx>
-KOKKOS_FUNCTION auto cached_expr_chain_impl(const ExprTuple& exprs,
-                                            const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities>& fmis,
-                                            CacheType&& cache, const Ctx& ctx) {
-  constexpr size_t num_expr = ExprTuple::size();
-  if constexpr (num_expr == 1) {
-    // Single expr; just eval it and return its value and the current cache
-    auto& expr = get<0>(exprs);
-    auto [val, next_cache] =
-        expr.template cached_eval<EvalCountsType, eval_counts>(fmis, std::forward<CacheType>(cache), ctx);
-    return Kokkos::make_pair(tuple{val}, next_cache);
-  } else if constexpr (I == num_expr) {
-    // No more exprs; return empty values tuple and the current cache
-    return Kokkos::make_pair(tuple<>{}, std::forward<CacheType>(cache));
-  } else {
-    // Evaluate current expr with the current cache
-    auto& expr = get<I>(exprs);
-    auto [val_i, next_cache] =
-        expr.template cached_eval<EvalCountsType, eval_counts>(fmis, std::forward<CacheType>(cache), ctx);
-
-    // Recurse for the rest, threading the updated cache
-    auto [vals_tail, final_cache] =
-        cached_expr_chain_impl<EvalCountsType, eval_counts, I + 1>(exprs, fmis, std::move(next_cache), ctx);
-
-    // Prepend this value to the tuple of later values
-    auto vals_all = tuple_cat(tuple{std::move(val_i)}, std::move(vals_tail));
-    return Kokkos::make_pair(vals_all, final_cache);
-  }
-}
-
-template <size_t I = 0, class ExprTuple, size_t NumEntities, class Ctx>
-KOKKOS_FUNCTION auto expr_chain_impl(const ExprTuple& exprs,
-                                     const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities>& fmis, const Ctx& ctx) {
-  constexpr size_t num_expr = ExprTuple::size();
-  if constexpr (num_expr == 1) {
-    // Single expr; just eval it and return its value and the current cache
-    auto val = get<0>(exprs).eval(fmis, ctx);
-    return tuple{std::move(val)};
-  } else if constexpr (I == num_expr) {
-    // No more exprs; return empty values tuple and the current cache
-    return tuple<>{};
-  } else {
-    // Evaluate current expr with the current cache
-    auto val_i = get<I>(exprs).eval(fmis, ctx);
-
-    // Recurse for the rest, threading the updated cache
-    auto vals_tail = expr_chain_impl<I + 1>(exprs, fmis, ctx);
-
-    // Prepend this value to the tuple of later values
-    auto vals_all = tuple_cat(tuple{std::move(val_i)}, std::move(vals_tail));
-    return vals_all;
-  }
-}
-
-// Public interface
-template <typename EvalCountsType, EvalCountsType eval_counts, class ExprTuple, size_t NumEntities, class CacheType,
-          class Ctx>
-KOKKOS_INLINE_FUNCTION auto cached_expr_chain(const ExprTuple& exprs,
-                                              const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities>& fmis,
-                                              CacheType&& cache0, const Ctx& ctx) {
-  return cached_expr_chain_impl<EvalCountsType, eval_counts>(exprs, fmis, std::forward<CacheType>(cache0), ctx);
-}
-
-template <class ExprTuple, size_t NumEntities, class Ctx>
-KOKKOS_INLINE_FUNCTION auto expr_chain(const ExprTuple& exprs,
-                                       const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities>& fmis,
-                                       const Ctx& ctx) {
-  return expr_chain_impl(exprs, fmis, ctx);
-}
-
-// A map from rank and selector to an std::any
-template <StringLiteral map_name>
-class AnyRankSelectorMap {
- public:
-  AnyRankSelectorMap() = default;
-
-  /// \brief The name of the map
-  static std::string name() {
-    return map_name.to_string();
-  }
-
-  /// \brief If a given rank/selector pair is in the map
-  bool contains(stk::mesh::EntityRank rank, const stk::mesh::Selector& selector) const {
-    const auto& selector_map = ranked_selector_maps_[rank];
-    return selector_map.find(selector) != selector_map.end();
-  }
-
-  template <typename T>
-  void insert(stk::mesh::EntityRank rank, const stk::mesh::Selector& selector, T value) {
-    auto& selector_map = ranked_selector_maps_[rank];
-    MUNDY_THROW_ASSERT(!contains(rank, selector), std::logic_error,
-                       "Attempting to insert a rank and selector pair into AnyRankSelectorMap that is already present");
-    selector_map.emplace(selector, std::move(value));
-  }
-
-  template <typename T>
-  T& at(stk::mesh::EntityRank rank, const stk::mesh::Selector& selector) {
-    auto& selector_map = ranked_selector_maps_[rank];
-    MUNDY_THROW_ASSERT(contains(rank, selector), std::logic_error,
-                       "Attempting to access a rank and selector pair into AnyRankSelectorMap that isn't present");
-    return std::any_cast<T&>(selector_map.at(selector));
-  }
-
-  template <typename T>
-  const T& at(stk::mesh::EntityRank rank, const stk::mesh::Selector& selector) const {
-    auto& selector_map = ranked_selector_maps_[rank];
-    MUNDY_THROW_ASSERT(contains(rank, selector), std::logic_error,
-                       "Attempting to access a rank and selector pair into AnyRankSelectorMap that isn't present");
-    return std::any_cast<const T&>(selector_map.at(selector));
-  }
-
- private:
-  using selector_map_t = std::map<stk::mesh::Selector, std::any>;
-  selector_map_t ranked_selector_maps_[stk::topology::NUM_RANKS];
-};
-
-}  // namespace impl
-
 template <template <class> class B, class E>
 using is_crtp_base_of = impl::is_crtp_base_of_impl<B, std::decay_t<E>>;
 
