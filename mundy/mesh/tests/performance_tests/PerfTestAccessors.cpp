@@ -85,7 +85,7 @@ void run_test() {
   double expected_scalar_data[1] = {1.0};
   double expected_vector3_data[3] = {1.0, 2.0, 3.0};
   double expected_matrix3_data[9] = {1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0};
-  double expected_quaternion_data[4] = {1.0, 2.0, 3.0, 4.0};
+  double expected_quaternion_data[4] = {2.0, 3.0, 4.0, 1.0};
   double expected_aabb_data[6] = {1.0, 2.0, 3.0, 4.0, 5.0, 6.0};
   stk::mesh::put_field_on_mesh(scalar_field, meta_data.universal_part(), 1, expected_scalar_data);
   stk::mesh::put_field_on_mesh(vector3_field, meta_data.universal_part(), 3, expected_vector3_data);
@@ -128,20 +128,17 @@ void run_test() {
     ankerl::nanobench::Bench bench;
     bench.relative(true).title(test_name).unit("op").performanceCounters(true).minEpochIterations(200);
 
-    bench.run("field", [&] {
-      field_op();
-    });
+    bench.run("field", [&] { field_op(); });
 
-    bench.run("accessor", [&] {
-      accessor_op();
-    });
+    bench.run("accessor", [&] { accessor_op(); });
   };
 
   ////////////
   // Scalar //
   ////////////
   run_benchmark(
-      "Scalar", [&] {
+      "Scalar",
+      [&] {
         for (size_t i = 0; i < num_nodes; ++i) {
           stk::mesh::Entity node = nodes[i];
           double& scalar = stk::mesh::field_data(scalar_field, node)[0];
@@ -160,7 +157,8 @@ void run_test() {
   // Vector3 //
   /////////////
   run_benchmark(
-      "Vector3", [&] {
+      "Vector3",
+      [&] {
         for (size_t i = 0; i < num_nodes; ++i) {
           stk::mesh::Entity node = nodes[i];
           for (size_t j = 0; j < 3; ++j) {
@@ -183,7 +181,8 @@ void run_test() {
   // Matrix3 //
   /////////////
   run_benchmark(
-      "Matrix3", [&] {
+      "Matrix3",
+      [&] {
         for (size_t i = 0; i < num_nodes; ++i) {
           stk::mesh::Entity node = nodes[i];
           for (size_t j = 0; j < 9; ++j) {
@@ -206,7 +205,8 @@ void run_test() {
   // Quaternion //
   ////////////////
   run_benchmark(
-      "Quaternion", [&] {
+      "Quaternion",
+      [&] {
         for (size_t i = 0; i < num_nodes; ++i) {
           stk::mesh::Entity node = nodes[i];
           for (size_t j = 0; j < 4; ++j) {
@@ -229,7 +229,8 @@ void run_test() {
   // AABB //
   //////////
   run_benchmark(
-      "AABB", [&] {
+      "AABB",
+      [&] {
         for (size_t i = 0; i < num_nodes; ++i) {
           stk::mesh::Entity node = nodes[i];
           for (size_t j = 0; j < 6; ++j) {

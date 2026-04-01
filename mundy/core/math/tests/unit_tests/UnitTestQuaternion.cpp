@@ -198,7 +198,7 @@ struct TypePair {
   using T2 = U2;
 };
 
-/// \brief GTETS typed test fixture so we can run tests on multiple pairs of types
+/// \brief GTEST typed test fixture so we can run tests on multiple pairs of types
 /// \tparam Pair The pair of types to run the tests on
 template <typename Pair>
 class QuaternionPairwiseTypeTest : public ::testing::Test {};  // Vector3PairwiseTypeTest
@@ -219,11 +219,17 @@ TYPED_TEST(QuaternionSingleTypeTest, DefaultConstructor) {
 
 TYPED_TEST(QuaternionSingleTypeTest, ConstructorFromFourScalars) {
   ASSERT_NO_THROW(Quaternion<TypeParam>(1, 2, 3, 4));
+  // Following eigen: Construction order is w, x, y, z but underlying storage order is x, y, z, w.
+  // So q[0] is x, q[1] is y, q[2] is z, and q[3] is w.
   Quaternion<TypeParam> q(1, 2, 3, 4);
-  is_close_debug(q[0], 1);
-  is_close_debug(q[1], 2);
-  is_close_debug(q[2], 3);
-  is_close_debug(q[3], 4);
+  is_close_debug(q[0], 2);
+  is_close_debug(q[1], 3);
+  is_close_debug(q[2], 4);
+  is_close_debug(q[3], 1);
+  is_close_debug(q.w(), q[3]);
+  is_close_debug(q.x(), q[0]);
+  is_close_debug(q.y(), q[1]);
+  is_close_debug(q.z(), q[2]);
 }
 
 TYPED_TEST(QuaternionSingleTypeTest, Comparison) {
@@ -278,10 +284,10 @@ TYPED_TEST(QuaternionSingleTypeTest, Accessors) {
   Quaternion<TypeParam> q(1, 2, 3, 4);
 
   // By index
-  is_close_debug(q[0], 1);
-  is_close_debug(q[1], 2);
-  is_close_debug(q[2], 3);
-  is_close_debug(q[3], 4);
+  is_close_debug(q[0], 2);
+  is_close_debug(q[1], 3);
+  is_close_debug(q[2], 4);
+  is_close_debug(q[3], 1);
 
   // By w, x, y, z
   is_close_debug(q.w(), 1);
@@ -296,8 +302,10 @@ TYPED_TEST(QuaternionSingleTypeTest, Accessors) {
   // Accessors return references
   q[0] = 4;
   is_close_debug(q[0], 4);
+  is_close_debug(q.x(), 4);
   q.w() = 5;
   is_close_debug(q.w(), 5);
+  is_close_debug(q[3], 5);
 }
 //@}
 
@@ -706,24 +714,24 @@ TYPED_TEST(QuaternionPairwiseTypeTest, SpecialOperationsEdgeCases) {
 
 TYPED_TEST(QuaternionSingleTypeTest, Views) {
   // Create a view from a subset of an std::vector<TypeParam>
-  std::vector<TypeParam> q1{0, 0, 1, 2, 3, 4, 0, 0};
+  std::vector<TypeParam> q1{0, 0, 2, 3, 4, 1, 0, 0};
   auto q2 = get_quaternion_view<TypeParam>(q1.data() + 2);
   is_close_debug(q2, Quaternion<TypeParam>{1, 2, 3, 4}, "View failed.");
-  q1 = {1, 2, 4, 10, 11, 12, 13, 14};
+  q1 = {1, 2, 10, 11, 12, 4, 13, 14};
   is_close_debug(q2, Quaternion<TypeParam>{4, 10, 11, 12}, "View isn't shallow.");
 
   // Create a view from a TypeParam*
-  TypeParam q3[4] = {1, 2, 3, 4};
+  TypeParam q3[4] = {2, 3, 4, 1};
   auto q4 = get_quaternion_view<TypeParam>(&q3[0]);
   is_close_debug(q4, Quaternion<TypeParam>{1, 2, 3, 4}, "View failed.");
-  q3[0] = 4;
-  q3[1] = 10;
-  q3[2] = 11;
-  q3[3] = 12;
+  q3[0] = 10;
+  q3[1] = 11;
+  q3[2] = 12;
+  q3[3] = 4;
   is_close_debug(q4, Quaternion<TypeParam>{4, 10, 11, 12}, "View isn't shallow.");
 
   // Create a const view from an std::vector<TypeParam>
-  const std::vector<TypeParam> q5{1, 2, 3, 4};
+  const std::vector<TypeParam> q5{2, 3, 4, 1};
   auto q6 = get_quaternion_view<TypeParam>(q5.data());
   is_close_debug(q6, Quaternion<TypeParam>{1, 2, 3, 4}, "Const view failed.");
 }

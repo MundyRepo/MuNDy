@@ -18,7 +18,6 @@
 // **********************************************************************************************************************
 // @HEADER
 
-
 #define ANKERL_NANOBENCH_IMPLEMENT
 
 // C++ core libs
@@ -95,19 +94,22 @@ void test_aggregate(const stk::mesh::BulkData& bulk_data, stk::mesh::Part& spher
   auto radius_accessor = ScalarFieldComponent(elem_radius_field);
 
   // Create an aggregate for the spheres
-  const auto sphere_data = make_aggregate<stk::topology::PARTICLE>(bulk_data, sphere_part)
-                               .add_component<FORCE, stk::topology::NODE_RANK>(force_accessor)
-                               .add_component<VELOCITY, stk::topology::NODE_RANK>(velocity_accessor)
-                               .add_component<RADIUS, stk::topology::ELEM_RANK>(radius_accessor);
+  const auto sphere_data = Aggregate(bulk_data, sphere_part)
+                               .add_component<FORCE>(force_accessor)
+                               .add_component<VELOCITY>(velocity_accessor)
+                               .add_component<RADIUS>(radius_accessor);
 
   // Compute the velocity of each sphere according to drag v = f / (6 * pi * r * mu)
-  sphere_data.for_each([one_over_6pi_mu](auto& sphere_view) {
-    auto force = sphere_view.template get<FORCE>(0);
-    auto velocity = sphere_view.template get<VELOCITY>(0);
-    auto radius = sphere_view.template get<RADIUS>();
-    double inv_radius = 1.0 / radius[0];
-    velocity = (one_over_6pi_mu * inv_radius) * force;
-  });
+  ::mundy::mesh::for_each_entity_run(sphere_data.bulk_data(), stk::topology::ELEM_RANK, sphere_data.selector(),
+                                     [sphere_data, one_over_6pi_mu](const stk::mesh::Entity& sphere) {
+                                       const stk::mesh::Entity node =
+                                           sphere_data.bulk_data().begin(sphere, stk::topology::NODE_RANK)[0];
+                                       auto force = sphere_data.get<FORCE>(node);
+                                       auto velocity = sphere_data.get<VELOCITY>(node);
+                                       auto radius = sphere_data.get<RADIUS>(sphere);
+                                       double inv_radius = 1.0 / radius[0];
+                                       velocity = (one_over_6pi_mu * inv_radius) * force;
+                                     });
 
   Kokkos::fence();
   ankerl::nanobench::doNotOptimizeAway(node_velocity_field);  // Prevent optimization of the result

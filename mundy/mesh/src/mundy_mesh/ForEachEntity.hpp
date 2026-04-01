@@ -40,6 +40,13 @@ namespace mundy {
 
 namespace mesh {
 
+namespace impl {
+
+template <typename T>
+inline constexpr bool always_false_v = false;
+
+}  // namespace impl
+
 template <typename Mesh, typename AlgorithmPerEntity>
   requires(!std::is_base_of_v<stk::mesh::BulkData, Mesh> && !std::is_base_of_v<::mundy::mesh::BulkData, Mesh>)
 inline void for_each_entity_run(Mesh& mesh, stk::topology::rank_t rank, const stk::mesh::Selector& selector,
@@ -70,8 +77,13 @@ struct TeamFunctor {
     Kokkos::parallel_for(Kokkos::TeamThreadRange(team_member, bucket_size), [&](const int i) {
       if constexpr (std::is_invocable_v<AlgorithmPerEntity, const Mesh&, const stk::mesh::MeshIndex&>) {
         functor(mesh, stk::mesh::MeshIndex({bucket, i}));
-      } else {
+      } else if constexpr (std::is_invocable_v<AlgorithmPerEntity, const Mesh&, const stk::mesh::Entity&>) {
         functor(mesh, (*bucket)[i]);
+      } else if constexpr (std::is_invocable_v<AlgorithmPerEntity, const stk::mesh::Entity&>) {
+        functor((*bucket)[i]);
+      } else {
+        static_assert(impl::always_false_v<AlgorithmPerEntity>,
+                      "Host for_each_entity_run functors must accept (mesh, mesh_index), (mesh, entity), or (entity).");
       }
     });
   }

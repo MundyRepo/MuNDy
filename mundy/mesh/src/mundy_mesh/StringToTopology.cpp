@@ -22,8 +22,12 @@
 /// \brief Definition of the StringToTopology class
 
 // C++ core libs
-#include <regex>   // for std::regex
-#include <string>  // for std::string
+#include <algorithm>    // for std::all_of
+#include <cctype>       // for std::isdigit
+#include <charconv>     // for std::from_chars
+#include <optional>     // for std::optional
+#include <string>       // for std::string
+#include <string_view>  // for std::string_view
 
 // Trilinos libs
 #include <stk_topology/topology.hpp>  // for stk::topology
@@ -31,6 +35,44 @@
 // Mundy libs
 #include <mundy_mesh/StringToTopology.hpp>  // for mundy::mesh::string_to_rank and mundy::mesh::string_to_topology
 #include <mundy_utils/throw_assert.hpp>     // for MUNDY_THROW_ASSERT
+
+namespace {
+
+std::optional<int> parse_super_topology_num_nodes(const std::string& topology_string,
+                                                  const std::string_view topology_prefix) {
+  const std::string_view topology_view(topology_string);
+  if (!topology_view.starts_with(topology_prefix)) {
+    return std::nullopt;
+  }
+
+  const size_t prefix_len = topology_prefix.size();
+  if ((topology_view.size() <= prefix_len + 2) || (topology_view[prefix_len] != '<') || (topology_view.back() != '>')) {
+    return std::nullopt;
+  }
+
+  const std::string_view num_nodes_view = topology_view.substr(prefix_len + 1, topology_view.size() - prefix_len - 2);
+  if (num_nodes_view.empty()) {
+    return std::nullopt;
+  }
+
+  const bool all_digits = std::all_of(num_nodes_view.begin(), num_nodes_view.end(),
+                                      [](const unsigned char c) { return std::isdigit(c) != 0; });
+  if (!all_digits) {
+    return std::nullopt;
+  }
+
+  int num_nodes = 0;
+  const char* first = num_nodes_view.data();
+  const char* last = first + num_nodes_view.size();
+  const auto [ptr, ec] = std::from_chars(first, last, num_nodes);
+  if ((ec != std::errc{}) || (ptr != last)) {
+    return std::nullopt;
+  }
+
+  return num_nodes;
+}
+
+}  // namespace
 
 namespace mundy {
 
@@ -150,21 +192,15 @@ stk::topology string_to_topology(const std::string& topology_string) {
     return stk::topology::HEX_20;
   } else if (topology_string == "HEX_27") {
     return stk::topology::HEX_27;
-  } else if (std::regex_match(topology_string, std::regex("SUPEREDGE<\\d+>"))) {
-    std::smatch base_match;
-    std::regex_match(topology_string, base_match, std::regex("\\d+"));
-    const int num_nodes = std::stoi(base_match[1].str());
-    return stk::create_superedge_topology(num_nodes);
-  } else if (std::regex_match(topology_string, std::regex("SUPERFACE<\\d+>"))) {
-    std::smatch base_match;
-    std::regex_match(topology_string, base_match, std::regex("\\d+"));
-    const int num_nodes = std::stoi(base_match[1].str());
-    return stk::create_superface_topology(num_nodes);
-  } else if (std::regex_match(topology_string, std::regex("SUPERELEMENT<\\d+>"))) {
-    std::smatch base_match;
-    std::regex_match(topology_string, base_match, std::regex("\\d+"));
-    const int num_nodes = std::stoi(base_match[1].str());
-    return stk::create_superelement_topology(num_nodes);
+  } else if (const auto num_nodes = parse_super_topology_num_nodes(topology_string, "SUPEREDGE");
+             num_nodes.has_value()) {
+    return stk::create_superedge_topology(*num_nodes);
+  } else if (const auto num_nodes = parse_super_topology_num_nodes(topology_string, "SUPERFACE");
+             num_nodes.has_value()) {
+    return stk::create_superface_topology(*num_nodes);
+  } else if (const auto num_nodes = parse_super_topology_num_nodes(topology_string, "SUPERELEMENT");
+             num_nodes.has_value()) {
+    return stk::create_superelement_topology(*num_nodes);
   } else {
     MUNDY_THROW_REQUIRE(false, std::invalid_argument,
                         std::string("PartReqs: The provided topology string ") + topology_string + " is not valid.");

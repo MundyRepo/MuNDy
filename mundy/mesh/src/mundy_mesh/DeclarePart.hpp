@@ -24,14 +24,13 @@
 /// \file DeclarePart.hpp
 /// \brief A set of helpers for declaring parts with reduced boilerplate code.
 
-// External
-#include <fmt/format.h>  // for fmt::format
-
 // C++ core
 #include <iostream>   // for std::ostream
 #include <memory>     // for std::shared_ptr
 #include <stdexcept>  // for std::runtime_error
-#include <vector>     // for std::vector
+#include <type_traits>
+#include <utility>
+#include <vector>  // for std::vector
 
 // Trilinos
 #include <stk_io/StkMeshIoBroker.hpp>  // for stk::io::StkMeshIoBroker
@@ -39,7 +38,10 @@
 #include <stk_mesh/base/MetaData.hpp>  // for stk::mesh::MetaData
 
 // Mundy
-#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_REQUIRE
+#include <mundy_mesh/Component.hpp>
+#include <mundy_mesh/DeclareComponent.hpp>
+#include <mundy_mesh/impl/ComponentImpl.hpp>  // for mundy::mesh::impl::component_backing_field
+#include <mundy_utils/throw_assert.hpp>       // for MUNDY_THROW_REQUIRE
 
 namespace mundy {
 
@@ -162,6 +164,30 @@ class PartDeclarationHelper {
     return *this;
   }
 
+  /// \brief Create a field restriction directly from a field-backed component declaration.
+  template <typename ComponentType, typename BackingFieldType = std::remove_cvref_t<
+                                        decltype(impl::component_backing_field(std::declval<ComponentType&>()))>>
+    requires requires(ComponentType component) {
+      typename std::remove_cvref_t<ComponentType>::canonical_access;
+      { impl::component_backing_field(component) };
+    }
+  PartDeclarationHelper put_component(ComponentType component,
+                                      const typename BackingFieldType::value_type* init_value) {
+    using component_type = std::remove_cvref_t<ComponentType>;
+    using access_traits = component_access_traits<typename component_type::canonical_access>;
+    auto& field = impl::component_backing_field(component);
+
+    static_assert(access_traits::has_known_num_field_scalars,
+                  "put_component(...) requires a component whose access trait defines a fixed number of field scalars. "
+                  "Use put_field(...) for raw field components.");
+
+    if constexpr (access_traits::num_field_scalars == 1) {
+      return put_field(field, init_value);
+    } else {
+      return put_field(field, access_traits::num_field_scalars, init_value);
+    }
+  }
+
   /// \brief Declare a part with the given properties.
   stk::mesh::Part& declare() {
     // Validate that required parameters have been set
@@ -172,13 +198,12 @@ class PartDeclarationHelper {
     bool is_topological_part = part_has_name_ && !part_has_rank_ && part_has_topology_;
     MUNDY_THROW_REQUIRE(
         is_named_part || is_ranked_part || is_topological_part, std::logic_error,
-        fmt::format(
-            "Part with name ('{}') is not properly specified. You may either specify:\n"
-            "   1. A name (but no rank or topology)    -> meta_data.declare_part('name')\n"
-            "   2. A name and a rank (but no topology) -> meta_data.declare_part('name', rank)\n"
-            "   3. A name and a topology (but no rank) -> meta_data.declare_part_with_topology('name', topology)\n"
-            "However, you have specified both a rank and a topology.",
-            part_name_));
+        sink()
+            << "Part with name ('" << part_name_ << "') is not properly specified. You may either specify:\n"
+            << "   1. A name (but no rank or topology)    -> meta_data.declare_part('name')\n"
+            << "   2. A name and a rank (but no topology) -> meta_data.declare_part('name', rank)\n"
+            << "   3. A name and a topology (but no rank) -> meta_data.declare_part_with_topology('name', topology)\n"
+            << "However, you have specified both a rank and a topology.");
 
     if (is_named_part) {
       return internal_declare_named_part();

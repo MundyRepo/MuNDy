@@ -58,6 +58,19 @@ spack add trilinos@16.0.0%gcc@11.4.0+belos~boost+exodus+hdf5+kokkos+openmp++cuda
 
 
 
+## For CPU builds w/ shared libs
+
+Source load_new.sh
+```bash
+module purge
+module load modules/2.3-20240529
+module load git/2.42.0 vscode/1.85.2-nix slurm openmpi/4.0.7 boost/1.84.0 eigen/3.4.0 hdf5/mpi-1.12.3 hwloc/2.9.1 netcdf-c/4.9.2 gcc/11.4.0 cmake/3.27.9
+```
+
+Tell spack about the modules you have loaded
+```bash
+```
+
 
 
 ### Create an independent spack environment for Trilinos

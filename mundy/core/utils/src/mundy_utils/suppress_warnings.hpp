@@ -99,6 +99,21 @@
   MUNDY_CLANG_DIAG_POP \
   MUNDY_MSVC_DIAG_POP
 
+// Suppress "possibly uninitialized" diagnostics around known-safe control
+// flow where the compiler cannot prove a throw path is exhaustive.
+#define MUNDY_SUPPRESS_MAYBE_UNINITIALIZED_PUSH  \
+  MUNDY_DIAG_PUSH                                \
+  /* MSVC */                                     \
+  MUNDY_MSVC_DIAG_DISABLE(4701)                  \
+  MUNDY_MSVC_DIAG_DISABLE(4703)                  \
+  /* GCC */                                      \
+  MUNDY_GCC_DIAG_IGNORE("-Wmaybe-uninitialized") \
+  MUNDY_GCC_DIAG_IGNORE("-Wuninitialized")       \
+  /* Clang */                                    \
+  MUNDY_CLANG_DIAG_IGNORE("-Wuninitialized")
+
+#define MUNDY_SUPPRESS_MAYBE_UNINITIALIZED_POP MUNDY_DIAG_POP
+
 // Suppress the CUDA/HIP/SYCL-ish cross-space call warning family.
 //
 // Notes:

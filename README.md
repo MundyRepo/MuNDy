@@ -17,6 +17,7 @@ MuNDy is a C++ framework for high-performance simulation of **multibody nonlocal
 ## Table of Contents
 
 - [Installation via Spack](#installation-via-spack)
+- [CDash Dashboard Submissions](#cdash-dashboard-submissions)
 - [Organizational Overview](#organizational-overview)
 - [Subpackages](#subpackages)
   - [MundyUtils: Centralized reusable utilities](#mundyutils-centralized-reusable-utilities)
@@ -55,6 +56,46 @@ spack install --add mundy +core +mesh +cuda cuda_arch=90 ^cuda@12.3.107
 ```
 
 `+mesh` automatically pulls in the required Trilinos `Teuchos` and `STK` support. MuNDy's current subpackages also require `OpenRAND`, which is enabled by default in the Spack recipe.
+
+## CDash Dashboard Submissions
+
+MuNDy now includes the TriBITS project-level files that the built-in `dashboard` target expects:
+
+- `CTestConfig.cmake`
+- `cmake/ctest/CTestCustom.cmake.in`
+- `cmake/ctest/MundyCTestDriver.cmake`
+- `cmake/ctest/general_gcc/ctest_mpi_openmp_release.cmake`
+
+The existing `rocky8-openmp-release` preset now also seeds the dashboard-specific cache entries `CTEST_BUILD_FLAGS`, `CTEST_PARALLEL_LEVEL`, and `CTEST_BUILD_NAME`, so the basic local flow is:
+
+```bash
+cmake --preset rocky8-openmp-release
+env CTEST_DO_SUBMIT=OFF cmake --build build/rocky8-openmp-release --target dashboard
+```
+
+Useful dashboard variants:
+
+```bash
+# Reuse an existing configure/build and only run+submit tests
+env CTEST_DO_CONFIGURE=OFF CTEST_DO_BUILD=OFF CTEST_DO_SUBMIT=OFF \
+  cmake --build build/rocky8-openmp-release --target dashboard
+```
+
+`CTestConfig.cmake` defaults to `my.cdash.org` and the CDash project name `Mundy`. If your CDash project uses a different host, project name, or submit path, override `CTEST_DROP_SITE`, `CTEST_PROJECT_NAME`, and `CTEST_DROP_LOCATION` at configure time before running the target.
+
+For a standalone `ctest -S` workflow, the MuNDy driver scaffold mirrors the TriBITS examples and can be launched from a scratch dashboard directory:
+
+```bash
+mkdir -p /tmp/mundy-dashboard
+cd /tmp/mundy-dashboard
+
+env TRILINOS_ROOT_DIR=/path/to/trilinos \
+    TPL_ROOT_DIR=/path/to/mundy-tpls \
+    CTEST_DO_SUBMIT=OFF \
+    ctest -V -S /path/to/MuNDy/cmake/ctest/general_gcc/ctest_mpi_openmp_release.cmake
+```
+
+That script uses the checked-out MuNDy source tree as `CTEST_SOURCE_DIRECTORY` and creates its build tree in the current working directory under `BUILD/`, which makes it a good starting point for a future CI-specific `ctest -S` matrix.
 
 
 ## Organizational Overview

@@ -449,6 +449,32 @@ class UnitTestAccessorExprFixture : public ::testing::Test {
 struct XTag;
 struct YTag;
 struct ZTag;
+struct SeedTag;
+struct CounterTag;
+struct FirstDrawTag;
+struct SecondDrawTag;
+
+using single_entity_expr_driver_t = NgpForEachEntityExprDriver<>;
+using single_entity_expr_t = EntityExpr<1, 0, single_entity_expr_driver_t>;
+using rng_contract_expr_t =
+    CounterBasedRNGExpr<ConstantMathExpr<size_t>, ConstantMathExpr<size_t>, openrand::Philox, make_philox>;
+using rng_draw_contract_expr_t = RandomDistributionExpr<rng_contract_expr_t, double>;
+using rng_uniform_contract_expr_t =
+    UniformDistributionExpr<rng_contract_expr_t, double, ConstantMathExpr<double>, ConstantMathExpr<double>>;
+using reusable_add_expr_t = AddExpr<rng_contract_expr_t, rng_contract_expr_t>;
+using nonreusable_add_expr_t = AddExpr<rng_draw_contract_expr_t, ConstantMathExpr<double>>;
+
+static_assert(single_entity_expr_t::has_static_eval);
+static_assert(!ConnectedEntitiesExpr<single_entity_expr_t>::has_static_eval);
+static_assert(!ConnectedEntitiesExpr<single_entity_expr_t>::supports_runtime_reuse);
+static_assert(!ConstantMathExpr<double>::has_static_eval);
+static_assert(!reusable_add_expr_t::supports_runtime_reuse);
+static_assert(!nonreusable_add_expr_t::supports_runtime_reuse);
+static_assert(rng_contract_expr_t::supports_runtime_reuse);
+static_assert(!rng_draw_contract_expr_t::has_static_eval);
+static_assert(!rng_draw_contract_expr_t::supports_runtime_reuse);
+static_assert(!rng_uniform_contract_expr_t::has_static_eval);
+static_assert(!rng_uniform_contract_expr_t::supports_runtime_reuse);
 
 TEST_F(UnitTestAccessorExprFixture, field_fill) {
   if (stk::parallel_machine_size(communicator_) > 2) {
@@ -469,7 +495,7 @@ TEST_F(UnitTestAccessorExprFixture, field_fill) {
   auto expected_value_func = [fill_value](const double* /*entity_coords*/) { return std::vector<double>{fill_value}; };
 
   stk::mesh::Selector b1_not_b2 = block1_selector_ - block2_selector_;
-  auto x = make_tagged_component<XTag, stk::topology::NODE_RANK>(ScalarFieldComponent(*field_x_ptr_));
+  auto x = make_tagged_component<XTag>(ScalarFieldComponent(*field_x_ptr_));
 
   {
     auto es = make_entity_expr(get_bulk(), b1_not_b2, stk::topology::NODE_RANK);
@@ -498,8 +524,8 @@ TEST_F(UnitTestAccessorExprFixture, field_copy) {
 #endif
 
   stk::mesh::Selector b1_not_b2 = block1_selector_ - block2_selector_;
-  auto x = make_tagged_component<XTag, stk::topology::NODE_RANK>(ScalarFieldComponent(*field_x_ptr_));
-  auto y = make_tagged_component<YTag, stk::topology::NODE_RANK>(ScalarFieldComponent(*field_y_ptr_));
+  auto x = make_tagged_component<XTag>(ScalarFieldComponent(*field_x_ptr_));
+  auto y = make_tagged_component<YTag>(ScalarFieldComponent(*field_y_ptr_));
 
   {
     auto es = make_entity_expr(get_bulk(), b1_not_b2, stk::topology::NODE_RANK);
@@ -529,8 +555,8 @@ TEST_F(UnitTestAccessorExprFixture, field_swap) {
 #endif
 
   stk::mesh::Selector b1_not_b2 = block1_selector_ - block2_selector_;
-  auto x = make_tagged_component<XTag, stk::topology::NODE_RANK>(ScalarFieldComponent(*field_x_ptr_));
-  auto y = make_tagged_component<YTag, stk::topology::NODE_RANK>(ScalarFieldComponent(*field_y_ptr_));
+  auto x = make_tagged_component<XTag>(ScalarFieldComponent(*field_x_ptr_));
+  auto y = make_tagged_component<YTag>(ScalarFieldComponent(*field_y_ptr_));
 
   {
     auto es = make_entity_expr(get_bulk(), b1_not_b2, stk::topology::NODE_RANK);
@@ -584,7 +610,7 @@ TEST_F(UnitTestAccessorExprFixture, field_scale) {
   };
 
   stk::mesh::Selector b1_not_b2 = block1_selector_ - block2_selector_;
-  auto x = make_tagged_component<XTag, stk::topology::NODE_RANK>(ScalarFieldComponent(*field_x_ptr_));
+  auto x = make_tagged_component<XTag>(ScalarFieldComponent(*field_x_ptr_));
 
   {
     auto es = make_entity_expr(get_bulk(), b1_not_b2, stk::topology::NODE_RANK);
@@ -619,9 +645,9 @@ TEST_F(UnitTestAccessorExprFixture, field_product) {
   };
 
   stk::mesh::Selector b1_not_b2 = block1_selector_ - block2_selector_;
-  auto x = make_tagged_component<XTag, stk::topology::NODE_RANK>(ScalarFieldComponent(*field_x_ptr_));
-  auto y = make_tagged_component<YTag, stk::topology::NODE_RANK>(ScalarFieldComponent(*field_y_ptr_));
-  auto z = make_tagged_component<ZTag, stk::topology::NODE_RANK>(ScalarFieldComponent(*field_z_ptr_));
+  auto x = make_tagged_component<XTag>(ScalarFieldComponent(*field_x_ptr_));
+  auto y = make_tagged_component<YTag>(ScalarFieldComponent(*field_y_ptr_));
+  auto z = make_tagged_component<ZTag>(ScalarFieldComponent(*field_z_ptr_));
 
   {
     auto es = make_entity_expr(get_bulk(), b1_not_b2, stk::topology::NODE_RANK);
@@ -661,8 +687,8 @@ TEST_F(UnitTestAccessorExprFixture, field_axpby) {
   };
 
   stk::mesh::Selector b1_not_b2 = block1_selector_ - block2_selector_;
-  auto x = make_tagged_component<XTag, stk::topology::NODE_RANK>(ScalarFieldComponent(*field_x_ptr_));
-  auto y = make_tagged_component<YTag, stk::topology::NODE_RANK>(ScalarFieldComponent(*field_y_ptr_));
+  auto x = make_tagged_component<XTag>(ScalarFieldComponent(*field_x_ptr_));
+  auto y = make_tagged_component<YTag>(ScalarFieldComponent(*field_y_ptr_));
 
   {
     auto es = make_entity_expr(get_bulk(), b1_not_b2, stk::topology::NODE_RANK);
@@ -674,6 +700,193 @@ TEST_F(UnitTestAccessorExprFixture, field_axpby) {
 
   check_field_data_on_host_func<1>("field subset error. x", get_bulk(), *field_x_ptr_, !b1_not_b2, get_field_x_func());
   check_field_data_on_host_func<1>("field subset error. y", get_bulk(), *field_y_ptr_, !b1_not_b2, get_field_y_func());
+}
+
+TEST_F(UnitTestAccessorExprFixture, non_static_branches_do_not_share_cache) {
+  if (stk::parallel_machine_size(communicator_) > 2) {
+    GTEST_SKIP() << "This test is only designed to run with 1 or 2 MPI ranks.";
+  }
+
+  const int we_know_there_are_five_ranks = 5;
+#if TRILINOS_MAJOR_MINOR_VERSION >= 160000
+  auto field_data_manager = std::make_unique<stk::mesh::DefaultFieldDataManager>(we_know_there_are_five_ranks);
+  setup_hex_mesh(stk::mesh::BulkData::AUTO_AURA, std::move(field_data_manager));
+#else
+  stk::mesh::DefaultFieldDataManager* field_data_manager_ptr =
+      new stk::mesh::DefaultFieldDataManager(we_know_there_are_five_ranks);
+  setup_hex_mesh(stk::mesh::BulkData::AUTO_AURA, field_data_manager_ptr);
+#endif
+
+  constexpr double y_offset = 1.0;
+  constexpr double z_offset = 2.0;
+  auto field_x_func = get_field_x_func();
+  auto expected_y_func = [&field_x_func, y_offset](const double* entity_coords) {
+    return std::vector<double>{field_x_func(entity_coords)[0] + y_offset};
+  };
+  auto expected_z_func = [&field_x_func, z_offset](const double* entity_coords) {
+    return std::vector<double>{field_x_func(entity_coords)[0] + z_offset};
+  };
+
+  stk::mesh::Selector b1_not_b2 = block1_selector_ - block2_selector_;
+  auto x = make_tagged_component<XTag>(ScalarFieldComponent(*field_x_ptr_));
+  auto y = make_tagged_component<YTag>(ScalarFieldComponent(*field_y_ptr_));
+  auto z = make_tagged_component<ZTag>(ScalarFieldComponent(*field_z_ptr_));
+
+  {
+    // x(es) + y_offset and x(es) + z_offset have the same type but different returns for the same eval input,
+    // so they should not cache their return type.
+    auto es = make_entity_expr(get_bulk(), b1_not_b2, stk::topology::NODE_RANK);
+    fused_assign(y(es), /*=*/x(es) + y_offset,  //
+                 z(es), /*=*/x(es) + z_offset);
+  }
+
+  check_field_data_on_host_func<1>("distinct constant branch cache error. x", get_bulk(), *field_x_ptr_, b1_not_b2,
+                                   get_field_x_func());
+  check_field_data_on_host_func<1>("distinct constant branch cache error. y", get_bulk(), *field_y_ptr_, b1_not_b2,
+                                   expected_y_func);
+  check_field_data_on_host_func<1>("distinct constant branch cache error. z", get_bulk(), *field_z_ptr_, b1_not_b2,
+                                   expected_z_func);
+}
+
+TEST_F(UnitTestAccessorExprFixture, repeated_calls_to_rng_expr_returns_new_values) {
+  // This is the test that having our rng expressions cache their RNG instance doesn't mean that they return
+  // the same random value on each call. That is, we want to guarantee regular behavior such as the following:
+  //   auto rng = make_philox(seed, counter);
+  //   double a = rng.rand<double>();
+  //   double b = rng.rand<double>();
+  //   EXPECT_NE(a, b);
+  //
+  // As opposed to the incorrect behavior of
+  //   double a = make_philox(seed, counter).rand<double>();
+  //   double b = make_philox(seed, counter).rand<double>();
+  // which will always result in a == b.
+  //
+  // This must be validated when seed/counter are generated by static or non-static expressions.
+
+  if (stk::parallel_machine_size(communicator_) > 2) {
+    GTEST_SKIP() << "This test is only designed to run with 1 or 2 MPI ranks.";
+  }
+
+  const int we_know_there_are_five_ranks = 5;
+#if TRILINOS_MAJOR_MINOR_VERSION >= 160000
+  auto field_data_manager = std::make_unique<stk::mesh::DefaultFieldDataManager>(we_know_there_are_five_ranks);
+  setup_hex_mesh(stk::mesh::BulkData::AUTO_AURA, std::move(field_data_manager));
+#else
+  stk::mesh::DefaultFieldDataManager* field_data_manager_ptr =
+      new stk::mesh::DefaultFieldDataManager(we_know_there_are_five_ranks);
+  setup_hex_mesh(stk::mesh::BulkData::AUTO_AURA, field_data_manager_ptr);
+#endif
+
+  stk::mesh::Selector b1_not_b2 = block1_selector_ - block2_selector_;
+  const stk::mesh::BulkData& bulk_data = get_bulk();
+
+  field_x_ptr_->clear_host_sync_state();
+  field_y_ptr_->clear_host_sync_state();
+  stk::mesh::for_each_entity_run(
+      bulk_data, stk::topology::NODE_RANK, b1_not_b2,
+      [&](const stk::mesh::BulkData& bulk, const stk::mesh::Entity entity) {
+        double* raw_seed = static_cast<double*>(stk::mesh::field_data(*field_x_ptr_, entity));
+        double* raw_counter = static_cast<double*>(stk::mesh::field_data(*field_y_ptr_, entity));
+        const size_t entity_id = bulk.identifier(entity);
+        raw_seed[0] = static_cast<double>(101 + 17 * entity_id);
+        raw_counter[0] = static_cast<double>(5 + 3 * entity_id);
+      });
+  field_x_ptr_->modify_on_host();
+  field_y_ptr_->modify_on_host();
+
+  auto seed = make_tagged_component<SeedTag>(ScalarFieldComponent(*field_x_ptr_));
+  auto counter = make_tagged_component<CounterTag>(ScalarFieldComponent(*field_y_ptr_));
+  auto first_draw = make_tagged_component<FirstDrawTag>(ScalarFieldComponent(*field_xs_ptr_));
+  auto second_draw = make_tagged_component<SecondDrawTag>(ScalarFieldComponent(*field_ys_ptr_));
+
+  auto run_case = [&]<bool non_static_seed, bool non_static_counter>(const char* case_name) {
+    auto es = make_entity_expr(get_bulk(), b1_not_b2, stk::topology::NODE_RANK);
+
+    if constexpr (non_static_seed && non_static_counter) {
+      auto our_rng = rng(seed(es) + 0.0, 0.0 + counter(es));
+      EXPECT_NO_THROW(fused_assign(first_draw(es), /*=*/our_rng.template rand<double>(),  //
+                                   second_draw(es), /*=*/our_rng.template rand<double>()))
+          << "non-static seed/non-static counter case threw an error";
+    } else if constexpr (non_static_seed) {
+      auto our_rng = rng(seed(es) + 0.0, counter(es));
+      EXPECT_NO_THROW(fused_assign(first_draw(es), /*=*/our_rng.template rand<double>(),  //
+                                   second_draw(es), /*=*/our_rng.template rand<double>()))
+          << "non-static seed/static counter case threw an error";
+    } else if constexpr (non_static_counter) {
+      auto our_rng = rng(seed(es), counter(es) + 0.0);
+      EXPECT_NO_THROW(fused_assign(first_draw(es), /*=*/our_rng.template rand<double>(),  //
+                                   second_draw(es), /*=*/our_rng.template rand<double>()))
+          << "static seed/non-static counter case threw an error";
+    } else {
+      auto our_rng = rng(seed(es), counter(es));
+      EXPECT_NO_THROW(fused_assign(first_draw(es), /*=*/our_rng.template rand<double>(),  //
+                                   second_draw(es), /*=*/our_rng.template rand<double>()))
+          << "static seed/static counter case threw an error";
+    }
+
+    field_x_ptr_->sync_to_host();
+    field_y_ptr_->sync_to_host();
+    field_xs_ptr_->sync_to_host();
+    field_ys_ptr_->sync_to_host();
+
+    int failure_count = 0;
+    stk::mesh::for_each_entity_run(
+        bulk_data, stk::topology::NODE_RANK, b1_not_b2,
+        [&](const stk::mesh::BulkData& bulk, const stk::mesh::Entity entity) {
+          const double* raw_seed = static_cast<const double*>(stk::mesh::field_data(*field_x_ptr_, entity));
+          const double* raw_counter = static_cast<const double*>(stk::mesh::field_data(*field_y_ptr_, entity));
+          const double* raw_first_draw = static_cast<const double*>(stk::mesh::field_data(*field_xs_ptr_, entity));
+          const double* raw_second_draw = static_cast<const double*>(stk::mesh::field_data(*field_ys_ptr_, entity));
+
+          const size_t expected_seed = static_cast<size_t>(raw_seed[0]);
+          const size_t expected_counter = static_cast<size_t>(raw_counter[0]);
+          auto host_rng = make_philox(expected_seed, expected_counter);
+          const double expected_first_draw = host_rng.rand<double>();
+          const double expected_second_draw = host_rng.rand<double>();
+
+          Kokkos::atomic_add(&failure_count, raw_first_draw[0] != expected_first_draw);
+          Kokkos::atomic_add(&failure_count, raw_second_draw[0] != expected_second_draw);
+          Kokkos::atomic_add(&failure_count, raw_first_draw[0] == raw_second_draw[0]);
+        });
+    EXPECT_EQ(failure_count, 0) << "RNG test failed for case: " << case_name;
+  };
+
+  run_case.template operator()<false, false>("static seed/static counter");
+  run_case.template operator()<true, false>("non-static seed/static counter");
+  run_case.template operator()<false, true>("static seed/non-static counter");
+  run_case.template operator()<true, true>("non-static seed/non-static counter");
+}
+
+TEST_F(UnitTestAccessorExprFixture, runtime_reuse_validation_rejects_non_equivalent_rng_nodes) {
+  if (stk::parallel_machine_size(communicator_) > 2) {
+    GTEST_SKIP() << "This test is only designed to run with 1 or 2 MPI ranks.";
+  }
+
+  const int we_know_there_are_five_ranks = 5;
+#if TRILINOS_MAJOR_MINOR_VERSION >= 160000
+  auto field_data_manager = std::make_unique<stk::mesh::DefaultFieldDataManager>(we_know_there_are_five_ranks);
+  setup_hex_mesh(stk::mesh::BulkData::AUTO_AURA, std::move(field_data_manager));
+#else
+  stk::mesh::DefaultFieldDataManager* field_data_manager_ptr =
+      new stk::mesh::DefaultFieldDataManager(we_know_there_are_five_ranks);
+  setup_hex_mesh(stk::mesh::BulkData::AUTO_AURA, field_data_manager_ptr);
+#endif
+
+  stk::mesh::Selector b1_not_b2 = block1_selector_ - block2_selector_;
+  auto seed = make_tagged_component<SeedTag>(ScalarFieldComponent(*field_x_ptr_));
+  auto counter = make_tagged_component<CounterTag>(ScalarFieldComponent(*field_y_ptr_));
+  auto first_draw = make_tagged_component<FirstDrawTag>(ScalarFieldComponent(*field_xs_ptr_));
+  auto second_draw = make_tagged_component<SecondDrawTag>(ScalarFieldComponent(*field_ys_ptr_));
+  auto es = make_entity_expr(get_bulk(), b1_not_b2, stk::topology::NODE_RANK);
+
+  EXPECT_THROW(
+      {
+        auto rng_a = rng(seed(es) + 0.0, counter(es));
+        auto rng_b = rng(seed(es) + 1.0, counter(es));
+        fused_assign(first_draw(es), /*=*/rng_a.template rand<double>(),  //
+                     second_draw(es), /*=*/rng_b.template rand<double>());
+      },
+      std::logic_error);
 }
 
 template <size_t NumComponents>
@@ -842,8 +1055,8 @@ TEST_F(UnitTestAccessorExprFixture, field_dot) {
 #endif
 
   stk::mesh::Selector b1_not_b2 = block1_selector_ - block2_selector_;
-  auto x = make_tagged_component<XTag, stk::topology::NODE_RANK>(ScalarFieldComponent(*field_x_ptr_));
-  auto y = make_tagged_component<YTag, stk::topology::NODE_RANK>(ScalarFieldComponent(*field_y_ptr_));
+  auto x = make_tagged_component<XTag>(ScalarFieldComponent(*field_x_ptr_));
+  auto y = make_tagged_component<YTag>(ScalarFieldComponent(*field_y_ptr_));
 
   auto es = make_entity_expr(get_bulk(), b1_not_b2, stk::topology::NODE_RANK);
   double actual_dot = all_reduce_sum<double>(x(es) * y(es));
@@ -867,8 +1080,8 @@ TEST_F(UnitTestAccessorExprFixture, quick_perf_test_against_blas) {
 #endif
 
   stk::mesh::Selector b1_not_b2 = block1_selector_ - block2_selector_;
-  auto x = make_tagged_component<XTag, stk::topology::NODE_RANK>(ScalarFieldComponent(*field_x_ptr_));
-  auto y = make_tagged_component<YTag, stk::topology::NODE_RANK>(ScalarFieldComponent(*field_y_ptr_));
+  auto x = make_tagged_component<XTag>(ScalarFieldComponent(*field_x_ptr_));
+  auto y = make_tagged_component<YTag>(ScalarFieldComponent(*field_y_ptr_));
 
   auto es = make_entity_expr(get_bulk(), b1_not_b2, stk::topology::NODE_RANK);
 

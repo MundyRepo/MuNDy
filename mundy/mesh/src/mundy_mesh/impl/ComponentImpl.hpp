@@ -18,31 +18,39 @@
 // **********************************************************************************************************************
 // @HEADER
 
-#ifndef MUNDY_MESH_FMT_STK_TYPES_HPP_
-#define MUNDY_MESH_FMT_STK_TYPES_HPP_
+#ifndef MUNDY_MESH_IMPL_COMPONENTSIMPL_HPP_
+#define MUNDY_MESH_IMPL_COMPONENTSIMPL_HPP_
 
-/// \file fmt_stk_types.hpp
-/// \brief fmt ostream support for STK types
+/// \file ComponentImpl.hpp
+/// \brief A set of helpers for working with components with reduced boilerplate code.
 
-// External
-#include <fmt/format.h>
-#include <fmt/ostream.h>
+// C++ core
+#include <iostream>   // for std::ostream
+#include <stdexcept>  // for std::runtime_error
+#include <type_traits>
+#include <utility>
+#include <vector>  // for std::vector
 
-// STK
-#include <stk_mesh/base/Entity.hpp>
-#include <stk_mesh/base/Selector.hpp>
-#include <stk_topology/topology.hpp>
+// Trilinos
+#include <stk_io/StkMeshIoBroker.hpp>  // for stk::io::StkMeshIoBroker
+#include <stk_mesh/base/Field.hpp>     // for stk::mesh::Field
+#include <stk_mesh/base/MetaData.hpp>  // for stk::mesh::MetaData
 
-#define MUNDY_ADD_FMT_OSTREAM_SUPPORT(type) \
-  template <>                               \
-  struct fmt::formatter<type> : fmt::ostream_formatter {};
+// Mundy
+#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_REQUIRE
 
-MUNDY_ADD_FMT_OSTREAM_SUPPORT(stk::mesh::Entity)
-MUNDY_ADD_FMT_OSTREAM_SUPPORT(stk::mesh::EntityId)
-MUNDY_ADD_FMT_OSTREAM_SUPPORT(stk::mesh::EntityKey)
-MUNDY_ADD_FMT_OSTREAM_SUPPORT(stk::mesh::Selector)
-MUNDY_ADD_FMT_OSTREAM_SUPPORT(stk::topology)
-MUNDY_ADD_FMT_OSTREAM_SUPPORT(stk::topology::rank_t)
-MUNDY_ADD_FMT_OSTREAM_SUPPORT(stk::topology::topology_t)
+namespace mundy {
 
-#endif  // MUNDY_MESH_FMT_STK_TYPES_HPP_
+namespace mesh {
+
+namespace impl {
+
+// TODO(palmerb4): How to pull the IMPL code out of Component.hpp given that it depends on public Component.hpp types?
+
+}  // namespace impl
+
+}  // namespace mesh
+
+}  // namespace mundy
+
+#endif  // MUNDY_MESH_IMPL_COMPONENTSIMPL_HPP_

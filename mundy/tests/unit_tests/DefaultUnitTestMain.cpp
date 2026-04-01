@@ -43,7 +43,7 @@
 #include <gtest/gtest.h>  // for TEST, ASSERT_NO_THROW, etc
 
 // Trilinos libs
-#include <Kokkos_Core.hpp>       // for Kokkos::initialize, Kokkos::finalize
+#include <Kokkos_Core.hpp>   // for Kokkos::initialize, Kokkos::finalize
 #include <Mundy_config.hpp>  // for HAVE_MUNDY_*
 #include <iostream>
 #ifdef HAVE_MUNDY_STK

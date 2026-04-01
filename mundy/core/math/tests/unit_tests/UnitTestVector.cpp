@@ -829,12 +829,11 @@ struct an_external_constexpr_functor {
   }
 };
 
-template<typename T>
+template <typename T>
   requires std::is_arithmetic_v<T>
 constexpr T constexpr_abs(const T& x) {
   return x < static_cast<T>(0) ? -x : x;
 }
-
 
 TYPED_TEST(VectorSingleTypeTest, ConstexprApply) {
   // Using a constexpr lambda function
@@ -868,8 +867,9 @@ TYPED_TEST(VectorSingleTypeTest, ConstexprApply) {
   // Dim 3
   constexpr Vector3<TypeParam> v11(1, 2, 3);
   constexpr auto v12 = apply(an_external_constexpr_functor{}, v11);
-  static_assert(constexpr_abs(v12[0] - 2) < 1e-6 && constexpr_abs(v12[1] - 3) < 1e-6 && constexpr_abs(v12[2] - 4) < 1e-6,
-                "Constexpr apply failed.");
+  static_assert(
+      constexpr_abs(v12[0] - 2) < 1e-6 && constexpr_abs(v12[1] - 3) < 1e-6 && constexpr_abs(v12[2] - 4) < 1e-6,
+      "Constexpr apply failed.");
 }
 //@}
 

@@ -157,16 +157,16 @@ void test_quaternion_blas_no_views(const double alpha, const std::vector<double>
                                    std::vector<double>& y) {
   const size_t num_entities = x.size() / 4;
   for (size_t i = 0; i < num_entities; ++i) {
-    // Copy into quaternions
-    const mundy::Quaterniond x_quat(x[4 * i + 0], x[4 * i + 1], x[4 * i + 2], x[4 * i + 3]);
-    mundy::Quaterniond y_quat(y[4 * i + 0], y[4 * i + 1], y[4 * i + 2], y[4 * i + 3]);
+    // Copy raw x,y,z,w storage into semantic w,x,y,z constructors.
+    const mundy::Quaterniond x_quat(x[4 * i + 3], x[4 * i + 0], x[4 * i + 1], x[4 * i + 2]);
+    mundy::Quaterniond y_quat(y[4 * i + 3], y[4 * i + 0], y[4 * i + 1], y[4 * i + 2]);
     y_quat = alpha * x_quat + beta * y_quat;
 
-    // Copy back into the result
-    y[4 * i + 0] = y_quat.w();
-    y[4 * i + 1] = y_quat.x();
-    y[4 * i + 2] = y_quat.y();
-    y[4 * i + 3] = y_quat.z();
+    // Copy back in raw x,y,z,w storage order.
+    y[4 * i + 0] = y_quat[0];
+    y[4 * i + 1] = y_quat[1];
+    y[4 * i + 2] = y_quat[2];
+    y[4 * i + 3] = y_quat[3];
   }
 }
 
@@ -271,12 +271,12 @@ void test_quaternion_rotation_no_views(const std::vector<double>& q1, const std:
                                        std::vector<double>& q3) {
   const size_t num_entities = q1.size() / 4;
   for (size_t i = 0; i < num_entities; ++i) {
-    // Copy into a quaternion
-    const mundy::Quaterniond q1_quat(q1[4 * i + 0], q1[4 * i + 1], q1[4 * i + 2], q1[4 * i + 3]);
-    const mundy::Quaterniond q2_quat(q2[4 * i + 0], q2[4 * i + 1], q2[4 * i + 2], q2[4 * i + 3]);
+    // Copy raw x,y,z,w storage into semantic w,x,y,z constructors.
+    const mundy::Quaterniond q1_quat(q1[4 * i + 3], q1[4 * i + 0], q1[4 * i + 1], q1[4 * i + 2]);
+    const mundy::Quaterniond q2_quat(q2[4 * i + 3], q2[4 * i + 0], q2[4 * i + 1], q2[4 * i + 2]);
     const mundy::Quaterniond q3_quat = q1_quat * q2_quat;
 
-    // Copy back into the result
+    // Copy back in raw x,y,z,w storage order.
     q3[4 * i + 0] = q3_quat[0];
     q3[4 * i + 1] = q3_quat[1];
     q3[4 * i + 2] = q3_quat[2];
@@ -288,18 +288,22 @@ void test_quaternion_rotation_direct(const std::vector<double>& q1, const std::v
                                      std::vector<double>& q3) {
   const size_t num_entities = q1.size() / 4;
   for (size_t i = 0; i < num_entities; ++i) {
-    const double q1_w = q1[4 * i + 0];
-    const double q1_x = q1[4 * i + 1];
-    const double q1_y = q1[4 * i + 2];
-    const double q1_z = q1[4 * i + 3];
-    const double q2_w = q2[4 * i + 0];
-    const double q2_x = q2[4 * i + 1];
-    const double q2_y = q2[4 * i + 2];
-    const double q2_z = q2[4 * i + 3];
-    q3[4 * i + 0] = q1_w * q2_w - q1_x * q2_x - q1_y * q2_y - q1_z * q2_z;
-    q3[4 * i + 1] = q1_w * q2_x + q1_x * q2_w + q1_y * q2_z - q1_z * q2_y;
-    q3[4 * i + 2] = q1_w * q2_y - q1_x * q2_z + q1_y * q2_w + q1_z * q2_x;
-    q3[4 * i + 3] = q1_w * q2_z + q1_x * q2_y - q1_y * q2_x + q1_z * q2_w;
+    const double q1_x = q1[4 * i + 0];
+    const double q1_y = q1[4 * i + 1];
+    const double q1_z = q1[4 * i + 2];
+    const double q1_w = q1[4 * i + 3];
+    const double q2_x = q2[4 * i + 0];
+    const double q2_y = q2[4 * i + 1];
+    const double q2_z = q2[4 * i + 2];
+    const double q2_w = q2[4 * i + 3];
+    const double out_w = q1_w * q2_w - q1_x * q2_x - q1_y * q2_y - q1_z * q2_z;
+    const double out_x = q1_w * q2_x + q1_x * q2_w + q1_y * q2_z - q1_z * q2_y;
+    const double out_y = q1_w * q2_y - q1_x * q2_z + q1_y * q2_w + q1_z * q2_x;
+    const double out_z = q1_w * q2_z + q1_x * q2_y - q1_y * q2_x + q1_z * q2_w;
+    q3[4 * i + 0] = out_x;
+    q3[4 * i + 1] = out_y;
+    q3[4 * i + 2] = out_z;
+    q3[4 * i + 3] = out_w;
   }
 }
 
@@ -309,17 +313,11 @@ void time_test(const std::string& test_name, const OurViewFunc& our_view_func, c
   ankerl::nanobench::Bench bench;
   bench.relative(true).title(test_name).unit("op").performanceCounters(true).minEpochIterations(1000);
 
-  bench.run("with views", [&] {
-    our_view_func();
-  });
+  bench.run("with views", [&] { our_view_func(); });
 
-  bench.run("no views", [&] {
-    our_no_view_func();
-  });
+  bench.run("no views", [&] { our_no_view_func(); });
 
-  bench.run("direct", [&] {
-    direct_func();
-  });
+  bench.run("direct", [&] { direct_func(); });
 }
 
 int main(int argc, char** argv) {

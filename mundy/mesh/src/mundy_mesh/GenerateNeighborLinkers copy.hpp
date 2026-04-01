@@ -432,7 +432,7 @@ class GenNeighborLinks {
 
       Kokkos::parallel_for(
           stk::ngp::RangePolicy<exec_space_t>(0, num_local_spheres), KOKKOS_LAMBDA(const unsigned& i) {
-            stk::mesh::Entity sphere = ngp_mesh.get_entity(spheres.rank(), sphere_indices(i));
+            stk::mesh::Entity sphere = ngp_mesh.get_entity(stk::topology::ELEM_RANK, sphere_indices(i));
             stk::mesh::FastMeshIndex sphere_index = ngp_mesh.fast_mesh_index(sphere);
 
             Sphere<double> sphere = gen(sphere_index);
@@ -461,7 +461,7 @@ class GenNeighborLinks {
       Kokkos::parallel_reduce(
           "CheckSearchBufferViolation", stk::ngp::HostRangePolicy(0, num_local_spheres),
           KOKKOS_LAMBDA(int i, bool& local_result) {
-            stk::mesh::Entity sphere = ngp_mesh.get_entity(spheres.rank(), sphere_indices(i));
+            stk::mesh::Entity sphere = ngp_mesh.get_entity(stk::topology::ELEM_RANK, sphere_indices(i));
             stk::mesh::FastMeshIndex sphere_index = ngp_mesh.fast_mesh_index(sphere);
 
             auto new_center = gen(sphere_index).center();

@@ -132,9 +132,9 @@ TEST(UnitTestAggregate, BasicUsage) {
   EXPECT_DOUBLE_EQ(radius[0], expected_radius);
 
   // Create an aggregate for the spheres
-  const auto collision_sphere_data = make_aggregate<stk::topology::PARTICLE>(bulk_data, sphere_part)
-                                         .add_component<CENTER, stk::topology::NODE_RANK>(center_accessor)
-                                         .add_component<COLLISION_RADIUS, stk::topology::ELEM_RANK>(radius_accessor);
+  const auto collision_sphere_data = Aggregate(bulk_data, sphere_part)
+                                         .add_component<CENTER>(center_accessor)
+                                         .add_component<COLLISION_RADIUS>(radius_accessor);
 
   // Validate our get_component() method
   EXPECT_EQ(collision_sphere_data.get_component<CENTER>().component().field().mesh_meta_data_ordinal(),
@@ -145,53 +145,55 @@ TEST(UnitTestAggregate, BasicUsage) {
   // Validate our selector
   EXPECT_EQ(collision_sphere_data.selector(), stk::mesh::Selector(sphere_part));
 
-  // Get an accessor-independent view of the entity's data
-  auto sphere_view = collision_sphere_data.get_view(elem1);
-  EXPECT_EQ(sphere_view.entity(), elem1);
-  EXPECT_EQ(sphere_view.rank(), stk::topology::ELEM_RANK);
-  EXPECT_EQ(sphere_view.topology(), stk::topology::PARTICLE);
-  unsigned center_node_con_ordinal = 0;
-  auto also_center = sphere_view.get<CENTER>(center_node_con_ordinal);
-  auto also_radius = sphere_view.get<COLLISION_RADIUS>();
+  auto also_center = collision_sphere_data.get<CENTER>(node1);
+  auto also_radius = collision_sphere_data.get<COLLISION_RADIUS>(elem1);
   EXPECT_DOUBLE_EQ(also_center[0], expected_center[0]);
   EXPECT_DOUBLE_EQ(also_center[1], expected_center[1]);
   EXPECT_DOUBLE_EQ(also_center[2], expected_center[2]);
   EXPECT_DOUBLE_EQ(also_radius[0], expected_radius);
 
-  collision_sphere_data.for_each([&expected_center, &expected_radius, &elem1](auto& other_sphere_view) {
-    // To avoid having users worry about the return type of get<TAG>() and if it returns a reference or a view,
-    // we switched to always returning a view even if the return type is a scalar. This means that you should always
-    // use auto to capture the return value of get<TAG>(). ScalarViews are just VectorViews of size 1, so they should
-    // feel the same to the user and have all the same operators/operations.
-    auto c = other_sphere_view.template get<CENTER>(0);
-    auto r = other_sphere_view.template get<COLLISION_RADIUS>();
+  ::mundy::mesh::for_each_entity_run(
+      collision_sphere_data.bulk_data(), stk::topology::ELEM_RANK, collision_sphere_data.selector(),
+      [&collision_sphere_data, &expected_center, &expected_radius, &elem1](const stk::mesh::Entity& other_sphere) {
+        // To avoid having users worry about the return type of get<TAG>() and if it returns a reference or a view,
+        // we switched to always returning a view even if the return type is a scalar. This means that you should always
+        // use auto to capture the return value of get<TAG>(). ScalarViews are just VectorViews of size 1, so they
+        // should feel the same to the user and have all the same operators/operations.
+        const stk::mesh::Entity center_node =
+            collision_sphere_data.bulk_data().begin(other_sphere, stk::topology::NODE_RANK)[0];
+        auto c = collision_sphere_data.get<CENTER>(center_node);
+        auto r = collision_sphere_data.get<COLLISION_RADIUS>(other_sphere);
 
-    // Because calling .template get<TAG>() is syntactically awkward, we offer a get<TAG>(view) method
-    auto c2 = get<CENTER>(other_sphere_view, 0);
-    auto r2 = get<COLLISION_RADIUS>(other_sphere_view);
+        // Because calling .template get<TAG>() is syntactically awkward, we offer a get<TAG>(agg, entity) helper too.
+        auto c2 = get<CENTER>(collision_sphere_data, center_node);
+        auto r2 = get<COLLISION_RADIUS>(collision_sphere_data, other_sphere);
 
-    // There is only one sphere, so we can perform the same checks as above
-    EXPECT_DOUBLE_EQ(c[0], expected_center[0]);
-    EXPECT_DOUBLE_EQ(c[1], expected_center[1]);
-    EXPECT_DOUBLE_EQ(c[2], expected_center[2]);
-    EXPECT_DOUBLE_EQ(r[0], expected_radius);
+        // There is only one sphere, so we can perform the same checks as above
+        EXPECT_DOUBLE_EQ(c[0], expected_center[0]);
+        EXPECT_DOUBLE_EQ(c[1], expected_center[1]);
+        EXPECT_DOUBLE_EQ(c[2], expected_center[2]);
+        EXPECT_DOUBLE_EQ(r[0], expected_radius);
 
-    EXPECT_DOUBLE_EQ(c2[0], expected_center[0]);
-    EXPECT_DOUBLE_EQ(c2[1], expected_center[1]);
-    EXPECT_DOUBLE_EQ(c2[2], expected_center[2]);
-    EXPECT_DOUBLE_EQ(r2[0], expected_radius);
+        EXPECT_DOUBLE_EQ(c2[0], expected_center[0]);
+        EXPECT_DOUBLE_EQ(c2[1], expected_center[1]);
+        EXPECT_DOUBLE_EQ(c2[2], expected_center[2]);
+        EXPECT_DOUBLE_EQ(r2[0], expected_radius);
 
-    EXPECT_EQ(other_sphere_view.entity(), elem1);
-    EXPECT_EQ(other_sphere_view.rank(), stk::topology::ELEM_RANK);
-    EXPECT_EQ(other_sphere_view.topology(), stk::topology::PARTICLE);
-  });
+        EXPECT_EQ(other_sphere, elem1);
+      });
 }
 
+template <typename NgpSphereAggregate>
 struct a_non_lambda_functor {
+  NgpSphereAggregate sphere_data;
+
   KOKKOS_INLINE_FUNCTION
-  int operator()(auto& sphere_view) const {
-    auto c = sphere_view.template get<CENTER>(0);
-    auto r = sphere_view.template get<COLLISION_RADIUS>();
+  int operator()(const stk::mesh::FastMeshIndex& sphere_index) const {
+    const auto connected_nodes =
+        sphere_data.ngp_mesh().get_connected_entities(stk::topology::ELEM_RANK, sphere_index, stk::topology::NODE_RANK);
+    const stk::mesh::FastMeshIndex center_node_index = sphere_data.ngp_mesh().fast_mesh_index(connected_nodes[0]);
+    auto c = sphere_data.template get<CENTER>(center_node_index);
+    auto r = sphere_data.template get<COLLISION_RADIUS>(sphere_index);
     c[0] += 1.0;
     r += 1.0;
     return 2;
@@ -249,27 +251,24 @@ void run_canonical_test() {
   auto mass_accessor = ScalarFieldComponent(elem_mass_field);
 
   // Create an aggregate for the spheres
-  const auto sphere_data = make_aggregate<stk::topology::PARTICLE>(bulk_data, sphere_part)
-                               .add_component<CENTER, stk::topology::NODE_RANK>(center_accessor)
-                               .add_component<FORCE, stk::topology::NODE_RANK>(force_accessor)
-                               .add_component<VELOCITY, stk::topology::NODE_RANK>(velocity_accessor)
-                               .add_component<COLLISION_RADIUS, stk::topology::ELEM_RANK>(radius_accessor)
-                               .add_component<MASS, stk::topology::ELEM_RANK>(mass_accessor);
+  const auto sphere_data = Aggregate(bulk_data, sphere_part)
+                               .add_component<CENTER>(center_accessor)
+                               .add_component<FORCE>(force_accessor)
+                               .add_component<VELOCITY>(velocity_accessor)
+                               .add_component<COLLISION_RADIUS>(radius_accessor)
+                               .add_component<MASS>(mass_accessor);
 
   // Move the spheres on the CPU
   // Note, data that is not fetched via .get is neither accessed nor modified
   double dt = 1e-5;
-  sphere_data.for_each([dt](auto& sphere_view) {
-    // Note: The zero is the center node connectivity ordinal.
-    //  If you had, say, a BEAM_2 you could use .get<VELOCITY>(0) and .get<VELOCITY>(1)
-    //  For the velocity of the left and right nodes, respectively.
-    auto c = get<CENTER>(sphere_view, 0);
-    auto v = get<VELOCITY>(sphere_view, 0);
-    c += dt * v;
-  });
+  ::mundy::mesh::for_each_entity_run(sphere_data.bulk_data(), stk::topology::NODE_RANK, sphere_data.selector(),
+                                     [sphere_data, dt](const stk::mesh::Entity& node) {
+                                       auto c = sphere_data.get<CENTER>(node);
+                                       auto v = sphere_data.get<VELOCITY>(node);
+                                       c += dt * v;
+                                     });
 
   // Same but on GPU
-  auto ngp_mesh = get_updated_ngp_mesh(bulk_data);
   auto ngp_sphere_data = get_updated_ngp_aggregate(sphere_data);
 
   EXPECT_TRUE(ngp_sphere_data.ngp_mesh().is_up_to_date());
@@ -277,7 +276,8 @@ void run_canonical_test() {
       << "If this works, we know that the NgpMesh was not default constructed";
 
   ngp_sphere_data.template sync_to_device<CENTER, COLLISION_RADIUS>();
-  ngp_sphere_data.template for_each(a_non_lambda_functor{});
+  ::mundy::mesh::for_each_entity_run(ngp_sphere_data.ngp_mesh(), stk::topology::ELEM_RANK, ngp_sphere_data.selector(),
+                                     a_non_lambda_functor<decltype(ngp_sphere_data)>{ngp_sphere_data});
   ngp_sphere_data.template modify_on_device<CENTER, COLLISION_RADIUS>();
 }
 

@@ -369,13 +369,11 @@ void randomize_test(stk::mesh::BulkData& bulk_data,           //
                     stk::mesh::Field<float>& float_field,  //
                     stk::mesh::Field<int>& int_field,      //
                     stk::mesh::Selector& selector) {
-  auto seed = make_tagged_component<SeedFieldTag, stk::topology::NODE_RANK>(ScalarFieldComponent(seed_field));
-  auto counter = make_tagged_component<CounterFieldTag, stk::topology::NODE_RANK>(ScalarFieldComponent(counter_field));
-  auto double_accessor =
-      make_tagged_component<DoubleFieldTag, stk::topology::NODE_RANK>(ScalarFieldComponent(double_field));
-  auto float_accessor =
-      make_tagged_component<FloatFieldTag, stk::topology::NODE_RANK>(ScalarFieldComponent(float_field));
-  auto int_accessor = make_tagged_component<IntFieldTag, stk::topology::NODE_RANK>(ScalarFieldComponent(int_field));
+  auto seed = make_tagged_component<SeedFieldTag>(ScalarFieldComponent(seed_field));
+  auto counter = make_tagged_component<CounterFieldTag>(ScalarFieldComponent(counter_field));
+  auto double_accessor = make_tagged_component<DoubleFieldTag>(ScalarFieldComponent(double_field));
+  auto float_accessor = make_tagged_component<FloatFieldTag>(ScalarFieldComponent(float_field));
+  auto int_accessor = make_tagged_component<IntFieldTag>(ScalarFieldComponent(int_field));
 
   size_t fixed_seed = 11235;
   size_t fixed_counter = 98765;
@@ -471,17 +469,17 @@ void randomize_uniform_test(stk::mesh::BulkData& bulk_data,             //
                             stk::mesh::Field<int>& int_ub_field,        //
                             stk::mesh::Selector& selector) {
   // clang-format off
-  auto seed               = make_tagged_component<SeedFieldTag,       stk::topology::NODE_RANK>(ScalarFieldComponent(seed_field));
-  auto counter            = make_tagged_component<CounterFieldTag,    stk::topology::NODE_RANK>(ScalarFieldComponent(counter_field));
-  auto double_accessor    = make_tagged_component<DoubleFieldTag,     stk::topology::NODE_RANK>(ScalarFieldComponent(double_field));
-  auto double_lb_accessor = make_tagged_component<LowerBoundFieldTag, stk::topology::NODE_RANK>(ScalarFieldComponent(double_lb_field));
-  auto double_ub_accessor = make_tagged_component<UpperBoundFieldTag, stk::topology::NODE_RANK>(ScalarFieldComponent(double_ub_field));
-  auto float_accessor     = make_tagged_component<FloatFieldTag,      stk::topology::NODE_RANK>(ScalarFieldComponent(float_field));
-  auto float_lb_accessor  = make_tagged_component<LowerBoundFieldTag, stk::topology::NODE_RANK>(ScalarFieldComponent(float_lb_field));
-  auto float_ub_accessor  = make_tagged_component<UpperBoundFieldTag, stk::topology::NODE_RANK>(ScalarFieldComponent(float_ub_field));
-  auto int_accessor       = make_tagged_component<IntFieldTag,        stk::topology::NODE_RANK>(ScalarFieldComponent(int_field));
-  auto int_lb_accessor    = make_tagged_component<LowerBoundFieldTag, stk::topology::NODE_RANK>(ScalarFieldComponent(int_lb_field));  
-  auto int_ub_accessor    = make_tagged_component<UpperBoundFieldTag, stk::topology::NODE_RANK>(ScalarFieldComponent(int_ub_field));
+  auto seed               = make_tagged_component<SeedFieldTag>(ScalarFieldComponent(seed_field));
+  auto counter            = make_tagged_component<CounterFieldTag>(ScalarFieldComponent(counter_field));
+  auto double_accessor    = make_tagged_component<DoubleFieldTag>(ScalarFieldComponent(double_field));
+  auto double_lb_accessor = make_tagged_component<LowerBoundFieldTag>(ScalarFieldComponent(double_lb_field));
+  auto double_ub_accessor = make_tagged_component<UpperBoundFieldTag>(ScalarFieldComponent(double_ub_field));
+  auto float_accessor     = make_tagged_component<FloatFieldTag>(ScalarFieldComponent(float_field));
+  auto float_lb_accessor  = make_tagged_component<LowerBoundFieldTag>(ScalarFieldComponent(float_lb_field));
+  auto float_ub_accessor  = make_tagged_component<UpperBoundFieldTag>(ScalarFieldComponent(float_ub_field));
+  auto int_accessor       = make_tagged_component<IntFieldTag>(ScalarFieldComponent(int_field));
+  auto int_lb_accessor    = make_tagged_component<LowerBoundFieldTag>(ScalarFieldComponent(int_lb_field));
+  auto int_ub_accessor    = make_tagged_component<UpperBoundFieldTag>(ScalarFieldComponent(int_ub_field));
   // clang-format on
 
   double double_fixed_lb = -11.1;

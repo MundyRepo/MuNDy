@@ -134,24 +134,18 @@ KOKKOS_INLINE_FUNCTION constexpr auto quat_quat_multiplication_impl(const AQuate
                                                                     const AQuaternion<U, OtherAccessor>& other)
     -> AQuaternion<std::common_type_t<T, U>> {
   using CommonType = std::common_type_t<T, U>;
-  AQuaternion<CommonType> result;
-  result[0] = static_cast<CommonType>(quat[0]) * static_cast<CommonType>(other[0]) -
-              static_cast<CommonType>(quat[1]) * static_cast<CommonType>(other[1]) -
-              static_cast<CommonType>(quat[2]) * static_cast<CommonType>(other[2]) -
-              static_cast<CommonType>(quat[3]) * static_cast<CommonType>(other[3]);
-  result[1] = static_cast<CommonType>(quat[0]) * static_cast<CommonType>(other[1]) +
-              static_cast<CommonType>(quat[1]) * static_cast<CommonType>(other[0]) +
-              static_cast<CommonType>(quat[2]) * static_cast<CommonType>(other[3]) -
-              static_cast<CommonType>(quat[3]) * static_cast<CommonType>(other[2]);
-  result[2] = static_cast<CommonType>(quat[0]) * static_cast<CommonType>(other[2]) -
-              static_cast<CommonType>(quat[1]) * static_cast<CommonType>(other[3]) +
-              static_cast<CommonType>(quat[2]) * static_cast<CommonType>(other[0]) +
-              static_cast<CommonType>(quat[3]) * static_cast<CommonType>(other[1]);
-  result[3] = static_cast<CommonType>(quat[0]) * static_cast<CommonType>(other[3]) +
-              static_cast<CommonType>(quat[1]) * static_cast<CommonType>(other[2]) -
-              static_cast<CommonType>(quat[2]) * static_cast<CommonType>(other[1]) +
-              static_cast<CommonType>(quat[3]) * static_cast<CommonType>(other[0]);
-  return result;
+  const CommonType lhs_w = static_cast<CommonType>(quat.w());
+  const CommonType lhs_x = static_cast<CommonType>(quat.x());
+  const CommonType lhs_y = static_cast<CommonType>(quat.y());
+  const CommonType lhs_z = static_cast<CommonType>(quat.z());
+  const CommonType rhs_w = static_cast<CommonType>(other.w());
+  const CommonType rhs_x = static_cast<CommonType>(other.x());
+  const CommonType rhs_y = static_cast<CommonType>(other.y());
+  const CommonType rhs_z = static_cast<CommonType>(other.z());
+  return AQuaternion<CommonType>(lhs_w * rhs_w - lhs_x * rhs_x - lhs_y * rhs_y - lhs_z * rhs_z,
+                                 lhs_w * rhs_x + lhs_x * rhs_w + lhs_y * rhs_z - lhs_z * rhs_y,
+                                 lhs_w * rhs_y - lhs_x * rhs_z + lhs_y * rhs_w + lhs_z * rhs_x,
+                                 lhs_w * rhs_z + lhs_x * rhs_y - lhs_y * rhs_x + lhs_z * rhs_w);
 }
 
 /// \brief Self-quaternion multiplication
@@ -160,18 +154,15 @@ template <typename T, typename U, ValidAccessor<T> Accessor, ValidAccessor<U> Ot
   requires HasNonConstAccessOperator<Accessor, T>
 KOKKOS_INLINE_FUNCTION constexpr void self_quat_multiplication_impl(AQuaternion<T, Accessor>& quat,
                                                                     const AQuaternion<U, OtherAccessor>& other) {
-  const T w = quat[0] * static_cast<T>(other[0]) - quat[1] * static_cast<T>(other[1]) -
-              quat[2] * static_cast<T>(other[2]) - quat[3] * static_cast<T>(other[3]);
-  const T x = quat[0] * static_cast<T>(other[1]) + quat[1] * static_cast<T>(other[0]) +
-              quat[2] * static_cast<T>(other[3]) - quat[3] * static_cast<T>(other[2]);
-  const T y = quat[0] * static_cast<T>(other[2]) - quat[1] * static_cast<T>(other[3]) +
-              quat[2] * static_cast<T>(other[0]) + quat[3] * static_cast<T>(other[1]);
-  const T z = quat[0] * static_cast<T>(other[3]) + quat[1] * static_cast<T>(other[2]) -
-              quat[2] * static_cast<T>(other[1]) + quat[3] * static_cast<T>(other[0]);
-  quat[0] = w;
-  quat[1] = x;
-  quat[2] = y;
-  quat[3] = z;
+  const T w = quat.w() * static_cast<T>(other.w()) - quat.x() * static_cast<T>(other.x()) -
+              quat.y() * static_cast<T>(other.y()) - quat.z() * static_cast<T>(other.z());
+  const T x = quat.w() * static_cast<T>(other.x()) + quat.x() * static_cast<T>(other.w()) +
+              quat.y() * static_cast<T>(other.z()) - quat.z() * static_cast<T>(other.y());
+  const T y = quat.w() * static_cast<T>(other.y()) - quat.x() * static_cast<T>(other.z()) +
+              quat.y() * static_cast<T>(other.w()) + quat.z() * static_cast<T>(other.x());
+  const T z = quat.w() * static_cast<T>(other.z()) + quat.x() * static_cast<T>(other.y()) -
+              quat.y() * static_cast<T>(other.x()) + quat.z() * static_cast<T>(other.w());
+  quat.set(w, x, y, z);
 }
 
 /// \brief AQuaternion-vector multiplication (same as R * v)
@@ -187,7 +178,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto quat_vec_multiplication_impl(const AQuater
   const AQuaternion<U> vec_quat(U(0), vec[0], vec[1], vec[2]);
   const auto quat_inv = inverse(quat);
   const auto quat_result = quat * vec_quat * quat_inv;
-  return AVector3<std::common_type_t<T, U>>(quat_result[1], quat_result[2], quat_result[3]);
+  return AVector3<std::common_type_t<T, U>>(quat_result.x(), quat_result.y(), quat_result.z());
 }
 
 /// \brief AAVector-quaternion multiplication (same as v^T * R = transpose(R^T * v))
@@ -203,7 +194,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto vec_quat_multiplication_impl(const AVector
   const AQuaternion<T> vec_quat(T(0), vec[0], vec[1], vec[2]);
   const auto quat_inv = inverse(quat);
   const auto quat_result = quat_inv * vec_quat * quat;
-  return AVector3<std::common_type_t<T, U>>(quat_result[1], quat_result[2], quat_result[3]);
+  return AVector3<std::common_type_t<T, U>>(quat_result.x(), quat_result.y(), quat_result.z());
 }
 
 /// \param[in] other The other matrix.

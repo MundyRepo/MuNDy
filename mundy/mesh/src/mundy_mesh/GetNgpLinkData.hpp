@@ -81,10 +81,6 @@ NgpLinkDataT<NgpMemSpace>& get_updated_ngp_link_data(const LinkData& link_data) 
   return std::any_cast<NgpLinkDataT<NgpMemSpace>&>(any_ngp_link_data);
 }
 
-NgpLinkData& get_updated_ngp_link_data(const LinkData& link_data) {
-  return get_updated_ngp_link_data<stk::ngp::MemSpace>(link_data);
-}
-
 }  // namespace mesh
 
 }  // namespace mundy

@@ -15,6 +15,9 @@ cmake -B build . \
     -DCMAKE_CXX_COMPILER=mpicxx \
     -DCMAKE_CXX_FLAGS="-O3 -g -fno-omit-frame-pointer -march=native" \
     -DCMAKE_INSTALL_PREFIX=${MUNDY_INSTALL} \
+    -DCTEST_BUILD_FLAGS:STRING="${CTEST_BUILD_FLAGS:--j8}" \
+    -DCTEST_PARALLEL_LEVEL:STRING="${CTEST_PARALLEL_LEVEL:-8}" \
+    -DCTEST_BUILD_NAME:STRING="${CTEST_BUILD_NAME:-jenkins-cpu-release}" \
     -DTPL_ENABLE_MPI=ON \
     -DKokkos_ENABLE_SERIAL=OFF \
     -DKokkos_ENABLE_OPENMP=ON \

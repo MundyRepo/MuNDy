@@ -38,11 +38,12 @@ namespace impl {
 // see https://github.com/google/benchmark/blob/v1.7.1/include/benchmark/benchmark.h#L514
 // see https://github.com/facebook/folly/blob/v2023.01.30.00/folly/lang/Hint-inl.h#L54-L58
 // see https://learn.microsoft.com/en-us/cpp/preprocessor/optimize
-#    if defined(_MSC_VER)
-#        pragma optimize("", off)
-void do_not_optimize_away_sink(void const*) {}
-#        pragma optimize("", on)
-#    endif
+#if defined(_MSC_VER)
+#pragma optimize("", off)
+void do_not_optimize_away_sink(void const*) {
+}
+#pragma optimize("", on)
+#endif
 
 template <typename T>
 void do_not_optimize_away(T const& val) {
