@@ -415,7 +415,7 @@ contact, they can.
       .append<RADIUS>(contact_radius_field);
   };
   auto assemble_hydro_spheres_agg = [&spheres]() {
-    return Aggregate:topology::PARTICLE>(spheres)
+    return Aggregate<stk::topology::PARTICLE>(spheres)
       .append<CENTER>(center_field)
       .append<RADIUS>(hydro_radius_field);
   };

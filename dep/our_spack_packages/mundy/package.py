@@ -43,7 +43,7 @@ class Mundy(CMakePackage, CudaPackage):
     tags = ["???"]
 
     version("main", branch="main", submodules=True)
-    version("dev", branch="streamlining", submodules=True)
+    version("dev", branch="main", submodules=True)
     # version("#.#.#", sha256="<fill-me-in>", submodules=True)
 
     #

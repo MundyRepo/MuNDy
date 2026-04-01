@@ -11,7 +11,7 @@ MUNDY_SOURCE_DIR=$3
 #   bash ../do-cmake.sh /mnt/home/cedelmaier/Projects/Software/spack/opt/spack/linux-rocky8-cascadelake/gcc-11.4.0/trilinos-16.0.0-jg6itzcs5ms7vsuecbejqfr7l3bbjm2f/ ~/mundyscratch ../
 
 # Using my spack tril16
-#   source source ~/software/MundyPerformanceTests/apps/conway_prc1_spacing_2026/load_cpu_bp.sh
+#   source ~/software/MundyPerformanceTests/apps/conway_prc1_spacing_2026/load_cpu_bp.sh
 #   bash ../do-cmake.sh /mnt/home/bpalmer/spack/opt/spack/linux-rocky8-cascadelake/gcc-11.4.0/trilinos-16.0.0-vqcs3hqcerjbv6g3ipewq364pxkjnutn ~/envs/MundyScratch/ ../
 
 echo "Using Trilinos dir: $TRILINOS_ROOT_DIR"
