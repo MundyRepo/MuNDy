@@ -198,6 +198,7 @@ template <typename T>
 concept AnyStringSink = LiteralStringSink<T> || RuntimeStringSink<T>;
 
 /// \brief Start a new sink pipeline.
+template <typename T = void>
 KOKKOS_INLINE_FUNCTION constexpr impl::SinkStart sink() {
   return {};
 }
