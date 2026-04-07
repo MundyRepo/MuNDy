@@ -26,6 +26,7 @@ set(NOINSTALLHEADERS
     src/mundy_utils/rng.hpp
     src/mundy_utils/storage.hpp
     src/mundy_utils/StringLiteral.hpp
+    src/mundy_utils/StringSink.hpp
     src/mundy_utils/suppress_warnings.hpp
     src/mundy_utils/throw_assert.hpp
     src/mundy_utils/tuple.hpp
