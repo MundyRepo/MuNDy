@@ -1,7 +1,9 @@
 FIND_PACKAGE(Tpetra REQUIRED
     CONFIG
-    HINTS
+    NO_DEFAULT_PATH
+    PATHS
       ${TPL_Tpetra_DIR}/lib/cmake/Tpetra
+      ${TPL_Tpetra_DIR}/lib64/cmake/Tpetra
       ${TPL_Tpetra_DIR}
     COMPONENTS
       ${${PACKAGE_NAME}_Tpetra_REQUIRED_COMPONENTS}

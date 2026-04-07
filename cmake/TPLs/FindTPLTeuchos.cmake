@@ -1,7 +1,9 @@
 FIND_PACKAGE(Teuchos REQUIRED
     CONFIG
-    HINTS
+    NO_DEFAULT_PATH
+    PATHS
       ${TPL_Teuchos_DIR}/lib/cmake/Teuchos
+      ${TPL_Teuchos_DIR}/lib64/cmake/Teuchos
       ${TPL_Teuchos_DIR}
     COMPONENTS
       ${${PACKAGE_NAME}_Teuchos_REQUIRED_COMPONENTS}

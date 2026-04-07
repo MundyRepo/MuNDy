@@ -1,7 +1,9 @@
 FIND_PACKAGE(KokkosKernels REQUIRED
     CONFIG
-    HINTS
+    NO_DEFAULT_PATH
+    PATHS
       ${TPL_KokkosKernels_DIR}/lib/cmake/KokkosKernels
+      ${TPL_KokkosKernels_DIR}/lib64/cmake/KokkosKernels
       ${TPL_KokkosKernels_DIR}
     COMPONENTS
       ${${PACKAGE_NAME}_KokkosKernels_REQUIRED_COMPONENTS}

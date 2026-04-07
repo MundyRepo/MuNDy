@@ -1,7 +1,9 @@
 FIND_PACKAGE(Belos REQUIRED
     CONFIG
-    HINTS
+    NO_DEFAULT_PATH
+    PATHS
       ${TPL_Belos_DIR}/lib/cmake/Belos
+      ${TPL_Belos_DIR}/lib64/cmake/Belos
       ${TPL_Belos_DIR}
     COMPONENTS
       ${${PACKAGE_NAME}_Belos_REQUIRED_COMPONENTS}

@@ -1,7 +1,9 @@
 FIND_PACKAGE(ArborX REQUIRED
     CONFIG
-    HINTS
+    NO_DEFAULT_PATH
+    PATHS
       ${TPL_ArborX_DIR}/lib/cmake/ArborX
+      ${TPL_ArborX_DIR}/lib64/cmake/ArborX
       ${TPL_ArborX_DIR}
 )
 

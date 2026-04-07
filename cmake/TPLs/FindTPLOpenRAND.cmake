@@ -5,7 +5,8 @@
 
 FIND_PACKAGE(OpenRAND REQUIRED
     CONFIG
-    HINTS
+    NO_DEFAULT_PATH
+    PATHS
       ${TPL_OpenRAND_DIR}/lib/cmake/OpenRAND
       ${TPL_OpenRAND_DIR}/lib64/cmake/OpenRAND
       ${TPL_OpenRAND_DIR}

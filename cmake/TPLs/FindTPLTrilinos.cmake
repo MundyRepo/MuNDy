@@ -1,7 +1,9 @@
 FIND_PACKAGE(Trilinos REQUIRED
     CONFIG
-    HINTS
+    NO_DEFAULT_PATH
+    PATHS
       ${TPL_Trilinos_DIR}/lib/cmake/Trilinos
+      ${TPL_Trilinos_DIR}/lib64/cmake/Trilinos
       ${TPL_Trilinos_DIR}
     COMPONENTS
       ${${PACKAGE_NAME}_Trilinos_REQUIRED_COMPONENTS}

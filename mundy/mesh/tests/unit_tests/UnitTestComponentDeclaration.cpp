@@ -50,21 +50,6 @@ struct INFERRED_FORCE;
 
 }  // namespace
 
-template <>
-struct component_tag_traits<DECLARED_COORDS> {
-  static constexpr stk::topology::rank_t rank = stk::topology::ELEM_RANK;
-};
-
-template <>
-struct component_tag_traits<DECLARED_SPEED> {
-  static constexpr stk::topology::rank_t rank = stk::topology::ELEM_RANK;
-};
-
-template <>
-struct component_tag_traits<INFERRED_FORCE> {
-  static constexpr stk::topology::rank_t rank = stk::topology::ELEM_RANK;
-};
-
 namespace {
 
 TEST(UnitTestComponentDeclaration, FieldAndSharedDeclarationsIntegrateWithAggregateAndParts) {
@@ -140,7 +125,12 @@ TEST(UnitTestComponentDeclaration, FieldComponentDeclarationAllowsAccessBeforeTy
   meta_data.use_simple_fields();
 
   FieldDeclarationHelper field_decl(meta_data);
-  auto force = field_decl.access<Vector3d>().name("INFERRED_FORCE").type<double>().tag<INFERRED_FORCE>().declare();
+  auto force = field_decl.access<Vector3d>()
+                   .name("INFERRED_FORCE")
+                   .type<double>()
+                   .tag<INFERRED_FORCE>()
+                   .rank(stk::topology::ELEM_RANK)
+                   .declare();
 
   PartDeclarationHelper part_decl(meta_data);
   stk::mesh::Part& particle_part =
@@ -170,7 +160,7 @@ TEST(UnitTestComponentDeclaration, SharedComponentDeclarationUsesCanonicalAccess
   }
 
   ComponentDeclarationHelper component_decl;
-  auto speed = component_decl.shared(3.5).tag<DECLARED_SPEED>().declare();
+  auto speed = component_decl.shared(3.5).tag<DECLARED_SPEED>().rank(stk::topology::ELEM_RANK).declare();
 
   stk::mesh::Entity entity = stk::mesh::Entity();
   auto speed_view = speed(entity);

@@ -1,7 +1,9 @@
 FIND_PACKAGE(fmt REQUIRED
     CONFIG
-    HINTS
+    NO_DEFAULT_PATH
+    PATHS
       ${TPL_fmt_DIR}/lib/cmake/fmt
+      ${TPL_fmt_DIR}/lib64/cmake/fmt
       ${TPL_fmt_DIR}
 )
 

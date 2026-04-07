@@ -44,8 +44,7 @@ namespace mundy {
 
 namespace mesh {
 
-template <typename FieldScalarType, typename AccessLike, typename Tag = void,
-          stk::topology::rank_t Rank = stk::topology::INVALID_RANK>
+template <typename FieldScalarType, typename AccessLike, typename Tag = void>
 class TaggedFieldComponentDeclarationHelperT;
 
 /// \brief Helper class for declaring a field
@@ -258,7 +257,7 @@ class FieldDeclarationHelperT {
   stk::io::FieldOutputType output_type_;
 
   friend class FieldDeclarationHelper;
-  template <typename OtherFieldScalarType, typename OtherAccessLike, typename OtherTag, stk::topology::rank_t OtherRank>
+  template <typename OtherFieldScalarType, typename OtherAccessLike, typename OtherTag>
   friend class TaggedFieldComponentDeclarationHelperT;
 };
 

@@ -1,6 +1,8 @@
 FIND_PACKAGE(GTest REQUIRED
-    HINTS
+    NO_DEFAULT_PATH
+    PATHS
       ${TPL_GTest_DIR}/lib/cmake/GTest
+      ${TPL_GTest_DIR}/lib64/cmake/GTest
       ${TPL_GTest_DIR}
 )
 
