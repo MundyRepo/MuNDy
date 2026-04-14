@@ -20,6 +20,7 @@ pipeline {
         MUNDY_INSTALL = "${WORKSPACE}/mundy_install"
         SPACK_ROOT = "/home/testuser/spack"
         SPACK_TRILINOS = "tril16_cpu"
+        OMPI_MCA_rmaps_base_oversubscribe = "1"
       }
       stages {
         stage('Build') {
