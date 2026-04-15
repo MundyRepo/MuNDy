@@ -1,11 +1,15 @@
-FIND_PACKAGE(fmt REQUIRED
-    CONFIG
-    NO_DEFAULT_PATH
-    PATHS
-      ${TPL_fmt_DIR}/lib/cmake/fmt
-      ${TPL_fmt_DIR}/lib64/cmake/fmt
-      ${TPL_fmt_DIR}
-)
+if (DEFINED TPL_fmt_DIR)
+  FIND_PACKAGE(fmt REQUIRED
+      CONFIG
+      NO_DEFAULT_PATH
+      PATHS
+        ${TPL_fmt_DIR}/lib/cmake/fmt
+        ${TPL_fmt_DIR}/lib64/cmake/fmt
+        ${TPL_fmt_DIR}
+  )
+else()
+  message(FATAL_ERROR "TPL_fmt_DIR must be defined before calling FIND_PACKAGE(fmt).")
+endif()
 
 # Print out where fmt was found
 message(STATUS "Found fmt: ${fmt_DIR}")

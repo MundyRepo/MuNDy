@@ -2,7 +2,11 @@ tribits_tpl_allow_pre_find_package(pvfmm pvfmm_ALLOW_PREFIND)
 
 if (pvfmm_ALLOW_PREFIND)
 
-  find_package(pvfmm)
+  if (DEFINED TPL_PVFMM_DIR)
+    find_package(pvfmm)
+  else()
+    message(FATAL_ERROR "TPL_PVFMM_DIR must be defined before calling find_package(pvfmm).")
+  endif()
 
   if (pvfmm_FOUND)
     # Tell TriBITS that we found PVFMM and there no need to look any further

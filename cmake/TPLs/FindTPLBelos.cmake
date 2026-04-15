@@ -1,15 +1,19 @@
-FIND_PACKAGE(Belos REQUIRED
-    CONFIG
-    NO_DEFAULT_PATH
-    PATHS
-      ${TPL_Belos_DIR}/lib/cmake/Belos
-      ${TPL_Belos_DIR}/lib64/cmake/Belos
-      ${TPL_Belos_DIR}
-    COMPONENTS
-      ${${PACKAGE_NAME}_Belos_REQUIRED_COMPONENTS}
-    OPTIONAL_COMPONENTS
-      ${${PACKAGE_NAME}_Belos_OPTIONAL_COMPONENTS}
-)
+if (DEFINED TPL_Belos_DIR)
+  FIND_PACKAGE(Belos REQUIRED
+      CONFIG
+      NO_DEFAULT_PATH
+      PATHS
+        ${TPL_Belos_DIR}/lib/cmake/Belos
+        ${TPL_Belos_DIR}/lib64/cmake/Belos
+        ${TPL_Belos_DIR}
+      COMPONENTS
+        ${${PACKAGE_NAME}_Belos_REQUIRED_COMPONENTS}
+      OPTIONAL_COMPONENTS
+        ${${PACKAGE_NAME}_Belos_OPTIONAL_COMPONENTS}
+  )
+else()
+  message(FATAL_ERROR "TPL_Belos_DIR must be defined before calling FIND_PACKAGE(Belos).")
+endif()
 
 # Print out where Belos was found
 message(STATUS "Found Belos: ${Belos_DIR}")

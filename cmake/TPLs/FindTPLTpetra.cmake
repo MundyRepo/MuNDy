@@ -1,15 +1,19 @@
-FIND_PACKAGE(Tpetra REQUIRED
-    CONFIG
-    NO_DEFAULT_PATH
-    PATHS
-      ${TPL_Tpetra_DIR}/lib/cmake/Tpetra
-      ${TPL_Tpetra_DIR}/lib64/cmake/Tpetra
-      ${TPL_Tpetra_DIR}
-    COMPONENTS
-      ${${PACKAGE_NAME}_Tpetra_REQUIRED_COMPONENTS}
-    OPTIONAL_COMPONENTS
-      ${${PACKAGE_NAME}_Tpetra_OPTIONAL_COMPONENTS}
-)
+if (DEFINED TPL_Tpetra_DIR)
+  FIND_PACKAGE(Tpetra REQUIRED
+      CONFIG
+      NO_DEFAULT_PATH
+      PATHS
+        ${TPL_Tpetra_DIR}/lib/cmake/Tpetra
+        ${TPL_Tpetra_DIR}/lib64/cmake/Tpetra
+        ${TPL_Tpetra_DIR}
+      COMPONENTS
+        ${${PACKAGE_NAME}_Tpetra_REQUIRED_COMPONENTS}
+      OPTIONAL_COMPONENTS
+        ${${PACKAGE_NAME}_Tpetra_OPTIONAL_COMPONENTS}
+  )
+else()
+  message(FATAL_ERROR "TPL_Tpetra_DIR must be defined before calling FIND_PACKAGE(Tpetra).")
+endif()
 
 # Print out where Tpetra was found
 message(STATUS "Found Tpetra: ${Tpetra_DIR}")

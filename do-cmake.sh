@@ -36,6 +36,7 @@ cmake \
 -DMundy_ENABLE_MundyMeta=ON \
 -DMundy_ENABLE_TESTS=ON \
 -DMundy_ENABLE_GTest=ON \
+-DMPI_EXEC_MAX_NUMPROCS=${MPI_EXEC_MAX_NUMPROCS:-1} \
 -DMundy_ENABLE_STKFMM=OFF \
 -DMundy_ENABLE_PVFMM=OFF \
 -DMundy_ENABLE_KokkosKernels=ON \

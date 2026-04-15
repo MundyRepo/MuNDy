@@ -3,14 +3,18 @@
 #   MUST_FIND_ALL_HEADERS 
 #   )
 
-FIND_PACKAGE(OpenRAND REQUIRED
-    CONFIG
-    NO_DEFAULT_PATH
-    PATHS
-      ${TPL_OpenRAND_DIR}/lib/cmake/OpenRAND
-      ${TPL_OpenRAND_DIR}/lib64/cmake/OpenRAND
-      ${TPL_OpenRAND_DIR}
-)
+if (DEFINED TPL_OpenRAND_DIR)
+  FIND_PACKAGE(OpenRAND REQUIRED
+      CONFIG
+      NO_DEFAULT_PATH
+      PATHS
+        ${TPL_OpenRAND_DIR}/lib/cmake/OpenRAND
+        ${TPL_OpenRAND_DIR}/lib64/cmake/OpenRAND
+        ${TPL_OpenRAND_DIR}
+  )
+else()
+  message(FATAL_ERROR "TPL_OpenRAND_DIR must be defined before calling FIND_PACKAGE(OpenRAND).")
+endif()
 
 # Print out where OpenRAND was found
 message(STATUS "Found OpenRAND: ${OpenRAND_DIR}")

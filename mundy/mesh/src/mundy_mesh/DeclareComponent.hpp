@@ -264,6 +264,76 @@ using shared_component_source_value_t = typename shared_component_source_value<S
 
 }  // namespace impl
 
+template <typename FieldScalarType, typename Tag>
+class TaggedFieldDeclarationHelperT {
+ public:
+  using our_t = TaggedFieldDeclarationHelperT<FieldScalarType, Tag>;
+  using field_scalar_type = std::remove_cvref_t<FieldScalarType>;
+
+  TaggedFieldDeclarationHelperT(const TaggedFieldDeclarationHelperT&) = default;
+  TaggedFieldDeclarationHelperT(TaggedFieldDeclarationHelperT&&) = default;
+  TaggedFieldDeclarationHelperT& operator=(const TaggedFieldDeclarationHelperT&) = default;
+  TaggedFieldDeclarationHelperT& operator=(TaggedFieldDeclarationHelperT&&) = default;
+
+  our_t rank(stk::mesh::EntityRank rank) {
+    snapshot_.has_rank = true;
+    snapshot_.rank = rank;
+    return *this;
+  }
+
+  our_t name(const std::string& field_name) {
+    snapshot_.has_name = true;
+    snapshot_.field_name = field_name;
+    return *this;
+  }
+
+  our_t role(Ioss::Field::RoleType field_role) {
+    snapshot_.has_role = true;
+    snapshot_.field_role = field_role;
+    return *this;
+  }
+
+  our_t output_type(stk::io::FieldOutputType output_type) {
+    snapshot_.has_output_type = true;
+    snapshot_.output_type = output_type;
+    return *this;
+  }
+
+  template <typename T>
+  auto type() const {
+    using new_field_scalar_type = std::remove_cvref_t<T>;
+    return TaggedFieldDeclarationHelperT<new_field_scalar_type, Tag>(snapshot_);
+  }
+
+  template <typename AccessLike>
+  auto access() const {
+    return TaggedFieldComponentDeclarationHelperT<FieldScalarType, AccessLike, Tag>(snapshot_);
+  }
+
+  template <typename NewTag>
+  auto tag() const {
+    auto next = snapshot_;
+    return TaggedFieldDeclarationHelperT<FieldScalarType, NewTag>(next);
+  }
+
+  void declare() const {
+    MUNDY_THROW_REQUIRE(false, std::logic_error,
+                        "Component access must be set before declaring a tagged field component.");
+  }
+
+ private:
+  explicit TaggedFieldDeclarationHelperT(impl::FieldDeclarationSnapshot snapshot) : snapshot_(std::move(snapshot)) {
+  }
+
+  impl::FieldDeclarationSnapshot snapshot_;
+
+  friend class FieldDeclarationHelper;
+  template <typename T>
+  friend class FieldDeclarationHelperT;
+  template <typename OtherFieldScalarType, typename OtherTag>
+  friend class TaggedFieldDeclarationHelperT;
+};  // TaggedFieldDeclarationHelperT
+
 template <typename FieldScalarType, typename AccessLike, typename Tag>
 class TaggedFieldComponentDeclarationHelperT {
  public:
@@ -352,6 +422,8 @@ class TaggedFieldComponentDeclarationHelperT {
   friend class FieldDeclarationHelper;
   template <typename T>
   friend class FieldDeclarationHelperT;
+  template <typename OtherFieldScalarType, typename OtherTag>
+  friend class TaggedFieldDeclarationHelperT;
   template <typename OtherFieldScalarType, typename OtherAccessLike, typename OtherTag>
   friend class TaggedFieldComponentDeclarationHelperT;
 };  // TaggedFieldComponentDeclarationHelperT
@@ -445,11 +517,23 @@ TaggedFieldComponentDeclarationHelperT<T, AccessLike> FieldDeclarationHelperT<T>
   return TaggedFieldComponentDeclarationHelperT<T, AccessLike>(impl::make_field_declaration_snapshot(*this));
 }
 
+template <typename T>
+template <typename Tag>
+TaggedFieldDeclarationHelperT<T, Tag> FieldDeclarationHelperT<T>::tag() const {
+  return TaggedFieldDeclarationHelperT<T, Tag>(impl::make_field_declaration_snapshot(*this));
+}
+
 template <typename AccessLike>
 TaggedFieldComponentDeclarationHelperT<FieldDeclarationHelper::invalid_field_scalar_type, AccessLike>
 FieldDeclarationHelper::access() const {
   return TaggedFieldComponentDeclarationHelperT<invalid_field_scalar_type, AccessLike>(
       impl::make_field_declaration_snapshot(*this));
+}
+
+template <typename Tag>
+TaggedFieldDeclarationHelperT<FieldDeclarationHelper::invalid_field_scalar_type, Tag> FieldDeclarationHelper::tag()
+    const {
+  return TaggedFieldDeclarationHelperT<invalid_field_scalar_type, Tag>(impl::make_field_declaration_snapshot(*this));
 }
 
 }  // namespace mesh

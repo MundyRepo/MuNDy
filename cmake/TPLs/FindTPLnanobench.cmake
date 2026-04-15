@@ -1,11 +1,15 @@
-FIND_PACKAGE(nanobench REQUIRED
-    CONFIG
-    NO_DEFAULT_PATH
-    PATHS
-      ${TPL_nanobench_DIR}/lib/cmake/nanobench
-      ${TPL_nanobench_DIR}/lib64/cmake/nanobench
-      ${TPL_nanobench_DIR}
-)
+if (DEFINED TPL_nanobench_DIR)
+  FIND_PACKAGE(nanobench REQUIRED
+      CONFIG
+      NO_DEFAULT_PATH
+      PATHS
+        ${TPL_nanobench_DIR}/lib/cmake/nanobench
+        ${TPL_nanobench_DIR}/lib64/cmake/nanobench
+        ${TPL_nanobench_DIR}
+  )
+else()
+  message(FATAL_ERROR "TPL_nanobench_DIR must be defined before calling FIND_PACKAGE(nanobench).")
+endif()
 
 # Print out where nanobench was found
 message(STATUS "Found nanobench: ${nanobench_DIR}")
