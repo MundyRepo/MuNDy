@@ -1,13 +1,19 @@
-FIND_PACKAGE(STK REQUIRED
-    CONFIG
-    HINTS
-      ${TPL_STK_DIR}/lib/cmake/STK
-      ${TPL_STK_DIR}
-    COMPONENTS
-      ${${PACKAGE_NAME}_STK_REQUIRED_COMPONENTS}
-    OPTIONAL_COMPONENTS
-      ${${PACKAGE_NAME}_STK_OPTIONAL_COMPONENTS}
-)
+if (DEFINED TPL_STK_DIR)
+  FIND_PACKAGE(STK REQUIRED
+      CONFIG
+      NO_DEFAULT_PATH
+      PATHS
+        ${TPL_STK_DIR}/lib/cmake/STK
+        ${TPL_STK_DIR}/lib64/cmake/STK
+        ${TPL_STK_DIR}
+      COMPONENTS
+        ${${PACKAGE_NAME}_STK_REQUIRED_COMPONENTS}
+      OPTIONAL_COMPONENTS
+        ${${PACKAGE_NAME}_STK_OPTIONAL_COMPONENTS}
+  )
+else()
+  message(FATAL_ERROR "TPL_STK_DIR must be defined before calling FIND_PACKAGE(STK).")
+endif()
 
 # Print out where STK was found
 message(STATUS "Found STK: ${STK_DIR}")

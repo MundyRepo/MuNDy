@@ -1,9 +1,15 @@
-FIND_PACKAGE(ArborX REQUIRED
-    CONFIG
-    HINTS
-      ${TPL_ArborX_DIR}/lib/cmake/ArborX
-      ${TPL_ArborX_DIR}
-)
+if (DEFINED TPL_ArborX_DIR)
+  FIND_PACKAGE(ArborX REQUIRED
+      CONFIG
+      NO_DEFAULT_PATH
+      PATHS
+        ${TPL_ArborX_DIR}/lib/cmake/ArborX
+        ${TPL_ArborX_DIR}/lib64/cmake/ArborX
+        ${TPL_ArborX_DIR}
+  )
+else()
+  message(FATAL_ERROR "TPL_ArborX_DIR must be defined before calling FIND_PACKAGE(ArborX).")
+endif()
 
 # Print out where ArborX was found
 message(STATUS "Found ArborX: ${ArborX_DIR}")

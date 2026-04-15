@@ -95,24 +95,6 @@ stk::mesh::Field<T>& declare_field_from_snapshot(const FieldDeclarationSnapshot&
   return field;
 }
 
-template <stk::topology::rank_t Rank>
-void apply_tag_rank_default(bool& has_rank, stk::mesh::EntityRank& rank) {
-  if constexpr (Rank != stk::topology::INVALID_RANK) {
-    if (!has_rank) {
-      has_rank = true;
-      rank = Rank;
-    }
-  }
-}
-
-template <stk::topology::rank_t Rank>
-void require_rank_matches_tag(stk::mesh::EntityRank rank) {
-  if constexpr (Rank != stk::topology::INVALID_RANK) {
-    MUNDY_THROW_REQUIRE(rank == Rank, std::invalid_argument,
-                        sink() << "Component declaration rank " << rank << " does not match tag rank " << Rank << ".");
-  }
-}
-
 }  // namespace impl
 
 }  // namespace mesh

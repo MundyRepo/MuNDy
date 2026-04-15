@@ -87,14 +87,6 @@ struct LINKED_ENTITIES;
 template <typename SharedType, typename NgpMemSpace>
 class NgpSharedComponent;
 
-template <typename Tag>
-struct component_tag_traits;
-
-template <typename Tag>
-concept HasComponentTagTraits = requires {
-  { component_tag_traits<Tag>::rank } -> std::convertible_to<stk::topology::rank_t>;
-};
-
 namespace access {
 
 template <typename ValueType>

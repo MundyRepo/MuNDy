@@ -264,10 +264,80 @@ using shared_component_source_value_t = typename shared_component_source_value<S
 
 }  // namespace impl
 
-template <typename FieldScalarType, typename AccessLike, typename Tag, stk::topology::rank_t Rank>
+template <typename FieldScalarType, typename Tag>
+class TaggedFieldDeclarationHelperT {
+ public:
+  using our_t = TaggedFieldDeclarationHelperT<FieldScalarType, Tag>;
+  using field_scalar_type = std::remove_cvref_t<FieldScalarType>;
+
+  TaggedFieldDeclarationHelperT(const TaggedFieldDeclarationHelperT&) = default;
+  TaggedFieldDeclarationHelperT(TaggedFieldDeclarationHelperT&&) = default;
+  TaggedFieldDeclarationHelperT& operator=(const TaggedFieldDeclarationHelperT&) = default;
+  TaggedFieldDeclarationHelperT& operator=(TaggedFieldDeclarationHelperT&&) = default;
+
+  our_t rank(stk::mesh::EntityRank rank) {
+    snapshot_.has_rank = true;
+    snapshot_.rank = rank;
+    return *this;
+  }
+
+  our_t name(const std::string& field_name) {
+    snapshot_.has_name = true;
+    snapshot_.field_name = field_name;
+    return *this;
+  }
+
+  our_t role(Ioss::Field::RoleType field_role) {
+    snapshot_.has_role = true;
+    snapshot_.field_role = field_role;
+    return *this;
+  }
+
+  our_t output_type(stk::io::FieldOutputType output_type) {
+    snapshot_.has_output_type = true;
+    snapshot_.output_type = output_type;
+    return *this;
+  }
+
+  template <typename T>
+  auto type() const {
+    using new_field_scalar_type = std::remove_cvref_t<T>;
+    return TaggedFieldDeclarationHelperT<new_field_scalar_type, Tag>(snapshot_);
+  }
+
+  template <typename AccessLike>
+  auto access() const {
+    return TaggedFieldComponentDeclarationHelperT<FieldScalarType, AccessLike, Tag>(snapshot_);
+  }
+
+  template <typename NewTag>
+  auto tag() const {
+    auto next = snapshot_;
+    return TaggedFieldDeclarationHelperT<FieldScalarType, NewTag>(next);
+  }
+
+  void declare() const {
+    MUNDY_THROW_REQUIRE(false, std::logic_error,
+                        "Component access must be set before declaring a tagged field component.");
+  }
+
+ private:
+  explicit TaggedFieldDeclarationHelperT(impl::FieldDeclarationSnapshot snapshot) : snapshot_(std::move(snapshot)) {
+  }
+
+  impl::FieldDeclarationSnapshot snapshot_;
+
+  friend class FieldDeclarationHelper;
+  template <typename T>
+  friend class FieldDeclarationHelperT;
+  template <typename OtherFieldScalarType, typename OtherTag>
+  friend class TaggedFieldDeclarationHelperT;
+};  // TaggedFieldDeclarationHelperT
+
+template <typename FieldScalarType, typename AccessLike, typename Tag>
 class TaggedFieldComponentDeclarationHelperT {
  public:
-  using our_t = TaggedFieldComponentDeclarationHelperT<FieldScalarType, AccessLike, Tag, Rank>;
+  using our_t = TaggedFieldComponentDeclarationHelperT<FieldScalarType, AccessLike, Tag>;
   using access_like = AccessLike;
   using canonical_access = canonical_component_access_t<AccessLike>;
   using access_traits = component_access_traits<canonical_access>;
@@ -313,27 +383,22 @@ class TaggedFieldComponentDeclarationHelperT {
     using new_field_scalar_type = std::remove_cvref_t<T>;
     static_assert(std::is_same_v<new_field_scalar_type, typename access_traits::field_scalar_type>,
                   "The chosen field scalar type is incompatible with the chosen component access.");
-    return TaggedFieldComponentDeclarationHelperT<new_field_scalar_type, AccessLike, Tag, Rank>(snapshot_);
+    return TaggedFieldComponentDeclarationHelperT<new_field_scalar_type, AccessLike, Tag>(snapshot_);
   }
 
   template <typename NewAccessLike>
   auto access() const {
-    return TaggedFieldComponentDeclarationHelperT<FieldScalarType, NewAccessLike, Tag, Rank>(snapshot_);
+    return TaggedFieldComponentDeclarationHelperT<FieldScalarType, NewAccessLike, Tag>(snapshot_);
   }
 
   template <typename NewTag>
-    requires HasComponentTagTraits<NewTag>
   auto tag() const {
-    constexpr stk::topology::rank_t new_rank = component_tag_traits<NewTag>::rank;
     auto next = snapshot_;
-    impl::apply_tag_rank_default<new_rank>(next.has_rank, next.rank);
-    return TaggedFieldComponentDeclarationHelperT<FieldScalarType, AccessLike, NewTag, new_rank>(next);
+    return TaggedFieldComponentDeclarationHelperT<FieldScalarType, AccessLike, NewTag>(next);
   }
 
   auto declare() const {
     auto snapshot = snapshot_;
-    impl::apply_tag_rank_default<Rank>(snapshot.has_rank, snapshot.rank);
-    impl::require_rank_matches_tag<Rank>(snapshot.rank);
     impl::apply_default_output_type_if_needed<canonical_access>(snapshot);
 
     stk::mesh::Field<field_scalar_type>& field = impl::declare_field_from_snapshot<field_scalar_type>(snapshot);
@@ -357,7 +422,9 @@ class TaggedFieldComponentDeclarationHelperT {
   friend class FieldDeclarationHelper;
   template <typename T>
   friend class FieldDeclarationHelperT;
-  template <typename OtherFieldScalarType, typename OtherAccessLike, typename OtherTag, stk::topology::rank_t OtherRank>
+  template <typename OtherFieldScalarType, typename OtherTag>
+  friend class TaggedFieldDeclarationHelperT;
+  template <typename OtherFieldScalarType, typename OtherAccessLike, typename OtherTag>
   friend class TaggedFieldComponentDeclarationHelperT;
 };  // TaggedFieldComponentDeclarationHelperT
 
@@ -365,11 +432,10 @@ class TaggedFieldComponentDeclarationHelperT {
 // was or why it exists It must exist because it may either be a raw value that needs to be copied into host storage or
 // a rank-1 Kokkos::View in HostSpace of extent 1 that can be aliased. But this is not at all clear from the current doc
 // (which currently doesn't exist)
-template <typename SharedSource, typename AccessLike, typename Tag = void,
-          stk::topology::rank_t Rank = stk::topology::INVALID_RANK>
+template <typename SharedSource, typename AccessLike, typename Tag = void>
 class TaggedSharedComponentDeclarationHelperT {
  public:
-  using our_t = TaggedSharedComponentDeclarationHelperT<SharedSource, AccessLike, Tag, Rank>;
+  using our_t = TaggedSharedComponentDeclarationHelperT<SharedSource, AccessLike, Tag>;
   using shared_source_type = SharedSource;
   using access_like = AccessLike;
   using canonical_access = canonical_component_access_t<AccessLike>;
@@ -381,7 +447,6 @@ class TaggedSharedComponentDeclarationHelperT {
 
   explicit TaggedSharedComponentDeclarationHelperT(shared_source_type shared_source)
       : shared_source_(std::move(shared_source)), has_rank_(false), rank_(stk::topology::INVALID_RANK) {
-    impl::apply_tag_rank_default<Rank>(has_rank_, rank_);
   }
 
   TaggedSharedComponentDeclarationHelperT(const TaggedSharedComponentDeclarationHelperT&) = default;
@@ -397,27 +462,23 @@ class TaggedSharedComponentDeclarationHelperT {
 
   template <typename NewAccessLike>
   auto access() const {
-    auto next = TaggedSharedComponentDeclarationHelperT<shared_source_type, NewAccessLike, Tag, Rank>(shared_source_);
+    auto next = TaggedSharedComponentDeclarationHelperT<shared_source_type, NewAccessLike, Tag>(shared_source_);
     next.has_rank_ = has_rank_;
     next.rank_ = rank_;
     return next;
   }
 
   template <typename NewTag>
-    requires HasComponentTagTraits<NewTag>
   auto tag() const {
-    constexpr stk::topology::rank_t new_rank = component_tag_traits<NewTag>::rank;
     auto next =
-        TaggedSharedComponentDeclarationHelperT<shared_source_type, AccessLike, NewTag, new_rank>(shared_source_);
+        TaggedSharedComponentDeclarationHelperT<shared_source_type, AccessLike, NewTag>(shared_source_);
     next.has_rank_ = has_rank_;
     next.rank_ = rank_;
-    impl::apply_tag_rank_default<new_rank>(next.has_rank_, next.rank_);
     return next;
   }
 
   auto declare() const {
     MUNDY_THROW_REQUIRE(has_rank_, std::logic_error, "Component rank must be set before declaring a shared component.");
-    impl::require_rank_matches_tag<Rank>(rank_);
 
     using component_type = typename access_traits::shared_component_t;
     component_type component(shared_source_);
@@ -434,7 +495,7 @@ class TaggedSharedComponentDeclarationHelperT {
   bool has_rank_;
   stk::mesh::EntityRank rank_;
 
-  template <typename OtherSharedSource, typename OtherAccessLike, typename OtherTag, stk::topology::rank_t OtherRank>
+  template <typename OtherSharedSource, typename OtherAccessLike, typename OtherTag>
   friend class TaggedSharedComponentDeclarationHelperT;
 };  // TaggedSharedComponentDeclarationHelperT
 
@@ -456,11 +517,23 @@ TaggedFieldComponentDeclarationHelperT<T, AccessLike> FieldDeclarationHelperT<T>
   return TaggedFieldComponentDeclarationHelperT<T, AccessLike>(impl::make_field_declaration_snapshot(*this));
 }
 
+template <typename T>
+template <typename Tag>
+TaggedFieldDeclarationHelperT<T, Tag> FieldDeclarationHelperT<T>::tag() const {
+  return TaggedFieldDeclarationHelperT<T, Tag>(impl::make_field_declaration_snapshot(*this));
+}
+
 template <typename AccessLike>
 TaggedFieldComponentDeclarationHelperT<FieldDeclarationHelper::invalid_field_scalar_type, AccessLike>
 FieldDeclarationHelper::access() const {
   return TaggedFieldComponentDeclarationHelperT<invalid_field_scalar_type, AccessLike>(
       impl::make_field_declaration_snapshot(*this));
+}
+
+template <typename Tag>
+TaggedFieldDeclarationHelperT<FieldDeclarationHelper::invalid_field_scalar_type, Tag> FieldDeclarationHelper::tag()
+    const {
+  return TaggedFieldDeclarationHelperT<invalid_field_scalar_type, Tag>(impl::make_field_declaration_snapshot(*this));
 }
 
 }  // namespace mesh

@@ -46,28 +46,17 @@ namespace {
 
 struct DECLARED_COORDS;
 struct DECLARED_SPEED;
-struct INFERRED_FORCE;
+struct ORDERED_FIELD_1;
+struct ORDERED_FIELD_2;
+struct ORDERED_FIELD_3;
+struct ORDERED_FIELD_4;
+struct ORDERED_FIELD_5;
 
 }  // namespace
 
-template <>
-struct component_tag_traits<DECLARED_COORDS> {
-  static constexpr stk::topology::rank_t rank = stk::topology::ELEM_RANK;
-};
-
-template <>
-struct component_tag_traits<DECLARED_SPEED> {
-  static constexpr stk::topology::rank_t rank = stk::topology::ELEM_RANK;
-};
-
-template <>
-struct component_tag_traits<INFERRED_FORCE> {
-  static constexpr stk::topology::rank_t rank = stk::topology::ELEM_RANK;
-};
-
 namespace {
 
-TEST(UnitTestComponentDeclaration, FieldAndSharedDeclarationsIntegrateWithAggregateAndParts) {
+TEST(UnitTestComponentDeclaration, CanonicalUse) {
   if (stk::parallel_machine_size(MPI_COMM_WORLD) != 1) {
     GTEST_SKIP();
   }
@@ -126,10 +115,13 @@ TEST(UnitTestComponentDeclaration, FieldAndSharedDeclarationsIntegrateWithAggreg
   EXPECT_DOUBLE_EQ(speed_view[0], 2.5);
 }
 
-TEST(UnitTestComponentDeclaration, FieldComponentDeclarationAllowsAccessBeforeTypeAndTagDrivenRank) {
+TEST(UnitTestComponentDeclaration, FieldComponentDeclarationIsInvariantToFluentCallOrder) {
   if (stk::parallel_machine_size(MPI_COMM_WORLD) != 1) {
     GTEST_SKIP();
   }
+
+  using Ioss::Field::TRANSIENT;
+  using stk::topology::ELEM_RANK;
 
   stk::mesh::MeshBuilder builder(MPI_COMM_WORLD);
   builder.set_spatial_dimension(3);
@@ -140,11 +132,55 @@ TEST(UnitTestComponentDeclaration, FieldComponentDeclarationAllowsAccessBeforeTy
   meta_data.use_simple_fields();
 
   FieldDeclarationHelper field_decl(meta_data);
-  auto force = field_decl.access<Vector3d>().name("INFERRED_FORCE").type<double>().tag<INFERRED_FORCE>().declare();
+  auto field1 = field_decl.type<double>()
+                    .role(TRANSIENT)
+                    .rank(ELEM_RANK)
+                    .name("ORDERED_FIELD_1")
+                    .access<Vector3d>()
+                    .tag<ORDERED_FIELD_1>()
+                    .declare();
+
+  auto field2 = field_decl.tag<ORDERED_FIELD_2>()
+                    .access<Vector3d>()
+                    .name("ORDERED_FIELD_2")
+                    .role(TRANSIENT)
+                    .type<double>()
+                    .rank(ELEM_RANK)
+                    .declare();
+
+  auto field3 = field_decl.name("ORDERED_FIELD_3")
+                    .rank(ELEM_RANK)
+                    .type<double>()
+                    .tag<ORDERED_FIELD_3>()
+                    .role(TRANSIENT)
+                    .access<Vector3d>()
+                    .declare();
+
+  auto field4 = field_decl.access<Vector3d>()
+                    .tag<ORDERED_FIELD_4>()
+                    .rank(ELEM_RANK)
+                    .role(TRANSIENT)
+                    .name("ORDERED_FIELD_4")
+                    .type<double>()
+                    .declare();
+
+  auto field5 = field_decl.rank(ELEM_RANK)
+                    .name("ORDERED_FIELD_5")
+                    .access<Vector3d>()
+                    .type<double>()
+                    .tag<ORDERED_FIELD_5>()
+                    .role(TRANSIENT)
+                    .declare();
 
   PartDeclarationHelper part_decl(meta_data);
-  stk::mesh::Part& particle_part =
-      part_decl.name("INFERRED_PARTICLES").topology(stk::topology::PARTICLE).put_component(force, nullptr).declare();
+  stk::mesh::Part& particle_part = part_decl.name("ORDERED_PARTICLES")
+                                       .topology(stk::topology::PARTICLE)
+                                       .put_component(field1, nullptr)
+                                       .put_component(field2, nullptr)
+                                       .put_component(field3, nullptr)
+                                       .put_component(field4, nullptr)
+                                       .put_component(field5, nullptr)
+                                       .declare();
 
   auto bulk_data_ptr = builder.create(meta_data_ptr);
   stk::mesh::BulkData& bulk_data = *bulk_data_ptr;
@@ -154,14 +190,48 @@ TEST(UnitTestComponentDeclaration, FieldComponentDeclarationAllowsAccessBeforeTy
   stk::mesh::Entity elem1 = bulk_data.declare_element(1, stk::mesh::PartVector{&particle_part});
   bulk_data.modification_end();
 
-  EXPECT_EQ(force.component().field().entity_rank(), stk::topology::ELEM_RANK);
-  EXPECT_EQ(stk::mesh::field_scalars_per_entity(force.component().field(), elem1), 3u);
+  EXPECT_EQ(field1.component().field().entity_rank(), ELEM_RANK);
+  EXPECT_EQ(field2.component().field().entity_rank(), ELEM_RANK);
+  EXPECT_EQ(field3.component().field().entity_rank(), ELEM_RANK);
+  EXPECT_EQ(field4.component().field().entity_rank(), ELEM_RANK);
+  EXPECT_EQ(field5.component().field().entity_rank(), ELEM_RANK);
+  EXPECT_EQ(stk::mesh::field_scalars_per_entity(field1.component().field(), elem1), 3u);
+  EXPECT_EQ(stk::mesh::field_scalars_per_entity(field2.component().field(), elem1), 3u);
+  EXPECT_EQ(stk::mesh::field_scalars_per_entity(field3.component().field(), elem1), 3u);
+  EXPECT_EQ(stk::mesh::field_scalars_per_entity(field4.component().field(), elem1), 3u);
+  EXPECT_EQ(stk::mesh::field_scalars_per_entity(field5.component().field(), elem1), 3u);
 
-  vector3_field_data(force.component().field(), elem1).set(4.0, 5.0, 6.0);
-  auto force_view = force(elem1);
-  EXPECT_DOUBLE_EQ(force_view[0], 4.0);
-  EXPECT_DOUBLE_EQ(force_view[1], 5.0);
-  EXPECT_DOUBLE_EQ(force_view[2], 6.0);
+  vector3_field_data(field1.component().field(), elem1).set(1.0, 2.0, 3.0);
+  vector3_field_data(field2.component().field(), elem1).set(4.0, 5.0, 6.0);
+  vector3_field_data(field3.component().field(), elem1).set(7.0, 8.0, 9.0);
+  vector3_field_data(field4.component().field(), elem1).set(10.0, 11.0, 12.0);
+  vector3_field_data(field5.component().field(), elem1).set(13.0, 14.0, 15.0);
+
+  auto field1_view = field1(elem1);
+  auto field2_view = field2(elem1);
+  auto field3_view = field3(elem1);
+  auto field4_view = field4(elem1);
+  auto field5_view = field5(elem1);
+
+  EXPECT_DOUBLE_EQ(field1_view[0], 1.0);
+  EXPECT_DOUBLE_EQ(field1_view[1], 2.0);
+  EXPECT_DOUBLE_EQ(field1_view[2], 3.0);
+
+  EXPECT_DOUBLE_EQ(field2_view[0], 4.0);
+  EXPECT_DOUBLE_EQ(field2_view[1], 5.0);
+  EXPECT_DOUBLE_EQ(field2_view[2], 6.0);
+
+  EXPECT_DOUBLE_EQ(field3_view[0], 7.0);
+  EXPECT_DOUBLE_EQ(field3_view[1], 8.0);
+  EXPECT_DOUBLE_EQ(field3_view[2], 9.0);
+
+  EXPECT_DOUBLE_EQ(field4_view[0], 10.0);
+  EXPECT_DOUBLE_EQ(field4_view[1], 11.0);
+  EXPECT_DOUBLE_EQ(field4_view[2], 12.0);
+
+  EXPECT_DOUBLE_EQ(field5_view[0], 13.0);
+  EXPECT_DOUBLE_EQ(field5_view[1], 14.0);
+  EXPECT_DOUBLE_EQ(field5_view[2], 15.0);
 }
 
 TEST(UnitTestComponentDeclaration, SharedComponentDeclarationUsesCanonicalAccessByDefault) {
@@ -170,7 +240,7 @@ TEST(UnitTestComponentDeclaration, SharedComponentDeclarationUsesCanonicalAccess
   }
 
   ComponentDeclarationHelper component_decl;
-  auto speed = component_decl.shared(3.5).tag<DECLARED_SPEED>().declare();
+  auto speed = component_decl.shared(3.5).tag<DECLARED_SPEED>().rank(stk::topology::ELEM_RANK).declare();
 
   stk::mesh::Entity entity = stk::mesh::Entity();
   auto speed_view = speed(entity);
@@ -199,6 +269,34 @@ TEST(UnitTestComponentDeclaration, FieldComponentDeclarationRejectsOutputTypeMis
                    .access<Vector3d>()
                    .declare(),
                std::invalid_argument);
+}
+
+TEST(UnitTestComponentDeclaration, ExpectedFailureModes) {
+  if (stk::parallel_machine_size(MPI_COMM_WORLD) != 1) {
+    GTEST_SKIP();
+  }
+
+  using stk::topology::ELEM_RANK;
+
+  stk::mesh::MeshBuilder builder(MPI_COMM_WORLD);
+  builder.set_spatial_dimension(3);
+  builder.set_entity_rank_names({"NODE", "EDGE", "FACE", "ELEMENT", "CONSTRAINT"});
+
+  auto meta_data_ptr = builder.create_meta_data();
+  stk::mesh::MetaData& meta_data = *meta_data_ptr;
+  meta_data.use_simple_fields();
+
+  FieldDeclarationHelper field_decl(meta_data);
+  ComponentDeclarationHelper component_decl;
+
+  EXPECT_THROW((void)field_decl.type<double>().rank(ELEM_RANK).access<double>().declare(), std::logic_error);
+  EXPECT_THROW((void)field_decl.type<double>().name("MISSING_FIELD_COMPONENT_RANK").access<double>().declare(),
+               std::logic_error);
+  EXPECT_THROW(
+      (void)field_decl.type<double>().rank(ELEM_RANK).name("MISSING_FIELD_COMPONENT_ACCESS").tag<ORDERED_FIELD_1>()
+          .declare(),
+      std::logic_error);
+  EXPECT_THROW((void)component_decl.shared(3.5).tag<DECLARED_SPEED>().declare(), std::logic_error);
 }
 
 }  // namespace

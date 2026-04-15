@@ -1,13 +1,19 @@
-FIND_PACKAGE(KokkosKernels REQUIRED
-    CONFIG
-    HINTS
-      ${TPL_KokkosKernels_DIR}/lib/cmake/KokkosKernels
-      ${TPL_KokkosKernels_DIR}
-    COMPONENTS
-      ${${PACKAGE_NAME}_KokkosKernels_REQUIRED_COMPONENTS}
-    OPTIONAL_COMPONENTS
-      ${${PACKAGE_NAME}_KokkosKernels_OPTIONAL_COMPONENTS}
-)
+if (DEFINED TPL_KokkosKernels_DIR)
+  FIND_PACKAGE(KokkosKernels REQUIRED
+      CONFIG
+      NO_DEFAULT_PATH
+      PATHS
+        ${TPL_KokkosKernels_DIR}/lib/cmake/KokkosKernels
+        ${TPL_KokkosKernels_DIR}/lib64/cmake/KokkosKernels
+        ${TPL_KokkosKernels_DIR}
+      COMPONENTS
+        ${${PACKAGE_NAME}_KokkosKernels_REQUIRED_COMPONENTS}
+      OPTIONAL_COMPONENTS
+        ${${PACKAGE_NAME}_KokkosKernels_OPTIONAL_COMPONENTS}
+  )
+else()
+  message(FATAL_ERROR "TPL_KokkosKernels_DIR must be defined before calling FIND_PACKAGE(KokkosKernels).")
+endif()
 
 # Print out where KokkosKernels was found
 message(STATUS "Found KokkosKernels: ${KokkosKernels_DIR}")

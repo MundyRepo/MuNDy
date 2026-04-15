@@ -1,13 +1,19 @@
-FIND_PACKAGE(Kokkos REQUIRED
-    CONFIG
-    HINTS
-      ${TPL_Kokkos_DIR}/lib/cmake/Kokkos
-      ${TPL_Kokkos_DIR}
-    COMPONENTS
-      ${${PACKAGE_NAME}_Kokkos_REQUIRED_COMPONENTS}
-    OPTIONAL_COMPONENTS
-      ${${PACKAGE_NAME}_Kokkos_OPTIONAL_COMPONENTS}
-)
+if (DEFINED TPL_Kokkos_DIR)
+  FIND_PACKAGE(Kokkos REQUIRED
+      CONFIG
+      NO_DEFAULT_PATH
+      PATHS
+        ${TPL_Kokkos_DIR}/lib/cmake/Kokkos
+        ${TPL_Kokkos_DIR}/lib64/cmake/Kokkos
+        ${TPL_Kokkos_DIR}
+      COMPONENTS
+        ${${PACKAGE_NAME}_Kokkos_REQUIRED_COMPONENTS}
+      OPTIONAL_COMPONENTS
+        ${${PACKAGE_NAME}_Kokkos_OPTIONAL_COMPONENTS}
+  )
+else()
+  message(FATAL_ERROR "TPL_Kokkos_DIR must be defined before calling FIND_PACKAGE(Kokkos).")
+endif()
 
 # Print out where Kokkos was found
 message(STATUS "Found Kokkos: ${Kokkos_DIR}")

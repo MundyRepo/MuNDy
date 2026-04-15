@@ -1,13 +1,19 @@
-FIND_PACKAGE(Teuchos REQUIRED
-    CONFIG
-    HINTS
-      ${TPL_Teuchos_DIR}/lib/cmake/Teuchos
-      ${TPL_Teuchos_DIR}
-    COMPONENTS
-      ${${PACKAGE_NAME}_Teuchos_REQUIRED_COMPONENTS}
-    OPTIONAL_COMPONENTS
-      ${${PACKAGE_NAME}_Teuchos_OPTIONAL_COMPONENTS}
-)
+if (DEFINED TPL_Teuchos_DIR)
+  FIND_PACKAGE(Teuchos REQUIRED
+      CONFIG
+      NO_DEFAULT_PATH
+      PATHS
+        ${TPL_Teuchos_DIR}/lib/cmake/Teuchos
+        ${TPL_Teuchos_DIR}/lib64/cmake/Teuchos
+        ${TPL_Teuchos_DIR}
+      COMPONENTS
+        ${${PACKAGE_NAME}_Teuchos_REQUIRED_COMPONENTS}
+      OPTIONAL_COMPONENTS
+        ${${PACKAGE_NAME}_Teuchos_OPTIONAL_COMPONENTS}
+  )
+else()
+  message(FATAL_ERROR "TPL_Teuchos_DIR must be defined before calling FIND_PACKAGE(Teuchos).")
+endif()
 
 # Print out where Teuchos was found
 message(STATUS "Found Teuchos: ${Teuchos_DIR}")

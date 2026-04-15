@@ -44,9 +44,11 @@ namespace mundy {
 
 namespace mesh {
 
-template <typename FieldScalarType, typename AccessLike, typename Tag = void,
-          stk::topology::rank_t Rank = stk::topology::INVALID_RANK>
+template <typename FieldScalarType, typename AccessLike, typename Tag = void>
 class TaggedFieldComponentDeclarationHelperT;
+
+template <typename FieldScalarType, typename Tag = void>
+class TaggedFieldDeclarationHelperT;
 
 /// \brief Helper class for declaring a field
 ///
@@ -195,6 +197,11 @@ class FieldDeclarationHelperT {
   template <typename AccessLike>
   TaggedFieldComponentDeclarationHelperT<field_scalar_type, AccessLike> access() const;
 
+  /// \brief Attach a component tag before selecting an access policy.
+  /// \note This member is defined in DeclareComponent.hpp.
+  template <typename Tag>
+  TaggedFieldDeclarationHelperT<field_scalar_type, Tag> tag() const;
+
   /// \brief Declare a field with the given stk output type and role.
   stk::mesh::Field<T>& declare() {
     // Validate that required parameters have been set
@@ -258,7 +265,7 @@ class FieldDeclarationHelperT {
   stk::io::FieldOutputType output_type_;
 
   friend class FieldDeclarationHelper;
-  template <typename OtherFieldScalarType, typename OtherAccessLike, typename OtherTag, stk::topology::rank_t OtherRank>
+  template <typename OtherFieldScalarType, typename OtherAccessLike, typename OtherTag>
   friend class TaggedFieldComponentDeclarationHelperT;
 };
 
@@ -329,6 +336,11 @@ class FieldDeclarationHelper {
   /// \note This member is defined in DeclareComponent.hpp.
   template <typename AccessLike>
   TaggedFieldComponentDeclarationHelperT<invalid_field_scalar_type, AccessLike> access() const;
+
+  /// \brief Attach a component tag before selecting an access policy.
+  /// \note This member is defined in DeclareComponent.hpp.
+  template <typename Tag>
+  TaggedFieldDeclarationHelperT<invalid_field_scalar_type, Tag> tag() const;
 
   /// \brief Declare a field with the given stk output type and role.
   void declare() {
