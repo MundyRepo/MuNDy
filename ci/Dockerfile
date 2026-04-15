@@ -1,5 +1,10 @@
 FROM nvidia/cuda:12.3.2-cudnn9-devel-ubuntu22.04
 
+# Reset the nvidia/cuda base image ENTRYPOINT so Jenkins' `docker run ... cat`
+# keep-alive pattern works without triggering the
+# "container started but didn't run the expected command" error.
+ENTRYPOINT []
+
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Install base packages including ca-certificates BEFORE any curl calls
@@ -33,8 +38,11 @@ RUN apt-get -y update && \
     apt-get -y autoclean && \
     rm -rf /var/cache/apt/* /var/lib/apt/lists/*
 
-# Create the testuser while still root.
-RUN useradd -m -s /bin/bash testuser
+# Create the testuser while still root. The home directory is made world-traversable
+# (and later the spack tree world-readable) so that Jenkins, which launches the
+# container as the host agent's uid (not testuser), can still read/source spack.
+RUN useradd -m -s /bin/bash testuser && \
+    chmod 755 /home/testuser
 
 ENV SPACK_ROOT=/home/testuser/spack
 ENV SPACK_ENV_NAME=tril16_cpu
@@ -59,4 +67,5 @@ RUN . ${SPACK_ROOT}/share/spack/setup-env.sh && \
     spack concretize && \
     spack install && \
     spack load cmake@3.27.9 && \
-    spack gc -y
+    spack gc -y && \
+    chmod -R a+rX ${SPACK_ROOT}
