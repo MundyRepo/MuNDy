@@ -1,7 +1,6 @@
 if (DEFINED TPL_Trilinos_DIR)
   FIND_PACKAGE(Trilinos REQUIRED
       CONFIG
-      NO_DEFAULT_PATH
       PATHS
         ${TPL_Trilinos_DIR}/lib/cmake/Trilinos
         ${TPL_Trilinos_DIR}/lib64/cmake/Trilinos

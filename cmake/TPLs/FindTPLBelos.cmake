@@ -1,7 +1,6 @@
 if (DEFINED TPL_Belos_DIR)
   FIND_PACKAGE(Belos REQUIRED
       CONFIG
-      NO_DEFAULT_PATH
       PATHS
         ${TPL_Belos_DIR}/lib/cmake/Belos
         ${TPL_Belos_DIR}/lib64/cmake/Belos

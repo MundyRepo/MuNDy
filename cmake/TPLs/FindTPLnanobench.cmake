@@ -1,7 +1,6 @@
 if (DEFINED TPL_nanobench_DIR)
   FIND_PACKAGE(nanobench REQUIRED
       CONFIG
-      NO_DEFAULT_PATH
       PATHS
         ${TPL_nanobench_DIR}/lib/cmake/nanobench
         ${TPL_nanobench_DIR}/lib64/cmake/nanobench

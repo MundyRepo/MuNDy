@@ -1,7 +1,6 @@
 if (DEFINED TPL_STK_DIR)
   FIND_PACKAGE(STK REQUIRED
       CONFIG
-      NO_DEFAULT_PATH
       PATHS
         ${TPL_STK_DIR}/lib/cmake/STK
         ${TPL_STK_DIR}/lib64/cmake/STK

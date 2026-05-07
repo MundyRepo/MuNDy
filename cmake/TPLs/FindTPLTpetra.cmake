@@ -1,7 +1,6 @@
 if (DEFINED TPL_Tpetra_DIR)
   FIND_PACKAGE(Tpetra REQUIRED
       CONFIG
-      NO_DEFAULT_PATH
       PATHS
         ${TPL_Tpetra_DIR}/lib/cmake/Tpetra
         ${TPL_Tpetra_DIR}/lib64/cmake/Tpetra
