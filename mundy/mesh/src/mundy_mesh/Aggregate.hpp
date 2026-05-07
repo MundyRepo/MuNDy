@@ -398,6 +398,12 @@ class Aggregate {
                   "Attempting to get a component that does not exist in the aggregate");
   }
 
+  /// \brief Check if we have a component with the given Tag
+  template <typename Tag>
+  KOKKOS_INLINE_FUNCTION static constexpr bool has() {
+    return contains_tag_v<Tag, Components...>;
+  }
+
  private:
   //! \name Private members
   //@{
@@ -618,6 +624,12 @@ class NgpAggregate {
                   "Attempting to get a component that does not exist in the NGP aggregate");
   }
 
+  /// \brief Check if we have a component with the given Tag
+  template <typename Tag>
+  KOKKOS_INLINE_FUNCTION static constexpr bool has() {
+    return contains_tag_v<Tag, NgpComponents...>;
+  }
+
  private:
   //! \name Private members
   //@{
@@ -659,6 +671,12 @@ decltype(auto) get(Aggregate<Components...>& aggregate, stk::mesh::Entity entity
   return aggregate.template get<Tag>(entity);
 }
 
+/// \brief Check if an aggregate has a component with the given tag
+template <typename Tag, typename... Components>
+KOKKOS_INLINE_FUNCTION constexpr bool has(const Aggregate<Components...>& /*aggregate*/) {
+  return Aggregate<Components...>::template has<Tag>();
+}
+
 /// \brief Get the data tagged by the given tag from the given aggregate and entity index (const)
 template <typename Tag, typename... Components>
 KOKKOS_INLINE_FUNCTION decltype(auto) get(const NgpAggregate<Components...>& aggregate,
@@ -683,6 +701,12 @@ KOKKOS_INLINE_FUNCTION decltype(auto) get(const NgpAggregate<Components...>& agg
 template <typename Tag, typename... Components>
 KOKKOS_INLINE_FUNCTION decltype(auto) get(NgpAggregate<Components...>& aggregate, stk::mesh::Entity entity) {
   return aggregate.template get<Tag>(entity);
+}
+
+/// \brief Check if an NGP aggregate has a component with the given tag
+template <typename Tag, typename... Components>
+KOKKOS_INLINE_FUNCTION constexpr bool has(const NgpAggregate<Components...>& /*aggregate*/) {
+  return NgpAggregate<Components...>::template has<Tag>();
 }
 
 /// \brief A helper function for getting the NGP aggregate from a regular aggregate
