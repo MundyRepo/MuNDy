@@ -18,14 +18,9 @@
 # **********************************************************************************************************************
 # @HEADER
 
-import os
-import sys
-
-from spack.build_environment import dso_suffix
-from spack.error import NoHeadersError
-from spack.operating_systems.mac_os import macos_version
 from spack.package import *
-from spack.pkg.builtin.kokkos import Kokkos
+from spack_repo.builtin.build_systems.cmake import CMakePackage
+from spack_repo.builtin.build_systems.cuda import CudaPackage
 
 class Mundy(CMakePackage, CudaPackage):
     """MuNDy: Multibody Nonlocal Dynamics.
@@ -43,7 +38,7 @@ class Mundy(CMakePackage, CudaPackage):
     tags = ["???"]
 
     version("main", branch="main", submodules=True)
-    version("dev", branch="main", submodules=True)
+    version("dev", branch="streamlining", submodules=True)
     # version("#.#.#", sha256="<fill-me-in>", submodules=True)
 
     #
@@ -116,8 +111,8 @@ class Mundy(CMakePackage, CudaPackage):
     # Optional TPLs
     #
     depends_on("mpi", when="+mpi")
-    depends_on("trilinos@16.0.0", when="+teuchos")
-    depends_on("trilinos@16.0.0+stk", when="+stk")
+    depends_on("trilinos@16.1.0", when="+teuchos")
+    depends_on("trilinos@16.1.0+stk", when="+stk")
     depends_on("kokkos-kernels", when="+kokkos-kernels")
     depends_on("openrand", when="+openrand")
     depends_on("nanobench", when="+performance_tests")
@@ -151,11 +146,11 @@ class Mundy(CMakePackage, CudaPackage):
             when="+kokkos-kernels +cuda cuda_arch={0}".format(arch),
         )
         depends_on(
-            "trilinos@16.0.0+cuda cuda_arch={0}".format(arch),
+            "trilinos@16.1.0+cuda cuda_arch={0}".format(arch),
             when="+teuchos +cuda cuda_arch={0}".format(arch),
         )
         depends_on(
-            "trilinos@16.0.0+stk+cuda cuda_arch={0}".format(arch),
+            "trilinos@16.1.0+stk+cuda cuda_arch={0}".format(arch),
             when="+stk +cuda cuda_arch={0}".format(arch),
         )
 
