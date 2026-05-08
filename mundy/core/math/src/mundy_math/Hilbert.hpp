@@ -43,8 +43,10 @@ namespace mundy {
 ///
 /// The non-reference passing of the current_position, dr1, dr2, and dr3 is intentional. This is because the
 /// we do some math when passing the values to the next recursive call.
-size_t hilbert_3d(size_t s, size_t i, std::vector<mundy::Vector3d>& position_array, mundy::Vector3d current_position,
-                  mundy::Vector3d dr1, mundy::Vector3d dr2, mundy::Vector3d dr3) {
+template <typename Scalar = double>
+size_t hilbert_3d(size_t s, size_t i, std::vector<mundy::Vector3<Scalar>>& position_array,
+                  mundy::Vector3<Scalar> current_position, mundy::Vector3<Scalar> dr1, mundy::Vector3<Scalar> dr2,
+                  mundy::Vector3<Scalar> dr3) {
   // Check to make sure we've been passed in a power of two
   MUNDY_THROW_ASSERT(s != 0 && (s & (s - 1)) == 0, std::logic_error, "hilbert_3d: s must be a power of 2");
   if (s == 1) {
@@ -55,14 +57,14 @@ size_t hilbert_3d(size_t s, size_t i, std::vector<mundy::Vector3d>& position_arr
   size_t snew = static_cast<size_t>(std::floor(s / 2));
   MUNDY_THROW_ASSERT(snew > 0, std::logic_error, "hilbert_3d: snew must be greater than 0");
 
-  mundy::Vector3d current_position_new = current_position;
-  mundy::Vector3d dr1_new = dr1;
-  mundy::Vector3d dr2_new = dr2;
-  mundy::Vector3d dr3_new = dr3;
+  mundy::Vector3<Scalar> current_position_new = current_position;
+  mundy::Vector3<Scalar> dr1_new = dr1;
+  mundy::Vector3<Scalar> dr2_new = dr2;
+  mundy::Vector3<Scalar> dr3_new = dr3;
 
   for (auto& dr : {dr1_new, dr2_new, dr3_new}) {
-    mundy::Vector3d dr_stencil = {dr[0] < 0.0 ? 1.0 : 0.0, dr[1] < 0.0 ? 1.0 : 0.0, dr[2] < 0.0 ? 1.0 : 0.0};
-    current_position_new -= static_cast<double>(snew) * elementwise_mul(dr_stencil, dr);
+    mundy::Vector3<Scalar> dr_stencil = {dr[0] < 0.0 ? 1.0 : 0.0, dr[1] < 0.0 ? 1.0 : 0.0, dr[2] < 0.0 ? 1.0 : 0.0};
+    current_position_new -= static_cast<Scalar>(snew) * elementwise_mul(dr_stencil, dr);
   }
 
   i = hilbert_3d(snew, i, position_array, current_position_new, dr2_new, dr3_new, dr1_new);
@@ -83,8 +85,11 @@ size_t hilbert_3d(size_t s, size_t i, std::vector<mundy::Vector3d>& position_arr
 }
 
 /// \brief Create a 3D Hilbert curve with a given number of links.
-std::tuple<std::vector<mundy::Vector3d>, std::vector<mundy::Vector3d>> create_hilbert_positions_and_directors(
-    size_t num_points, mundy::Vector3d orientation = mundy::Vector3d(1.0, 0.0, 0.0), double side_length = 1.0) {
+template <typename Scalar = double>
+std::tuple<std::vector<mundy::Vector3<Scalar>>, std::vector<mundy::Vector3<Scalar>>>
+create_hilbert_positions_and_directors(size_t num_points,
+                                       mundy::Vector3<Scalar> orientation = mundy::Vector3<Scalar>(1.0, 0.0, 0.0),
+                                       Scalar side_length = 1.0) {
   MUNDY_THROW_ASSERT(num_points > 0, std::logic_error, "num_points must be greater than 0");
   MUNDY_THROW_ASSERT(side_length > 0.0, std::logic_error, "side_length must be greater than 0");
 
@@ -94,26 +99,26 @@ std::tuple<std::vector<mundy::Vector3d>, std::vector<mundy::Vector3d>> create_hi
   }
   size_t ind = 0;
   // Create a vector of 3D vectors to store the positions, and the default position
-  std::vector<mundy::Vector3d> position_array(num_side_points * num_side_points * num_side_points);
-  mundy::Vector3d current_position(0.0, 0.0, 0.0);
+  std::vector<mundy::Vector3<Scalar>> position_array(num_side_points * num_side_points * num_side_points);
+  mundy::Vector3<Scalar> current_position(0.0, 0.0, 0.0);
   // Create a orthogonal right handed coordinate system for the cell vectors
   // TODO(palmerb4): This is not valid for all orientations :(
-  mundy::Vector3d zhat(0.0, 0.0, 1.0);
-  mundy::Vector3d dr1_hat = orientation;
+  mundy::Vector3<Scalar> zhat(0.0, 0.0, 1.0);
+  mundy::Vector3<Scalar> dr1_hat = orientation;
   dr1_hat = dr1_hat / two_norm(dr1_hat);
-  mundy::Vector3d dr2_hat = cross(zhat, dr1_hat);
+  mundy::Vector3<Scalar> dr2_hat = cross(zhat, dr1_hat);
   dr2_hat = dr2_hat / two_norm(dr2_hat);
-  mundy::Vector3d dr3_hat = cross(dr1_hat, dr2_hat);
+  mundy::Vector3<Scalar> dr3_hat = cross(dr1_hat, dr2_hat);
   dr3_hat = dr3_hat / two_norm(dr3_hat);
 
-  mundy::Vector3d dr1 = side_length * dr1_hat;
-  mundy::Vector3d dr2 = side_length * dr2_hat;
-  mundy::Vector3d dr3 = side_length * dr3_hat;
+  mundy::Vector3<Scalar> dr1 = side_length * dr1_hat;
+  mundy::Vector3<Scalar> dr2 = side_length * dr2_hat;
+  mundy::Vector3<Scalar> dr3 = side_length * dr3_hat;
 
   ind = hilbert_3d(num_side_points, ind, position_array, current_position, dr1, dr2, dr3);
 
   // Now create the directors array
-  std::vector<mundy::Vector3d> directors(position_array.size() - 1);
+  std::vector<mundy::Vector3<Scalar>> directors(position_array.size() - 1);
   for (size_t i = 0; i < directors.size(); i++) {
     directors[i] = position_array[(i + 1) % position_array.size()] - position_array[i];
     directors[i] = directors[i] / two_norm(directors[i]);
