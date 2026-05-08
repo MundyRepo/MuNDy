@@ -76,27 +76,54 @@ void DeclareEntitiesHelper::check_consistency(const stk::mesh::BulkData& bulk_da
     }
   }
 
-  // Check that the parts of all elements and nodes are non nullptr
+  // Check that each entity uses only one membership pipeline and that its membership pointers are valid.
+  const stk::mesh::MetaData& meta_data = bulk_data.mesh_meta_data();
   for (const auto& node_info : node_info_vec_) {
+    MUNDY_THROW_REQUIRE(node_info.parts.empty() || node_info.classes.empty(), std::logic_error,
+                        sink() << "Node " << node_info.id
+                               << " cannot use both the part pipeline and the Class pipeline.");
     for (const auto& part_ptr : node_info.parts) {
       MUNDY_THROW_REQUIRE(part_ptr != nullptr, std::runtime_error,
                           sink() << "Node " << node_info.id << " has a null part pointer in its part list");
     }
+    for (const auto& class_ptr : node_info.classes) {
+      MUNDY_THROW_REQUIRE(class_ptr != nullptr, std::runtime_error,
+                          sink() << "Node " << node_info.id << " has a null Class pointer in its class list");
+      MUNDY_THROW_REQUIRE(&class_ptr->mesh_meta_data() == &meta_data, std::runtime_error,
+                          sink() << "Node " << node_info.id << " has Class '" << class_ptr->name()
+                                 << "' from a different MetaData instance");
+    }
   }
   for (const auto& element_info : elem_info_vec_) {
+    MUNDY_THROW_REQUIRE(element_info.parts.empty() || element_info.classes.empty(), std::logic_error,
+                        sink() << "Element " << element_info.id
+                               << " cannot use both the part pipeline and the Class pipeline.");
     for (const auto& part_ptr : element_info.parts) {
       MUNDY_THROW_REQUIRE(part_ptr != nullptr, std::runtime_error,
                           sink() << "Element " << element_info.id << " has a null part pointer in its part list");
     }
+    for (const auto& class_ptr : element_info.classes) {
+      MUNDY_THROW_REQUIRE(class_ptr != nullptr, std::runtime_error,
+                          sink() << "Element " << element_info.id << " has a null Class pointer in its class list");
+      MUNDY_THROW_REQUIRE(&class_ptr->mesh_meta_data() == &meta_data, std::runtime_error,
+                          sink() << "Element " << element_info.id << " has Class '" << class_ptr->name()
+                                 << "' from a different MetaData instance");
+    }
   }
 
-  // Check that the given set of parts will create an entity of the given topology
+  // Check that the given set of parts/classes will create an entity of the given topology
   for (const auto& element_info : elem_info_vec_) {
     const stk::topology given_topo = element_info.topology;
-    const stk::topology actual_topo =
-        get_topology(bulk_data.mesh_meta_data(), stk::topology::ELEM_RANK, element_info.parts);
+    const stk::topology actual_topo = element_info.classes.empty()
+                                          ? get_topology(bulk_data.mesh_meta_data(), stk::topology::ELEM_RANK,
+                                                         element_info.parts)
+                                          : get_topology(bulk_data.mesh_meta_data(), stk::topology::ELEM_RANK,
+                                                         impl::populate_entity_rank_parts(
+                                                             stk::topology::ELEM_RANK, element_info.classes,
+                                                             "DeclareEntitiesHelper element classes"));
     MUNDY_THROW_REQUIRE(given_topo == actual_topo, std::runtime_error,
-                        sink() << "Element " << element_info.id << " has parts that do not match its topology\n"
+                        sink() << "Element " << element_info.id
+                               << " has parts/classes that do not match its topology\n"
                                << "Given Topology: " << given_topo.name() << "\n"
                                << "Actual Topology: " << actual_topo.name() << "\n"
                                << "Dumping the element info:\n"
@@ -172,6 +199,21 @@ DeclareEntitiesHelper& DeclareEntitiesHelper::declare_entities(stk::mesh::BulkDa
 #endif
 
   const int our_rank = bulk_data.parallel_rank();
+  BulkDataClassInterface class_bulk_data = class_interface(bulk_data);
+
+  auto declare_node_from_info = [&](const DeclareNodeInfo& node_info) {
+    if (!node_info.classes.empty()) {
+      return class_bulk_data.declare_node(node_info.id, node_info.classes);
+    }
+    return bulk_data.declare_entity(stk::topology::NODE_RANK, node_info.id, node_info.parts);
+  };
+
+  auto declare_element_from_info = [&](const DeclareElementInfo& element_info) {
+    if (!element_info.classes.empty()) {
+      return class_bulk_data.declare_element(element_info.id, element_info.classes);
+    }
+    return bulk_data.declare_entity(stk::topology::ELEM_RANK, element_info.id, element_info.parts);
+  };
 
   // Construct maps for quick lookup of node and element info
   std::unordered_map<stk::mesh::EntityId, DeclareNodeInfo> node_info_map;
@@ -191,7 +233,7 @@ DeclareEntitiesHelper& DeclareEntitiesHelper::declare_entities(stk::mesh::BulkDa
   // Declare all elements. Declare their nodes as we go. Mark sharing as necessary.
   for (const auto& element_info : elem_info_vec_) {
     if (element_info.owning_proc == our_rank) {
-      stk::mesh::Entity element = bulk_data.declare_element(element_info.id, element_info.parts);
+      stk::mesh::Entity element = declare_element_from_info(element_info);
       if (element_info.node_ids.size() != 0) {
         stk::mesh::Permutation perm = stk::mesh::Permutation::INVALID_PERMUTATION;
         stk::mesh::OrdinalVector scratch1, scratch2, scratch3;
@@ -205,11 +247,7 @@ DeclareEntitiesHelper& DeclareEntitiesHelper::declare_entities(stk::mesh::BulkDa
           stk::mesh::Entity node = bulk_data.get_entity(stk::topology::NODE_RANK, node_id);
           if (!bulk_data.is_valid(node)) {
             const auto& node_info = node_info_map[node_id];
-            if (node_info.parts.size() != 0) {
-              node = bulk_data.declare_node(node_info.id, node_info.parts);
-            } else {
-              node = bulk_data.declare_node(node_info.id);
-            }
+            node = declare_node_from_info(node_info);
           }
 
           bulk_data.declare_relation(element, node, static_cast<stk::mesh::RelationIdentifier>(i), perm, scratch1,
@@ -238,11 +276,7 @@ DeclareEntitiesHelper& DeclareEntitiesHelper::declare_entities(stk::mesh::BulkDa
           stk::mesh::Entity node = bulk_data.get_entity(stk::topology::NODE_RANK, node_id);
           if (!bulk_data.is_valid(node)) {
             const auto& node_info = node_info_map[node_id];
-            if (node_info.parts.size() != 0) {
-              node = bulk_data.declare_node(node_info.id, node_info.parts);
-            } else {
-              node = bulk_data.declare_node(node_info.id);
-            }
+            node = declare_node_from_info(node_info);
           }
 
           bulk_data.add_node_sharing(node, element_info.owning_proc);
@@ -260,11 +294,7 @@ DeclareEntitiesHelper& DeclareEntitiesHelper::declare_entities(stk::mesh::BulkDa
     if (we_own_node) {
       stk::mesh::Entity node = bulk_data.get_entity(stk::topology::NODE_RANK, node_info.id);
       if (!bulk_data.is_valid(node)) {
-        if (node_info.parts.size() != 0) {
-          node = bulk_data.declare_node(node_info.id, node_info.parts);
-        } else {
-          node = bulk_data.declare_node(node_info.id);
-        }
+        node = declare_node_from_info(node_info);
       }
       for (const auto& field_data : node_info.field_data) {
         field_data->set_field_data(node);

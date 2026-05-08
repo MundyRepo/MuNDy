@@ -36,6 +36,7 @@
 #include <stk_topology/topology.hpp>
 
 // Mundy
+#include <mundy_mesh/Class.hpp>            // for mundy::mesh::Class
 #include <mundy_mesh/DeclareEntities.hpp>  // for mundy::mesh::DeclareEntitiesHelper
 #include <mundy_mesh/LinkData.hpp>         // for mundy::mesh::LinkData
 #include <mundy_mesh/LinkMetaData.hpp>     // for mundy::mesh::LinkMetaData
@@ -142,6 +143,10 @@ class UnitTestDeclareEntities : public ::testing::Test {
     element_rank_part_ptr_ = &meta_data_ptr_->declare_part("element_rank_part", stk::topology::ELEM_RANK);
     node_part_ptr_ = &meta_data_ptr_->declare_part_with_topology("node_part", stk::topology::NODE);
 
+    beam_2_class_ptr_ = &declare_class(*meta_data_ptr_, "beam_2_class", stk::topology::BEAM_2);
+    particle_class_ptr_ = &declare_class(*meta_data_ptr_, "particle_class", stk::topology::PARTICLE);
+    node_set_class_ptr_ = &declare_class(*meta_data_ptr_, "node_set_class", stk::topology::NODE_RANK);
+
     elem_field_ptr_ =
         create_field_on_parts("elem_field", stk::topology::ELEMENT_RANK, 1, {beam_2_part_ptr_, element_rank_part_ptr_});
     other_elem_field_ptr_ =
@@ -149,6 +154,11 @@ class UnitTestDeclareEntities : public ::testing::Test {
     node_field_ptr_ = create_field_on_parts("node_field", stk::topology::NODE_RANK, 1, {beam_2_part_ptr_});
     other_node_field_ptr_ =
         create_field_on_parts("other_node_field", stk::topology::NODE_RANK, 1, {element_rank_part_ptr_});
+
+    put_field_on_mesh(*elem_field_ptr_, *beam_2_class_ptr_, 1, initial_value);
+    put_field_on_mesh(*other_elem_field_ptr_, *particle_class_ptr_, 1, initial_value);
+    put_field_on_mesh(*node_field_ptr_, *node_set_class_ptr_, 1, initial_value);
+    put_field_on_mesh(*node_field_ptr_, *beam_2_class_ptr_, 1, initial_value);
 
     // Sanity check field rank and part membership
     EXPECT_EQ(elem_field_ptr_->entity_rank(), stk::topology::ELEMENT_RANK);
@@ -171,8 +181,10 @@ class UnitTestDeclareEntities : public ::testing::Test {
     unsigned dimensionality = 2;
     node_slinks_part_ptr_ = &link_meta_data_nodes_ptr_->declare_link_part("NODE_SURFACE_LINKS", dimensionality);
     elem_slinks_part_ptr_ = &link_meta_data_elems_ptr_->declare_link_part("ELEM_SURFACE_LINKS", dimensionality);
+    node_slinks_class_ptr_ = &link_meta_data_nodes_ptr_->declare_link_class("NODE_SURFACE_LINK_CLASS", dimensionality);
     ASSERT_TRUE(node_slinks_part_ptr_ != nullptr);
     ASSERT_TRUE(elem_slinks_part_ptr_ != nullptr);
+    ASSERT_TRUE(node_slinks_class_ptr_ != nullptr);
 
     meta_data_ptr_->commit();
   }
@@ -218,6 +230,10 @@ class UnitTestDeclareEntities : public ::testing::Test {
   stk::mesh::Part* node_part_ptr_;
   stk::mesh::Part* node_slinks_part_ptr_;
   stk::mesh::Part* elem_slinks_part_ptr_;
+  Class* beam_2_class_ptr_;
+  Class* particle_class_ptr_;
+  Class* node_set_class_ptr_;
+  Class* node_slinks_class_ptr_;
 };  // class UnitTestDeclareEntities
 
 TEST_F(UnitTestDeclareEntities, Fixture) {
@@ -237,6 +253,11 @@ TEST_F(UnitTestDeclareEntities, Fixture) {
   EXPECT_NE(particle_part_ptr_, nullptr);
   EXPECT_NE(element_rank_part_ptr_, nullptr);
   EXPECT_NE(node_part_ptr_, nullptr);
+
+  EXPECT_NE(beam_2_class_ptr_, nullptr);
+  EXPECT_NE(particle_class_ptr_, nullptr);
+  EXPECT_NE(node_set_class_ptr_, nullptr);
+  EXPECT_NE(node_slinks_class_ptr_, nullptr);
 }
 
 TEST_F(UnitTestDeclareEntities, DeclareEntities) {
@@ -380,6 +401,104 @@ TEST_F(UnitTestDeclareEntities, DeclareEntities) {
   }
 }
 
+TEST_F(UnitTestDeclareEntities, DeclareEntitiesSupportsClassPipeline) {
+  if (stk::parallel_machine_size(communicator_) != 1) {
+    GTEST_SKIP() << "This test is only designed to run with 1 MPI rank.";
+  }
+
+  setup();
+
+  DeclareEntitiesHelper builder;
+  builder.create_node()
+      .id(1)
+      .owning_proc(0)
+      .add_class(*node_set_class_ptr_)
+      .add_class(*beam_2_class_ptr_)
+      .add_field_data<double>(node_field_ptr_, 10.0);
+  builder.create_node()
+      .id(2)
+      .owning_proc(0)
+      .add_classes({node_set_class_ptr_, beam_2_class_ptr_})
+      .add_field_data<double>(node_field_ptr_, 20.0);
+  builder.create_node().id(3).owning_proc(0).add_class(*particle_class_ptr_);
+
+  builder.create_element()
+      .id(1)
+      .owning_proc(0)
+      .topology(stk::topology::BEAM_2)
+      .nodes({1, 2})
+      .add_class(*beam_2_class_ptr_)
+      .add_field_data<double>(elem_field_ptr_, 30.0);
+
+  ClassVector particle_classes{particle_class_ptr_};
+  builder.create_element()
+      .id(2)
+      .owning_proc(0)
+      .topology(stk::topology::PARTICLE)
+      .nodes({3})
+      .add_classes(particle_classes)
+      .add_field_data<double>(other_elem_field_ptr_, 40.0);
+
+  EXPECT_NO_THROW(builder.check_consistency(*bulk_data_ptr_)) << "Builder consistency check failed.";
+
+  bulk_data_ptr_->modification_begin();
+  builder.declare_entities(*bulk_data_ptr_);
+  bulk_data_ptr_->modification_end();
+
+  stk::mesh::Entity node1 = bulk_data_ptr_->get_entity(stk::topology::NODE_RANK, 1);
+  stk::mesh::Entity node2 = bulk_data_ptr_->get_entity(stk::topology::NODE_RANK, 2);
+  stk::mesh::Entity particle_node = bulk_data_ptr_->get_entity(stk::topology::NODE_RANK, 3);
+  stk::mesh::Entity spring = bulk_data_ptr_->get_entity(stk::topology::ELEMENT_RANK, 1);
+  stk::mesh::Entity particle = bulk_data_ptr_->get_entity(stk::topology::ELEMENT_RANK, 2);
+
+  ASSERT_TRUE(bulk_data_ptr_->is_valid(node1));
+  ASSERT_TRUE(bulk_data_ptr_->is_valid(node2));
+  ASSERT_TRUE(bulk_data_ptr_->is_valid(particle_node));
+  ASSERT_TRUE(bulk_data_ptr_->is_valid(spring));
+  ASSERT_TRUE(bulk_data_ptr_->is_valid(particle));
+
+  Class& beam_2_nodeset = beam_2_class_ptr_->get_induced_set(stk::topology::NODE_RANK);
+  EXPECT_TRUE(bulk_data_ptr_->bucket(node1).member(node_set_class_ptr_->leaf_part()));
+  EXPECT_TRUE(bulk_data_ptr_->bucket(node2).member(node_set_class_ptr_->leaf_part()));
+  EXPECT_TRUE(bulk_data_ptr_->bucket(node1).member(beam_2_class_ptr_->leaf_part()));
+  EXPECT_TRUE(bulk_data_ptr_->bucket(node2).member(beam_2_class_ptr_->leaf_part()));
+  EXPECT_TRUE(bulk_data_ptr_->bucket(node1).member(beam_2_nodeset.leaf_part()));
+  EXPECT_TRUE(bulk_data_ptr_->bucket(node2).member(beam_2_nodeset.leaf_part()));
+
+  EXPECT_TRUE(bulk_data_ptr_->bucket(spring).member(beam_2_class_ptr_->leaf_part()));
+  EXPECT_TRUE(bulk_data_ptr_->bucket(spring).member(beam_2_class_ptr_->assembly_part()));
+  EXPECT_TRUE(bulk_data_ptr_->bucket(particle_node).member(particle_class_ptr_->leaf_part()));
+  EXPECT_TRUE(bulk_data_ptr_->bucket(particle).member(particle_class_ptr_->leaf_part()));
+
+  EXPECT_EQ(bulk_data_ptr_->bucket(spring).topology(), stk::topology::BEAM_2);
+  EXPECT_EQ(bulk_data_ptr_->bucket(particle).topology(), stk::topology::PARTICLE);
+  EXPECT_EQ(bulk_data_ptr_->begin_nodes(spring)[0], node1);
+  EXPECT_EQ(bulk_data_ptr_->begin_nodes(spring)[1], node2);
+  EXPECT_EQ(bulk_data_ptr_->begin_nodes(particle)[0], particle_node);
+
+  ASSERT_NE(stk::mesh::field_data(*node_field_ptr_, node1), nullptr);
+  ASSERT_NE(stk::mesh::field_data(*node_field_ptr_, node2), nullptr);
+  ASSERT_NE(stk::mesh::field_data(*elem_field_ptr_, spring), nullptr);
+  ASSERT_NE(stk::mesh::field_data(*other_elem_field_ptr_, particle), nullptr);
+  EXPECT_DOUBLE_EQ(stk::mesh::field_data(*node_field_ptr_, node1)[0], 10.0);
+  EXPECT_DOUBLE_EQ(stk::mesh::field_data(*node_field_ptr_, node2)[0], 20.0);
+  EXPECT_DOUBLE_EQ(stk::mesh::field_data(*elem_field_ptr_, spring)[0], 30.0);
+  EXPECT_DOUBLE_EQ(stk::mesh::field_data(*other_elem_field_ptr_, particle)[0], 40.0);
+}
+
+TEST_F(UnitTestDeclareEntities, DeclareEntityBuilderRejectsMixedPartAndClassPipelines) {
+  setup();
+
+  DeclareEntitiesHelper builder;
+  auto node = builder.create_node();
+  node.add_part(node_part_ptr_);
+  EXPECT_THROW(node.add_class(*node_set_class_ptr_), std::logic_error);
+
+  auto element = builder.create_element();
+  element.add_class(*beam_2_class_ptr_);
+  EXPECT_THROW(element.add_part(beam_2_part_ptr_), std::logic_error);
+}
+
 TEST_F(UnitTestDeclareEntities, DeclareLinks) {
   if (stk::parallel_machine_size(communicator_) != 1) {
     GTEST_SKIP() << "This test is only designed to run with 1 MPI rank.";
@@ -416,8 +535,8 @@ TEST_F(UnitTestDeclareEntities, DeclareLinks) {
   builder.create_node()
       .id(5)
       .owning_proc(0)
-      .add_part(node_slinks_part_ptr_)  // Endows this node with link dimensionality 2 within the node rank "ALL_LINKS"
-                                        // link data
+      .add_class(*node_slinks_class_ptr_)  // Endows this node with link dimensionality 2 within the node rank
+                                           // "ALL_LINKS" link data
       .links_to(link_data_nodes_ptr_, 1, stk::topology::ELEM_RANK, 0)   // Link to particle 1
       .links_to(link_data_nodes_ptr_, 3, stk::topology::NODE_RANK, 1);  // Link to spring node 1
   builder.create_node()
@@ -476,7 +595,8 @@ TEST_F(UnitTestDeclareEntities, DeclareLinks) {
       << "Link Node " << bulk_data_ptr_->identifier(link_node1) << " is not valid.";
   EXPECT_TRUE(bulk_data_ptr_->is_valid(link_node2))
       << "Link Node " << bulk_data_ptr_->identifier(link_node2) << " is not valid.";
-  EXPECT_TRUE(bulk_data_ptr_->bucket(link_node1).member(*node_slinks_part_ptr_));
+  EXPECT_TRUE(bulk_data_ptr_->bucket(link_node1).member(node_slinks_class_ptr_->leaf_part()));
+  EXPECT_TRUE(bulk_data_ptr_->bucket(link_node1).member(node_slinks_class_ptr_->assembly_part()));
   EXPECT_TRUE(bulk_data_ptr_->bucket(link_node2).member(*node_slinks_part_ptr_));
 
   // Verify the links | node_coo_data.get_linked_entity(
