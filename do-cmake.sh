@@ -80,6 +80,5 @@ cmake \
 -DTPL_Teuchos_DIR:PATH=${TRILINOS_ROOT_DIR} \
 ${ccache_args} \
 ${compiler_flags} \
-${install_dir} \
 ${extra_args} \
 ${MUNDY_SOURCE_DIR}

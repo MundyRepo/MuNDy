@@ -29,7 +29,6 @@
 #include <cstdlib>      // for std::getenv (temporary)
 #include <iostream>     // for std::cout profiling output (temporary)
 #include <memory>       // for std::shared_ptr, std::unique_ptr
-#include <string>       // for std::string
 #include <type_traits>  // for std::enable_if, std::is_base_of
 #include <typeindex>    // for std::type_index
 #include <vector>       // for std::vector
@@ -67,14 +66,18 @@ namespace mesh {
 
 namespace impl {
 
+inline bool is_env_flag_enabled(const char* env_name) {
+  const char* env = std::getenv(env_name);
+  return env != nullptr && env[0] == '1' && env[1] == '\0';
+}
+
 inline bool is_link_sync_profiling_enabled() {
-  const char* env = std::getenv("MUNDY_LINKDATA_SYNC_PROFILE");
-  return env != nullptr && std::string(env) == "1";
+  static const bool enabled = is_env_flag_enabled("MUNDY_LINKDATA_SYNC_PROFILE");
+  return enabled;
 }
 
 inline bool use_team_flat_for_gather_part_2_partial_sum() {
-  const char* env = std::getenv("MUNDY_LINKDATA_GATHER2_TEAM_FLAT");
-  return env != nullptr && std::string(env) == "1";
+  return is_env_flag_enabled("MUNDY_LINKDATA_GATHER2_TEAM_FLAT");
 }
 
 inline double elapsed_sync_profile_seconds(const std::chrono::steady_clock::time_point& begin,

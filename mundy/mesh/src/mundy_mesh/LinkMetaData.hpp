@@ -35,12 +35,14 @@
 // Trilinos libs
 #include <Trilinos_version.h>  // for TRILINOS_MAJOR_MINOR_VERSION
 
-#include <stk_io/StkMeshIoBroker.hpp>  // for stk::io::StkMeshIoBroker
-#include <stk_mesh/base/Entity.hpp>    // for stk::mesh::Entity
-#include <stk_mesh/base/Field.hpp>     // for stk::mesh::Field
-#include <stk_mesh/base/Part.hpp>      // stk::mesh::Part
-#include <stk_mesh/base/Selector.hpp>  // stk::mesh::Selector
-#include <stk_mesh/base/Types.hpp>     // for stk::mesh::EntityRank
+#include <stk_io/IossBridge.hpp>                // for stk::io::set_field_role, stk::io::Field
+#include <stk_io/StkMeshIoBroker.hpp>           // for stk::io::StkMeshIoBroker
+#include <stk_mesh/base/Entity.hpp>             // for stk::mesh::Entity
+#include <stk_mesh/base/Field.hpp>              // for stk::mesh::Field
+#include <stk_mesh/base/Part.hpp>               // stk::mesh::Part
+#include <stk_mesh/base/Selector.hpp>           // stk::mesh::Selector
+#include <stk_mesh/base/Types.hpp>              // for stk::mesh::EntityRank
+#include <stk_util/parallel/OutputStreams.hpp>  // for stk::outputP0
 
 // Mundy libs
 #include <mundy_mesh/BulkData.hpp>  // for mundy::mesh::BulkData
@@ -119,10 +121,11 @@ class LinkMetaData {
             declare_class(meta_data, std::string("MUNDY_UNIVERSAL_") + our_name + "_" + rank_to_string(link_rank_),
                           link_rank_, /* disable io support */ link_rank_ == stk::topology::ELEM_RANK)) {
     if (link_rank_ == stk::topology::ELEM_RANK) {
-      std::cerr << "Warning: LinkMetaData '" << our_name_
-                << "' is using a non-IO universal element-rank link set because STK IO does not yet support "
-                   "ELEMENT_RANK sets."
-                << std::endl;
+      // Only print on rank zero to avoid redundant warnings in parallel runs
+      stk::outputP0() << "Warning: LinkMetaData '" << our_name_
+                      << "' is using a non-IO universal element-rank link class because STK IO does not yet support "
+                         "ELEMENT_RANK sets."
+                      << std::endl;
     }
 
     unsigned links_start_valid[1] = {0};
@@ -504,7 +507,7 @@ inline void add_link_restart_fields(stk::io::StkMeshIoBroker& io_broker, size_t 
                                     LinkMetaData& link_meta_data) {
   ClassVector link_classes = link_meta_data.universal_link_class_.subclasses();
   link_classes.push_back(&link_meta_data.universal_link_class_);
-  
+
   ClassVector io_link_classes = impl::filter_io_supported_classes(link_classes);
   add_class_field(io_broker, output_index, link_meta_data.linked_entity_ids_field_, io_link_classes);
   add_class_field(io_broker, output_index, link_meta_data.linked_entity_ranks_field_, io_link_classes);
