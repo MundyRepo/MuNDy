@@ -1,7 +1,6 @@
 if (DEFINED TPL_Teuchos_DIR)
   FIND_PACKAGE(Teuchos REQUIRED
       CONFIG
-      NO_DEFAULT_PATH
       PATHS
         ${TPL_Teuchos_DIR}/lib/cmake/Teuchos
         ${TPL_Teuchos_DIR}/lib64/cmake/Teuchos

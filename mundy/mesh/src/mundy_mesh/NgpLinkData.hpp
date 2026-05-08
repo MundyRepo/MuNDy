@@ -132,6 +132,10 @@ class NgpLinkDataT {
     MUNDY_THROW_ASSERT(link_data_ptr_ != nullptr, std::invalid_argument, "Link data is not set.");
     return *link_data_ptr_;
   }
+  const LinkData& link_data() const {
+    MUNDY_THROW_ASSERT(link_data_ptr_ != nullptr, std::invalid_argument, "Link data is not set.");
+    return *link_data_ptr_;
+  }
 
   /// \brief Fetch the link rank
   KOKKOS_INLINE_FUNCTION
@@ -167,11 +171,11 @@ class NgpLinkDataT {
   void crs_modify_on_device() {
     link_data().crs_modify_on_device();
   }
-  void crs_need_sync_to_host() const {
-    link_data().crs_need_sync_to_host();
+  bool crs_need_sync_to_host() const {
+    return link_data().crs_need_sync_to_host();
   }
-  void crs_need_sync_to_device() const {
-    link_data().crs_need_sync_to_device();
+  bool crs_need_sync_to_device() const {
+    return link_data().crs_need_sync_to_device();
   }
   void crs_sync_to_host() {
     link_data().crs_sync_to_host();
@@ -204,11 +208,11 @@ class NgpLinkDataT {
   void coo_modify_on_device() {
     link_data().coo_modify_on_device();
   }
-  void coo_need_sync_to_host() const {
-    link_data().coo_need_sync_to_host();
+  bool coo_need_sync_to_host() const {
+    return link_data().coo_need_sync_to_host();
   }
-  void coo_need_sync_to_device() const {
-    link_data().coo_need_sync_to_device();
+  bool coo_need_sync_to_device() const {
+    return link_data().coo_need_sync_to_device();
   }
   void coo_sync_to_host() {
     link_data().coo_sync_to_host();
@@ -234,11 +238,19 @@ class NgpLinkDataT {
   ///  2. A reduction over all selected links to check if any of the links are dirty.
   /// These aren't expensive operations and they're designed to be fast/GPU-compatible, but they aren't free.
   bool is_crs_up_to_date(const stk::mesh::Selector& selector) {
+    if (impl::get_crs_structure_dirty(link_data())) {
+      return false;
+    }
+    sync_coo_to_device_if_needed();
     return impl::NgpCOOToCSRSynchronizerT<NgpMemSpace>::is_crs_up_to_date(ngp_crs_data_, ngp_coo_data_, selector);
   }
 
   /// \brief Check if the CSR connectivity is up-to-date for all links.
   bool is_crs_up_to_date() {
+    if (impl::get_crs_structure_dirty(link_data())) {
+      return false;
+    }
+    sync_coo_to_device_if_needed();
     return impl::NgpCOOToCSRSynchronizerT<NgpMemSpace>::is_crs_up_to_date(ngp_crs_data_, ngp_coo_data_);
   }
 
@@ -246,13 +258,24 @@ class NgpLinkDataT {
   /// This takes changes made via the declare/destroy_relation functions or request/destroy links and updates
   /// the CSR connectivity to reflect these changes.
   void update_crs_from_coo(const stk::mesh::Selector& selector) {
-    impl::NgpCOOToCSRSynchronizerT<NgpMemSpace>::update_crs_from_coo(ngp_crs_data_, ngp_coo_data_, selector);
+    const bool structure_dirty = impl::get_crs_structure_dirty(link_data());
+    sync_coo_for_crs_update(structure_dirty);
+    impl::NgpCOOToCSRSynchronizerT<NgpMemSpace>::update_crs_from_coo(ngp_crs_data_, ngp_coo_data_, selector,
+                                                                     structure_dirty);
+    if (structure_dirty) {
+      impl::clear_crs_structure_dirty(link_data());
+    }
     crs_modify_on_device();
   }
 
   /// \brief Propagate changes made to the COO connectivity to the CSR connectivity.
   void update_crs_from_coo() {
-    impl::NgpCOOToCSRSynchronizerT<NgpMemSpace>::update_crs_from_coo(ngp_crs_data_, ngp_coo_data_);
+    const bool structure_dirty = impl::get_crs_structure_dirty(link_data());
+    sync_coo_for_crs_update(structure_dirty);
+    impl::NgpCOOToCSRSynchronizerT<NgpMemSpace>::update_crs_from_coo(ngp_crs_data_, ngp_coo_data_, structure_dirty);
+    if (structure_dirty) {
+      impl::clear_crs_structure_dirty(link_data());
+    }
     crs_modify_on_device();
   }
 
@@ -294,6 +317,19 @@ class NgpLinkDataT {
   //@}
 
  private:
+  void sync_coo_to_device_if_needed() {
+    if (coo_need_sync_to_device()) {
+      coo_sync_to_device();
+    }
+  }
+
+  void sync_coo_for_crs_update(bool host_validation_required) {
+    if (host_validation_required && coo_need_sync_to_host()) {
+      coo_sync_to_host();
+    }
+    sync_coo_to_device_if_needed();
+  }
+
   //! \name Internal members (host only)
   //@{
 

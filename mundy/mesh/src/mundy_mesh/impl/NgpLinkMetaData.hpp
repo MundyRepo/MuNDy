@@ -56,7 +56,7 @@ class NgpLinkMetaDataT {
   //! \name Type aliases
   //@{
 
-  using entity_rank_value_t = std::underlying_type_t<stk::mesh::EntityRank>;
+  using entity_rank_value_t = LinkMetaData::entity_rank_value_t;
   using entity_id_value_t = stk::mesh::EntityId;
   using entity_value_t = stk::mesh::Entity::entity_value_type;
 
@@ -107,7 +107,7 @@ class NgpLinkMetaDataT {
         ngp_link_marked_for_destruction_field_(
             stk::mesh::get_updated_ngp_field<link_marked_for_destruction_field_t::value_type>(
                 impl::get_link_marked_for_destruction_field(link_meta_data))),
-        universal_link_part_ord_(link_meta_data.universal_link_part().mesh_meta_data_ordinal()) {
+        universal_link_class_ordinal_(link_meta_data.universal_link_class().class_ordinal()) {
   }
 
   /// \brief Destructor.
@@ -149,10 +149,10 @@ class NgpLinkMetaDataT {
     return link_rank_;
   }
 
-  /// \brief Fetch the universal link part.
+  /// \brief Fetch the universal link class ordinal.
   KOKKOS_INLINE_FUNCTION
-  stk::mesh::PartOrdinal universal_link_part_ord() const noexcept {
-    return universal_link_part_ord_;
+  Class::class_ordinal_t universal_link_class_ordinal() const noexcept {
+    return universal_link_class_ordinal_;
   }
 
   /// \brief Fetch the linked entity ids field.
@@ -260,7 +260,7 @@ class NgpLinkMetaDataT {
   ngp_linked_entity_bucket_ords_field_t ngp_linked_entity_bucket_ords_field_;
   ngp_link_crs_needs_updated_field_t ngp_link_crs_needs_updated_field_;
   ngp_link_marked_for_destruction_field_t ngp_link_marked_for_destruction_field_;
-  stk::mesh::PartOrdinal universal_link_part_ord_;
+  Class::class_ordinal_t universal_link_class_ordinal_;
   //@}
 };  // NgpLinkMetaDataT
 

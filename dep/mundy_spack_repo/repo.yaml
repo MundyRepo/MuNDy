@@ -1,0 +1,3 @@
+repo:
+  namespace: mundy_spack_repo
+  api: v2.0

@@ -32,15 +32,16 @@ General comments as we go:
   It's just that the CSR connectivity can only be accessed for a given partition.
 
 Can we hide this entire class from the user by making it internal? NgpPartitionedCSRConn
-How would they access the CSR connectivity then? Can we could give them a PartitionOrdinal instead of giving them an
-instance of this class? Well, if a user requests a partition, can we ever destroy it? No. I assume that's part of why
-STK chose to make partitions internal details.
+How would they access the CSR connectivity then? Can we give them a PartitionOrdinal instead of giving them an
+instance of this class? That suggests partition identity should remain stable even if the heavy CSR storage for that
+slot is later retired.
 
 I guess we need to address the underlying question: when should we destroy a partition?
-After much deliberation, I think the answer is never. We'll allow users to request CSR connectivity for a given
-partition, and we will give them an ordinal that they can then use to access the CSR connectivity. In this fashion,
-users will interact with the CSR connectivity via the NgpLinkData class calling get_connected_links(p_ordinal, rank,
-entity_fmi), which will perform partitioned_crs_conn_vec_[p_ordinal].get_connected_links(rank, entity_fmi);
+For v1, the implementation effectively behaves as if the answer is "never except by global rebuild". For v2, a better
+target is likely "never renumber or invalidate partition identity during normal structural churn, but allow a partition
+slot to become empty and release heavy CSR storage at a safe modification boundary". In that fashion, users would still
+interact with CSR connectivity via a stable partition ordinal, while the implementation remains free to reactivate the
+same slot if the key later reappears locally.
 
 update_crs_from_coo should be done for all partitions all at once and should be managed by the NgpLinkData.
 
@@ -101,15 +102,26 @@ class LinkCSRPartitionT {  // Raw data in any space.
   //! \name Public constructors and destructor
   //@{
 
-  KOKKOS_DEFAULTED_FUNCTION
-  LinkCSRPartitionT() = default;
+  KOKKOS_FUNCTION
+  LinkCSRPartitionT()
+      : id_(0),
+        ngp_key_(),
+        selector_(),
+        link_rank_(stk::topology::INVALID_RANK),
+        link_dimensionality_(0u) {
+  }
 
   LinkCSRPartitionT(const stk::mesh::Ordinal& partition_id, const impl::PartitionKey key,
                     const stk::mesh::EntityRank& link_rank, const unsigned link_dimensionality,
                     const stk::mesh::BulkData& bulk_data)
-      : id_(partition_id), link_rank_(link_rank), link_dimensionality_(link_dimensionality) {
+      : id_(partition_id),
+        ngp_key_(),
+        selector_(),
+        link_rank_(link_rank),
+        link_dimensionality_(link_dimensionality) {
     // Map host key to ngp key
-    ngp_key_ = impl::NgpPartitionKey("NgpCSRimpl::PartitionKey", key.size());
+    ngp_key_ = impl::NgpPartitionKey(Kokkos::view_alloc(Kokkos::WithoutInitializing, "NgpCSRimpl::PartitionKey"),
+                                     key.size());
     auto ngp_key_host = Kokkos::create_mirror_view(ngp_key_);
     for (size_t i = 0; i < key.size(); ++i) {
       ngp_key_host(i) = key[i];
@@ -125,11 +137,9 @@ class LinkCSRPartitionT {  // Raw data in any space.
     // *selector_ptr_ = stk::mesh::selectIntersection(parts);
     selector_ = stk::mesh::selectIntersection(parts);
 
-    // Initialize the linked buckets for each rank
     for (stk::mesh::EntityRank rank = stk::topology::NODE_RANK; rank < stk::topology::NUM_RANKS; ++rank) {
       const stk::mesh::BucketVector& buckets = bulk_data.buckets(rank);
-      size_t num_buckets = buckets.size();
-
+      const size_t num_buckets = buckets.size();
       linked_buckets_[rank] =
           LinkCSRBucketConnView(Kokkos::view_alloc(Kokkos::WithoutInitializing, "LinkedBuckets"), num_buckets);
       for (size_t i = 0; i < num_buckets; ++i) {
@@ -262,6 +272,7 @@ class LinkCSRPartitionT {  // Raw data in any space.
                        std::invalid_argument, "Bucket ordinal is out of bounds for this partition.");
     return linked_buckets_[rank](entity_index.bucket_id).num_connected_links(entity_index.bucket_ord);
   }
+
   //@}
 
  private:
@@ -280,13 +291,15 @@ class LinkCSRPartitionT {  // Raw data in any space.
 
   KOKKOS_FUNCTION
   void clear_buckets_and_views() {
-    KOKKOS_IF_ON_HOST((if (is_last_bucket_reference()) {
-      for (stk::mesh::EntityRank rank = stk::topology::NODE_RANK; rank < stk::topology::NUM_RANKS; rank++) {
-        for (size_t iBucket = 0; iBucket < linked_buckets_[rank].size(); ++iBucket) {
-          linked_buckets_[rank][iBucket].~LinkCSRBucketConnT<MemSpace>();
-        }
-      }
-    }))
+    KOKKOS_IF_ON_HOST((
+        for (stk::mesh::EntityRank rank = stk::topology::NODE_RANK; rank < stk::topology::NUM_RANKS; rank++) {
+          if (is_last_bucket_reference(rank)) {
+            for (size_t iBucket = 0; iBucket < linked_buckets_[rank].size(); ++iBucket) {
+              linked_buckets_[rank][iBucket].~LinkCSRBucketConnT<MemSpace>();
+            }
+          }
+          linked_buckets_[rank] = LinkCSRBucketConnView();
+        }))
   }
   //@}
 

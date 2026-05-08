@@ -67,3 +67,18 @@ TEST(StringSink, StreamsToOstream) {
 }  // namespace
 
 }  // namespace mundy
+
+namespace {
+
+TEST(StringSink, MaterializesExpectedStringsWhenNotInMundyNamespace) {
+  constexpr auto literal_sink = mundy::sink() << "Some " << "error message";
+  EXPECT_EQ(literal_sink.to_string(), "Some error message");
+
+  const auto runtime_sink = mundy::sink() << "Failure for a = " << 2;
+  EXPECT_EQ(runtime_sink.to_string(), "Failure for a = 2");
+
+  const auto string_started_sink = mundy::sink() << std::string("prefix ") << 2 << " suffix";
+  EXPECT_EQ(string_started_sink.to_string(), "prefix 2 suffix");
+}
+
+}

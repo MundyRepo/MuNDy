@@ -1,7 +1,6 @@
 if (DEFINED TPL_Kokkos_DIR)
   FIND_PACKAGE(Kokkos REQUIRED
       CONFIG
-      NO_DEFAULT_PATH
       PATHS
         ${TPL_Kokkos_DIR}/lib/cmake/Kokkos
         ${TPL_Kokkos_DIR}/lib64/cmake/Kokkos

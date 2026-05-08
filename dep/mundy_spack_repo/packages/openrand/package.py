@@ -1,4 +1,5 @@
 from spack.package import *
+from spack_repo.builtin.build_systems.cmake import CMakePackage
 
 class Openrand(CMakePackage):
     """OpenRAND: reproducible random number generation for parallel computations."""

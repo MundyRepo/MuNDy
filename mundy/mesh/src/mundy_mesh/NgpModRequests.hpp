@@ -478,7 +478,8 @@ class NgpRequestEntitiesImplT {
   NgpRequestEntitiesImplT() = delete;
 
   /// \brief Constructor.
-  NgpRequestEntitiesImplT(unsigned helper_index) : state_("NgpRequestEntitiesImplT::state") {
+  NgpRequestEntitiesImplT(unsigned helper_index)
+      : state_(Kokkos::view_alloc(Kokkos::SequentialHostInit, "NgpRequestEntitiesImplT::state")) {
     state_().index_ = helper_index;
     state_().active_space_dev_view_ = bool_view_t("NgpRequestEntitiesImplT::active_space_dev_view");
     state_().active_space_host_view_ = Kokkos::create_mirror_view(state_().active_space_dev_view_);
@@ -792,8 +793,13 @@ class NgpRequestConnectionsT {
   //! \name Constructors / Destructors
   //@{
 
-  /// \brief Default constructor.
-  NgpRequestConnectionsT() : state_("NgpRequestConnectionsT::state") {
+  /// \brief Default constructor. Call initialize() before use.
+  KOKKOS_DEFAULTED_FUNCTION NgpRequestConnectionsT() = default;
+
+  void initialize() {
+    MUNDY_THROW_ASSERT(!state_.is_allocated(), std::runtime_error,
+                       "NgpRequestConnectionsT::initialize() called on already initialized object.");
+    state_ = state_view_t(Kokkos::view_alloc(Kokkos::SequentialHostInit, "NgpRequestConnectionsT::state"));
     state_().active_space_dev_view_ = bool_view_t("NgpRequestConnectionsT::active_space_dev_view");
     state_().active_space_host_view_ = Kokkos::create_mirror_view(state_().active_space_dev_view_);
     state_().ticket_issuer_ = ticket_issuer_t(/*activate_device*/ true);
@@ -995,8 +1001,13 @@ class NgpDestroyEntitiesT {
   //! \name Constructors / Destructors
   //@{
 
-  /// \brief Default constructor.
-  NgpDestroyEntitiesT() : state_("NgpDestroyEntitiesT::state") {
+  /// \brief Default constructor. Call initialize() before use.
+  KOKKOS_DEFAULTED_FUNCTION NgpDestroyEntitiesT() = default;
+
+  void initialize() {
+    MUNDY_THROW_ASSERT(!state_.is_allocated(), std::runtime_error,
+                       "NgpDestroyEntitiesT::initialize() called on already initialized object.");
+    state_ = state_view_t(Kokkos::view_alloc(Kokkos::SequentialHostInit, "NgpDestroyEntitiesT::state"));
     state_().active_space_dev_view_ = bool_view_t("NgpDestroyEntitiesT::active_space_dev_view");
     state_().active_space_host_view_ = Kokkos::create_mirror_view(state_().active_space_dev_view_);
     state_().ticket_issuer_ = ticket_issuer_t(/*activate_device*/ true);
@@ -1179,8 +1190,13 @@ class NgpDestroyConnectionsT {
   //! \name Constructors / Destructors
   //@{
 
-  /// \brief Default constructor.
-  NgpDestroyConnectionsT() : state_("NgpDestroyConnectionsT::state") {
+  /// \brief Default constructor. Call initialize() before use.
+  KOKKOS_DEFAULTED_FUNCTION NgpDestroyConnectionsT() = default;
+
+  void initialize() {
+    MUNDY_THROW_ASSERT(!state_.is_allocated(), std::runtime_error,
+                       "NgpDestroyConnectionsT::initialize() called on already initialized object.");
+    state_ = state_view_t(Kokkos::view_alloc(Kokkos::SequentialHostInit, "NgpDestroyConnectionsT::state"));
     state_().active_space_dev_view_ = bool_view_t("NgpDestroyConnectionsT::active_space_dev_view");
     state_().active_space_host_view_ = Kokkos::create_mirror_view(state_().active_space_dev_view_);
     state_().ticket_issuer_ = ticket_issuer_t(/*activate_device*/ true);
@@ -1371,7 +1387,10 @@ class NgpModRequestsT {
   //@{
 
   /// \brief Default constructor.
-  NgpModRequestsT() : shared_state_("NgpModRequestsT::shared_state"), host_state_("NgpModRequestsT::host_state") {
+  NgpModRequestsT()
+      : shared_state_(Kokkos::view_alloc(Kokkos::SequentialHostInit, "NgpModRequestsT::shared_state")),
+        host_state_(Kokkos::view_alloc(Kokkos::SequentialHostInit, "NgpModRequestsT::host_state")) {
+    shared_state_().initialize();
   }
 
   KOKKOS_DEFAULTED_FUNCTION NgpModRequestsT(const NgpModRequestsT&) = default;
@@ -1695,6 +1714,12 @@ class NgpModRequestsT {
   using entity_requests_known_ids_index_map_t = std::map<impl::PartitionKey, unsigned>;
 
   struct SharedState {
+    void initialize() {
+      destroy_entity_requests_.initialize();
+      connection_requests_.initialize();
+      destroy_connection_requests_.initialize();
+    }
+
     NgpDestroyEntitiesT<NgpMemSpace> destroy_entity_requests_;
     NgpRequestConnectionsT<NgpMemSpace> connection_requests_;
     NgpDestroyConnectionsT<NgpMemSpace> destroy_connection_requests_;

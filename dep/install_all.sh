@@ -13,6 +13,7 @@ fi
 INSTALL_DIR=$1
 KOKKOS_DIR=$2
 
+bash ./install_kokkos_tools.sh $INSTALL_DIR $KOKKOS_DIR
 bash ./install_arborx.sh $INSTALL_DIR $KOKKOS_DIR
 bash ./install_fmt.sh $INSTALL_DIR
 bash ./install_gtest.sh $INSTALL_DIR

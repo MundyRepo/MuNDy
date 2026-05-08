@@ -25,30 +25,35 @@ if (Mundy_ENABLE_TESTS AND Mundy_ENABLE_GTest)
   tribits_add_executable_and_test(
     UnitTestSegmentSegment
     SOURCES UnitTestSegmentSegment.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+    NUM_MPI_PROCS 1
     INSTALLABLE
   )
 
   tribits_add_executable_and_test(
     UnitTestEllipsoidEllipsoid
     SOURCES UnitTestEllipsoidEllipsoid.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+    NUM_MPI_PROCS 1
     INSTALLABLE
   )
 
   tribits_add_executable_and_test(
     UnitTestComputeAABB
     SOURCES UnitTestComputeAABB.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+    NUM_MPI_PROCS 1
     INSTALLABLE
   )
 
   tribits_add_executable_and_test(
     UnitTestComputeBoundingRadius
     SOURCES UnitTestComputeBoundingRadius.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+    NUM_MPI_PROCS 1
     INSTALLABLE
   )
 
   tribits_add_executable_and_test(
     UnitTestPeriodicity
     SOURCES UnitTestPeriodicity.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+    NUM_MPI_PROCS 1
     INSTALLABLE
   )
 else()

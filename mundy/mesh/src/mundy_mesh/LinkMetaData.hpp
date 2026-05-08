@@ -25,6 +25,7 @@
 /// \brief Declaration of the LinkMetaData class
 
 // C++ core libs
+#include <iostream>
 #include <memory>     // for std::shared_ptr, std::unique_ptr
 #include <sstream>    // for std::ostringstream
 #include <string>     // for std::string
@@ -34,14 +35,18 @@
 // Trilinos libs
 #include <Trilinos_version.h>  // for TRILINOS_MAJOR_MINOR_VERSION
 
-#include <stk_mesh/base/Entity.hpp>    // for stk::mesh::Entity
-#include <stk_mesh/base/Field.hpp>     // for stk::mesh::Field
-#include <stk_mesh/base/Part.hpp>      // stk::mesh::Part
-#include <stk_mesh/base/Selector.hpp>  // stk::mesh::Selector
-#include <stk_mesh/base/Types.hpp>     // for stk::mesh::EntityRank
+#include <stk_io/IossBridge.hpp>                // for stk::io::set_field_role, stk::io::Field
+#include <stk_io/StkMeshIoBroker.hpp>           // for stk::io::StkMeshIoBroker
+#include <stk_mesh/base/Entity.hpp>             // for stk::mesh::Entity
+#include <stk_mesh/base/Field.hpp>              // for stk::mesh::Field
+#include <stk_mesh/base/Part.hpp>               // stk::mesh::Part
+#include <stk_mesh/base/Selector.hpp>           // stk::mesh::Selector
+#include <stk_mesh/base/Types.hpp>              // for stk::mesh::EntityRank
+#include <stk_util/parallel/OutputStreams.hpp>  // for stk::outputP0
 
 // Mundy libs
 #include <mundy_mesh/BulkData.hpp>  // for mundy::mesh::BulkData
+#include <mundy_mesh/Class.hpp>     // for mundy::mesh::Class
 #include <mundy_mesh/MetaData.hpp>  // for mundy::mesh::MetaData
 
 namespace mundy {
@@ -53,24 +58,26 @@ namespace mesh {
 
 class LinkMetaData;
 
+void add_link_restart_fields(stk::io::StkMeshIoBroker& io_broker, size_t output_index, LinkMetaData& link_meta_data);
+
 namespace impl {
 // clang-format off
-      stk::mesh::Field<stk::mesh::EntityId>                           &get_linked_entity_ids_field(                LinkMetaData& link_meta_data);
-      stk::mesh::Field<std::underlying_type_t<stk::mesh::EntityRank>> &get_linked_entity_ranks_field(              LinkMetaData& link_meta_data);
-      stk::mesh::Field<stk::mesh::Entity::entity_value_type>          &get_linked_entities_field(                  LinkMetaData& link_meta_data);
-      stk::mesh::Field<stk::mesh::Entity::entity_value_type>          &get_linked_entities_crs_field(              LinkMetaData& link_meta_data);
-      stk::mesh::Field<unsigned>                                      &get_linked_entity_bucket_ids_field(         LinkMetaData& link_meta_data);
-      stk::mesh::Field<unsigned>                                      &get_linked_entity_bucket_ords_field(        LinkMetaData& link_meta_data);
-      stk::mesh::Field<int>                                           &get_link_crs_needs_updated_field(           LinkMetaData& link_meta_data);
-      stk::mesh::Field<unsigned>                                      &get_link_marked_for_destruction_field(      LinkMetaData& link_meta_data);
-const stk::mesh::Field<stk::mesh::EntityId>                           &get_linked_entity_ids_field(          const LinkMetaData& link_meta_data);
-const stk::mesh::Field<std::underlying_type_t<stk::mesh::EntityRank>> &get_linked_entity_ranks_field(        const LinkMetaData& link_meta_data);
-const stk::mesh::Field<stk::mesh::Entity::entity_value_type>          &get_linked_entities_field(            const LinkMetaData& link_meta_data);
-const stk::mesh::Field<stk::mesh::Entity::entity_value_type>          &get_linked_entities_crs_field(        const LinkMetaData& link_meta_data);
-const stk::mesh::Field<unsigned>                                      &get_linked_entity_bucket_ids_field(   const LinkMetaData& link_meta_data);
-const stk::mesh::Field<unsigned>                                      &get_linked_entity_bucket_ords_field(  const LinkMetaData& link_meta_data);
-const stk::mesh::Field<int>                                           &get_link_crs_needs_updated_field(     const LinkMetaData& link_meta_data);
-const stk::mesh::Field<unsigned>                                      &get_link_marked_for_destruction_field(const LinkMetaData& link_meta_data);
+      stk::mesh::Field<stk::mesh::EntityId>                  &get_linked_entity_ids_field(                LinkMetaData& link_meta_data);
+      stk::mesh::Field<int>                                  &get_linked_entity_ranks_field(              LinkMetaData& link_meta_data);
+      stk::mesh::Field<stk::mesh::Entity::entity_value_type> &get_linked_entities_field(                  LinkMetaData& link_meta_data);
+      stk::mesh::Field<stk::mesh::Entity::entity_value_type> &get_linked_entities_crs_field(              LinkMetaData& link_meta_data);
+      stk::mesh::Field<unsigned>                             &get_linked_entity_bucket_ids_field(         LinkMetaData& link_meta_data);
+      stk::mesh::Field<unsigned>                             &get_linked_entity_bucket_ords_field(        LinkMetaData& link_meta_data);
+      stk::mesh::Field<int>                                  &get_link_crs_needs_updated_field(           LinkMetaData& link_meta_data);
+      stk::mesh::Field<unsigned>                             &get_link_marked_for_destruction_field(      LinkMetaData& link_meta_data);
+const stk::mesh::Field<stk::mesh::EntityId>                  &get_linked_entity_ids_field(          const LinkMetaData& link_meta_data);
+const stk::mesh::Field<int>                                  &get_linked_entity_ranks_field(        const LinkMetaData& link_meta_data);
+const stk::mesh::Field<stk::mesh::Entity::entity_value_type> &get_linked_entities_field(            const LinkMetaData& link_meta_data);
+const stk::mesh::Field<stk::mesh::Entity::entity_value_type> &get_linked_entities_crs_field(        const LinkMetaData& link_meta_data);
+const stk::mesh::Field<unsigned>                             &get_linked_entity_bucket_ids_field(   const LinkMetaData& link_meta_data);
+const stk::mesh::Field<unsigned>                             &get_linked_entity_bucket_ords_field(  const LinkMetaData& link_meta_data);
+const stk::mesh::Field<int>                                  &get_link_crs_needs_updated_field(     const LinkMetaData& link_meta_data);
+const stk::mesh::Field<unsigned>                             &get_link_marked_for_destruction_field(const LinkMetaData& link_meta_data);
 // clang-format on
 }  // namespace impl
 //@}
@@ -80,7 +87,7 @@ class LinkMetaData {
   //! \name Type aliases
   //@{
 
-  using entity_rank_value_t = std::underlying_type_t<stk::mesh::EntityRank>;
+  using entity_rank_value_t = int;
   using entity_id_value_t = stk::mesh::EntityId;
   using entity_value_t = stk::mesh::Entity::entity_value_type;
   using linked_entity_ids_field_t = stk::mesh::Field<entity_id_value_t>;
@@ -109,11 +116,35 @@ class LinkMetaData {
             meta_data.declare_field<unsigned>(link_rank_, "MUNDY_LINKED_ENTITY_BUCKET_ORD")),
         link_crs_needs_updated_field_(meta_data.declare_field<int>(link_rank_, "MUNDY_LINK_CSR_NEEDS_UPDATED")),
         link_marked_for_destruction_field_(
-            meta_data.declare_field<unsigned>(link_rank_, "MUNDY_LINK_MARKED_FOR_DESTRUCTION")),
-        universal_link_part_(meta_data.declare_part(
-            std::string("MUNDY_UNIVERSAL_") + our_name + "_" + rank_to_string(link_rank_), link_rank_)) {
+            meta_data.declare_field<unsigned>(link_rank_, "MUNDY_LINK_MARKED_FOR_DESTROY")),
+        universal_link_class_(
+            declare_class(meta_data, std::string("MUNDY_UNIVERSAL_") + our_name + "_" + rank_to_string(link_rank_),
+                          link_rank_, /* disable io support */ link_rank_ == stk::topology::ELEM_RANK)) {
+    if (link_rank_ == stk::topology::ELEM_RANK) {
+      // Only print on rank zero to avoid redundant warnings in parallel runs
+      stk::outputP0() << "Warning: LinkMetaData '" << our_name_
+                      << "' is using a non-IO universal element-rank link class because STK IO does not yet support "
+                         "ELEMENT_RANK sets."
+                      << std::endl;
+    }
+
     unsigned links_start_valid[1] = {0};
-    stk::mesh::put_field_on_mesh(link_marked_for_destruction_field_, meta_data.universal_part(), 1, links_start_valid);
+    int link_crs_needs_updated_start_valid[1] = {1};
+    put_field_on_mesh(link_marked_for_destruction_field_, universal_link_class_, 1, links_start_valid);
+    put_field_on_mesh(link_crs_needs_updated_field_, universal_link_class_, 1, link_crs_needs_updated_start_valid);
+
+    // Only the linked entity IDs and ranks are restart-stable. Entity handles and bucket ordinals are runtime caches
+    // that must be rebuilt after reading a mesh.
+    stk::io::set_field_role(linked_entity_ids_field_, Ioss::Field::TRANSIENT);
+    stk::io::set_field_role(linked_entity_ranks_field_, Ioss::Field::TRANSIENT);
+
+    // As a test, what happens if we make ALL link fields transient
+    stk::io::set_field_role(linked_entities_field_, Ioss::Field::TRANSIENT);
+    stk::io::set_field_role(linked_entities_crs_field_, Ioss::Field::TRANSIENT);
+    stk::io::set_field_role(linked_entity_bucket_ids_field_, Ioss::Field::TRANSIENT);
+    stk::io::set_field_role(linked_entity_bucket_ords_field_, Ioss::Field::TRANSIENT);
+    stk::io::set_field_role(link_crs_needs_updated_field_, Ioss::Field::TRANSIENT);
+    stk::io::set_field_role(link_marked_for_destruction_field_, Ioss::Field::TRANSIENT);
   }
 
   /// \brief Default copy/move constructors/operators.
@@ -160,14 +191,14 @@ class LinkMetaData {
     return linked_entity_ranks_field_;
   }
 
-  /// \brief Fetch the universal link part.
-  const stk::mesh::Part& universal_link_part() const {
-    return universal_link_part_;
+  /// \brief Fetch the universal link class.
+  const Class& universal_link_class() const {
+    return universal_link_class_;
   }
 
-  /// \brief Fetch the universal link part.
-  stk::mesh::Part& universal_link_part() {
-    return universal_link_part_;
+  /// \brief Fetch the universal link class.
+  Class& universal_link_class() {
+    return universal_link_class_;
   }
 
   /// \brief Fetch the mesh meta data manager for this bulk data manager.
@@ -194,11 +225,46 @@ class LinkMetaData {
     return part;
   }
 
+  /// \brief Declare a link class (compatible with the current link data)
+  ///
+  /// \param class_name [in] The name of the class.
+  /// \param link_dimensionality_for_this_class [in] The number of linked entities per link.
+  Class& declare_link_class(const std::string& class_name, unsigned link_dimensionality_for_this_class) {
+    const bool disable_io_support = link_rank_ == stk::topology::ELEM_RANK;
+    if (disable_io_support) {
+      std::cerr << "Warning: LinkMetaData '" << our_name_ << "' is " << "declaring element-rank link class '"
+                << class_name << "' with IO support disabled because STK IO does not yet support ELEMENT_RANK sets."
+                << std::endl;
+    }
+
+    Class& link_class = declare_class(meta_data_, class_name, link_rank_, disable_io_support);
+    add_link_support_to_class(link_class, link_dimensionality_for_this_class);
+    return link_class;
+  }
+
+  /// \brief Declare a topological link class (compatible with the current link data)
+  ///
+  /// \param class_name [in] The name of the class.
+  /// \param class_topology [in] The topology of the class.
+  /// \param link_dimensionality_for_this_class [in] The number of linked entities per link.
+  Class& declare_link_class(const std::string& class_name, stk::topology::topology_t class_topology,
+                            unsigned link_dimensionality_for_this_class) {
+    MUNDY_THROW_REQUIRE(stk::topology(class_topology).rank() == link_rank_, std::logic_error,
+                        sink() << "Cannot declare link class '" << class_name << "' with topology '"
+                               << stk::topology(class_topology) << "' because its rank does not match the link rank '"
+                               << link_rank_ << "'.");
+
+    Class& link_class = declare_class(meta_data_, class_name, class_topology);
+    add_link_support_to_class(link_class, link_dimensionality_for_this_class);
+    return link_class;
+  }
+
   /// \brief Declare a link assembly part (compatible with the current link data)
   ///
   /// \param part_name [in] The name of the part.
   stk::mesh::Part& declare_link_assembly_part(const std::string& part_name) {
-    stk::mesh::Part& part = meta_data_.declare_part(part_name, link_rank_);
+    stk::mesh::Part& part = meta_data_.declare_part(part_name);
+    stk::io::put_assembly_io_part_attribute(part);
     add_link_support_to_assembly_part(part);
     return part;
   }
@@ -208,16 +274,25 @@ class LinkMetaData {
   /// \param part_name [in] The name of the part.
   /// \param link_dimensionality_for_this_part [in] The number of linked entities per link.
   void add_link_support_to_part(stk::mesh::Part& part, unsigned link_dimensionality_for_this_part) {
-    meta_data_.declare_part_subset(universal_link_part_, part);
+    meta_data_.declare_part_subset(universal_link_class_.assembly_part(), part);
+    meta_data_.declare_part_subset(universal_link_class_.data_part(), part);
     put_link_fields_on_part(part, link_dimensionality_for_this_part);
+  }
+
+  /// \brief Make an existing class into a link-compatible class (compatible with the current link data)
+  ///
+  /// \param link_class [in] The class.
+  /// \param link_dimensionality_for_this_class [in] The number of linked entities per link.
+  void add_link_support_to_class(Class& link_class, unsigned link_dimensionality_for_this_class) {
+    universal_link_class_.declare_subset(link_class);
+    put_link_fields_on_class(link_class, link_dimensionality_for_this_class);
   }
 
   /// \brief Make an existing assembly part into a link-compatible part (compatible with the current link data)
   ///
   /// \param part_name [in] The name of the part.
-  /// \param link_dimensionality_for_this_part [in] The number of linked entities per link.
   void add_link_support_to_assembly_part(stk::mesh::Part& part) {
-    meta_data_.declare_part_subset(universal_link_part_, part);
+    meta_data_.declare_part_subset(universal_link_class_.assembly_part(), part);
   }
   //@}
 
@@ -310,7 +385,6 @@ class LinkMetaData {
     std::vector<entity_id_value_t> initial_linked_entity_ids(link_dimensionality, stk::mesh::EntityId());
     std::vector<entity_rank_value_t> initial_linked_entity_ranks(
         link_dimensionality, static_cast<entity_rank_value_t>(stk::topology::INVALID_RANK));
-    int initial_link_crs_needs_updated[1] = {true};
     stk::mesh::put_field_on_mesh(linked_entities_field_, part, link_dimensionality, initial_linked_entities.data());
     stk::mesh::put_field_on_mesh(linked_entities_crs_field_, part, link_dimensionality, initial_linked_entities.data());
     stk::mesh::put_field_on_mesh(linked_entity_ids_field_, part, link_dimensionality, initial_linked_entity_ids.data());
@@ -318,7 +392,20 @@ class LinkMetaData {
                                  initial_linked_entity_ranks.data());
     stk::mesh::put_field_on_mesh(linked_entity_bucket_ids_field_, part, link_dimensionality, nullptr);
     stk::mesh::put_field_on_mesh(linked_entity_bucket_ords_field_, part, link_dimensionality, nullptr);
-    stk::mesh::put_field_on_mesh(link_crs_needs_updated_field_, part, 1, initial_link_crs_needs_updated);
+  }
+
+  /// \brief Add the linked entities and keys field to the class with the given dimensionality
+  inline void put_link_fields_on_class(Class& link_class, unsigned link_dimensionality) {
+    std::vector<entity_value_t> initial_linked_entities(link_dimensionality, stk::mesh::Entity().local_offset());
+    std::vector<entity_id_value_t> initial_linked_entity_ids(link_dimensionality, stk::mesh::EntityId());
+    std::vector<entity_rank_value_t> initial_linked_entity_ranks(
+        link_dimensionality, static_cast<entity_rank_value_t>(stk::topology::INVALID_RANK));
+    put_field_on_mesh(linked_entities_field_, link_class, link_dimensionality, initial_linked_entities.data());
+    put_field_on_mesh(linked_entities_crs_field_, link_class, link_dimensionality, initial_linked_entities.data());
+    put_field_on_mesh(linked_entity_ids_field_, link_class, link_dimensionality, initial_linked_entity_ids.data());
+    put_field_on_mesh(linked_entity_ranks_field_, link_class, link_dimensionality, initial_linked_entity_ranks.data());
+    put_field_on_mesh(linked_entity_bucket_ids_field_, link_class, link_dimensionality, nullptr);
+    put_field_on_mesh(linked_entity_bucket_ords_field_, link_class, link_dimensionality, nullptr);
   }
   //@}
 
@@ -326,23 +413,26 @@ class LinkMetaData {
   //! \name Friends <3
   //@{
 
+  friend void add_link_restart_fields(stk::io::StkMeshIoBroker& io_broker, size_t output_index,
+                                      LinkMetaData& link_meta_data);
+
   // clang-format off
-  friend       stk::mesh::Field<entity_id_value_t>   &impl::get_linked_entity_ids_field(                LinkMetaData &link_meta_data);
-  friend       stk::mesh::Field<entity_rank_value_t> &impl::get_linked_entity_ranks_field(              LinkMetaData &link_meta_data);
-  friend       stk::mesh::Field<entity_value_t>      &impl::get_linked_entities_field(                  LinkMetaData &link_meta_data);
-  friend       stk::mesh::Field<entity_value_t>      &impl::get_linked_entities_crs_field(              LinkMetaData &link_meta_data);
-  friend       stk::mesh::Field<unsigned>            &impl::get_linked_entity_bucket_ids_field(         LinkMetaData &link_meta_data);
-  friend       stk::mesh::Field<unsigned>            &impl::get_linked_entity_bucket_ords_field(        LinkMetaData &link_meta_data);
-  friend       stk::mesh::Field<int>                 &impl::get_link_crs_needs_updated_field(           LinkMetaData &link_meta_data);
-  friend       stk::mesh::Field<unsigned>            &impl::get_link_marked_for_destruction_field(      LinkMetaData &link_meta_data);
-  friend const stk::mesh::Field<entity_id_value_t>   &impl::get_linked_entity_ids_field(          const LinkMetaData &link_meta_data);
-  friend const stk::mesh::Field<entity_rank_value_t> &impl::get_linked_entity_ranks_field(        const LinkMetaData &link_meta_data);
-  friend const stk::mesh::Field<entity_value_t>      &impl::get_linked_entities_field(            const LinkMetaData &link_meta_data);
-  friend const stk::mesh::Field<entity_value_t>      &impl::get_linked_entities_crs_field(        const LinkMetaData &link_meta_data);
-  friend const stk::mesh::Field<unsigned>            &impl::get_linked_entity_bucket_ids_field(   const LinkMetaData &link_meta_data);
-  friend const stk::mesh::Field<unsigned>            &impl::get_linked_entity_bucket_ords_field(  const LinkMetaData &link_meta_data);
-  friend const stk::mesh::Field<int>                 &impl::get_link_crs_needs_updated_field(     const LinkMetaData &link_meta_data);
-  friend const stk::mesh::Field<unsigned>            &impl::get_link_marked_for_destruction_field(const LinkMetaData &link_meta_data);
+  friend       stk::mesh::Field<stk::mesh::EntityId>                  &impl::get_linked_entity_ids_field(                LinkMetaData &link_meta_data);
+  friend       stk::mesh::Field<int>                                  &impl::get_linked_entity_ranks_field(              LinkMetaData &link_meta_data);
+  friend       stk::mesh::Field<stk::mesh::Entity::entity_value_type> &impl::get_linked_entities_field(                  LinkMetaData &link_meta_data);
+  friend       stk::mesh::Field<stk::mesh::Entity::entity_value_type> &impl::get_linked_entities_crs_field(              LinkMetaData &link_meta_data);
+  friend       stk::mesh::Field<unsigned>                             &impl::get_linked_entity_bucket_ids_field(         LinkMetaData &link_meta_data);
+  friend       stk::mesh::Field<unsigned>                             &impl::get_linked_entity_bucket_ords_field(        LinkMetaData &link_meta_data);
+  friend       stk::mesh::Field<int>                                  &impl::get_link_crs_needs_updated_field(           LinkMetaData &link_meta_data);
+  friend       stk::mesh::Field<unsigned>                             &impl::get_link_marked_for_destruction_field(      LinkMetaData &link_meta_data);
+  friend const stk::mesh::Field<stk::mesh::EntityId>                  &impl::get_linked_entity_ids_field(          const LinkMetaData &link_meta_data);
+  friend const stk::mesh::Field<int>                                  &impl::get_linked_entity_ranks_field(        const LinkMetaData &link_meta_data);
+  friend const stk::mesh::Field<stk::mesh::Entity::entity_value_type> &impl::get_linked_entities_field(            const LinkMetaData &link_meta_data);
+  friend const stk::mesh::Field<stk::mesh::Entity::entity_value_type> &impl::get_linked_entities_crs_field(        const LinkMetaData &link_meta_data);
+  friend const stk::mesh::Field<unsigned>                             &impl::get_linked_entity_bucket_ids_field(   const LinkMetaData &link_meta_data);
+  friend const stk::mesh::Field<unsigned>                             &impl::get_linked_entity_bucket_ords_field(  const LinkMetaData &link_meta_data);
+  friend const stk::mesh::Field<int>                                  &impl::get_link_crs_needs_updated_field(     const LinkMetaData &link_meta_data);
+  friend const stk::mesh::Field<unsigned>                             &impl::get_link_marked_for_destruction_field(const LinkMetaData &link_meta_data);
   // clang-format on
   //@}
 
@@ -360,7 +450,7 @@ class LinkMetaData {
   linked_entity_bucket_ords_field_t& linked_entity_bucket_ords_field_;
   link_crs_needs_updated_field_t& link_crs_needs_updated_field_;
   link_marked_for_destruction_field_t& link_marked_for_destruction_field_;
-  stk::mesh::Part& universal_link_part_;
+  Class& universal_link_class_;
   //@}
 };  // LinkMetaData
 
@@ -413,28 +503,46 @@ inline std::shared_ptr<LinkMetaData> get_link_meta_data(const stk::mesh::MetaDat
   return it->second;
 }
 
+inline void add_link_restart_fields(stk::io::StkMeshIoBroker& io_broker, size_t output_index,
+                                    LinkMetaData& link_meta_data) {
+  ClassVector link_classes = link_meta_data.universal_link_class_.subclasses();
+  link_classes.push_back(&link_meta_data.universal_link_class_);
+
+  ClassVector io_link_classes = impl::filter_io_supported_classes(link_classes);
+  add_class_field(io_broker, output_index, link_meta_data.linked_entity_ids_field_, io_link_classes);
+  add_class_field(io_broker, output_index, link_meta_data.linked_entity_ranks_field_, io_link_classes);
+
+  // As a test, what happens if we add all link fields as restart fields?
+  add_class_field(io_broker, output_index, link_meta_data.linked_entities_field_, io_link_classes);
+  add_class_field(io_broker, output_index, link_meta_data.linked_entities_crs_field_, io_link_classes);
+  add_class_field(io_broker, output_index, link_meta_data.linked_entity_bucket_ids_field_, io_link_classes);
+  add_class_field(io_broker, output_index, link_meta_data.linked_entity_bucket_ords_field_, io_link_classes);
+  add_class_field(io_broker, output_index, link_meta_data.link_crs_needs_updated_field_, io_link_classes);
+  add_class_field(io_broker, output_index, link_meta_data.link_marked_for_destruction_field_, io_link_classes);
+}
+
 namespace impl {
 
 // Instead of making classes be friends with the LinkMetaData to get access to its protected fields, we offer non-member
 // impl getters
 
 // clang-format off
-inline       stk::mesh::Field<stk::mesh::EntityId>                           &get_linked_entity_ids_field(                LinkMetaData &link_meta_data) { return link_meta_data.linked_entity_ids_field(); }
-inline       stk::mesh::Field<std::underlying_type_t<stk::mesh::EntityRank>> &get_linked_entity_ranks_field(              LinkMetaData &link_meta_data) { return link_meta_data.linked_entity_ranks_field(); }
-inline       stk::mesh::Field<stk::mesh::Entity::entity_value_type>          &get_linked_entities_field(                  LinkMetaData &link_meta_data) { return link_meta_data.linked_entities_field(); }
-inline       stk::mesh::Field<stk::mesh::Entity::entity_value_type>          &get_linked_entities_crs_field(              LinkMetaData &link_meta_data) { return link_meta_data.linked_entities_crs_field(); }
-inline       stk::mesh::Field<unsigned>                                      &get_linked_entity_bucket_ids_field(         LinkMetaData &link_meta_data) { return link_meta_data.linked_entity_bucket_ids_field(); }
-inline       stk::mesh::Field<unsigned>                                      &get_linked_entity_bucket_ords_field(        LinkMetaData &link_meta_data) { return link_meta_data.linked_entity_bucket_ords_field(); }
-inline       stk::mesh::Field<int>                                           &get_link_crs_needs_updated_field(           LinkMetaData &link_meta_data) { return link_meta_data.link_crs_needs_updated_field(); }
-inline       stk::mesh::Field<unsigned>                                      &get_link_marked_for_destruction_field(      LinkMetaData &link_meta_data) { return link_meta_data.link_marked_for_destruction_field(); }
-inline const stk::mesh::Field<stk::mesh::EntityId>                           &get_linked_entity_ids_field(          const LinkMetaData &link_meta_data) { return link_meta_data.linked_entity_ids_field(); }
-inline const stk::mesh::Field<std::underlying_type_t<stk::mesh::EntityRank>> &get_linked_entity_ranks_field(        const LinkMetaData &link_meta_data) { return link_meta_data.linked_entity_ranks_field(); }
-inline const stk::mesh::Field<stk::mesh::Entity::entity_value_type>          &get_linked_entities_field(            const LinkMetaData &link_meta_data) { return link_meta_data.linked_entities_field(); }
-inline const stk::mesh::Field<stk::mesh::Entity::entity_value_type>          &get_linked_entities_crs_field(        const LinkMetaData &link_meta_data) { return link_meta_data.linked_entities_crs_field(); }
-inline const stk::mesh::Field<unsigned>                                      &get_linked_entity_bucket_ids_field(   const LinkMetaData &link_meta_data) { return link_meta_data.linked_entity_bucket_ids_field(); }
-inline const stk::mesh::Field<unsigned>                                      &get_linked_entity_bucket_ords_field(  const LinkMetaData &link_meta_data) { return link_meta_data.linked_entity_bucket_ords_field(); }
-inline const stk::mesh::Field<int>                                           &get_link_crs_needs_updated_field(     const LinkMetaData &link_meta_data) { return link_meta_data.link_crs_needs_updated_field(); }
-inline const stk::mesh::Field<unsigned>                                      &get_link_marked_for_destruction_field(const LinkMetaData &link_meta_data) { return link_meta_data.link_marked_for_destruction_field(); }
+inline       stk::mesh::Field<stk::mesh::EntityId>                  &get_linked_entity_ids_field(                LinkMetaData &link_meta_data) { return link_meta_data.linked_entity_ids_field(); }
+inline       stk::mesh::Field<int>                                  &get_linked_entity_ranks_field(              LinkMetaData &link_meta_data) { return link_meta_data.linked_entity_ranks_field(); }
+inline       stk::mesh::Field<stk::mesh::Entity::entity_value_type> &get_linked_entities_field(                  LinkMetaData &link_meta_data) { return link_meta_data.linked_entities_field(); }
+inline       stk::mesh::Field<stk::mesh::Entity::entity_value_type> &get_linked_entities_crs_field(              LinkMetaData &link_meta_data) { return link_meta_data.linked_entities_crs_field(); }
+inline       stk::mesh::Field<unsigned>                             &get_linked_entity_bucket_ids_field(         LinkMetaData &link_meta_data) { return link_meta_data.linked_entity_bucket_ids_field(); }
+inline       stk::mesh::Field<unsigned>                             &get_linked_entity_bucket_ords_field(        LinkMetaData &link_meta_data) { return link_meta_data.linked_entity_bucket_ords_field(); }
+inline       stk::mesh::Field<int>                                  &get_link_crs_needs_updated_field(           LinkMetaData &link_meta_data) { return link_meta_data.link_crs_needs_updated_field(); }
+inline       stk::mesh::Field<unsigned>                             &get_link_marked_for_destruction_field(      LinkMetaData &link_meta_data) { return link_meta_data.link_marked_for_destruction_field(); }
+inline const stk::mesh::Field<stk::mesh::EntityId>                  &get_linked_entity_ids_field(          const LinkMetaData &link_meta_data) { return link_meta_data.linked_entity_ids_field(); }
+inline const stk::mesh::Field<int>                                  &get_linked_entity_ranks_field(        const LinkMetaData &link_meta_data) { return link_meta_data.linked_entity_ranks_field(); }
+inline const stk::mesh::Field<stk::mesh::Entity::entity_value_type> &get_linked_entities_field(            const LinkMetaData &link_meta_data) { return link_meta_data.linked_entities_field(); }
+inline const stk::mesh::Field<stk::mesh::Entity::entity_value_type> &get_linked_entities_crs_field(        const LinkMetaData &link_meta_data) { return link_meta_data.linked_entities_crs_field(); }
+inline const stk::mesh::Field<unsigned>                             &get_linked_entity_bucket_ids_field(   const LinkMetaData &link_meta_data) { return link_meta_data.linked_entity_bucket_ids_field(); }
+inline const stk::mesh::Field<unsigned>                             &get_linked_entity_bucket_ords_field(  const LinkMetaData &link_meta_data) { return link_meta_data.linked_entity_bucket_ords_field(); }
+inline const stk::mesh::Field<int>                                  &get_link_crs_needs_updated_field(     const LinkMetaData &link_meta_data) { return link_meta_data.link_crs_needs_updated_field(); }
+inline const stk::mesh::Field<unsigned>                             &get_link_marked_for_destruction_field(const LinkMetaData &link_meta_data) { return link_meta_data.link_marked_for_destruction_field(); }
 // clang-format on
 
 }  // namespace impl

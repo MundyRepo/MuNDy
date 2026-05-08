@@ -1,28 +1,57 @@
-TRILINOS_ROOT_DIR=$1
-TPL_ROOT_DIR=$2
-MUNDY_SOURCE_DIR=$3
+set -e
 
-# bash ../do-cmake.sh /mnt/sw/nix/store/ajfmwdjwipp5rrpkq8dj4aff23ar4cix-trilinos-14.2.0 ~/envs/MundyScratch/ ../
+if [ "$#" -lt 3 ]; then
+  echo "Usage: $0 <TPL_ROOT_DIR> <MUNDY_SOURCE_DIR> <INSTALL_DIR>" >&2
+  echo "  TPL_ROOT_DIR    : where mundy_tpl_deps are installed (fmt, gtest, ...)" >&2
+  echo "  MUNDY_SOURCE_DIR: path to the MuNDy source tree" >&2
+  echo "  INSTALL_DIR     : CMAKE_INSTALL_PREFIX for the MuNDy install" >&2
+  exit 1
+fi
 
-# bash ../do-cmake.sh /mnt/ceph/users/bpalmer/envs/spack/opt/spack/linux-rocky8-cascadelake/gcc-11.4.0/trilinos-master-ek7lwb5ilssmazas2p3zhavykp6kiyf4 ~/envs/MundyScratch/ ../
+TPL_ROOT_DIR=$1
+MUNDY_SOURCE_DIR=$2
+INSTALL_DIR=$3
 
-# Using Chris's spack tril16
-#   source ~/software/MundyPerformanceTests/apps/conway_prc1_spacing_2026/load_cpu_cje.sh
-#   bash ../do-cmake.sh /mnt/home/cedelmaier/Projects/Software/spack/opt/spack/linux-rocky8-cascadelake/gcc-11.4.0/trilinos-16.0.0-jg6itzcs5ms7vsuecbejqfr7l3bbjm2f/ ~/mundyscratch ../
+# Trilinos / Kokkos are discovered via spack. Optionally pass a spec
+# (e.g. TRILINOS_SPEC="trilinos@16.2.0 %gcc@13") to disambiguate.
+TRILINOS_SPEC=${TRILINOS_SPEC:-trilinos}
+KOKKOS_SPEC=${KOKKOS_SPEC:-kokkos}
+KOKKOS_KERNELS_SPEC=${KOKKOS_KERNELS_SPEC:-kokkos-kernels}
 
-# Using my spack tril16
-#   source ~/software/MundyPerformanceTests/apps/conway_prc1_spacing_2026/load_cpu_bp.sh
-#   bash ../do-cmake.sh /mnt/home/bpalmer/spack/opt/spack/linux-rocky8-cascadelake/gcc-11.4.0/trilinos-16.0.0-vqcs3hqcerjbv6g3ipewq364pxkjnutn ~/envs/MundyScratch/ ../
+if ! command -v spack >/dev/null 2>&1; then
+  echo "ERROR: 'spack' not found in PATH. Source your spack setup-env.sh first." >&2
+  exit 1
+fi
+
+TRILINOS_ROOT_DIR=$(spack location -i "${TRILINOS_SPEC}") || {
+  echo "ERROR: could not locate spack install for '${TRILINOS_SPEC}'." >&2
+  exit 1
+}
+KOKKOS_ROOT_DIR=$(spack location -i "${KOKKOS_SPEC}") || {
+  echo "ERROR: could not locate spack install for '${KOKKOS_SPEC}'." >&2
+  exit 1
+}
+KOKKOS_KERNELS_ROOT_DIR=$(spack location -i "${KOKKOS_KERNELS_SPEC}") || {
+  echo "ERROR: could not locate spack install for '${KOKKOS_KERNELS_SPEC}'." >&2
+  exit 1
+}
+
+# Usage:
+#   bash ../do-cmake.sh ~/MuNDyScratch/mundy_tpl_deps ../ ~/MuNDyScratch/mundy_install
+#
+# Override package selection with TRILINOS_SPEC / KOKKOS_SPEC env vars if needed.
 
 echo "Using Trilinos dir: $TRILINOS_ROOT_DIR"
+echo "Using Kokkos dir: $KOKKOS_ROOT_DIR"
 echo "Using TPL dir: $TPL_ROOT_DIR"
-echo "Using STK test-app dir: $MUNDY_SOURCE_DIR"
+echo "Using MuNDy source dir: $MUNDY_SOURCE_DIR"
+echo "Using install dir: $INSTALL_DIR"
 
 cmake \
 -DCMAKE_BUILD_TYPE=${BUILD_TYPE:-RELEASE} \
 -DCMAKE_CXX_COMPILER=mpicxx \
 -DCMAKE_CXX_FLAGS="-O3 -march=native" \
--DCMAKE_INSTALL_PREFIX=~/tmp/mundy_install_test/ \
+-DCMAKE_INSTALL_PREFIX=${INSTALL_DIR} \
 -DCTEST_BUILD_FLAGS:STRING="${CTEST_BUILD_FLAGS:--j8}" \
 -DCTEST_PARALLEL_LEVEL:STRING="${CTEST_PARALLEL_LEVEL:-8}" \
 -DCTEST_BUILD_NAME:STRING="${CTEST_BUILD_NAME:-mundy-cpu-local}" \
@@ -45,12 +74,11 @@ cmake \
 -DTPL_nanobench_DIR:PATH=${TPL_ROOT_DIR} \
 -DTPL_OpenRAND_DIR:PATH=${TPL_ROOT_DIR} \
 -DTPL_fmt_DIR:PATH=${TPL_ROOT_DIR} \
--DTPL_Kokkos_DIR:PATH=${TRILINOS_ROOT_DIR} \
--DTPL_KokkosKernels_DIR:PATH=${TRILINOS_ROOT_DIR} \
+-DTPL_Kokkos_DIR:PATH=${KOKKOS_ROOT_DIR} \
+-DTPL_KokkosKernels_DIR:PATH=${KOKKOS_KERNELS_ROOT_DIR} \
 -DTPL_STK_DIR:PATH=${TRILINOS_ROOT_DIR} \
 -DTPL_Teuchos_DIR:PATH=${TRILINOS_ROOT_DIR} \
 ${ccache_args} \
 ${compiler_flags} \
-${install_dir} \
 ${extra_args} \
 ${MUNDY_SOURCE_DIR}

@@ -1,7 +1,6 @@
 if (DEFINED TPL_KokkosKernels_DIR)
   FIND_PACKAGE(KokkosKernels REQUIRED
       CONFIG
-      NO_DEFAULT_PATH
       PATHS
         ${TPL_KokkosKernels_DIR}/lib/cmake/KokkosKernels
         ${TPL_KokkosKernels_DIR}/lib64/cmake/KokkosKernels

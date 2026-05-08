@@ -58,9 +58,9 @@ struct StringLiteralSink;
 template <typename... Chunks>
 struct StringSink;
 
-namespace impl {
-
 struct SinkStart {};
+
+namespace impl {
 
 template <typename T>
 struct sink_stored_type {
@@ -198,22 +198,22 @@ template <typename T>
 concept AnyStringSink = LiteralStringSink<T> || RuntimeStringSink<T>;
 
 /// \brief Start a new sink pipeline.
-KOKKOS_INLINE_FUNCTION constexpr impl::SinkStart sink() {
+KOKKOS_INLINE_FUNCTION constexpr SinkStart sink() {
   return {};
 }
 
 template <impl::RuntimeSinkChunk T>
-KOKKOS_INLINE_FUNCTION constexpr auto operator<<(impl::SinkStart, T&& rhs) {
+KOKKOS_INLINE_FUNCTION constexpr auto operator<<(SinkStart, T&& rhs) {
   return impl::make_string_sink(std::forward<T>(rhs));
 }
 
 template <size_t N>
-KOKKOS_INLINE_FUNCTION constexpr auto operator<<(impl::SinkStart, const char (&rhs)[N]) {
+KOKKOS_INLINE_FUNCTION constexpr auto operator<<(SinkStart, const char (&rhs)[N]) {
   return StringLiteralSink<N>(make_string_literal(rhs));
 }
 
 template <size_t N>
-KOKKOS_INLINE_FUNCTION constexpr auto operator<<(impl::SinkStart, const StringLiteral<N>& rhs) {
+KOKKOS_INLINE_FUNCTION constexpr auto operator<<(SinkStart, const StringLiteral<N>& rhs) {
   return StringLiteralSink<N>(rhs);
 }
 

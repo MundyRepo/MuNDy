@@ -53,6 +53,8 @@ namespace mesh {
 
 namespace {
 
+struct MISSING_TAG;
+
 // template <typename Radius, typename Center>
 // struct move_spheres {
 //   /// \brief Apply this functor to a single sphere object
@@ -135,6 +137,13 @@ TEST(UnitTestAggregate, BasicUsage) {
   const auto collision_sphere_data = Aggregate(bulk_data, sphere_part)
                                          .add_component<CENTER>(center_accessor)
                                          .add_component<COLLISION_RADIUS>(radius_accessor);
+
+  static_assert(decltype(collision_sphere_data)::template has<CENTER>());
+  static_assert(!decltype(collision_sphere_data)::template has<MISSING_TAG>());
+  static_assert(::mundy::aggregate_has_v<CENTER, decltype(collision_sphere_data)>);
+  static_assert(!::mundy::aggregate_has_v<MISSING_TAG, decltype(collision_sphere_data)>);
+  EXPECT_TRUE(has<CENTER>(collision_sphere_data));
+  EXPECT_FALSE(has<MISSING_TAG>(collision_sphere_data));
 
   // Validate our get_component() method
   EXPECT_EQ(collision_sphere_data.get_component<CENTER>().component().field().mesh_meta_data_ordinal(),
@@ -270,6 +279,13 @@ void run_canonical_test() {
 
   // Same but on GPU
   auto ngp_sphere_data = get_updated_ngp_aggregate(sphere_data);
+
+  static_assert(decltype(ngp_sphere_data)::template has<CENTER>());
+  static_assert(!decltype(ngp_sphere_data)::template has<MISSING_TAG>());
+  static_assert(::mundy::aggregate_has_v<CENTER, decltype(ngp_sphere_data)>);
+  static_assert(!::mundy::aggregate_has_v<MISSING_TAG, decltype(ngp_sphere_data)>);
+  EXPECT_TRUE(has<CENTER>(ngp_sphere_data));
+  EXPECT_FALSE(has<MISSING_TAG>(ngp_sphere_data));
 
   EXPECT_TRUE(ngp_sphere_data.ngp_mesh().is_up_to_date());
   EXPECT_TRUE(ngp_sphere_data.ngp_mesh().get_spatial_dimension() == 3)
