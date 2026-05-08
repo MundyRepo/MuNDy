@@ -1458,6 +1458,10 @@ TEST(Convex, MundyMathMixedCongruentAnalyticalSolutions) {
 
 #ifdef HAVE_MUNDYMATH_KOKKOSKERNELS
 TEST(Convex, KokkosAnalyticalSolutions) {
+#if !defined(KOKKOSKERNELS_ENABLE_TPL_LAPACK) && !defined(KOKKOSKERNELS_ENABLE_TPL_CUSOLVER) && \
+    !defined(KOKKOSKERNELS_ENABLE_TPL_ROCSOLVER) && !defined(KOKKOSKERNELS_ENABLE_TPL_MAGMA)
+  GTEST_SKIP() << "KokkosLapack::gesv requires LAPACK, CUSOLVER, ROCSOLVER, or MAGMA.";
+#endif
   auto test_cases = std::make_tuple(kokkos_backend::UnconstrainedSPD1Problem{},          //
                                     kokkos_backend::InactiveBoxConstrainedSPDProblem{},  //
                                     kokkos_backend::ActiveBoxConstrainedSPDProblem{},    //
@@ -1468,6 +1472,10 @@ TEST(Convex, KokkosAnalyticalSolutions) {
 }
 
 TEST(Convex, KokkosCongruentAnalyticalSolutions) {
+#if !defined(KOKKOSKERNELS_ENABLE_TPL_LAPACK) && !defined(KOKKOSKERNELS_ENABLE_TPL_CUSOLVER) && \
+    !defined(KOKKOSKERNELS_ENABLE_TPL_ROCSOLVER) && !defined(KOKKOSKERNELS_ENABLE_TPL_MAGMA)
+  GTEST_SKIP() << "KokkosLapack::gesv requires LAPACK, CUSOLVER, ROCSOLVER, or MAGMA.";
+#endif
   using kokkos_backend::congruent::CongruentLCPProblemWrapper;
   auto test_cases = std::make_tuple(CongruentLCPProblemWrapper{kokkos_backend::UnconstrainedSPD1Problem{}},          //
                                     CongruentLCPProblemWrapper{kokkos_backend::InactiveBoxConstrainedSPDProblem{}},  //
@@ -1479,6 +1487,10 @@ TEST(Convex, KokkosCongruentAnalyticalSolutions) {
 }
 
 TEST(Convex, KokkosMixedCongruentAnalyticalSolutions) {
+#if !defined(KOKKOSKERNELS_ENABLE_TPL_LAPACK) && !defined(KOKKOSKERNELS_ENABLE_TPL_CUSOLVER) && \
+    !defined(KOKKOSKERNELS_ENABLE_TPL_ROCSOLVER) && !defined(KOKKOSKERNELS_ENABLE_TPL_MAGMA)
+  GTEST_SKIP() << "KokkosLapack::gesv requires LAPACK, CUSOLVER, ROCSOLVER, or MAGMA.";
+#endif
   auto test_cases = std::make_tuple(kokkos_backend::mixed::RandomMixedCongruentCCQP<5, 4, 3>{},  //
                                     kokkos_backend::mixed::RandomMixedCongruentCCQP<3, 4, 5>{});
   std::apply([](auto&&... test_case) { (run_kokkos_mixed_congruent_test(test_case), ...); }, test_cases);
