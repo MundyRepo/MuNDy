@@ -25,21 +25,26 @@
 /// \brief A set of helper methods for declaring entities without worrying about parallel ownership and sharing.
 
 // C++ core
-#include <iostream>       // for std::ostream
-#include <memory>         // for std::shared_ptr
-#include <stdexcept>      // for std::runtime_error
-#include <tuple>          // for std::tuple, std::make_tuple
-#include <typeindex>      // for std::type_index
-#include <unordered_map>  // for std::unordered_map
-#include <unordered_set>  // for std::unordered_set
-#include <utility>        // for std::pair, std::make_pair
-#include <vector>         // for std::vector
+#include <algorithm>         // for std::find
+#include <initializer_list>  // for std::initializer_list
+#include <iostream>          // for std::ostream
+#include <map>               // for std::map
+#include <memory>            // for std::shared_ptr
+#include <stdexcept>         // for std::runtime_error
+#include <string>            // for std::string
+#include <tuple>             // for std::tuple, std::make_tuple
+#include <typeindex>         // for std::type_index
+#include <unordered_map>     // for std::unordered_map
+#include <unordered_set>     // for std::unordered_set
+#include <utility>           // for std::pair, std::make_pair
+#include <vector>            // for std::vector
 
 // Trilinos
 #include <stk_mesh/base/BulkData.hpp>    // for stk::mesh::BulkData
 #include <stk_mesh/base/FEMHelpers.hpp>  // for stk::mesh::declare_element
 
 // Mundy
+#include <mundy_mesh/Class.hpp>          // for mundy::mesh::Class, mundy::mesh::ClassVector
 #include <mundy_mesh/LinkData.hpp>       // for mundy::mesh::LinkData
 #include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_REQUIRE
 
@@ -147,6 +152,7 @@ class DeclareEntitiesHelper {
     std::vector<int> non_owning_shared_procs;
     stk::mesh::EntityId id = stk::mesh::InvalidEntityId;
     stk::mesh::PartVector parts;
+    ClassVector classes;
     std::vector<std::shared_ptr<FieldDataBase>> field_data;
     std::map<std::string, DeclareLinksInfo> link_info_map;
   };
@@ -157,6 +163,7 @@ class DeclareEntitiesHelper {
     stk::topology topology = stk::topology::INVALID_TOPOLOGY;
     stk::mesh::EntityIdVector node_ids;
     stk::mesh::PartVector parts;
+    ClassVector classes;
     std::vector<std::shared_ptr<FieldDataBase>> field_data;
     std::map<std::string, DeclareLinksInfo> link_info_map;
   };
@@ -208,6 +215,30 @@ class DeclareEntitiesHelper {
           os << "}";
         }
         ++part_counter;
+      }
+    }
+    os << "\n";
+
+    os << "  Number of Classes: " << info.classes.size() << "\n";
+    os << "  Classes: ";
+    size_t class_counter = 0;
+    size_t num_classes = info.classes.size();
+    if (num_classes == 0) {
+      os << "None";
+    } else {
+      os << "{";
+      for (const auto& class_instance : info.classes) {
+        if (class_instance != nullptr) {
+          os << class_instance->name();
+        } else {
+          os << "nullptr";
+        }
+        if (class_counter < num_classes - 1) {
+          os << ", ";
+        } else {
+          os << "}";
+        }
+        ++class_counter;
       }
     }
     os << "\n";
@@ -300,6 +331,30 @@ class DeclareEntitiesHelper {
     }
     os << "\n";
 
+    os << "  Number of Classes: " << info.classes.size() << "\n";
+    os << "  Classes: ";
+    size_t class_counter = 0;
+    size_t num_classes = info.classes.size();
+    if (num_classes == 0) {
+      os << "None";
+    } else {
+      os << "{";
+      for (const auto& class_instance : info.classes) {
+        if (class_instance != nullptr) {
+          os << class_instance->name();
+        } else {
+          os << "nullptr";
+        }
+        if (class_counter < num_classes - 1) {
+          os << ", ";
+        } else {
+          os << "}";
+        }
+        ++class_counter;
+      }
+    }
+    os << "\n";
+
     // Print Field Data
     os << "  Number of Field Data: " << info.field_data.size() << "\n";
     os << "  Field Data: ";
@@ -361,12 +416,16 @@ class DeclareEntitiesHelper {
     /// \note You do not need to add parts that will be automatically added such as the universal part.
     ///  This includes parts that the node will become a member of due to automatic part inheritance.
     NodeBuilder& add_part(stk::mesh::Part* part_ptr) {
+      MUNDY_THROW_REQUIRE(node_info_.classes.empty(), std::logic_error,
+                          "Cannot add a part to a node that already uses the Class pipeline.");
       node_info_.parts.push_back(part_ptr);
       return *this;
     }
 
     /// \brief Add a vector of parts to the node (i.e, parts that the node belongs to)
     NodeBuilder& add_parts(const stk::mesh::PartVector& parts) {
+      MUNDY_THROW_REQUIRE(node_info_.classes.empty(), std::logic_error,
+                          "Cannot add parts to a node that already uses the Class pipeline.");
       node_info_.parts.insert(node_info_.parts.end(), parts.begin(), parts.end());
       return *this;
     }
@@ -375,6 +434,33 @@ class DeclareEntitiesHelper {
     NodeBuilder& add_parts(std::initializer_list<stk::mesh::Part*> parts) {
       stk::mesh::PartVector part_vector(parts);
       return add_parts(part_vector);
+    }
+
+    /// \brief Add a class to the node (i.e, a Class that the node belongs to)
+    NodeBuilder& add_class(Class* class_ptr) {
+      MUNDY_THROW_REQUIRE(node_info_.parts.empty(), std::logic_error,
+                          "Cannot add a class to a node that already uses the part pipeline.");
+      node_info_.classes.push_back(class_ptr);
+      return *this;
+    }
+
+    /// \brief Add a class to the node (i.e, a Class that the node belongs to)
+    NodeBuilder& add_class(Class& class_instance) {
+      return add_class(&class_instance);
+    }
+
+    /// \brief Add a vector of classes to the node (i.e, Classes that the node belongs to)
+    NodeBuilder& add_classes(const ClassVector& classes) {
+      MUNDY_THROW_REQUIRE(node_info_.parts.empty(), std::logic_error,
+                          "Cannot add classes to a node that already uses the part pipeline.");
+      node_info_.classes.insert(node_info_.classes.end(), classes.begin(), classes.end());
+      return *this;
+    }
+
+    /// \brief Add a vector of classes to the node (i.e, Classes that the node belongs to)
+    NodeBuilder& add_classes(std::initializer_list<Class*> classes) {
+      ClassVector class_vector(classes);
+      return add_classes(class_vector);
     }
 
     /// \brief Add field data to the node.
@@ -469,12 +555,16 @@ class DeclareEntitiesHelper {
 
     /// \brief Add a part to the element (i.e, a part that the element belongs to)
     ElementBuilder& add_part(stk::mesh::Part* part_ptr) {
+      MUNDY_THROW_REQUIRE(elem_info_.classes.empty(), std::logic_error,
+                          "Cannot add a part to an element that already uses the Class pipeline.");
       elem_info_.parts.push_back(part_ptr);
       return *this;
     }
 
     /// \brief Add a vector of parts to the element (i.e, parts that the element belongs to)
     ElementBuilder& add_parts(const stk::mesh::PartVector& parts) {
+      MUNDY_THROW_REQUIRE(elem_info_.classes.empty(), std::logic_error,
+                          "Cannot add parts to an element that already uses the Class pipeline.");
       elem_info_.parts.insert(elem_info_.parts.end(), parts.begin(), parts.end());
       return *this;
     }
@@ -483,6 +573,33 @@ class DeclareEntitiesHelper {
     ElementBuilder& add_parts(std::initializer_list<stk::mesh::Part*> parts) {
       stk::mesh::PartVector part_vector(parts);
       return add_parts(part_vector);
+    }
+
+    /// \brief Add a class to the element (i.e, a Class that the element belongs to)
+    ElementBuilder& add_class(Class* class_ptr) {
+      MUNDY_THROW_REQUIRE(elem_info_.parts.empty(), std::logic_error,
+                          "Cannot add a class to an element that already uses the part pipeline.");
+      elem_info_.classes.push_back(class_ptr);
+      return *this;
+    }
+
+    /// \brief Add a class to the element (i.e, a Class that the element belongs to)
+    ElementBuilder& add_class(Class& class_instance) {
+      return add_class(&class_instance);
+    }
+
+    /// \brief Add a vector of classes to the element (i.e, Classes that the element belongs to)
+    ElementBuilder& add_classes(const ClassVector& classes) {
+      MUNDY_THROW_REQUIRE(elem_info_.parts.empty(), std::logic_error,
+                          "Cannot add classes to an element that already uses the part pipeline.");
+      elem_info_.classes.insert(elem_info_.classes.end(), classes.begin(), classes.end());
+      return *this;
+    }
+
+    /// \brief Add a vector of classes to the element (i.e, Classes that the element belongs to)
+    ElementBuilder& add_classes(std::initializer_list<Class*> classes) {
+      ClassVector class_vector(classes);
+      return add_classes(class_vector);
     }
 
     /// \brief Add field data to the element.
@@ -728,6 +845,15 @@ class DeclareEntitiesHelper {
 
   stk::topology get_topology(const stk::mesh::MetaData& meta_data, stk::mesh::EntityRank entity_rank,
                              const stk::mesh::PartVector& parts) const {
+    stk::mesh::OrdinalVector part_ordinals;
+    for (const stk::mesh::Part* part : parts) {
+      part_ordinals.push_back(part->mesh_meta_data_ordinal());
+    }
+    return get_topology(meta_data, entity_rank, part_ordinals);
+  }
+
+  stk::topology get_topology(const stk::mesh::MetaData& meta_data, stk::mesh::EntityRank entity_rank,
+                             const stk::mesh::ConstPartVector& parts) const {
     stk::mesh::OrdinalVector part_ordinals;
     for (const stk::mesh::Part* part : parts) {
       part_ordinals.push_back(part->mesh_meta_data_ordinal());
