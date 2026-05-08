@@ -14,18 +14,26 @@ tribits_subpackage(Mesh)
 set(NOINSTALLHEADERS
     src/mundy_mesh/Aggregate.hpp
     src/mundy_mesh/BulkData.hpp
-    src/mundy_mesh/DeclareEntities.hpp
+    src/mundy_mesh/Class.hpp
+    src/mundy_mesh/Component.hpp
+    src/mundy_mesh/DeclareClass.hpp
     src/mundy_mesh/DeclareComponent.hpp
+    src/mundy_mesh/DeclareEntities.hpp
     src/mundy_mesh/DeclareField.hpp
     src/mundy_mesh/DeclarePart.hpp
+    src/mundy_mesh/FieldComponent.hpp
     src/mundy_mesh/FieldViews.hpp
     src/mundy_mesh/ForEachEntity.hpp
     # src/mundy_mesh/GenNeighborLinkers.hpp
     src/mundy_mesh/GetNgpLinkData.hpp
+    src/mundy_mesh/impl/ComponentImpl.hpp
+    src/mundy_mesh/impl/DeclareFieldImpl.hpp
     src/mundy_mesh/impl/HostDeviceCOOSynchronizer.hpp
     src/mundy_mesh/impl/HostDeviceCSRSynchronizer.hpp
     src/mundy_mesh/impl/HostDeviceSynchronizer.hpp
+    src/mundy_mesh/impl/LinkDataObserver.hpp
     src/mundy_mesh/impl/LinkedBucketConn.hpp
+    src/mundy_mesh/impl/NgpAccessorExprImpl.hpp
     src/mundy_mesh/impl/NgpCOOToCSRSynchronizer.hpp
     src/mundy_mesh/impl/NgpFieldBLASImpl.hpp
     src/mundy_mesh/impl/NgpLinkMetaData.hpp
@@ -34,6 +42,7 @@ set(NOINSTALLHEADERS
     src/mundy_mesh/impl/SelectorLexem.hpp
     src/mundy_mesh/impl/SelectorNode.hpp
     src/mundy_mesh/impl/SelectorParser.hpp
+    src/mundy_mesh/impl/SharedComponentImpl.hpp
     src/mundy_mesh/LinkCOOData.hpp
     src/mundy_mesh/LinkCSRBucketConn.hpp
     src/mundy_mesh/LinkCSRData.hpp
@@ -51,6 +60,7 @@ set(NOINSTALLHEADERS
     src/mundy_mesh/NgpLinkData.hpp
     src/mundy_mesh/NgpModRequests.hpp
     src/mundy_mesh/NgpUtils.hpp
+    src/mundy_mesh/SharedComponent.hpp
     src/mundy_mesh/StringToSelector.hpp
     src/mundy_mesh/StringToTopology.hpp
     src/mundy_mesh/Types.hpp

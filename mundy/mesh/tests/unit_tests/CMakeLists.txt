@@ -85,17 +85,18 @@ if (Mundy_ENABLE_TESTS AND Mundy_ENABLE_GTest)
     INSTALLABLE
   )
 
-  # tribits_add_executable_and_test(
-  # UnitTestLinkData
-  # SOURCES
-  # UnitTestLinkData.cpp
-  # ${Mundy_DEFAULT_UNIT_TEST_MAIN}
-  # NUM_MPI_PROCS 1-4
-  # )
   tribits_add_executable_and_test(
     UnitTestNgpLinkData
     SOURCES UnitTestNgpLinkData.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
     NUM_MPI_PROCS 1-4
+    INSTALLABLE
+  )
+
+  tribits_add_executable_and_test(
+    UnitTestLinkDataObserver
+    SOURCES UnitTestLinkDataObserver.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+    NUM_MPI_PROCS 1-4
+    ENVIRONMENT OMP_WAIT_POLICY=PASSIVE OMP_PROC_BIND=false
     INSTALLABLE
   )
 
@@ -109,24 +110,28 @@ if (Mundy_ENABLE_TESTS AND Mundy_ENABLE_GTest)
   tribits_add_executable_and_test(
     UnitTestNgpModRequests
     SOURCES UnitTestNgpModRequests.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+    NUM_MPI_PROCS 1-4
     INSTALLABLE
   )
 
   tribits_add_executable_and_test(
     UnitTestDeclareEntities
     SOURCES UnitTestDeclareEntities.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+    NUM_MPI_PROCS 1-4
     INSTALLABLE
   )
 
   tribits_add_executable_and_test(
     UnitTestEntityPool
     SOURCES UnitTestEntityPool.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+    NUM_MPI_PROCS 1-4
     INSTALLABLE
   )
 
   tribits_add_executable_and_test(
     UnitTestFieldBLAS
     SOURCES UnitTestFieldBLAS.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+    NUM_MPI_PROCS 1-4
     INSTALLABLE
   )
 

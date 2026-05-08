@@ -247,6 +247,112 @@ class LinkCOOData {  // Host only | Valid during mesh modifications
   }
   //@}
 
+ private:
+  //! \name Friends <3
+  //@{
+
+  friend class LinkData;
+  //@}
+
+  //! \name Internal restart helpers
+  //@{
+
+  /// \brief Rebuild runtime-only COO fields from restart-stable linked entity IDs and ranks.
+  ///
+  /// Link restart IO only persists the portable description of a relation: the linked entity's rank and entity ID.
+  /// The other COO fields are local caches:
+  ///   - `MUNDY_LINKED_ENTITIES` stores the current process's `stk::mesh::Entity` local offset.
+  ///   - bucket IDs and ordinals store the current bucket location of that entity.
+  ///   - `MUNDY_LINKED_ENTITIES_CSR` stores the relation as last seen by the CSR rebuild.
+  ///
+  /// After STK reads a restart mesh, those cache fields either contain default values or stale values from another
+  /// process layout. This helper walks every link, resolves each persisted rank/id pair against the freshly-read
+  /// `BulkData`, repopulates the runtime caches, clears the CSR-side relation cache, and marks touched links as needing
+  /// a CSR rebuild. It returns whether any link cache was changed so the owning `LinkData` can update its host/device
+  /// synchronization state.
+  bool rebuild_runtime_fields_from_ids_and_ranks() const {
+    auto& linked_entities_field = impl::get_linked_entities_field(link_meta_data());
+    auto& linked_entities_crs_field = impl::get_linked_entities_crs_field(link_meta_data());
+    auto& linked_entity_ids_field = impl::get_linked_entity_ids_field(link_meta_data());
+    auto& linked_entity_ranks_field = impl::get_linked_entity_ranks_field(link_meta_data());
+    auto& linked_entity_bucket_ids_field = impl::get_linked_entity_bucket_ids_field(link_meta_data());
+    auto& linked_entity_bucket_ords_field = impl::get_linked_entity_bucket_ords_field(link_meta_data());
+    auto& link_crs_needs_updated_field = impl::get_link_crs_needs_updated_field(link_meta_data());
+
+    bool modified_any_link = false;
+    const stk::mesh::Selector link_selector = link_meta_data().universal_link_class();
+    const stk::mesh::BucketVector& link_buckets = bulk_data().get_buckets(link_rank(), link_selector);
+
+    for (const stk::mesh::Bucket* bucket : link_buckets) {
+      const unsigned link_dimensionality = stk::mesh::field_scalars_per_entity(linked_entity_ids_field, *bucket);
+      for (const stk::mesh::Entity link : *bucket) {
+        auto* linked_entities_data = stk::mesh::field_data(linked_entities_field, link);
+        auto* linked_entities_crs_data = stk::mesh::field_data(linked_entities_crs_field, link);
+        auto* linked_entity_ids_data = stk::mesh::field_data(linked_entity_ids_field, link);
+        auto* linked_entity_ranks_data = stk::mesh::field_data(linked_entity_ranks_field, link);
+        auto* linked_entity_bucket_ids_data = stk::mesh::field_data(linked_entity_bucket_ids_field, link);
+        auto* linked_entity_bucket_ords_data = stk::mesh::field_data(linked_entity_bucket_ords_field, link);
+        auto* link_dirty_data = stk::mesh::field_data(link_crs_needs_updated_field, link);
+
+        bool modified_this_link = false;
+        for (unsigned d = 0; d < link_dimensionality; ++d) {
+          const stk::mesh::EntityId linked_entity_id = linked_entity_ids_data[d];
+          const LinkMetaData::entity_rank_value_t linked_entity_rank_value = linked_entity_ranks_data[d];
+          const bool empty_restart_relation =
+              linked_entity_id == stk::mesh::EntityId() &&
+              linked_entity_rank_value == static_cast<LinkMetaData::entity_rank_value_t>(stk::topology::INVALID_RANK);
+          const bool restart_rank_valid =
+              linked_entity_rank_value >= static_cast<LinkMetaData::entity_rank_value_t>(stk::topology::BEGIN_RANK) &&
+              linked_entity_rank_value < static_cast<LinkMetaData::entity_rank_value_t>(stk::topology::NUM_RANKS);
+
+          stk::mesh::Entity linked_entity;
+          if (!empty_restart_relation) {
+            MUNDY_THROW_REQUIRE(restart_rank_valid, std::logic_error,
+                                "Cannot rebuild link COO runtime fields from restart data because a persisted linked "
+                                "entity rank is invalid.");
+            linked_entity =
+                bulk_data().get_entity(static_cast<stk::mesh::EntityRank>(linked_entity_rank_value), linked_entity_id);
+            MUNDY_THROW_REQUIRE(bulk_data().is_valid(linked_entity), std::logic_error,
+                                "Cannot rebuild link COO runtime fields from restart data because a persisted linked "
+                                "entity id/rank pair does not resolve to a valid local entity.");
+          }
+
+          const stk::mesh::Entity::entity_value_type linked_entity_value = linked_entity.local_offset();
+          const unsigned linked_entity_bucket_id =
+              bulk_data().is_valid(linked_entity) ? bulk_data().bucket(linked_entity).bucket_id() : 0u;
+          const unsigned linked_entity_bucket_ord =
+              bulk_data().is_valid(linked_entity) ? bulk_data().bucket_ordinal(linked_entity) : 0u;
+
+          if (linked_entities_data[d] != linked_entity_value ||
+              linked_entity_bucket_ids_data[d] != linked_entity_bucket_id ||
+              linked_entity_bucket_ords_data[d] != linked_entity_bucket_ord) {
+            linked_entities_data[d] = linked_entity_value;
+            linked_entities_crs_data[d] = stk::mesh::Entity().local_offset();
+            linked_entity_bucket_ids_data[d] = linked_entity_bucket_id;
+            linked_entity_bucket_ords_data[d] = linked_entity_bucket_ord;
+            modified_this_link = true;
+          }
+        }
+
+        if (modified_this_link) {
+          link_dirty_data[0] = true;
+          modified_any_link = true;
+        }
+      }
+    }
+
+    if (modified_any_link) {
+      linked_entities_field.modify_on_host();
+      linked_entities_crs_field.modify_on_host();
+      linked_entity_bucket_ids_field.modify_on_host();
+      linked_entity_bucket_ords_field.modify_on_host();
+      link_crs_needs_updated_field.modify_on_host();
+    }
+
+    return modified_any_link;
+  }
+  //@}
+
  protected:
   /// \brief Get the linked entity for a given linker and link ordinal (as last seen by the CSR connectivity).
   ///

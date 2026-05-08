@@ -26,15 +26,17 @@
 
 // C++ core libs
 #include <any>     // for std::any
+#include <map>     // for std::map
 #include <memory>  // for std::shared_ptr, std::shared_ptr
 
 // Trilinos libs
-#include <stk_mesh/base/BulkData.hpp>  // for stk::mesh::BulkData
-#include <stk_mesh/base/Entity.hpp>    // for stk::mesh::Entity
-#include <stk_mesh/base/Field.hpp>     // for stk::mesh::Field
-#include <stk_mesh/base/MetaData.hpp>  // for stk::mesh::MetaData
-#include <stk_mesh/base/Part.hpp>      // stk::mesh::Part
-#include <stk_mesh/base/Types.hpp>     // for stk::mesh::EntityRank
+#include <stk_mesh/base/BulkData.hpp>              // for stk::mesh::BulkData
+#include <stk_mesh/base/Entity.hpp>                // for stk::mesh::Entity
+#include <stk_mesh/base/Field.hpp>                 // for stk::mesh::Field
+#include <stk_mesh/base/MetaData.hpp>              // for stk::mesh::MetaData
+#include <stk_mesh/base/ModificationObserver.hpp>  // for stk::mesh::ModificationObserver
+#include <stk_mesh/base/Part.hpp>                  // stk::mesh::Part
+#include <stk_mesh/base/Types.hpp>                 // for stk::mesh::EntityRank
 
 // Mundy libs
 #include <mundy_mesh/LinkCOOData.hpp>                  // for mundy::mesh::LinkCOOData/NgpLinkCOOData
@@ -42,6 +44,7 @@
 #include <mundy_mesh/LinkMetaData.hpp>                 // for mundy::mesh::LinkMetaData
 #include <mundy_mesh/Types.hpp>                        // for mundy::mesh::NgpDataAccessTag
 #include <mundy_mesh/impl/HostDeviceSynchronizer.hpp>  // for mundy::mesh::impl::HostDeviceSynchronizer
+#include <mundy_mesh/impl/LinkDataObserver.hpp>        // for mundy::mesh::impl::LinkDataObserver
 #include <mundy_utils/throw_assert.hpp>                // for MUNDY_THROW_ASSERT
 
 namespace mundy {
@@ -53,6 +56,10 @@ namespace impl {
 std::any& get_ngp_link_data(const LinkData& link_data);
 void set_coo_synchronizer(const LinkData& link_data, std::shared_ptr<impl::HostDeviceSynchronizer> synchronizer);
 void set_crs_synchronizer(const LinkData& link_data, std::shared_ptr<impl::HostDeviceSynchronizer> synchronizer);
+bool get_crs_structure_dirty(const LinkData& link_data);
+bool& get_crs_structure_dirty_ref(const LinkData& link_data);
+void set_crs_structure_dirty(const LinkData& link_data, bool structure_dirty);
+void clear_crs_structure_dirty(const LinkData& link_data);
 }  // namespace impl
 
 /// \class LinkData
@@ -186,36 +193,13 @@ class LinkData {
   //@{
 
   /// \brief Default constructor.
-  LinkData() = default;
+  LinkData() = delete;
 
-  /// \brief Default copy or move constructors/operators.
-  LinkData(const LinkData&) = default;
-  LinkData(LinkData&&) = default;
-  LinkData& operator=(const LinkData&) = default;
-  LinkData& operator=(LinkData&&) = default;
-
-  /// \brief Canonical constructor.
-  /// \param bulk_data [in] The bulk data manager we extend.
-  /// \param link_meta_data [in] Our meta data manager.
-  LinkData(stk::mesh::BulkData& bulk_data,
-           LinkMetaData& link_meta_data)  // We do NOT take ownership of the LinkMetaData
-      : bulk_data_ptr_(&bulk_data),
-        mesh_meta_data_ptr_(&bulk_data.mesh_meta_data()),
-        link_meta_data_ptr_(&link_meta_data),
-        coo_data_(bulk_data, link_meta_data),
-        crs_data_(bulk_data, link_meta_data),
-        coo_synchronizer_(nullptr),
-        crs_synchronizer_(nullptr),
-        any_ngp_link_data_(),
-        crs_modified_on_host_(false),
-        crs_modified_on_device_(false),
-        coo_modified_on_host_(false),
-        coo_modified_on_device_(false),
-        crs_num_syncs_to_host_(0),
-        crs_num_syncs_to_device_(0),
-        coo_num_syncs_to_host_(0),
-        coo_num_syncs_to_device_(0) {
-  }
+  /// \brief LinkData is owned by the MetaData attribute map.
+  LinkData(const LinkData&) = delete;
+  LinkData(LinkData&&) = delete;
+  LinkData& operator=(const LinkData&) = delete;
+  LinkData& operator=(LinkData&&) = delete;
 
   /// \brief Destructor.
   virtual ~LinkData() = default;
@@ -448,6 +432,39 @@ class LinkData {
   }
   //@}
 
+ protected:
+  //! \name MetaData-owned construction
+  //@{
+
+  /// \brief Canonical constructor.
+  /// \param bulk_data [in] The bulk data manager we extend.
+  /// \param link_meta_data [in] Our meta data manager.
+  LinkData(stk::mesh::BulkData& bulk_data,
+           LinkMetaData& link_meta_data)  // We do NOT take ownership of the LinkMetaData
+      : bulk_data_ptr_(&bulk_data),
+        mesh_meta_data_ptr_(&bulk_data.mesh_meta_data()),
+        link_meta_data_ptr_(&link_meta_data),
+        coo_data_(bulk_data, link_meta_data),
+        crs_data_(bulk_data, link_meta_data),
+        crs_structure_dirty_(false),
+        coo_synchronizer_(nullptr),
+        crs_synchronizer_(nullptr),
+        any_ngp_link_data_(),
+        crs_modified_on_host_(false),
+        crs_modified_on_device_(false),
+        coo_modified_on_host_(false),
+        coo_modified_on_device_(false),
+        crs_num_syncs_to_host_(0),
+        crs_num_syncs_to_device_(0),
+        coo_num_syncs_to_host_(0),
+        coo_num_syncs_to_device_(0) {
+    if (coo_data_.rebuild_runtime_fields_from_ids_and_ranks()) {
+      coo_modified_on_host_ = true;
+      set_crs_structure_dirty(true);
+    }
+  }
+  //@}
+
  private:
   //! \name Internal methods
   //@{
@@ -463,6 +480,22 @@ class LinkData {
   void set_crs_synchronizer(std::shared_ptr<impl::HostDeviceSynchronizer> synchronizer) const {
     crs_synchronizer_ = std::move(synchronizer);
   }
+
+  bool get_crs_structure_dirty() const {
+    return get_crs_structure_dirty_ref();
+  }
+
+  bool& get_crs_structure_dirty_ref() const {
+    return crs_structure_dirty_;
+  }
+
+  void set_crs_structure_dirty(bool structure_dirty) const {
+    get_crs_structure_dirty_ref() = structure_dirty;
+  }
+
+  void clear_crs_structure_dirty() const {
+    set_crs_structure_dirty(false);
+  }
   //@}
 
   //! \name Friends <3
@@ -473,6 +506,11 @@ class LinkData {
                                          std::shared_ptr<impl::HostDeviceSynchronizer> synchronizer);
   friend void impl::set_crs_synchronizer(const LinkData& link_data,
                                          std::shared_ptr<impl::HostDeviceSynchronizer> synchronizer);
+  friend bool impl::get_crs_structure_dirty(const LinkData& link_data);
+  friend bool& impl::get_crs_structure_dirty_ref(const LinkData& link_data);
+  friend void impl::set_crs_structure_dirty(const LinkData& link_data, bool structure_dirty);
+  friend void impl::clear_crs_structure_dirty(const LinkData& link_data);
+  friend LinkData& declare_link_data(stk::mesh::BulkData& bulk_data, LinkMetaData& link_meta_data);
   //@}
 
   //! \name Internal members
@@ -484,6 +522,7 @@ class LinkData {
 
   LinkCOOData coo_data_;
   LinkCSRData crs_data_;
+  mutable bool crs_structure_dirty_;
   mutable std::shared_ptr<impl::HostDeviceSynchronizer> coo_synchronizer_;
   mutable std::shared_ptr<impl::HostDeviceSynchronizer> crs_synchronizer_;
   mutable std::any any_ngp_link_data_;
@@ -513,14 +552,35 @@ inline void set_coo_synchronizer(const LinkData& link_data,
   link_data.set_coo_synchronizer(std::move(synchronizer));
 }
 
+inline bool get_crs_structure_dirty(const LinkData& link_data) {
+  return link_data.get_crs_structure_dirty();
+}
+
+inline bool& get_crs_structure_dirty_ref(const LinkData& link_data) {
+  return link_data.get_crs_structure_dirty_ref();
+}
+
+inline void set_crs_structure_dirty(const LinkData& link_data, bool structure_dirty) {
+  link_data.set_crs_structure_dirty(structure_dirty);
+}
+
+inline void clear_crs_structure_dirty(const LinkData& link_data) {
+  link_data.clear_crs_structure_dirty();
+}
+
 }  // namespace impl
 
 struct LinkDataMap {
-  std::map<std::string, std::shared_ptr<LinkData>> contents[stk::topology::NUM_RANKS];
+  std::map<std::string, std::unique_ptr<LinkData>> contents[stk::topology::NUM_RANKS];
+  std::map<std::string, std::shared_ptr<stk::mesh::ModificationObserver>> observers[stk::topology::NUM_RANKS];
 };
 
-inline std::shared_ptr<LinkData> declare_link_data_ptr(stk::mesh::BulkData& bulk_data, LinkMetaData& link_meta_data) {
-  // Tie the lifetime of this object to the BulkData object so we can return a reference to it.
+/// \brief Declare or fetch a MetaData-owned LinkData object.
+/// \param bulk_data [in] The bulk data manager we extend.
+/// \param link_meta_data [in] Our meta data manager.
+/// \return A reference to the MetaData-owned LinkData object.
+inline LinkData& declare_link_data(stk::mesh::BulkData& bulk_data, LinkMetaData& link_meta_data) {
+  // Tie the lifetime of this object to the MetaData object so we can return a reference to it.
   stk::mesh::MetaData& meta_data = bulk_data.mesh_meta_data();
   LinkDataMap* link_data_map = const_cast<LinkDataMap*>(meta_data.get_attribute<LinkDataMap>());
   if (link_data_map == nullptr) {
@@ -529,30 +589,29 @@ inline std::shared_ptr<LinkData> declare_link_data_ptr(stk::mesh::BulkData& bulk
   }
   const std::string& our_name = link_meta_data.name();
   stk::mesh::EntityRank link_rank = link_meta_data.link_rank();
-  if (link_data_map->contents[link_rank].find(our_name) == link_data_map->contents[link_rank].end()) {
+  auto& link_data_for_rank = link_data_map->contents[link_rank];
+  auto link_data_it = link_data_for_rank.find(our_name);
+  if (link_data_it == link_data_for_rank.end()) {
     // The name/rank combo doesn't exist yet, so we can create it.
-    link_data_map->contents[link_rank].emplace(our_name,
-                                               std::shared_ptr<LinkData>(new LinkData(bulk_data, link_meta_data)));
+    auto insert_result =
+        link_data_for_rank.emplace(our_name, std::unique_ptr<LinkData>(new LinkData(bulk_data, link_meta_data)));
+    link_data_it = insert_result.first;
   }
-  return link_data_map->contents[link_rank][our_name];
-}
 
-/// \brief Declare a new LinkData object.
-///
-/// Note, this is the de-facto constructor for LinkData. In the future, we will have it return a reference to
-/// the constructed LinkData object by tying its lifetime to the BulkData object.
-///
-/// \param bulk_data [in] The bulk data manager we extend.
-/// \param link_meta_data [in] Our meta data manager. Must be persistant with a lifetime at least as long as the
-///   generated LinkData.
-/// \return A new LinkData object.
-inline LinkData& declare_link_data(stk::mesh::BulkData& bulk_data, LinkMetaData& link_meta_data) {
-  return *declare_link_data_ptr(bulk_data, link_meta_data);
+  if (link_data_map->observers[link_rank].find(our_name) == link_data_map->observers[link_rank].end()) {
+    LinkData& link_data = *link_data_it->second;
+    std::shared_ptr<impl::LinkDataObserver> observer = std::make_shared<impl::LinkDataObserver>(
+        bulk_data, link_meta_data, impl::get_crs_structure_dirty_ref(link_data));
+    bulk_data.register_observer(observer);
+    link_data_map->observers[link_rank].emplace(our_name, observer);
+  }
+
+  return *link_data_it->second;
 }
 
 /// \brief Get an existing LinkData object
-inline std::shared_ptr<LinkData> get_link_data(const stk::mesh::BulkData& bulk_data, const std::string& our_name,
-                                               stk::mesh::EntityRank link_rank) {
+inline LinkData* get_link_data(const stk::mesh::BulkData& bulk_data, const std::string& our_name,
+                               stk::mesh::EntityRank link_rank) {
   const stk::mesh::MetaData& meta_data = bulk_data.mesh_meta_data();
   LinkDataMap* link_data_map = const_cast<LinkDataMap*>(meta_data.get_attribute<LinkDataMap>());
   if (link_data_map == nullptr) {
@@ -562,11 +621,10 @@ inline std::shared_ptr<LinkData> get_link_data(const stk::mesh::BulkData& bulk_d
   if (it == link_data_map->contents[link_rank].end()) {
     return nullptr;
   }
-  return it->second;
+  return it->second.get();
 }
 
-inline std::shared_ptr<LinkData> get_link_data(const stk::mesh::BulkData& bulk_data,
-                                               const LinkMetaData& link_meta_data) {
+inline LinkData* get_link_data(const stk::mesh::BulkData& bulk_data, const LinkMetaData& link_meta_data) {
   const std::string& our_name = link_meta_data.name();
   stk::mesh::EntityRank link_rank = link_meta_data.link_rank();
   return get_link_data(bulk_data, our_name, link_rank);

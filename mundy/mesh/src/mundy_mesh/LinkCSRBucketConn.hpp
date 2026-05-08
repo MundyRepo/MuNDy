@@ -68,9 +68,10 @@ class LinkCSRBucketConnT {  // Raw data in any space.
         bucket_id_(0),
         bucket_rank_(stk::topology::INVALID_RANK),
         total_num_connected_links_(0),
-        num_connected_links_("num_connected_links", 0),
-        sparse_connectivity_offsets_("sparse_connectivity_offsets", 0),
-        sparse_connectivity_("sparse_connectivity", 0) {
+        num_connected_links_(Kokkos::view_alloc(Kokkos::WithoutInitializing, "num_connected_links"), 0),
+        sparse_connectivity_offsets_(
+            Kokkos::view_alloc(Kokkos::WithoutInitializing, "sparse_connectivity_offsets"), 0),
+        sparse_connectivity_(Kokkos::view_alloc(Kokkos::WithoutInitializing, "sparse_connectivity"), 0) {
   }
 
   LinkCSRBucketConnT(const stk::mesh::Bucket& bucket)
@@ -80,9 +81,11 @@ class LinkCSRBucketConnT {  // Raw data in any space.
         bucket_id_(bucket.bucket_id()),
         bucket_rank_(bucket.entity_rank()),
         total_num_connected_links_(0),
-        num_connected_links_("num_connected_links", bucket.capacity()),
-        sparse_connectivity_offsets_("sparse_connectivity_offsets", bucket.capacity() + 1),
-        sparse_connectivity_("sparse_connectivity", 0) {
+        num_connected_links_(Kokkos::view_alloc(Kokkos::WithoutInitializing, "num_connected_links"),
+                             bucket.capacity()),
+        sparse_connectivity_offsets_(
+            Kokkos::view_alloc(Kokkos::WithoutInitializing, "sparse_connectivity_offsets"), bucket.capacity() + 1),
+        sparse_connectivity_(Kokkos::view_alloc(Kokkos::WithoutInitializing, "sparse_connectivity"), 0) {
   }
 
   // clang-format off

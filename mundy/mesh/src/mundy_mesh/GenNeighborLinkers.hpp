@@ -93,7 +93,7 @@ get_linked_neighbors_set(LinkData& link_data, const stk::mesh::Selector& link_se
   auto ngp_link_data = get_updated_ngp_data(link_data);
   auto& ngp_mesh = ngp_link_data.ngp_mesh();
 
-  stk::mesh::Selector selected_links = link_selector & link_data.link_meta_data().universal_link_part();
+  stk::mesh::Selector selected_links = link_selector & link_data.link_meta_data().universal_link_class();
   size_t num_linkers = stk::mesh::count_selected_entities(
       selected_links, link_data.bulk_data().buckets(link_data.link_meta_data().link_rank()));
 

@@ -25,6 +25,9 @@
 /// \brief Declaration of the NgpCOOToCSRSynchronizerT class
 
 // C++ core libs
+#include <chrono>       // for std::chrono profiling (temporary)
+#include <cstdlib>      // for std::getenv (temporary)
+#include <iostream>     // for std::cout profiling output (temporary)
 #include <memory>       // for std::shared_ptr, std::unique_ptr
 #include <string>       // for std::string
 #include <type_traits>  // for std::enable_if, std::is_base_of
@@ -51,18 +54,57 @@
 #include <stk_util/ngp/NgpSpaces.hpp>             // for stk::ngp::HostMemSpace, stk::ngp::UVMMemSpace
 
 // Mundy libs
-#include <mundy_mesh/ForEachEntity.hpp>     // for mundy::mesh::for_each_entity_run
-#include <mundy_mesh/LinkCSRPartition.hpp>  // for mundy::mesh::LinkCSRPartition
-#include <mundy_mesh/LinkMetaData.hpp>      // for mundy::mesh::LinkMetaData
-#include <mundy_mesh/MetaData.hpp>          // for mundy::mesh::MetaData
-#include <mundy_mesh/NgpFieldBLAS.hpp>      // for mundy::mesh::field_copy
-#include <mundy_utils/throw_assert.hpp>     // for MUNDY_THROW_ASSERT
+#include <mundy_mesh/ForEachEntity.hpp>                    // for mundy::mesh::for_each_entity_run
+#include <mundy_mesh/LinkCSRPartition.hpp>                 // for mundy::mesh::LinkCSRPartition
+#include <mundy_mesh/LinkMetaData.hpp>                     // for mundy::mesh::LinkMetaData
+#include <mundy_mesh/MetaData.hpp>                         // for mundy::mesh::MetaData
+#include <mundy_mesh/NgpFieldBLAS.hpp>   // for mundy::mesh::field_copy
+#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
 
 namespace mundy {
 
 namespace mesh {
 
 namespace impl {
+
+inline bool is_link_sync_profiling_enabled() {
+  const char* env = std::getenv("MUNDY_LINKDATA_SYNC_PROFILE");
+  return env != nullptr && std::string(env) == "1";
+}
+
+inline bool use_team_flat_for_gather_part_2_partial_sum() {
+  const char* env = std::getenv("MUNDY_LINKDATA_GATHER2_TEAM_FLAT");
+  return env != nullptr && std::string(env) == "1";
+}
+
+inline double elapsed_sync_profile_seconds(const std::chrono::steady_clock::time_point& begin,
+                                           const std::chrono::steady_clock::time_point& end) {
+  return std::chrono::duration<double>(end - begin).count();
+}
+
+class ScopedLinkSyncProfileTimer {
+ public:
+  explicit ScopedLinkSyncProfileTimer(const char* label)
+      : label_(label), enabled_(is_link_sync_profiling_enabled()), begin_(std::chrono::steady_clock::now()) {
+  }
+
+  ~ScopedLinkSyncProfileTimer() {
+    if (!enabled_) {
+      return;
+    }
+
+    const auto end = std::chrono::steady_clock::now();
+    std::cout << "[LinkDataSyncProfile] " << label_ << "=" << elapsed_sync_profile_seconds(begin_, end) << " s\n";
+  }
+
+ private:
+  const char* label_;
+  bool enabled_;
+  std::chrono::steady_clock::time_point begin_;
+};
+
+#define MUNDY_LINK_SYNC_PROFILE_SCOPE(label_literal) \
+  ::mundy::mesh::impl::ScopedLinkSyncProfileTimer scoped_link_sync_profile_timer(label_literal)
 
 // This class is really more like a namespace with similar methods, which exists because we want the CSR/COO
 // to only be friends with this and not each individual method.
@@ -108,6 +150,80 @@ class NgpCOOToCSRSynchronizerT {
   //! \name Methods
   //@{
 
+  static bool has_stale_or_invalid_coo_relations(NgpLinkCSRDataT<NgpMemSpace>& crs_data,
+                                                 const stk::mesh::Selector& selector) {
+    MUNDY_LINK_SYNC_PROFILE_SCOPE("has_stale_or_invalid_coo_relations");
+    const stk::mesh::Selector link_subset_selector = crs_data.link_meta_data().universal_link_class() & selector;
+    const stk::mesh::BulkData& bulk_data = crs_data.bulk_data();
+    const LinkMetaData& link_meta_data = crs_data.link_meta_data();
+    const auto& linked_entities_field = impl::get_linked_entities_field(link_meta_data);
+    const auto& linked_entity_ids_field = impl::get_linked_entity_ids_field(link_meta_data);
+    const auto& linked_entity_ranks_field = impl::get_linked_entity_ranks_field(link_meta_data);
+    const auto& linked_entity_bucket_ids_field = impl::get_linked_entity_bucket_ids_field(link_meta_data);
+    const auto& linked_entity_bucket_ords_field = impl::get_linked_entity_bucket_ords_field(link_meta_data);
+
+    const stk::mesh::BucketVector& link_buckets =
+        bulk_data.get_buckets(link_meta_data.link_rank(), link_subset_selector);
+    for (const stk::mesh::Bucket* bucket : link_buckets) {
+      const unsigned link_dimensionality = stk::mesh::field_scalars_per_entity(linked_entities_field, *bucket);
+      for (size_t i = 0; i < bucket->size(); ++i) {
+        const stk::mesh::Entity link = (*bucket)[i];
+        const auto* linked_entities_data = stk::mesh::field_data(linked_entities_field, link);
+        const auto* linked_entity_ids_data = stk::mesh::field_data(linked_entity_ids_field, link);
+        const auto* linked_entity_ranks_data = stk::mesh::field_data(linked_entity_ranks_field, link);
+        const auto* linked_entity_bucket_ids_data = stk::mesh::field_data(linked_entity_bucket_ids_field, link);
+        const auto* linked_entity_bucket_ords_data = stk::mesh::field_data(linked_entity_bucket_ords_field, link);
+
+        for (unsigned d = 0; d < link_dimensionality; ++d) {
+          const stk::mesh::Entity linked_entity(linked_entities_data[d]);
+          const stk::mesh::EntityId stored_id = linked_entity_ids_data[d];
+          const LinkMetaData::entity_rank_value_t stored_rank_value = linked_entity_ranks_data[d];
+          const bool empty_handle = linked_entity == stk::mesh::Entity();
+          const bool empty_id_rank =
+              stored_id == stk::mesh::EntityId() &&
+              stored_rank_value == static_cast<LinkMetaData::entity_rank_value_t>(stk::topology::INVALID_RANK);
+
+          if (empty_handle || empty_id_rank) {
+            if (!empty_handle || !empty_id_rank || linked_entity_bucket_ids_data[d] != 0u ||
+                linked_entity_bucket_ords_data[d] != 0u) {
+              return true;
+            }
+            continue;
+          }
+
+          const bool stored_rank_valid =
+              stored_rank_value >= static_cast<LinkMetaData::entity_rank_value_t>(stk::topology::BEGIN_RANK) &&
+              stored_rank_value < static_cast<LinkMetaData::entity_rank_value_t>(stk::topology::NUM_RANKS);
+          if (!stored_rank_valid) {
+            return true;
+          }
+
+          if (!bulk_data.is_valid(linked_entity)) {
+            return true;
+          }
+
+          const stk::mesh::EntityRank stored_rank = static_cast<stk::mesh::EntityRank>(stored_rank_value);
+          if (bulk_data.identifier(linked_entity) != stored_id || bulk_data.entity_rank(linked_entity) != stored_rank) {
+            return true;
+          }
+
+          if (bulk_data.get_entity(stored_rank, stored_id) != linked_entity) {
+            return true;
+          }
+
+          const unsigned current_bucket_id = bulk_data.bucket(linked_entity).bucket_id();
+          const unsigned current_bucket_ord = bulk_data.bucket_ordinal(linked_entity);
+          if (linked_entity_bucket_ids_data[d] != current_bucket_id ||
+              linked_entity_bucket_ords_data[d] != current_bucket_ord) {
+            return true;
+          }
+        }
+      }
+    }
+
+    return false;
+  }
+
   /// \brief Check if the CSR connectivity is up-to-date for the given link subset selector.
   ///
   /// \note This check is more than just a lookup of a flag. Instead, it performs two operations
@@ -116,10 +232,16 @@ class NgpCOOToCSRSynchronizerT {
   /// These aren't expensive operations and they're designed to be fast/GPU-compatible, but they aren't free.
   static bool is_crs_up_to_date(NgpLinkCSRDataT<NgpMemSpace>& crs_data, NgpLinkCOODataT<NgpMemSpace>& /*coo_data*/,
                                 const stk::mesh::Selector& selector) {
-    Kokkos::Profiling::pushRegion("NgpCOOToCSRSynchronizerT::is_crs_up_to_date");
+    MUNDY_LINK_SYNC_PROFILE_SCOPE("is_crs_up_to_date(selector)");
 
     // Dereference just once
-    stk::mesh::Selector link_subset_selector = crs_data.link_meta_data().universal_link_part() & selector;
+    stk::mesh::Selector link_subset_selector = crs_data.link_meta_data().universal_link_class() & selector;
+    const stk::mesh::BucketVector& selected_link_buckets =
+        crs_data.bulk_data().get_buckets(crs_data.link_meta_data().link_rank(), link_subset_selector);
+
+    if (crs_data.get_all_crs_partitions().extent(0) == 0 && !selected_link_buckets.empty()) {
+      return false;
+    }
 
     // Two types of out-of-date:
     //  1. The CSR connectivity of a selected partition is dirty.
@@ -176,21 +298,23 @@ class NgpCOOToCSRSynchronizerT {
     //     Kokkos::Sum<int>(num_dirty_buckets));
     // bool crs_buckets_up_to_date = num_dirty_buckets == 0;
 
-    if (crs_buckets_up_to_date) {  // No need to perform the second check if the first fails.
+    bool is_up_to_date = crs_buckets_up_to_date;
+    if (is_up_to_date) {  // No need to perform the second check if the first fails.
       //  2. A selected link is out-of-date.
       int link_needs_updated_count =
           ::mundy::mesh::field_sum<int>(impl::get_link_crs_needs_updated_field(crs_data.link_meta_data()),
                                         link_subset_selector, stk::ngp::ExecSpace());
-      bool links_up_to_date = (link_needs_updated_count == 0);
-      return links_up_to_date;
+      const bool links_up_to_date = (link_needs_updated_count == 0);
+      is_up_to_date = links_up_to_date;
+
     }
 
-    Kokkos::Profiling::popRegion();
-    return crs_buckets_up_to_date;
+    return is_up_to_date;
   }
 
   /// \brief Check if the CSR connectivity is up-to-date for all links.
   static bool is_crs_up_to_date(NgpLinkCSRDataT<NgpMemSpace>& crs_data, NgpLinkCOODataT<NgpMemSpace>& coo_data) {
+    MUNDY_LINK_SYNC_PROFILE_SCOPE("is_crs_up_to_date(universal)");
     return is_crs_up_to_date(crs_data, coo_data, crs_data.bulk_data().mesh_meta_data().universal_part());
   }
 
@@ -198,74 +322,114 @@ class NgpCOOToCSRSynchronizerT {
   /// This takes changes made via the declare/destroy_relation functions or request/destroy links and updates
   /// the CSR connectivity to reflect these changes.
   static void update_crs_from_coo(NgpLinkCSRDataT<NgpMemSpace>& crs_data, NgpLinkCOODataT<NgpMemSpace>& coo_data,
-                                  const stk::mesh::Selector& selector) {
-    stk::mesh::Selector link_subset_selector = crs_data.link_meta_data().universal_link_part() & selector;
+                                  const stk::mesh::Selector& selector, bool force_full_rebuild = false) {
+    MUNDY_LINK_SYNC_PROFILE_SCOPE("update_crs_from_coo(selector)");
+    const bool sync_profile_enabled = is_link_sync_profiling_enabled();
+    const auto sync_total_begin = std::chrono::steady_clock::now();
 
-    if (is_crs_up_to_date(crs_data, coo_data, link_subset_selector)) {
-      return;
+    double is_up_to_date_time = 0.0;
+    double validation_time = 0.0;
+    double prepare_rebuild_time = 0.0;
+    double flag_dirty_time = 0.0;
+    double reset_dirty_time = 0.0;
+    double gather_count_time = 0.0;
+    double gather_prefix_time = 0.0;
+    double scatter_setup_time = 0.0;
+    double scatter_fill_time = 0.0;
+    double finalize_time = 0.0;
+
+    stk::mesh::Selector universal_link_selector = crs_data.link_meta_data().universal_link_class();
+    stk::mesh::Selector link_subset_selector = universal_link_selector & selector;
+    if (force_full_rebuild) {
+      link_subset_selector = universal_link_selector;
     }
 
-    Kokkos::Profiling::pushRegion("NgpCOOToCSRSynchronizerT::update_crs_from_coo");
+    if (!force_full_rebuild) {
+      const auto up_to_date_begin = std::chrono::steady_clock::now();
+      if (is_crs_up_to_date(crs_data, coo_data, link_subset_selector)) {
+        if (sync_profile_enabled) {
+          const auto sync_total_end = std::chrono::steady_clock::now();
+          std::cout << "[LinkDataSyncProfile] update_crs_from_coo early-return up-to-date in "
+                    << elapsed_sync_profile_seconds(sync_total_begin, sync_total_end) << " s\n";
+        }
+        return;
+      }
+      const auto up_to_date_end = std::chrono::steady_clock::now();
+      is_up_to_date_time += elapsed_sync_profile_seconds(up_to_date_begin, up_to_date_end);
 
-    // There are a couple options here for the types of state that we need to address:
-    //  1. Nothing happened: All STK buckets are up-to-date (technically we only care about link buckets and the buckets
-    //  of entities they link but we'll ignore that for now), all selected links are up-to-date, and all CSR buckets of
-    //  selected partitions are up-to-date.
-    //  2. A link was added or removed: Some STK buckets are out-of-date but all selected links are up-to-date.
-    //  3. A link relation was added or removed: All STK buckets are up-to-date but some selected links are out-of-date.
-    //  4. A combination of 2 and 3: Some STK buckets are out-of-date and some selected links are out-of-date.
-    //
-    // If some links are out-of-date, we need to mark the CSR connectivity of each downward linked entity as dirty. Upon
-    // update, all dirty buckets will be updated.
-    //
-    // If link is created (or becomes a member of a link part), this has no effect on the CSR connectivity until it is
-    // connected to linked entities, at which point, the regular update procedure would handle propagating changes.
-    //
-    // If a link is deleted (or loses its link part membership), then we need to update the CSR connectivity of the
-    // downward linked CSR entities (regardless of the currently linked entities).
-    //
-    // If a the ownership of a link changes, the process losing ownership must mark the buckets of downward linked
-    // entities are dirty and the receiving process must mark the link as needing an update to its CSR connectivity.
-    //
-    // If a link ever enters a state where it is linked to non-empty entities and none of those entities are owned by
-    // its owning process, the link will transfer ownership to the process that owns the first non-empty linked entity.
-    //
-    // An observer will detect deletions, loss of link part membership, and changes of ownership. It will properly flag
-    // the buckets of the linked entities as dirty or the link itself as being out-of-date, which will then be processed
-    // in the next update.
-    //
-    // This function is independent of said observer and is only responsible for updating the CSR connectivity given
-    // that some links are out-of-date or some crs buckets are dirty. As such, it simply loops over the links in the
-    // given selector, flags the buckets of linked entities as dirty if the link is out-of-date, and then updates all
-    // dirty crs buckets.
-    //
-    // stk_link_bucket_to_partition_id_map_ is a weird animal in that it must have the same size as the number of
-    // buckets but the number of buckets may change during a modification cycle. We need to be certain if buckets may
-    // even change their IDs during a modification cycle or not. If not, then we need to delete and shift this map each
-    // time a bucket is destroyed.
-    //
-    // Each link bucket needs to be able to access its link partition. Buckets may change parts, but the observer isn't
-    // informed of this change. Every tome that STK send a signal for local_buckets_changed_notification(link_rank), we
-    // need to rebuilt this map by looping over all selected link buckets, fetching their partition key, and using
-    // partition_key_to_id_map_ to get the corresponding id. We'll then store this in the bucket to id map.
-    //
-    // This tells us that the LinkDataObserver is in charge of deciding when to rebuild this map but not when to build
-    // it in the first place. We could use a memoized getter that sees if the list is empty or not. If it's empty, it
-    // calls rebuild_stk_link_bucket_to_partition_id_map.
-    flag_dirty_linked_buckets_of_modified_links(crs_data, coo_data, link_subset_selector);
+    }
 
+    if (force_full_rebuild) {
+      const auto validation_begin = std::chrono::steady_clock::now();
+      MUNDY_THROW_REQUIRE(!has_stale_or_invalid_coo_relations(crs_data, link_subset_selector), std::logic_error,
+                          "Cannot rebuild link CSR data because one or more COO relations reference an invalid entity, "
+                          "an entity with mismatched id/rank metadata, or stale bucket id/ordinal metadata.");
+      const auto validation_end = std::chrono::steady_clock::now();
+      validation_time += elapsed_sync_profile_seconds(validation_begin, validation_end);
+    }
+
+    if (force_full_rebuild) {
+      const auto rebuild_begin = std::chrono::steady_clock::now();
+      prepare_full_rebuild_state(crs_data);
+      const auto rebuild_end = std::chrono::steady_clock::now();
+      prepare_rebuild_time += elapsed_sync_profile_seconds(rebuild_begin, rebuild_end);
+    }
+
+    // Incremental updates only need to flag buckets touched by dirty COO links. Full rebuilds have already recreated
+    // the CSR partition structure and marked every CSR bucket connection dirty.
+    if (!force_full_rebuild) {
+      const auto flag_begin = std::chrono::steady_clock::now();
+      flag_dirty_linked_buckets_of_modified_links(crs_data, coo_data, link_subset_selector);
+      const auto flag_end = std::chrono::steady_clock::now();
+      flag_dirty_time += elapsed_sync_profile_seconds(flag_begin, flag_end);
+    }
+
+    const auto reset_begin = std::chrono::steady_clock::now();
     reset_dirty_linked_buckets(crs_data, coo_data, link_subset_selector);
+    const auto reset_end = std::chrono::steady_clock::now();
+    reset_dirty_time += elapsed_sync_profile_seconds(reset_begin, reset_end);
 
+    const auto gather_count_begin = std::chrono::steady_clock::now();
     gather_part_1_count(crs_data, coo_data, link_subset_selector);
+    const auto gather_count_end = std::chrono::steady_clock::now();
+    gather_count_time += elapsed_sync_profile_seconds(gather_count_begin, gather_count_end);
 
+    const auto gather_prefix_begin = std::chrono::steady_clock::now();
     gather_part_2_partial_sum(crs_data, coo_data, link_subset_selector);
+    const auto gather_prefix_end = std::chrono::steady_clock::now();
+    gather_prefix_time += elapsed_sync_profile_seconds(gather_prefix_begin, gather_prefix_end);
 
+    const auto scatter_setup_begin = std::chrono::steady_clock::now();
     scatter_part_1_setup(crs_data, coo_data, link_subset_selector);
+    const auto scatter_setup_end = std::chrono::steady_clock::now();
+    scatter_setup_time += elapsed_sync_profile_seconds(scatter_setup_begin, scatter_setup_end);
 
+    const auto scatter_fill_begin = std::chrono::steady_clock::now();
     scatter_part_2_fill(crs_data, coo_data, link_subset_selector);
+    const auto scatter_fill_end = std::chrono::steady_clock::now();
+    scatter_fill_time += elapsed_sync_profile_seconds(scatter_fill_begin, scatter_fill_end);
 
+    const auto finalize_begin = std::chrono::steady_clock::now();
     finalize_crs_update(crs_data, coo_data, link_subset_selector);
-    Kokkos::Profiling::popRegion();
+    const auto finalize_end = std::chrono::steady_clock::now();
+    finalize_time += elapsed_sync_profile_seconds(finalize_begin, finalize_end);
+
+    if (sync_profile_enabled) {
+      const auto sync_total_end = std::chrono::steady_clock::now();
+      std::cout << "[LinkDataSyncProfile] update_crs_from_coo total="
+                << elapsed_sync_profile_seconds(sync_total_begin, sync_total_end) << " s"
+                << " (force_full_rebuild=" << (force_full_rebuild ? "true" : "false") << ")\n"
+                << "[LinkDataSyncProfile]   is_crs_up_to_date=" << is_up_to_date_time << " s\n"
+                << "[LinkDataSyncProfile]   validate_coo_relations=" << validation_time << " s\n"
+                << "[LinkDataSyncProfile]   prepare_full_rebuild_state=" << prepare_rebuild_time << " s\n"
+                << "[LinkDataSyncProfile]   flag_dirty_linked_buckets_of_modified_links=" << flag_dirty_time << " s\n"
+                << "[LinkDataSyncProfile]   reset_dirty_linked_buckets=" << reset_dirty_time << " s\n"
+                << "[LinkDataSyncProfile]   gather_part_1_count=" << gather_count_time << " s\n"
+                << "[LinkDataSyncProfile]   gather_part_2_partial_sum=" << gather_prefix_time << " s\n"
+                << "[LinkDataSyncProfile]   scatter_part_1_setup=" << scatter_setup_time << " s\n"
+                << "[LinkDataSyncProfile]   scatter_part_2_fill=" << scatter_fill_time << " s\n"
+                << "[LinkDataSyncProfile]   finalize_crs_update=" << finalize_time << " s\n";
+    }
 
 // If in debug, check consistency
 #ifndef NDEBUG
@@ -274,16 +438,27 @@ class NgpCOOToCSRSynchronizerT {
   }
 
   /// \brief Propagate changes made to the COO connectivity to the CSR connectivity.
-  static void update_crs_from_coo(NgpLinkCSRDataT<NgpMemSpace>& crs_data, NgpLinkCOODataT<NgpMemSpace>& coo_data) {
-    update_crs_from_coo(crs_data, coo_data, crs_data.bulk_data().mesh_meta_data().universal_part());
+  static void update_crs_from_coo(NgpLinkCSRDataT<NgpMemSpace>& crs_data, NgpLinkCOODataT<NgpMemSpace>& coo_data,
+                                  bool force_full_rebuild = false) {
+    MUNDY_LINK_SYNC_PROFILE_SCOPE("update_crs_from_coo(universal)");
+    update_crs_from_coo(crs_data, coo_data, crs_data.bulk_data().mesh_meta_data().universal_part(), force_full_rebuild);
+  }
+
+  static void prepare_full_rebuild_state(NgpLinkCSRDataT<NgpMemSpace>& crs_data) {
+    MUNDY_LINK_SYNC_PROFILE_SCOPE("prepare_full_rebuild_state");
+    const stk::mesh::Selector universal_link_selector = crs_data.link_meta_data().universal_link_class();
+    crs_data.clear_structural_caches();
+    crs_data.get_or_create_crs_partitions(universal_link_selector);
+    crs_data.update_stk_link_bucket_to_partition_id_map();
+    crs_data.mark_all_crs_bucket_conns_dirty();
   }
 
   static void flag_dirty_linked_buckets_of_modified_links(NgpLinkCSRDataT<NgpMemSpace>& crs_data,
                                                           NgpLinkCOODataT<NgpMemSpace>& coo_data,
                                                           const stk::mesh::Selector& selector) {
-    Kokkos::Profiling::pushRegion("NgpLinkPartitionT::flag_dirty_linked_buckets");
+    MUNDY_LINK_SYNC_PROFILE_SCOPE("flag_dirty_linked_buckets_of_modified_links");
 
-    stk::mesh::Selector link_subset_selector = crs_data.link_meta_data().universal_link_part() & selector;
+    stk::mesh::Selector link_subset_selector = crs_data.link_meta_data().universal_link_class() & selector;
 
     // Flag dirty buckets: Team loop over selected link buckets, fetch their partition, thread loop over links,
     // determine if any of those links are flagged as modified. If so, determine if their links were created or
@@ -302,70 +477,62 @@ class NgpCOOToCSRSynchronizerT {
 
     Kokkos::parallel_for(
         "flag_dirty_linked_buckets_of_modified_links", team_policy, KOKKOS_LAMBDA(const TeamHandleType& team) {
-          // Fetch our bucket
           const unsigned bucket_id = bucket_ids.get<stk::mesh::NgpMesh::MeshExecSpace>(team.league_rank());
           const stk::mesh::NgpMesh::BucketType& bucket = ngp_mesh.get_bucket(link_rank, bucket_id);
-          unsigned num_links = static_cast<unsigned>(bucket.size());
+          const unsigned num_links = static_cast<unsigned>(bucket.size());
 
-          // Fetch the partition for this bucket
           MUNDY_THROW_ASSERT(stk_link_bucket_to_partition_id_map.exists(bucket_id), std::out_of_range,
                              "Bucket ID not found in the link bucket to partition ID map.");
-          unsigned map_index = static_cast<unsigned>(stk_link_bucket_to_partition_id_map.find(bucket_id));
-          stk::mesh::Ordinal partition_id = stk_link_bucket_to_partition_id_map.value_at(map_index);
-
+          const unsigned map_index = static_cast<unsigned>(stk_link_bucket_to_partition_id_map.find(bucket_id));
+          const stk::mesh::Ordinal partition_id = stk_link_bucket_to_partition_id_map.value_at(map_index);
           MUNDY_THROW_ASSERT(partition_id < crs_partitions.extent(0), std::out_of_range,
                              "Partition ID is out of range for the number of CSR partitions.");
 
           NgpLinkCSRPartitionT<NgpMemSpace>& crs_partition = crs_partitions(partition_id);
-          unsigned dimensionality = crs_partition.link_dimensionality();
+          const unsigned dimensionality = crs_partition.link_dimensionality();
 
-          Kokkos::parallel_for(Kokkos::TeamThreadRange(team, 0u, num_links), [&](const int& i) {
-            stk::mesh::Entity link = bucket[i];
-            stk::mesh::FastMeshIndex link_index = ngp_mesh.fast_mesh_index(link);
-            if (coo_data.get_link_crs_needs_updated(link_index)) {
-              // Loop over the linked entities of this link
-              for (unsigned d = 0; d < dimensionality; ++d) {
-                stk::mesh::Entity linked_entity_crs = coo_data.get_linked_entity_crs(link_index, d);
-                stk::mesh::Entity linked_entity = coo_data.get_linked_entity(link_index, d);
-                bool things_changed = linked_entity_crs != linked_entity;
-                if (things_changed) {
-                  bool old_entity_is_valid = (linked_entity_crs != stk::mesh::Entity());
-                  if (old_entity_is_valid) {
-                    // Mark the old linked entity's crs bucket conn as dirty
-                    const stk::mesh::FastMeshIndex linked_entity_crs_index =
-                        ngp_mesh.fast_mesh_index(linked_entity_crs);
-                    const stk::mesh::EntityRank linked_entity_crs_rank = ngp_mesh.entity_rank(linked_entity_crs);
-                    auto& crs_bucket_conn = crs_partition.get_crs_bucket_conn(
-                        linked_entity_crs_rank, static_cast<unsigned>(linked_entity_crs_index.bucket_id));
-                    Kokkos::atomic_store(&impl::get_dirty_flag(crs_bucket_conn),
-                                         true);  // TODO: This should be a protected function (flag_as_dirty_atomically)
-                  }
+          // TEAM_FLAT path: flatten (link,ordinal) work into a single TeamThreadRange to improve utilization.
+          const unsigned work_items = num_links * dimensionality;
+          Kokkos::parallel_for(Kokkos::TeamThreadRange(team, 0u, work_items), [&](const unsigned work) {
+            const unsigned i = work / dimensionality;
+            const unsigned d = work % dimensionality;
+            const stk::mesh::Entity link = bucket[i];
+            const stk::mesh::FastMeshIndex link_index = ngp_mesh.fast_mesh_index(link);
+            if (!coo_data.get_link_crs_needs_updated(link_index)) {
+              return;
+            }
 
-                  bool new_entity_is_valid = (linked_entity != stk::mesh::Entity());
-                  if (new_entity_is_valid) {
-                    // Mark the new linked entity's crs bucket conn as dirty
-                    const stk::mesh::FastMeshIndex new_linked_entity_index = ngp_mesh.fast_mesh_index(linked_entity);
-                    const stk::mesh::EntityRank linked_entity_rank = ngp_mesh.entity_rank(linked_entity);
-                    auto& crs_bucket_conn =
-                        crs_partition.get_crs_bucket_conn(linked_entity_rank, new_linked_entity_index.bucket_id);
-                    Kokkos::atomic_store(&impl::get_dirty_flag(crs_bucket_conn),
-                                         true);  // TODO: This should be a protected function (flag_as_dirty_atomically)
-                  }
-                }
-              }
+            const stk::mesh::Entity linked_entity_crs = coo_data.get_linked_entity_crs(link_index, d);
+            const stk::mesh::Entity linked_entity = coo_data.get_linked_entity(link_index, d);
+            if (linked_entity_crs == linked_entity) {
+              return;
+            }
+
+            if (linked_entity_crs != stk::mesh::Entity()) {
+              const stk::mesh::FastMeshIndex linked_entity_crs_index = ngp_mesh.fast_mesh_index(linked_entity_crs);
+              const stk::mesh::EntityRank linked_entity_crs_rank = ngp_mesh.entity_rank(linked_entity_crs);
+              auto& crs_bucket_conn = crs_partition.get_crs_bucket_conn(
+                  linked_entity_crs_rank, static_cast<unsigned>(linked_entity_crs_index.bucket_id));
+              Kokkos::atomic_store(&impl::get_dirty_flag(crs_bucket_conn), true);
+            }
+
+            if (linked_entity != stk::mesh::Entity()) {
+              const stk::mesh::FastMeshIndex linked_entity_index = ngp_mesh.fast_mesh_index(linked_entity);
+              const stk::mesh::EntityRank linked_entity_rank = ngp_mesh.entity_rank(linked_entity);
+              auto& crs_bucket_conn = crs_partition.get_crs_bucket_conn(
+                  linked_entity_rank, static_cast<unsigned>(linked_entity_index.bucket_id));
+              Kokkos::atomic_store(&impl::get_dirty_flag(crs_bucket_conn), true);
             }
           });
         });
-
-    Kokkos::Profiling::popRegion();
   }
 
   static void reset_dirty_linked_buckets(NgpLinkCSRDataT<NgpMemSpace>& crs_data,
                                          NgpLinkCOODataT<NgpMemSpace>& /*coo_data*/,
                                          const stk::mesh::Selector& selector) {
-    Kokkos::Profiling::pushRegion("NgpLinkPartitionT::reset_dirty_linked_buckets");
+    MUNDY_LINK_SYNC_PROFILE_SCOPE("reset_dirty_linked_buckets");
 
-    stk::mesh::Selector link_subset_selector = crs_data.link_meta_data().universal_link_part() & selector;
+    stk::mesh::Selector link_subset_selector = crs_data.link_meta_data().universal_link_class() & selector;
 
     //  Reset dirty buckets: Serial loop over each rank, team loop over each stk bucket of said rank, serial loop over
     //  the partitions, if its corresponding linked bucket has been modified, thread loop over the linked entities and
@@ -402,15 +569,13 @@ class NgpCOOToCSRSynchronizerT {
             }
           });
     }
-
-    Kokkos::Profiling::popRegion();
   }
 
   static void gather_part_1_count(NgpLinkCSRDataT<NgpMemSpace>& crs_data, NgpLinkCOODataT<NgpMemSpace>& coo_data,
                                   const stk::mesh::Selector& selector) {
-    Kokkos::Profiling::pushRegion("NgpLinkPartitionT::gather_part_1_count");
+    MUNDY_LINK_SYNC_PROFILE_SCOPE("gather_part_1_count");
 
-    stk::mesh::Selector link_subset_selector = crs_data.link_meta_data().universal_link_part() & selector;
+    stk::mesh::Selector link_subset_selector = crs_data.link_meta_data().universal_link_class() & selector;
 
     // Gather part 1 (count): Team loop over selected link buckets, fetch their partition, team loop over the links,
     // serial loop over the downward linked entities, if their bucket is dirty, atomically increment the connectivity
@@ -429,54 +594,49 @@ class NgpCOOToCSRSynchronizerT {
 
     Kokkos::parallel_for(
         "gather_part_1_count", team_policy, KOKKOS_LAMBDA(const TeamHandleType& team) {
-          // Fetch our bucket
           const unsigned bucket_id = bucket_ids.get<stk::mesh::NgpMesh::MeshExecSpace>(team.league_rank());
           const stk::mesh::NgpMesh::BucketType& bucket = ngp_mesh.get_bucket(link_rank, bucket_id);
-          unsigned num_links = static_cast<unsigned>(bucket.size());
+          const unsigned num_links = static_cast<unsigned>(bucket.size());
 
-          // Fetch the partition for this bucket
           MUNDY_THROW_ASSERT(stk_link_bucket_to_partition_id_map.exists(bucket_id), std::out_of_range,
                              "Bucket ID not found in the link bucket to partition ID map.");
 
-          unsigned map_index = static_cast<unsigned>(stk_link_bucket_to_partition_id_map.find(bucket_id));
-          stk::mesh::Ordinal partition_id = stk_link_bucket_to_partition_id_map.value_at(map_index);
+          const unsigned map_index = static_cast<unsigned>(stk_link_bucket_to_partition_id_map.find(bucket_id));
+          const stk::mesh::Ordinal partition_id = stk_link_bucket_to_partition_id_map.value_at(map_index);
           MUNDY_THROW_ASSERT(partition_id < crs_partitions.extent(0), std::out_of_range,
                              "Partition ID is out of range for the number of CSR partitions.");
 
           NgpLinkCSRPartitionT<NgpMemSpace>& crs_partition = crs_partitions(partition_id);
-          unsigned dimensionality = crs_partition.link_dimensionality();
+          const unsigned dimensionality = crs_partition.link_dimensionality();
 
-          Kokkos::parallel_for(Kokkos::TeamThreadRange(team, 0u, num_links), [&](const int& i) {
-            stk::mesh::Entity link = bucket[i];
-            stk::mesh::FastMeshIndex link_index = ngp_mesh.fast_mesh_index(link);
-            // Loop over the linked entities of this link
-            for (unsigned d = 0; d < dimensionality; ++d) {
-              // Only consider non-empty links
-              if (coo_data.get_linked_entity(link_index, d) != stk::mesh::Entity()) {
-                stk::mesh::FastMeshIndex linked_entity_index = coo_data.get_linked_entity_index(link_index, d);
-                stk::mesh::EntityRank linked_entity_rank = coo_data.get_linked_entity_rank(link_index, d);
-                auto& crs_bucket_conn =
-                    crs_partition.get_crs_bucket_conn(linked_entity_rank, linked_entity_index.bucket_id);
+          // TEAM_FLAT path: flatten (link,ordinal) work into a single TeamThreadRange to improve utilization.
+          const unsigned work_items = num_links * dimensionality;
+          Kokkos::parallel_for(Kokkos::TeamThreadRange(team, 0u, work_items), [&](const unsigned work) {
+            const unsigned i = work / dimensionality;
+            const unsigned d = work % dimensionality;
+            const stk::mesh::Entity link = bucket[i];
+            const stk::mesh::FastMeshIndex link_index = ngp_mesh.fast_mesh_index(link);
+            if (coo_data.get_linked_entity(link_index, d) == stk::mesh::Entity()) {
+              return;
+            }
+            const stk::mesh::FastMeshIndex linked_entity_index = coo_data.get_linked_entity_index(link_index, d);
+            const stk::mesh::EntityRank linked_entity_rank = coo_data.get_linked_entity_rank(link_index, d);
+            auto& crs_bucket_conn =
+                crs_partition.get_crs_bucket_conn(linked_entity_rank, linked_entity_index.bucket_id);
 
-                if (impl::get_dirty_flag(crs_bucket_conn)) {
-                  // Atomically increment the connectivity count
-                  Kokkos::atomic_add(&impl::get_num_connected_links(crs_bucket_conn)(linked_entity_index.bucket_ord),
-                                     1u);
-                }
-              }
+            if (impl::get_dirty_flag(crs_bucket_conn)) {
+              Kokkos::atomic_add(&impl::get_num_connected_links(crs_bucket_conn)(linked_entity_index.bucket_ord), 1u);
             }
           });
         });
-
-    Kokkos::Profiling::popRegion();
   }
 
   static void gather_part_2_partial_sum(NgpLinkCSRDataT<NgpMemSpace>& crs_data,
                                         NgpLinkCOODataT<NgpMemSpace>& /*coo_data*/,
                                         const stk::mesh::Selector& selector) {
-    Kokkos::Profiling::pushRegion("NgpLinkPartitionT::gather_part_2_partial_sum");
+    MUNDY_LINK_SYNC_PROFILE_SCOPE("gather_part_2_partial_sum");
 
-    stk::mesh::Selector link_subset_selector = crs_data.link_meta_data().universal_link_part() & selector;
+    stk::mesh::Selector link_subset_selector = crs_data.link_meta_data().universal_link_class() & selector;
 
     // Gather part 2 (partial sum): Serial loop over each rank, team loop over the stk buckets of said rank, serial loop
     // over the partitions, if its corresponding linked bucket has been modified, thread loop over the linked bucket to
@@ -484,66 +644,62 @@ class NgpCOOToCSRSynchronizerT {
 
     const stk::mesh::NgpMesh& ngp_mesh = stk::mesh::get_updated_ngp_mesh(crs_data.bulk_data());
     const NgpLinkCSRPartitionView& crs_partitions = crs_data.get_or_create_crs_partitions(link_subset_selector);
-
     // Serial loop over each rank
     for (stk::topology::rank_t rank = stk::topology::NODE_RANK; rank < stk::topology::NUM_RANKS; ++rank) {
-      // Team loop over each stk bucket of said rank
-      typedef stk::ngp::TeamPolicy<stk::mesh::NgpMesh::MeshExecSpace>::member_type TeamHandleType;
+      // TEAM_FLAT: Team loop over each stk bucket/partition pair
+      using TeamHandleType = stk::ngp::TeamPolicy<stk::mesh::NgpMesh::MeshExecSpace>::member_type;
+      const unsigned num_buckets = static_cast<unsigned>(ngp_mesh.num_buckets(rank));
+      const unsigned num_partitions = static_cast<unsigned>(crs_partitions.extent(0));
+      const unsigned work_items = num_buckets * num_partitions;
       const auto& team_policy =
-          stk::ngp::TeamPolicy<stk::mesh::NgpMesh::MeshExecSpace>(ngp_mesh.num_buckets(rank), Kokkos::AUTO);
+          stk::ngp::TeamPolicy<stk::mesh::NgpMesh::MeshExecSpace>(static_cast<int>(work_items), Kokkos::AUTO);
       Kokkos::parallel_for(
           "gather_part_2_partial_sum", team_policy, KOKKOS_LAMBDA(const TeamHandleType& team) {
-            // Fetch our bucket
-            const stk::mesh::NgpMesh::BucketType& bucket = ngp_mesh.get_bucket(rank, team.league_rank());
-            unsigned bucket_size = static_cast<unsigned>(bucket.size());
+            const unsigned work = static_cast<unsigned>(team.league_rank());
+            const unsigned bucket_id = work / num_partitions;
+            const unsigned partition_id = work % num_partitions;
 
-            // Serial loop over the partitions
-            for (size_t partition_id = 0; partition_id < crs_partitions.extent(0); ++partition_id) {
-              NgpLinkCSRPartitionT<NgpMemSpace>& crs_partition = crs_partitions(partition_id);
+            const stk::mesh::NgpMesh::BucketType& bucket = ngp_mesh.get_bucket(rank, bucket_id);
+            const unsigned bucket_size = static_cast<unsigned>(bucket.size());
+            NgpLinkCSRPartitionT<NgpMemSpace>& crs_partition = crs_partitions(partition_id);
+            auto& crs_bucket_conn = crs_partition.get_crs_bucket_conn(rank, bucket.bucket_id());
 
-              // Fetch the crs bucket conn for this rank and bucket
-              auto& crs_bucket_conn = crs_partition.get_crs_bucket_conn(rank, bucket.bucket_id());
-
-              // If the bucket is dirty, partial sum the connectivity counts into the connectivity offsets.
-              if (impl::get_dirty_flag(crs_bucket_conn)) {
-                // Use a parallel_scan to compute the offsets
-                Kokkos::parallel_scan(Kokkos::TeamThreadRange(team, 0u, bucket_size),
-                                      [&](unsigned i, unsigned& partial_sum, bool final_pass) {
-                                        const unsigned num_connected_links =
-                                            impl::get_num_connected_links(crs_bucket_conn)(i);
-                                        if (final_pass) {
-                                          // exclusive offset
-                                          impl::get_sparse_connectivity_offsets(crs_bucket_conn)(i) = partial_sum;
-
-                                          if (i == bucket_size - 1) {
-                                            // Store the total number of connected links at the end of the offsets array
-                                            impl::get_sparse_connectivity_offsets(crs_bucket_conn)(bucket_size) =
-                                                partial_sum + num_connected_links;
-                                          }
+            if (impl::get_dirty_flag(crs_bucket_conn)) {
+              Kokkos::parallel_scan(Kokkos::TeamThreadRange(team, 0u, bucket_size),
+                                    [&](unsigned i, unsigned& partial_sum, bool final_pass) {
+                                      const unsigned num_connected_links =
+                                          impl::get_num_connected_links(crs_bucket_conn)(i);
+                                      if (final_pass) {
+                                        impl::get_sparse_connectivity_offsets(crs_bucket_conn)(i) = partial_sum;
+                                        if (i == bucket_size - 1) {
+                                          impl::get_sparse_connectivity_offsets(crs_bucket_conn)(bucket_size) =
+                                              partial_sum + num_connected_links;
                                         }
-                                        partial_sum += num_connected_links;
-                                      });
-                // Stash the total for access on the host
-                impl::get_total_num_connected_links(crs_bucket_conn) =
-                    impl::get_sparse_connectivity_offsets(crs_bucket_conn)(bucket_size);
-              }
+                                      }
+                                      partial_sum += num_connected_links;
+                                    });
+              impl::get_total_num_connected_links(crs_bucket_conn) =
+                  impl::get_sparse_connectivity_offsets(crs_bucket_conn)(bucket_size);
             }
           });
     }
-
-    Kokkos::Profiling::popRegion();
   }
 
   static void scatter_part_1_setup(NgpLinkCSRDataT<NgpMemSpace>& crs_data, NgpLinkCOODataT<NgpMemSpace>& coo_data,
                                    const stk::mesh::Selector& selector) {
-    Kokkos::Profiling::pushRegion("NgpLinkPartitionT::scatter_part_1_setup");
+    MUNDY_LINK_SYNC_PROFILE_SCOPE("scatter_part_1_setup");
 
-    stk::mesh::Selector link_subset_selector = crs_data.link_meta_data().universal_link_part() & selector;
+    stk::mesh::Selector link_subset_selector = crs_data.link_meta_data().universal_link_class() & selector;
 
     // Scatter part 1 (setup): Serial loop over each rank, team loop over the stk buckets of said rank, serial loop over
-    // the partitions, if its corresponding linked bucket has been modified, reset the connectivity counts to zero.
+    // the partitions, if its corresponding linked bucket has been modified, reset the connectivity counts to zero so
+    // scatter_part_2_fill() can reuse num_connected_links as an insertion cursor.
     //
+    // Resize the sparse connectivity arrays: OpenMP loop over the partitions, serial loop over each rank, and serial
+    // loop over each bucket. If its corresponding linked bucket has been modified, grow the sparse connectivity array
+    // to the required size.
     //
+
     reset_dirty_linked_buckets(crs_data, coo_data, link_subset_selector);
 
     // Resize the bucket sparse connectivity arrays
@@ -566,15 +722,13 @@ class NgpCOOToCSRSynchronizerT {
         }
       }
     }
-
-    Kokkos::Profiling::popRegion();
   }
 
   static void scatter_part_2_fill(NgpLinkCSRDataT<NgpMemSpace>& crs_data, NgpLinkCOODataT<NgpMemSpace>& coo_data,
                                   const stk::mesh::Selector& selector) {
-    Kokkos::Profiling::pushRegion("NgpLinkPartitionT::scatter_part_2_fill");
+    MUNDY_LINK_SYNC_PROFILE_SCOPE("scatter_part_2_fill");
 
-    stk::mesh::Selector link_subset_selector = crs_data.link_meta_data().universal_link_part() & selector;
+    stk::mesh::Selector link_subset_selector = crs_data.link_meta_data().universal_link_class() & selector;
 
     // Scatter part 2 (fill): Team loop over each selected link buckets, fetch
     // their partition ID, thread loop over the links, serial loop over their downward linked entities, and if their
@@ -610,40 +764,40 @@ class NgpCOOToCSRSynchronizerT {
           NgpLinkCSRPartitionT<NgpMemSpace>& crs_partition = crs_partitions(partition_id);
           unsigned dimensionality = crs_partition.link_dimensionality();
 
-          Kokkos::parallel_for(Kokkos::TeamThreadRange(team, 0u, num_links), [&](const int& i) {
+          // TEAM_FLAT path: flatten (link,ordinal) work into a single TeamThreadRange to improve utilization.
+          const unsigned work_items = num_links * dimensionality;
+          Kokkos::parallel_for(Kokkos::TeamThreadRange(team, 0u, work_items), [&](const unsigned work) {
+            const unsigned i = work / dimensionality;
+            const unsigned d = work % dimensionality;
             stk::mesh::Entity link = bucket[i];
             stk::mesh::FastMeshIndex link_index = ngp_mesh.fast_mesh_index(link);
-            // Loop over the linked entities of this link
-            for (unsigned d = 0; d < dimensionality; ++d) {
-              // Only consider non-empty links
-              stk::mesh::Entity linked_entity = coo_data.get_linked_entity(link_index, d);
-              if (linked_entity != stk::mesh::Entity()) {
-                stk::mesh::FastMeshIndex linked_entity_index = coo_data.get_linked_entity_index(link_index, d);
-                stk::mesh::EntityRank linked_entity_rank = coo_data.get_linked_entity_rank(link_index, d);
-                auto& crs_bucket_conn =
-                    crs_partition.get_crs_bucket_conn(linked_entity_rank, linked_entity_index.bucket_id);
 
-                if (impl::get_dirty_flag(crs_bucket_conn)) {
-                  // Atomically increment the connectivity count
-                  const unsigned offset =
-                      impl::get_sparse_connectivity_offsets(crs_bucket_conn)(linked_entity_index.bucket_ord);
-                  const unsigned num_inserted_old = Kokkos::atomic_fetch_add(
-                      &impl::get_num_connected_links(crs_bucket_conn)(linked_entity_index.bucket_ord), 1);
-                  impl::get_sparse_connectivity(crs_bucket_conn)(offset + num_inserted_old) = link;
-                }
+            // Loop over the linked entities of this link + Only consider non-empty links
+            stk::mesh::Entity linked_entity = coo_data.get_linked_entity(link_index, d);
+            if (linked_entity != stk::mesh::Entity()) {
+              stk::mesh::FastMeshIndex linked_entity_index = coo_data.get_linked_entity_index(link_index, d);
+              stk::mesh::EntityRank linked_entity_rank = coo_data.get_linked_entity_rank(link_index, d);
+              auto& crs_bucket_conn =
+                  crs_partition.get_crs_bucket_conn(linked_entity_rank, linked_entity_index.bucket_id);
+
+              if (impl::get_dirty_flag(crs_bucket_conn)) {
+                // Atomically increment the connectivity count
+                const unsigned offset =
+                    impl::get_sparse_connectivity_offsets(crs_bucket_conn)(linked_entity_index.bucket_ord);
+                const unsigned num_inserted_old = Kokkos::atomic_fetch_add(
+                    &impl::get_num_connected_links(crs_bucket_conn)(linked_entity_index.bucket_ord), 1);
+                impl::get_sparse_connectivity(crs_bucket_conn)(offset + num_inserted_old) = link;
               }
             }
           });
         });
-
-    Kokkos::Profiling::popRegion();
   }
 
   static void finalize_crs_update(NgpLinkCSRDataT<NgpMemSpace>& crs_data, NgpLinkCOODataT<NgpMemSpace>& /*coo_data*/,
                                   const stk::mesh::Selector& selector) {
-    Kokkos::Profiling::pushRegion("NgpLinkPartitionT::scatter_part_3_finalize");
+    MUNDY_LINK_SYNC_PROFILE_SCOPE("finalize_crs_update");
 
-    stk::mesh::Selector link_subset_selector = crs_data.link_meta_data().universal_link_part() & selector;
+    stk::mesh::Selector link_subset_selector = crs_data.link_meta_data().universal_link_class() & selector;
 
     // Finalize CSR update: Mark all buckets as no longer dirty, mark all selected links are up-to-date, and copy the
     // old COO connectivity to the new COO connectivity (for the given selector)
@@ -693,8 +847,6 @@ class NgpCOOToCSRSynchronizerT {
     ::mundy::mesh::field_copy<entity_value_t>(impl::get_linked_entities_field(crs_data.link_meta_data()),
                                               impl::get_linked_entities_crs_field(crs_data.link_meta_data()),
                                               link_subset_selector, stk::ngp::ExecSpace());
-
-    Kokkos::Profiling::popRegion();
   }
 
   /// \brief Check consistency between the COO and CSR connectivity for the given selector
@@ -704,9 +856,10 @@ class NgpCOOToCSRSynchronizerT {
   /// \note The checks performed in this function are performed even in RELEASE mode.
   static void check_crs_coo_consistency(NgpLinkCSRDataT<NgpMemSpace>& crs_data, NgpLinkCOODataT<NgpMemSpace>& coo_data,
                                         const stk::mesh::Selector& selector) {
+    MUNDY_LINK_SYNC_PROFILE_SCOPE("check_crs_coo_consistency(selector)");
     MUNDY_THROW_REQUIRE(crs_data.is_valid() && coo_data.is_valid(), std::invalid_argument,
                         "CSR and COO data must be valid to check consistency.");
-    stk::mesh::Selector link_subset_selector = crs_data.link_meta_data().universal_link_part() & selector;
+    stk::mesh::Selector link_subset_selector = crs_data.link_meta_data().universal_link_class() & selector;
     check_all_links_in_sync(crs_data, coo_data, link_subset_selector);
     check_linked_bucket_conn_size(crs_data, coo_data, link_subset_selector);
     check_coo_to_crs_conn(crs_data, coo_data, link_subset_selector);
@@ -716,6 +869,7 @@ class NgpCOOToCSRSynchronizerT {
   /// \brief Check consistency between the COO and CSR connectivity for all links
   static void check_crs_coo_consistency(NgpLinkCSRDataT<NgpMemSpace>& crs_data,
                                         NgpLinkCOODataT<NgpMemSpace>& coo_data) {
+    MUNDY_LINK_SYNC_PROFILE_SCOPE("check_crs_coo_consistency(universal)");
     MUNDY_THROW_REQUIRE(crs_data.is_valid() && coo_data.is_valid(), std::invalid_argument,
                         "CSR and COO data must be valid to check consistency.");
     check_crs_coo_consistency(crs_data, coo_data, crs_data.bulk_data().mesh_meta_data().universal_part());
@@ -723,7 +877,7 @@ class NgpCOOToCSRSynchronizerT {
 
   static void check_all_links_in_sync(NgpLinkCSRDataT<NgpMemSpace>& crs_data, NgpLinkCOODataT<NgpMemSpace>& coo_data,
                                       const stk::mesh::Selector& selector) {
-    stk::mesh::Selector link_subset_selector = crs_data.link_meta_data().universal_link_part() & selector;
+    stk::mesh::Selector link_subset_selector = crs_data.link_meta_data().universal_link_class() & selector;
     int needs_updated_count = field_sum<int>(impl::get_link_crs_needs_updated_field(crs_data.link_meta_data()),
                                              link_subset_selector, stk::ngp::ExecSpace());
     MUNDY_THROW_REQUIRE(needs_updated_count == 0, std::logic_error, "There are still links that are out of sync.");
@@ -732,7 +886,7 @@ class NgpCOOToCSRSynchronizerT {
   static void check_linked_bucket_conn_size(NgpLinkCSRDataT<NgpMemSpace>& crs_data,
                                             NgpLinkCOODataT<NgpMemSpace>& coo_data,
                                             const stk::mesh::Selector& selector) {
-    stk::mesh::Selector link_subset_selector = crs_data.link_meta_data().universal_link_part() & selector;
+    stk::mesh::Selector link_subset_selector = crs_data.link_meta_data().universal_link_class() & selector;
 
     // Serial loop over each selected partition. Serial loop over each rank.
     // Assert that the size of the bucket conn is the same as the number of STK buckets of the given rank.
@@ -750,7 +904,7 @@ class NgpCOOToCSRSynchronizerT {
 
   static void check_coo_to_crs_conn(NgpLinkCSRDataT<NgpMemSpace>& crs_data, NgpLinkCOODataT<NgpMemSpace>& coo_data,
                                     const stk::mesh::Selector& selector) {
-    stk::mesh::Selector link_subset_selector = crs_data.link_meta_data().universal_link_part() & selector;
+    stk::mesh::Selector link_subset_selector = crs_data.link_meta_data().universal_link_class() & selector;
 
     // Serial loop over each partial, hierarchical parallelism over each link in said selector,
     // serial loop over each of its downward connections, if it is non-empty, fetch their CSR conn,
@@ -806,7 +960,7 @@ class NgpCOOToCSRSynchronizerT {
 
   static void check_crs_to_coo_conn(NgpLinkCSRDataT<NgpMemSpace>& crs_data, NgpLinkCOODataT<NgpMemSpace>& coo_data,
                                     const stk::mesh::Selector& selector) {
-    stk::mesh::Selector link_subset_selector = crs_data.link_meta_data().universal_link_part() & selector;
+    stk::mesh::Selector link_subset_selector = crs_data.link_meta_data().universal_link_class() & selector;
 
     // Serial loop over each rank, team loop over each stk bucket of said rank, serial loop over each CSR partition,
     // fetch the corresponding CSR bucket conn, thread loop over the entities in said bucket, serial loop over their

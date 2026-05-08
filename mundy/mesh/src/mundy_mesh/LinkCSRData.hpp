@@ -25,7 +25,9 @@
 /// \brief Declaration of the LinkCSRData class
 
 // C++ core libs
+#include <map>          // for std::map
 #include <memory>       // for std::shared_ptr, std::unique_ptr
+#include <set>          // for std::set
 #include <string>       // for std::string
 #include <type_traits>  // for std::enable_if, std::is_base_of
 #include <typeindex>    // for std::type_index
@@ -67,6 +69,8 @@ class LinkCSRDataT {  // Raw data in any space
   using LinkCSRPartition = LinkCSRPartitionT<MemSpace>;
   using LinkCSRPartitionView = Kokkos::View<LinkCSRPartition*, stk::ngp::UVMMemSpace>;
   using LinkBucketToPartitionIdMap = Kokkos::UnorderedMap<unsigned, unsigned, MemSpace>;
+  using SelectorToPartitionsMap = std::map<stk::mesh::Selector, LinkCSRPartitionView>;
+  using PartitionKeyToIdMap = std::map<impl::PartitionKey, unsigned>;
   //@}
 
   //! \name Constructors and destructor
@@ -172,7 +176,7 @@ class LinkCSRDataT {  // Raw data in any space
 
   /// \brief Get the CSR partitions for a given link subset selector (Memoized/host only/not thread safe).
   ///
-  /// This is the only way for either mundy or users to create a new partition. The returned view is persistent
+  /// This is the only way for either Mundy or users to create a new partition. The returned view is persistent
   /// but its contents/size will change dynamically as new partitions are created and destroyed. The only promise
   /// we will make is to never delete a partition outside of a modification cycle.
   ///
@@ -182,93 +186,72 @@ class LinkCSRDataT {  // Raw data in any space
   const LinkCSRPartitionView& get_or_create_crs_partitions(const stk::mesh::Selector& selector) const {
     MUNDY_THROW_ASSERT(is_valid(), std::invalid_argument, "Link data is not valid.");
 
-    // We only care about the intersection of the given selector and our universe link selector.
-    stk::mesh::Selector link_subset_selector = link_meta_data().universal_link_part() & selector;
-
-    // Memoized return
+    stk::mesh::Selector link_subset_selector = link_meta_data().universal_link_class() & selector;
     typename SelectorToPartitionsMap::iterator it = selector_to_partitions_map_.find(link_subset_selector);
     if (it != selector_to_partitions_map_.end()) {
-      // Return the existing view
       return it->second;
-    } else {
-      // Create a new view
-      // 1. Map selector to buckets
-      const stk::mesh::BucketVector& selected_buckets =
-          bulk_data().get_buckets(link_meta_data().link_rank(), link_subset_selector);
-
-      // 2. Sort and unique the keys for each buckets
-      std::set<impl::PartitionKey> new_keys;
-      std::set<impl::PartitionKey> old_keys;
-      for (const stk::mesh::Bucket* bucket : selected_buckets) {
-        impl::PartitionKey key = impl::get_partition_key(*bucket);
-        if (partition_key_to_id_map_.find(key) == partition_key_to_id_map_.end()) {
-          new_keys.insert(key);
-        } else {
-          old_keys.insert(key);
-        }
-      }
-
-      size_t num_previous_partitions = all_crs_partitions_.extent(0);
-      size_t num_new_partitions = new_keys.size();
-      size_t num_old_partitions = old_keys.size();
-      if (num_new_partitions > 0) {
-        // 3. Grow the size of the partition view by the number of new unique keys
-        Kokkos::resize(Kokkos::WithoutInitializing, all_crs_partitions_, num_previous_partitions + num_new_partitions);
-
-        // 4. Create a new LinkCSRPartition (for each unique new key) and store it within the all_crs_partitions_ view
-        stk::mesh::Ordinal partition_id = static_cast<stk::mesh::Ordinal>(num_previous_partitions);
-        Kokkos::Timer timer;
-        for (const impl::PartitionKey& key : new_keys) {
-          new (&all_crs_partitions_(partition_id))
-              LinkCSRPartition(partition_id, key, link_rank(), get_linker_dimensionality(key), bulk_data());
-          partition_key_to_id_map_[key] = partition_id;
-          ++partition_id;
-        }
-        std::cout << "Created " << num_new_partitions << " new partitions in " << timer.seconds() << " seconds."
-                  << std::endl;
-      }
-
-      // 5. Create a new view of CSR partitions of size equal to the number of unique keys (both existing and new)
-      LinkCSRPartitionView new_crs_partitions(Kokkos::view_alloc(Kokkos::WithoutInitializing, "LinkCSRPartitions"),
-                                              num_new_partitions + num_old_partitions);
-
-      // 6. Copy the corresponding LinkCSRPartition from the all_crs_partitions_ view to the new view using the key to
-      // partition_id map
-      unsigned count = 0;
-      for (const impl::PartitionKey& key : old_keys) {
-        auto it = partition_key_to_id_map_.find(key);
-        if (it != partition_key_to_id_map_.end()) {
-          stk::mesh::Ordinal partition_id = it->second;
-          new (&new_crs_partitions(count)) LinkCSRPartition(all_crs_partitions_(partition_id));  // Shallow copy
-          ++count;
-        } else {
-          MUNDY_THROW_ASSERT(false, std::logic_error,
-                             "Partition key not found in partition key to id map. This should never happen.");
-        }
-      }
-      for (const impl::PartitionKey& key : new_keys) {
-        auto it = partition_key_to_id_map_.find(key);
-        if (it != partition_key_to_id_map_.end()) {
-          stk::mesh::Ordinal partition_id = it->second;
-          new (&new_crs_partitions(count)) LinkCSRPartition(all_crs_partitions_(partition_id));  // Shallow copy
-          ++count;
-        } else {
-          MUNDY_THROW_ASSERT(false, std::logic_error,
-                             "Partition key not found in partition key to id map. This should never happen.");
-        }
-      }
-
-      // 7. Store the new view in the selector to partitions map
-      selector_to_partitions_map_[link_subset_selector] = new_crs_partitions;
-
-      // 8. Return a reference to the new view
-      return selector_to_partitions_map_[link_subset_selector];
     }
+
+    const stk::mesh::BucketVector& selected_buckets =
+        bulk_data().get_buckets(link_meta_data().link_rank(), link_subset_selector);
+    std::set<impl::PartitionKey> new_keys;
+    std::set<impl::PartitionKey> old_keys;
+    for (const stk::mesh::Bucket* bucket : selected_buckets) {
+      const impl::PartitionKey key = impl::get_partition_key(*bucket);
+      if (partition_key_to_id_map_.find(key) == partition_key_to_id_map_.end()) {
+        new_keys.insert(key);
+      } else {
+        old_keys.insert(key);
+      }
+    }
+
+    const size_t num_previous_partitions = all_crs_partitions_.extent(0);
+    const size_t num_new_partitions = new_keys.size();
+    const size_t num_old_partitions = old_keys.size();
+    if (num_new_partitions > 0) {
+      LinkCSRPartitionView new_all_crs_partitions(
+          Kokkos::view_alloc(Kokkos::WithoutInitializing, std::string("AllCSRPartitions")),
+          num_previous_partitions + num_new_partitions);
+      for (unsigned partition_id = 0u; partition_id < num_previous_partitions; ++partition_id) {
+        new (&new_all_crs_partitions(partition_id)) LinkCSRPartition(all_crs_partitions_(partition_id));
+      }
+      destroy_partition_view(all_crs_partitions_);
+      all_crs_partitions_ = new_all_crs_partitions;
+
+      unsigned partition_id = static_cast<unsigned>(num_previous_partitions);
+      for (const impl::PartitionKey& key : new_keys) {
+        new (&all_crs_partitions_(partition_id))
+            LinkCSRPartition(partition_id, key, link_rank(), get_linker_dimensionality(key), bulk_data());
+        partition_key_to_id_map_[key] = partition_id;
+        ++partition_id;
+      }
+    }
+
+    LinkCSRPartitionView new_crs_partitions(
+        Kokkos::view_alloc(Kokkos::WithoutInitializing, "LinkCSRPartitions"),
+        num_new_partitions + num_old_partitions);
+    unsigned count = 0u;
+    for (const impl::PartitionKey& key : old_keys) {
+      auto id_it = partition_key_to_id_map_.find(key);
+      MUNDY_THROW_ASSERT(id_it != partition_key_to_id_map_.end(), std::logic_error,
+                         "Partition key not found in partition key to id map. This should never happen.");
+      new (&new_crs_partitions(count)) LinkCSRPartition(all_crs_partitions_(id_it->second));
+      ++count;
+    }
+    for (const impl::PartitionKey& key : new_keys) {
+      auto id_it = partition_key_to_id_map_.find(key);
+      MUNDY_THROW_ASSERT(id_it != partition_key_to_id_map_.end(), std::logic_error,
+                         "Partition key not found in partition key to id map. This should never happen.");
+      new (&new_crs_partitions(count)) LinkCSRPartition(all_crs_partitions_(id_it->second));
+      ++count;
+    }
+
+    selector_to_partitions_map_[link_subset_selector] = new_crs_partitions;
+    return selector_to_partitions_map_[link_subset_selector];
   }
 
   /// \brief Get the map from link bucket id to partition id (memoized/host only/not thread safe).
   LinkBucketToPartitionIdMap get_updated_stk_link_bucket_to_partition_id_map() {
-    // If the map is empty, populate it.  MOD MARK: There are so many better ways to do this.
     if (stk_link_bucket_to_partition_id_map_.size() == 0) {
       update_stk_link_bucket_to_partition_id_map();
     }
@@ -278,24 +261,22 @@ class LinkCSRDataT {  // Raw data in any space
 
   /// \brief Update the map from link bucket id to partition id (host only/not thread safe).
   void update_stk_link_bucket_to_partition_id_map() {
-    // Get all link buckets that currently have selectors.
-    stk::mesh::Selector our_all_selector = all_selector();
+    clear_stk_link_bucket_to_partition_id_map();
+
+    const stk::mesh::Selector our_all_selector = all_selector();
     const stk::mesh::BucketVector& all_link_buckets =
         bulk_data().get_buckets(link_meta_data().link_rank(), our_all_selector);
     const unsigned num_link_buckets = static_cast<unsigned>(all_link_buckets.size());
 
-    // Resize the map if needed. (only grow)
     if (stk_link_bucket_to_partition_id_map_host_.capacity() < num_link_buckets) {
       stk_link_bucket_to_partition_id_map_host_.rehash(num_link_buckets);
     }
 
-    // Loop over each bucket, get its partition key, map the key to an id, and store the id in the map.
     for (const stk::mesh::Bucket* bucket : all_link_buckets) {
-      impl::PartitionKey key = impl::get_partition_key(*bucket);
-
+      const impl::PartitionKey key = impl::get_partition_key(*bucket);
       auto it = partition_key_to_id_map_.find(key);
       if (it != partition_key_to_id_map_.end()) {
-        stk::mesh::Ordinal partition_id = it->second;
+        const unsigned partition_id = it->second;
         bool insert_success =
             stk_link_bucket_to_partition_id_map_host_.insert(bucket->bucket_id(), partition_id).success();
         MUNDY_THROW_ASSERT(insert_success, std::runtime_error,
@@ -306,14 +287,49 @@ class LinkCSRDataT {  // Raw data in any space
       }
     }
 
-    // Copy to device
     Kokkos::deep_copy(stk_link_bucket_to_partition_id_map_, stk_link_bucket_to_partition_id_map_host_);
+  }
+
+  /// \brief Clear all memoized CSR structure. The next partition request rebuilds from current mesh buckets.
+  void clear_structural_caches() {
+    clear_partitions_and_views();
+    selector_to_partitions_map_.clear();
+    partition_key_to_id_map_.clear();
+    all_crs_partitions_ = LinkCSRPartitionView("AllCSRPartitions", 0);
+    clear_stk_link_bucket_to_partition_id_map();
+  }
+
+  /// \brief Mark every CSR bucket-connection in the selected partitions as dirty.
+  void mark_crs_bucket_conns_dirty(const stk::mesh::Selector& selector) {
+    const LinkCSRPartitionView& partitions = get_or_create_crs_partitions(selector);
+    for (size_t partition_id = 0; partition_id < partitions.extent(0); ++partition_id) {
+      LinkCSRPartition& partition = partitions(partition_id);
+      for (stk::topology::rank_t rank = stk::topology::NODE_RANK; rank < stk::topology::NUM_RANKS; ++rank) {
+        const unsigned num_buckets = static_cast<unsigned>(partition.num_buckets(rank));
+        for (unsigned bucket_id = 0; bucket_id < num_buckets; ++bucket_id) {
+          impl::get_dirty_flag(partition.get_crs_bucket_conn(rank, bucket_id)) = true;
+        }
+      }
+    }
+  }
+
+  /// \brief Mark every CSR bucket-connection in every partition as dirty.
+  void mark_all_crs_bucket_conns_dirty() {
+    LinkCSRPartitionView& partitions = all_crs_partitions_;
+    for (size_t partition_id = 0; partition_id < partitions.extent(0); ++partition_id) {
+      LinkCSRPartition& partition = partitions(partition_id);
+      for (stk::topology::rank_t rank = stk::topology::NODE_RANK; rank < stk::topology::NUM_RANKS; ++rank) {
+        const unsigned num_buckets = static_cast<unsigned>(partition.num_buckets(rank));
+        for (unsigned bucket_id = 0; bucket_id < num_buckets; ++bucket_id) {
+          impl::get_dirty_flag(partition.get_crs_bucket_conn(rank, bucket_id)) = true;
+        }
+      }
+    }
   }
 
   template <typename OtherMemSpace>
   void synchronize_with(LinkCSRDataT<OtherMemSpace>& src) {  // Shallow copy if same space, otherwise deep copy
     if constexpr (std::is_same_v<MemSpace, OtherMemSpace>) {
-      // Shallow copy. They have the same template param as us, so we're friends.
       bulk_data_ptr_ = &src.bulk_data();
       link_meta_data_ptr_ = &src.link_meta_data();
       selector_to_partitions_map_ = src.selector_to_partitions_map_;
@@ -322,25 +338,30 @@ class LinkCSRDataT {  // Raw data in any space
       stk_link_bucket_to_partition_id_map_host_ = src.stk_link_bucket_to_partition_id_map_host_;
       stk_link_bucket_to_partition_id_map_ = src.stk_link_bucket_to_partition_id_map_;
     } else {
-      // For each partition in the source, loop over each of its buckets and deep copy them to the corresponding
-      // desk bucket.
-      //
-      // At this point their number of partitions aren't guaranteed to be the same since get_or_create_crs_partitions
-      // may have only been called on one memory space and not the other.
-      stk::mesh::Selector src_all_selector = src.all_selector();
+      clear_structural_caches();
+      selector_to_partitions_map_.clear();
+      partition_key_to_id_map_ = src.partition_key_to_id_map_;
+
+      bulk_data_ptr_ = &src.bulk_data();
+      link_meta_data_ptr_ = &src.link_meta_data();
+
       auto& src_crs_partitions = src.get_all_crs_partitions();
       Kokkos::resize(Kokkos::WithoutInitializing, all_crs_partitions_, src_crs_partitions.extent(0));
-
-      MUNDY_THROW_ASSERT(all_crs_partitions_.extent(0) == src_crs_partitions.extent(0), std::logic_error,
-                         "Internal error, inform the devs. Number of partitions in our memory space somehow differs "
-                         "from the src's number of partitions.");
-
       for (unsigned partition_id = 0u; partition_id < all_crs_partitions_.extent(0); ++partition_id) {
-        // The only way the following is true, is if we sort the partition view by partition id.
         new (&all_crs_partitions_(partition_id)) LinkCSRPartition();
         auto& our_partition = all_crs_partitions_(partition_id);
         auto& src_partition = src_crs_partitions(partition_id);
         deep_copy(our_partition, src_partition);
+      }
+
+      for (const auto& pair : src.selector_to_partitions_map_) {
+        get_or_create_crs_partitions(pair.first);
+      }
+
+      if (src.stk_link_bucket_to_partition_id_map_.size() > 0) {
+        update_stk_link_bucket_to_partition_id_map();
+      } else {
+        clear_stk_link_bucket_to_partition_id_map();
       }
     }
   }
@@ -371,8 +392,8 @@ class LinkCSRDataT {  // Raw data in any space
   inline unsigned get_linker_dimensionality(const stk::mesh::Bucket& linker_bucket) const {
     MUNDY_THROW_ASSERT(link_meta_data().link_rank() == linker_bucket.entity_rank(), std::invalid_argument,
                        "Linker bucket is not of the correct rank.");
-    MUNDY_THROW_ASSERT(linker_bucket.member(link_meta_data().universal_link_part()), std::invalid_argument,
-                       "Linker bucket is not a subset of our universal link part.");
+    MUNDY_THROW_ASSERT(linker_bucket.member(link_meta_data().universal_link_class()),
+                       std::invalid_argument, "Linker bucket is not a subset of our universal link class.");
 
     auto& linked_es_field = impl::get_linked_entities_field(link_meta_data());
     return stk::mesh::field_scalars_per_entity(linked_es_field, linker_bucket);
@@ -395,32 +416,25 @@ class LinkCSRDataT {  // Raw data in any space
     return restriction.num_scalars_per_entity();
   }
 
-  void sort_partitions_by_id() {
-    Kokkos::sort(all_crs_partitions_,
-                 [](const LinkCSRPartition& a, const LinkCSRPartition& b) { return a.id() < b.id(); });
+  void destroy_partition_view(LinkCSRPartitionView& view) const {
+    KOKKOS_IF_ON_HOST((if (view.use_count() == 1) {
+      for (unsigned i = 0u; i < view.size(); ++i) {
+        view[i].~LinkCSRPartition();
+      }
+    } view = LinkCSRPartitionView();))
   }
 
   KOKKOS_FUNCTION
   void clear_partitions_and_views() {
-    KOKKOS_IF_ON_HOST(
-        // Kill all_partitions_ if we're the last reference to it.
-        if (all_crs_partitions_.use_count() == 1) {
-          for (unsigned i = 0; i < all_crs_partitions_.size(); ++i) {
-            all_crs_partitions_[i].~LinkCSRPartition();
-          }
-        }
+    KOKKOS_IF_ON_HOST((for (auto& pair : selector_to_partitions_map_) {
+      destroy_partition_view(pair.second);
+    } destroy_partition_view(all_crs_partitions_);))
+  }
 
-        // Kill selector_to_partitions_map_'s partitions if we're the last reference to them.
-        // These are distinct copies of LinkCSRPartitions, so we need to destroy them too.
-        // TODO(palmerb4): Does this double free their internal views or will their ref count prevent that?
-        for (auto& pair : selector_to_partitions_map_) {
-          LinkCSRPartitionView& view = pair.second;
-          if (view.use_count() == 1) {
-            for (unsigned i = 0; i < view.size(); ++i) {
-              view[i].~LinkCSRPartition();
-            }
-          }
-        });
+  /// \brief Clear the memoized map from STK link bucket id to partition id.
+  void clear_stk_link_bucket_to_partition_id_map() {
+    stk_link_bucket_to_partition_id_map_host_.clear();
+    stk_link_bucket_to_partition_id_map_.clear();
   }
   //@}
 
@@ -430,9 +444,6 @@ class LinkCSRDataT {  // Raw data in any space
 
   stk::mesh::BulkData* bulk_data_ptr_;
   LinkMetaData* link_meta_data_ptr_;
-
-  using SelectorToPartitionsMap = std::map<stk::mesh::Selector, LinkCSRPartitionView>;
-  using PartitionKeyToIdMap = std::map<impl::PartitionKey, unsigned>;
   mutable SelectorToPartitionsMap selector_to_partitions_map_;  // NEEDS to be a VIEW data type. Right now, our copies
                                                                 // may be modified without us knowing.
   mutable PartitionKeyToIdMap partition_key_to_id_map_;

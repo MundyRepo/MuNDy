@@ -124,8 +124,8 @@ class UnitTestDeclareEntities : public ::testing::Test {
     initial_bucket_capacity_ = initial_bucket_capacity;
     maximum_bucket_capacity_ = maximum_bucket_capacity;
 
-    link_data_nodes_ptr_ = declare_link_data_ptr(*bulk_data_ptr_, *link_meta_data_nodes_ptr_);
-    link_data_elems_ptr_ = declare_link_data_ptr(*bulk_data_ptr_, *link_meta_data_elems_ptr_);
+    link_data_nodes_ptr_ = &declare_link_data(*bulk_data_ptr_, *link_meta_data_nodes_ptr_);
+    link_data_elems_ptr_ = &declare_link_data(*bulk_data_ptr_, *link_meta_data_elems_ptr_);
     ASSERT_TRUE(link_data_nodes_ptr_ != nullptr);
     ASSERT_TRUE(link_data_elems_ptr_ != nullptr);
 
@@ -200,8 +200,8 @@ class UnitTestDeclareEntities : public ::testing::Test {
   std::shared_ptr<LinkMetaData> link_meta_data_elems_ptr_;
 
   std::shared_ptr<stk::mesh::BulkData> bulk_data_ptr_;
-  std::shared_ptr<LinkData> link_data_nodes_ptr_;
-  std::shared_ptr<LinkData> link_data_elems_ptr_;
+  LinkData* link_data_nodes_ptr_{nullptr};
+  LinkData* link_data_elems_ptr_{nullptr};
 
   stk::mesh::BulkData::AutomaticAuraOption aura_option_{stk::mesh::BulkData::AUTO_AURA};
   unsigned initial_bucket_capacity_ = 0;
@@ -418,15 +418,15 @@ TEST_F(UnitTestDeclareEntities, DeclareLinks) {
       .owning_proc(0)
       .add_part(node_slinks_part_ptr_)  // Endows this node with link dimensionality 2 within the node rank "ALL_LINKS"
                                         // link data
-      .links_to(link_data_nodes_ptr_.get(), 1, stk::topology::ELEM_RANK, 0)   // Link to particle 1
-      .links_to(link_data_nodes_ptr_.get(), 3, stk::topology::NODE_RANK, 1);  // Link to spring node 1
+      .links_to(link_data_nodes_ptr_, 1, stk::topology::ELEM_RANK, 0)   // Link to particle 1
+      .links_to(link_data_nodes_ptr_, 3, stk::topology::NODE_RANK, 1);  // Link to spring node 1
   builder.create_node()
       .id(6)
       .owning_proc(0)
       .add_part(node_slinks_part_ptr_)  // Endows this node with link dimensionality 2 within the node rank "ALL_LINKS"
                                         // link data
-      .links_to(link_data_nodes_ptr_.get(), 2, stk::topology::ELEM_RANK, 0)   // Link to particle 2
-      .links_to(link_data_nodes_ptr_.get(), 4, stk::topology::NODE_RANK, 1);  // Link to spring node 2
+      .links_to(link_data_nodes_ptr_, 2, stk::topology::ELEM_RANK, 0)   // Link to particle 2
+      .links_to(link_data_nodes_ptr_, 4, stk::topology::NODE_RANK, 1);  // Link to spring node 2
 
   EXPECT_NO_THROW(builder.check_consistency(*bulk_data_ptr_)) << "Builder consistency check failed.";
   bulk_data_ptr_->modification_begin();
