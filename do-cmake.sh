@@ -8,9 +8,18 @@ if [ "$#" -lt 3 ]; then
   exit 1
 fi
 
-TPL_ROOT_DIR=$1
-MUNDY_SOURCE_DIR=$2
-INSTALL_DIR=$3
+TPL_ROOT_DIR=$(readlink -f "$1")
+MUNDY_SOURCE_DIR=$(readlink -f "$2")
+INSTALL_DIR=$(readlink -m "$3")  # -m: install dir need not exist yet
+
+if [ ! -d "$TPL_ROOT_DIR" ]; then
+  echo "ERROR: TPL_ROOT_DIR does not exist or is not a directory: $1" >&2
+  exit 1
+fi
+if [ ! -d "$MUNDY_SOURCE_DIR" ]; then
+  echo "ERROR: MUNDY_SOURCE_DIR does not exist or is not a directory: $2" >&2
+  exit 1
+fi
 
 # Trilinos / Kokkos are discovered via spack. Optionally pass a spec
 # (e.g. TRILINOS_SPEC="trilinos@16.2.0 %gcc@13") to disambiguate.
