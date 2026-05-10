@@ -13,11 +13,11 @@ MUNDY_SOURCE_DIR=$(readlink -f "$2")
 INSTALL_DIR=$(readlink -m "$3")  # -m: install dir need not exist yet
 
 if [ ! -d "$TPL_ROOT_DIR" ]; then
-  echo "ERROR: TPL_ROOT_DIR does not exist: $1" >&2
+  echo "ERROR: TPL_ROOT_DIR does not exist or is not a directory: $1" >&2
   exit 1
 fi
 if [ ! -d "$MUNDY_SOURCE_DIR" ]; then
-  echo "ERROR: MUNDY_SOURCE_DIR does not exist: $1" >&2
+  echo "ERROR: MUNDY_SOURCE_DIR does not exist or is not a directory: $2" >&2
   exit 1
 fi
 
