@@ -56,8 +56,8 @@ SHELL ["/bin/bash", "-c"]
 USER testuser
 WORKDIR /home/testuser
 
-ARG SPACK_TAG=releases/v1.1
-RUN git clone --depth=2 --branch=${SPACK_TAG} https://github.com/spack/spack.git ${SPACK_ROOT}
+ARG SPACK_TAG=v1.1.1
+RUN git clone --depth=2 --branch ${SPACK_TAG} https://github.com/spack/spack.git ${SPACK_ROOT}
 
 RUN . ${SPACK_ROOT}/share/spack/setup-env.sh && \
     spack env create ${SPACK_ENV_NAME} && \
