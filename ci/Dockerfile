@@ -45,7 +45,7 @@ RUN useradd -m -s /bin/bash testuser && \
     chmod 755 /home/testuser
 
 ENV SPACK_ROOT=/home/testuser/spack
-ENV SPACK_ENV_NAME=tril16_cpu
+ENV SPACK_ENV_NAME=tril161_cpu
 
 # Make spack available in interactive shells for any user (must be done as root).
 RUN echo "source ${SPACK_ROOT}/share/spack/setup-env.sh" >> /etc/bash.bashrc
@@ -56,13 +56,13 @@ SHELL ["/bin/bash", "-c"]
 USER testuser
 WORKDIR /home/testuser
 
-ARG SPACK_TAG=v0.23.1
-RUN git clone -c feature.manyFiles=true --depth=2 --branch ${SPACK_TAG} https://github.com/spack/spack.git ${SPACK_ROOT}
+ARG SPACK_TAG=v1.1.1
+RUN git clone --depth=2 --branch ${SPACK_TAG} https://github.com/spack/spack.git ${SPACK_ROOT}
 
 RUN . ${SPACK_ROOT}/share/spack/setup-env.sh && \
     spack env create ${SPACK_ENV_NAME} && \
     spack env activate ${SPACK_ENV_NAME} && \
-    spack add trilinos@16.0.0%gcc@11.4.0+belos~boost+exodus+hdf5+kokkos+openmp+shared+stk+zoltan+zoltan2 cxxstd=17 ^kokkos@4.3.01+hwloc+openmp+shared ^openmpi@4.1.2 && \
+    spack add trilinos@16.1.0+belos~boost+exodus+hdf5+kokkos+openmp+shared+stk+zoltan+zoltan2 cxxstd=17 %gcc@11.4.0 ^kokkos@4.5.01+hwloc+openmp+serial+shared ^openmpi@4.1.2 && \
     spack add cmake@3.27.9 && \
     spack concretize && \
     spack install && \
