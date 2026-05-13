@@ -25,14 +25,12 @@ Vector2d v2{3.3};       // Same as Vector2d{3.3, 3.3};
 ```
 
 ### Accessors
-Canonically, we treat the `()` accessor as the mathematical accessor and `[]` as the programming accessor into the flattened underlying data. So for a 3x3 matrix this would be `mat33(i, j) == mat33[3 * i + j]`. Of course, for vectors, the two are equivalent. 
+Canonically, we treat the `()` accessor as the mathematical accessor and `[]` as the programming accessor into the flattened underlying data. So for a 3x3 matrix this would be `mat33(i, j) == mat33[3 * i + j]`. For vectors, the two are equivalent. 
 ```cpp
-std::cout << v1[0] << "," << v1(0) << std::end;  // Prints 1.1,1.1
+std::cout << v1[0] << ", " << v1(0) << std::end;  // Prints 1.1, 1.1
 ```
 
-### Math!
-
-Mathematical formula in comment.
+### Operations
 
 #### Element-wise addition/subtraction
 ```cpp
@@ -56,7 +54,7 @@ Vector3d::zeros() == Vector3d{0., 0., 0.};
 Vector3d::ones() == Vector3d{1., 1., 1.};
 ```
 
-#### Basic arithmetic reduction operations
+#### Basic arithmetic reductions
 The following operations can be performed on a vector to compute various reductions:
 
 | **Operation**       | **Description**                                   | **Example** (for `Vector2d v1{1.1, 2.2}`) |
@@ -70,13 +68,13 @@ The following operations can be performed on a vector to compute various reducti
 | `variance(v)`       | Variance of the components.                      | `variance(v1)` → `0.3025`                 |
 | `stddev(v)`         | Standard deviation of the components.            | `stddev(v1)` → `0.55`                     |
 
-#### Special vector operations
+#### Special operations
 The following operations can be performed on vectors to compute various properties:
 
 | **Operation**          | **Description**                                                                 | **Example** (for `Vector2d v1{1., 2.}, v2{3., 4.}`) |
 |-------------------------|---------------------------------------------------------------------------------|----------------------------------------------------------|
 | `dot(v1, v2)`          | Dot product of two vectors.                                                     | `dot(v1, v2)` → `1. * 3. + 2. * 4. = 11.`          |
-| `inf_norm(v)`     | Infinity norm (maximum absolute value of components).                           | `inf_norm(v1)` → `2.`                              |
+| `infinity_norm(v)`     | Infinity norm (maximum absolute value of components).                           | `infinity_norm(v1)` → `2.`                              |
 | `one_norm(v)`          | 1-norm (sum of absolute values of components).                                  | `one_norm(v1)` → `1. + 2. = 3.`                       |
 | `two_norm(v)`          | 2-norm (Euclidean norm, square root of the sum of squares).                     | `two_norm(v1)` → `sqrt(1.^2 + 2.^2) = sqrt(5.)`       |
 | `two_norm_squared(v)`  | Squared 2-norm (sum of squares of components).                                   | `two_norm_squared(v1)` → `1.^2 + 2.^2 = 5.`           |
@@ -85,7 +83,7 @@ The following operations can be performed on vectors to compute various properti
 | `minor_angle(v1, v2)`  | Minor angle between two vectors (angle in radians, between 0 and π).            | `minor_angle(v1, v2)` → `acos(dot(v1, v2) / (||v1|| * ||v2||))` |
 | `major_angle(v1, v2)`  | Major angle between two vectors (angle in radians, between 0 and π).           | `major_angle(v1, v2)` → `π - minor_angle(v1, v2)`        |
 
-#### Operations for Vectors of Certain Sizes
+#### Operations for vectors of certain sizes
 
 Some operations are only defined for vectors of specific sizes. For example, the cross product is only valid for 3D vectors (`Vector3`).
 
@@ -116,7 +114,7 @@ Matrices support both row-column accessors (`()`) and flattened row-major data a
 std::cout << m1(0, 1) << "," << m1[1] << std::endl;  // Prints 2.0,2.0
 ```
 
-### Math!
+### Operations
 
 #### Element-wise addition/subtraction
 ```cpp
@@ -144,7 +142,7 @@ Of course, the matrices and vectors must be of the correct size. We do, however,
 auto v4 = v1 * m1;  // v4_j = v1_i * m1_ij
 ```
 
-### Special Matrices
+### Special matrices
 ```cpp
 Matrix3d::identity();  // Identity matrix (1's along diagonal)
 Matrix3d::zeros();     // Zero matrix
@@ -177,13 +175,59 @@ The following operations can be performed on matrices to compute various propert
 | `frobenius_inner_product(m1, m2)` | Frobenius inner product of two matrices.                                   |
 | `outer_product(v1, v2)`    | Outer product of two vectors, resulting in a matrix.                            |
 | `frobenius_norm(m)`        | Frobenius norm (square root of the sum of squares of all elements).              |
-| `inf_norm(m)`         | Maximum absolute row sum.                                                       |
+| `infinity_norm(m)`         | Maximum absolute row sum.                                                       |
 | `one_norm(m)`              | Maximum absolute column sum.                                                    |
 | `two_norm(m)`              | 2-norm (largest singular value of the matrix).                                  |
 
+## **`Views`**
+Mundy's Vector, Matrix, and Quaternion types offer the ability to construct a non-owning mathematical view into existing data, endowing it with all the mathematical properties listed above. Views can either be constructed from pointers: 
+```cpp
+std::vector<TypeParam> std_vec{0, 0, 1, 2, 3, 0, 0};
+auto v = get_vector3d_view(std_vec.data() + 2);
+v += 2;  // std_vec -> [0, 0, 3, 4, 5, 0, 0]
+```
+or from any copy constructable class that offers a [size_t] access operator, such as the following strided array class:
+```cpp
+template <typename T>
+struct ShiftedArray {
+  T* ptr;
+  size_t shift;
+  
+  T& operator[](size_t i) { return ptr[i + shift]; }
+  const T& operator[](size_t i) const { return ptr[i + shift]; }
+};
+
+int main() {
+  std::vector<TypeParam> std_vec{0, 0, 1, 2, 3, 0, 0};
+  ShiftedArray s{std_vec.data(), 2};
+  auto v = get_vector3d_view(s);
+  v += 2;  // std_vec -> [0, 0, 3, 4, 5, 0, 0]
+}
+```
 
 
+## **`Element-wise atomics`**
+Mundy’s <code inline="">Vector</code> and <code inline="">Matrix</code> types provide <strong>element-wise atomic operations</strong>. “Element-wise” means the atomic is applied <strong>independently to each component</strong> (each <code inline="">v[i]</code> or <code inline="">m(r,c)</code>), rather than synchronizing on the entire vector/matrix as one big locked object.</p><p>These APIs are intended for <strong>shared-memory parallel updates</strong> (e.g., many threads accumulating into the same vector/matrix) where you want correctness without manually managing locks.</p><hr><h3>Atomic load and store</h3><p>Use these when you want an atomic snapshot of each element (load) or an atomic write to each element (store).</p><pre><code class="language-cpp">auto x = atomic_load(v);   // element-wise atomic read: x[i] = v[i]
+atomic_store(&amp;v, x);       // element-wise atomic write: v[i] = x[i]
+</code></pre><blockquote><p>Notes:</p><ul><li><p><code inline="">atomic_load(v)</code> returns a <strong>value copy</strong>.</p></li><li><p><code inline="">atomic_store(&amp;v, x)</code> takes a pointer/reference to the destination being updated.</p></li></ul></blockquote><hr><h3>Atomic update operations</h3><p>All atomic update routines come in three <em>return-style</em> flavors:</p><ol><li><p><strong><code inline="">atomic_&lt;op&gt;(...)</code></strong><br>Performs the update and returns nothing.</p></li><li><p><strong><code inline="">atomic_fetch_&lt;op&gt;(...)</code></strong><br>Performs the update and returns the <strong>old</strong> value (before modification).</p></li><li><p><strong><code inline="">atomic_&lt;op&gt;_fetch(...)</code></strong><br>Performs the update and returns the <strong>new</strong> value (after modification).</p></li></ol><p>Each operation is applied <strong>per element</strong>.</p><hr><h3>Supported operations and operand forms</h3><p>Operations are provided in two operand forms:</p><ul><li><p><strong>Scalar RHS:</strong> apply the same scalar to every element.</p></li><li><p><strong>Element-wise RHS:</strong> apply component-by-component using another vector/matrix of the same shape.</p></li></ul>
+Form | Examples of operations
+-- | --
+Scalar RHS | add, sub, mul, div
+Element-wise RHS | add, sub, elementwise_mul, elementwise_div
 
-# Things that are missing
-- Everyone needs cast.
-- 
+<hr><h3>Vector atomics</h3><h4>Update without return</h4><pre><code class="language-cpp">atomic_add(&amp;v, s);                 // v[i] += s
+atomic_sub(&amp;v, s);                 // v[i] -= s
+atomic_mul(&amp;v, s);                 // v[i] *= s
+atomic_div(&amp;v, s);                 // v[i] /= s
+
+atomic_add(&amp;v1, v2);               // v1[i] += v2[i]
+atomic_sub(&amp;v1, v2);               // v1[i] -= v2[i]
+atomic_elementwise_mul(&amp;v1, v2);   // v1[i] *= v2[i]
+atomic_elementwise_div(&amp;v1, v2);   // v1[i] /= v2[i]
+</code></pre><h4>Fetch old value</h4><pre><code class="language-cpp">auto old_v  = atomic_fetch_add(&amp;v,  s);  // returns old v, then v[i] += s
+auto old_v1 = atomic_fetch_add(&amp;v1, v2); // returns old v1, then v1[i] += v2[i]
+</code></pre><h4>Fetch new value</h4><pre><code class="language-cpp">auto new_v  = atomic_add_fetch(&amp;v,  s);  // v[i] += s, returns new v
+auto new_v1 = atomic_add_fetch(&amp;v1, v2); // v1[i] += v2[i], returns new v1
+</code></pre><blockquote><p>Tip: pick the variant based on what you want to do next.</p><ul><li><p>If you do not need a value, prefer <code inline="">atomic_&lt;op&gt;</code> (it’s the simplest and often the cheapest).</p></li><li><p>If you need the prior value (e.g., for a conditional), use <code inline="">atomic_fetch_&lt;op&gt;</code>.</p></li><li><p>If you need the updated value (e.g., to chain computations), use <code inline="">atomic_&lt;op&gt;_fetch</code>.</p></li></ul></blockquote><hr><h3>Matrix atomics</h3><p>Matrix atomics mirror the vector API exactly, but operate on <code inline="">m(r,c)</code> element-by-element.</p><h4>Atomic load and store</h4><pre><code class="language-cpp">auto A = atomic_load(M);     // A(r,c) = M(r,c)
+atomic_store(&amp;M, A);         // M(r,c) = A(r,c)
+</code></pre><h4>Update families</h4><ul><li><p><code inline="">atomic_&lt;op&gt;(&amp;M, rhs)</code></p></li><li><p><code inline="">atomic_fetch_&lt;op&gt;(&amp;M, rhs)</code> → returns old matrix value</p></li><li><p><code inline="">atomic_&lt;op&gt;_fetch(&amp;M, rhs)</code> → returns new matrix value</p></li></ul><p><code inline="">rhs</code> may be a scalar (broadcast) or a matrix of matching shape (element-wise), depending on the operation.
