@@ -58,6 +58,18 @@ TEST(ThrowAssert, Predicates) {
   constexpr auto b = make_string_literal("b");
   static_assert(MUNDY_IS_OUR_STRING_LITERAL(b));
 
+  // Check that all compile-time sink messages are device printable.
+  constexpr auto literal_sink = sink() << "literal " << "sink";
+  static_assert(DevicePrintableThrowMessage<decltype(literal_sink)>);
+  constexpr StringSink<StringLiteral<6>, StringLiteral<5>> compile_time_sink(
+      ::mundy::make_tuple(make_string_literal("left "), make_string_literal("side")));
+  static_assert(DevicePrintableThrowMessage<decltype(compile_time_sink)>);
+  static_assert(get_throw_require_device_string(make_string_literal("false"), compile_time_sink,
+                                                make_string_literal("file.cpp"), make_string_literal("7")) ==
+                make_string_literal("Assertion (false) failed.\nFile: file.cpp\nLine: 7\nMessage: left side"));
+  const auto runtime_sink = sink() << "value = " << 2;
+  static_assert(!DevicePrintableThrowMessage<decltype(runtime_sink)>);
+
   // Check that host code is host code and device code is device code
   std::string space;
   KOKKOS_IF_ON_HOST(space = "  on host"; std::cout << space << std::endl;)
