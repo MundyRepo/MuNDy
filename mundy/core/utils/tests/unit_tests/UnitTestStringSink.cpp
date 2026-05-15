@@ -35,7 +35,11 @@ namespace {
 TEST(StringSink, ConceptsAndTraits) {
   constexpr auto literal_sink = sink() << "abc" << "def";
   static_assert(LiteralStringSink<decltype(literal_sink)>);
+  static_assert(AnyStringSink<decltype(literal_sink)>);
+  static_assert(CompileTimeStringSink<decltype(literal_sink)>);
   static_assert(is_string_literal_sink_v<decltype(literal_sink)>);
+  static_assert(decltype(literal_sink)::is_compile_time);
+  static_assert(literal_sink.to_string_literal() == make_string_literal("abcdef"));
   static_assert(literal_sink.value == make_string_literal("abcdef"));
 
   constexpr auto literal_sink_from_string_literal = sink() << make_string_literal("ghi") << "jkl";
@@ -43,19 +47,44 @@ TEST(StringSink, ConceptsAndTraits) {
   static_assert(literal_sink_from_string_literal.value == make_string_literal("ghijkl"));
 
   const auto runtime_sink = sink() << "value = " << 2;
-  static_assert(RuntimeStringSink<decltype(runtime_sink)>);
+  static_assert(ChunkedStringSink<decltype(runtime_sink)>);
+  static_assert(AnyStringSink<decltype(runtime_sink)>);
+  static_assert(!CompileTimeStringSink<decltype(runtime_sink)>);
   static_assert(is_string_sink_v<decltype(runtime_sink)>);
+
+  constexpr StringSink<StringLiteral<6>, StringLiteral<6>> compile_time_sink(
+      ::mundy::make_tuple(make_string_literal("left "), make_string_literal("right")));
+  static_assert(ChunkedStringSink<decltype(compile_time_sink)>);
+  static_assert(AnyStringSink<decltype(compile_time_sink)>);
+  static_assert(CompileTimeStringSink<decltype(compile_time_sink)>);
+  static_assert(decltype(compile_time_sink)::is_compile_time);
+  static_assert(compile_time_sink.to_string_literal() == make_string_literal("left right"));
+  static_assert(compile_time_sink == "left right");
+  static_assert(!(compile_time_sink == "left"));
+
+  constexpr auto extended_compile_time_sink = compile_time_sink << "!";
+  static_assert(decltype(extended_compile_time_sink)::is_compile_time);
+  static_assert(extended_compile_time_sink == "left right!");
 }
 
 TEST(StringSink, MaterializesExpectedStrings) {
   constexpr auto literal_sink = sink() << "Some " << "error message";
   EXPECT_EQ(literal_sink.to_string(), "Some error message");
+  EXPECT_TRUE(literal_sink == "Some error message");
+  EXPECT_TRUE(literal_sink == make_string_literal("Some error message"));
+  EXPECT_TRUE(literal_sink == (sink() << "Some " << "error message"));
 
   const auto runtime_sink = sink() << "Failure for a = " << 2;
   EXPECT_EQ(runtime_sink.to_string(), "Failure for a = 2");
+  EXPECT_TRUE(runtime_sink == "Failure for a = 2");
+  EXPECT_TRUE(runtime_sink == make_string_literal("Failure for a = 2"));
+  EXPECT_TRUE(runtime_sink == (sink() << "Failure for a = " << 2));
 
   const auto string_started_sink = sink() << std::string("prefix ") << 2 << " suffix";
   EXPECT_EQ(string_started_sink.to_string(), "prefix 2 suffix");
+  EXPECT_TRUE(string_started_sink == "prefix 2 suffix");
+  EXPECT_TRUE(string_started_sink == make_string_literal("prefix 2 suffix"));
+  EXPECT_TRUE(string_started_sink == (sink() << std::string("prefix ") << 2 << " suffix"));
 }
 
 TEST(StringSink, StreamsToOstream) {

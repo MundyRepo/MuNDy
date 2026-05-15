@@ -310,7 +310,7 @@ class LinkCSRPartitionT {  // Raw data in any space.
   impl::NgpPartitionKey
       ngp_key_;  ///< Sorted view of the part ordinals that this partition contains, in NGP memory space.
   stk::mesh::Selector selector_;     ///< Selector for this partition, derived from the ngp_key_. Must be default
-                                     ///< constructable, copiable, movable on the device so we use a pointer.
+                                     ///< constructible, copiable, movable on the device so we use a pointer.
   stk::mesh::EntityRank link_rank_;  ///< Rank of the linkers in this partition.
   unsigned link_dimensionality_;     ///< Maximum dimensionality of the parts contained in this partition.
   LinkCSRBucketConnView linked_buckets_[stk::topology::NUM_RANKS];  ///< Bucketized CSR connectivity for each rank.

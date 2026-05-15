@@ -29,6 +29,9 @@
 // External libs
 #include <Kokkos_Core.hpp>
 
+// C++ core
+#include <type_traits>
+
 // Mundy
 #include <mundy_geom/primitives.hpp>  // for mundy::Point, ...
 #include <mundy_math/Matrix3.hpp>     // for mundy::Matrix3
@@ -41,9 +44,10 @@ namespace mundy {
 class FreeSpaceMetric {
  public:
   /// \brief Distance vector between two points in free space (from point1 to point2)
-  template <typename Scalar>
-  KOKKOS_INLINE_FUNCTION constexpr Point<Scalar> operator()(const Point<Scalar>& point1,
-                                                            const Point<Scalar>& point2) const {
+  template <ValidPointType PointType1, ValidPointType PointType2>
+    requires std::is_same_v<typename PointType1::scalar_t, typename PointType2::scalar_t>
+  KOKKOS_INLINE_FUNCTION constexpr Point<typename PointType1::scalar_t> operator()(const PointType1& point1,
+                                                                                   const PointType2& point2) const {
     return point2 - point1;
   }
 };
@@ -68,8 +72,10 @@ class PeriodicSpaceMetric {
   }
 
   /// \brief Distance vector between two points in periodic space (from point1 to point2)
-  KOKKOS_INLINE_FUNCTION
-  constexpr Point<Scalar> operator()(const Point<Scalar>& point1, const Point<Scalar>& point2) const {
+  template <ValidPointType PointType1, ValidPointType PointType2>
+    requires std::is_same_v<typename PointType1::scalar_t, Scalar> &&
+             std::is_same_v<typename PointType2::scalar_t, Scalar>
+  KOKKOS_INLINE_FUNCTION constexpr Point<Scalar> operator()(const PointType1& point1, const PointType2& point2) const {
     // Convert the difference to fractional coordinates
     auto ds_frac = h_inv_ * (point2 - point1);
 
@@ -106,8 +112,10 @@ class PeriodicScaledSpaceMetric {
   }
 
   /// \brief Distance vector between two points in periodic space (from point1 to point2)
-  KOKKOS_INLINE_FUNCTION
-  constexpr Point<Scalar> operator()(const Point<Scalar>& point1, const Point<Scalar>& point2) const {
+  template <ValidPointType PointType1, ValidPointType PointType2>
+    requires std::is_same_v<typename PointType1::scalar_t, Scalar> &&
+             std::is_same_v<typename PointType2::scalar_t, Scalar>
+  KOKKOS_INLINE_FUNCTION constexpr Point<Scalar> operator()(const PointType1& point1, const PointType2& point2) const {
     // Convert the difference to fractional coordinates
     auto ds_frac = mundy::elementwise_mul(scale_inv_, point2 - point1);
 

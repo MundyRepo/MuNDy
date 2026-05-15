@@ -164,7 +164,7 @@ struct tuple_impl<std::index_sequence<Idx...>, Elements...> : public tuple_membe
 
 /// \brief A simple std::tuple-like class that can be used in device code with similar sementics to std::tuple (e.g.,
 /// get<N>(), get<T>(), tuple_cat, etc.). All elements must be copyable but not necessarily moveable or default
-/// constructible. The tuple itself is copyable, moveable, and default constructable if all of its elements are
+/// constructible. The tuple itself is copyable, moveable, and default constructible if all of its elements are
 /// copyable, moveable, and default constructible (respectively).
 template <class... Elements>
 struct tuple : public impl::tuple_impl<decltype(std::make_index_sequence<sizeof...(Elements)>()), Elements...> {

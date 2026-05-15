@@ -35,7 +35,7 @@
 
 namespace mundy {
 
-/// \brief NgpPoolT is a Kokkos-compatible pool of default constructable objects.
+/// \brief NgpPoolT is a Kokkos-compatible pool of default constructible objects.
 template <class DataType, typename MemorySpace, typename SizeType = size_t>
 class NgpPoolT {
  public:

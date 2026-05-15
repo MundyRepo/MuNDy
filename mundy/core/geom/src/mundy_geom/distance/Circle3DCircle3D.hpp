@@ -24,6 +24,9 @@
 // External libs
 #include <Kokkos_Core.hpp>
 
+// C++ core
+#include <type_traits>
+
 // Mundy math
 #include <mundy_math/Quaternion.hpp>  // for mundy::Quaternion
 #include <mundy_math/Tolerance.hpp>   // for mundy::get_zero_tolerance
@@ -42,16 +45,19 @@ namespace mundy {
 //! \name Free space distance calculations
 //@{
 
-template <typename Scalar>
-KOKKOS_FUNCTION Scalar distance(const Circle3D<Scalar>& circle3d1,  //
-                                const Circle3D<Scalar>& circle3d2) {
+template <ValidCircle3DType Circle3DType1, ValidCircle3DType Circle3DType2>
+  requires std::is_same_v<typename Circle3DType1::scalar_t, typename Circle3DType2::scalar_t>
+KOKKOS_FUNCTION typename Circle3DType1::scalar_t distance(const Circle3DType1& circle3d1,  //
+                                                          const Circle3DType2& circle3d2) {
   return distance(Euclidean{}, circle3d1, circle3d2);
 }
 
-template <typename Scalar>
-KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const Euclidean distance_type,  //
-                                const Circle3D<Scalar>& circle3d1,               //
-                                const Circle3D<Scalar>& circle3d2) {
+template <ValidCircle3DType Circle3DType1, ValidCircle3DType Circle3DType2>
+  requires std::is_same_v<typename Circle3DType1::scalar_t, typename Circle3DType2::scalar_t>
+KOKKOS_FUNCTION typename Circle3DType1::scalar_t distance([[maybe_unused]] const Euclidean distance_type,  //
+                                                          const Circle3DType1& circle3d1,                  //
+                                                          const Circle3DType2& circle3d2) {
+  using Scalar = typename Circle3DType1::scalar_t;
   Point<Scalar> closest_point1;
   Point<Scalar> closest_point2;
   mundy::Vector3<Scalar> shared_normal1;
@@ -60,12 +66,15 @@ KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const Euclidean distance_type, 
                   closest_point1, closest_point2, shared_normal1, shared_normal2);
 }
 
-template <typename Scalar>
+template <ValidCircle3DType Circle3DType1, ValidCircle3DType Circle3DType2>
+  requires std::is_same_v<typename Circle3DType1::scalar_t, typename Circle3DType2::scalar_t>
 class Circle3DCircle3DObjective {
  public:
+  using Scalar = typename Circle3DType1::scalar_t;
+
   KOKKOS_FUNCTION
-  Circle3DCircle3DObjective(const Circle3D<Scalar>& circle3d0,       //
-                            const Circle3D<Scalar>& circle3d1,       //
+  Circle3DCircle3DObjective(const Circle3DType1& circle3d0,          //
+                            const Circle3DType2& circle3d1,          //
                             mundy::Vector3<Scalar>& shared_normal0,  //
                             mundy::Vector3<Scalar>& shared_normal1,  //
                             Point<Scalar>& foot_point0,              //
@@ -78,8 +87,9 @@ class Circle3DCircle3DObjective {
         foot_point1_(foot_point1) {
   }
 
-  KOKKOS_INLINE_FUNCTION Point<Scalar> theta_to_foot_point_on_circle3d(const double theta,
-                                                                       const Circle3D<Scalar>& circle3d) const {
+  template <ValidCircle3DType Circle3DType>
+  KOKKOS_INLINE_FUNCTION Point<Scalar> theta_to_foot_point_on_circle3d(const Scalar theta,
+                                                                       const Circle3DType& circle3d) const {
     Point<Scalar> p_local{circle3d.radius() * std::cos(theta), circle3d.radius() * std::sin(theta), 0.0};
     auto p_global = circle3d.orientation() * p_local + circle3d.center();
     return p_global;
@@ -99,22 +109,26 @@ class Circle3DCircle3DObjective {
   }
 
  private:
-  const Circle3D<Scalar>& circle3d0_;
-  const Circle3D<Scalar>& circle3d1_;
+  const Circle3DType1& circle3d0_;
+  const Circle3DType2& circle3d1_;
   mundy::Vector3<Scalar>& shared_normal0_;
   mundy::Vector3<Scalar>& shared_normal1_;
   Point<Scalar>& foot_point0_;
   Point<Scalar>& foot_point1_;
 };
 
-template <typename Scalar>
-KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const Euclidean distance_type,  //
-                                const Circle3D<Scalar>& circle3d1,               //
-                                const Circle3D<Scalar>& circle3d2,               //
-                                Point<Scalar>& closest_point1,                   //
-                                Point<Scalar>& closest_point2,                   //
-                                mundy::Vector3<Scalar>& shared_normal1,          //
-                                mundy::Vector3<Scalar>& shared_normal2) {
+template <ValidCircle3DType Circle3DType1, ValidCircle3DType Circle3DType2>
+  requires std::is_same_v<typename Circle3DType1::scalar_t, typename Circle3DType2::scalar_t>
+KOKKOS_FUNCTION typename Circle3DType1::scalar_t distance(
+    [[maybe_unused]] const Euclidean distance_type,                    //
+    const Circle3DType1& circle3d1,                                    //
+    const Circle3DType2& circle3d2,                                    //
+    Point<typename Circle3DType1::scalar_t>& closest_point1,           //
+    Point<typename Circle3DType1::scalar_t>& closest_point2,           //
+    mundy::Vector3<typename Circle3DType1::scalar_t>& shared_normal1,  //
+    mundy::Vector3<typename Circle3DType1::scalar_t>& shared_normal2) {
+  using Scalar = typename Circle3DType1::scalar_t;
+
   // Setup the minimization
   // Note, the actual error is not guaranteed to be less than min_objective_delta due to the use of approximate
   // derivatives. Instead, we saw that the error was typically less than the square root of min_objective_delta.
@@ -122,9 +136,8 @@ KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const Euclidean distance_type, 
   constexpr size_t lbfgs_max_memory_size = 10;
 
   // Reuse the solution space rather than re-allocating it each time
-  Circle3DCircle3DObjective minimize_euclidean_distance(circle3d1, circle3d2,            //
-                                                        shared_normal1, shared_normal2,  //
-                                                        closest_point1, closest_point2);
+  Circle3DCircle3DObjective<Circle3DType1, Circle3DType2> minimize_euclidean_distance(
+      circle3d1, circle3d2, shared_normal1, shared_normal2, closest_point1, closest_point2);
 
   constexpr Scalar pi = Kokkos::numbers::pi_v<Scalar>;
   constexpr Scalar zero = static_cast<Scalar>(0.0);

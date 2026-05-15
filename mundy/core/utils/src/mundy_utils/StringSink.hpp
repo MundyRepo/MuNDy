@@ -40,7 +40,6 @@
 #include <ostream>
 #include <sstream>
 #include <string>
-#include <tuple>
 #include <type_traits>
 #include <utility>
 
@@ -49,6 +48,7 @@
 
 // Mundy
 #include <mundy_utils/StringLiteral.hpp>
+#include <mundy_utils/tuple.hpp>
 
 namespace mundy {
 
@@ -114,7 +114,7 @@ template <typename... Chunks>
   requires(SinkChunk<Chunks> && ...)
 KOKKOS_INLINE_FUNCTION constexpr auto make_string_sink(Chunks&&... chunks) {
   using SinkType = StringSink<sink_stored_t<Chunks>...>;
-  return SinkType(std::tuple<sink_stored_t<Chunks>...>{make_sink_piece(std::forward<Chunks>(chunks))...});
+  return SinkType(::mundy::make_tuple(make_sink_piece(std::forward<Chunks>(chunks))...));
 }
 
 }  // namespace impl
@@ -126,10 +126,23 @@ KOKKOS_INLINE_FUNCTION constexpr auto make_string_sink(Chunks&&... chunks) {
 /// automatically when a runtime value is appended.
 template <size_t N>
 struct StringLiteralSink {
+  static constexpr bool is_compile_time = true;
+
   StringLiteral<N> value;
 
   KOKKOS_INLINE_FUNCTION constexpr explicit StringLiteralSink(const StringLiteral<N>& input) : value(input) {
   }
+
+  std::string to_string() const {
+    return value.to_string();
+  }
+
+  KOKKOS_INLINE_FUNCTION constexpr StringLiteral<N> to_string_literal() const {
+    return value;
+  }
+
+  //! \name Stream operators
+  //@{
 
   template <size_t OtherSize>
   KOKKOS_INLINE_FUNCTION constexpr auto operator<<(const char (&rhs)[OtherSize]) const {
@@ -143,21 +156,53 @@ struct StringLiteralSink {
 
   template <impl::RuntimeSinkChunk T>
   KOKKOS_INLINE_FUNCTION constexpr auto operator<<(T&& rhs) const;
+  //@}
 
-  std::string to_string() const {
-    return value.to_string();
+  //! \name Equality operators
+  //@{
+
+  template <size_t OtherSize>
+  KOKKOS_INLINE_FUNCTION constexpr bool operator==(const char (&other)[OtherSize]) const {
+    if constexpr (N != OtherSize) {
+      return false;
+    } else {
+      return value == make_string_literal(other);
+    }
   }
+
+  template <size_t OtherSize>
+  KOKKOS_INLINE_FUNCTION constexpr bool operator==(const StringLiteralSink<OtherSize>& other) const {
+    if constexpr (N != OtherSize) {
+      return false;
+    } else {
+      return value == other.value;
+    }
+  }
+
+  template <size_t OtherSize>
+  KOKKOS_INLINE_FUNCTION constexpr bool operator==(const StringLiteral<OtherSize>& other) const {
+    if constexpr (N != OtherSize) {
+      return false;
+    } else {
+      return value == other;
+    }
+  }
+  //@}
 };
 
 /// \brief Sink that stores streamed chunks until a string is actually needed.
 ///
-/// `StringSink` is the runtime counterpart to `StringLiteralSink`. It stores each chunk by value and only joins them
-/// into a single `std::string` when `to_string()` or `operator<<` is used.
+/// `StringSink` is the chunked counterpart to `StringLiteralSink`. It stores each chunk by value and only joins them
+/// into a single `std::string` when `to_string()` or `operator<<` is used. If every stored chunk is a
+/// `mundy::StringLiteral`, it can also be collapsed to a `StringLiteral` at compile time.
 template <typename... Chunks>
 struct StringSink {
-  std::tuple<Chunks...> chunks;
+  static constexpr bool is_compile_time = (is_our_string_literal_v<Chunks> && ...);
 
-  explicit StringSink(std::tuple<Chunks...> input_chunks) : chunks(std::move(input_chunks)) {
+  ::mundy::tuple<Chunks...> chunks;
+
+  KOKKOS_INLINE_FUNCTION constexpr explicit StringSink(::mundy::tuple<Chunks...> input_chunks)
+      : chunks(std::move(input_chunks)) {
   }
 
   template <impl::SinkChunk T>
@@ -165,8 +210,101 @@ struct StringSink {
 
   std::string to_string() const {
     std::ostringstream os;
-    std::apply([&os](const auto&... values) { (os << ... << values); }, chunks);
+    [&]<size_t... Is>(std::index_sequence<Is...>) {
+      ((os << ::mundy::get<Is>(chunks)), ...);
+    }(std::make_index_sequence<sizeof...(Chunks)>{});
     return os.str();
+  }
+
+  KOKKOS_INLINE_FUNCTION constexpr auto to_string_literal() const
+    requires(is_compile_time)
+  {
+    if constexpr (sizeof...(Chunks) == 0) {
+      return make_string_literal("");
+    } else {
+      return to_string_literal_impl(std::make_index_sequence<sizeof...(Chunks)>{});
+    }
+  }
+
+  //! \name Equality operators
+  //@{
+
+  template <size_t OtherSize>
+  KOKKOS_INLINE_FUNCTION constexpr bool operator==(const char (&other)[OtherSize]) const
+    requires(is_compile_time)
+  {
+    return *this == make_string_literal(other);
+  }
+
+  template <size_t OtherSize>
+  bool operator==(const char (&other)[OtherSize]) const
+    requires(!is_compile_time)
+  {
+    return to_string() == other;
+  }
+
+  template <size_t OtherSize>
+  KOKKOS_INLINE_FUNCTION constexpr bool operator==(const StringLiteralSink<OtherSize>& other) const
+    requires(is_compile_time)
+  {
+    return *this == other.value;
+  }
+
+  template <size_t OtherSize>
+  bool operator==(const StringLiteralSink<OtherSize>& other) const
+    requires(!is_compile_time)
+  {
+    return to_string() == other.to_string();
+  }
+
+  template <size_t OtherSize>
+  KOKKOS_INLINE_FUNCTION constexpr bool operator==(const StringLiteral<OtherSize>& other) const
+    requires(is_compile_time)
+  {
+    constexpr size_t our_size = decltype(to_string_literal())::size;
+    if constexpr (our_size != OtherSize) {
+      return false;
+    } else {
+      return to_string_literal() == other;
+    }
+  }
+
+  template <size_t OtherSize>
+  bool operator==(const StringLiteral<OtherSize>& other) const
+    requires(!is_compile_time)
+  {
+    return to_string() == other.to_string();
+  }
+
+  template <typename... OtherChunks>
+  KOKKOS_INLINE_FUNCTION constexpr bool operator==(const StringSink<OtherChunks...>& other) const
+    requires(is_compile_time && StringSink<OtherChunks...>::is_compile_time)
+  {
+    constexpr size_t our_size = decltype(to_string_literal())::size;
+    constexpr size_t other_size = decltype(other.to_string_literal())::size;
+    if constexpr (our_size != other_size) {
+      return false;
+    } else {
+      return to_string_literal() == other.to_string_literal();
+    }
+  }
+
+  template <typename... OtherChunks>
+  bool operator==(const StringSink<OtherChunks...>& other) const
+    requires(!(is_compile_time && StringSink<OtherChunks...>::is_compile_time))
+  {
+    return to_string() == other.to_string();
+  }
+
+  bool operator==(const std::string& other) const {
+    return to_string() == other;
+  }
+  //@}
+
+ private:
+  template <size_t... Is>
+  KOKKOS_INLINE_FUNCTION constexpr auto to_string_literal_impl(std::index_sequence<Is...>) const {
+    return (::mundy::get<Is>(chunks) + ...);
   }
 };
 
@@ -192,10 +330,14 @@ template <typename T>
 inline constexpr bool is_string_sink_v = is_string_sink<std::remove_cvref_t<T>>::value;
 
 template <typename T>
-concept RuntimeStringSink = is_string_sink_v<T>;
+concept ChunkedStringSink = is_string_sink_v<T>;
 
 template <typename T>
-concept AnyStringSink = LiteralStringSink<T> || RuntimeStringSink<T>;
+concept AnyStringSink = LiteralStringSink<T> || ChunkedStringSink<T>;
+
+template <typename T>
+concept CompileTimeStringSink = AnyStringSink<T> && requires { std::remove_cvref_t<T>::is_compile_time; } &&
+                                std::remove_cvref_t<T>::is_compile_time;
 
 /// \brief Start a new sink pipeline.
 KOKKOS_INLINE_FUNCTION constexpr SinkStart sink() {
@@ -227,7 +369,7 @@ template <typename... Chunks>
 template <impl::SinkChunk T>
 KOKKOS_INLINE_FUNCTION constexpr auto StringSink<Chunks...>::operator<<(T&& rhs) const {
   return StringSink<Chunks..., impl::sink_stored_t<T>>(
-      std::tuple_cat(chunks, std::tuple<impl::sink_stored_t<T>>{impl::make_sink_piece(std::forward<T>(rhs))}));
+      ::mundy::tuple_cat(chunks, ::mundy::make_tuple(impl::make_sink_piece(std::forward<T>(rhs)))));
 }
 
 template <size_t N>
@@ -238,7 +380,9 @@ std::ostream& operator<<(std::ostream& os, const StringLiteralSink<N>& sink_to_p
 
 template <typename... Chunks>
 std::ostream& operator<<(std::ostream& os, const StringSink<Chunks...>& sink_to_print) {
-  std::apply([&os](const auto&... values) { (os << ... << values); }, sink_to_print.chunks);
+  [&]<size_t... Is>(std::index_sequence<Is...>) {
+    ((os << ::mundy::get<Is>(sink_to_print.chunks)), ...);
+  }(std::make_index_sequence<sizeof...(Chunks)>{});
   return os;
 }
 

@@ -24,10 +24,14 @@
 // External libs
 #include <Kokkos_Core.hpp>
 
+// C++ core
+#include <type_traits>
+
 // Mundy
 #include <mundy_geom/distance/DistanceMetrics.hpp>  // for mundy::FreeSpaceMetric
 #include <mundy_geom/distance/PointPoint.hpp>       // for mundy::distance(Point, Point)
 #include <mundy_geom/distance/Types.hpp>            // for mundy::SharedNormalSigned
+#include <mundy_geom/primitives/Ellipsoid.hpp>      // for mundy::Ellipsoid
 #include <mundy_geom/primitives/Point.hpp>          // for mundy::Point
 #include <mundy_math/Quaternion.hpp>                // for mundy::Quaternion
 #include <mundy_math/Tolerance.hpp>                 // for mundy::get_zero_tolerance
@@ -39,16 +43,20 @@ namespace mundy {
 //! \name Free space distance calculations
 //@{
 
-template <typename Scalar>
-KOKKOS_FUNCTION Scalar distance(const Ellipsoid<Scalar>& ellipsoid1,  //
-                                const Ellipsoid<Scalar>& ellipsoid2) {
+template <ValidEllipsoidType EllipsoidType1, ValidEllipsoidType EllipsoidType2>
+  requires std::is_same_v<typename EllipsoidType1::scalar_t, typename EllipsoidType2::scalar_t>
+KOKKOS_FUNCTION typename EllipsoidType1::scalar_t distance(const EllipsoidType1& ellipsoid1,  //
+                                                           const EllipsoidType2& ellipsoid2) {
   return distance(SharedNormalSigned{}, ellipsoid1, ellipsoid2);
 }
 
-template <typename Scalar>
-KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
-                                const Ellipsoid<Scalar>& ellipsoid1,                      //
-                                const Ellipsoid<Scalar>& ellipsoid2) {
+template <ValidEllipsoidType EllipsoidType1, ValidEllipsoidType EllipsoidType2>
+  requires std::is_same_v<typename EllipsoidType1::scalar_t, typename EllipsoidType2::scalar_t>
+KOKKOS_FUNCTION typename EllipsoidType1::scalar_t distance(
+    [[maybe_unused]] const SharedNormalSigned distance_type,  //
+    const EllipsoidType1& ellipsoid1,                         //
+    const EllipsoidType2& ellipsoid2) {
+  using Scalar = typename EllipsoidType1::scalar_t;
   Point<Scalar> closest_point1;
   Point<Scalar> closest_point2;
   mundy::Vector3<Scalar> shared_normal1;
@@ -57,12 +65,15 @@ KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distan
                   closest_point1, closest_point2, shared_normal1, shared_normal2);
 }
 
-template <typename Scalar>
+template <ValidEllipsoidType EllipsoidType1, ValidEllipsoidType EllipsoidType2>
+  requires std::is_same_v<typename EllipsoidType1::scalar_t, typename EllipsoidType2::scalar_t>
 class EllipsoidEllipsoidObjective {
  public:
+  using Scalar = typename EllipsoidType1::scalar_t;
+
   KOKKOS_FUNCTION
-  EllipsoidEllipsoidObjective(const Ellipsoid<Scalar>& ellipsoid0,     //
-                              const Ellipsoid<Scalar>& ellipsoid1,     //
+  EllipsoidEllipsoidObjective(const EllipsoidType1& ellipsoid0,        //
+                              const EllipsoidType2& ellipsoid1,        //
                               mundy::Vector3<Scalar>& shared_normal0,  //
                               mundy::Vector3<Scalar>& shared_normal1,  //
                               Point<Scalar>& foot_point0,              //
@@ -93,22 +104,26 @@ class EllipsoidEllipsoidObjective {
   }
 
  private:
-  const Ellipsoid<Scalar>& ellipsoid0_;
-  const Ellipsoid<Scalar>& ellipsoid1_;
+  const EllipsoidType1& ellipsoid0_;
+  const EllipsoidType2& ellipsoid1_;
   mundy::Vector3<Scalar>& shared_normal0_;
   mundy::Vector3<Scalar>& shared_normal1_;
   Point<Scalar>& foot_point0_;
   Point<Scalar>& foot_point1_;
 };
 
-template <typename Scalar>
-KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
-                                const Ellipsoid<Scalar>& ellipsoid1,                      //
-                                const Ellipsoid<Scalar>& ellipsoid2,                      //
-                                Point<Scalar>& closest_point1,                            //
-                                Point<Scalar>& closest_point2,                            //
-                                mundy::Vector3<Scalar>& shared_normal1,                   //
-                                mundy::Vector3<Scalar>& shared_normal2) {
+template <ValidEllipsoidType EllipsoidType1, ValidEllipsoidType EllipsoidType2>
+  requires std::is_same_v<typename EllipsoidType1::scalar_t, typename EllipsoidType2::scalar_t>
+KOKKOS_FUNCTION typename EllipsoidType1::scalar_t distance(
+    [[maybe_unused]] const SharedNormalSigned distance_type,               //
+    const EllipsoidType1& ellipsoid1,                                      //
+    const EllipsoidType2& ellipsoid2,                                      //
+    Point<typename EllipsoidType1::scalar_t>& closest_point1,              //
+    Point<typename EllipsoidType1::scalar_t>& closest_point2,              //
+    mundy::Vector3<typename EllipsoidType1::scalar_t>& shared_normal1,     //
+    mundy::Vector3<typename EllipsoidType1::scalar_t>& shared_normal2) {
+  using Scalar = typename EllipsoidType1::scalar_t;
+
   // Setup the minimization
   // Note, the actual error is not guaranteed to be less than min_objective_delta due to the use of approximate
   // derivatives. Instead, we saw that the error was typically less than the square root of min_objective_delta.
@@ -116,9 +131,8 @@ KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distan
   constexpr size_t lbfgs_max_memory_size = 10;
 
   // Reuse the solution space rather than re-allocating it each time
-  EllipsoidEllipsoidObjective shared_normal_objective(ellipsoid1, ellipsoid2,          //
-                                                      shared_normal1, shared_normal2,  //
-                                                      closest_point1, closest_point2);
+  EllipsoidEllipsoidObjective<EllipsoidType1, EllipsoidType2> shared_normal_objective(
+      ellipsoid1, ellipsoid2, shared_normal1, shared_normal2, closest_point1, closest_point2);
 
   constexpr Scalar pi = Kokkos::numbers::pi_v<Scalar>;
   constexpr Scalar zero = static_cast<Scalar>(0.0);

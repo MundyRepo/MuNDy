@@ -57,47 +57,6 @@ spack install --add mundy +core +mesh +cuda cuda_arch=90 ^cuda@12.3.107
 
 `+mesh` automatically pulls in the required Trilinos `Teuchos` and `STK` support. MuNDy's current subpackages also require `OpenRAND`, which is enabled by default in the Spack recipe.
 
-## CDash Dashboard Submissions
-
-MuNDy now includes the TriBITS project-level files that the built-in `dashboard` target expects:
-
-- `CTestConfig.cmake`
-- `cmake/ctest/CTestCustom.cmake.in`
-- `cmake/ctest/MundyCTestDriver.cmake`
-- `cmake/ctest/general_gcc/ctest_mpi_openmp_release.cmake`
-
-The existing `rocky8-openmp-release` preset now also seeds the dashboard-specific cache entries `CTEST_BUILD_FLAGS`, `CTEST_PARALLEL_LEVEL`, and `CTEST_BUILD_NAME`, so the basic local flow is:
-
-```bash
-cmake --preset rocky8-openmp-release
-env CTEST_DO_SUBMIT=OFF cmake --build build/rocky8-openmp-release --target dashboard
-```
-
-Useful dashboard variants:
-
-```bash
-# Reuse an existing configure/build and only run+submit tests
-env CTEST_DO_CONFIGURE=OFF CTEST_DO_BUILD=OFF CTEST_DO_SUBMIT=OFF \
-  cmake --build build/rocky8-openmp-release --target dashboard
-```
-
-`CTestConfig.cmake` defaults to `my.cdash.org` and the CDash project name `Mundy`. If your CDash project uses a different host, project name, or submit path, override `CTEST_DROP_SITE`, `CTEST_PROJECT_NAME`, and `CTEST_DROP_LOCATION` at configure time before running the target.
-
-For a standalone `ctest -S` workflow, the MuNDy driver scaffold mirrors the TriBITS examples and can be launched from a scratch dashboard directory:
-
-```bash
-mkdir -p /tmp/mundy-dashboard
-cd /tmp/mundy-dashboard
-
-env TRILINOS_ROOT_DIR=/path/to/trilinos \
-    TPL_ROOT_DIR=/path/to/mundy-tpls \
-    CTEST_DO_SUBMIT=OFF \
-    ctest -V -S /path/to/MuNDy/cmake/ctest/general_gcc/ctest_mpi_openmp_release.cmake
-```
-
-That script uses the checked-out MuNDy source tree as `CTEST_SOURCE_DIRECTORY` and creates its build tree in the current working directory under `BUILD/`, which makes it a good starting point for a future CI-specific `ctest -S` matrix.
-
-
 ## Organizational Overview
 
 MuNDy adopts a **Trilinos-style subpackage stack**:
@@ -112,25 +71,26 @@ This structure is intended to keep:
 ### Code Statistics (via cloc)
 ```text
 cloc-1.96.pl --exclude-dir=TriBITS,ci,doc,scrap ./MuNDy
-     322 text files.
-     286 unique files.                                          
-      42 files ignored.
+     384 text files.
+     345 unique files.                                          
+      52 files ignored.
 
-github.com/AlDanial/cloc v 1.96  T=0.85 s (337.1 files/s, 90346.8 lines/s)
+github.com/AlDanial/cloc v 1.96  T=1.71 s (201.6 files/s, 53673.7 lines/s)
 ------------------------------------------------------------------
 Language            files        blank        comment         code
 ------------------------------------------------------------------
-C/C++ Header          129         6254          11607        26332
-C++                    67         3755           4035        17506
-CMake                  63          379           1741         1894
-Markdown                4          342              0         1160
-Python                  5          127            172          553
-Bourne Shell           15           96             83          333
+C/C++ Header          142         7071          12382        30540
+C++                    81         4823           4428        22397
+CMake                  88          620           2046         2824
+Markdown                8          832              0         2220
+Python                  5          119            161          522
+Bourne Shell           15           98             91          329
 Text                    1           25              0          172
-JSON                    1            5              0           67
-YAML                    1            0              0            3
+JSON                    2           10              0          137
+YAML                    2            0              0            6
+CSV                     1            0              0            1
 ------------------------------------------------------------------
-SUM:                  286        10983          17638        48020
+SUM:                  345        13598          19108        59148
 ------------------------------------------------------------------
 ```
 
@@ -141,14 +101,14 @@ SUM:                  286        10983          17638        48020
 ### MundyUtils: Centralized reusable utilities
 
 Centralized, Kokkos-friendly building blocks for type-level plumbing, error handling, and device-aware data management.
+- **`MUNDY_THROW_ASSERT` / `MUNDY_THROW_REQUIRE`**  
+  Kokkos-compatible throw/assert helpers with diagnostics and detailed error context 
+  - On-device: abort  |  On-host: throw
+  - Can be called within constexpr contexts
+
 - **`tuple` / `variant`**  
   Reduced, Kokkos-compatible analogs of `std::tuple` / `std::variant` for default-constructible types.  
   - `core::tuple` is NTTP-compatible and `constexpr`-friendly  
-
-- **`aggregate`**  
-  Compile-time extensible “tagged bag of types” (conceptually similar to `boost::hana::map`).  
-  - Kokkos-compatible  
-  - `constexpr` and NTTP-compatible  
 
 - **`reference_wrapper`**  
   Kokkos-compatible analog of `std::reference_wrapper` for non-const references.  
@@ -156,14 +116,19 @@ Centralized, Kokkos-friendly building blocks for type-level plumbing, error hand
 - **`storage`**
   Unified means to maybe own or maybe view a value using a simple normalized storage policy.
 
+- **`aggregate`**  
+  Compile-time extensible “tagged bag of types” (conceptually similar to `boost::hana::map`).  
+  - Kokkos-compatible  
+  - `constexpr` and NTTP-compatible  
+
 - **`StringLiteral`**  
   `constexpr` string literals that are NTTP-compatible.  
-  - Supports `constexpr` concatenation  
+  - Supports `constexpr` concatenation
 
-- **`MUNDY_THROW_ASSERT` / `MUNDY_THROW_REQUIRE`**  
-  Kokkos-compatible throw/assert helpers with diagnostics and detailed error context 
-  - On-device: abort  |  On-host: throw
-  - Can be called within constexpr contexts
+- **`StringSink`**  
+  A stream-like (`<<`) utility for constructing compile-time and runtime strings.  
+  - Kokkos-compatible/constexpr-friendly
+  - Automatically produces compile-time strings when possible
 
 - **`NgpPool` / `NgpView`**  
   Dual-view abstractions that follow MuNDy’s sync semantics plus a dual-view push/pop pool.  
@@ -241,11 +206,8 @@ Helpers and abstractions for integrating MuNDy with Trilinos/STK meshes and fiel
   - Rank: `"ELEM_RANK"`  
   to their corresponding STK objects.
 
-- **`DeclareEntities` / `DeclareField` / `DeclarePart`**  
-  Helper functions that streamline:
-  - Entity declaration  
-  - Field registration  
-  - Part creation  
+- **`DeclareEntities` / `DeclareField` / `DeclarePart` / `DeclareClass`**  
+  Helper functions that streamline common STK mesh setup tasks, such as declaring fields and parts with the correct properties and parallel consistency.
 
 * **`NgpModRequests`**
   A ticket-based framework for staging mesh modification requests from the device and processing them on the host.
@@ -256,6 +218,9 @@ Helpers and abstractions for integrating MuNDy with Trilinos/STK meshes and fiel
 
 - **`FieldViews`**  
   Helpers for extracting mathematical views into STK field types, both on host and device.  
+
+- **`Classes`**  
+  A utility for mapping a deconstructed class hierarchy (e.g. rod segments, rod ends, contacts) onto STK parts and fields in a consistent IO-compliant way with enforced invariants.
 
 - **`Aggregate`**  
   Wraps STK fields in their underlying view type, enabling clean code such as  
@@ -269,23 +234,21 @@ Helpers and abstractions for integrating MuNDy with Trilinos/STK meshes and fiel
   * Supports dynamically updating COO connectivity
   * Allows on-device sparse updates to CSR structures
   * Follows dual-view-like semantics aligned with STK’s NGP design
+  * Automatic synchronization tracking during mesh modification cycles
 
 * **`NgpFieldBLAS`**
   Reimplementation of STK’s field BLAS routines with unified host/device syntax.
 
 * **`NgpAccessorExpr`**
   MuNDy’s usability layer: a templated expression system with:
-
   * Automatic pruning of reused branches
   * Automatic synchronization of read fields
   * Automatic marking of modified fields as dirty
 
   This lets users write expressions like:
-
   ```cpp
   x(rods) += dt * vel(rods);
   ```
-
   and have them executed on the device without manual synchronization bookkeeping.
 
 ---
@@ -300,12 +263,11 @@ Independent projects that emerged from MuNDy’s infrastructure and are usable o
   - Now used by HOOMD-Blue
   
 - **[alsous_gigantism_2025](https://github.com/flatironinstitute/alsous_gigantism_2025)**
-  A discrete elastic rod model implemented using MuNDy (becomes public end of December 2025). 
+  A discrete elastic rod model implemented using MuNDy. 
 
 - **[mundy_mock_app](https://github.com/MundyRepo/mundy_mock_app)** /
   **[mundy_mock_app_tribits](https://github.com/MundyRepo/mundy_mock_app_tribits)**
   Helper applications for bootstrapping MuNDy-based codes:
-
   - CMake-based or TriBITS+CMake templates
   - Intended as starting points for internal and external applications that depend on MuNDy
 

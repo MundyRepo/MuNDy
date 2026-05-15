@@ -165,10 +165,10 @@ TEST(MetaDataAttributes, DeclareFetchAndRemoveMeshAttribute) {
 }
 
 struct CountCopiesStruct {
-  CountCopiesStruct() = default;  // Default constructable
+  CountCopiesStruct() = default;  // Default constructible
   CountCopiesStruct(const CountCopiesStruct&) {
     ++num_copies;
-  }  // Copy constructable
+  }  // Copy constructible
 
   // Never used
   // CountCopiesStruct &operator=(const CountCopiesStruct &) {

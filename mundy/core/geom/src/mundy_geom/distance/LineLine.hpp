@@ -24,6 +24,9 @@
 // External libs
 #include <Kokkos_Core.hpp>
 
+// C++ core
+#include <type_traits>
+
 // Mundy
 #include <mundy_geom/distance/DistanceMetrics.hpp>  // for mundy::FreeSpaceMetric
 #include <mundy_geom/distance/PointPoint.hpp>       // for distance(Point, Point)
@@ -41,9 +44,10 @@ namespace mundy {
 /// \tparam Scalar The scalar type
 /// \param[in] line1 One line
 /// \param[in] line2 The other line
-template <typename Scalar>
-KOKKOS_FUNCTION Scalar distance(const Line<Scalar>& line1,  //
-                                const Line<Scalar>& line2) {
+template <ValidLineType LineType1, ValidLineType LineType2>
+  requires std::is_same_v<typename LineType1::scalar_t, typename LineType2::scalar_t>
+KOKKOS_FUNCTION typename LineType1::scalar_t distance(const LineType1& line1,  //
+                                                      const LineType2& line2) {
   return distance(SharedNormalSigned{}, line1, line2);
 }
 
@@ -52,10 +56,13 @@ KOKKOS_FUNCTION Scalar distance(const Line<Scalar>& line1,  //
 /// \param[in] distance_type The distance type
 /// \param[in] line1 One line
 /// \param[in] line2 The other line
-template <typename Scalar>
-KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
-                                const Line<Scalar>& line1,                                //
-                                const Line<Scalar>& line2) {
+template <ValidLineType LineType1, ValidLineType LineType2>
+  requires std::is_same_v<typename LineType1::scalar_t, typename LineType2::scalar_t>
+KOKKOS_FUNCTION typename LineType1::scalar_t distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
+                                                      const LineType1& line1,                                  //
+                                                      const LineType2& line2) {
+  using Scalar = typename LineType1::scalar_t;
+
   // Part of this function was adapted from VTK, which, in turn adapted part of it from "GeometryAlgorithms.com"
   const auto center_center = line1.center() - line2.center();
   const Scalar a = mundy::dot(line1.direction(), line1.direction());
@@ -83,10 +90,11 @@ KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distan
 /// \param[in] distance_type The distance type
 /// \param[in] line1 One line
 /// \param[in] line2 The other line
-template <typename Scalar>
-KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const Euclidean distance_type,  //
-                                const Line<Scalar>& line1,                       //
-                                const Line<Scalar>& line2) {
+template <ValidLineType LineType1, ValidLineType LineType2>
+  requires std::is_same_v<typename LineType1::scalar_t, typename LineType2::scalar_t>
+KOKKOS_FUNCTION typename LineType1::scalar_t distance([[maybe_unused]] const Euclidean distance_type,  //
+                                                      const LineType1& line1,                         //
+                                                      const LineType2& line2) {
   return distance(SharedNormalSigned{}, line1, line2);  // no difference between distance types for lines
 }
 
@@ -99,14 +107,15 @@ KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const Euclidean distance_type, 
 /// \param[out] arch_length1 The arch-length parameter of the closest point on line1
 /// \param[out] arch_length2 The arch-length parameter of the closest point on line2
 /// \param[out] sep The separation vector (from line1 to line2)
-template <typename Scalar>
-KOKKOS_FUNCTION Scalar distance(const Line<Scalar>& line1,      //
-                                const Line<Scalar>& line2,      //
-                                Point<Scalar>& closest_point1,  //
-                                Point<Scalar>& closest_point2,  //
-                                Scalar& arch_length1,           //
-                                Scalar& arch_length2,           //
-                                mundy::Vector3<Scalar>& sep) {
+template <ValidLineType LineType1, ValidLineType LineType2>
+  requires std::is_same_v<typename LineType1::scalar_t, typename LineType2::scalar_t>
+KOKKOS_FUNCTION typename LineType1::scalar_t distance(const LineType1& line1,                           //
+                                                      const LineType2& line2,                           //
+                                                      Point<typename LineType1::scalar_t>& closest_point1,  //
+                                                      Point<typename LineType1::scalar_t>& closest_point2,  //
+                                                      typename LineType1::scalar_t& arch_length1,       //
+                                                      typename LineType1::scalar_t& arch_length2,       //
+                                                      mundy::Vector3<typename LineType1::scalar_t>& sep) {
   return distance(SharedNormalSigned{}, line1, line2,  //
                   closest_point1, closest_point2, arch_length1, arch_length2, sep);
 }
@@ -121,15 +130,18 @@ KOKKOS_FUNCTION Scalar distance(const Line<Scalar>& line1,      //
 /// \param[out] arch_length1 The arch-length parameter of the closest point on line1
 /// \param[out] arch_length2 The arch-length parameter of the closest point on line2
 /// \param[out] sep The separation vector (from line1 to line2)
-template <typename Scalar>
-KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
-                                const Line<Scalar>& line1,                                //
-                                const Line<Scalar>& line2,                                //
-                                Point<Scalar>& closest_point1,                            //
-                                Point<Scalar>& closest_point2,                            //
-                                Scalar& arch_length1,                                     //
-                                Scalar& arch_length2,                                     //
-                                mundy::Vector3<Scalar>& sep) {
+template <ValidLineType LineType1, ValidLineType LineType2>
+  requires std::is_same_v<typename LineType1::scalar_t, typename LineType2::scalar_t>
+KOKKOS_FUNCTION typename LineType1::scalar_t distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
+                                                      const LineType1& line1,                                  //
+                                                      const LineType2& line2,                                  //
+                                                      Point<typename LineType1::scalar_t>& closest_point1,     //
+                                                      Point<typename LineType1::scalar_t>& closest_point2,     //
+                                                      typename LineType1::scalar_t& arch_length1,              //
+                                                      typename LineType1::scalar_t& arch_length2,              //
+                                                      mundy::Vector3<typename LineType1::scalar_t>& sep) {
+  using Scalar = typename LineType1::scalar_t;
+
   // Part of this function was adapted from VTK, which, in turn adapted part of it from "GeometryAlgorithms.com"
   const auto center_center = line1.center() - line2.center();
   const Scalar a = mundy::dot(line1.direction(), line1.direction());

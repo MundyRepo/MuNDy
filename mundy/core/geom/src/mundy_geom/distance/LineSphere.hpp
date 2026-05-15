@@ -24,6 +24,9 @@
 // External libs
 #include <Kokkos_Core.hpp>
 
+// C++ core
+#include <type_traits>
+
 // Mundy
 #include <mundy_geom/distance/DistanceMetrics.hpp>  // for mundy::FreeSpaceMetric
 #include <mundy_geom/distance/PointLine.hpp>        // for distance(Point, Line)
@@ -41,9 +44,10 @@ namespace mundy {
 /// \tparam Scalar The scalar type
 /// \param[in] line The line
 /// \param[in] sphere The sphere
-template <typename Scalar>
-KOKKOS_FUNCTION Scalar distance(const Line<Scalar>& line,  //
-                                const Sphere<Scalar>& sphere) {
+template <ValidLineType LineType, ValidSphereType SphereType>
+  requires std::is_same_v<typename LineType::scalar_t, typename SphereType::scalar_t>
+KOKKOS_FUNCTION typename LineType::scalar_t distance(const LineType& line,  //
+                                                     const SphereType& sphere) {
   return distance(SharedNormalSigned{}, line, sphere);
 }
 
@@ -51,10 +55,11 @@ KOKKOS_FUNCTION Scalar distance(const Line<Scalar>& line,  //
 /// \tparam Scalar The scalar type
 /// \param[in] line The line
 /// \param[in] sphere The sphere
-template <typename Scalar>
-KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
-                                const Line<Scalar>& line,                                 //
-                                const Sphere<Scalar>& sphere) {
+template <ValidLineType LineType, ValidSphereType SphereType>
+  requires std::is_same_v<typename LineType::scalar_t, typename SphereType::scalar_t>
+KOKKOS_FUNCTION typename LineType::scalar_t distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
+                                                     const LineType& line,                                    //
+                                                     const SphereType& sphere) {
   return distance(sphere.center(), line) - sphere.radius();
 }
 
@@ -65,12 +70,13 @@ KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distan
 /// \param[out] closest_point The closest point on the line
 /// \param[out] arch_length The arch-length parameter of the closest point on the line
 /// \param[out] sep The separation vector (from line to sphere)
-template <typename Scalar>
-KOKKOS_FUNCTION Scalar distance(const Line<Scalar>& line,      //
-                                const Sphere<Scalar>& sphere,  //
-                                Point<Scalar>& closest_point,  //
-                                Scalar& arch_length,           //
-                                mundy::Vector3<Scalar>& sep) {
+template <ValidLineType LineType, ValidSphereType SphereType>
+  requires std::is_same_v<typename LineType::scalar_t, typename SphereType::scalar_t>
+KOKKOS_FUNCTION typename LineType::scalar_t distance(const LineType& line,                          //
+                                                     const SphereType& sphere,                       //
+                                                     Point<typename LineType::scalar_t>& closest_point,  //
+                                                     typename LineType::scalar_t& arch_length,       //
+                                                     mundy::Vector3<typename LineType::scalar_t>& sep) {
   return distance(SharedNormalSigned{}, line, sphere, closest_point, arch_length, sep);
 }
 
@@ -81,13 +87,15 @@ KOKKOS_FUNCTION Scalar distance(const Line<Scalar>& line,      //
 /// \param[out] closest_point The closest point on the line
 /// \param[out] arch_length The arch-length parameter of the closest point on the line
 /// \param[out] sep The separation vector (from line to sphere)
-template <typename Scalar>
-KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
-                                const Line<Scalar>& line,                                 //
-                                const Sphere<Scalar>& sphere,                             //
-                                Point<Scalar>& closest_point,                             //
-                                Scalar& arch_length,                                      //
-                                mundy::Vector3<Scalar>& sep) {
+template <ValidLineType LineType, ValidSphereType SphereType>
+  requires std::is_same_v<typename LineType::scalar_t, typename SphereType::scalar_t>
+KOKKOS_FUNCTION typename LineType::scalar_t distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
+                                                     const LineType& line,                                    //
+                                                     const SphereType& sphere,                                //
+                                                     Point<typename LineType::scalar_t>& closest_point,       //
+                                                     typename LineType::scalar_t& arch_length,                //
+                                                     mundy::Vector3<typename LineType::scalar_t>& sep) {
+  using Scalar = typename LineType::scalar_t;
   const Scalar line_point_distance = distance(sphere.center(), line, closest_point, arch_length, sep);
 
   // Rescale the separation vector to the surface of the sphere

@@ -167,16 +167,16 @@ concept HasMoveConstructor = requires(Accessor a) { Accessor{std::move(a)}; };
 template <typename Accessor, typename T>
 concept ValidAccessor = (HasConstAccessOperator<Accessor, T> || HasNonConstAccessOperator<Accessor, T>);
 
-/// \brief A concept that checks if an Accessor is default constructable
+/// \brief A concept that checks if an Accessor is default constructible
 template <typename Accessor>
 concept HasDefaultConstructor = requires { Accessor{}; };
 
-/// \brief A concept that checks if an Accessor is constructable from N arguments of type T
+/// \brief A concept that checks if an Accessor is constructible from N arguments of type T
 template <typename Accessor, typename T, size_t N>
 concept HasNArgConstructor =
     impl::can_construct_from_unpacked_tuple<Accessor, decltype(impl::generate_tuple_with_t_repeated_n_times<T, N>())>();
 
-/// \brief A concept that checks if an Accessor is constructable from an initializer list of type T
+/// \brief A concept that checks if an Accessor is constructible from an initializer list of type T
 template <typename Accessor, typename T>
 concept HasInitializerListConstructor = requires(std::initializer_list<T> list) { Accessor{list}; };
 

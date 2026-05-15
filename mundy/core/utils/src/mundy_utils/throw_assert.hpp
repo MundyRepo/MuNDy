@@ -53,7 +53,7 @@
 namespace mundy {
 
 template <typename T>
-concept DevicePrintableThrowMessage = is_char_array_v<T> || is_our_string_literal_v<T> || LiteralStringSink<T>;
+concept DevicePrintableThrowMessage = is_char_array_v<T> || is_our_string_literal_v<T> || CompileTimeStringSink<T>;
 
 template <size_t AssertionStringSize, size_t FileStringSize, size_t LineStringSize>
 std::string get_throw_require_host_string(
@@ -86,16 +86,7 @@ std::string get_throw_require_host_string(
   return get_throw_require_host_string(assertion_string, message_to_print.value, file_string, line_string);
 }
 
-template <size_t AssertionStringSize, LiteralStringSink MessageStringType, size_t FileStringSize, size_t LineStringSize>
-std::string get_throw_require_host_string(
-    const StringLiteral<AssertionStringSize>& assertion_string,                        //
-    const MessageStringType& message_to_print,                                         //
-    const StringLiteral<FileStringSize>& file_string = make_string_literal(__FILE__),  //
-    const StringLiteral<LineStringSize>& line_string = make_string_literal(MUNDY_LINE_STRING)) {
-  return get_throw_require_host_string(assertion_string, message_to_print.value, file_string, line_string);
-}
-
-template <size_t AssertionStringSize, RuntimeStringSink MessageStringType, size_t FileStringSize, size_t LineStringSize>
+template <size_t AssertionStringSize, AnyStringSink MessageStringType, size_t FileStringSize, size_t LineStringSize>
 std::string get_throw_require_host_string(
     const StringLiteral<AssertionStringSize>& assertion_string,                        //
     const MessageStringType& message_to_print,                                         //
@@ -124,24 +115,15 @@ KOKKOS_INLINE_FUNCTION constexpr auto get_throw_require_device_string(
          "\nLine: " + line_string + "\nMessage: " + message_to_print;
 }
 
-template <size_t AssertionStringSize, LiteralStringSink MessageStringType, size_t FileStringSize, size_t LineStringSize>
+template <size_t AssertionStringSize, CompileTimeStringSink MessageStringType, size_t FileStringSize,
+          size_t LineStringSize>
 KOKKOS_INLINE_FUNCTION constexpr auto get_throw_require_device_string(
     const StringLiteral<AssertionStringSize>& assertion_string,                        //
     const MessageStringType& message_to_print,                                         //
     const StringLiteral<FileStringSize>& file_string = make_string_literal(__FILE__),  //
     const StringLiteral<LineStringSize>& line_string = make_string_literal(MUNDY_LINE_STRING)) {
-  return get_throw_require_device_string(assertion_string, message_to_print.value, file_string, line_string);
-}
-
-template <size_t AssertionStringSize, size_t MessageStringSize, size_t FileStringSize, size_t LineStringSize>
-std::string get_throw_require_device_string(
-    const StringLiteral<AssertionStringSize>& assertion_string,                        //
-    const std::string& message_to_print,                                               //
-    const StringLiteral<FileStringSize>& file_string = make_string_literal(__FILE__),  //
-    const StringLiteral<LineStringSize>& line_string = make_string_literal(MUNDY_LINE_STRING)) {
-  constexpr auto prefix = make_string_literal("Assertion (") + assertion_string + ") failed.\nFile: " + file_string +
-                          "\nLine: " + line_string + "\nMessage: ";
-  return prefix.to_string() + message_to_print;
+  return get_throw_require_device_string(assertion_string, message_to_print.to_string_literal(), file_string,
+                                         line_string);
 }
 
 template <typename ExceptionType, typename MessageStringType, size_t AssertionStringSize, size_t FileStringSize,
@@ -166,10 +148,7 @@ KOKKOS_INLINE_FUNCTION constexpr void abort_require(
     const StringLiteral<FileStringSize>& file_string = make_string_literal(__FILE__),  //
     const StringLiteral<LineStringSize>& line_string = make_string_literal(MUNDY_LINE_STRING)) {
   if (!assertion_value) {
-    if constexpr (std::same_as<std::remove_cvref_t<MessageStringType>, std::string>) {
-      Kokkos::abort(
-          get_throw_require_device_string(assertion_string, message_to_print, file_string, line_string).c_str());
-    } else if constexpr (DevicePrintableThrowMessage<MessageStringType>) {
+    if constexpr (DevicePrintableThrowMessage<MessageStringType>) {
       Kokkos::abort(
           get_throw_require_device_string(assertion_string, message_to_print, file_string, line_string).value);
     } else {
