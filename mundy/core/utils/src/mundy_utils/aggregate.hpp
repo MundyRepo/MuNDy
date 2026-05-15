@@ -549,7 +549,7 @@ concept callable_with = requires(T t, Args... args) { t(std::forward<Args>(args)
 /// In other words, a compile-time unordered map of arbitrary types indexed by tag type.
 ///
 /// They are compile-time compatable "structural types" compatable with NTTPs.
-/// Their types must be default constructable and copyable.
+/// Their types must be default constructible and copyable.
 ///
 /// Construct an aggregate via a fluent interface:
 /// \code{.cpp}

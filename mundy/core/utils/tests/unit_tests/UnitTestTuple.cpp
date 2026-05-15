@@ -75,7 +75,7 @@ TEST(TupleTest, EmptyTuple) {
   EXPECT_EQ(sizeof(t), 1);  // Empty tuple should have size 1 due to empty base optimization
 }
 
-TEST(TupleTest, TupleDefaultConstructable) {
+TEST(TupleTest, TupleDefaultConstructible) {
   ::mundy::tuple<> t;
   EXPECT_EQ(sizeof(t), 1);  // Empty tuple should have size 1 due to empty base optimization
 }

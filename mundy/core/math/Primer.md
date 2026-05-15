@@ -27,7 +27,7 @@ Vector2d v2{3.3};       // Same as Vector2d{3.3, 3.3};
 ### Accessors
 Canonically, we treat the `()` accessor as the mathematical accessor and `[]` as the programming accessor into the flattened underlying data. So for a 3x3 matrix this would be `mat33(i, j) == mat33[3 * i + j]`. For vectors, the two are equivalent. 
 ```cpp
-std::cout << v1[0] << ", " << v1(0) << std::end;  // Prints 1.1, 1.1
+std::cout << v1[0] << ", " << v1(0) << std::endl;  // Prints 1.1, 1.1
 ```
 
 ### Operations
@@ -137,7 +137,7 @@ m1 /= 2.0;            // m1_ij /= 2.
 auto v2 = m1 * v1;  // v2_i = m1_ij * v1_j
 auto m3 = m1 * m2;  // m3_ij = m1_ik * m2_kj
 ```
-Of course, the matrices and vectors must be of the correct size. We do, however, take the pythonic approach and use lazy tranposes for vectors, so left vector-matrix multiplication is just
+Of course, the matrices and vectors must be of the correct size. We do, however, take the pythonic approach and use lazy transposes for vectors, so left vector-matrix multiplication is just
 ```cpp
 auto v4 = v1 * m1;  // v4_j = v1_i * m1_ij
 ```
@@ -182,7 +182,7 @@ The following operations can be performed on matrices to compute various propert
 ## **`Views`**
 Mundy's Vector, Matrix, and Quaternion types offer the ability to construct a non-owning mathematical view into existing data, endowing it with all the mathematical properties listed above. Views can either be constructed from pointers: 
 ```cpp
-std::vector<TypeParam> std_vec{0, 0, 1, 2, 3, 0, 0};
+std::vector<double> std_vec{0, 0, 1, 2, 3, 0, 0};
 auto v = get_vector3d_view(std_vec.data() + 2);
 v += 2;  // std_vec -> [0, 0, 3, 4, 5, 0, 0]
 ```
@@ -198,7 +198,7 @@ struct ShiftedArray {
 };
 
 int main() {
-  std::vector<TypeParam> std_vec{0, 0, 1, 2, 3, 0, 0};
+  std::vector<double> std_vec{0, 0, 1, 2, 3, 0, 0};
   ShiftedArray s{std_vec.data(), 2};
   auto v = get_vector3d_view(s);
   v += 2;  // std_vec -> [0, 0, 3, 4, 5, 0, 0]
@@ -207,27 +207,89 @@ int main() {
 
 
 ## **`Element-wise atomics`**
-Mundy’s <code inline="">Vector</code> and <code inline="">Matrix</code> types provide <strong>element-wise atomic operations</strong>. “Element-wise” means the atomic is applied <strong>independently to each component</strong> (each <code inline="">v[i]</code> or <code inline="">m(r,c)</code>), rather than synchronizing on the entire vector/matrix as one big locked object.</p><p>These APIs are intended for <strong>shared-memory parallel updates</strong> (e.g., many threads accumulating into the same vector/matrix) where you want correctness without manually managing locks.</p><hr><h3>Atomic load and store</h3><p>Use these when you want an atomic snapshot of each element (load) or an atomic write to each element (store).</p><pre><code class="language-cpp">auto x = atomic_load(v);   // element-wise atomic read: x[i] = v[i]
-atomic_store(&amp;v, x);       // element-wise atomic write: v[i] = x[i]
-</code></pre><blockquote><p>Notes:</p><ul><li><p><code inline="">atomic_load(v)</code> returns a <strong>value copy</strong>.</p></li><li><p><code inline="">atomic_store(&amp;v, x)</code> takes a pointer/reference to the destination being updated.</p></li></ul></blockquote><hr><h3>Atomic update operations</h3><p>All atomic update routines come in three <em>return-style</em> flavors:</p><ol><li><p><strong><code inline="">atomic_&lt;op&gt;(...)</code></strong><br>Performs the update and returns nothing.</p></li><li><p><strong><code inline="">atomic_fetch_&lt;op&gt;(...)</code></strong><br>Performs the update and returns the <strong>old</strong> value (before modification).</p></li><li><p><strong><code inline="">atomic_&lt;op&gt;_fetch(...)</code></strong><br>Performs the update and returns the <strong>new</strong> value (after modification).</p></li></ol><p>Each operation is applied <strong>per element</strong>.</p><hr><h3>Supported operations and operand forms</h3><p>Operations are provided in two operand forms:</p><ul><li><p><strong>Scalar RHS:</strong> apply the same scalar to every element.</p></li><li><p><strong>Element-wise RHS:</strong> apply component-by-component using another vector/matrix of the same shape.</p></li></ul>
-Form | Examples of operations
--- | --
-Scalar RHS | add, sub, mul, div
-Element-wise RHS | add, sub, elementwise_mul, elementwise_div
+Mundy's `Vector` and `Matrix` types provide **element-wise atomic operations**. "Element-wise" means the atomic is applied **independently to each component** (each `v[i]` or `m(r,c)`), rather than synchronizing on the entire vector/matrix as one big locked object.
 
-<hr><h3>Vector atomics</h3><h4>Update without return</h4><pre><code class="language-cpp">atomic_add(&amp;v, s);                 // v[i] += s
-atomic_sub(&amp;v, s);                 // v[i] -= s
-atomic_mul(&amp;v, s);                 // v[i] *= s
-atomic_div(&amp;v, s);                 // v[i] /= s
+These APIs are intended for **shared-memory parallel updates** (e.g., many threads accumulating into the same vector/matrix) where you want correctness without manually managing locks.
 
-atomic_add(&amp;v1, v2);               // v1[i] += v2[i]
-atomic_sub(&amp;v1, v2);               // v1[i] -= v2[i]
-atomic_elementwise_mul(&amp;v1, v2);   // v1[i] *= v2[i]
-atomic_elementwise_div(&amp;v1, v2);   // v1[i] /= v2[i]
-</code></pre><h4>Fetch old value</h4><pre><code class="language-cpp">auto old_v  = atomic_fetch_add(&amp;v,  s);  // returns old v, then v[i] += s
-auto old_v1 = atomic_fetch_add(&amp;v1, v2); // returns old v1, then v1[i] += v2[i]
-</code></pre><h4>Fetch new value</h4><pre><code class="language-cpp">auto new_v  = atomic_add_fetch(&amp;v,  s);  // v[i] += s, returns new v
-auto new_v1 = atomic_add_fetch(&amp;v1, v2); // v1[i] += v2[i], returns new v1
-</code></pre><blockquote><p>Tip: pick the variant based on what you want to do next.</p><ul><li><p>If you do not need a value, prefer <code inline="">atomic_&lt;op&gt;</code> (it’s the simplest and often the cheapest).</p></li><li><p>If you need the prior value (e.g., for a conditional), use <code inline="">atomic_fetch_&lt;op&gt;</code>.</p></li><li><p>If you need the updated value (e.g., to chain computations), use <code inline="">atomic_&lt;op&gt;_fetch</code>.</p></li></ul></blockquote><hr><h3>Matrix atomics</h3><p>Matrix atomics mirror the vector API exactly, but operate on <code inline="">m(r,c)</code> element-by-element.</p><h4>Atomic load and store</h4><pre><code class="language-cpp">auto A = atomic_load(M);     // A(r,c) = M(r,c)
-atomic_store(&amp;M, A);         // M(r,c) = A(r,c)
-</code></pre><h4>Update families</h4><ul><li><p><code inline="">atomic_&lt;op&gt;(&amp;M, rhs)</code></p></li><li><p><code inline="">atomic_fetch_&lt;op&gt;(&amp;M, rhs)</code> → returns old matrix value</p></li><li><p><code inline="">atomic_&lt;op&gt;_fetch(&amp;M, rhs)</code> → returns new matrix value</p></li></ul><p><code inline="">rhs</code> may be a scalar (broadcast) or a matrix of matching shape (element-wise), depending on the operation.
+### Atomic load and store
+Use these when you want an atomic snapshot of each element (load) or an atomic write to each element (store).
+
+```cpp
+auto x = atomic_load(v);   // element-wise atomic read: x[i] = v[i]
+atomic_store(&v, x);       // element-wise atomic write: v[i] = x[i]
+```
+
+> Notes:
+> - `atomic_load(v)` returns a **value copy**.
+> - `atomic_store(&v, x)` takes a pointer/reference to the destination being updated.
+
+### Atomic update operations
+All atomic update routines come in three *return-style* flavors:
+
+1. **`atomic_<op>(...)`**  
+   Performs the update and returns nothing.
+2. **`atomic_fetch_<op>(...)`**  
+   Performs the update and returns the **old** value (before modification).
+3. **`atomic_<op>_fetch(...)`**  
+   Performs the update and returns the **new** value (after modification).
+
+Each operation is applied **per element**.
+
+### Supported operations and operand forms
+Operations are provided in two operand forms:
+
+- **Scalar RHS:** apply the same scalar to every element.
+- **Element-wise RHS:** apply component-by-component using another vector/matrix of the same shape.
+
+| Form | Examples of operations |
+|------|-------------------------|
+| Scalar RHS | add, sub, mul, div |
+| Element-wise RHS | add, sub, elementwise_mul, elementwise_div |
+
+### Vector atomics
+
+#### Update without return
+```cpp
+atomic_add(&v, s);                 // v[i] += s
+atomic_sub(&v, s);                 // v[i] -= s
+atomic_mul(&v, s);                 // v[i] *= s
+atomic_div(&v, s);                 // v[i] /= s
+
+atomic_add(&v1, v2);               // v1[i] += v2[i]
+atomic_sub(&v1, v2);               // v1[i] -= v2[i]
+atomic_elementwise_mul(&v1, v2);   // v1[i] *= v2[i]
+atomic_elementwise_div(&v1, v2);   // v1[i] /= v2[i]
+```
+
+#### Fetch old value
+```cpp
+auto old_v  = atomic_fetch_add(&v,  s);  // returns old v, then v[i] += s
+auto old_v1 = atomic_fetch_add(&v1, v2); // returns old v1, then v1[i] += v2[i]
+```
+
+#### Fetch new value
+```cpp
+auto new_v  = atomic_add_fetch(&v,  s);  // v[i] += s, returns new v
+auto new_v1 = atomic_add_fetch(&v1, v2); // v1[i] += v2[i], returns new v1
+```
+
+> Tip: pick the variant based on what you want to do next.
+> - If you do not need a value, prefer `atomic_<op>` (it's the simplest and often the cheapest).
+> - If you need the prior value (e.g., for a conditional), use `atomic_fetch_<op>`.
+> - If you need the updated value (e.g., to chain computations), use `atomic_<op>_fetch`.
+
+### Matrix atomics
+Matrix atomics mirror the vector API exactly, but operate on `m(r,c)` element-by-element.
+
+#### Atomic load and store
+```cpp
+auto A = atomic_load(M);     // A(r,c) = M(r,c)
+atomic_store(&M, A);         // M(r,c) = A(r,c)
+```
+
+#### Update families
+- `atomic_<op>(&M, rhs)`
+- `atomic_fetch_<op>(&M, rhs)` -> returns old matrix value
+- `atomic_<op>_fetch(&M, rhs)` -> returns new matrix value
+
+`rhs` may be a scalar (broadcast) or a matrix of matching shape (element-wise), depending on the operation.
