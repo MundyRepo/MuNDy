@@ -1,34 +1,48 @@
 # MundyUtils
-This subpackage contains small Kokkos-friendly utilities that smooth over standard-library tools that are missing,
-awkward, or unavailable in device code. The core functionality includes
- - **Device-friendly helpers**
- - **Device-friendly containers**
- - **Kokkos-like views**
+This subpackage contains small Kokkos-friendly utilities that fill the gaps left by the standard library and by
+host-only APIs. The core functionality includes
+ - **Portable assertions and compile-time strings**
+ - **Type-pack utilities**
+ - **Device-friendly containers and ownership wrappers**
+ - **Tagged aggregates**
+ - **Kokkos-like host/device data structures**
 
-## **Device-friendly helpers**
-These helpers are mostly about writing portable host/device code without giving up readable errors, compile-time strings,
-or small metaprogramming conveniences.
+The overall style is the same as the rest of Mundy: small focused types, explicit free functions, and APIs that work in
+host/device code without hiding ownership or synchronization.
 
-### `throw_assert` and `StringSink`
-`MUNDY_THROW_REQUIRE` and `MUNDY_THROW_ASSERT` are the main tools for writing portable assertions. They are designed to be used in both host and device code and provide rich error information while still being safe to use in device code.
+## **Portable helpers**
+These are the lowest-level tools in the package. They are mostly about writing portable code without giving up readable
+errors, compile-time strings, or simple metaprogramming.
 
-Their signature is as follows:
+### `throw_assert`
+`MUNDY_THROW_REQUIRE` and `MUNDY_THROW_ASSERT` are the main assertion macros.
+
 ```cpp
-MUNDY_THROW_REQUIRE(bool assertion, ExceptionType, message);  // Always checks the assertion and host throws on failure/device aborts.
-MUNDY_THROW_ASSERT(bool assertion, ExceptionType, message);   // The assertion is only evaluated/checked in debug builds.
+MUNDY_THROW_REQUIRE(assertion, ExceptionType, message);
+MUNDY_THROW_ASSERT(assertion, ExceptionType, message);
 ```
 
-Here, assertion may be either a bool or an inline expression that produces a bool. The `message` may be a string literal, `StringLiteral`, `std::string`, or `StringSink` expression. However, only compile-time-printable messages are guaranteed to appear in the abort output on the device. If the message is an `std::string` or a `StringSink` expression involving runtime values, the device will still compile and run, but the message won't be included in the error output.
+Their behavior is:
 
-StringSinks are particularly useful for constructing both compile-time and runtime messages via streaming (`<<`) syntax:
+| **Macro** | **Behavior** |
+|-----------|--------------|
+| `MUNDY_THROW_REQUIRE(...)` | Always checks the assertion. On host it throws the requested exception; on device it aborts. |
+| `MUNDY_THROW_ASSERT(...)` | Same behavior in debug builds; compiled out in release builds except for minimal type use. |
+
+The message can be a string literal, `StringLiteral`, `std::string`, or a sink expression such as `sink() << ...`.
+Only compile-time-printable messages are guaranteed to appear in device abort output.
+
 ```cpp
 MUNDY_THROW_REQUIRE(i < n, std::out_of_range,
                     sink() << "i = " << i << " but n = " << n);
 ```
 
+Use `MUNDY_THROW_REQUIRE` for contract-like checks that must always run. Use `MUNDY_THROW_ASSERT` for debug-only
+internal invariants.
+
 ### `StringLiteral`
-`StringLiteral` wraps a string literal so it can be used as a compile-time value. This is most useful when a string is part
-of a type or policy.
+`StringLiteral<N>` wraps a string literal as a compile-time value. This is useful when a string participates in a type,
+a policy, or a compile-time comparison.
 
 ```cpp
 template <StringLiteral Name>
@@ -40,94 +54,128 @@ using Position = FieldTag<make_string_literal("position")>;
 static_assert(Position::name == make_string_literal("position"));
 ```
 
-String literals can also be concatenated and streamed at compile time.
+`StringLiteral`s can be concatenated at compile time.
+
 ```cpp
-constexpr auto full_name1 = make_string_literal("particle.") + Position::name;
-constexpr auto full_name2 = sink() << "particle." << Position::name;
-static_assert(full_name1 == make_string_literal("particle.position"));
-static_assert(full_name2 == make_string_literal("particle.position"));
+constexpr auto full = make_string_literal("particle.") + Position::name;
+static_assert(full == make_string_literal("particle.position"));
 ```
 
-### `type_traits`
-Mundy offers a few tiny traits for working with type packs. They are intentionally simple and mostly support the containers below.
+### `StringSink`
+`sink()` starts a `<<`-style message builder. Literal-only pipelines remain compile-time objects; once you stream a
+runtime value, the pipeline becomes a chunked runtime sink.
 
-| **Trait** | **Description** |
-|-----------|-----------------|
-| `contains_type_v<T, Ts...>` | True if `T` appears in `Ts...`. |
+```cpp
+constexpr auto a = sink() << "left " << "right";
+auto b = sink() << "i = " << i << ", n = " << n;
+```
+
+The two important sink families are:
+
+| **Type** | **When you get it** | **Main use** |
+|----------|----------------------|--------------|
+| `StringLiteralSink` | Every streamed chunk is compile-time text. | `constexpr` strings and device-printable assertion messages. |
+| `StringSink` | At least one streamed chunk is a runtime value. | Lazy runtime message construction with `to_string()`. |
+
+This is why the same `sink() << ...` syntax works for both compile-time and runtime diagnostics.
+
+### `type_traits`
+Mundy offers a few intentionally small type-pack traits.
+
+| **Trait** | **Meaning** |
+|-----------|-------------|
+| `contains_type_v<T, Ts...>` | `true` if `T` appears in `Ts...`. |
 | `count_type_v<T, Ts...>` | Number of times `T` appears in `Ts...`. |
 | `index_finder_v<T, Ts...>` | Index of a unique `T` in `Ts...`. |
-| `type_at_index_t<I, Ts...>` | The `I`'th type in `Ts...`. |
+| `type_at_index_t<I, Ts...>` | The `I`th type in `Ts...`. |
+
+These traits are mostly there to support `tuple`, `variant`, and the aggregate types.
 
 ### `rng`
-`make_philox` constructs an `openrand::Philox` generator from a `size_t` seed and counter value.
+`make_philox(seed, counter)` constructs an `openrand::Philox` generator from `size_t` inputs.
 
-The resulting generator can be used to produce random values in host or device code:
 ```cpp
-openrand::Philox rng = make_philox(seed, counter);
+auto rng = make_philox(seed, counter);
 auto u = rng.rand<double>();
 ```
 
-This helper exists to provide a single, consistent way to construct Philox generators across the codebase while accounting for the differences between Philox's interface and Mundy's needs. Notably, Philox's counter is `uint32_t`-based and Mundy's counter is `size_t`-based. We static_cast between the two and throw in debug mode if the given counter exceeds the maximum representable value for a `uint32_t`.
+This helper exists because Philox expects a `uint64_t` seed and `uint32_t` counter, while Mundy often works with
+`size_t`. The helper performs the conversion and debug-checks that the values fit.
 
 ### Minor helpers
 
 | **Helper** | **Use** |
 |------------|---------|
 | `MUNDY_ATTRIBUTE_UNUSED` | Mark intentionally unused declarations. |
-| `MUNDY_SUPPRESS_*` macros | Locally silence compiler diagnostics around unavoidable warnings. |
-| `do_not_optimize_away(x)` | Keep benchmark values live so the compiler cannot erase the work. |
+| `MUNDY_SUPPRESS_*` macros | Locally silence compiler warnings around unavoidable patterns. |
+| `do_not_optimize_away(x)` | Keep values live in benchmarks or micro-tests. |
+| `make_string_array(...)` | Build a `Teuchos::Array<std::string>` from a parameter pack. |
 
-## **Device-friendly containers**
-These containers mirror familiar standard-library ideas while remaining friendly to Kokkos kernels and constexpr use.
+## **Containers and ownership wrappers**
+These utilities mirror familiar standard-library ideas while staying friendly to Kokkos kernels and constexpr use.
 
 ### `tuple`
-`mundy::tuple<Ts...>` stores a fixed set of heterogeneous values. It offers the tuple operations we use in device code:
-`get<I>`, unique-type `get<T>`, `tuple_size_v`, `tuple_element_t`, `make_tuple`, and binary
-`tuple_cat`.
-
-It is not `std::tuple` with a different namespace. `std::tuple` also supports `tie`, `forward_as_tuple`, `apply`,
-`make_from_tuple`, variadic `tuple_cat` over tuple-like inputs, pair/tuple-like conversions, allocator-aware
-construction, comparisons, swap, formatting, and rvalue/ref-qualified `get`. `mundy::tuple` leaves those out.
-
-The practical differences are:
-
-| **`std::tuple`** | **`mundy::tuple`** |
-|------------------|--------------------|
-| Uses the standard `std::tuple_size` / `std::tuple_element` protocol. | Uses Mundy's own `tuple_size_v` / `tuple_element_t`; standard tuple-like algorithms do not automatically see it. |
-| Has forwarding and reference helpers such as `tie` and `forward_as_tuple`. | Stores values directly; `make_tuple` copies its inputs and does not build forwarding-reference tuples. |
-| `get` preserves value category with `&`, `const&`, `&&`, and `const&&` overloads. | `get` returns mutable or const lvalue references. |
-| `tuple_cat` is variadic and works with tuple-like inputs. | `tuple_cat` joins two `mundy::tuple`s and copies the elements into the result. |
+`mundy::tuple<Ts...>` is a small heterogeneous value container. The core interface is:
 
 ```cpp
 auto t = make_tuple(1, 2.5, "test");
-get<0>(t);        // Returns 1
-get<double>(t);   // Returns 2.5
+
+get<0>(t);      // 1
+get<double>(t); // 2.5
 
 auto both = tuple_cat(make_tuple(1, 2), make_tuple(3.0));
 ```
 
-### `variant`
-`mundy::variant<Ts...>` is a Kokkos-compatible `std::variant`-like class. It has one active alternative at a time and provides type/index access, assignment to a new active type, `holds_alternative`, `variant_size_v`, `variant_alternative_t`, and `visit`.
+The main supported operations are:
 
-Compared with `std::variant`, this version is more restrictive: alternatives must be default constructible and copy assignable, wrong-type access is debug-checked, and visitors must return the same type for every alternative.
+| **Operation** | **Meaning** |
+|---------------|-------------|
+| `get<I>(t)` | Access by index. |
+| `get<T>(t)` | Access by unique type. |
+| `tuple_size_v<T>` | Number of elements. |
+| `tuple_element_t<I, T>` | Type of the `I`th element. |
+| `make_tuple(...)` | Build a tuple by value. |
+| `tuple_cat(a, b)` | Concatenate two `mundy::tuple`s. |
+
+Compared with `std::tuple`, this is smaller out of time constraints. If you find there is a missing operation you need or would make your life easier, please open an issue or submit a PR. The main differences are:
+
+| **`std::tuple`** | **`mundy::tuple`** |
+|------------------|--------------------|
+| Supports the full standard tuple protocol. | Supports only the tuple operations Mundy uses. |
+| Has `tie`, `forward_as_tuple`, `apply`, variadic `tuple_cat`, and richer conversions. | Omits those helpers. |
+| `get` preserves full value category. | `get` returns mutable or const lvalue references. |
+| `tuple_cat` works on tuple-like inputs. | `tuple_cat` joins two `mundy::tuple`s and copies values into the result. |
+
+### `variant`
+`mundy::variant<Ts...>` is a Kokkos-compatible `std::variant`-like class with one active alternative at a time.
 
 ```cpp
 variant<int, double> v(2.5);
+
 holds_alternative<double>(v);  // true
-get<double>(v);                // Returns 2.5
+get<double>(v);                // 2.5
 
 v = 4;
 auto shifted = visit([](const auto& value) { return static_cast<double>(value) + 1.0; }, v);
 ```
 
-### `reference_wrapper`
-`reference_wrapper` is a Kokkos-compatible `std::reference_wrapper`-like class. It stores a reference as a
-pointer, supports `get()`, implicit conversion back to `T&`, and copies like a reference rather than copying the
-referenced object.
+The main API is:
 
-It follows the spirit of `std::reference_wrapper`, but adds Kokkos annotations and forwards `operator()` and
-`operator[]` when the wrapped object supports them. This makes it useful for accessors and functors captured into device
-objects.
+| **Operation** | **Meaning** |
+|---------------|-------------|
+| `v.index()` | Active alternative index. |
+| `holds_alternative<T>(v)` | Check the active type. |
+| `get<T>(v)` / `get<I>(v)` | Access the active alternative. |
+| `visit(visitor, v)` | Dispatch on the active alternative. |
+| `variant_size_v<Variant>` | Number of alternatives. |
+| `variant_alternative_t<I, Variant>` | `I`th alternative type. |
+
+Relative to `std::variant`, Mundy's `variant` is more restrictive: all alternatives must be default constructible and
+copy assignable, wrong-type access is debug-checked, and `visit` requires a homogeneous return type across all
+alternatives.
+
+### `reference_wrapper`
+`reference_wrapper<T>` is a Kokkos-compatible `std::reference_wrapper`-like class.
 
 ```cpp
 int value = 3;
@@ -135,14 +183,48 @@ auto r = ref(value);
 r.get() = 7;  // value -> 7
 ```
 
-If the wrapped object is callable or subscriptable, the wrapper forwards those operations.
+Core operations are:
+
+| **Operation** | **Meaning** |
+|---------------|-------------|
+| `ref(x)` | Wrap a mutable lvalue reference. |
+| `cref(x)` | Wrap a const lvalue reference. |
+| `r.get()` | Recover the wrapped reference. |
+| implicit conversion to `T&` | Use it where a reference is expected. |
+| `r(args...)` / `r[i]` | Forward call or subscript when the wrapped object supports it. |
+
+This makes it especially useful for accessors and functors that need reference-like semantics inside device-friendly
+objects.
+
+### `storage`
+`storage<T>` normalizes owning and non-owning storage.
+
+The `store(...)` helper follows the rule Mundy usually wants:
+
+| **Input** | **Stored as** |
+|-----------|---------------|
+| lvalue | `reference_wrapper<T>` |
+| rvalue | owning value |
+| pointer | pointer |
+| existing `storage<U>` | unwrapped stored policy |
+
 ```cpp
-auto wrapped_accessor = ref(accessor);
-wrapped_accessor(i);  // Same as accessor(i)
+int value = 4;
+
+auto a = store(value);  // non-owning
+auto b = store(7);      // owning
+auto c = store(&value); // pointer
+
+a.get() = 9;  // value -> 9
 ```
 
+This is a small but useful way to write APIs that accept either borrowed or owned data without manual overload sets.
+
+## **Tagged aggregates**
+The aggregate family gives Mundy a lightweight, Kokkos-compatible alternative to larger metaprogramming libraries.
+
 ### `aggregate`
-`aggregate` is a tagged bag of types: Boost::hana-like, but Kokkos-friendly. Tags may be any type (complete or incomplete).
+`aggregate` is a tagged bag of values where tags are types. It is similar in spirit to boost::hana::Map. Tags may be any type (complete or incomplete). In most cases, we use empty incomplete structs as tags, but there is no requirement to do so.
 
 ```cpp
 struct DT;
@@ -153,11 +235,23 @@ auto cfg = aggregate()
     .append<DT>(0.01)
     .append<MAX_ITERS>(1000);
 
-cfg.get<DT>();         // Returns 0.01
-has<MAX_ITERS>(cfg);   // true
+cfg.get<DT>();        // 0.01
+has<MAX_ITERS>(cfg);  // true
 ```
 
-If a stored value is callable, `get<Tag>(args...)` calls it directly.
+The core operations are:
+
+| **Operation** | **Meaning** |
+|---------------|-------------|
+| `aggregate()` | Start an empty aggregate. |
+| `.append<Tag>(value)` | Return a new aggregate with one more tagged value. |
+| `get<Tag>(agg)` / `agg.get<Tag>()` | Access by tag. |
+| `get<I>(agg)` / `agg.get<I>()` | Access by index. |
+| `has<Tag>(agg)` | Check whether a tag is present. |
+| `project<Tags...>(agg)` | Copy out a smaller aggregate in the requested tag order. |
+
+If a stored value is callable, `get<Tag>(args...)` is syntactic sugar for calling that stored callable directly.
+
 ```cpp
 auto particles = aggregate()
     .append<CENTER>(center_accessor)
@@ -166,33 +260,41 @@ auto particles = aggregate()
 auto center = particles.get<CENTER>(i);
 ```
 
-Use `project` to copy out a smaller aggregate while preserving the requested tag order.
-```cpp
-auto small = project<CENTER, DT>(particles);
-```
-
-`variant_aggregate` stores a tagged bag of variants. `runtime_aggregate` stores variants behind runtime string tags.
-
-### `storage`
-`storage` normalizes owning and non-owning data semantics. The `store` helper follows the rule we usually want:
-lvalues are stored by reference, rvalues are stored by value, and pointers remain pointers.
+### `variant_aggregate`
+`variant_aggregate<VariantType, Tags...>` stores one `VariantType` per compile-time tag.
 
 ```cpp
-int value = 4;
+using Value = variant<int, double>;
 
-auto a = store(value);  // Non-owning; a.get() returns int&
-auto b = store(7);      // Owning;     b.get() returns int&
-auto c = store(&value); // Pointer;    c.get() returns int*
+struct A;
+struct B;
 
-a.get() = 9;  // value -> 9
+auto vagg = make_variant_aggregate<Value>()
+    .append<A>(Value(1))
+    .append<B>(Value(2.0));
 ```
 
-## **Kokkos-like views**
-These utilities build on Kokkos views and DualViews while using Mundy's `sync_to_*` and `modify_on_*` naming.
+Use this when the tags are known at compile time but each tagged slot needs variant-valued runtime content.
+
+### `runtime_aggregate`
+`runtime_aggregate<VariantType>` stores variant values behind runtime string tags.
+
+```cpp
+using Value = variant<int, double>;
+
+auto ragg = make_runtime_aggregate<Value>()
+    .append("dt", Value(0.01))
+    .append("iters", Value(1000));
+```
+
+This is the runtime-tagged counterpart to `variant_aggregate`.
+
+## **Kokkos-like host/device data structures**
+These utilities build on Kokkos views and dual views while using Mundy's `sync_to_*` and `modify_on_*` naming.
 
 ### `NgpView`
-`NgpView` is Mundy's default `Kokkos::DualView` wrapper. The most important pattern is: sync before reading in a memory
-space, mark modified after writing in that memory space. `NgpView` is exactly `Kokkos::DualView` except with the same API as STK.
+`NgpView` is Mundy's default wrapper around `Kokkos::DualView`. The synchronization rule is the one you already expect:
+sync before reading in a memory space, mark modified after writing in that memory space.
 
 ```cpp
 NgpView<int*> values("values", n);
@@ -213,21 +315,43 @@ values.modify_on_device();
 values.sync_to_host();
 ```
 
+The important helpers are:
+
+| **Operation** | **Meaning** |
+|---------------|-------------|
+| `view_host()` / `view_device()` | Access the host or device view. |
+| `modify_on_host()` / `modify_on_device()` | Mark which side was written. |
+| `sync_to_host()` / `sync_to_device()` | Synchronize stale data. |
+| `need_sync_to_host()` / `need_sync_to_device()` | Check whether a sync is needed. |
+
 ### `NgpPool`
-`NgpPool` is a host/device pool of default-constructible objects. Single-value use is intentionally simple.
+`NgpPool` is a host/device pool of default-constructible objects built on top of `NgpView`.
 
 ```cpp
 NgpPool<int> pool(10);
 
 pool.add_host(42);
-auto value = pool.acquire_host();  // Returns 42
+auto value = pool.acquire_host();  // value -> 42
 
-pool.modify_on_host();  // Mark host-side changes before syncing the pool elsewhere.
+pool.modify_on_host();
 ```
 
-For bulk movement, use the batch APIs.
+Single-item and batch APIs are both available.
+
+| **Operation** | **Meaning** |
+|---------------|-------------|
+| `add(x)` / `add_host(x)` | Push one item on device or host. |
+| `acquire()` / `acquire_host()` | Pop one item on device or host. |
+| `batch_add(view)` / `batch_add_host(vector)` | Push many items. |
+| `batch_acquire(n)` / `batch_acquire_host(n)` | Pop many items. |
+| `reserve(n)` | Increase capacity. |
+| `size()` / `capacity()` | Device-side size and capacity accessors. |
+| `size_host()` / `capacity_host()` | Host-side size and capacity accessors. |
+
 ```cpp
 pool.batch_add_host(std::vector<int>{1, 2, 3, 4});
 NgpView<int*> values = pool.batch_acquire(4);
 pool.batch_add(values);
 ```
+
+Just like `NgpView`, you still use `modify_on_*`, `sync_to_*`, and `need_sync_to_*` to manage host/device state.

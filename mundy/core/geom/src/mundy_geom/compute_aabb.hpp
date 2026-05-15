@@ -90,6 +90,14 @@ KOKKOS_FUNCTION AABB<typename SphereType::scalar_t> compute_aabb(const SphereTyp
 }
 
 /// @brief Compute the axis-aligned bounding box of an ellipsoid
+///
+/// An oriented ellipsoid with center `c`, radii `r_i`, and lab-frame principal axes `u_i = Q e_i` can be written as
+/// `x = c + sum_i alpha_i r_i u_i`, where `||alpha||_2 <= 1`. The half-width in lab coordinate direction `e_j` is
+/// therefore
+/// `max_{||alpha|| <= 1} |sum_i alpha_i r_i (e_j dot u_i)| = sqrt(sum_i (r_i u_i[j])^2)`.
+///
+/// In code, we form the three scaled lab-frame axes `r_i u_i`, square them component-wise, add the squared
+/// contributions, and take a component-wise square root. The AABB is `center +/- extents`.
 template <ValidEllipsoidType EllipsoidType>
 KOKKOS_FUNCTION AABB<typename EllipsoidType::scalar_t> compute_aabb(const EllipsoidType& ellipsoid) {
   using scalar_t = typename EllipsoidType::scalar_t;
@@ -98,18 +106,18 @@ KOKKOS_FUNCTION AABB<typename EllipsoidType::scalar_t> compute_aabb(const Ellips
   const auto& radii = ellipsoid.radii();
   const auto& orient = ellipsoid.orientation();
 
-  // The body frame min/max corners are -/+ the radii
-  // Rotate/translate these into the lab frame and find their min/max in each direction.
-  const point_t rotated_radii = orient * radii;
-  const point_t obb_min_corner = center - rotated_radii;
-  const point_t obb_max_corner = center + rotated_radii;
-  const scalar_t min_x = Kokkos::min(obb_min_corner[0], obb_max_corner[0]);
-  const scalar_t min_y = Kokkos::min(obb_min_corner[1], obb_max_corner[1]);
-  const scalar_t min_z = Kokkos::min(obb_min_corner[2], obb_max_corner[2]);
-  const scalar_t max_x = Kokkos::max(obb_min_corner[0], obb_max_corner[0]);
-  const scalar_t max_y = Kokkos::max(obb_min_corner[1], obb_max_corner[1]);
-  const scalar_t max_z = Kokkos::max(obb_min_corner[2], obb_max_corner[2]);
-  return AABB<scalar_t>{min_x, min_y, min_z, max_x, max_y, max_z};
+  constexpr point_t body_x{static_cast<scalar_t>(1), static_cast<scalar_t>(0), static_cast<scalar_t>(0)};
+  constexpr point_t body_y{static_cast<scalar_t>(0), static_cast<scalar_t>(1), static_cast<scalar_t>(0)};
+  constexpr point_t body_z{static_cast<scalar_t>(0), static_cast<scalar_t>(0), static_cast<scalar_t>(1)};
+  const point_t scaled_axis0 = radii[0] * (orient * body_x);
+  const point_t scaled_axis1 = radii[1] * (orient * body_y);
+  const point_t scaled_axis2 = radii[2] * (orient * body_z);
+
+  const point_t squared_extents = elementwise_mul(scaled_axis0, scaled_axis0) +
+                                  elementwise_mul(scaled_axis1, scaled_axis1) +
+                                  elementwise_mul(scaled_axis2, scaled_axis2);
+  const point_t extents = apply([](scalar_t value) { return Kokkos::sqrt(value); }, squared_extents);
+  return AABB<scalar_t>{center - extents, center + extents};
 }
 template <ValidEllipsoidType EllipsoidType, typename Metric>
 KOKKOS_FUNCTION AABB<typename EllipsoidType::scalar_t> compute_aabb(const EllipsoidType& ellipsoid,
@@ -118,6 +126,10 @@ KOKKOS_FUNCTION AABB<typename EllipsoidType::scalar_t> compute_aabb(const Ellips
 }
 
 /// @brief Compute the axis-aligned bounding box of a spherocylinder
+///
+/// The oriented spherocylinder is a line segment swept by a sphere of radius `radius`. Its centerline runs along the
+/// lab-frame image of the body z-axis with half-length `length / 2`, so the AABB is the centerline endpoint AABB padded
+/// by `radius` in every coordinate direction.
 template <ValidSpherocylinderType SpherocylinderType>
 KOKKOS_FUNCTION AABB<typename SpherocylinderType::scalar_t> compute_aabb(const SpherocylinderType& spherocylinder) {
   using scalar_t = typename SpherocylinderType::scalar_t;

@@ -18,8 +18,8 @@
 // **********************************************************************************************************************
 // @HEADER
 
-//! \file MatrixVectorQuaternion.cpp
-/// \brief Performance test the use of matrices, vectors, and quaternions.
+//! \file PerfTestGeomMetric.cpp
+/// \brief Performance test metrics for geometric distance calculations.
 
 #define ANKERL_NANOBENCH_IMPLEMENT
 
@@ -39,7 +39,6 @@
 
 // Mundy
 #include <mundy_geom/distance/DistanceMetrics.hpp>     // for mundy::FreeSpaceMetric
-#include <mundy_geom/distance/OldDistanceMetrics.hpp>  // for mundy::OldFreeSpaceMetric
 #include <mundy_math/Array.hpp>                        // for mundy::Array
 #include <mundy_math/Matrix.hpp>                       // for mundy::Matrix
 #include <mundy_math/Quaternion.hpp>                   // for mundy::Quaternion
@@ -70,14 +69,6 @@ void speed_test() {
   auto new_periodic_space_metric = mundy::periodic_metric_from_unit_cell(cell_size);
   auto new_periodic_scaled_space_metric = mundy::periodic_scaled_metric_from_unit_cell(cell_size);
 
-  // Old constructor
-  mundy::OldPeriodicSpaceMetric<double> old_periodic_space_metric;
-  old_unit_cell_box(old_periodic_space_metric, cell_size);
-
-  bench.run("Old Periodic Metric | Loops", [&] {
-    auto sep = old_periodic_space_metric(point1, point2);
-    ankerl::nanobench::doNotOptimizeAway(sep);
-  });
   bench.run("New Periodic Metric | No Loops", [&] {
     auto sep = new_periodic_space_metric(point1, point2);
     ankerl::nanobench::doNotOptimizeAway(sep);
@@ -103,13 +94,6 @@ void construction_test() {
   mundy::Vector3d point1 = random_vector();
   mundy::Vector3d point2 = random_vector();
 
-  bench.run("Old Periodic Metric | Loops", [&] {
-    // Old constructor
-    mundy::OldPeriodicSpaceMetric<double> old_periodic_space_metric;
-    old_unit_cell_box(old_periodic_space_metric, cell_size);
-    auto sep = old_periodic_space_metric(point1, point2);
-    ankerl::nanobench::doNotOptimizeAway(sep);
-  });
   bench.run("New Periodic Metric | No Loops", [&] {
     // New constructor
     auto new_periodic_space_metric = mundy::periodic_metric_from_unit_cell(cell_size);

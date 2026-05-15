@@ -24,6 +24,9 @@
 // External libs
 #include <Kokkos_Core.hpp>
 
+// C++ core
+#include <type_traits>
+
 // Mundy
 #include <mundy_geom/distance/DistanceMetrics.hpp>  // for mundy::FreeSpaceMetric
 #include <mundy_geom/distance/PointPoint.hpp>       // for distance(Point, Point)
@@ -39,9 +42,10 @@ namespace mundy {
 /// \tparam Scalar The scalar type
 /// \param[in] sphere1 One sphere
 /// \param[in] sphere2 The other sphere
-template <typename Scalar>
-KOKKOS_FUNCTION Scalar distance(const Sphere<Scalar>& sphere1,  //
-                                const Sphere<Scalar>& sphere2) {
+template <ValidSphereType SphereType1, ValidSphereType SphereType2>
+  requires std::is_same_v<typename SphereType1::scalar_t, typename SphereType2::scalar_t>
+KOKKOS_FUNCTION typename SphereType1::scalar_t distance(const SphereType1& sphere1,  //
+                                                        const SphereType2& sphere2) {
   return distance(SharedNormalSigned{}, sphere1, sphere2);
 }
 
@@ -49,10 +53,11 @@ KOKKOS_FUNCTION Scalar distance(const Sphere<Scalar>& sphere1,  //
 /// \tparam Scalar The scalar type
 /// \param[in] sphere1 One sphere
 /// \param[in] sphere2 The other sphere
-template <typename Scalar>
-KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
-                                const Sphere<Scalar>& sphere1,                            //
-                                const Sphere<Scalar>& sphere2) {
+template <ValidSphereType SphereType1, ValidSphereType SphereType2>
+  requires std::is_same_v<typename SphereType1::scalar_t, typename SphereType2::scalar_t>
+KOKKOS_FUNCTION typename SphereType1::scalar_t distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
+                                                        const SphereType1& sphere1,                             //
+                                                        const SphereType2& sphere2) {
   return distance(sphere1.center(), sphere2.center()) - sphere1.radius() - sphere2.radius();
 }
 
@@ -61,10 +66,13 @@ KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distan
 /// \param[in] sphere1 One sphere
 /// \param[in] sphere2 The other sphere
 /// \param[out] sep The separation vector (from the surface of sphere1 to the surface of sphere2)
-template <typename Scalar>
-KOKKOS_FUNCTION Scalar distance(const Sphere<Scalar>& sphere1,  //
-                                const Sphere<Scalar>& sphere2,  //
-                                mundy::Vector3<Scalar>& sep) {
+template <ValidSphereType SphereType1, ValidSphereType SphereType2>
+  requires std::is_same_v<typename SphereType1::scalar_t, typename SphereType2::scalar_t>
+KOKKOS_FUNCTION typename SphereType1::scalar_t distance(
+    const SphereType1& sphere1,                                //
+    const SphereType2& sphere2,                                //
+    mundy::Vector3<typename SphereType1::scalar_t>& sep) {
+  using Scalar = typename SphereType1::scalar_t;
   const Scalar center_center_distance = distance(sphere1.center(), sphere2.center(), sep);
 
   // Rescale the separation vector to the surface of the sphere

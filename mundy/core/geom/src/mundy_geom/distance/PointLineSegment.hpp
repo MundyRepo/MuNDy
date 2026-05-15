@@ -24,6 +24,9 @@
 // External libs
 #include <Kokkos_Core.hpp>
 
+// C++ core
+#include <type_traits>
+
 // Mundy
 #include <mundy_geom/distance/DistanceMetrics.hpp>  // for mundy::FreeSpaceMetric, mundy::PeriodicSpaceMetric
 #include <mundy_geom/distance/PointPoint.hpp>       // for mundy::distance(Point, Point)
@@ -41,9 +44,10 @@ namespace mundy {
 /// \tparam Scalar The scalar type
 /// \param[in] point The point
 /// \param[in] line_segment The line segment
-template <typename Scalar>
-KOKKOS_FUNCTION Scalar distance(const Point<Scalar>& point,  //
-                                const LineSegment<Scalar>& line_segment) {
+template <ValidPointType PointType, ValidLineSegmentType LineSegmentType>
+  requires std::is_same_v<typename PointType::scalar_t, typename LineSegmentType::scalar_t>
+KOKKOS_FUNCTION typename PointType::scalar_t distance(const PointType& point,  //
+                                                      const LineSegmentType& line_segment) {
   return distance(SharedNormalSigned{}, point, line_segment);
 }
 
@@ -51,17 +55,19 @@ KOKKOS_FUNCTION Scalar distance(const Point<Scalar>& point,  //
 /// \tparam Scalar The scalar type
 /// \param[in] point The point
 /// \param[in] line_segment The line segment
-template <typename Scalar>
-KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
-                                const Point<Scalar>& point,                               //
-                                const LineSegment<Scalar>& line_segment) {
+template <ValidPointType PointType, ValidLineSegmentType LineSegmentType>
+  requires std::is_same_v<typename PointType::scalar_t, typename LineSegmentType::scalar_t>
+KOKKOS_FUNCTION typename PointType::scalar_t distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
+                                                      const PointType& point,                                  //
+                                                      const LineSegmentType& line_segment) {
+  using Scalar = typename PointType::scalar_t;
   const auto& p1 = line_segment.start();
   const auto& p2 = line_segment.end();
   const auto p21 = p2 - p1;
 
   // Define some temporary variables
   mundy::Vector3<Scalar> closest_point_tmp;
-  double t_tmp;
+  Scalar t_tmp;
 
   // Get parametric location
   const Scalar num = mundy::dot(p21, point - p1);
@@ -105,12 +111,13 @@ KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distan
 /// \param[out] closest_point The closest point on the line segment
 /// \param[out] arch_length The arch-length parameter of the closest point on the line segment
 /// \param[out] sep The separation vector (from point to line segment)
-template <typename Scalar>
-KOKKOS_FUNCTION Scalar distance(const Point<Scalar>& point,               //
-                                const LineSegment<Scalar>& line_segment,  //
-                                Point<Scalar>& closest_point,             //
-                                Scalar& arch_length,                      //
-                                mundy::Vector3<Scalar>& sep) {
+template <ValidPointType PointType, ValidLineSegmentType LineSegmentType>
+  requires std::is_same_v<typename PointType::scalar_t, typename LineSegmentType::scalar_t>
+KOKKOS_FUNCTION typename PointType::scalar_t distance(const PointType& point,                             //
+                                                      const LineSegmentType& line_segment,                //
+                                                      Point<typename PointType::scalar_t>& closest_point,  //
+                                                      typename PointType::scalar_t& arch_length,          //
+                                                      mundy::Vector3<typename PointType::scalar_t>& sep) {
   return distance(SharedNormalSigned{}, point, line_segment,  //
                   closest_point, arch_length, sep);
 }
@@ -122,13 +129,15 @@ KOKKOS_FUNCTION Scalar distance(const Point<Scalar>& point,               //
 /// \param[out] closest_point The closest point on the line segment
 /// \param[out] arch_length The arch-length parameter of the closest point on the line segment
 /// \param[out] sep The separation vector (from point to line segment)
-template <typename Scalar>
-KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
-                                const Point<Scalar>& point,                               //
-                                const LineSegment<Scalar>& line_segment,                  //
-                                Point<Scalar>& closest_point,                             //
-                                Scalar& arch_length,                                      //
-                                mundy::Vector3<Scalar>& sep) {
+template <ValidPointType PointType, ValidLineSegmentType LineSegmentType>
+  requires std::is_same_v<typename PointType::scalar_t, typename LineSegmentType::scalar_t>
+KOKKOS_FUNCTION typename PointType::scalar_t distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
+                                                      const PointType& point,                                  //
+                                                      const LineSegmentType& line_segment,                     //
+                                                      Point<typename PointType::scalar_t>& closest_point,      //
+                                                      typename PointType::scalar_t& arch_length,               //
+                                                      mundy::Vector3<typename PointType::scalar_t>& sep) {
+  using Scalar = typename PointType::scalar_t;
   const auto& p1 = line_segment.start();
   const auto& p2 = line_segment.end();
   const auto p21 = p2 - p1;

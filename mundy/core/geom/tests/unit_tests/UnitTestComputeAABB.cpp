@@ -23,6 +23,7 @@
 
 // C++ core
 #include <algorithm>   // for std::max
+#include <cmath>       // for std::cos, std::sin, std::sqrt
 #include <concepts>    // for std::convertible_to
 #include <functional>  // for std::hash
 #include <string>      // for std::string
@@ -184,6 +185,9 @@ std::vector<EllipsoidTestCase<double>> ellipsoid_test_cases() {
 
   // Rotate 90 degrees about the x-axis
   const Quaterniond x_90_rot = get_quaternion_x_90<double>();
+  const double half_z_45 = 0.125 * Kokkos::numbers::pi_v<double>;
+  const Quaterniond z_45_rot = Quaterniond{std::cos(half_z_45), 0.0, 0.0, std::sin(half_z_45)};
+  const double z_45_xy_extent = std::sqrt(2.5);
 
   test_cases.push_back(EllipsoidTestCase{
       .name = std::string("spherical"),  //
@@ -201,6 +205,11 @@ std::vector<EllipsoidTestCase<double>> ellipsoid_test_cases() {
       EllipsoidTestCase{.name = std::string("rotated 90 degrees about x + shift"),
                         .ellipsoid = Ellipsoid<double>{Point<double>{1, -2, 3}, x_90_rot, Vector3d{4, 5, 6}},
                         .expected_aabb = AABB<double>{-3, -8, -2, 5, 4, 8}});
+  test_cases.push_back(EllipsoidTestCase{
+      .name = std::string("rotated 45 degrees about z + shift"),
+      .ellipsoid = Ellipsoid<double>{Point<double>{1, -2, 3}, z_45_rot, Vector3d{2, 1, 3}},
+      .expected_aabb = AABB<double>{1 - z_45_xy_extent, -2 - z_45_xy_extent, 0, 1 + z_45_xy_extent,
+                                    -2 + z_45_xy_extent, 6}});
   return test_cases;
 }
 

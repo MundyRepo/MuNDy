@@ -24,6 +24,9 @@
 // External libs
 #include <Kokkos_Core.hpp>
 
+// C++ core
+#include <type_traits>
+
 // Mundy
 #include <mundy_geom/distance/DistanceMetrics.hpp>  // for mundy::FreeSpaceMetric
 #include <mundy_geom/distance/Types.hpp>            // for mundy::SharedNormalSigned
@@ -39,9 +42,10 @@ namespace mundy {
 /// \tparam Scalar The scalar type
 /// \param[in] point The point
 /// \param[in] line The line
-template <typename Scalar>
-KOKKOS_FUNCTION Scalar distance(const Point<Scalar>& point,  //
-                                const Line<Scalar>& line) {
+template <ValidPointType PointType, ValidLineType LineType>
+  requires std::is_same_v<typename PointType::scalar_t, typename LineType::scalar_t>
+KOKKOS_FUNCTION typename PointType::scalar_t distance(const PointType& point,  //
+                                                      const LineType& line) {
   return distance(SharedNormalSigned{}, point, line);
 }
 
@@ -49,10 +53,13 @@ KOKKOS_FUNCTION Scalar distance(const Point<Scalar>& point,  //
 /// \tparam Scalar The scalar type
 /// \param[in] point The point
 /// \param[in] line The line
-template <typename Scalar>
-KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
-                                const Point<Scalar>& point,                               //
-                                const Line<Scalar>& line) {
+template <ValidPointType PointType, ValidLineType LineType>
+  requires std::is_same_v<typename PointType::scalar_t, typename LineType::scalar_t>
+KOKKOS_FUNCTION typename PointType::scalar_t distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
+                                                      const PointType& point,                                  //
+                                                      const LineType& line) {
+  using Scalar = typename PointType::scalar_t;
+
   // Compute the projection of the vector onto the line's direction
   auto line_to_point = point - line.center();
   Scalar projection = mundy::dot(line_to_point, line.direction());
@@ -68,12 +75,13 @@ KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distan
 /// \param[out] closest_point The closest point on the line
 /// \param[out] arch_length The arch-length parameter of the closest point on the line
 /// \param[out] sep The separation vector (from point to line)
-template <typename Scalar>
-KOKKOS_FUNCTION Scalar distance(const Point<Scalar>& point,    //
-                                const Line<Scalar>& line,      //
-                                Point<Scalar>& closest_point,  //
-                                Scalar& arch_length,           //
-                                mundy::Vector3<Scalar>& sep) {
+template <ValidPointType PointType, ValidLineType LineType>
+  requires std::is_same_v<typename PointType::scalar_t, typename LineType::scalar_t>
+KOKKOS_FUNCTION typename PointType::scalar_t distance(const PointType& point,                           //
+                                                      const LineType& line,                             //
+                                                      Point<typename PointType::scalar_t>& closest_point,  //
+                                                      typename PointType::scalar_t& arch_length,        //
+                                                      mundy::Vector3<typename PointType::scalar_t>& sep) {
   // No difference between distance types for points and lines
   return distance(SharedNormalSigned{}, point, line, closest_point, arch_length, sep);
 }
@@ -85,13 +93,14 @@ KOKKOS_FUNCTION Scalar distance(const Point<Scalar>& point,    //
 /// \param[out] closest_point The closest point on the line
 /// \param[out] arch_length The arch-length parameter of the closest point on the line
 /// \param[out] sep The separation vector (from point to line)
-template <typename Scalar>
-KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
-                                const Point<Scalar>& point,                               //
-                                const Line<Scalar>& line,                                 //
-                                Point<Scalar>& closest_point,                             //
-                                Scalar& arch_length,                                      //
-                                mundy::Vector3<Scalar>& sep) {
+template <ValidPointType PointType, ValidLineType LineType>
+  requires std::is_same_v<typename PointType::scalar_t, typename LineType::scalar_t>
+KOKKOS_FUNCTION typename PointType::scalar_t distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
+                                                      const PointType& point,                                  //
+                                                      const LineType& line,                                    //
+                                                      Point<typename PointType::scalar_t>& closest_point,      //
+                                                      typename PointType::scalar_t& arch_length,               //
+                                                      mundy::Vector3<typename PointType::scalar_t>& sep) {
   // Compute the projection of the vector onto the line's direction
   auto line_to_point = point - line.center();
   arch_length = mundy::dot(line_to_point, line.direction());

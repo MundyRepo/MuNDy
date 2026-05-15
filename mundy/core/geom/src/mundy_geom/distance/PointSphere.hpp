@@ -24,6 +24,9 @@
 // External libs
 #include <Kokkos_Core.hpp>
 
+// C++ core
+#include <type_traits>
+
 // Mundy
 #include <mundy_geom/distance/DistanceMetrics.hpp>  // for mundy::FreeSpaceMetric
 #include <mundy_geom/distance/PointPoint.hpp>       // for distance(Point, Point)
@@ -40,9 +43,10 @@ namespace mundy {
 /// \tparam Scalar The scalar type
 /// \param[in] point The point
 /// \param[in] sphere The sphere
-template <typename Scalar>
-KOKKOS_FUNCTION Scalar distance(const Point<Scalar>& point,  //
-                                const Sphere<Scalar>& sphere) {
+template <ValidPointType PointType, ValidSphereType SphereType>
+  requires std::is_same_v<typename PointType::scalar_t, typename SphereType::scalar_t>
+KOKKOS_FUNCTION typename PointType::scalar_t distance(const PointType& point,  //
+                                                      const SphereType& sphere) {
   return distance(SharedNormalSigned{}, point, sphere);
 }
 
@@ -50,10 +54,11 @@ KOKKOS_FUNCTION Scalar distance(const Point<Scalar>& point,  //
 /// \tparam Scalar The scalar type
 /// \param[in] point The point
 /// \param[in] sphere The sphere
-template <typename Scalar>
-KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
-                                const Point<Scalar>& point,                               //
-                                const Sphere<Scalar>& sphere) {
+template <ValidPointType PointType, ValidSphereType SphereType>
+  requires std::is_same_v<typename PointType::scalar_t, typename SphereType::scalar_t>
+KOKKOS_FUNCTION typename PointType::scalar_t distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
+                                                      const PointType& point,                                  //
+                                                      const SphereType& sphere) {
   return distance(point, sphere.center()) - sphere.radius();
 }
 
@@ -62,10 +67,12 @@ KOKKOS_FUNCTION Scalar distance([[maybe_unused]] const SharedNormalSigned distan
 /// \param[in] point The point
 /// \param[in] sphere The sphere
 /// \param[out] sep The separation vector (from point to sphere)
-template <typename Scalar>
-KOKKOS_FUNCTION Scalar distance(const Point<Scalar>& point,    //
-                                const Sphere<Scalar>& sphere,  //
-                                mundy::Vector3<Scalar>& sep) {
+template <ValidPointType PointType, ValidSphereType SphereType>
+  requires std::is_same_v<typename PointType::scalar_t, typename SphereType::scalar_t>
+KOKKOS_FUNCTION typename PointType::scalar_t distance(const PointType& point,  //
+                                                      const SphereType& sphere,
+                                                      mundy::Vector3<typename PointType::scalar_t>& sep) {
+  using Scalar = typename PointType::scalar_t;
   const Scalar center_point_distance = distance(point, sphere.center(), sep);
 
   // Rescale the separation vector to the surface of the sphere
