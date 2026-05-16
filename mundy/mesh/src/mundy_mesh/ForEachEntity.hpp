@@ -35,6 +35,7 @@
 
 // Mundy
 #include <mundy_mesh/BulkData.hpp>  // for mundy::mesh::BulkData
+#include <mundy_utils/requires.hpp>
 
 namespace mundy {
 
@@ -48,21 +49,21 @@ inline constexpr bool always_false_v = false;
 }  // namespace impl
 
 template <typename Mesh, typename AlgorithmPerEntity>
-  requires(!std::is_base_of_v<stk::mesh::BulkData, Mesh> && !std::is_base_of_v<::mundy::mesh::BulkData, Mesh>)
+  MUNDY_REQUIRES(!std::is_base_of_v<stk::mesh::BulkData, Mesh> && !std::is_base_of_v<::mundy::mesh::BulkData, Mesh>)
 inline void for_each_entity_run(Mesh& mesh, stk::topology::rank_t rank, const stk::mesh::Selector& selector,
                                 const AlgorithmPerEntity& functor) {
   stk::mesh::for_each_entity_run(mesh, rank, selector, functor);
 }
 
 template <typename Mesh, typename AlgorithmPerEntity, typename EXEC_SPACE>
-  requires(!std::is_base_of_v<stk::mesh::BulkData, Mesh>)
+  MUNDY_REQUIRES(!std::is_base_of_v<stk::mesh::BulkData, Mesh>)
 inline void for_each_entity_run(Mesh& mesh, stk::topology::rank_t rank, const stk::mesh::Selector& selector,
                                 const AlgorithmPerEntity& functor, const EXEC_SPACE& exec_space) {
   stk::mesh::for_each_entity_run(mesh, rank, selector, functor, exec_space);
 }
 
 template <typename Mesh, typename AlgorithmPerEntity>
-  requires(std::is_base_of_v<stk::mesh::BulkData, Mesh> || std::is_base_of_v<BulkData, Mesh>)
+  MUNDY_REQUIRES(std::is_base_of_v<stk::mesh::BulkData, Mesh> || std::is_base_of_v<BulkData, Mesh>)
 struct TeamFunctor {
   using team_policy_t = Kokkos::TeamPolicy<Kokkos::DefaultHostExecutionSpace>;
   using team_member_t = typename team_policy_t::member_type;
@@ -94,7 +95,7 @@ struct TeamFunctor {
 };
 
 template <typename Mesh, typename AlgorithmPerEntity>
-  requires(std::is_base_of_v<stk::mesh::BulkData, Mesh> || std::is_base_of_v<BulkData, Mesh>)
+  MUNDY_REQUIRES(std::is_base_of_v<stk::mesh::BulkData, Mesh> || std::is_base_of_v<BulkData, Mesh>)
 inline void for_each_entity_run(const Mesh& mesh, stk::topology::rank_t rank, const stk::mesh::Selector& selector,
                                 const AlgorithmPerEntity& functor) {
   const stk::mesh::BucketVector& buckets = mesh.get_buckets(rank, selector);
@@ -106,7 +107,7 @@ inline void for_each_entity_run(const Mesh& mesh, stk::topology::rank_t rank, co
 }
 
 template <typename Mesh, typename AlgorithmPerEntity>
-  requires(std::is_base_of_v<stk::mesh::BulkData, Mesh> || std::is_base_of_v<BulkData, Mesh>)
+  MUNDY_REQUIRES(std::is_base_of_v<stk::mesh::BulkData, Mesh> || std::is_base_of_v<BulkData, Mesh>)
 inline void for_each_entity_run(const Mesh& mesh, stk::topology::rank_t rank, const AlgorithmPerEntity& functor) {
   stk::mesh::Selector selectAll = mesh.mesh_meta_data().universal_part();
   for_each_entity_run(mesh, rank, selectAll, functor);

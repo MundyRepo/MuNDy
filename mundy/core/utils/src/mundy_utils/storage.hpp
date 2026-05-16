@@ -31,6 +31,7 @@
 
 // Mundy
 #include <mundy_utils/reference_wrapper.hpp>  // for mundy::reference_wrapper, ref, is_reference_wrapper_v
+#include <mundy_utils/requires.hpp>
 
 namespace mundy {
 
@@ -54,7 +55,7 @@ struct storage_underlying_type {
 };
 
 template <class T>
-  requires is_storage_v<T>
+  MUNDY_REQUIRES(is_storage_v<T>)
 struct storage_underlying_type<T> {
   using type = typename T::stored_type;
 };
@@ -85,7 +86,7 @@ struct store_input_type {
 };
 
 template <class T>
-  requires is_storage_v<std::remove_cvref_t<T>>
+  MUNDY_REQUIRES(is_storage_v<std::remove_cvref_t<T>>)
 struct store_input_type<T> {
   using type = typename std::remove_cvref_t<T>::input_type;
 };
@@ -138,7 +139,7 @@ class storage {
   using stored_type = impl::storage_type_t<T>;
 
   KOKKOS_DEFAULTED_FUNCTION constexpr storage()
-    requires std::default_initializable<stored_type>
+    MUNDY_REQUIRES(std::default_initializable<stored_type>)
   = default;
 
   KOKKOS_DEFAULTED_FUNCTION constexpr storage(const storage&) = default;
@@ -147,7 +148,7 @@ class storage {
   KOKKOS_DEFAULTED_FUNCTION constexpr storage& operator=(storage&&) = default;
 
   template <class U>
-    requires std::constructible_from<stored_type, decltype(impl::storage_get(std::declval<U&&>()))>
+    MUNDY_REQUIRES(std::constructible_from<stored_type, decltype(impl::storage_get(std::declval<U&&>()))>)
   KOKKOS_FUNCTION constexpr explicit storage(U&& value) noexcept(
       std::is_nothrow_constructible_v<stored_type, decltype(impl::storage_get(std::declval<U&&>()))>)
       : m_storage(impl::storage_get(std::forward<U>(value))) {

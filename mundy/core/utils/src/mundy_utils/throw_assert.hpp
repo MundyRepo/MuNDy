@@ -37,6 +37,7 @@
 // Mundy
 #include <mundy_utils/StringLiteral.hpp>  // for mundy::is_string_literal and mundy::StringLiteral
 #include <mundy_utils/StringSink.hpp>     // for mundy::StringLiteralSink, mundy::StringSink, mundy::sink
+#include <mundy_utils/requires.hpp>
 
 #define MUNDY_STRINGIFY(x) MUNDY_STRINGIFY2(x)
 #define MUNDY_STRINGIFY2(x) #x
@@ -128,7 +129,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto get_throw_require_device_string(
 
 template <typename ExceptionType, typename MessageStringType, size_t AssertionStringSize, size_t FileStringSize,
           size_t LineStringSize>
-  requires std::derived_from<ExceptionType, std::exception>
+  MUNDY_REQUIRES(std::derived_from<ExceptionType, std::exception>)
 constexpr void throw_require(
     const bool assertion_value,                                                        //
     const StringLiteral<AssertionStringSize>& assertion_string,                        //

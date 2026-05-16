@@ -28,12 +28,12 @@
 #include <type_traits>
 
 // Mundy
-#include <mundy_geom/distance/DistanceMetrics.hpp>  // for mundy::FreeSpaceMetric
 #include <mundy_geom/distance/PointPoint.hpp>       // for distance(Point, Point)
 #include <mundy_geom/distance/Types.hpp>            // for mundy::SharedNormalSigned
 #include <mundy_geom/primitives/Line.hpp>           // for mundy::Line
 #include <mundy_geom/primitives/Point.hpp>          // for mundy::Point
 #include <mundy_math/Tolerance.hpp>                 // for mundy::get_zero_tolerance
+#include <mundy_utils/requires.hpp>
 
 namespace mundy {
 
@@ -45,7 +45,7 @@ namespace mundy {
 /// \param[in] line1 One line
 /// \param[in] line2 The other line
 template <ValidLineType LineType1, ValidLineType LineType2>
-  requires std::is_same_v<typename LineType1::scalar_t, typename LineType2::scalar_t>
+  MUNDY_REQUIRES(std::is_same_v<typename LineType1::scalar_t, typename LineType2::scalar_t>)
 KOKKOS_FUNCTION typename LineType1::scalar_t distance(const LineType1& line1,  //
                                                       const LineType2& line2) {
   return distance(SharedNormalSigned{}, line1, line2);
@@ -57,7 +57,7 @@ KOKKOS_FUNCTION typename LineType1::scalar_t distance(const LineType1& line1,  /
 /// \param[in] line1 One line
 /// \param[in] line2 The other line
 template <ValidLineType LineType1, ValidLineType LineType2>
-  requires std::is_same_v<typename LineType1::scalar_t, typename LineType2::scalar_t>
+  MUNDY_REQUIRES(std::is_same_v<typename LineType1::scalar_t, typename LineType2::scalar_t>)
 KOKKOS_FUNCTION typename LineType1::scalar_t distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
                                                       const LineType1& line1,                                  //
                                                       const LineType2& line2) {
@@ -91,7 +91,7 @@ KOKKOS_FUNCTION typename LineType1::scalar_t distance([[maybe_unused]] const Sha
 /// \param[in] line1 One line
 /// \param[in] line2 The other line
 template <ValidLineType LineType1, ValidLineType LineType2>
-  requires std::is_same_v<typename LineType1::scalar_t, typename LineType2::scalar_t>
+  MUNDY_REQUIRES(std::is_same_v<typename LineType1::scalar_t, typename LineType2::scalar_t>)
 KOKKOS_FUNCTION typename LineType1::scalar_t distance([[maybe_unused]] const Euclidean distance_type,  //
                                                       const LineType1& line1,                         //
                                                       const LineType2& line2) {
@@ -108,7 +108,7 @@ KOKKOS_FUNCTION typename LineType1::scalar_t distance([[maybe_unused]] const Euc
 /// \param[out] arch_length2 The arch-length parameter of the closest point on line2
 /// \param[out] sep The separation vector (from line1 to line2)
 template <ValidLineType LineType1, ValidLineType LineType2>
-  requires std::is_same_v<typename LineType1::scalar_t, typename LineType2::scalar_t>
+  MUNDY_REQUIRES(std::is_same_v<typename LineType1::scalar_t, typename LineType2::scalar_t>)
 KOKKOS_FUNCTION typename LineType1::scalar_t distance(const LineType1& line1,                           //
                                                       const LineType2& line2,                           //
                                                       Point<typename LineType1::scalar_t>& closest_point1,  //
@@ -131,7 +131,7 @@ KOKKOS_FUNCTION typename LineType1::scalar_t distance(const LineType1& line1,   
 /// \param[out] arch_length2 The arch-length parameter of the closest point on line2
 /// \param[out] sep The separation vector (from line1 to line2)
 template <ValidLineType LineType1, ValidLineType LineType2>
-  requires std::is_same_v<typename LineType1::scalar_t, typename LineType2::scalar_t>
+  MUNDY_REQUIRES(std::is_same_v<typename LineType1::scalar_t, typename LineType2::scalar_t>)
 KOKKOS_FUNCTION typename LineType1::scalar_t distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
                                                       const LineType1& line1,                                  //
                                                       const LineType2& line2,                                  //

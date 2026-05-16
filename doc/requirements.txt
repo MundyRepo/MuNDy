@@ -1,0 +1,5 @@
+sphinx>=8,<9
+sphinx-rtd-theme>=3,<4
+myst-parser>=4,<5
+breathe>=4.36,<5
+exhale>=0.3,<0.4

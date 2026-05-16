@@ -28,7 +28,6 @@
 #include <type_traits>
 
 // Mundy
-#include <mundy_geom/distance/DistanceMetrics.hpp>  // for mundy::FreeSpaceMetric
 #include <mundy_geom/distance/PointPoint.hpp>       // for mundy::distance(Point, Point)
 #include <mundy_geom/distance/Types.hpp>            // for mundy::SharedNormalSigned
 #include <mundy_geom/primitives/Ellipsoid.hpp>      // for mundy::Ellipsoid
@@ -37,6 +36,7 @@
 #include <mundy_math/Tolerance.hpp>                 // for mundy::get_zero_tolerance
 #include <mundy_math/Vector3.hpp>                   // for mundy::Vector3
 #include <mundy_math/minimize.hpp>                  // for mundy::find_min_using_approximate_derivatives
+#include <mundy_utils/requires.hpp>
 
 namespace mundy {
 
@@ -44,14 +44,14 @@ namespace mundy {
 //@{
 
 template <ValidPointType PointType, ValidEllipsoidType EllipsoidType>
-  requires std::is_same_v<typename PointType::scalar_t, typename EllipsoidType::scalar_t>
+  MUNDY_REQUIRES(std::is_same_v<typename PointType::scalar_t, typename EllipsoidType::scalar_t>)
 KOKKOS_FUNCTION typename PointType::scalar_t distance(const PointType& point,  //
                                                       const EllipsoidType& ellipsoid) {
   return distance(SharedNormalSigned{}, point, ellipsoid);
 }
 
 template <ValidPointType PointType, ValidEllipsoidType EllipsoidType>
-  requires std::is_same_v<typename PointType::scalar_t, typename EllipsoidType::scalar_t>
+  MUNDY_REQUIRES(std::is_same_v<typename PointType::scalar_t, typename EllipsoidType::scalar_t>)
 KOKKOS_FUNCTION typename PointType::scalar_t distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
                                                       const PointType& point,                                  //
                                                       const EllipsoidType& ellipsoid) {
@@ -63,7 +63,7 @@ KOKKOS_FUNCTION typename PointType::scalar_t distance([[maybe_unused]] const Sha
 }
 
 template <ValidPointType PointType, ValidEllipsoidType EllipsoidType>
-  requires std::is_same_v<typename PointType::scalar_t, typename EllipsoidType::scalar_t>
+  MUNDY_REQUIRES(std::is_same_v<typename PointType::scalar_t, typename EllipsoidType::scalar_t>)
 class PointEllipsoidObjective {
  public:
   using Scalar = typename PointType::scalar_t;
@@ -99,7 +99,7 @@ class PointEllipsoidObjective {
 };
 
 template <ValidPointType PointType, ValidEllipsoidType EllipsoidType>
-  requires std::is_same_v<typename PointType::scalar_t, typename EllipsoidType::scalar_t>
+  MUNDY_REQUIRES(std::is_same_v<typename PointType::scalar_t, typename EllipsoidType::scalar_t>)
 KOKKOS_FUNCTION typename PointType::scalar_t distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
                                                       const PointType& point,                                  //
                                                       const EllipsoidType& ellipsoid,                          //

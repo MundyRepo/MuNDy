@@ -27,6 +27,7 @@
 #include <mundy_math/Quaternion.hpp>
 #include <mundy_math/Tolerance.hpp>
 #include <mundy_math/Vector3.hpp>
+#include <mundy_geom/periodicity.hpp>
 
 namespace mundy {
 
@@ -88,16 +89,16 @@ TEST(DistanceViews, AcceptsViewBackedPointLineSegmentAndSphere) {
   double arch_length2 = 0.0;
   EXPECT_NEAR(distance(segment, segment2, closest1, closest2, arch_length1, arch_length2, sep), 2.0, tol);
 
-  FreeSpaceMetric free_metric;
-  const auto free_sep = free_metric(origin, point_x);
+  EuclideanMetric<double> free_metric;
+  const auto free_sep = free_metric.sep(origin, point_x);
   EXPECT_NEAR(free_sep[0], 1.0, tol);
 
-  PeriodicScaledSpaceMetric<double> periodic_metric{Vector3d{10.0, 10.0, 10.0}};
+  PeriodicScaledMetric<double> periodic_metric{Vector3d{10.0, 10.0, 10.0}};
   double near_right_data[3] = {9.8, 0.0, 0.0};
   double near_left_data[3] = {0.2, 0.0, 0.0};
   auto near_right = get_vector3_view<double>(near_right_data);
   auto near_left = get_vector3_view<double>(near_left_data);
-  const auto periodic_sep = periodic_metric(near_right, near_left);
+  const auto periodic_sep = periodic_metric.sep(near_right, near_left);
   EXPECT_NEAR(periodic_sep[0], 0.4, tol);
 }
 

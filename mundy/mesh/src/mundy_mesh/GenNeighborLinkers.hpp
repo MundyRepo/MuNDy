@@ -267,9 +267,11 @@ std::shared_ptr<SearchFilterBase<OurExecSpace>> make_search_filter(OurExecSpace 
   return std::make_shared<SearchFilter<OurExecSpace, Predicates...>>(space, predicates...);
 }
 
+#if !defined(DOXYGEN_SHOULD_SKIP_THIS)
 // Deduction guide
 template <typename OurExecSpace, typename... Predicates>
 SearchFilter(OurExecSpace, Predicates...) -> SearchFilter<OurExecSpace, Predicates...>;
+#endif
 
 }  // namespace search_filters
 

@@ -36,6 +36,7 @@
 #include <mundy_math/Quaternion.hpp>  // for mundy_math::Quaternion
 #include <mundy_math/Tolerance.hpp>   // for mundy::get_relaxed_tolerance
 #include <mundy_math/Vector3.hpp>     // for mundy::Vector3
+#include <mundy_utils/requires.hpp>
 
 // Note, these tests are meant to look like real use cases for the Quaternion class. As a result, we use implicit type
 // conversions rather than being explicit about types. This is to ensure that the Quaternion class can be used in a
@@ -54,7 +55,7 @@ namespace {
 /// \param[in] b The second algebraic type
 /// \param[in] message_if_fail The message to print if the test fails
 template <typename U, typename T>
-  requires std::is_arithmetic_v<T> && std::is_arithmetic_v<U>
+  MUNDY_REQUIRES(std::is_arithmetic_v<T> && std::is_arithmetic_v<U>)
 void is_close_debug(const U& a, const T& b, const std::string& message_if_fail = "") {
   using CommonType = std::common_type_t<T, U>;
   if (!is_approx_close(a, b)) {

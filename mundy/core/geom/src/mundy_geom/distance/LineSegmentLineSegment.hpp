@@ -29,13 +29,13 @@
 #include <Kokkos_Core.hpp>
 
 // Mundy
-#include <mundy_geom/distance/DistanceMetrics.hpp>   // for mundy::FreeSpaceMetric
 #include <mundy_geom/distance/PointLineSegment.hpp>  // for mundy::distance(Point, LineSegment)
 #include <mundy_geom/distance/PointPoint.hpp>        // for mundy::distance(Point, Point)
 #include <mundy_geom/distance/Types.hpp>             // for mundy::SharedNormalSigned
 #include <mundy_geom/primitives/LineSegment.hpp>     // for mundy::LineSegment
 #include <mundy_geom/primitives/Point.hpp>           // for mundy::Point
 #include <mundy_math/Tolerance.hpp>                  // for mundy::get_zero_tolerance
+#include <mundy_utils/requires.hpp>
 
 namespace mundy {
 
@@ -47,7 +47,7 @@ namespace mundy {
 /// \param[in] line_segment1 The first line segment
 /// \param[in] line_segment2 The second line segment
 template <ValidLineSegmentType LineSegmentType1, ValidLineSegmentType LineSegmentType2>
-  requires std::is_same_v<typename LineSegmentType1::scalar_t, typename LineSegmentType2::scalar_t>
+  MUNDY_REQUIRES(std::is_same_v<typename LineSegmentType1::scalar_t, typename LineSegmentType2::scalar_t>)
 KOKKOS_FUNCTION typename LineSegmentType1::scalar_t distance(const LineSegmentType1& line_segment1,  //
                                                              const LineSegmentType2& line_segment2) {
   return distance(SharedNormalSigned{}, line_segment1, line_segment2);
@@ -58,7 +58,7 @@ KOKKOS_FUNCTION typename LineSegmentType1::scalar_t distance(const LineSegmentTy
 /// \param[in] line_segment1 The first line segment
 /// \param[in] line_segment2 The second line segment
 template <ValidLineSegmentType LineSegmentType1, ValidLineSegmentType LineSegmentType2>
-  requires std::is_same_v<typename LineSegmentType1::scalar_t, typename LineSegmentType2::scalar_t>
+  MUNDY_REQUIRES(std::is_same_v<typename LineSegmentType1::scalar_t, typename LineSegmentType2::scalar_t>)
 KOKKOS_FUNCTION typename LineSegmentType1::scalar_t distance(
     [[maybe_unused]] const Euclidean distance_type,  //
     const LineSegmentType1& line_segment1,           //
@@ -72,7 +72,7 @@ KOKKOS_FUNCTION typename LineSegmentType1::scalar_t distance(
 /// \param[in] line_segment1 The first line segment
 /// \param[in] line_segment2 The second line segment
 template <ValidLineSegmentType LineSegmentType1, ValidLineSegmentType LineSegmentType2>
-  requires std::is_same_v<typename LineSegmentType1::scalar_t, typename LineSegmentType2::scalar_t>
+  MUNDY_REQUIRES(std::is_same_v<typename LineSegmentType1::scalar_t, typename LineSegmentType2::scalar_t>)
 KOKKOS_FUNCTION typename LineSegmentType1::scalar_t distance(
     [[maybe_unused]] const SharedNormalSigned distance_type,  //
     const LineSegmentType1& line_segment1,                    //
@@ -172,7 +172,7 @@ KOKKOS_FUNCTION typename LineSegmentType1::scalar_t distance(
 /// \param[out] arch_length2 The arch-length parameter of the closest point on the second line segment
 /// \param[out] sep The separation vector (from line_segment1 to line_segment2)
 template <ValidLineSegmentType LineSegmentType1, ValidLineSegmentType LineSegmentType2>
-  requires std::is_same_v<typename LineSegmentType1::scalar_t, typename LineSegmentType2::scalar_t>
+  MUNDY_REQUIRES(std::is_same_v<typename LineSegmentType1::scalar_t, typename LineSegmentType2::scalar_t>)
 KOKKOS_FUNCTION typename LineSegmentType1::scalar_t distance(
     const LineSegmentType1& line_segment1,                                  //
     const LineSegmentType2& line_segment2,                                  //
@@ -195,7 +195,7 @@ KOKKOS_FUNCTION typename LineSegmentType1::scalar_t distance(
 /// \param[out] arch_length2 The arch-length parameter of the closest point on the second line segment
 /// \param[out] sep The separation vector (from line_segment1 to line_segment2)
 template <ValidLineSegmentType LineSegmentType1, ValidLineSegmentType LineSegmentType2>
-  requires std::is_same_v<typename LineSegmentType1::scalar_t, typename LineSegmentType2::scalar_t>
+  MUNDY_REQUIRES(std::is_same_v<typename LineSegmentType1::scalar_t, typename LineSegmentType2::scalar_t>)
 KOKKOS_FUNCTION typename LineSegmentType1::scalar_t distance(
     [[maybe_unused]] const SharedNormalSigned distance_type,               //
     const LineSegmentType1& line_segment1,                                 //
@@ -339,7 +339,7 @@ KOKKOS_FUNCTION typename LineSegmentType1::scalar_t distance(
 /// \param[out] arch_length2 The arch-length parameter of the closest point on the second line segment
 /// \param[out] sep The separation vector (from line_segment1 to line_segment2)
 template <ValidLineSegmentType LineSegmentType1, ValidLineSegmentType LineSegmentType2>
-  requires std::is_same_v<typename LineSegmentType1::scalar_t, typename LineSegmentType2::scalar_t>
+  MUNDY_REQUIRES(std::is_same_v<typename LineSegmentType1::scalar_t, typename LineSegmentType2::scalar_t>)
 KOKKOS_FUNCTION typename LineSegmentType1::scalar_t distance(
     [[maybe_unused]] const Euclidean distance_type,                              //
     const LineSegmentType1& line_segment1,                                       //

@@ -35,6 +35,7 @@
 #include <mundy_math/Quaternion.hpp>           // for mundy::Quaternion
 #include <mundy_math/Vector3.hpp>              // for mundy::Vector3
 #include <mundy_utils/throw_assert.hpp>        // for MUNDY_THROW_ASSERT
+#include <mundy_utils/requires.hpp>
 
 namespace mundy {
 
@@ -67,7 +68,7 @@ class Ring {
   /// invalid value of -1
   KOKKOS_FUNCTION
   constexpr Ring()
-    requires(HasDefaultConstructor<point_t> && HasDefaultConstructor<orientation_t>)
+    MUNDY_REQUIRES(HasDefaultConstructor<point_t> && HasDefaultConstructor<orientation_t>)
       : center_circle_(), minor_radius_(static_cast<scalar_t>(-1)) {
   }
 
@@ -90,7 +91,7 @@ class Ring {
   template <ValidPointType OtherPointType, ValidQuaternionType OtherQuaternionType>
   KOKKOS_FUNCTION constexpr Ring(const OtherPointType& center, const OtherQuaternionType& orientation,
                                  const scalar_t& major_radius, const scalar_t& minor_radius)
-    requires(!std::is_same_v<OtherPointType, point_t> || !std::is_same_v<OtherQuaternionType, orientation_t>)
+    MUNDY_REQUIRES(!std::is_same_v<OtherPointType, point_t> || !std::is_same_v<OtherQuaternionType, orientation_t>)
       : center_circle_(center, orientation, major_radius), minor_radius_(minor_radius) {
   }
 
@@ -107,7 +108,7 @@ class Ring {
   /// \brief Deep copy constructor with different ring type
   template <typename OtherRingType>
   KOKKOS_FUNCTION constexpr Ring(const OtherRingType& other)
-    requires(!std::is_same_v<OtherRingType, Ring<scalar_t, point_t, orientation_t>>)
+    MUNDY_REQUIRES(!std::is_same_v<OtherRingType, Ring<scalar_t, point_t, orientation_t>>)
       : center_circle_(other.center_circle_), minor_radius_(other.minor_radius_) {
   }
 
@@ -120,7 +121,7 @@ class Ring {
   /// \brief Deep move constructor
   template <typename OtherRingType>
   KOKKOS_FUNCTION constexpr Ring(OtherRingType&& other)
-    requires(!std::is_same_v<OtherRingType, Ring<scalar_t, point_t, orientation_t>>)
+    MUNDY_REQUIRES(!std::is_same_v<OtherRingType, Ring<scalar_t, point_t, orientation_t>>)
       : center_circle_(std::move(other.center_circle_)), minor_radius_(std::move(other.minor_radius_)) {
   }
   //@}
@@ -140,7 +141,7 @@ class Ring {
   /// \brief Copy assignment operator
   template <typename OtherRingType>
   KOKKOS_FUNCTION constexpr Ring<scalar_t, point_t, orientation_t>& operator=(const OtherRingType& other)
-    requires(!std::is_same_v<OtherRingType, Ring<scalar_t, point_t, orientation_t>>)
+    MUNDY_REQUIRES(!std::is_same_v<OtherRingType, Ring<scalar_t, point_t, orientation_t>>)
   {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     center_circle_ = other.center_circle_;
@@ -160,7 +161,7 @@ class Ring {
   /// \brief Move assignment operator
   template <typename OtherRingType>
   KOKKOS_FUNCTION constexpr Ring<scalar_t, point_t, orientation_t>& operator=(OtherRingType&& other)
-    requires(!std::is_same_v<OtherRingType, Ring<scalar_t, point_t, orientation_t>>)
+    MUNDY_REQUIRES(!std::is_same_v<OtherRingType, Ring<scalar_t, point_t, orientation_t>>)
   {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     center_circle_ = std::move(other.center_circle_);

@@ -28,10 +28,10 @@
 #include <type_traits>
 
 // Mundy
-#include <mundy_geom/distance/DistanceMetrics.hpp>  // for mundy::FreeSpaceMetric
 #include <mundy_geom/distance/Types.hpp>            // for mundy::SharedNormalSigned
 #include <mundy_geom/primitives/Line.hpp>           // for mundy::Line
 #include <mundy_geom/primitives/Point.hpp>          // for mundy::Point
+#include <mundy_utils/requires.hpp>
 
 namespace mundy {
 
@@ -43,7 +43,7 @@ namespace mundy {
 /// \param[in] point The point
 /// \param[in] line The line
 template <ValidPointType PointType, ValidLineType LineType>
-  requires std::is_same_v<typename PointType::scalar_t, typename LineType::scalar_t>
+  MUNDY_REQUIRES(std::is_same_v<typename PointType::scalar_t, typename LineType::scalar_t>)
 KOKKOS_FUNCTION typename PointType::scalar_t distance(const PointType& point,  //
                                                       const LineType& line) {
   return distance(SharedNormalSigned{}, point, line);
@@ -54,7 +54,7 @@ KOKKOS_FUNCTION typename PointType::scalar_t distance(const PointType& point,  /
 /// \param[in] point The point
 /// \param[in] line The line
 template <ValidPointType PointType, ValidLineType LineType>
-  requires std::is_same_v<typename PointType::scalar_t, typename LineType::scalar_t>
+  MUNDY_REQUIRES(std::is_same_v<typename PointType::scalar_t, typename LineType::scalar_t>)
 KOKKOS_FUNCTION typename PointType::scalar_t distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
                                                       const PointType& point,                                  //
                                                       const LineType& line) {
@@ -76,7 +76,7 @@ KOKKOS_FUNCTION typename PointType::scalar_t distance([[maybe_unused]] const Sha
 /// \param[out] arch_length The arch-length parameter of the closest point on the line
 /// \param[out] sep The separation vector (from point to line)
 template <ValidPointType PointType, ValidLineType LineType>
-  requires std::is_same_v<typename PointType::scalar_t, typename LineType::scalar_t>
+  MUNDY_REQUIRES(std::is_same_v<typename PointType::scalar_t, typename LineType::scalar_t>)
 KOKKOS_FUNCTION typename PointType::scalar_t distance(const PointType& point,                           //
                                                       const LineType& line,                             //
                                                       Point<typename PointType::scalar_t>& closest_point,  //
@@ -94,7 +94,7 @@ KOKKOS_FUNCTION typename PointType::scalar_t distance(const PointType& point,   
 /// \param[out] arch_length The arch-length parameter of the closest point on the line
 /// \param[out] sep The separation vector (from point to line)
 template <ValidPointType PointType, ValidLineType LineType>
-  requires std::is_same_v<typename PointType::scalar_t, typename LineType::scalar_t>
+  MUNDY_REQUIRES(std::is_same_v<typename PointType::scalar_t, typename LineType::scalar_t>)
 KOKKOS_FUNCTION typename PointType::scalar_t distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
                                                       const PointType& point,                                  //
                                                       const LineType& line,                                    //

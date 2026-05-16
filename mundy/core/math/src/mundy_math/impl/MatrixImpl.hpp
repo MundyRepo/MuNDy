@@ -43,11 +43,12 @@
 #include <mundy_math/Vector.hpp>              // for mundy::Vector
 #include <mundy_utils/suppress_warnings.hpp>  // for MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_PUSH/POP
 #include <mundy_utils/throw_assert.hpp>       // for MUNDY_THROW_ASSERT
+#include <mundy_utils/requires.hpp>
 
 namespace mundy {
 
 template <typename T, size_t N, size_t M, ValidAccessor<T> Accessor = Array<T, N * M>>
-  requires std::is_arithmetic_v<T>
+  MUNDY_REQUIRES(std::is_arithmetic_v<T>)
 class AMatrix;
 
 namespace impl {
@@ -58,7 +59,7 @@ namespace impl {
 /// \details Copies the data from the other matrix to our data. This is only enabled if T is not const.
 template <size_t... Is, typename T, size_t N, size_t M, ValidAccessor<T> Accessor, typename U,
           ValidAccessor<U> OtherAccessor>
-  requires HasNonConstAccessOperator<Accessor, T> && std::is_convertible_v<U, T>
+  MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T> && std::is_convertible_v<U, T>)
 KOKKOS_INLINE_FUNCTION void deep_copy_impl(std::index_sequence<Is...>, AMatrix<T, N, M, Accessor>& mat,
                                            const AMatrix<U, N, M, OtherAccessor>& other) {
   static_assert(sizeof...(Is) == N * M, "Number of indices must match number of elements in the matrix.");
@@ -68,7 +69,7 @@ KOKKOS_INLINE_FUNCTION void deep_copy_impl(std::index_sequence<Is...>, AMatrix<T
 /// \brief Move assignment operator with same accessor
 /// \details Moves the data from the other matrix to our data. This is only enabled if T is not const.
 template <size_t... Is, typename T, size_t N, size_t M, ValidAccessor<T> Accessor, ValidAccessor<T> OtherAccessor>
-  requires HasNonConstAccessOperator<Accessor, T>
+  MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>)
 KOKKOS_INLINE_FUNCTION void move_impl(std::index_sequence<Is...>, AMatrix<T, N, M, Accessor>& mat,
                                       AMatrix<T, N, M, OtherAccessor>&& other) {
   static_assert(sizeof...(Is) == N * M, "Number of indices must match number of elements in the matrix.");
@@ -118,7 +119,7 @@ KOKKOS_INLINE_FUNCTION auto cast_impl(std::index_sequence<Is...>, const AMatrix<
 
 /// \brief Set all elements of the matrix
 template <size_t... Is, typename T, size_t N, size_t M, ValidAccessor<T> Accessor, typename... Args>
-  requires HasNonConstAccessOperator<Accessor, T>
+  MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>)
 KOKKOS_INLINE_FUNCTION void set_impl(std::index_sequence<Is...>, AMatrix<T, N, M, Accessor>& mat, Args&&... args) {
   static_assert(sizeof...(Is) == N * M, "Number of arguments must match number of elements in the matrix.");
   ((mat[Is] = std::forward<Args>(args)), ...);
@@ -128,7 +129,7 @@ KOKKOS_INLINE_FUNCTION void set_impl(std::index_sequence<Is...>, AMatrix<T, N, M
 /// \param[in] accessor A valid accessor.
 /// \note A AMatrix is also a valid accessor.
 template <size_t... Is, typename T, size_t N, size_t M, ValidAccessor<T> Accessor>
-  requires HasNonConstAccessOperator<Accessor, T>
+  MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>)
 KOKKOS_INLINE_FUNCTION void set_impl(std::index_sequence<Is...>, AMatrix<T, N, M, Accessor>& mat,
                                      const auto& accessor) {
   static_assert(sizeof...(Is) == N * M, "Number of indices must match number of elements in the matrix.");
@@ -138,7 +139,7 @@ KOKKOS_INLINE_FUNCTION void set_impl(std::index_sequence<Is...>, AMatrix<T, N, M
 /// \brief Set a certain row of the matrix
 /// \param[in] i The row index.
 template <size_t... Is, typename T, size_t N, size_t M, ValidAccessor<T> Accessor, typename... Args>
-  requires HasNonConstAccessOperator<Accessor, T>
+  MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>)
 KOKKOS_INLINE_FUNCTION void set_row_impl(std::index_sequence<Is...>, AMatrix<T, N, M, Accessor>& mat, const size_t& i,
                                          Args&&... args) {
   static_assert(sizeof...(Is) == M, "Number of arguments must match number of columns.");
@@ -149,7 +150,7 @@ KOKKOS_INLINE_FUNCTION void set_row_impl(std::index_sequence<Is...>, AMatrix<T, 
 /// \param[in] i The row index.
 /// \param[in] row The row vector.
 template <size_t... Is, typename T, size_t N, size_t M, ValidAccessor<T> Accessor, ValidAccessor<T> OtherAccessor>
-  requires HasNonConstAccessOperator<Accessor, T>
+  MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>)
 KOKKOS_INLINE_FUNCTION void set_row_impl(std::index_sequence<Is...>, AMatrix<T, N, M, Accessor>& mat, const size_t& i,
                                          const AVector<T, M, OtherAccessor>& row) {
   static_assert(sizeof...(Is) == M, "Number of arguments must match number of columns.");
@@ -159,7 +160,7 @@ KOKKOS_INLINE_FUNCTION void set_row_impl(std::index_sequence<Is...>, AMatrix<T, 
 /// \brief Set a certain column of the matrix
 /// \param[in] j The column index.
 template <size_t... Is, typename T, size_t N, size_t M, ValidAccessor<T> Accessor, typename... Args>
-  requires HasNonConstAccessOperator<Accessor, T>
+  MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>)
 KOKKOS_INLINE_FUNCTION void set_column_impl(std::index_sequence<Is...>, AMatrix<T, N, M, Accessor>& mat,
                                             const size_t& j, Args&&... args) {
   static_assert(sizeof...(Is) == N, "Number of arguments must match number of rows.");
@@ -170,7 +171,7 @@ KOKKOS_INLINE_FUNCTION void set_column_impl(std::index_sequence<Is...>, AMatrix<
 /// \param[in] j The column index.
 /// \param[in] col The column vector.
 template <size_t... Is, typename T, size_t N, size_t M, ValidAccessor<T> Accessor, ValidAccessor<T> OtherAccessor>
-  requires HasNonConstAccessOperator<Accessor, T>
+  MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>)
 KOKKOS_INLINE_FUNCTION void set_column_impl(std::index_sequence<Is...>, AMatrix<T, N, M, Accessor>& mat,
                                             const size_t& j, const AVector<T, N, OtherAccessor>& col) {
   static_assert(sizeof...(Is) == N, "Number of arguments must match number of rows.");
@@ -180,7 +181,7 @@ KOKKOS_INLINE_FUNCTION void set_column_impl(std::index_sequence<Is...>, AMatrix<
 /// \brief Set all elements of the matrix to a single value
 /// \param[in] value The value to set all elements to.
 template <size_t... Is, typename T, size_t N, size_t M, ValidAccessor<T> Accessor>
-  requires HasNonConstAccessOperator<Accessor, T>
+  MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>)
 KOKKOS_INLINE_FUNCTION void fill_impl(std::index_sequence<Is...>, AMatrix<T, N, M, Accessor>& mat, const T& value) {
   static_assert(sizeof...(Is) == N * M, "Number of indices must match number of elements in the matrix.");
   ((mat[Is] = value), ...);
@@ -215,10 +216,10 @@ KOKKOS_INLINE_FUNCTION auto matrix_matrix_addition_impl(std::index_sequence<Is..
 /// \param[in] other The other matrix.
 template <size_t... Is, typename T, size_t N, size_t M, ValidAccessor<T> Accessor, typename U,
           ValidAccessor<U> OtherAccessor>
-  requires HasNonConstAccessOperator<Accessor, T>
+  MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>)
 KOKKOS_INLINE_FUNCTION void self_matrix_addition_impl(std::index_sequence<Is...>, AMatrix<T, N, M, Accessor>& mat,
                                                       const AMatrix<U, N, M, OtherAccessor>& other)
-  requires HasNonConstAccessOperator<Accessor, T>
+  MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>)
 {
   static_assert(sizeof...(Is) == N * M, "Number of indices must match number of elements in the matrix.");
   ((mat[Is] += static_cast<T>(other[Is])), ...);
@@ -243,10 +244,10 @@ KOKKOS_INLINE_FUNCTION auto matrix_matrix_subtraction_impl(std::index_sequence<I
 /// \param[in] other The other matrix.
 template <size_t... Is, typename T, size_t N, size_t M, ValidAccessor<T> Accessor, typename U,
           ValidAccessor<U> OtherAccessor>
-  requires HasNonConstAccessOperator<Accessor, T>
+  MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>)
 KOKKOS_INLINE_FUNCTION void self_matrix_subtraction_impl(std::index_sequence<Is...>, AMatrix<T, N, M, Accessor>& mat,
                                                          const AMatrix<U, N, M, OtherAccessor>& other)
-  requires HasNonConstAccessOperator<Accessor, T>
+  MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>)
 {
   static_assert(sizeof...(Is) == N * M, "Number of indices must match number of elements in the matrix.");
   ((mat[Is] -= static_cast<T>(other[Is])), ...);
@@ -255,7 +256,7 @@ KOKKOS_INLINE_FUNCTION void self_matrix_subtraction_impl(std::index_sequence<Is.
 /// \brief AMatrix-scalar addition
 /// \param[in] scalar The scalar.
 template <size_t... Is, typename T, size_t N, size_t M, ValidAccessor<T> Accessor, typename U>
-  requires std::is_arithmetic_v<U>
+  MUNDY_REQUIRES(std::is_arithmetic_v<U>)
 KOKKOS_INLINE_FUNCTION auto matrix_scalar_addition_impl(std::index_sequence<Is...>,
                                                         const AMatrix<T, N, M, Accessor>& mat, const U& scalar)
     -> AMatrix<std::common_type_t<T, U>, N, M> {
@@ -269,7 +270,7 @@ KOKKOS_INLINE_FUNCTION auto matrix_scalar_addition_impl(std::index_sequence<Is..
 /// \brief AMatrix-scalar addition
 /// \param[in] scalar The scalar.
 template <size_t... Is, typename T, size_t N, size_t M, ValidAccessor<T> Accessor, typename U>
-  requires HasNonConstAccessOperator<Accessor, T> && std::is_arithmetic_v<U>
+  MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T> && std::is_arithmetic_v<U>)
 KOKKOS_INLINE_FUNCTION void self_scalar_addition_impl(std::index_sequence<Is...>, AMatrix<T, N, M, Accessor>& mat,
                                                       const U& scalar) {
   static_assert(sizeof...(Is) == N * M, "Number of indices must match number of elements in the matrix.");
@@ -279,7 +280,7 @@ KOKKOS_INLINE_FUNCTION void self_scalar_addition_impl(std::index_sequence<Is...>
 /// \brief AMatrix-scalar subtraction
 /// \param[in] scalar The scalar.
 template <size_t... Is, typename T, size_t N, size_t M, ValidAccessor<T> Accessor, typename U>
-  requires std::is_arithmetic_v<U>
+  MUNDY_REQUIRES(std::is_arithmetic_v<U>)
 KOKKOS_INLINE_FUNCTION auto matrix_scalar_subtraction_impl(std::index_sequence<Is...>,
                                                            const AMatrix<T, N, M, Accessor>& mat, const U& scalar)
     -> AMatrix<std::common_type_t<T, U>, N, M> {
@@ -293,7 +294,7 @@ KOKKOS_INLINE_FUNCTION auto matrix_scalar_subtraction_impl(std::index_sequence<I
 /// \brief Self-scalar subtraction
 /// \param[in] scalar The scalar.
 template <size_t... Is, typename T, size_t N, size_t M, ValidAccessor<T> Accessor, typename U>
-  requires HasNonConstAccessOperator<Accessor, T> && std::is_arithmetic_v<U>
+  MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T> && std::is_arithmetic_v<U>)
 KOKKOS_INLINE_FUNCTION void self_scalar_subtraction_impl(std::index_sequence<Is...>, AMatrix<T, N, M, Accessor>& mat,
                                                          const U& scalar) {
   static_assert(sizeof...(Is) == N * M, "Number of indices must match number of elements in the matrix.");
@@ -325,10 +326,10 @@ KOKKOS_INLINE_FUNCTION auto matrix_matrix_multiplication_impl(std::index_sequenc
 /// \brief Self-matrix multiplication (only valid for square matrices)
 /// \param[in] other The other matrix.
 template <size_t... Is, typename T, size_t N, ValidAccessor<T> Accessor, typename U, ValidAccessor<U> OtherAccessor>
-  requires HasNonConstAccessOperator<Accessor, T>
+  MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>)
 KOKKOS_INLINE_FUNCTION void self_matrix_multiplication_impl(std::index_sequence<Is...>, AMatrix<T, N, N, Accessor>& mat,
                                                             const AMatrix<U, N, N, OtherAccessor>& other)
-  requires HasNonConstAccessOperator<Accessor, T>
+  MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>)
 {
   static_assert(sizeof...(Is) == N * N, "Number of indices must match number of elements in the matrix.");
   // When writing to self, it's important to not write over data before we use it.
@@ -360,7 +361,7 @@ KOKKOS_INLINE_FUNCTION auto matrix_vector_multiplication_impl(std::index_sequenc
 /// \brief AMatrix-scalar multiplication
 /// \param[in] scalar The scalar.
 template <size_t... Is, typename T, size_t N, size_t M, ValidAccessor<T> Accessor, typename U>
-  requires std::is_arithmetic_v<U>
+  MUNDY_REQUIRES(std::is_arithmetic_v<U>)
 KOKKOS_INLINE_FUNCTION auto matrix_scalar_multiplication_impl(std::index_sequence<Is...>,
                                                               const AMatrix<T, N, M, Accessor>& mat, const U& scalar)
     -> AMatrix<std::common_type_t<T, U>, N, M> {
@@ -374,10 +375,10 @@ KOKKOS_INLINE_FUNCTION auto matrix_scalar_multiplication_impl(std::index_sequenc
 /// \brief Self-scalar multiplication
 /// \param[in] scalar The scalar.
 template <size_t... Is, typename T, size_t N, size_t M, ValidAccessor<T> Accessor, typename U>
-  requires(HasNonConstAccessOperator<Accessor, T> && std::is_arithmetic_v<U>)
+  MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T> && std::is_arithmetic_v<U>)
 KOKKOS_INLINE_FUNCTION void self_scalar_multiplication_impl(std::index_sequence<Is...>, AMatrix<T, N, M, Accessor>& mat,
                                                             const U& scalar)
-  requires HasNonConstAccessOperator<Accessor, T>
+  MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>)
 {
   static_assert(sizeof...(Is) == N * M, "Number of indices must match number of elements in the matrix.");
   ((mat[Is] *= static_cast<T>(scalar)), ...);
@@ -386,7 +387,7 @@ KOKKOS_INLINE_FUNCTION void self_scalar_multiplication_impl(std::index_sequence<
 /// \brief AMatrix-scalar division
 /// \param[in] scalar The scalar.
 template <size_t... Is, typename T, size_t N, size_t M, ValidAccessor<T> Accessor, typename U>
-  requires std::is_arithmetic_v<U>
+  MUNDY_REQUIRES(std::is_arithmetic_v<U>)
 KOKKOS_INLINE_FUNCTION auto matrix_scalar_division_impl(std::index_sequence<Is...>,
                                                         const AMatrix<T, N, M, Accessor>& mat, const U& scalar)
     -> AMatrix<std::common_type_t<T, U>, N, M> {
@@ -400,7 +401,7 @@ KOKKOS_INLINE_FUNCTION auto matrix_scalar_division_impl(std::index_sequence<Is..
 /// \brief Self-scalar division
 /// \param[in] scalar The scalar.
 template <size_t... Is, typename T, size_t N, size_t M, ValidAccessor<T> Accessor, typename U>
-  requires HasNonConstAccessOperator<Accessor, T> && std::is_arithmetic_v<U>
+  MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T> && std::is_arithmetic_v<U>)
 KOKKOS_INLINE_FUNCTION void self_scalar_division_impl(std::index_sequence<Is...>, AMatrix<T, N, M, Accessor>& mat,
                                                       const U& scalar) {
   static_assert(sizeof...(Is) == N * M, "Number of indices must match number of elements in the matrix.");
@@ -413,7 +414,7 @@ KOKKOS_INLINE_FUNCTION void self_scalar_division_impl(std::index_sequence<Is...>
 /// \param[in] tol The tolerance.
 template <size_t... Is, typename T, size_t N, size_t M, typename U, typename V, ValidAccessor<T> Accessor,
           ValidAccessor<U> OtherAccessor>
-  requires std::is_arithmetic_v<V>
+  MUNDY_REQUIRES(std::is_arithmetic_v<V>)
 KOKKOS_INLINE_FUNCTION bool is_close_impl(std::index_sequence<Is...>, const AMatrix<U, N, M, Accessor>& mat1,
                                           const AMatrix<T, N, M, OtherAccessor>& mat2, const V& tol) {
   static_assert(sizeof...(Is) == N * M, "Number of indices must match number of elements in the matrix.");
@@ -477,7 +478,7 @@ KOKKOS_INLINE_FUNCTION OutputType standard_deviation_impl(std::index_sequence<Is
 
 /// \brief AMatrix determinant (specialized for size 1 matrices)
 template <size_t N, size_t... Is, typename T, ValidAccessor<T> Accessor>
-  requires(N == 1)
+  MUNDY_REQUIRES(N == 1)
 KOKKOS_INLINE_FUNCTION auto determinant_impl(std::index_sequence<Is...>, const AMatrix<T, N, N, Accessor>& mat) {
   static_assert(sizeof...(Is) == N, "Number of indices must match number of columns in the matrix.");
   return mat(0, 0);
@@ -485,7 +486,7 @@ KOKKOS_INLINE_FUNCTION auto determinant_impl(std::index_sequence<Is...>, const A
 
 /// \brief AMatrix determinant
 template <size_t N, size_t... Is, typename T, ValidAccessor<T> Accessor>
-  requires(N != 1)
+  MUNDY_REQUIRES(N != 1)
 KOKKOS_INLINE_FUNCTION auto determinant_impl(std::index_sequence<Is...>, const AMatrix<T, N, N, Accessor>& mat) {
   static_assert(sizeof...(Is) == N, "Number of indices must match number of columns in the matrix.");
   // Recursively compute the determinant using the Laplace expansion

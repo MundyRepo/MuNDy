@@ -158,7 +158,7 @@ Small, composable math utilities with view semantics that integrate naturally in
   - View semantics for arbitrary accessors  
 
 - **mundy::minimize(...)** 
-  Kokkos-compatible analog of dlib’s `minimize` (L-BFGS) with **no dynamic memory allocation**.  
+  Kokkos-compatible analog of dlib’s `minimize` (L-BFGS) with no dynamic memory allocation.  
   - Callable inside kernels or from host drivers  
 
 - **mundy::convex**  

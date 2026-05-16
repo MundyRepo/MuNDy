@@ -54,6 +54,7 @@
 #include <mundy_utils/suppress_warnings.hpp>  // for MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_PUSH/POP
 #include <mundy_utils/throw_assert.hpp>       // for MUNDY_THROW_ASSERT
 #include <mundy_utils/tuple.hpp>              // for mundy::tuple
+#include <mundy_utils/requires.hpp>
 
 namespace mundy {
 
@@ -271,25 +272,25 @@ class NgpFieldComponent : public NgpFieldComponentBase {
 };  // NgpFieldComponent
 
 template <typename ComponentType>
-  requires requires(ComponentType& component) { component.field(); }
+  MUNDY_REQUIRES(requires(ComponentType& component) { component.field(); })
 inline decltype(auto) component_backing_field(ComponentType& component) {
   return component.field();
 }
 
 template <typename ComponentType>
-  requires requires(const ComponentType& component) { component.field(); }
+  MUNDY_REQUIRES(requires(const ComponentType& component) { component.field(); })
 inline decltype(auto) component_backing_field(const ComponentType& component) {
   return component.field();
 }
 
 template <typename Tag, typename ComponentType>
-  requires requires(ComponentType& component) { component_backing_field(component); }
+  MUNDY_REQUIRES(requires(ComponentType& component) { component_backing_field(component); })
 inline decltype(auto) component_backing_field(TaggedComponent<Tag, ComponentType>& tagged_component) {
   return component_backing_field(tagged_component.component());
 }
 
 template <typename Tag, typename ComponentType>
-  requires requires(const ComponentType& component) { component_backing_field(component); }
+  MUNDY_REQUIRES(requires(const ComponentType& component) { component_backing_field(component); })
 inline decltype(auto) component_backing_field(const TaggedComponent<Tag, ComponentType>& tagged_component) {
   return component_backing_field(tagged_component.component());
 }

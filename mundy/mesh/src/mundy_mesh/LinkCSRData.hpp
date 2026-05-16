@@ -50,6 +50,7 @@
 #include <mundy_mesh/LinkMetaData.hpp>       // for mundy::mesh::LinkMetaData
 #include <mundy_mesh/impl/PartitionKey.hpp>  // for mundy::mesh::impl::PartitionKey, mundy::mesh::impl::get_partition_key
 #include <mundy_utils/throw_assert.hpp>      // for MUNDY_THROW_ASSERT
+#include <mundy_utils/requires.hpp>
 
 namespace mundy {
 
@@ -106,7 +107,7 @@ class LinkCSRDataT {  // Raw data in any space
   /// copy if NgpMemSpace == MemSpace and this operator otherwise.
   template <typename OtherMemSpace>
   explicit LinkCSRDataT(LinkCSRDataT<OtherMemSpace>& other)
-    requires(!std::is_same_v<OtherMemSpace, MemSpace>)
+    MUNDY_REQUIRES(!std::is_same_v<OtherMemSpace, MemSpace>)
       : bulk_data_ptr_(&other.bulk_data()),
         link_meta_data_ptr_(&other.link_meta_data()),
         selector_to_partitions_map_(),

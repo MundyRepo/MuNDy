@@ -30,6 +30,7 @@
 
 // Mundy
 #include <mundy_utils/suppress_warnings.hpp>  // for MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_PUSH/POP
+#include <mundy_utils/requires.hpp>
 
 namespace mundy {
 
@@ -105,28 +106,28 @@ class reference_wrapper {
 
   template <class... Args>
   KOKKOS_FUNCTION constexpr decltype(auto) operator()(Args&&... args) const
-    requires impl::invocable<T&, Args&&...>
+    MUNDY_REQUIRES(impl::invocable<T&, Args&&...>)
   {
     return impl::invoke(*m_ptr, std::forward<Args>(args)...);
   }
 
   template <class Index>
   KOKKOS_FUNCTION constexpr decltype(auto) operator[](Index&& idx) const
-    requires impl::subscriptable<T&, Index&&>
+    MUNDY_REQUIRES(impl::subscriptable<T&, Index&&>)
   {
     return impl::subscript(*m_ptr, std::forward<Index>(idx));
   }
 
   template <class... Args>
   KOKKOS_FUNCTION constexpr decltype(auto) operator()(Args&&... args)
-    requires impl::invocable<T&, Args&&...>
+    MUNDY_REQUIRES(impl::invocable<T&, Args&&...>)
   {
     return impl::invoke(*m_ptr, std::forward<Args>(args)...);
   }
 
   template <class Index>
   KOKKOS_FUNCTION constexpr decltype(auto) operator[](Index&& idx)
-    requires impl::subscriptable<T&, Index&&>
+    MUNDY_REQUIRES(impl::subscriptable<T&, Index&&>)
   {
     return impl::subscript(*m_ptr, std::forward<Index>(idx));
   }
@@ -155,7 +156,7 @@ static constexpr bool is_reference_wrapper_v = is_reference_wrapper<T>::value;
 /// \brief Make a mutable reference wrapper.
 template <class T>
 KOKKOS_FUNCTION constexpr auto ref(T&& t) noexcept -> reference_wrapper<std::remove_reference_t<T>>
-  requires(std::is_lvalue_reference_v<T &&> && !is_reference_wrapper_v<std::remove_cvref_t<T>>)
+  MUNDY_REQUIRES(std::is_lvalue_reference_v<T &&> && !is_reference_wrapper_v<std::remove_cvref_t<T>>)
 {
   return reference_wrapper<std::remove_reference_t<T>>(t);
 }
@@ -168,7 +169,7 @@ KOKKOS_FUNCTION constexpr reference_wrapper<T> ref(reference_wrapper<T> t) noexc
 /// \brief Make a const reference wrapper.
 template <class T>
 KOKKOS_FUNCTION constexpr auto cref(T&& t) noexcept -> reference_wrapper<const std::remove_reference_t<T>>
-  requires(std::is_lvalue_reference_v<T &&> && !is_reference_wrapper_v<std::remove_cvref_t<T>>)
+  MUNDY_REQUIRES(std::is_lvalue_reference_v<T &&> && !is_reference_wrapper_v<std::remove_cvref_t<T>>)
 {
   return reference_wrapper<const std::remove_reference_t<T>>(t);
 }

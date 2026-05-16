@@ -31,6 +31,7 @@
 
 // Mundy
 #include <mundy_geom/primitives/LineSegment.hpp>  // for mundy::LineSegment
+#include <mundy_utils/requires.hpp>
 
 namespace mundy {
 
@@ -63,14 +64,14 @@ class HookeanSpring {
   /// constant and rest length to -1.
   KOKKOS_FUNCTION
   HookeanSpring()
-    requires std::is_same_v<OwnershipType, mundy::Ownership::Owns>
+    MUNDY_REQUIRES(std::is_same_v<OwnershipType, mundy::Ownership::Owns>)
       : line_segment_(), rest_length_(static_cast<scalar_t>(-1)), spring_constant_(static_cast<scalar_t>(-1)) {
   }
 
   /// \brief No default constructor for viewing HookeanSpringss.
   KOKKOS_FUNCTION
   HookeanSpring()
-    requires std::is_same_v<OwnershipType, mundy::Ownership::Views>
+    MUNDY_REQUIRES(std::is_same_v<OwnershipType, mundy::Ownership::Views>)
   = delete;
 
   /// \brief Constructor to initialize the line segment, rest length, and spring constant.
@@ -85,7 +86,7 @@ class HookeanSpring {
   template <mundy::ValidLineSegmentType OtherLineSegmentType>
   KOKKOS_FUNCTION HookeanSpring(const OtherLineSegmentType& line_segment, const scalar_t& rest_length,
                                 const scalar_t& spring_constant)
-    requires(!std::is_same_v<OtherLineSegmentType, line_segment_t>)
+    MUNDY_REQUIRES(!std::is_same_v<OtherLineSegmentType, line_segment_t>)
       : line_segment_(line_segment), rest_length_(rest_length), spring_constant_(spring_constant) {
   }
 
@@ -102,7 +103,7 @@ class HookeanSpring {
   /// \brief Deep copy constructor
   template <typename OtherHookeanSpringType>
   KOKKOS_FUNCTION HookeanSpring(const OtherHookeanSpringType& other)
-    requires(!std::is_same_v<OtherHookeanSpringType, HookeanSpring<scalar_t, line_segment_t, ownership_t>>)
+    MUNDY_REQUIRES(!std::is_same_v<OtherHookeanSpringType, HookeanSpring<scalar_t, line_segment_t, ownership_t>>)
       : line_segment_(other.line_segment_), rest_length_(other.rest_length_), spring_constant_(other.spring_constant_) {
   }
 
@@ -117,7 +118,7 @@ class HookeanSpring {
   /// \brief Deep move constructor
   template <typename OtherHookeanSpringType>
   KOKKOS_FUNCTION HookeanSpring(OtherHookeanSpringType&& other)
-    requires(!std::is_same_v<OtherHookeanSpringType, HookeanSpring<scalar_t, line_segment_t, ownership_t>>)
+    MUNDY_REQUIRES(!std::is_same_v<OtherHookeanSpringType, HookeanSpring<scalar_t, line_segment_t, ownership_t>>)
       : line_segment_(std::move(other.line_segment_)),
         rest_length_(std::move(other.rest_length_)),
         spring_constant_(std::move(other.spring_constant_)) {
@@ -141,7 +142,7 @@ class HookeanSpring {
   /// \brief Copy assignment operator
   template <typename OtherHookeanSpringType>
   KOKKOS_FUNCTION HookeanSpring<scalar_t, line_segment_t, ownership_t>& operator=(const OtherHookeanSpringType& other)
-    requires(!std::is_same_v<OtherHookeanSpringType, HookeanSpring<scalar_t, line_segment_t, ownership_t>>)
+    MUNDY_REQUIRES(!std::is_same_v<OtherHookeanSpringType, HookeanSpring<scalar_t, line_segment_t, ownership_t>>)
   {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     line_segment_ = other.line_segment_;
@@ -164,7 +165,7 @@ class HookeanSpring {
   /// \brief Move assignment operator
   template <typename OtherHookeanSpringType>
   KOKKOS_FUNCTION HookeanSpring<scalar_t, line_segment_t, ownership_t>& operator=(OtherHookeanSpringType&& other)
-    requires(!std::is_same_v<OtherHookeanSpringType, HookeanSpring<scalar_t, line_segment_t, ownership_t>>)
+    MUNDY_REQUIRES(!std::is_same_v<OtherHookeanSpringType, HookeanSpring<scalar_t, line_segment_t, ownership_t>>)
   {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     line_segment_ = std::move(other.line_segment_);

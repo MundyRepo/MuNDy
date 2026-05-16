@@ -32,6 +32,7 @@
 // Our libs
 #include <mundy_geom/primitives/Point.hpp>  // for mundy::Point
 #include <mundy_utils/throw_assert.hpp>     // for MUNDY_THROW_ASSERT
+#include <mundy_utils/requires.hpp>
 
 namespace mundy {
 
@@ -62,7 +63,7 @@ class LineSegment {
   /// \brief Default constructor for owning LineSegments. Default initialize the start and end points.
   KOKKOS_FUNCTION
   constexpr LineSegment()
-    requires(HasNArgConstructor<start_point_t, scalar_t, 3> && HasNArgConstructor<end_point_t, scalar_t, 3>)
+    MUNDY_REQUIRES(HasNArgConstructor<start_point_t, scalar_t, 3> && HasNArgConstructor<end_point_t, scalar_t, 3>)
       : start_(scalar_t(), scalar_t(), scalar_t()), end_(scalar_t(), scalar_t(), scalar_t()) {
   }
 
@@ -78,7 +79,7 @@ class LineSegment {
   /// \param[in] end The end of the LineSegment.
   template <ValidPointType OtherStartPointType, ValidPointType OtherEndPointType>
   KOKKOS_FUNCTION constexpr LineSegment(const OtherStartPointType& start, const OtherEndPointType& end)
-    requires(!std::is_same_v<OtherStartPointType, start_point_t> || !std::is_same_v<OtherEndPointType, end_point_t>)
+    MUNDY_REQUIRES(!std::is_same_v<OtherStartPointType, start_point_t> || !std::is_same_v<OtherEndPointType, end_point_t>)
       : start_(start), end_(end) {
   }
 
@@ -95,7 +96,7 @@ class LineSegment {
   /// \brief Deep copy constructor
   template <typename OtherLineSegmentType>
   KOKKOS_FUNCTION constexpr LineSegment(const OtherLineSegmentType& other)
-    requires(!std::is_same_v<OtherLineSegmentType, LineSegment<scalar_t, start_point_t, end_point_t>>)
+    MUNDY_REQUIRES(!std::is_same_v<OtherLineSegmentType, LineSegment<scalar_t, start_point_t, end_point_t>>)
       : start_(other.start_), end_(other.end_) {
   }
 
@@ -108,7 +109,7 @@ class LineSegment {
   /// \brief Deep move constructor
   template <typename OtherLineSegmentType>
   KOKKOS_FUNCTION constexpr LineSegment(OtherLineSegmentType&& other)
-    requires(!std::is_same_v<OtherLineSegmentType, LineSegment<scalar_t, start_point_t, end_point_t>>)
+    MUNDY_REQUIRES(!std::is_same_v<OtherLineSegmentType, LineSegment<scalar_t, start_point_t, end_point_t>>)
       : start_(std::move(other.start_)), end_(std::move(other.end_)) {
   }
   //@}
@@ -130,7 +131,7 @@ class LineSegment {
   template <typename OtherLineSegmentType>
   KOKKOS_FUNCTION constexpr LineSegment<scalar_t, start_point_t, end_point_t>& operator=(
       const OtherLineSegmentType& other)
-    requires(!std::is_same_v<OtherLineSegmentType, LineSegment<scalar_t, start_point_t, end_point_t>>)
+    MUNDY_REQUIRES(!std::is_same_v<OtherLineSegmentType, LineSegment<scalar_t, start_point_t, end_point_t>>)
   {
     start_ = other.start_;
     end_ = other.end_;
@@ -150,7 +151,7 @@ class LineSegment {
   /// \brief Move assignment operator
   template <typename OtherLineSegmentType>
   KOKKOS_FUNCTION constexpr LineSegment<scalar_t, start_point_t, end_point_t>& operator=(OtherLineSegmentType&& other)
-    requires(!std::is_same_v<OtherLineSegmentType, LineSegment<scalar_t, start_point_t, end_point_t>>)
+    MUNDY_REQUIRES(!std::is_same_v<OtherLineSegmentType, LineSegment<scalar_t, start_point_t, end_point_t>>)
   {
     start_ = std::move(other.start_);
     end_ = std::move(other.end_);
@@ -239,10 +240,12 @@ class LineSegment {
   end_point_t end_;
 };
 
+#if !defined(DOXYGEN_SHOULD_SKIP_THIS)
 /// \brief Deduction guide for LineSegment
 template <ValidPointType StartPointType, ValidPointType EndPointType>
 LineSegment(StartPointType, EndPointType)
     -> LineSegment<typename StartPointType::scalar_t, StartPointType, EndPointType>;
+#endif
 
 /// @brief (Implementation) Type trait to determine if a type is a LineSegment
 template <typename T>
