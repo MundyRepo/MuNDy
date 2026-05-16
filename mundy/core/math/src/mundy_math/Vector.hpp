@@ -778,8 +778,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto elementwise_div(const AVector<U, N, Access
 /// \param[in] func The function to apply.
 /// \param[in] vec The vector.
 template <typename Func, size_t N, typename T, ValidAccessor<T> Accessor>
-KOKKOS_INLINE_FUNCTION constexpr auto apply(Func&& func, const AVector<T, N, Accessor>& vec)
-    -> AVector<std::invoke_result_t<Func, T>, N> {
+KOKKOS_INLINE_FUNCTION constexpr auto apply(Func&& func, const AVector<T, N, Accessor>& vec) {
   return impl::apply_impl(std::make_index_sequence<N>{}, std::forward<Func>(func), vec);
 }
 //@}

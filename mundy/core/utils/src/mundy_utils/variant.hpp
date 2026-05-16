@@ -229,8 +229,7 @@ KOKKOS_FUNCTION constexpr decltype(auto) visit(Visitor&& visitor, variant<Alts..
       "Visitor return type must be the same for all alternatives.");
   return impl::visit_dispatch<0, sizeof...(Alts), ReturnType>(static_cast<Visitor&&>(visitor), var);
 }
-
-/// \brief Visit the active value in the variant (const overload)
+///
 template <class Visitor, class... Alts>
 KOKKOS_FUNCTION constexpr decltype(auto) visit(Visitor&& visitor, const variant<Alts...>& var) {
   static_assert(sizeof...(Alts) > 0, "variant must have at least one alternative.");

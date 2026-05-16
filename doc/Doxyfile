@@ -271,7 +271,7 @@ RECURSIVE              = YES
 EXCLUDE                = mundy/core/math/src/mundy_math/impl \
                          mundy/mesh/src/mundy_mesh/impl \
                          mundy/mesh/src/mundy_mesh/LinkDataNotes.md
-EXCLUDE_PATTERNS       = */impl/*
+EXCLUDE_PATTERNS = */tests/* */impl/*
 EXCLUDE_SYMBOLS        = impl \
                          impl::* \
                          mundy::impl \

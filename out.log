@@ -1,0 +1,2414 @@
+Running Sphinx v8.2.3
+loading translations [en]... done
+loading pickled environment... The configuration has changed (3 options: 'html_permalinks_icon', 'html_static_path', 'jquery_use_sri')
+done
+myst v4.0.1: MdParserConfig(commonmark_only=False, gfm_only=False, enable_extensions={'tasklist', 'smartquotes', 'substitution', 'colon_fence', 'fieldlist', 'replacements', 'deflist'}, disable_syntax=[], all_links_external=False, links_external_new_tab=False, url_schemes=('http', 'https', 'mailto', 'ftp'), ref_domains=None, fence_as_directive=set(), number_code_blocks=[], title_to_header=False, heading_anchors=0, heading_slug_func=None, html_meta={}, footnote_sort=True, footnote_transition=True, words_per_minute=200, substitutions={}, linkify_fuzzy_links=True, dmath_allow_labels=True, dmath_allow_space=True, dmath_allow_digits=True, dmath_double_inline=False, update_mathjax=True, mathjax_classes='tex2jax_process|mathjax_process|math|output_area', enable_checkboxes=False, suppress_warnings=[], highlight_code_blocks=True)
+[34;1m[~] Exhale: adding tree view css / javascript.[0m
+[32;1m[+] Exhale: added tree view css / javascript.[0m
+[31;1m(!) 
+(!) Current limitations in .. doxygenfunction:: directive affect your code!
+(!) 
+(!) Right now there are 2 functions that will all be generating the
+(!) *SAME* directive on different pages:
+(!) 
+(!)     .. doxygenfunction:: mundy::apply()
+(!) 
+(!) This will result in all 2 pages documenting the same function, however
+(!) which function is not known (possibly dependent upon order of Doxygen's
+(!) index.xml?).  We hope to resolve this issue soon, and appreciate your
+(!) understanding.
+(!) 
+(!) The full function signatures as parsed by Exhale that will point to the
+(!) same function:
+(!) 
+(!) - None mundy::apply()
+(!) - None mundy::apply()
+(!) 
+(!) Unfortunately, there are no known workarounds at this time.  Your only options
+(!) 
+(!) 1. Ignore it, hopefully this will be resolved sooner rather than later.
+(!) 2. Only let Doxygen document *ONE* of these functions, e.g., by doing
+(!) 
+(!)        #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+(!)            // function declaration and/or implementation
+(!)        #endif // DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    Making sure that your Doxygen configuration has
+(!) 
+(!)        PREDEFINED += DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    (added by default when using "exhaleDoxygenStdin").
+(!) 
+(!) Sorry :(
+(!) 
+[0m[31;1m(!) 
+(!) Current limitations in .. doxygenfunction:: directive affect your code!
+(!) 
+(!) Right now there are 3 functions that will all be generating the
+(!) *SAME* directive on different pages:
+(!) 
+(!)     .. doxygenfunction:: mundy::atomic_load()
+(!) 
+(!) This will result in all 3 pages documenting the same function, however
+(!) which function is not known (possibly dependent upon order of Doxygen's
+(!) index.xml?).  We hope to resolve this issue soon, and appreciate your
+(!) understanding.
+(!) 
+(!) The full function signatures as parsed by Exhale that will point to the
+(!) same function:
+(!) 
+(!) - None mundy::atomic_load()
+(!) - None mundy::atomic_load()
+(!) - None mundy::atomic_load()
+(!) 
+(!) Unfortunately, there are no known workarounds at this time.  Your only options
+(!) 
+(!) 1. Ignore it, hopefully this will be resolved sooner rather than later.
+(!) 2. Only let Doxygen document *ONE* of these functions, e.g., by doing
+(!) 
+(!)        #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+(!)            // function declaration and/or implementation
+(!)        #endif // DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    Making sure that your Doxygen configuration has
+(!) 
+(!)        PREDEFINED += DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    (added by default when using "exhaleDoxygenStdin").
+(!) 
+(!) Sorry :(
+(!) 
+[0m[31;1m(!) 
+(!) Current limitations in .. doxygenfunction:: directive affect your code!
+(!) 
+(!) Right now there are 5 functions that will all be generating the
+(!) *SAME* directive on different pages:
+(!) 
+(!)     .. doxygenfunction:: mundy::atomic_store()
+(!) 
+(!) This will result in all 5 pages documenting the same function, however
+(!) which function is not known (possibly dependent upon order of Doxygen's
+(!) index.xml?).  We hope to resolve this issue soon, and appreciate your
+(!) understanding.
+(!) 
+(!) The full function signatures as parsed by Exhale that will point to the
+(!) same function:
+(!) 
+(!) - None mundy::atomic_store()
+(!) - None mundy::atomic_store()
+(!) - None mundy::atomic_store()
+(!) - None mundy::atomic_store()
+(!) - None mundy::atomic_store()
+(!) 
+(!) Unfortunately, there are no known workarounds at this time.  Your only options
+(!) 
+(!) 1. Ignore it, hopefully this will be resolved sooner rather than later.
+(!) 2. Only let Doxygen document *ONE* of these functions, e.g., by doing
+(!) 
+(!)        #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+(!)            // function declaration and/or implementation
+(!)        #endif // DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    Making sure that your Doxygen configuration has
+(!) 
+(!)        PREDEFINED += DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    (added by default when using "exhaleDoxygenStdin").
+(!) 
+(!) Sorry :(
+(!) 
+[0m[31;1m(!) 
+(!) Current limitations in .. doxygenfunction:: directive affect your code!
+(!) 
+(!) Right now there are 3 functions that will all be generating the
+(!) *SAME* directive on different pages:
+(!) 
+(!)     .. doxygenfunction:: mundy::convex::to_cqpp()
+(!) 
+(!) This will result in all 3 pages documenting the same function, however
+(!) which function is not known (possibly dependent upon order of Doxygen's
+(!) index.xml?).  We hope to resolve this issue soon, and appreciate your
+(!) understanding.
+(!) 
+(!) The full function signatures as parsed by Exhale that will point to the
+(!) same function:
+(!) 
+(!) - None mundy::convex::to_cqpp()
+(!) - None mundy::convex::to_cqpp()
+(!) - None mundy::convex::to_cqpp()
+(!) 
+(!) Unfortunately, there are no known workarounds at this time.  Your only options
+(!) 
+(!) 1. Ignore it, hopefully this will be resolved sooner rather than later.
+(!) 2. Only let Doxygen document *ONE* of these functions, e.g., by doing
+(!) 
+(!)        #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+(!)            // function declaration and/or implementation
+(!)        #endif // DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    Making sure that your Doxygen configuration has
+(!) 
+(!)        PREDEFINED += DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    (added by default when using "exhaleDoxygenStdin").
+(!) 
+(!) Sorry :(
+(!) 
+[0m[31;1m(!) 
+(!) Current limitations in .. doxygenfunction:: directive affect your code!
+(!) 
+(!) Right now there are 3 functions that will all be generating the
+(!) *SAME* directive on different pages:
+(!) 
+(!)     .. doxygenfunction:: mundy::copy()
+(!) 
+(!) This will result in all 3 pages documenting the same function, however
+(!) which function is not known (possibly dependent upon order of Doxygen's
+(!) index.xml?).  We hope to resolve this issue soon, and appreciate your
+(!) understanding.
+(!) 
+(!) The full function signatures as parsed by Exhale that will point to the
+(!) same function:
+(!) 
+(!) - None mundy::copy()
+(!) - None mundy::copy()
+(!) - None mundy::copy()
+(!) 
+(!) Unfortunately, there are no known workarounds at this time.  Your only options
+(!) 
+(!) 1. Ignore it, hopefully this will be resolved sooner rather than later.
+(!) 2. Only let Doxygen document *ONE* of these functions, e.g., by doing
+(!) 
+(!)        #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+(!)            // function declaration and/or implementation
+(!)        #endif // DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    Making sure that your Doxygen configuration has
+(!) 
+(!)        PREDEFINED += DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    (added by default when using "exhaleDoxygenStdin").
+(!) 
+(!) Sorry :(
+(!) 
+[0m[31;1m(!) 
+(!) Current limitations in .. doxygenfunction:: directive affect your code!
+(!) 
+(!) Right now there are 48 functions that will all be generating the
+(!) *SAME* directive on different pages:
+(!) 
+(!)     .. doxygenfunction:: mundy::distance()
+(!) 
+(!) This will result in all 48 pages documenting the same function, however
+(!) which function is not known (possibly dependent upon order of Doxygen's
+(!) index.xml?).  We hope to resolve this issue soon, and appreciate your
+(!) understanding.
+(!) 
+(!) The full function signatures as parsed by Exhale that will point to the
+(!) same function:
+(!) 
+(!) - None mundy::distance()
+(!) - None mundy::distance()
+(!) - None mundy::distance()
+(!) - None mundy::distance()
+(!) - None mundy::distance()
+(!) - None mundy::distance()
+(!) - None mundy::distance()
+(!) - None mundy::distance()
+(!) - None mundy::distance()
+(!) - None mundy::distance()
+(!) - None mundy::distance()
+(!) - None mundy::distance()
+(!) - None mundy::distance()
+(!) - None mundy::distance()
+(!) - None mundy::distance()
+(!) - None mundy::distance()
+(!) - None mundy::distance()
+(!) - None mundy::distance()
+(!) - None mundy::distance()
+(!) - None mundy::distance()
+(!) - None mundy::distance()
+(!) - None mundy::distance()
+(!) - None mundy::distance()
+(!) - None mundy::distance()
+(!) - None mundy::distance()
+(!) - None mundy::distance()
+(!) - None mundy::distance()
+(!) - None mundy::distance()
+(!) - None mundy::distance()
+(!) - None mundy::distance()
+(!) - None mundy::distance()
+(!) - None mundy::distance()
+(!) - None mundy::distance()
+(!) - None mundy::distance()
+(!) - None mundy::distance()
+(!) - None mundy::distance()
+(!) - None mundy::distance()
+(!) - None mundy::distance()
+(!) - None mundy::distance()
+(!) - None mundy::distance()
+(!) - None mundy::distance()
+(!) - None mundy::distance()
+(!) - None mundy::distance()
+(!) - None mundy::distance()
+(!) - None mundy::distance()
+(!) - None mundy::distance()
+(!) - None mundy::distance()
+(!) - None mundy::distance()
+(!) 
+(!) Unfortunately, there are no known workarounds at this time.  Your only options
+(!) 
+(!) 1. Ignore it, hopefully this will be resolved sooner rather than later.
+(!) 2. Only let Doxygen document *ONE* of these functions, e.g., by doing
+(!) 
+(!)        #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+(!)            // function declaration and/or implementation
+(!)        #endif // DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    Making sure that your Doxygen configuration has
+(!) 
+(!)        PREDEFINED += DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    (added by default when using "exhaleDoxygenStdin").
+(!) 
+(!) Sorry :(
+(!) 
+[0m[31;1m(!) 
+(!) Current limitations in .. doxygenfunction:: directive affect your code!
+(!) 
+(!) Right now there are 2 functions that will all be generating the
+(!) *SAME* directive on different pages:
+(!) 
+(!)     .. doxygenfunction:: mundy::dot()
+(!) 
+(!) This will result in all 2 pages documenting the same function, however
+(!) which function is not known (possibly dependent upon order of Doxygen's
+(!) index.xml?).  We hope to resolve this issue soon, and appreciate your
+(!) understanding.
+(!) 
+(!) The full function signatures as parsed by Exhale that will point to the
+(!) same function:
+(!) 
+(!) - None mundy::dot()
+(!) - None mundy::dot()
+(!) 
+(!) Unfortunately, there are no known workarounds at this time.  Your only options
+(!) 
+(!) 1. Ignore it, hopefully this will be resolved sooner rather than later.
+(!) 2. Only let Doxygen document *ONE* of these functions, e.g., by doing
+(!) 
+(!)        #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+(!)            // function declaration and/or implementation
+(!)        #endif // DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    Making sure that your Doxygen configuration has
+(!) 
+(!)        PREDEFINED += DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    (added by default when using "exhaleDoxygenStdin").
+(!) 
+(!) Sorry :(
+(!) 
+[0m[31;1m(!) 
+(!) Current limitations in .. doxygenfunction:: directive affect your code!
+(!) 
+(!) Right now there are 2 functions that will all be generating the
+(!) *SAME* directive on different pages:
+(!) 
+(!)     .. doxygenfunction:: mundy::elementwise_div()
+(!) 
+(!) This will result in all 2 pages documenting the same function, however
+(!) which function is not known (possibly dependent upon order of Doxygen's
+(!) index.xml?).  We hope to resolve this issue soon, and appreciate your
+(!) understanding.
+(!) 
+(!) The full function signatures as parsed by Exhale that will point to the
+(!) same function:
+(!) 
+(!) - None mundy::elementwise_div()
+(!) - None mundy::elementwise_div()
+(!) 
+(!) Unfortunately, there are no known workarounds at this time.  Your only options
+(!) 
+(!) 1. Ignore it, hopefully this will be resolved sooner rather than later.
+(!) 2. Only let Doxygen document *ONE* of these functions, e.g., by doing
+(!) 
+(!)        #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+(!)            // function declaration and/or implementation
+(!)        #endif // DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    Making sure that your Doxygen configuration has
+(!) 
+(!)        PREDEFINED += DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    (added by default when using "exhaleDoxygenStdin").
+(!) 
+(!) Sorry :(
+(!) 
+[0m[31;1m(!) 
+(!) Current limitations in .. doxygenfunction:: directive affect your code!
+(!) 
+(!) Right now there are 2 functions that will all be generating the
+(!) *SAME* directive on different pages:
+(!) 
+(!)     .. doxygenfunction:: mundy::elementwise_mul()
+(!) 
+(!) This will result in all 2 pages documenting the same function, however
+(!) which function is not known (possibly dependent upon order of Doxygen's
+(!) index.xml?).  We hope to resolve this issue soon, and appreciate your
+(!) understanding.
+(!) 
+(!) The full function signatures as parsed by Exhale that will point to the
+(!) same function:
+(!) 
+(!) - None mundy::elementwise_mul()
+(!) - None mundy::elementwise_mul()
+(!) 
+(!) Unfortunately, there are no known workarounds at this time.  Your only options
+(!) 
+(!) 1. Ignore it, hopefully this will be resolved sooner rather than later.
+(!) 2. Only let Doxygen document *ONE* of these functions, e.g., by doing
+(!) 
+(!)        #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+(!)            // function declaration and/or implementation
+(!)        #endif // DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    Making sure that your Doxygen configuration has
+(!) 
+(!)        PREDEFINED += DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    (added by default when using "exhaleDoxygenStdin").
+(!) 
+(!) Sorry :(
+(!) 
+[0m[31;1m(!) 
+(!) Current limitations in .. doxygenfunction:: directive affect your code!
+(!) 
+(!) Right now there are 8 functions that will all be generating the
+(!) *SAME* directive on different pages:
+(!) 
+(!)     .. doxygenfunction:: mundy::get()
+(!) 
+(!) This will result in all 8 pages documenting the same function, however
+(!) which function is not known (possibly dependent upon order of Doxygen's
+(!) index.xml?).  We hope to resolve this issue soon, and appreciate your
+(!) understanding.
+(!) 
+(!) The full function signatures as parsed by Exhale that will point to the
+(!) same function:
+(!) 
+(!) - None mundy::get()
+(!) - None mundy::get()
+(!) - None mundy::get()
+(!) - None mundy::get()
+(!) - None mundy::get()
+(!) - None mundy::get()
+(!) - None mundy::get()
+(!) - None mundy::get()
+(!) 
+(!) Unfortunately, there are no known workarounds at this time.  Your only options
+(!) 
+(!) 1. Ignore it, hopefully this will be resolved sooner rather than later.
+(!) 2. Only let Doxygen document *ONE* of these functions, e.g., by doing
+(!) 
+(!)        #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+(!)            // function declaration and/or implementation
+(!)        #endif // DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    Making sure that your Doxygen configuration has
+(!) 
+(!)        PREDEFINED += DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    (added by default when using "exhaleDoxygenStdin").
+(!) 
+(!) Sorry :(
+(!) 
+[0m[31;1m(!) 
+(!) Current limitations in .. doxygenfunction:: directive affect your code!
+(!) 
+(!) Right now there are 2 functions that will all be generating the
+(!) *SAME* directive on different pages:
+(!) 
+(!)     .. doxygenfunction:: mundy::has()
+(!) 
+(!) This will result in all 2 pages documenting the same function, however
+(!) which function is not known (possibly dependent upon order of Doxygen's
+(!) index.xml?).  We hope to resolve this issue soon, and appreciate your
+(!) understanding.
+(!) 
+(!) The full function signatures as parsed by Exhale that will point to the
+(!) same function:
+(!) 
+(!) - None mundy::has()
+(!) - None mundy::has()
+(!) 
+(!) Unfortunately, there are no known workarounds at this time.  Your only options
+(!) 
+(!) 1. Ignore it, hopefully this will be resolved sooner rather than later.
+(!) 2. Only let Doxygen document *ONE* of these functions, e.g., by doing
+(!) 
+(!)        #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+(!)            // function declaration and/or implementation
+(!)        #endif // DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    Making sure that your Doxygen configuration has
+(!) 
+(!)        PREDEFINED += DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    (added by default when using "exhaleDoxygenStdin").
+(!) 
+(!) Sorry :(
+(!) 
+[0m[31;1m(!) 
+(!) Current limitations in .. doxygenfunction:: directive affect your code!
+(!) 
+(!) Right now there are 2 functions that will all be generating the
+(!) *SAME* directive on different pages:
+(!) 
+(!)     .. doxygenfunction:: mundy::inf_norm()
+(!) 
+(!) This will result in all 2 pages documenting the same function, however
+(!) which function is not known (possibly dependent upon order of Doxygen's
+(!) index.xml?).  We hope to resolve this issue soon, and appreciate your
+(!) understanding.
+(!) 
+(!) The full function signatures as parsed by Exhale that will point to the
+(!) same function:
+(!) 
+(!) - None mundy::inf_norm()
+(!) - None mundy::inf_norm()
+(!) 
+(!) Unfortunately, there are no known workarounds at this time.  Your only options
+(!) 
+(!) 1. Ignore it, hopefully this will be resolved sooner rather than later.
+(!) 2. Only let Doxygen document *ONE* of these functions, e.g., by doing
+(!) 
+(!)        #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+(!)            // function declaration and/or implementation
+(!)        #endif // DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    Making sure that your Doxygen configuration has
+(!) 
+(!)        PREDEFINED += DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    (added by default when using "exhaleDoxygenStdin").
+(!) 
+(!) Sorry :(
+(!) 
+[0m[31;1m(!) 
+(!) Current limitations in .. doxygenfunction:: directive affect your code!
+(!) 
+(!) Right now there are 2 functions that will all be generating the
+(!) *SAME* directive on different pages:
+(!) 
+(!)     .. doxygenfunction:: mundy::inverse()
+(!) 
+(!) This will result in all 2 pages documenting the same function, however
+(!) which function is not known (possibly dependent upon order of Doxygen's
+(!) index.xml?).  We hope to resolve this issue soon, and appreciate your
+(!) understanding.
+(!) 
+(!) The full function signatures as parsed by Exhale that will point to the
+(!) same function:
+(!) 
+(!) - None mundy::inverse()
+(!) - None mundy::inverse()
+(!) 
+(!) Unfortunately, there are no known workarounds at this time.  Your only options
+(!) 
+(!) 1. Ignore it, hopefully this will be resolved sooner rather than later.
+(!) 2. Only let Doxygen document *ONE* of these functions, e.g., by doing
+(!) 
+(!)        #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+(!)            // function declaration and/or implementation
+(!)        #endif // DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    Making sure that your Doxygen configuration has
+(!) 
+(!)        PREDEFINED += DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    (added by default when using "exhaleDoxygenStdin").
+(!) 
+(!) Sorry :(
+(!) 
+[0m[31;1m(!) 
+(!) Current limitations in .. doxygenfunction:: directive affect your code!
+(!) 
+(!) Right now there are 4 functions that will all be generating the
+(!) *SAME* directive on different pages:
+(!) 
+(!)     .. doxygenfunction:: mundy::is_approx_close()
+(!) 
+(!) This will result in all 4 pages documenting the same function, however
+(!) which function is not known (possibly dependent upon order of Doxygen's
+(!) index.xml?).  We hope to resolve this issue soon, and appreciate your
+(!) understanding.
+(!) 
+(!) The full function signatures as parsed by Exhale that will point to the
+(!) same function:
+(!) 
+(!) - None mundy::is_approx_close()
+(!) - None mundy::is_approx_close()
+(!) - None mundy::is_approx_close()
+(!) - None mundy::is_approx_close()
+(!) 
+(!) Unfortunately, there are no known workarounds at this time.  Your only options
+(!) 
+(!) 1. Ignore it, hopefully this will be resolved sooner rather than later.
+(!) 2. Only let Doxygen document *ONE* of these functions, e.g., by doing
+(!) 
+(!)        #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+(!)            // function declaration and/or implementation
+(!)        #endif // DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    Making sure that your Doxygen configuration has
+(!) 
+(!)        PREDEFINED += DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    (added by default when using "exhaleDoxygenStdin").
+(!) 
+(!) Sorry :(
+(!) 
+[0m[31;1m(!) 
+(!) Current limitations in .. doxygenfunction:: directive affect your code!
+(!) 
+(!) Right now there are 4 functions that will all be generating the
+(!) *SAME* directive on different pages:
+(!) 
+(!)     .. doxygenfunction:: mundy::is_close()
+(!) 
+(!) This will result in all 4 pages documenting the same function, however
+(!) which function is not known (possibly dependent upon order of Doxygen's
+(!) index.xml?).  We hope to resolve this issue soon, and appreciate your
+(!) understanding.
+(!) 
+(!) The full function signatures as parsed by Exhale that will point to the
+(!) same function:
+(!) 
+(!) - None mundy::is_close()
+(!) - None mundy::is_close()
+(!) - None mundy::is_close()
+(!) - None mundy::is_close()
+(!) 
+(!) Unfortunately, there are no known workarounds at this time.  Your only options
+(!) 
+(!) 1. Ignore it, hopefully this will be resolved sooner rather than later.
+(!) 2. Only let Doxygen document *ONE* of these functions, e.g., by doing
+(!) 
+(!)        #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+(!)            // function declaration and/or implementation
+(!)        #endif // DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    Making sure that your Doxygen configuration has
+(!) 
+(!)        PREDEFINED += DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    (added by default when using "exhaleDoxygenStdin").
+(!) 
+(!) Sorry :(
+(!) 
+[0m[31;1m(!) 
+(!) Current limitations in .. doxygenfunction:: directive affect your code!
+(!) 
+(!) Right now there are 2 functions that will all be generating the
+(!) *SAME* directive on different pages:
+(!) 
+(!)     .. doxygenfunction:: mundy::max()
+(!) 
+(!) This will result in all 2 pages documenting the same function, however
+(!) which function is not known (possibly dependent upon order of Doxygen's
+(!) index.xml?).  We hope to resolve this issue soon, and appreciate your
+(!) understanding.
+(!) 
+(!) The full function signatures as parsed by Exhale that will point to the
+(!) same function:
+(!) 
+(!) - None mundy::max()
+(!) - None mundy::max()
+(!) 
+(!) Unfortunately, there are no known workarounds at this time.  Your only options
+(!) 
+(!) 1. Ignore it, hopefully this will be resolved sooner rather than later.
+(!) 2. Only let Doxygen document *ONE* of these functions, e.g., by doing
+(!) 
+(!)        #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+(!)            // function declaration and/or implementation
+(!)        #endif // DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    Making sure that your Doxygen configuration has
+(!) 
+(!)        PREDEFINED += DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    (added by default when using "exhaleDoxygenStdin").
+(!) 
+(!) Sorry :(
+(!) 
+[0m[31;1m(!) 
+(!) Current limitations in .. doxygenfunction:: directive affect your code!
+(!) 
+(!) Right now there are 2 functions that will all be generating the
+(!) *SAME* directive on different pages:
+(!) 
+(!)     .. doxygenfunction:: mundy::mean()
+(!) 
+(!) This will result in all 2 pages documenting the same function, however
+(!) which function is not known (possibly dependent upon order of Doxygen's
+(!) index.xml?).  We hope to resolve this issue soon, and appreciate your
+(!) understanding.
+(!) 
+(!) The full function signatures as parsed by Exhale that will point to the
+(!) same function:
+(!) 
+(!) - None mundy::mean()
+(!) - None mundy::mean()
+(!) 
+(!) Unfortunately, there are no known workarounds at this time.  Your only options
+(!) 
+(!) 1. Ignore it, hopefully this will be resolved sooner rather than later.
+(!) 2. Only let Doxygen document *ONE* of these functions, e.g., by doing
+(!) 
+(!)        #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+(!)            // function declaration and/or implementation
+(!)        #endif // DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    Making sure that your Doxygen configuration has
+(!) 
+(!)        PREDEFINED += DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    (added by default when using "exhaleDoxygenStdin").
+(!) 
+(!) Sorry :(
+(!) 
+[0m[31;1m(!) 
+(!) Current limitations in .. doxygenfunction:: directive affect your code!
+(!) 
+(!) Right now there are 2 functions that will all be generating the
+(!) *SAME* directive on different pages:
+(!) 
+(!)     .. doxygenfunction:: mundy::mean_f()
+(!) 
+(!) This will result in all 2 pages documenting the same function, however
+(!) which function is not known (possibly dependent upon order of Doxygen's
+(!) index.xml?).  We hope to resolve this issue soon, and appreciate your
+(!) understanding.
+(!) 
+(!) The full function signatures as parsed by Exhale that will point to the
+(!) same function:
+(!) 
+(!) - None mundy::mean_f()
+(!) - None mundy::mean_f()
+(!) 
+(!) Unfortunately, there are no known workarounds at this time.  Your only options
+(!) 
+(!) 1. Ignore it, hopefully this will be resolved sooner rather than later.
+(!) 2. Only let Doxygen document *ONE* of these functions, e.g., by doing
+(!) 
+(!)        #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+(!)            // function declaration and/or implementation
+(!)        #endif // DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    Making sure that your Doxygen configuration has
+(!) 
+(!)        PREDEFINED += DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    (added by default when using "exhaleDoxygenStdin").
+(!) 
+(!) Sorry :(
+(!) 
+[0m[31;1m(!) 
+(!) Current limitations in .. doxygenfunction:: directive affect your code!
+(!) 
+(!) Right now there are 4 functions that will all be generating the
+(!) *SAME* directive on different pages:
+(!) 
+(!)     .. doxygenfunction:: mundy::mesh::add_class_field()
+(!) 
+(!) This will result in all 4 pages documenting the same function, however
+(!) which function is not known (possibly dependent upon order of Doxygen's
+(!) index.xml?).  We hope to resolve this issue soon, and appreciate your
+(!) understanding.
+(!) 
+(!) The full function signatures as parsed by Exhale that will point to the
+(!) same function:
+(!) 
+(!) - None mundy::mesh::add_class_field()
+(!) - None mundy::mesh::add_class_field()
+(!) - None mundy::mesh::add_class_field()
+(!) - None mundy::mesh::add_class_field()
+(!) 
+(!) Unfortunately, there are no known workarounds at this time.  Your only options
+(!) 
+(!) 1. Ignore it, hopefully this will be resolved sooner rather than later.
+(!) 2. Only let Doxygen document *ONE* of these functions, e.g., by doing
+(!) 
+(!)        #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+(!)            // function declaration and/or implementation
+(!)        #endif // DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    Making sure that your Doxygen configuration has
+(!) 
+(!)        PREDEFINED += DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    (added by default when using "exhaleDoxygenStdin").
+(!) 
+(!) Sorry :(
+(!) 
+[0m[31;1m(!) 
+(!) Current limitations in .. doxygenfunction:: directive affect your code!
+(!) 
+(!) Right now there are 4 functions that will all be generating the
+(!) *SAME* directive on different pages:
+(!) 
+(!)     .. doxygenfunction:: mundy::mesh::for_each_link_run()
+(!) 
+(!) This will result in all 4 pages documenting the same function, however
+(!) which function is not known (possibly dependent upon order of Doxygen's
+(!) index.xml?).  We hope to resolve this issue soon, and appreciate your
+(!) understanding.
+(!) 
+(!) The full function signatures as parsed by Exhale that will point to the
+(!) same function:
+(!) 
+(!) - None mundy::mesh::for_each_link_run()
+(!) - None mundy::mesh::for_each_link_run()
+(!) - None mundy::mesh::for_each_link_run()
+(!) - None mundy::mesh::for_each_link_run()
+(!) 
+(!) Unfortunately, there are no known workarounds at this time.  Your only options
+(!) 
+(!) 1. Ignore it, hopefully this will be resolved sooner rather than later.
+(!) 2. Only let Doxygen document *ONE* of these functions, e.g., by doing
+(!) 
+(!)        #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+(!)            // function declaration and/or implementation
+(!)        #endif // DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    Making sure that your Doxygen configuration has
+(!) 
+(!)        PREDEFINED += DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    (added by default when using "exhaleDoxygenStdin").
+(!) 
+(!) Sorry :(
+(!) 
+[0m[31;1m(!) 
+(!) Current limitations in .. doxygenfunction:: directive affect your code!
+(!) 
+(!) Right now there are 8 functions that will all be generating the
+(!) *SAME* directive on different pages:
+(!) 
+(!)     .. doxygenfunction:: mundy::mesh::get_class()
+(!) 
+(!) This will result in all 8 pages documenting the same function, however
+(!) which function is not known (possibly dependent upon order of Doxygen's
+(!) index.xml?).  We hope to resolve this issue soon, and appreciate your
+(!) understanding.
+(!) 
+(!) The full function signatures as parsed by Exhale that will point to the
+(!) same function:
+(!) 
+(!) - None mundy::mesh::get_class()
+(!) - None mundy::mesh::get_class()
+(!) - None mundy::mesh::get_class()
+(!) - None mundy::mesh::get_class()
+(!) - None mundy::mesh::get_class()
+(!) - None mundy::mesh::get_class()
+(!) - None mundy::mesh::get_class()
+(!) - None mundy::mesh::get_class()
+(!) 
+(!) Unfortunately, there are no known workarounds at this time.  Your only options
+(!) 
+(!) 1. Ignore it, hopefully this will be resolved sooner rather than later.
+(!) 2. Only let Doxygen document *ONE* of these functions, e.g., by doing
+(!) 
+(!)        #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+(!)            // function declaration and/or implementation
+(!)        #endif // DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    Making sure that your Doxygen configuration has
+(!) 
+(!)        PREDEFINED += DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    (added by default when using "exhaleDoxygenStdin").
+(!) 
+(!) Sorry :(
+(!) 
+[0m[31;1m(!) 
+(!) Current limitations in .. doxygenfunction:: directive affect your code!
+(!) 
+(!) Right now there are 2 functions that will all be generating the
+(!) *SAME* directive on different pages:
+(!) 
+(!)     .. doxygenfunction:: mundy::mesh::get_classes()
+(!) 
+(!) This will result in all 2 pages documenting the same function, however
+(!) which function is not known (possibly dependent upon order of Doxygen's
+(!) index.xml?).  We hope to resolve this issue soon, and appreciate your
+(!) understanding.
+(!) 
+(!) The full function signatures as parsed by Exhale that will point to the
+(!) same function:
+(!) 
+(!) - None mundy::mesh::get_classes()
+(!) - None mundy::mesh::get_classes()
+(!) 
+(!) Unfortunately, there are no known workarounds at this time.  Your only options
+(!) 
+(!) 1. Ignore it, hopefully this will be resolved sooner rather than later.
+(!) 2. Only let Doxygen document *ONE* of these functions, e.g., by doing
+(!) 
+(!)        #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+(!)            // function declaration and/or implementation
+(!)        #endif // DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    Making sure that your Doxygen configuration has
+(!) 
+(!)        PREDEFINED += DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    (added by default when using "exhaleDoxygenStdin").
+(!) 
+(!) Sorry :(
+(!) 
+[0m[31;1m(!) 
+(!) Current limitations in .. doxygenfunction:: directive affect your code!
+(!) 
+(!) Right now there are 2 functions that will all be generating the
+(!) *SAME* directive on different pages:
+(!) 
+(!)     .. doxygenfunction:: mundy::mesh::get_local_entity_indices(const stk::mesh::BulkData&, stk::mesh::EntityRank, const stk::mesh::Selector&, const OurExecSpace&)
+(!) 
+(!) This will result in all 2 pages documenting the same function, however
+(!) which function is not known (possibly dependent upon order of Doxygen's
+(!) index.xml?).  We hope to resolve this issue soon, and appreciate your
+(!) understanding.
+(!) 
+(!) The full function signatures as parsed by Exhale that will point to the
+(!) same function:
+(!) 
+(!) - template <typename OurExecSpace> NgpView<stk::mesh::FastMeshIndex *, OurExecSpace> mundy::mesh::get_local_entity_indices(const stk::mesh::BulkData&, stk::mesh::EntityRank, const stk::mesh::Selector&, const OurExecSpace&)
+(!) - template <typename OurExecSpace> NgpViewT<stk::mesh::FastMeshIndex *, OurExecSpace> mundy::mesh::get_local_entity_indices(const stk::mesh::BulkData&, stk::mesh::EntityRank, const stk::mesh::Selector&, const OurExecSpace&)
+(!) 
+(!) Unfortunately, there are no known workarounds at this time.  Your only options
+(!) 
+(!) 1. Ignore it, hopefully this will be resolved sooner rather than later.
+(!) 2. Only let Doxygen document *ONE* of these functions, e.g., by doing
+(!) 
+(!)        #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+(!)            // function declaration and/or implementation
+(!)        #endif // DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    Making sure that your Doxygen configuration has
+(!) 
+(!)        PREDEFINED += DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    (added by default when using "exhaleDoxygenStdin").
+(!) 
+(!) Sorry :(
+(!) 
+[0m[31;1m(!) 
+(!) Current limitations in .. doxygenfunction:: directive affect your code!
+(!) 
+(!) Right now there are 2 functions that will all be generating the
+(!) *SAME* directive on different pages:
+(!) 
+(!)     .. doxygenfunction:: mundy::mesh::MUNDY_ACCESSOR_EXPR_OP()
+(!) 
+(!) This will result in all 2 pages documenting the same function, however
+(!) which function is not known (possibly dependent upon order of Doxygen's
+(!) index.xml?).  We hope to resolve this issue soon, and appreciate your
+(!) understanding.
+(!) 
+(!) The full function signatures as parsed by Exhale that will point to the
+(!) same function:
+(!) 
+(!) - None mundy::mesh::MUNDY_ACCESSOR_EXPR_OP()
+(!) - None mundy::mesh::MUNDY_ACCESSOR_EXPR_OP()
+(!) 
+(!) Unfortunately, there are no known workarounds at this time.  Your only options
+(!) 
+(!) 1. Ignore it, hopefully this will be resolved sooner rather than later.
+(!) 2. Only let Doxygen document *ONE* of these functions, e.g., by doing
+(!) 
+(!)        #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+(!)            // function declaration and/or implementation
+(!)        #endif // DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    Making sure that your Doxygen configuration has
+(!) 
+(!)        PREDEFINED += DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    (added by default when using "exhaleDoxygenStdin").
+(!) 
+(!) Sorry :(
+(!) 
+[0m[31;1m(!) 
+(!) Current limitations in .. doxygenfunction:: directive affect your code!
+(!) 
+(!) Right now there are 18 functions that will all be generating the
+(!) *SAME* directive on different pages:
+(!) 
+(!)     .. doxygenfunction:: mundy::mesh::MUNDY_IMPL_MATRIX_FIELD_DATA_NM()
+(!) 
+(!) This will result in all 18 pages documenting the same function, however
+(!) which function is not known (possibly dependent upon order of Doxygen's
+(!) index.xml?).  We hope to resolve this issue soon, and appreciate your
+(!) understanding.
+(!) 
+(!) The full function signatures as parsed by Exhale that will point to the
+(!) same function:
+(!) 
+(!) - None mundy::mesh::MUNDY_IMPL_MATRIX_FIELD_DATA_NM()
+(!) - None mundy::mesh::MUNDY_IMPL_MATRIX_FIELD_DATA_NM()
+(!) - None mundy::mesh::MUNDY_IMPL_MATRIX_FIELD_DATA_NM()
+(!) - None mundy::mesh::MUNDY_IMPL_MATRIX_FIELD_DATA_NM()
+(!) - None mundy::mesh::MUNDY_IMPL_MATRIX_FIELD_DATA_NM()
+(!) - None mundy::mesh::MUNDY_IMPL_MATRIX_FIELD_DATA_NM()
+(!) - None mundy::mesh::MUNDY_IMPL_MATRIX_FIELD_DATA_NM()
+(!) - None mundy::mesh::MUNDY_IMPL_MATRIX_FIELD_DATA_NM()
+(!) - None mundy::mesh::MUNDY_IMPL_MATRIX_FIELD_DATA_NM()
+(!) - None mundy::mesh::MUNDY_IMPL_MATRIX_FIELD_DATA_NM()
+(!) - None mundy::mesh::MUNDY_IMPL_MATRIX_FIELD_DATA_NM()
+(!) - None mundy::mesh::MUNDY_IMPL_MATRIX_FIELD_DATA_NM()
+(!) - None mundy::mesh::MUNDY_IMPL_MATRIX_FIELD_DATA_NM()
+(!) - None mundy::mesh::MUNDY_IMPL_MATRIX_FIELD_DATA_NM()
+(!) - None mundy::mesh::MUNDY_IMPL_MATRIX_FIELD_DATA_NM()
+(!) - None mundy::mesh::MUNDY_IMPL_MATRIX_FIELD_DATA_NM()
+(!) - None mundy::mesh::MUNDY_IMPL_MATRIX_FIELD_DATA_NM()
+(!) - None mundy::mesh::MUNDY_IMPL_MATRIX_FIELD_DATA_NM()
+(!) 
+(!) Unfortunately, there are no known workarounds at this time.  Your only options
+(!) 
+(!) 1. Ignore it, hopefully this will be resolved sooner rather than later.
+(!) 2. Only let Doxygen document *ONE* of these functions, e.g., by doing
+(!) 
+(!)        #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+(!)            // function declaration and/or implementation
+(!)        #endif // DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    Making sure that your Doxygen configuration has
+(!) 
+(!)        PREDEFINED += DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    (added by default when using "exhaleDoxygenStdin").
+(!) 
+(!) Sorry :(
+(!) 
+[0m[31;1m(!) 
+(!) Current limitations in .. doxygenfunction:: directive affect your code!
+(!) 
+(!) Right now there are 3 functions that will all be generating the
+(!) *SAME* directive on different pages:
+(!) 
+(!)     .. doxygenfunction:: mundy::mesh::operator&()
+(!) 
+(!) This will result in all 3 pages documenting the same function, however
+(!) which function is not known (possibly dependent upon order of Doxygen's
+(!) index.xml?).  We hope to resolve this issue soon, and appreciate your
+(!) understanding.
+(!) 
+(!) The full function signatures as parsed by Exhale that will point to the
+(!) same function:
+(!) 
+(!) - None mundy::mesh::operator&()
+(!) - None mundy::mesh::operator&()
+(!) - None mundy::mesh::operator&()
+(!) 
+(!) Unfortunately, there are no known workarounds at this time.  Your only options
+(!) 
+(!) 1. Ignore it, hopefully this will be resolved sooner rather than later.
+(!) 2. Only let Doxygen document *ONE* of these functions, e.g., by doing
+(!) 
+(!)        #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+(!)            // function declaration and/or implementation
+(!)        #endif // DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    Making sure that your Doxygen configuration has
+(!) 
+(!)        PREDEFINED += DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    (added by default when using "exhaleDoxygenStdin").
+(!) 
+(!) Sorry :(
+(!) 
+[0m[31;1m(!) 
+(!) Current limitations in .. doxygenfunction:: directive affect your code!
+(!) 
+(!) Right now there are 2 functions that will all be generating the
+(!) *SAME* directive on different pages:
+(!) 
+(!)     .. doxygenfunction:: mundy::mesh::operator*()
+(!) 
+(!) This will result in all 2 pages documenting the same function, however
+(!) which function is not known (possibly dependent upon order of Doxygen's
+(!) index.xml?).  We hope to resolve this issue soon, and appreciate your
+(!) understanding.
+(!) 
+(!) The full function signatures as parsed by Exhale that will point to the
+(!) same function:
+(!) 
+(!) - None mundy::mesh::operator*()
+(!) - None mundy::mesh::operator*()
+(!) 
+(!) Unfortunately, there are no known workarounds at this time.  Your only options
+(!) 
+(!) 1. Ignore it, hopefully this will be resolved sooner rather than later.
+(!) 2. Only let Doxygen document *ONE* of these functions, e.g., by doing
+(!) 
+(!)        #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+(!)            // function declaration and/or implementation
+(!)        #endif // DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    Making sure that your Doxygen configuration has
+(!) 
+(!)        PREDEFINED += DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    (added by default when using "exhaleDoxygenStdin").
+(!) 
+(!) Sorry :(
+(!) 
+[0m[31;1m(!) 
+(!) Current limitations in .. doxygenfunction:: directive affect your code!
+(!) 
+(!) Right now there are 2 functions that will all be generating the
+(!) *SAME* directive on different pages:
+(!) 
+(!)     .. doxygenfunction:: mundy::mesh::operator+()
+(!) 
+(!) This will result in all 2 pages documenting the same function, however
+(!) which function is not known (possibly dependent upon order of Doxygen's
+(!) index.xml?).  We hope to resolve this issue soon, and appreciate your
+(!) understanding.
+(!) 
+(!) The full function signatures as parsed by Exhale that will point to the
+(!) same function:
+(!) 
+(!) - None mundy::mesh::operator+()
+(!) - None mundy::mesh::operator+()
+(!) 
+(!) Unfortunately, there are no known workarounds at this time.  Your only options
+(!) 
+(!) 1. Ignore it, hopefully this will be resolved sooner rather than later.
+(!) 2. Only let Doxygen document *ONE* of these functions, e.g., by doing
+(!) 
+(!)        #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+(!)            // function declaration and/or implementation
+(!)        #endif // DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    Making sure that your Doxygen configuration has
+(!) 
+(!)        PREDEFINED += DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    (added by default when using "exhaleDoxygenStdin").
+(!) 
+(!) Sorry :(
+(!) 
+[0m[31;1m(!) 
+(!) Current limitations in .. doxygenfunction:: directive affect your code!
+(!) 
+(!) Right now there are 5 functions that will all be generating the
+(!) *SAME* directive on different pages:
+(!) 
+(!)     .. doxygenfunction:: mundy::mesh::operator-()
+(!) 
+(!) This will result in all 5 pages documenting the same function, however
+(!) which function is not known (possibly dependent upon order of Doxygen's
+(!) index.xml?).  We hope to resolve this issue soon, and appreciate your
+(!) understanding.
+(!) 
+(!) The full function signatures as parsed by Exhale that will point to the
+(!) same function:
+(!) 
+(!) - None mundy::mesh::operator-()
+(!) - None mundy::mesh::operator-()
+(!) - None mundy::mesh::operator-()
+(!) - None mundy::mesh::operator-()
+(!) - None mundy::mesh::operator-()
+(!) 
+(!) Unfortunately, there are no known workarounds at this time.  Your only options
+(!) 
+(!) 1. Ignore it, hopefully this will be resolved sooner rather than later.
+(!) 2. Only let Doxygen document *ONE* of these functions, e.g., by doing
+(!) 
+(!)        #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+(!)            // function declaration and/or implementation
+(!)        #endif // DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    Making sure that your Doxygen configuration has
+(!) 
+(!)        PREDEFINED += DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    (added by default when using "exhaleDoxygenStdin").
+(!) 
+(!) Sorry :(
+(!) 
+[0m[31;1m(!) 
+(!) Current limitations in .. doxygenfunction:: directive affect your code!
+(!) 
+(!) Right now there are 2 functions that will all be generating the
+(!) *SAME* directive on different pages:
+(!) 
+(!)     .. doxygenfunction:: mundy::mesh::operator/()
+(!) 
+(!) This will result in all 2 pages documenting the same function, however
+(!) which function is not known (possibly dependent upon order of Doxygen's
+(!) index.xml?).  We hope to resolve this issue soon, and appreciate your
+(!) understanding.
+(!) 
+(!) The full function signatures as parsed by Exhale that will point to the
+(!) same function:
+(!) 
+(!) - None mundy::mesh::operator/()
+(!) - None mundy::mesh::operator/()
+(!) 
+(!) Unfortunately, there are no known workarounds at this time.  Your only options
+(!) 
+(!) 1. Ignore it, hopefully this will be resolved sooner rather than later.
+(!) 2. Only let Doxygen document *ONE* of these functions, e.g., by doing
+(!) 
+(!)        #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+(!)            // function declaration and/or implementation
+(!)        #endif // DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    Making sure that your Doxygen configuration has
+(!) 
+(!)        PREDEFINED += DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    (added by default when using "exhaleDoxygenStdin").
+(!) 
+(!) Sorry :(
+(!) 
+[0m[31;1m(!) 
+(!) Current limitations in .. doxygenfunction:: directive affect your code!
+(!) 
+(!) Right now there are 3 functions that will all be generating the
+(!) *SAME* directive on different pages:
+(!) 
+(!)     .. doxygenfunction:: mundy::mesh::operator|()
+(!) 
+(!) This will result in all 3 pages documenting the same function, however
+(!) which function is not known (possibly dependent upon order of Doxygen's
+(!) index.xml?).  We hope to resolve this issue soon, and appreciate your
+(!) understanding.
+(!) 
+(!) The full function signatures as parsed by Exhale that will point to the
+(!) same function:
+(!) 
+(!) - None mundy::mesh::operator|()
+(!) - None mundy::mesh::operator|()
+(!) - None mundy::mesh::operator|()
+(!) 
+(!) Unfortunately, there are no known workarounds at this time.  Your only options
+(!) 
+(!) 1. Ignore it, hopefully this will be resolved sooner rather than later.
+(!) 2. Only let Doxygen document *ONE* of these functions, e.g., by doing
+(!) 
+(!)        #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+(!)            // function declaration and/or implementation
+(!)        #endif // DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    Making sure that your Doxygen configuration has
+(!) 
+(!)        PREDEFINED += DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    (added by default when using "exhaleDoxygenStdin").
+(!) 
+(!) Sorry :(
+(!) 
+[0m[31;1m(!) 
+(!) Current limitations in .. doxygenfunction:: directive affect your code!
+(!) 
+(!) Right now there are 3 functions that will all be generating the
+(!) *SAME* directive on different pages:
+(!) 
+(!)     .. doxygenfunction:: mundy::mesh::put_field_on_mesh()
+(!) 
+(!) This will result in all 3 pages documenting the same function, however
+(!) which function is not known (possibly dependent upon order of Doxygen's
+(!) index.xml?).  We hope to resolve this issue soon, and appreciate your
+(!) understanding.
+(!) 
+(!) The full function signatures as parsed by Exhale that will point to the
+(!) same function:
+(!) 
+(!) - None mundy::mesh::put_field_on_mesh()
+(!) - None mundy::mesh::put_field_on_mesh()
+(!) - None mundy::mesh::put_field_on_mesh()
+(!) 
+(!) Unfortunately, there are no known workarounds at this time.  Your only options
+(!) 
+(!) 1. Ignore it, hopefully this will be resolved sooner rather than later.
+(!) 2. Only let Doxygen document *ONE* of these functions, e.g., by doing
+(!) 
+(!)        #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+(!)            // function declaration and/or implementation
+(!)        #endif // DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    Making sure that your Doxygen configuration has
+(!) 
+(!)        PREDEFINED += DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    (added by default when using "exhaleDoxygenStdin").
+(!) 
+(!) Sorry :(
+(!) 
+[0m[31;1m(!) 
+(!) Current limitations in .. doxygenfunction:: directive affect your code!
+(!) 
+(!) Right now there are 4 functions that will all be generating the
+(!) *SAME* directive on different pages:
+(!) 
+(!)     .. doxygenfunction:: mundy::mesh::rng()
+(!) 
+(!) This will result in all 4 pages documenting the same function, however
+(!) which function is not known (possibly dependent upon order of Doxygen's
+(!) index.xml?).  We hope to resolve this issue soon, and appreciate your
+(!) understanding.
+(!) 
+(!) The full function signatures as parsed by Exhale that will point to the
+(!) same function:
+(!) 
+(!) - None mundy::mesh::rng()
+(!) - None mundy::mesh::rng()
+(!) - None mundy::mesh::rng()
+(!) - None mundy::mesh::rng()
+(!) 
+(!) Unfortunately, there are no known workarounds at this time.  Your only options
+(!) 
+(!) 1. Ignore it, hopefully this will be resolved sooner rather than later.
+(!) 2. Only let Doxygen document *ONE* of these functions, e.g., by doing
+(!) 
+(!)        #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+(!)            // function declaration and/or implementation
+(!)        #endif // DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    Making sure that your Doxygen configuration has
+(!) 
+(!)        PREDEFINED += DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    (added by default when using "exhaleDoxygenStdin").
+(!) 
+(!) Sorry :(
+(!) 
+[0m[31;1m(!) 
+(!) Current limitations in .. doxygenfunction:: directive affect your code!
+(!) 
+(!) Right now there are 2 functions that will all be generating the
+(!) *SAME* directive on different pages:
+(!) 
+(!)     .. doxygenfunction:: mundy::mesh::vector_field_data()
+(!) 
+(!) This will result in all 2 pages documenting the same function, however
+(!) which function is not known (possibly dependent upon order of Doxygen's
+(!) index.xml?).  We hope to resolve this issue soon, and appreciate your
+(!) understanding.
+(!) 
+(!) The full function signatures as parsed by Exhale that will point to the
+(!) same function:
+(!) 
+(!) - None mundy::mesh::vector_field_data()
+(!) - None mundy::mesh::vector_field_data()
+(!) 
+(!) Unfortunately, there are no known workarounds at this time.  Your only options
+(!) 
+(!) 1. Ignore it, hopefully this will be resolved sooner rather than later.
+(!) 2. Only let Doxygen document *ONE* of these functions, e.g., by doing
+(!) 
+(!)        #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+(!)            // function declaration and/or implementation
+(!)        #endif // DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    Making sure that your Doxygen configuration has
+(!) 
+(!)        PREDEFINED += DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    (added by default when using "exhaleDoxygenStdin").
+(!) 
+(!) Sorry :(
+(!) 
+[0m[31;1m(!) 
+(!) Current limitations in .. doxygenfunction:: directive affect your code!
+(!) 
+(!) Right now there are 2 functions that will all be generating the
+(!) *SAME* directive on different pages:
+(!) 
+(!)     .. doxygenfunction:: mundy::min()
+(!) 
+(!) This will result in all 2 pages documenting the same function, however
+(!) which function is not known (possibly dependent upon order of Doxygen's
+(!) index.xml?).  We hope to resolve this issue soon, and appreciate your
+(!) understanding.
+(!) 
+(!) The full function signatures as parsed by Exhale that will point to the
+(!) same function:
+(!) 
+(!) - None mundy::min()
+(!) - None mundy::min()
+(!) 
+(!) Unfortunately, there are no known workarounds at this time.  Your only options
+(!) 
+(!) 1. Ignore it, hopefully this will be resolved sooner rather than later.
+(!) 2. Only let Doxygen document *ONE* of these functions, e.g., by doing
+(!) 
+(!)        #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+(!)            // function declaration and/or implementation
+(!)        #endif // DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    Making sure that your Doxygen configuration has
+(!) 
+(!)        PREDEFINED += DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    (added by default when using "exhaleDoxygenStdin").
+(!) 
+(!) Sorry :(
+(!) 
+[0m[31;1m(!) 
+(!) Current limitations in .. doxygenfunction:: directive affect your code!
+(!) 
+(!) Right now there are 3 functions that will all be generating the
+(!) *SAME* directive on different pages:
+(!) 
+(!)     .. doxygenfunction:: mundy::MUNDY_MATH_MATRIX_SIZE_SPECIALIZATION_IMPL()
+(!) 
+(!) This will result in all 3 pages documenting the same function, however
+(!) which function is not known (possibly dependent upon order of Doxygen's
+(!) index.xml?).  We hope to resolve this issue soon, and appreciate your
+(!) understanding.
+(!) 
+(!) The full function signatures as parsed by Exhale that will point to the
+(!) same function:
+(!) 
+(!) - None mundy::MUNDY_MATH_MATRIX_SIZE_SPECIALIZATION_IMPL()
+(!) - None mundy::MUNDY_MATH_MATRIX_SIZE_SPECIALIZATION_IMPL()
+(!) - None mundy::MUNDY_MATH_MATRIX_SIZE_SPECIALIZATION_IMPL()
+(!) 
+(!) Unfortunately, there are no known workarounds at this time.  Your only options
+(!) 
+(!) 1. Ignore it, hopefully this will be resolved sooner rather than later.
+(!) 2. Only let Doxygen document *ONE* of these functions, e.g., by doing
+(!) 
+(!)        #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+(!)            // function declaration and/or implementation
+(!)        #endif // DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    Making sure that your Doxygen configuration has
+(!) 
+(!)        PREDEFINED += DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    (added by default when using "exhaleDoxygenStdin").
+(!) 
+(!) Sorry :(
+(!) 
+[0m[31;1m(!) 
+(!) Current limitations in .. doxygenfunction:: directive affect your code!
+(!) 
+(!) Right now there are 8 functions that will all be generating the
+(!) *SAME* directive on different pages:
+(!) 
+(!)     .. doxygenfunction:: mundy::MUNDY_MATH_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL()
+(!) 
+(!) This will result in all 8 pages documenting the same function, however
+(!) which function is not known (possibly dependent upon order of Doxygen's
+(!) index.xml?).  We hope to resolve this issue soon, and appreciate your
+(!) understanding.
+(!) 
+(!) The full function signatures as parsed by Exhale that will point to the
+(!) same function:
+(!) 
+(!) - None mundy::MUNDY_MATH_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL()
+(!) - None mundy::MUNDY_MATH_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL()
+(!) - None mundy::MUNDY_MATH_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL()
+(!) - None mundy::MUNDY_MATH_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL()
+(!) - None mundy::MUNDY_MATH_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL()
+(!) - None mundy::MUNDY_MATH_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL()
+(!) - None mundy::MUNDY_MATH_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL()
+(!) - None mundy::MUNDY_MATH_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL()
+(!) 
+(!) Unfortunately, there are no known workarounds at this time.  Your only options
+(!) 
+(!) 1. Ignore it, hopefully this will be resolved sooner rather than later.
+(!) 2. Only let Doxygen document *ONE* of these functions, e.g., by doing
+(!) 
+(!)        #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+(!)            // function declaration and/or implementation
+(!)        #endif // DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    Making sure that your Doxygen configuration has
+(!) 
+(!)        PREDEFINED += DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    (added by default when using "exhaleDoxygenStdin").
+(!) 
+(!) Sorry :(
+(!) 
+[0m[31;1m(!) 
+(!) Current limitations in .. doxygenfunction:: directive affect your code!
+(!) 
+(!) Right now there are 3 functions that will all be generating the
+(!) *SAME* directive on different pages:
+(!) 
+(!)     .. doxygenfunction:: mundy::MUNDY_MATH_VECTOR_SIZE_SPECIALIZATION()
+(!) 
+(!) This will result in all 3 pages documenting the same function, however
+(!) which function is not known (possibly dependent upon order of Doxygen's
+(!) index.xml?).  We hope to resolve this issue soon, and appreciate your
+(!) understanding.
+(!) 
+(!) The full function signatures as parsed by Exhale that will point to the
+(!) same function:
+(!) 
+(!) - None mundy::MUNDY_MATH_VECTOR_SIZE_SPECIALIZATION()
+(!) - None mundy::MUNDY_MATH_VECTOR_SIZE_SPECIALIZATION()
+(!) - None mundy::MUNDY_MATH_VECTOR_SIZE_SPECIALIZATION()
+(!) 
+(!) Unfortunately, there are no known workarounds at this time.  Your only options
+(!) 
+(!) 1. Ignore it, hopefully this will be resolved sooner rather than later.
+(!) 2. Only let Doxygen document *ONE* of these functions, e.g., by doing
+(!) 
+(!)        #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+(!)            // function declaration and/or implementation
+(!)        #endif // DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    Making sure that your Doxygen configuration has
+(!) 
+(!)        PREDEFINED += DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    (added by default when using "exhaleDoxygenStdin").
+(!) 
+(!) Sorry :(
+(!) 
+[0m[31;1m(!) 
+(!) Current limitations in .. doxygenfunction:: directive affect your code!
+(!) 
+(!) Right now there are 8 functions that will all be generating the
+(!) *SAME* directive on different pages:
+(!) 
+(!)     .. doxygenfunction:: mundy::MUNDY_MATH_VECTOR_TYPE_AND_SIZE_SPECIALIZATION()
+(!) 
+(!) This will result in all 8 pages documenting the same function, however
+(!) which function is not known (possibly dependent upon order of Doxygen's
+(!) index.xml?).  We hope to resolve this issue soon, and appreciate your
+(!) understanding.
+(!) 
+(!) The full function signatures as parsed by Exhale that will point to the
+(!) same function:
+(!) 
+(!) - None mundy::MUNDY_MATH_VECTOR_TYPE_AND_SIZE_SPECIALIZATION()
+(!) - None mundy::MUNDY_MATH_VECTOR_TYPE_AND_SIZE_SPECIALIZATION()
+(!) - None mundy::MUNDY_MATH_VECTOR_TYPE_AND_SIZE_SPECIALIZATION()
+(!) - None mundy::MUNDY_MATH_VECTOR_TYPE_AND_SIZE_SPECIALIZATION()
+(!) - None mundy::MUNDY_MATH_VECTOR_TYPE_AND_SIZE_SPECIALIZATION()
+(!) - None mundy::MUNDY_MATH_VECTOR_TYPE_AND_SIZE_SPECIALIZATION()
+(!) - None mundy::MUNDY_MATH_VECTOR_TYPE_AND_SIZE_SPECIALIZATION()
+(!) - None mundy::MUNDY_MATH_VECTOR_TYPE_AND_SIZE_SPECIALIZATION()
+(!) 
+(!) Unfortunately, there are no known workarounds at this time.  Your only options
+(!) 
+(!) 1. Ignore it, hopefully this will be resolved sooner rather than later.
+(!) 2. Only let Doxygen document *ONE* of these functions, e.g., by doing
+(!) 
+(!)        #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+(!)            // function declaration and/or implementation
+(!)        #endif // DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    Making sure that your Doxygen configuration has
+(!) 
+(!)        PREDEFINED += DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    (added by default when using "exhaleDoxygenStdin").
+(!) 
+(!) Sorry :(
+(!) 
+[0m[31;1m(!) 
+(!) Current limitations in .. doxygenfunction:: directive affect your code!
+(!) 
+(!) Right now there are 2 functions that will all be generating the
+(!) *SAME* directive on different pages:
+(!) 
+(!)     .. doxygenfunction:: mundy::norm()
+(!) 
+(!) This will result in all 2 pages documenting the same function, however
+(!) which function is not known (possibly dependent upon order of Doxygen's
+(!) index.xml?).  We hope to resolve this issue soon, and appreciate your
+(!) understanding.
+(!) 
+(!) The full function signatures as parsed by Exhale that will point to the
+(!) same function:
+(!) 
+(!) - None mundy::norm()
+(!) - None mundy::norm()
+(!) 
+(!) Unfortunately, there are no known workarounds at this time.  Your only options
+(!) 
+(!) 1. Ignore it, hopefully this will be resolved sooner rather than later.
+(!) 2. Only let Doxygen document *ONE* of these functions, e.g., by doing
+(!) 
+(!)        #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+(!)            // function declaration and/or implementation
+(!)        #endif // DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    Making sure that your Doxygen configuration has
+(!) 
+(!)        PREDEFINED += DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    (added by default when using "exhaleDoxygenStdin").
+(!) 
+(!) Sorry :(
+(!) 
+[0m[31;1m(!) 
+(!) Current limitations in .. doxygenfunction:: directive affect your code!
+(!) 
+(!) Right now there are 2 functions that will all be generating the
+(!) *SAME* directive on different pages:
+(!) 
+(!)     .. doxygenfunction:: mundy::norm_squared()
+(!) 
+(!) This will result in all 2 pages documenting the same function, however
+(!) which function is not known (possibly dependent upon order of Doxygen's
+(!) index.xml?).  We hope to resolve this issue soon, and appreciate your
+(!) understanding.
+(!) 
+(!) The full function signatures as parsed by Exhale that will point to the
+(!) same function:
+(!) 
+(!) - None mundy::norm_squared()
+(!) - None mundy::norm_squared()
+(!) 
+(!) Unfortunately, there are no known workarounds at this time.  Your only options
+(!) 
+(!) 1. Ignore it, hopefully this will be resolved sooner rather than later.
+(!) 2. Only let Doxygen document *ONE* of these functions, e.g., by doing
+(!) 
+(!)        #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+(!)            // function declaration and/or implementation
+(!)        #endif // DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    Making sure that your Doxygen configuration has
+(!) 
+(!)        PREDEFINED += DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    (added by default when using "exhaleDoxygenStdin").
+(!) 
+(!) Sorry :(
+(!) 
+[0m[31;1m(!) 
+(!) Current limitations in .. doxygenfunction:: directive affect your code!
+(!) 
+(!) Right now there are 2 functions that will all be generating the
+(!) *SAME* directive on different pages:
+(!) 
+(!)     .. doxygenfunction:: mundy::one_norm()
+(!) 
+(!) This will result in all 2 pages documenting the same function, however
+(!) which function is not known (possibly dependent upon order of Doxygen's
+(!) index.xml?).  We hope to resolve this issue soon, and appreciate your
+(!) understanding.
+(!) 
+(!) The full function signatures as parsed by Exhale that will point to the
+(!) same function:
+(!) 
+(!) - None mundy::one_norm()
+(!) - None mundy::one_norm()
+(!) 
+(!) Unfortunately, there are no known workarounds at this time.  Your only options
+(!) 
+(!) 1. Ignore it, hopefully this will be resolved sooner rather than later.
+(!) 2. Only let Doxygen document *ONE* of these functions, e.g., by doing
+(!) 
+(!)        #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+(!)            // function declaration and/or implementation
+(!)        #endif // DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    Making sure that your Doxygen configuration has
+(!) 
+(!)        PREDEFINED += DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    (added by default when using "exhaleDoxygenStdin").
+(!) 
+(!) Sorry :(
+(!) 
+[0m[31;1m(!) 
+(!) Current limitations in .. doxygenfunction:: directive affect your code!
+(!) 
+(!) Right now there are 10 functions that will all be generating the
+(!) *SAME* directive on different pages:
+(!) 
+(!)     .. doxygenfunction:: mundy::operator!=()
+(!) 
+(!) This will result in all 10 pages documenting the same function, however
+(!) which function is not known (possibly dependent upon order of Doxygen's
+(!) index.xml?).  We hope to resolve this issue soon, and appreciate your
+(!) understanding.
+(!) 
+(!) The full function signatures as parsed by Exhale that will point to the
+(!) same function:
+(!) 
+(!) - None mundy::operator!=()
+(!) - None mundy::operator!=()
+(!) - None mundy::operator!=()
+(!) - None mundy::operator!=()
+(!) - None mundy::operator!=()
+(!) - None mundy::operator!=()
+(!) - None mundy::operator!=()
+(!) - None mundy::operator!=()
+(!) - None mundy::operator!=()
+(!) - None mundy::operator!=()
+(!) 
+(!) Unfortunately, there are no known workarounds at this time.  Your only options
+(!) 
+(!) 1. Ignore it, hopefully this will be resolved sooner rather than later.
+(!) 2. Only let Doxygen document *ONE* of these functions, e.g., by doing
+(!) 
+(!)        #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+(!)            // function declaration and/or implementation
+(!)        #endif // DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    Making sure that your Doxygen configuration has
+(!) 
+(!)        PREDEFINED += DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    (added by default when using "exhaleDoxygenStdin").
+(!) 
+(!) Sorry :(
+(!) 
+[0m[31;1m(!) 
+(!) Current limitations in .. doxygenfunction:: directive affect your code!
+(!) 
+(!) Right now there are 7 functions that will all be generating the
+(!) *SAME* directive on different pages:
+(!) 
+(!)     .. doxygenfunction:: mundy::operator*()
+(!) 
+(!) This will result in all 7 pages documenting the same function, however
+(!) which function is not known (possibly dependent upon order of Doxygen's
+(!) index.xml?).  We hope to resolve this issue soon, and appreciate your
+(!) understanding.
+(!) 
+(!) The full function signatures as parsed by Exhale that will point to the
+(!) same function:
+(!) 
+(!) - None mundy::operator*()
+(!) - None mundy::operator*()
+(!) - None mundy::operator*()
+(!) - None mundy::operator*()
+(!) - None mundy::operator*()
+(!) - None mundy::operator*()
+(!) - None mundy::operator*()
+(!) 
+(!) Unfortunately, there are no known workarounds at this time.  Your only options
+(!) 
+(!) 1. Ignore it, hopefully this will be resolved sooner rather than later.
+(!) 2. Only let Doxygen document *ONE* of these functions, e.g., by doing
+(!) 
+(!)        #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+(!)            // function declaration and/or implementation
+(!)        #endif // DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    Making sure that your Doxygen configuration has
+(!) 
+(!)        PREDEFINED += DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    (added by default when using "exhaleDoxygenStdin").
+(!) 
+(!) Sorry :(
+(!) 
+[0m[31;1m(!) 
+(!) Current limitations in .. doxygenfunction:: directive affect your code!
+(!) 
+(!) Right now there are 2 functions that will all be generating the
+(!) *SAME* directive on different pages:
+(!) 
+(!)     .. doxygenfunction:: mundy::operator+()
+(!) 
+(!) This will result in all 2 pages documenting the same function, however
+(!) which function is not known (possibly dependent upon order of Doxygen's
+(!) index.xml?).  We hope to resolve this issue soon, and appreciate your
+(!) understanding.
+(!) 
+(!) The full function signatures as parsed by Exhale that will point to the
+(!) same function:
+(!) 
+(!) - None mundy::operator+()
+(!) - None mundy::operator+()
+(!) 
+(!) Unfortunately, there are no known workarounds at this time.  Your only options
+(!) 
+(!) 1. Ignore it, hopefully this will be resolved sooner rather than later.
+(!) 2. Only let Doxygen document *ONE* of these functions, e.g., by doing
+(!) 
+(!)        #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+(!)            // function declaration and/or implementation
+(!)        #endif // DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    Making sure that your Doxygen configuration has
+(!) 
+(!)        PREDEFINED += DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    (added by default when using "exhaleDoxygenStdin").
+(!) 
+(!) Sorry :(
+(!) 
+[0m[31;1m(!) 
+(!) Current limitations in .. doxygenfunction:: directive affect your code!
+(!) 
+(!) Right now there are 2 functions that will all be generating the
+(!) *SAME* directive on different pages:
+(!) 
+(!)     .. doxygenfunction:: mundy::operator-()
+(!) 
+(!) This will result in all 2 pages documenting the same function, however
+(!) which function is not known (possibly dependent upon order of Doxygen's
+(!) index.xml?).  We hope to resolve this issue soon, and appreciate your
+(!) understanding.
+(!) 
+(!) The full function signatures as parsed by Exhale that will point to the
+(!) same function:
+(!) 
+(!) - None mundy::operator-()
+(!) - None mundy::operator-()
+(!) 
+(!) Unfortunately, there are no known workarounds at this time.  Your only options
+(!) 
+(!) 1. Ignore it, hopefully this will be resolved sooner rather than later.
+(!) 2. Only let Doxygen document *ONE* of these functions, e.g., by doing
+(!) 
+(!)        #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+(!)            // function declaration and/or implementation
+(!)        #endif // DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    Making sure that your Doxygen configuration has
+(!) 
+(!)        PREDEFINED += DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    (added by default when using "exhaleDoxygenStdin").
+(!) 
+(!) Sorry :(
+(!) 
+[0m[31;1m(!) 
+(!) Current limitations in .. doxygenfunction:: directive affect your code!
+(!) 
+(!) Right now there are 14 functions that will all be generating the
+(!) *SAME* directive on different pages:
+(!) 
+(!)     .. doxygenfunction:: mundy::operator<<()
+(!) 
+(!) This will result in all 14 pages documenting the same function, however
+(!) which function is not known (possibly dependent upon order of Doxygen's
+(!) index.xml?).  We hope to resolve this issue soon, and appreciate your
+(!) understanding.
+(!) 
+(!) The full function signatures as parsed by Exhale that will point to the
+(!) same function:
+(!) 
+(!) - None mundy::operator<<()
+(!) - None mundy::operator<<()
+(!) - None mundy::operator<<()
+(!) - None mundy::operator<<()
+(!) - None mundy::operator<<()
+(!) - None mundy::operator<<()
+(!) - None mundy::operator<<()
+(!) - None mundy::operator<<()
+(!) - None mundy::operator<<()
+(!) - None mundy::operator<<()
+(!) - None mundy::operator<<()
+(!) - None mundy::operator<<()
+(!) - None mundy::operator<<()
+(!) - None mundy::operator<<()
+(!) 
+(!) Unfortunately, there are no known workarounds at this time.  Your only options
+(!) 
+(!) 1. Ignore it, hopefully this will be resolved sooner rather than later.
+(!) 2. Only let Doxygen document *ONE* of these functions, e.g., by doing
+(!) 
+(!)        #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+(!)            // function declaration and/or implementation
+(!)        #endif // DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    Making sure that your Doxygen configuration has
+(!) 
+(!)        PREDEFINED += DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    (added by default when using "exhaleDoxygenStdin").
+(!) 
+(!) Sorry :(
+(!) 
+[0m[31;1m(!) 
+(!) Current limitations in .. doxygenfunction:: directive affect your code!
+(!) 
+(!) Right now there are 10 functions that will all be generating the
+(!) *SAME* directive on different pages:
+(!) 
+(!)     .. doxygenfunction:: mundy::operator==()
+(!) 
+(!) This will result in all 10 pages documenting the same function, however
+(!) which function is not known (possibly dependent upon order of Doxygen's
+(!) index.xml?).  We hope to resolve this issue soon, and appreciate your
+(!) understanding.
+(!) 
+(!) The full function signatures as parsed by Exhale that will point to the
+(!) same function:
+(!) 
+(!) - None mundy::operator==()
+(!) - None mundy::operator==()
+(!) - None mundy::operator==()
+(!) - None mundy::operator==()
+(!) - None mundy::operator==()
+(!) - None mundy::operator==()
+(!) - None mundy::operator==()
+(!) - None mundy::operator==()
+(!) - None mundy::operator==()
+(!) - None mundy::operator==()
+(!) 
+(!) Unfortunately, there are no known workarounds at this time.  Your only options
+(!) 
+(!) 1. Ignore it, hopefully this will be resolved sooner rather than later.
+(!) 2. Only let Doxygen document *ONE* of these functions, e.g., by doing
+(!) 
+(!)        #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+(!)            // function declaration and/or implementation
+(!)        #endif // DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    Making sure that your Doxygen configuration has
+(!) 
+(!)        PREDEFINED += DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    (added by default when using "exhaleDoxygenStdin").
+(!) 
+(!) Sorry :(
+(!) 
+[0m[31;1m(!) 
+(!) Current limitations in .. doxygenfunction:: directive affect your code!
+(!) 
+(!) Right now there are 2 functions that will all be generating the
+(!) *SAME* directive on different pages:
+(!) 
+(!)     .. doxygenfunction:: mundy::product()
+(!) 
+(!) This will result in all 2 pages documenting the same function, however
+(!) which function is not known (possibly dependent upon order of Doxygen's
+(!) index.xml?).  We hope to resolve this issue soon, and appreciate your
+(!) understanding.
+(!) 
+(!) The full function signatures as parsed by Exhale that will point to the
+(!) same function:
+(!) 
+(!) - None mundy::product()
+(!) - None mundy::product()
+(!) 
+(!) Unfortunately, there are no known workarounds at this time.  Your only options
+(!) 
+(!) 1. Ignore it, hopefully this will be resolved sooner rather than later.
+(!) 2. Only let Doxygen document *ONE* of these functions, e.g., by doing
+(!) 
+(!)        #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+(!)            // function declaration and/or implementation
+(!)        #endif // DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    Making sure that your Doxygen configuration has
+(!) 
+(!)        PREDEFINED += DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    (added by default when using "exhaleDoxygenStdin").
+(!) 
+(!) Sorry :(
+(!) 
+[0m[31;1m(!) 
+(!) Current limitations in .. doxygenfunction:: directive affect your code!
+(!) 
+(!) Right now there are 4 functions that will all be generating the
+(!) *SAME* directive on different pages:
+(!) 
+(!)     .. doxygenfunction:: mundy::project()
+(!) 
+(!) This will result in all 4 pages documenting the same function, however
+(!) which function is not known (possibly dependent upon order of Doxygen's
+(!) index.xml?).  We hope to resolve this issue soon, and appreciate your
+(!) understanding.
+(!) 
+(!) The full function signatures as parsed by Exhale that will point to the
+(!) same function:
+(!) 
+(!) - None mundy::project()
+(!) - None mundy::project()
+(!) - None mundy::project()
+(!) - None mundy::project()
+(!) 
+(!) Unfortunately, there are no known workarounds at this time.  Your only options
+(!) 
+(!) 1. Ignore it, hopefully this will be resolved sooner rather than later.
+(!) 2. Only let Doxygen document *ONE* of these functions, e.g., by doing
+(!) 
+(!)        #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+(!)            // function declaration and/or implementation
+(!)        #endif // DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    Making sure that your Doxygen configuration has
+(!) 
+(!)        PREDEFINED += DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    (added by default when using "exhaleDoxygenStdin").
+(!) 
+(!) Sorry :(
+(!) 
+[0m[31;1m(!) 
+(!) Current limitations in .. doxygenfunction:: directive affect your code!
+(!) 
+(!) Right now there are 11 functions that will all be generating the
+(!) *SAME* directive on different pages:
+(!) 
+(!)     .. doxygenfunction:: mundy::rotate()
+(!) 
+(!) This will result in all 11 pages documenting the same function, however
+(!) which function is not known (possibly dependent upon order of Doxygen's
+(!) index.xml?).  We hope to resolve this issue soon, and appreciate your
+(!) understanding.
+(!) 
+(!) The full function signatures as parsed by Exhale that will point to the
+(!) same function:
+(!) 
+(!) - None mundy::rotate()
+(!) - None mundy::rotate()
+(!) - None mundy::rotate()
+(!) - None mundy::rotate()
+(!) - None mundy::rotate()
+(!) - None mundy::rotate()
+(!) - None mundy::rotate()
+(!) - None mundy::rotate()
+(!) - None mundy::rotate()
+(!) - None mundy::rotate()
+(!) - None mundy::rotate()
+(!) 
+(!) Unfortunately, there are no known workarounds at this time.  Your only options
+(!) 
+(!) 1. Ignore it, hopefully this will be resolved sooner rather than later.
+(!) 2. Only let Doxygen document *ONE* of these functions, e.g., by doing
+(!) 
+(!)        #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+(!)            // function declaration and/or implementation
+(!)        #endif // DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    Making sure that your Doxygen configuration has
+(!) 
+(!)        PREDEFINED += DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    (added by default when using "exhaleDoxygenStdin").
+(!) 
+(!) Sorry :(
+(!) 
+[0m[31;1m(!) 
+(!) Current limitations in .. doxygenfunction:: directive affect your code!
+(!) 
+(!) Right now there are 11 functions that will all be generating the
+(!) *SAME* directive on different pages:
+(!) 
+(!)     .. doxygenfunction:: mundy::rotate_inplace()
+(!) 
+(!) This will result in all 11 pages documenting the same function, however
+(!) which function is not known (possibly dependent upon order of Doxygen's
+(!) index.xml?).  We hope to resolve this issue soon, and appreciate your
+(!) understanding.
+(!) 
+(!) The full function signatures as parsed by Exhale that will point to the
+(!) same function:
+(!) 
+(!) - None mundy::rotate_inplace()
+(!) - None mundy::rotate_inplace()
+(!) - None mundy::rotate_inplace()
+(!) - None mundy::rotate_inplace()
+(!) - None mundy::rotate_inplace()
+(!) - None mundy::rotate_inplace()
+(!) - None mundy::rotate_inplace()
+(!) - None mundy::rotate_inplace()
+(!) - None mundy::rotate_inplace()
+(!) - None mundy::rotate_inplace()
+(!) - None mundy::rotate_inplace()
+(!) 
+(!) Unfortunately, there are no known workarounds at this time.  Your only options
+(!) 
+(!) 1. Ignore it, hopefully this will be resolved sooner rather than later.
+(!) 2. Only let Doxygen document *ONE* of these functions, e.g., by doing
+(!) 
+(!)        #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+(!)            // function declaration and/or implementation
+(!)        #endif // DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    Making sure that your Doxygen configuration has
+(!) 
+(!)        PREDEFINED += DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    (added by default when using "exhaleDoxygenStdin").
+(!) 
+(!) Sorry :(
+(!) 
+[0m[31;1m(!) 
+(!) Current limitations in .. doxygenfunction:: directive affect your code!
+(!) 
+(!) Right now there are 2 functions that will all be generating the
+(!) *SAME* directive on different pages:
+(!) 
+(!)     .. doxygenfunction:: mundy::stddev()
+(!) 
+(!) This will result in all 2 pages documenting the same function, however
+(!) which function is not known (possibly dependent upon order of Doxygen's
+(!) index.xml?).  We hope to resolve this issue soon, and appreciate your
+(!) understanding.
+(!) 
+(!) The full function signatures as parsed by Exhale that will point to the
+(!) same function:
+(!) 
+(!) - None mundy::stddev()
+(!) - None mundy::stddev()
+(!) 
+(!) Unfortunately, there are no known workarounds at this time.  Your only options
+(!) 
+(!) 1. Ignore it, hopefully this will be resolved sooner rather than later.
+(!) 2. Only let Doxygen document *ONE* of these functions, e.g., by doing
+(!) 
+(!)        #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+(!)            // function declaration and/or implementation
+(!)        #endif // DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    Making sure that your Doxygen configuration has
+(!) 
+(!)        PREDEFINED += DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    (added by default when using "exhaleDoxygenStdin").
+(!) 
+(!) Sorry :(
+(!) 
+[0m[31;1m(!) 
+(!) Current limitations in .. doxygenfunction:: directive affect your code!
+(!) 
+(!) Right now there are 2 functions that will all be generating the
+(!) *SAME* directive on different pages:
+(!) 
+(!)     .. doxygenfunction:: mundy::stddev_f()
+(!) 
+(!) This will result in all 2 pages documenting the same function, however
+(!) which function is not known (possibly dependent upon order of Doxygen's
+(!) index.xml?).  We hope to resolve this issue soon, and appreciate your
+(!) understanding.
+(!) 
+(!) The full function signatures as parsed by Exhale that will point to the
+(!) same function:
+(!) 
+(!) - None mundy::stddev_f()
+(!) - None mundy::stddev_f()
+(!) 
+(!) Unfortunately, there are no known workarounds at this time.  Your only options
+(!) 
+(!) 1. Ignore it, hopefully this will be resolved sooner rather than later.
+(!) 2. Only let Doxygen document *ONE* of these functions, e.g., by doing
+(!) 
+(!)        #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+(!)            // function declaration and/or implementation
+(!)        #endif // DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    Making sure that your Doxygen configuration has
+(!) 
+(!)        PREDEFINED += DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    (added by default when using "exhaleDoxygenStdin").
+(!) 
+(!) Sorry :(
+(!) 
+[0m[31;1m(!) 
+(!) Current limitations in .. doxygenfunction:: directive affect your code!
+(!) 
+(!) Right now there are 2 functions that will all be generating the
+(!) *SAME* directive on different pages:
+(!) 
+(!)     .. doxygenfunction:: mundy::sum()
+(!) 
+(!) This will result in all 2 pages documenting the same function, however
+(!) which function is not known (possibly dependent upon order of Doxygen's
+(!) index.xml?).  We hope to resolve this issue soon, and appreciate your
+(!) understanding.
+(!) 
+(!) The full function signatures as parsed by Exhale that will point to the
+(!) same function:
+(!) 
+(!) - None mundy::sum()
+(!) - None mundy::sum()
+(!) 
+(!) Unfortunately, there are no known workarounds at this time.  Your only options
+(!) 
+(!) 1. Ignore it, hopefully this will be resolved sooner rather than later.
+(!) 2. Only let Doxygen document *ONE* of these functions, e.g., by doing
+(!) 
+(!)        #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+(!)            // function declaration and/or implementation
+(!)        #endif // DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    Making sure that your Doxygen configuration has
+(!) 
+(!)        PREDEFINED += DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    (added by default when using "exhaleDoxygenStdin").
+(!) 
+(!) Sorry :(
+(!) 
+[0m[31;1m(!) 
+(!) Current limitations in .. doxygenfunction:: directive affect your code!
+(!) 
+(!) Right now there are 11 functions that will all be generating the
+(!) *SAME* directive on different pages:
+(!) 
+(!)     .. doxygenfunction:: mundy::translate()
+(!) 
+(!) This will result in all 11 pages documenting the same function, however
+(!) which function is not known (possibly dependent upon order of Doxygen's
+(!) index.xml?).  We hope to resolve this issue soon, and appreciate your
+(!) understanding.
+(!) 
+(!) The full function signatures as parsed by Exhale that will point to the
+(!) same function:
+(!) 
+(!) - None mundy::translate()
+(!) - None mundy::translate()
+(!) - None mundy::translate()
+(!) - None mundy::translate()
+(!) - None mundy::translate()
+(!) - None mundy::translate()
+(!) - None mundy::translate()
+(!) - None mundy::translate()
+(!) - None mundy::translate()
+(!) - None mundy::translate()
+(!) - None mundy::translate()
+(!) 
+(!) Unfortunately, there are no known workarounds at this time.  Your only options
+(!) 
+(!) 1. Ignore it, hopefully this will be resolved sooner rather than later.
+(!) 2. Only let Doxygen document *ONE* of these functions, e.g., by doing
+(!) 
+(!)        #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+(!)            // function declaration and/or implementation
+(!)        #endif // DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    Making sure that your Doxygen configuration has
+(!) 
+(!)        PREDEFINED += DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    (added by default when using "exhaleDoxygenStdin").
+(!) 
+(!) Sorry :(
+(!) 
+[0m[31;1m(!) 
+(!) Current limitations in .. doxygenfunction:: directive affect your code!
+(!) 
+(!) Right now there are 11 functions that will all be generating the
+(!) *SAME* directive on different pages:
+(!) 
+(!)     .. doxygenfunction:: mundy::translate_inplace()
+(!) 
+(!) This will result in all 11 pages documenting the same function, however
+(!) which function is not known (possibly dependent upon order of Doxygen's
+(!) index.xml?).  We hope to resolve this issue soon, and appreciate your
+(!) understanding.
+(!) 
+(!) The full function signatures as parsed by Exhale that will point to the
+(!) same function:
+(!) 
+(!) - None mundy::translate_inplace()
+(!) - None mundy::translate_inplace()
+(!) - None mundy::translate_inplace()
+(!) - None mundy::translate_inplace()
+(!) - None mundy::translate_inplace()
+(!) - None mundy::translate_inplace()
+(!) - None mundy::translate_inplace()
+(!) - None mundy::translate_inplace()
+(!) - None mundy::translate_inplace()
+(!) - None mundy::translate_inplace()
+(!) - None mundy::translate_inplace()
+(!) 
+(!) Unfortunately, there are no known workarounds at this time.  Your only options
+(!) 
+(!) 1. Ignore it, hopefully this will be resolved sooner rather than later.
+(!) 2. Only let Doxygen document *ONE* of these functions, e.g., by doing
+(!) 
+(!)        #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+(!)            // function declaration and/or implementation
+(!)        #endif // DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    Making sure that your Doxygen configuration has
+(!) 
+(!)        PREDEFINED += DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    (added by default when using "exhaleDoxygenStdin").
+(!) 
+(!) Sorry :(
+(!) 
+[0m[31;1m(!) 
+(!) Current limitations in .. doxygenfunction:: directive affect your code!
+(!) 
+(!) Right now there are 2 functions that will all be generating the
+(!) *SAME* directive on different pages:
+(!) 
+(!)     .. doxygenfunction:: mundy::two_norm()
+(!) 
+(!) This will result in all 2 pages documenting the same function, however
+(!) which function is not known (possibly dependent upon order of Doxygen's
+(!) index.xml?).  We hope to resolve this issue soon, and appreciate your
+(!) understanding.
+(!) 
+(!) The full function signatures as parsed by Exhale that will point to the
+(!) same function:
+(!) 
+(!) - None mundy::two_norm()
+(!) - None mundy::two_norm()
+(!) 
+(!) Unfortunately, there are no known workarounds at this time.  Your only options
+(!) 
+(!) 1. Ignore it, hopefully this will be resolved sooner rather than later.
+(!) 2. Only let Doxygen document *ONE* of these functions, e.g., by doing
+(!) 
+(!)        #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+(!)            // function declaration and/or implementation
+(!)        #endif // DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    Making sure that your Doxygen configuration has
+(!) 
+(!)        PREDEFINED += DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    (added by default when using "exhaleDoxygenStdin").
+(!) 
+(!) Sorry :(
+(!) 
+[0m[31;1m(!) 
+(!) Current limitations in .. doxygenfunction:: directive affect your code!
+(!) 
+(!) Right now there are 2 functions that will all be generating the
+(!) *SAME* directive on different pages:
+(!) 
+(!)     .. doxygenfunction:: mundy::variance()
+(!) 
+(!) This will result in all 2 pages documenting the same function, however
+(!) which function is not known (possibly dependent upon order of Doxygen's
+(!) index.xml?).  We hope to resolve this issue soon, and appreciate your
+(!) understanding.
+(!) 
+(!) The full function signatures as parsed by Exhale that will point to the
+(!) same function:
+(!) 
+(!) - None mundy::variance()
+(!) - None mundy::variance()
+(!) 
+(!) Unfortunately, there are no known workarounds at this time.  Your only options
+(!) 
+(!) 1. Ignore it, hopefully this will be resolved sooner rather than later.
+(!) 2. Only let Doxygen document *ONE* of these functions, e.g., by doing
+(!) 
+(!)        #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+(!)            // function declaration and/or implementation
+(!)        #endif // DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    Making sure that your Doxygen configuration has
+(!) 
+(!)        PREDEFINED += DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    (added by default when using "exhaleDoxygenStdin").
+(!) 
+(!) Sorry :(
+(!) 
+[0m[31;1m(!) 
+(!) Current limitations in .. doxygenfunction:: directive affect your code!
+(!) 
+(!) Right now there are 2 functions that will all be generating the
+(!) *SAME* directive on different pages:
+(!) 
+(!)     .. doxygenfunction:: mundy::variance_f()
+(!) 
+(!) This will result in all 2 pages documenting the same function, however
+(!) which function is not known (possibly dependent upon order of Doxygen's
+(!) index.xml?).  We hope to resolve this issue soon, and appreciate your
+(!) understanding.
+(!) 
+(!) The full function signatures as parsed by Exhale that will point to the
+(!) same function:
+(!) 
+(!) - None mundy::variance_f()
+(!) - None mundy::variance_f()
+(!) 
+(!) Unfortunately, there are no known workarounds at this time.  Your only options
+(!) 
+(!) 1. Ignore it, hopefully this will be resolved sooner rather than later.
+(!) 2. Only let Doxygen document *ONE* of these functions, e.g., by doing
+(!) 
+(!)        #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+(!)            // function declaration and/or implementation
+(!)        #endif // DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    Making sure that your Doxygen configuration has
+(!) 
+(!)        PREDEFINED += DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    (added by default when using "exhaleDoxygenStdin").
+(!) 
+(!) Sorry :(
+(!) 
+[0m[31;1m(!) 
+(!) Current limitations in .. doxygenfunction:: directive affect your code!
+(!) 
+(!) Right now there are 2 functions that will all be generating the
+(!) *SAME* directive on different pages:
+(!) 
+(!)     .. doxygenfunction:: mundy::visit()
+(!) 
+(!) This will result in all 2 pages documenting the same function, however
+(!) which function is not known (possibly dependent upon order of Doxygen's
+(!) index.xml?).  We hope to resolve this issue soon, and appreciate your
+(!) understanding.
+(!) 
+(!) The full function signatures as parsed by Exhale that will point to the
+(!) same function:
+(!) 
+(!) - None mundy::visit()
+(!) - None mundy::visit()
+(!) 
+(!) Unfortunately, there are no known workarounds at this time.  Your only options
+(!) 
+(!) 1. Ignore it, hopefully this will be resolved sooner rather than later.
+(!) 2. Only let Doxygen document *ONE* of these functions, e.g., by doing
+(!) 
+(!)        #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+(!)            // function declaration and/or implementation
+(!)        #endif // DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    Making sure that your Doxygen configuration has
+(!) 
+(!)        PREDEFINED += DOXYGEN_SHOULD_SKIP_THIS
+(!) 
+(!)    (added by default when using "exhaleDoxygenStdin").
+(!) 
+(!) Sorry :(
+(!) 
+[0m[31;1m(!) Unabridged API: unexpected kind 'concept' (IGNORED)
+[0m[34;1m[~] Exhale: parsing Doxygen XML.[0m
+[32;1m[+] Exhale: finished parsing Doxygen XML in 15.43 seconds.[0m
+[34;1m[~] Exhale: generating reStructuredText documents.[0m
+[32;1m[+] Exhale: generated reStructuredText documents in 14.56 seconds.[0m
+building [mo]: targets for 0 po files that are out of date
+writing output... 
+building [html]: targets for 0 source files that are out of date
+updating environment: 0 added, 0 changed, 0 removed
+reading sources... 
+looking for now-outdated files... none found
+no targets are out of date.
+preparing documents... done
+copying assets... 
+copying static files... 
+Writing evaluated template result to /mnt/home/bpalmer/software/MundyPerformanceTests/versions/latest2/main/doc/_build/html/_static/documentation_options.js
+Writing evaluated template result to /mnt/home/bpalmer/software/MundyPerformanceTests/versions/latest2/main/doc/_build/html/_static/basic.css
+Writing evaluated template result to /mnt/home/bpalmer/software/MundyPerformanceTests/versions/latest2/main/doc/_build/html/_static/language_data.js
+Writing evaluated template result to /mnt/home/bpalmer/software/MundyPerformanceTests/versions/latest2/main/doc/_build/html/_static/js/versions.js
+copying static files: done
+copying extra files... 
+copying extra files: done
+copying assets: done
+generating indices... genindex done
+writing additional pages... search done
+dumping search index in English (code: en)... done
+dumping object inventory... done
+build succeeded.
+
+The HTML pages are in doc/_build/html.

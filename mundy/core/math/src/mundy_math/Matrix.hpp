@@ -1060,8 +1060,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto elementwise_div(const AMatrix<U, N, M, Acc
 /// \param[in] func The function to apply.
 /// \param[in] mat The matrix.
 template <typename Func, size_t N, size_t M, typename T, ValidAccessor<T> Accessor>
-KOKKOS_INLINE_FUNCTION constexpr auto apply(Func&& func, const AMatrix<T, N, M, Accessor>& mat)
-    -> AMatrix<std::invoke_result_t<Func, T>, N, M> {
+KOKKOS_INLINE_FUNCTION constexpr auto apply(Func&& func, const AMatrix<T, N, M, Accessor>& mat) {
   return impl::apply_impl(std::make_index_sequence<N * M>{}, std::forward<Func>(func), mat);
 }
 
@@ -1069,8 +1068,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto apply(Func&& func, const AMatrix<T, N, M, 
 /// \param[in] func The function to apply.
 /// \param[in] mat The matrix.
 template <typename Func, size_t N, size_t M, typename T, ValidAccessor<T> Accessor>
-KOKKOS_INLINE_FUNCTION constexpr auto apply_row(Func&& func, const AMatrix<T, N, M, Accessor>& mat)
-    -> AMatrix<typename std::invoke_result_t<Func, Vector<T, M>>::scalar_t, N, M> {
+KOKKOS_INLINE_FUNCTION constexpr auto apply_row(Func&& func, const AMatrix<T, N, M, Accessor>& mat) {
   return impl::apply_row_impl(std::make_index_sequence<N>{}, std::forward<Func>(func), mat);
 }
 
@@ -1078,8 +1076,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto apply_row(Func&& func, const AMatrix<T, N,
 /// \param[in] func The function to apply.
 /// \param[in] mat The matrix.
 template <typename Func, size_t N, size_t M, typename T, ValidAccessor<T> Accessor>
-KOKKOS_INLINE_FUNCTION constexpr auto apply_column(Func&& func, const AMatrix<T, N, M, Accessor>& mat)
-    -> AMatrix<typename std::invoke_result_t<Func, Vector<T, N>>::scalar_t, N, M> {
+KOKKOS_INLINE_FUNCTION constexpr auto apply_column(Func&& func, const AMatrix<T, N, M, Accessor>& mat) {
   return impl::apply_column_impl(std::make_index_sequence<M>{}, std::forward<Func>(func), mat);
 }
 //@}
@@ -1092,8 +1089,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto apply_column(Func&& func, const AMatrix<T,
 /// \param[in] b The second vector.
 template <size_t N, size_t M, typename U, typename T, ValidAccessor<U> Accessor1, ValidAccessor<T> Accessor2>
 KOKKOS_INLINE_FUNCTION constexpr auto outer_product(const AVector<U, N, Accessor1>& a,
-                                                    const AVector<T, M, Accessor2>& b)
-    -> AMatrix<std::common_type_t<T, U>, N, M> {
+                                                    const AVector<T, M, Accessor2>& b) {
   return impl::outer_product_impl(std::make_index_sequence<N * M>{}, a, b);
 }
 //@}

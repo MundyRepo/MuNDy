@@ -497,12 +497,14 @@ struct variant_aggregate_has {
 template <typename Tag, typename VarAggType>
 static constexpr bool variant_aggregate_has_v = variant_aggregate_has<Tag, VarAggType>::value;
 
+#if !defined(DOXYGEN_SHOULD_SKIP_THIS)
 /// \brief Add a new value to an existing variant_aggregate (fluent interface)
 template <typename Tag, typename VariantType, typename... Tags>
 KOKKOS_INLINE_FUNCTION constexpr auto append(const variant_aggregate<VariantType, Tags...>& v_agg,
                                              VariantType new_variant) {
   return v_agg.template append<Tag>(std::move(new_variant));
 }
+#endif  // DOXYGEN_SHOULD_SKIP_THIS
 
 /// \brief Project selected tags from a variant_aggregate into a new variant_aggregate.
 /// Copies the corresponding variants and preserves the requested tag order.
@@ -986,11 +988,13 @@ struct aggregate_has {
 template <typename Tag, typename AggType>
 static constexpr bool aggregate_has_v = aggregate_has<Tag, AggType>::value;
 
+#if !defined(DOXYGEN_SHOULD_SKIP_THIS)
 /// \brief Add a new value to an existing aggregate (fluent interface)
 template <typename Tag, typename NewComponent, typename... Ts>
 KOKKOS_INLINE_FUNCTION constexpr auto append(const aggregate<Ts...>& agg, NewComponent new_component) {
   return agg.template append<Tag>(std::move(new_component));
 }
+#endif  // DOXYGEN_SHOULD_SKIP_THIS
 
 /// \brief The I'th aggregate tag
 template <size_t I, typename AggType>

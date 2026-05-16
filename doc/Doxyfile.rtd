@@ -6,6 +6,10 @@
 GENERATE_HTML          = NO
 GENERATE_XML           = YES
 XML_OUTPUT             = xml
+INPUT = ./mundy
+RECURSIVE = YES
+FULL_PATH_NAMES = YES
+STRIP_FROM_PATH = ..
 
 # Keep this path stable because doc/conf.py will point Breathe here.
 OUTPUT_DIRECTORY       = doc
