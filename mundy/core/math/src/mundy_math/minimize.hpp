@@ -21,6 +21,10 @@
 #ifndef MUNDY_MATH_MINIMIZE_HPP_
 #define MUNDY_MATH_MINIMIZE_HPP_
 
+/// \file minimize.hpp
+/// \defgroup MundyMathMinimize mundy::minimize(...)
+/// \brief Fixed-size, allocation-free L-BFGS minimization helpers for Kokkos code.
+
 // External
 #include <Kokkos_Core.hpp>
 

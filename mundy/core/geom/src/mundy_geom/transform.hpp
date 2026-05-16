@@ -21,6 +21,10 @@
 #ifndef MUNDY_GEOM_TRANSFORM_HPP_
 #define MUNDY_GEOM_TRANSFORM_HPP_
 
+/// \file transform.hpp
+/// \defgroup MundyGeomTransform mundy::transform
+/// \brief Translation and rotation helpers for Mundy geometric primitives.
+
 // External libs
 #include <Kokkos_Core.hpp>
 

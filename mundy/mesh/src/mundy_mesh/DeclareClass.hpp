@@ -22,6 +22,7 @@
 #define MUNDY_MESH_DECLARECLASS_HPP_
 
 /// \file DeclareClass.hpp
+/// \defgroup MundyMeshDeclareClass mundy::mesh::DeclareClass
 /// \brief A set of helpers for declaring classes with reduced boilerplate code.
 
 // C++ core

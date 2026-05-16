@@ -21,7 +21,7 @@
 #ifndef MUNDY_UTILS_THROW_ASSERT_HPP_
 #define MUNDY_UTILS_THROW_ASSERT_HPP_
 
-/// \file MundyAssert.cpp
+/// \file throw_assert.hpp
 /// \brief Declaration of our assertion macros
 
 // C++ core
@@ -184,7 +184,7 @@ KOKKOS_INLINE_FUNCTION constexpr void abort_require(
     }                                                                                                                  \
   } while (false);
 
-/// \def MUNDY_THROW_REQUIRE
+/// \def MUNDY_THROW_REQUIRE(assertion_to_test, exception_to_throw, message_to_print)
 /// \brief Abort the code if the given assertion is false.
 /// \note This macro will always test the assertion, regardless of whether NDEBUG is defined. Use it to enforce critical
 /// requirements (hence the name).
@@ -209,7 +209,7 @@ KOKKOS_INLINE_FUNCTION constexpr void abort_require(
     KOKKOS_IF_ON_DEVICE(MUNDY_THROW_REQUIRE_DEVICE(assertion_to_test, exception_to_throw, message_to_print);) \
   } while (false);
 
-/// \def MUNDY_THROW_ASSERT
+/// \def MUNDY_THROW_ASSERT(assertion_to_test, exception_to_throw, message_to_print)
 /// \brief Throw an exception if the given assertion is false.
 /// \note This macro is only compiled if NDEBUG is not defined. Well, that's a lie. Technically, we still use the
 /// assertion_to_test but only its type and not its value. This avoids unused variable warnings and shouldn't have any

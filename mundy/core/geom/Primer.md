@@ -1,4 +1,7 @@
-# MundyGeom
+# MundyGeom {#MundyGeom}
+
+See the \ref mundy/core/geom "MundyGeom directory reference".
+
 This subpackage contains small Kokkos-friendly geometric primitives and the free functions that act on them. The core
 functionality includes
  - **Primitives**
@@ -16,7 +19,7 @@ algorithms on them.
 The default primitive aliases own their coordinate data, but the primitive templates can also store view-backed points
 and orientations. The same free functions work with both owning and view-backed primitives.
 
-## **`Primitives`**
+## Primitives
 Primitives are light value types. They store the data that defines a shape; they do not allocate, own mesh entities, or
 hide the underlying math. Prefer explicit construction, since default constructors for sized shapes often do not encode
 meaningful radii or lengths.
@@ -136,7 +139,7 @@ shifts and rigid wrapping.
 
 That reference point is what `shift_image(shape, lattice_vector, metric)` moves between periodic images.
 
-## **`distance`**
+## distance
 The main interface is a single overloaded family of free functions:
 
 ```cpp
@@ -231,7 +234,7 @@ auto d = distance(circle0, circle1, c0, c1, n0, n1);
 
 Not every primitive pair has a distance overload. When in doubt, treat the table above as the supported surface area.
 
-## **Bounding geometry**
+## Bounding geometry
 MundyGeom provides cheap conservative bounding queries for broad-phase filtering and neighbor pruning.
 
 ```cpp
@@ -258,7 +261,7 @@ auto maybe_close = intersects(compute_aabb(a), compute_aabb(b));
 This is intentionally a conservative layer: it is cheap enough for broad-phase work, then you follow with an exact
 query such as `distance` only when needed.
 
-## **`Periodicity`**
+## Periodicity
 A metric defines what “nearby” means. In free space, the separation from `x` to `y` is just `y - x`. In periodic space,
 the metric applies the minimum-image convention.
 
@@ -314,7 +317,7 @@ For multi-point physical bodies, `wrap_rigid` is usually the right choice. `wrap
 stored point independently in the primary cell, but it can make long objects look broken across image boundaries until
 you call `unwrap_points_to_ref`.
 
-## **Transforms**
+## Transforms
 Transforms follow the same pattern as MundyMath: return-by-value by default, `_inplace` when mutation is desired.
 
 ### Translation
@@ -347,7 +350,7 @@ auto rotated_ellipsoid = rotate(ellipsoid, q);
 Rotation is defined for all common primitives except `AABB`. Rotating an `AABB` is intentionally not supported because
 the result is ambiguous: an oriented box and its enclosing axis-aligned box are different objects.
 
-## **Random generation**
+## Random generation
 Random helpers build test geometry and synthetic examples from a Kokkos-friendly random generator. The low-level
 generators give you points, directions, and orientations; the higher-level generators assemble full primitives.
 

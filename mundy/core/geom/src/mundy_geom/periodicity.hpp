@@ -21,6 +21,10 @@
 #ifndef MUNDY_GEOM_PERIODICITY_HPP_
 #define MUNDY_GEOM_PERIODICITY_HPP_
 
+/// \file periodicity.hpp
+/// \defgroup MundyGeomPeriodicity mundy::periodicity
+/// \brief Periodic metric classes and displacement helpers for geometric calculations.
+
 // External libs
 #include <Kokkos_Core.hpp>
 
@@ -59,6 +63,7 @@
 //   bool is_valid() const {
 //     return value_ != INVALID_METRIC;
 //   }
+
 
 //   //! \name Cast to integer type
 //   //@{

@@ -22,6 +22,8 @@
 #define MUNDY_MESH_NGPACCESSOREXPR_HPP_
 
 /// \file NgpAccessorExpr.hpp
+/// \defgroup MundyMeshNgpAccessorExpr mundy::mesh::NgpAccessorExpr
+/// \brief Expression-template layer for fusing STK NGP field reads, writes, and reductions.
 
 // Kokkos
 #include <Kokkos_Core.hpp>  // for KOKKOS_LAMBDA, etc.

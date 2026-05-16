@@ -22,7 +22,8 @@
 #define MUNDY_MESH_FIELDVIEWS_HPP_
 
 /// \file FieldViews.hpp
-/// \brief Declaration of the field view helper functions
+/// \defgroup MundyMeshFieldViews mundy::mesh::FieldViews
+/// \brief Host and device helpers for viewing STK field data as Mundy math and geometry types.
 
 // C++ core libs
 #include <map>          // for std::map

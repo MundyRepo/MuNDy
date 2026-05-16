@@ -21,6 +21,10 @@
 #ifndef MUNDY_GEOM_RANDOMIZE_HPP_
 #define MUNDY_GEOM_RANDOMIZE_HPP_
 
+/// \file randomize.hpp
+/// \defgroup MundyGeomRandomize mundy::randomize
+/// \brief Random primitive generation helpers for Mundy geometric primitives.
+
 // External libs
 #include <Kokkos_Core.hpp>
 

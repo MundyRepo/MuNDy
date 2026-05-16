@@ -1,19 +1,22 @@
-# MundyMath
+# MundyMath {#MundyMath}
+
+See the \ref mundy/core/math "MundyMath directory reference".
+
 This subpackage contains shared functionality for performing small highly-optimized mathematical operations. The core functionality includes
  - **Array<Scalar, N>**
  - **Vector<Scalar, N>**
  - **Matrix<Scalar, N, M>**
  - **Quaternion\<Scalar\>**
 
-## **`Array`**
-The `Array` class is a container with constexpr access and construction equivalent to Kokkos::Array.
+## Array
+The \ref mundy::Array "Array" class is a container with constexpr access and construction equivalent to `Kokkos::Array`.
 ```cpp
 Array<int, 6> a{5, 4, 3, 2, 1, 0};
 a[2];  // Returns 4
 ```
 
-## **`Vector`**
-The `Vector` class is endowed with the mathematical properties of vectors. It supports addition, multiplication, dot products, norms, etc. It is templated by the vector's scalar type and size so `Vector<double, 3>` would correspond to a double-typed vector in R3. Similar to Eigen, we offer shorthand naming for scalar types float/double and sizes 1-6. For example:
+## Vector
+The \ref mundy::AVector "Vector" class is endowed with the mathematical properties of vectors. It supports addition, multiplication, dot products, norms, etc. It is templated by the vector's scalar type and size so `Vector<double, 3>` would correspond to a double-typed vector in R3. Similar to Eigen, we offer shorthand naming for scalar types float/double and sizes 1-6. For example:
 - `Vector3<Scalar>` -> `Vector<Scalar, 3>`
 - `Vector3d`        -> `Vector<double, 3>`
 - `Vector2f`        -> `Vector<float, 2>`
@@ -80,7 +83,7 @@ The following operations can be performed on vectors to compute various properti
 | `two_norm_squared(v)`  | Squared 2-norm (sum of squares of components).                                   | `two_norm_squared(v1)` → `1.^2 + 2.^2 = 5.`           |
 | `norm(v)`              | Default norm (same as `two_norm`).                                              | `norm(v1)` → `sqrt(5.)`                                 |
 | `norm_squared(v)`      | Default squared norm (same as `two_norm_squared`).                              | `norm_squared(v1)` → `5.`                               |
-| `minor_angle(v1, v2)`  | Minor angle between two vectors (angle in radians, between 0 and π).            | `minor_angle(v1, v2)` → `acos(dot(v1, v2) / (||v1|| * ||v2||))` |
+| `minor_angle(v1, v2)`  | Minor angle between two vectors (angle in radians, between 0 and π).            | `minor_angle(v1, v2)` → `acos(dot(v1, v2) / (norm(v1) * norm(v2)))` |
 | `major_angle(v1, v2)`  | Major angle between two vectors (angle in radians, between 0 and π).           | `major_angle(v1, v2)` → `π - minor_angle(v1, v2)`        |
 
 #### Operations for vectors of certain sizes
@@ -91,8 +94,8 @@ Some operations are only defined for vectors of specific sizes. For example, the
 |-------------------------|---------------------------------------------------|--------------------------------------------------------------------|
 | `cross(v1, v2)`         | Cross product of two 3D vectors.                 | `cross(v1, v2)` → `Vector3d{-3., 6., -3.}`                     |
 
-## **`Matrix`**
-The `Matrix` class is endowed with the mathematical properties of dense matrices. It supports addition, multiplication, matrix-vector, matrix-scalar arithmetic, norms, etc. It is templated by the matrices's scalar type and sizes so `Matrix<double, 3, 2>` would correspond to a double-typed matrix with 3 rows and 2 columns. Similar to Eigen, we offer shorthand naming for scalar types float/double and sizes 1-6. For example:
+## Matrix
+The \ref mundy::AMatrix "Matrix" class is endowed with the mathematical properties of dense matrices. It supports addition, multiplication, matrix-vector, matrix-scalar arithmetic, norms, etc. It is templated by the matrices's scalar type and sizes so `Matrix<double, 3, 2>` would correspond to a double-typed matrix with 3 rows and 2 columns. Similar to Eigen, we offer shorthand naming for scalar types float/double and sizes 1-6. For example:
 - `Matrix23<Scalar>` -> `Matrix<Scalar, 2, 3>`
 - `Matrix23d`        -> `Matrix<double, 2, 3>`
 - `Matrix3d`        -> `Matrix<double, 3, 3>`
@@ -179,7 +182,7 @@ The following operations can be performed on matrices to compute various propert
 | `one_norm(m)`              | Maximum absolute column sum.                                                    |
 | `two_norm(m)`              | 2-norm (largest singular value of the matrix).                                  |
 
-## **`Views`**
+## Views
 Mundy's Vector, Matrix, and Quaternion types offer the ability to construct a non-owning mathematical view into existing data, endowing it with all the mathematical properties listed above. Views can either be constructed from pointers: 
 ```cpp
 std::vector<double> std_vec{0, 0, 1, 2, 3, 0, 0};
@@ -206,7 +209,7 @@ int main() {
 ```
 
 
-## **`Element-wise atomics`**
+## Element-wise atomics
 Mundy's `Vector` and `Matrix` types provide **element-wise atomic operations**. "Element-wise" means the atomic is applied **independently to each component** (each `v[i]` or `m(r,c)`), rather than synchronizing on the entire vector/matrix as one big locked object.
 
 These APIs are intended for **shared-memory parallel updates** (e.g., many threads accumulating into the same vector/matrix) where you want correctness without manually managing locks.
@@ -226,11 +229,11 @@ atomic_store(&v, x);       // element-wise atomic write: v[i] = x[i]
 ### Atomic update operations
 All atomic update routines come in three *return-style* flavors:
 
-1. **`atomic_<op>(...)`**  
+1. `atomic_<op>(...)`  
    Performs the update and returns nothing.
-2. **`atomic_fetch_<op>(...)`**  
+2. `atomic_fetch_<op>(...)`  
    Performs the update and returns the **old** value (before modification).
-3. **`atomic_<op>_fetch(...)`**  
+3. `atomic_<op>_fetch(...)`  
    Performs the update and returns the **new** value (after modification).
 
 Each operation is applied **per element**.

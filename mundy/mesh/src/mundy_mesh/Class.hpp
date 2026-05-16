@@ -22,6 +22,7 @@
 #define MUNDY_MESH_CLASS_HPP_
 
 /// \file Class.hpp
+/// \defgroup MundyMeshClasses mundy::mesh::Classes
 /// \brief Turning STK's IO support from a hierarchy of disjoint parts to a polymorphic class hierarchy.
 
 // C++ core

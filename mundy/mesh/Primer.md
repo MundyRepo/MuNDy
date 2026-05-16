@@ -1,4 +1,7 @@
-# MundyMesh
+# MundyMesh {#MundyMesh}
+
+See the \ref mundy/mesh "MundyMesh directory reference".
+
 MundyMesh is the part of Mundy that manages mesh data, mesh-side access patterns, and mesh-side algorithms.
 
 If MundyMath provides small math objects and MundyGeom provides small geometry objects, MundyMesh provides the mesh
@@ -18,7 +21,7 @@ If you are new to STK, the main idea is simple: MundyMesh does not replace STK's
 workflow on top of it. This primer starts from the public concepts you use in application code and only then drills
 into the STK-shaped vocabulary underneath.
 
-## **STK domain model and Mundy vocabulary**
+## STK domain model and Mundy vocabulary
 MundyMesh follows STK's domain model rather than introducing a separate one. STK provides a runtime-extensible,
 heterogeneous, dynamic, ranked mesh system built around entities, parts, fields, selectors, and a separation between
 mesh schema and live mesh state. MundyMesh extends that model rather than replacing it.
@@ -51,7 +54,7 @@ Three pairings summarize the relationship:
 Some of these layers exist to reduce STK boilerplate. Others add capabilities that STK does not provide directly,
 including dynamic GPU-compatible links and ticketed device-side modification requests.
 
-## **Architecture at a glance**
+## Architecture at a glance
 
 | **Layer** | **Main types / functions** | **Use when you need** |
 |-----------|-----------------------------|------------------------|
@@ -66,7 +69,7 @@ including dynamic GPU-compatible links and ticketed device-side modification req
 | Mesh modification staging | `NgpModRequests` | Ticketed device-side requests for later host-side mesh modification. |
 | Usability layer | `NgpFieldBLAS`, `NgpAccessorExpr` | Higher-level field math and expression-style device programming. |
 
-## **Mesh construction**
+## Mesh construction
 At the lowest level, MundyMesh extends STK rather than replacing it.
 
 ### `MeshBuilder`
@@ -124,7 +127,7 @@ The attribute interface is symmetric across mesh, part, and field scope:
 
 Use mesh attributes for configuration and provenance, not as a replacement for entity fields.
 
-## **Reduced-boilerplate declaration helpers**
+## Reduced-boilerplate declaration helpers
 STK setup code is often repetitive. Mundy's declaration helpers exist to reduce that boilerplate while keeping the
 underlying STK behavior visible.
 
@@ -262,7 +265,7 @@ builder.declare_entities(*bulk);
 This helper is useful when you want a deterministic serial description of a mesh and then need the corresponding
 sharing and connectivity declared on all ranks.
 
-## **Classes: semantic structure on top of STK IO**
+## Classes: semantic structure on top of STK IO
 STK IO works with a hierarchy of disjoint parts. Mundy's `Class` layer builds on top of that representation so code can
 be written more like a flattened class hierarchy while still satisfying STK's IO rules.
 
@@ -304,7 +307,7 @@ The main consequences are:
 
 Use classes when you want semantic, class-like code and raw parts when you need direct STK interoperation.
 
-## **String parsing helpers**
+## String parsing helpers
 MundyMesh provides a set of parsing and configuration utilities for turning strings into STK objects.
 
 ### `string_to_selector`
@@ -334,7 +337,7 @@ auto topo = mundy::mesh::string_to_topology("HEX_8");
 
 Use these when mesh configuration is text-driven rather than hard-coded.
 
-## **Typed views into field data**
+## Typed views into field data
 Raw `stk::mesh::field_data(...)` returns raw pointers. `FieldViews.hpp` maps that storage into Mundy math and geometry
 types.
 
@@ -372,7 +375,7 @@ KOKKOS_LAMBDA(const stk::mesh::FastMeshIndex& i) {
 
 Use these helpers when a field is logically a math object, not just a flat array.
 
-## **Components and aggregates**
+## Components and aggregates
 
 ### Components
 Components provide algorithmic separation of concerns: most algorithms that act on entities care only about accessing a
@@ -489,7 +492,7 @@ refreshing it is inexpensive.
 auto ngp_sphere_data = mundy::mesh::get_updated_ngp_aggregate(sphere_data);
 ```
 
-## **Dynamic links**
+## Dynamic links
 Links are one of the major features added by MundyMesh.
 
 ### Links vs STK connectivity
@@ -677,7 +680,7 @@ for_each_link_run(ngp_link_data, sphere_contacts,
                   });
 ```
 
-## **Staged mesh modification from device code**
+## Staged mesh modification from device code
 `NgpModRequests` is Mundy's ticket-based framework for device-originated mesh changes.
 
 ### The three-stage model
@@ -732,7 +735,7 @@ reqs.process_requests(*bulk);
 `NgpModRequests` lets kernels describe requested mesh changes on device and then has the host realize them safely in a
 later modification phase.
 
-## **Field BLAS**
+## Field BLAS
 `NgpFieldBLAS.hpp` provides BLAS-like operations over `stk::mesh::FieldBase` objects with unified host/device style.
 
 ### Common operations
@@ -756,7 +759,7 @@ later modification phase.
 
 These are useful when your algorithm wants whole-field linear algebra rather than per-entity accessors.
 
-## **Accessor expressions**
+## Accessor expressions
 `NgpAccessorExpr` is Mundy's highest-level device expression layer.
 
 ### Goal

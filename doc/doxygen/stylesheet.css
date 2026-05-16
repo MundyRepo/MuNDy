@@ -1,0 +1,9 @@
+/* docs/doxygen/stylesheet.css */
+
+img[src$="mundy_banner_v2_t.png"] {
+  display: block;
+  width: 70%;
+  height: auto;
+  margin-left: auto;
+  margin-right: auto;
+}

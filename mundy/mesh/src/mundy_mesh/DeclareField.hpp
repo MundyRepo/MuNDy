@@ -22,6 +22,7 @@
 #define MUNDY_MESH_DECLAREFIELD_HPP_
 
 /// \file DeclareField.hpp
+/// \defgroup MundyMeshDeclareField mundy::mesh::DeclareField
 /// \brief A set of helpers for declaring fields with reduced boilerplate code.
 
 // C++ core
@@ -71,6 +72,7 @@ class TaggedFieldDeclarationHelperT;
 ///   auto vec3d_io_field_decl = field_decl.type<double>().role(TRANSIENT).output_type(VECTOR_3D);
 ///   stk::mesh::Field<double> &node_velocity_field = vec3d_io_field_decl.rank(NODE_RANK).name("velocity").declare();
 ///   stk::mesh::Field<double> &elem_force_field    = vec3d_io_field_decl.rank(ELEMENT_RANK).name("force").declare();
+/// \endcode
 class FieldDeclarationHelper;
 
 template <typename T>

@@ -305,8 +305,10 @@ using vector_scalar_t = std::remove_cvref_t<decltype(std::declval<const std::rem
 ///
 /// auto bar(const Vector3d& x) {
 ///   Stash stash(to_storage(x));  // x here is an lvalue reference, so it will be wrapped in a reference wrapper and
-///   the stash will view x's data without copying return stash;
+///                                // the stash will view x's data without copying.
+///   return stash;
 /// }
+/// \endcode
 template <class T>
 KOKKOS_INLINE_FUNCTION auto to_storage(T&& value) {
   if constexpr (is_reference_wrapper_v<T>) {  // value is already a reference wrapper, so just return it
@@ -2175,9 +2177,9 @@ KOKKOS_INLINE_FUNCTION auto solve_mixed_cqpp(const Problem& prob, const Strategy
 /// Example 1:
 /// \code{.cpp}
 ///    // Problem setup
-///    Matrix3d A = {/*...*/};
-///    Vector3d q = {/*...*/};
-///    Vector3d x{/* initial_guess */}, grad{}, x_tmp{}, grad_tmp{};
+///    Matrix3d A{};
+///    Vector3d q{};
+///    Vector3d x{}, grad{}, x_tmp{}, grad_tmp{};
 ///
 ///    // Build the problem (no template args at callsite)
 ///    const auto lcp = make_mundy_math_lcp(A, q);
@@ -2200,10 +2202,10 @@ KOKKOS_INLINE_FUNCTION auto solve_mixed_cqpp(const Problem& prob, const Strategy
 /// Example 2: Congruent LCP
 /// \code{.cpp}
 ///    // Problem setup
-///    Matrix3d D = {/*...*/};
-///    Matrix3d M = {/*...*/};
-///    Vector3d q = {/*...*/};
-///    Vector3d x{/* initial_guess */}, grad{}, x_tmp{}, grad_tmp{};
+///    Matrix3d D{};
+///    Matrix3d M{};
+///    Vector3d q{};
+///    Vector3d x{}, grad{}, x_tmp{}, grad_tmp{};
 ///
 ///    // Build quadratic-form operator and problem
 ///    using backend_t = convex::MundyMathBackend<double, 3>;

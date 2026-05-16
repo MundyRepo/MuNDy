@@ -21,8 +21,9 @@
 #ifndef MUNDY_MESH_NGPFIELDBLAS_HPP_
 #define MUNDY_MESH_NGPFIELDBLAS_HPP_
 
-/// \file FieldBLAS.hpp
-/// \brief A set of BLAS-like operations for stk::mesh::FieldBase objects
+/// \file NgpFieldBLAS.hpp
+/// \defgroup MundyMeshNgpFieldBLAS mundy::mesh::NgpFieldBLAS
+/// \brief BLAS-like operations for stk::mesh::FieldBase objects with host/device-style execution.
 
 // Trilinos
 #include <stk_mesh/base/FieldBase.hpp>
