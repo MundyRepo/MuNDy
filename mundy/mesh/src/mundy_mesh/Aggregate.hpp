@@ -50,6 +50,7 @@
 #include <mundy_utils/suppress_warnings.hpp>  // for MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_PUSH/POP
 #include <mundy_utils/throw_assert.hpp>       // for MUNDY_THROW_ASSERT
 #include <mundy_utils/tuple.hpp>              // for mundy::tuple
+#include <mundy_utils/requires.hpp>
 
 namespace mundy {
 
@@ -241,7 +242,7 @@ namespace mesh {
 ///   move_spheres2(center_accessor, radius_accessor);
 /// \endcode
 template <typename... Components>
-  requires(all_have_tags_v<Components...> && all_tags_unique_v<Components...>)
+  MUNDY_REQUIRES(all_have_tags_v<Components...> && all_tags_unique_v<Components...>)
 class Aggregate {
  public:
   using ComponentsTuple = tuple<Components...>;
@@ -251,7 +252,7 @@ class Aggregate {
 
   /// \brief Construct an Aggregate that has no components
   Aggregate(const stk::mesh::BulkData& bulk_data, stk::mesh::Selector selector)
-    requires(sizeof...(Components) == 0)
+    MUNDY_REQUIRES(sizeof...(Components) == 0)
       : bulk_data_(bulk_data), selector_(std::move(selector)), components_{} {
   }
 
@@ -283,7 +284,7 @@ class Aggregate {
 
   /// \brief Add a component with the given tag (fluent interface):
   template <typename Tag, typename NewComponent>
-    requires(all_tags_unique_v<TaggedComponent<Tag, NewComponent>, Components...>)
+    MUNDY_REQUIRES(all_tags_unique_v<TaggedComponent<Tag, NewComponent>, Components...>)
   auto add_component(NewComponent new_component) const {
     auto new_tagged_comp = TaggedComponent<Tag, NewComponent>{std::move(new_component)};
     auto new_tuple = tuple_cat(components_, make_tuple(new_tagged_comp));
@@ -295,7 +296,7 @@ class Aggregate {
   }
   //
   template <typename Tag, typename NewComponent>
-    requires(!all_tags_unique_v<TaggedComponent<Tag, NewComponent>, Components...>)
+    MUNDY_REQUIRES(!all_tags_unique_v<TaggedComponent<Tag, NewComponent>, Components...>)
   void add_component(NewComponent /*new_component*/) const {
     static_assert(all_tags_unique_v<TaggedComponent<Tag, NewComponent>, Components...>,
                   "The new component's tag must be unique from all existing component tags.");
@@ -303,7 +304,7 @@ class Aggregate {
 
   /// \brief Add a component that already has a tag
   template <typename NewTaggedComponent>
-    requires(all_have_tags_v<std::remove_cvref_t<NewTaggedComponent>> &&
+    MUNDY_REQUIRES(all_have_tags_v<std::remove_cvref_t<NewTaggedComponent>> &&
              all_tags_unique_v<std::remove_cvref_t<NewTaggedComponent>, Components...>)
   auto add_component(NewTaggedComponent new_component) const {
     using tagged_component_type = std::remove_cvref_t<NewTaggedComponent>;
@@ -313,7 +314,7 @@ class Aggregate {
   }
   //
   template <typename NewTaggedComponent>
-    requires(all_have_tags_v<std::remove_cvref_t<NewTaggedComponent>> &&
+    MUNDY_REQUIRES(all_have_tags_v<std::remove_cvref_t<NewTaggedComponent>> &&
              !all_tags_unique_v<std::remove_cvref_t<NewTaggedComponent>, Components...>)
   void add_component(NewTaggedComponent /*new_component*/) const {
     static_assert(all_tags_unique_v<std::remove_cvref_t<NewTaggedComponent>, Components...>,
@@ -322,12 +323,12 @@ class Aggregate {
 
   /// \brief Fetch the component corresponding to the given Tag
   template <typename Tag>
-    requires(contains_tag_v<Tag, Components...>)
+    MUNDY_REQUIRES(contains_tag_v<Tag, Components...>)
   const auto& get_component() const {
     return ::mundy::impl::find_component<Tag>(components_);
   }
   template <typename Tag>
-    requires(!contains_tag_v<Tag, Components...>)
+    MUNDY_REQUIRES(!contains_tag_v<Tag, Components...>)
   const void get_component() const {
     static_assert(contains_tag_v<Tag, Components...>,
                   "Attempting to get a component that does not exist in the aggregate");
@@ -335,12 +336,12 @@ class Aggregate {
 
   /// \brief Fetch the component corresponding to the given Tag
   template <typename Tag>
-    requires(contains_tag_v<Tag, Components...>)
+    MUNDY_REQUIRES(contains_tag_v<Tag, Components...>)
   auto& get_component() {
     return ::mundy::impl::find_component<Tag>(components_);
   }
   template <typename Tag>
-    requires(!contains_tag_v<Tag, Components...>)
+    MUNDY_REQUIRES(!contains_tag_v<Tag, Components...>)
   void get_component() {
     static_assert(contains_tag_v<Tag, Components...>,
                   "Attempting to get a component that does not exist in the aggregate");
@@ -372,13 +373,13 @@ class Aggregate {
 
   /// \brief Get the data tagged by the given tag for the given entity.
   template <typename Tag>
-    requires(contains_tag_v<Tag, Components...>)
+    MUNDY_REQUIRES(contains_tag_v<Tag, Components...>)
   decltype(auto) get(stk::mesh::Entity entity) {
     MUNDY_THROW_ASSERT(bulk_data_.is_valid(entity), std::runtime_error, "Aggregate::get() called with invalid entity");
     return get_component<Tag>()(entity);
   }
   template <typename Tag>
-    requires(!contains_tag_v<Tag, Components...>)
+    MUNDY_REQUIRES(!contains_tag_v<Tag, Components...>)
   void get(stk::mesh::Entity /*entity*/) {
     static_assert(contains_tag_v<Tag, Components...>,
                   "Attempting to get a component that does not exist in the aggregate");
@@ -386,13 +387,13 @@ class Aggregate {
 
   /// \brief Get the data tagged by the given tag for the given entity.
   template <typename Tag>
-    requires(contains_tag_v<Tag, Components...>)
+    MUNDY_REQUIRES(contains_tag_v<Tag, Components...>)
   decltype(auto) get(stk::mesh::Entity entity) const {
     MUNDY_THROW_ASSERT(bulk_data_.is_valid(entity), std::runtime_error, "Aggregate::get() called with invalid entity");
     return get_component<Tag>()(entity);
   }
   template <typename Tag>
-    requires(!contains_tag_v<Tag, Components...>)
+    MUNDY_REQUIRES(!contains_tag_v<Tag, Components...>)
   void get(stk::mesh::Entity /*entity*/) const {
     static_assert(contains_tag_v<Tag, Components...>,
                   "Attempting to get a component that does not exist in the aggregate");
@@ -415,7 +416,7 @@ class Aggregate {
 };  // Aggregate
 
 template <typename... NgpComponents>
-  requires(::mundy::all_have_tags_v<NgpComponents...> /* All of the given components must have tags */
+  MUNDY_REQUIRES(::mundy::all_have_tags_v<NgpComponents...> /* All of the given components must have tags */
            && ::mundy::all_tags_unique_v<NgpComponents...> /* All tags in an NgpAggregate must be unique */)
 class NgpAggregate {
  public:
@@ -430,7 +431,7 @@ class NgpAggregate {
 
   /// \brief Construct an Aggregate that has no components
   NgpAggregate(stk::mesh::NgpMesh ngp_mesh, stk::mesh::Selector selector)
-    requires(sizeof...(NgpComponents) == 0)
+    MUNDY_REQUIRES(sizeof...(NgpComponents) == 0)
       : ngp_mesh_(ngp_mesh), host_selector_(std::move(selector)), ngp_components_{} {
   }
 
@@ -485,7 +486,7 @@ class NgpAggregate {
   /// TODO(palmerb4): If we do decide to use get_updated_ngp_aggregate with references, then this function will
   ///   need removed, as Aggregates managing the lifetime of NGP components means users should construct them
   template <typename Tag, typename NewNgpComponent>
-    requires(all_tags_unique_v<NgpTaggedComponent<Tag, NewNgpComponent>, NgpComponents...>)
+    MUNDY_REQUIRES(all_tags_unique_v<NgpTaggedComponent<Tag, NewNgpComponent>, NgpComponents...>)
   auto add_component(NewNgpComponent new_ngp_component) const {
     auto new_ngp_tagged_comp = NgpTaggedComponent<Tag, NewNgpComponent>{std::move(new_ngp_component)};
     auto new_tuple = tuple_cat(ngp_components_, make_tuple(new_ngp_tagged_comp));
@@ -496,14 +497,14 @@ class NgpAggregate {
     return NewType(ngp_mesh_, host_selector_, new_tuple);
   }
   template <typename Tag, typename NewNgpComponent>
-    requires(!all_tags_unique_v<NgpTaggedComponent<Tag, NewNgpComponent>, NgpComponents...>)
+    MUNDY_REQUIRES(!all_tags_unique_v<NgpTaggedComponent<Tag, NewNgpComponent>, NgpComponents...>)
   void add_component(NewNgpComponent /*new_ngp_component*/) const {
     static_assert(all_tags_unique_v<NgpTaggedComponent<Tag, NewNgpComponent>, NgpComponents...>,
                   "The new component's tag must be unique from all existing component tags.");
   }
 
   template <typename NewNgpTaggedComponent>
-    requires(all_have_tags_v<std::remove_cvref_t<NewNgpTaggedComponent>> &&
+    MUNDY_REQUIRES(all_have_tags_v<std::remove_cvref_t<NewNgpTaggedComponent>> &&
              all_tags_unique_v<std::remove_cvref_t<NewNgpTaggedComponent>, NgpComponents...>)
   auto add_component(NewNgpTaggedComponent new_ngp_component) const {
     using tagged_component_type = std::remove_cvref_t<NewNgpTaggedComponent>;
@@ -513,7 +514,7 @@ class NgpAggregate {
   }
 
   template <typename NewNgpTaggedComponent>
-    requires(all_have_tags_v<std::remove_cvref_t<NewNgpTaggedComponent>> &&
+    MUNDY_REQUIRES(all_have_tags_v<std::remove_cvref_t<NewNgpTaggedComponent>> &&
              !all_tags_unique_v<std::remove_cvref_t<NewNgpTaggedComponent>, NgpComponents...>)
   void add_component(NewNgpTaggedComponent /*new_ngp_component*/) const {
     static_assert(all_tags_unique_v<std::remove_cvref_t<NewNgpTaggedComponent>, NgpComponents...>,
@@ -522,12 +523,12 @@ class NgpAggregate {
 
   /// \brief Fetch the component corresponding to the given Tag
   template <typename Tag>
-    requires(contains_tag_v<Tag, NgpComponents...>)
+    MUNDY_REQUIRES(contains_tag_v<Tag, NgpComponents...>)
   KOKKOS_INLINE_FUNCTION const auto& get_component() const {
     return ::mundy::impl::find_component<Tag>(ngp_components_);
   }
   template <typename Tag>
-    requires(!contains_tag_v<Tag, NgpComponents...>)
+    MUNDY_REQUIRES(!contains_tag_v<Tag, NgpComponents...>)
   KOKKOS_INLINE_FUNCTION const void get_component() const {
     static_assert(contains_tag_v<Tag, NgpComponents...>,
                   "Attempting to get a component that does not exist in the NGP aggregate");
@@ -535,12 +536,12 @@ class NgpAggregate {
 
   /// \brief Fetch the component corresponding to the given Tag
   template <typename Tag>
-    requires(contains_tag_v<Tag, NgpComponents...>)
+    MUNDY_REQUIRES(contains_tag_v<Tag, NgpComponents...>)
   KOKKOS_INLINE_FUNCTION auto& get_component() {
     return ::mundy::impl::find_component<Tag>(ngp_components_);
   }
   template <typename Tag>
-    requires(!contains_tag_v<Tag, NgpComponents...>)
+    MUNDY_REQUIRES(!contains_tag_v<Tag, NgpComponents...>)
   KOKKOS_INLINE_FUNCTION void get_component() {
     static_assert(contains_tag_v<Tag, NgpComponents...>,
                   "Attempting to get a component that does not exist in the NGP aggregate");
@@ -572,13 +573,13 @@ class NgpAggregate {
 
   /// \brief Get the data tagged by the given tag for the given entity index.
   template <typename Tag>
-    requires(contains_tag_v<Tag, NgpComponents...>)
+    MUNDY_REQUIRES(contains_tag_v<Tag, NgpComponents...>)
   KOKKOS_INLINE_FUNCTION decltype(auto) get(stk::mesh::FastMeshIndex entity_index) {
     auto& comp = get_component<Tag>();
     return comp(entity_index);
   }
   template <typename Tag>
-    requires(!contains_tag_v<Tag, NgpComponents...>)
+    MUNDY_REQUIRES(!contains_tag_v<Tag, NgpComponents...>)
   KOKKOS_INLINE_FUNCTION void get(stk::mesh::FastMeshIndex /*entity_index*/) {
     static_assert(contains_tag_v<Tag, NgpComponents...>,
                   "Attempting to get a component that does not exist in the NGP aggregate");
@@ -586,13 +587,13 @@ class NgpAggregate {
 
   /// \brief Get the data tagged by the given tag for the given entity index.
   template <typename Tag>
-    requires(contains_tag_v<Tag, NgpComponents...>)
+    MUNDY_REQUIRES(contains_tag_v<Tag, NgpComponents...>)
   KOKKOS_INLINE_FUNCTION decltype(auto) get(stk::mesh::FastMeshIndex entity_index) const {
     auto& comp = get_component<Tag>();
     return comp(entity_index);
   }
   template <typename Tag>
-    requires(!contains_tag_v<Tag, NgpComponents...>)
+    MUNDY_REQUIRES(!contains_tag_v<Tag, NgpComponents...>)
   KOKKOS_INLINE_FUNCTION void get(stk::mesh::FastMeshIndex /*entity_index*/) const {
     static_assert(contains_tag_v<Tag, NgpComponents...>,
                   "Attempting to get a component that does not exist in the NGP aggregate");
@@ -600,12 +601,12 @@ class NgpAggregate {
 
   /// \brief Get the data tagged by the given tag for the given entity.
   template <typename Tag>
-    requires(contains_tag_v<Tag, NgpComponents...>)
+    MUNDY_REQUIRES(contains_tag_v<Tag, NgpComponents...>)
   KOKKOS_INLINE_FUNCTION decltype(auto) get(stk::mesh::Entity entity) {
     return get<Tag>(ngp_mesh_.fast_mesh_index(entity));
   }
   template <typename Tag>
-    requires(!contains_tag_v<Tag, NgpComponents...>)
+    MUNDY_REQUIRES(!contains_tag_v<Tag, NgpComponents...>)
   KOKKOS_INLINE_FUNCTION void get(stk::mesh::Entity /*entity*/) {
     static_assert(contains_tag_v<Tag, NgpComponents...>,
                   "Attempting to get a component that does not exist in the NGP aggregate");
@@ -613,12 +614,12 @@ class NgpAggregate {
 
   /// \brief Get the data tagged by the given tag for the given entity.
   template <typename Tag>
-    requires(contains_tag_v<Tag, NgpComponents...>)
+    MUNDY_REQUIRES(contains_tag_v<Tag, NgpComponents...>)
   KOKKOS_INLINE_FUNCTION decltype(auto) get(stk::mesh::Entity entity) const {
     return get<Tag>(ngp_mesh_.fast_mesh_index(entity));
   }
   template <typename Tag>
-    requires(!contains_tag_v<Tag, NgpComponents...>)
+    MUNDY_REQUIRES(!contains_tag_v<Tag, NgpComponents...>)
   KOKKOS_INLINE_FUNCTION void get(stk::mesh::Entity /*entity*/) const {
     static_assert(contains_tag_v<Tag, NgpComponents...>,
                   "Attempting to get a component that does not exist in the NGP aggregate");
@@ -640,9 +641,11 @@ class NgpAggregate {
   //@}
 };  // NgpAggregate
 
+#if !defined(DOXYGEN_SHOULD_SKIP_THIS)
 /// \brief A deduction guide to allow for Aggregate() instead of Aggregate<>()
 template <typename... TaggedComponents>
 Aggregate(TaggedComponents...) -> Aggregate<TaggedComponents...>;
+#endif
 
 /// \brief Get a component of the given aggregate (const)
 /// This simply calls the get_component method of the given aggregate and solely exists so you don't need to write

@@ -21,6 +21,10 @@
 #ifndef MUNDY_MATH_HILBERT_HPP_
 #define MUNDY_MATH_HILBERT_HPP_
 
+/// \file Hilbert.hpp
+/// \defgroup MundyMathHilbert mundy::Hilbert
+/// \brief Helpers for constructing 3D Hilbert space-filling curve layouts.
+
 // External
 
 // C++ core

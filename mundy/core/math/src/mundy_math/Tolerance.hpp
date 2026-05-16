@@ -24,6 +24,7 @@
 // C++ core includes
 #include <Kokkos_Core.hpp>  // for KOKKOS_INLINE_FUNCTION
 #include <type_traits>      // for std::is_same_v
+#include <mundy_utils/requires.hpp>
 
 namespace mundy {
 
@@ -34,7 +35,7 @@ namespace mundy {
 ///
 /// \tparam T The type to get the tolerance for.
 template <typename T>
-  requires std::is_arithmetic_v<T>
+  MUNDY_REQUIRES(std::is_arithmetic_v<T>)
 KOKKOS_INLINE_FUNCTION constexpr T get_zero_tolerance() {
   using cT = std::remove_reference_t<T>;
   if constexpr (std::is_same_v<cT, float>) {
@@ -54,7 +55,7 @@ KOKKOS_INLINE_FUNCTION constexpr T get_zero_tolerance() {
 ///
 /// \tparam T The type to get the tolerance for.
 template <typename T>
-  requires std::is_arithmetic_v<T>
+  MUNDY_REQUIRES(std::is_arithmetic_v<T>)
 KOKKOS_INLINE_FUNCTION constexpr T get_relaxed_zero_tolerance() {
   using cT = std::remove_reference_t<T>;
   if constexpr (std::is_same_v<cT, float>) {
@@ -69,7 +70,7 @@ KOKKOS_INLINE_FUNCTION constexpr T get_relaxed_zero_tolerance() {
 
 /// \brief A helper function for getting the tolerance to use when comparing two different types.
 template <typename T1, typename T2>
-  requires std::is_arithmetic_v<T1> && std::is_arithmetic_v<T2>
+  MUNDY_REQUIRES(std::is_arithmetic_v<T1> && std::is_arithmetic_v<T2>)
 KOKKOS_INLINE_FUNCTION constexpr auto get_comparison_tolerance() {
   // If the types are both floating point types, we use the smaller of the two types as the comparison type.
   // If one of the types is an integer and the other is a floating point type, we use the floating point type.
@@ -96,7 +97,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto get_comparison_tolerance() {
 /// float  - int -> float
 /// double - int -> double
 template <typename T1, typename T2>
-  requires std::is_arithmetic_v<T1> && std::is_arithmetic_v<T2>
+  MUNDY_REQUIRES(std::is_arithmetic_v<T1> && std::is_arithmetic_v<T2>)
 KOKKOS_INLINE_FUNCTION constexpr auto get_comparison_tolerance_promote_ints() {
   using cT1 = std::remove_reference_t<T1>;
   using cT2 = std::remove_reference_t<T2>;
@@ -111,7 +112,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto get_comparison_tolerance_promote_ints() {
 /// \brief A helper function for getting the relaxed tolerance to use when comparing two different types.
 /// This class chooses the tolerance based on the smaller of the two types.
 template <typename T1, typename T2>
-  requires std::is_arithmetic_v<T1> && std::is_arithmetic_v<T2>
+  MUNDY_REQUIRES(std::is_arithmetic_v<T1> && std::is_arithmetic_v<T2>)
 KOKKOS_INLINE_FUNCTION constexpr auto get_relaxed_comparison_tolerance() {
   using T = decltype(get_comparison_tolerance<T1, T2>());
   return get_relaxed_zero_tolerance<T>();
@@ -119,7 +120,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto get_relaxed_comparison_tolerance() {
 
 /// \brief A helper function for getting the relaxed tolerance to use when comparing two different types.
 template <typename T1, typename T2>
-  requires std::is_arithmetic_v<T1> && std::is_arithmetic_v<T2>
+  MUNDY_REQUIRES(std::is_arithmetic_v<T1> && std::is_arithmetic_v<T2>)
 KOKKOS_INLINE_FUNCTION constexpr auto get_relaxed_comparison_tolerance_promote_ints() {
   using cT1 = std::remove_reference_t<T1>;
   using cT2 = std::remove_reference_t<T2>;

@@ -3,3 +3,9 @@
 *build*
 DATA**
 __pycache__
+doc/html/
+doc/xml/
+doc/api/
+doc/_build/
+doxygen-readthedocs.log
+.venv*

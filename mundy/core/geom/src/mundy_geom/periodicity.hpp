@@ -21,6 +21,10 @@
 #ifndef MUNDY_GEOM_PERIODICITY_HPP_
 #define MUNDY_GEOM_PERIODICITY_HPP_
 
+/// \file periodicity.hpp
+/// \defgroup MundyGeomPeriodicity mundy::periodicity
+/// \brief Periodic metric classes and displacement helpers for geometric calculations.
+
 // External libs
 #include <Kokkos_Core.hpp>
 
@@ -30,12 +34,13 @@
 #include <utility>
 
 // Mundy
-#include <mundy_geom/primitives.hpp>     // for mundy::Point, mundy::LineSegment, ...
-#include <mundy_geom/transform.hpp>      // for mundy::translate
-#include <mundy_math/Matrix3.hpp>        // for mundy::Matrix3
-#include <mundy_math/Quaternion.hpp>     // for mundy::Quaternion
-#include <mundy_math/Tolerance.hpp>      // for mundy::get_zero_tolerance
-#include <mundy_math/Vector3.hpp>        // for mundy::Vector3
+#include <mundy_geom/primitives.hpp>  // for mundy::Point, mundy::LineSegment, ...
+#include <mundy_geom/transform.hpp>   // for mundy::translate
+#include <mundy_math/Matrix3.hpp>     // for mundy::Matrix3
+#include <mundy_math/Quaternion.hpp>  // for mundy::Quaternion
+#include <mundy_math/Tolerance.hpp>   // for mundy::get_zero_tolerance
+#include <mundy_math/Vector3.hpp>     // for mundy::Vector3
+#include <mundy_utils/requires.hpp>
 #include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
 
 // Need a runtime metric with a visit function that can turn into a concrete metric.
@@ -175,14 +180,14 @@ class EuclideanMetric {
 
   /// \brief Map a point into fractional coordinates
   template <ValidPointType PointT>
-    requires std::is_same_v<typename PointT::scalar_t, Scalar>
+  MUNDY_REQUIRES(std::is_same_v<typename PointT::scalar_t, Scalar>)
   KOKKOS_INLINE_FUNCTION constexpr OurPoint to_fractional(const PointT& point) const {
     return point;
   }
 
   /// \brief Map a point from fractional coordinates to real space
   template <ValidPointType PointT>
-    requires std::is_same_v<typename PointT::scalar_t, Scalar>
+  MUNDY_REQUIRES(std::is_same_v<typename PointT::scalar_t, Scalar>)
   KOKKOS_INLINE_FUNCTION constexpr OurPoint from_fractional(const PointT& point_frac) const {
     return point_frac;
   }
@@ -201,14 +206,15 @@ class EuclideanMetric {
 
   /// \brief Distance vector between two points in free space (from point1 to point2)
   template <ValidPointType PointT1, ValidPointType PointT2>
-    requires std::is_same_v<typename PointT1::scalar_t, Scalar> && std::is_same_v<typename PointT2::scalar_t, Scalar>
+  MUNDY_REQUIRES(
+      std::is_same_v<typename PointT1::scalar_t, Scalar>&& std::is_same_v<typename PointT2::scalar_t, Scalar>)
   KOKKOS_INLINE_FUNCTION constexpr OurPoint sep(const PointT1& point1, const PointT2& point2) const {
     return point2 - point1;
   }
 
   /// \brief Wrap a point into the free space
   template <ValidPointType PointT>
-    requires std::is_same_v<typename PointT::scalar_t, Scalar>
+  MUNDY_REQUIRES(std::is_same_v<typename PointT::scalar_t, Scalar>)
   KOKKOS_INLINE_FUNCTION constexpr OurPoint wrap(const PointT& point) const {
     return point;
   }
@@ -220,9 +226,9 @@ class EuclideanMetric {
 
   /// \brief Shift a point by a given number of lattice images in each direction (free space does nothing)
   template <ValidPointType PointT, typename Integer>
-    requires std::is_same_v<typename PointT::scalar_t, Scalar>
-  KOKKOS_INLINE_FUNCTION constexpr OurPoint shift_image(const PointT& point,
-                                                        const Vector3<Integer>& /*num_images*/) const {
+  MUNDY_REQUIRES(std::is_same_v<typename PointT::scalar_t, Scalar>)
+  KOKKOS_INLINE_FUNCTION constexpr OurPoint
+      shift_image(const PointT& point, const Vector3<Integer>& /*num_images*/) const {
     return point;
   }
 };  // EuclideanMetric
@@ -270,14 +276,14 @@ class PeriodicMetric {
 
   /// \brief Map a point into fractional coordinates
   template <ValidPointType PointT>
-    requires std::is_same_v<typename PointT::scalar_t, Scalar>
+  MUNDY_REQUIRES(std::is_same_v<typename PointT::scalar_t, Scalar>)
   KOKKOS_INLINE_FUNCTION constexpr OurPoint to_fractional(const PointT& point) const {
     return h_inv_ * point;
   }
 
   /// \brief Map a point from fractional coordinates to real space
   template <ValidPointType PointT>
-    requires std::is_same_v<typename PointT::scalar_t, Scalar>
+  MUNDY_REQUIRES(std::is_same_v<typename PointT::scalar_t, Scalar>)
   KOKKOS_INLINE_FUNCTION constexpr OurPoint from_fractional(const PointT& point_frac) const {
     return h_ * point_frac;
   }
@@ -297,7 +303,8 @@ class PeriodicMetric {
 
   /// \brief Distance vector between two points in periodic space (from point1 to point2)
   template <ValidPointType PointT1, ValidPointType PointT2>
-    requires std::is_same_v<typename PointT1::scalar_t, Scalar> && std::is_same_v<typename PointT2::scalar_t, Scalar>
+  MUNDY_REQUIRES(
+      std::is_same_v<typename PointT1::scalar_t, Scalar>&& std::is_same_v<typename PointT2::scalar_t, Scalar>)
   KOKKOS_INLINE_FUNCTION constexpr OurPoint sep(const PointT1& point1, const PointT2& point2) const {
     // Assumes linearity of to_fractional
     return from_fractional(frac_minimum_image<int64_t>(to_fractional(point2 - point1)));
@@ -305,7 +312,7 @@ class PeriodicMetric {
 
   /// \brief Wrap a point into the periodic space
   template <ValidPointType PointT>
-    requires std::is_same_v<typename PointT::scalar_t, Scalar>
+  MUNDY_REQUIRES(std::is_same_v<typename PointT::scalar_t, Scalar>)
   KOKKOS_INLINE_FUNCTION constexpr OurPoint wrap(const PointT& point) const {
     return from_fractional(frac_wrap_to_unit_cell<int64_t>(to_fractional(point)));
   }
@@ -317,7 +324,7 @@ class PeriodicMetric {
 
   /// \brief Shift a point by a given number of lattice images in each direction
   template <ValidPointType PointT, typename Integer>
-    requires std::is_same_v<typename PointT::scalar_t, Scalar>
+  MUNDY_REQUIRES(std::is_same_v<typename PointT::scalar_t, Scalar>)
   KOKKOS_INLINE_FUNCTION constexpr OurPoint shift_image(const PointT& point, const Vector3<Integer>& num_images) const {
     return translate(point, h_ * num_images);
   }
@@ -364,14 +371,14 @@ class PeriodicMetricX {
 
   /// \brief Map a point into fractional coordinates
   template <ValidPointType PointT>
-    requires std::is_same_v<typename PointT::scalar_t, Scalar>
+  MUNDY_REQUIRES(std::is_same_v<typename PointT::scalar_t, Scalar>)
   KOKKOS_INLINE_FUNCTION constexpr OurPoint to_fractional(const PointT& point) const {
     return elementwise_mul(inv_scale_, point);
   }
 
   /// \brief Map a point from fractional coordinates to real space
   template <ValidPointType PointT>
-    requires std::is_same_v<typename PointT::scalar_t, Scalar>
+  MUNDY_REQUIRES(std::is_same_v<typename PointT::scalar_t, Scalar>)
   KOKKOS_INLINE_FUNCTION constexpr OurPoint from_fractional(const PointT& point_frac) const {
     return elementwise_mul(scale_, point_frac);
   }
@@ -394,7 +401,8 @@ class PeriodicMetricX {
 
   /// \brief Distance vector between two points in periodic space (from point1 to point2)
   template <ValidPointType PointT1, ValidPointType PointT2>
-    requires std::is_same_v<typename PointT1::scalar_t, Scalar> && std::is_same_v<typename PointT2::scalar_t, Scalar>
+  MUNDY_REQUIRES(
+      std::is_same_v<typename PointT1::scalar_t, Scalar>&& std::is_same_v<typename PointT2::scalar_t, Scalar>)
   KOKKOS_INLINE_FUNCTION constexpr OurPoint sep(const PointT1& point1, const PointT2& point2) const {
     // Assumes linearity of to_fractional
     return from_fractional(frac_minimum_image<int64_t>(to_fractional(point2 - point1)));
@@ -402,7 +410,7 @@ class PeriodicMetricX {
 
   /// \brief Wrap a point into the periodic space
   template <ValidPointType PointT>
-    requires std::is_same_v<typename PointT::scalar_t, Scalar>
+  MUNDY_REQUIRES(std::is_same_v<typename PointT::scalar_t, Scalar>)
   KOKKOS_INLINE_FUNCTION constexpr OurPoint wrap(const PointT& point) const {
     return from_fractional(frac_wrap_to_unit_cell<int64_t>(to_fractional(point)));
   }
@@ -415,7 +423,7 @@ class PeriodicMetricX {
 
   /// \brief Shift a point by a given number of lattice images in each direction
   template <ValidPointType PointT, typename Integer>
-    requires std::is_same_v<typename PointT::scalar_t, Scalar>
+  MUNDY_REQUIRES(std::is_same_v<typename PointT::scalar_t, Scalar>)
   KOKKOS_INLINE_FUNCTION constexpr OurPoint shift_image(const PointT& point, const Vector3<Integer>& num_images) const {
     return translate(point, from_fractional(num_images.template cast<Scalar>()));
   }
@@ -462,14 +470,14 @@ class PeriodicMetricY {
 
   /// \brief Map a point into fractional coordinates
   template <ValidPointType PointT>
-    requires std::is_same_v<typename PointT::scalar_t, Scalar>
+  MUNDY_REQUIRES(std::is_same_v<typename PointT::scalar_t, Scalar>)
   KOKKOS_INLINE_FUNCTION constexpr OurPoint to_fractional(const PointT& point) const {
     return elementwise_mul(inv_scale_, point);
   }
 
   /// \brief Map a point from fractional coordinates to real space
   template <ValidPointType PointT>
-    requires std::is_same_v<typename PointT::scalar_t, Scalar>
+  MUNDY_REQUIRES(std::is_same_v<typename PointT::scalar_t, Scalar>)
   KOKKOS_INLINE_FUNCTION constexpr OurPoint from_fractional(const PointT& point_frac) const {
     return elementwise_mul(scale_, point_frac);
   }
@@ -493,7 +501,8 @@ class PeriodicMetricY {
 
   /// \brief Distance vector between two points in periodic space (from point1 to point2)
   template <ValidPointType PointT1, ValidPointType PointT2>
-    requires std::is_same_v<typename PointT1::scalar_t, Scalar> && std::is_same_v<typename PointT2::scalar_t, Scalar>
+  MUNDY_REQUIRES(
+      std::is_same_v<typename PointT1::scalar_t, Scalar>&& std::is_same_v<typename PointT2::scalar_t, Scalar>)
   KOKKOS_INLINE_FUNCTION constexpr OurPoint sep(const PointT1& point1, const PointT2& point2) const {
     // Assumes linearity of to_fractional
     return from_fractional(frac_minimum_image<int64_t>(to_fractional(point2 - point1)));
@@ -501,7 +510,7 @@ class PeriodicMetricY {
 
   /// \brief Wrap a point into the periodic space
   template <ValidPointType PointT>
-    requires std::is_same_v<typename PointT::scalar_t, Scalar>
+  MUNDY_REQUIRES(std::is_same_v<typename PointT::scalar_t, Scalar>)
   KOKKOS_INLINE_FUNCTION constexpr OurPoint wrap(const PointT& point) const {
     return from_fractional(frac_wrap_to_unit_cell<int64_t>(to_fractional(point)));
   }
@@ -514,7 +523,7 @@ class PeriodicMetricY {
 
   /// \brief Shift a point by a given number of lattice images in each direction
   template <ValidPointType PointT, typename Integer>
-    requires std::is_same_v<typename PointT::scalar_t, Scalar>
+  MUNDY_REQUIRES(std::is_same_v<typename PointT::scalar_t, Scalar>)
   KOKKOS_INLINE_FUNCTION constexpr OurPoint shift_image(const PointT& point, const Vector3<Integer>& num_images) const {
     return translate(point, from_fractional(num_images.template cast<Scalar>()));
   }
@@ -561,14 +570,14 @@ class PeriodicMetricXY {
 
   /// \brief Map a point into fractional coordinates
   template <ValidPointType PointT>
-    requires std::is_same_v<typename PointT::scalar_t, Scalar>
+  MUNDY_REQUIRES(std::is_same_v<typename PointT::scalar_t, Scalar>)
   KOKKOS_INLINE_FUNCTION constexpr OurPoint to_fractional(const PointT& point) const {
     return elementwise_mul(inv_scale_, point);
   }
 
   /// \brief Map a point from fractional coordinates to real space
   template <ValidPointType PointT>
-    requires std::is_same_v<typename PointT::scalar_t, Scalar>
+  MUNDY_REQUIRES(std::is_same_v<typename PointT::scalar_t, Scalar>)
   KOKKOS_INLINE_FUNCTION constexpr OurPoint from_fractional(const PointT& point_frac) const {
     return elementwise_mul(scale_, point_frac);
   }
@@ -593,7 +602,8 @@ class PeriodicMetricXY {
 
   /// \brief Distance vector between two points in periodic space (from point1 to point2)
   template <ValidPointType PointT1, ValidPointType PointT2>
-    requires std::is_same_v<typename PointT1::scalar_t, Scalar> && std::is_same_v<typename PointT2::scalar_t, Scalar>
+  MUNDY_REQUIRES(
+      std::is_same_v<typename PointT1::scalar_t, Scalar>&& std::is_same_v<typename PointT2::scalar_t, Scalar>)
   KOKKOS_INLINE_FUNCTION constexpr OurPoint sep(const PointT1& point1, const PointT2& point2) const {
     // Assumes linearity of to_fractional
     return from_fractional(frac_minimum_image<int64_t>(to_fractional(point2 - point1)));
@@ -601,7 +611,7 @@ class PeriodicMetricXY {
 
   /// \brief Wrap a point into the periodic space
   template <ValidPointType PointT>
-    requires std::is_same_v<typename PointT::scalar_t, Scalar>
+  MUNDY_REQUIRES(std::is_same_v<typename PointT::scalar_t, Scalar>)
   KOKKOS_INLINE_FUNCTION constexpr OurPoint wrap(const PointT& point) const {
     return from_fractional(frac_wrap_to_unit_cell<int64_t>(to_fractional(point)));
   }
@@ -614,7 +624,7 @@ class PeriodicMetricXY {
 
   /// \brief Shift a point by a given number of lattice images in each direction
   template <ValidPointType PointT, typename Integer>
-    requires std::is_same_v<typename PointT::scalar_t, Scalar>
+  MUNDY_REQUIRES(std::is_same_v<typename PointT::scalar_t, Scalar>)
   KOKKOS_INLINE_FUNCTION constexpr OurPoint shift_image(const PointT& point, const Vector3<Integer>& num_images) const {
     return translate(point, from_fractional(num_images.template cast<Scalar>()));
   }
@@ -661,14 +671,14 @@ class PeriodicMetricYZ {
 
   /// \brief Map a point into fractional coordinates
   template <ValidPointType PointT>
-    requires std::is_same_v<typename PointT::scalar_t, Scalar>
+  MUNDY_REQUIRES(std::is_same_v<typename PointT::scalar_t, Scalar>)
   KOKKOS_INLINE_FUNCTION constexpr OurPoint to_fractional(const PointT& point) const {
     return elementwise_mul(inv_scale_, point);
   }
 
   /// \brief Map a point from fractional coordinates to real space
   template <ValidPointType PointT>
-    requires std::is_same_v<typename PointT::scalar_t, Scalar>
+  MUNDY_REQUIRES(std::is_same_v<typename PointT::scalar_t, Scalar>)
   KOKKOS_INLINE_FUNCTION constexpr OurPoint from_fractional(const PointT& point_frac) const {
     return elementwise_mul(scale_, point_frac);
   }
@@ -693,7 +703,8 @@ class PeriodicMetricYZ {
 
   /// \brief Distance vector between two points in periodic space (from point1 to point2)
   template <ValidPointType PointT1, ValidPointType PointT2>
-    requires std::is_same_v<typename PointT1::scalar_t, Scalar> && std::is_same_v<typename PointT2::scalar_t, Scalar>
+  MUNDY_REQUIRES(
+      std::is_same_v<typename PointT1::scalar_t, Scalar>&& std::is_same_v<typename PointT2::scalar_t, Scalar>)
   KOKKOS_INLINE_FUNCTION constexpr OurPoint sep(const PointT1& point1, const PointT2& point2) const {
     // Assumes linearity of to_fractional
     return from_fractional(frac_minimum_image<int64_t>(to_fractional(point2 - point1)));
@@ -701,7 +712,7 @@ class PeriodicMetricYZ {
 
   /// \brief Wrap a point into the periodic space
   template <ValidPointType PointT>
-    requires std::is_same_v<typename PointT::scalar_t, Scalar>
+  MUNDY_REQUIRES(std::is_same_v<typename PointT::scalar_t, Scalar>)
   KOKKOS_INLINE_FUNCTION constexpr OurPoint wrap(const PointT& point) const {
     return from_fractional(frac_wrap_to_unit_cell<int64_t>(to_fractional(point)));
   }
@@ -714,7 +725,7 @@ class PeriodicMetricYZ {
 
   /// \brief Shift a point by a given number of lattice images in each direction
   template <ValidPointType PointT, typename Integer>
-    requires std::is_same_v<typename PointT::scalar_t, Scalar>
+  MUNDY_REQUIRES(std::is_same_v<typename PointT::scalar_t, Scalar>)
   KOKKOS_INLINE_FUNCTION constexpr OurPoint shift_image(const PointT& point, const Vector3<Integer>& num_images) const {
     return translate(point, from_fractional(num_images.template cast<Scalar>()));
   }
@@ -767,14 +778,14 @@ class PeriodicScaledMetric {
 
   /// \brief Map a point into fractional coordinates
   template <ValidPointType PointT>
-    requires std::is_same_v<typename PointT::scalar_t, Scalar>
+  MUNDY_REQUIRES(std::is_same_v<typename PointT::scalar_t, Scalar>)
   KOKKOS_INLINE_FUNCTION constexpr OurPoint to_fractional(const PointT& point) const {
     return elementwise_mul(scale_inv_, point);
   }
 
   /// \brief Map a point from fractional coordinates to real space
   template <ValidPointType PointT>
-    requires std::is_same_v<typename PointT::scalar_t, Scalar>
+  MUNDY_REQUIRES(std::is_same_v<typename PointT::scalar_t, Scalar>)
   KOKKOS_INLINE_FUNCTION constexpr OurPoint from_fractional(const PointT& point_frac) const {
     return elementwise_mul(scale_, point_frac);
   }
@@ -794,14 +805,15 @@ class PeriodicScaledMetric {
 
   /// \brief Distance vector between two points in periodic space (from point1 to point2)
   template <ValidPointType PointT1, ValidPointType PointT2>
-    requires std::is_same_v<typename PointT1::scalar_t, Scalar> && std::is_same_v<typename PointT2::scalar_t, Scalar>
+  MUNDY_REQUIRES(
+      std::is_same_v<typename PointT1::scalar_t, Scalar>&& std::is_same_v<typename PointT2::scalar_t, Scalar>)
   KOKKOS_INLINE_FUNCTION constexpr OurPoint sep(const PointT1& point1, const PointT2& point2) const {
     return from_fractional(frac_minimum_image<int64_t>(to_fractional(point2 - point1)));
   }
 
   /// \brief Wrap a point into the periodic space
   template <ValidPointType PointT>
-    requires std::is_same_v<typename PointT::scalar_t, Scalar>
+  MUNDY_REQUIRES(std::is_same_v<typename PointT::scalar_t, Scalar>)
   KOKKOS_INLINE_FUNCTION constexpr OurPoint wrap(const PointT& point) const {
     return from_fractional(frac_wrap_to_unit_cell<int64_t>(to_fractional(point)));
   }
@@ -813,7 +825,7 @@ class PeriodicScaledMetric {
 
   /// \brief Shift a point by a given number of lattice images in each direction
   template <ValidPointType PointT, typename Integer>
-    requires std::is_same_v<typename PointT::scalar_t, Scalar>
+  MUNDY_REQUIRES(std::is_same_v<typename PointT::scalar_t, Scalar>)
   KOKKOS_INLINE_FUNCTION constexpr OurPoint shift_image(const PointT& point, const Vector3<Integer>& num_images) const {
     return translate(point, elementwise_mul(scale_, num_images));
   }
@@ -857,80 +869,95 @@ KOKKOS_INLINE_FUNCTION constexpr PeriodicScaledMetric<Scalar> periodic_scaled_me
 }
 //@}
 
-//! \name Get the periodic reference point for an object
+//! \name Periodic reference points
 //@{
-/*
 
-The set of reference points:
-                Point -> center
-          LineSegment -> start
-                 Line -> center
-             Circle3D -> center
-             VSegment -> start
-                 AABB -> min_corner
-               Sphere -> center
-       Spherocylinder -> center
-SpherocylinderSegment -> start
-                 Ring -> center
-            Ellipsoid -> center
-*/
+/// \brief Get the reference point for an object
+///
+/// The set of reference points:
+///                 Point -> center
+///           LineSegment -> start
+///                  Line -> center
+///              Circle3D -> center
+///              VSegment -> start
+///                  AABB -> min_corner
+///                Sphere -> center
+///        Spherocylinder -> center
+/// SpherocylinderSegment -> start
+///                  Ring -> center
+///             Ellipsoid -> center
+template <typename Object>
+KOKKOS_INLINE_FUNCTION auto reference_point(const Object& obj);
 
+#if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+/// \brief Overload for a point
 template <ValidPointType PointT>
 KOKKOS_INLINE_FUNCTION Point<typename PointT::scalar_t> reference_point(const PointT& point) {
   return point;
 }
 
+/// \brief Overload for a line
 template <ValidLineType LineT>
 KOKKOS_INLINE_FUNCTION Point<typename LineT::scalar_t> reference_point(const LineT& line) {
   return line.center();
 }
 
+/// \brief Overload for a line segment
 template <ValidLineSegmentType LineSegmentT>
 KOKKOS_INLINE_FUNCTION Point<typename LineSegmentT::scalar_t> reference_point(const LineSegmentT& line_segment) {
   return line_segment.start();
 }
 
+/// \brief Overload for a circle3D
 template <ValidCircle3DType Circle3DT>
 KOKKOS_INLINE_FUNCTION Point<typename Circle3DT::scalar_t> reference_point(const Circle3DT& circle) {
   return circle.center();
 }
 
+/// \brief Overload for a VSegment
 template <ValidVSegmentType VSegmentT>
 KOKKOS_INLINE_FUNCTION Point<typename VSegmentT::scalar_t> reference_point(const VSegmentT& v_segment) {
   return v_segment.start();
 }
 
+/// \brief Overload for an AABB
 template <ValidAABBType AABBT>
 KOKKOS_INLINE_FUNCTION Point<typename AABBT::scalar_t> reference_point(const AABBT& aabb) {
   return aabb.min_corner();
 }
 
+/// \brief Overload for a sphere
 template <ValidSphereType SphereT>
 KOKKOS_INLINE_FUNCTION Point<typename SphereT::scalar_t> reference_point(const SphereT& sphere) {
   return sphere.center();
 }
 
+/// \brief Overload for a spherocylinder
 template <ValidSpherocylinderType SpherocylinderT>
 KOKKOS_INLINE_FUNCTION Point<typename SpherocylinderT::scalar_t> reference_point(
     const SpherocylinderT& spherocylinder) {
   return spherocylinder.center();
 }
 
+/// \brief Overload for a spherocylinder segment
 template <ValidSpherocylinderSegmentType SpherocylinderSegmentT>
 KOKKOS_INLINE_FUNCTION Point<typename SpherocylinderSegmentT::scalar_t> reference_point(
     const SpherocylinderSegmentT& spherocylinder_segment) {
   return spherocylinder_segment.start();
 }
 
+/// \brief Overload for a ring
 template <ValidRingType RingT>
 KOKKOS_INLINE_FUNCTION Point<typename RingT::scalar_t> reference_point(const RingT& ring) {
   return ring.center();
 }
 
+/// \brief Overload for an ellipsoid
 template <ValidEllipsoidType EllipsoidT>
 KOKKOS_INLINE_FUNCTION Point<typename EllipsoidT::scalar_t> reference_point(const EllipsoidT& ellipsoid) {
   return ellipsoid.center();
 }
+#endif  // DOXYGEN_SHOULD_SKIP_THIS
 //@}
 
 //! \name Shift image functions to take an object and shift it by a lattice vector
@@ -949,40 +976,35 @@ KOKKOS_INLINE_FUNCTION auto shift_image(const Object& obj,                      
 //! \name Rigid wrapping functions (based on a consistent reference point)
 //@{
 
-/*
+/// \brief Rigidly wrap a geometric primitives into a given space (based on its reference point)
+/// The set of reference points:
+///                 Point -> center
+///           LineSegment -> start
+///                  Line -> (not valid)
+///              Circle3D -> center
+///              VSegment -> start
+///                  AABB -> min_corner
+///                Sphere -> center
+///        Spherocylinder -> center
+/// SpherocylinderSegment -> start
+///                  Ring -> center
+///             Ellipsoid -> center
+///
+/// Re-imagining the names for these functions:
+///  -wrap_points: wraps each point of the object independently using the metric's wrap function.
+///  -wrap_rigid: rigid translation so the internal reference point ends up wrapped into the primary cell; all other
+/// points move with it.
+template <typename Object, typename Metric>
+KOKKOS_INLINE_FUNCTION auto wrap_rigid(const Object& obj, const Metric& metric);
 
-The set of reference points:
-                Point -> center
-          LineSegment -> start
-                 Line -> (not valid)
-             Circle3D -> center
-             VSegment -> start
-                 AABB -> min_corner
-               Sphere -> center
-       Spherocylinder -> center
-SpherocylinderSegment -> start
-                 Ring -> center
-            Ellipsoid -> center
-
-Re-imagining the names for these functions:
- -wrap_points: wraps each point of the object independently using the metric's wrap function.
- -wrap_rigid: rigid translation so the internal reference point ends up wrapped into the primary cell; all other
-points move with it.
-*/
-
-/// \brief Rigidly wrap a point into a given space (based on its center)
+#if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+/// \brief Overload for a point
 template <ValidPointType PointT, typename Metric>
 KOKKOS_INLINE_FUNCTION Point<typename PointT::scalar_t> wrap_rigid(const PointT& point, const Metric& metric) {
   return metric.wrap(point);
 }
 
-/// \brief Rigidly wrap a point into a given space (based on its center | inplace)
-template <ValidPointType PointT, typename Metric>
-KOKKOS_INLINE_FUNCTION void wrap_rigid_inplace(PointT& point, const Metric& metric) {
-  metric.wrap_inplace(point);
-}
-
-/// \brief Rigidly wrap a line into a given space (invalid operation)
+/// \brief Overload for a line
 template <ValidLineType LineT, typename Metric>
 KOKKOS_INLINE_FUNCTION Line<typename LineT::scalar_t> wrap_rigid(const LineT& line, const Metric& /*metric*/) {
   MUNDY_THROW_REQUIRE(false, std::invalid_argument,
@@ -991,15 +1013,7 @@ KOKKOS_INLINE_FUNCTION Line<typename LineT::scalar_t> wrap_rigid(const LineT& li
   return line;
 }
 
-/// brief Rigidly wrap a line into a given space (invalid operation | inplace)
-template <ValidLineType LineT, typename Metric>
-KOKKOS_INLINE_FUNCTION void wrap_rigid_inplace(LineT& /*line*/, const Metric& /*metric*/) {
-  MUNDY_THROW_REQUIRE(false, std::invalid_argument,
-                      "Not implemented error: wrapping a line into a periodic space does not make sense, as it is "
-                      "infinite in length and could fill the space.")
-}
-
-/// \brief Rigidly wrap a line segment into a given space (based on its start point)
+/// \brief Overload for a line segment
 template <ValidLineSegmentType LineSegmentT, typename Metric>
 KOKKOS_INLINE_FUNCTION LineSegment<typename LineSegmentT::scalar_t> wrap_rigid(const LineSegmentT& line_segment,
                                                                                const Metric& metric) {
@@ -1008,29 +1022,14 @@ KOKKOS_INLINE_FUNCTION LineSegment<typename LineSegmentT::scalar_t> wrap_rigid(c
   return LineSegment<typename LineSegmentT::scalar_t>(wrapped_start, wrapped_end);
 }
 
-/// \brief Rigidly wrap a line segment into a given space (based on its start point | inplace)
-template <ValidLineSegmentType LineSegmentT, typename Metric>
-KOKKOS_INLINE_FUNCTION void wrap_rigid_inplace(LineSegmentT& line_segment, const Metric& metric) {
-  auto wrapped_start = metric.wrap(line_segment.start());
-  auto disp = wrapped_start - line_segment.start();
-  line_segment.set_start(wrapped_start);
-  line_segment.set_end(line_segment.end() + disp);
-}
-
-/// \brief Rigidly wrap a circle3D into a given space (based on its center point)
+/// \brief Overload for a circle3D
 template <ValidCircle3DType Circle3DT, typename Metric>
 KOKKOS_INLINE_FUNCTION Circle3D<typename Circle3DT::scalar_t> wrap_rigid(const Circle3DT& circle,
                                                                          const Metric& metric) {
   return Circle3D<typename Circle3DT::scalar_t>(metric.wrap(circle.center()), circle.orientation(), circle.radius());
 }
 
-/// \brief Rigidly wrap a circle3D into a given space (based on its center point | inplace)
-template <ValidCircle3DType Circle3DT, typename Metric>
-KOKKOS_INLINE_FUNCTION void wrap_rigid_inplace(Circle3DT& circle, const Metric& metric) {
-  metric.wrap_inplace(circle.center());
-}
-
-/// \brief Rigidly wrap a v-segment into a given space (based on its start point)
+/// \brief Overload for a v-segment
 template <ValidVSegmentType VSegmentT, typename Metric>
 KOKKOS_INLINE_FUNCTION VSegment<typename VSegmentT::scalar_t> wrap_rigid(const VSegmentT& v_segment,
                                                                          const Metric& metric) {
@@ -1041,17 +1040,7 @@ KOKKOS_INLINE_FUNCTION VSegment<typename VSegmentT::scalar_t> wrap_rigid(const V
   return VSegment<typename VSegmentT::scalar_t>(wrapped_start, wrapped_middle, wrapped_end);
 }
 
-/// \brief Rigidly wrap a v-segment into a given space (based on its start point | inplace)
-template <ValidVSegmentType VSegmentT, typename Metric>
-KOKKOS_INLINE_FUNCTION void wrap_rigid_inplace(VSegmentT& v_segment, const Metric& metric) {
-  auto wrapped_start = metric.wrap(v_segment.start());
-  auto disp = wrapped_start - v_segment.start();
-  v_segment.set_start(wrapped_start);
-  v_segment.set_middle(v_segment.middle() + disp);
-  v_segment.set_end(v_segment.end() + disp);
-}
-
-/// \brief Rigidly wrap an AABB into a given space (based on its min_corner)
+/// \brief Overload for an AABB
 template <ValidAABBType AABBT, typename Metric>
 KOKKOS_INLINE_FUNCTION AABB<typename AABBT::scalar_t> wrap_rigid(const AABBT& aabb, const Metric& metric) {
   auto wrapped_min = metric.wrap(aabb.min_corner());
@@ -1059,28 +1048,13 @@ KOKKOS_INLINE_FUNCTION AABB<typename AABBT::scalar_t> wrap_rigid(const AABBT& aa
   return AABB<typename AABBT::scalar_t>(wrapped_min, wrapped_max);
 }
 
-/// \brief Rigidly wrap an AABB into a given space (based on its min_corner | inplace)
-template <ValidAABBType AABBT, typename Metric>
-KOKKOS_INLINE_FUNCTION void wrap_rigid_inplace(AABBT& aabb, const Metric& metric) {
-  auto wrapped_min = metric.wrap(aabb.min_corner());
-  auto disp = wrapped_min - aabb.min_corner();
-  aabb.set_min_corner(wrapped_min);
-  aabb.set_max_corner(aabb.max_corner() + disp);
-}
-
-/// \brief Rigidly wrap a sphere into a given space (based on its center point)
+/// \brief Overload for a sphere
 template <ValidSphereType SphereT, typename Metric>
 KOKKOS_INLINE_FUNCTION Sphere<typename SphereT::scalar_t> wrap_rigid(const SphereT& sphere, const Metric& metric) {
   return Sphere<typename SphereT::scalar_t>(metric.wrap(sphere.center()), sphere.radius());
 }
 
-/// \brief Rigidly wrap a sphere into a given space (based on its center point | inplace)
-template <ValidSphereType SphereT, typename Metric>
-KOKKOS_INLINE_FUNCTION void wrap_rigid_inplace(SphereT& sphere, const Metric& metric) {
-  metric.wrap_inplace(sphere.center());
-}
-
-/// \brief Rigidly wrap a spherocylinder into a given space (based on its center point)
+/// \brief Overload for a spherocylinder
 template <ValidSpherocylinderType SpherocylinderT, typename Metric>
 KOKKOS_INLINE_FUNCTION Spherocylinder<typename SpherocylinderT::scalar_t> wrap_rigid(
     const SpherocylinderT& spherocylinder, const Metric& metric) {
@@ -1089,13 +1063,7 @@ KOKKOS_INLINE_FUNCTION Spherocylinder<typename SpherocylinderT::scalar_t> wrap_r
                                                             spherocylinder.length());
 }
 
-/// \brief Rigidly wrap a spherocylinder into a given space (based on its center point | inplace)
-template <ValidSpherocylinderType SpherocylinderT, typename Metric>
-KOKKOS_INLINE_FUNCTION void wrap_rigid_inplace(SpherocylinderT& spherocylinder, const Metric& metric) {
-  metric.wrap_inplace(spherocylinder.center());
-}
-
-/// \brief Rigidly wrap a spherocylinder segment into a given space (based on its start point)
+/// \brief Overload for a spherocylinder segment
 template <ValidSpherocylinderSegmentType SpherocylinderSegmentT, typename Metric>
 KOKKOS_INLINE_FUNCTION SpherocylinderSegment<typename SpherocylinderSegmentT::scalar_t> wrap_rigid(
     const SpherocylinderSegmentT& spherocylinder_segment, const Metric& metric) {
@@ -1106,7 +1074,88 @@ KOKKOS_INLINE_FUNCTION SpherocylinderSegment<typename SpherocylinderSegmentT::sc
       spherocylinder_segment.length());
 }
 
-/// \brief Rigidly wrap a spherocylinder segment into a given space (based on its start point | inplace)
+/// \brief Overload for a ring
+template <ValidRingType RingT, typename Metric>
+KOKKOS_INLINE_FUNCTION Ring<typename RingT::scalar_t> wrap_rigid(const RingT& ring, const Metric& metric) {
+  return Ring<typename RingT::scalar_t>(metric.wrap(ring.center()), ring.orientation(), ring.major_radius(),
+                                        ring.minor_radius());
+}
+
+/// \brief Overload for an ellipsoid
+template <ValidEllipsoidType EllipsoidT, typename Metric>
+KOKKOS_INLINE_FUNCTION Ellipsoid<typename EllipsoidT::scalar_t> wrap_rigid(const EllipsoidT& ellipsoid,
+                                                                           const Metric& metric) {
+  return Ellipsoid<typename EllipsoidT::scalar_t>(metric.wrap(ellipsoid.center()), ellipsoid.orientation(),
+                                                  ellipsoid.radii());
+}
+#endif  // DOXYGEN_SHOULD_SKIP_THIS
+
+/// \brief Rigidly wrap a geometric primitives into a given space (based on its reference point | in-place)
+template <typename Object, typename Metric>
+KOKKOS_INLINE_FUNCTION void wrap_rigid_inplace(Object& obj, const Metric& metric);
+
+#if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+/// \brief Overload for a point
+template <ValidPointType PointT, typename Metric>
+KOKKOS_INLINE_FUNCTION void wrap_rigid_inplace(PointT& point, const Metric& metric) {
+  metric.wrap_inplace(point);
+}
+
+/// \brief Overload for a line (invalid operation)
+template <ValidLineType LineT, typename Metric>
+KOKKOS_INLINE_FUNCTION void wrap_rigid_inplace(LineT& /*line*/, const Metric& /*metric*/) {
+  MUNDY_THROW_REQUIRE(false, std::invalid_argument,
+                      "Not implemented error: wrapping a line into a periodic space does not make sense, as it is "
+                      "infinite in length and could fill the space.")
+}
+
+/// \brief Overload for a line segment
+template <ValidLineSegmentType LineSegmentT, typename Metric>
+KOKKOS_INLINE_FUNCTION void wrap_rigid_inplace(LineSegmentT& line_segment, const Metric& metric) {
+  auto wrapped_start = metric.wrap(line_segment.start());
+  auto disp = wrapped_start - line_segment.start();
+  line_segment.set_start(wrapped_start);
+  line_segment.set_end(line_segment.end() + disp);
+}
+
+/// \brief Overload for a circle3D
+template <ValidCircle3DType Circle3DT, typename Metric>
+KOKKOS_INLINE_FUNCTION void wrap_rigid_inplace(Circle3DT& circle, const Metric& metric) {
+  metric.wrap_inplace(circle.center());
+}
+
+/// \brief Overload for a v-segment
+template <ValidVSegmentType VSegmentT, typename Metric>
+KOKKOS_INLINE_FUNCTION void wrap_rigid_inplace(VSegmentT& v_segment, const Metric& metric) {
+  auto wrapped_start = metric.wrap(v_segment.start());
+  auto disp = wrapped_start - v_segment.start();
+  v_segment.set_start(wrapped_start);
+  v_segment.set_middle(v_segment.middle() + disp);
+  v_segment.set_end(v_segment.end() + disp);
+}
+
+/// \brief Overload for an AABB
+template <ValidAABBType AABBT, typename Metric>
+KOKKOS_INLINE_FUNCTION void wrap_rigid_inplace(AABBT& aabb, const Metric& metric) {
+  auto wrapped_min = metric.wrap(aabb.min_corner());
+  auto disp = wrapped_min - aabb.min_corner();
+  aabb.set_min_corner(wrapped_min);
+  aabb.set_max_corner(aabb.max_corner() + disp);
+}
+
+/// \brief Overload for a sphere
+template <ValidSphereType SphereT, typename Metric>
+KOKKOS_INLINE_FUNCTION void wrap_rigid_inplace(SphereT& sphere, const Metric& metric) {
+  metric.wrap_inplace(sphere.center());
+}
+
+/// \brief Overload for a spherocylinder
+template <ValidSpherocylinderType SpherocylinderT, typename Metric>
+KOKKOS_INLINE_FUNCTION void wrap_rigid_inplace(SpherocylinderT& spherocylinder, const Metric& metric) {
+  metric.wrap_inplace(spherocylinder.center());
+}
+
+/// \brief Overload for a spherocylinder segment
 template <ValidSpherocylinderSegmentType SpherocylinderSegmentT, typename Metric>
 KOKKOS_INLINE_FUNCTION void wrap_rigid_inplace(SpherocylinderSegmentT& spherocylinder_segment, const Metric& metric) {
   auto wrapped_start = metric.wrap(spherocylinder_segment.start());
@@ -1115,50 +1164,38 @@ KOKKOS_INLINE_FUNCTION void wrap_rigid_inplace(SpherocylinderSegmentT& spherocyl
   spherocylinder_segment.set_end(spherocylinder_segment.end() + disp);
 }
 
-/// \brief Rigidly wrap a ring into a given space (based on its center point)
-template <ValidRingType RingT, typename Metric>
-KOKKOS_INLINE_FUNCTION Ring<typename RingT::scalar_t> wrap_rigid(const RingT& ring, const Metric& metric) {
-  return Ring<typename RingT::scalar_t>(metric.wrap(ring.center()), ring.orientation(), ring.major_radius(),
-                                        ring.minor_radius());
-}
-
-/// \brief Rigidly wrap a ring into a given space (based on its center point | inplace)
+/// \brief Overload for a ring
 template <ValidRingType RingT, typename Metric>
 KOKKOS_INLINE_FUNCTION void wrap_rigid_inplace(RingT& ring, const Metric& metric) {
   metric.wrap_inplace(ring.center());
 }
 
-/// \brief Rigidly wrap an ellipsoid into a given space (based on its center point)
-template <ValidEllipsoidType EllipsoidT, typename Metric>
-KOKKOS_INLINE_FUNCTION Ellipsoid<typename EllipsoidT::scalar_t> wrap_rigid(const EllipsoidT& ellipsoid,
-                                                                           const Metric& metric) {
-  return Ellipsoid<typename EllipsoidT::scalar_t>(metric.wrap(ellipsoid.center()), ellipsoid.orientation(),
-                                                  ellipsoid.radii());
-}
-
-/// \brief Rigidly wrap an ellipsoid into a given space (based on its center point | inplace)
+/// \brief Overload for an ellipsoid
 template <ValidEllipsoidType EllipsoidT, typename Metric>
 KOKKOS_INLINE_FUNCTION void wrap_rigid_inplace(EllipsoidT& ellipsoid, const Metric& metric) {
   metric.wrap_inplace(ellipsoid.center());
 }
+#endif  // DOXYGEN_SHOULD_SKIP_THIS
 //@}
 
 //! \name Wrap all points of an object into a periodic space
 //@{
 
-/// \brief Wrap all points of a point into a periodic space
+/// \brief Wrap all points of a geometric primitive into a periodic space
+///
+/// \param obj the geometric primitive to wrap
+/// \param metric the periodic metric to use for wrapping
+template <typename Object, typename Metric>
+KOKKOS_INLINE_FUNCTION auto wrap_points(const Object& obj, const Metric& metric);
+
+#if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+/// \brief Overload for a point
 template <ValidPointType PointT, typename Metric>
 KOKKOS_INLINE_FUNCTION Point<typename PointT::scalar_t> wrap_points(const PointT& point, const Metric& metric) {
   return metric.wrap(point);
 }
 
-/// \brief Wrap all points of a point into a periodic space (inplace)
-template <ValidPointType PointT, typename Metric>
-KOKKOS_INLINE_FUNCTION void wrap_points_inplace(PointT& point, const Metric& metric) {
-  metric.wrap_inplace(point);
-}
-
-/// \brief Wrap all points of a line into a periodic space (invalid operation)
+/// \brief Overload for a line (invalid operation)
 template <ValidLineType LineT, typename Metric>
 KOKKOS_INLINE_FUNCTION Line<typename LineT::scalar_t> wrap_points(const LineT& line, const Metric& /*metric*/) {
   MUNDY_THROW_REQUIRE(false, std::invalid_argument,
@@ -1167,15 +1204,7 @@ KOKKOS_INLINE_FUNCTION Line<typename LineT::scalar_t> wrap_points(const LineT& l
   return line;
 }
 
-/// \brief Wrap all points of a line into a periodic space (invalid operation | inplace)
-template <ValidLineType LineT, typename Metric>
-KOKKOS_INLINE_FUNCTION void wrap_points_inplace(LineT& /*line*/, const Metric& /*metric*/) {
-  MUNDY_THROW_REQUIRE(false, std::invalid_argument,
-                      "Not implemented error: wrapping a line into a periodic space does not make sense, as it is "
-                      "infinite in length and could fill the space.")
-}
-
-/// \brief Wrap all points of a line segment into a periodic space
+/// \brief Overload for a line segment
 template <ValidLineSegmentType LineSegmentT, typename Metric>
 KOKKOS_INLINE_FUNCTION LineSegment<typename LineSegmentT::scalar_t> wrap_points(const LineSegmentT& line_segment,
                                                                                 const Metric& metric) {
@@ -1183,27 +1212,14 @@ KOKKOS_INLINE_FUNCTION LineSegment<typename LineSegmentT::scalar_t> wrap_points(
                                                       metric.wrap(line_segment.end()));
 }
 
-/// \brief Wrap all points of a line segment into a periodic space (inplace)
-template <ValidLineSegmentType LineSegmentT, typename Metric>
-KOKKOS_INLINE_FUNCTION void wrap_points_inplace(LineSegmentT& line_segment, const Metric& metric) {
-  metric.wrap_inplace(line_segment.start());
-  metric.wrap_inplace(line_segment.end());
-}
-
-/// \brief Wrap all points of a circle3D into a periodic space
+/// \brief Overload for a circle3D
 template <ValidCircle3DType Circle3DT, typename Metric>
 KOKKOS_INLINE_FUNCTION Circle3D<typename Circle3DT::scalar_t> wrap_points(const Circle3DT& circle,
                                                                           const Metric& metric) {
   return Circle3D<typename Circle3DT::scalar_t>(metric.wrap(circle.center()), circle.orientation(), circle.radius());
 }
 
-/// \brief Wrap all points of a circle3D into a periodic space (inplace)
-template <ValidCircle3DType Circle3DT, typename Metric>
-KOKKOS_INLINE_FUNCTION void wrap_points_inplace(Circle3DT& circle, const Metric& metric) {
-  metric.wrap_inplace(circle.center());
-}
-
-/// \brief Wrap all points of a v-segment into a periodic space
+/// \brief Overload for a v-segment
 template <ValidVSegmentType VSegmentT, typename Metric>
 KOKKOS_INLINE_FUNCTION VSegment<typename VSegmentT::scalar_t> wrap_points(const VSegmentT& v_segment,
                                                                           const Metric& metric) {
@@ -1211,40 +1227,19 @@ KOKKOS_INLINE_FUNCTION VSegment<typename VSegmentT::scalar_t> wrap_points(const 
                                                 metric.wrap(v_segment.end()));
 }
 
-/// \brief Wrap all points of a v-segment into a periodic space (inplace)
-template <ValidVSegmentType VSegmentT, typename Metric>
-KOKKOS_INLINE_FUNCTION void wrap_points_inplace(VSegmentT& v_segment, const Metric& metric) {
-  metric.wrap_inplace(v_segment.start());
-  metric.wrap_inplace(v_segment.middle());
-  metric.wrap_inplace(v_segment.end());
-}
-
-/// \brief Wrap all points of an AABB into a periodic space
+/// \brief Overload for an AABB
 template <ValidAABBType AABBT, typename Metric>
 KOKKOS_INLINE_FUNCTION AABB<typename AABBT::scalar_t> wrap_points(const AABBT& aabb, const Metric& metric) {
   return AABB<typename AABBT::scalar_t>(metric.wrap(aabb.min_corner()), metric.wrap(aabb.max_corner()));
 }
 
-/// \brief Wrap all points of an AABB into a periodic space (inplace)
-template <ValidAABBType AABBT, typename Metric>
-KOKKOS_INLINE_FUNCTION void wrap_points_inplace(AABBT& aabb, const Metric& metric) {
-  metric.wrap_inplace(aabb.min_corner());
-  metric.wrap_inplace(aabb.max_corner());
-}
-
-/// \brief Wrap all points of a sphere into a periodic space
+/// \brief Overload for a sphere
 template <ValidSphereType SphereT, typename Metric>
 KOKKOS_INLINE_FUNCTION Sphere<typename SphereT::scalar_t> wrap_points(const SphereT& sphere, const Metric& metric) {
   return Sphere<typename SphereT::scalar_t>(metric.wrap(sphere.center()), sphere.radius());
 }
 
-/// \brief Wrap all points of a sphere into a periodic space (inplace)
-template <ValidSphereType SphereT, typename Metric>
-KOKKOS_INLINE_FUNCTION void wrap_points_inplace(SphereT& sphere, const Metric& metric) {
-  metric.wrap_inplace(sphere.center());
-}
-
-/// \brief Wrap all points of a spherocylinder into a periodic space
+/// \brief Overload for a spherocylinder
 template <ValidSpherocylinderType SpherocylinderT, typename Metric>
 KOKKOS_INLINE_FUNCTION Spherocylinder<typename SpherocylinderT::scalar_t> wrap_points(
     const SpherocylinderT& spherocylinder, const Metric& metric) {
@@ -1253,13 +1248,7 @@ KOKKOS_INLINE_FUNCTION Spherocylinder<typename SpherocylinderT::scalar_t> wrap_p
                                                             spherocylinder.length());
 }
 
-/// \brief Wrap all points of a spherocylinder into a periodic space (inplace)
-template <ValidSpherocylinderType SpherocylinderT, typename Metric>
-KOKKOS_INLINE_FUNCTION void wrap_points_inplace(SpherocylinderT& spherocylinder, const Metric& metric) {
-  metric.wrap_inplace(spherocylinder.center());
-}
-
-/// \brief Wrap all points of a spherocylinder segment into a periodic space
+/// \brief Overload for a spherocylinder segment
 template <ValidSpherocylinderSegmentType SpherocylinderSegmentT, typename Metric>
 KOKKOS_INLINE_FUNCTION SpherocylinderSegment<typename SpherocylinderSegmentT::scalar_t> wrap_points(
     const SpherocylinderSegmentT& spherocylinder_segment, const Metric& metric) {
@@ -1268,53 +1257,119 @@ KOKKOS_INLINE_FUNCTION SpherocylinderSegment<typename SpherocylinderSegmentT::sc
       spherocylinder_segment.orientation(), spherocylinder_segment.radius(), spherocylinder_segment.length());
 }
 
-/// \brief Wrap all points of a spherocylinder segment into a periodic space (inplace)
-template <ValidSpherocylinderSegmentType SpherocylinderSegmentT, typename Metric>
-KOKKOS_INLINE_FUNCTION void wrap_points_inplace(SpherocylinderSegmentT& spherocylinder_segment, const Metric& metric) {
-  metric.wrap_inplace(spherocylinder_segment.start());
-  metric.wrap_inplace(spherocylinder_segment.end());
-}
-
-/// \brief Wrap all points of a ring into a periodic space
+/// \brief Overload for a ring
 template <ValidRingType RingT, typename Metric>
 KOKKOS_INLINE_FUNCTION Ring<typename RingT::scalar_t> wrap_points(const RingT& ring, const Metric& metric) {
   return Ring<typename RingT::scalar_t>(metric.wrap(ring.center()), ring.orientation(), ring.major_radius(),
                                         ring.minor_radius());
 }
 
-/// \brief Wrap all points of a ring into a periodic space (inplace)
-template <ValidRingType RingT, typename Metric>
-KOKKOS_INLINE_FUNCTION void wrap_points_inplace(RingT& ring, const Metric& metric) {
-  metric.wrap_inplace(ring.center());
-}
-
-/// \brief Wrap all points of an ellipsoid into a periodic space
+/// \brief Overload for an ellipsoid
 template <ValidEllipsoidType EllipsoidT, typename Metric>
 KOKKOS_INLINE_FUNCTION Ellipsoid<typename EllipsoidT::scalar_t> wrap_points(const EllipsoidT& ellipsoid,
                                                                             const Metric& metric) {
   return Ellipsoid<typename EllipsoidT::scalar_t>(metric.wrap(ellipsoid.center()), ellipsoid.orientation(),
                                                   ellipsoid.radii());
 }
+#endif  // DOXYGEN_SHOULD_SKIP_THIS
 
-/// \brief Wrap all points of an ellipsoid into a periodic space (inplace)
+/// \brief Wrap all points of a geometric primitive into a periodic space (inplace)
+///
+/// \param obj the geometric primitive to wrap (modified inplace)
+/// \param metric the periodic metric to use for wrapping
+template <typename Object, typename Metric>
+KOKKOS_INLINE_FUNCTION auto wrap_points_inplace(Object& obj, const Metric& metric);
+
+#if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+/// \brief Overload for a point (inplace)
+template <ValidPointType PointT, typename Metric>
+KOKKOS_INLINE_FUNCTION void wrap_points_inplace(PointT& point, const Metric& metric) {
+  metric.wrap_inplace(point);
+}
+
+/// \brief Overload for a line (invalid operation | inplace)
+template <ValidLineType LineT, typename Metric>
+KOKKOS_INLINE_FUNCTION void wrap_points_inplace(LineT& /*line*/, const Metric& /*metric*/) {
+  MUNDY_THROW_REQUIRE(false, std::invalid_argument,
+                      "Not implemented error: wrapping a line into a periodic space does not make sense, as it is "
+                      "infinite in length and could fill the space.")
+}
+
+/// \brief Overload for a line segment (inplace)
+template <ValidLineSegmentType LineSegmentT, typename Metric>
+KOKKOS_INLINE_FUNCTION void wrap_points_inplace(LineSegmentT& line_segment, const Metric& metric) {
+  metric.wrap_inplace(line_segment.start());
+  metric.wrap_inplace(line_segment.end());
+}
+
+/// \brief Overload for a circle3D (inplace)
+template <ValidCircle3DType Circle3DT, typename Metric>
+KOKKOS_INLINE_FUNCTION void wrap_points_inplace(Circle3DT& circle, const Metric& metric) {
+  metric.wrap_inplace(circle.center());
+}
+
+/// \brief Overload for a v-segment (inplace)
+template <ValidVSegmentType VSegmentT, typename Metric>
+KOKKOS_INLINE_FUNCTION void wrap_points_inplace(VSegmentT& v_segment, const Metric& metric) {
+  metric.wrap_inplace(v_segment.start());
+  metric.wrap_inplace(v_segment.middle());
+  metric.wrap_inplace(v_segment.end());
+}
+
+/// \brief Overload for an AABB (inplace)
+template <ValidAABBType AABBT, typename Metric>
+KOKKOS_INLINE_FUNCTION void wrap_points_inplace(AABBT& aabb, const Metric& metric) {
+  metric.wrap_inplace(aabb.min_corner());
+  metric.wrap_inplace(aabb.max_corner());
+}
+
+/// \brief Overload for a sphere (inplace)
+template <ValidSphereType SphereT, typename Metric>
+KOKKOS_INLINE_FUNCTION void wrap_points_inplace(SphereT& sphere, const Metric& metric) {
+  metric.wrap_inplace(sphere.center());
+}
+
+/// \brief Overload for a spherocylinder (inplace)
+template <ValidSpherocylinderType SpherocylinderT, typename Metric>
+KOKKOS_INLINE_FUNCTION void wrap_points_inplace(SpherocylinderT& spherocylinder, const Metric& metric) {
+  metric.wrap_inplace(spherocylinder.center());
+}
+
+/// \brief Overload for a spherocylinder segment (inplace)
+template <ValidSpherocylinderSegmentType SpherocylinderSegmentT, typename Metric>
+KOKKOS_INLINE_FUNCTION void wrap_points_inplace(SpherocylinderSegmentT& spherocylinder_segment, const Metric& metric) {
+  metric.wrap_inplace(spherocylinder_segment.start());
+  metric.wrap_inplace(spherocylinder_segment.end());
+}
+
+/// \brief Overload for a ring (inplace)
+template <ValidRingType RingT, typename Metric>
+KOKKOS_INLINE_FUNCTION void wrap_points_inplace(RingT& ring, const Metric& metric) {
+  metric.wrap_inplace(ring.center());
+}
+
+/// \brief Overload for an ellipsoid (inplace)
 template <ValidEllipsoidType EllipsoidT, typename Metric>
 KOKKOS_INLINE_FUNCTION void wrap_points_inplace(EllipsoidT& ellipsoid, const Metric& metric) {
   metric.wrap_inplace(ellipsoid.center());
 }
+#endif  // DOXYGEN_SHOULD_SKIP_THIS
 //@}
 
 //! \name Unwrap all points of an object to be within one image of the reference point
 //@{
 
-/*
-We must emphasize that unwrap_points_to_ref is only the inverse of wrap_points if the reference point already lies
-within the primary cell. Otherwise, they are the same up to wrap_rigid applied to the original shape. That is:
-  wrap_rigid(s) == unwrap_points_to_ref(wrap_points(s, metric)) == unwrap_points_to_ref(s, s.ref()).
+/// \brief Unwrap all points of a geometric primitive to be within one image of the reference point
+/// We must emphasize that unwrap_points_to_ref is only the inverse of wrap_points if the reference point already lies
+/// within the primary cell. Otherwise, they are the same up to wrap_rigid applied to the original shape. That is:
+///   wrap_rigid(s) == unwrap_points_to_ref(wrap_points(s, metric)) == unwrap_points_to_ref(s, s.ref()).
+///
+/// \note The following are valid even if the ref point is one of the given points.
+template <typename Object, ValidPointType PointT, typename Metric>
+KOKKOS_INLINE_FUNCTION auto unwrap_points_to_ref(const Object& obj, const Metric& metric, const PointT& ref_point);
 
-Note. The following are valid even if the ref point is one of the given points.
-*/
-
-/// \brief Unwrap all points of a point to be within one image of the reference point
+#if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+/// \brief Overload for a point
 template <ValidPointType PointT1, ValidPointType PointT2, typename Metric>
 KOKKOS_INLINE_FUNCTION Point<typename PointT1::scalar_t> unwrap_points_to_ref(const PointT1& point,
                                                                               const Metric& metric,
@@ -1322,13 +1377,7 @@ KOKKOS_INLINE_FUNCTION Point<typename PointT1::scalar_t> unwrap_points_to_ref(co
   return ref_point + metric.sep(ref_point, point);
 }
 
-/// \brief Unwrap all points of a point to be within one image of the reference point (inplace)
-template <ValidPointType PointT, typename Metric>
-KOKKOS_INLINE_FUNCTION void unwrap_points_to_ref_inplace(PointT& point, const Metric& metric, const PointT& ref_point) {
-  point = ref_point + metric.sep(ref_point, point);
-}
-
-/// \brief Unwrap all points of a line to be within one image of the reference point
+/// \brief Overload for a line (invalid operation)
 template <ValidLineType LineT, ValidPointType PointT, typename Metric>
 KOKKOS_INLINE_FUNCTION Line<typename PointT::scalar_t> unwrap_points_to_ref(const LineT& line, const Metric& /*metric*/,
                                                                             const PointT& /*ref_point*/) {
@@ -1338,16 +1387,7 @@ KOKKOS_INLINE_FUNCTION Line<typename PointT::scalar_t> unwrap_points_to_ref(cons
   return line;
 }
 
-/// \brief Unwrap all points of a line to be within one image of the reference point (inplace)
-template <ValidLineType LineT, ValidPointType PointT, typename Metric>
-KOKKOS_INLINE_FUNCTION void unwrap_points_to_ref_inplace(LineT& /*line*/, const Metric& /*metric*/,
-                                                         const PointT& /*ref_point*/) {
-  MUNDY_THROW_REQUIRE(false, std::invalid_argument,
-                      "Not implemented error: unwrapping a line into a periodic space does not make sense, as it is "
-                      "infinite in length and could fill the space.")
-}
-
-/// \brief Unwrap all points of a line segment to be within one image of the reference point
+/// \brief Overload for a line segment
 template <ValidLineSegmentType LineSegmentT, ValidPointType PointT, typename Metric>
 KOKKOS_INLINE_FUNCTION LineSegment<typename PointT::scalar_t> unwrap_points_to_ref(const LineSegmentT& line_segment,
                                                                                    const Metric& metric,
@@ -1363,23 +1403,7 @@ KOKKOS_INLINE_FUNCTION LineSegment<typename PointT::scalar_t> unwrap_points_to_r
                                                 metric.from_fractional(sr + d_end));
 }
 
-/// \brief Unwrap all points of a line segment to be within one image of the reference point
-/// (inplace)
-template <ValidLineSegmentType LineSegmentT, ValidPointType PointT, typename Metric>
-KOKKOS_INLINE_FUNCTION void unwrap_points_to_ref_inplace(LineSegmentT& line_segment, const Metric& metric,
-                                                         const PointT& ref_point) {
-  const auto s_start = metric.to_fractional(line_segment.start());
-  const auto s_end = metric.to_fractional(line_segment.end());
-  const auto sr = metric.to_fractional(ref_point);
-
-  const auto d_start = metric.template frac_minimum_image<int64_t>(s_start - sr);
-  const auto d_end = metric.template frac_minimum_image<int64_t>(s_end - sr);
-
-  line_segment.set_start(metric.from_fractional(sr + d_start));
-  line_segment.set_end(metric.from_fractional(sr + d_end));
-}
-
-/// \brief Unwrap all points of a circle3D to be within one image of the reference point
+/// \brief Overload for a circle3D
 template <ValidCircle3DType Circle3DT, ValidPointType PointT, typename Metric>
 KOKKOS_INLINE_FUNCTION Circle3D<typename PointT::scalar_t> unwrap_points_to_ref(const Circle3DT& circle,
                                                                                 const Metric& metric,
@@ -1388,14 +1412,7 @@ KOKKOS_INLINE_FUNCTION Circle3D<typename PointT::scalar_t> unwrap_points_to_ref(
   return Circle3D<typename PointT::scalar_t>(new_center, circle.orientation(), circle.radius());
 }
 
-/// \brief Unwrap all points of a circle3D to be within one image of the reference point (inplace)
-template <ValidCircle3DType Circle3DT, ValidPointType PointT, typename Metric>
-KOKKOS_INLINE_FUNCTION void unwrap_points_to_ref_inplace(Circle3DT& circle, const Metric& metric,
-                                                         const PointT& ref_point) {
-  unwrap_points_to_ref_inplace(circle.center(), metric, ref_point);
-}
-
-/// \brief Unwrap all points of a v-segment to be within one image of the reference point
+/// \brief Overload for a v-segment
 template <ValidVSegmentType VSegmentT, ValidPointType PointT, typename Metric>
 KOKKOS_INLINE_FUNCTION VSegment<typename PointT::scalar_t> unwrap_points_to_ref(const VSegmentT& v_segment,
                                                                                 const Metric& metric,
@@ -1413,25 +1430,7 @@ KOKKOS_INLINE_FUNCTION VSegment<typename PointT::scalar_t> unwrap_points_to_ref(
                                              metric.from_fractional(sr + d_middle), metric.from_fractional(sr + d_end));
 }
 
-/// \brief Unwrap all points of a v-segment to be within one image of the reference point (inplace)
-template <ValidVSegmentType VSegmentT, ValidPointType PointT, typename Metric>
-KOKKOS_INLINE_FUNCTION void unwrap_points_to_ref_inplace(VSegmentT& v_segment, const Metric& metric,
-                                                         const PointT& ref_point) {
-  const auto s_start = metric.to_fractional(v_segment.start());
-  const auto s_middle = metric.to_fractional(v_segment.middle());
-  const auto s_end = metric.to_fractional(v_segment.end());
-  const auto sr = metric.to_fractional(ref_point);
-
-  const auto d_start = metric.template frac_minimum_image<int64_t>(s_start - sr);
-  const auto d_middle = metric.template frac_minimum_image<int64_t>(s_middle - sr);
-  const auto d_end = metric.template frac_minimum_image<int64_t>(s_end - sr);
-
-  v_segment.set_start(metric.from_fractional(sr + d_start));
-  v_segment.set_middle(metric.from_fractional(sr + d_middle));
-  v_segment.set_end(metric.from_fractional(sr + d_end));
-}
-
-/// \brief Unwrap all points of an AABB to be within one image of the reference point
+/// \brief Overload for an AABB
 template <ValidAABBType AABBT, ValidPointType PointT, typename Metric>
 KOKKOS_INLINE_FUNCTION AABB<typename PointT::scalar_t> unwrap_points_to_ref(const AABBT& aabb, const Metric& metric,
                                                                             const PointT& ref_point) {
@@ -1445,21 +1444,7 @@ KOKKOS_INLINE_FUNCTION AABB<typename PointT::scalar_t> unwrap_points_to_ref(cons
   return AABB<typename PointT::scalar_t>(metric.from_fractional(sr + d_min), metric.from_fractional(sr + d_max));
 }
 
-/// \brief Unwrap all points of an AABB to be within one image of the reference point (inplace)
-template <ValidAABBType AABBT, ValidPointType PointT, typename Metric>
-KOKKOS_INLINE_FUNCTION void unwrap_points_to_ref_inplace(AABBT& aabb, const Metric& metric, const PointT& ref_point) {
-  const auto s_min = metric.to_fractional(aabb.min_corner());
-  const auto s_max = metric.to_fractional(aabb.max_corner());
-  const auto sr = metric.to_fractional(ref_point);
-
-  const auto d_min = metric.template frac_minimum_image<int64_t>(s_min - sr);
-  const auto d_max = metric.template frac_minimum_image<int64_t>(s_max - sr);
-
-  aabb.set_min_corner(metric.from_fractional(sr + d_min));
-  aabb.set_max_corner(metric.from_fractional(sr + d_max));
-}
-
-/// \brief Unwrap all points of a sphere to be within one image of the reference point
+/// \brief Overload for a sphere
 template <ValidSphereType SphereT, ValidPointType PointT, typename Metric>
 KOKKOS_INLINE_FUNCTION Sphere<typename PointT::scalar_t> unwrap_points_to_ref(const SphereT& sphere,
                                                                               const Metric& metric,
@@ -1468,14 +1453,7 @@ KOKKOS_INLINE_FUNCTION Sphere<typename PointT::scalar_t> unwrap_points_to_ref(co
   return Sphere<typename PointT::scalar_t>(new_center, sphere.radius());
 }
 
-/// \brief Unwrap all points of a sphere to be within one image of the reference point (inplace)
-template <ValidSphereType SphereT, ValidPointType PointT, typename Metric>
-KOKKOS_INLINE_FUNCTION void unwrap_points_to_ref_inplace(SphereT& sphere, const Metric& metric,
-                                                         const PointT& ref_point) {
-  unwrap_points_to_ref_inplace(sphere.center(), metric, ref_point);
-}
-
-/// \brief Unwrap all points of a spherocylinder to be within one image of the reference point
+/// \brief Overload for a spherocylinder
 template <ValidSpherocylinderType SpherocylinderT, ValidPointType PointT, typename Metric>
 KOKKOS_INLINE_FUNCTION Spherocylinder<typename PointT::scalar_t> unwrap_points_to_ref(
     const SpherocylinderT& spherocylinder, const Metric& metric, const PointT& ref_point) {
@@ -1484,15 +1462,7 @@ KOKKOS_INLINE_FUNCTION Spherocylinder<typename PointT::scalar_t> unwrap_points_t
                                                    spherocylinder.length());
 }
 
-/// \brief Unwrap all points of a spherocylinder to be within one image of the reference point (inplace)
-template <ValidSpherocylinderType SpherocylinderT, ValidPointType PointT, typename Metric>
-KOKKOS_INLINE_FUNCTION void unwrap_points_to_ref_inplace(SpherocylinderT& spherocylinder, const Metric& metric,
-                                                         const PointT& ref_point) {
-  unwrap_points_to_ref_inplace(spherocylinder.center(), metric, ref_point);
-}
-
-/// \brief Unwrap all points of a spherocylinder segment to be within one image of the reference
-/// point
+/// \brief Overload for a spherocylinder segment
 template <ValidSpherocylinderSegmentType SpherocylinderSegmentT, ValidPointType PointT, typename Metric>
 KOKKOS_INLINE_FUNCTION SpherocylinderSegment<typename PointT::scalar_t> unwrap_points_to_ref(
     const SpherocylinderSegmentT& spherocylinder_segment, const Metric& metric, const PointT& ref_point) {
@@ -1510,7 +1480,113 @@ KOKKOS_INLINE_FUNCTION SpherocylinderSegment<typename PointT::scalar_t> unwrap_p
                                                           spherocylinder_segment.length());
 }
 
-/// \brief Unwrap all points of a spherocylinder segment to be within one image of the reference point (inplace)
+/// \brief Overload for a ring
+template <ValidRingType RingT, ValidPointType PointT, typename Metric>
+KOKKOS_INLINE_FUNCTION Ring<typename PointT::scalar_t> unwrap_points_to_ref(const RingT& ring, const Metric& metric,
+                                                                            const PointT& ref_point) {
+  auto new_center = unwrap_points_to_ref(ring.center(), metric, ref_point);
+  return Ring<typename PointT::scalar_t>(new_center, ring.orientation(), ring.major_radius(), ring.minor_radius());
+}
+
+/// \brief Overload for an ellipsoid
+template <ValidEllipsoidType EllipsoidT, ValidPointType PointT, typename Metric>
+KOKKOS_INLINE_FUNCTION Ellipsoid<typename PointT::scalar_t> unwrap_points_to_ref(const EllipsoidT& ellipsoid,
+                                                                                 const Metric& metric,
+                                                                                 const PointT& ref_point) {
+  auto new_center = unwrap_points_to_ref(ellipsoid.center(), metric, ref_point);
+  return Ellipsoid<typename PointT::scalar_t>(new_center, ellipsoid.orientation(), ellipsoid.radii());
+}
+#endif  // DOXYGEN_SHOULD_SKIP_THIS
+
+/// \brief Unwrap all points of a geometric primitive to be within one image of the reference point (in-place)
+template <typename Object, ValidPointType PointT, typename Metric>
+KOKKOS_INLINE_FUNCTION void unwrap_points_to_ref_inplace(Object& obj, const Metric& metric, const PointT& ref_point);
+
+#if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+/// \brief Overload for a point (inplace)
+template <ValidPointType PointT, typename Metric>
+KOKKOS_INLINE_FUNCTION void unwrap_points_to_ref_inplace(PointT& point, const Metric& metric, const PointT& ref_point) {
+  point = ref_point + metric.sep(ref_point, point);
+}
+
+/// \brief Overload for a line (inplace, invalid operation)
+template <ValidLineType LineT, ValidPointType PointT, typename Metric>
+KOKKOS_INLINE_FUNCTION void unwrap_points_to_ref_inplace(LineT& /*line*/, const Metric& /*metric*/,
+                                                         const PointT& /*ref_point*/) {
+  MUNDY_THROW_REQUIRE(false, std::invalid_argument,
+                      "Not implemented error: unwrapping a line into a periodic space does not make sense, as it is "
+                      "infinite in length and could fill the space.")
+}
+
+/// \brief Overload for a line segment (inplace)
+template <ValidLineSegmentType LineSegmentT, ValidPointType PointT, typename Metric>
+KOKKOS_INLINE_FUNCTION void unwrap_points_to_ref_inplace(LineSegmentT& line_segment, const Metric& metric,
+                                                         const PointT& ref_point) {
+  const auto s_start = metric.to_fractional(line_segment.start());
+  const auto s_end = metric.to_fractional(line_segment.end());
+  const auto sr = metric.to_fractional(ref_point);
+
+  const auto d_start = metric.template frac_minimum_image<int64_t>(s_start - sr);
+  const auto d_end = metric.template frac_minimum_image<int64_t>(s_end - sr);
+
+  line_segment.set_start(metric.from_fractional(sr + d_start));
+  line_segment.set_end(metric.from_fractional(sr + d_end));
+}
+
+/// \brief Overload for a circle3D (inplace)
+template <ValidCircle3DType Circle3DT, ValidPointType PointT, typename Metric>
+KOKKOS_INLINE_FUNCTION void unwrap_points_to_ref_inplace(Circle3DT& circle, const Metric& metric,
+                                                         const PointT& ref_point) {
+  unwrap_points_to_ref_inplace(circle.center(), metric, ref_point);
+}
+
+/// \brief Overload for a v-segment (inplace)
+template <ValidVSegmentType VSegmentT, ValidPointType PointT, typename Metric>
+KOKKOS_INLINE_FUNCTION void unwrap_points_to_ref_inplace(VSegmentT& v_segment, const Metric& metric,
+                                                         const PointT& ref_point) {
+  const auto s_start = metric.to_fractional(v_segment.start());
+  const auto s_middle = metric.to_fractional(v_segment.middle());
+  const auto s_end = metric.to_fractional(v_segment.end());
+  const auto sr = metric.to_fractional(ref_point);
+
+  const auto d_start = metric.template frac_minimum_image<int64_t>(s_start - sr);
+  const auto d_middle = metric.template frac_minimum_image<int64_t>(s_middle - sr);
+  const auto d_end = metric.template frac_minimum_image<int64_t>(s_end - sr);
+
+  v_segment.set_start(metric.from_fractional(sr + d_start));
+  v_segment.set_middle(metric.from_fractional(sr + d_middle));
+  v_segment.set_end(metric.from_fractional(sr + d_end));
+}
+
+/// \brief Overload for an AABB (inplace)
+template <ValidAABBType AABBT, ValidPointType PointT, typename Metric>
+KOKKOS_INLINE_FUNCTION void unwrap_points_to_ref_inplace(AABBT& aabb, const Metric& metric, const PointT& ref_point) {
+  const auto s_min = metric.to_fractional(aabb.min_corner());
+  const auto s_max = metric.to_fractional(aabb.max_corner());
+  const auto sr = metric.to_fractional(ref_point);
+
+  const auto d_min = metric.template frac_minimum_image<int64_t>(s_min - sr);
+  const auto d_max = metric.template frac_minimum_image<int64_t>(s_max - sr);
+
+  aabb.set_min_corner(metric.from_fractional(sr + d_min));
+  aabb.set_max_corner(metric.from_fractional(sr + d_max));
+}
+
+/// \brief Overload for a sphere (inplace)
+template <ValidSphereType SphereT, ValidPointType PointT, typename Metric>
+KOKKOS_INLINE_FUNCTION void unwrap_points_to_ref_inplace(SphereT& sphere, const Metric& metric,
+                                                         const PointT& ref_point) {
+  unwrap_points_to_ref_inplace(sphere.center(), metric, ref_point);
+}
+
+/// \brief Overload for a spherocylinder (inplace)
+template <ValidSpherocylinderType SpherocylinderT, ValidPointType PointT, typename Metric>
+KOKKOS_INLINE_FUNCTION void unwrap_points_to_ref_inplace(SpherocylinderT& spherocylinder, const Metric& metric,
+                                                         const PointT& ref_point) {
+  unwrap_points_to_ref_inplace(spherocylinder.center(), metric, ref_point);
+}
+
+/// \brief Overload for a spherocylinder segment (inplace)
 template <ValidSpherocylinderSegmentType SpherocylinderSegmentT, ValidPointType PointT, typename Metric>
 KOKKOS_INLINE_FUNCTION void unwrap_points_to_ref_inplace(SpherocylinderSegmentT& spherocylinder_segment,
                                                          const Metric& metric, const PointT& ref_point) {
@@ -1525,35 +1601,19 @@ KOKKOS_INLINE_FUNCTION void unwrap_points_to_ref_inplace(SpherocylinderSegmentT&
   spherocylinder_segment.set_end(metric.from_fractional(sr + d_end));
 }
 
-/// \brief Unwrap all points of a ring to be within one image of the reference point
-template <ValidRingType RingT, ValidPointType PointT, typename Metric>
-KOKKOS_INLINE_FUNCTION Ring<typename PointT::scalar_t> unwrap_points_to_ref(const RingT& ring, const Metric& metric,
-                                                                            const PointT& ref_point) {
-  auto new_center = unwrap_points_to_ref(ring.center(), metric, ref_point);
-  return Ring<typename PointT::scalar_t>(new_center, ring.orientation(), ring.major_radius(), ring.minor_radius());
-}
-
-/// \brief Unwrap all points of a ring to be within one image of the reference point (inplace)
+/// \brief Overload for a ring (inplace)
 template <ValidRingType RingT, ValidPointType PointT, typename Metric>
 KOKKOS_INLINE_FUNCTION void unwrap_points_to_ref_inplace(RingT& ring, const Metric& metric, const PointT& ref_point) {
   unwrap_points_to_ref_inplace(ring.center(), metric, ref_point);
 }
 
-/// \brief Unwrap all points of an ellipsoid to be within one image of the reference point
-template <ValidEllipsoidType EllipsoidT, ValidPointType PointT, typename Metric>
-KOKKOS_INLINE_FUNCTION Ellipsoid<typename PointT::scalar_t> unwrap_points_to_ref(const EllipsoidT& ellipsoid,
-                                                                                 const Metric& metric,
-                                                                                 const PointT& ref_point) {
-  auto new_center = unwrap_points_to_ref(ellipsoid.center(), metric, ref_point);
-  return Ellipsoid<typename PointT::scalar_t>(new_center, ellipsoid.orientation(), ellipsoid.radii());
-}
-
-/// \brief Unwrap all points of an ellipsoid to be within one image of the reference point (inplace)
+/// \brief Overload for an ellipsoid (inplace)
 template <ValidEllipsoidType EllipsoidT, ValidPointType PointT, typename Metric>
 KOKKOS_INLINE_FUNCTION void unwrap_points_to_ref_inplace(EllipsoidT& ellipsoid, const Metric& metric,
                                                          const PointT& ref_point) {
   unwrap_points_to_ref_inplace(ellipsoid.center(), metric, ref_point);
 }
+#endif  // DOXYGEN_SHOULD_SKIP_THIS
 //@}
 
 }  // namespace mundy

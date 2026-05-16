@@ -22,6 +22,7 @@
 #define MUNDY_MESH_DECLAREENTITIES_HPP_
 
 /// \file DeclareEntities.hpp
+/// \defgroup MundyMeshDeclareEntities mundy::mesh::DeclareEntities
 /// \brief A set of helper methods for declaring entities without worrying about parallel ownership and sharing.
 
 // C++ core

@@ -38,6 +38,7 @@
 #include <mundy_math/Tolerance.hpp>      // for mundy::get_zero_tolerance
 #include <mundy_math/Vector.hpp>         // for mundy::Vector
 #include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
+#include <mundy_utils/requires.hpp>
 
 namespace mundy {
 
@@ -45,7 +46,7 @@ namespace mundy {
 ///
 /// This scalar type is just a 1D vector with a single entry.
 template <typename T, ValidAccessor<T> Accessor = Array<T, 1>>
-  requires std::is_arithmetic_v<T>
+  MUNDY_REQUIRES(std::is_arithmetic_v<T>)
 using ScalarWrapper = AVector<T, 1, Accessor>;
 
 /// \brief (Implementation) Type trait to determine if a type is a ScalarWrapper

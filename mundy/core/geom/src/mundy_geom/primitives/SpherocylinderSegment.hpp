@@ -32,6 +32,7 @@
 // Our libs
 #include <mundy_geom/primitives/Point.hpp>  // for mundy::Point
 #include <mundy_utils/throw_assert.hpp>     // for MUNDY_THROW_ASSERT
+#include <mundy_utils/requires.hpp>
 
 namespace mundy {
 
@@ -58,7 +59,7 @@ class SpherocylinderSegment {
   /// \brief Default constructor for owning SpherocylinderSegments. Default initialize the start and end points.
   KOKKOS_FUNCTION
   constexpr SpherocylinderSegment()
-    requires HasNArgConstructor<point_t, scalar_t, 3>
+    MUNDY_REQUIRES(HasNArgConstructor<point_t, scalar_t, 3>)
       : start_(scalar_t(), scalar_t(), scalar_t()),
         end_(scalar_t(), scalar_t(), scalar_t()),
         radius_(static_cast<scalar_t>(-1)) {
@@ -94,7 +95,7 @@ class SpherocylinderSegment {
   /// \brief Deep copy constructor
   template <typename OtherSpherocylinderSegmentType>
   KOKKOS_FUNCTION constexpr SpherocylinderSegment(const OtherSpherocylinderSegmentType& other)
-    requires(!std::is_same_v<OtherSpherocylinderSegmentType, SpherocylinderSegment<scalar_t, point_t>>)
+    MUNDY_REQUIRES(!std::is_same_v<OtherSpherocylinderSegmentType, SpherocylinderSegment<scalar_t, point_t>>)
       : start_(other.start_), end_(other.end_), radius_(other.radius_) {
   }
 
@@ -107,7 +108,7 @@ class SpherocylinderSegment {
   /// \brief Deep move constructor
   template <typename OtherSpherocylinderSegmentType>
   KOKKOS_FUNCTION constexpr SpherocylinderSegment(OtherSpherocylinderSegmentType&& other)
-    requires(!std::is_same_v<OtherSpherocylinderSegmentType, SpherocylinderSegment<scalar_t, point_t>>)
+    MUNDY_REQUIRES(!std::is_same_v<OtherSpherocylinderSegmentType, SpherocylinderSegment<scalar_t, point_t>>)
       : start_(std::move(other.start_)), end_(std::move(other.end_)), radius_(std::move(other.radius_)) {
   }
   //@}
@@ -129,7 +130,7 @@ class SpherocylinderSegment {
   template <typename OtherSpherocylinderSegmentType>
   KOKKOS_FUNCTION constexpr SpherocylinderSegment<scalar_t, point_t>& operator=(
       const OtherSpherocylinderSegmentType& other)
-    requires(!std::is_same_v<OtherSpherocylinderSegmentType, SpherocylinderSegment<scalar_t, point_t>>)
+    MUNDY_REQUIRES(!std::is_same_v<OtherSpherocylinderSegmentType, SpherocylinderSegment<scalar_t, point_t>>)
   {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     start_ = other.start_;
@@ -151,7 +152,7 @@ class SpherocylinderSegment {
   /// \brief Move assignment operator
   template <typename OtherSpherocylinderSegmentType>
   KOKKOS_FUNCTION constexpr SpherocylinderSegment<scalar_t, point_t>& operator=(OtherSpherocylinderSegmentType&& other)
-    requires(!std::is_same_v<OtherSpherocylinderSegmentType, SpherocylinderSegment<scalar_t, point_t>>)
+    MUNDY_REQUIRES(!std::is_same_v<OtherSpherocylinderSegmentType, SpherocylinderSegment<scalar_t, point_t>>)
   {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     start_ = std::move(other.start_);

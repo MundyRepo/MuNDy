@@ -31,6 +31,10 @@
 #ifndef MUNDY_MATH_ZMORT_HPP_
 #define MUNDY_MATH_ZMORT_HPP_
 
+/// \file zmort.hpp
+/// \defgroup MundyMathZmort mundy::zmort
+/// \brief Z-order/Morton comparison helpers for locality-aware ordering.
+
 // C++ core
 #include <algorithm>
 #include <array>

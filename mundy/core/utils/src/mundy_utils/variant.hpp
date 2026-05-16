@@ -36,6 +36,7 @@
 #include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
 #include <mundy_utils/tuple.hpp>         // for mundy::tuple
 #include <mundy_utils/type_traits.hpp>   // for mundy::index_finder, contains_type
+#include <mundy_utils/requires.hpp>
 
 namespace mundy {
 
@@ -71,7 +72,7 @@ struct variant {
 
   /// \brief Constructor for initializing with a specific type
   template <class T>
-    requires(contains_type_v<T, Alts...>)
+    MUNDY_REQUIRES(contains_type_v<T, Alts...>)
   KOKKOS_FUNCTION constexpr variant(const T& value) : storage_{}, active_index_{index_of<T>()} {
     storage_.template get<T>() = value;
   }
@@ -133,7 +134,7 @@ struct variant {
 
   /// \brief Set a new active type, default-constructing the previous type
   template <class T>
-    requires(contains_type_v<T, Alts...>)
+    MUNDY_REQUIRES(contains_type_v<T, Alts...>)
   KOKKOS_FUNCTION constexpr void operator=(T const& value) {
     reset_active_type();
     active_index_ = index_of<T>();
@@ -228,8 +229,7 @@ KOKKOS_FUNCTION constexpr decltype(auto) visit(Visitor&& visitor, variant<Alts..
       "Visitor return type must be the same for all alternatives.");
   return impl::visit_dispatch<0, sizeof...(Alts), ReturnType>(static_cast<Visitor&&>(visitor), var);
 }
-
-/// \brief Visit the active value in the variant (const overload)
+///
 template <class Visitor, class... Alts>
 KOKKOS_FUNCTION constexpr decltype(auto) visit(Visitor&& visitor, const variant<Alts...>& var) {
   static_assert(sizeof...(Alts) > 0, "variant must have at least one alternative.");

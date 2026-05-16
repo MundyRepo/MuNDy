@@ -32,6 +32,7 @@
 
 #include <stk_mesh/base/NgpField.hpp>
 #include <stk_mesh/base/NgpMesh.hpp>
+#include <mundy_utils/requires.hpp>
 
 namespace mundy {
 
@@ -98,7 +99,7 @@ void sync_field_to_owning_space(Field& field) {
 }
 
 template <typename ExecSpace>
-  requires Kokkos::is_execution_space<ExecSpace>::value
+  MUNDY_REQUIRES(Kokkos::is_execution_space<ExecSpace>::value)
 void sync_field_to_space(const stk::mesh::FieldBase& field, [[maybe_unused]] const ExecSpace& exec_space) {
   constexpr bool is_device_exec_space =
       !Kokkos::SpaceAccessibility<ExecSpace, stk::ngp::HostExecSpace::memory_space>::accessible;
@@ -121,7 +122,7 @@ void mark_field_modified_on_owning_space(Field& field) {
 }
 
 template <typename ExecSpace>
-  requires Kokkos::is_execution_space<ExecSpace>::value
+  MUNDY_REQUIRES(Kokkos::is_execution_space<ExecSpace>::value)
 void mark_field_modified_on_space(const stk::mesh::FieldBase& field, [[maybe_unused]] const ExecSpace& exec_space) {
   constexpr bool is_device_exec_space =
       !Kokkos::SpaceAccessibility<ExecSpace, stk::ngp::HostExecSpace::memory_space>::accessible;

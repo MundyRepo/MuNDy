@@ -1,4 +1,7 @@
-# MundyUtils
+# MundyUtils {#MundyUtils}
+
+See the \ref mundy/core/utils "MundyUtils directory reference".
+
 This subpackage contains small Kokkos-friendly utilities that fill the gaps left by the standard library and by
 host-only APIs. The core functionality includes
  - **Portable assertions and compile-time strings**
@@ -10,7 +13,7 @@ host-only APIs. The core functionality includes
 The overall style is the same as the rest of Mundy: small focused types, explicit free functions, and APIs that work in
 host/device code without hiding ownership or synchronization.
 
-## **Portable helpers**
+## Portable helpers
 These are the lowest-level tools in the package. They are mostly about writing portable code without giving up readable
 errors, compile-time strings, or simple metaprogramming.
 
@@ -111,7 +114,7 @@ This helper exists because Philox expects a `uint64_t` seed and `uint32_t` count
 | `do_not_optimize_away(x)` | Keep values live in benchmarks or micro-tests. |
 | `make_string_array(...)` | Build a `Teuchos::Array<std::string>` from a parameter pack. |
 
-## **Containers and ownership wrappers**
+## Containers and ownership wrappers
 These utilities mirror familiar standard-library ideas while staying friendly to Kokkos kernels and constexpr use.
 
 ### `tuple`
@@ -220,7 +223,7 @@ a.get() = 9;  // value -> 9
 
 This is a small but useful way to write APIs that accept either borrowed or owned data without manual overload sets.
 
-## **Tagged aggregates**
+## Tagged aggregates
 The aggregate family gives Mundy a lightweight, Kokkos-compatible alternative to larger metaprogramming libraries.
 
 ### `aggregate`
@@ -289,7 +292,7 @@ auto ragg = make_runtime_aggregate<Value>()
 
 This is the runtime-tagged counterpart to `variant_aggregate`.
 
-## **Kokkos-like host/device data structures**
+## Kokkos-like host/device data structures
 These utilities build on Kokkos views and dual views while using Mundy's `sync_to_*` and `modify_on_*` naming.
 
 ### `NgpView`

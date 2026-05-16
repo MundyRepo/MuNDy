@@ -1,0 +1,24 @@
+# Doxygen config used by Read the Docs / Sphinx / Breathe / Exhale.
+# It includes the normal Doxyfile but overrides output mode.
+
+@INCLUDE = doc/Doxyfile
+
+GENERATE_HTML          = NO
+GENERATE_XML           = YES
+XML_OUTPUT             = xml
+INPUT = ./mundy
+RECURSIVE = YES
+FULL_PATH_NAMES = YES
+STRIP_FROM_PATH = ..
+
+# Keep this path stable because doc/conf.py will point Breathe here.
+OUTPUT_DIRECTORY       = doc
+
+# The raw Doxygen stylesheet is irrelevant for Sphinx output.
+HTML_EXTRA_STYLESHEET  =
+
+PREDEFINED += MUNDY_REQUIRES(...)=
+PREDEFINED += KOKKOS_FUNCTION=
+PREDEFINED += KOKKOS_INLINE_FUNCTION=
+PREDEFINED += KOKKOS_FORCEINLINE_FUNCTION=
+PREDEFINED += KOKKOS_DEFAULTED_FUNCTION=

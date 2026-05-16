@@ -28,12 +28,12 @@
 #include <type_traits>
 
 // Mundy
-#include <mundy_geom/distance/DistanceMetrics.hpp>   // for mundy::FreeSpaceMetric
 #include <mundy_geom/distance/PointLineSegment.hpp>  // for mundy::distance(Point, LineSegment)
 #include <mundy_geom/distance/Types.hpp>             // for mundy::SharedNormalSigned
 #include <mundy_geom/primitives/LineSegment.hpp>     // for mundy::LineSegment
 #include <mundy_geom/primitives/Point.hpp>           // for mundy::Point
 #include <mundy_geom/primitives/Sphere.hpp>          // for mundy::Sphere
+#include <mundy_utils/requires.hpp>
 
 namespace mundy {
 
@@ -45,7 +45,7 @@ namespace mundy {
 /// \param[in] line_segment The line segment
 /// \param[in] sphere The sphere
 template <ValidLineSegmentType LineSegmentType, ValidSphereType SphereType>
-  requires std::is_same_v<typename LineSegmentType::scalar_t, typename SphereType::scalar_t>
+  MUNDY_REQUIRES(std::is_same_v<typename LineSegmentType::scalar_t, typename SphereType::scalar_t>)
 KOKKOS_FUNCTION typename LineSegmentType::scalar_t distance(const LineSegmentType& line_segment,  //
                                                             const SphereType& sphere) {
   return distance(SharedNormalSigned{}, line_segment, sphere);
@@ -56,7 +56,7 @@ KOKKOS_FUNCTION typename LineSegmentType::scalar_t distance(const LineSegmentTyp
 /// \param[in] line_segment The line segment
 /// \param[in] sphere The sphere
 template <ValidLineSegmentType LineSegmentType, ValidSphereType SphereType>
-  requires std::is_same_v<typename LineSegmentType::scalar_t, typename SphereType::scalar_t>
+  MUNDY_REQUIRES(std::is_same_v<typename LineSegmentType::scalar_t, typename SphereType::scalar_t>)
 KOKKOS_FUNCTION typename LineSegmentType::scalar_t distance(
     [[maybe_unused]] const SharedNormalSigned distance_type,  //
     const LineSegmentType& line_segment,                      //
@@ -72,7 +72,7 @@ KOKKOS_FUNCTION typename LineSegmentType::scalar_t distance(
 /// \param[out] arch_length The arch-length parameter of the closest point on the line segment
 /// \param[out] sep The separation vector (from line_segment to sphere)
 template <ValidLineSegmentType LineSegmentType, ValidSphereType SphereType>
-  requires std::is_same_v<typename LineSegmentType::scalar_t, typename SphereType::scalar_t>
+  MUNDY_REQUIRES(std::is_same_v<typename LineSegmentType::scalar_t, typename SphereType::scalar_t>)
 KOKKOS_FUNCTION typename LineSegmentType::scalar_t distance(
     const LineSegmentType& line_segment,                                  //
     const SphereType& sphere,                                             //
@@ -90,7 +90,7 @@ KOKKOS_FUNCTION typename LineSegmentType::scalar_t distance(
 /// \param[out] arch_length The arch-length parameter of the closest point on the line segment
 /// \param[out] sep The separation vector (from line_segment to sphere)
 template <ValidLineSegmentType LineSegmentType, ValidSphereType SphereType>
-  requires std::is_same_v<typename LineSegmentType::scalar_t, typename SphereType::scalar_t>
+  MUNDY_REQUIRES(std::is_same_v<typename LineSegmentType::scalar_t, typename SphereType::scalar_t>)
 KOKKOS_FUNCTION typename LineSegmentType::scalar_t distance(
     [[maybe_unused]] const SharedNormalSigned distance_type,               //
     const LineSegmentType& line_segment,                                   //

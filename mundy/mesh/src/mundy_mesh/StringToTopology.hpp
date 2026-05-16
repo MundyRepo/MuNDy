@@ -22,7 +22,7 @@
 #define MUNDY_MESH_STRINGTOTOPOLOGY_HPP_
 
 /// \file StringToTopology.hpp
-/// \brief Declaration of the StringToTopology class
+/// \brief Helpers for mapping string names to STK entity ranks and topologies.
 
 // C++ core libs
 #include <string>  // for std::string
@@ -108,7 +108,7 @@ stk::topology::rank_t string_to_rank(const std::string& rank_string);
 ///     - SUPEREDGE<N>                           -> create_superedge_topology(N)
 ///     - SUPERFACE<N>                           -> create_superface_topology(N)
 ///     - SUPERELEMENT<N>                        -> create_superelement_topology(N)
-/// \param rank_string [in] String containing a valid rank name.
+/// \param topology_string [in] String containing a valid topology name.
 stk::topology string_to_topology(const std::string& topology_string);
 
 }  // namespace mesh

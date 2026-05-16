@@ -38,12 +38,12 @@
 #include <stk_util/parallel/Parallel.hpp>  // for stk::parallel_machine_init, stk::parallel_machine_finalize
 
 // Mundy
-#include <mundy_geom/distance/DistanceMetrics.hpp>     // for mundy::FreeSpaceMetric
 #include <mundy_math/Array.hpp>                        // for mundy::Array
 #include <mundy_math/Matrix.hpp>                       // for mundy::Matrix
 #include <mundy_math/Quaternion.hpp>                   // for mundy::Quaternion
 #include <mundy_math/Tolerance.hpp>                    // for mundy::get_relaxed_tolerance
 #include <mundy_math/Vector.hpp>                       // for mundy::Vector
+#include <mundy_geom/periodicity.hpp>                 // for mundy::PeriodicScaledMetric, mundy::PeriodicMetric
 
 mundy::Vector3d random_vector() {
   return mundy::Vector3d{static_cast<double>(rand()) / RAND_MAX, static_cast<double>(rand()) / RAND_MAX,
@@ -70,11 +70,11 @@ void speed_test() {
   auto new_periodic_scaled_space_metric = mundy::periodic_scaled_metric_from_unit_cell(cell_size);
 
   bench.run("New Periodic Metric | No Loops", [&] {
-    auto sep = new_periodic_space_metric(point1, point2);
+    auto sep = new_periodic_space_metric.sep(point1, point2);
     ankerl::nanobench::doNotOptimizeAway(sep);
   });
   bench.run("New Periodic Metric | No Loops | Scale only", [&] {
-    auto sep = new_periodic_scaled_space_metric(point1, point2);
+    auto sep = new_periodic_scaled_space_metric.sep(point1, point2);
     ankerl::nanobench::doNotOptimizeAway(sep);
   });
 }
@@ -97,13 +97,13 @@ void construction_test() {
   bench.run("New Periodic Metric | No Loops", [&] {
     // New constructor
     auto new_periodic_space_metric = mundy::periodic_metric_from_unit_cell(cell_size);
-    auto sep = new_periodic_space_metric(point1, point2);
+    auto sep = new_periodic_space_metric.sep(point1, point2);
     ankerl::nanobench::doNotOptimizeAway(sep);
   });
   bench.run("New Periodic Metric | No Loops | Scale only", [&] {
     // New constructor | scale only
     auto new_periodic_scaled_space_metric = mundy::periodic_scaled_metric_from_unit_cell(cell_size);
-    auto sep = new_periodic_scaled_space_metric(point1, point2);
+    auto sep = new_periodic_scaled_space_metric.sep(point1, point2);
     ankerl::nanobench::doNotOptimizeAway(sep);
   });
 }

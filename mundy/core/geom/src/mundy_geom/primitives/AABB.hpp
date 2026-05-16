@@ -32,6 +32,7 @@
 // Our libs
 #include <mundy_geom/primitives/Point.hpp>  // for mundy::Point
 #include <mundy_utils/throw_assert.hpp>     // for MUNDY_THROW_ASSERT
+#include <mundy_utils/requires.hpp>
 
 namespace mundy {
 
@@ -62,7 +63,7 @@ class AABB {
   /// Initializes the aabb inside-out so nothing can be inside this aabb.
   KOKKOS_FUNCTION
   constexpr AABB()
-    requires(HasDefaultConstructor<min_point_t> && HasDefaultConstructor<max_point_t>)
+    MUNDY_REQUIRES(HasDefaultConstructor<min_point_t> && HasDefaultConstructor<max_point_t>)
       : min_corner_(), max_corner_() {
     min_corner_[0] = scalar_max();
     min_corner_[1] = scalar_max();
@@ -85,7 +86,7 @@ class AABB {
   /// \param[in] max_corner The maximum corner of the aabb.
   template <ValidPointType OtherPointType1, ValidPointType OtherPointType2>
   KOKKOS_FUNCTION constexpr AABB(const OtherPointType1& min_corner, const OtherPointType2& max_corner)
-    requires(!std::is_same_v<OtherPointType1, min_point_t> || !std::is_same_v<OtherPointType2, max_point_t>)
+    MUNDY_REQUIRES(!std::is_same_v<OtherPointType1, min_point_t> || !std::is_same_v<OtherPointType2, max_point_t>)
       : min_corner_(min_corner), max_corner_(max_corner) {
   }
 
@@ -98,7 +99,7 @@ class AABB {
   /// \param[in] z_max The maximum z-coordinate.
   KOKKOS_FUNCTION
   constexpr AABB(scalar_t x_min, scalar_t y_min, scalar_t z_min, scalar_t x_max, scalar_t y_max, scalar_t z_max)
-    requires(HasNArgConstructor<min_point_t, scalar_t, 3> && HasNArgConstructor<max_point_t, scalar_t, 3>)
+    MUNDY_REQUIRES(HasNArgConstructor<min_point_t, scalar_t, 3> && HasNArgConstructor<max_point_t, scalar_t, 3>)
       : min_corner_(x_min, y_min, z_min), max_corner_(x_max, y_max, z_max) {
   }
 
@@ -115,7 +116,7 @@ class AABB {
   /// \brief Deep copy constructor
   template <typename OtherAABBType>
   KOKKOS_FUNCTION constexpr AABB(const OtherAABBType& other)
-    requires(!std::is_same_v<OtherAABBType, AABB<scalar_t, min_point_t, max_point_t>>)
+    MUNDY_REQUIRES(!std::is_same_v<OtherAABBType, AABB<scalar_t, min_point_t, max_point_t>>)
       : min_corner_(other.min_corner_), max_corner_(other.max_corner_) {
   }
 
@@ -128,7 +129,7 @@ class AABB {
   /// \brief Deep move constructor
   template <typename OtherAABBType>
   KOKKOS_FUNCTION constexpr AABB(OtherAABBType&& other)
-    requires(!std::is_same_v<OtherAABBType, AABB<scalar_t, min_point_t, max_point_t>>)
+    MUNDY_REQUIRES(!std::is_same_v<OtherAABBType, AABB<scalar_t, min_point_t, max_point_t>>)
       : min_corner_(std::move(other.min_corner_)), max_corner_(std::move(other.max_corner_)) {
   }
   //@}
@@ -148,7 +149,7 @@ class AABB {
   /// \brief Copy assignment operator
   template <typename OtherAABBType>
   KOKKOS_FUNCTION constexpr AABB<scalar_t, min_point_t, max_point_t>& operator=(const OtherAABBType& other)
-    requires(!std::is_same_v<OtherAABBType, AABB<scalar_t, min_point_t, max_point_t>>)
+    MUNDY_REQUIRES(!std::is_same_v<OtherAABBType, AABB<scalar_t, min_point_t, max_point_t>>)
   {
     min_corner_ = other.min_corner_;
     max_corner_ = other.max_corner_;
@@ -167,7 +168,7 @@ class AABB {
   /// \brief Move assignment operator
   template <typename OtherAABBType>
   KOKKOS_FUNCTION constexpr AABB<scalar_t, min_point_t, max_point_t>& operator=(OtherAABBType&& other)
-    requires(!std::is_same_v<OtherAABBType, AABB<scalar_t, min_point_t, max_point_t>>)
+    MUNDY_REQUIRES(!std::is_same_v<OtherAABBType, AABB<scalar_t, min_point_t, max_point_t>>)
   {
     min_corner_ = std::move(other.min_corner_);
     max_corner_ = std::move(other.max_corner_);
@@ -279,12 +280,14 @@ class AABB {
   max_point_t max_corner_;
 };  // AABB
 
+#if !defined(DOXYGEN_SHOULD_SKIP_THIS)
 /// \brief Deduction guide for AABB
 template <typename Scalar>
 AABB(Scalar, Scalar, Scalar, Scalar, Scalar, Scalar) -> AABB<Scalar>;
 //
 template <ValidPointType MinPointType, ValidPointType MaxPointType>
 AABB(MinPointType, MaxPointType) -> AABB<typename MaxPointType::scalar_t, MinPointType, MaxPointType>;
+#endif
 
 /// @brief (Implementation) Type trait to determine if a type is an AABB
 template <typename T>

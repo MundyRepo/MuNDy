@@ -1,0 +1,25 @@
+version: 2
+
+build:
+  os: ubuntu-24.04
+  tools:
+    python: "3.12"
+  apt_packages:
+    - doxygen
+    - graphviz
+  jobs:
+    pre_build:
+      - doxygen --version
+      - dot -V
+      - rm -rf doc/xml doc/api
+      - doxygen doc/Doxyfile.rtd
+      - test -f doc/xml/index.xml
+
+sphinx:
+  configuration: doc/conf.py
+  builder: html
+  fail_on_warning: false
+
+python:
+  install:
+    - requirements: doc/requirements.txt

@@ -33,6 +33,7 @@
 #include <mundy_geom/primitives/Point.hpp>  // for mundy::Point
 #include <mundy_math/Quaternion.hpp>        // for mundy::Quaternion
 #include <mundy_utils/throw_assert.hpp>     // for MUNDY_THROW_ASSERT
+#include <mundy_utils/requires.hpp>
 
 namespace mundy {
 
@@ -65,7 +66,7 @@ class Spherocylinder {
   /// invalid value of -1
   KOKKOS_FUNCTION
   constexpr Spherocylinder()
-    requires(HasNArgConstructor<point_t, scalar_t, 3> && HasNArgConstructor<orientation_t, scalar_t, 4>)
+    MUNDY_REQUIRES(HasNArgConstructor<point_t, scalar_t, 3> && HasNArgConstructor<orientation_t, scalar_t, 4>)
       : center_(scalar_t(), scalar_t(), scalar_t()),
         orientation_(static_cast<scalar_t>(1), static_cast<scalar_t>(0), static_cast<scalar_t>(0),
                      static_cast<scalar_t>(0)),
@@ -92,7 +93,7 @@ class Spherocylinder {
   template <ValidPointType OtherPointType, ValidQuaternionType OtherQuaternionType>
   KOKKOS_FUNCTION constexpr Spherocylinder(const OtherPointType& center, const OtherQuaternionType& orientation,
                                            const scalar_t& radius, const scalar_t& length)
-    requires(!std::is_same_v<OtherPointType, point_t> || !std::is_same_v<OtherQuaternionType, orientation_t>)
+    MUNDY_REQUIRES(!std::is_same_v<OtherPointType, point_t> || !std::is_same_v<OtherQuaternionType, orientation_t>)
       : center_(center), orientation_(orientation), radius_(radius), length_(length) {
   }
 
@@ -109,7 +110,7 @@ class Spherocylinder {
   /// \brief Deep copy constructor with different spherocylinder type
   template <typename OtherSpherocylinderType>
   KOKKOS_FUNCTION constexpr Spherocylinder(const OtherSpherocylinderType& other)
-    requires(!std::is_same_v<OtherSpherocylinderType, Spherocylinder<scalar_t, point_t, orientation_t>>)
+    MUNDY_REQUIRES(!std::is_same_v<OtherSpherocylinderType, Spherocylinder<scalar_t, point_t, orientation_t>>)
       : center_(other.center_), orientation_(other.orientation_), radius_(other.radius_), length_(other.length_) {
   }
 
@@ -125,7 +126,7 @@ class Spherocylinder {
   /// \brief Deep move constructor
   template <typename OtherSpherocylinderType>
   KOKKOS_FUNCTION constexpr Spherocylinder(OtherSpherocylinderType&& other)
-    requires(!std::is_same_v<OtherSpherocylinderType, Spherocylinder<scalar_t, point_t, orientation_t>>)
+    MUNDY_REQUIRES(!std::is_same_v<OtherSpherocylinderType, Spherocylinder<scalar_t, point_t, orientation_t>>)
       : center_(std::move(other.center_)),
         orientation_{std::move(other.orientation_)},
         radius_(std::move(other.radius_)),
@@ -152,7 +153,7 @@ class Spherocylinder {
   template <typename OtherSpherocylinderType>
   KOKKOS_FUNCTION constexpr Spherocylinder<scalar_t, point_t, orientation_t>& operator=(
       const OtherSpherocylinderType& other)
-    requires(!std::is_same_v<OtherSpherocylinderType, Spherocylinder<scalar_t, point_t, orientation_t>>)
+    MUNDY_REQUIRES(!std::is_same_v<OtherSpherocylinderType, Spherocylinder<scalar_t, point_t, orientation_t>>)
   {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     center_ = other.center_;
@@ -177,7 +178,7 @@ class Spherocylinder {
   /// \brief Move assignment operator
   template <typename OtherSpherocylinderType>
   KOKKOS_FUNCTION constexpr Spherocylinder<scalar_t, point_t, orientation_t>& operator=(OtherSpherocylinderType&& other)
-    requires(!std::is_same_v<OtherSpherocylinderType, Spherocylinder<scalar_t, point_t, orientation_t>>)
+    MUNDY_REQUIRES(!std::is_same_v<OtherSpherocylinderType, Spherocylinder<scalar_t, point_t, orientation_t>>)
   {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     center_ = std::move(other.center_);

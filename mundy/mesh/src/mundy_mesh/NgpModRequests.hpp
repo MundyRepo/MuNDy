@@ -45,6 +45,7 @@
 #include <mundy_utils/StringLiteral.hpp>     // for mundy::StringLiteral, mundy::make_string_literal
 #include <mundy_utils/throw_assert.hpp>
 #include <mundy_utils/variant.hpp>  // for mundy::variant
+#include <mundy_utils/requires.hpp>
 
 namespace mundy {
 
@@ -584,7 +585,7 @@ class NgpRequestEntitiesImplT {
   /// \brief Record an entity creation request for the new-id variant.
   /// The current process will own the created entity. It will be assigned a new ID by the mesh.
   KOKKOS_INLINE_FUNCTION FutureEntity request(size_t ticket, stk::mesh::EntityRank entity_rank) const
-    requires(!HasKnownEntityId)
+    MUNDY_REQUIRES(!HasKnownEntityId)
   {
     constexpr auto name = make_string_literal("NgpRequestEntitiesImplT::request");
     assert_active_space<name>();
@@ -605,11 +606,11 @@ class NgpRequestEntitiesImplT {
   }
 
   // clang-format off
-  KOKKOS_INLINE_FUNCTION FutureEntity request_node(size_t ticket) const requires(!HasKnownEntityId) { return request(ticket, stk::topology::NODE_RANK); }
-  KOKKOS_INLINE_FUNCTION FutureEntity request_edge(size_t ticket) const requires(!HasKnownEntityId) { return request(ticket, stk::topology::EDGE_RANK); }
-  KOKKOS_INLINE_FUNCTION FutureEntity request_face(size_t ticket) const requires(!HasKnownEntityId) { return request(ticket, stk::topology::FACE_RANK); }
-  KOKKOS_INLINE_FUNCTION FutureEntity request_element(size_t ticket) const requires(!HasKnownEntityId) { return request(ticket, stk::topology::ELEMENT_RANK); }
-  KOKKOS_INLINE_FUNCTION FutureEntity request_constraint(size_t ticket) const requires(!HasKnownEntityId) { return request(ticket, stk::topology::CONSTRAINT_RANK); }
+  KOKKOS_INLINE_FUNCTION FutureEntity request_node(size_t ticket) const MUNDY_REQUIRES(!HasKnownEntityId) { return request(ticket, stk::topology::NODE_RANK); }
+  KOKKOS_INLINE_FUNCTION FutureEntity request_edge(size_t ticket) const MUNDY_REQUIRES(!HasKnownEntityId) { return request(ticket, stk::topology::EDGE_RANK); }
+  KOKKOS_INLINE_FUNCTION FutureEntity request_face(size_t ticket) const MUNDY_REQUIRES(!HasKnownEntityId) { return request(ticket, stk::topology::FACE_RANK); }
+  KOKKOS_INLINE_FUNCTION FutureEntity request_element(size_t ticket) const MUNDY_REQUIRES(!HasKnownEntityId) { return request(ticket, stk::topology::ELEMENT_RANK); }
+  KOKKOS_INLINE_FUNCTION FutureEntity request_constraint(size_t ticket) const MUNDY_REQUIRES(!HasKnownEntityId) { return request(ticket, stk::topology::CONSTRAINT_RANK); }
   // clang-format on
 
   /// \brief Record an entity creation request with a specified entity ID for the known-id variant.
@@ -617,7 +618,7 @@ class NgpRequestEntitiesImplT {
   KOKKOS_INLINE_FUNCTION FutureEntity request(size_t ticket,                      //
                                               stk::mesh::EntityRank entity_rank,  //
                                               stk::mesh::EntityId entity_id) const
-    requires(HasKnownEntityId)
+    MUNDY_REQUIRES(HasKnownEntityId)
   {
     constexpr auto name = make_string_literal("NgpRequestEntitiesImplT::request");
     assert_active_space<name>();
@@ -634,16 +635,16 @@ class NgpRequestEntitiesImplT {
   }
 
   // clang-format off
-  KOKKOS_INLINE_FUNCTION FutureEntity request_node(size_t ticket, stk::mesh::EntityId entity_id) const requires(HasKnownEntityId) { return request(ticket, stk::topology::NODE_RANK, entity_id); }
-  KOKKOS_INLINE_FUNCTION FutureEntity request_edge(size_t ticket, stk::mesh::EntityId entity_id) const requires(HasKnownEntityId) { return request(ticket, stk::topology::EDGE_RANK, entity_id); }
-  KOKKOS_INLINE_FUNCTION FutureEntity request_face(size_t ticket, stk::mesh::EntityId entity_id) const requires(HasKnownEntityId) { return request(ticket, stk::topology::FACE_RANK, entity_id); }
-  KOKKOS_INLINE_FUNCTION FutureEntity request_element(size_t ticket, stk::mesh::EntityId entity_id) const requires(HasKnownEntityId) { return request(ticket, stk::topology::ELEMENT_RANK, entity_id); }
-  KOKKOS_INLINE_FUNCTION FutureEntity request_constraint(size_t ticket, stk::mesh::EntityId entity_id) const requires(HasKnownEntityId) { return request(ticket, stk::topology::CONSTRAINT_RANK, entity_id); }
+  KOKKOS_INLINE_FUNCTION FutureEntity request_node(size_t ticket, stk::mesh::EntityId entity_id) const MUNDY_REQUIRES(HasKnownEntityId) { return request(ticket, stk::topology::NODE_RANK, entity_id); }
+  KOKKOS_INLINE_FUNCTION FutureEntity request_edge(size_t ticket, stk::mesh::EntityId entity_id) const MUNDY_REQUIRES(HasKnownEntityId) { return request(ticket, stk::topology::EDGE_RANK, entity_id); }
+  KOKKOS_INLINE_FUNCTION FutureEntity request_face(size_t ticket, stk::mesh::EntityId entity_id) const MUNDY_REQUIRES(HasKnownEntityId) { return request(ticket, stk::topology::FACE_RANK, entity_id); }
+  KOKKOS_INLINE_FUNCTION FutureEntity request_element(size_t ticket, stk::mesh::EntityId entity_id) const MUNDY_REQUIRES(HasKnownEntityId) { return request(ticket, stk::topology::ELEMENT_RANK, entity_id); }
+  KOKKOS_INLINE_FUNCTION FutureEntity request_constraint(size_t ticket, stk::mesh::EntityId entity_id) const MUNDY_REQUIRES(HasKnownEntityId) { return request(ticket, stk::topology::CONSTRAINT_RANK, entity_id); }
   // clang-format on
 
   /// \brief Fetch the requested entity ID using the given ticket. Only valid for the known-id variant.
   KOKKOS_INLINE_FUNCTION stk::mesh::EntityId get_entity_id(size_t ticket, stk::mesh::EntityRank entity_rank) const
-    requires(HasKnownEntityId)
+    MUNDY_REQUIRES(HasKnownEntityId)
   {
     constexpr auto name = make_string_literal("NgpRequestEntitiesImplT::get_entity_id");
     assert_active_space<name>();

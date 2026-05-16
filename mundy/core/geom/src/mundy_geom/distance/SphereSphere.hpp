@@ -28,10 +28,10 @@
 #include <type_traits>
 
 // Mundy
-#include <mundy_geom/distance/DistanceMetrics.hpp>  // for mundy::FreeSpaceMetric
 #include <mundy_geom/distance/PointPoint.hpp>       // for distance(Point, Point)
 #include <mundy_geom/distance/Types.hpp>            // for mundy::SharedNormalSigned
 #include <mundy_geom/primitives/Sphere.hpp>         // for mundy::Sphere
+#include <mundy_utils/requires.hpp>
 
 namespace mundy {
 
@@ -43,7 +43,7 @@ namespace mundy {
 /// \param[in] sphere1 One sphere
 /// \param[in] sphere2 The other sphere
 template <ValidSphereType SphereType1, ValidSphereType SphereType2>
-  requires std::is_same_v<typename SphereType1::scalar_t, typename SphereType2::scalar_t>
+  MUNDY_REQUIRES(std::is_same_v<typename SphereType1::scalar_t, typename SphereType2::scalar_t>)
 KOKKOS_FUNCTION typename SphereType1::scalar_t distance(const SphereType1& sphere1,  //
                                                         const SphereType2& sphere2) {
   return distance(SharedNormalSigned{}, sphere1, sphere2);
@@ -54,7 +54,7 @@ KOKKOS_FUNCTION typename SphereType1::scalar_t distance(const SphereType1& spher
 /// \param[in] sphere1 One sphere
 /// \param[in] sphere2 The other sphere
 template <ValidSphereType SphereType1, ValidSphereType SphereType2>
-  requires std::is_same_v<typename SphereType1::scalar_t, typename SphereType2::scalar_t>
+  MUNDY_REQUIRES(std::is_same_v<typename SphereType1::scalar_t, typename SphereType2::scalar_t>)
 KOKKOS_FUNCTION typename SphereType1::scalar_t distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
                                                         const SphereType1& sphere1,                             //
                                                         const SphereType2& sphere2) {
@@ -67,7 +67,7 @@ KOKKOS_FUNCTION typename SphereType1::scalar_t distance([[maybe_unused]] const S
 /// \param[in] sphere2 The other sphere
 /// \param[out] sep The separation vector (from the surface of sphere1 to the surface of sphere2)
 template <ValidSphereType SphereType1, ValidSphereType SphereType2>
-  requires std::is_same_v<typename SphereType1::scalar_t, typename SphereType2::scalar_t>
+  MUNDY_REQUIRES(std::is_same_v<typename SphereType1::scalar_t, typename SphereType2::scalar_t>)
 KOKKOS_FUNCTION typename SphereType1::scalar_t distance(
     const SphereType1& sphere1,                                //
     const SphereType2& sphere2,                                //

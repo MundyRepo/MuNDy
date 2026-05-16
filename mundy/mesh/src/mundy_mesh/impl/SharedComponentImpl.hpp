@@ -58,6 +58,7 @@
 #include <mundy_utils/suppress_warnings.hpp>  // for MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_PUSH/POP
 #include <mundy_utils/throw_assert.hpp>       // for MUNDY_THROW_ASSERT
 #include <mundy_utils/tuple.hpp>              // for mundy::tuple
+#include <mundy_utils/requires.hpp>
 
 namespace mundy {
 
@@ -169,7 +170,7 @@ class SharedComponentState {
   }
 
   template <typename HostViewType>
-    requires CompatibleSharedComponentHostView<HostViewType, shared_type>
+    MUNDY_REQUIRES(CompatibleSharedComponentHostView<HostViewType, shared_type>)
   explicit SharedComponentState(HostViewType host_view)
       : host_view_(),
         host_owner_(std::move(host_view)),

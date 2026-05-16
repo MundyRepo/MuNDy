@@ -1,0 +1,39 @@
+/**
+ * \dir mundy/core/utils
+ * \anchor MundyUtilsDir
+ * \brief Centralized reusable utilities for Mundy.
+ *
+ * See the \ref MundyUtils "MundyUtils primer".
+ */
+
+/**
+ * \dir mundy/core/math
+ * \anchor MundyMathDir
+ * \brief Constexpr, inline mathematics for Mundy.
+ *
+ * See the \ref MundyMath "MundyMath primer".
+ */
+
+/**
+ * \dir mundy/core/geom
+ * \anchor MundyGeomDir
+ * \brief Geometric primitives and utilities for Mundy.
+ *
+ * See the \ref MundyGeom "MundyGeom primer".
+ */
+
+/**
+ * \dir mundy/core/mech
+ * \anchor MundyMechDir
+ * \brief Mechanical primitives and utilities for Mundy.
+ *
+ * See the \ref MundyMech "MundyMech primer".
+ */
+
+/**
+ * \dir mundy/mesh
+ * \anchor MundyMeshDir
+ * \brief Mundy's extension to Trilinos/STK.
+ *
+ * See the \ref MundyMesh "MundyMesh primer".
+ */
