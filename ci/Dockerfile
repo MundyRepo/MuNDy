@@ -1,4 +1,4 @@
-FROM nvidia/cuda:12.3.2-cudnn9-devel-ubuntu22.04
+FROM docker.io/nvidia/cuda:12.3.2-cudnn9-devel-ubuntu22.04
 
 # Reset the nvidia/cuda base image ENTRYPOINT so Jenkins' `docker run ... cat`
 # keep-alive pattern works without triggering the
