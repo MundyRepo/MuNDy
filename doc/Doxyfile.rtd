@@ -6,10 +6,17 @@
 GENERATE_HTML          = NO
 GENERATE_XML           = YES
 XML_OUTPUT             = xml
-INPUT = ./mundy
+INPUT = doc/SubpackageDirectories.dox \
+        mundy/core/utils \
+        mundy/core/math \
+        mundy/core/geom \
+        mundy/core/mech \
+        mundy/mesh
 RECURSIVE = YES
+FILE_PATTERNS = *.hpp *.cpp *.dox
 FULL_PATH_NAMES = YES
-STRIP_FROM_PATH = ..
+STRIP_FROM_PATH = .
+USE_MDFILE_AS_MAINPAGE =
 
 # Keep this path stable because doc/conf.py will point Breathe here.
 OUTPUT_DIRECTORY       = doc
