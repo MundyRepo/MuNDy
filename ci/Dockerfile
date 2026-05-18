@@ -62,8 +62,8 @@ RUN git clone --depth=2 --branch ${SPACK_TAG} https://github.com/spack/spack.git
 RUN . ${SPACK_ROOT}/share/spack/setup-env.sh && \
     spack env create ${SPACK_ENV_NAME} && \
     spack env activate ${SPACK_ENV_NAME} && \
-    spack add trilinos@16.1.0+belos~boost+exodus+hdf5+kokkos+openmp+shared+stk+zoltan+zoltan2 cxxstd=17 %gcc@11.4.0 ^kokkos@4.5.01+hwloc+openmp+serial+shared ^openmpi@4.1.2 && \
-    spack add cmake@3.27.9 && \
+    spack add trilinos@16.1.0+belos~boost+exodus+hdf5+kokkos+openmp+shared+stk+zoltan+zoltan2 cxxstd=17 %gcc@11.4.0 ^kokkos@4.5.01+hwloc+openmp+serial+shared ^openmpi@4.1.2 target=broadwell && \
+    spack add cmake@3.27.9 target=broadwell && \
     spack concretize && \
     spack install && \
     spack load cmake@3.27.9 && \
