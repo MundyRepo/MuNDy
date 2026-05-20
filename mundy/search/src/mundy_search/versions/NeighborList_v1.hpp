@@ -46,8 +46,8 @@ namespace mesh {
 /// \struct FullNeighborTag
 /// \brief Build a directed full neighbor list.
 ///
-/// If target A neighbors source B, the reverse pair is also stored whenever the target/source sets make the reverse pair
-/// meaningful. Self pairs are removed.
+/// If target A neighbors source B, the reverse pair is also stored whenever the target/source sets make the reverse
+/// pair meaningful. Self pairs are removed.
 struct FullNeighborTag {};
 
 /// \struct HalfNeighborTag
@@ -60,16 +60,16 @@ struct HalfNeighborTag {};
 /// \struct SelfNeighborTag
 /// \brief Build a list that only removes self interactions.
 ///
-/// This follows Cabana's current "self" discriminator meaning: remove pairs where target and source are the same entity,
-/// but do not otherwise attempt full/half symmetry management.
+/// This follows Cabana's current "self" discriminator meaning: remove pairs where target and source are the same
+/// entity, but do not otherwise attempt full/half symmetry management.
 struct SelfNeighborTag {};
 
 /// \class NeighborList
 /// \brief Static interface facade for a concrete neighbor-list implementation.
 ///
-/// Concrete neighbor-list types own storage. This facade defines the common access and iteration surface used by kernels
-/// and higher-level Mundy algorithms. It intentionally uses static dispatch rather than virtual functions so Kokkos
-/// device code can inline through the implementation type.
+/// Concrete neighbor-list types own storage. This facade defines the common access and iteration surface used by
+/// kernels and higher-level Mundy algorithms. It intentionally uses static dispatch rather than virtual functions so
+/// Kokkos device code can inline through the implementation type.
 /// \tparam NeighborListType Concrete neighbor-list implementation type.
 template <typename NeighborListType>
 class NeighborList;
@@ -79,8 +79,9 @@ namespace impl {
 /// \class ArborXSearchBoxesT
 /// \brief Build-time ArborX boxes paired with STK entity identities.
 ///
-/// This object is an input to ArborX neighbor-list construction. It is not the storage model of the final neighbor list.
-/// The final list stores target/source entities and neighbor indices, while search boxes remain a construction detail.
+/// This object is an input to ArborX neighbor-list construction. It is not the storage model of the final neighbor
+/// list. The final list stores target/source entities and neighbor indices, while search boxes remain a construction
+/// detail.
 /// \tparam MemorySpace Kokkos memory space in which the boxes and entity view live.
 template <typename MemorySpace>
 class ArborXSearchBoxesT {
@@ -544,7 +545,8 @@ class DeployFunctorOnTargetNeighbors {
   /// \param list [in] Concrete neighbor list.
   /// \param functor [in] User callback to run for every target.
   KOKKOS_INLINE_FUNCTION
-  DeployFunctorOnTargetNeighbors(const NeighborListType& list, const Functor& functor) : list_(list), functor_(functor) {
+  DeployFunctorOnTargetNeighbors(const NeighborListType& list, const Functor& functor)
+      : list_(list), functor_(functor) {
   }
 
   /// \brief Run the user callback for one target ordinal.
@@ -1199,7 +1201,8 @@ class STKSearchNeighborList {
 /// \brief Build a compressed 1D ArborX neighbor list from target and source search boxes.
 ///
 /// Declaration only for this design pass. The eventual definition should run ArborX, apply the selected neighbor
-/// semantics, and return list storage containing entities plus source indices. It must not silently return an empty list.
+/// semantics, and return list storage containing entities plus source indices. It must not silently return an empty
+/// list.
 /// \tparam ExecutionSpace Kokkos execution space used for build work.
 /// \tparam NeighborTag Neighbor-list semantic tag.
 /// \tparam MemorySpace Kokkos memory space for the returned list.
@@ -1217,8 +1220,9 @@ ArborX1dNeighborList<NeighborTag, MemorySpace> make_arborx_1d_neighbor_list(
 
 /// \brief Build a dense 2D ArborX neighbor list from target and source search boxes.
 ///
-/// Declaration only for this design pass. The eventual definition should run ArborX's two-pass count/fill flow and return
-/// list storage containing entities, per-target counts, and dense source rows. It must not silently return an empty list.
+/// Declaration only for this design pass. The eventual definition should run ArborX's two-pass count/fill flow and
+/// return list storage containing entities, per-target counts, and dense source rows. It must not silently return an
+/// empty list.
 /// \tparam ExecutionSpace Kokkos execution space used for build work.
 /// \tparam NeighborTag Neighbor-list semantic tag.
 /// \tparam MemorySpace Kokkos memory space for the returned list.
@@ -1237,8 +1241,8 @@ ArborX2dNeighborList<NeighborTag, MemorySpace> make_arborx_2d_neighbor_list(
 /// \brief Build an STK coarse-search neighbor list from target and source search boxes.
 ///
 /// Declaration only for this design pass. The eventual definition should run `stk::search::coarse_search`, apply the
-/// selected neighbor semantics, group by target, and return compressed list storage. It must not silently return an empty
-/// list.
+/// selected neighbor semantics, group by target, and return compressed list storage. It must not silently return an
+/// empty list.
 /// \tparam ExecutionSpace Execution-space tag associated with search preparation.
 /// \tparam NeighborTag Neighbor-list semantic tag.
 /// \tparam MemorySpace Kokkos memory space for the returned list.

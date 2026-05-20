@@ -33,7 +33,7 @@
 #include <stk_mesh/base/Selector.hpp>
 
 // Mundy
-#include <mundy_search/Excluder.hpp>                // for ExcluderType, NoExcluder
+#include <mundy_search/Excluder.hpp>                 // for ExcluderType, NoExcluder
 #include <mundy_search/NeighborListBuildTraits.hpp>  // for NeighborListInputType, NeighborListBuildTraits
 
 namespace mundy {

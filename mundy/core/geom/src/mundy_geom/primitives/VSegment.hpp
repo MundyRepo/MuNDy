@@ -31,8 +31,8 @@
 
 // Our libs
 #include <mundy_geom/primitives/Point.hpp>  // for mundy::Point
-#include <mundy_utils/throw_assert.hpp>     // for MUNDY_THROW_ASSERT
 #include <mundy_utils/requires.hpp>
+#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
 
 namespace mundy {
 
@@ -58,8 +58,7 @@ class VSegment {
 
   /// \brief Default constructor for owning VSegments. Default initialize the start, middle, and end points.
   KOKKOS_FUNCTION
-  constexpr VSegment()
-    MUNDY_REQUIRES(HasNArgConstructor<point_t, scalar_t, 3>)
+  constexpr VSegment() MUNDY_REQUIRES(HasNArgConstructor<point_t, scalar_t, 3>)
       : start_(scalar_t(), scalar_t(), scalar_t()),
         middle_(scalar_t(), scalar_t(), scalar_t()),
         end_(scalar_t(), scalar_t(), scalar_t()) {
@@ -97,7 +96,7 @@ class VSegment {
   /// \brief Deep copy constructor
   template <typename OtherVSegmentType>
   KOKKOS_FUNCTION constexpr VSegment(const OtherVSegmentType& other)
-    MUNDY_REQUIRES(!std::is_same_v<OtherVSegmentType, VSegment<scalar_t, point_t>>)
+      MUNDY_REQUIRES(!std::is_same_v<OtherVSegmentType, VSegment<scalar_t, point_t>>)
       : start_(other.start_), middle_(other.middle_), end_(other.end_) {
   }
 
@@ -110,7 +109,7 @@ class VSegment {
   /// \brief Deep move constructor
   template <typename OtherVSegmentType>
   KOKKOS_FUNCTION constexpr VSegment(OtherVSegmentType&& other)
-    MUNDY_REQUIRES(!std::is_same_v<OtherVSegmentType, VSegment<scalar_t, point_t>>)
+      MUNDY_REQUIRES(!std::is_same_v<OtherVSegmentType, VSegment<scalar_t, point_t>>)
       : start_(std::move(other.start_)), middle_(std::move(other.middle_)), end_(std::move(other.end_)) {
   }
   //@}
@@ -131,8 +130,7 @@ class VSegment {
   /// \brief Copy assignment operator
   template <typename OtherVSegmentType>
   KOKKOS_FUNCTION constexpr VSegment<scalar_t, point_t>& operator=(const OtherVSegmentType& other)
-    MUNDY_REQUIRES(!std::is_same_v<OtherVSegmentType, VSegment<scalar_t, point_t>>)
-  {
+      MUNDY_REQUIRES(!std::is_same_v<OtherVSegmentType, VSegment<scalar_t, point_t>>) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     start_ = other.start_;
     middle_ = other.middle_;
@@ -153,8 +151,7 @@ class VSegment {
   /// \brief Move assignment operator
   template <typename OtherVSegmentType>
   KOKKOS_FUNCTION constexpr VSegment<scalar_t, point_t>& operator=(OtherVSegmentType&& other)
-    MUNDY_REQUIRES(!std::is_same_v<OtherVSegmentType, VSegment<scalar_t, point_t>>)
-  {
+      MUNDY_REQUIRES(!std::is_same_v<OtherVSegmentType, VSegment<scalar_t, point_t>>) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     start_ = std::move(other.start_);
     middle_ = std::move(other.middle_);

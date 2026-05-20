@@ -35,11 +35,11 @@
 #include <Kokkos_Core.hpp>
 
 // Mundy
+#include <mundy_utils/requires.hpp>
 #include <mundy_utils/suppress_warnings.hpp>  // for MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_PUSH/POP
 #include <mundy_utils/tuple.hpp>              // for mundy::tuple
 #include <mundy_utils/type_traits.hpp>        // for count_type_v
 #include <mundy_utils/variant.hpp>            // for mundy::variant
-#include <mundy_utils/requires.hpp>
 
 namespace mundy {
 
@@ -127,29 +127,29 @@ static constexpr bool all_tags_unique_v = all_tags_unique<Ts...>::value;
 // **********************************************************************************************************************
 /// \brief Check if a tagged value pack contains a value with the given Tag
 template <typename Tag, typename... Ts>
-  MUNDY_REQUIRES(all_have_tags_v<Ts...>)
+MUNDY_REQUIRES(all_have_tags_v<Ts...>)
 struct contains_tag : std::false_type {};
 
 template <typename Tag, typename First, typename... Rest>
-  MUNDY_REQUIRES(all_have_tags_v<First, Rest...>)
+MUNDY_REQUIRES(all_have_tags_v<First, Rest...>)
 struct contains_tag<Tag, First, Rest...> {
   static constexpr bool value = std::is_same_v<typename First::tag_type, Tag> || contains_tag<Tag, Rest...>::value;
 };
 
 template <typename Tag, typename... Ts>
-  MUNDY_REQUIRES(all_have_tags_v<Ts...>)
+MUNDY_REQUIRES(all_have_tags_v<Ts...>)
 static constexpr bool contains_tag_v = contains_tag<Tag, Ts...>::value;
 
 // **********************************************************************************************************************
 /// \brief Find the index of Tag inside a pack of tagged components
 template <typename Tag, typename... Ts>
-  MUNDY_REQUIRES(all_have_tags_v<Ts...> && contains_tag_v<Tag, Ts...>)
+MUNDY_REQUIRES(all_have_tags_v<Ts...>&& contains_tag_v<Tag, Ts...>)
 struct index_of_tag {
   static constexpr size_t value = index_finder_v<Tag, typename Ts::tag_type...>;
 };
 
 template <typename Tag, typename... Ts>
-  MUNDY_REQUIRES(all_have_tags_v<Ts...> && contains_tag_v<Tag, Ts...>)
+MUNDY_REQUIRES(all_have_tags_v<Ts...>&& contains_tag_v<Tag, Ts...>)
 static constexpr size_t index_of_tag_v = index_of_tag<Tag, Ts...>::value;
 
 namespace impl {
@@ -329,7 +329,7 @@ class variant_aggregate {
 
   /// \brief Add a value (fluent interface):
   template <typename Tag>
-    MUNDY_REQUIRES(!contains_type_v<Tag, Tags...>)
+  MUNDY_REQUIRES(!contains_type_v<Tag, Tags...>)
   KOKKOS_FUNCTION constexpr auto append(variant_t new_variant) const {
     // Copy the old variants into a new array with one extra slot
     Kokkos::Array<variant_t, N + 1> new_variants;
@@ -344,7 +344,7 @@ class variant_aggregate {
 
 #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
   template <typename Tag>
-    MUNDY_REQUIRES(contains_type_v<Tag, Tags...>)
+  MUNDY_REQUIRES(contains_type_v<Tag, Tags...>)
   KOKKOS_FUNCTION constexpr void append(variant_t /*new_variant*/) const {
     static_assert(!contains_type_v<Tag, Tags...>, "variant_aggregate::append called with duplicate Tag");
   }
@@ -352,29 +352,29 @@ class variant_aggregate {
 
   /// \brief The I'th tag type
   template <size_t I>
-    MUNDY_REQUIRES(sizeof...(Tags) > 0 && I < sizeof...(Tags))
+  MUNDY_REQUIRES(sizeof...(Tags) > 0 && I < sizeof...(Tags))
   using tag_type = tuple_element_t<I, TagsTuple>;
 
   /// \brief Fetch the I'th value (compile-time index)
   template <size_t I>
-    MUNDY_REQUIRES(I < sizeof...(Tags))
+  MUNDY_REQUIRES(I < sizeof...(Tags))
   KOKKOS_INLINE_FUNCTION constexpr const variant_t& get() const {
     return variants_[I];
   }
   template <size_t I>
-    MUNDY_REQUIRES(I < sizeof...(Tags))
+  MUNDY_REQUIRES(I < sizeof...(Tags))
   KOKKOS_INLINE_FUNCTION constexpr variant_t& get() {
     return variants_[I];
   }
 
 #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
   template <size_t I>
-    MUNDY_REQUIRES(I >= sizeof...(Tags))
+  MUNDY_REQUIRES(I >= sizeof...(Tags))
   KOKKOS_INLINE_FUNCTION constexpr const void get() const {
     static_assert(I < sizeof...(Tags), "Attempting to get a value with an index that is out of bounds");
   }
   template <size_t I>
-    MUNDY_REQUIRES(I >= sizeof...(Tags))
+  MUNDY_REQUIRES(I >= sizeof...(Tags))
   KOKKOS_INLINE_FUNCTION constexpr void get() {
     static_assert(I < sizeof...(Tags), "Attempting to get a value with an index that is out of bounds");
   }
@@ -392,7 +392,7 @@ class variant_aggregate {
 
   /// \brief Fetch the value corresponding to the given Tag
   template <typename Tag>
-    MUNDY_REQUIRES(contains_type_v<Tag, Tags...>)
+  MUNDY_REQUIRES(contains_type_v<Tag, Tags...>)
   KOKKOS_INLINE_FUNCTION constexpr const variant_t& get() const {
     constexpr size_t index = index_finder_v<Tag, Tags...>;
     return variants_[index];
@@ -400,7 +400,7 @@ class variant_aggregate {
 
   /// \brief Fetch the value corresponding to the given Tag
   template <typename Tag>
-    MUNDY_REQUIRES(contains_type_v<Tag, Tags...>)
+  MUNDY_REQUIRES(contains_type_v<Tag, Tags...>)
   KOKKOS_INLINE_FUNCTION constexpr variant_t& get() {
     constexpr size_t index = index_finder_v<Tag, Tags...>;
     return variants_[index];
@@ -408,13 +408,13 @@ class variant_aggregate {
 
 #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
   template <typename Tag>
-    MUNDY_REQUIRES(!contains_type_v<Tag, Tags...>)
+  MUNDY_REQUIRES(!contains_type_v<Tag, Tags...>)
   KOKKOS_INLINE_FUNCTION constexpr void get() const {
     static_assert(contains_type_v<Tag, Tags...>,
                   "Attempting to get a value that does not exist in the variant_aggregate");
   }
   template <typename Tag>
-    MUNDY_REQUIRES(!contains_type_v<Tag, Tags...>)
+  MUNDY_REQUIRES(!contains_type_v<Tag, Tags...>)
   KOKKOS_INLINE_FUNCTION constexpr void get() {
     static_assert(contains_type_v<Tag, Tags...>,
                   "Attempting to get a value that does not exist in the variant_aggregate");
@@ -509,7 +509,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto append(const variant_aggregate<VariantType
 /// \brief Project selected tags from a variant_aggregate into a new variant_aggregate.
 /// Copies the corresponding variants and preserves the requested tag order.
 template <typename... SelectedTags, typename VariantType, typename... Tags>
-  MUNDY_REQUIRES((sizeof...(SelectedTags) > 0) && (contains_type_v<SelectedTags, Tags...> && ...))
+MUNDY_REQUIRES((sizeof...(SelectedTags) > 0) && (contains_type_v<SelectedTags, Tags...> && ...))
 KOKKOS_INLINE_FUNCTION constexpr auto project(variant_aggregate<VariantType, Tags...>& v_agg) {
   Kokkos::Array<VariantType, sizeof...(SelectedTags)> projected_variants = {v_agg.template get<SelectedTags>()...};
   return variant_aggregate<VariantType, SelectedTags...>(std::move(projected_variants));
@@ -517,7 +517,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto project(variant_aggregate<VariantType, Tag
 
 #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
 template <typename... SelectedTags, typename VariantType, typename... Tags>
-  MUNDY_REQUIRES(!((sizeof...(SelectedTags) > 0) && (contains_type_v<SelectedTags, Tags...> && ...)))
+MUNDY_REQUIRES(!((sizeof...(SelectedTags) > 0) && (contains_type_v<SelectedTags, Tags...> && ...)))
 KOKKOS_INLINE_FUNCTION constexpr void project(variant_aggregate<VariantType, Tags...>& /*v_agg*/) {
   if constexpr (sizeof...(SelectedTags) == 0) {
     static_assert(sizeof...(SelectedTags) > 0, "project<Tags...>(v_agg) requires at least one Tag.");
@@ -531,7 +531,7 @@ KOKKOS_INLINE_FUNCTION constexpr void project(variant_aggregate<VariantType, Tag
 /// \brief Project selected tags from a const variant_aggregate into a new variant_aggregate.
 /// Copies the corresponding variants and preserves the requested tag order.
 template <typename... SelectedTags, typename VariantType, typename... Tags>
-  MUNDY_REQUIRES((sizeof...(SelectedTags) > 0) && (contains_type_v<SelectedTags, Tags...> && ...))
+MUNDY_REQUIRES((sizeof...(SelectedTags) > 0) && (contains_type_v<SelectedTags, Tags...> && ...))
 KOKKOS_INLINE_FUNCTION constexpr auto project(const variant_aggregate<VariantType, Tags...>& v_agg) {
   Kokkos::Array<VariantType, sizeof...(SelectedTags)> projected_variants = {v_agg.template get<SelectedTags>()...};
   return variant_aggregate<VariantType, SelectedTags...>(std::move(projected_variants));
@@ -539,7 +539,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto project(const variant_aggregate<VariantTyp
 
 #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
 template <typename... SelectedTags, typename VariantType, typename... Tags>
-  MUNDY_REQUIRES(!((sizeof...(SelectedTags) > 0) && (contains_type_v<SelectedTags, Tags...> && ...)))
+MUNDY_REQUIRES(!((sizeof...(SelectedTags) > 0) && (contains_type_v<SelectedTags, Tags...> && ...)))
 KOKKOS_INLINE_FUNCTION constexpr void project(const variant_aggregate<VariantType, Tags...>& /*v_agg*/) {
   if constexpr (sizeof...(SelectedTags) == 0) {
     static_assert(sizeof...(SelectedTags) > 0, "project<Tags...>(v_agg) requires at least one Tag.");
@@ -634,8 +634,8 @@ concept callable_with = requires(T t, Args... args) { t(std::forward<Args>(args)
 ///   struct DT; struct MAX_ITERS;
 /// \endcode
 template <typename... TaggedComponents>
-  MUNDY_REQUIRES(all_have_tags_v<TaggedComponents...> /* All of the given components must have tags */
-           && all_tags_unique_v<TaggedComponents...> /* All tags in an aggregate must be unique */)
+MUNDY_REQUIRES(all_have_tags_v<TaggedComponents...> /* All of the given components must have tags */
+                   && all_tags_unique_v<TaggedComponents...> /* All tags in an aggregate must be unique */)
 class aggregate {
  public:
   using TaggedComponentsTuple = tuple<TaggedComponents...>;
@@ -649,8 +649,7 @@ class aggregate {
 
   /// \brief Construct an aggregate that has the given components
   KOKKOS_FUNCTION
-  constexpr aggregate(TaggedComponentsTuple tagged_components)
-    MUNDY_REQUIRES(sizeof...(TaggedComponents) > 0)
+  constexpr aggregate(TaggedComponentsTuple tagged_components) MUNDY_REQUIRES(sizeof...(TaggedComponents) > 0)
       : tagged_components_(std::move(tagged_components)) {
   }
 
@@ -663,7 +662,7 @@ class aggregate {
 
   /// \brief Add a value (fluent interface):
   template <typename Tag, typename NewComponent>
-    MUNDY_REQUIRES(!contains_tag_v<Tag, TaggedComponents...>)
+  MUNDY_REQUIRES(!contains_tag_v<Tag, TaggedComponents...>)
   KOKKOS_FUNCTION constexpr auto append(NewComponent new_component) const {
     tagged<Tag, NewComponent> new_tagged_comp(std::move(new_component));
     auto new_tuple = ::mundy::tuple_cat(tagged_components_, ::mundy::make_tuple(new_tagged_comp));
@@ -676,7 +675,7 @@ class aggregate {
   //
 #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
   template <typename Tag, typename NewComponent>
-    MUNDY_REQUIRES(contains_tag_v<Tag, TaggedComponents...>)
+  MUNDY_REQUIRES(contains_tag_v<Tag, TaggedComponents...>)
   KOKKOS_FUNCTION constexpr void append(NewComponent /*new_component*/) const {
     static_assert(!contains_tag_v<Tag, TaggedComponents...>, "aggregate::append called with duplicate Tag");
   }
@@ -684,29 +683,29 @@ class aggregate {
 
   /// \brief The I'th tag type
   template <size_t I>
-    MUNDY_REQUIRES(sizeof...(TaggedComponents) > 0 && I < sizeof...(TaggedComponents))
+  MUNDY_REQUIRES(sizeof...(TaggedComponents) > 0 && I < sizeof...(TaggedComponents))
   using tag_type = typename tuple_element_t<I, TaggedComponentsTuple>::tag_type;
 
   /// \brief Fetch the I'th tagged object
   template <size_t I>
-    MUNDY_REQUIRES(I < sizeof...(TaggedComponents))
+  MUNDY_REQUIRES(I < sizeof...(TaggedComponents))
   KOKKOS_INLINE_FUNCTION constexpr const auto& get_tagged() const {
     return tagged_components_.template get<I>();
   }
   template <size_t I>
-    MUNDY_REQUIRES(I < sizeof...(TaggedComponents))
+  MUNDY_REQUIRES(I < sizeof...(TaggedComponents))
   KOKKOS_INLINE_FUNCTION constexpr auto& get_tagged() {
     return tagged_components_.template get<I>();
   }
 
 #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
   template <size_t I>
-    MUNDY_REQUIRES(I >= sizeof...(TaggedComponents))
+  MUNDY_REQUIRES(I >= sizeof...(TaggedComponents))
   KOKKOS_INLINE_FUNCTION constexpr const void get_tagged() const {
     static_assert(I < sizeof...(TaggedComponents), "Attempting to get a value with an index that is out of bounds");
   }
   template <size_t I>
-    MUNDY_REQUIRES(I >= sizeof...(TaggedComponents))
+  MUNDY_REQUIRES(I >= sizeof...(TaggedComponents))
   KOKKOS_INLINE_FUNCTION constexpr void get_tagged() {
     static_assert(I < sizeof...(TaggedComponents), "Attempting to get a value with an index that is out of bounds");
   }
@@ -714,13 +713,13 @@ class aggregate {
 
   /// \brief Fetch the tagged object corresponding to the given Tag
   template <typename Tag>
-    MUNDY_REQUIRES(contains_tag_v<Tag, TaggedComponents...>)
+  MUNDY_REQUIRES(contains_tag_v<Tag, TaggedComponents...>)
   KOKKOS_INLINE_FUNCTION constexpr const auto& get_tagged() const {
     constexpr size_t index = index_of_tag_v<Tag, TaggedComponents...>;
     return tagged_components_.template get<index>();
   }
   template <typename Tag>
-    MUNDY_REQUIRES(contains_tag_v<Tag, TaggedComponents...>)
+  MUNDY_REQUIRES(contains_tag_v<Tag, TaggedComponents...>)
   KOKKOS_INLINE_FUNCTION constexpr auto& get_tagged() {
     constexpr size_t index = index_of_tag_v<Tag, TaggedComponents...>;
     return tagged_components_.template get<index>();
@@ -728,13 +727,13 @@ class aggregate {
 
 #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
   template <typename Tag>
-    MUNDY_REQUIRES(!contains_tag_v<Tag, TaggedComponents...>)
+  MUNDY_REQUIRES(!contains_tag_v<Tag, TaggedComponents...>)
   KOKKOS_INLINE_FUNCTION constexpr void get_tagged() const {
     static_assert(contains_tag_v<Tag, TaggedComponents...>,
                   "Attempting to get a value that does not exist in the aggregate");
   }
   template <typename Tag>
-    MUNDY_REQUIRES(!contains_tag_v<Tag, TaggedComponents...>)
+  MUNDY_REQUIRES(!contains_tag_v<Tag, TaggedComponents...>)
   KOKKOS_INLINE_FUNCTION constexpr void get_tagged() {
     static_assert(contains_tag_v<Tag, TaggedComponents...>,
                   "Attempting to get a value that does not exist in the aggregate");
@@ -743,24 +742,24 @@ class aggregate {
 
   /// \brief Fetch the I'th value
   template <size_t I>
-    MUNDY_REQUIRES(I < sizeof...(TaggedComponents))
+  MUNDY_REQUIRES(I < sizeof...(TaggedComponents))
   KOKKOS_INLINE_FUNCTION constexpr const auto& get() const {
     return tagged_components_.template get<I>().get();
   }
   template <size_t I>
-    MUNDY_REQUIRES(I < sizeof...(TaggedComponents))
+  MUNDY_REQUIRES(I < sizeof...(TaggedComponents))
   KOKKOS_INLINE_FUNCTION constexpr auto& get() {
     return tagged_components_.template get<I>().get();
   }
 
 #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
   template <size_t I>
-    MUNDY_REQUIRES(I >= sizeof...(TaggedComponents))
+  MUNDY_REQUIRES(I >= sizeof...(TaggedComponents))
   KOKKOS_INLINE_FUNCTION constexpr const void get() const {
     static_assert(I < sizeof...(TaggedComponents), "Attempting to get a value with an index that is out of bounds");
   }
   template <size_t I>
-    MUNDY_REQUIRES(I >= sizeof...(TaggedComponents))
+  MUNDY_REQUIRES(I >= sizeof...(TaggedComponents))
   KOKKOS_INLINE_FUNCTION constexpr void get() {
     static_assert(I < sizeof...(TaggedComponents), "Attempting to get a value with an index that is out of bounds");
   }
@@ -768,13 +767,13 @@ class aggregate {
 
   /// \brief Fetch the value corresponding to the given Tag
   template <typename Tag>
-    MUNDY_REQUIRES(contains_tag_v<Tag, TaggedComponents...>)
+  MUNDY_REQUIRES(contains_tag_v<Tag, TaggedComponents...>)
   KOKKOS_INLINE_FUNCTION constexpr const auto& get() const {
     constexpr size_t index = index_of_tag_v<Tag, TaggedComponents...>;
     return tagged_components_.template get<index>().get();
   }
   template <typename Tag>
-    MUNDY_REQUIRES(contains_tag_v<Tag, TaggedComponents...>)
+  MUNDY_REQUIRES(contains_tag_v<Tag, TaggedComponents...>)
   KOKKOS_INLINE_FUNCTION constexpr auto& get() {
     constexpr size_t index = index_of_tag_v<Tag, TaggedComponents...>;
     return tagged_components_.template get<index>().get();
@@ -782,13 +781,13 @@ class aggregate {
 
 #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
   template <typename Tag>
-    MUNDY_REQUIRES(!contains_tag_v<Tag, TaggedComponents...>)
+  MUNDY_REQUIRES(!contains_tag_v<Tag, TaggedComponents...>)
   KOKKOS_INLINE_FUNCTION constexpr void get() const {
     static_assert(contains_tag_v<Tag, TaggedComponents...>,
                   "Attempting to get a value that does not exist in the aggregate");
   }
   template <typename Tag>
-    MUNDY_REQUIRES(!contains_tag_v<Tag, TaggedComponents...>)
+  MUNDY_REQUIRES(!contains_tag_v<Tag, TaggedComponents...>)
   KOKKOS_INLINE_FUNCTION constexpr void get() {
     static_assert(contains_tag_v<Tag, TaggedComponents...>,
                   "Attempting to get a value that does not exist in the aggregate");
@@ -799,25 +798,25 @@ class aggregate {
 
   /// \brief Get tagged object of the given args: Perform get<I'th tag>()(args...) with syntactic sugar
   template <size_t I, typename... Args>
-    MUNDY_REQUIRES(impl::callable_with<const typename type_at_index_t<I, TaggedComponents...>::value_type&, Args...>)
+  MUNDY_REQUIRES(impl::callable_with<const typename type_at_index_t<I, TaggedComponents...>::value_type&, Args...>)
   KOKKOS_INLINE_FUNCTION constexpr decltype(auto) get(Args&&... args) const {
     return get<I>()(std::forward<Args>(args)...);
   }
   template <size_t I, typename... Args>
-    MUNDY_REQUIRES(impl::callable_with<typename type_at_index_t<I, TaggedComponents...>::value_type&, Args...>)
+  MUNDY_REQUIRES(impl::callable_with<typename type_at_index_t<I, TaggedComponents...>::value_type&, Args...>)
   KOKKOS_INLINE_FUNCTION constexpr decltype(auto) get(Args&&... args) {
     return get<I>()(std::forward<Args>(args)...);
   }
 
 #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
   template <size_t I, typename... Args>
-    MUNDY_REQUIRES(!impl::callable_with<const typename type_at_index_t<I, TaggedComponents...>::value_type&, Args...>)
+  MUNDY_REQUIRES(!impl::callable_with<const typename type_at_index_t<I, TaggedComponents...>::value_type&, Args...>)
   KOKKOS_INLINE_FUNCTION constexpr void get(Args&&... /*args*/) const {
     static_assert(impl::callable_with<const typename type_at_index_t<I, TaggedComponents...>::value_type&, Args...>,
                   "The I'th value is not callable with the given arguments.");
   }
   template <size_t I, typename... Args>
-    MUNDY_REQUIRES(!impl::callable_with<typename type_at_index_t<I, TaggedComponents...>::value_type&, Args...>)
+  MUNDY_REQUIRES(!impl::callable_with<typename type_at_index_t<I, TaggedComponents...>::value_type&, Args...>)
   KOKKOS_INLINE_FUNCTION constexpr void get(Args&&... /*args*/) {
     static_assert(impl::callable_with<typename type_at_index_t<I, TaggedComponents...>::value_type&, Args...>,
                   "The I'th value is not callable with the given arguments.");
@@ -826,16 +825,15 @@ class aggregate {
 
   /// \brief Get tagged object of the given args: Perform get<TAG>()(args...) with syntactic sugar
   template <typename Tag, typename... Args>
-    MUNDY_REQUIRES(contains_tag_v<Tag, TaggedComponents...> &&
-             impl::callable_with<const typename type_at_index_t<index_of_tag_v<Tag, TaggedComponents...>,
-                                                                TaggedComponents...>::value_type&,
-                                 Args...>)
+  MUNDY_REQUIRES(
+      contains_tag_v<Tag, TaggedComponents...>&& impl::callable_with<
+          const typename type_at_index_t<index_of_tag_v<Tag, TaggedComponents...>, TaggedComponents...>::value_type&,
+          Args...>)
   KOKKOS_INLINE_FUNCTION constexpr decltype(auto) get(Args&&... args) const {
     return get<Tag>()(std::forward<Args>(args)...);
   }
   template <typename Tag, typename... Args>
-    MUNDY_REQUIRES(contains_tag_v<Tag, TaggedComponents...> &&
-             impl::callable_with<
+  MUNDY_REQUIRES(contains_tag_v<Tag, TaggedComponents...>&& impl::callable_with<
                  typename type_at_index_t<index_of_tag_v<Tag, TaggedComponents...>, TaggedComponents...>::value_type&,
                  Args...>)
   KOKKOS_INLINE_FUNCTION constexpr decltype(auto) get(Args&&... args) {
@@ -844,23 +842,23 @@ class aggregate {
 
 #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
   template <typename Tag, typename... Args>
-    MUNDY_REQUIRES(!contains_tag_v<Tag, TaggedComponents...>)
+  MUNDY_REQUIRES(!contains_tag_v<Tag, TaggedComponents...>)
   KOKKOS_INLINE_FUNCTION constexpr void get(Args&&... /*args*/) const {
     static_assert(contains_tag_v<Tag, TaggedComponents...>,
                   "Attempting to get a value that does not exist in the aggregate");
   }
   template <typename Tag, typename... Args>
-    MUNDY_REQUIRES(!contains_tag_v<Tag, TaggedComponents...>)
+  MUNDY_REQUIRES(!contains_tag_v<Tag, TaggedComponents...>)
   KOKKOS_INLINE_FUNCTION constexpr void get(Args&&... /*args*/) {
     static_assert(contains_tag_v<Tag, TaggedComponents...>,
                   "Attempting to get a value that does not exist in the aggregate");
   }
 
   template <typename Tag, typename... Args>
-    MUNDY_REQUIRES(contains_tag_v<Tag, TaggedComponents...> &&
-             !impl::callable_with<const typename type_at_index_t<index_of_tag_v<Tag, TaggedComponents...>,
-                                                                 TaggedComponents...>::value_type&,
-                                  Args...>)
+  MUNDY_REQUIRES(contains_tag_v<Tag, TaggedComponents...> &&
+                 !impl::callable_with<const typename type_at_index_t<index_of_tag_v<Tag, TaggedComponents...>,
+                                                                     TaggedComponents...>::value_type&,
+                                      Args...>)
   KOKKOS_INLINE_FUNCTION constexpr void get(Args&&... /*args*/) const {
     static_assert(
         impl::callable_with<
@@ -869,10 +867,10 @@ class aggregate {
         "The value with the given Tag is not callable with the given arguments.");
   }
   template <typename Tag, typename... Args>
-    MUNDY_REQUIRES(contains_tag_v<Tag, TaggedComponents...> &&
-             !impl::callable_with<
-                 typename type_at_index_t<index_of_tag_v<Tag, TaggedComponents...>, TaggedComponents...>::value_type&,
-                 Args...>)
+  MUNDY_REQUIRES(contains_tag_v<Tag, TaggedComponents...> &&
+                 !impl::callable_with<typename type_at_index_t<index_of_tag_v<Tag, TaggedComponents...>,
+                                                               TaggedComponents...>::value_type&,
+                                      Args...>)
   KOKKOS_INLINE_FUNCTION constexpr void get(Args&&... /*args*/) {
     static_assert(
         impl::callable_with<
@@ -914,14 +912,14 @@ aggregate(TaggedComponents...) -> aggregate<TaggedComponents...>;
 
 /// \brief Project selected tags from an aggregate into a new aggregate (copies their corresponding components).
 template <typename... Tags, typename... Ts>
-  MUNDY_REQUIRES((sizeof...(Tags) > 0) && (contains_tag_v<Tags, Ts...> && ...))
+MUNDY_REQUIRES((sizeof...(Tags) > 0) && (contains_tag_v<Tags, Ts...> && ...))
 KOKKOS_INLINE_FUNCTION constexpr auto project(aggregate<Ts...>& agg) {
   return aggregate(::mundy::make_tuple(agg.template get_tagged<Tags>()...));
 }
 
 #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
 template <typename... Tags, typename... Ts>
-  MUNDY_REQUIRES(!((sizeof...(Tags) > 0) && (contains_tag_v<Tags, Ts...> && ...)))
+MUNDY_REQUIRES(!((sizeof...(Tags) > 0) && (contains_tag_v<Tags, Ts...> && ...)))
 KOKKOS_INLINE_FUNCTION constexpr void project(aggregate<Ts...>& /*agg*/) {
   if constexpr (sizeof...(Tags) == 0) {
     static_assert(sizeof...(Tags) > 0, "project<Tags...>(agg) requires at least one Tag.");
@@ -934,14 +932,14 @@ KOKKOS_INLINE_FUNCTION constexpr void project(aggregate<Ts...>& /*agg*/) {
 
 /// \brief Project selected tags from a const aggregate into a new aggregate (copies their corresponding components).
 template <typename... Tags, typename... Ts>
-  MUNDY_REQUIRES((sizeof...(Tags) > 0) && (contains_tag_v<Tags, Ts...> && ...))
+MUNDY_REQUIRES((sizeof...(Tags) > 0) && (contains_tag_v<Tags, Ts...> && ...))
 KOKKOS_INLINE_FUNCTION constexpr auto project(const aggregate<Ts...>& agg) {
   return aggregate(::mundy::make_tuple(agg.template get_tagged<Tags>()...));
 }
 
 #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
 template <typename... Tags, typename... Ts>
-  MUNDY_REQUIRES(!((sizeof...(Tags) > 0) && (contains_tag_v<Tags, Ts...> && ...)))
+MUNDY_REQUIRES(!((sizeof...(Tags) > 0) && (contains_tag_v<Tags, Ts...> && ...)))
 KOKKOS_INLINE_FUNCTION constexpr void project(const aggregate<Ts...>& /*agg*/) {
   if constexpr (sizeof...(Tags) == 0) {
     static_assert(sizeof...(Tags) > 0, "project<Tags...>(agg) requires at least one Tag.");

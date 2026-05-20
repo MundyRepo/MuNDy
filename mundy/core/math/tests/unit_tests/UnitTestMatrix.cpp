@@ -53,8 +53,7 @@ namespace {
 
 template <typename U, typename T>
 void is_close_debug(const U& a, const T& b, const std::string& message_if_fail = "")
-  MUNDY_REQUIRES(std::is_arithmetic_v<T> && std::is_arithmetic_v<U>)
-{
+    MUNDY_REQUIRES(std::is_arithmetic_v<T>&& std::is_arithmetic_v<U>) {
   EXPECT_TRUE(is_approx_close(a, b)) << message_if_fail;
 }
 

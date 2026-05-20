@@ -37,8 +37,8 @@
 #include <mundy_math/Array.hpp>      // for mundy::Array
 #include <mundy_math/Tolerance.hpp>  // for mundy::get_zero_tolerance
 #include <mundy_math/impl/VectorImpl.hpp>
-#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
 #include <mundy_utils/requires.hpp>
+#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
 
 namespace mundy {
 
@@ -107,7 +107,7 @@ concept ValidVectorType =
 /// should be lightweight such that they can be copied around without much overhead. Furthermore, the lifetime of the
 /// data underlying the accessor should be as long as the AVector that use it.
 template <typename T, size_t N, ValidAccessor<T> Accessor>
-  MUNDY_REQUIRES(std::is_arithmetic_v<T>)
+MUNDY_REQUIRES(std::is_arithmetic_v<T>)
 class AVector {
  public:
   //! \name Internal data
@@ -141,15 +141,12 @@ class AVector {
 
   /// \brief Default constructor. Assume elements are uninitialized.
   /// \note This constructor is only enabled if the Accessor has a default constructor.
-  KOKKOS_DEFAULTED_FUNCTION constexpr AVector()
-    MUNDY_REQUIRES(HasDefaultConstructor<Accessor>)
-  = default;
+  KOKKOS_DEFAULTED_FUNCTION constexpr AVector() MUNDY_REQUIRES(HasDefaultConstructor<Accessor>) = default;
 
   /// \brief Constructor from a given accessor
   /// \param[in] data The accessor.
   KOKKOS_INLINE_FUNCTION
-  constexpr explicit AVector(const Accessor& data)
-    MUNDY_REQUIRES(std::is_copy_constructible_v<Accessor>)
+  constexpr explicit AVector(const Accessor& data) MUNDY_REQUIRES(std::is_copy_constructible_v<Accessor>)
       : accessor_(data) {
   }
 
@@ -157,15 +154,14 @@ class AVector {
   /// \param[in] data The accessor.
   KOKKOS_INLINE_FUNCTION
   constexpr explicit AVector(Accessor&& data)
-    MUNDY_REQUIRES(std::is_copy_constructible_v<Accessor> || std::is_move_constructible_v<Accessor>)
+      MUNDY_REQUIRES(std::is_copy_constructible_v<Accessor> || std::is_move_constructible_v<Accessor>)
       : accessor_(std::forward<Accessor>(data)) {
   }
 
   /// \brief Constructor to initialize all elements to a single value.
   /// Requires the number of arguments to be N and the type of each to be T.
   /// Only enabled if the Accessor has a N-argument constructor.
-  KOKKOS_INLINE_FUNCTION constexpr explicit AVector(const T& value)
-    MUNDY_REQUIRES(HasNArgConstructor<Accessor, T, 1>)
+  KOKKOS_INLINE_FUNCTION constexpr explicit AVector(const T& value) MUNDY_REQUIRES(HasNArgConstructor<Accessor, T, 1>)
       : accessor_(value) {
   }
 
@@ -173,8 +169,8 @@ class AVector {
   /// Requires the number of arguments to be N and the type of each to be T.
   /// Only enabled if the Accessor has a N-argument constructor.
   template <typename... Args>
-    MUNDY_REQUIRES((sizeof...(Args) == N) && (N != 1) && (std::is_convertible_v<Args, T> && ...) &&
-            HasNArgConstructor<Accessor, T, N>)
+  MUNDY_REQUIRES((sizeof...(Args) == N) && (N != 1) && (std::is_convertible_v<Args, T> && ...) &&
+                 HasNArgConstructor<Accessor, T, N>)
   KOKKOS_INLINE_FUNCTION constexpr explicit AVector(Args&&... args)
       : accessor_(Accessor{static_cast<T>(std::forward<Args>(args))...}) {
   }
@@ -182,7 +178,7 @@ class AVector {
   /// \brief Constructor to initialize all elements via initializer list
   /// \param[in] list The initializer list.
   KOKKOS_INLINE_FUNCTION constexpr AVector(const std::initializer_list<T>& list)
-    MUNDY_REQUIRES(HasInitializerListConstructor<Accessor, T>)
+      MUNDY_REQUIRES(HasInitializerListConstructor<Accessor, T>)
       : accessor_(list) {
   }
 
@@ -219,8 +215,8 @@ class AVector {
   /// \brief Deep copy constructor with different accessor or ownership
   template <ValidVectorType OtherVectorType>
   KOKKOS_INLINE_FUNCTION constexpr AVector(const OtherVectorType& other)
-    MUNDY_REQUIRES((!std::is_same_v<OtherVectorType, AVector<T, N, Accessor>>) && (OtherVectorType::size == N) &&
-            (std::is_convertible_v<typename OtherVectorType::scalar_t, T>) && HasDefaultConstructor<Accessor>)
+      MUNDY_REQUIRES((!std::is_same_v<OtherVectorType, AVector<T, N, Accessor>>) && (OtherVectorType::size == N) &&
+                     (std::is_convertible_v<typename OtherVectorType::scalar_t, T>) && HasDefaultConstructor<Accessor>)
       : accessor_() {
     impl::deep_copy_impl(std::make_index_sequence<N>{}, *this, other);
   }
@@ -228,8 +224,8 @@ class AVector {
   /// \brief Deep move constructor with different accessor or ownership
   template <ValidVectorType OtherVectorType>
   KOKKOS_INLINE_FUNCTION constexpr AVector(OtherVectorType&& other)
-    MUNDY_REQUIRES((!std::is_same_v<OtherVectorType, AVector<T, N, Accessor>>) && (OtherVectorType::size == N) &&
-            (std::is_convertible_v<typename OtherVectorType::scalar_t, T>) && HasDefaultConstructor<Accessor>)
+      MUNDY_REQUIRES((!std::is_same_v<OtherVectorType, AVector<T, N, Accessor>>) && (OtherVectorType::size == N) &&
+                     (std::is_convertible_v<typename OtherVectorType::scalar_t, T>) && HasDefaultConstructor<Accessor>)
       : accessor_() {
     impl::deep_copy_impl(std::make_index_sequence<N>{}, *this, std::move(other));
   }
@@ -238,9 +234,9 @@ class AVector {
   /// \details Copies the data from the other vector to our data. This is only enabled if T is not const.
   template <ValidVectorType OtherVectorType>
   KOKKOS_INLINE_FUNCTION constexpr AVector<T, N, Accessor>& operator=(const OtherVectorType& other)
-    MUNDY_REQUIRES((!std::is_same_v<OtherVectorType, AVector<T, N, Accessor>>) && (OtherVectorType::size == N) &&
-            (std::is_convertible_v<typename OtherVectorType::scalar_t, T>) && HasNonConstAccessOperator<Accessor, T>)
-  {
+      MUNDY_REQUIRES((!std::is_same_v<OtherVectorType, AVector<T, N, Accessor>>) && (OtherVectorType::size == N) &&
+                     (std::is_convertible_v<typename OtherVectorType::scalar_t, T>) &&
+                     HasNonConstAccessOperator<Accessor, T>) {
     impl::deep_copy_impl(std::make_index_sequence<N>{}, *this, other);
     return *this;
   }
@@ -249,9 +245,9 @@ class AVector {
   /// \details Moves the data from the other vector to our data. This is only enabled if T is not const.
   template <ValidVectorType OtherVectorType>
   KOKKOS_INLINE_FUNCTION constexpr AVector<T, N, Accessor>& operator=(OtherVectorType&& other)
-    MUNDY_REQUIRES((!std::is_same_v<OtherVectorType, AVector<T, N, Accessor>>) && (OtherVectorType::size == N) &&
-            (std::is_convertible_v<typename OtherVectorType::scalar_t, T>) && HasNonConstAccessOperator<Accessor, T>)
-  {
+      MUNDY_REQUIRES((!std::is_same_v<OtherVectorType, AVector<T, N, Accessor>>) && (OtherVectorType::size == N) &&
+                     (std::is_convertible_v<typename OtherVectorType::scalar_t, T>) &&
+                     HasNonConstAccessOperator<Accessor, T>) {
     impl::deep_copy_impl(std::make_index_sequence<N>{}, *this, std::move(other));
     return *this;
   }
@@ -259,16 +255,13 @@ class AVector {
   /// \brief Deep copy assignment operator from a single value
   /// \param[in] value The value to set all elements to.
   KOKKOS_INLINE_FUNCTION constexpr AVector<T, N, Accessor>& operator=(const T value)
-    MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>)
-  {
+      MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>) {
     impl::fill_impl(std::make_index_sequence<N>{}, *this, value);
     return *this;
   }
 
   /// \brief Allow for automatic conversion of a length 1 vector to a scalar
-  KOKKOS_INLINE_FUNCTION constexpr operator T()
-    MUNDY_REQUIRES(N == 1)
-  {
+  KOKKOS_INLINE_FUNCTION constexpr operator T() MUNDY_REQUIRES(N == 1) {
     return impl::access_at(accessor_, 0);
   }
   //@}
@@ -330,7 +323,8 @@ class AVector {
 
   /// \brief Set all elements of the vector
   template <typename... Args>
-    MUNDY_REQUIRES((sizeof...(Args) == N) && (std::is_convertible_v<Args, T> && ...) && HasNonConstAccessOperator<Accessor, T>)
+  MUNDY_REQUIRES((sizeof...(Args) == N) && (std::is_convertible_v<Args, T> && ...) &&
+                 HasNonConstAccessOperator<Accessor, T>)
   KOKKOS_INLINE_FUNCTION constexpr void set(Args&&... args) {
     impl::set_from_args_impl(std::make_index_sequence<N>{}, *this, static_cast<T>(std::forward<Args>(args))...);
   }
@@ -340,17 +334,14 @@ class AVector {
   /// \note An AVector is also a valid accessor.
   template <ValidAccessor<T> OtherAccessor>
   KOKKOS_INLINE_FUNCTION constexpr void set(const OtherAccessor& accessor)
-    MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>)
-  {
+      MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>) {
     impl::set_from_accessor_impl(std::make_index_sequence<N>{}, *this, accessor);
   }
 
   /// \brief Set all elements of the vector to a single value
   /// \param[in] value The value to set all elements to.
   KOKKOS_INLINE_FUNCTION
-  constexpr void fill(const T& value)
-    MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>)
-  {
+  constexpr void fill(const T& value) MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>) {
     impl::fill_impl(std::make_index_sequence<N>{}, *this, value);
   }
   //@}
@@ -385,8 +376,7 @@ class AVector {
   /// \param[in] other The other vector.
   template <typename U, ValidAccessor<U> OtherAccessor>
   KOKKOS_INLINE_FUNCTION constexpr AVector<T, N, Accessor>& operator+=(const AVector<U, N, OtherAccessor>& other)
-    MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>)
-  {
+      MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>) {
     impl::self_vector_add_impl(std::make_index_sequence<N>{}, *this, other);
     return *this;
   }
@@ -402,8 +392,7 @@ class AVector {
   /// \param[in] other The other vector.
   template <typename U, ValidAccessor<U> OtherAccessor>
   KOKKOS_INLINE_FUNCTION constexpr AVector<T, N, Accessor>& operator-=(const AVector<U, N, OtherAccessor>& other)
-    MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>)
-  {
+      MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>) {
     impl::self_vector_subtraction_impl(std::make_index_sequence<N>{}, *this, other);
     return *this;
   }
@@ -411,7 +400,7 @@ class AVector {
   /// \brief AVector-scalar addition
   /// \param[in] scalar The scalar.
   template <typename U>
-    MUNDY_REQUIRES(std::is_arithmetic_v<U>)
+  MUNDY_REQUIRES(std::is_arithmetic_v<U>)
   KOKKOS_INLINE_FUNCTION constexpr auto operator+(const U& scalar) const {
     return impl::vector_scalar_add_impl(std::make_index_sequence<N>{}, *this, scalar);
   }
@@ -419,10 +408,9 @@ class AVector {
   /// \brief Self-scalar addition
   /// \param[in] scalar The scalar.
   template <typename U>
-    MUNDY_REQUIRES(std::is_arithmetic_v<U>)
+  MUNDY_REQUIRES(std::is_arithmetic_v<U>)
   KOKKOS_INLINE_FUNCTION constexpr AVector<T, N, Accessor>& operator+=(const U& scalar)
-    MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>)
-  {
+      MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>) {
     impl::self_scalar_add_impl(std::make_index_sequence<N>{}, *this, scalar);
     return *this;
   }
@@ -430,7 +418,7 @@ class AVector {
   /// \brief AVector-scalar subtraction
   /// \param[in] scalar The scalar.
   template <typename U>
-    MUNDY_REQUIRES(std::is_arithmetic_v<U>)
+  MUNDY_REQUIRES(std::is_arithmetic_v<U>)
   KOKKOS_INLINE_FUNCTION constexpr auto operator-(const U& scalar) const {
     return impl::vector_scalar_subtraction_impl(std::make_index_sequence<N>{}, *this, scalar);
   }
@@ -438,10 +426,9 @@ class AVector {
   /// \brief AVector-scalar subtraction
   /// \param[in] scalar The scalar.
   template <typename U>
-    MUNDY_REQUIRES(std::is_arithmetic_v<U>)
+  MUNDY_REQUIRES(std::is_arithmetic_v<U>)
   KOKKOS_INLINE_FUNCTION constexpr AVector<T, N, Accessor>& operator-=(const U& scalar)
-    MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>)
-  {
+      MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>) {
     impl::self_scalar_subtraction_impl(std::make_index_sequence<N>{}, *this, scalar);
     return *this;
   }
@@ -453,7 +440,7 @@ class AVector {
   /// \brief AVector-scalar multiplication
   /// \param[in] scalar The scalar.
   template <typename U>
-    MUNDY_REQUIRES(std::is_arithmetic_v<U>)
+  MUNDY_REQUIRES(std::is_arithmetic_v<U>)
   KOKKOS_INLINE_FUNCTION constexpr auto operator*(const U& scalar) const {
     return impl::vector_scalar_multiplication_impl(std::make_index_sequence<N>{}, *this, scalar);
   }
@@ -461,10 +448,9 @@ class AVector {
   /// \brief Self-scalar multiplication
   /// \param[in] scalar The scalar.
   template <typename U>
-    MUNDY_REQUIRES(std::is_arithmetic_v<U>)
+  MUNDY_REQUIRES(std::is_arithmetic_v<U>)
   KOKKOS_INLINE_FUNCTION constexpr AVector<T, N, Accessor>& operator*=(const U& scalar)
-    MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>)
-  {
+      MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>) {
     impl::self_scalar_multiplication_impl(std::make_index_sequence<N>{}, *this, scalar);
     return *this;
   }
@@ -472,7 +458,7 @@ class AVector {
   /// \brief AVector-scalar division. (Type promotes the result to a double if both vector and scalar are integral.)
   /// \param[in] scalar The scalar.
   template <typename U>
-    MUNDY_REQUIRES(std::is_arithmetic_v<U>)
+  MUNDY_REQUIRES(std::is_arithmetic_v<U>)
   KOKKOS_INLINE_FUNCTION constexpr auto operator/(const U& scalar) const {
     return impl::vector_scalar_division_impl(std::make_index_sequence<N>{}, *this, scalar);
   }
@@ -481,10 +467,9 @@ class AVector {
   /// \note Because there is no type promotion, this will perform integer division if the scalar is an integer.
   /// \param[in] scalar The scalar.
   template <typename U>
-    MUNDY_REQUIRES(std::is_arithmetic_v<U>)
+  MUNDY_REQUIRES(std::is_arithmetic_v<U>)
   KOKKOS_INLINE_FUNCTION constexpr AVector<T, N, Accessor>& operator/=(const U& scalar)
-    MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>)
-  {
+      MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>) {
     impl::self_scalar_division_impl(std::make_index_sequence<N>{}, *this, scalar);
     return *this;
   }
@@ -513,7 +498,7 @@ class AVector {
 
   // We are friends with all Vectors regardless of their Accessor, type, or ownership
   template <typename U, size_t M, ValidAccessor<U> OtherAccessor>
-    MUNDY_REQUIRES(std::is_arithmetic_v<U>)
+  MUNDY_REQUIRES(std::is_arithmetic_v<U>)
   friend class AVector;
   //@}
 
@@ -585,10 +570,10 @@ std::ostream& operator<<(std::ostream& os, const AVector<T, N, Accessor>& vec) {
 /// \param[in] scalar2 The second scalar.
 /// \param[in] tol The tolerance (default is determined by the given type).
 template <typename U, typename T>
-  MUNDY_REQUIRES(std::is_arithmetic_v<U> && std::is_arithmetic_v<T>)
-KOKKOS_INLINE_FUNCTION constexpr bool is_close(
-    const U& scalar1, const T& scalar2,
-    const decltype(get_comparison_tolerance<T, U>())& tol = get_comparison_tolerance<T, U>()) {
+MUNDY_REQUIRES(std::is_arithmetic_v<U>&& std::is_arithmetic_v<T>)
+KOKKOS_INLINE_FUNCTION
+    constexpr bool is_close(const U& scalar1, const T& scalar2,
+                            const decltype(get_comparison_tolerance<T, U>())& tol = get_comparison_tolerance<T, U>()) {
   // Use the tolerance type as the comparison type
   using ComparisonType = std::remove_reference_t<decltype(tol)>;
   return Kokkos::abs(static_cast<ComparisonType>(scalar1) - static_cast<ComparisonType>(scalar2)) <= tol;
@@ -599,7 +584,7 @@ KOKKOS_INLINE_FUNCTION constexpr bool is_close(
 /// \param[in] scalar2 The second scalar.
 /// \param[in] tol The tolerance (default is determined by the given type).
 template <typename U, typename T>
-  MUNDY_REQUIRES(std::is_arithmetic_v<U> && std::is_arithmetic_v<T>)
+MUNDY_REQUIRES(std::is_arithmetic_v<U>&& std::is_arithmetic_v<T>)
 KOKKOS_INLINE_FUNCTION constexpr bool is_approx_close(
     const U& scalar1, const T& scalar2,
     const decltype(get_relaxed_comparison_tolerance<T, U>())& tol = get_relaxed_comparison_tolerance<T, U>()) {
@@ -636,7 +621,7 @@ KOKKOS_INLINE_FUNCTION constexpr bool is_approx_close(
 /// \param[in] scalar The scalar.
 /// \param[in] vec The vector.
 template <size_t N, typename U, typename T, ValidAccessor<T> Accessor>
-  MUNDY_REQUIRES(std::is_arithmetic_v<U>)
+MUNDY_REQUIRES(std::is_arithmetic_v<U>)
 KOKKOS_INLINE_FUNCTION constexpr auto operator+(const U& scalar, const AVector<T, N, Accessor>& vec)
     -> AVector<std::common_type_t<T, U>, N> {
   return vec + scalar;
@@ -646,7 +631,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto operator+(const U& scalar, const AVector<T
 /// \param[in] scalar The scalar.
 /// \param[in] vec The vector.
 template <size_t N, typename U, typename T, ValidAccessor<T> Accessor>
-  MUNDY_REQUIRES(std::is_arithmetic_v<U>)
+MUNDY_REQUIRES(std::is_arithmetic_v<U>)
 KOKKOS_INLINE_FUNCTION constexpr auto operator-(const U& scalar, const AVector<T, N, Accessor>& vec)
     -> AVector<std::common_type_t<T, U>, N> {
   return -vec + scalar;
@@ -660,7 +645,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto operator-(const U& scalar, const AVector<T
 /// \param[in] scalar The scalar.
 /// \param[in] vec The vector.
 template <size_t N, typename U, typename T, ValidAccessor<T> Accessor>
-  MUNDY_REQUIRES(std::is_arithmetic_v<U>)
+MUNDY_REQUIRES(std::is_arithmetic_v<U>)
 KOKKOS_INLINE_FUNCTION constexpr auto operator*(const U& scalar, const AVector<T, N, Accessor>& vec)
     -> AVector<std::common_type_t<T, U>, N> {
   return vec * scalar;
@@ -1072,10 +1057,10 @@ MUNDY_MATH_VECTOR_VECTOR_ATOMIC_OP_FETCH(elementwise_div)
 
 #define MUNDY_MATH_VECTOR_SIZE_SPECIALIZATION(alias, alias_lower, N)                      \
   template <typename T, ValidAccessor<T> Accessor = Array<T, N>>                          \
-    MUNDY_REQUIRES(std::is_arithmetic_v<T>)                                                      \
+  MUNDY_REQUIRES(std::is_arithmetic_v<T>)                                                 \
   using A##alias = AVector<T, N, Accessor>;                                               \
   template <typename T>                                                                   \
-    MUNDY_REQUIRES(std::is_arithmetic_v<T>)                                                      \
+  MUNDY_REQUIRES(std::is_arithmetic_v<T>)                                                 \
   using alias = A##alias<T>;                                                              \
   template <typename TypeToCheck>                                                         \
   struct is_##alias_lower##_impl : std::false_type {};                                    \

@@ -38,12 +38,12 @@
 #include <stk_mesh/base/MetaData.hpp>  // for stk::mesh::MetaData
 
 // Mundy
+#include <mundy_mesh/Class.hpp>
 #include <mundy_mesh/Component.hpp>
 #include <mundy_mesh/DeclareComponent.hpp>
 #include <mundy_mesh/impl/ComponentImpl.hpp>  // for mundy::mesh::impl::component_backing_field
-#include <mundy_utils/throw_assert.hpp>       // for MUNDY_THROW_REQUIRE
-#include <mundy_mesh/Class.hpp>
 #include <mundy_utils/requires.hpp>
+#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_REQUIRE
 
 namespace mundy {
 
@@ -66,7 +66,8 @@ namespace mesh {
 ///   ClassDeclarationHelper class_decl(meta_data);
 ///   Class& boundary_nodes = class_decl.name("boundary_nodes").rank(NODE_RANK).declare();
 ///   Class& loading_nodes  = class_decl.name("loading_nodes").rank(NODE_RANK).declare();
-///   Class& all_nodes      = class_decl.name("all_nodes").rank(NODE_RANK).subclass(boundary_nodes).subclass(loading_nodes).declare();
+///   Class& all_nodes      =
+///   class_decl.name("all_nodes").rank(NODE_RANK).subclass(boundary_nodes).subclass(loading_nodes).declare();
 /// \endcode
 ///
 /// These setters may be called in any order. Subclasses are optional, but you must call a valid combination of
@@ -90,8 +91,8 @@ class ClassDeclarationHelper {
         class_has_name_(false),
         class_has_rank_(false),
         class_has_topology_(false),
-      class_has_subclasses_(false),
-      class_has_superclasses_(false) {
+        class_has_subclasses_(false),
+        class_has_superclasses_(false) {
   }
 
   /// \brief Copy/Move constructors and assignment operators.
@@ -165,12 +166,12 @@ class ClassDeclarationHelper {
   /// \brief Create a field restriction directly from a field-backed component declaration.
   template <typename ComponentType, typename BackingFieldType = std::remove_cvref_t<
                                         decltype(impl::component_backing_field(std::declval<ComponentType&>()))>>
-    MUNDY_REQUIRES(requires(ComponentType component) {
-      typename std::remove_cvref_t<ComponentType>::canonical_access;
-      { impl::component_backing_field(component) };
-    })
-  ClassDeclarationHelper put_component(ComponentType component,
-                                       const typename BackingFieldType::value_type* init_value) {
+  MUNDY_REQUIRES(requires(ComponentType component) {
+    typename std::remove_cvref_t<ComponentType>::canonical_access;
+    { impl::component_backing_field(component) };
+  })
+  ClassDeclarationHelper
+      put_component(ComponentType component, const typename BackingFieldType::value_type* init_value) {
     using component_type = std::remove_cvref_t<ComponentType>;
     using access_traits = component_access_traits<typename component_type::canonical_access>;
     auto& field = impl::component_backing_field(component);
@@ -196,12 +197,11 @@ class ClassDeclarationHelper {
 
     MUNDY_THROW_REQUIRE(
         is_named_class || is_ranked_class || is_topological_class, std::logic_error,
-        sink()
-            << "Class with name ('" << class_name_ << "') is not properly specified. You may either specify:\n"
-            << "   1. A name (but no rank or topology)    -> declare_class(meta_data, 'name')\n"
-            << "   2. A name and a rank (but no topology) -> declare_class(meta_data, 'name', rank)\n"
-            << "   3. A name and a topology (but no rank) -> declare_class(meta_data, 'name', topology)\n"
-            << "However, you have specified both a rank and a topology.");
+        sink() << "Class with name ('" << class_name_ << "') is not properly specified. You may either specify:\n"
+               << "   1. A name (but no rank or topology)    -> declare_class(meta_data, 'name')\n"
+               << "   2. A name and a rank (but no topology) -> declare_class(meta_data, 'name', rank)\n"
+               << "   3. A name and a topology (but no rank) -> declare_class(meta_data, 'name', topology)\n"
+               << "However, you have specified both a rank and a topology.");
 
     if (is_named_class) {
       return internal_declare_named_class();

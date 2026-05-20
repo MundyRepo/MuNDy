@@ -29,8 +29,8 @@
 #include <Kokkos_Core.hpp>
 
 // Mundy
-#include <mundy_search/Excluder.hpp>                 // for ExcluderType
-#include <mundy_search/impl/ArborXSearchBoxes.hpp>   // for ArborXSearchBoxesT, PeriodicArborXSearchBoxesT
+#include <mundy_search/Excluder.hpp>                // for ExcluderType
+#include <mundy_search/impl/ArborXSearchBoxes.hpp>  // for ArborXSearchBoxesT, PeriodicArborXSearchBoxesT
 
 namespace mundy {
 
@@ -227,8 +227,7 @@ class ArborXExcluderCallback {
   /// \param source_index [in] ArborX source primitive ordinal.
   /// \param out [in] ArborX output functor.
   template <typename Predicate, typename OutputFunctor>
-  KOKKOS_INLINE_FUNCTION void operator()(const Predicate& predicate, int source_index,
-                                         const OutputFunctor& out) const {
+  KOKKOS_INLINE_FUNCTION void operator()(const Predicate& predicate, int source_index, const OutputFunctor& out) const {
     const auto candidate = candidate_factory_(predicate, static_cast<size_type>(source_index));
     if (!excluder_(candidate)) {
       out(source_index);

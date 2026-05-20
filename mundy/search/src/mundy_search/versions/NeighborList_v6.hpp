@@ -2291,7 +2291,7 @@ class ArborX2dNeighborList {
     size_type total = 0;
     Kokkos::parallel_reduce(
         Kokkos::RangePolicy<execution_space>(0, neighbor_counts_.extent(0)),
-        KOKKOS_LAMBDA(size_type i, size_type& partial_sum) { partial_sum += neighbor_counts_(i); }, total);
+        KOKKOS_LAMBDA(size_type i, size_type & partial_sum) { partial_sum += neighbor_counts_(i); }, total);
     total_pairs_ = total;
   }
   //@}

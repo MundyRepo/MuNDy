@@ -53,12 +53,12 @@
 #include <stk_util/ngp/NgpSpaces.hpp>             // for stk::ngp::HostMemSpace, stk::ngp::UVMMemSpace
 
 // Mundy libs
-#include <mundy_mesh/ForEachEntity.hpp>                    // for mundy::mesh::for_each_entity_run
-#include <mundy_mesh/LinkCSRPartition.hpp>                 // for mundy::mesh::LinkCSRPartition
-#include <mundy_mesh/LinkMetaData.hpp>                     // for mundy::mesh::LinkMetaData
-#include <mundy_mesh/MetaData.hpp>                         // for mundy::mesh::MetaData
-#include <mundy_mesh/NgpFieldBLAS.hpp>   // for mundy::mesh::field_copy
-#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
+#include <mundy_mesh/ForEachEntity.hpp>     // for mundy::mesh::for_each_entity_run
+#include <mundy_mesh/LinkCSRPartition.hpp>  // for mundy::mesh::LinkCSRPartition
+#include <mundy_mesh/LinkMetaData.hpp>      // for mundy::mesh::LinkMetaData
+#include <mundy_mesh/MetaData.hpp>          // for mundy::mesh::MetaData
+#include <mundy_mesh/NgpFieldBLAS.hpp>      // for mundy::mesh::field_copy
+#include <mundy_utils/throw_assert.hpp>     // for MUNDY_THROW_ASSERT
 
 namespace mundy {
 
@@ -309,7 +309,6 @@ class NgpCOOToCSRSynchronizerT {
                                         link_subset_selector, stk::ngp::ExecSpace());
       const bool links_up_to_date = (link_needs_updated_count == 0);
       is_up_to_date = links_up_to_date;
-
     }
 
     return is_up_to_date;
@@ -359,7 +358,6 @@ class NgpCOOToCSRSynchronizerT {
       }
       const auto up_to_date_end = std::chrono::steady_clock::now();
       is_up_to_date_time += elapsed_sync_profile_seconds(up_to_date_begin, up_to_date_end);
-
     }
 
     if (force_full_rebuild) {

@@ -53,8 +53,8 @@
 #include <mundy_mesh/NgpFieldBLAS.hpp>   // for mundy::mesh::field_copy
 #include <mundy_mesh/NgpLinkData.hpp>    // for mundy::mesh::NgpLinkData
 #include <mundy_utils/NgpView.hpp>       // for mundy::NgpView
-#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
 #include <mundy_utils/requires.hpp>
+#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
 
 namespace mundy {
 
@@ -182,7 +182,7 @@ class LinkDeclarationRequestsT {  // Raw data in any space
   ///
   /// \param linked_entities [in] Any number of entities to link.
   template <typename... LinkedEntities>
-    MUNDY_REQUIRES(std::is_same_v<std::decay_t<LinkedEntities>, stk::mesh::Entity> && ...)
+  MUNDY_REQUIRES(std::is_same_v<std::decay_t<LinkedEntities>, stk::mesh::Entity>&&...)
   KOKKOS_INLINE_FUNCTION void request_link(LinkedEntities&&... linked_entities) const {
     MUNDY_THROW_ASSERT(link_dimensionality() >= sizeof...(linked_entities), std::invalid_argument,
                        "The number of linked entities cannot exceed the link dimensionality.");
@@ -196,7 +196,7 @@ class LinkDeclarationRequestsT {  // Raw data in any space
                    std::forward<LinkedEntities>(linked_entities)...);
   }
   template <typename... LinkedEntities>
-    MUNDY_REQUIRES(std::is_same_v<std::decay_t<LinkedEntities>, stk::mesh::Entity> && ...)
+  MUNDY_REQUIRES(std::is_same_v<std::decay_t<LinkedEntities>, stk::mesh::Entity>&&...)
   inline void request_link_host(LinkedEntities&&... linked_entities) const {
     MUNDY_THROW_ASSERT(link_dimensionality() >= sizeof...(linked_entities), std::invalid_argument,
                        "The number of linked entities cannot exceed the link dimensionality.");

@@ -63,13 +63,13 @@ class NeighborSearchCandidate;
 /// `operator()` must be callable on at least `NeighborSearchCandidate<size_t>` (checked here as a representative
 /// non-periodic candidate type; excluders that also handle periodic candidates do so via their own template overloads).
 template <typename T>
-concept ExcluderType =
-    requires(T& excluder, const stk::mesh::BulkData& bulk_data, const stk::mesh::Selector& target_selector,
-             const stk::mesh::Selector& source_selector) {
-      { excluder.setup(bulk_data, target_selector, source_selector) } -> std::same_as<void>;
-    } && requires(const T& excluder, const NeighborSearchCandidate<size_t>& candidate) {
-      { excluder(candidate) } -> std::convertible_to<bool>;
-    };
+concept ExcluderType = requires(T& excluder, const stk::mesh::BulkData& bulk_data,
+                                const stk::mesh::Selector& target_selector,
+                                const stk::mesh::Selector& source_selector) {
+  { excluder.setup(bulk_data, target_selector, source_selector) } -> std::same_as<void>;
+} && requires(const T& excluder, const NeighborSearchCandidate<size_t>& candidate) {
+  { excluder(candidate) } -> std::convertible_to<bool>;
+};
 
 // Forward declaration needed by NoExcluder::exclude().
 template <typename PriorExcluder, typename Excluder>
@@ -2560,8 +2560,7 @@ class PeriodicArborX2dNeighborList {
   /// \param neighbor_counts [in] Number of valid entries in each target owner row.
   /// \param source_owner_indices [in] Dense source owner ordinals in target-by-neighbor rows.
   /// \param relative_image_shifts [in] Relative image shifts in target-by-neighbor rows.
-  PeriodicArborX2dNeighborList(const stk::mesh::Selector& target_selector,
-                               const stk::mesh::Selector& source_selector,
+  PeriodicArborX2dNeighborList(const stk::mesh::Selector& target_selector, const stk::mesh::Selector& source_selector,
                                const entity_view_t& target_entities, const entity_view_t& source_entities,
                                const count_view_t& neighbor_counts, const source_index_view_t& source_owner_indices,
                                const image_shift_view_t& relative_image_shifts)
@@ -2964,8 +2963,7 @@ class PeriodicSTKSearchNeighborList {
   /// \param source_owner_indices [in] Dense source owner ordinal for every stored pair.
   /// \param relative_image_shifts [in] Source image shift minus target image shift for every stored pair.
   /// \param offsets [in] Target owner offsets into `source_owner_indices`; extent must be `num_targets + 1`.
-  PeriodicSTKSearchNeighborList(const stk::mesh::Selector& target_selector,
-                                const stk::mesh::Selector& source_selector,
+  PeriodicSTKSearchNeighborList(const stk::mesh::Selector& target_selector, const stk::mesh::Selector& source_selector,
                                 const entity_view_t& target_entities, const entity_view_t& source_entities,
                                 const source_index_view_t& source_owner_indices,
                                 const image_shift_view_t& relative_image_shifts, const offset_view_t& offsets)

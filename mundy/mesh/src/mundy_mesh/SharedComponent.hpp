@@ -52,10 +52,10 @@
 #include <mundy_mesh/NgpAccessorExpr.hpp>  // for mundy::mesh::AccessorExpr and EntityExprBase
 #include <mundy_mesh/impl/HostDeviceSynchronizer.hpp>
 #include <mundy_mesh/impl/SharedComponentImpl.hpp>
+#include <mundy_utils/requires.hpp>
 #include <mundy_utils/suppress_warnings.hpp>  // for MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_PUSH/POP
 #include <mundy_utils/throw_assert.hpp>       // for MUNDY_THROW_ASSERT
 #include <mundy_utils/tuple.hpp>              // for mundy::tuple
-#include <mundy_utils/requires.hpp>
 
 namespace mundy {
 
@@ -82,7 +82,7 @@ class SharedComponent {
   }
 
   template <typename HostViewType>
-    MUNDY_REQUIRES(impl::CompatibleSharedComponentHostView<HostViewType, shared_type>)
+  MUNDY_REQUIRES(impl::CompatibleSharedComponentHostView<HostViewType, shared_type>)
   explicit SharedComponent(HostViewType host_view) : state_(std::make_shared<state_type>(std::move(host_view))) {
   }
 
@@ -165,7 +165,7 @@ class SharedScalarComponent : public SharedComponent<ScalarType> {
   }
 
   template <typename HostViewType>
-    MUNDY_REQUIRES(impl::CompatibleSharedComponentHostView<HostViewType, ScalarType>)
+  MUNDY_REQUIRES(impl::CompatibleSharedComponentHostView<HostViewType, ScalarType>)
   explicit SharedScalarComponent(HostViewType host_view) : base_t(std::move(host_view)) {
   }
 
@@ -194,7 +194,7 @@ class SharedVectorComponent : public SharedComponent<Vector<ScalarType, N>> {
   }
 
   template <typename HostViewType>
-    MUNDY_REQUIRES(impl::CompatibleSharedComponentHostView<HostViewType, shared_value_type>)
+  MUNDY_REQUIRES(impl::CompatibleSharedComponentHostView<HostViewType, shared_value_type>)
   explicit SharedVectorComponent(HostViewType host_view) : base_t(std::move(host_view)) {
   }
 
@@ -236,7 +236,7 @@ class SharedMatrix3Component : public SharedComponent<Matrix3<ScalarType>> {
   }
 
   template <typename HostViewType>
-    MUNDY_REQUIRES(impl::CompatibleSharedComponentHostView<HostViewType, shared_value_type>)
+  MUNDY_REQUIRES(impl::CompatibleSharedComponentHostView<HostViewType, shared_value_type>)
   explicit SharedMatrix3Component(HostViewType host_view) : base_t(std::move(host_view)) {
   }
 
@@ -260,7 +260,7 @@ class SharedQuaternionComponent : public SharedComponent<Quaternion<ScalarType>>
   }
 
   template <typename HostViewType>
-    MUNDY_REQUIRES(impl::CompatibleSharedComponentHostView<HostViewType, shared_value_type>)
+  MUNDY_REQUIRES(impl::CompatibleSharedComponentHostView<HostViewType, shared_value_type>)
   explicit SharedQuaternionComponent(HostViewType host_view) : base_t(std::move(host_view)) {
   }
 
@@ -284,7 +284,7 @@ class SharedAABBComponent : public SharedComponent<AABB<ScalarType>> {
   }
 
   template <typename HostViewType>
-    MUNDY_REQUIRES(impl::CompatibleSharedComponentHostView<HostViewType, shared_value_type>)
+  MUNDY_REQUIRES(impl::CompatibleSharedComponentHostView<HostViewType, shared_value_type>)
   explicit SharedAABBComponent(HostViewType host_view) : base_t(std::move(host_view)) {
   }
 
@@ -471,7 +471,7 @@ auto get_updated_ngp_component(const SharedScalarComponent<ScalarType>& componen
 // **********************************************************************************************************************
 /// \brief Class template argument deduction guides for SharedComponent
 template <typename SharedType>
-  MUNDY_REQUIRES(!Kokkos::is_view_v<std::remove_cvref_t<SharedType>>)
+MUNDY_REQUIRES(!Kokkos::is_view_v<std::remove_cvref_t<SharedType>>)
 SharedComponent(SharedType) -> SharedComponent<std::remove_cvref_t<SharedType>>;
 
 template <impl::SharedComponentHostView HostViewType>
@@ -480,11 +480,11 @@ SharedComponent(HostViewType) -> SharedComponent<impl::shared_component_host_vie
 // **********************************************************************************************************************
 /// \brief Class template argument deduction guides for SharedScalarComponent
 template <typename ScalarType>
-  MUNDY_REQUIRES(!Kokkos::is_view_v<std::remove_cvref_t<ScalarType>>)
+MUNDY_REQUIRES(!Kokkos::is_view_v<std::remove_cvref_t<ScalarType>>)
 SharedScalarComponent(ScalarType) -> SharedScalarComponent<std::remove_cvref_t<ScalarType>>;
 
 template <impl::SharedComponentHostView HostViewType>
-  MUNDY_REQUIRES(std::is_arithmetic_v<impl::shared_component_host_view_value_t<HostViewType>>)
+MUNDY_REQUIRES(std::is_arithmetic_v<impl::shared_component_host_view_value_t<HostViewType>>)
 SharedScalarComponent(HostViewType) -> SharedScalarComponent<impl::shared_component_host_view_value_t<HostViewType>>;
 
 // **********************************************************************************************************************
@@ -493,7 +493,7 @@ template <typename ScalarType, size_t N>
 SharedVectorComponent(Vector<ScalarType, N>) -> SharedVectorComponent<ScalarType, N>;
 
 template <impl::SharedComponentHostView HostViewType>
-  MUNDY_REQUIRES(is_vector_v<impl::shared_component_host_view_value_t<HostViewType>>)
+MUNDY_REQUIRES(is_vector_v<impl::shared_component_host_view_value_t<HostViewType>>)
 SharedVectorComponent(HostViewType)
     -> SharedVectorComponent<typename impl::shared_component_host_view_value_t<HostViewType>::scalar_t,
                              impl::shared_component_host_view_value_t<HostViewType>::size>;
@@ -504,7 +504,7 @@ template <typename ScalarType>
 SharedMatrix3Component(Matrix3<ScalarType>) -> SharedMatrix3Component<ScalarType>;
 
 template <impl::SharedComponentHostView HostViewType>
-  MUNDY_REQUIRES(is_matrix3_v<impl::shared_component_host_view_value_t<HostViewType>>)
+MUNDY_REQUIRES(is_matrix3_v<impl::shared_component_host_view_value_t<HostViewType>>)
 SharedMatrix3Component(HostViewType)
     -> SharedMatrix3Component<typename impl::shared_component_host_view_value_t<HostViewType>::scalar_t>;
 
@@ -514,7 +514,7 @@ template <typename ScalarType>
 SharedQuaternionComponent(Quaternion<ScalarType>) -> SharedQuaternionComponent<ScalarType>;
 
 template <impl::SharedComponentHostView HostViewType>
-  MUNDY_REQUIRES(is_quaternion_v<impl::shared_component_host_view_value_t<HostViewType>>)
+MUNDY_REQUIRES(is_quaternion_v<impl::shared_component_host_view_value_t<HostViewType>>)
 SharedQuaternionComponent(HostViewType)
     -> SharedQuaternionComponent<typename impl::shared_component_host_view_value_t<HostViewType>::scalar_t>;
 
@@ -524,7 +524,7 @@ template <typename ScalarType>
 SharedAABBComponent(AABB<ScalarType>) -> SharedAABBComponent<ScalarType>;
 
 template <impl::SharedComponentHostView HostViewType>
-  MUNDY_REQUIRES(is_aabb_v<impl::shared_component_host_view_value_t<HostViewType>>)
+MUNDY_REQUIRES(is_aabb_v<impl::shared_component_host_view_value_t<HostViewType>>)
 SharedAABBComponent(HostViewType)
     -> SharedAABBComponent<typename impl::shared_component_host_view_value_t<HostViewType>::scalar_t>;
 //@}

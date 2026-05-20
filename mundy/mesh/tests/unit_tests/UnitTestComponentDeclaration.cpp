@@ -292,10 +292,12 @@ TEST(UnitTestComponentDeclaration, ExpectedFailureModes) {
   EXPECT_THROW((void)field_decl.type<double>().rank(ELEM_RANK).access<double>().declare(), std::logic_error);
   EXPECT_THROW((void)field_decl.type<double>().name("MISSING_FIELD_COMPONENT_RANK").access<double>().declare(),
                std::logic_error);
-  EXPECT_THROW(
-      (void)field_decl.type<double>().rank(ELEM_RANK).name("MISSING_FIELD_COMPONENT_ACCESS").tag<ORDERED_FIELD_1>()
-          .declare(),
-      std::logic_error);
+  EXPECT_THROW((void)field_decl.type<double>()
+                   .rank(ELEM_RANK)
+                   .name("MISSING_FIELD_COMPONENT_ACCESS")
+                   .tag<ORDERED_FIELD_1>()
+                   .declare(),
+               std::logic_error);
   EXPECT_THROW((void)component_decl.shared(3.5).tag<DECLARED_SPEED>().declare(), std::logic_error);
 }
 

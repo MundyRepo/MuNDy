@@ -49,10 +49,10 @@
 #include <mundy_mesh/impl/NgpAccessorExprImpl.hpp>
 #include <mundy_utils/StringLiteral.hpp>  // for mundy::StringLiteral
 #include <mundy_utils/aggregate.hpp>      // for mundy::aggregate
-#include <mundy_utils/rng.hpp>            // for mundy::make_philox
-#include <mundy_utils/throw_assert.hpp>   // for MUNDY_THROW_REQUIRE
-#include <mundy_utils/tuple.hpp>          // for mundy::tuple
 #include <mundy_utils/requires.hpp>
+#include <mundy_utils/rng.hpp>           // for mundy::make_philox
+#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_REQUIRE
+#include <mundy_utils/tuple.hpp>         // for mundy::tuple
 
 namespace mundy {
 
@@ -1568,13 +1568,13 @@ class AssignExpr : public MathExprBase<AssignExpr<TargetExpr, SourceExpr>> {
                                                                                                                        \
   /* Evaluate the given function on two expressions */                                                                 \
   template <typename LeftExpr, typename RightExpr>                                                                     \
-    MUNDY_REQUIRES(is_crtp_base_of_v<MathExprBase, LeftExpr> || is_crtp_base_of_v<MathExprBase, RightExpr>)                  \
+  MUNDY_REQUIRES(is_crtp_base_of_v<MathExprBase, LeftExpr> || is_crtp_base_of_v<MathExprBase, RightExpr>)              \
   auto FuncName(const MathExprBase<LeftExpr>& left_expr, const MathExprBase<RightExpr>& right_expr) {                  \
     return ExprClassName##Expr<LeftExpr, RightExpr>(left_expr.self(), right_expr.self());                              \
   }                                                                                                                    \
   /* On an expression and a constant */                                                                                \
   template <typename LeftExpr, typename RightT>                                                                        \
-    MUNDY_REQUIRES(is_crtp_base_of_v<MathExprBase, LeftExpr> && !is_crtp_base_of_v<MathExprBase, RightT>)                    \
+  MUNDY_REQUIRES(is_crtp_base_of_v<MathExprBase, LeftExpr> && !is_crtp_base_of_v<MathExprBase, RightT>)                \
   auto FuncName(const MathExprBase<LeftExpr>& left_expr, const RightT& right_const) {                                  \
     using RightExpr = ConstantMathExpr<RightT>;                                                                        \
     RightExpr right_expr(right_const);                                                                                 \
@@ -1582,7 +1582,7 @@ class AssignExpr : public MathExprBase<AssignExpr<TargetExpr, SourceExpr>> {
   }                                                                                                                    \
   /* On a constant and an expression */                                                                                \
   template <typename LeftT, typename RightExpr>                                                                        \
-    MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, LeftT> && is_crtp_base_of_v<MathExprBase, RightExpr>)                    \
+  MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, LeftT> && is_crtp_base_of_v<MathExprBase, RightExpr>)                \
   auto FuncName(const LeftT& left_const, const MathExprBase<RightExpr>& right_expr) {                                  \
     using LeftExpr = ConstantMathExpr<LeftT>;                                                                          \
     LeftExpr left_expr(left_const);                                                                                    \
@@ -1590,7 +1590,7 @@ class AssignExpr : public MathExprBase<AssignExpr<TargetExpr, SourceExpr>> {
   }                                                                                                                    \
   /* On two constants (not allowed) */                                                                                 \
   template <typename LeftT, typename RightT>                                                                           \
-    MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, LeftT> && !is_crtp_base_of_v<MathExprBase, RightT>)                      \
+  MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, LeftT> && !is_crtp_base_of_v<MathExprBase, RightT>)                  \
   void FuncName(const LeftT& left_const, const RightT& right_const) {                                                  \
     MUNDY_THROW_REQUIRE(                                                                                               \
         false, std::logic_error,                                                                                       \
@@ -1797,13 +1797,13 @@ class AssignExpr : public MathExprBase<AssignExpr<TargetExpr, SourceExpr>> {
                                                                                                                        \
   /* Evaluate the given atomic operation on two expressions */                                                         \
   template <typename LeftExpr, typename RightExpr>                                                                     \
-    MUNDY_REQUIRES(is_crtp_base_of_v<MathExprBase, LeftExpr> || is_crtp_base_of_v<MathExprBase, RightExpr>)                  \
+  MUNDY_REQUIRES(is_crtp_base_of_v<MathExprBase, LeftExpr> || is_crtp_base_of_v<MathExprBase, RightExpr>)              \
   auto AtomicName(const MathExprBase<LeftExpr>& left_expr, const MathExprBase<RightExpr>& right_expr) {                \
     return ExprClassName##Expr<LeftExpr, RightExpr>(left_expr.self(), right_expr.self());                              \
   }                                                                                                                    \
   /* On an expression and a constant */                                                                                \
   template <typename LeftExpr, typename RightT>                                                                        \
-    MUNDY_REQUIRES(is_crtp_base_of_v<MathExprBase, LeftExpr> && !is_crtp_base_of_v<MathExprBase, RightT>)                    \
+  MUNDY_REQUIRES(is_crtp_base_of_v<MathExprBase, LeftExpr> && !is_crtp_base_of_v<MathExprBase, RightT>)                \
   auto AtomicName(const MathExprBase<LeftExpr>& left_expr, const RightT& right_const) {                                \
     using RightExpr = ConstantMathExpr<RightT>;                                                                        \
     RightExpr right_expr(right_const);                                                                                 \
@@ -1811,7 +1811,7 @@ class AssignExpr : public MathExprBase<AssignExpr<TargetExpr, SourceExpr>> {
   }                                                                                                                    \
   /* On a constant and an expression */                                                                                \
   template <typename LeftT, typename RightExpr>                                                                        \
-    MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, LeftT> && is_crtp_base_of_v<MathExprBase, RightExpr>)                    \
+  MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, LeftT> && is_crtp_base_of_v<MathExprBase, RightExpr>)                \
   auto AtomicName(const LeftT& left_const, const MathExprBase<RightExpr>& right_expr) {                                \
     using LeftExpr = ConstantMathExpr<LeftT>;                                                                          \
     LeftExpr left_expr(left_const);                                                                                    \
@@ -1819,7 +1819,7 @@ class AssignExpr : public MathExprBase<AssignExpr<TargetExpr, SourceExpr>> {
   }                                                                                                                    \
   /* On two constants (not allowed) */                                                                                 \
   template <typename LeftT, typename RightT>                                                                           \
-    MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, LeftT> && !is_crtp_base_of_v<MathExprBase, RightT>)                      \
+  MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, LeftT> && !is_crtp_base_of_v<MathExprBase, RightT>)                  \
   void AtomicName(const LeftT& left_const, const RightT& right_const) {                                                \
     MUNDY_THROW_REQUIRE(                                                                                               \
         false, std::logic_error,                                                                                       \
@@ -1831,49 +1831,49 @@ class AssignExpr : public MathExprBase<AssignExpr<TargetExpr, SourceExpr>> {
 #define MUNDY_ACCESSOR_EXPR_NON_MEMBER_WITH_CONSTANT_1(ExprClassName)                                          \
   /* Non-member operators with ConstantMathExpr */                                                             \
   template <typename ConstantType, typename SubPrevMathExpr>                                                   \
-    MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                   \
+  MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                               \
   auto operator+(const ConstantType& c, const ExprClassName##Expr<SubPrevMathExpr>& expr) {                    \
     ConstantMathExpr<ConstantType> constant_expr(c);                                                           \
     return AddExpr<ConstantMathExpr<ConstantType>, ExprClassName##Expr<SubPrevMathExpr>>(constant_expr, expr); \
   }                                                                                                            \
   template <typename ConstantType, typename SubPrevMathExpr>                                                   \
-    MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                   \
+  MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                               \
   auto operator-(const ConstantType& c, const ExprClassName##Expr<SubPrevMathExpr>& expr) {                    \
     ConstantMathExpr<ConstantType> constant_expr(c);                                                           \
     return SubExpr<ConstantMathExpr<ConstantType>, ExprClassName##Expr<SubPrevMathExpr>>(constant_expr, expr); \
   }                                                                                                            \
   template <typename ConstantType, typename SubPrevMathExpr>                                                   \
-    MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                   \
+  MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                               \
   auto operator*(const ConstantType& c, const ExprClassName##Expr<SubPrevMathExpr>& expr) {                    \
     ConstantMathExpr<ConstantType> constant_expr(c);                                                           \
     return MulExpr<ConstantMathExpr<ConstantType>, ExprClassName##Expr<SubPrevMathExpr>>(constant_expr, expr); \
   }                                                                                                            \
   template <typename ConstantType, typename SubPrevMathExpr>                                                   \
-    MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                   \
+  MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                               \
   auto operator/(const ConstantType& c, const ExprClassName##Expr<SubPrevMathExpr>& expr) {                    \
     ConstantMathExpr<ConstantType> constant_expr(c);                                                           \
     return DivExpr<ConstantMathExpr<ConstantType>, ExprClassName##Expr<SubPrevMathExpr>>(constant_expr, expr); \
   }                                                                                                            \
   template <typename ConstantType, typename SubPrevMathExpr>                                                   \
-    MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                   \
+  MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                               \
   auto operator+(const ExprClassName##Expr<SubPrevMathExpr>& expr, const ConstantType& c) {                    \
     ConstantMathExpr<ConstantType> constant_expr(c);                                                           \
     return AddExpr<ExprClassName##Expr<SubPrevMathExpr>, ConstantMathExpr<ConstantType>>(expr, constant_expr); \
   }                                                                                                            \
   template <typename ConstantType, typename SubPrevMathExpr>                                                   \
-    MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                   \
+  MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                               \
   auto operator-(const ExprClassName##Expr<SubPrevMathExpr>& expr, const ConstantType& c) {                    \
     ConstantMathExpr<ConstantType> constant_expr(c);                                                           \
     return SubExpr<ExprClassName##Expr<SubPrevMathExpr>, ConstantMathExpr<ConstantType>>(expr, constant_expr); \
   }                                                                                                            \
   template <typename ConstantType, typename SubPrevMathExpr>                                                   \
-    MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                   \
+  MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                               \
   auto operator*(const ExprClassName##Expr<SubPrevMathExpr>& expr, const ConstantType& c) {                    \
     ConstantMathExpr<ConstantType> constant_expr(c);                                                           \
     return MulExpr<ExprClassName##Expr<SubPrevMathExpr>, ConstantMathExpr<ConstantType>>(expr, constant_expr); \
   }                                                                                                            \
   template <typename ConstantType, typename SubPrevMathExpr>                                                   \
-    MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                   \
+  MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                               \
   auto operator/(const ExprClassName##Expr<SubPrevMathExpr>& expr, const ConstantType& c) {                    \
     ConstantMathExpr<ConstantType> constant_expr(c);                                                           \
     return DivExpr<ExprClassName##Expr<SubPrevMathExpr>, ConstantMathExpr<ConstantType>>(expr, constant_expr); \
@@ -1882,56 +1882,56 @@ class AssignExpr : public MathExprBase<AssignExpr<TargetExpr, SourceExpr>> {
 #define MUNDY_ACCESSOR_EXPR_NON_MEMBER_WITH_CONSTANT_2(ExprClassName)                                              \
   /* Non-member operators with ConstantMathExpr */                                                                 \
   template <typename ConstantType, typename SubLeftExpr, typename SubRightExpr>                                    \
-    MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                       \
+  MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                   \
   auto operator+(const ConstantType& c, const ExprClassName##Expr<SubLeftExpr, SubRightExpr>& expr) {              \
     ConstantMathExpr<ConstantType> constant_expr(c);                                                               \
     return AddExpr<ConstantMathExpr<ConstantType>, ExprClassName##Expr<SubLeftExpr, SubRightExpr>>(constant_expr,  \
                                                                                                    expr);          \
   }                                                                                                                \
   template <typename ConstantType, typename SubLeftExpr, typename SubRightExpr>                                    \
-    MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                       \
+  MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                   \
   auto operator-(const ConstantType& c, const ExprClassName##Expr<SubLeftExpr, SubRightExpr>& expr) {              \
     ConstantMathExpr<ConstantType> constant_expr(c);                                                               \
     return SubExpr<ConstantMathExpr<ConstantType>, ExprClassName##Expr<SubLeftExpr, SubRightExpr>>(constant_expr,  \
                                                                                                    expr);          \
   }                                                                                                                \
   template <typename ConstantType, typename SubLeftExpr, typename SubRightExpr>                                    \
-    MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                       \
+  MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                   \
   auto operator*(const ConstantType& c, const ExprClassName##Expr<SubLeftExpr, SubRightExpr>& expr) {              \
     ConstantMathExpr<ConstantType> constant_expr(c);                                                               \
     return MulExpr<ConstantMathExpr<ConstantType>, ExprClassName##Expr<SubLeftExpr, SubRightExpr>>(constant_expr,  \
                                                                                                    expr);          \
   }                                                                                                                \
   template <typename ConstantType, typename SubLeftExpr, typename SubRightExpr>                                    \
-    MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                       \
+  MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                   \
   auto operator/(const ConstantType& c, const ExprClassName##Expr<SubLeftExpr, SubRightExpr>& expr) {              \
     ConstantMathExpr<ConstantType> constant_expr(c);                                                               \
     return DivExpr<ConstantMathExpr<ConstantType>, ExprClassName##Expr<SubLeftExpr, SubRightExpr>>(constant_expr,  \
                                                                                                    expr);          \
   }                                                                                                                \
   template <typename ConstantType, typename SubLeftExpr, typename SubRightExpr>                                    \
-    MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                       \
+  MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                   \
   auto operator+(const ExprClassName##Expr<SubLeftExpr, SubRightExpr>& expr, const ConstantType& c) {              \
     ConstantMathExpr<ConstantType> constant_expr(c);                                                               \
     return AddExpr<ExprClassName##Expr<SubLeftExpr, SubRightExpr>, ConstantMathExpr<ConstantType>>(expr,           \
                                                                                                    constant_expr); \
   }                                                                                                                \
   template <typename ConstantType, typename SubLeftExpr, typename SubRightExpr>                                    \
-    MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                       \
+  MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                   \
   auto operator-(const ExprClassName##Expr<SubLeftExpr, SubRightExpr>& expr, const ConstantType& c) {              \
     ConstantMathExpr<ConstantType> constant_expr(c);                                                               \
     return SubExpr<ExprClassName##Expr<SubLeftExpr, SubRightExpr>, ConstantMathExpr<ConstantType>>(expr,           \
                                                                                                    constant_expr); \
   }                                                                                                                \
   template <typename ConstantType, typename SubLeftExpr, typename SubRightExpr>                                    \
-    MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                       \
+  MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                   \
   auto operator*(const ExprClassName##Expr<SubLeftExpr, SubRightExpr>& expr, const ConstantType& c) {              \
     ConstantMathExpr<ConstantType> constant_expr(c);                                                               \
     return MulExpr<ExprClassName##Expr<SubLeftExpr, SubRightExpr>, ConstantMathExpr<ConstantType>>(expr,           \
                                                                                                    constant_expr); \
   }                                                                                                                \
   template <typename ConstantType, typename SubLeftExpr, typename SubRightExpr>                                    \
-    MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                       \
+  MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, ConstantType>)                                                   \
   auto operator/(const ExprClassName##Expr<SubLeftExpr, SubRightExpr>& expr, const ConstantType& c) {              \
     ConstantMathExpr<ConstantType> constant_expr(c);                                                               \
     return DivExpr<ExprClassName##Expr<SubLeftExpr, SubRightExpr>, ConstantMathExpr<ConstantType>>(expr,           \
@@ -2088,14 +2088,14 @@ class AccessorExpr : public MathExprBase<AccessorExpr<TaggedAccessorT, PrevEntit
   }
 
   template <typename OtherExpr>
-    MUNDY_REQUIRES(!std::is_same_v<OtherExpr, our_t>)
+  MUNDY_REQUIRES(!std::is_same_v<OtherExpr, our_t>)
   auto operator=(const MathExprBase<OtherExpr>& other) {
     AssignExpr<our_t, OtherExpr> expr(*this, other.self());
     expr.driver()->run(expr);
   }
 
   template <typename OtherExpr>
-    MUNDY_REQUIRES(!std::is_same_v<OtherExpr, our_t>)
+  MUNDY_REQUIRES(!std::is_same_v<OtherExpr, our_t>)
   auto operator=(const EntityExprBase<OtherExpr>& other) {
     AssignExpr<our_t, OtherExpr> expr(*this, other.self());
     expr.driver()->run(expr);
@@ -2146,7 +2146,7 @@ class AccessorExpr : public MathExprBase<AccessorExpr<TaggedAccessorT, PrevEntit
   }
 
   template <typename ConstantType>
-    MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, ConstantType> && !is_crtp_base_of_v<EntityExprBase, ConstantType>)
+  MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, ConstantType> && !is_crtp_base_of_v<EntityExprBase, ConstantType>)
   auto operator=(const ConstantType& c) {
     ConstantMathExpr<ConstantType> constant_expr(c);
     AssignExpr<our_t, ConstantMathExpr<ConstantType>> expr(*this, constant_expr);
@@ -2154,7 +2154,7 @@ class AccessorExpr : public MathExprBase<AccessorExpr<TaggedAccessorT, PrevEntit
   }
 
   template <typename ConstantType>
-    MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, ConstantType> && !is_crtp_base_of_v<EntityExprBase, ConstantType>)
+  MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, ConstantType> && !is_crtp_base_of_v<EntityExprBase, ConstantType>)
   auto operator+=(const ConstantType& c) {
     ConstantMathExpr<ConstantType> constant_expr(c);
     AddEqualsExpr<our_t, ConstantMathExpr<ConstantType>> expr(*this, constant_expr);
@@ -2162,7 +2162,7 @@ class AccessorExpr : public MathExprBase<AccessorExpr<TaggedAccessorT, PrevEntit
   }
 
   template <typename ConstantType>
-    MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, ConstantType> && !is_crtp_base_of_v<EntityExprBase, ConstantType>)
+  MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, ConstantType> && !is_crtp_base_of_v<EntityExprBase, ConstantType>)
   auto operator-=(const ConstantType& c) {
     ConstantMathExpr<ConstantType> constant_expr(c);
     SubEqualsExpr<our_t, ConstantMathExpr<ConstantType>> expr(*this, constant_expr);
@@ -2170,7 +2170,7 @@ class AccessorExpr : public MathExprBase<AccessorExpr<TaggedAccessorT, PrevEntit
   }
 
   template <typename ConstantType>
-    MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, ConstantType> && !is_crtp_base_of_v<EntityExprBase, ConstantType>)
+  MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, ConstantType> && !is_crtp_base_of_v<EntityExprBase, ConstantType>)
   auto operator*=(const ConstantType& c) {
     ConstantMathExpr<ConstantType> constant_expr(c);
     MulEqualsExpr<our_t, ConstantMathExpr<ConstantType>> expr(*this, constant_expr);
@@ -2178,7 +2178,7 @@ class AccessorExpr : public MathExprBase<AccessorExpr<TaggedAccessorT, PrevEntit
   }
 
   template <typename ConstantType>
-    MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, ConstantType> && !is_crtp_base_of_v<EntityExprBase, ConstantType>)
+  MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, ConstantType> && !is_crtp_base_of_v<EntityExprBase, ConstantType>)
   auto operator/=(const ConstantType& c) {
     ConstantMathExpr<ConstantType> constant_expr(c);
     DivEqualsExpr<our_t, ConstantMathExpr<ConstantType>> expr(*this, constant_expr);
@@ -2265,56 +2265,56 @@ class AccessorExpr : public MathExprBase<AccessorExpr<TaggedAccessorT, PrevEntit
 
 /* Non-member operators with ConstantMathExpr */
 template <typename ConstantType, typename SubTaggedAccessorT, typename SubPrevEntityExpr>
-  MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, ConstantType> && !is_crtp_base_of_v<EntityExprBase, ConstantType>)
+MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, ConstantType> && !is_crtp_base_of_v<EntityExprBase, ConstantType>)
 auto operator+(const ConstantType& c, const AccessorExpr<SubTaggedAccessorT, SubPrevEntityExpr>& expr) {
   auto constant_expr = ConstantMathExpr<ConstantType>(c);
   return AddExpr<ConstantMathExpr<ConstantType>, AccessorExpr<SubTaggedAccessorT, SubPrevEntityExpr>>(constant_expr,
                                                                                                       expr);
 }
 template <typename ConstantType, typename SubTaggedAccessorT, typename SubPrevEntityExpr>
-  MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, ConstantType> && !is_crtp_base_of_v<EntityExprBase, ConstantType>)
+MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, ConstantType> && !is_crtp_base_of_v<EntityExprBase, ConstantType>)
 auto operator-(const ConstantType& c, const AccessorExpr<SubTaggedAccessorT, SubPrevEntityExpr>& expr) {
   auto constant_expr = ConstantMathExpr<ConstantType>(c);
   return SubExpr<ConstantMathExpr<ConstantType>, AccessorExpr<SubTaggedAccessorT, SubPrevEntityExpr>>(constant_expr,
                                                                                                       expr);
 }
 template <typename ConstantType, typename SubTaggedAccessorT, typename SubPrevEntityExpr>
-  MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, ConstantType> && !is_crtp_base_of_v<EntityExprBase, ConstantType>)
+MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, ConstantType> && !is_crtp_base_of_v<EntityExprBase, ConstantType>)
 auto operator*(const ConstantType& c, const AccessorExpr<SubTaggedAccessorT, SubPrevEntityExpr>& expr) {
   auto constant_expr = ConstantMathExpr<ConstantType>(c);
   return MulExpr<ConstantMathExpr<ConstantType>, AccessorExpr<SubTaggedAccessorT, SubPrevEntityExpr>>(constant_expr,
                                                                                                       expr);
 }
 template <typename ConstantType, typename SubTaggedAccessorT, typename SubPrevEntityExpr>
-  MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, ConstantType> && !is_crtp_base_of_v<EntityExprBase, ConstantType>)
+MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, ConstantType> && !is_crtp_base_of_v<EntityExprBase, ConstantType>)
 auto operator/(const ConstantType& c, const AccessorExpr<SubTaggedAccessorT, SubPrevEntityExpr>& expr) {
   auto constant_expr = ConstantMathExpr<ConstantType>(c);
   return DivExpr<ConstantMathExpr<ConstantType>, AccessorExpr<SubTaggedAccessorT, SubPrevEntityExpr>>(constant_expr,
                                                                                                       expr);
 }
 template <typename ConstantType, typename SubTaggedAccessorT, typename SubPrevEntityExpr>
-  MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, ConstantType> && !is_crtp_base_of_v<EntityExprBase, ConstantType>)
+MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, ConstantType> && !is_crtp_base_of_v<EntityExprBase, ConstantType>)
 auto operator+(const AccessorExpr<SubTaggedAccessorT, SubPrevEntityExpr>& expr, const ConstantType& c) {
   auto constant_expr = ConstantMathExpr<ConstantType>(c);
   return AddExpr<AccessorExpr<SubTaggedAccessorT, SubPrevEntityExpr>, ConstantMathExpr<ConstantType>>(expr,
                                                                                                       constant_expr);
 }
 template <typename ConstantType, typename SubTaggedAccessorT, typename SubPrevEntityExpr>
-  MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, ConstantType> && !is_crtp_base_of_v<EntityExprBase, ConstantType>)
+MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, ConstantType> && !is_crtp_base_of_v<EntityExprBase, ConstantType>)
 auto operator-(const AccessorExpr<SubTaggedAccessorT, SubPrevEntityExpr>& expr, const ConstantType& c) {
   auto constant_expr = ConstantMathExpr<ConstantType>(c);
   return SubExpr<AccessorExpr<SubTaggedAccessorT, SubPrevEntityExpr>, ConstantMathExpr<ConstantType>>(expr,
                                                                                                       constant_expr);
 }
 template <typename ConstantType, typename SubTaggedAccessorT, typename SubPrevEntityExpr>
-  MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, ConstantType> && !is_crtp_base_of_v<EntityExprBase, ConstantType>)
+MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, ConstantType> && !is_crtp_base_of_v<EntityExprBase, ConstantType>)
 auto operator*(const AccessorExpr<SubTaggedAccessorT, SubPrevEntityExpr>& expr, const ConstantType& c) {
   auto constant_expr = ConstantMathExpr<ConstantType>(c);
   return MulExpr<AccessorExpr<SubTaggedAccessorT, SubPrevEntityExpr>, ConstantMathExpr<ConstantType>>(expr,
                                                                                                       constant_expr);
 }
 template <typename ConstantType, typename SubTaggedAccessorT, typename SubPrevEntityExpr>
-  MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, ConstantType> && !is_crtp_base_of_v<EntityExprBase, ConstantType>)
+MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, ConstantType> && !is_crtp_base_of_v<EntityExprBase, ConstantType>)
 auto operator/(const AccessorExpr<SubTaggedAccessorT, SubPrevEntityExpr>& expr, const ConstantType& c) {
   auto constant_expr = ConstantMathExpr<ConstantType>(c);
   return DivExpr<AccessorExpr<SubTaggedAccessorT, SubPrevEntityExpr>, ConstantMathExpr<ConstantType>>(expr,
@@ -2680,13 +2680,13 @@ class CounterBasedRNGExpr
   // Allow the user to rand_gen_expr.uniform(low, high) to get an expression for generating random numbers between low
   // and high Low & high are expressions
   template <typename T, typename LowExpr, typename HighExpr>
-    MUNDY_REQUIRES(is_crtp_base_of_v<MathExprBase, LowExpr> && is_crtp_base_of_v<MathExprBase, HighExpr>)
+  MUNDY_REQUIRES(is_crtp_base_of_v<MathExprBase, LowExpr>&& is_crtp_base_of_v<MathExprBase, HighExpr>)
   auto uniform(const LowExpr& low_expr, const HighExpr& high_expr) const {
     return UniformDistributionExpr<our_t, T, LowExpr, HighExpr>(*this, low_expr, high_expr);
   }
   // Low is an expression but high is a constant
   template <typename T, typename LowExpr, typename HighT>
-    MUNDY_REQUIRES(is_crtp_base_of_v<MathExprBase, LowExpr> && !is_crtp_base_of_v<MathExprBase, HighT>)
+  MUNDY_REQUIRES(is_crtp_base_of_v<MathExprBase, LowExpr> && !is_crtp_base_of_v<MathExprBase, HighT>)
   auto uniform(const LowExpr& low_expr, const HighT& high) const {
     ConstantMathExpr<HighT> high_expr(high);
     using HighExpr = ConstantMathExpr<HighT>;
@@ -2694,7 +2694,7 @@ class CounterBasedRNGExpr
   }
   // Low is a constant but high is an expression
   template <typename T, typename LowT, typename HighExpr>
-    MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, LowT> && is_crtp_base_of_v<MathExprBase, HighExpr>)
+  MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, LowT> && is_crtp_base_of_v<MathExprBase, HighExpr>)
   auto uniform(const LowT& low, const HighExpr& high_expr) const {
     ConstantMathExpr<LowT> low_expr(low);
     using LowExpr = ConstantMathExpr<LowT>;
@@ -2702,7 +2702,7 @@ class CounterBasedRNGExpr
   }
   // Low & high are constants (perfectly allowed since the rng has a driver)
   template <typename T, typename LowT, typename HighT>
-    MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, LowT> && !is_crtp_base_of_v<MathExprBase, HighT>)
+  MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, LowT> && !is_crtp_base_of_v<MathExprBase, HighT>)
   auto uniform(const LowT& low, const HighT& high) const {
     ConstantMathExpr<LowT> low_expr(low);
     ConstantMathExpr<HighT> high_expr(high);
@@ -2763,14 +2763,14 @@ class CounterBasedRNGExpr
 /// Seed and counter are expressions
 template <typename SeedExpr, typename CounterExpr, typename RNGType = openrand::Philox,
           RNGType (*make_counter_based_rng)(size_t, size_t) = make_philox>
-  MUNDY_REQUIRES(is_crtp_base_of_v<MathExprBase, SeedExpr> && is_crtp_base_of_v<MathExprBase, CounterExpr>)
+MUNDY_REQUIRES(is_crtp_base_of_v<MathExprBase, SeedExpr>&& is_crtp_base_of_v<MathExprBase, CounterExpr>)
 auto rng(const SeedExpr& seed_expr, const CounterExpr& counter_expr) {
   return CounterBasedRNGExpr<SeedExpr, CounterExpr, RNGType, make_counter_based_rng>(seed_expr, counter_expr);
 }
 /// Seed is an expression but counter is a constant
 template <typename SeedExpr, typename CounterT, typename RNGType = openrand::Philox,
           RNGType (*make_counter_based_rng)(size_t, size_t) = make_philox>
-  MUNDY_REQUIRES(is_crtp_base_of_v<MathExprBase, SeedExpr> && !is_crtp_base_of_v<MathExprBase, CounterT>)
+MUNDY_REQUIRES(is_crtp_base_of_v<MathExprBase, SeedExpr> && !is_crtp_base_of_v<MathExprBase, CounterT>)
 auto rng(const SeedExpr& seed_expr, const CounterT& counter) {
   using CounterExpr = ConstantMathExpr<CounterT>;
   auto counter_expr = CounterExpr(counter);
@@ -2779,7 +2779,7 @@ auto rng(const SeedExpr& seed_expr, const CounterT& counter) {
 /// Seed is a constant but counter is an expression
 template <typename SeedT, typename CounterExpr, typename RNGType = openrand::Philox,
           RNGType (*make_counter_based_rng)(size_t, size_t) = make_philox>
-  MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, SeedT> && is_crtp_base_of_v<MathExprBase, CounterExpr>)
+MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, SeedT> && is_crtp_base_of_v<MathExprBase, CounterExpr>)
 auto rng(const SeedT& seed, const CounterExpr& counter_expr) {
   using SeedExpr = ConstantMathExpr<SeedT>;
   auto seed_expr = SeedExpr(seed);
@@ -2788,7 +2788,7 @@ auto rng(const SeedT& seed, const CounterExpr& counter_expr) {
 /// Both seed and counter are constants (not allowed)
 template <typename SeedT, typename CounterT, typename RNGType = openrand::Philox,
           RNGType (*make_counter_based_rng)(size_t, size_t) = make_philox>
-  MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, SeedT> && !is_crtp_base_of_v<MathExprBase, CounterT>)
+MUNDY_REQUIRES(!is_crtp_base_of_v<MathExprBase, SeedT> && !is_crtp_base_of_v<MathExprBase, CounterT>)
 void rng(const SeedT& seed, const CounterT& counter) {
   MUNDY_THROW_REQUIRE(false, std::logic_error,
                       "Both seed and counter arguments to rng() cannot be constants.\n"
@@ -2942,7 +2942,7 @@ void fused_assign(const TrgSrcExprPairs&... exprs) {
 
 /// \brief Reduces value of a given expression over all entities in the driver on this process
 template <typename Expr, typename ReductionOp>
-  MUNDY_REQUIRES(is_crtp_base_of_v<MathExprBase, Expr> || is_crtp_base_of_v<EntityExprBase, Expr>)
+MUNDY_REQUIRES(is_crtp_base_of_v<MathExprBase, Expr> || is_crtp_base_of_v<EntityExprBase, Expr>)
 void reduce_local(Expr&& expr, ReductionOp& reduction) {
   auto driver = expr.driver();
   driver->reduce_local(expr, reduction);
@@ -2950,7 +2950,7 @@ void reduce_local(Expr&& expr, ReductionOp& reduction) {
 
 /// \brief Reduce sum (process local)
 template <typename Scalar, typename Expr>
-  MUNDY_REQUIRES(is_crtp_base_of_v<MathExprBase, Expr> || is_crtp_base_of_v<EntityExprBase, Expr>)
+MUNDY_REQUIRES(is_crtp_base_of_v<MathExprBase, Expr> || is_crtp_base_of_v<EntityExprBase, Expr>)
 auto reduce_local_sum(Expr&& expr) {
   Scalar local_sum = 0;
   Kokkos::Sum<Scalar> sum_reduction(local_sum);
@@ -2960,7 +2960,7 @@ auto reduce_local_sum(Expr&& expr) {
 
 /// \brief Reduce max (process local)
 template <typename Scalar, typename Expr>
-  MUNDY_REQUIRES(is_crtp_base_of_v<MathExprBase, Expr> || is_crtp_base_of_v<EntityExprBase, Expr>)
+MUNDY_REQUIRES(is_crtp_base_of_v<MathExprBase, Expr> || is_crtp_base_of_v<EntityExprBase, Expr>)
 auto reduce_local_max(Expr&& expr) {
   Scalar local_max;
   Kokkos::Max<Scalar> max_reduction(local_max);
@@ -2970,7 +2970,7 @@ auto reduce_local_max(Expr&& expr) {
 
 /// \brief Reduce min (process local)
 template <typename Scalar, typename Expr>
-  MUNDY_REQUIRES(is_crtp_base_of_v<MathExprBase, Expr> || is_crtp_base_of_v<EntityExprBase, Expr>)
+MUNDY_REQUIRES(is_crtp_base_of_v<MathExprBase, Expr> || is_crtp_base_of_v<EntityExprBase, Expr>)
 auto reduce_local_min(Expr&& expr) {
   Scalar local_min;
   Kokkos::Min<Scalar> min_reduction(local_min);
@@ -2980,7 +2980,7 @@ auto reduce_local_min(Expr&& expr) {
 
 /// \brief Reduces sum (all processes)
 template <typename Scalar, typename Expr>
-  MUNDY_REQUIRES(is_crtp_base_of_v<MathExprBase, Expr> || is_crtp_base_of_v<EntityExprBase, Expr>)
+MUNDY_REQUIRES(is_crtp_base_of_v<MathExprBase, Expr> || is_crtp_base_of_v<EntityExprBase, Expr>)
 auto all_reduce_sum(Expr&& expr) {
   auto* driver = expr.driver();
   Scalar local_sum = reduce_local_sum<Scalar>(std::forward<Expr>(expr));
@@ -2991,7 +2991,7 @@ auto all_reduce_sum(Expr&& expr) {
 
 /// \brief Reduces max (all processes)
 template <typename Scalar, typename Expr>
-  MUNDY_REQUIRES(is_crtp_base_of_v<MathExprBase, Expr> || is_crtp_base_of_v<EntityExprBase, Expr>)
+MUNDY_REQUIRES(is_crtp_base_of_v<MathExprBase, Expr> || is_crtp_base_of_v<EntityExprBase, Expr>)
 auto all_reduce_max(Expr&& expr) {
   auto* driver = expr.driver();
   Scalar local_max = reduce_local_max<Scalar>(std::forward<Expr>(expr));
@@ -3002,7 +3002,7 @@ auto all_reduce_max(Expr&& expr) {
 
 /// \brief Reduces min (all processes)
 template <typename Scalar, typename Expr>
-  MUNDY_REQUIRES(is_crtp_base_of_v<MathExprBase, Expr> || is_crtp_base_of_v<EntityExprBase, Expr>)
+MUNDY_REQUIRES(is_crtp_base_of_v<MathExprBase, Expr> || is_crtp_base_of_v<EntityExprBase, Expr>)
 auto all_reduce_min(Expr&& expr) {
   auto* driver = expr.driver();
   Scalar local_min = reduce_local_min<Scalar>(std::forward<Expr>(expr));

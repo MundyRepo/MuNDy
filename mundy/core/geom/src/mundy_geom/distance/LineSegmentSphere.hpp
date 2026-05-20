@@ -45,7 +45,7 @@ namespace mundy {
 /// \param[in] line_segment The line segment
 /// \param[in] sphere The sphere
 template <ValidLineSegmentType LineSegmentType, ValidSphereType SphereType>
-  MUNDY_REQUIRES(std::is_same_v<typename LineSegmentType::scalar_t, typename SphereType::scalar_t>)
+MUNDY_REQUIRES(std::is_same_v<typename LineSegmentType::scalar_t, typename SphereType::scalar_t>)
 KOKKOS_FUNCTION typename LineSegmentType::scalar_t distance(const LineSegmentType& line_segment,  //
                                                             const SphereType& sphere) {
   return distance(SharedNormalSigned{}, line_segment, sphere);
@@ -56,11 +56,10 @@ KOKKOS_FUNCTION typename LineSegmentType::scalar_t distance(const LineSegmentTyp
 /// \param[in] line_segment The line segment
 /// \param[in] sphere The sphere
 template <ValidLineSegmentType LineSegmentType, ValidSphereType SphereType>
-  MUNDY_REQUIRES(std::is_same_v<typename LineSegmentType::scalar_t, typename SphereType::scalar_t>)
-KOKKOS_FUNCTION typename LineSegmentType::scalar_t distance(
-    [[maybe_unused]] const SharedNormalSigned distance_type,  //
-    const LineSegmentType& line_segment,                      //
-    const SphereType& sphere) {
+MUNDY_REQUIRES(std::is_same_v<typename LineSegmentType::scalar_t, typename SphereType::scalar_t>)
+KOKKOS_FUNCTION typename LineSegmentType::scalar_t distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
+                                                            const LineSegmentType& line_segment,                      //
+                                                            const SphereType& sphere) {
   return distance(sphere.center(), line_segment) - sphere.radius();
 }
 
@@ -72,13 +71,13 @@ KOKKOS_FUNCTION typename LineSegmentType::scalar_t distance(
 /// \param[out] arch_length The arch-length parameter of the closest point on the line segment
 /// \param[out] sep The separation vector (from line_segment to sphere)
 template <ValidLineSegmentType LineSegmentType, ValidSphereType SphereType>
-  MUNDY_REQUIRES(std::is_same_v<typename LineSegmentType::scalar_t, typename SphereType::scalar_t>)
-KOKKOS_FUNCTION typename LineSegmentType::scalar_t distance(
-    const LineSegmentType& line_segment,                                  //
-    const SphereType& sphere,                                             //
-    Point<typename LineSegmentType::scalar_t>& closest_point,             //
-    typename LineSegmentType::scalar_t& arch_length,                      //
-    mundy::Vector3<typename LineSegmentType::scalar_t>& sep) {
+MUNDY_REQUIRES(std::is_same_v<typename LineSegmentType::scalar_t, typename SphereType::scalar_t>)
+KOKKOS_FUNCTION typename LineSegmentType::scalar_t
+    distance(const LineSegmentType& line_segment,                       //
+             const SphereType& sphere,                                  //
+             Point<typename LineSegmentType::scalar_t>& closest_point,  //
+             typename LineSegmentType::scalar_t& arch_length,           //
+             mundy::Vector3<typename LineSegmentType::scalar_t>& sep) {
   return distance(SharedNormalSigned{}, line_segment, sphere, closest_point, arch_length, sep);
 }
 
@@ -90,14 +89,14 @@ KOKKOS_FUNCTION typename LineSegmentType::scalar_t distance(
 /// \param[out] arch_length The arch-length parameter of the closest point on the line segment
 /// \param[out] sep The separation vector (from line_segment to sphere)
 template <ValidLineSegmentType LineSegmentType, ValidSphereType SphereType>
-  MUNDY_REQUIRES(std::is_same_v<typename LineSegmentType::scalar_t, typename SphereType::scalar_t>)
-KOKKOS_FUNCTION typename LineSegmentType::scalar_t distance(
-    [[maybe_unused]] const SharedNormalSigned distance_type,               //
-    const LineSegmentType& line_segment,                                   //
-    const SphereType& sphere,                                              //
-    Point<typename LineSegmentType::scalar_t>& closest_point,              //
-    typename LineSegmentType::scalar_t& arch_length,                       //
-    mundy::Vector3<typename LineSegmentType::scalar_t>& sep) {
+MUNDY_REQUIRES(std::is_same_v<typename LineSegmentType::scalar_t, typename SphereType::scalar_t>)
+KOKKOS_FUNCTION typename LineSegmentType::scalar_t
+    distance([[maybe_unused]] const SharedNormalSigned distance_type,   //
+             const LineSegmentType& line_segment,                       //
+             const SphereType& sphere,                                  //
+             Point<typename LineSegmentType::scalar_t>& closest_point,  //
+             typename LineSegmentType::scalar_t& arch_length,           //
+             mundy::Vector3<typename LineSegmentType::scalar_t>& sep) {
   using Scalar = typename LineSegmentType::scalar_t;
   const Scalar line_center_distance = distance(sphere.center(), line_segment, closest_point, arch_length, sep);
 

@@ -80,8 +80,10 @@ FieldDeclarationSnapshot make_field_declaration_snapshot(const FieldHelper& fiel
 template <typename T>
 stk::mesh::Field<T>& declare_field_from_snapshot(const FieldDeclarationSnapshot& snapshot) {
   MUNDY_THROW_ASSERT(snapshot.meta_data != nullptr, std::logic_error, "Field declaration metadata is null.");
-  MUNDY_THROW_REQUIRE(snapshot.has_name, std::logic_error, "Field name must be set before declaring a field component.");
-  MUNDY_THROW_REQUIRE(snapshot.has_rank, std::logic_error, "Field rank must be set before declaring a field component.");
+  MUNDY_THROW_REQUIRE(snapshot.has_name, std::logic_error,
+                      "Field name must be set before declaring a field component.");
+  MUNDY_THROW_REQUIRE(snapshot.has_rank, std::logic_error,
+                      "Field rank must be set before declaring a field component.");
 
   stk::mesh::Field<T>& field = snapshot.meta_data->declare_field<T>(snapshot.rank, snapshot.field_name);
 

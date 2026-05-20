@@ -17,11 +17,11 @@
 # **********************************************************************************************************************
 # @HEADER
 
-if (Mundy_ENABLE_TESTS AND Mundy_ENABLE_nanobench)
+if(Mundy_ENABLE_TESTS AND Mundy_ENABLE_nanobench)
   message(STATUS
-          "MundySearch: Setting up performance tests since Mundy_ENABLE_TESTS=ON and Mundy_ENABLE_nanobench=ON")
+    "MundySearch: Setting up performance tests since Mundy_ENABLE_TESTS=ON and Mundy_ENABLE_nanobench=ON")
 
 else()
   message(STATUS
-          "MundySearch: Skipping performance tests since Mundy_ENABLE_TESTS=OFF or Mundy_ENABLE_nanobench=OFF ...")
+    "MundySearch: Skipping performance tests since Mundy_ENABLE_TESTS=OFF or Mundy_ENABLE_nanobench=OFF ...")
 endif()

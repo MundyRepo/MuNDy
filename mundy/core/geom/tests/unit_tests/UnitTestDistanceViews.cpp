@@ -23,11 +23,11 @@
 
 // Mundy
 #include <mundy_geom/distance.hpp>
+#include <mundy_geom/periodicity.hpp>
 #include <mundy_geom/primitives.hpp>
 #include <mundy_math/Quaternion.hpp>
 #include <mundy_math/Tolerance.hpp>
 #include <mundy_math/Vector3.hpp>
-#include <mundy_geom/periodicity.hpp>
 
 namespace mundy {
 

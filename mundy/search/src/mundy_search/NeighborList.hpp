@@ -38,14 +38,14 @@
 /// provided for convenience when the full interface is needed.
 
 // mundy_search public interface — dependency order
-#include <mundy_search/SearchCandidate.hpp>          // NeighborSearchCandidate, PeriodicNeighborSearchCandidate
-#include <mundy_search/Excluder.hpp>                 // ExcluderType, NoExcluder, ExcluderChain, ExcludeSelfInteraction, ExcludeSymmetricDuplicates
-#include <mundy_search/Neighbors.hpp>                // NeighborListType, Neighbors, NeighborPair
+#include <mundy_search/ArborX1dNeighborList.hpp>  // ArborX1dNeighborList, PeriodicArborX1dNeighborList + traits
+#include <mundy_search/ArborX2dNeighborList.hpp>  // ArborX2dNeighborList, PeriodicArborX2dNeighborList + traits
+#include <mundy_search/Excluder.hpp>  // ExcluderType, NoExcluder, ExcluderChain, ExcludeSelfInteraction, ExcludeSymmetricDuplicates
 #include <mundy_search/ForEach.hpp>                  // for_each_neighbor_pair, for_each_target_with_neighbors
 #include <mundy_search/NeighborListBuildTraits.hpp>  // NeighborListInputType, NeighborListBuildTraits primary template
 #include <mundy_search/NeighborListBuilder.hpp>      // NeighborListBuilder, make_neighbor_list_builder
-#include <mundy_search/ArborX1dNeighborList.hpp>     // ArborX1dNeighborList, PeriodicArborX1dNeighborList + traits
-#include <mundy_search/ArborX2dNeighborList.hpp>     // ArborX2dNeighborList, PeriodicArborX2dNeighborList + traits
+#include <mundy_search/Neighbors.hpp>                // NeighborListType, Neighbors, NeighborPair
 #include <mundy_search/STKSearchNeighborList.hpp>    // STKSearchNeighborList, PeriodicSTKSearchNeighborList + traits
+#include <mundy_search/SearchCandidate.hpp>          // NeighborSearchCandidate, PeriodicNeighborSearchCandidate
 
 #endif  // MUNDY_SEARCH_NEIGHBORLIST_HPP_

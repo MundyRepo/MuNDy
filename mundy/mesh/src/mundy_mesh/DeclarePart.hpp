@@ -42,8 +42,8 @@
 #include <mundy_mesh/Component.hpp>
 #include <mundy_mesh/DeclareComponent.hpp>
 #include <mundy_mesh/impl/ComponentImpl.hpp>  // for mundy::mesh::impl::component_backing_field
-#include <mundy_utils/throw_assert.hpp>       // for MUNDY_THROW_REQUIRE
 #include <mundy_utils/requires.hpp>
+#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_REQUIRE
 
 namespace mundy {
 
@@ -169,12 +169,12 @@ class PartDeclarationHelper {
   /// \brief Create a field restriction directly from a field-backed component declaration.
   template <typename ComponentType, typename BackingFieldType = std::remove_cvref_t<
                                         decltype(impl::component_backing_field(std::declval<ComponentType&>()))>>
-    MUNDY_REQUIRES(requires(ComponentType component) {
-      typename std::remove_cvref_t<ComponentType>::canonical_access;
-      { impl::component_backing_field(component) };
-    })
-  PartDeclarationHelper put_component(ComponentType component,
-                                      const typename BackingFieldType::value_type* init_value) {
+  MUNDY_REQUIRES(requires(ComponentType component) {
+    typename std::remove_cvref_t<ComponentType>::canonical_access;
+    { impl::component_backing_field(component) };
+  })
+  PartDeclarationHelper
+      put_component(ComponentType component, const typename BackingFieldType::value_type* init_value) {
     using component_type = std::remove_cvref_t<ComponentType>;
     using access_traits = component_access_traits<typename component_type::canonical_access>;
     auto& field = impl::component_backing_field(component);

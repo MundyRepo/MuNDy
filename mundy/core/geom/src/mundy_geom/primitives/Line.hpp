@@ -32,8 +32,8 @@
 // Our libs
 #include <mundy_geom/primitives/Point.hpp>  // for mundy::Point
 #include <mundy_math/Vector3.hpp>           // for mundy::Vector3
-#include <mundy_utils/throw_assert.hpp>     // for MUNDY_THROW_ASSERT
 #include <mundy_utils/requires.hpp>
+#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
 
 namespace mundy {
 
@@ -62,8 +62,7 @@ class Line {
 
   /// \brief Default constructor for owning Lines. Default initialize the
   KOKKOS_FUNCTION
-  constexpr Line()
-    MUNDY_REQUIRES(HasNArgConstructor<point_t, scalar_t, 3> && HasNArgConstructor<vector_t, scalar_t, 3>)
+  constexpr Line() MUNDY_REQUIRES(HasNArgConstructor<point_t, scalar_t, 3>&& HasNArgConstructor<vector_t, scalar_t, 3>)
       : center_(scalar_t(), scalar_t(), scalar_t()), direction_(scalar_t(), scalar_t(), scalar_t()) {
   }
 
@@ -79,7 +78,7 @@ class Line {
   /// \param[in] direction The direction of the Line.
   template <ValidPointType OtherPointType, ValidVectorType OtherVectorType>
   KOKKOS_FUNCTION constexpr Line(const OtherPointType& center, const OtherVectorType& direction)
-    MUNDY_REQUIRES(!std::is_same_v<OtherPointType, point_t> || !std::is_same_v<OtherVectorType, vector_t>)
+      MUNDY_REQUIRES(!std::is_same_v<OtherPointType, point_t> || !std::is_same_v<OtherVectorType, vector_t>)
       : center_(center), direction_(direction) {
   }
 
@@ -95,7 +94,7 @@ class Line {
   /// \brief Deep copy constructor
   template <typename OtherLineType>
   KOKKOS_FUNCTION constexpr Line(const OtherLineType& other)
-    MUNDY_REQUIRES(!std::is_same_v<OtherLineType, Line<scalar_t, point_t>>)
+      MUNDY_REQUIRES(!std::is_same_v<OtherLineType, Line<scalar_t, point_t>>)
       : center_(other.center_), direction_(other.direction_) {
   }
 
@@ -108,7 +107,7 @@ class Line {
   /// \brief Deep move constructor
   template <typename OtherLineType>
   KOKKOS_FUNCTION constexpr Line(OtherLineType&& other)
-    MUNDY_REQUIRES(!std::is_same_v<OtherLineType, Line<scalar_t, point_t>>)
+      MUNDY_REQUIRES(!std::is_same_v<OtherLineType, Line<scalar_t, point_t>>)
       : center_(std::move(other.center_)), direction_(std::move(other.direction_)) {
   }
   //@}
@@ -128,8 +127,7 @@ class Line {
   /// \brief Copy assignment operator
   template <typename OtherLineType>
   KOKKOS_FUNCTION constexpr Line<scalar_t, point_t>& operator=(const OtherLineType& other)
-    MUNDY_REQUIRES(!std::is_same_v<OtherLineType, Line<scalar_t, point_t>>)
-  {
+      MUNDY_REQUIRES(!std::is_same_v<OtherLineType, Line<scalar_t, point_t>>) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     center_ = other.center_;
     direction_ = other.direction_;
@@ -148,8 +146,7 @@ class Line {
   /// \brief Move assignment operator
   template <typename OtherLineType>
   KOKKOS_FUNCTION constexpr Line<scalar_t, point_t>& operator=(OtherLineType&& other)
-    MUNDY_REQUIRES(!std::is_same_v<OtherLineType, Line<scalar_t, point_t>>)
-  {
+      MUNDY_REQUIRES(!std::is_same_v<OtherLineType, Line<scalar_t, point_t>>) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     center_ = std::move(other.center_);
     direction_ = std::move(other.direction_);

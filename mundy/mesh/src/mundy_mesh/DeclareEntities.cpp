@@ -79,9 +79,9 @@ void DeclareEntitiesHelper::check_consistency(const stk::mesh::BulkData& bulk_da
   // Check that each entity uses only one membership pipeline and that its membership pointers are valid.
   const stk::mesh::MetaData& meta_data = bulk_data.mesh_meta_data();
   for (const auto& node_info : node_info_vec_) {
-    MUNDY_THROW_REQUIRE(node_info.parts.empty() || node_info.classes.empty(), std::logic_error,
-                        sink() << "Node " << node_info.id
-                               << " cannot use both the part pipeline and the Class pipeline.");
+    MUNDY_THROW_REQUIRE(
+        node_info.parts.empty() || node_info.classes.empty(), std::logic_error,
+        sink() << "Node " << node_info.id << " cannot use both the part pipeline and the Class pipeline.");
     for (const auto& part_ptr : node_info.parts) {
       MUNDY_THROW_REQUIRE(part_ptr != nullptr, std::runtime_error,
                           sink() << "Node " << node_info.id << " has a null part pointer in its part list");
@@ -95,9 +95,9 @@ void DeclareEntitiesHelper::check_consistency(const stk::mesh::BulkData& bulk_da
     }
   }
   for (const auto& element_info : elem_info_vec_) {
-    MUNDY_THROW_REQUIRE(element_info.parts.empty() || element_info.classes.empty(), std::logic_error,
-                        sink() << "Element " << element_info.id
-                               << " cannot use both the part pipeline and the Class pipeline.");
+    MUNDY_THROW_REQUIRE(
+        element_info.parts.empty() || element_info.classes.empty(), std::logic_error,
+        sink() << "Element " << element_info.id << " cannot use both the part pipeline and the Class pipeline.");
     for (const auto& part_ptr : element_info.parts) {
       MUNDY_THROW_REQUIRE(part_ptr != nullptr, std::runtime_error,
                           sink() << "Element " << element_info.id << " has a null part pointer in its part list");
@@ -114,16 +114,14 @@ void DeclareEntitiesHelper::check_consistency(const stk::mesh::BulkData& bulk_da
   // Check that the given set of parts/classes will create an entity of the given topology
   for (const auto& element_info : elem_info_vec_) {
     const stk::topology given_topo = element_info.topology;
-    const stk::topology actual_topo = element_info.classes.empty()
-                                          ? get_topology(bulk_data.mesh_meta_data(), stk::topology::ELEM_RANK,
-                                                         element_info.parts)
-                                          : get_topology(bulk_data.mesh_meta_data(), stk::topology::ELEM_RANK,
-                                                         impl::populate_entity_rank_parts(
-                                                             stk::topology::ELEM_RANK, element_info.classes,
-                                                             "DeclareEntitiesHelper element classes"));
+    const stk::topology actual_topo =
+        element_info.classes.empty()
+            ? get_topology(bulk_data.mesh_meta_data(), stk::topology::ELEM_RANK, element_info.parts)
+            : get_topology(bulk_data.mesh_meta_data(), stk::topology::ELEM_RANK,
+                           impl::populate_entity_rank_parts(stk::topology::ELEM_RANK, element_info.classes,
+                                                            "DeclareEntitiesHelper element classes"));
     MUNDY_THROW_REQUIRE(given_topo == actual_topo, std::runtime_error,
-                        sink() << "Element " << element_info.id
-                               << " has parts/classes that do not match its topology\n"
+                        sink() << "Element " << element_info.id << " has parts/classes that do not match its topology\n"
                                << "Given Topology: " << given_topo.name() << "\n"
                                << "Actual Topology: " << actual_topo.name() << "\n"
                                << "Dumping the element info:\n"

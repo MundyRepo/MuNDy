@@ -372,8 +372,7 @@ struct AccessTraits<mundy::search::impl::ArborXSearchBoxesT<MemorySpace>
   /// \brief Get the intersection predicate for a target ordinal.
   /// \param boxes [in] Mundy ArborX search boxes.
   /// \param index [in] Target ordinal to attach as predicate data.
-  static KOKKOS_FUNCTION auto get(const mundy::search::impl::ArborXSearchBoxesT<MemorySpace>& boxes,
-                                  size_type index) {
+  static KOKKOS_FUNCTION auto get(const mundy::search::impl::ArborXSearchBoxesT<MemorySpace>& boxes, size_type index) {
     return ArborX::attach(ArborX::intersects(boxes.box(index)), index);
   }
 };

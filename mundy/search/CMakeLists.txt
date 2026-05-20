@@ -43,13 +43,13 @@ tribits_include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
 # Add a standard library
 mundy_tribits_add_library(
-  mundy_search
-  HEADERS ${CMAKE_CURRENT_BINARY_DIR}/${PACKAGE_NAME}_config.hpp
-  NOINSTALLHEADERS ${NOINSTALLHEADERS}
-  DIRECTORIES src/mundy_search
-  FILES_MATCHING
-  PATTERN "*.hpp"
-  SOURCES ${SOURCES}
+    mundy_search
+    HEADERS ${CMAKE_CURRENT_BINARY_DIR}/${PACKAGE_NAME}_config.hpp
+    NOINSTALLHEADERS ${NOINSTALLHEADERS}
+    DIRECTORIES src/mundy_search
+    FILES_MATCHING
+    PATTERN "*.hpp"
+    SOURCES ${SOURCES}
 )
 
 tribits_add_test_directories(tests)

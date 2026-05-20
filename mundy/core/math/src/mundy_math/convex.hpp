@@ -42,10 +42,10 @@
 #include <mundy_utils/throw_assert.hpp>
 
 // Mundy math:
-#include <mundy_math/Tolerance.hpp>           // for mundy::get_zero_tolerance<T>
-#include <mundy_math/Vector.hpp>              // for mundy::Vector
-#include <mundy_utils/suppress_warnings.hpp>  // for MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_PUSH/POP
+#include <mundy_math/Tolerance.hpp>  // for mundy::get_zero_tolerance<T>
+#include <mundy_math/Vector.hpp>     // for mundy::Vector
 #include <mundy_utils/requires.hpp>
+#include <mundy_utils/suppress_warnings.hpp>  // for MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_PUSH/POP
 
 namespace mundy {
 
@@ -820,19 +820,19 @@ struct KokkosBackend {
   }
 
   template <class LinearOp>
-    MUNDY_REQUIRES(impl::DenseMatView<LinearOp>)
+  MUNDY_REQUIRES(impl::DenseMatView<LinearOp>)
   KOKKOS_INLINE_FUNCTION static size_t domain_size(LinearOp& op) {
     return op.extent(1);
   }
   //
   template <class LinearOp>
-    MUNDY_REQUIRES(!impl::DenseMatView<LinearOp> && impl::HasDomainSizeMember<LinearOp>)
+  MUNDY_REQUIRES(!impl::DenseMatView<LinearOp> && impl::HasDomainSizeMember<LinearOp>)
   KOKKOS_INLINE_FUNCTION static size_t domain_size(LinearOp& op) {
     return op.domain_size();
   }
   //
   template <class LinearOp>
-    MUNDY_REQUIRES(!impl::DenseMatView<LinearOp> && !impl::HasDomainSizeMember<LinearOp>)
+  MUNDY_REQUIRES(!impl::DenseMatView<LinearOp> && !impl::HasDomainSizeMember<LinearOp>)
   KOKKOS_INLINE_FUNCTION static size_t domain_size(LinearOp&) {
     MUNDY_THROW_REQUIRE(
         false, std::logic_error,
@@ -841,19 +841,19 @@ struct KokkosBackend {
   }
 
   template <class LinearOp>
-    MUNDY_REQUIRES(impl::DenseMatView<LinearOp>)
+  MUNDY_REQUIRES(impl::DenseMatView<LinearOp>)
   KOKKOS_INLINE_FUNCTION static size_t range_size(LinearOp& op) {
     return op.extent(0);
   }
   //
   template <class LinearOp>
-    MUNDY_REQUIRES(!impl::DenseMatView<LinearOp> && impl::HasRangeSizeMember<LinearOp>)
+  MUNDY_REQUIRES(!impl::DenseMatView<LinearOp> && impl::HasRangeSizeMember<LinearOp>)
   KOKKOS_INLINE_FUNCTION static size_t range_size(LinearOp& op) {
     return op.range_size();
   }
   //
   template <class LinearOp>
-    MUNDY_REQUIRES(!impl::DenseMatView<LinearOp> && !impl::HasRangeSizeMember<LinearOp>)
+  MUNDY_REQUIRES(!impl::DenseMatView<LinearOp> && !impl::HasRangeSizeMember<LinearOp>)
   KOKKOS_INLINE_FUNCTION static size_t range_size(LinearOp&) {
     MUNDY_THROW_REQUIRE(false, std::logic_error,
                         "KokkosBackend::range_size: op must be a rank-2 Kokkos::View or provide size_t range_size().");
@@ -874,7 +874,7 @@ struct KokkosBackend {
   // Path 1: If op is a dense 2D Kokkos::View, call BLAS gemv.
   // y = A*x
   template <class LinearOp, class XVector, class YVector>
-    MUNDY_REQUIRES(impl::DenseMatView<LinearOp>)
+  MUNDY_REQUIRES(impl::DenseMatView<LinearOp>)
   static void apply(const LinearOp& A, const XVector& x, YVector& y) {
     using scalar_t = impl::vector_scalar_t<YVector>;
     MUNDY_THROW_ASSERT(A.extent(1) == x.extent(0), std::invalid_argument, "gemv: dimension mismatch A(:,1) vs x");
@@ -883,7 +883,7 @@ struct KokkosBackend {
   }
 
   template <class LinearOp, class XVector, class YVector, class Workspace>
-    MUNDY_REQUIRES(impl::DenseMatView<LinearOp>)
+  MUNDY_REQUIRES(impl::DenseMatView<LinearOp>)
   static void apply(const LinearOp& A, const XVector& x, YVector& y, Workspace&) {
     apply(A, x, y);
   }
@@ -891,7 +891,7 @@ struct KokkosBackend {
   // Path 1: If op is a dense 2D Kokkos::View, call BLAS gemv.
   // y = alpha * A * x + beta * y
   template <class Scalar, class LinearOp, class XVector, class YVector>
-    MUNDY_REQUIRES(impl::DenseMatView<LinearOp>)
+  MUNDY_REQUIRES(impl::DenseMatView<LinearOp>)
   static void apply(Scalar alpha, const LinearOp& A, const XVector& x, Scalar beta, YVector& y) {
     MUNDY_THROW_ASSERT(A.extent(1) == x.extent(0), std::invalid_argument, "gemv: dimension mismatch A(:,1) vs x");
     MUNDY_THROW_ASSERT(A.extent(0) == y.extent(0), std::invalid_argument, "gemv: dimension mismatch A(0,:) vs y");
@@ -901,37 +901,38 @@ struct KokkosBackend {
 
   // Path 2: If op has member `apply(x,y)`
   template <class LinearOp, class XVector, class YVector>
-    MUNDY_REQUIRES(!impl::DenseMatView<LinearOp> && impl::HasApplyMember<LinearOp, XVector, YVector>)
+  MUNDY_REQUIRES(!impl::DenseMatView<LinearOp> && impl::HasApplyMember<LinearOp, XVector, YVector>)
   static void apply(const LinearOp& op, const XVector& x, YVector& y) {
     op.apply(x, y);
   }
 
   template <class LinearOp, class XVector, class YVector, class Workspace>
-    MUNDY_REQUIRES(!impl::DenseMatView<LinearOp> && impl::HasApplyMemberWithWorkspace<LinearOp, XVector, YVector, Workspace>)
+  MUNDY_REQUIRES(!impl::DenseMatView<LinearOp> &&
+                 impl::HasApplyMemberWithWorkspace<LinearOp, XVector, YVector, Workspace>)
   static void apply(const LinearOp& op, const XVector& x, YVector& y, Workspace& workspace) {
     op.apply(x, y, workspace);
   }
 
   template <class LinearOp, class XVector, class YVector, class Workspace>
-    MUNDY_REQUIRES(!impl::DenseMatView<LinearOp> &&
-             !impl::HasApplyMemberWithWorkspace<LinearOp, XVector, YVector, Workspace> &&
-             impl::HasApplyMember<LinearOp, XVector, YVector>)
+  MUNDY_REQUIRES(!impl::DenseMatView<LinearOp> &&
+                 !impl::HasApplyMemberWithWorkspace<LinearOp, XVector, YVector, Workspace> &&
+                 impl::HasApplyMember<LinearOp, XVector, YVector>)
   static void apply(const LinearOp& op, const XVector& x, YVector& y, Workspace&) {
     op.apply(x, y);
   }
 
   // Path 3: Otherwise, runtime error.
   template <typename LinearOp, class XVector, class YVector>
-    MUNDY_REQUIRES(!impl::DenseMatView<LinearOp> && !impl::HasApplyMember<LinearOp, XVector, YVector>)
+  MUNDY_REQUIRES(!impl::DenseMatView<LinearOp> && !impl::HasApplyMember<LinearOp, XVector, YVector>)
   static void apply(const LinearOp& op, const XVector& x, YVector& y) {
     MUNDY_THROW_REQUIRE(false, std::logic_error,
                         "KokkosBackend::apply: op must be a rank-2 Kokkos::View or provide void apply(x,y).");
   }
 
   template <typename LinearOp, class XVector, class YVector, class Workspace>
-    MUNDY_REQUIRES(!impl::DenseMatView<LinearOp> &&
-             !impl::HasApplyMemberWithWorkspace<LinearOp, XVector, YVector, Workspace> &&
-             !impl::HasApplyMember<LinearOp, XVector, YVector>)
+  MUNDY_REQUIRES(!impl::DenseMatView<LinearOp> &&
+                 !impl::HasApplyMemberWithWorkspace<LinearOp, XVector, YVector, Workspace> &&
+                 !impl::HasApplyMember<LinearOp, XVector, YVector>)
   static void apply(const LinearOp&, const XVector&, YVector&, Workspace&) {
     MUNDY_THROW_REQUIRE(
         false, std::logic_error,
@@ -1083,19 +1084,19 @@ struct MundyMathBackend {
   }
 
   template <class LinearOp>
-    MUNDY_REQUIRES(is_matrix_v<LinearOp>)
+  MUNDY_REQUIRES(is_matrix_v<LinearOp>)
   KOKKOS_INLINE_FUNCTION static size_t domain_size(LinearOp& /*op*/) {
     return std::remove_reference_t<LinearOp>::num_cols;
   }
   //
   template <class LinearOp>
-    MUNDY_REQUIRES(!is_matrix_v<LinearOp> && impl::HasDomainSizeMember<LinearOp>)
+  MUNDY_REQUIRES(!is_matrix_v<LinearOp> && impl::HasDomainSizeMember<LinearOp>)
   KOKKOS_INLINE_FUNCTION static size_t domain_size(LinearOp& op) {
     return op.domain_size();
   }
   //
   template <class LinearOp>
-    MUNDY_REQUIRES(!is_matrix_v<LinearOp> && !impl::HasDomainSizeMember<LinearOp>)
+  MUNDY_REQUIRES(!is_matrix_v<LinearOp> && !impl::HasDomainSizeMember<LinearOp>)
   KOKKOS_INLINE_FUNCTION static size_t domain_size(LinearOp& /*op*/) {
     MUNDY_THROW_REQUIRE(
         false, std::logic_error,
@@ -1104,19 +1105,19 @@ struct MundyMathBackend {
   }
 
   template <class LinearOp>
-    MUNDY_REQUIRES(is_matrix_v<LinearOp>)
+  MUNDY_REQUIRES(is_matrix_v<LinearOp>)
   KOKKOS_INLINE_FUNCTION static size_t range_size(LinearOp& /*op*/) {
     return std::remove_reference_t<LinearOp>::num_rows;
   }
   //
   template <class LinearOp>
-    MUNDY_REQUIRES(!is_matrix_v<LinearOp> && impl::HasRangeSizeMember<LinearOp>)
+  MUNDY_REQUIRES(!is_matrix_v<LinearOp> && impl::HasRangeSizeMember<LinearOp>)
   KOKKOS_INLINE_FUNCTION static size_t range_size(LinearOp& op) {
     return op.range_size();
   }
   //
   template <class LinearOp>
-    MUNDY_REQUIRES(!is_matrix_v<LinearOp> && !impl::HasRangeSizeMember<LinearOp>)
+  MUNDY_REQUIRES(!is_matrix_v<LinearOp> && !impl::HasRangeSizeMember<LinearOp>)
   KOKKOS_INLINE_FUNCTION static size_t range_size(LinearOp& /*op*/) {
     MUNDY_THROW_REQUIRE(false, std::logic_error,
                         "MundyBackend::range_size: op must be a mundy::Matrix or provide size_t range_size().");
@@ -2103,7 +2104,7 @@ KOKKOS_INLINE_FUNCTION auto make_pgd_state(XVector&& x,         //
 /// \param state The state to use for the solution strategy, which will be modified during the solve.
 /// \return The result of the solve (contents are defined by the strategy).
 template <class Problem, class Strategy, class State>
-  MUNDY_REQUIRES(convex::CQPPSolverStrategy<Strategy, Problem, State>)
+MUNDY_REQUIRES(convex::CQPPSolverStrategy<Strategy, Problem, State>)
 KOKKOS_INLINE_FUNCTION auto solve_cqpp(const Problem& prob, const Strategy& strat, State& state) {
   strat.initialize(prob, state);
   while (!strat.done(state)) {
@@ -2157,11 +2158,12 @@ KOKKOS_INLINE_FUNCTION auto solve_cqpp(const Problem& prob, const Strategy& stra
 /// \param state The state to use for the solution strategy, which will be modified during the solve.
 /// \return The result of the solve (contents are defined by the strategy).
 template <class Problem, class Strategy>
-  MUNDY_REQUIRES(requires(const Problem& p) {
-    { to_cqpp(p) };
-  })
-KOKKOS_INLINE_FUNCTION auto solve_mixed_cqpp(const Problem& prob, const Strategy& strat,
-                                             typename Strategy::state_t& state) -> typename Strategy::result_t {
+MUNDY_REQUIRES(requires(const Problem& p) {
+  { to_cqpp(p) };
+})
+KOKKOS_INLINE_FUNCTION
+    auto solve_mixed_cqpp(const Problem& prob, const Strategy& strat, typename Strategy::state_t& state) ->
+    typename Strategy::result_t {
   // Convert MCQPP to CQPP
   auto ccpp_prob = to_cqpp(prob);
   return solve_cqpp(ccpp_prob, strat, state);
@@ -2237,9 +2239,9 @@ KOKKOS_INLINE_FUNCTION auto solve_mixed_cqpp(const Problem& prob, const Strategy
 /// \param state The state to use for the solution strategy, which will be modified during the solve.
 /// \return The result of the solve (contents are defined by the strategy).
 template <class Problem, class Strategy, class State>
-  MUNDY_REQUIRES(requires(const Problem& p) {
-    { to_cqpp(p) };
-  })
+MUNDY_REQUIRES(requires(const Problem& p) {
+  { to_cqpp(p) };
+})
 KOKKOS_INLINE_FUNCTION auto solve_lcp(const Problem& prob, const Strategy& strat, State& state) {
   // Convert LCP to CQPP
   auto ccpp_prob = to_cqpp(prob);

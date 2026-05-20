@@ -24,6 +24,7 @@ set(NOINSTALLHEADERS
     src/mundy_mesh/FieldComponent.hpp
     src/mundy_mesh/FieldViews.hpp
     src/mundy_mesh/ForEachEntity.hpp
+
     # src/mundy_mesh/GenNeighborLinkers.hpp
     src/mundy_mesh/GetNgpLinkData.hpp
     src/mundy_mesh/impl/ComponentImpl.hpp
@@ -89,13 +90,13 @@ tribits_include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
 # Add a standard library
 mundy_tribits_add_library(
-  mundy_mesh
-  HEADERS ${CMAKE_CURRENT_BINARY_DIR}/${PACKAGE_NAME}_config.hpp
-  NOINSTALLHEADERS ${NOINSTALLHEADERS}
-  DIRECTORIES src/mundy_mesh
-  FILES_MATCHING
-  PATTERN "*.hpp"
-  SOURCES ${SOURCES}
+    mundy_mesh
+    HEADERS ${CMAKE_CURRENT_BINARY_DIR}/${PACKAGE_NAME}_config.hpp
+    NOINSTALLHEADERS ${NOINSTALLHEADERS}
+    DIRECTORIES src/mundy_mesh
+    FILES_MATCHING
+    PATTERN "*.hpp"
+    SOURCES ${SOURCES}
 )
 
 tribits_add_test_directories(tests)

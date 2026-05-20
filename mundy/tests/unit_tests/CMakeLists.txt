@@ -17,7 +17,7 @@
 # **********************************************************************************************************************
 # @HEADER
 
-if (Mundy_ENABLE_TESTS AND Mundy_ENABLE_GTest)
+if(Mundy_ENABLE_TESTS AND Mundy_ENABLE_GTest)
   message(STATUS "-- Setting up unit tests for Mundy package since Mundy_ENABLE_TESTS=ON and Mundy_ENABLE_GTest=ON")
   tribits_add_executable_and_test(
     UnitTestTest

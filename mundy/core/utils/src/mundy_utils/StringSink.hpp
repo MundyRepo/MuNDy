@@ -48,8 +48,8 @@
 
 // Mundy
 #include <mundy_utils/StringLiteral.hpp>
-#include <mundy_utils/tuple.hpp>
 #include <mundy_utils/requires.hpp>
+#include <mundy_utils/tuple.hpp>
 
 namespace mundy {
 
@@ -112,7 +112,7 @@ template <typename T>
 concept RuntimeSinkChunk = SinkChunk<T> && !LiteralSinkChunk<T>;
 
 template <typename... Chunks>
-  MUNDY_REQUIRES(SinkChunk<Chunks> && ...)
+MUNDY_REQUIRES(SinkChunk<Chunks>&&...)
 KOKKOS_INLINE_FUNCTION constexpr auto make_string_sink(Chunks&&... chunks) {
   using SinkType = StringSink<sink_stored_t<Chunks>...>;
   return SinkType(::mundy::make_tuple(make_sink_piece(std::forward<Chunks>(chunks))...));
@@ -217,9 +217,7 @@ struct StringSink {
     return os.str();
   }
 
-  KOKKOS_INLINE_FUNCTION constexpr auto to_string_literal() const
-    MUNDY_REQUIRES(is_compile_time)
-  {
+  KOKKOS_INLINE_FUNCTION constexpr auto to_string_literal() const MUNDY_REQUIRES(is_compile_time) {
     if constexpr (sizeof...(Chunks) == 0) {
       return make_string_literal("");
     } else {
@@ -232,36 +230,29 @@ struct StringSink {
 
   template <size_t OtherSize>
   KOKKOS_INLINE_FUNCTION constexpr bool operator==(const char (&other)[OtherSize]) const
-    MUNDY_REQUIRES(is_compile_time)
-  {
+      MUNDY_REQUIRES(is_compile_time) {
     return *this == make_string_literal(other);
   }
 
   template <size_t OtherSize>
-  bool operator==(const char (&other)[OtherSize]) const
-    MUNDY_REQUIRES(!is_compile_time)
-  {
+  bool operator==(const char (&other)[OtherSize]) const MUNDY_REQUIRES(!is_compile_time) {
     return to_string() == other;
   }
 
   template <size_t OtherSize>
   KOKKOS_INLINE_FUNCTION constexpr bool operator==(const StringLiteralSink<OtherSize>& other) const
-    MUNDY_REQUIRES(is_compile_time)
-  {
+      MUNDY_REQUIRES(is_compile_time) {
     return *this == other.value;
   }
 
   template <size_t OtherSize>
-  bool operator==(const StringLiteralSink<OtherSize>& other) const
-    MUNDY_REQUIRES(!is_compile_time)
-  {
+  bool operator==(const StringLiteralSink<OtherSize>& other) const MUNDY_REQUIRES(!is_compile_time) {
     return to_string() == other.to_string();
   }
 
   template <size_t OtherSize>
   KOKKOS_INLINE_FUNCTION constexpr bool operator==(const StringLiteral<OtherSize>& other) const
-    MUNDY_REQUIRES(is_compile_time)
-  {
+      MUNDY_REQUIRES(is_compile_time) {
     constexpr size_t our_size = decltype(to_string_literal())::size;
     if constexpr (our_size != OtherSize) {
       return false;
@@ -271,16 +262,13 @@ struct StringSink {
   }
 
   template <size_t OtherSize>
-  bool operator==(const StringLiteral<OtherSize>& other) const
-    MUNDY_REQUIRES(!is_compile_time)
-  {
+  bool operator==(const StringLiteral<OtherSize>& other) const MUNDY_REQUIRES(!is_compile_time) {
     return to_string() == other.to_string();
   }
 
   template <typename... OtherChunks>
   KOKKOS_INLINE_FUNCTION constexpr bool operator==(const StringSink<OtherChunks...>& other) const
-    MUNDY_REQUIRES(is_compile_time && StringSink<OtherChunks...>::is_compile_time)
-  {
+      MUNDY_REQUIRES(is_compile_time&& StringSink<OtherChunks...>::is_compile_time) {
     constexpr size_t our_size = decltype(to_string_literal())::size;
     constexpr size_t other_size = decltype(other.to_string_literal())::size;
     if constexpr (our_size != other_size) {
@@ -292,8 +280,7 @@ struct StringSink {
 
   template <typename... OtherChunks>
   bool operator==(const StringSink<OtherChunks...>& other) const
-    MUNDY_REQUIRES(!(is_compile_time && StringSink<OtherChunks...>::is_compile_time))
-  {
+      MUNDY_REQUIRES(!(is_compile_time && StringSink<OtherChunks...>::is_compile_time)) {
     return to_string() == other.to_string();
   }
 

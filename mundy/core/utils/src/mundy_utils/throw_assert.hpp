@@ -129,7 +129,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto get_throw_require_device_string(
 
 template <typename ExceptionType, typename MessageStringType, size_t AssertionStringSize, size_t FileStringSize,
           size_t LineStringSize>
-  MUNDY_REQUIRES(std::derived_from<ExceptionType, std::exception>)
+MUNDY_REQUIRES(std::derived_from<ExceptionType, std::exception>)
 constexpr void throw_require(
     const bool assertion_value,                                                        //
     const StringLiteral<AssertionStringSize>& assertion_string,                        //

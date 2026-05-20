@@ -33,8 +33,8 @@
 #include <mundy_geom/primitives/Point.hpp>  // for mundy::Point
 #include <mundy_math/Quaternion.hpp>        // for mundy::Quaternion
 #include <mundy_math/Tolerance.hpp>         // for mundy::get_zero_tolerance
-#include <mundy_utils/throw_assert.hpp>     // for MUNDY_THROW_ASSERT
 #include <mundy_utils/requires.hpp>
+#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
 
 namespace mundy {
 
@@ -65,8 +65,7 @@ class Ellipsoid {
 
   /// \brief Default constructor. Default initializes center/orientation and sets axis radii to invalid values.
   KOKKOS_FUNCTION
-  constexpr Ellipsoid()
-    MUNDY_REQUIRES(HasDefaultConstructor<point_t> && HasDefaultConstructor<orientation_t>)
+  constexpr Ellipsoid() MUNDY_REQUIRES(HasDefaultConstructor<point_t>&& HasDefaultConstructor<orientation_t>)
       : center_(), orientation_(), radii_() {
     radii_[0] = static_cast<scalar_t>(-1);
     radii_[1] = static_cast<scalar_t>(-1);
@@ -81,7 +80,7 @@ class Ellipsoid {
   KOKKOS_FUNCTION
   constexpr Ellipsoid(const point_t& center, const scalar_t& radius_1, const scalar_t& radius_2,
                       const scalar_t& radius_3)
-    MUNDY_REQUIRES(HasNArgConstructor<orientation_t, scalar_t, 4> && HasNArgConstructor<point_t, scalar_t, 3>)
+      MUNDY_REQUIRES(HasNArgConstructor<orientation_t, scalar_t, 4>&& HasNArgConstructor<point_t, scalar_t, 3>)
       : center_(center),
         orientation_{static_cast<scalar_t>(1), static_cast<scalar_t>(0), static_cast<scalar_t>(0),
                      static_cast<scalar_t>(0)},
@@ -103,7 +102,7 @@ class Ellipsoid {
   constexpr Ellipsoid(const scalar_t& x, const scalar_t& y, const scalar_t& z, const scalar_t& qw, const scalar_t& qx,
                       const scalar_t& qy, const scalar_t& qz, const scalar_t& radius_1, const scalar_t& radius_2,
                       const scalar_t& radius_3)
-    MUNDY_REQUIRES(HasNArgConstructor<point_t, scalar_t, 3> && HasNArgConstructor<orientation_t, scalar_t, 4>)
+      MUNDY_REQUIRES(HasNArgConstructor<point_t, scalar_t, 3>&& HasNArgConstructor<orientation_t, scalar_t, 4>)
       : center_(x, y, z), orientation_(qw, qx, qy, qz), radii_{radius_1, radius_2, radius_3} {
   }
 
@@ -121,7 +120,7 @@ class Ellipsoid {
   KOKKOS_FUNCTION
   constexpr Ellipsoid(const point_t& center, const orientation_t& orientation, const scalar_t& radius_1,
                       const scalar_t& radius_2, const scalar_t& radius_3)
-    MUNDY_REQUIRES(HasNArgConstructor<point_t, scalar_t, 3>)
+      MUNDY_REQUIRES(HasNArgConstructor<point_t, scalar_t, 3>)
       : center_(center), orientation_(orientation), radii_(radius_1, radius_2, radius_3) {
   }
 
@@ -138,7 +137,7 @@ class Ellipsoid {
   /// \brief Deep copy constructor with different ellipsoid type
   template <typename OtherEllipsoidType>
   KOKKOS_FUNCTION constexpr Ellipsoid(const OtherEllipsoidType& other)
-    MUNDY_REQUIRES(!std::is_same_v<OtherEllipsoidType, Ellipsoid<scalar_t, point_t, orientation_t>>)
+      MUNDY_REQUIRES(!std::is_same_v<OtherEllipsoidType, Ellipsoid<scalar_t, point_t, orientation_t>>)
       : center_(other.center_), orientation_{other.orientation_}, radii_{other.radii_} {
   }
 
@@ -153,7 +152,7 @@ class Ellipsoid {
   /// \brief Deep move constructor with different ellipsoid type
   template <typename OtherEllipsoidType>
   KOKKOS_FUNCTION constexpr Ellipsoid(OtherEllipsoidType&& other)
-    MUNDY_REQUIRES(!std::is_same_v<OtherEllipsoidType, Ellipsoid<scalar_t, point_t, orientation_t>>)
+      MUNDY_REQUIRES(!std::is_same_v<OtherEllipsoidType, Ellipsoid<scalar_t, point_t, orientation_t>>)
       : center_(std::move(other.center_)),
         orientation_{std::move(other.orientation_)},
         radii_{std::move(other.radii_)} {
@@ -177,8 +176,7 @@ class Ellipsoid {
   /// \brief Copy assignment operator with different ellipsoid type
   template <typename OtherEllipsoidType>
   KOKKOS_FUNCTION constexpr Ellipsoid<scalar_t, point_t, orientation_t>& operator=(const OtherEllipsoidType& other)
-    MUNDY_REQUIRES(!std::is_same_v<OtherEllipsoidType, Ellipsoid<scalar_t, point_t, orientation_t>>)
-  {
+      MUNDY_REQUIRES(!std::is_same_v<OtherEllipsoidType, Ellipsoid<scalar_t, point_t, orientation_t>>) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     center_ = other.center_;
     orientation_ = other.orientation_;
@@ -200,8 +198,7 @@ class Ellipsoid {
   /// \brief Move assignment operator with different ellipsoid type
   template <typename OtherEllipsoidType>
   KOKKOS_FUNCTION constexpr Ellipsoid<scalar_t, point_t, orientation_t>& operator=(OtherEllipsoidType&& other)
-    MUNDY_REQUIRES(!std::is_same_v<OtherEllipsoidType, Ellipsoid<scalar_t, point_t, orientation_t>>)
-  {
+      MUNDY_REQUIRES(!std::is_same_v<OtherEllipsoidType, Ellipsoid<scalar_t, point_t, orientation_t>>) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     center_ = std::move(other.center_);
     orientation_ = std::move(other.orientation_);

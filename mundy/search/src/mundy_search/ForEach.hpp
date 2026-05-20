@@ -28,8 +28,8 @@
 #include <Kokkos_Core.hpp>
 
 // Mundy
-#include <mundy_search/Neighbors.hpp>                       // for NeighborListType concept
-#include <mundy_search/impl/NeighborListFunctors.hpp>       // for DeployFunctorOnNeighborPairs, DeployFunctorOnTargetNeighbors
+#include <mundy_search/Neighbors.hpp>                  // for NeighborListType concept
+#include <mundy_search/impl/NeighborListFunctors.hpp>  // for DeployFunctorOnNeighborPairs, DeployFunctorOnTargetNeighbors
 
 namespace mundy {
 

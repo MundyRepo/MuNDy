@@ -208,8 +208,8 @@ std::vector<EllipsoidTestCase<double>> ellipsoid_test_cases() {
   test_cases.push_back(EllipsoidTestCase{
       .name = std::string("rotated 45 degrees about z + shift"),
       .ellipsoid = Ellipsoid<double>{Point<double>{1, -2, 3}, z_45_rot, Vector3d{2, 1, 3}},
-      .expected_aabb = AABB<double>{1 - z_45_xy_extent, -2 - z_45_xy_extent, 0, 1 + z_45_xy_extent,
-                                    -2 + z_45_xy_extent, 6}});
+      .expected_aabb =
+          AABB<double>{1 - z_45_xy_extent, -2 - z_45_xy_extent, 0, 1 + z_45_xy_extent, -2 + z_45_xy_extent, 6}});
   return test_cases;
 }
 

@@ -470,8 +470,7 @@ class TaggedSharedComponentDeclarationHelperT {
 
   template <typename NewTag>
   auto tag() const {
-    auto next =
-        TaggedSharedComponentDeclarationHelperT<shared_source_type, AccessLike, NewTag>(shared_source_);
+    auto next = TaggedSharedComponentDeclarationHelperT<shared_source_type, AccessLike, NewTag>(shared_source_);
     next.has_rank_ = has_rank_;
     next.rank_ = rank_;
     return next;

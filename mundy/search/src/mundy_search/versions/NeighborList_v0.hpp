@@ -25,8 +25,8 @@
 /// \brief First-pass Mundy neighbor-list interface sketch.
 
 // C++ core
-#include <cstddef>      // for size_t
-#include <stdexcept>    // for std::invalid_argument
+#include <cstddef>    // for size_t
+#include <stdexcept>  // for std::invalid_argument
 
 // Trilinos
 #include <ArborX.hpp>
@@ -62,8 +62,8 @@ struct HalfNeighborTag {};
 /// \struct SelfNeighborTag
 /// \brief Build a list that only removes self interactions.
 ///
-/// This follows Cabana's current "self" discriminator meaning: remove pairs where target and source are the same entity,
-/// but do not otherwise attempt full/half symmetry management.
+/// This follows Cabana's current "self" discriminator meaning: remove pairs where target and source are the same
+/// entity, but do not otherwise attempt full/half symmetry management.
 struct SelfNeighborTag {};
 
 /// \class NeighborList
@@ -214,9 +214,10 @@ class NeighborSearchEntitiesT {
 /// \class NeighborImageMetadataT
 /// \brief Optional periodic-image metadata for target/source handles.
 ///
-/// This helper is deliberately separate from `NeighborSearchEntitiesT`. Periodic images and owner ordinals are essential
-/// for some search workflows, but they are not part of the minimum neighbor-list access contract. Builders that produce
-/// periodic-image candidates can carry this object beside a list or inside a higher-level algorithm-specific wrapper.
+/// This helper is deliberately separate from `NeighborSearchEntitiesT`. Periodic images and owner ordinals are
+/// essential for some search workflows, but they are not part of the minimum neighbor-list access contract. Builders
+/// that produce periodic-image candidates can carry this object beside a list or inside a higher-level
+/// algorithm-specific wrapper.
 /// \tparam MemorySpace Kokkos memory space in which the metadata views live.
 template <typename MemorySpace>
 class NeighborImageMetadataT {
@@ -430,8 +431,7 @@ class STKSearchBoxesT {
   /// \param entity_map [in] Entity metadata associated with each box.
   /// \param boxes [in] STK boxes used for coarse search.
   KOKKOS_INLINE_FUNCTION
-  STKSearchBoxesT(const entity_map_type& entity_map, const box_view_t& boxes)
-      : entity_map_(entity_map), boxes_(boxes) {
+  STKSearchBoxesT(const entity_map_type& entity_map, const box_view_t& boxes) : entity_map_(entity_map), boxes_(boxes) {
     MUNDY_THROW_ASSERT(entity_map_.size() == boxes_.extent(0), std::invalid_argument,
                        "STKSearchBoxesT: entity map and boxes must have the same extent.");
   }
@@ -500,8 +500,8 @@ struct PartialSelectorOverlapTag {};
 /// \brief Policy hook for applying full/half/self neighbor semantics to build candidate pairs.
 ///
 /// Specializations expose a `keep` function that decides whether a geometric candidate pair belongs in the final
-/// neighbor list. Selector-overlap state is part of the policy type rather than a runtime enum so factories can select a
-/// callback that matches identical, disjoint, or partially overlapping target/source selectors.
+/// neighbor list. Selector-overlap state is part of the policy type rather than a runtime enum so factories can select
+/// a callback that matches identical, disjoint, or partially overlapping target/source selectors.
 /// \tparam NeighborTag One of `FullNeighborTag`, `HalfNeighborTag`, or `SelfNeighborTag`.
 /// \tparam SelectorOverlapTag One of the internal selector-overlap tags above.
 template <typename NeighborTag, typename SelectorOverlapTag>
@@ -517,9 +517,8 @@ struct NeighborBuildSemantics<FullNeighborTag, SelectorOverlapTag> {
   /// \param sources [in] Source entity metadata.
   /// \param source_index [in] Source local search handle.
   template <typename SearchEntitiesType>
-  KOKKOS_INLINE_FUNCTION
-  static bool keep(const SearchEntitiesType& targets, size_t target_index, const SearchEntitiesType& sources,
-                   size_t source_index) {
+  KOKKOS_INLINE_FUNCTION static bool keep(const SearchEntitiesType& targets, size_t target_index,
+                                          const SearchEntitiesType& sources, size_t source_index) {
     return targets.entity(target_index) != sources.entity(source_index);
   }
 };
@@ -534,9 +533,8 @@ struct NeighborBuildSemantics<HalfNeighborTag, IdenticalSelectorOverlapTag> {
   /// \param sources [in] Source entity metadata.
   /// \param source_index [in] Source local search handle.
   template <typename SearchEntitiesType>
-  KOKKOS_INLINE_FUNCTION
-  static bool keep(const SearchEntitiesType& targets, size_t target_index, const SearchEntitiesType& sources,
-                   size_t source_index) {
+  KOKKOS_INLINE_FUNCTION static bool keep(const SearchEntitiesType& targets, size_t target_index,
+                                          const SearchEntitiesType& sources, size_t source_index) {
     const stk::mesh::Entity target = targets.entity(target_index);
     const stk::mesh::Entity source = sources.entity(source_index);
     return target != source && target < source;
@@ -553,9 +551,8 @@ struct NeighborBuildSemantics<HalfNeighborTag, DisjointSelectorOverlapTag> {
   /// \param sources [in] Source entity metadata.
   /// \param source_index [in] Source local search handle.
   template <typename SearchEntitiesType>
-  KOKKOS_INLINE_FUNCTION
-  static bool keep(const SearchEntitiesType& targets, size_t target_index, const SearchEntitiesType& sources,
-                   size_t source_index) {
+  KOKKOS_INLINE_FUNCTION static bool keep(const SearchEntitiesType& targets, size_t target_index,
+                                          const SearchEntitiesType& sources, size_t source_index) {
     return targets.entity(target_index) != sources.entity(source_index);
   }
 };
@@ -575,9 +572,9 @@ struct NeighborBuildSemantics<HalfNeighborTag, PartialSelectorOverlapTag> {
   /// \param source_index [in] Source local search handle.
   /// \param in_overlap [in] Device-callable predicate over a metadata map and local search handle.
   template <typename SearchEntitiesType, typename OverlapPredicate>
-  KOKKOS_INLINE_FUNCTION
-  static bool keep(const SearchEntitiesType& targets, size_t target_index, const SearchEntitiesType& sources,
-                   size_t source_index, const OverlapPredicate& in_overlap) {
+  KOKKOS_INLINE_FUNCTION static bool keep(const SearchEntitiesType& targets, size_t target_index,
+                                          const SearchEntitiesType& sources, size_t source_index,
+                                          const OverlapPredicate& in_overlap) {
     const stk::mesh::Entity target = targets.entity(target_index);
     const stk::mesh::Entity source = sources.entity(source_index);
     const bool both_in_overlap = in_overlap(targets, target_index) && in_overlap(sources, source_index);
@@ -595,9 +592,8 @@ struct NeighborBuildSemantics<SelfNeighborTag, SelectorOverlapTag> {
   /// \param sources [in] Source entity metadata.
   /// \param source_index [in] Source local search handle.
   template <typename SearchEntitiesType>
-  KOKKOS_INLINE_FUNCTION
-  static bool keep(const SearchEntitiesType& targets, size_t target_index, const SearchEntitiesType& sources,
-                   size_t source_index) {
+  KOKKOS_INLINE_FUNCTION static bool keep(const SearchEntitiesType& targets, size_t target_index,
+                                          const SearchEntitiesType& sources, size_t source_index) {
     return targets.entity(target_index) != sources.entity(source_index);
   }
 };
@@ -607,8 +603,8 @@ struct NeighborBuildSemantics<SelfNeighborTag, SelectorOverlapTag> {
 /// \class Neighbors
 /// \brief Lightweight neighbor-range view for one target.
 ///
-/// `Neighbors` stores the concrete list and a target handle. The handle type comes from `NeighborListTraits`, which lets
-/// the same wrapper support both dense ordinal-addressed lists and future non-contiguous lists.
+/// `Neighbors` stores the concrete list and a target handle. The handle type comes from `NeighborListTraits`, which
+/// lets the same wrapper support both dense ordinal-addressed lists and future non-contiguous lists.
 /// \tparam NeighborListType Concrete neighbor-list implementation type.
 template <typename NeighborListType>
 class Neighbors {
@@ -929,7 +925,8 @@ class DeployFunctorOnTargetNeighbors {
   /// \param list [in] Concrete neighbor list.
   /// \param functor [in] User callback to run for every target.
   KOKKOS_INLINE_FUNCTION
-  DeployFunctorOnTargetNeighbors(const NeighborListType& list, const Functor& functor) : list_(list), functor_(functor) {
+  DeployFunctorOnTargetNeighbors(const NeighborListType& list, const Functor& functor)
+      : list_(list), functor_(functor) {
   }
 
   /// \brief Run the user callback for one target ordinal.
@@ -1524,8 +1521,8 @@ class ArborX2dNeighborList {
 /// \brief STK coarse-search neighbor list mapped into Mundy's common target/source access surface.
 ///
 /// This implementation is intended to consume STK coarse-search candidate pairs and materialize the same compressed
-/// target-to-source storage shape as `ArborX1dNeighborList`. The first sketch uses contiguous ordinals for target/source
-/// handles, while the generic facade remains ready for a future non-contiguous implementation.
+/// target-to-source storage shape as `ArborX1dNeighborList`. The first sketch uses contiguous ordinals for
+/// target/source handles, while the generic facade remains ready for a future non-contiguous implementation.
 /// \tparam NeighborTag Neighbor-list semantic tag (`FullNeighborTag`, `HalfNeighborTag`, or `SelfNeighborTag`).
 /// \tparam MemorySpace Kokkos memory space for owned views.
 template <typename NeighborTag = FullNeighborTag, typename MemorySpace = stk::ngp::MemSpace>
@@ -1760,8 +1757,8 @@ ArborX1dNeighborList<NeighborTag, MemorySpace> make_arborx_1d_neighbor_list(
 
 /// \brief Build a dense 2D ArborX neighbor list from target and source search boxes.
 ///
-/// This host-side factory owns the two-pass ArborX count/fill sequence. The current body intentionally returns an empty,
-/// structurally valid list while the query path is being designed.
+/// This host-side factory owns the two-pass ArborX count/fill sequence. The current body intentionally returns an
+/// empty, structurally valid list while the query path is being designed.
 /// \tparam ExecutionSpace Kokkos execution space used for build work.
 /// \tparam NeighborTag Neighbor-list semantic tag.
 /// \tparam MemorySpace Kokkos memory space for the returned list.
@@ -1798,8 +1795,8 @@ ArborX2dNeighborList<NeighborTag, MemorySpace> make_arborx_2d_neighbor_list(
 /// \brief Build an STK coarse-search neighbor list from target and source search boxes.
 ///
 /// This host-side factory owns `stk::search::coarse_search` setup and grouping so `STKSearchNeighborList` can remain a
-/// compressed device-facing storage view. The current body intentionally returns an empty, structurally valid list while
-/// the STK search path is being designed.
+/// compressed device-facing storage view. The current body intentionally returns an empty, structurally valid list
+/// while the STK search path is being designed.
 /// \tparam ExecutionSpace Execution-space tag associated with search preparation.
 /// \tparam NeighborTag Neighbor-list semantic tag.
 /// \tparam MemorySpace Kokkos memory space for the returned list.

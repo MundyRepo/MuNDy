@@ -43,9 +43,9 @@
 #include <mundy_mesh/impl/PartitionKey.hpp>  // for mundy::mesh::impl::PartitionKey, mundy::mesh::impl::get_partition_key
 #include <mundy_utils/NgpView.hpp>           // for mundy::NgpViewT
 #include <mundy_utils/StringLiteral.hpp>     // for mundy::StringLiteral, mundy::make_string_literal
+#include <mundy_utils/requires.hpp>
 #include <mundy_utils/throw_assert.hpp>
 #include <mundy_utils/variant.hpp>  // for mundy::variant
-#include <mundy_utils/requires.hpp>
 
 namespace mundy {
 
@@ -585,8 +585,7 @@ class NgpRequestEntitiesImplT {
   /// \brief Record an entity creation request for the new-id variant.
   /// The current process will own the created entity. It will be assigned a new ID by the mesh.
   KOKKOS_INLINE_FUNCTION FutureEntity request(size_t ticket, stk::mesh::EntityRank entity_rank) const
-    MUNDY_REQUIRES(!HasKnownEntityId)
-  {
+      MUNDY_REQUIRES(!HasKnownEntityId) {
     constexpr auto name = make_string_literal("NgpRequestEntitiesImplT::request");
     assert_active_space<name>();
     assert_valid_rank<name>(entity_rank);
@@ -617,9 +616,7 @@ class NgpRequestEntitiesImplT {
   /// The current process will own the created entity. It will be assigned the given ID.
   KOKKOS_INLINE_FUNCTION FutureEntity request(size_t ticket,                      //
                                               stk::mesh::EntityRank entity_rank,  //
-                                              stk::mesh::EntityId entity_id) const
-    MUNDY_REQUIRES(HasKnownEntityId)
-  {
+                                              stk::mesh::EntityId entity_id) const MUNDY_REQUIRES(HasKnownEntityId) {
     constexpr auto name = make_string_literal("NgpRequestEntitiesImplT::request");
     assert_active_space<name>();
     assert_valid_rank<name>(entity_rank);
@@ -644,8 +641,7 @@ class NgpRequestEntitiesImplT {
 
   /// \brief Fetch the requested entity ID using the given ticket. Only valid for the known-id variant.
   KOKKOS_INLINE_FUNCTION stk::mesh::EntityId get_entity_id(size_t ticket, stk::mesh::EntityRank entity_rank) const
-    MUNDY_REQUIRES(HasKnownEntityId)
-  {
+      MUNDY_REQUIRES(HasKnownEntityId) {
     constexpr auto name = make_string_literal("NgpRequestEntitiesImplT::get_entity_id");
     assert_active_space<name>();
     assert_valid_rank<name>(entity_rank);

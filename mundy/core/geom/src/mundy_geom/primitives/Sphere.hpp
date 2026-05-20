@@ -31,8 +31,8 @@
 
 // Our libs
 #include <mundy_geom/primitives/Point.hpp>  // for mundy::Point
-#include <mundy_utils/throw_assert.hpp>     // for MUNDY_THROW_ASSERT
 #include <mundy_utils/requires.hpp>
+#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
 
 namespace mundy {
 
@@ -59,8 +59,7 @@ class Sphere {
   /// \brief Default constructor for owning Spheres. Default initializes the center and sets the radius to an invalid
   /// value of -1
   KOKKOS_FUNCTION
-  constexpr Sphere()
-    MUNDY_REQUIRES(HasNArgConstructor<point_t, scalar_t, 3>)
+  constexpr Sphere() MUNDY_REQUIRES(HasNArgConstructor<point_t, scalar_t, 3>)
       : center_(scalar_t(), scalar_t(), scalar_t()), radius_(static_cast<scalar_t>(-1)) {
   }
 
@@ -76,7 +75,7 @@ class Sphere {
   /// \param[in] radius The radius of the Sphere.
   template <ValidPointType OtherPointType>
   KOKKOS_FUNCTION constexpr Sphere(const OtherPointType& center, const scalar_t& radius)
-    MUNDY_REQUIRES(!std::is_same_v<OtherPointType, point_t>)
+      MUNDY_REQUIRES(!std::is_same_v<OtherPointType, point_t>)
       : center_(center), radius_(radius) {
   }
 
@@ -92,7 +91,7 @@ class Sphere {
   /// \brief Deep copy constructor with different sphere type
   template <typename OtherSphereType>
   KOKKOS_FUNCTION constexpr Sphere(const OtherSphereType& other)
-    MUNDY_REQUIRES(!std::is_same_v<OtherSphereType, Sphere<scalar_t, point_t>>)
+      MUNDY_REQUIRES(!std::is_same_v<OtherSphereType, Sphere<scalar_t, point_t>>)
       : center_(other.center_), radius_(other.radius_) {
   }
 
@@ -105,7 +104,7 @@ class Sphere {
   /// \brief Deep move constructor
   template <typename OtherSphereType>
   KOKKOS_FUNCTION constexpr Sphere(OtherSphereType&& other)
-    MUNDY_REQUIRES(!std::is_same_v<OtherSphereType, Sphere<scalar_t, point_t>>)
+      MUNDY_REQUIRES(!std::is_same_v<OtherSphereType, Sphere<scalar_t, point_t>>)
       : center_(std::move(other.center_)), radius_(std::move(other.radius_)) {
   }
   //@}
@@ -125,8 +124,7 @@ class Sphere {
   /// \brief Copy assignment operator
   template <typename OtherSphereType>
   KOKKOS_FUNCTION constexpr Sphere<scalar_t, point_t>& operator=(const OtherSphereType& other)
-    MUNDY_REQUIRES(!std::is_same_v<OtherSphereType, Sphere<scalar_t, point_t>>)
-  {
+      MUNDY_REQUIRES(!std::is_same_v<OtherSphereType, Sphere<scalar_t, point_t>>) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     center_ = other.center_;
     radius_ = other.radius_;
@@ -145,8 +143,7 @@ class Sphere {
   /// \brief Move assignment operator
   template <typename OtherSphereType>
   KOKKOS_FUNCTION constexpr Sphere<scalar_t, point_t>& operator=(OtherSphereType&& other)
-    MUNDY_REQUIRES(!std::is_same_v<OtherSphereType, Sphere<scalar_t, point_t>>)
-  {
+      MUNDY_REQUIRES(!std::is_same_v<OtherSphereType, Sphere<scalar_t, point_t>>) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     center_ = std::move(other.center_);
     radius_ = std::move(other.radius_);

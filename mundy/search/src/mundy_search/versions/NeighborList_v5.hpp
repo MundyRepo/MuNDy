@@ -33,8 +33,8 @@
 // Trilinos
 #include <ArborX.hpp>
 #include <Kokkos_Core.hpp>
-#include <stk_mesh/base/BulkData.hpp>
 #include <stk_mesh/base/Bucket.hpp>
+#include <stk_mesh/base/BulkData.hpp>
 #include <stk_mesh/base/Entity.hpp>
 #include <stk_mesh/base/GetNgpMesh.hpp>
 #include <stk_mesh/base/NgpMesh.hpp>
@@ -58,8 +58,9 @@ class ExclusionChain;
 /// \class NoExclusions
 /// \brief Empty exclusion chain used as the starting point for neighbor-list builders.
 ///
-/// Exclusions are build-time predicates that reject candidate target/source pairs before those pairs are materialized in
-/// a neighbor list. `NoExclusions` rejects nothing and provides the first `.exclude(...)` step for type-level chaining.
+/// Exclusions are build-time predicates that reject candidate target/source pairs before those pairs are materialized
+/// in a neighbor list. `NoExclusions` rejects nothing and provides the first `.exclude(...)` step for type-level
+/// chaining.
 class NoExclusions {
  public:
   //! \name Constructors
@@ -77,8 +78,7 @@ class NoExclusions {
   /// \tparam Candidate Candidate pair type.
   /// \param candidate [in] Candidate pair produced by a search backend.
   template <typename Candidate>
-  KOKKOS_INLINE_FUNCTION
-  bool operator()(const Candidate& /*candidate*/) const noexcept {
+  KOKKOS_INLINE_FUNCTION bool operator()(const Candidate& /*candidate*/) const noexcept {
     return false;
   }
 
@@ -86,8 +86,7 @@ class NoExclusions {
   /// \tparam NewExclusion Kokkos-callable exclusion predicate type.
   /// \param exclusion [in] Exclusion predicate to append to the chain.
   template <typename NewExclusion>
-  KOKKOS_INLINE_FUNCTION
-  ExclusionChain<NoExclusions, NewExclusion> exclude(const NewExclusion& exclusion) const {
+  KOKKOS_INLINE_FUNCTION ExclusionChain<NoExclusions, NewExclusion> exclude(const NewExclusion& exclusion) const {
     return ExclusionChain<NoExclusions, NewExclusion>(*this, exclusion);
   }
   //@}
@@ -96,9 +95,9 @@ class NoExclusions {
 /// \class ExclusionChain
 /// \brief Type-level chain of Kokkos-callable exclusion predicates.
 ///
-/// Each `.exclude(...)` call returns a new `ExclusionChain` type containing the complete concrete type of every previous
-/// exclusion plus the newly appended exclusion. ArborX callbacks can therefore store one chain object and inline through
-/// all exclusions without virtual functions, runtime jump tables, or type-erased call sites.
+/// Each `.exclude(...)` call returns a new `ExclusionChain` type containing the complete concrete type of every
+/// previous exclusion plus the newly appended exclusion. ArborX callbacks can therefore store one chain object and
+/// inline through all exclusions without virtual functions, runtime jump tables, or type-erased call sites.
 ///
 /// \tparam PriorExclusions Previous exclusion chain type.
 /// \tparam Exclusion Newly appended exclusion predicate type.
@@ -135,8 +134,7 @@ class ExclusionChain {
   /// \tparam Candidate Candidate pair type.
   /// \param candidate [in] Candidate pair produced by a search backend.
   template <typename Candidate>
-  KOKKOS_INLINE_FUNCTION
-  bool operator()(const Candidate& candidate) const {
+  KOKKOS_INLINE_FUNCTION bool operator()(const Candidate& candidate) const {
     return prior_exclusions_(candidate) || exclusion_(candidate);
   }
 
@@ -144,8 +142,8 @@ class ExclusionChain {
   /// \tparam NextExclusion Kokkos-callable exclusion predicate type.
   /// \param next_exclusion [in] Exclusion predicate to append to the chain.
   template <typename NextExclusion>
-  KOKKOS_INLINE_FUNCTION
-  ExclusionChain<ExclusionChain, NextExclusion> exclude(const NextExclusion& next_exclusion) const {
+  KOKKOS_INLINE_FUNCTION ExclusionChain<ExclusionChain, NextExclusion> exclude(
+      const NextExclusion& next_exclusion) const {
     return ExclusionChain<ExclusionChain, NextExclusion>(*this, next_exclusion);
   }
   //@}
@@ -181,8 +179,8 @@ class ExclusionChain {
 /// \brief Non-periodic target/source candidate passed to exclusion predicates.
 ///
 /// Candidate objects are produced during search construction and are not final neighbor-list storage. They expose owner
-/// accessors as aliases of the normal target/source accessors so exclusion predicates can use one owner-based vocabulary
-/// for both periodic and non-periodic search.
+/// accessors as aliases of the normal target/source accessors so exclusion predicates can use one owner-based
+/// vocabulary for both periodic and non-periodic search.
 /// \tparam SizeType Integral type used for local target/source ordinals.
 template <typename SizeType = size_t>
 class NeighborSearchCandidate {
@@ -262,8 +260,8 @@ class NeighborSearchCandidate {
 /// \class PeriodicNeighborSearchCandidate
 /// \brief Periodic owner-pair candidate passed to exclusion predicates.
 ///
-/// The candidate stores owner ordinals/entities and the source image shift relative to the target image shift. Images are
-/// not entities; exclusions should reason in terms of owner identity plus relative shift.
+/// The candidate stores owner ordinals/entities and the source image shift relative to the target image shift. Images
+/// are not entities; exclusions should reason in terms of owner identity plus relative shift.
 /// \tparam ImageShiftType Vector type used for relative image shifts.
 /// \tparam SizeType Integral type used for local owner ordinals.
 template <typename ImageShiftType, typename SizeType = size_t>
@@ -364,8 +362,7 @@ struct ExcludeSelfInteraction {
   /// \tparam Candidate Candidate pair type.
   /// \param candidate [in] Candidate pair produced by a search backend.
   template <typename Candidate>
-  KOKKOS_INLINE_FUNCTION
-  bool operator()(const Candidate& candidate) const {
+  KOKKOS_INLINE_FUNCTION bool operator()(const Candidate& candidate) const {
     return candidate.target_entity() == candidate.source_entity() && relative_shift_is_zero(candidate);
   }
 
@@ -374,8 +371,7 @@ struct ExcludeSelfInteraction {
   /// \tparam Candidate Non-periodic candidate type.
   /// \param candidate [in] Candidate pair produced by a search backend.
   template <typename Candidate>
-  KOKKOS_INLINE_FUNCTION
-  static bool relative_shift_is_zero(const Candidate& /*candidate*/) {
+  KOKKOS_INLINE_FUNCTION static bool relative_shift_is_zero(const Candidate& /*candidate*/) {
     return true;
   }
 
@@ -384,8 +380,8 @@ struct ExcludeSelfInteraction {
   /// \tparam SizeType Integral type used for local owner ordinals.
   /// \param candidate [in] Periodic candidate pair produced by a search backend.
   template <typename ImageShiftType, typename SizeType>
-  KOKKOS_INLINE_FUNCTION
-  static bool relative_shift_is_zero(const PeriodicNeighborSearchCandidate<ImageShiftType, SizeType>& candidate) {
+  KOKKOS_INLINE_FUNCTION static bool relative_shift_is_zero(
+      const PeriodicNeighborSearchCandidate<ImageShiftType, SizeType>& candidate) {
     const ImageShiftType shift = candidate.relative_image_shift();
     using scalar_type = typename ImageShiftType::scalar_t;
     return shift[0] == static_cast<scalar_type>(0) && shift[1] == static_cast<scalar_type>(0) &&
@@ -413,8 +409,8 @@ namespace impl {
 /// \class ArborXSearchCandidateFactory
 /// \brief Create non-periodic search candidates from ArborX predicate/source matches.
 ///
-/// The factory adapts ArborX callback inputs to Mundy's exclusion-candidate interface. It is a build-time helper and does
-/// not own final neighbor-list storage.
+/// The factory adapts ArborX callback inputs to Mundy's exclusion-candidate interface. It is a build-time helper and
+/// does not own final neighbor-list storage.
 /// \tparam TargetBoxes Target search-box wrapper type.
 /// \tparam SourceBoxes Source search-box wrapper type.
 template <typename TargetBoxes, typename SourceBoxes>
@@ -453,8 +449,7 @@ class ArborXSearchCandidateFactory {
   /// \param predicate [in] ArborX predicate.
   /// \param source_index [in] Dense source ordinal reported by ArborX.
   template <typename Predicate>
-  KOKKOS_INLINE_FUNCTION
-  candidate_type operator()(const Predicate& predicate, size_type source_index) const {
+  KOKKOS_INLINE_FUNCTION candidate_type operator()(const Predicate& predicate, size_type source_index) const {
     const size_type target_index = ArborX::getData(predicate);
     return candidate_type(target_index, source_index, targets_.entity(target_index), sources_.entity(source_index));
   }
@@ -474,8 +469,8 @@ class ArborXSearchCandidateFactory {
 /// \class PeriodicArborXSearchCandidateFactory
 /// \brief Create periodic owner-pair candidates from ArborX image-box matches.
 ///
-/// ArborX reports image ordinals. This factory maps them to target/source owner ordinals and computes the relative image
-/// shift that filters and final periodic neighbor-list storage need.
+/// ArborX reports image ordinals. This factory maps them to target/source owner ordinals and computes the relative
+/// image shift that filters and final periodic neighbor-list storage need.
 /// \tparam TargetBoxes Target periodic search-box wrapper type.
 /// \tparam SourceBoxes Source periodic search-box wrapper type.
 template <typename TargetBoxes, typename SourceBoxes>
@@ -515,8 +510,7 @@ class PeriodicArborXSearchCandidateFactory {
   /// \param predicate [in] ArborX predicate.
   /// \param source_image_index [in] Dense source image ordinal reported by ArborX.
   template <typename Predicate>
-  KOKKOS_INLINE_FUNCTION
-  candidate_type operator()(const Predicate& predicate, size_type source_image_index) const {
+  KOKKOS_INLINE_FUNCTION candidate_type operator()(const Predicate& predicate, size_type source_image_index) const {
     const size_type target_image_index = ArborX::getData(predicate);
     const size_type target_owner_index = targets_.owner_index(target_image_index);
     const size_type source_owner_index = sources_.owner_index(source_image_index);
@@ -541,9 +535,9 @@ class PeriodicArborXSearchCandidateFactory {
 /// \class ArborXExclusionCallback
 /// \brief ArborX query callback that applies a Mundy exclusion chain.
 ///
-/// The callback constructs a Mundy candidate for each ArborX hit and emits the source primitive only when no exclusion in
-/// the statically typed chain rejects the candidate. This keeps filtering in the search/materialization layer rather than
-/// in final neighbor-list storage.
+/// The callback constructs a Mundy candidate for each ArborX hit and emits the source primitive only when no exclusion
+/// in the statically typed chain rejects the candidate. This keeps filtering in the search/materialization layer rather
+/// than in final neighbor-list storage.
 /// \tparam CandidateFactory Factory that converts ArborX hits to Mundy candidates.
 /// \tparam Exclusions Statically typed exclusion chain.
 template <typename CandidateFactory, typename Exclusions>
@@ -585,9 +579,9 @@ class ArborXExclusionCallback {
   /// \param value_pair [in] ArborX primitive geometry/source-index pair.
   /// \param out [in] ArborX output functor.
   template <typename Predicate, typename Geometry, typename OutputFunctor>
-  KOKKOS_INLINE_FUNCTION
-  void operator()(const Predicate& predicate, const ArborX::PairValueIndex<Geometry, int>& value_pair,
-                  const OutputFunctor& out) const {
+  KOKKOS_INLINE_FUNCTION void operator()(const Predicate& predicate,
+                                         const ArborX::PairValueIndex<Geometry, int>& value_pair,
+                                         const OutputFunctor& out) const {
     const size_type source_index = static_cast<size_type>(value_pair.index);
     const auto candidate = candidate_factory_(predicate, source_index);
     if (!exclusions_(candidate)) {
@@ -602,8 +596,7 @@ class ArborXExclusionCallback {
   /// \param source_index [in] ArborX source primitive ordinal.
   /// \param out [in] ArborX output functor.
   template <typename Predicate, typename OutputFunctor>
-  KOKKOS_INLINE_FUNCTION
-  void operator()(const Predicate& predicate, int source_index, const OutputFunctor& out) const {
+  KOKKOS_INLINE_FUNCTION void operator()(const Predicate& predicate, int source_index, const OutputFunctor& out) const {
     const auto candidate = candidate_factory_(predicate, static_cast<size_type>(source_index));
     if (!exclusions_(candidate)) {
       out(source_index);
@@ -1161,9 +1154,8 @@ class ExcludeSymmetricDuplicates {
   /// \param bulk_data [in] STK bulk data used to walk buckets and compute the intersection mask.
   /// \param target_selector [in] Target-side selector.
   /// \param source_selector [in] Source-side selector.
-  ExcludeSymmetricDuplicates(const stk::mesh::BulkData& bulk_data,
-                              const stk::mesh::Selector& target_selector,
-                              const stk::mesh::Selector& source_selector);
+  ExcludeSymmetricDuplicates(const stk::mesh::BulkData& bulk_data, const stk::mesh::Selector& target_selector,
+                             const stk::mesh::Selector& source_selector);
   //@}
 
   //! \name Filtering
@@ -1173,14 +1165,15 @@ class ExcludeSymmetricDuplicates {
   /// \tparam Candidate Candidate pair type.
   /// \param candidate [in] Candidate pair produced by a search backend.
   template <typename Candidate>
-  KOKKOS_INLINE_FUNCTION
-  bool operator()(const Candidate& candidate) const {
+  KOKKOS_INLINE_FUNCTION bool operator()(const Candidate& candidate) const {
     stk::mesh::Entity trg_entity = candidate.target_entity();
     stk::mesh::Entity src_entity = candidate.source_entity();
     unsigned trg_bucket_id = ngp_mesh_.fast_mesh_index(trg_entity).bucket_id;
     unsigned src_bucket_id = ngp_mesh_.fast_mesh_index(src_entity).bucket_id;
-    MUNDY_THROW_ASSERT(trg_bucket_id < num_buckets_, std::runtime_error, "ExcludeSymmetricDuplicates: target bucket ID out of range.");
-    MUNDY_THROW_ASSERT(src_bucket_id < num_buckets_, std::runtime_error, "ExcludeSymmetricDuplicates: source bucket ID out of range.");
+    MUNDY_THROW_ASSERT(trg_bucket_id < num_buckets_, std::runtime_error,
+                       "ExcludeSymmetricDuplicates: target bucket ID out of range.");
+    MUNDY_THROW_ASSERT(src_bucket_id < num_buckets_, std::runtime_error,
+                       "ExcludeSymmetricDuplicates: source bucket ID out of range.");
     if (bucket_in_intersection_(trg_bucket_id) && bucket_in_intersection_(src_bucket_id)) {
       return src_entity < trg_entity;
     }
@@ -1201,10 +1194,9 @@ class ExcludeSymmetricDuplicates {
   //@}
 };
 
-inline ExcludeSymmetricDuplicates::ExcludeSymmetricDuplicates(
-    const stk::mesh::BulkData& bulk_data,
-    const stk::mesh::Selector& target_selector,
-    const stk::mesh::Selector& source_selector)
+inline ExcludeSymmetricDuplicates::ExcludeSymmetricDuplicates(const stk::mesh::BulkData& bulk_data,
+                                                              const stk::mesh::Selector& target_selector,
+                                                              const stk::mesh::Selector& source_selector)
     : ngp_mesh_(stk::mesh::get_updated_ngp_mesh(bulk_data)) {
   unsigned max_bucket_id = 0;
   bool any_buckets = false;
@@ -1237,10 +1229,9 @@ inline ExcludeSymmetricDuplicates::ExcludeSymmetricDuplicates(
 /// Search boxes, periodic image boxes, and future source/target input types may have different geometry and indexing
 /// APIs, but they must expose the selector that defines the semantic entity chunk being searched.
 template <typename T>
-concept NeighborListInputType =
-    requires(const T& input) {
-      { input.selector() } -> std::same_as<const stk::mesh::Selector&>;
-    };
+concept NeighborListInputType = requires(const T& input) {
+  { input.selector() } -> std::same_as<const stk::mesh::Selector&>;
+};
 
 /// \class Neighbors
 /// \brief Lightweight neighbor-range view for one target.
@@ -1268,22 +1259,36 @@ class Neighbors {
 
     KOKKOS_INLINE_FUNCTION
     EntityIterator(const neighbor_list_type& list, size_type target_index, size_type neighbor_ordinal)
-        : list_(list), target_index_(target_index), neighbor_ordinal_(neighbor_ordinal) {}
+        : list_(list), target_index_(target_index), neighbor_ordinal_(neighbor_ordinal) {
+    }
 
     KOKKOS_INLINE_FUNCTION
-    stk::mesh::Entity operator*() const { return list_.get_neighbor(target_index_, neighbor_ordinal_); }
+    stk::mesh::Entity operator*() const {
+      return list_.get_neighbor(target_index_, neighbor_ordinal_);
+    }
 
     KOKKOS_INLINE_FUNCTION
-    EntityIterator& operator++() { ++neighbor_ordinal_; return *this; }
+    EntityIterator& operator++() {
+      ++neighbor_ordinal_;
+      return *this;
+    }
 
     KOKKOS_INLINE_FUNCTION
-    EntityIterator operator++(int) { auto tmp = *this; ++neighbor_ordinal_; return tmp; }
+    EntityIterator operator++(int) {
+      auto tmp = *this;
+      ++neighbor_ordinal_;
+      return tmp;
+    }
 
     KOKKOS_INLINE_FUNCTION
-    bool operator==(const EntityIterator& other) const { return neighbor_ordinal_ == other.neighbor_ordinal_; }
+    bool operator==(const EntityIterator& other) const {
+      return neighbor_ordinal_ == other.neighbor_ordinal_;
+    }
 
     KOKKOS_INLINE_FUNCTION
-    bool operator!=(const EntityIterator& other) const { return neighbor_ordinal_ != other.neighbor_ordinal_; }
+    bool operator!=(const EntityIterator& other) const {
+      return neighbor_ordinal_ != other.neighbor_ordinal_;
+    }
 
    private:
     neighbor_list_type list_;
@@ -1361,11 +1366,15 @@ class Neighbors {
 
   /// \brief Return an iterator to the first neighbor entity.
   KOKKOS_INLINE_FUNCTION
-  EntityIterator begin() const { return EntityIterator(list_, target_index_, 0); }
+  EntityIterator begin() const {
+    return EntityIterator(list_, target_index_, 0);
+  }
 
   /// \brief Return a past-the-end iterator over neighbor entities.
   KOKKOS_INLINE_FUNCTION
-  EntityIterator end() const { return EntityIterator(list_, target_index_, size()); }
+  EntityIterator end() const {
+    return EntityIterator(list_, target_index_, size());
+  }
   //@}
 
  private:
@@ -1549,25 +1558,23 @@ class DeployFunctorOnTargetNeighbors {
 /// for_each_target_with_neighbors. Concrete list types are checked against this protocol at
 /// every call site, providing better error messages than a static-facade approach.
 template <typename T>
-concept NeighborListType =
-    requires {
-      typename T::size_type;
-      typename T::source_index_type;
-      typename T::execution_space;
-      typename T::memory_space;
-    } &&
-    requires(const T& list, typename T::size_type i, typename T::size_type j) {
-      { list.num_targets() } -> std::convertible_to<typename T::size_type>;
-      { list.num_sources() } -> std::convertible_to<typename T::size_type>;
-      { list.size() } -> std::convertible_to<typename T::size_type>;
-      { list.target_selector() } -> std::same_as<const stk::mesh::Selector&>;
-      { list.source_selector() } -> std::same_as<const stk::mesh::Selector&>;
-      { list.num_neighbors(i) } -> std::convertible_to<typename T::size_type>;
-      { list.get_neighbor(i, j) } -> std::same_as<stk::mesh::Entity>;
-      { list.target_entity(i) } -> std::same_as<stk::mesh::Entity>;
-      { list.source_entity(i) } -> std::same_as<stk::mesh::Entity>;
-      { list.source_index(i, j) } -> std::convertible_to<typename T::source_index_type>;
-    };
+concept NeighborListType = requires {
+  typename T::size_type;
+  typename T::source_index_type;
+  typename T::execution_space;
+  typename T::memory_space;
+} && requires(const T& list, typename T::size_type i, typename T::size_type j) {
+  { list.num_targets() } -> std::convertible_to<typename T::size_type>;
+  { list.num_sources() } -> std::convertible_to<typename T::size_type>;
+  { list.size() } -> std::convertible_to<typename T::size_type>;
+  { list.target_selector() } -> std::same_as<const stk::mesh::Selector&>;
+  { list.source_selector() } -> std::same_as<const stk::mesh::Selector&>;
+  { list.num_neighbors(i) } -> std::convertible_to<typename T::size_type>;
+  { list.get_neighbor(i, j) } -> std::same_as<stk::mesh::Entity>;
+  { list.target_entity(i) } -> std::same_as<stk::mesh::Entity>;
+  { list.source_entity(i) } -> std::same_as<stk::mesh::Entity>;
+  { list.source_index(i, j) } -> std::convertible_to<typename T::source_index_type>;
+};
 
 /// \brief Run a callback for every stored neighbor pair using the list's default execution space.
 /// \tparam ListType Concrete neighbor list type satisfying NeighborListType.
@@ -1592,8 +1599,8 @@ void for_each_neighbor_pair(const ExecutionSpace& exec_space, const ListType& li
   using size_type = typename ListType::size_type;
   using range_policy_t = Kokkos::RangePolicy<ExecutionSpace, Kokkos::IndexType<size_type>>;
   impl::DeployFunctorOnNeighborPairs<ListType, Functor> deploy_functor(list, functor);
-  Kokkos::parallel_for("mundy::mesh::for_each_neighbor_pair",
-                       range_policy_t(exec_space, 0, list.num_targets()), deploy_functor);
+  Kokkos::parallel_for("mundy::mesh::for_each_neighbor_pair", range_policy_t(exec_space, 0, list.num_targets()),
+                       deploy_functor);
 }
 
 /// \brief Run a callback for every target and its neighbors using the list's default execution space.
@@ -1619,8 +1626,8 @@ void for_each_target_with_neighbors(const ExecutionSpace& exec_space, const List
   using size_type = typename ListType::size_type;
   using range_policy_t = Kokkos::RangePolicy<ExecutionSpace, Kokkos::IndexType<size_type>>;
   impl::DeployFunctorOnTargetNeighbors<ListType, Functor> deploy_functor(list, functor);
-  Kokkos::parallel_for("mundy::mesh::for_each_target_with_neighbors",
-                       range_policy_t(exec_space, 0, list.num_targets()), deploy_functor);
+  Kokkos::parallel_for("mundy::mesh::for_each_target_with_neighbors", range_policy_t(exec_space, 0, list.num_targets()),
+                       deploy_functor);
 }
 
 /// \class NeighborListBuilder
@@ -1761,8 +1768,7 @@ class NeighborListBuilder {
 /// \param source_input [in] Selected source input.
 template <typename ListType, typename ExecutionSpace, NeighborListInputType TargetInput,
           NeighborListInputType SourceInput>
-NeighborListBuilder<ListType, ExecutionSpace, TargetInput, SourceInput, NoExclusions>
-make_neighbor_list_builder(
+NeighborListBuilder<ListType, ExecutionSpace, TargetInput, SourceInput, NoExclusions> make_neighbor_list_builder(
     const ExecutionSpace& exec_space, const TargetInput& target_input, const SourceInput& source_input) {
   return NeighborListBuilder<ListType, ExecutionSpace, TargetInput, SourceInput, NoExclusions>(
       exec_space, target_input, source_input, NoExclusions{});
@@ -2206,8 +2212,7 @@ class ArborX2dNeighborList {
     size_type total = 0;
     Kokkos::parallel_reduce(
         Kokkos::RangePolicy<execution_space>(0, neighbor_counts_.extent(0)),
-        KOKKOS_LAMBDA(size_type i, size_type& partial_sum) { partial_sum += neighbor_counts_(i); },
-        total);
+        KOKKOS_LAMBDA(size_type i, size_type & partial_sum) { partial_sum += neighbor_counts_(i); }, total);
     total_pairs_ = total;
   }
   //@}
@@ -2955,9 +2960,10 @@ class PeriodicSTKSearchNeighborList {
 /// \param sources [in] Source search boxes and entity identities.
 /// \param buffer_size [in] Optional ArborX traversal buffer-size hint.
 template <typename ExecutionSpace, typename MemorySpace = stk::ngp::MemSpace>
-ArborX1dNeighborList<MemorySpace> make_arborx_1d_neighbor_list(
-    const ExecutionSpace& exec_space, const impl::ArborXSearchBoxesT<MemorySpace>& targets,
-    const impl::ArborXSearchBoxesT<MemorySpace>& sources, int buffer_size = 0);
+ArborX1dNeighborList<MemorySpace> make_arborx_1d_neighbor_list(const ExecutionSpace& exec_space,
+                                                               const impl::ArborXSearchBoxesT<MemorySpace>& targets,
+                                                               const impl::ArborXSearchBoxesT<MemorySpace>& sources,
+                                                               int buffer_size = 0);
 
 /// \brief Build a dense 2D ArborX neighbor list from target and source search boxes.
 ///
@@ -2971,9 +2977,10 @@ ArborX1dNeighborList<MemorySpace> make_arborx_1d_neighbor_list(
 /// \param sources [in] Source search boxes and entity identities.
 /// \param buffer_size [in] Optional maximum-neighbor preallocation guess.
 template <typename ExecutionSpace, typename MemorySpace = stk::ngp::MemSpace>
-ArborX2dNeighborList<MemorySpace> make_arborx_2d_neighbor_list(
-    const ExecutionSpace& exec_space, const impl::ArborXSearchBoxesT<MemorySpace>& targets,
-    const impl::ArborXSearchBoxesT<MemorySpace>& sources, int buffer_size = 0);
+ArborX2dNeighborList<MemorySpace> make_arborx_2d_neighbor_list(const ExecutionSpace& exec_space,
+                                                               const impl::ArborXSearchBoxesT<MemorySpace>& targets,
+                                                               const impl::ArborXSearchBoxesT<MemorySpace>& sources,
+                                                               int buffer_size = 0);
 
 /// \brief Build an STK coarse-search neighbor list from target and source search boxes.
 ///
@@ -2986,9 +2993,9 @@ ArborX2dNeighborList<MemorySpace> make_arborx_2d_neighbor_list(
 /// \param targets [in] Target search boxes and entity identities.
 /// \param sources [in] Source search boxes and entity identities.
 template <typename ExecutionSpace, typename MemorySpace = stk::ngp::MemSpace>
-STKSearchNeighborList<MemorySpace> make_stk_search_neighbor_list(
-    const ExecutionSpace& exec_space, const impl::STKSearchBoxesT<MemorySpace>& targets,
-    const impl::STKSearchBoxesT<MemorySpace>& sources);
+STKSearchNeighborList<MemorySpace> make_stk_search_neighbor_list(const ExecutionSpace& exec_space,
+                                                                 const impl::STKSearchBoxesT<MemorySpace>& targets,
+                                                                 const impl::STKSearchBoxesT<MemorySpace>& sources);
 
 /// \brief Build a compressed 1D periodic ArborX neighbor list from target and source image boxes.
 ///

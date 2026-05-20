@@ -52,13 +52,13 @@ namespace search {
 /// `operator()` must be callable on at least `NeighborSearchCandidate<size_t>` (checked here as a representative
 /// non-periodic candidate type; excluders that also handle periodic candidates do so via their own template overloads).
 template <typename T>
-concept ExcluderType =
-    requires(T& excluder, const stk::mesh::BulkData& bulk_data, const stk::mesh::Selector& target_selector,
-             const stk::mesh::Selector& source_selector) {
-      { excluder.setup(bulk_data, target_selector, source_selector) } -> std::same_as<void>;
-    } && requires(const T& excluder, const NeighborSearchCandidate<size_t>& candidate) {
-      { excluder(candidate) } -> std::convertible_to<bool>;
-    };
+concept ExcluderType = requires(T& excluder, const stk::mesh::BulkData& bulk_data,
+                                const stk::mesh::Selector& target_selector,
+                                const stk::mesh::Selector& source_selector) {
+  { excluder.setup(bulk_data, target_selector, source_selector) } -> std::same_as<void>;
+} && requires(const T& excluder, const NeighborSearchCandidate<size_t>& candidate) {
+  { excluder(candidate) } -> std::convertible_to<bool>;
+};
 
 // Forward declaration needed by NoExcluder::exclude().
 template <typename PriorExcluder, typename Excluder>

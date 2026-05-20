@@ -110,4 +110,4 @@ TEST(StringSink, MaterializesExpectedStringsWhenNotInMundyNamespace) {
   EXPECT_EQ(string_started_sink.to_string(), "prefix 2 suffix");
 }
 
-}
+}  // namespace

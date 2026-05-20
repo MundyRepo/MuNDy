@@ -71,7 +71,8 @@ class ExcluderChain;
 /// \brief Empty excluder used as the starting point for neighbor-list builders.
 ///
 /// Excluders are build-time predicates that reject candidate target/source pairs before those pairs are materialized
-/// in a neighbor list. `NoExcluder` rejects nothing and provides the first `.exclude(...)` step for type-level chaining.
+/// in a neighbor list. `NoExcluder` rejects nothing and provides the first `.exclude(...)` step for type-level
+/// chaining.
 class NoExcluder {
  public:
   //! \name Constructors
@@ -2285,7 +2286,7 @@ class ArborX2dNeighborList {
     size_type total = 0;
     Kokkos::parallel_reduce(
         Kokkos::RangePolicy<execution_space>(0, neighbor_counts_.extent(0)),
-        KOKKOS_LAMBDA(size_type i, size_type& partial_sum) { partial_sum += neighbor_counts_(i); }, total);
+        KOKKOS_LAMBDA(size_type i, size_type & partial_sum) { partial_sum += neighbor_counts_(i); }, total);
     total_pairs_ = total;
   }
   //@}

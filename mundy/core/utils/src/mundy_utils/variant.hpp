@@ -33,10 +33,10 @@
 #include <Kokkos_Core.hpp>
 
 // Mundy
+#include <mundy_utils/requires.hpp>
 #include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
 #include <mundy_utils/tuple.hpp>         // for mundy::tuple
 #include <mundy_utils/type_traits.hpp>   // for mundy::index_finder, contains_type
-#include <mundy_utils/requires.hpp>
 
 namespace mundy {
 
@@ -72,7 +72,7 @@ struct variant {
 
   /// \brief Constructor for initializing with a specific type
   template <class T>
-    MUNDY_REQUIRES(contains_type_v<T, Alts...>)
+  MUNDY_REQUIRES(contains_type_v<T, Alts...>)
   KOKKOS_FUNCTION constexpr variant(const T& value) : storage_{}, active_index_{index_of<T>()} {
     storage_.template get<T>() = value;
   }
@@ -134,7 +134,7 @@ struct variant {
 
   /// \brief Set a new active type, default-constructing the previous type
   template <class T>
-    MUNDY_REQUIRES(contains_type_v<T, Alts...>)
+  MUNDY_REQUIRES(contains_type_v<T, Alts...>)
   KOKKOS_FUNCTION constexpr void operator=(T const& value) {
     reset_active_type();
     active_index_ = index_of<T>();

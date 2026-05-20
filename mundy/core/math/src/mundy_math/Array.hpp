@@ -34,8 +34,8 @@
 // Mundy
 #include <mundy_math/Tolerance.hpp>  // for mundy::get_zero_tolerance
 #include <mundy_math/impl/ArrayImpl.hpp>
-#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
 #include <mundy_utils/requires.hpp>
+#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
 
 namespace mundy {
 
@@ -67,16 +67,15 @@ class Array {
   /// \brief Constructor to initialize all elements explicitly.
   /// Requires the number of arguments to be N and the type of each to be T.
   template <typename... Args>
-    MUNDY_REQUIRES(sizeof...(Args) == N) && (N != 1) &&
-            (std::is_same_v<std::remove_cv_t<std::remove_reference_t<Args>>, T> && ...)
-  KOKKOS_INLINE_FUNCTION constexpr explicit Array(Args&&... args) : data_{std::forward<Args>(args)...} {
+      MUNDY_REQUIRES(sizeof...(Args) == N) && (N != 1) &&
+      (std::is_same_v<std::remove_cv_t<std::remove_reference_t<Args>>, T> && ...) KOKKOS_INLINE_FUNCTION
+      constexpr explicit Array(Args&&... args)
+      : data_{std::forward<Args>(args)...} {
   }
 
   /// \brief Constructor to initialize all elements via initializer list
   KOKKOS_INLINE_FUNCTION
-  constexpr Array(const std::initializer_list<T>& list)
-    MUNDY_REQUIRES(!std::is_const_v<T>)
-  {
+  constexpr Array(const std::initializer_list<T>& list) MUNDY_REQUIRES(!std::is_const_v<T>) {
     if (list.size() == N) {
       size_t i = 0;
       for (auto it = list.begin(); it != list.end(); ++it) {
