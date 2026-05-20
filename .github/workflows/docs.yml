@@ -28,7 +28,7 @@ jobs:
 
       - name: Build Doxygen
         run: |
-          doxygen Doxyfile
+          doxygen doc/Doxyfile
           touch doc/html/.nojekyll
 
       - name: Upload GitHub Pages artifact
