@@ -30,7 +30,7 @@ set(NOINSTALLHEADERS
 )
 
 set(SOURCES
-    src/mundy_math/a_necessary_empty_file.cpp
+    src/mundy_search/a_necessary_empty_file.cpp
 )
 
 tribits_configure_file(${PACKAGE_NAME}_config.hpp)
