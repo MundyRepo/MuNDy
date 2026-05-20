@@ -16,6 +16,7 @@ concurrency:
 
 env:
   DOXYGEN_VERSION: 1.17.0
+  DOXYGEN_SHA256: "75419ef4f446fc1c24ef12514b574e66e898ee6f527c6ae2ad84f91a905823c2"
 
 jobs:
   build:
@@ -45,6 +46,8 @@ jobs:
             --max-time 120 \
             -o doxygen.tar.gz \
             "https://github.com/doxygen/doxygen/releases/download/${TAG}/${TARBALL}"
+
+          echo "${DOXYGEN_SHA256}  doxygen.tar.gz" | sha256sum --check || { echo 'SHA256 verification failed'; exit 1; }
 
           tar -xzf doxygen.tar.gz
 
