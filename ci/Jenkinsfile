@@ -1,70 +1,35 @@
-pipeline {
-  agent none
-  options {
-    disableConcurrentBuilds()
-    timeout(time: 6, unit: 'HOURS')
-    timestamps()
-  }
-  stages {
-    stage('Build and Test') {
-      agent {
-        dockerfile {
-          filename 'ci/Dockerfile'
-          dir '.'
-          label 'linux'
-        }
-      }
-      environment {
-        HOME = "${WORKSPACE}"
-        MUNDY_DEPS = "${WORKSPACE}/mundy_deps"
-        MUNDY_INSTALL = "${WORKSPACE}/mundy_install"
-        SPACK_ROOT = "/home/testuser/spack"
-        SPACK_TRILINOS = "tril161_cpu"
-        OMPI_MCA_rmaps_base_oversubscribe = "1"
-      }
-      stages {
+properties([
+  disableConcurrentBuilds(),
+  buildDiscarder(logRotator(numToKeepStr: '10', daysToKeepStr: '30'))
+])
+
+try {
+  timeout(time: 6, unit: 'HOURS') {
+    buildPod(context: 'ci') {
+      withEnv([
+        "HOME=${WORKSPACE}",
+        "MUNDY_DEPS=${WORKSPACE}/mundy_deps",
+        "MUNDY_INSTALL=${WORKSPACE}/mundy_install",
+        "SPACK_ROOT=/home/testuser/spack",
+        "SPACK_TRILINOS=tril161_cpu",
+        "OMPI_MCA_rmaps_base_oversubscribe=1"
+      ]) {
         stage('Build') {
-          steps {
             echo 'Building software inside the container'
             sh './ci/build_jenkins_cpu_release.sh'
-          }
         }
         stage('Test') {
-          steps {
+          try {
             echo 'Executing tests'
             sh './ci/test_jenkins_cpu_release.sh'
+          } finally {
+            junit allowEmptyResults: true, testResults: 'build/ctest_results.xml'
           }
-          post {
-            always {
-              junit allowEmptyResults: true, testResults: 'build/ctest_results.xml'
-            }
-          }
-        }
-      }
-      post {
-        always {
-          cleanWs()
         }
       }
     }
   }
-  post {
-    failure {
-      emailext subject: '$PROJECT_NAME - Build #$BUILD_NUMBER - $BUILD_STATUS',
-      body: '''$PROJECT_NAME - Build #$BUILD_NUMBER - $BUILD_STATUS
-Check console output at $BUILD_URL to view full results.
-Building $BRANCH_NAME for $CAUSE
-$JOB_DESCRIPTION
-Changes:
-$CHANGES
-End of build log:
-${BUILD_LOG,maxLines=200}
-''',
-      recipientProviders: [
-    [$class: 'DevelopersRecipientProvider'],
-    ],
-      replyTo: '$DEFAULT_REPLYTO',
-      to: 'cedelmaier@flatironinstitute.org, bpalmer@flatironinstitute.org'
-      }
-  }
+}
+finally {
+  emailFailure()
 }
