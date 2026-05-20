@@ -169,6 +169,11 @@ class SharedScalarComponent : public SharedComponent<ScalarType> {
   explicit SharedScalarComponent(HostViewType host_view) : base_t(std::move(host_view)) {
   }
 
+  SharedScalarComponent(const SharedScalarComponent&) = default;
+  SharedScalarComponent(SharedScalarComponent&&) = default;
+  SharedScalarComponent& operator=(const SharedScalarComponent&) = default;
+  SharedScalarComponent& operator=(SharedScalarComponent&&) = default;
+
   inline decltype(auto) operator()(stk::mesh::Entity /*entity*/) const {
     auto& value = static_cast<our_t&>(*const_cast<our_t*>(this)).shared_value();
     return get_scalar_view<ScalarType>(&value);
@@ -192,6 +197,11 @@ class SharedVectorComponent : public SharedComponent<Vector<ScalarType, N>> {
     MUNDY_REQUIRES(impl::CompatibleSharedComponentHostView<HostViewType, shared_value_type>)
   explicit SharedVectorComponent(HostViewType host_view) : base_t(std::move(host_view)) {
   }
+
+  SharedVectorComponent(const SharedVectorComponent&) = default;
+  SharedVectorComponent(SharedVectorComponent&&) = default;
+  SharedVectorComponent& operator=(const SharedVectorComponent&) = default;
+  SharedVectorComponent& operator=(SharedVectorComponent&&) = default;
 };  // SharedVectorComponent
 
 template <typename ScalarType>
@@ -229,6 +239,11 @@ class SharedMatrix3Component : public SharedComponent<Matrix3<ScalarType>> {
     MUNDY_REQUIRES(impl::CompatibleSharedComponentHostView<HostViewType, shared_value_type>)
   explicit SharedMatrix3Component(HostViewType host_view) : base_t(std::move(host_view)) {
   }
+
+  SharedMatrix3Component(const SharedMatrix3Component&) = default;
+  SharedMatrix3Component(SharedMatrix3Component&&) = default;
+  SharedMatrix3Component& operator=(const SharedMatrix3Component&) = default;
+  SharedMatrix3Component& operator=(SharedMatrix3Component&&) = default;
 };  // SharedMatrix3Component
 
 template <typename ScalarType>
@@ -248,6 +263,11 @@ class SharedQuaternionComponent : public SharedComponent<Quaternion<ScalarType>>
     MUNDY_REQUIRES(impl::CompatibleSharedComponentHostView<HostViewType, shared_value_type>)
   explicit SharedQuaternionComponent(HostViewType host_view) : base_t(std::move(host_view)) {
   }
+
+  SharedQuaternionComponent(const SharedQuaternionComponent&) = default;
+  SharedQuaternionComponent(SharedQuaternionComponent&&) = default;
+  SharedQuaternionComponent& operator=(const SharedQuaternionComponent&) = default;
+  SharedQuaternionComponent& operator=(SharedQuaternionComponent&&) = default;
 };  // SharedQuaternionComponent
 
 template <typename ScalarType>
@@ -267,6 +287,11 @@ class SharedAABBComponent : public SharedComponent<AABB<ScalarType>> {
     MUNDY_REQUIRES(impl::CompatibleSharedComponentHostView<HostViewType, shared_value_type>)
   explicit SharedAABBComponent(HostViewType host_view) : base_t(std::move(host_view)) {
   }
+
+  SharedAABBComponent(const SharedAABBComponent&) = default;
+  SharedAABBComponent(SharedAABBComponent&&) = default;
+  SharedAABBComponent& operator=(const SharedAABBComponent&) = default;
+  SharedAABBComponent& operator=(SharedAABBComponent&&) = default;
 };  // SharedAABBComponent
 
 template <typename SharedType, typename NgpMemSpace>
