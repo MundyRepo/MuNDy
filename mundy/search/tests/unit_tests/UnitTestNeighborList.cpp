@@ -555,6 +555,317 @@ TEST_F(NonPeriodicFixture, OutOfBounds_2d) {
 
 #endif  // NDEBUG
 
+// =============================================================================
+// Group 5 — Adversarial edge-case and invariant probes
+// =============================================================================
+//
+// These tests target invariants and code paths not covered by Groups 1-4.
+// Each probe is designed so that a real implementation defect causes a test
+// failure rather than a silent pass.
+
+// ---- Shared adversarial helpers (not used in Groups 1-4) ----
+
+// Verify list.size() == sum of num_neighbors over all targets.
+// For List1d, size() reads source_indices_.extent(0); for List2d it reads total_pairs_
+// computed by parallel_reduce at construction.  Both must equal the sum of per-target
+// counts accessed through num_neighbors().
+template <typename ListType>
+void check_size_equals_neighbor_sum(const ListType& list) {
+  size_t manual_sum = 0;
+  for (size_t t = 0; t < list.num_targets(); ++t) manual_sum += list.num_neighbors(t);
+  EXPECT_EQ(list.size(), manual_sum) << "list.size() != sum of per-target neighbor counts.";
+}
+
+// Directly construct NeighborPair for every (target, neighbor_ordinal) and verify
+// that every accessor returns a value consistent with the list's direct accessors.
+template <typename ListType>
+void check_neighbor_pair_accessors(const ListType& list) {
+  for (size_t t = 0; t < list.num_targets(); ++t) {
+    for (size_t k = 0; k < list.num_neighbors(t); ++k) {
+      NeighborPair<ListType> pair(list, t, k);
+      EXPECT_EQ(pair.target_index(), t);
+      const size_t si = list.source_index(t, k);
+      EXPECT_EQ(pair.source_index(), si) << "target " << t << " neighbor " << k;
+      EXPECT_EQ(pair.target_entity(), list.target_entity(t)) << "target " << t << " neighbor " << k;
+      EXPECT_EQ(pair.source_entity(), list.source_entity(si)) << "target " << t << " neighbor " << k;
+      EXPECT_LT(si, list.num_sources()) << "source_index out of range at target " << t << " neighbor " << k;
+    }
+  }
+}
+
+// Directly construct Neighbors for every target and verify all accessors.
+template <typename ListType>
+void check_neighbors_accessors(const ListType& list) {
+  for (size_t t = 0; t < list.num_targets(); ++t) {
+    Neighbors<ListType> nbrs(list, t);
+    EXPECT_EQ(nbrs.size(), list.num_neighbors(t)) << "target " << t;
+    EXPECT_EQ(nbrs.target_entity(), list.target_entity(t)) << "target " << t;
+    EXPECT_EQ(nbrs.target_index(), t) << "target " << t;
+    for (size_t k = 0; k < nbrs.size(); ++k) {
+      EXPECT_EQ(nbrs[k], list.get_neighbor(t, k)) << "target " << t << " neighbor " << k;
+      EXPECT_EQ(nbrs(k), list.get_neighbor(t, k)) << "target " << t << " neighbor " << k;
+      EXPECT_EQ(nbrs.source_index(k), list.source_index(t, k)) << "target " << t << " neighbor " << k;
+    }
+  }
+}
+
+// Use for_each_neighbor_pair to build a per-(target,source) visit-count matrix,
+// then compare it against the direct-accessor pair set from collect_pairs.
+// This verifies (a) no pair is duplicated by the iterator, (b) no pair is skipped,
+// and (c) target_index()/source_index() on NeighborPair return the correct ordinals.
+template <typename ListType>
+void check_foreach_pair_matches_direct(const ListType& list) {
+  const size_t nt = list.num_targets();
+  const size_t ns = list.num_sources();
+  Kokkos::View<int**, TestMemSpace> visit_count("adv_visit", nt, ns);
+  Kokkos::deep_copy(visit_count, 0);
+  mundy::search::for_each_neighbor_pair(
+      TestExecSpace{}, list,
+      KOKKOS_LAMBDA(const NeighborPair<ListType>& pair) {
+        Kokkos::atomic_inc(&visit_count(pair.target_index(), pair.source_index()));
+      });
+  Kokkos::fence();
+  std::set<std::pair<size_t, size_t>> fe_set;
+  for (size_t t = 0; t < nt; ++t) {
+    for (size_t s = 0; s < ns; ++s) {
+      const int cnt = visit_count(t, s);
+      if (cnt > 0) {
+        EXPECT_EQ(cnt, 1) << "Pair (" << t << "," << s << ") visited " << cnt << " times (expected 1).";
+        fe_set.insert({t, s});
+      }
+    }
+  }
+  EXPECT_EQ(fe_set, collect_pairs(list)) << "for_each pair set doesn't match direct-accessor pair set.";
+}
+
+// ---- Test 5.1: NoExcluder includes self-pairs ----
+//
+// All builds in Groups 1-4 apply ExcludeSelfInteraction.  The NoExcluder path
+// is never exercised.  If the ArborX callback accidentally applies exclusion
+// even without an excluder, self-pairs would be absent and size() would be 4
+// instead of 8.
+//
+// Expected pairs with no excluder on the 4-box fixture (see fixture comment):
+//   target 0: sources {0,1,2}  (self + two overlapping boxes)
+//   target 1: sources {0,1}    (overlaps box 0 and self; box 2 is disjoint in x)
+//   target 2: sources {0,2}    (overlaps box 0 and self; box 1 is disjoint in x)
+//   target 3: sources {3}      (isolated — only overlaps itself)
+// Total: 3+2+2+1 = 8 pairs.
+
+TEST_F(NonPeriodicFixture, NoExcluder_IncludesSelfPairs_1d) {
+  auto list = make_neighbor_list_builder<List1d>()
+      .exec_space(TestExecSpace{})
+      .target_input(search_boxes_)
+      .source_input(search_boxes_)
+      .build(*bulk_);
+  EXPECT_EQ(list.size(), 8u) << "NoExcluder should include all 8 pairs (4 self + 4 cross).";
+  EXPECT_EQ(list.num_neighbors(3), 1u) << "Isolated box must retain its self-pair without an excluder.";
+  EXPECT_EQ(list.source_index(3, 0), 3u) << "Self-pair source ordinal for target 3 must be 3.";
+  check_size_equals_neighbor_sum(list);
+}
+
+TEST_F(NonPeriodicFixture, NoExcluder_IncludesSelfPairs_2d) {
+  auto list = make_neighbor_list_builder<List2d>()
+      .exec_space(TestExecSpace{})
+      .target_input(search_boxes_)
+      .source_input(search_boxes_)
+      .build(*bulk_);
+  EXPECT_EQ(list.size(), 8u);
+  EXPECT_EQ(list.num_neighbors(3), 1u);
+  EXPECT_EQ(list.source_index(3, 0), 3u);
+  check_size_equals_neighbor_sum(list);
+}
+
+// ---- Test 5.2: all-isolated geometry — empty pair set, full target visit ----
+//
+// for_each_target_with_neighbors must visit ALL targets even when every target has
+// zero neighbors.  If the implementation changes its semantics to skip zero-neighbor
+// targets (matching the misleading "with_neighbors" name literally), this test fails.
+
+TEST(AdversarialSearch, AllIsolated_EmptyPairs_1d) {
+  constexpr int kN = 3;
+  auto [meta, bulk] = make_node_mesh(kN);
+  const stk::mesh::Selector sel = meta->universal_part();
+  std::vector<stk::mesh::Entity> nodes(kN);
+  for (int i = 0; i < kN; ++i) nodes[i] = bulk->get_entity(stk::topology::NODE_RANK, i + 1);
+  const std::vector<ArborX::Box> far_boxes = {
+      make_arborx_box(0.0f, 0.0f, 0.0f, 0.1f),
+      make_arborx_box(1000.0f, 0.0f, 0.0f, 0.1f),
+      make_arborx_box(0.0f, 1000.0f, 0.0f, 0.1f),
+  };
+  const SearchBoxes sb = make_search_boxes(sel, far_boxes, nodes);
+  const auto list = build_1d_list(*bulk, sb, sb);
+  ASSERT_EQ(list.size(), 0u);
+  for (size_t t = 0; t < list.num_targets(); ++t)
+    EXPECT_EQ(list.num_neighbors(t), 0u) << "target " << t << " should be isolated.";
+  Kokkos::View<size_t*, TestMemSpace> pair_count("iso_pairs", 1);
+  Kokkos::deep_copy(pair_count, size_t(0));
+  mundy::search::for_each_neighbor_pair(
+      TestExecSpace{}, list, KOKKOS_LAMBDA(const NeighborPair<List1d>&) { Kokkos::atomic_inc(&pair_count(0)); });
+  Kokkos::fence();
+  EXPECT_EQ(pair_count(0), 0u) << "for_each_neighbor_pair should fire zero times for an empty list.";
+  Kokkos::View<size_t*, TestMemSpace> tgt_count("iso_tgts", 1);
+  Kokkos::deep_copy(tgt_count, size_t(0));
+  mundy::search::for_each_target_with_neighbors(
+      TestExecSpace{}, list, KOKKOS_LAMBDA(const Neighbors<List1d>&) { Kokkos::atomic_inc(&tgt_count(0)); });
+  Kokkos::fence();
+  EXPECT_EQ(tgt_count(0), static_cast<size_t>(kN))
+      << "for_each_target_with_neighbors must visit all targets even when they have zero neighbors.";
+}
+
+TEST(AdversarialSearch, AllIsolated_EmptyPairs_2d) {
+  constexpr int kN = 3;
+  auto [meta, bulk] = make_node_mesh(kN);
+  const stk::mesh::Selector sel = meta->universal_part();
+  std::vector<stk::mesh::Entity> nodes(kN);
+  for (int i = 0; i < kN; ++i) nodes[i] = bulk->get_entity(stk::topology::NODE_RANK, i + 1);
+  const std::vector<ArborX::Box> far_boxes = {
+      make_arborx_box(0.0f, 0.0f, 0.0f, 0.1f),
+      make_arborx_box(1000.0f, 0.0f, 0.0f, 0.1f),
+      make_arborx_box(0.0f, 1000.0f, 0.0f, 0.1f),
+  };
+  const SearchBoxes sb = make_search_boxes(sel, far_boxes, nodes);
+  const auto list = build_2d_list(*bulk, sb, sb);
+  ASSERT_EQ(list.size(), 0u);
+  for (size_t t = 0; t < list.num_targets(); ++t)
+    EXPECT_EQ(list.num_neighbors(t), 0u) << "target " << t << " should be isolated.";
+  Kokkos::View<size_t*, TestMemSpace> pair_count("iso2_pairs", 1);
+  Kokkos::deep_copy(pair_count, size_t(0));
+  mundy::search::for_each_neighbor_pair(
+      TestExecSpace{}, list, KOKKOS_LAMBDA(const NeighborPair<List2d>&) { Kokkos::atomic_inc(&pair_count(0)); });
+  Kokkos::fence();
+  EXPECT_EQ(pair_count(0), 0u);
+  Kokkos::View<size_t*, TestMemSpace> tgt_count("iso2_tgts", 1);
+  Kokkos::deep_copy(tgt_count, size_t(0));
+  mundy::search::for_each_target_with_neighbors(
+      TestExecSpace{}, list, KOKKOS_LAMBDA(const Neighbors<List2d>&) { Kokkos::atomic_inc(&tgt_count(0)); });
+  Kokkos::fence();
+  EXPECT_EQ(tgt_count(0), static_cast<size_t>(kN));
+}
+
+// ---- Test 5.3: NeighborPair accessor chain consistency ----
+//
+// Groups 1-4 only COUNT pairs via for_each; they never verify that the NeighborPair
+// object returns correct entity/index values.  A bug in the offset arithmetic
+// (e.g., off-by-one in pair_index()) would produce wrong source_entity values
+// without affecting the pair count.
+
+TEST_F(NonPeriodicFixture, NeighborPairAccessorChain_1d) {
+  auto list = build_1d_list(*bulk_, search_boxes_, search_boxes_);
+  check_neighbor_pair_accessors(list);
+}
+
+TEST_F(NonPeriodicFixture, NeighborPairAccessorChain_2d) {
+  auto list = build_2d_list(*bulk_, search_boxes_, search_boxes_);
+  check_neighbor_pair_accessors(list);
+}
+
+// ---- Test 5.4: Neighbors accessor consistency ----
+//
+// The Neighbors wrapper is constructed inside for_each_target_with_neighbors but
+// is never directly tested.  A misalignment between Neighbors::operator[] and
+// list.get_neighbor() would go undetected by the existing tests.
+
+TEST_F(NonPeriodicFixture, NeighborsAccessorConsistency_1d) {
+  auto list = build_1d_list(*bulk_, search_boxes_, search_boxes_);
+  check_neighbors_accessors(list);
+}
+
+TEST_F(NonPeriodicFixture, NeighborsAccessorConsistency_2d) {
+  auto list = build_2d_list(*bulk_, search_boxes_, search_boxes_);
+  check_neighbors_accessors(list);
+}
+
+// ---- Test 5.5: for_each_neighbor_pair visits correct pairs, each exactly once ----
+//
+// The existing check_for_each_pair_count only verifies the total count.  This test
+// also verifies which (target_idx, source_idx) pairs are visited, catching bugs
+// where the iterator emits duplicate or swapped indices.
+
+TEST_F(NonPeriodicFixture, ForEachPairMatchesDirectAccess_1d) {
+  auto list = build_1d_list(*bulk_, search_boxes_, search_boxes_);
+  check_foreach_pair_matches_direct(list);
+}
+
+TEST_F(NonPeriodicFixture, ForEachPairMatchesDirectAccess_2d) {
+  auto list = build_2d_list(*bulk_, search_boxes_, search_boxes_);
+  check_foreach_pair_matches_direct(list);
+}
+
+// ---- Test 5.6: size() equals the sum of per-target neighbor counts ----
+//
+// List1d returns size() from source_indices_.extent(0); List2d from total_pairs_
+// computed via parallel_reduce in the constructor.  Both must agree with summing
+// num_neighbors(t) for all t.  Also verified on a copy of each list to confirm
+// that the plain-int total_pairs_ copy-construct path for List2d is correct.
+
+TEST_F(NonPeriodicFixture, SizeEqualsNeighborSum_1d) {
+  auto list = build_1d_list(*bulk_, search_boxes_, search_boxes_);
+  check_size_equals_neighbor_sum(list);
+  auto copy = list;
+  check_size_equals_neighbor_sum(copy);
+}
+
+TEST_F(NonPeriodicFixture, SizeEqualsNeighborSum_2d) {
+  auto list = build_2d_list(*bulk_, search_boxes_, search_boxes_);
+  check_size_equals_neighbor_sum(list);
+  auto copy = list;
+  check_size_equals_neighbor_sum(copy);
+}
+
+// ---- Test 5.7: ExcludeSymmetricDuplicates suppresses exactly one orientation ----
+//
+// ExcludeSymmetricDuplicates is completely absent from Groups 1-4.  The excluder
+// marks buckets in the target ∩ source selector intersection, then suppresses the
+// pair (t,s) when src_entity < trg_entity.  With the universal selector the
+// intersection is the full mesh, so the rule applies to every pair.
+//
+// 4-box fixture, ExcludeSelf + ExcludeSymDup:
+//   Full pair set (ExcludeSelf only): {(0,1),(1,0),(0,2),(2,0)}
+//   Suppressed (src < trg):           {(1,0),(2,0)}  — source nodes 1,2 < target nodes 2,3
+//   Retained (src > trg):             {(0,1),(0,2)}  — source nodes 2,3 > target node 1
+//
+// The test verifies size()==2 and, for every retained pair, that
+// source_entity > target_entity (the property guaranteed by the excluder).
+
+TEST_F(NonPeriodicFixture, ExcludeSymmetricDuplicates_1d) {
+  auto list = make_neighbor_list_builder<List1d>()
+      .exec_space(TestExecSpace{})
+      .target_input(search_boxes_)
+      .source_input(search_boxes_)
+      .exclude(ExcludeSelfInteraction{})
+      .exclude(ExcludeSymmetricDuplicates{})
+      .build(*bulk_);
+  EXPECT_EQ(list.size(), 2u) << "ExcludeSymmetricDuplicates should halve the 4-pair set to 2.";
+  check_size_equals_neighbor_sum(list);
+  for (size_t t = 0; t < list.num_targets(); ++t) {
+    for (size_t k = 0; k < list.num_neighbors(t); ++k) {
+      const stk::mesh::Entity trg = list.target_entity(t);
+      const stk::mesh::Entity src = list.source_entity(list.source_index(t, k));
+      EXPECT_GT(src, trg) << "ExcludeSymmetricDuplicates must retain only pairs where src_entity > trg_entity.";
+    }
+  }
+}
+
+TEST_F(NonPeriodicFixture, ExcludeSymmetricDuplicates_2d) {
+  auto list = make_neighbor_list_builder<List2d>()
+      .exec_space(TestExecSpace{})
+      .target_input(search_boxes_)
+      .source_input(search_boxes_)
+      .exclude(ExcludeSelfInteraction{})
+      .exclude(ExcludeSymmetricDuplicates{})
+      .build(*bulk_);
+  EXPECT_EQ(list.size(), 2u);
+  check_size_equals_neighbor_sum(list);
+  for (size_t t = 0; t < list.num_targets(); ++t) {
+    for (size_t k = 0; k < list.num_neighbors(t); ++k) {
+      const stk::mesh::Entity trg = list.target_entity(t);
+      const stk::mesh::Entity src = list.source_entity(list.source_index(t, k));
+      EXPECT_GT(src, trg) << "ExcludeSymmetricDuplicates must retain only pairs where src_entity > trg_entity.";
+    }
+  }
+}
+
 }  // namespace
 }  // namespace search
 }  // namespace mundy
