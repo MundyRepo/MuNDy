@@ -84,7 +84,7 @@ class ArborX2dCountCallback {
     const size_type source_idx = static_cast<size_type>(val.index);
     const auto candidate = factory_(pred, source_idx);
     if (!excluder_(candidate)) {
-      Kokkos::atomic_increment(&counts_(static_cast<size_type>(ArborX::getData(pred))));
+      Kokkos::atomic_inc(&counts_(static_cast<size_type>(ArborX::getData(pred))));
     }
   }
 #else
@@ -93,7 +93,7 @@ class ArborX2dCountCallback {
     const size_type source_idx = static_cast<size_type>(source_idx_raw);
     const auto candidate = factory_(pred, source_idx);
     if (!excluder_(candidate)) {
-      Kokkos::atomic_increment(&counts_(static_cast<size_type>(ArborX::getData(pred))));
+      Kokkos::atomic_inc(&counts_(static_cast<size_type>(ArborX::getData(pred))));
     }
   }
 #endif

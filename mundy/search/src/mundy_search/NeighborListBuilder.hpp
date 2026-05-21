@@ -179,10 +179,9 @@ class NeighborListBuilder {
   /// \brief Return a new builder type with an appended excluder.
   /// \tparam NextExcluder Excluder type to append.
   /// \param next_excluder [in] Excluder to append.
-  template <typename NextExcluder>
-    requires ExcluderType<NextExcluder>
+  template <ExcluderType NextExcluder>
   auto exclude(const NextExcluder& next_excluder) const {
-    const auto new_excluder = excluder_.exclude(next_excluder);
+    auto new_excluder = excluder_.exclude(next_excluder);
     using new_excluder_type = decltype(new_excluder);
     return NeighborListBuilder<neighbor_list_type, execution_space, target_input_type, source_input_type,
                                new_excluder_type>(exec_space_, target_input_, source_input_, new_excluder);

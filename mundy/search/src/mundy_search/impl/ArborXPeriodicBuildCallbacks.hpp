@@ -88,7 +88,7 @@ class ArborXPeriodicCountCallback {
     const size_type source_image_idx = static_cast<size_type>(val.index);
     const auto candidate = factory_(pred, source_image_idx);
     if (!excluder_(candidate)) {
-      Kokkos::atomic_increment(&owner_counts_(candidate.target_index()));
+      Kokkos::atomic_inc(&owner_counts_(candidate.target_index()));
     }
   }
 #else
@@ -97,7 +97,7 @@ class ArborXPeriodicCountCallback {
     const size_type source_image_idx = static_cast<size_type>(source_image_raw);
     const auto candidate = factory_(pred, source_image_idx);
     if (!excluder_(candidate)) {
-      Kokkos::atomic_increment(&owner_counts_(candidate.target_index()));
+      Kokkos::atomic_inc(&owner_counts_(candidate.target_index()));
     }
   }
 #endif

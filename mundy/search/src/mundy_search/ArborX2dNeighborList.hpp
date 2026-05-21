@@ -241,7 +241,7 @@ class ArborX2dNeighborList {
   //! Dense per-target source ordinals; extent is `num_targets() x max_neighbors_per_target`.
   source_index_view_t source_indices_;
   //! Total number of stored neighbor pairs, computed once at construction.
-  size_type total_pairs_;
+  size_type total_pairs_ = 0;
   //@}
 };
 

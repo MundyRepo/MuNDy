@@ -54,14 +54,14 @@ namespace search {
 template <typename T>
 concept ExcluderType = requires(T& excluder, const stk::mesh::BulkData& bulk_data,
                                 const stk::mesh::Selector& target_selector,
-                                const stk::mesh::Selector& source_selector) {
+                                const stk::mesh::Selector& source_selector,
+                                const NeighborSearchCandidate<size_t>& candidate) {
   { excluder.setup(bulk_data, target_selector, source_selector) } -> std::same_as<void>;
-} && requires(const T& excluder, const NeighborSearchCandidate<size_t>& candidate) {
-  { excluder(candidate) } -> std::convertible_to<bool>;
+  { std::as_const(excluder)(candidate) } -> std::convertible_to<bool>;
 };
 
 // Forward declaration needed by NoExcluder::exclude().
-template <typename PriorExcluder, typename Excluder>
+template <ExcluderType PriorExcluder, ExcluderType Excluder>
 class ExcluderChain;
 
 /// \class NoExcluder
@@ -121,11 +121,8 @@ class NoExcluder {
 ///
 /// \tparam PriorExcluder Previous excluder type.
 /// \tparam Excluder Newly appended excluder type.
-template <typename PriorExcluder, typename Excluder>
+template <ExcluderType PriorExcluder, ExcluderType Excluder>
 class ExcluderChain {
-  static_assert(ExcluderType<PriorExcluder>, "ExcluderChain requires prior excluder to satisfy ExcluderType.");
-  static_assert(ExcluderType<Excluder>, "ExcluderChain requires appended excluder to satisfy ExcluderType.");
-
  public:
   //! \name Aliases
   //@{
@@ -366,6 +363,12 @@ inline void ExcludeSymmetricDuplicates::setup(const stk::mesh::BulkData& bulk_da
   }
   Kokkos::deep_copy(bucket_in_intersection_, host_mask);
 }
+
+// All of our excluders satisfy the ExcluderType concept
+static_assert(ExcluderType<NoExcluder>, "NoExcluder does not satisfy ExcluderType.");
+static_assert(ExcluderType<ExcludeSelfInteraction>, "ExcludeSelfInteraction does not satisfy ExcluderType.");
+static_assert(ExcluderType<ExcludeSymmetricDuplicates>, "ExcludeSymmetricDuplicates does not satisfy ExcluderType.");
+static_assert(ExcluderType<ExcluderChain<NoExcluder, ExcludeSelfInteraction>>, "ExcluderChain does not satisfy ExcluderType.");
 
 }  // namespace search
 

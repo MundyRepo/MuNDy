@@ -298,7 +298,7 @@ void check_for_each_pair_count(const ListType& list) {
   Kokkos::deep_copy(count, size_t(0));
   mundy::search::for_each_neighbor_pair(
       TestExecSpace{}, list,
-      KOKKOS_LAMBDA(const NeighborPair<ListType>&) { Kokkos::atomic_increment(&count(0)); });
+      KOKKOS_LAMBDA(const NeighborPair<ListType>&) { Kokkos::atomic_inc(&count(0)); });
   Kokkos::fence();
   EXPECT_EQ(count(0), list.size())
       << "for_each_neighbor_pair count does not match list.size().";
@@ -310,7 +310,7 @@ void check_for_each_target_count(const ListType& list) {
   Kokkos::deep_copy(count, size_t(0));
   mundy::search::for_each_target_with_neighbors(
       TestExecSpace{}, list,
-      KOKKOS_LAMBDA(const Neighbors<ListType>&) { Kokkos::atomic_increment(&count(0)); });
+      KOKKOS_LAMBDA(const Neighbors<ListType>&) { Kokkos::atomic_inc(&count(0)); });
   Kokkos::fence();
   EXPECT_EQ(count(0), list.num_targets())
       << "for_each_target_with_neighbors count does not match list.num_targets().";
