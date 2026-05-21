@@ -17,7 +17,9 @@ set(NOINSTALLHEADERS
     src/mundy_search/ArborXNeighborList.hpp
     src/mundy_search/Excluder.hpp
     src/mundy_search/ForEach.hpp
+    src/mundy_search/impl/ArborX2dBuildCallbacks.hpp
     src/mundy_search/impl/ArborXCallback.hpp
+    src/mundy_search/impl/ArborXPeriodicBuildCallbacks.hpp
     src/mundy_search/impl/ArborXSearchBoxes.hpp
     src/mundy_search/impl/NeighborListFunctors.hpp
     src/mundy_search/impl/STKSearchBoxes.hpp

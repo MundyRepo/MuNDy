@@ -312,38 +312,32 @@ class PeriodicArborXSearchBoxesT {
 
 namespace ArborX {
 
+#if ARBORX_VERSION < 10799
 /// \struct AccessTraits<mundy::search::impl::ArborXSearchBoxesT<MemorySpace>, PrimitivesTag>
-/// \brief ArborX primitive access traits for Mundy ArborX search boxes.
+/// \brief ArborX primitive access traits for Mundy ArborX search boxes (old ArborX API only).
 ///
-/// This specialization tells ArborX how many source primitives exist and how to fetch the `ArborX::Box` for each source
-/// ordinal. The specialization must live in namespace `ArborX`.
+/// For ArborX >= 1.7.99 the BVH is constructed via `attach_indices<int>(source_boxes.boxes())` which uses the
+/// built-in Kokkos::View traits; this specialization is not needed and would conflict with the predicate traits.
 /// \tparam MemorySpace Kokkos memory space for the Mundy search boxes.
 template <typename MemorySpace>
-struct AccessTraits<mundy::search::impl::ArborXSearchBoxesT<MemorySpace>
-#if ARBORX_VERSION < 10799
-                    ,
-                    PrimitivesTag
-#endif
-                    > {
+struct AccessTraits<mundy::search::impl::ArborXSearchBoxesT<MemorySpace>, PrimitivesTag> {
   //! Kokkos memory space for the search boxes.
   using memory_space = MemorySpace;
   //! Size type used by the search-box wrapper.
   using size_type = typename mundy::search::impl::ArborXSearchBoxesT<MemorySpace>::size_type;
 
   /// \brief Get the number of primitives.
-  /// \param boxes [in] Mundy ArborX search boxes.
   static KOKKOS_FUNCTION size_type size(const mundy::search::impl::ArborXSearchBoxesT<MemorySpace>& boxes) {
     return boxes.size();
   }
 
   /// \brief Get the primitive box for a source ordinal.
-  /// \param boxes [in] Mundy ArborX search boxes.
-  /// \param index [in] Source ordinal.
   static KOKKOS_FUNCTION ArborX::Box get(const mundy::search::impl::ArborXSearchBoxesT<MemorySpace>& boxes,
                                          size_type index) {
     return boxes.box(index);
   }
 };
+#endif  // ARBORX_VERSION < 10799
 
 /// \struct AccessTraits<mundy::search::impl::ArborXSearchBoxesT<MemorySpace>, PredicatesTag>
 /// \brief ArborX predicate access traits for Mundy ArborX search boxes.
@@ -377,20 +371,16 @@ struct AccessTraits<mundy::search::impl::ArborXSearchBoxesT<MemorySpace>
   }
 };
 
+#if ARBORX_VERSION < 10799
 /// \struct AccessTraits<mundy::search::impl::PeriodicArborXSearchBoxesT<MemorySpace, ImageShiftScalar>, PrimitivesTag>
-/// \brief ArborX primitive access traits for Mundy periodic ArborX image boxes.
+/// \brief ArborX primitive access traits for Mundy periodic ArborX image boxes (old ArborX API only).
 ///
-/// This specialization exposes periodic image boxes to ArborX. The owner-entity mapping and image shifts remain in the
-/// Mundy wrapper and are consumed by the neighbor-list builder after ArborX reports image-image matches.
+/// For ArborX >= 1.7.99 the BVH is constructed via `attach_indices<int>(source_boxes.boxes())`; this specialization
+/// is not needed and would conflict with the predicate traits.
 /// \tparam MemorySpace Kokkos memory space for the Mundy periodic search boxes.
 /// \tparam ImageShiftScalar Scalar type used by image-shift vectors.
 template <typename MemorySpace, typename ImageShiftScalar>
-struct AccessTraits<mundy::search::impl::PeriodicArborXSearchBoxesT<MemorySpace, ImageShiftScalar>
-#if ARBORX_VERSION < 10799
-                    ,
-                    PrimitivesTag
-#endif
-                    > {
+struct AccessTraits<mundy::search::impl::PeriodicArborXSearchBoxesT<MemorySpace, ImageShiftScalar>, PrimitivesTag> {
   //! Periodic search-box wrapper type.
   using boxes_type = mundy::search::impl::PeriodicArborXSearchBoxesT<MemorySpace, ImageShiftScalar>;
   //! Kokkos memory space for the search boxes.
@@ -399,18 +389,16 @@ struct AccessTraits<mundy::search::impl::PeriodicArborXSearchBoxesT<MemorySpace,
   using size_type = typename boxes_type::size_type;
 
   /// \brief Get the number of primitive image boxes.
-  /// \param boxes [in] Mundy periodic ArborX search boxes.
   static KOKKOS_FUNCTION size_type size(const boxes_type& boxes) {
     return boxes.size();
   }
 
   /// \brief Get the primitive image box for an image ordinal.
-  /// \param boxes [in] Mundy periodic ArborX search boxes.
-  /// \param index [in] Image ordinal.
   static KOKKOS_FUNCTION ArborX::Box get(const boxes_type& boxes, size_type index) {
     return boxes.box(index);
   }
 };
+#endif  // ARBORX_VERSION < 10799
 
 /// \struct AccessTraits<mundy::search::impl::PeriodicArborXSearchBoxesT<MemorySpace, ImageShiftScalar>, PredicatesTag>
 /// \brief ArborX predicate access traits for Mundy periodic ArborX image boxes.

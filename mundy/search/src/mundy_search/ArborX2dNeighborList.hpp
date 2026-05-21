@@ -31,15 +31,19 @@
 
 // Trilinos
 #include <Kokkos_Core.hpp>
+#include <stk_mesh/base/BulkData.hpp>
 #include <stk_mesh/base/Entity.hpp>
 #include <stk_mesh/base/Selector.hpp>
 #include <stk_util/ngp/NgpSpaces.hpp>
 
 // Mundy
-#include <mundy_math/Vector3.hpp>                    // for mundy::Vector3
-#include <mundy_search/NeighborListBuildTraits.hpp>  // for NeighborListBuildTraits
-#include <mundy_search/impl/ArborXSearchBoxes.hpp>   // for impl::ArborXSearchBoxesT, impl::PeriodicArborXSearchBoxesT
-#include <mundy_utils/throw_assert.hpp>              // for MUNDY_THROW_ASSERT
+#include <mundy_math/Vector3.hpp>                              // for mundy::Vector3
+#include <mundy_search/NeighborListBuildTraits.hpp>            // for NeighborListBuildTraits
+#include <mundy_search/impl/ArborX2dBuildCallbacks.hpp>        // for ArborX2dCountCallback, ArborX2dFillCallback
+#include <mundy_search/impl/ArborXCallback.hpp>               // for ArborXSearchCandidateFactory, PeriodicArborXSearchCandidateFactory
+#include <mundy_search/impl/ArborXPeriodicBuildCallbacks.hpp>  // for ArborXPeriodicCountCallback, ArborXPeriodic2dFillCallback
+#include <mundy_search/impl/ArborXSearchBoxes.hpp>             // for impl::ArborXSearchBoxesT, impl::PeriodicArborXSearchBoxesT
+#include <mundy_utils/throw_assert.hpp>                        // for MUNDY_THROW_ASSERT
 
 namespace mundy {
 
@@ -541,6 +545,141 @@ struct NeighborListBuildTraits<PeriodicArborX2dNeighborList<MemorySpace, ImageSh
   static list_type build(const Builder& builder, const stk::mesh::BulkData& bulk_data, const args_type& args);
   //@}
 };
+
+// -----------------------------------------------------------------------
+// NeighborListBuildTraits::build() definitions — non-periodic 2D
+// -----------------------------------------------------------------------
+
+/// \brief Build an `ArborX2dNeighborList` using a two-pass count/fill strategy.
+///
+/// First pass counts surviving neighbors per target and locates the maximum count to size the dense 2D view. The
+/// second pass fills each target's row. `args.buffer_size` is currently not used; callers needing a single-pass
+/// buffer optimization may extend this implementation.
+template <typename MemorySpace>
+template <typename Builder>
+  requires std::same_as<typename Builder::target_input_type, impl::ArborXSearchBoxesT<MemorySpace>> &&
+           std::same_as<typename Builder::source_input_type, impl::ArborXSearchBoxesT<MemorySpace>>
+ArborX2dNeighborList<MemorySpace>
+NeighborListBuildTraits<ArborX2dNeighborList<MemorySpace>>::build(const Builder& builder,
+                                                                   const stk::mesh::BulkData& bulk_data,
+                                                                   const args_type& args) {
+  using exec_space = typename Builder::execution_space;
+  using size_type = typename list_type::size_type;
+  using factory_type = impl::ArborXSearchCandidateFactory<target_input_type, source_input_type>;
+  using excluder_type = typename Builder::excluder_type;
+  using count_cb_t = impl::ArborX2dCountCallback<target_input_type, source_input_type, excluder_type>;
+  using fill_cb_t = impl::ArborX2dFillCallback<target_input_type, source_input_type, excluder_type>;
+
+  const auto& target_boxes = builder.target_input();
+  const auto& source_boxes = builder.source_input();
+  const auto exec_sp = builder.exec_space();
+  const auto excluder = builder.setup_excluder(bulk_data);
+  const size_type num_targets = target_boxes.size();
+
+  factory_type factory(target_boxes, source_boxes);
+
+#if ARBORX_VERSION >= 10799
+  ArborX::BoundingVolumeHierarchy bvh(exec_sp,
+                                      ArborX::Experimental::attach_indices<int>(source_boxes.boxes()));
+#else
+  ArborX::BVH<MemorySpace> bvh(exec_sp, source_boxes);
+#endif
+
+  // Pass 1: count surviving neighbors per target.
+  Kokkos::View<size_type*, MemorySpace> neighbor_counts("mundy_search_2d_counts", num_targets);
+  Kokkos::deep_copy(neighbor_counts, size_type(0));
+  bvh.query(exec_sp, target_boxes, count_cb_t(factory, excluder, neighbor_counts));
+
+  // Find maximum per-target count to size the dense 2D view.
+  size_type max_neighbors = 0;
+  Kokkos::parallel_reduce("mundy_search_2d_max",
+                          Kokkos::RangePolicy<exec_space>(0, num_targets),
+                          KOKKOS_LAMBDA(size_type i, size_type& local_max) {
+                            if (neighbor_counts(i) > local_max) local_max = neighbor_counts(i);
+                          },
+                          Kokkos::Max<size_type>(max_neighbors));
+
+  Kokkos::View<size_type**, MemorySpace> source_indices("mundy_search_2d_src_idx", num_targets, max_neighbors);
+  Kokkos::View<size_type*, MemorySpace> write_positions("mundy_search_2d_wpos", num_targets);
+  Kokkos::deep_copy(write_positions, size_type(0));
+
+  // Pass 2: fill source-index rows.
+  bvh.query(exec_sp, target_boxes, fill_cb_t(factory, excluder, write_positions, source_indices));
+
+  return list_type(builder.target_selector(), builder.source_selector(), target_boxes.entities(),
+                   source_boxes.entities(), neighbor_counts, source_indices);
+}
+
+// -----------------------------------------------------------------------
+// NeighborListBuildTraits::build() definitions — periodic 2D
+// -----------------------------------------------------------------------
+
+/// \brief Build a `PeriodicArborX2dNeighborList` using a two-pass owner-indexed count/fill strategy.
+///
+/// ArborX returns image ordinals; the count callback maps each surviving hit to the target owner ordinal.
+/// The maximum per-owner count sizes the dense 2D views. The fill callback writes source owner ordinals and
+/// relative image shifts into the allocated rows.
+template <typename MemorySpace, typename ImageShiftScalar>
+template <typename Builder>
+  requires std::same_as<typename Builder::target_input_type,
+                        impl::PeriodicArborXSearchBoxesT<MemorySpace, ImageShiftScalar>> &&
+           std::same_as<typename Builder::source_input_type,
+                        impl::PeriodicArborXSearchBoxesT<MemorySpace, ImageShiftScalar>>
+PeriodicArborX2dNeighborList<MemorySpace, ImageShiftScalar>
+NeighborListBuildTraits<PeriodicArborX2dNeighborList<MemorySpace, ImageShiftScalar>>::build(
+    const Builder& builder, const stk::mesh::BulkData& bulk_data, const args_type& args) {
+  using exec_space = typename Builder::execution_space;
+  using size_type = typename list_type::size_type;
+  using image_shift_type = typename list_type::image_shift_type;
+  using factory_type = impl::PeriodicArborXSearchCandidateFactory<target_input_type, source_input_type>;
+  using excluder_type = typename Builder::excluder_type;
+  using count_cb_t = impl::ArborXPeriodicCountCallback<target_input_type, source_input_type, excluder_type>;
+  using fill_cb_t =
+      impl::ArborXPeriodic2dFillCallback<target_input_type, source_input_type, excluder_type, image_shift_type>;
+
+  const auto& target_boxes = builder.target_input();
+  const auto& source_boxes = builder.source_input();
+  const auto exec_sp = builder.exec_space();
+  const auto excluder = builder.setup_excluder(bulk_data);
+  const size_type num_target_owners = target_boxes.num_owners();
+
+  factory_type factory(target_boxes, source_boxes);
+
+#if ARBORX_VERSION >= 10799
+  ArborX::BoundingVolumeHierarchy bvh(exec_sp,
+                                      ArborX::Experimental::attach_indices<int>(source_boxes.boxes()));
+#else
+  ArborX::BVH<MemorySpace> bvh(exec_sp, source_boxes);
+#endif
+
+  // Pass 1: count surviving pairs per target owner.
+  Kokkos::View<size_type*, MemorySpace> owner_counts("mundy_search_per2d_counts", num_target_owners);
+  Kokkos::deep_copy(owner_counts, size_type(0));
+  bvh.query(exec_sp, target_boxes, count_cb_t(factory, excluder, owner_counts));
+
+  // Find maximum per-owner count to size the dense 2D views.
+  size_type max_neighbors = 0;
+  Kokkos::parallel_reduce("mundy_search_per2d_max",
+                          Kokkos::RangePolicy<exec_space>(0, num_target_owners),
+                          KOKKOS_LAMBDA(size_type i, size_type& local_max) {
+                            if (owner_counts(i) > local_max) local_max = owner_counts(i);
+                          },
+                          Kokkos::Max<size_type>(max_neighbors));
+
+  Kokkos::View<size_type**, MemorySpace> source_owner_indices("mundy_search_per2d_soi", num_target_owners,
+                                                              max_neighbors);
+  Kokkos::View<image_shift_type**, MemorySpace> relative_image_shifts("mundy_search_per2d_ris", num_target_owners,
+                                                                      max_neighbors);
+  Kokkos::View<size_type*, MemorySpace> write_positions("mundy_search_per2d_wpos", num_target_owners);
+  Kokkos::deep_copy(write_positions, size_type(0));
+
+  // Pass 2: fill source owner ordinals and relative image shifts.
+  bvh.query(exec_sp, target_boxes,
+            fill_cb_t(factory, excluder, write_positions, source_owner_indices, relative_image_shifts));
+
+  return list_type(builder.target_selector(), builder.source_selector(), target_boxes.owner_entities(),
+                   source_boxes.owner_entities(), owner_counts, source_owner_indices, relative_image_shifts);
+}
 
 }  // namespace search
 
