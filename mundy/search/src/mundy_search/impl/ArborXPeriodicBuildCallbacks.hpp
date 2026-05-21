@@ -27,6 +27,11 @@
 /// These callbacks receive ArborX image ordinals, map them to owner ordinals and relative shifts via the periodic
 /// candidate factory, apply the excluder, and atomically write to owner-indexed output views.
 
+// Mundy
+#include <MundySearch_config.hpp>  // for HAVE_MUNDYSEARCH_*
+
+#ifdef HAVE_MUNDYSEARCH_ARBORX
+
 // Trilinos
 #include <ArborX.hpp>
 #include <Kokkos_Core.hpp>
@@ -274,5 +279,7 @@ class ArborXPeriodic2dFillCallback {
 }  // namespace search
 
 }  // namespace mundy
+
+#endif  // HAVE_MUNDYSEARCH_ARBORX
 
 #endif  // MUNDY_SEARCH_IMPL_ARBORXPERIODICBUILDCALLBACKS_HPP_

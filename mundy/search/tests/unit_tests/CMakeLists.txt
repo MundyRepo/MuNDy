@@ -23,6 +23,22 @@
 if(Mundy_ENABLE_TESTS AND Mundy_ENABLE_GTest)
   message(STATUS "MundySearch: Setting up unit tests since Mundy_ENABLE_TESTS=ON and Mundy_ENABLE_GTest=ON")
 
+  if (Mundy_ENABLE_ArborX)
+    tribits_add_executable_and_test(
+      UnitTestNeighborList
+      SOURCES UnitTestNeighborList.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+      NUM_MPI_PROCS 1
+      INSTALLABLE
+    )
+
+    tribits_add_executable_and_test(
+      UnitTestPeriodicNeighborList
+      SOURCES UnitTestPeriodicNeighborList.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+      NUM_MPI_PROCS 1
+      INSTALLABLE
+    )
+  endif ()
+
 else()
   message(STATUS "MundySearch: Skipping unit tests since Mundy_ENABLE_TESTS=OFF or Mundy_ENABLE_GTest=OFF ...")
 endif()

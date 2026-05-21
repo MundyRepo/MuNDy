@@ -24,6 +24,11 @@
 /// \file impl/ArborXSearchBoxes.hpp
 /// \brief Build-time ArborX search box wrappers and their ArborX::AccessTraits specializations.
 
+// Mundy
+#include <MundySearch_config.hpp>  // for HAVE_MUNDYSEARCH_*
+
+#ifdef HAVE_MUNDYSEARCH_ARBORX
+
 // C++ core
 #include <cstddef>  // for size_t
 
@@ -436,5 +441,7 @@ struct AccessTraits<mundy::search::impl::PeriodicArborXSearchBoxesT<MemorySpace,
 };
 
 }  // namespace ArborX
+
+#endif  // HAVE_MUNDYSEARCH_ARBORX
 
 #endif  // MUNDY_SEARCH_IMPL_ARBORXSEARCHBOXES_HPP_

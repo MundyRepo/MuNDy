@@ -30,7 +30,14 @@
 ///
 /// Include this umbrella only when both storage layouts are needed in the same translation unit.
 
+// Mundy
+#include <MundySearch_config.hpp>  // for HAVE_MUNDYSEARCH_*
+
+#ifdef HAVE_MUNDYSEARCH_ARBORX
+
 #include <mundy_search/ArborX1dNeighborList.hpp>
 #include <mundy_search/ArborX2dNeighborList.hpp>
+
+#endif  // HAVE_MUNDYSEARCH_ARBORX
 
 #endif  // MUNDY_SEARCH_ARBORXNEIGHBORLIST_HPP_

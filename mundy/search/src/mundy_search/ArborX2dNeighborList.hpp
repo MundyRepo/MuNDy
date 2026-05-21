@@ -24,6 +24,11 @@
 /// \file ArborX2dNeighborList.hpp
 /// \brief ArborX dense 2D neighbor-list types and their NeighborListBuildTraits specializations.
 
+// Mundy
+#include <MundySearch_config.hpp>  // for HAVE_MUNDYSEARCH_*
+
+#ifdef HAVE_MUNDYSEARCH_ARBORX
+
 // C++ core
 #include <concepts>   // for std::same_as
 #include <cstddef>    // for size_t
@@ -684,5 +689,7 @@ NeighborListBuildTraits<PeriodicArborX2dNeighborList<MemorySpace, ImageShiftScal
 }  // namespace search
 
 }  // namespace mundy
+
+#endif  // HAVE_MUNDYSEARCH_ARBORX
 
 #endif  // MUNDY_SEARCH_ARBORX2DNEIGHBORLIST_HPP_

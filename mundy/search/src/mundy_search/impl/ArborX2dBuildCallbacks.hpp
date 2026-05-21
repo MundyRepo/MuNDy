@@ -24,6 +24,11 @@
 /// \file impl/ArborX2dBuildCallbacks.hpp
 /// \brief No-output ArborX callbacks for non-periodic 2D neighbor-list construction.
 
+// Mundy
+#include <MundySearch_config.hpp>  // for HAVE_MUNDYSEARCH_*
+
+#ifdef HAVE_MUNDYSEARCH_ARBORX
+
 // Trilinos
 #include <ArborX.hpp>
 #include <Kokkos_Core.hpp>
@@ -174,5 +179,7 @@ class ArborX2dFillCallback {
 }  // namespace search
 
 }  // namespace mundy
+
+#endif  // HAVE_MUNDYSEARCH_ARBORX
 
 #endif  // MUNDY_SEARCH_IMPL_ARBORX2DBUILDCALLBACKS_HPP_

@@ -24,6 +24,11 @@
 /// \file impl/ArborXCallback.hpp
 /// \brief ArborX candidate factories and query callback with excluder filtering.
 
+// Mundy
+#include <MundySearch_config.hpp>  // for HAVE_MUNDYSEARCH_*
+
+#ifdef HAVE_MUNDYSEARCH_ARBORX
+
 // Trilinos
 #include <ArborX.hpp>
 #include <Kokkos_Core.hpp>
@@ -252,5 +257,7 @@ class ArborXExcluderCallback {
 }  // namespace search
 
 }  // namespace mundy
+
+#endif  // HAVE_MUNDYSEARCH_ARBORX
 
 #endif  // MUNDY_SEARCH_IMPL_ARBORXCALLBACK_HPP_
