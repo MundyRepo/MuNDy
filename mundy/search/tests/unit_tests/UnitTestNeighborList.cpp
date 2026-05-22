@@ -944,6 +944,169 @@ TEST_F(DeterministicFixture, OutOfBounds_2d) {
 
 #endif  // NDEBUG
 
+// =============================================================================
+// Group 6 — Reduction functions
+// =============================================================================
+//
+// Verifies for_each_neighbor_pair_reduce and for_each_target_with_neighbors_reduce
+// using Kokkos::Sum<size_t>.  All results are cross-checked against the direct
+// pair accessor so that a wrong count or missing contribution is caught cleanly.
+//
+// Four invariants tested on the universal+ExcludeSelf list (12 known pairs):
+//   1. for_each_neighbor_pair_reduce Sum(1 per pair)             == list.size()
+//   2. for_each_neighbor_pair_reduce Sum(source_index per pair)  == direct sum
+//   3. for_each_target_with_neighbors_reduce Sum(nbrs.size())    == list.size()
+//   4. for_each_target_with_neighbors_reduce Sum(1 per target)   == num_targets()
+//
+// A fifth test reuses the all-isolated geometry from Group 4 to verify that
+// zero-neighbor targets are still counted in a target-reduce (visit count == N).
+// =============================================================================
+
+template <typename ListType>
+void check_reduce_functions(const ListType& list) {
+  // 1. Pair count via Sum reducer must equal list.size().
+  {
+    size_t count = 0;
+    Kokkos::Sum<size_t> reducer(count);
+    mundy::search::for_each_neighbor_pair_reduce(
+        TestExecSpace{}, list,
+        KOKKOS_LAMBDA(const NeighborPair<ListType>&, size_t& n) { ++n; },
+        reducer);
+    EXPECT_EQ(count, list.size())
+        << "for_each_neighbor_pair_reduce Sum(1) != list.size()";
+  }
+
+  // 2. Sum of source ordinals via pair reducer must match direct iteration.
+  {
+    size_t direct_sum = 0;
+    for (size_t t = 0; t < list.num_targets(); ++t)
+      for (size_t k = 0; k < list.num_neighbors(t); ++k)
+        direct_sum += list.source_index(t, k);
+
+    size_t reduce_sum = 0;
+    Kokkos::Sum<size_t> reducer(reduce_sum);
+    mundy::search::for_each_neighbor_pair_reduce(
+        TestExecSpace{}, list,
+        KOKKOS_LAMBDA(const NeighborPair<ListType>& pair, size_t& s) {
+          s += pair.source_index();
+        },
+        reducer);
+    EXPECT_EQ(reduce_sum, direct_sum)
+        << "for_each_neighbor_pair_reduce Sum(source_index) != direct sum";
+  }
+
+  // 3. Sum of per-target neighbor counts must equal list.size().
+  {
+    size_t total = 0;
+    Kokkos::Sum<size_t> reducer(total);
+    mundy::search::for_each_target_with_neighbors_reduce(
+        TestExecSpace{}, list,
+        KOKKOS_LAMBDA(const Neighbors<ListType>& nbrs, size_t& n) {
+          n += nbrs.size();
+        },
+        reducer);
+    EXPECT_EQ(total, list.size())
+        << "for_each_target_with_neighbors_reduce Sum(nbrs.size) != list.size()";
+  }
+
+  // 4. Every target is visited exactly once (including zero-neighbor targets).
+  {
+    size_t count = 0;
+    Kokkos::Sum<size_t> reducer(count);
+    mundy::search::for_each_target_with_neighbors_reduce(
+        TestExecSpace{}, list,
+        KOKKOS_LAMBDA(const Neighbors<ListType>&, size_t& n) { ++n; },
+        reducer);
+    EXPECT_EQ(count, list.num_targets())
+        << "for_each_target_with_neighbors_reduce Sum(1) != num_targets()";
+  }
+}
+
+template <typename ListType>
+void test_reduce_universal_self(DeterministicFixture& f) {
+  auto list = make_neighbor_list_builder<ListType>()
+      .exec_space(TestExecSpace{})
+      .target_input(f.universal_boxes_)
+      .source_input(f.universal_boxes_)
+      .exclude(ExcludeSelfInteraction{})
+      .build(*f.bulk_);
+  check_reduce_functions(list);
+}
+
+TEST_F(DeterministicFixture, ReduceFunctions_1d) {
+  test_reduce_universal_self<List1d>(*this);
+}
+TEST_F(DeterministicFixture, ReduceFunctions_2d) {
+  test_reduce_universal_self<List2d>(*this);
+}
+
+// for_each_target_with_neighbors_reduce must visit every target even when every
+// target has zero neighbors — regression parallel to Group 4 IterationProtocol.
+
+TEST(ReduceProtocol, AllIsolated_VisitsAllTargets_1d) {
+  constexpr int kN = 3;
+  auto [meta, bulk] = make_node_mesh(kN);
+  const stk::mesh::Selector sel = meta->universal_part();
+  std::vector<stk::mesh::Entity> nodes(kN);
+  for (int i = 0; i < kN; ++i) nodes[i] = bulk->get_entity(stk::topology::NODE_RANK, i + 1);
+  const std::vector<ArborX::Box> far_boxes = {
+      make_arborx_box(0.f, 0.f, 0.f, 0.1f),
+      make_arborx_box(1000.f, 0.f, 0.f, 0.1f),
+      make_arborx_box(0.f, 1000.f, 0.f, 0.1f),
+  };
+  const SearchBoxes sb = make_search_boxes(sel, far_boxes, nodes);
+  const auto list = make_neighbor_list_builder<List1d>()
+      .exec_space(TestExecSpace{})
+      .target_input(sb)
+      .source_input(sb)
+      .exclude(ExcludeSelfInteraction{})
+      .build(*bulk);
+
+  ASSERT_EQ(list.size(), 0u);
+
+  size_t count = 0;
+  Kokkos::Sum<size_t> reducer(count);
+  mundy::search::for_each_target_with_neighbors_reduce(
+      TestExecSpace{}, list,
+      KOKKOS_LAMBDA(const Neighbors<List1d>&, size_t& n) { ++n; },
+      reducer);
+  EXPECT_EQ(count, static_cast<size_t>(kN))
+      << "for_each_target_with_neighbors_reduce must visit all " << kN
+      << " targets even when all have zero neighbors.";
+}
+
+TEST(ReduceProtocol, AllIsolated_VisitsAllTargets_2d) {
+  constexpr int kN = 3;
+  auto [meta, bulk] = make_node_mesh(kN);
+  const stk::mesh::Selector sel = meta->universal_part();
+  std::vector<stk::mesh::Entity> nodes(kN);
+  for (int i = 0; i < kN; ++i) nodes[i] = bulk->get_entity(stk::topology::NODE_RANK, i + 1);
+  const std::vector<ArborX::Box> far_boxes = {
+      make_arborx_box(0.f, 0.f, 0.f, 0.1f),
+      make_arborx_box(1000.f, 0.f, 0.f, 0.1f),
+      make_arborx_box(0.f, 1000.f, 0.f, 0.1f),
+  };
+  const SearchBoxes sb = make_search_boxes(sel, far_boxes, nodes);
+  const auto list = make_neighbor_list_builder<List2d>()
+      .exec_space(TestExecSpace{})
+      .target_input(sb)
+      .source_input(sb)
+      .exclude(ExcludeSelfInteraction{})
+      .build(*bulk);
+
+  ASSERT_EQ(list.size(), 0u);
+
+  size_t count = 0;
+  Kokkos::Sum<size_t> reducer(count);
+  mundy::search::for_each_target_with_neighbors_reduce(
+      TestExecSpace{}, list,
+      KOKKOS_LAMBDA(const Neighbors<List2d>&, size_t& n) { ++n; },
+      reducer);
+  EXPECT_EQ(count, static_cast<size_t>(kN))
+      << "for_each_target_with_neighbors_reduce must visit all " << kN
+      << " targets even when all have zero neighbors.";
+}
+
 }  // namespace
 }  // namespace search
 }  // namespace mundy

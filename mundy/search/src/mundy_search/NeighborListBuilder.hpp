@@ -155,7 +155,7 @@ class NeighborListBuilder {
   template <typename NewExecutionSpace>
   auto exec_space(const NewExecutionSpace& exec_space) const {
     return NeighborListBuilder<neighbor_list_type, NewExecutionSpace, target_input_type, source_input_type,
-                               excluder_type>(exec_space, target_input_, source_input_, excluder_);
+                               excluder_type>(exec_space, target_input_, source_input_, excluder_, sort_neighbors_);
   }
 
   /// \brief Return a new builder with the target input supplied.
@@ -164,7 +164,7 @@ class NeighborListBuilder {
   template <NeighborListInputType NewTargetInput>
   auto target_input(const NewTargetInput& target_input) const {
     return NeighborListBuilder<neighbor_list_type, execution_space, NewTargetInput, source_input_type, excluder_type>(
-        exec_space_, target_input, source_input_, excluder_);
+        exec_space_, target_input, source_input_, excluder_, sort_neighbors_);
   }
 
   /// \brief Return a new builder with the source input supplied.
@@ -173,7 +173,7 @@ class NeighborListBuilder {
   template <NeighborListInputType NewSourceInput>
   auto source_input(const NewSourceInput& source_input) const {
     return NeighborListBuilder<neighbor_list_type, execution_space, target_input_type, NewSourceInput, excluder_type>(
-        exec_space_, target_input_, source_input, excluder_);
+        exec_space_, target_input_, source_input, excluder_, sort_neighbors_);
   }
 
   /// \brief Return a new builder type with an appended excluder.
@@ -184,7 +184,24 @@ class NeighborListBuilder {
     auto new_excluder = excluder_.exclude(next_excluder);
     using new_excluder_type = decltype(new_excluder);
     return NeighborListBuilder<neighbor_list_type, execution_space, target_input_type, source_input_type,
-                               new_excluder_type>(exec_space_, target_input_, source_input_, new_excluder);
+                               new_excluder_type>(exec_space_, target_input_, source_input_, new_excluder,
+                                                  sort_neighbors_);
+  }
+
+  /// \brief Return a new builder with the neighbor-sort flag set.
+  ///
+  /// When `true`, each target's neighbor row is sorted by ascending source ordinal after the ArborX query
+  /// completes.  Sorting improves spatial locality when kernels access per-source data (positions, radii, …)
+  /// for multiple targets that share neighbors.  The sort uses a per-row in-place insertion sort, which is
+  /// efficient for the small row sizes typical of neighbor lists (~10–20 entries).  Periodic list variants
+  /// keep the associated image-shift array in sync during the sort.
+  ///
+  /// Default is `false` (ArborX BVH-traversal order is preserved).
+  ///
+  /// \param sort [in] Whether to sort neighbor rows by source ordinal after construction.
+  auto sort_neighbors(bool sort) const {
+    return NeighborListBuilder<neighbor_list_type, execution_space, target_input_type, source_input_type,
+                               excluder_type>(exec_space_, target_input_, source_input_, excluder_, sort);
   }
   //@}
 
@@ -229,6 +246,11 @@ class NeighborListBuilder {
   /// \brief Get the excluder stored by the builder.
   const excluder_type& excluder() const noexcept {
     return excluder_;
+  }
+
+  /// \brief Whether neighbor rows will be sorted by source ordinal after construction.
+  bool sort_neighbors() const noexcept {
+    return sort_neighbors_;
   }
 
   /// \brief Return a prepared copy of the excluder.
@@ -280,9 +302,10 @@ class NeighborListBuilder {
 
   /// \brief Construct a builder from all type-state fields.
   NeighborListBuilder(const execution_space& exec_space, const target_input_type& target_input,
-                      const source_input_type& source_input, const excluder_type& excluder)
-      : exec_space_(exec_space), target_input_(target_input), source_input_(source_input), excluder_(excluder) {
-  }
+                      const source_input_type& source_input, const excluder_type& excluder,
+                      bool sort_neighbors = false)
+      : exec_space_(exec_space), target_input_(target_input), source_input_(source_input), excluder_(excluder),
+        sort_neighbors_(sort_neighbors) {}
   //@}
 
   //! \name Internal members
@@ -296,6 +319,8 @@ class NeighborListBuilder {
   source_input_type source_input_;
   //! Excluder stored by the builder.
   excluder_type excluder_;
+  //! Whether to sort each target's neighbor row by source ordinal after construction.
+  bool sort_neighbors_ = false;
   //@}
 };
 

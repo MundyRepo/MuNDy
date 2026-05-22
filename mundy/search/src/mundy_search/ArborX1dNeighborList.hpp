@@ -592,6 +592,26 @@ NeighborListBuildTraits<ArborX1dNeighborList<MemorySpace>>::build(const Builder&
   Kokkos::parallel_for("mundy_search_1d_cast_off", Kokkos::RangePolicy<exec_space>(0, num_targets + 1),
                        KOKKOS_LAMBDA(size_type i) { offsets(i) = static_cast<size_type>(raw_offsets(i)); });
 
+  if (builder.sort_neighbors()) {
+    // Sort each target's neighbor row by ascending source ordinal. Insertion sort is used because row
+    // sizes are small (~10-20 entries at typical densities) and it incurs no auxiliary allocation.
+    Kokkos::parallel_for(
+        "mundy_search_1d_sort_rows", Kokkos::RangePolicy<exec_space>(0, num_targets),
+        KOKKOS_LAMBDA(size_type t) {
+          const size_type beg = offsets(t);
+          const size_type end = offsets(t + 1);
+          for (size_type i = beg + 1; i < end; ++i) {
+            const size_type key = source_indices(i);
+            size_type j = i;
+            while (j > beg && source_indices(j - 1) > key) {
+              source_indices(j) = source_indices(j - 1);
+              --j;
+            }
+            source_indices(j) = key;
+          }
+        });
+  }
+
   return list_type(builder.target_selector(), builder.source_selector(), target_boxes.entities(),
                    source_boxes.entities(), source_indices, offsets);
 }
@@ -667,6 +687,29 @@ NeighborListBuildTraits<PeriodicArborX1dNeighborList<MemorySpace, ImageShiftScal
   // Pass 2: fill source owner ordinals and relative image shifts.
   bvh.query(exec_sp, target_boxes,
             fill_cb_t(factory, excluder, write_positions, offsets, source_owner_indices, relative_image_shifts));
+
+  if (builder.sort_neighbors()) {
+    // Sort each target owner's neighbor row by ascending source owner ordinal, keeping
+    // relative_image_shifts in sync so each pair's shift stays with its source ordinal.
+    Kokkos::parallel_for(
+        "mundy_search_per1d_sort_rows", Kokkos::RangePolicy<exec_space>(0, num_target_owners),
+        KOKKOS_LAMBDA(size_type t) {
+          const size_type beg = offsets(t);
+          const size_type end = offsets(t + 1);
+          for (size_type i = beg + 1; i < end; ++i) {
+            const size_type     key_idx   = source_owner_indices(i);
+            const image_shift_type key_shift = relative_image_shifts(i);
+            size_type j = i;
+            while (j > beg && source_owner_indices(j - 1) > key_idx) {
+              source_owner_indices(j)   = source_owner_indices(j - 1);
+              relative_image_shifts(j)  = relative_image_shifts(j - 1);
+              --j;
+            }
+            source_owner_indices(j)  = key_idx;
+            relative_image_shifts(j) = key_shift;
+          }
+        });
+  }
 
   return list_type(builder.target_selector(), builder.source_selector(), target_boxes.owner_entities(),
                    source_boxes.owner_entities(), source_owner_indices, relative_image_shifts, offsets);

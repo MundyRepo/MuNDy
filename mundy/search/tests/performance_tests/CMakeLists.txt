@@ -21,6 +21,21 @@ if(Mundy_ENABLE_TESTS AND Mundy_ENABLE_nanobench)
   message(STATUS
     "MundySearch: Setting up performance tests since Mundy_ENABLE_TESTS=ON and Mundy_ENABLE_nanobench=ON")
 
+  tribits_add_executable(
+    PerfTestNeighborList
+    SOURCES PerfTestNeighborList.cpp
+    INSTALLABLE
+    CATEGORIES PERFORMANCE
+  )
+
+  tribits_copy_files_to_binary_dir(
+    PerfTestNeighborListCopyFiles
+    SOURCE_FILES
+    PerfNeighborListScaling.py
+    EXEDEPS PerfTestNeighborList
+    CATEGORIES PERFORMANCE
+  )
+
 else()
   message(STATUS
     "MundySearch: Skipping performance tests since Mundy_ENABLE_TESTS=OFF or Mundy_ENABLE_nanobench=OFF ...")

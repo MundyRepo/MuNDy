@@ -110,6 +110,89 @@ class DeployFunctorOnTargetNeighbors {
   //@}
 };
 
+/// \class DeployReduceFunctorOnNeighborPairs
+/// \brief Kokkos reduction functor that expands target-parallel work into per-pair reduction callbacks.
+///
+/// The outer `parallel_reduce` iterates over targets; for each target this functor walks the neighbor
+/// row serially and calls the user callback with a `NeighborPair` payload and the thread-local
+/// reduction accumulator.  The `value_type` is taken from `ReducerType::value_type` so it matches
+/// whatever Kokkos built-in reducer (Sum, Min, Max, …) the caller passes.
+///
+/// \tparam NeighborListType Concrete neighbor-list implementation type.
+/// \tparam Functor User functor callable as `functor(NeighborPair<NeighborListType>, value_type&)`.
+/// \tparam ReducerType Kokkos reducer type (e.g. `Kokkos::Sum<double>`); supplies `value_type`.
+template <typename NeighborListType, typename Functor, typename ReducerType>
+class DeployReduceFunctorOnNeighborPairs {
+ public:
+  //! Size type used by the concrete neighbor list.
+  using size_type = typename NeighborListType::size_type;
+  //! Reduction accumulator type required by Kokkos parallel_reduce.
+  using value_type = typename ReducerType::value_type;
+
+  /// \brief Construct the deployment functor.
+  /// \param list [in] Concrete neighbor list.
+  /// \param functor [in] User callback to run for every neighbor pair.
+  KOKKOS_INLINE_FUNCTION
+  DeployReduceFunctorOnNeighborPairs(const NeighborListType& list, const Functor& functor)
+      : list_(list), functor_(functor) {}
+
+  /// \brief Accumulate over every neighbor of one target ordinal.
+  /// \param target_index [in] Dense target ordinal in `[0, list.num_targets())`.
+  /// \param update [in,out] Thread-local reduction accumulator.
+  KOKKOS_INLINE_FUNCTION
+  void operator()(const size_type target_index, value_type& update) const {
+    const size_type num_neighbors = list_.num_neighbors(target_index);
+    for (size_type k = 0; k < num_neighbors; ++k) {
+      functor_(mundy::search::NeighborPair<NeighborListType>(list_, target_index, k), update);
+    }
+  }
+
+ private:
+  //! Concrete list copied into the Kokkos functor.
+  NeighborListType list_;
+  //! User callback invoked once for each stored neighbor pair.
+  Functor functor_;
+};
+
+/// \class DeployReduceFunctorOnTargetNeighbors
+/// \brief Kokkos reduction functor that invokes a target-neighbors reduction callback for each target ordinal.
+///
+/// The outer `parallel_reduce` iterates over targets; this functor constructs a `Neighbors` facade for
+/// each target and calls the user callback with it and the thread-local accumulator.
+///
+/// \tparam NeighborListType Concrete neighbor-list implementation type.
+/// \tparam Functor User functor callable as `functor(Neighbors<NeighborListType>, value_type&)`.
+/// \tparam ReducerType Kokkos reducer type (e.g. `Kokkos::Sum<double>`); supplies `value_type`.
+template <typename NeighborListType, typename Functor, typename ReducerType>
+class DeployReduceFunctorOnTargetNeighbors {
+ public:
+  //! Size type used by the concrete neighbor list.
+  using size_type = typename NeighborListType::size_type;
+  //! Reduction accumulator type required by Kokkos parallel_reduce.
+  using value_type = typename ReducerType::value_type;
+
+  /// \brief Construct the deployment functor.
+  /// \param list [in] Concrete neighbor list.
+  /// \param functor [in] User callback to run for every target.
+  KOKKOS_INLINE_FUNCTION
+  DeployReduceFunctorOnTargetNeighbors(const NeighborListType& list, const Functor& functor)
+      : list_(list), functor_(functor) {}
+
+  /// \brief Accumulate over one target ordinal.
+  /// \param target_index [in] Dense target ordinal in `[0, list.num_targets())`.
+  /// \param update [in,out] Thread-local reduction accumulator.
+  KOKKOS_INLINE_FUNCTION
+  void operator()(const size_type target_index, value_type& update) const {
+    functor_(mundy::search::Neighbors<NeighborListType>(list_, target_index), update);
+  }
+
+ private:
+  //! Concrete list copied into the Kokkos functor.
+  NeighborListType list_;
+  //! User callback invoked once for each target-neighbors payload.
+  Functor functor_;
+};
+
 }  // namespace impl
 
 }  // namespace search
