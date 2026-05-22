@@ -27,7 +27,7 @@
 //---------------------------------------------------------------------------------------------------------------------//
 // Construction example.
 //---------------------------------------------------------------------------------------------------------------------//
-void constructionExample() {
+void construction_example() {
   std::cout << "\n--- Construction ---\n" << std::endl;
 
   /*
@@ -69,7 +69,7 @@ void constructionExample() {
 //---------------------------------------------------------------------------------------------------------------------//
 // Accessors example.
 //---------------------------------------------------------------------------------------------------------------------//
-void accessorsExample() {
+void accessors_example() {
   std::cout << "\n--- Accessors ---\n" << std::endl;
 
   /*
@@ -102,7 +102,7 @@ void accessorsExample() {
 //---------------------------------------------------------------------------------------------------------------------//
 // Arithmetic example.
 //---------------------------------------------------------------------------------------------------------------------//
-void arithmeticExample() {
+void arithmetic_example() {
   std::cout << "\n--- Arithmetic ---\n" << std::endl;
 
   /*
@@ -137,7 +137,7 @@ void arithmeticExample() {
 //---------------------------------------------------------------------------------------------------------------------//
 // Reductions example.
 //---------------------------------------------------------------------------------------------------------------------//
-void reductionsExample() {
+void reductions_example() {
   std::cout << "\n--- Reductions ---\n" << std::endl;
 
   /*
@@ -161,7 +161,7 @@ void reductionsExample() {
 //---------------------------------------------------------------------------------------------------------------------//
 // Norms and products example.
 //---------------------------------------------------------------------------------------------------------------------//
-void normsAndProductsExample() {
+void norms_and_products_example() {
   std::cout << "\n--- Norms and Products ---\n" << std::endl;
 
   /*
@@ -209,11 +209,11 @@ void normsAndProductsExample() {
 int main(int argc, char* argv[]) {
   Kokkos::ScopeGuard scope_guard(argc, argv);
 
-  constructionExample();
-  accessorsExample();
-  arithmeticExample();
-  reductionsExample();
-  normsAndProductsExample();
+  construction_example();
+  accessors_example();
+  arithmetic_example();
+  reductions_example();
+  norms_and_products_example();
 
   return 0;
 }

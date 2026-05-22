@@ -30,7 +30,7 @@
 //---------------------------------------------------------------------------------------------------------------------//
 // Signed distance convention.
 //---------------------------------------------------------------------------------------------------------------------//
-void signedDistanceExample() {
+void signed_distance_example() {
   std::cout << "\n--- Signed Distance Convention ---\n" << std::endl;
 
   /*
@@ -72,7 +72,7 @@ void signedDistanceExample() {
 //---------------------------------------------------------------------------------------------------------------------//
 // Point and segment distances.
 //---------------------------------------------------------------------------------------------------------------------//
-void pointAndSegmentExample() {
+void point_and_segment_example() {
   std::cout << "\n--- Point and Segment Distances ---\n" << std::endl;
 
   /*
@@ -115,7 +115,7 @@ void pointAndSegmentExample() {
 //---------------------------------------------------------------------------------------------------------------------//
 // Sphere-sphere witness overload.
 //---------------------------------------------------------------------------------------------------------------------//
-void sphereSphereWitnessExample() {
+void sphere_sphere_witness_example() {
   std::cout << "\n--- Sphere-Sphere with Witness ---\n" << std::endl;
 
   /*
@@ -154,7 +154,7 @@ void sphereSphereWitnessExample() {
 //---------------------------------------------------------------------------------------------------------------------//
 // Broad-phase filtering with bounding geometry.
 //---------------------------------------------------------------------------------------------------------------------//
-void broadPhaseExample() {
+void broad_phase_example() {
   std::cout << "\n--- Broad-Phase Filtering ---\n" << std::endl;
 
   /*
@@ -213,10 +213,10 @@ void broadPhaseExample() {
 int main(int argc, char* argv[]) {
   Kokkos::ScopeGuard scope_guard(argc, argv);
 
-  signedDistanceExample();
-  pointAndSegmentExample();
-  sphereSphereWitnessExample();
-  broadPhaseExample();
+  signed_distance_example();
+  point_and_segment_example();
+  sphere_sphere_witness_example();
+  broad_phase_example();
 
   return 0;
 }

@@ -28,7 +28,7 @@
 //---------------------------------------------------------------------------------------------------------------------//
 // Construction example.
 //---------------------------------------------------------------------------------------------------------------------//
-void constructionExample() {
+void construction_example() {
   std::cout << "\n--- Construction ---\n" << std::endl;
 
   /*
@@ -46,7 +46,7 @@ void constructionExample() {
       scalar part w, not x.
 
     In practice you rarely construct a quaternion by hand.  Use the
-    conversion functions described in conversionExample below; they are
+    conversion functions described in conversion_example below; they are
     harder to get wrong and make the intent of the rotation obvious at the
     call site.
 
@@ -69,7 +69,7 @@ void constructionExample() {
 //---------------------------------------------------------------------------------------------------------------------//
 // Conversion functions.
 //---------------------------------------------------------------------------------------------------------------------//
-void conversionExample() {
+void conversion_example() {
   std::cout << "\n--- Conversion Functions ---\n" << std::endl;
 
   /*
@@ -130,7 +130,7 @@ void conversionExample() {
 //---------------------------------------------------------------------------------------------------------------------//
 // Inverse and conjugate example.
 //---------------------------------------------------------------------------------------------------------------------//
-void inverseExample() {
+void inverse_example() {
   std::cout << "\n--- Inverse and Conjugate ---\n" << std::endl;
 
   /*
@@ -161,7 +161,7 @@ void inverseExample() {
 //---------------------------------------------------------------------------------------------------------------------//
 // Composition example.
 //---------------------------------------------------------------------------------------------------------------------//
-void compositionExample() {
+void composition_example() {
   std::cout << "\n--- Composition ---\n" << std::endl;
 
   /*
@@ -190,7 +190,7 @@ void compositionExample() {
 //---------------------------------------------------------------------------------------------------------------------//
 // Rotating a vector example.
 //---------------------------------------------------------------------------------------------------------------------//
-void rotateVectorExample() {
+void rotate_vector_example() {
   std::cout << "\n--- Rotating a Vector ---\n" << std::endl;
 
   /*
@@ -234,7 +234,7 @@ void rotateVectorExample() {
 //---------------------------------------------------------------------------------------------------------------------//
 // Rotating a tensor example.
 //---------------------------------------------------------------------------------------------------------------------//
-void rotateTensorExample() {
+void rotate_tensor_example() {
   std::cout << "\n--- Rotating a Tensor ---\n" << std::endl;
 
   /*
@@ -286,7 +286,7 @@ void rotateTensorExample() {
 //---------------------------------------------------------------------------------------------------------------------//
 // Slerp example.
 //---------------------------------------------------------------------------------------------------------------------//
-void slerpExample() {
+void slerp_example() {
   std::cout << "\n--- Slerp (Spherical Linear Interpolation) ---\n" << std::endl;
 
   /*
@@ -323,13 +323,13 @@ void slerpExample() {
 int main(int argc, char* argv[]) {
   Kokkos::ScopeGuard scope_guard(argc, argv);
 
-  constructionExample();
-  conversionExample();
-  inverseExample();
-  compositionExample();
-  rotateVectorExample();
-  rotateTensorExample();
-  slerpExample();
+  construction_example();
+  conversion_example();
+  inverse_example();
+  composition_example();
+  rotate_vector_example();
+  rotate_tensor_example();
+  slerp_example();
 
   return 0;
 }

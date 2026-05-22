@@ -27,7 +27,7 @@
 //---------------------------------------------------------------------------------------------------------------------//
 // Construction example.
 //---------------------------------------------------------------------------------------------------------------------//
-void constructionExample() {
+void construction_example() {
   std::cout << "\n--- Construction ---\n" << std::endl;
 
   /*
@@ -74,7 +74,7 @@ void constructionExample() {
 //---------------------------------------------------------------------------------------------------------------------//
 // Accessors example.
 //---------------------------------------------------------------------------------------------------------------------//
-void accessorsExample() {
+void accessors_example() {
   std::cout << "\n--- Accessors ---\n" << std::endl;
 
   /*
@@ -107,7 +107,7 @@ void accessorsExample() {
 //---------------------------------------------------------------------------------------------------------------------//
 // Arithmetic example.
 //---------------------------------------------------------------------------------------------------------------------//
-void arithmeticExample() {
+void arithmetic_example() {
   std::cout << "\n--- Arithmetic ---\n" << std::endl;
 
   /*
@@ -167,7 +167,7 @@ void arithmeticExample() {
 //---------------------------------------------------------------------------------------------------------------------//
 // Special operations example.
 //---------------------------------------------------------------------------------------------------------------------//
-void specialOperationsExample() {
+void special_operations_example() {
   std::cout << "\n--- Special Operations ---\n" << std::endl;
 
   /*
@@ -201,7 +201,7 @@ void specialOperationsExample() {
 //---------------------------------------------------------------------------------------------------------------------//
 // Inverse example.
 //---------------------------------------------------------------------------------------------------------------------//
-void inverseExample() {
+void inverse_example() {
   std::cout << "\n--- Inverse ---\n" << std::endl;
 
   /*
@@ -261,11 +261,11 @@ void inverseExample() {
 int main(int argc, char* argv[]) {
   Kokkos::ScopeGuard scope_guard(argc, argv);
 
-  constructionExample();
-  accessorsExample();
-  arithmeticExample();
-  specialOperationsExample();
-  inverseExample();
+  construction_example();
+  accessors_example();
+  arithmetic_example();
+  special_operations_example();
+  inverse_example();
 
   return 0;
 }

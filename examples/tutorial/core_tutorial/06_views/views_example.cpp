@@ -28,7 +28,7 @@
 //---------------------------------------------------------------------------------------------------------------------//
 // Basic vector view example.
 //---------------------------------------------------------------------------------------------------------------------//
-void vectorViewExample() {
+void vector_view_example() {
   std::cout << "\n--- Vector Views ---\n" << std::endl;
 
   /*
@@ -93,7 +93,7 @@ void vectorViewExample() {
 //---------------------------------------------------------------------------------------------------------------------//
 // Custom accessor example.
 //---------------------------------------------------------------------------------------------------------------------//
-void customAccessorExample() {
+void custom_accessor_example() {
   std::cout << "\n--- Custom Accessor (Strided View) ---\n" << std::endl;
 
   /*
@@ -136,7 +136,7 @@ void customAccessorExample() {
 //---------------------------------------------------------------------------------------------------------------------//
 // Matrix and quaternion views example.
 //---------------------------------------------------------------------------------------------------------------------//
-void matrixAndQuaternionViewExample() {
+void matrix_and_quaternion_view_example() {
   std::cout << "\n--- Matrix and Quaternion Views ---\n" << std::endl;
 
   /*
@@ -186,9 +186,9 @@ void matrixAndQuaternionViewExample() {
 int main(int argc, char* argv[]) {
   Kokkos::ScopeGuard scope_guard(argc, argv);
 
-  vectorViewExample();
-  customAccessorExample();
-  matrixAndQuaternionViewExample();
+  vector_view_example();
+  custom_accessor_example();
+  matrix_and_quaternion_view_example();
 
   return 0;
 }

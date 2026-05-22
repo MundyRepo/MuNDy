@@ -25,7 +25,7 @@
 //---------------------------------------------------------------------------------------------------------------------//
 // Hello World example.
 //---------------------------------------------------------------------------------------------------------------------//
-void helloWorldExample() {
+void hello_world_example() {
   /*
     Welcome to Mundy.
 
@@ -79,7 +79,7 @@ void helloWorldExample() {
 int main(int argc, char* argv[]) {
   Kokkos::ScopeGuard scope_guard(argc, argv);
 
-  helloWorldExample();
+  hello_world_example();
 
   return 0;
 }

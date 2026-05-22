@@ -29,7 +29,7 @@
 //---------------------------------------------------------------------------------------------------------------------//
 // Point and Sphere example.
 //---------------------------------------------------------------------------------------------------------------------//
-void pointAndSphereExample() {
+void point_and_sphere_example() {
   std::cout << "\n--- Point and Sphere ---\n" << std::endl;
 
   /*
@@ -74,7 +74,7 @@ void pointAndSphereExample() {
 //---------------------------------------------------------------------------------------------------------------------//
 // LineSegment example.
 //---------------------------------------------------------------------------------------------------------------------//
-void lineSegmentExample() {
+void line_segment_example() {
   std::cout << "\n--- LineSegment ---\n" << std::endl;
 
   /*
@@ -104,7 +104,7 @@ void lineSegmentExample() {
 //---------------------------------------------------------------------------------------------------------------------//
 // Oriented shapes example.
 //---------------------------------------------------------------------------------------------------------------------//
-void orientedShapesExample() {
+void oriented_shapes_example() {
   std::cout << "\n--- Oriented Shapes (Spherocylinder) ---\n" << std::endl;
 
   /*
@@ -152,7 +152,7 @@ void orientedShapesExample() {
 //---------------------------------------------------------------------------------------------------------------------//
 // Ellipsoid example.
 //---------------------------------------------------------------------------------------------------------------------//
-void ellipsoidExample() {
+void ellipsoid_example() {
   std::cout << "\n--- Ellipsoid ---\n" << std::endl;
 
   /*
@@ -201,7 +201,7 @@ void ellipsoidExample() {
 //---------------------------------------------------------------------------------------------------------------------//
 // AABB example.
 //---------------------------------------------------------------------------------------------------------------------//
-void aabbExample() {
+void aabb_example() {
   std::cout << "\n--- AABB ---\n" << std::endl;
 
   /*
@@ -233,7 +233,7 @@ void aabbExample() {
 //---------------------------------------------------------------------------------------------------------------------//
 // View-backed primitives example.
 //---------------------------------------------------------------------------------------------------------------------//
-void viewBackedPrimitiveExample() {
+void view_backed_primitive_example() {
   std::cout << "\n--- View-Backed Primitives ---\n" << std::endl;
 
   /*
@@ -269,7 +269,7 @@ void viewBackedPrimitiveExample() {
 //---------------------------------------------------------------------------------------------------------------------//
 // Transforms example.
 //---------------------------------------------------------------------------------------------------------------------//
-void transformsExample() {
+void transforms_example() {
   std::cout << "\n--- Transforms ---\n" << std::endl;
 
   /*
@@ -312,13 +312,13 @@ void transformsExample() {
 int main(int argc, char* argv[]) {
   Kokkos::ScopeGuard scope_guard(argc, argv);
 
-  pointAndSphereExample();
-  lineSegmentExample();
-  orientedShapesExample();
-  ellipsoidExample();
-  aabbExample();
-  viewBackedPrimitiveExample();
-  transformsExample();
+  point_and_sphere_example();
+  line_segment_example();
+  oriented_shapes_example();
+  ellipsoid_example();
+  aabb_example();
+  view_backed_primitive_example();
+  transforms_example();
 
   return 0;
 }

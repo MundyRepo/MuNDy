@@ -40,14 +40,14 @@
   The template must be defined before any call site.
 */
 template <mundy::StringLiteral Name>
-void printFieldType() {
+void print_field_type() {
   std::cout << "  field type with name: " << Name.data() << std::endl;
 }
 
 //---------------------------------------------------------------------------------------------------------------------//
 // Assertions example.
 //---------------------------------------------------------------------------------------------------------------------//
-void assertionsExample() {
+void assertions_example() {
   std::cout << "\n--- Assertions ---\n" << std::endl;
 
   /*
@@ -101,7 +101,7 @@ void assertionsExample() {
 //---------------------------------------------------------------------------------------------------------------------//
 // StringSink example.
 //---------------------------------------------------------------------------------------------------------------------//
-void stringSinkExample() {
+void string_sink_example() {
   std::cout << "\n--- StringSink ---\n" << std::endl;
 
   /*
@@ -145,7 +145,7 @@ void stringSinkExample() {
 //---------------------------------------------------------------------------------------------------------------------//
 // StringLiteral example.
 //---------------------------------------------------------------------------------------------------------------------//
-void stringLiteralExample() {
+void string_literal_example() {
   std::cout << "\n--- StringLiteral ---\n" << std::endl;
 
   /*
@@ -169,14 +169,14 @@ void stringLiteralExample() {
 
   // Use a StringLiteral as a non-type template parameter.
   // Different names produce different instantiations -- zero runtime cost.
-  printFieldType<mundy::make_string_literal("position")>();
-  printFieldType<mundy::make_string_literal("velocity")>();
+  print_field_type<mundy::make_string_literal("position")>();
+  print_field_type<mundy::make_string_literal("velocity")>();
 }
 
 //---------------------------------------------------------------------------------------------------------------------//
 // RNG example.
 //---------------------------------------------------------------------------------------------------------------------//
-void rngExample() {
+void rng_example() {
   std::cout << "\n--- RNG (Philox) ---\n" << std::endl;
 
   /*
@@ -217,7 +217,7 @@ void rngExample() {
 //---------------------------------------------------------------------------------------------------------------------//
 // Tuple and variant example.
 //---------------------------------------------------------------------------------------------------------------------//
-void tupleAndVariantExample() {
+void tuple_and_variant_example() {
   std::cout << "\n--- Tuple and Variant ---\n" << std::endl;
 
   /*
@@ -275,11 +275,11 @@ void tupleAndVariantExample() {
 int main(int argc, char* argv[]) {
   Kokkos::ScopeGuard scope_guard(argc, argv);
 
-  assertionsExample();
-  stringSinkExample();
-  stringLiteralExample();
-  rngExample();
-  tupleAndVariantExample();
+  assertions_example();
+  string_sink_example();
+  string_literal_example();
+  rng_example();
+  tuple_and_variant_example();
 
   return 0;
 }

@@ -26,7 +26,7 @@
 //---------------------------------------------------------------------------------------------------------------------//
 // NgpView basics.
 //---------------------------------------------------------------------------------------------------------------------//
-void ngpViewBasicsExample() {
+void ngp_view_basics_example() {
   std::cout << "\n--- NgpView Basics ---\n" << std::endl;
 
   /*
@@ -48,8 +48,10 @@ void ngpViewBasicsExample() {
       The four operations:
         view_host()       / view_device()       -- access the view for reading or writing
         modify_on_host()  / modify_on_device()  -- declare that this side was written
-        sync_to_host()    / sync_to_device()    -- copy stale data from the other side
-        need_sync_to_host() / need_sync_to_device() -- query whether a sync is needed
+        sync_to_host()    / sync_to_device()    -- copy stale data from the other side; already
+                                                   a no-op when the target is up to date
+        need_sync_to_host() / need_sync_to_device() -- query sync state for diagnostics and
+                                                       assertions; NOT a guard for sync calls
 
     NgpView<T*> inherits from Kokkos::DualView<T*>.  The "*" in the type
     parameter indicates a 1D dynamically-sized array, following Kokkos
@@ -115,19 +117,22 @@ void ngpViewBasicsExample() {
 }
 
 //---------------------------------------------------------------------------------------------------------------------//
-// Conditional sync with need_sync_to_*.
+// Sync state inspection with need_sync_to_*.
 //---------------------------------------------------------------------------------------------------------------------//
-void conditionalSyncExample() {
-  std::cout << "\n--- Conditional Sync ---\n" << std::endl;
+void sync_state_inspection_example() {
+  std::cout << "\n--- Sync State Inspection ---\n" << std::endl;
 
   /*
-    need_sync_to_host() and need_sync_to_device() return true when the
-    corresponding side is stale.
+    sync_to_device() and sync_to_host() already check internally whether a
+    copy is necessary.  If the target side is current they return immediately
+    without touching memory.  You should never guard a sync call:
 
-    In practice you may want to check before syncing -- for example, when
-    a helper function does not know whether the caller already synced.
-    Syncing when the data is already current is safe (it's a no-op) but
-    checking avoids the overhead of the memcpy for large arrays.
+      if (v.need_sync_to_device()) v.sync_to_device();  // WRONG -- redundant
+      v.sync_to_device();                                // RIGHT -- call unconditionally
+
+    need_sync_to_host() and need_sync_to_device() exist for diagnostics and
+    assertions.  Use them to verify that your protocol is correct, not to
+    decide whether to call sync.
   */
 
   const int n = 4;
@@ -137,22 +142,28 @@ void conditionalSyncExample() {
   for (int i = 0; i < n; ++i) h(i) = static_cast<double>(i + 1);
   v.modify_on_host();
 
+  // Diagnostic: confirm the expected state before syncing.
   std::cout << "After modifying host:" << std::endl;
-  std::cout << "  need_sync_to_device? " << (v.need_sync_to_device() ? "yes" : "no") << std::endl;
-  std::cout << "  need_sync_to_host?   " << (v.need_sync_to_host() ? "yes" : "no") << std::endl;
+  std::cout << "  need_sync_to_device? " << (v.need_sync_to_device() ? "yes" : "no") << "  (expected: yes)" << std::endl;
+  std::cout << "  need_sync_to_host?   " << (v.need_sync_to_host() ? "yes" : "no") << "  (expected: no)" << std::endl;
 
-  if (v.need_sync_to_device()) {
-    v.sync_to_device();
-  }
+  // Sync unconditionally -- sync_to_device already skips the copy when not needed.
+  v.sync_to_device();
 
+  // Diagnostic: confirm the flag was cleared.
   std::cout << "After sync_to_device:" << std::endl;
-  std::cout << "  need_sync_to_device? " << (v.need_sync_to_device() ? "yes" : "no") << std::endl;
+  std::cout << "  need_sync_to_device? " << (v.need_sync_to_device() ? "yes" : "no") << "  (expected: no)" << std::endl;
+
+  // Calling sync_to_device a second time is safe: it sees no work and returns immediately.
+  v.sync_to_device();
+  std::cout << "After redundant sync_to_device (no-op):" << std::endl;
+  std::cout << "  need_sync_to_device? " << (v.need_sync_to_device() ? "yes" : "no") << "  (expected: no)" << std::endl;
 }
 
 //---------------------------------------------------------------------------------------------------------------------//
 // 2D NgpView for particle positions.
 //---------------------------------------------------------------------------------------------------------------------//
-void twoDimNgpViewExample() {
+void two_dim_ngp_view_example() {
   std::cout << "\n--- 2D NgpView for Particle Positions ---\n" << std::endl;
 
   /*
@@ -205,7 +216,7 @@ void twoDimNgpViewExample() {
 //---------------------------------------------------------------------------------------------------------------------//
 // Putting it together: parallel norm computation.
 //---------------------------------------------------------------------------------------------------------------------//
-void parallelNormExample() {
+void parallel_norm_example() {
   std::cout << "\n--- Parallel Norm Computation ---\n" << std::endl;
 
   /*
@@ -227,30 +238,19 @@ void parallelNormExample() {
   // Fill positions on the host.
   {
     auto h = pos.view_host();
-    h(0, 0) = 1.0;
-    h(0, 1) = 0.0;
-    h(0, 2) = 0.0;  // norm = 1
-    h(1, 0) = 3.0;
-    h(1, 1) = 4.0;
-    h(1, 2) = 0.0;  // norm = 5
-    h(2, 0) = 1.0;
-    h(2, 1) = 1.0;
-    h(2, 2) = 1.0;  // norm = sqrt(3)
-    h(3, 0) = 0.0;
-    h(3, 1) = 0.0;
-    h(3, 2) = 0.0;  // norm = 0
-    h(4, 0) = 2.0;
-    h(4, 1) = 0.0;
-    h(4, 2) = 0.0;  // norm = 2
-    h(5, 0) = 1.0;
-    h(5, 1) = 2.0;
-    h(5, 2) = 2.0;  // norm = 3
+    // clang-format off
+    h(0, 0) = 1.0; h(0, 1) = 0.0; h(0, 2) = 0.0;  // norm = 1
+    h(1, 0) = 3.0; h(1, 1) = 4.0; h(1, 2) = 0.0;  // norm = 5
+    h(2, 0) = 1.0; h(2, 1) = 1.0; h(2, 2) = 1.0;  // norm = sqrt(3)
+    h(3, 0) = 0.0; h(3, 1) = 0.0; h(3, 2) = 0.0;  // norm = 0
+    h(4, 0) = 2.0; h(4, 1) = 0.0; h(4, 2) = 0.0;  // norm = 2
+    h(5, 0) = 1.0; h(5, 1) = 2.0; h(5, 2) = 2.0;  // norm = 3
+    // clang-format on
     pos.modify_on_host();
   }
 
   // Compute norms on the device.
   pos.sync_to_device();
-  norms.sync_to_device();  // no-op, but good practice to sync before writing
   {
     auto d_pos = pos.view_device();
     auto d_norms = norms.view_device();
@@ -282,10 +282,10 @@ void parallelNormExample() {
 int main(int argc, char* argv[]) {
   Kokkos::ScopeGuard scope_guard(argc, argv);
 
-  ngpViewBasicsExample();
-  conditionalSyncExample();
-  twoDimNgpViewExample();
-  parallelNormExample();
+  ngp_view_basics_example();
+  sync_state_inspection_example();
+  two_dim_ngp_view_example();
+  parallel_norm_example();
 
   return 0;
 }

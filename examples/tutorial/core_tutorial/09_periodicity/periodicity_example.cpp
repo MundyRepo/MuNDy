@@ -30,7 +30,7 @@
 //---------------------------------------------------------------------------------------------------------------------//
 // Metrics and minimum-image separation.
 //---------------------------------------------------------------------------------------------------------------------//
-void metricAndSepExample() {
+void metric_and_sep_example() {
   std::cout << "\n--- Metric and Minimum-Image Separation ---\n" << std::endl;
 
   /*
@@ -83,7 +83,7 @@ void metricAndSepExample() {
 //---------------------------------------------------------------------------------------------------------------------//
 // Wrapping points into the primary cell.
 //---------------------------------------------------------------------------------------------------------------------//
-void wrapExample() {
+void wrap_example() {
   std::cout << "\n--- Wrapping Points ---\n" << std::endl;
 
   /*
@@ -119,7 +119,7 @@ void wrapExample() {
 //---------------------------------------------------------------------------------------------------------------------//
 // Rigid wrapping of multi-point shapes.
 //---------------------------------------------------------------------------------------------------------------------//
-void wrapRigidExample() {
+void wrap_rigid_example() {
   std::cout << "\n--- Rigid Wrapping of Multi-Point Shapes ---\n" << std::endl;
 
   /*
@@ -169,7 +169,7 @@ void wrapRigidExample() {
 //---------------------------------------------------------------------------------------------------------------------//
 // Unwrapping points to restore coherence near a reference.
 //---------------------------------------------------------------------------------------------------------------------//
-void unwrapExample() {
+void unwrap_example() {
   std::cout << "\n--- Unwrap Points to Reference ---\n" << std::endl;
 
   /*
@@ -203,7 +203,7 @@ void unwrapExample() {
 //---------------------------------------------------------------------------------------------------------------------//
 // Explicit image shift.
 //---------------------------------------------------------------------------------------------------------------------//
-void shiftImageExample() {
+void shift_image_example() {
   std::cout << "\n--- Shift Image ---\n" << std::endl;
 
   /*
@@ -233,7 +233,7 @@ void shiftImageExample() {
 //---------------------------------------------------------------------------------------------------------------------//
 // Fractional coordinates.
 //---------------------------------------------------------------------------------------------------------------------//
-void fractionalCoordExample() {
+void fractional_coord_example() {
   std::cout << "\n--- Fractional Coordinates ---\n" << std::endl;
 
   /*
@@ -273,12 +273,12 @@ void fractionalCoordExample() {
 int main(int argc, char* argv[]) {
   Kokkos::ScopeGuard scope_guard(argc, argv);
 
-  metricAndSepExample();
-  wrapExample();
-  wrapRigidExample();
-  unwrapExample();
-  shiftImageExample();
-  fractionalCoordExample();
+  metric_and_sep_example();
+  wrap_example();
+  wrap_rigid_example();
+  unwrap_example();
+  shift_image_example();
+  fractional_coord_example();
 
   return 0;
 }
