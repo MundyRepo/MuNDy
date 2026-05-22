@@ -37,6 +37,13 @@ if(Mundy_ENABLE_TESTS AND Mundy_ENABLE_GTest)
       NUM_MPI_PROCS 1
       INSTALLABLE
     )
+
+    tribits_add_executable_and_test(
+      UnitTestExcluder
+      SOURCES UnitTestExcluder.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+      NUM_MPI_PROCS 1
+      INSTALLABLE
+    )
   endif ()
 
 else()

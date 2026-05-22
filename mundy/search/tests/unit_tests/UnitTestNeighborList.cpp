@@ -22,18 +22,16 @@
 /// \brief Unit tests for ArborX1dNeighborList and ArborX2dNeighborList.
 ///
 /// Test structure:
-///   Group 1 — Construction and access:
-///     default construction, copy/move semantics (all four operations).
-///   Group 2 — Deterministic 4-box test:
-///     4 nodes with known AABB boxes; ExcludeSelfInteraction removes self-pairs.
-///     Exact expected pair structure is verified, along with for_each iteration counts.
-///   Group 3 — Random N² validation:
-///     N spheres at random Philox-generated positions; every pair found in the list
-///     must correspond to overlapping boxes, and every overlapping oracle pair must
-///     appear in the list.
-///   Group 4 — Debug-only bound-check tests (NDEBUG guard):
-///     MUNDY_THROW_ASSERT fires only in debug builds; tests wrap expected-throw cases
-///     in #ifndef NDEBUG.
+///   Group 1 — Construction: default construction, copy/move semantics.
+///   Group 2 — Deterministic geometry: 6-node mesh with 3 STK parts enables 4 selector
+///     configurations (Universal, Disjoint, Overlapping, IdSubset) each tested against
+///     4 excluder variants (NoExcluder, ExcludeSelf, ExcludeSymDup, ExcludeSelf+ExcludeSymDup)
+///     for both List1d and List2d — 32 tests total.  Every test calls verify_exact_pair_set,
+///     which checks the exact pair set AND five structural invariants.
+///   Group 3 — Random N²: oracle comparison on 50 Philox-generated random spheres.
+///   Group 4 — Iteration protocol: for_each_target_with_neighbors must visit every target
+///     even when it has zero neighbors.
+///   Group 5 — Debug bounds: MUNDY_THROW_ASSERT out-of-range checks (guarded by #ifndef NDEBUG).
 
 // Mundy
 #include <MundySearch_config.hpp>  // for HAVE_MUNDYSEARCH_*
@@ -45,6 +43,7 @@
 
 // C++ core
 #include <cstddef>
+#include <initializer_list>
 #include <memory>
 #include <set>
 #include <stdexcept>
@@ -86,7 +85,6 @@ namespace {
 // Compile-time concept checks
 // =============================================================================
 
-// These fire at translation-unit scope: the test binary won't link if broken.
 static_assert(NeighborListType<ArborX1dNeighborList<Kokkos::HostSpace>>,
               "ArborX1dNeighborList<HostSpace> must satisfy NeighborListType.");
 static_assert(NeighborListType<ArborX2dNeighborList<Kokkos::HostSpace>>,
@@ -96,29 +94,25 @@ static_assert(NeighborListType<ArborX2dNeighborList<Kokkos::HostSpace>>,
 // Type aliases
 // =============================================================================
 
-// All tests run on the host so we can iterate over list views directly without
-// device-side deep_copy round-trips.
 using TestMemSpace = Kokkos::HostSpace;
 using TestExecSpace = Kokkos::DefaultHostExecutionSpace;
 using SearchBoxes = impl::ArborXSearchBoxesT<TestMemSpace>;
 using List1d = ArborX1dNeighborList<TestMemSpace>;
 using List2d = ArborX2dNeighborList<TestMemSpace>;
+using PairSet = std::set<std::pair<size_t, size_t>>;
 
 // =============================================================================
 // Box helpers
 // =============================================================================
 
-// Create an ArborX::Box from center + per-axis half-widths.
 ArborX::Box make_arborx_box(float cx, float cy, float cz, float hx, float hy, float hz) {
   return ArborX::Box{ArborX::Point{cx - hx, cy - hy, cz - hz}, ArborX::Point{cx + hx, cy + hy, cz + hz}};
 }
 
-// Overload for uniform half-width (sphere-like box).
 ArborX::Box make_arborx_box(float cx, float cy, float cz, float h) {
   return make_arborx_box(cx, cy, cz, h, h, h);
 }
 
-// Two boxes intersect when their intervals are non-empty in all three dimensions.
 bool boxes_overlap(const ArborX::Box& a, const ArborX::Box& b) {
   for (int d = 0; d < 3; ++d) {
     if (a.maxCorner()[d] < b.minCorner()[d]) return false;
@@ -131,8 +125,7 @@ bool boxes_overlap(const ArborX::Box& a, const ArborX::Box& b) {
 // STK mesh helpers
 // =============================================================================
 
-// Create a minimal node-only STK mesh with nodes numbered 1..num_nodes.
-// No fields are declared; only the universal part exists.
+// Create a minimal node-only mesh with nodes numbered 1..num_nodes, no extra parts.
 std::pair<std::shared_ptr<stk::mesh::MetaData>, std::unique_ptr<stk::mesh::BulkData>> make_node_mesh(int num_nodes) {
   stk::mesh::MeshBuilder builder(MPI_COMM_WORLD);
   builder.set_spatial_dimension(3);
@@ -142,25 +135,21 @@ std::pair<std::shared_ptr<stk::mesh::MetaData>, std::unique_ptr<stk::mesh::BulkD
   auto bulk_ptr = builder.create(meta_ptr);
   meta_ptr->commit();
   bulk_ptr->modification_begin();
-  for (int id = 1; id <= num_nodes; ++id) {
-    bulk_ptr->declare_node(id);
-  }
+  for (int id = 1; id <= num_nodes; ++id) bulk_ptr->declare_node(id);
   bulk_ptr->modification_end();
   return {std::move(meta_ptr), std::move(bulk_ptr)};
 }
 
 // =============================================================================
-// Search-box construction helper
+// Search-box construction
 // =============================================================================
 
-// Wrap pre-populated host arrays into an ArborXSearchBoxesT<HostSpace>.
-// boxes_h[i] and entities_h[i] must correspond to the same search object.
 SearchBoxes make_search_boxes(const stk::mesh::Selector& selector, const std::vector<ArborX::Box>& boxes_h,
                               const std::vector<stk::mesh::Entity>& entities_h) {
   const size_t n = boxes_h.size();
-  EXPECT_EQ(n, entities_h.size());  // sanity: equal-length arrays
-  Kokkos::View<ArborX::Box*, TestMemSpace> boxes("unit_test_boxes", n);
-  Kokkos::View<stk::mesh::Entity*, TestMemSpace> entities("unit_test_entities", n);
+  EXPECT_EQ(n, entities_h.size());
+  Kokkos::View<ArborX::Box*, TestMemSpace> boxes("boxes", n);
+  Kokkos::View<stk::mesh::Entity*, TestMemSpace> entities("entities", n);
   for (size_t i = 0; i < n; ++i) {
     boxes(i) = boxes_h[i];
     entities(i) = entities_h[i];
@@ -169,406 +158,34 @@ SearchBoxes make_search_boxes(const stk::mesh::Selector& selector, const std::ve
 }
 
 // =============================================================================
-// Oracle
+// Pair collection
 // =============================================================================
 
-// Compute the expected (target_ordinal, source_ordinal) pair set: all pairs where
-// boxes overlap, excluding t==s (mirrors ExcludeSelfInteraction with identical
-// target and source box sets).
-std::set<std::pair<size_t, size_t>> oracle_pairs(const std::vector<ArborX::Box>& target_boxes,
-                                                 const std::vector<ArborX::Box>& source_boxes) {
-  std::set<std::pair<size_t, size_t>> pairs;
-  for (size_t t = 0; t < target_boxes.size(); ++t) {
-    for (size_t s = 0; s < source_boxes.size(); ++s) {
-      if (t == s) continue;  // ExcludeSelfInteraction removes same-entity pairs
-      if (boxes_overlap(target_boxes[t], source_boxes[s])) pairs.insert({t, s});
-    }
-  }
+template <typename ListType>
+PairSet collect_pairs(const ListType& list) {
+  PairSet result;
+  for (size_t t = 0; t < list.num_targets(); ++t)
+    for (size_t k = 0; k < list.num_neighbors(t); ++k)
+      result.insert({t, list.source_index(t, k)});
+  return result;
+}
+
+// Oracle for the random-N² test: overlapping boxes, excluding self (ordinal equality = entity equality
+// when the target and source arrays hold the same node sequence).
+PairSet oracle_pairs_no_self(const std::vector<ArborX::Box>& target_boxes,
+                             const std::vector<ArborX::Box>& source_boxes) {
+  PairSet pairs;
+  for (size_t t = 0; t < target_boxes.size(); ++t)
+    for (size_t s = 0; s < source_boxes.size(); ++s)
+      if (t != s && boxes_overlap(target_boxes[t], source_boxes[s]))
+        pairs.insert({t, s});
   return pairs;
 }
 
 // =============================================================================
-// Direct pair extraction (host-side, no parallel overhead)
+// Shared invariant checks (also used standalone in Group 4/5)
 // =============================================================================
 
-// Collect all (target_ordinal, source_ordinal) pairs from a built list by
-// walking the list's own accessors.  Correct only for HostSpace lists where
-// views are accessible without a device round-trip.
-template <typename ListType>
-std::set<std::pair<size_t, size_t>> collect_pairs(const ListType& list) {
-  std::set<std::pair<size_t, size_t>> result;
-  for (size_t t = 0; t < list.num_targets(); ++t) {
-    for (size_t k = 0; k < list.num_neighbors(t); ++k) {
-      result.insert({t, list.source_index(t, k)});
-    }
-  }
-  return result;
-}
-
-// =============================================================================
-// Build helpers
-// =============================================================================
-
-List1d build_1d_list(const stk::mesh::BulkData& bulk, const SearchBoxes& target_boxes,
-                     const SearchBoxes& source_boxes) {
-  return make_neighbor_list_builder<List1d>()
-      .exec_space(TestExecSpace{})
-      .target_input(target_boxes)
-      .source_input(source_boxes)
-      .exclude(ExcludeSelfInteraction{})
-      .build(bulk);
-}
-
-List2d build_2d_list(const stk::mesh::BulkData& bulk, const SearchBoxes& target_boxes,
-                     const SearchBoxes& source_boxes) {
-  return make_neighbor_list_builder<List2d>()
-      .exec_space(TestExecSpace{})
-      .target_input(target_boxes)
-      .source_input(source_boxes)
-      .exclude(ExcludeSelfInteraction{})
-      .build(bulk);
-}
-
-// =============================================================================
-// Shared list-validity checks
-// =============================================================================
-
-// Verify that for_each_neighbor_pair visits exactly list.size() pairs.
-// Uses an atomic counter so the test is correct even under OpenMP host execution.
-template <typename ListType>
-void check_for_each_pair_count(const ListType& list) {
-  Kokkos::View<size_t*, TestMemSpace> count("fep_count", 1);
-  Kokkos::deep_copy(count, size_t(0));
-  mundy::search::for_each_neighbor_pair(
-      TestExecSpace{}, list, KOKKOS_LAMBDA(const NeighborPair<ListType>&) { Kokkos::atomic_inc(&count(0)); });
-  Kokkos::fence();
-  EXPECT_EQ(count(0), list.size()) << "for_each_neighbor_pair count does not match list.size().";
-}
-
-// Verify that for_each_target_with_neighbors visits exactly list.num_targets() targets.
-template <typename ListType>
-void check_for_each_target_count(const ListType& list) {
-  Kokkos::View<size_t*, TestMemSpace> count("fet_count", 1);
-  Kokkos::deep_copy(count, size_t(0));
-  mundy::search::for_each_target_with_neighbors(
-      TestExecSpace{}, list, KOKKOS_LAMBDA(const Neighbors<ListType>&) { Kokkos::atomic_inc(&count(0)); });
-  Kokkos::fence();
-  EXPECT_EQ(count(0), list.num_targets()) << "for_each_target_with_neighbors count does not match list.num_targets().";
-}
-
-// =============================================================================
-// Test Fixture — 4-node mesh with known AABB geometry
-// =============================================================================
-
-// Four AABB boxes assigned one-to-one to STK nodes 1..4 (ordinals 0..3):
-//
-//   Box 0 (node 1): center (0,0,0) half-size 2.0  →  [-2,2]³
-//   Box 1 (node 2): center (3,0,0) half (1.5,1,1) →  [1.5,4.5]×[-1,1]×[-1,1]
-//   Box 2 (node 3): center (0,3,0) half (1,1.5,1) →  [-1,1]×[1.5,4.5]×[-1,1]
-//   Box 3 (node 4): center (100.5,100.5,100.5) h=0.5 →  isolated
-//
-// Box overlaps after ExcludeSelfInteraction:
-//   Box 0 ↔ Box 1  (x-overlap: [1.5,2])
-//   Box 0 ↔ Box 2  (y-overlap: [1.5,2])
-//   Box 1 ↔ Box 2  NO  (x=[1.5,4.5] ∩ [-1,1] is empty)
-//   Box 3           no neighbors
-//
-// Expected pairs: (0,1),(0,2),(1,0),(2,0) — 4 total.
-class NonPeriodicFixture : public ::testing::Test {
- protected:
-  static constexpr int kN = 4;
-
-  void SetUp() override {
-    if (stk::parallel_machine_size(MPI_COMM_WORLD) != 1) {
-      GTEST_SKIP();
-    }
-    auto [meta, bulk] = make_node_mesh(kN);
-    meta_ = std::move(meta);
-    bulk_ = std::move(bulk);
-
-    // Retrieve nodes in explicit ID order: ordinal i = node ID (i+1).
-    nodes_.resize(kN);
-    for (int id = 1; id <= kN; ++id) {
-      nodes_[id - 1] = bulk_->get_entity(stk::topology::NODE_RANK, id);
-      ASSERT_TRUE(bulk_->is_valid(nodes_[id - 1])) << "Node " << id << " not found.";
-    }
-
-    selector_ = meta_->universal_part();
-
-    boxes_ = {
-        make_arborx_box(0.0f, 0.0f, 0.0f, 2.0f),              // box 0
-        make_arborx_box(3.0f, 0.0f, 0.0f, 1.5f, 1.0f, 1.0f),  // box 1
-        make_arborx_box(0.0f, 3.0f, 0.0f, 1.0f, 1.5f, 1.0f),  // box 2
-        make_arborx_box(100.5f, 100.5f, 100.5f, 0.5f),        // box 3 (isolated)
-    };
-
-    search_boxes_ = make_search_boxes(selector_, boxes_, nodes_);
-  }
-
-  std::shared_ptr<stk::mesh::MetaData> meta_;
-  std::unique_ptr<stk::mesh::BulkData> bulk_;
-  std::vector<stk::mesh::Entity> nodes_;
-  stk::mesh::Selector selector_;
-  std::vector<ArborX::Box> boxes_;
-  SearchBoxes search_boxes_;
-};
-
-// =============================================================================
-// Group 1 — Construction and access
-// =============================================================================
-
-TEST(ArborX1dNeighborList, DefaultConstruct) {
-  // Default-constructed list must report zero extents without crashing.
-  List1d list;
-  EXPECT_EQ(list.num_targets(), 0u);
-  EXPECT_EQ(list.num_sources(), 0u);
-  EXPECT_EQ(list.size(), 0u);
-}
-
-TEST(ArborX2dNeighborList, DefaultConstruct) {
-  List2d list;
-  EXPECT_EQ(list.num_targets(), 0u);
-  EXPECT_EQ(list.num_sources(), 0u);
-  EXPECT_EQ(list.size(), 0u);
-}
-
-// Verify all four copy/move operations for the 1D list.
-// Kokkos views are reference-counted, so copy yields a shallow copy that shares
-// the same underlying data and reports identical counts.
-TEST_F(NonPeriodicFixture, CopyMove_1d) {
-  auto original = build_1d_list(*bulk_, search_boxes_, search_boxes_);
-  const size_t nt = original.num_targets();
-  const size_t ns = original.num_sources();
-  const size_t size = original.size();
-
-  // Copy construction.
-  auto copy_ctor = original;
-  EXPECT_EQ(copy_ctor.num_targets(), nt);
-  EXPECT_EQ(copy_ctor.num_sources(), ns);
-  EXPECT_EQ(copy_ctor.size(), size);
-
-  // Move construction.
-  auto move_ctor = std::move(copy_ctor);
-  EXPECT_EQ(move_ctor.num_targets(), nt);
-  EXPECT_EQ(move_ctor.num_sources(), ns);
-  EXPECT_EQ(move_ctor.size(), size);
-
-  // Copy assignment.
-  List1d copy_assign;
-  copy_assign = original;
-  EXPECT_EQ(copy_assign.num_targets(), nt);
-  EXPECT_EQ(copy_assign.num_sources(), ns);
-  EXPECT_EQ(copy_assign.size(), size);
-
-  // Move assignment.
-  List1d move_assign;
-  move_assign = std::move(copy_assign);
-  EXPECT_EQ(move_assign.num_targets(), nt);
-  EXPECT_EQ(move_assign.num_sources(), ns);
-  EXPECT_EQ(move_assign.size(), size);
-}
-
-TEST_F(NonPeriodicFixture, CopyMove_2d) {
-  auto original = build_2d_list(*bulk_, search_boxes_, search_boxes_);
-  const size_t nt = original.num_targets();
-  const size_t ns = original.num_sources();
-  const size_t size = original.size();
-
-  auto copy_ctor = original;
-  EXPECT_EQ(copy_ctor.num_targets(), nt);
-  EXPECT_EQ(copy_ctor.num_sources(), ns);
-  EXPECT_EQ(copy_ctor.size(), size);
-
-  auto move_ctor = std::move(copy_ctor);
-  EXPECT_EQ(move_ctor.num_targets(), nt);
-  EXPECT_EQ(move_ctor.num_sources(), ns);
-  EXPECT_EQ(move_ctor.size(), size);
-
-  List2d copy_assign;
-  copy_assign = original;
-  EXPECT_EQ(copy_assign.num_targets(), nt);
-  EXPECT_EQ(copy_assign.num_sources(), ns);
-  EXPECT_EQ(copy_assign.size(), size);
-
-  List2d move_assign;
-  move_assign = std::move(copy_assign);
-  EXPECT_EQ(move_assign.num_targets(), nt);
-  EXPECT_EQ(move_assign.num_sources(), ns);
-  EXPECT_EQ(move_assign.size(), size);
-}
-
-// =============================================================================
-// Group 2 — Deterministic 4-box test
-// =============================================================================
-
-// Shared body: verify the structure and iteration behavior of a list built from
-// the 4-box fixture. Called for both 1D and 2D to avoid duplicating assertions.
-template <typename ListType>
-void verify_deterministic_4box(const ListType& list, const std::vector<stk::mesh::Entity>& nodes,
-                               const std::vector<ArborX::Box>& boxes) {
-  // Counts.
-  ASSERT_EQ(list.num_targets(), 4u);
-  ASSERT_EQ(list.num_sources(), 4u);
-  EXPECT_EQ(list.size(), 4u);  // (0,1),(0,2),(1,0),(2,0)
-
-  // Per-target neighbor counts.
-  EXPECT_EQ(list.num_neighbors(0), 2u);  // box 0 overlaps boxes 1 and 2
-  EXPECT_EQ(list.num_neighbors(1), 1u);  // box 1 overlaps box 0 only
-  EXPECT_EQ(list.num_neighbors(2), 1u);  // box 2 overlaps box 0 only
-  EXPECT_EQ(list.num_neighbors(3), 0u);  // box 3 is isolated
-
-  // Target entity accessors: ordinal i must return nodes[i].
-  for (size_t i = 0; i < 4; ++i) {
-    EXPECT_EQ(list.target_entity(i), nodes[i]) << "target_entity(" << i << ") mismatch.";
-  }
-
-  // Neighbors of target 0 must be exactly {nodes[1], nodes[2]} in any order.
-  {
-    std::set<stk::mesh::Entity> nbrs_of_0;
-    for (size_t k = 0; k < list.num_neighbors(0); ++k) {
-      nbrs_of_0.insert(list.get_neighbor(0, k));
-    }
-    EXPECT_EQ(nbrs_of_0, (std::set<stk::mesh::Entity>{nodes[1], nodes[2]}));
-  }
-
-  // Each of targets 1 and 2 has one neighbor: nodes[0].
-  EXPECT_EQ(list.get_neighbor(1, 0), nodes[0]);
-  EXPECT_EQ(list.get_neighbor(2, 0), nodes[0]);
-
-  // Oracle-level pair set check.
-  const auto expected = oracle_pairs(boxes, boxes);
-  const auto actual = collect_pairs(list);
-  EXPECT_EQ(actual, expected) << "Neighbor list pair set does not match oracle.";
-
-  // Iteration helpers: count visited pairs and targets.
-  check_for_each_pair_count(list);
-  check_for_each_target_count(list);
-}
-
-TEST_F(NonPeriodicFixture, Deterministic_1d) {
-  auto list = build_1d_list(*bulk_, search_boxes_, search_boxes_);
-  verify_deterministic_4box(list, nodes_, boxes_);
-}
-
-TEST_F(NonPeriodicFixture, Deterministic_2d) {
-  auto list = build_2d_list(*bulk_, search_boxes_, search_boxes_);
-  verify_deterministic_4box(list, nodes_, boxes_);
-}
-
-// =============================================================================
-// Group 3 — Random N² correctness validation
-// =============================================================================
-
-// Place N spheres at random Philox-generated centers (seed=42, counter=ordinal).
-// Build the list, then:
-//   (a) Verify every list pair corresponds to actually-overlapping boxes.
-//   (b) Verify every oracle-overlapping pair appears in the list.
-// The same oracle comparison used for the deterministic test is re-used here.
-template <typename ListType, typename BuildFn>
-void run_random_n2_validation(BuildFn build_fn, stk::mesh::BulkData& bulk, const stk::mesh::Selector& selector,
-                              int num_nodes) {
-  constexpr size_t kSeed = 42;
-  constexpr float kDomainSize = 10.0f;
-  constexpr float kRadius = 0.9f;
-
-  std::vector<stk::mesh::Entity> nodes(num_nodes);
-  for (int i = 0; i < num_nodes; ++i) {
-    nodes[i] = bulk.get_entity(stk::topology::NODE_RANK, i + 1);
-    ASSERT_TRUE(bulk.is_valid(nodes[i])) << "Node " << (i + 1) << " not found.";
-  }
-
-  // Generate sphere boxes: counter = particle ordinal so each particle gets an
-  // independent random stream regardless of thread scheduling.
-  std::vector<ArborX::Box> boxes(num_nodes);
-  for (int i = 0; i < num_nodes; ++i) {
-    openrand::Philox rng = mundy::make_philox(kSeed, static_cast<uint32_t>(i));
-    const float cx = rng.uniform<float>(0.0f, kDomainSize);
-    const float cy = rng.uniform<float>(0.0f, kDomainSize);
-    const float cz = rng.uniform<float>(0.0f, kDomainSize);
-    boxes[i] = make_arborx_box(cx, cy, cz, kRadius);
-  }
-
-  SearchBoxes search_boxes = make_search_boxes(selector, boxes, nodes);
-  ListType list = build_fn(bulk, search_boxes, search_boxes);
-
-  // (a) Every pair in the list must correspond to overlapping boxes.
-  for (size_t t = 0; t < list.num_targets(); ++t) {
-    for (size_t k = 0; k < list.num_neighbors(t); ++k) {
-      const size_t s = list.source_index(t, k);
-      EXPECT_TRUE(boxes_overlap(boxes[t], boxes[s]))
-          << "Spurious pair (target=" << t << ", source=" << s << "): boxes do not overlap.";
-      EXPECT_NE(t, s) << "Self-pair (target==source==" << t << ") found despite ExcludeSelfInteraction.";
-    }
-  }
-
-  // (b) Oracle pairs must all be present.
-  const auto expected = oracle_pairs(boxes, boxes);
-  const auto actual = collect_pairs(list);
-  EXPECT_EQ(actual, expected) << "Neighbor list is missing oracle pairs or contains extra pairs.";
-}
-
-TEST(ArborX1dNeighborList, RandomN2Validation) {
-  constexpr int kN = 50;
-  auto [meta, bulk] = make_node_mesh(kN);
-  const stk::mesh::Selector selector = meta->universal_part();
-  run_random_n2_validation<List1d>(
-      [](stk::mesh::BulkData& b, const SearchBoxes& tgt, const SearchBoxes& src) { return build_1d_list(b, tgt, src); },
-      *bulk, selector, kN);
-}
-
-TEST(ArborX2dNeighborList, RandomN2Validation) {
-  constexpr int kN = 50;
-  auto [meta, bulk] = make_node_mesh(kN);
-  const stk::mesh::Selector selector = meta->universal_part();
-  run_random_n2_validation<List2d>(
-      [](stk::mesh::BulkData& b, const SearchBoxes& tgt, const SearchBoxes& src) { return build_2d_list(b, tgt, src); },
-      *bulk, selector, kN);
-}
-
-// =============================================================================
-// Group 4 — Debug-only bound-check tests
-// =============================================================================
-
-// MUNDY_THROW_ASSERT fires only when NDEBUG is not defined. Tests that expect a
-// throw are wrapped in #ifndef NDEBUG so they compile and pass in release builds.
-
-#ifndef NDEBUG
-
-TEST_F(NonPeriodicFixture, OutOfBounds_1d) {
-  auto list = build_1d_list(*bulk_, search_boxes_, search_boxes_);
-
-  EXPECT_THROW(list.num_neighbors(list.num_targets()), std::out_of_range);
-  EXPECT_THROW(list.target_entity(list.num_targets()), std::out_of_range);
-  EXPECT_THROW(list.source_entity(list.num_sources()), std::out_of_range);
-  // target 0 has 2 neighbors; neighbor ordinal 2 is out of range.
-  EXPECT_THROW(list.source_index(0, list.num_neighbors(0)), std::out_of_range);
-}
-
-TEST_F(NonPeriodicFixture, OutOfBounds_2d) {
-  auto list = build_2d_list(*bulk_, search_boxes_, search_boxes_);
-
-  EXPECT_THROW(list.num_neighbors(list.num_targets()), std::out_of_range);
-  EXPECT_THROW(list.target_entity(list.num_targets()), std::out_of_range);
-  EXPECT_THROW(list.source_entity(list.num_sources()), std::out_of_range);
-  EXPECT_THROW(list.source_index(0, list.num_neighbors(0)), std::out_of_range);
-}
-
-#endif  // NDEBUG
-
-// =============================================================================
-// Group 5 — Adversarial edge-case and invariant probes
-// =============================================================================
-//
-// These tests target invariants and code paths not covered by Groups 1-4.
-// Each probe is designed so that a real implementation defect causes a test
-// failure rather than a silent pass.
-
-// ---- Shared adversarial helpers (not used in Groups 1-4) ----
-
-// Verify list.size() == sum of num_neighbors over all targets.
-// For List1d, size() reads source_indices_.extent(0); for List2d it reads total_pairs_
-// computed by parallel_reduce at construction.  Both must equal the sum of per-target
-// counts accessed through num_neighbors().
 template <typename ListType>
 void check_size_equals_neighbor_sum(const ListType& list) {
   size_t manual_sum = 0;
@@ -576,8 +193,6 @@ void check_size_equals_neighbor_sum(const ListType& list) {
   EXPECT_EQ(list.size(), manual_sum) << "list.size() != sum of per-target neighbor counts.";
 }
 
-// Directly construct NeighborPair for every (target, neighbor_ordinal) and verify
-// that every accessor returns a value consistent with the list's direct accessors.
 template <typename ListType>
 void check_neighbor_pair_accessors(const ListType& list) {
   for (size_t t = 0; t < list.num_targets(); ++t) {
@@ -593,7 +208,6 @@ void check_neighbor_pair_accessors(const ListType& list) {
   }
 }
 
-// Directly construct Neighbors for every target and verify all accessors.
 template <typename ListType>
 void check_neighbors_accessors(const ListType& list) {
   for (size_t t = 0; t < list.num_targets(); ++t) {
@@ -609,15 +223,17 @@ void check_neighbors_accessors(const ListType& list) {
   }
 }
 
-// Use for_each_neighbor_pair to build a per-(target,source) visit-count matrix,
-// then compare it against the direct-accessor pair set from collect_pairs.
-// This verifies (a) no pair is duplicated by the iterator, (b) no pair is skipped,
-// and (c) target_index()/source_index() on NeighborPair return the correct ordinals.
+// Verifies that for_each_neighbor_pair emits exactly the same pairs as the direct accessor,
+// each exactly once.
 template <typename ListType>
 void check_foreach_pair_matches_direct(const ListType& list) {
   const size_t nt = list.num_targets();
   const size_t ns = list.num_sources();
-  Kokkos::View<int**, TestMemSpace> visit_count("adv_visit", nt, ns);
+  if (nt == 0 || ns == 0) {
+    EXPECT_EQ(list.size(), 0u);
+    return;
+  }
+  Kokkos::View<int**, TestMemSpace> visit_count("visit_count", nt, ns);
   Kokkos::deep_copy(visit_count, 0);
   mundy::search::for_each_neighbor_pair(
       TestExecSpace{}, list,
@@ -625,8 +241,8 @@ void check_foreach_pair_matches_direct(const ListType& list) {
         Kokkos::atomic_inc(&visit_count(pair.target_index(), pair.source_index()));
       });
   Kokkos::fence();
-  std::set<std::pair<size_t, size_t>> fe_set;
-  for (size_t t = 0; t < nt; ++t) {
+  PairSet fe_set;
+  for (size_t t = 0; t < nt; ++t)
     for (size_t s = 0; s < ns; ++s) {
       const int cnt = visit_count(t, s);
       if (cnt > 0) {
@@ -634,237 +250,699 @@ void check_foreach_pair_matches_direct(const ListType& list) {
         fe_set.insert({t, s});
       }
     }
-  }
   EXPECT_EQ(fe_set, collect_pairs(list)) << "for_each pair set doesn't match direct-accessor pair set.";
 }
 
-// ---- Test 5.1: NoExcluder includes self-pairs ----
-//
-// All builds in Groups 1-4 apply ExcludeSelfInteraction.  The NoExcluder path
-// is never exercised.  If the ArborX callback accidentally applies exclusion
-// even without an excluder, self-pairs would be absent and size() would be 4
-// instead of 8.
-//
-// Expected pairs with no excluder on the 4-box fixture (see fixture comment):
-//   target 0: sources {0,1,2}  (self + two overlapping boxes)
-//   target 1: sources {0,1}    (overlaps box 0 and self; box 2 is disjoint in x)
-//   target 2: sources {0,2}    (overlaps box 0 and self; box 1 is disjoint in x)
-//   target 3: sources {3}      (isolated — only overlaps itself)
-// Total: 3+2+2+1 = 8 pairs.
+// =============================================================================
+// Canonical verifier: exact pair set + all structural invariants.
+// =============================================================================
 
-TEST_F(NonPeriodicFixture, NoExcluder_IncludesSelfPairs_1d) {
-  auto list = make_neighbor_list_builder<List1d>()
-      .exec_space(TestExecSpace{})
-      .target_input(search_boxes_)
-      .source_input(search_boxes_)
-      .build(*bulk_);
-  EXPECT_EQ(list.size(), 8u) << "NoExcluder should include all 8 pairs (4 self + 4 cross).";
-  EXPECT_EQ(list.num_neighbors(3), 1u) << "Isolated box must retain its self-pair without an excluder.";
-  EXPECT_EQ(list.source_index(3, 0), 3u) << "Self-pair source ordinal for target 3 must be 3.";
+template <typename ListType>
+void verify_exact_pair_set(const ListType& list, const PairSet& expected) {
+  EXPECT_EQ(list.size(), expected.size());
+  EXPECT_EQ(collect_pairs(list), expected);
   check_size_equals_neighbor_sum(list);
+  check_neighbor_pair_accessors(list);
+  check_neighbors_accessors(list);
+  check_foreach_pair_matches_direct(list);
 }
 
-TEST_F(NonPeriodicFixture, NoExcluder_IncludesSelfPairs_2d) {
-  auto list = make_neighbor_list_builder<List2d>()
-      .exec_space(TestExecSpace{})
-      .target_input(search_boxes_)
-      .source_input(search_boxes_)
-      .build(*bulk_);
-  EXPECT_EQ(list.size(), 8u);
-  EXPECT_EQ(list.num_neighbors(3), 1u);
-  EXPECT_EQ(list.source_index(3, 0), 3u);
-  check_size_equals_neighbor_sum(list);
+// =============================================================================
+// DeterministicFixture — 6-node mesh with 3 STK parts, 4 selector configurations
+// =============================================================================
+//
+// Nodes and boxes (0-indexed array ordinals):
+//   Ord 0  (node 1, target_part):  box0 = [-2,   2]³       (center 0,    half 2.0)
+//   Ord 1  (node 2, target_part):  box1 = isolated @ 100   (center 100,  half 0.5)
+//   Ord 2  (node 3, source_part):  box2 = [ 1.5, 3.5]³     (center 2.5,  half 1.0)
+//   Ord 3  (node 4, source_part):  box3 = isolated @ 200   (center 200,  half 0.5)
+//   Ord 4  (node 5, shared_part):  box4 = [-0.5, 2.5]³     (center 1.0,  half 1.5)
+//   Ord 5  (node 6, shared_part):  box5 = [ 0.5, 3.5]³     (center 2.0,  half 1.5)
+//
+// Non-self overlapping undirected pairs (global ordinals): {0↔2, 0↔4, 0↔5, 2↔4, 2↔5, 4↔5}
+// Isolated nodes (no cross-overlaps): ordinals 1 and 3.
+//
+// Selector configurations and their array ordinals:
+//   Universal:   target = {0,1,2,3,4,5},  source = {0,1,2,3,4,5}
+//   Disjoint:    target = {0,1},           source = {2,3}
+//   Overlapping: target = {0,1,4,5},       source = {2,3,4,5}
+//   IdSubset:    target = {4,5},           source = {4,5}
+//
+// For Overlapping and IdSubset the source and target arrays are different, so
+// local array ordinals differ from global mesh ordinals.  Expected pair comments
+// annotate each entry with the global node IDs involved.
+class DeterministicFixture : public ::testing::Test {
+ public:
+  void SetUp() override {
+    if (stk::parallel_machine_size(MPI_COMM_WORLD) != 1) GTEST_SKIP();
+
+    stk::mesh::MeshBuilder builder(MPI_COMM_WORLD);
+    builder.set_spatial_dimension(3);
+    builder.set_entity_rank_names({"NODE", "EDGE", "FACE", "ELEMENT", "CONSTRAINT"});
+    meta_ = builder.create_meta_data();
+    meta_->use_simple_fields();
+    target_part_ = &meta_->declare_part("target_part", stk::topology::NODE_RANK);
+    source_part_ = &meta_->declare_part("source_part", stk::topology::NODE_RANK);
+    shared_part_ = &meta_->declare_part("shared_part", stk::topology::NODE_RANK);
+    bulk_ = builder.create(meta_);
+    meta_->commit();
+
+    bulk_->modification_begin();
+    for (int id = 1; id <= 6; ++id) bulk_->declare_node(id);
+    for (int id : {1, 2}) {
+      auto n = bulk_->get_entity(stk::topology::NODE_RANK, id);
+      bulk_->change_entity_parts(n, stk::mesh::PartVector{target_part_}, stk::mesh::PartVector{});
+    }
+    for (int id : {3, 4}) {
+      auto n = bulk_->get_entity(stk::topology::NODE_RANK, id);
+      bulk_->change_entity_parts(n, stk::mesh::PartVector{source_part_}, stk::mesh::PartVector{});
+    }
+    for (int id : {5, 6}) {
+      auto n = bulk_->get_entity(stk::topology::NODE_RANK, id);
+      bulk_->change_entity_parts(n, stk::mesh::PartVector{shared_part_}, stk::mesh::PartVector{});
+    }
+    bulk_->modification_end();
+
+    nodes_.resize(6);
+    for (int id = 1; id <= 6; ++id) {
+      nodes_[id - 1] = bulk_->get_entity(stk::topology::NODE_RANK, id);
+      ASSERT_TRUE(bulk_->is_valid(nodes_[id - 1])) << "Node " << id << " not found.";
+    }
+
+    all_boxes_ = {
+        make_arborx_box(0.0f, 0.0f, 0.0f, 2.0f),       // ord 0: [-2, 2]³
+        make_arborx_box(100.f, 100.f, 100.f, 0.5f),     // ord 1: isolated
+        make_arborx_box(2.5f, 2.5f, 2.5f, 1.0f),        // ord 2: [1.5, 3.5]³
+        make_arborx_box(200.f, 200.f, 200.f, 0.5f),     // ord 3: isolated
+        make_arborx_box(1.0f, 1.0f, 1.0f, 1.5f),        // ord 4: [-0.5, 2.5]³
+        make_arborx_box(2.0f, 2.0f, 2.0f, 1.5f),        // ord 5: [0.5, 3.5]³
+    };
+
+    const stk::mesh::Selector sel_all     = meta_->universal_part();
+    const stk::mesh::Selector sel_tgt     = *target_part_;
+    const stk::mesh::Selector sel_src     = *source_part_;
+    const stk::mesh::Selector sel_shr     = *shared_part_;
+    const stk::mesh::Selector sel_tgt_shr = *target_part_ | *shared_part_;
+    const stk::mesh::Selector sel_src_shr = *source_part_ | *shared_part_;
+
+    // Universal: all 6 boxes, all 6 nodes, universal selector.
+    universal_boxes_ = make_search_boxes(sel_all, all_boxes_, nodes_);
+
+    // Disjoint: target={node1,node2}, source={node3,node4}.
+    disjoint_target_boxes_ = make_search_boxes(
+        sel_tgt, {all_boxes_[0], all_boxes_[1]}, {nodes_[0], nodes_[1]});
+    disjoint_source_boxes_ = make_search_boxes(
+        sel_src, {all_boxes_[2], all_boxes_[3]}, {nodes_[2], nodes_[3]});
+
+    // Overlapping: target={node1,node2,node5,node6}, source={node3,node4,node5,node6}.
+    overlapping_target_boxes_ = make_search_boxes(
+        sel_tgt_shr,
+        {all_boxes_[0], all_boxes_[1], all_boxes_[4], all_boxes_[5]},
+        {nodes_[0], nodes_[1], nodes_[4], nodes_[5]});
+    overlapping_source_boxes_ = make_search_boxes(
+        sel_src_shr,
+        {all_boxes_[2], all_boxes_[3], all_boxes_[4], all_boxes_[5]},
+        {nodes_[2], nodes_[3], nodes_[4], nodes_[5]});
+
+    // IdSubset: target={node5,node6}, source={node5,node6} — identical subset.
+    idsubset_boxes_ = make_search_boxes(
+        sel_shr, {all_boxes_[4], all_boxes_[5]}, {nodes_[4], nodes_[5]});
+  }
+
+  std::shared_ptr<stk::mesh::MetaData> meta_;
+  std::unique_ptr<stk::mesh::BulkData> bulk_;
+  stk::mesh::Part* target_part_ = nullptr;
+  stk::mesh::Part* source_part_ = nullptr;
+  stk::mesh::Part* shared_part_ = nullptr;
+  std::vector<stk::mesh::Entity> nodes_;
+  std::vector<ArborX::Box> all_boxes_;
+  SearchBoxes universal_boxes_;
+  SearchBoxes disjoint_target_boxes_;
+  SearchBoxes disjoint_source_boxes_;
+  SearchBoxes overlapping_target_boxes_;
+  SearchBoxes overlapping_source_boxes_;
+  SearchBoxes idsubset_boxes_;
+};
+
+// =============================================================================
+// Group 1 — Construction and access
+// =============================================================================
+
+TEST(ArborX1dNeighborList, DefaultConstruct) {
+  List1d list;
+  EXPECT_EQ(list.num_targets(), 0u);
+  EXPECT_EQ(list.num_sources(), 0u);
+  EXPECT_EQ(list.size(), 0u);
 }
 
-// ---- Test 5.2: all-isolated geometry — empty pair set, full target visit ----
-//
-// for_each_target_with_neighbors must visit ALL targets even when every target has
-// zero neighbors.  If the implementation changes its semantics to skip zero-neighbor
-// targets (matching the misleading "with_neighbors" name literally), this test fails.
+TEST(ArborX2dNeighborList, DefaultConstruct) {
+  List2d list;
+  EXPECT_EQ(list.num_targets(), 0u);
+  EXPECT_EQ(list.num_sources(), 0u);
+  EXPECT_EQ(list.size(), 0u);
+}
 
-TEST(AdversarialSearch, AllIsolated_EmptyPairs_1d) {
+// Kokkos views are reference-counted: copy yields a shallow copy sharing the same data.
+TEST_F(DeterministicFixture, CopyMove_1d) {
+  auto original = make_neighbor_list_builder<List1d>()
+      .exec_space(TestExecSpace{})
+      .target_input(universal_boxes_)
+      .source_input(universal_boxes_)
+      .exclude(ExcludeSelfInteraction{})
+      .build(*bulk_);
+  const size_t nt = original.num_targets();
+  const size_t ns = original.num_sources();
+  const size_t sz = original.size();
+
+  auto copy_ctor = original;
+  EXPECT_EQ(copy_ctor.num_targets(), nt);
+  EXPECT_EQ(copy_ctor.num_sources(), ns);
+  EXPECT_EQ(copy_ctor.size(), sz);
+
+  auto move_ctor = std::move(copy_ctor);
+  EXPECT_EQ(move_ctor.num_targets(), nt);
+  EXPECT_EQ(move_ctor.num_sources(), ns);
+  EXPECT_EQ(move_ctor.size(), sz);
+
+  List1d copy_assign;
+  copy_assign = original;
+  EXPECT_EQ(copy_assign.num_targets(), nt);
+  EXPECT_EQ(copy_assign.num_sources(), ns);
+  EXPECT_EQ(copy_assign.size(), sz);
+
+  List1d move_assign;
+  move_assign = std::move(copy_assign);
+  EXPECT_EQ(move_assign.num_targets(), nt);
+  EXPECT_EQ(move_assign.num_sources(), ns);
+  EXPECT_EQ(move_assign.size(), sz);
+}
+
+TEST_F(DeterministicFixture, CopyMove_2d) {
+  auto original = make_neighbor_list_builder<List2d>()
+      .exec_space(TestExecSpace{})
+      .target_input(universal_boxes_)
+      .source_input(universal_boxes_)
+      .exclude(ExcludeSelfInteraction{})
+      .build(*bulk_);
+  const size_t nt = original.num_targets();
+  const size_t ns = original.num_sources();
+  const size_t sz = original.size();
+
+  auto copy_ctor = original;
+  EXPECT_EQ(copy_ctor.num_targets(), nt);
+  EXPECT_EQ(copy_ctor.num_sources(), ns);
+  EXPECT_EQ(copy_ctor.size(), sz);
+
+  auto move_ctor = std::move(copy_ctor);
+  EXPECT_EQ(move_ctor.num_targets(), nt);
+  EXPECT_EQ(move_ctor.num_sources(), ns);
+  EXPECT_EQ(move_ctor.size(), sz);
+
+  List2d copy_assign;
+  copy_assign = original;
+  EXPECT_EQ(copy_assign.num_targets(), nt);
+  EXPECT_EQ(copy_assign.num_sources(), ns);
+  EXPECT_EQ(copy_assign.size(), sz);
+
+  List2d move_assign;
+  move_assign = std::move(copy_assign);
+  EXPECT_EQ(move_assign.num_targets(), nt);
+  EXPECT_EQ(move_assign.num_sources(), ns);
+  EXPECT_EQ(move_assign.size(), sz);
+}
+
+// =============================================================================
+// Group 2 — Deterministic pair-set tests (4 selectors × 4 excluders × 2 list types)
+// =============================================================================
+//
+// Expected pair notation: (target_array_ordinal, source_array_ordinal).
+//
+// Universal (target={0..5}, source={0..5}):
+//   Cross overlapping undirected: {0↔2, 0↔4, 0↔5, 2↔4, 2↔5, 4↔5}
+//   NoExcluder        (18): 6 self + 12 directed cross
+//   ExcludeSelf       (12): 12 directed cross
+//   ExcludeSymDup     (12): 6 self + 6 cross where s_ord > t_ord
+//   ExcludeSelf+SymDup (6): 6 cross where s_ord > t_ord
+//
+// Disjoint (target={node1,node2} ords {0,1}, source={node3,node4} ords {0,1}):
+//   Only box0↔box2 overlaps (node1↔node3).  Intersection of selectors is empty.
+//   All 4 excluder variants: {(0,0)} — 1 pair.
+//
+// Overlapping (target={node1,node2,node5,node6} ords {0,1,2,3},
+//              source={node3,node4,node5,node6} ords {0,1,2,3}):
+//   Intersection = shared_part = {node5,node6} = target ords {2,3} / source ords {2,3}.
+//   NoExcluder        (9): {(0,0),(0,2),(0,3),(2,0),(2,2),(2,3),(3,0),(3,2),(3,3)}
+//   ExcludeSelf       (7): remove self-pairs (2,2),(3,3)
+//   ExcludeSymDup     (8): remove (3,2) [trg=node6, src=node5, src<trg]
+//   ExcludeSelf+SymDup(6): remove (2,2),(3,3),(3,2)
+//
+// IdSubset (target={node5,node6} ords {0,1}, source={node5,node6} ords {0,1}):
+//   Intersection = shared_part = all nodes in both arrays.
+//   NoExcluder        (4): {(0,0),(0,1),(1,0),(1,1)}
+//   ExcludeSelf       (2): {(0,1),(1,0)}
+//   ExcludeSymDup     (3): remove (1,0) [trg=node6, src=node5, src<trg]
+//   ExcludeSelf+SymDup(1): {(0,1)}
+
+// ---- Universal ----
+
+template <typename ListType>
+void test_universal_no_excluder(DeterministicFixture& f) {
+  auto list = make_neighbor_list_builder<ListType>()
+      .exec_space(TestExecSpace{})
+      .target_input(f.universal_boxes_)
+      .source_input(f.universal_boxes_)
+      .build(*f.bulk_);
+  const PairSet expected = {
+      {0, 0}, {1, 1}, {2, 2}, {3, 3}, {4, 4}, {5, 5},
+      {0, 2}, {2, 0}, {0, 4}, {4, 0}, {0, 5}, {5, 0},
+      {2, 4}, {4, 2}, {2, 5}, {5, 2}, {4, 5}, {5, 4}};
+  verify_exact_pair_set(list, expected);
+}
+
+template <typename ListType>
+void test_universal_self(DeterministicFixture& f) {
+  auto list = make_neighbor_list_builder<ListType>()
+      .exec_space(TestExecSpace{})
+      .target_input(f.universal_boxes_)
+      .source_input(f.universal_boxes_)
+      .exclude(ExcludeSelfInteraction{})
+      .build(*f.bulk_);
+  const PairSet expected = {
+      {0, 2}, {2, 0}, {0, 4}, {4, 0}, {0, 5}, {5, 0},
+      {2, 4}, {4, 2}, {2, 5}, {5, 2}, {4, 5}, {5, 4}};
+  verify_exact_pair_set(list, expected);
+}
+
+template <typename ListType>
+void test_universal_symdups(DeterministicFixture& f) {
+  auto list = make_neighbor_list_builder<ListType>()
+      .exec_space(TestExecSpace{})
+      .target_input(f.universal_boxes_)
+      .source_input(f.universal_boxes_)
+      .exclude(ExcludeSymmetricDuplicates{})
+      .build(*f.bulk_);
+  // Universal intersection = all nodes; suppress (t,s) where src_entity < trg_entity.
+  // For sequential node creation, entity(n1) < entity(n2) iff node-id(n1) < node-id(n2),
+  // which equals s_ord < t_ord in the universal array.
+  const PairSet expected = {
+      {0, 0}, {1, 1}, {2, 2}, {3, 3}, {4, 4}, {5, 5},
+      {0, 2}, {0, 4}, {0, 5}, {2, 4}, {2, 5}, {4, 5}};
+  verify_exact_pair_set(list, expected);
+}
+
+template <typename ListType>
+void test_universal_self_symdups(DeterministicFixture& f) {
+  auto list = make_neighbor_list_builder<ListType>()
+      .exec_space(TestExecSpace{})
+      .target_input(f.universal_boxes_)
+      .source_input(f.universal_boxes_)
+      .exclude(ExcludeSelfInteraction{})
+      .exclude(ExcludeSymmetricDuplicates{})
+      .build(*f.bulk_);
+  const PairSet expected = {{0, 2}, {0, 4}, {0, 5}, {2, 4}, {2, 5}, {4, 5}};
+  verify_exact_pair_set(list, expected);
+}
+
+// ---- Disjoint ----
+
+template <typename ListType>
+void test_disjoint_no_excluder(DeterministicFixture& f) {
+  auto list = make_neighbor_list_builder<ListType>()
+      .exec_space(TestExecSpace{})
+      .target_input(f.disjoint_target_boxes_)
+      .source_input(f.disjoint_source_boxes_)
+      .build(*f.bulk_);
+  const PairSet expected = {{0, 0}};  // node1 (box0) ↔ node3 (box2)
+  verify_exact_pair_set(list, expected);
+}
+
+template <typename ListType>
+void test_disjoint_self(DeterministicFixture& f) {
+  auto list = make_neighbor_list_builder<ListType>()
+      .exec_space(TestExecSpace{})
+      .target_input(f.disjoint_target_boxes_)
+      .source_input(f.disjoint_source_boxes_)
+      .exclude(ExcludeSelfInteraction{})
+      .build(*f.bulk_);
+  const PairSet expected = {{0, 0}};  // disjoint nodes: no self-pairs to remove
+  verify_exact_pair_set(list, expected);
+}
+
+template <typename ListType>
+void test_disjoint_symdups(DeterministicFixture& f) {
+  auto list = make_neighbor_list_builder<ListType>()
+      .exec_space(TestExecSpace{})
+      .target_input(f.disjoint_target_boxes_)
+      .source_input(f.disjoint_source_boxes_)
+      .exclude(ExcludeSymmetricDuplicates{})
+      .build(*f.bulk_);
+  const PairSet expected = {{0, 0}};  // intersection = empty; ExcludeSymDup never fires
+  verify_exact_pair_set(list, expected);
+}
+
+template <typename ListType>
+void test_disjoint_self_symdups(DeterministicFixture& f) {
+  auto list = make_neighbor_list_builder<ListType>()
+      .exec_space(TestExecSpace{})
+      .target_input(f.disjoint_target_boxes_)
+      .source_input(f.disjoint_source_boxes_)
+      .exclude(ExcludeSelfInteraction{})
+      .exclude(ExcludeSymmetricDuplicates{})
+      .build(*f.bulk_);
+  const PairSet expected = {{0, 0}};
+  verify_exact_pair_set(list, expected);
+}
+
+// ---- Overlapping ----
+// Target local ords: 0=node1, 1=node2, 2=node5, 3=node6
+// Source local ords: 0=node3, 1=node4, 2=node5, 3=node6
+
+template <typename ListType>
+void test_overlapping_no_excluder(DeterministicFixture& f) {
+  auto list = make_neighbor_list_builder<ListType>()
+      .exec_space(TestExecSpace{})
+      .target_input(f.overlapping_target_boxes_)
+      .source_input(f.overlapping_source_boxes_)
+      .build(*f.bulk_);
+  const PairSet expected = {
+      {0, 0},  // node1↔node3
+      {0, 2},  // node1↔node5
+      {0, 3},  // node1↔node6
+      {2, 0},  // node5↔node3
+      {2, 2},  // node5 self
+      {2, 3},  // node5↔node6
+      {3, 0},  // node6↔node3
+      {3, 2},  // node6↔node5
+      {3, 3},  // node6 self
+  };
+  verify_exact_pair_set(list, expected);
+}
+
+template <typename ListType>
+void test_overlapping_self(DeterministicFixture& f) {
+  auto list = make_neighbor_list_builder<ListType>()
+      .exec_space(TestExecSpace{})
+      .target_input(f.overlapping_target_boxes_)
+      .source_input(f.overlapping_source_boxes_)
+      .exclude(ExcludeSelfInteraction{})
+      .build(*f.bulk_);
+  const PairSet expected = {{0, 0}, {0, 2}, {0, 3}, {2, 0}, {2, 3}, {3, 0}, {3, 2}};
+  verify_exact_pair_set(list, expected);
+}
+
+template <typename ListType>
+void test_overlapping_symdups(DeterministicFixture& f) {
+  auto list = make_neighbor_list_builder<ListType>()
+      .exec_space(TestExecSpace{})
+      .target_input(f.overlapping_target_boxes_)
+      .source_input(f.overlapping_source_boxes_)
+      .exclude(ExcludeSymmetricDuplicates{})
+      .build(*f.bulk_);
+  // Intersection = shared_part = {node5, node6}.
+  // Only pair where BOTH entities are in shared_part AND src<trg: (3,2) [trg=node6, src=node5].
+  const PairSet expected = {{0, 0}, {0, 2}, {0, 3}, {2, 0}, {2, 2}, {2, 3}, {3, 0}, {3, 3}};
+  verify_exact_pair_set(list, expected);
+}
+
+template <typename ListType>
+void test_overlapping_self_symdups(DeterministicFixture& f) {
+  auto list = make_neighbor_list_builder<ListType>()
+      .exec_space(TestExecSpace{})
+      .target_input(f.overlapping_target_boxes_)
+      .source_input(f.overlapping_source_boxes_)
+      .exclude(ExcludeSelfInteraction{})
+      .exclude(ExcludeSymmetricDuplicates{})
+      .build(*f.bulk_);
+  const PairSet expected = {{0, 0}, {0, 2}, {0, 3}, {2, 0}, {2, 3}, {3, 0}};
+  verify_exact_pair_set(list, expected);
+}
+
+// ---- IdSubset ----
+// Target local ords: 0=node5, 1=node6
+// Source local ords: 0=node5, 1=node6
+
+template <typename ListType>
+void test_idsubset_no_excluder(DeterministicFixture& f) {
+  auto list = make_neighbor_list_builder<ListType>()
+      .exec_space(TestExecSpace{})
+      .target_input(f.idsubset_boxes_)
+      .source_input(f.idsubset_boxes_)
+      .build(*f.bulk_);
+  const PairSet expected = {{0, 0}, {0, 1}, {1, 0}, {1, 1}};
+  verify_exact_pair_set(list, expected);
+}
+
+template <typename ListType>
+void test_idsubset_self(DeterministicFixture& f) {
+  auto list = make_neighbor_list_builder<ListType>()
+      .exec_space(TestExecSpace{})
+      .target_input(f.idsubset_boxes_)
+      .source_input(f.idsubset_boxes_)
+      .exclude(ExcludeSelfInteraction{})
+      .build(*f.bulk_);
+  const PairSet expected = {{0, 1}, {1, 0}};
+  verify_exact_pair_set(list, expected);
+}
+
+template <typename ListType>
+void test_idsubset_symdups(DeterministicFixture& f) {
+  auto list = make_neighbor_list_builder<ListType>()
+      .exec_space(TestExecSpace{})
+      .target_input(f.idsubset_boxes_)
+      .source_input(f.idsubset_boxes_)
+      .exclude(ExcludeSymmetricDuplicates{})
+      .build(*f.bulk_);
+  // Both arrays are shared_part; intersection = shared_part = all nodes here.
+  // Suppress (1,0): trg=node6, src=node5, src_entity < trg_entity.
+  const PairSet expected = {{0, 0}, {0, 1}, {1, 1}};
+  verify_exact_pair_set(list, expected);
+}
+
+template <typename ListType>
+void test_idsubset_self_symdups(DeterministicFixture& f) {
+  auto list = make_neighbor_list_builder<ListType>()
+      .exec_space(TestExecSpace{})
+      .target_input(f.idsubset_boxes_)
+      .source_input(f.idsubset_boxes_)
+      .exclude(ExcludeSelfInteraction{})
+      .exclude(ExcludeSymmetricDuplicates{})
+      .build(*f.bulk_);
+  const PairSet expected = {{0, 1}};
+  verify_exact_pair_set(list, expected);
+}
+
+// TEST_F wrappers — one 1d/2d pair per template helper (32 tests total).
+
+// clang-format off
+#define MAKE_DET_TESTS(selector, excluder_tag)                                              \
+  TEST_F(DeterministicFixture, selector##_##excluder_tag##_1d) {                           \
+    test_##selector##_##excluder_tag<List1d>(*this);                                        \
+  }                                                                                         \
+  TEST_F(DeterministicFixture, selector##_##excluder_tag##_2d) {                           \
+    test_##selector##_##excluder_tag<List2d>(*this);                                        \
+  }
+
+MAKE_DET_TESTS(universal,   no_excluder)
+MAKE_DET_TESTS(universal,   self)
+MAKE_DET_TESTS(universal,   symdups)
+MAKE_DET_TESTS(universal,   self_symdups)
+MAKE_DET_TESTS(disjoint,    no_excluder)
+MAKE_DET_TESTS(disjoint,    self)
+MAKE_DET_TESTS(disjoint,    symdups)
+MAKE_DET_TESTS(disjoint,    self_symdups)
+MAKE_DET_TESTS(overlapping, no_excluder)
+MAKE_DET_TESTS(overlapping, self)
+MAKE_DET_TESTS(overlapping, symdups)
+MAKE_DET_TESTS(overlapping, self_symdups)
+MAKE_DET_TESTS(idsubset,    no_excluder)
+MAKE_DET_TESTS(idsubset,    self)
+MAKE_DET_TESTS(idsubset,    symdups)
+MAKE_DET_TESTS(idsubset,    self_symdups)
+
+#undef MAKE_DET_TESTS
+// clang-format on
+
+// =============================================================================
+// Group 3 — Random N² correctness validation
+// =============================================================================
+
+// Place N spheres at Philox-generated centers; build with ExcludeSelfInteraction;
+// verify every list pair corresponds to overlapping boxes and every oracle pair appears.
+template <typename ListType, typename BuildFn>
+void run_random_n2_validation(BuildFn build_fn, stk::mesh::BulkData& bulk,
+                              const stk::mesh::Selector& selector, int num_nodes) {
+  constexpr size_t kSeed = 42;
+  constexpr float kDomainSize = 10.0f;
+  constexpr float kRadius = 0.9f;
+
+  std::vector<stk::mesh::Entity> nodes(num_nodes);
+  for (int i = 0; i < num_nodes; ++i) {
+    nodes[i] = bulk.get_entity(stk::topology::NODE_RANK, i + 1);
+    ASSERT_TRUE(bulk.is_valid(nodes[i])) << "Node " << (i + 1) << " not found.";
+  }
+
+  std::vector<ArborX::Box> boxes(num_nodes);
+  for (int i = 0; i < num_nodes; ++i) {
+    openrand::Philox rng = mundy::make_philox(kSeed, static_cast<uint32_t>(i));
+    const float cx = rng.uniform<float>(0.0f, kDomainSize);
+    const float cy = rng.uniform<float>(0.0f, kDomainSize);
+    const float cz = rng.uniform<float>(0.0f, kDomainSize);
+    boxes[i] = make_arborx_box(cx, cy, cz, kRadius);
+  }
+
+  SearchBoxes sb = make_search_boxes(selector, boxes, nodes);
+  ListType list = build_fn(bulk, sb, sb);
+
+  for (size_t t = 0; t < list.num_targets(); ++t) {
+    for (size_t k = 0; k < list.num_neighbors(t); ++k) {
+      const size_t s = list.source_index(t, k);
+      EXPECT_TRUE(boxes_overlap(boxes[t], boxes[s]))
+          << "Spurious pair (target=" << t << ", source=" << s << "): boxes do not overlap.";
+      EXPECT_NE(t, s) << "Self-pair (target==source==" << t << ") despite ExcludeSelfInteraction.";
+    }
+  }
+
+  const auto expected = oracle_pairs_no_self(boxes, boxes);
+  const auto actual = collect_pairs(list);
+  EXPECT_EQ(actual, expected) << "Neighbor list is missing oracle pairs or contains extra pairs.";
+}
+
+TEST(ArborX1dNeighborList, RandomN2Validation) {
+  constexpr int kN = 50;
+  auto [meta, bulk] = make_node_mesh(kN);
+  run_random_n2_validation<List1d>(
+      [](stk::mesh::BulkData& b, const SearchBoxes& tgt, const SearchBoxes& src) {
+        return make_neighbor_list_builder<List1d>()
+            .exec_space(TestExecSpace{})
+            .target_input(tgt)
+            .source_input(src)
+            .exclude(ExcludeSelfInteraction{})
+            .build(b);
+      },
+      *bulk, meta->universal_part(), kN);
+}
+
+TEST(ArborX2dNeighborList, RandomN2Validation) {
+  constexpr int kN = 50;
+  auto [meta, bulk] = make_node_mesh(kN);
+  run_random_n2_validation<List2d>(
+      [](stk::mesh::BulkData& b, const SearchBoxes& tgt, const SearchBoxes& src) {
+        return make_neighbor_list_builder<List2d>()
+            .exec_space(TestExecSpace{})
+            .target_input(tgt)
+            .source_input(src)
+            .exclude(ExcludeSelfInteraction{})
+            .build(b);
+      },
+      *bulk, meta->universal_part(), kN);
+}
+
+// =============================================================================
+// Group 4 — Iteration protocol
+// =============================================================================
+//
+// for_each_target_with_neighbors must visit ALL targets, including those with zero
+// neighbors.  A literal reading of "with_neighbors" might suggest skipping
+// zero-neighbor targets; this test guards against that regression.
+
+TEST(IterationProtocol, AllIsolated_VisitsAllTargets_1d) {
   constexpr int kN = 3;
   auto [meta, bulk] = make_node_mesh(kN);
   const stk::mesh::Selector sel = meta->universal_part();
   std::vector<stk::mesh::Entity> nodes(kN);
   for (int i = 0; i < kN; ++i) nodes[i] = bulk->get_entity(stk::topology::NODE_RANK, i + 1);
   const std::vector<ArborX::Box> far_boxes = {
-      make_arborx_box(0.0f, 0.0f, 0.0f, 0.1f),
-      make_arborx_box(1000.0f, 0.0f, 0.0f, 0.1f),
-      make_arborx_box(0.0f, 1000.0f, 0.0f, 0.1f),
+      make_arborx_box(0.f, 0.f, 0.f, 0.1f),
+      make_arborx_box(1000.f, 0.f, 0.f, 0.1f),
+      make_arborx_box(0.f, 1000.f, 0.f, 0.1f),
   };
   const SearchBoxes sb = make_search_boxes(sel, far_boxes, nodes);
-  const auto list = build_1d_list(*bulk, sb, sb);
+  const auto list = make_neighbor_list_builder<List1d>()
+      .exec_space(TestExecSpace{})
+      .target_input(sb)
+      .source_input(sb)
+      .exclude(ExcludeSelfInteraction{})
+      .build(*bulk);
+
   ASSERT_EQ(list.size(), 0u);
-  for (size_t t = 0; t < list.num_targets(); ++t)
-    EXPECT_EQ(list.num_neighbors(t), 0u) << "target " << t << " should be isolated.";
-  Kokkos::View<size_t*, TestMemSpace> pair_count("iso_pairs", 1);
-  Kokkos::deep_copy(pair_count, size_t(0));
-  mundy::search::for_each_neighbor_pair(
-      TestExecSpace{}, list, KOKKOS_LAMBDA(const NeighborPair<List1d>&) { Kokkos::atomic_inc(&pair_count(0)); });
-  Kokkos::fence();
-  EXPECT_EQ(pair_count(0), 0u) << "for_each_neighbor_pair should fire zero times for an empty list.";
-  Kokkos::View<size_t*, TestMemSpace> tgt_count("iso_tgts", 1);
+
+  Kokkos::View<size_t*, TestMemSpace> tgt_count("tgt_count", 1);
   Kokkos::deep_copy(tgt_count, size_t(0));
   mundy::search::for_each_target_with_neighbors(
-      TestExecSpace{}, list, KOKKOS_LAMBDA(const Neighbors<List1d>&) { Kokkos::atomic_inc(&tgt_count(0)); });
+      TestExecSpace{}, list,
+      KOKKOS_LAMBDA(const Neighbors<List1d>&) { Kokkos::atomic_inc(&tgt_count(0)); });
   Kokkos::fence();
   EXPECT_EQ(tgt_count(0), static_cast<size_t>(kN))
-      << "for_each_target_with_neighbors must visit all targets even when they have zero neighbors.";
+      << "for_each_target_with_neighbors must visit all " << kN << " targets even with zero neighbors.";
 }
 
-TEST(AdversarialSearch, AllIsolated_EmptyPairs_2d) {
+TEST(IterationProtocol, AllIsolated_VisitsAllTargets_2d) {
   constexpr int kN = 3;
   auto [meta, bulk] = make_node_mesh(kN);
   const stk::mesh::Selector sel = meta->universal_part();
   std::vector<stk::mesh::Entity> nodes(kN);
   for (int i = 0; i < kN; ++i) nodes[i] = bulk->get_entity(stk::topology::NODE_RANK, i + 1);
   const std::vector<ArborX::Box> far_boxes = {
-      make_arborx_box(0.0f, 0.0f, 0.0f, 0.1f),
-      make_arborx_box(1000.0f, 0.0f, 0.0f, 0.1f),
-      make_arborx_box(0.0f, 1000.0f, 0.0f, 0.1f),
+      make_arborx_box(0.f, 0.f, 0.f, 0.1f),
+      make_arborx_box(1000.f, 0.f, 0.f, 0.1f),
+      make_arborx_box(0.f, 1000.f, 0.f, 0.1f),
   };
   const SearchBoxes sb = make_search_boxes(sel, far_boxes, nodes);
-  const auto list = build_2d_list(*bulk, sb, sb);
+  const auto list = make_neighbor_list_builder<List2d>()
+      .exec_space(TestExecSpace{})
+      .target_input(sb)
+      .source_input(sb)
+      .exclude(ExcludeSelfInteraction{})
+      .build(*bulk);
+
   ASSERT_EQ(list.size(), 0u);
-  for (size_t t = 0; t < list.num_targets(); ++t)
-    EXPECT_EQ(list.num_neighbors(t), 0u) << "target " << t << " should be isolated.";
-  Kokkos::View<size_t*, TestMemSpace> pair_count("iso2_pairs", 1);
-  Kokkos::deep_copy(pair_count, size_t(0));
-  mundy::search::for_each_neighbor_pair(
-      TestExecSpace{}, list, KOKKOS_LAMBDA(const NeighborPair<List2d>&) { Kokkos::atomic_inc(&pair_count(0)); });
-  Kokkos::fence();
-  EXPECT_EQ(pair_count(0), 0u);
-  Kokkos::View<size_t*, TestMemSpace> tgt_count("iso2_tgts", 1);
+
+  Kokkos::View<size_t*, TestMemSpace> tgt_count("tgt_count2", 1);
   Kokkos::deep_copy(tgt_count, size_t(0));
   mundy::search::for_each_target_with_neighbors(
-      TestExecSpace{}, list, KOKKOS_LAMBDA(const Neighbors<List2d>&) { Kokkos::atomic_inc(&tgt_count(0)); });
+      TestExecSpace{}, list,
+      KOKKOS_LAMBDA(const Neighbors<List2d>&) { Kokkos::atomic_inc(&tgt_count(0)); });
   Kokkos::fence();
   EXPECT_EQ(tgt_count(0), static_cast<size_t>(kN));
 }
 
-// ---- Test 5.3: NeighborPair accessor chain consistency ----
+// =============================================================================
+// Group 5 — Debug bounds
+// =============================================================================
 //
-// Groups 1-4 only COUNT pairs via for_each; they never verify that the NeighborPair
-// object returns correct entity/index values.  A bug in the offset arithmetic
-// (e.g., off-by-one in pair_index()) would produce wrong source_entity values
-// without affecting the pair count.
+// MUNDY_THROW_ASSERT fires only when NDEBUG is not defined.
 
-TEST_F(NonPeriodicFixture, NeighborPairAccessorChain_1d) {
-  auto list = build_1d_list(*bulk_, search_boxes_, search_boxes_);
-  check_neighbor_pair_accessors(list);
-}
+#ifndef NDEBUG
 
-TEST_F(NonPeriodicFixture, NeighborPairAccessorChain_2d) {
-  auto list = build_2d_list(*bulk_, search_boxes_, search_boxes_);
-  check_neighbor_pair_accessors(list);
-}
-
-// ---- Test 5.4: Neighbors accessor consistency ----
-//
-// The Neighbors wrapper is constructed inside for_each_target_with_neighbors but
-// is never directly tested.  A misalignment between Neighbors::operator[] and
-// list.get_neighbor() would go undetected by the existing tests.
-
-TEST_F(NonPeriodicFixture, NeighborsAccessorConsistency_1d) {
-  auto list = build_1d_list(*bulk_, search_boxes_, search_boxes_);
-  check_neighbors_accessors(list);
-}
-
-TEST_F(NonPeriodicFixture, NeighborsAccessorConsistency_2d) {
-  auto list = build_2d_list(*bulk_, search_boxes_, search_boxes_);
-  check_neighbors_accessors(list);
-}
-
-// ---- Test 5.5: for_each_neighbor_pair visits correct pairs, each exactly once ----
-//
-// The existing check_for_each_pair_count only verifies the total count.  This test
-// also verifies which (target_idx, source_idx) pairs are visited, catching bugs
-// where the iterator emits duplicate or swapped indices.
-
-TEST_F(NonPeriodicFixture, ForEachPairMatchesDirectAccess_1d) {
-  auto list = build_1d_list(*bulk_, search_boxes_, search_boxes_);
-  check_foreach_pair_matches_direct(list);
-}
-
-TEST_F(NonPeriodicFixture, ForEachPairMatchesDirectAccess_2d) {
-  auto list = build_2d_list(*bulk_, search_boxes_, search_boxes_);
-  check_foreach_pair_matches_direct(list);
-}
-
-// ---- Test 5.6: size() equals the sum of per-target neighbor counts ----
-//
-// List1d returns size() from source_indices_.extent(0); List2d from total_pairs_
-// computed via parallel_reduce in the constructor.  Both must agree with summing
-// num_neighbors(t) for all t.  Also verified on a copy of each list to confirm
-// that the plain-int total_pairs_ copy-construct path for List2d is correct.
-
-TEST_F(NonPeriodicFixture, SizeEqualsNeighborSum_1d) {
-  auto list = build_1d_list(*bulk_, search_boxes_, search_boxes_);
-  check_size_equals_neighbor_sum(list);
-  auto copy = list;
-  check_size_equals_neighbor_sum(copy);
-}
-
-TEST_F(NonPeriodicFixture, SizeEqualsNeighborSum_2d) {
-  auto list = build_2d_list(*bulk_, search_boxes_, search_boxes_);
-  check_size_equals_neighbor_sum(list);
-  auto copy = list;
-  check_size_equals_neighbor_sum(copy);
-}
-
-// ---- Test 5.7: ExcludeSymmetricDuplicates suppresses exactly one orientation ----
-//
-// ExcludeSymmetricDuplicates is completely absent from Groups 1-4.  The excluder
-// marks buckets in the target ∩ source selector intersection, then suppresses the
-// pair (t,s) when src_entity < trg_entity.  With the universal selector the
-// intersection is the full mesh, so the rule applies to every pair.
-//
-// 4-box fixture, ExcludeSelf + ExcludeSymDup:
-//   Full pair set (ExcludeSelf only): {(0,1),(1,0),(0,2),(2,0)}
-//   Suppressed (src < trg):           {(1,0),(2,0)}  — source nodes 1,2 < target nodes 2,3
-//   Retained (src > trg):             {(0,1),(0,2)}  — source nodes 2,3 > target node 1
-//
-// The test verifies size()==2 and, for every retained pair, that
-// source_entity > target_entity (the property guaranteed by the excluder).
-
-TEST_F(NonPeriodicFixture, ExcludeSymmetricDuplicates_1d) {
+TEST_F(DeterministicFixture, OutOfBounds_1d) {
   auto list = make_neighbor_list_builder<List1d>()
       .exec_space(TestExecSpace{})
-      .target_input(search_boxes_)
-      .source_input(search_boxes_)
+      .target_input(universal_boxes_)
+      .source_input(universal_boxes_)
       .exclude(ExcludeSelfInteraction{})
-      .exclude(ExcludeSymmetricDuplicates{})
       .build(*bulk_);
-  EXPECT_EQ(list.size(), 2u) << "ExcludeSymmetricDuplicates should halve the 4-pair set to 2.";
-  check_size_equals_neighbor_sum(list);
-  for (size_t t = 0; t < list.num_targets(); ++t) {
-    for (size_t k = 0; k < list.num_neighbors(t); ++k) {
-      const stk::mesh::Entity trg = list.target_entity(t);
-      const stk::mesh::Entity src = list.source_entity(list.source_index(t, k));
-      EXPECT_GT(src, trg) << "ExcludeSymmetricDuplicates must retain only pairs where src_entity > trg_entity.";
-    }
-  }
+
+  EXPECT_THROW(list.num_neighbors(list.num_targets()), std::out_of_range);
+  EXPECT_THROW(list.target_entity(list.num_targets()), std::out_of_range);
+  EXPECT_THROW(list.source_entity(list.num_sources()), std::out_of_range);
+  EXPECT_THROW(list.source_index(0, list.num_neighbors(0)), std::out_of_range);
 }
 
-TEST_F(NonPeriodicFixture, ExcludeSymmetricDuplicates_2d) {
+TEST_F(DeterministicFixture, OutOfBounds_2d) {
   auto list = make_neighbor_list_builder<List2d>()
       .exec_space(TestExecSpace{})
-      .target_input(search_boxes_)
-      .source_input(search_boxes_)
+      .target_input(universal_boxes_)
+      .source_input(universal_boxes_)
       .exclude(ExcludeSelfInteraction{})
-      .exclude(ExcludeSymmetricDuplicates{})
       .build(*bulk_);
-  EXPECT_EQ(list.size(), 2u);
-  check_size_equals_neighbor_sum(list);
-  for (size_t t = 0; t < list.num_targets(); ++t) {
-    for (size_t k = 0; k < list.num_neighbors(t); ++k) {
-      const stk::mesh::Entity trg = list.target_entity(t);
-      const stk::mesh::Entity src = list.source_entity(list.source_index(t, k));
-      EXPECT_GT(src, trg) << "ExcludeSymmetricDuplicates must retain only pairs where src_entity > trg_entity.";
-    }
-  }
+
+  EXPECT_THROW(list.num_neighbors(list.num_targets()), std::out_of_range);
+  EXPECT_THROW(list.target_entity(list.num_targets()), std::out_of_range);
+  EXPECT_THROW(list.source_entity(list.num_sources()), std::out_of_range);
+  EXPECT_THROW(list.source_index(0, list.num_neighbors(0)), std::out_of_range);
 }
+
+#endif  // NDEBUG
 
 }  // namespace
 }  // namespace search

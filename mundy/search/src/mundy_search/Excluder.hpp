@@ -364,12 +364,6 @@ inline void ExcludeSymmetricDuplicates::setup(const stk::mesh::BulkData& bulk_da
   Kokkos::deep_copy(bucket_in_intersection_, host_mask);
 }
 
-// All of our excluders satisfy the ExcluderType concept
-static_assert(ExcluderType<NoExcluder>, "NoExcluder does not satisfy ExcluderType.");
-static_assert(ExcluderType<ExcludeSelfInteraction>, "ExcludeSelfInteraction does not satisfy ExcluderType.");
-static_assert(ExcluderType<ExcludeSymmetricDuplicates>, "ExcludeSymmetricDuplicates does not satisfy ExcluderType.");
-static_assert(ExcluderType<ExcluderChain<NoExcluder, ExcludeSelfInteraction>>, "ExcluderChain does not satisfy ExcluderType.");
-
 }  // namespace search
 
 }  // namespace mundy
