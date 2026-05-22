@@ -17,4 +17,4 @@
 # **********************************************************************************************************************
 # @HEADER
 
-add_subdirectory(core_tutorial)
+mundy_add_core_tutorial(04_matrices matrices_example.cpp CT_04_matrices)

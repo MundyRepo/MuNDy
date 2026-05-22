@@ -17,4 +17,4 @@
 # **********************************************************************************************************************
 # @HEADER
 
-add_subdirectory(core_tutorial)
+mundy_add_core_tutorial(05_quaternions quaternions_example.cpp CT_05_quaternions)

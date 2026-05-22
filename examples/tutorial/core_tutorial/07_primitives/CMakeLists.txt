@@ -17,4 +17,4 @@
 # **********************************************************************************************************************
 # @HEADER
 
-add_subdirectory(core_tutorial)
+mundy_add_core_tutorial(07_primitives primitives_example.cpp CT_07_primitives)

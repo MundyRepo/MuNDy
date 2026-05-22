@@ -17,4 +17,26 @@
 # **********************************************************************************************************************
 # @HEADER
 
-add_subdirectory(core_tutorial)
+function(mundy_add_core_tutorial exe_name source_file test_name)
+  tribits_add_executable_and_test(
+    ${exe_name}
+    NOEXEPREFIX
+    SOURCES ${source_file}
+    NAME ${test_name}
+    NUM_MPI_PROCS 1
+    CATEGORIES BASIC
+    TIMEOUT 30
+    INSTALLABLE
+  )
+endfunction()
+
+add_subdirectory(01_hello_world)
+add_subdirectory(02_utilities)
+add_subdirectory(03_vectors)
+add_subdirectory(04_matrices)
+add_subdirectory(05_quaternions)
+add_subdirectory(06_views)
+add_subdirectory(07_primitives)
+add_subdirectory(08_distance)
+add_subdirectory(09_periodicity)
+add_subdirectory(10_ngp_view)

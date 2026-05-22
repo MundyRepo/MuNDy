@@ -17,4 +17,4 @@
 # **********************************************************************************************************************
 # @HEADER
 
-add_subdirectory(core_tutorial)
+mundy_add_core_tutorial(01_hello_world hello_world.cpp CT_01_hello_world)

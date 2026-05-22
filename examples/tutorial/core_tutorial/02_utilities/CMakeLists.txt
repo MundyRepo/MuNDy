@@ -17,4 +17,4 @@
 # **********************************************************************************************************************
 # @HEADER
 
-add_subdirectory(core_tutorial)
+mundy_add_core_tutorial(02_utilities utilities_example.cpp CT_02_utilities)

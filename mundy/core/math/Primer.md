@@ -182,6 +182,100 @@ The following operations can be performed on matrices to compute various propert
 | `one_norm(m)`              | Maximum absolute column sum.                                                    |
 | `two_norm(m)`              | 2-norm (largest singular value of the matrix).                                  |
 
+## Quaternion
+The \ref mundy::AQuaternion "Quaternion" class represents an orientation or rotation in 3D space. When unit-norm (w² + x² + y² + z² = 1) it encodes a pure rotation and supports composition, vector rotation, tensor rotation, and spherical interpolation. It is templated by the scalar type. The concrete alias `Quaterniond` covers the common double-precision case.
+
+**Component order:** The constructor and named accessors use semantic order `(w, x, y, z)`. Internally Mundy follows Eigen's coefficient order `(x, y, z, w)`, which is visible only when accessing raw storage through `[]`.
+
+### Construction
+```cpp
+Quaterniond q1{1.0, 0.0, 0.0, 0.0};  // explicit (w, x, y, z): identity
+Quaterniond q2 = Quaterniond::identity();  // canonical no-rotation factory
+```
+
+### Accessors
+Named accessors use the mathematical `(w, x, y, z)` names. The `[]` accessor addresses the internal Eigen-coefficient storage `(x=0, y=1, z=2, w=3)`.
+```cpp
+q1.w();  q1.x();  q1.y();  q1.z();  // semantic component access
+q1[3];   // raw storage: index 3 is w in Eigen order
+```
+
+### Operations
+
+#### Scalar multiplication/division
+```cpp
+auto q2 = 2.0 * q1;   // q2_i = 2. * q1_i  (component-wise)
+auto q3 = q1 / 2.0;   // q3_i = q1_i / 2.
+q1 *= 2.0;
+q1 /= 2.0;
+```
+
+#### Element-wise addition/subtraction
+```cpp
+auto q3 = q1 + q2;   // component-wise; result is generally not unit-norm
+auto q4 = q1 - q2;
+q1 += q2;
+q1 -= q2;
+```
+
+#### Quaternion multiplication (rotation composition)
+```cpp
+auto q3 = q1 * q2;  // apply q2 first, then q1 (same convention as matrix multiplication)
+q1 *= q2;
+```
+
+#### Rotating a vector
+```cpp
+auto v2 = q * v;  // sandwich product q * v * q⁻¹; rotates v by the rotation encoded in q
+auto v3 = v * q;  // inverse rotation q⁻¹ * v * q; equivalent to conjugate(q) * v
+```
+
+#### Rotating a tensor (rank-2 matrix)
+`q * M` rotates each column of M (equivalent to R * M); `M * q` rotates each row by the inverse rotation (equivalent to M * R^T). Together they form the similarity transform:
+```cpp
+auto M_lab = q * M_body * conjugate(q);  // R * M_body * R^T -- full tensor rotation
+```
+
+### Special quaternions
+```cpp
+Quaterniond::identity();  // w=1, x=y=z=0 -- no rotation
+```
+
+### Basic arithmetic reductions
+
+| **Operation**     | **Description**                          |
+|--------------------|------------------------------------------|
+| `norm(q)`         | Euclidean norm √(w²+x²+y²+z²).          |
+| `norm_squared(q)` | Squared norm w²+x²+y²+z².               |
+| `dot(q1, q2)`     | Dot product of the component vectors.    |
+
+### Special operations
+
+| **Operation**                            | **Description**                                                                                                   |
+|------------------------------------------|-------------------------------------------------------------------------------------------------------------------|
+| `conjugate(q)`                           | Negate the vector part: `(w, -x, -y, -z)`. For unit quaternions, equivalent to the inverse rotation.             |
+| `inverse(q)`                             | `conjugate(q) / norm(q)²`. Equals `conjugate(q)` when `q` is unit-norm.                                          |
+| `normalize(q)`                           | Return `q / norm(q)`.                                                                                             |
+| `slerp(q1, q2, t)`                       | Spherical linear interpolation at parameter `t ∈ [0, 1]`. Gives constant angular velocity between orientations.  |
+| `rotate_quaternion(q, omega, dt)`        | Integrate angular velocity `omega` over timestep `dt` into `q` in-place (Delong 2015, Appendix A).               |
+
+### Conversion functions
+Build a quaternion from whichever representation is natural for your data. Manual `(w, x, y, z)` construction requires remembering the half-angle formula; prefer these helpers.
+
+| **Function**                             | **Description**                                                                                   |
+|------------------------------------------|---------------------------------------------------------------------------------------------------|
+| `axis_angle_to_quaternion(axis, angle)`  | Unit axis vector + angle in radians → unit quaternion. Formula: w=cos(θ/2), (x,y,z)=sin(θ/2)·axis. |
+| `euler_to_quat(roll, pitch, yaw)`        | ZYX intrinsic Euler angles (roll about x, pitch about y, yaw about z) → quaternion.               |
+| `rotation_matrix_to_quaternion(R)`       | 3×3 orthonormal rotation matrix → quaternion.                                                     |
+| `quaternion_to_rotation_matrix(q)`       | Quaternion → 3×3 rotation matrix.                                                                 |
+
+```cpp
+auto q = axis_angle_to_quaternion(Vector3d{0., 0., 1.}, M_PI / 2.0);  // 90° about z
+auto q = euler_to_quat(0.0, 0.0, M_PI / 2.0);                         // same rotation as Euler yaw
+auto q = rotation_matrix_to_quaternion(R);
+auto R = quaternion_to_rotation_matrix(q);
+```
+
 ## Views
 Mundy's Vector, Matrix, and Quaternion types offer the ability to construct a non-owning mathematical view into existing data, endowing it with all the mathematical properties listed above. Views can either be constructed from pointers: 
 ```cpp

@@ -14,6 +14,7 @@ GLOBAL_SET(${PACKAGE_NAME}_ENABLE_ALL_OPTIONAL_PACKAGES ON)
 
 tribits_configure_file(Mundy_config.hpp)
 tribits_add_test_directories(${PACKAGE_SOURCE_DIR}/mundy/tests)
+tribits_add_example_directories(${PACKAGE_SOURCE_DIR}/examples/tutorial)
 
 tribits_process_subpackages()
 
