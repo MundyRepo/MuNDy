@@ -26,6 +26,7 @@ set(NOINSTALLHEADERS
     src/mundy_search/NeighborList.hpp
     src/mundy_search/NeighborListBuilder.hpp
     src/mundy_search/NeighborListBuildTraits.hpp
+    src/mundy_search/NeighborListIterationTraits.hpp
     src/mundy_search/Neighbors.hpp
     src/mundy_search/SearchCandidate.hpp
     src/mundy_search/STKSearchNeighborList.hpp

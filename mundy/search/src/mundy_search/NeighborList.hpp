@@ -28,6 +28,8 @@
 ///   - Search candidate types (SearchCandidate.hpp)
 ///   - Excluder concept and built-in excluders (Excluder.hpp)
 ///   - NeighborListType concept and Neighbors/NeighborPair access types (Neighbors.hpp)
+///   - NeighborListIterationTraits primary template and 2D specializations (NeighborListIterationTraits.hpp,
+///     ArborX2dNeighborList.hpp)
 ///   - ForEach parallel iteration entry points (ForEach.hpp)
 ///   - NeighborListInputType concept and NeighborListBuildTraits primary template (NeighborListBuildTraits.hpp)
 ///   - Type-state fluent builder (NeighborListBuilder.hpp)

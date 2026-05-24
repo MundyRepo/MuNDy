@@ -42,8 +42,8 @@
 #include <Kokkos_Core.hpp>
 
 // Mundy
-#include <mundy_search/Neighbors.hpp>                  // for NeighborListType concept
-#include <mundy_search/impl/NeighborListFunctors.hpp>  // for DeployFunctorOnNeighborPairs, DeployFunctorOnTargetNeighbors
+#include <mundy_search/NeighborListIterationTraits.hpp>  // for NeighborListIterationTraits primary template
+#include <mundy_search/Neighbors.hpp>                    // for NeighborListType concept
 
 namespace mundy {
 
@@ -69,11 +69,7 @@ void for_each_neighbor_pair(const ListType& list, const Functor& functor) {
 /// \param functor [in] Callback invoked once per stored neighbor pair.
 template <NeighborListType ListType, typename ExecutionSpace, typename Functor>
 void for_each_neighbor_pair(const ExecutionSpace& exec_space, const ListType& list, const Functor& functor) {
-  using size_type = typename ListType::size_type;
-  using range_policy_t = Kokkos::RangePolicy<ExecutionSpace, Kokkos::IndexType<size_type>>;
-  impl::DeployFunctorOnNeighborPairs<ListType, Functor> deploy_functor(list, functor);
-  Kokkos::parallel_for("mundy::search::for_each_neighbor_pair", range_policy_t(exec_space, 0, list.num_targets()),
-                       deploy_functor);
+  NeighborListIterationTraits<ListType>::dispatch_pair(exec_space, list, functor);
 }
 
 /// \brief Run a callback for every target and its neighbors using the list's default execution space.
@@ -96,11 +92,7 @@ void for_each_target_with_neighbors(const ListType& list, const Functor& functor
 /// \param functor [in] Callback invoked once per target.
 template <NeighborListType ListType, typename ExecutionSpace, typename Functor>
 void for_each_target_with_neighbors(const ExecutionSpace& exec_space, const ListType& list, const Functor& functor) {
-  using size_type = typename ListType::size_type;
-  using range_policy_t = Kokkos::RangePolicy<ExecutionSpace, Kokkos::IndexType<size_type>>;
-  impl::DeployFunctorOnTargetNeighbors<ListType, Functor> deploy_functor(list, functor);
-  Kokkos::parallel_for("mundy::search::for_each_target_with_neighbors",
-                       range_policy_t(exec_space, 0, list.num_targets()), deploy_functor);
+  NeighborListIterationTraits<ListType>::dispatch_target(exec_space, list, functor);
 }
 
 /// \brief Run a Kokkos reduction over every stored neighbor pair using the list's default execution space.
@@ -126,14 +118,9 @@ void for_each_neighbor_pair_reduce(const ListType& list, const Functor& functor,
 /// \param functor [in] Callback invoked once per stored neighbor pair.
 /// \param reducer [in,out] Kokkos reducer that owns the result and defines join/init.
 template <NeighborListType ListType, typename ExecutionSpace, typename Functor, typename ReducerType>
-void for_each_neighbor_pair_reduce(const ExecutionSpace& exec_space, const ListType& list,
-                                   const Functor& functor, ReducerType& reducer) {
-  using size_type = typename ListType::size_type;
-  using range_policy_t = Kokkos::RangePolicy<ExecutionSpace, Kokkos::IndexType<size_type>>;
-  impl::DeployReduceFunctorOnNeighborPairs<ListType, Functor, ReducerType> deploy_functor(list, functor);
-  Kokkos::parallel_reduce("mundy::search::for_each_neighbor_pair_reduce",
-                          range_policy_t(exec_space, 0, list.num_targets()),
-                          deploy_functor, reducer);
+void for_each_neighbor_pair_reduce(const ExecutionSpace& exec_space, const ListType& list, const Functor& functor,
+                                   ReducerType& reducer) {
+  NeighborListIterationTraits<ListType>::dispatch_pair_reduce(exec_space, list, functor, reducer);
 }
 
 /// \brief Run a Kokkos reduction over every target and its neighbors using the list's default execution space.
@@ -161,12 +148,7 @@ void for_each_target_with_neighbors_reduce(const ListType& list, const Functor& 
 template <NeighborListType ListType, typename ExecutionSpace, typename Functor, typename ReducerType>
 void for_each_target_with_neighbors_reduce(const ExecutionSpace& exec_space, const ListType& list,
                                            const Functor& functor, ReducerType& reducer) {
-  using size_type = typename ListType::size_type;
-  using range_policy_t = Kokkos::RangePolicy<ExecutionSpace, Kokkos::IndexType<size_type>>;
-  impl::DeployReduceFunctorOnTargetNeighbors<ListType, Functor, ReducerType> deploy_functor(list, functor);
-  Kokkos::parallel_reduce("mundy::search::for_each_target_with_neighbors_reduce",
-                          range_policy_t(exec_space, 0, list.num_targets()),
-                          deploy_functor, reducer);
+  NeighborListIterationTraits<ListType>::dispatch_target_reduce(exec_space, list, functor, reducer);
 }
 
 }  // namespace search

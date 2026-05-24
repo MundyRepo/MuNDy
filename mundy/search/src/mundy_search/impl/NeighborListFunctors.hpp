@@ -193,6 +193,97 @@ class DeployReduceFunctorOnTargetNeighbors {
   Functor functor_;
 };
 
+/// \class FlatDeployFunctorOnNeighborPairs
+/// \brief Kokkos functor for use with MDRangePolicy<Rank<2>> over a dense 2D neighbor layout.
+///
+/// The outer `parallel_for` iterates over a rectangular `(num_targets, max_neighbors_per_target)`
+/// grid.  Each cell `(t, k)` is a potential pair slot; the functor guards on
+/// `k < list->num_neighbors(t)` and skips padding slots silently.  This exposes
+/// `num_targets * max_neighbors_per_target` parallel work items, removing the serial inner
+/// loop and load-imbalance of the target-parallel strategy when neighbor counts vary.
+///
+/// \tparam NeighborListType Concrete neighbor-list implementation type.
+/// \tparam Functor User functor callable with `NeighborPair<NeighborListType>`.
+template <typename NeighborListType, typename Functor>
+class FlatDeployFunctorOnNeighborPairs {
+ public:
+  //! Size type used by the concrete neighbor list.
+  using size_type = typename NeighborListType::size_type;
+
+  /// \brief Construct the flat deployment functor.
+  /// \param list [in] Concrete neighbor list.
+  /// \param functor [in] User callback to run for every valid neighbor pair.
+  KOKKOS_INLINE_FUNCTION
+  FlatDeployFunctorOnNeighborPairs(const NeighborListType& list, const Functor& functor)
+      : list_(&list), functor_(functor) {}
+
+  /// \brief Invoke the user callback for cell `(target_index, neighbor_ordinal)` if valid.
+  /// \param target_index [in] Dense target ordinal (outer MDRange dimension).
+  /// \param neighbor_ordinal [in] Neighbor slot index (inner MDRange dimension).
+  KOKKOS_INLINE_FUNCTION
+  void operator()(const size_type target_index, const size_type neighbor_ordinal) const {
+    if (neighbor_ordinal < list_->num_neighbors(target_index)) {
+      functor_(mundy::search::NeighborPair<NeighborListType>(*list_, target_index, neighbor_ordinal));
+    }
+  }
+
+ private:
+  //! \name Internal members
+  //@{
+
+  //! Pointer to the neighbor list (never null after construction; outlives this functor).
+  const NeighborListType* list_;
+  //! User callback invoked once for each valid pair cell.
+  Functor functor_;
+  //@}
+};
+
+/// \class FlatDeployReduceFunctorOnNeighborPairs
+/// \brief Kokkos reduction functor for use with MDRangePolicy<Rank<2>> over a dense 2D neighbor layout.
+///
+/// Same cell-guard logic as `FlatDeployFunctorOnNeighborPairs`, but with an accumulator argument
+/// for use inside `parallel_reduce`.
+///
+/// \tparam NeighborListType Concrete neighbor-list implementation type.
+/// \tparam Functor User functor callable as `functor(NeighborPair<NeighborListType>, value_type&)`.
+/// \tparam ReducerType Kokkos reducer type (e.g. `Kokkos::Sum<double>`); supplies `value_type`.
+template <typename NeighborListType, typename Functor, typename ReducerType>
+class FlatDeployReduceFunctorOnNeighborPairs {
+ public:
+  //! Size type used by the concrete neighbor list.
+  using size_type = typename NeighborListType::size_type;
+  //! Reduction accumulator type required by Kokkos parallel_reduce.
+  using value_type = typename ReducerType::value_type;
+
+  /// \brief Construct the flat reduction functor.
+  /// \param list [in] Concrete neighbor list.
+  /// \param functor [in] User callback to run for every valid neighbor pair.
+  KOKKOS_INLINE_FUNCTION
+  FlatDeployReduceFunctorOnNeighborPairs(const NeighborListType& list, const Functor& functor)
+      : list_(&list), functor_(functor) {}
+
+  /// \brief Accumulate over cell `(target_index, neighbor_ordinal)` if valid.
+  /// \param target_index [in] Dense target ordinal (outer MDRange dimension).
+  /// \param neighbor_ordinal [in] Neighbor slot index (inner MDRange dimension).
+  /// \param update [in,out] Thread-local reduction accumulator.
+  KOKKOS_INLINE_FUNCTION
+  void operator()(const size_type target_index, const size_type neighbor_ordinal, value_type& update) const {
+    if (neighbor_ordinal < list_->num_neighbors(target_index)) {
+      functor_(mundy::search::NeighborPair<NeighborListType>(*list_, target_index, neighbor_ordinal), update);
+    }
+  }
+
+ private:
+  //! \name Internal members
+  //@{
+
+  //! Pointer to the neighbor list (never null after construction; outlives this functor).
+  const NeighborListType* list_;
+  //! User callback invoked once for each valid pair cell.
+  Functor functor_;
+  //@}
+};
+
 }  // namespace impl
 
 }  // namespace search
