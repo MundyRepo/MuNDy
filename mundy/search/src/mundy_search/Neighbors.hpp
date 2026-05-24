@@ -95,7 +95,7 @@ class Neighbors {
   /// \param list [in] Concrete neighbor list to view.
   /// \param target_index [in] Dense target ordinal.
   KOKKOS_INLINE_FUNCTION
-  Neighbors(const neighbor_list_type& list, size_type target_index) : list_(list), target_index_(target_index) {
+  Neighbors(const neighbor_list_type& list, size_type target_index) : list_(&list), target_index_(target_index) {
   }
   //@}
 
@@ -105,14 +105,14 @@ class Neighbors {
   /// \brief Get the number of neighbors for the target.
   KOKKOS_INLINE_FUNCTION
   size_type size() const {
-    return list_.num_neighbors(target_index_);
+    return list_->num_neighbors(target_index_);
   }
 
   /// \brief Get the neighbor entity for a neighbor ordinal.
   /// \param neighbor_ordinal [in] Ordinal in `[0, size())`.
   KOKKOS_INLINE_FUNCTION
   stk::mesh::Entity operator[](size_type neighbor_ordinal) const {
-    return list_.get_neighbor(target_index_, neighbor_ordinal);
+    return list_->get_neighbor(target_index_, neighbor_ordinal);
   }
 
   /// \brief Get the neighbor entity for a neighbor ordinal.
@@ -126,13 +126,13 @@ class Neighbors {
   /// \param neighbor_ordinal [in] Ordinal in `[0, size())`.
   KOKKOS_INLINE_FUNCTION
   source_index_type source_index(size_type neighbor_ordinal) const {
-    return list_.source_index(target_index_, neighbor_ordinal);
+    return list_->source_index(target_index_, neighbor_ordinal);
   }
 
   /// \brief Get the target STK entity for this neighbor range.
   KOKKOS_INLINE_FUNCTION
   stk::mesh::Entity target_entity() const {
-    return list_.target_entity(target_index_);
+    return list_->target_entity(target_index_);
   }
 
   /// \brief Get the dense target ordinal associated with this range.
@@ -147,7 +147,7 @@ class Neighbors {
   /// as reading image shifts directly from a periodic list type.
   KOKKOS_INLINE_FUNCTION
   const neighbor_list_type& list() const noexcept {
-    return list_;
+    return *list_;
   }
   //@}
 
@@ -155,8 +155,8 @@ class Neighbors {
   //! \name Internal members
   //@{
 
-  //! Concrete list instance being viewed.
-  neighbor_list_type list_;
+  //! Pointer to the concrete list being viewed (never null after construction).
+  const neighbor_list_type* list_ = nullptr;
   //! Dense target ordinal whose neighbor range is being viewed.
   size_type target_index_;
   //@}
@@ -193,7 +193,7 @@ class NeighborPair {
   /// \param neighbor_ordinal [in] Ordinal of the source neighbor for the target.
   KOKKOS_INLINE_FUNCTION
   NeighborPair(const neighbor_list_type& list, size_type target_index, size_type neighbor_ordinal)
-      : list_(list), target_index_(target_index), neighbor_ordinal_(neighbor_ordinal) {
+      : list_(&list), target_index_(target_index), neighbor_ordinal_(neighbor_ordinal) {
   }
   //@}
 
@@ -209,19 +209,19 @@ class NeighborPair {
   /// \brief Get the dense source ordinal for this pair.
   KOKKOS_INLINE_FUNCTION
   source_index_type source_index() const {
-    return list_.source_index(target_index_, neighbor_ordinal_);
+    return list_->source_index(target_index_, neighbor_ordinal_);
   }
 
   /// \brief Get the target STK entity.
   KOKKOS_INLINE_FUNCTION
   stk::mesh::Entity target_entity() const {
-    return list_.target_entity(target_index_);
+    return list_->target_entity(target_index_);
   }
 
   /// \brief Get the source STK entity.
   KOKKOS_INLINE_FUNCTION
   stk::mesh::Entity source_entity() const {
-    return list_.source_entity(source_index());
+    return list_->source_entity(source_index());
   }
 
   /// \brief Get the source image shift relative to the target image shift.
@@ -230,7 +230,7 @@ class NeighborPair {
   /// fake shift value because that would hide whether a kernel is using periodic geometry.
   KOKKOS_INLINE_FUNCTION
   auto relative_image_shift() const {
-    return list_.relative_image_shift(target_index_, neighbor_ordinal_);
+    return list_->relative_image_shift(target_index_, neighbor_ordinal_);
   }
   //@}
 
@@ -238,8 +238,8 @@ class NeighborPair {
   //! \name Internal members
   //@{
 
-  //! Concrete list instance being viewed.
-  neighbor_list_type list_;
+  //! Pointer to the concrete list being viewed (never null after construction).
+  const neighbor_list_type* list_ = nullptr;
   //! Dense target ordinal for the pair.
   size_type target_index_;
   //! Ordinal of the source inside the target's neighbor range.

@@ -524,12 +524,13 @@ TEST_F(UnitTestAccessorExprFixture, field_copy) {
 #endif
 
   stk::mesh::Selector b1_not_b2 = block1_selector_ - block2_selector_;
-  auto x = make_tagged_component<XTag>(ScalarFieldComponent(*field_x_ptr_));
-  auto y = make_tagged_component<YTag>(ScalarFieldComponent(*field_y_ptr_));
+  auto aggregate = Aggregate(get_bulk(), b1_not_b2)
+                       .add_component<XTag>(ScalarFieldComponent(*field_x_ptr_))
+                       .add_component<YTag>(ScalarFieldComponent(*field_y_ptr_));
 
   {
     auto es = make_entity_expr(get_bulk(), b1_not_b2, stk::topology::NODE_RANK);
-    x(es) = y(es);
+    aggregate.get<XTag>(es) = aggregate.get<YTag>(es);
   }
 
   check_field_data_on_host_func<1>("field copy error. x", get_bulk(), *field_x_ptr_, b1_not_b2, get_field_y_func());

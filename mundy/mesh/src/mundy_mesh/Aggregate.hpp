@@ -385,6 +385,19 @@ class Aggregate {
                   "Attempting to get a component that does not exist in the aggregate");
   }
 
+  /// \brief Get an expression for the data tagged by the given tag for the given entity expression.
+  template <typename Tag, class EntityExpr>
+  MUNDY_REQUIRES(contains_tag_v<Tag, Components...>)
+  decltype(auto) get(const EntityExprBase<EntityExpr>& entity_expr) {
+    return get_component<Tag>()(entity_expr);
+  }
+  template <typename Tag, class EntityExpr>
+  MUNDY_REQUIRES(!contains_tag_v<Tag, Components...>)
+  void get(const EntityExprBase<EntityExpr>& /*entity_expr*/) {
+    static_assert(contains_tag_v<Tag, Components...>,
+                  "Attempting to get a component that does not exist in the aggregate");
+  }
+
   /// \brief Get the data tagged by the given tag for the given entity.
   template <typename Tag>
   MUNDY_REQUIRES(contains_tag_v<Tag, Components...>)
@@ -395,6 +408,19 @@ class Aggregate {
   template <typename Tag>
   MUNDY_REQUIRES(!contains_tag_v<Tag, Components...>)
   void get(stk::mesh::Entity /*entity*/) const {
+    static_assert(contains_tag_v<Tag, Components...>,
+                  "Attempting to get a component that does not exist in the aggregate");
+  }
+
+  /// \brief Get an expression for the data tagged by the given tag for the given entity expression.
+  template <typename Tag, class EntityExpr>
+  MUNDY_REQUIRES(contains_tag_v<Tag, Components...>)
+  decltype(auto) get(const EntityExprBase<EntityExpr>& entity_expr) const {
+    return get_component<Tag>()(entity_expr);
+  }
+  template <typename Tag, class EntityExpr>
+  MUNDY_REQUIRES(!contains_tag_v<Tag, Components...>)
+  void get(const EntityExprBase<EntityExpr>& /*entity_expr*/) const {
     static_assert(contains_tag_v<Tag, Components...>,
                   "Attempting to get a component that does not exist in the aggregate");
   }

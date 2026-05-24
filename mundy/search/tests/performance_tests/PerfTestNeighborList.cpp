@@ -111,7 +111,7 @@
 // giving r = cbrt(kTargetNeighbors + 1) / 4 = cbrt(16) / 4 ≈ 0.6300.
 static constexpr int   kTargetNeighbors = 15;
 static constexpr float kDetectRadius = 0.6300f;  // cbrt(kTargetNeighbors + 1) / 4
-static constexpr int kNValues[] = {250, 1000, 4000, 16000, 32000, 64000, 128000, 256000, 512000};
+static constexpr int kNValues[] = {1000, 8000, 64000, 256000, 512000};
 static constexpr int kNumNValues = sizeof(kNValues) / sizeof(kNValues[0]);
 
 // =============================================================================

@@ -50,16 +50,16 @@ class DeployFunctorOnNeighborPairs {
   /// \param list [in] Concrete neighbor list.
   /// \param functor [in] User callback to run for every neighbor pair.
   KOKKOS_INLINE_FUNCTION
-  DeployFunctorOnNeighborPairs(const NeighborListType& list, const Functor& functor) : list_(list), functor_(functor) {
+  DeployFunctorOnNeighborPairs(const NeighborListType& list, const Functor& functor) : list_(&list), functor_(functor) {
   }
 
   /// \brief Run the user callback for every neighbor of one target ordinal.
   /// \param target_index [in] Dense target ordinal in `[0, list.num_targets())`.
   KOKKOS_INLINE_FUNCTION
   void operator()(const size_type target_index) const {
-    const size_type num_neighbors = list_.num_neighbors(target_index);
+    const size_type num_neighbors = list_->num_neighbors(target_index);
     for (size_type neighbor_ordinal = 0; neighbor_ordinal < num_neighbors; ++neighbor_ordinal) {
-      functor_(mundy::search::NeighborPair<NeighborListType>(list_, target_index, neighbor_ordinal));
+      functor_(mundy::search::NeighborPair<NeighborListType>(*list_, target_index, neighbor_ordinal));
     }
   }
 
@@ -67,8 +67,8 @@ class DeployFunctorOnNeighborPairs {
   //! \name Internal members
   //@{
 
-  //! Concrete list copied into the Kokkos functor.
-  NeighborListType list_;
+  //! Pointer to the neighbor list (never null after construction; outlives this functor).
+  const NeighborListType* list_;
   //! User callback invoked once for each stored neighbor pair.
   Functor functor_;
   //@}
@@ -89,22 +89,22 @@ class DeployFunctorOnTargetNeighbors {
   /// \param functor [in] User callback to run for every target.
   KOKKOS_INLINE_FUNCTION
   DeployFunctorOnTargetNeighbors(const NeighborListType& list, const Functor& functor)
-      : list_(list), functor_(functor) {
+      : list_(&list), functor_(functor) {
   }
 
   /// \brief Run the user callback for one target ordinal.
   /// \param target_index [in] Dense target ordinal in `[0, list.num_targets())`.
   KOKKOS_INLINE_FUNCTION
   void operator()(const size_type target_index) const {
-    functor_(mundy::search::Neighbors<NeighborListType>(list_, target_index));
+    functor_(mundy::search::Neighbors<NeighborListType>(*list_, target_index));
   }
 
  private:
   //! \name Internal members
   //@{
 
-  //! Concrete list copied into the Kokkos functor.
-  NeighborListType list_;
+  //! Pointer to the neighbor list (never null after construction; outlives this functor).
+  const NeighborListType* list_;
   //! User callback invoked once for each target-neighbors payload.
   Functor functor_;
   //@}
@@ -134,22 +134,22 @@ class DeployReduceFunctorOnNeighborPairs {
   /// \param functor [in] User callback to run for every neighbor pair.
   KOKKOS_INLINE_FUNCTION
   DeployReduceFunctorOnNeighborPairs(const NeighborListType& list, const Functor& functor)
-      : list_(list), functor_(functor) {}
+      : list_(&list), functor_(functor) {}
 
   /// \brief Accumulate over every neighbor of one target ordinal.
   /// \param target_index [in] Dense target ordinal in `[0, list.num_targets())`.
   /// \param update [in,out] Thread-local reduction accumulator.
   KOKKOS_INLINE_FUNCTION
   void operator()(const size_type target_index, value_type& update) const {
-    const size_type num_neighbors = list_.num_neighbors(target_index);
+    const size_type num_neighbors = list_->num_neighbors(target_index);
     for (size_type k = 0; k < num_neighbors; ++k) {
-      functor_(mundy::search::NeighborPair<NeighborListType>(list_, target_index, k), update);
+      functor_(mundy::search::NeighborPair<NeighborListType>(*list_, target_index, k), update);
     }
   }
 
  private:
-  //! Concrete list copied into the Kokkos functor.
-  NeighborListType list_;
+  //! Pointer to the neighbor list (never null after construction; outlives this functor).
+  const NeighborListType* list_;
   //! User callback invoked once for each stored neighbor pair.
   Functor functor_;
 };
@@ -176,19 +176,19 @@ class DeployReduceFunctorOnTargetNeighbors {
   /// \param functor [in] User callback to run for every target.
   KOKKOS_INLINE_FUNCTION
   DeployReduceFunctorOnTargetNeighbors(const NeighborListType& list, const Functor& functor)
-      : list_(list), functor_(functor) {}
+      : list_(&list), functor_(functor) {}
 
   /// \brief Accumulate over one target ordinal.
   /// \param target_index [in] Dense target ordinal in `[0, list.num_targets())`.
   /// \param update [in,out] Thread-local reduction accumulator.
   KOKKOS_INLINE_FUNCTION
   void operator()(const size_type target_index, value_type& update) const {
-    functor_(mundy::search::Neighbors<NeighborListType>(list_, target_index), update);
+    functor_(mundy::search::Neighbors<NeighborListType>(*list_, target_index), update);
   }
 
  private:
-  //! Concrete list copied into the Kokkos functor.
-  NeighborListType list_;
+  //! Pointer to the neighbor list (never null after construction; outlives this functor).
+  const NeighborListType* list_;
   //! User callback invoked once for each target-neighbors payload.
   Functor functor_;
 };
