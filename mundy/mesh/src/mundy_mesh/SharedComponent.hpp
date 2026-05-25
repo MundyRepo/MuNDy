@@ -25,6 +25,7 @@
 #include <any>
 #include <concepts>
 #include <memory>
+#include <string>
 #include <tuple>
 #include <type_traits>  // for std::conditional_t, std::false_type, std::true_type
 #include <utility>      // for std::declval
@@ -124,6 +125,16 @@ class SharedComponent {
     state().clear_device_sync_state();
   }
 
+  void set_declaration_metadata(std::string name, stk::mesh::EntityRank rank) {
+    name_ = std::move(name);
+    rank_ = rank;
+  }
+
+  // clang-format off
+  const std::string&      name()        const { return name_; }
+  stk::mesh::EntityRank   entity_rank() const { return rank_; }
+  // clang-format on
+
  private:
   using state_type = impl::SharedComponentState<shared_type>;
   using host_view_type = typename state_type::host_view_type;
@@ -137,15 +148,9 @@ class SharedComponent {
     return state().host_view();
   }
 
-  std::any& any_ngp_component() const {
-    return state().any_ngp_component();
-  }
-
-  void set_synchronizer(std::shared_ptr<impl::HostDeviceSynchronizer> synchronizer) const {
-    state().set_synchronizer(std::move(synchronizer));
-  }
-
   std::shared_ptr<state_type> state_;
+  std::string name_;
+  stk::mesh::EntityRank rank_ = stk::topology::INVALID_RANK;
 
   template <typename NgpMemSpace, typename OtherSharedType>
   friend NgpSharedComponent<OtherSharedType, NgpMemSpace>& get_updated_ngp_component(
@@ -174,8 +179,8 @@ class SharedScalarComponent : public SharedComponent<ScalarType> {
   SharedScalarComponent& operator=(const SharedScalarComponent&) = default;
   SharedScalarComponent& operator=(SharedScalarComponent&&) = default;
 
-  inline decltype(auto) operator()(stk::mesh::Entity /*entity*/) const {
-    auto& value = static_cast<our_t&>(*const_cast<our_t*>(this)).shared_value();
+  inline decltype(auto) operator()(stk::mesh::Entity entity) const {
+    ScalarType& value = base_t::operator()(entity);
     return get_scalar_view<ScalarType>(&value);
   }
 };  // SharedScalarComponent
@@ -323,46 +328,46 @@ class NgpSharedComponent {
   // clang-format on
 
   void sync_to_device() {
-    host_component().sync_to_device();
+    state().sync_to_device();
   }
 
   void sync_to_host() {
-    host_component().sync_to_host();
+    state().sync_to_host();
   }
 
   void modify_on_device() {
-    host_component().modify_on_device();
+    state().modify_on_device();
   }
 
   void modify_on_host() {
-    host_component().modify_on_host();
+    state().modify_on_host();
   }
 
   void clear_host_sync_state() {
-    host_component().clear_host_sync_state();
+    state().clear_host_sync_state();
   }
 
   void clear_device_sync_state() {
-    host_component().clear_device_sync_state();
+    state().clear_device_sync_state();
   }
 
  private:
-  using host_component_type = SharedComponent<shared_type>;
   using host_view_type = impl::shared_component_host_view_t<shared_type>;
+  using state_type     = impl::SharedComponentState<shared_type>;
   static constexpr bool aliases_host_storage = Kokkos::SpaceAccessibility<NgpMemSpace, Kokkos::HostSpace>::accessible;
   using ngp_view_type =
       std::conditional_t<aliases_host_storage, host_view_type, Kokkos::View<shared_type*, NgpMemSpace>>;
 
-  NgpSharedComponent(host_component_type& host_component, ngp_view_type ngp_view)
-      : host_component_(&host_component), ngp_view_(ngp_view) {
+  NgpSharedComponent(std::shared_ptr<state_type> state, ngp_view_type ngp_view)
+      : state_(std::move(state)), ngp_view_(std::move(ngp_view)) {
   }
 
-  host_component_type& host_component() const {
-    MUNDY_THROW_ASSERT(host_component_ != nullptr, std::runtime_error, "NgpSharedComponent host component is null");
-    return *host_component_;
+  state_type& state() const {
+    MUNDY_THROW_ASSERT(state_, std::runtime_error, "NgpSharedComponent state is null");
+    return *state_;
   }
 
-  host_component_type* host_component_ = nullptr;
+  std::shared_ptr<state_type> state_;
   ngp_view_type ngp_view_;
 
   template <typename OtherNgpMemSpace, typename OtherSharedType>
@@ -388,8 +393,7 @@ class NgpSharedScalarComponent : public NgpSharedComponent<ScalarType, NgpMemSpa
 
   KOKKOS_INLINE_FUNCTION
   decltype(auto) operator()(stk::mesh::FastMeshIndex /*entity_index*/) const {
-    auto& ngp_view = static_cast<our_t&>(*const_cast<our_t*>(this)).ngp_view();
-    return get_scalar_view<ScalarType>(ngp_view.data());
+    return get_scalar_view<ScalarType>(this->ngp_view().data());
   }
 };
 
@@ -435,7 +439,7 @@ NgpSharedComponent<SharedType, NgpMemSpace>& get_updated_ngp_component(const Sha
       std::conditional_t<aliases_host_storage, host_view_type, Kokkos::View<SharedType*, NgpMemSpace>>;
   using synchronizer_t = impl::SharedComponentSynchronizerT<host_view_type, ngp_view_type, aliases_host_storage>;
 
-  std::any& any_ngp_component = component.any_ngp_component();
+  std::any& any_ngp_component = component.state_->ngp_component_for(typeid(NgpMemSpace));
 
   if (!any_ngp_component.has_value()) {
     ngp_view_type ngp_view = [&component]() {
@@ -449,9 +453,10 @@ NgpSharedComponent<SharedType, NgpMemSpace>& get_updated_ngp_component(const Sha
       Kokkos::deep_copy(ngp_view, component.host_view());
     }
 
-    any_ngp_component = ngp_component_type(const_cast<SharedComponent<SharedType>&>(component), ngp_view);
+    any_ngp_component = ngp_component_type(component.state_, std::move(ngp_view));
     ngp_component_type& ngp_component = std::any_cast<ngp_component_type&>(any_ngp_component);
-    component.set_synchronizer(std::make_shared<synchronizer_t>(component.host_view(), ngp_component.ngp_view()));
+    component.state_->set_synchronizer(
+        std::make_shared<synchronizer_t>(component.host_view(), ngp_component.ngp_view()));
   }
 
   return std::any_cast<NgpSharedComponent<SharedType, NgpMemSpace>&>(any_ngp_component);

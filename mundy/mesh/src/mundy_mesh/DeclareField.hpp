@@ -195,12 +195,12 @@ class FieldDeclarationHelperT {
   }
 
   /// \brief Switch from field declaration to field-backed component declaration.
-  /// \note This member is defined in DeclareComponent.hpp.
+  /// \note This member is defined in impl/DeclareComponentImpl.hpp.
   template <typename AccessLike>
   TaggedFieldComponentDeclarationHelperT<field_scalar_type, AccessLike> access() const;
 
   /// \brief Attach a component tag before selecting an access policy.
-  /// \note This member is defined in DeclareComponent.hpp.
+  /// \note This member is defined in impl/DeclareComponentImpl.hpp.
   template <typename Tag>
   TaggedFieldDeclarationHelperT<field_scalar_type, Tag> tag() const;
 
@@ -335,22 +335,14 @@ class FieldDeclarationHelper {
   }
 
   /// \brief Switch from field declaration to field-backed component declaration.
-  /// \note This member is defined in DeclareComponent.hpp.
+  /// \note This member is defined in impl/DeclareComponentImpl.hpp.
   template <typename AccessLike>
   TaggedFieldComponentDeclarationHelperT<invalid_field_scalar_type, AccessLike> access() const;
 
   /// \brief Attach a component tag before selecting an access policy.
-  /// \note This member is defined in DeclareComponent.hpp.
+  /// \note This member is defined in impl/DeclareComponentImpl.hpp.
   template <typename Tag>
   TaggedFieldDeclarationHelperT<invalid_field_scalar_type, Tag> tag() const;
-
-  /// \brief Declare a field with the given stk output type and role.
-  void declare() {
-    // Validate that required parameters have been set
-    MUNDY_THROW_REQUIRE(field_has_name_, std::logic_error, "Field name must be set before declaring a field.");
-    MUNDY_THROW_REQUIRE(field_has_rank_, std::logic_error, "Field rank must be set before declaring a field.");
-    MUNDY_THROW_REQUIRE(false, std::logic_error, "Field type must be set before declaring a field.");
-  }
 
   // clang-format off
   stk::mesh::MetaData& meta_data() const { return meta_data_; }

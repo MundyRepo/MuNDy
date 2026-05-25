@@ -79,8 +79,7 @@ TEST(UnitTestFieldDeclaration, RequiresTypeRankAndNameBeforeDeclare) {
   stk::mesh::MetaData& meta_data = *meta_data_ptr;
   meta_data.use_simple_fields();
 
-  EXPECT_THROW((void)FieldDeclarationHelper(meta_data).rank(stk::topology::ELEM_RANK).name("MISSING_TYPE").declare(),
-               std::logic_error);
+  // Missing type: FieldDeclarationHelper has no .declare() — calling .type<T>() is required first (compile error).
   EXPECT_THROW((void)FieldDeclarationHelper(meta_data).type<double>().name("MISSING_RANK").declare(), std::logic_error);
   EXPECT_THROW(
       (void)FieldDeclarationHelper(meta_data).type<double>().rank(stk::topology::ELEM_RANK).declare(),  // Missing name

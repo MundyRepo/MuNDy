@@ -33,7 +33,7 @@ That viewpoint is useful throughout the package:
 | `Entity` | A runtime mesh object such as a node, edge, face, element, constraint, or custom-ranked object. | `Link` uses ordinary mesh entities to represent dynamic non-topological relationships. |
 | `Rank` | The role of an entity, such as node-rank versus element-rank. | Mundy builds higher-level workflows that still stay rank-aware. |
 | `Part` | STK's native grouping mechanism for entities. Parts drive selectors, topology declarations, and IO membership. | `Class` extends parts into a semantic hierarchy like “all rods” or “boundary nodes”. |
-| `Field` | Per-entity data attached to a rank and usually restricted by part membership. | `Component` wraps a field as a typed, tagged accessor. |
+| `Field` | Per-entity data attached to a rank and usually restricted by part membership. | `Component` provides a typed accessor into entity data. `FieldComponent` wraps a field; `SharedComponent` holds one value returned for every entity. |
 | `Selector` | A query over part membership. | Mundy adds `string_to_selector(...)` and class-aware workflows on top. |
 | `MetaData` | The schema of the mesh: what parts, fields, and ranks exist. | Mundy extends it with attributes and helper-driven declaration workflows. |
 | `BulkData` | The live mesh state: which entities currently exist and how they are related. | Mundy extends it with links, staged modification helpers, and richer NGP workflows. |
@@ -59,7 +59,7 @@ including dynamic GPU-compatible links and ticketed device-side modification req
 | **Layer** | **Main types / functions** | **Use when you need** |
 |-----------|-----------------------------|------------------------|
 | Mesh construction | `MeshBuilder`, `MetaData`, `BulkData` | A Mundy-aware STK mesh object. |
-| Declaration helpers | `FieldDeclarationHelper`, `PartDeclarationHelper`, `ClassDeclarationHelper`, `DeclareEntitiesHelper` | Less boilerplate when setting up a mesh. |
+| Declaration helpers | `FieldDeclarationHelper`, `ComponentDeclarationHelper`, `PartDeclarationHelper`, `ClassDeclarationHelper`, `DeclareEntitiesHelper` | Less boilerplate when setting up a mesh. |
 | Semantic structure | `Class`, `declare_class(...)` | A flattened class hierarchy on top of parts that also behaves correctly with STK IO. |
 | Field access | `scalar_field_data`, `vector3_field_data`, `quaternion_field_data`, ... | Typed math/geom views into raw field storage. |
 | Components / aggregates | `Component`, `FieldComponent`, `SharedComponent`, `Aggregate`, `NgpAggregate` | Storage-independent data access and logical grouping of many accessors. |
@@ -84,7 +84,7 @@ builder.set_spatial_dimension(3)
        .set_upward_connectivity_flag(true);
 
 std::unique_ptr<mundy::mesh::BulkData> bulk = builder.create_bulk_data();
-mundy::mesh::MetaData& meta = static_cast<mundy::mesh::MetaData&>(bulk->mesh_meta_data());
+mundy::mesh::MetaData& meta = bulk->mesh_meta_data();
 ```
 
 The main builder setters are:
@@ -132,7 +132,7 @@ STK setup code is often repetitive. Mundy's declaration helpers exist to reduce 
 underlying STK behavior visible.
 
 ### `FieldDeclarationHelper`
-Use `FieldDeclarationHelper` when you want to declare a field through a fluent interface.
+Use `FieldDeclarationHelper` when you want to declare a plain STK field through a fluent interface.
 
 ```cpp
 using namespace mundy::mesh;
@@ -156,25 +156,179 @@ stk::mesh::Field<double>& velocity =
               .declare();
 ```
 
-The required inputs are:
+Because each setter returns a new builder value rather than mutating in place, you can capture a partial
+builder and branch from it to declare several related fields with shared attributes:
 
-| **Required before `declare()`** | **Optional** |
-|---------------------------------|--------------|
-| `type<T>()` | `role(...)` |
-| `rank(...)` | `output_type(...)` |
-| `name(...)` | |
+```cpp
+auto transient_vec3 = field_decl.type<double>()
+                                 .role(Ioss::Field::TRANSIENT)
+                                 .output_type(stk::io::FieldOutputType::VECTOR_3D);
 
-The most useful setters are:
+stk::mesh::Field<double>& node_vel   = transient_vec3.rank(stk::topology::NODE_RANK).name("velocity").declare();
+stk::mesh::Field<double>& node_force = transient_vec3.rank(stk::topology::NODE_RANK).name("force").declare();
+stk::mesh::Field<double>& elem_stress = transient_vec3.rank(stk::topology::ELEM_RANK).name("stress").declare();
+```
+
+The required inputs before `declare()` are `type<T>()`, `rank(...)`, and `name(...)`. `role(...)` and
+`output_type(...)` are optional.
 
 | **Setter** | **Meaning** |
 |------------|-------------|
-| `type<T>()` | Choose the scalar storage type. |
+| `type<T>()` | Choose the scalar storage type. Returns a typed `FieldDeclarationHelperT<T>`. |
 | `rank(rank)` | Choose the entity rank for the field. |
 | `name("...")` | Choose the field name. |
-| `role(role)` | Set STK IO role such as `MESH` or `TRANSIENT`. |
-| `output_type(type)` | Control component labeling in IO. |
-| `tag<Tag>()` | Continue into tagged field/component declaration. |
-| `access<AccessLike>()` | Continue into field-backed component declaration. |
+| `role(role)` | Set the STK IO role such as `Ioss::Field::MESH` or `Ioss::Field::TRANSIENT`. |
+| `output_type(type)` | Control component labeling in IO output. |
+| `tag<Tag>()` | Attach a semantic tag type, entering the component declaration chain. |
+| `access<AccessLike>()` | Select a component access shape, entering the field-backed component declaration chain. |
+
+`.tag<Tag>()` and `.access<AccessLike>()` do not produce an STK field immediately — they pivot from the
+raw field declaration chain into a component declaration chain. After pivoting, you must choose a backend
+with `.field()` (field-backed) or `.shared(source)` (shared-backed), then call `.declare()`. For
+component declarations, prefer starting from `ComponentDeclarationHelper` instead; it has the same
+setters but makes the intent clearer.
+
+### `ComponentDeclarationHelper`
+`ComponentDeclarationHelper` is the preferred entry point when you want to declare a field-backed or
+shared-backed component. It offers the same fluent setters as `FieldDeclarationHelper` but routes the
+declaration through a typed builder chain that produces a `FieldComponent` or `SharedComponent` rather
+than a raw `stk::mesh::Field`.
+
+The chain has a clear two-step structure: first select an access shape with `.access<A>()`, then commit
+to a backend with `.field()` or `.shared(source)`, then call `.declare()`. All other setters
+(`rank`, `name`, `role`, `output_type`, `tag`) may appear anywhere in the chain before `.declare()`.
+
+#### Builder state machine
+
+The chain accumulates type information as it goes. Each transition is an implementation-detail type;
+use `auto` throughout:
+
+| **Builder** | **State** | **Available transitions** |
+|-------------|-----------|---------------------------|
+| `ComponentDeclarationHelper` | Nothing fixed | `.rank()` `.name()` `.role()` `.output_type()` `.tag<Tag>()` `.access<A>()` |
+| `TaggedFieldDeclarationHelperT` | Tag fixed | same + `.type<T>()` |
+| `TaggedFieldComponentDeclarationHelperT` | Access fixed | same + `.field()` `.shared(source)` |
+| `TaggedFieldBackedDeclarationHelperT` | Access + field backend | `.rank()` `.name()` `.role()` `.output_type()` `.tag<Tag>()` `.declare()` |
+| `TaggedSharedComponentDeclarationHelperT` | Access + shared backend | `.rank()` `.name()` `.access<A>()` `.tag<Tag>()` `.declare()` |
+
+`.field()` and `.shared(source)` are the backend commitment steps. Neither has a shortcut on
+`ComponentDeclarationHelper` — access must always be specified explicitly.
+
+#### Access shapes
+
+The `AccessLike` argument to `.access<>()` selects the component shape. Explicit `access::` tag types
+and their corresponding Mundy math/geometry types are both accepted:
+
+| **`AccessLike`** | **Also accepts** | **View type per entity** | **Field scalars** |
+|------------------|------------------|--------------------------|-------------------|
+| `access::scalar<T>` | arithmetic `T` | `ScalarWrapper<T>` | 1 |
+| `access::vector<T, N>` | `Vector<T, N>` | `Vector<T, N>` | N |
+| `access::matrix3<T>` | `Matrix3<T>` | `Matrix3<T>` | 9 |
+| `access::quaternion<T>` | `Quaternion<T>` | `Quaternion<T>` | 4 |
+| `access::aabb<T>` | `AABB<T>` | `AABB<T>` | 6 |
+| `access::raw<T>` | — | `T&` | unspecified |
+
+`access::raw<T>` is the escape hatch: it maps to a plain `FieldComponent<T>` and makes no assumptions
+about how the field scalars compose. Use it when no existing shape matches your storage layout.
+
+The scalar type carried by the `AccessLike` determines the STK field scalar type. Providing `.type<T>()`
+separately is allowed but must agree with the access shape — a compile-time assertion catches mismatches.
+
+#### Field-backed component declaration
+
+After `.access<A>()`, call `.field()` to commit to a field-backed component, then `.declare()`:
+
+```cpp
+using namespace mundy::mesh;
+
+ComponentDeclarationHelper decl(meta);
+
+// Untagged scalar field component
+auto mass =
+    decl.rank(stk::topology::ELEM_RANK)
+        .name("mass")
+        .role(Ioss::Field::ATTRIBUTE)
+        .access<access::scalar<double>>()
+        .field()
+        .declare();
+
+// Tagged vector3 field component
+auto center =
+    decl.rank(stk::topology::NODE_RANK)
+        .name("center")
+        .role(Ioss::Field::TRANSIENT)
+        .access<access::vector<double, 3>>()
+        .tag<CENTER>()
+        .field()
+        .declare();
+```
+
+`.tag<Tag>()` may be called before or after `.access<>()` — the two orderings are equivalent:
+
+```cpp
+decl.access<access::quaternion<double>>().tag<ORIENT>().field().declare();  // equivalent
+decl.tag<ORIENT>().access<access::quaternion<double>>().field().declare();  // to this
+```
+
+When a tag is present, `.declare()` returns `TaggedComponent<Tag, ComponentType>`. Without a tag it
+returns the plain `ComponentType` directly.
+
+#### Shared-backed component declaration
+
+After `.access<A>()`, call `.shared(source)` to commit to a shared-backed component. `source` can be a
+raw value (stored by copy) or a length-1 Kokkos view in `HostSpace` (aliased directly):
+
+```cpp
+using namespace mundy::mesh;
+
+ComponentDeclarationHelper decl(meta);
+
+// Shared scalar: one collision radius for all elements in a part
+auto collision_radius =
+    decl.rank(stk::topology::ELEM_RANK)
+        .name("collision_radius")
+        .access<access::scalar<double>>()
+        .tag<COLLISION_RADIUS>()
+        .shared(0.5)
+        .declare();
+```
+
+Shared declarations require `.rank()` before `.declare()`. The rank is recorded in the component's
+metadata so the component knows which entity rank it applies to when attached to an aggregate or
+part-restricted context. An assertion fires at `.declare()` time if rank is missing.
+
+The order of `.access<>()` and `.shared(source)` relative to other setters is free:
+
+```cpp
+// access-first, then shared
+decl.access<double>().shared(1.5).rank(ELEM_RANK).name("radius").declare();
+
+// name/rank-first, then access, then shared
+decl.rank(ELEM_RANK).name("radius").access<double>().shared(1.5).declare();
+```
+
+#### Snapshot reuse
+
+Because each setter returns the builder by value, a partial builder can be captured and reused to declare
+multiple components that share common attributes:
+
+```cpp
+using namespace mundy::mesh;
+
+ComponentDeclarationHelper decl(meta);
+
+// Capture common attributes at the node transient vector3 level.
+// access<access::vector<double, 3>>() and access<Vector3<double>>() are equivalent.
+auto node_transient_vec3 =
+    decl.rank(stk::topology::NODE_RANK)
+        .role(Ioss::Field::TRANSIENT)
+        .access<Vector3<double>>();
+
+// Branch with distinct names, tags, and field() commitment
+auto center   = node_transient_vec3.name("center").tag<CENTER>().field().declare();
+auto velocity = node_transient_vec3.name("velocity").tag<LIN_VEL>().field().declare();
+auto force    = node_transient_vec3.name("force").tag<FORCE>().field().declare();
+```
 
 ### `PartDeclarationHelper`
 Use `PartDeclarationHelper` to declare named, ranked, or topological parts and optionally attach restrictions.
@@ -386,11 +540,12 @@ entities vs. stored as a field value on each entity.
 This is achieved through a simple set of accessor classes called `Component`s, each of which offers an access operator
 `operator()(entity)` that returns a view into the data for that entity of the given semantic type. For example,
 ```cpp
+// center_field is an existing stk::mesh::Field<double>; 0.5 is the single shared collision radius
 auto center_accessor = Vector3FieldComponent<double>(center_field);
-auto radius_accessor = SharedScalarComponent<double>(radius);
+auto radius_accessor = SharedScalarComponent<double>(0.5);
 
-auto center = center_accessor(node1);  // returns a Vector3 view into the center field data for node1
-auto collision_radius = radius_accessor(elem1);  // returns a scalar view into the shared radius value for elem1
+auto center = center_accessor(node1);          // Vector3 view into the center field for node1
+auto collision_radius = radius_accessor(elem1); // ScalarWrapper view returning 0.5 for any entity
 ```
 
 In both cases the calling code asks only for the desired semantic quantity. The accessor itself determines where that
@@ -408,11 +563,15 @@ without caring where the underlying data came from.
 
 | **Supported view type** | **Field-backed component** | **Shared component** | **What `operator()(entity)` acts like** |
 |-------------------------|------------------------------|----------------------|----------------------------------------|
-| Scalar | `ScalarFieldComponent<T>` | `SharedScalarComponent<T>` | ScalarWrapper<T> |
-| Vector of length `N` | `VectorNFieldComponent<T, N>` | `SharedVectorComponent<T, N>` | Vector<T, N> |
-| Matrix3 | `Matrix3FieldComponent<T>` | `SharedMatrix3Component<T>` | Matrix3<T> |
-| Quaternion | `QuaternionFieldComponent<T>` | `SharedQuaternionComponent<T>` | Quaternion<T> |
-| AABB | `AABBFieldComponent<T>` | `SharedAABBComponent<T>` | AABB<T> |
+| Scalar | `ScalarFieldComponent<T>` | `SharedScalarComponent<T>` | `ScalarWrapper<T>` |
+| Vector of length N | `VectorFieldComponent<T, N>` | `SharedVectorComponent<T, N>` | `Vector<T, N>` |
+| Matrix3 | `Matrix3FieldComponent<T>` | `SharedMatrix3Component<T>` | `Matrix3<T>` |
+| Quaternion | `QuaternionFieldComponent<T>` | `SharedQuaternionComponent<T>` | `Quaternion<T>` |
+| AABB | `AABBFieldComponent<T>` | `SharedAABBComponent<T>` | `AABB<T>` |
+
+Fixed-length aliases `Vector1FieldComponent<T>` through `Vector6FieldComponent<T>` are provided for the most common vector sizes.
+
+**Pre-defined semantic tags.** `Component.hpp` ships a set of common tag types so you do not have to define your own for the standard physical quantities. The pre-defined tags are: `CENTER`, `ORIENT`, `LIN_VEL`, `ANG_VEL`, `FORCE`, and `COLLISION_RADIUS`. These are plain forward-declared structs; they carry no data and impose no behavior. You can define additional tag types anywhere in your own code using the same pattern.
 
 At present, these patterns are supported for field-backed and shared components. We intend to
 offer the same interface through `PartMappedComponent`s in the future so that per-part access policies can be exposed
@@ -429,7 +588,7 @@ will simply return a reference to the existing ngp component, making it inexpens
 ```cpp
 auto ngp_center_accessor = mundy::mesh::get_updated_ngp_component(center_accessor);
 auto ngp_velocity_accessor = mundy::mesh::get_updated_ngp_component(velocity_accessor);
-stk::mesh::for_each_entity_run(ngp_mesh, stk::topology::NODE_RANK, selector,
+mundy::mesh::for_each_entity_run(ngp_mesh, stk::topology::NODE_RANK, selector,
         KOKKOS_LAMBDA(const stk::mesh::FastMeshIndex& i) {
             auto center = ngp_center_accessor(i);
             auto velocity = ngp_velocity_accessor(i);
@@ -452,8 +611,9 @@ contains a `CENTER` component and a `COLLISION_RADIUS` component and pass that a
 ```cpp
 using namespace mundy::mesh;
 
-auto center_accessor = Vector3FieldComponent(center_field);
-auto radius_accessor = SharedScalarComponent(radius);
+// center_field is a stk::mesh::Field<double> declared elsewhere; 0.5 is the shared collision radius
+auto center_accessor = Vector3FieldComponent<double>(center_field);
+auto radius_accessor = SharedScalarComponent<double>(0.5);
 
 auto sphere_data = Aggregate<>(bulk_data, selector)
   .add_component<CENTER>(center_accessor)
@@ -784,16 +944,13 @@ This is more than syntax sugar. The expression tree carries enough structure for
  - delay evaluation until assignment or reduction,
  - automatically synchronize fields read by the expression,
  - automatically mark written fields as modified,
- - fuse multiple assignments into one traversal,
- - reuse repeated subexpressions,
- - reuse repeated subexpressions that appear on different branches of the expression tree,
- - generate compile-time-optimized loop bodies rather than treating the expression as an interpreted runtime object.
+ - fuse multiple assignments into one traversal with `fused_assign(...)`,
+ - avoid recomputing shared subexpressions within a fused kernel using `reuse(...)`.
 
 So the real mental model is not “fancy accessor syntax”. It is “write the body of a device loop in compact algebraic
 form, then let the expression system build and optimize that loop for you.”
 
-At user level, that means delayed evaluation, automatic sync/modify handling, fused multi-assignment, optional reuse,
-and reductions directly over expressions.
+In practice, the payoff is that you write the math and the sync/modify bookkeeping takes care of itself.
 
 ### The four pieces of an expression loop
 Most expression code has four conceptual pieces:
@@ -949,7 +1106,9 @@ fused_assign(x(es), /*=*/copy(y(es)),
              y(es), /*=*/copy(x(es)));
 ```
 
-Without `copy(...)`, the right-hand side may just stash another view rather than the value you meant to preserve.
+Without `copy(...)`, `x(es)` in the right-hand side of the second clause is a view into the accessor — it reads whatever
+`x` currently contains, which the first clause has already overwritten. `copy(...)` forces the expression system to
+capture the value before the fused kernel writes anything back.
 
 2. **Use `reuse(expr)` only for repeated pure subexpressions inside one fused evaluation.**
 

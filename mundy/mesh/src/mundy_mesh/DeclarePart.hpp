@@ -40,7 +40,6 @@
 
 // Mundy
 #include <mundy_mesh/Component.hpp>
-#include <mundy_mesh/DeclareComponent.hpp>
 #include <mundy_mesh/impl/ComponentImpl.hpp>  // for mundy::mesh::impl::component_backing_field
 #include <mundy_utils/requires.hpp>
 #include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_REQUIRE
@@ -176,17 +175,17 @@ class PartDeclarationHelper {
   PartDeclarationHelper
       put_component(ComponentType component, const typename BackingFieldType::value_type* init_value) {
     using component_type = std::remove_cvref_t<ComponentType>;
-    using access_traits = component_access_traits<typename component_type::canonical_access>;
+    using access_shape = component_access_shape<typename component_type::canonical_access>;
     auto& field = impl::component_backing_field(component);
 
-    static_assert(access_traits::has_known_num_field_scalars,
-                  "put_component(...) requires a component whose access trait defines a fixed number of field scalars. "
+    static_assert(access_shape::has_fixed_field_scalars,
+                  "put_component(...) requires a component whose access shape defines a fixed number of field scalars. "
                   "Use put_field(...) for raw field components.");
 
-    if constexpr (access_traits::num_field_scalars == 1) {
+    if constexpr (access_shape::field_scalars == 1) {
       return put_field(field, init_value);
     } else {
-      return put_field(field, access_traits::num_field_scalars, init_value);
+      return put_field(field, access_shape::field_scalars, init_value);
     }
   }
 

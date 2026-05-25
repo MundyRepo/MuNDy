@@ -649,7 +649,6 @@ TEST_F(UnitTestAccessorExprFixture, field_product) {
   auto x = make_tagged_component<XTag>(ScalarFieldComponent(*field_x_ptr_));
   auto y = make_tagged_component<YTag>(ScalarFieldComponent(*field_y_ptr_));
   auto z = make_tagged_component<ZTag>(ScalarFieldComponent(*field_z_ptr_));
-
   {
     auto es = make_entity_expr(get_bulk(), b1_not_b2, stk::topology::NODE_RANK);
     z(es) = x(es) * y(es);

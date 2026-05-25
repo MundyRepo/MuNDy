@@ -22,35 +22,15 @@
 #define MUNDY_MESH_IMPL_COMPONENTSIMPL_HPP_
 
 /// \file ComponentImpl.hpp
-/// \brief A set of helpers for working with components with reduced boilerplate code.
-
-// C++ core
-#include <iostream>   // for std::ostream
-#include <stdexcept>  // for std::runtime_error
-#include <type_traits>
-#include <utility>
-#include <vector>  // for std::vector
-
-// Trilinos
-#include <stk_io/StkMeshIoBroker.hpp>  // for stk::io::StkMeshIoBroker
-#include <stk_mesh/base/Field.hpp>     // for stk::mesh::Field
-#include <stk_mesh/base/MetaData.hpp>  // for stk::mesh::MetaData
+/// \brief Stable re-export header for component implementation utilities.
+///
+/// Restriction-layer headers (DeclarePart, DeclareClass) include this file to access
+/// `component_backing_field` without depending on the full declaration machinery in
+/// DeclareComponent.hpp. The function is defined in FieldComponent.hpp; this header
+/// provides a stable include path that does not expose the FieldComponent class hierarchy
+/// directly to callers who only need the backing-field accessor.
 
 // Mundy
-#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_REQUIRE
-
-namespace mundy {
-
-namespace mesh {
-
-namespace impl {
-
-// TODO(palmerb4): How to pull the IMPL code out of Component.hpp given that it depends on public Component.hpp types?
-
-}  // namespace impl
-
-}  // namespace mesh
-
-}  // namespace mundy
+#include <mundy_mesh/FieldComponent.hpp>  // for mundy::mesh::impl::component_backing_field
 
 #endif  // MUNDY_MESH_IMPL_COMPONENTSIMPL_HPP_

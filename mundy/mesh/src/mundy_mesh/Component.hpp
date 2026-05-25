@@ -46,6 +46,7 @@
 
 // Mundy
 #include <mundy_mesh/BulkData.hpp>            // for mundy::mesh::BulkData
+#include <mundy_mesh/ComponentAccess.hpp>     // for access::*, canonical_component_access_t, component_access_shape
 #include <mundy_mesh/FieldViews.hpp>          // for mundy::mesh::vector3_field_data, mundy::mesh::quaternion_field_data
 #include <mundy_mesh/ForEachEntity.hpp>       // for mundy::mesh::for_each_entity_run
 #include <mundy_mesh/NgpAccessorExpr.hpp>     // for mundy::mesh::AccessorExpr and EntityExprBase
@@ -86,109 +87,6 @@ struct LINKED_ENTITIES;
 
 template <typename SharedType, typename NgpMemSpace>
 class NgpSharedComponent;
-
-namespace access {
-
-template <typename ValueType>
-struct raw {
-  using value_type = ValueType;
-};
-
-template <typename ScalarType>
-struct scalar {
-  using scalar_type = ScalarType;
-};
-
-template <typename ScalarType, size_t N>
-struct vector {
-  using scalar_type = ScalarType;
-  static constexpr size_t size = N;
-};
-
-template <typename ScalarType>
-struct matrix3 {
-  using scalar_type = ScalarType;
-};
-
-template <typename ScalarType>
-struct quaternion {
-  using scalar_type = ScalarType;
-};
-
-template <typename ScalarType>
-struct aabb {
-  using scalar_type = ScalarType;
-};
-
-}  // namespace access
-
-template <typename AccessLike, typename Enable = void>
-struct canonical_component_access {
-  using type = access::raw<std::remove_cvref_t<AccessLike>>;
-};
-
-template <typename ValueType>
-struct canonical_component_access<access::raw<ValueType>, void> {
-  using type = access::raw<std::remove_cvref_t<ValueType>>;
-};
-
-template <typename ScalarType>
-struct canonical_component_access<access::scalar<ScalarType>, void> {
-  using type = access::scalar<std::remove_cvref_t<ScalarType>>;
-};
-
-template <typename ScalarType, size_t N>
-struct canonical_component_access<access::vector<ScalarType, N>, void> {
-  using type = access::vector<std::remove_cvref_t<ScalarType>, N>;
-};
-
-template <typename ScalarType>
-struct canonical_component_access<access::matrix3<ScalarType>, void> {
-  using type = access::matrix3<std::remove_cvref_t<ScalarType>>;
-};
-
-template <typename ScalarType>
-struct canonical_component_access<access::quaternion<ScalarType>, void> {
-  using type = access::quaternion<std::remove_cvref_t<ScalarType>>;
-};
-
-template <typename ScalarType>
-struct canonical_component_access<access::aabb<ScalarType>, void> {
-  using type = access::aabb<std::remove_cvref_t<ScalarType>>;
-};
-
-template <typename ScalarType>
-struct canonical_component_access<ScalarType, std::enable_if_t<std::is_arithmetic_v<std::remove_cvref_t<ScalarType>>>> {
-  using type = access::scalar<std::remove_cvref_t<ScalarType>>;
-};
-
-template <typename VectorType>
-struct canonical_component_access<VectorType, std::enable_if_t<is_vector_v<std::remove_cvref_t<VectorType>>>> {
-  using decayed_type = std::remove_cvref_t<VectorType>;
-  using type = access::vector<typename decayed_type::scalar_t, decayed_type::size>;
-};
-
-template <typename Matrix3Type>
-struct canonical_component_access<Matrix3Type, std::enable_if_t<is_matrix3_v<std::remove_cvref_t<Matrix3Type>>>> {
-  using decayed_type = std::remove_cvref_t<Matrix3Type>;
-  using type = access::matrix3<typename decayed_type::scalar_t>;
-};
-
-template <typename QuaternionType>
-struct canonical_component_access<QuaternionType,
-                                  std::enable_if_t<is_quaternion_v<std::remove_cvref_t<QuaternionType>>>> {
-  using decayed_type = std::remove_cvref_t<QuaternionType>;
-  using type = access::quaternion<typename decayed_type::scalar_t>;
-};
-
-template <typename AABBType>
-struct canonical_component_access<AABBType, std::enable_if_t<is_aabb_v<std::remove_cvref_t<AABBType>>>> {
-  using decayed_type = std::remove_cvref_t<AABBType>;
-  using type = access::aabb<typename decayed_type::scalar_t>;
-};
-
-template <typename AccessLike>
-using canonical_component_access_t = typename canonical_component_access<AccessLike>::type;
 
 /// \brief A small helper type for tying a Tag to an underlying component
 template <typename Tag, typename ComponentType>
