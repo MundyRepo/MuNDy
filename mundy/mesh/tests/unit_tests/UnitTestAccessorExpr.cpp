@@ -454,6 +454,13 @@ struct CounterTag;
 struct FirstDrawTag;
 struct SecondDrawTag;
 
+struct VariadicApplyExprFunc {
+  template <typename XValue, typename YValue, typename BiasValue>
+  KOKKOS_INLINE_FUNCTION auto operator()(const XValue& x, const YValue& y, const BiasValue& bias) const {
+    return x + 2.0 * y + bias;
+  }
+};
+
 using single_entity_expr_driver_t = NgpForEachEntityExprDriver<>;
 using single_entity_expr_t = EntityExpr<1, 0, single_entity_expr_driver_t>;
 using rng_contract_expr_t =
@@ -700,6 +707,52 @@ TEST_F(UnitTestAccessorExprFixture, field_axpby) {
 
   check_field_data_on_host_func<1>("field subset error. x", get_bulk(), *field_x_ptr_, !b1_not_b2, get_field_x_func());
   check_field_data_on_host_func<1>("field subset error. y", get_bulk(), *field_y_ptr_, !b1_not_b2, get_field_y_func());
+}
+
+TEST_F(UnitTestAccessorExprFixture, apply_expr_supports_variadic_functions_and_scalar_args) {
+  if (stk::parallel_machine_size(communicator_) > 2) {
+    GTEST_SKIP() << "This test is only designed to run with 1 or 2 MPI ranks.";
+  }
+
+  const int we_know_there_are_five_ranks = 5;
+#if TRILINOS_MAJOR_MINOR_VERSION >= 160000
+  auto field_data_manager = std::make_unique<stk::mesh::DefaultFieldDataManager>(we_know_there_are_five_ranks);
+  setup_hex_mesh(stk::mesh::BulkData::AUTO_AURA, std::move(field_data_manager));
+#else
+  stk::mesh::DefaultFieldDataManager* field_data_manager_ptr =
+      new stk::mesh::DefaultFieldDataManager(we_know_there_are_five_ranks);
+  setup_hex_mesh(stk::mesh::BulkData::AUTO_AURA, field_data_manager_ptr);
+#endif
+
+  constexpr double bias = -0.125;
+  auto field_x_func = get_field_x_func();
+  auto field_y_func = get_field_y_func();
+  auto expected_value_func = [bias, &field_x_func, &field_y_func](const double* entity_coords) {
+    const double x = field_x_func(entity_coords)[0];
+    const double y = field_y_func(entity_coords)[0];
+    return std::vector<double>{2.0 * (x + 2.0 * y + bias)};
+  };
+
+  stk::mesh::Selector b1_not_b2 = block1_selector_ - block2_selector_;
+  auto x = make_tagged_component<XTag>(ScalarFieldComponent(*field_x_ptr_));
+  auto y = make_tagged_component<YTag>(ScalarFieldComponent(*field_y_ptr_));
+  auto z = make_tagged_component<ZTag>(ScalarFieldComponent(*field_z_ptr_));
+
+  {
+    auto es = make_entity_expr(get_bulk(), b1_not_b2, stk::topology::NODE_RANK);
+    z(es) = 2.0 * apply_expr(VariadicApplyExprFunc{}, x(es), y(es), bias);
+  }
+
+  check_field_data_on_host_func<1>("apply_expr variadic error. x", get_bulk(), *field_x_ptr_, b1_not_b2,
+                                   get_field_x_func());
+  check_field_data_on_host_func<1>("apply_expr variadic error. y", get_bulk(), *field_y_ptr_, b1_not_b2,
+                                   get_field_y_func());
+  check_field_data_on_host_func<1>("apply_expr variadic error. z", get_bulk(), *field_z_ptr_, b1_not_b2,
+                                   expected_value_func);
+
+  check_field_data_on_host_func<1>("field subset error. x", get_bulk(), *field_x_ptr_, !b1_not_b2, get_field_x_func());
+  check_field_data_on_host_func<1>("field subset error. y", get_bulk(), *field_y_ptr_, !b1_not_b2, get_field_y_func());
+  check_field_data_on_host_func<1>("field subset error. z", get_bulk(), *field_z_ptr_, !b1_not_b2, get_field_z_func());
 }
 
 TEST_F(UnitTestAccessorExprFixture, non_static_branches_do_not_share_cache) {
