@@ -29,6 +29,7 @@
 
 #include <mundy_mesh/impl/NgpAccessorExprApplyValue.hpp>
 #include <mundy_utils/requires.hpp>
+#include <mundy_utils/rng.hpp>
 
 namespace mundy {
 
@@ -442,6 +443,41 @@ struct is_counter_based_rng_expr<CounterBasedRNGExpr<SeedExpr, CounterExpr, RNGT
 
 template <typename T>
 static constexpr bool is_counter_based_rng_expr_v = is_counter_based_rng_expr<std::decay_t<T>>::value;
+
+template <typename SeedExpr, typename CounterExpr, typename RNGType = openrand::Philox,
+          RNGType (*make_counter_based_rng)(size_t, size_t) = make_philox>
+MUNDY_REQUIRES(is_math_expr_arg_v<SeedExpr>&& is_math_expr_arg_v<CounterExpr>)
+auto rng_impl(const SeedExpr& seed_expr, const CounterExpr& counter_expr) {
+  return CounterBasedRNGExpr<SeedExpr, CounterExpr, RNGType, make_counter_based_rng>(seed_expr, counter_expr);
+}
+
+template <typename SeedExpr, typename CounterT, typename RNGType = openrand::Philox,
+          RNGType (*make_counter_based_rng)(size_t, size_t) = make_philox>
+MUNDY_REQUIRES(is_math_expr_arg_v<SeedExpr> && !is_math_expr_arg_v<CounterT>)
+auto rng_impl(const SeedExpr& seed_expr, const CounterT& counter) {
+  using CounterExpr = ConstantMathExpr<CounterT>;
+  auto counter_expr = CounterExpr(counter);
+  return rng_impl<SeedExpr, CounterExpr, RNGType, make_counter_based_rng>(seed_expr, counter_expr);
+}
+
+template <typename SeedT, typename CounterExpr, typename RNGType = openrand::Philox,
+          RNGType (*make_counter_based_rng)(size_t, size_t) = make_philox>
+MUNDY_REQUIRES(!is_math_expr_arg_v<SeedT> && is_math_expr_arg_v<CounterExpr>)
+auto rng_impl(const SeedT& seed, const CounterExpr& counter_expr) {
+  using SeedExpr = ConstantMathExpr<SeedT>;
+  auto seed_expr = SeedExpr(seed);
+  return rng_impl<SeedExpr, CounterExpr, RNGType, make_counter_based_rng>(seed_expr, counter_expr);
+}
+
+template <typename SeedT, typename CounterT, typename RNGType = openrand::Philox,
+          RNGType (*make_counter_based_rng)(size_t, size_t) = make_philox>
+MUNDY_REQUIRES(!is_math_expr_arg_v<SeedT> && !is_math_expr_arg_v<CounterT>)
+void rng_impl(const SeedT& /*seed*/, const CounterT& /*counter*/) {
+  MUNDY_THROW_REQUIRE(false, std::logic_error,
+                      "Both seed and counter arguments to rng() cannot be constants.\n"
+                      "At least one of them must be an expression, lest we have no idea how to run the expression over "
+                      "multiple entities.");
+}
 
 }  // namespace impl
 

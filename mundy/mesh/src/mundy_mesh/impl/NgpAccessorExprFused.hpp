@@ -169,6 +169,15 @@ struct is_fused_assign_expr<FusedAssignExpr<TrgSrcExprPairs...>> : std::true_typ
 template <typename T>
 static constexpr bool is_fused_assign_expr_v = is_fused_assign_expr<std::decay_t<T>>::value;
 
+template <typename... TrgSrcExprPairs>
+void fused_assign_impl(const TrgSrcExprPairs&... exprs) {
+  constexpr size_t num_trg_src_pairs = sizeof...(TrgSrcExprPairs);
+  static_assert(num_trg_src_pairs % 2 == 0,
+                "The number of target/source expression pairs in fused_assign must be even.");
+  FusedAssignExpr<TrgSrcExprPairs...> fused_expr(exprs...);
+  fused_expr.driver()->run(fused_expr);
+}
+
 }  // namespace impl
 
 }  // namespace mesh

@@ -63,7 +63,7 @@ namespace mesh {
   template <typename... Args>                                                                                  \
   MUNDY_REQUIRES((impl::is_math_expr_arg_v<Args> || ...))                                                      \
   auto FuncName(const Args&... args) {                                                                         \
-    return apply_expr(impl::ExprClassName##Func{}, args...);                                                   \
+    return impl::apply_expr_impl(impl::ExprClassName##Func{}, args...);                                        \
   }
 
 /// \brief SinkAccessMode constant aliases for use with MUNDY_ACCESSOR_EXPR_FORWARD_SINK_FUNC.

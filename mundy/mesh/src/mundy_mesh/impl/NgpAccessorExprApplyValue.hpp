@@ -23,7 +23,7 @@
 
 /// \file NgpAccessorExprApplyValue.hpp
 /// \brief ApplyValueExpr: function-application value expression node, its operator overloads,
-///        and the impl-namespace helpers (is_math_expr_arg_v, make_apply_expr_arg, etc.).
+///        and the impl-namespace helpers (make_apply_expr_arg, apply_expr_impl, etc.).
 ///
 /// The apply_expr() factory function is public API defined in NgpAccessorExpr.hpp.
 
@@ -228,6 +228,21 @@ struct is_apply_value_expr<ApplyValueExpr<Func, Exprs...>> : std::true_type {};
 
 template <typename T>
 static constexpr bool is_apply_value_expr_v = is_apply_value_expr<std::decay_t<T>>::value;
+
+/// \brief Low-level apply expression factory (impl variant).
+///
+/// This is the implementation called by the public apply_expr() in NgpAccessorExpr.hpp and by
+/// NgpAccessorExprBuiltins.hpp. Users should prefer the public apply_expr() wrapper.
+template <typename Func, typename... Args>
+auto apply_expr_impl(Func func, const Args&... args) {
+  static_assert(sizeof...(Args) > 0, "apply_expr(func, args...): at least one argument is required.");
+  static_assert((is_math_expr_arg_v<Args> || ...),
+                "apply_expr(func, args...): at least one argument must be a math expression so Mundy knows which "
+                "entity driver should evaluate the expression. Scalars are allowed, but they cannot be the only "
+                "arguments.");
+  return ApplyValueExpr<std::decay_t<Func>, decltype(make_apply_expr_arg(args))...>(
+      std::move(func), make_apply_expr_arg(args)...);
+}
 
 // Apply value operator overloads for ApplyValueExpr op MathExprBase
 #define MUNDY_ACCESSOR_EXPR_APPLY_VALUE_OPERATOR(OpName, op)                                           \

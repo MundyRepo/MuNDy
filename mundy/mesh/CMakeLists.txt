@@ -47,6 +47,7 @@ set(NOINSTALLHEADERS
     src/mundy_mesh/impl/NgpAccessorExprEntityExpr.hpp
     src/mundy_mesh/impl/NgpAccessorExprFused.hpp
     src/mundy_mesh/impl/NgpAccessorExprMathBase.hpp
+    src/mundy_mesh/impl/NgpAccessorExprReductions.hpp
     src/mundy_mesh/impl/NgpAccessorExprRNG.hpp
     src/mundy_mesh/impl/NgpAccessorExprSink.hpp
     src/mundy_mesh/impl/NgpAccessorExprTypes.hpp

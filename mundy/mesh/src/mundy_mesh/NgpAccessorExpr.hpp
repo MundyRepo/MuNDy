@@ -67,6 +67,8 @@
 #include <mundy_mesh/impl/NgpAccessorExprAccessor.hpp>     // AccessorExpr
 #include <mundy_mesh/impl/NgpAccessorExprRNG.hpp>          // RandomDistributionExpr, UniformDistributionExpr, CounterBasedRNGExpr
 #include <mundy_mesh/impl/NgpAccessorExprFused.hpp>        // FusedAssignExpr
+#include <mundy_mesh/impl/NgpAccessorExprReductions.hpp>   // reduce helpers
+#include <mundy_mesh/impl/NgpAccessorExprBuiltins.hpp>     // standard wrappers (norm, dot, etc.)
 
 namespace mundy {
 
@@ -262,25 +264,9 @@ auto make_pairwise_entity_expr(stk::mesh::BulkData& bulk_data,                  
 /// Scalar values are automatically wrapped in `ConstantMathExpr`.
 template <typename Func, typename... Args>
 auto apply_expr(Func func, const Args&... args) {
-  static_assert(sizeof...(Args) > 0, "apply_expr(func, args...): at least one argument is required.");
-  static_assert((impl::is_math_expr_arg_v<Args> || ...),
-                "apply_expr(func, args...): at least one argument must be a math expression so Mundy knows which "
-                "entity driver should evaluate the expression. Scalars are allowed, but they cannot be the only "
-                "arguments.");
-  return impl::ApplyValueExpr<std::decay_t<Func>, decltype(impl::make_apply_expr_arg(args))...>(
-      std::move(func), impl::make_apply_expr_arg(args)...);
+  return impl::apply_expr_impl(std::move(func), args...);
 }
 //@}
-
-}  // namespace mesh
-
-}  // namespace mundy
-
-#include <mundy_mesh/impl/NgpAccessorExprBuiltins.hpp>  // FORWARD_FUNC/SINK macros, standard wrappers (norm, dot, etc.)
-
-namespace mundy {
-
-namespace mesh {
 
 //! \name Sink expressions
 //@{
@@ -325,22 +311,22 @@ auto sink_expr(Func func, const Args&... args) {
 
 template <typename... Args>
 auto atomic_add(const Args&... args) {
-  return impl::atomic_add(args...);
+  return impl::atomic_add_impl(args...);
 }
 
 template <typename... Args>
 auto atomic_sub(const Args&... args) {
-  return impl::atomic_sub(args...);
+  return impl::atomic_sub_impl(args...);
 }
 
 template <typename... Args>
 auto atomic_mul(const Args&... args) {
-  return impl::atomic_mul(args...);
+  return impl::atomic_mul_impl(args...);
 }
 
 template <typename... Args>
 auto atomic_div(const Args&... args) {
-  return impl::atomic_div(args...);
+  return impl::atomic_div_impl(args...);
 }
 //@}
 
@@ -354,7 +340,7 @@ template <typename SeedExpr, typename CounterExpr, typename RNGType = openrand::
 MUNDY_REQUIRES(impl::is_crtp_base_of_v<impl::MathExprBase, SeedExpr>&&
                    impl::is_crtp_base_of_v<impl::MathExprBase, CounterExpr>)
 auto rng(const SeedExpr& seed_expr, const CounterExpr& counter_expr) {
-  return impl::CounterBasedRNGExpr<SeedExpr, CounterExpr, RNGType, make_counter_based_rng>(seed_expr, counter_expr);
+  return impl::rng_impl<SeedExpr, CounterExpr, RNGType, make_counter_based_rng>(seed_expr, counter_expr);
 }
 /// Seed is an expression but counter is a constant.
 template <typename SeedExpr, typename CounterT, typename RNGType = openrand::Philox,
@@ -362,9 +348,7 @@ template <typename SeedExpr, typename CounterT, typename RNGType = openrand::Phi
 MUNDY_REQUIRES(impl::is_crtp_base_of_v<impl::MathExprBase, SeedExpr> &&
                    !impl::is_crtp_base_of_v<impl::MathExprBase, CounterT>)
 auto rng(const SeedExpr& seed_expr, const CounterT& counter) {
-  using CounterExpr = impl::ConstantMathExpr<CounterT>;
-  auto counter_expr = CounterExpr(counter);
-  return rng<SeedExpr, CounterExpr, RNGType, make_counter_based_rng>(seed_expr, counter_expr);
+  return impl::rng_impl<SeedExpr, CounterT, RNGType, make_counter_based_rng>(seed_expr, counter);
 }
 /// Seed is a constant but counter is an expression.
 template <typename SeedT, typename CounterExpr, typename RNGType = openrand::Philox,
@@ -372,20 +356,15 @@ template <typename SeedT, typename CounterExpr, typename RNGType = openrand::Phi
 MUNDY_REQUIRES(!impl::is_crtp_base_of_v<impl::MathExprBase, SeedT> &&
                    impl::is_crtp_base_of_v<impl::MathExprBase, CounterExpr>)
 auto rng(const SeedT& seed, const CounterExpr& counter_expr) {
-  using SeedExpr = impl::ConstantMathExpr<SeedT>;
-  auto seed_expr = SeedExpr(seed);
-  return rng<SeedExpr, CounterExpr, RNGType, make_counter_based_rng>(seed_expr, counter_expr);
+  return impl::rng_impl<SeedT, CounterExpr, RNGType, make_counter_based_rng>(seed, counter_expr);
 }
 /// Both seed and counter are constants (not allowed).
 template <typename SeedT, typename CounterT, typename RNGType = openrand::Philox,
           RNGType (*make_counter_based_rng)(size_t, size_t) = make_philox>
 MUNDY_REQUIRES(!impl::is_crtp_base_of_v<impl::MathExprBase, SeedT> &&
                    !impl::is_crtp_base_of_v<impl::MathExprBase, CounterT>)
-void rng(const SeedT& /*seed*/, const CounterT& /*counter*/) {
-  MUNDY_THROW_REQUIRE(false, std::logic_error,
-                      "Both seed and counter arguments to rng() cannot be constants.\n"
-                      "At least one of them must be an expression, lest we have no idea how to run the expression over "
-                      "multiple entities.");
+void rng(const SeedT& seed, const CounterT& counter) {
+  return impl::rng_impl<SeedT, CounterT, RNGType, make_counter_based_rng>(seed, counter);
 }
 //@}
 
@@ -401,11 +380,7 @@ void rng(const SeedT& /*seed*/, const CounterT& /*counter*/) {
 ///      trg_exprN, /*=*/ src_exprN);
 template <typename... TrgSrcExprPairs>
 void fused_assign(const TrgSrcExprPairs&... exprs) {
-  constexpr size_t num_trg_src_pairs = sizeof...(TrgSrcExprPairs);
-  static_assert(num_trg_src_pairs % 2 == 0,
-                "The number of target/source expression pairs in fused_assign must be even.");
-  impl::FusedAssignExpr<TrgSrcExprPairs...> fused_expr(exprs...);
-  fused_expr.driver()->run(fused_expr);
+  impl::fused_assign_impl(exprs...);
 }
 //@}
 
@@ -417,8 +392,7 @@ template <typename Expr, typename ReductionOp>
 MUNDY_REQUIRES(impl::is_crtp_base_of_v<impl::MathExprBase, Expr> ||
                    impl::is_crtp_base_of_v<impl::EntityExprBase, Expr>)
 void reduce_local(Expr&& expr, ReductionOp& reduction) {
-  auto driver = expr.driver();
-  driver->reduce_local(expr, reduction);
+  impl::reduce_local_impl(std::forward<Expr>(expr), reduction);
 }
 
 /// \brief Reduce sum (process local)
@@ -426,10 +400,7 @@ template <typename Scalar, typename Expr>
 MUNDY_REQUIRES(impl::is_crtp_base_of_v<impl::MathExprBase, Expr> ||
                    impl::is_crtp_base_of_v<impl::EntityExprBase, Expr>)
 auto reduce_local_sum(Expr&& expr) {
-  Scalar local_sum = 0;
-  Kokkos::Sum<Scalar> sum_reduction(local_sum);
-  reduce_local(std::forward<Expr>(expr), sum_reduction);
-  return local_sum;
+  return impl::reduce_local_sum_impl<Scalar>(std::forward<Expr>(expr));
 }
 
 /// \brief Reduce max (process local)
@@ -437,10 +408,7 @@ template <typename Scalar, typename Expr>
 MUNDY_REQUIRES(impl::is_crtp_base_of_v<impl::MathExprBase, Expr> ||
                    impl::is_crtp_base_of_v<impl::EntityExprBase, Expr>)
 auto reduce_local_max(Expr&& expr) {
-  Scalar local_max;
-  Kokkos::Max<Scalar> max_reduction(local_max);
-  reduce_local(std::forward<Expr>(expr), max_reduction);
-  return local_max;
+  return impl::reduce_local_max_impl<Scalar>(std::forward<Expr>(expr));
 }
 
 /// \brief Reduce min (process local)
@@ -448,10 +416,7 @@ template <typename Scalar, typename Expr>
 MUNDY_REQUIRES(impl::is_crtp_base_of_v<impl::MathExprBase, Expr> ||
                    impl::is_crtp_base_of_v<impl::EntityExprBase, Expr>)
 auto reduce_local_min(Expr&& expr) {
-  Scalar local_min;
-  Kokkos::Min<Scalar> min_reduction(local_min);
-  reduce_local(std::forward<Expr>(expr), min_reduction);
-  return local_min;
+  return impl::reduce_local_min_impl<Scalar>(std::forward<Expr>(expr));
 }
 
 /// \brief Reduces sum (all processes)
@@ -459,11 +424,7 @@ template <typename Scalar, typename Expr>
 MUNDY_REQUIRES(impl::is_crtp_base_of_v<impl::MathExprBase, Expr> ||
                    impl::is_crtp_base_of_v<impl::EntityExprBase, Expr>)
 auto all_reduce_sum(Expr&& expr) {
-  auto* driver = expr.driver();
-  Scalar local_sum = reduce_local_sum<Scalar>(std::forward<Expr>(expr));
-  Scalar global_sum = 0;
-  stk::all_reduce_sum(driver->bulk_data().parallel(), &local_sum, &global_sum, 1);
-  return global_sum;
+  return impl::all_reduce_sum_impl<Scalar>(std::forward<Expr>(expr));
 }
 
 /// \brief Reduces max (all processes)
@@ -471,11 +432,7 @@ template <typename Scalar, typename Expr>
 MUNDY_REQUIRES(impl::is_crtp_base_of_v<impl::MathExprBase, Expr> ||
                    impl::is_crtp_base_of_v<impl::EntityExprBase, Expr>)
 auto all_reduce_max(Expr&& expr) {
-  auto* driver = expr.driver();
-  Scalar local_max = reduce_local_max<Scalar>(std::forward<Expr>(expr));
-  Scalar global_max = 0;
-  stk::all_reduce_max(driver->bulk_data().parallel(), &local_max, &global_max, 1);
-  return global_max;
+  return impl::all_reduce_max_impl<Scalar>(std::forward<Expr>(expr));
 }
 
 /// \brief Reduces min (all processes)
@@ -483,11 +440,7 @@ template <typename Scalar, typename Expr>
 MUNDY_REQUIRES(impl::is_crtp_base_of_v<impl::MathExprBase, Expr> ||
                    impl::is_crtp_base_of_v<impl::EntityExprBase, Expr>)
 auto all_reduce_min(Expr&& expr) {
-  auto* driver = expr.driver();
-  Scalar local_min = reduce_local_min<Scalar>(std::forward<Expr>(expr));
-  Scalar global_min = 0;
-  stk::all_reduce_min(driver->bulk_data().parallel(), &local_min, &global_min, 1);
-  return global_min;
+  return impl::all_reduce_min_impl<Scalar>(std::forward<Expr>(expr));
 }
 //@}
 

@@ -535,10 +535,10 @@ MUNDY_ACCESSOR_EXPR_OP_EQUALS(Add, +=)
 MUNDY_ACCESSOR_EXPR_OP_EQUALS(Sub, -=)
 MUNDY_ACCESSOR_EXPR_OP_EQUALS(Div, /=)
 MUNDY_ACCESSOR_EXPR_OP_EQUALS(Mul, *=)
-MUNDY_ACCESSOR_EXPR_ATOMIC_OP(AtomicAdd, atomic_add, ::mundy::atomic_add)
-MUNDY_ACCESSOR_EXPR_ATOMIC_OP(AtomicSub, atomic_sub, ::mundy::atomic_sub)
-MUNDY_ACCESSOR_EXPR_ATOMIC_OP(AtomicMul, atomic_mul, ::mundy::atomic_mul)
-MUNDY_ACCESSOR_EXPR_ATOMIC_OP(AtomicDiv, atomic_div, ::mundy::atomic_div)
+MUNDY_ACCESSOR_EXPR_ATOMIC_OP(AtomicAdd, atomic_add_impl, ::mundy::atomic_add)
+MUNDY_ACCESSOR_EXPR_ATOMIC_OP(AtomicSub, atomic_sub_impl, ::mundy::atomic_sub)
+MUNDY_ACCESSOR_EXPR_ATOMIC_OP(AtomicMul, atomic_mul_impl, ::mundy::atomic_mul)
+MUNDY_ACCESSOR_EXPR_ATOMIC_OP(AtomicDiv, atomic_div_impl, ::mundy::atomic_div)
 
 }  // namespace impl
 
