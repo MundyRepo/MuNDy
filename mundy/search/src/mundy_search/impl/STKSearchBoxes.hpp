@@ -49,15 +49,17 @@ namespace impl {
 /// This is the STK coarse-search counterpart to `ArborXSearchBoxesT`. It is a construction input, not persistent
 /// neighbor-list storage.
 /// \tparam MemorySpace Kokkos memory space in which the boxes and entity view live.
-template <typename MemorySpace>
+/// \tparam BoxScalar Scalar type used by the STK search boxes.
+template <typename MemorySpace, typename BoxScalar = float>
 class STKSearchBoxesT {
  public:
   //! \name Aliases
   //@{
 
   using memory_space = MemorySpace;
+  using box_scalar = BoxScalar;
   using size_type = size_t;
-  using box_type = stk::search::Box<double>;
+  using box_type = stk::search::Box<box_scalar>;
   using box_view_t = Kokkos::View<box_type*, memory_space>;
   using entity_view_t = Kokkos::View<stk::mesh::Entity*, memory_space>;
   //@}

@@ -27,6 +27,7 @@
 // C++ core
 #include <concepts>      // for std::same_as
 #include <cstddef>       // for size_t
+#include <limits>        // for std::numeric_limits
 #include <stdexcept>     // for std::invalid_argument, std::out_of_range
 #include <unordered_set> // for std::unordered_set (Phase E: extended source dedup)
 #include <vector>        // for std::vector (Phase D: ghosting send list)
@@ -467,8 +468,8 @@ struct NeighborListBuildTraits<STKSearchNeighborList<MemorySpace>> {
   //@{
 
   using list_type = STKSearchNeighborList<MemorySpace>;
-  using target_input_type = impl::STKSearchBoxesT<MemorySpace>;
-  using source_input_type = impl::STKSearchBoxesT<MemorySpace>;
+  using target_input_type = impl::STKSearchBoxesT<MemorySpace, float>;
+  using source_input_type = impl::STKSearchBoxesT<MemorySpace, float>;
   //@}
 
   //! \name Build parameters
@@ -548,6 +549,7 @@ struct STKBuildPhaseTimings {
   double phase_d_ms{0};  ///< D: mirror results to host + ghosting coordination
   double phase_e_ms{0};  ///< E: build extended source entity view (host→device)
   double phase_f_ms{0};  ///< F: refresh NgpMesh + build source EntityKey→ordinal map
+  double phase_g0_ms{0};  ///< G0: precompute valid target/source ordinal pairs
   double phase_g_ms{0};  ///< G: count pass (atomic per-target increments)
   double phase_h_ms{0};  ///< H: prefix scan + write-position init
   double phase_i_ms{0};  ///< I: fill pass (atomic slot allocation)
@@ -555,7 +557,7 @@ struct STKBuildPhaseTimings {
   double phase_k_ms{0};  ///< K: construct list object
   double total_ms()  const {
     return phase_a_ms + phase_b_ms + phase_c_ms + phase_d_ms + phase_e_ms +
-           phase_f_ms + phase_g_ms + phase_h_ms + phase_i_ms + phase_j_ms + phase_k_ms;
+           phase_f_ms + phase_g0_ms + phase_g_ms + phase_h_ms + phase_i_ms + phase_j_ms + phase_k_ms;
   }
 };
 
@@ -583,6 +585,7 @@ inline STKBuildPhaseTimings stk_build_last_timings{};
 ///             ghost the source to the target's rank.
 ///   - **E** — Build an extended source entity list (owned + newly-ghosted) and transfer to device.
 ///   - **F** — Refresh the NGP mesh (includes ghosts); build a source `EntityKey → ordinal` map.
+///   - **G0** — Precompute valid target/source ordinal pairs with the shared filter.
 ///   - **G** — Count pass: atomically increment per-target neighbor counts for all passing pairs.
 ///   - **H** — Exclusive prefix scan: compute CSR offsets, allocate `source_indices` and `write_positions`.
 ///   - **I** — Fill pass: write source ordinals into `source_indices` via atomic fetch-add positions.
@@ -606,8 +609,8 @@ inline STKBuildPhaseTimings stk_build_last_timings{};
 /// \tparam Builder     Complete `NeighborListBuilder` type.
 template <typename MemorySpace>
 template <typename Builder>
-  requires std::same_as<typename Builder::target_input_type, impl::STKSearchBoxesT<MemorySpace>> &&
-           std::same_as<typename Builder::source_input_type, impl::STKSearchBoxesT<MemorySpace>>
+  requires std::same_as<typename Builder::target_input_type, impl::STKSearchBoxesT<MemorySpace, float>> &&
+           std::same_as<typename Builder::source_input_type, impl::STKSearchBoxesT<MemorySpace, float>>
 STKSearchNeighborList<MemorySpace>
 NeighborListBuildTraits<STKSearchNeighborList<MemorySpace>>::build(
     const Builder& builder, const stk::mesh::BulkData& bulk_data, const args_type& /*args*/) {
@@ -619,6 +622,7 @@ NeighborListBuildTraits<STKSearchNeighborList<MemorySpace>>::build(
   using exec_space = typename Builder::execution_space;
   using size_type  = typename list_type::size_type;
   using entity_view_t = typename list_type::entity_view_t;
+  using box_type = typename target_input_type::box_type;
 
   // STK search identifier: EntityKey encodes both entity rank and entity ID.
   // Required for `bulk_data.get_entity(entity_key)` in the ghosting phase;
@@ -626,7 +630,7 @@ NeighborListBuildTraits<STKSearchNeighborList<MemorySpace>>::build(
   using ident_proc_t = stk::search::IdentProc<stk::mesh::EntityKey, int>;
 
   // Per-entity search input for the Kokkos::View-based coarse_search overload.
-  using box_ident_proc_t = stk::search::BoxIdentProc<stk::search::Box<double>, ident_proc_t>;
+  using box_ident_proc_t = stk::search::BoxIdentProc<box_type, ident_proc_t>;
 
   // Per-result type written by coarse_search: domain = target, range = source.
   using intersection_t = stk::search::IdentProcIntersection<ident_proc_t, ident_proc_t>;
@@ -655,6 +659,7 @@ NeighborListBuildTraits<STKSearchNeighborList<MemorySpace>>::build(
   const size_type num_targets = target_boxes.size();
   const size_type num_sources = source_boxes.size();
   const int       my_rank     = bulk_data.parallel_rank();
+  const bool      single_rank = bulk_data.parallel_size() == 1;
 
   // Cache device-view handles.  Kokkos::View is reference-counted; capturing
   // by value in a KOKKOS_LAMBDA is safe.
@@ -792,9 +797,18 @@ NeighborListBuildTraits<STKSearchNeighborList<MemorySpace>>::build(
   // build's ghosting side effect is documented in the function header.  The
   // caller's BulkData object is non-const; the cast is safe.
 
-  auto host_results = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, search_results_view);
+  entity_view_t extended_source_entities;
+  size_type num_extended_sources = 0;
 
-  if (bulk_data.parallel_size() > 1) {
+  if (single_rank) {
+    // No cross-process ghosting can occur on one rank.  The extended source
+    // list is exactly the caller-provided source list, preserving ordinals.
+    extended_source_entities = source_boxes.entities();
+    num_extended_sources = num_sources;
+    stk_prof_mark(stk_build_last_timings.phase_d_ms);
+  } else {
+    auto host_results = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, search_results_view);
+
     std::vector<stk::mesh::EntityProc> entities_to_ghost;
     for (size_type r = 0; r < num_results; ++r) {
       const auto& res         = host_results(r);
@@ -816,58 +830,63 @@ NeighborListBuildTraits<STKSearchNeighborList<MemorySpace>>::build(
     stk::mesh::Ghosting& ghosting = mutable_bulk.create_ghosting("MUNDY_STK_SEARCH_NL_GHOSTING");
     mutable_bulk.change_ghosting(ghosting, entities_to_ghost);
     mutable_bulk.modification_end();
+    stk_prof_mark(stk_build_last_timings.phase_d_ms);
+
+    // ===========================================================================
+    // Phase E — Build extended source entity view (host → device)
+    // ===========================================================================
+    //
+    // After modification_end(), newly-ghosted source entities are locally
+    // accessible.  Concatenate owned sources (ordinals 0..num_sources-1,
+    // unchanged) with any additional ghosted sources discovered through the search
+    // (ordinals num_sources..num_extended-1).
+    //
+    // `std::unordered_set` gives O(1) membership tests for deduplication.
+
+    // Mirror owned source entities to host for key lookup.
+    auto host_owned_sources = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, source_boxes.entities());
+
+    // Build a set of owned source keys.
+    std::unordered_set<stk::mesh::EntityKey, std::hash<stk::mesh::EntityKey>> owned_source_keys;
+    owned_source_keys.reserve(num_sources);
+    for (size_type i = 0; i < num_sources; ++i) {
+      owned_source_keys.insert(bulk_data.entity_key(host_owned_sources(i)));
+    }
+
+    // Start the extended list with all owned sources in original order.
+    std::vector<stk::mesh::Entity> extended_src_vec(host_owned_sources.data(),
+                                                     host_owned_sources.data() + num_sources);
+
+    // Append ghosted sources not yet in the owned set.
+    std::unordered_set<stk::mesh::EntityKey, std::hash<stk::mesh::EntityKey>> newly_added_keys;
+    for (size_type r = 0; r < num_results; ++r) {
+      const auto& res = host_results(r);
+      if (res.domainIdentProc.proc() != my_rank) continue;  // Not our target row.
+      const stk::mesh::EntityKey src_key = res.rangeIdentProc.id();
+      if (owned_source_keys.count(src_key)) continue;          // Already owned.
+      if (!newly_added_keys.insert(src_key).second) continue;  // Already appended.
+      const stk::mesh::Entity src_ent = bulk_data.get_entity(src_key);
+      MUNDY_THROW_ASSERT(bulk_data.is_valid(src_ent), std::runtime_error,
+                         "mundy_stk_nl: ghosted source entity is invalid after modification_end().");
+      extended_src_vec.push_back(src_ent);
+    }
+
+    num_extended_sources = static_cast<size_type>(extended_src_vec.size());
+
+    // Transfer to device.
+    extended_source_entities = entity_view_t("mundy_stk_nl_ext_src", num_extended_sources);
+    {
+      auto host_ext = Kokkos::create_mirror_view(extended_source_entities);
+      for (size_type i = 0; i < num_extended_sources; ++i) host_ext(i) = extended_src_vec[i];
+      Kokkos::deep_copy(extended_source_entities, host_ext);
+    }
+    stk_prof_mark(stk_build_last_timings.phase_e_ms);
   }
-  stk_prof_mark(stk_build_last_timings.phase_d_ms);
-
-  // ===========================================================================
-  // Phase E — Build extended source entity view (host → device)
-  // ===========================================================================
-  //
-  // After modification_end(), newly-ghosted source entities are locally
-  // accessible.  Concatenate owned sources (ordinals 0..num_sources-1,
-  // unchanged) with any additional ghosted sources discovered through the search
-  // (ordinals num_sources..num_extended-1).
-  //
-  // `std::unordered_set` gives O(1) membership tests for deduplication.
-
-  // Mirror owned source entities to host for key lookup.
-  auto host_owned_sources = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, source_boxes.entities());
-
-  // Build a set of owned source keys.
-  std::unordered_set<stk::mesh::EntityKey, std::hash<stk::mesh::EntityKey>> owned_source_keys;
-  owned_source_keys.reserve(num_sources);
-  for (size_type i = 0; i < num_sources; ++i) {
-    owned_source_keys.insert(bulk_data.entity_key(host_owned_sources(i)));
+  if (single_rank) {
+    // Phase E is also a no-op on one rank: there are no remote sources to
+    // append, and `extended_source_entities` already aliases the source input.
+    stk_prof_mark(stk_build_last_timings.phase_e_ms);
   }
-
-  // Start the extended list with all owned sources in original order.
-  std::vector<stk::mesh::Entity> extended_src_vec(host_owned_sources.data(),
-                                                   host_owned_sources.data() + num_sources);
-
-  // Append ghosted sources not yet in the owned set.
-  std::unordered_set<stk::mesh::EntityKey, std::hash<stk::mesh::EntityKey>> newly_added_keys;
-  for (size_type r = 0; r < num_results; ++r) {
-    const auto& res = host_results(r);
-    if (res.domainIdentProc.proc() != my_rank) continue;  // Not our target row.
-    const stk::mesh::EntityKey src_key = res.rangeIdentProc.id();
-    if (owned_source_keys.count(src_key)) continue;          // Already owned.
-    if (!newly_added_keys.insert(src_key).second) continue;  // Already appended.
-    const stk::mesh::Entity src_ent = bulk_data.get_entity(src_key);
-    MUNDY_THROW_ASSERT(bulk_data.is_valid(src_ent), std::runtime_error,
-                       "mundy_stk_nl: ghosted source entity is invalid after modification_end().");
-    extended_src_vec.push_back(src_ent);
-  }
-
-  const size_type num_extended_sources = static_cast<size_type>(extended_src_vec.size());
-
-  // Transfer to device.
-  entity_view_t extended_source_entities("mundy_stk_nl_ext_src", num_extended_sources);
-  {
-    auto host_ext = Kokkos::create_mirror_view(extended_source_entities);
-    for (size_type i = 0; i < num_extended_sources; ++i) host_ext(i) = extended_src_vec[i];
-    Kokkos::deep_copy(extended_source_entities, host_ext);
-  }
-  stk_prof_mark(stk_build_last_timings.phase_e_ms);
 
   // ===========================================================================
   // Phase F — Build source key-to-ordinal map (device)
@@ -894,31 +913,34 @@ NeighborListBuildTraits<STKSearchNeighborList<MemorySpace>>::build(
   stk_prof_mark(stk_build_last_timings.phase_f_ms);
 
   // ===========================================================================
-  // Phase G — Count pass (device)
+  // Phase G0 — Precompute valid target/source ordinal pairs (device)
   // ===========================================================================
   //
-  // For each search result, the shared filter (target lookup → source lookup →
-  // excluder) determines whether the pair enters the neighbor list.  Surviving
-  // pairs atomically increment the per-target count.
+  // For each search result, apply the full neighbor-list filter exactly once and
+  // materialize the surviving dense ordinals.  Count and fill then read these
+  // flat views without repeating the EntityKey map probes or excluder call.
   //
   // Filter steps:
   //   1. **Target lookup**: a map miss means the domain entity belongs to a
-  //      remote rank (symmetric copy); skip — not our list entry.
+  //      remote rank (symmetric copy); mark invalid — not our list entry.
   //   2. **Source lookup**: must succeed — Phase E validated that every source for
-  //      a locally-owned target is accessible and added it to `extended_src_vec`,
-  //      and Phase F mapped all of those into `source_key_to_ordinal`.  A miss here
-  //      means something went wrong (NgpMesh key mismatch, ghosting failure, etc.).
+  //      a locally-owned target is accessible and Phase F mapped all of those
+  //      into `source_key_to_ordinal`.  A miss here means something went wrong
+  //      (NgpMesh key mismatch, ghosting failure, etc.).
   //   3. **Excluder**: the builder's prepared excluder chain (e.g., ExcludeSelfInteraction).
-  //
-  // NOTE: The filter block here must remain IDENTICAL to Phase I (fill pass).
-  // Any divergence between the two passes silently corrupts the CSR structure.
 
-  Kokkos::View<size_type*, MemorySpace> per_target_count("mundy_stk_nl_count", num_targets);
-  Kokkos::deep_copy(per_target_count, size_type(0));
+  constexpr size_type k_invalid_ordinal = std::numeric_limits<size_type>::max();
+  Kokkos::View<size_type*, MemorySpace> precomputed_target_ordinals(
+      "mundy_stk_nl_precomp_trg", num_results);
+  Kokkos::View<size_type*, MemorySpace> precomputed_source_ordinals(
+      "mundy_stk_nl_precomp_src", num_results);
 
   Kokkos::parallel_for(
-      "mundy_stk_nl_count", Kokkos::RangePolicy<exec_space>(0, num_results),
+      "mundy_stk_nl_precompute_ordinals", Kokkos::RangePolicy<exec_space>(0, num_results),
       KOKKOS_LAMBDA(const size_type r) {
+        precomputed_target_ordinals(r) = k_invalid_ordinal;
+        precomputed_source_ordinals(r) = k_invalid_ordinal;
+
         const intersection_t& result = search_results_view(r);
 
         // Step 1: target lookup — skip symmetric copies with a remote domain.
@@ -938,6 +960,26 @@ NeighborListBuildTraits<STKSearchNeighborList<MemorySpace>>::build(
         const stk::mesh::Entity src_ent = extended_source_entities(src_ord);
         if (excluder(NeighborSearchCandidate<size_type>(trg_ord, src_ord, trg_ent, src_ent))) return;
 
+        precomputed_target_ordinals(r) = trg_ord;
+        precomputed_source_ordinals(r) = src_ord;
+      });
+  stk_prof_mark(stk_build_last_timings.phase_g0_ms);
+
+  // ===========================================================================
+  // Phase G — Count pass (device)
+  // ===========================================================================
+  //
+  // Each valid precomputed ordinal pair contributes one neighbor to its target.
+  // Invalid entries are remote symmetric copies or pairs rejected by the excluder.
+
+  Kokkos::View<size_type*, MemorySpace> per_target_count("mundy_stk_nl_count", num_targets);
+  Kokkos::deep_copy(per_target_count, size_type(0));
+
+  Kokkos::parallel_for(
+      "mundy_stk_nl_count", Kokkos::RangePolicy<exec_space>(0, num_results),
+      KOKKOS_LAMBDA(const size_type r) {
+        const size_type trg_ord = precomputed_target_ordinals(r);
+        if (trg_ord == k_invalid_ordinal) return;
         Kokkos::atomic_fetch_add(&per_target_count(trg_ord), size_type(1));
       });
   stk_prof_mark(stk_build_last_timings.phase_g_ms);
@@ -978,34 +1020,17 @@ NeighborListBuildTraits<STKSearchNeighborList<MemorySpace>>::build(
   // Phase I — Fill pass (device)
   // ===========================================================================
   //
-  // Identical filter logic to Phase G (see NOTE there).  For each surviving
-  // pair, `atomic_fetch_add` on `write_positions[trg_ord]` allocates a unique
-  // slot; the source ordinal is written into that slot.
+  // For each valid precomputed pair, `atomic_fetch_add` on
+  // `write_positions[trg_ord]` allocates a unique slot; the source ordinal is
+  // written into that slot.
 
   Kokkos::parallel_for(
       "mundy_stk_nl_fill", Kokkos::RangePolicy<exec_space>(0, num_results),
       KOKKOS_LAMBDA(const size_type r) {
-        const intersection_t& result = search_results_view(r);
-
-        // Step 1: target lookup — IDENTICAL to count pass.
-        const auto trg_slot = target_key_to_ordinal.find(result.domainIdentProc.id());
-        if (!target_key_to_ordinal.valid_at(trg_slot)) return;
-        const size_type trg_ord = target_key_to_ordinal.value_at(trg_slot);
-
-        // Step 2: source lookup — must succeed after Phase E/F validation (IDENTICAL to count pass).
-        const auto src_slot = source_key_to_ordinal.find(result.rangeIdentProc.id());
-        MUNDY_THROW_ASSERT(source_key_to_ordinal.valid_at(src_slot), std::runtime_error,
-                           "mundy_stk_nl: source entity missing from ordinal map after Phase E validation — "
-                           "possible NgpMesh key mismatch or ghosting failure.");
-        const size_type src_ord = source_key_to_ordinal.value_at(src_slot);
-
-        // Step 3: excluder — IDENTICAL to count pass.
-        const stk::mesh::Entity trg_ent = target_entities_dev(trg_ord);
-        const stk::mesh::Entity src_ent = extended_source_entities(src_ord);
-        if (excluder(NeighborSearchCandidate<size_type>(trg_ord, src_ord, trg_ent, src_ent))) return;
-
+        const size_type trg_ord = precomputed_target_ordinals(r);
+        if (trg_ord == k_invalid_ordinal) return;
         const size_type pos = Kokkos::atomic_fetch_add(&write_positions(trg_ord), size_type(1));
-        source_indices(pos) = src_ord;
+        source_indices(pos) = precomputed_source_ordinals(r);
       });
   stk_prof_mark(stk_build_last_timings.phase_i_ms);
 

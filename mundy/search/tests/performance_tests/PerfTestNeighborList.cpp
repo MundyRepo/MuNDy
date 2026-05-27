@@ -120,8 +120,8 @@ using ArborXBoxes = mundy::search::impl::ArborXSearchBoxesT<HostSpace>;
 // =============================================================================
 
 struct STKBoxTrait {
-  using box_type          = stk::search::Box<double>;
   using search_boxes_type = STKBoxes;
+  using box_type          = typename search_boxes_type::box_type;
   static box_type make(float cx, float cy, float cz, float h) {
     return box_type{cx - h, cy - h, cz - h, cx + h, cy + h, cz + h};
   }
@@ -271,12 +271,13 @@ static void sort_fixture_targets_by_morton(PerfFixtureT<Trait>& f) {
   f.boxes = typename Trait::search_boxes_type{f.meta->universal_part(), box_view, entity_view};
 }
 
-static void diagnose_target_ordering() {
+static void diagnose_target_ordering(bool sort_targets) {
   std::cout << "\n=== Target Ordering Diagnostic ===\n"
             << "  ratio = avg_consecutive / avg_random_pair  (1=random, <<1=spatially coherent)\n\n";
   for (int ni = 0; ni < kNumNValues; ++ni) {
     const int N = kNValues[ni];
-    const auto f = build_fixture<STKBoxTrait>(N);
+    auto f = build_fixture<STKBoxTrait>(N);
+    if (sort_targets) sort_fixture_targets_by_morton(f);
 
     auto avg_consec = [&](const std::vector<int>& order) {
       double sum = 0.0;
@@ -299,7 +300,8 @@ static void diagnose_target_ordering() {
           mundy::Vector3<float>{f.pos(b,0), f.pos(b,1), f.pos(b,2)});
     });
 
-    const int n_samp = std::min(N * (N - 1), 2000);
+    const int n_samp = static_cast<int>(
+        std::min(static_cast<long long>(N) * static_cast<long long>(N - 1), 2000LL));
     double sum_rand = 0.0;
     for (int k = 0; k < n_samp; ++k) {
       const int i = k % N, j = (k * 6271 + 1337) % N;
@@ -649,6 +651,7 @@ static void bench_stk_phase_timing(const BenchOptions& opts) {
             << std::setw(kPhW) << "D(ms)"
             << std::setw(kPhW) << "E(ms)"
             << std::setw(kPhW) << "F(ms)"
+            << std::setw(kPhW) << "G0(ms)"
             << std::setw(kPhW) << "G(ms)"
             << std::setw(kPhW) << "H(ms)"
             << std::setw(kPhW) << "I(ms)"
@@ -656,7 +659,7 @@ static void bench_stk_phase_timing(const BenchOptions& opts) {
             << std::setw(kPhW) << "K(ms)"
             << std::setw(kTotW) << "Total(ms)"
             << "\n";
-  const int ruler_w = kNW + 11 * kPhW + kTotW;
+  const int ruler_w = kNW + 12 * kPhW + kTotW;
   std::cout << "  " << std::string(ruler_w, '-') << "\n";
 
   const auto fmt_ms = [](double ms) {
@@ -686,6 +689,7 @@ static void bench_stk_phase_timing(const BenchOptions& opts) {
               << fmt_ms(t.phase_d_ms)
               << fmt_ms(t.phase_e_ms)
               << fmt_ms(t.phase_f_ms)
+              << fmt_ms(t.phase_g0_ms)
               << fmt_ms(t.phase_g_ms)
               << fmt_ms(t.phase_h_ms)
               << fmt_ms(t.phase_i_ms)
@@ -704,6 +708,7 @@ static void bench_stk_phase_timing(const BenchOptions& opts) {
             << "    D = mirror results to host + ghosting (multi-rank only)\n"
             << "    E = build extended source entity view\n"
             << "    F = refresh NgpMesh + build source EntityKey→ordinal map\n"
+            << "    G0 = precompute valid target/source ordinal pairs\n"
             << "    G = count pass (atomic per-target increments)\n"
             << "    H = prefix scan + write-position init\n"
             << "    I = fill pass (atomic slot allocation)\n"
@@ -873,7 +878,7 @@ int main(int argc, char** argv) {
     if (opts.time_phases)    std::cout << "  Mode     : --time-phases (STK build phase breakdown)\n";
     std::cout << "\n";
 
-    diagnose_target_ordering();
+    diagnose_target_ordering(opts.sort_targets);
 
     if (opts.time_phases && opts.backend == BenchOptions::Backend::STK) {
       bench_stk_phase_timing(opts);

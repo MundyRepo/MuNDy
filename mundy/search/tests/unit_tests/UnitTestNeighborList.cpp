@@ -160,10 +160,10 @@ struct ArborXBoxTrait {
 };
 #endif  // HAVE_MUNDYSEARCH_ARBORX
 
-/// Trait for STK-backed tests (stk::search::Box<double>, impl::STKSearchBoxesT).
+/// Trait for STK-backed tests (impl::STKSearchBoxesT).
 struct STKBoxTrait {
-  using box_type          = stk::search::Box<double>;
   using search_boxes_type = impl::STKSearchBoxesT<TestMemSpace>;
+  using box_type          = typename search_boxes_type::box_type;
 
   static box_type make(float cx, float cy, float cz, float hx, float hy, float hz) {
     return box_type{cx - hx, cy - hy, cz - hz, cx + hx, cy + hy, cz + hz};
