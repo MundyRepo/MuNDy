@@ -334,37 +334,11 @@ auto atomic_div(const Args&... args) {
 //@{
 
 /// \brief Create a counter-based random number generator using the given seed and counter.
-/// Seed and counter are expressions.
+/// At least one of seed or counter must be an expression for this code to compile.
 template <typename SeedExpr, typename CounterExpr, typename RNGType = openrand::Philox,
           RNGType (*make_counter_based_rng)(size_t, size_t) = make_philox>
-MUNDY_REQUIRES(impl::is_crtp_base_of_v<impl::MathExprBase, SeedExpr>&&
-                   impl::is_crtp_base_of_v<impl::MathExprBase, CounterExpr>)
 auto rng(const SeedExpr& seed_expr, const CounterExpr& counter_expr) {
   return impl::rng_impl<SeedExpr, CounterExpr, RNGType, make_counter_based_rng>(seed_expr, counter_expr);
-}
-/// Seed is an expression but counter is a constant.
-template <typename SeedExpr, typename CounterT, typename RNGType = openrand::Philox,
-          RNGType (*make_counter_based_rng)(size_t, size_t) = make_philox>
-MUNDY_REQUIRES(impl::is_crtp_base_of_v<impl::MathExprBase, SeedExpr> &&
-                   !impl::is_crtp_base_of_v<impl::MathExprBase, CounterT>)
-auto rng(const SeedExpr& seed_expr, const CounterT& counter) {
-  return impl::rng_impl<SeedExpr, CounterT, RNGType, make_counter_based_rng>(seed_expr, counter);
-}
-/// Seed is a constant but counter is an expression.
-template <typename SeedT, typename CounterExpr, typename RNGType = openrand::Philox,
-          RNGType (*make_counter_based_rng)(size_t, size_t) = make_philox>
-MUNDY_REQUIRES(!impl::is_crtp_base_of_v<impl::MathExprBase, SeedT> &&
-                   impl::is_crtp_base_of_v<impl::MathExprBase, CounterExpr>)
-auto rng(const SeedT& seed, const CounterExpr& counter_expr) {
-  return impl::rng_impl<SeedT, CounterExpr, RNGType, make_counter_based_rng>(seed, counter_expr);
-}
-/// Both seed and counter are constants (not allowed).
-template <typename SeedT, typename CounterT, typename RNGType = openrand::Philox,
-          RNGType (*make_counter_based_rng)(size_t, size_t) = make_philox>
-MUNDY_REQUIRES(!impl::is_crtp_base_of_v<impl::MathExprBase, SeedT> &&
-                   !impl::is_crtp_base_of_v<impl::MathExprBase, CounterT>)
-void rng(const SeedT& seed, const CounterT& counter) {
-  return impl::rng_impl<SeedT, CounterT, RNGType, make_counter_based_rng>(seed, counter);
 }
 //@}
 
