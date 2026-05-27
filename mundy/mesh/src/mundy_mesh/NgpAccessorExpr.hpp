@@ -1283,8 +1283,6 @@ static constexpr bool dependent_false_v = false;
 template <typename T>
 static constexpr bool is_math_expr_arg_v = is_crtp_base_of_v<MathExprBase, std::decay_t<T>>;
 
-}  // namespace impl
-
 template <typename Expr>
 KOKKOS_INLINE_FUNCTION auto make_apply_expr_arg(const MathExprBase<Expr>& expr) {
   return expr.self();
@@ -1294,6 +1292,102 @@ template <typename T>
 MUNDY_REQUIRES(!impl::is_math_expr_arg_v<T> && !is_crtp_base_of_v<EntityExprBase, T>)
 KOKKOS_INLINE_FUNCTION auto make_apply_expr_arg(const T& value) {
   return ConstantMathExpr<std::decay_t<T>>(value);
+}
+
+enum class SinkAccessMode { ReadOnly, ReadWrite, OverwriteAll };
+
+template <SinkAccessMode Mode, typename Expr>
+class SinkArg {
+ public:
+  using expr_t = Expr;
+  static constexpr SinkAccessMode mode = Mode;
+
+  KOKKOS_INLINE_FUNCTION
+  explicit SinkArg(Expr expr) : expr_(expr) {
+  }
+
+  KOKKOS_INLINE_FUNCTION
+  const Expr& expr() const {
+    return expr_;
+  }
+
+  KOKKOS_INLINE_FUNCTION
+  Expr& expr() {
+    return expr_;
+  }
+
+ private:
+  Expr expr_;
+};
+
+template <typename T>
+struct is_sink_arg : std::false_type {};
+
+template <SinkAccessMode Mode, typename Expr>
+struct is_sink_arg<SinkArg<Mode, Expr>> : std::true_type {};
+
+template <typename T>
+static constexpr bool is_sink_arg_v = is_sink_arg<std::decay_t<T>>::value;
+
+template <typename T>
+struct is_constant_math_expr : std::false_type {};
+
+template <typename T>
+struct is_constant_math_expr<ConstantMathExpr<T>> : std::true_type {};
+
+template <typename T>
+static constexpr bool is_constant_math_expr_v = is_constant_math_expr<std::decay_t<T>>::value;
+
+template <typename T>
+struct sink_arg_has_nonconstant_expr
+    : std::bool_constant<is_math_expr_arg_v<T> && !is_constant_math_expr_v<T>> {};
+
+template <SinkAccessMode Mode, typename Expr>
+struct sink_arg_has_nonconstant_expr<SinkArg<Mode, Expr>>
+    : std::bool_constant<!is_constant_math_expr_v<Expr>> {};
+
+template <typename T>
+static constexpr bool sink_arg_has_nonconstant_expr_v = sink_arg_has_nonconstant_expr<std::decay_t<T>>::value;
+
+template <SinkAccessMode Mode, typename T>
+KOKKOS_INLINE_FUNCTION auto make_sink_arg_with_mode(const T& value) {
+  static_assert(!is_sink_arg_v<T>, "sink_expr access wrappers cannot be nested.");
+  if constexpr (Mode == SinkAccessMode::ReadOnly) {
+    return SinkArg<Mode, decltype(make_apply_expr_arg(value))>(make_apply_expr_arg(value));
+  } else {
+    static_assert(is_math_expr_arg_v<T>,
+                  "sink_expr(func, args...): read_write(...) and overwrite_all(...) arguments must be math "
+                  "expressions. Scalars can only be read-only sink arguments.");
+    return SinkArg<Mode, decltype(make_apply_expr_arg(value))>(make_apply_expr_arg(value));
+  }
+}
+
+template <SinkAccessMode Mode, typename Expr>
+KOKKOS_INLINE_FUNCTION auto make_sink_expr_arg(const SinkArg<Mode, Expr>& arg) {
+  return arg;
+}
+
+template <typename T>
+MUNDY_REQUIRES(!is_sink_arg_v<T>)
+KOKKOS_INLINE_FUNCTION auto make_sink_expr_arg(const T& value) {
+  return make_sink_arg_with_mode<SinkAccessMode::ReadOnly>(value);
+}
+
+}  // namespace impl
+
+template <typename Arg>
+KOKKOS_INLINE_FUNCTION auto read_only(const Arg& arg) {
+  return impl::make_sink_arg_with_mode<impl::SinkAccessMode::ReadOnly>(arg);
+}
+
+template <typename Arg>
+KOKKOS_INLINE_FUNCTION auto read_write(const Arg& arg) {
+  return impl::make_sink_arg_with_mode<impl::SinkAccessMode::ReadWrite>(arg);
+}
+
+template <typename Arg>
+KOKKOS_INLINE_FUNCTION auto overwrite_all(const Arg& arg) {
+  return impl::make_sink_arg_with_mode<impl::SinkAccessMode::OverwriteAll>(arg);
 }
 
 /// \brief Expression node for applying an arbitrary non-mutating function object to expression values.
@@ -1472,8 +1566,8 @@ auto apply_expr(Func func, const Args&... args) {
                 "apply_expr(func, args...): at least one argument must be a math expression so Mundy knows which "
                 "entity driver should evaluate the expression. Scalars are allowed, but they cannot be the only "
                 "arguments.");
-  return ApplyValueExpr<std::decay_t<Func>, decltype(make_apply_expr_arg(args))...>(std::move(func),
-                                                                                    make_apply_expr_arg(args)...);
+  return ApplyValueExpr<std::decay_t<Func>, decltype(impl::make_apply_expr_arg(args))...>(std::move(func),
+                                                                                    impl::make_apply_expr_arg(args)...);
 }
 
 #define MUNDY_ACCESSOR_EXPR_FORWARD_FUNC(ExprClassName, FuncName, FuncCall)                                  \
@@ -1489,6 +1583,306 @@ auto apply_expr(Func func, const Args&... args) {
   MUNDY_REQUIRES((impl::is_math_expr_arg_v<Args> || ...))                                                    \
   auto FuncName(const Args&... args) {                                                                       \
     return apply_expr(ExprClassName##Func{}, args...);                                                       \
+  }
+
+template <typename Func, typename... SinkArgs>
+class ApplySinkExpr : public MathExprBase<ApplySinkExpr<Func, SinkArgs...>> {
+ public:
+  using our_t = ApplySinkExpr<Func, SinkArgs...>;
+  using our_tag = typename MathExprBase<our_t>::our_tag;
+  using sub_expressions_t = tuple<typename SinkArgs::expr_t...>;
+  static constexpr bool constrains_num_entities = false;
+  static constexpr bool has_static_eval = false;
+  static constexpr size_t num_args = sizeof...(SinkArgs);
+
+  KOKKOS_INLINE_FUNCTION
+  ApplySinkExpr(Func func, SinkArgs... sink_args) : func_(func), sink_args_(make_tuple(sink_args...)) {
+  }
+
+  template <size_t NumEntities>
+  KOKKOS_INLINE_FUNCTION void eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities>& fmis,
+                                   const NgpEvalContext& context) const {
+    auto values = eval_arg_chain(fmis, context);
+    apply_values(values, std::make_index_sequence<num_args>{});
+  }
+
+  template <typename EvalCountsType, EvalCountsType eval_counts, size_t NumEntities, typename OldCacheType>
+  KOKKOS_INLINE_FUNCTION void cached_eval(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities>& fmis,
+                                          OldCacheType&& old_cache, const NgpEvalContext& context) const {
+    static_assert(!aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>,
+                  "The cache somehow contains our tag, but our eval returns void and should never cache anything.");
+    auto [value_handles, final_cache] = cached_arg_chain<EvalCountsType, eval_counts>(
+        fmis, std::forward<OldCacheType>(old_cache), context);
+    apply_cached_values(value_handles, final_cache, std::make_index_sequence<num_args>{});
+  }
+
+  template <typename EvalCountsType, EvalCountsType eval_counts>
+  void validate_runtime_reuse(impl::RuntimeReuseValidator& validator) const {
+    validate_runtime_reuse_impl<EvalCountsType, eval_counts>(std::make_index_sequence<num_args>{}, validator);
+  }
+
+  void propagate_synchronize(const NgpEvalContext& context) {
+    flag_sink_args<impl::SinkAccessMode::ReadOnly>(std::make_index_sequence<num_args>{}, context);
+    flag_sink_args<impl::SinkAccessMode::ReadWrite>(std::make_index_sequence<num_args>{}, context);
+    flag_sink_args<impl::SinkAccessMode::OverwriteAll>(std::make_index_sequence<num_args>{}, context);
+    propagate_synchronize_impl(std::make_index_sequence<num_args>{}, context);
+  }
+
+  void flag_read_only(const NgpEvalContext& /*context*/) {
+    MUNDY_THROW_REQUIRE(false, std::logic_error,
+                        "Attempting to read the return type of a sink expression, which returns void.");
+  }
+
+  void flag_read_write(const NgpEvalContext& /*context*/) {
+    MUNDY_THROW_REQUIRE(false, std::logic_error,
+                        "Attempting to write to the return type of a sink expression, which returns void.");
+  }
+
+  void flag_overwrite_all(const NgpEvalContext& /*context*/) {
+    MUNDY_THROW_REQUIRE(false, std::logic_error,
+                        "Attempting to write to the return type of a sink expression, which returns void.");
+  }
+
+  const auto driver() const {
+    return driver_impl<0>();
+  }
+
+ private:
+  template <size_t I>
+  using sink_arg_i_t = tuple_element_t<I, tuple<SinkArgs...>>;
+
+  template <size_t I = 0, size_t NumEntities>
+  KOKKOS_FUNCTION auto eval_arg_chain(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities>& fmis,
+                                      const NgpEvalContext& context) const {
+    if constexpr (I == num_args) {
+      return tuple<>{};
+    } else {
+      auto val_i = get<I>(sink_args_).expr().eval(fmis, context);
+      auto vals_tail = eval_arg_chain<I + 1>(fmis, context);
+      return tuple_cat(tuple{std::move(val_i)}, std::move(vals_tail));
+    }
+  }
+
+  template <typename EvalCountsType, EvalCountsType eval_counts, size_t I = 0, size_t NumEntities, typename CacheType>
+  KOKKOS_FUNCTION auto cached_arg_chain(const Kokkos::Array<stk::mesh::FastMeshIndex, NumEntities>& fmis,
+                                        CacheType&& cache, const NgpEvalContext& context) const {
+    if constexpr (I == num_args) {
+      return Kokkos::make_pair(tuple<>{}, std::forward<CacheType>(cache));
+    } else {
+      auto result_i = get<I>(sink_args_).expr().template cached_eval<EvalCountsType, eval_counts>(
+          fmis, std::forward<CacheType>(cache), context);
+      auto value_handle_i = std::move(result_i.first);
+      auto next_cache = std::move(result_i.second);
+      auto [vals_tail, final_cache] =
+          cached_arg_chain<EvalCountsType, eval_counts, I + 1>(fmis, std::move(next_cache), context);
+      auto vals_all = tuple_cat(tuple{std::move(value_handle_i)}, std::move(vals_tail));
+      return Kokkos::make_pair(vals_all, std::move(final_cache));
+    }
+  }
+
+  template <size_t I, typename ValuesTuple>
+  KOKKOS_INLINE_FUNCTION decltype(auto) sink_eval_arg(ValuesTuple& values) const {
+    if constexpr (sink_arg_i_t<I>::mode == impl::SinkAccessMode::ReadOnly) {
+      using value_t = std::remove_reference_t<decltype(get<I>(values))>;
+      return static_cast<const value_t&>(get<I>(values));
+    } else {
+      return (get<I>(values));
+    }
+  }
+
+  template <size_t I, typename ValueHandlesTuple, typename CacheType>
+  KOKKOS_INLINE_FUNCTION decltype(auto) sink_cached_arg(ValueHandlesTuple& value_handles, CacheType& cache) const {
+    if constexpr (sink_arg_i_t<I>::mode == impl::SinkAccessMode::ReadOnly) {
+      using value_t = std::remove_reference_t<decltype(get<I>(value_handles).get(cache))>;
+      return static_cast<const value_t&>(get<I>(value_handles).get(cache));
+    } else {
+      return (get<I>(value_handles).get(cache));
+    }
+  }
+
+  template <typename ValuesTuple, size_t... Is>
+  KOKKOS_INLINE_FUNCTION void apply_values(ValuesTuple& values, std::index_sequence<Is...>) const {
+    if constexpr (std::is_invocable_v<const Func&, decltype(sink_eval_arg<Is>(values))...>) {
+      using result_t = std::invoke_result_t<const Func&, decltype(sink_eval_arg<Is>(values))...>;
+      static_assert(std::is_void_v<result_t>,
+                    "sink_expr(func, args...): func must return void. Mutating functions that return a value are not "
+                    "supported by generic sink expressions.");
+      func_(sink_eval_arg<Is>(values)...);
+    } else {
+      static_assert(impl::dependent_false_v<Func, decltype(sink_eval_arg<Is>(values))...>,
+                    "sink_expr(func, args...): func cannot be called with the requested read-only/read-write/"
+                    "overwrite-all evaluated arguments. Check that every mutating argument is wrapped with "
+                    "read_write(...) or overwrite_all(...), and every write-mode expression evaluates to a mutable "
+                    "lvalue.");
+    }
+  }
+
+  template <typename ValueHandlesTuple, typename CacheType, size_t... Is>
+  KOKKOS_INLINE_FUNCTION void apply_cached_values(ValueHandlesTuple& value_handles, CacheType& cache,
+                                                  std::index_sequence<Is...>) const {
+    if constexpr (std::is_invocable_v<const Func&, decltype(sink_cached_arg<Is>(value_handles, cache))...>) {
+      using result_t = std::invoke_result_t<const Func&, decltype(sink_cached_arg<Is>(value_handles, cache))...>;
+      static_assert(std::is_void_v<result_t>,
+                    "sink_expr(func, args...): func must return void. Mutating functions that return a value are not "
+                    "supported by generic sink expressions.");
+      func_(sink_cached_arg<Is>(value_handles, cache)...);
+    } else {
+      static_assert(impl::dependent_false_v<Func, decltype(sink_cached_arg<Is>(value_handles, cache))...>,
+                    "sink_expr(func, args...): func cannot be called with the requested read-only/read-write/"
+                    "overwrite-all cached arguments. Check that every mutating argument is wrapped with "
+                    "read_write(...) or overwrite_all(...), and every write-mode expression evaluates to a mutable "
+                    "lvalue.");
+    }
+  }
+
+  template <typename EvalCountsType, EvalCountsType eval_counts, size_t... Is>
+  void validate_runtime_reuse_impl(std::index_sequence<Is...>, impl::RuntimeReuseValidator& validator) const {
+    (get<Is>(sink_args_).expr().template validate_runtime_reuse<EvalCountsType, eval_counts>(validator), ...);
+  }
+
+  template <impl::SinkAccessMode Mode, size_t... Is>
+  void flag_sink_args(std::index_sequence<Is...>, const NgpEvalContext& context) {
+    (flag_sink_arg<Mode, Is>(context), ...);
+  }
+
+  template <impl::SinkAccessMode Mode, size_t I>
+  void flag_sink_arg(const NgpEvalContext& context) {
+    if constexpr (sink_arg_i_t<I>::mode == Mode) {
+      if constexpr (Mode == impl::SinkAccessMode::ReadOnly) {
+        get<I>(sink_args_).expr().flag_read_only(context);
+      } else if constexpr (Mode == impl::SinkAccessMode::ReadWrite) {
+        get<I>(sink_args_).expr().flag_read_write(context);
+      } else {
+        get<I>(sink_args_).expr().flag_overwrite_all(context);
+      }
+    }
+  }
+
+  template <size_t... Is>
+  void propagate_synchronize_impl(std::index_sequence<Is...>, const NgpEvalContext& context) {
+    (get<Is>(sink_args_).expr().propagate_synchronize(context), ...);
+  }
+
+  template <size_t I>
+  const auto driver_impl() const {
+    using nullptr_t = decltype(nullptr);
+    if constexpr (I == num_args) {
+      static_assert(impl::dependent_false_v<Func, SinkArgs...>,
+                    "sink_expr(func, args...): at least one argument must have a non-null driver. Did you pass only "
+                    "constants?");
+      return nullptr;
+    } else {
+      const auto& expr = get<I>(sink_args_).expr();
+      if constexpr (std::is_same_v<nullptr_t, decltype(expr.driver())>) {
+        return driver_impl<I + 1>();
+      } else {
+        auto d = expr.driver();
+        check_remaining_drivers<I + 1>(d);
+        return d;
+      }
+    }
+  }
+
+  template <size_t I, typename DriverType>
+  void check_remaining_drivers(const DriverType& driver) const {
+    using nullptr_t = decltype(nullptr);
+    if constexpr (I < num_args) {
+      const auto& expr = get<I>(sink_args_).expr();
+      if constexpr (!std::is_same_v<nullptr_t, decltype(expr.driver())>) {
+        MUNDY_THROW_REQUIRE(driver == expr.driver(), std::logic_error, "Mismatched drivers in sink expression");
+      }
+      check_remaining_drivers<I + 1>(driver);
+    }
+  }
+
+  Func func_;
+  tuple<SinkArgs...> sink_args_;
+};
+
+/// \brief Build a side-effect expression that applies a mutating function object to evaluated expression arguments.
+///
+/// `sink_expr` is the low-level escape hatch for mutating functions that Mundy does not wrap directly. Most users
+/// should prefer a named wrapper such as `rotate_quaternion(q(es), omega(es), dt)` when one exists. Named wrappers
+/// run immediately; use `sink_expr` when you need to construct the expression object yourself.
+///
+/// Rules:
+/// - At least one argument must be an expression with a non-null driver.
+/// - Unwrapped arguments are treated as `read_only(...)`.
+/// - Scalars are allowed only as read-only arguments and are converted to `ConstantMathExpr`.
+/// - `read_write(expr)` means the old device value is synchronized, then the field is marked modified on device.
+/// - `overwrite_all(expr)` means host sync state is cleared, then the field is marked modified on device.
+/// - Write-mode arguments must be expressions that evaluate to mutable lvalues.
+/// - The callable must return `void`.
+/// - Mutating functions that also return a value are intentionally unsupported (for now).
+template <typename Func, typename... Args>
+auto sink_expr(Func func, const Args&... args) {
+  static_assert(sizeof...(Args) > 0, "sink_expr(func, args...): at least one argument is required.");
+  static_assert((impl::sink_arg_has_nonconstant_expr_v<Args> || ...),
+                "sink_expr(func, args...): at least one argument must be a non-constant math expression so Mundy "
+                "knows which entity driver should evaluate the expression. Scalars are allowed, but they cannot be "
+                "the only arguments.");
+  return ApplySinkExpr<std::decay_t<Func>, decltype(impl::make_sink_expr_arg(args))...>(
+      std::move(func), impl::make_sink_expr_arg(args)...);
+}
+
+namespace impl {
+
+template <SinkAccessMode... Modes>
+struct SinkArgPolicy {
+  static constexpr size_t num_args = sizeof...(Modes);
+};
+
+template <size_t I, SinkAccessMode First, SinkAccessMode... Rest>
+struct NthSinkAccessMode : NthSinkAccessMode<I - 1, Rest...> {};
+
+template <SinkAccessMode First, SinkAccessMode... Rest>
+struct NthSinkAccessMode<0, First, Rest...> {
+  static constexpr SinkAccessMode value = First;
+};
+
+template <typename Policy, size_t I>
+struct SinkPolicyMode;
+
+template <SinkAccessMode... Modes, size_t I>
+struct SinkPolicyMode<SinkArgPolicy<Modes...>, I> {
+  static_assert(I < sizeof...(Modes), "Named sink expression argument index is out of range for its access policy.");
+  static constexpr SinkAccessMode value = NthSinkAccessMode<I, Modes...>::value;
+};
+
+template <typename Policy, typename Func, typename... Args, size_t... Is>
+auto make_named_sink_expr_impl(Func func, std::index_sequence<Is...>, const Args&... args) {
+  return sink_expr(std::move(func), make_sink_arg_with_mode<SinkPolicyMode<Policy, Is>::value>(args)...);
+}
+
+template <typename Policy, typename Func, typename... Args>
+auto make_named_sink_expr(Func func, const Args&... args) {
+  static_assert(sizeof...(Args) == Policy::num_args,
+                "Named sink expression called with the wrong number of arguments for its access policy.");
+  return make_named_sink_expr_impl<Policy>(std::move(func), std::make_index_sequence<sizeof...(Args)>{}, args...);
+}
+
+}  // namespace impl
+
+#define MUNDY_ACCESSOR_EXPR_SINK_READ_ONLY ::mundy::mesh::impl::SinkAccessMode::ReadOnly
+#define MUNDY_ACCESSOR_EXPR_SINK_READ_WRITE ::mundy::mesh::impl::SinkAccessMode::ReadWrite
+#define MUNDY_ACCESSOR_EXPR_SINK_OVERWRITE_ALL ::mundy::mesh::impl::SinkAccessMode::OverwriteAll
+
+#define MUNDY_ACCESSOR_EXPR_FORWARD_SINK_FUNC(ExprClassName, FuncName, FuncCall, ...)                         \
+  struct ExprClassName##SinkFunc {                                                                            \
+    template <typename... Values>                                                                             \
+    KOKKOS_INLINE_FUNCTION auto operator()(Values&&... values) const                                          \
+        -> decltype(FuncCall(std::forward<Values>(values)...)) {                                              \
+      return FuncCall(std::forward<Values>(values)...);                                                       \
+    }                                                                                                         \
+  };                                                                                                          \
+  using ExprClassName##SinkPolicy = impl::SinkArgPolicy<__VA_ARGS__>;                                         \
+  template <typename... SinkArgs>                                                                             \
+  using ExprClassName##SinkExpr = ApplySinkExpr<ExprClassName##SinkFunc, SinkArgs...>;                        \
+  template <typename... Args>                                                                                 \
+  MUNDY_REQUIRES((impl::is_math_expr_arg_v<Args> || ...))                                                     \
+  void FuncName(const Args&... args) {                                                                        \
+    auto expr = impl::make_named_sink_expr<ExprClassName##SinkPolicy>(ExprClassName##SinkFunc{}, args...);    \
+    expr.driver()->run(expr);                                                                                 \
   }
 
 template <typename Policy, typename LeftMathExpr, typename RightMathExpr>
@@ -1745,12 +2139,12 @@ MUNDY_ACCESSOR_EXPR_ATOMIC_OP(AtomicDiv, atomic_div, ::mundy::atomic_div)
 // Vector/Matrix/Quaternion functions
 MUNDY_ACCESSOR_EXPR_FORWARD_FUNC(Copy, copy, copy)                       // v, q, m
 MUNDY_ACCESSOR_EXPR_FORWARD_FUNC(Sum, sum, sum)                          // v, q, m
-MUNDY_ACCESSOR_EXPR_FORWARD_FUNC(Product, product, ::mundy::product)     // Vector/Matrix/Quaternion
-MUNDY_ACCESSOR_EXPR_FORWARD_FUNC(Min, min, ::mundy::min)                 // Vector/Matrix/Quaternion
-MUNDY_ACCESSOR_EXPR_FORWARD_FUNC(Max, max, ::mundy::max)                 // Vector/Matrix/Quaternion
-MUNDY_ACCESSOR_EXPR_FORWARD_FUNC(Mean, mean, ::mundy::mean)              // Vector/Matrix/Quaternion
-MUNDY_ACCESSOR_EXPR_FORWARD_FUNC(Variance, variance, ::mundy::variance)  // Vector/Matrix/Quaternion
-MUNDY_ACCESSOR_EXPR_FORWARD_FUNC(StdDev, stddev, ::mundy::stddev)        // Vector/Matrix/Quaternion
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC(Product, product, ::mundy::product)     // v, q, m
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC(Min, min, ::mundy::min)                 // v, q, m
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC(Max, max, ::mundy::max)                 // v, q, m
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC(Mean, mean, ::mundy::mean)              // v, q, m
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC(Variance, variance, ::mundy::variance)  // v, q, m
+MUNDY_ACCESSOR_EXPR_FORWARD_FUNC(StdDev, stddev, ::mundy::stddev)        // v, q, m
 MUNDY_ACCESSOR_EXPR_FORWARD_FUNC(Norm, norm, ::mundy::norm)              // v, q, m
 MUNDY_ACCESSOR_EXPR_FORWARD_FUNC(OneNorm, one_norm, ::mundy::one_norm)   // v, m
 MUNDY_ACCESSOR_EXPR_FORWARD_FUNC(InfNorm, inf_norm, ::mundy::inf_norm)   // v, m
@@ -1777,6 +2171,9 @@ MUNDY_ACCESSOR_EXPR_FORWARD_FUNC(Cross, cross, ::mundy::cross)                  
 MUNDY_ACCESSOR_EXPR_FORWARD_FUNC(ElementwiseMul, elementwise_mul, ::mundy::elementwise_mul)  // v-v, m-m
 MUNDY_ACCESSOR_EXPR_FORWARD_FUNC(ElementwiseDiv, elementwise_div, ::mundy::elementwise_div)  // v-v, m-m
 MUNDY_ACCESSOR_EXPR_FORWARD_FUNC(Slerp, slerp, ::mundy::slerp)                               // q-q
+MUNDY_ACCESSOR_EXPR_FORWARD_SINK_FUNC(RotateQuaternion, rotate_quaternion, ::mundy::rotate_quaternion,
+                                      MUNDY_ACCESSOR_EXPR_SINK_READ_WRITE, MUNDY_ACCESSOR_EXPR_SINK_READ_ONLY,
+                                      MUNDY_ACCESSOR_EXPR_SINK_READ_ONLY)  // q, v, s
 
 // Scalar functions
 MUNDY_ACCESSOR_EXPR_FORWARD_FUNC(Abs, abs, Kokkos::abs)

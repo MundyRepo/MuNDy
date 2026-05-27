@@ -25,19 +25,33 @@
 /// \brief STK-coarse-search-backed concrete neighbor-list types and their NeighborListBuildTraits specializations.
 
 // C++ core
-#include <concepts>   // for std::same_as
-#include <cstddef>    // for size_t
-#include <stdexcept>  // for std::invalid_argument, std::out_of_range
+#include <concepts>      // for std::same_as
+#include <cstddef>       // for size_t
+#include <stdexcept>     // for std::invalid_argument, std::out_of_range
+#include <unordered_set> // for std::unordered_set (Phase E: extended source dedup)
+#include <vector>        // for std::vector (Phase D: ghosting send list)
 
 // Trilinos
 #include <Kokkos_Core.hpp>
+#include <Kokkos_UnorderedMap.hpp>                          // for Kokkos::UnorderedMap (key-to-ordinal maps)
+#include <stk_mesh/base/BulkData.hpp>                       // for modification_begin/end, get_entity, entity_key
 #include <stk_mesh/base/Entity.hpp>
+#include <stk_mesh/base/EntityKey.hpp>                      // for stk::mesh::EntityKey
+#include <stk_mesh/base/GetNgpMesh.hpp>                     // for stk::mesh::get_updated_ngp_mesh
+#include <stk_mesh/base/HashEntityAndEntityKey.hpp>         // for std::hash<stk::mesh::EntityKey>
+#include <stk_mesh/base/NgpMesh.hpp>                        // for stk::mesh::NgpMesh (entity_key on device)
 #include <stk_mesh/base/Selector.hpp>
+#include <stk_search/BoundingBox.hpp>                       // for stk::search::Box
+#include <stk_search/BoxIdent.hpp>                          // for stk::search::BoxIdentProc, IdentProcIntersection
+#include <stk_search/CoarseSearch.hpp>                      // for stk::search::coarse_search
+#include <stk_search/IdentProc.hpp>                         // for stk::search::IdentProc
+#include <stk_search/SearchMethod.hpp>                      // for stk::search::MORTON_LBVH
 #include <stk_util/ngp/NgpSpaces.hpp>
 
 // Mundy
 #include <mundy_math/Vector3.hpp>                    // for mundy::Vector3
 #include <mundy_search/NeighborListBuildTraits.hpp>  // for NeighborListBuildTraits
+#include <mundy_search/SearchCandidate.hpp>          // for NeighborSearchCandidate
 #include <mundy_search/impl/STKSearchBoxes.hpp>      // for impl::STKSearchBoxesT, impl::PeriodicSTKSearchBoxesT
 #include <mundy_utils/throw_assert.hpp>              // for MUNDY_THROW_ASSERT
 
@@ -518,6 +532,459 @@ struct NeighborListBuildTraits<PeriodicSTKSearchNeighborList<MemorySpace, ImageS
   static list_type build(const Builder& builder, const stk::mesh::BulkData& bulk_data, const args_type& args);
   //@}
 };
+
+// -----------------------------------------------------------------------
+// NeighborListBuildTraits::build() definition — STK coarse-search, non-periodic
+// -----------------------------------------------------------------------
+
+/// \brief Build an `STKSearchNeighborList` using STK coarse search and two-pass CSR construction.
+///
+/// The build has two regimes:
+///   - A **device-side regime** that constructs search inputs, runs the distributed search,
+///     and assembles CSR neighbor storage (Phases A–C and F–K).
+///   - A **host-side regime** that coordinates ghosting via STK BulkData APIs (Phases D–E).
+///
+/// The phases are:
+///   - **A** — Build `BoxIdentProc` search-input views on device (domain = target, range = source).
+///   - **B** — Build a target `EntityKey → dense-ordinal` map on device; targets never need ghosting.
+///   - **C** — Run `stk::search::coarse_search` (MORTON_LBVH, MPI-distributed, symmetry enabled).
+///   - **D** — Mirror results to host; for each cross-process pair where this rank owns the source,
+///             ghost the source to the target's rank.
+///   - **E** — Build an extended source entity list (owned + newly-ghosted) and transfer to device.
+///   - **F** — Refresh the NGP mesh (includes ghosts); build a source `EntityKey → ordinal` map.
+///   - **G** — Count pass: atomically increment per-target neighbor counts for all passing pairs.
+///   - **H** — Exclusive prefix scan: compute CSR offsets, allocate `source_indices` and `write_positions`.
+///   - **I** — Fill pass: write source ordinals into `source_indices` via atomic fetch-add positions.
+///   - **J** — (Optional) Per-row insertion sort for ascending source-ordinal ordering.
+///   - **K** — Construct and return the `STKSearchNeighborList`.
+///
+/// \par Ghosting side effect
+/// This function calls `bulk_data.modification_begin/end` to ghost remote source entities.  The
+/// ghosting group `"MUNDY_STK_SEARCH_NL_GHOSTING"` persists on `bulk_data` after the call returns.
+/// Callers must communicate field data on the ghosted source entities via this group before
+/// computing interactions.  The build function does not communicate field data — it does not know
+/// which fields the caller needs.
+///
+/// \par `list.source_entities()` vs `source_boxes.entities()`
+/// When cross-process sources are ghosted in, `list.source_entities()` is a *superset* of
+/// `source_boxes.entities()`.  The two Kokkos::View handles are not identical.  Ordinals
+/// `0 .. source_boxes.size()-1` index the original owned sources; ordinals
+/// `source_boxes.size() .. list.num_sources()-1` index the ghosted additions.
+///
+/// \tparam MemorySpace Kokkos memory space for all device views.
+/// \tparam Builder     Complete `NeighborListBuilder` type.
+template <typename MemorySpace>
+template <typename Builder>
+  requires std::same_as<typename Builder::target_input_type, impl::STKSearchBoxesT<MemorySpace>> &&
+           std::same_as<typename Builder::source_input_type, impl::STKSearchBoxesT<MemorySpace>>
+STKSearchNeighborList<MemorySpace>
+NeighborListBuildTraits<STKSearchNeighborList<MemorySpace>>::build(
+    const Builder& builder, const stk::mesh::BulkData& bulk_data, const args_type& /*args*/) {
+
+  // ===========================================================================
+  // Type aliases
+  // ===========================================================================
+
+  using exec_space = typename Builder::execution_space;
+  using size_type  = typename list_type::size_type;
+  using entity_view_t = typename list_type::entity_view_t;
+
+  // STK search identifier: EntityKey encodes both entity rank and entity ID.
+  // Required for `bulk_data.get_entity(entity_key)` in the ghosting phase;
+  // EntityId alone lacks the entity rank and cannot be used there.
+  using ident_proc_t = stk::search::IdentProc<stk::mesh::EntityKey, int>;
+
+  // Per-entity search input for the Kokkos::View-based coarse_search overload.
+  using box_ident_proc_t = stk::search::BoxIdentProc<stk::search::Box<double>, ident_proc_t>;
+
+  // Per-result type written by coarse_search: domain = target, range = source.
+  using intersection_t = stk::search::IdentProcIntersection<ident_proc_t, ident_proc_t>;
+
+  using search_view_t  = Kokkos::View<box_ident_proc_t*, MemorySpace>;
+  using results_view_t = Kokkos::View<intersection_t*, MemorySpace>;
+
+  // Device-side key-to-ordinal map.  EntityKey is effectively a uint64_t,
+  // so Kokkos::pod_hash gives correct, device-callable hashing.
+  using key_map_t = Kokkos::UnorderedMap<stk::mesh::EntityKey, size_type, MemorySpace>;
+
+  // ===========================================================================
+  // Unpack builder state
+  // ===========================================================================
+
+  const auto& target_boxes = builder.target_input();
+  const auto& source_boxes = builder.source_input();
+  const auto  exec_sp      = builder.exec_space();
+
+  // setup_excluder returns a prepared copy of the builder's excluder chain
+  // (it has already called excluder.setup(bulk_data, target_selector, source_selector)).
+  // The copy is device-capturable because all ExcluderType implementations hold
+  // only Kokkos views or plain scalars.
+  const auto excluder = builder.setup_excluder(bulk_data);
+
+  const size_type num_targets = target_boxes.size();
+  const size_type num_sources = source_boxes.size();
+  const int       my_rank     = bulk_data.parallel_rank();
+
+  // Cache device-view handles.  Kokkos::View is reference-counted; capturing
+  // by value in a KOKKOS_LAMBDA is safe.
+  const auto target_entities_dev = target_boxes.entities();
+  const auto target_boxes_dev    = target_boxes.boxes();
+  const auto source_entities_dev = source_boxes.entities();
+  const auto source_boxes_dev    = source_boxes.boxes();  // used in Phase A to build source_search_view
+
+  // ===========================================================================
+  // Phase A — Build STK search input views (device)
+  // ===========================================================================
+  //
+  // Target boxes form the *domain*; source boxes form the *range*.  This keeps
+  // the result vocabulary consistent: `result.domainIdentProc` always refers to
+  // a target entity and `result.rangeIdentProc` always to a source entity.
+  //
+  // `ngp_mesh.entity_key(entity)` is a KOKKOS_FUNCTION that returns the
+  // `EntityKey` encoding both entity rank and entity ID.  We must obtain the
+  // NgpMesh before any mesh modification; it is refreshed in Phase F after
+  // modification_end().
+
+  auto ngp_mesh = stk::mesh::get_updated_ngp_mesh(bulk_data);
+
+  search_view_t target_search_view("mundy_stk_nl_tgt_search", num_targets);
+  search_view_t source_search_view("mundy_stk_nl_src_search", num_sources);
+
+  Kokkos::parallel_for(
+      "mundy_stk_nl_build_target_search", Kokkos::RangePolicy<exec_space>(0, num_targets),
+      KOKKOS_LAMBDA(const size_type i) {
+        target_search_view(i).box       = target_boxes_dev(i);
+        target_search_view(i).identProc = ident_proc_t(ngp_mesh.entity_key(target_entities_dev(i)), my_rank);
+      });
+
+  Kokkos::parallel_for(
+      "mundy_stk_nl_build_source_search", Kokkos::RangePolicy<exec_space>(0, num_sources),
+      KOKKOS_LAMBDA(const size_type i) {
+        source_search_view(i).box       = source_boxes_dev(i);
+        source_search_view(i).identProc = ident_proc_t(ngp_mesh.entity_key(source_entities_dev(i)), my_rank);
+      });
+
+  // ===========================================================================
+  // Phase B — Build target key-to-ordinal map (device)
+  // ===========================================================================
+  //
+  // All domain (target) results reference locally owned targets, so this map
+  // can be populated before the search.  The CSR count and fill passes use it
+  // to skip symmetric copies where the domain entity belongs to a remote rank.
+  //
+  // 2× capacity keeps the load factor ≈50%, making insert failures effectively
+  // impossible for any well-distributed collection of entity keys.
+
+  key_map_t target_key_to_ordinal(2 * num_targets);
+
+  Kokkos::parallel_for(
+      "mundy_stk_nl_build_target_map", Kokkos::RangePolicy<exec_space>(0, num_targets),
+      KOKKOS_LAMBDA(const size_type i) {
+        const auto result = target_key_to_ordinal.insert(ngp_mesh.entity_key(target_entities_dev(i)), i);
+        MUNDY_THROW_ASSERT(!result.failed(), std::runtime_error,
+                           "mundy_stk_nl: target key-to-ordinal map insert failed; increase map capacity.");
+      });
+  Kokkos::fence();
+  MUNDY_THROW_ASSERT(!target_key_to_ordinal.failed_insert(), std::runtime_error,
+                     "mundy_stk_nl: target key-to-ordinal map has failed inserts after fence.");
+
+  // ===========================================================================
+  // Phase C — Distributed coarse search (device + MPI)
+  // ===========================================================================
+  //
+  // MORTON_LBVH is the only STK search method that accepts Kokkos::View I/O.
+  // KDTREE forces host-side results regardless of MemorySpace, defeating the
+  // device-side CSR passes.
+  //
+  // `enforceSearchResultSymmetry = true`: for every cross-process pair
+  // (target on rank A, source on rank B), BOTH ranks receive the pair.  This
+  // is structurally required for the cooperative ghosting protocol in Phase D:
+  // rank B must see the pair to know it should ghost its source entity to rank A.
+  //
+  // `autoSwapDomainAndRange = false`: the caller has sized the target and source
+  // views independently; auto-swapping would invert the domain/range semantics.
+
+  results_view_t search_results_view;  // Resized by coarse_search.
+  stk::search::coarse_search(target_search_view, source_search_view,
+                             stk::search::MORTON_LBVH,
+                             bulk_data.parallel(),
+                             search_results_view,
+                             exec_sp,
+                             /* enforceSearchResultSymmetry = */ true,
+                             /* autoSwapDomainAndRange = */ false);
+
+  const size_type num_results = search_results_view.extent(0);
+
+  // ===========================================================================
+  // Phase D — Ghosting coordination (host)
+  // ===========================================================================
+  //
+  // STK BulkData modification APIs are host-only.  Mirror results to host, then
+  // apply the cooperative ghosting rule:
+  //
+  //   If I own the *range* (source) entity and the *domain* (target) is on a
+  //   different rank, ghost my source to the target's rank.
+  //
+  // The symmetric result copies (where the domain belongs to a remote rank)
+  // appear in `host_results` but produce no action here; they are filtered
+  // by the target-map lookup in the device CSR passes (miss → skip).
+  //
+  // Single-process short-circuit: no cross-process pairs exist on one rank;
+  // the modification cycle is skipped entirely.
+  //
+  // `const_cast` rationale: `build()` takes `const BulkData&` for interface
+  // uniformity with ArborX builds that make no mesh modifications.  The STK
+  // build's ghosting side effect is documented in the function header.  The
+  // caller's BulkData object is non-const; the cast is safe.
+
+  auto host_results = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, search_results_view);
+
+  if (bulk_data.parallel_size() > 1) {
+    std::vector<stk::mesh::EntityProc> entities_to_ghost;
+    for (size_type r = 0; r < num_results; ++r) {
+      const auto& res         = host_results(r);
+      const int   source_proc = res.rangeIdentProc.proc();
+      const int   target_proc = res.domainIdentProc.proc();
+      if (source_proc != my_rank || target_proc == my_rank) continue;
+      // I own this source; its paired target lives on `target_proc`.
+      // Ghost the source to `target_proc` so that rank can form the neighbor pair.
+      const stk::mesh::Entity source_ent = bulk_data.get_entity(res.rangeIdentProc.id());
+      MUNDY_THROW_ASSERT(bulk_data.is_valid(source_ent), std::runtime_error,
+                         "mundy_stk_nl: owned source entity not found in bulk_data during ghosting.");
+      entities_to_ghost.emplace_back(source_ent, target_proc);
+    }
+
+    auto& mutable_bulk = const_cast<stk::mesh::BulkData&>(bulk_data);
+    mutable_bulk.modification_begin();
+    // The ghosting group persists on bulk_data after build() returns.  Callers
+    // communicate field data they need via this group.
+    stk::mesh::Ghosting& ghosting = mutable_bulk.create_ghosting("MUNDY_STK_SEARCH_NL_GHOSTING");
+    mutable_bulk.change_ghosting(ghosting, entities_to_ghost);
+    mutable_bulk.modification_end();
+  }
+
+  // ===========================================================================
+  // Phase E — Build extended source entity view (host → device)
+  // ===========================================================================
+  //
+  // After modification_end(), newly-ghosted source entities are locally
+  // accessible.  Concatenate owned sources (ordinals 0..num_sources-1,
+  // unchanged) with any additional ghosted sources discovered through the search
+  // (ordinals num_sources..num_extended-1).
+  //
+  // `std::unordered_set` gives O(1) membership tests for deduplication.
+
+  // Mirror owned source entities to host for key lookup.
+  auto host_owned_sources = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, source_boxes.entities());
+
+  // Build a set of owned source keys.
+  std::unordered_set<stk::mesh::EntityKey, std::hash<stk::mesh::EntityKey>> owned_source_keys;
+  owned_source_keys.reserve(num_sources);
+  for (size_type i = 0; i < num_sources; ++i) {
+    owned_source_keys.insert(bulk_data.entity_key(host_owned_sources(i)));
+  }
+
+  // Start the extended list with all owned sources in original order.
+  std::vector<stk::mesh::Entity> extended_src_vec(host_owned_sources.data(),
+                                                   host_owned_sources.data() + num_sources);
+
+  // Append ghosted sources not yet in the owned set.
+  std::unordered_set<stk::mesh::EntityKey, std::hash<stk::mesh::EntityKey>> newly_added_keys;
+  for (size_type r = 0; r < num_results; ++r) {
+    const auto& res = host_results(r);
+    if (res.domainIdentProc.proc() != my_rank) continue;  // Not our target row.
+    const stk::mesh::EntityKey src_key = res.rangeIdentProc.id();
+    if (owned_source_keys.count(src_key)) continue;          // Already owned.
+    if (!newly_added_keys.insert(src_key).second) continue;  // Already appended.
+    const stk::mesh::Entity src_ent = bulk_data.get_entity(src_key);
+    MUNDY_THROW_ASSERT(bulk_data.is_valid(src_ent), std::runtime_error,
+                       "mundy_stk_nl: ghosted source entity is invalid after modification_end().");
+    extended_src_vec.push_back(src_ent);
+  }
+
+  const size_type num_extended_sources = static_cast<size_type>(extended_src_vec.size());
+
+  // Transfer to device.
+  entity_view_t extended_source_entities("mundy_stk_nl_ext_src", num_extended_sources);
+  {
+    auto host_ext = Kokkos::create_mirror_view(extended_source_entities);
+    for (size_type i = 0; i < num_extended_sources; ++i) host_ext(i) = extended_src_vec[i];
+    Kokkos::deep_copy(extended_source_entities, host_ext);
+  }
+
+  // ===========================================================================
+  // Phase F — Build source key-to-ordinal map (device)
+  // ===========================================================================
+  //
+  // Built from the extended source view (owned + ghosted).  The NgpMesh must
+  // be refreshed from the host mesh after modification_end() so that newly-
+  // ghosted entities have valid fast mesh indices on device.
+
+  auto updated_ngp_mesh = stk::mesh::get_updated_ngp_mesh(bulk_data);
+
+  key_map_t source_key_to_ordinal(2 * num_extended_sources);
+  Kokkos::parallel_for(
+      "mundy_stk_nl_build_source_map", Kokkos::RangePolicy<exec_space>(0, num_extended_sources),
+      KOKKOS_LAMBDA(const size_type i) {
+        const auto result = source_key_to_ordinal.insert(
+            updated_ngp_mesh.entity_key(extended_source_entities(i)), i);
+        MUNDY_THROW_ASSERT(!result.failed(), std::runtime_error,
+                           "mundy_stk_nl: source key-to-ordinal map insert failed; increase map capacity.");
+      });
+  Kokkos::fence();
+  MUNDY_THROW_ASSERT(!source_key_to_ordinal.failed_insert(), std::runtime_error,
+                     "mundy_stk_nl: source key-to-ordinal map has failed inserts after fence.");
+
+  // ===========================================================================
+  // Phase G — Count pass (device)
+  // ===========================================================================
+  //
+  // For each search result, the shared filter (target lookup → source lookup →
+  // excluder) determines whether the pair enters the neighbor list.  Surviving
+  // pairs atomically increment the per-target count.
+  //
+  // Filter steps:
+  //   1. **Target lookup**: a map miss means the domain entity belongs to a
+  //      remote rank (symmetric copy); skip — not our list entry.
+  //   2. **Source lookup**: a map miss means the source was not ghosted to us;
+  //      skip — the target-owning rank did not receive the pair's source.
+  //   3. **Excluder**: the builder's prepared excluder chain (e.g., ExcludeSelfInteraction).
+  //
+  // NOTE: The filter block here must remain IDENTICAL to Phase I (fill pass).
+  // Any divergence between the two passes silently corrupts the CSR structure.
+
+  Kokkos::View<size_type*, MemorySpace> per_target_count("mundy_stk_nl_count", num_targets);
+  Kokkos::deep_copy(per_target_count, size_type(0));
+
+  Kokkos::parallel_for(
+      "mundy_stk_nl_count", Kokkos::RangePolicy<exec_space>(0, num_results),
+      KOKKOS_LAMBDA(const size_type r) {
+        const intersection_t& result = search_results_view(r);
+
+        // Step 1: target lookup — skip symmetric copies with a remote domain.
+        const auto trg_slot = target_key_to_ordinal.find(result.domainIdentProc.id());
+        if (!target_key_to_ordinal.valid_at(trg_slot)) return;
+        const size_type trg_ord = target_key_to_ordinal.value_at(trg_slot);
+
+        // Step 2: source lookup — skip pairs whose source was not ghosted here.
+        const auto src_slot = source_key_to_ordinal.find(result.rangeIdentProc.id());
+        if (!source_key_to_ordinal.valid_at(src_slot)) return;
+        const size_type src_ord = source_key_to_ordinal.value_at(src_slot);
+
+        // Step 3: excluder.
+        const stk::mesh::Entity trg_ent = target_entities_dev(trg_ord);
+        const stk::mesh::Entity src_ent = extended_source_entities(src_ord);
+        if (excluder(NeighborSearchCandidate<size_type>(trg_ord, src_ord, trg_ent, src_ent))) return;
+
+        Kokkos::atomic_fetch_add(&per_target_count(trg_ord), size_type(1));
+      });
+
+  // ===========================================================================
+  // Phase H — Prefix scan (device)
+  // ===========================================================================
+  //
+  // `offsets[i] = sum(per_target_count[0..i))` for `i in [0, num_targets+1)`.
+  // `offsets[num_targets] = total_pairs`.
+  //
+  // `write_positions` is a mutable copy of `offsets[0..num_targets)` used by
+  // the fill pass for atomic slot allocation; `offsets` itself remains intact
+  // for the list constructor.
+
+  Kokkos::View<size_type*, MemorySpace> offsets("mundy_stk_nl_offsets", num_targets + 1);
+  Kokkos::parallel_scan(
+      "mundy_stk_nl_scan",
+      Kokkos::RangePolicy<exec_space>(0, num_targets + 1),
+      KOKKOS_LAMBDA(const size_type i, size_type& update, const bool final_pass) {
+        if (final_pass) offsets(i) = update;
+        if (i < num_targets) update += per_target_count(i);
+      });
+
+  // Scalar copy to host for output-view allocation.
+  size_type total_pairs = 0;
+  Kokkos::deep_copy(total_pairs, Kokkos::subview(offsets, num_targets));
+
+  Kokkos::View<size_type*, MemorySpace> source_indices("mundy_stk_nl_src_idx", total_pairs);
+
+  // write_positions initialized from offsets[0..num_targets); modified in-place by fill pass.
+  Kokkos::View<size_type*, MemorySpace> write_positions("mundy_stk_nl_wpos", num_targets);
+  Kokkos::deep_copy(write_positions,
+                    Kokkos::subview(offsets, Kokkos::make_pair(size_type(0), num_targets)));
+
+  // ===========================================================================
+  // Phase I — Fill pass (device)
+  // ===========================================================================
+  //
+  // Identical filter logic to Phase G (see NOTE there).  For each surviving
+  // pair, `atomic_fetch_add` on `write_positions[trg_ord]` allocates a unique
+  // slot; the source ordinal is written into that slot.
+
+  Kokkos::parallel_for(
+      "mundy_stk_nl_fill", Kokkos::RangePolicy<exec_space>(0, num_results),
+      KOKKOS_LAMBDA(const size_type r) {
+        const intersection_t& result = search_results_view(r);
+
+        // Step 1: target lookup — IDENTICAL to count pass.
+        const auto trg_slot = target_key_to_ordinal.find(result.domainIdentProc.id());
+        if (!target_key_to_ordinal.valid_at(trg_slot)) return;
+        const size_type trg_ord = target_key_to_ordinal.value_at(trg_slot);
+
+        // Step 2: source lookup — IDENTICAL to count pass.
+        const auto src_slot = source_key_to_ordinal.find(result.rangeIdentProc.id());
+        if (!source_key_to_ordinal.valid_at(src_slot)) return;
+        const size_type src_ord = source_key_to_ordinal.value_at(src_slot);
+
+        // Step 3: excluder — IDENTICAL to count pass.
+        const stk::mesh::Entity trg_ent = target_entities_dev(trg_ord);
+        const stk::mesh::Entity src_ent = extended_source_entities(src_ord);
+        if (excluder(NeighborSearchCandidate<size_type>(trg_ord, src_ord, trg_ent, src_ent))) return;
+
+        const size_type pos = Kokkos::atomic_fetch_add(&write_positions(trg_ord), size_type(1));
+        source_indices(pos) = src_ord;
+      });
+
+  // ===========================================================================
+  // Phase J — Optional per-row insertion sort (device)
+  // ===========================================================================
+  //
+  // Sorts each target's neighbor row by ascending source ordinal.  Insertion sort
+  // is used because row sizes are small (~10–20 entries at typical densities) and
+  // it avoids auxiliary allocation.  Sorted rows improve spatial locality when
+  // kernels access per-source data (positions, radii, …) for multiple targets
+  // that share neighbors.  Default is `false` (BVH traversal order preserved).
+
+  if (builder.sort_neighbors()) {
+    Kokkos::parallel_for(
+        "mundy_stk_nl_sort", Kokkos::RangePolicy<exec_space>(0, num_targets),
+        KOKKOS_LAMBDA(const size_type t) {
+          const size_type beg = offsets(t);
+          const size_type end = offsets(t + 1);
+          for (size_type i = beg + 1; i < end; ++i) {
+            const size_type key = source_indices(i);
+            size_type j = i;
+            while (j > beg && source_indices(j - 1) > key) {
+              source_indices(j) = source_indices(j - 1);
+              --j;
+            }
+            source_indices(j) = key;
+          }
+        });
+  }
+
+  // ===========================================================================
+  // Phase K — Construct and return the list
+  // ===========================================================================
+  //
+  // `target_boxes.entities()` is the original owned-target view (unchanged).
+  // `extended_source_entities` is the extended view (owned + ghosted sources).
+  // `source_indices` and `offsets` are exclusively owned by the returned list.
+  //
+  // Kokkos::View is reference-counted; the list shares ownership of the entity
+  // views with any other holders, so no copies are made.
+
+  return list_type(builder.target_selector(), builder.source_selector(),
+                   target_boxes.entities(), extended_source_entities,
+                   source_indices, offsets);
+}
 
 }  // namespace search
 
