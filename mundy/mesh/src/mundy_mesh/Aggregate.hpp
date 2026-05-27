@@ -388,12 +388,12 @@ class Aggregate {
   /// \brief Get an expression for the data tagged by the given tag for the given entity expression.
   template <typename Tag, class EntityExpr>
   MUNDY_REQUIRES(contains_tag_v<Tag, Components...>)
-  decltype(auto) get(const EntityExprBase<EntityExpr>& entity_expr) {
+  decltype(auto) get(const impl::EntityExprBase<EntityExpr>& entity_expr) {
     return get_component<Tag>()(entity_expr);
   }
   template <typename Tag, class EntityExpr>
   MUNDY_REQUIRES(!contains_tag_v<Tag, Components...>)
-  void get(const EntityExprBase<EntityExpr>& /*entity_expr*/) {
+  void get(const impl::EntityExprBase<EntityExpr>& /*entity_expr*/) {
     static_assert(contains_tag_v<Tag, Components...>,
                   "Attempting to get a component that does not exist in the aggregate");
   }
@@ -415,12 +415,12 @@ class Aggregate {
   /// \brief Get an expression for the data tagged by the given tag for the given entity expression.
   template <typename Tag, class EntityExpr>
   MUNDY_REQUIRES(contains_tag_v<Tag, Components...>)
-  decltype(auto) get(const EntityExprBase<EntityExpr>& entity_expr) const {
+  decltype(auto) get(const impl::EntityExprBase<EntityExpr>& entity_expr) const {
     return get_component<Tag>()(entity_expr);
   }
   template <typename Tag, class EntityExpr>
   MUNDY_REQUIRES(!contains_tag_v<Tag, Components...>)
-  void get(const EntityExprBase<EntityExpr>& /*entity_expr*/) const {
+  void get(const impl::EntityExprBase<EntityExpr>& /*entity_expr*/) const {
     static_assert(contains_tag_v<Tag, Components...>,
                   "Attempting to get a component that does not exist in the aggregate");
   }

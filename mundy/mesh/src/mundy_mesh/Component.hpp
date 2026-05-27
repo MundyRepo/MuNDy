@@ -117,7 +117,7 @@ class TaggedComponent {
   ///   EntityExpr all_nodes(node_selector, stk::topology::NODE_RANK);
   ///   auto get_v3_expr = v3_accessor(all_nodes);
   template <class EntityExpr>
-  auto operator()(const EntityExprBase<EntityExpr>& e) const;
+  auto operator()(const impl::EntityExprBase<EntityExpr>& e) const;
 
   inline const component_type& component() const {
     // Our lifetime should be at least as long as the component's
@@ -191,8 +191,8 @@ class NgpTaggedComponent {
   ///   EntityExpr all_nodes(node_selector, stk::topology::NODE_RANK);
   ///   auto get_v3_expr = v3_accessor(all_nodes);
   template <class EntityExpr>
-  auto operator()(const EntityExprBase<EntityExpr>& e) const {
-    return AccessorExpr<our_t, EntityExpr>(*this, e.self());
+  auto operator()(const impl::EntityExprBase<EntityExpr>& e) const {
+    return impl::AccessorExpr<our_t, EntityExpr>(*this, e.self());
   }
 
   KOKKOS_INLINE_FUNCTION
@@ -242,7 +242,7 @@ decltype(auto) get_updated_ngp_component(const TaggedComponent<Tag, ComponentTyp
 
 template <typename Tag, typename ComponentType>
 template <class EntityExpr>
-auto TaggedComponent<Tag, ComponentType>::operator()(const EntityExprBase<EntityExpr>& e) const {
+auto TaggedComponent<Tag, ComponentType>::operator()(const impl::EntityExprBase<EntityExpr>& e) const {
   // Entity expressions are (currently) always on the device, so we need to get the NGP tagged component
   // TODO(palmerb4): Allow for exec_spaces that aren't simply the default execution space (need Tril 16.1+)
   auto ngp_this = get_updated_ngp_component(*this);

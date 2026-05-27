@@ -533,6 +533,37 @@ struct NeighborListBuildTraits<PeriodicSTKSearchNeighborList<MemorySpace, ImageS
   //@}
 };
 
+// ---------------------------------------------------------------------------
+// Optional build-phase profiling
+// ---------------------------------------------------------------------------
+// Set `enable_stk_build_profiling = true` before calling build() to populate
+// `stk_build_last_timings` on return.  Inserts Kokkos::fence() between each
+// phase and records wall time in milliseconds.  Zero overhead when false.
+
+/// Per-phase wall-time breakdown for one STKSearchNeighborList build call.
+struct STKBuildPhaseTimings {
+  double phase_a_ms{0};  ///< A: build BoxIdentProc search views
+  double phase_b_ms{0};  ///< B: build target EntityKey→ordinal map
+  double phase_c_ms{0};  ///< C: stk::search::coarse_search (MORTON_LBVH + MPI)
+  double phase_d_ms{0};  ///< D: mirror results to host + ghosting coordination
+  double phase_e_ms{0};  ///< E: build extended source entity view (host→device)
+  double phase_f_ms{0};  ///< F: refresh NgpMesh + build source EntityKey→ordinal map
+  double phase_g_ms{0};  ///< G: count pass (atomic per-target increments)
+  double phase_h_ms{0};  ///< H: prefix scan + write-position init
+  double phase_i_ms{0};  ///< I: fill pass (atomic slot allocation)
+  double phase_j_ms{0};  ///< J: optional per-row insertion sort
+  double phase_k_ms{0};  ///< K: construct list object
+  double total_ms()  const {
+    return phase_a_ms + phase_b_ms + phase_c_ms + phase_d_ms + phase_e_ms +
+           phase_f_ms + phase_g_ms + phase_h_ms + phase_i_ms + phase_j_ms + phase_k_ms;
+  }
+};
+
+/// Set to true before calling build() to enable per-phase timing.
+inline bool                 enable_stk_build_profiling{false};
+/// Populated by the most recent build() call when enable_stk_build_profiling is true.
+inline STKBuildPhaseTimings stk_build_last_timings{};
+
 // -----------------------------------------------------------------------
 // NeighborListBuildTraits::build() definition — STK coarse-search, non-periodic
 // -----------------------------------------------------------------------
@@ -633,6 +664,27 @@ NeighborListBuildTraits<STKSearchNeighborList<MemorySpace>>::build(
   const auto source_boxes_dev    = source_boxes.boxes();  // used in Phase A to build source_search_view
 
   // ===========================================================================
+  // Optional phase-profiling timer (zero overhead when disabled)
+  // ===========================================================================
+  //
+  // stk_prof_mark(slot) fences the device, records elapsed ms into `slot`,
+  // and resets the timer for the next phase.  All calls are no-ops when
+  // enable_stk_build_profiling is false.
+
+  Kokkos::Timer stk_prof_timer_;
+  const auto stk_prof_mark = [&](double& slot) {
+    if (!enable_stk_build_profiling) return;
+    Kokkos::fence();
+    slot = stk_prof_timer_.seconds() * 1000.0;
+    stk_prof_timer_.reset();
+  };
+  if (enable_stk_build_profiling) {
+    stk_build_last_timings = {};
+    Kokkos::fence();
+    stk_prof_timer_.reset();
+  }
+
+  // ===========================================================================
   // Phase A — Build STK search input views (device)
   // ===========================================================================
   //
@@ -663,6 +715,7 @@ NeighborListBuildTraits<STKSearchNeighborList<MemorySpace>>::build(
         source_search_view(i).box       = source_boxes_dev(i);
         source_search_view(i).identProc = ident_proc_t(ngp_mesh.entity_key(source_entities_dev(i)), my_rank);
       });
+  stk_prof_mark(stk_build_last_timings.phase_a_ms);
 
   // ===========================================================================
   // Phase B — Build target key-to-ordinal map (device)
@@ -687,6 +740,7 @@ NeighborListBuildTraits<STKSearchNeighborList<MemorySpace>>::build(
   Kokkos::fence();
   MUNDY_THROW_ASSERT(!target_key_to_ordinal.failed_insert(), std::runtime_error,
                      "mundy_stk_nl: target key-to-ordinal map has failed inserts after fence.");
+  stk_prof_mark(stk_build_last_timings.phase_b_ms);
 
   // ===========================================================================
   // Phase C — Distributed coarse search (device + MPI)
@@ -714,6 +768,7 @@ NeighborListBuildTraits<STKSearchNeighborList<MemorySpace>>::build(
                              /* autoSwapDomainAndRange = */ false);
 
   const size_type num_results = search_results_view.extent(0);
+  stk_prof_mark(stk_build_last_timings.phase_c_ms);
 
   // ===========================================================================
   // Phase D — Ghosting coordination (host)
@@ -762,6 +817,7 @@ NeighborListBuildTraits<STKSearchNeighborList<MemorySpace>>::build(
     mutable_bulk.change_ghosting(ghosting, entities_to_ghost);
     mutable_bulk.modification_end();
   }
+  stk_prof_mark(stk_build_last_timings.phase_d_ms);
 
   // ===========================================================================
   // Phase E — Build extended source entity view (host → device)
@@ -811,6 +867,7 @@ NeighborListBuildTraits<STKSearchNeighborList<MemorySpace>>::build(
     for (size_type i = 0; i < num_extended_sources; ++i) host_ext(i) = extended_src_vec[i];
     Kokkos::deep_copy(extended_source_entities, host_ext);
   }
+  stk_prof_mark(stk_build_last_timings.phase_e_ms);
 
   // ===========================================================================
   // Phase F — Build source key-to-ordinal map (device)
@@ -834,6 +891,7 @@ NeighborListBuildTraits<STKSearchNeighborList<MemorySpace>>::build(
   Kokkos::fence();
   MUNDY_THROW_ASSERT(!source_key_to_ordinal.failed_insert(), std::runtime_error,
                      "mundy_stk_nl: source key-to-ordinal map has failed inserts after fence.");
+  stk_prof_mark(stk_build_last_timings.phase_f_ms);
 
   // ===========================================================================
   // Phase G — Count pass (device)
@@ -846,8 +904,10 @@ NeighborListBuildTraits<STKSearchNeighborList<MemorySpace>>::build(
   // Filter steps:
   //   1. **Target lookup**: a map miss means the domain entity belongs to a
   //      remote rank (symmetric copy); skip — not our list entry.
-  //   2. **Source lookup**: a map miss means the source was not ghosted to us;
-  //      skip — the target-owning rank did not receive the pair's source.
+  //   2. **Source lookup**: must succeed — Phase E validated that every source for
+  //      a locally-owned target is accessible and added it to `extended_src_vec`,
+  //      and Phase F mapped all of those into `source_key_to_ordinal`.  A miss here
+  //      means something went wrong (NgpMesh key mismatch, ghosting failure, etc.).
   //   3. **Excluder**: the builder's prepared excluder chain (e.g., ExcludeSelfInteraction).
   //
   // NOTE: The filter block here must remain IDENTICAL to Phase I (fill pass).
@@ -866,9 +926,11 @@ NeighborListBuildTraits<STKSearchNeighborList<MemorySpace>>::build(
         if (!target_key_to_ordinal.valid_at(trg_slot)) return;
         const size_type trg_ord = target_key_to_ordinal.value_at(trg_slot);
 
-        // Step 2: source lookup — skip pairs whose source was not ghosted here.
+        // Step 2: source lookup — must succeed after Phase E/F validation.
         const auto src_slot = source_key_to_ordinal.find(result.rangeIdentProc.id());
-        if (!source_key_to_ordinal.valid_at(src_slot)) return;
+        MUNDY_THROW_ASSERT(source_key_to_ordinal.valid_at(src_slot), std::runtime_error,
+                           "mundy_stk_nl: source entity missing from ordinal map after Phase E validation — "
+                           "possible NgpMesh key mismatch or ghosting failure.");
         const size_type src_ord = source_key_to_ordinal.value_at(src_slot);
 
         // Step 3: excluder.
@@ -878,6 +940,7 @@ NeighborListBuildTraits<STKSearchNeighborList<MemorySpace>>::build(
 
         Kokkos::atomic_fetch_add(&per_target_count(trg_ord), size_type(1));
       });
+  stk_prof_mark(stk_build_last_timings.phase_g_ms);
 
   // ===========================================================================
   // Phase H — Prefix scan (device)
@@ -909,6 +972,7 @@ NeighborListBuildTraits<STKSearchNeighborList<MemorySpace>>::build(
   Kokkos::View<size_type*, MemorySpace> write_positions("mundy_stk_nl_wpos", num_targets);
   Kokkos::deep_copy(write_positions,
                     Kokkos::subview(offsets, Kokkos::make_pair(size_type(0), num_targets)));
+  stk_prof_mark(stk_build_last_timings.phase_h_ms);
 
   // ===========================================================================
   // Phase I — Fill pass (device)
@@ -928,9 +992,11 @@ NeighborListBuildTraits<STKSearchNeighborList<MemorySpace>>::build(
         if (!target_key_to_ordinal.valid_at(trg_slot)) return;
         const size_type trg_ord = target_key_to_ordinal.value_at(trg_slot);
 
-        // Step 2: source lookup — IDENTICAL to count pass.
+        // Step 2: source lookup — must succeed after Phase E/F validation (IDENTICAL to count pass).
         const auto src_slot = source_key_to_ordinal.find(result.rangeIdentProc.id());
-        if (!source_key_to_ordinal.valid_at(src_slot)) return;
+        MUNDY_THROW_ASSERT(source_key_to_ordinal.valid_at(src_slot), std::runtime_error,
+                           "mundy_stk_nl: source entity missing from ordinal map after Phase E validation — "
+                           "possible NgpMesh key mismatch or ghosting failure.");
         const size_type src_ord = source_key_to_ordinal.value_at(src_slot);
 
         // Step 3: excluder — IDENTICAL to count pass.
@@ -941,6 +1007,7 @@ NeighborListBuildTraits<STKSearchNeighborList<MemorySpace>>::build(
         const size_type pos = Kokkos::atomic_fetch_add(&write_positions(trg_ord), size_type(1));
         source_indices(pos) = src_ord;
       });
+  stk_prof_mark(stk_build_last_timings.phase_i_ms);
 
   // ===========================================================================
   // Phase J — Optional per-row insertion sort (device)
@@ -969,6 +1036,7 @@ NeighborListBuildTraits<STKSearchNeighborList<MemorySpace>>::build(
           }
         });
   }
+  stk_prof_mark(stk_build_last_timings.phase_j_ms);
 
   // ===========================================================================
   // Phase K — Construct and return the list
@@ -981,9 +1049,11 @@ NeighborListBuildTraits<STKSearchNeighborList<MemorySpace>>::build(
   // Kokkos::View is reference-counted; the list shares ownership of the entity
   // views with any other holders, so no copies are made.
 
-  return list_type(builder.target_selector(), builder.source_selector(),
-                   target_boxes.entities(), extended_source_entities,
-                   source_indices, offsets);
+  auto result = list_type(builder.target_selector(), builder.source_selector(),
+                          target_boxes.entities(), extended_source_entities,
+                          source_indices, offsets);
+  stk_prof_mark(stk_build_last_timings.phase_k_ms);
+  return result;
 }
 
 }  // namespace search

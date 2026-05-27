@@ -34,7 +34,23 @@ set(NOINSTALLHEADERS
     src/mundy_mesh/impl/HostDeviceSynchronizer.hpp
     src/mundy_mesh/impl/LinkDataObserver.hpp
     src/mundy_mesh/impl/LinkedBucketConn.hpp
-    src/mundy_mesh/impl/NgpAccessorExprImpl.hpp
+    src/mundy_mesh/impl/NgpAccessorExprAccessor.hpp
+    src/mundy_mesh/impl/NgpAccessorExprApplyValue.hpp
+    src/mundy_mesh/impl/NgpAccessorExprAssign.hpp
+    src/mundy_mesh/impl/NgpAccessorExprBinaryValue.hpp
+    src/mundy_mesh/impl/NgpAccessorExprBuiltins.hpp
+    src/mundy_mesh/impl/NgpAccessorExprCachable.hpp
+    src/mundy_mesh/impl/NgpAccessorExprConstant.hpp
+    src/mundy_mesh/impl/NgpAccessorExprConnectedEntities.hpp
+    src/mundy_mesh/impl/NgpAccessorExprDrivers.hpp
+    src/mundy_mesh/impl/NgpAccessorExprEntityBase.hpp
+    src/mundy_mesh/impl/NgpAccessorExprEntityExpr.hpp
+    src/mundy_mesh/impl/NgpAccessorExprFused.hpp
+    src/mundy_mesh/impl/NgpAccessorExprMathBase.hpp
+    src/mundy_mesh/impl/NgpAccessorExprRNG.hpp
+    src/mundy_mesh/impl/NgpAccessorExprSink.hpp
+    src/mundy_mesh/impl/NgpAccessorExprTypes.hpp
+    src/mundy_mesh/impl/NgpAccessorExprUtils.hpp
     src/mundy_mesh/impl/NgpCOOToCSRSynchronizer.hpp
     src/mundy_mesh/impl/NgpFieldBLASImpl.hpp
     src/mundy_mesh/impl/NgpLinkMetaData.hpp

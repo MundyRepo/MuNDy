@@ -21,10 +21,11 @@ Usage
 
   --exe   PATH          Path to the .exe  (default: look next to this script)
   --threads T [T ...]   Thread counts to test  (default: 1 2 4 8 … ≤ cpu_count)
-  --out   PREFIX        Output file prefix  (default: neighbor_list)
+  --out   PREFIX        Output file prefix  (default: neighbor_list_<backend>)
   --bind  spread|close  OMP_PROC_BIND policy  (default: spread)
   --sort-targets        Pre-sort STK entities by Z-Morton before building
   --sort-neighbors      Sort each target's neighbor row by source ordinal after construction
+  --search arborx|stk   Which neighbor-list backend to benchmark  (default: arborx)
 """
 
 import argparse
@@ -115,13 +116,14 @@ def locate_exe(hint=None):
 
 
 def run_bench(exe, nthreads, omp_bind="spread",
-              sort_targets=False, sort_neighbors=False):
+              sort_targets=False, sort_neighbors=False, search="arborx"):
     """Run with nthreads OpenMP threads; return stdout text (stderr discarded)."""
     env = os.environ.copy()
     env["OMP_NUM_THREADS"] = str(nthreads)
     env["OMP_PROC_BIND"]   = omp_bind
     env["OMP_PLACES"]      = "cores"
-    cmd = [exe, "--simple", f"--kokkos-num-threads={nthreads}"]
+    cmd = [exe, "--simple", f"--kokkos-num-threads={nthreads}",
+           "--search", search]
     if sort_targets:
         cmd.append("--sort-targets")
     if sort_neighbors:
@@ -217,7 +219,7 @@ def _section_label(s):
 # Figure 1 — Speedup vs thread count
 # ──────────────────────────────────────────────────────────────────────────────
 
-def plot_scaling(all_data, thread_counts, out_prefix="neighbor_list"):
+def plot_scaling(all_data, thread_counts, out_prefix="neighbor_list", search="arborx"):
     """
     For each benchmark section, plot speedup = t(T_ref) / t(T) vs thread count T,
     where T_ref = thread_counts[0] (the smallest supplied thread count).
@@ -233,7 +235,7 @@ def plot_scaling(all_data, thread_counts, out_prefix="neighbor_list"):
                              sharex="all", sharey="all",
                              squeeze=False)
     fig.suptitle(
-        f"Neighbor List — Thread Scaling  (speedup relative to {ref_threads} thread"
+        f"Neighbor List ({search}) — Thread Scaling  (speedup relative to {ref_threads} thread"
         f"{'s' if ref_threads != 1 else ''})\n"
         r"unit-density domain  ·  $r_\mathrm{det}=\!\sqrt[3]{16}/4\approx 0.630$  ·  15 avg neighbours",
         fontsize=12, y=1.01,
@@ -330,7 +332,7 @@ def plot_scaling(all_data, thread_counts, out_prefix="neighbor_list"):
 # Figure 2 — Absolute performance vs N
 # ──────────────────────────────────────────────────────────────────────────────
 
-def plot_performance(all_data, thread_counts, out_prefix="neighbor_list"):
+def plot_performance(all_data, thread_counts, out_prefix="neighbor_list", search="arborx"):
     """
     For each section, plot ns/op vs N.  One line per (variant, thread_count) pair.
     Colours encode thread count (plasma); line styles encode variant.
@@ -343,7 +345,7 @@ def plot_performance(all_data, thread_counts, out_prefix="neighbor_list"):
                              figsize=(5.5 * ncols, 4.0 * nrows),
                              squeeze=False)
     fig.suptitle(
-        "Neighbor List — Absolute Performance vs N\n"
+        f"Neighbor List ({search}) — Absolute Performance vs N\n"
         r"unit-density domain  ·  $r_\mathrm{det}=\!\sqrt[3]{16}/4\approx 0.630$  ·  15 avg neighbours",
         fontsize=12, y=1.01,
     )
@@ -486,8 +488,8 @@ def main():
                         help="Path to MundySearch_PerfTestNeighborList.exe")
     parser.add_argument("--threads", nargs="+", type=int, default=None,
                         help="Thread counts to sweep  (default: 1 2 4 … ≤ cpu_count)")
-    parser.add_argument("--out", default="neighbor_list",
-                        help="Output file prefix  (default: neighbor_list)")
+    parser.add_argument("--out", default=None,
+                        help="Output file prefix  (default: neighbor_list_<backend>)")
     parser.add_argument("--bind", default="spread",
                         choices=["spread", "close"],
                         help="OMP_PROC_BIND policy  (default: spread)")
@@ -495,15 +497,20 @@ def main():
                         help="Pre-sort STK entities by Z-Morton before building")
     parser.add_argument("--sort-neighbors", action="store_true",
                         help="Sort each target's neighbor row by source ordinal after construction")
+    parser.add_argument("--search", default="arborx",
+                        choices=["arborx", "stk"],
+                        help="Neighbor-list backend to benchmark  (default: arborx)")
     args = parser.parse_args()
 
     exe           = locate_exe(args.exe)
     thread_counts = sorted(set(args.threads)) if args.threads else _default_threads()
+    out_prefix    = args.out if args.out else f"neighbor_list_{args.search}"
 
     print("=" * 60)
     print("  Neighbor List — Thread Scaling Study")
     print("=" * 60)
     print(f"  Executable : {exe}")
+    print(f"  Backend    : {args.search}")
     print(f"  Threads    : {thread_counts}")
     print(f"  OMP_PROC_BIND : {args.bind}  (OMP_PLACES=cores)")
     if args.sort_targets:
@@ -518,15 +525,16 @@ def main():
               end=" ", flush=True)
         stdout = run_bench(exe, nt, omp_bind=args.bind,
                            sort_targets=args.sort_targets,
-                           sort_neighbors=args.sort_neighbors)
+                           sort_neighbors=args.sort_neighbors,
+                           search=args.search)
         all_data[nt] = parse_output(stdout)
         n_sects = sum(1 for s in all_data[nt].values() if s)
         print(f"parsed {n_sects} non-empty sections")
 
     print()
     print("Generating plots...")
-    plot_scaling(all_data, thread_counts, out_prefix=args.out)
-    plot_performance(all_data, thread_counts, out_prefix=args.out)
+    plot_scaling(all_data, thread_counts, out_prefix=out_prefix, search=args.search)
+    plot_performance(all_data, thread_counts, out_prefix=out_prefix, search=args.search)
 
     print()
     print_performance_table(all_data, thread_counts)

@@ -496,20 +496,22 @@ struct OverwriteAffineSinkFunc {
   }
 };
 
-using single_entity_expr_driver_t = NgpForEachEntityExprDriver<>;
-using single_entity_expr_t = EntityExpr<1, 0, single_entity_expr_driver_t>;
+using single_entity_expr_driver_t = impl::NgpForEachEntityExprDriver<>;
+using single_entity_expr_t = impl::EntityExpr<1, 0, single_entity_expr_driver_t>;
 using rng_contract_expr_t =
-    CounterBasedRNGExpr<ConstantMathExpr<size_t>, ConstantMathExpr<size_t>, openrand::Philox, make_philox>;
-using rng_draw_contract_expr_t = RandomDistributionExpr<rng_contract_expr_t, double>;
+    impl::CounterBasedRNGExpr<impl::ConstantMathExpr<size_t>, impl::ConstantMathExpr<size_t>, openrand::Philox,
+                              make_philox>;
+using rng_draw_contract_expr_t = impl::RandomDistributionExpr<rng_contract_expr_t, double>;
 using rng_uniform_contract_expr_t =
-    UniformDistributionExpr<rng_contract_expr_t, double, ConstantMathExpr<double>, ConstantMathExpr<double>>;
-using reusable_add_expr_t = AddExpr<rng_contract_expr_t, rng_contract_expr_t>;
-using nonreusable_add_expr_t = AddExpr<rng_draw_contract_expr_t, ConstantMathExpr<double>>;
+    impl::UniformDistributionExpr<rng_contract_expr_t, double, impl::ConstantMathExpr<double>,
+                                  impl::ConstantMathExpr<double>>;
+using reusable_add_expr_t = impl::AddExpr<rng_contract_expr_t, rng_contract_expr_t>;
+using nonreusable_add_expr_t = impl::AddExpr<rng_draw_contract_expr_t, impl::ConstantMathExpr<double>>;
 
 static_assert(single_entity_expr_t::has_static_eval);
-static_assert(!ConnectedEntitiesExpr<single_entity_expr_t>::has_static_eval);
-static_assert(!ConnectedEntitiesExpr<single_entity_expr_t>::supports_runtime_reuse);
-static_assert(!ConstantMathExpr<double>::has_static_eval);
+static_assert(!impl::ConnectedEntitiesExpr<single_entity_expr_t>::has_static_eval);
+static_assert(!impl::ConnectedEntitiesExpr<single_entity_expr_t>::supports_runtime_reuse);
+static_assert(!impl::ConstantMathExpr<double>::has_static_eval);
 static_assert(!reusable_add_expr_t::supports_runtime_reuse);
 static_assert(!nonreusable_add_expr_t::supports_runtime_reuse);
 static_assert(rng_contract_expr_t::supports_runtime_reuse);
