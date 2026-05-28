@@ -23,6 +23,7 @@
 // C++ core
 #include <iostream>       // for std::ostream
 #include <memory>         // for std::shared_ptr
+#include <set>            // for std::set
 #include <stdexcept>      // for std::runtime_error
 #include <tuple>          // for std::tuple, std::make_tuple
 #include <typeindex>      // for std::type_index
@@ -198,6 +199,7 @@ DeclareEntitiesHelper& DeclareEntitiesHelper::declare_entities(stk::mesh::BulkDa
 
   const int our_rank = bulk_data.parallel_rank();
   BulkDataClassInterface class_bulk_data = class_interface(bulk_data);
+  std::set<stk::mesh::FieldBase*> modified_fields;
 
   auto declare_node_from_info = [&](const DeclareNodeInfo& node_info) {
     if (!node_info.classes.empty()) {
@@ -261,6 +263,7 @@ DeclareEntitiesHelper& DeclareEntitiesHelper::declare_entities(stk::mesh::BulkDa
       }
       for (const auto& field_data : element_info.field_data) {
         field_data->set_field_data(element);
+        modified_fields.insert(field_data->field());
       }
     } else {
       // We don't own the element, but if it connects to a node we own, we need to share that node with the element's
@@ -296,6 +299,7 @@ DeclareEntitiesHelper& DeclareEntitiesHelper::declare_entities(stk::mesh::BulkDa
       }
       for (const auto& field_data : node_info.field_data) {
         field_data->set_field_data(node);
+        modified_fields.insert(field_data->field());
       }
     } else if (we_share_node) {
       stk::mesh::Entity node = bulk_data.get_entity(stk::topology::NODE_RANK, node_info.id);
@@ -303,8 +307,13 @@ DeclareEntitiesHelper& DeclareEntitiesHelper::declare_entities(stk::mesh::BulkDa
                           sink() << "Node " << node_info.id << " is not valid and yet we are sharing it.");
       for (const auto& field_data : node_info.field_data) {
         field_data->set_field_data(node);
+        modified_fields.insert(field_data->field());
       }
     }
+  }
+
+  for (stk::mesh::FieldBase* field : modified_fields) {
+    field->modify_on_host();
   }
 
   // Now that every node/element is declared, set up the links
