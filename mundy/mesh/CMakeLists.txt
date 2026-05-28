@@ -27,7 +27,6 @@ set(NOINSTALLHEADERS
 
     # src/mundy_mesh/GenNeighborLinkers.hpp
     src/mundy_mesh/GetNgpLinkData.hpp
-    src/mundy_mesh/impl/ComponentImpl.hpp
     src/mundy_mesh/impl/DeclareFieldImpl.hpp
     src/mundy_mesh/impl/HostDeviceCOOSynchronizer.hpp
     src/mundy_mesh/impl/HostDeviceCSRSynchronizer.hpp
@@ -79,6 +78,7 @@ set(NOINSTALLHEADERS
     src/mundy_mesh/NgpModRequests.hpp
     src/mundy_mesh/NgpUtils.hpp
     src/mundy_mesh/SharedComponent.hpp
+    src/mundy_mesh/StringToRank.hpp
     src/mundy_mesh/StringToSelector.hpp
     src/mundy_mesh/StringToTopology.hpp
     src/mundy_mesh/Types.hpp
@@ -93,6 +93,7 @@ set(SOURCES
     src/mundy_mesh/impl/SelectorParser.cpp
     src/mundy_mesh/MeshBuilder.cpp
     src/mundy_mesh/MetaData.cpp
+    src/mundy_mesh/StringToRank.cpp
     src/mundy_mesh/StringToSelector.cpp
     src/mundy_mesh/StringToTopology.cpp
 )

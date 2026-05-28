@@ -23,7 +23,13 @@
 
 /// \file NgpAccessorExpr.hpp
 /// \defgroup MundyMeshNgpAccessorExpr mundy::mesh::NgpAccessorExpr
-/// \brief Expression-template layer for fusing STK NGP field reads, writes, and reductions.
+/// \brief Expression-template layer for NGP field operations.
+///
+/// Accessor expressions let you write mesh-field arithmetic against plain math objects without manually
+/// managing field synchronization, kernel boundaries, or per-entity loops. Expressions are lazy—nothing
+/// runs until an accessor expression appears as an lvalue or is passed to a reduction.
+///
+/// See the \ref MundyMesh "MundyMesh Primer" for a full walkthrough, examples, and the complete function reference.
 
 // Kokkos
 #include <Kokkos_Core.hpp>  // for KOKKOS_LAMBDA, etc.
@@ -51,154 +57,45 @@
 
 // Implementation headers — included in dependency order.
 // Each header includes its own prerequisites, so explicit ordering here is for documentation.
-#include <mundy_mesh/impl/NgpAccessorExprUtils.hpp>      // is_crtp_base_of, is_crtp_base_of_v
-#include <mundy_mesh/impl/NgpAccessorExprTypes.hpp>      // NgpEvalContext, holder types
-#include <mundy_mesh/impl/NgpAccessorExprCachable.hpp>   // CachableExprBase
-#include <mundy_mesh/impl/NgpAccessorExprMathBase.hpp>   // MathExprBase
-#include <mundy_mesh/impl/NgpAccessorExprEntityBase.hpp>  // EntityExprBase
+#include <mundy_mesh/impl/NgpAccessorExprAccessor.hpp>           // AccessorExpr
+#include <mundy_mesh/impl/NgpAccessorExprApplyValue.hpp>         // ApplyValueExpr, impl helpers
+#include <mundy_mesh/impl/NgpAccessorExprAssign.hpp>             // AssignExpr
+#include <mundy_mesh/impl/NgpAccessorExprBinaryValue.hpp>        // BinaryValueExpr, Add/Sub/Mul/DivExpr, operators
+#include <mundy_mesh/impl/NgpAccessorExprBuiltins.hpp>           // standard wrappers (norm, dot, etc.)
+#include <mundy_mesh/impl/NgpAccessorExprCachable.hpp>           // CachableExprBase
 #include <mundy_mesh/impl/NgpAccessorExprConnectedEntities.hpp>  // ConnectedEntitiesExpr
+#include <mundy_mesh/impl/NgpAccessorExprConstant.hpp>           // ConstantMathExpr
+#include <mundy_mesh/impl/NgpAccessorExprDrivers.hpp>     // NgpForEachEntityExprDriver, NgpForEachEntityPairExprDriver
+#include <mundy_mesh/impl/NgpAccessorExprEntityBase.hpp>  // EntityExprBase
 #include <mundy_mesh/impl/NgpAccessorExprEntityExpr.hpp>  // EntityExpr
-#include <mundy_mesh/impl/NgpAccessorExprDrivers.hpp>    // NgpForEachEntityExprDriver, NgpForEachEntityPairExprDriver
-#include <mundy_mesh/impl/NgpAccessorExprConstant.hpp>   // ConstantMathExpr
-#include <mundy_mesh/impl/NgpAccessorExprAssign.hpp>     // AssignExpr
-#include <mundy_mesh/impl/NgpAccessorExprBinaryValue.hpp>  // BinaryValueExpr, Add/Sub/Mul/DivExpr, operators
-#include <mundy_mesh/impl/NgpAccessorExprApplyValue.hpp>   // ApplyValueExpr, impl helpers
-#include <mundy_mesh/impl/NgpAccessorExprSink.hpp>         // SinkArg, ApplySinkExpr, sink_expr_impl, BinarySideEffectExpr
-#include <mundy_mesh/impl/NgpAccessorExprAccessor.hpp>     // AccessorExpr
-#include <mundy_mesh/impl/NgpAccessorExprRNG.hpp>          // RandomDistributionExpr, UniformDistributionExpr, CounterBasedRNGExpr
-#include <mundy_mesh/impl/NgpAccessorExprFused.hpp>        // FusedAssignExpr
-#include <mundy_mesh/impl/NgpAccessorExprReductions.hpp>   // reduce helpers
-#include <mundy_mesh/impl/NgpAccessorExprBuiltins.hpp>     // standard wrappers (norm, dot, etc.)
+#include <mundy_mesh/impl/NgpAccessorExprFused.hpp>       // FusedAssignExpr
+#include <mundy_mesh/impl/NgpAccessorExprMathBase.hpp>    // MathExprBase
+#include <mundy_mesh/impl/NgpAccessorExprRNG.hpp>  // RandomDistributionExpr, UniformDistributionExpr, CounterBasedRNGExpr
+#include <mundy_mesh/impl/NgpAccessorExprReductions.hpp>  // reduce helpers
+#include <mundy_mesh/impl/NgpAccessorExprSink.hpp>   // SinkArg, ApplySinkExpr, sink_expr_impl, BinarySideEffectExpr
+#include <mundy_mesh/impl/NgpAccessorExprTypes.hpp>  // NgpEvalContext, holder types
+#include <mundy_mesh/impl/NgpAccessorExprUtils.hpp>  // is_crtp_base_of, is_crtp_base_of_v
 
 namespace mundy {
 
 namespace mesh {
 
-/*
-Accessor expressions!
-
-Goal:
-To allow fields/components to be used as though they were their underlying type by delayed expression evaluation.
-
-For example, let vec*, mat*, quat* be accessors of the appropriate type. Then the following will create and evaluate
-an inlined expression list:
-  EntityExpr all_rods(rod_selector, rank);
-  ConnectedEntitiesExpr rod_nodes = all_rods.get_connectivity(NODE_RANK);
-  auto vec3_1 = avec3_1(rod_nodes[0]) + avec3_2(rod_nodes[1]);
-  auto vec3_2 = avec3_2(all_rods);
-  auto tmp_vec3 = reuse(vec3_1 + vec3_2 * 2.0 - cross(vec3_1, vec3_2));
-  auto tmp_mat3 = outer(tmp_vec3, vec3_1) + mat3_1 * 3.0;
-
-  // Performs a single kernel launch, evaluates tmp_vec3 and tmp_mat3 for each rods, then assigns them to the accessors
-  fused_assign(vec3_1, tmp_vec3,   // vec3_1 = tmp_vec3
-               mat3_1, tmp_mat3);  // mat3_1 = tmp_mat3
-
-  // Performs a different kernel launch, recomputes tmp_mat3 for each rods, and finds its global min.
-  Vector3<double> min_vel = reduce_min(tmp_mat3);
-
-Expressions are evaluated upon assignment to an lvalue or when passed to a reduction operation. The following will all
-perform evals
-  - accessor(entity_expr) = expr;
-  - accessor(entity_expr) += expr;
-  - fused_assign(accessor1, expr1, accessor2, expr2, ...);
-  - auto result = reduce_op(expr);
-
-Upon evaluation, but before looping over the entities, all fields involved in the expression are synchronized to the
-appropriate space and marked modified where necessary. The expression tree "knows" which fields are read and written.
-
-# Caching:
-
-Something important to consider here is that our design is carefully setup to ensure that identical sub-expressions in
-the tree will always return the same result given the same input. That is, if you can identify a subset of the tree
-(from a given node all the way to its leaves) that matches another subset, then they are compatible with reuse. Because
-our reuse is based on "if constexpr" they have zero overhead and do not introduce branching. As such, it seems like your
-tag system can be done using the collective type of the sub-expressions. So, we basically want our expression system to
-use a tagged bag (aka Aggregate). To then decide what to cache, we need to perform something similar to update_is_cached
-but instead of setting equal to true, we count the total number of occurrences of each tag in the bag. Then, whenever
-ANYTHING in the tree is evaluated, we conditionally cache the result if the number of occurrences of that tag is > 1.
-This way, the user never marks anything as reused, but rather the system automatically determines what to cache. The
-fact that we are using "if constexpr" means that there is no runtime overhead to this approach.
-
-Type-based caching is only sound when a node's type fully determines its eval result within a tree. Each expression
-therefore exposes `static constexpr bool has_static_eval` to indicate whether two nodes with the same tag are
-guaranteed to evaluate to the same result for the same inputs. Automatic memoization is enabled only for such nodes.
-
-Special functions
- -reuse: Flag an expression to be reused by multiple other expressions in a single fused kernel. Its return is memoized
-instead of being re-evaluated.
-
- -fused_assign: Fuse N assignment operations into a single kernel to avoid either multiple evaluations of shared
-sub-expressions or multiple kernel launches.
-*/
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Example of accessor expression vs for_each_entity_run
-//
-// void euler_update_rods_agg() {
-//   rod_agg.sync_to_device<CENTER, QUAT, VELOCITY, OMEGA>();
-//   stk::mesh::for_each_entity_run(
-//       ngp_mesh, rod_selector, rank, KOKKOS_LAMBDA(const stk::mesh::FastMeshIndex &rod_index) {
-//         auto nodes = ngp_mesh.get_connected_entities(rod_index, NODE_RANK);
-//         auto center = rod_agg.get<CENTER>(nodes[0]);
-//         auto quat = rod_agg.get<QUAT>(nodes[0]);
-//         auto velocity = rod_agg.get<VELOCITY>(nodes[0]);
-//         auto omega = rod_agg.get<OMEGA>(nodes[0]);
-//         center += dt * velocity;
-//         quat = rotate_quaternion(quat, omega, dt);
-//       });
-//   rod_agg.modify_on_device<CENTER, QUAT>();
-// }
-//
-// void euler_update_rods_expr() {
-//   EntityExpr rods(rod_selector, rank);
-//   ConnectedEntitiesExpr nodes = rods.get_connectivity(NODE_RANK);
-//   auto center = rod_agg.get<CENTER>(nodes[0]);
-//   auto quat = rod_agg.get<QUAT>(nodes[0]);
-//   auto velocity = od_agg.get<VELOCITY>(nodes[0]);
-//   auto omega = rod_agg.get<OMEGA>(nodes[0]);
-//
-//   fused_assign(center, /* = */ center + dt * velocity,  //
-//                quat, /* = */ rotate_quaternion(quat, omega, dt));
-// }
-//
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Example reduction of max speed vs field blas
-// void max_speed_agg() {
-//   stk::mesh::for_each_entity_run(
-//       ngp_mesh, rod_selector, rank, KOKKOS_LAMBDA(const stk::mesh::FastMeshIndex &rod_index) {
-//         // Need to stash speed
-//         aspeed(rod_index) = norm(avelocity(rod_index));
-//       });
-//
-//   double max_speed = field_max(ngp_mesh, rod_selector, aspeed);
-// }
-//
-// void max_speed_expr() {
-//   EntityExpr all_rods(rod_selector, rank);
-//   double max_speed = reduce_max(norm(avelocity(all_rods)));
-// }
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
 //! \name Entity expression factories
 //@{
 
+/// \brief Create an entity expression for iterating over entities of a given rank in a selector.
 template <typename ExecSpace = stk::ngp::ExecSpace>
 auto make_entity_expr(stk::mesh::BulkData& bulk_data, const stk::mesh::Selector& selector,
                       const stk::mesh::EntityRank& rank, const ExecSpace& exec_space = ExecSpace()) {
   return impl::make_entity_expr_impl(bulk_data, selector, rank, exec_space);
 }
 
+/// \brief Create a pairwise entity expression for iterating over entity pairs defined by a pair view.
 template <typename PairView, typename FMIExtractor, typename ExecSpace = stk::ngp::ExecSpace>
-auto make_pairwise_entity_expr(stk::mesh::BulkData& bulk_data,                                    //
-                               const stk::mesh::EntityRank& left_rank,                            //
-                               const stk::mesh::EntityRank& right_rank,                           //
-                               const PairView& pair_view, const FMIExtractor& fmi_extractor,      //
+auto make_pairwise_entity_expr(stk::mesh::BulkData& bulk_data,                                //
+                               const stk::mesh::EntityRank& left_rank,                        //
+                               const stk::mesh::EntityRank& right_rank,                       //
+                               const PairView& pair_view, const FMIExtractor& fmi_extractor,  //
                                const ExecSpace& exec_space = ExecSpace()) {
   return impl::make_pairwise_entity_expr_impl(bulk_data, left_rank, right_rank, pair_view, fmi_extractor, exec_space);
 }
@@ -207,10 +104,7 @@ auto make_pairwise_entity_expr(stk::mesh::BulkData& bulk_data,                  
 //! \name Value expressions
 //@{
 
-/// \brief Build a read-only value expression that applies an arbitrary function object to expression arguments.
-///
-/// Usage: `apply_expr(func, expr1, expr2, ...)` where at least one argument is a math expression.
-/// Scalar values are automatically wrapped in `ConstantMathExpr`.
+/// \brief Build a read-only value expression by applying a function object to expression arguments.
 template <typename Func, typename... Args>
 auto apply_expr(Func func, const Args&... args) {
   return impl::apply_expr_impl(std::move(func), args...);
@@ -238,41 +132,31 @@ KOKKOS_INLINE_FUNCTION auto overwrite_all(const Arg& arg) {
   return impl::make_sink_arg_with_mode<impl::SinkAccessMode::OverwriteAll>(arg);
 }
 
-/// \brief Build a side-effect expression that applies a mutating function object to evaluated expression arguments.
-///
-/// `sink_expr` is the low-level escape hatch for mutating functions that Mundy does not wrap directly. Most users
-/// should prefer a named wrapper such as `rotate_quaternion(q(es), omega(es), dt)` when one exists. Named wrappers
-/// run immediately; use `sink_expr` when you need to construct the expression object yourself.
-///
-/// Rules:
-/// - At least one argument must be an expression with a non-null driver.
-/// - Unwrapped arguments are treated as `read_only(...)`.
-/// - Scalars are allowed only as read-only arguments and are converted to `ConstantMathExpr`.
-/// - `read_write(expr)` means the old device value is synchronized, then the field is marked modified on device.
-/// - `overwrite_all(expr)` means host sync state is cleared, then the field is marked modified on device.
-/// - Write-mode arguments must be expressions that evaluate to mutable lvalues.
-/// - The callable must return `void`.
-/// - Mutating functions that also return a value are intentionally unsupported (for now).
+/// \brief Build a side-effect expression that applies a mutating function object to expression arguments.
 template <typename Func, typename... Args>
 auto sink_expr(Func func, const Args&... args) {
   return impl::sink_expr_impl(std::move(func), args...);
 }
 
+/// \brief Atomically add rhs to each element of the target expression.
 template <typename... Args>
 auto atomic_add(const Args&... args) {
   return impl::atomic_add_impl(args...);
 }
 
+/// \brief Atomically subtract rhs from each element of the target expression.
 template <typename... Args>
 auto atomic_sub(const Args&... args) {
   return impl::atomic_sub_impl(args...);
 }
 
+/// \brief Atomically multiply each element of the target expression by rhs.
 template <typename... Args>
 auto atomic_mul(const Args&... args) {
   return impl::atomic_mul_impl(args...);
 }
 
+/// \brief Atomically divide each element of the target expression by rhs.
 template <typename... Args>
 auto atomic_div(const Args&... args) {
   return impl::atomic_div_impl(args...);
@@ -294,13 +178,7 @@ auto rng(const SeedExpr& seed_expr, const CounterExpr& counter_expr) {
 //! \name Fused assignment
 //@{
 
-/// \brief Perform a fused assignment operation.
-///
-/// fused_assign(
-///      trg_expr1, /*=*/ src_expr1,
-///      trg_expr2, /*=*/ src_expr2,
-///               ...
-///      trg_exprN, /*=*/ src_exprN);
+/// \brief Evaluate all RHS expressions before writing any LHS—simultaneous multi-target assignment in one kernel.
 template <typename... TrgSrcExprPairs>
 void fused_assign(const TrgSrcExprPairs&... exprs) {
   impl::fused_assign_impl(exprs...);
@@ -312,56 +190,49 @@ void fused_assign(const TrgSrcExprPairs&... exprs) {
 
 /// \brief Reduces value of a given expression over all entities in the driver on this process
 template <typename Expr, typename ReductionOp>
-MUNDY_REQUIRES(impl::is_crtp_base_of_v<impl::MathExprBase, Expr> ||
-                   impl::is_crtp_base_of_v<impl::EntityExprBase, Expr>)
+MUNDY_REQUIRES(impl::is_crtp_base_of_v<impl::MathExprBase, Expr> || impl::is_crtp_base_of_v<impl::EntityExprBase, Expr>)
 void reduce_local(Expr&& expr, ReductionOp& reduction) {
   impl::reduce_local_impl(std::forward<Expr>(expr), reduction);
 }
 
 /// \brief Reduce sum (process local)
 template <typename Scalar, typename Expr>
-MUNDY_REQUIRES(impl::is_crtp_base_of_v<impl::MathExprBase, Expr> ||
-                   impl::is_crtp_base_of_v<impl::EntityExprBase, Expr>)
+MUNDY_REQUIRES(impl::is_crtp_base_of_v<impl::MathExprBase, Expr> || impl::is_crtp_base_of_v<impl::EntityExprBase, Expr>)
 auto reduce_local_sum(Expr&& expr) {
   return impl::reduce_local_sum_impl<Scalar>(std::forward<Expr>(expr));
 }
 
 /// \brief Reduce max (process local)
 template <typename Scalar, typename Expr>
-MUNDY_REQUIRES(impl::is_crtp_base_of_v<impl::MathExprBase, Expr> ||
-                   impl::is_crtp_base_of_v<impl::EntityExprBase, Expr>)
+MUNDY_REQUIRES(impl::is_crtp_base_of_v<impl::MathExprBase, Expr> || impl::is_crtp_base_of_v<impl::EntityExprBase, Expr>)
 auto reduce_local_max(Expr&& expr) {
   return impl::reduce_local_max_impl<Scalar>(std::forward<Expr>(expr));
 }
 
 /// \brief Reduce min (process local)
 template <typename Scalar, typename Expr>
-MUNDY_REQUIRES(impl::is_crtp_base_of_v<impl::MathExprBase, Expr> ||
-                   impl::is_crtp_base_of_v<impl::EntityExprBase, Expr>)
+MUNDY_REQUIRES(impl::is_crtp_base_of_v<impl::MathExprBase, Expr> || impl::is_crtp_base_of_v<impl::EntityExprBase, Expr>)
 auto reduce_local_min(Expr&& expr) {
   return impl::reduce_local_min_impl<Scalar>(std::forward<Expr>(expr));
 }
 
 /// \brief Reduces sum (all processes)
 template <typename Scalar, typename Expr>
-MUNDY_REQUIRES(impl::is_crtp_base_of_v<impl::MathExprBase, Expr> ||
-                   impl::is_crtp_base_of_v<impl::EntityExprBase, Expr>)
+MUNDY_REQUIRES(impl::is_crtp_base_of_v<impl::MathExprBase, Expr> || impl::is_crtp_base_of_v<impl::EntityExprBase, Expr>)
 auto all_reduce_sum(Expr&& expr) {
   return impl::all_reduce_sum_impl<Scalar>(std::forward<Expr>(expr));
 }
 
 /// \brief Reduces max (all processes)
 template <typename Scalar, typename Expr>
-MUNDY_REQUIRES(impl::is_crtp_base_of_v<impl::MathExprBase, Expr> ||
-                   impl::is_crtp_base_of_v<impl::EntityExprBase, Expr>)
+MUNDY_REQUIRES(impl::is_crtp_base_of_v<impl::MathExprBase, Expr> || impl::is_crtp_base_of_v<impl::EntityExprBase, Expr>)
 auto all_reduce_max(Expr&& expr) {
   return impl::all_reduce_max_impl<Scalar>(std::forward<Expr>(expr));
 }
 
 /// \brief Reduces min (all processes)
 template <typename Scalar, typename Expr>
-MUNDY_REQUIRES(impl::is_crtp_base_of_v<impl::MathExprBase, Expr> ||
-                   impl::is_crtp_base_of_v<impl::EntityExprBase, Expr>)
+MUNDY_REQUIRES(impl::is_crtp_base_of_v<impl::MathExprBase, Expr> || impl::is_crtp_base_of_v<impl::EntityExprBase, Expr>)
 auto all_reduce_min(Expr&& expr) {
   return impl::all_reduce_min_impl<Scalar>(std::forward<Expr>(expr));
 }

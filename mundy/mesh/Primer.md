@@ -475,6 +475,9 @@ This is mainly useful for user input, parameter lists, and tests.
 ### `string_to_rank` and `string_to_topology`
 
 ```cpp
+#include <mundy_mesh/StringToRank.hpp>
+#include <mundy_mesh/StringToTopology.hpp>
+
 auto rank = mundy::mesh::string_to_rank("NODE_RANK");
 auto topo = mundy::mesh::string_to_topology("HEX_8");
 ```
@@ -910,201 +913,291 @@ later modification phase.
 These are useful when your algorithm wants whole-field linear algebra rather than per-entity accessors.
 
 ## Accessor expressions
-`NgpAccessorExpr` is Mundy's highest-level device expression layer.
 
-### Goal
-The point of accessor expressions is to reduce device-loop code down to a higher-level, math-like syntax.
+Accessor expressions let you write mesh-field arithmetic the same way you would write it against plain
+math objects, without manually managing field synchronization, kernel boundaries, or per-entity loops.
+The expression is *lazy*—nothing runs until an accessor expression appears as an *lvalue* (on the
+left-hand side of an assignment) or until the expression tree is passed to a reduction. At evaluation
+time, Mundy inspects the full expression tree, syncs every field it touches to the device (marking output
+fields as modified on device), and launches a single Kokkos kernel.
 
-Instead of writing a manual loop that says
-
- - iterate these entities,
- - fetch these accessors,
- - compute this intermediate quantity,
- - write these results,
- - remember which fields must sync,
- - remember which fields must be marked modified,
-
-you write something much closer to PyTorch, TensorFlow, or MATLAB-style algebra over entity-backed data.
-
-That is why this layer is best viewed as a small domain-specific language for device-side mesh loops. It describes what
-should be computed over a set of entities and then compiles that description into optimized loop bodies.
-
-This is more than syntax sugar. The expression tree carries enough structure for Mundy to:
-
- - delay evaluation until assignment or reduction,
- - automatically synchronize fields read by the expression,
- - automatically mark written fields as modified,
- - fuse multiple assignments into one traversal with `fused_assign(...)`,
- - avoid recomputing shared subexpressions within a fused kernel using `reuse(...)`.
-
-So the real mental model is not “fancy accessor syntax”. It is “write the body of a device loop in compact algebraic
-form, then let the expression system build and optimize that loop for you.”
-
-In practice, the payoff is that you write the math and the sync/modify bookkeeping takes care of itself.
-
-### The four pieces of an expression loop
-Most expression code has four conceptual pieces:
-
-1. define the **iteration domain**,
-2. lift accessors into **entity-indexed expressions**,
-3. combine them into **algebraic expressions**,
-4. evaluate them with an **assignment or reduction**.
-
-Seen that way, an expression block is just a compact spelling of a mesh loop.
-
-### Step 1: define the iteration domain
-The first object is usually created with `make_entity_expr(...)`.
+A quick comparison illustrates the intent. The manual approach:
 
 ```cpp
-using namespace mundy::mesh;
-
-auto rods = make_entity_expr(*bulk, rod_selector, stk::topology::ELEM_RANK);
+rod_agg.sync_to_device<CENTER, VELOCITY>();
+stk::mesh::for_each_entity_run(
+    ngp_mesh, rod_selector, ELEM_RANK, KOKKOS_LAMBDA(const stk::mesh::FastMeshIndex& rod_index) {
+      auto nodes    = ngp_mesh.get_connected_entities(rod_index, NODE_RANK);
+      auto center   = rod_agg.get<CENTER>(nodes[0]);
+      auto velocity = rod_agg.get<VELOCITY>(nodes[0]);
+      center += dt * velocity;
+    });
+rod_agg.modify_on_device<CENTER>();
 ```
 
-This says, “the logical loop domain is all selected rod entities of this rank.”
-
-You can think of `rods` as the loop variable family, not as data itself.
-
-### Step 2: lift accessors into expression form
-Accessor expressions operate on tagged components or other accessors. The most explicit pattern is to fetch the
-component first, then apply it to the entity expression.
+The expression approach:
 
 ```cpp
-auto center = rod_data.get_component<CENTER>();
-auto velocity = rod_data.get_component<VELOCITY>();
-
-auto center_e = center(rods);
-auto velocity_e = velocity(rods);
+auto rods  = make_entity_expr(bulk_data, rod_selector, ELEM_RANK);
+auto nodes = rods.get_connectivity(NODE_RANK);
+center(nodes[0]) += dt * velocity(nodes[0]);
 ```
 
-At this point, `center_e` and `velocity_e` are not values yet. They are delayed expressions that mean “center of the
-current rod in the loop” and “velocity of the current rod in the loop”.
+Field sync and marking are automatic. The loop body is gone.
 
-### Step 3: build algebraic expressions
-Once lifted, accessors can participate in ordinary arithmetic and in many MundyMath-style free functions supported by
-their underlying value type.
+### Evaluation
+
+The system has two kinds of objects: *entity expressions* define what to iterate over, and *accessor
+expressions* are lazy handles to field data for those entities. You build up a tree of accessor
+expressions using arithmetic and named functions, then trigger evaluation in one of four ways:
+
+- `accessor(entity_expr) = rhs_expr;` — direct assignment
+- `accessor(entity_expr) += rhs_expr;` — compound assignment (also `-=`, `*=`, `/=`)
+- `fused_assign(lhs1, rhs1, lhs2, rhs2, ...)` — fused multi-assignment (see below)
+- `reduce_local_*(expr)` or `all_reduce_*(expr)` — reduction
+
+Accessor expressions are *lvalues*: when one appears on the left-hand side of an assignment, the
+right-hand side expression tree is evaluated and its result written back to the underlying field. Each
+trigger produces exactly one kernel launch. Before the kernel runs, all input fields are synced to
+device and all output fields are marked as modified on device.
 
 ```cpp
-auto predicted_center = center_e + dt * velocity_e;
+x(es) = 3.14;                          // fill
+x(es) = y(es);                         // copy
+x(es) *= alpha;                        // scale in-place
+x(es) = alpha * x(es) + beta * y(es); // axpby
+z(es) = x(es) * y(es);                // element-wise product
 ```
 
-This is the point of the DSL: the loop body starts to look like math instead of explicit gather/compute/scatter code.
+### Entity expressions
 
-For connected-entity workflows, derive a new entity expression first and then apply the accessor to that expression.
+An entity expression defines *what to iterate over*. Create one with `make_entity_expr`:
 
 ```cpp
-auto rod_nodes = rods.get_connectivity(stk::topology::NODE_RANK);
-
-auto node_center_e = center(rod_nodes[0]);
-auto node_velocity_e = velocity(rod_nodes[0]);
+auto es = make_entity_expr(bulk_data, selector, stk::topology::NODE_RANK);
 ```
 
-That pattern lets you express multi-entity loop logic while keeping the code algebraic.
-
-### Step 4: trigger evaluation
-Nothing runs until an evaluation call happens. In the common case, evaluation is triggered simply by assigning to an
-expression l-value. As soon as you assign to it with `=`, `+=`, `-=`, `*=`, or `/=`, evaluation occurs over the loop
-domain.
+You can also express connectivity—iterating over elements while reading data from connected nodes:
 
 ```cpp
-center(rods) += dt * velocity(rods);
+auto elements = make_entity_expr(bulk_data, rod_selector, stk::topology::ELEMENT_RANK);
+auto nodes = elements.get_connectivity(stk::topology::NODE_RANK);
+// nodes[0] is the first connected node of each element, nodes[1] the second, and so on.
 ```
 
-Before the kernel runs, the expression system synchronizes fields that are read and marks written fields as modified on
-device. That is the main reason to use this layer instead of manually writing every `sync_to_device()` and
-`modify_on_device()` call.
-
-So a helpful rule is:
-
- - building expressions is like building a computation graph,
- - assignment to an expression l-value and reduction calls are the points where that graph is realized as an optimized
-   loop.
-
-### A full update example
-Written out explicitly, a typical update looks like this:
+For pairwise algorithms (e.g., neighbor lists), there is a corresponding pairwise variant:
 
 ```cpp
-using namespace mundy::mesh;
-
-auto rods = make_entity_expr(*bulk, rod_selector, stk::topology::ELEM_RANK);
-
-auto center = rod_data.get_component<CENTER>();
-auto velocity = rod_data.get_component<VELOCITY>();
-
-center(rods) += dt * velocity(rods);
+auto pairs = make_pairwise_entity_expr(bulk_data, left_rank, right_rank, pair_view, fmi_extractor);
 ```
 
-### `fused_assign(...)` for simultaneous multi-assignment
-Use `fused_assign(...)` when you want multiple different left-hand sides to be updated in the same loop evaluation.
-That is its real role: not ordinary single-target assignment, but simultaneous multi-target assignment.
+### Accessor expression objects
+
+A component accessor applied to an entity expression produces an *accessor expression*: a lazy, typed
+handle to the field data for those entities. Each component type corresponds to the math type stored in
+the field:
 
 ```cpp
-auto x = data.get_component<X>();
-auto y = data.get_component<Y>();
-auto z = data.get_component<Z>();
+auto x   = make_tagged_component<XTag>(ScalarFieldComponent(*x_field));
+auto vel = make_tagged_component<VTag>(Vector3FieldComponent(*vel_field));
+auto q   = make_tagged_component<QTag>(QuaternionFieldComponent(*q_field));
 
-auto es = make_entity_expr(*bulk, selector, stk::topology::NODE_RANK);
-
-fused_assign(y(es), /*=*/2.0 * x(es) + y(es),
-             z(es), /*=*/x(es) * y(es));
+auto es     = make_entity_expr(bulk_data, selector, NODE_RANK);
+auto x_expr = x(es);    // lazy handle to x for every entity in es
 ```
 
-This performs both updates in one traversal and one kernel launch.
-
-This is also where reuse matters most. If several outputs depend on the same intermediate expression, the expression
-system can avoid recomputing that intermediate by reusing it within the fused evaluation.
-
-### Reductions over expressions
-Reductions are also explicit evaluation points.
+Alternatively, components can be accessed through an `Aggregate`:
 
 ```cpp
-auto es = make_entity_expr(*bulk, selector, stk::topology::NODE_RANK);
-
-auto x = make_tagged_component<XTag>(ScalarFieldComponent(*field_x));
-auto y = make_tagged_component<YTag>(ScalarFieldComponent(*field_y));
-
-double dot_xy = all_reduce_sum<double>(x(es) * y(es));
-double local_max_x = reduce_local_max<double>(x(es));
+aggregate.get<XTag>(es) = aggregate.get<YTag>(es);
 ```
 
-Use the reduction family that matches the scope you want:
+Accessor expressions compose freely with arithmetic and named functions before anything runs.
 
-| **Function** | **Meaning** |
-|--------------|-------------|
-| `reduce_local_sum<Scalar>(expr)` | Sum on this MPI rank only. |
-| `reduce_local_max<Scalar>(expr)` / `reduce_local_min<Scalar>(expr)` | Rank-local extrema. |
-| `all_reduce_sum<Scalar>(expr)` | Global MPI sum. |
-| `all_reduce_max<Scalar>(expr)` / `all_reduce_min<Scalar>(expr)` | Global MPI extrema. |
+### Arithmetic operators
 
-### Important evaluation rules
+Within an expression, the standard arithmetic operators produce new expression nodes rather than computing
+immediately. Scalars on either side are promoted automatically, so mixing scalars and expressions works
+without any manual wrapping.
 
-| **What you write** | **What happens** |
-|--------------------|------------------|
-| `lhs = rhs` or `lhs += rhs` | If `lhs` is an expression l-value such as `center(rods)`, evaluate over the entity set and write back to `lhs`. |
-| `fused_assign(lhs1, rhs1, lhs2, rhs2, ...)` | Evaluate several left/right pairs in the same fused loop. Use this when you want simultaneous multi-target assignment. |
-| `all_reduce_*<Scalar>(expr)` / `reduce_local_*<Scalar>(expr)` | Evaluate the expression and reduce the resulting values. |
-| `auto expr = ...;` | Build an expression tree only; no kernel runs yet. |
+| **Operator** | **Effect** |
+|---|---|
+| `a + b` | element-wise addition |
+| `a - b` | element-wise subtraction |
+| `a * b` | scalar multiplication, or matrix-vector / matrix-matrix product |
+| `a / b` | element-wise scalar division |
+| `a += b`, `a -= b`, `a *= b`, `a /= b` | in-place variants (trigger evaluation immediately) |
 
-### Two common gotchas
+### Named functions
 
-1. **Swapping view-backed accessors requires `copy(...)`.**
+The builtins below produce expression nodes and can be freely combined with arithmetic before anything runs.
+
+#### Vectors
+
+| **Function** | **Description** |
+|---|---|
+| `copy(v)` | explicit value copy (important for swaps; see Fused assignment) |
+| `sum(v)`, `product(v)`, `min(v)`, `max(v)` | component reductions |
+| `mean(v)`, `variance(v)`, `stddev(v)` | component statistics |
+| `norm(v)` | Euclidean (2-)norm |
+| `one_norm(v)`, `two_norm(v)`, `inf_norm(v)`, `infinity_norm(v)` | 1-, 2-, and ∞-norms |
+| `norm_squared(v)`, `two_norm_squared(v)` | squared norms |
+| `dot(v1, v2)` | dot product |
+| `cross(v1, v2)` | cross product (3D vectors) |
+| `outer_product(v1, v2)` | outer product → matrix |
+| `elementwise_mul(v1, v2)`, `elementwise_div(v1, v2)` | component-wise multiply / divide |
+| `minor_angle(v1, v2)`, `major_angle(v1, v2)` | angle between vectors |
+
+#### Matrices
+
+| **Function** | **Description** |
+|---|---|
+| `copy(m)` | explicit value copy |
+| `sum(m)`, `product(m)`, `min(m)`, `max(m)`, `mean(m)`, `variance(m)`, `stddev(m)` | element reductions |
+| `trace(m)`, `determinant(m)`, `transpose(m)` | standard matrix operations |
+| `inverse(m)`, `adjugate(m)`, `cofactors(m)` | inverse and cofactor operations |
+| `frobenius_norm(m)`, `one_norm(m)`, `two_norm(m)`, `inf_norm(m)`, `infinity_norm(m)` | matrix norms |
+| `frobenius_inner_product(m1, m2)` | Frobenius inner product |
+| `elementwise_mul(m1, m2)`, `elementwise_div(m1, m2)` | component-wise multiply / divide |
+
+#### Quaternions
+
+| **Function** | **Description** |
+|---|---|
+| `copy(q)` | explicit value copy |
+| `sum(q)`, `product(q)`, `min(q)`, `max(q)`, `mean(q)`, `variance(q)`, `stddev(q)` | component reductions |
+| `norm(q)`, `norm_squared(q)` | norms |
+| `inverse(q)`, `conjugate(q)`, `normalize(q)` | quaternion-specific operations |
+| `dot(q1, q2)` | dot product |
+| `slerp(q1, q2)` | spherical linear interpolation |
+
+#### Scalars
+
+The following pointwise functions lift standard math operations to scalar expressions:
+`abs`, `sqrt`, `exp`, `log`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`.
+
+#### Mutating functions
+
+Some operations mutate their argument in-place and run a kernel immediately rather than building an
+expression node. These are exposed as named wrappers:
 
 ```cpp
-auto es = make_entity_expr(*bulk, selector, stk::topology::NODE_RANK);
-
-fused_assign(x(es), /*=*/copy(y(es)),
-             y(es), /*=*/copy(x(es)));
+rotate_quaternion(q(es), omega(es), dt);  // modifies q; reads omega and dt; runs immediately
 ```
 
-Without `copy(...)`, `x(es)` in the right-hand side of the second clause is a view into the accessor — it reads whatever
-`x` currently contains, which the first clause has already overwritten. `copy(...)` forces the expression system to
-capture the value before the fused kernel writes anything back.
+### Automatic sub-expression reuse
 
-2. **Use `reuse(expr)` only for repeated pure subexpressions inside one fused evaluation.**
+Within any single kernel—whether a simple assignment, a `fused_assign`, or a reduction—the compiler
+identifies sub-expression nodes that are structurally identical and whose type guarantees that the same
+entity always yields the same result. Any such node that appears more than once in the tree is evaluated
+only once, with zero runtime overhead and no branching. Field reads and entity lookups benefit from this.
+For example, `norm(vel(es))` appearing twice in a single expression is computed once per entity:
 
-If the same expensive expression is used multiple times in one fused kernel, `reuse(...)` makes that intent explicit.
-This includes cases where the repeated expression appears in different branches of the overall expression tree rather
-than in one obvious linear formula. If you are only using the subexpression once, it is usually unnecessary.
+```cpp
+x(es) = norm(vel(es)) / (1.0 + norm(vel(es)));  // norm(vel) computed once
+```
 
-Use this abstraction when you want expression-style math without manually managing every `sync_to_device()` and
-`modify_on_device()` call.
+Constants captured at expression-build time are treated as potentially distinct regardless of their
+apparent equality, so they do not qualify for compile-time reuse. The system handles this conservatively
+and automatically—you do not need to annotate anything.
+
+### Fused assignment
+
+`fused_assign` packs any number of assignments into a single kernel. All right-hand sides are evaluated
+before any left-hand side is written, which makes simultaneous updates safe—in the same spirit as Python's
+tuple assignment `x, y = y, x`. For example, a field swap:
+
+```cpp
+fused_assign(x(es), /*=*/ copy(y(es)),   // x ← old y
+             y(es), /*=*/ copy(x(es)));  // y ← old x
+```
+
+The `copy()` calls are necessary. `x(es)` and `y(es)` return *views* into field storage. Without `copy()`,
+the stashed right-hand sides would be views that still alias the field buffers being written, so reads and
+writes would interfere. `copy()` forces an upfront value snapshot before any write occurs.
+
+### Reductions
+
+To reduce an expression over entities to a scalar, use the reduction helpers. Process-local (single MPI
+rank) variants:
+
+```cpp
+double s  = reduce_local_sum<double>(x(es) * y(es));
+double hi = reduce_local_max<double>(norm(vel(es)));
+double lo = reduce_local_min<double>(norm(vel(es)));
+```
+
+MPI-global (across all ranks) variants:
+
+```cpp
+double dot       = all_reduce_sum<double>(x(es) * y(es));
+double max_speed = all_reduce_max<double>(norm(velocity(es)));
+```
+
+Compared to the manual approach, no scratch field is needed to hold an intermediate result:
+
+```cpp
+// Manual: compute norm into a scratch field, then reduce the scratch field separately.
+// Expression: compute and reduce in one step, no scratch storage.
+double max_speed = all_reduce_max<double>(norm(velocity(es)));
+```
+
+### Random numbers
+
+`rng` creates a per-entity counter-based random number generator (Philox by default). The seed and
+counter can each be a field expression or a plain constant, with at least one being an expression:
+
+```cpp
+auto our_rng = rng(seed(es), counter(es));  // both from fields
+auto our_rng = rng(42u,      counter(es));  // fixed seed, per-entity counter
+auto our_rng = rng(seed(es), 0u);           // per-entity seed, fixed counter
+fused_assign(a(es), /*=*/ our_rng.rand<double>(),   // first draw
+             b(es), /*=*/ our_rng.rand<double>());  // second draw — a != b
+```
+
+Sequential draws from the same `rng` expression advance the generator state so successive calls return
+different values, exactly as you would expect. The `rng` node is the runtime analog of compile-time reuse:
+the generator is constructed once per entity within the fused tree and then `.rand<T>()` calls advance its
+counter, rather than each draw re-seeding from scratch.
+
+### Custom operations
+
+The operations below are for users who need to call functions that the expression system does not wrap
+directly. Most users will not need them—the named builtins cover the common cases.
+
+#### `apply_expr` — custom read-only functions
+
+Wrap any device-callable function object that takes values and returns a value, including Kokkos lambdas:
+
+```cpp
+auto func = KOKKOS_LAMBDA(const auto& x, const auto& y, const auto& bias) {
+    return x + 2.0 * y + bias;
+};
+z(es) = 2.0 * apply_expr(func, x(es), y(es), some_scalar);
+```
+
+Scalars are promoted automatically. The result is a regular expression node that composes freely with
+arithmetic and other builtins.
+
+#### `sink_expr` — custom mutating functions
+
+For functions that mutate one of their arguments, use `sink_expr` with explicit access-mode wrappers and
+call `.driver()->run()` to evaluate:
+
+```cpp
+auto func = KOKKOS_LAMBDA(auto& y, const auto& x, const auto& scale) {
+    y += scale * x;
+};
+auto expr = sink_expr(func, read_write(y(es)), read_only(x(es)), alpha);
+expr.driver()->run(expr);
+```
+
+The three access modes control how each argument's field sync state is managed:
+
+| **Wrapper** | **Sync behavior** |
+|---|---|
+| `read_only(expr)` | field is synced to device; not marked modified |
+| `read_write(expr)` | field is synced to device; marked modified on device after the kernel |
+| `overwrite_all(expr)` | host sync state is cleared; field is marked modified on device |
+
+Unwrapped arguments default to `read_only`. The callable must return `void`.

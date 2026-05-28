@@ -22,7 +22,7 @@
 #define MUNDY_MESH_STRINGTOTOPOLOGY_HPP_
 
 /// \file StringToTopology.hpp
-/// \brief Helpers for mapping string names to STK entity ranks and topologies.
+/// \brief Helpers for mapping string names to STK topologies.
 
 // C++ core libs
 #include <string>  // for std::string
@@ -30,25 +30,9 @@
 // Trilinos libs
 #include <stk_topology/topology.hpp>  // for stk::topology
 
-// Mundy libs
-#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
-
 namespace mundy {
 
 namespace mesh {
-
-/// \brief Map a string with a valid rank name to the corresponding rank.
-///
-/// The set of valid rank names and their corresponding type is
-///  - NODE_RANK        -> stk::topology::NODE_RANK
-///  - EDGE_RANK        -> stk::topology::EDGE_RANK
-///  - FACE_RANK        -> stk::topology::FACE_RANK
-///  - ELEMENT_RANK     -> stk::topology::ELEMENT_RANK
-///  - CONSTRAINT_RANK  -> stk::topology::CONSTRAINT_RANK
-///  - INVALID_RANK     -> stk::topology::INVALID_RANK
-///
-/// \param rank_string [in] String containing a valid rank name.
-stk::topology::rank_t string_to_rank(const std::string& rank_string);
 
 /// \brief Map a string with a valid topology name to the corresponding topology.
 ///
