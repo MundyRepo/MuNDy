@@ -179,14 +179,9 @@ The required inputs before `declare()` are `type<T>()`, `rank(...)`, and `name(.
 | `name("...")` | Choose the field name. |
 | `role(role)` | Set the STK IO role such as `Ioss::Field::MESH` or `Ioss::Field::TRANSIENT`. |
 | `output_type(type)` | Control component labeling in IO output. |
-| `tag<Tag>()` | Attach a semantic tag type, entering the component declaration chain. |
-| `access<AccessLike>()` | Select a component access shape, entering the field-backed component declaration chain. |
 
-`.tag<Tag>()` and `.access<AccessLike>()` do not produce an STK field immediately — they pivot from the
-raw field declaration chain into a component declaration chain. After pivoting, you must choose a backend
-with `.field()` (field-backed) or `.shared(source)` (shared-backed), then call `.declare()`. For
-component declarations, prefer starting from `ComponentDeclarationHelper` instead; it has the same
-setters but makes the intent clearer.
+`FieldDeclarationHelper` declares raw STK fields only. Use `ComponentDeclarationHelper` when the intent
+is to declare a field-backed or shared component.
 
 ### `ComponentDeclarationHelper`
 `ComponentDeclarationHelper` is the preferred entry point when you want to declare a field-backed or
@@ -194,8 +189,8 @@ shared-backed component. It offers the same fluent setters as `FieldDeclarationH
 declaration through a typed builder chain that produces a `FieldComponent` or `SharedComponent` rather
 than a raw `stk::mesh::Field`.
 
-The chain has a clear two-step structure: first select an access shape with `.access<A>()`, then commit
-to a backend with `.field()` or `.shared(source)`, then call `.declare()`. All other setters
+The backend and access shape are selected together with `.field<A>()` or `.shared<A>(source)`, then
+committed with `.declare()`. All other setters
 (`rank`, `name`, `role`, `output_type`, `tag`) may appear anywhere in the chain before `.declare()`.
 
 #### Builder state machine
@@ -205,18 +200,16 @@ use `auto` throughout:
 
 | **Builder** | **State** | **Available transitions** |
 |-------------|-----------|---------------------------|
-| `ComponentDeclarationHelper` | Nothing fixed | `.rank()` `.name()` `.role()` `.output_type()` `.tag<Tag>()` `.access<A>()` |
-| `TaggedFieldDeclarationHelperT` | Tag fixed | same + `.type<T>()` |
-| `TaggedFieldComponentDeclarationHelperT` | Access fixed | same + `.field()` `.shared(source)` |
-| `TaggedFieldBackedDeclarationHelperT` | Access + field backend | `.rank()` `.name()` `.role()` `.output_type()` `.tag<Tag>()` `.declare()` |
-| `TaggedSharedComponentDeclarationHelperT` | Access + shared backend | `.rank()` `.name()` `.access<A>()` `.tag<Tag>()` `.declare()` |
+| `ComponentDeclarationHelper` | Nothing fixed | `.rank()` `.name()` `.role()` `.output_type()` `.type<T>()` `.tag<Tag>()` `.field<A>()` `.shared<A>(source)` |
+| `TaggedFieldDeclarationHelperT` | Tag and/or field scalar fixed | same backend transitions as `ComponentDeclarationHelper` |
+| `TaggedFieldBackedDeclarationHelperT` | Access + field backend | `.rank()` `.name()` `.role()` `.output_type()` `.type<T>()` `.tag<Tag>()` `.declare()` |
+| `TaggedSharedComponentDeclarationHelperT` | Access + shared backend | `.rank()` `.name()` `.tag<Tag>()` `.declare()` |
 
-`.field()` and `.shared(source)` are the backend commitment steps. Neither has a shortcut on
-`ComponentDeclarationHelper` — access must always be specified explicitly.
+`.field<A>()` and `.shared<A>(source)` are the backend commitment steps. The `A` is the access shape.
 
 #### Access shapes
 
-The `AccessLike` argument to `.access<>()` selects the component shape. Explicit `access::` tag types
+The `AccessLike` argument to `.field<>()` or `.shared<>()` selects the component shape. Explicit `access::` tag types
 and their corresponding Mundy math/geometry types are both accepted:
 
 | **`AccessLike`** | **Also accepts** | **View type per entity** | **Field scalars** |
@@ -236,7 +229,7 @@ separately is allowed but must agree with the access shape — a compile-time as
 
 #### Field-backed component declaration
 
-After `.access<A>()`, call `.field()` to commit to a field-backed component, then `.declare()`:
+Call `.field<A>()` to commit to a field-backed component, then `.declare()`:
 
 ```cpp
 using namespace mundy::mesh;
@@ -248,8 +241,7 @@ auto mass =
     decl.rank(stk::topology::ELEM_RANK)
         .name("mass")
         .role(Ioss::Field::ATTRIBUTE)
-        .access<access::scalar<double>>()
-        .field()
+        .field<access::scalar<double>>()
         .declare();
 
 // Tagged vector3 field component
@@ -257,17 +249,16 @@ auto center =
     decl.rank(stk::topology::NODE_RANK)
         .name("center")
         .role(Ioss::Field::TRANSIENT)
-        .access<access::vector<double, 3>>()
+        .field<access::vector<double, 3>>()
         .tag<CENTER>()
-        .field()
         .declare();
 ```
 
-`.tag<Tag>()` may be called before or after `.access<>()` — the two orderings are equivalent:
+`.tag<Tag>()` may be called before or after `.field<>()` — the two orderings are equivalent:
 
 ```cpp
-decl.access<access::quaternion<double>>().tag<ORIENT>().field().declare();  // equivalent
-decl.tag<ORIENT>().access<access::quaternion<double>>().field().declare();  // to this
+decl.field<access::quaternion<double>>().tag<ORIENT>().declare();  // equivalent
+decl.tag<ORIENT>().field<access::quaternion<double>>().declare();  // to this
 ```
 
 When a tag is present, `.declare()` returns `TaggedComponent<Tag, ComponentType>`. Without a tag it
@@ -275,8 +266,8 @@ returns the plain `ComponentType` directly.
 
 #### Shared-backed component declaration
 
-After `.access<A>()`, call `.shared(source)` to commit to a shared-backed component. `source` can be a
-raw value (stored by copy) or a length-1 Kokkos view in `HostSpace` (aliased directly):
+Call `.shared<A>(source)` to commit to a shared-backed component. `source` can be a raw value
+(stored by copy) or a length-1 Kokkos view in `HostSpace` (aliased directly):
 
 ```cpp
 using namespace mundy::mesh;
@@ -287,9 +278,8 @@ ComponentDeclarationHelper decl(meta);
 auto collision_radius =
     decl.rank(stk::topology::ELEM_RANK)
         .name("collision_radius")
-        .access<access::scalar<double>>()
         .tag<COLLISION_RADIUS>()
-        .shared(0.5)
+        .shared<access::scalar<double>>(0.5)
         .declare();
 ```
 
@@ -297,14 +287,14 @@ Shared declarations require `.rank()` before `.declare()`. The rank is recorded 
 metadata so the component knows which entity rank it applies to when attached to an aggregate or
 part-restricted context. An assertion fires at `.declare()` time if rank is missing.
 
-The order of `.access<>()` and `.shared(source)` relative to other setters is free:
+The order of `.shared<>()` relative to other setters is free:
 
 ```cpp
-// access-first, then shared
-decl.access<double>().shared(1.5).rank(ELEM_RANK).name("radius").declare();
+// backend-first
+decl.shared<double>(1.5).rank(ELEM_RANK).name("radius").declare();
 
-// name/rank-first, then access, then shared
-decl.rank(ELEM_RANK).name("radius").access<double>().shared(1.5).declare();
+// name/rank-first
+decl.rank(ELEM_RANK).name("radius").shared<double>(1.5).declare();
 ```
 
 #### Snapshot reuse
@@ -318,16 +308,16 @@ using namespace mundy::mesh;
 ComponentDeclarationHelper decl(meta);
 
 // Capture common attributes at the node transient vector3 level.
-// access<access::vector<double, 3>>() and access<Vector3<double>>() are equivalent.
+// field<access::vector<double, 3>>() and field<Vector3<double>>() are equivalent.
 auto node_transient_vec3 =
     decl.rank(stk::topology::NODE_RANK)
         .role(Ioss::Field::TRANSIENT)
-        .access<Vector3<double>>();
+        .field<Vector3<double>>();
 
-// Branch with distinct names, tags, and field() commitment
-auto center   = node_transient_vec3.name("center").tag<CENTER>().field().declare();
-auto velocity = node_transient_vec3.name("velocity").tag<LIN_VEL>().field().declare();
-auto force    = node_transient_vec3.name("force").tag<FORCE>().field().declare();
+// Branch with distinct names and tags
+auto center   = node_transient_vec3.name("center").tag<CENTER>().declare();
+auto velocity = node_transient_vec3.name("velocity").tag<LIN_VEL>().declare();
+auto force    = node_transient_vec3.name("force").tag<FORCE>().declare();
 ```
 
 ### `PartDeclarationHelper`

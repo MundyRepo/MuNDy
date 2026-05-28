@@ -28,6 +28,10 @@
 /// The preferred entry point for component declarations is \c ComponentDeclarationHelper.
 /// Use \c FieldDeclarationHelper (DeclareField.hpp) for raw STK field declarations only.
 
+// C++ core
+#include <type_traits>
+#include <utility>
+
 // STK
 #include <stk_mesh/base/MetaData.hpp>  // for stk::mesh::MetaData
 
@@ -44,14 +48,14 @@ namespace mesh {
 ///
 /// \c ComponentDeclarationHelper is the preferred entry point for all component declarations.
 /// It accumulates declaration metadata through a fluent chain of setters and then materializes
-/// either a field-backed component (via \c .access<A>().declare()) or a shared-backed component
-/// (via \c .shared(source).declare()).
+/// either a field-backed component (via \c .field<A>().declare()) or a shared-backed component
+/// (via \c .shared<A>(source).declare()).
 ///
 /// The builder transitions through implementation-detail intermediate types as the fluent chain
 /// accumulates type information; use \c auto to hold these intermediate results.
 ///
-/// The backend is selected explicitly after \c .access<A>(): call \c .field() for a field-backed
-/// component or \c .shared(source) for a shared-backed component, then \c .declare().
+/// The backend is selected explicitly by calling \c .field<A>() for a field-backed component or
+/// \c .shared<A>(source) for a shared-backed component, then \c .declare().
 ///
 /// \par Field-backed example:
 /// \code{.cpp}
@@ -59,8 +63,7 @@ namespace mesh {
 ///   auto velocity = decl.rank(NODE_RANK)
 ///                       .name("velocity")
 ///                       .role(Ioss::Field::TRANSIENT)
-///                       .access<mundy::math::Vector3<double>>()
-///                       .field()
+///                       .field<mundy::math::Vector3<double>>()
 ///                       .declare();
 /// \endcode
 ///
@@ -69,8 +72,7 @@ namespace mesh {
 ///   ComponentDeclarationHelper decl;
 ///   auto stiffness = decl.rank(ELEMENT_RANK)
 ///                        .name("stiffness")
-///                        .access<double>()
-///                        .shared(1.0)
+///                        .shared<double>(1.0)
 ///                        .declare();
 /// \endcode
 ///
@@ -80,8 +82,7 @@ namespace mesh {
 ///   auto tagged = decl.rank(NODE_RANK)
 ///                     .name("velocity")
 ///                     .tag<VelocityTag>()
-///                     .access<mundy::math::Vector3<double>>()
-///                     .field()
+///                     .field<mundy::math::Vector3<double>>()
 ///                     .declare();
 /// \endcode
 ///
@@ -92,9 +93,9 @@ namespace mesh {
 ///   ComponentDeclarationHelper decl(meta_data);
 ///   auto node_vec3 = decl.rank(NODE_RANK)
 ///                        .role(Ioss::Field::TRANSIENT)
-///                        .access<mundy::math::Vector3<double>>();
-///   auto velocity = node_vec3.name("velocity").field().declare();
-///   auto force    = node_vec3.name("force").field().declare();
+///                        .field<mundy::math::Vector3<double>>();
+///   auto velocity = node_vec3.name("velocity").declare();
+///   auto force    = node_vec3.name("force").declare();
 /// \endcode
 class ComponentDeclarationHelper {
  public:
@@ -156,17 +157,41 @@ class ComponentDeclarationHelper {
   //! \name Terminal transitions
   //@{
 
-  /// \brief Set the access shape, returning an access-typed builder that supports both \c .declare() and \c .shared().
+  /// \brief Fix the field scalar type before choosing a component backend.
+  template <typename T>
+  auto type() const {
+    impl::FieldDeclarationSnapshot snap = snapshot_;
+    snap.meta_data                      = meta_data_;
+    return TaggedFieldDeclarationHelperT<std::remove_cvref_t<T>, void>(snap);
+  }
+
+  /// \brief Commit to a field-backed component with the given access shape.
   ///
   /// \tparam AccessLike  Access shape: arithmetic type, Mundy math type, or explicit \c access:: tag.
   template <typename AccessLike>
-  auto access() const {
+  auto field() const {
     impl::FieldDeclarationSnapshot snap = snapshot_;
     snap.meta_data                      = meta_data_;
-    return TaggedFieldComponentDeclarationHelperT<void, AccessLike, void>(snap);
+    return TaggedFieldBackedDeclarationHelperT<void, AccessLike, void>(snap);
   }
 
-  /// \brief Attach a semantic tag before access is chosen.
+  /// \brief Commit to a shared-backed component with the given access shape and source.
+  template <typename AccessLike, typename SharedSource>
+  auto shared(SharedSource&& source) const {
+    using canonical_access = canonical_component_access_t<AccessLike>;
+    using shape            = component_access_shape<canonical_access>;
+    using source_type      = std::decay_t<SharedSource>;
+    using shared_value_t   = impl::shared_component_source_value_t<source_type>;
+    static_assert(std::is_same_v<shared_value_t, typename shape::shared_value_type>,
+                  "Shared source value type is incompatible with the chosen component access.");
+
+    impl::FieldDeclarationSnapshot snap = snapshot_;
+    snap.meta_data                      = meta_data_;
+    return TaggedSharedComponentDeclarationHelperT<source_type, AccessLike, void>(
+        std::forward<SharedSource>(source), snap);
+  }
+
+  /// \brief Attach a semantic tag before choosing a component backend.
   ///
   /// \tparam Tag  Tag type to attach to the resulting component.
   template <typename Tag>
