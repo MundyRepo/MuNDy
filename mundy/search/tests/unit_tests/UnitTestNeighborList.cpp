@@ -39,6 +39,10 @@
 ///   Group 5 — Debug bounds: MUNDY_THROW_ASSERT out-of-range checks (guarded by #ifndef NDEBUG).
 ///   Group 6 — Reduction functions: for_each_neighbor_pair_reduce and
 ///     for_each_target_with_neighbors_reduce.
+///   Group 7 — Rebuilder system: RebuilderType concept checks, AlwaysRebuild, NeverRebuild,
+///     RebuildOnEntityChange, RebuildOnAABBDisplacement threshold behavior, RebuilderChain
+///     OR logic via operator|, and ManagedNeighborList lifecycle (has_valid_list, invalidate,
+///     current).
 
 // External
 #include <gtest/gtest.h>
@@ -72,7 +76,9 @@
 // Mundy search — common
 #include <mundy_search/Excluder.hpp>
 #include <mundy_search/ForEach.hpp>
+#include <mundy_search/ManagedNeighborList.hpp>
 #include <mundy_search/NeighborListBuilder.hpp>
+#include <mundy_search/NeighborListRebuilder.hpp>
 #include <mundy_search/Neighbors.hpp>
 
 // Mundy search — STK (always available)
@@ -1202,6 +1208,271 @@ TEST(ReduceProtocol, AllIsolated_VisitsAllTargets_2d) {
   test_reduce_all_isolated_visits_all_targets<List2d, ArborXBoxTrait>();
 }
 #endif  // HAVE_MUNDYSEARCH_ARBORX
+
+// =============================================================================
+// Group 7 — Rebuilder system
+//
+// Behavioral verification strategy: when no rebuild occurs the managed list
+// returns the same pair set from the initial build even when the caller passes
+// new (non-overlapping) input boxes.  When a rebuild does occur the pair set
+// reflects the new geometry.  The direct-API tests for RebuildOnAABBDisplacement
+// call needs_rebuild / snapshot directly to verify threshold logic without
+// going through ManagedNeighborList.
+// =============================================================================
+
+// Compile-time concept checks
+static_assert(RebuilderType<AlwaysRebuild>,
+              "AlwaysRebuild must satisfy RebuilderType.");
+static_assert(RebuilderType<NeverRebuild>,
+              "NeverRebuild must satisfy RebuilderType.");
+static_assert(RebuilderType<RebuildOnEntityChange>,
+              "RebuildOnEntityChange must satisfy RebuilderType.");
+static_assert(RebuilderType<RebuildOnAABBDisplacement<TestMemSpace>>,
+              "RebuildOnAABBDisplacement<HostSpace> must satisfy RebuilderType.");
+static_assert(RebuilderType<RebuilderChain<AlwaysRebuild, NeverRebuild>>,
+              "RebuilderChain<AlwaysRebuild,NeverRebuild> must satisfy RebuilderType.");
+
+// Build a 2-box STK search-box container whose boxes are positioned far from all
+// fixture source boxes, so that zero target/source pairs overlap.  Uses the same
+// entities and selector as the fixture's disjoint_target_boxes_.
+STKBoxTrait::search_boxes_type make_far_target_boxes(const STKDeterministicFixture& f) {
+  Kokkos::View<STKBoxTrait::box_type*, TestMemSpace> bv("far_tgt_boxes", 2);
+  bv(0) = STKBoxTrait::make(500.f, 500.f, 500.f, 0.5f);
+  bv(1) = STKBoxTrait::make(600.f, 600.f, 600.f, 0.5f);
+  return {f.disjoint_target_boxes_.selector(), bv, f.disjoint_target_boxes_.entities()};
+}
+
+// ---- ManagedNeighborList lifecycle ----
+
+TEST(ManagedNeighborList, HasNoValidListBeforeFirstUpdate) {
+  auto managed = make_neighbor_list_builder<STKList>()
+      .exec_space(TestExecSpace{})
+      .manage(NeverRebuild{});
+  EXPECT_FALSE(managed.has_valid_list());
+}
+
+TEST(ManagedNeighborList, CurrentBeforeFirstUpdateThrows) {
+  auto managed = make_neighbor_list_builder<STKList>()
+      .exec_space(TestExecSpace{})
+      .manage(NeverRebuild{});
+  EXPECT_THROW(managed.current(), std::runtime_error);
+}
+
+TEST_F(STKDeterministicFixture, ManagedNeighborList_HasValidListAfterUpdate) {
+  auto managed = make_neighbor_list_builder<STKList>()
+      .exec_space(TestExecSpace{})
+      .manage(NeverRebuild{});
+  EXPECT_FALSE(managed.has_valid_list());
+  managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
+  EXPECT_TRUE(managed.has_valid_list());
+}
+
+TEST_F(STKDeterministicFixture, ManagedNeighborList_InvalidateClearsCache) {
+  auto managed = make_neighbor_list_builder<STKList>()
+      .exec_space(TestExecSpace{})
+      .manage(NeverRebuild{});
+  managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
+  EXPECT_TRUE(managed.has_valid_list());
+  managed.invalidate();
+  EXPECT_FALSE(managed.has_valid_list());
+}
+
+// Even NeverRebuild must build on the first update() call after invalidate(),
+// because the cache is empty (not because needs_rebuild() fired).
+TEST_F(STKDeterministicFixture, ManagedNeighborList_InvalidateForcesBuildOnNextUpdate) {
+  auto managed = make_neighbor_list_builder<STKList>()
+      .exec_space(TestExecSpace{})
+      .manage(NeverRebuild{});
+
+  const auto& nl1 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
+  EXPECT_EQ(collect_pairs(nl1), (PairSet{{0, 0}}));
+
+  managed.invalidate();
+  // Update with geometry that produces zero pairs.
+  auto far_tgt = make_far_target_boxes(*this);
+  const auto& nl2 = managed.update(*bulk_, far_tgt, disjoint_source_boxes_);
+  EXPECT_TRUE(managed.has_valid_list());
+  EXPECT_EQ(collect_pairs(nl2), PairSet{});  // rebuilt with new geometry
+}
+
+// ---- AlwaysRebuild ----
+
+// On each update() call AlwaysRebuild forces a fresh build, so passing different
+// input geometry produces a different pair set.
+TEST_F(STKDeterministicFixture, Rebuilder_AlwaysRebuild_RebuildsEveryUpdate) {
+  auto managed = make_neighbor_list_builder<STKList>()
+      .exec_space(TestExecSpace{})
+      .manage(AlwaysRebuild{});
+
+  const auto& nl1 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
+  EXPECT_EQ(collect_pairs(nl1), (PairSet{{0, 0}}));
+
+  // AlwaysRebuild fires on the second call → result reflects the new geometry.
+  auto far_tgt = make_far_target_boxes(*this);
+  const auto& nl2 = managed.update(*bulk_, far_tgt, disjoint_source_boxes_);
+  EXPECT_EQ(collect_pairs(nl2), PairSet{});
+}
+
+// ---- NeverRebuild ----
+
+// After the first build NeverRebuild never fires, so passing different input
+// geometry still returns the original pair set from the cache.
+TEST_F(STKDeterministicFixture, Rebuilder_NeverRebuild_CachesAfterFirstBuild) {
+  auto managed = make_neighbor_list_builder<STKList>()
+      .exec_space(TestExecSpace{})
+      .manage(NeverRebuild{});
+
+  const auto& nl1 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
+  EXPECT_EQ(collect_pairs(nl1), (PairSet{{0, 0}}));
+
+  auto far_tgt = make_far_target_boxes(*this);
+  const auto& nl2 = managed.update(*bulk_, far_tgt, disjoint_source_boxes_);
+  EXPECT_EQ(collect_pairs(nl2), (PairSet{{0, 0}}));  // old pairs = cache was used
+}
+
+// ---- RebuildOnEntityChange ----
+
+// On a static mesh the entity count never changes, so needs_rebuild returns false
+// after the initial snapshot, and passing different box geometry returns the cache.
+TEST_F(STKDeterministicFixture, Rebuilder_EntityChange_NoRebuildOnUnchangedCount) {
+  auto managed = make_neighbor_list_builder<STKList>()
+      .exec_space(TestExecSpace{})
+      .manage(RebuildOnEntityChange{});
+
+  const auto& nl1 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
+  EXPECT_EQ(collect_pairs(nl1), (PairSet{{0, 0}}));
+
+  auto far_tgt = make_far_target_boxes(*this);
+  const auto& nl2 = managed.update(*bulk_, far_tgt, disjoint_source_boxes_);
+  EXPECT_EQ(collect_pairs(nl2), (PairSet{{0, 0}}));  // cache: entity count unchanged
+}
+
+// ---- RebuildOnAABBDisplacement ----
+
+// Directly exercise needs_rebuild / snapshot to verify the threshold without
+// going through ManagedNeighborList.  One box with center shifted along x.
+//
+//   Snapshot at cx = 0 → min_x = -1, max_x = 1.
+//   cx = 0.2: corner displacement 0.2 < threshold 0.5 → no rebuild.
+//   cx = 1.0: corner displacement 1.0 > threshold 0.5 → rebuild.
+//   New snapshot at cx = 1 → min_x = 0, max_x = 2.
+//   cx = 0.6: displacement 0.4 < 0.5 → no rebuild.
+//   cx = 0.4: displacement 0.6 > 0.5 → rebuild.
+TEST(RebuildOnAABBDisplacement, ThresholdBehavior) {
+  constexpr int kN = 1;
+  auto [meta, bulk] = make_node_mesh(kN);
+  auto node = bulk->get_entity(stk::topology::NODE_RANK, 1);
+
+  Kokkos::View<stk::mesh::Entity*, TestMemSpace> ev("entities", 1);
+  ev(0) = node;
+  const stk::mesh::Selector sel = meta->universal_part();
+
+  constexpr float kThreshold = 0.5f;
+  RebuildOnAABBDisplacement<TestMemSpace> rebuilder(kThreshold);
+
+  auto make_sb = [&](float cx) {
+    Kokkos::View<STKBoxTrait::box_type*, TestMemSpace> bv("boxes", 1);
+    bv(0) = STKBoxTrait::make(cx, 0.f, 0.f, 1.0f);  // min=(cx-1,-1,-1), max=(cx+1,1,1)
+    return STKBoxTrait::search_boxes_type{sel, bv, ev};
+  };
+
+  auto sb0 = make_sb(0.f);
+  // No snapshot yet: always needs rebuild.
+  EXPECT_TRUE(rebuilder.needs_rebuild(*bulk, sb0, sb0));
+  rebuilder.snapshot(*bulk, sb0, sb0);
+
+  // Identical geometry: no rebuild.
+  EXPECT_FALSE(rebuilder.needs_rebuild(*bulk, sb0, sb0));
+
+  // cx=0.2: corner displacement 0.2 < 0.5 → no rebuild.
+  auto sb_small = make_sb(0.2f);
+  EXPECT_FALSE(rebuilder.needs_rebuild(*bulk, sb_small, sb_small));
+
+  // cx=1.0: corner displacement 1.0 > 0.5 → rebuild.
+  auto sb_large = make_sb(1.0f);
+  EXPECT_TRUE(rebuilder.needs_rebuild(*bulk, sb_large, sb_large));
+
+  // Take new snapshot at cx=1.
+  rebuilder.snapshot(*bulk, sb_large, sb_large);
+  EXPECT_FALSE(rebuilder.needs_rebuild(*bulk, sb_large, sb_large));
+
+  // cx=0.6: displacement from cx=1 is 0.4 < 0.5 → no rebuild.
+  auto sb_near = make_sb(0.6f);
+  EXPECT_FALSE(rebuilder.needs_rebuild(*bulk, sb_near, sb_near));
+
+  // cx=0.4: displacement from cx=1 is 0.6 > 0.5 → rebuild.
+  auto sb_far = make_sb(0.4f);
+  EXPECT_TRUE(rebuilder.needs_rebuild(*bulk, sb_far, sb_far));
+}
+
+// End-to-end test through ManagedNeighborList: large displacement forces rebuild
+// and updates the snapshot; a subsequent same-geometry call returns the cache.
+TEST_F(STKDeterministicFixture, Rebuilder_AABBDisplacement_EndToEnd) {
+  constexpr float kThreshold = 0.3f;
+  auto managed = make_neighbor_list_builder<STKList>()
+      .exec_space(TestExecSpace{})
+      .manage(RebuildOnAABBDisplacement<TestMemSpace>{kThreshold});
+
+  // Initial: 1 overlapping pair; snapshot taken.
+  const auto& nl1 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
+  EXPECT_EQ(collect_pairs(nl1), (PairSet{{0, 0}}));
+
+  // Far-away targets: displacement >> threshold → rebuild → 0 pairs; snapshot updated.
+  auto far_tgt = make_far_target_boxes(*this);
+  const auto& nl2 = managed.update(*bulk_, far_tgt, disjoint_source_boxes_);
+  EXPECT_EQ(collect_pairs(nl2), PairSet{});
+
+  // Same geometry as nl2: displacement == 0 < threshold → cache → still 0 pairs.
+  const auto& nl3 = managed.update(*bulk_, far_tgt, disjoint_source_boxes_);
+  EXPECT_EQ(collect_pairs(nl3), PairSet{});
+}
+
+// ---- RebuilderChain via operator| ----
+
+// (NeverRebuild | AlwaysRebuild): prior returns false, so next is always evaluated
+// and returns true → chain always rebuilds.
+TEST_F(STKDeterministicFixture, Rebuilder_Chain_NeverOrAlways_BehavesLikeAlways) {
+  auto managed = make_neighbor_list_builder<STKList>()
+      .exec_space(TestExecSpace{})
+      .manage(NeverRebuild{} | AlwaysRebuild{});
+
+  const auto& nl1 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
+  EXPECT_EQ(collect_pairs(nl1), (PairSet{{0, 0}}));
+
+  auto far_tgt = make_far_target_boxes(*this);
+  const auto& nl2 = managed.update(*bulk_, far_tgt, disjoint_source_boxes_);
+  EXPECT_EQ(collect_pairs(nl2), PairSet{});  // AlwaysRebuild forced rebuild
+}
+
+// (NeverRebuild | NeverRebuild): both return false → chain never rebuilds after first.
+TEST_F(STKDeterministicFixture, Rebuilder_Chain_NeverOrNever_BehavesLikeNever) {
+  auto managed = make_neighbor_list_builder<STKList>()
+      .exec_space(TestExecSpace{})
+      .manage(NeverRebuild{} | NeverRebuild{});
+
+  const auto& nl1 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
+  EXPECT_EQ(collect_pairs(nl1), (PairSet{{0, 0}}));
+
+  auto far_tgt = make_far_target_boxes(*this);
+  const auto& nl2 = managed.update(*bulk_, far_tgt, disjoint_source_boxes_);
+  EXPECT_EQ(collect_pairs(nl2), (PairSet{{0, 0}}));  // cache: both returned false
+}
+
+// (RebuildOnEntityChange | AlwaysRebuild): entity count unchanged (static mesh),
+// so RebuildOnEntityChange returns false; AlwaysRebuild is then evaluated and
+// returns true → chain always rebuilds.
+TEST_F(STKDeterministicFixture, Rebuilder_Chain_EntityChangeOrAlways_BehavesLikeAlways) {
+  auto managed = make_neighbor_list_builder<STKList>()
+      .exec_space(TestExecSpace{})
+      .manage(RebuildOnEntityChange{} | AlwaysRebuild{});
+
+  const auto& nl1 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
+  EXPECT_EQ(collect_pairs(nl1), (PairSet{{0, 0}}));
+
+  auto far_tgt = make_far_target_boxes(*this);
+  const auto& nl2 = managed.update(*bulk_, far_tgt, disjoint_source_boxes_);
+  EXPECT_EQ(collect_pairs(nl2), PairSet{});  // AlwaysRebuild forced rebuild
+}
 
 }  // namespace
 }  // namespace search

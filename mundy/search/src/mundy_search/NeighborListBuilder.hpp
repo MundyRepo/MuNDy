@@ -34,7 +34,9 @@
 
 // Mundy
 #include <mundy_search/Excluder.hpp>                 // for ExcluderType, NoExcluder
+#include <mundy_search/ManagedNeighborList.hpp>      // for ManagedNeighborList (provides .manage())
 #include <mundy_search/NeighborListBuildTraits.hpp>  // for NeighborListInputType, NeighborListBuildTraits
+#include <mundy_search/NeighborListRebuilder.hpp>    // for RebuilderType
 
 namespace mundy {
 
@@ -90,6 +92,16 @@ struct UnsetNeighborListBuilderField {};
 ///       .target_input(stk_target_boxes)
 ///       .source_input(stk_source_boxes)
 ///       .build(bulk_data);
+/// \endcode
+///
+/// \par Example — managed list with rebuilder (manage() at any position)
+/// \code{.cpp}
+///   auto managed = make_neighbor_list_builder<STKSearchNeighborList<>>()
+///       .manage(RebuildOnEntityChange{} | RebuildOnAABBDisplacement<>{skin_distance})
+///       .exec_space(exec_space);
+///
+///   // Each time-step:
+///   const auto& nl = managed.update(bulk_data, target_boxes, source_boxes);
 /// \endcode
 ///
 /// \tparam ListType Concrete neighbor-list type returned by `build()`.
@@ -291,6 +303,34 @@ class NeighborListBuilder {
     }
     return neighbor_list_type{};
   }
+
+  /// \brief Wrap this builder in a `ManagedNeighborList` driven by a stateful rebuilder policy.
+  ///
+  /// Captures the current builder state (execution space, excluder, sort flag) into a
+  /// `ManagedNeighborList`. The remaining fluent methods — `exec_space`, `exclude`, and
+  /// `sort_neighbors` — remain available on the returned object, so this call may appear at
+  /// **any position** in the chain:
+  ///
+  /// \code{.cpp}
+  ///   // manage() first, then finish configuring:
+  ///   auto managed = make_neighbor_list_builder<STKSearchNeighborList<>>()
+  ///       .manage(RebuildOnEntityChange{} | RebuildOnAABBDisplacement<>{skin_distance})
+  ///       .exec_space(exec)
+  ///       .exclude(ExcludeSelfInteraction{});
+  ///
+  ///   // Each time-step — passes fresh box views:
+  ///   const auto& nl = managed.update(bulk, target_boxes, source_boxes);
+  /// \endcode
+  ///
+  /// \tparam Rebuilder Stateful rebuilder policy type (must satisfy `RebuilderType`).
+  /// \param rebuilder [in] Rebuilder instance moved into the returned `ManagedNeighborList`.
+  template <RebuilderType Rebuilder>
+  auto manage(Rebuilder rebuilder) const {
+    return ManagedNeighborList<NeighborListBuilder<neighbor_list_type, execution_space,
+                                                   target_input_type, source_input_type,
+                                                   excluder_type>, Rebuilder>(
+        *this, std::move(rebuilder));
+  }
   //@}
 
  private:
@@ -302,10 +342,13 @@ class NeighborListBuilder {
 
   /// \brief Construct a builder from all type-state fields.
   NeighborListBuilder(const execution_space& exec_space, const target_input_type& target_input,
-                      const source_input_type& source_input, const excluder_type& excluder,
-                      bool sort_neighbors = false)
-      : exec_space_(exec_space), target_input_(target_input), source_input_(source_input), excluder_(excluder),
-        sort_neighbors_(sort_neighbors) {}
+                      const source_input_type& source_input, const excluder_type& excluder, bool sort_neighbors = false)
+      : exec_space_(exec_space),
+        target_input_(target_input),
+        source_input_(source_input),
+        excluder_(excluder),
+        sort_neighbors_(sort_neighbors) {
+  }
   //@}
 
   //! \name Internal members
