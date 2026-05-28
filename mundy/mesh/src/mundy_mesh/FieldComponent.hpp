@@ -62,6 +62,7 @@ namespace mesh {
 
 class FieldComponentBase {
  public:
+  FieldComponentBase() = default;
   FieldComponentBase(const stk::mesh::FieldBase& field_base) : field_base_ptr_(&field_base) {
   }
 
@@ -208,6 +209,7 @@ class FieldComponent : public FieldComponentBase {
   using access_policy = AccessPolicy;
   using view_t = decltype(access_policy::host_access(std::declval<field_type&>(), std::declval<stk::mesh::Entity>()));
 
+  FieldComponent() = default;
   explicit FieldComponent(field_type& field) : FieldComponentBase(field), field_ptr_(&field) {
   }
 
@@ -314,6 +316,7 @@ class FieldComponent : public impl::FieldComponent<ValueType, impl::FieldDataAcc
   using canonical_access = access::raw<ValueType>;
   using view_t = typename base_t::view_t;
 
+  FieldComponent() = default;
   explicit FieldComponent(stk::mesh::Field<ValueType>& field) : base_t(field) {
   }
 
@@ -344,6 +347,7 @@ class ScalarFieldComponent : public impl::FieldComponent<ScalarType, impl::Scala
   using canonical_access = access::scalar<ScalarType>;
   using view_t = typename base_t::view_t;
 
+  ScalarFieldComponent() = default;
   explicit ScalarFieldComponent(stk::mesh::Field<ScalarType>& field) : base_t(field) {
   }
 
@@ -374,6 +378,7 @@ class VectorFieldComponent : public impl::FieldComponent<ScalarType, impl::Vecto
   using canonical_access = access::vector<ScalarType, N>;
   using view_t = typename base_t::view_t;
 
+  VectorFieldComponent() = default;
   explicit VectorFieldComponent(stk::mesh::Field<ScalarType>& field) : base_t(field) {
   }
 
@@ -439,6 +444,7 @@ class Matrix3FieldComponent : public impl::FieldComponent<ScalarType, impl::Matr
   using canonical_access = access::matrix3<ScalarType>;
   using view_t = typename base_t::view_t;
 
+  Matrix3FieldComponent() = default;
   explicit Matrix3FieldComponent(stk::mesh::Field<ScalarType>& field) : base_t(field) {
   }
 
@@ -468,6 +474,7 @@ class QuaternionFieldComponent : public impl::FieldComponent<ScalarType, impl::Q
   using canonical_access = access::quaternion<ScalarType>;
   using view_t = typename base_t::view_t;
 
+  QuaternionFieldComponent() = default;
   explicit QuaternionFieldComponent(stk::mesh::Field<ScalarType>& field) : base_t(field) {
   }
 
@@ -497,6 +504,7 @@ class AABBFieldComponent : public impl::FieldComponent<ScalarType, impl::AABBFie
   using canonical_access = access::aabb<ScalarType>;
   using view_t = typename base_t::view_t;
 
+  AABBFieldComponent() = default;
   explicit AABBFieldComponent(stk::mesh::Field<ScalarType>& field) : base_t(field) {
   }
 

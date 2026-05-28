@@ -148,23 +148,46 @@ class UnitTestComponentFixture : public ::testing::Test {
 };
 
 template <typename ComponentType>
-constexpr bool is_copy_and_move_assignable_v =
-    std::is_copy_assignable_v<ComponentType> && std::is_move_assignable_v<ComponentType>;
+constexpr bool has_default_copy_move_assign_v =
+    std::is_default_constructible_v<ComponentType> && std::is_copy_constructible_v<ComponentType> &&
+    std::is_move_constructible_v<ComponentType> && std::is_copy_assignable_v<ComponentType> &&
+    std::is_move_assignable_v<ComponentType>;
 
 using TaggedScalarFieldComponent = TaggedComponent<POSITION, ScalarFieldComponent<double>>;
+using TaggedScalarSharedComponent = TaggedComponent<POSITION, SharedScalarComponent<double>>;
+using NgpDoubleField = stk::mesh::NgpField<double>;
 
-static_assert(is_copy_and_move_assignable_v<FieldComponent<double>>);
-static_assert(is_copy_and_move_assignable_v<ScalarFieldComponent<double>>);
-static_assert(is_copy_and_move_assignable_v<Vector3FieldComponent<double>>);
-static_assert(is_copy_and_move_assignable_v<Matrix3FieldComponent<double>>);
-static_assert(is_copy_and_move_assignable_v<QuaternionFieldComponent<double>>);
-static_assert(is_copy_and_move_assignable_v<AABBFieldComponent<double>>);
-static_assert(is_copy_and_move_assignable_v<SharedScalarComponent<double>>);
-static_assert(is_copy_and_move_assignable_v<SharedVector3Component<double>>);
-static_assert(is_copy_and_move_assignable_v<SharedMatrix3Component<double>>);
-static_assert(is_copy_and_move_assignable_v<SharedQuaternionComponent<double>>);
-static_assert(is_copy_and_move_assignable_v<SharedAABBComponent<double>>);
-static_assert(is_copy_and_move_assignable_v<TaggedScalarFieldComponent>);
+static_assert(has_default_copy_move_assign_v<FieldComponentBase>);
+static_assert(has_default_copy_move_assign_v<impl::FieldComponent<double, impl::FieldDataAccessPolicy>>);
+static_assert(has_default_copy_move_assign_v<FieldComponent<double>>);
+static_assert(has_default_copy_move_assign_v<ScalarFieldComponent<double>>);
+static_assert(has_default_copy_move_assign_v<Vector3FieldComponent<double>>);
+static_assert(has_default_copy_move_assign_v<Matrix3FieldComponent<double>>);
+static_assert(has_default_copy_move_assign_v<QuaternionFieldComponent<double>>);
+static_assert(has_default_copy_move_assign_v<AABBFieldComponent<double>>);
+static_assert(has_default_copy_move_assign_v<NgpFieldComponentBase>);
+static_assert(has_default_copy_move_assign_v<impl::NgpFieldComponent<NgpDoubleField, impl::FieldDataAccessPolicy>>);
+static_assert(has_default_copy_move_assign_v<NgpFieldComponent<NgpDoubleField>>);
+static_assert(has_default_copy_move_assign_v<NgpScalarFieldComponent<NgpDoubleField>>);
+static_assert(has_default_copy_move_assign_v<NgpVector3FieldComponent<NgpDoubleField>>);
+static_assert(has_default_copy_move_assign_v<NgpMatrix3FieldComponent<NgpDoubleField>>);
+static_assert(has_default_copy_move_assign_v<NgpQuaternionFieldComponent<NgpDoubleField>>);
+static_assert(has_default_copy_move_assign_v<NgpAABBFieldComponent<NgpDoubleField>>);
+static_assert(has_default_copy_move_assign_v<SharedComponent<double>>);
+static_assert(has_default_copy_move_assign_v<SharedScalarComponent<double>>);
+static_assert(has_default_copy_move_assign_v<SharedVector3Component<double>>);
+static_assert(has_default_copy_move_assign_v<SharedMatrix3Component<double>>);
+static_assert(has_default_copy_move_assign_v<SharedQuaternionComponent<double>>);
+static_assert(has_default_copy_move_assign_v<SharedAABBComponent<double>>);
+static_assert(has_default_copy_move_assign_v<NgpSharedComponent<double, stk::ngp::MemSpace>>);
+static_assert(has_default_copy_move_assign_v<NgpSharedScalarComponent<double>>);
+static_assert(has_default_copy_move_assign_v<NgpSharedVector3Component<double>>);
+static_assert(has_default_copy_move_assign_v<NgpSharedMatrix3Component<double>>);
+static_assert(has_default_copy_move_assign_v<NgpSharedQuaternionComponent<double>>);
+static_assert(has_default_copy_move_assign_v<NgpSharedAABBComponent<double>>);
+static_assert(has_default_copy_move_assign_v<TaggedScalarFieldComponent>);
+static_assert(has_default_copy_move_assign_v<TaggedScalarSharedComponent>);
+static_assert(has_default_copy_move_assign_v<NgpTaggedComponent<POSITION, NgpSharedScalarComponent<double>>>);
 
 TEST_F(UnitTestComponentFixture, FieldComponentExposeTypedViewsAndMutations) {
   FieldComponent<double> raw_accessor(*quaternion_field_ptr_);

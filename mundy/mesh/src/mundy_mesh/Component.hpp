@@ -98,6 +98,7 @@ class TaggedComponent {
   using component_type = ComponentType;
   using canonical_access = typename component_type::canonical_access;
 
+  TaggedComponent() = default;
   TaggedComponent(component_type component) : component_(component) {
   }
 
