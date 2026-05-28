@@ -48,7 +48,7 @@
 #include <mundy_search/impl/ArborXCallback.hpp>               // for ArborXSearchCandidateFactory, PeriodicArborXSearchCandidateFactory
 #include <mundy_search/impl/ArborXPeriodicBuildCallbacks.hpp>  // for ArborXPeriodicCountCallback, ArborXPeriodic2dFillCallback
 #include <mundy_search/impl/ArborXSearchBoxes.hpp>             // for impl::ArborXSearchBoxesT, impl::PeriodicArborXSearchBoxesT
-#include <mundy_utils/throw_assert.hpp>                        // for MUNDY_THROW_ASSERT
+#include <mundy_utils/throw_assert.hpp>                        // for MUNDY_THROW_ASSERT, MUNDY_THROW_REQUIRE
 
 namespace mundy {
 
@@ -568,6 +568,9 @@ ArborX2dNeighborList<MemorySpace>
 NeighborListBuildTraits<ArborX2dNeighborList<MemorySpace>>::build(const Builder& builder,
                                                                    const stk::mesh::BulkData& bulk_data,
                                                                    const args_type& args) {
+  MUNDY_THROW_REQUIRE(bulk_data.parallel_size() == 1, std::invalid_argument,
+                      "ArborX2dNeighborList build currently supports only single-process runs.");
+
   using exec_space = typename Builder::execution_space;
   using size_type = typename list_type::size_type;
   using factory_type = impl::ArborXSearchCandidateFactory<target_input_type, source_input_type>;
@@ -651,6 +654,9 @@ template <typename Builder>
 PeriodicArborX2dNeighborList<MemorySpace, ImageShiftScalar>
 NeighborListBuildTraits<PeriodicArborX2dNeighborList<MemorySpace, ImageShiftScalar>>::build(
     const Builder& builder, const stk::mesh::BulkData& bulk_data, const args_type& args) {
+  MUNDY_THROW_REQUIRE(bulk_data.parallel_size() == 1, std::invalid_argument,
+                      "PeriodicArborX2dNeighborList build currently supports only single-process runs.");
+
   using exec_space = typename Builder::execution_space;
   using size_type = typename list_type::size_type;
   using image_shift_type = typename list_type::image_shift_type;

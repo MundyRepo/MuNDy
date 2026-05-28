@@ -593,11 +593,12 @@ inline STKBuildPhaseTimings stk_build_last_timings{};
 ///   - **K** — Construct and return the `STKSearchNeighborList`.
 ///
 /// \par Ghosting side effect
-/// This function calls `bulk_data.modification_begin/end` to ghost remote source entities.  The
-/// ghosting group `"MUNDY_STK_SEARCH_NL_GHOSTING"` persists on `bulk_data` after the call returns.
-/// Callers must communicate field data on the ghosted source entities via this group before
-/// computing interactions.  The build function does not communicate field data — it does not know
-/// which fields the caller needs.
+/// On multi-rank runs this function calls `bulk_data.modification_begin/end` to ghost remote
+/// source entities.  The ghosting group `"MUNDY_STK_SEARCH_NL_GHOSTING"` persists on `bulk_data`
+/// after the call returns; callers must communicate field data on the ghosted source entities via
+/// this group before computing interactions.  On single-rank runs no ghosting occurs and the group
+/// is not created.  The build function does not communicate field data — it does not know which
+/// fields the caller needs.
 ///
 /// \par `list.source_entities()` vs `source_boxes.entities()`
 /// When cross-process sources are ghosted in, `list.source_entities()` is a *superset* of
@@ -939,7 +940,6 @@ NeighborListBuildTraits<STKSearchNeighborList<MemorySpace>>::build(
       "mundy_stk_nl_precompute_ordinals", Kokkos::RangePolicy<exec_space>(0, num_results),
       KOKKOS_LAMBDA(const size_type r) {
         precomputed_target_ordinals(r) = k_invalid_ordinal;
-        precomputed_source_ordinals(r) = k_invalid_ordinal;
 
         const intersection_t& result = search_results_view(r);
 
@@ -973,7 +973,6 @@ NeighborListBuildTraits<STKSearchNeighborList<MemorySpace>>::build(
   // Invalid entries are remote symmetric copies or pairs rejected by the excluder.
 
   Kokkos::View<size_type*, MemorySpace> per_target_count("mundy_stk_nl_count", num_targets);
-  Kokkos::deep_copy(per_target_count, size_type(0));
 
   Kokkos::parallel_for(
       "mundy_stk_nl_count", Kokkos::RangePolicy<exec_space>(0, num_results),
