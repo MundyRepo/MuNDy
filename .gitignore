@@ -1,11 +1,11 @@
-.vscode
-.codex
-*build*
-DATA**
+.vscode/
+.codex/
+*build*/
+DATA**/
 __pycache__
 doc/html/
 doc/xml/
 doc/api/
 doc/_build/
 doxygen-readthedocs.log
-.venv*
+.venv*/
