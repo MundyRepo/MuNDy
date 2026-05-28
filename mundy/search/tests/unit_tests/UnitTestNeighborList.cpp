@@ -40,9 +40,9 @@
 ///   Group 6 — Reduction functions: for_each_neighbor_pair_reduce and
 ///     for_each_target_with_neighbors_reduce.
 ///   Group 7 — Rebuilder system: RebuilderType concept checks, AlwaysRebuild, NeverRebuild,
-///     RebuildOnEntityChange, RebuildOnAABBDisplacement threshold behavior, RebuilderChain
-///     OR logic via operator|, and ManagedNeighborList lifecycle (has_valid_list, invalidate,
-///     current).
+///     RebuildOnEntityChange (no-change / increase / decrease box count), RebuildOnAABBDisplacement
+///     threshold behavior, RebuilderChain OR logic via operator|, and ManagedNeighborList lifecycle
+///     (has_valid_list, invalidate, current).
 
 // External
 #include <gtest/gtest.h>
@@ -1225,21 +1225,39 @@ static_assert(RebuilderType<AlwaysRebuild>,
               "AlwaysRebuild must satisfy RebuilderType.");
 static_assert(RebuilderType<NeverRebuild>,
               "NeverRebuild must satisfy RebuilderType.");
-static_assert(RebuilderType<RebuildOnEntityChange>,
-              "RebuildOnEntityChange must satisfy RebuilderType.");
+static_assert(RebuilderType<RebuildOnEntityChange<TestMemSpace>>,
+              "RebuildOnEntityChange<HostSpace> must satisfy RebuilderType.");
 static_assert(RebuilderType<RebuildOnAABBDisplacement<TestMemSpace>>,
               "RebuildOnAABBDisplacement<HostSpace> must satisfy RebuilderType.");
 static_assert(RebuilderType<RebuilderChain<AlwaysRebuild, NeverRebuild>>,
               "RebuilderChain<AlwaysRebuild,NeverRebuild> must satisfy RebuilderType.");
 
-// Build a 2-box STK search-box container whose boxes are positioned far from all
-// fixture source boxes, so that zero target/source pairs overlap.  Uses the same
-// entities and selector as the fixture's disjoint_target_boxes_.
+// 2-box container far from all source boxes — same selector/entities as disjoint_target_boxes_.
 STKBoxTrait::search_boxes_type make_far_target_boxes(const STKDeterministicFixture& f) {
   Kokkos::View<STKBoxTrait::box_type*, TestMemSpace> bv("far_tgt_boxes", 2);
   bv(0) = STKBoxTrait::make(500.f, 500.f, 500.f, 0.5f);
   bv(1) = STKBoxTrait::make(600.f, 600.f, 600.f, 0.5f);
   return {f.disjoint_target_boxes_.selector(), bv, f.disjoint_target_boxes_.entities()};
+}
+
+// 6-box container far from all source boxes — same selector/entities as universal_boxes_.
+STKBoxTrait::search_boxes_type make_far_universal_boxes(const STKDeterministicFixture& f) {
+  const size_t n = f.universal_boxes_.entities().extent(0);
+  Kokkos::View<STKBoxTrait::box_type*, TestMemSpace> bv("far_universal_boxes", n);
+  for (size_t i = 0; i < n; ++i)
+    bv(i) = STKBoxTrait::make(500.f + static_cast<float>(i) * 10.f, 500.f, 500.f, 0.5f);
+  return {f.universal_boxes_.selector(), bv, f.universal_boxes_.entities()};
+}
+
+// Same positions as disjoint_target_boxes_, but using disjoint_source_boxes_.entities().
+// Simulates an add-one/remove-one swap at constant count: the box coordinates are identical
+// so RebuildOnAABBDisplacement returns false, but the entities differ so
+// RebuildOnEntityChange returns true.
+STKBoxTrait::search_boxes_type make_swapped_entity_boxes(const STKDeterministicFixture& f) {
+  const auto orig = f.disjoint_target_boxes_.boxes();
+  Kokkos::View<STKBoxTrait::box_type*, TestMemSpace> bv("swapped_entity_boxes", orig.extent(0));
+  Kokkos::deep_copy(bv, orig);
+  return {f.disjoint_source_boxes_.selector(), bv, f.disjoint_source_boxes_.entities()};
 }
 
 // ---- ManagedNeighborList lifecycle ----
@@ -1332,19 +1350,49 @@ TEST_F(STKDeterministicFixture, Rebuilder_NeverRebuild_CachesAfterFirstBuild) {
 
 // ---- RebuildOnEntityChange ----
 
-// On a static mesh the entity count never changes, so needs_rebuild returns false
-// after the initial snapshot, and passing different box geometry returns the cache.
+// Same geometry, same box count → cache is reused even though boxes moved.
 TEST_F(STKDeterministicFixture, Rebuilder_EntityChange_NoRebuildOnUnchangedCount) {
   auto managed = make_neighbor_list_builder<STKList>()
       .exec_space(TestExecSpace{})
-      .manage(RebuildOnEntityChange{});
+      .manage(RebuildOnEntityChange<TestMemSpace>{});
 
   const auto& nl1 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
   EXPECT_EQ(collect_pairs(nl1), (PairSet{{0, 0}}));
 
   auto far_tgt = make_far_target_boxes(*this);
   const auto& nl2 = managed.update(*bulk_, far_tgt, disjoint_source_boxes_);
-  EXPECT_EQ(collect_pairs(nl2), (PairSet{{0, 0}}));  // cache: entity count unchanged
+  EXPECT_EQ(collect_pairs(nl2), (PairSet{{0, 0}}));  // cache: box count unchanged (still 2)
+}
+
+// Box count increases (2 → 6) → rebuild → pair set reflects new geometry.
+TEST_F(STKDeterministicFixture, Rebuilder_EntityChange_RebuildOnIncrease) {
+  auto managed = make_neighbor_list_builder<STKList>()
+      .exec_space(TestExecSpace{})
+      .manage(RebuildOnEntityChange<TestMemSpace>{});
+
+  const auto& nl1 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
+  EXPECT_EQ(collect_pairs(nl1), (PairSet{{0, 0}}));
+
+  // 6 far-away universal boxes: count 2 → 6 → rebuild → 0 pairs.
+  auto far_uni = make_far_universal_boxes(*this);
+  const auto& nl2 = managed.update(*bulk_, far_uni, disjoint_source_boxes_);
+  EXPECT_EQ(collect_pairs(nl2), PairSet{});
+}
+
+// Box count decreases (6 → 2) → rebuild → pair set reflects new geometry.
+TEST_F(STKDeterministicFixture, Rebuilder_EntityChange_RebuildOnDecrease) {
+  auto managed = make_neighbor_list_builder<STKList>()
+      .exec_space(TestExecSpace{})
+      .manage(RebuildOnEntityChange<TestMemSpace>{});
+
+  // Initial build: 6 far-away universal boxes → 0 pairs.
+  auto far_uni = make_far_universal_boxes(*this);
+  const auto& nl1 = managed.update(*bulk_, far_uni, disjoint_source_boxes_);
+  EXPECT_EQ(collect_pairs(nl1), PairSet{});
+
+  // 2 nearby disjoint-target boxes: count 6 → 2 → rebuild → pairs restored.
+  const auto& nl2 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
+  EXPECT_EQ(collect_pairs(nl2), (PairSet{{0, 0}}));
 }
 
 // ---- RebuildOnAABBDisplacement ----
@@ -1464,7 +1512,7 @@ TEST_F(STKDeterministicFixture, Rebuilder_Chain_NeverOrNever_BehavesLikeNever) {
 TEST_F(STKDeterministicFixture, Rebuilder_Chain_EntityChangeOrAlways_BehavesLikeAlways) {
   auto managed = make_neighbor_list_builder<STKList>()
       .exec_space(TestExecSpace{})
-      .manage(RebuildOnEntityChange{} | AlwaysRebuild{});
+      .manage(RebuildOnEntityChange<TestMemSpace>{} | AlwaysRebuild{});
 
   const auto& nl1 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
   EXPECT_EQ(collect_pairs(nl1), (PairSet{{0, 0}}));
@@ -1472,6 +1520,69 @@ TEST_F(STKDeterministicFixture, Rebuilder_Chain_EntityChangeOrAlways_BehavesLike
   auto far_tgt = make_far_target_boxes(*this);
   const auto& nl2 = managed.update(*bulk_, far_tgt, disjoint_source_boxes_);
   EXPECT_EQ(collect_pairs(nl2), PairSet{});  // AlwaysRebuild forced rebuild
+}
+
+// ---- RebuildOnAABBDisplacement | RebuildOnEntityChange combined chain ----
+//
+// AABB is prior_ (evaluated first); EntityChange is next_ (evaluated only when AABB returns
+// false).  The count guard added to RebuildOnAABBDisplacement::needs_rebuild ensures it
+// returns true immediately when the box count changes, without accessing out-of-bounds in
+// the snapshot view.  The three tests below cover: entity add (2→6), entity remove (6→2),
+// and entity swap (same count, different identity).
+
+// Entity add: target count increases 2→6.  AABB count guard fires and returns true (prior_),
+// so EntityChange is never evaluated.  A rebuild occurs; the new geometry produces 0 pairs.
+TEST_F(STKDeterministicFixture, CombinedRebuilder_AABBSafeOnEntityAdd) {
+  constexpr float kThreshold = 0.3f;
+  auto managed = make_neighbor_list_builder<STKList>()
+      .exec_space(TestExecSpace{})
+      .manage(RebuildOnAABBDisplacement<TestMemSpace>{kThreshold} | RebuildOnEntityChange<TestMemSpace>{});
+
+  // Initial build: 2 targets, 2 sources → 1 pair; both snapshots recorded.
+  const auto& nl1 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
+  EXPECT_EQ(collect_pairs(nl1), (PairSet{{0, 0}}));
+
+  // 6 far-away universal targets: count 2→6 → AABB count guard fires → rebuild → 0 pairs.
+  auto far_uni = make_far_universal_boxes(*this);
+  const auto& nl2 = managed.update(*bulk_, far_uni, disjoint_source_boxes_);
+  EXPECT_EQ(collect_pairs(nl2), PairSet{});
+}
+
+// Entity remove: target count decreases 6→2.  AABB count guard fires and returns true,
+// so EntityChange is never evaluated.  A rebuild occurs; the original geometry is restored.
+TEST_F(STKDeterministicFixture, CombinedRebuilder_AABBSafeOnEntityRemove) {
+  constexpr float kThreshold = 0.3f;
+  auto managed = make_neighbor_list_builder<STKList>()
+      .exec_space(TestExecSpace{})
+      .manage(RebuildOnAABBDisplacement<TestMemSpace>{kThreshold} | RebuildOnEntityChange<TestMemSpace>{});
+
+  // Initial build: 6 far-away universal targets → 0 pairs.
+  auto far_uni = make_far_universal_boxes(*this);
+  const auto& nl1 = managed.update(*bulk_, far_uni, disjoint_source_boxes_);
+  EXPECT_EQ(collect_pairs(nl1), PairSet{});
+
+  // 2 nearby disjoint targets: count 6→2 → AABB count guard fires → rebuild → 1 pair.
+  const auto& nl2 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
+  EXPECT_EQ(collect_pairs(nl2), (PairSet{{0, 0}}));
+}
+
+// Entity swap: one entity removed and one added at the same count (2→2).  AABB sees
+// identical box coordinates (displacement 0) and returns false.  EntityChange detects
+// that the entity identity changed and returns true, triggering the rebuild.
+TEST_F(STKDeterministicFixture, CombinedRebuilder_EntityChangeFiresOnEntitySwap) {
+  constexpr float kThreshold = 0.3f;
+  auto chain = RebuildOnAABBDisplacement<TestMemSpace>{kThreshold} | RebuildOnEntityChange<TestMemSpace>{};
+
+  // Snapshot the initial state.
+  chain.snapshot(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
+
+  // Swapped: same box positions as disjoint_target_boxes_, different entities.
+  auto swapped = make_swapped_entity_boxes(*this);
+
+  // AABB (prior_) sees unchanged positions → returns false.
+  EXPECT_FALSE(chain.prior().needs_rebuild(*bulk_, swapped, disjoint_source_boxes_));
+  // Full chain: EntityChange (next_) detects the entity identity change → returns true.
+  EXPECT_TRUE(chain.needs_rebuild(*bulk_, swapped, disjoint_source_boxes_));
 }
 
 }  // namespace

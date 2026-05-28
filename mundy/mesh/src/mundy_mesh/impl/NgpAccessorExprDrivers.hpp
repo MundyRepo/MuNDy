@@ -26,6 +26,9 @@
 
 #include <mundy_mesh/impl/NgpAccessorExprCachable.hpp>
 #include <mundy_mesh/impl/NgpAccessorExprEntityBase.hpp>
+#include <mundy_mesh/impl/NgpAccessorExprEntityExpr.hpp>
+#include <mundy_mesh/impl/NgpAccessorExprTypes.hpp>
+#include <mundy_utils/StringLiteral.hpp>
 #include <mundy_utils/requires.hpp>
 
 namespace mundy {
@@ -302,6 +305,63 @@ struct is_ngp_for_each_entity_pair_expr_driver<NgpForEachEntityPairExprDriver<Pa
 template <typename T>
 static constexpr bool is_ngp_for_each_entity_pair_expr_driver_v =
     is_ngp_for_each_entity_pair_expr_driver<std::decay_t<T>>::value;
+
+template <typename ExecSpace = stk::ngp::ExecSpace>
+auto make_entity_expr_impl(stk::mesh::BulkData& bulk_data, const stk::mesh::Selector& selector,
+                           const stk::mesh::EntityRank& rank, const ExecSpace& exec_space = ExecSpace()) {
+  using driver_t = NgpForEachEntityExprDriver<ExecSpace>;
+  using driver_map_t = AnyRankSelectorMap<make_string_literal("NgpExprDrivers")>;
+  stk::mesh::MetaData& meta_data = bulk_data.mesh_meta_data();
+  driver_map_t* driver_map = const_cast<driver_map_t*>(meta_data.get_attribute<driver_map_t>());
+  if (driver_map == nullptr) {
+    const driver_map_t* new_driver_map = new driver_map_t();
+    driver_map = const_cast<driver_map_t*>(meta_data.declare_attribute_with_delete(new_driver_map));
+  }
+
+  const driver_t* driver_ptr;
+  if (driver_map->contains(rank, selector)) {
+    driver_t& existing_driver = driver_map->at<driver_t>(rank, selector);
+    driver_ptr = &existing_driver;
+  } else {
+    driver_t new_driver(bulk_data, selector, rank, exec_space);
+    driver_map->insert<driver_t>(rank, selector, std::move(new_driver));
+    const driver_t& inserted_driver = driver_map->at<driver_t>(rank, selector);
+    driver_ptr = &inserted_driver;
+  }
+
+  return EntityExpr<1, 0, driver_t>(rank, driver_ptr);
+}
+
+template <typename PairView, typename FMIExtractor, typename ExecSpace = stk::ngp::ExecSpace>
+auto make_pairwise_entity_expr_impl(stk::mesh::BulkData& bulk_data,                                    //
+                                    const stk::mesh::EntityRank& left_rank,                            //
+                                    const stk::mesh::EntityRank& right_rank,                           //
+                                    const PairView& pair_view, const FMIExtractor& /*fmi_extractor*/,  //
+                                    const ExecSpace& exec_space = ExecSpace()) {
+  using driver_t = NgpForEachEntityPairExprDriver<PairView, FMIExtractor, ExecSpace>;
+  using driver_map_t = AnyRankSelectorMap<make_string_literal("NgpPairExprDrivers")>;
+  stk::mesh::MetaData& meta_data = bulk_data.mesh_meta_data();
+  driver_map_t* driver_map = const_cast<driver_map_t*>(meta_data.get_attribute<driver_map_t>());
+  if (driver_map == nullptr) {
+    const driver_map_t* new_driver_map = new driver_map_t();
+    driver_map = const_cast<driver_map_t*>(meta_data.declare_attribute_with_delete(new_driver_map));
+  }
+
+  const driver_t* driver_ptr;
+  stk::mesh::EntityRank dummy_rank = stk::topology::NODE_RANK;
+  stk::mesh::Selector dummy_selector = stk::mesh::Selector();
+  if (driver_map->contains(dummy_rank, dummy_selector)) {
+    driver_t& existing_driver = driver_map->at<driver_t>(dummy_rank, dummy_selector);
+    driver_ptr = &existing_driver;
+  } else {
+    driver_t new_driver(bulk_data, pair_view, exec_space);
+    driver_map->insert<driver_t>(dummy_rank, dummy_selector, std::move(new_driver));
+    const driver_t& inserted_driver = driver_map->at<driver_t>(dummy_rank, dummy_selector);
+    driver_ptr = &inserted_driver;
+  }
+
+  return EntityPair(left_rank, right_rank, driver_ptr);
+}
 
 }  // namespace impl
 

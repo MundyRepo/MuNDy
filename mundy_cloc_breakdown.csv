@@ -1,0 +1,52 @@
+directory,language,n_files,blank,comment,code
+mundy/cmake,CMake,1,0,2,18
+mundy/core,C/C++ Header,86,3443,6646,14224
+mundy/core,C++,35,2065,1976,9535
+mundy/core,Markdown,4,245,0,826
+mundy/core,CMake,25,81,390,438
+mundy/mesh,C/C++ Header,74,4043,6345,16836
+mundy/mesh,C++,41,2630,2226,12413
+mundy/mesh,Markdown,2,417,0,1230
+mundy/mesh,CMake,8,40,138,295
+mundy/search,C/C++ Header,31,5165,14442,19280
+mundy/search,C++,5,472,665,2405
+mundy/search,Python,1,94,90,365
+mundy/search,Markdown,1,113,0,362
+mundy/search,CMake,7,19,110,96
+mundy/tests,C++,4,26,136,76
+mundy/tests,CMake,3,3,54,22
+mundy/core/geom,C/C++ Header,39,1170,2415,4600
+mundy/core/geom,C++,8,358,465,1694
+mundy/core/geom,Markdown,1,94,0,305
+mundy/core/geom,CMake,7,19,111,120
+mundy/core/math,C/C++ Header,23,1428,2643,6422
+mundy/core/math,C++,13,1176,1040,5520
+mundy/core/math,Markdown,1,54,0,244
+mundy/core/math,CMake,8,25,129,140
+mundy/core/mech,C/C++ Header,6,164,362,585
+mundy/core/mech,CMake,6,12,93,35
+mundy/core/mech,Markdown,1,5,0,9
+mundy/core/mech,C++,1,1,21,0
+mundy/core/utils,C/C++ Header,18,681,1226,2617
+mundy/core/utils,C++,15,532,492,2321
+mundy/core/utils,Markdown,1,92,0,268
+mundy/core/utils,CMake,7,26,111,145
+mundy/mesh/cmake,CMake,1,0,0,10
+mundy/mesh/src,C/C++ Header,72,3747,5643,15380
+mundy/mesh/src,C++,10,284,300,1342
+mundy/mesh/src,Markdown,1,137,0,390
+mundy/mesh/src,CMake,3,2,54,2
+mundy/mesh/tests,C++,31,2346,1926,11071
+mundy/mesh/tests,C/C++ Header,2,296,702,1456
+mundy/mesh/tests,CMake,3,29,66,186
+mundy/search/cmake,CMake,1,0,0,10
+mundy/search/src,C/C++ Header,31,5165,14442,19280
+mundy/search/src,CMake,2,1,36,1
+mundy/search/src,C++,1,1,21,0
+mundy/search/tests,C++,4,471,644,2405
+mundy/search/tests,Python,1,94,90,365
+mundy/search/tests,CMake,3,10,57,47
+mundy/tests/integration_tests,C++,1,8,44,13
+mundy/tests/integration_tests,CMake,1,0,18,0
+mundy/tests/unit_tests,C++,3,18,92,63
+mundy/tests/unit_tests,CMake,1,2,18,20
