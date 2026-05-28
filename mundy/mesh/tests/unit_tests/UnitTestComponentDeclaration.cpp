@@ -21,6 +21,9 @@
 // External libs
 #include <gtest/gtest.h>
 
+// C++ core
+#include <type_traits>
+
 // STK mesh
 #include <stk_mesh/base/BulkData.hpp>
 #include <stk_mesh/base/Field.hpp>
@@ -28,8 +31,13 @@
 #include <stk_topology/topology.hpp>
 
 // Mundy libs
+#include <mundy_geom/primitives/AABB.hpp>
+#include <mundy_math/Matrix3.hpp>
+#include <mundy_math/Quaternion.hpp>
+#include <mundy_math/Vector.hpp>
 #include <mundy_math/Vector3.hpp>
 #include <mundy_mesh/Aggregate.hpp>
+#include <mundy_mesh/ComponentAccess.hpp>
 #include <mundy_mesh/Component.hpp>
 #include <mundy_mesh/DeclareComponent.hpp>
 #include <mundy_mesh/DeclarePart.hpp>
@@ -55,9 +63,173 @@ struct VELOCITY;
 struct ANGULAR_VELOCITY;
 struct DRAG_COEFFICIENT;
 
+struct UnknownAccessLike;
+struct CANONICAL_SCALAR;
+struct CANONICAL_VECTOR;
+struct CANONICAL_MATRIX3;
+struct CANONICAL_QUATERNION;
+struct CANONICAL_AABB;
+
+template <typename AccessLike, typename ExpectedAccess>
+constexpr bool canonical_component_access_is_v =
+    std::is_same_v<canonical_component_access_t<AccessLike>, ExpectedAccess>;
+
+template <typename AccessLike, typename ExpectedFieldScalar, typename ExpectedSharedValue, bool ExpectedFixedScalars,
+          unsigned ExpectedFieldScalars = 0>
+constexpr bool component_access_shape_matches_v = []() {
+  using shape = component_access_shape<canonical_component_access_t<AccessLike>>;
+  if constexpr (ExpectedFixedScalars) {
+    return std::is_same_v<typename shape::field_scalar_type, ExpectedFieldScalar> &&
+           std::is_same_v<typename shape::shared_value_type, ExpectedSharedValue> && shape::has_fixed_field_scalars &&
+           shape::field_scalars == ExpectedFieldScalars;
+  } else {
+    return std::is_same_v<typename shape::field_scalar_type, ExpectedFieldScalar> &&
+           std::is_same_v<typename shape::shared_value_type, ExpectedSharedValue> && !shape::has_fixed_field_scalars;
+  }
+}();
+
+static_assert(canonical_component_access_is_v<UnknownAccessLike, access::raw<UnknownAccessLike>>);
+static_assert(canonical_component_access_is_v<const UnknownAccessLike&, access::raw<UnknownAccessLike>>);
+static_assert(canonical_component_access_is_v<double, access::scalar<double>>);
+static_assert(canonical_component_access_is_v<const double&, access::scalar<double>>);
+static_assert(canonical_component_access_is_v<access::raw<const double&>, access::raw<double>>);
+static_assert(canonical_component_access_is_v<access::scalar<const double&>, access::scalar<double>>);
+static_assert(canonical_component_access_is_v<access::vector<const float&, 5>, access::vector<float, 5>>);
+static_assert(canonical_component_access_is_v<access::vector1<int>, access::vector<int, 1>>);
+static_assert(canonical_component_access_is_v<access::vector2f, access::vector<float, 2>>);
+static_assert(canonical_component_access_is_v<access::vector3d, access::vector<double, 3>>);
+static_assert(canonical_component_access_is_v<access::vector4i, access::vector<int, 4>>);
+static_assert(canonical_component_access_is_v<access::vector6<double>, access::vector<double, 6>>);
+static_assert(canonical_component_access_is_v<access::matrix<const double, 2, 3>, access::matrix<double, 2, 3>>);
+static_assert(canonical_component_access_is_v<access::matrix23f, access::matrix<float, 2, 3>>);
+static_assert(canonical_component_access_is_v<access::matrix36d, access::matrix<double, 3, 6>>);
+static_assert(canonical_component_access_is_v<access::matrix4i, access::matrix<int, 4, 4>>);
+static_assert(canonical_component_access_is_v<access::matrix6<double>, access::matrix<double, 6, 6>>);
+static_assert(canonical_component_access_is_v<access::matrix3<const double>, access::matrix3<double>>);
+static_assert(canonical_component_access_is_v<access::quaternion<volatile float>, access::quaternion<float>>);
+static_assert(canonical_component_access_is_v<access::aabb<const double>, access::aabb<double>>);
+static_assert(canonical_component_access_is_v<Vector<double, 5>, access::vector<double, 5>>);
+static_assert(canonical_component_access_is_v<const Vector3d&, access::vector<double, 3>>);
+static_assert(canonical_component_access_is_v<Matrix3<double>, access::matrix3<double>>);
+static_assert(canonical_component_access_is_v<Matrix<double, 2, 3>, access::matrix<double, 2, 3>>);
+static_assert(canonical_component_access_is_v<Matrix6i, access::matrix<int, 6, 6>>);
+static_assert(canonical_component_access_is_v<const Quaternion<double>&, access::quaternion<double>>);
+static_assert(canonical_component_access_is_v<AABB<double>, access::aabb<double>>);
+
+static_assert(component_access_shape_matches_v<UnknownAccessLike, UnknownAccessLike, UnknownAccessLike, false>);
+static_assert(component_access_shape_matches_v<double, double, double, true, 1>);
+static_assert(component_access_shape_matches_v<Vector<double, 5>, double, Vector<double, 5>, true, 5>);
+static_assert(component_access_shape_matches_v<Matrix3<double>, double, Matrix3<double>, true, 9>);
+static_assert(component_access_shape_matches_v<Matrix<double, 2, 3>, double, Matrix<double, 2, 3>, true, 6>);
+static_assert(component_access_shape_matches_v<access::matrix45f, float, Matrix<float, 4, 5>, true, 20>);
+static_assert(component_access_shape_matches_v<Quaternion<double>, double, Quaternion<double>, true, 4>);
+static_assert(component_access_shape_matches_v<AABB<double>, double, AABB<double>, true, 6>);
+static_assert(std::is_same_v<
+              typename impl::field_component_for<canonical_component_access_t<Vector3d>>::template type<double>,
+              Vector3FieldComponent<double>>);
+static_assert(std::is_same_v<
+              typename impl::field_component_for<canonical_component_access_t<Matrix<double, 2, 3>>>::template type<double>,
+              MatrixFieldComponent<double, 2, 3>>);
+static_assert(std::is_same_v<typename impl::shared_component_for<canonical_component_access_t<Matrix3<double>>>::type,
+                             SharedMatrix3Component<double>>);
+static_assert(std::is_same_v<typename impl::shared_component_for<canonical_component_access_t<Matrix<double, 2, 3>>>::type,
+                             SharedMatrixComponent<double, 2, 3>>);
+
 }  // namespace
 
 namespace {
+
+TEST(UnitTestComponentDeclaration, CanonicalComponentAccessDrivesConcreteDeclarations) {
+  if (stk::parallel_machine_size(MPI_COMM_WORLD) != 1) {
+    GTEST_SKIP();
+  }
+
+  using stk::topology::ELEM_RANK;
+
+  stk::mesh::MeshBuilder builder(MPI_COMM_WORLD);
+  builder.set_spatial_dimension(3);
+  builder.set_entity_rank_names({"NODE", "EDGE", "FACE", "ELEMENT", "CONSTRAINT"});
+
+  auto meta_data_ptr = builder.create_meta_data();
+  stk::mesh::MetaData& meta_data = *meta_data_ptr;
+  meta_data.use_simple_fields();
+
+  ComponentDeclarationHelper decl(meta_data);
+
+  auto scalar =
+      decl.rank(ELEM_RANK).name("CANONICAL_SCALAR").access<const double&>().tag<CANONICAL_SCALAR>().field().declare();
+  auto vector = decl.rank(ELEM_RANK)
+                    .name("CANONICAL_VECTOR")
+                    .access<Vector<double, 5>>()
+                    .tag<CANONICAL_VECTOR>()
+                    .field()
+                    .declare();
+  auto matrix3 = decl.rank(ELEM_RANK)
+                     .name("CANONICAL_MATRIX3")
+                     .access<Matrix3<double>>()
+                     .tag<CANONICAL_MATRIX3>()
+                     .field()
+                     .declare();
+  auto matrix23 = decl.rank(ELEM_RANK).name("CANONICAL_MATRIX23").access<access::matrix23d>().field().declare();
+  auto quaternion = decl.rank(ELEM_RANK)
+                        .name("CANONICAL_QUATERNION")
+                        .access<Quaternion<double>>()
+                        .tag<CANONICAL_QUATERNION>()
+                        .field()
+                        .declare();
+  auto aabb =
+      decl.rank(ELEM_RANK).name("CANONICAL_AABB").access<AABB<double>>().tag<CANONICAL_AABB>().field().declare();
+
+  static_assert(std::is_same_v<decltype(scalar), TaggedComponent<CANONICAL_SCALAR, ScalarFieldComponent<double>>>);
+  static_assert(std::is_same_v<decltype(vector), TaggedComponent<CANONICAL_VECTOR, VectorFieldComponent<double, 5>>>);
+  static_assert(std::is_same_v<decltype(matrix3), TaggedComponent<CANONICAL_MATRIX3, Matrix3FieldComponent<double>>>);
+  static_assert(std::is_same_v<decltype(matrix23), MatrixFieldComponent<double, 2, 3>>);
+  static_assert(
+      std::is_same_v<decltype(quaternion), TaggedComponent<CANONICAL_QUATERNION, QuaternionFieldComponent<double>>>);
+  static_assert(std::is_same_v<decltype(aabb), TaggedComponent<CANONICAL_AABB, AABBFieldComponent<double>>>);
+
+  PartDeclarationHelper part_decl(meta_data);
+  stk::mesh::Part& elem_part = part_decl.name("CANONICAL_COMPONENT_ACCESS_PART")
+                                   .topology(stk::topology::PARTICLE)
+                                   .put_component(scalar, nullptr)
+                                   .put_component(vector, nullptr)
+                                   .put_component(matrix3, nullptr)
+                                   .put_component(matrix23, nullptr)
+                                   .put_component(quaternion, nullptr)
+                                   .put_component(aabb, nullptr)
+                                   .declare();
+
+  auto bulk_data_ptr = builder.create(meta_data_ptr);
+  stk::mesh::BulkData& bulk_data = *bulk_data_ptr;
+  meta_data.commit();
+  bulk_data.modification_begin();
+  stk::mesh::Entity elem1 = bulk_data.declare_element(1, stk::mesh::PartVector{&elem_part});
+  bulk_data.modification_end();
+
+  EXPECT_EQ(stk::mesh::field_scalars_per_entity(scalar.component().field(), elem1), 1u);
+  EXPECT_EQ(stk::mesh::field_scalars_per_entity(vector.component().field(), elem1), 5u);
+  EXPECT_EQ(stk::mesh::field_scalars_per_entity(matrix3.component().field(), elem1), 9u);
+  EXPECT_EQ(stk::mesh::field_scalars_per_entity(matrix23.field(), elem1), 6u);
+  EXPECT_EQ(stk::mesh::field_scalars_per_entity(quaternion.component().field(), elem1), 4u);
+  EXPECT_EQ(stk::mesh::field_scalars_per_entity(aabb.component().field(), elem1), 6u);
+
+  auto shared_scalar =
+      ComponentDeclarationHelper().access<const double&>().shared(2.0).rank(ELEM_RANK).tag<CANONICAL_SCALAR>().declare();
+  auto shared_matrix3 = ComponentDeclarationHelper()
+                            .access<Matrix3<double>>()
+                            .shared(Matrix3<double>{})
+                            .rank(ELEM_RANK)
+                            .tag<CANONICAL_MATRIX3>()
+                            .declare();
+  auto shared_matrix23 =
+      ComponentDeclarationHelper().access<access::matrix23d>().shared(Matrix<double, 2, 3>{}).rank(ELEM_RANK).declare();
+
+  static_assert(
+      std::is_same_v<decltype(shared_scalar), TaggedComponent<CANONICAL_SCALAR, SharedScalarComponent<double>>>);
+  static_assert(std::is_same_v<decltype(shared_matrix3),
+                               TaggedComponent<CANONICAL_MATRIX3, SharedMatrix3Component<double>>>);
+  static_assert(std::is_same_v<decltype(shared_matrix23), SharedMatrixComponent<double, 2, 3>>);
+}
 
 TEST(UnitTestComponentDeclaration, CanonicalUse) {
   if (stk::parallel_machine_size(MPI_COMM_WORLD) != 1) {

@@ -53,6 +53,9 @@
 #include <mundy_mesh/NgpAccessorExpr.hpp>  // for mundy::mesh::AccessorExpr and EntityExprBase
 #include <mundy_mesh/impl/HostDeviceSynchronizer.hpp>
 #include <mundy_mesh/impl/SharedComponentImpl.hpp>
+#include <mundy_math/Vector.hpp>
+#include <mundy_math/Matrix.hpp>
+#include <mundy_math/Quaternion.hpp>
 #include <mundy_utils/requires.hpp>
 #include <mundy_utils/suppress_warnings.hpp>  // for MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_PUSH/POP
 #include <mundy_utils/throw_assert.hpp>       // for MUNDY_THROW_ASSERT
@@ -211,45 +214,53 @@ class SharedVectorComponent : public SharedComponent<Vector<ScalarType, N>> {
 
 template <typename ScalarType>
 using SharedVector1Component = SharedVectorComponent<ScalarType, 1>;
-
 template <typename ScalarType>
 using SharedVector2Component = SharedVectorComponent<ScalarType, 2>;
-
 template <typename ScalarType>
 using SharedVector3Component = SharedVectorComponent<ScalarType, 3>;
-
 template <typename ScalarType>
 using SharedVector4Component = SharedVectorComponent<ScalarType, 4>;
-
 template <typename ScalarType>
 using SharedVector5Component = SharedVectorComponent<ScalarType, 5>;
-
 template <typename ScalarType>
 using SharedVector6Component = SharedVectorComponent<ScalarType, 6>;
 
-template <typename ScalarType>
-class SharedMatrix3Component : public SharedComponent<Matrix3<ScalarType>> {
+template <typename ScalarType, size_t N, size_t M>
+class SharedMatrixComponent : public SharedComponent<Matrix<ScalarType, N, M>> {
  public:
-  using shared_value_type = Matrix3<ScalarType>;
-  using our_t = SharedMatrix3Component<ScalarType>;
+  using shared_value_type = Matrix<ScalarType, N, M>;
+  using our_t = SharedMatrixComponent<ScalarType, N, M>;
   using base_t = SharedComponent<shared_value_type>;
-  using canonical_access = access::matrix3<ScalarType>;
+  using canonical_access = access::matrix<ScalarType, N, M>;
   using view_t = typename base_t::view_t;
 
-  SharedMatrix3Component() = default;
-  explicit SharedMatrix3Component(shared_value_type shared_value) : base_t(std::move(shared_value)) {
+  SharedMatrixComponent() = default;
+  explicit SharedMatrixComponent(shared_value_type shared_value) : base_t(std::move(shared_value)) {
   }
 
   template <typename HostViewType>
   MUNDY_REQUIRES(impl::CompatibleSharedComponentHostView<HostViewType, shared_value_type>)
-  explicit SharedMatrix3Component(HostViewType host_view) : base_t(std::move(host_view)) {
+  explicit SharedMatrixComponent(HostViewType host_view) : base_t(std::move(host_view)) {
   }
 
-  SharedMatrix3Component(const SharedMatrix3Component&) = default;
-  SharedMatrix3Component(SharedMatrix3Component&&) = default;
-  SharedMatrix3Component& operator=(const SharedMatrix3Component&) = default;
-  SharedMatrix3Component& operator=(SharedMatrix3Component&&) = default;
-};  // SharedMatrix3Component
+  SharedMatrixComponent(const SharedMatrixComponent&) = default;
+  SharedMatrixComponent(SharedMatrixComponent&&) = default;
+  SharedMatrixComponent& operator=(const SharedMatrixComponent&) = default;
+  SharedMatrixComponent& operator=(SharedMatrixComponent&&) = default;
+};  // SharedMatrixComponent
+
+template <typename ScalarType>
+using SharedMatrix1Component = SharedMatrixComponent<ScalarType, 1, 1>;
+template <typename ScalarType>
+using SharedMatrix2Component = SharedMatrixComponent<ScalarType, 2, 2>;
+template <typename ScalarType>
+using SharedMatrix3Component = SharedMatrixComponent<ScalarType, 3, 3>;
+template <typename ScalarType>
+using SharedMatrix4Component = SharedMatrixComponent<ScalarType, 4, 4>;
+template <typename ScalarType>
+using SharedMatrix5Component = SharedMatrixComponent<ScalarType, 5, 5>;
+template <typename ScalarType>
+using SharedMatrix6Component = SharedMatrixComponent<ScalarType, 6, 6>;
 
 template <typename ScalarType>
 class SharedQuaternionComponent : public SharedComponent<Quaternion<ScalarType>> {
@@ -399,27 +410,33 @@ class NgpSharedScalarComponent : public NgpSharedComponent<ScalarType, NgpMemSpa
 
 template <typename ScalarType, size_t N, typename NgpMemSpace = stk::ngp::MemSpace>
 using NgpSharedVectorComponent = NgpSharedComponent<Vector<ScalarType, N>, NgpMemSpace>;
-
 template <typename ScalarType, typename NgpMemSpace = stk::ngp::MemSpace>
 using NgpSharedVector1Component = NgpSharedVectorComponent<ScalarType, 1, NgpMemSpace>;
-
 template <typename ScalarType, typename NgpMemSpace = stk::ngp::MemSpace>
 using NgpSharedVector2Component = NgpSharedVectorComponent<ScalarType, 2, NgpMemSpace>;
-
 template <typename ScalarType, typename NgpMemSpace = stk::ngp::MemSpace>
 using NgpSharedVector3Component = NgpSharedVectorComponent<ScalarType, 3, NgpMemSpace>;
-
 template <typename ScalarType, typename NgpMemSpace = stk::ngp::MemSpace>
 using NgpSharedVector4Component = NgpSharedVectorComponent<ScalarType, 4, NgpMemSpace>;
-
 template <typename ScalarType, typename NgpMemSpace = stk::ngp::MemSpace>
 using NgpSharedVector5Component = NgpSharedVectorComponent<ScalarType, 5, NgpMemSpace>;
-
 template <typename ScalarType, typename NgpMemSpace = stk::ngp::MemSpace>
 using NgpSharedVector6Component = NgpSharedVectorComponent<ScalarType, 6, NgpMemSpace>;
 
+template <typename ScalarType, size_t N, size_t M, typename NgpMemSpace = stk::ngp::MemSpace>
+using NgpSharedMatrixComponent = NgpSharedComponent<Matrix<ScalarType, N, M>, NgpMemSpace>;
 template <typename ScalarType, typename NgpMemSpace = stk::ngp::MemSpace>
-using NgpSharedMatrix3Component = NgpSharedComponent<Matrix3<ScalarType>, NgpMemSpace>;
+using NgpSharedMatrix1Component = NgpSharedMatrixComponent<ScalarType, 1, 1, NgpMemSpace>;
+template <typename ScalarType, typename NgpMemSpace = stk::ngp::MemSpace>
+using NgpSharedMatrix2Component = NgpSharedMatrixComponent<ScalarType, 2, 2, NgpMemSpace>;
+template <typename ScalarType, typename NgpMemSpace = stk::ngp::MemSpace>
+using NgpSharedMatrix3Component = NgpSharedMatrixComponent<ScalarType, 3, 3, NgpMemSpace>;
+template <typename ScalarType, typename NgpMemSpace = stk::ngp::MemSpace>
+using NgpSharedMatrix4Component = NgpSharedMatrixComponent<ScalarType, 4, 4, NgpMemSpace>;
+template <typename ScalarType, typename NgpMemSpace = stk::ngp::MemSpace>
+using NgpSharedMatrix5Component = NgpSharedMatrixComponent<ScalarType, 5, 5, NgpMemSpace>;
+template <typename ScalarType, typename NgpMemSpace = stk::ngp::MemSpace>
+using NgpSharedMatrix6Component = NgpSharedMatrixComponent<ScalarType, 6, 6, NgpMemSpace>;
 
 template <typename ScalarType, typename NgpMemSpace = stk::ngp::MemSpace>
 using NgpSharedQuaternionComponent = NgpSharedComponent<Quaternion<ScalarType>, NgpMemSpace>;
@@ -504,14 +521,16 @@ SharedVectorComponent(HostViewType)
                              impl::shared_component_host_view_value_t<HostViewType>::size>;
 
 // **********************************************************************************************************************
-/// \brief Class template argument deduction guides for SharedMatrix3Component
-template <typename ScalarType>
-SharedMatrix3Component(Matrix3<ScalarType>) -> SharedMatrix3Component<ScalarType>;
+/// \brief Class template argument deduction guides for SharedMatrixComponent
+template <typename ScalarType, size_t N, size_t M>
+SharedMatrixComponent(Matrix<ScalarType, N, M>) -> SharedMatrixComponent<ScalarType, N, M>;
 
 template <impl::SharedComponentHostView HostViewType>
-MUNDY_REQUIRES(is_matrix3_v<impl::shared_component_host_view_value_t<HostViewType>>)
-SharedMatrix3Component(HostViewType)
-    -> SharedMatrix3Component<typename impl::shared_component_host_view_value_t<HostViewType>::scalar_t>;
+MUNDY_REQUIRES(is_matrix_v<impl::shared_component_host_view_value_t<HostViewType>>)
+SharedMatrixComponent(HostViewType)
+    -> SharedMatrixComponent<typename impl::shared_component_host_view_value_t<HostViewType>::scalar_t,
+                             impl::shared_component_host_view_value_t<HostViewType>::num_rows,
+                             impl::shared_component_host_view_value_t<HostViewType>::num_cols>;
 
 // **********************************************************************************************************************
 /// \brief Class template argument deduction guides for SharedQuaternionComponent

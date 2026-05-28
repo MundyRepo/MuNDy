@@ -86,10 +86,10 @@ struct field_component_for<access::vector<ScalarType, N>> {
   using type = VectorFieldComponent<FieldScalarType, N>;
 };
 
-template <typename ScalarType>
-struct field_component_for<access::matrix3<ScalarType>> {
+template <typename ScalarType, size_t N, size_t M>
+struct field_component_for<access::matrix<ScalarType, N, M>> {
   template <typename FieldScalarType>
-  using type = Matrix3FieldComponent<FieldScalarType>;
+  using type = MatrixFieldComponent<FieldScalarType, N, M>;
 };
 
 template <typename ScalarType>
@@ -126,9 +126,9 @@ struct shared_component_for<access::vector<ScalarType, N>> {
   using type = SharedVectorComponent<ScalarType, N>;
 };
 
-template <typename ScalarType>
-struct shared_component_for<access::matrix3<ScalarType>> {
-  using type = SharedMatrix3Component<ScalarType>;
+template <typename ScalarType, size_t N, size_t M>
+struct shared_component_for<access::matrix<ScalarType, N, M>> {
+  using type = SharedMatrixComponent<ScalarType, N, M>;
 };
 
 template <typename ScalarType>
@@ -189,8 +189,10 @@ std::string component_access_name(access::vector<ScalarType, N>) {
   return (sink() << "vector" << N).to_string();
 }
 
-template <typename ScalarType>
-std::string component_access_name(access::matrix3<ScalarType>) { return "matrix3"; }
+template <typename ScalarType, size_t N, size_t M>
+std::string component_access_name(access::matrix<ScalarType, N, M>) {
+  return (sink() << "matrix" << N << "x" << M).to_string();
+}
 
 template <typename ScalarType>
 std::string component_access_name(access::quaternion<ScalarType>) { return "quaternion"; }
@@ -228,7 +230,7 @@ struct component_default_output_type<access::vector<ScalarType, N>> {
 };
 
 template <typename ScalarType>
-struct component_default_output_type<access::matrix3<ScalarType>> {
+struct component_default_output_type<access::matrix<ScalarType, 3, 3>> {
   static constexpr bool has_default = true;
   static constexpr stk::io::FieldOutputType value = stk::io::FieldOutputType::MATRIX_33;
 };

@@ -34,6 +34,7 @@
 
 // Mundy math / geometry
 #include <mundy_geom/primitives/AABB.hpp>  // for mundy::AABB, is_aabb_v
+#include <mundy_math/Matrix.hpp>           // for mundy::Matrix, is_matrix_v
 #include <mundy_math/Matrix3.hpp>          // for mundy::Matrix3, is_matrix3_v
 #include <mundy_math/Quaternion.hpp>       // for mundy::Quaternion, is_quaternion_v
 #include <mundy_math/Vector.hpp>           // for mundy::Vector, is_vector_v
@@ -67,11 +68,125 @@ struct vector {
   static constexpr size_t size = N;
 };
 
-/// 3x3 matrix access: 9 scalars per entity.
 template <typename ScalarType>
-struct matrix3 {
+using vector1 = vector<ScalarType, 1>;
+template <typename ScalarType>
+using vector2 = vector<ScalarType, 2>;
+template <typename ScalarType>
+using vector3 = vector<ScalarType, 3>;
+template <typename ScalarType>
+using vector4 = vector<ScalarType, 4>;
+template <typename ScalarType>
+using vector5 = vector<ScalarType, 5>;
+template <typename ScalarType>
+using vector6 = vector<ScalarType, 6>;
+
+using vector1d = vector1<double>;
+using vector2d = vector2<double>;
+using vector3d = vector3<double>;
+using vector4d = vector4<double>;
+using vector5d = vector5<double>;
+using vector6d = vector6<double>;
+
+using vector1f = vector1<float>;
+using vector2f = vector2<float>;
+using vector3f = vector3<float>;
+using vector4f = vector4<float>;
+using vector5f = vector5<float>;
+using vector6f = vector6<float>;
+
+using vector1i = vector1<int>;
+using vector2i = vector2<int>;
+using vector3i = vector3<int>;
+using vector4i = vector4<int>;
+using vector5i = vector5<int>;
+using vector6i = vector6<int>;
+
+/// Fixed-size matrix access: N * M scalars per entity.
+template <typename ScalarType, size_t N, size_t M>
+struct matrix {
   using scalar_type = ScalarType;
+  static constexpr size_t num_rows = N;
+  static constexpr size_t num_cols = M;
 };
+
+#define MUNDY_MESH_COMPONENT_ACCESS_MATRIX_ALIAS(N, M) \
+  template <typename ScalarType>                       \
+  using matrix##N####M = matrix<ScalarType, N, M>;     \
+  using matrix##N####M##d = matrix##N####M<double>;    \
+  using matrix##N####M##f = matrix##N####M<float>;
+
+MUNDY_MESH_COMPONENT_ACCESS_MATRIX_ALIAS(1, 1)
+MUNDY_MESH_COMPONENT_ACCESS_MATRIX_ALIAS(1, 2)
+MUNDY_MESH_COMPONENT_ACCESS_MATRIX_ALIAS(1, 3)
+MUNDY_MESH_COMPONENT_ACCESS_MATRIX_ALIAS(1, 4)
+MUNDY_MESH_COMPONENT_ACCESS_MATRIX_ALIAS(1, 5)
+MUNDY_MESH_COMPONENT_ACCESS_MATRIX_ALIAS(1, 6)
+MUNDY_MESH_COMPONENT_ACCESS_MATRIX_ALIAS(2, 1)
+MUNDY_MESH_COMPONENT_ACCESS_MATRIX_ALIAS(2, 2)
+MUNDY_MESH_COMPONENT_ACCESS_MATRIX_ALIAS(2, 3)
+MUNDY_MESH_COMPONENT_ACCESS_MATRIX_ALIAS(2, 4)
+MUNDY_MESH_COMPONENT_ACCESS_MATRIX_ALIAS(2, 5)
+MUNDY_MESH_COMPONENT_ACCESS_MATRIX_ALIAS(2, 6)
+MUNDY_MESH_COMPONENT_ACCESS_MATRIX_ALIAS(3, 1)
+MUNDY_MESH_COMPONENT_ACCESS_MATRIX_ALIAS(3, 2)
+MUNDY_MESH_COMPONENT_ACCESS_MATRIX_ALIAS(3, 3)
+MUNDY_MESH_COMPONENT_ACCESS_MATRIX_ALIAS(3, 4)
+MUNDY_MESH_COMPONENT_ACCESS_MATRIX_ALIAS(3, 5)
+MUNDY_MESH_COMPONENT_ACCESS_MATRIX_ALIAS(3, 6)
+MUNDY_MESH_COMPONENT_ACCESS_MATRIX_ALIAS(4, 1)
+MUNDY_MESH_COMPONENT_ACCESS_MATRIX_ALIAS(4, 2)
+MUNDY_MESH_COMPONENT_ACCESS_MATRIX_ALIAS(4, 3)
+MUNDY_MESH_COMPONENT_ACCESS_MATRIX_ALIAS(4, 4)
+MUNDY_MESH_COMPONENT_ACCESS_MATRIX_ALIAS(4, 5)
+MUNDY_MESH_COMPONENT_ACCESS_MATRIX_ALIAS(4, 6)
+MUNDY_MESH_COMPONENT_ACCESS_MATRIX_ALIAS(5, 1)
+MUNDY_MESH_COMPONENT_ACCESS_MATRIX_ALIAS(5, 2)
+MUNDY_MESH_COMPONENT_ACCESS_MATRIX_ALIAS(5, 3)
+MUNDY_MESH_COMPONENT_ACCESS_MATRIX_ALIAS(5, 4)
+MUNDY_MESH_COMPONENT_ACCESS_MATRIX_ALIAS(5, 5)
+MUNDY_MESH_COMPONENT_ACCESS_MATRIX_ALIAS(5, 6)
+MUNDY_MESH_COMPONENT_ACCESS_MATRIX_ALIAS(6, 1)
+MUNDY_MESH_COMPONENT_ACCESS_MATRIX_ALIAS(6, 2)
+MUNDY_MESH_COMPONENT_ACCESS_MATRIX_ALIAS(6, 3)
+MUNDY_MESH_COMPONENT_ACCESS_MATRIX_ALIAS(6, 4)
+MUNDY_MESH_COMPONENT_ACCESS_MATRIX_ALIAS(6, 5)
+MUNDY_MESH_COMPONENT_ACCESS_MATRIX_ALIAS(6, 6)
+#undef MUNDY_MESH_COMPONENT_ACCESS_MATRIX_ALIAS
+
+template <typename ScalarType>
+using matrix1 = matrix11<ScalarType>;
+template <typename ScalarType>
+using matrix2 = matrix22<ScalarType>;
+template <typename ScalarType>
+using matrix3 = matrix33<ScalarType>;
+template <typename ScalarType>
+using matrix4 = matrix44<ScalarType>;
+template <typename ScalarType>
+using matrix5 = matrix55<ScalarType>;
+template <typename ScalarType>
+using matrix6 = matrix66<ScalarType>;
+
+using matrix1d = matrix1<double>;
+using matrix2d = matrix2<double>;
+using matrix3d = matrix3<double>;
+using matrix4d = matrix4<double>;
+using matrix5d = matrix5<double>;
+using matrix6d = matrix6<double>;
+
+using matrix1f = matrix1<float>;
+using matrix2f = matrix2<float>;
+using matrix3f = matrix3<float>;
+using matrix4f = matrix4<float>;
+using matrix5f = matrix5<float>;
+using matrix6f = matrix6<float>;
+
+using matrix1i = matrix1<int>;
+using matrix2i = matrix2<int>;
+using matrix3i = matrix3<int>;
+using matrix4i = matrix4<int>;
+using matrix5i = matrix5<int>;
+using matrix6i = matrix6<int>;
 
 /// Quaternion access: 4 scalars per entity.
 template <typename ScalarType>
@@ -111,9 +226,9 @@ struct canonical_component_access<access::vector<ScalarType, N>, void> {
   using type = access::vector<std::remove_cvref_t<ScalarType>, N>;
 };
 
-template <typename ScalarType>
-struct canonical_component_access<access::matrix3<ScalarType>, void> {
-  using type = access::matrix3<std::remove_cvref_t<ScalarType>>;
+template <typename ScalarType, size_t N, size_t M>
+struct canonical_component_access<access::matrix<ScalarType, N, M>, void> {
+  using type = access::matrix<std::remove_cvref_t<ScalarType>, N, M>;
 };
 
 template <typename ScalarType>
@@ -147,6 +262,15 @@ struct canonical_component_access<Matrix3Type,
                                    std::enable_if_t<is_matrix3_v<std::remove_cvref_t<Matrix3Type>>>> {
   using decayed = std::remove_cvref_t<Matrix3Type>;
   using type    = access::matrix3<typename decayed::scalar_t>;
+};
+
+// Mundy Matrix<> types map to access::matrix
+template <typename MatrixType>
+struct canonical_component_access<
+    MatrixType, std::enable_if_t<is_matrix_v<std::remove_cvref_t<MatrixType>> &&
+                                 !is_matrix3_v<std::remove_cvref_t<MatrixType>>>> {
+  using decayed = std::remove_cvref_t<MatrixType>;
+  using type    = access::matrix<typename decayed::scalar_t, decayed::num_rows, decayed::num_cols>;
 };
 
 // Mundy Quaternion<> types map to access::quaternion
@@ -208,12 +332,12 @@ struct component_access_shape<access::vector<ScalarType, N>> {
   static constexpr unsigned field_scalars            = static_cast<unsigned>(N);
 };
 
-template <typename ScalarType>
-struct component_access_shape<access::matrix3<ScalarType>> {
+template <typename ScalarType, size_t N, size_t M>
+struct component_access_shape<access::matrix<ScalarType, N, M>> {
   using field_scalar_type  = ScalarType;
-  using shared_value_type  = Matrix3<ScalarType>;
+  using shared_value_type  = Matrix<ScalarType, N, M>;
   static constexpr bool     has_fixed_field_scalars = true;
-  static constexpr unsigned field_scalars            = 9;
+  static constexpr unsigned field_scalars            = static_cast<unsigned>(N * M);
 };
 
 template <typename ScalarType>

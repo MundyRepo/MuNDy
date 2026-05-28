@@ -166,15 +166,16 @@ struct VectorFieldAccessPolicy {
   }
 };
 
-struct Matrix3FieldAccessPolicy {
+template <size_t N, size_t M>
+struct MatrixFieldAccessPolicy {
   template <typename FieldType>
   static decltype(auto) host_access(FieldType& field, stk::mesh::Entity entity) {
-    return matrix3_field_data(field, entity);
+    return matrix_field_data<N, M>(field, entity);
   }
 
   template <typename FieldType>
   KOKKOS_INLINE_FUNCTION static decltype(auto) ngp_access(FieldType& field, stk::mesh::FastMeshIndex entity_index) {
-    return matrix3_field_data(field, entity_index);
+    return matrix_field_data<N, M>(field, entity_index);
   }
 };
 
@@ -390,19 +391,14 @@ class VectorFieldComponent : public impl::FieldComponent<ScalarType, impl::Vecto
 
 template <typename ScalarType>
 using Vector1FieldComponent = VectorFieldComponent<ScalarType, 1>;
-
 template <typename ScalarType>
 using Vector2FieldComponent = VectorFieldComponent<ScalarType, 2>;
-
 template <typename ScalarType>
 using Vector3FieldComponent = VectorFieldComponent<ScalarType, 3>;
-
 template <typename ScalarType>
 using Vector4FieldComponent = VectorFieldComponent<ScalarType, 4>;
-
 template <typename ScalarType>
 using Vector5FieldComponent = VectorFieldComponent<ScalarType, 5>;
-
 template <typename ScalarType>
 using Vector6FieldComponent = VectorFieldComponent<ScalarType, 6>;
 
@@ -421,51 +417,72 @@ class NgpVectorFieldComponent : public impl::NgpFieldComponent<NgpFieldType, imp
 
 template <typename NgpFieldType>
 using NgpVector1FieldComponent = NgpVectorFieldComponent<NgpFieldType, 1>;
-
 template <typename NgpFieldType>
 using NgpVector2FieldComponent = NgpVectorFieldComponent<NgpFieldType, 2>;
-
 template <typename NgpFieldType>
 using NgpVector3FieldComponent = NgpVectorFieldComponent<NgpFieldType, 3>;
-
 template <typename NgpFieldType>
 using NgpVector4FieldComponent = NgpVectorFieldComponent<NgpFieldType, 4>;
-
 template <typename NgpFieldType>
 using NgpVector5FieldComponent = NgpVectorFieldComponent<NgpFieldType, 5>;
-
 template <typename NgpFieldType>
 using NgpVector6FieldComponent = NgpVectorFieldComponent<NgpFieldType, 6>;
 
-template <typename ScalarType>
-class Matrix3FieldComponent : public impl::FieldComponent<ScalarType, impl::Matrix3FieldAccessPolicy> {
+template <typename ScalarType, size_t N, size_t M>
+class MatrixFieldComponent : public impl::FieldComponent<ScalarType, impl::MatrixFieldAccessPolicy<N, M>> {
  public:
-  using base_t = impl::FieldComponent<ScalarType, impl::Matrix3FieldAccessPolicy>;
-  using canonical_access = access::matrix3<ScalarType>;
+  using base_t = impl::FieldComponent<ScalarType, impl::MatrixFieldAccessPolicy<N, M>>;
+  using canonical_access = access::matrix<ScalarType, N, M>;
   using view_t = typename base_t::view_t;
 
-  Matrix3FieldComponent() = default;
-  explicit Matrix3FieldComponent(stk::mesh::Field<ScalarType>& field) : base_t(field) {
+  MatrixFieldComponent() = default;
+  explicit MatrixFieldComponent(stk::mesh::Field<ScalarType>& field) : base_t(field) {
   }
 
-  Matrix3FieldComponent(const Matrix3FieldComponent&) = default;
-  Matrix3FieldComponent(Matrix3FieldComponent&&) = default;
-  Matrix3FieldComponent& operator=(const Matrix3FieldComponent&) = default;
-  Matrix3FieldComponent& operator=(Matrix3FieldComponent&&) = default;
-};  // Matrix3FieldComponent
+  MatrixFieldComponent(const MatrixFieldComponent&) = default;
+  MatrixFieldComponent(MatrixFieldComponent&&) = default;
+  MatrixFieldComponent& operator=(const MatrixFieldComponent&) = default;
+  MatrixFieldComponent& operator=(MatrixFieldComponent&&) = default;
+};  // MatrixFieldComponent
+
+template <typename ScalarType>
+using Matrix1FieldComponent = MatrixFieldComponent<ScalarType, 1, 1>;
+template <typename ScalarType>
+using Matrix2FieldComponent = MatrixFieldComponent<ScalarType, 2, 2>;
+template <typename ScalarType>
+using Matrix3FieldComponent = MatrixFieldComponent<ScalarType, 3, 3>;
+template <typename ScalarType>
+using Matrix4FieldComponent = MatrixFieldComponent<ScalarType, 4, 4>;
+template <typename ScalarType>
+using Matrix5FieldComponent = MatrixFieldComponent<ScalarType, 5, 5>;
+template <typename ScalarType>
+using Matrix6FieldComponent = MatrixFieldComponent<ScalarType, 6, 6>;
+
+template <typename NgpFieldType, size_t N, size_t M>
+class NgpMatrixFieldComponent : public impl::NgpFieldComponent<NgpFieldType, impl::MatrixFieldAccessPolicy<N, M>> {
+ public:
+  using our_t = NgpMatrixFieldComponent<NgpFieldType, N, M>;
+  using base_t = impl::NgpFieldComponent<NgpFieldType, impl::MatrixFieldAccessPolicy<N, M>>;
+  using canonical_access = access::matrix<typename NgpFieldType::value_type, N, M>;
+  using view_t = typename base_t::view_t;
+
+  NgpMatrixFieldComponent() = default;
+  explicit NgpMatrixFieldComponent(NgpFieldType ngp_field) : base_t(ngp_field) {
+  }
+};  // NgpMatrixFieldComponent
 
 template <typename NgpFieldType>
-class NgpMatrix3FieldComponent : public impl::NgpFieldComponent<NgpFieldType, impl::Matrix3FieldAccessPolicy> {
- public:
-  using our_t = NgpMatrix3FieldComponent<NgpFieldType>;
-  using base_t = impl::NgpFieldComponent<NgpFieldType, impl::Matrix3FieldAccessPolicy>;
-  using canonical_access = access::matrix3<typename NgpFieldType::value_type>;
-  using view_t = typename base_t::view_t;
-
-  NgpMatrix3FieldComponent() = default;
-  explicit NgpMatrix3FieldComponent(NgpFieldType ngp_field) : base_t(ngp_field) {
-  }
-};  // NgpMatrix3FieldComponent
+using NgpMatrix1FieldComponent = NgpMatrixFieldComponent<NgpFieldType, 1, 1>;
+template <typename NgpFieldType>
+using NgpMatrix2FieldComponent = NgpMatrixFieldComponent<NgpFieldType, 2, 2>;
+template <typename NgpFieldType>
+using NgpMatrix3FieldComponent = NgpMatrixFieldComponent<NgpFieldType, 3, 3>;
+template <typename NgpFieldType>
+using NgpMatrix4FieldComponent = NgpMatrixFieldComponent<NgpFieldType, 4, 4>;
+template <typename NgpFieldType>
+using NgpMatrix5FieldComponent = NgpMatrixFieldComponent<NgpFieldType, 5, 5>;
+template <typename NgpFieldType>
+using NgpMatrix6FieldComponent = NgpMatrixFieldComponent<NgpFieldType, 6, 6>;
 
 template <typename ScalarType>
 class QuaternionFieldComponent : public impl::FieldComponent<ScalarType, impl::QuaternionFieldAccessPolicy> {
