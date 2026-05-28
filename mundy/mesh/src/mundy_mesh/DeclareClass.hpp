@@ -40,7 +40,7 @@
 // Mundy
 #include <mundy_mesh/Class.hpp>
 #include <mundy_mesh/Component.hpp>
-#include <mundy_mesh/impl/ComponentImpl.hpp>  // for mundy::mesh::impl::component_backing_field
+#include <mundy_mesh/FieldComponent.hpp>  // for mundy::mesh::impl::component_backing_field
 #include <mundy_utils/requires.hpp>
 #include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_REQUIRE
 
