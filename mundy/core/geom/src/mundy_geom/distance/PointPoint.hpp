@@ -34,6 +34,9 @@
 
 namespace mundy {
 
+/// \addtogroup MundyGeomDistance
+/// @{
+
 //! \name Free space distance calculations
 //@{
 
@@ -114,6 +117,8 @@ KOKKOS_FUNCTION typename PointType1::scalar_t distance(const PointType1& point1,
   return distance(SharedNormalSigned{}, point1, point2, sep);
 }
 //@}
+
+/// @}
 
 }  // namespace mundy
 

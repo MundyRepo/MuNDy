@@ -39,6 +39,10 @@
 #include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
 
 namespace mundy {
+
+/// \addtogroup MundyGeomTransform
+/// @{
+
 /*
 Supported shapes:
   - Point
@@ -415,6 +419,8 @@ KOKKOS_INLINE_FUNCTION void rotate_inplace(EllipsoidT& ellipsoid, const Quaterni
   ellipsoid.orientation() = ellipsoid.orientation() * q;
 }
 //@}
+
+/// @}
 
 }  // namespace mundy
 

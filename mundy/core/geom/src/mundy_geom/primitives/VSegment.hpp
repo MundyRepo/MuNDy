@@ -36,6 +36,9 @@
 
 namespace mundy {
 
+/// \addtogroup MundyGeomPrimitives
+/// @{
+
 template <typename Scalar, ValidPointType PointType = Point<Scalar>>
 class VSegment {
   static_assert(std::is_same_v<typename PointType::scalar_t, Scalar>,
@@ -50,6 +53,8 @@ class VSegment {
 
   /// \brief Our point type
   using point_t = PointType;
+
+  static constexpr bool is_finite = true;
 
   //@}
 
@@ -289,18 +294,21 @@ static_assert(ValidVSegmentType<VSegment<float>> && ValidVSegmentType<const VSeg
 //! \name Non-member functions for ValidVSegmentType objects
 //@{
 
-/// \brief Equality operator
-template <ValidVSegmentType VSegmentType1, ValidVSegmentType VSegmentType2>
-KOKKOS_FUNCTION constexpr bool operator==(const VSegmentType1& v_segment1, const VSegmentType2& v_segment2) {
-  return (v_segment1.start() == v_segment2.start()) && (v_segment1.middle() == v_segment2.middle()) &&
-         (v_segment1.end() == v_segment2.end());
+/// \brief Element-wise approximate equality (within a tolerance)
+template <ValidVSegmentType T1, ValidVSegmentType T2>
+KOKKOS_FUNCTION constexpr bool is_close(
+    const T1& vs1, const T2& vs2,
+    typename T1::scalar_t tol = get_comparison_tolerance<typename T1::scalar_t, typename T2::scalar_t>()) {
+  return is_close(vs1.start(), vs2.start(), tol) && is_close(vs1.middle(), vs2.middle(), tol) &&
+         is_close(vs1.end(), vs2.end(), tol);
 }
 
-/// \brief Inequality operator
-template <ValidVSegmentType VSegmentType1, ValidVSegmentType VSegmentType2>
-KOKKOS_FUNCTION constexpr bool operator!=(const VSegmentType1& v_segment1, const VSegmentType2& v_segment2) {
-  return (v_segment1.start() != v_segment2.start()) || (v_segment1.middle() != v_segment2.middle()) ||
-         (v_segment1.end() != v_segment2.end());
+/// \brief Element-wise approximate equality (within a relaxed tolerance)
+template <ValidVSegmentType T1, ValidVSegmentType T2>
+KOKKOS_FUNCTION constexpr bool is_approx_close(
+    const T1& vs1, const T2& vs2,
+    typename T1::scalar_t tol = get_relaxed_comparison_tolerance<typename T1::scalar_t, typename T2::scalar_t>()) {
+  return is_close(vs1, vs2, tol);
 }
 
 /// \brief OStream operator
@@ -309,6 +317,29 @@ std::ostream& operator<<(std::ostream& os, const VSegmentType& v_segment) {
   os << "{" << v_segment.start() << "->" << v_segment.middle() << "->" << v_segment.end() << "}";
   return os;
 }
+
+/// @}
+
+//! \name Point visitation
+//@{
+
+/// \brief Visit each geometric point of a VSegment (start, middle, end).
+template <ValidVSegmentType T, typename Functor>
+KOKKOS_INLINE_FUNCTION void for_each_point(const T& vs, Functor&& f) {
+  f(vs.start());
+  f(vs.middle());
+  f(vs.end());
+}
+
+/// \brief Visit and mutate each geometric point of a VSegment.
+template <ValidVSegmentType T, typename Functor>
+KOKKOS_INLINE_FUNCTION void for_each_point_mutable(T& vs, Functor&& f) {
+  f(vs.start());
+  f(vs.middle());
+  f(vs.end());
+}
+
+//@}
 
 }  // namespace mundy
 

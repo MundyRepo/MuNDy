@@ -37,6 +37,9 @@
 
 namespace mundy {
 
+/// \addtogroup MundyGeomDistance
+/// @{
+
 //! \name Free space distance calculations
 //@{
 
@@ -106,6 +109,8 @@ KOKKOS_FUNCTION typename LineSegmentType::scalar_t
   return surface_distance;
 }
 //@}
+
+/// @}
 
 }  // namespace mundy
 

@@ -39,6 +39,9 @@
 
 namespace mundy {
 
+/// \addtogroup MundyGeomPrimitives
+/// @{
+
 template <typename Scalar, ValidPointType PointType = Point<Scalar>,
           ValidQuaternionType QuaternionType = Quaternion<Scalar>>
 class Ring {
@@ -58,6 +61,8 @@ class Ring {
 
   /// \brief Our orientation type
   using orientation_t = QuaternionType;
+
+  static constexpr bool is_finite = true;
 
   //@}
 
@@ -306,18 +311,22 @@ static_assert(ValidRingType<Ring<float>> && ValidRingType<const Ring<float>> && 
 //! \name Non-member functions for ValidRingType objects
 //@{
 
-/// \brief Equality operator
-template <ValidRingType RingType1, ValidRingType RingType2>
-KOKKOS_FUNCTION constexpr bool operator==(const RingType1& ring1, const RingType2& ring2) {
-  return (ring1.major_radius() == ring2.major_radius()) && (ring1.minor_radius() == ring2.minor_radius()) &&
-         (ring1.center() == ring2.center()) && (ring1.orientation() == ring2.orientation());
+/// \brief Element-wise approximate equality (within a tolerance)
+template <ValidRingType T1, ValidRingType T2>
+KOKKOS_FUNCTION constexpr bool is_close(
+    const T1& r1, const T2& r2,
+    typename T1::scalar_t tol = get_comparison_tolerance<typename T1::scalar_t, typename T2::scalar_t>()) {
+  return is_close(r1.major_radius(), r2.major_radius(), tol) &&
+         is_close(r1.minor_radius(), r2.minor_radius(), tol) && is_close(r1.center(), r2.center(), tol) &&
+         is_close(r1.orientation(), r2.orientation(), tol);
 }
 
-/// \brief Inequality operator
-template <ValidRingType RingType1, ValidRingType RingType2>
-KOKKOS_FUNCTION constexpr bool operator!=(const RingType1& ring1, const RingType2& ring2) {
-  return (ring1.major_radius() != ring2.major_radius()) || (ring1.minor_radius() != ring2.minor_radius()) ||
-         (ring1.center() != ring2.center()) || (ring1.orientation() != ring2.orientation());
+/// \brief Element-wise approximate equality (within a relaxed tolerance)
+template <ValidRingType T1, ValidRingType T2>
+KOKKOS_FUNCTION constexpr bool is_approx_close(
+    const T1& r1, const T2& r2,
+    typename T1::scalar_t tol = get_relaxed_comparison_tolerance<typename T1::scalar_t, typename T2::scalar_t>()) {
+  return is_close(r1, r2, tol);
 }
 
 /// \brief OStream operator
@@ -327,6 +336,25 @@ std::ostream& operator<<(std::ostream& os, const RingType& ring) {
      << "}";
   return os;
 }
+//@}
+
+/// @}
+
+//! \name Point visitation
+//@{
+
+/// \brief Visit the geometric point of a Ring (its center).
+template <ValidRingType T, typename Functor>
+KOKKOS_INLINE_FUNCTION void for_each_point(const T& r, Functor&& f) {
+  f(r.center());
+}
+
+/// \brief Visit and mutate the geometric point of a Ring.
+template <ValidRingType T, typename Functor>
+KOKKOS_INLINE_FUNCTION void for_each_point_mutable(T& r, Functor&& f) {
+  f(r.center());
+}
+
 //@}
 
 }  // namespace mundy

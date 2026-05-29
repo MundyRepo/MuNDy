@@ -24,6 +24,8 @@
 /// \file NgpFieldBLAS.hpp
 /// \defgroup MundyMeshNgpFieldBLAS mundy::mesh::NgpFieldBLAS
 /// \brief BLAS-like operations for stk::mesh::FieldBase objects with host/device-style execution.
+/// \details These overloads expose fill, copy, scale, product, axpy-style updates, norms, dot products, and reductions
+/// over STK fields and selectors.
 
 // Trilinos
 #include <stk_mesh/base/FieldBase.hpp>
@@ -35,6 +37,9 @@
 namespace mundy {
 
 namespace mesh {
+
+/// \addtogroup MundyMeshNgpFieldBLAS
+/// @{
 
 /*
 List of available field operations:
@@ -516,6 +521,8 @@ inline Scalar field_amin(stk::mesh::FieldBase& x,  //
 // inline Kokkos::pair<stk::mesh::Entity, typename Scalar> field_eamax(Mesh& stk::mesh::FieldBase&x) {
 //   return impl::ngp_field_eamax(x, nullptr);
 // }
+
+/// @}
 
 }  // namespace mesh
 

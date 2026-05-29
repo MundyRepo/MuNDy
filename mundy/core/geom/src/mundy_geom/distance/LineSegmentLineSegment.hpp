@@ -39,6 +39,9 @@
 
 namespace mundy {
 
+/// \addtogroup MundyGeomDistance
+/// @{
+
 //! \name Free space distance calculations
 //@{
 
@@ -352,6 +355,8 @@ KOKKOS_FUNCTION typename LineSegmentType1::scalar_t
                   closest_point1, closest_point2, arch_length1, arch_length2, sep);
 }
 //@}
+
+/// @}
 
 }  // namespace mundy
 

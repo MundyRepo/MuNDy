@@ -80,6 +80,9 @@ namespace mundy {
 
 namespace mesh {
 
+/// \addtogroup MundyMeshNgpAccessorExpr
+/// @{
+
 //! \name Entity expression factories
 //@{
 
@@ -237,6 +240,8 @@ auto all_reduce_min(Expr&& expr) {
   return impl::all_reduce_min_impl<Scalar>(std::forward<Expr>(expr));
 }
 //@}
+
+/// @}
 
 }  // namespace mesh
 

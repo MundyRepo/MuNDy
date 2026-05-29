@@ -24,6 +24,8 @@
 /// \file FieldViews.hpp
 /// \defgroup MundyMeshFieldViews mundy::mesh::FieldViews
 /// \brief Host and device helpers for viewing STK field data as Mundy math and geometry types.
+/// \details These free functions adapt raw STK field storage into scalar, vector, matrix, quaternion, and bounding-box
+/// accessors used by Mundy's math and geometry kernels.
 
 // C++ core libs
 #include <map>          // for std::map
@@ -46,6 +48,9 @@
 namespace mundy {
 
 namespace mesh {
+
+/// \addtogroup MundyMeshFieldViews
+/// @{
 
 //! \name stk::mesh::Field data views
 ///@{
@@ -300,6 +305,8 @@ KOKKOS_INLINE_FUNCTION auto aabb_field_data(FieldType& f, const stk::mesh::FastM
   return AABB<scalar_t, min_point_t, max_point_t>(min_corner, max_corner);
 }
 //@}
+
+/// @}
 
 }  // namespace mesh
 

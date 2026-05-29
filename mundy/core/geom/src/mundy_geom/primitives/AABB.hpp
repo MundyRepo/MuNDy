@@ -36,6 +36,9 @@
 
 namespace mundy {
 
+/// \addtogroup MundyGeomPrimitives
+/// @{
+
 template <typename Scalar, ValidPointType MinPointType = Point<Scalar>, ValidPointType MaxPointType = Point<Scalar>>
 class AABB {
   static_assert(std::is_same_v<typename MinPointType::scalar_t, Scalar> &&
@@ -54,6 +57,9 @@ class AABB {
 
   /// \brief Our point type for the max corner
   using max_point_t = MaxPointType;
+
+  static constexpr bool is_finite = true;
+
   //@}
 
   //! \name Constructors and destructor
@@ -307,16 +313,20 @@ concept ValidAABBType = is_aabb_v<AABBType>;
 //! \name Non-member functions for ValidAABBType objects
 //@{
 
-/// \brief Equality operator
-template <ValidAABBType AABBType1, ValidAABBType AABBType2>
-KOKKOS_FUNCTION constexpr bool operator==(const AABBType1& aabb1, const AABBType2& aabb2) {
-  return (aabb1.min_corner() == aabb2.min_corner()) && (aabb1.max_corner() == aabb2.max_corner());
+/// \brief Element-wise approximate equality (within a tolerance)
+template <ValidAABBType T1, ValidAABBType T2>
+KOKKOS_FUNCTION constexpr bool is_close(
+    const T1& a1, const T2& a2,
+    typename T1::scalar_t tol = get_comparison_tolerance<typename T1::scalar_t, typename T2::scalar_t>()) {
+  return is_close(a1.min_corner(), a2.min_corner(), tol) && is_close(a1.max_corner(), a2.max_corner(), tol);
 }
 
-/// \brief Inequality operator
-template <ValidAABBType AABBType1, ValidAABBType AABBType2>
-KOKKOS_FUNCTION constexpr bool operator!=(const AABBType1& aabb1, const AABBType2& aabb2) {
-  return (aabb1.min_corner() != aabb2.min_corner()) || (aabb1.max_corner() != aabb2.max_corner());
+/// \brief Element-wise approximate equality (within a relaxed tolerance)
+template <ValidAABBType T1, ValidAABBType T2>
+KOKKOS_FUNCTION constexpr bool is_approx_close(
+    const T1& a1, const T2& a2,
+    typename T1::scalar_t tol = get_relaxed_comparison_tolerance<typename T1::scalar_t, typename T2::scalar_t>()) {
+  return is_close(a1, a2, tol);
 }
 
 template <ValidAABBType AABBType>
@@ -340,6 +350,27 @@ KOKKOS_FUNCTION constexpr bool intersects(const AABBType1& aabb1, const AABBType
   return !disjoint2;
 }
 //@}
+
+//! \name Point visitation
+//@{
+
+/// \brief Visit each geometric point of an AABB (min_corner, max_corner).
+template <ValidAABBType T, typename Functor>
+KOKKOS_INLINE_FUNCTION void for_each_point(const T& aabb, Functor&& f) {
+  f(aabb.min_corner());
+  f(aabb.max_corner());
+}
+
+/// \brief Visit and mutate each geometric point of an AABB.
+template <ValidAABBType T, typename Functor>
+KOKKOS_INLINE_FUNCTION void for_each_point_mutable(T& aabb, Functor&& f) {
+  f(aabb.min_corner());
+  f(aabb.max_corner());
+}
+
+//@}
+
+/// @}
 
 }  // namespace mundy
 

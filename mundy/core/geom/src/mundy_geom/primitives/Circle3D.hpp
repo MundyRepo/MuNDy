@@ -38,6 +38,9 @@
 
 namespace mundy {
 
+/// \addtogroup MundyGeomPrimitives
+/// @{
+
 template <typename Scalar, ValidPointType PointType = Point<Scalar>,
           ValidQuaternionType QuaternionType = Quaternion<Scalar>>
 class Circle3D {
@@ -57,6 +60,8 @@ class Circle3D {
 
   /// \brief Our orientation type
   using orientation_t = QuaternionType;
+
+  static constexpr bool is_finite = true;
 
   //@}
 
@@ -262,18 +267,21 @@ concept ValidCircle3DType = is_circle3d_v<Circle3DType>;
 //! \name Non-member functions for ValidCircle3DType objects
 //@{
 
-/// \brief Equality operator
-template <ValidCircle3DType Circle3DType1, ValidCircle3DType Circle3DType2>
-KOKKOS_FUNCTION constexpr bool operator==(const Circle3DType1& circle3d1, const Circle3DType2& circle3d2) {
-  return (circle3d1.radius() == circle3d2.radius()) && (circle3d1.center() == circle3d2.center()) &&
-         (circle3d1.orientation() == circle3d2.orientation());
+/// \brief Element-wise approximate equality (within a tolerance)
+template <ValidCircle3DType T1, ValidCircle3DType T2>
+KOKKOS_FUNCTION constexpr bool is_close(
+    const T1& c1, const T2& c2,
+    typename T1::scalar_t tol = get_comparison_tolerance<typename T1::scalar_t, typename T2::scalar_t>()) {
+  return is_close(c1.radius(), c2.radius(), tol) && is_close(c1.center(), c2.center(), tol) &&
+         is_close(c1.orientation(), c2.orientation(), tol);
 }
 
-/// \brief Inequality operator
-template <ValidCircle3DType Circle3DType1, ValidCircle3DType Circle3DType2>
-KOKKOS_FUNCTION constexpr bool operator!=(const Circle3DType1& circle3d1, const Circle3DType2& circle3d2) {
-  return (circle3d1.radius() != circle3d2.radius()) || (circle3d1.center() != circle3d2.center()) ||
-         (circle3d1.orientation() != circle3d2.orientation());
+/// \brief Element-wise approximate equality (within a relaxed tolerance)
+template <ValidCircle3DType T1, ValidCircle3DType T2>
+KOKKOS_FUNCTION constexpr bool is_approx_close(
+    const T1& c1, const T2& c2,
+    typename T1::scalar_t tol = get_relaxed_comparison_tolerance<typename T1::scalar_t, typename T2::scalar_t>()) {
+  return is_close(c1, c2, tol);
 }
 
 /// \brief OStream operator
@@ -283,6 +291,25 @@ std::ostream& operator<<(std::ostream& os, const Circle3DType& circle3d) {
   return os;
 }
 //@}
+
+//! \name Point visitation
+//@{
+
+/// \brief Visit the geometric point of a Circle3D (its center).
+template <ValidCircle3DType T, typename Functor>
+KOKKOS_INLINE_FUNCTION void for_each_point(const T& c, Functor&& f) {
+  f(c.center());
+}
+
+/// \brief Visit and mutate the geometric point of a Circle3D.
+template <ValidCircle3DType T, typename Functor>
+KOKKOS_INLINE_FUNCTION void for_each_point_mutable(T& c, Functor&& f) {
+  f(c.center());
+}
+
+//@}
+
+/// @}
 
 }  // namespace mundy
 

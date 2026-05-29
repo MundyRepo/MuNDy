@@ -24,6 +24,8 @@
 /// \file DeclareField.hpp
 /// \defgroup MundyMeshDeclareField mundy::mesh::DeclareField
 /// \brief A set of helpers for declaring fields with reduced boilerplate code.
+/// \details FieldDeclarationHelper and its tagged variants provide fluent builders for STK field type, rank, role,
+/// output type, and name before declaration.
 
 // C++ core
 #include <iostream>   // for std::ostream
@@ -44,6 +46,9 @@
 namespace mundy {
 
 namespace mesh {
+
+/// \addtogroup MundyMeshDeclareField
+/// @{
 
 template <typename FieldScalarType, typename Tag = void>
 class TaggedFieldDeclarationHelperT;
@@ -344,6 +349,8 @@ class FieldDeclarationHelper {
   Ioss::Field::RoleType field_role_;
   stk::io::FieldOutputType output_type_;
 };
+
+/// @}
 
 }  // namespace mesh
 

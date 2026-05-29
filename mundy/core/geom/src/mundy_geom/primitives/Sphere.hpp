@@ -36,6 +36,9 @@
 
 namespace mundy {
 
+/// \addtogroup MundyGeomPrimitives
+/// @{
+
 template <typename Scalar, ValidPointType PointType = Point<Scalar>>
 class Sphere {
   static_assert(std::is_same_v<typename PointType::scalar_t, Scalar>,
@@ -50,6 +53,8 @@ class Sphere {
 
   /// \brief Our point type
   using point_t = PointType;
+
+  static constexpr bool is_finite = true;
 
   //@}
 
@@ -238,16 +243,20 @@ static_assert(ValidSphereType<Sphere<float>> && ValidSphereType<const Sphere<flo
 //! \name Non-member functions for ValidSphereType objects
 //@{
 
-/// \brief Equality operator
-template <ValidSphereType SphereType1, ValidSphereType SphereType2>
-KOKKOS_FUNCTION constexpr bool operator==(const SphereType1& sphere1, const SphereType2& sphere2) {
-  return (sphere1.radius() == sphere2.radius()) && (sphere1.center() == sphere2.center());
+/// \brief Element-wise approximate equality (within a tolerance)
+template <ValidSphereType T1, ValidSphereType T2>
+KOKKOS_FUNCTION constexpr bool is_close(
+    const T1& s1, const T2& s2,
+    typename T1::scalar_t tol = get_comparison_tolerance<typename T1::scalar_t, typename T2::scalar_t>()) {
+  return is_close(s1.radius(), s2.radius(), tol) && is_close(s1.center(), s2.center(), tol);
 }
 
-/// \brief Inequality operator
-template <ValidSphereType SphereType1, ValidSphereType SphereType2>
-KOKKOS_FUNCTION constexpr bool operator!=(const SphereType1& sphere1, const SphereType2& sphere2) {
-  return (sphere1.radius() != sphere2.radius()) || (sphere1.center() != sphere2.center());
+/// \brief Element-wise approximate equality (within a relaxed tolerance)
+template <ValidSphereType T1, ValidSphereType T2>
+KOKKOS_FUNCTION constexpr bool is_approx_close(
+    const T1& s1, const T2& s2,
+    typename T1::scalar_t tol = get_relaxed_comparison_tolerance<typename T1::scalar_t, typename T2::scalar_t>()) {
+  return is_close(s1, s2, tol);
 }
 
 /// \brief OStream operator
@@ -256,6 +265,25 @@ std::ostream& operator<<(std::ostream& os, const SphereType& sphere) {
   os << "{" << sphere.center() << ":" << sphere.radius() << "}";
   return os;
 }
+//@}
+
+/// @}
+
+//! \name Point visitation
+//@{
+
+/// \brief Visit the geometric point of a Sphere (its center).
+template <ValidSphereType T, typename Functor>
+KOKKOS_INLINE_FUNCTION void for_each_point(const T& s, Functor&& f) {
+  f(s.center());
+}
+
+/// \brief Visit and mutate the geometric point of a Sphere.
+template <ValidSphereType T, typename Functor>
+KOKKOS_INLINE_FUNCTION void for_each_point_mutable(T& s, Functor&& f) {
+  f(s.center());
+}
+
 //@}
 
 }  // namespace mundy

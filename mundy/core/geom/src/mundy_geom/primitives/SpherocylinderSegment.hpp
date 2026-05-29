@@ -36,6 +36,9 @@
 
 namespace mundy {
 
+/// \addtogroup MundyGeomPrimitives
+/// @{
+
 template <typename Scalar, ValidPointType PointType = Point<Scalar>>
 class SpherocylinderSegment {
   static_assert(std::is_same_v<typename PointType::scalar_t, Scalar>,
@@ -50,6 +53,8 @@ class SpherocylinderSegment {
 
   /// \brief Our point type
   using point_t = PointType;
+
+  static constexpr bool is_finite = true;
 
   //@}
 
@@ -279,24 +284,21 @@ static_assert(ValidSpherocylinderSegmentType<SpherocylinderSegment<float>> &&
 //! \name Non-member functions for ValidSpherocylinderSegmentType objects
 //@{
 
-/// \brief Equality operator
-template <ValidSpherocylinderSegmentType SpherocylinderSegmentType1,
-          ValidSpherocylinderSegmentType SpherocylinderSegmentType2>
-KOKKOS_FUNCTION constexpr bool operator==(const SpherocylinderSegmentType1& spherocylinder_segment1,
-                                          const SpherocylinderSegmentType2& spherocylinder_segment2) {
-  return (spherocylinder_segment1.radius() == spherocylinder_segment2.radius()) &&
-         (spherocylinder_segment1.start() == spherocylinder_segment2.start()) &&
-         (spherocylinder_segment1.end() == spherocylinder_segment2.end());
+/// \brief Element-wise approximate equality (within a tolerance)
+template <ValidSpherocylinderSegmentType T1, ValidSpherocylinderSegmentType T2>
+KOKKOS_FUNCTION constexpr bool is_close(
+    const T1& scs1, const T2& scs2,
+    typename T1::scalar_t tol = get_comparison_tolerance<typename T1::scalar_t, typename T2::scalar_t>()) {
+  return is_close(scs1.radius(), scs2.radius(), tol) && is_close(scs1.start(), scs2.start(), tol) &&
+         is_close(scs1.end(), scs2.end(), tol);
 }
 
-/// \brief Inequality operator
-template <ValidSpherocylinderSegmentType SpherocylinderSegmentType1,
-          ValidSpherocylinderSegmentType SpherocylinderSegmentType2>
-KOKKOS_FUNCTION constexpr bool operator!=(const SpherocylinderSegmentType1& spherocylinder_segment1,
-                                          const SpherocylinderSegmentType2& spherocylinder_segment2) {
-  return ((spherocylinder_segment1.radius() != spherocylinder_segment2.radius())) ||
-         (spherocylinder_segment1.start() != spherocylinder_segment2.start()) ||
-         (spherocylinder_segment1.end() != spherocylinder_segment2.end());
+/// \brief Element-wise approximate equality (within a relaxed tolerance)
+template <ValidSpherocylinderSegmentType T1, ValidSpherocylinderSegmentType T2>
+KOKKOS_FUNCTION constexpr bool is_approx_close(
+    const T1& scs1, const T2& scs2,
+    typename T1::scalar_t tol = get_relaxed_comparison_tolerance<typename T1::scalar_t, typename T2::scalar_t>()) {
+  return is_close(scs1, scs2, tol);
 }
 
 /// \brief OStream operator
@@ -306,6 +308,27 @@ std::ostream& operator<<(std::ostream& os, const SpherocylinderSegmentType& sphe
      << spherocylinder_segment.radius() << "}";
   return os;
 }
+
+/// @}
+
+//! \name Point visitation
+//@{
+
+/// \brief Visit each geometric point of a SpherocylinderSegment (start, end).
+template <ValidSpherocylinderSegmentType T, typename Functor>
+KOKKOS_INLINE_FUNCTION void for_each_point(const T& scs, Functor&& f) {
+  f(scs.start());
+  f(scs.end());
+}
+
+/// \brief Visit and mutate each geometric point of a SpherocylinderSegment.
+template <ValidSpherocylinderSegmentType T, typename Functor>
+KOKKOS_INLINE_FUNCTION void for_each_point_mutable(T& scs, Functor&& f) {
+  f(scs.start());
+  f(scs.end());
+}
+
+//@}
 
 }  // namespace mundy
 

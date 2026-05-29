@@ -35,6 +35,9 @@
 
 namespace mundy {
 
+/// \addtogroup MundyGeomDistance
+/// @{
+
 //! \name Free space distance calculations
 //@{
 
@@ -80,6 +83,8 @@ KOKKOS_FUNCTION typename SphereType1::scalar_t distance(const SphereType1& spher
   return surface_distance;
 }
 //@}
+
+/// @}
 
 }  // namespace mundy
 

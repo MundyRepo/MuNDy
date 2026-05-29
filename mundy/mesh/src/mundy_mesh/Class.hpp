@@ -24,6 +24,8 @@
 /// \file Class.hpp
 /// \defgroup MundyMeshClasses mundy::mesh::Classes
 /// \brief Turning STK's IO support from a hierarchy of disjoint parts to a polymorphic class hierarchy.
+/// \details Classes wrap STK parts with metadata and utilities for class membership, subclass relationships, primary
+/// classes, and BulkData-facing class changes.
 
 // C++ core
 #include <algorithm>
@@ -55,6 +57,9 @@
 namespace mundy {
 
 namespace mesh {
+
+/// \addtogroup MundyMeshClasses
+/// @{
 
 class Class;
 using ClassVector = std::vector<Class*>;
@@ -1419,6 +1424,8 @@ inline BulkDataClassInterface class_interface(stk::mesh::BulkData& bulk_data) {
   return BulkDataClassInterface{bulk_data};
 }
 //@}
+
+/// @}
 
 }  // namespace mesh
 

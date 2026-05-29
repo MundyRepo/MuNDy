@@ -35,6 +35,9 @@
 
 namespace mundy {
 
+/// \addtogroup MundyGeomDistance
+/// @{
+
 //! \name Free space distance calculations
 //@{
 
@@ -110,6 +113,8 @@ KOKKOS_FUNCTION typename PointType::scalar_t distance([[maybe_unused]] const Sha
   return distance(arch_length * line.direction(), line_to_point);
 }
 //@}
+
+/// @}
 
 }  // namespace mundy
 

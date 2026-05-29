@@ -42,6 +42,9 @@
 
 namespace mundy {
 
+/// \addtogroup MundyGeomDistance
+/// @{
+
 //! \name Free space distance calculations
 //@{
 
@@ -165,6 +168,8 @@ KOKKOS_FUNCTION typename Circle3DType1::scalar_t
   return global_dist;
 }
 //@}
+
+/// @}
 
 }  // namespace mundy
 

@@ -225,7 +225,7 @@ Helpers and abstractions for integrating MuNDy with Trilinos/STK meshes and fiel
   - Rank: `"ELEM_RANK"`  
   to their corresponding STK objects.
 
-- **mundy::mesh::DeclareEntities / mundy::mesh::DeclareField / mundy::mesh::DeclarePart / mundy::mesh::DeclareClass**  
+- **mundy::mesh::DeclareEntitiesHelper / mundy::mesh::FieldDeclarationHelper / mundy::mesh::PartDeclarationHelper / mundy::mesh::ClassDeclarationHelper**  
   Helper functions that streamline common STK mesh setup tasks, such as declaring fields and parts with the correct properties and parallel consistency.
 
 * **mundy::mesh::NgpModRequests**

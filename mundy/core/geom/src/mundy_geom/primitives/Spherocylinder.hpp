@@ -37,6 +37,9 @@
 
 namespace mundy {
 
+/// \addtogroup MundyGeomPrimitives
+/// @{
+
 template <typename Scalar, ValidPointType PointType = Point<Scalar>,
           ValidQuaternionType QuaternionType = Quaternion<Scalar>>
 class Spherocylinder {
@@ -56,6 +59,8 @@ class Spherocylinder {
 
   /// \brief Our orientation type
   using orientation_t = QuaternionType;
+
+  static constexpr bool is_finite = true;
 
   //@}
 
@@ -328,24 +333,21 @@ static_assert(ValidSpherocylinderType<Spherocylinder<float>> && ValidSpherocylin
 //! \name Non-member functions for ValidSpherocylinderType objects
 //@{
 
-/// \brief Equality operator
-template <ValidSpherocylinderType SpherocylinderType1, ValidSpherocylinderType SpherocylinderType2>
-KOKKOS_FUNCTION constexpr bool operator==(const SpherocylinderType1& spherocylinder1,
-                                          const SpherocylinderType2& spherocylinder2) {
-  return (spherocylinder1.radius() == spherocylinder2.radius()) &&
-         (spherocylinder1.length() == spherocylinder2.length()) &&
-         (spherocylinder1.center() == spherocylinder2.center()) &&
-         (spherocylinder1.orientation() == spherocylinder2.orientation());
+/// \brief Element-wise approximate equality (within a tolerance)
+template <ValidSpherocylinderType T1, ValidSpherocylinderType T2>
+KOKKOS_FUNCTION constexpr bool is_close(
+    const T1& sc1, const T2& sc2,
+    typename T1::scalar_t tol = get_comparison_tolerance<typename T1::scalar_t, typename T2::scalar_t>()) {
+  return is_close(sc1.radius(), sc2.radius(), tol) && is_close(sc1.length(), sc2.length(), tol) &&
+         is_close(sc1.center(), sc2.center(), tol) && is_close(sc1.orientation(), sc2.orientation(), tol);
 }
 
-/// \brief Inequality operator
-template <ValidSpherocylinderType SpherocylinderType1, ValidSpherocylinderType SpherocylinderType2>
-KOKKOS_FUNCTION constexpr bool operator!=(const SpherocylinderType1& spherocylinder1,
-                                          const SpherocylinderType2& spherocylinder2) {
-  return (spherocylinder1.radius() != spherocylinder2.radius()) ||
-         (spherocylinder1.length() != spherocylinder2.length()) ||
-         (spherocylinder1.center() != spherocylinder2.center()) ||
-         (spherocylinder1.orientation() != spherocylinder2.orientation());
+/// \brief Element-wise approximate equality (within a relaxed tolerance)
+template <ValidSpherocylinderType T1, ValidSpherocylinderType T2>
+KOKKOS_FUNCTION constexpr bool is_approx_close(
+    const T1& sc1, const T2& sc2,
+    typename T1::scalar_t tol = get_relaxed_comparison_tolerance<typename T1::scalar_t, typename T2::scalar_t>()) {
+  return is_close(sc1, sc2, tol);
 }
 
 /// \brief OStream operator
@@ -355,6 +357,25 @@ std::ostream& operator<<(std::ostream& os, const SpherocylinderType& spherocylin
      << spherocylinder.length() << "}";
   return os;
 }
+//@}
+
+/// @}
+
+//! \name Point visitation
+//@{
+
+/// \brief Visit the geometric point of a Spherocylinder (its center).
+template <ValidSpherocylinderType T, typename Functor>
+KOKKOS_INLINE_FUNCTION void for_each_point(const T& sc, Functor&& f) {
+  f(sc.center());
+}
+
+/// \brief Visit and mutate the geometric point of a Spherocylinder.
+template <ValidSpherocylinderType T, typename Functor>
+KOKKOS_INLINE_FUNCTION void for_each_point_mutable(T& sc, Functor&& f) {
+  f(sc.center());
+}
+
 //@}
 
 }  // namespace mundy

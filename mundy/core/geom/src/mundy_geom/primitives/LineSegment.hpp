@@ -36,6 +36,9 @@
 
 namespace mundy {
 
+/// \addtogroup MundyGeomPrimitives
+/// @{
+
 template <typename Scalar, ValidPointType StartPointType = Point<Scalar>, ValidPointType EndPointType = Point<Scalar>>
 class LineSegment {
   static_assert(std::is_same_v<typename StartPointType::scalar_t, Scalar> &&
@@ -54,6 +57,8 @@ class LineSegment {
 
   /// \brief Our point type for the end point
   using end_point_t = EndPointType;
+
+  static constexpr bool is_finite = true;
 
   //@}
 
@@ -274,18 +279,20 @@ static_assert(ValidLineSegmentType<LineSegment<double, Point<double>, APoint<dou
 //! \name Non-member functions for ValidLineSegmentType objects
 //@{
 
-/// \brief Equality operator
-template <ValidLineSegmentType LineSegmentType1, ValidLineSegmentType LineSegmentType2>
-KOKKOS_FUNCTION constexpr bool operator==(const LineSegmentType1& line_segment1,
-                                          const LineSegmentType2& line_segment2) {
-  return (line_segment1.start() == line_segment2.start()) && (line_segment1.end() == line_segment2.end());
+/// \brief Element-wise approximate equality (within a tolerance)
+template <ValidLineSegmentType T1, ValidLineSegmentType T2>
+KOKKOS_FUNCTION constexpr bool is_close(
+    const T1& ls1, const T2& ls2,
+    typename T1::scalar_t tol = get_comparison_tolerance<typename T1::scalar_t, typename T2::scalar_t>()) {
+  return is_close(ls1.start(), ls2.start(), tol) && is_close(ls1.end(), ls2.end(), tol);
 }
 
-/// \brief Inequality operator
-template <ValidLineSegmentType LineSegmentType1, ValidLineSegmentType LineSegmentType2>
-KOKKOS_FUNCTION constexpr bool operator!=(const LineSegmentType1& line_segment1,
-                                          const LineSegmentType2& line_segment2) {
-  return (line_segment1.start() != line_segment2.start()) || (line_segment1.end() != line_segment2.end());
+/// \brief Element-wise approximate equality (within a relaxed tolerance)
+template <ValidLineSegmentType T1, ValidLineSegmentType T2>
+KOKKOS_FUNCTION constexpr bool is_approx_close(
+    const T1& ls1, const T2& ls2,
+    typename T1::scalar_t tol = get_relaxed_comparison_tolerance<typename T1::scalar_t, typename T2::scalar_t>()) {
+  return is_close(ls1, ls2, tol);
 }
 
 /// \brief OStream operator
@@ -294,6 +301,27 @@ std::ostream& operator<<(std::ostream& os, const LineSegmentType& line_segment) 
   os << "{" << line_segment.start() << "->" << line_segment.end() << "}";
   return os;
 }
+
+/// @}
+
+//! \name Point visitation
+//@{
+
+/// \brief Visit each geometric point of a LineSegment (start, end).
+template <ValidLineSegmentType T, typename Functor>
+KOKKOS_INLINE_FUNCTION void for_each_point(const T& ls, Functor&& f) {
+  f(ls.start());
+  f(ls.end());
+}
+
+/// \brief Visit and mutate each geometric point of a LineSegment.
+template <ValidLineSegmentType T, typename Functor>
+KOKKOS_INLINE_FUNCTION void for_each_point_mutable(T& ls, Functor&& f) {
+  f(ls.start());
+  f(ls.end());
+}
+
+//@}
 
 }  // namespace mundy
 

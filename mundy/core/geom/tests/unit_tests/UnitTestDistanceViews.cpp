@@ -89,11 +89,11 @@ TEST(DistanceViews, AcceptsViewBackedPointLineSegmentAndSphere) {
   double arch_length2 = 0.0;
   EXPECT_NEAR(distance(segment, segment2, closest1, closest2, arch_length1, arch_length2, sep), 2.0, tol);
 
-  EuclideanMetric<double> free_metric;
+  FreeSpaceMetric<double> free_metric;
   const auto free_sep = free_metric.sep(origin, point_x);
   EXPECT_NEAR(free_sep[0], 1.0, tol);
 
-  PeriodicScaledMetric<double> periodic_metric{Vector3d{10.0, 10.0, 10.0}};
+  OrthorhombicMetric<AXIS_XYZ, double> periodic_metric{Vector3d{10.0, 10.0, 10.0}};
   double near_right_data[3] = {9.8, 0.0, 0.0};
   double near_left_data[3] = {0.2, 0.0, 0.0};
   auto near_right = get_vector3_view<double>(near_right_data);

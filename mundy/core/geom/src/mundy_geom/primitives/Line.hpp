@@ -37,6 +37,9 @@
 
 namespace mundy {
 
+/// \addtogroup MundyGeomPrimitives
+/// @{
+
 template <typename Scalar, ValidPointType PointType = Point<Scalar>>
 class Line {
   static_assert(std::is_same_v<typename PointType::scalar_t, Scalar>,
@@ -54,6 +57,8 @@ class Line {
 
   /// \brief Our vector type
   using vector_t = PointType;
+
+  static constexpr bool is_finite = false;
 
   //@}
 
@@ -248,16 +253,20 @@ concept ValidLineType = is_line_v<LineType>;
 //! \name Non-member functions for ValidLineType objects
 //@{
 
-/// \brief Equality operator
-template <ValidLineType LineType1, ValidLineType LineType2>
-KOKKOS_FUNCTION constexpr bool operator==(const LineType1& line1, const LineType2& line2) {
-  return (line1.center() == line2.center()) && (line1.direction() == line2.direction());
+/// \brief Element-wise approximate equality (within a tolerance)
+template <ValidLineType T1, ValidLineType T2>
+KOKKOS_FUNCTION constexpr bool is_close(
+    const T1& l1, const T2& l2,
+    typename T1::scalar_t tol = get_comparison_tolerance<typename T1::scalar_t, typename T2::scalar_t>()) {
+  return is_close(l1.center(), l2.center(), tol) && is_close(l1.direction(), l2.direction(), tol);
 }
 
-/// \brief Inequality operator
-template <ValidLineType LineType1, ValidLineType LineType2>
-KOKKOS_FUNCTION constexpr bool operator!=(const LineType1& line1, const LineType2& line2) {
-  return (line1.center() != line2.center()) || (line1.direction() != line2.direction());
+/// \brief Element-wise approximate equality (within a relaxed tolerance)
+template <ValidLineType T1, ValidLineType T2>
+KOKKOS_FUNCTION constexpr bool is_approx_close(
+    const T1& l1, const T2& l2,
+    typename T1::scalar_t tol = get_relaxed_comparison_tolerance<typename T1::scalar_t, typename T2::scalar_t>()) {
+  return is_close(l1, l2, tol);
 }
 
 /// \brief Output stream operator
@@ -266,6 +275,27 @@ std::ostream& operator<<(std::ostream& os, const LineType& line) {
   os << "{" << line.center() << ":" << line.direction() << "}";
   return os;
 }
+//@}
+
+/// @}
+
+//! \name Point visitation
+//@{
+
+/// \brief Visit the geometric anchor point of a Line (its center).
+/// The direction is a vector, not a position, and is not visited.
+template <ValidLineType T, typename Functor>
+KOKKOS_INLINE_FUNCTION void for_each_point(const T& l, Functor&& f) {
+  f(l.center());
+}
+
+/// \brief Visit and mutate the geometric anchor point of a Line.
+/// The direction is a vector, not a position, and is not mutated.
+template <ValidLineType T, typename Functor>
+KOKKOS_INLINE_FUNCTION void for_each_point_mutable(T& l, Functor&& f) {
+  f(l.center());
+}
+
 //@}
 
 }  // namespace mundy

@@ -40,6 +40,9 @@
 
 namespace mundy {
 
+/// \addtogroup MundyGeomDistance
+/// @{
+
 //! \name Free space distance calculations
 //@{
 
@@ -145,6 +148,8 @@ KOKKOS_FUNCTION typename PointType::scalar_t distance([[maybe_unused]] const Sha
   return mundy::dot(point - closest_point, ellipsoid_normal);
 }
 //@}
+
+/// @}
 
 }  // namespace mundy
 

@@ -40,6 +40,10 @@
 #include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
 
 namespace mundy {
+
+/// \addtogroup MundyGeomRandomize
+/// @{
+
 /*
 Supported shapes:
   - Point
@@ -299,6 +303,8 @@ Ellipsoid<Scalar> generate_random_ellipsoid(const AABB<Scalar>& box, const Vecto
 
   return Ellipsoid<Scalar>(center, random_quaternion, r0, r1, r2);
 }
+
+/// @}
 
 }  // namespace mundy
 

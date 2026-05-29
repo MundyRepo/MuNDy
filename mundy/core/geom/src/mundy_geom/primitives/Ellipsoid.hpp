@@ -38,6 +38,9 @@
 
 namespace mundy {
 
+/// \addtogroup MundyGeomPrimitives
+/// @{
+
 template <typename Scalar, ValidPointType PointType = Point<Scalar>,
           ValidQuaternionType OrientationType = Quaternion<Scalar>>
 class Ellipsoid {
@@ -57,6 +60,8 @@ class Ellipsoid {
 
   /// \brief Our quaternion type
   using orientation_t = OrientationType;
+
+  static constexpr bool is_finite = true;
 
   //@}
 
@@ -371,18 +376,21 @@ concept ValidEllipsoidType = is_ellipsoid_v<EllipsoidType>;
 //! \name Non-member functions for ValidSphereType objects
 //@{
 
-/// \brief Equality operator
-template <ValidEllipsoidType EllipsoidType1, ValidEllipsoidType EllipsoidType2>
-KOKKOS_FUNCTION constexpr bool operator==(const EllipsoidType1& ellipsoid1, const EllipsoidType2& ellipsoid2) {
-  return (ellipsoid1.center() == ellipsoid2.center()) && (ellipsoid1.orientation() == ellipsoid2.orientation()) &&
-         (ellipsoid1.radii() == ellipsoid2.radii());
+/// \brief Element-wise approximate equality (within a tolerance)
+template <ValidEllipsoidType T1, ValidEllipsoidType T2>
+KOKKOS_FUNCTION constexpr bool is_close(
+    const T1& e1, const T2& e2,
+    typename T1::scalar_t tol = get_comparison_tolerance<typename T1::scalar_t, typename T2::scalar_t>()) {
+  return is_close(e1.center(), e2.center(), tol) && is_close(e1.orientation(), e2.orientation(), tol) &&
+         is_close(e1.radii(), e2.radii(), tol);
 }
 
-/// \brief Inequality operator
-template <ValidEllipsoidType EllipsoidType1, ValidEllipsoidType EllipsoidType2>
-KOKKOS_FUNCTION constexpr bool operator!=(const EllipsoidType1& ellipsoid1, const EllipsoidType2& ellipsoid2) {
-  return (ellipsoid1.center() != ellipsoid2.center()) || (ellipsoid1.orientation() != ellipsoid2.orientation()) ||
-         (ellipsoid1.radii() != ellipsoid2.radii());
+/// \brief Element-wise approximate equality (within a relaxed tolerance)
+template <ValidEllipsoidType T1, ValidEllipsoidType T2>
+KOKKOS_FUNCTION constexpr bool is_approx_close(
+    const T1& e1, const T2& e2,
+    typename T1::scalar_t tol = get_relaxed_comparison_tolerance<typename T1::scalar_t, typename T2::scalar_t>()) {
+  return is_close(e1, e2, tol);
 }
 
 /// \brief OStream operator
@@ -441,6 +449,25 @@ KOKKOS_FUNCTION constexpr Vector3<Scalar> map_surface_normal_to_foot_point_on_el
   const auto body_frame_foot_point = map_body_frame_normal_to_ellipsoid(body_frame_nhat, ellipsoid);
   return ellipsoid.orientation() * body_frame_foot_point + ellipsoid.center();
 }
+//@}
+
+/// @}
+
+//! \name Point visitation
+//@{
+
+/// \brief Visit the geometric point of an Ellipsoid (its center).
+template <ValidEllipsoidType T, typename Functor>
+KOKKOS_INLINE_FUNCTION void for_each_point(const T& e, Functor&& f) {
+  f(e.center());
+}
+
+/// \brief Visit and mutate the geometric point of an Ellipsoid.
+template <ValidEllipsoidType T, typename Functor>
+KOKKOS_INLINE_FUNCTION void for_each_point_mutable(T& e, Functor&& f) {
+  f(e.center());
+}
+
 //@}
 
 }  // namespace mundy
