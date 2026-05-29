@@ -38,12 +38,12 @@
 #include <stk_util/parallel/Parallel.hpp>  // for stk::parallel_machine_init, stk::parallel_machine_finalize
 
 // Mundy
-#include <mundy_math/Array.hpp>                        // for mundy::Array
-#include <mundy_math/Matrix.hpp>                       // for mundy::Matrix
-#include <mundy_math/Quaternion.hpp>                   // for mundy::Quaternion
-#include <mundy_math/Tolerance.hpp>                    // for mundy::get_relaxed_tolerance
-#include <mundy_math/Vector.hpp>                       // for mundy::Vector
-#include <mundy_geom/periodicity.hpp>                 // for mundy::PeriodicScaledMetric, mundy::PeriodicMetric
+#include <mundy_geom/periodicity.hpp>  // for mundy::PeriodicScaledMetric, mundy::PeriodicMetric
+#include <mundy_math/Array.hpp>        // for mundy::Array
+#include <mundy_math/Matrix.hpp>       // for mundy::Matrix
+#include <mundy_math/Quaternion.hpp>   // for mundy::Quaternion
+#include <mundy_math/Tolerance.hpp>    // for mundy::get_relaxed_tolerance
+#include <mundy_math/Vector.hpp>       // for mundy::Vector
 
 mundy::Vector3d random_vector() {
   return mundy::Vector3d{static_cast<double>(rand()) / RAND_MAX, static_cast<double>(rand()) / RAND_MAX,

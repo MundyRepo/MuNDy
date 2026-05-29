@@ -28,8 +28,8 @@
 #include <type_traits>
 
 // Mundy
-#include <mundy_geom/distance/Types.hpp>            // for mundy::SharedNormalSigned, Euclidean
-#include <mundy_geom/primitives/Point.hpp>          // for mundy::Point
+#include <mundy_geom/distance/Types.hpp>    // for mundy::SharedNormalSigned, Euclidean
+#include <mundy_geom/primitives/Point.hpp>  // for mundy::Point
 #include <mundy_utils/requires.hpp>
 
 namespace mundy {
@@ -42,9 +42,9 @@ namespace mundy {
 /// \param[in] point1 The first point
 /// \param[in] point2 The second point
 template <ValidPointType PointType1, ValidPointType PointType2>
-  MUNDY_REQUIRES(std::is_same_v<typename PointType1::scalar_t, typename PointType2::scalar_t>)
+MUNDY_REQUIRES(std::is_same_v<typename PointType1::scalar_t, typename PointType2::scalar_t>)
 KOKKOS_FUNCTION typename PointType1::scalar_t distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
-                                                       const PointType1& point1,                                //
+                                                       const PointType1& point1,                                 //
                                                        const PointType2& point2) {
   return mundy::norm(point2 - point1);
 }
@@ -55,10 +55,10 @@ KOKKOS_FUNCTION typename PointType1::scalar_t distance([[maybe_unused]] const Sh
 /// \param[in] point2 The second point
 /// \param[out] sep The separation vector (from point1 to point2)
 template <ValidPointType PointType1, ValidPointType PointType2>
-  MUNDY_REQUIRES(std::is_same_v<typename PointType1::scalar_t, typename PointType2::scalar_t>)
+MUNDY_REQUIRES(std::is_same_v<typename PointType1::scalar_t, typename PointType2::scalar_t>)
 KOKKOS_FUNCTION typename PointType1::scalar_t distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
-                                                       const PointType1& point1,                                //
-                                                       const PointType2& point2,                                //
+                                                       const PointType1& point1,                                 //
+                                                       const PointType2& point2,                                 //
                                                        mundy::Vector3<typename PointType1::scalar_t>& sep) {
   sep = point2 - point1;
   return mundy::norm(sep);
@@ -69,9 +69,9 @@ KOKKOS_FUNCTION typename PointType1::scalar_t distance([[maybe_unused]] const Sh
 /// \param[in] point1 The first point
 /// \param[in] point2 The second point
 template <ValidPointType PointType1, ValidPointType PointType2>
-  MUNDY_REQUIRES(std::is_same_v<typename PointType1::scalar_t, typename PointType2::scalar_t>)
+MUNDY_REQUIRES(std::is_same_v<typename PointType1::scalar_t, typename PointType2::scalar_t>)
 KOKKOS_FUNCTION typename PointType1::scalar_t distance([[maybe_unused]] const Euclidean distance_type,  //
-                                                       const PointType1& point1,                       //
+                                                       const PointType1& point1,                        //
                                                        const PointType2& point2) {
   return distance(SharedNormalSigned{}, point1, point2);
 }
@@ -82,10 +82,10 @@ KOKKOS_FUNCTION typename PointType1::scalar_t distance([[maybe_unused]] const Eu
 /// \param[in] point2 The second point
 /// \param[out] sep The separation vector (from point1 to point2)
 template <ValidPointType PointType1, ValidPointType PointType2>
-  MUNDY_REQUIRES(std::is_same_v<typename PointType1::scalar_t, typename PointType2::scalar_t>)
+MUNDY_REQUIRES(std::is_same_v<typename PointType1::scalar_t, typename PointType2::scalar_t>)
 KOKKOS_FUNCTION typename PointType1::scalar_t distance([[maybe_unused]] const Euclidean distance_type,  //
-                                                       const PointType1& point1,                       //
-                                                       const PointType2& point2,                       //
+                                                       const PointType1& point1,                        //
+                                                       const PointType2& point2,                        //
                                                        mundy::Vector3<typename PointType1::scalar_t>& sep) {
   return distance(SharedNormalSigned{}, point1, point2, sep);
 }
@@ -95,7 +95,7 @@ KOKKOS_FUNCTION typename PointType1::scalar_t distance([[maybe_unused]] const Eu
 /// \param[in] point1 The first point
 /// \param[in] point2 The second point
 template <ValidPointType PointType1, ValidPointType PointType2>
-  MUNDY_REQUIRES(std::is_same_v<typename PointType1::scalar_t, typename PointType2::scalar_t>)
+MUNDY_REQUIRES(std::is_same_v<typename PointType1::scalar_t, typename PointType2::scalar_t>)
 KOKKOS_FUNCTION typename PointType1::scalar_t distance(const PointType1& point1,  //
                                                        const PointType2& point2) {
   return distance(SharedNormalSigned{}, point1, point2);
@@ -107,7 +107,7 @@ KOKKOS_FUNCTION typename PointType1::scalar_t distance(const PointType1& point1,
 /// \param[in] point2 The second point
 /// \param[out] sep The separation vector (from point1 to point2)
 template <ValidPointType PointType1, ValidPointType PointType2>
-  MUNDY_REQUIRES(std::is_same_v<typename PointType1::scalar_t, typename PointType2::scalar_t>)
+MUNDY_REQUIRES(std::is_same_v<typename PointType1::scalar_t, typename PointType2::scalar_t>)
 KOKKOS_FUNCTION typename PointType1::scalar_t distance(const PointType1& point1,  //
                                                        const PointType2& point2,  //
                                                        mundy::Vector3<typename PointType1::scalar_t>& sep) {

@@ -34,10 +34,10 @@
 #include <mundy_math/minimize.hpp>    // for mundy::find_min_using_approximate_derivatives
 
 // Mundy geom
-#include <mundy_geom/distance/PointPoint.hpp>       // for mundy::distance(Point, Point)
-#include <mundy_geom/distance/Types.hpp>            // for mundy::SharedNormalSigned
-#include <mundy_geom/primitives/Circle3D.hpp>       // for mundy::Circle3D
-#include <mundy_geom/primitives/Point.hpp>          // for mundy::Point
+#include <mundy_geom/distance/PointPoint.hpp>  // for mundy::distance(Point, Point)
+#include <mundy_geom/distance/Types.hpp>       // for mundy::SharedNormalSigned
+#include <mundy_geom/primitives/Circle3D.hpp>  // for mundy::Circle3D
+#include <mundy_geom/primitives/Point.hpp>     // for mundy::Point
 #include <mundy_utils/requires.hpp>
 
 namespace mundy {
@@ -46,14 +46,14 @@ namespace mundy {
 //@{
 
 template <ValidCircle3DType Circle3DType1, ValidCircle3DType Circle3DType2>
-  MUNDY_REQUIRES(std::is_same_v<typename Circle3DType1::scalar_t, typename Circle3DType2::scalar_t>)
+MUNDY_REQUIRES(std::is_same_v<typename Circle3DType1::scalar_t, typename Circle3DType2::scalar_t>)
 KOKKOS_FUNCTION typename Circle3DType1::scalar_t distance(const Circle3DType1& circle3d1,  //
                                                           const Circle3DType2& circle3d2) {
   return distance(Euclidean{}, circle3d1, circle3d2);
 }
 
 template <ValidCircle3DType Circle3DType1, ValidCircle3DType Circle3DType2>
-  MUNDY_REQUIRES(std::is_same_v<typename Circle3DType1::scalar_t, typename Circle3DType2::scalar_t>)
+MUNDY_REQUIRES(std::is_same_v<typename Circle3DType1::scalar_t, typename Circle3DType2::scalar_t>)
 KOKKOS_FUNCTION typename Circle3DType1::scalar_t distance([[maybe_unused]] const Euclidean distance_type,  //
                                                           const Circle3DType1& circle3d1,                  //
                                                           const Circle3DType2& circle3d2) {
@@ -67,7 +67,7 @@ KOKKOS_FUNCTION typename Circle3DType1::scalar_t distance([[maybe_unused]] const
 }
 
 template <ValidCircle3DType Circle3DType1, ValidCircle3DType Circle3DType2>
-  MUNDY_REQUIRES(std::is_same_v<typename Circle3DType1::scalar_t, typename Circle3DType2::scalar_t>)
+MUNDY_REQUIRES(std::is_same_v<typename Circle3DType1::scalar_t, typename Circle3DType2::scalar_t>)
 class Circle3DCircle3DObjective {
  public:
   using Scalar = typename Circle3DType1::scalar_t;
@@ -118,15 +118,15 @@ class Circle3DCircle3DObjective {
 };
 
 template <ValidCircle3DType Circle3DType1, ValidCircle3DType Circle3DType2>
-  MUNDY_REQUIRES(std::is_same_v<typename Circle3DType1::scalar_t, typename Circle3DType2::scalar_t>)
-KOKKOS_FUNCTION typename Circle3DType1::scalar_t distance(
-    [[maybe_unused]] const Euclidean distance_type,                    //
-    const Circle3DType1& circle3d1,                                    //
-    const Circle3DType2& circle3d2,                                    //
-    Point<typename Circle3DType1::scalar_t>& closest_point1,           //
-    Point<typename Circle3DType1::scalar_t>& closest_point2,           //
-    mundy::Vector3<typename Circle3DType1::scalar_t>& shared_normal1,  //
-    mundy::Vector3<typename Circle3DType1::scalar_t>& shared_normal2) {
+MUNDY_REQUIRES(std::is_same_v<typename Circle3DType1::scalar_t, typename Circle3DType2::scalar_t>)
+KOKKOS_FUNCTION typename Circle3DType1::scalar_t
+    distance([[maybe_unused]] const Euclidean distance_type,                    //
+             const Circle3DType1& circle3d1,                                    //
+             const Circle3DType2& circle3d2,                                    //
+             Point<typename Circle3DType1::scalar_t>& closest_point1,           //
+             Point<typename Circle3DType1::scalar_t>& closest_point2,           //
+             mundy::Vector3<typename Circle3DType1::scalar_t>& shared_normal1,  //
+             mundy::Vector3<typename Circle3DType1::scalar_t>& shared_normal2) {
   using Scalar = typename Circle3DType1::scalar_t;
 
   // Setup the minimization

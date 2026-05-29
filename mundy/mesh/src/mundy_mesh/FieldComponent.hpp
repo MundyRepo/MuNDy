@@ -51,10 +51,10 @@
 #include <mundy_mesh/ForEachEntity.hpp>    // for mundy::mesh::for_each_entity_run
 #include <mundy_mesh/NgpAccessorExpr.hpp>  // for mundy::mesh::AccessorExpr and EntityExprBase
 #include <mundy_mesh/impl/HostDeviceSynchronizer.hpp>
+#include <mundy_utils/requires.hpp>
 #include <mundy_utils/suppress_warnings.hpp>  // for MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_PUSH/POP
 #include <mundy_utils/throw_assert.hpp>       // for MUNDY_THROW_ASSERT
 #include <mundy_utils/tuple.hpp>              // for mundy::tuple
-#include <mundy_utils/requires.hpp>
 
 namespace mundy {
 
@@ -62,7 +62,8 @@ namespace mesh {
 
 class FieldComponentBase {
  public:
-  FieldComponentBase(const stk::mesh::FieldBase& field_base) : field_base_(field_base) {
+  FieldComponentBase() = default;
+  FieldComponentBase(const stk::mesh::FieldBase& field_base) : field_base_ptr_(&field_base) {
   }
 
   /// \brief Default copy/move/assign constructors
@@ -72,17 +73,21 @@ class FieldComponentBase {
   FieldComponentBase& operator=(FieldComponentBase&&) = default;
 
   // clang-format off
-  void sync_to_device() { field_base_.sync_to_device(); }
-  void sync_to_host() { field_base_.sync_to_host(); }
-  void modify_on_device() { field_base_.modify_on_device(); }
-  void modify_on_host() { field_base_.modify_on_host(); }
-  void clear_host_sync_state() { field_base_.clear_host_sync_state(); }
-  void clear_device_sync_state() { field_base_.clear_device_sync_state(); }
-  const stk::mesh::FieldBase& field_base() const { return field_base_; }
+  void sync_to_device() { field_base().sync_to_device(); }
+  void sync_to_host() { field_base().sync_to_host(); }
+  void modify_on_device() { field_base().modify_on_device(); }
+  void modify_on_host() { field_base().modify_on_host(); }
+  void clear_host_sync_state() { field_base().clear_host_sync_state(); }
+  void clear_device_sync_state() { field_base().clear_device_sync_state(); }
   // clang-format on
 
+  const stk::mesh::FieldBase& field_base() const {
+    MUNDY_THROW_ASSERT(field_base_ptr_ != nullptr, std::runtime_error, "FieldComponentBase field_base_ptr_ is null");
+    return *field_base_ptr_;
+  }
+
  private:
-  const stk::mesh::FieldBase& field_base_;
+  const stk::mesh::FieldBase* field_base_ptr_ = nullptr;
 };  // FieldComponentBase
 
 class NgpFieldComponentBase {
@@ -161,15 +166,16 @@ struct VectorFieldAccessPolicy {
   }
 };
 
-struct Matrix3FieldAccessPolicy {
+template <size_t N, size_t M>
+struct MatrixFieldAccessPolicy {
   template <typename FieldType>
   static decltype(auto) host_access(FieldType& field, stk::mesh::Entity entity) {
-    return matrix3_field_data(field, entity);
+    return matrix_field_data<N, M>(field, entity);
   }
 
   template <typename FieldType>
   KOKKOS_INLINE_FUNCTION static decltype(auto) ngp_access(FieldType& field, stk::mesh::FastMeshIndex entity_index) {
-    return matrix3_field_data(field, entity_index);
+    return matrix_field_data<N, M>(field, entity_index);
   }
 };
 
@@ -204,25 +210,31 @@ class FieldComponent : public FieldComponentBase {
   using access_policy = AccessPolicy;
   using view_t = decltype(access_policy::host_access(std::declval<field_type&>(), std::declval<stk::mesh::Entity>()));
 
-  explicit FieldComponent(field_type& field) : FieldComponentBase(field), field_(field) {
+  FieldComponent() = default;
+  explicit FieldComponent(field_type& field) : FieldComponentBase(field), field_ptr_(&field) {
   }
 
   FieldComponent(const FieldComponent&) = default;
   FieldComponent(FieldComponent&&) = default;
-  FieldComponent& operator=(const FieldComponent&) = delete;
-  FieldComponent& operator=(FieldComponent&&) = delete;
+  FieldComponent& operator=(const FieldComponent&) = default;
+  FieldComponent& operator=(FieldComponent&&) = default;
 
   inline decltype(auto) operator()(stk::mesh::Entity entity) const {
-    return access_policy::host_access(field_, entity);
+    return access_policy::host_access(field_ref(), entity);
   }
 
   // clang-format off
-  inline       field_type& field()       { return field_; }
-  inline const field_type& field() const { return field_; }
+  inline       field_type& field()       { return field_ref(); }
+  inline const field_type& field() const { return field_ref(); }
   // clang-format on
 
  private:
-  field_type& field_;
+  field_type& field_ref() const {
+    MUNDY_THROW_ASSERT(field_ptr_ != nullptr, std::runtime_error, "FieldComponent field_ptr_ is null");
+    return *field_ptr_;
+  }
+
+  field_type* field_ptr_ = nullptr;
 };  // FieldComponent
 
 template <typename NgpFieldType, typename AccessPolicy>
@@ -272,25 +284,25 @@ class NgpFieldComponent : public NgpFieldComponentBase {
 };  // NgpFieldComponent
 
 template <typename ComponentType>
-  MUNDY_REQUIRES(requires(ComponentType& component) { component.field(); })
+MUNDY_REQUIRES(requires(ComponentType& component) { component.field(); })
 inline decltype(auto) component_backing_field(ComponentType& component) {
   return component.field();
 }
 
 template <typename ComponentType>
-  MUNDY_REQUIRES(requires(const ComponentType& component) { component.field(); })
+MUNDY_REQUIRES(requires(const ComponentType& component) { component.field(); })
 inline decltype(auto) component_backing_field(const ComponentType& component) {
   return component.field();
 }
 
 template <typename Tag, typename ComponentType>
-  MUNDY_REQUIRES(requires(ComponentType& component) { component_backing_field(component); })
+MUNDY_REQUIRES(requires(ComponentType& component) { component_backing_field(component); })
 inline decltype(auto) component_backing_field(TaggedComponent<Tag, ComponentType>& tagged_component) {
   return component_backing_field(tagged_component.component());
 }
 
 template <typename Tag, typename ComponentType>
-  MUNDY_REQUIRES(requires(const ComponentType& component) { component_backing_field(component); })
+MUNDY_REQUIRES(requires(const ComponentType& component) { component_backing_field(component); })
 inline decltype(auto) component_backing_field(const TaggedComponent<Tag, ComponentType>& tagged_component) {
   return component_backing_field(tagged_component.component());
 }
@@ -305,8 +317,14 @@ class FieldComponent : public impl::FieldComponent<ValueType, impl::FieldDataAcc
   using canonical_access = access::raw<ValueType>;
   using view_t = typename base_t::view_t;
 
+  FieldComponent() = default;
   explicit FieldComponent(stk::mesh::Field<ValueType>& field) : base_t(field) {
   }
+
+  FieldComponent(const FieldComponent&) = default;
+  FieldComponent(FieldComponent&&) = default;
+  FieldComponent& operator=(const FieldComponent&) = default;
+  FieldComponent& operator=(FieldComponent&&) = default;
 };  // FieldComponent
 
 template <typename NgpFieldType>
@@ -330,8 +348,14 @@ class ScalarFieldComponent : public impl::FieldComponent<ScalarType, impl::Scala
   using canonical_access = access::scalar<ScalarType>;
   using view_t = typename base_t::view_t;
 
+  ScalarFieldComponent() = default;
   explicit ScalarFieldComponent(stk::mesh::Field<ScalarType>& field) : base_t(field) {
   }
+
+  ScalarFieldComponent(const ScalarFieldComponent&) = default;
+  ScalarFieldComponent(ScalarFieldComponent&&) = default;
+  ScalarFieldComponent& operator=(const ScalarFieldComponent&) = default;
+  ScalarFieldComponent& operator=(ScalarFieldComponent&&) = default;
 };  // ScalarFieldComponent
 
 template <typename NgpFieldType>
@@ -355,25 +379,26 @@ class VectorFieldComponent : public impl::FieldComponent<ScalarType, impl::Vecto
   using canonical_access = access::vector<ScalarType, N>;
   using view_t = typename base_t::view_t;
 
+  VectorFieldComponent() = default;
   explicit VectorFieldComponent(stk::mesh::Field<ScalarType>& field) : base_t(field) {
   }
+
+  VectorFieldComponent(const VectorFieldComponent&) = default;
+  VectorFieldComponent(VectorFieldComponent&&) = default;
+  VectorFieldComponent& operator=(const VectorFieldComponent&) = default;
+  VectorFieldComponent& operator=(VectorFieldComponent&&) = default;
 };  // VectorFieldComponent
 
 template <typename ScalarType>
 using Vector1FieldComponent = VectorFieldComponent<ScalarType, 1>;
-
 template <typename ScalarType>
 using Vector2FieldComponent = VectorFieldComponent<ScalarType, 2>;
-
 template <typename ScalarType>
 using Vector3FieldComponent = VectorFieldComponent<ScalarType, 3>;
-
 template <typename ScalarType>
 using Vector4FieldComponent = VectorFieldComponent<ScalarType, 4>;
-
 template <typename ScalarType>
 using Vector5FieldComponent = VectorFieldComponent<ScalarType, 5>;
-
 template <typename ScalarType>
 using Vector6FieldComponent = VectorFieldComponent<ScalarType, 6>;
 
@@ -392,45 +417,72 @@ class NgpVectorFieldComponent : public impl::NgpFieldComponent<NgpFieldType, imp
 
 template <typename NgpFieldType>
 using NgpVector1FieldComponent = NgpVectorFieldComponent<NgpFieldType, 1>;
-
 template <typename NgpFieldType>
 using NgpVector2FieldComponent = NgpVectorFieldComponent<NgpFieldType, 2>;
-
 template <typename NgpFieldType>
 using NgpVector3FieldComponent = NgpVectorFieldComponent<NgpFieldType, 3>;
-
 template <typename NgpFieldType>
 using NgpVector4FieldComponent = NgpVectorFieldComponent<NgpFieldType, 4>;
-
 template <typename NgpFieldType>
 using NgpVector5FieldComponent = NgpVectorFieldComponent<NgpFieldType, 5>;
-
 template <typename NgpFieldType>
 using NgpVector6FieldComponent = NgpVectorFieldComponent<NgpFieldType, 6>;
 
-template <typename ScalarType>
-class Matrix3FieldComponent : public impl::FieldComponent<ScalarType, impl::Matrix3FieldAccessPolicy> {
+template <typename ScalarType, size_t N, size_t M>
+class MatrixFieldComponent : public impl::FieldComponent<ScalarType, impl::MatrixFieldAccessPolicy<N, M>> {
  public:
-  using base_t = impl::FieldComponent<ScalarType, impl::Matrix3FieldAccessPolicy>;
-  using canonical_access = access::matrix3<ScalarType>;
+  using base_t = impl::FieldComponent<ScalarType, impl::MatrixFieldAccessPolicy<N, M>>;
+  using canonical_access = access::matrix<ScalarType, N, M>;
   using view_t = typename base_t::view_t;
 
-  explicit Matrix3FieldComponent(stk::mesh::Field<ScalarType>& field) : base_t(field) {
+  MatrixFieldComponent() = default;
+  explicit MatrixFieldComponent(stk::mesh::Field<ScalarType>& field) : base_t(field) {
   }
-};  // Matrix3FieldComponent
+
+  MatrixFieldComponent(const MatrixFieldComponent&) = default;
+  MatrixFieldComponent(MatrixFieldComponent&&) = default;
+  MatrixFieldComponent& operator=(const MatrixFieldComponent&) = default;
+  MatrixFieldComponent& operator=(MatrixFieldComponent&&) = default;
+};  // MatrixFieldComponent
+
+template <typename ScalarType>
+using Matrix1FieldComponent = MatrixFieldComponent<ScalarType, 1, 1>;
+template <typename ScalarType>
+using Matrix2FieldComponent = MatrixFieldComponent<ScalarType, 2, 2>;
+template <typename ScalarType>
+using Matrix3FieldComponent = MatrixFieldComponent<ScalarType, 3, 3>;
+template <typename ScalarType>
+using Matrix4FieldComponent = MatrixFieldComponent<ScalarType, 4, 4>;
+template <typename ScalarType>
+using Matrix5FieldComponent = MatrixFieldComponent<ScalarType, 5, 5>;
+template <typename ScalarType>
+using Matrix6FieldComponent = MatrixFieldComponent<ScalarType, 6, 6>;
+
+template <typename NgpFieldType, size_t N, size_t M>
+class NgpMatrixFieldComponent : public impl::NgpFieldComponent<NgpFieldType, impl::MatrixFieldAccessPolicy<N, M>> {
+ public:
+  using our_t = NgpMatrixFieldComponent<NgpFieldType, N, M>;
+  using base_t = impl::NgpFieldComponent<NgpFieldType, impl::MatrixFieldAccessPolicy<N, M>>;
+  using canonical_access = access::matrix<typename NgpFieldType::value_type, N, M>;
+  using view_t = typename base_t::view_t;
+
+  NgpMatrixFieldComponent() = default;
+  explicit NgpMatrixFieldComponent(NgpFieldType ngp_field) : base_t(ngp_field) {
+  }
+};  // NgpMatrixFieldComponent
 
 template <typename NgpFieldType>
-class NgpMatrix3FieldComponent : public impl::NgpFieldComponent<NgpFieldType, impl::Matrix3FieldAccessPolicy> {
- public:
-  using our_t = NgpMatrix3FieldComponent<NgpFieldType>;
-  using base_t = impl::NgpFieldComponent<NgpFieldType, impl::Matrix3FieldAccessPolicy>;
-  using canonical_access = access::matrix3<typename NgpFieldType::value_type>;
-  using view_t = typename base_t::view_t;
-
-  NgpMatrix3FieldComponent() = default;
-  explicit NgpMatrix3FieldComponent(NgpFieldType ngp_field) : base_t(ngp_field) {
-  }
-};  // NgpMatrix3FieldComponent
+using NgpMatrix1FieldComponent = NgpMatrixFieldComponent<NgpFieldType, 1, 1>;
+template <typename NgpFieldType>
+using NgpMatrix2FieldComponent = NgpMatrixFieldComponent<NgpFieldType, 2, 2>;
+template <typename NgpFieldType>
+using NgpMatrix3FieldComponent = NgpMatrixFieldComponent<NgpFieldType, 3, 3>;
+template <typename NgpFieldType>
+using NgpMatrix4FieldComponent = NgpMatrixFieldComponent<NgpFieldType, 4, 4>;
+template <typename NgpFieldType>
+using NgpMatrix5FieldComponent = NgpMatrixFieldComponent<NgpFieldType, 5, 5>;
+template <typename NgpFieldType>
+using NgpMatrix6FieldComponent = NgpMatrixFieldComponent<NgpFieldType, 6, 6>;
 
 template <typename ScalarType>
 class QuaternionFieldComponent : public impl::FieldComponent<ScalarType, impl::QuaternionFieldAccessPolicy> {
@@ -439,8 +491,14 @@ class QuaternionFieldComponent : public impl::FieldComponent<ScalarType, impl::Q
   using canonical_access = access::quaternion<ScalarType>;
   using view_t = typename base_t::view_t;
 
+  QuaternionFieldComponent() = default;
   explicit QuaternionFieldComponent(stk::mesh::Field<ScalarType>& field) : base_t(field) {
   }
+
+  QuaternionFieldComponent(const QuaternionFieldComponent&) = default;
+  QuaternionFieldComponent(QuaternionFieldComponent&&) = default;
+  QuaternionFieldComponent& operator=(const QuaternionFieldComponent&) = default;
+  QuaternionFieldComponent& operator=(QuaternionFieldComponent&&) = default;
 };  // QuaternionFieldComponent
 
 template <typename NgpFieldType>
@@ -463,8 +521,14 @@ class AABBFieldComponent : public impl::FieldComponent<ScalarType, impl::AABBFie
   using canonical_access = access::aabb<ScalarType>;
   using view_t = typename base_t::view_t;
 
+  AABBFieldComponent() = default;
   explicit AABBFieldComponent(stk::mesh::Field<ScalarType>& field) : base_t(field) {
   }
+
+  AABBFieldComponent(const AABBFieldComponent&) = default;
+  AABBFieldComponent(AABBFieldComponent&&) = default;
+  AABBFieldComponent& operator=(const AABBFieldComponent&) = default;
+  AABBFieldComponent& operator=(AABBFieldComponent&&) = default;
 };  // AABBFieldComponent
 
 template <typename NgpFieldType>

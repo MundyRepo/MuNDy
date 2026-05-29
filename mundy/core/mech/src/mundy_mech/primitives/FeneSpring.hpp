@@ -63,16 +63,13 @@ class FeneSpring {
   /// \brief Default constructor for owning FeneSprings. Default initialize the line segment and set the spring
   /// constant and max length to -1.
   KOKKOS_FUNCTION
-  FeneSpring()
-    MUNDY_REQUIRES(std::is_same_v<OwnershipType, mundy::Ownership::Owns>)
+  FeneSpring() MUNDY_REQUIRES(std::is_same_v<OwnershipType, mundy::Ownership::Owns>)
       : line_segment_(), max_length_(static_cast<scalar_t>(-1)), spring_constant_(static_cast<scalar_t>(-1)) {
   }
 
   /// \brief No default constructor for viewing FeneSpringss.
   KOKKOS_FUNCTION
-  FeneSpring()
-    MUNDY_REQUIRES(std::is_same_v<OwnershipType, mundy::Ownership::Views>)
-  = delete;
+  FeneSpring() MUNDY_REQUIRES(std::is_same_v<OwnershipType, mundy::Ownership::Views>) = delete;
 
   /// \brief Constructor to initialize the line segment, max length, and spring constant.
   KOKKOS_FUNCTION
@@ -86,7 +83,7 @@ class FeneSpring {
   template <mundy::ValidLineSegmentType OtherLineSegmentType>
   KOKKOS_FUNCTION FeneSpring(const OtherLineSegmentType& line_segment, const scalar_t& max_length,
                              const scalar_t& spring_constant)
-    MUNDY_REQUIRES(!std::is_same_v<OtherLineSegmentType, line_segment_t>)
+      MUNDY_REQUIRES(!std::is_same_v<OtherLineSegmentType, line_segment_t>)
       : line_segment_(line_segment), max_length_(max_length), spring_constant_(spring_constant) {
   }
 
@@ -103,7 +100,7 @@ class FeneSpring {
   /// \brief Deep copy constructor
   template <typename OtherFeneSpringType>
   KOKKOS_FUNCTION FeneSpring(const OtherFeneSpringType& other)
-    MUNDY_REQUIRES(!std::is_same_v<OtherFeneSpringType, FeneSpring<scalar_t, line_segment_t, ownership_t>>)
+      MUNDY_REQUIRES(!std::is_same_v<OtherFeneSpringType, FeneSpring<scalar_t, line_segment_t, ownership_t>>)
       : line_segment_(other.line_segment_), max_length_(other.max_length_), spring_constant_(other.spring_constant_) {
   }
 
@@ -118,7 +115,7 @@ class FeneSpring {
   /// \brief Deep move constructor
   template <typename OtherFeneSpringType>
   KOKKOS_FUNCTION FeneSpring(OtherFeneSpringType&& other)
-    MUNDY_REQUIRES(!std::is_same_v<OtherFeneSpringType, FeneSpring<scalar_t, line_segment_t, ownership_t>>)
+      MUNDY_REQUIRES(!std::is_same_v<OtherFeneSpringType, FeneSpring<scalar_t, line_segment_t, ownership_t>>)
       : line_segment_(std::move(other.line_segment_)),
         max_length_(std::move(other.max_length_)),
         spring_constant_(std::move(other.spring_constant_)) {
@@ -142,8 +139,7 @@ class FeneSpring {
   /// \brief Copy assignment operator
   template <typename OtherFeneSpringType>
   KOKKOS_FUNCTION FeneSpring<scalar_t, line_segment_t, ownership_t>& operator=(const OtherFeneSpringType& other)
-    MUNDY_REQUIRES(!std::is_same_v<OtherFeneSpringType, FeneSpring<scalar_t, line_segment_t, ownership_t>>)
-  {
+      MUNDY_REQUIRES(!std::is_same_v<OtherFeneSpringType, FeneSpring<scalar_t, line_segment_t, ownership_t>>) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     line_segment_ = other.line_segment_;
     max_length_ = other.max_length_;
@@ -165,8 +161,7 @@ class FeneSpring {
   /// \brief Move assignment operator
   template <typename OtherFeneSpringType>
   KOKKOS_FUNCTION FeneSpring<scalar_t, line_segment_t, ownership_t>& operator=(OtherFeneSpringType&& other)
-    MUNDY_REQUIRES(!std::is_same_v<OtherFeneSpringType, FeneSpring<scalar_t, line_segment_t, ownership_t>>)
-  {
+      MUNDY_REQUIRES(!std::is_same_v<OtherFeneSpringType, FeneSpring<scalar_t, line_segment_t, ownership_t>>) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     line_segment_ = std::move(other.line_segment_);
     max_length_ = std::move(other.max_length_);

@@ -23,6 +23,7 @@
 // C++ core
 #include <iostream>       // for std::ostream
 #include <memory>         // for std::shared_ptr
+#include <set>            // for std::set
 #include <stdexcept>      // for std::runtime_error
 #include <tuple>          // for std::tuple, std::make_tuple
 #include <typeindex>      // for std::type_index
@@ -79,9 +80,9 @@ void DeclareEntitiesHelper::check_consistency(const stk::mesh::BulkData& bulk_da
   // Check that each entity uses only one membership pipeline and that its membership pointers are valid.
   const stk::mesh::MetaData& meta_data = bulk_data.mesh_meta_data();
   for (const auto& node_info : node_info_vec_) {
-    MUNDY_THROW_REQUIRE(node_info.parts.empty() || node_info.classes.empty(), std::logic_error,
-                        sink() << "Node " << node_info.id
-                               << " cannot use both the part pipeline and the Class pipeline.");
+    MUNDY_THROW_REQUIRE(
+        node_info.parts.empty() || node_info.classes.empty(), std::logic_error,
+        sink() << "Node " << node_info.id << " cannot use both the part pipeline and the Class pipeline.");
     for (const auto& part_ptr : node_info.parts) {
       MUNDY_THROW_REQUIRE(part_ptr != nullptr, std::runtime_error,
                           sink() << "Node " << node_info.id << " has a null part pointer in its part list");
@@ -95,9 +96,9 @@ void DeclareEntitiesHelper::check_consistency(const stk::mesh::BulkData& bulk_da
     }
   }
   for (const auto& element_info : elem_info_vec_) {
-    MUNDY_THROW_REQUIRE(element_info.parts.empty() || element_info.classes.empty(), std::logic_error,
-                        sink() << "Element " << element_info.id
-                               << " cannot use both the part pipeline and the Class pipeline.");
+    MUNDY_THROW_REQUIRE(
+        element_info.parts.empty() || element_info.classes.empty(), std::logic_error,
+        sink() << "Element " << element_info.id << " cannot use both the part pipeline and the Class pipeline.");
     for (const auto& part_ptr : element_info.parts) {
       MUNDY_THROW_REQUIRE(part_ptr != nullptr, std::runtime_error,
                           sink() << "Element " << element_info.id << " has a null part pointer in its part list");
@@ -114,16 +115,14 @@ void DeclareEntitiesHelper::check_consistency(const stk::mesh::BulkData& bulk_da
   // Check that the given set of parts/classes will create an entity of the given topology
   for (const auto& element_info : elem_info_vec_) {
     const stk::topology given_topo = element_info.topology;
-    const stk::topology actual_topo = element_info.classes.empty()
-                                          ? get_topology(bulk_data.mesh_meta_data(), stk::topology::ELEM_RANK,
-                                                         element_info.parts)
-                                          : get_topology(bulk_data.mesh_meta_data(), stk::topology::ELEM_RANK,
-                                                         impl::populate_entity_rank_parts(
-                                                             stk::topology::ELEM_RANK, element_info.classes,
-                                                             "DeclareEntitiesHelper element classes"));
+    const stk::topology actual_topo =
+        element_info.classes.empty()
+            ? get_topology(bulk_data.mesh_meta_data(), stk::topology::ELEM_RANK, element_info.parts)
+            : get_topology(bulk_data.mesh_meta_data(), stk::topology::ELEM_RANK,
+                           impl::populate_entity_rank_parts(stk::topology::ELEM_RANK, element_info.classes,
+                                                            "DeclareEntitiesHelper element classes"));
     MUNDY_THROW_REQUIRE(given_topo == actual_topo, std::runtime_error,
-                        sink() << "Element " << element_info.id
-                               << " has parts/classes that do not match its topology\n"
+                        sink() << "Element " << element_info.id << " has parts/classes that do not match its topology\n"
                                << "Given Topology: " << given_topo.name() << "\n"
                                << "Actual Topology: " << actual_topo.name() << "\n"
                                << "Dumping the element info:\n"
@@ -200,6 +199,7 @@ DeclareEntitiesHelper& DeclareEntitiesHelper::declare_entities(stk::mesh::BulkDa
 
   const int our_rank = bulk_data.parallel_rank();
   BulkDataClassInterface class_bulk_data = class_interface(bulk_data);
+  std::set<stk::mesh::FieldBase*> modified_fields;
 
   auto declare_node_from_info = [&](const DeclareNodeInfo& node_info) {
     if (!node_info.classes.empty()) {
@@ -263,6 +263,7 @@ DeclareEntitiesHelper& DeclareEntitiesHelper::declare_entities(stk::mesh::BulkDa
       }
       for (const auto& field_data : element_info.field_data) {
         field_data->set_field_data(element);
+        modified_fields.insert(field_data->field());
       }
     } else {
       // We don't own the element, but if it connects to a node we own, we need to share that node with the element's
@@ -298,6 +299,7 @@ DeclareEntitiesHelper& DeclareEntitiesHelper::declare_entities(stk::mesh::BulkDa
       }
       for (const auto& field_data : node_info.field_data) {
         field_data->set_field_data(node);
+        modified_fields.insert(field_data->field());
       }
     } else if (we_share_node) {
       stk::mesh::Entity node = bulk_data.get_entity(stk::topology::NODE_RANK, node_info.id);
@@ -305,8 +307,13 @@ DeclareEntitiesHelper& DeclareEntitiesHelper::declare_entities(stk::mesh::BulkDa
                           sink() << "Node " << node_info.id << " is not valid and yet we are sharing it.");
       for (const auto& field_data : node_info.field_data) {
         field_data->set_field_data(node);
+        modified_fields.insert(field_data->field());
       }
     }
+  }
+
+  for (stk::mesh::FieldBase* field : modified_fields) {
+    field->modify_on_host();
   }
 
   // Now that every node/element is declared, set up the links

@@ -24,16 +24,33 @@ set(NOINSTALLHEADERS
     src/mundy_mesh/FieldComponent.hpp
     src/mundy_mesh/FieldViews.hpp
     src/mundy_mesh/ForEachEntity.hpp
+
     # src/mundy_mesh/GenNeighborLinkers.hpp
     src/mundy_mesh/GetNgpLinkData.hpp
-    src/mundy_mesh/impl/ComponentImpl.hpp
     src/mundy_mesh/impl/DeclareFieldImpl.hpp
     src/mundy_mesh/impl/HostDeviceCOOSynchronizer.hpp
     src/mundy_mesh/impl/HostDeviceCSRSynchronizer.hpp
     src/mundy_mesh/impl/HostDeviceSynchronizer.hpp
     src/mundy_mesh/impl/LinkDataObserver.hpp
     src/mundy_mesh/impl/LinkedBucketConn.hpp
-    src/mundy_mesh/impl/NgpAccessorExprImpl.hpp
+    src/mundy_mesh/impl/NgpAccessorExprAccessor.hpp
+    src/mundy_mesh/impl/NgpAccessorExprApplyValue.hpp
+    src/mundy_mesh/impl/NgpAccessorExprAssign.hpp
+    src/mundy_mesh/impl/NgpAccessorExprBinaryValue.hpp
+    src/mundy_mesh/impl/NgpAccessorExprBuiltins.hpp
+    src/mundy_mesh/impl/NgpAccessorExprCachable.hpp
+    src/mundy_mesh/impl/NgpAccessorExprConstant.hpp
+    src/mundy_mesh/impl/NgpAccessorExprConnectedEntities.hpp
+    src/mundy_mesh/impl/NgpAccessorExprDrivers.hpp
+    src/mundy_mesh/impl/NgpAccessorExprEntityBase.hpp
+    src/mundy_mesh/impl/NgpAccessorExprEntityExpr.hpp
+    src/mundy_mesh/impl/NgpAccessorExprFused.hpp
+    src/mundy_mesh/impl/NgpAccessorExprMathBase.hpp
+    src/mundy_mesh/impl/NgpAccessorExprReductions.hpp
+    src/mundy_mesh/impl/NgpAccessorExprRNG.hpp
+    src/mundy_mesh/impl/NgpAccessorExprSink.hpp
+    src/mundy_mesh/impl/NgpAccessorExprTypes.hpp
+    src/mundy_mesh/impl/NgpAccessorExprUtils.hpp
     src/mundy_mesh/impl/NgpCOOToCSRSynchronizer.hpp
     src/mundy_mesh/impl/NgpFieldBLASImpl.hpp
     src/mundy_mesh/impl/NgpLinkMetaData.hpp
@@ -61,6 +78,7 @@ set(NOINSTALLHEADERS
     src/mundy_mesh/NgpModRequests.hpp
     src/mundy_mesh/NgpUtils.hpp
     src/mundy_mesh/SharedComponent.hpp
+    src/mundy_mesh/StringToRank.hpp
     src/mundy_mesh/StringToSelector.hpp
     src/mundy_mesh/StringToTopology.hpp
     src/mundy_mesh/Types.hpp
@@ -75,6 +93,7 @@ set(SOURCES
     src/mundy_mesh/impl/SelectorParser.cpp
     src/mundy_mesh/MeshBuilder.cpp
     src/mundy_mesh/MetaData.cpp
+    src/mundy_mesh/StringToRank.cpp
     src/mundy_mesh/StringToSelector.cpp
     src/mundy_mesh/StringToTopology.cpp
 )
@@ -89,13 +108,13 @@ tribits_include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
 # Add a standard library
 mundy_tribits_add_library(
-  mundy_mesh
-  HEADERS ${CMAKE_CURRENT_BINARY_DIR}/${PACKAGE_NAME}_config.hpp
-  NOINSTALLHEADERS ${NOINSTALLHEADERS}
-  DIRECTORIES src/mundy_mesh
-  FILES_MATCHING
-  PATTERN "*.hpp"
-  SOURCES ${SOURCES}
+    mundy_mesh
+    HEADERS ${CMAKE_CURRENT_BINARY_DIR}/${PACKAGE_NAME}_config.hpp
+    NOINSTALLHEADERS ${NOINSTALLHEADERS}
+    DIRECTORIES src/mundy_mesh
+    FILES_MATCHING
+    PATTERN "*.hpp"
+    SOURCES ${SOURCES}
 )
 
 tribits_add_test_directories(tests)

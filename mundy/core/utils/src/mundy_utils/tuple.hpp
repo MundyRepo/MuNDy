@@ -32,8 +32,8 @@
 #include <Kokkos_Core.hpp>
 
 // Mundy
-#include <mundy_utils/type_traits.hpp>  // for count_type_v
 #include <mundy_utils/requires.hpp>
+#include <mundy_utils/type_traits.hpp>  // for count_type_v
 
 namespace mundy {
 
@@ -48,9 +48,7 @@ struct tuple_member {
 
   /// \brief Default constructor. Only valid if T is default constructible
   KOKKOS_DEFAULTED_FUNCTION
-  constexpr tuple_member()
-    MUNDY_REQUIRES(std::default_initializable<T>)
-  = default;
+  constexpr tuple_member() MUNDY_REQUIRES(std::default_initializable<T>) = default;
 
   /// \brief Constructor that takes a single argument
   KOKKOS_FUNCTION
@@ -109,14 +107,11 @@ template <size_t... Idx, class... Elements>
 struct tuple_impl<std::index_sequence<Idx...>, Elements...> : public tuple_member<Elements, Idx>... {
   /// \brief Default constructor. Only valid if all elements are default constructible
   KOKKOS_DEFAULTED_FUNCTION
-  constexpr tuple_impl()
-    MUNDY_REQUIRES((std::default_initializable<Elements> && ...))
-  = default;
+  constexpr tuple_impl() MUNDY_REQUIRES((std::default_initializable<Elements> && ...)) = default;
 
   /// \brief Copy constructor from a set of values. Only valid if all elements are copy constructible
   KOKKOS_FUNCTION
-  constexpr tuple_impl(Elements... vals)
-    MUNDY_REQUIRES(sizeof...(Elements) > 0)
+  constexpr tuple_impl(Elements... vals) MUNDY_REQUIRES(sizeof...(Elements) > 0)
       : tuple_member<Elements, Idx>{vals}... {
   }
 
@@ -156,9 +151,9 @@ struct tuple_impl<std::index_sequence<Idx...>, Elements...> : public tuple_membe
 
   /// \brief Helper alias: select the matching base; sentinel ensures fold is never empty.
   template <size_t N>
-    MUNDY_REQUIRES(sizeof...(Elements) > 0)
-  using base_of =
-      typename decltype((tuple_idx_matcher<N, Idx, Elements>() | ... | tuple_idx_matcher<N, N, void>{}))::type;
+  MUNDY_REQUIRES(sizeof...(Elements) > 0)
+  using base_of = typename decltype((tuple_idx_matcher<N, Idx, Elements>() | ... |
+                                     tuple_idx_matcher<N, N, void>{}))::type;
 };
 
 }  // namespace impl
@@ -171,14 +166,11 @@ template <class... Elements>
 struct tuple : public impl::tuple_impl<decltype(std::make_index_sequence<sizeof...(Elements)>()), Elements...> {
   /// \brief Default constructor. Only valid if all elements are default constructible
   KOKKOS_DEFAULTED_FUNCTION
-  constexpr tuple()
-    MUNDY_REQUIRES((std::default_initializable<Elements> && ...))
-  = default;
+  constexpr tuple() MUNDY_REQUIRES((std::default_initializable<Elements> && ...)) = default;
 
   /// \brief Constructor that takes a set of values. Only valid if all elements are copy constructible
   KOKKOS_FUNCTION
-  constexpr tuple(Elements... vals)
-    MUNDY_REQUIRES(sizeof...(Elements) > 0)
+  constexpr tuple(Elements... vals) MUNDY_REQUIRES(sizeof...(Elements) > 0)
       : impl::tuple_impl<decltype(std::make_index_sequence<sizeof...(Elements)>()), Elements...>(vals...) {
   }
 
@@ -196,7 +188,7 @@ struct tuple : public impl::tuple_impl<decltype(std::make_index_sequence<sizeof.
 
   /// \brief Get the type of the N'th element
   template <size_t N>
-    MUNDY_REQUIRES(sizeof...(Elements) > 0)
+  MUNDY_REQUIRES(sizeof...(Elements) > 0)
   using element_t = type_at_index_t<N, Elements...>;
 };
 

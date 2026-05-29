@@ -21,6 +21,8 @@
 // External libs
 #include <gtest/gtest.h>  // for TEST, ASSERT_NO_THROW, etc
 
+#include <cmath>  // for std::cos, std::sin
+
 // STK mesh
 #include <Trilinos_version.h>  // for TRILINOS_MAJOR_MINOR_VERSION
 
@@ -216,6 +218,14 @@ class UnitTestAccessorExprFixture : public ::testing::Test {
     };
   }
 
+  CoordinateFunc get_field_q_func() const {
+    return [](const double* /*coords*/) { return std::vector<double>{0.0, 0.0, 0.0, 1.0}; };
+  }
+
+  CoordinateFunc get_field_omega_func() const {
+    return [](const double* /*coords*/) { return std::vector<double>{0.0, 0.0, 1.0}; };
+  }
+
   void reset_field_values() {
     randomize_coordinates(*bulk_data_ptr_, *node_coord_field_ptr_, spatial_dimension_);
 
@@ -226,6 +236,8 @@ class UnitTestAccessorExprFixture : public ::testing::Test {
     set_field_data_on_host(*bulk_data_ptr_, *field_xs_ptr_, all_blocks, get_field_x_func());
     set_field_data_on_host(*bulk_data_ptr_, *field_ys_ptr_, all_blocks, get_field_y_func());
     set_field_data_on_host(*bulk_data_ptr_, *field_zs_ptr_, all_blocks, get_field_z_func());
+    set_field_data_on_host(*bulk_data_ptr_, *field_q_ptr_, all_blocks, get_field_q_func());
+    set_field_data_on_host(*bulk_data_ptr_, *field_omega_ptr_, all_blocks, get_field_omega_func());
   }
 
   void validate_initial_five_hex_mesh() {
@@ -401,6 +413,10 @@ class UnitTestAccessorExprFixture : public ::testing::Test {
                                           {block1_part_ptr_, block2_part_ptr_, block3_part_ptr_});
     field_zs_ptr_ = create_field_on_parts("field_z_scratch", stk::topology::NODE_RANK, scalars_per_entity,
                                           {block1_part_ptr_, block2_part_ptr_, block3_part_ptr_});
+    field_q_ptr_ = create_field_on_parts("field_q", stk::topology::NODE_RANK, 4,
+                                         {block1_part_ptr_, block2_part_ptr_, block3_part_ptr_});
+    field_omega_ptr_ = create_field_on_parts("field_omega", stk::topology::NODE_RANK, 3,
+                                             {block1_part_ptr_, block2_part_ptr_, block3_part_ptr_});
     field1_ptr_ = create_field_on_parts("field1", stk::topology::NODE_RANK, scalars_per_entity, {block1_part_ptr_});
     field2_ptr_ = create_field_on_parts("field2", stk::topology::NODE_RANK, scalars_per_entity, {block2_part_ptr_});
     field3_ptr_ = create_field_on_parts("field3", stk::topology::NODE_RANK, scalars_per_entity, {block3_part_ptr_});
@@ -433,6 +449,9 @@ class UnitTestAccessorExprFixture : public ::testing::Test {
   DoubleField* field_ys_ptr_;
   DoubleField* field_zs_ptr_;
 
+  DoubleField* field_q_ptr_;
+  DoubleField* field_omega_ptr_;
+
   DoubleField* field1_ptr_;
   DoubleField* field2_ptr_;
   DoubleField* field3_ptr_;
@@ -453,21 +472,46 @@ struct SeedTag;
 struct CounterTag;
 struct FirstDrawTag;
 struct SecondDrawTag;
+struct QTag;
+struct OmegaTag;
 
-using single_entity_expr_driver_t = NgpForEachEntityExprDriver<>;
-using single_entity_expr_t = EntityExpr<1, 0, single_entity_expr_driver_t>;
+struct VariadicApplyExprFunc {
+  template <typename XValue, typename YValue, typename BiasValue>
+  KOKKOS_INLINE_FUNCTION auto operator()(const XValue& x, const YValue& y, const BiasValue& bias) const {
+    return x + 2.0 * y + bias;
+  }
+};
+
+struct ReadWriteScaleAddSinkFunc {
+  template <typename YValue, typename XValue, typename ScaleValue>
+  KOKKOS_INLINE_FUNCTION void operator()(YValue& y, const XValue& x, const ScaleValue& scale) const {
+    y += scale * x;
+  }
+};
+
+struct OverwriteAffineSinkFunc {
+  template <typename YValue, typename XValue, typename BiasValue>
+  KOKKOS_INLINE_FUNCTION void operator()(YValue& y, const XValue& x, const BiasValue& bias) const {
+    y = x + bias;
+  }
+};
+
+using single_entity_expr_driver_t = impl::NgpForEachEntityExprDriver<>;
+using single_entity_expr_t = impl::EntityExpr<1, 0, single_entity_expr_driver_t>;
 using rng_contract_expr_t =
-    CounterBasedRNGExpr<ConstantMathExpr<size_t>, ConstantMathExpr<size_t>, openrand::Philox, make_philox>;
-using rng_draw_contract_expr_t = RandomDistributionExpr<rng_contract_expr_t, double>;
+    impl::CounterBasedRNGExpr<impl::ConstantMathExpr<size_t>, impl::ConstantMathExpr<size_t>, openrand::Philox,
+                              make_philox>;
+using rng_draw_contract_expr_t = impl::RandomDistributionExpr<rng_contract_expr_t, double>;
 using rng_uniform_contract_expr_t =
-    UniformDistributionExpr<rng_contract_expr_t, double, ConstantMathExpr<double>, ConstantMathExpr<double>>;
-using reusable_add_expr_t = AddExpr<rng_contract_expr_t, rng_contract_expr_t>;
-using nonreusable_add_expr_t = AddExpr<rng_draw_contract_expr_t, ConstantMathExpr<double>>;
+    impl::UniformDistributionExpr<rng_contract_expr_t, double, impl::ConstantMathExpr<double>,
+                                  impl::ConstantMathExpr<double>>;
+using reusable_add_expr_t = impl::AddExpr<rng_contract_expr_t, rng_contract_expr_t>;
+using nonreusable_add_expr_t = impl::AddExpr<rng_draw_contract_expr_t, impl::ConstantMathExpr<double>>;
 
 static_assert(single_entity_expr_t::has_static_eval);
-static_assert(!ConnectedEntitiesExpr<single_entity_expr_t>::has_static_eval);
-static_assert(!ConnectedEntitiesExpr<single_entity_expr_t>::supports_runtime_reuse);
-static_assert(!ConstantMathExpr<double>::has_static_eval);
+static_assert(!impl::ConnectedEntitiesExpr<single_entity_expr_t>::has_static_eval);
+static_assert(!impl::ConnectedEntitiesExpr<single_entity_expr_t>::supports_runtime_reuse);
+static_assert(!impl::ConstantMathExpr<double>::has_static_eval);
 static_assert(!reusable_add_expr_t::supports_runtime_reuse);
 static_assert(!nonreusable_add_expr_t::supports_runtime_reuse);
 static_assert(rng_contract_expr_t::supports_runtime_reuse);
@@ -524,12 +568,13 @@ TEST_F(UnitTestAccessorExprFixture, field_copy) {
 #endif
 
   stk::mesh::Selector b1_not_b2 = block1_selector_ - block2_selector_;
-  auto x = make_tagged_component<XTag>(ScalarFieldComponent(*field_x_ptr_));
-  auto y = make_tagged_component<YTag>(ScalarFieldComponent(*field_y_ptr_));
+  auto aggregate = Aggregate(get_bulk(), b1_not_b2)
+                       .add_component<XTag>(ScalarFieldComponent(*field_x_ptr_))
+                       .add_component<YTag>(ScalarFieldComponent(*field_y_ptr_));
 
   {
     auto es = make_entity_expr(get_bulk(), b1_not_b2, stk::topology::NODE_RANK);
-    x(es) = y(es);
+    aggregate.get<XTag>(es) = aggregate.get<YTag>(es);
   }
 
   check_field_data_on_host_func<1>("field copy error. x", get_bulk(), *field_x_ptr_, b1_not_b2, get_field_y_func());
@@ -648,7 +693,6 @@ TEST_F(UnitTestAccessorExprFixture, field_product) {
   auto x = make_tagged_component<XTag>(ScalarFieldComponent(*field_x_ptr_));
   auto y = make_tagged_component<YTag>(ScalarFieldComponent(*field_y_ptr_));
   auto z = make_tagged_component<ZTag>(ScalarFieldComponent(*field_z_ptr_));
-
   {
     auto es = make_entity_expr(get_bulk(), b1_not_b2, stk::topology::NODE_RANK);
     z(es) = x(es) * y(es);
@@ -700,6 +744,168 @@ TEST_F(UnitTestAccessorExprFixture, field_axpby) {
 
   check_field_data_on_host_func<1>("field subset error. x", get_bulk(), *field_x_ptr_, !b1_not_b2, get_field_x_func());
   check_field_data_on_host_func<1>("field subset error. y", get_bulk(), *field_y_ptr_, !b1_not_b2, get_field_y_func());
+}
+
+TEST_F(UnitTestAccessorExprFixture, apply_expr_supports_variadic_functions_and_scalar_args) {
+  if (stk::parallel_machine_size(communicator_) > 2) {
+    GTEST_SKIP() << "This test is only designed to run with 1 or 2 MPI ranks.";
+  }
+
+  const int we_know_there_are_five_ranks = 5;
+#if TRILINOS_MAJOR_MINOR_VERSION >= 160000
+  auto field_data_manager = std::make_unique<stk::mesh::DefaultFieldDataManager>(we_know_there_are_five_ranks);
+  setup_hex_mesh(stk::mesh::BulkData::AUTO_AURA, std::move(field_data_manager));
+#else
+  stk::mesh::DefaultFieldDataManager* field_data_manager_ptr =
+      new stk::mesh::DefaultFieldDataManager(we_know_there_are_five_ranks);
+  setup_hex_mesh(stk::mesh::BulkData::AUTO_AURA, field_data_manager_ptr);
+#endif
+
+  constexpr double bias = -0.125;
+  auto field_x_func = get_field_x_func();
+  auto field_y_func = get_field_y_func();
+  auto expected_value_func = [bias, &field_x_func, &field_y_func](const double* entity_coords) {
+    const double x = field_x_func(entity_coords)[0];
+    const double y = field_y_func(entity_coords)[0];
+    return std::vector<double>{2.0 * (x + 2.0 * y + bias)};
+  };
+
+  stk::mesh::Selector b1_not_b2 = block1_selector_ - block2_selector_;
+  auto x = make_tagged_component<XTag>(ScalarFieldComponent(*field_x_ptr_));
+  auto y = make_tagged_component<YTag>(ScalarFieldComponent(*field_y_ptr_));
+  auto z = make_tagged_component<ZTag>(ScalarFieldComponent(*field_z_ptr_));
+
+  {
+    auto es = make_entity_expr(get_bulk(), b1_not_b2, stk::topology::NODE_RANK);
+    z(es) = 2.0 * apply_expr(VariadicApplyExprFunc{}, x(es), y(es), bias);
+  }
+
+  check_field_data_on_host_func<1>("apply_expr variadic error. x", get_bulk(), *field_x_ptr_, b1_not_b2,
+                                   get_field_x_func());
+  check_field_data_on_host_func<1>("apply_expr variadic error. y", get_bulk(), *field_y_ptr_, b1_not_b2,
+                                   get_field_y_func());
+  check_field_data_on_host_func<1>("apply_expr variadic error. z", get_bulk(), *field_z_ptr_, b1_not_b2,
+                                   expected_value_func);
+
+  check_field_data_on_host_func<1>("field subset error. x", get_bulk(), *field_x_ptr_, !b1_not_b2, get_field_x_func());
+  check_field_data_on_host_func<1>("field subset error. y", get_bulk(), *field_y_ptr_, !b1_not_b2, get_field_y_func());
+  check_field_data_on_host_func<1>("field subset error. z", get_bulk(), *field_z_ptr_, !b1_not_b2, get_field_z_func());
+}
+
+TEST_F(UnitTestAccessorExprFixture, sink_expr_supports_explicit_read_write_and_overwrite_all) {
+  if (stk::parallel_machine_size(communicator_) > 2) {
+    GTEST_SKIP() << "This test is only designed to run with 1 or 2 MPI ranks.";
+  }
+
+  const int we_know_there_are_five_ranks = 5;
+#if TRILINOS_MAJOR_MINOR_VERSION >= 160000
+  auto field_data_manager = std::make_unique<stk::mesh::DefaultFieldDataManager>(we_know_there_are_five_ranks);
+  setup_hex_mesh(stk::mesh::BulkData::AUTO_AURA, std::move(field_data_manager));
+#else
+  stk::mesh::DefaultFieldDataManager* field_data_manager_ptr =
+      new stk::mesh::DefaultFieldDataManager(we_know_there_are_five_ranks);
+  setup_hex_mesh(stk::mesh::BulkData::AUTO_AURA, field_data_manager_ptr);
+#endif
+
+  constexpr double alpha = 2.5;
+  constexpr double bias = -0.75;
+  auto field_x_func = get_field_x_func();
+  auto field_y_func = get_field_y_func();
+  auto expected_y_func = [alpha, &field_x_func, &field_y_func](const double* entity_coords) {
+    return std::vector<double>{field_y_func(entity_coords)[0] + alpha * field_x_func(entity_coords)[0]};
+  };
+  auto expected_z_func = [bias, &field_x_func](const double* entity_coords) {
+    return std::vector<double>{field_x_func(entity_coords)[0] + bias};
+  };
+
+  stk::mesh::Selector b1_not_b2 = block1_selector_ - block2_selector_;
+  auto x = make_tagged_component<XTag>(ScalarFieldComponent(*field_x_ptr_));
+  auto y = make_tagged_component<YTag>(ScalarFieldComponent(*field_y_ptr_));
+  auto z = make_tagged_component<ZTag>(ScalarFieldComponent(*field_z_ptr_));
+
+  {
+    auto es = make_entity_expr(get_bulk(), b1_not_b2, stk::topology::NODE_RANK);
+    auto read_write_expr = sink_expr(ReadWriteScaleAddSinkFunc{}, read_write(y(es)), x(es), alpha);
+    read_write_expr.driver()->run(read_write_expr);
+
+    auto overwrite_expr = sink_expr(OverwriteAffineSinkFunc{}, overwrite_all(z(es)), read_only(x(es)), bias);
+    overwrite_expr.driver()->run(overwrite_expr);
+  }
+
+  check_field_data_on_host_func<1>("sink_expr read-write error. x", get_bulk(), *field_x_ptr_, b1_not_b2,
+                                   get_field_x_func());
+  check_field_data_on_host_func<1>("sink_expr read-write error. y", get_bulk(), *field_y_ptr_, b1_not_b2,
+                                   expected_y_func);
+  check_field_data_on_host_func<1>("sink_expr overwrite-all error. z", get_bulk(), *field_z_ptr_, b1_not_b2,
+                                   expected_z_func);
+
+  check_field_data_on_host_func<1>("sink_expr subset error. x", get_bulk(), *field_x_ptr_, !b1_not_b2,
+                                   get_field_x_func());
+  check_field_data_on_host_func<1>("sink_expr subset error. y", get_bulk(), *field_y_ptr_, !b1_not_b2,
+                                   get_field_y_func());
+  check_field_data_on_host_func<1>("sink_expr subset error. z", get_bulk(), *field_z_ptr_, !b1_not_b2,
+                                   get_field_z_func());
+}
+
+TEST_F(UnitTestAccessorExprFixture, rotate_quaternion_uses_named_sink_wrapper) {
+  if (stk::parallel_machine_size(communicator_) > 2) {
+    GTEST_SKIP() << "This test is only designed to run with 1 or 2 MPI ranks.";
+  }
+
+  const int we_know_there_are_five_ranks = 5;
+#if TRILINOS_MAJOR_MINOR_VERSION >= 160000
+  auto field_data_manager = std::make_unique<stk::mesh::DefaultFieldDataManager>(we_know_there_are_five_ranks);
+  setup_hex_mesh(stk::mesh::BulkData::AUTO_AURA, std::move(field_data_manager));
+#else
+  stk::mesh::DefaultFieldDataManager* field_data_manager_ptr =
+      new stk::mesh::DefaultFieldDataManager(we_know_there_are_five_ranks);
+  setup_hex_mesh(stk::mesh::BulkData::AUTO_AURA, field_data_manager_ptr);
+#endif
+
+  constexpr double dt = 0.2;
+  auto expected_q_func = [](const double* /*entity_coords*/) {
+    return std::vector<double>{0.0, 0.0, std::sin(0.5 * dt), std::cos(0.5 * dt)};
+  };
+
+  stk::mesh::Selector b1_not_b2 = block1_selector_ - block2_selector_;
+  auto q = make_tagged_component<QTag>(QuaternionFieldComponent(*field_q_ptr_));
+  auto omega = make_tagged_component<OmegaTag>(Vector3FieldComponent(*field_omega_ptr_));
+
+  {
+    auto es = make_entity_expr(get_bulk(), b1_not_b2, stk::topology::NODE_RANK);
+    rotate_quaternion(q(es), omega(es), dt);
+  }
+
+  check_field_data_on_host_func<4>("rotate_quaternion sink wrapper error. q", get_bulk(), *field_q_ptr_,
+                                   b1_not_b2, expected_q_func);
+  check_field_data_on_host_func<3>("rotate_quaternion sink wrapper error. omega", get_bulk(), *field_omega_ptr_,
+                                   b1_not_b2, get_field_omega_func());
+  check_field_data_on_host_func<4>("rotate_quaternion subset error. q", get_bulk(), *field_q_ptr_, !b1_not_b2,
+                                   get_field_q_func());
+}
+
+TEST_F(UnitTestAccessorExprFixture, sink_expr_rejects_mismatched_drivers) {
+  if (stk::parallel_machine_size(communicator_) > 2) {
+    GTEST_SKIP() << "This test is only designed to run with 1 or 2 MPI ranks.";
+  }
+
+  const int we_know_there_are_five_ranks = 5;
+#if TRILINOS_MAJOR_MINOR_VERSION >= 160000
+  auto field_data_manager = std::make_unique<stk::mesh::DefaultFieldDataManager>(we_know_there_are_five_ranks);
+  setup_hex_mesh(stk::mesh::BulkData::AUTO_AURA, std::move(field_data_manager));
+#else
+  stk::mesh::DefaultFieldDataManager* field_data_manager_ptr =
+      new stk::mesh::DefaultFieldDataManager(we_know_there_are_five_ranks);
+  setup_hex_mesh(stk::mesh::BulkData::AUTO_AURA, field_data_manager_ptr);
+#endif
+
+  auto x = make_tagged_component<XTag>(ScalarFieldComponent(*field_x_ptr_));
+  auto y = make_tagged_component<YTag>(ScalarFieldComponent(*field_y_ptr_));
+
+  auto es1 = make_entity_expr(get_bulk(), block1_selector_, stk::topology::NODE_RANK);
+  auto es2 = make_entity_expr(get_bulk(), block2_selector_, stk::topology::NODE_RANK);
+  auto expr = sink_expr(ReadWriteScaleAddSinkFunc{}, read_write(y(es1)), x(es2), 1.0);
+  EXPECT_THROW(expr.driver(), std::logic_error);
 }
 
 TEST_F(UnitTestAccessorExprFixture, non_static_branches_do_not_share_cache) {

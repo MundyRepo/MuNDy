@@ -52,15 +52,14 @@ class TransposedView {
 
   /// \brief Constructor from a given accessor
   KOKKOS_INLINE_FUNCTION
-  explicit constexpr TransposedView(const Accessor& accessor)
-    MUNDY_REQUIRES(std::is_copy_constructible_v<Accessor>)
+  explicit constexpr TransposedView(const Accessor& accessor) MUNDY_REQUIRES(std::is_copy_constructible_v<Accessor>)
       : accessor_(accessor) {
   }
 
   /// \brief Constructor from a given accessor
   KOKKOS_INLINE_FUNCTION
   explicit constexpr TransposedView(Accessor&& accessor)
-    MUNDY_REQUIRES(std::is_copy_constructible_v<Accessor> || std::is_move_constructible_v<Accessor>)
+      MUNDY_REQUIRES(std::is_copy_constructible_v<Accessor> || std::is_move_constructible_v<Accessor>)
       : accessor_(std::forward<Accessor>(accessor)) {
   }
 

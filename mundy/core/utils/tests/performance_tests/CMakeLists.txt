@@ -17,9 +17,9 @@
 # **********************************************************************************************************************
 # @HEADER
 
-if (Mundy_ENABLE_TESTS AND Mundy_ENABLE_nanobench)
+if(Mundy_ENABLE_TESTS AND Mundy_ENABLE_nanobench)
   message(STATUS
-          "MundyUtils: Setting up performance tests since Mundy_ENABLE_TESTS=ON and Mundy_ENABLE_nanobench=ON")
+    "MundyUtils: Setting up performance tests since Mundy_ENABLE_TESTS=ON and Mundy_ENABLE_nanobench=ON")
 
   tribits_add_executable(
     ReferenceWrapperVsExplicitReference
@@ -50,5 +50,5 @@ if (Mundy_ENABLE_TESTS AND Mundy_ENABLE_nanobench)
   )
 else()
   message(STATUS
-          "MundyUtils: Skipping performance tests since Mundy_ENABLE_TESTS=OFF or Mundy_ENABLE_nanobench=OFF ...")
+    "MundyUtils: Skipping performance tests since Mundy_ENABLE_TESTS=OFF or Mundy_ENABLE_nanobench=OFF ...")
 endif()

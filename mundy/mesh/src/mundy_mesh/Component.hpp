@@ -46,6 +46,7 @@
 
 // Mundy
 #include <mundy_mesh/BulkData.hpp>            // for mundy::mesh::BulkData
+#include <mundy_mesh/ComponentAccess.hpp>     // for access::*, canonical_component_access_t, component_access_shape
 #include <mundy_mesh/FieldViews.hpp>          // for mundy::mesh::vector3_field_data, mundy::mesh::quaternion_field_data
 #include <mundy_mesh/ForEachEntity.hpp>       // for mundy::mesh::for_each_entity_run
 #include <mundy_mesh/NgpAccessorExpr.hpp>     // for mundy::mesh::AccessorExpr and EntityExprBase
@@ -87,109 +88,6 @@ struct LINKED_ENTITIES;
 template <typename SharedType, typename NgpMemSpace>
 class NgpSharedComponent;
 
-namespace access {
-
-template <typename ValueType>
-struct raw {
-  using value_type = ValueType;
-};
-
-template <typename ScalarType>
-struct scalar {
-  using scalar_type = ScalarType;
-};
-
-template <typename ScalarType, size_t N>
-struct vector {
-  using scalar_type = ScalarType;
-  static constexpr size_t size = N;
-};
-
-template <typename ScalarType>
-struct matrix3 {
-  using scalar_type = ScalarType;
-};
-
-template <typename ScalarType>
-struct quaternion {
-  using scalar_type = ScalarType;
-};
-
-template <typename ScalarType>
-struct aabb {
-  using scalar_type = ScalarType;
-};
-
-}  // namespace access
-
-template <typename AccessLike, typename Enable = void>
-struct canonical_component_access {
-  using type = access::raw<std::remove_cvref_t<AccessLike>>;
-};
-
-template <typename ValueType>
-struct canonical_component_access<access::raw<ValueType>, void> {
-  using type = access::raw<std::remove_cvref_t<ValueType>>;
-};
-
-template <typename ScalarType>
-struct canonical_component_access<access::scalar<ScalarType>, void> {
-  using type = access::scalar<std::remove_cvref_t<ScalarType>>;
-};
-
-template <typename ScalarType, size_t N>
-struct canonical_component_access<access::vector<ScalarType, N>, void> {
-  using type = access::vector<std::remove_cvref_t<ScalarType>, N>;
-};
-
-template <typename ScalarType>
-struct canonical_component_access<access::matrix3<ScalarType>, void> {
-  using type = access::matrix3<std::remove_cvref_t<ScalarType>>;
-};
-
-template <typename ScalarType>
-struct canonical_component_access<access::quaternion<ScalarType>, void> {
-  using type = access::quaternion<std::remove_cvref_t<ScalarType>>;
-};
-
-template <typename ScalarType>
-struct canonical_component_access<access::aabb<ScalarType>, void> {
-  using type = access::aabb<std::remove_cvref_t<ScalarType>>;
-};
-
-template <typename ScalarType>
-struct canonical_component_access<ScalarType, std::enable_if_t<std::is_arithmetic_v<std::remove_cvref_t<ScalarType>>>> {
-  using type = access::scalar<std::remove_cvref_t<ScalarType>>;
-};
-
-template <typename VectorType>
-struct canonical_component_access<VectorType, std::enable_if_t<is_vector_v<std::remove_cvref_t<VectorType>>>> {
-  using decayed_type = std::remove_cvref_t<VectorType>;
-  using type = access::vector<typename decayed_type::scalar_t, decayed_type::size>;
-};
-
-template <typename Matrix3Type>
-struct canonical_component_access<Matrix3Type, std::enable_if_t<is_matrix3_v<std::remove_cvref_t<Matrix3Type>>>> {
-  using decayed_type = std::remove_cvref_t<Matrix3Type>;
-  using type = access::matrix3<typename decayed_type::scalar_t>;
-};
-
-template <typename QuaternionType>
-struct canonical_component_access<QuaternionType,
-                                  std::enable_if_t<is_quaternion_v<std::remove_cvref_t<QuaternionType>>>> {
-  using decayed_type = std::remove_cvref_t<QuaternionType>;
-  using type = access::quaternion<typename decayed_type::scalar_t>;
-};
-
-template <typename AABBType>
-struct canonical_component_access<AABBType, std::enable_if_t<is_aabb_v<std::remove_cvref_t<AABBType>>>> {
-  using decayed_type = std::remove_cvref_t<AABBType>;
-  using type = access::aabb<typename decayed_type::scalar_t>;
-};
-
-template <typename AccessLike>
-using canonical_component_access_t = typename canonical_component_access<AccessLike>::type;
-
 /// \brief A small helper type for tying a Tag to an underlying component
 template <typename Tag, typename ComponentType>
 class TaggedComponent {
@@ -200,6 +98,7 @@ class TaggedComponent {
   using component_type = ComponentType;
   using canonical_access = typename component_type::canonical_access;
 
+  TaggedComponent() = default;
   TaggedComponent(component_type component) : component_(component) {
   }
 
@@ -219,7 +118,7 @@ class TaggedComponent {
   ///   EntityExpr all_nodes(node_selector, stk::topology::NODE_RANK);
   ///   auto get_v3_expr = v3_accessor(all_nodes);
   template <class EntityExpr>
-  auto operator()(const EntityExprBase<EntityExpr>& e) const;
+  auto operator()(const impl::EntityExprBase<EntityExpr>& e) const;
 
   inline const component_type& component() const {
     // Our lifetime should be at least as long as the component's
@@ -293,8 +192,8 @@ class NgpTaggedComponent {
   ///   EntityExpr all_nodes(node_selector, stk::topology::NODE_RANK);
   ///   auto get_v3_expr = v3_accessor(all_nodes);
   template <class EntityExpr>
-  auto operator()(const EntityExprBase<EntityExpr>& e) const {
-    return AccessorExpr<our_t, EntityExpr>(*this, e.self());
+  auto operator()(const impl::EntityExprBase<EntityExpr>& e) const {
+    return impl::AccessorExpr<our_t, EntityExpr>(*this, e.self());
   }
 
   KOKKOS_INLINE_FUNCTION
@@ -344,7 +243,7 @@ decltype(auto) get_updated_ngp_component(const TaggedComponent<Tag, ComponentTyp
 
 template <typename Tag, typename ComponentType>
 template <class EntityExpr>
-auto TaggedComponent<Tag, ComponentType>::operator()(const EntityExprBase<EntityExpr>& e) const {
+auto TaggedComponent<Tag, ComponentType>::operator()(const impl::EntityExprBase<EntityExpr>& e) const {
   // Entity expressions are (currently) always on the device, so we need to get the NGP tagged component
   // TODO(palmerb4): Allow for exec_spaces that aren't simply the default execution space (need Tril 16.1+)
   auto ngp_this = get_updated_ngp_component(*this);

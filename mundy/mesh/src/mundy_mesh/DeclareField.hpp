@@ -45,9 +45,6 @@ namespace mundy {
 
 namespace mesh {
 
-template <typename FieldScalarType, typename AccessLike, typename Tag = void>
-class TaggedFieldComponentDeclarationHelperT;
-
 template <typename FieldScalarType, typename Tag = void>
 class TaggedFieldDeclarationHelperT;
 
@@ -194,16 +191,6 @@ class FieldDeclarationHelperT {
     return *this;
   }
 
-  /// \brief Switch from field declaration to field-backed component declaration.
-  /// \note This member is defined in DeclareComponent.hpp.
-  template <typename AccessLike>
-  TaggedFieldComponentDeclarationHelperT<field_scalar_type, AccessLike> access() const;
-
-  /// \brief Attach a component tag before selecting an access policy.
-  /// \note This member is defined in DeclareComponent.hpp.
-  template <typename Tag>
-  TaggedFieldDeclarationHelperT<field_scalar_type, Tag> tag() const;
-
   /// \brief Declare a field with the given stk output type and role.
   stk::mesh::Field<T>& declare() {
     // Validate that required parameters have been set
@@ -267,8 +254,6 @@ class FieldDeclarationHelperT {
   stk::io::FieldOutputType output_type_;
 
   friend class FieldDeclarationHelper;
-  template <typename OtherFieldScalarType, typename OtherAccessLike, typename OtherTag>
-  friend class TaggedFieldComponentDeclarationHelperT;
 };
 
 class FieldDeclarationHelper {
@@ -332,24 +317,6 @@ class FieldDeclarationHelper {
     field_has_output_type_ = true;
     output_type_ = output_type;
     return *this;
-  }
-
-  /// \brief Switch from field declaration to field-backed component declaration.
-  /// \note This member is defined in DeclareComponent.hpp.
-  template <typename AccessLike>
-  TaggedFieldComponentDeclarationHelperT<invalid_field_scalar_type, AccessLike> access() const;
-
-  /// \brief Attach a component tag before selecting an access policy.
-  /// \note This member is defined in DeclareComponent.hpp.
-  template <typename Tag>
-  TaggedFieldDeclarationHelperT<invalid_field_scalar_type, Tag> tag() const;
-
-  /// \brief Declare a field with the given stk output type and role.
-  void declare() {
-    // Validate that required parameters have been set
-    MUNDY_THROW_REQUIRE(field_has_name_, std::logic_error, "Field name must be set before declaring a field.");
-    MUNDY_THROW_REQUIRE(field_has_rank_, std::logic_error, "Field rank must be set before declaring a field.");
-    MUNDY_THROW_REQUIRE(false, std::logic_error, "Field type must be set before declaring a field.");
   }
 
   // clang-format off

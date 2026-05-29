@@ -28,10 +28,10 @@
 #include <type_traits>
 
 // Mundy
-#include <mundy_geom/distance/PointPoint.hpp>       // for distance(Point, Point)
-#include <mundy_geom/distance/Types.hpp>            // for mundy::SharedNormalSigned
-#include <mundy_geom/primitives/Point.hpp>          // for mundy::Point
-#include <mundy_geom/primitives/Sphere.hpp>         // for mundy::Sphere
+#include <mundy_geom/distance/PointPoint.hpp>  // for distance(Point, Point)
+#include <mundy_geom/distance/Types.hpp>       // for mundy::SharedNormalSigned
+#include <mundy_geom/primitives/Point.hpp>     // for mundy::Point
+#include <mundy_geom/primitives/Sphere.hpp>    // for mundy::Sphere
 #include <mundy_utils/requires.hpp>
 
 namespace mundy {
@@ -44,7 +44,7 @@ namespace mundy {
 /// \param[in] point The point
 /// \param[in] sphere The sphere
 template <ValidPointType PointType, ValidSphereType SphereType>
-  MUNDY_REQUIRES(std::is_same_v<typename PointType::scalar_t, typename SphereType::scalar_t>)
+MUNDY_REQUIRES(std::is_same_v<typename PointType::scalar_t, typename SphereType::scalar_t>)
 KOKKOS_FUNCTION typename PointType::scalar_t distance(const PointType& point,  //
                                                       const SphereType& sphere) {
   return distance(SharedNormalSigned{}, point, sphere);
@@ -55,9 +55,9 @@ KOKKOS_FUNCTION typename PointType::scalar_t distance(const PointType& point,  /
 /// \param[in] point The point
 /// \param[in] sphere The sphere
 template <ValidPointType PointType, ValidSphereType SphereType>
-  MUNDY_REQUIRES(std::is_same_v<typename PointType::scalar_t, typename SphereType::scalar_t>)
+MUNDY_REQUIRES(std::is_same_v<typename PointType::scalar_t, typename SphereType::scalar_t>)
 KOKKOS_FUNCTION typename PointType::scalar_t distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
-                                                      const PointType& point,                                  //
+                                                      const PointType& point,                                   //
                                                       const SphereType& sphere) {
   return distance(point, sphere.center()) - sphere.radius();
 }
@@ -68,10 +68,10 @@ KOKKOS_FUNCTION typename PointType::scalar_t distance([[maybe_unused]] const Sha
 /// \param[in] sphere The sphere
 /// \param[out] sep The separation vector (from point to sphere)
 template <ValidPointType PointType, ValidSphereType SphereType>
-  MUNDY_REQUIRES(std::is_same_v<typename PointType::scalar_t, typename SphereType::scalar_t>)
-KOKKOS_FUNCTION typename PointType::scalar_t distance(const PointType& point,  //
-                                                      const SphereType& sphere,
-                                                      mundy::Vector3<typename PointType::scalar_t>& sep) {
+MUNDY_REQUIRES(std::is_same_v<typename PointType::scalar_t, typename SphereType::scalar_t>)
+KOKKOS_FUNCTION typename PointType::scalar_t
+    distance(const PointType& point,  //
+             const SphereType& sphere, mundy::Vector3<typename PointType::scalar_t>& sep) {
   using Scalar = typename PointType::scalar_t;
   const Scalar center_point_distance = distance(point, sphere.center(), sep);
 

@@ -25,6 +25,7 @@
 #include <any>
 #include <concepts>
 #include <memory>
+#include <string>
 #include <tuple>
 #include <type_traits>  // for std::conditional_t, std::false_type, std::true_type
 #include <utility>      // for std::declval
@@ -52,10 +53,13 @@
 #include <mundy_mesh/NgpAccessorExpr.hpp>  // for mundy::mesh::AccessorExpr and EntityExprBase
 #include <mundy_mesh/impl/HostDeviceSynchronizer.hpp>
 #include <mundy_mesh/impl/SharedComponentImpl.hpp>
+#include <mundy_math/Vector.hpp>
+#include <mundy_math/Matrix.hpp>
+#include <mundy_math/Quaternion.hpp>
+#include <mundy_utils/requires.hpp>
 #include <mundy_utils/suppress_warnings.hpp>  // for MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_PUSH/POP
 #include <mundy_utils/throw_assert.hpp>       // for MUNDY_THROW_ASSERT
 #include <mundy_utils/tuple.hpp>              // for mundy::tuple
-#include <mundy_utils/requires.hpp>
 
 namespace mundy {
 
@@ -82,7 +86,7 @@ class SharedComponent {
   }
 
   template <typename HostViewType>
-    MUNDY_REQUIRES(impl::CompatibleSharedComponentHostView<HostViewType, shared_type>)
+  MUNDY_REQUIRES(impl::CompatibleSharedComponentHostView<HostViewType, shared_type>)
   explicit SharedComponent(HostViewType host_view) : state_(std::make_shared<state_type>(std::move(host_view))) {
   }
 
@@ -124,6 +128,16 @@ class SharedComponent {
     state().clear_device_sync_state();
   }
 
+  void set_declaration_metadata(std::string name, stk::mesh::EntityRank rank) {
+    name_ = std::move(name);
+    rank_ = rank;
+  }
+
+  // clang-format off
+  const std::string&      name()        const { return name_; }
+  stk::mesh::EntityRank   entity_rank() const { return rank_; }
+  // clang-format on
+
  private:
   using state_type = impl::SharedComponentState<shared_type>;
   using host_view_type = typename state_type::host_view_type;
@@ -137,15 +151,9 @@ class SharedComponent {
     return state().host_view();
   }
 
-  std::any& any_ngp_component() const {
-    return state().any_ngp_component();
-  }
-
-  void set_synchronizer(std::shared_ptr<impl::HostDeviceSynchronizer> synchronizer) const {
-    state().set_synchronizer(std::move(synchronizer));
-  }
-
   std::shared_ptr<state_type> state_;
+  std::string name_;
+  stk::mesh::EntityRank rank_ = stk::topology::INVALID_RANK;
 
   template <typename NgpMemSpace, typename OtherSharedType>
   friend NgpSharedComponent<OtherSharedType, NgpMemSpace>& get_updated_ngp_component(
@@ -165,12 +173,17 @@ class SharedScalarComponent : public SharedComponent<ScalarType> {
   }
 
   template <typename HostViewType>
-    MUNDY_REQUIRES(impl::CompatibleSharedComponentHostView<HostViewType, ScalarType>)
+  MUNDY_REQUIRES(impl::CompatibleSharedComponentHostView<HostViewType, ScalarType>)
   explicit SharedScalarComponent(HostViewType host_view) : base_t(std::move(host_view)) {
   }
 
-  inline decltype(auto) operator()(stk::mesh::Entity /*entity*/) const {
-    auto& value = static_cast<our_t&>(*const_cast<our_t*>(this)).shared_value();
+  SharedScalarComponent(const SharedScalarComponent&) = default;
+  SharedScalarComponent(SharedScalarComponent&&) = default;
+  SharedScalarComponent& operator=(const SharedScalarComponent&) = default;
+  SharedScalarComponent& operator=(SharedScalarComponent&&) = default;
+
+  inline decltype(auto) operator()(stk::mesh::Entity entity) const {
+    ScalarType& value = base_t::operator()(entity);
     return get_scalar_view<ScalarType>(&value);
   }
 };  // SharedScalarComponent
@@ -189,47 +202,65 @@ class SharedVectorComponent : public SharedComponent<Vector<ScalarType, N>> {
   }
 
   template <typename HostViewType>
-    MUNDY_REQUIRES(impl::CompatibleSharedComponentHostView<HostViewType, shared_value_type>)
+  MUNDY_REQUIRES(impl::CompatibleSharedComponentHostView<HostViewType, shared_value_type>)
   explicit SharedVectorComponent(HostViewType host_view) : base_t(std::move(host_view)) {
   }
+
+  SharedVectorComponent(const SharedVectorComponent&) = default;
+  SharedVectorComponent(SharedVectorComponent&&) = default;
+  SharedVectorComponent& operator=(const SharedVectorComponent&) = default;
+  SharedVectorComponent& operator=(SharedVectorComponent&&) = default;
 };  // SharedVectorComponent
 
 template <typename ScalarType>
 using SharedVector1Component = SharedVectorComponent<ScalarType, 1>;
-
 template <typename ScalarType>
 using SharedVector2Component = SharedVectorComponent<ScalarType, 2>;
-
 template <typename ScalarType>
 using SharedVector3Component = SharedVectorComponent<ScalarType, 3>;
-
 template <typename ScalarType>
 using SharedVector4Component = SharedVectorComponent<ScalarType, 4>;
-
 template <typename ScalarType>
 using SharedVector5Component = SharedVectorComponent<ScalarType, 5>;
-
 template <typename ScalarType>
 using SharedVector6Component = SharedVectorComponent<ScalarType, 6>;
 
-template <typename ScalarType>
-class SharedMatrix3Component : public SharedComponent<Matrix3<ScalarType>> {
+template <typename ScalarType, size_t N, size_t M>
+class SharedMatrixComponent : public SharedComponent<Matrix<ScalarType, N, M>> {
  public:
-  using shared_value_type = Matrix3<ScalarType>;
-  using our_t = SharedMatrix3Component<ScalarType>;
+  using shared_value_type = Matrix<ScalarType, N, M>;
+  using our_t = SharedMatrixComponent<ScalarType, N, M>;
   using base_t = SharedComponent<shared_value_type>;
-  using canonical_access = access::matrix3<ScalarType>;
+  using canonical_access = access::matrix<ScalarType, N, M>;
   using view_t = typename base_t::view_t;
 
-  SharedMatrix3Component() = default;
-  explicit SharedMatrix3Component(shared_value_type shared_value) : base_t(std::move(shared_value)) {
+  SharedMatrixComponent() = default;
+  explicit SharedMatrixComponent(shared_value_type shared_value) : base_t(std::move(shared_value)) {
   }
 
   template <typename HostViewType>
-    MUNDY_REQUIRES(impl::CompatibleSharedComponentHostView<HostViewType, shared_value_type>)
-  explicit SharedMatrix3Component(HostViewType host_view) : base_t(std::move(host_view)) {
+  MUNDY_REQUIRES(impl::CompatibleSharedComponentHostView<HostViewType, shared_value_type>)
+  explicit SharedMatrixComponent(HostViewType host_view) : base_t(std::move(host_view)) {
   }
-};  // SharedMatrix3Component
+
+  SharedMatrixComponent(const SharedMatrixComponent&) = default;
+  SharedMatrixComponent(SharedMatrixComponent&&) = default;
+  SharedMatrixComponent& operator=(const SharedMatrixComponent&) = default;
+  SharedMatrixComponent& operator=(SharedMatrixComponent&&) = default;
+};  // SharedMatrixComponent
+
+template <typename ScalarType>
+using SharedMatrix1Component = SharedMatrixComponent<ScalarType, 1, 1>;
+template <typename ScalarType>
+using SharedMatrix2Component = SharedMatrixComponent<ScalarType, 2, 2>;
+template <typename ScalarType>
+using SharedMatrix3Component = SharedMatrixComponent<ScalarType, 3, 3>;
+template <typename ScalarType>
+using SharedMatrix4Component = SharedMatrixComponent<ScalarType, 4, 4>;
+template <typename ScalarType>
+using SharedMatrix5Component = SharedMatrixComponent<ScalarType, 5, 5>;
+template <typename ScalarType>
+using SharedMatrix6Component = SharedMatrixComponent<ScalarType, 6, 6>;
 
 template <typename ScalarType>
 class SharedQuaternionComponent : public SharedComponent<Quaternion<ScalarType>> {
@@ -245,9 +276,14 @@ class SharedQuaternionComponent : public SharedComponent<Quaternion<ScalarType>>
   }
 
   template <typename HostViewType>
-    MUNDY_REQUIRES(impl::CompatibleSharedComponentHostView<HostViewType, shared_value_type>)
+  MUNDY_REQUIRES(impl::CompatibleSharedComponentHostView<HostViewType, shared_value_type>)
   explicit SharedQuaternionComponent(HostViewType host_view) : base_t(std::move(host_view)) {
   }
+
+  SharedQuaternionComponent(const SharedQuaternionComponent&) = default;
+  SharedQuaternionComponent(SharedQuaternionComponent&&) = default;
+  SharedQuaternionComponent& operator=(const SharedQuaternionComponent&) = default;
+  SharedQuaternionComponent& operator=(SharedQuaternionComponent&&) = default;
 };  // SharedQuaternionComponent
 
 template <typename ScalarType>
@@ -264,9 +300,14 @@ class SharedAABBComponent : public SharedComponent<AABB<ScalarType>> {
   }
 
   template <typename HostViewType>
-    MUNDY_REQUIRES(impl::CompatibleSharedComponentHostView<HostViewType, shared_value_type>)
+  MUNDY_REQUIRES(impl::CompatibleSharedComponentHostView<HostViewType, shared_value_type>)
   explicit SharedAABBComponent(HostViewType host_view) : base_t(std::move(host_view)) {
   }
+
+  SharedAABBComponent(const SharedAABBComponent&) = default;
+  SharedAABBComponent(SharedAABBComponent&&) = default;
+  SharedAABBComponent& operator=(const SharedAABBComponent&) = default;
+  SharedAABBComponent& operator=(SharedAABBComponent&&) = default;
 };  // SharedAABBComponent
 
 template <typename SharedType, typename NgpMemSpace>
@@ -298,46 +339,46 @@ class NgpSharedComponent {
   // clang-format on
 
   void sync_to_device() {
-    host_component().sync_to_device();
+    state().sync_to_device();
   }
 
   void sync_to_host() {
-    host_component().sync_to_host();
+    state().sync_to_host();
   }
 
   void modify_on_device() {
-    host_component().modify_on_device();
+    state().modify_on_device();
   }
 
   void modify_on_host() {
-    host_component().modify_on_host();
+    state().modify_on_host();
   }
 
   void clear_host_sync_state() {
-    host_component().clear_host_sync_state();
+    state().clear_host_sync_state();
   }
 
   void clear_device_sync_state() {
-    host_component().clear_device_sync_state();
+    state().clear_device_sync_state();
   }
 
  private:
-  using host_component_type = SharedComponent<shared_type>;
   using host_view_type = impl::shared_component_host_view_t<shared_type>;
+  using state_type     = impl::SharedComponentState<shared_type>;
   static constexpr bool aliases_host_storage = Kokkos::SpaceAccessibility<NgpMemSpace, Kokkos::HostSpace>::accessible;
   using ngp_view_type =
       std::conditional_t<aliases_host_storage, host_view_type, Kokkos::View<shared_type*, NgpMemSpace>>;
 
-  NgpSharedComponent(host_component_type& host_component, ngp_view_type ngp_view)
-      : host_component_(&host_component), ngp_view_(ngp_view) {
+  NgpSharedComponent(std::shared_ptr<state_type> state, ngp_view_type ngp_view)
+      : state_(std::move(state)), ngp_view_(std::move(ngp_view)) {
   }
 
-  host_component_type& host_component() const {
-    MUNDY_THROW_ASSERT(host_component_ != nullptr, std::runtime_error, "NgpSharedComponent host component is null");
-    return *host_component_;
+  state_type& state() const {
+    MUNDY_THROW_ASSERT(state_, std::runtime_error, "NgpSharedComponent state is null");
+    return *state_;
   }
 
-  host_component_type* host_component_ = nullptr;
+  std::shared_ptr<state_type> state_;
   ngp_view_type ngp_view_;
 
   template <typename OtherNgpMemSpace, typename OtherSharedType>
@@ -363,34 +404,39 @@ class NgpSharedScalarComponent : public NgpSharedComponent<ScalarType, NgpMemSpa
 
   KOKKOS_INLINE_FUNCTION
   decltype(auto) operator()(stk::mesh::FastMeshIndex /*entity_index*/) const {
-    auto& ngp_view = static_cast<our_t&>(*const_cast<our_t*>(this)).ngp_view();
-    return get_scalar_view<ScalarType>(ngp_view.data());
+    return get_scalar_view<ScalarType>(this->ngp_view().data());
   }
 };
 
 template <typename ScalarType, size_t N, typename NgpMemSpace = stk::ngp::MemSpace>
 using NgpSharedVectorComponent = NgpSharedComponent<Vector<ScalarType, N>, NgpMemSpace>;
-
 template <typename ScalarType, typename NgpMemSpace = stk::ngp::MemSpace>
 using NgpSharedVector1Component = NgpSharedVectorComponent<ScalarType, 1, NgpMemSpace>;
-
 template <typename ScalarType, typename NgpMemSpace = stk::ngp::MemSpace>
 using NgpSharedVector2Component = NgpSharedVectorComponent<ScalarType, 2, NgpMemSpace>;
-
 template <typename ScalarType, typename NgpMemSpace = stk::ngp::MemSpace>
 using NgpSharedVector3Component = NgpSharedVectorComponent<ScalarType, 3, NgpMemSpace>;
-
 template <typename ScalarType, typename NgpMemSpace = stk::ngp::MemSpace>
 using NgpSharedVector4Component = NgpSharedVectorComponent<ScalarType, 4, NgpMemSpace>;
-
 template <typename ScalarType, typename NgpMemSpace = stk::ngp::MemSpace>
 using NgpSharedVector5Component = NgpSharedVectorComponent<ScalarType, 5, NgpMemSpace>;
-
 template <typename ScalarType, typename NgpMemSpace = stk::ngp::MemSpace>
 using NgpSharedVector6Component = NgpSharedVectorComponent<ScalarType, 6, NgpMemSpace>;
 
+template <typename ScalarType, size_t N, size_t M, typename NgpMemSpace = stk::ngp::MemSpace>
+using NgpSharedMatrixComponent = NgpSharedComponent<Matrix<ScalarType, N, M>, NgpMemSpace>;
 template <typename ScalarType, typename NgpMemSpace = stk::ngp::MemSpace>
-using NgpSharedMatrix3Component = NgpSharedComponent<Matrix3<ScalarType>, NgpMemSpace>;
+using NgpSharedMatrix1Component = NgpSharedMatrixComponent<ScalarType, 1, 1, NgpMemSpace>;
+template <typename ScalarType, typename NgpMemSpace = stk::ngp::MemSpace>
+using NgpSharedMatrix2Component = NgpSharedMatrixComponent<ScalarType, 2, 2, NgpMemSpace>;
+template <typename ScalarType, typename NgpMemSpace = stk::ngp::MemSpace>
+using NgpSharedMatrix3Component = NgpSharedMatrixComponent<ScalarType, 3, 3, NgpMemSpace>;
+template <typename ScalarType, typename NgpMemSpace = stk::ngp::MemSpace>
+using NgpSharedMatrix4Component = NgpSharedMatrixComponent<ScalarType, 4, 4, NgpMemSpace>;
+template <typename ScalarType, typename NgpMemSpace = stk::ngp::MemSpace>
+using NgpSharedMatrix5Component = NgpSharedMatrixComponent<ScalarType, 5, 5, NgpMemSpace>;
+template <typename ScalarType, typename NgpMemSpace = stk::ngp::MemSpace>
+using NgpSharedMatrix6Component = NgpSharedMatrixComponent<ScalarType, 6, 6, NgpMemSpace>;
 
 template <typename ScalarType, typename NgpMemSpace = stk::ngp::MemSpace>
 using NgpSharedQuaternionComponent = NgpSharedComponent<Quaternion<ScalarType>, NgpMemSpace>;
@@ -410,7 +456,7 @@ NgpSharedComponent<SharedType, NgpMemSpace>& get_updated_ngp_component(const Sha
       std::conditional_t<aliases_host_storage, host_view_type, Kokkos::View<SharedType*, NgpMemSpace>>;
   using synchronizer_t = impl::SharedComponentSynchronizerT<host_view_type, ngp_view_type, aliases_host_storage>;
 
-  std::any& any_ngp_component = component.any_ngp_component();
+  std::any& any_ngp_component = component.state_->ngp_component_for(typeid(NgpMemSpace));
 
   if (!any_ngp_component.has_value()) {
     ngp_view_type ngp_view = [&component]() {
@@ -424,9 +470,10 @@ NgpSharedComponent<SharedType, NgpMemSpace>& get_updated_ngp_component(const Sha
       Kokkos::deep_copy(ngp_view, component.host_view());
     }
 
-    any_ngp_component = ngp_component_type(const_cast<SharedComponent<SharedType>&>(component), ngp_view);
+    any_ngp_component = ngp_component_type(component.state_, std::move(ngp_view));
     ngp_component_type& ngp_component = std::any_cast<ngp_component_type&>(any_ngp_component);
-    component.set_synchronizer(std::make_shared<synchronizer_t>(component.host_view(), ngp_component.ngp_view()));
+    component.state_->set_synchronizer(
+        std::make_shared<synchronizer_t>(component.host_view(), ngp_component.ngp_view()));
   }
 
   return std::any_cast<NgpSharedComponent<SharedType, NgpMemSpace>&>(any_ngp_component);
@@ -446,7 +493,7 @@ auto get_updated_ngp_component(const SharedScalarComponent<ScalarType>& componen
 // **********************************************************************************************************************
 /// \brief Class template argument deduction guides for SharedComponent
 template <typename SharedType>
-  MUNDY_REQUIRES(!Kokkos::is_view_v<std::remove_cvref_t<SharedType>>)
+MUNDY_REQUIRES(!Kokkos::is_view_v<std::remove_cvref_t<SharedType>>)
 SharedComponent(SharedType) -> SharedComponent<std::remove_cvref_t<SharedType>>;
 
 template <impl::SharedComponentHostView HostViewType>
@@ -455,11 +502,11 @@ SharedComponent(HostViewType) -> SharedComponent<impl::shared_component_host_vie
 // **********************************************************************************************************************
 /// \brief Class template argument deduction guides for SharedScalarComponent
 template <typename ScalarType>
-  MUNDY_REQUIRES(!Kokkos::is_view_v<std::remove_cvref_t<ScalarType>>)
+MUNDY_REQUIRES(!Kokkos::is_view_v<std::remove_cvref_t<ScalarType>>)
 SharedScalarComponent(ScalarType) -> SharedScalarComponent<std::remove_cvref_t<ScalarType>>;
 
 template <impl::SharedComponentHostView HostViewType>
-  MUNDY_REQUIRES(std::is_arithmetic_v<impl::shared_component_host_view_value_t<HostViewType>>)
+MUNDY_REQUIRES(std::is_arithmetic_v<impl::shared_component_host_view_value_t<HostViewType>>)
 SharedScalarComponent(HostViewType) -> SharedScalarComponent<impl::shared_component_host_view_value_t<HostViewType>>;
 
 // **********************************************************************************************************************
@@ -468,20 +515,22 @@ template <typename ScalarType, size_t N>
 SharedVectorComponent(Vector<ScalarType, N>) -> SharedVectorComponent<ScalarType, N>;
 
 template <impl::SharedComponentHostView HostViewType>
-  MUNDY_REQUIRES(is_vector_v<impl::shared_component_host_view_value_t<HostViewType>>)
+MUNDY_REQUIRES(is_vector_v<impl::shared_component_host_view_value_t<HostViewType>>)
 SharedVectorComponent(HostViewType)
     -> SharedVectorComponent<typename impl::shared_component_host_view_value_t<HostViewType>::scalar_t,
                              impl::shared_component_host_view_value_t<HostViewType>::size>;
 
 // **********************************************************************************************************************
-/// \brief Class template argument deduction guides for SharedMatrix3Component
-template <typename ScalarType>
-SharedMatrix3Component(Matrix3<ScalarType>) -> SharedMatrix3Component<ScalarType>;
+/// \brief Class template argument deduction guides for SharedMatrixComponent
+template <typename ScalarType, size_t N, size_t M>
+SharedMatrixComponent(Matrix<ScalarType, N, M>) -> SharedMatrixComponent<ScalarType, N, M>;
 
 template <impl::SharedComponentHostView HostViewType>
-  MUNDY_REQUIRES(is_matrix3_v<impl::shared_component_host_view_value_t<HostViewType>>)
-SharedMatrix3Component(HostViewType)
-    -> SharedMatrix3Component<typename impl::shared_component_host_view_value_t<HostViewType>::scalar_t>;
+MUNDY_REQUIRES(is_matrix_v<impl::shared_component_host_view_value_t<HostViewType>>)
+SharedMatrixComponent(HostViewType)
+    -> SharedMatrixComponent<typename impl::shared_component_host_view_value_t<HostViewType>::scalar_t,
+                             impl::shared_component_host_view_value_t<HostViewType>::num_rows,
+                             impl::shared_component_host_view_value_t<HostViewType>::num_cols>;
 
 // **********************************************************************************************************************
 /// \brief Class template argument deduction guides for SharedQuaternionComponent
@@ -489,7 +538,7 @@ template <typename ScalarType>
 SharedQuaternionComponent(Quaternion<ScalarType>) -> SharedQuaternionComponent<ScalarType>;
 
 template <impl::SharedComponentHostView HostViewType>
-  MUNDY_REQUIRES(is_quaternion_v<impl::shared_component_host_view_value_t<HostViewType>>)
+MUNDY_REQUIRES(is_quaternion_v<impl::shared_component_host_view_value_t<HostViewType>>)
 SharedQuaternionComponent(HostViewType)
     -> SharedQuaternionComponent<typename impl::shared_component_host_view_value_t<HostViewType>::scalar_t>;
 
@@ -499,7 +548,7 @@ template <typename ScalarType>
 SharedAABBComponent(AABB<ScalarType>) -> SharedAABBComponent<ScalarType>;
 
 template <impl::SharedComponentHostView HostViewType>
-  MUNDY_REQUIRES(is_aabb_v<impl::shared_component_host_view_value_t<HostViewType>>)
+MUNDY_REQUIRES(is_aabb_v<impl::shared_component_host_view_value_t<HostViewType>>)
 SharedAABBComponent(HostViewType)
     -> SharedAABBComponent<typename impl::shared_component_host_view_value_t<HostViewType>::scalar_t>;
 //@}

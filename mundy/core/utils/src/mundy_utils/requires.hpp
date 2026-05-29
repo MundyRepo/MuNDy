@@ -21,10 +21,9 @@
 #ifndef MUNDY_UTILS_REQUIRES_HPP_
 #define MUNDY_UTILS_REQUIRES_HPP_
 
-
 /// \brief A tiny helper macro that allows us to (optionally) hide the `requires` keyword from Doxygen/ReadTheDocs.
 #ifndef MUNDY_REQUIRES
-#define MUNDY_REQUIRES(...) requires (__VA_ARGS__)
+#define MUNDY_REQUIRES(...) requires(__VA_ARGS__)
 #endif
 
 #endif  // MUNDY_UTILS_REQUIRES_HPP_

@@ -18,39 +18,26 @@
 // **********************************************************************************************************************
 // @HEADER
 
-#ifndef MUNDY_MESH_IMPL_COMPONENTSIMPL_HPP_
-#define MUNDY_MESH_IMPL_COMPONENTSIMPL_HPP_
+#ifndef MUNDY_SEARCH_ARBORXNEIGHBORLIST_HPP_
+#define MUNDY_SEARCH_ARBORXNEIGHBORLIST_HPP_
 
-/// \file ComponentImpl.hpp
-/// \brief A set of helpers for working with components with reduced boilerplate code.
-
-// C++ core
-#include <iostream>   // for std::ostream
-#include <stdexcept>  // for std::runtime_error
-#include <type_traits>
-#include <utility>
-#include <vector>  // for std::vector
-
-// Trilinos
-#include <stk_io/StkMeshIoBroker.hpp>  // for stk::io::StkMeshIoBroker
-#include <stk_mesh/base/Field.hpp>     // for stk::mesh::Field
-#include <stk_mesh/base/MetaData.hpp>  // for stk::mesh::MetaData
+/// \file ArborXNeighborList.hpp
+/// \brief Umbrella header: includes both ArborX 1D and 2D neighbor-list types.
+///
+/// Most code should include only one of the two individual headers:
+///   - ArborX1dNeighborList.hpp — compressed 1D storage (lower memory, best for sparse neighbor lists)
+///   - ArborX2dNeighborList.hpp — dense 2D per-target storage (best for dense neighbor lists)
+///
+/// Include this umbrella only when both storage layouts are needed in the same translation unit.
 
 // Mundy
-#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_REQUIRE
+#include <MundySearch_config.hpp>  // for HAVE_MUNDYSEARCH_*
 
-namespace mundy {
+#ifdef HAVE_MUNDYSEARCH_ARBORX
 
-namespace mesh {
+#include <mundy_search/ArborX1dNeighborList.hpp>
+#include <mundy_search/ArborX2dNeighborList.hpp>
 
-namespace impl {
+#endif  // HAVE_MUNDYSEARCH_ARBORX
 
-// TODO(palmerb4): How to pull the IMPL code out of Component.hpp given that it depends on public Component.hpp types?
-
-}  // namespace impl
-
-}  // namespace mesh
-
-}  // namespace mundy
-
-#endif  // MUNDY_MESH_IMPL_COMPONENTSIMPL_HPP_
+#endif  // MUNDY_SEARCH_ARBORXNEIGHBORLIST_HPP_

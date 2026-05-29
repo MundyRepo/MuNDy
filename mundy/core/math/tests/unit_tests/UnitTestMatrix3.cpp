@@ -59,8 +59,7 @@ namespace {
 /// \param[in] message_if_fail The message to print if the test fails
 template <typename U, typename T>
 void is_close_debug(const U& a, const T& b, const std::string& message_if_fail = "")
-  MUNDY_REQUIRES(std::is_arithmetic_v<T> && std::is_arithmetic_v<U>)
-{
+    MUNDY_REQUIRES(std::is_arithmetic_v<T>&& std::is_arithmetic_v<U>) {
   if (!is_approx_close(a, b)) {
     std::cout << "a = " << a << std::endl;
     std::cout << "b = " << b << std::endl;

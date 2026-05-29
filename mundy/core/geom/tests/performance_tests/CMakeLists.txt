@@ -17,9 +17,9 @@
 # **********************************************************************************************************************
 # @HEADER
 
-if (Mundy_ENABLE_TESTS AND Mundy_ENABLE_nanobench)
+if(Mundy_ENABLE_TESTS AND Mundy_ENABLE_nanobench)
   message(STATUS
-          "MundyGeom: Setting up performance tests since Mundy_ENABLE_TESTS=ON and Mundy_ENABLE_nanobench=ON")
+    "MundyGeom: Setting up performance tests since Mundy_ENABLE_TESTS=ON and Mundy_ENABLE_nanobench=ON")
 
   tribits_add_executable(
     PerfTestGeomMetric
@@ -29,5 +29,5 @@ if (Mundy_ENABLE_TESTS AND Mundy_ENABLE_nanobench)
   )
 else()
   message(STATUS
-          "MundyGeom: Skipping performance tests since Mundy_ENABLE_TESTS=OFF or Mundy_ENABLE_nanobench=OFF ...")
+    "MundyGeom: Skipping performance tests since Mundy_ENABLE_TESTS=OFF or Mundy_ENABLE_nanobench=OFF ...")
 endif()

@@ -74,12 +74,14 @@ class UnitTestComponentFixture : public ::testing::Test {
     bulk_data_ptr_ = builder.create(meta_data_ptr_);
 
     scalar_field_ptr_ = &meta_data.declare_field<double>(stk::topology::NODE_RANK, "SCALAR");
+    scalar_alt_field_ptr_ = &meta_data.declare_field<double>(stk::topology::NODE_RANK, "SCALAR_ALT");
     vector3_field_ptr_ = &meta_data.declare_field<double>(stk::topology::NODE_RANK, "VECTOR3");
     matrix3_field_ptr_ = &meta_data.declare_field<double>(stk::topology::NODE_RANK, "MATRIX3");
     quaternion_field_ptr_ = &meta_data.declare_field<double>(stk::topology::NODE_RANK, "QUATERNION");
     aabb_field_ptr_ = &meta_data.declare_field<double>(stk::topology::NODE_RANK, "AABB");
 
     stk::mesh::put_field_on_mesh(*scalar_field_ptr_, meta_data.universal_part(), 1, nullptr);
+    stk::mesh::put_field_on_mesh(*scalar_alt_field_ptr_, meta_data.universal_part(), 1, nullptr);
     stk::mesh::put_field_on_mesh(*vector3_field_ptr_, meta_data.universal_part(), 3, nullptr);
     stk::mesh::put_field_on_mesh(*matrix3_field_ptr_, meta_data.universal_part(), 9, nullptr);
     stk::mesh::put_field_on_mesh(*quaternion_field_ptr_, meta_data.universal_part(), 4, nullptr);
@@ -108,6 +110,7 @@ class UnitTestComponentFixture : public ::testing::Test {
 
   void set_node_values(stk::mesh::Entity node, double base) {
     scalar_field_data(*scalar_field_ptr_, node).set(base + 0.0);
+    scalar_field_data(*scalar_alt_field_ptr_, node).set(base + 200.0);
     vector3_field_data(*vector3_field_ptr_, node).set(base + 10.0, base + 11.0, base + 12.0);
     matrix3_field_data(*matrix3_field_ptr_, node)
         .set(base + 20.0, base + 21.0, base + 22.0, base + 23.0, base + 24.0, base + 25.0, base + 26.0, base + 27.0,
@@ -125,6 +128,7 @@ class UnitTestComponentFixture : public ::testing::Test {
 
   void mark_all_fields_modified_on_host() {
     scalar_field_ptr_->modify_on_host();
+    scalar_alt_field_ptr_->modify_on_host();
     vector3_field_ptr_->modify_on_host();
     matrix3_field_ptr_->modify_on_host();
     quaternion_field_ptr_->modify_on_host();
@@ -134,6 +138,7 @@ class UnitTestComponentFixture : public ::testing::Test {
   std::shared_ptr<stk::mesh::MetaData> meta_data_ptr_;
   std::shared_ptr<stk::mesh::BulkData> bulk_data_ptr_;
   DoubleField* scalar_field_ptr_ = nullptr;
+  DoubleField* scalar_alt_field_ptr_ = nullptr;
   DoubleField* vector3_field_ptr_ = nullptr;
   DoubleField* matrix3_field_ptr_ = nullptr;
   DoubleField* quaternion_field_ptr_ = nullptr;
@@ -141,6 +146,48 @@ class UnitTestComponentFixture : public ::testing::Test {
   stk::mesh::Entity node1_ = stk::mesh::Entity();
   stk::mesh::Entity node2_ = stk::mesh::Entity();
 };
+
+template <typename ComponentType>
+constexpr bool has_default_copy_move_assign_v =
+    std::is_default_constructible_v<ComponentType> && std::is_copy_constructible_v<ComponentType> &&
+    std::is_move_constructible_v<ComponentType> && std::is_copy_assignable_v<ComponentType> &&
+    std::is_move_assignable_v<ComponentType>;
+
+using TaggedScalarFieldComponent = TaggedComponent<POSITION, ScalarFieldComponent<double>>;
+using TaggedScalarSharedComponent = TaggedComponent<POSITION, SharedScalarComponent<double>>;
+using NgpDoubleField = stk::mesh::NgpField<double>;
+
+static_assert(has_default_copy_move_assign_v<FieldComponentBase>);
+static_assert(has_default_copy_move_assign_v<impl::FieldComponent<double, impl::FieldDataAccessPolicy>>);
+static_assert(has_default_copy_move_assign_v<FieldComponent<double>>);
+static_assert(has_default_copy_move_assign_v<ScalarFieldComponent<double>>);
+static_assert(has_default_copy_move_assign_v<Vector3FieldComponent<double>>);
+static_assert(has_default_copy_move_assign_v<Matrix3FieldComponent<double>>);
+static_assert(has_default_copy_move_assign_v<QuaternionFieldComponent<double>>);
+static_assert(has_default_copy_move_assign_v<AABBFieldComponent<double>>);
+static_assert(has_default_copy_move_assign_v<NgpFieldComponentBase>);
+static_assert(has_default_copy_move_assign_v<impl::NgpFieldComponent<NgpDoubleField, impl::FieldDataAccessPolicy>>);
+static_assert(has_default_copy_move_assign_v<NgpFieldComponent<NgpDoubleField>>);
+static_assert(has_default_copy_move_assign_v<NgpScalarFieldComponent<NgpDoubleField>>);
+static_assert(has_default_copy_move_assign_v<NgpVector3FieldComponent<NgpDoubleField>>);
+static_assert(has_default_copy_move_assign_v<NgpMatrix3FieldComponent<NgpDoubleField>>);
+static_assert(has_default_copy_move_assign_v<NgpQuaternionFieldComponent<NgpDoubleField>>);
+static_assert(has_default_copy_move_assign_v<NgpAABBFieldComponent<NgpDoubleField>>);
+static_assert(has_default_copy_move_assign_v<SharedComponent<double>>);
+static_assert(has_default_copy_move_assign_v<SharedScalarComponent<double>>);
+static_assert(has_default_copy_move_assign_v<SharedVector3Component<double>>);
+static_assert(has_default_copy_move_assign_v<SharedMatrix3Component<double>>);
+static_assert(has_default_copy_move_assign_v<SharedQuaternionComponent<double>>);
+static_assert(has_default_copy_move_assign_v<SharedAABBComponent<double>>);
+static_assert(has_default_copy_move_assign_v<NgpSharedComponent<double, stk::ngp::MemSpace>>);
+static_assert(has_default_copy_move_assign_v<NgpSharedScalarComponent<double>>);
+static_assert(has_default_copy_move_assign_v<NgpSharedVector3Component<double>>);
+static_assert(has_default_copy_move_assign_v<NgpSharedMatrix3Component<double>>);
+static_assert(has_default_copy_move_assign_v<NgpSharedQuaternionComponent<double>>);
+static_assert(has_default_copy_move_assign_v<NgpSharedAABBComponent<double>>);
+static_assert(has_default_copy_move_assign_v<TaggedScalarFieldComponent>);
+static_assert(has_default_copy_move_assign_v<TaggedScalarSharedComponent>);
+static_assert(has_default_copy_move_assign_v<NgpTaggedComponent<POSITION, NgpSharedScalarComponent<double>>>);
 
 TEST_F(UnitTestComponentFixture, FieldComponentExposeTypedViewsAndMutations) {
   FieldComponent<double> raw_accessor(*quaternion_field_ptr_);
@@ -195,6 +242,23 @@ TEST_F(UnitTestComponentFixture, FieldComponentExposeTypedViewsAndMutations) {
   EXPECT_DOUBLE_EQ(aabb1.z_max(), 46.0);
   aabb1.y_max() = 77.0;
   EXPECT_DOUBLE_EQ(stk::mesh::field_data(*aabb_field_ptr_, node1_)[4], 77.0);
+}
+
+TEST_F(UnitTestComponentFixture, ShallowCopyAssignment) {
+  auto lhs_accessor = ScalarFieldComponent(*scalar_field_ptr_);
+  auto rhs_accessor = ScalarFieldComponent(*scalar_alt_field_ptr_);
+
+  lhs_accessor = rhs_accessor;
+
+  EXPECT_EQ(&lhs_accessor.field(), scalar_alt_field_ptr_);
+  EXPECT_EQ(&rhs_accessor.field(), scalar_alt_field_ptr_);
+  EXPECT_DOUBLE_EQ(lhs_accessor(node1_)[0], 201.0);
+  EXPECT_DOUBLE_EQ(lhs_accessor(node2_)[0], 301.0);
+
+  lhs_accessor(node1_)[0] = -17.25;
+
+  EXPECT_DOUBLE_EQ(scalar_field_data(*scalar_alt_field_ptr_, node1_)[0], -17.25);
+  EXPECT_DOUBLE_EQ(scalar_field_data(*scalar_field_ptr_, node1_)[0], 1.0);
 }
 
 TEST_F(UnitTestComponentFixture, NgpFieldComponentRoundTripDeviceMutations) {
@@ -345,6 +409,25 @@ TEST_F(UnitTestComponentFixture, SharedComponentAreShallowCopiesAndCacheNgpInsta
   if constexpr (Kokkos::SpaceAccessibility<stk::ngp::MemSpace, Kokkos::HostSpace>::accessible) {
     EXPECT_EQ(ngp_shared_component0.ngp_view().data(), managed_view.data());
   }
+}
+
+TEST_F(UnitTestComponentFixture, SharedComponentAssignmentRebindsToRhsState) {
+  Kokkos::View<double*, Kokkos::HostSpace> rhs_view("assigned_shared_value", 1);
+  rhs_view(0) = 2.5;
+
+  auto lhs_component = SharedScalarComponent(1.0);
+  auto rhs_component = SharedScalarComponent(rhs_view);
+
+  lhs_component = rhs_component;
+
+  EXPECT_EQ(&lhs_component.shared_value(), &rhs_component.shared_value());
+  EXPECT_EQ(&lhs_component.shared_value(), rhs_view.data());
+  EXPECT_DOUBLE_EQ(lhs_component(node1_)[0], 2.5);
+
+  rhs_component(node2_)[0] = 4.75;
+
+  EXPECT_DOUBLE_EQ(lhs_component(node1_)[0], 4.75);
+  EXPECT_DOUBLE_EQ(rhs_view(0), 4.75);
 }
 
 TEST_F(UnitTestComponentFixture, NgpSharedComponentRoundTripHostAndDeviceMutations) {

@@ -53,7 +53,7 @@
 #include <mundy_utils/throw_assert.hpp>
 
 namespace mundy {
-  
+
 namespace mesh {
 
 class Class;
@@ -61,8 +61,8 @@ using ClassVector = std::vector<Class*>;
 using ConstClassVector = std::vector<const Class*>;
 
 Class& declare_class(stk::mesh::MetaData& meta_data, const std::string& class_name);
-Class& declare_class(stk::mesh::MetaData& meta_data, const std::string& class_name,
-                     stk::mesh::EntityRank class_rank, bool disable_io_support = false);
+Class& declare_class(stk::mesh::MetaData& meta_data, const std::string& class_name, stk::mesh::EntityRank class_rank,
+                     bool disable_io_support = false);
 Class& declare_class(stk::mesh::MetaData& meta_data, const std::string& class_name,
                      stk::topology::topology_t class_topology, bool disable_io_support = false);
 const ClassVector& get_classes(stk::mesh::MetaData& meta_data);
@@ -320,13 +320,13 @@ class Class {
 
   /// \brief Create an induced set for this class at \p rank if it doesn't already exist and return it.
   Class& get_or_create_induced_set(stk::mesh::EntityRank rank) {
-    MUNDY_THROW_REQUIRE(is_primary(), std::logic_error,
-                        sink() << "Attempting to create an induced set of a class ('" << name()
-                               << "') that is not a primary class.");
+    MUNDY_THROW_REQUIRE(
+        is_primary(), std::logic_error,
+        sink() << "Attempting to create an induced set of a class ('" << name() << "') that is not a primary class.");
     MUNDY_THROW_REQUIRE(rank < primary_entity_rank(), std::logic_error,
                         sink() << "Attempting to create an induced set for class '" << name() << "' at rank " << rank
-                               << " that is greater than the class's primary entity rank of "
-                               << primary_entity_rank() << ".");
+                               << " that is greater than the class's primary entity rank of " << primary_entity_rank()
+                               << ".");
 
     if (induced_sets_[rank] == nullptr) {
       const std::string set_name = name() + induced_set_suffix(rank);
@@ -448,7 +448,8 @@ class Class {
   /// \brief Declare \p sub_class as a direct subclass in both hierarchy channels.
   /// sub_class must have the same primary entity rank as this class.
   ///
-  /// If sub_class has the same primary entity rank as this class, then its members are a subset of this class's members:
+  /// If sub_class has the same primary entity rank as this class, then its members are a subset of this class's
+  /// members:
   ///  - `this.data_part      -> sub_class.data_part`
   ///  - `this.assembly_part  -> sub_class.assembly_part`
   void declare_subset(Class& sub_class) {
@@ -456,9 +457,10 @@ class Class {
                         "Cannot declare subset relation across different MetaData instances.");
     MUNDY_THROW_REQUIRE(this != &sub_class, std::logic_error,
                         sink() << "Cannot declare class '" << name() << "' as a subclass of itself.");
-    MUNDY_THROW_REQUIRE(primary_entity_rank() == sub_class.primary_entity_rank(), std::logic_error,
-                        sink() << "Cannot declare class '" << sub_class.name() << "' as a subclass of class '" << name()
-                               << "' because its primary entity rank is different than the primary entity rank of this class.");
+    MUNDY_THROW_REQUIRE(
+        primary_entity_rank() == sub_class.primary_entity_rank(), std::logic_error,
+        sink() << "Cannot declare class '" << sub_class.name() << "' as a subclass of class '" << name()
+               << "' because its primary entity rank is different than the primary entity rank of this class.");
 
     const bool already_direct_subclass =
         std::find(subclasses_.begin(), subclasses_.end(), &sub_class) != subclasses_.end();
@@ -468,7 +470,7 @@ class Class {
 
     MUNDY_THROW_REQUIRE(!sub_class.contains(*this), std::logic_error,
                         sink() << "Declaring class '" << sub_class.name() << "' as a subclass of class '" << name()
-                              << "' would create a class hierarchy cycle.");
+                               << "' would create a class hierarchy cycle.");
 
     meta_data_.declare_part_subset(data_part_, sub_class.data_part_);
     meta_data_.declare_part_subset(assembly_part_, sub_class.assembly_part_);
@@ -547,7 +549,8 @@ class Class {
   }
 
   static constexpr const char* assembly_part_suffix() noexcept {
-    return ""; // The assembly part contains all entities and connected entities of this class, so we identify it with the class name itself.
+    return "";  // The assembly part contains all entities and connected entities of this class, so we identify it with
+                // the class name itself.
   }
 
   static constexpr const char* leaf_assembly_part_suffix() noexcept {
@@ -727,14 +730,13 @@ inline const char* class_type_name(Class::Type class_type) {
 
 /// \brief Validate that an existing class matches a repeated declaration request.
 inline void require_matching_declaration(const Class& class_instance, const Class::Type requested_class_type,
-                     const Class::DeclarationSignature& requested_signature) {
+                                         const Class::DeclarationSignature& requested_signature) {
   const Class::DeclarationSignature& existing_signature = class_instance.declaration_signature();
-  MUNDY_THROW_REQUIRE(class_instance.class_type() == requested_class_type, std::logic_error,
-            sink() << "Repeated declaration of class '" << class_instance.name()
-               << "' used incompatible class type. Existing type="
-            << class_type_name(class_instance.class_type())
-               << ", requested type="
-            << class_type_name(requested_class_type) << '.');
+  MUNDY_THROW_REQUIRE(
+      class_instance.class_type() == requested_class_type, std::logic_error,
+      sink() << "Repeated declaration of class '" << class_instance.name()
+             << "' used incompatible class type. Existing type=" << class_type_name(class_instance.class_type())
+             << ", requested type=" << class_type_name(requested_class_type) << '.');
   MUNDY_THROW_REQUIRE(
       existing_signature == requested_signature, std::logic_error,
       sink() << "Repeated declaration of class '" << class_instance.name()
@@ -764,11 +766,11 @@ inline Class& declare_class_impl(stk::mesh::MetaData& meta_data, Class::Type cla
   if (class_type == Class::Type::SET) {
     MUNDY_THROW_REQUIRE(declaration_signature.declaration_kind == Class::DeclarationKind::RANKED, std::logic_error,
                         sink() << "Set class '" << class_name << "' must use ranked declaration kind.");
-    MUNDY_THROW_REQUIRE(declaration_signature.class_rank != stk::topology::ELEMENT_RANK ||
-                            declaration_signature.disable_io_support,
-                        std::logic_error,
-                        sink() << "Set class declaration for ELEMENT_RANK is unsupported for class '" << class_name
-                               << "' unless IO support is disabled.");
+    MUNDY_THROW_REQUIRE(
+        declaration_signature.class_rank != stk::topology::ELEMENT_RANK || declaration_signature.disable_io_support,
+        std::logic_error,
+        sink() << "Set class declaration for ELEMENT_RANK is unsupported for class '" << class_name
+               << "' unless IO support is disabled.");
   }
 
   ClassMap& class_map = get_or_create_class_map(meta_data);
@@ -805,9 +807,9 @@ inline std::vector<std::string> collect_field_leaf_part_names(const ClassVector&
   std::vector<std::string> leaf_part_names;
   leaf_part_names.reserve(classes.size());
   for (const Class* class_instance : classes) {
-    MUNDY_THROW_REQUIRE(class_instance != nullptr, std::logic_error,
-                        sink() << "Cannot collect field leaf part names from a null Class pointer for field '"
-                               << field.name() << "'.");
+    MUNDY_THROW_REQUIRE(
+        class_instance != nullptr, std::logic_error,
+        sink() << "Cannot collect field leaf part names from a null Class pointer for field '" << field.name() << "'.");
     const stk::mesh::Part& leaf_part = class_instance->leaf_part();
     if (stk::io::is_field_on_part(&field, stk::topology::NODE_RANK, leaf_part)) {
       const std::string leaf_part_name = stk::io::getPartName(leaf_part);
@@ -838,27 +840,29 @@ inline ClassVector filter_io_supported_classes(const ClassVector& classes) {
   return io_supported_classes;
 }
 
-inline stk::mesh::ConstPartVector populate_entity_rank_parts(stk::mesh::EntityRank entity_rank, const ClassVector& classes, const char* vector_name) {
+inline stk::mesh::ConstPartVector populate_entity_rank_parts(stk::mesh::EntityRank entity_rank,
+                                                             const ClassVector& classes, const char* vector_name) {
   stk::mesh::ConstPartVector parts;
   bool found_primary_class = false;
   for (Class* class_instance : classes) {
-    MUNDY_THROW_REQUIRE(class_instance != nullptr, std::logic_error, sink() << "All classes in " << vector_name << " must be non-null.");
+    MUNDY_THROW_REQUIRE(class_instance != nullptr, std::logic_error,
+                        sink() << "All classes in " << vector_name << " must be non-null.");
     if (class_instance->is_set()) {
       MUNDY_THROW_REQUIRE(class_instance->primary_entity_rank() == entity_rank, std::logic_error,
                           sink() << "Class set '" << class_instance->name() << "' in " << vector_name
-                                  << " has primary entity rank " << class_instance->primary_entity_rank()
-                                  << " that does not match the entity's rank " << entity_rank << '.');
+                                 << " has primary entity rank " << class_instance->primary_entity_rank()
+                                 << " that does not match the entity's rank " << entity_rank << '.');
       parts.push_back(&class_instance->leaf_part());
     } else {
       MUNDY_THROW_REQUIRE(class_instance->primary_entity_rank() >= entity_rank, std::logic_error,
                           sink() << "Primary class '" << class_instance->name() << "' in " << vector_name
-                                  << " has primary entity rank " << class_instance->primary_entity_rank()
-                                  << " that is less than the entity's rank " << entity_rank << '.');
+                                 << " has primary entity rank " << class_instance->primary_entity_rank()
+                                 << " that is less than the entity's rank " << entity_rank << '.');
       if (class_instance->primary_entity_rank() == entity_rank) {
         MUNDY_THROW_REQUIRE(!found_primary_class, std::logic_error,
                             sink() << "Multiple primary classes in " << vector_name
-                                    << " have primary entity rank matching the entity's rank "
-                                    << entity_rank << ": '" << class_instance->name() << "'.");
+                                   << " have primary entity rank matching the entity's rank " << entity_rank << ": '"
+                                   << class_instance->name() << "'.");
         found_primary_class = true;
       }
 
@@ -885,25 +889,24 @@ inline Class& declare_class(stk::mesh::MetaData& meta_data, const std::string& c
   return impl::declare_class_impl(
       meta_data, Class::Type::PRIMARY, class_name,
       Class::DeclarationSignature{Class::DeclarationKind::NAMED, stk::topology::INVALID_RANK,
-                  stk::topology::INVALID_TOPOLOGY, /* disable_io_support */ false});
+                                  stk::topology::INVALID_TOPOLOGY, /* disable_io_support */ false});
 }
 
 /// \brief Declare (or fetch) a ranked class-set on the given MetaData.
 inline Class& declare_class(stk::mesh::MetaData& meta_data, const std::string& class_name,
-                stk::mesh::EntityRank class_rank, bool disable_io_support) {
-  return impl::declare_class_impl(
-  meta_data, Class::Type::SET, class_name,
-      Class::DeclarationSignature{Class::DeclarationKind::RANKED, class_rank, stk::topology::INVALID_TOPOLOGY,
-                  disable_io_support});
+                            stk::mesh::EntityRank class_rank, bool disable_io_support) {
+  return impl::declare_class_impl(meta_data, Class::Type::SET, class_name,
+                                  Class::DeclarationSignature{Class::DeclarationKind::RANKED, class_rank,
+                                                              stk::topology::INVALID_TOPOLOGY, disable_io_support});
 }
 
 /// \brief Declare (or fetch) a topological primary class on the given MetaData.
 inline Class& declare_class(stk::mesh::MetaData& meta_data, const std::string& class_name,
-        stk::topology::topology_t class_topology, bool disable_io_support) {
+                            stk::topology::topology_t class_topology, bool disable_io_support) {
   return impl::declare_class_impl(
       meta_data, Class::Type::PRIMARY, class_name,
       Class::DeclarationSignature{Class::DeclarationKind::TOPOLOGICAL, stk::topology::INVALID_RANK, class_topology,
-                  disable_io_support});
+                                  disable_io_support});
 }
 //@}
 
@@ -1120,9 +1123,9 @@ inline void add_class_field(stk::io::StkMeshIoBroker& io_broker, size_t output_f
                             const ClassVector& classes, const std::string& db_name) {
   stk::mesh::BulkData& bulk_data = io_broker.bulk_data();
   for (const Class* class_instance : classes) {
-    MUNDY_THROW_REQUIRE(class_instance != nullptr, std::logic_error,
-                        sink() << "Cannot register field '" << field.name()
-                               << "' with a class vector containing null Class pointers.");
+    MUNDY_THROW_REQUIRE(
+        class_instance != nullptr, std::logic_error,
+        sink() << "Cannot register field '" << field.name() << "' with a class vector containing null Class pointers.");
     MUNDY_THROW_REQUIRE(class_instance->has_io_support(), std::logic_error,
                         sink() << "Cannot register field '" << field.name() << "' with class '"
                                << class_instance->name() << "' because that class does not support IO.");
@@ -1136,7 +1139,7 @@ inline void add_class_field(stk::io::StkMeshIoBroker& io_broker, size_t output_f
     for (const std::string& leaf_part_name : leaf_part_names) {
       std::cout << leaf_part_name << ' ';
     }
-    std::cout << std::endl; 
+    std::cout << std::endl;
   }
 
   const bool already_registered = impl::is_output_field_registered(io_broker, output_file_index, field, db_name);
@@ -1180,8 +1183,8 @@ inline void add_class_field(stk::io::StkMeshIoBroker& io_broker, size_t output_f
 }
 
 /// \brief Register a field for output using Class-aware IO rules over an explicit class set.
-inline void add_class_field(stk::io::StkMeshIoBroker& io_broker, size_t output_file_index,
-                            stk::mesh::FieldBase& field, const ClassVector& classes) {
+inline void add_class_field(stk::io::StkMeshIoBroker& io_broker, size_t output_file_index, stk::mesh::FieldBase& field,
+                            const ClassVector& classes) {
   add_class_field(io_broker, output_file_index, field, classes, field.name());
 }
 
@@ -1289,9 +1292,12 @@ struct BulkDataClassInterface {
   ///   - All class sets must have a primary entity rank equal to the entity's rank.
   ///   - At most one of the primary classes may have a primary entity rank matching the entity's rank.
   ///   - All other primary classes must have a primary entity rank greater than the entity's rank.
-  inline stk::mesh::Entity declare_entity(stk::mesh::EntityRank rank, stk::mesh::EntityId id, const ClassVector& class_vector) {
-    MUNDY_THROW_REQUIRE(!class_vector.empty(), std::logic_error, "Cannot declare an entity with empty class membership.");
-    stk::mesh::ConstPartVector part_vector = impl::populate_entity_rank_parts(rank, class_vector, "declare_entity class_vector");
+  inline stk::mesh::Entity declare_entity(stk::mesh::EntityRank rank, stk::mesh::EntityId id,
+                                          const ClassVector& class_vector) {
+    MUNDY_THROW_REQUIRE(!class_vector.empty(), std::logic_error,
+                        "Cannot declare an entity with empty class membership.");
+    stk::mesh::ConstPartVector part_vector =
+        impl::populate_entity_rank_parts(rank, class_vector, "declare_entity class_vector");
     return bulk_data.declare_entity(rank, id, part_vector);
   }
   inline stk::mesh::Entity declare_node(stk::mesh::EntityId id, const ClassVector& class_vector) {
@@ -1304,11 +1310,12 @@ struct BulkDataClassInterface {
     return declare_entity(stk::topology::ELEMENT_RANK, id, class_vector);
   }
 
-
   /// \brief Same as declare_entity but with a single class instance
-  inline stk::mesh::Entity declare_entity(stk::mesh::EntityRank rank, stk::mesh::EntityId id, const Class& class_instance) {
-    // TODO(palmerb4): Long term, this has small performance implications due to the extra vector construction and destruction; add a populate_entity_rank_parts for a single class
-    // but with duplicative, albeit somewhat simplified, logic.
+  inline stk::mesh::Entity declare_entity(stk::mesh::EntityRank rank, stk::mesh::EntityId id,
+                                          const Class& class_instance) {
+    // TODO(palmerb4): Long term, this has small performance implications due to the extra vector construction and
+    // destruction; add a populate_entity_rank_parts for a single class but with duplicative, albeit somewhat
+    // simplified, logic.
     return declare_entity(rank, id, ClassVector{const_cast<Class*>(&class_instance)});
   }
   inline stk::mesh::Entity declare_node(stk::mesh::EntityId id, const Class& class_instance) {
@@ -1321,16 +1328,18 @@ struct BulkDataClassInterface {
     return declare_entity(stk::topology::ELEMENT_RANK, id, class_instance);
   }
 
-  /// \brief Change the parallel-locally-owned entity's class membership by swapping class membership (only valid for entities of non-primary rank for all involved classes).
+  /// \brief Change the parallel-locally-owned entity's class membership by swapping class membership (only valid for
+  /// entities of non-primary rank for all involved classes).
   ///
   /// The vector of classes may contain primary classes or class sets; they must satisfy the following constraints:
   ///   - All class sets must have a primary entity rank equal to the entity's rank.
   ///   - At most one of the primary classes may have a primary entity rank matching the entity's rank.
   ///   - All other primary classes must have a primary entity rank greater than the entity's rank.
   ///
-  /// The entity will be added (or removed) from the leaf parts of all given class sets, all induced sets of classes with primary entity rank greater than the entity's rank, and all
-  /// primary classes with equal primary entity rank.
-  inline void change_entity_classes(const stk::mesh::Entity entity, const ClassVector& add_classes, const ClassVector& remove_classes = ClassVector()) {
+  /// The entity will be added (or removed) from the leaf parts of all given class sets, all induced sets of classes
+  /// with primary entity rank greater than the entity's rank, and all primary classes with equal primary entity rank.
+  inline void change_entity_classes(const stk::mesh::Entity entity, const ClassVector& add_classes,
+                                    const ClassVector& remove_classes = ClassVector()) {
     MUNDY_THROW_REQUIRE(bulk_data.is_valid(entity), std::invalid_argument,
                         "Cannot change class membership for invalid entity.");
     stk::mesh::EntityRank entity_rank = bulk_data.entity_rank(entity);
@@ -1338,7 +1347,8 @@ struct BulkDataClassInterface {
     auto find_matching_primary = [entity_rank](const ClassVector& classes) {
       Class* matching_primary = nullptr;
       for (Class* class_instance : classes) {
-        MUNDY_THROW_REQUIRE(class_instance != nullptr, std::logic_error, "Class vectors must not contain null pointers.");
+        MUNDY_THROW_REQUIRE(class_instance != nullptr, std::logic_error,
+                            "Class vectors must not contain null pointers.");
         if (class_instance->is_primary() && class_instance->primary_entity_rank() == entity_rank) {
           MUNDY_THROW_REQUIRE(matching_primary == nullptr, std::logic_error,
                               sink() << "Multiple matching-rank primary classes found for rank " << entity_rank << '.');
@@ -1349,9 +1359,10 @@ struct BulkDataClassInterface {
     };
 
     const ClassVector current_matching_primary_classes = get_matching_rank_primary_classes(entity);
-    MUNDY_THROW_REQUIRE(current_matching_primary_classes.size() <= 1u, std::logic_error,
-                        sink() << "Entity id " << bulk_data.identifier(entity)
-                               << " currently belongs to multiple matching-rank primary classes, which violates class invariants.");
+    MUNDY_THROW_REQUIRE(
+        current_matching_primary_classes.size() <= 1u, std::logic_error,
+        sink() << "Entity id " << bulk_data.identifier(entity)
+               << " currently belongs to multiple matching-rank primary classes, which violates class invariants.");
 
     Class* current_matching_primary =
         current_matching_primary_classes.empty() ? nullptr : current_matching_primary_classes.front();
@@ -1361,7 +1372,8 @@ struct BulkDataClassInterface {
     if (add_matching_primary != nullptr) {
       if (current_matching_primary == nullptr) {
         // allowed
-      } else if (remove_matching_primary == current_matching_primary && add_matching_primary != current_matching_primary) {
+      } else if (remove_matching_primary == current_matching_primary &&
+                 add_matching_primary != current_matching_primary) {
         // atomic swap allowed
       } else {
         MUNDY_THROW_REQUIRE(false, std::logic_error,
@@ -1374,16 +1386,16 @@ struct BulkDataClassInterface {
     }
 
     if (remove_matching_primary != nullptr && current_matching_primary != nullptr) {
-      MUNDY_THROW_REQUIRE(remove_matching_primary == current_matching_primary || add_matching_primary != nullptr,
-                          std::logic_error,
-                          sink() << "Cannot remove matching-rank primary class '" << remove_matching_primary->name()
-                                 << "' from entity id " << bulk_data.identifier(entity)
-                                 << " because current matching-rank primary class is '" << current_matching_primary->name()
-                                 << "'.");
+      MUNDY_THROW_REQUIRE(
+          remove_matching_primary == current_matching_primary || add_matching_primary != nullptr, std::logic_error,
+          sink() << "Cannot remove matching-rank primary class '" << remove_matching_primary->name()
+                 << "' from entity id " << bulk_data.identifier(entity)
+                 << " because current matching-rank primary class is '" << current_matching_primary->name() << "'.");
     }
 
     stk::mesh::ConstPartVector add_parts = impl::populate_entity_rank_parts(entity_rank, add_classes, "add_classes");
-    stk::mesh::ConstPartVector remove_parts = impl::populate_entity_rank_parts(entity_rank, remove_classes, "remove_classes");
+    stk::mesh::ConstPartVector remove_parts =
+        impl::populate_entity_rank_parts(entity_rank, remove_classes, "remove_classes");
     bulk_data.change_entity_parts(entity, add_parts, remove_parts);
 
     const ClassVector final_matching_primary_classes = get_matching_rank_primary_classes(entity);
@@ -1401,7 +1413,6 @@ struct BulkDataClassInterface {
                                     const Class& remove_class) {
     return change_entity_classes(entity, add_classes, ClassVector{const_cast<Class*>(&remove_class)});
   }
-
 };
 
 inline BulkDataClassInterface class_interface(stk::mesh::BulkData& bulk_data) {

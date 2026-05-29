@@ -1,0 +1,9 @@
+#ifndef MUNDYSEARCH_CONFIG_HPP_
+#define MUNDYSEARCH_CONFIG_HPP_
+
+// Declare special variables, especially those related to optional features, TPLs, and workarounds.
+
+// Optional packages
+#cmakedefine HAVE_MUNDYSEARCH_ARBORX
+
+#endif  // MUNDYSEARCH_CONFIG_HPP_

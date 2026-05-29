@@ -5,6 +5,6 @@ tribits_package_define_dependencies(
   TEST_OPTIONAL_PACKAGES
   LIB_REQUIRED_TPLS Kokkos OpenRAND STK Teuchos
   LIB_OPTIONAL_TPLS MPI CUDA
-  TEST_REQUIRED_TPLS 
+  TEST_REQUIRED_TPLS
   TEST_OPTIONAL_TPLS GTest nanobench
 )

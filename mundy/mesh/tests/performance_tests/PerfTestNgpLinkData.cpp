@@ -1221,8 +1221,7 @@ void run_test(ankerl::nanobench::Bench& /*bench*/, const TestParameters& params)
   timer.reset();
   ngp_link_data.update_crs_from_coo();
   Kokkos::fence();
-  std::cout << "update_crs_from_coo() after dirty-update scenario took " << timer.seconds() << " seconds."
-            << std::endl;
+  std::cout << "update_crs_from_coo() after dirty-update scenario took " << timer.seconds() << " seconds." << std::endl;
 }
 
 /// \brief The driver that runs the performance tests over a range of parameters.
@@ -1242,8 +1241,8 @@ void run_tests() {
   // id_sigma_bucket_iter{0.0, 0.25, 0.5, 0.75, 1.0, 2.0, 4.0};  // 7 tests (in bucket_id space) std::vector<double>
   // id_sigma_entity_iter{0., 2., 4., 8., 16., 32., 64.};        // 7 tests (in bucket_ord space)
 
-  std::vector<size_t> num_entities_per_rank_iter{5'000, 50'000};                                   // 7 tests
-  std::vector<size_t> num_links_iter{5'000, 50'000};                                               // 7 tests
+  std::vector<size_t> num_entities_per_rank_iter{5'000, 50'000};                             // 7 tests
+  std::vector<size_t> num_links_iter{5'000, 50'000};                                         // 7 tests
   std::vector<LinkDistribution> link_distribution_iter{LinkDistribution::EQUAL};             // 2 tests
   std::vector<LinkedEntityRanksType> linked_entity_ranks_iter{LinkedEntityRanksType::SAME};  // 3 tests
   std::vector<stk::mesh::EntityRank> link_ranks_iter{stk::topology::NODE_RANK};              // 2 tests

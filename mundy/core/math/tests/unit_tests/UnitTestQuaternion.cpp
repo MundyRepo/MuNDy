@@ -55,7 +55,7 @@ namespace {
 /// \param[in] b The second algebraic type
 /// \param[in] message_if_fail The message to print if the test fails
 template <typename U, typename T>
-  MUNDY_REQUIRES(std::is_arithmetic_v<T> && std::is_arithmetic_v<U>)
+MUNDY_REQUIRES(std::is_arithmetic_v<T>&& std::is_arithmetic_v<U>)
 void is_close_debug(const U& a, const T& b, const std::string& message_if_fail = "") {
   using CommonType = std::common_type_t<T, U>;
   if (!is_approx_close(a, b)) {

@@ -27,10 +27,12 @@
 // C++ core
 #include <any>
 #include <concepts>
+#include <map>
 #include <memory>
 #include <tuple>
 #include <type_traits>  // for std::conditional_t, std::false_type, std::true_type
-#include <utility>      // for std::declval
+#include <typeindex>
+#include <utility>  // for std::declval
 
 // Kokkos
 #include <Kokkos_Core.hpp>  // for Kokkos::initialize, Kokkos::finalize, Kokkos::Timer
@@ -50,15 +52,15 @@
 // Mundy
 #include <mundy_mesh/BulkData.hpp>  // for mundy::mesh::BulkData
 #include <mundy_mesh/Component.hpp>
+#include <mundy_mesh/FieldComponent.hpp>       // for mundy::mesh::impl::component_backing_field
 #include <mundy_mesh/FieldViews.hpp>          // for mundy::mesh::vector3_field_data, mundy::mesh::quaternion_field_data
 #include <mundy_mesh/ForEachEntity.hpp>       // for mundy::mesh::for_each_entity_run
 #include <mundy_mesh/NgpAccessorExpr.hpp>     // for mundy::mesh::AccessorExpr and EntityExprBase
-#include <mundy_mesh/impl/ComponentImpl.hpp>  // for mundy::mesh::impl::component_backing_field
 #include <mundy_mesh/impl/HostDeviceSynchronizer.hpp>
+#include <mundy_utils/requires.hpp>
 #include <mundy_utils/suppress_warnings.hpp>  // for MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_PUSH/POP
 #include <mundy_utils/throw_assert.hpp>       // for MUNDY_THROW_ASSERT
 #include <mundy_utils/tuple.hpp>              // for mundy::tuple
-#include <mundy_utils/requires.hpp>
 
 namespace mundy {
 
@@ -123,13 +125,6 @@ class SharedComponentSynchronizerT : public HostDeviceSynchronizer {
   DeviceViewType device_view_;
 };  // SharedComponentSynchronizerT
 
-// TODO(palmerb4): The only place that even uses SharedComponentState is the SharedComponent itself.
-// That means we should just merge SharedComponentState into SharedComponent and eliminate the indirection. This class
-// is entirely a feature of an outdated design that required a shared state. We'll need to clean up the doc of it to
-// remove implementation details since this class will no longer be itself an implementation detail. But the comments
-// about management of storage are important to tell the user for the sake of clarity, so we should preserve those. Just
-// don't mention internal members like host_view_ in the doc.
-
 /// \brief Internal state shared by all shallow copies of a SharedComponent.
 ///
 /// The public SharedComponent API intentionally hides this type. It exists so the host-side accessor can behave
@@ -160,7 +155,6 @@ class SharedComponentState {
   explicit SharedComponentState(shared_type host_value)
       : host_view_(),
         host_owner_(owned_host_view_type("host_shared_component_value", 1)),
-        any_ngp_component_(),
         synchronizer_(nullptr),
         modified_on_host_(false),
         modified_on_device_(false) {
@@ -170,11 +164,10 @@ class SharedComponentState {
   }
 
   template <typename HostViewType>
-    MUNDY_REQUIRES(CompatibleSharedComponentHostView<HostViewType, shared_type>)
+  MUNDY_REQUIRES(CompatibleSharedComponentHostView<HostViewType, shared_type>)
   explicit SharedComponentState(HostViewType host_view)
       : host_view_(),
         host_owner_(std::move(host_view)),
-        any_ngp_component_(),
         synchronizer_(nullptr),
         modified_on_host_(false),
         modified_on_device_(false) {
@@ -193,10 +186,6 @@ class SharedComponentState {
   }
 
   inline host_view_type host_view() {
-    return host_view_;
-  }
-
-  inline host_view_type host_value_view() {
     return host_view_;
   }
 
@@ -262,8 +251,8 @@ class SharedComponentState {
     return synchronizer_ != nullptr;
   }
 
-  std::any& any_ngp_component() {
-    return any_ngp_component_;
+  std::any& ngp_component_for(std::type_index space_id) {
+    return ngp_components_[space_id];
   }
 
   void set_synchronizer(std::shared_ptr<HostDeviceSynchronizer> synchronizer) {
@@ -273,7 +262,7 @@ class SharedComponentState {
  private:
   host_view_type host_view_;
   std::any host_owner_;
-  std::any any_ngp_component_;
+  std::map<std::type_index, std::any> ngp_components_;
   std::shared_ptr<HostDeviceSynchronizer> synchronizer_;
   bool modified_on_host_;
   bool modified_on_device_;

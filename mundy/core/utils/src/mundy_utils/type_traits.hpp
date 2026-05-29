@@ -79,7 +79,7 @@ struct index_finder<T, First, Rest...> {
 };
 //
 template <class T, class... Ts>
-  MUNDY_REQUIRES(count_type_v<T, Ts...> == 1)
+MUNDY_REQUIRES(count_type_v<T, Ts...> == 1)
 static constexpr size_t index_finder_v = index_finder<T, Ts...>::value;
 
 // **********************************************************************************************************************
@@ -100,7 +100,7 @@ struct type_at_index<0, Head, Tail...> {
 };
 //
 template <size_t I, class... Ts>
-  MUNDY_REQUIRES(I < sizeof...(Ts))
+MUNDY_REQUIRES(I < sizeof...(Ts))
 using type_at_index_t = typename type_at_index<I, Ts...>::type;
 
 }  // namespace mundy

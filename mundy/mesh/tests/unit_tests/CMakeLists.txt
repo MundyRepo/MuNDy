@@ -20,7 +20,7 @@
 # Here, we attempt to organize unit tests logically by dependencies (not by spelling). Simple classes are tested first
 # and more complex classes are tested later. This is not a hard and fast rule, but it is a good guideline to follow,
 # as it produces more logical error messages when a test fails.
-if (Mundy_ENABLE_TESTS AND Mundy_ENABLE_GTest)
+if(Mundy_ENABLE_TESTS AND Mundy_ENABLE_GTest)
   message(STATUS "MundyMesh: Setting up unit tests since Mundy_ENABLE_TESTS=ON and Mundy_ENABLE_GTest=ON")
   tribits_add_executable_and_test(
     UnitTestMeshBuilder
@@ -141,13 +141,13 @@ if (Mundy_ENABLE_TESTS AND Mundy_ENABLE_GTest)
     NUM_MPI_PROCS 1
   )
 
-  # tribits_add_executable_and_test(
-  # UnitTestGenNeighborLinks
-  # SOURCES
-  # UnitTestGenNeighborLinks.cpp
-  # ${Mundy_DEFAULT_UNIT_TEST_MAIN}
-  # NUM_MPI_PROCS 1-4
-  # )
+# tribits_add_executable_and_test(
+# UnitTestGenNeighborLinks
+# SOURCES
+# UnitTestGenNeighborLinks.cpp
+# ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+# NUM_MPI_PROCS 1-4
+# )
 else()
   message(STATUS "MundyMesh: Skipping unit tests since Mundy_ENABLE_TESTS=OFF or Mundy_ENABLE_GTest=OFF ...")
 endif()

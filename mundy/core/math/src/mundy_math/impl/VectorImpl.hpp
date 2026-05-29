@@ -33,17 +33,17 @@
 #include <utility>
 
 // Mundy
-#include <mundy_math/Accessor.hpp>            // for mundy::ValidAccessor
-#include <mundy_math/Array.hpp>               // for mundy::Array
-#include <mundy_math/Tolerance.hpp>           // for mundy::get_zero_tolerance
+#include <mundy_math/Accessor.hpp>   // for mundy::ValidAccessor
+#include <mundy_math/Array.hpp>      // for mundy::Array
+#include <mundy_math/Tolerance.hpp>  // for mundy::get_zero_tolerance
+#include <mundy_utils/requires.hpp>
 #include <mundy_utils/suppress_warnings.hpp>  // for MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_PUSH/POP
 #include <mundy_utils/throw_assert.hpp>       // for MUNDY_THROW_ASSERT
-#include <mundy_utils/requires.hpp>
 
 namespace mundy {
 
 template <typename T, size_t N, ValidAccessor<T> Accessor = Array<T, N>>
-  MUNDY_REQUIRES(std::is_arithmetic_v<T>)
+MUNDY_REQUIRES(std::is_arithmetic_v<T>)
 class AVector;
 
 namespace impl {
@@ -53,7 +53,7 @@ namespace impl {
 /// \brief Deep copy assignment operator with (potentially) different accessor
 /// \details Copies the data from the other vector to our data. This is only enabled if T is not const.
 template <size_t... Is, typename T, size_t N, ValidAccessor<T> Accessor, typename U, ValidAccessor<U> OtherAccessor>
-  MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T> && std::is_convertible_v<U, T>)
+MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>&& std::is_convertible_v<U, T>)
 KOKKOS_INLINE_FUNCTION constexpr void deep_copy_impl(std::index_sequence<Is...>, AVector<T, N, Accessor>& vec,
                                                      const AVector<U, N, OtherAccessor>& other) {
   static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");
@@ -63,7 +63,7 @@ KOKKOS_INLINE_FUNCTION constexpr void deep_copy_impl(std::index_sequence<Is...>,
 /// \brief Move assignment operator. Simply a vector owns an accessor, doesn't mean we can move its contents.
 /// \details Moves the data from the other vector to our data. This is only enabled if T is not const.
 template <size_t... Is, typename T, size_t N, ValidAccessor<T> Accessor, ValidAccessor<T> OtherAccessor>
-  MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>)
+MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>)
 KOKKOS_INLINE_FUNCTION constexpr void move_impl(std::index_sequence<Is...>, AVector<T, N, Accessor>& vec,
                                                 AVector<T, N, OtherAccessor>&& other) {
   static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");
@@ -72,9 +72,9 @@ KOKKOS_INLINE_FUNCTION constexpr void move_impl(std::index_sequence<Is...>, AVec
 
 /// \brief Set all elements of the vector
 template <size_t... Is, typename T, size_t N, ValidAccessor<T> Accessor, typename... Args>
-  MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>)
-KOKKOS_INLINE_FUNCTION constexpr void set_from_args_impl(std::index_sequence<Is...>, AVector<T, N, Accessor>& vec,
-                                                         Args&&... args) {
+MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>)
+KOKKOS_INLINE_FUNCTION
+    constexpr void set_from_args_impl(std::index_sequence<Is...>, AVector<T, N, Accessor>& vec, Args&&... args) {
   static_assert(sizeof...(Is) == N, "Number of arguments must match number of elements in the vector.");
   ((vec[Is] = std::forward<Args>(args)), ...);
 }
@@ -83,7 +83,7 @@ KOKKOS_INLINE_FUNCTION constexpr void set_from_args_impl(std::index_sequence<Is.
 /// \param[in] accessor A valid accessor.
 /// \note A AVector is also a valid accessor.
 template <size_t... Is, typename T, size_t N, ValidAccessor<T> Accessor, ValidAccessor<T> OtherAccessor>
-  MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>)
+MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>)
 KOKKOS_INLINE_FUNCTION constexpr void set_from_accessor_impl(std::index_sequence<Is...>, AVector<T, N, Accessor>& vec,
                                                              const OtherAccessor& accessor) {
   static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");
@@ -93,9 +93,9 @@ KOKKOS_INLINE_FUNCTION constexpr void set_from_accessor_impl(std::index_sequence
 /// \brief Set all elements of the vector to a single value
 /// \param[in] value The value to set all elements to.
 template <size_t... Is, typename T, size_t N, ValidAccessor<T> Accessor>
-  MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>)
-KOKKOS_INLINE_FUNCTION constexpr void fill_impl(std::index_sequence<Is...>, AVector<T, N, Accessor>& vec,
-                                                const T& value) {
+MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>)
+KOKKOS_INLINE_FUNCTION
+    constexpr void fill_impl(std::index_sequence<Is...>, AVector<T, N, Accessor>& vec, const T& value) {
   static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");
   ((vec[Is] = value), ...);
 }
@@ -136,8 +136,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto vector_vector_add_impl(std::index_sequence
 template <size_t... Is, typename T, size_t N, typename U, ValidAccessor<T> Accessor, ValidAccessor<U> OtherAccessor>
 KOKKOS_INLINE_FUNCTION constexpr void self_vector_add_impl(std::index_sequence<Is...>, AVector<T, N, Accessor>& vec,
                                                            const AVector<U, N, OtherAccessor>& other)
-  MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>)
-{
+    MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>) {
   static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");
   ((vec[Is] += static_cast<T>(other[Is])), ...);
 }
@@ -162,8 +161,7 @@ template <size_t... Is, typename T, size_t N, typename U, ValidAccessor<T> Acces
 KOKKOS_INLINE_FUNCTION constexpr void self_vector_subtraction_impl(std::index_sequence<Is...>,
                                                                    AVector<T, N, Accessor>& vec,
                                                                    const AVector<U, N, OtherAccessor>& other)
-  MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>)
-{
+    MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>) {
   static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");
   ((vec[Is] -= static_cast<T>(other[Is])), ...);
 }
@@ -186,8 +184,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto vector_scalar_add_impl(std::index_sequence
 template <size_t... Is, typename T, size_t N, typename U, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr void self_scalar_add_impl(std::index_sequence<Is...>, AVector<T, N, Accessor>& vec,
                                                            const U& scalar)
-  MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>)
-{
+    MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>) {
   static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");
   ((vec[Is] += static_cast<T>(scalar)), ...);
 }
@@ -211,8 +208,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto vector_scalar_subtraction_impl(std::index_
 template <size_t... Is, typename T, size_t N, typename U, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr void self_scalar_subtraction_impl(std::index_sequence<Is...>,
                                                                    AVector<T, N, Accessor>& vec, const U& scalar)
-  MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>)
-{
+    MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>) {
   static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");
   ((vec[Is] -= static_cast<T>(scalar)), ...);
 }
@@ -236,8 +232,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto vector_scalar_multiplication_impl(std::ind
 template <size_t... Is, typename T, size_t N, typename U, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr void self_scalar_multiplication_impl(std::index_sequence<Is...>,
                                                                       AVector<T, N, Accessor>& vec, const U& scalar)
-  MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>)
-{
+    MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>) {
   static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");
   ((vec[Is] *= static_cast<T>(scalar)), ...);
 }
@@ -268,8 +263,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto vector_scalar_division_impl(std::index_seq
 template <size_t... Is, typename T, size_t N, typename U, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr void self_scalar_division_impl(std::index_sequence<Is...>,
                                                                 AVector<T, N, Accessor>& vec, const U& scalar)
-  MUNDY_REQUIRES(HasNonConstAccessOperator<decltype(vec), T>)
-{
+    MUNDY_REQUIRES(HasNonConstAccessOperator<decltype(vec), T>) {
   static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");
   ((vec[Is] /= static_cast<T>(scalar)), ...);
 }
@@ -280,7 +274,7 @@ KOKKOS_INLINE_FUNCTION constexpr void self_scalar_division_impl(std::index_seque
 /// \param[in] tol The tolerance.
 template <size_t... Is, size_t N, typename U, typename T, typename V, ValidAccessor<U> Accessor,
           ValidAccessor<T> OtherAccessor>
-  MUNDY_REQUIRES(std::is_arithmetic_v<V>)
+MUNDY_REQUIRES(std::is_arithmetic_v<V>)
 KOKKOS_INLINE_FUNCTION constexpr bool is_close_impl(std::index_sequence<Is...>, const AVector<U, N, Accessor>& vec1,
                                                     const AVector<T, N, OtherAccessor>& vec2, const V& tol) {
   static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");

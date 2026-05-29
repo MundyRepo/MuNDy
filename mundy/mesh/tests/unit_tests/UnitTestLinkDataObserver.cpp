@@ -62,7 +62,8 @@ struct LinkDataObserverFixture {
   stk::mesh::Part* linked_node_part{nullptr};
   std::vector<stk::mesh::EntityId> next_ids;
 
-  explicit LinkDataObserverFixture(unsigned bucket_capacity = default_bucket_capacity, bool commit_mesh = true) : next_ids(stk::topology::NUM_RANKS, 0) {
+  explicit LinkDataObserverFixture(unsigned bucket_capacity = default_bucket_capacity, bool commit_mesh = true)
+      : next_ids(stk::topology::NUM_RANKS, 0) {
     builder.set_spatial_dimension(3);
     builder.set_entity_rank_names({"NODE", "EDGE", "FACE", "ELEMENT", "CONSTRAINT"});
     builder.set_initial_bucket_capacity(bucket_capacity);
@@ -508,7 +509,7 @@ TEST(UnitTestLinkDataObserver, ObserverDoesNotMutateHostCooSyncState) {
 
 TEST(UnitTestLinkDataObserver, SelectorUpdateForcesUniversalRebuildAndClearsPending) {
   for (bool commit_mesh : {false, true}) {
-      LinkDataObserverFixture fixture(default_bucket_capacity, commit_mesh);
+    LinkDataObserverFixture fixture(default_bucket_capacity, commit_mesh);
     create_connected_dim2_link(fixture);
 
     NgpLinkData& baseline_ngp = get_updated_ngp_link_data(*fixture.link_data);

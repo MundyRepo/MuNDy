@@ -15,29 +15,29 @@ global_set(${PACKAGE_NAME}_ENABLE_ALL_OPTIONAL_PACKAGES ON)
 # find src/ -type f -name "*.hpp" | sed 's/^.\/\///' | sort
 # find src/ -type f -name "*.cpp" | sed 's/^.\/\///' | sort
 set(NOINSTALLHEADERS
-    src/mundy_math/Accessor.hpp
-    src/mundy_math/Array.hpp
-    src/mundy_math/convex.hpp
-    src/mundy_math/Hilbert.hpp
-    src/mundy_math/impl/AccessorImpl.hpp
-    src/mundy_math/impl/ArrayImpl.hpp
-    src/mundy_math/impl/MatrixImpl.hpp
-    src/mundy_math/impl/minimize_impl.hpp
-    src/mundy_math/impl/QuaternionImpl.hpp
-    src/mundy_math/impl/VectorImpl.hpp
-    src/mundy_math/MaskedView.hpp
-    src/mundy_math/Matrix3.hpp
-    src/mundy_math/Matrix.hpp
-    src/mundy_math/minimize.hpp
-    src/mundy_math/Quaternion.hpp
-    src/mundy_math/ScalarWrapper.hpp
-    src/mundy_math/ShiftedView.hpp
-    src/mundy_math/StridedView.hpp
-    src/mundy_math/Tolerance.hpp
-    src/mundy_math/TransposedView.hpp
-    src/mundy_math/Vector3.hpp
-    src/mundy_math/Vector.hpp
-    src/mundy_math/zmort.hpp
+  src/mundy_math/Accessor.hpp
+  src/mundy_math/Array.hpp
+  src/mundy_math/convex.hpp
+  src/mundy_math/Hilbert.hpp
+  src/mundy_math/impl/AccessorImpl.hpp
+  src/mundy_math/impl/ArrayImpl.hpp
+  src/mundy_math/impl/MatrixImpl.hpp
+  src/mundy_math/impl/minimize_impl.hpp
+  src/mundy_math/impl/QuaternionImpl.hpp
+  src/mundy_math/impl/VectorImpl.hpp
+  src/mundy_math/MaskedView.hpp
+  src/mundy_math/Matrix3.hpp
+  src/mundy_math/Matrix.hpp
+  src/mundy_math/minimize.hpp
+  src/mundy_math/Quaternion.hpp
+  src/mundy_math/ScalarWrapper.hpp
+  src/mundy_math/ShiftedView.hpp
+  src/mundy_math/StridedView.hpp
+  src/mundy_math/Tolerance.hpp
+  src/mundy_math/TransposedView.hpp
+  src/mundy_math/Vector3.hpp
+  src/mundy_math/Vector.hpp
+  src/mundy_math/zmort.hpp
 )
 
 set(SOURCES src/mundy_math/a_necessary_empty_file.cpp)

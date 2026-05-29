@@ -17,9 +17,9 @@
 # **********************************************************************************************************************
 # @HEADER
 
-if (Mundy_ENABLE_TESTS AND Mundy_ENABLE_nanobench)
+if(Mundy_ENABLE_TESTS AND Mundy_ENABLE_nanobench)
   message(STATUS
-          "MundyMesh: Setting up performance tests since Mundy_ENABLE_TESTS=ON and Mundy_ENABLE_nanobench=ON")
+    "MundyMesh: Setting up performance tests since Mundy_ENABLE_TESTS=ON and Mundy_ENABLE_nanobench=ON")
 
   tribits_add_executable(
     PerfTestDeclareEntities
@@ -30,11 +30,11 @@ if (Mundy_ENABLE_TESTS AND Mundy_ENABLE_nanobench)
   tribits_copy_files_to_binary_dir(
     PerfTestDeclareEntitiesCopyFiles
     SOURCE_FILES
-      2013_03_06_cell08_876_H41_05_Cell2_cell-axon.ply
-      bee_hive.ply
-      cube.ply
-      ellipsoid.ply
-      sphere.ply
+    2013_03_06_cell08_876_H41_05_Cell2_cell-axon.ply
+    bee_hive.ply
+    cube.ply
+    ellipsoid.ply
+    sphere.ply
     EXEDEPS PerfTestDeclareEntities
     CATEGORIES PERFORMANCE
   )
@@ -49,11 +49,11 @@ if (Mundy_ENABLE_TESTS AND Mundy_ENABLE_nanobench)
   tribits_add_executable(
     PerfTestSharedComponents
     SOURCES
-      PerfTestSharedComponents.cpp
-      PerfTestSharedComponentsSupport.cpp
-      PerfTestSharedComponentsDrag.cpp
-      PerfTestSharedComponentsBodyMobility.cpp
-      PerfTestSharedComponentsComplex.cpp
+    PerfTestSharedComponents.cpp
+    PerfTestSharedComponentsSupport.cpp
+    PerfTestSharedComponentsDrag.cpp
+    PerfTestSharedComponentsBodyMobility.cpp
+    PerfTestSharedComponentsComplex.cpp
     INSTALLABLE
     CATEGORIES PERFORMANCE
   )
@@ -103,5 +103,5 @@ if (Mundy_ENABLE_TESTS AND Mundy_ENABLE_nanobench)
   )
 else()
   message(STATUS
-          "MundyMesh: Skipping performance tests since Mundy_ENABLE_TESTS=OFF or Mundy_ENABLE_nanobench=OFF ...")
+    "MundyMesh: Skipping performance tests since Mundy_ENABLE_TESTS=OFF or Mundy_ENABLE_nanobench=OFF ...")
 endif()

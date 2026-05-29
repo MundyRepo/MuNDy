@@ -36,8 +36,8 @@
 #include <mundy_math/Tolerance.hpp>  // for mundy::get_zero_tolerance
 #include <mundy_math/Vector3.hpp>    // for mundy::Vector3
 #include <mundy_math/impl/QuaternionImpl.hpp>
-#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
 #include <mundy_utils/requires.hpp>
+#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
 
 namespace mundy {
 
@@ -132,7 +132,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto norm(const AQuaternion<T, Accessor>& quat)
 /// should be lightweight such that they can be copied around without much overhead. Furthermore, the lifetime of the
 /// data underlying the accessor should be as long as the AQuaternion that use it.
 template <typename T, ValidAccessor<T> Accessor>
-  MUNDY_REQUIRES(std::is_floating_point_v<T>)
+MUNDY_REQUIRES(std::is_floating_point_v<T>)
 class AQuaternion {
  public:
   //! \name Internal data
@@ -163,15 +163,13 @@ class AQuaternion {
  private:
   KOKKOS_INLINE_FUNCTION
   static constexpr Accessor make_storage_from_semantic_components(const T& w, const T& x, const T& y, const T& z)
-    MUNDY_REQUIRES(HasNArgConstructor<Accessor, T, 4> || HasInitializerListConstructor<Accessor, T>)
-  {
+      MUNDY_REQUIRES(HasNArgConstructor<Accessor, T, 4> || HasInitializerListConstructor<Accessor, T>) {
     return Accessor{x, y, z, w};
   }
 
   KOKKOS_INLINE_FUNCTION
   static constexpr Accessor make_storage_from_semantic_components(const std::initializer_list<T>& list)
-    MUNDY_REQUIRES(HasInitializerListConstructor<Accessor, T>)
-  {
+      MUNDY_REQUIRES(HasInitializerListConstructor<Accessor, T>) {
     MUNDY_THROW_ASSERT(list.size() == 4, std::invalid_argument, "AQuaternion: Initializer list must have 4 elements.");
     auto it = list.begin();
     const T w = *it++;
@@ -187,16 +185,13 @@ class AQuaternion {
 
   /// \brief Default constructor. Assume elements are uninitialized.
   /// \note This constructor is only enabled if the Accessor has a default constructor.
-  KOKKOS_INLINE_FUNCTION constexpr AQuaternion()
-    MUNDY_REQUIRES(HasDefaultConstructor<Accessor>)
-      : accessor_() {
+  KOKKOS_INLINE_FUNCTION constexpr AQuaternion() MUNDY_REQUIRES(HasDefaultConstructor<Accessor>) : accessor_() {
   }
 
   /// \brief Constructor from a given accessor
   /// \param[in] data The accessor.
   KOKKOS_INLINE_FUNCTION
-  explicit constexpr AQuaternion(const Accessor& data)
-    MUNDY_REQUIRES(std::is_copy_constructible_v<Accessor>)
+  explicit constexpr AQuaternion(const Accessor& data) MUNDY_REQUIRES(std::is_copy_constructible_v<Accessor>)
       : accessor_(data) {
   }
 
@@ -208,7 +203,7 @@ class AQuaternion {
   /// \note This constructor is only enabled if the Accessor has a 4-argument constructor.
   /// \note The underlying storage order is `(x, y, z, w)`.
   KOKKOS_INLINE_FUNCTION constexpr AQuaternion(const T& w, const T& x, const T& y, const T& z)
-    MUNDY_REQUIRES(HasNArgConstructor<Accessor, T, 4>)
+      MUNDY_REQUIRES(HasNArgConstructor<Accessor, T, 4>)
       : accessor_(make_storage_from_semantic_components(w, x, y, z)) {
   }
 
@@ -216,7 +211,7 @@ class AQuaternion {
   /// \param[in] list The initializer list.
   /// \note The initializer list is interpreted in `(w, x, y, z)` order.
   KOKKOS_INLINE_FUNCTION constexpr AQuaternion(const std::initializer_list<T>& list)
-    MUNDY_REQUIRES(HasInitializerListConstructor<Accessor, T>)
+      MUNDY_REQUIRES(HasInitializerListConstructor<Accessor, T>)
       : accessor_(make_storage_from_semantic_components(list)) {
   }
 
@@ -246,19 +241,17 @@ class AQuaternion {
 
   /// \brief Deep copy constructor with different accessor
   template <ValidQuaternionType OtherQuaternionType>
-  KOKKOS_INLINE_FUNCTION constexpr AQuaternion(const OtherQuaternionType& other)
-    MUNDY_REQUIRES(!std::is_same_v<OtherQuaternionType, AQuaternion<T, Accessor>>) &&
-            (std::is_convertible_v<typename OtherQuaternionType::scalar_t, T>)
-      : accessor_() {
+      KOKKOS_INLINE_FUNCTION constexpr AQuaternion(const OtherQuaternionType& other)
+          MUNDY_REQUIRES(!std::is_same_v<OtherQuaternionType, AQuaternion<T, Accessor>>) &&
+      (std::is_convertible_v<typename OtherQuaternionType::scalar_t, T>) : accessor_() {
     impl::deep_copy_impl(*this, other);
   }
 
   /// \brief Deep move constructor with different accessor
   template <ValidQuaternionType OtherQuaternionType>
-  KOKKOS_INLINE_FUNCTION constexpr AQuaternion(OtherQuaternionType&& other)
-    MUNDY_REQUIRES(!std::is_same_v<OtherQuaternionType, AQuaternion<T, Accessor>>) &&
-            (std::is_convertible_v<typename OtherQuaternionType::scalar_t, T>)
-      : accessor_() {
+      KOKKOS_INLINE_FUNCTION constexpr AQuaternion(OtherQuaternionType&& other)
+          MUNDY_REQUIRES(!std::is_same_v<OtherQuaternionType, AQuaternion<T, Accessor>>) &&
+      (std::is_convertible_v<typename OtherQuaternionType::scalar_t, T>) : accessor_() {
     impl::deep_copy_impl(*this, std::move(other));
   }
 
@@ -266,9 +259,9 @@ class AQuaternion {
   /// \details Copies the data from the other vector to our data. This is only enabled if T is not const.
   template <ValidQuaternionType OtherQuaternionType>
   KOKKOS_INLINE_FUNCTION constexpr AQuaternion<T, Accessor>& operator=(const OtherQuaternionType& other)
-    MUNDY_REQUIRES((!std::is_same_v<OtherQuaternionType, AQuaternion<T, Accessor>>) &&
-            (std::is_convertible_v<typename OtherQuaternionType::scalar_t, T>) && HasNonConstAccessOperator<Accessor, T>)
-  {
+      MUNDY_REQUIRES((!std::is_same_v<OtherQuaternionType, AQuaternion<T, Accessor>>) &&
+                     (std::is_convertible_v<typename OtherQuaternionType::scalar_t, T>) &&
+                     HasNonConstAccessOperator<Accessor, T>) {
     impl::deep_copy_impl(*this, other);
     return *this;
   }
@@ -277,9 +270,9 @@ class AQuaternion {
   /// \details Moves the data from the other vector to our data. This is only enabled if T is not const.
   template <ValidQuaternionType OtherQuaternionType>
   KOKKOS_INLINE_FUNCTION constexpr AQuaternion<T, Accessor>& operator=(OtherQuaternionType&& other)
-    MUNDY_REQUIRES((!std::is_same_v<OtherQuaternionType, AQuaternion<T, Accessor>>) &&
-            (std::is_convertible_v<typename OtherQuaternionType::scalar_t, T>) && HasNonConstAccessOperator<Accessor, T>)
-  {
+      MUNDY_REQUIRES((!std::is_same_v<OtherQuaternionType, AQuaternion<T, Accessor>>) &&
+                     (std::is_convertible_v<typename OtherQuaternionType::scalar_t, T>) &&
+                     HasNonConstAccessOperator<Accessor, T>) {
     impl::deep_copy_impl(*this, std::move(other));
     return *this;
   }
@@ -423,8 +416,7 @@ class AQuaternion {
   /// \param[in] z The z component.
   KOKKOS_INLINE_FUNCTION
   constexpr void set(const T& w, const T& x, const T& y, const T& z)
-    MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>)
-  {
+      MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>) {
     impl::access_at(accessor_, x_storage_index) = x;
     impl::access_at(accessor_, y_storage_index) = y;
     impl::access_at(accessor_, z_storage_index) = z;
@@ -435,9 +427,7 @@ class AQuaternion {
   /// \param[in] w The scalar component.
   /// \param[in] vec The vector component.
   KOKKOS_INLINE_FUNCTION
-  constexpr void set(const T& w, const Vector3<T>& vec)
-    MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>)
-  {
+  constexpr void set(const T& w, const Vector3<T>& vec) MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>) {
     impl::access_at(accessor_, x_storage_index) = vec[0];
     impl::access_at(accessor_, y_storage_index) = vec[1];
     impl::access_at(accessor_, z_storage_index) = vec[2];
@@ -449,8 +439,7 @@ class AQuaternion {
   /// \note An AQuaternion is also a valid accessor.
   template <ValidAccessor<T> OtherAccessor>
   KOKKOS_INLINE_FUNCTION constexpr void set(const OtherAccessor& accessor)
-    MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>)
-  {
+      MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>) {
     impl::access_at(accessor_, 0) = impl::access_at(accessor, 0);
     impl::access_at(accessor_, 1) = impl::access_at(accessor, 1);
     impl::access_at(accessor_, 2) = impl::access_at(accessor, 2);
@@ -460,9 +449,7 @@ class AQuaternion {
   /// \brief Set the quaternion vector component
   /// \param[in] vec The vector.
   KOKKOS_INLINE_FUNCTION
-  constexpr void set_vector(const Vector3<T>& vec)
-    MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>)
-  {
+  constexpr void set_vector(const Vector3<T>& vec) MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>) {
     impl::access_at(accessor_, x_storage_index) = vec[0];
     impl::access_at(accessor_, y_storage_index) = vec[1];
     impl::access_at(accessor_, z_storage_index) = vec[2];
@@ -470,9 +457,7 @@ class AQuaternion {
 
   /// \brief Normalize the quaternion in place
   KOKKOS_INLINE_FUNCTION
-  constexpr void normalize()
-    MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>)
-  {
+  constexpr void normalize() MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>) {
     const T quat_norm = norm(*this);
     MUNDY_THROW_ASSERT(!is_close(quat_norm, T(0)), std::runtime_error, "AQuaternion: Cannot normalize zero norm.");
     const T inv_norm = T(1) / quat_norm;
@@ -484,9 +469,7 @@ class AQuaternion {
 
   /// \brief Conjugate the quaternion in place
   KOKKOS_INLINE_FUNCTION
-  constexpr void conjugate()
-    MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>)
-  {
+  constexpr void conjugate() MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>) {
     impl::access_at(accessor_, x_storage_index) = -impl::access_at(accessor_, x_storage_index);
     impl::access_at(accessor_, y_storage_index) = -impl::access_at(accessor_, y_storage_index);
     impl::access_at(accessor_, z_storage_index) = -impl::access_at(accessor_, z_storage_index);
@@ -494,9 +477,7 @@ class AQuaternion {
 
   /// \brief Invert the quaternion in place
   KOKKOS_INLINE_FUNCTION
-  constexpr void invert()
-    MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>)
-  {
+  constexpr void invert() MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>) {
     const T quat_norm_squared = impl::access_at(accessor_, 0) * impl::access_at(accessor_, 0) +
                                 impl::access_at(accessor_, 1) * impl::access_at(accessor_, 1) +
                                 impl::access_at(accessor_, 2) * impl::access_at(accessor_, 2) +
@@ -541,8 +522,7 @@ class AQuaternion {
   /// \param[in] other The other quaternion.
   template <typename U, ValidAccessor<U> OtherAccessor>
   KOKKOS_INLINE_FUNCTION constexpr AQuaternion<T, Accessor>& operator+=(const AQuaternion<U, OtherAccessor>& other)
-    MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>)
-  {
+      MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>) {
     impl::self_quat_addition_impl(*this, other);
     return *this;
   }
@@ -558,8 +538,7 @@ class AQuaternion {
   /// \param[in] other The other quaternion.
   template <typename U, ValidAccessor<U> OtherAccessor>
   KOKKOS_INLINE_FUNCTION constexpr AQuaternion<T, Accessor>& operator-=(const AQuaternion<U, OtherAccessor>& other)
-    MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>)
-  {
+      MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>) {
     impl::self_quat_subtraction_impl(*this, other);
     return *this;
   }
@@ -579,8 +558,7 @@ class AQuaternion {
   /// \param[in] other The other quaternion.
   template <typename U, ValidAccessor<U> OtherAccessor>
   KOKKOS_INLINE_FUNCTION constexpr AQuaternion<T, Accessor>& operator*=(const AQuaternion<U, OtherAccessor>& other)
-    MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>)
-  {
+      MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>) {
     impl::self_quat_multiplication_impl(*this, other);
     return *this;
   }
@@ -602,7 +580,7 @@ class AQuaternion {
   /// \brief AQuaternion-scalar multiplication
   /// \param[in] scalar The scalar.
   template <typename U>
-    MUNDY_REQUIRES(std::is_arithmetic_v<U>)
+  MUNDY_REQUIRES(std::is_arithmetic_v<U>)
   KOKKOS_INLINE_FUNCTION constexpr auto operator*(const U& scalar) const {
     return impl::quat_scalar_multiplication_impl(*this, scalar);
   }
@@ -610,7 +588,7 @@ class AQuaternion {
   /// \brief Self-scalar multiplication
   /// \param[in] scalar The scalar.
   template <typename U>
-    MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T> && std::is_arithmetic_v<U>)
+  MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>&& std::is_arithmetic_v<U>)
   KOKKOS_INLINE_FUNCTION constexpr AQuaternion<T, Accessor>& operator*=(const U& scalar) {
     impl::self_scalar_multiplication_impl(*this, scalar);
     return *this;
@@ -619,7 +597,7 @@ class AQuaternion {
   /// \brief AQuaternion-scalar division
   /// \param[in] scalar The scalar.
   template <typename U>
-    MUNDY_REQUIRES(std::is_arithmetic_v<U>)
+  MUNDY_REQUIRES(std::is_arithmetic_v<U>)
   KOKKOS_INLINE_FUNCTION constexpr auto operator/(const U& scalar) const {
     return impl::quat_scalar_division_impl(*this, scalar);
   }
@@ -627,7 +605,7 @@ class AQuaternion {
   /// \brief Self-scalar division
   /// \param[in] scalar The scalar.
   template <typename U>
-    MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T> && std::is_arithmetic_v<U>)
+  MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>&& std::is_arithmetic_v<U>)
   KOKKOS_INLINE_FUNCTION constexpr AQuaternion<T, Accessor>& operator/=(const U& scalar) {
     impl::self_scalar_division_impl(*this, scalar);
     return *this;
@@ -653,7 +631,7 @@ class AQuaternion {
 
   // We are friends with all Quaternions regardless of their Accessor or type
   template <typename U, ValidAccessor<U> OtherAccessor>
-    MUNDY_REQUIRES(std::is_floating_point_v<U>)
+  MUNDY_REQUIRES(std::is_floating_point_v<U>)
   friend class AQuaternion;
   //@}
 };  // AQuaternion
@@ -719,7 +697,7 @@ KOKKOS_INLINE_FUNCTION constexpr bool is_approx_close(
 /// \param[in] scalar The scalar.
 /// \param[in] quat The quaternion.
 template <typename U, typename T, ValidAccessor<T> Accessor>
-  MUNDY_REQUIRES(std::is_arithmetic_v<U>)
+MUNDY_REQUIRES(std::is_arithmetic_v<U>)
 KOKKOS_INLINE_FUNCTION constexpr auto operator*(const U& scalar, const AQuaternion<T, Accessor>& quat)
     -> AQuaternion<std::common_type_t<T, U>> {
   return quat * scalar;
@@ -812,9 +790,10 @@ KOKKOS_INLINE_FUNCTION constexpr AQuaternion<std::remove_const_t<T>> normalize(c
 /// \param[in] q2 The second quaternion.
 /// \param[in] t The interpolation parameter.
 template <typename U, typename T, typename V, ValidAccessor<U> Accessor1, ValidAccessor<T> Accessor2>
-  MUNDY_REQUIRES(std::is_arithmetic_v<V>)
-KOKKOS_INLINE_FUNCTION constexpr auto slerp(const AQuaternion<U, Accessor1>& q1, const AQuaternion<T, Accessor2>& q2,
-                                            const V t) -> AQuaternion<std::common_type_t<U, T, V>> {
+MUNDY_REQUIRES(std::is_arithmetic_v<V>)
+KOKKOS_INLINE_FUNCTION
+    constexpr auto slerp(const AQuaternion<U, Accessor1>& q1, const AQuaternion<T, Accessor2>& q2, const V t)
+        -> AQuaternion<std::common_type_t<U, T, V>> {
   using CommonType = std::common_type_t<U, T, V>;
   const CommonType epsilon = get_relaxed_zero_tolerance<CommonType>();  // Threshold for linear interpolation
 
@@ -954,7 +933,7 @@ KOKKOS_INLINE_FUNCTION constexpr void rotate_quaternion(QuaternionType& quat, co
 /// \param[in] axis The axis.
 /// \param[in] angle The angle.
 template <typename T, typename U, ValidAccessor<T> Accessor>
-  MUNDY_REQUIRES(std::is_arithmetic_v<U>)
+MUNDY_REQUIRES(std::is_arithmetic_v<U>)
 KOKKOS_INLINE_FUNCTION constexpr auto axis_angle_to_quaternion(const AVector3<T, Accessor>& axis, const U& angle)
     -> AQuaternion<std::common_type_t<T, U>> {
   using CommonType = std::common_type_t<T, U>;
@@ -1013,9 +992,9 @@ KOKKOS_INLINE_FUNCTION constexpr Matrix3<std::remove_const_t<T>> quaternion_to_r
 /// \param[in] pitch Pitch angle.
 /// \param[in] yaw Yaw angle.
 template <typename T>
-  MUNDY_REQUIRES(std::is_arithmetic_v<T>)
-KOKKOS_INLINE_FUNCTION constexpr AQuaternion<std::remove_const_t<T>> euler_to_quat(const T roll, const T pitch,
-                                                                                   const T yaw) {
+MUNDY_REQUIRES(std::is_arithmetic_v<T>)
+KOKKOS_INLINE_FUNCTION
+    constexpr AQuaternion<std::remove_const_t<T>> euler_to_quat(const T roll, const T pitch, const T yaw) {
   // Convert Euler angles to quaternion
   AQuaternion<std::remove_const_t<T>> quat;
   const T cha1 = std::cos(T(0.5) * roll);
@@ -1046,7 +1025,7 @@ KOKKOS_INLINE_FUNCTION constexpr AQuaternion<std::remove_const_t<T>> euler_to_qu
 /// of the difference geometry of framed curves," and as shown above, is identical to the equation given in K. Korner's
 /// "Simple deformation measures for discrete elastic rods and ribbons."
 template <typename U, typename T, ValidAccessor<U> Accessor1, ValidAccessor<T> Accessor2>
-  MUNDY_REQUIRES(std::is_arithmetic_v<T> && std::is_arithmetic_v<U>)
+MUNDY_REQUIRES(std::is_arithmetic_v<T>&& std::is_arithmetic_v<U>)
 KOKKOS_INLINE_FUNCTION constexpr auto quat_from_parallel_transport(const AVector3<U, Accessor1>& v_from,
                                                                    const AVector3<T, Accessor2>& v_to)
     -> AQuaternion<decltype(U() * T())> {

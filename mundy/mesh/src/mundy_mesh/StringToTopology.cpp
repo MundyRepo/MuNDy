@@ -19,13 +19,14 @@
 // @HEADER
 
 /// \file StringToTopology.cpp
-/// \brief Definition of the StringToTopology class
+/// \brief Definition of the string-to-topology helper.
 
 // C++ core libs
 #include <algorithm>    // for std::all_of
 #include <cctype>       // for std::isdigit
 #include <charconv>     // for std::from_chars
 #include <optional>     // for std::optional
+#include <stdexcept>    // for std::invalid_argument
 #include <string>       // for std::string
 #include <string_view>  // for std::string_view
 
@@ -33,8 +34,8 @@
 #include <stk_topology/topology.hpp>  // for stk::topology
 
 // Mundy libs
-#include <mundy_mesh/StringToTopology.hpp>  // for mundy::mesh::string_to_rank and mundy::mesh::string_to_topology
-#include <mundy_utils/throw_assert.hpp>     // for MUNDY_THROW_ASSERT
+#include <mundy_mesh/StringToTopology.hpp>  // for mundy::mesh::string_to_topology
+#include <mundy_utils/throw_assert.hpp>     // for MUNDY_THROW_REQUIRE
 
 namespace {
 
@@ -77,27 +78,6 @@ std::optional<int> parse_super_topology_num_nodes(const std::string& topology_st
 namespace mundy {
 
 namespace mesh {
-
-stk::topology::rank_t string_to_rank(const std::string& rank_string) {
-  if (rank_string == "NODE_RANK") {
-    return stk::topology::NODE_RANK;
-  } else if (rank_string == "EDGE_RANK") {
-    return stk::topology::EDGE_RANK;
-  } else if (rank_string == "FACE_RANK") {
-    return stk::topology::FACE_RANK;
-  } else if (rank_string == "ELEMENT_RANK") {
-    return stk::topology::ELEMENT_RANK;
-  } else if (rank_string == "CONSTRAINT_RANK") {
-    return stk::topology::CONSTRAINT_RANK;
-  } else if (rank_string == "INVALID_RANK") {
-    return stk::topology::INVALID_RANK;
-  } else {
-    MUNDY_THROW_REQUIRE(false, std::invalid_argument,
-                        std::string("The provided rank string ") + rank_string + " is not valid.");
-  }
-
-  return stk::topology::INVALID_RANK;  // Should never be reached.
-}
 
 stk::topology string_to_topology(const std::string& topology_string) {
   if (topology_string == "INVALID_TOPOLOGY") {

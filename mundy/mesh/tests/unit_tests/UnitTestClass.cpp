@@ -613,8 +613,8 @@ TEST_F(UnitTestClassFixture, RestartRoundTripPreservesTreeAssemblyFields) {
   // Move nodes in class2 into class2_nodes
   stk::mesh::Entity class2_node = writer.bulk_data->get_entity(stk::topology::NODE_RANK, 3);
   ASSERT_TRUE(writer.bulk_data->is_valid(class2_node));
-  class_interface(*writer.bulk_data).change_entity_classes(class2_node,
-  ClassVector{&writer_meta.class2_nodes.class_instance()});
+  class_interface(*writer.bulk_data)
+      .change_entity_classes(class2_node, ClassVector{&writer_meta.class2_nodes.class_instance()});
 
   // Make a new node that is only in class2_nodes to test what happens when a node only resides in a nodeset and not in
   // a block

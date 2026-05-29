@@ -49,8 +49,8 @@
 #include <mundy_mesh/LinkCSRPartition.hpp>   // for mundy::mesh::LinkCSRPartition
 #include <mundy_mesh/LinkMetaData.hpp>       // for mundy::mesh::LinkMetaData
 #include <mundy_mesh/impl/PartitionKey.hpp>  // for mundy::mesh::impl::PartitionKey, mundy::mesh::impl::get_partition_key
-#include <mundy_utils/throw_assert.hpp>      // for MUNDY_THROW_ASSERT
 #include <mundy_utils/requires.hpp>
+#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
 
 namespace mundy {
 
@@ -106,8 +106,7 @@ class LinkCSRDataT {  // Raw data in any space
   /// This constructor exists so that we can use NgpLinkCSRData(LinkCSRData) to perform a shallow
   /// copy if NgpMemSpace == MemSpace and this operator otherwise.
   template <typename OtherMemSpace>
-  explicit LinkCSRDataT(LinkCSRDataT<OtherMemSpace>& other)
-    MUNDY_REQUIRES(!std::is_same_v<OtherMemSpace, MemSpace>)
+  explicit LinkCSRDataT(LinkCSRDataT<OtherMemSpace>& other) MUNDY_REQUIRES(!std::is_same_v<OtherMemSpace, MemSpace>)
       : bulk_data_ptr_(&other.bulk_data()),
         link_meta_data_ptr_(&other.link_meta_data()),
         selector_to_partitions_map_(),
@@ -228,9 +227,8 @@ class LinkCSRDataT {  // Raw data in any space
       }
     }
 
-    LinkCSRPartitionView new_crs_partitions(
-        Kokkos::view_alloc(Kokkos::WithoutInitializing, "LinkCSRPartitions"),
-        num_new_partitions + num_old_partitions);
+    LinkCSRPartitionView new_crs_partitions(Kokkos::view_alloc(Kokkos::WithoutInitializing, "LinkCSRPartitions"),
+                                            num_new_partitions + num_old_partitions);
     unsigned count = 0u;
     for (const impl::PartitionKey& key : old_keys) {
       auto id_it = partition_key_to_id_map_.find(key);
@@ -393,8 +391,8 @@ class LinkCSRDataT {  // Raw data in any space
   inline unsigned get_linker_dimensionality(const stk::mesh::Bucket& linker_bucket) const {
     MUNDY_THROW_ASSERT(link_meta_data().link_rank() == linker_bucket.entity_rank(), std::invalid_argument,
                        "Linker bucket is not of the correct rank.");
-    MUNDY_THROW_ASSERT(linker_bucket.member(link_meta_data().universal_link_class()),
-                       std::invalid_argument, "Linker bucket is not a subset of our universal link class.");
+    MUNDY_THROW_ASSERT(linker_bucket.member(link_meta_data().universal_link_class()), std::invalid_argument,
+                       "Linker bucket is not a subset of our universal link class.");
 
     auto& linked_es_field = impl::get_linked_entities_field(link_meta_data());
     return stk::mesh::field_scalars_per_entity(linked_es_field, linker_bucket);
