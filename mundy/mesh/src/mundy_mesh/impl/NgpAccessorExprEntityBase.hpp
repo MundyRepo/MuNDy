@@ -25,6 +25,7 @@
 /// \brief EntityExprBase CRTP base class.
 
 #include <mundy_mesh/impl/NgpAccessorExprCachable.hpp>
+#include <mundy_mesh/impl/NgpAccessorExprUtils.hpp>
 
 namespace mundy {
 

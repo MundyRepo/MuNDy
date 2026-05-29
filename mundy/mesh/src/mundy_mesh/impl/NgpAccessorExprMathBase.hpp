@@ -25,6 +25,7 @@
 /// \brief MathExprBase CRTP base class for all mathematical expression nodes.
 
 #include <mundy_mesh/impl/NgpAccessorExprCachable.hpp>
+#include <mundy_mesh/impl/NgpAccessorExprUtils.hpp>
 
 namespace mundy {
 
