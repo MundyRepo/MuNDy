@@ -976,6 +976,12 @@ KOKKOS_INLINE_FUNCTION constexpr auto copy(const MatrixType& m) {
   return m.copy();
 }
 
+/// \brief Cast a matrix to a different arithmetic type
+template <typename U, ValidMatrixType MatrixType>
+KOKKOS_INLINE_FUNCTION constexpr auto cast(const MatrixType& m) {
+  return m.template cast<U>();
+}
+
 /// \brief AMatrix transpose
 /// \param[in] mat The matrix.
 template <size_t N, size_t M, typename T, ValidAccessor<T> Accessor>

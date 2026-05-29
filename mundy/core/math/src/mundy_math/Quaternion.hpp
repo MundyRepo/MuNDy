@@ -732,6 +732,12 @@ KOKKOS_INLINE_FUNCTION constexpr auto copy(const QuaternionType& q) {
   return q.copy();
 }
 
+/// \brief Cast a quaternion to a different arithmetic type
+template <typename U, ValidQuaternionType QuaternionType>
+KOKKOS_INLINE_FUNCTION constexpr auto cast(const QuaternionType& q) {
+  return q.template cast<U>();
+}
+
 /// \brief Get the dot product of two quaternions
 /// \param[in] q1 The first quaternion.
 /// \param[in] q2 The second quaternion.

@@ -732,6 +732,12 @@ KOKKOS_INLINE_FUNCTION constexpr auto copy(const VectorType& v) {
   return v.copy();
 }
 
+/// \brief Cast a vector to a different arithmetic type
+template <typename U, ValidVectorType VectorType>
+KOKKOS_INLINE_FUNCTION constexpr auto cast(const VectorType& v) {
+  return v.template cast<U>();
+}
+
 /// \brief Dot product of two vectors
 /// \param[in] a The first vector.
 /// \param[in] b The second vector.
