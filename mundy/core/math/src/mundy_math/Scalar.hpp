@@ -676,10 +676,23 @@ KOKKOS_INLINE_FUNCTION void atomic_add(T* const s, const U& value) {
   Kokkos::atomic_add(s, static_cast<T>(value));
 }
 
+/// \brief Atomic *s += value — AScalar overload: operates on the underlying scalar, bypassing
+/// AScalar's operator+ (which returns a different storage type incompatible with CAS loops).
+template <typename T, typename Acc, typename U>
+KOKKOS_INLINE_FUNCTION void atomic_add(AScalar<T, Acc>* const s, const U& value) {
+  Kokkos::atomic_add(&s->value(), static_cast<T>(value));
+}
+
 /// \brief Atomic *s -= value
 template <typename T, typename U>
 KOKKOS_INLINE_FUNCTION void atomic_sub(T* const s, const U& value) {
   Kokkos::atomic_sub(s, static_cast<T>(value));
+}
+
+/// \brief Atomic *s -= value — AScalar overload.
+template <typename T, typename Acc, typename U>
+KOKKOS_INLINE_FUNCTION void atomic_sub(AScalar<T, Acc>* const s, const U& value) {
+  Kokkos::atomic_sub(&s->value(), static_cast<T>(value));
 }
 
 /// \brief Atomic *s *= value
@@ -688,10 +701,22 @@ KOKKOS_INLINE_FUNCTION void atomic_mul(T* const s, const U& value) {
   Kokkos::atomic_mul(s, static_cast<T>(value));
 }
 
+/// \brief Atomic *s *= value — AScalar overload.
+template <typename T, typename Acc, typename U>
+KOKKOS_INLINE_FUNCTION void atomic_mul(AScalar<T, Acc>* const s, const U& value) {
+  Kokkos::atomic_mul(&s->value(), static_cast<T>(value));
+}
+
 /// \brief Atomic *s /= value
 template <typename T, typename U>
 KOKKOS_INLINE_FUNCTION void atomic_div(T* const s, const U& value) {
   Kokkos::atomic_div(s, static_cast<T>(value));
+}
+
+/// \brief Atomic *s /= value — AScalar overload.
+template <typename T, typename Acc, typename U>
+KOKKOS_INLINE_FUNCTION void atomic_div(AScalar<T, Acc>* const s, const U& value) {
+  Kokkos::atomic_div(&s->value(), static_cast<T>(value));
 }
 
 /// \brief Atomic *s += value; returns old *s

@@ -845,6 +845,38 @@ inline ClassVector filter_io_supported_classes(const ClassVector& classes) {
   return io_supported_classes;
 }
 
+inline void warn_shared_component_io_unsupported_once() {
+  static bool warned = false;
+  if (!warned) {
+    std::cout << "add_class_component: IO is currently not supported for shared components. "
+                 "Skipping shared component output registration."
+              << std::endl;
+    warned = true;
+  }
+}
+
+template <typename ComponentType>
+inline constexpr bool has_direct_field_v = requires(ComponentType& component) { component.field(); };
+
+template <typename ComponentType>
+inline constexpr bool has_nested_component_field_v = requires(ComponentType& component) { component.component().field(); };
+
+template <typename ComponentType>
+decltype(auto) class_component_field(ComponentType& component) {
+  if constexpr (has_direct_field_v<ComponentType>) {
+    return component.field();
+  } else if constexpr (has_nested_component_field_v<ComponentType>) {
+    return component.component().field();
+  } else {
+    static_assert(has_direct_field_v<ComponentType> || has_nested_component_field_v<ComponentType>,
+                  "Component does not expose a backing field.");
+  }
+}
+
+template <typename ComponentType>
+inline constexpr bool has_class_component_field_v =
+    has_direct_field_v<ComponentType> || has_nested_component_field_v<ComponentType>;
+
 inline stk::mesh::ConstPartVector populate_entity_rank_parts(stk::mesh::EntityRank entity_rank,
                                                              const ClassVector& classes, const char* vector_name) {
   stk::mesh::ConstPartVector parts;
@@ -1206,6 +1238,53 @@ inline void add_class_field(stk::io::StkMeshIoBroker& io_broker, size_t output_f
 inline void add_class_field(stk::io::StkMeshIoBroker& io_broker, size_t output_file_index,
                             stk::mesh::FieldBase& field) {
   add_class_field(io_broker, output_file_index, field, field.name());
+}
+
+/// \brief Register a component for output using Class-aware IO rules over an explicit class set.
+///
+/// Shared components do not currently have an IO representation. Passing a shared component here is a no-op that prints a
+/// warning once.
+template <typename ComponentType>
+inline void add_class_component(stk::io::StkMeshIoBroker& io_broker, size_t output_file_index, ComponentType& component,
+                                const ClassVector& classes, const std::string& db_name) {
+  if constexpr (impl::has_class_component_field_v<ComponentType>) {
+    add_class_field(io_broker, output_file_index, impl::class_component_field(component), classes, db_name);
+  } else {
+    impl::warn_shared_component_io_unsupported_once();
+  }
+}
+
+/// \brief Register a component for output using Class-aware IO rules over an explicit class set.
+template <typename ComponentType>
+inline void add_class_component(stk::io::StkMeshIoBroker& io_broker, size_t output_file_index, ComponentType& component,
+                                const ClassVector& classes) {
+  if constexpr (impl::has_class_component_field_v<ComponentType>) {
+    stk::mesh::FieldBase& field = impl::class_component_field(component);
+    add_class_component(io_broker, output_file_index, component, classes, field.name());
+  } else {
+    impl::warn_shared_component_io_unsupported_once();
+  }
+}
+
+/// \brief Register a component for output using Class-aware IO rules.
+///
+/// This overload discovers all declared classes on the broker bulk data and forwards to the explicit-classes overload.
+template <typename ComponentType>
+inline void add_class_component(stk::io::StkMeshIoBroker& io_broker, size_t output_file_index, ComponentType& component,
+                                const std::string& db_name) {
+  add_class_component(io_broker, output_file_index, component,
+                      impl::filter_io_supported_classes(get_classes(io_broker.bulk_data().mesh_meta_data())), db_name);
+}
+
+/// \brief Register a component for output using Class-aware IO rules.
+template <typename ComponentType>
+inline void add_class_component(stk::io::StkMeshIoBroker& io_broker, size_t output_file_index, ComponentType& component) {
+  if constexpr (impl::has_class_component_field_v<ComponentType>) {
+    stk::mesh::FieldBase& field = impl::class_component_field(component);
+    add_class_component(io_broker, output_file_index, component, field.name());
+  } else {
+    impl::warn_shared_component_io_unsupported_once();
+  }
 }
 
 /// \brief Put a rank-0/1 field restriction on a class data part.

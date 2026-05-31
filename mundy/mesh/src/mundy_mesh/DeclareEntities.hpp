@@ -111,6 +111,9 @@ class DeclareEntitiesHelper {
     FieldData(stk::mesh::FieldBase* field, const std::vector<T>& data) : field_(field), data_(data) {
     }
 
+    FieldData(stk::mesh::FieldBase& field, const std::vector<T>& data) : FieldData(&field, data) {
+    }
+
     void set_field_data(const stk::mesh::Entity& entity) override {
       T* raw_field_data = static_cast<T*>(stk::mesh::field_data(*field_, entity));
       for (size_t i = 0; i < data_.size(); ++i) {
@@ -477,9 +480,25 @@ class DeclareEntitiesHelper {
     /// \param field The field to set data for
     /// \param data The data to set
     template <typename T>
+    NodeBuilder& add_field_data(stk::mesh::FieldBase& field, const std::vector<T>& data) {
+      return add_field_data(&field, data);
+    }
+
+    /// \brief Add field data to the node.
+    /// \param field The field to set data for
+    /// \param data The data to set
+    template <typename T>
     NodeBuilder& add_field_data(stk::mesh::FieldBase* const field, const T& data) {
       node_info_.field_data.push_back(std::make_shared<FieldData<T>>(field, std::vector<T>{data}));
       return *this;
+    }
+
+    /// \brief Add field data to the node.
+    /// \param field The field to set data for
+    /// \param data The data to set
+    template <typename T>
+    NodeBuilder& add_field_data(stk::mesh::FieldBase& field, const T& data) {
+      return add_field_data(&field, data);
     }
 
     /// \brief This node is a valid linker. Link it to a given entity at the desired ordinal.
@@ -499,6 +518,16 @@ class DeclareEntitiesHelper {
       link_info.linked_entity_ids[ordinal] = linked_entity_id;
       link_info.linked_entity_ranks[ordinal] = linked_entity_rank;
       return *this;
+    }
+
+    /// \brief This node is a valid linker. Link it to a given entity at the desired ordinal.
+    /// \param link_data The link data to link under.
+    /// \param linked_entity_id The entity id of the entity to link to.
+    /// \param linked_entity_rank The entity rank of the entity to link to.
+    /// \param ordinal The slot/ordinal to link the entity at.
+    NodeBuilder& links_to(LinkData& link_data, const stk::mesh::EntityId linked_entity_id,
+                          const stk::mesh::EntityRank linked_entity_rank, const unsigned ordinal) {
+      return links_to(&link_data, linked_entity_id, linked_entity_rank, ordinal);
     }
 
     /// \brief Get the owner of the builder.
@@ -616,13 +645,29 @@ class DeclareEntitiesHelper {
     /// \param field The field to set data for
     /// \param data The data to set
     template <typename T>
+    ElementBuilder& add_field_data(stk::mesh::FieldBase& field, const std::vector<T>& data) {
+      return add_field_data(&field, data);
+    }
+
+    /// \brief Add field data to the element.
+    /// \param field The field to set data for
+    /// \param data The data to set
+    template <typename T>
     ElementBuilder& add_field_data(stk::mesh::FieldBase* const field, const T& data) {
       elem_info_.field_data.push_back(std::make_shared<FieldData<T>>(field, std::vector<T>{data}));
       return *this;
     }
 
+    /// \brief Add field data to the element.
+    /// \param field The field to set data for
+    /// \param data The data to set
+    template <typename T>
+    ElementBuilder& add_field_data(stk::mesh::FieldBase& field, const T& data) {
+      return add_field_data(&field, data);
+    }
+
     /// \brief This element is a valid linker. Link it to a given entity at the desired ordinal.
-    /// \param link_meta_data_name The name of the LinkMetaData to link under.
+    /// \param link_data_ptr The link data to link under.
     /// \param linked_entity_id The entity id of the entity to link to.
     /// \param linked_entity_rank The entity rank of the entity to link to.
     /// \param ordinal The slot/ordinal to link the entity at.
@@ -638,6 +683,16 @@ class DeclareEntitiesHelper {
       link_info.linked_entity_ids[ordinal] = linked_entity_id;
       link_info.linked_entity_ranks[ordinal] = linked_entity_rank;
       return *this;
+    }
+
+    /// \brief This element is a valid linker. Link it to a given entity at the desired ordinal.
+    /// \param link_data The link data to link under.
+    /// \param linked_entity_id The entity id of the entity to link to.
+    /// \param linked_entity_rank The entity rank of the entity to link to.
+    /// \param ordinal The slot/ordinal to link the entity at.
+    ElementBuilder& links_to(LinkData& link_data, const stk::mesh::EntityId linked_entity_id,
+                             const stk::mesh::EntityRank linked_entity_rank, const unsigned ordinal) {
+      return links_to(&link_data, linked_entity_id, linked_entity_rank, ordinal);
     }
 
     /// \brief Get the owner of the builder.
