@@ -93,7 +93,7 @@ class Circle3DCircle3DObjective {
   template <ValidCircle3DType Circle3DType>
   KOKKOS_INLINE_FUNCTION Point<Scalar> theta_to_foot_point_on_circle3d(const Scalar theta,
                                                                        const Circle3DType& circle3d) const {
-    Point<Scalar> p_local{circle3d.radius() * std::cos(theta), circle3d.radius() * std::sin(theta), 0.0};
+    Point<Scalar> p_local{circle3d.radius() * Kokkos::cos(theta), circle3d.radius() * Kokkos::sin(theta), 0.0};
     auto p_global = circle3d.orientation() * p_local + circle3d.center();
     return p_global;
   }

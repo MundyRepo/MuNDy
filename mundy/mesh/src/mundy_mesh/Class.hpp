@@ -1172,11 +1172,6 @@ inline void add_class_field(stk::io::StkMeshIoBroker& io_broker, size_t output_f
   std::vector<std::string> leaf_part_names;
   if (is_node_rank_field) {
     leaf_part_names = impl::collect_field_leaf_part_names(classes, field);
-    std::cout << "add_class_field: nodeset field '" << field.name() << "' is on leaves: ";
-    for (const std::string& leaf_part_name : leaf_part_names) {
-      std::cout << leaf_part_name << ' ';
-    }
-    std::cout << std::endl;
   }
 
   const bool already_registered = impl::is_output_field_registered(io_broker, output_file_index, field, db_name);

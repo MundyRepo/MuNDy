@@ -81,10 +81,10 @@ class PointEllipsoidObjective {
 
   KOKKOS_FUNCTION Scalar operator()(const mundy::Vector<Scalar, 2>& theta_phi) const {
     // Map theta and phi to the lab frame normal vector
-    const Scalar sin_theta = std::sin(theta_phi[0]);
-    const Scalar cos_theta = std::cos(theta_phi[0]);
-    const Scalar sin_phi = std::sin(theta_phi[1]);
-    const Scalar cos_phi = std::cos(theta_phi[1]);
+    const Scalar sin_theta = Kokkos::sin(theta_phi[0]);
+    const Scalar cos_theta = Kokkos::cos(theta_phi[0]);
+    const Scalar sin_phi = Kokkos::sin(theta_phi[1]);
+    const Scalar cos_phi = Kokkos::cos(theta_phi[1]);
     shared_normal_.set(sin_theta * cos_phi, sin_theta * sin_phi, cos_theta);
 
     // Map the normal vector to the foot point on the ellipsoid

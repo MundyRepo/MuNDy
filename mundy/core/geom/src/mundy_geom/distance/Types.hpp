@@ -39,6 +39,13 @@ namespace mundy {
 struct Euclidean {};
 struct SharedNormalSigned {};
 
+/// \brief Tag selecting the finite-difference-gradient variant of the shared-normal signed distance.
+///
+/// Uses central-difference approximations for the L-BFGS gradient instead of the analytical
+/// gradient employed by the default \c SharedNormalSigned implementation.  Retained for
+/// benchmarking and regression testing only — prefer \c SharedNormalSigned for all production use.
+struct SharedNormalSignedFiniteDiff {};
+
 /// @}
 
 }  // namespace mundy

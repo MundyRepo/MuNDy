@@ -562,6 +562,168 @@ class lbfgs_search_strategy {
   }
 };
 
+/// \brief Functor computing the directional derivative along a search direction using an
+/// analytical gradient callable.  Analogous to \c line_search_funct but for derivatives.
+template <size_t N, typename DerivativeFunctionType>
+class line_search_funct_der {
+ public:
+  KOKKOS_FUNCTION
+  line_search_funct_der(const DerivativeFunctionType& der_func, const Vector<double, N>& start,
+                        const Vector<double, N>& direction)
+      : der_func_(der_func), start_(start), direction_(direction) {
+  }
+
+  KOKKOS_FUNCTION
+  double operator()(const double& alpha) const {
+    return dot(der_func_(start_ + alpha * direction_), direction_);
+  }
+
+ private:
+  const DerivativeFunctionType& der_func_;
+  const Vector<double, N>& start_;
+  const Vector<double, N>& direction_;
+};
+
+/// \brief L-BFGS minimization with a caller-supplied analytical gradient.
+///
+/// Mirrors \c find_min_using_approximate_derivatives but drives the line search with exact
+/// directional derivatives instead of central differences.  This reduces the number of cost-
+/// function evaluations per L-BFGS iteration from O(2N+line_search) to O(line_search), and
+/// produces more accurate gradient information for the quasi-Newton update.
+///
+/// \tparam max_size  L-BFGS history depth (same meaning as in the approximate variant).
+/// \tparam N         Dimensionality of the search space.
+/// \param cost_func  Callable: \c double(const Vector<double,N>&).
+/// \param der_func   Callable: \c Vector<double,N>(const Vector<double,N>&).  Must return
+///                   the exact gradient of \c cost_func at the given point.
+template <size_t max_size, size_t N, typename search_strategy_type, typename stop_strategy_type,
+          typename CostFunctionType, typename DerivativeFunctionType>
+KOKKOS_FUNCTION double find_min_with_derivatives(search_strategy_type search_strategy,
+                                                 stop_strategy_type stop_strategy,
+                                                 const CostFunctionType& cost_func,
+                                                 const DerivativeFunctionType& der_func,
+                                                 Vector<double, N>& x,
+                                                 const double min_allowable_cost) {
+  Vector<double, N> g;
+  Vector<double, N> s;
+
+  double cost = cost_func(x);
+  g = der_func(x);
+
+  while (stop_strategy.should_continue_search(x, cost, g) && cost > min_allowable_cost) {
+    s = search_strategy.get_next_direction(x, cost, g);
+
+    double alpha = line_search(
+        line_search_funct(cost_func, x, s), cost,
+        line_search_funct_der(der_func, x, s),
+        dot(g, s),
+        search_strategy.get_wolfe_rho(), search_strategy.get_wolfe_sigma(),
+        min_allowable_cost, search_strategy.get_max_line_search_iterations());
+
+    x = alpha * s + x;
+    g = der_func(x);
+    cost = cost_func(x);
+  }
+
+  return cost;
+}
+
+/// \brief Caching adaptor that wraps a combined FDF functor for use with the existing
+/// scalar \c line_search function.
+///
+/// The line search always calls f(alpha) then der(alpha) at the same alpha.  This adaptor
+/// ensures the FDF callable is invoked only once per distinct alpha value: the first call
+/// (always f) evaluates FDF and stores the result; the second call (der at the same alpha)
+/// returns the cached directional derivative.
+///
+/// Not \c KOKKOS_FUNCTION — uses \c mutable for caching.  Safe when instances are
+/// stack-allocated inside a single host thread (which \c find_min_with_fdf guarantees).
+///
+/// \tparam N         Parameter-space dimension.
+/// \tparam FDFType   Combined callable: \c double(const Vector<double,N>&, Vector<double,N>&)
+///                   that fills the gradient reference and returns f.
+template <size_t N, typename FDFType>
+class CachingFDFLineAdaptor {
+ public:
+  CachingFDFLineAdaptor(const FDFType& fdf, const Vector<double, N>& start,
+                        const Vector<double, N>& direction)
+      : fdf_(fdf), start_(start), direction_(direction) {
+  }
+
+  void ensure_evaluated(double alpha) const {
+    if (valid_ && alpha == last_alpha_) return;
+    Vector<double, N> g;
+    cached_f_  = fdf_(start_ + alpha * direction_, g);
+    cached_df_ = dot(g, direction_);
+    last_alpha_ = alpha;
+    valid_      = true;
+  }
+
+  // f-only and df-only callable types that share this cacher's state via reference.
+  struct FCallable {
+    const CachingFDFLineAdaptor& c;
+    double operator()(double a) const { c.ensure_evaluated(a); return c.cached_f_; }
+  };
+  struct DFCallable {
+    const CachingFDFLineAdaptor& c;
+    double operator()(double a) const { c.ensure_evaluated(a); return c.cached_df_; }
+  };
+
+  FCallable  f_callable()  const { return FCallable{*this}; }
+  DFCallable df_callable() const { return DFCallable{*this}; }
+
+ private:
+  const FDFType&             fdf_;
+  const Vector<double, N>&   start_;
+  const Vector<double, N>&   direction_;
+  mutable double last_alpha_{0.0};
+  mutable bool   valid_{false};
+  mutable double cached_f_{0.0};
+  mutable double cached_df_{0.0};
+};
+
+/// \brief L-BFGS minimization using a single combined cost-and-gradient (FDF) callable.
+///
+/// The FDF callable is invoked exactly once per evaluation point.  This eliminates the
+/// redundant forward pass that occurs when cost and gradient are computed separately (as in
+/// \c find_min_with_derivatives).  For EllipsoidEllipsoid distance the savings are:
+///
+///   - Outer loop boundary: 2 foot-point evaluations instead of 4 (1 FDF vs 1f + 1g).
+///   - Line search: 2 foot-point evaluations per step instead of 4 (cached adaptor ensures
+///     one FDF call covers both f and the directional derivative at the same alpha).
+///
+/// \note Host-only: uses \c mutable caching inside \c CachingFDFLineAdaptor.
+///
+/// \tparam max_size  L-BFGS history depth.
+/// \tparam N         Dimensionality of the parameter space.
+/// \param fdf        Combined callable: \c double(const Vector<double,N>&, Vector<double,N>&).
+///                   Must fill the second argument with the gradient and return f.
+template <size_t max_size, size_t N, typename search_strategy_type, typename stop_strategy_type,
+          typename FDFType>
+double find_min_with_fdf(search_strategy_type search_strategy, stop_strategy_type stop_strategy,
+                         const FDFType& fdf, Vector<double, N>& x, const double min_allowable_cost) {
+  Vector<double, N> g;
+  Vector<double, N> s;
+
+  double cost = fdf(x, g);  // ONE call for both f and gradient
+
+  while (stop_strategy.should_continue_search(x, cost, g) && cost > min_allowable_cost) {
+    s = search_strategy.get_next_direction(x, cost, g);
+
+    // Caching adaptor: each (alpha) point in the line search triggers exactly one FDF call.
+    CachingFDFLineAdaptor<N, FDFType> cacher(fdf, x, s);
+
+    double alpha = line_search(cacher.f_callable(), cost, cacher.df_callable(), dot(g, s),
+                               search_strategy.get_wolfe_rho(), search_strategy.get_wolfe_sigma(),
+                               min_allowable_cost, search_strategy.get_max_line_search_iterations());
+
+    x    = alpha * s + x;
+    cost = fdf(x, g);  // ONE call for both f and gradient
+  }
+
+  return cost;
+}
+
 template <size_t max_size, size_t N, typename search_strategy_type, typename stop_strategy_type,
           typename CostFunctionType>
 KOKKOS_FUNCTION double find_min_using_approximate_derivatives(search_strategy_type search_strategy,
