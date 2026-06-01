@@ -22,11 +22,11 @@
 #define MUNDY_MESH_IMPL_NGPACCESSOREXPRSINK_HPP_
 
 /// \file NgpAccessorExprSink.hpp
-/// \brief Sink expression types: SinkArg, impl sink helpers, ApplySinkExpr, impl::sink_expr_impl,
+/// \brief Sink expression types: SinkArg, impl sink helpers, ApplySinkExpr, impl::delayed_sink_expr_impl,
 ///        BinarySideEffectExpr, plus the OP_EQUALS and ATOMIC_OP macro definitions and their invocations.
 ///
 /// Note: read_only(), read_write(), overwrite_all(), and sink_expr() are public functions
-/// defined in NgpAccessorExpr.hpp. This file provides the underlying impl::sink_expr_impl()
+/// defined in NgpAccessorExpr.hpp. This file provides the underlying impl::delayed_sink_expr_impl()
 /// which is called by the public sink_expr() and by NgpAccessorExprAccessor.hpp.
 
 #include <mundy_mesh/impl/NgpAccessorExprApplyValue.hpp>
@@ -333,10 +333,11 @@ static constexpr bool is_apply_sink_expr_v = is_apply_sink_expr<std::decay_t<T>>
 
 /// \brief Low-level sink expression factory (impl variant).
 ///
-/// This is the implementation called by the public sink_expr() in NgpAccessorExpr.hpp and by
-/// NgpAccessorExprAccessor.hpp. Users should prefer the public sink_expr() wrapper.
+/// Returns an ApplySinkExpr without running it. Called internally by NgpAccessorExprAccessor.hpp
+/// (lvalue assignment operator) and by the named-sink-wrapper macro. Users should call the
+/// public sink_expr() in NgpAccessorExpr.hpp, which runs the expression immediately.
 template <typename Func, typename... Args>
-auto sink_expr_impl(Func func, const Args&... args) {
+auto delayed_sink_expr_impl(Func func, const Args&... args) {
   static_assert(sizeof...(Args) > 0, "sink_expr(func, args...): at least one argument is required.");
   static_assert((sink_arg_has_nonconstant_expr_v<Args> || ...),
                 "sink_expr(func, args...): at least one argument must be a non-constant math expression so Mundy "
@@ -370,7 +371,7 @@ struct SinkPolicyMode<SinkArgPolicy<Modes...>, I> {
 
 template <typename Policy, typename Func, typename... Args, size_t... Is>
 auto make_named_sink_expr_impl(Func func, std::index_sequence<Is...>, const Args&... args) {
-  return sink_expr_impl(std::move(func), make_sink_arg_with_mode<SinkPolicyMode<Policy, Is>::value>(args)...);
+  return delayed_sink_expr_impl(std::move(func), make_sink_arg_with_mode<SinkPolicyMode<Policy, Is>::value>(args)...);
 }
 
 template <typename Policy, typename Func, typename... Args>

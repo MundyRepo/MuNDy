@@ -322,6 +322,12 @@ class AMatrix {
     return accessor_.get();
   }
 
+  /// \brief Get a deep copy of the matrix
+  KOKKOS_INLINE_FUNCTION
+  constexpr deep_copy_t copy() const {
+    return *this;
+  }
+
   /// \brief Get a copy of a certain column of the matrix
   /// \param[in] col The column index.
   KOKKOS_INLINE_FUNCTION

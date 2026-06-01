@@ -1247,6 +1247,8 @@ inline void add_class_field(stk::io::StkMeshIoBroker& io_broker, size_t output_f
 template <typename ComponentType>
 inline void add_class_component(stk::io::StkMeshIoBroker& io_broker, size_t output_file_index, ComponentType& component,
                                 const ClassVector& classes, const std::string& db_name) {
+  static_assert(!std::is_const_v<std::remove_reference_t<ComponentType>>,
+              "add_class_component requires a non-const component.");
   if constexpr (impl::has_class_component_field_v<ComponentType>) {
     add_class_field(io_broker, output_file_index, impl::class_component_field(component), classes, db_name);
   } else {
@@ -1258,6 +1260,8 @@ inline void add_class_component(stk::io::StkMeshIoBroker& io_broker, size_t outp
 template <typename ComponentType>
 inline void add_class_component(stk::io::StkMeshIoBroker& io_broker, size_t output_file_index, ComponentType& component,
                                 const ClassVector& classes) {
+  static_assert(!std::is_const_v<std::remove_reference_t<ComponentType>>,
+              "add_class_component requires a non-const component.");
   if constexpr (impl::has_class_component_field_v<ComponentType>) {
     stk::mesh::FieldBase& field = impl::class_component_field(component);
     add_class_component(io_broker, output_file_index, component, classes, field.name());
@@ -1272,6 +1276,8 @@ inline void add_class_component(stk::io::StkMeshIoBroker& io_broker, size_t outp
 template <typename ComponentType>
 inline void add_class_component(stk::io::StkMeshIoBroker& io_broker, size_t output_file_index, ComponentType& component,
                                 const std::string& db_name) {
+  static_assert(!std::is_const_v<std::remove_reference_t<ComponentType>>,
+              "add_class_component requires a non-const component.");
   add_class_component(io_broker, output_file_index, component,
                       impl::filter_io_supported_classes(get_classes(io_broker.bulk_data().mesh_meta_data())), db_name);
 }
@@ -1279,6 +1285,8 @@ inline void add_class_component(stk::io::StkMeshIoBroker& io_broker, size_t outp
 /// \brief Register a component for output using Class-aware IO rules.
 template <typename ComponentType>
 inline void add_class_component(stk::io::StkMeshIoBroker& io_broker, size_t output_file_index, ComponentType& component) {
+  static_assert(!std::is_const_v<std::remove_reference_t<ComponentType>>,
+              "add_class_component requires a non-const component.");
   if constexpr (impl::has_class_component_field_v<ComponentType>) {
     stk::mesh::FieldBase& field = impl::class_component_field(component);
     add_class_component(io_broker, output_file_index, component, field.name());
