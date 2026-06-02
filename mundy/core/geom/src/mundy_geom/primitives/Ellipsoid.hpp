@@ -35,6 +35,7 @@
 #include <mundy_math/Tolerance.hpp>         // for mundy::get_zero_tolerance
 #include <mundy_utils/requires.hpp>
 #include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
+#include <mundy_math/cmath.hpp>
 
 namespace mundy {
 
@@ -412,9 +413,9 @@ KOKKOS_FUNCTION constexpr Point<typename EllipsoidType::value_type> map_body_fra
   const Scalar r2 = ellipsoid.radius_2();
   const Scalar r3 = ellipsoid.radius_3();
 
-  const Scalar sign0 = Kokkos::copysign(one, body_frame_nhat[0]);
-  const Scalar sign1 = Kokkos::copysign(one, body_frame_nhat[1]);
-  const Scalar sign2 = Kokkos::copysign(one, body_frame_nhat[2]);
+  const Scalar sign0 = copysign(one, body_frame_nhat[0]);
+  const Scalar sign1 = copysign(one, body_frame_nhat[1]);
+  const Scalar sign2 = copysign(one, body_frame_nhat[2]);
 
   Scalar alpha1, alpha2;
   if (sign0 * body_frame_nhat[0] > get_zero_tolerance<Scalar>()) {
@@ -432,12 +433,12 @@ KOKKOS_FUNCTION constexpr Point<typename EllipsoidType::value_type> map_body_fra
     alpha2 = zero;
   }
 
-  const Scalar sqrt_alpha1 = Kokkos::sqrt(alpha1);
-  const Scalar sqrt_alpha2 = Kokkos::sqrt(alpha2);
+  const Scalar sqrt_alpha1 = sqrt(alpha1);
+  const Scalar sqrt_alpha2 = sqrt(alpha2);
 
   const Scalar x = half * sign0 * ((one + sign0) * r1 + (one - sign0) * r1) * sqrt_alpha1 * sqrt_alpha2;
-  const Scalar y = half * sign1 * ((one + sign1) * r2 + (one - sign1) * r2) * Kokkos::sqrt(one - alpha1) * sqrt_alpha2;
-  const Scalar z = half * sign2 * ((one + sign2) * r3 + (one - sign2) * r3) * Kokkos::sqrt(one - alpha2);
+  const Scalar y = half * sign1 * ((one + sign1) * r2 + (one - sign1) * r2) * sqrt(one - alpha1) * sqrt_alpha2;
+  const Scalar z = half * sign2 * ((one + sign2) * r3 + (one - sign2) * r3) * sqrt(one - alpha2);
 
   return Point<Scalar>(x, y, z);
 }

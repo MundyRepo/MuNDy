@@ -37,6 +37,7 @@
 #include <mundy_math/Vector3.hpp>               // for mundy::Vector3
 #include <mundy_math/minimize.hpp>              // for mundy::find_min_using_approximate_derivatives
 #include <mundy_utils/requires.hpp>
+#include <mundy_math/cmath.hpp>
 
 namespace mundy {
 
@@ -81,10 +82,10 @@ class PointEllipsoidObjective {
 
   KOKKOS_FUNCTION Scalar operator()(const mundy::Vector<Scalar, 2>& theta_phi) const {
     // Map theta and phi to the lab frame normal vector
-    const Scalar sin_theta = Kokkos::sin(theta_phi[0]);
-    const Scalar cos_theta = Kokkos::cos(theta_phi[0]);
-    const Scalar sin_phi = Kokkos::sin(theta_phi[1]);
-    const Scalar cos_phi = Kokkos::cos(theta_phi[1]);
+    const Scalar sin_theta = sin(theta_phi[0]);
+    const Scalar cos_theta = cos(theta_phi[0]);
+    const Scalar sin_phi = sin(theta_phi[1]);
+    const Scalar cos_phi = cos(theta_phi[1]);
     shared_normal_.set(sin_theta * cos_phi, sin_theta * sin_phi, cos_theta);
 
     // Map the normal vector to the foot point on the ellipsoid

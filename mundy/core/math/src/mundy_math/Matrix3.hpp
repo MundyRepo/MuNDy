@@ -36,6 +36,7 @@
 #include <mundy_math/Matrix.hpp>         // for mundy::Matrix
 #include <mundy_math/Tolerance.hpp>      // for mundy::get_zero_tolerance
 #include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
+#include <mundy_math/cmath.hpp>
 
 namespace mundy {
 
@@ -54,18 +55,18 @@ KOKKOS_INLINE_FUNCTION auto cholesky(const AMatrix3<T, Accessor>& A) -> Matrix3<
   const OutputType a22 = static_cast<OutputType>(A(2, 2));
 
   MUNDY_THROW_ASSERT(a00 > tol, std::invalid_argument, "Matrix3 must be positive definite");
-  const OutputType l11 = Kokkos::sqrt(a00);
+  const OutputType l11 = sqrt(a00);
 
   const OutputType l21 = a10 / l11;
   const OutputType s22 = a11 - l21 * l21;
   MUNDY_THROW_ASSERT(s22 > tol, std::invalid_argument, "Matrix3 must be positive definite");
-  const OutputType l22 = Kokkos::sqrt(s22);
+  const OutputType l22 = sqrt(s22);
 
   const OutputType l31 = a20 / l11;
   const OutputType l32 = (a21 - l31 * l21) / l22;
   const OutputType s33 = a22 - l31 * l31 - l32 * l32;
   MUNDY_THROW_ASSERT(s33 > tol, std::invalid_argument, "Matrix3 must be positive definite");
-  const OutputType l33 = Kokkos::sqrt(s33);
+  const OutputType l33 = sqrt(s33);
 
   return Matrix3<OutputType>(l11, OutputType(0), OutputType(0), l21, l22, OutputType(0), l31, l32, l33);
 }

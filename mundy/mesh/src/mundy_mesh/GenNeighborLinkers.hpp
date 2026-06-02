@@ -23,14 +23,14 @@
 
 /// \file GenerateNeighborLinkers.hpp
 
-// C++ core libs
+// C++ core
 #include <memory>       // for std::shared_ptr, std::unique_ptr
 #include <string>       // for std::string
 #include <type_traits>  // for std::enable_if, std::is_base_of
 #include <typeindex>    // for std::type_index
 #include <vector>       // for std::vector
 
-// Trilinos libs
+// Trilinos
 #include <Trilinos_version.h>  // for TRILINOS_MAJOR_MINOR_VERSION
 
 #include <Kokkos_UnorderedMap.hpp>                // for Kokkos::UnorderedMap
@@ -51,7 +51,7 @@
 #include <stk_search/SearchMethod.hpp>            // for stk::search::KDTREE
 #include <stk_util/parallel/Parallel.hpp>         // for stk::parallel_machine_init, stk::parallel_machine_finalize
 
-// Mundy libs
+// Mundy
 #include <mundy_geom/primitives.hpp>             // for mundy::Sphere/mundy::AABB
 #include <mundy_mesh/BulkData.hpp>               // for mundy::mesh::BulkData
 #include <mundy_mesh/ForEachEntity.hpp>          // for mundy::mesh::for_each_entity_run
@@ -61,6 +61,8 @@
 #include <mundy_mesh/impl/LinkedBucketConn.hpp>  // for mundy::mesh::impl::LinkedBucketConn
 #include <mundy_utils/NgpView.hpp>               // for mundy::NgpView
 #include <mundy_utils/throw_assert.hpp>          // for MUNDY_THROW_ASSERT
+#include <mundy_math/cmath.hpp>
+
 namespace mundy {
 
 namespace mesh {
@@ -611,7 +613,7 @@ class GenNeighborLinks {
             double dx = new_center[0] - old_center[0];
             double dy = new_center[1] - old_center[1];
             double dz = new_center[2] - old_center[2];
-            double disp = Kokkos::sqrt(dx * dx + dy * dy + dz * dz);
+            double disp = sqrt(dx * dx + dy * dy + dz * dz);
             local_result = local_result || (disp > 0.5 * search_buffer);
           },
           Kokkos::LOr<bool>(moved_too_much));

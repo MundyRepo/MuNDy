@@ -53,6 +53,7 @@
 
 // Mundy
 #include <mundy_utils/throw_assert.hpp>  // MUNDY_THROW_ASSERT
+#include <mundy_math/cmath.hpp>
 
 namespace zorder_knn {
 
@@ -187,7 +188,7 @@ KOKKOS_INLINE_FUNCTION auto FloatXorMsb(Scalar p, Scalar q) -> decltype(FloatExp
       return p_exp;
   }
 
-  return Kokkos::max(p_exp, q_exp);
+  return mundy::max(p_exp, q_exp);
 }
 
 }  // namespace detail

@@ -23,6 +23,7 @@
 
 // External
 #include <Kokkos_Core.hpp>
+#include <mundy_math/cmath.hpp>
 
 // C++ core
 #include <cmath>
@@ -543,7 +544,7 @@ KOKKOS_INLINE_FUNCTION constexpr bool is_close(
     const AScalar<U, Accessor1>& a, const AScalar<T, Accessor2>& b,
     const decltype(get_comparison_tolerance<T, U>())& tol = get_comparison_tolerance<T, U>()) {
   using ComparisonType = std::remove_reference_t<decltype(tol)>;
-  return Kokkos::abs(static_cast<ComparisonType>(a.value()) - static_cast<ComparisonType>(b.value())) <= tol;
+  return abs(static_cast<ComparisonType>(a.value()) - static_cast<ComparisonType>(b.value())) <= tol;
 }
 
 template <typename U, typename T, ValidAccessor<U> Accessor1, ValidAccessor<T> Accessor2>
@@ -649,7 +650,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto operator/(const AMatrix<T, N, M, Accessor1
 /// \brief Absolute value of a scalar
 template <typename T, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto abs(const AScalar<T, Accessor>& s) {
-  return AScalar<T>{Kokkos::abs(s.value())};
+  return AScalar<T>{abs(s.value())};
 }
 
 /// \brief Deep copy (mirrors the AVector free function)

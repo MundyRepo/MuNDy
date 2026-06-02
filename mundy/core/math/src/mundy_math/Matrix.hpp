@@ -44,6 +44,7 @@
 #include <mundy_math/impl/MatrixImpl.hpp>
 #include <mundy_utils/requires.hpp>
 #include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
+#include <mundy_math/cmath.hpp>
 
 namespace mundy {
 
@@ -397,7 +398,7 @@ class AMatrix {
     // diagonal.
     constexpr size_t stride = M + 1;
     auto strided_data_accessor = get_strided_view<T, stride>(accessor_);
-    return get_owning_vector<T, Kokkos::min(N, M)>(std::move(strided_data_accessor));
+    return get_owning_vector<T, min(N, M)>(std::move(strided_data_accessor));
   }
 
   /// \brief Get a view into the diagonal of the matrix
@@ -407,7 +408,7 @@ class AMatrix {
     // diagonal.
     constexpr size_t stride = M + 1;
     auto strided_data_accessor = get_strided_view<T, stride>(accessor_);
-    return get_owning_vector<T, Kokkos::min(N, M)>(std::move(strided_data_accessor));
+    return get_owning_vector<T, min(N, M)>(std::move(strided_data_accessor));
   }
 
   /// \brief Get a view into the transpose of the matrix
@@ -1101,7 +1102,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto outer_product(const AVector<U, N, Accessor
 /// \brief AMatrix Frobenius norm
 template <size_t N, size_t M, typename T, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto frobenius_norm(const AMatrix<T, N, M, Accessor>& mat) {
-  return Kokkos::sqrt(frobenius_inner_product(mat, mat));
+  return sqrt(frobenius_inner_product(mat, mat));
 }
 
 /// \brief AMatrix infinity norm
@@ -1119,7 +1120,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto one_norm(const AMatrix<T, N, M, Accessor>&
 /// \brief AMatrix 2-norm
 template <size_t N, size_t M, typename T, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto two_norm(const AMatrix<T, N, M, Accessor>& mat) {
-  return Kokkos::sqrt(frobenius_inner_product(mat, mat));
+  return sqrt(frobenius_inner_product(mat, mat));
 }
 //@}
 

@@ -33,6 +33,7 @@
 
 // Mundy
 #include <mundy_math/Vector.hpp>  // for mundy::Vector
+#include <mundy_math/cmath.hpp>
 
 namespace mundy {
 
@@ -45,7 +46,7 @@ KOKKOS_INLINE_FUNCTION T3 put_in_range(T1 min_val, T2 max_val, T3 val) {
 
 template <typename T>
 KOKKOS_INLINE_FUNCTION bool is_subnormal(T value) {
-  return (value != 0) && (Kokkos::abs(value) < Kokkos::Experimental::norm_min_v<T>);
+  return (value != 0) && (abs(value) < Kokkos::Experimental::norm_min_v<T>);
 }
 
 KOKKOS_INLINE_FUNCTION double poly_min_extrap(const double f0, const double d0, const double f1, const double d1,
@@ -55,16 +56,16 @@ KOKKOS_INLINE_FUNCTION double poly_min_extrap(const double f0, const double d0, 
 
   // find the minimum of the derivative of the polynomial
 
-  const double temp_sqr = Kokkos::max(n * n - 3 * e * d0, 0.0);
+  const double temp_sqr = max(n * n - 3 * e * d0, 0.0);
   if (temp_sqr < 0) {
     return 0.5;
   }
-  if (Kokkos::abs(e) <= Kokkos::Experimental::epsilon_v<double>) {
+  if (abs(e) <= Kokkos::Experimental::epsilon_v<double>) {
     return 0.5;
   }
 
   // figure out the two possible min values
-  const double temp = Kokkos::sqrt(temp_sqr);
+  const double temp = sqrt(temp_sqr);
   const double x1 = (temp - n) / (3 * e);
   const double x2 = -(temp + n) / (3 * e);
 
@@ -81,7 +82,7 @@ KOKKOS_INLINE_FUNCTION double poly_min_extrap(const double f0, const double d0, 
 
 KOKKOS_INLINE_FUNCTION double poly_min_extrap(const double f0, const double d0, const double f1) {
   const double temp = 2 * (f1 - f0 - d0);
-  if (Kokkos::abs(temp) <= d0 * Kokkos::Experimental::epsilon_v<double>) {
+  if (abs(temp) <= d0 * Kokkos::Experimental::epsilon_v<double>) {
     return 0.5;
   }
 
@@ -122,7 +123,7 @@ KOKKOS_INLINE_FUNCTION double poly_min_extrap(const double f0, const double d0, 
     else
       return x2;
   }
-  const double temp3 = (-b + Kokkos::sqrt(temp2)) / (3 * a);
+  const double temp3 = (-b + sqrt(temp2)) / (3 * a);
   return put_in_range(0, x2, temp3);
 }
 
@@ -170,7 +171,7 @@ class objective_delta_stop_strategy {
       }
 
       // check if the function change was too small
-      if (Kokkos::abs(funct_value - prev_funct_value_) < min_delta_) {
+      if (abs(funct_value - prev_funct_value_) < min_delta_) {
         return false;
       }
     }
@@ -246,7 +247,7 @@ KOKKOS_FUNCTION double line_search(const CostFunctionType& f, const double f0, c
   const double tau3 = 1.0 / 2.0;
 
   // Stop right away and return a step size of 0 if the gradient is 0 at the starting point
-  if (Kokkos::abs(d0) <= Kokkos::abs(f0) * Kokkos::Experimental::epsilon_v<double>) {
+  if (abs(d0) <= abs(f0) * Kokkos::Experimental::epsilon_v<double>) {
     return 0;
   }
 
@@ -275,7 +276,7 @@ KOKKOS_FUNCTION double line_search(const CostFunctionType& f, const double f0, c
   double a_val, b_val, a_val_der, b_val_der;
 
   // This thresh value represents the Wolfe curvature condition
-  const double thresh = Kokkos::abs(sigma * d0);
+  const double thresh = abs(sigma * d0);
 
   size_t itr = 0;
   // do the bracketing stage to find the bracket range [a,b]
@@ -301,7 +302,7 @@ KOKKOS_FUNCTION double line_search(const CostFunctionType& f, const double f0, c
       break;
     }
 
-    if (Kokkos::abs(val_der) <= thresh) {
+    if (abs(val_der) <= thresh) {
       return alpha;
     }
 
@@ -326,11 +327,11 @@ KOKKOS_FUNCTION double line_search(const CostFunctionType& f, const double f0, c
     // range.
     double first, last;
     if (mu > 0) {
-      first = Kokkos::min(mu, alpha + tau1a * (alpha - last_alpha));
-      last = Kokkos::min(mu, alpha + tau1b * (alpha - last_alpha));
+      first = min(mu, alpha + tau1a * (alpha - last_alpha));
+      last = min(mu, alpha + tau1b * (alpha - last_alpha));
     } else {
-      first = Kokkos::max(mu, alpha + tau1a * (alpha - last_alpha));
-      last = Kokkos::max(mu, alpha + tau1b * (alpha - last_alpha));
+      first = max(mu, alpha + tau1a * (alpha - last_alpha));
+      last = max(mu, alpha + tau1b * (alpha - last_alpha));
     }
 
     // pick a point between first and last by doing some kind of interpolation
@@ -376,8 +377,8 @@ KOKKOS_FUNCTION double line_search(const CostFunctionType& f, const double f0, c
     // if we take the largest possible alpha step will the objective function
     // change at all?  If not then there isn't any point looking for a better
     // alpha.
-    const double max_possible_alpha = Kokkos::max(Kokkos::abs(a), Kokkos::abs(b));
-    if (Kokkos::abs(max_possible_alpha * d0) <= Kokkos::abs(f0) * Kokkos::Experimental::epsilon_v<double>) {
+    const double max_possible_alpha = max(abs(a), abs(b));
+    if (abs(max_possible_alpha * d0) <= abs(f0) * Kokkos::Experimental::epsilon_v<double>) {
       return alpha;
     }
 
@@ -386,7 +387,7 @@ KOKKOS_FUNCTION double line_search(const CostFunctionType& f, const double f0, c
       b_val = val;
       b_val_der = val_der;
     } else {
-      if (Kokkos::abs(val_der) <= thresh) {
+      if (abs(val_der) <= thresh) {
         return alpha;
       }
 
@@ -459,7 +460,7 @@ class lbfgs_search_strategy {
       dh_temp.y = funct_derivative - prev_derivative;
       double temp = dot(dh_temp.s, dh_temp.y);
       // only accept this bit of data if temp isn't zero
-      if (Kokkos::abs(temp) > Kokkos::Experimental::epsilon_v<double>) {
+      if (abs(temp) > Kokkos::Experimental::epsilon_v<double>) {
         dh_temp.rho = 1.0 / temp;
         if (current_size < max_size) {
           data[current_size++] = dh_temp;

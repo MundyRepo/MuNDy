@@ -42,6 +42,7 @@
 #include <mundy_math/Vector3.hpp>
 #include <mundy_utils/rng.hpp>
 #include <mundy_utils/throw_assert.hpp>
+#include <mundy_math/cmath.hpp>
 
 namespace mundy {
 
@@ -148,7 +149,7 @@ struct TestObjectTraits<TestObjectType::SPHERE> {
   static constexpr unsigned num_points = 1;
   static type generate(const AABB<double>& box, openrand::Philox& rng) {
     double w =
-        Kokkos::min(Kokkos::min(box.x_max() - box.x_min(), box.y_max() - box.y_min()), box.z_max() - box.z_min());
+        min(min(box.x_max() - box.x_min(), box.y_max() - box.y_min()), box.z_max() - box.z_min());
     return generate_random_sphere<double>(box, 0.0, 0.25 * w, rng);
   }
   static KOKKOS_FUNCTION Point<double> reference_point(const type& s) {
@@ -166,7 +167,7 @@ struct TestObjectTraits<TestObjectType::ELLIPSOID> {
   static constexpr unsigned num_points = 1;
   static type generate(const AABB<double>& box, openrand::Philox& rng) {
     double w =
-        Kokkos::min(Kokkos::min(box.x_max() - box.x_min(), box.y_max() - box.y_min()), box.z_max() - box.z_min());
+        min(min(box.x_max() - box.x_min(), box.y_max() - box.y_min()), box.z_max() - box.z_min());
     double r = 0.25 * w;
     return generate_random_ellipsoid<double>(box, Vector3<double>{0.0, 0.0, 0.0}, Vector3<double>{r, r, r}, rng);
   }
@@ -185,7 +186,7 @@ struct TestObjectTraits<TestObjectType::CIRCLE_3D> {
   static constexpr unsigned num_points = 1;
   static type generate(const AABB<double>& box, openrand::Philox& rng) {
     double w =
-        Kokkos::min(Kokkos::min(box.x_max() - box.x_min(), box.y_max() - box.y_min()), box.z_max() - box.z_min());
+        min(min(box.x_max() - box.x_min(), box.y_max() - box.y_min()), box.z_max() - box.z_min());
     return generate_random_circle3D<double>(box, 0.0, 0.25 * w, rng);
   }
   static KOKKOS_FUNCTION Point<double> reference_point(const type& c) {
@@ -779,7 +780,7 @@ struct test_unwrap_to_ref_impl {
                               primary_box.z_max() - primary_box.z_min()};
       bool within_half_cell = true;
       for (int d = 0; d < 3; ++d) {
-        if (metric.is_periodic(d) && Kokkos::abs(reference_point(s)[d] - ref[d]) > 0.5 * box_len[d]) {
+        if (metric.is_periodic(d) && abs(reference_point(s)[d] - ref[d]) > 0.5 * box_len[d]) {
           within_half_cell = false;
           break;
         }
@@ -881,7 +882,7 @@ TEST(WrappingAPI, MinImageVsBruteForce_Orthorhombic) {
       for (int j = -1; j <= 1; ++j)
         for (int k = -1; k <= 1; ++k) {
           Vector3<double> disp{i * L[0], j * L[1], k * L[2]};
-          min_dist = Kokkos::min(min_dist, norm(free_m.sep(a, b + disp)));
+          min_dist = min(min_dist, norm(free_m.sep(a, b + disp)));
         }
 
     ASSERT_NEAR(norm(ortho_m.sep(a, b)), min_dist, get_relaxed_zero_tolerance<double>())

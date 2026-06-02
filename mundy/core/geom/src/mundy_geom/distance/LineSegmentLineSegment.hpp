@@ -36,6 +36,7 @@
 #include <mundy_geom/primitives/Point.hpp>           // for mundy::Point
 #include <mundy_math/Tolerance.hpp>                  // for mundy::get_zero_tolerance
 #include <mundy_utils/requires.hpp>
+#include <mundy_math/cmath.hpp>
 
 namespace mundy {
 
@@ -99,7 +100,7 @@ KOKKOS_FUNCTION typename LineSegmentType1::value_type
   const Scalar D = a * c - b * b;  // always >= 0
 
   // Compute the line parameters of the two closest points
-  if (D < Kokkos::sqrt(mundy::get_zero_tolerance<Scalar>())) {
+  if (D < sqrt(mundy::get_zero_tolerance<Scalar>())) {
     // CASE 1: The lines are colinear. Therefore, one of the four endpoints is the
     // point of closest approach. We'll directly compute the 4 distances and the closest point on the line.
     const Scalar dist1 = distance(l0, line_segment2);
@@ -108,7 +109,7 @@ KOKKOS_FUNCTION typename LineSegmentType1::value_type
     const Scalar dist4 = distance(m1, line_segment1);
 
     // Determine which of the 4 distances is the minimum using exact Scalar comparison.
-    Scalar min_distance = Kokkos::min(Kokkos::min(dist1, dist2), Kokkos::min(dist3, dist4));
+    Scalar min_distance = min(min(dist1, dist2), min(dist3, dist4));
     return min_distance;
   }
 
@@ -156,9 +157,9 @@ KOKKOS_FUNCTION typename LineSegmentType1::value_type
 
   // Finally, get the arch-length parameters, the corresponding closest points, and their distance.
   const Scalar arch_length1 =
-      (Kokkos::fabs(sN) < mundy::get_zero_tolerance<Scalar>()) ? static_cast<Scalar>(0.0) : sN / sD;
+      (fabs(sN) < mundy::get_zero_tolerance<Scalar>()) ? static_cast<Scalar>(0.0) : sN / sD;
   const Scalar arch_length2 =
-      (Kokkos::fabs(tN) < mundy::get_zero_tolerance<Scalar>()) ? static_cast<Scalar>(0.0) : tN / tD;
+      (fabs(tN) < mundy::get_zero_tolerance<Scalar>()) ? static_cast<Scalar>(0.0) : tN / tD;
   const auto closest_point1 = l0 + arch_length1 * u;
   const auto closest_point2 = m0 + arch_length2 * v;
   return distance(closest_point1, closest_point2);
@@ -226,7 +227,7 @@ KOKKOS_FUNCTION typename LineSegmentType1::value_type
   const Scalar D = a * c - b * b;  // always >= 0
 
   // Compute the line parameters of the two closest points
-  if (D < Kokkos::sqrt(mundy::get_zero_tolerance<Scalar>())) {
+  if (D < sqrt(mundy::get_zero_tolerance<Scalar>())) {
     // CASE 1: The lines are colinear. Therefore, one of the four endpoints is the
     // point of closest approach. We'll directly compute the 4 distances and the closest point on the line.
     Point<Scalar> closest_point_tmp1;
@@ -247,7 +248,7 @@ KOKKOS_FUNCTION typename LineSegmentType1::value_type
     const Scalar dist4 = distance(m1, line_segment1, closest_point_tmp4, arch_length_tmp4, sep_tmp4);
 
     // Determine which of the 4 distances is the minimum using exact Scalar comparison.
-    Scalar min_distance = Kokkos::min(Kokkos::min(dist1, dist2), Kokkos::min(dist3, dist4));
+    Scalar min_distance = min(min(dist1, dist2), min(dist3, dist4));
     if (min_distance == dist1) {
       // CASE 1.1: l0 is closest to the line segment m0-m1.
       arch_length1 = static_cast<Scalar>(0.0);
@@ -324,8 +325,8 @@ KOKKOS_FUNCTION typename LineSegmentType1::value_type
   }
 
   // Finally, get the arch-length parameters, the corresponding closest points, and their distance.
-  arch_length1 = (Kokkos::fabs(sN) < mundy::get_zero_tolerance<Scalar>()) ? static_cast<Scalar>(0.0) : sN / sD;
-  arch_length2 = (Kokkos::fabs(tN) < mundy::get_zero_tolerance<Scalar>()) ? static_cast<Scalar>(0.0) : tN / tD;
+  arch_length1 = (fabs(sN) < mundy::get_zero_tolerance<Scalar>()) ? static_cast<Scalar>(0.0) : sN / sD;
+  arch_length2 = (fabs(tN) < mundy::get_zero_tolerance<Scalar>()) ? static_cast<Scalar>(0.0) : tN / tD;
   closest_point1 = l0 + arch_length1 * u;
   closest_point2 = m0 + arch_length2 * v;
   return distance(closest_point1, closest_point2, sep);

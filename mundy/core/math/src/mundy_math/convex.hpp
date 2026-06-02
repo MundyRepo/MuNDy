@@ -37,15 +37,14 @@
 #include <KokkosBlas_gesv.hpp>
 #endif
 
-// Mundy core:
+// Mundy
 #include <mundy_utils/reference_wrapper.hpp>
 #include <mundy_utils/throw_assert.hpp>
-
-// Mundy math:
 #include <mundy_math/Tolerance.hpp>  // for mundy::get_zero_tolerance<T>
 #include <mundy_math/Vector.hpp>     // for mundy::Vector
 #include <mundy_utils/requires.hpp>
 #include <mundy_utils/suppress_warnings.hpp>  // for MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_PUSH/POP
+#include <mundy_math/cmath.hpp>
 
 namespace mundy {
 
@@ -85,7 +84,7 @@ struct LowerBound {
 
   KOKKOS_INLINE_FUNCTION
   constexpr value_type project(const value_type& x) const {
-    return Kokkos::max(x, lower_bound);
+    return max(x, lower_bound);
   }
 };
 
@@ -103,7 +102,7 @@ struct UpperBound {
 
   KOKKOS_INLINE_FUNCTION
   constexpr value_type project(const value_type& x) const {
-    return Kokkos::min(x, upper_bound);
+    return min(x, upper_bound);
   }
 };
 
@@ -122,7 +121,7 @@ struct Bounded {
 
   KOKKOS_INLINE_FUNCTION
   constexpr value_type project(const value_type& x) const {
-    return Kokkos::min(Kokkos::max(x, lower_bound), upper_bound);
+    return min(max(x, lower_bound), upper_bound);
   }
 };
 
@@ -942,8 +941,8 @@ struct KokkosBackend {
   template <class Scalar, class XVector, class YVector>
   static void axpby(const Scalar alpha, const XVector& x, const Scalar beta, YVector& y) {
     MUNDY_THROW_ASSERT(x.extent(0) == y.extent(0), std::invalid_argument, "x and y must have the same size.");
-    const bool alpha_is_zero = Kokkos::abs(alpha) < get_zero_tolerance<Scalar>();
-    const bool beta_is_zero = Kokkos::abs(beta) < get_zero_tolerance<Scalar>();
+    const bool alpha_is_zero = abs(alpha) < get_zero_tolerance<Scalar>();
+    const bool beta_is_zero = abs(beta) < get_zero_tolerance<Scalar>();
 
     if (!alpha_is_zero && !beta_is_zero) {
       Kokkos::parallel_for(
@@ -967,8 +966,8 @@ struct KokkosBackend {
                              const Wrapper& wrapper) {
     MUNDY_THROW_ASSERT(x.extent(0) == y.extent(0) && x.extent(0) == z.extent(0), std::invalid_argument,
                        "x, y, and z must have the same size.");
-    const bool alpha_is_zero = Kokkos::abs(alpha) < get_zero_tolerance<Scalar>();
-    const bool beta_is_zero = Kokkos::abs(beta) < get_zero_tolerance<Scalar>();
+    const bool alpha_is_zero = abs(alpha) < get_zero_tolerance<Scalar>();
+    const bool beta_is_zero = abs(beta) < get_zero_tolerance<Scalar>();
 
     if (!alpha_is_zero && !beta_is_zero) {
       Kokkos::parallel_for(
@@ -1581,9 +1580,9 @@ struct LinfNormProjectedGradientResidual {  // Lower bound only for non-negativi
 
           value_type abs_projected_grad;
           if (x_i < get_zero_tolerance<value_type>()) {
-            abs_projected_grad = Kokkos::max(value_type(0), grad_i);
+            abs_projected_grad = max(value_type(0), grad_i);
           } else {
-            abs_projected_grad = Kokkos::abs(grad_i);
+            abs_projected_grad = abs(grad_i);
           }
 
           if (abs_projected_grad > max_val) {
@@ -1616,7 +1615,7 @@ struct LinfNormProjectedDiffResidual {
           value_type x_i = Backend::vector_data(x, i);
           value_type grad_i = Backend::vector_data(grad, i);
           value_type x_i_proj = convex_space.project(x_i - small_step_size * grad_i);
-          value_type abs_diff = Kokkos::abs(x_i - x_i_proj);
+          value_type abs_diff = abs(x_i - x_i_proj);
           if (abs_diff > max_val) {
             max_val = abs_diff;
           }
@@ -1642,7 +1641,7 @@ struct BBStepStrategy {
 
     // Avoid division by zero
     constexpr value_type eps = get_zero_tolerance<value_type>() * static_cast<value_type>(10);
-    denom += eps * (Kokkos::abs(denom) < eps);
+    denom += eps * (abs(denom) < eps);
 
     return num / denom;
   }

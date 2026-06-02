@@ -37,6 +37,7 @@
 #include <mundy_math/Vector3.hpp>               // for mundy::Vector3
 #include <mundy_math/minimize.hpp>              // for mundy::find_min_with_fdf, find_min_using_approximate_derivatives
 #include <mundy_utils/requires.hpp>
+#include <mundy_math/cmath.hpp>
 
 namespace mundy {
 
@@ -62,8 +63,8 @@ class EllipsoidEllipsoidObjective {
   }
 
   KOKKOS_FUNCTION Scalar operator()(const mundy::Vector<Scalar, 2>& tp) const {
-    const Scalar sth = Kokkos::sin(tp[0]), cth = Kokkos::cos(tp[0]);
-    const Scalar sph = Kokkos::sin(tp[1]), cph = Kokkos::cos(tp[1]);
+    const Scalar sth = sin(tp[0]), cth = cos(tp[0]);
+    const Scalar sph = sin(tp[1]), cph = cos(tp[1]);
     sn0_.set(sth * cph, sth * sph, cth);
     sn1_ = -sn0_;
     fp0_ = map_surface_normal_to_foot_point_on_ellipsoid(sn0_, e0_);
@@ -103,8 +104,8 @@ class EllipsoidEllipsoidObjectiveFDF {
 
   KOKKOS_FUNCTION Scalar operator()(const mundy::Vector<Scalar, 2>& tp,
                                      mundy::Vector<Scalar, 2>& g) const {
-    const Scalar sth = Kokkos::sin(tp[0]), cth = Kokkos::cos(tp[0]);
-    const Scalar sph = Kokkos::sin(tp[1]), cph = Kokkos::cos(tp[1]);
+    const Scalar sth = sin(tp[0]), cth = cos(tp[0]);
+    const Scalar sph = sin(tp[1]), cph = cos(tp[1]);
 
     const mundy::Vector3<Scalar> n{sth * cph, sth * sph, cth};
     sn0_.set(n[0], n[1], n[2]);

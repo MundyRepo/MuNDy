@@ -21,24 +21,23 @@
 #ifndef MUNDY_GEOM_DISTANCE_CIRCLE3DCIRCLE3D_HPP_
 #define MUNDY_GEOM_DISTANCE_CIRCLE3DCIRCLE3D_HPP_
 
-// External libs
+// External
 #include <Kokkos_Core.hpp>
 
 // C++ core
 #include <type_traits>
 
-// Mundy math
+// Mundy
 #include <mundy_math/Quaternion.hpp>  // for mundy::Quaternion
 #include <mundy_math/Tolerance.hpp>   // for mundy::get_zero_tolerance
 #include <mundy_math/Vector3.hpp>     // for mundy::Vector3
 #include <mundy_math/minimize.hpp>    // for mundy::find_min_using_approximate_derivatives
-
-// Mundy geom
 #include <mundy_geom/distance/PointPoint.hpp>  // for mundy::distance(Point, Point)
 #include <mundy_geom/distance/Types.hpp>       // for mundy::SharedNormalSigned
 #include <mundy_geom/primitives/Circle3D.hpp>  // for mundy::Circle3D
 #include <mundy_geom/primitives/Point.hpp>     // for mundy::Point
 #include <mundy_utils/requires.hpp>
+#include <mundy_math/cmath.hpp>
 
 namespace mundy {
 
@@ -93,7 +92,7 @@ class Circle3DCircle3DObjective {
   template <ValidCircle3DType Circle3DType>
   KOKKOS_INLINE_FUNCTION Point<Scalar> theta_to_foot_point_on_circle3d(const Scalar theta,
                                                                        const Circle3DType& circle3d) const {
-    Point<Scalar> p_local{circle3d.radius() * Kokkos::cos(theta), circle3d.radius() * Kokkos::sin(theta), 0.0};
+    Point<Scalar> p_local{circle3d.radius() * cos(theta), circle3d.radius() * sin(theta), 0.0};
     auto p_global = circle3d.orientation() * p_local + circle3d.center();
     return p_global;
   }

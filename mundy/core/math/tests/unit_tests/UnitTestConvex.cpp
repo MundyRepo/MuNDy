@@ -22,7 +22,7 @@
 #include <gtest/gtest.h>      // for TEST, ASSERT_NO_THROW, etc
 #include <openrand/philox.h>  // for openrand::Philox
 
-#include <Kokkos_Core.hpp>  // for Kokkos::Array
+#include <Kokkos_Core.hpp>
 
 // KokkosKernels
 #include <MundyMath_config.hpp>  // for HAVE_MUNDYMATH_*
@@ -39,6 +39,7 @@
 #include <mundy_math/Vector.hpp>  // for mundy::Vector
 #include <mundy_math/convex.hpp>  // for mundy::solve_lcp/solve_cqpp
 #include <mundy_utils/rng.hpp>    // for mundy::make_philox
+#include <mundy_math/cmath.hpp>
 
 namespace mundy {
 
@@ -219,7 +220,7 @@ struct RandomLCP {
     for (size_t i = 0; i < N; ++i) {
       value_type off_diag_abs_row_sum = 0;
       for (size_t j = 0; j < N; ++j) {
-        off_diag_abs_row_sum += Kokkos::abs(mat(i, j)) * (i != j);
+        off_diag_abs_row_sum += abs(mat(i, j)) * (i != j);
       }
       mat(i, i) = off_diag_abs_row_sum + 10.0;
     }
@@ -740,7 +741,7 @@ struct RandomLCP {
           value_type off_diag_abs_row_sum = 0;
           Kokkos::parallel_reduce(
               Kokkos::TeamThreadRange(team, 0, size),
-              [&](const size_t j, value_type& sum) { sum += Kokkos::abs(mat(i, j)) * (j != i); }, off_diag_abs_row_sum);
+              [&](const size_t j, value_type& sum) { sum += abs(mat(i, j)) * (j != i); }, off_diag_abs_row_sum);
           mat(i, i) = off_diag_abs_row_sum + 10.0;
         });
 
@@ -1003,7 +1004,7 @@ struct RandomMixedCongruentCCQP {
     Kokkos::deep_copy(Kinv, 0.0);
     Kokkos::parallel_for(
         "init_kinv_diag", Kokkos::RangePolicy<exec_space>(0, NY), KOKKOS_LAMBDA(const size_t i) {
-          Kinv(i, i) = 10.0 + Kokkos::abs(urand(static_cast<uint64_t>(i + seed + 401), static_cast<uint64_t>(911)));
+          Kinv(i, i) = 10.0 + abs(urand(static_cast<uint64_t>(i + seed + 401), static_cast<uint64_t>(911)));
         });
 
     matzy_t MB(Kokkos::view_alloc(Kokkos::WithoutInitializing, "MB"), NZ, NY);

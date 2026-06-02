@@ -37,6 +37,7 @@
 
 // Mundy
 #include <mundy_search/impl/STKSearchBoxes.hpp>  // for impl::STKSearchBoxesT (concept representative)
+#include <mundy_math/cmath.hpp>
 
 namespace mundy {
 
@@ -431,17 +432,17 @@ class RebuildOnAABBDisplacement {
         KOKKOS_LAMBDA(int i, int& lmax) {
           const int base = 6 * i;
           int moved =
-              (Kokkos::abs(static_cast<double>(current_boxes(i).get_x_min()) - snap(base + 0)) > threshold ? 1
+              (abs(static_cast<double>(current_boxes(i).get_x_min()) - snap(base + 0)) > threshold ? 1
                                                                                                             : 0) |
-              (Kokkos::abs(static_cast<double>(current_boxes(i).get_y_min()) - snap(base + 1)) > threshold ? 1
+              (abs(static_cast<double>(current_boxes(i).get_y_min()) - snap(base + 1)) > threshold ? 1
                                                                                                             : 0) |
-              (Kokkos::abs(static_cast<double>(current_boxes(i).get_z_min()) - snap(base + 2)) > threshold ? 1
+              (abs(static_cast<double>(current_boxes(i).get_z_min()) - snap(base + 2)) > threshold ? 1
                                                                                                             : 0) |
-              (Kokkos::abs(static_cast<double>(current_boxes(i).get_x_max()) - snap(base + 3)) > threshold ? 1
+              (abs(static_cast<double>(current_boxes(i).get_x_max()) - snap(base + 3)) > threshold ? 1
                                                                                                             : 0) |
-              (Kokkos::abs(static_cast<double>(current_boxes(i).get_y_max()) - snap(base + 4)) > threshold ? 1
+              (abs(static_cast<double>(current_boxes(i).get_y_max()) - snap(base + 4)) > threshold ? 1
                                                                                                             : 0) |
-              (Kokkos::abs(static_cast<double>(current_boxes(i).get_z_max()) - snap(base + 5)) > threshold ? 1
+              (abs(static_cast<double>(current_boxes(i).get_z_max()) - snap(base + 5)) > threshold ? 1
                                                                                                             : 0);
           lmax = lmax > moved ? lmax : moved;
         },

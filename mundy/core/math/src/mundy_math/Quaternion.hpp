@@ -38,6 +38,7 @@
 #include <mundy_math/impl/QuaternionImpl.hpp>
 #include <mundy_utils/requires.hpp>
 #include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
+#include <mundy_math/cmath.hpp>
 
 namespace mundy {
 
@@ -672,10 +673,10 @@ KOKKOS_INLINE_FUNCTION constexpr bool is_close(
     const AQuaternion<U, Accessor1>& quat1, const AQuaternion<T, Accessor2>& quat2,
     const decltype(get_comparison_tolerance<T, U>())& tol = get_comparison_tolerance<T, U>()) {
   using Tol = decltype(tol);
-  return Kokkos::abs(static_cast<Tol>(quat1.w()) - static_cast<Tol>(quat2.w())) <= tol &&
-         Kokkos::abs(static_cast<Tol>(quat1.x()) - static_cast<Tol>(quat2.x())) <= tol &&
-         Kokkos::abs(static_cast<Tol>(quat1.y()) - static_cast<Tol>(quat2.y())) <= tol &&
-         Kokkos::abs(static_cast<Tol>(quat1.z()) - static_cast<Tol>(quat2.z())) <= tol;
+  return abs(static_cast<Tol>(quat1.w()) - static_cast<Tol>(quat2.w())) <= tol &&
+         abs(static_cast<Tol>(quat1.x()) - static_cast<Tol>(quat2.x())) <= tol &&
+         abs(static_cast<Tol>(quat1.y()) - static_cast<Tol>(quat2.y())) <= tol &&
+         abs(static_cast<Tol>(quat1.z()) - static_cast<Tol>(quat2.z())) <= tol;
 }
 
 /// \brief AQuaternion-quaternion equality (element-wise within a relaxed tolerance)
@@ -771,7 +772,7 @@ KOKKOS_INLINE_FUNCTION constexpr AQuaternion<std::remove_const_t<T>> inverse(con
 /// \param[in] quat The quaternion.
 template <typename T, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto norm(const AQuaternion<T, Accessor>& quat) {
-  return Kokkos::sqrt(quat.w() * quat.w() + quat.x() * quat.x() + quat.y() * quat.y() + quat.z() * quat.z());
+  return sqrt(quat.w() * quat.w() + quat.x() * quat.x() + quat.y() * quat.y() + quat.z() * quat.z());
 }
 
 /// \brief Get the squared norm of a quaternion
@@ -836,14 +837,14 @@ KOKKOS_INLINE_FUNCTION
             static_cast<CommonType>(t) * (static_cast<CommonType>(q2_adjusted.z()) - static_cast<CommonType>(q1.z()))};
   } else {
     // Spherical Interpolation
-    const CommonType theta = Kokkos::acos(dot_q12);
-    const CommonType sin_theta = Kokkos::sin(theta);
+    const CommonType theta = acos(dot_q12);
+    const CommonType sin_theta = sin(theta);
     MUNDY_THROW_ASSERT(!is_close(sin_theta, CommonType(0)), std::runtime_error,
                        "AQuaternion: slerp undefined for sin(theta) near zero.");
     const CommonType inv_sin_theta = static_cast<CommonType>(1) / sin_theta;
     const CommonType s1 =
-        Kokkos::sin((static_cast<CommonType>(1) - static_cast<CommonType>(t)) * theta) * inv_sin_theta;
-    const CommonType s2 = Kokkos::sin(static_cast<CommonType>(t) * theta) * inv_sin_theta;
+        sin((static_cast<CommonType>(1) - static_cast<CommonType>(t)) * theta) * inv_sin_theta;
+    const CommonType s2 = sin(static_cast<CommonType>(t) * theta) * inv_sin_theta;
 
     return AQuaternion<CommonType>{(static_cast<CommonType>(s1) * static_cast<CommonType>(q1.w())) +
                                        (static_cast<CommonType>(s2) * static_cast<CommonType>(q2_adjusted.w())),
@@ -923,8 +924,8 @@ KOKKOS_INLINE_FUNCTION constexpr void rotate_quaternion(
     return;
   }
   const Scalar winv = Scalar(1) / w;
-  const Scalar sw   = Kokkos::sin(Scalar(0.5) * w * dt);
-  const Scalar cw   = Kokkos::cos(Scalar(0.5) * w * dt);
+  const Scalar sw   = sin(Scalar(0.5) * w * dt);
+  const Scalar cw   = cos(Scalar(0.5) * w * dt);
   const Scalar s    = quat.w();
   const auto p      = quat.vector();
   const auto xyz    = s * sw * omega * winv + cw * p + sw * winv * cross(omega, p);
@@ -962,10 +963,10 @@ KOKKOS_INLINE_FUNCTION constexpr AQuaternion<T> rotation_matrix_to_quaternion(co
   AQuaternion<T> quat;
 
   // Computing the quaternion components
-  quat.w() = Kokkos::sqrt(Kokkos::max(T(0), T(1) + rot_mat(0, 0) + rot_mat(1, 1) + rot_mat(2, 2))) / T(2);
-  quat.x() = Kokkos::sqrt(Kokkos::max(T(0), T(1) + rot_mat(0, 0) - rot_mat(1, 1) - rot_mat(2, 2))) / T(2);
-  quat.y() = Kokkos::sqrt(Kokkos::max(T(0), T(1) - rot_mat(0, 0) + rot_mat(1, 1) - rot_mat(2, 2))) / T(2);
-  quat.z() = Kokkos::sqrt(Kokkos::max(T(0), T(1) - rot_mat(0, 0) - rot_mat(1, 1) + rot_mat(2, 2))) / T(2);
+  quat.w() = sqrt(max(T(0), T(1) + rot_mat(0, 0) + rot_mat(1, 1) + rot_mat(2, 2))) / T(2);
+  quat.x() = sqrt(max(T(0), T(1) + rot_mat(0, 0) - rot_mat(1, 1) - rot_mat(2, 2))) / T(2);
+  quat.y() = sqrt(max(T(0), T(1) - rot_mat(0, 0) + rot_mat(1, 1) - rot_mat(2, 2))) / T(2);
+  quat.z() = sqrt(max(T(0), T(1) - rot_mat(0, 0) - rot_mat(1, 1) + rot_mat(2, 2))) / T(2);
 
   // Correcting the signs
   quat.x() = std::copysign(quat.x(), rot_mat(2, 1) - rot_mat(1, 2));

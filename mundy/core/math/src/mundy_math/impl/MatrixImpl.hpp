@@ -44,6 +44,7 @@
 #include <mundy_utils/requires.hpp>
 #include <mundy_utils/suppress_warnings.hpp>  // for MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_PUSH/POP
 #include <mundy_utils/throw_assert.hpp>       // for MUNDY_THROW_ASSERT
+#include <mundy_math/cmath.hpp>
 
 namespace mundy {
 
@@ -415,7 +416,7 @@ KOKKOS_INLINE_FUNCTION bool is_close_impl(std::index_sequence<Is...>, const AMat
                                           const AMatrix<T, N, M, OtherAccessor>& mat2, const V& tol) {
   static_assert(sizeof...(Is) == N * M, "Number of indices must match number of elements in the matrix.");
   // Use the type of the tolerance to determine the comparison type
-  return ((Kokkos::abs(static_cast<V>(mat1[Is]) - static_cast<V>(mat2[Is])) <= tol) && ...);
+  return ((abs(static_cast<V>(mat1[Is]) - static_cast<V>(mat2[Is])) <= tol) && ...);
 }
 
 /// \brief Sum of all elements
@@ -537,8 +538,8 @@ KOKKOS_INLINE_FUNCTION auto outer_product_impl(std::index_sequence<Is...>, const
 template <size_t... Is, typename T, size_t N, size_t M, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION T inf_norm_impl(std::index_sequence<Is...>, const AMatrix<T, N, M, Accessor>& mat) {
   static_assert(sizeof...(Is) == N, "Number of indices must match number of rows in the matrix.");
-  T max_value = Kokkos::abs(sum(mat.template view_row<0>()));
-  ((max_value = Kokkos::max(max_value, Kokkos::abs(sum(mat.template view_row<Is>())))), ...);
+  T max_value = abs(sum(mat.template view_row<0>()));
+  ((max_value = max(max_value, abs(sum(mat.template view_row<Is>())))), ...);
   return max_value;
 }
 
@@ -547,8 +548,8 @@ template <size_t... Is, typename T, size_t N, size_t M, ValidAccessor<T> Accesso
 KOKKOS_INLINE_FUNCTION T one_norm_impl(std::index_sequence<Is...>, const AMatrix<T, N, M, Accessor>& mat) {
   static_assert(sizeof...(Is) == M, "Number of indices must match number of columns in the matrix.");
   // Max absolute column sum
-  T max_value = Kokkos::abs(sum(mat.template view_column<0>()));
-  ((max_value = Kokkos::max(max_value, Kokkos::abs(sum(mat.template view_column<Is>())))), ...);
+  T max_value = abs(sum(mat.template view_column<0>()));
+  ((max_value = max(max_value, abs(sum(mat.template view_column<Is>())))), ...);
   return max_value;
 }
 

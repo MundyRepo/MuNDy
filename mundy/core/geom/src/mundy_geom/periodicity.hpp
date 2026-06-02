@@ -58,7 +58,7 @@
 /// for_each_point_mutable alongside its definition. There is no default
 /// implementation: a missing overload is a compile error, not silent wrong behavior.
 
-// External libs
+// External
 #include <Kokkos_Core.hpp>
 
 // C++ core
@@ -75,6 +75,7 @@
 #include <mundy_math/Vector3.hpp>     // for mundy::Vector3
 #include <mundy_utils/requires.hpp>
 #include <mundy_utils/throw_assert.hpp>
+#include <mundy_math/cmath.hpp>
 
 namespace mundy {
 
@@ -88,8 +89,8 @@ namespace impl {
 template <typename Scalar>
 KOKKOS_INLINE_FUNCTION constexpr Scalar safe_unit_mod1(Scalar s) {
   const Scalar tol = get_zero_tolerance<Scalar>();
-  Scalar t = s - Kokkos::floor(s);
-  if (Kokkos::fabs(t - Scalar(1)) < tol) t = Scalar(0);
+  Scalar t = s - floor(s);
+  if (fabs(t - Scalar(1)) < tol) t = Scalar(0);
   return t;
 }
 
@@ -280,9 +281,9 @@ class OrthorhombicMetric {
   MUNDY_REQUIRES(std::is_same_v<typename Vector3T::value_type, Scalar>)
   KOKKOS_INLINE_FUNCTION constexpr OurVector3 frac_minimum_image(const Vector3T& fv) const {
     OurVector3 r{fv[0], fv[1], fv[2]};
-    if constexpr (PeriodicAxes & AXIS_X) r[0] -= Kokkos::round(r[0]);
-    if constexpr (PeriodicAxes & AXIS_Y) r[1] -= Kokkos::round(r[1]);
-    if constexpr (PeriodicAxes & AXIS_Z) r[2] -= Kokkos::round(r[2]);
+    if constexpr (PeriodicAxes & AXIS_X) r[0] -= round(r[0]);
+    if constexpr (PeriodicAxes & AXIS_Y) r[1] -= round(r[1]);
+    if constexpr (PeriodicAxes & AXIS_Z) r[2] -= round(r[2]);
     return r;
   }
 
@@ -409,9 +410,9 @@ class TriclinicMetric {
   MUNDY_REQUIRES(std::is_same_v<typename Vector3T::value_type, Scalar>)
   KOKKOS_INLINE_FUNCTION constexpr OurVector3 frac_minimum_image(const Vector3T& fv) const {
     OurVector3 r{fv[0], fv[1], fv[2]};
-    if constexpr (PeriodicAxes & AXIS_X) r[0] -= Kokkos::round(r[0]);
-    if constexpr (PeriodicAxes & AXIS_Y) r[1] -= Kokkos::round(r[1]);
-    if constexpr (PeriodicAxes & AXIS_Z) r[2] -= Kokkos::round(r[2]);
+    if constexpr (PeriodicAxes & AXIS_X) r[0] -= round(r[0]);
+    if constexpr (PeriodicAxes & AXIS_Y) r[1] -= round(r[1]);
+    if constexpr (PeriodicAxes & AXIS_Z) r[2] -= round(r[2]);
     return r;
   }
 

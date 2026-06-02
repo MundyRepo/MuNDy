@@ -39,6 +39,7 @@
 #include <mundy_math/impl/VectorImpl.hpp>
 #include <mundy_utils/requires.hpp>
 #include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
+#include <mundy_math/cmath.hpp>
 
 namespace mundy {
 
@@ -576,7 +577,7 @@ KOKKOS_INLINE_FUNCTION
                             const decltype(get_comparison_tolerance<T, U>())& tol = get_comparison_tolerance<T, U>()) {
   // Use the tolerance type as the comparison type
   using ComparisonType = std::remove_reference_t<decltype(tol)>;
-  return Kokkos::abs(static_cast<ComparisonType>(scalar1) - static_cast<ComparisonType>(scalar2)) <= tol;
+  return abs(static_cast<ComparisonType>(scalar1) - static_cast<ComparisonType>(scalar2)) <= tol;
 }
 
 /// \brief Scalar-scalar equality (within a relaxed tolerance)
@@ -803,7 +804,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto one_norm(const AVector<T, N, Accessor>& ve
 template <size_t N, typename T, ValidAccessor<T> Accessor,
           typename OutputType = std::conditional_t<std::is_integral_v<T>, double, T>>
 KOKKOS_INLINE_FUNCTION constexpr OutputType two_norm(const AVector<T, N, Accessor>& vec) {
-  return Kokkos::sqrt(static_cast<OutputType>(dot(vec, vec)));
+  return sqrt(static_cast<OutputType>(dot(vec, vec)));
 }
 
 /// \brief AVector 2-norm (Returns a float if T is an integral type, otherwise returns T)
@@ -864,7 +865,7 @@ KOKKOS_INLINE_FUNCTION constexpr OutputType minor_angle(const AVector<U, N, Acce
   } else if (cosine < OutputType(-1)) {
     cosine = OutputType(-1);
   }
-  return Kokkos::acos(cosine);
+  return acos(cosine);
 }
 
 /// \brief Minor angle between two vectors (returns a float if common_type_t<U, T> is integral, otherwise

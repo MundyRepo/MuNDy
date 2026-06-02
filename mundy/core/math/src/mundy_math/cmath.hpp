@@ -78,7 +78,7 @@ inline constexpr auto mundy_norm_min_v = Kokkos::Experimental::norm_min_v<passiv
 /// Unary: arithmetic → Kokkos::func(x); AD → ADL + using std::func.
 #define MUNDY_MATH_DISPATCH_UNARY(func)          \
   template <typename T>                          \
-  KOKKOS_INLINE_FUNCTION auto func(const T& x) { \
+  KOKKOS_INLINE_FUNCTION constexpr auto func(const T& x) { \
     if constexpr (std::is_arithmetic_v<T>) {     \
       return Kokkos::func(x);                    \
     } else {                                     \
@@ -89,9 +89,9 @@ inline constexpr auto mundy_norm_min_v = Kokkos::Experimental::norm_min_v<passiv
 
 /// Binary (possibly mixed types): arithmetic → Kokkos::func(a,b); AD → ADL + using std::func.
 #define MUNDY_MATH_DISPATCH_BINARY(func)                                \
-  template <typename T, typename U>                                     \
-  KOKKOS_INLINE_FUNCTION auto func(const T& a, const U& b) {            \
-    if constexpr (std::is_arithmetic_v<T> && std::is_arithmetic_v<U>) { \
+  template <typename T>                                     \
+  KOKKOS_INLINE_FUNCTION constexpr auto func(const T& a, const T& b) {            \
+    if constexpr (std::is_arithmetic_v<T>) { \
       return Kokkos::func(a, b);                                        \
     } else {                                                            \
       using std::func;                                                  \
