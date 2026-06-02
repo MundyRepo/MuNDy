@@ -40,6 +40,7 @@
 
 // Mundy
 #include <mundy_mesh/BulkData.hpp>
+#include <mundy_mesh/Class.hpp>           // for mundy::mesh::declare_class, mundy::mesh::Class
 #include <mundy_mesh/MeshBuilder.hpp>
 #include <mundy_mesh/MetaData.hpp>
 #include <mundy_mesh/NgpModRequests.hpp>  // for mundy::mesh::NgpModRequests
@@ -296,6 +297,111 @@ TEST(NgpModRequests, HigherLevelCreateEntitiesAndConnectExistingToNew) {
   EXPECT_TRUE(bulk.is_valid(created_new_node));
   EXPECT_EQ(bulk.identifier(created_known_elem), 2001u);
   EXPECT_EQ(bulk.begin_nodes(existing_elem)[0], created_new_node);
+}
+
+// ============================================================
+// Fixture and tests for the Class-based API
+// ============================================================
+
+struct NgpModRequestsClassFixture {
+  MeshBuilder builder{MPI_COMM_WORLD};
+  std::shared_ptr<MetaData> meta_data_ptr;
+  std::shared_ptr<BulkData> bulk_data_ptr;
+  Class* particle_class{nullptr};
+  Class* element_class{nullptr};
+
+  NgpModRequestsClassFixture() {
+    builder.set_spatial_dimension(3);
+    builder.set_entity_rank_names({"NODE", "EDGE", "FACE", "ELEMENT", "CONSTRAINT"});
+    meta_data_ptr = builder.create_meta_data();
+    meta_data_ptr->use_simple_fields();
+
+    // Declare classes before committing meta_data — analogous to declaring parts.
+    particle_class = &declare_class(*meta_data_ptr, "PARTICLE_CLASS", stk::topology::PARTICLE,
+                                    /*disable_io_support=*/true);
+    element_class  = &declare_class(*meta_data_ptr, "ELEMENT_CLASS", stk::topology::HEX_8,
+                                    /*disable_io_support=*/true);
+
+    bulk_data_ptr = builder.create_bulk_data(meta_data_ptr);
+    meta_data_ptr->commit();
+  }
+
+  BulkData& bulk() { return *bulk_data_ptr; }
+};
+
+TEST(NgpModRequests, ClassBasedRequestEntitiesNewIds_SingleClass) {
+  // Entities requested via a single Class must be created and reside in that class.
+  NgpModRequestsClassFixture fixture;
+  BulkData& bulk = fixture.bulk();
+
+  NgpModRequests reqs;
+  auto req = reqs.request_entities_new_ids(*fixture.particle_class);
+
+  reqs.activate_host();
+  size_t ticket = req.element_tickets().claim();
+  reqs.finalize_counts();
+  req.request_element(ticket);
+
+  ASSERT_NO_THROW(reqs.process_requests(bulk));
+
+  stk::mesh::Entity entity = req.get_entity(ticket, stk::topology::ELEMENT_RANK);
+  ASSERT_TRUE(bulk.is_valid(entity));
+
+  // Entity must be a member of the class's leaf_part (direct membership) and
+  // assembly_part (membership visible through the class hierarchy).
+  EXPECT_TRUE(bulk.bucket(entity).member(fixture.particle_class->leaf_part()))
+      << "Entity should reside in the class's leaf_part.";
+  EXPECT_TRUE(bulk.bucket(entity).member(fixture.particle_class->assembly_part()))
+      << "Entity should be visible through the class's assembly_part.";
+}
+
+TEST(NgpModRequests, ClassBasedRequestEntitiesNewIds_ClassVector) {
+  // Requesting with a ClassVector must produce the same memoized helper as a single-Class call
+  // for the same set of classes, and entities must land in all specified classes.
+  NgpModRequestsClassFixture fixture;
+  BulkData& bulk = fixture.bulk();
+
+  NgpModRequests reqs;
+  ClassVector classes{fixture.particle_class};
+
+  auto req_vec    = reqs.request_entities_new_ids(classes);
+  auto req_single = reqs.request_entities_new_ids(*fixture.particle_class);
+
+  // Same partition key → same memoized helper.
+  EXPECT_EQ(req_vec.id(), req_single.id())
+      << "ClassVector{cls} and single Class& must return the same memoized helper.";
+
+  reqs.activate_host();
+  size_t ticket = req_vec.element_tickets().claim();
+  reqs.finalize_counts();
+  req_vec.request_element(ticket);
+
+  ASSERT_NO_THROW(reqs.process_requests(bulk));
+
+  stk::mesh::Entity entity = req_vec.get_entity(ticket, stk::topology::ELEMENT_RANK);
+  ASSERT_TRUE(bulk.is_valid(entity));
+  EXPECT_TRUE(bulk.bucket(entity).member(fixture.particle_class->leaf_part()));
+}
+
+TEST(NgpModRequests, ClassBasedRequestEntitiesKnownIds) {
+  // The known-ID class overload must create the entity with the specified ID in the class.
+  NgpModRequestsClassFixture fixture;
+  BulkData& bulk = fixture.bulk();
+
+  NgpModRequests reqs;
+  auto req = reqs.request_entities_known_ids(*fixture.particle_class);
+
+  reqs.activate_host();
+  size_t ticket = req.element_tickets().claim();
+  reqs.finalize_counts();
+  req.request_element(ticket, /*id=*/9999);
+
+  ASSERT_NO_THROW(reqs.process_requests(bulk));
+
+  stk::mesh::Entity entity = req.get_entity(ticket, stk::topology::ELEMENT_RANK);
+  ASSERT_TRUE(bulk.is_valid(entity));
+  EXPECT_EQ(bulk.identifier(entity), 9999u);
+  EXPECT_TRUE(bulk.bucket(entity).member(fixture.particle_class->leaf_part()));
 }
 
 TEST(NgpModRequests, HigherLevelDestroyConnectionAndEntity) {

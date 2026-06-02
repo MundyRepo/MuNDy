@@ -86,6 +86,7 @@ set(NOINSTALLHEADERS
 
 set(SOURCES
     src/mundy_mesh/DeclareEntities.cpp
+    src/mundy_mesh/impl/ClassPartitionKey.cpp
     src/mundy_mesh/impl/PartitionKey.cpp
     src/mundy_mesh/impl/SelectorEval.cpp
     src/mundy_mesh/impl/SelectorLexem.cpp
