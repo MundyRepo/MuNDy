@@ -256,9 +256,9 @@ struct ExcludeSelfInteraction {
   KOKKOS_INLINE_FUNCTION static bool relative_shift_is_zero(
       const PeriodicNeighborSearchCandidate<ImageShiftType, SizeType>& candidate) {
     const ImageShiftType shift = candidate.relative_image_shift();
-    using scalar_type = typename ImageShiftType::scalar_t;
-    return shift[0] == static_cast<scalar_type>(0) && shift[1] == static_cast<scalar_type>(0) &&
-           shift[2] == static_cast<scalar_type>(0);
+    using value_typeype = typename ImageShiftType::value_type;
+    return shift[0] == static_cast<value_typeype>(0) && shift[1] == static_cast<value_typeype>(0) &&
+           shift[2] == static_cast<value_typeype>(0);
   }
 };
 

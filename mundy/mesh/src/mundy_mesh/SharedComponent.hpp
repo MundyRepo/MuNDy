@@ -517,7 +517,7 @@ SharedVectorComponent(Vector<ScalarType, N>) -> SharedVectorComponent<ScalarType
 template <impl::SharedComponentHostView HostViewType>
 MUNDY_REQUIRES(is_vector_v<impl::shared_component_host_view_value_t<HostViewType>>)
 SharedVectorComponent(HostViewType)
-    -> SharedVectorComponent<typename impl::shared_component_host_view_value_t<HostViewType>::scalar_t,
+    -> SharedVectorComponent<typename impl::shared_component_host_view_value_t<HostViewType>::value_type,
                              impl::shared_component_host_view_value_t<HostViewType>::size>;
 
 // **********************************************************************************************************************
@@ -528,7 +528,7 @@ SharedMatrixComponent(Matrix<ScalarType, N, M>) -> SharedMatrixComponent<ScalarT
 template <impl::SharedComponentHostView HostViewType>
 MUNDY_REQUIRES(is_matrix_v<impl::shared_component_host_view_value_t<HostViewType>>)
 SharedMatrixComponent(HostViewType)
-    -> SharedMatrixComponent<typename impl::shared_component_host_view_value_t<HostViewType>::scalar_t,
+    -> SharedMatrixComponent<typename impl::shared_component_host_view_value_t<HostViewType>::value_type,
                              impl::shared_component_host_view_value_t<HostViewType>::num_rows,
                              impl::shared_component_host_view_value_t<HostViewType>::num_cols>;
 
@@ -540,7 +540,7 @@ SharedQuaternionComponent(Quaternion<ScalarType>) -> SharedQuaternionComponent<S
 template <impl::SharedComponentHostView HostViewType>
 MUNDY_REQUIRES(is_quaternion_v<impl::shared_component_host_view_value_t<HostViewType>>)
 SharedQuaternionComponent(HostViewType)
-    -> SharedQuaternionComponent<typename impl::shared_component_host_view_value_t<HostViewType>::scalar_t>;
+    -> SharedQuaternionComponent<typename impl::shared_component_host_view_value_t<HostViewType>::value_type>;
 
 // **********************************************************************************************************************
 /// \brief Class template argument deduction guides for SharedAABBComponent
@@ -550,7 +550,7 @@ SharedAABBComponent(AABB<ScalarType>) -> SharedAABBComponent<ScalarType>;
 template <impl::SharedComponentHostView HostViewType>
 MUNDY_REQUIRES(is_aabb_v<impl::shared_component_host_view_value_t<HostViewType>>)
 SharedAABBComponent(HostViewType)
-    -> SharedAABBComponent<typename impl::shared_component_host_view_value_t<HostViewType>::scalar_t>;
+    -> SharedAABBComponent<typename impl::shared_component_host_view_value_t<HostViewType>::value_type>;
 //@}
 #endif  // DOXYGEN_SHOULD_SKIP_THIS
 

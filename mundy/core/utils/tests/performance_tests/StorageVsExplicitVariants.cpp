@@ -40,49 +40,49 @@
 // Mundy
 #include <mundy_utils/storage.hpp>
 
-using scalar_t = double;
-using vec_t = std::vector<scalar_t>;
+using value_type = double;
+using vec_t = std::vector<value_type>;
 
 KOKKOS_INLINE_FUNCTION
-constexpr void workspace_step(scalar_t& x, scalar_t& y, scalar_t& z, const scalar_t alpha, const scalar_t beta,
+constexpr void workspace_step(value_type& x, value_type& y, value_type& z, const value_type alpha, const value_type beta,
                               const size_t i, const size_t round) {
-  const scalar_t wave = static_cast<scalar_t>((i % 11) + 1) + static_cast<scalar_t>((round % 7) + 1);
-  const scalar_t t0 = x + beta * y;
-  const scalar_t t1 = y - alpha * z + 0.125 * wave;
+  const value_type wave = static_cast<value_type>((i % 11) + 1) + static_cast<value_type>((round % 7) + 1);
+  const value_type t0 = x + beta * y;
+  const value_type t1 = y - alpha * z + 0.125 * wave;
   z = t0 * t1 + 0.01 * x;
   x = z - 0.25 * y + 0.5 * alpha;
   y = y + alpha * x - beta * z + 0.001 * wave;
 }
 
 struct WorkspaceExplicitOwned {
-  scalar_t x;
-  scalar_t y;
-  scalar_t z;
+  value_type x;
+  value_type y;
+  value_type z;
 
   KOKKOS_INLINE_FUNCTION
-  constexpr void step(const scalar_t alpha, const scalar_t beta, const size_t i, const size_t round) {
+  constexpr void step(const value_type alpha, const value_type beta, const size_t i, const size_t round) {
     workspace_step(x, y, z, alpha, beta, i, round);
   }
 };
 
 struct WorkspaceExplicitPointer {
-  scalar_t* x;
-  scalar_t* y;
-  scalar_t* z;
+  value_type* x;
+  value_type* y;
+  value_type* z;
 
   KOKKOS_INLINE_FUNCTION
-  constexpr void step(const scalar_t alpha, const scalar_t beta, const size_t i, const size_t round) {
+  constexpr void step(const value_type alpha, const value_type beta, const size_t i, const size_t round) {
     workspace_step(*x, *y, *z, alpha, beta, i, round);
   }
 };
 
 struct WorkspaceExplicitReference {
-  scalar_t& x;
-  scalar_t& y;
-  scalar_t& z;
+  value_type& x;
+  value_type& y;
+  value_type& z;
 
   KOKKOS_INLINE_FUNCTION
-  constexpr void step(const scalar_t alpha, const scalar_t beta, const size_t i, const size_t round) {
+  constexpr void step(const value_type alpha, const value_type beta, const size_t i, const size_t round) {
     workspace_step(x, y, z, alpha, beta, i, round);
   }
 };
@@ -104,7 +104,7 @@ struct WorkspaceStorage {
   ZStorage z_storage;
 
   KOKKOS_INLINE_FUNCTION
-  constexpr void step(const scalar_t alpha, const scalar_t beta, const size_t i, const size_t round) {
+  constexpr void step(const value_type alpha, const value_type beta, const size_t i, const size_t round) {
     auto& x = storage_element(x_storage.get());
     auto& y = storage_element(y_storage.get());
     auto& z = storage_element(z_storage.get());
@@ -116,7 +116,7 @@ void fill_deterministic(vec_t& x, vec_t& y, vec_t& z) {
   std::uint64_t seed = 0xC0FFEEULL;
   auto next_unit = [&seed]() {
     seed = seed * 1664525ULL + 1013904223ULL;
-    return static_cast<scalar_t>(seed & 0xFFFFULL) / static_cast<scalar_t>(0x10000ULL);
+    return static_cast<value_type>(seed & 0xFFFFULL) / static_cast<value_type>(0x10000ULL);
   };
 
   for (size_t i = 0; i < x.size(); ++i) {
@@ -126,15 +126,15 @@ void fill_deterministic(vec_t& x, vec_t& y, vec_t& z) {
   }
 }
 
-scalar_t compute_checksum(const vec_t& x, const vec_t& y, const vec_t& z) {
-  scalar_t checksum = 0.0;
+value_type compute_checksum(const vec_t& x, const vec_t& y, const vec_t& z) {
+  value_type checksum = 0.0;
   for (size_t i = 0; i < x.size(); i += 7) {
     checksum += x[i] * 0.5 + y[i] * 0.25 + z[i] * 0.125;
   }
   return checksum;
 }
 
-scalar_t run_explicit_owned(vec_t& x, vec_t& y, vec_t& z, const scalar_t alpha, const scalar_t beta,
+value_type run_explicit_owned(vec_t& x, vec_t& y, vec_t& z, const value_type alpha, const value_type beta,
                             const size_t rounds) {
   for (size_t round = 0; round < rounds; ++round) {
     for (size_t i = 0; i < x.size(); ++i) {
@@ -148,12 +148,12 @@ scalar_t run_explicit_owned(vec_t& x, vec_t& y, vec_t& z, const scalar_t alpha, 
   return compute_checksum(x, y, z);
 }
 
-scalar_t run_storage_owned(vec_t& x, vec_t& y, vec_t& z, const scalar_t alpha, const scalar_t beta,
+value_type run_storage_owned(vec_t& x, vec_t& y, vec_t& z, const value_type alpha, const value_type beta,
                            const size_t rounds) {
   for (size_t round = 0; round < rounds; ++round) {
     for (size_t i = 0; i < x.size(); ++i) {
-      WorkspaceStorage workspace{mundy::store(scalar_t{x[i]}), mundy::store(scalar_t{y[i]}),
-                                 mundy::store(scalar_t{z[i]})};
+      WorkspaceStorage workspace{mundy::store(value_type{x[i]}), mundy::store(value_type{y[i]}),
+                                 mundy::store(value_type{z[i]})};
       workspace.step(alpha, beta, i, round);
       x[i] = workspace.x_storage.get();
       y[i] = workspace.y_storage.get();
@@ -163,7 +163,7 @@ scalar_t run_storage_owned(vec_t& x, vec_t& y, vec_t& z, const scalar_t alpha, c
   return compute_checksum(x, y, z);
 }
 
-scalar_t run_explicit_pointer(vec_t& x, vec_t& y, vec_t& z, const scalar_t alpha, const scalar_t beta,
+value_type run_explicit_pointer(vec_t& x, vec_t& y, vec_t& z, const value_type alpha, const value_type beta,
                               const size_t rounds) {
   for (size_t round = 0; round < rounds; ++round) {
     for (size_t i = 0; i < x.size(); ++i) {
@@ -174,7 +174,7 @@ scalar_t run_explicit_pointer(vec_t& x, vec_t& y, vec_t& z, const scalar_t alpha
   return compute_checksum(x, y, z);
 }
 
-scalar_t run_storage_pointer(vec_t& x, vec_t& y, vec_t& z, const scalar_t alpha, const scalar_t beta,
+value_type run_storage_pointer(vec_t& x, vec_t& y, vec_t& z, const value_type alpha, const value_type beta,
                              const size_t rounds) {
   for (size_t round = 0; round < rounds; ++round) {
     for (size_t i = 0; i < x.size(); ++i) {
@@ -185,7 +185,7 @@ scalar_t run_storage_pointer(vec_t& x, vec_t& y, vec_t& z, const scalar_t alpha,
   return compute_checksum(x, y, z);
 }
 
-scalar_t run_explicit_reference(vec_t& x, vec_t& y, vec_t& z, const scalar_t alpha, const scalar_t beta,
+value_type run_explicit_reference(vec_t& x, vec_t& y, vec_t& z, const value_type alpha, const value_type beta,
                                 const size_t rounds) {
   for (size_t round = 0; round < rounds; ++round) {
     for (size_t i = 0; i < x.size(); ++i) {
@@ -196,7 +196,7 @@ scalar_t run_explicit_reference(vec_t& x, vec_t& y, vec_t& z, const scalar_t alp
   return compute_checksum(x, y, z);
 }
 
-scalar_t run_storage_reference(vec_t& x, vec_t& y, vec_t& z, const scalar_t alpha, const scalar_t beta,
+value_type run_storage_reference(vec_t& x, vec_t& y, vec_t& z, const value_type alpha, const value_type beta,
                                const size_t rounds) {
   for (size_t round = 0; round < rounds; ++round) {
     for (size_t i = 0; i < x.size(); ++i) {
@@ -214,7 +214,7 @@ void run_case(ankerl::nanobench::Bench& bench, const std::string& name, const ve
     vec_t x = x0;
     vec_t y = y0;
     vec_t z = z0;
-    const scalar_t checksum = func(x, y, z);
+    const value_type checksum = func(x, y, z);
     ankerl::nanobench::doNotOptimizeAway(checksum);
     ankerl::nanobench::doNotOptimizeAway(x);
     ankerl::nanobench::doNotOptimizeAway(y);
@@ -227,8 +227,8 @@ int main(int argc, char** argv) {
   {
     constexpr size_t num_entries = 200000;
     constexpr size_t rounds = 8;
-    constexpr scalar_t alpha = 1.75;
-    constexpr scalar_t beta = 0.65;
+    constexpr value_type alpha = 1.75;
+    constexpr value_type beta = 0.65;
 
     vec_t x0(num_entries);
     vec_t y0(num_entries);

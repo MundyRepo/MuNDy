@@ -61,26 +61,26 @@ template <typename QuaternionType>
 concept ValidQuaternionType =
     is_quaternion_v<std::decay_t<QuaternionType>> &&
     requires(std::decay_t<QuaternionType> quaternion, const std::decay_t<QuaternionType> const_quaternion) {
-      typename std::decay_t<QuaternionType>::scalar_t;
-      { quaternion[0] } -> std::convertible_to<typename std::decay_t<QuaternionType>::scalar_t>;
-      { quaternion[1] } -> std::convertible_to<typename std::decay_t<QuaternionType>::scalar_t>;
-      { quaternion[2] } -> std::convertible_to<typename std::decay_t<QuaternionType>::scalar_t>;
-      { quaternion[3] } -> std::convertible_to<typename std::decay_t<QuaternionType>::scalar_t>;
+      typename std::decay_t<QuaternionType>::value_type;
+      { quaternion[0] } -> std::convertible_to<typename std::decay_t<QuaternionType>::value_type>;
+      { quaternion[1] } -> std::convertible_to<typename std::decay_t<QuaternionType>::value_type>;
+      { quaternion[2] } -> std::convertible_to<typename std::decay_t<QuaternionType>::value_type>;
+      { quaternion[3] } -> std::convertible_to<typename std::decay_t<QuaternionType>::value_type>;
 
-      { quaternion(0) } -> std::convertible_to<typename std::decay_t<QuaternionType>::scalar_t>;
-      { quaternion(1) } -> std::convertible_to<typename std::decay_t<QuaternionType>::scalar_t>;
-      { quaternion(2) } -> std::convertible_to<typename std::decay_t<QuaternionType>::scalar_t>;
-      { quaternion(3) } -> std::convertible_to<typename std::decay_t<QuaternionType>::scalar_t>;
+      { quaternion(0) } -> std::convertible_to<typename std::decay_t<QuaternionType>::value_type>;
+      { quaternion(1) } -> std::convertible_to<typename std::decay_t<QuaternionType>::value_type>;
+      { quaternion(2) } -> std::convertible_to<typename std::decay_t<QuaternionType>::value_type>;
+      { quaternion(3) } -> std::convertible_to<typename std::decay_t<QuaternionType>::value_type>;
 
-      { const_quaternion[0] } -> std::convertible_to<const typename std::decay_t<QuaternionType>::scalar_t>;
-      { const_quaternion[1] } -> std::convertible_to<const typename std::decay_t<QuaternionType>::scalar_t>;
-      { const_quaternion[2] } -> std::convertible_to<const typename std::decay_t<QuaternionType>::scalar_t>;
-      { const_quaternion[3] } -> std::convertible_to<const typename std::decay_t<QuaternionType>::scalar_t>;
+      { const_quaternion[0] } -> std::convertible_to<const typename std::decay_t<QuaternionType>::value_type>;
+      { const_quaternion[1] } -> std::convertible_to<const typename std::decay_t<QuaternionType>::value_type>;
+      { const_quaternion[2] } -> std::convertible_to<const typename std::decay_t<QuaternionType>::value_type>;
+      { const_quaternion[3] } -> std::convertible_to<const typename std::decay_t<QuaternionType>::value_type>;
 
-      { const_quaternion(0) } -> std::convertible_to<const typename std::decay_t<QuaternionType>::scalar_t>;
-      { const_quaternion(1) } -> std::convertible_to<const typename std::decay_t<QuaternionType>::scalar_t>;
-      { const_quaternion(2) } -> std::convertible_to<const typename std::decay_t<QuaternionType>::scalar_t>;
-      { const_quaternion(3) } -> std::convertible_to<const typename std::decay_t<QuaternionType>::scalar_t>;
+      { const_quaternion(0) } -> std::convertible_to<const typename std::decay_t<QuaternionType>::value_type>;
+      { const_quaternion(1) } -> std::convertible_to<const typename std::decay_t<QuaternionType>::value_type>;
+      { const_quaternion(2) } -> std::convertible_to<const typename std::decay_t<QuaternionType>::value_type>;
+      { const_quaternion(3) } -> std::convertible_to<const typename std::decay_t<QuaternionType>::value_type>;
     };  // ValidQuaternionType
 
 //! \name Forward declare AQuaternion functions that also require AQuaternion to be defined
@@ -151,10 +151,10 @@ class AQuaternion {
   //@{
 
   /// \brief The type of the entries
-  using scalar_t = T;
+  using value_type = T;
 
   /// \brief The non-const type of the entries
-  using non_const_scalar_t = std::remove_const_t<T>;
+  using non_const_value_type = std::remove_const_t<T>;
 
   /// \brief Deep copy type
   using deep_copy_t = AQuaternion<T>;
@@ -243,7 +243,7 @@ class AQuaternion {
   template <ValidQuaternionType OtherQuaternionType>
       KOKKOS_INLINE_FUNCTION constexpr AQuaternion(const OtherQuaternionType& other)
           MUNDY_REQUIRES(!std::is_same_v<OtherQuaternionType, AQuaternion<T, Accessor>>) &&
-      (std::is_convertible_v<typename OtherQuaternionType::scalar_t, T>) : accessor_() {
+      (std::is_convertible_v<typename OtherQuaternionType::value_type, T>) : accessor_() {
     impl::deep_copy_impl(*this, other);
   }
 
@@ -251,7 +251,7 @@ class AQuaternion {
   template <ValidQuaternionType OtherQuaternionType>
       KOKKOS_INLINE_FUNCTION constexpr AQuaternion(OtherQuaternionType&& other)
           MUNDY_REQUIRES(!std::is_same_v<OtherQuaternionType, AQuaternion<T, Accessor>>) &&
-      (std::is_convertible_v<typename OtherQuaternionType::scalar_t, T>) : accessor_() {
+      (std::is_convertible_v<typename OtherQuaternionType::value_type, T>) : accessor_() {
     impl::deep_copy_impl(*this, std::move(other));
   }
 
@@ -260,7 +260,7 @@ class AQuaternion {
   template <ValidQuaternionType OtherQuaternionType>
   KOKKOS_INLINE_FUNCTION constexpr AQuaternion<T, Accessor>& operator=(const OtherQuaternionType& other)
       MUNDY_REQUIRES((!std::is_same_v<OtherQuaternionType, AQuaternion<T, Accessor>>) &&
-                     (std::is_convertible_v<typename OtherQuaternionType::scalar_t, T>) &&
+                     (std::is_convertible_v<typename OtherQuaternionType::value_type, T>) &&
                      HasNonConstAccessOperator<Accessor, T>) {
     impl::deep_copy_impl(*this, other);
     return *this;
@@ -271,7 +271,7 @@ class AQuaternion {
   template <ValidQuaternionType OtherQuaternionType>
   KOKKOS_INLINE_FUNCTION constexpr AQuaternion<T, Accessor>& operator=(OtherQuaternionType&& other)
       MUNDY_REQUIRES((!std::is_same_v<OtherQuaternionType, AQuaternion<T, Accessor>>) &&
-                     (std::is_convertible_v<typename OtherQuaternionType::scalar_t, T>) &&
+                     (std::is_convertible_v<typename OtherQuaternionType::value_type, T>) &&
                      HasNonConstAccessOperator<Accessor, T>) {
     impl::deep_copy_impl(*this, std::move(other));
     return *this;
@@ -913,21 +913,23 @@ KOKKOS_INLINE_FUNCTION
 /// \param omega The angular velocity
 /// \param dt The time
 template <ValidQuaternionType QuaternionType, ValidVectorType VectorType>
-KOKKOS_INLINE_FUNCTION constexpr void rotate_quaternion(QuaternionType& quat, const VectorType& omega,
-                                                        const double& dt) {
-  const double w = norm(omega);
-  if (w < get_zero_tolerance<double>()) {
-    // Omega is zero, no rotation
+MUNDY_REQUIRES(std::is_same_v<typename QuaternionType::value_type, typename VectorType::value_type>)
+KOKKOS_INLINE_FUNCTION constexpr void rotate_quaternion(
+    QuaternionType& quat, const VectorType& omega,
+    const typename QuaternionType::value_type& dt) {
+  using Scalar = typename QuaternionType::value_type;
+  const Scalar w = norm(omega);
+  if (w < get_zero_tolerance<Scalar>()) {
     return;
   }
-  const double winv = 1.0 / w;
-  const double sw = Kokkos::sin(0.5 * w * dt);
-  const double cw = Kokkos::cos(0.5 * w * dt);
-  const double s = quat.w();
-  const auto p = quat.vector();
-  const auto xyz = s * sw * omega * winv + cw * p + sw * winv * cross(omega, p);
-  quat.w() = s * cw - dot(omega, p) * sw * winv;
-  quat.vector() = xyz;
+  const Scalar winv = Scalar(1) / w;
+  const Scalar sw   = Kokkos::sin(Scalar(0.5) * w * dt);
+  const Scalar cw   = Kokkos::cos(Scalar(0.5) * w * dt);
+  const Scalar s    = quat.w();
+  const auto p      = quat.vector();
+  const auto xyz    = s * sw * omega * winv + cw * p + sw * winv * cross(omega, p);
+  quat.w()          = s * cw - dot(omega, p) * sw * winv;
+  quat.vector()     = xyz;
   quat.normalize();
 }
 //@}

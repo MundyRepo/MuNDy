@@ -45,8 +45,8 @@ namespace mundy {
 template <typename Scalar, ValidPointType PointType = Point<Scalar>,
           ValidQuaternionType QuaternionType = Quaternion<Scalar>>
 class Ring {
-  static_assert(std::is_same_v<typename PointType::scalar_t, Scalar> &&
-                    std::is_same_v<typename QuaternionType::scalar_t, Scalar>,
+  static_assert(std::is_same_v<typename PointType::value_type, Scalar> &&
+                    std::is_same_v<typename QuaternionType::value_type, Scalar>,
                 "The scalar type of the PointType and QuaternionType must match the scalar type of the Ring.");
 
  public:
@@ -54,7 +54,7 @@ class Ring {
   //@{
 
   /// \brief Our scalar type
-  using scalar_t = Scalar;
+  using value_type = Scalar;
 
   /// \brief Our point type
   using point_t = PointType;
@@ -73,7 +73,7 @@ class Ring {
   /// invalid value of -1
   KOKKOS_FUNCTION
   constexpr Ring() MUNDY_REQUIRES(HasDefaultConstructor<point_t>&& HasDefaultConstructor<orientation_t>)
-      : center_circle_(), minor_radius_(static_cast<scalar_t>(-1)) {
+      : center_circle_(), minor_radius_(static_cast<value_type>(-1)) {
   }
 
   /// \brief Constructor to initialize the ring.
@@ -82,8 +82,8 @@ class Ring {
   /// \param[in] major_radius The radius of the center circle of the Ring.
   /// \param[in] minor_radius The radius of the tube around said circle.
   KOKKOS_FUNCTION
-  constexpr Ring(const point_t& center, const orientation_t& orientation, const scalar_t& major_radius,
-                 const scalar_t& minor_radius)
+  constexpr Ring(const point_t& center, const orientation_t& orientation, const value_type& major_radius,
+                 const value_type& minor_radius)
       : center_circle_(center, orientation, major_radius), minor_radius_(minor_radius) {
   }
 
@@ -94,7 +94,7 @@ class Ring {
   /// \param[in] minor_radius The radius of the tube around said circle.
   template <ValidPointType OtherPointType, ValidQuaternionType OtherQuaternionType>
   KOKKOS_FUNCTION constexpr Ring(const OtherPointType& center, const OtherQuaternionType& orientation,
-                                 const scalar_t& major_radius, const scalar_t& minor_radius)
+                                 const value_type& major_radius, const value_type& minor_radius)
       MUNDY_REQUIRES(!std::is_same_v<OtherPointType, point_t> || !std::is_same_v<OtherQuaternionType, orientation_t>)
       : center_circle_(center, orientation, major_radius), minor_radius_(minor_radius) {
   }
@@ -105,27 +105,27 @@ class Ring {
 
   /// \brief Deep copy constructor
   KOKKOS_FUNCTION
-  constexpr Ring(const Ring<scalar_t, point_t, orientation_t>& other)
+  constexpr Ring(const Ring<value_type, point_t, orientation_t>& other)
       : center_circle_(other.center_circle_), minor_radius_(other.minor_radius_) {
   }
 
   /// \brief Deep copy constructor with different ring type
   template <typename OtherRingType>
   KOKKOS_FUNCTION constexpr Ring(const OtherRingType& other)
-      MUNDY_REQUIRES(!std::is_same_v<OtherRingType, Ring<scalar_t, point_t, orientation_t>>)
+      MUNDY_REQUIRES(!std::is_same_v<OtherRingType, Ring<value_type, point_t, orientation_t>>)
       : center_circle_(other.center_circle_), minor_radius_(other.minor_radius_) {
   }
 
   /// \brief Deep move constructor
   KOKKOS_FUNCTION
-  constexpr Ring(Ring<scalar_t, point_t, orientation_t>&& other)
+  constexpr Ring(Ring<value_type, point_t, orientation_t>&& other)
       : center_circle_(std::move(other.center_circle_)), minor_radius_(std::move(other.minor_radius_)) {
   }
 
   /// \brief Deep move constructor
   template <typename OtherRingType>
   KOKKOS_FUNCTION constexpr Ring(OtherRingType&& other)
-      MUNDY_REQUIRES(!std::is_same_v<OtherRingType, Ring<scalar_t, point_t, orientation_t>>)
+      MUNDY_REQUIRES(!std::is_same_v<OtherRingType, Ring<value_type, point_t, orientation_t>>)
       : center_circle_(std::move(other.center_circle_)), minor_radius_(std::move(other.minor_radius_)) {
   }
   //@}
@@ -135,7 +135,7 @@ class Ring {
 
   /// \brief Copy assignment operator
   KOKKOS_FUNCTION
-  constexpr Ring<scalar_t, point_t, orientation_t>& operator=(const Ring<scalar_t, point_t, orientation_t>& other) {
+  constexpr Ring<value_type, point_t, orientation_t>& operator=(const Ring<value_type, point_t, orientation_t>& other) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     center_circle_ = other.center_circle_;
     minor_radius_ = other.minor_radius_;
@@ -144,8 +144,8 @@ class Ring {
 
   /// \brief Copy assignment operator
   template <typename OtherRingType>
-  KOKKOS_FUNCTION constexpr Ring<scalar_t, point_t, orientation_t>& operator=(const OtherRingType& other)
-      MUNDY_REQUIRES(!std::is_same_v<OtherRingType, Ring<scalar_t, point_t, orientation_t>>) {
+  KOKKOS_FUNCTION constexpr Ring<value_type, point_t, orientation_t>& operator=(const OtherRingType& other)
+      MUNDY_REQUIRES(!std::is_same_v<OtherRingType, Ring<value_type, point_t, orientation_t>>) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     center_circle_ = other.center_circle_;
     minor_radius_ = other.minor_radius_;
@@ -154,7 +154,7 @@ class Ring {
 
   /// \brief Move assignment operator
   KOKKOS_FUNCTION
-  constexpr Ring<scalar_t, point_t, orientation_t>& operator=(Ring<scalar_t, point_t, orientation_t>&& other) {
+  constexpr Ring<value_type, point_t, orientation_t>& operator=(Ring<value_type, point_t, orientation_t>&& other) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     center_circle_ = std::move(other.center_circle_);
     minor_radius_ = std::move(other.minor_radius_);
@@ -163,8 +163,8 @@ class Ring {
 
   /// \brief Move assignment operator
   template <typename OtherRingType>
-  KOKKOS_FUNCTION constexpr Ring<scalar_t, point_t, orientation_t>& operator=(OtherRingType&& other)
-      MUNDY_REQUIRES(!std::is_same_v<OtherRingType, Ring<scalar_t, point_t, orientation_t>>) {
+  KOKKOS_FUNCTION constexpr Ring<value_type, point_t, orientation_t>& operator=(OtherRingType&& other)
+      MUNDY_REQUIRES(!std::is_same_v<OtherRingType, Ring<value_type, point_t, orientation_t>>) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     center_circle_ = std::move(other.center_circle_);
     minor_radius_ = std::move(other.minor_radius_);
@@ -177,7 +177,7 @@ class Ring {
 
   /// \brief Accessor for the center line (a Circle3D)
   KOKKOS_FUNCTION
-  constexpr const Circle3D<scalar_t, point_t, orientation_t>& center_circle() const {
+  constexpr const Circle3D<value_type, point_t, orientation_t>& center_circle() const {
     return center_circle_;
   }
 
@@ -207,25 +207,25 @@ class Ring {
 
   /// \brief Accessor for the major radius
   KOKKOS_FUNCTION
-  constexpr const scalar_t& major_radius() const {
+  constexpr const value_type& major_radius() const {
     return center_circle_.radius();
   }
 
   /// \brief Accessor for the major radius
   KOKKOS_FUNCTION
-  constexpr scalar_t& major_radius() {
+  constexpr value_type& major_radius() {
     return center_circle_.radius();
   }
 
   /// \brief Accessor for the minor radius
   KOKKOS_FUNCTION
-  constexpr const scalar_t& minor_radius() const {
+  constexpr const value_type& minor_radius() const {
     return minor_radius_;
   }
 
   /// \brief Accessor for the minor radius
   KOKKOS_FUNCTION
-  constexpr scalar_t& minor_radius() {
+  constexpr value_type& minor_radius() {
     return minor_radius_;
   }
   //@}
@@ -245,7 +245,7 @@ class Ring {
   /// \param[in] y The y-coordinate.
   /// \param[in] z The z-coordinate.
   KOKKOS_FUNCTION
-  constexpr void set_center(const scalar_t& x, const scalar_t& y, const scalar_t& z) {
+  constexpr void set_center(const value_type& x, const value_type& y, const value_type& z) {
     center_circle_.set_center(x, y, z);
   }
 
@@ -262,28 +262,28 @@ class Ring {
   /// \param[in] qy The y-component of the orientation quaternion.
   /// \param[in] qz The z-component of the orientation quaternion.
   KOKKOS_FUNCTION
-  constexpr void set_orientation(const scalar_t& qw, const scalar_t& qx, const scalar_t& qy, const scalar_t& qz) {
+  constexpr void set_orientation(const value_type& qw, const value_type& qx, const value_type& qy, const value_type& qz) {
     center_circle_.set_orientation(qw, qx, qy, qz);
   }
 
   /// \brief Set the major radius
   /// \param[in] major_radius The new major radius.
   KOKKOS_FUNCTION
-  constexpr void set_major_radius(const scalar_t& major_radius) {
+  constexpr void set_major_radius(const value_type& major_radius) {
     center_circle_.set_radius(major_radius);
   }
 
   /// \brief Set the minor radius
   /// \param[in] minor_radius The new minor radius.
   KOKKOS_FUNCTION
-  constexpr void set_minor_radius(const scalar_t& minor_radius) {
+  constexpr void set_minor_radius(const value_type& minor_radius) {
     minor_radius_ = minor_radius;
   }
   //@}
 
  private:
-  Circle3D<scalar_t, point_t, orientation_t> center_circle_;
-  scalar_t minor_radius_;
+  Circle3D<value_type, point_t, orientation_t> center_circle_;
+  value_type minor_radius_;
 };
 
 /// @brief (Implementation) Type trait to determine if a type is a Ring
@@ -315,7 +315,7 @@ static_assert(ValidRingType<Ring<float>> && ValidRingType<const Ring<float>> && 
 template <ValidRingType T1, ValidRingType T2>
 KOKKOS_FUNCTION constexpr bool is_close(
     const T1& r1, const T2& r2,
-    typename T1::scalar_t tol = get_comparison_tolerance<typename T1::scalar_t, typename T2::scalar_t>()) {
+    typename T1::value_type tol = get_comparison_tolerance<typename T1::value_type, typename T2::value_type>()) {
   return is_close(r1.major_radius(), r2.major_radius(), tol) &&
          is_close(r1.minor_radius(), r2.minor_radius(), tol) && is_close(r1.center(), r2.center(), tol) &&
          is_close(r1.orientation(), r2.orientation(), tol);
@@ -325,7 +325,7 @@ KOKKOS_FUNCTION constexpr bool is_close(
 template <ValidRingType T1, ValidRingType T2>
 KOKKOS_FUNCTION constexpr bool is_approx_close(
     const T1& r1, const T2& r2,
-    typename T1::scalar_t tol = get_relaxed_comparison_tolerance<typename T1::scalar_t, typename T2::scalar_t>()) {
+    typename T1::value_type tol = get_relaxed_comparison_tolerance<typename T1::value_type, typename T2::value_type>()) {
   return is_close(r1, r2, tol);
 }
 

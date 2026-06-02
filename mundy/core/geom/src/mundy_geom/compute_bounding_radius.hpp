@@ -42,51 +42,51 @@ namespace mundy {
 
 /// @brief Compute the bounding radius of a point
 template <ValidPointType PointType>
-KOKKOS_FUNCTION typename PointType::scalar_t compute_bounding_radius([[maybe_unused]] const PointType& point) {
-  return static_cast<typename PointType::scalar_t>(0);
+KOKKOS_FUNCTION typename PointType::value_type compute_bounding_radius([[maybe_unused]] const PointType& point) {
+  return static_cast<typename PointType::value_type>(0);
 }
 
 /// @brief Compute the bounding radius of a line segment
 template <ValidLineSegmentType LineSegmentType>
-KOKKOS_FUNCTION typename LineSegmentType::scalar_t compute_bounding_radius(const LineSegmentType& line_segment) {
-  using scalar_t = typename LineSegmentType::scalar_t;
+KOKKOS_FUNCTION typename LineSegmentType::value_type compute_bounding_radius(const LineSegmentType& line_segment) {
+  using value_type = typename LineSegmentType::value_type;
   const auto& start = line_segment.start();
   const auto& end = line_segment.end();
-  const scalar_t length = mundy::norm(end - start);
-  return static_cast<scalar_t>(0.5) * length;
+  const value_type length = mundy::norm(end - start);
+  return static_cast<value_type>(0.5) * length;
 }
 
 /// @brief Compute the bounding radius of a sphere
 template <ValidSphereType SphereType>
-KOKKOS_FUNCTION typename SphereType::scalar_t compute_bounding_radius(const SphereType& sphere) {
+KOKKOS_FUNCTION typename SphereType::value_type compute_bounding_radius(const SphereType& sphere) {
   return sphere.radius();
 }
 
 /// @brief Compute the bounding radius of an ellipsoid
 template <ValidEllipsoidType EllipsoidType>
-KOKKOS_FUNCTION EllipsoidType::scalar_t compute_bounding_radius(const EllipsoidType& ellipsoid) {
+KOKKOS_FUNCTION EllipsoidType::value_type compute_bounding_radius(const EllipsoidType& ellipsoid) {
   return mundy::max(ellipsoid.radii());
 }
 
 /// @brief Compute the bounding radius of a spherocylinder
 template <ValidSpherocylinderType SpherocylinderType>
-KOKKOS_FUNCTION typename SpherocylinderType::scalar_t compute_bounding_radius(
+KOKKOS_FUNCTION typename SpherocylinderType::value_type compute_bounding_radius(
     const SpherocylinderType& spherocylinder) {
-  using scalar_t = typename SpherocylinderType::scalar_t;
+  using value_type = typename SpherocylinderType::value_type;
   const auto& radius = spherocylinder.radius();
   const auto& length = spherocylinder.length();
-  return static_cast<scalar_t>(0.5) * length + radius;
+  return static_cast<value_type>(0.5) * length + radius;
 }
 
 /// @brief Compute the bounding radius of a spherocylinder segment
 template <ValidSpherocylinderSegmentType SegmentType>
-KOKKOS_FUNCTION typename SegmentType::scalar_t compute_bounding_radius(const SegmentType& segment) {
-  using scalar_t = typename SegmentType::scalar_t;
+KOKKOS_FUNCTION typename SegmentType::value_type compute_bounding_radius(const SegmentType& segment) {
+  using value_type = typename SegmentType::value_type;
   const auto& start = segment.start();
   const auto& end = segment.end();
   const auto& radius = segment.radius();
-  const scalar_t length = mundy::norm(end - start);
-  return static_cast<scalar_t>(0.5) * length + radius;
+  const value_type length = mundy::norm(end - start);
+  return static_cast<value_type>(0.5) * length + radius;
 }
 
 }  // namespace mundy

@@ -47,18 +47,18 @@ namespace mundy {
 //@{
 
 template <ValidPointType PointType, ValidEllipsoidType EllipsoidType>
-MUNDY_REQUIRES(std::is_same_v<typename PointType::scalar_t, typename EllipsoidType::scalar_t>)
-KOKKOS_FUNCTION typename PointType::scalar_t distance(const PointType& point,  //
+MUNDY_REQUIRES(std::is_same_v<typename PointType::value_type, typename EllipsoidType::value_type>)
+KOKKOS_FUNCTION typename PointType::value_type distance(const PointType& point,  //
                                                       const EllipsoidType& ellipsoid) {
   return distance(SharedNormalSigned{}, point, ellipsoid);
 }
 
 template <ValidPointType PointType, ValidEllipsoidType EllipsoidType>
-MUNDY_REQUIRES(std::is_same_v<typename PointType::scalar_t, typename EllipsoidType::scalar_t>)
-KOKKOS_FUNCTION typename PointType::scalar_t distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
+MUNDY_REQUIRES(std::is_same_v<typename PointType::value_type, typename EllipsoidType::value_type>)
+KOKKOS_FUNCTION typename PointType::value_type distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
                                                       const PointType& point,                                   //
                                                       const EllipsoidType& ellipsoid) {
-  using Scalar = typename PointType::scalar_t;
+  using Scalar = typename PointType::value_type;
   Point<Scalar> closest_point;
   mundy::Vector3<Scalar> ellipsoid_normal;
   return distance(distance_type, point, ellipsoid,  //
@@ -66,10 +66,10 @@ KOKKOS_FUNCTION typename PointType::scalar_t distance([[maybe_unused]] const Sha
 }
 
 template <ValidPointType PointType, ValidEllipsoidType EllipsoidType>
-MUNDY_REQUIRES(std::is_same_v<typename PointType::scalar_t, typename EllipsoidType::scalar_t>)
+MUNDY_REQUIRES(std::is_same_v<typename PointType::value_type, typename EllipsoidType::value_type>)
 class PointEllipsoidObjective {
  public:
-  using Scalar = typename PointType::scalar_t;
+  using Scalar = typename PointType::value_type;
 
   KOKKOS_FUNCTION
   PointEllipsoidObjective(const PointType& point,                 //
@@ -102,13 +102,13 @@ class PointEllipsoidObjective {
 };
 
 template <ValidPointType PointType, ValidEllipsoidType EllipsoidType>
-MUNDY_REQUIRES(std::is_same_v<typename PointType::scalar_t, typename EllipsoidType::scalar_t>)
-KOKKOS_FUNCTION typename PointType::scalar_t distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
+MUNDY_REQUIRES(std::is_same_v<typename PointType::value_type, typename EllipsoidType::value_type>)
+KOKKOS_FUNCTION typename PointType::value_type distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
                                                       const PointType& point,                                   //
                                                       const EllipsoidType& ellipsoid,                           //
-                                                      Point<typename PointType::scalar_t>& closest_point,       //
-                                                      mundy::Vector3<typename PointType::scalar_t>& ellipsoid_normal) {
-  using Scalar = typename PointType::scalar_t;
+                                                      Point<typename PointType::value_type>& closest_point,       //
+                                                      mundy::Vector3<typename PointType::value_type>& ellipsoid_normal) {
+  using Scalar = typename PointType::value_type;
 
   // Setup the minimization
   // Note, the actual error is not guaranteed to be less than min_objective_delta due to the use of approximate

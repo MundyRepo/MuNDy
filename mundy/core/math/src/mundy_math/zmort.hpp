@@ -228,7 +228,7 @@ namespace mundy {
 
 template <ValidVector3Type Vector3Type1, ValidVector3Type Vector3Type2>
 bool zmorton_less(const Vector3Type1& p, const Vector3Type2& q) {
-  using Scalar = typename Vector3Type1::scalar_t;
+  using Scalar = typename Vector3Type1::value_type;
   constexpr auto zero = Scalar(0.0);
 
   // Signed less then

@@ -193,7 +193,7 @@ TYPED_TEST(ScalarSingleTypeTest, ScalarScalarRoundTrip) {
   // (a * b) / b == a
   auto product = a * b;
   auto quotient = product / b;
-  is_close_debug(quotient, cast<typename decltype(quotient)::scalar_t>(a), "Round-trip (a*b)/b != a.");
+  is_close_debug(quotient, cast<typename decltype(quotient)::value_type>(a), "Round-trip (a*b)/b != a.");
 }
 //@}
 

@@ -79,11 +79,11 @@ template <typename AccessLike, typename ExpectedFieldScalar, typename ExpectedSh
 constexpr bool component_access_shape_matches_v = []() {
   using shape = component_access_shape<canonical_component_access_t<AccessLike>>;
   if constexpr (ExpectedFixedScalars) {
-    return std::is_same_v<typename shape::field_scalar_type, ExpectedFieldScalar> &&
+    return std::is_same_v<typename shape::field_value_typeype, ExpectedFieldScalar> &&
            std::is_same_v<typename shape::shared_value_type, ExpectedSharedValue> && shape::has_fixed_field_scalars &&
            shape::field_scalars == ExpectedFieldScalars;
   } else {
-    return std::is_same_v<typename shape::field_scalar_type, ExpectedFieldScalar> &&
+    return std::is_same_v<typename shape::field_value_typeype, ExpectedFieldScalar> &&
            std::is_same_v<typename shape::shared_value_type, ExpectedSharedValue> && !shape::has_fixed_field_scalars;
   }
 }();

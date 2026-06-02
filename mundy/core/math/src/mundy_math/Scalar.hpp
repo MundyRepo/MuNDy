@@ -87,17 +87,28 @@ struct is_scalar : public is_scalar_impl<std::decay_t<TypeToCheck>> {};
 template <typename TypeToCheck>
 constexpr bool is_scalar_v = is_scalar<TypeToCheck>::value;
 
-/// \brief Concept for a valid AScalar type.
-/// Requires the type trait, a scalar_t member type, a value() getter, and implicit conversion to scalar_t.
-template <typename ScalarType>
-concept ValidScalarType =
-    is_scalar_v<std::decay_t<ScalarType>> &&
-    requires(std::decay_t<ScalarType> s, const std::decay_t<ScalarType> cs) {
-      typename std::decay_t<ScalarType>::scalar_t;
-      { s.value() } -> std::same_as<typename std::decay_t<ScalarType>::scalar_t&>;
-      { cs.value() } -> std::same_as<const typename std::decay_t<ScalarType>::scalar_t&>;
-      { static_cast<typename std::decay_t<ScalarType>::scalar_t>(cs) };
-    };  // ValidScalarType
+/// \brief Concept satisfied by any type that behaves as a mathematical scalar.
+///
+/// Accepts fundamental arithmetic types (float, double, int, ...), std::complex,
+/// Sacado FAD types, autodiff duals, Ceres Jets — any type providing scalar arithmetic
+/// operators and constructibility from a numeric literal.
+///
+/// Use this instead of \c std::is_arithmetic_v<T> wherever the intent is
+/// "I need a type I can do math with", not "I specifically need a primitive type".
+/// The broader acceptance enables automatic differentiation without code changes.
+template <typename T>
+concept ValidScalarType = requires(T a, T b) {
+    { a + b } -> std::convertible_to<T>;
+    { a - b } -> std::convertible_to<T>;
+    { a * b } -> std::convertible_to<T>;
+    { a / b } -> std::convertible_to<T>;
+    { -a }    -> std::convertible_to<T>;
+    T(1.0);  // constructible from a double literal
+};
+
+static_assert(ValidScalarType<float>);
+static_assert(ValidScalarType<double>);
+static_assert(ValidScalarType<int>);
 //@}
 
 // =============================================================================
@@ -119,10 +130,10 @@ class AScalar {
   //@{
 
   /// \brief The type of the stored value
-  using scalar_t = T;
+  using value_type = T;
 
-  /// \brief Non-const version of scalar_t
-  using non_const_scalar_t = std::remove_const_t<T>;
+  /// \brief Non-const version of value_type
+  using non_const_value_type = std::remove_const_t<T>;
 
   /// \brief Owning deep-copy type
   using deep_copy_t = AScalar<T>;
@@ -181,40 +192,40 @@ class AScalar {
   // Cross-accessor copy / move constructors and assignments
 
   /// \brief Deep copy constructor from a different AScalar accessor or ownership
-  template <ValidScalarType OtherScalarType>
+  template <typename OtherScalarType>
   KOKKOS_INLINE_FUNCTION constexpr AScalar(const OtherScalarType& other)
       MUNDY_REQUIRES((!std::is_same_v<OtherScalarType, AScalar<T, Accessor>>) &&
-                     (std::is_convertible_v<typename OtherScalarType::scalar_t, T>) &&
+                     (std::is_convertible_v<typename OtherScalarType::value_type, T>) &&
                      HasDefaultConstructor<Accessor>)
       : accessor_() {
     impl::access_at(accessor_, 0) = static_cast<T>(other.value());
   }
 
   /// \brief Deep move constructor from a different AScalar accessor or ownership
-  template <ValidScalarType OtherScalarType>
+  template <typename OtherScalarType>
   KOKKOS_INLINE_FUNCTION constexpr AScalar(OtherScalarType&& other)
       MUNDY_REQUIRES((!std::is_same_v<std::decay_t<OtherScalarType>, AScalar<T, Accessor>>) &&
-                     (std::is_convertible_v<typename std::decay_t<OtherScalarType>::scalar_t, T>) &&
+                     (std::is_convertible_v<typename std::decay_t<OtherScalarType>::value_type, T>) &&
                      HasDefaultConstructor<Accessor>)
       : accessor_() {
     impl::access_at(accessor_, 0) = static_cast<T>(other.value());
   }
 
   /// \brief Deep copy assignment from a different AScalar accessor or ownership
-  template <ValidScalarType OtherScalarType>
+  template <typename OtherScalarType>
   KOKKOS_INLINE_FUNCTION constexpr AScalar<T, Accessor>& operator=(const OtherScalarType& other)
       MUNDY_REQUIRES((!std::is_same_v<OtherScalarType, AScalar<T, Accessor>>) &&
-                     (std::is_convertible_v<typename OtherScalarType::scalar_t, T>) &&
+                     (std::is_convertible_v<typename OtherScalarType::value_type, T>) &&
                      HasNonConstAccessOperator<Accessor, T>) {
     impl::access_at(accessor_, 0) = static_cast<T>(other.value());
     return *this;
   }
 
   /// \brief Deep move assignment from a different AScalar accessor or ownership
-  template <ValidScalarType OtherScalarType>
+  template <typename OtherScalarType>
   KOKKOS_INLINE_FUNCTION constexpr AScalar<T, Accessor>& operator=(OtherScalarType&& other)
       MUNDY_REQUIRES((!std::is_same_v<std::decay_t<OtherScalarType>, AScalar<T, Accessor>>) &&
-                     (std::is_convertible_v<typename std::decay_t<OtherScalarType>::scalar_t, T>) &&
+                     (std::is_convertible_v<typename std::decay_t<OtherScalarType>::value_type, T>) &&
                      HasNonConstAccessOperator<Accessor, T>) {
     impl::access_at(accessor_, 0) = static_cast<T>(other.value());
     return *this;
@@ -496,6 +507,8 @@ class AScalar {
 
 static_assert(is_scalar_v<AScalar<int, Array<int, 1>>>, "AScalar<int, Array<int,1>> should satisfy is_scalar.");
 static_assert(!is_scalar_v<int>, "int should not satisfy is_scalar.");
+static_assert(ValidScalarType<AScalar<double>>, "AScalar<double> must satisfy ValidScalarType.");
+static_assert(ValidScalarType<AScalar<float>>,  "AScalar<float> must satisfy ValidScalarType.");
 
 // =============================================================================
 // Type alias: Scalar<T> — the owning, default-accessor specialisation

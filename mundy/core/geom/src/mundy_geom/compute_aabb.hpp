@@ -43,49 +43,49 @@ namespace mundy {
 
 /// @brief Compute the axis-aligned bounding box of a point
 template <ValidPointType PointType>
-KOKKOS_FUNCTION AABB<typename PointType::scalar_t> compute_aabb(const PointType& point) {
-  using scalar_t = typename PointType::scalar_t;
-  const scalar_t x = point[0];
-  const scalar_t y = point[1];
-  const scalar_t z = point[2];
-  return AABB<scalar_t>{x, y, z, x, y, z};
+KOKKOS_FUNCTION AABB<typename PointType::value_type> compute_aabb(const PointType& point) {
+  using value_type = typename PointType::value_type;
+  const value_type x = point[0];
+  const value_type y = point[1];
+  const value_type z = point[2];
+  return AABB<value_type>{x, y, z, x, y, z};
 }
 template <ValidPointType PointType, typename Metric>
-KOKKOS_FUNCTION AABB<typename PointType::scalar_t> compute_aabb(const PointType& point, const Metric& /*metric*/) {
+KOKKOS_FUNCTION AABB<typename PointType::value_type> compute_aabb(const PointType& point, const Metric& /*metric*/) {
   return compute_aabb(point);
 }
 
 /// @brief Compute the axis-aligned bounding box of a line segment
 template <ValidLineSegmentType LineSegmentType>
-KOKKOS_FUNCTION AABB<typename LineSegmentType::scalar_t> compute_aabb(const LineSegmentType& line_segment) {
-  using scalar_t = typename LineSegmentType::scalar_t;
+KOKKOS_FUNCTION AABB<typename LineSegmentType::value_type> compute_aabb(const LineSegmentType& line_segment) {
+  using value_type = typename LineSegmentType::value_type;
   const auto& start = line_segment.start();
   const auto& end = line_segment.end();
-  const scalar_t min_x = Kokkos::min(start[0], end[0]);
-  const scalar_t min_y = Kokkos::min(start[1], end[1]);
-  const scalar_t min_z = Kokkos::min(start[2], end[2]);
-  const scalar_t max_x = Kokkos::max(start[0], end[0]);
-  const scalar_t max_y = Kokkos::max(start[1], end[1]);
-  const scalar_t max_z = Kokkos::max(start[2], end[2]);
-  return AABB<scalar_t>{min_x, min_y, min_z, max_x, max_y, max_z};
+  const value_type min_x = Kokkos::min(start[0], end[0]);
+  const value_type min_y = Kokkos::min(start[1], end[1]);
+  const value_type min_z = Kokkos::min(start[2], end[2]);
+  const value_type max_x = Kokkos::max(start[0], end[0]);
+  const value_type max_y = Kokkos::max(start[1], end[1]);
+  const value_type max_z = Kokkos::max(start[2], end[2]);
+  return AABB<value_type>{min_x, min_y, min_z, max_x, max_y, max_z};
 }
 template <ValidLineSegmentType LineSegmentType, typename Metric>
-KOKKOS_FUNCTION AABB<typename LineSegmentType::scalar_t> compute_aabb(const LineSegmentType& line_segment,
+KOKKOS_FUNCTION AABB<typename LineSegmentType::value_type> compute_aabb(const LineSegmentType& line_segment,
                                                                       const Metric& metric) {
   return compute_aabb(unwrap_points_to_ref(line_segment, metric, reference_point(line_segment)));
 }
 
 /// @brief Compute the axis-aligned bounding box of a sphere
 template <ValidSphereType SphereType>
-KOKKOS_FUNCTION AABB<typename SphereType::scalar_t> compute_aabb(const SphereType& sphere) {
-  using scalar_t = typename SphereType::scalar_t;
-  constexpr mundy::Vector3<scalar_t> ones{static_cast<scalar_t>(1), static_cast<scalar_t>(1), static_cast<scalar_t>(1)};
-  const mundy::Vector3<scalar_t> min_corner = sphere.center() - ones * sphere.radius();
-  const mundy::Vector3<scalar_t> max_corner = sphere.center() + ones * sphere.radius();
-  return AABB<scalar_t>{min_corner, max_corner};
+KOKKOS_FUNCTION AABB<typename SphereType::value_type> compute_aabb(const SphereType& sphere) {
+  using value_type = typename SphereType::value_type;
+  constexpr mundy::Vector3<value_type> ones{static_cast<value_type>(1), static_cast<value_type>(1), static_cast<value_type>(1)};
+  const mundy::Vector3<value_type> min_corner = sphere.center() - ones * sphere.radius();
+  const mundy::Vector3<value_type> max_corner = sphere.center() + ones * sphere.radius();
+  return AABB<value_type>{min_corner, max_corner};
 }
 template <ValidSphereType SphereType, typename Metric>
-KOKKOS_FUNCTION AABB<typename SphereType::scalar_t> compute_aabb(const SphereType& sphere, const Metric& /*metric*/) {
+KOKKOS_FUNCTION AABB<typename SphereType::value_type> compute_aabb(const SphereType& sphere, const Metric& /*metric*/) {
   return compute_aabb(sphere);
 }
 
@@ -99,16 +99,16 @@ KOKKOS_FUNCTION AABB<typename SphereType::scalar_t> compute_aabb(const SphereTyp
 /// In code, we form the three scaled lab-frame axes `r_i u_i`, square them component-wise, add the squared
 /// contributions, and take a component-wise square root. The AABB is `center +/- extents`.
 template <ValidEllipsoidType EllipsoidType>
-KOKKOS_FUNCTION AABB<typename EllipsoidType::scalar_t> compute_aabb(const EllipsoidType& ellipsoid) {
-  using scalar_t = typename EllipsoidType::scalar_t;
-  using point_t = Point<scalar_t>;
+KOKKOS_FUNCTION AABB<typename EllipsoidType::value_type> compute_aabb(const EllipsoidType& ellipsoid) {
+  using value_type = typename EllipsoidType::value_type;
+  using point_t = Point<value_type>;
   const auto& center = ellipsoid.center();
   const auto& radii = ellipsoid.radii();
   const auto& orient = ellipsoid.orientation();
 
-  constexpr point_t body_x{static_cast<scalar_t>(1), static_cast<scalar_t>(0), static_cast<scalar_t>(0)};
-  constexpr point_t body_y{static_cast<scalar_t>(0), static_cast<scalar_t>(1), static_cast<scalar_t>(0)};
-  constexpr point_t body_z{static_cast<scalar_t>(0), static_cast<scalar_t>(0), static_cast<scalar_t>(1)};
+  constexpr point_t body_x{static_cast<value_type>(1), static_cast<value_type>(0), static_cast<value_type>(0)};
+  constexpr point_t body_y{static_cast<value_type>(0), static_cast<value_type>(1), static_cast<value_type>(0)};
+  constexpr point_t body_z{static_cast<value_type>(0), static_cast<value_type>(0), static_cast<value_type>(1)};
   const point_t scaled_axis0 = radii[0] * (orient * body_x);
   const point_t scaled_axis1 = radii[1] * (orient * body_y);
   const point_t scaled_axis2 = radii[2] * (orient * body_z);
@@ -116,11 +116,11 @@ KOKKOS_FUNCTION AABB<typename EllipsoidType::scalar_t> compute_aabb(const Ellips
   const point_t squared_extents = elementwise_mul(scaled_axis0, scaled_axis0) +
                                   elementwise_mul(scaled_axis1, scaled_axis1) +
                                   elementwise_mul(scaled_axis2, scaled_axis2);
-  const point_t extents = apply([](scalar_t value) { return Kokkos::sqrt(value); }, squared_extents);
-  return AABB<scalar_t>{center - extents, center + extents};
+  const point_t extents = apply([](value_type value) { return Kokkos::sqrt(value); }, squared_extents);
+  return AABB<value_type>{center - extents, center + extents};
 }
 template <ValidEllipsoidType EllipsoidType, typename Metric>
-KOKKOS_FUNCTION AABB<typename EllipsoidType::scalar_t> compute_aabb(const EllipsoidType& ellipsoid,
+KOKKOS_FUNCTION AABB<typename EllipsoidType::value_type> compute_aabb(const EllipsoidType& ellipsoid,
                                                                     const Metric& /*metric*/) {
   return compute_aabb(ellipsoid);
 }
@@ -131,50 +131,50 @@ KOKKOS_FUNCTION AABB<typename EllipsoidType::scalar_t> compute_aabb(const Ellips
 /// lab-frame image of the body z-axis with half-length `length / 2`, so the AABB is the centerline endpoint AABB padded
 /// by `radius` in every coordinate direction.
 template <ValidSpherocylinderType SpherocylinderType>
-KOKKOS_FUNCTION AABB<typename SpherocylinderType::scalar_t> compute_aabb(const SpherocylinderType& spherocylinder) {
-  using scalar_t = typename SpherocylinderType::scalar_t;
-  using point_t = Point<scalar_t>;
+KOKKOS_FUNCTION AABB<typename SpherocylinderType::value_type> compute_aabb(const SpherocylinderType& spherocylinder) {
+  using value_type = typename SpherocylinderType::value_type;
+  using point_t = Point<value_type>;
   const auto& center = spherocylinder.center();
   const auto& orientation = spherocylinder.orientation();
   const auto& radius = spherocylinder.radius();
   const auto& length = spherocylinder.length();
 
-  constexpr mundy::Vector3<scalar_t> z_axis = {static_cast<scalar_t>(0), static_cast<scalar_t>(0),
-                                               static_cast<scalar_t>(1)};
-  const point_t scaled_dir = static_cast<scalar_t>(0.5) * length * (orientation * z_axis);
+  constexpr mundy::Vector3<value_type> z_axis = {static_cast<value_type>(0), static_cast<value_type>(0),
+                                               static_cast<value_type>(1)};
+  const point_t scaled_dir = static_cast<value_type>(0.5) * length * (orientation * z_axis);
   const point_t obb_centerline_min_corner = center - scaled_dir;
   const point_t obb_centerline_max_corner = center + scaled_dir;
-  const scalar_t min_x = Kokkos::min(obb_centerline_min_corner[0], obb_centerline_max_corner[0]) - radius;
-  const scalar_t min_y = Kokkos::min(obb_centerline_min_corner[1], obb_centerline_max_corner[1]) - radius;
-  const scalar_t min_z = Kokkos::min(obb_centerline_min_corner[2], obb_centerline_max_corner[2]) - radius;
-  const scalar_t max_x = Kokkos::max(obb_centerline_min_corner[0], obb_centerline_max_corner[0]) + radius;
-  const scalar_t max_y = Kokkos::max(obb_centerline_min_corner[1], obb_centerline_max_corner[1]) + radius;
-  const scalar_t max_z = Kokkos::max(obb_centerline_min_corner[2], obb_centerline_max_corner[2]) + radius;
-  return AABB<scalar_t>{min_x, min_y, min_z, max_x, max_y, max_z};
+  const value_type min_x = Kokkos::min(obb_centerline_min_corner[0], obb_centerline_max_corner[0]) - radius;
+  const value_type min_y = Kokkos::min(obb_centerline_min_corner[1], obb_centerline_max_corner[1]) - radius;
+  const value_type min_z = Kokkos::min(obb_centerline_min_corner[2], obb_centerline_max_corner[2]) - radius;
+  const value_type max_x = Kokkos::max(obb_centerline_min_corner[0], obb_centerline_max_corner[0]) + radius;
+  const value_type max_y = Kokkos::max(obb_centerline_min_corner[1], obb_centerline_max_corner[1]) + radius;
+  const value_type max_z = Kokkos::max(obb_centerline_min_corner[2], obb_centerline_max_corner[2]) + radius;
+  return AABB<value_type>{min_x, min_y, min_z, max_x, max_y, max_z};
 }
 template <ValidSpherocylinderType SpherocylinderType, typename Metric>
-KOKKOS_FUNCTION AABB<typename SpherocylinderType::scalar_t> compute_aabb(const SpherocylinderType& spherocylinder,
+KOKKOS_FUNCTION AABB<typename SpherocylinderType::value_type> compute_aabb(const SpherocylinderType& spherocylinder,
                                                                          const Metric& /*metric*/) {
   return compute_aabb(spherocylinder);
 }
 
 /// @brief Compute the axis-aligned bounding box of a spherocylinder segment
 template <ValidSpherocylinderSegmentType SegmentType>
-KOKKOS_FUNCTION AABB<typename SegmentType::scalar_t> compute_aabb(const SegmentType& segment) {
-  using scalar_t = typename SegmentType::scalar_t;
+KOKKOS_FUNCTION AABB<typename SegmentType::value_type> compute_aabb(const SegmentType& segment) {
+  using value_type = typename SegmentType::value_type;
   const auto& start = segment.start();
   const auto& end = segment.end();
   const auto& radius = segment.radius();
-  const scalar_t min_x = Kokkos::min(start[0], end[0]) - radius;
-  const scalar_t min_y = Kokkos::min(start[1], end[1]) - radius;
-  const scalar_t min_z = Kokkos::min(start[2], end[2]) - radius;
-  const scalar_t max_x = Kokkos::max(start[0], end[0]) + radius;
-  const scalar_t max_y = Kokkos::max(start[1], end[1]) + radius;
-  const scalar_t max_z = Kokkos::max(start[2], end[2]) + radius;
-  return AABB<scalar_t>{min_x, min_y, min_z, max_x, max_y, max_z};
+  const value_type min_x = Kokkos::min(start[0], end[0]) - radius;
+  const value_type min_y = Kokkos::min(start[1], end[1]) - radius;
+  const value_type min_z = Kokkos::min(start[2], end[2]) - radius;
+  const value_type max_x = Kokkos::max(start[0], end[0]) + radius;
+  const value_type max_y = Kokkos::max(start[1], end[1]) + radius;
+  const value_type max_z = Kokkos::max(start[2], end[2]) + radius;
+  return AABB<value_type>{min_x, min_y, min_z, max_x, max_y, max_z};
 }
 template <ValidSpherocylinderSegmentType SegmentType, typename Metric>
-KOKKOS_FUNCTION AABB<typename SegmentType::scalar_t> compute_aabb(const SegmentType& segment, const Metric& metric) {
+KOKKOS_FUNCTION AABB<typename SegmentType::value_type> compute_aabb(const SegmentType& segment, const Metric& metric) {
   return compute_aabb(unwrap_points_to_ref(segment, metric, reference_point(segment)));
 }
 

@@ -80,7 +80,7 @@ class FieldDeclarationHelper;
 template <typename T>
 class FieldDeclarationHelperT {
  public:
-  using field_scalar_type = T;
+  using field_value_typeype = T;
 
   //! \name Constructors and Assignment Operators
   //@{
@@ -266,7 +266,7 @@ class FieldDeclarationHelper {
   //! \name Constructors and Assignment Operators
   //@{
 
-  using invalid_field_scalar_type = void;
+  using invalid_field_value_typeype = void;
 
   /// \brief Canonical constructor
   FieldDeclarationHelper(stk::mesh::MetaData& meta_data)

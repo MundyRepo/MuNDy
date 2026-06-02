@@ -67,13 +67,13 @@ template <typename MatrixType>
 concept ValidMatrixType =
     is_matrix_v<std::decay_t<MatrixType>> &&
     requires(std::decay_t<MatrixType> matrix, const std::decay_t<MatrixType> const_matrix, size_t i) {
-      typename std::decay_t<MatrixType>::scalar_t;
-      { matrix[i] } -> std::convertible_to<typename std::decay_t<MatrixType>::scalar_t>;
-      { matrix(i) } -> std::convertible_to<typename std::decay_t<MatrixType>::scalar_t>;
-      { matrix(i, i) } -> std::convertible_to<typename std::decay_t<MatrixType>::scalar_t>;
-      { const_matrix[i] } -> std::convertible_to<const typename std::decay_t<MatrixType>::scalar_t>;
-      { const_matrix(i) } -> std::convertible_to<const typename std::decay_t<MatrixType>::scalar_t>;
-      { const_matrix(i, i) } -> std::convertible_to<const typename std::decay_t<MatrixType>::scalar_t>;
+      typename std::decay_t<MatrixType>::value_type;
+      { matrix[i] } -> std::convertible_to<typename std::decay_t<MatrixType>::value_type>;
+      { matrix(i) } -> std::convertible_to<typename std::decay_t<MatrixType>::value_type>;
+      { matrix(i, i) } -> std::convertible_to<typename std::decay_t<MatrixType>::value_type>;
+      { const_matrix[i] } -> std::convertible_to<const typename std::decay_t<MatrixType>::value_type>;
+      { const_matrix(i) } -> std::convertible_to<const typename std::decay_t<MatrixType>::value_type>;
+      { const_matrix(i, i) } -> std::convertible_to<const typename std::decay_t<MatrixType>::value_type>;
     };  // ValidMatrixType
 
 /// \brief Class for an NxM (num rows x num columns) matrix with arithmetic entries
@@ -129,10 +129,10 @@ class AMatrix {
   //@{
 
   /// \brief The type of the entries
-  using scalar_t = T;
+  using value_type = T;
 
   /// \brief The non-const type of the entries
-  using non_const_scalar_t = std::remove_const_t<T>;
+  using non_const_value_type = std::remove_const_t<T>;
 
   /// \brief Deep copy type
   using deep_copy_t = AMatrix<T, N, M>;
@@ -206,7 +206,7 @@ class AMatrix {
       KOKKOS_INLINE_FUNCTION constexpr AMatrix(const OtherMatrixType& other)
           MUNDY_REQUIRES(!std::is_same_v<OtherMatrixType, AMatrix<T, N, M, Accessor>>) &&
       (OtherMatrixType::num_rows == N) && (OtherMatrixType::num_cols == M) &&
-      (std::is_convertible_v<typename OtherMatrixType::scalar_t, T>) : accessor_() {
+      (std::is_convertible_v<typename OtherMatrixType::value_type, T>) : accessor_() {
     impl::deep_copy_impl(std::make_index_sequence<N * M>{}, *this, other);
   }
 
@@ -215,7 +215,7 @@ class AMatrix {
       KOKKOS_INLINE_FUNCTION constexpr AMatrix(OtherMatrixType&& other)
           MUNDY_REQUIRES(!std::is_same_v<OtherMatrixType, AMatrix<T, N, M, Accessor>>) &&
       (OtherMatrixType::num_rows == N) && (OtherMatrixType::num_cols == M) &&
-      (std::is_convertible_v<typename OtherMatrixType::scalar_t, T>) : accessor_() {
+      (std::is_convertible_v<typename OtherMatrixType::value_type, T>) : accessor_() {
     impl::deep_copy_impl(std::make_index_sequence<N * M>{}, *this, std::move(other));
   }
 
@@ -225,7 +225,7 @@ class AMatrix {
   KOKKOS_INLINE_FUNCTION constexpr AMatrix<T, N, M, Accessor>& operator=(const OtherMatrixType& other)
       MUNDY_REQUIRES((!std::is_same_v<OtherMatrixType, AMatrix<T, N, M, Accessor>>) &&
                      (OtherMatrixType::num_rows == N) && (OtherMatrixType::num_cols == M) &&
-                     (std::is_convertible_v<typename OtherMatrixType::scalar_t, T>) &&
+                     (std::is_convertible_v<typename OtherMatrixType::value_type, T>) &&
                      HasNonConstAccessOperator<Accessor, T>) {
     impl::deep_copy_impl(std::make_index_sequence<N * M>{}, *this, other);
     return *this;
@@ -237,7 +237,7 @@ class AMatrix {
   KOKKOS_INLINE_FUNCTION constexpr AMatrix<T, N, M, Accessor>& operator=(OtherMatrixType&& other)
       MUNDY_REQUIRES((!std::is_same_v<OtherMatrixType, AMatrix<T, N, M, Accessor>>) &&
                      (OtherMatrixType::num_rows == N) && (OtherMatrixType::num_cols == M) &&
-                     (std::is_convertible_v<typename OtherMatrixType::scalar_t, T>) &&
+                     (std::is_convertible_v<typename OtherMatrixType::value_type, T>) &&
                      HasNonConstAccessOperator<Accessor, T>) {
     impl::deep_copy_impl(std::make_index_sequence<N * M>{}, *this, std::move(other));
     return *this;
@@ -331,14 +331,14 @@ class AMatrix {
   /// \brief Get a copy of a certain column of the matrix
   /// \param[in] col The column index.
   KOKKOS_INLINE_FUNCTION
-  constexpr Vector<non_const_scalar_t, N> copy_column(size_t col) const {
+  constexpr Vector<non_const_value_type, N> copy_column(size_t col) const {
     return impl::copy_column_impl(std::make_index_sequence<N>{}, *this, col);
   }
 
   /// \brief Get a copy of a certain row of the matrix
   /// \param[in] row The row index.
   KOKKOS_INLINE_FUNCTION
-  constexpr Vector<non_const_scalar_t, M> copy_row(size_t row) const {
+  constexpr Vector<non_const_value_type, M> copy_row(size_t row) const {
     return impl::copy_row_impl(std::make_index_sequence<M>{}, *this, row);
   }
 

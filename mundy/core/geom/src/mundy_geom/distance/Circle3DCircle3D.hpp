@@ -49,18 +49,18 @@ namespace mundy {
 //@{
 
 template <ValidCircle3DType Circle3DType1, ValidCircle3DType Circle3DType2>
-MUNDY_REQUIRES(std::is_same_v<typename Circle3DType1::scalar_t, typename Circle3DType2::scalar_t>)
-KOKKOS_FUNCTION typename Circle3DType1::scalar_t distance(const Circle3DType1& circle3d1,  //
+MUNDY_REQUIRES(std::is_same_v<typename Circle3DType1::value_type, typename Circle3DType2::value_type>)
+KOKKOS_FUNCTION typename Circle3DType1::value_type distance(const Circle3DType1& circle3d1,  //
                                                           const Circle3DType2& circle3d2) {
   return distance(Euclidean{}, circle3d1, circle3d2);
 }
 
 template <ValidCircle3DType Circle3DType1, ValidCircle3DType Circle3DType2>
-MUNDY_REQUIRES(std::is_same_v<typename Circle3DType1::scalar_t, typename Circle3DType2::scalar_t>)
-KOKKOS_FUNCTION typename Circle3DType1::scalar_t distance([[maybe_unused]] const Euclidean distance_type,  //
+MUNDY_REQUIRES(std::is_same_v<typename Circle3DType1::value_type, typename Circle3DType2::value_type>)
+KOKKOS_FUNCTION typename Circle3DType1::value_type distance([[maybe_unused]] const Euclidean distance_type,  //
                                                           const Circle3DType1& circle3d1,                  //
                                                           const Circle3DType2& circle3d2) {
-  using Scalar = typename Circle3DType1::scalar_t;
+  using Scalar = typename Circle3DType1::value_type;
   Point<Scalar> closest_point1;
   Point<Scalar> closest_point2;
   mundy::Vector3<Scalar> shared_normal1;
@@ -70,10 +70,10 @@ KOKKOS_FUNCTION typename Circle3DType1::scalar_t distance([[maybe_unused]] const
 }
 
 template <ValidCircle3DType Circle3DType1, ValidCircle3DType Circle3DType2>
-MUNDY_REQUIRES(std::is_same_v<typename Circle3DType1::scalar_t, typename Circle3DType2::scalar_t>)
+MUNDY_REQUIRES(std::is_same_v<typename Circle3DType1::value_type, typename Circle3DType2::value_type>)
 class Circle3DCircle3DObjective {
  public:
-  using Scalar = typename Circle3DType1::scalar_t;
+  using Scalar = typename Circle3DType1::value_type;
 
   KOKKOS_FUNCTION
   Circle3DCircle3DObjective(const Circle3DType1& circle3d0,          //
@@ -121,16 +121,16 @@ class Circle3DCircle3DObjective {
 };
 
 template <ValidCircle3DType Circle3DType1, ValidCircle3DType Circle3DType2>
-MUNDY_REQUIRES(std::is_same_v<typename Circle3DType1::scalar_t, typename Circle3DType2::scalar_t>)
-KOKKOS_FUNCTION typename Circle3DType1::scalar_t
+MUNDY_REQUIRES(std::is_same_v<typename Circle3DType1::value_type, typename Circle3DType2::value_type>)
+KOKKOS_FUNCTION typename Circle3DType1::value_type
     distance([[maybe_unused]] const Euclidean distance_type,                    //
              const Circle3DType1& circle3d1,                                    //
              const Circle3DType2& circle3d2,                                    //
-             Point<typename Circle3DType1::scalar_t>& closest_point1,           //
-             Point<typename Circle3DType1::scalar_t>& closest_point2,           //
-             mundy::Vector3<typename Circle3DType1::scalar_t>& shared_normal1,  //
-             mundy::Vector3<typename Circle3DType1::scalar_t>& shared_normal2) {
-  using Scalar = typename Circle3DType1::scalar_t;
+             Point<typename Circle3DType1::value_type>& closest_point1,           //
+             Point<typename Circle3DType1::value_type>& closest_point2,           //
+             mundy::Vector3<typename Circle3DType1::value_type>& shared_normal1,  //
+             mundy::Vector3<typename Circle3DType1::value_type>& shared_normal2) {
+  using Scalar = typename Circle3DType1::value_type;
 
   // Setup the minimization
   // Note, the actual error is not guaranteed to be less than min_objective_delta due to the use of approximate

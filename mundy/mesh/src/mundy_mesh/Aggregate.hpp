@@ -151,11 +151,11 @@ namespace mesh {
 ///
 /// Our Accessors, the data they access, and the return type of the Accessor's get_view method are as follows:
 ///          Component Name                :              Data it accesses             ->         Return Type
-///   ScalarFieldComponent                 :  Field<scalar_t>                          ->  ScalarView<scalar_t>
-///   VectorNFieldComponent                :  Field<scalar_t>                          ->  VectorView<scalar_t, N>
-///   Matrix3FieldComponent                :  Field<scalar_t>                          ->  Matrix3View<scalar_t>
-///   QuaternionFieldComponent             :  Field<scalar_t>                          ->  QuaternionView<scalar_t>
-///   AABBFieldComponent                   :  Field<scalar_t>                          ->  AABBView<scalar_t>
+///   ScalarFieldComponent                 :  Field<value_type>                          ->  ScalarView<value_type>
+///   VectorNFieldComponent                :  Field<value_type>                          ->  VectorView<value_type, N>
+///   Matrix3FieldComponent                :  Field<value_type>                          ->  Matrix3View<value_type>
+///   QuaternionFieldComponent             :  Field<value_type>                          ->  QuaternionView<value_type>
+///   AABBFieldComponent                   :  Field<value_type>                          ->  AABBView<value_type>
 ///   SharedComponent<SharedType>      :  SharedType                               ->  SharedType&
 ///   PartMappedComponent<OtherComponent>  :  Kokkos::Map<PartOrdinal, OtherComponent> -> OtherComponent's return type
 ///

@@ -180,15 +180,15 @@ inline auto aabb_field_data(const FieldType& f, stk::mesh::Entity e,
                             stk::mesh::DummyOverload dummyArg = stk::mesh::DummyOverload(),
                             const char* fileName = HOST_DEBUG_FILE_NAME, int lineNumber = HOST_DEBUG_LINE_NUMBER) {
   constexpr size_t shift = 3;
-  using scalar_t = typename FieldType::value_type;
+  using value_type = typename FieldType::value_type;
   auto shifted_data_accessor =
-      get_shifted_view<scalar_t, shift>(stk::mesh::field_data(f, e, dummyArg, fileName, lineNumber));
-  auto max_corner = get_owning_vector3<scalar_t>(std::move(shifted_data_accessor));
-  auto min_corner = get_vector3_view<scalar_t>(stk::mesh::field_data(f, e, dummyArg, fileName, lineNumber));
+      get_shifted_view<value_type, shift>(stk::mesh::field_data(f, e, dummyArg, fileName, lineNumber));
+  auto max_corner = get_owning_vector3<value_type>(std::move(shifted_data_accessor));
+  auto min_corner = get_vector3_view<value_type>(stk::mesh::field_data(f, e, dummyArg, fileName, lineNumber));
 
   using min_point_t = decltype(min_corner);
   using max_point_t = decltype(max_corner);
-  return AABB<scalar_t, min_point_t, max_point_t>(min_corner, max_corner);
+  return AABB<value_type, min_point_t, max_point_t>(min_corner, max_corner);
 }
 //@}
 
@@ -295,14 +295,14 @@ KOKKOS_INLINE_FUNCTION auto quaternion_field_data(FieldType& f, const stk::mesh:
 template <class FieldType>
 KOKKOS_INLINE_FUNCTION auto aabb_field_data(FieldType& f, const stk::mesh::FastMeshIndex& i) {
   constexpr size_t shift = 3;
-  using scalar_t = typename FieldType::value_type;
-  auto shifted_data_accessor = get_owning_shifted_accessor<scalar_t, shift>(f(i));
-  auto max_corner = get_owning_vector3<scalar_t>(std::move(shifted_data_accessor));
-  auto min_corner = get_owning_vector3<scalar_t>(f(i));
+  using value_type = typename FieldType::value_type;
+  auto shifted_data_accessor = get_owning_shifted_accessor<value_type, shift>(f(i));
+  auto max_corner = get_owning_vector3<value_type>(std::move(shifted_data_accessor));
+  auto min_corner = get_owning_vector3<value_type>(f(i));
 
   using min_point_t = decltype(min_corner);
   using max_point_t = decltype(max_corner);
-  return AABB<scalar_t, min_point_t, max_point_t>(min_corner, max_corner);
+  return AABB<value_type, min_point_t, max_point_t>(min_corner, max_corner);
 }
 //@}
 

@@ -62,11 +62,11 @@ template <typename VectorType>
 concept ValidVectorType =
     is_vector_v<std::decay_t<VectorType>> &&
     requires(std::decay_t<VectorType> vector, const std::decay_t<VectorType> const_vector, size_t i) {
-      typename std::decay_t<VectorType>::scalar_t;
-      { vector[i] } -> std::convertible_to<typename std::decay_t<VectorType>::scalar_t>;
-      { vector(i) } -> std::convertible_to<typename std::decay_t<VectorType>::scalar_t>;
-      { const_vector[i] } -> std::convertible_to<const typename std::decay_t<VectorType>::scalar_t>;
-      { const_vector(i) } -> std::convertible_to<const typename std::decay_t<VectorType>::scalar_t>;
+      typename std::decay_t<VectorType>::value_type;
+      { vector[i] } -> std::convertible_to<typename std::decay_t<VectorType>::value_type>;
+      { vector(i) } -> std::convertible_to<typename std::decay_t<VectorType>::value_type>;
+      { const_vector[i] } -> std::convertible_to<const typename std::decay_t<VectorType>::value_type>;
+      { const_vector(i) } -> std::convertible_to<const typename std::decay_t<VectorType>::value_type>;
     };  // ValidVectorType
 
 /// \brief Class for an Nx1 vector with arithmetic entries
@@ -121,10 +121,10 @@ class AVector {
   //@{
 
   /// \brief The type of the entries
-  using scalar_t = T;
+  using value_type = T;
 
   /// \brief The non-const type of the entries
-  using non_const_scalar_t = std::remove_const_t<T>;
+  using non_const_value_type = std::remove_const_t<T>;
 
   /// \brief Deep copy type
   using deep_copy_t = AVector<T, N>;
@@ -216,7 +216,7 @@ class AVector {
   template <ValidVectorType OtherVectorType>
   KOKKOS_INLINE_FUNCTION constexpr AVector(const OtherVectorType& other)
       MUNDY_REQUIRES((!std::is_same_v<OtherVectorType, AVector<T, N, Accessor>>) && (OtherVectorType::size == N) &&
-                     (std::is_convertible_v<typename OtherVectorType::scalar_t, T>) && HasDefaultConstructor<Accessor>)
+                     (std::is_convertible_v<typename OtherVectorType::value_type, T>) && HasDefaultConstructor<Accessor>)
       : accessor_() {
     impl::deep_copy_impl(std::make_index_sequence<N>{}, *this, other);
   }
@@ -225,7 +225,7 @@ class AVector {
   template <ValidVectorType OtherVectorType>
   KOKKOS_INLINE_FUNCTION constexpr AVector(OtherVectorType&& other)
       MUNDY_REQUIRES((!std::is_same_v<OtherVectorType, AVector<T, N, Accessor>>) && (OtherVectorType::size == N) &&
-                     (std::is_convertible_v<typename OtherVectorType::scalar_t, T>) && HasDefaultConstructor<Accessor>)
+                     (std::is_convertible_v<typename OtherVectorType::value_type, T>) && HasDefaultConstructor<Accessor>)
       : accessor_() {
     impl::deep_copy_impl(std::make_index_sequence<N>{}, *this, std::move(other));
   }
@@ -235,7 +235,7 @@ class AVector {
   template <ValidVectorType OtherVectorType>
   KOKKOS_INLINE_FUNCTION constexpr AVector<T, N, Accessor>& operator=(const OtherVectorType& other)
       MUNDY_REQUIRES((!std::is_same_v<OtherVectorType, AVector<T, N, Accessor>>) && (OtherVectorType::size == N) &&
-                     (std::is_convertible_v<typename OtherVectorType::scalar_t, T>) &&
+                     (std::is_convertible_v<typename OtherVectorType::value_type, T>) &&
                      HasNonConstAccessOperator<Accessor, T>) {
     impl::deep_copy_impl(std::make_index_sequence<N>{}, *this, other);
     return *this;
@@ -246,7 +246,7 @@ class AVector {
   template <ValidVectorType OtherVectorType>
   KOKKOS_INLINE_FUNCTION constexpr AVector<T, N, Accessor>& operator=(OtherVectorType&& other)
       MUNDY_REQUIRES((!std::is_same_v<OtherVectorType, AVector<T, N, Accessor>>) && (OtherVectorType::size == N) &&
-                     (std::is_convertible_v<typename OtherVectorType::scalar_t, T>) &&
+                     (std::is_convertible_v<typename OtherVectorType::value_type, T>) &&
                      HasNonConstAccessOperator<Accessor, T>) {
     impl::deep_copy_impl(std::make_index_sequence<N>{}, *this, std::move(other));
     return *this;

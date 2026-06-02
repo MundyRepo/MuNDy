@@ -114,7 +114,7 @@ class FreeSpaceMetric {
   //! \name Type aliases
   //@{
 
-  using scalar_t = Scalar;
+  using value_type = Scalar;
   using OurVector3 = Vector3<Scalar>;
   using OurMatrix3 = Matrix3<Scalar>;
   using OurPoint = Point<Scalar>;
@@ -139,38 +139,38 @@ class FreeSpaceMetric {
   //@{
 
   template <ValidPointType PointT>
-  MUNDY_REQUIRES(std::is_same_v<typename PointT::scalar_t, Scalar>)
+  MUNDY_REQUIRES(std::is_same_v<typename PointT::value_type, Scalar>)
   KOKKOS_INLINE_FUNCTION constexpr OurPoint to_fractional(const PointT& p) const {
     return p;
   }
 
   template <ValidPointType PointT>
-  MUNDY_REQUIRES(std::is_same_v<typename PointT::scalar_t, Scalar>)
+  MUNDY_REQUIRES(std::is_same_v<typename PointT::value_type, Scalar>)
   KOKKOS_INLINE_FUNCTION constexpr OurPoint from_fractional(const PointT& p) const {
     return p;
   }
 
   template <ValidVector3Type Vector3T>
-  MUNDY_REQUIRES(std::is_same_v<typename Vector3T::scalar_t, Scalar>)
+  MUNDY_REQUIRES(std::is_same_v<typename Vector3T::value_type, Scalar>)
   KOKKOS_INLINE_FUNCTION constexpr OurVector3 frac_minimum_image(const Vector3T& fv) const {
     return OurVector3{fv[0], fv[1], fv[2]};
   }
 
   template <ValidVector3Type Vector3T>
-  MUNDY_REQUIRES(std::is_same_v<typename Vector3T::scalar_t, Scalar>)
+  MUNDY_REQUIRES(std::is_same_v<typename Vector3T::value_type, Scalar>)
   KOKKOS_INLINE_FUNCTION constexpr OurVector3 frac_wrap_to_unit_cell(const Vector3T& fv) const {
     return OurVector3{fv[0], fv[1], fv[2]};
   }
 
   template <ValidPointType PointT1, ValidPointType PointT2>
   MUNDY_REQUIRES(
-      std::is_same_v<typename PointT1::scalar_t, Scalar>&& std::is_same_v<typename PointT2::scalar_t, Scalar>)
+      std::is_same_v<typename PointT1::value_type, Scalar>&& std::is_same_v<typename PointT2::value_type, Scalar>)
   KOKKOS_INLINE_FUNCTION constexpr OurVector3 sep(const PointT1& p1, const PointT2& p2) const {
     return p2 - p1;
   }
 
   template <ValidPointType PointT>
-  MUNDY_REQUIRES(std::is_same_v<typename PointT::scalar_t, Scalar>)
+  MUNDY_REQUIRES(std::is_same_v<typename PointT::value_type, Scalar>)
   KOKKOS_INLINE_FUNCTION constexpr OurPoint wrap(const PointT& p) const {
     return p;
   }
@@ -181,7 +181,7 @@ class FreeSpaceMetric {
   }
 
   template <ValidPointType PointT, typename Integer>
-  MUNDY_REQUIRES(std::is_same_v<typename PointT::scalar_t, Scalar>)
+  MUNDY_REQUIRES(std::is_same_v<typename PointT::value_type, Scalar>)
   KOKKOS_INLINE_FUNCTION constexpr OurPoint shift_image(const PointT& p, const Vector3<Integer>& /*n*/) const {
     return p;  // No periodic images in free space; shift is a no-op for any n.
   }
@@ -206,7 +206,7 @@ class OrthorhombicMetric {
   //! \name Type aliases
   //@{
 
-  using scalar_t = Scalar;
+  using value_type = Scalar;
   using OurVector3 = Vector3<Scalar>;
   using OurMatrix3 = Matrix3<Scalar>;
   using OurPoint = Point<Scalar>;
@@ -261,13 +261,13 @@ class OrthorhombicMetric {
   //@{
 
   template <ValidPointType PointT>
-  MUNDY_REQUIRES(std::is_same_v<typename PointT::scalar_t, Scalar>)
+  MUNDY_REQUIRES(std::is_same_v<typename PointT::value_type, Scalar>)
   KOKKOS_INLINE_FUNCTION constexpr OurPoint to_fractional(const PointT& p) const {
     return elementwise_mul(scale_inv_, p);
   }
 
   template <ValidPointType PointT>
-  MUNDY_REQUIRES(std::is_same_v<typename PointT::scalar_t, Scalar>)
+  MUNDY_REQUIRES(std::is_same_v<typename PointT::value_type, Scalar>)
   KOKKOS_INLINE_FUNCTION constexpr OurPoint from_fractional(const PointT& frac) const {
     return elementwise_mul(scale_, frac);
   }
@@ -277,7 +277,7 @@ class OrthorhombicMetric {
   /// Maps each periodic component to [-0.5, 0.5) by subtracting round().
   /// Non-periodic components are passed through unchanged.
   template <ValidVector3Type Vector3T>
-  MUNDY_REQUIRES(std::is_same_v<typename Vector3T::scalar_t, Scalar>)
+  MUNDY_REQUIRES(std::is_same_v<typename Vector3T::value_type, Scalar>)
   KOKKOS_INLINE_FUNCTION constexpr OurVector3 frac_minimum_image(const Vector3T& fv) const {
     OurVector3 r{fv[0], fv[1], fv[2]};
     if constexpr (PeriodicAxes & AXIS_X) r[0] -= Kokkos::round(r[0]);
@@ -287,7 +287,7 @@ class OrthorhombicMetric {
   }
 
   template <ValidVector3Type Vector3T>
-  MUNDY_REQUIRES(std::is_same_v<typename Vector3T::scalar_t, Scalar>)
+  MUNDY_REQUIRES(std::is_same_v<typename Vector3T::value_type, Scalar>)
   KOKKOS_INLINE_FUNCTION constexpr OurVector3 frac_wrap_to_unit_cell(const Vector3T& fv) const {
     OurVector3 r{fv[0], fv[1], fv[2]};
     if constexpr (PeriodicAxes & AXIS_X) r[0] = impl::safe_unit_mod1(r[0]);
@@ -299,13 +299,13 @@ class OrthorhombicMetric {
   /// \brief Minimum-image displacement vector from p1 to p2.
   template <ValidPointType PointT1, ValidPointType PointT2>
   MUNDY_REQUIRES(
-      std::is_same_v<typename PointT1::scalar_t, Scalar>&& std::is_same_v<typename PointT2::scalar_t, Scalar>)
+      std::is_same_v<typename PointT1::value_type, Scalar>&& std::is_same_v<typename PointT2::value_type, Scalar>)
   KOKKOS_INLINE_FUNCTION constexpr OurVector3 sep(const PointT1& p1, const PointT2& p2) const {
     return from_fractional(frac_minimum_image(to_fractional(p2 - p1)));
   }
 
   template <ValidPointType PointT>
-  MUNDY_REQUIRES(std::is_same_v<typename PointT::scalar_t, Scalar>)
+  MUNDY_REQUIRES(std::is_same_v<typename PointT::value_type, Scalar>)
   KOKKOS_INLINE_FUNCTION constexpr OurPoint wrap(const PointT& p) const {
     return from_fractional(frac_wrap_to_unit_cell(to_fractional(p)));
   }
@@ -317,7 +317,7 @@ class OrthorhombicMetric {
   }
 
   template <ValidPointType PointT, typename Integer>
-  MUNDY_REQUIRES(std::is_same_v<typename PointT::scalar_t, Scalar>)
+  MUNDY_REQUIRES(std::is_same_v<typename PointT::value_type, Scalar>)
   KOKKOS_INLINE_FUNCTION constexpr OurPoint shift_image(const PointT& p, const Vector3<Integer>& n) const {
     return translate(p, elementwise_mul(scale_, n.template cast<Scalar>()));
   }
@@ -348,7 +348,7 @@ class TriclinicMetric {
   //! \name Type aliases
   //@{
 
-  using scalar_t = Scalar;
+  using value_type = Scalar;
   using OurVector3 = Vector3<Scalar>;
   using OurMatrix3 = Matrix3<Scalar>;
   using OurPoint = Point<Scalar>;
@@ -390,13 +390,13 @@ class TriclinicMetric {
   //@{
 
   template <ValidPointType PointT>
-  MUNDY_REQUIRES(std::is_same_v<typename PointT::scalar_t, Scalar>)
+  MUNDY_REQUIRES(std::is_same_v<typename PointT::value_type, Scalar>)
   KOKKOS_INLINE_FUNCTION constexpr OurPoint to_fractional(const PointT& p) const {
     return h_inv_ * p;
   }
 
   template <ValidPointType PointT>
-  MUNDY_REQUIRES(std::is_same_v<typename PointT::scalar_t, Scalar>)
+  MUNDY_REQUIRES(std::is_same_v<typename PointT::value_type, Scalar>)
   KOKKOS_INLINE_FUNCTION constexpr OurPoint from_fractional(const PointT& frac) const {
     return h_ * frac;
   }
@@ -406,7 +406,7 @@ class TriclinicMetric {
   /// Maps each periodic fractional component to [-0.5, 0.5) by subtracting round().
   /// Non-periodic fractional components are passed through unchanged.
   template <ValidVector3Type Vector3T>
-  MUNDY_REQUIRES(std::is_same_v<typename Vector3T::scalar_t, Scalar>)
+  MUNDY_REQUIRES(std::is_same_v<typename Vector3T::value_type, Scalar>)
   KOKKOS_INLINE_FUNCTION constexpr OurVector3 frac_minimum_image(const Vector3T& fv) const {
     OurVector3 r{fv[0], fv[1], fv[2]};
     if constexpr (PeriodicAxes & AXIS_X) r[0] -= Kokkos::round(r[0]);
@@ -416,7 +416,7 @@ class TriclinicMetric {
   }
 
   template <ValidVector3Type Vector3T>
-  MUNDY_REQUIRES(std::is_same_v<typename Vector3T::scalar_t, Scalar>)
+  MUNDY_REQUIRES(std::is_same_v<typename Vector3T::value_type, Scalar>)
   KOKKOS_INLINE_FUNCTION constexpr OurVector3 frac_wrap_to_unit_cell(const Vector3T& fv) const {
     OurVector3 r{fv[0], fv[1], fv[2]};
     if constexpr (PeriodicAxes & AXIS_X) r[0] = impl::safe_unit_mod1(r[0]);
@@ -427,13 +427,13 @@ class TriclinicMetric {
 
   template <ValidPointType PointT1, ValidPointType PointT2>
   MUNDY_REQUIRES(
-      std::is_same_v<typename PointT1::scalar_t, Scalar>&& std::is_same_v<typename PointT2::scalar_t, Scalar>)
+      std::is_same_v<typename PointT1::value_type, Scalar>&& std::is_same_v<typename PointT2::value_type, Scalar>)
   KOKKOS_INLINE_FUNCTION constexpr OurVector3 sep(const PointT1& p1, const PointT2& p2) const {
     return from_fractional(frac_minimum_image(to_fractional(p2 - p1)));
   }
 
   template <ValidPointType PointT>
-  MUNDY_REQUIRES(std::is_same_v<typename PointT::scalar_t, Scalar>)
+  MUNDY_REQUIRES(std::is_same_v<typename PointT::value_type, Scalar>)
   KOKKOS_INLINE_FUNCTION constexpr OurPoint wrap(const PointT& p) const {
     return from_fractional(frac_wrap_to_unit_cell(to_fractional(p)));
   }
@@ -443,7 +443,7 @@ class TriclinicMetric {
   }
 
   template <ValidPointType PointT, typename Integer>
-  MUNDY_REQUIRES(std::is_same_v<typename PointT::scalar_t, Scalar>)
+  MUNDY_REQUIRES(std::is_same_v<typename PointT::value_type, Scalar>)
   KOKKOS_INLINE_FUNCTION constexpr OurPoint shift_image(const PointT& p, const Vector3<Integer>& n) const {
     return translate(p, h_ * n.template cast<Scalar>());
   }
@@ -828,57 +828,57 @@ KOKKOS_INLINE_FUNCTION auto reference_point(const Object& obj);
 #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
 
 template <ValidPointType T>
-KOKKOS_INLINE_FUNCTION Point<typename T::scalar_t> reference_point(const T& p) {
+KOKKOS_INLINE_FUNCTION Point<typename T::value_type> reference_point(const T& p) {
   return p;
 }
 
 template <ValidLineType T>
-KOKKOS_INLINE_FUNCTION Point<typename T::scalar_t> reference_point(const T& l) {
+KOKKOS_INLINE_FUNCTION Point<typename T::value_type> reference_point(const T& l) {
   return l.center();
 }
 
 template <ValidLineSegmentType T>
-KOKKOS_INLINE_FUNCTION Point<typename T::scalar_t> reference_point(const T& ls) {
+KOKKOS_INLINE_FUNCTION Point<typename T::value_type> reference_point(const T& ls) {
   return ls.start();
 }
 
 template <ValidCircle3DType T>
-KOKKOS_INLINE_FUNCTION Point<typename T::scalar_t> reference_point(const T& c) {
+KOKKOS_INLINE_FUNCTION Point<typename T::value_type> reference_point(const T& c) {
   return c.center();
 }
 
 template <ValidVSegmentType T>
-KOKKOS_INLINE_FUNCTION Point<typename T::scalar_t> reference_point(const T& vs) {
+KOKKOS_INLINE_FUNCTION Point<typename T::value_type> reference_point(const T& vs) {
   return vs.start();
 }
 
 template <ValidAABBType T>
-KOKKOS_INLINE_FUNCTION Point<typename T::scalar_t> reference_point(const T& aabb) {
+KOKKOS_INLINE_FUNCTION Point<typename T::value_type> reference_point(const T& aabb) {
   return aabb.min_corner();
 }
 
 template <ValidSphereType T>
-KOKKOS_INLINE_FUNCTION Point<typename T::scalar_t> reference_point(const T& s) {
+KOKKOS_INLINE_FUNCTION Point<typename T::value_type> reference_point(const T& s) {
   return s.center();
 }
 
 template <ValidSpherocylinderType T>
-KOKKOS_INLINE_FUNCTION Point<typename T::scalar_t> reference_point(const T& sc) {
+KOKKOS_INLINE_FUNCTION Point<typename T::value_type> reference_point(const T& sc) {
   return sc.center();
 }
 
 template <ValidSpherocylinderSegmentType T>
-KOKKOS_INLINE_FUNCTION Point<typename T::scalar_t> reference_point(const T& scs) {
+KOKKOS_INLINE_FUNCTION Point<typename T::value_type> reference_point(const T& scs) {
   return scs.start();
 }
 
 template <ValidRingType T>
-KOKKOS_INLINE_FUNCTION Point<typename T::scalar_t> reference_point(const T& r) {
+KOKKOS_INLINE_FUNCTION Point<typename T::value_type> reference_point(const T& r) {
   return r.center();
 }
 
 template <ValidEllipsoidType T>
-KOKKOS_INLINE_FUNCTION Point<typename T::scalar_t> reference_point(const T& e) {
+KOKKOS_INLINE_FUNCTION Point<typename T::value_type> reference_point(const T& e) {
   return e.center();
 }
 

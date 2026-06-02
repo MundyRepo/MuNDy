@@ -39,23 +39,23 @@
 // Mundy
 #include <mundy_utils/reference_wrapper.hpp>  // for mundy::reference_wrapper, mundy::ref
 
-using scalar_t = double;
-using vec_t = std::vector<scalar_t>;
+using value_type = double;
+using vec_t = std::vector<value_type>;
 
 struct WorkspaceWrapper {
-  mundy::reference_wrapper<scalar_t> x;
-  mundy::reference_wrapper<scalar_t> y;
-  mundy::reference_wrapper<scalar_t> z;
+  mundy::reference_wrapper<value_type> x;
+  mundy::reference_wrapper<value_type> y;
+  mundy::reference_wrapper<value_type> z;
 
   KOKKOS_INLINE_FUNCTION
-  constexpr void step(const scalar_t alpha, const scalar_t beta, const size_t i, const size_t round) {
-    scalar_t& x_ref = x;  // intentionally exercise implicit conversion
-    scalar_t& y_ref = y;
-    scalar_t& z_ref = z;
+  constexpr void step(const value_type alpha, const value_type beta, const size_t i, const size_t round) {
+    value_type& x_ref = x;  // intentionally exercise implicit conversion
+    value_type& y_ref = y;
+    value_type& z_ref = z;
 
-    const scalar_t wave = static_cast<scalar_t>((i % 11) + 1) + static_cast<scalar_t>((round % 7) + 1);
-    const scalar_t t0 = x_ref + beta * y_ref;
-    const scalar_t t1 = y_ref - alpha * z_ref + 0.125 * wave;
+    const value_type wave = static_cast<value_type>((i % 11) + 1) + static_cast<value_type>((round % 7) + 1);
+    const value_type t0 = x_ref + beta * y_ref;
+    const value_type t1 = y_ref - alpha * z_ref + 0.125 * wave;
     z_ref = t0 * t1 + 0.01 * x_ref;
     x_ref = z_ref - 0.25 * y_ref + 0.5 * alpha;
     y_ref = y_ref + alpha * x_ref - beta * z_ref + 0.001 * wave;
@@ -63,15 +63,15 @@ struct WorkspaceWrapper {
 };
 
 struct WorkspaceExplicit {
-  scalar_t& x;
-  scalar_t& y;
-  scalar_t& z;
+  value_type& x;
+  value_type& y;
+  value_type& z;
 
   KOKKOS_INLINE_FUNCTION
-  constexpr void step(const scalar_t alpha, const scalar_t beta, const size_t i, const size_t round) {
-    const scalar_t wave = static_cast<scalar_t>((i % 11) + 1) + static_cast<scalar_t>((round % 7) + 1);
-    const scalar_t t0 = x + beta * y;
-    const scalar_t t1 = y - alpha * z + 0.125 * wave;
+  constexpr void step(const value_type alpha, const value_type beta, const size_t i, const size_t round) {
+    const value_type wave = static_cast<value_type>((i % 11) + 1) + static_cast<value_type>((round % 7) + 1);
+    const value_type t0 = x + beta * y;
+    const value_type t1 = y - alpha * z + 0.125 * wave;
     z = t0 * t1 + 0.01 * x;
     x = z - 0.25 * y + 0.5 * alpha;
     y = y + alpha * x - beta * z + 0.001 * wave;
@@ -82,7 +82,7 @@ void fill_deterministic(vec_t& x, vec_t& y, vec_t& z) {
   std::uint64_t seed = 0xC0FFEEULL;
   auto next_unit = [&seed]() {
     seed = seed * 1664525ULL + 1013904223ULL;
-    return static_cast<scalar_t>(seed & 0xFFFFULL) / static_cast<scalar_t>(0x10000ULL);
+    return static_cast<value_type>(seed & 0xFFFFULL) / static_cast<value_type>(0x10000ULL);
   };
 
   for (size_t i = 0; i < x.size(); ++i) {
@@ -92,15 +92,15 @@ void fill_deterministic(vec_t& x, vec_t& y, vec_t& z) {
   }
 }
 
-scalar_t compute_checksum(const vec_t& x, const vec_t& y, const vec_t& z) {
-  scalar_t checksum = 0.0;
+value_type compute_checksum(const vec_t& x, const vec_t& y, const vec_t& z) {
+  value_type checksum = 0.0;
   for (size_t i = 0; i < x.size(); i += 7) {
     checksum += x[i] * 0.5 + y[i] * 0.25 + z[i] * 0.125;
   }
   return checksum;
 }
 
-scalar_t run_with_wrapper(vec_t& x, vec_t& y, vec_t& z, const scalar_t alpha, const scalar_t beta,
+value_type run_with_wrapper(vec_t& x, vec_t& y, vec_t& z, const value_type alpha, const value_type beta,
                           const size_t rounds) {
   for (size_t round = 0; round < rounds; ++round) {
     for (size_t i = 0; i < x.size(); ++i) {
@@ -111,7 +111,7 @@ scalar_t run_with_wrapper(vec_t& x, vec_t& y, vec_t& z, const scalar_t alpha, co
   return compute_checksum(x, y, z);
 }
 
-scalar_t run_with_explicit_ref(vec_t& x, vec_t& y, vec_t& z, const scalar_t alpha, const scalar_t beta,
+value_type run_with_explicit_ref(vec_t& x, vec_t& y, vec_t& z, const value_type alpha, const value_type beta,
                                const size_t rounds) {
   for (size_t round = 0; round < rounds; ++round) {
     for (size_t i = 0; i < x.size(); ++i) {
@@ -122,12 +122,12 @@ scalar_t run_with_explicit_ref(vec_t& x, vec_t& y, vec_t& z, const scalar_t alph
   return compute_checksum(x, y, z);
 }
 
-scalar_t run_direct(vec_t& x, vec_t& y, vec_t& z, const scalar_t alpha, const scalar_t beta, const size_t rounds) {
+value_type run_direct(vec_t& x, vec_t& y, vec_t& z, const value_type alpha, const value_type beta, const size_t rounds) {
   for (size_t round = 0; round < rounds; ++round) {
     for (size_t i = 0; i < x.size(); ++i) {
-      const scalar_t wave = static_cast<scalar_t>((i % 11) + 1) + static_cast<scalar_t>((round % 7) + 1);
-      const scalar_t t0 = x[i] + beta * y[i];
-      const scalar_t t1 = y[i] - alpha * z[i] + 0.125 * wave;
+      const value_type wave = static_cast<value_type>((i % 11) + 1) + static_cast<value_type>((round % 7) + 1);
+      const value_type t0 = x[i] + beta * y[i];
+      const value_type t1 = y[i] - alpha * z[i] + 0.125 * wave;
       z[i] = t0 * t1 + 0.01 * x[i];
       x[i] = z[i] - 0.25 * y[i] + 0.5 * alpha;
       y[i] = y[i] + alpha * x[i] - beta * z[i] + 0.001 * wave;
@@ -143,7 +143,7 @@ void run_case(ankerl::nanobench::Bench& bench, const std::string& name, const ve
     vec_t x = x0;
     vec_t y = y0;
     vec_t z = z0;
-    const scalar_t checksum = func(x, y, z);
+    const value_type checksum = func(x, y, z);
     ankerl::nanobench::doNotOptimizeAway(checksum);
     ankerl::nanobench::doNotOptimizeAway(x);
     ankerl::nanobench::doNotOptimizeAway(y);
@@ -156,8 +156,8 @@ int main(int argc, char** argv) {
   {
     constexpr size_t num_entries = 200000;
     constexpr size_t rounds = 8;
-    constexpr scalar_t alpha = 1.75;
-    constexpr scalar_t beta = 0.65;
+    constexpr value_type alpha = 1.75;
+    constexpr value_type beta = 0.65;
 
     vec_t x0(num_entries);
     vec_t y0(num_entries);

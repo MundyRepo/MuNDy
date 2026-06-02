@@ -329,7 +329,7 @@ template <typename FieldScalarType, typename Tag>
 class TaggedFieldDeclarationHelperT {
  public:
   using our_t           = TaggedFieldDeclarationHelperT<FieldScalarType, Tag>;
-  using field_scalar_type = std::remove_cvref_t<FieldScalarType>;
+  using field_value_typeype = std::remove_cvref_t<FieldScalarType>;
 
   //! \name Constructors and Assignment Operators
   //@{
@@ -448,12 +448,12 @@ class TaggedFieldBackedDeclarationHelperT {
   using access_like    = AccessLike;
   using canonical_access = canonical_component_access_t<AccessLike>;
   using shape          = component_access_shape<canonical_access>;
-  using field_scalar_type =
-      std::conditional_t<std::is_void_v<FieldScalarType>, typename shape::field_scalar_type,
+  using field_value_typeype =
+      std::conditional_t<std::is_void_v<FieldScalarType>, typename shape::field_value_typeype,
                          std::remove_cvref_t<FieldScalarType>>;
 
   static_assert(std::is_void_v<FieldScalarType> ||
-                    std::is_same_v<std::remove_cvref_t<FieldScalarType>, typename shape::field_scalar_type>,
+                    std::is_same_v<std::remove_cvref_t<FieldScalarType>, typename shape::field_value_typeype>,
                 "The chosen field scalar type is incompatible with the chosen component access.");
 
   //! \name Constructors and Assignment Operators
@@ -505,7 +505,7 @@ class TaggedFieldBackedDeclarationHelperT {
   template <typename T>
   auto type() const {
     using new_fst = std::remove_cvref_t<T>;
-    static_assert(std::is_same_v<new_fst, typename shape::field_scalar_type>,
+    static_assert(std::is_same_v<new_fst, typename shape::field_value_typeype>,
                   "The chosen field scalar type is incompatible with the chosen component access.");
     return TaggedFieldBackedDeclarationHelperT<new_fst, AccessLike, Tag>(snapshot_);
   }
@@ -530,11 +530,11 @@ class TaggedFieldBackedDeclarationHelperT {
     auto snapshot = snapshot_;
     impl::apply_default_output_type_if_needed<canonical_access>(snapshot);
 
-    stk::mesh::Field<field_scalar_type>& field =
-        impl::declare_field_from_snapshot<field_scalar_type>(snapshot);
+    stk::mesh::Field<field_value_typeype>& field =
+        impl::declare_field_from_snapshot<field_value_typeype>(snapshot);
 
     using component_type =
-        typename impl::field_component_for<canonical_access>::template type<field_scalar_type>;
+        typename impl::field_component_for<canonical_access>::template type<field_value_typeype>;
     component_type component(field);
 
     if constexpr (std::is_void_v<Tag>) {

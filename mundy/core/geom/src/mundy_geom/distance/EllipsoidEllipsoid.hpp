@@ -49,10 +49,10 @@ namespace impl {
 /// \brief Cost-only functor for ellipsoid–ellipsoid distance, used by SharedNormalSignedFiniteDiff.
 /// \internal
 template <ValidEllipsoidType EllipsoidType1, ValidEllipsoidType EllipsoidType2>
-MUNDY_REQUIRES(std::is_same_v<typename EllipsoidType1::scalar_t, typename EllipsoidType2::scalar_t>)
+MUNDY_REQUIRES(std::is_same_v<typename EllipsoidType1::value_type, typename EllipsoidType2::value_type>)
 class EllipsoidEllipsoidObjective {
  public:
-  using Scalar = typename EllipsoidType1::scalar_t;
+  using Scalar = typename EllipsoidType1::value_type;
 
   KOKKOS_FUNCTION
   EllipsoidEllipsoidObjective(const EllipsoidType1& e0, const EllipsoidType2& e1,
@@ -89,10 +89,10 @@ class EllipsoidEllipsoidObjective {
 ///
 /// \internal
 template <ValidEllipsoidType EllipsoidType1, ValidEllipsoidType EllipsoidType2>
-MUNDY_REQUIRES(std::is_same_v<typename EllipsoidType1::scalar_t, typename EllipsoidType2::scalar_t>)
+MUNDY_REQUIRES(std::is_same_v<typename EllipsoidType1::value_type, typename EllipsoidType2::value_type>)
 class EllipsoidEllipsoidObjectiveFDF {
  public:
-  using Scalar = typename EllipsoidType1::scalar_t;
+  using Scalar = typename EllipsoidType1::value_type;
 
   KOKKOS_FUNCTION
   EllipsoidEllipsoidObjectiveFDF(const EllipsoidType1& e0, const EllipsoidType2& e1,
@@ -176,19 +176,19 @@ class EllipsoidEllipsoidObjectiveFDF {
 /// Dispatches to \c distance(SharedNormalSigned{}, ...).  The implementation uses a combined
 /// cost-and-gradient (FDF) L-BFGS minimiser over a 3×3 grid of initial guesses.
 template <ValidEllipsoidType EllipsoidType1, ValidEllipsoidType EllipsoidType2>
-MUNDY_REQUIRES(std::is_same_v<typename EllipsoidType1::scalar_t, typename EllipsoidType2::scalar_t>)
-typename EllipsoidType1::scalar_t distance(const EllipsoidType1& ellipsoid1,
+MUNDY_REQUIRES(std::is_same_v<typename EllipsoidType1::value_type, typename EllipsoidType2::value_type>)
+typename EllipsoidType1::value_type distance(const EllipsoidType1& ellipsoid1,
                                            const EllipsoidType2& ellipsoid2) {
   return distance(SharedNormalSigned{}, ellipsoid1, ellipsoid2);
 }
 
 /// \brief 2-arg overload — convenience wrapper for the 6-arg FDF implementation.
 template <ValidEllipsoidType EllipsoidType1, ValidEllipsoidType EllipsoidType2>
-MUNDY_REQUIRES(std::is_same_v<typename EllipsoidType1::scalar_t, typename EllipsoidType2::scalar_t>)
-typename EllipsoidType1::scalar_t distance([[maybe_unused]] const SharedNormalSigned tag,
+MUNDY_REQUIRES(std::is_same_v<typename EllipsoidType1::value_type, typename EllipsoidType2::value_type>)
+typename EllipsoidType1::value_type distance([[maybe_unused]] const SharedNormalSigned tag,
                                            const EllipsoidType1& ellipsoid1,
                                            const EllipsoidType2& ellipsoid2) {
-  using Scalar = typename EllipsoidType1::scalar_t;
+  using Scalar = typename EllipsoidType1::value_type;
   Point<Scalar> cp1, cp2;
   mundy::Vector3<Scalar> sn1, sn2;
   return distance(tag, ellipsoid1, ellipsoid2, cp1, cp2, sn1, sn2);
@@ -200,16 +200,16 @@ typename EllipsoidType1::scalar_t distance([[maybe_unused]] const SharedNormalSi
 /// exactly once for each ellipsoid, with the result shared between the objective value and the
 /// analytical gradient.
 template <ValidEllipsoidType EllipsoidType1, ValidEllipsoidType EllipsoidType2>
-MUNDY_REQUIRES(std::is_same_v<typename EllipsoidType1::scalar_t, typename EllipsoidType2::scalar_t>)
-typename EllipsoidType1::scalar_t
+MUNDY_REQUIRES(std::is_same_v<typename EllipsoidType1::value_type, typename EllipsoidType2::value_type>)
+typename EllipsoidType1::value_type
     distance([[maybe_unused]] const SharedNormalSigned,
              const EllipsoidType1& ellipsoid1,
              const EllipsoidType2& ellipsoid2,
-             Point<typename EllipsoidType1::scalar_t>& closest_point1,
-             Point<typename EllipsoidType1::scalar_t>& closest_point2,
-             mundy::Vector3<typename EllipsoidType1::scalar_t>& shared_normal1,
-             mundy::Vector3<typename EllipsoidType1::scalar_t>& shared_normal2) {
-  using Scalar = typename EllipsoidType1::scalar_t;
+             Point<typename EllipsoidType1::value_type>& closest_point1,
+             Point<typename EllipsoidType1::value_type>& closest_point2,
+             mundy::Vector3<typename EllipsoidType1::value_type>& shared_normal1,
+             mundy::Vector3<typename EllipsoidType1::value_type>& shared_normal2) {
+  using Scalar = typename EllipsoidType1::value_type;
   constexpr size_t lbfgs_max_memory_size = 10;
 
   impl::EllipsoidEllipsoidObjectiveFDF<EllipsoidType1, EllipsoidType2> fdf(
@@ -250,28 +250,28 @@ typename EllipsoidType1::scalar_t
 /// gradient.  Kept so that timing and accuracy comparisons with the default FDF implementation
 /// remain reproducible.  Not intended for production use.
 template <ValidEllipsoidType EllipsoidType1, ValidEllipsoidType EllipsoidType2>
-MUNDY_REQUIRES(std::is_same_v<typename EllipsoidType1::scalar_t, typename EllipsoidType2::scalar_t>)
-KOKKOS_FUNCTION typename EllipsoidType1::scalar_t distance(
+MUNDY_REQUIRES(std::is_same_v<typename EllipsoidType1::value_type, typename EllipsoidType2::value_type>)
+KOKKOS_FUNCTION typename EllipsoidType1::value_type distance(
     [[maybe_unused]] const SharedNormalSignedFiniteDiff tag,
     const EllipsoidType1& ellipsoid1,
     const EllipsoidType2& ellipsoid2) {
-  using Scalar = typename EllipsoidType1::scalar_t;
+  using Scalar = typename EllipsoidType1::value_type;
   Point<Scalar> cp1, cp2;
   mundy::Vector3<Scalar> sn1, sn2;
   return distance(tag, ellipsoid1, ellipsoid2, cp1, cp2, sn1, sn2);
 }
 
 template <ValidEllipsoidType EllipsoidType1, ValidEllipsoidType EllipsoidType2>
-MUNDY_REQUIRES(std::is_same_v<typename EllipsoidType1::scalar_t, typename EllipsoidType2::scalar_t>)
-KOKKOS_FUNCTION typename EllipsoidType1::scalar_t
+MUNDY_REQUIRES(std::is_same_v<typename EllipsoidType1::value_type, typename EllipsoidType2::value_type>)
+KOKKOS_FUNCTION typename EllipsoidType1::value_type
     distance([[maybe_unused]] const SharedNormalSignedFiniteDiff,
              const EllipsoidType1& ellipsoid1,
              const EllipsoidType2& ellipsoid2,
-             Point<typename EllipsoidType1::scalar_t>& closest_point1,
-             Point<typename EllipsoidType1::scalar_t>& closest_point2,
-             mundy::Vector3<typename EllipsoidType1::scalar_t>& shared_normal1,
-             mundy::Vector3<typename EllipsoidType1::scalar_t>& shared_normal2) {
-  using Scalar = typename EllipsoidType1::scalar_t;
+             Point<typename EllipsoidType1::value_type>& closest_point1,
+             Point<typename EllipsoidType1::value_type>& closest_point2,
+             mundy::Vector3<typename EllipsoidType1::value_type>& shared_normal1,
+             mundy::Vector3<typename EllipsoidType1::value_type>& shared_normal2) {
+  using Scalar = typename EllipsoidType1::value_type;
   constexpr size_t lbfgs_max_memory_size = 10;
 
   impl::EllipsoidEllipsoidObjective<EllipsoidType1, EllipsoidType2> objective(

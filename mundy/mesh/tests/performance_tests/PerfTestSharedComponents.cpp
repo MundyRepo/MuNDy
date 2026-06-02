@@ -89,11 +89,11 @@ static constexpr size_t kDefaultNumEntities = 100000;
 // Type aliases
 // =============================================================================
 
-using scalar_t     = double;
-using vector3_t    = mundy::Vector3<scalar_t>;
-using matrix3_t    = mundy::Matrix3<scalar_t>;
-using quaternion_t = mundy::Quaternion<scalar_t>;
-using field_t      = stk::mesh::Field<scalar_t>;
+using value_type     = double;
+using vector3_t    = mundy::Vector3<value_type>;
+using matrix3_t    = mundy::Matrix3<value_type>;
+using quaternion_t = mundy::Quaternion<value_type>;
+using field_t      = stk::mesh::Field<value_type>;
 
 using mundy::normalize;
 using mundy::mesh::get_updated_ngp_component;
@@ -102,21 +102,21 @@ using mundy::mesh::vector3_field_data;
 using mundy::mesh::matrix3_field_data;
 using mundy::mesh::quaternion_field_data;
 
-using FC_s = mundy::mesh::ScalarFieldComponent<scalar_t>;
-using FC_v = mundy::mesh::Vector3FieldComponent<scalar_t>;
-using FC_m = mundy::mesh::Matrix3FieldComponent<scalar_t>;
-using FC_q = mundy::mesh::QuaternionFieldComponent<scalar_t>;
-using SC_s = mundy::mesh::SharedScalarComponent<scalar_t>;
-using SC_v = mundy::mesh::SharedVector3Component<scalar_t>;
-using SC_m = mundy::mesh::SharedMatrix3Component<scalar_t>;
-using SC_q = mundy::mesh::SharedQuaternionComponent<scalar_t>;
+using FC_s = mundy::mesh::ScalarFieldComponent<value_type>;
+using FC_v = mundy::mesh::Vector3FieldComponent<value_type>;
+using FC_m = mundy::mesh::Matrix3FieldComponent<value_type>;
+using FC_q = mundy::mesh::QuaternionFieldComponent<value_type>;
+using SC_s = mundy::mesh::SharedScalarComponent<value_type>;
+using SC_v = mundy::mesh::SharedVector3Component<value_type>;
+using SC_m = mundy::mesh::SharedMatrix3Component<value_type>;
+using SC_q = mundy::mesh::SharedQuaternionComponent<value_type>;
 
 // =============================================================================
 // Fixture
 // =============================================================================
 
 KOKKOS_INLINE_FUNCTION
-static matrix3_t make_spd_matrix3(scalar_t b) {
+static matrix3_t make_spd_matrix3(value_type b) {
   return matrix3_t(1.25 + b,           0.08 + 0.05*b,  -0.04 + 0.01*b,
                    0.08 + 0.05*b,      1.75 + 0.50*b,   0.06 - 0.02*b,
                   -0.04 + 0.01*b,      0.06 - 0.02*b,   2.25 + 0.75*b);
@@ -146,8 +146,8 @@ struct RigidBodyFixture {
   field_t* target_orientation;
 
   // Shared control values (for the "shared" variant)
-  scalar_t     shared_dt                 = 0.015;
-  scalar_t     shared_drag_scalar        = 0.65;
+  value_type     shared_dt                 = 0.015;
+  value_type     shared_drag_scalar        = 0.65;
   vector3_t    shared_ambient            = {0.25, -0.15, 0.35};
   matrix3_t    shared_drag               = make_spd_matrix3(0.35);
   quaternion_t shared_target_orientation = normalize(quaternion_t(1.0, 0.04, -0.08, 0.03));
@@ -163,19 +163,19 @@ static RigidBodyFixture build_fixture(size_t n) {
   f.meta->use_simple_fields();
 
   auto& meta = *f.meta;
-  f.force            = &meta.declare_field<scalar_t>(stk::topology::NODE_RANK, "FORCE");
-  f.torque           = &meta.declare_field<scalar_t>(stk::topology::NODE_RANK, "TORQUE");
-  f.orientation      = &meta.declare_field<scalar_t>(stk::topology::NODE_RANK, "ORIENTATION");
-  f.mobility         = &meta.declare_field<scalar_t>(stk::topology::NODE_RANK, "MOBILITY");
-  f.velocity         = &meta.declare_field<scalar_t>(stk::topology::NODE_RANK, "VELOCITY");
-  f.stress           = &meta.declare_field<scalar_t>(stk::topology::NODE_RANK, "STRESS");
-  f.orientation_out  = &meta.declare_field<scalar_t>(stk::topology::NODE_RANK, "ORIENTATION_OUT");
-  f.energy           = &meta.declare_field<scalar_t>(stk::topology::NODE_RANK, "ENERGY");
-  f.dt               = &meta.declare_field<scalar_t>(stk::topology::NODE_RANK, "DT");
-  f.drag_scalar      = &meta.declare_field<scalar_t>(stk::topology::NODE_RANK, "DRAG_SCALAR");
-  f.ambient          = &meta.declare_field<scalar_t>(stk::topology::NODE_RANK, "AMBIENT");
-  f.drag             = &meta.declare_field<scalar_t>(stk::topology::NODE_RANK, "DRAG");
-  f.target_orientation = &meta.declare_field<scalar_t>(stk::topology::NODE_RANK, "TARGET_ORIENTATION");
+  f.force            = &meta.declare_field<value_type>(stk::topology::NODE_RANK, "FORCE");
+  f.torque           = &meta.declare_field<value_type>(stk::topology::NODE_RANK, "TORQUE");
+  f.orientation      = &meta.declare_field<value_type>(stk::topology::NODE_RANK, "ORIENTATION");
+  f.mobility         = &meta.declare_field<value_type>(stk::topology::NODE_RANK, "MOBILITY");
+  f.velocity         = &meta.declare_field<value_type>(stk::topology::NODE_RANK, "VELOCITY");
+  f.stress           = &meta.declare_field<value_type>(stk::topology::NODE_RANK, "STRESS");
+  f.orientation_out  = &meta.declare_field<value_type>(stk::topology::NODE_RANK, "ORIENTATION_OUT");
+  f.energy           = &meta.declare_field<value_type>(stk::topology::NODE_RANK, "ENERGY");
+  f.dt               = &meta.declare_field<value_type>(stk::topology::NODE_RANK, "DT");
+  f.drag_scalar      = &meta.declare_field<value_type>(stk::topology::NODE_RANK, "DRAG_SCALAR");
+  f.ambient          = &meta.declare_field<value_type>(stk::topology::NODE_RANK, "AMBIENT");
+  f.drag             = &meta.declare_field<value_type>(stk::topology::NODE_RANK, "DRAG");
+  f.target_orientation = &meta.declare_field<value_type>(stk::topology::NODE_RANK, "TARGET_ORIENTATION");
 
   const auto& universal = meta.universal_part();
   stk::mesh::put_field_on_mesh(*f.force,            universal, 3, nullptr);
@@ -203,7 +203,7 @@ static RigidBodyFixture build_fixture(size_t n) {
     const stk::mesh::Entity node = bulk.declare_node(i + 1);
     f.entities.push_back(node);
 
-    const scalar_t p = 1.0e-5 * static_cast<scalar_t>(i);
+    const value_type p = 1.0e-5 * static_cast<value_type>(i);
     vector3_field_data(*f.force,  node) = vector3_t(1.25 + 0.25*p, -0.85 + 0.15*p,  0.65 - 0.10*p);
     vector3_field_data(*f.torque, node) = vector3_t(0.35 + 0.12*p, -0.28 + 0.05*p,  0.18 - 0.02*p);
     quaternion_field_data(*f.orientation, node) = normalize(quaternion_t(1.0, 0.18*p, -0.11*p, 0.09*p));
@@ -231,7 +231,7 @@ static RigidBodyFixture build_fixture(size_t n) {
 
 template <typename DragT, typename ForceT, typename VelT>
 KOKKOS_INLINE_FUNCTION void drag_velocity_step(const DragT& drag, const ForceT& force, VelT vel) {
-  vel = force / static_cast<scalar_t>(drag);
+  vel = force / static_cast<value_type>(drag);
 }
 
 template <typename AmbientT, typename MobilityT, typename ForceT, typename OrientT, typename VelT>
@@ -251,11 +251,11 @@ KOKKOS_INLINE_FUNCTION void rigid_body_step(const DtT& dt, const AmbientT& ambie
   const auto body_force   = conjugate(orient) * total_force;
   const auto body_spin    = torque + cross(body_force, ambient);
   const quaternion_t spin_q(0.0, body_spin[0], body_spin[1], body_spin[2]);
-  const auto trial_orient = normalize(target * orient + (0.5 * static_cast<scalar_t>(dt)) * (spin_q * orient));
+  const auto trial_orient = normalize(target * orient + (0.5 * static_cast<value_type>(dt)) * (spin_q * orient));
   const auto eff_mobility = mobility + drag;
   const auto lab_vel      = orient * (eff_mobility * body_force);
-  const scalar_t inv_scale = 1.0 / (1.0 + mundy::norm(body_force));
-  vel        = lab_vel + (static_cast<scalar_t>(dt) * inv_scale) * cross(body_spin, total_force);
+  const value_type inv_scale = 1.0 / (1.0 + mundy::norm(body_force));
+  vel        = lab_vel + (static_cast<value_type>(dt) * inv_scale) * cross(body_spin, total_force);
   stress     = trial_orient * eff_mobility + 0.25 * (mobility - drag);
   orient_out = trial_orient;
   energy     = mundy::dot(lab_vel, lab_vel) + 0.1 * mundy::dot(body_spin, body_spin)
@@ -273,9 +273,9 @@ static void sync_outputs_to_host(const RigidBodyFixture& f) {
   f.energy->sync_to_host();
 }
 
-static scalar_t checksum(const RigidBodyFixture& f) {
+static value_type checksum(const RigidBodyFixture& f) {
   const size_t stride = std::max<size_t>(1, f.entities.size() / 32);
-  scalar_t sum = 0.0;
+  value_type sum = 0.0;
   for (size_t i = 0; i < f.entities.size(); i += stride) {
     const auto e      = f.entities[i];
     const auto vel    = vector3_field_data(*f.velocity, e);
@@ -295,13 +295,13 @@ static void validate_equal(const std::string& label, RunnerA&& a, RunnerB&& b,
                             const RigidBodyFixture& f, bool sync_from_device) {
   a();
   if (sync_from_device) sync_outputs_to_host(f);
-  const scalar_t sum_a = checksum(f);
+  const value_type sum_a = checksum(f);
 
   b();
   if (sync_from_device) sync_outputs_to_host(f);
-  const scalar_t sum_b = checksum(f);
+  const value_type sum_b = checksum(f);
 
-  const scalar_t scale = 1.0 + std::max(std::abs(sum_a), std::abs(sum_b));
+  const value_type scale = 1.0 + std::max(std::abs(sum_a), std::abs(sum_b));
   if (std::abs(sum_a - sum_b) > 1.0e-11 * scale)
     throw std::runtime_error("validate_equal failed for \"" + label + "\": "
                              + std::to_string(sum_a) + " vs " + std::to_string(sum_b));

@@ -47,8 +47,8 @@ namespace mundy {
 /// \param[in] point The point
 /// \param[in] sphere The sphere
 template <ValidPointType PointType, ValidSphereType SphereType>
-MUNDY_REQUIRES(std::is_same_v<typename PointType::scalar_t, typename SphereType::scalar_t>)
-KOKKOS_FUNCTION typename PointType::scalar_t distance(const PointType& point,  //
+MUNDY_REQUIRES(std::is_same_v<typename PointType::value_type, typename SphereType::value_type>)
+KOKKOS_FUNCTION typename PointType::value_type distance(const PointType& point,  //
                                                       const SphereType& sphere) {
   return distance(SharedNormalSigned{}, point, sphere);
 }
@@ -58,8 +58,8 @@ KOKKOS_FUNCTION typename PointType::scalar_t distance(const PointType& point,  /
 /// \param[in] point The point
 /// \param[in] sphere The sphere
 template <ValidPointType PointType, ValidSphereType SphereType>
-MUNDY_REQUIRES(std::is_same_v<typename PointType::scalar_t, typename SphereType::scalar_t>)
-KOKKOS_FUNCTION typename PointType::scalar_t distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
+MUNDY_REQUIRES(std::is_same_v<typename PointType::value_type, typename SphereType::value_type>)
+KOKKOS_FUNCTION typename PointType::value_type distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
                                                       const PointType& point,                                   //
                                                       const SphereType& sphere) {
   return distance(point, sphere.center()) - sphere.radius();
@@ -71,11 +71,11 @@ KOKKOS_FUNCTION typename PointType::scalar_t distance([[maybe_unused]] const Sha
 /// \param[in] sphere The sphere
 /// \param[out] sep The separation vector (from point to sphere)
 template <ValidPointType PointType, ValidSphereType SphereType>
-MUNDY_REQUIRES(std::is_same_v<typename PointType::scalar_t, typename SphereType::scalar_t>)
-KOKKOS_FUNCTION typename PointType::scalar_t
+MUNDY_REQUIRES(std::is_same_v<typename PointType::value_type, typename SphereType::value_type>)
+KOKKOS_FUNCTION typename PointType::value_type
     distance(const PointType& point,  //
-             const SphereType& sphere, mundy::Vector3<typename PointType::scalar_t>& sep) {
-  using Scalar = typename PointType::scalar_t;
+             const SphereType& sphere, mundy::Vector3<typename PointType::value_type>& sep) {
+  using Scalar = typename PointType::value_type;
   const Scalar center_point_distance = distance(point, sphere.center(), sep);
 
   // Rescale the separation vector to the surface of the sphere

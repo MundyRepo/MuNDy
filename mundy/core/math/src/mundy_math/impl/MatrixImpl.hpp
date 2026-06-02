@@ -596,9 +596,9 @@ KOKKOS_INLINE_FUNCTION auto apply_impl(std::index_sequence<Is...>, const Func& f
 template <size_t... Is, typename Func, typename T, size_t N, size_t M, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION auto apply_row_impl(std::index_sequence<Is...>, const Func& func,
                                            const AMatrix<T, N, M, Accessor>& mat)
-    -> AMatrix<typename std::invoke_result_t<Func, AVector<T, M>>::scalar_t, N, M> {
+    -> AMatrix<typename std::invoke_result_t<Func, AVector<T, M>>::value_type, N, M> {
   static_assert(sizeof...(Is) == N, "Number of indices must match number of rows in the matrix.");
-  using ResultType = typename std::invoke_result_t<Func, AVector<T, M>>::scalar_t;
+  using ResultType = typename std::invoke_result_t<Func, AVector<T, M>>::value_type;
   AMatrix<ResultType, N, M> result;
   ((result.template view_row<Is>() = func(mat.template view_row<Is>())), ...);
   return result;
@@ -608,9 +608,9 @@ KOKKOS_INLINE_FUNCTION auto apply_row_impl(std::index_sequence<Is...>, const Fun
 template <size_t... Is, typename Func, typename T, size_t N, size_t M, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION auto apply_column_impl(std::index_sequence<Is...>, const Func& func,
                                               const AMatrix<T, N, M, Accessor>& mat)
-    -> AMatrix<typename std::invoke_result_t<Func, AVector<T, N>>::scalar_t, N, M> {
+    -> AMatrix<typename std::invoke_result_t<Func, AVector<T, N>>::value_type, N, M> {
   static_assert(sizeof...(Is) == M, "Number of indices must match number of columns in the matrix.");
-  using ResultType = typename std::invoke_result_t<Func, AVector<T, M>>::scalar_t;
+  using ResultType = typename std::invoke_result_t<Func, AVector<T, M>>::value_type;
   AMatrix<ResultType, N, M> result;
   ((result.template view_column<Is>() = func(mat.template view_column<Is>())), ...);
   return result;

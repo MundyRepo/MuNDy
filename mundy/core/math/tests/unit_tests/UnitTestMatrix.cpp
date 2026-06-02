@@ -188,7 +188,7 @@ TYPED_TEST_SUITE(MatrixPairwiseTypeTest, MyTypePairs);
 
 template <typename U, size_t R, size_t C>
 struct MatrixCase {
-  using scalar_t = U;
+  using value_type = U;
   static constexpr size_t rows = R;
   static constexpr size_t cols = C;
 };
@@ -206,7 +206,7 @@ TYPED_TEST_SUITE(NonSquareMatrixShapeTest, NonSquareCases);
 //@{
 
 TYPED_TEST(NonSquareMatrixShapeTest, ConstructionAccessAndTranspose) {
-  using T = typename TypeParam::scalar_t;
+  using T = typename TypeParam::value_type;
   constexpr size_t R = TypeParam::rows;
   constexpr size_t C = TypeParam::cols;
 
@@ -236,7 +236,7 @@ TYPED_TEST(NonSquareMatrixShapeTest, ConstructionAccessAndTranspose) {
 //@{
 
 TYPED_TEST(NonSquareMatrixShapeTest, SettersViewsMinorAndHelperOwnership) {
-  using T = typename TypeParam::scalar_t;
+  using T = typename TypeParam::value_type;
   constexpr size_t R = TypeParam::rows;
   constexpr size_t C = TypeParam::cols;
 
@@ -313,7 +313,7 @@ TYPED_TEST(NonSquareMatrixShapeTest, SettersViewsMinorAndHelperOwnership) {
 //@{
 
 TYPED_TEST(NonSquareMatrixShapeTest, Arithmetic) {
-  using T = typename TypeParam::scalar_t;
+  using T = typename TypeParam::value_type;
   constexpr size_t R = TypeParam::rows;
   constexpr size_t C = TypeParam::cols;
 
@@ -381,12 +381,12 @@ struct non_square_apply_external_functor {
 struct non_square_apply_vector_functor {
   template <typename V>
   KOKKOS_FUNCTION auto operator()(const V& x) const {
-    return sum(x) * Vector<typename V::scalar_t, V::size>{1};
+    return sum(x) * Vector<typename V::value_type, V::size>{1};
   }
 };
 
 TYPED_TEST(NonSquareMatrixShapeTest, Apply) {
-  using T = typename TypeParam::scalar_t;
+  using T = typename TypeParam::value_type;
   constexpr size_t R = TypeParam::rows;
   constexpr size_t C = TypeParam::cols;
 
@@ -427,7 +427,7 @@ TYPED_TEST(NonSquareMatrixShapeTest, Apply) {
 //@{
 
 TYPED_TEST(NonSquareMatrixShapeTest, StaticFactoriesAndFormatting) {
-  using T = typename TypeParam::scalar_t;
+  using T = typename TypeParam::value_type;
   constexpr size_t R = TypeParam::rows;
   constexpr size_t C = TypeParam::cols;
 
@@ -456,7 +456,7 @@ TYPED_TEST(NonSquareMatrixShapeTest, StaticFactoriesAndFormatting) {
 //@{
 
 TYPED_TEST(NonSquareMatrixShapeTest, AtomicOpTestLoadStore) {
-  using T = typename TypeParam::scalar_t;
+  using T = typename TypeParam::value_type;
   constexpr size_t R = TypeParam::rows;
   constexpr size_t C = TypeParam::cols;
 
@@ -487,7 +487,7 @@ TYPED_TEST(NonSquareMatrixShapeTest, AtomicOpTestLoadStore) {
 }
 
 TYPED_TEST(NonSquareMatrixShapeTest, AtomicOpTestAddSub) {
-  using T = typename TypeParam::scalar_t;
+  using T = typename TypeParam::value_type;
   constexpr size_t R = TypeParam::rows;
   constexpr size_t C = TypeParam::cols;
 

@@ -44,8 +44,8 @@ namespace mundy {
 template <typename Scalar, mundy::ValidLineSegmentType LineSegmentType = mundy::LineSegment<Scalar>,
           typename OwnershipType = mundy::Ownership::Owns>
 class BallJoint {
-  static_assert(std::is_same_v<typename LineSegmentType::scalar_t, Scalar>,
-                "The scalar_t of the LineSegmentType must match the Scalar type.");
+  static_assert(std::is_same_v<typename LineSegmentType::value_type, Scalar>,
+                "The value_type of the LineSegmentType must match the Scalar type.");
   static_assert(std::is_same_v<typename LineSegmentType::ownership_t, OwnershipType>,
                 "The ownership type of the LineSegmentType must match the OwnershipType.\n"
                 "This is somewhat restrictive, and we may want to relax this constraint in the future.\n"
@@ -56,7 +56,7 @@ class BallJoint {
   //@{
 
   /// \brief Our scalar type
-  using scalar_t = Scalar;
+  using value_type = Scalar;
 
   /// \brief Our line segment type
   using line_segment_t = LineSegmentType;
@@ -92,25 +92,25 @@ class BallJoint {
 
   /// \brief Deep copy constructor
   KOKKOS_FUNCTION
-  BallJoint(const BallJoint<scalar_t, line_segment_t, ownership_t>& other) : line_segment_(other.line_segment_) {
+  BallJoint(const BallJoint<value_type, line_segment_t, ownership_t>& other) : line_segment_(other.line_segment_) {
   }
 
   /// \brief Deep copy constructor
   template <typename OtherBallJointType>
   KOKKOS_FUNCTION BallJoint(const OtherBallJointType& other)
-      MUNDY_REQUIRES(!std::is_same_v<OtherBallJointType, BallJoint<scalar_t, line_segment_t, ownership_t>>)
+      MUNDY_REQUIRES(!std::is_same_v<OtherBallJointType, BallJoint<value_type, line_segment_t, ownership_t>>)
       : line_segment_(other.line_segment_) {
   }
 
   /// \brief Deep move constructor
   KOKKOS_FUNCTION
-  BallJoint(BallJoint<scalar_t, line_segment_t, ownership_t>&& other) : line_segment_(std::move(other.line_segment_)) {
+  BallJoint(BallJoint<value_type, line_segment_t, ownership_t>&& other) : line_segment_(std::move(other.line_segment_)) {
   }
 
   /// \brief Deep move constructor
   template <typename OtherBallJointType>
   KOKKOS_FUNCTION BallJoint(OtherBallJointType&& other)
-      MUNDY_REQUIRES(!std::is_same_v<OtherBallJointType, BallJoint<scalar_t, line_segment_t, ownership_t>>)
+      MUNDY_REQUIRES(!std::is_same_v<OtherBallJointType, BallJoint<value_type, line_segment_t, ownership_t>>)
       : line_segment_(std::move(other.line_segment_)) {
   }
   //@}
@@ -120,8 +120,8 @@ class BallJoint {
 
   /// \brief Copy assignment operator
   KOKKOS_FUNCTION
-  BallJoint<scalar_t, line_segment_t, ownership_t>& operator=(
-      const BallJoint<scalar_t, line_segment_t, ownership_t>& other) {
+  BallJoint<value_type, line_segment_t, ownership_t>& operator=(
+      const BallJoint<value_type, line_segment_t, ownership_t>& other) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     line_segment_ = other.line_segment_;
     return *this;
@@ -129,8 +129,8 @@ class BallJoint {
 
   /// \brief Copy assignment operator
   template <typename OtherBallJointType>
-  KOKKOS_FUNCTION BallJoint<scalar_t, line_segment_t, ownership_t>& operator=(const OtherBallJointType& other)
-      MUNDY_REQUIRES(!std::is_same_v<OtherBallJointType, BallJoint<scalar_t, line_segment_t, ownership_t>>) {
+  KOKKOS_FUNCTION BallJoint<value_type, line_segment_t, ownership_t>& operator=(const OtherBallJointType& other)
+      MUNDY_REQUIRES(!std::is_same_v<OtherBallJointType, BallJoint<value_type, line_segment_t, ownership_t>>) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     line_segment_ = other.line_segment_;
     return *this;
@@ -138,8 +138,8 @@ class BallJoint {
 
   /// \brief Move assignment operator
   KOKKOS_FUNCTION
-  BallJoint<scalar_t, line_segment_t, ownership_t>& operator=(
-      BallJoint<scalar_t, line_segment_t, ownership_t>&& other) {
+  BallJoint<value_type, line_segment_t, ownership_t>& operator=(
+      BallJoint<value_type, line_segment_t, ownership_t>&& other) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     line_segment_ = std::move(other.line_segment_);
     return *this;
@@ -147,8 +147,8 @@ class BallJoint {
 
   /// \brief Move assignment operator
   template <typename OtherBallJointType>
-  KOKKOS_FUNCTION BallJoint<scalar_t, line_segment_t, ownership_t>& operator=(OtherBallJointType&& other)
-      MUNDY_REQUIRES(!std::is_same_v<OtherBallJointType, BallJoint<scalar_t, line_segment_t, ownership_t>>) {
+  KOKKOS_FUNCTION BallJoint<value_type, line_segment_t, ownership_t>& operator=(OtherBallJointType&& other)
+      MUNDY_REQUIRES(!std::is_same_v<OtherBallJointType, BallJoint<value_type, line_segment_t, ownership_t>>) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     line_segment_ = std::move(other.line_segment_);
     return *this;

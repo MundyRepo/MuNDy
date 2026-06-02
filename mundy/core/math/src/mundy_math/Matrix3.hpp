@@ -81,120 +81,120 @@ KOKKOS_INLINE_FUNCTION auto cholesky_f(const AMatrix3<T, Accessor>& A) -> Matrix
 template <typename Matrix3Type>
 concept ValidMatrix3Type = is_matrix3_v<std::decay_t<Matrix3Type>> &&
                            requires(std::decay_t<Matrix3Type> matrix3, const std::decay_t<Matrix3Type> const_matrix3) {
-                             typename std::decay_t<Matrix3Type>::scalar_t;
-                             { matrix3[0] } -> std::convertible_to<typename std::decay_t<Matrix3Type>::scalar_t>;
-                             { matrix3[1] } -> std::convertible_to<typename std::decay_t<Matrix3Type>::scalar_t>;
-                             { matrix3[2] } -> std::convertible_to<typename std::decay_t<Matrix3Type>::scalar_t>;
-                             { matrix3[3] } -> std::convertible_to<typename std::decay_t<Matrix3Type>::scalar_t>;
-                             { matrix3[4] } -> std::convertible_to<typename std::decay_t<Matrix3Type>::scalar_t>;
-                             { matrix3[5] } -> std::convertible_to<typename std::decay_t<Matrix3Type>::scalar_t>;
-                             { matrix3[6] } -> std::convertible_to<typename std::decay_t<Matrix3Type>::scalar_t>;
-                             { matrix3[7] } -> std::convertible_to<typename std::decay_t<Matrix3Type>::scalar_t>;
-                             { matrix3[8] } -> std::convertible_to<typename std::decay_t<Matrix3Type>::scalar_t>;
+                             typename std::decay_t<Matrix3Type>::value_type;
+                             { matrix3[0] } -> std::convertible_to<typename std::decay_t<Matrix3Type>::value_type>;
+                             { matrix3[1] } -> std::convertible_to<typename std::decay_t<Matrix3Type>::value_type>;
+                             { matrix3[2] } -> std::convertible_to<typename std::decay_t<Matrix3Type>::value_type>;
+                             { matrix3[3] } -> std::convertible_to<typename std::decay_t<Matrix3Type>::value_type>;
+                             { matrix3[4] } -> std::convertible_to<typename std::decay_t<Matrix3Type>::value_type>;
+                             { matrix3[5] } -> std::convertible_to<typename std::decay_t<Matrix3Type>::value_type>;
+                             { matrix3[6] } -> std::convertible_to<typename std::decay_t<Matrix3Type>::value_type>;
+                             { matrix3[7] } -> std::convertible_to<typename std::decay_t<Matrix3Type>::value_type>;
+                             { matrix3[8] } -> std::convertible_to<typename std::decay_t<Matrix3Type>::value_type>;
 
-                             { matrix3(0) } -> std::convertible_to<typename std::decay_t<Matrix3Type>::scalar_t>;
-                             { matrix3(1) } -> std::convertible_to<typename std::decay_t<Matrix3Type>::scalar_t>;
-                             { matrix3(2) } -> std::convertible_to<typename std::decay_t<Matrix3Type>::scalar_t>;
-                             { matrix3(3) } -> std::convertible_to<typename std::decay_t<Matrix3Type>::scalar_t>;
-                             { matrix3(4) } -> std::convertible_to<typename std::decay_t<Matrix3Type>::scalar_t>;
-                             { matrix3(5) } -> std::convertible_to<typename std::decay_t<Matrix3Type>::scalar_t>;
-                             { matrix3(6) } -> std::convertible_to<typename std::decay_t<Matrix3Type>::scalar_t>;
-                             { matrix3(7) } -> std::convertible_to<typename std::decay_t<Matrix3Type>::scalar_t>;
-                             { matrix3(8) } -> std::convertible_to<typename std::decay_t<Matrix3Type>::scalar_t>;
+                             { matrix3(0) } -> std::convertible_to<typename std::decay_t<Matrix3Type>::value_type>;
+                             { matrix3(1) } -> std::convertible_to<typename std::decay_t<Matrix3Type>::value_type>;
+                             { matrix3(2) } -> std::convertible_to<typename std::decay_t<Matrix3Type>::value_type>;
+                             { matrix3(3) } -> std::convertible_to<typename std::decay_t<Matrix3Type>::value_type>;
+                             { matrix3(4) } -> std::convertible_to<typename std::decay_t<Matrix3Type>::value_type>;
+                             { matrix3(5) } -> std::convertible_to<typename std::decay_t<Matrix3Type>::value_type>;
+                             { matrix3(6) } -> std::convertible_to<typename std::decay_t<Matrix3Type>::value_type>;
+                             { matrix3(7) } -> std::convertible_to<typename std::decay_t<Matrix3Type>::value_type>;
+                             { matrix3(8) } -> std::convertible_to<typename std::decay_t<Matrix3Type>::value_type>;
 
-                             { matrix3(0, 0) } -> std::convertible_to<typename std::decay_t<Matrix3Type>::scalar_t>;
-                             { matrix3(0, 1) } -> std::convertible_to<typename std::decay_t<Matrix3Type>::scalar_t>;
-                             { matrix3(0, 2) } -> std::convertible_to<typename std::decay_t<Matrix3Type>::scalar_t>;
-                             { matrix3(1, 0) } -> std::convertible_to<typename std::decay_t<Matrix3Type>::scalar_t>;
-                             { matrix3(1, 1) } -> std::convertible_to<typename std::decay_t<Matrix3Type>::scalar_t>;
-                             { matrix3(1, 2) } -> std::convertible_to<typename std::decay_t<Matrix3Type>::scalar_t>;
-                             { matrix3(2, 0) } -> std::convertible_to<typename std::decay_t<Matrix3Type>::scalar_t>;
-                             { matrix3(2, 1) } -> std::convertible_to<typename std::decay_t<Matrix3Type>::scalar_t>;
-                             { matrix3(2, 2) } -> std::convertible_to<typename std::decay_t<Matrix3Type>::scalar_t>;
+                             { matrix3(0, 0) } -> std::convertible_to<typename std::decay_t<Matrix3Type>::value_type>;
+                             { matrix3(0, 1) } -> std::convertible_to<typename std::decay_t<Matrix3Type>::value_type>;
+                             { matrix3(0, 2) } -> std::convertible_to<typename std::decay_t<Matrix3Type>::value_type>;
+                             { matrix3(1, 0) } -> std::convertible_to<typename std::decay_t<Matrix3Type>::value_type>;
+                             { matrix3(1, 1) } -> std::convertible_to<typename std::decay_t<Matrix3Type>::value_type>;
+                             { matrix3(1, 2) } -> std::convertible_to<typename std::decay_t<Matrix3Type>::value_type>;
+                             { matrix3(2, 0) } -> std::convertible_to<typename std::decay_t<Matrix3Type>::value_type>;
+                             { matrix3(2, 1) } -> std::convertible_to<typename std::decay_t<Matrix3Type>::value_type>;
+                             { matrix3(2, 2) } -> std::convertible_to<typename std::decay_t<Matrix3Type>::value_type>;
 
                              {
                                const_matrix3[0]
-                             } -> std::convertible_to<const typename std::decay_t<Matrix3Type>::scalar_t>;
+                             } -> std::convertible_to<const typename std::decay_t<Matrix3Type>::value_type>;
                              {
                                const_matrix3[1]
-                             } -> std::convertible_to<const typename std::decay_t<Matrix3Type>::scalar_t>;
+                             } -> std::convertible_to<const typename std::decay_t<Matrix3Type>::value_type>;
                              {
                                const_matrix3[2]
-                             } -> std::convertible_to<const typename std::decay_t<Matrix3Type>::scalar_t>;
+                             } -> std::convertible_to<const typename std::decay_t<Matrix3Type>::value_type>;
                              {
                                const_matrix3[3]
-                             } -> std::convertible_to<const typename std::decay_t<Matrix3Type>::scalar_t>;
+                             } -> std::convertible_to<const typename std::decay_t<Matrix3Type>::value_type>;
                              {
                                const_matrix3[4]
-                             } -> std::convertible_to<const typename std::decay_t<Matrix3Type>::scalar_t>;
+                             } -> std::convertible_to<const typename std::decay_t<Matrix3Type>::value_type>;
                              {
                                const_matrix3[5]
-                             } -> std::convertible_to<const typename std::decay_t<Matrix3Type>::scalar_t>;
+                             } -> std::convertible_to<const typename std::decay_t<Matrix3Type>::value_type>;
                              {
                                const_matrix3[6]
-                             } -> std::convertible_to<const typename std::decay_t<Matrix3Type>::scalar_t>;
+                             } -> std::convertible_to<const typename std::decay_t<Matrix3Type>::value_type>;
                              {
                                const_matrix3[7]
-                             } -> std::convertible_to<const typename std::decay_t<Matrix3Type>::scalar_t>;
+                             } -> std::convertible_to<const typename std::decay_t<Matrix3Type>::value_type>;
                              {
                                const_matrix3[8]
-                             } -> std::convertible_to<const typename std::decay_t<Matrix3Type>::scalar_t>;
+                             } -> std::convertible_to<const typename std::decay_t<Matrix3Type>::value_type>;
 
                              {
                                const_matrix3(0)
-                             } -> std::convertible_to<const typename std::decay_t<Matrix3Type>::scalar_t>;
+                             } -> std::convertible_to<const typename std::decay_t<Matrix3Type>::value_type>;
                              {
                                const_matrix3(1)
-                             } -> std::convertible_to<const typename std::decay_t<Matrix3Type>::scalar_t>;
+                             } -> std::convertible_to<const typename std::decay_t<Matrix3Type>::value_type>;
                              {
                                const_matrix3(2)
-                             } -> std::convertible_to<const typename std::decay_t<Matrix3Type>::scalar_t>;
+                             } -> std::convertible_to<const typename std::decay_t<Matrix3Type>::value_type>;
                              {
                                const_matrix3(3)
-                             } -> std::convertible_to<const typename std::decay_t<Matrix3Type>::scalar_t>;
+                             } -> std::convertible_to<const typename std::decay_t<Matrix3Type>::value_type>;
                              {
                                const_matrix3(4)
-                             } -> std::convertible_to<const typename std::decay_t<Matrix3Type>::scalar_t>;
+                             } -> std::convertible_to<const typename std::decay_t<Matrix3Type>::value_type>;
                              {
                                const_matrix3(5)
-                             } -> std::convertible_to<const typename std::decay_t<Matrix3Type>::scalar_t>;
+                             } -> std::convertible_to<const typename std::decay_t<Matrix3Type>::value_type>;
                              {
                                const_matrix3(6)
-                             } -> std::convertible_to<const typename std::decay_t<Matrix3Type>::scalar_t>;
+                             } -> std::convertible_to<const typename std::decay_t<Matrix3Type>::value_type>;
                              {
                                const_matrix3(7)
-                             } -> std::convertible_to<const typename std::decay_t<Matrix3Type>::scalar_t>;
+                             } -> std::convertible_to<const typename std::decay_t<Matrix3Type>::value_type>;
                              {
                                const_matrix3(8)
-                             } -> std::convertible_to<const typename std::decay_t<Matrix3Type>::scalar_t>;
+                             } -> std::convertible_to<const typename std::decay_t<Matrix3Type>::value_type>;
 
                              {
                                const_matrix3(0, 0)
-                             } -> std::convertible_to<const typename std::decay_t<Matrix3Type>::scalar_t>;
+                             } -> std::convertible_to<const typename std::decay_t<Matrix3Type>::value_type>;
                              {
                                const_matrix3(0, 1)
-                             } -> std::convertible_to<const typename std::decay_t<Matrix3Type>::scalar_t>;
+                             } -> std::convertible_to<const typename std::decay_t<Matrix3Type>::value_type>;
                              {
                                const_matrix3(0, 2)
-                             } -> std::convertible_to<const typename std::decay_t<Matrix3Type>::scalar_t>;
+                             } -> std::convertible_to<const typename std::decay_t<Matrix3Type>::value_type>;
                              {
                                const_matrix3(1, 0)
-                             } -> std::convertible_to<const typename std::decay_t<Matrix3Type>::scalar_t>;
+                             } -> std::convertible_to<const typename std::decay_t<Matrix3Type>::value_type>;
                              {
                                const_matrix3(1, 1)
-                             } -> std::convertible_to<const typename std::decay_t<Matrix3Type>::scalar_t>;
+                             } -> std::convertible_to<const typename std::decay_t<Matrix3Type>::value_type>;
                              {
                                const_matrix3(1, 2)
-                             } -> std::convertible_to<const typename std::decay_t<Matrix3Type>::scalar_t>;
+                             } -> std::convertible_to<const typename std::decay_t<Matrix3Type>::value_type>;
                              {
                                const_matrix3(2, 0)
-                             } -> std::convertible_to<const typename std::decay_t<Matrix3Type>::scalar_t>;
+                             } -> std::convertible_to<const typename std::decay_t<Matrix3Type>::value_type>;
                              {
                                const_matrix3(2, 1)
-                             } -> std::convertible_to<const typename std::decay_t<Matrix3Type>::scalar_t>;
+                             } -> std::convertible_to<const typename std::decay_t<Matrix3Type>::value_type>;
                              {
                                const_matrix3(2, 2)
-                             } -> std::convertible_to<const typename std::decay_t<Matrix3Type>::scalar_t>;
+                             } -> std::convertible_to<const typename std::decay_t<Matrix3Type>::value_type>;
                            };  // ValidMatrix3Type
 
 static_assert(is_matrix3_v<Matrix3<int>>, "Odd, default matrix3 is not a matrix3.");
