@@ -281,6 +281,115 @@ TEST(UnitTestLinkCSRData, AllSelector) {
       << "all_selector must select dim3 buckets after registering selector_dim3";
 }
 
+// ---------------------------------------------------------------------------
+// synchronize_with
+// ---------------------------------------------------------------------------
+//
+// On this CPU build HostMemSpace == DeviceMemSpace, so synchronize_with always
+// takes the same-space path (shallow copy of the Kokkos views and maps).
+//
+// Cross-space path correctness was audited (C3, LINK_ANALYSIS.md):
+//   1. partition_key_to_id_map_ is copied from src BEFORE all_crs_partitions_ is
+//      populated, so every bucket key is an "old key" when get_or_create_crs_partitions
+//      runs — no new partitions are created.
+//   2. Selectors are already intersected with universal_link_class; the re-intersection
+//      inside get_or_create_crs_partitions is idempotent.
+//   3. The resulting selector_to_partitions_map_ views reference the deep-copied
+//      all_crs_partitions_ slots, giving independent data from src.
+//   4. Kokkos::WithoutInitializing resize + placement-new is safe since every
+//      slot is initialized before use.
+
+// After synchronize_with, dst has the same partition count and selector coverage.
+TEST(UnitTestLinkCSRData, SynchronizeWith_ReplicatesStructure) {
+  LinkCSRDataFixture f;
+
+  LinkCSRData src(*f.bulk, *f.link_meta);
+  src.get_or_create_crs_partitions(f.selector_dim2);
+  src.get_or_create_crs_partitions(f.selector_dim3);
+  ASSERT_EQ(src.get_all_crs_partitions().extent(0), 2u);
+
+  LinkCSRData dst(*f.bulk, *f.link_meta);
+  dst.synchronize_with(src);
+
+  EXPECT_EQ(dst.get_all_crs_partitions().extent(0), src.get_all_crs_partitions().extent(0));
+
+  const stk::mesh::Bucket& dim2_bucket = f.bulk->bucket(f.link_dim2);
+  const stk::mesh::Bucket& dim3_bucket = f.bulk->bucket(f.link_dim3);
+  EXPECT_TRUE(dst.all_selector()(dim2_bucket))
+      << "dst must cover the dim2 selector after synchronize_with";
+  EXPECT_TRUE(dst.all_selector()(dim3_bucket))
+      << "dst must cover the dim3 selector after synchronize_with";
+}
+
+// For the same-space path, synchronize_with is a shallow copy: the underlying
+// partition views are shared.  A dirty flag set through dst is visible through src.
+TEST(UnitTestLinkCSRData, SynchronizeWith_SameSpace_ViewsAreShared) {
+  LinkCSRDataFixture f;
+
+  LinkCSRData src(*f.bulk, *f.link_meta);
+  src.get_or_create_crs_partitions(f.selector_dim2);
+  ASSERT_EQ(src.get_all_crs_partitions().extent(0), 1u);
+  ASSERT_GT(total_bucket_conns(src.get_all_crs_partitions()(0)), 0u);
+
+  LinkCSRData dst(*f.bulk, *f.link_meta);
+  dst.synchronize_with(src);
+
+  // dst and src share the same Kokkos view allocation — same data pointer
+  EXPECT_EQ(dst.get_all_crs_partitions().data(), src.get_all_crs_partitions().data());
+
+  // Mark dirty through dst; the change must be visible through src's view
+  dst.mark_all_crs_bucket_conns_dirty();
+  EXPECT_TRUE(all_bucket_conns_dirty(src.get_all_crs_partitions()(0)))
+      << "shared views: dirty flag set through dst must be visible through src";
+}
+
+// After src clears its structural caches, dst retains the partition data because
+// its Kokkos views hold an independent reference (ref-counted).
+TEST(UnitTestLinkCSRData, SynchronizeWith_DstRetainsDataAfterSrcClears) {
+  LinkCSRDataFixture f;
+
+  LinkCSRData src(*f.bulk, *f.link_meta);
+  src.get_or_create_crs_partitions(f.selector_dim2);
+  src.get_or_create_crs_partitions(f.selector_dim3);
+
+  LinkCSRData dst(*f.bulk, *f.link_meta);
+  dst.synchronize_with(src);
+  ASSERT_EQ(dst.get_all_crs_partitions().extent(0), 2u);
+
+  src.clear_structural_caches();
+  ASSERT_EQ(src.get_all_crs_partitions().extent(0), 0u);  // src is clear
+
+  // dst still holds its own reference — data must be alive
+  EXPECT_EQ(dst.get_all_crs_partitions().extent(0), 2u)
+      << "dst must retain its partition data after src clears its caches";
+  EXPECT_TRUE(dst.all_selector()(f.bulk->bucket(f.link_dim2)));
+  EXPECT_TRUE(dst.all_selector()(f.bulk->bucket(f.link_dim3)));
+}
+
+// get_or_create_crs_partitions on dst returns memoized views after synchronize_with —
+// no new partitions are created; the existing deep-copied ones are reused.
+TEST(UnitTestLinkCSRData, SynchronizeWith_GetOrCreateIsMemoizedAfterSync) {
+  LinkCSRDataFixture f;
+
+  LinkCSRData src(*f.bulk, *f.link_meta);
+  const auto& src_dim2 = src.get_or_create_crs_partitions(f.selector_dim2);
+  src.get_or_create_crs_partitions(f.selector_dim3);
+
+  LinkCSRData dst(*f.bulk, *f.link_meta);
+  dst.synchronize_with(src);
+
+  // Calling get_or_create on dst for the same selector must return the already-synced view
+  const auto& dst_dim2_first  = dst.get_or_create_crs_partitions(f.selector_dim2);
+  const auto& dst_dim2_second = dst.get_or_create_crs_partitions(f.selector_dim2);
+
+  EXPECT_EQ(dst_dim2_first.data(), dst_dim2_second.data())
+      << "repeated get_or_create on dst after sync must be memoized";
+  EXPECT_EQ(dst.get_all_crs_partitions().extent(0), src.get_all_crs_partitions().extent(0))
+      << "synchronize_with + get_or_create must not create extra partitions";
+  // For same-space sync, dst's partition view data ptr matches src's
+  EXPECT_EQ(dst_dim2_first.data(), src_dim2.data());
+}
+
 }  // namespace
 
 }  // namespace mesh
