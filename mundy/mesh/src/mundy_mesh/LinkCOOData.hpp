@@ -386,6 +386,27 @@ class LinkCOOData {  // Host only | Valid during mesh modifications
   //@}
 };  // LinkCOOData
 
+namespace impl {
+
+/// Return the CRS-snapshot entity stored for `linker` at `link_ordinal`.
+/// This is the value last written by the CSR synchronizer and is intentionally
+/// NOT cleared by destroy_relation() — the synchronizer uses the stale value
+/// to detect removals.
+inline stk::mesh::Entity get_linked_entity_crs(const LinkCOOData& coo_data,
+                                                const stk::mesh::Entity& linker,
+                                                unsigned link_ordinal) {
+  auto& field = get_linked_entities_crs_field(coo_data.link_meta_data());
+  return stk::mesh::Entity(stk::mesh::field_data(field, linker)[link_ordinal]);
+}
+
+/// Return whether the CSR connectivity for `linker` is marked as needing an update.
+inline bool get_link_crs_needs_updated(const LinkCOOData& coo_data, const stk::mesh::Entity& linker) {
+  auto& field = get_link_crs_needs_updated_field(coo_data.link_meta_data());
+  return static_cast<bool>(stk::mesh::field_data(field, linker)[0]);
+}
+
+}  // namespace impl
+
 template <typename NgpMemSpace>
 class NgpLinkCOODataT;
 
