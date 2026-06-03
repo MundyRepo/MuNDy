@@ -441,7 +441,8 @@ class LinkData {
   /// \param link_meta_data [in] Our meta data manager.
   LinkData(stk::mesh::BulkData& bulk_data,
            LinkMetaData& link_meta_data)  // We do NOT take ownership of the LinkMetaData
-      : bulk_data_ptr_(&bulk_data),
+      : any_ngp_link_data_(),
+        bulk_data_ptr_(&bulk_data),
         mesh_meta_data_ptr_(&bulk_data.mesh_meta_data()),
         link_meta_data_ptr_(&link_meta_data),
         coo_data_(bulk_data, link_meta_data),
@@ -449,7 +450,6 @@ class LinkData {
         crs_structure_dirty_(false),
         coo_synchronizer_(nullptr),
         crs_synchronizer_(nullptr),
-        any_ngp_link_data_(),
         crs_modified_on_host_(false),
         crs_modified_on_device_(false),
         coo_modified_on_host_(false),
@@ -465,13 +465,19 @@ class LinkData {
   }
   //@}
 
+  //! \name Protected impl data
+  //@{
+
+  /// \brief Type-erased storage for the `NgpLinkDataT<NgpMemSpace>` associated with this `LinkData`.
+  ///
+  /// Accessed exclusively through `impl::get_ngp_link_data` and `get_updated_ngp_link_data`, which
+  /// hold the only correct `std::any_cast` call sites.
+  mutable std::any any_ngp_link_data_;
+  //@}
+
  private:
   //! \name Internal methods
   //@{
-
-  std::any& get_ngp_link_data() const {
-    return any_ngp_link_data_;
-  }
 
   void set_coo_synchronizer(std::shared_ptr<impl::HostDeviceSynchronizer> synchronizer) const {
     coo_synchronizer_ = std::move(synchronizer);
@@ -525,7 +531,6 @@ class LinkData {
   mutable bool crs_structure_dirty_;
   mutable std::shared_ptr<impl::HostDeviceSynchronizer> coo_synchronizer_;
   mutable std::shared_ptr<impl::HostDeviceSynchronizer> crs_synchronizer_;
-  mutable std::any any_ngp_link_data_;
   mutable bool crs_modified_on_host_;
   mutable bool crs_modified_on_device_;
   mutable bool coo_modified_on_host_;
@@ -539,7 +544,7 @@ class LinkData {
 
 namespace impl {
 inline std::any& get_ngp_link_data(const LinkData& link_data) {
-  return link_data.get_ngp_link_data();
+  return link_data.any_ngp_link_data_;
 }
 
 inline void set_crs_synchronizer(const LinkData& link_data,

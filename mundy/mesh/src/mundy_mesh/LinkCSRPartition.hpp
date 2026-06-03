@@ -104,13 +104,13 @@ class LinkCSRPartitionT {  // Raw data in any space.
 
   KOKKOS_FUNCTION
   LinkCSRPartitionT()
-      : id_(0), ngp_key_(), selector_(), link_rank_(stk::topology::INVALID_RANK), link_dimensionality_(0u) {
+      : id_(0), ngp_key_(), selector_view_(), link_rank_(stk::topology::INVALID_RANK), link_dimensionality_(0u) {
   }
 
   LinkCSRPartitionT(const stk::mesh::Ordinal& partition_id, const impl::PartitionKey key,
                     const stk::mesh::EntityRank& link_rank, const unsigned link_dimensionality,
                     const stk::mesh::BulkData& bulk_data)
-      : id_(partition_id), ngp_key_(), selector_(), link_rank_(link_rank), link_dimensionality_(link_dimensionality) {
+      : id_(partition_id), ngp_key_(), selector_view_(), link_rank_(link_rank), link_dimensionality_(link_dimensionality) {
     // Map host key to ngp key
     ngp_key_ =
         impl::NgpPartitionKey(Kokkos::view_alloc(Kokkos::WithoutInitializing, "NgpCSRimpl::PartitionKey"), key.size());
@@ -125,9 +125,9 @@ class LinkCSRPartitionT {  // Raw data in any space.
     for (const stk::mesh::PartOrdinal& part_ordinal : key) {
       parts.push_back(&bulk_data.mesh_meta_data().get_part(part_ordinal));
     }
-    // selector_ptr_ = new stk::mesh::Selector();
-    // *selector_ptr_ = stk::mesh::selectIntersection(parts);
-    selector_ = stk::mesh::selectIntersection(parts);
+    selector_view_ = Kokkos::View<stk::mesh::Selector*, stk::ngp::HostMemSpace>(
+        Kokkos::view_alloc(Kokkos::WithoutInitializing, "selector_view"), 1);
+    new (selector_view_.data()) stk::mesh::Selector(stk::mesh::selectIntersection(parts));
 
     for (stk::mesh::EntityRank rank = stk::topology::NODE_RANK; rank < stk::topology::NUM_RANKS; ++rank) {
       const stk::mesh::BucketVector& buckets = bulk_data.buckets(rank);
@@ -147,7 +147,6 @@ class LinkCSRPartitionT {  // Raw data in any space.
 
   KOKKOS_FUNCTION virtual ~LinkCSRPartitionT() {
     clear_buckets_and_views();
-    // delete selector_ptr_;
   }
   //@}
 
@@ -180,10 +179,9 @@ class LinkCSRPartitionT {  // Raw data in any space.
 
   /// \brief Fetch the selector for this partition.
   stk::mesh::Selector selector() const {
-    // MUNDY_THROW_REQUIRE(selector_ptr_ != nullptr, std::logic_error,
-    //                     "Attempting to access a selector before it has been set.");
-    // return *selector_ptr_;
-    return selector_;
+    MUNDY_THROW_REQUIRE(selector_view_.extent(0) > 0, std::logic_error,
+                        "Attempting to access a selector before it has been set.");
+    return selector_view_(0);
   }
 
   /// \brief Check if this partition contains a given part
@@ -291,7 +289,12 @@ class LinkCSRPartitionT {  // Raw data in any space.
             }
           }
           linked_buckets_[rank] = LinkCSRBucketConnView();
-        }))
+        }
+        using SelectorT = stk::mesh::Selector;
+        if (selector_view_.use_count() == 1 && selector_view_.extent(0) > 0) {
+          selector_view_(0).~SelectorT();
+        }
+        selector_view_ = decltype(selector_view_){};))
   }
   //@}
 
@@ -301,8 +304,10 @@ class LinkCSRPartitionT {  // Raw data in any space.
   stk::mesh::Ordinal id_;  ///< Unique identifier for this partition.
   impl::NgpPartitionKey
       ngp_key_;  ///< Sorted view of the part ordinals that this partition contains, in NGP memory space.
-  stk::mesh::Selector selector_;     ///< Selector for this partition, derived from the ngp_key_. Must be default
-                                     ///< constructible, copiable, movable on the device so we use a pointer.
+  /// Selector for this partition, derived from ngp_key_. Stored in a ref-counted HostMemSpace view so
+  /// that shallow copies share ownership; the explicit destructor is called in clear_buckets_and_views()
+  /// when the last reference drops, mirroring the pattern used for linked_buckets_.
+  Kokkos::View<stk::mesh::Selector*, stk::ngp::HostMemSpace> selector_view_;
   stk::mesh::EntityRank link_rank_;  ///< Rank of the linkers in this partition.
   unsigned link_dimensionality_;     ///< Maximum dimensionality of the parts contained in this partition.
   LinkCSRBucketConnView linked_buckets_[stk::topology::NUM_RANKS];  ///< Bucketized CSR connectivity for each rank.
@@ -320,9 +325,18 @@ void deep_copy(LinkCSRPartitionT<MemSpace1>& dest, const LinkCSRPartitionT<MemSp
   // Destination must at least be default constructed.
   dest.id_ = src.id_;
   dest.ngp_key_ = src.ngp_key_;
-  dest.selector_ = src.selector_;
   dest.link_rank_ = src.link_rank_;
   dest.link_dimensionality_ = src.link_dimensionality_;
+
+  // Deep-copy the selector into dest's own allocation.  stk::mesh::Selector::operator= is a value copy.
+  if (src.selector_view_.extent(0) > 0) {
+    if (dest.selector_view_.extent(0) == 0) {
+      dest.selector_view_ = Kokkos::View<stk::mesh::Selector*, stk::ngp::HostMemSpace>(
+          Kokkos::view_alloc(Kokkos::WithoutInitializing, "selector_view"), 1);
+      new (dest.selector_view_.data()) stk::mesh::Selector();
+    }
+    dest.selector_view_(0) = src.selector_view_(0);
+  }
 
   for (stk::mesh::EntityRank rank = stk::topology::NODE_RANK; rank < stk::topology::NUM_RANKS; ++rank) {
     if (dest.linked_buckets_[rank].extent(0) != src.linked_buckets_[rank].extent(0)) {

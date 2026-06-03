@@ -217,7 +217,7 @@ class LinkDeclarationRequestsT {  // Raw data in any space
   /// \brief Get the dimensionality for a collection of linker parts
   inline unsigned get_linker_dimensionality_host(const stk::mesh::PartVector& parts) const {
     // The restriction may be empty if the parts are not a subset of the universal link part.
-    auto& linked_es_field = impl::get_linked_entities_field(link_meta_data);
+    auto& linked_es_field = impl::get_linked_entities_field(link_meta_data());
     const stk::mesh::FieldRestriction& restriction = stk::mesh::find_restriction(linked_es_field, link_rank_, parts);
     return restriction.num_scalars_per_entity();
   }
@@ -253,7 +253,7 @@ class LinkDeclarationRequestsT {  // Raw data in any space
 };  // LinkDeclarationRequestsT
 
 // Following STK's default naming convention, to make return statements of our functions more readable.
-using LinkDeclarationRequestsT = LinkDeclarationRequestsT<stk::ngp::HostMemSpace>;
+using LinkDeclarationRequests = LinkDeclarationRequestsT<stk::ngp::HostMemSpace>;
 using NgpLinkDeclarationRequests = LinkDeclarationRequestsT<stk::ngp::MemSpace>;
 
 }  // namespace mesh
