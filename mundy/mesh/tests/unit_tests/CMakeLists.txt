@@ -107,6 +107,13 @@ if(Mundy_ENABLE_TESTS AND Mundy_ENABLE_GTest)
   )
 
   tribits_add_executable_and_test(
+    UnitTestLinkCSRData
+    SOURCES UnitTestLinkCSRData.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
+    NUM_MPI_PROCS 1-4
+    INSTALLABLE
+  )
+
+  tribits_add_executable_and_test(
     UnitTestNgpLinkData
     SOURCES UnitTestNgpLinkData.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
     NUM_MPI_PROCS 1-4

@@ -844,6 +844,62 @@ TEST(UnitTestNgpLinkData, RestartRoundTripPreservesLinkRelations) {
   EXPECT_TRUE(reader_ngp_link_data.is_crs_up_to_date());
 }
 
+// ---------------------------------------------------------------------------
+// Focused invariant tests for LinkData
+// ---------------------------------------------------------------------------
+
+/// Minimal fixture for the focused LinkData API tests below.
+struct LinkDataApiFixture {
+  MeshBuilder builder{MPI_COMM_WORLD};
+  std::shared_ptr<MetaData> meta;
+  std::shared_ptr<BulkData> bulk;
+  LinkMetaData* link_meta{nullptr};
+  static constexpr stk::mesh::EntityRank link_rank = stk::topology::CONSTRAINT_RANK;
+
+  LinkDataApiFixture() {
+    builder.set_spatial_dimension(3);
+    builder.set_entity_rank_names({"NODE", "EDGE", "FACE", "ELEMENT", "CONSTRAINT"});
+    meta = builder.create_meta_data();
+    meta->use_simple_fields();
+    bulk = builder.create_bulk_data(meta);
+    link_meta = &declare_link_meta_data(*meta, "API_TEST_LINKS", link_rank);
+    link_meta->declare_link_part("API_TEST_LINK_PART", 2u);
+    meta->commit();
+  }
+};
+
+// declare_link_data is idempotent: a second call with the same BulkData and
+// LinkMetaData returns the same object, not a new one.
+TEST(UnitTestNgpLinkData, DeclareLinkData_Idempotent) {
+  LinkDataApiFixture f;
+  LinkData& first  = declare_link_data(*f.bulk, *f.link_meta);
+  LinkData& second = declare_link_data(*f.bulk, *f.link_meta);
+  EXPECT_EQ(&first, &second);
+}
+
+// get_link_data returns nullptr when no declare_link_data call has been made yet.
+TEST(UnitTestNgpLinkData, GetLinkData_ReturnsNullBeforeDeclaration) {
+  LinkDataApiFixture f;
+  EXPECT_EQ(get_link_data(*f.bulk, *f.link_meta), nullptr);
+}
+
+// The host-side CSR is a read-only snapshot of the device CSR; attempting to
+// mark it modified always throws.
+TEST(UnitTestNgpLinkData, CrsModifyOnHost_Throws) {
+  LinkDataApiFixture f;
+  LinkData& link_data = declare_link_data(*f.bulk, *f.link_meta);
+  EXPECT_THROW(link_data.crs_modify_on_host(), std::exception);
+}
+
+// Host and device COO modification are mutually exclusive: marking the host as
+// modified and then trying to mark the device as modified throws.
+TEST(UnitTestNgpLinkData, CooModifyOnDevice_ThrowsWhenHostAlreadyModified) {
+  LinkDataApiFixture f;
+  LinkData& link_data = declare_link_data(*f.bulk, *f.link_meta);
+  link_data.coo_modify_on_host();
+  EXPECT_THROW(link_data.coo_modify_on_device(), std::exception);
+}
+
 }  // namespace
 
 }  // namespace mesh

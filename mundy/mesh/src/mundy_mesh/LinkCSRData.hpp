@@ -441,8 +441,8 @@ class LinkCSRDataT {  // Raw data in any space
   //! \name Internal members (host only)
   //@{
 
-  stk::mesh::BulkData* bulk_data_ptr_;
-  LinkMetaData* link_meta_data_ptr_;
+  stk::mesh::BulkData* bulk_data_ptr_ = nullptr;
+  LinkMetaData* link_meta_data_ptr_ = nullptr;
   mutable SelectorToPartitionsMap selector_to_partitions_map_;  // NEEDS to be a VIEW data type. Right now, our copies
                                                                 // may be modified without us knowing.
   mutable PartitionKeyToIdMap partition_key_to_id_map_;
