@@ -32,8 +32,8 @@
 #include <gtest/gtest.h>
 
 // C++ core libs
-#include <iostream>  // for dump() smoke test
 #include <memory>    // for std::shared_ptr
+#include <sstream>   // for std::ostringstream (dump() smoke test)
 
 // Trilinos libs
 #include <stk_mesh/base/BulkData.hpp>
@@ -201,12 +201,11 @@ TEST(UnitTestLinkCSRBucketConn, DirtyFlag_InitiallyFalseAndMutable) {
 // ---------------------------------------------------------------------------
 
 TEST(UnitTestLinkCSRBucketConn, Dump_DoesNotCrash) {
-  std::streambuf* old_buf = std::cout.rdbuf(nullptr);
-  EXPECT_NO_THROW(BucketConn{}.dump());
+  std::ostringstream sink;
+  EXPECT_NO_THROW(BucketConn{}.dump(sink));
   BucketConnFixture f;
   BucketConn conn(f.node_bucket());
-  EXPECT_NO_THROW(conn.dump());
-  std::cout.rdbuf(old_buf);
+  EXPECT_NO_THROW(conn.dump(sink));
 }
 
 }  // namespace

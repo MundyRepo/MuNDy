@@ -23,43 +23,6 @@
 
 /// \file LinkCSRPartition.hpp
 
-/*
-General comments as we go:
-
-- Partitions need to store their selector
-- We need to make sure that we are only updating the CSR for buckets that were marked as needing an update
-- I'm not sure we should call these partitions partitions since all they really do is help manage the CSR connectivity
-  It's just that the CSR connectivity can only be accessed for a given partition.
-
-Can we hide this entire class from the user by making it internal? NgpPartitionedCSRConn
-How would they access the CSR connectivity then? Can we give them a PartitionOrdinal instead of giving them an
-instance of this class? That suggests partition identity should remain stable even if the heavy CSR storage for that
-slot is later retired.
-
-I guess we need to address the underlying question: when should we destroy a partition?
-For v1, the implementation effectively behaves as if the answer is "never except by global rebuild". For v2, a better
-target is likely "never renumber or invalidate partition identity during normal structural churn, but allow a partition
-slot to become empty and release heavy CSR storage at a safe modification boundary". In that fashion, users would still
-interact with CSR connectivity via a stable partition ordinal, while the implementation remains free to reactivate the
-same slot if the key later reappears locally.
-
-update_crs_from_coo should be done for all partitions all at once and should be managed by the NgpLinkData.
-
-We need the vector of partitions to be accessible on the GPU. The only data contained in the NgpPartition is a key,
-rank, dimensionality, and vector of linked buckets per rank. Of these rank and dim come from the owning link data.
-
-What we actually need to store is:
-- [rank][partition_id][linked_bucket_id][entity_offset] -> NgpLinkedBucket
-  Array of Kokkos::View<LinkCSRBucketConnT<MemSpace> **, stk::ngp::UVMMemSpace>
-- [partition_id] -> impl::PartitionKey
-  std::vector<impl::PartitionKey>
-- [partition_key] -> partition_id
-  std::unordered_map<impl::PartitionKey, PartitionOrdinal>
-
-Previously we used a map from key to partition. I don't think we really care about the partition key that much. It would
-be better to use a contiguous vector of partitions indexed by contiguous i
-*/
-
 // C++ core libs
 #include <any>     // for std::any
 #include <vector>  // for std::vector

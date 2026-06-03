@@ -63,18 +63,12 @@ class NgpLinkMetaDataT {
   using linked_entity_ids_field_t = stk::mesh::Field<entity_id_value_t>;
   using linked_entity_ranks_field_t = stk::mesh::Field<entity_rank_value_t>;
   using linked_entities_field_t = stk::mesh::Field<entity_value_t>;
-  using linked_entity_bucket_ids_field_t = stk::mesh::Field<unsigned>;
-  using linked_entity_bucket_ords_field_t = stk::mesh::Field<unsigned>;
   using link_crs_needs_updated_field_t = stk::mesh::Field<int>;
-  using link_marked_for_destruction_field_t = stk::mesh::Field<unsigned>;
 
   using ngp_linked_entity_ids_field_t = stk::mesh::NgpField<LinkMetaData::entity_id_value_t>;
   using ngp_linked_entity_ranks_field_t = stk::mesh::NgpField<LinkMetaData::entity_rank_value_t>;
   using ngp_linked_entities_field_t = stk::mesh::NgpField<entity_value_t>;
-  using ngp_linked_entity_bucket_ids_field_t = stk::mesh::NgpField<unsigned>;
-  using ngp_linked_entity_bucket_ords_field_t = stk::mesh::NgpField<unsigned>;
   using ngp_link_crs_needs_updated_field_t = stk::mesh::NgpField<int>;
-  using ngp_link_marked_for_destruction_field_t = stk::mesh::NgpField<unsigned>;
 
   //@}
 
@@ -96,17 +90,8 @@ class NgpLinkMetaDataT {
             impl::get_linked_entity_ids_field(link_meta_data))),
         ngp_linked_entity_ranks_field_(stk::mesh::get_updated_ngp_field<linked_entity_ranks_field_t::value_type>(
             impl::get_linked_entity_ranks_field(link_meta_data))),
-        ngp_linked_entity_bucket_ids_field_(
-            stk::mesh::get_updated_ngp_field<linked_entity_bucket_ids_field_t::value_type>(
-                impl::get_linked_entity_bucket_ids_field(link_meta_data))),
-        ngp_linked_entity_bucket_ords_field_(
-            stk::mesh::get_updated_ngp_field<linked_entity_bucket_ords_field_t::value_type>(
-                impl::get_linked_entity_bucket_ords_field(link_meta_data))),
         ngp_link_crs_needs_updated_field_(stk::mesh::get_updated_ngp_field<link_crs_needs_updated_field_t::value_type>(
             impl::get_link_crs_needs_updated_field(link_meta_data))),
-        ngp_link_marked_for_destruction_field_(
-            stk::mesh::get_updated_ngp_field<link_marked_for_destruction_field_t::value_type>(
-                impl::get_link_marked_for_destruction_field(link_meta_data))),
         universal_link_class_ordinal_(link_meta_data.universal_link_class().class_ordinal()) {
   }
 
@@ -205,26 +190,6 @@ class NgpLinkMetaDataT {
     return ngp_linked_entities_crs_field_;
   }
 
-  /// \brief Fetch the linked entity bucket id field.
-  KOKKOS_INLINE_FUNCTION
-  const ngp_linked_entity_bucket_ids_field_t& ngp_linked_entity_bucket_ids_field() const noexcept {
-    return ngp_linked_entity_bucket_ids_field_;
-  }
-  KOKKOS_INLINE_FUNCTION
-  ngp_linked_entity_bucket_ids_field_t& ngp_linked_entity_bucket_ids_field() noexcept {
-    return ngp_linked_entity_bucket_ids_field_;
-  }
-
-  /// \brief Fetch the linked entity bucket ord field.
-  KOKKOS_INLINE_FUNCTION
-  const ngp_linked_entity_bucket_ords_field_t& ngp_linked_entity_bucket_ords_field() const noexcept {
-    return ngp_linked_entity_bucket_ords_field_;
-  }
-  KOKKOS_INLINE_FUNCTION
-  ngp_linked_entity_bucket_ords_field_t& ngp_linked_entity_bucket_ords_field() noexcept {
-    return ngp_linked_entity_bucket_ords_field_;
-  }
-
   /// \brief Fetch the link crs needs updated field.
   KOKKOS_INLINE_FUNCTION
   const ngp_link_crs_needs_updated_field_t& ngp_link_crs_needs_updated_field() const noexcept {
@@ -235,15 +200,6 @@ class NgpLinkMetaDataT {
     return ngp_link_crs_needs_updated_field_;
   }
 
-  /// \brief Fetch the link marked for destruction field.
-  KOKKOS_INLINE_FUNCTION
-  const ngp_link_marked_for_destruction_field_t& ngp_link_marked_for_destruction_field() const noexcept {
-    return ngp_link_marked_for_destruction_field_;
-  }
-  KOKKOS_INLINE_FUNCTION
-  ngp_link_marked_for_destruction_field_t& ngp_link_marked_for_destruction_field() noexcept {
-    return ngp_link_marked_for_destruction_field_;
-  }
   //@}
 
  private:
@@ -256,10 +212,7 @@ class NgpLinkMetaDataT {
   ngp_linked_entities_field_t ngp_linked_entities_crs_field_;
   ngp_linked_entity_ids_field_t ngp_linked_entity_ids_field_;
   ngp_linked_entity_ranks_field_t ngp_linked_entity_ranks_field_;
-  ngp_linked_entity_bucket_ids_field_t ngp_linked_entity_bucket_ids_field_;
-  ngp_linked_entity_bucket_ords_field_t ngp_linked_entity_bucket_ords_field_;
   ngp_link_crs_needs_updated_field_t ngp_link_crs_needs_updated_field_;
-  ngp_link_marked_for_destruction_field_t ngp_link_marked_for_destruction_field_;
   Class::class_ordinal_t universal_link_class_ordinal_;
   //@}
 };  // NgpLinkMetaDataT

@@ -90,11 +90,9 @@ TEST(UnitTestNgpLinkData, LinkMetaDataUsesUniversalClassHierarchy) {
   EXPECT_FALSE(universal_link_class.data_part().contains(link_assembly_part));
 
   const auto& link_dirty_field = impl::get_link_crs_needs_updated_field(link_meta_data);
-  const auto& link_destroy_field = impl::get_link_marked_for_destruction_field(link_meta_data);
   const auto& linked_entity_ids_field = impl::get_linked_entity_ids_field(link_meta_data);
 
   EXPECT_TRUE(link_dirty_field.defined_on(universal_link_class.data_part()));
-  EXPECT_TRUE(link_destroy_field.defined_on(universal_link_class.data_part()));
   EXPECT_FALSE(linked_entity_ids_field.defined_on(universal_link_class.data_part()));
 
   EXPECT_TRUE(linked_entity_ids_field.defined_on(link_class.data_part()));

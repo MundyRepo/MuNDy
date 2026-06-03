@@ -105,32 +105,32 @@ class LinkCSRBucketConnT {  // Raw data in any space.
     return num_connected_links_(offset_into_bucket);
   }
 
-  void dump() const {
-    std::cout << "Bucket ID: " << bucket_id_ << std::endl;
-    std::cout << "Bucket rank: " << bucket_rank_ << std::endl;
-    std::cout << "Bucket size: " << bucket_size_ << std::endl;
-    std::cout << "Bucket capacity: " << bucket_capacity_ << std::endl;
-    std::cout << "Bucket is dirty?: " << (dirty_ ? "true" : "false") << std::endl;
+  void dump(std::ostream& os = std::cout) const {
+    os << "Bucket ID: " << bucket_id_ << std::endl;
+    os << "Bucket rank: " << bucket_rank_ << std::endl;
+    os << "Bucket size: " << bucket_size_ << std::endl;
+    os << "Bucket capacity: " << bucket_capacity_ << std::endl;
+    os << "Bucket is dirty?: " << (dirty_ ? "true" : "false") << std::endl;
 
-    std::cout << "Total Number of Connected Links: " << total_num_connected_links_ << std::endl;
+    os << "Total Number of Connected Links: " << total_num_connected_links_ << std::endl;
 
-    std::cout << "Number of Connected Links: size " << num_connected_links_.extent(0) << " values: ";
+    os << "Number of Connected Links: size " << num_connected_links_.extent(0) << " values: ";
     for (unsigned i = 0; i < bucket_size_; ++i) {
-      std::cout << num_connected_links_(i) << " ";
+      os << num_connected_links_(i) << " ";
     }
-    std::cout << std::endl;
+    os << std::endl;
 
-    std::cout << "Sparse Connectivity Offsets: size " << sparse_connectivity_offsets_.extent(0) << " values: ";
+    os << "Sparse Connectivity Offsets: size " << sparse_connectivity_offsets_.extent(0) << " values: ";
     for (unsigned i = 0; i < bucket_size_ + 1; ++i) {
-      std::cout << sparse_connectivity_offsets_(i) << " ";
+      os << sparse_connectivity_offsets_(i) << " ";
     }
-    std::cout << std::endl;
+    os << std::endl;
 
-    std::cout << "Sparse Connectivity: size " << sparse_connectivity_.extent(0) << " values: ";
+    os << "Sparse Connectivity: size " << sparse_connectivity_.extent(0) << " values: ";
     for (unsigned i = 0; i < sparse_connectivity_.extent(0); ++i) {
-      std::cout << sparse_connectivity_(i) << " ";
+      os << sparse_connectivity_(i) << " ";
     }
-    std::cout << std::endl;
+    os << std::endl;
   }
 
  private:
