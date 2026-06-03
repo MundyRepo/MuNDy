@@ -41,6 +41,7 @@
 
 // Mundy
 #include <mundy_mesh/Class.hpp>                   // for mundy::mesh::Class, mundy::mesh::ClassVector
+#include <mundy_mesh/LinkData.hpp>                // for mundy::mesh::LinkData
 #include <mundy_mesh/impl/ClassPartitionKey.hpp>  // for mundy::mesh::impl::ClassPartitionKey
 #include <mundy_mesh/impl/PartitionKey.hpp>       // for mundy::mesh::impl::PartitionKey
 #include <mundy_utils/NgpView.hpp>                // for mundy::NgpViewT
@@ -985,6 +986,181 @@ class NgpRequestConnectionsT {
   //@}
 };  // NgpRequestConnectionsT
 
+/// \class NgpRequestLinkRelationsT
+/// \brief Request helper for writing COO link relations, supporting FutureEntity linkers.
+///
+/// This class mirrors NgpRequestConnectionsT but targets LinkData::coo_data().declare_relation()
+/// rather than bulk_data.declare_relation().  The key use case is "I am requesting a new link
+/// entity, and I want to record that its linked-entity slots should be filled once it exists."
+/// Both the linker and the linked entity may be FutureEntity handles.
+///
+/// COO writes do not require an open modification cycle, so these requests are processed after
+/// NgpModRequestsT::process_requests() closes the modification cycle — entities are valid at that
+/// point and the write is mod-cycle-free.
+template <typename NgpMemSpace>
+class NgpRequestLinkRelationsT {
+ public:
+  using memory_space = NgpMemSpace;
+  using ticket_issuer_t = TicketIssuer<NgpMemSpace>;
+  using control_space = Kokkos::SharedSpace;
+
+  //! \name Constructors / Destructors
+  //@{
+
+  KOKKOS_DEFAULTED_FUNCTION NgpRequestLinkRelationsT() = default;
+
+  void initialize() {
+    MUNDY_THROW_ASSERT(!state_.is_allocated(), std::runtime_error,
+                       "NgpRequestLinkRelationsT::initialize() called on already initialized object.");
+    state_ = state_view_t(Kokkos::view_alloc(Kokkos::SequentialHostInit, "NgpRequestLinkRelationsT::state"));
+    state_().active_space_dev_view_ = bool_view_t("NgpRequestLinkRelationsT::active_space_dev_view");
+    state_().active_space_host_view_ = Kokkos::create_mirror_view(state_().active_space_dev_view_);
+    state_().ticket_issuer_ = ticket_issuer_t(/*activate_device*/ true);
+    state_().requests_ = request_view_t("NgpRequestLinkRelationsT::requests", 0);
+    state_().active_space_host_view_() = true;
+    Kokkos::deep_copy(state_().active_space_dev_view_, state_().active_space_host_view_);
+  }
+
+  KOKKOS_DEFAULTED_FUNCTION NgpRequestLinkRelationsT(const NgpRequestLinkRelationsT&) = default;
+  KOKKOS_DEFAULTED_FUNCTION NgpRequestLinkRelationsT& operator=(const NgpRequestLinkRelationsT&) = default;
+  KOKKOS_DEFAULTED_FUNCTION NgpRequestLinkRelationsT(NgpRequestLinkRelationsT&&) = default;
+  KOKKOS_DEFAULTED_FUNCTION NgpRequestLinkRelationsT& operator=(NgpRequestLinkRelationsT&&) = default;
+
+  KOKKOS_DEFAULTED_FUNCTION ~NgpRequestLinkRelationsT() = default;
+  //@}
+
+  //! \name Control plane (HOST only)
+  //@{
+
+  void activate_host() {
+    auto device_is_active = state_().active_space_host_view_();
+    if (device_is_active) {
+      Kokkos::fence();
+      state_().active_space_host_view_() = false;
+      Kokkos::deep_copy(state_().active_space_dev_view_, state_().active_space_host_view_);
+      state_().ticket_issuer_.activate_host();
+    }
+  }
+
+  void activate_device() {
+    auto host_is_active = !state_().active_space_host_view_();
+    if (host_is_active) {
+      Kokkos::fence();
+      state_().active_space_host_view_() = true;
+      Kokkos::deep_copy(state_().active_space_dev_view_, state_().active_space_host_view_);
+      state_().ticket_issuer_.activate_device();
+    }
+  }
+
+  void sync() {
+    Kokkos::fence();
+    bool device_is_active = state_().active_space_host_view_();
+    if (device_is_active) {
+      state_().ticket_issuer_.sync();
+      Kokkos::deep_copy(state_().requests_.view_host(), state_().requests_.view_device());
+    } else {
+      state_().ticket_issuer_.sync();
+      Kokkos::deep_copy(state_().requests_.view_device(), state_().requests_.view_host());
+    }
+  }
+  //@}
+
+  //! \name Actions
+  //@{
+
+  KOKKOS_INLINE_FUNCTION unsigned id() const noexcept { return state_().index_; }
+
+  KOKKOS_INLINE_FUNCTION ticket_issuer_t& tickets() const noexcept { return state_().ticket_issuer_; }
+
+  /// \brief Record a COO link relation request.
+  ///
+  /// \param ticket        Ticket claimed from tickets().claim().
+  /// \param linker        The link entity (real or future).
+  /// \param linked_entity The entity to connect at link_ordinal (real or future).
+  /// \param link_ordinal  COO ordinal slot (0 .. dimensionality-1).
+  KOKKOS_INLINE_FUNCTION
+  void request(size_t ticket, variant<stk::mesh::Entity, FutureEntity> linker,
+               variant<stk::mesh::Entity, FutureEntity> linked_entity, unsigned link_ordinal) const {
+    constexpr auto name = make_string_literal("NgpRequestLinkRelationsT::request");
+    assert_active_space<name>();
+    assert_ticket_out_of_range<name>(ticket);
+
+    KOKKOS_IF_ON_HOST(auto& req = state_().requests_.view_host()(ticket); req.linker = linker;
+                      req.linked_entity = linked_entity; req.link_ordinal = link_ordinal;)
+    KOKKOS_IF_ON_DEVICE(auto& req = state_().requests_.view_device()(ticket); req.linker = linker;
+                        req.linked_entity = linked_entity; req.link_ordinal = link_ordinal;)
+  }
+  //@}
+
+  //! \name Mod cycle management
+  //@{
+
+  void reset() {
+    state_().ticket_issuer_.reset();
+    Kokkos::deep_copy(state_().requests_.view_host(), LinkRelationRequest{});
+    Kokkos::deep_copy(state_().requests_.view_device(), LinkRelationRequest{});
+  }
+
+  size_t finalize_count() {
+    size_t count = state_().ticket_issuer_.finalize_count();
+    if (state_().requests_.extent(0) < count) {
+      Kokkos::resize(state_().requests_, count);
+    }
+    return count;
+  }
+  //@}
+
+ private:
+  template <typename>
+  friend class NgpModRequestsT;
+
+  struct LinkRelationRequest {
+    variant<stk::mesh::Entity, FutureEntity> linker;
+    variant<stk::mesh::Entity, FutureEntity> linked_entity;
+    unsigned link_ordinal{0};
+  };
+
+  KOKKOS_INLINE_FUNCTION LinkRelationRequest get_request(size_t ticket) const {
+    constexpr auto name = make_string_literal("NgpRequestLinkRelationsT::get_request");
+    assert_active_space<name>();
+    assert_ticket_out_of_range<name>(ticket);
+
+    KOKKOS_IF_ON_HOST(return state_().requests_.view_host()(ticket);)
+    KOKKOS_IF_ON_DEVICE(return state_().requests_.view_device()(ticket);)
+  }
+
+  template <StringLiteral name>
+  KOKKOS_INLINE_FUNCTION void assert_active_space() const {
+    constexpr bool has_separate =
+        !Kokkos::SpaceAccessibility<Kokkos::HostSpace, memory_space>::accessible;
+    if constexpr (has_separate) {
+      KOKKOS_IF_ON_HOST(MUNDY_THROW_ASSERT(!state_().active_space_host_view_(), std::runtime_error,
+                                           name + " called from host when device is active.");)
+      KOKKOS_IF_ON_DEVICE(MUNDY_THROW_ASSERT(state_().active_space_dev_view_(), std::runtime_error,
+                                             name + " called from device when host is active.");)
+    }
+  }
+
+  template <StringLiteral name>
+  KOKKOS_INLINE_FUNCTION void assert_ticket_out_of_range(size_t ticket) const {
+    MUNDY_THROW_ASSERT(ticket < state_().ticket_issuer_.count(), std::out_of_range,
+                       name + " called with invalid ticket.");
+  }
+
+  using request_view_t = NgpViewT<LinkRelationRequest*, NgpMemSpace>;
+  using bool_view_t = Kokkos::View<bool, memory_space>;
+  struct State {
+    unsigned index_{0};
+    bool_view_t active_space_dev_view_;
+    bool_view_t::HostMirror active_space_host_view_;
+    ticket_issuer_t ticket_issuer_;
+    request_view_t requests_;
+  };
+
+  using state_view_t = Kokkos::View<State, control_space>;
+  mutable state_view_t state_;
+};  // NgpRequestLinkRelationsT
+
 struct FutureDestroyEntity {
   size_t ticket;
   unsigned request_helper_index;
@@ -1460,6 +1636,15 @@ class NgpModRequestsT {
   NgpDestroyConnectionsT<NgpMemSpace> destroy_connections() const {
     return shared_state_().destroy_connection_requests_;
   }
+
+  /// \brief Get or create the link-relation request helper for the given LinkData.
+  ///
+  /// Requests recorded on the returned helper will be processed by process_requests() after
+  /// entity creation — the linker entity is guaranteed to exist at write time.
+  /// Multiple calls with the same LinkData return the same helper (memoized).
+  NgpRequestLinkRelationsT<NgpMemSpace> request_links(LinkData& link_data) const {
+    return get_or_create_link_relation_requests(link_data);
+  }
   //@}
 
   //! \name Control plane (HOST only)
@@ -1476,6 +1661,9 @@ class NgpModRequestsT {
     shared_state_().destroy_entity_requests_.activate_host();
     shared_state_().connection_requests_.activate_host();
     shared_state_().destroy_connection_requests_.activate_host();
+    for (auto& entry : get_link_relation_entries()) {
+      entry.requests.activate_host();
+    }
   }
 
   /// \brief Sets the active memory space to device for all request helpers and ticket issuers.
@@ -1489,6 +1677,9 @@ class NgpModRequestsT {
     shared_state_().destroy_entity_requests_.activate_device();
     shared_state_().connection_requests_.activate_device();
     shared_state_().destroy_connection_requests_.activate_device();
+    for (auto& entry : get_link_relation_entries()) {
+      entry.requests.activate_device();
+    }
   }
   //@}
 
@@ -1506,6 +1697,9 @@ class NgpModRequestsT {
     shared_state_().destroy_entity_requests_.reset();
     shared_state_().connection_requests_.reset();
     shared_state_().destroy_connection_requests_.reset();
+    for (auto& entry : get_link_relation_entries()) {
+      entry.requests.reset();
+    }
   }
 
   /// \brief Finalize counts for all request classes. Users may no longer claim tickets after this call.
@@ -1519,6 +1713,9 @@ class NgpModRequestsT {
     shared_state_().destroy_entity_requests_.finalize_count();
     shared_state_().connection_requests_.finalize_count();
     shared_state_().destroy_connection_requests_.finalize_count();
+    for (auto& entry : get_link_relation_entries()) {
+      entry.requests.finalize_count();
+    }
   }
 
   /// \brief Process all requests in all request classes.
@@ -1549,6 +1746,9 @@ class NgpModRequestsT {
     total_requests += shared_state_().destroy_entity_requests_.tickets().count();
     total_requests += shared_state_().connection_requests_.tickets().count();
     total_requests += shared_state_().destroy_connection_requests_.tickets().count();
+    for (const auto& entry : get_link_relation_entries()) {
+      total_requests += entry.requests.tickets().count();
+    }
     if (total_requests == 0) {
       return;
     }
@@ -1647,26 +1847,28 @@ class NgpModRequestsT {
       }
     }
 
+    // Resolve a variant<Entity, FutureEntity> to a concrete Entity.
+    // Valid after entity-creation steps above have populated the created_entities_ views.
+    auto resolve_entity = [&](const variant<stk::mesh::Entity, FutureEntity>& maybe_future) {
+      if (holds_alternative<stk::mesh::Entity>(maybe_future)) {
+        return get<stk::mesh::Entity>(maybe_future);
+      }
+
+      const FutureEntity future = get<FutureEntity>(maybe_future);
+      if (future.has_known_id) {
+        return get_entity_requests_known_ids_by_index(future.request_helper_index)
+            .get_entity(future.ticket, future.entity_rank);
+      }
+      return get_entity_requests_new_ids_by_index(future.request_helper_index)
+          .get_entity(future.ticket, future.entity_rank);
+    };
+
     /////////////////////////
     // Connection requests //
     /////////////////////////
     {
       stk::mesh::Permutation perm = stk::mesh::Permutation::INVALID_PERMUTATION;
       stk::mesh::OrdinalVector scratch1, scratch2, scratch3;
-
-      auto resolve_entity = [&](const variant<stk::mesh::Entity, FutureEntity>& maybe_future) {
-        if (holds_alternative<stk::mesh::Entity>(maybe_future)) {
-          return get<stk::mesh::Entity>(maybe_future);
-        }
-
-        const FutureEntity future = get<FutureEntity>(maybe_future);
-        if (future.has_known_id) {
-          return get_entity_requests_known_ids_by_index(future.request_helper_index)
-              .get_entity(future.ticket, future.entity_rank);
-        }
-        return get_entity_requests_new_ids_by_index(future.request_helper_index)
-            .get_entity(future.ticket, future.entity_rank);
-      };
 
       // Must be done in serial since declare_relation is not thread safe.
       size_t num_connection_requests = shared_state_().connection_requests_.tickets().count();
@@ -1738,6 +1940,25 @@ class NgpModRequestsT {
         bulk_data.modification_end();
       }
     }
+
+    ///////////////////////////
+    // Link relation writes  //
+    ///////////////////////////
+    // COO declare_relation is mod-cycle-free and can be called after the modification cycle
+    // closes.  At this point all FutureEntity linkers and linked entities have been created and
+    // their concrete Entity handles are available through resolve_entity.
+    for (auto& entry : get_link_relation_entries()) {
+      size_t count = entry.requests.tickets().count();
+      if (count == 0) continue;
+      LinkData& link_data = *entry.link_data_ptr;
+      for (size_t ticket = 0; ticket < count; ++ticket) {
+        auto req = entry.requests.get_request(ticket);
+        stk::mesh::Entity linker = resolve_entity(req.linker);
+        stk::mesh::Entity linked_entity = resolve_entity(req.linked_entity);
+        link_data.coo_data().declare_relation(linker, linked_entity, req.link_ordinal);
+      }
+      link_data.coo_modify_on_host();
+    }
   }
   //@}
 
@@ -1765,6 +1986,13 @@ class NgpModRequestsT {
   using entity_requests_new_ids_class_index_map_t = std::map<impl::ClassPartitionKey, unsigned>;
   using entity_requests_known_ids_class_index_map_t = std::map<impl::ClassPartitionKey, unsigned>;
 
+  struct link_relations_entry_t {
+    LinkData* link_data_ptr{nullptr};
+    NgpRequestLinkRelationsT<NgpMemSpace> requests;
+  };
+  using link_relations_entries_t = std::deque<link_relations_entry_t>;
+  using link_data_to_index_map_t = std::map<LinkData*, unsigned>;
+
   struct SharedState {
     void initialize() {
       destroy_entity_requests_.initialize();
@@ -1784,6 +2012,8 @@ class NgpModRequestsT {
     entity_requests_known_ids_index_map_t entity_requests_known_ids_index_map_;
     entity_requests_new_ids_class_index_map_t entity_requests_new_ids_class_index_map_;
     entity_requests_known_ids_class_index_map_t entity_requests_known_ids_class_index_map_;
+    link_relations_entries_t link_relation_entries_;
+    link_data_to_index_map_t link_data_to_index_map_;
   };
 
   entity_requests_new_ids_entries_t& get_entity_requests_new_ids_entries() const {
@@ -1808,6 +2038,31 @@ class NgpModRequestsT {
 
   entity_requests_known_ids_class_index_map_t& get_entity_requests_known_ids_class_index_map() const {
     return host_state_().entity_requests_known_ids_class_index_map_;
+  }
+
+  link_relations_entries_t& get_link_relation_entries() const {
+    return host_state_().link_relation_entries_;
+  }
+
+  link_data_to_index_map_t& get_link_data_to_index_map() const {
+    return host_state_().link_data_to_index_map_;
+  }
+
+  NgpRequestLinkRelationsT<NgpMemSpace> get_or_create_link_relation_requests(LinkData& link_data) const {
+    auto& entries = get_link_relation_entries();
+    auto& index_map = get_link_data_to_index_map();
+    auto it = index_map.find(&link_data);
+    if (it != index_map.end()) {
+      return entries[it->second].requests;
+    }
+    unsigned new_index = static_cast<unsigned>(entries.size());
+    entries.emplace_back();
+    auto& entry = entries.back();
+    entry.link_data_ptr = &link_data;
+    entry.requests.initialize();
+    entry.requests.state_().index_ = new_index;
+    index_map[&link_data] = new_index;
+    return entry.requests;
   }
 
   NgpRequestEntitiesNewIdsT<NgpMemSpace> get_entity_requests_new_ids_by_index(unsigned index) const {
@@ -1976,6 +2231,7 @@ using NgpModRequests = NgpModRequestsT<stk::ngp::MemSpace>;
 using NgpRequestEntitiesKnownIds = NgpRequestEntitiesKnownIdsT<stk::ngp::MemSpace>;
 using NgpRequestEntitiesNewIds = NgpRequestEntitiesNewIdsT<stk::ngp::MemSpace>;
 using NgpRequestConnections = NgpRequestConnectionsT<stk::ngp::MemSpace>;
+using NgpRequestLinkRelations = NgpRequestLinkRelationsT<stk::ngp::MemSpace>;
 using NgpDestroyEntities = NgpDestroyEntitiesT<stk::ngp::MemSpace>;
 using NgpDestroyConnections = NgpDestroyConnectionsT<stk::ngp::MemSpace>;
 

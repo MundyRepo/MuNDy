@@ -161,32 +161,6 @@ void clear_crs_structure_dirty(const LinkData& link_data);
 /// structure. There are some operations that fundamentally require a CSR-like structure such as maintaining parallel
 /// consistency as entities are removed from the mesh or performing operations that require a serial loop over each
 /// linker that connects to a given linked entity.
-///
-/// # Delayed link declaration and destruction
-/// We offer helper functions for delayed destruction and declaration of links. Users call request_destruction(linker)
-/// and request_link(linked_entity0, linked_entity1, ... linked_entityN) to request the destruction of a link and the
-/// creation of a link between the given entities, respectively. These requests may be made in parallel and are
-/// processed in the next process_requests call. These functions streamline the enforcement of the requirement that
-/// "declare/destroy_relation are performed consistently for each process that locally owns or shares the given linker
-/// or linked entity." We do so at two ~levels ~of user investment, each with different costs.
-///
-/// ## FULLY_CONSISTENT: You did all the work
-/// At a fully consistent level, request_link must be called by each process that locally owns or shares any of the
-/// given linked entities and request_destruction must be called by each process that locally owns or shares the given
-/// linker. This is the most user-intensive level, but it requires the least amount of MPI communication. At this level,
-/// our role is to declare the linker on a single process, ghost the linker to all owners and sharers of the linked
-/// entities, and then connect the linker to the linked entities on each process.
-///
-/// ## PARTIALLY_CONSISTENT: You did some of the work
-/// Partial consistency is the default level. It has all of the same requirements as fully consistent, but without
-/// considering sharers of either the linker or the linked entities. It is often quite arduous to ensure consistency
-/// across all sharers, particularly when attempting to link an entity that is ghosted to the current process. This
-/// level is the most user-friendly but does come with a cost. We must perform two pass MPI communication, first
-/// broadcasting information to the owners and then to the sharers. Sometimes this is simply unavoidable.
-///
-/// If using a single process or if only linking element or constraint-rank entities, then partial consistency is the
-/// same as full consistency. The level of consistency is passed to the process_requests function, accepting a bool
-/// stating if the requests are fully consistent or not. This function will enter a modification cycle only if needed.
 class LinkData {
  public:
   //! \name Constructors and destructor
@@ -413,22 +387,6 @@ class LinkData {
   void update_post_mesh_mod() {
     coo_synchronizer_->update_post_mesh_mod();
     crs_synchronizer_->update_post_mesh_mod();
-  }
-  //@}
-
-  //! \name Declaration/destruction requests
-  //@{
-
-  /// \brief Process all requests for creation/destruction made since the last process_requests call.
-  ///
-  /// Note, on a single process or if the entities you wish to link are all of element rank or higher, then partial
-  /// consistency is the same as full consistency.
-  ///
-  /// If the global number of requests is non-zero, this function will enter a modification cycle if not already in one.
-  ///
-  /// \param assume_fully_consistent [in] If we should assume that the requests are fully consistent or not.
-  void process_requests(bool /*assume_fully_consistent*/ = false) {
-    MUNDY_THROW_REQUIRE(false, std::invalid_argument, "Processing requests not implemented yet.");
   }
   //@}
 
