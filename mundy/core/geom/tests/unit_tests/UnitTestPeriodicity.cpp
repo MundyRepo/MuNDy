@@ -627,6 +627,9 @@ TEST(RuntimeMetric, VisitFreeSpaceDispatchesCorrectType) {
 
 TEST(RuntimeMetric, VisitOrthorhombicDispatchesCorrectType) {
   metric m(metric::ORTHORHOMBIC_XY);
+  // visit() constructs OrthorhombicMetric from stored cell widths; the constructor
+  // asserts widths > 0 for enabled periodic axes, so we must set valid widths first.
+  m.set_cell_widths({1.0, 1.0, 1.0});
   bool correct_type = false;
   m.visit([&](auto&& c) {
     using T = std::decay_t<decltype(c)>;

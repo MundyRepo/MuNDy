@@ -1452,7 +1452,8 @@ TEST(Convex, MundyMathCongruentAnalyticalSolutions) {
 }
 
 TEST(Convex, MundyMathMixedCongruentAnalyticalSolutions) {
-  auto test_cases = std::make_tuple(math_backend::mixed::RandomMixedCongruentCCQP<5, 4, 3>{},  //
+  // Template params are <NX, NY, NZ>; make_D_full_rank requires NZ >= NX.
+  auto test_cases = std::make_tuple(math_backend::mixed::RandomMixedCongruentCCQP<4, 3, 5>{},  //
                                     math_backend::mixed::RandomMixedCongruentCCQP<3, 4, 5>{});
   std::apply([](auto&&... test_case) { (run_mundy_math_mixed_congruent_test(test_case), ...); }, test_cases);
 }

@@ -115,7 +115,11 @@ inline void set_field_data_on_host(const stk::mesh::BulkData& stk_mesh, const st
   stk::mesh::for_each_entity_run(
       stk_mesh, stk_field.entity_rank(), selector,
       [&]([[maybe_unused]] const stk::mesh::BulkData& bulk, const stk::mesh::Entity entity) {
-        double* entity_coords = static_cast<double*>(stk::mesh::field_data(coord_field, entity));
+        // coord_field lives at NODE_RANK. For node entities use the entity directly; for higher-rank
+        // entities (elements, edges, etc.) use the 0th connected node as a representative position.
+        const stk::mesh::Entity coord_entity =
+            (bulk.entity_rank(entity) == stk::topology::NODE_RANK) ? entity : bulk.begin_nodes(entity)[0];
+        const double* entity_coords = static_cast<const double*>(stk::mesh::field_data(coord_field, coord_entity));
         auto expected_values = func(entity_coords);
         const int num_components = stk::mesh::field_scalars_per_entity(stk_field, entity);
         double* raw_field_data = static_cast<double*>(stk::mesh::field_data(stk_field, entity));
@@ -139,7 +143,9 @@ inline void check_field_data_on_host_func(const std::string& message_to_throw, c
   stk::mesh::for_each_entity_run(
       stk_mesh, stk_field.entity_rank(), selector,
       [&]([[maybe_unused]] const stk::mesh::BulkData& bulk, const stk::mesh::Entity entity) {
-        double* entity_coords = static_cast<double*>(stk::mesh::field_data(coord_field, entity));
+        const stk::mesh::Entity coord_entity =
+            (bulk.entity_rank(entity) == stk::topology::NODE_RANK) ? entity : bulk.begin_nodes(entity)[0];
+        const double* entity_coords = static_cast<const double*>(stk::mesh::field_data(coord_field, coord_entity));
         auto expected_values = func(entity_coords);
 
         unsigned int num_components = stk::mesh::field_scalars_per_entity(stk_field, entity);
