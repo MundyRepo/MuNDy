@@ -555,6 +555,82 @@ TEST(NgpModRequests, RequestLinks_WritesRelationForFutureLinker) {
       << "COO ordinal 1 must point to node1 after process_requests.";
 }
 
+// Two distinct LinkData objects in a single process_requests call: each gets its own
+// NgpRequestLinkRelationsT (keyed by LinkData*), both COO writes land in the right object,
+// and coo_modify_on_host() is called once for each.
+TEST(NgpModRequests, RequestLinks_TwoLinkDataObjects) {
+  // Build a mesh with two independent link meta-datas at the same rank.
+  MeshBuilder builder{MPI_COMM_WORLD};
+  builder.set_spatial_dimension(3);
+  builder.set_entity_rank_names({"NODE", "EDGE", "FACE", "ELEMENT", "CONSTRAINT"});
+  auto meta = builder.create_meta_data();
+  meta->use_simple_fields();
+  auto bulk = builder.create_bulk_data(meta);
+
+  static constexpr stk::mesh::EntityRank link_rank = stk::topology::CONSTRAINT_RANK;
+
+  LinkMetaData& link_meta_a = declare_link_meta_data(*meta, "LINKS_A", link_rank);
+  stk::mesh::Part* link_part_a = &link_meta_a.declare_link_part("LINK_PART_A", 2u);
+
+  LinkMetaData& link_meta_b = declare_link_meta_data(*meta, "LINKS_B", link_rank);
+  stk::mesh::Part* link_part_b = &link_meta_b.declare_link_part("LINK_PART_B", 2u);
+
+  meta->commit();
+  LinkData& link_data_a = declare_link_data(*bulk, link_meta_a);
+  LinkData& link_data_b = declare_link_data(*bulk, link_meta_b);
+
+  // Declare shared target nodes.
+  bulk->modification_begin();
+  stk::mesh::Entity node0 = bulk->declare_node(1u);
+  stk::mesh::Entity node1 = bulk->declare_node(2u);
+  bulk->modification_end();
+
+  NgpModRequests reqs;
+  auto req_links_a = reqs.request_entities_new_ids(*link_part_a);
+  auto req_links_b = reqs.request_entities_new_ids(*link_part_b);
+  auto req_rel_a   = reqs.request_links(link_data_a);
+  auto req_rel_b   = reqs.request_links(link_data_b);
+
+  // request_links for two different LinkData must return helpers with different ids.
+  EXPECT_NE(req_rel_a.id(), req_rel_b.id());
+
+  reqs.activate_host();
+  size_t ta  = req_links_a.constraint_tickets().claim();
+  size_t tb  = req_links_b.constraint_tickets().claim();
+  size_t ra0 = req_rel_a.tickets().claim();
+  size_t ra1 = req_rel_a.tickets().claim();
+  size_t rb0 = req_rel_b.tickets().claim();
+  size_t rb1 = req_rel_b.tickets().claim();
+  reqs.finalize_counts();
+
+  FutureEntity future_a = req_links_a.request_constraint(ta);
+  FutureEntity future_b = req_links_b.request_constraint(tb);
+  req_rel_a.request(ra0, future_a, node0, 0u);
+  req_rel_a.request(ra1, future_a, node1, 1u);
+  req_rel_b.request(rb0, future_b, node1, 0u);  // reversed: b links to node1 first
+  req_rel_b.request(rb1, future_b, node0, 1u);
+
+  ASSERT_NO_THROW(reqs.process_requests(*bulk));
+
+  stk::mesh::Entity link_a = req_links_a.get_entity(ta, link_rank);
+  stk::mesh::Entity link_b = req_links_b.get_entity(tb, link_rank);
+
+  ASSERT_TRUE(bulk->is_valid(link_a));
+  ASSERT_TRUE(bulk->is_valid(link_b));
+
+  // link_data_a COO must hold node0 at ordinal 0, node1 at ordinal 1.
+  EXPECT_EQ(link_data_a.coo_data().get_linked_entity(link_a, 0u), node0);
+  EXPECT_EQ(link_data_a.coo_data().get_linked_entity(link_a, 1u), node1);
+
+  // link_data_b COO must hold node1 at ordinal 0, node0 at ordinal 1.
+  EXPECT_EQ(link_data_b.coo_data().get_linked_entity(link_b, 0u), node1);
+  EXPECT_EQ(link_data_b.coo_data().get_linked_entity(link_b, 1u), node0);
+
+  // coo_modify_on_host() was called for both — both should need a device sync.
+  EXPECT_TRUE(link_data_a.coo_need_sync_to_device());
+  EXPECT_TRUE(link_data_b.coo_need_sync_to_device());
+}
+
 }  // namespace
 
 }  // namespace mesh
