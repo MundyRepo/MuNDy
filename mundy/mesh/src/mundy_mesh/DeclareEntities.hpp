@@ -18,6 +18,8 @@
 // **********************************************************************************************************************
 // @HEADER
 
+#include <Mundy_config.hpp>  // for MUNDY_DEPRECATED_MSG
+
 #ifndef MUNDY_MESH_DECLAREENTITIES_HPP_
 #define MUNDY_MESH_DECLAREENTITIES_HPP_
 
@@ -59,8 +61,8 @@ namespace mesh {
 /// nodes and elements that should be declared in the mesh. Once complete, use it to perform the declaration, sharing,
 /// and setting of field data automatically.
 ///
-/// \note We emphasize that all processes should own exact copies of the same DeclareEntitiesHelper. This choice means
-/// that DeclareEntitiesHelper is not optimally performant but the cost of duplicating entity information is cheap in
+/// \note We emphasize that all processes should own exact copies of the same EntityDeclaration. This choice means
+/// that EntityDeclaration is not optimally performant but the cost of duplicating entity information is cheap in
 /// comparison to the burden of determining parallel ownership and sharing.
 ///
 /// \note The create_* methods within this class are not thread safe. To perform parallel construction of entities, use
@@ -77,7 +79,7 @@ namespace mesh {
 /// \code{.cpp}
 ///   const int num_nodes = 7;
 ///   const int num_edges = 6;
-///   DeclareEntitiesHelper builder;
+///   EntityDeclaration builder;
 ///   for (int i = 0; i < num_nodes; ++i) {
 ///     builder.create_node().owning_proc(0).id(i + 1);
 ///   }
@@ -91,7 +93,7 @@ namespace mesh {
 ///   }
 ///   builder.declare_entities(bulk_data);
 /// \endcode
-class DeclareEntitiesHelper {
+class EntityDeclaration {
  private:
   //! \name Private Helpers
   //@{
@@ -531,7 +533,7 @@ class DeclareEntitiesHelper {
     }
 
     /// \brief Get the owner of the builder.
-    DeclareEntitiesHelper& owner() {
+    EntityDeclaration& owner() {
       return owner_;
     }
 
@@ -544,15 +546,15 @@ class DeclareEntitiesHelper {
 
    private:
     /// \brief Private constructor for the NodeBuilder.
-    NodeBuilder(DeclareEntitiesHelper& owner, DeclareNodeInfo& node_info) : owner_(owner), node_info_(node_info) {
+    NodeBuilder(EntityDeclaration& owner, DeclareNodeInfo& node_info) : owner_(owner), node_info_(node_info) {
     }
 
     //! \name Internal Data
     //@{
 
-    DeclareEntitiesHelper& owner_;
+    EntityDeclaration& owner_;
     DeclareNodeInfo& node_info_;
-    friend class DeclareEntitiesHelper;
+    friend class EntityDeclaration;
     //@}
   };  // class NodeBuilder
 
@@ -696,7 +698,7 @@ class DeclareEntitiesHelper {
     }
 
     /// \brief Get the owner of the builder.
-    DeclareEntitiesHelper& owner() {
+    EntityDeclaration& owner() {
       return owner_;
     }
 
@@ -709,21 +711,21 @@ class DeclareEntitiesHelper {
 
    private:
     /// \brief Private constructor for the ElementBuilder.
-    ElementBuilder(DeclareEntitiesHelper& owner, DeclareElementInfo& element_info)
+    ElementBuilder(EntityDeclaration& owner, DeclareElementInfo& element_info)
         : owner_(owner), elem_info_(element_info) {
     }
 
     //! \name Internal Data
     //@{
 
-    DeclareEntitiesHelper& owner_;
+    EntityDeclaration& owner_;
     DeclareElementInfo& elem_info_;
     //@}
 
     //! \name Friends <3
     //@{
 
-    friend class DeclareEntitiesHelper;
+    friend class EntityDeclaration;
     //@}
   };  // class ElementBuilder
   //@}
@@ -806,7 +808,7 @@ class DeclareEntitiesHelper {
   }
 
   /// \brief Print the builder information to the output stream.
-  friend std::ostream& operator<<(std::ostream& os, const DeclareEntitiesHelper& builder) {
+  friend std::ostream& operator<<(std::ostream& os, const EntityDeclaration& builder) {
     os << "Number of Nodes: " << builder.node_info_vec_.size() << "\n";
     size_t node_count = 0;
     for (const auto& node_info : builder.node_info_vec_) {
@@ -843,7 +845,7 @@ class DeclareEntitiesHelper {
   /// occur until the next call to modification_end.
   ///
   /// \param bulk_data The bulk data
-  DeclareEntitiesHelper& declare_entities(stk::mesh::BulkData& bulk_data);
+  EntityDeclaration& declare_entities(stk::mesh::BulkData& bulk_data);
   //@}
 
  private:
@@ -924,6 +926,8 @@ class DeclareEntitiesHelper {
   std::vector<DeclareElementInfo> elem_info_vec_;
   //@}
 };
+
+using DeclareEntitiesHelper MUNDY_DEPRECATED_MSG("use EntityDeclaration") = EntityDeclaration;
 
 }  // namespace mesh
 

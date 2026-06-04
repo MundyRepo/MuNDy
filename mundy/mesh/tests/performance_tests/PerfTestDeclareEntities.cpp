@@ -40,7 +40,7 @@
 
 // Mundy
 #include <mundy_math/Vector3.hpp>          // for mundy::Vector3
-#include <mundy_mesh/DeclareEntities.hpp>  // for mundy::mesh::DeclareEntitiesHelper
+#include <mundy_mesh/DeclareEntities.hpp>  // for mundy::mesh::EntityDeclaration
 #include <mundy_utils/throw_assert.hpp>    // for MUNDY_THROW_REQUIRE
 
 void neuron() {
@@ -86,7 +86,7 @@ void neuron() {
   meta_data.commit();
 
   // Fill the declare entities helper from a ply file
-  mundy::mesh::DeclareEntitiesHelper dec_helper;
+  mundy::mesh::EntityDeclaration dec_helper;
   std::string filename = "2013_03_06_cell08_876_H41_05_Cell2_cell-axon.ply";
   happly::PLYData ply_in(filename);
 
@@ -310,7 +310,7 @@ void ciliated_sphere() {
   // Fill the triangulated sphere from the ply file
   std::string filename = "sphere.ply";
   happly::PLYData ply_in(filename);
-  mundy::mesh::DeclareEntitiesHelper dec_helper;
+  mundy::mesh::EntityDeclaration dec_helper;
   size_t node_count = 0;
   size_t element_count = 0;
 
@@ -518,7 +518,7 @@ void bacteria_in_a_porous_media() {
   meta_data.commit();
 
   // Fill the declare entities helper
-  mundy::mesh::DeclareEntitiesHelper dec_helper;
+  mundy::mesh::EntityDeclaration dec_helper;
   size_t node_count = 0;
   size_t element_count = 0;
 
@@ -770,7 +770,7 @@ void chromatin() {
   meta_data.commit();
 
   // Fill the declare entities helper
-  mundy::mesh::DeclareEntitiesHelper dec_helper;
+  mundy::mesh::EntityDeclaration dec_helper;
   size_t node_count = 0;
   size_t element_count = 0;
 
@@ -1119,7 +1119,7 @@ void bee_hive() {
   meta_data.commit();
 
   // Fill the declare entities helper
-  mundy::mesh::DeclareEntitiesHelper dec_helper;
+  mundy::mesh::EntityDeclaration dec_helper;
   size_t node_count = 0;
   size_t element_count = 0;
 

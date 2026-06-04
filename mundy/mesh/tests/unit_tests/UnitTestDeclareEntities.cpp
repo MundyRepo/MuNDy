@@ -37,7 +37,7 @@
 
 // Mundy
 #include <mundy_mesh/Class.hpp>            // for mundy::mesh::Class
-#include <mundy_mesh/DeclareEntities.hpp>  // for mundy::mesh::DeclareEntitiesHelper
+#include <mundy_mesh/DeclareEntities.hpp>  // for mundy::mesh::EntityDeclaration
 #include <mundy_mesh/LinkData.hpp>         // for mundy::mesh::LinkData
 #include <mundy_mesh/LinkMetaData.hpp>     // for mundy::mesh::LinkMetaData
 
@@ -277,7 +277,7 @@ TEST_F(UnitTestDeclareEntities, DeclareEntities) {
 
   const size_t num_nodes = 4;
   const size_t num_edges = num_nodes - 1;
-  DeclareEntitiesHelper builder;
+  EntityDeclaration builder;
   for (size_t i = 0; i < num_nodes; ++i) {
     builder.create_node()
         .id(i + 1)
@@ -408,7 +408,7 @@ TEST_F(UnitTestDeclareEntities, DeclareEntitiesSupportsClassPipeline) {
 
   setup();
 
-  DeclareEntitiesHelper builder;
+  EntityDeclaration builder;
   builder.create_node()
       .id(1)
       .owning_proc(0)
@@ -489,7 +489,7 @@ TEST_F(UnitTestDeclareEntities, DeclareEntitiesSupportsClassPipeline) {
 TEST_F(UnitTestDeclareEntities, DeclareEntityBuilderRejectsMixedPartAndClassPipelines) {
   setup();
 
-  DeclareEntitiesHelper builder;
+  EntityDeclaration builder;
   auto node = builder.create_node();
   node.add_part(node_part_ptr_);
   EXPECT_THROW(node.add_class(*node_set_class_ptr_), std::logic_error);
@@ -508,7 +508,7 @@ TEST_F(UnitTestDeclareEntities, DeclareLinks) {
   // The links are members of the link meta data with name "LINKS"
   setup();
 
-  DeclareEntitiesHelper builder;
+  EntityDeclaration builder;
 
   // Create two particles
   for (size_t i = 0; i < 2; ++i) {

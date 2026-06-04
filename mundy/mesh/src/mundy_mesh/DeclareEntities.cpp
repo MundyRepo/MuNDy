@@ -37,7 +37,7 @@
 #include <stk_mesh/base/FEMHelpers.hpp>  // for stk::mesh::declare_element
 
 // Mundy
-#include <mundy_mesh/DeclareEntities.hpp>  // for mundy::mesh::DeclareEntitiesHelper
+#include <mundy_mesh/DeclareEntities.hpp>  // for mundy::mesh::EntityDeclaration
 #include <mundy_mesh/LinkData.hpp>         // for mundy::mesh::get_link_data, mundy::mesh::LinkData
 #include <mundy_mesh/LinkMetaData.hpp>     // for mundy::mesh::LinkMetaData
 #include <mundy_utils/throw_assert.hpp>    // for MUNDY_THROW_REQUIRE
@@ -46,7 +46,7 @@ namespace mundy {
 
 namespace mesh {
 
-void DeclareEntitiesHelper::check_consistency(const stk::mesh::BulkData& bulk_data) const {
+void EntityDeclaration::check_consistency(const stk::mesh::BulkData& bulk_data) const {
   // Get the set of unique node and element ids to be added
   // In doing so, if we find a duplicate, we can return early
   std::unordered_set<stk::mesh::EntityId> unique_node_ids;
@@ -120,7 +120,7 @@ void DeclareEntitiesHelper::check_consistency(const stk::mesh::BulkData& bulk_da
             ? get_topology(bulk_data.mesh_meta_data(), stk::topology::ELEM_RANK, element_info.parts)
             : get_topology(bulk_data.mesh_meta_data(), stk::topology::ELEM_RANK,
                            impl::populate_entity_rank_parts(stk::topology::ELEM_RANK, element_info.classes,
-                                                            "DeclareEntitiesHelper element classes"));
+                                                            "EntityDeclaration element classes"));
     MUNDY_THROW_REQUIRE(given_topo == actual_topo, std::runtime_error,
                         sink() << "Element " << element_info.id << " has parts/classes that do not match its topology\n"
                                << "Given Topology: " << given_topo.name() << "\n"
@@ -192,7 +192,7 @@ void DeclareEntitiesHelper::check_consistency(const stk::mesh::BulkData& bulk_da
   }
 }
 
-DeclareEntitiesHelper& DeclareEntitiesHelper::declare_entities(stk::mesh::BulkData& bulk_data) {
+EntityDeclaration& EntityDeclaration::declare_entities(stk::mesh::BulkData& bulk_data) {
 #ifndef NDEBUG
   check_consistency(bulk_data);
 #endif

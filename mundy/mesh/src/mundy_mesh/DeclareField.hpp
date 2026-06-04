@@ -24,7 +24,7 @@
 /// \file DeclareField.hpp
 /// \defgroup MundyMeshDeclareField mundy::mesh::DeclareField
 /// \brief A set of helpers for declaring fields with reduced boilerplate code.
-/// \details FieldDeclarationHelper and its tagged variants provide fluent builders for STK field type, rank, role,
+/// \details FieldDeclaration and its tagged variants provide fluent builders for STK field type, rank, role,
 /// output type, and name before declaration.
 
 // C++ core
@@ -42,6 +42,7 @@
 // Mundy
 #include <mundy_mesh/impl/DeclareFieldImpl.hpp>
 #include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_REQUIRE
+#include <Mundy_config.hpp>  // for MUNDY_DEPRECATED_MSG
 
 namespace mundy {
 
@@ -51,7 +52,7 @@ namespace mesh {
 /// @{
 
 template <typename FieldScalarType, typename Tag = void>
-class TaggedFieldDeclarationHelperT;
+class TaggedFieldDeclarationT;
 
 /// \brief Helper class for declaring a field
 ///
@@ -60,7 +61,7 @@ class TaggedFieldDeclarationHelperT;
 ///
 /// For example, to create a transient vector3 field on nodes called "velocity":
 /// \code{.cpp}
-///   FieldDeclarationHelper field_decl(meta_data);
+///   FieldDeclaration field_decl(meta_data);
 ///   stk::mesh::Field<double> &node_velocity_field =
 ///      field_decl.type<double>().role(TRANSIENT).output_type(VECTOR_3D).rank(NODE_RANK).name("velocity").declare();
 /// \endcode
@@ -68,17 +69,17 @@ class TaggedFieldDeclarationHelperT;
 /// These setters may be called in any order. Role and output type are optional, but type(), rank(), and name() must be
 /// called before declare().
 ///
-/// You may also reuse the same FieldDeclarationHelper to declare multiple fields with similar properties:
+/// You may also reuse the same FieldDeclaration to declare multiple fields with similar properties:
 /// \code{.cpp}
-///   FieldDeclarationHelper field_decl(meta_data);
+///   FieldDeclaration field_decl(meta_data);
 ///   auto vec3d_io_field_decl = field_decl.type<double>().role(TRANSIENT).output_type(VECTOR_3D);
 ///   stk::mesh::Field<double> &node_velocity_field = vec3d_io_field_decl.rank(NODE_RANK).name("velocity").declare();
 ///   stk::mesh::Field<double> &elem_force_field    = vec3d_io_field_decl.rank(ELEMENT_RANK).name("force").declare();
 /// \endcode
-class FieldDeclarationHelper;
+class FieldDeclaration;
 
 template <typename T>
-class FieldDeclarationHelperT {
+class FieldDeclarationT {
  public:
   using field_value_typeype = T;
 
@@ -86,7 +87,7 @@ class FieldDeclarationHelperT {
   //@{
 
   /// \brief Canonical constructor
-  FieldDeclarationHelperT(stk::mesh::MetaData& meta_data)
+  FieldDeclarationT(stk::mesh::MetaData& meta_data)
       : meta_data_(meta_data),
         field_has_rank_(false),
         field_has_name_(false),
@@ -99,24 +100,24 @@ class FieldDeclarationHelperT {
   }
 
   /// \brief Copy/Move constructors and assignment operators
-  FieldDeclarationHelperT(const FieldDeclarationHelperT&) = default;
-  FieldDeclarationHelperT(FieldDeclarationHelperT&&) = default;
-  FieldDeclarationHelperT& operator=(const FieldDeclarationHelperT&) = default;
-  FieldDeclarationHelperT& operator=(FieldDeclarationHelperT&&) = default;
+  FieldDeclarationT(const FieldDeclarationT&) = default;
+  FieldDeclarationT(FieldDeclarationT&&) = default;
+  FieldDeclarationT& operator=(const FieldDeclarationT&) = default;
+  FieldDeclarationT& operator=(FieldDeclarationT&&) = default;
   //@}
 
   //! \name Fluent interface
   //@{
 
   /// \brief Set the entity rank of the field (must be called before declare())
-  FieldDeclarationHelperT rank(stk::mesh::EntityRank rank) {
+  FieldDeclarationT rank(stk::mesh::EntityRank rank) {
     field_has_rank_ = true;
     rank_ = rank;
     return *this;
   }
 
   /// \brief Set the name of the field (must be called before declare())
-  FieldDeclarationHelperT name(const std::string& field_name) {
+  FieldDeclarationT name(const std::string& field_name) {
     field_has_name_ = true;
     field_name_ = field_name;
     return *this;
@@ -156,7 +157,7 @@ class FieldDeclarationHelperT {
   ///                    or times in an analysis. These are typically "results"
   ///                    data. Examples would be nodal displacement or element
   ///                    stress. */
-  FieldDeclarationHelperT role(Ioss::Field::RoleType field_role) {
+  FieldDeclarationT role(Ioss::Field::RoleType field_role) {
     field_has_role_ = true;
     field_role_ = field_role;
     return *this;
@@ -190,7 +191,7 @@ class FieldDeclarationHelperT {
   ///  QUATERNION_2D,    //  [s, q]
   ///  QUATERNION_3D,    //  [x, y, z, q]
   ///  CUSTOM            //  User-defined subscripting
-  FieldDeclarationHelperT output_type(stk::io::FieldOutputType output_type) {
+  FieldDeclarationT output_type(stk::io::FieldOutputType output_type) {
     field_has_output_type_ = true;
     output_type_ = output_type;
     return *this;
@@ -234,7 +235,7 @@ class FieldDeclarationHelperT {
     return *snapshot.meta_data;
   }
 
-  explicit FieldDeclarationHelperT(const impl::FieldDeclarationSnapshot& snapshot)
+  explicit FieldDeclarationT(const impl::FieldDeclarationSnapshot& snapshot)
       : meta_data_(get_meta_data_from_snapshot(snapshot)),
         field_has_rank_(snapshot.has_rank),
         field_has_name_(snapshot.has_name),
@@ -258,10 +259,10 @@ class FieldDeclarationHelperT {
   Ioss::Field::RoleType field_role_;
   stk::io::FieldOutputType output_type_;
 
-  friend class FieldDeclarationHelper;
+  friend class FieldDeclaration;
 };
 
-class FieldDeclarationHelper {
+class FieldDeclaration {
  public:
   //! \name Constructors and Assignment Operators
   //@{
@@ -269,7 +270,7 @@ class FieldDeclarationHelper {
   using invalid_field_value_typeype = void;
 
   /// \brief Canonical constructor
-  FieldDeclarationHelper(stk::mesh::MetaData& meta_data)
+  FieldDeclaration(stk::mesh::MetaData& meta_data)
       : meta_data_(meta_data),
         field_has_rank_(false),
         field_has_name_(false),
@@ -282,43 +283,43 @@ class FieldDeclarationHelper {
   }
 
   /// \brief Copy/Move constructors and assignment operators
-  FieldDeclarationHelper(const FieldDeclarationHelper&) = default;
-  FieldDeclarationHelper(FieldDeclarationHelper&&) = default;
-  FieldDeclarationHelper& operator=(const FieldDeclarationHelper&) = default;
-  FieldDeclarationHelper& operator=(FieldDeclarationHelper&&) = default;
+  FieldDeclaration(const FieldDeclaration&) = default;
+  FieldDeclaration(FieldDeclaration&&) = default;
+  FieldDeclaration& operator=(const FieldDeclaration&) = default;
+  FieldDeclaration& operator=(FieldDeclaration&&) = default;
 
   //! \name Fluent interface
   //@{
 
   /// \brief Set the type of the field (must be called before declare())
   template <typename T>
-  FieldDeclarationHelperT<T> type() {
-    return FieldDeclarationHelperT<T>(impl::make_field_declaration_snapshot(*this));
+  FieldDeclarationT<T> type() {
+    return FieldDeclarationT<T>(impl::make_field_declaration_snapshot(*this));
   }
 
   /// \brief Set the entity rank of the field (must be called before declare())
-  FieldDeclarationHelper rank(stk::mesh::EntityRank rank) {
+  FieldDeclaration rank(stk::mesh::EntityRank rank) {
     field_has_rank_ = true;
     rank_ = rank;
     return *this;
   }
 
   /// \brief Set the name of the field (must be called before declare())
-  FieldDeclarationHelper name(const std::string& field_name) {
+  FieldDeclaration name(const std::string& field_name) {
     field_has_name_ = true;
     field_name_ = field_name;
     return *this;
   }
 
   /// \brief Set the io role of the field (optional)
-  FieldDeclarationHelper role(Ioss::Field::RoleType field_role) {
+  FieldDeclaration role(Ioss::Field::RoleType field_role) {
     field_has_role_ = true;
     field_role_ = field_role;
     return *this;
   }
 
   /// \brief Set the stk output type of the field (optional)
-  FieldDeclarationHelper output_type(stk::io::FieldOutputType output_type) {
+  FieldDeclaration output_type(stk::io::FieldOutputType output_type) {
     field_has_output_type_ = true;
     output_type_ = output_type;
     return *this;
@@ -351,6 +352,8 @@ class FieldDeclarationHelper {
 };
 
 /// @}
+
+using FieldDeclarationHelper MUNDY_DEPRECATED_MSG("use FieldDeclaration") = FieldDeclaration;
 
 }  // namespace mesh
 

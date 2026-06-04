@@ -22,11 +22,11 @@
 #define MUNDY_MESH_DECLARECOMPONENT_HPP_
 
 /// \file DeclareComponent.hpp
-/// \defgroup MundyMeshDeclareComponent mundy::mesh::ComponentDeclarationHelper
+/// \defgroup MundyMeshDeclareComponent mundy::mesh::ComponentDeclaration
 /// \brief Unified fluent builder for declaring field-backed and shared components.
 ///
-/// The preferred entry point for component declarations is \c ComponentDeclarationHelper.
-/// Use \c FieldDeclarationHelper (DeclareField.hpp) for raw STK field declarations only.
+/// The preferred entry point for component declarations is \c ComponentDeclaration.
+/// Use \c FieldDeclaration (DeclareField.hpp) for raw STK field declarations only.
 
 // C++ core
 #include <type_traits>
@@ -37,16 +37,17 @@
 
 // Mundy
 #include <mundy_mesh/impl/DeclareComponentImpl.hpp>  // for impl::FieldDeclarationSnapshot, tagged builder types
+#include <Mundy_config.hpp>  // for MUNDY_DEPRECATED_MSG
 
 namespace mundy {
 
 namespace mesh {
 
-/// \class ComponentDeclarationHelper
+/// \class ComponentDeclaration
 /// \ingroup MundyMeshDeclareComponent
 /// \brief Unified fluent builder for declaring both field-backed and shared-backed components.
 ///
-/// \c ComponentDeclarationHelper is the preferred entry point for all component declarations.
+/// \c ComponentDeclaration is the preferred entry point for all component declarations.
 /// It accumulates declaration metadata through a fluent chain of setters and then materializes
 /// either a field-backed component (via \c .field<A>().declare()) or a shared-backed component
 /// (via \c .shared<A>(source).declare()).
@@ -59,7 +60,7 @@ namespace mesh {
 ///
 /// \par Field-backed example:
 /// \code{.cpp}
-///   ComponentDeclarationHelper decl(meta_data);
+///   ComponentDeclaration decl(meta_data);
 ///   auto velocity = decl.rank(NODE_RANK)
 ///                       .name("velocity")
 ///                       .role(Ioss::Field::TRANSIENT)
@@ -69,7 +70,7 @@ namespace mesh {
 ///
 /// \par Shared-backed example:
 /// \code{.cpp}
-///   ComponentDeclarationHelper decl;
+///   ComponentDeclaration decl;
 ///   auto stiffness = decl.rank(ELEMENT_RANK)
 ///                        .name("stiffness")
 ///                        .shared<double>(1.0)
@@ -78,7 +79,7 @@ namespace mesh {
 ///
 /// \par Tagged field component:
 /// \code{.cpp}
-///   ComponentDeclarationHelper decl(meta_data);
+///   ComponentDeclaration decl(meta_data);
 ///   auto tagged = decl.rank(NODE_RANK)
 ///                     .name("velocity")
 ///                     .tag<VelocityTag>()
@@ -90,28 +91,28 @@ namespace mesh {
 /// Intermediate builder values are copyable and may be reused to declare multiple components
 /// that share common properties:
 /// \code{.cpp}
-///   ComponentDeclarationHelper decl(meta_data);
+///   ComponentDeclaration decl(meta_data);
 ///   auto node_vec3 = decl.rank(NODE_RANK)
 ///                        .role(Ioss::Field::TRANSIENT)
 ///                        .field<mundy::math::Vector3<double>>();
 ///   auto velocity = node_vec3.name("velocity").declare();
 ///   auto force    = node_vec3.name("force").declare();
 /// \endcode
-class ComponentDeclarationHelper {
+class ComponentDeclaration {
  public:
   //! \name Constructors and Assignment Operators
   //@{
 
   /// \brief Construct with a MetaData reference (required for field-backed declarations; optional for shared).
-  explicit ComponentDeclarationHelper(stk::mesh::MetaData& meta_data) : meta_data_(&meta_data) {}
+  explicit ComponentDeclaration(stk::mesh::MetaData& meta_data) : meta_data_(&meta_data) {}
 
   /// \brief Default constructor for shared-backed declarations that do not require MetaData.
-  ComponentDeclarationHelper() : meta_data_(nullptr) {}
+  ComponentDeclaration() : meta_data_(nullptr) {}
 
-  ComponentDeclarationHelper(const ComponentDeclarationHelper&) = default;
-  ComponentDeclarationHelper(ComponentDeclarationHelper&&)      = default;
-  ComponentDeclarationHelper& operator=(const ComponentDeclarationHelper&) = default;
-  ComponentDeclarationHelper& operator=(ComponentDeclarationHelper&&)      = default;
+  ComponentDeclaration(const ComponentDeclaration&) = default;
+  ComponentDeclaration(ComponentDeclaration&&)      = default;
+  ComponentDeclaration& operator=(const ComponentDeclaration&) = default;
+  ComponentDeclaration& operator=(ComponentDeclaration&&)      = default;
 
   //@}
 
@@ -119,16 +120,16 @@ class ComponentDeclarationHelper {
   //@{
 
   /// \brief Set the entity rank of the component.
-  ComponentDeclarationHelper rank(stk::mesh::EntityRank rank) const {
-    ComponentDeclarationHelper copy = *this;
+  ComponentDeclaration rank(stk::mesh::EntityRank rank) const {
+    ComponentDeclaration copy = *this;
     copy.snapshot_.has_rank = true;
     copy.snapshot_.rank     = rank;
     return copy;
   }
 
   /// \brief Set the name of the component.
-  ComponentDeclarationHelper name(const std::string& component_name) const {
-    ComponentDeclarationHelper copy = *this;
+  ComponentDeclaration name(const std::string& component_name) const {
+    ComponentDeclaration copy = *this;
     copy.snapshot_.has_name   = true;
     copy.snapshot_.field_name = component_name;
     return copy;
@@ -137,16 +138,16 @@ class ComponentDeclarationHelper {
   /// \brief Set the I/O role for field-backed components.
   ///
   /// The typical Mundy application will label fields as \c TRANSIENT or \c MESH.
-  ComponentDeclarationHelper role(Ioss::Field::RoleType field_role) const {
-    ComponentDeclarationHelper copy = *this;
+  ComponentDeclaration role(Ioss::Field::RoleType field_role) const {
+    ComponentDeclaration copy = *this;
     copy.snapshot_.has_role   = true;
     copy.snapshot_.field_role = field_role;
     return copy;
   }
 
   /// \brief Set the STK output type for field-backed components.
-  ComponentDeclarationHelper output_type(stk::io::FieldOutputType output_type) const {
-    ComponentDeclarationHelper copy = *this;
+  ComponentDeclaration output_type(stk::io::FieldOutputType output_type) const {
+    ComponentDeclaration copy = *this;
     copy.snapshot_.has_output_type = true;
     copy.snapshot_.output_type     = output_type;
     return copy;
@@ -162,7 +163,7 @@ class ComponentDeclarationHelper {
   auto type() const {
     impl::FieldDeclarationSnapshot snap = snapshot_;
     snap.meta_data                      = meta_data_;
-    return TaggedFieldDeclarationHelperT<std::remove_cvref_t<T>, void>(snap);
+    return TaggedFieldDeclarationT<std::remove_cvref_t<T>, void>(snap);
   }
 
   /// \brief Commit to a field-backed component with the given access shape.
@@ -187,7 +188,7 @@ class ComponentDeclarationHelper {
 
     impl::FieldDeclarationSnapshot snap = snapshot_;
     snap.meta_data                      = meta_data_;
-    return TaggedSharedComponentDeclarationHelperT<source_type, AccessLike, void>(
+    return TaggedSharedComponentDeclarationT<source_type, AccessLike, void>(
         std::forward<SharedSource>(source), snap);
   }
 
@@ -198,7 +199,7 @@ class ComponentDeclarationHelper {
   auto tag() const {
     impl::FieldDeclarationSnapshot snap = snapshot_;
     snap.meta_data                      = meta_data_;
-    return TaggedFieldDeclarationHelperT<void, Tag>(snap);
+    return TaggedFieldDeclarationT<void, Tag>(snap);
   }
 
   //@}
@@ -206,7 +207,9 @@ class ComponentDeclarationHelper {
  private:
   stk::mesh::MetaData*           meta_data_ = nullptr;
   impl::FieldDeclarationSnapshot snapshot_;
-};  // ComponentDeclarationHelper
+};  // ComponentDeclaration
+
+using ComponentDeclarationHelper MUNDY_DEPRECATED_MSG("use ComponentDeclaration") = ComponentDeclaration;
 
 }  // namespace mesh
 

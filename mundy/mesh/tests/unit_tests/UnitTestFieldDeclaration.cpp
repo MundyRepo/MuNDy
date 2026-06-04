@@ -54,7 +54,7 @@ TEST(UnitTestFieldDeclaration, DeclaresFieldsWhenSettersAreReorderedAroundType) 
   stk::mesh::MetaData& meta_data = *meta_data_ptr;
   meta_data.use_simple_fields();
 
-  FieldDeclarationHelper field_decl(meta_data);
+  FieldDeclaration field_decl(meta_data);
   stk::mesh::Field<double>& field = field_decl.output_type(stk::io::FieldOutputType::VECTOR_3D)
                                         .name("DECLARED_FIELD")
                                         .type<double>()
@@ -79,10 +79,10 @@ TEST(UnitTestFieldDeclaration, RequiresTypeRankAndNameBeforeDeclare) {
   stk::mesh::MetaData& meta_data = *meta_data_ptr;
   meta_data.use_simple_fields();
 
-  // Missing type: FieldDeclarationHelper has no .declare() — calling .type<T>() is required first (compile error).
-  EXPECT_THROW((void)FieldDeclarationHelper(meta_data).type<double>().name("MISSING_RANK").declare(), std::logic_error);
+  // Missing type: FieldDeclaration has no .declare() — calling .type<T>() is required first (compile error).
+  EXPECT_THROW((void)FieldDeclaration(meta_data).type<double>().name("MISSING_RANK").declare(), std::logic_error);
   EXPECT_THROW(
-      (void)FieldDeclarationHelper(meta_data).type<double>().rank(stk::topology::ELEM_RANK).declare(),  // Missing name
+      (void)FieldDeclaration(meta_data).type<double>().rank(stk::topology::ELEM_RANK).declare(),  // Missing name
       std::logic_error);
 }
 
