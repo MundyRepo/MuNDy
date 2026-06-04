@@ -1302,15 +1302,15 @@ TEST_F(STKDeterministicFixture, ManagedNeighborList_InvalidateForcesBuildOnNextU
       .exec_space(TestExecSpace{})
       .manage(NeverRebuild{});
 
-  const auto& nl1 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
-  EXPECT_EQ(collect_pairs(nl1), (PairSet{{0, 0}}));
+  auto r1 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
+  EXPECT_EQ(collect_pairs(r1.list), (PairSet{{0, 0}}));
 
   managed.invalidate();
   // Update with geometry that produces zero pairs.
   auto far_tgt = make_far_target_boxes(*this);
-  const auto& nl2 = managed.update(*bulk_, far_tgt, disjoint_source_boxes_);
+  auto r2 = managed.update(*bulk_, far_tgt, disjoint_source_boxes_);
   EXPECT_TRUE(managed.has_valid_list());
-  EXPECT_EQ(collect_pairs(nl2), PairSet{});  // rebuilt with new geometry
+  EXPECT_EQ(collect_pairs(r2.list), PairSet{});  // rebuilt with new geometry
 }
 
 // ---- AlwaysRebuild ----
@@ -1322,13 +1322,15 @@ TEST_F(STKDeterministicFixture, Rebuilder_AlwaysRebuild_RebuildsEveryUpdate) {
       .exec_space(TestExecSpace{})
       .manage(AlwaysRebuild{});
 
-  const auto& nl1 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
-  EXPECT_EQ(collect_pairs(nl1), (PairSet{{0, 0}}));
+  auto r1 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
+  EXPECT_TRUE(r1.rebuilt);
+  EXPECT_EQ(collect_pairs(r1.list), (PairSet{{0, 0}}));
 
   // AlwaysRebuild fires on the second call → result reflects the new geometry.
   auto far_tgt = make_far_target_boxes(*this);
-  const auto& nl2 = managed.update(*bulk_, far_tgt, disjoint_source_boxes_);
-  EXPECT_EQ(collect_pairs(nl2), PairSet{});
+  auto r2 = managed.update(*bulk_, far_tgt, disjoint_source_boxes_);
+  EXPECT_TRUE(r2.rebuilt);
+  EXPECT_EQ(collect_pairs(r2.list), PairSet{});
 }
 
 // ---- NeverRebuild ----
@@ -1340,12 +1342,14 @@ TEST_F(STKDeterministicFixture, Rebuilder_NeverRebuild_CachesAfterFirstBuild) {
       .exec_space(TestExecSpace{})
       .manage(NeverRebuild{});
 
-  const auto& nl1 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
-  EXPECT_EQ(collect_pairs(nl1), (PairSet{{0, 0}}));
+  auto r1 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
+  EXPECT_TRUE(r1.rebuilt);
+  EXPECT_EQ(collect_pairs(r1.list), (PairSet{{0, 0}}));
 
   auto far_tgt = make_far_target_boxes(*this);
-  const auto& nl2 = managed.update(*bulk_, far_tgt, disjoint_source_boxes_);
-  EXPECT_EQ(collect_pairs(nl2), (PairSet{{0, 0}}));  // old pairs = cache was used
+  auto r2 = managed.update(*bulk_, far_tgt, disjoint_source_boxes_);
+  EXPECT_FALSE(r2.rebuilt);
+  EXPECT_EQ(collect_pairs(r2.list), (PairSet{{0, 0}}));  // old pairs = cache was used
 }
 
 // ---- RebuildOnEntityChange ----
@@ -1356,12 +1360,14 @@ TEST_F(STKDeterministicFixture, Rebuilder_EntityChange_NoRebuildOnUnchangedCount
       .exec_space(TestExecSpace{})
       .manage(RebuildOnEntityChange<TestMemSpace>{});
 
-  const auto& nl1 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
-  EXPECT_EQ(collect_pairs(nl1), (PairSet{{0, 0}}));
+  auto r1 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
+  EXPECT_TRUE(r1.rebuilt);
+  EXPECT_EQ(collect_pairs(r1.list), (PairSet{{0, 0}}));
 
   auto far_tgt = make_far_target_boxes(*this);
-  const auto& nl2 = managed.update(*bulk_, far_tgt, disjoint_source_boxes_);
-  EXPECT_EQ(collect_pairs(nl2), (PairSet{{0, 0}}));  // cache: box count unchanged (still 2)
+  auto r2 = managed.update(*bulk_, far_tgt, disjoint_source_boxes_);
+  EXPECT_FALSE(r2.rebuilt);
+  EXPECT_EQ(collect_pairs(r2.list), (PairSet{{0, 0}}));  // cache: box count unchanged (still 2)
 }
 
 // Box count increases (2 → 6) → rebuild → pair set reflects new geometry.
@@ -1370,13 +1376,15 @@ TEST_F(STKDeterministicFixture, Rebuilder_EntityChange_RebuildOnIncrease) {
       .exec_space(TestExecSpace{})
       .manage(RebuildOnEntityChange<TestMemSpace>{});
 
-  const auto& nl1 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
-  EXPECT_EQ(collect_pairs(nl1), (PairSet{{0, 0}}));
+  auto r1 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
+  EXPECT_TRUE(r1.rebuilt);
+  EXPECT_EQ(collect_pairs(r1.list), (PairSet{{0, 0}}));
 
   // 6 far-away universal boxes: count 2 → 6 → rebuild → 0 pairs.
   auto far_uni = make_far_universal_boxes(*this);
-  const auto& nl2 = managed.update(*bulk_, far_uni, disjoint_source_boxes_);
-  EXPECT_EQ(collect_pairs(nl2), PairSet{});
+  auto r2 = managed.update(*bulk_, far_uni, disjoint_source_boxes_);
+  EXPECT_TRUE(r2.rebuilt);
+  EXPECT_EQ(collect_pairs(r2.list), PairSet{});
 }
 
 // Box count decreases (6 → 2) → rebuild → pair set reflects new geometry.
@@ -1387,12 +1395,14 @@ TEST_F(STKDeterministicFixture, Rebuilder_EntityChange_RebuildOnDecrease) {
 
   // Initial build: 6 far-away universal boxes → 0 pairs.
   auto far_uni = make_far_universal_boxes(*this);
-  const auto& nl1 = managed.update(*bulk_, far_uni, disjoint_source_boxes_);
-  EXPECT_EQ(collect_pairs(nl1), PairSet{});
+  auto r1 = managed.update(*bulk_, far_uni, disjoint_source_boxes_);
+  EXPECT_TRUE(r1.rebuilt);
+  EXPECT_EQ(collect_pairs(r1.list), PairSet{});
 
   // 2 nearby disjoint-target boxes: count 6 → 2 → rebuild → pairs restored.
-  const auto& nl2 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
-  EXPECT_EQ(collect_pairs(nl2), (PairSet{{0, 0}}));
+  auto r2 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
+  EXPECT_TRUE(r2.rebuilt);
+  EXPECT_EQ(collect_pairs(r2.list), (PairSet{{0, 0}}));
 }
 
 // ---- RebuildOnAABBDisplacement ----
@@ -1462,17 +1472,20 @@ TEST_F(STKDeterministicFixture, Rebuilder_AABBDisplacement_EndToEnd) {
       .manage(RebuildOnAABBDisplacement<TestMemSpace>{kThreshold});
 
   // Initial: 1 overlapping pair; snapshot taken.
-  const auto& nl1 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
-  EXPECT_EQ(collect_pairs(nl1), (PairSet{{0, 0}}));
+  auto r1 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
+  EXPECT_TRUE(r1.rebuilt);
+  EXPECT_EQ(collect_pairs(r1.list), (PairSet{{0, 0}}));
 
   // Far-away targets: displacement >> threshold → rebuild → 0 pairs; snapshot updated.
   auto far_tgt = make_far_target_boxes(*this);
-  const auto& nl2 = managed.update(*bulk_, far_tgt, disjoint_source_boxes_);
-  EXPECT_EQ(collect_pairs(nl2), PairSet{});
+  auto r2 = managed.update(*bulk_, far_tgt, disjoint_source_boxes_);
+  EXPECT_TRUE(r2.rebuilt);
+  EXPECT_EQ(collect_pairs(r2.list), PairSet{});
 
-  // Same geometry as nl2: displacement == 0 < threshold → cache → still 0 pairs.
-  const auto& nl3 = managed.update(*bulk_, far_tgt, disjoint_source_boxes_);
-  EXPECT_EQ(collect_pairs(nl3), PairSet{});
+  // Same geometry as r2: displacement == 0 < threshold → cache → still 0 pairs.
+  auto r3 = managed.update(*bulk_, far_tgt, disjoint_source_boxes_);
+  EXPECT_FALSE(r3.rebuilt);
+  EXPECT_EQ(collect_pairs(r3.list), PairSet{});
 }
 
 // ---- RebuilderChain via operator| ----
@@ -1484,12 +1497,14 @@ TEST_F(STKDeterministicFixture, Rebuilder_Chain_NeverOrAlways_BehavesLikeAlways)
       .exec_space(TestExecSpace{})
       .manage(NeverRebuild{} | AlwaysRebuild{});
 
-  const auto& nl1 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
-  EXPECT_EQ(collect_pairs(nl1), (PairSet{{0, 0}}));
+  auto r1 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
+  EXPECT_TRUE(r1.rebuilt);
+  EXPECT_EQ(collect_pairs(r1.list), (PairSet{{0, 0}}));
 
   auto far_tgt = make_far_target_boxes(*this);
-  const auto& nl2 = managed.update(*bulk_, far_tgt, disjoint_source_boxes_);
-  EXPECT_EQ(collect_pairs(nl2), PairSet{});  // AlwaysRebuild forced rebuild
+  auto r2 = managed.update(*bulk_, far_tgt, disjoint_source_boxes_);
+  EXPECT_TRUE(r2.rebuilt);
+  EXPECT_EQ(collect_pairs(r2.list), PairSet{});  // AlwaysRebuild forced rebuild
 }
 
 // (NeverRebuild | NeverRebuild): both return false → chain never rebuilds after first.
@@ -1498,12 +1513,14 @@ TEST_F(STKDeterministicFixture, Rebuilder_Chain_NeverOrNever_BehavesLikeNever) {
       .exec_space(TestExecSpace{})
       .manage(NeverRebuild{} | NeverRebuild{});
 
-  const auto& nl1 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
-  EXPECT_EQ(collect_pairs(nl1), (PairSet{{0, 0}}));
+  auto r1 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
+  EXPECT_TRUE(r1.rebuilt);
+  EXPECT_EQ(collect_pairs(r1.list), (PairSet{{0, 0}}));
 
   auto far_tgt = make_far_target_boxes(*this);
-  const auto& nl2 = managed.update(*bulk_, far_tgt, disjoint_source_boxes_);
-  EXPECT_EQ(collect_pairs(nl2), (PairSet{{0, 0}}));  // cache: both returned false
+  auto r2 = managed.update(*bulk_, far_tgt, disjoint_source_boxes_);
+  EXPECT_FALSE(r2.rebuilt);
+  EXPECT_EQ(collect_pairs(r2.list), (PairSet{{0, 0}}));  // cache: both returned false
 }
 
 // (RebuildOnEntityChange | AlwaysRebuild): entity count unchanged (static mesh),
@@ -1514,12 +1531,14 @@ TEST_F(STKDeterministicFixture, Rebuilder_Chain_EntityChangeOrAlways_BehavesLike
       .exec_space(TestExecSpace{})
       .manage(RebuildOnEntityChange<TestMemSpace>{} | AlwaysRebuild{});
 
-  const auto& nl1 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
-  EXPECT_EQ(collect_pairs(nl1), (PairSet{{0, 0}}));
+  auto r1 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
+  EXPECT_TRUE(r1.rebuilt);
+  EXPECT_EQ(collect_pairs(r1.list), (PairSet{{0, 0}}));
 
   auto far_tgt = make_far_target_boxes(*this);
-  const auto& nl2 = managed.update(*bulk_, far_tgt, disjoint_source_boxes_);
-  EXPECT_EQ(collect_pairs(nl2), PairSet{});  // AlwaysRebuild forced rebuild
+  auto r2 = managed.update(*bulk_, far_tgt, disjoint_source_boxes_);
+  EXPECT_TRUE(r2.rebuilt);
+  EXPECT_EQ(collect_pairs(r2.list), PairSet{});  // AlwaysRebuild forced rebuild
 }
 
 // ---- RebuildOnAABBDisplacement | RebuildOnEntityChange combined chain ----
@@ -1539,13 +1558,15 @@ TEST_F(STKDeterministicFixture, CombinedRebuilder_AABBSafeOnEntityAdd) {
       .manage(RebuildOnAABBDisplacement<TestMemSpace>{kThreshold} | RebuildOnEntityChange<TestMemSpace>{});
 
   // Initial build: 2 targets, 2 sources → 1 pair; both snapshots recorded.
-  const auto& nl1 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
-  EXPECT_EQ(collect_pairs(nl1), (PairSet{{0, 0}}));
+  auto r1 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
+  EXPECT_TRUE(r1.rebuilt);
+  EXPECT_EQ(collect_pairs(r1.list), (PairSet{{0, 0}}));
 
   // 6 far-away universal targets: count 2→6 → AABB count guard fires → rebuild → 0 pairs.
   auto far_uni = make_far_universal_boxes(*this);
-  const auto& nl2 = managed.update(*bulk_, far_uni, disjoint_source_boxes_);
-  EXPECT_EQ(collect_pairs(nl2), PairSet{});
+  auto r2 = managed.update(*bulk_, far_uni, disjoint_source_boxes_);
+  EXPECT_TRUE(r2.rebuilt);
+  EXPECT_EQ(collect_pairs(r2.list), PairSet{});
 }
 
 // Entity remove: target count decreases 6→2.  AABB count guard fires and returns true,
@@ -1558,12 +1579,14 @@ TEST_F(STKDeterministicFixture, CombinedRebuilder_AABBSafeOnEntityRemove) {
 
   // Initial build: 6 far-away universal targets → 0 pairs.
   auto far_uni = make_far_universal_boxes(*this);
-  const auto& nl1 = managed.update(*bulk_, far_uni, disjoint_source_boxes_);
-  EXPECT_EQ(collect_pairs(nl1), PairSet{});
+  auto r1 = managed.update(*bulk_, far_uni, disjoint_source_boxes_);
+  EXPECT_TRUE(r1.rebuilt);
+  EXPECT_EQ(collect_pairs(r1.list), PairSet{});
 
   // 2 nearby disjoint targets: count 6→2 → AABB count guard fires → rebuild → 1 pair.
-  const auto& nl2 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
-  EXPECT_EQ(collect_pairs(nl2), (PairSet{{0, 0}}));
+  auto r2 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
+  EXPECT_TRUE(r2.rebuilt);
+  EXPECT_EQ(collect_pairs(r2.list), (PairSet{{0, 0}}));
 }
 
 // Entity swap: one entity removed and one added at the same count (2→2).  AABB sees

@@ -85,6 +85,37 @@ class ManagedNeighborList {
   using build_args_type = typename NeighborListBuildTraits<list_type>::args_type;
   //@}
 
+  //! \name Update result
+  //@{
+
+  /// \brief Return type for update() carrying both the list and a rebuild indicator.
+  ///
+  /// Implicitly converts to `const list_type&` so existing call sites that bind the result
+  /// to a reference compile unchanged (so long as the call site isn't templated). Contextual 
+  /// bool conversion is `true` when the list waw rebuilt during this call, `false` 
+  /// when the cached copy was returned as-is:
+  ///
+  /// \code{.cpp}
+  ///   // Unchanged existing usage:
+  ///   const auto& nl = managed.update(bulk, targets, sources);
+  ///
+  ///   // New: react only when the list changed:
+  ///   if (managed.update(bulk, targets, sources)) { rehash_bins(); }
+  ///
+  ///   // Capture both at once:
+  ///   auto result = managed.update(bulk, targets, sources);
+  ///   use(result);         // implicit list conversion
+  ///   if (result) { ... }  // bool branch
+  /// \endcode
+  struct UpdateResult {
+    const list_type& list;
+    bool             rebuilt;
+
+    operator const list_type&() const noexcept { return list; }
+    explicit operator bool()    const noexcept { return rebuilt; }
+  };
+  //@}
+
   //! \name Constructors
   //@{
 
@@ -139,18 +170,16 @@ class ManagedNeighborList {
   /// \param sources [in] Source input (boxes, selector, …) for this update.
   /// \param args [in] Backend-specific build parameters; default-constructed when omitted.
   template <NeighborListInputType TargetInput, NeighborListInputType SourceInput>
-  const list_type& update(const stk::mesh::BulkData& bulk, const TargetInput& targets,
-                          const SourceInput& sources, const build_args_type& args = {})
+  UpdateResult update(const stk::mesh::BulkData& bulk, const TargetInput& targets,
+                      const SourceInput& sources, const build_args_type& args = {})
     requires(BuilderState::has_exec_space)
   {
-    if (!cached_list_.has_value() || rebuilder_.needs_rebuild(bulk, targets, sources)) {
-      cached_list_.emplace(builder_
-                               .target_input(targets)
-                               .source_input(sources)
-                               .build(bulk, args));
+    const bool did_rebuild = !cached_list_.has_value() || rebuilder_.needs_rebuild(bulk, targets, sources);
+    if (did_rebuild) {
+      cached_list_.emplace(builder_.target_input(targets).source_input(sources).build(bulk, args));
       rebuilder_.snapshot(bulk, targets, sources);
     }
-    return *cached_list_;
+    return {*cached_list_, did_rebuild};
   }
 
   /// \brief Discard the cached list so that the next `update()` unconditionally rebuilds.

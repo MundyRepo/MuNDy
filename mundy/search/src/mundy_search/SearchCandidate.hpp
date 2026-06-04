@@ -105,6 +105,33 @@ class NeighborSearchCandidate {
 
   //@}
 
+  //! \name Degenerate check
+  //@{
+
+  /// \brief True if this candidate is a self-interaction.
+  KOKKOS_INLINE_FUNCTION bool is_degenerate() const noexcept {
+    return target_entity_ == source_entity_;
+  }
+  //@}
+
+  //! \name Comparison operators
+  //@{
+
+  KOKKOS_INLINE_FUNCTION bool operator==(const NeighborSearchCandidate& o) const noexcept {
+    return target_entity_ == o.target_entity_ && source_entity_ == o.source_entity_;
+  }
+  KOKKOS_INLINE_FUNCTION bool operator!=(const NeighborSearchCandidate& o) const noexcept {
+    return !(*this == o);
+  }
+  KOKKOS_INLINE_FUNCTION bool operator<(const NeighborSearchCandidate& o) const noexcept {
+    if (target_entity_ != o.target_entity_) return target_entity_ < o.target_entity_;
+    return source_entity_ < o.source_entity_;
+  }
+  KOKKOS_INLINE_FUNCTION bool operator>(const NeighborSearchCandidate& o) const noexcept {
+    return o < *this;
+  }
+  //@}
+
  private:
   //! \name Internal members
   //@{
@@ -195,6 +222,43 @@ class PeriodicNeighborSearchCandidate {
     return relative_image_shift_;
   }
 
+  //@}
+
+  //! \name Degenerate check
+  //@{
+
+  /// \brief True if this candidate is a self-interaction.
+  KOKKOS_INLINE_FUNCTION bool is_degenerate() const noexcept {
+    using scalar_t = typename image_shift_type::value_type;
+    return target_entity_ == source_entity_ && relative_image_shift_[0] == scalar_t(0) &&
+           relative_image_shift_[1] == scalar_t(0) && relative_image_shift_[2] == scalar_t(0);
+  }
+  //@}
+
+  //! \name Comparison operators
+  //@{
+
+  KOKKOS_INLINE_FUNCTION bool operator==(const PeriodicNeighborSearchCandidate& o) const noexcept {
+    if (target_entity_ != o.target_entity_ || source_entity_ != o.source_entity_) return false;
+    return relative_image_shift_[0] == o.relative_image_shift_[0] &&
+           relative_image_shift_[1] == o.relative_image_shift_[1] &&
+           relative_image_shift_[2] == o.relative_image_shift_[2];
+  }
+  KOKKOS_INLINE_FUNCTION bool operator!=(const PeriodicNeighborSearchCandidate& o) const noexcept {
+    return !(*this == o);
+  }
+  KOKKOS_INLINE_FUNCTION bool operator<(const PeriodicNeighborSearchCandidate& o) const noexcept {
+    if (target_entity_ != o.target_entity_) return target_entity_ < o.target_entity_;
+    if (source_entity_ != o.source_entity_) return source_entity_ < o.source_entity_;
+    for (int d = 0; d < 3; ++d) {
+      if (relative_image_shift_[d] != o.relative_image_shift_[d])
+        return relative_image_shift_[d] < o.relative_image_shift_[d];
+    }
+    return false;
+  }
+  KOKKOS_INLINE_FUNCTION bool operator>(const PeriodicNeighborSearchCandidate& o) const noexcept {
+    return o < *this;
+  }
   //@}
 
  private:

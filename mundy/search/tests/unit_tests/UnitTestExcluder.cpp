@@ -27,6 +27,7 @@
 ///   Group 3 — ExcludeSelfInteraction: entity-based self-exclusion, zero-shift semantics.
 ///   Group 4 — ExcluderChain: OR semantics, multi-level chaining, setup propagation.
 ///   Group 5 — ExcludeSymmetricDuplicates: selector intersection logic and directional suppression.
+///   Group 6 — ExcludeConnectedEntities: excludes element pairs sharing a connected node.
 
 // Mundy
 #include <MundySearch_config.hpp>  // for HAVE_MUNDYSEARCH_*
@@ -76,10 +77,12 @@ using PeriodicCand = PeriodicNeighborSearchCandidate<Vec3f, size_t>;
 
 static_assert(ExcluderType<NoExcluder>);
 static_assert(ExcluderType<ExcludeSelfInteraction>);
+static_assert(ExcluderType<ExcludeConnectedEntities>);
 static_assert(ExcluderType<ExcludeSymmetricDuplicates>);
 static_assert(ExcluderType<ExcluderChain<NoExcluder, ExcludeSelfInteraction>>);
 static_assert(ExcluderType<ExcluderChain<NoExcluder, ExcludeSymmetricDuplicates>>);
-static_assert(ExcluderType<ExcluderChain<ExcluderChain<NoExcluder, ExcludeSelfInteraction>, ExcludeSymmetricDuplicates>>);
+static_assert(
+    ExcluderType<ExcluderChain<ExcluderChain<NoExcluder, ExcludeSelfInteraction>, ExcludeSymmetricDuplicates>>);
 // const-qualified types must NOT satisfy ExcluderType because setup() is non-const.
 static_assert(!ExcluderType<const NoExcluder>);
 static_assert(!ExcluderType<const ExcludeSelfInteraction>);
@@ -121,8 +124,7 @@ TwoPartMesh make_two_part_mesh() {
   }
   m.bulk->modification_end();
 
-  for (int id = 1; id <= 4; ++id)
-    m.node[id] = m.bulk->get_entity(stk::topology::NODE_RANK, id);
+  for (int id = 1; id <= 4; ++id) m.node[id] = m.bulk->get_entity(stk::topology::NODE_RANK, id);
   return m;
 }
 
@@ -392,6 +394,111 @@ TEST(ExcludeSymmetricDuplicatesTest, ResetOnSetup) {
   // Third setup: universal again → back to suppressing.
   ex.setup(*m.bulk, m.meta->universal_part(), m.meta->universal_part());
   EXPECT_TRUE(ex(make_cand(1, 0, m.node[2], m.node[1])));
+}
+
+// =============================================================================
+// Group 6 — ExcludeConnectedEntities
+// =============================================================================
+//
+// Three BEAM_2 elements sharing nodes as follows:
+//   elem[1]: nodes 1, 2
+//   elem[2]: nodes 2, 3   (shares node 2 with elem[1])
+//   elem[3]: nodes 4, 5   (no shared nodes with elem[1] or elem[2])
+//
+// ExcludeConnectedEntities(NODE_RANK) must exclude (elem[1], elem[2]) and
+// retain (elem[1], elem[3]) and (elem[2], elem[3]).
+
+struct ThreeBeamMesh {
+  std::shared_ptr<stk::mesh::MetaData> meta;
+  std::unique_ptr<stk::mesh::BulkData> bulk;
+  stk::mesh::Part* beam_part = nullptr;
+  stk::mesh::Entity node[6];  // 1-indexed: node[1]..node[5]
+  stk::mesh::Entity elem[4];  // 1-indexed: elem[1]..elem[3]
+};
+
+ThreeBeamMesh make_three_beam_mesh() {
+  ThreeBeamMesh m;
+  stk::mesh::MeshBuilder builder(MPI_COMM_WORLD);
+  builder.set_spatial_dimension(3);
+  builder.set_entity_rank_names({"NODE", "EDGE", "FACE", "ELEMENT", "CONSTRAINT"});
+  m.meta = builder.create_meta_data();
+  m.meta->use_simple_fields();
+  m.beam_part = &m.meta->declare_part_with_topology("beams", stk::topology::BEAM_2);
+  m.bulk = builder.create(m.meta);
+  m.meta->commit();
+
+  m.bulk->modification_begin();
+  for (int id = 1; id <= 5; ++id) m.node[id] = m.bulk->declare_node(id);
+
+  auto declare_beam = [&](int eid, int n0, int n1) {
+    m.elem[eid] = m.bulk->declare_element(eid, stk::mesh::PartVector{m.beam_part});
+    m.bulk->declare_relation(m.elem[eid], m.node[n0], 0);
+    m.bulk->declare_relation(m.elem[eid], m.node[n1], 1);
+  };
+  declare_beam(1, 1, 2);
+  declare_beam(2, 2, 3);
+  declare_beam(3, 4, 5);
+  m.bulk->modification_end();
+  return m;
+}
+
+TEST(ExcludeConnectedEntitiesTest, ExcludesElementsPairSharingANode) {
+  if (stk::parallel_machine_size(MPI_COMM_WORLD) != 1) GTEST_SKIP();
+  auto m = make_three_beam_mesh();
+  ExcludeConnectedEntities ex(stk::topology::NODE_RANK);
+  ex.setup(*m.bulk, m.meta->universal_part(), m.meta->universal_part());
+
+  // elem[1] and elem[2] share node[2].
+  EXPECT_TRUE(ex(make_cand(0, 1, m.elem[1], m.elem[2])));
+  // Symmetric.
+  EXPECT_TRUE(ex(make_cand(1, 0, m.elem[2], m.elem[1])));
+}
+
+TEST(ExcludeConnectedEntitiesTest, RetainsElementPairsWithNoSharedNode) {
+  if (stk::parallel_machine_size(MPI_COMM_WORLD) != 1) GTEST_SKIP();
+  auto m = make_three_beam_mesh();
+  ExcludeConnectedEntities ex(stk::topology::NODE_RANK);
+  ex.setup(*m.bulk, m.meta->universal_part(), m.meta->universal_part());
+
+  // elem[1]{1,2} and elem[3]{4,5} share nothing.
+  EXPECT_FALSE(ex(make_cand(0, 2, m.elem[1], m.elem[3])));
+  EXPECT_FALSE(ex(make_cand(2, 0, m.elem[3], m.elem[1])));
+  // elem[2]{2,3} and elem[3]{4,5} share nothing.
+  EXPECT_FALSE(ex(make_cand(1, 2, m.elem[2], m.elem[3])));
+  EXPECT_FALSE(ex(make_cand(2, 1, m.elem[3], m.elem[2])));
+}
+
+TEST(ExcludeConnectedEntitiesTest, SelfPairIsExcluded) {
+  // An element shares all its nodes with itself — degenerate case, excluded.
+  if (stk::parallel_machine_size(MPI_COMM_WORLD) != 1) GTEST_SKIP();
+  auto m = make_three_beam_mesh();
+  ExcludeConnectedEntities ex(stk::topology::NODE_RANK);
+  ex.setup(*m.bulk, m.meta->universal_part(), m.meta->universal_part());
+
+  EXPECT_TRUE(ex(make_cand(0, 0, m.elem[1], m.elem[1])));
+  EXPECT_TRUE(ex(make_cand(2, 2, m.elem[3], m.elem[3])));
+}
+
+TEST(ExcludeConnectedEntitiesTest, ReflectsNewConnectivityAfterSetup) {
+  // Calling setup again after modifying the mesh updates the NGP mesh snapshot.
+  if (stk::parallel_machine_size(MPI_COMM_WORLD) != 1) GTEST_SKIP();
+  auto m = make_three_beam_mesh();
+  ExcludeConnectedEntities ex(stk::topology::NODE_RANK);
+  ex.setup(*m.bulk, m.meta->universal_part(), m.meta->universal_part());
+
+  // Before modification: elem[1] and elem[3] do not share nodes.
+  EXPECT_FALSE(ex(make_cand(0, 2, m.elem[1], m.elem[3])));
+
+  // Reconnect elem[3] to share node[2] with elem[1].
+  m.bulk->modification_begin();
+  m.bulk->destroy_relation(m.elem[3], m.node[4], 0);
+  m.bulk->declare_relation(m.elem[3], m.node[2], 0);
+  m.bulk->modification_end();
+
+  // Re-snapshot the NGP mesh.
+  ex.setup(*m.bulk, m.meta->universal_part(), m.meta->universal_part());
+
+  EXPECT_TRUE(ex(make_cand(0, 2, m.elem[1], m.elem[3])));
 }
 
 }  // namespace

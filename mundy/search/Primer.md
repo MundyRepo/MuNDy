@@ -48,14 +48,13 @@ have no relation to STK entity identifiers. They are the index space used by all
 Two concrete storage layouts are provided. Both satisfy the `NeighborListType` concept and support identical
 iteration via `for_each_neighbor_pair` and `for_each_target_with_neighbors`.
 
-| **Layout** | **Concrete type** | **Internal structure** | **Best for** |
-|------------|-------------------|------------------------|--------------|
-| Compressed 1D | `ArborX1dNeighborList<MemSpace>` | Target array + source array + flattened pair array + per-target offsets (CSR) | Sparse or variable-length neighbor lists; minimum memory overhead. |
-| Dense 2D | `ArborX2dNeighborList<MemSpace>` | Target array + source array + `[num_targets × max_neighbors]` dense grid | Uniform-density lists where GPU pair-parallel dispatch is valuable. |
+| **Layout** | **Concrete type** | **Best for** |
+|------------|-------------------|--------------|
+| Compressed 1D | `ArborX1dNeighborList<MemSpace>` | Sparse or variable-length neighbor lists; minimum memory overhead. |
+| Dense 2D | `ArborX2dNeighborList<MemSpace>` | Uniform-density lists where GPU pair-parallel dispatch is valuable. |
 
 The 1D layout is the better default. The 2D layout trades memory for a constant per-target row width, which can
-improve GPU thread utilization when a list-type-specific `NeighborListIterationTraits` specialization exposes
-pair-level parallelism.
+improve GPU thread utilization when specialized parallel dispatch is used.
 
 ### The `NeighborListType` concept
 
@@ -104,9 +103,8 @@ SearchBoxes target_boxes(spheres_selector, boxes, entities);
 SearchBoxes source_boxes(spheres_selector, boxes, entities);  // same set → self-interaction search
 ```
 
-The selector stored inside `ArborXSearchBoxesT` is used only to satisfy the `NeighborListInputType` concept and
-to populate target/source selector metadata on the finished list. The actual geometric query is driven entirely by
-the box views.
+The selector is carried through to the finished list so that its `target_selector()` and `source_selector()`
+accessors reflect the selectors used to build it.
 
 ### `NeighborListBuilder`
 
@@ -135,19 +133,11 @@ The builder setters are:
 | `.exclude(excluder)` | Append an excluder to the build-time filter chain. |
 | `.sort_neighbors(bool)` | Whether to sort each target's neighbor row by ascending source ordinal after construction. Default: `false`. |
 
-Three compile-time flags are exposed on the builder type for static introspection:
-
-| **Flag** | **Meaning** |
-|----------|-------------|
-| `has_exec_space` | `exec_space(...)` has been called. |
-| `has_target_input` / `has_source_input` | The respective input has been set. |
-| `is_complete` | All three required fields have been set; `build()` will compile. |
-
 ### Build arguments
 
-Every concrete list type publishes a `NeighborListBuildTraits<ListType>::args_type` struct for backend-specific
-parameters. For ArborX-backed types, the only parameter is `buffer_size`, which controls how many neighbors per
-target ArborX pre-allocates per query pass.
+Every concrete list type accepts optional backend-specific build parameters. For ArborX-backed types, the only
+parameter is `buffer_size`, which hints at how many neighbors per target to pre-allocate. Larger values reduce
+reallocation passes at the cost of more memory; `0` (the default) lets ArborX choose.
 
 ```cpp
 // Pass inline using designated initialization — type is deduced:
@@ -177,13 +167,12 @@ auto list = make_neighbor_list_builder<ArborX1dNeighborList<>>()
     .build(bulk_data, {.buffer_size = 16});
 ```
 
-Sorting is an insertion sort over each per-target row, which is efficient for the short rows typical in neighbor
-lists. Periodic list variants keep their image-shift arrays synchronized during the sort.
+Sorting is efficient for the short rows typical in neighbor lists.
 
 ## Excluders
 
 Excluders are build-time predicates that reject candidate target/source pairs before those pairs enter the stored
-list. They run during the ArborX or STK query callback, not at iteration time.
+list. They are evaluated at build time, not at iteration time.
 
 The `ExcluderType` concept requires:
 
@@ -197,14 +186,14 @@ The `ExcluderType` concept requires:
 | **Excluder** | **Behavior** |
 |--------------|--------------|
 | `NoExcluder` | Rejects nothing. Default starting point in all builders. |
-| `ExcludeSelfInteraction` | Rejects pairs where target and source are the same entity. For periodic candidates, a pair is self-interaction only if the entities match **and** the relative image shift is zero, so a legitimate same-entity interaction across a periodic boundary is preserved. |
-| `ExcludeSymmetricDuplicates` | Rejects one orientation of each symmetric pair when targets and sources overlap. Handles identical, disjoint, and partially-overlapping selectors with one type. Requires `setup()` to walk the bucket lists; pass through the builder rather than constructing directly. |
+| `ExcludeSelfInteraction` | Rejects self-interactions. For non-periodic candidates, a self-interaction is any pair where target and source are the same entity. For periodic candidates, it additionally requires the relative image shift to be zero — a same-entity pair across a periodic boundary (nonzero shift) is a genuine interaction and is retained. |
+| `ExcludeConnectedEntities` | Rejects pairs where the target and source share at least one connected entity at a specified rank. Constructed with a `stk::mesh::EntityRank` (e.g., `NODE_RANK` to exclude element pairs sharing a common node). Requires `setup()` before use. |
+| `ExcludeSymmetricDuplicates` | Rejects one orientation of each symmetric pair when targets and sources overlap. Handles identical, disjoint, and partially-overlapping selectors with one type. Requires `setup()` before use; pass through the builder rather than constructing directly. |
 
 ### Chaining excluders
 
 `.exclude(excluder)` on the builder (or on an existing excluder) returns a new `ExcluderChain` that applies all
-previously accumulated excluders in series. The chain is a value-typed object stored directly in the builder and
-passed by value into ArborX callbacks, so it must remain lightweight and copyable.
+previously accumulated excluders in series. Excluders must be lightweight and copyable.
 
 ```cpp
 auto list = make_neighbor_list_builder<ArborX1dNeighborList<>>()
@@ -215,6 +204,20 @@ auto list = make_neighbor_list_builder<ArborX1dNeighborList<>>()
     .exclude(ExcludeSymmetricDuplicates{})  // appended; both will run
     .build(bulk_data, {.buffer_size = 16});
 ```
+
+### Search candidates
+
+Excluder `operator()` receives a candidate object. Both candidate types expose:
+
+| **Method** | **Meaning** |
+|------------|-------------|
+| `target_entity()` / `source_entity()` | STK entities for the target and source. |
+| `target_index()` / `source_index()` | Dense ordinals for the target and source. |
+| `is_degenerate()` | `true` when the candidate is a self-interaction. |
+| `operator==` / `operator!=` | Equality by entity (non-periodic) or entity + shift (periodic). |
+| `operator<` / `operator>` | Consistent strict ordering — target entity first, then source entity, then shift components — suitable for sorted containers. |
+
+`PeriodicNeighborSearchCandidate` additionally exposes `relative_image_shift()`.
 
 ### Custom excluders
 
@@ -262,8 +265,7 @@ When no execution space is provided, `ListType::execution_space{}` is used.
 
 ### `NeighborPair<List>`
 
-`NeighborPair<List>` is the payload passed to pair-granular functors. It stores a dense target ordinal and a
-neighbor ordinal and exposes:
+`NeighborPair<List>` is the payload passed to pair-granular functors. It exposes:
 
 | **Accessor** | **Returns** |
 |--------------|-------------|
@@ -275,8 +277,7 @@ neighbor ordinal and exposes:
 
 ### `Neighbors<List>`
 
-`Neighbors<List>` is the per-target range view passed to target-granular functors. It stores a dense target
-ordinal and exposes:
+`Neighbors<List>` is the per-target range view passed to target-granular functors. It exposes:
 
 | **Accessor** | **Returns** |
 |--------------|-------------|
@@ -355,22 +356,44 @@ Periodic search boxes are `impl::PeriodicArborXSearchBoxesT<MemSpace, ShiftScala
 variant, this input tracks owner ordinals and per-image shift vectors so that ArborX candidate matches can be
 traced back to owner entities with their associated relative shifts.
 
+**Target and source boxes must be built differently** to avoid duplicate list entries.
+
+- **Target boxes** — one image per owner, wrapped into the primary cell. The stored shift is
+  `wrapped_position − original_position`.
+- **Source boxes** — up to 27 images per owner (one per lattice neighbor at shifts n·L for n ∈ {−1,0,+1}³), each
+  stamped at `wrapped_position + n·L`. The stored shift for image n is
+  `(wrapped_position + n·L) − original_position`.
+
+The `relative_image_shift` stored in the list for a pair is always
+`source_image_shift − target_image_shift`.
+
 ```cpp
 using PeriodicSearchBoxes = mundy::search::impl::PeriodicArborXSearchBoxesT<MemSpace>;
 
-PeriodicSearchBoxes periodic_target_boxes(selector,
-    image_boxes,       // one box per periodic image
-    owner_entities,    // indexed by dense owner ordinal
-    owner_indices,     // owner ordinal for each image box
-    image_shifts);     // translation applied to generate each image
+// Target: one wrapped image per owner.
+PeriodicSearchBoxes target_boxes(selector,
+    target_image_boxes,    // one AABB per owner, centered at wrap(original)
+    owner_entities,        // indexed by dense owner ordinal
+    target_owner_indices,  // one entry per owner
+    target_image_shifts);  // wrap(original_k) - original_k
+
+// Source: up to 27 images per owner.
+PeriodicSearchBoxes source_boxes(selector,
+    source_image_boxes,    // up to 27 AABBs per owner
+    owner_entities,        // same owner entity list
+    source_owner_indices,  // owner ordinal for each image
+    source_image_shifts);  // (wrapped + n*L) - original, one per image
 
 auto list = make_neighbor_list_builder<PeriodicArborX1dNeighborList<>>()
     .exec_space(exec)
-    .target_input(periodic_target_boxes)
-    .source_input(periodic_target_boxes)
+    .target_input(target_boxes)
+    .source_input(source_boxes)
     .exclude(ExcludeSelfInteraction{})
     .build(bulk_data, {.buffer_size = 16});
 ```
+
+Source images can be pruned before building by computing the union AABB of all target boxes and discarding any
+source image that doesn't intersect it — such images cannot produce a neighbor pair.
 
 ### Using relative image shifts in kernels
 

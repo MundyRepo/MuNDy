@@ -52,13 +52,12 @@ namespace search {
 /// `operator()` must be callable on at least `NeighborSearchCandidate<size_t>` (checked here as a representative
 /// non-periodic candidate type; excluders that also handle periodic candidates do so via their own template overloads).
 template <typename T>
-concept ExcluderType = requires(T& excluder, const stk::mesh::BulkData& bulk_data,
-                                const stk::mesh::Selector& target_selector,
-                                const stk::mesh::Selector& source_selector,
-                                const NeighborSearchCandidate<size_t>& candidate) {
-  { excluder.setup(bulk_data, target_selector, source_selector) } -> std::same_as<void>;
-  { std::as_const(excluder)(candidate) } -> std::convertible_to<bool>;
-};
+concept ExcluderType =
+    requires(T& excluder, const stk::mesh::BulkData& bulk_data, const stk::mesh::Selector& target_selector,
+             const stk::mesh::Selector& source_selector, const NeighborSearchCandidate<size_t>& candidate) {
+      { excluder.setup(bulk_data, target_selector, source_selector) } -> std::same_as<void>;
+      { std::as_const(excluder)(candidate) } -> std::convertible_to<bool>;
+    };
 
 // Forward declaration needed by NoExcluder::exclude().
 template <ExcluderType PriorExcluder, ExcluderType Excluder>
@@ -209,19 +208,11 @@ class ExcluderChain {
 };
 
 /// \struct ExcludeSelfInteraction
-/// \brief Exclude self interactions.
-///
-/// For non-periodic candidates, self means same owner entity. For periodic candidates, self means same owner entity and
-/// zero relative image shift, preserving legitimate interactions with nonzero periodic images of the same owner when a
-/// builder chooses to generate them.
+/// \brief Exclude degenerate (self) interactions.
 struct ExcludeSelfInteraction {
   //! \name Setup
   //@{
 
-  /// \brief Prepare self-interaction excluder for the selected source and target chunks.
-  /// \param bulk_data [in] Unused bulk data.
-  /// \param target_selector [in] Unused target selector.
-  /// \param source_selector [in] Unused source selector.
   void setup(const stk::mesh::BulkData& /*bulk_data*/, const stk::mesh::Selector& /*target_selector*/,
              const stk::mesh::Selector& /*source_selector*/) {
   }
@@ -230,52 +221,68 @@ struct ExcludeSelfInteraction {
   //! \name Filtering
   //@{
 
-  /// \brief Return whether a candidate should be excluded as a self interaction.
-  /// \tparam Candidate Candidate pair type.
-  /// \param candidate [in] Candidate pair produced by a search backend.
   template <typename Candidate>
   KOKKOS_INLINE_FUNCTION bool operator()(const Candidate& candidate) const {
-    return candidate.target_entity() == candidate.source_entity() && relative_shift_is_zero(candidate);
+    return candidate.is_degenerate();
+  }
+  //@}
+};
+
+/// \class ExcludeConnectedEntities
+/// \brief Exclude candidate pairs that share a connected entity at a given rank.
+///
+/// Naive O(|target_connected| × |source_connected|) check per candidate.
+/// Constructed with the rank of the shared entity to test; for example, pass
+/// NODE_RANK to exclude pairs of elements that share a common node.
+class ExcludeConnectedEntities {
+ public:
+  //! \name Constructors
+  //@{
+
+  KOKKOS_DEFAULTED_FUNCTION ExcludeConnectedEntities() = default;
+
+  explicit ExcludeConnectedEntities(stk::mesh::EntityRank connected_rank) : connected_rank_(connected_rank) {
+  }
+  //@}
+
+  //! \name Setup
+  //@{
+
+  void setup(const stk::mesh::BulkData& bulk_data, const stk::mesh::Selector& /*target_selector*/,
+             const stk::mesh::Selector& /*source_selector*/) {
+    ngp_mesh_ = stk::mesh::get_updated_ngp_mesh(bulk_data);
+  }
+  //@}
+
+  //! \name Filtering
+  //@{
+
+  template <typename Candidate>
+  KOKKOS_INLINE_FUNCTION bool operator()(const Candidate& candidate) const {
+    const stk::mesh::Entity target = candidate.target_entity();
+    const stk::mesh::Entity source = candidate.source_entity();
+    const stk::mesh::FastMeshIndex target_idx = ngp_mesh_.fast_mesh_index(target);
+    const stk::mesh::FastMeshIndex source_idx = ngp_mesh_.fast_mesh_index(source);
+    const stk::mesh::EntityRank target_rank = ngp_mesh_.entity_rank(target);
+    const stk::mesh::EntityRank source_rank = ngp_mesh_.entity_rank(source);
+    const auto target_conn = ngp_mesh_.get_connected_entities(target_rank, target_idx, connected_rank_);
+    const auto source_conn = ngp_mesh_.get_connected_entities(source_rank, source_idx, connected_rank_);
+    for (unsigned i = 0; i < target_conn.size(); ++i) {
+      for (unsigned j = 0; j < source_conn.size(); ++j) {
+        if (target_conn[i] == source_conn[j]) {
+          return true;
+        }
+      }
+    }
+
+    return false;
   }
   //@}
 
  private:
-  /// \brief Non-periodic candidates have no image shift, so self is determined by owner identity alone.
-  /// \tparam Candidate Non-periodic candidate type.
-  /// \param candidate [in] Candidate pair produced by a search backend.
-  template <typename Candidate>
-  KOKKOS_INLINE_FUNCTION static bool relative_shift_is_zero(const Candidate& /*candidate*/) {
-    return true;
-  }
-
-  /// \brief Periodic candidates are self interactions only when the relative image shift is zero.
-  /// \tparam ImageShiftType Vector type used for relative image shifts.
-  /// \tparam SizeType Integral type used for local owner ordinals.
-  /// \param candidate [in] Periodic candidate pair produced by a search backend.
-  template <typename ImageShiftType, typename SizeType>
-  KOKKOS_INLINE_FUNCTION static bool relative_shift_is_zero(
-      const PeriodicNeighborSearchCandidate<ImageShiftType, SizeType>& candidate) {
-    const ImageShiftType shift = candidate.relative_image_shift();
-    using value_typeype = typename ImageShiftType::value_type;
-    return shift[0] == static_cast<value_typeype>(0) && shift[1] == static_cast<value_typeype>(0) &&
-           shift[2] == static_cast<value_typeype>(0);
-  }
+  stk::mesh::NgpMesh ngp_mesh_;
+  stk::mesh::EntityRank connected_rank_{stk::topology::NODE_RANK};
 };
-
-// clang-format off
-/* ExcludeConnectedEntities — reserved for future design pass — current implementation is a placeholder.
-template <typename Relation>
-class ExcludeConnectedEntities {
- public:
-  KOKKOS_DEFAULTED_FUNCTION ExcludeConnectedEntities() = default;
-  KOKKOS_INLINE_FUNCTION explicit ExcludeConnectedEntities(const Relation& relation) : relation_(relation) {}
-  template <typename Candidate>
-  KOKKOS_INLINE_FUNCTION bool operator()(const Candidate& candidate) const { return relation_.connected(candidate); }
- private:
-  Relation relation_;
-};
-*/
-// clang-format on
 
 /// \class ExcludeSymmetricDuplicates
 /// \brief Builder-prepared excluder that suppresses one orientation of symmetric target/source pairs.
