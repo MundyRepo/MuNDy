@@ -67,7 +67,9 @@
 
 // C++ core
 #include <cstddef>
+#include <limits>
 #include <memory>
+#include <optional>
 #include <set>
 #include <stdexcept>
 #include <utility>
@@ -216,16 +218,21 @@ PeriodicBoxes make_periodic_boxes(const stk::mesh::Selector& selector,
 //       target_shift = wrapped_position - original_position
 //   (the vector that translates the original into its wrapped image).
 //
-// SOURCES — each owner contributes 27 images (one per lattice neighbor):
+// SOURCES — each owner contributes up to 27 images (one per lattice neighbor):
 //   The original source is first wrapped into [0,L)^3, giving wrapped_position.
-//   Then 27 images are stamped at wrapped_position + n*L for n ∈ {-1,0,+1}^3.
+//   Then candidate images are stamped at wrapped_position + n*L for n ∈ {-1,0,+1}^3.
 //   The stored shift for image n is:
 //       source_shift = (wrapped_position + n*L) - original_position
+//
+//   AABB pruning (optional): compute the union AABB of all target images with
+//   compute_target_bbox(), then pass it to make_source_periodic_boxes().  Any
+//   candidate source image that does not intersect the target AABB cannot produce
+//   a neighbor with ANY target, so it is discarded.
 //
 // The list reports the RELATIVE SHIFT for each pair:
 //       relative_shift = source_shift - target_shift
 //
-// Using 1 target image and 27 source images guarantees that for any given
+// Using 1 target image and (up to) 27 source images guarantees that for any given
 // (target_owner, source_owner, relative_shift) triple there is at most one
 // (target_image, source_image) pair that produces it, eliminating duplicates.
 // Using 27 images for BOTH targets and sources breaks this guarantee: two
@@ -237,30 +244,59 @@ PeriodicBoxes make_periodic_boxes(const stk::mesh::Selector& selector,
 // shift = wrapped_position - original_position.
 static PeriodicBoxes make_target_periodic_boxes(const stk::mesh::Selector& selector,
                                                 const std::vector<stk::mesh::Entity>& nodes,
-                                                const std::vector<std::array<float, 3>>& positions, float L, float r) {
+                                                const std::vector<std::array<float, 3>>& positions,
+                                                float L, float r) {
   const OrthorhombicMetric<AXIS_XYZ, float> metric{Vector3<float>{L, L, L}};
   const size_t N = positions.size();
-  std::vector<ArborX::Box> img_boxes(N);
-  std::vector<size_t> img_owners(N);
+  std::vector<ArborX::Box>    img_boxes(N);
+  std::vector<size_t>         img_owners(N);
   std::vector<ImageShiftType> img_shifts(N);
   for (size_t i = 0; i < N; ++i) {
     const Point<float> orig{positions[i][0], positions[i][1], positions[i][2]};
     const Point<float> wrapped = metric.wrap(orig);
-    img_boxes[i] = make_arborx_box(wrapped[0], wrapped[1], wrapped[2], r);
+    img_boxes[i]  = make_arborx_box(wrapped[0], wrapped[1], wrapped[2], r);
     img_owners[i] = i;
     img_shifts[i] = wrapped - orig;
   }
   return make_periodic_boxes(selector, nodes, img_boxes, img_owners, img_shifts);
 }
 
-// Build source boxes: 27 images per owner (wrapped position + n*L for n∈{-1,0,1}^3).
-// shift for image n = (wrapped_position + n*L) - original_position.
+// Compute the union AABB of all image boxes in a PeriodicBoxes set.
+// Pass the result to make_source_periodic_boxes() to prune candidate images
+// that cannot possibly overlap any target.
+static ArborX::Box compute_target_bbox(const PeriodicBoxes& target_boxes) {
+  MUNDY_THROW_REQUIRE(target_boxes.size() > 0, std::invalid_argument,
+                      "compute_target_bbox: target_boxes must be non-empty.");
+  float lo[3] = { std::numeric_limits<float>::max(),
+                  std::numeric_limits<float>::max(),
+                  std::numeric_limits<float>::max()};
+  float hi[3] = {-std::numeric_limits<float>::max(),
+                 -std::numeric_limits<float>::max(),
+                 -std::numeric_limits<float>::max()};
+  for (size_t k = 0; k < target_boxes.size(); ++k) {
+    const auto& b = target_boxes.box(k);
+    for (int d = 0; d < 3; ++d) {
+      lo[d] = std::min(lo[d], b.minCorner()[d]);
+      hi[d] = std::max(hi[d], b.maxCorner()[d]);
+    }
+  }
+  return ArborX::Box{ArborX::Point{lo[0], lo[1], lo[2]},
+                     ArborX::Point{hi[0], hi[1], hi[2]}};
+}
+
+// Build source boxes: up to 27 images per owner (wrapped + n*L for n∈{-1,0,1}^3).
+// If target_bbox is provided, candidate images that don't intersect it are skipped —
+// they cannot produce a pair with any target and including them wastes memory and
+// ArborX build time.  Omit target_bbox (or pass std::nullopt) to get all 27 images.
+// shift for surviving image n = (wrapped_position + n*L) - original_position.
 static PeriodicBoxes make_source_periodic_boxes(const stk::mesh::Selector& selector,
                                                 const std::vector<stk::mesh::Entity>& nodes,
-                                                const std::vector<std::array<float, 3>>& positions, float L, float r) {
+                                                const std::vector<std::array<float, 3>>& positions,
+                                                float L, float r,
+                                                std::optional<ArborX::Box> target_bbox = std::nullopt) {
   const OrthorhombicMetric<AXIS_XYZ, float> metric{Vector3<float>{L, L, L}};
-  std::vector<ArborX::Box> img_boxes;
-  std::vector<size_t> img_owners;
+  std::vector<ArborX::Box>    img_boxes;
+  std::vector<size_t>         img_owners;
   std::vector<ImageShiftType> img_shifts;
   img_boxes.reserve(positions.size() * 27);
   img_owners.reserve(positions.size() * 27);
@@ -272,7 +308,9 @@ static PeriodicBoxes make_source_periodic_boxes(const stk::mesh::Selector& selec
       for (int ny : {-1, 0, 1}) {
         for (int nz : {-1, 0, 1}) {
           const auto image_pos = metric.shift_image(wrapped, Vector3<int>{nx, ny, nz});
-          img_boxes.push_back(make_arborx_box(image_pos[0], image_pos[1], image_pos[2], r));
+          const ArborX::Box image_box = make_arborx_box(image_pos[0], image_pos[1], image_pos[2], r);
+          if (target_bbox.has_value() && !boxes_overlap(image_box, *target_bbox)) continue;
+          img_boxes.push_back(image_box);
           img_owners.push_back(i);
           img_shifts.push_back(image_pos - orig);
         }
@@ -629,6 +667,70 @@ TEST(TestInfra, TargetAndSourceBoxHelperShifts) {
   }
 }
 
+// Verifies that compute_target_bbox + make_source_periodic_boxes pruning:
+//   (a) produces strictly fewer images than the full 27-per-owner layout, and
+//   (b) produces exactly the same neighbor pairs as the N² oracle built from the
+//       FULL (unpruned) 27-image source set.
+TEST(TestInfra, SourceBoxAabbPruningReducesImagesAndPreservesCorrectness) {
+  if (stk::parallel_machine_size(MPI_COMM_WORLD) != 1) GTEST_SKIP();
+  constexpr int kN = 20; constexpr size_t kSeed = 77;
+  constexpr float L = 10.0f, r = 1.5f;
+  std::vector<std::array<float, 3>> positions(kN);
+  for (int i = 0; i < kN; ++i) {
+    openrand::Philox rng = mundy::make_philox(kSeed, static_cast<uint32_t>(i));
+    positions[i] = {rng.uniform<float>(0.0f, L),
+                    rng.uniform<float>(0.0f, L),
+                    rng.uniform<float>(0.0f, L)};
+  }
+  auto [meta, bulk] = make_node_mesh(kN);
+  const stk::mesh::Selector sel = meta->universal_part();
+  std::vector<stk::mesh::Entity> nodes(kN);
+  for (int i = 0; i < kN; ++i)
+    nodes[i] = bulk->get_entity(stk::topology::NODE_RANK, static_cast<stk::mesh::EntityId>(i + 1));
+
+  const auto tboxes       = make_target_periodic_boxes(sel, nodes, positions, L, r);
+  const auto sboxes_full  = make_source_periodic_boxes(sel, nodes, positions, L, r);
+  const auto sboxes_pruned = make_source_periodic_boxes(sel, nodes, positions, L, r,
+                                                         compute_target_bbox(tboxes));
+
+  // (a) Pruning reduces image count vs the naive 27*N ceiling.
+  EXPECT_LT(sboxes_pruned.size(), static_cast<size_t>(kN) * 27u)
+      << "Pruned source count=" << sboxes_pruned.size() << " should be < 27*N=" << kN * 27;
+  EXPECT_LT(sboxes_pruned.size(), sboxes_full.size())
+      << "Pruned count should be strictly less than full count=" << sboxes_full.size();
+
+  // (b) Oracle from FULL (unpruned) source boxes — independent of compute_target_bbox.
+  std::set<PeriodicPair> oracle;
+  for (size_t ti = 0; ti < tboxes.size(); ++ti) {
+    const size_t t_own = tboxes.owner_index(ti);
+    for (size_t si = 0; si < sboxes_full.size(); ++si) {
+      const size_t s_own = sboxes_full.owner_index(si);
+      if (t_own == s_own) continue;
+      if (!boxes_overlap(tboxes.box(ti), sboxes_full.box(si))) continue;
+      oracle.insert({t_own, s_own, sboxes_full.image_shift(si) - tboxes.image_shift(ti)});
+    }
+  }
+
+  // List built from PRUNED source boxes — one ArborX build, no stall.
+  auto list = build_per1d_list(*bulk, tboxes, sboxes_pruned);
+  const auto actual_vec = collect_periodic_pairs(list);
+  const std::set<PeriodicPair> actual(actual_vec.begin(), actual_vec.end());
+
+  EXPECT_EQ(actual_vec.size(), actual.size()) << "List has duplicate entries after pruning.";
+  EXPECT_EQ(actual.size(), oracle.size())
+      << "list=" << actual.size() << " oracle=" << oracle.size();
+  for (const auto& p : oracle)
+    EXPECT_TRUE(actual.count(p))
+        << "MISSING t=" << p.target_owner << " s=" << p.source_owner
+        << " shift=(" << p.relative_shift[0] << "," << p.relative_shift[1]
+        << "," << p.relative_shift[2] << ")";
+  for (const auto& p : actual)
+    EXPECT_TRUE(oracle.count(p))
+        << "SPURIOUS t=" << p.target_owner << " s=" << p.source_owner
+        << " shift=(" << p.relative_shift[0] << "," << p.relative_shift[1]
+        << "," << p.relative_shift[2] << ")";
+}
+
 // =============================================================================
 // Group 1 — Construction and access
 // =============================================================================
@@ -880,9 +982,11 @@ static const std::vector<std::array<float, 3>> kBoundaryPositions = {
 // clang-format on
 
 // Run the full periodic N² oracle and compare against the built list.
-// Uses make_target_periodic_boxes (1 image/owner) and make_source_periodic_boxes
-// (27 images/owner) so each (target_owner, source_owner, relative_shift) triple
-// is produced by exactly one image pair — no duplicates possible.
+// Uses make_target_periodic_boxes (1 image/owner) and the full-27-image
+// make_source_periodic_boxes (no AABB pruning) so the oracle is independent of
+// compute_target_bbox. With 1 target image per owner and distinct per-owner source
+// shifts, each (target_owner, source_owner, relative_shift) triple is produced by
+// exactly one image pair — no duplicates possible.
 template <typename ListType, typename BuildFn>
 void run_full_periodic_n2_validation(BuildFn build_fn, stk::mesh::BulkData& bulk, const stk::mesh::Selector& selector,
                                      const std::vector<std::array<float, 3>>& positions, float L, float r) {
