@@ -197,6 +197,12 @@ EntityDeclaration& EntityDeclaration::declare_entities(stk::mesh::BulkData& bulk
   check_consistency(bulk_data);
 #endif
 
+  bool we_started_mod_cycle = false;
+  if (!bulk_data.in_modifiable_state()) {
+    bulk_data.modification_begin();
+    we_started_mod_cycle = true;
+  }
+
   const int our_rank = bulk_data.parallel_rank();
   BulkDataClassInterface class_bulk_data = class_interface(bulk_data);
   std::set<stk::mesh::FieldBase*> modified_fields;
@@ -215,49 +221,55 @@ EntityDeclaration& EntityDeclaration::declare_entities(stk::mesh::BulkData& bulk
     return bulk_data.declare_entity(stk::topology::ELEM_RANK, element_info.id, element_info.parts);
   };
 
-  // Construct maps for quick lookup of node and element info
+  // Build a mutable id→info map for node fast-lookup and sharing tracking.
+  // The copy of DeclareNodeInfo stored here accumulates non_owning_shared_procs during the element
+  // loop so the node loop can see which processes need field data set on shared nodes.
+  // A separate set catches duplicate element ids in release builds (check_consistency covers debug).
   std::unordered_map<stk::mesh::EntityId, DeclareNodeInfo> node_info_map;
-  std::unordered_map<stk::mesh::EntityId, DeclareElementInfo> elem_info_map;
+  std::unordered_set<stk::mesh::EntityId> declared_element_ids;
   for (const auto& node_info : node_info_vec_) {
     MUNDY_THROW_REQUIRE(node_info_map.find(node_info.id) == node_info_map.end(), std::runtime_error,
                         sink() << "Duplicate node id found: " << node_info.id);
     node_info_map[node_info.id] = node_info;
   }
-
   for (const auto& element_info : elem_info_vec_) {
-    MUNDY_THROW_REQUIRE(elem_info_map.find(element_info.id) == elem_info_map.end(), std::runtime_error,
+    MUNDY_THROW_REQUIRE(declared_element_ids.insert(element_info.id).second, std::runtime_error,
                         sink() << "Duplicate element id found: " << element_info.id);
-    elem_info_map[element_info.id] = element_info;
   }
 
   // Declare all elements. Declare their nodes as we go. Mark sharing as necessary.
   for (const auto& element_info : elem_info_vec_) {
     if (element_info.owning_proc == our_rank) {
       stk::mesh::Entity element = declare_element_from_info(element_info);
-      if (element_info.node_ids.size() != 0) {
-        stk::mesh::Permutation perm = stk::mesh::Permutation::INVALID_PERMUTATION;
-        stk::mesh::OrdinalVector scratch1, scratch2, scratch3;
-        for (size_t i = 0; i < element_info.node_ids.size(); ++i) {
-          // Skip intentionally invalid nodes
-          stk::mesh::EntityId node_id = element_info.node_ids[i];
-          if (node_id == stk::mesh::InvalidEntityId) {
-            continue;
-          }
+      stk::mesh::Permutation perm = stk::mesh::Permutation::INVALID_PERMUTATION;
+      stk::mesh::OrdinalVector scratch1, scratch2, scratch3;
+      for (size_t i = 0; i < element_info.node_ids.size(); ++i) {
+        stk::mesh::EntityId node_id = element_info.node_ids[i];
+        if (node_id == stk::mesh::InvalidEntityId) continue;
 
-          stk::mesh::Entity node = bulk_data.get_entity(stk::topology::NODE_RANK, node_id);
-          if (!bulk_data.is_valid(node)) {
-            const auto& node_info = node_info_map[node_id];
-            node = declare_node_from_info(node_info);
-          }
+        stk::mesh::Entity node = bulk_data.get_entity(stk::topology::NODE_RANK, node_id);
+        if (!bulk_data.is_valid(node)) {
+          auto it = node_info_map.find(node_id);
+          MUNDY_THROW_REQUIRE(it != node_info_map.end(), std::runtime_error,
+                              sink() << "Element " << element_info.id
+                                     << " connects to undeclared node " << node_id);
+          node = declare_node_from_info(it->second);
+        }
+        bulk_data.declare_relation(element, node, static_cast<stk::mesh::RelationIdentifier>(i),
+                                   perm, scratch1, scratch2, scratch3);
 
-          bulk_data.declare_relation(element, node, static_cast<stk::mesh::RelationIdentifier>(i), perm, scratch1,
-                                     scratch2, scratch3);
-
-          // If the current element is owned by a different processor than the node, we (the element's owning process)
-          // need to share the node with the node's owning processor.
-          if (node_info_map[node_id].owning_proc != our_rank) {
-            bulk_data.add_node_sharing(node, node_info_map[node_id].owning_proc);
-            node_info_map[node_id].non_owning_shared_procs.push_back(element_info.owning_proc);
+        // If the current element is owned by a different processor than the node, we (the element's
+        // owning process) need to share the node with the node's owning processor.
+        // For nodes declared through this EntityDeclaration use the declared owning proc;
+        // for pre-existing mesh nodes query STK directly.
+        auto node_map_it = node_info_map.find(node_id);
+        const int node_owning_proc = (node_map_it != node_info_map.end())
+                                         ? node_map_it->second.owning_proc
+                                         : bulk_data.parallel_owner_rank(node);
+        if (node_owning_proc != our_rank) {
+          bulk_data.add_node_sharing(node, node_owning_proc);
+          if (node_map_it != node_info_map.end()) {
+            node_map_it->second.non_owning_shared_procs.push_back(element_info.owning_proc);
           }
         }
       }
@@ -266,45 +278,38 @@ EntityDeclaration& EntityDeclaration::declare_entities(stk::mesh::BulkData& bulk
         modified_fields.insert(field_data->field());
       }
     } else {
-      // We don't own the element, but if it connects to a node we own, we need to share that node with the element's
-      // owning processor.
+      // Not our element, but if we own a connected node we must share it with the element's owner.
       for (const auto& node_id : element_info.node_ids) {
-        if (node_id == stk::mesh::InvalidEntityId) {
-          continue;
-        }
-        const auto& node_info = node_info_map[node_id];
-        if (node_info.owning_proc == our_rank) {
-          stk::mesh::Entity node = bulk_data.get_entity(stk::topology::NODE_RANK, node_id);
-          if (!bulk_data.is_valid(node)) {
-            const auto& node_info = node_info_map[node_id];
-            node = declare_node_from_info(node_info);
-          }
+        if (node_id == stk::mesh::InvalidEntityId) continue;
+        auto it = node_info_map.find(node_id);
+        if (it == node_info_map.end()) continue;  // node already in mesh; sharing handled externally
+        if (it->second.owning_proc != our_rank) continue;
 
-          bulk_data.add_node_sharing(node, element_info.owning_proc);
-        }
+        stk::mesh::Entity node = bulk_data.get_entity(stk::topology::NODE_RANK, node_id);
+        if (!bulk_data.is_valid(node)) node = declare_node_from_info(it->second);
+        bulk_data.add_node_sharing(node, element_info.owning_proc);
+        it->second.non_owning_shared_procs.push_back(element_info.owning_proc);
       }
     }
   }
 
-  // Declare all nodes not already declared. Set all node field data.
-  for (const auto& node_info : node_info_vec_) {
+  // Declare all nodes not already declared. Set field data on owned and shared nodes.
+  // Read sharing state from node_info_map (not node_info_vec_) because the element loop
+  // above has populated non_owning_shared_procs in the map copies.
+  for (const auto& base_node_info : node_info_vec_) {
+    const auto& node_info = node_info_map.at(base_node_info.id);
     const bool we_own_node = node_info.owning_proc == our_rank;
     const bool we_share_node =
         std::find(node_info.non_owning_shared_procs.begin(), node_info.non_owning_shared_procs.end(), our_rank) !=
         node_info.non_owning_shared_procs.end();
-    if (we_own_node) {
+
+    if (we_own_node || we_share_node) {
       stk::mesh::Entity node = bulk_data.get_entity(stk::topology::NODE_RANK, node_info.id);
       if (!bulk_data.is_valid(node)) {
+        MUNDY_THROW_REQUIRE(we_own_node, std::runtime_error,
+                            sink() << "Node " << node_info.id << " is shared but was never declared.");
         node = declare_node_from_info(node_info);
       }
-      for (const auto& field_data : node_info.field_data) {
-        field_data->set_field_data(node);
-        modified_fields.insert(field_data->field());
-      }
-    } else if (we_share_node) {
-      stk::mesh::Entity node = bulk_data.get_entity(stk::topology::NODE_RANK, node_info.id);
-      MUNDY_THROW_REQUIRE(bulk_data.is_valid(node), std::runtime_error,
-                          sink() << "Node " << node_info.id << " is not valid and yet we are sharing it.");
       for (const auto& field_data : node_info.field_data) {
         field_data->set_field_data(node);
         modified_fields.insert(field_data->field());
@@ -316,106 +321,64 @@ EntityDeclaration& EntityDeclaration::declare_entities(stk::mesh::BulkData& bulk
     field->modify_on_host();
   }
 
-  // Now that every node/element is declared, set up the links
+  if (we_started_mod_cycle) {
+    bulk_data.modification_end();
+  }
+
+  // Shared helper: write COO link relations for a linker entity.
+  auto setup_links = [&](stk::mesh::Entity entity, stk::mesh::EntityRank entity_rank,
+                         stk::mesh::EntityId entity_id,
+                         const std::map<std::string, DeclareLinksInfo>& link_info_map) {
+    for (const auto& [link_data_name, link_info] : link_info_map) {
+      auto* link_data_ptr = get_link_data(bulk_data, link_data_name, entity_rank);
+      MUNDY_THROW_REQUIRE(link_data_ptr != nullptr, std::runtime_error,
+                          sink() << "Entity (rank " << entity_rank << ", id " << entity_id
+                                 << ") has link info for '" << link_data_name << "' that does not exist");
+      const unsigned num_links = static_cast<unsigned>(link_info.linked_entity_ids.size());
+      for (unsigned ordinal = 0; ordinal < num_links; ++ordinal) {
+        const stk::mesh::EntityId linked_id = link_info.linked_entity_ids[ordinal];
+        if (linked_id == stk::mesh::InvalidEntityId) continue;
+        const stk::mesh::EntityRank linked_rank = link_info.linked_entity_ranks[ordinal];
+        const stk::mesh::Entity linked_entity = bulk_data.get_entity(linked_rank, linked_id);
+        MUNDY_THROW_REQUIRE(bulk_data.is_valid(linked_entity), std::runtime_error,
+                            sink() << "Entity (rank " << entity_rank << ", id " << entity_id
+                                   << ") tries to link to non-existent entity (rank " << linked_rank
+                                   << ", id " << linked_id << ")");
+        link_data_ptr->coo_data().declare_relation(entity, linked_entity, ordinal);
+      }
+    }
+  };
 
   // Elem linkers
-  // 1. Check if action is required: Loop over each element, if we own or share any of its nodes, we need to set up its
-  // links
-  // 2. Get the link data: find its link info, fetch the corresponding link meta data. Get the corresponding LinkData.
-  // 3. Declare the link relations
+  // 1. Check if action is required: only the element's owning process declares its COO link relations.
+  // 2. Get the link data: fetch the LinkData corresponding to each link_data_name in link_info_map.
+  // 3. Declare the link relations via setup_links.
   for (const auto& element_info : elem_info_vec_) {
-    const bool we_own_element = element_info.owning_proc == our_rank;
-    bool we_ghost_element = false;
-    for (const auto& node_id : element_info.node_ids) {
-      const auto& node_info = node_info_map[node_id];
-      if (node_info.owning_proc == our_rank) {  // We own one of the element's nodes
-        we_ghost_element = true;
-        break;
-      }
-
-      if (std::find(node_info.non_owning_shared_procs.begin(), node_info.non_owning_shared_procs.end(), our_rank) !=
-          node_info.non_owning_shared_procs.end()) {  // We share one of the element's nodes
-        we_ghost_element = true;
-        break;
-      }
-    }
-
-    if (we_own_element || we_ghost_element) {
-      stk::mesh::Entity element = bulk_data.get_entity(stk::topology::ELEM_RANK, element_info.id);
-      MUNDY_THROW_REQUIRE(bulk_data.is_valid(element), std::runtime_error,
-                          sink() << "Element " << element_info.id << " is not valid when trying to set up its links.");
-
-      for (const auto& link_info_pair : element_info.link_info_map) {
-        const std::string& link_data_name = link_info_pair.first;
-        const DeclareLinksInfo& link_info = link_info_pair.second;
-
-        auto link_data_ptr = get_link_data(bulk_data, link_data_name, stk::topology::ELEM_RANK);
-        MUNDY_THROW_REQUIRE(link_data_ptr != nullptr, std::runtime_error,
-                            sink() << "Element " << element_info.id << " has link info for link data '"
-                                   << link_data_name << "' that does not exist");
-        unsigned num_links = static_cast<unsigned>(link_info.linked_entity_ids.size());
-        for (unsigned ordinal = 0; ordinal < num_links; ++ordinal) {
-          // If the linked entity id is invalid, skip it
-          stk::mesh::EntityId linked_entity_id = link_info.linked_entity_ids[ordinal];
-          if (linked_entity_id == stk::mesh::InvalidEntityId) {
-            continue;
-          }
-
-          stk::mesh::EntityRank linked_entity_rank = link_info.linked_entity_ranks[ordinal];
-          stk::mesh::Entity linked_entity = bulk_data.get_entity(linked_entity_rank, linked_entity_id);
-
-          MUNDY_THROW_REQUIRE(bulk_data.is_valid(linked_entity), std::runtime_error,
-                              sink() << "Element " << element_info.id
-                                     << " is trying to link to non-existent entity (rank " << linked_entity_rank
-                                     << ", id " << linked_entity_id << ")");
-          link_data_ptr->coo_data().declare_relation(element, linked_entity, ordinal);
-        }
-      }
-    }
+    if (element_info.owning_proc != our_rank || element_info.link_info_map.empty()) continue;
+    stk::mesh::Entity element = bulk_data.get_entity(stk::topology::ELEM_RANK, element_info.id);
+    MUNDY_THROW_REQUIRE(bulk_data.is_valid(element), std::runtime_error,
+                        sink() << "Element " << element_info.id << " is not valid when setting up links.");
+    setup_links(element, stk::topology::ELEM_RANK, element_info.id, element_info.link_info_map);
   }
 
   // Node linkers
-  // 1. Check if action is required: Loop over each node, if we own or share it, we need to set up its links
-  // 2. Get the link data: find its link info, fetch the corresponding link meta data. Get the corresponding LinkData.
-  // 3. Declare the link relations
-  for (const auto& node_info : node_info_vec_) {
+  // 1. Check if action is required: if we own or share the node, we need to set up its links.
+  // 2. Get the link data: fetch the LinkData corresponding to each link_data_name in link_info_map.
+  // 3. Declare the link relations via setup_links.
+  for (const auto& base_node_info : node_info_vec_) {
+    if (base_node_info.link_info_map.empty()) continue;
+    const auto& node_info = node_info_map.at(base_node_info.id);
     const bool we_own_node = node_info.owning_proc == our_rank;
     const bool we_share_node =
         std::find(node_info.non_owning_shared_procs.begin(), node_info.non_owning_shared_procs.end(), our_rank) !=
         node_info.non_owning_shared_procs.end();
-
-    if (we_own_node || we_share_node) {
-      stk::mesh::Entity node = bulk_data.get_entity(stk::topology::NODE_RANK, node_info.id);
-      MUNDY_THROW_REQUIRE(bulk_data.is_valid(node), std::runtime_error,
-                          sink() << "Node " << node_info.id << " is not valid when trying to set up its links.");
-
-      for (const auto& link_info_pair : node_info.link_info_map) {
-        const std::string& link_data_name = link_info_pair.first;
-        const DeclareLinksInfo& link_info = link_info_pair.second;
-
-        auto link_data_ptr = get_link_data(bulk_data, link_data_name, stk::topology::NODE_RANK);
-        MUNDY_THROW_REQUIRE(link_data_ptr != nullptr, std::runtime_error,
-                            sink() << "Node " << node_info.id << " has link info for link data '" << link_data_name
-                                   << "' that does not exist");
-        unsigned num_links = static_cast<unsigned>(link_info.linked_entity_ids.size());
-        for (unsigned ordinal = 0; ordinal < num_links; ++ordinal) {
-          // If the linked entity id is invalid, skip it
-          stk::mesh::EntityId linked_entity_id = link_info.linked_entity_ids[ordinal];
-          if (linked_entity_id == stk::mesh::InvalidEntityId) {
-            continue;
-          }
-
-          stk::mesh::EntityRank linked_entity_rank = link_info.linked_entity_ranks[ordinal];
-          stk::mesh::Entity linked_entity = bulk_data.get_entity(linked_entity_rank, linked_entity_id);
-
-          MUNDY_THROW_REQUIRE(bulk_data.is_valid(linked_entity), std::runtime_error,
-                              sink() << "Node " << node_info.id << " is trying to link to non-existent entity (rank "
-                                     << linked_entity_rank << ", id " << linked_entity_id << ")");
-          link_data_ptr->coo_data().declare_relation(node, linked_entity, ordinal);
-        }
-      }
-    }
+    if (!we_own_node && !we_share_node) continue;
+    stk::mesh::Entity node = bulk_data.get_entity(stk::topology::NODE_RANK, base_node_info.id);
+    MUNDY_THROW_REQUIRE(bulk_data.is_valid(node), std::runtime_error,
+                        sink() << "Node " << base_node_info.id << " is not valid when setting up links.");
+    setup_links(node, stk::topology::NODE_RANK, base_node_info.id, base_node_info.link_info_map);
   }
+
   return *this;
 }
 
