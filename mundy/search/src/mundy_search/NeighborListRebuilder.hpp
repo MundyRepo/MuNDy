@@ -36,8 +36,10 @@
 #include <stk_util/ngp/NgpSpaces.hpp>
 
 // Mundy
-#include <mundy_search/impl/STKSearchBoxes.hpp>  // for impl::STKSearchBoxesT (concept representative)
+#include <mundy_geom/periodicity.hpp>  // for FreeSpaceMetric (aperiodic default)
+#include <mundy_math/Vector3.hpp>      // for mundy::Vector3 (point construction in corners_moved)
 #include <mundy_math/cmath.hpp>
+#include <mundy_search/impl/STKSearchBoxes.hpp>  // for impl::STKSearchBoxesT (concept representative)
 
 namespace mundy {
 
@@ -56,9 +58,8 @@ namespace search {
 /// The concept is checked against `impl::STKSearchBoxesT<stk::ngp::MemSpace, float>` as a
 /// representative input type.
 template <typename T>
-concept RebuilderType = requires(
-    T& rebuilder, const stk::mesh::BulkData& bulk_data,
-    const impl::STKSearchBoxesT<stk::ngp::MemSpace, float>& input) {
+concept RebuilderType = requires(T& rebuilder, const stk::mesh::BulkData& bulk_data,
+                                 const impl::STKSearchBoxesT<stk::ngp::MemSpace, float>& input) {
   { rebuilder.needs_rebuild(bulk_data, input, input) } -> std::convertible_to<bool>;
   { rebuilder.snapshot(bulk_data, input, input) } -> std::same_as<void>;
 };
@@ -88,8 +89,8 @@ class RebuilderChain {
 
   RebuilderChain() = default;
 
-  RebuilderChain(const prior_rebuilder_type& prior, const appended_rebuilder_type& next)
-      : prior_(prior), next_(next) {}
+  RebuilderChain(const prior_rebuilder_type& prior, const appended_rebuilder_type& next) : prior_(prior), next_(next) {
+  }
   //@}
 
   //! \name Rebuild policy
@@ -97,15 +98,13 @@ class RebuilderChain {
 
   /// \brief Return true if either rebuilder in the chain signals a rebuild is needed.
   template <typename TargetInput, typename SourceInput>
-  bool needs_rebuild(const stk::mesh::BulkData& bulk, const TargetInput& targets,
-                     const SourceInput& sources) {
+  bool needs_rebuild(const stk::mesh::BulkData& bulk, const TargetInput& targets, const SourceInput& sources) {
     return prior_.needs_rebuild(bulk, targets, sources) || next_.needs_rebuild(bulk, targets, sources);
   }
 
   /// \brief Snapshot state in both chain members to keep all snapshots current.
   template <typename TargetInput, typename SourceInput>
-  void snapshot(const stk::mesh::BulkData& bulk, const TargetInput& targets,
-                const SourceInput& sources) {
+  void snapshot(const stk::mesh::BulkData& bulk, const TargetInput& targets, const SourceInput& sources) {
     prior_.snapshot(bulk, targets, sources);
     next_.snapshot(bulk, targets, sources);
   }
@@ -129,10 +128,18 @@ class RebuilderChain {
   //! \name Accessors
   //@{
 
-  prior_rebuilder_type& prior() noexcept { return prior_; }
-  const prior_rebuilder_type& prior() const noexcept { return prior_; }
-  appended_rebuilder_type& next() noexcept { return next_; }
-  const appended_rebuilder_type& next() const noexcept { return next_; }
+  prior_rebuilder_type& prior() noexcept {
+    return prior_;
+  }
+  const prior_rebuilder_type& prior() const noexcept {
+    return prior_;
+  }
+  appended_rebuilder_type& next() noexcept {
+    return next_;
+  }
+  const appended_rebuilder_type& next() const noexcept {
+    return next_;
+  }
   //@}
 
  private:
@@ -163,7 +170,8 @@ struct AlwaysRebuild {
   /// \brief No state to snapshot after a rebuild.
   template <typename TargetInput, typename SourceInput>
   void snapshot(const stk::mesh::BulkData& /*bulk*/, const TargetInput& /*targets*/,
-                const SourceInput& /*sources*/) noexcept {}
+                const SourceInput& /*sources*/) noexcept {
+  }
   //@}
 
   //! \name Chaining
@@ -202,7 +210,8 @@ struct NeverRebuild {
   /// \brief No state to snapshot after a rebuild.
   template <typename TargetInput, typename SourceInput>
   void snapshot(const stk::mesh::BulkData& /*bulk*/, const TargetInput& /*targets*/,
-                const SourceInput& /*sources*/) noexcept {}
+                const SourceInput& /*sources*/) noexcept {
+  }
   //@}
 
   //! \name Chaining
@@ -259,8 +268,7 @@ class RebuildOnEntityChange {
   ///
   /// On the first call (no snapshot yet), always returns true.
   template <typename TargetInput, typename SourceInput>
-  bool needs_rebuild(const stk::mesh::BulkData& /*bulk*/, const TargetInput& targets,
-                     const SourceInput& sources) {
+  bool needs_rebuild(const stk::mesh::BulkData& /*bulk*/, const TargetInput& targets, const SourceInput& sources) {
     if (!has_snapshot_) return true;
     return entities_changed(targets.entities(), snapshot_target_) ||
            entities_changed(sources.entities(), snapshot_source_);
@@ -268,8 +276,7 @@ class RebuildOnEntityChange {
 
   /// \brief Snapshot the current entity sequences into device-resident storage.
   template <typename TargetInput, typename SourceInput>
-  void snapshot(const stk::mesh::BulkData& /*bulk*/, const TargetInput& targets,
-                const SourceInput& sources) {
+  void snapshot(const stk::mesh::BulkData& /*bulk*/, const TargetInput& targets, const SourceInput& sources) {
     take_snapshot(targets.entities(), snapshot_target_);
     take_snapshot(sources.entities(), snapshot_source_);
     has_snapshot_ = true;
@@ -296,8 +303,7 @@ class RebuildOnEntityChange {
   //@{
 
   template <typename EntityView>
-  bool entities_changed(const EntityView& current,
-                        const Kokkos::View<stk::mesh::Entity*, memory_space>& snap) const {
+  bool entities_changed(const EntityView& current, const Kokkos::View<stk::mesh::Entity*, memory_space>& snap) const {
     int n = static_cast<int>(current.extent(0));
     if (n != static_cast<int>(snap.extent(0))) return true;
     if (n == 0) return false;  // Kokkos::Max identity (INT_MIN) != 0 over empty range — guard explicitly
@@ -314,8 +320,7 @@ class RebuildOnEntityChange {
   }
 
   template <typename EntityView>
-  void take_snapshot(const EntityView& entities,
-                     Kokkos::View<stk::mesh::Entity*, memory_space>& snap) {
+  void take_snapshot(const EntityView& entities, Kokkos::View<stk::mesh::Entity*, memory_space>& snap) {
     int n = static_cast<int>(entities.extent(0));
     Kokkos::resize(snap, n);
     Kokkos::parallel_for(
@@ -340,20 +345,22 @@ class RebuildOnEntityChange {
 /// \class RebuildOnAABBDisplacement
 /// \brief Rebuilder that triggers when any box corner moves beyond a displacement threshold.
 ///
-/// After each build, `snapshot()` records all six scalar coordinates (min/max per axis)
-/// for every target and source box using a device-resident view and a Kokkos parallel_for.
-/// `needs_rebuild()` computes the maximum per-coordinate displacement using a Kokkos
-/// parallel_reduce on device and returns true when any coordinate has moved more than
-/// `max_displacement`.
+/// After each build, `snapshot()` records all six corner coordinates (min/max per axis)
+/// for every target and source box.  `needs_rebuild()` computes the per-corner displacement
+/// via the supplied `Metric` and returns true when any corner has moved farther than its
+/// threshold.
 ///
-/// Checking per-coordinate displacement of axis-aligned bounding box corners is stronger
-/// than checking center displacement alone: the maximum displacement of any corner equals
-/// the maximum displacement of any of the six bounding scalar values, so the check is exact
-/// for AABBs and conservative for arbitrary shapes.
+/// The `Metric` controls how displacement is measured.  The default `FreeSpaceMetric<double>`
+/// gives the raw Cartesian difference, reproducing the original aperiodic behaviour.  Any
+/// periodic metric from `mundy_geom/periodicity.hpp` (e.g. `OrthorhombicMetric`,
+/// `TriclinicMetric`) applies the minimum-image convention so that a particle crossing a
+/// periodic boundary is not counted as having moved by a full cell length.
 ///
-/// \tparam MemorySpace Kokkos memory space used for device-resident snapshots and kernels.
-///   Must match the memory space of the box views supplied to `needs_rebuild` and `snapshot`.
-template <typename MemorySpace = stk::ngp::MemSpace>
+/// \tparam MemorySpace Kokkos memory space for device-resident snapshots and kernels.
+/// \tparam Metric      Distance metric used for corner-displacement measurement.
+///   Defaults to `FreeSpaceMetric<double>` (aperiodic, raw Cartesian difference).
+///   Any concrete metric type from `mundy_geom/periodicity.hpp` is valid.
+template <typename MemorySpace = stk::ngp::MemSpace, typename Metric = FreeSpaceMetric<double>>
 class RebuildOnAABBDisplacement {
  public:
   //! \name Aliases
@@ -361,23 +368,52 @@ class RebuildOnAABBDisplacement {
 
   using memory_space = MemorySpace;
   using execution_space = typename MemorySpace::execution_space;
+  using metric_type = Metric;
+  using scalar_type = typename Metric::value_type;
   //@}
 
   //! \name Constructors
   //@{
 
-  /// \brief Construct with a single displacement threshold applied to both targets and sources.
-  /// \param max_displacement [in] Rebuild is triggered if any box corner moves farther than this.
-  explicit RebuildOnAABBDisplacement(double max_displacement)
-      : target_max_displacement_(max_displacement), source_max_displacement_(max_displacement) {}
-
-  /// \brief Construct with separate displacement thresholds for target and source boxes.
+  /// \brief Construct with a single displacement threshold for both targets and sources.
   ///
+  /// Only available when `Metric` is `FreeSpaceMetric` (the aperiodic default). For
+  /// periodic simulations or when using a custom metric, supply a metric explicitly via the overloads below.
+  /// \param max_displacement [in] Rebuild if any corner moves farther than this.
+  explicit RebuildOnAABBDisplacement(double max_displacement)
+    requires std::is_same_v<Metric, FreeSpaceMetric<typename Metric::value_type>>
+      : target_max_displacement_(max_displacement), source_max_displacement_(max_displacement) {
+  }
+
+  /// \brief Construct with separate thresholds for target and source boxes.
+  ///
+  /// Only available when `Metric` is `FreeSpaceMetric` (the aperiodic default).
   /// \param target_max_displacement [in] Threshold for target box corners.
   /// \param source_max_displacement [in] Threshold for source box corners.
   RebuildOnAABBDisplacement(double target_max_displacement, double source_max_displacement)
+    requires std::is_same_v<Metric, FreeSpaceMetric<typename Metric::value_type>>
+      : target_max_displacement_(target_max_displacement), source_max_displacement_(source_max_displacement) {
+  }
+
+  /// \brief Construct with a single threshold and an explicit metric.
+  ///
+  /// Use this for periodic simulations where displacement must respect the periodic cell.
+  /// \param max_displacement [in] Threshold applied to both targets and sources.
+  /// \param metric [in] Metric used to compute minimum-image corner displacement.
+  RebuildOnAABBDisplacement(double max_displacement, const Metric& metric)
+      : target_max_displacement_(max_displacement), source_max_displacement_(max_displacement), metric_(metric) {
+  }
+
+  /// \brief Construct with separate thresholds and an explicit metric.
+  ///
+  /// \param target_max_displacement [in] Threshold for target box corners.
+  /// \param source_max_displacement [in] Threshold for source box corners.
+  /// \param metric [in] Metric used to compute minimum-image corner displacement.
+  RebuildOnAABBDisplacement(double target_max_displacement, double source_max_displacement, const Metric& metric)
       : target_max_displacement_(target_max_displacement),
-        source_max_displacement_(source_max_displacement) {}
+        source_max_displacement_(source_max_displacement),
+        metric_(metric) {
+  }
   //@}
 
   //! \name Rebuild policy
@@ -387,8 +423,7 @@ class RebuildOnAABBDisplacement {
   ///
   /// On the first call (no snapshot yet), always returns true.
   template <typename TargetInput, typename SourceInput>
-  bool needs_rebuild(const stk::mesh::BulkData& /*bulk*/, const TargetInput& targets,
-                     const SourceInput& sources) {
+  bool needs_rebuild(const stk::mesh::BulkData& /*bulk*/, const TargetInput& targets, const SourceInput& sources) {
     if (!has_snapshot_) return true;
     // Empty targets or sources → result is always empty regardless of geometry; skip displacement check.
     if (targets.boxes().extent(0) == 0 || sources.boxes().extent(0) == 0) return false;
@@ -401,8 +436,7 @@ class RebuildOnAABBDisplacement {
 
   /// \brief Snapshot the current box corners into device-resident storage.
   template <typename TargetInput, typename SourceInput>
-  void snapshot(const stk::mesh::BulkData& /*bulk*/, const TargetInput& targets,
-                const SourceInput& sources) {
+  void snapshot(const stk::mesh::BulkData& /*bulk*/, const TargetInput& targets, const SourceInput& sources) {
     take_snapshot(targets.boxes(), snapshot_target_);
     take_snapshot(sources.boxes(), snapshot_source_);
     has_snapshot_ = true;
@@ -448,26 +482,38 @@ class RebuildOnAABBDisplacement {
     }
   }
 
-  /// \brief Return true if any box corner has moved more than `threshold`.
+  /// \brief Return true if any box corner has moved beyond `threshold` under the metric.
+  ///
+  /// For `FreeSpaceMetric` this is identical to the raw per-scalar absolute difference.
+  /// For periodic metrics the minimum-image displacement is used, so a corner that wraps
+  /// across the cell boundary is not counted as having moved by a full cell length.
   template <typename BoxView>
-  bool corners_moved(const BoxView& current_boxes,
-                     const Kokkos::View<double*, memory_space>& snapshot,
+  bool corners_moved(const BoxView& current_boxes, const Kokkos::View<scalar_type*, memory_space>& snapshot,
                      double threshold) const {
     int n = static_cast<int>(current_boxes.extent(0));
     if (n == 0) return false;
     auto snap = snapshot;
+    auto met = metric_;  // device-capturable by value; all concrete metrics are trivially copyable
     int any_moved = 0;
     Kokkos::parallel_reduce(
         "mundy_aabb_displacement_check", Kokkos::RangePolicy<execution_space>(0, n),
         KOKKOS_LAMBDA(int i, int& lmax) {
           const int base = 6 * i;
-          int moved =
-              (abs(box_min(current_boxes(i), 0) - snap(base + 0)) > threshold ? 1 : 0) |
-              (abs(box_min(current_boxes(i), 1) - snap(base + 1)) > threshold ? 1 : 0) |
-              (abs(box_min(current_boxes(i), 2) - snap(base + 2)) > threshold ? 1 : 0) |
-              (abs(box_max(current_boxes(i), 0) - snap(base + 3)) > threshold ? 1 : 0) |
-              (abs(box_max(current_boxes(i), 1) - snap(base + 4)) > threshold ? 1 : 0) |
-              (abs(box_max(current_boxes(i), 2) - snap(base + 5)) > threshold ? 1 : 0);
+          // Form snapshotted and current min/max corner points in the metric's scalar type.
+          const Point<scalar_type> old_min{snap(base + 0), snap(base + 1), snap(base + 2)};
+          const Point<scalar_type> new_min{static_cast<scalar_type>(box_min(current_boxes(i), 0)),
+                                           static_cast<scalar_type>(box_min(current_boxes(i), 1)),
+                                           static_cast<scalar_type>(box_min(current_boxes(i), 2))};
+          const Point<scalar_type> old_max{snap(base + 3), snap(base + 4), snap(base + 5)};
+          const Point<scalar_type> new_max{static_cast<scalar_type>(box_max(current_boxes(i), 0)),
+                                           static_cast<scalar_type>(box_max(current_boxes(i), 1)),
+                                           static_cast<scalar_type>(box_max(current_boxes(i), 2))};
+          // met.sep gives the minimum-image displacement (identity for FreeSpaceMetric).
+          const auto d_min = met.sep(old_min, new_min);
+          const auto d_max = met.sep(old_max, new_max);
+          int moved = (abs(d_min[0]) > threshold ? 1 : 0) | (abs(d_min[1]) > threshold ? 1 : 0) |
+                      (abs(d_min[2]) > threshold ? 1 : 0) | (abs(d_max[0]) > threshold ? 1 : 0) |
+                      (abs(d_max[1]) > threshold ? 1 : 0) | (abs(d_max[2]) > threshold ? 1 : 0);
           lmax = lmax > moved ? lmax : moved;
         },
         Kokkos::Max<int>(any_moved));
@@ -477,18 +523,18 @@ class RebuildOnAABBDisplacement {
 
   /// \brief Snapshot box corners into a device-resident view using a Kokkos parallel_for.
   template <typename BoxView>
-  void take_snapshot(const BoxView& boxes, Kokkos::View<double*, memory_space>& snapshot) {
+  void take_snapshot(const BoxView& boxes, Kokkos::View<scalar_type*, memory_space>& snapshot) {
     int n = static_cast<int>(boxes.extent(0));
     Kokkos::resize(snapshot, 6 * n);
     auto snap = snapshot;
     Kokkos::parallel_for(
         "mundy_aabb_snapshot", Kokkos::RangePolicy<execution_space>(0, n), KOKKOS_LAMBDA(int i) {
-          snap(6 * i + 0) = box_min(boxes(i), 0);
-          snap(6 * i + 1) = box_min(boxes(i), 1);
-          snap(6 * i + 2) = box_min(boxes(i), 2);
-          snap(6 * i + 3) = box_max(boxes(i), 0);
-          snap(6 * i + 4) = box_max(boxes(i), 1);
-          snap(6 * i + 5) = box_max(boxes(i), 2);
+          snap(6 * i + 0) = static_cast<scalar_type>(box_min(boxes(i), 0));
+          snap(6 * i + 1) = static_cast<scalar_type>(box_min(boxes(i), 1));
+          snap(6 * i + 2) = static_cast<scalar_type>(box_min(boxes(i), 2));
+          snap(6 * i + 3) = static_cast<scalar_type>(box_max(boxes(i), 0));
+          snap(6 * i + 4) = static_cast<scalar_type>(box_max(boxes(i), 1));
+          snap(6 * i + 5) = static_cast<scalar_type>(box_max(boxes(i), 2));
         });
     Kokkos::fence();
   }
@@ -503,10 +549,12 @@ class RebuildOnAABBDisplacement {
   double target_max_displacement_;
   //! Per-corner displacement threshold for source boxes.
   double source_max_displacement_;
-  //! Device-resident snapshot of target box corners (6 doubles per box: min_xyz then max_xyz).
-  Kokkos::View<double*, memory_space> snapshot_target_{"mundy_rebuilder_snap_tgt", 0};
-  //! Device-resident snapshot of source box corners (6 doubles per box: min_xyz then max_xyz).
-  Kokkos::View<double*, memory_space> snapshot_source_{"mundy_rebuilder_snap_src", 0};
+  //! Metric used to compute minimum-image corner displacement.  Default is FreeSpaceMetric<double>.
+  Metric metric_{};
+  //! Snapshot of target box corners (6 scalars per box: min_xyz then max_xyz).
+  Kokkos::View<scalar_type*, memory_space> snapshot_target_{"mundy_rebuilder_snap_tgt", 0};
+  //! Snapshot of source box corners (6 scalars per box: min_xyz then max_xyz).
+  Kokkos::View<scalar_type*, memory_space> snapshot_source_{"mundy_rebuilder_snap_src", 0};
   //@}
 };
 

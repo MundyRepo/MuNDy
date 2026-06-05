@@ -50,11 +50,11 @@
 #include <stk_util/ngp/NgpSpaces.hpp>
 
 // Mundy
-#include <mundy_math/Vector3.hpp>                    // for mundy::Vector3
-#include <mundy_search/NeighborListBuildTraits.hpp>  // for NeighborListBuildTraits
-#include <mundy_search/SearchCandidate.hpp>          // for NeighborSearchCandidate
-#include <mundy_search/impl/STKSearchBoxes.hpp>      // for impl::STKSearchBoxesT, impl::PeriodicSTKSearchBoxesT
-#include <mundy_utils/throw_assert.hpp>              // for MUNDY_THROW_ASSERT
+#include <mundy_math/Vector3.hpp>                                         // for mundy::Vector3
+#include <mundy_search/NeighborListBuildTraits.hpp>                       // for NeighborListBuildTraits
+#include <mundy_search/SearchCandidate.hpp>                               // for NeighborSearchCandidate
+#include <mundy_search/impl/STKSearchBoxes.hpp>                           // for impl::STKSearchBoxesT, impl::PeriodicSTKSearchBoxesT
+#include <mundy_utils/throw_assert.hpp>                                   // for MUNDY_THROW_ASSERT
 
 namespace mundy {
 
@@ -482,10 +482,16 @@ struct NeighborListBuildTraits<STKSearchNeighborList<MemorySpace>> {
   //! \name Build
   //@{
 
-  /// \brief Build the list from a complete builder and BulkData.
+  /// \brief Build an up-to-date neighbor list from the supplied targets, sources, and excluder.
+  ///
+  /// On multi-rank runs a ghosting side effect occurs: remote source entities are ghosted into
+  /// the local process so that every target can reach its neighbors.  The ghosting group
+  /// `"MUNDY_STK_SEARCH_NL_GHOSTING"` persists on `bulk_data` after the call returns; callers
+  /// must communicate any needed field data via this group before computing interactions.
+  ///
   /// \tparam Builder Complete `NeighborListBuilder` type carrying exec space, inputs, and excluder.
-  /// \param builder [in] Complete builder. Target and source inputs must be `STKSearchBoxesT<MemorySpace>`.
-  /// \param bulk_data [in] STK bulk data for excluder setup.
+  /// \param builder [in] Complete builder.
+  /// \param bulk_data [in] STK bulk data.
   /// \param args [in] Build-specific parameters (unused).
   template <typename Builder>
     requires std::same_as<typename Builder::target_input_type, target_input_type> &&
@@ -567,7 +573,7 @@ inline bool                 enable_stk_build_profiling{false};
 inline STKBuildPhaseTimings stk_build_last_timings{};
 
 // -----------------------------------------------------------------------
-// NeighborListBuildTraits::build() definition — STK coarse-search, non-periodic
+// NeighborListBuildTraits::build()
 // -----------------------------------------------------------------------
 
 /// \brief Build an `STKSearchNeighborList` using STK coarse search and two-pass CSR construction.
@@ -577,7 +583,7 @@ inline STKBuildPhaseTimings stk_build_last_timings{};
 ///     and assembles CSR neighbor storage (Phases A–C and F–K).
 ///   - A **host-side regime** that coordinates ghosting via STK BulkData APIs (Phases D–E).
 ///
-/// The phases are:
+/// Phases:
 ///   - **A** — Build `BoxIdentProc` search-input views on device (domain = target, range = source).
 ///   - **B** — Build a target `EntityKey → dense-ordinal` map on device; targets never need ghosting.
 ///   - **C** — Run `stk::search::coarse_search` (MORTON_LBVH, MPI-distributed, symmetry enabled).
@@ -585,7 +591,7 @@ inline STKBuildPhaseTimings stk_build_last_timings{};
 ///             ghost the source to the target's rank.
 ///   - **E** — Build an extended source entity list (owned + newly-ghosted) and transfer to device.
 ///   - **F** — Refresh the NGP mesh (includes ghosts); build a source `EntityKey → ordinal` map.
-///   - **G0** — Precompute valid target/source ordinal pairs with the shared filter.
+///   - **G0** — Precompute valid target/source ordinal pairs with the excluder filter.
 ///   - **G** — Count pass: atomically increment per-target neighbor counts for all passing pairs.
 ///   - **H** — Exclusive prefix scan: compute CSR offsets, allocate `source_indices` and `write_positions`.
 ///   - **I** — Fill pass: write source ordinals into `source_indices` via atomic fetch-add positions.
@@ -602,9 +608,8 @@ inline STKBuildPhaseTimings stk_build_last_timings{};
 ///
 /// \par `list.source_entities()` vs `source_boxes.entities()`
 /// When cross-process sources are ghosted in, `list.source_entities()` is a *superset* of
-/// `source_boxes.entities()`.  The two Kokkos::View handles are not identical.  Ordinals
-/// `0 .. source_boxes.size()-1` index the original owned sources; ordinals
-/// `source_boxes.size() .. list.num_sources()-1` index the ghosted additions.
+/// `source_boxes.entities()`.  Ordinals `0 .. source_boxes.size()-1` index the original owned
+/// sources; ordinals `source_boxes.size() .. list.num_sources()-1` index the ghosted additions.
 ///
 /// \tparam MemorySpace Kokkos memory space for all device views.
 /// \tparam Builder     Complete `NeighborListBuilder` type.
@@ -620,10 +625,11 @@ NeighborListBuildTraits<STKSearchNeighborList<MemorySpace>>::build(
   // Type aliases
   // ===========================================================================
 
-  using exec_space = typename Builder::execution_space;
-  using size_type  = typename list_type::size_type;
+  using list_type   = STKSearchNeighborList<MemorySpace>;
+  using exec_space  = typename Builder::execution_space;
+  using size_type   = typename list_type::size_type;
   using entity_view_t = typename list_type::entity_view_t;
-  using box_type = typename target_input_type::box_type;
+  using box_type    = typename Builder::target_input_type::box_type;
 
   // STK search identifier: EntityKey encodes both entity rank and entity ID.
   // Required for `bulk_data.get_entity(entity_key)` in the ghosting phase;
