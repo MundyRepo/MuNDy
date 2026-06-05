@@ -1608,6 +1608,135 @@ TEST_F(STKDeterministicFixture, CombinedRebuilder_EntityChangeFiresOnEntitySwap)
   EXPECT_TRUE(chain.needs_rebuild(*bulk_, swapped, disjoint_source_boxes_));
 }
 
+// =============================================================================
+// Group 7 (continued) — Zero-target / zero-source edge cases
+//
+// When the target or source input is empty the correct result is trivially the
+// empty list.  Rebuilders must not fire spurious rebuilds in this state, and
+// their internal Kokkos reductions must not produce garbage from identity values
+// over empty ranges (Kokkos::Max identity is INT_MIN, which != 0 and would
+// incorrectly report a change without the explicit n==0 guard).
+// =============================================================================
+
+// Helper: build empty search boxes (no entities, no boxes) using the STK trait.
+static STKBoxTrait::search_boxes_type make_empty_boxes(const STKDeterministicFixture& f) {
+  Kokkos::View<STKBoxTrait::box_type*, TestMemSpace> bv("empty_boxes", 0);
+  Kokkos::View<stk::mesh::Entity*,    TestMemSpace> ev("empty_entities", 0);
+  return {f.disjoint_target_boxes_.selector(), bv, ev};
+}
+
+// --- RebuildOnEntityChange with zero entities ---
+
+// entities_changed on two empty views must return false.
+// Without the n==0 guard, Kokkos::Max over an empty range returns INT_MIN
+// (the identity), which is != 0 and would falsely signal a change.
+TEST_F(STKDeterministicFixture, EntityChange_EmptyTargets_DoesNotSignalChange) {
+  RebuildOnEntityChange<TestMemSpace> rebuilder;
+  auto empty = make_empty_boxes(*this);
+
+  // No snapshot yet → always rebuilds on first call.
+  EXPECT_TRUE(rebuilder.needs_rebuild(*bulk_, empty, empty));
+
+  // After snapshot of empty inputs, subsequent call with still-empty inputs → no change.
+  rebuilder.snapshot(*bulk_, empty, empty);
+  EXPECT_FALSE(rebuilder.needs_rebuild(*bulk_, empty, empty));
+}
+
+// Snapshot with real entities, then present empty targets → treated as a count
+// change (2→0) and correctly signals a rebuild (the entity sequence did change).
+TEST_F(STKDeterministicFixture, EntityChange_TransitionToEmpty_SignalsRebuild) {
+  RebuildOnEntityChange<TestMemSpace> rebuilder;
+  auto empty = make_empty_boxes(*this);
+
+  rebuilder.snapshot(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
+  // Count drops from 2 to 0 → change detected.
+  EXPECT_TRUE(rebuilder.needs_rebuild(*bulk_, empty, disjoint_source_boxes_));
+}
+
+// --- RebuildOnAABBDisplacement with zero targets/sources ---
+
+// After a snapshot with non-empty boxes, presenting zero-target boxes must
+// suppress the displacement check entirely and return false.  Without the guard,
+// the size mismatch (snapshot stores 2 boxes, current has 0) would trigger a
+// count-change rebuild; but an empty target set trivially produces an empty list
+// regardless of how far boxes "moved".
+TEST_F(STKDeterministicFixture, AABBDisplacement_EmptyTargets_DoesNotFireAfterSnapshot) {
+  RebuildOnAABBDisplacement<TestMemSpace> rebuilder(0.01f);
+  auto empty = make_empty_boxes(*this);
+
+  // First call always rebuilds (no snapshot yet).
+  EXPECT_TRUE(rebuilder.needs_rebuild(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_));
+  rebuilder.snapshot(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
+
+  // Empty target set → result is trivially empty; displacement check suppressed.
+  EXPECT_FALSE(rebuilder.needs_rebuild(*bulk_, empty, disjoint_source_boxes_));
+
+  // Symmetric: empty source set → also suppressed.
+  EXPECT_FALSE(rebuilder.needs_rebuild(*bulk_, disjoint_target_boxes_, empty));
+
+  // Both empty → also suppressed.
+  EXPECT_FALSE(rebuilder.needs_rebuild(*bulk_, empty, empty));
+}
+
+// With zero targets and zero sources from the very start, corners_moved over
+// an empty range must return false (not crash or return garbage from the reducer).
+TEST_F(STKDeterministicFixture, AABBDisplacement_EmptyFromStart_NoRebuildAfterFirstBuild) {
+  RebuildOnAABBDisplacement<TestMemSpace> rebuilder(0.01f);
+  auto empty = make_empty_boxes(*this);
+
+  // First call: no snapshot → rebuilds.
+  EXPECT_TRUE(rebuilder.needs_rebuild(*bulk_, empty, empty));
+  rebuilder.snapshot(*bulk_, empty, empty);
+
+  // Same empty inputs → nothing changed, no rebuild.
+  EXPECT_FALSE(rebuilder.needs_rebuild(*bulk_, empty, empty));
+
+  // Presenting non-empty boxes after an empty snapshot → count change, rebuilds.
+  EXPECT_TRUE(rebuilder.needs_rebuild(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_));
+}
+
+// --- ManagedNeighborList with zero targets end-to-end ---
+
+// With zero targets the managed list should build once and then never rebuild
+// (there is nothing to search; the result is always empty).
+TEST_F(STKDeterministicFixture, ManagedList_ZeroTargets_NeverRebuildsAfterFirstBuild) {
+  auto empty = make_empty_boxes(*this);
+  auto managed = make_neighbor_list_builder<STKList>()
+      .exec_space(TestExecSpace{})
+      .manage(RebuildOnAABBDisplacement<TestMemSpace>{0.01f});
+
+  // First update: list doesn't exist yet, must build.
+  auto r1 = managed.update(*bulk_, empty, disjoint_source_boxes_);
+  EXPECT_TRUE(r1.rebuilt);
+  EXPECT_EQ(collect_pairs(r1.list), PairSet{});
+
+  // Second update with same empty targets: displacement check suppressed → no rebuild.
+  auto r2 = managed.update(*bulk_, empty, disjoint_source_boxes_);
+  EXPECT_FALSE(r2.rebuilt);
+  EXPECT_EQ(collect_pairs(r2.list), PairSet{});
+
+  // Even with very different source geometry, zero targets → no rebuild needed.
+  auto r3 = managed.update(*bulk_, empty, overlapping_source_boxes_);
+  EXPECT_FALSE(r3.rebuilt);
+  EXPECT_EQ(collect_pairs(r3.list), PairSet{});
+}
+
+// EntityChange rebuilder also must not fire for empty→empty transitions inside
+// a managed list.
+TEST_F(STKDeterministicFixture, ManagedList_ZeroTargets_EntityChangeDoesNotFire) {
+  auto empty = make_empty_boxes(*this);
+  auto managed = make_neighbor_list_builder<STKList>()
+      .exec_space(TestExecSpace{})
+      .manage(RebuildOnEntityChange<TestMemSpace>{});
+
+  auto r1 = managed.update(*bulk_, empty, disjoint_source_boxes_);
+  EXPECT_TRUE(r1.rebuilt);
+
+  // Entity snapshot is empty; presenting empty targets again → no entity change.
+  auto r2 = managed.update(*bulk_, empty, disjoint_source_boxes_);
+  EXPECT_FALSE(r2.rebuilt);
+}
+
 }  // namespace
 }  // namespace search
 }  // namespace mundy
