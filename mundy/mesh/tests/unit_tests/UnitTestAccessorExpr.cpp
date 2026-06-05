@@ -2285,13 +2285,12 @@ TEST_F(AccessorExprCoverageFixture, EvalTrigger_ReduceLocalSum) {
   // Expected sum: accumulate r(c) over locally-owned selected nodes on the host.
   // r(c) = 2.0 + c[0] + 0.25*c[1]; nodes in block_1 – block_2 are IDs {1..8, 10..12}.
   fields().r->sync_to_host();
+  const stk::mesh::Selector owned_selected =
+      parts().selected & bulk().mesh_meta_data().locally_owned_part();
   double expected = 0.0;
-  stk::mesh::for_each_entity_run(
-      static_cast<const stk::mesh::BulkData&>(bulk()), stk::topology::NODE_RANK, parts().selected,
-      [&](const stk::mesh::BulkData& mesh, const stk::mesh::Entity entity) {
-        if (!mesh.bucket(entity).owned()) return;
-        expected += stk::mesh::field_data(*fields().r, entity)[0];
-      });
+  for (const stk::mesh::Bucket* b : bulk().get_buckets(stk::topology::NODE_RANK, owned_selected))
+    for (stk::mesh::Entity e : *b)
+      expected += stk::mesh::field_data(*fields().r, e)[0];
   auto es = make_node_entities();
   const double result = reduce_local_sum<double>(r()(es));
   EXPECT_NEAR(result, expected, kTolerance * std::abs(expected) + kTolerance);
@@ -2300,13 +2299,12 @@ TEST_F(AccessorExprCoverageFixture, EvalTrigger_ReduceLocalSum) {
 TEST_F(AccessorExprCoverageFixture, EvalTrigger_ReduceLocalMax) {
   // Expected max: maximum r(c) over locally-owned selected nodes on the host.
   fields().r->sync_to_host();
+  const stk::mesh::Selector owned_selected =
+      parts().selected & bulk().mesh_meta_data().locally_owned_part();
   double expected = 0.0;  // r > 2 always; sentinel 0 is safely below any r value
-  stk::mesh::for_each_entity_run(
-      static_cast<const stk::mesh::BulkData&>(bulk()), stk::topology::NODE_RANK, parts().selected,
-      [&](const stk::mesh::BulkData& mesh, const stk::mesh::Entity entity) {
-        if (!mesh.bucket(entity).owned()) return;
-        expected = std::max(expected, stk::mesh::field_data(*fields().r, entity)[0]);
-      });
+  for (const stk::mesh::Bucket* b : bulk().get_buckets(stk::topology::NODE_RANK, owned_selected))
+    for (stk::mesh::Entity e : *b)
+      expected = std::max(expected, stk::mesh::field_data(*fields().r, e)[0]);
   auto es = make_node_entities();
   const double result = reduce_local_max<double>(r()(es));
   EXPECT_NEAR(result, expected, kTolerance);
@@ -2315,13 +2313,12 @@ TEST_F(AccessorExprCoverageFixture, EvalTrigger_ReduceLocalMax) {
 TEST_F(AccessorExprCoverageFixture, EvalTrigger_ReduceLocalMin) {
   // Expected min: minimum r(c) over locally-owned selected nodes on the host.
   fields().r->sync_to_host();
+  const stk::mesh::Selector owned_selected =
+      parts().selected & bulk().mesh_meta_data().locally_owned_part();
   double expected = 1.0e10;  // r < 3 always; sentinel 1e10 is safely above any r value
-  stk::mesh::for_each_entity_run(
-      static_cast<const stk::mesh::BulkData&>(bulk()), stk::topology::NODE_RANK, parts().selected,
-      [&](const stk::mesh::BulkData& mesh, const stk::mesh::Entity entity) {
-        if (!mesh.bucket(entity).owned()) return;
-        expected = std::min(expected, stk::mesh::field_data(*fields().r, entity)[0]);
-      });
+  for (const stk::mesh::Bucket* b : bulk().get_buckets(stk::topology::NODE_RANK, owned_selected))
+    for (stk::mesh::Entity e : *b)
+      expected = std::min(expected, stk::mesh::field_data(*fields().r, e)[0]);
   auto es = make_node_entities();
   const double result = reduce_local_min<double>(r()(es));
   EXPECT_NEAR(result, expected, kTolerance);
@@ -2332,13 +2329,12 @@ TEST_F(AccessorExprCoverageFixture, EvalTrigger_AllReduceSum) {
   // local contribution and must account for all ranks (1-rank: equal; 2-rank: larger).
   // Also verify the local reduction result exactly, which tests both code paths.
   fields().r->sync_to_host();
+  const stk::mesh::Selector owned_selected =
+      parts().selected & bulk().mesh_meta_data().locally_owned_part();
   double local_expected = 0.0;
-  stk::mesh::for_each_entity_run(
-      static_cast<const stk::mesh::BulkData&>(bulk()), stk::topology::NODE_RANK, parts().selected,
-      [&](const stk::mesh::BulkData& mesh, const stk::mesh::Entity entity) {
-        if (!mesh.bucket(entity).owned()) return;
-        local_expected += stk::mesh::field_data(*fields().r, entity)[0];
-      });
+  for (const stk::mesh::Bucket* b : bulk().get_buckets(stk::topology::NODE_RANK, owned_selected))
+    for (stk::mesh::Entity e : *b)
+      local_expected += stk::mesh::field_data(*fields().r, e)[0];
   auto es = make_node_entities();
   const double local_result  = reduce_local_sum<double>(r()(es));
   const double global_result = all_reduce_sum<double>(r()(es));
@@ -2350,13 +2346,12 @@ TEST_F(AccessorExprCoverageFixture, EvalTrigger_AllReduceSum) {
 TEST_F(AccessorExprCoverageFixture, EvalTrigger_AllReduceMax) {
   // all_reduce_max must be >= the local maximum on every rank.
   fields().r->sync_to_host();
-  double local_expected = 0.0;
-  stk::mesh::for_each_entity_run(
-      static_cast<const stk::mesh::BulkData&>(bulk()), stk::topology::NODE_RANK, parts().selected,
-      [&](const stk::mesh::BulkData& mesh, const stk::mesh::Entity entity) {
-        if (!mesh.bucket(entity).owned()) return;
-        local_expected = std::max(local_expected, stk::mesh::field_data(*fields().r, entity)[0]);
-      });
+  const stk::mesh::Selector owned_selected =
+      parts().selected & bulk().mesh_meta_data().locally_owned_part();
+  double local_expected = 0.0;  // r > 2 always; sentinel 0 is safely below any r value
+  for (const stk::mesh::Bucket* b : bulk().get_buckets(stk::topology::NODE_RANK, owned_selected))
+    for (stk::mesh::Entity e : *b)
+      local_expected = std::max(local_expected, stk::mesh::field_data(*fields().r, e)[0]);
   auto es = make_node_entities();
   const double local_result  = reduce_local_max<double>(r()(es));
   const double global_result = all_reduce_max<double>(r()(es));
@@ -2368,13 +2363,12 @@ TEST_F(AccessorExprCoverageFixture, EvalTrigger_AllReduceMax) {
 TEST_F(AccessorExprCoverageFixture, EvalTrigger_AllReduceMin) {
   // all_reduce_min must be <= the local minimum on every rank.
   fields().r->sync_to_host();
-  double local_expected = 1.0e10;
-  stk::mesh::for_each_entity_run(
-      static_cast<const stk::mesh::BulkData&>(bulk()), stk::topology::NODE_RANK, parts().selected,
-      [&](const stk::mesh::BulkData& mesh, const stk::mesh::Entity entity) {
-        if (!mesh.bucket(entity).owned()) return;
-        local_expected = std::min(local_expected, stk::mesh::field_data(*fields().r, entity)[0]);
-      });
+  const stk::mesh::Selector owned_selected =
+      parts().selected & bulk().mesh_meta_data().locally_owned_part();
+  double local_expected = 1.0e10;  // r < 3 always; sentinel 1e10 is safely above any r value
+  for (const stk::mesh::Bucket* b : bulk().get_buckets(stk::topology::NODE_RANK, owned_selected))
+    for (stk::mesh::Entity e : *b)
+      local_expected = std::min(local_expected, stk::mesh::field_data(*fields().r, e)[0]);
   auto es = make_node_entities();
   const double local_result  = reduce_local_min<double>(r()(es));
   const double global_result = all_reduce_min<double>(r()(es));
