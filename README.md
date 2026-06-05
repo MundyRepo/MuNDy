@@ -80,26 +80,24 @@ This structure is intended to keep:
 ### Code Statistics (via cloc)
 ```text
 cloc-1.96.pl --exclude-dir=TriBITS,ci,doc,scrap ./MuNDy
-     384 text files.
-     345 unique files.                                          
-      52 files ignored.
+     424 text files.
+     384 unique files.                                          
+      46 files ignored.
 
-github.com/AlDanial/cloc v 1.96  T=1.71 s (201.6 files/s, 53673.7 lines/s)
+github.com/AlDanial/cloc v 1.96  T=1.18 s (324.5 files/s, 91526.3 lines/s)
 ------------------------------------------------------------------
 Language            files        blank        comment         code
 ------------------------------------------------------------------
-C/C++ Header          142         7071          12382        30540
-C++                    81         4823           4428        22397
-CMake                  88          620           2046         2824
-Markdown                8          832              0         2220
-Python                  5          119            161          522
-Bourne Shell           15           98             91          329
-Text                    1           25              0          172
+C/C++ Header          181         8542          15906        34395
+C++                    86         5730           6410        26960
+Markdown                9          896              0         2787
+CMake                  79          530           1638         2430
+Python                  5          161            196          659
+Bourne Shell           18          130            142          547
 JSON                    2           10              0          137
-YAML                    2            0              0            6
-CSV                     1            0              0            1
+YAML                    4           21              0           87
 ------------------------------------------------------------------
-SUM:                  345        13598          19108        59148
+SUM:                  384        16020          24292        68002
 ------------------------------------------------------------------
 ```
 

@@ -205,7 +205,7 @@ static ListType build_full(const PerfFixtureT<Trait>& f, bool sort_neighbors = f
       .exec_space(HostExec{})
       .target_input(f.boxes)
       .source_input(f.boxes)
-      .exclude(mundy::search::ExcludeSelfInteraction{})
+      .broad_phase(mundy::search::ExcludeSelfInteraction{})
       .sort_neighbors(sort_neighbors)
       .build(*f.bulk);
 }
@@ -216,8 +216,8 @@ static ListType build_half(const PerfFixtureT<Trait>& f, bool sort_neighbors = f
       .exec_space(HostExec{})
       .target_input(f.boxes)
       .source_input(f.boxes)
-      .exclude(mundy::search::ExcludeSelfInteraction{})
-      .exclude(mundy::search::ExcludeSymmetricDuplicates{})
+      .broad_phase(mundy::search::ExcludeSelfInteraction{})
+      .broad_phase(mundy::search::ExcludeSymmetricDuplicates{})
       .sort_neighbors(sort_neighbors)
       .build(*f.bulk);
 }

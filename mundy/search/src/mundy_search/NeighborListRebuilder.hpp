@@ -381,7 +381,7 @@ class RebuildOnAABBDisplacement {
   /// periodic simulations or when using a custom metric, supply a metric explicitly via the overloads below.
   /// \param max_displacement [in] Rebuild if any corner moves farther than this.
   explicit RebuildOnAABBDisplacement(double max_displacement)
-    requires std::is_same_v<Metric, FreeSpaceMetric<typename Metric::value_type>>
+    requires is_free_space_metric_v<Metric>
       : target_max_displacement_(max_displacement), source_max_displacement_(max_displacement) {
   }
 
@@ -391,7 +391,7 @@ class RebuildOnAABBDisplacement {
   /// \param target_max_displacement [in] Threshold for target box corners.
   /// \param source_max_displacement [in] Threshold for source box corners.
   RebuildOnAABBDisplacement(double target_max_displacement, double source_max_displacement)
-    requires std::is_same_v<Metric, FreeSpaceMetric<typename Metric::value_type>>
+    requires is_free_space_metric_v<Metric>
       : target_max_displacement_(target_max_displacement), source_max_displacement_(source_max_displacement) {
   }
 

@@ -72,8 +72,7 @@ class ArborXPeriodicCountCallback {
   KOKKOS_DEFAULTED_FUNCTION ArborXPeriodicCountCallback() = default;
 
   KOKKOS_INLINE_FUNCTION
-  ArborXPeriodicCountCallback(const factory_type& factory, const Excluder& excluder,
-                               const count_view_t& owner_counts)
+  ArborXPeriodicCountCallback(const factory_type& factory, const Excluder& excluder, const count_view_t& owner_counts)
       : factory_(factory), excluder_(excluder), owner_counts_(owner_counts) {
   }
   //@}
@@ -140,9 +139,9 @@ class ArborXPeriodic1dFillCallback {
 
   KOKKOS_INLINE_FUNCTION
   ArborXPeriodic1dFillCallback(const factory_type& factory, const Excluder& excluder,
-                                const count_view_t& write_positions, const count_view_t& offsets,
-                                const source_index_view_t& source_owner_indices,
-                                const image_shift_view_t& relative_image_shifts)
+                               const count_view_t& write_positions, const count_view_t& offsets,
+                               const source_index_view_t& source_owner_indices,
+                               const image_shift_view_t& relative_image_shifts)
       : factory_(factory),
         excluder_(excluder),
         write_positions_(write_positions),
@@ -224,9 +223,8 @@ class ArborXPeriodic2dFillCallback {
 
   KOKKOS_INLINE_FUNCTION
   ArborXPeriodic2dFillCallback(const factory_type& factory, const Excluder& excluder,
-                                const count_view_t& write_positions,
-                                const source_index_view_t& source_owner_indices,
-                                const image_shift_view_t& relative_image_shifts)
+                               const count_view_t& write_positions, const source_index_view_t& source_owner_indices,
+                               const image_shift_view_t& relative_image_shifts)
       : factory_(factory),
         excluder_(excluder),
         write_positions_(write_positions),

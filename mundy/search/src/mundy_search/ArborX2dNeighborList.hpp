@@ -42,13 +42,14 @@
 #include <stk_util/ngp/NgpSpaces.hpp>
 
 // Mundy
-#include <mundy_math/Vector3.hpp>                              // for mundy::Vector3
-#include <mundy_search/NeighborListBuildTraits.hpp>            // for NeighborListBuildTraits
-#include <mundy_search/impl/ArborX2dBuildCallbacks.hpp>        // for ArborX2dCountCallback, ArborX2dFillCallback
-#include <mundy_search/impl/ArborXCallback.hpp>               // for ArborXSearchCandidateFactory, PeriodicArborXSearchCandidateFactory
+#include <mundy_math/Vector3.hpp>                        // for mundy::Vector3
+#include <mundy_search/NeighborListBuildTraits.hpp>      // for NeighborListBuildTraits
+#include <mundy_search/impl/ArborX2dBuildCallbacks.hpp>  // for ArborX2dCountCallback, ArborX2dFillCallback
+#include <mundy_search/impl/ArborXCallback.hpp>  // for ArborXSearchCandidateFactory, PeriodicArborXSearchCandidateFactory
 #include <mundy_search/impl/ArborXPeriodicBuildCallbacks.hpp>  // for ArborXPeriodicCountCallback, ArborXPeriodic2dFillCallback
-#include <mundy_search/impl/ArborXSearchBoxes.hpp>             // for impl::ArborXSearchBoxesT, impl::PeriodicArborXSearchBoxesT
-#include <mundy_utils/throw_assert.hpp>                        // for MUNDY_THROW_ASSERT, MUNDY_THROW_REQUIRE
+#include <mundy_search/impl/ArborXSearchBoxes.hpp>  // for impl::ArborXSearchBoxesT, impl::PeriodicArborXSearchBoxesT
+#include <mundy_search/impl/NarrowPhaseFilter.hpp>  // for impl::apply_narrow_phase
+#include <mundy_utils/throw_assert.hpp>             // for MUNDY_THROW_ASSERT, MUNDY_THROW_REQUIRE
 
 namespace mundy {
 
@@ -564,31 +565,28 @@ template <typename MemorySpace>
 template <typename Builder>
   requires std::same_as<typename Builder::target_input_type, impl::ArborXSearchBoxesT<MemorySpace>> &&
            std::same_as<typename Builder::source_input_type, impl::ArborXSearchBoxesT<MemorySpace>>
-ArborX2dNeighborList<MemorySpace>
-NeighborListBuildTraits<ArborX2dNeighborList<MemorySpace>>::build(const Builder& builder,
-                                                                   const stk::mesh::BulkData& bulk_data,
-                                                                   const args_type& args) {
+ArborX2dNeighborList<MemorySpace> NeighborListBuildTraits<ArborX2dNeighborList<MemorySpace>>::build(
+    const Builder& builder, const stk::mesh::BulkData& bulk_data, const args_type& args) {
   MUNDY_THROW_REQUIRE(bulk_data.parallel_size() == 1, std::invalid_argument,
                       "ArborX2dNeighborList build currently supports only single-process runs.");
 
   using exec_space = typename Builder::execution_space;
   using size_type = typename list_type::size_type;
   using factory_type = impl::ArborXSearchCandidateFactory<target_input_type, source_input_type>;
-  using excluder_type = typename Builder::excluder_type;
-  using count_cb_t = impl::ArborX2dCountCallback<target_input_type, source_input_type, excluder_type>;
-  using fill_cb_t = impl::ArborX2dFillCallback<target_input_type, source_input_type, excluder_type>;
+  using broad_excluder_type = typename Builder::broad_excluder_type;
+  using count_cb_t = impl::ArborX2dCountCallback<target_input_type, source_input_type, broad_excluder_type>;
+  using fill_cb_t = impl::ArborX2dFillCallback<target_input_type, source_input_type, broad_excluder_type>;
 
   const auto& target_boxes = builder.target_input();
   const auto& source_boxes = builder.source_input();
   const auto exec_sp = builder.exec_space();
-  const auto excluder = builder.setup_excluder(bulk_data);
+  const auto excluder = builder.setup_broad_excluder(bulk_data);
   const size_type num_targets = target_boxes.size();
 
   factory_type factory(target_boxes, source_boxes);
 
 #if ARBORX_VERSION >= 10799
-  ArborX::BoundingVolumeHierarchy bvh(exec_sp,
-                                      ArborX::Experimental::attach_indices<int>(source_boxes.boxes()));
+  ArborX::BoundingVolumeHierarchy bvh(exec_sp, ArborX::Experimental::attach_indices<int>(source_boxes.boxes()));
 #else
   ArborX::BVH<MemorySpace> bvh(exec_sp, source_boxes);
 #endif
@@ -600,12 +598,12 @@ NeighborListBuildTraits<ArborX2dNeighborList<MemorySpace>>::build(const Builder&
 
   // Find maximum per-target count to size the dense 2D view.
   size_type max_neighbors = 0;
-  Kokkos::parallel_reduce("mundy_search_2d_max",
-                          Kokkos::RangePolicy<exec_space>(0, num_targets),
-                          KOKKOS_LAMBDA(size_type i, size_type& local_max) {
-                            if (neighbor_counts(i) > local_max) local_max = neighbor_counts(i);
-                          },
-                          Kokkos::Max<size_type>(max_neighbors));
+  Kokkos::parallel_reduce(
+      "mundy_search_2d_max", Kokkos::RangePolicy<exec_space>(0, num_targets),
+      KOKKOS_LAMBDA(size_type i, size_type & local_max) {
+        if (neighbor_counts(i) > local_max) local_max = neighbor_counts(i);
+      },
+      Kokkos::Max<size_type>(max_neighbors));
 
   Kokkos::View<size_type**, MemorySpace> source_indices("mundy_search_2d_src_idx", num_targets, max_neighbors);
   Kokkos::View<size_type*, MemorySpace> write_positions("mundy_search_2d_wpos", num_targets);
@@ -617,8 +615,7 @@ NeighborListBuildTraits<ArborX2dNeighborList<MemorySpace>>::build(const Builder&
   if (builder.sort_neighbors()) {
     // Sort each target's dense neighbor row by ascending source ordinal.
     Kokkos::parallel_for(
-        "mundy_search_2d_sort_rows", Kokkos::RangePolicy<exec_space>(0, num_targets),
-        KOKKOS_LAMBDA(size_type t) {
+        "mundy_search_2d_sort_rows", Kokkos::RangePolicy<exec_space>(0, num_targets), KOKKOS_LAMBDA(size_type t) {
           const size_type n = neighbor_counts(t);
           for (size_type i = 1; i < n; ++i) {
             const size_type key = source_indices(t, i);
@@ -630,6 +627,51 @@ NeighborListBuildTraits<ArborX2dNeighborList<MemorySpace>>::build(const Builder&
             source_indices(t, j) = key;
           }
         });
+  }
+
+  // Narrow phase: re-pack the 2D grid after filtering survivors per row.
+  if constexpr (Builder::has_narrow_phase) {
+    const auto narrow_excluder = builder.setup_narrow_excluder(bulk_data);
+    const auto target_ents = target_boxes.entities();
+    const auto source_ents = source_boxes.entities();
+
+    // L0: count narrow survivors per target row.
+    Kokkos::View<size_type*, MemorySpace> narrow_counts("mundy_2d_narrow_counts", num_targets);
+    Kokkos::parallel_for(
+        "mundy_2d_narrow_L0", Kokkos::RangePolicy<exec_space>(0, num_targets), KOKKOS_LAMBDA(size_type t) {
+          size_type count = 0;
+          for (size_type k = 0; k < neighbor_counts(t); ++k) {
+            const size_type s = source_indices(t, k);
+            if (!narrow_excluder(NeighborSearchCandidate<size_t>(static_cast<size_t>(t), static_cast<size_t>(s), target_ents(t), source_ents(s)))) {
+              ++count;
+            }
+          }
+          narrow_counts(t) = count;
+        });
+
+    // L1: new max column width.
+    size_type new_max = 0;
+    Kokkos::parallel_reduce(
+        "mundy_2d_narrow_L1_max", Kokkos::RangePolicy<exec_space>(0, num_targets),
+        KOKKOS_LAMBDA(size_type t, size_type & lmax) { lmax = lmax > narrow_counts(t) ? lmax : narrow_counts(t); },
+        Kokkos::Max<size_type>(new_max));
+    Kokkos::fence();
+
+    // L2: fill new 2D grid with surviving pairs compacted to the left.
+    Kokkos::View<size_type**, MemorySpace> narrow_src("mundy_2d_narrow_src", num_targets, new_max);
+    Kokkos::parallel_for(
+        "mundy_2d_narrow_L2", Kokkos::RangePolicy<exec_space>(0, num_targets), KOKKOS_LAMBDA(size_type t) {
+          size_type write_col = 0;
+          for (size_type k = 0; k < neighbor_counts(t); ++k) {
+            const size_type s = source_indices(t, k);
+            if (!narrow_excluder(NeighborSearchCandidate<size_t>(static_cast<size_t>(t), static_cast<size_t>(s), target_ents(t), source_ents(s)))) {
+              narrow_src(t, write_col++) = s;
+            }
+          }
+        });
+
+    return list_type(builder.target_selector(), builder.source_selector(), target_boxes.entities(),
+                     source_boxes.entities(), narrow_counts, narrow_src);
   }
 
   return list_type(builder.target_selector(), builder.source_selector(), target_boxes.entities(),
@@ -661,22 +703,21 @@ NeighborListBuildTraits<PeriodicArborX2dNeighborList<MemorySpace, ImageShiftScal
   using size_type = typename list_type::size_type;
   using image_shift_type = typename list_type::image_shift_type;
   using factory_type = impl::PeriodicArborXSearchCandidateFactory<target_input_type, source_input_type>;
-  using excluder_type = typename Builder::excluder_type;
-  using count_cb_t = impl::ArborXPeriodicCountCallback<target_input_type, source_input_type, excluder_type>;
+  using broad_excluder_type = typename Builder::broad_excluder_type;
+  using count_cb_t = impl::ArborXPeriodicCountCallback<target_input_type, source_input_type, broad_excluder_type>;
   using fill_cb_t =
-      impl::ArborXPeriodic2dFillCallback<target_input_type, source_input_type, excluder_type, image_shift_type>;
+      impl::ArborXPeriodic2dFillCallback<target_input_type, source_input_type, broad_excluder_type, image_shift_type>;
 
   const auto& target_boxes = builder.target_input();
   const auto& source_boxes = builder.source_input();
   const auto exec_sp = builder.exec_space();
-  const auto excluder = builder.setup_excluder(bulk_data);
+  const auto excluder = builder.setup_broad_excluder(bulk_data);
   const size_type num_target_owners = target_boxes.num_owners();
 
   factory_type factory(target_boxes, source_boxes);
 
 #if ARBORX_VERSION >= 10799
-  ArborX::BoundingVolumeHierarchy bvh(exec_sp,
-                                      ArborX::Experimental::attach_indices<int>(source_boxes.boxes()));
+  ArborX::BoundingVolumeHierarchy bvh(exec_sp, ArborX::Experimental::attach_indices<int>(source_boxes.boxes()));
 #else
   ArborX::BVH<MemorySpace> bvh(exec_sp, source_boxes);
 #endif
@@ -688,12 +729,12 @@ NeighborListBuildTraits<PeriodicArborX2dNeighborList<MemorySpace, ImageShiftScal
 
   // Find maximum per-owner count to size the dense 2D views.
   size_type max_neighbors = 0;
-  Kokkos::parallel_reduce("mundy_search_per2d_max",
-                          Kokkos::RangePolicy<exec_space>(0, num_target_owners),
-                          KOKKOS_LAMBDA(size_type i, size_type& local_max) {
-                            if (owner_counts(i) > local_max) local_max = owner_counts(i);
-                          },
-                          Kokkos::Max<size_type>(max_neighbors));
+  Kokkos::parallel_reduce(
+      "mundy_search_per2d_max", Kokkos::RangePolicy<exec_space>(0, num_target_owners),
+      KOKKOS_LAMBDA(size_type i, size_type & local_max) {
+        if (owner_counts(i) > local_max) local_max = owner_counts(i);
+      },
+      Kokkos::Max<size_type>(max_neighbors));
 
   Kokkos::View<size_type**, MemorySpace> source_owner_indices("mundy_search_per2d_soi", num_target_owners,
                                                               max_neighbors);
@@ -714,18 +755,71 @@ NeighborListBuildTraits<PeriodicArborX2dNeighborList<MemorySpace, ImageShiftScal
         KOKKOS_LAMBDA(size_type t) {
           const size_type n = owner_counts(t);
           for (size_type i = 1; i < n; ++i) {
-            const size_type        key_idx   = source_owner_indices(t, i);
+            const size_type key_idx = source_owner_indices(t, i);
             const image_shift_type key_shift = relative_image_shifts(t, i);
             size_type j = i;
             while (j > 0 && source_owner_indices(t, j - 1) > key_idx) {
-              source_owner_indices(t, j)  = source_owner_indices(t, j - 1);
+              source_owner_indices(t, j) = source_owner_indices(t, j - 1);
               relative_image_shifts(t, j) = relative_image_shifts(t, j - 1);
               --j;
             }
-            source_owner_indices(t, j)  = key_idx;
+            source_owner_indices(t, j) = key_idx;
             relative_image_shifts(t, j) = key_shift;
           }
         });
+  }
+
+  // Narrow phase: re-pack the periodic 2D grid after filtering survivors per row.
+  if constexpr (Builder::has_narrow_phase) {
+    const auto narrow_excluder = builder.setup_narrow_excluder(bulk_data);
+    const auto target_ents = target_boxes.owner_entities();
+    const auto source_ents = source_boxes.owner_entities();
+
+    // L0: count narrow survivors per target row.
+    Kokkos::View<size_type*, MemorySpace> narrow_counts("mundy_2d_per_narrow_counts", num_target_owners);
+    Kokkos::parallel_for(
+        "mundy_2d_per_narrow_L0", Kokkos::RangePolicy<exec_space>(0, num_target_owners),
+        KOKKOS_LAMBDA(size_type t) {
+          size_type count = 0;
+          for (size_type k = 0; k < owner_counts(t); ++k) {
+            const size_type  s     = source_owner_indices(t, k);
+            const auto       shift = relative_image_shifts(t, k);
+            if (!narrow_excluder(PeriodicNeighborSearchCandidate<image_shift_type, size_type>(
+                    t, s, target_ents(t), source_ents(s), shift))) { ++count; }
+          }
+          narrow_counts(t) = count;
+        });
+
+    // L1: new max column width.
+    size_type new_max = 0;
+    Kokkos::parallel_reduce(
+        "mundy_2d_per_narrow_L1_max", Kokkos::RangePolicy<exec_space>(0, num_target_owners),
+        KOKKOS_LAMBDA(size_type t, size_type& lmax) { lmax = lmax > narrow_counts(t) ? lmax : narrow_counts(t); },
+        Kokkos::Max<size_type>(new_max));
+    Kokkos::fence();
+
+    // L2: fill compacted 2D grid.
+    Kokkos::View<size_type**,       MemorySpace> narrow_src   ("mundy_2d_per_narrow_src",    num_target_owners, new_max);
+    Kokkos::View<image_shift_type**, MemorySpace> narrow_shifts("mundy_2d_per_narrow_shifts", num_target_owners, new_max);
+    Kokkos::parallel_for(
+        "mundy_2d_per_narrow_L2", Kokkos::RangePolicy<exec_space>(0, num_target_owners),
+        KOKKOS_LAMBDA(size_type t) {
+          size_type write_col = 0;
+          for (size_type k = 0; k < owner_counts(t); ++k) {
+            const size_type  s     = source_owner_indices(t, k);
+            const auto       shift = relative_image_shifts(t, k);
+            if (!narrow_excluder(PeriodicNeighborSearchCandidate<image_shift_type, size_type>(
+                    t, s, target_ents(t), source_ents(s), shift))) {
+              narrow_src(t, write_col)    = s;
+              narrow_shifts(t, write_col) = shift;
+              ++write_col;
+            }
+          }
+        });
+
+    return list_type(builder.target_selector(), builder.source_selector(),
+                     target_boxes.owner_entities(), source_boxes.owner_entities(),
+                     narrow_counts, narrow_src, narrow_shifts);
   }
 
   return list_type(builder.target_selector(), builder.source_selector(), target_boxes.owner_entities(),

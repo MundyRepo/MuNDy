@@ -79,8 +79,7 @@ struct NeighborListIterationTraits {
   /// \param f [in] User callback.
   /// \param r [in,out] Kokkos reducer.
   template <typename ExecutionSpace, typename Functor, typename ReducerType>
-  static void dispatch_pair_reduce(const ExecutionSpace& exec, const ListType& list, const Functor& f,
-                                   ReducerType& r) {
+  static void dispatch_pair_reduce(const ExecutionSpace& exec, const ListType& list, const Functor& f, ReducerType& r) {
     using range_t = Kokkos::RangePolicy<ExecutionSpace, Kokkos::IndexType<size_type>>;
     Kokkos::parallel_reduce("mundy::search::for_each_neighbor_pair_reduce", range_t(exec, 0, list.num_targets()),
                             impl::DeployReduceFunctorOnNeighborPairs<ListType, Functor, ReducerType>(list, f), r);

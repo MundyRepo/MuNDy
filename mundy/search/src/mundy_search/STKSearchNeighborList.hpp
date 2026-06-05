@@ -25,36 +25,37 @@
 /// \brief STK-coarse-search-backed concrete neighbor-list types and their NeighborListBuildTraits specializations.
 
 // C++ core
-#include <concepts>      // for std::same_as
-#include <cstddef>       // for size_t
-#include <limits>        // for std::numeric_limits
-#include <stdexcept>     // for std::invalid_argument, std::out_of_range
-#include <unordered_set> // for std::unordered_set (Phase E: extended source dedup)
-#include <vector>        // for std::vector (Phase D: ghosting send list)
+#include <concepts>       // for std::same_as
+#include <cstddef>        // for size_t
+#include <limits>         // for std::numeric_limits
+#include <stdexcept>      // for std::invalid_argument, std::out_of_range
+#include <unordered_set>  // for std::unordered_set (Phase E: extended source dedup)
+#include <vector>         // for std::vector (Phase D: ghosting send list)
 
 // Trilinos
 #include <Kokkos_Core.hpp>
-#include <Kokkos_UnorderedMap.hpp>                          // for Kokkos::UnorderedMap (key-to-ordinal maps)
-#include <stk_mesh/base/BulkData.hpp>                       // for modification_begin/end, get_entity, entity_key
+#include <Kokkos_UnorderedMap.hpp>     // for Kokkos::UnorderedMap (key-to-ordinal maps)
+#include <stk_mesh/base/BulkData.hpp>  // for modification_begin/end, get_entity, entity_key
 #include <stk_mesh/base/Entity.hpp>
-#include <stk_mesh/base/EntityKey.hpp>                      // for stk::mesh::EntityKey
-#include <stk_mesh/base/GetNgpMesh.hpp>                     // for stk::mesh::get_updated_ngp_mesh
-#include <stk_mesh/base/HashEntityAndEntityKey.hpp>         // for std::hash<stk::mesh::EntityKey>
-#include <stk_mesh/base/NgpMesh.hpp>                        // for stk::mesh::NgpMesh (entity_key on device)
+#include <stk_mesh/base/EntityKey.hpp>               // for stk::mesh::EntityKey
+#include <stk_mesh/base/GetNgpMesh.hpp>              // for stk::mesh::get_updated_ngp_mesh
+#include <stk_mesh/base/HashEntityAndEntityKey.hpp>  // for std::hash<stk::mesh::EntityKey>
+#include <stk_mesh/base/NgpMesh.hpp>                 // for stk::mesh::NgpMesh (entity_key on device)
 #include <stk_mesh/base/Selector.hpp>
-#include <stk_search/BoundingBox.hpp>                       // for stk::search::Box
-#include <stk_search/BoxIdent.hpp>                          // for stk::search::BoxIdentProc, IdentProcIntersection
-#include <stk_search/CoarseSearch.hpp>                      // for stk::search::coarse_search
-#include <stk_search/IdentProc.hpp>                         // for stk::search::IdentProc
-#include <stk_search/SearchMethod.hpp>                      // for stk::search::MORTON_LBVH
+#include <stk_search/BoundingBox.hpp>   // for stk::search::Box
+#include <stk_search/BoxIdent.hpp>      // for stk::search::BoxIdentProc, IdentProcIntersection
+#include <stk_search/CoarseSearch.hpp>  // for stk::search::coarse_search
+#include <stk_search/IdentProc.hpp>     // for stk::search::IdentProc
+#include <stk_search/SearchMethod.hpp>  // for stk::search::MORTON_LBVH
 #include <stk_util/ngp/NgpSpaces.hpp>
 
 // Mundy
-#include <mundy_math/Vector3.hpp>                                         // for mundy::Vector3
-#include <mundy_search/NeighborListBuildTraits.hpp>                       // for NeighborListBuildTraits
-#include <mundy_search/SearchCandidate.hpp>                               // for NeighborSearchCandidate
-#include <mundy_search/impl/STKSearchBoxes.hpp>                           // for impl::STKSearchBoxesT, impl::PeriodicSTKSearchBoxesT
-#include <mundy_utils/throw_assert.hpp>                                   // for MUNDY_THROW_ASSERT
+#include <mundy_math/Vector3.hpp>                    // for mundy::Vector3
+#include <mundy_search/NeighborListBuildTraits.hpp>  // for NeighborListBuildTraits
+#include <mundy_search/SearchCandidate.hpp>          // for NeighborSearchCandidate
+#include <mundy_search/impl/NarrowPhaseFilter.hpp>   // for impl::apply_narrow_phase
+#include <mundy_search/impl/STKSearchBoxes.hpp>      // for impl::STKSearchBoxesT, impl::PeriodicSTKSearchBoxesT
+#include <mundy_utils/throw_assert.hpp>              // for MUNDY_THROW_ASSERT
 
 namespace mundy {
 
@@ -549,26 +550,26 @@ struct NeighborListBuildTraits<PeriodicSTKSearchNeighborList<MemorySpace, ImageS
 
 /// Per-phase wall-time breakdown for one STKSearchNeighborList build call.
 struct STKBuildPhaseTimings {
-  double phase_a_ms{0};  ///< A: build BoxIdentProc search views
-  double phase_b_ms{0};  ///< B: build target EntityKey→ordinal map
-  double phase_c_ms{0};  ///< C: stk::search::coarse_search (MORTON_LBVH + MPI)
-  double phase_d_ms{0};  ///< D: mirror results to host + ghosting coordination
-  double phase_e_ms{0};  ///< E: build extended source entity view (host→device)
-  double phase_f_ms{0};  ///< F: refresh NgpMesh + build source EntityKey→ordinal map
+  double phase_a_ms{0};   ///< A: build BoxIdentProc search views
+  double phase_b_ms{0};   ///< B: build target EntityKey→ordinal map
+  double phase_c_ms{0};   ///< C: stk::search::coarse_search (MORTON_LBVH + MPI)
+  double phase_d_ms{0};   ///< D: mirror results to host + ghosting coordination
+  double phase_e_ms{0};   ///< E: build extended source entity view (host→device)
+  double phase_f_ms{0};   ///< F: refresh NgpMesh + build source EntityKey→ordinal map
   double phase_g0_ms{0};  ///< G0: precompute valid target/source ordinal pairs
-  double phase_g_ms{0};  ///< G: count pass (atomic per-target increments)
-  double phase_h_ms{0};  ///< H: prefix scan + write-position init
-  double phase_i_ms{0};  ///< I: fill pass (atomic slot allocation)
-  double phase_j_ms{0};  ///< J: optional per-row insertion sort
-  double phase_k_ms{0};  ///< K: construct list object
-  double total_ms()  const {
-    return phase_a_ms + phase_b_ms + phase_c_ms + phase_d_ms + phase_e_ms +
-           phase_f_ms + phase_g0_ms + phase_g_ms + phase_h_ms + phase_i_ms + phase_j_ms + phase_k_ms;
+  double phase_g_ms{0};   ///< G: count pass (atomic per-target increments)
+  double phase_h_ms{0};   ///< H: prefix scan + write-position init
+  double phase_i_ms{0};   ///< I: fill pass (atomic slot allocation)
+  double phase_j_ms{0};   ///< J: optional per-row insertion sort
+  double phase_k_ms{0};   ///< K: construct list object
+  double total_ms() const {
+    return phase_a_ms + phase_b_ms + phase_c_ms + phase_d_ms + phase_e_ms + phase_f_ms + phase_g0_ms + phase_g_ms +
+           phase_h_ms + phase_i_ms + phase_j_ms + phase_k_ms;
   }
 };
 
 /// Set to true before calling build() to enable per-phase timing.
-inline bool                 enable_stk_build_profiling{false};
+inline bool enable_stk_build_profiling{false};
 /// Populated by the most recent build() call when enable_stk_build_profiling is true.
 inline STKBuildPhaseTimings stk_build_last_timings{};
 
@@ -617,19 +618,17 @@ template <typename MemorySpace>
 template <typename Builder>
   requires std::same_as<typename Builder::target_input_type, impl::STKSearchBoxesT<MemorySpace, float>> &&
            std::same_as<typename Builder::source_input_type, impl::STKSearchBoxesT<MemorySpace, float>>
-STKSearchNeighborList<MemorySpace>
-NeighborListBuildTraits<STKSearchNeighborList<MemorySpace>>::build(
+STKSearchNeighborList<MemorySpace> NeighborListBuildTraits<STKSearchNeighborList<MemorySpace>>::build(
     const Builder& builder, const stk::mesh::BulkData& bulk_data, const args_type& /*args*/) {
-
   // ===========================================================================
   // Type aliases
   // ===========================================================================
 
-  using list_type   = STKSearchNeighborList<MemorySpace>;
-  using exec_space  = typename Builder::execution_space;
-  using size_type   = typename list_type::size_type;
+  using list_type = STKSearchNeighborList<MemorySpace>;
+  using exec_space = typename Builder::execution_space;
+  using size_type = typename list_type::size_type;
   using entity_view_t = typename list_type::entity_view_t;
-  using box_type    = typename Builder::target_input_type::box_type;
+  using box_type = typename Builder::target_input_type::box_type;
 
   // STK search identifier: EntityKey encodes both entity rank and entity ID.
   // Required for `bulk_data.get_entity(entity_key)` in the ghosting phase;
@@ -642,7 +641,7 @@ NeighborListBuildTraits<STKSearchNeighborList<MemorySpace>>::build(
   // Per-result type written by coarse_search: domain = target, range = source.
   using intersection_t = stk::search::IdentProcIntersection<ident_proc_t, ident_proc_t>;
 
-  using search_view_t  = Kokkos::View<box_ident_proc_t*, MemorySpace>;
+  using search_view_t = Kokkos::View<box_ident_proc_t*, MemorySpace>;
   using results_view_t = Kokkos::View<intersection_t*, MemorySpace>;
 
   // Device-side key-to-ordinal map.  EntityKey is effectively a uint64_t,
@@ -655,25 +654,31 @@ NeighborListBuildTraits<STKSearchNeighborList<MemorySpace>>::build(
 
   const auto& target_boxes = builder.target_input();
   const auto& source_boxes = builder.source_input();
-  const auto  exec_sp      = builder.exec_space();
+  const auto exec_sp = builder.exec_space();
 
   // setup_excluder returns a prepared copy of the builder's excluder chain
   // (it has already called excluder.setup(bulk_data, target_selector, source_selector)).
   // The copy is device-capturable because all ExcluderType implementations hold
   // only Kokkos views or plain scalars.
-  const auto excluder = builder.setup_excluder(bulk_data);
+  const auto excluder = builder.setup_broad_excluder(bulk_data);
+  // Narrow excluder is only set up when one was actually provided; NoExcluder
+  // compiles away entirely so this branch is zero-cost when has_narrow_phase is false.
+  [[maybe_unused]] const auto narrow_excluder = [&]() {
+    if constexpr (Builder::has_narrow_phase) return builder.setup_narrow_excluder(bulk_data);
+    else                                     return typename Builder::narrow_excluder_type{};
+  }();
 
   const size_type num_targets = target_boxes.size();
   const size_type num_sources = source_boxes.size();
-  const int       my_rank     = bulk_data.parallel_rank();
-  const bool      single_rank = bulk_data.parallel_size() == 1;
+  const int my_rank = bulk_data.parallel_rank();
+  const bool single_rank = bulk_data.parallel_size() == 1;
 
   // Cache device-view handles.  Kokkos::View is reference-counted; capturing
   // by value in a KOKKOS_LAMBDA is safe.
   const auto target_entities_dev = target_boxes.entities();
-  const auto target_boxes_dev    = target_boxes.boxes();
+  const auto target_boxes_dev = target_boxes.boxes();
   const auto source_entities_dev = source_boxes.entities();
-  const auto source_boxes_dev    = source_boxes.boxes();  // used in Phase A to build source_search_view
+  const auto source_boxes_dev = source_boxes.boxes();  // used in Phase A to build source_search_view
 
   // ===========================================================================
   // Optional phase-profiling timer (zero overhead when disabled)
@@ -717,14 +722,14 @@ NeighborListBuildTraits<STKSearchNeighborList<MemorySpace>>::build(
   Kokkos::parallel_for(
       "mundy_stk_nl_build_target_search", Kokkos::RangePolicy<exec_space>(0, num_targets),
       KOKKOS_LAMBDA(const size_type i) {
-        target_search_view(i).box       = target_boxes_dev(i);
+        target_search_view(i).box = target_boxes_dev(i);
         target_search_view(i).identProc = ident_proc_t(ngp_mesh.entity_key(target_entities_dev(i)), my_rank);
       });
 
   Kokkos::parallel_for(
       "mundy_stk_nl_build_source_search", Kokkos::RangePolicy<exec_space>(0, num_sources),
       KOKKOS_LAMBDA(const size_type i) {
-        source_search_view(i).box       = source_boxes_dev(i);
+        source_search_view(i).box = source_boxes_dev(i);
         source_search_view(i).identProc = ident_proc_t(ngp_mesh.entity_key(source_entities_dev(i)), my_rank);
       });
   stk_prof_mark(stk_build_last_timings.phase_a_ms);
@@ -771,11 +776,8 @@ NeighborListBuildTraits<STKSearchNeighborList<MemorySpace>>::build(
   // views independently; auto-swapping would invert the domain/range semantics.
 
   results_view_t search_results_view;  // Resized by coarse_search.
-  stk::search::coarse_search(target_search_view, source_search_view,
-                             stk::search::MORTON_LBVH,
-                             bulk_data.parallel(),
-                             search_results_view,
-                             exec_sp,
+  stk::search::coarse_search(target_search_view, source_search_view, stk::search::MORTON_LBVH, bulk_data.parallel(),
+                             search_results_view, exec_sp,
                              /* enforceSearchResultSymmetry = */ true,
                              /* autoSwapDomainAndRange = */ false);
 
@@ -818,9 +820,9 @@ NeighborListBuildTraits<STKSearchNeighborList<MemorySpace>>::build(
 
     std::vector<stk::mesh::EntityProc> entities_to_ghost;
     for (size_type r = 0; r < num_results; ++r) {
-      const auto& res         = host_results(r);
-      const int   source_proc = res.rangeIdentProc.proc();
-      const int   target_proc = res.domainIdentProc.proc();
+      const auto& res = host_results(r);
+      const int source_proc = res.rangeIdentProc.proc();
+      const int target_proc = res.domainIdentProc.proc();
       if (source_proc != my_rank || target_proc == my_rank) continue;
       // I own this source; its paired target lives on `target_proc`.
       // Ghost the source to `target_proc` so that rank can form the neighbor pair.
@@ -861,8 +863,7 @@ NeighborListBuildTraits<STKSearchNeighborList<MemorySpace>>::build(
     }
 
     // Start the extended list with all owned sources in original order.
-    std::vector<stk::mesh::Entity> extended_src_vec(host_owned_sources.data(),
-                                                     host_owned_sources.data() + num_sources);
+    std::vector<stk::mesh::Entity> extended_src_vec(host_owned_sources.data(), host_owned_sources.data() + num_sources);
 
     // Append ghosted sources not yet in the owned set.
     std::unordered_set<stk::mesh::EntityKey, std::hash<stk::mesh::EntityKey>> newly_added_keys;
@@ -909,8 +910,7 @@ NeighborListBuildTraits<STKSearchNeighborList<MemorySpace>>::build(
   Kokkos::parallel_for(
       "mundy_stk_nl_build_source_map", Kokkos::RangePolicy<exec_space>(0, num_extended_sources),
       KOKKOS_LAMBDA(const size_type i) {
-        const auto result = source_key_to_ordinal.insert(
-            updated_ngp_mesh.entity_key(extended_source_entities(i)), i);
+        const auto result = source_key_to_ordinal.insert(updated_ngp_mesh.entity_key(extended_source_entities(i)), i);
         MUNDY_THROW_ASSERT(!result.failed(), std::runtime_error,
                            "mundy_stk_nl: source key-to-ordinal map insert failed; increase map capacity.");
       });
@@ -937,10 +937,8 @@ NeighborListBuildTraits<STKSearchNeighborList<MemorySpace>>::build(
   //   3. **Excluder**: the builder's prepared excluder chain (e.g., ExcludeSelfInteraction).
 
   constexpr size_type k_invalid_ordinal = std::numeric_limits<size_type>::max();
-  Kokkos::View<size_type*, MemorySpace> precomputed_target_ordinals(
-      "mundy_stk_nl_precomp_trg", num_results);
-  Kokkos::View<size_type*, MemorySpace> precomputed_source_ordinals(
-      "mundy_stk_nl_precomp_src", num_results);
+  Kokkos::View<size_type*, MemorySpace> precomputed_target_ordinals("mundy_stk_nl_precomp_trg", num_results);
+  Kokkos::View<size_type*, MemorySpace> precomputed_source_ordinals("mundy_stk_nl_precomp_src", num_results);
 
   Kokkos::parallel_for(
       "mundy_stk_nl_precompute_ordinals", Kokkos::RangePolicy<exec_space>(0, num_results),
@@ -961,10 +959,14 @@ NeighborListBuildTraits<STKSearchNeighborList<MemorySpace>>::build(
                            "possible NgpMesh key mismatch or ghosting failure.");
         const size_type src_ord = source_key_to_ordinal.value_at(src_slot);
 
-        // Step 3: excluder.
+        // Step 3: broad-phase excluder, then narrow-phase excluder.
+        // Both are applied here so the final precomputed ordinals reflect all
+        // filtering in one pass — no post-CRS compaction needed for STK.
         const stk::mesh::Entity trg_ent = target_entities_dev(trg_ord);
         const stk::mesh::Entity src_ent = extended_source_entities(src_ord);
-        if (excluder(NeighborSearchCandidate<size_type>(trg_ord, src_ord, trg_ent, src_ent))) return;
+        const NeighborSearchCandidate<size_type> candidate(trg_ord, src_ord, trg_ent, src_ent);
+        if (excluder(candidate)) return;
+        if constexpr (Builder::has_narrow_phase) { if (narrow_excluder(candidate)) return; }
 
         precomputed_target_ordinals(r) = trg_ord;
         precomputed_source_ordinals(r) = src_ord;
@@ -981,8 +983,7 @@ NeighborListBuildTraits<STKSearchNeighborList<MemorySpace>>::build(
   Kokkos::View<size_type*, MemorySpace> per_target_count("mundy_stk_nl_count", num_targets);
 
   Kokkos::parallel_for(
-      "mundy_stk_nl_count", Kokkos::RangePolicy<exec_space>(0, num_results),
-      KOKKOS_LAMBDA(const size_type r) {
+      "mundy_stk_nl_count", Kokkos::RangePolicy<exec_space>(0, num_results), KOKKOS_LAMBDA(const size_type r) {
         const size_type trg_ord = precomputed_target_ordinals(r);
         if (trg_ord == k_invalid_ordinal) return;
         Kokkos::atomic_fetch_add(&per_target_count(trg_ord), size_type(1));
@@ -1002,8 +1003,7 @@ NeighborListBuildTraits<STKSearchNeighborList<MemorySpace>>::build(
 
   Kokkos::View<size_type*, MemorySpace> offsets("mundy_stk_nl_offsets", num_targets + 1);
   Kokkos::parallel_scan(
-      "mundy_stk_nl_scan",
-      Kokkos::RangePolicy<exec_space>(0, num_targets + 1),
+      "mundy_stk_nl_scan", Kokkos::RangePolicy<exec_space>(0, num_targets + 1),
       KOKKOS_LAMBDA(const size_type i, size_type& update, const bool final_pass) {
         if (final_pass) offsets(i) = update;
         if (i < num_targets) update += per_target_count(i);
@@ -1017,8 +1017,7 @@ NeighborListBuildTraits<STKSearchNeighborList<MemorySpace>>::build(
 
   // write_positions initialized from offsets[0..num_targets); modified in-place by fill pass.
   Kokkos::View<size_type*, MemorySpace> write_positions("mundy_stk_nl_wpos", num_targets);
-  Kokkos::deep_copy(write_positions,
-                    Kokkos::subview(offsets, Kokkos::make_pair(size_type(0), num_targets)));
+  Kokkos::deep_copy(write_positions, Kokkos::subview(offsets, Kokkos::make_pair(size_type(0), num_targets)));
   stk_prof_mark(stk_build_last_timings.phase_h_ms);
 
   // ===========================================================================
@@ -1030,8 +1029,7 @@ NeighborListBuildTraits<STKSearchNeighborList<MemorySpace>>::build(
   // written into that slot.
 
   Kokkos::parallel_for(
-      "mundy_stk_nl_fill", Kokkos::RangePolicy<exec_space>(0, num_results),
-      KOKKOS_LAMBDA(const size_type r) {
+      "mundy_stk_nl_fill", Kokkos::RangePolicy<exec_space>(0, num_results), KOKKOS_LAMBDA(const size_type r) {
         const size_type trg_ord = precomputed_target_ordinals(r);
         if (trg_ord == k_invalid_ordinal) return;
         const size_type pos = Kokkos::atomic_fetch_add(&write_positions(trg_ord), size_type(1));
@@ -1051,8 +1049,7 @@ NeighborListBuildTraits<STKSearchNeighborList<MemorySpace>>::build(
 
   if (builder.sort_neighbors()) {
     Kokkos::parallel_for(
-        "mundy_stk_nl_sort", Kokkos::RangePolicy<exec_space>(0, num_targets),
-        KOKKOS_LAMBDA(const size_type t) {
+        "mundy_stk_nl_sort", Kokkos::RangePolicy<exec_space>(0, num_targets), KOKKOS_LAMBDA(const size_type t) {
           const size_type beg = offsets(t);
           const size_type end = offsets(t + 1);
           for (size_type i = beg + 1; i < end; ++i) {
@@ -1079,9 +1076,8 @@ NeighborListBuildTraits<STKSearchNeighborList<MemorySpace>>::build(
   // Kokkos::View is reference-counted; the list shares ownership of the entity
   // views with any other holders, so no copies are made.
 
-  auto result = list_type(builder.target_selector(), builder.source_selector(),
-                          target_boxes.entities(), extended_source_entities,
-                          source_indices, offsets);
+  auto result = list_type(builder.target_selector(), builder.source_selector(), target_boxes.entities(),
+                          extended_source_entities, source_indices, offsets);
   stk_prof_mark(stk_build_last_timings.phase_k_ms);
   return result;
 }

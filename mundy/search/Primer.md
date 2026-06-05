@@ -119,7 +119,7 @@ auto list = make_neighbor_list_builder<ArborX1dNeighborList<>>()
     .exec_space(Kokkos::DefaultExecutionSpace{})
     .target_input(target_boxes)
     .source_input(source_boxes)
-    .exclude(ExcludeSelfInteraction{})
+    .broad_phase(ExcludeSelfInteraction{})
     .build(bulk_data, {.buffer_size = 16});
 ```
 
@@ -130,7 +130,7 @@ The builder setters are:
 | `.exec_space(exec)` | Kokkos execution space used for the search query. |
 | `.target_input(input)` | Search geometry for the target population. |
 | `.source_input(input)` | Search geometry for the source population. |
-| `.exclude(excluder)` | Append an excluder to the build-time filter chain. |
+| `.broad_phase(excluder)` / `.narrow_phase(excluder)` | Append an excluder to the build-time filter chain. |
 | `.sort_neighbors(bool)` | Whether to sort each target's neighbor row by ascending source ordinal after construction. Default: `false`. |
 
 ### Build arguments
@@ -192,7 +192,7 @@ The `ExcluderType` concept requires:
 
 ### Chaining excluders
 
-`.exclude(excluder)` on the builder (or on an existing excluder) returns a new `ExcluderChain` that applies all
+`.broad_phase(excluder)` / `.narrow_phase(excluder)` on the builder (or on an existing excluder) returns a new `ExcluderChain` that applies all
 previously accumulated excluders in series. Excluders must be lightweight and copyable.
 
 ```cpp
@@ -200,8 +200,8 @@ auto list = make_neighbor_list_builder<ArborX1dNeighborList<>>()
     .exec_space(exec)
     .target_input(target_boxes)
     .source_input(source_boxes)
-    .exclude(ExcludeSelfInteraction{})
-    .exclude(ExcludeSymmetricDuplicates{})  // appended; both will run
+    .broad_phase(ExcludeSelfInteraction{})
+    .broad_phase(ExcludeSymmetricDuplicates{})  // appended; both will run
     .build(bulk_data, {.buffer_size = 16});
 ```
 
@@ -388,7 +388,7 @@ auto list = make_neighbor_list_builder<PeriodicArborX1dNeighborList<>>()
     .exec_space(exec)
     .target_input(target_boxes)
     .source_input(source_boxes)
-    .exclude(ExcludeSelfInteraction{})
+    .broad_phase(ExcludeSelfInteraction{})
     .build(bulk_data, {.buffer_size = 16});
 ```
 
@@ -495,4 +495,4 @@ inherently target-granular; overriding them is possible but unusual.
 | Dense uniform neighborhoods, GPU pair dispatch desired | `ArborX2dNeighborList<>` — constant row width enables `MDRangePolicy` specialization. |
 | Already using STK coarse search infrastructure | `STKSearchNeighborList<>` — wraps STK output in the common access surface. |
 | Periodic boundary conditions | `PeriodicArborX1dNeighborList<>` or `PeriodicArborX2dNeighborList<>` — stores relative image shifts with each pair. |
-| Building a half list (no symmetric duplicates) | Any list type with `.exclude(ExcludeSymmetricDuplicates{})`. The half list stores roughly half the pairs, which cuts both memory and kernel cost when both pair orientations would be processed anyway. |
+| Building a half list (no symmetric duplicates) | Any list type with `.broad_phase(ExcludeSymmetricDuplicates{})`. The half list stores roughly half the pairs, which cuts both memory and kernel cost when both pair orientations would be processed anyway. |

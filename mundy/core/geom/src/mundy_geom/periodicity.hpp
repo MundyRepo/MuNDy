@@ -65,6 +65,7 @@
 #include <ostream>
 #include <stdexcept>
 #include <string_view>
+#include <type_traits>
 #include <utility>
 
 // Mundy
@@ -968,6 +969,66 @@ KOKKOS_INLINE_FUNCTION void unwrap_points_to_ref_inplace(Object& obj, const Metr
   for_each_point_mutable(
       obj, [&](auto& p) { p = metric.from_fractional(sr + metric.frac_minimum_image(metric.to_fractional(p) - sr)); });
 }
+
+//@}
+
+// =============================================================================
+//! \name Metric type traits
+//!
+//! Compile-time predicates that classify concrete metric types.  These traits
+//! are defined here alongside the metric classes so that any code working with
+//! metrics can branch on their structural properties without inspecting member
+//! names or relying on ad-hoc partial specialisations elsewhere.
+//!
+//! Primary templates evaluate to `false_type`; explicit specialisations below
+//! opt each metric family in to the appropriate trait.
+//@{
+// =============================================================================
+
+/// \brief True when T is any instantiation of `FreeSpaceMetric`.
+///
+/// A `FreeSpaceMetric` represents unbounded Euclidean space: no periodic
+/// images, identity wrapping, and direct Cartesian displacements.  This trait
+/// distinguishes it from every periodic metric family.
+template <typename T>
+struct is_free_space_metric : std::false_type {};
+template <typename Scalar>
+struct is_free_space_metric<FreeSpaceMetric<Scalar>> : std::true_type {};
+template <typename T>
+inline constexpr bool is_free_space_metric_v = is_free_space_metric<T>::value;
+
+/// \brief True when T is any instantiation of `OrthorhombicMetric`.
+///
+/// An `OrthorhombicMetric` represents an axis-aligned periodic cell.  The
+/// bitmask of periodic axes is a template parameter; a metric that is periodic
+/// along any subset of axes satisfies this trait.
+template <typename T>
+struct is_orthorhombic_metric : std::false_type {};
+template <unsigned PeriodicAxes, typename Scalar>
+struct is_orthorhombic_metric<OrthorhombicMetric<PeriodicAxes, Scalar>> : std::true_type {};
+template <typename T>
+inline constexpr bool is_orthorhombic_metric_v = is_orthorhombic_metric<T>::value;
+
+/// \brief True when T is any instantiation of `TriclinicMetric`.
+///
+/// A `TriclinicMetric` represents a general (tilted) periodic cell described
+/// by an arbitrary 3×3 lattice matrix.
+template <typename T>
+struct is_triclinic_metric : std::false_type {};
+template <unsigned PeriodicAxes, typename Scalar>
+struct is_triclinic_metric<TriclinicMetric<PeriodicAxes, Scalar>> : std::true_type {};
+template <typename T>
+inline constexpr bool is_triclinic_metric_v = is_triclinic_metric<T>::value;
+
+/// \brief True when T is any periodic metric (orthorhombic or triclinic).
+///
+/// Evaluates to true for any `OrthorhombicMetric` or `TriclinicMetric`
+/// instantiation, regardless of which axes are marked periodic.
+template <typename T>
+struct is_periodic_metric
+    : std::bool_constant<is_orthorhombic_metric_v<T> || is_triclinic_metric_v<T>> {};
+template <typename T>
+inline constexpr bool is_periodic_metric_v = is_periodic_metric<T>::value;
 
 //@}
 

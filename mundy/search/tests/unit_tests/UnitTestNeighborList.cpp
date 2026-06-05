@@ -105,7 +105,7 @@ namespace {
 // Execution / memory space aliases
 // =============================================================================
 
-using TestMemSpace  = Kokkos::HostSpace;
+using TestMemSpace = Kokkos::HostSpace;
 using TestExecSpace = Kokkos::DefaultHostExecutionSpace;
 
 // =============================================================================
@@ -136,14 +136,15 @@ using PairSet = std::set<std::pair<size_t, size_t>>;
 #ifdef HAVE_MUNDYSEARCH_ARBORX
 /// Trait for ArborX-backed tests (ArborX::Box, impl::ArborXSearchBoxesT).
 struct ArborXBoxTrait {
-  using box_type         = ArborX::Box;
+  using box_type = ArborX::Box;
   using search_boxes_type = impl::ArborXSearchBoxesT<TestMemSpace>;
 
   static box_type make(float cx, float cy, float cz, float hx, float hy, float hz) {
-    return ArborX::Box{ArborX::Point{cx - hx, cy - hy, cz - hz},
-                       ArborX::Point{cx + hx, cy + hy, cz + hz}};
+    return ArborX::Box{ArborX::Point{cx - hx, cy - hy, cz - hz}, ArborX::Point{cx + hx, cy + hy, cz + hz}};
   }
-  static box_type make(float cx, float cy, float cz, float h) { return make(cx, cy, cz, h, h, h); }
+  static box_type make(float cx, float cy, float cz, float h) {
+    return make(cx, cy, cz, h, h, h);
+  }
 
   static bool overlap(const box_type& a, const box_type& b) {
     for (int d = 0; d < 3; ++d) {
@@ -153,14 +154,16 @@ struct ArborXBoxTrait {
     return true;
   }
 
-  static search_boxes_type make_search_boxes(const stk::mesh::Selector&          sel,
-                                             const std::vector<box_type>&         bh,
+  static search_boxes_type make_search_boxes(const stk::mesh::Selector& sel, const std::vector<box_type>& bh,
                                              const std::vector<stk::mesh::Entity>& eh) {
     const size_t n = bh.size();
     EXPECT_EQ(n, eh.size());
-    Kokkos::View<box_type*, TestMemSpace>          bv("boxes", n);
+    Kokkos::View<box_type*, TestMemSpace> bv("boxes", n);
     Kokkos::View<stk::mesh::Entity*, TestMemSpace> ev("entities", n);
-    for (size_t i = 0; i < n; ++i) { bv(i) = bh[i]; ev(i) = eh[i]; }
+    for (size_t i = 0; i < n; ++i) {
+      bv(i) = bh[i];
+      ev(i) = eh[i];
+    }
     return search_boxes_type{sel, bv, ev};
   }
 };
@@ -169,12 +172,14 @@ struct ArborXBoxTrait {
 /// Trait for STK-backed tests (impl::STKSearchBoxesT).
 struct STKBoxTrait {
   using search_boxes_type = impl::STKSearchBoxesT<TestMemSpace>;
-  using box_type          = typename search_boxes_type::box_type;
+  using box_type = typename search_boxes_type::box_type;
 
   static box_type make(float cx, float cy, float cz, float hx, float hy, float hz) {
     return box_type{cx - hx, cy - hy, cz - hz, cx + hx, cy + hy, cz + hz};
   }
-  static box_type make(float cx, float cy, float cz, float h) { return make(cx, cy, cz, h, h, h); }
+  static box_type make(float cx, float cy, float cz, float h) {
+    return make(cx, cy, cz, h, h, h);
+  }
 
   static bool overlap(const box_type& a, const box_type& b) {
     if (a.get_x_max() < b.get_x_min() || b.get_x_max() < a.get_x_min()) return false;
@@ -183,14 +188,16 @@ struct STKBoxTrait {
     return true;
   }
 
-  static search_boxes_type make_search_boxes(const stk::mesh::Selector&          sel,
-                                             const std::vector<box_type>&         bh,
+  static search_boxes_type make_search_boxes(const stk::mesh::Selector& sel, const std::vector<box_type>& bh,
                                              const std::vector<stk::mesh::Entity>& eh) {
     const size_t n = bh.size();
     EXPECT_EQ(n, eh.size());
-    Kokkos::View<box_type*, TestMemSpace>          bv("boxes", n);
+    Kokkos::View<box_type*, TestMemSpace> bv("boxes", n);
     Kokkos::View<stk::mesh::Entity*, TestMemSpace> ev("entities", n);
-    for (size_t i = 0; i < n; ++i) { bv(i) = bh[i]; ev(i) = eh[i]; }
+    for (size_t i = 0; i < n; ++i) {
+      bv(i) = bh[i];
+      ev(i) = eh[i];
+    }
     return search_boxes_type{sel, bv, ev};
   }
 };
@@ -200,8 +207,7 @@ struct STKBoxTrait {
 // =============================================================================
 
 /// Create a minimal node-only mesh with nodes numbered 1..num_nodes.
-std::pair<std::shared_ptr<stk::mesh::MetaData>, std::unique_ptr<stk::mesh::BulkData>>
-make_node_mesh(int num_nodes) {
+std::pair<std::shared_ptr<stk::mesh::MetaData>, std::unique_ptr<stk::mesh::BulkData>> make_node_mesh(int num_nodes) {
   stk::mesh::MeshBuilder builder(MPI_COMM_WORLD);
   builder.set_spatial_dimension(3);
   builder.set_entity_rank_names({"NODE", "EDGE", "FACE", "ELEMENT", "CONSTRAINT"});
@@ -223,8 +229,7 @@ template <typename ListType>
 PairSet collect_pairs(const ListType& list) {
   PairSet result;
   for (size_t t = 0; t < list.num_targets(); ++t)
-    for (size_t k = 0; k < list.num_neighbors(t); ++k)
-      result.insert({t, list.source_index(t, k)});
+    for (size_t k = 0; k < list.num_neighbors(t); ++k) result.insert({t, list.source_index(t, k)});
   return result;
 }
 
@@ -234,8 +239,7 @@ PairSet oracle_pairs_no_self(const std::vector<typename Trait::box_type>& boxes)
   PairSet pairs;
   for (size_t t = 0; t < boxes.size(); ++t)
     for (size_t s = 0; s < boxes.size(); ++s)
-      if (t != s && Trait::overlap(boxes[t], boxes[s]))
-        pairs.insert({t, s});
+      if (t != s && Trait::overlap(boxes[t], boxes[s])) pairs.insert({t, s});
   return pairs;
 }
 
@@ -293,8 +297,7 @@ void check_foreach_pair_matches_direct(const ListType& list) {
   Kokkos::View<int**, TestMemSpace> visit_count("visit_count", nt, ns);
   Kokkos::deep_copy(visit_count, 0);
   mundy::search::for_each_neighbor_pair(
-      TestExecSpace{}, list,
-      KOKKOS_LAMBDA(const NeighborPair<ListType>& pair) {
+      TestExecSpace{}, list, KOKKOS_LAMBDA(const NeighborPair<ListType>& pair) {
         Kokkos::atomic_inc(&visit_count(pair.target_index(), pair.source_index()));
       });
   Kokkos::fence();
@@ -345,7 +348,7 @@ void verify_exact_pair_set(const ListType& list, const PairSet& expected) {
 template <typename Trait>
 class DeterministicFixtureT : public ::testing::Test {
  public:
-  using box_type          = typename Trait::box_type;
+  using box_type = typename Trait::box_type;
   using search_boxes_type = typename Trait::search_boxes_type;
 
   void SetUp() override {
@@ -385,39 +388,34 @@ class DeterministicFixtureT : public ::testing::Test {
     }
 
     all_boxes_ = {
-        Trait::make(0.0f, 0.0f, 0.0f, 2.0f),        // ord 0: [-2, 2]³
-        Trait::make(100.f, 100.f, 100.f, 0.5f),      // ord 1: isolated
-        Trait::make(2.5f, 2.5f, 2.5f, 1.0f),         // ord 2: [1.5, 3.5]³
-        Trait::make(200.f, 200.f, 200.f, 0.5f),      // ord 3: isolated
-        Trait::make(1.0f, 1.0f, 1.0f, 1.5f),         // ord 4: [-0.5, 2.5]³
-        Trait::make(2.0f, 2.0f, 2.0f, 1.5f),         // ord 5: [0.5, 3.5]³
+        Trait::make(0.0f, 0.0f, 0.0f, 2.0f),     // ord 0: [-2, 2]³
+        Trait::make(100.f, 100.f, 100.f, 0.5f),  // ord 1: isolated
+        Trait::make(2.5f, 2.5f, 2.5f, 1.0f),     // ord 2: [1.5, 3.5]³
+        Trait::make(200.f, 200.f, 200.f, 0.5f),  // ord 3: isolated
+        Trait::make(1.0f, 1.0f, 1.0f, 1.5f),     // ord 4: [-0.5, 2.5]³
+        Trait::make(2.0f, 2.0f, 2.0f, 1.5f),     // ord 5: [0.5, 3.5]³
     };
 
-    const stk::mesh::Selector sel_all     = meta_->universal_part();
-    const stk::mesh::Selector sel_tgt     = *target_part_;
-    const stk::mesh::Selector sel_src     = *source_part_;
-    const stk::mesh::Selector sel_shr     = *shared_part_;
+    const stk::mesh::Selector sel_all = meta_->universal_part();
+    const stk::mesh::Selector sel_tgt = *target_part_;
+    const stk::mesh::Selector sel_src = *source_part_;
+    const stk::mesh::Selector sel_shr = *shared_part_;
     const stk::mesh::Selector sel_tgt_shr = *target_part_ | *shared_part_;
     const stk::mesh::Selector sel_src_shr = *source_part_ | *shared_part_;
 
     universal_boxes_ = Trait::make_search_boxes(sel_all, all_boxes_, nodes_);
 
-    disjoint_target_boxes_ = Trait::make_search_boxes(
-        sel_tgt, {all_boxes_[0], all_boxes_[1]}, {nodes_[0], nodes_[1]});
-    disjoint_source_boxes_ = Trait::make_search_boxes(
-        sel_src, {all_boxes_[2], all_boxes_[3]}, {nodes_[2], nodes_[3]});
+    disjoint_target_boxes_ = Trait::make_search_boxes(sel_tgt, {all_boxes_[0], all_boxes_[1]}, {nodes_[0], nodes_[1]});
+    disjoint_source_boxes_ = Trait::make_search_boxes(sel_src, {all_boxes_[2], all_boxes_[3]}, {nodes_[2], nodes_[3]});
 
-    overlapping_target_boxes_ = Trait::make_search_boxes(
-        sel_tgt_shr,
-        {all_boxes_[0], all_boxes_[1], all_boxes_[4], all_boxes_[5]},
-        {nodes_[0], nodes_[1], nodes_[4], nodes_[5]});
-    overlapping_source_boxes_ = Trait::make_search_boxes(
-        sel_src_shr,
-        {all_boxes_[2], all_boxes_[3], all_boxes_[4], all_boxes_[5]},
-        {nodes_[2], nodes_[3], nodes_[4], nodes_[5]});
+    overlapping_target_boxes_ =
+        Trait::make_search_boxes(sel_tgt_shr, {all_boxes_[0], all_boxes_[1], all_boxes_[4], all_boxes_[5]},
+                                 {nodes_[0], nodes_[1], nodes_[4], nodes_[5]});
+    overlapping_source_boxes_ =
+        Trait::make_search_boxes(sel_src_shr, {all_boxes_[2], all_boxes_[3], all_boxes_[4], all_boxes_[5]},
+                                 {nodes_[2], nodes_[3], nodes_[4], nodes_[5]});
 
-    idsubset_boxes_ = Trait::make_search_boxes(
-        sel_shr, {all_boxes_[4], all_boxes_[5]}, {nodes_[4], nodes_[5]});
+    idsubset_boxes_ = Trait::make_search_boxes(sel_shr, {all_boxes_[4], all_boxes_[5]}, {nodes_[4], nodes_[5]});
   }
 
   std::shared_ptr<stk::mesh::MetaData> meta_;
@@ -474,56 +472,52 @@ using DeterministicFixture = DeterministicFixtureT<ArborXBoxTrait>;
 template <typename ListType, typename FixtureType>
 void test_universal_no_excluder(FixtureType& f) {
   auto list = make_neighbor_list_builder<ListType>()
-      .exec_space(TestExecSpace{})
-      .target_input(f.universal_boxes_)
-      .source_input(f.universal_boxes_)
-      .build(*f.bulk_);
-  const PairSet expected = {
-      {0, 0}, {1, 1}, {2, 2}, {3, 3}, {4, 4}, {5, 5},
-      {0, 2}, {2, 0}, {0, 4}, {4, 0}, {0, 5}, {5, 0},
-      {2, 4}, {4, 2}, {2, 5}, {5, 2}, {4, 5}, {5, 4}};
+                  .exec_space(TestExecSpace{})
+                  .target_input(f.universal_boxes_)
+                  .source_input(f.universal_boxes_)
+                  .build(*f.bulk_);
+  const PairSet expected = {{0, 0}, {1, 1}, {2, 2}, {3, 3}, {4, 4}, {5, 5}, {0, 2}, {2, 0}, {0, 4},
+                            {4, 0}, {0, 5}, {5, 0}, {2, 4}, {4, 2}, {2, 5}, {5, 2}, {4, 5}, {5, 4}};
   verify_exact_pair_set(list, expected);
 }
 
 template <typename ListType, typename FixtureType>
 void test_universal_self(FixtureType& f) {
   auto list = make_neighbor_list_builder<ListType>()
-      .exec_space(TestExecSpace{})
-      .target_input(f.universal_boxes_)
-      .source_input(f.universal_boxes_)
-      .exclude(ExcludeSelfInteraction{})
-      .build(*f.bulk_);
-  const PairSet expected = {
-      {0, 2}, {2, 0}, {0, 4}, {4, 0}, {0, 5}, {5, 0},
-      {2, 4}, {4, 2}, {2, 5}, {5, 2}, {4, 5}, {5, 4}};
+                  .exec_space(TestExecSpace{})
+                  .target_input(f.universal_boxes_)
+                  .source_input(f.universal_boxes_)
+                  .broad_phase(ExcludeSelfInteraction{})
+                  .build(*f.bulk_);
+  const PairSet expected = {{0, 2}, {2, 0}, {0, 4}, {4, 0}, {0, 5}, {5, 0},
+                            {2, 4}, {4, 2}, {2, 5}, {5, 2}, {4, 5}, {5, 4}};
   verify_exact_pair_set(list, expected);
 }
 
 template <typename ListType, typename FixtureType>
 void test_universal_symdups(FixtureType& f) {
   auto list = make_neighbor_list_builder<ListType>()
-      .exec_space(TestExecSpace{})
-      .target_input(f.universal_boxes_)
-      .source_input(f.universal_boxes_)
-      .exclude(ExcludeSymmetricDuplicates{})
-      .build(*f.bulk_);
+                  .exec_space(TestExecSpace{})
+                  .target_input(f.universal_boxes_)
+                  .source_input(f.universal_boxes_)
+                  .broad_phase(ExcludeSymmetricDuplicates{})
+                  .build(*f.bulk_);
   // Suppress (t,s) where src_entity < trg_entity; sequential node creation means
   // entity handle ordering == node-ID ordering == array ordinal ordering.
-  const PairSet expected = {
-      {0, 0}, {1, 1}, {2, 2}, {3, 3}, {4, 4}, {5, 5},
-      {0, 2}, {0, 4}, {0, 5}, {2, 4}, {2, 5}, {4, 5}};
+  const PairSet expected = {{0, 0}, {1, 1}, {2, 2}, {3, 3}, {4, 4}, {5, 5},
+                            {0, 2}, {0, 4}, {0, 5}, {2, 4}, {2, 5}, {4, 5}};
   verify_exact_pair_set(list, expected);
 }
 
 template <typename ListType, typename FixtureType>
 void test_universal_self_symdups(FixtureType& f) {
   auto list = make_neighbor_list_builder<ListType>()
-      .exec_space(TestExecSpace{})
-      .target_input(f.universal_boxes_)
-      .source_input(f.universal_boxes_)
-      .exclude(ExcludeSelfInteraction{})
-      .exclude(ExcludeSymmetricDuplicates{})
-      .build(*f.bulk_);
+                  .exec_space(TestExecSpace{})
+                  .target_input(f.universal_boxes_)
+                  .source_input(f.universal_boxes_)
+                  .broad_phase(ExcludeSelfInteraction{})
+                  .broad_phase(ExcludeSymmetricDuplicates{})
+                  .build(*f.bulk_);
   const PairSet expected = {{0, 2}, {0, 4}, {0, 5}, {2, 4}, {2, 5}, {4, 5}};
   verify_exact_pair_set(list, expected);
 }
@@ -533,10 +527,10 @@ void test_universal_self_symdups(FixtureType& f) {
 template <typename ListType, typename FixtureType>
 void test_disjoint_no_excluder(FixtureType& f) {
   auto list = make_neighbor_list_builder<ListType>()
-      .exec_space(TestExecSpace{})
-      .target_input(f.disjoint_target_boxes_)
-      .source_input(f.disjoint_source_boxes_)
-      .build(*f.bulk_);
+                  .exec_space(TestExecSpace{})
+                  .target_input(f.disjoint_target_boxes_)
+                  .source_input(f.disjoint_source_boxes_)
+                  .build(*f.bulk_);
   const PairSet expected = {{0, 0}};  // node1 (box0) ↔ node3 (box2)
   verify_exact_pair_set(list, expected);
 }
@@ -544,11 +538,11 @@ void test_disjoint_no_excluder(FixtureType& f) {
 template <typename ListType, typename FixtureType>
 void test_disjoint_self(FixtureType& f) {
   auto list = make_neighbor_list_builder<ListType>()
-      .exec_space(TestExecSpace{})
-      .target_input(f.disjoint_target_boxes_)
-      .source_input(f.disjoint_source_boxes_)
-      .exclude(ExcludeSelfInteraction{})
-      .build(*f.bulk_);
+                  .exec_space(TestExecSpace{})
+                  .target_input(f.disjoint_target_boxes_)
+                  .source_input(f.disjoint_source_boxes_)
+                  .broad_phase(ExcludeSelfInteraction{})
+                  .build(*f.bulk_);
   const PairSet expected = {{0, 0}};  // disjoint parts: no self-pairs to remove
   verify_exact_pair_set(list, expected);
 }
@@ -556,11 +550,11 @@ void test_disjoint_self(FixtureType& f) {
 template <typename ListType, typename FixtureType>
 void test_disjoint_symdups(FixtureType& f) {
   auto list = make_neighbor_list_builder<ListType>()
-      .exec_space(TestExecSpace{})
-      .target_input(f.disjoint_target_boxes_)
-      .source_input(f.disjoint_source_boxes_)
-      .exclude(ExcludeSymmetricDuplicates{})
-      .build(*f.bulk_);
+                  .exec_space(TestExecSpace{})
+                  .target_input(f.disjoint_target_boxes_)
+                  .source_input(f.disjoint_source_boxes_)
+                  .broad_phase(ExcludeSymmetricDuplicates{})
+                  .build(*f.bulk_);
   const PairSet expected = {{0, 0}};  // selector intersection is empty; ExcludeSymDup never fires
   verify_exact_pair_set(list, expected);
 }
@@ -568,12 +562,12 @@ void test_disjoint_symdups(FixtureType& f) {
 template <typename ListType, typename FixtureType>
 void test_disjoint_self_symdups(FixtureType& f) {
   auto list = make_neighbor_list_builder<ListType>()
-      .exec_space(TestExecSpace{})
-      .target_input(f.disjoint_target_boxes_)
-      .source_input(f.disjoint_source_boxes_)
-      .exclude(ExcludeSelfInteraction{})
-      .exclude(ExcludeSymmetricDuplicates{})
-      .build(*f.bulk_);
+                  .exec_space(TestExecSpace{})
+                  .target_input(f.disjoint_target_boxes_)
+                  .source_input(f.disjoint_source_boxes_)
+                  .broad_phase(ExcludeSelfInteraction{})
+                  .broad_phase(ExcludeSymmetricDuplicates{})
+                  .build(*f.bulk_);
   const PairSet expected = {{0, 0}};
   verify_exact_pair_set(list, expected);
 }
@@ -585,20 +579,20 @@ void test_disjoint_self_symdups(FixtureType& f) {
 template <typename ListType, typename FixtureType>
 void test_overlapping_no_excluder(FixtureType& f) {
   auto list = make_neighbor_list_builder<ListType>()
-      .exec_space(TestExecSpace{})
-      .target_input(f.overlapping_target_boxes_)
-      .source_input(f.overlapping_source_boxes_)
-      .build(*f.bulk_);
+                  .exec_space(TestExecSpace{})
+                  .target_input(f.overlapping_target_boxes_)
+                  .source_input(f.overlapping_source_boxes_)
+                  .build(*f.bulk_);
   const PairSet expected = {
-      {0, 0},   // node1↔node3
-      {0, 2},   // node1↔node5
-      {0, 3},   // node1↔node6
-      {2, 0},   // node5↔node3
-      {2, 2},   // node5 self
-      {2, 3},   // node5↔node6
-      {3, 0},   // node6↔node3
-      {3, 2},   // node6↔node5
-      {3, 3},   // node6 self
+      {0, 0},  // node1↔node3
+      {0, 2},  // node1↔node5
+      {0, 3},  // node1↔node6
+      {2, 0},  // node5↔node3
+      {2, 2},  // node5 self
+      {2, 3},  // node5↔node6
+      {3, 0},  // node6↔node3
+      {3, 2},  // node6↔node5
+      {3, 3},  // node6 self
   };
   verify_exact_pair_set(list, expected);
 }
@@ -606,11 +600,11 @@ void test_overlapping_no_excluder(FixtureType& f) {
 template <typename ListType, typename FixtureType>
 void test_overlapping_self(FixtureType& f) {
   auto list = make_neighbor_list_builder<ListType>()
-      .exec_space(TestExecSpace{})
-      .target_input(f.overlapping_target_boxes_)
-      .source_input(f.overlapping_source_boxes_)
-      .exclude(ExcludeSelfInteraction{})
-      .build(*f.bulk_);
+                  .exec_space(TestExecSpace{})
+                  .target_input(f.overlapping_target_boxes_)
+                  .source_input(f.overlapping_source_boxes_)
+                  .broad_phase(ExcludeSelfInteraction{})
+                  .build(*f.bulk_);
   const PairSet expected = {{0, 0}, {0, 2}, {0, 3}, {2, 0}, {2, 3}, {3, 0}, {3, 2}};
   verify_exact_pair_set(list, expected);
 }
@@ -618,11 +612,11 @@ void test_overlapping_self(FixtureType& f) {
 template <typename ListType, typename FixtureType>
 void test_overlapping_symdups(FixtureType& f) {
   auto list = make_neighbor_list_builder<ListType>()
-      .exec_space(TestExecSpace{})
-      .target_input(f.overlapping_target_boxes_)
-      .source_input(f.overlapping_source_boxes_)
-      .exclude(ExcludeSymmetricDuplicates{})
-      .build(*f.bulk_);
+                  .exec_space(TestExecSpace{})
+                  .target_input(f.overlapping_target_boxes_)
+                  .source_input(f.overlapping_source_boxes_)
+                  .broad_phase(ExcludeSymmetricDuplicates{})
+                  .build(*f.bulk_);
   // Intersection = shared_part = {node5, node6}.
   // Only pair where BOTH entities are in intersection AND src < trg: (3,2) [trg=node6, src=node5].
   const PairSet expected = {{0, 0}, {0, 2}, {0, 3}, {2, 0}, {2, 2}, {2, 3}, {3, 0}, {3, 3}};
@@ -632,12 +626,12 @@ void test_overlapping_symdups(FixtureType& f) {
 template <typename ListType, typename FixtureType>
 void test_overlapping_self_symdups(FixtureType& f) {
   auto list = make_neighbor_list_builder<ListType>()
-      .exec_space(TestExecSpace{})
-      .target_input(f.overlapping_target_boxes_)
-      .source_input(f.overlapping_source_boxes_)
-      .exclude(ExcludeSelfInteraction{})
-      .exclude(ExcludeSymmetricDuplicates{})
-      .build(*f.bulk_);
+                  .exec_space(TestExecSpace{})
+                  .target_input(f.overlapping_target_boxes_)
+                  .source_input(f.overlapping_source_boxes_)
+                  .broad_phase(ExcludeSelfInteraction{})
+                  .broad_phase(ExcludeSymmetricDuplicates{})
+                  .build(*f.bulk_);
   const PairSet expected = {{0, 0}, {0, 2}, {0, 3}, {2, 0}, {2, 3}, {3, 0}};
   verify_exact_pair_set(list, expected);
 }
@@ -649,10 +643,10 @@ void test_overlapping_self_symdups(FixtureType& f) {
 template <typename ListType, typename FixtureType>
 void test_idsubset_no_excluder(FixtureType& f) {
   auto list = make_neighbor_list_builder<ListType>()
-      .exec_space(TestExecSpace{})
-      .target_input(f.idsubset_boxes_)
-      .source_input(f.idsubset_boxes_)
-      .build(*f.bulk_);
+                  .exec_space(TestExecSpace{})
+                  .target_input(f.idsubset_boxes_)
+                  .source_input(f.idsubset_boxes_)
+                  .build(*f.bulk_);
   const PairSet expected = {{0, 0}, {0, 1}, {1, 0}, {1, 1}};
   verify_exact_pair_set(list, expected);
 }
@@ -660,11 +654,11 @@ void test_idsubset_no_excluder(FixtureType& f) {
 template <typename ListType, typename FixtureType>
 void test_idsubset_self(FixtureType& f) {
   auto list = make_neighbor_list_builder<ListType>()
-      .exec_space(TestExecSpace{})
-      .target_input(f.idsubset_boxes_)
-      .source_input(f.idsubset_boxes_)
-      .exclude(ExcludeSelfInteraction{})
-      .build(*f.bulk_);
+                  .exec_space(TestExecSpace{})
+                  .target_input(f.idsubset_boxes_)
+                  .source_input(f.idsubset_boxes_)
+                  .broad_phase(ExcludeSelfInteraction{})
+                  .build(*f.bulk_);
   const PairSet expected = {{0, 1}, {1, 0}};
   verify_exact_pair_set(list, expected);
 }
@@ -672,11 +666,11 @@ void test_idsubset_self(FixtureType& f) {
 template <typename ListType, typename FixtureType>
 void test_idsubset_symdups(FixtureType& f) {
   auto list = make_neighbor_list_builder<ListType>()
-      .exec_space(TestExecSpace{})
-      .target_input(f.idsubset_boxes_)
-      .source_input(f.idsubset_boxes_)
-      .exclude(ExcludeSymmetricDuplicates{})
-      .build(*f.bulk_);
+                  .exec_space(TestExecSpace{})
+                  .target_input(f.idsubset_boxes_)
+                  .source_input(f.idsubset_boxes_)
+                  .broad_phase(ExcludeSymmetricDuplicates{})
+                  .build(*f.bulk_);
   // Both arrays are shared_part; intersection = all nodes here.
   // Suppress (1,0): trg=node6, src=node5, src_entity < trg_entity.
   const PairSet expected = {{0, 0}, {0, 1}, {1, 1}};
@@ -686,13 +680,59 @@ void test_idsubset_symdups(FixtureType& f) {
 template <typename ListType, typename FixtureType>
 void test_idsubset_self_symdups(FixtureType& f) {
   auto list = make_neighbor_list_builder<ListType>()
-      .exec_space(TestExecSpace{})
-      .target_input(f.idsubset_boxes_)
-      .source_input(f.idsubset_boxes_)
-      .exclude(ExcludeSelfInteraction{})
-      .exclude(ExcludeSymmetricDuplicates{})
-      .build(*f.bulk_);
+                  .exec_space(TestExecSpace{})
+                  .target_input(f.idsubset_boxes_)
+                  .source_input(f.idsubset_boxes_)
+                  .broad_phase(ExcludeSelfInteraction{})
+                  .broad_phase(ExcludeSymmetricDuplicates{})
+                  .build(*f.bulk_);
   const PairSet expected = {{0, 1}};
+  verify_exact_pair_set(list, expected);
+}
+
+// Narrow-phase-only: ExcludeSelfInteraction runs after the spatial query (narrow path).
+// The pair set must be identical to the broad-phase-only self-exclusion tests — the
+// phase a filter runs in must not affect which pairs survive.
+template <typename ListType, typename FixtureType>
+void test_universal_narrow_self(FixtureType& f) {
+  auto list = make_neighbor_list_builder<ListType>()
+                  .exec_space(TestExecSpace{})
+                  .target_input(f.universal_boxes_)
+                  .source_input(f.universal_boxes_)
+                  .narrow_phase(ExcludeSelfInteraction{})
+                  .build(*f.bulk_);
+  const PairSet expected = {{0, 2}, {2, 0}, {0, 4}, {4, 0}, {0, 5}, {5, 0},
+                            {2, 4}, {4, 2}, {2, 5}, {5, 2}, {4, 5}, {5, 4}};
+  verify_exact_pair_set(list, expected);
+}
+
+template <typename ListType, typename FixtureType>
+void test_disjoint_narrow_self(FixtureType& f) {
+  auto list = make_neighbor_list_builder<ListType>()
+                  .exec_space(TestExecSpace{})
+                  .target_input(f.disjoint_target_boxes_)
+                  .source_input(f.disjoint_source_boxes_)
+                  .narrow_phase(ExcludeSelfInteraction{})
+                  .build(*f.bulk_);
+  const PairSet expected = {{0, 0}};
+  verify_exact_pair_set(list, expected);
+}
+
+// Mixed broad + narrow: ExcludeSymmetricDuplicates in broad, ExcludeSelfInteraction in
+// narrow.  Running both phases must produce the intersection of both filter sets — the
+// result is the half-list with self-pairs also removed.
+template <typename ListType, typename FixtureType>
+void test_universal_broad_symdups_narrow_self(FixtureType& f) {
+  auto list = make_neighbor_list_builder<ListType>()
+                  .exec_space(TestExecSpace{})
+                  .target_input(f.universal_boxes_)
+                  .source_input(f.universal_boxes_)
+                  .broad_phase(ExcludeSymmetricDuplicates{})
+                  .narrow_phase(ExcludeSelfInteraction{})
+                  .build(*f.bulk_);
+  // ExcludeSymmetricDuplicates keeps only (t,s) where src_entity >= trg_entity (including
+  // self-pairs); the narrow-phase ExcludeSelfInteraction then removes those self-pairs.
+  const PairSet expected = {{0, 2}, {0, 4}, {0, 5}, {2, 4}, {2, 5}, {4, 5}};
   verify_exact_pair_set(list, expected);
 }
 
@@ -703,12 +743,12 @@ void test_idsubset_self_symdups(FixtureType& f) {
 //   — registers one TEST_F for the given (selector × excluder_tag) combination.
 //
 // MAKE_ALL_DET_TESTS(FIXTURE, SUFFIX, LIST_TYPE)
-//   — registers all 16 (4 selectors × 4 excluder_tags) combinations at once.
+//   — registers all combinations at once.
 //
-// Usage:
-//   MAKE_ALL_DET_TESTS(DeterministicFixture,    1d,  List1d)  → 16 ArborX-1d tests
-//   MAKE_ALL_DET_TESTS(DeterministicFixture,    2d,  List2d)  → 16 ArborX-2d tests
-//   MAKE_ALL_DET_TESTS(STKDeterministicFixture, stk, STKList) → 16 STK tests
+// Broad-phase-only (4 selectors × 4 tags = 16 tests), plus 3 narrow/mixed tests:
+//   MAKE_ALL_DET_TESTS(DeterministicFixture,    1d,  List1d)  → 19 ArborX-1d tests
+//   MAKE_ALL_DET_TESTS(DeterministicFixture,    2d,  List2d)  → 19 ArborX-2d tests
+//   MAKE_ALL_DET_TESTS(STKDeterministicFixture, stk, STKList) → 19 STK tests
 // =============================================================================
 
 // clang-format off
@@ -717,23 +757,28 @@ void test_idsubset_self_symdups(FixtureType& f) {
     test_##selector##_##excluder_tag<LIST_TYPE, FIXTURE>(*this);              \
   }
 
-#define MAKE_ALL_DET_TESTS(FIXTURE, SUFFIX, LIST_TYPE)                        \
-  MAKE_DET_TEST(FIXTURE, SUFFIX, LIST_TYPE, universal,   no_excluder)         \
-  MAKE_DET_TEST(FIXTURE, SUFFIX, LIST_TYPE, universal,   self)                \
-  MAKE_DET_TEST(FIXTURE, SUFFIX, LIST_TYPE, universal,   symdups)             \
-  MAKE_DET_TEST(FIXTURE, SUFFIX, LIST_TYPE, universal,   self_symdups)        \
-  MAKE_DET_TEST(FIXTURE, SUFFIX, LIST_TYPE, disjoint,    no_excluder)         \
-  MAKE_DET_TEST(FIXTURE, SUFFIX, LIST_TYPE, disjoint,    self)                \
-  MAKE_DET_TEST(FIXTURE, SUFFIX, LIST_TYPE, disjoint,    symdups)             \
-  MAKE_DET_TEST(FIXTURE, SUFFIX, LIST_TYPE, disjoint,    self_symdups)        \
-  MAKE_DET_TEST(FIXTURE, SUFFIX, LIST_TYPE, overlapping, no_excluder)         \
-  MAKE_DET_TEST(FIXTURE, SUFFIX, LIST_TYPE, overlapping, self)                \
-  MAKE_DET_TEST(FIXTURE, SUFFIX, LIST_TYPE, overlapping, symdups)             \
-  MAKE_DET_TEST(FIXTURE, SUFFIX, LIST_TYPE, overlapping, self_symdups)        \
-  MAKE_DET_TEST(FIXTURE, SUFFIX, LIST_TYPE, idsubset,    no_excluder)         \
-  MAKE_DET_TEST(FIXTURE, SUFFIX, LIST_TYPE, idsubset,    self)                \
-  MAKE_DET_TEST(FIXTURE, SUFFIX, LIST_TYPE, idsubset,    symdups)             \
-  MAKE_DET_TEST(FIXTURE, SUFFIX, LIST_TYPE, idsubset,    self_symdups)
+#define MAKE_ALL_DET_TESTS(FIXTURE, SUFFIX, LIST_TYPE)                                    \
+  MAKE_DET_TEST(FIXTURE, SUFFIX, LIST_TYPE, universal,   no_excluder)                    \
+  MAKE_DET_TEST(FIXTURE, SUFFIX, LIST_TYPE, universal,   self)                           \
+  MAKE_DET_TEST(FIXTURE, SUFFIX, LIST_TYPE, universal,   symdups)                        \
+  MAKE_DET_TEST(FIXTURE, SUFFIX, LIST_TYPE, universal,   self_symdups)                   \
+  MAKE_DET_TEST(FIXTURE, SUFFIX, LIST_TYPE, disjoint,    no_excluder)                    \
+  MAKE_DET_TEST(FIXTURE, SUFFIX, LIST_TYPE, disjoint,    self)                           \
+  MAKE_DET_TEST(FIXTURE, SUFFIX, LIST_TYPE, disjoint,    symdups)                        \
+  MAKE_DET_TEST(FIXTURE, SUFFIX, LIST_TYPE, disjoint,    self_symdups)                   \
+  MAKE_DET_TEST(FIXTURE, SUFFIX, LIST_TYPE, overlapping, no_excluder)                    \
+  MAKE_DET_TEST(FIXTURE, SUFFIX, LIST_TYPE, overlapping, self)                           \
+  MAKE_DET_TEST(FIXTURE, SUFFIX, LIST_TYPE, overlapping, symdups)                        \
+  MAKE_DET_TEST(FIXTURE, SUFFIX, LIST_TYPE, overlapping, self_symdups)                   \
+  MAKE_DET_TEST(FIXTURE, SUFFIX, LIST_TYPE, idsubset,    no_excluder)                    \
+  MAKE_DET_TEST(FIXTURE, SUFFIX, LIST_TYPE, idsubset,    self)                           \
+  MAKE_DET_TEST(FIXTURE, SUFFIX, LIST_TYPE, idsubset,    symdups)                        \
+  MAKE_DET_TEST(FIXTURE, SUFFIX, LIST_TYPE, idsubset,    self_symdups)                   \
+  /* narrow-phase-only: filter runs after spatial query, result must match broad-phase */ \
+  MAKE_DET_TEST(FIXTURE, SUFFIX, LIST_TYPE, universal,   narrow_self)                    \
+  MAKE_DET_TEST(FIXTURE, SUFFIX, LIST_TYPE, disjoint,    narrow_self)                    \
+  /* mixed broad + narrow: each phase contributes independent filtering */                \
+  MAKE_DET_TEST(FIXTURE, SUFFIX, LIST_TYPE, universal,   broad_symdups_narrow_self)
 // clang-format on
 
 // =============================================================================
@@ -749,11 +794,11 @@ TEST(STKSearchNeighborList, DefaultConstruct) {
 
 TEST_F(STKDeterministicFixture, CopyMove_stk) {
   auto original = make_neighbor_list_builder<STKList>()
-      .exec_space(TestExecSpace{})
-      .target_input(universal_boxes_)
-      .source_input(universal_boxes_)
-      .exclude(ExcludeSelfInteraction{})
-      .build(*bulk_);
+                      .exec_space(TestExecSpace{})
+                      .target_input(universal_boxes_)
+                      .source_input(universal_boxes_)
+                      .broad_phase(ExcludeSelfInteraction{})
+                      .build(*bulk_);
   const size_t nt = original.num_targets();
   const size_t ns = original.num_sources();
   const size_t sz = original.size();
@@ -800,11 +845,11 @@ TEST(ArborX2dNeighborList, DefaultConstruct) {
 // Kokkos views are reference-counted: copy yields a shallow copy sharing the same data.
 TEST_F(DeterministicFixture, CopyMove_1d) {
   auto original = make_neighbor_list_builder<List1d>()
-      .exec_space(TestExecSpace{})
-      .target_input(universal_boxes_)
-      .source_input(universal_boxes_)
-      .exclude(ExcludeSelfInteraction{})
-      .build(*bulk_);
+                      .exec_space(TestExecSpace{})
+                      .target_input(universal_boxes_)
+                      .source_input(universal_boxes_)
+                      .broad_phase(ExcludeSelfInteraction{})
+                      .build(*bulk_);
   const size_t nt = original.num_targets();
   const size_t ns = original.num_sources();
   const size_t sz = original.size();
@@ -834,11 +879,11 @@ TEST_F(DeterministicFixture, CopyMove_1d) {
 
 TEST_F(DeterministicFixture, CopyMove_2d) {
   auto original = make_neighbor_list_builder<List2d>()
-      .exec_space(TestExecSpace{})
-      .target_input(universal_boxes_)
-      .source_input(universal_boxes_)
-      .exclude(ExcludeSelfInteraction{})
-      .build(*bulk_);
+                      .exec_space(TestExecSpace{})
+                      .target_input(universal_boxes_)
+                      .source_input(universal_boxes_)
+                      .broad_phase(ExcludeSelfInteraction{})
+                      .build(*bulk_);
   const size_t nt = original.num_targets();
   const size_t ns = original.num_sources();
   const size_t sz = original.size();
@@ -896,13 +941,12 @@ MAKE_ALL_DET_TESTS(DeterministicFixture, 2d, List2d)
 // =============================================================================
 
 template <typename ListType, typename Trait>
-void run_random_n2_validation(stk::mesh::BulkData& bulk, const stk::mesh::Selector& selector,
-                              int num_nodes) {
+void run_random_n2_validation(stk::mesh::BulkData& bulk, const stk::mesh::Selector& selector, int num_nodes) {
   using box_type = typename Trait::box_type;
 
-  constexpr size_t kSeed       = 42;
-  constexpr float  kDomainSize = 10.0f;
-  constexpr float  kRadius     = 0.9f;
+  constexpr size_t kSeed = 42;
+  constexpr float kDomainSize = 10.0f;
+  constexpr float kRadius = 0.9f;
 
   std::vector<stk::mesh::Entity> nodes(num_nodes);
   for (int i = 0; i < num_nodes; ++i) {
@@ -919,13 +963,13 @@ void run_random_n2_validation(stk::mesh::BulkData& bulk, const stk::mesh::Select
     boxes[i] = Trait::make(cx, cy, cz, kRadius);
   }
 
-  auto sb   = Trait::make_search_boxes(selector, boxes, nodes);
+  auto sb = Trait::make_search_boxes(selector, boxes, nodes);
   auto list = make_neighbor_list_builder<ListType>()
-      .exec_space(TestExecSpace{})
-      .target_input(sb)
-      .source_input(sb)
-      .exclude(ExcludeSelfInteraction{})
-      .build(bulk);
+                  .exec_space(TestExecSpace{})
+                  .target_input(sb)
+                  .source_input(sb)
+                  .broad_phase(ExcludeSelfInteraction{})
+                  .build(bulk);
 
   for (size_t t = 0; t < list.num_targets(); ++t) {
     for (size_t k = 0; k < list.num_neighbors(t); ++k) {
@@ -975,34 +1019,29 @@ void test_all_isolated_visits_all_targets() {
   const stk::mesh::Selector sel = meta->universal_part();
 
   std::vector<stk::mesh::Entity> nodes(kN);
-  for (int i = 0; i < kN; ++i)
-    nodes[i] = bulk->get_entity(stk::topology::NODE_RANK, i + 1);
+  for (int i = 0; i < kN; ++i) nodes[i] = bulk->get_entity(stk::topology::NODE_RANK, i + 1);
 
   // Three mutually non-overlapping boxes (isolated).
-  auto sb = Trait::make_search_boxes(sel,
-      {Trait::make(0.f, 0.f, 0.f, 0.1f),
-       Trait::make(1000.f, 0.f, 0.f, 0.1f),
-       Trait::make(0.f, 1000.f, 0.f, 0.1f)},
+  auto sb = Trait::make_search_boxes(
+      sel, {Trait::make(0.f, 0.f, 0.f, 0.1f), Trait::make(1000.f, 0.f, 0.f, 0.1f), Trait::make(0.f, 1000.f, 0.f, 0.1f)},
       nodes);
 
   const auto list = make_neighbor_list_builder<ListType>()
-      .exec_space(TestExecSpace{})
-      .target_input(sb)
-      .source_input(sb)
-      .exclude(ExcludeSelfInteraction{})
-      .build(*bulk);
+                        .exec_space(TestExecSpace{})
+                        .target_input(sb)
+                        .source_input(sb)
+                        .broad_phase(ExcludeSelfInteraction{})
+                        .build(*bulk);
 
   ASSERT_EQ(list.size(), 0u);
 
   Kokkos::View<size_t*, TestMemSpace> tgt_count("tgt_count", 1);
   Kokkos::deep_copy(tgt_count, size_t(0));
   mundy::search::for_each_target_with_neighbors(
-      TestExecSpace{}, list,
-      KOKKOS_LAMBDA(const Neighbors<ListType>&) { Kokkos::atomic_inc(&tgt_count(0)); });
+      TestExecSpace{}, list, KOKKOS_LAMBDA(const Neighbors<ListType>&) { Kokkos::atomic_inc(&tgt_count(0)); });
   Kokkos::fence();
   EXPECT_EQ(tgt_count(0), static_cast<size_t>(kN))
-      << "for_each_target_with_neighbors must visit all " << kN
-      << " targets even with zero neighbors.";
+      << "for_each_target_with_neighbors must visit all " << kN << " targets even with zero neighbors.";
 }
 
 TEST(IterationProtocol, AllIsolated_VisitsAllTargets_stk) {
@@ -1030,15 +1069,15 @@ TEST(IterationProtocol, AllIsolated_VisitsAllTargets_2d) {
 template <typename ListType, typename FixtureType>
 void test_out_of_bounds(FixtureType& f) {
   auto list = make_neighbor_list_builder<ListType>()
-      .exec_space(TestExecSpace{})
-      .target_input(f.universal_boxes_)
-      .source_input(f.universal_boxes_)
-      .exclude(ExcludeSelfInteraction{})
-      .build(*f.bulk_);
+                  .exec_space(TestExecSpace{})
+                  .target_input(f.universal_boxes_)
+                  .source_input(f.universal_boxes_)
+                  .broad_phase(ExcludeSelfInteraction{})
+                  .build(*f.bulk_);
 
-  EXPECT_THROW(list.num_neighbors(list.num_targets()),  std::out_of_range);
-  EXPECT_THROW(list.target_entity(list.num_targets()),  std::out_of_range);
-  EXPECT_THROW(list.source_entity(list.num_sources()),  std::out_of_range);
+  EXPECT_THROW(list.num_neighbors(list.num_targets()), std::out_of_range);
+  EXPECT_THROW(list.target_entity(list.num_targets()), std::out_of_range);
+  EXPECT_THROW(list.source_entity(list.num_sources()), std::out_of_range);
   EXPECT_THROW(list.source_index(0, list.num_neighbors(0)), std::out_of_range);
 }
 
@@ -1079,30 +1118,22 @@ void check_reduce_functions(const ListType& list) {
     size_t count = 0;
     Kokkos::Sum<size_t> reducer(count);
     mundy::search::for_each_neighbor_pair_reduce(
-        TestExecSpace{}, list,
-        KOKKOS_LAMBDA(const NeighborPair<ListType>&, size_t& n) { ++n; },
-        reducer);
-    EXPECT_EQ(count, list.size())
-        << "for_each_neighbor_pair_reduce Sum(1) != list.size()";
+        TestExecSpace{}, list, KOKKOS_LAMBDA(const NeighborPair<ListType>&, size_t& n) { ++n; }, reducer);
+    EXPECT_EQ(count, list.size()) << "for_each_neighbor_pair_reduce Sum(1) != list.size()";
   }
 
   // 2. Sum of source ordinals via pair reducer must match direct iteration.
   {
     size_t direct_sum = 0;
     for (size_t t = 0; t < list.num_targets(); ++t)
-      for (size_t k = 0; k < list.num_neighbors(t); ++k)
-        direct_sum += list.source_index(t, k);
+      for (size_t k = 0; k < list.num_neighbors(t); ++k) direct_sum += list.source_index(t, k);
 
     size_t reduce_sum = 0;
     Kokkos::Sum<size_t> reducer(reduce_sum);
     mundy::search::for_each_neighbor_pair_reduce(
         TestExecSpace{}, list,
-        KOKKOS_LAMBDA(const NeighborPair<ListType>& pair, size_t& s) {
-          s += pair.source_index();
-        },
-        reducer);
-    EXPECT_EQ(reduce_sum, direct_sum)
-        << "for_each_neighbor_pair_reduce Sum(source_index) != direct sum";
+        KOKKOS_LAMBDA(const NeighborPair<ListType>& pair, size_t& s) { s += pair.source_index(); }, reducer);
+    EXPECT_EQ(reduce_sum, direct_sum) << "for_each_neighbor_pair_reduce Sum(source_index) != direct sum";
   }
 
   // 3. Sum of per-target neighbor counts must equal list.size().
@@ -1110,13 +1141,9 @@ void check_reduce_functions(const ListType& list) {
     size_t total = 0;
     Kokkos::Sum<size_t> reducer(total);
     mundy::search::for_each_target_with_neighbors_reduce(
-        TestExecSpace{}, list,
-        KOKKOS_LAMBDA(const Neighbors<ListType>& nbrs, size_t& n) {
-          n += nbrs.size();
-        },
+        TestExecSpace{}, list, KOKKOS_LAMBDA(const Neighbors<ListType>& nbrs, size_t& n) { n += nbrs.size(); },
         reducer);
-    EXPECT_EQ(total, list.size())
-        << "for_each_target_with_neighbors_reduce Sum(nbrs.size) != list.size()";
+    EXPECT_EQ(total, list.size()) << "for_each_target_with_neighbors_reduce Sum(nbrs.size) != list.size()";
   }
 
   // 4. Every target is visited exactly once (including zero-neighbor targets).
@@ -1124,22 +1151,19 @@ void check_reduce_functions(const ListType& list) {
     size_t count = 0;
     Kokkos::Sum<size_t> reducer(count);
     mundy::search::for_each_target_with_neighbors_reduce(
-        TestExecSpace{}, list,
-        KOKKOS_LAMBDA(const Neighbors<ListType>&, size_t& n) { ++n; },
-        reducer);
-    EXPECT_EQ(count, list.num_targets())
-        << "for_each_target_with_neighbors_reduce Sum(1) != num_targets()";
+        TestExecSpace{}, list, KOKKOS_LAMBDA(const Neighbors<ListType>&, size_t& n) { ++n; }, reducer);
+    EXPECT_EQ(count, list.num_targets()) << "for_each_target_with_neighbors_reduce Sum(1) != num_targets()";
   }
 }
 
 template <typename ListType, typename FixtureType>
 void test_reduce_universal_self(FixtureType& f) {
   auto list = make_neighbor_list_builder<ListType>()
-      .exec_space(TestExecSpace{})
-      .target_input(f.universal_boxes_)
-      .source_input(f.universal_boxes_)
-      .exclude(ExcludeSelfInteraction{})
-      .build(*f.bulk_);
+                  .exec_space(TestExecSpace{})
+                  .target_input(f.universal_boxes_)
+                  .source_input(f.universal_boxes_)
+                  .broad_phase(ExcludeSelfInteraction{})
+                  .build(*f.bulk_);
   check_reduce_functions(list);
 }
 
@@ -1166,33 +1190,27 @@ void test_reduce_all_isolated_visits_all_targets() {
   const stk::mesh::Selector sel = meta->universal_part();
 
   std::vector<stk::mesh::Entity> nodes(kN);
-  for (int i = 0; i < kN; ++i)
-    nodes[i] = bulk->get_entity(stk::topology::NODE_RANK, i + 1);
+  for (int i = 0; i < kN; ++i) nodes[i] = bulk->get_entity(stk::topology::NODE_RANK, i + 1);
 
-  auto sb = Trait::make_search_boxes(sel,
-      {Trait::make(0.f, 0.f, 0.f, 0.1f),
-       Trait::make(1000.f, 0.f, 0.f, 0.1f),
-       Trait::make(0.f, 1000.f, 0.f, 0.1f)},
+  auto sb = Trait::make_search_boxes(
+      sel, {Trait::make(0.f, 0.f, 0.f, 0.1f), Trait::make(1000.f, 0.f, 0.f, 0.1f), Trait::make(0.f, 1000.f, 0.f, 0.1f)},
       nodes);
 
   const auto list = make_neighbor_list_builder<ListType>()
-      .exec_space(TestExecSpace{})
-      .target_input(sb)
-      .source_input(sb)
-      .exclude(ExcludeSelfInteraction{})
-      .build(*bulk);
+                        .exec_space(TestExecSpace{})
+                        .target_input(sb)
+                        .source_input(sb)
+                        .broad_phase(ExcludeSelfInteraction{})
+                        .build(*bulk);
 
   ASSERT_EQ(list.size(), 0u);
 
   size_t count = 0;
   Kokkos::Sum<size_t> reducer(count);
   mundy::search::for_each_target_with_neighbors_reduce(
-      TestExecSpace{}, list,
-      KOKKOS_LAMBDA(const Neighbors<ListType>&, size_t& n) { ++n; },
-      reducer);
+      TestExecSpace{}, list, KOKKOS_LAMBDA(const Neighbors<ListType>&, size_t& n) { ++n; }, reducer);
   EXPECT_EQ(count, static_cast<size_t>(kN))
-      << "for_each_target_with_neighbors_reduce must visit all " << kN
-      << " targets even when all have zero neighbors.";
+      << "for_each_target_with_neighbors_reduce must visit all " << kN << " targets even when all have zero neighbors.";
 }
 
 TEST(ReduceProtocol, AllIsolated_VisitsAllTargets_stk) {
@@ -1221,10 +1239,8 @@ TEST(ReduceProtocol, AllIsolated_VisitsAllTargets_2d) {
 // =============================================================================
 
 // Compile-time concept checks
-static_assert(RebuilderType<AlwaysRebuild>,
-              "AlwaysRebuild must satisfy RebuilderType.");
-static_assert(RebuilderType<NeverRebuild>,
-              "NeverRebuild must satisfy RebuilderType.");
+static_assert(RebuilderType<AlwaysRebuild>, "AlwaysRebuild must satisfy RebuilderType.");
+static_assert(RebuilderType<NeverRebuild>, "NeverRebuild must satisfy RebuilderType.");
 static_assert(RebuilderType<RebuildOnEntityChange<TestMemSpace>>,
               "RebuildOnEntityChange<HostSpace> must satisfy RebuilderType.");
 static_assert(RebuilderType<RebuildOnAABBDisplacement<TestMemSpace>>,
@@ -1244,8 +1260,7 @@ STKBoxTrait::search_boxes_type make_far_target_boxes(const STKDeterministicFixtu
 STKBoxTrait::search_boxes_type make_far_universal_boxes(const STKDeterministicFixture& f) {
   const size_t n = f.universal_boxes_.entities().extent(0);
   Kokkos::View<STKBoxTrait::box_type*, TestMemSpace> bv("far_universal_boxes", n);
-  for (size_t i = 0; i < n; ++i)
-    bv(i) = STKBoxTrait::make(500.f + static_cast<float>(i) * 10.f, 500.f, 500.f, 0.5f);
+  for (size_t i = 0; i < n; ++i) bv(i) = STKBoxTrait::make(500.f + static_cast<float>(i) * 10.f, 500.f, 500.f, 0.5f);
   return {f.universal_boxes_.selector(), bv, f.universal_boxes_.entities()};
 }
 
@@ -1263,32 +1278,24 @@ STKBoxTrait::search_boxes_type make_swapped_entity_boxes(const STKDeterministicF
 // ---- ManagedNeighborList lifecycle ----
 
 TEST(ManagedNeighborList, HasNoValidListBeforeFirstUpdate) {
-  auto managed = make_neighbor_list_builder<STKList>()
-      .exec_space(TestExecSpace{})
-      .manage(NeverRebuild{});
+  auto managed = make_neighbor_list_builder<STKList>().exec_space(TestExecSpace{}).manage(NeverRebuild{});
   EXPECT_FALSE(managed.has_valid_list());
 }
 
 TEST(ManagedNeighborList, CurrentBeforeFirstUpdateThrows) {
-  auto managed = make_neighbor_list_builder<STKList>()
-      .exec_space(TestExecSpace{})
-      .manage(NeverRebuild{});
+  auto managed = make_neighbor_list_builder<STKList>().exec_space(TestExecSpace{}).manage(NeverRebuild{});
   EXPECT_THROW(managed.current(), std::runtime_error);
 }
 
 TEST_F(STKDeterministicFixture, ManagedNeighborList_HasValidListAfterUpdate) {
-  auto managed = make_neighbor_list_builder<STKList>()
-      .exec_space(TestExecSpace{})
-      .manage(NeverRebuild{});
+  auto managed = make_neighbor_list_builder<STKList>().exec_space(TestExecSpace{}).manage(NeverRebuild{});
   EXPECT_FALSE(managed.has_valid_list());
   managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
   EXPECT_TRUE(managed.has_valid_list());
 }
 
 TEST_F(STKDeterministicFixture, ManagedNeighborList_InvalidateClearsCache) {
-  auto managed = make_neighbor_list_builder<STKList>()
-      .exec_space(TestExecSpace{})
-      .manage(NeverRebuild{});
+  auto managed = make_neighbor_list_builder<STKList>().exec_space(TestExecSpace{}).manage(NeverRebuild{});
   managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
   EXPECT_TRUE(managed.has_valid_list());
   managed.invalidate();
@@ -1298,9 +1305,7 @@ TEST_F(STKDeterministicFixture, ManagedNeighborList_InvalidateClearsCache) {
 // Even NeverRebuild must build on the first update() call after invalidate(),
 // because the cache is empty (not because needs_rebuild() fired).
 TEST_F(STKDeterministicFixture, ManagedNeighborList_InvalidateForcesBuildOnNextUpdate) {
-  auto managed = make_neighbor_list_builder<STKList>()
-      .exec_space(TestExecSpace{})
-      .manage(NeverRebuild{});
+  auto managed = make_neighbor_list_builder<STKList>().exec_space(TestExecSpace{}).manage(NeverRebuild{});
 
   auto r1 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
   EXPECT_EQ(collect_pairs(r1.list), (PairSet{{0, 0}}));
@@ -1318,9 +1323,7 @@ TEST_F(STKDeterministicFixture, ManagedNeighborList_InvalidateForcesBuildOnNextU
 // On each update() call AlwaysRebuild forces a fresh build, so passing different
 // input geometry produces a different pair set.
 TEST_F(STKDeterministicFixture, Rebuilder_AlwaysRebuild_RebuildsEveryUpdate) {
-  auto managed = make_neighbor_list_builder<STKList>()
-      .exec_space(TestExecSpace{})
-      .manage(AlwaysRebuild{});
+  auto managed = make_neighbor_list_builder<STKList>().exec_space(TestExecSpace{}).manage(AlwaysRebuild{});
 
   auto r1 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
   EXPECT_TRUE(r1.rebuilt);
@@ -1338,9 +1341,7 @@ TEST_F(STKDeterministicFixture, Rebuilder_AlwaysRebuild_RebuildsEveryUpdate) {
 // After the first build NeverRebuild never fires, so passing different input
 // geometry still returns the original pair set from the cache.
 TEST_F(STKDeterministicFixture, Rebuilder_NeverRebuild_CachesAfterFirstBuild) {
-  auto managed = make_neighbor_list_builder<STKList>()
-      .exec_space(TestExecSpace{})
-      .manage(NeverRebuild{});
+  auto managed = make_neighbor_list_builder<STKList>().exec_space(TestExecSpace{}).manage(NeverRebuild{});
 
   auto r1 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
   EXPECT_TRUE(r1.rebuilt);
@@ -1356,9 +1357,8 @@ TEST_F(STKDeterministicFixture, Rebuilder_NeverRebuild_CachesAfterFirstBuild) {
 
 // Same geometry, same box count → cache is reused even though boxes moved.
 TEST_F(STKDeterministicFixture, Rebuilder_EntityChange_NoRebuildOnUnchangedCount) {
-  auto managed = make_neighbor_list_builder<STKList>()
-      .exec_space(TestExecSpace{})
-      .manage(RebuildOnEntityChange<TestMemSpace>{});
+  auto managed =
+      make_neighbor_list_builder<STKList>().exec_space(TestExecSpace{}).manage(RebuildOnEntityChange<TestMemSpace>{});
 
   auto r1 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
   EXPECT_TRUE(r1.rebuilt);
@@ -1372,9 +1372,8 @@ TEST_F(STKDeterministicFixture, Rebuilder_EntityChange_NoRebuildOnUnchangedCount
 
 // Box count increases (2 → 6) → rebuild → pair set reflects new geometry.
 TEST_F(STKDeterministicFixture, Rebuilder_EntityChange_RebuildOnIncrease) {
-  auto managed = make_neighbor_list_builder<STKList>()
-      .exec_space(TestExecSpace{})
-      .manage(RebuildOnEntityChange<TestMemSpace>{});
+  auto managed =
+      make_neighbor_list_builder<STKList>().exec_space(TestExecSpace{}).manage(RebuildOnEntityChange<TestMemSpace>{});
 
   auto r1 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
   EXPECT_TRUE(r1.rebuilt);
@@ -1389,9 +1388,8 @@ TEST_F(STKDeterministicFixture, Rebuilder_EntityChange_RebuildOnIncrease) {
 
 // Box count decreases (6 → 2) → rebuild → pair set reflects new geometry.
 TEST_F(STKDeterministicFixture, Rebuilder_EntityChange_RebuildOnDecrease) {
-  auto managed = make_neighbor_list_builder<STKList>()
-      .exec_space(TestExecSpace{})
-      .manage(RebuildOnEntityChange<TestMemSpace>{});
+  auto managed =
+      make_neighbor_list_builder<STKList>().exec_space(TestExecSpace{}).manage(RebuildOnEntityChange<TestMemSpace>{});
 
   // Initial build: 6 far-away universal boxes → 0 pairs.
   auto far_uni = make_far_universal_boxes(*this);
@@ -1533,8 +1531,8 @@ TEST(RebuildOnAABBDisplacement, SeparateTargetAndSourceThresholds) {
 TEST_F(STKDeterministicFixture, Rebuilder_AABBDisplacement_EndToEnd) {
   constexpr float kThreshold = 0.3f;
   auto managed = make_neighbor_list_builder<STKList>()
-      .exec_space(TestExecSpace{})
-      .manage(RebuildOnAABBDisplacement<TestMemSpace>{kThreshold});
+                     .exec_space(TestExecSpace{})
+                     .manage(RebuildOnAABBDisplacement<TestMemSpace>{kThreshold});
 
   // Initial: 1 overlapping pair; snapshot taken.
   auto r1 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
@@ -1558,9 +1556,8 @@ TEST_F(STKDeterministicFixture, Rebuilder_AABBDisplacement_EndToEnd) {
 // (NeverRebuild | AlwaysRebuild): prior returns false, so next is always evaluated
 // and returns true → chain always rebuilds.
 TEST_F(STKDeterministicFixture, Rebuilder_Chain_NeverOrAlways_BehavesLikeAlways) {
-  auto managed = make_neighbor_list_builder<STKList>()
-      .exec_space(TestExecSpace{})
-      .manage(NeverRebuild{} | AlwaysRebuild{});
+  auto managed =
+      make_neighbor_list_builder<STKList>().exec_space(TestExecSpace{}).manage(NeverRebuild{} | AlwaysRebuild{});
 
   auto r1 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
   EXPECT_TRUE(r1.rebuilt);
@@ -1574,9 +1571,8 @@ TEST_F(STKDeterministicFixture, Rebuilder_Chain_NeverOrAlways_BehavesLikeAlways)
 
 // (NeverRebuild | NeverRebuild): both return false → chain never rebuilds after first.
 TEST_F(STKDeterministicFixture, Rebuilder_Chain_NeverOrNever_BehavesLikeNever) {
-  auto managed = make_neighbor_list_builder<STKList>()
-      .exec_space(TestExecSpace{})
-      .manage(NeverRebuild{} | NeverRebuild{});
+  auto managed =
+      make_neighbor_list_builder<STKList>().exec_space(TestExecSpace{}).manage(NeverRebuild{} | NeverRebuild{});
 
   auto r1 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
   EXPECT_TRUE(r1.rebuilt);
@@ -1593,8 +1589,8 @@ TEST_F(STKDeterministicFixture, Rebuilder_Chain_NeverOrNever_BehavesLikeNever) {
 // returns true → chain always rebuilds.
 TEST_F(STKDeterministicFixture, Rebuilder_Chain_EntityChangeOrAlways_BehavesLikeAlways) {
   auto managed = make_neighbor_list_builder<STKList>()
-      .exec_space(TestExecSpace{})
-      .manage(RebuildOnEntityChange<TestMemSpace>{} | AlwaysRebuild{});
+                     .exec_space(TestExecSpace{})
+                     .manage(RebuildOnEntityChange<TestMemSpace>{} | AlwaysRebuild{});
 
   auto r1 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
   EXPECT_TRUE(r1.rebuilt);
@@ -1618,9 +1614,10 @@ TEST_F(STKDeterministicFixture, Rebuilder_Chain_EntityChangeOrAlways_BehavesLike
 // so EntityChange is never evaluated.  A rebuild occurs; the new geometry produces 0 pairs.
 TEST_F(STKDeterministicFixture, CombinedRebuilder_AABBSafeOnEntityAdd) {
   constexpr float kThreshold = 0.3f;
-  auto managed = make_neighbor_list_builder<STKList>()
-      .exec_space(TestExecSpace{})
-      .manage(RebuildOnAABBDisplacement<TestMemSpace>{kThreshold} | RebuildOnEntityChange<TestMemSpace>{});
+  auto managed =
+      make_neighbor_list_builder<STKList>()
+          .exec_space(TestExecSpace{})
+          .manage(RebuildOnAABBDisplacement<TestMemSpace>{kThreshold} | RebuildOnEntityChange<TestMemSpace>{});
 
   // Initial build: 2 targets, 2 sources → 1 pair; both snapshots recorded.
   auto r1 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
@@ -1638,9 +1635,10 @@ TEST_F(STKDeterministicFixture, CombinedRebuilder_AABBSafeOnEntityAdd) {
 // so EntityChange is never evaluated.  A rebuild occurs; the original geometry is restored.
 TEST_F(STKDeterministicFixture, CombinedRebuilder_AABBSafeOnEntityRemove) {
   constexpr float kThreshold = 0.3f;
-  auto managed = make_neighbor_list_builder<STKList>()
-      .exec_space(TestExecSpace{})
-      .manage(RebuildOnAABBDisplacement<TestMemSpace>{kThreshold} | RebuildOnEntityChange<TestMemSpace>{});
+  auto managed =
+      make_neighbor_list_builder<STKList>()
+          .exec_space(TestExecSpace{})
+          .manage(RebuildOnAABBDisplacement<TestMemSpace>{kThreshold} | RebuildOnEntityChange<TestMemSpace>{});
 
   // Initial build: 6 far-away universal targets → 0 pairs.
   auto far_uni = make_far_universal_boxes(*this);
@@ -1686,7 +1684,7 @@ TEST_F(STKDeterministicFixture, CombinedRebuilder_EntityChangeFiresOnEntitySwap)
 // Helper: build empty search boxes (no entities, no boxes) using the STK trait.
 static STKBoxTrait::search_boxes_type make_empty_boxes(const STKDeterministicFixture& f) {
   Kokkos::View<STKBoxTrait::box_type*, TestMemSpace> bv("empty_boxes", 0);
-  Kokkos::View<stk::mesh::Entity*,    TestMemSpace> ev("empty_entities", 0);
+  Kokkos::View<stk::mesh::Entity*, TestMemSpace> ev("empty_entities", 0);
   return {f.disjoint_target_boxes_.selector(), bv, ev};
 }
 
@@ -1767,8 +1765,8 @@ TEST_F(STKDeterministicFixture, AABBDisplacement_EmptyFromStart_NoRebuildAfterFi
 TEST_F(STKDeterministicFixture, ManagedList_ZeroTargets_NeverRebuildsAfterFirstBuild) {
   auto empty = make_empty_boxes(*this);
   auto managed = make_neighbor_list_builder<STKList>()
-      .exec_space(TestExecSpace{})
-      .manage(RebuildOnAABBDisplacement<TestMemSpace>{0.01f});
+                     .exec_space(TestExecSpace{})
+                     .manage(RebuildOnAABBDisplacement<TestMemSpace>{0.01f});
 
   // First update: list doesn't exist yet, must build.
   auto r1 = managed.update(*bulk_, empty, disjoint_source_boxes_);
@@ -1790,9 +1788,8 @@ TEST_F(STKDeterministicFixture, ManagedList_ZeroTargets_NeverRebuildsAfterFirstB
 // a managed list.
 TEST_F(STKDeterministicFixture, ManagedList_ZeroTargets_EntityChangeDoesNotFire) {
   auto empty = make_empty_boxes(*this);
-  auto managed = make_neighbor_list_builder<STKList>()
-      .exec_space(TestExecSpace{})
-      .manage(RebuildOnEntityChange<TestMemSpace>{});
+  auto managed =
+      make_neighbor_list_builder<STKList>().exec_space(TestExecSpace{}).manage(RebuildOnEntityChange<TestMemSpace>{});
 
   auto r1 = managed.update(*bulk_, empty, disjoint_source_boxes_);
   EXPECT_TRUE(r1.rebuilt);

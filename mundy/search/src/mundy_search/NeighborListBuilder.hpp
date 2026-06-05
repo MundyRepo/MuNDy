@@ -54,8 +54,9 @@ struct UnsetNeighborListBuilderField {};
 /// \brief Type-state fluent neighbor-list builder.
 ///
 /// A builder starts empty. Calls to `exec_space(...)`, `target_input(...)`, and `source_input(...)` return new builder
-/// types carrying the supplied field. Calls to `.exclude(...)` may be made at any point and append excluders without
-/// changing the selected inputs. `build(bulk_data)` delegates to `NeighborListBuildTraits<ListType>::build`.
+/// types carrying the supplied field. Calls to `.broad_phase(...)` and `.narrow_phase(...)` may be made at any point
+/// and append excluders to the broad or narrow filter chain, respectively, without changing the selected inputs.
+/// `build(bulk_data)` delegates to `NeighborListBuildTraits<ListType>::build`.
 ///
 /// \par Build arguments
 /// Every concrete list type publishes a `NeighborListBuildTraits<ListType>::args_type` struct for its backend-specific
@@ -74,14 +75,15 @@ struct UnsetNeighborListBuilderField {};
 /// List types that require no extra parameters (e.g., `STKSearchNeighborList`) have an empty `args_type`; omit
 /// the second argument entirely and call `build(bulk_data)`.
 ///
-/// \par Example — ArborX 1D list with an excluder
+/// \par Example — ArborX 1D list with broad and narrow phase excluders
 /// \code{.cpp}
 ///   // target_boxes and source_boxes are impl::ArborXSearchBoxesT<MemSpace> values already populated.
 ///   auto list = make_neighbor_list_builder<ArborX1dNeighborList<>>()
 ///       .exec_space(Kokkos::DefaultExecutionSpace{})
 ///       .target_input(target_boxes)
 ///       .source_input(source_boxes)
-///       .exclude(ExcludeSelfInteraction{})
+///       .broad_phase(ExcludeSelfInteraction{})
+///       .narrow_phase(ExcludeNonOverlappingOBBs{})
 ///       .build(bulk_data, {.buffer_size = 16});
 /// \endcode
 ///
@@ -108,10 +110,12 @@ struct UnsetNeighborListBuilderField {};
 /// \tparam ExecutionSpace Kokkos execution space used by the eventual build, or an unset marker.
 /// \tparam TargetInput Selected target input type, or an unset marker.
 /// \tparam SourceInput Selected source input type, or an unset marker.
-/// \tparam Excluder Excluder type stored by the builder.
+/// \tparam BroadExcluder Excluder type applied in the broad phase.
+/// \tparam NarrowExcluder Excluder type applied in the narrow phase.
 template <typename ListType, typename ExecutionSpace = impl::UnsetNeighborListBuilderField,
           typename TargetInput = impl::UnsetNeighborListBuilderField,
-          typename SourceInput = impl::UnsetNeighborListBuilderField, ExcluderType Excluder = NoExcluder>
+          typename SourceInput = impl::UnsetNeighborListBuilderField, ExcluderType BroadExcluder = NoExcluder,
+          ExcluderType NarrowExcluder = NoExcluder>
 class NeighborListBuilder {
   static_assert(std::same_as<TargetInput, impl::UnsetNeighborListBuilderField> || NeighborListInputType<TargetInput>,
                 "NeighborListBuilder target input must be set with a NeighborListInputType.");
@@ -126,7 +130,8 @@ class NeighborListBuilder {
   using execution_space = ExecutionSpace;
   using target_input_type = TargetInput;
   using source_input_type = SourceInput;
-  using excluder_type = Excluder;
+  using broad_excluder_type = BroadExcluder;
+  using narrow_excluder_type = NarrowExcluder;
   /// \brief Shorthand for the build-specific parameter struct of this list type.
   ///
   /// Equivalent to `NeighborListBuildTraits<neighbor_list_type>::args_type`. Use this alias when the args
@@ -147,6 +152,10 @@ class NeighborListBuilder {
   static constexpr bool has_selected_inputs = has_target_input && has_source_input;
   /// \brief Whether all fields required by build() have been supplied.
   static constexpr bool is_complete = has_exec_space && has_selected_inputs;
+  /// \brief Whether a broad-phase excluder has been supplied.
+  static constexpr bool has_broad_phase = !std::same_as<broad_excluder_type, NoExcluder>;
+  /// \brief Whether a narrow-phase excluder has been supplied.
+  static constexpr bool has_narrow_phase = !std::same_as<narrow_excluder_type, NoExcluder>;
   //@}
 
   //! \name Constructors
@@ -167,7 +176,8 @@ class NeighborListBuilder {
   template <typename NewExecutionSpace>
   auto exec_space(const NewExecutionSpace& exec_space) const {
     return NeighborListBuilder<neighbor_list_type, NewExecutionSpace, target_input_type, source_input_type,
-                               excluder_type>(exec_space, target_input_, source_input_, excluder_, sort_neighbors_);
+                               broad_excluder_type, narrow_excluder_type>(
+        exec_space, target_input_, source_input_, broad_excluder_, narrow_excluder_, sort_neighbors_);
   }
 
   /// \brief Return a new builder with the target input supplied.
@@ -175,8 +185,9 @@ class NeighborListBuilder {
   /// \param target_input [in] Selected target input.
   template <NeighborListInputType NewTargetInput>
   auto target_input(const NewTargetInput& target_input) const {
-    return NeighborListBuilder<neighbor_list_type, execution_space, NewTargetInput, source_input_type, excluder_type>(
-        exec_space_, target_input, source_input_, excluder_, sort_neighbors_);
+    return NeighborListBuilder<neighbor_list_type, execution_space, NewTargetInput, source_input_type,
+                               broad_excluder_type, narrow_excluder_type>(
+        exec_space_, target_input, source_input_, broad_excluder_, narrow_excluder_, sort_neighbors_);
   }
 
   /// \brief Return a new builder with the source input supplied.
@@ -184,20 +195,39 @@ class NeighborListBuilder {
   /// \param source_input [in] Selected source input.
   template <NeighborListInputType NewSourceInput>
   auto source_input(const NewSourceInput& source_input) const {
-    return NeighborListBuilder<neighbor_list_type, execution_space, target_input_type, NewSourceInput, excluder_type>(
-        exec_space_, target_input_, source_input, excluder_, sort_neighbors_);
+    return NeighborListBuilder<neighbor_list_type, execution_space, target_input_type, NewSourceInput,
+                               broad_excluder_type, narrow_excluder_type>(
+        exec_space_, target_input_, source_input, broad_excluder_, narrow_excluder_, sort_neighbors_);
   }
 
-  /// \brief Return a new builder type with an appended excluder.
+  /// \brief Return a new builder type with an appended broad-phase excluder.
+  ///
+  /// Broad-phase excluders are applied during the coarse spatial query to quickly prune candidate pairs.
+  ///
   /// \tparam NextExcluder Excluder type to append.
-  /// \param next_excluder [in] Excluder to append.
+  /// \param next_excluder [in] Excluder to append to the broad-phase chain.
   template <ExcluderType NextExcluder>
-  auto exclude(const NextExcluder& next_excluder) const {
-    auto new_excluder = excluder_.exclude(next_excluder);
-    using new_excluder_type = decltype(new_excluder);
+  auto broad_phase(const NextExcluder& next_excluder) const {
+    auto new_broad_excluder = broad_excluder_.exclude(next_excluder);
+    using new_broad_excluder_type = decltype(new_broad_excluder);
     return NeighborListBuilder<neighbor_list_type, execution_space, target_input_type, source_input_type,
-                               new_excluder_type>(exec_space_, target_input_, source_input_, new_excluder,
-                                                  sort_neighbors_);
+                               new_broad_excluder_type, narrow_excluder_type>(
+        exec_space_, target_input_, source_input_, new_broad_excluder, narrow_excluder_, sort_neighbors_);
+  }
+
+  /// \brief Return a new builder type with an appended narrow-phase excluder.
+  ///
+  /// Narrow-phase excluders are applied after the broad spatial query for fine-grained pair filtering.
+  ///
+  /// \tparam NextExcluder Excluder type to append.
+  /// \param next_excluder [in] Excluder to append to the narrow-phase chain.
+  template <ExcluderType NextExcluder>
+  auto narrow_phase(const NextExcluder& next_excluder) const {
+    auto new_narrow_excluder = narrow_excluder_.exclude(next_excluder);
+    using new_narrow_excluder_type = decltype(new_narrow_excluder);
+    return NeighborListBuilder<neighbor_list_type, execution_space, target_input_type, source_input_type,
+                               broad_excluder_type, new_narrow_excluder_type>(
+        exec_space_, target_input_, source_input_, broad_excluder_, new_narrow_excluder, sort_neighbors_);
   }
 
   /// \brief Return a new builder with the neighbor-sort flag set.
@@ -213,7 +243,8 @@ class NeighborListBuilder {
   /// \param sort [in] Whether to sort neighbor rows by source ordinal after construction.
   auto sort_neighbors(bool sort) const {
     return NeighborListBuilder<neighbor_list_type, execution_space, target_input_type, source_input_type,
-                               excluder_type>(exec_space_, target_input_, source_input_, excluder_, sort);
+                               broad_excluder_type, narrow_excluder_type>(exec_space_, target_input_, source_input_,
+                                                                          broad_excluder_, narrow_excluder_, sort);
   }
   //@}
 
@@ -255,9 +286,14 @@ class NeighborListBuilder {
     return source_input_.selector();
   }
 
-  /// \brief Get the excluder stored by the builder.
-  const excluder_type& excluder() const noexcept {
-    return excluder_;
+  /// \brief Get the broad-phase excluder stored by the builder.
+  const broad_excluder_type& broad_excluder() const noexcept {
+    return broad_excluder_;
+  }
+
+  /// \brief Get the narrow-phase excluder stored by the builder.
+  const narrow_excluder_type& narrow_excluder() const noexcept {
+    return narrow_excluder_;
   }
 
   /// \brief Whether neighbor rows will be sorted by source ordinal after construction.
@@ -265,20 +301,16 @@ class NeighborListBuilder {
     return sort_neighbors_;
   }
 
-  /// \brief Return a prepared copy of the excluder.
+  /// \brief Return a prepared copy of the broad-phase excluder.
   /// \param bulk_data [in] STK bulk data used for mesh-dependent excluder setup.
-  excluder_type setup_excluder(const stk::mesh::BulkData& bulk_data) const {
-    if constexpr (!has_selected_inputs) {
-      static_assert(has_selected_inputs,
-                    "NeighborListBuilder::setup_excluder(bulk_data) requires target_input(...) and source_input(...) "
-                    "before setup.");
-    } else {
-      excluder_type prepared_excluder = excluder_;
-      prepared_excluder.setup(bulk_data, target_selector(), source_selector());
-      return prepared_excluder;
-    }
+  broad_excluder_type setup_broad_excluder(const stk::mesh::BulkData& bulk_data) const {
+    return setup_excluder_impl(broad_excluder_, bulk_data, "setup_broad_excluder");
+  }
 
-    return excluder_;
+  /// \brief Return a prepared copy of the narrow-phase excluder.
+  /// \param bulk_data [in] STK bulk data used for mesh-dependent excluder setup.
+  narrow_excluder_type setup_narrow_excluder(const stk::mesh::BulkData& bulk_data) const {
+    return setup_excluder_impl(narrow_excluder_, bulk_data, "setup_narrow_excluder");
   }
   //@}
 
@@ -306,8 +338,8 @@ class NeighborListBuilder {
 
   /// \brief Wrap this builder in a `ManagedNeighborList` driven by a stateful rebuilder policy.
   ///
-  /// Captures the current builder state (execution space, excluder, sort flag) into a
-  /// `ManagedNeighborList`. The remaining fluent methods — `exec_space`, `exclude`, and
+  /// Captures the current builder state (execution space, broad and narrow excluders, sort flag) into a
+  /// `ManagedNeighborList`. The remaining fluent methods — `exec_space`, `broad_phase`, `narrow_phase`, and
   /// `sort_neighbors` — remain available on the returned object, so this call may appear at
   /// **any position** in the chain:
   ///
@@ -316,7 +348,7 @@ class NeighborListBuilder {
   ///   auto managed = make_neighbor_list_builder<STKSearchNeighborList<>>()
   ///       .manage(RebuildOnEntityChange{} | RebuildOnAABBDisplacement<>{skin_distance})
   ///       .exec_space(exec)
-  ///       .exclude(ExcludeSelfInteraction{});
+  ///       .broad_phase(ExcludeSelfInteraction{});
   ///
   ///   // Each time-step — passes fresh box views:
   ///   const auto& nl = managed.update(bulk, target_boxes, source_boxes);
@@ -326,15 +358,14 @@ class NeighborListBuilder {
   /// \param rebuilder [in] Rebuilder instance moved into the returned `ManagedNeighborList`.
   template <RebuilderType Rebuilder>
   auto manage(Rebuilder rebuilder) const {
-    return ManagedNeighborList<NeighborListBuilder<neighbor_list_type, execution_space,
-                                                   target_input_type, source_input_type,
-                                                   excluder_type>, Rebuilder>(
-        *this, std::move(rebuilder));
+    return ManagedNeighborList<NeighborListBuilder<neighbor_list_type, execution_space, target_input_type,
+                                                   source_input_type, broad_excluder_type, narrow_excluder_type>,
+                               Rebuilder>(*this, std::move(rebuilder));
   }
   //@}
 
  private:
-  template <typename, typename, typename, typename, ExcluderType>
+  template <typename, typename, typename, typename, ExcluderType, ExcluderType>
   friend class NeighborListBuilder;
 
   //! \name Internal constructors
@@ -342,12 +373,29 @@ class NeighborListBuilder {
 
   /// \brief Construct a builder from all type-state fields.
   NeighborListBuilder(const execution_space& exec_space, const target_input_type& target_input,
-                      const source_input_type& source_input, const excluder_type& excluder, bool sort_neighbors = false)
+                      const source_input_type& source_input, const broad_excluder_type& broad_excluder,
+                      const narrow_excluder_type& narrow_excluder, bool sort_neighbors = false)
       : exec_space_(exec_space),
         target_input_(target_input),
         source_input_(source_input),
-        excluder_(excluder),
+        broad_excluder_(broad_excluder),
+        narrow_excluder_(narrow_excluder),
         sort_neighbors_(sort_neighbors) {
+  }
+  //@}
+
+  //! \name Internal helpers
+  //@{
+
+  /// \brief Copy `excluder`, call its setup(), and return it.  Shared by setup_broad/narrow_excluder.
+  template <ExcluderType E>
+  E setup_excluder_impl(const E& excluder, const stk::mesh::BulkData& bulk_data,
+                        [[maybe_unused]] const char* caller) const {
+    static_assert(has_selected_inputs,
+                  "NeighborListBuilder: setup requires target_input(...) and source_input(...) to be set first.");
+    E prepared = excluder;
+    prepared.setup(bulk_data, target_selector(), source_selector());
+    return prepared;
   }
   //@}
 
@@ -360,8 +408,10 @@ class NeighborListBuilder {
   target_input_type target_input_;
   //! Selected source input, or unset marker.
   source_input_type source_input_;
-  //! Excluder stored by the builder.
-  excluder_type excluder_;
+  //! Broad-phase excluder stored by the builder.
+  broad_excluder_type broad_excluder_;
+  //! Narrow-phase excluder stored by the builder.
+  narrow_excluder_type narrow_excluder_;
   //! Whether to sort each target's neighbor row by source ordinal after construction.
   bool sort_neighbors_ = false;
   //@}

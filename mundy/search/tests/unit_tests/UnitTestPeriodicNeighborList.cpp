@@ -391,7 +391,7 @@ PerList1d build_per1d_list(const stk::mesh::BulkData& bulk, const PeriodicBoxes&
       .exec_space(TestExecSpace{})
       .target_input(boxes)
       .source_input(boxes)
-      .exclude(ExcludeSelfInteraction{})
+      .broad_phase(ExcludeSelfInteraction{})
       .build(bulk);
 }
 
@@ -400,7 +400,7 @@ PerList2d build_per2d_list(const stk::mesh::BulkData& bulk, const PeriodicBoxes&
       .exec_space(TestExecSpace{})
       .target_input(boxes)
       .source_input(boxes)
-      .exclude(ExcludeSelfInteraction{})
+      .broad_phase(ExcludeSelfInteraction{})
       .build(bulk);
 }
 
@@ -411,7 +411,7 @@ PerList1d build_per1d_list(const stk::mesh::BulkData& bulk, const PeriodicBoxes&
       .exec_space(TestExecSpace{})
       .target_input(targets)
       .source_input(sources)
-      .exclude(ExcludeSelfInteraction{})
+      .broad_phase(ExcludeSelfInteraction{})
       .build(bulk);
 }
 
@@ -421,7 +421,7 @@ PerList2d build_per2d_list(const stk::mesh::BulkData& bulk, const PeriodicBoxes&
       .exec_space(TestExecSpace{})
       .target_input(targets)
       .source_input(sources)
-      .exclude(ExcludeSelfInteraction{})
+      .broad_phase(ExcludeSelfInteraction{})
       .build(bulk);
 }
 

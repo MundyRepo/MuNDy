@@ -134,7 +134,8 @@ class DeployReduceFunctorOnNeighborPairs {
   /// \param functor [in] User callback to run for every neighbor pair.
   KOKKOS_INLINE_FUNCTION
   DeployReduceFunctorOnNeighborPairs(const NeighborListType& list, const Functor& functor)
-      : list_(&list), functor_(functor) {}
+      : list_(&list), functor_(functor) {
+  }
 
   /// \brief Accumulate over every neighbor of one target ordinal.
   /// \param target_index [in] Dense target ordinal in `[0, list.num_targets())`.
@@ -176,7 +177,8 @@ class DeployReduceFunctorOnTargetNeighbors {
   /// \param functor [in] User callback to run for every target.
   KOKKOS_INLINE_FUNCTION
   DeployReduceFunctorOnTargetNeighbors(const NeighborListType& list, const Functor& functor)
-      : list_(&list), functor_(functor) {}
+      : list_(&list), functor_(functor) {
+  }
 
   /// \brief Accumulate over one target ordinal.
   /// \param target_index [in] Dense target ordinal in `[0, list.num_targets())`.
@@ -215,7 +217,8 @@ class FlatDeployFunctorOnNeighborPairs {
   /// \param functor [in] User callback to run for every valid neighbor pair.
   KOKKOS_INLINE_FUNCTION
   FlatDeployFunctorOnNeighborPairs(const NeighborListType& list, const Functor& functor)
-      : list_(&list), functor_(functor) {}
+      : list_(&list), functor_(functor) {
+  }
 
   /// \brief Invoke the user callback for cell `(target_index, neighbor_ordinal)` if valid.
   /// \param target_index [in] Dense target ordinal (outer MDRange dimension).
@@ -260,7 +263,8 @@ class FlatDeployReduceFunctorOnNeighborPairs {
   /// \param functor [in] User callback to run for every valid neighbor pair.
   KOKKOS_INLINE_FUNCTION
   FlatDeployReduceFunctorOnNeighborPairs(const NeighborListType& list, const Functor& functor)
-      : list_(&list), functor_(functor) {}
+      : list_(&list), functor_(functor) {
+  }
 
   /// \brief Accumulate over cell `(target_index, neighbor_ordinal)` if valid.
   /// \param target_index [in] Dense target ordinal (outer MDRange dimension).
