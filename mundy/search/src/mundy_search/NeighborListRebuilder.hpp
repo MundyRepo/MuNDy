@@ -366,15 +366,24 @@ class RebuildOnAABBDisplacement {
   //! \name Constructors
   //@{
 
-  /// \brief Construct with a maximum per-corner displacement threshold.
+  /// \brief Construct with a single displacement threshold applied to both targets and sources.
   /// \param max_displacement [in] Rebuild is triggered if any box corner moves farther than this.
-  explicit RebuildOnAABBDisplacement(double max_displacement) : max_displacement_(max_displacement) {}
+  explicit RebuildOnAABBDisplacement(double max_displacement)
+      : target_max_displacement_(max_displacement), source_max_displacement_(max_displacement) {}
+
+  /// \brief Construct with separate displacement thresholds for target and source boxes.
+  ///
+  /// \param target_max_displacement [in] Threshold for target box corners.
+  /// \param source_max_displacement [in] Threshold for source box corners.
+  RebuildOnAABBDisplacement(double target_max_displacement, double source_max_displacement)
+      : target_max_displacement_(target_max_displacement),
+        source_max_displacement_(source_max_displacement) {}
   //@}
 
   //! \name Rebuild policy
   //@{
 
-  /// \brief Return true if any box corner has moved more than `max_displacement` since the last build.
+  /// \brief Return true if any box corner has moved beyond its threshold since the last build.
   ///
   /// On the first call (no snapshot yet), always returns true.
   template <typename TargetInput, typename SourceInput>
@@ -386,8 +395,8 @@ class RebuildOnAABBDisplacement {
     if (targets.boxes().extent(0) * 6 != snapshot_target_.extent(0) ||
         sources.boxes().extent(0) * 6 != snapshot_source_.extent(0))
       return true;
-    return corners_moved(targets.boxes(), snapshot_target_) ||
-           corners_moved(sources.boxes(), snapshot_source_);
+    return corners_moved(targets.boxes(), snapshot_target_, target_max_displacement_) ||
+           corners_moved(sources.boxes(), snapshot_source_, source_max_displacement_);
   }
 
   /// \brief Snapshot the current box corners into device-resident storage.
@@ -439,16 +448,13 @@ class RebuildOnAABBDisplacement {
     }
   }
 
-  /// \brief Return true if any box corner has moved more than `max_displacement_`.
-  ///
-  /// Uses a Kokkos parallel_reduce on `execution_space` to evaluate all boxes on device
-  /// without copying data to host.
+  /// \brief Return true if any box corner has moved more than `threshold`.
   template <typename BoxView>
   bool corners_moved(const BoxView& current_boxes,
-                     const Kokkos::View<double*, memory_space>& snapshot) const {
+                     const Kokkos::View<double*, memory_space>& snapshot,
+                     double threshold) const {
     int n = static_cast<int>(current_boxes.extent(0));
     if (n == 0) return false;
-    double threshold = max_displacement_;
     auto snap = snapshot;
     int any_moved = 0;
     Kokkos::parallel_reduce(
@@ -493,8 +499,10 @@ class RebuildOnAABBDisplacement {
 
   //! Whether snapshot() has been called at least once.
   bool has_snapshot_ = false;
-  //! Maximum per-corner displacement before a rebuild is triggered.
-  double max_displacement_;
+  //! Per-corner displacement threshold for target boxes.
+  double target_max_displacement_;
+  //! Per-corner displacement threshold for source boxes.
+  double source_max_displacement_;
   //! Device-resident snapshot of target box corners (6 doubles per box: min_xyz then max_xyz).
   Kokkos::View<double*, memory_space> snapshot_target_{"mundy_rebuilder_snap_tgt", 0};
   //! Device-resident snapshot of source box corners (6 doubles per box: min_xyz then max_xyz).

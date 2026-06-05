@@ -1463,6 +1463,71 @@ TEST(RebuildOnAABBDisplacement, ThresholdBehavior) {
   EXPECT_TRUE(rebuilder.needs_rebuild(*bulk, sb_far, sb_far));
 }
 
+// Separate target and source thresholds: the tighter side fires independently.
+//
+//   target threshold = 0.3, source threshold = 0.8
+//   Snapshot at cx=0 for both.
+//
+//   Target moves to cx=0.4 (disp 0.4 > 0.3) → target side fires.
+//   Source stays at cx=0    → source side quiet.
+//   Expected: rebuild triggered by target alone.
+//
+//   After new snapshot at cx=0.4 / cx=0:
+//   Target moves to cx=0.6 (disp 0.2 < 0.3) → target quiet.
+//   Source moves to cx=0.9 (disp 0.9 > 0.8) → source side fires.
+//   Expected: rebuild triggered by source alone.
+TEST(RebuildOnAABBDisplacement, SeparateTargetAndSourceThresholds) {
+  constexpr int kN = 1;
+  auto [meta, bulk] = make_node_mesh(kN);
+  auto node = bulk->get_entity(stk::topology::NODE_RANK, 1);
+
+  Kokkos::View<stk::mesh::Entity*, TestMemSpace> ev("entities", 1);
+  ev(0) = node;
+  const stk::mesh::Selector sel = meta->universal_part();
+
+  constexpr float kTargetThreshold = 0.3f;
+  constexpr float kSourceThreshold = 0.8f;
+  RebuildOnAABBDisplacement<TestMemSpace> rebuilder(kTargetThreshold, kSourceThreshold);
+
+  auto make_sb = [&](float cx) {
+    Kokkos::View<STKBoxTrait::box_type*, TestMemSpace> bv("boxes", 1);
+    bv(0) = STKBoxTrait::make(cx, 0.f, 0.f, 1.0f);
+    return STKBoxTrait::search_boxes_type{sel, bv, ev};
+  };
+
+  auto sb0 = make_sb(0.f);
+  // No snapshot yet: always needs rebuild.
+  EXPECT_TRUE(rebuilder.needs_rebuild(*bulk, sb0, sb0));
+  rebuilder.snapshot(*bulk, sb0, sb0);
+
+  // Both unchanged: no rebuild.
+  EXPECT_FALSE(rebuilder.needs_rebuild(*bulk, sb0, sb0));
+
+  // Target moves 0.4 > 0.3, source stays: target side fires.
+  auto sb_tgt_moved = make_sb(0.4f);
+  EXPECT_TRUE(rebuilder.needs_rebuild(*bulk, sb_tgt_moved, sb0));
+
+  // Target moves 0.2 < 0.3, source moves 0.5 < 0.8: neither fires.
+  auto sb_tgt_small = make_sb(0.2f);
+  auto sb_src_small = make_sb(0.5f);
+  EXPECT_FALSE(rebuilder.needs_rebuild(*bulk, sb_tgt_small, sb_src_small));
+
+  // Source moves 0.9 > 0.8, target stays: source side fires even though target is quiet.
+  auto sb_src_large = make_sb(0.9f);
+  EXPECT_TRUE(rebuilder.needs_rebuild(*bulk, sb0, sb_src_large));
+
+  // Take snapshot with target at 0.4 and source at 0.
+  rebuilder.snapshot(*bulk, sb_tgt_moved, sb0);
+
+  // Target moves from 0.4 to 0.6 (disp 0.2 < 0.3): quiet.
+  // Source stays at 0 (disp 0): quiet.
+  auto sb_tgt_near = make_sb(0.6f);
+  EXPECT_FALSE(rebuilder.needs_rebuild(*bulk, sb_tgt_near, sb0));
+
+  // Source now moves 0.9 > 0.8: source fires, target still quiet.
+  EXPECT_TRUE(rebuilder.needs_rebuild(*bulk, sb_tgt_near, sb_src_large));
+}
+
 // End-to-end test through ManagedNeighborList: large displacement forces rebuild
 // and updates the snapshot; a subsequent same-geometry call returns the cache.
 TEST_F(STKDeterministicFixture, Rebuilder_AABBDisplacement_EndToEnd) {
