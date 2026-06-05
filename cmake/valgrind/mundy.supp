@@ -1,0 +1,136 @@
+# Valgrind suppressions for Mundy's known-benign false positives.
+#
+# Contents:
+#   1. OpenMPI 4.x (ORTE/PMIX) infrastructure — intentional allocations that
+#      are never freed because they live for the entire process lifetime.
+#   2. OpenMPI hwloc — hwloc disables its x86 backend under valgrind and takes
+#      a different code path that valgrind may flag.
+#   3. Kokkos / OpenMP runtime — thread-local storage and runtime init/fini.
+#
+# To add a new suppression, run:
+#   valgrind --gen-suppressions=all ./program 2>&1 | grep -A 20 "^{"
+# and paste the output here after trimming the frame count to a reasonable depth.
+#
+# ============================================================================
+# 1. OpenMPI / ORTE / PMIX
+# ============================================================================
+
+{
+   openmpi_pmix_server_init_leak
+   Memcheck:Leak
+   match-leak-kinds: definite,indirect
+   ...
+   fun:pmix_server_init
+   ...
+}
+
+{
+   openmpi_orte_init_leak
+   Memcheck:Leak
+   match-leak-kinds: definite,indirect
+   ...
+   fun:orte_init
+   ...
+}
+
+{
+   openmpi_orte_submit_init_leak
+   Memcheck:Leak
+   match-leak-kinds: definite,indirect
+   ...
+   fun:orte_submit_init
+   ...
+}
+
+{
+   openmpi_orte_pmix_server_register_nspace_leak
+   Memcheck:Leak
+   match-leak-kinds: definite,indirect
+   ...
+   fun:orte_pmix_server_register_nspace
+   ...
+}
+
+{
+   openmpi_orte_odls_construct_child_list_leak
+   Memcheck:Leak
+   match-leak-kinds: definite,indirect
+   ...
+   fun:orte_odls_base_default_construct_child_list
+   ...
+}
+
+{
+   openmpi_orte_quit_leak
+   Memcheck:Leak
+   match-leak-kinds: definite,indirect
+   ...
+   fun:orte_quit
+   ...
+}
+
+{
+   openmpi_orterun_leak
+   Memcheck:Leak
+   match-leak-kinds: definite,indirect
+   ...
+   fun:orterun
+   ...
+}
+
+# ============================================================================
+# 2. hwloc CPU topology detection
+# ============================================================================
+
+{
+   hwloc_init_leak
+   Memcheck:Leak
+   match-leak-kinds: all
+   ...
+   obj:*hwloc*
+   ...
+}
+
+# ============================================================================
+# 3. Kokkos / OpenMP runtime
+# ============================================================================
+
+{
+   kokkos_openmp_thread_init_leak
+   Memcheck:Leak
+   match-leak-kinds: definite,indirect,reachable
+   ...
+   fun:__kmp_allocate*
+   ...
+}
+
+{
+   gomp_thread_pool_leak
+   Memcheck:Leak
+   match-leak-kinds: definite,indirect,reachable
+   ...
+   fun:gomp_*
+   ...
+}
+
+# ============================================================================
+# 4. dlopen / dl_init — shared library constructors run once at load time
+# ============================================================================
+
+{
+   dlopen_once_leak
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   ...
+   fun:_dl_init
+   ...
+}
+
+{
+   dlopenL_reachable
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   ...
+   fun:dlopen*
+   ...
+}

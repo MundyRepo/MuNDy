@@ -300,6 +300,7 @@ class RebuildOnEntityChange {
                         const Kokkos::View<stk::mesh::Entity*, memory_space>& snap) const {
     int n = static_cast<int>(current.extent(0));
     if (n != static_cast<int>(snap.extent(0))) return true;
+    if (n == 0) return false;  // Kokkos::Max identity (INT_MIN) != 0 over empty range — guard explicitly
     int any_changed = 0;
     Kokkos::parallel_reduce(
         "mundy_entity_change_check", Kokkos::RangePolicy<execution_space>(0, n),
@@ -379,7 +380,9 @@ class RebuildOnAABBDisplacement {
   template <typename TargetInput, typename SourceInput>
   bool needs_rebuild(const stk::mesh::BulkData& /*bulk*/, const TargetInput& targets,
                      const SourceInput& sources) {
-    if (snapshot_target_.extent(0) == 0) return true;
+    if (!has_snapshot_) return true;
+    // Empty targets or sources → result is always empty regardless of geometry; skip displacement check.
+    if (targets.boxes().extent(0) == 0 || sources.boxes().extent(0) == 0) return false;
     if (targets.boxes().extent(0) * 6 != snapshot_target_.extent(0) ||
         sources.boxes().extent(0) * 6 != snapshot_source_.extent(0))
       return true;
@@ -393,6 +396,7 @@ class RebuildOnAABBDisplacement {
                 const SourceInput& sources) {
     take_snapshot(targets.boxes(), snapshot_target_);
     take_snapshot(sources.boxes(), snapshot_source_);
+    has_snapshot_ = true;
   }
   //@}
 
@@ -415,6 +419,26 @@ class RebuildOnAABBDisplacement {
   //! \name Internal helpers
   //@{
 
+  /// \brief Uniform min-corner accessor for both ArborX::Box (.minCorner()) and STK boxes (.min_corner()).
+  template <typename BoxT>
+  KOKKOS_INLINE_FUNCTION static double box_min(const BoxT& b, int i) {
+    if constexpr (requires { b.minCorner(); }) {
+      return static_cast<double>(b.minCorner()[i]);
+    } else {
+      return static_cast<double>(b.min_corner()[i]);
+    }
+  }
+
+  /// \brief Uniform max-corner accessor for both ArborX::Box (.maxCorner()) and STK boxes (.max_corner()).
+  template <typename BoxT>
+  KOKKOS_INLINE_FUNCTION static double box_max(const BoxT& b, int i) {
+    if constexpr (requires { b.maxCorner(); }) {
+      return static_cast<double>(b.maxCorner()[i]);
+    } else {
+      return static_cast<double>(b.max_corner()[i]);
+    }
+  }
+
   /// \brief Return true if any box corner has moved more than `max_displacement_`.
   ///
   /// Uses a Kokkos parallel_reduce on `execution_space` to evaluate all boxes on device
@@ -432,18 +456,12 @@ class RebuildOnAABBDisplacement {
         KOKKOS_LAMBDA(int i, int& lmax) {
           const int base = 6 * i;
           int moved =
-              (abs(static_cast<double>(current_boxes(i).get_x_min()) - snap(base + 0)) > threshold ? 1
-                                                                                                            : 0) |
-              (abs(static_cast<double>(current_boxes(i).get_y_min()) - snap(base + 1)) > threshold ? 1
-                                                                                                            : 0) |
-              (abs(static_cast<double>(current_boxes(i).get_z_min()) - snap(base + 2)) > threshold ? 1
-                                                                                                            : 0) |
-              (abs(static_cast<double>(current_boxes(i).get_x_max()) - snap(base + 3)) > threshold ? 1
-                                                                                                            : 0) |
-              (abs(static_cast<double>(current_boxes(i).get_y_max()) - snap(base + 4)) > threshold ? 1
-                                                                                                            : 0) |
-              (abs(static_cast<double>(current_boxes(i).get_z_max()) - snap(base + 5)) > threshold ? 1
-                                                                                                            : 0);
+              (abs(box_min(current_boxes(i), 0) - snap(base + 0)) > threshold ? 1 : 0) |
+              (abs(box_min(current_boxes(i), 1) - snap(base + 1)) > threshold ? 1 : 0) |
+              (abs(box_min(current_boxes(i), 2) - snap(base + 2)) > threshold ? 1 : 0) |
+              (abs(box_max(current_boxes(i), 0) - snap(base + 3)) > threshold ? 1 : 0) |
+              (abs(box_max(current_boxes(i), 1) - snap(base + 4)) > threshold ? 1 : 0) |
+              (abs(box_max(current_boxes(i), 2) - snap(base + 5)) > threshold ? 1 : 0);
           lmax = lmax > moved ? lmax : moved;
         },
         Kokkos::Max<int>(any_moved));
@@ -459,12 +477,12 @@ class RebuildOnAABBDisplacement {
     auto snap = snapshot;
     Kokkos::parallel_for(
         "mundy_aabb_snapshot", Kokkos::RangePolicy<execution_space>(0, n), KOKKOS_LAMBDA(int i) {
-          snap(6 * i + 0) = static_cast<double>(boxes(i).get_x_min());
-          snap(6 * i + 1) = static_cast<double>(boxes(i).get_y_min());
-          snap(6 * i + 2) = static_cast<double>(boxes(i).get_z_min());
-          snap(6 * i + 3) = static_cast<double>(boxes(i).get_x_max());
-          snap(6 * i + 4) = static_cast<double>(boxes(i).get_y_max());
-          snap(6 * i + 5) = static_cast<double>(boxes(i).get_z_max());
+          snap(6 * i + 0) = box_min(boxes(i), 0);
+          snap(6 * i + 1) = box_min(boxes(i), 1);
+          snap(6 * i + 2) = box_min(boxes(i), 2);
+          snap(6 * i + 3) = box_max(boxes(i), 0);
+          snap(6 * i + 4) = box_max(boxes(i), 1);
+          snap(6 * i + 5) = box_max(boxes(i), 2);
         });
     Kokkos::fence();
   }
@@ -473,6 +491,8 @@ class RebuildOnAABBDisplacement {
   //! \name Internal members
   //@{
 
+  //! Whether snapshot() has been called at least once.
+  bool has_snapshot_ = false;
   //! Maximum per-corner displacement before a rebuild is triggered.
   double max_displacement_;
   //! Device-resident snapshot of target box corners (6 doubles per box: min_xyz then max_xyz).
