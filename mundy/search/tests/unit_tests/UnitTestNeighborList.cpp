@@ -41,13 +41,15 @@
 ///     for_each_target_with_neighbors_reduce.
 ///   Group 7 — Rebuilder system: RebuilderType concept checks, AlwaysRebuild, NeverRebuild,
 ///     RebuildOnEntityChange (no-change / increase / decrease box count), RebuildOnAABBDisplacement
-///     threshold behavior, RebuilderChain OR logic via operator|, and ManagedNeighborList lifecycle
+///     threshold behavior, RebuildOnOBBDisplacement threshold behavior (translation-only and
+///     rotation-only), RebuilderChain OR logic via operator|, and ManagedNeighborList lifecycle
 ///     (has_valid_list, invalidate, current).
 
 // External
 #include <gtest/gtest.h>
 
 // C++ core
+#include <cmath>
 #include <cstddef>
 #include <memory>
 #include <set>
@@ -1245,6 +1247,8 @@ static_assert(RebuilderType<RebuildOnEntityChange<TestMemSpace>>,
               "RebuildOnEntityChange<HostSpace> must satisfy RebuilderType.");
 static_assert(RebuilderType<RebuildOnAABBDisplacement<TestMemSpace>>,
               "RebuildOnAABBDisplacement<HostSpace> must satisfy RebuilderType.");
+static_assert(RebuilderType<RebuildOnOBBDisplacement<double, TestMemSpace>>,
+              "RebuildOnOBBDisplacement<double, HostSpace> must satisfy RebuilderType.");
 static_assert(RebuilderType<RebuilderChain<AlwaysRebuild, NeverRebuild>>,
               "RebuilderChain<AlwaysRebuild,NeverRebuild> must satisfy RebuilderType.");
 
@@ -1524,6 +1528,216 @@ TEST(RebuildOnAABBDisplacement, SeparateTargetAndSourceThresholds) {
 
   // Source now moves 0.9 > 0.8: source fires, target still quiet.
   EXPECT_TRUE(rebuilder.needs_rebuild(*bulk, sb_tgt_near, sb_src_large));
+}
+
+// ---- RebuildOnOBBDisplacement ----
+
+// Pure-translation threshold test.
+//
+//   Unit cube OBBs (half-extent 0.5) at origin; threshold 0.5.
+//   With R_rel = I (no rotation change), the escape condition on axis x reduces to
+//     |T[x]| > threshold = 0.5.
+//
+//   cx=0.3 → displacement 0.3 < 0.5 → no rebuild.
+//   cx=0.7 → displacement 0.7 > 0.5 → rebuild.
+TEST(RebuildOnOBBDisplacement, ThresholdBehavior_TranslationOnly) {
+  constexpr int kN = 1;
+  auto [meta, bulk] = make_node_mesh(kN);
+  auto node = bulk->get_entity(stk::topology::NODE_RANK, 1);
+  Kokkos::View<stk::mesh::Entity*, TestMemSpace> ev("entities", 1);
+  ev(0) = node;
+  const stk::mesh::Selector sel = meta->universal_part();
+
+  constexpr double kHalf = 0.5;
+  constexpr double kThreshold = 0.5;
+
+  // Mutable view; const alias passed to the rebuilder so updates are seen immediately.
+  Kokkos::View<OBB<double>*, TestMemSpace> obbs("obb_tgt", 1);
+  Kokkos::View<const OBB<double>*, TestMemSpace> const_obbs(obbs);
+
+  auto set_cx = [&](double cx) {
+    obbs(0) = OBB<double>{Point<double>{cx, 0.0, 0.0}, Quaternion<double>::identity(), kHalf, kHalf, kHalf};
+  };
+  set_cx(0.0);
+
+  RebuildOnOBBDisplacement<double, TestMemSpace> rebuilder(const_obbs, kThreshold);
+
+  // Dummy STK input — the OBB rebuilder ignores TargetInput/SourceInput entirely.
+  Kokkos::View<STKBoxTrait::box_type*, TestMemSpace> bv("boxes", 1);
+  bv(0) = STKBoxTrait::make(0.f, 0.f, 0.f, 1.0f);
+  STKBoxTrait::search_boxes_type sb{sel, bv, ev};
+
+  // No snapshot yet: always needs rebuild.
+  EXPECT_TRUE(rebuilder.needs_rebuild(*bulk, sb, sb));
+  rebuilder.snapshot(*bulk, sb, sb);
+
+  // Unchanged: no rebuild.
+  EXPECT_FALSE(rebuilder.needs_rebuild(*bulk, sb, sb));
+
+  // Displacement 0.3 < 0.5: no rebuild.
+  set_cx(0.3);
+  EXPECT_FALSE(rebuilder.needs_rebuild(*bulk, sb, sb));
+
+  // Displacement 0.7 > 0.5: rebuild.
+  set_cx(0.7);
+  EXPECT_TRUE(rebuilder.needs_rebuild(*bulk, sb, sb));
+
+  // New snapshot at cx=0.7.
+  rebuilder.snapshot(*bulk, sb, sb);
+  EXPECT_FALSE(rebuilder.needs_rebuild(*bulk, sb, sb));
+
+  // Displacement from 0.7: |0.7-0.4|=0.3 < 0.5 → no rebuild.
+  set_cx(0.4);
+  EXPECT_FALSE(rebuilder.needs_rebuild(*bulk, sb, sb));
+
+  // Displacement from 0.7: |0.7-0.1|=0.6 > 0.5 → rebuild.
+  set_cx(0.1);
+  EXPECT_TRUE(rebuilder.needs_rebuild(*bulk, sb, sb));
+}
+
+// Rotation-only threshold test.
+//
+//   Unit cube OBBs (half-extent 0.5) at origin; threshold 0.1.
+//   For a rotation θ around z with no translation the escape condition on axis k=0 is:
+//     (|cos θ| + |sin θ|) * 0.5 > 0.5 + 0.1 = 0.6
+//     |cos θ| + |sin θ|          > 1.2
+//   This triggers at θ ≈ 17°; all three axes must pass.
+//
+//   Relative θ=5°:  (cos5°+sin5°)*0.5 ≈ 0.542 ≤ 0.6 → no rebuild.
+//   Relative θ=25°: (cos25°+sin25°)*0.5 ≈ 0.664 > 0.6 → rebuild.
+TEST(RebuildOnOBBDisplacement, ThresholdBehavior_RotationOnly) {
+  constexpr int kN = 1;
+  auto [meta, bulk] = make_node_mesh(kN);
+  auto node = bulk->get_entity(stk::topology::NODE_RANK, 1);
+  Kokkos::View<stk::mesh::Entity*, TestMemSpace> ev("entities", 1);
+  ev(0) = node;
+  const stk::mesh::Selector sel = meta->universal_part();
+
+  constexpr double kHalf = 0.5;
+  constexpr double kThreshold = 0.1;
+  const double pi = Kokkos::numbers::pi_v<double>;
+
+  Kokkos::View<OBB<double>*, TestMemSpace> obbs("obb_rot", 1);
+  Kokkos::View<const OBB<double>*, TestMemSpace> const_obbs(obbs);
+
+  // Rotation by angle theta around z: q = {cos(θ/2), 0, 0, sin(θ/2)}.
+  auto set_theta = [&](double theta) {
+    const Quaternion<double> q{std::cos(theta / 2.0), 0.0, 0.0, std::sin(theta / 2.0)};
+    obbs(0) = OBB<double>{Point<double>{0.0, 0.0, 0.0}, q, kHalf, kHalf, kHalf};
+  };
+  set_theta(0.0);
+
+  RebuildOnOBBDisplacement<double, TestMemSpace> rebuilder(const_obbs, kThreshold);
+
+  Kokkos::View<STKBoxTrait::box_type*, TestMemSpace> bv("boxes", 1);
+  bv(0) = STKBoxTrait::make(0.f, 0.f, 0.f, 1.0f);
+  STKBoxTrait::search_boxes_type sb{sel, bv, ev};
+
+  // No snapshot yet: always needs rebuild.
+  EXPECT_TRUE(rebuilder.needs_rebuild(*bulk, sb, sb));
+  rebuilder.snapshot(*bulk, sb, sb);
+
+  // θ=0 (identity): no rebuild.
+  EXPECT_FALSE(rebuilder.needs_rebuild(*bulk, sb, sb));
+
+  // Relative θ=5° from snapshot: (cos5°+sin5°)*0.5 ≈ 0.542 ≤ 0.6 → no rebuild.
+  set_theta(5.0 * pi / 180.0);
+  EXPECT_FALSE(rebuilder.needs_rebuild(*bulk, sb, sb));
+
+  // Relative θ=30° from snapshot: (cos30°+sin30°)*0.5 ≈ 0.683 > 0.6 → rebuild.
+  set_theta(30.0 * pi / 180.0);
+  EXPECT_TRUE(rebuilder.needs_rebuild(*bulk, sb, sb));
+
+  // Snapshot at θ=30°; subsequent checks are relative to this orientation.
+  rebuilder.snapshot(*bulk, sb, sb);
+  EXPECT_FALSE(rebuilder.needs_rebuild(*bulk, sb, sb));
+
+  // Relative rotation from snapshot: 35°−30°=5° → (cos5°+sin5°)*0.5 ≈ 0.542 ≤ 0.6 → no rebuild.
+  set_theta(35.0 * pi / 180.0);
+  EXPECT_FALSE(rebuilder.needs_rebuild(*bulk, sb, sb));
+
+  // Relative rotation from snapshot: 55°−30°=25° → (cos25°+sin25°)*0.5 ≈ 0.664 > 0.6 → rebuild.
+  set_theta(55.0 * pi / 180.0);
+  EXPECT_TRUE(rebuilder.needs_rebuild(*bulk, sb, sb));
+}
+
+// Separate target/source thresholds: each side fires independently.
+//
+//   target threshold=0.3, source threshold=0.8.
+//   Snapshot both at origin.
+//
+//   Target → 0.4 (0.4 > 0.3): target fires.  Source unchanged: quiet.  Expected: rebuild.
+//   Target → 0.2 (0.2 < 0.3), source → 0.5 (0.5 < 0.8): neither fires.
+//   Source → 0.9 (0.9 > 0.8), target quiet: source fires.  Expected: rebuild.
+//
+//   After snapshot at target=0.4, source=0:
+//   Target → 0.55 (disp 0.15 < 0.3): quiet.
+//   Source → 0.9 (0.9 > 0.8): source fires.  Expected: rebuild.
+TEST(RebuildOnOBBDisplacement, SeparateTargetAndSourceThresholds) {
+  constexpr int kN = 1;
+  auto [meta, bulk] = make_node_mesh(kN);
+  auto node = bulk->get_entity(stk::topology::NODE_RANK, 1);
+  Kokkos::View<stk::mesh::Entity*, TestMemSpace> ev("entities", 1);
+  ev(0) = node;
+  const stk::mesh::Selector sel = meta->universal_part();
+
+  constexpr double kHalf = 0.5;
+  constexpr double kTargetThreshold = 0.3;
+  constexpr double kSourceThreshold = 0.8;
+
+  Kokkos::View<OBB<double>*, TestMemSpace> tgt_obbs("obb_tgt2", 1);
+  Kokkos::View<OBB<double>*, TestMemSpace> src_obbs("obb_src2", 1);
+  Kokkos::View<const OBB<double>*, TestMemSpace> const_tgt(tgt_obbs);
+  Kokkos::View<const OBB<double>*, TestMemSpace> const_src(src_obbs);
+
+  auto set_tgt = [&](double cx) {
+    tgt_obbs(0) = OBB<double>{Point<double>{cx, 0.0, 0.0}, Quaternion<double>::identity(), kHalf, kHalf, kHalf};
+  };
+  auto set_src = [&](double cx) {
+    src_obbs(0) = OBB<double>{Point<double>{cx, 0.0, 0.0}, Quaternion<double>::identity(), kHalf, kHalf, kHalf};
+  };
+
+  set_tgt(0.0);
+  set_src(0.0);
+
+  RebuildOnOBBDisplacement<double, TestMemSpace> rebuilder(const_tgt, const_src, kTargetThreshold, kSourceThreshold);
+
+  Kokkos::View<STKBoxTrait::box_type*, TestMemSpace> bv("boxes", 1);
+  bv(0) = STKBoxTrait::make(0.f, 0.f, 0.f, 1.0f);
+  STKBoxTrait::search_boxes_type sb{sel, bv, ev};
+
+  // No snapshot yet: always needs rebuild.
+  EXPECT_TRUE(rebuilder.needs_rebuild(*bulk, sb, sb));
+  rebuilder.snapshot(*bulk, sb, sb);
+
+  // Both unchanged: no rebuild.
+  EXPECT_FALSE(rebuilder.needs_rebuild(*bulk, sb, sb));
+
+  // Target moves 0.4 > 0.3, source stays: target fires.
+  set_tgt(0.4);
+  EXPECT_TRUE(rebuilder.needs_rebuild(*bulk, sb, sb));
+
+  // Target 0.2 < 0.3, source 0.5 < 0.8: neither fires.
+  set_tgt(0.2);
+  set_src(0.5);
+  EXPECT_FALSE(rebuilder.needs_rebuild(*bulk, sb, sb));
+
+  // Source 0.9 > 0.8, target at 0.2: source fires.
+  set_src(0.9);
+  EXPECT_TRUE(rebuilder.needs_rebuild(*bulk, sb, sb));
+
+  // Snapshot with target=0.4, source=0.
+  set_tgt(0.4);
+  set_src(0.0);
+  rebuilder.snapshot(*bulk, sb, sb);
+
+  // Target to 0.55: disp=|0.55−0.4|=0.15 < 0.3 → quiet.  Source at 0: quiet.
+  set_tgt(0.55);
+  EXPECT_FALSE(rebuilder.needs_rebuild(*bulk, sb, sb));
+
+  // Source to 0.9: disp=0.9 > 0.8 → source fires.
+  set_src(0.9);
+  EXPECT_TRUE(rebuilder.needs_rebuild(*bulk, sb, sb));
 }
 
 // End-to-end test through ManagedNeighborList: large displacement forces rebuild
