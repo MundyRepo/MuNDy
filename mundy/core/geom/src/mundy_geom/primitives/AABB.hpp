@@ -283,14 +283,20 @@ class AABB {
   max_point_t max_corner_;
 };  // AABB
 
+// =============================================================================
+// Deduction guides
+// =============================================================================
+
 #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
-/// \brief Deduction guide for AABB
 template <typename Scalar>
 AABB(Scalar, Scalar, Scalar, Scalar, Scalar, Scalar) -> AABB<Scalar>;
-//
 template <ValidPointType MinPointType, ValidPointType MaxPointType>
 AABB(MinPointType, MaxPointType) -> AABB<typename MaxPointType::value_type, MinPointType, MaxPointType>;
 #endif
+
+// =============================================================================
+// Type trait and concept
+// =============================================================================
 
 /// @brief (Implementation) Type trait to determine if a type is an AABB
 template <typename T>
@@ -367,7 +373,6 @@ KOKKOS_INLINE_FUNCTION void for_each_point_mutable(T& aabb, Functor&& f) {
   f(aabb.min_corner());
   f(aabb.max_corner());
 }
-
 //@}
 
 /// @}

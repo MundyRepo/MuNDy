@@ -52,6 +52,7 @@
 #include <mundy_geom/primitives/Sphere.hpp>
 #include <mundy_geom/primitives/Spherocylinder.hpp>
 #include <mundy_geom/primitives/SpherocylinderSegment.hpp>
+#include <mundy_geom/primitives/OBB.hpp>
 #include <mundy_geom/primitives/VSegment.hpp>
 
 #endif  // MUNDY_GEOM_PRIMITIVES_HPP_

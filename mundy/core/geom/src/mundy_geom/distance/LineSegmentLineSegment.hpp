@@ -99,8 +99,11 @@ KOKKOS_FUNCTION typename LineSegmentType1::value_type
   const Scalar e = mundy::dot(v, w);
   const Scalar D = a * c - b * b;  // always >= 0
 
-  // Compute the line parameters of the two closest points
-  if (D < sqrt(mundy::get_zero_tolerance<Scalar>())) {
+  // Compute the line parameters of the two closest points.
+  // D <= 0 catches truly degenerate segments (a=0 or c=0 → D=0) and floating-point noise.
+  // D*D < zero_tol*a*c is scale-invariant: checks sin²(θ) < sqrt(zero_tol/a/c) without sqrt.
+  constexpr Scalar zero_tol = get_zero_tolerance<Scalar>();
+  if (D <= static_cast<Scalar>(0) || D * D < zero_tol * a * c) {
     // CASE 1: The lines are colinear. Therefore, one of the four endpoints is the
     // point of closest approach. We'll directly compute the 4 distances and the closest point on the line.
     const Scalar dist1 = distance(l0, line_segment2);
@@ -156,10 +159,8 @@ KOKKOS_FUNCTION typename LineSegmentType1::value_type
   }
 
   // Finally, get the arch-length parameters, the corresponding closest points, and their distance.
-  const Scalar arch_length1 =
-      (fabs(sN) < mundy::get_zero_tolerance<Scalar>()) ? static_cast<Scalar>(0.0) : sN / sD;
-  const Scalar arch_length2 =
-      (fabs(tN) < mundy::get_zero_tolerance<Scalar>()) ? static_cast<Scalar>(0.0) : tN / tD;
+  const Scalar arch_length1 = (fabs(sN) < zero_tol) ? static_cast<Scalar>(0.0) : sN / sD;
+  const Scalar arch_length2 = (fabs(tN) < zero_tol) ? static_cast<Scalar>(0.0) : tN / tD;
   const auto closest_point1 = l0 + arch_length1 * u;
   const auto closest_point2 = m0 + arch_length2 * v;
   return distance(closest_point1, closest_point2);
@@ -226,8 +227,11 @@ KOKKOS_FUNCTION typename LineSegmentType1::value_type
   const Scalar e = mundy::dot(v, w);
   const Scalar D = a * c - b * b;  // always >= 0
 
-  // Compute the line parameters of the two closest points
-  if (D < sqrt(mundy::get_zero_tolerance<Scalar>())) {
+  // Compute the line parameters of the two closest points.
+  // D <= 0 catches truly degenerate segments (a=0 or c=0 → D=0) and floating-point noise.
+  // D*D < zero_tol*a*c is scale-invariant: checks sin²(θ) < sqrt(zero_tol/a/c) without sqrt.
+  constexpr Scalar zero_tol = get_zero_tolerance<Scalar>();
+  if (D <= static_cast<Scalar>(0) || D * D < zero_tol * a * c) {
     // CASE 1: The lines are colinear. Therefore, one of the four endpoints is the
     // point of closest approach. We'll directly compute the 4 distances and the closest point on the line.
     Point<Scalar> closest_point_tmp1;
@@ -325,8 +329,8 @@ KOKKOS_FUNCTION typename LineSegmentType1::value_type
   }
 
   // Finally, get the arch-length parameters, the corresponding closest points, and their distance.
-  arch_length1 = (fabs(sN) < mundy::get_zero_tolerance<Scalar>()) ? static_cast<Scalar>(0.0) : sN / sD;
-  arch_length2 = (fabs(tN) < mundy::get_zero_tolerance<Scalar>()) ? static_cast<Scalar>(0.0) : tN / tD;
+  arch_length1 = (fabs(sN) < zero_tol) ? static_cast<Scalar>(0.0) : sN / sD;
+  arch_length2 = (fabs(tN) < zero_tol) ? static_cast<Scalar>(0.0) : tN / tD;
   closest_point1 = l0 + arch_length1 * u;
   closest_point2 = m0 + arch_length2 * v;
   return distance(closest_point1, closest_point2, sep);
