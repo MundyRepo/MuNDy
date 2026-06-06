@@ -99,7 +99,7 @@ struct UnsetNeighborListBuilderField {};
 /// \par Example — managed list with rebuilder (manage() at any position)
 /// \code{.cpp}
 ///   auto managed = make_neighbor_list_builder<STKSearchNeighborList<>>()
-///       .manage(RebuildOnEntityChange{} | RebuildOnAABBDisplacement<>{skin_distance})
+///       .manage(RebuildOnEntityChange{} | RebuildOnAABBDisplacement<double>{skin_distance})
 ///       .exec_space(exec_space);
 ///
 ///   // Each time-step:
@@ -346,7 +346,7 @@ class NeighborListBuilder {
   /// \code{.cpp}
   ///   // manage() first, then finish configuring:
   ///   auto managed = make_neighbor_list_builder<STKSearchNeighborList<>>()
-  ///       .manage(RebuildOnEntityChange{} | RebuildOnAABBDisplacement<>{skin_distance})
+  ///       .manage(RebuildOnEntityChange{} | RebuildOnAABBDisplacement<double>{skin_distance})
   ///       .exec_space(exec)
   ///       .broad_phase(ExcludeSelfInteraction{});
   ///

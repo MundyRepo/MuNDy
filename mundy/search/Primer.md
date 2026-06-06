@@ -20,7 +20,8 @@ the list.
 | Search inputs | `impl::ArborXSearchBoxesT`, `impl::PeriodicArborXSearchBoxesT`, `impl::STKSearchBoxesT` | A geometry-indexed pairing of STK entities with search boxes to feed the builder. |
 | Builder | `NeighborListBuilder`, `make_neighbor_list_builder<ListType>()` | A fluent, type-safe way to build a concrete neighbor list. |
 | Build traits | `NeighborListBuildTraits<ListType>`, `NeighborListInputType` | Coupling a concrete list type to its build logic and type-specific parameters. |
-| Excluders | `NoExcluder`, `ExcludeSelfInteraction`, `ExcludeSymmetricDuplicates`, `ExcluderChain` | Filtering candidate pairs at build time before they enter storage. |
+| Excluders | `NoExcluder`, `ExcludeSelfInteraction`, `ExcludeSymmetricDuplicates`, `ExcludeNonIntersectingOBBs`, `ExcluderChain` | Filtering candidate pairs at build time before they enter storage. |
+| Managed lists | `ManagedNeighborList`, `RebuilderType` concept, `AlwaysRebuild`, `NeverRebuild`, `RebuildOnEntityChange`, `RebuildOnAABBDisplacement`, `RebuildOnOBBDisplacement`, `RebuilderChain` | Caching a list across time steps and rebuilding only when geometry has moved beyond a threshold. |
 | Common access surface | `NeighborListType` concept, `Neighbors<List>`, `NeighborPair<List>` | Querying the stored list in a backend-independent way. |
 | Iteration | `for_each_neighbor_pair`, `for_each_target_with_neighbors`, and their `_reduce` variants | Parallel dispatch over stored pairs or targets. |
 | Iteration traits | `NeighborListIterationTraits<ListType>` | Specializing the parallel dispatch strategy for a list type. |
@@ -189,6 +190,7 @@ The `ExcluderType` concept requires:
 | `ExcludeSelfInteraction` | Rejects self-interactions. For non-periodic candidates, a self-interaction is any pair where target and source are the same entity. For periodic candidates, it additionally requires the relative image shift to be zero — a same-entity pair across a periodic boundary (nonzero shift) is a genuine interaction and is retained. |
 | `ExcludeConnectedEntities` | Rejects pairs where the target and source share at least one connected entity at a specified rank. Constructed with a `stk::mesh::EntityRank` (e.g., `NODE_RANK` to exclude element pairs sharing a common node). Requires `setup()` before use. |
 | `ExcludeSymmetricDuplicates` | Rejects one orientation of each symmetric pair when targets and sources overlap. Handles identical, disjoint, and partially-overlapping selectors with one type. Requires `setup()` before use; pass through the builder rather than constructing directly. |
+| `ExcludeNonIntersectingOBBs<Scalar, MemSpace>` | Narrow-phase OBB–OBB separating-axis test. Rejects pairs whose oriented bounding boxes do not intersect. Constructed with one or two `Kokkos::View<const OBB<Scalar>*, MemSpace>` views indexed by dense target/source ordinals. Two constructors: asymmetric `(target_obbs, source_obbs)` and symmetric `(obbs)` (same view for both sides). `setup()` is a no-op; the views are caller-maintained and must stay valid for the lifetime of the excluder. |
 
 ### Chaining excluders
 
@@ -240,6 +242,120 @@ struct ExcludeByPartMembership {
  private:
   stk::mesh::NgpMesh ngp_mesh_;
 };
+```
+
+## Managed neighbor lists
+
+In time-stepping simulations the list rarely needs to be rebuilt every step. `ManagedNeighborList`
+wraps a builder together with a **rebuilder policy** and caches the last-built list. On each call to
+`update()` the rebuilder decides whether the current geometry is still close enough to the last
+snapshot to reuse the cached list.
+
+### `ManagedNeighborList` lifetime
+
+```cpp
+using namespace mundy::search;
+
+// Attach a rebuilder with .manage(); returns a ManagedNeighborList<...>
+auto managed = make_neighbor_list_builder<STKSearchNeighborList<>>()
+    .exec_space(exec)
+    .manage(RebuildOnAABBDisplacement<double>{skin_distance});
+
+// Each time step: update() rebuilds only when the rebuilder fires.
+auto result = managed.update(bulk, target_boxes, source_boxes);
+// result.rebuilt — true if the list was actually rebuilt this step
+// result.list    — const reference to the current (possibly cached) list
+```
+
+`ManagedNeighborList` also exposes:
+
+| **Method** | **Meaning** |
+|------------|-------------|
+| `has_valid_list()` | `true` after the first `update()` or after any build. |
+| `current()` | Returns the cached list; throws if `has_valid_list()` is `false`. |
+| `invalidate()` | Clears the cache; forces a rebuild on the next `update()`. |
+
+### The `RebuilderType` concept
+
+A rebuilder is any type satisfying:
+
+| **Required** | **Meaning** |
+|--------------|-------------|
+| `needs_rebuild(bulk, targets, sources) → bool` | Returns `true` when the list should be discarded and rebuilt. Called before every `update()`. |
+| `snapshot(bulk, targets, sources) → void` | Records whatever state the rebuilder uses to detect staleness. Called after every successful build. |
+
+Both methods receive the full `TargetInput` and `SourceInput` objects so that geometry-aware rebuilders
+can read box views directly.
+
+### Built-in rebuilders
+
+| **Rebuilder** | **Template parameters** | **Rebuild condition** |
+|---------------|-------------------------|-----------------------|
+| `AlwaysRebuild` | — | Rebuilds every step. |
+| `NeverRebuild` | — | Never rebuilds after the first build. |
+| `RebuildOnEntityChange<MemSpace>` | Memory space | Target or source entity count changes. |
+| `RebuildOnAABBDisplacement<Scalar, MemSpace, Metric>` | Scalar type (default `double`), memory space, optional metric | Any AABB corner moves farther than the threshold since the last snapshot. Reads boxes from the search input at snapshot/check time. |
+| `RebuildOnOBBDisplacement<Scalar, MemSpace, Metric>` | Scalar type (default `double`), memory space, optional metric | Any OBB escapes its inflated snapshot containment region. Reads from caller-maintained `Kokkos::View<const OBB<Scalar>*, MemSpace>` views supplied at construction time. |
+
+#### `RebuildOnAABBDisplacement` constructors
+
+```cpp
+// Single threshold, both sides (aperiodic):
+RebuildOnAABBDisplacement<double, MemSpace> r(skin_distance);
+
+// Separate target/source thresholds (aperiodic):
+RebuildOnAABBDisplacement<double, MemSpace> r(target_skin, source_skin);
+
+// Single threshold with explicit periodic metric:
+RebuildOnAABBDisplacement<double, MemSpace, OrthorhombicMetric<double>> r(skin, metric);
+```
+
+#### `RebuildOnOBBDisplacement` constructors
+
+`RebuildOnOBBDisplacement` stores the OBB views at construction time and reads them directly on
+every `needs_rebuild()` / `snapshot()` call; it ignores the `TargetInput` / `SourceInput` arguments
+entirely. The caller must keep the views alive and up to date.
+
+```cpp
+using OBBView = Kokkos::View<const OBB<double>*, MemSpace>;
+
+// Symmetric (same view for both sides, aperiodic):
+RebuildOnOBBDisplacement<double, MemSpace> r(obb_view, skin_distance);
+
+// Asymmetric, single threshold (aperiodic):
+RebuildOnOBBDisplacement<double, MemSpace> r(target_obbs, source_obbs, skin_distance);
+
+// Asymmetric, separate thresholds (aperiodic):
+RebuildOnOBBDisplacement<double, MemSpace> r(target_obbs, source_obbs, target_skin, source_skin);
+
+// With explicit periodic metric:
+RebuildOnOBBDisplacement<double, MemSpace, OrthorhombicMetric<double>> r(obbs, skin, metric);
+```
+
+**Rebuild condition.** After snapshotting `obb_old`, each subsequent `obb_new` is tested for
+containment inside `obb_old` inflated by the threshold `d`. The check is performed in `obb_old`'s
+local frame along its three face normals:
+
+```
+for axis k in {0,1,2}:
+    extent = |T[k]| + Σⱼ |R_rel(k,j)| * h_new[j]
+    if extent > h_old[k] + d  →  rebuild required
+```
+
+where `T = R_old^T * sep(c_old, c_new)` is the center displacement in `obb_old`'s local frame,
+`R_rel = R_old^T * R_new` is the relative rotation, and `h_old`, `h_new` are half-extents.
+This reduces to the AABB corner-displacement check when `R_rel = I` (no orientation change).
+
+### Chaining rebuilders
+
+Rebuilders can be chained with `operator|`. The chain is short-circuit OR: if the first rebuilder
+fires, the second is not consulted. Both rebuilders' `snapshot()` methods are always called after a
+build so all snapshots stay current.
+
+```cpp
+auto managed = make_neighbor_list_builder<STKSearchNeighborList<>>()
+    .exec_space(exec)
+    .manage(RebuildOnEntityChange<MemSpace>{} | RebuildOnAABBDisplacement<double>{skin});
 ```
 
 ## Iterating over a neighbor list

@@ -351,17 +351,20 @@ class RebuildOnEntityChange {
 /// via the supplied `Metric` and returns true when any corner has moved farther than its
 /// threshold.
 ///
-/// The `Metric` controls how displacement is measured.  The default `FreeSpaceMetric<double>`
+/// The `Metric` controls how displacement is measured.  The default `FreeSpaceMetric<Scalar>`
 /// gives the raw Cartesian difference, reproducing the original aperiodic behaviour.  Any
 /// periodic metric from `mundy_geom/periodicity.hpp` (e.g. `OrthorhombicMetric`,
 /// `TriclinicMetric`) applies the minimum-image convention so that a particle crossing a
 /// periodic boundary is not counted as having moved by a full cell length.
 ///
+/// \tparam Scalar      Floating-point type for the displacement threshold and snapshot storage.
+///   Defaults to `double`.
 /// \tparam MemorySpace Kokkos memory space for device-resident snapshots and kernels.
 /// \tparam Metric      Distance metric used for corner-displacement measurement.
-///   Defaults to `FreeSpaceMetric<double>` (aperiodic, raw Cartesian difference).
+///   Defaults to `FreeSpaceMetric<Scalar>` (aperiodic, raw Cartesian difference).
 ///   Any concrete metric type from `mundy_geom/periodicity.hpp` is valid.
-template <typename MemorySpace = stk::ngp::MemSpace, typename Metric = FreeSpaceMetric<double>>
+template <typename Scalar = double, typename MemorySpace = stk::ngp::MemSpace,
+          typename Metric = FreeSpaceMetric<Scalar>>
 class RebuildOnAABBDisplacement {
  public:
   //! \name Aliases
@@ -370,7 +373,7 @@ class RebuildOnAABBDisplacement {
   using memory_space = MemorySpace;
   using execution_space = typename MemorySpace::execution_space;
   using metric_type = Metric;
-  using scalar_type = typename Metric::value_type;
+  using scalar_type = Scalar;
   //@}
 
   //! \name Constructors
@@ -381,7 +384,7 @@ class RebuildOnAABBDisplacement {
   /// Only available when `Metric` is `FreeSpaceMetric` (the aperiodic default). For
   /// periodic simulations or when using a custom metric, supply a metric explicitly via the overloads below.
   /// \param max_displacement [in] Rebuild if any corner moves farther than this.
-  explicit RebuildOnAABBDisplacement(double max_displacement)
+  explicit RebuildOnAABBDisplacement(Scalar max_displacement)
     requires is_free_space_metric_v<Metric>
       : target_max_displacement_(max_displacement), source_max_displacement_(max_displacement) {
   }
@@ -391,7 +394,7 @@ class RebuildOnAABBDisplacement {
   /// Only available when `Metric` is `FreeSpaceMetric` (the aperiodic default).
   /// \param target_max_displacement [in] Threshold for target box corners.
   /// \param source_max_displacement [in] Threshold for source box corners.
-  RebuildOnAABBDisplacement(double target_max_displacement, double source_max_displacement)
+  RebuildOnAABBDisplacement(Scalar target_max_displacement, Scalar source_max_displacement)
     requires is_free_space_metric_v<Metric>
       : target_max_displacement_(target_max_displacement), source_max_displacement_(source_max_displacement) {
   }
@@ -401,7 +404,7 @@ class RebuildOnAABBDisplacement {
   /// Use this for periodic simulations where displacement must respect the periodic cell.
   /// \param max_displacement [in] Threshold applied to both targets and sources.
   /// \param metric [in] Metric used to compute minimum-image corner displacement.
-  RebuildOnAABBDisplacement(double max_displacement, const Metric& metric)
+  RebuildOnAABBDisplacement(Scalar max_displacement, const Metric& metric)
       : target_max_displacement_(max_displacement), source_max_displacement_(max_displacement), metric_(metric) {
   }
 
@@ -410,7 +413,7 @@ class RebuildOnAABBDisplacement {
   /// \param target_max_displacement [in] Threshold for target box corners.
   /// \param source_max_displacement [in] Threshold for source box corners.
   /// \param metric [in] Metric used to compute minimum-image corner displacement.
-  RebuildOnAABBDisplacement(double target_max_displacement, double source_max_displacement, const Metric& metric)
+  RebuildOnAABBDisplacement(Scalar target_max_displacement, Scalar source_max_displacement, const Metric& metric)
       : target_max_displacement_(target_max_displacement),
         source_max_displacement_(source_max_displacement),
         metric_(metric) {
@@ -465,21 +468,21 @@ class RebuildOnAABBDisplacement {
 
   /// \brief Uniform min-corner accessor for both ArborX::Box (.minCorner()) and STK boxes (.min_corner()).
   template <typename BoxT>
-  KOKKOS_INLINE_FUNCTION static double box_min(const BoxT& b, int i) {
+  KOKKOS_INLINE_FUNCTION static scalar_type box_min(const BoxT& b, int i) {
     if constexpr (requires { b.minCorner(); }) {
-      return static_cast<double>(b.minCorner()[i]);
+      return static_cast<scalar_type>(b.minCorner()[i]);
     } else {
-      return static_cast<double>(b.min_corner()[i]);
+      return static_cast<scalar_type>(b.min_corner()[i]);
     }
   }
 
   /// \brief Uniform max-corner accessor for both ArborX::Box (.maxCorner()) and STK boxes (.max_corner()).
   template <typename BoxT>
-  KOKKOS_INLINE_FUNCTION static double box_max(const BoxT& b, int i) {
+  KOKKOS_INLINE_FUNCTION static scalar_type box_max(const BoxT& b, int i) {
     if constexpr (requires { b.maxCorner(); }) {
-      return static_cast<double>(b.maxCorner()[i]);
+      return static_cast<scalar_type>(b.maxCorner()[i]);
     } else {
-      return static_cast<double>(b.max_corner()[i]);
+      return static_cast<scalar_type>(b.max_corner()[i]);
     }
   }
 
@@ -490,7 +493,7 @@ class RebuildOnAABBDisplacement {
   /// across the cell boundary is not counted as having moved by a full cell length.
   template <typename BoxView>
   bool corners_moved(const BoxView& current_boxes, const Kokkos::View<scalar_type*, memory_space>& snapshot,
-                     double threshold) const {
+                     scalar_type threshold) const {
     int n = static_cast<int>(current_boxes.extent(0));
     if (n == 0) return false;
     auto snap = snapshot;
@@ -547,10 +550,10 @@ class RebuildOnAABBDisplacement {
   //! Whether snapshot() has been called at least once.
   bool has_snapshot_ = false;
   //! Per-corner displacement threshold for target boxes.
-  double target_max_displacement_;
+  scalar_type target_max_displacement_;
   //! Per-corner displacement threshold for source boxes.
-  double source_max_displacement_;
-  //! Metric used to compute minimum-image corner displacement.  Default is FreeSpaceMetric<double>.
+  scalar_type source_max_displacement_;
+  //! Metric used to compute minimum-image corner displacement.  Default is FreeSpaceMetric<Scalar>.
   Metric metric_{};
   //! Snapshot of target box corners (6 scalars per box: min_xyz then max_xyz).
   Kokkos::View<scalar_type*, memory_space> snapshot_target_{"mundy_rebuilder_snap_tgt", 0};
@@ -605,7 +608,7 @@ class RebuildOnAABBDisplacement {
 ///   Any periodic metric from `mundy_geom/periodicity.hpp` applies the minimum-image
 ///   convention to the center displacement so that boundary-crossing is handled correctly.
 template <typename Scalar = double, typename MemorySpace = stk::ngp::MemSpace,
-          typename Metric = FreeSpaceMetric<double>>
+          typename Metric = FreeSpaceMetric<Scalar>>
 class RebuildOnOBBDisplacement {
  public:
   //! \name Aliases

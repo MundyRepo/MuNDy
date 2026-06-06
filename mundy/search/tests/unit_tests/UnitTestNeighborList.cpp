@@ -1245,8 +1245,8 @@ static_assert(RebuilderType<AlwaysRebuild>, "AlwaysRebuild must satisfy Rebuilde
 static_assert(RebuilderType<NeverRebuild>, "NeverRebuild must satisfy RebuilderType.");
 static_assert(RebuilderType<RebuildOnEntityChange<TestMemSpace>>,
               "RebuildOnEntityChange<HostSpace> must satisfy RebuilderType.");
-static_assert(RebuilderType<RebuildOnAABBDisplacement<TestMemSpace>>,
-              "RebuildOnAABBDisplacement<HostSpace> must satisfy RebuilderType.");
+static_assert(RebuilderType<RebuildOnAABBDisplacement<float, TestMemSpace>>,
+              "RebuildOnAABBDisplacement<float, HostSpace> must satisfy RebuilderType.");
 static_assert(RebuilderType<RebuildOnOBBDisplacement<double, TestMemSpace>>,
               "RebuildOnOBBDisplacement<double, HostSpace> must satisfy RebuilderType.");
 static_assert(RebuilderType<RebuilderChain<AlwaysRebuild, NeverRebuild>>,
@@ -1428,7 +1428,7 @@ TEST(RebuildOnAABBDisplacement, ThresholdBehavior) {
   const stk::mesh::Selector sel = meta->universal_part();
 
   constexpr float kThreshold = 0.5f;
-  RebuildOnAABBDisplacement<TestMemSpace> rebuilder(kThreshold);
+  RebuildOnAABBDisplacement<float, TestMemSpace> rebuilder(kThreshold);
 
   auto make_sb = [&](float cx) {
     Kokkos::View<STKBoxTrait::box_type*, TestMemSpace> bv("boxes", 1);
@@ -1489,7 +1489,7 @@ TEST(RebuildOnAABBDisplacement, SeparateTargetAndSourceThresholds) {
 
   constexpr float kTargetThreshold = 0.3f;
   constexpr float kSourceThreshold = 0.8f;
-  RebuildOnAABBDisplacement<TestMemSpace> rebuilder(kTargetThreshold, kSourceThreshold);
+  RebuildOnAABBDisplacement<float, TestMemSpace> rebuilder(kTargetThreshold, kSourceThreshold);
 
   auto make_sb = [&](float cx) {
     Kokkos::View<STKBoxTrait::box_type*, TestMemSpace> bv("boxes", 1);
@@ -1746,7 +1746,7 @@ TEST_F(STKDeterministicFixture, Rebuilder_AABBDisplacement_EndToEnd) {
   constexpr float kThreshold = 0.3f;
   auto managed = make_neighbor_list_builder<STKList>()
                      .exec_space(TestExecSpace{})
-                     .manage(RebuildOnAABBDisplacement<TestMemSpace>{kThreshold});
+                     .manage(RebuildOnAABBDisplacement<float, TestMemSpace>{kThreshold});
 
   // Initial: 1 overlapping pair; snapshot taken.
   auto r1 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
@@ -1831,7 +1831,7 @@ TEST_F(STKDeterministicFixture, CombinedRebuilder_AABBSafeOnEntityAdd) {
   auto managed =
       make_neighbor_list_builder<STKList>()
           .exec_space(TestExecSpace{})
-          .manage(RebuildOnAABBDisplacement<TestMemSpace>{kThreshold} | RebuildOnEntityChange<TestMemSpace>{});
+          .manage(RebuildOnAABBDisplacement<float, TestMemSpace>{kThreshold} | RebuildOnEntityChange<TestMemSpace>{});
 
   // Initial build: 2 targets, 2 sources → 1 pair; both snapshots recorded.
   auto r1 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
@@ -1852,7 +1852,7 @@ TEST_F(STKDeterministicFixture, CombinedRebuilder_AABBSafeOnEntityRemove) {
   auto managed =
       make_neighbor_list_builder<STKList>()
           .exec_space(TestExecSpace{})
-          .manage(RebuildOnAABBDisplacement<TestMemSpace>{kThreshold} | RebuildOnEntityChange<TestMemSpace>{});
+          .manage(RebuildOnAABBDisplacement<float, TestMemSpace>{kThreshold} | RebuildOnEntityChange<TestMemSpace>{});
 
   // Initial build: 6 far-away universal targets → 0 pairs.
   auto far_uni = make_far_universal_boxes(*this);
@@ -1871,7 +1871,7 @@ TEST_F(STKDeterministicFixture, CombinedRebuilder_AABBSafeOnEntityRemove) {
 // that the entity identity changed and returns true, triggering the rebuild.
 TEST_F(STKDeterministicFixture, CombinedRebuilder_EntityChangeFiresOnEntitySwap) {
   constexpr float kThreshold = 0.3f;
-  auto chain = RebuildOnAABBDisplacement<TestMemSpace>{kThreshold} | RebuildOnEntityChange<TestMemSpace>{};
+  auto chain = RebuildOnAABBDisplacement<float, TestMemSpace>{kThreshold} | RebuildOnEntityChange<TestMemSpace>{};
 
   // Snapshot the initial state.
   chain.snapshot(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
@@ -1938,7 +1938,7 @@ TEST_F(STKDeterministicFixture, EntityChange_TransitionToEmpty_SignalsRebuild) {
 // count-change rebuild; but an empty target set trivially produces an empty list
 // regardless of how far boxes "moved".
 TEST_F(STKDeterministicFixture, AABBDisplacement_EmptyTargets_DoesNotFireAfterSnapshot) {
-  RebuildOnAABBDisplacement<TestMemSpace> rebuilder(0.01f);
+  RebuildOnAABBDisplacement<float, TestMemSpace> rebuilder(0.01f);
   auto empty = make_empty_boxes(*this);
 
   // First call always rebuilds (no snapshot yet).
@@ -1958,7 +1958,7 @@ TEST_F(STKDeterministicFixture, AABBDisplacement_EmptyTargets_DoesNotFireAfterSn
 // With zero targets and zero sources from the very start, corners_moved over
 // an empty range must return false (not crash or return garbage from the reducer).
 TEST_F(STKDeterministicFixture, AABBDisplacement_EmptyFromStart_NoRebuildAfterFirstBuild) {
-  RebuildOnAABBDisplacement<TestMemSpace> rebuilder(0.01f);
+  RebuildOnAABBDisplacement<float, TestMemSpace> rebuilder(0.01f);
   auto empty = make_empty_boxes(*this);
 
   // First call: no snapshot → rebuilds.
@@ -1980,7 +1980,7 @@ TEST_F(STKDeterministicFixture, ManagedList_ZeroTargets_NeverRebuildsAfterFirstB
   auto empty = make_empty_boxes(*this);
   auto managed = make_neighbor_list_builder<STKList>()
                      .exec_space(TestExecSpace{})
-                     .manage(RebuildOnAABBDisplacement<TestMemSpace>{0.01f});
+                     .manage(RebuildOnAABBDisplacement<float, TestMemSpace>{0.01f});
 
   // First update: list doesn't exist yet, must build.
   auto r1 = managed.update(*bulk_, empty, disjoint_source_boxes_);

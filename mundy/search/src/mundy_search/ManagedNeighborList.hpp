@@ -59,7 +59,7 @@ namespace search {
 /// \code{.cpp}
 ///   // manage() at any position — chain continues after it:
 ///   auto managed = make_neighbor_list_builder<STKSearchNeighborList<>>()
-///       .manage(RebuildOnEntityChange{} | RebuildOnAABBDisplacement<>{skin_distance})
+///       .manage(RebuildOnEntityChange{} | RebuildOnAABBDisplacement<double>{skin_distance})
 ///       .exec_space(exec)
 ///       .broad_phase(ExcludeSelfInteraction{});
 ///
