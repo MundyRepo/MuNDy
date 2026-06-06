@@ -37,6 +37,7 @@
 #include <stk_util/ngp/NgpSpaces.hpp>
 
 // Mundy
+#include <mundy_geom/primitives/OBB.hpp>     // for mundy::OBB, mundy::intersects
 #include <mundy_search/SearchCandidate.hpp>  // for NeighborSearchCandidate, PeriodicNeighborSearchCandidate
 #include <mundy_utils/throw_assert.hpp>      // for MUNDY_THROW_ASSERT
 
@@ -370,6 +371,76 @@ inline void ExcludeSymmetricDuplicates::setup(const stk::mesh::BulkData& bulk_da
   }
   Kokkos::deep_copy(bucket_in_intersection_, host_mask);
 }
+
+/// \class ExcludeNonIntersectingOBBs
+/// \brief Narrow-phase excluder that keeps only candidates whose OBBs intersect.
+///
+/// Takes two caller-owned Kokkos views of OBBs indexed by the same dense ordinals as the
+/// target/source entity arrays used to build the search.  `operator()` calls
+/// `intersects(target_obb, source_obb)` (15-axis SAT) and excludes the pair if the OBBs
+/// do not overlap.
+///
+/// Intended use: append as a `.narrow_phase(ExcludeNonIntersectingOBBs{...})` filter after
+/// an AABB broad phase to tighten the candidate set for oriented shapes.
+///
+/// \tparam Scalar   Floating-point scalar type of the OBBs (default: `double`).
+/// \tparam MemSpace Kokkos memory space for the OBB views (default: `stk::ngp::MemSpace`).
+template <typename Scalar = double, typename MemSpace = stk::ngp::MemSpace>
+class ExcludeNonIntersectingOBBs {
+ public:
+  //! \name Aliases
+  //@{
+
+  using scalar_type   = Scalar;
+  using obb_type      = OBB<Scalar>;
+  using obb_view_type = Kokkos::View<const obb_type*, MemSpace>;
+  //@}
+
+  //! \name Constructors
+  //@{
+
+  KOKKOS_DEFAULTED_FUNCTION ExcludeNonIntersectingOBBs() = default;
+
+  /// \brief Construct from separate target and source OBB views (asymmetric search).
+  /// \param target_obbs [in] OBBs for target entities, indexed by dense target ordinals.
+  /// \param source_obbs [in] OBBs for source entities, indexed by dense source ordinals.
+  KOKKOS_INLINE_FUNCTION
+  ExcludeNonIntersectingOBBs(obb_view_type target_obbs, obb_view_type source_obbs)
+      : target_obbs_(target_obbs), source_obbs_(source_obbs) {}
+
+  /// \brief Construct from a single OBB view (symmetric / self-search).
+  /// \param obbs [in] OBBs indexed by dense entity ordinals, shared by both sides.
+  KOKKOS_INLINE_FUNCTION
+  explicit ExcludeNonIntersectingOBBs(obb_view_type obbs)
+      : target_obbs_(obbs), source_obbs_(obbs) {}
+  //@}
+
+  //! \name Setup
+  //@{
+
+  /// \brief No-op: OBB views are caller-owned and provided at construction.
+  void setup(const stk::mesh::BulkData& /*bulk_data*/, const stk::mesh::Selector& /*target_selector*/,
+             const stk::mesh::Selector& /*source_selector*/) {}
+  //@}
+
+  //! \name Filtering
+  //@{
+
+  /// \brief Exclude candidate pairs whose OBBs do not intersect.
+  /// \tparam Candidate Candidate pair type with `target_index()` and `source_index()` accessors.
+  /// \param candidate [in] Candidate pair produced by a search backend.
+  template <typename Candidate>
+  KOKKOS_INLINE_FUNCTION bool operator()(const Candidate& candidate) const {
+    return !intersects(target_obbs_(candidate.target_index()), source_obbs_(candidate.source_index()));
+  }
+  //@}
+
+ private:
+  //! OBBs for target entities, indexed by dense target ordinals.
+  obb_view_type target_obbs_;
+  //! OBBs for source entities, indexed by dense source ordinals.
+  obb_view_type source_obbs_;
+};
 
 }  // namespace search
 

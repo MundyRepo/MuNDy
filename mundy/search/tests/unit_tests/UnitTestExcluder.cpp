@@ -28,6 +28,7 @@
 ///   Group 4 — ExcluderChain: OR semantics, multi-level chaining, setup propagation.
 ///   Group 5 — ExcludeSymmetricDuplicates: selector intersection logic and directional suppression.
 ///   Group 6 — ExcludeConnectedEntities: excludes element pairs sharing a connected node.
+///   Group 7 — ExcludeNonIntersectingOBBs: ordinal-indexed OBB views, separated vs intersecting pairs.
 
 // Mundy
 #include <MundySearch_config.hpp>  // for HAVE_MUNDYSEARCH_*
@@ -52,8 +53,12 @@
 #include <stk_topology/topology.hpp>
 #include <stk_util/parallel/Parallel.hpp>
 
+// Mundy geom
+#include <mundy_geom/primitives/OBB.hpp>  // for mundy::OBB, mundy::Point, mundy::intersects
+
 // Mundy math
-#include <mundy_math/Vector3.hpp>  // for mundy::Vector3
+#include <mundy_math/Quaternion.hpp>  // for mundy::Quaternion
+#include <mundy_math/Vector3.hpp>     // for mundy::Vector3
 
 // Mundy search
 #include <mundy_search/Excluder.hpp>
@@ -70,6 +75,17 @@ namespace {
 using Cand = NeighborSearchCandidate<size_t>;
 using Vec3f = mundy::Vector3<float>;
 using PeriodicCand = PeriodicNeighborSearchCandidate<Vec3f, size_t>;
+using ObbView = Kokkos::View<OBB<double>*, stk::ngp::MemSpace>;
+
+// Build a device-accessible OBB view from an initializer list.
+ObbView make_obb_view(std::initializer_list<OBB<double>> items) {
+  ObbView v("test_obbs", items.size());
+  auto h = Kokkos::create_mirror_view(v);
+  size_t i = 0;
+  for (const auto& obb : items) h(i++) = obb;
+  Kokkos::deep_copy(v, h);
+  return v;
+}
 
 // =============================================================================
 // Group 1 — Compile-time concept checks
@@ -79,13 +95,17 @@ static_assert(ExcluderType<NoExcluder>);
 static_assert(ExcluderType<ExcludeSelfInteraction>);
 static_assert(ExcluderType<ExcludeConnectedEntities>);
 static_assert(ExcluderType<ExcludeSymmetricDuplicates>);
+static_assert(ExcluderType<ExcludeNonIntersectingOBBs<double>>);
+static_assert(ExcluderType<ExcludeNonIntersectingOBBs<float>>);
 static_assert(ExcluderType<ExcluderChain<NoExcluder, ExcludeSelfInteraction>>);
 static_assert(ExcluderType<ExcluderChain<NoExcluder, ExcludeSymmetricDuplicates>>);
+static_assert(ExcluderType<ExcluderChain<NoExcluder, ExcludeNonIntersectingOBBs<double>>>);
 static_assert(
     ExcluderType<ExcluderChain<ExcluderChain<NoExcluder, ExcludeSelfInteraction>, ExcludeSymmetricDuplicates>>);
 // const-qualified types must NOT satisfy ExcluderType because setup() is non-const.
 static_assert(!ExcluderType<const NoExcluder>);
 static_assert(!ExcluderType<const ExcludeSelfInteraction>);
+static_assert(!ExcluderType<const ExcludeNonIntersectingOBBs<double>>);
 
 // =============================================================================
 // Minimal STK mesh factory for excluder tests
@@ -499,6 +519,95 @@ TEST(ExcludeConnectedEntitiesTest, ReflectsNewConnectivityAfterSetup) {
   ex.setup(*m.bulk, m.meta->universal_part(), m.meta->universal_part());
 
   EXPECT_TRUE(ex(make_cand(0, 2, m.elem[1], m.elem[3])));
+}
+
+// =============================================================================
+// Group 7 — ExcludeNonIntersectingOBBs
+// =============================================================================
+//
+// Three axis-aligned unit-cube OBBs:
+//   obb_origin: center=(0,0,0),  half=(0.5,0.5,0.5)
+//   obb_close:  center=(0.8,0,0), half=(0.5,0.5,0.5) → separation=0.8 < 1.0 → intersects obb_origin
+//   obb_far:    center=(2.0,0,0), half=(0.5,0.5,0.5) → separation=2.0 > 1.0 → separated from obb_origin
+
+static OBB<double> make_unit_cube(double cx, double cy, double cz) {
+  return OBB<double>{Point<double>{cx, cy, cz}, Quaternion<double>::identity(), 0.5, 0.5, 0.5};
+}
+
+TEST(ExcludeNonIntersectingOBBsTest, SetupIsNoOp) {
+  // setup() must be callable and must not affect filtering behavior.
+  auto m = make_two_part_mesh();
+  const OBB<double> origin = make_unit_cube(0.0, 0.0, 0.0);
+  const OBB<double> far    = make_unit_cube(2.0, 0.0, 0.0);
+  auto v = make_obb_view({origin, far});
+  ExcludeNonIntersectingOBBs<double> ex{v};
+
+  ex.setup(*m.bulk, *m.part_a, *m.part_b);
+  EXPECT_TRUE(ex(make_cand(0, 1, m.node[1], m.node[2])));  // separated → excluded
+  ex.setup(*m.bulk, m.meta->universal_part(), m.meta->universal_part());
+  EXPECT_TRUE(ex(make_cand(0, 1, m.node[1], m.node[2])));  // unchanged
+}
+
+TEST(ExcludeNonIntersectingOBBsTest, ExcludesSeparatedPair) {
+  auto m = make_two_part_mesh();
+  auto v = make_obb_view({make_unit_cube(0.0, 0.0, 0.0),  // index 0
+                          make_unit_cube(2.0, 0.0, 0.0)}); // index 1 — separated
+  ExcludeNonIntersectingOBBs<double> ex{v};
+  ex.setup(*m.bulk, m.meta->universal_part(), m.meta->universal_part());
+
+  EXPECT_TRUE(ex(make_cand(0, 1, m.node[1], m.node[2])));  // origin vs far → excluded
+  EXPECT_TRUE(ex(make_cand(1, 0, m.node[2], m.node[1])));  // far vs origin → excluded (symmetric)
+}
+
+TEST(ExcludeNonIntersectingOBBsTest, RetainsIntersectingPair) {
+  auto m = make_two_part_mesh();
+  auto v = make_obb_view({make_unit_cube(0.0, 0.0, 0.0),  // index 0
+                          make_unit_cube(0.8, 0.0, 0.0)}); // index 1 — overlapping
+  ExcludeNonIntersectingOBBs<double> ex{v};
+  ex.setup(*m.bulk, m.meta->universal_part(), m.meta->universal_part());
+
+  EXPECT_FALSE(ex(make_cand(0, 1, m.node[1], m.node[2])));  // origin vs close → retained
+  EXPECT_FALSE(ex(make_cand(1, 0, m.node[2], m.node[1])));  // close vs origin → retained
+}
+
+TEST(ExcludeNonIntersectingOBBsTest, AsymmetricTargetSourceViews) {
+  // target_obbs[0] = origin; source_obbs[0] = far, source_obbs[1] = close.
+  auto m = make_two_part_mesh();
+  auto target_v = make_obb_view({make_unit_cube(0.0, 0.0, 0.0)});
+  auto source_v = make_obb_view({make_unit_cube(2.0, 0.0, 0.0),   // index 0 — separated
+                                  make_unit_cube(0.8, 0.0, 0.0)}); // index 1 — overlapping
+  ExcludeNonIntersectingOBBs<double> ex{target_v, source_v};
+  ex.setup(*m.bulk, m.meta->universal_part(), m.meta->universal_part());
+
+  EXPECT_TRUE (ex(make_cand(0, 0, m.node[1], m.node[1])));  // origin vs far   → excluded
+  EXPECT_FALSE(ex(make_cand(0, 1, m.node[1], m.node[2])));  // origin vs close → retained
+}
+
+TEST(ExcludeNonIntersectingOBBsTest, SymmetricSingleViewConstructor) {
+  // Single view used for both target and source sides.
+  auto m = make_two_part_mesh();
+  auto v = make_obb_view({make_unit_cube(0.0, 0.0, 0.0),  // index 0 — origin
+                          make_unit_cube(0.8, 0.0, 0.0),  // index 1 — close
+                          make_unit_cube(2.0, 0.0, 0.0)}); // index 2 — far
+  ExcludeNonIntersectingOBBs<double> ex{v};
+  ex.setup(*m.bulk, m.meta->universal_part(), m.meta->universal_part());
+
+  EXPECT_FALSE(ex(make_cand(0, 0, m.node[1], m.node[1])));  // origin vs origin → retained
+  EXPECT_FALSE(ex(make_cand(0, 1, m.node[1], m.node[2])));  // origin vs close  → retained
+  EXPECT_TRUE (ex(make_cand(0, 2, m.node[1], m.node[3])));  // origin vs far    → excluded
+}
+
+TEST(ExcludeNonIntersectingOBBsTest, ChainCompatibility) {
+  // ExcludeNonIntersectingOBBs must compose correctly in an ExcluderChain.
+  auto m = make_two_part_mesh();
+  auto v = make_obb_view({make_unit_cube(0.0, 0.0, 0.0),  // index 0
+                          make_unit_cube(0.8, 0.0, 0.0),  // index 1 — close
+                          make_unit_cube(2.0, 0.0, 0.0)}); // index 2 — far
+  auto chain = NoExcluder{}.exclude(ExcludeNonIntersectingOBBs<double>{v});
+  chain.setup(*m.bulk, m.meta->universal_part(), m.meta->universal_part());
+
+  EXPECT_FALSE(chain(make_cand(0, 1, m.node[1], m.node[2])));  // origin vs close → retained
+  EXPECT_TRUE (chain(make_cand(0, 2, m.node[1], m.node[3])));  // origin vs far   → excluded
 }
 
 }  // namespace
