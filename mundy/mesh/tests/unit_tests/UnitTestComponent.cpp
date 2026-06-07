@@ -274,6 +274,17 @@ TEST_F(UnitTestComponentFixture, NgpFieldComponentRoundTripDeviceMutations) {
   auto ngp_quaternion_accessor = get_updated_ngp_component(quaternion_accessor);
   auto ngp_aabb_accessor = get_updated_ngp_component(aabb_accessor);
 
+  static_assert(std::is_same_v<decltype(ngp_scalar_accessor),
+                               NgpScalarFieldComponent<stk::mesh::NgpField<double>>>);
+  static_assert(std::is_same_v<decltype(ngp_vector3_accessor),
+                               NgpVector3FieldComponent<stk::mesh::NgpField<double>>>);
+  static_assert(std::is_same_v<decltype(ngp_matrix3_accessor),
+                               NgpMatrix3FieldComponent<stk::mesh::NgpField<double>>>);
+  static_assert(std::is_same_v<decltype(ngp_quaternion_accessor),
+                               NgpQuaternionFieldComponent<stk::mesh::NgpField<double>>>);
+  static_assert(std::is_same_v<decltype(ngp_aabb_accessor),
+                               NgpAABBFieldComponent<stk::mesh::NgpField<double>>>);
+
   ngp_scalar_accessor.sync_to_device();
   ngp_vector3_accessor.sync_to_device();
   ngp_matrix3_accessor.sync_to_device();
