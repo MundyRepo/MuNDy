@@ -41,10 +41,13 @@
 
 // Mundy
 #include <mundy_geom/primitives/AABB.hpp>  // for mundy::AABB
+#include <mundy_geom/primitives/OBB.hpp>   // for mundy::OBB
 #include <mundy_math/Matrix3.hpp>          // for mundy::get_matrix3_view and mundy::Matrix3
 #include <mundy_math/Quaternion.hpp>       // for mundy::get_quaternion_view and mundy::Quaternion
 #include <mundy_math/ScalarWrapper.hpp>    // for mundy::get_scalar_view and mundy::ScalarView
 #include <mundy_math/Vector3.hpp>          // for mundy::get_vector3_view and mundy::Vector3
+#include <mundy_math/ShiftedView.hpp>      // for mundy::get_shifted_view and mundy::get_owning_shifted_accessor
+
 namespace mundy {
 
 namespace mesh {
@@ -165,6 +168,7 @@ MUNDY_IMPL_MATRIX_FIELD_DATA_NN(6)  // matrix6_field_data
 #undef MUNDY_IMPL_MATRIX_FIELD_DATA_NN
 
 /// \brief Get a view of a field's data as a Quaternion. 4 scalars per entity.
+/// Layout: x (0), y (1), z (2), w (3). Same as Eigen's internal storage order for quaternions.
 template <class FieldType, typename StkDebugger = stk::mesh::DefaultStkFieldSyncDebugger>
 inline auto quaternion_field_data(const FieldType& f, stk::mesh::Entity e,
                                   stk::mesh::DummyOverload dummyArg = stk::mesh::DummyOverload(),
@@ -175,6 +179,7 @@ inline auto quaternion_field_data(const FieldType& f, stk::mesh::Entity e,
 }
 
 /// \brief Get a view of a field's data as an AABB. 6 scalars per entity.
+/// Layout: min corner xyz (0-2), max corner xyz (3-5).
 template <class FieldType, typename StkDebugger = stk::mesh::DefaultStkFieldSyncDebugger>
 inline auto aabb_field_data(const FieldType& f, stk::mesh::Entity e,
                             stk::mesh::DummyOverload dummyArg = stk::mesh::DummyOverload(),
@@ -189,6 +194,23 @@ inline auto aabb_field_data(const FieldType& f, stk::mesh::Entity e,
   using min_point_t = decltype(min_corner);
   using max_point_t = decltype(max_corner);
   return AABB<value_type, min_point_t, max_point_t>(min_corner, max_corner);
+}
+
+/// \brief Get a view of a field's data as an OBB. 10 scalars per entity.
+/// Layout: center xyz (0-2), orientation quaternion wxyz (3-6), half-extents xyz (7-9).
+template <class FieldType, typename StkDebugger = stk::mesh::DefaultStkFieldSyncDebugger>
+inline auto obb_field_data(const FieldType& f, stk::mesh::Entity e,
+                           stk::mesh::DummyOverload dummyArg = stk::mesh::DummyOverload(),
+                           const char* fileName = HOST_DEBUG_FILE_NAME, int lineNumber = HOST_DEBUG_LINE_NUMBER) {
+  using value_type  = typename FieldType::value_type;
+  value_type* base  = stk::mesh::field_data(f, e, dummyArg, fileName, lineNumber);
+  auto center       = get_vector3_view<value_type>(base);
+  auto orientation  = get_owning_quaternion<value_type>(get_shifted_view<value_type, 3>(base));
+  auto half_extents = get_owning_vector3<value_type>(get_shifted_view<value_type, 7>(base));
+  using center_t    = decltype(center);
+  using orient_t    = decltype(orientation);
+  using he_t        = decltype(half_extents);
+  return OBB<value_type, center_t, orient_t, he_t>(center, orientation, half_extents);
 }
 //@}
 
@@ -291,7 +313,8 @@ KOKKOS_INLINE_FUNCTION auto quaternion_field_data(FieldType& f, const stk::mesh:
   return get_owning_quaternion<typename FieldType::value_type>(f(i));
 }
 
-/// \brief Get a view of a field's data as a Matrix3
+/// \brief Get a view of a field's data as an AABB. 6 scalars per entity.
+/// Layout: min corner xyz (0-2), max corner xyz (3-5).
 template <class FieldType>
 KOKKOS_INLINE_FUNCTION auto aabb_field_data(FieldType& f, const stk::mesh::FastMeshIndex& i) {
   constexpr size_t shift = 3;
@@ -303,6 +326,20 @@ KOKKOS_INLINE_FUNCTION auto aabb_field_data(FieldType& f, const stk::mesh::FastM
   using min_point_t = decltype(min_corner);
   using max_point_t = decltype(max_corner);
   return AABB<value_type, min_point_t, max_point_t>(min_corner, max_corner);
+}
+
+/// \brief Get a view of a field's NGP data as an OBB. 10 scalars per entity.
+/// Layout: center xyz (0-2), orientation quaternion wxyz (3-6), half-extents xyz (7-9).
+template <class FieldType>
+KOKKOS_INLINE_FUNCTION auto obb_field_data(FieldType& f, const stk::mesh::FastMeshIndex& i) {
+  using value_type  = typename FieldType::value_type;
+  auto center       = get_owning_vector3<value_type>(f(i));
+  auto orientation  = get_owning_quaternion<value_type>(get_owning_shifted_accessor<value_type, 3>(f(i)));
+  auto half_extents = get_owning_vector3<value_type>(get_owning_shifted_accessor<value_type, 7>(f(i)));
+  using center_t    = decltype(center);
+  using orient_t    = decltype(orientation);
+  using he_t        = decltype(half_extents);
+  return OBB<value_type, center_t, orient_t, he_t>(center, orientation, half_extents);
 }
 //@}
 

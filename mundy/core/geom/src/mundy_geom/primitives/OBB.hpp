@@ -67,16 +67,21 @@ namespace mundy {
 /// \class OBB
 /// \brief Oriented Bounding Box: a center, a unit-quaternion orientation, and per-axis half-extents.
 ///
-/// \tparam Scalar       Floating-point scalar type.
-/// \tparam PointType    Point type for the center; defaults to `Point<Scalar>`.
+/// \tparam Scalar          Floating-point scalar type.
+/// \tparam PointType       Point type for the center; defaults to `Point<Scalar>`.
 /// \tparam QuaternionType  Quaternion type for the orientation; defaults to `Quaternion<Scalar>`.
-template <typename Scalar,//
-          ValidPointType    PointType     = Point<Scalar>,//
-          ValidQuaternionType QuaternionType = Quaternion<Scalar>>
+/// \tparam HalfExtentsType Vector3 type for the half-extents; defaults to `Vector3<Scalar>`.
+///                        A view variant (e.g. an owning Vector3 aliasing field storage) may be
+///                        substituted here to enable field-backed OBB components.
+template <typename Scalar, //
+          ValidPointType      PointType      = Point<Scalar>, //
+          ValidQuaternionType QuaternionType = Quaternion<Scalar>, //
+          ValidVector3Type    HalfExtentsType = Vector3<Scalar>> //
 class OBB {
-  static_assert(std::is_same_v<typename PointType::value_type,     Scalar> &&
-                std::is_same_v<typename QuaternionType::value_type, Scalar>,
-                "The value_type of PointType and QuaternionType must match Scalar.");
+  static_assert(std::is_same_v<typename PointType::value_type,      Scalar> &&
+                std::is_same_v<typename QuaternionType::value_type,  Scalar> &&
+                std::is_same_v<typename HalfExtentsType::value_type, Scalar>,
+                "The value_type of PointType, QuaternionType, and HalfExtentsType must match Scalar.");
 
  public:
   //! \name Type aliases
@@ -85,7 +90,7 @@ class OBB {
   using value_type     = Scalar;
   using point_t        = PointType;
   using orientation_t  = QuaternionType;
-  using half_extents_t = Vector3<Scalar>;
+  using half_extents_t = HalfExtentsType;
 
   static constexpr bool is_finite = true;
   //@}
@@ -216,7 +221,7 @@ class OBB {
   //@}
 
  private:
-  template <typename, ValidPointType, ValidQuaternionType>
+  template <typename, ValidPointType, ValidQuaternionType, ValidVector3Type>
   friend class OBB;
 
   point_t        center_;
@@ -230,7 +235,7 @@ class OBB {
 
 #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
 template <ValidPointType P, ValidQuaternionType Q, ValidVector3Type V>
-OBB(P, Q, V) -> OBB<typename P::value_type, P, Q>;
+OBB(P, Q, V) -> OBB<typename P::value_type, P, Q, V>;
 #endif
 
 // =============================================================================
@@ -239,8 +244,8 @@ OBB(P, Q, V) -> OBB<typename P::value_type, P, Q>;
 
 template <typename T>
 struct is_obb_impl : std::false_type {};
-template <typename Scalar, typename P, typename Q>
-struct is_obb_impl<OBB<Scalar, P, Q>> : std::true_type {};
+template <typename Scalar, typename P, typename Q, typename H>
+struct is_obb_impl<OBB<Scalar, P, Q, H>> : std::true_type {};
 
 template <typename T>
 struct is_obb : is_obb_impl<std::remove_cv_t<T>> {};

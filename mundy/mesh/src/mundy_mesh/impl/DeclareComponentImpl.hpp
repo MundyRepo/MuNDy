@@ -100,6 +100,12 @@ struct field_component_for<access::aabb<ScalarType>> {
   using type = AABBFieldComponent<FieldScalarType>;
 };
 
+template <typename ScalarType>
+struct field_component_for<access::obb<ScalarType>> {
+  template <typename FieldScalarType>
+  using type = OBBFieldComponent<FieldScalarType>;
+};
+
 // ======================================================================================================================
 // shared_component_for — maps a canonical access tag to the concrete shared-backed component type
 // ======================================================================================================================
@@ -195,6 +201,9 @@ std::string component_access_name(access::quaternion<ScalarType>) { return "quat
 
 template <typename ScalarType>
 std::string component_access_name(access::aabb<ScalarType>) { return "aabb"; }
+
+template <typename ScalarType>
+std::string component_access_name(access::obb<ScalarType>) { return "obb"; }
 
 template <typename CanonicalAccess>
 std::string component_access_name() { return component_access_name(CanonicalAccess{}); }

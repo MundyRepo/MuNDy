@@ -251,6 +251,161 @@ std::tuple<IndexView, ShiftView, OffsetView> apply_narrow_phase(
   return {narrow_source_owner_indices, narrow_relative_image_shifts, narrow_offsets};
 }
 
+/// \brief Apply a narrow-phase excluder to a broad-phase dense-2D neighbor list (non-periodic).
+///
+/// The broad-phase 2D list is represented as a dense `source_indices(t, k)` view with a separate
+/// `neighbor_counts(t)` view giving the valid column count per target.  Three passes:
+///
+///  - L0 (count): For each target row, count candidates that survive the excluder.
+///  - L1 (max):   Find the new maximum column width to size the output 2D view.
+///  - L2 (fill):  Re-iterate each row and write surviving source ordinals, left-compacted.
+///
+/// \tparam ExecutionSpace  Kokkos execution space.
+/// \tparam NarrowExcluder  Excluder satisfying `ExcluderType`.
+/// \tparam EntityView      Kokkos view of `stk::mesh::Entity*` (rank 1).
+/// \tparam CountView       Kokkos view of per-target count values (rank 1).
+/// \tparam IndexView2D     Kokkos view of source-ordinal values (rank 2, `(target, col)`).
+///
+/// \returns `{narrow_counts, narrow_src}` — the filtered per-target counts and dense-2D source index view.
+template <typename ExecutionSpace, typename NarrowExcluder, typename EntityView, typename CountView,
+          typename IndexView2D>
+  requires ExcluderType<NarrowExcluder>
+std::pair<CountView, IndexView2D> apply_narrow_phase_2d(ExecutionSpace exec,
+                                                        const NarrowExcluder& narrow_excluder,
+                                                        const EntityView& target_entities,
+                                                        const EntityView& source_entities,
+                                                        const IndexView2D& broad_source_indices,
+                                                        const CountView& neighbor_counts) {
+  using size_type = typename CountView::value_type;
+  using memory_space = typename CountView::memory_space;
+
+  const size_type num_targets = static_cast<size_type>(target_entities.extent(0));
+
+  // L0: count narrow survivors per target row.
+  CountView narrow_counts("mundy_2d_narrow_counts", num_targets);
+  Kokkos::parallel_for(
+      "mundy_2d_narrow_L0", Kokkos::RangePolicy<ExecutionSpace>(exec, 0, num_targets),
+      KOKKOS_LAMBDA(size_type t) {
+        size_type count = 0;
+        for (size_type k = 0; k < neighbor_counts(t); ++k) {
+          const size_type s = broad_source_indices(t, k);
+          if (!narrow_excluder(NeighborSearchCandidate<size_t>(
+                  static_cast<size_t>(t), static_cast<size_t>(s),
+                  target_entities(t), source_entities(s)))) {
+            ++count;
+          }
+        }
+        narrow_counts(t) = count;
+      });
+
+  // L1: new max column width.
+  size_type new_max = 0;
+  Kokkos::parallel_reduce(
+      "mundy_2d_narrow_L1_max", Kokkos::RangePolicy<ExecutionSpace>(exec, 0, num_targets),
+      KOKKOS_LAMBDA(size_type t, size_type& lmax) {
+        lmax = lmax > narrow_counts(t) ? lmax : narrow_counts(t);
+      },
+      Kokkos::Max<size_type>(new_max));
+  Kokkos::fence();
+
+  // L2: fill compacted 2D grid.
+  IndexView2D narrow_src("mundy_2d_narrow_src", num_targets, new_max);
+  Kokkos::parallel_for(
+      "mundy_2d_narrow_L2", Kokkos::RangePolicy<ExecutionSpace>(exec, 0, num_targets),
+      KOKKOS_LAMBDA(size_type t) {
+        size_type write_col = 0;
+        for (size_type k = 0; k < neighbor_counts(t); ++k) {
+          const size_type s = broad_source_indices(t, k);
+          if (!narrow_excluder(NeighborSearchCandidate<size_t>(
+                  static_cast<size_t>(t), static_cast<size_t>(s),
+                  target_entities(t), source_entities(s)))) {
+            narrow_src(t, write_col++) = s;
+          }
+        }
+      });
+
+  return {narrow_counts, narrow_src};
+}
+
+/// \brief Apply a narrow-phase excluder to a broad-phase dense-2D neighbor list (periodic).
+///
+/// Periodic overload: carries per-pair relative image shifts through the filter alongside source
+/// ordinals.  The input `broad_source_indices(t, k)` and `broad_image_shifts(t, k)` are a matched
+/// pair; the output `narrow_src` and `narrow_shifts` preserve that correspondence for surviving pairs.
+///
+/// \tparam ExecutionSpace  Kokkos execution space.
+/// \tparam NarrowExcluder  Excluder satisfying `ExcluderType`.
+/// \tparam EntityView      Kokkos view of `stk::mesh::Entity*` (rank 1).
+/// \tparam CountView       Kokkos view of per-target count values (rank 1).
+/// \tparam IndexView2D     Kokkos view of source-ordinal values (rank 2, `(target, col)`).
+/// \tparam ShiftView2D     Kokkos view of relative image-shift values (rank 2, `(target, col)`).
+///
+/// \returns `{narrow_counts, narrow_src, narrow_shifts}`.
+template <typename ExecutionSpace, typename NarrowExcluder, typename EntityView, typename CountView,
+          typename IndexView2D, typename ShiftView2D>
+  requires ExcluderType<NarrowExcluder>
+std::tuple<CountView, IndexView2D, ShiftView2D> apply_narrow_phase_2d(
+    ExecutionSpace exec, const NarrowExcluder& narrow_excluder,
+    const EntityView& target_entities, const EntityView& source_entities,
+    const IndexView2D& broad_source_indices, const ShiftView2D& broad_image_shifts,
+    const CountView& owner_counts) {
+  using size_type = typename CountView::value_type;
+  using shift_type = typename ShiftView2D::value_type;
+  using memory_space = typename CountView::memory_space;
+
+  const size_type num_targets = static_cast<size_type>(target_entities.extent(0));
+
+  // L0: count narrow survivors per target row.
+  CountView narrow_counts("mundy_2d_per_narrow_counts", num_targets);
+  Kokkos::parallel_for(
+      "mundy_2d_per_narrow_L0", Kokkos::RangePolicy<ExecutionSpace>(exec, 0, num_targets),
+      KOKKOS_LAMBDA(size_type t) {
+        size_type count = 0;
+        for (size_type k = 0; k < owner_counts(t); ++k) {
+          const size_type  s     = broad_source_indices(t, k);
+          const shift_type shift = broad_image_shifts(t, k);
+          if (!narrow_excluder(PeriodicNeighborSearchCandidate<shift_type, size_t>(
+                  static_cast<size_t>(t), static_cast<size_t>(s),
+                  target_entities(t), source_entities(s), shift))) {
+            ++count;
+          }
+        }
+        narrow_counts(t) = count;
+      });
+
+  // L1: new max column width.
+  size_type new_max = 0;
+  Kokkos::parallel_reduce(
+      "mundy_2d_per_narrow_L1_max", Kokkos::RangePolicy<ExecutionSpace>(exec, 0, num_targets),
+      KOKKOS_LAMBDA(size_type t, size_type& lmax) {
+        lmax = lmax > narrow_counts(t) ? lmax : narrow_counts(t);
+      },
+      Kokkos::Max<size_type>(new_max));
+  Kokkos::fence();
+
+  // L2: fill compacted 2D grid.
+  IndexView2D narrow_src   ("mundy_2d_per_narrow_src",    num_targets, new_max);
+  ShiftView2D narrow_shifts("mundy_2d_per_narrow_shifts", num_targets, new_max);
+  Kokkos::parallel_for(
+      "mundy_2d_per_narrow_L2", Kokkos::RangePolicy<ExecutionSpace>(exec, 0, num_targets),
+      KOKKOS_LAMBDA(size_type t) {
+        size_type write_col = 0;
+        for (size_type k = 0; k < owner_counts(t); ++k) {
+          const size_type  s     = broad_source_indices(t, k);
+          const shift_type shift = broad_image_shifts(t, k);
+          if (!narrow_excluder(PeriodicNeighborSearchCandidate<shift_type, size_t>(
+                  static_cast<size_t>(t), static_cast<size_t>(s),
+                  target_entities(t), source_entities(s), shift))) {
+            narrow_src(t, write_col)    = s;
+            narrow_shifts(t, write_col) = shift;
+            ++write_col;
+          }
+        }
+      });
+
+  return {narrow_counts, narrow_src, narrow_shifts};
+}
+
 }  // namespace impl
 
 }  // namespace search
