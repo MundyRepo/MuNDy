@@ -151,9 +151,16 @@ void store_obb(stk::mesh::Field<double>& field, stk::mesh::Entity node, const OB
   const auto& c = obb.center();
   const auto& q = obb.orientation();
   const auto& h = obb.half_extents();
-  d[0] = c[0]; d[1] = c[1]; d[2] = c[2];
-  d[3] = q.w(); d[4] = q.x(); d[5] = q.y(); d[6] = q.z();
-  d[7] = h[0]; d[8] = h[1]; d[9] = h[2];
+  d[0] = c[0];
+  d[1] = c[1];
+  d[2] = c[2];
+  d[3] = q.w();
+  d[4] = q.x();
+  d[5] = q.y();
+  d[6] = q.z();
+  d[7] = h[0];
+  d[8] = h[1];
+  d[9] = h[2];
 }
 
 // Mesh with an `obb` node field; node id i+1 carries obbs[i] (so the universal-selector enumeration gives dense
@@ -618,14 +625,14 @@ TEST(ExcludeNonIntersectingOBBsTest, RetainsIntersectingPair) {
 
 TEST(ExcludeNonIntersectingOBBsTest, AsymmetricTargetSourceSelectors) {
   // One OBB field, asymmetric via per-side selectors: part_a = {origin}; part_b = {far, close}.
-  auto m = make_obb_mesh({make_unit_cube(0.0, 0.0, 0.0),    // node 1 → part_a, target ordinal 0 — origin
-                          make_unit_cube(2.0, 0.0, 0.0),    // node 2 → part_b, source ordinal 0 — separated
-                          make_unit_cube(0.8, 0.0, 0.0)},   // node 3 → part_b, source ordinal 1 — overlapping
+  auto m = make_obb_mesh({make_unit_cube(0.0, 0.0, 0.0),   // node 1 → part_a, target ordinal 0 — origin
+                          make_unit_cube(2.0, 0.0, 0.0),   // node 2 → part_b, source ordinal 0 — separated
+                          make_unit_cube(0.8, 0.0, 0.0)},  // node 3 → part_b, source ordinal 1 — overlapping
                          /*split=*/1);
   ExcludeNonIntersectingOBBs<double> ex{m.component(), m.component()};
   ex.setup(*m.bulk, *m.part_a, *m.part_b);
 
-  EXPECT_TRUE (ex(make_cand(0, 0, m.node[0], m.node[1])));  // origin vs far   → excluded
+  EXPECT_TRUE(ex(make_cand(0, 0, m.node[0], m.node[1])));   // origin vs far   → excluded
   EXPECT_FALSE(ex(make_cand(0, 1, m.node[0], m.node[2])));  // origin vs close → retained
 }
 
@@ -639,7 +646,7 @@ TEST(ExcludeNonIntersectingOBBsTest, SymmetricSingleComponentConstructor) {
 
   EXPECT_FALSE(ex(make_cand(0, 0, m.node[0], m.node[0])));  // origin vs origin → retained
   EXPECT_FALSE(ex(make_cand(0, 1, m.node[0], m.node[1])));  // origin vs close  → retained
-  EXPECT_TRUE (ex(make_cand(0, 2, m.node[0], m.node[2])));  // origin vs far    → excluded
+  EXPECT_TRUE(ex(make_cand(0, 2, m.node[0], m.node[2])));   // origin vs far    → excluded
 }
 
 TEST(ExcludeNonIntersectingOBBsTest, ChainCompatibility) {
@@ -651,7 +658,7 @@ TEST(ExcludeNonIntersectingOBBsTest, ChainCompatibility) {
   chain.setup(*m.bulk, m.meta->universal_part(), m.meta->universal_part());
 
   EXPECT_FALSE(chain(make_cand(0, 1, m.node[0], m.node[1])));  // origin vs close → retained
-  EXPECT_TRUE (chain(make_cand(0, 2, m.node[0], m.node[2])));  // origin vs far   → excluded
+  EXPECT_TRUE(chain(make_cand(0, 2, m.node[0], m.node[2])));   // origin vs far   → excluded
 }
 
 }  // namespace

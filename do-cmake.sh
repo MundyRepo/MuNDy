@@ -53,15 +53,28 @@ is_positive_integer() {
   esac
 }
 
-# TriBITS uses MPI_EXEC_MAX_NUMPROCS as a hard configure-time cap:
-# tests requesting more ranks are not added to CTest. MPI_EXEC_DEFAULT_NUMPROCS
-# is only used for MPI tests without NUM_MPI_PROCS; TriBITS does not clamp it
-# to the max, so keep the default <= max.
+# TriBITS MPI test-registration policy
 #
-# Policy: explicit env vars win. Otherwise infer max from Slurm when possible,
-# fall back to 1 inside Slurm with no task count, and use nproc outside Slurm.
-# If default is not set, use min(4, max) to preserve TriBITS' usual default
-# without skipping default-rank MPI tests on small allocations.
+# TriBITS decides which MPI tests exist at configure time. The relevant knobs
+# are defined in TriBITS' MPI/test support modules:
+#
+#   MPI_EXEC_MAX_NUMPROCS
+#     Hard cap for test registration. A test requesting more ranks than this
+#     value is not added to CTest.
+#
+#   MPI_EXEC_DEFAULT_NUMPROCS
+#     Rank count for MPI tests that do not specify NUM_MPI_PROCS. This is not
+#     a cap, so keep it <= MPI_EXEC_MAX_NUMPROCS.
+#
+# This script chooses MPI_EXEC_MAX_NUMPROCS from, in order:
+#   1. explicit MPI_EXEC_MAX_NUMPROCS
+#   2. Slurm task-count variables
+#   3. 1 inside Slurm when no task count is visible
+#   4. local CPU count outside Slurm
+#
+# The default rank count is explicit MPI_EXEC_DEFAULT_NUMPROCS when provided;
+# otherwise min(4, MPI_EXEC_MAX_NUMPROCS), matching TriBITS' default when the
+# allocation can support it.
 if [ -n "${MPI_EXEC_MAX_NUMPROCS:-}" ]; then
   if ! is_positive_integer "$MPI_EXEC_MAX_NUMPROCS"; then
     echo "ERROR: MPI_EXEC_MAX_NUMPROCS must be a positive integer: $MPI_EXEC_MAX_NUMPROCS" >&2

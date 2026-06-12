@@ -88,8 +88,7 @@ class ArborXSearchCandidateFactory {
   template <typename Predicate>
   KOKKOS_INLINE_FUNCTION candidate_type operator()(const Predicate& predicate, size_type source_index) const {
     const size_type target_index = ArborX::getData(predicate);
-    return candidate_type(target_index, source_index, targets_.identity(target_index),
-                          sources_.identity(source_index));
+    return candidate_type(target_index, source_index, targets_.identity(target_index), sources_.identity(source_index));
   }
   //@}
 

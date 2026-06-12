@@ -396,12 +396,12 @@ class ExcludeNonIntersectingOBBs {
   //! \name Aliases
   //@{
 
-  using scalar_type        = Scalar;
-  using memory_space       = MemSpace;
-  using execution_space    = typename MemSpace::execution_space;
-  using obb_type           = OBB<Scalar>;
+  using scalar_type = Scalar;
+  using memory_space = MemSpace;
+  using execution_space = typename MemSpace::execution_space;
+  using obb_type = OBB<Scalar>;
   using obb_component_type = mundy::mesh::OBBFieldComponent<Scalar>;
-  using obb_view_type      = Kokkos::View<obb_type*, MemSpace>;
+  using obb_view_type = Kokkos::View<obb_type*, MemSpace>;
   //@}
 
   //! \name Constructors
@@ -413,12 +413,14 @@ class ExcludeNonIntersectingOBBs {
   /// \param target_obbs [in] OBB component supplying target-entity OBBs.
   /// \param source_obbs [in] OBB component supplying source-entity OBBs.
   ExcludeNonIntersectingOBBs(obb_component_type target_obbs, obb_component_type source_obbs)
-      : target_obb_component_(target_obbs), source_obb_component_(source_obbs) {}
+      : target_obb_component_(target_obbs), source_obb_component_(source_obbs) {
+  }
 
   /// \brief Construct from a single OBB component (symmetric / self-search).
   /// \param obbs [in] OBB component shared by both target and source sides.
   explicit ExcludeNonIntersectingOBBs(obb_component_type obbs)
-      : target_obb_component_(obbs), source_obb_component_(obbs) {}
+      : target_obb_component_(obbs), source_obb_component_(obbs) {
+  }
   //@}
 
   //! \name Setup
@@ -453,8 +455,8 @@ class ExcludeNonIntersectingOBBs {
                           const stk::mesh::Selector& selector, obb_view_type& out) {
     component.sync_to_device();
     auto ngp_component = mundy::mesh::get_updated_ngp_component(component);
-    auto indices = mundy::mesh::get_local_entity_indices(bulk_data, component.field().entity_rank(), selector,
-                                                         execution_space{});
+    auto indices =
+        mundy::mesh::get_local_entity_indices(bulk_data, component.field().entity_rank(), selector, execution_space{});
     indices.sync_to_device();
     auto idx = indices.view_device();
     const int n = static_cast<int>(idx.extent(0));
@@ -463,10 +465,10 @@ class ExcludeNonIntersectingOBBs {
     Kokkos::parallel_for(
         "mundy_obb_excluder_materialize", Kokkos::RangePolicy<execution_space>(0, n), KOKKOS_LAMBDA(int i) {
           const auto v = ngp_component(idx(i));
-          out_local(i) = obb_type(Point<Scalar>{v.center()[0], v.center()[1], v.center()[2]},
-                                  Quaternion<Scalar>{v.orientation().w(), v.orientation().x(), v.orientation().y(),
-                                                     v.orientation().z()},
-                                  Vector3<Scalar>{v.half_extents()[0], v.half_extents()[1], v.half_extents()[2]});
+          out_local(i) = obb_type(
+              Point<Scalar>{v.center()[0], v.center()[1], v.center()[2]},
+              Quaternion<Scalar>{v.orientation().w(), v.orientation().x(), v.orientation().y(), v.orientation().z()},
+              Vector3<Scalar>{v.half_extents()[0], v.half_extents()[1], v.half_extents()[2]});
         });
     Kokkos::fence();
   }

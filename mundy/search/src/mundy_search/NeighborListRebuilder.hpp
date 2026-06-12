@@ -41,7 +41,7 @@
 #include <mundy_math/Quaternion.hpp>      // for mundy::Quaternion
 #include <mundy_math/Vector3.hpp>         // for mundy::Vector3
 #include <mundy_math/cmath.hpp>
-#include <mundy_mesh/EntityIndices.hpp>   // for mundy::mesh::get_local_entities, get_local_entity_indices
+#include <mundy_mesh/EntityIndices.hpp>  // for mundy::mesh::get_local_entities, get_local_entity_indices
 #include <mundy_mesh/FieldComponent.hpp>  // for mundy::mesh::AABBFieldComponent/OBBFieldComponent, get_updated_ngp_component
 #include <mundy_search/NeighborListBuildTraits.hpp>  // for AABBSearchInputTypeFor
 #include <mundy_search/SearchInput.hpp>              // for SearchInput
@@ -166,7 +166,8 @@ struct AlwaysRebuild {
 
   /// \brief No per-update setup needed.
   void setup(const stk::mesh::BulkData& /*bulk*/, const stk::mesh::Selector& /*target_selector*/,
-             const stk::mesh::Selector& /*source_selector*/) noexcept {}
+             const stk::mesh::Selector& /*source_selector*/) noexcept {
+  }
 
   /// \brief Always signal that a rebuild is needed.
   template <typename TargetInput, typename SourceInput>
@@ -210,7 +211,8 @@ struct NeverRebuild {
 
   /// \brief No per-update setup needed.
   void setup(const stk::mesh::BulkData& /*bulk*/, const stk::mesh::Selector& /*target_selector*/,
-             const stk::mesh::Selector& /*source_selector*/) noexcept {}
+             const stk::mesh::Selector& /*source_selector*/) noexcept {
+  }
 
   /// \brief Never signal that a rebuild is needed after the first build.
   template <typename TargetInput, typename SourceInput>
@@ -278,7 +280,8 @@ class RebuildOnEntityChange {
 
   /// \brief No per-update setup needed; entities are enumerated on demand from each input's selector.
   void setup(const stk::mesh::BulkData& /*bulk*/, const stk::mesh::Selector& /*target_selector*/,
-             const stk::mesh::Selector& /*source_selector*/) noexcept {}
+             const stk::mesh::Selector& /*source_selector*/) noexcept {
+  }
 
   /// \brief Return true if the entity sequence differs from the snapshot at the last build.
   ///
@@ -462,7 +465,8 @@ class RebuildOnAABBDisplacement {
 
   /// \brief No per-update setup needed; geometry is read on demand from each input's AABB component.
   void setup(const stk::mesh::BulkData& /*bulk*/, const stk::mesh::Selector& /*target_selector*/,
-             const stk::mesh::Selector& /*source_selector*/) noexcept {}
+             const stk::mesh::Selector& /*source_selector*/) noexcept {
+  }
 
   /// \brief Return true if any AABB corner has moved beyond its threshold since the last build.
   ///
@@ -660,11 +664,11 @@ class RebuildOnOBBDisplacement {
   //! \name Aliases
   //@{
 
-  using memory_space       = MemorySpace;
-  using execution_space    = typename MemorySpace::execution_space;
-  using metric_type        = Metric;
-  using scalar_type        = Scalar;
-  using obb_type           = OBB<Scalar>;
+  using memory_space = MemorySpace;
+  using execution_space = typename MemorySpace::execution_space;
+  using metric_type = Metric;
+  using scalar_type = Scalar;
+  using obb_type = OBB<Scalar>;
   using obb_component_type = mundy::mesh::OBBFieldComponent<Scalar>;
   //@}
 
@@ -682,7 +686,8 @@ class RebuildOnOBBDisplacement {
       : target_obb_component_(obbs),
         source_obb_component_(obbs),
         target_max_displacement_(max_displacement),
-        source_max_displacement_(max_displacement) {}
+        source_max_displacement_(max_displacement) {
+  }
 
   /// \brief Construct with separate target/source OBB components and a single threshold (aperiodic).
   ///
@@ -694,7 +699,8 @@ class RebuildOnOBBDisplacement {
       : target_obb_component_(target_obbs),
         source_obb_component_(source_obbs),
         target_max_displacement_(max_displacement),
-        source_max_displacement_(max_displacement) {}
+        source_max_displacement_(max_displacement) {
+  }
 
   /// \brief Construct with separate target/source OBB components and asymmetric thresholds (aperiodic).
   ///
@@ -703,12 +709,13 @@ class RebuildOnOBBDisplacement {
   /// \param target_max_displacement  [in] Threshold for target OBBs.
   /// \param source_max_displacement  [in] Threshold for source OBBs.
   RebuildOnOBBDisplacement(obb_component_type target_obbs, obb_component_type source_obbs,
-                            Scalar target_max_displacement, Scalar source_max_displacement)
+                           Scalar target_max_displacement, Scalar source_max_displacement)
     requires is_free_space_metric_v<Metric>
       : target_obb_component_(target_obbs),
         source_obb_component_(source_obbs),
         target_max_displacement_(target_max_displacement),
-        source_max_displacement_(source_max_displacement) {}
+        source_max_displacement_(source_max_displacement) {
+  }
 
   /// \brief Construct with a symmetric OBB component, a single threshold, and an explicit metric.
   ///
@@ -722,7 +729,8 @@ class RebuildOnOBBDisplacement {
         source_obb_component_(obbs),
         target_max_displacement_(max_displacement),
         source_max_displacement_(max_displacement),
-        metric_(metric) {}
+        metric_(metric) {
+  }
 
   /// \brief Construct with separate target/source OBB components, asymmetric thresholds, and a metric.
   ///
@@ -732,13 +740,13 @@ class RebuildOnOBBDisplacement {
   /// \param source_max_displacement  [in] Threshold for source OBBs.
   /// \param metric                   [in] Metric for minimum-image center displacement.
   RebuildOnOBBDisplacement(obb_component_type target_obbs, obb_component_type source_obbs,
-                            Scalar target_max_displacement, Scalar source_max_displacement,
-                            const Metric& metric)
+                           Scalar target_max_displacement, Scalar source_max_displacement, const Metric& metric)
       : target_obb_component_(target_obbs),
         source_obb_component_(source_obbs),
         target_max_displacement_(target_max_displacement),
         source_max_displacement_(source_max_displacement),
-        metric_(metric) {}
+        metric_(metric) {
+  }
   //@}
 
   //! \name Rebuild policy
@@ -746,7 +754,8 @@ class RebuildOnOBBDisplacement {
 
   /// \brief No per-update setup needed; OBBs are read on demand from the stored OBB components.
   void setup(const stk::mesh::BulkData& /*bulk*/, const stk::mesh::Selector& /*target_selector*/,
-             const stk::mesh::Selector& /*source_selector*/) noexcept {}
+             const stk::mesh::Selector& /*source_selector*/) noexcept {
+  }
 
   /// \brief Return true if any OBB has escaped its inflated snapshot containment region.
   ///
@@ -830,8 +839,7 @@ class RebuildOnOBBDisplacement {
           const Vector3<Scalar> T = conjugate(obb_old.orientation()) * T_world;
 
           // Relative rotation: R_old^T * R_new.
-          const auto R_rel = quaternion_to_rotation_matrix(
-              conjugate(obb_old.orientation()) * obb_new.orientation());
+          const auto R_rel = quaternion_to_rotation_matrix(conjugate(obb_old.orientation()) * obb_new.orientation());
 
           // Check containment along each of obb_old's face normals.
           // The maximum extent of obb_new along local axis k is |T[k]| + sum_j |R_rel(k,j)| * h_new[j].
@@ -863,10 +871,10 @@ class RebuildOnOBBDisplacement {
         "mundy_obb_snapshot", Kokkos::RangePolicy<execution_space>(0, n), KOKKOS_LAMBDA(int i) {
           const auto v = ngp_component(indices(i));
           // Materialize the field-view OBB into an owning OBB<Scalar> (coordinate-wise to avoid cross-type ctors).
-          s(i) = obb_type(Point<Scalar>{v.center()[0], v.center()[1], v.center()[2]},
-                          Quaternion<Scalar>{v.orientation().w(), v.orientation().x(), v.orientation().y(),
-                                             v.orientation().z()},
-                          Vector3<Scalar>{v.half_extents()[0], v.half_extents()[1], v.half_extents()[2]});
+          s(i) = obb_type(
+              Point<Scalar>{v.center()[0], v.center()[1], v.center()[2]},
+              Quaternion<Scalar>{v.orientation().w(), v.orientation().x(), v.orientation().y(), v.orientation().z()},
+              Vector3<Scalar>{v.half_extents()[0], v.half_extents()[1], v.half_extents()[2]});
         });
     Kokkos::fence();
   }

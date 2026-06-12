@@ -38,9 +38,9 @@
 #include <stk_mesh/base/BulkData.hpp>  // for modification_begin/end, get_entity, entity_key
 #include <stk_mesh/base/Entity.hpp>
 #include <stk_mesh/base/EntityKey.hpp>               // for stk::mesh::EntityKey
+#include <stk_mesh/base/FieldParallel.hpp>           // for stk::mesh::communicate_field_data (ghosted geometry)
 #include <stk_mesh/base/GetNgpMesh.hpp>              // for stk::mesh::get_updated_ngp_mesh
 #include <stk_mesh/base/HashEntityAndEntityKey.hpp>  // for std::hash<stk::mesh::EntityKey>
-#include <stk_mesh/base/FieldParallel.hpp>           // for stk::mesh::communicate_field_data (ghosted geometry)
 #include <stk_mesh/base/NgpMesh.hpp>                 // for stk::mesh::NgpMesh (entity_key on device)
 #include <stk_mesh/base/Selector.hpp>
 #include <stk_search/BoundingBox.hpp>   // for stk::search::Box
@@ -695,8 +695,10 @@ STKSearchNeighborList<MemorySpace> NeighborListBuildTraits<STKSearchNeighborList
   // Narrow excluder is only set up when one was actually provided; NoExcluder
   // compiles away entirely so this branch is zero-cost when has_narrow_phase is false.
   [[maybe_unused]] const auto narrow_excluder = [&]() {
-    if constexpr (Builder::has_narrow_phase) return builder.setup_narrow_excluder(bulk_data);
-    else                                     return typename Builder::narrow_excluder_type{};
+    if constexpr (Builder::has_narrow_phase)
+      return builder.setup_narrow_excluder(bulk_data);
+    else
+      return typename Builder::narrow_excluder_type{};
   }();
 
   const int my_rank = bulk_data.parallel_rank();
@@ -1025,7 +1027,9 @@ STKSearchNeighborList<MemorySpace> NeighborListBuildTraits<STKSearchNeighborList
         const stk::mesh::Entity src_ent = extended_source_entities(src_ord);
         const NeighborSearchCandidate<size_type> candidate(trg_ord, src_ord, trg_ent, src_ent);
         if (excluder(candidate)) return;
-        if constexpr (Builder::has_narrow_phase) { if (narrow_excluder(candidate)) return; }
+        if constexpr (Builder::has_narrow_phase) {
+          if (narrow_excluder(candidate)) return;
+        }
 
         precomputed_target_ordinals(r) = trg_ord;
         precomputed_source_ordinals(r) = src_ord;
@@ -1141,19 +1145,17 @@ STKSearchNeighborList<MemorySpace> NeighborListBuildTraits<STKSearchNeighborList
   return result;
 }
 
-namespace impl {
-
-}  // namespace impl
+namespace impl {}  // namespace impl
 
 // ---------------------------------------------------------------------------
 // NeighborListBuildTraits::build() definition — periodic STK
 // ---------------------------------------------------------------------------
 //
 // Mirrors the non-periodic STK build, but the coarse search runs over periodic *image* boxes whose identity encodes
-// `{owner key, image shift}` (impl::PeriodicImageIdentity<EntityKey>).  Ghosting acts on the source *owner* named by the identity;
-// results collapse to owner ordinals with the per-object shift taken straight from the identity.  Source images are
-// pruned against the GLOBAL target bounding box (all-reduced) so an image that only reaches a remote rank's targets is
-// not dropped.
+// `{owner key, image shift}` (impl::PeriodicImageIdentity<EntityKey>).  Ghosting acts on the source *owner* named by
+// the identity; results collapse to owner ordinals with the per-object shift taken straight from the identity.  Source
+// images are pruned against the GLOBAL target bounding box (all-reduced) so an image that only reaches a remote rank's
+// targets is not dropped.
 template <typename MemorySpace, typename ImageShiftScalar>
 template <typename Builder>
   requires PeriodicAABBSearchInputType<typename Builder::target_input_type> &&
@@ -1185,8 +1187,10 @@ NeighborListBuildTraits<PeriodicSTKSearchNeighborList<MemorySpace, ImageShiftSca
   const auto exec_sp = builder.exec_space();
   const auto excluder = builder.setup_broad_excluder(bulk_data);
   [[maybe_unused]] const auto narrow_excluder = [&]() {
-    if constexpr (Builder::has_narrow_phase) return builder.setup_narrow_excluder(bulk_data);
-    else                                     return typename Builder::narrow_excluder_type{};
+    if constexpr (Builder::has_narrow_phase)
+      return builder.setup_narrow_excluder(bulk_data);
+    else
+      return typename Builder::narrow_excluder_type{};
   }();
   const int my_rank = bulk_data.parallel_rank();
   const bool single_rank = bulk_data.parallel_size() == 1;
@@ -1234,7 +1238,8 @@ NeighborListBuildTraits<PeriodicSTKSearchNeighborList<MemorySpace, ImageShiftSca
   auto source_image_identities = source_boxes.identities();
   auto source_owner_entities = source_images.owner_entities;
 
-  // --- Phase A: BoxIdentProc views over images; the per-image identity {owner key, image shift} is the search ident. ---
+  // --- Phase A: BoxIdentProc views over images; the per-image identity {owner key, image shift} is the search ident.
+  // ---
   search_view_t target_search("mundy_stk_per_tgt_search", num_target_images);
   search_view_t source_search("mundy_stk_per_src_search", num_source_images);
   Kokkos::parallel_for(

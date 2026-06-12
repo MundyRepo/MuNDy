@@ -71,8 +71,8 @@ namespace impl {
 /// \brief Per-axis lattice-neighbour bound: 1 on a periodic axis (offsets {-1,0,1}), 0 otherwise (offset {0}).
 template <typename Metric>
 KOKKOS_INLINE_FUNCTION mundy::Vector3<int> lattice_neighbour_bound(const Metric& metric) {
-  return mundy::Vector3<int>{metric.is_periodic(0) ? 1 : 0, //
-                             metric.is_periodic(1) ? 1 : 0, //
+  return mundy::Vector3<int>{metric.is_periodic(0) ? 1 : 0,  //
+                             metric.is_periodic(1) ? 1 : 0,  //
                              metric.is_periodic(2) ? 1 : 0};
 }
 

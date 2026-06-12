@@ -290,7 +290,8 @@ void store_aabb(stk::mesh::Field<double>& field, stk::mesh::Entity node, float c
 // over `selector` with an orthorhombic metric of cell length L.  The build generates the periodic images.
 PerInput make_periodic_input(stk::mesh::Field<double>& aabb_field, const stk::mesh::Selector& selector,
                              const std::vector<stk::mesh::Entity>& nodes,
-                             const std::vector<std::array<float, 3>>& positions, float hx, float hy, float hz, float L) {
+                             const std::vector<std::array<float, 3>>& positions, float hx, float hy, float hz,
+                             float L) {
   for (size_t i = 0; i < nodes.size(); ++i)
     store_aabb(aabb_field, nodes[i], positions[i][0], positions[i][1], positions[i][2], hx, hy, hz);
   PerComponent component(aabb_field);
@@ -361,18 +362,17 @@ PeriodicBoxes make_periodic_boxes(const stk::mesh::Selector& /*selector*/,
 // shift = wrapped_position - original_position.
 static PeriodicBoxes make_target_periodic_boxes(const stk::mesh::Selector& selector,
                                                 const std::vector<stk::mesh::Entity>& nodes,
-                                                const std::vector<std::array<float, 3>>& positions,
-                                                float L, float r) {
+                                                const std::vector<std::array<float, 3>>& positions, float L, float r) {
   const OrthorhombicMetric<AXIS_XYZ, float> metric{Vector3<float>{L, L, L}};
   const size_t N = positions.size();
-  std::vector<ArborX::Box>    img_boxes(N);
-  std::vector<size_t>         img_owners(N);
+  std::vector<ArborX::Box> img_boxes(N);
+  std::vector<size_t> img_owners(N);
   std::vector<ImageShiftType> img_shifts(N);
   for (size_t i = 0; i < N; ++i) {
     // Mirror the device generator: rigidly wrap the owner AABB (reference point = its min corner) into [0,L)^3.
     const AABB<float> aabb = make_aabb(positions[i][0], positions[i][1], positions[i][2], r);
     const ImageShiftType shift = oracle_image_shift(aabb, mundy::Vector3<int>{0, 0, 0}, metric);
-    img_boxes[i]  = impl::pack_arborx_box(translate(aabb, shift));
+    img_boxes[i] = impl::pack_arborx_box(translate(aabb, shift));
     img_owners[i] = i;
     img_shifts[i] = shift;
   }
@@ -385,11 +385,9 @@ static PeriodicBoxes make_target_periodic_boxes(const stk::mesh::Selector& selec
 static ArborX::Box compute_target_bbox(const PeriodicBoxes& target_boxes) {
   MUNDY_THROW_REQUIRE(target_boxes.size() > 0, std::invalid_argument,
                       "compute_target_bbox: target_boxes must be non-empty.");
-  float lo[3] = { std::numeric_limits<float>::max(),
-                  std::numeric_limits<float>::max(),
-                  std::numeric_limits<float>::max()};
-  float hi[3] = {-std::numeric_limits<float>::max(),
-                 -std::numeric_limits<float>::max(),
+  float lo[3] = {std::numeric_limits<float>::max(), std::numeric_limits<float>::max(),
+                 std::numeric_limits<float>::max()};
+  float hi[3] = {-std::numeric_limits<float>::max(), -std::numeric_limits<float>::max(),
                  -std::numeric_limits<float>::max()};
   for (size_t k = 0; k < target_boxes.size(); ++k) {
     const auto& b = target_boxes.box(k);
@@ -398,8 +396,7 @@ static ArborX::Box compute_target_bbox(const PeriodicBoxes& target_boxes) {
       hi[d] = std::max(hi[d], b.maxCorner()[d]);
     }
   }
-  return ArborX::Box{ArborX::Point{lo[0], lo[1], lo[2]},
-                     ArborX::Point{hi[0], hi[1], hi[2]}};
+  return ArborX::Box{ArborX::Point{lo[0], lo[1], lo[2]}, ArborX::Point{hi[0], hi[1], hi[2]}};
 }
 
 // Build source boxes: up to 27 images per owner (wrapped + n*L for n∈{-1,0,1}^3).
@@ -409,12 +406,11 @@ static ArborX::Box compute_target_bbox(const PeriodicBoxes& target_boxes) {
 // shift for surviving image n = (wrapped_position + n*L) - original_position.
 static PeriodicBoxes make_source_periodic_boxes(const stk::mesh::Selector& selector,
                                                 const std::vector<stk::mesh::Entity>& nodes,
-                                                const std::vector<std::array<float, 3>>& positions,
-                                                float L, float r,
+                                                const std::vector<std::array<float, 3>>& positions, float L, float r,
                                                 std::optional<ArborX::Box> target_bbox = std::nullopt) {
   const OrthorhombicMetric<AXIS_XYZ, float> metric{Vector3<float>{L, L, L}};
-  std::vector<ArborX::Box>    img_boxes;
-  std::vector<size_t>         img_owners;
+  std::vector<ArborX::Box> img_boxes;
+  std::vector<size_t> img_owners;
   std::vector<ImageShiftType> img_shifts;
   img_boxes.reserve(positions.size() * 27);
   img_owners.reserve(positions.size() * 27);
@@ -548,7 +544,8 @@ void check_target_image_shifts(const ListType& list, const std::vector<std::arra
           found = true;
           break;
         }
-      EXPECT_TRUE(found) << "target_image_shift+relative is not a valid source image for pair (" << t << "," << s << ")";
+      EXPECT_TRUE(found) << "target_image_shift+relative is not a valid source image for pair (" << t << "," << s
+                         << ")";
     }
   }
 }
@@ -650,8 +647,7 @@ class PeriodicFixture : public ::testing::Test {
     // owner's center into [0,L) for its single target image and stamps 27 source images; the resulting wrap-around
     // overlap (A's left source image with B's target, and vice-versa) is verified by `verify_periodic_2particle`.
     const std::vector<std::array<float, 3>> positions = {{kXa, 0.0f, 0.0f}, {kXb, 0.0f, 0.0f}};
-    periodic_input_ =
-        make_periodic_input(*aabb_field_, selector_, {node_a_, node_b_}, positions, kHx, kHyz, kHyz, kL);
+    periodic_input_ = make_periodic_input(*aabb_field_, selector_, {node_a_, node_b_}, positions, kHx, kHyz, kHyz, kL);
   }
 
   std::shared_ptr<stk::mesh::MetaData> meta_;
@@ -859,14 +855,13 @@ TEST(TestInfra, TargetAndSourceBoxHelperShifts) {
 //       FULL (unpruned) 27-image source set.
 TEST(TestInfra, SourceBoxAabbPruningReducesImagesAndPreservesCorrectness) {
   if (stk::parallel_machine_size(MPI_COMM_WORLD) != 1) GTEST_SKIP();
-  constexpr int kN = 20; constexpr size_t kSeed = 77;
+  constexpr int kN = 20;
+  constexpr size_t kSeed = 77;
   constexpr float L = 10.0f, r = 1.5f;
   std::vector<std::array<float, 3>> positions(kN);
   for (int i = 0; i < kN; ++i) {
     openrand::Philox rng = mundy::make_philox(kSeed, static_cast<uint32_t>(i));
-    positions[i] = {rng.uniform<float>(0.0f, L),
-                    rng.uniform<float>(0.0f, L),
-                    rng.uniform<float>(0.0f, L)};
+    positions[i] = {rng.uniform<float>(0.0f, L), rng.uniform<float>(0.0f, L), rng.uniform<float>(0.0f, L)};
   }
   auto mesh = make_node_mesh_with_aabb(kN);
   const stk::mesh::Selector sel = mesh.meta->universal_part();
@@ -874,10 +869,9 @@ TEST(TestInfra, SourceBoxAabbPruningReducesImagesAndPreservesCorrectness) {
   for (int i = 0; i < kN; ++i)
     nodes[i] = mesh.bulk->get_entity(stk::topology::NODE_RANK, static_cast<stk::mesh::EntityId>(i + 1));
 
-  const auto tboxes       = make_target_periodic_boxes(sel, nodes, positions, L, r);
-  const auto sboxes_full  = make_source_periodic_boxes(sel, nodes, positions, L, r);
-  const auto sboxes_pruned = make_source_periodic_boxes(sel, nodes, positions, L, r,
-                                                         compute_target_bbox(tboxes));
+  const auto tboxes = make_target_periodic_boxes(sel, nodes, positions, L, r);
+  const auto sboxes_full = make_source_periodic_boxes(sel, nodes, positions, L, r);
+  const auto sboxes_pruned = make_source_periodic_boxes(sel, nodes, positions, L, r, compute_target_bbox(tboxes));
 
   // (a) Pruning reduces image count vs the naive 27*N ceiling.
   EXPECT_LT(sboxes_pruned.size(), static_cast<size_t>(kN) * 27u)
@@ -905,18 +899,15 @@ TEST(TestInfra, SourceBoxAabbPruningReducesImagesAndPreservesCorrectness) {
   const std::set<PeriodicPair> actual(actual_vec.begin(), actual_vec.end());
 
   EXPECT_EQ(actual_vec.size(), actual.size()) << "List has duplicate entries after pruning.";
-  EXPECT_EQ(actual.size(), oracle.size())
-      << "list=" << actual.size() << " oracle=" << oracle.size();
+  EXPECT_EQ(actual.size(), oracle.size()) << "list=" << actual.size() << " oracle=" << oracle.size();
   for (const auto& p : oracle)
-    EXPECT_TRUE(actual.count(p))
-        << "MISSING t=" << p.target_owner << " s=" << p.source_owner
-        << " shift=(" << p.relative_shift[0] << "," << p.relative_shift[1]
-        << "," << p.relative_shift[2] << ")";
+    EXPECT_TRUE(actual.count(p)) << "MISSING t=" << p.target_owner << " s=" << p.source_owner << " shift=("
+                                 << p.relative_shift[0] << "," << p.relative_shift[1] << "," << p.relative_shift[2]
+                                 << ")";
   for (const auto& p : actual)
-    EXPECT_TRUE(oracle.count(p))
-        << "SPURIOUS t=" << p.target_owner << " s=" << p.source_owner
-        << " shift=(" << p.relative_shift[0] << "," << p.relative_shift[1]
-        << "," << p.relative_shift[2] << ")";
+    EXPECT_TRUE(oracle.count(p)) << "SPURIOUS t=" << p.target_owner << " s=" << p.source_owner << " shift=("
+                                 << p.relative_shift[0] << "," << p.relative_shift[1] << "," << p.relative_shift[2]
+                                 << ")";
 }
 
 // =============================================================================

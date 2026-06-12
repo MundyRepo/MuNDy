@@ -86,8 +86,8 @@
 #include <mundy_search/Neighbors.hpp>
 
 // Mundy search — STK (always available)
-#include <mundy_search/SearchInput.hpp>  // for SearchInput (component-backed inputs)
 #include <mundy_search/STKSearchNeighborList.hpp>
+#include <mundy_search/SearchInput.hpp>  // for SearchInput (component-backed inputs)
 #include <mundy_search/impl/STKSearchBoxes.hpp>
 
 // Mundy mesh / geom
@@ -156,7 +156,9 @@ using TestInput = SearchInput<TestComponent>;
 inline TestAABB make_aabb(double cx, double cy, double cz, double hx, double hy, double hz) {
   return TestAABB(cx - hx, cy - hy, cz - hz, cx + hx, cy + hy, cz + hz);
 }
-inline TestAABB make_aabb(double cx, double cy, double cz, double h) { return make_aabb(cx, cy, cz, h, h, h); }
+inline TestAABB make_aabb(double cx, double cy, double cz, double h) {
+  return make_aabb(cx, cy, cz, h, h, h);
+}
 
 /// AABB overlap predicate (the N^2 oracle's comparison).
 inline bool aabb_overlap(const TestAABB& a, const TestAABB& b) {
@@ -1326,8 +1328,9 @@ TestInput make_far_target_boxes(STKDeterministicFixture& f) {
 }
 
 // Write the disjoint-target nodes' coordinates onto the shared nodes (5,6): same coordinates, different entities.
-// RebuildOnAABBDisplacement sees no movement (target {1,2} → shared {5,6} carry identical coords); RebuildOnEntityChange
-// sees the entity set change.  Both target selectors are disjoint from the source nodes {3,4}.  Returns the shared input.
+// RebuildOnAABBDisplacement sees no movement (target {1,2} → shared {5,6} carry identical coords);
+// RebuildOnEntityChange sees the entity set change.  Both target selectors are disjoint from the source nodes {3,4}.
+// Returns the shared input.
 TestInput make_swapped_entity_boxes(STKDeterministicFixture& f) {
   store_aabb(*f.aabb_field_, f.nodes_[4], make_aabb(0.0, 0.0, 0.0, 2.0));     // node5 ← node1's coords
   store_aabb(*f.aabb_field_, f.nodes_[5], make_aabb(100., 100., 100., 0.5));  // node6 ← node2's coords
@@ -1797,7 +1800,7 @@ TEST(RebuildOnOBBDisplacement, SeparateTargetAndSourceThresholds) {
 
   // Same OBB component read over each side's selector: target → node 1, source → node 2.
   RebuildOnOBBDisplacement<double, TestMemSpace> rebuilder(obb_component, obb_component, kTargetThreshold,
-                                                          kSourceThreshold);
+                                                           kSourceThreshold);
 
   // No snapshot yet: always needs rebuild.
   EXPECT_TRUE(rebuilder.needs_rebuild(*mesh.bulk, tgt_input, src_input));

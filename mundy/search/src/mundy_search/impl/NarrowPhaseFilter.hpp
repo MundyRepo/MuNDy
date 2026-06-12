@@ -275,8 +275,7 @@ std::tuple<IndexView, ShiftView, OffsetView> apply_narrow_phase(
 template <typename ExecutionSpace, typename NarrowExcluder, typename EntityView, typename CountView,
           typename IndexView2D>
   requires ExcluderType<NarrowExcluder>
-std::pair<CountView, IndexView2D> apply_narrow_phase_2d(ExecutionSpace exec,
-                                                        const NarrowExcluder& narrow_excluder,
+std::pair<CountView, IndexView2D> apply_narrow_phase_2d(ExecutionSpace exec, const NarrowExcluder& narrow_excluder,
                                                         const EntityView& target_entities,
                                                         const EntityView& source_entities,
                                                         const IndexView2D& broad_source_indices,
@@ -289,14 +288,12 @@ std::pair<CountView, IndexView2D> apply_narrow_phase_2d(ExecutionSpace exec,
   // L0: count narrow survivors per target row.
   CountView narrow_counts("mundy_2d_narrow_counts", num_targets);
   Kokkos::parallel_for(
-      "mundy_2d_narrow_L0", Kokkos::RangePolicy<ExecutionSpace>(exec, 0, num_targets),
-      KOKKOS_LAMBDA(size_type t) {
+      "mundy_2d_narrow_L0", Kokkos::RangePolicy<ExecutionSpace>(exec, 0, num_targets), KOKKOS_LAMBDA(size_type t) {
         size_type count = 0;
         for (size_type k = 0; k < neighbor_counts(t); ++k) {
           const size_type s = broad_source_indices(t, k);
-          if (!narrow_excluder(NeighborSearchCandidate<size_t>(
-                  static_cast<size_t>(t), static_cast<size_t>(s),
-                  target_entities(t), source_entities(s)))) {
+          if (!narrow_excluder(NeighborSearchCandidate<size_t>(static_cast<size_t>(t), static_cast<size_t>(s),
+                                                               target_entities(t), source_entities(s)))) {
             ++count;
           }
         }
@@ -307,23 +304,19 @@ std::pair<CountView, IndexView2D> apply_narrow_phase_2d(ExecutionSpace exec,
   size_type new_max = 0;
   Kokkos::parallel_reduce(
       "mundy_2d_narrow_L1_max", Kokkos::RangePolicy<ExecutionSpace>(exec, 0, num_targets),
-      KOKKOS_LAMBDA(size_type t, size_type& lmax) {
-        lmax = lmax > narrow_counts(t) ? lmax : narrow_counts(t);
-      },
+      KOKKOS_LAMBDA(size_type t, size_type & lmax) { lmax = lmax > narrow_counts(t) ? lmax : narrow_counts(t); },
       Kokkos::Max<size_type>(new_max));
   Kokkos::fence();
 
   // L2: fill compacted 2D grid.
   IndexView2D narrow_src("mundy_2d_narrow_src", num_targets, new_max);
   Kokkos::parallel_for(
-      "mundy_2d_narrow_L2", Kokkos::RangePolicy<ExecutionSpace>(exec, 0, num_targets),
-      KOKKOS_LAMBDA(size_type t) {
+      "mundy_2d_narrow_L2", Kokkos::RangePolicy<ExecutionSpace>(exec, 0, num_targets), KOKKOS_LAMBDA(size_type t) {
         size_type write_col = 0;
         for (size_type k = 0; k < neighbor_counts(t); ++k) {
           const size_type s = broad_source_indices(t, k);
-          if (!narrow_excluder(NeighborSearchCandidate<size_t>(
-                  static_cast<size_t>(t), static_cast<size_t>(s),
-                  target_entities(t), source_entities(s)))) {
+          if (!narrow_excluder(NeighborSearchCandidate<size_t>(static_cast<size_t>(t), static_cast<size_t>(s),
+                                                               target_entities(t), source_entities(s)))) {
             narrow_src(t, write_col++) = s;
           }
         }
