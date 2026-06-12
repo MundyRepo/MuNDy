@@ -154,36 +154,37 @@ std::pair<IndexView, OffsetView> apply_narrow_phase(ExecutionSpace exec, const N
 
 /// \brief Apply a narrow-phase excluder to a broad-phase CSR neighbor list (periodic).
 ///
-/// Periodic overload that also carries per-pair relative image shifts through the filter.
-/// Runs the same three L passes, but constructs `PeriodicNeighborSearchCandidate` in L0/L2
-/// using the shift from `broad_relative_image_shifts(k)`, and in L2 writes both the source
-/// owner ordinal and the shift to the output views.
+/// Periodic overload that carries per-object image shifts through the filter: a per-target-owner target shift and a
+/// per-pair source shift. It constructs `PeriodicNeighborSearchCandidate` in L0/L2 from both, and in L2 writes the
+/// surviving source owner ordinal and source shift to the output views.
 ///
 /// \tparam ExecutionSpace Kokkos execution space for all three passes.
 /// \tparam NarrowExcluder Excluder type satisfying `ExcluderType`; must be callable with
 ///                        `PeriodicNeighborSearchCandidate<shift_type, size_t>`.
 /// \tparam EntityView     Kokkos view of `stk::mesh::Entity*` (rank 1).
 /// \tparam IndexView      Kokkos view of integral source-owner-ordinal values (rank 1).
-/// \tparam ShiftView      Kokkos view of relative image-shift values (rank 1).
+/// \tparam ShiftView      Kokkos view of image-shift values (rank 1).
 /// \tparam OffsetView     Kokkos view of integral offset values (rank 1).
 ///
-/// \param exec                        [in] Execution space instance.
-/// \param narrow_excluder             [in] Excluder applied to every broad-phase candidate.
-/// \param target_entities             [in] Dense target owner entity view of extent `num_targets`.
-/// \param source_entities             [in] Dense source owner entity view of extent `num_sources`.
-/// \param broad_source_owner_indices  [in] Flat CSR data: source owner ordinals, extent `total_broad_pairs`.
-/// \param broad_relative_image_shifts [in] Flat CSR data: relative image shifts, extent `total_broad_pairs`.
-/// \param broad_offsets               [in] CSR offsets of extent `num_targets + 1`.
+/// \param exec                       [in] Execution space instance.
+/// \param narrow_excluder            [in] Excluder applied to every broad-phase candidate.
+/// \param target_entities            [in] Dense target owner entity view of extent `num_targets`.
+/// \param source_entities            [in] Dense source owner entity view of extent `num_sources`.
+/// \param target_image_shifts        [in] Per-target-owner image shift, extent `num_targets`.
+/// \param broad_source_owner_indices [in] Flat CSR data: source owner ordinals, extent `total_broad_pairs`.
+/// \param broad_source_image_shifts  [in] Flat CSR data: per-pair source image shifts, extent `total_broad_pairs`.
+/// \param broad_offsets              [in] CSR offsets of extent `num_targets + 1`.
 ///
-/// \returns `{narrow_source_owner_indices, narrow_relative_image_shifts, narrow_offsets}` — the
-///          filtered CSR data views and offset view.
+/// \returns `{narrow_source_owner_indices, narrow_source_image_shifts, narrow_offsets}` — the filtered CSR data
+///          views and offset view.
 template <typename ExecutionSpace, typename NarrowExcluder, typename EntityView, typename IndexView, typename ShiftView,
           typename OffsetView>
   requires ExcluderType<NarrowExcluder>
 std::tuple<IndexView, ShiftView, OffsetView> apply_narrow_phase(
     ExecutionSpace exec, const NarrowExcluder& narrow_excluder, const EntityView& target_entities,
-    const EntityView& source_entities, const IndexView& broad_source_owner_indices,
-    const ShiftView& broad_relative_image_shifts, const OffsetView& broad_offsets) {
+    const EntityView& source_entities, const ShiftView& target_image_shifts,
+    const IndexView& broad_source_owner_indices, const ShiftView& broad_source_image_shifts,
+    const OffsetView& broad_offsets) {
   using size_type = typename OffsetView::value_type;
   using shift_type = typename ShiftView::value_type;
 
@@ -199,11 +200,13 @@ std::tuple<IndexView, ShiftView, OffsetView> apply_narrow_phase(
         const size_type beg = broad_offsets(t);
         const size_type end = broad_offsets(t + 1);
         size_type count = 0;
+        const shift_type target_shift = target_image_shifts(t);
         for (size_type k = beg; k < end; ++k) {
           const size_type s = static_cast<size_type>(broad_source_owner_indices(k));
-          const shift_type shift = broad_relative_image_shifts(k);
+          const shift_type source_shift = broad_source_image_shifts(k);
           if (!narrow_excluder(PeriodicNeighborSearchCandidate<shift_type, size_t>(
-                  static_cast<size_t>(t), static_cast<size_t>(s), target_entities(t), source_entities(s), shift))) {
+                  static_cast<size_t>(t), static_cast<size_t>(s), target_entities(t), source_entities(s), target_shift,
+                  source_shift))) {
             ++count;
           }
         }
@@ -229,26 +232,28 @@ std::tuple<IndexView, ShiftView, OffsetView> apply_narrow_phase(
   // Phase L2: fill surviving source owner ordinals and relative image shifts.
   // -------------------------------------------------------------------------
   IndexView narrow_source_owner_indices("mundy_narrow_L2_source_owner_indices", total_narrow);
-  ShiftView narrow_relative_image_shifts("mundy_narrow_L2_relative_image_shifts", total_narrow);
+  ShiftView narrow_source_image_shifts("mundy_narrow_L2_source_image_shifts", total_narrow);
 
   Kokkos::parallel_for(
       "mundy_narrow_L2_fill", Kokkos::RangePolicy<ExecutionSpace>(exec, 0, num_targets), KOKKOS_LAMBDA(size_type t) {
         const size_type beg = broad_offsets(t);
         const size_type end = broad_offsets(t + 1);
         size_type write_pos = narrow_offsets(t);
+        const shift_type target_shift = target_image_shifts(t);
         for (size_type k = beg; k < end; ++k) {
           const size_type s = static_cast<size_type>(broad_source_owner_indices(k));
-          const shift_type shift = broad_relative_image_shifts(k);
+          const shift_type source_shift = broad_source_image_shifts(k);
           if (!narrow_excluder(PeriodicNeighborSearchCandidate<shift_type, size_t>(
-                  static_cast<size_t>(t), static_cast<size_t>(s), target_entities(t), source_entities(s), shift))) {
+                  static_cast<size_t>(t), static_cast<size_t>(s), target_entities(t), source_entities(s), target_shift,
+                  source_shift))) {
             narrow_source_owner_indices(write_pos) = s;
-            narrow_relative_image_shifts(write_pos) = shift;
+            narrow_source_image_shifts(write_pos) = source_shift;
             ++write_pos;
           }
         }
       });
 
-  return {narrow_source_owner_indices, narrow_relative_image_shifts, narrow_offsets};
+  return {narrow_source_owner_indices, narrow_source_image_shifts, narrow_offsets};
 }
 
 /// \brief Apply a narrow-phase excluder to a broad-phase dense-2D neighbor list (non-periodic).
@@ -325,85 +330,6 @@ std::pair<CountView, IndexView2D> apply_narrow_phase_2d(ExecutionSpace exec,
       });
 
   return {narrow_counts, narrow_src};
-}
-
-/// \brief Apply a narrow-phase excluder to a broad-phase dense-2D neighbor list (periodic).
-///
-/// Periodic overload: carries per-pair relative image shifts through the filter alongside source
-/// ordinals.  The input `broad_source_indices(t, k)` and `broad_image_shifts(t, k)` are a matched
-/// pair; the output `narrow_src` and `narrow_shifts` preserve that correspondence for surviving pairs.
-///
-/// \tparam ExecutionSpace  Kokkos execution space.
-/// \tparam NarrowExcluder  Excluder satisfying `ExcluderType`.
-/// \tparam EntityView      Kokkos view of `stk::mesh::Entity*` (rank 1).
-/// \tparam CountView       Kokkos view of per-target count values (rank 1).
-/// \tparam IndexView2D     Kokkos view of source-ordinal values (rank 2, `(target, col)`).
-/// \tparam ShiftView2D     Kokkos view of relative image-shift values (rank 2, `(target, col)`).
-///
-/// \returns `{narrow_counts, narrow_src, narrow_shifts}`.
-template <typename ExecutionSpace, typename NarrowExcluder, typename EntityView, typename CountView,
-          typename IndexView2D, typename ShiftView2D>
-  requires ExcluderType<NarrowExcluder>
-std::tuple<CountView, IndexView2D, ShiftView2D> apply_narrow_phase_2d(
-    ExecutionSpace exec, const NarrowExcluder& narrow_excluder,
-    const EntityView& target_entities, const EntityView& source_entities,
-    const IndexView2D& broad_source_indices, const ShiftView2D& broad_image_shifts,
-    const CountView& owner_counts) {
-  using size_type = typename CountView::value_type;
-  using shift_type = typename ShiftView2D::value_type;
-  using memory_space = typename CountView::memory_space;
-
-  const size_type num_targets = static_cast<size_type>(target_entities.extent(0));
-
-  // L0: count narrow survivors per target row.
-  CountView narrow_counts("mundy_2d_per_narrow_counts", num_targets);
-  Kokkos::parallel_for(
-      "mundy_2d_per_narrow_L0", Kokkos::RangePolicy<ExecutionSpace>(exec, 0, num_targets),
-      KOKKOS_LAMBDA(size_type t) {
-        size_type count = 0;
-        for (size_type k = 0; k < owner_counts(t); ++k) {
-          const size_type  s     = broad_source_indices(t, k);
-          const shift_type shift = broad_image_shifts(t, k);
-          if (!narrow_excluder(PeriodicNeighborSearchCandidate<shift_type, size_t>(
-                  static_cast<size_t>(t), static_cast<size_t>(s),
-                  target_entities(t), source_entities(s), shift))) {
-            ++count;
-          }
-        }
-        narrow_counts(t) = count;
-      });
-
-  // L1: new max column width.
-  size_type new_max = 0;
-  Kokkos::parallel_reduce(
-      "mundy_2d_per_narrow_L1_max", Kokkos::RangePolicy<ExecutionSpace>(exec, 0, num_targets),
-      KOKKOS_LAMBDA(size_type t, size_type& lmax) {
-        lmax = lmax > narrow_counts(t) ? lmax : narrow_counts(t);
-      },
-      Kokkos::Max<size_type>(new_max));
-  Kokkos::fence();
-
-  // L2: fill compacted 2D grid.
-  IndexView2D narrow_src   ("mundy_2d_per_narrow_src",    num_targets, new_max);
-  ShiftView2D narrow_shifts("mundy_2d_per_narrow_shifts", num_targets, new_max);
-  Kokkos::parallel_for(
-      "mundy_2d_per_narrow_L2", Kokkos::RangePolicy<ExecutionSpace>(exec, 0, num_targets),
-      KOKKOS_LAMBDA(size_type t) {
-        size_type write_col = 0;
-        for (size_type k = 0; k < owner_counts(t); ++k) {
-          const size_type  s     = broad_source_indices(t, k);
-          const shift_type shift = broad_image_shifts(t, k);
-          if (!narrow_excluder(PeriodicNeighborSearchCandidate<shift_type, size_t>(
-                  static_cast<size_t>(t), static_cast<size_t>(s),
-                  target_entities(t), source_entities(s), shift))) {
-            narrow_src(t, write_col)    = s;
-            narrow_shifts(t, write_col) = shift;
-            ++write_col;
-          }
-        }
-      });
-
-  return {narrow_counts, narrow_src, narrow_shifts};
 }
 
 }  // namespace impl

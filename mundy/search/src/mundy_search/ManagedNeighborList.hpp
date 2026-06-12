@@ -188,6 +188,7 @@ class ManagedNeighborList {
                       const build_args_type& args = {})
     requires(BuilderState::has_exec_space)
   {
+    rebuilder_.setup(bulk, targets.selector(), sources.selector());
     const bool did_rebuild = !cached_list_.has_value() || rebuilder_.needs_rebuild(bulk, targets, sources);
     if (did_rebuild) {
       cached_list_.emplace(builder_.target_input(targets).source_input(sources).build(bulk, args));

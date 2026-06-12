@@ -167,7 +167,9 @@ class Neighbors {
 ///
 /// The payload carries a dense target ordinal and a neighbor ordinal. It exposes source/target entities and source
 /// ordinals, but does not expose storage internals such as compact pair ids or dense row slots. Periodic concrete list
-/// types may additionally provide a relative image shift through the forwarding `relative_image_shift()` accessor.
+/// types additionally provide per-object image shifts through the forwarding `target_image_shift()` /
+/// `source_image_shift()` accessors; a kernel that wants the relative shift computes `source − target` itself.
+///
 /// \tparam NeighborListType Concrete neighbor-list implementation type.
 template <typename NeighborListType>
 class NeighborPair {
@@ -224,13 +226,21 @@ class NeighborPair {
     return list_->source_entity(source_index());
   }
 
-  /// \brief Get the source image shift relative to the target image shift.
+  /// \brief Get the target owner's image shift (original → imaged reference point).
   ///
-  /// This accessor forwards to periodic concrete list types. For non-periodic lists, there is deliberately no neutral
-  /// fake shift value because that would hide whether a kernel is using periodic geometry.
+  /// Forwards to periodic concrete list types. For non-periodic lists there is deliberately no neutral fake shift,
+  /// because that would hide whether a kernel is using periodic geometry.
   KOKKOS_INLINE_FUNCTION
-  auto relative_image_shift() const {
-    return list_->relative_image_shift(target_index_, neighbor_ordinal_);
+  auto target_image_shift() const {
+    return list_->target_image_shift(target_index_);
+  }
+
+  /// \brief Get the source owner's image shift for this pair (original → imaged reference point).
+  ///
+  /// A kernel that wants the pairwise relative shift computes `source_image_shift() − target_image_shift()` itself.
+  KOKKOS_INLINE_FUNCTION
+  auto source_image_shift() const {
+    return list_->source_image_shift(target_index_, neighbor_ordinal_);
   }
   //@}
 

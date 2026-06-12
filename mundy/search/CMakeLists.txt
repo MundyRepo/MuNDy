@@ -32,6 +32,7 @@ set(NOINSTALLHEADERS
     src/mundy_search/NeighborListRebuilder.hpp
     src/mundy_search/Neighbors.hpp
     src/mundy_search/SearchCandidate.hpp
+    src/mundy_search/SearchInput.hpp
     src/mundy_search/STKSearchNeighborList.hpp
 )
 

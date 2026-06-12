@@ -970,6 +970,33 @@ KOKKOS_INLINE_FUNCTION void unwrap_points_to_ref_inplace(Object& obj, const Metr
       obj, [&](auto& p) { p = metric.from_fractional(sr + metric.frac_minimum_image(metric.to_fractional(p) - sr)); });
 }
 
+/// \brief The integer periodic image of a point: the lattice cell `k` such that the point lies in cell `k`.
+///
+/// Computed in fractional coordinates, where wrapping is genuinely per-axis, so it is exact and correct for any
+/// lattice — orthorhombic or tilted. A non-periodic axis wraps to itself, giving `k = 0` there. The displacement that
+/// wraps the point into the primary cell is `-lattice_displacement(image_index(p, m), m)`; the integer reconstruction
+/// avoids the sub-ULP noise of the metric's `wrap`/`from_fractional` round-trip.
+template <ValidPointType PointT, typename Metric>
+KOKKOS_INLINE_FUNCTION Vector3<int> image_index(const PointT& p, const Metric& metric) {
+  const auto f = metric.to_fractional(p);
+  const auto fw = metric.frac_wrap_to_unit_cell(f);
+  return Vector3<int>{static_cast<int>(round(f[0] - fw[0])), static_cast<int>(round(f[1] - fw[1])),
+                      static_cast<int>(round(f[2] - fw[2]))};
+}
+
+/// \brief The Cartesian displacement of an integer lattice combination `n`, i.e. `Σ nᵢ·aᵢ` over the lattice vectors.
+///
+/// Applies the metric's lattice vectors to the integer fractional offset via `from_fractional`, so it is exact and
+/// correct for tilted cells. The result is in the metric's scalar type.
+template <typename Integer, typename Metric>
+KOKKOS_INLINE_FUNCTION Vector3<typename Metric::value_type> lattice_displacement(const Vector3<Integer>& n,
+                                                                                 const Metric& metric) {
+  using Scalar = typename Metric::value_type;
+  const auto d = metric.from_fractional(
+      Point<Scalar>{static_cast<Scalar>(n[0]), static_cast<Scalar>(n[1]), static_cast<Scalar>(n[2])});
+  return Vector3<Scalar>{d[0], d[1], d[2]};
+}
+
 //@}
 
 // =============================================================================

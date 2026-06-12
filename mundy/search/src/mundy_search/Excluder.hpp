@@ -38,6 +38,11 @@
 
 // Mundy
 #include <mundy_geom/primitives/OBB.hpp>     // for mundy::OBB, mundy::intersects
+#include <mundy_geom/primitives/Point.hpp>   // for mundy::Point (materialized OBB centers)
+#include <mundy_math/Quaternion.hpp>         // for mundy::Quaternion (materialized OBB orientations)
+#include <mundy_math/Vector3.hpp>            // for mundy::Vector3 (materialized OBB half-extents)
+#include <mundy_mesh/EntityIndices.hpp>      // for mundy::mesh::get_local_entity_indices
+#include <mundy_mesh/FieldComponent.hpp>     // for mundy::mesh::OBBFieldComponent, get_updated_ngp_component
 #include <mundy_search/SearchCandidate.hpp>  // for NeighborSearchCandidate, PeriodicNeighborSearchCandidate
 #include <mundy_utils/throw_assert.hpp>      // for MUNDY_THROW_ASSERT
 
@@ -375,25 +380,28 @@ inline void ExcludeSymmetricDuplicates::setup(const stk::mesh::BulkData& bulk_da
 /// \class ExcludeNonIntersectingOBBs
 /// \brief Narrow-phase excluder that keeps only candidates whose OBBs intersect.
 ///
-/// Takes two caller-owned Kokkos views of OBBs indexed by the same dense ordinals as the
-/// target/source entity arrays used to build the search.  `operator()` calls
-/// `intersects(target_obb, source_obb)` (15-axis SAT) and excludes the pair if the OBBs
-/// do not overlap.
+/// Reads each entity's OBB from an `OBBFieldComponent` (so the geometry survives mid-build ghosting). `setup()`
+/// materializes the OBBs into device storage indexed by the search's dense target/source ordinals; `operator()` calls
+/// `intersects(target_obb, source_obb)` (15-axis SAT) and excludes the pair if the OBBs do not overlap.
 ///
-/// Intended use: append as a `.narrow_phase(ExcludeNonIntersectingOBBs{...})` filter after
-/// an AABB broad phase to tighten the candidate set for oriented shapes.
+/// Intended use: append as a `.narrow_phase(ExcludeNonIntersectingOBBs{...})` filter after an AABB broad phase to
+/// tighten the candidate set for oriented shapes. The OBB component must be on the same entity rank as the search
+/// input, so that enumerating its selector reproduces the search's dense ordinals.
 ///
 /// \tparam Scalar   Floating-point scalar type of the OBBs (default: `double`).
-/// \tparam MemSpace Kokkos memory space for the OBB views (default: `stk::ngp::MemSpace`).
+/// \tparam MemSpace Kokkos memory space for the materialized OBB storage (default: `stk::ngp::MemSpace`).
 template <typename Scalar = double, typename MemSpace = stk::ngp::MemSpace>
 class ExcludeNonIntersectingOBBs {
  public:
   //! \name Aliases
   //@{
 
-  using scalar_type   = Scalar;
-  using obb_type      = OBB<Scalar>;
-  using obb_view_type = Kokkos::View<const obb_type*, MemSpace>;
+  using scalar_type        = Scalar;
+  using memory_space       = MemSpace;
+  using execution_space    = typename MemSpace::execution_space;
+  using obb_type           = OBB<Scalar>;
+  using obb_component_type = mundy::mesh::OBBFieldComponent<Scalar>;
+  using obb_view_type      = Kokkos::View<obb_type*, MemSpace>;
   //@}
 
   //! \name Constructors
@@ -401,26 +409,27 @@ class ExcludeNonIntersectingOBBs {
 
   KOKKOS_DEFAULTED_FUNCTION ExcludeNonIntersectingOBBs() = default;
 
-  /// \brief Construct from separate target and source OBB views (asymmetric search).
-  /// \param target_obbs [in] OBBs for target entities, indexed by dense target ordinals.
-  /// \param source_obbs [in] OBBs for source entities, indexed by dense source ordinals.
-  KOKKOS_INLINE_FUNCTION
-  ExcludeNonIntersectingOBBs(obb_view_type target_obbs, obb_view_type source_obbs)
-      : target_obbs_(target_obbs), source_obbs_(source_obbs) {}
+  /// \brief Construct from separate target and source OBB components (asymmetric search).
+  /// \param target_obbs [in] OBB component supplying target-entity OBBs.
+  /// \param source_obbs [in] OBB component supplying source-entity OBBs.
+  ExcludeNonIntersectingOBBs(obb_component_type target_obbs, obb_component_type source_obbs)
+      : target_obb_component_(target_obbs), source_obb_component_(source_obbs) {}
 
-  /// \brief Construct from a single OBB view (symmetric / self-search).
-  /// \param obbs [in] OBBs indexed by dense entity ordinals, shared by both sides.
-  KOKKOS_INLINE_FUNCTION
-  explicit ExcludeNonIntersectingOBBs(obb_view_type obbs)
-      : target_obbs_(obbs), source_obbs_(obbs) {}
+  /// \brief Construct from a single OBB component (symmetric / self-search).
+  /// \param obbs [in] OBB component shared by both target and source sides.
+  explicit ExcludeNonIntersectingOBBs(obb_component_type obbs)
+      : target_obb_component_(obbs), source_obb_component_(obbs) {}
   //@}
 
   //! \name Setup
   //@{
 
-  /// \brief No-op: OBB views are caller-owned and provided at construction.
-  void setup(const stk::mesh::BulkData& /*bulk_data*/, const stk::mesh::Selector& /*target_selector*/,
-             const stk::mesh::Selector& /*source_selector*/) {}
+  /// \brief Materialize each side's OBBs into device storage indexed by the search's dense ordinals.
+  void setup(const stk::mesh::BulkData& bulk_data, const stk::mesh::Selector& target_selector,
+             const stk::mesh::Selector& source_selector) {
+    materialize(bulk_data, target_obb_component_, target_selector, target_obbs_);
+    materialize(bulk_data, source_obb_component_, source_selector, source_obbs_);
+  }
   //@}
 
   //! \name Filtering
@@ -436,10 +445,45 @@ class ExcludeNonIntersectingOBBs {
   //@}
 
  private:
-  //! OBBs for target entities, indexed by dense target ordinals.
+  //! \name Internal helpers
+  //@{
+
+  /// \brief Read a component's OBBs over a selector into an owning device view indexed by dense ordinal.
+  static void materialize(const stk::mesh::BulkData& bulk_data, obb_component_type component,
+                          const stk::mesh::Selector& selector, obb_view_type& out) {
+    component.sync_to_device();
+    auto ngp_component = mundy::mesh::get_updated_ngp_component(component);
+    auto indices = mundy::mesh::get_local_entity_indices(bulk_data, component.field().entity_rank(), selector,
+                                                         execution_space{});
+    indices.sync_to_device();
+    auto idx = indices.view_device();
+    const int n = static_cast<int>(idx.extent(0));
+    Kokkos::realloc(out, n);
+    auto out_local = out;
+    Kokkos::parallel_for(
+        "mundy_obb_excluder_materialize", Kokkos::RangePolicy<execution_space>(0, n), KOKKOS_LAMBDA(int i) {
+          const auto v = ngp_component(idx(i));
+          out_local(i) = obb_type(Point<Scalar>{v.center()[0], v.center()[1], v.center()[2]},
+                                  Quaternion<Scalar>{v.orientation().w(), v.orientation().x(), v.orientation().y(),
+                                                     v.orientation().z()},
+                                  Vector3<Scalar>{v.half_extents()[0], v.half_extents()[1], v.half_extents()[2]});
+        });
+    Kokkos::fence();
+  }
+  //@}
+
+  //! \name Internal members
+  //@{
+
+  //! OBB component supplying target-entity OBBs (read over the target selector).
+  obb_component_type target_obb_component_;
+  //! OBB component supplying source-entity OBBs (read over the source selector).
+  obb_component_type source_obb_component_;
+  //! Materialized target OBBs indexed by dense target ordinal.
   obb_view_type target_obbs_;
-  //! OBBs for source entities, indexed by dense source ordinals.
+  //! Materialized source OBBs indexed by dense source ordinal.
   obb_view_type source_obbs_;
+  //@}
 };
 
 }  // namespace search

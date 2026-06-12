@@ -77,13 +77,13 @@ struct UnsetNeighborListBuilderField {};
 ///
 /// \par Example — ArborX 1D list with broad and narrow phase excluders
 /// \code{.cpp}
-///   // target_boxes and source_boxes are impl::ArborXSearchBoxesT<MemSpace> values already populated.
+///   // target_input and source_input are SearchInput<AABBFieldComponent<...>> (selector + AABB component).
 ///   auto list = make_neighbor_list_builder<ArborX1dNeighborList<>>()
 ///       .exec_space(Kokkos::DefaultExecutionSpace{})
-///       .target_input(target_boxes)
-///       .source_input(source_boxes)
+///       .target_input(target_input)
+///       .source_input(source_input)
 ///       .broad_phase(ExcludeSelfInteraction{})
-///       .narrow_phase(ExcludeNonOverlappingOBBs{})
+///       .narrow_phase(ExcludeNonIntersectingOBBs{obb_component})
 ///       .build(bulk_data, {.buffer_size = 16});
 /// \endcode
 ///
@@ -91,8 +91,8 @@ struct UnsetNeighborListBuilderField {};
 /// \code{.cpp}
 ///   auto list = make_neighbor_list_builder<STKSearchNeighborList<>>()
 ///       .exec_space(exec_space)
-///       .target_input(stk_target_boxes)
-///       .source_input(stk_source_boxes)
+///       .target_input(target_input)
+///       .source_input(source_input)
 ///       .build(bulk_data);
 /// \endcode
 ///

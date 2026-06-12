@@ -2,15 +2,17 @@
 
 # MuNDy: Multibody Nonlocal Dynamics
 
-MuNDy is a C++ framework for high-performance simulation of **multibody nonlocal dynamics** on modern CPU and GPU architectures.
-
 ![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg)
 ![Backend-Kokkos](https://img.shields.io/badge/backend-Kokkos-1E88E5.svg)
 ![Mesh-STK](https://img.shields.io/badge/mesh-Trilinos%2FSTK-4CAF50.svg)
 
+MuNDy is C++ infrastructure for building scalable, biologically grounded microscale multibody dynamics software.
+
+MuNDy supports models with evolving mechanical and relational structure: heterogeneous rigid and flexible bodies; constraints, motors, and contact; growth, division, death, and bonds that form, break, and reorganize; and long-range interactions mediated through a shared medium. Rather than a monolithic simulator, MuNDy builds upon Trilinos/STK’s runtime-extensible entity/part/field data model to provide reusable abstractions and data structures for this problem class. It targets research software developers building domain-specific applications across deployment scales, from laptops and workstations to multi-GPU clusters.
+
 > [!IMPORTANT]
-> **Project status (3/18/2026):**  
-> MuNDy is under active development. We have chosen to make development public as we move toward a first formal release targeted for **Late June 2026**.
+> **Project status (6/12/2026):**  
+> MuNDy is under active development and rapidly approaching our first formal release. Currently in the "polishing" phase: we have a complete set of core utilities, mathematical tools, geometric and mechanical primitives, and mesh integration machinery. We are now focused on hardening the API, expanding documentation and examples, and building out the Python interface.
 
 ---
 
@@ -25,6 +27,7 @@ MuNDy is a C++ framework for high-performance simulation of **multibody nonlocal
   - [MundyGeom: Geometric primitives and utilities](#mundygeom-geometric-primitives-and-utilities)
   - [MundyMech: Mechanical primitives and utilities](#mundymech-mechanical-primitives-and-utilities-under-construction)
   - [MundyMesh: MuNDy’s extension to Trilinos/STK](#mundymesh-mundys-extension-to-trilinosstk)
+  - [MundySearch: Neighbor-list construction and iteration](#mundysearch-neighbor-list-construction-and-iteration)
   - [Standalone Offshoots](#standalone-offshoots)
 - [Release Roadmap](#release-roadmap)
 
@@ -32,11 +35,17 @@ MuNDy is a C++ framework for high-performance simulation of **multibody nonlocal
 
 ## Documentation
 
-Check our our [Wiki](https://github.com/MundyRepo/MuNDy/wiki) for user-facing documentation, design notes, and tutorials. The Wiki is a living document that we will continue to expand and refine as the library matures. You can also generate the local Doxygen documentation from the source tree with:
+Use the [hosted Doxygen documentation](https://mundyrepo.github.io/MuNDy/) for user-facing documentation, design notes, primers, and generated API reference pages. Start with the [Primers](https://mundyrepo.github.io/MuNDy/pages.html), then use the generated [class](https://mundyrepo.github.io/MuNDy/classes.html), [file](https://mundyrepo.github.io/MuNDy/files.html), and [namespace](https://mundyrepo.github.io/MuNDy/namespaces.html) indexes as needed. You can also generate the local Doxygen documentation from the source tree with:
 
 ```bash
-module load doxygen
-doxygen doc/Doxyfile
+python3 -m venv .venv-docs
+source .venv-docs/bin/activate
+
+python -m pip install --upgrade pip setuptools wheel
+python -m pip install -r doc/requirements.txt
+
+# Assumes doxygen is in PATH and has version >= 1.9 | version >= 1.11 recommended for best results
+doxygen doc/Doxyfile 
 ```
 
 ## Installation via Spack
@@ -75,7 +84,7 @@ MuNDy adopts a **Trilinos-style subpackage stack**:
 
 This structure is intended to keep:
 - **Core utilities** small, reusable, and dependency-light. (utils, math, geom, mech)
-- **Simulation layers** configurable, so applications can opt into only what they need (mesh, mbody)
+- **Simulation layers** configurable, so applications can opt into only what they need (mesh, search, mbody)
 
 ### Code Statistics (via cloc)
 ```text
@@ -105,9 +114,7 @@ SUM:                  384        16020          24292        68002
 
 ## Subpackages
 
-### [**MundyUtils**](https://github.com/MundyRepo/MuNDy/wiki/1.-MundyUtils): Centralized reusable utilities
-
-Doxygen directory reference: \ref mundy/core/utils "MundyUtils".
+### [**MundyUtils**](https://mundyrepo.github.io/MuNDy/MundyUtils.html): Centralized reusable utilities
 
 Centralized, Kokkos-friendly building blocks for type-level plumbing, error handling, and device-aware data management.
 - **MUNDY_THROW_ASSERT() / MUNDY_THROW_REQUIRE()**  
@@ -145,9 +152,7 @@ Centralized, Kokkos-friendly building blocks for type-level plumbing, error hand
 
 ---
 
-### [**MundyMath**](https://github.com/MundyRepo/MuNDy/wiki/2.-MundyMath): `constexpr`, inline mathematics
-
-Doxygen directory reference: \ref mundy/core/math "MundyMath".
+### [**MundyMath**](https://mundyrepo.github.io/MuNDy/MundyMath.html): `constexpr`, inline mathematics
 
 Small, composable math utilities with view semantics that integrate naturally into Kokkos-based code.
 - **mundy::Matrix / mundy::Vector / mundy::Quaternion**  
@@ -160,7 +165,7 @@ Small, composable math utilities with view semantics that integrate naturally in
   - Callable inside kernels or from host drivers  
 
 - **mundy::convex**  
-  Linear complementarity problem (LCP) and constrained convex quadratic programming (QP) solver.  
+  Linear complementarity problem (LCP) and constrained convex quadratic programming (QP) solver.
   - Kokkos-compatible  
   - Can run inside a kernel or orchestrate kernel launches
   - Supports Mixed LCP/QP problems with equality and inequality constraints
@@ -171,9 +176,7 @@ Small, composable math utilities with view semantics that integrate naturally in
 
 ---
 
-### [**MundyGeom**](https://github.com/MundyRepo/MuNDy/wiki/3.-MundyGeom): Geometric primitives and utilities
-
-Doxygen directory reference: \ref mundy/core/geom "MundyGeom".
+### [**MundyGeom**](https://mundyrepo.github.io/MuNDy/MundyGeom.html): Geometric primitives and utilities
 
 Foundational geometric abstractions for multibody dynamics and contact mechanics.
 - **Primitives**  
@@ -198,9 +201,7 @@ Foundational geometric abstractions for multibody dynamics and contact mechanics
 
 ---
 
-### [**MundyMech**](https://github.com/MundyRepo/MuNDy/wiki/4.-MundyMech): Mechanical primitives and utilities (under construction)
-
-Doxygen directory reference: \ref mundy/core/mech "MundyMech".
+### [**MundyMech**](https://mundyrepo.github.io/MuNDy/MundyMech.html): Mechanical primitives and utilities (under construction)
 
 Mechanical elements and force laws for building multibody models.
 
@@ -211,9 +212,7 @@ Further mechanical models and integration hooks will be added as the library mat
 
 ---
 
-### [**MundyMesh**](https://github.com/MundyRepo/MuNDy/wiki/4.-MundyMesh): MuNDy’s extension to Trilinos/STK
-
-Doxygen directory reference: \ref mundy/mesh "MundyMesh".
+### [**MundyMesh**](https://mundyrepo.github.io/MuNDy/MundyMesh.html): MuNDy’s extension to Trilinos/STK
 
 Helpers and abstractions for integrating MuNDy with Trilinos/STK meshes and fields.
 - **mundy::mesh::string_to_selector / mundy::mesh::string_to_topology / mundy::mesh::string_to_rank**  
@@ -223,7 +222,7 @@ Helpers and abstractions for integrating MuNDy with Trilinos/STK meshes and fiel
   - Rank: `"ELEM_RANK"`  
   to their corresponding STK objects.
 
-- **mundy::mesh::DeclareEntitiesHelper / mundy::mesh::FieldDeclarationHelper / mundy::mesh::PartDeclarationHelper / mundy::mesh::ClassDeclarationHelper**  
+- **mundy::mesh::EntityDeclaration / mundy::mesh::FieldDeclaration mundy::mesh::ComponentDeclaration / mundy::mesh::PartDeclaration / mundy::mesh::ClassDeclaration**  
   Helper functions that streamline common STK mesh setup tasks, such as declaring fields and parts with the correct properties and parallel consistency.
 
 * **mundy::mesh::NgpModRequests**
@@ -267,6 +266,17 @@ Helpers and abstractions for integrating MuNDy with Trilinos/STK meshes and fiel
   x(rods) += dt * vel(rods);
   ```
   and have them executed on the device without manual synchronization bookkeeping.
+
+---
+
+### [**MundySearch**](https://mundyrepo.github.io/MuNDy/MundySearch.html): Neighbor-list construction and iteration
+
+MundySearch builds and iterates neighbor lists over STK mesh entities.
+- **Search inputs** pair selectors with geometry components so builders know which entities to search and how to read their detection regions.
+- **NeighborListBuilder** provides a fluent, type-safe interface for constructing backend-specific lists.
+- **Excluders** filter candidate pairs during the build, including self-interaction, symmetric duplicate, and narrow-phase filters.
+- **ManagedNeighborList** caches neighbor lists across time steps and rebuilds them only when selected policies require it.
+- **for_each_neighbor_pair / for_each_target_with_neighbors** expose backend-independent parallel iteration over stored neighbor relationships.
 
 ---
 

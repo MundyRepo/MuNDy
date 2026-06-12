@@ -54,6 +54,7 @@
 // Mundy
 #include <mundy_geom/primitives.hpp>             // for mundy::Sphere/mundy::AABB
 #include <mundy_mesh/BulkData.hpp>               // for mundy::mesh::BulkData
+#include <mundy_mesh/EntityIndices.hpp>          // for mundy::mesh::get_local_entity_indices
 #include <mundy_mesh/ForEachEntity.hpp>          // for mundy::mesh::for_each_entity_run
 #include <mundy_mesh/LinkData.hpp>               // for mundy::mesh::LinkData
 #include <mundy_mesh/MetaData.hpp>               // for mundy::mesh::MetaData
@@ -67,28 +68,8 @@ namespace mundy {
 
 namespace mesh {
 
-/// \brief Get the local fast mesh indices for a set of entities as an NgpView.
-template <typename OurExecSpace>
-NgpViewT<stk::mesh::FastMeshIndex*, OurExecSpace> get_local_entity_indices(const stk::mesh::BulkData& bulk_data,
-                                                                           stk::mesh::EntityRank rank,
-                                                                           const stk::mesh::Selector& selector,
-                                                                           const OurExecSpace& /*exec_space*/) {
-  std::vector<stk::mesh::Entity> local_entities;
-  stk::mesh::get_entities(bulk_data, rank, selector, local_entities);
-
-  NgpViewT<stk::mesh::FastMeshIndex*, OurExecSpace> ngp_local_entity_indices("local_entity_indices",
-                                                                             local_entities.size());
-
-  Kokkos::parallel_for(stk::ngp::HostRangePolicy(0, local_entities.size()),
-                       [&bulk_data, &local_entities, &ngp_local_entity_indices](const int i) {
-                         const stk::mesh::MeshIndex& mesh_index = bulk_data.mesh_index(local_entities[i]);
-                         ngp_local_entity_indices.view_host()(i) =
-                             stk::mesh::FastMeshIndex{mesh_index.bucket->bucket_id(), mesh_index.bucket_ordinal};
-                       });
-
-  ngp_local_entity_indices.modify_on_host();
-  return ngp_local_entity_indices;
-}
+// `get_local_entity_indices` now lives in mundy_mesh/EntityIndices.hpp (included above) so it can be shared
+// with the search build; it remains usable here unqualified within namespace mundy::mesh.
 
 Kokkos::UnorderedMap<Kokkos::pair<stk::mesh::Entity, stk::mesh::Entity>, void, stk::ngp::ExecSpace>
 get_linked_neighbors_set(LinkData& link_data, const stk::mesh::Selector& link_selector) {

@@ -111,7 +111,7 @@ class ArborXPeriodicCountCallback {
 /// \class ArborXPeriodic1dFillCallback
 /// \brief Fill flat 1D owner-indexed pair arrays for periodic builds (no-output, side-effect only).
 ///
-/// Writes source owner ordinals and relative image shifts into flat CSR storage indexed by the prefix-scan `offsets`
+/// Writes source owner ordinals and source image shifts into flat CSR storage indexed by the prefix-scan `offsets`
 /// and per-target `write_positions` cursors. `atomic_fetch_add` on `write_positions` serializes writes within each
 /// target owner's row.
 /// \tparam TargetBoxes Periodic search-box wrapper for target image boxes.
@@ -141,13 +141,13 @@ class ArborXPeriodic1dFillCallback {
   ArborXPeriodic1dFillCallback(const factory_type& factory, const Excluder& excluder,
                                const count_view_t& write_positions, const count_view_t& offsets,
                                const source_index_view_t& source_owner_indices,
-                               const image_shift_view_t& relative_image_shifts)
+                               const image_shift_view_t& source_image_shifts)
       : factory_(factory),
         excluder_(excluder),
         write_positions_(write_positions),
         offsets_(offsets),
         source_owner_indices_(source_owner_indices),
-        relative_image_shifts_(relative_image_shifts) {
+        source_image_shifts_(source_image_shifts) {
   }
   //@}
 
@@ -165,7 +165,7 @@ class ArborXPeriodic1dFillCallback {
       const size_type pos = Kokkos::atomic_fetch_add(&write_positions_(target_owner_idx), size_type(1));
       const size_type flat_idx = offsets_(target_owner_idx) + pos;
       source_owner_indices_(flat_idx) = candidate.source_index();
-      relative_image_shifts_(flat_idx) = candidate.relative_image_shift();
+      source_image_shifts_(flat_idx) = candidate.source_image_shift();
     }
   }
 #else
@@ -178,7 +178,7 @@ class ArborXPeriodic1dFillCallback {
       const size_type pos = Kokkos::atomic_fetch_add(&write_positions_(target_owner_idx), size_type(1));
       const size_type flat_idx = offsets_(target_owner_idx) + pos;
       source_owner_indices_(flat_idx) = candidate.source_index();
-      relative_image_shifts_(flat_idx) = candidate.relative_image_shift();
+      source_image_shifts_(flat_idx) = candidate.source_image_shift();
     }
   }
 #endif
@@ -190,13 +190,13 @@ class ArborXPeriodic1dFillCallback {
   count_view_t write_positions_;
   count_view_t offsets_;
   source_index_view_t source_owner_indices_;
-  image_shift_view_t relative_image_shifts_;
+  image_shift_view_t source_image_shifts_;
 };
 
 /// \class ArborXPeriodic2dFillCallback
 /// \brief Fill 2D owner-indexed pair arrays for periodic builds (no-output, side-effect only).
 ///
-/// Writes source owner ordinals and relative image shifts into dense 2D storage. Uses `atomic_fetch_add` on a
+/// Writes source owner ordinals and source image shifts into dense 2D storage. Uses `atomic_fetch_add` on a
 /// per-target write-position cursor to assign a column slot within each target owner's dense row.
 /// \tparam TargetBoxes Periodic search-box wrapper for target image boxes.
 /// \tparam SourceBoxes Periodic search-box wrapper for source image boxes.
@@ -224,12 +224,12 @@ class ArborXPeriodic2dFillCallback {
   KOKKOS_INLINE_FUNCTION
   ArborXPeriodic2dFillCallback(const factory_type& factory, const Excluder& excluder,
                                const count_view_t& write_positions, const source_index_view_t& source_owner_indices,
-                               const image_shift_view_t& relative_image_shifts)
+                               const image_shift_view_t& source_image_shifts)
       : factory_(factory),
         excluder_(excluder),
         write_positions_(write_positions),
         source_owner_indices_(source_owner_indices),
-        relative_image_shifts_(relative_image_shifts) {
+        source_image_shifts_(source_image_shifts) {
   }
   //@}
 
@@ -246,7 +246,7 @@ class ArborXPeriodic2dFillCallback {
       const size_type target_owner_idx = candidate.target_index();
       const size_type pos = Kokkos::atomic_fetch_add(&write_positions_(target_owner_idx), size_type(1));
       source_owner_indices_(target_owner_idx, pos) = candidate.source_index();
-      relative_image_shifts_(target_owner_idx, pos) = candidate.relative_image_shift();
+      source_image_shifts_(target_owner_idx, pos) = candidate.source_image_shift();
     }
   }
 #else
@@ -258,7 +258,7 @@ class ArborXPeriodic2dFillCallback {
       const size_type target_owner_idx = candidate.target_index();
       const size_type pos = Kokkos::atomic_fetch_add(&write_positions_(target_owner_idx), size_type(1));
       source_owner_indices_(target_owner_idx, pos) = candidate.source_index();
-      relative_image_shifts_(target_owner_idx, pos) = candidate.relative_image_shift();
+      source_image_shifts_(target_owner_idx, pos) = candidate.source_image_shift();
     }
   }
 #endif
@@ -269,7 +269,7 @@ class ArborXPeriodic2dFillCallback {
   Excluder excluder_;
   count_view_t write_positions_;
   source_index_view_t source_owner_indices_;
-  image_shift_view_t relative_image_shifts_;
+  image_shift_view_t source_image_shifts_;
 };
 
 }  // namespace impl

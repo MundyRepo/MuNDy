@@ -1,5 +1,7 @@
 # MundySearch {#MundySearch}
 
+\brief Neighbor-list construction and iteration.
+
 See the \ref mundy/search "MundySearch directory reference".
 
 MundySearch is the part of Mundy that builds and iterates neighbor lists over STK mesh entities.
@@ -17,7 +19,7 @@ the list.
 
 | **Layer** | **Main types / functions** | **Use when you need** |
 |-----------|-----------------------------|------------------------|
-| Search inputs | `impl::ArborXSearchBoxesT`, `impl::PeriodicArborXSearchBoxesT`, `impl::STKSearchBoxesT` | A geometry-indexed pairing of STK entities with search boxes to feed the builder. |
+| Search inputs | `SearchInput<Component>`, `PeriodicSearchInput<Component, Metric>` | A `(selector, geometry component[, metric])` pairing that tells the builder which entities to search and how to read their geometry. Raw box wrappers (`impl::ArborXSearchBoxesT`, `impl::PeriodicArborXSearchBoxesT`, `impl::PeriodicSTKSearchBoxesT`) are internal build buffers, not public inputs. |
 | Builder | `NeighborListBuilder`, `make_neighbor_list_builder<ListType>()` | A fluent, type-safe way to build a concrete neighbor list. |
 | Build traits | `NeighborListBuildTraits<ListType>`, `NeighborListInputType` | Coupling a concrete list type to its build logic and type-specific parameters. |
 | Excluders | `NoExcluder`, `ExcludeSelfInteraction`, `ExcludeSymmetricDuplicates`, `ExcludeNonIntersectingOBBs`, `ExcluderChain` | Filtering candidate pairs at build time before they enter storage. |
@@ -82,26 +84,18 @@ Any type that satisfies `NeighborListType` may be used with `for_each_neighbor_p
 
 ### Search inputs
 
-The builder requires geometry for both the target and source populations. For ArborX-backed lists, this geometry
-is provided as `impl::ArborXSearchBoxesT<MemSpace>` — a paired collection of `ArborX::Box` objects and
-`stk::mesh::Entity` values sharing a single selector.
+The builder requires geometry for both the target and source populations, supplied as a `SearchInput<Component>` —
+a selector paired with a geometry-yielding component (e.g. an `AABBFieldComponent`). The pair `(selector, component)`
+is the single source of truth for which entities are searched, their dense ordering, and how to read each entity's
+geometry; the build enumerates the selector and reads boxes from the component on device. Because the geometry comes
+from a field, the build can also supply geometry for entities ghosted mid-build (which a tabulated view cannot).
 
 ```cpp
-using MemSpace = stk::ngp::MemSpace;
-using SearchBoxes = mundy::search::impl::ArborXSearchBoxesT<MemSpace>;
+// `aabb_field` holds each entity's AABB (populated by the caller); `spheres_selector` selects the searched entities.
+mundy::mesh::AABBFieldComponent<double> component(aabb_field);
+component.modify_on_host();
 
-// N entities selected by spheres_selector with positions and radii already computed
-size_t n = /* number of selected entities */;
-Kokkos::View<ArborX::Box*, MemSpace> boxes("boxes", n);
-Kokkos::View<stk::mesh::Entity*, MemSpace> entities("entities", n);
-
-// Populate boxes and entities on the device:
-// for each entity at position center and detection radius r:
-//   boxes(i) = ArborX::Box{center - r, center + r};
-//   entities(i) = entity;
-
-SearchBoxes target_boxes(spheres_selector, boxes, entities);
-SearchBoxes source_boxes(spheres_selector, boxes, entities);  // same set → self-interaction search
+mundy::search::SearchInput input{spheres_selector, component};  // same input for target & source → self-interaction
 ```
 
 The selector is carried through to the finished list so that its `target_selector()` and `source_selector()`
@@ -118,8 +112,8 @@ using namespace mundy::search;
 
 auto list = make_neighbor_list_builder<ArborX1dNeighborList<>>()
     .exec_space(Kokkos::DefaultExecutionSpace{})
-    .target_input(target_boxes)
-    .source_input(source_boxes)
+    .target_input(input)
+    .source_input(input)
     .broad_phase(ExcludeSelfInteraction{})
     .build(bulk_data, {.buffer_size = 16});
 ```
@@ -162,8 +156,8 @@ locality in the source data accesses:
 ```cpp
 auto list = make_neighbor_list_builder<ArborX1dNeighborList<>>()
     .exec_space(exec)
-    .target_input(target_boxes)
-    .source_input(source_boxes)
+    .target_input(input)
+    .source_input(input)
     .sort_neighbors(true)
     .build(bulk_data, {.buffer_size = 16});
 ```
@@ -190,7 +184,7 @@ The `ExcluderType` concept requires:
 | `ExcludeSelfInteraction` | Rejects self-interactions. For non-periodic candidates, a self-interaction is any pair where target and source are the same entity. For periodic candidates, it additionally requires the relative image shift to be zero — a same-entity pair across a periodic boundary (nonzero shift) is a genuine interaction and is retained. |
 | `ExcludeConnectedEntities` | Rejects pairs where the target and source share at least one connected entity at a specified rank. Constructed with a `stk::mesh::EntityRank` (e.g., `NODE_RANK` to exclude element pairs sharing a common node). Requires `setup()` before use. |
 | `ExcludeSymmetricDuplicates` | Rejects one orientation of each symmetric pair when targets and sources overlap. Handles identical, disjoint, and partially-overlapping selectors with one type. Requires `setup()` before use; pass through the builder rather than constructing directly. |
-| `ExcludeNonIntersectingOBBs<Scalar, MemSpace>` | Narrow-phase OBB–OBB separating-axis test. Rejects pairs whose oriented bounding boxes do not intersect. Constructed with one or two `Kokkos::View<const OBB<Scalar>*, MemSpace>` views indexed by dense target/source ordinals. Two constructors: asymmetric `(target_obbs, source_obbs)` and symmetric `(obbs)` (same view for both sides). `setup()` is a no-op; the views are caller-maintained and must stay valid for the lifetime of the excluder. |
+| `ExcludeNonIntersectingOBBs<Scalar, MemSpace>` | Narrow-phase OBB–OBB separating-axis test. Rejects pairs whose oriented bounding boxes do not intersect. Constructed with one or two `OBBFieldComponent<Scalar>` (asymmetric `(target_obbs, source_obbs)` or symmetric `(obbs)`). The OBB component must be on the same entity rank as the search input. `setup()` reads each side's OBBs from the component over its selector into device storage indexed by the search's dense ordinals — so the geometry survives mid-build ghosting. |
 
 ### Chaining excluders
 
@@ -200,8 +194,8 @@ previously accumulated excluders in series. Excluders must be lightweight and co
 ```cpp
 auto list = make_neighbor_list_builder<ArborX1dNeighborList<>>()
     .exec_space(exec)
-    .target_input(target_boxes)
-    .source_input(source_boxes)
+    .target_input(input)
+    .source_input(input)
     .broad_phase(ExcludeSelfInteraction{})
     .broad_phase(ExcludeSymmetricDuplicates{})  // appended; both will run
     .build(bulk_data, {.buffer_size = 16});
@@ -219,7 +213,8 @@ Excluder `operator()` receives a candidate object. Both candidate types expose:
 | `operator==` / `operator!=` | Equality by entity (non-periodic) or entity + shift (periodic). |
 | `operator<` / `operator>` | Consistent strict ordering — target entity first, then source entity, then shift components — suitable for sorted containers. |
 
-`PeriodicNeighborSearchCandidate` additionally exposes `relative_image_shift()`.
+`PeriodicNeighborSearchCandidate` additionally exposes `target_image_shift()` and `source_image_shift()` (a consumer
+that wants the relative shift computes `source_image_shift() − target_image_shift()`).
 
 ### Custom excluders
 
@@ -262,7 +257,7 @@ auto managed = make_neighbor_list_builder<STKSearchNeighborList<>>()
     .manage(RebuildOnAABBDisplacement<double>{skin_distance});
 
 // Each time step: update() rebuilds only when the rebuilder fires.
-auto result = managed.update(bulk, target_boxes, source_boxes);
+auto result = managed.update(bulk, input, input);  // input: a SearchInput<Component> (see "Search inputs")
 // result.rebuilt — true if the list was actually rebuilt this step
 // result.list    — const reference to the current (possibly cached) list
 ```
@@ -389,7 +384,7 @@ When no execution space is provided, `ListType::execution_space{}` is used.
 | `source_index()` | Dense source ordinal for this pair. |
 | `target_entity()` | STK target entity. |
 | `source_entity()` | STK source entity. |
-| `relative_image_shift()` | Periodic relative image shift (periodic list types only). |
+| `target_image_shift()` / `source_image_shift()` | Per-object image shifts (periodic list types only); the relative shift is `source − target`, computed by the consumer. |
 
 ### `Neighbors<List>`
 
@@ -463,53 +458,31 @@ MundySearch supports this through two dedicated list types and a corresponding p
 | `ArborX1dNeighborList<MemSpace>` | `PeriodicArborX1dNeighborList<MemSpace, ShiftScalar>` |
 | `ArborX2dNeighborList<MemSpace>` | `PeriodicArborX2dNeighborList<MemSpace, ShiftScalar>` |
 
-Both periodic types store a `relative_image_shift` — the source image's translation relative to the target image
-— alongside each stored pair. The shift is of type `Vector3<ShiftScalar>` (default `float`).
+Both periodic types store two per-object image shifts — `target_image_shift(t)` per owner and
+`source_image_shift(t, k)` per stored pair — of type `Vector3<ShiftScalar>` (default `float`). A consumer that wants
+the source image's translation relative to the target computes `source_image_shift − target_image_shift` itself.
 
 ### Periodic search inputs
 
-Periodic search boxes are `impl::PeriodicArborXSearchBoxesT<MemSpace, ShiftScalar>`. Unlike the non-periodic
-variant, this input tracks owner ordinals and per-image shift vectors so that ArborX candidate matches can be
-traced back to owner entities with their associated relative shifts.
-
-**Target and source boxes must be built differently** to avoid duplicate list entries.
-
-- **Target boxes** — one image per owner, wrapped into the primary cell. The stored shift is
-  `wrapped_position − original_position`.
-- **Source boxes** — up to 27 images per owner (one per lattice neighbor at shifts n·L for n ∈ {−1,0,+1}³), each
-  stamped at `wrapped_position + n·L`. The stored shift for image n is
-  `(wrapped_position + n·L) − original_position`.
-
-The `relative_image_shift` stored in the list for a pair is always
-`source_image_shift − target_image_shift`.
+The public input is a `PeriodicSearchInput<Component, Metric>` — a selector, a geometry-yielding component, and a
+periodicity metric. The build generates the periodic images on device from the component's geometry; the caller
+never constructs image boxes by hand.
 
 ```cpp
-using PeriodicSearchBoxes = mundy::search::impl::PeriodicArborXSearchBoxesT<MemSpace>;
+using Metric = mundy::OrthorhombicMetric<mundy::AXIS_XYZ, float>;
 
-// Target: one wrapped image per owner.
-PeriodicSearchBoxes target_boxes(selector,
-    target_image_boxes,    // one AABB per owner, centered at wrap(original)
-    owner_entities,        // indexed by dense owner ordinal
-    target_owner_indices,  // one entry per owner
-    target_image_shifts);  // wrap(original_k) - original_k
-
-// Source: up to 27 images per owner.
-PeriodicSearchBoxes source_boxes(selector,
-    source_image_boxes,    // up to 27 AABBs per owner
-    owner_entities,        // same owner entity list
-    source_owner_indices,  // owner ordinal for each image
-    source_image_shifts);  // (wrapped + n*L) - original, one per image
+// `aabb_field` holds each entity's AABB (populated by the caller); `box_selector` selects the searched entities.
+mundy::mesh::AABBFieldComponent<double> component(aabb_field);
+component.modify_on_host();
+mundy::search::PeriodicSearchInput input{box_selector, component, Metric{mundy::Vector3<float>{L, L, L}}};
 
 auto list = make_neighbor_list_builder<PeriodicArborX1dNeighborList<>>()
     .exec_space(exec)
-    .target_input(target_boxes)
-    .source_input(source_boxes)
+    .target_input(input)
+    .source_input(input)
     .broad_phase(ExcludeSelfInteraction{})
     .build(bulk_data, {.buffer_size = 16});
 ```
-
-Source images can be pruned before building by computing the union AABB of all target boxes and discarding any
-source image that doesn't intersect it — such images cannot produce a neighbor pair.
 
 ### Using relative image shifts in kernels
 
@@ -525,8 +498,8 @@ mundy::search::for_each_neighbor_pair(list,
       stk::mesh::Entity target = pair.target_entity();
       stk::mesh::Entity source = pair.source_entity();
 
-      // pair.relative_image_shift() gives source image shift - target image shift
-      auto shift = pair.relative_image_shift();
+      // the relative shift is source image shift − target image shift (computed from the two per-object accessors)
+      auto shift = pair.source_image_shift() - pair.target_image_shift();
       // reconstructed source position = ngp_position(source) + shift
     });
 ```

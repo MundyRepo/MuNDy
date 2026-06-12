@@ -22,7 +22,6 @@
 #define MUNDY_MESH_DECLARECOMPONENT_HPP_
 
 /// \file DeclareComponent.hpp
-/// \defgroup MundyMeshDeclareComponent mundy::mesh::ComponentDeclaration
 /// \brief Unified fluent builder for declaring field-backed and shared components.
 ///
 /// The preferred entry point for component declarations is \c ComponentDeclaration.
@@ -44,7 +43,6 @@ namespace mundy {
 namespace mesh {
 
 /// \class ComponentDeclaration
-/// \ingroup MundyMeshDeclareComponent
 /// \brief Unified fluent builder for declaring both field-backed and shared-backed components.
 ///
 /// \c ComponentDeclaration is the preferred entry point for all component declarations.

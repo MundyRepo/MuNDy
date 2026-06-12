@@ -22,7 +22,6 @@
 #define MUNDY_MESH_DECLAREPART_HPP_
 
 /// \file DeclarePart.hpp
-/// \defgroup MundyMeshDeclarePart mundy::mesh::DeclarePart
 /// \brief A set of helpers for declaring parts with reduced boilerplate code.
 
 // C++ core

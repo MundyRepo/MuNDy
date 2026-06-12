@@ -106,7 +106,7 @@ IGNORE_PREFIX          =
 GENERATE_HTML          = YES
 HTML_OUTPUT            = html
 HTML_FILE_EXTENSION    = .html
-HTML_TIMESTAMP         = YES
+HTML_COLORSTYLE        = TOGGLE
 GENERATE_HTMLHELP      = NO
 CHM_FILE               = 
 HHC_LOCATION           = 
@@ -117,6 +117,7 @@ DISABLE_INDEX          = NO
 ENUM_VALUES_PER_LINE   = 4
 GENERATE_TREEVIEW      = NO
 TREEVIEW_WIDTH         = 250
+LAYOUT_FILE = doc/doxygen/DoxygenLayout.xml
 #---------------------------------------------------------------------------
 # configuration options related to the LaTeX output
 #---------------------------------------------------------------------------
@@ -261,7 +262,9 @@ INPUT                  = README.md \
                          mundy/core/mech/Primer.md \
                          mundy/core/mech/src \
                          mundy/mesh/Primer.md \
-                         mundy/mesh/src
+                         mundy/mesh/src \
+                         mundy/search/Primer.md \
+                         mundy/search/src
 USE_MDFILE_AS_MAINPAGE = README.md
 MARKDOWN_SUPPORT       = YES
 TOC_INCLUDE_HEADINGS   = 2

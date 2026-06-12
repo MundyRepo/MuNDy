@@ -214,6 +214,18 @@ class AABB {
   // clang-format on
   //@}
 
+  //! \name Casting
+  //@{
+
+  /// \brief Cast (and copy) the AABB to a different scalar type.
+  ///
+  /// Mirrors Vector/Matrix cast(): returns an owning AABB<U> whose corners are this AABB's corners cast to U.
+  template <typename U>
+  KOKKOS_FUNCTION constexpr auto cast() const {
+    return AABB<U>(min_corner_.template cast<U>(), max_corner_.template cast<U>());
+  }
+  //@}
+
   //! \name Setters
   //@{
 

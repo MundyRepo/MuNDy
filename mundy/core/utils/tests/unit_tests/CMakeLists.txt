@@ -25,70 +25,70 @@ if(Mundy_ENABLE_TESTS AND Mundy_ENABLE_GTest)
   tribits_add_executable_and_test(
     UnitTestThrowAssert
     SOURCES UnitTestThrowAssert.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
-    NUM_MPI_PROCS 1-4
+    NUM_MPI_PROCS 1
     INSTALLABLE
   )
 
   tribits_add_executable_and_test(
     UnitTestStringSink
     SOURCES UnitTestStringSink.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
-    NUM_MPI_PROCS 1-4
+    NUM_MPI_PROCS 1
     INSTALLABLE
   )
 
   tribits_add_executable_and_test(
     UnitTestStringLiteral
     SOURCES UnitTestStringLiteral.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
-    NUM_MPI_PROCS 1-4
+    NUM_MPI_PROCS 1
     INSTALLABLE
   )
 
   tribits_add_executable_and_test(
     UnitTestTuple
     SOURCES UnitTestTuple.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
-    NUM_MPI_PROCS 1-4
+    NUM_MPI_PROCS 1
     INSTALLABLE
   )
 
   tribits_add_executable_and_test(
     UnitTestVariant
     SOURCES UnitTestVariant.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
-    NUM_MPI_PROCS 1-4
+    NUM_MPI_PROCS 1
     INSTALLABLE
   )
 
   tribits_add_executable_and_test(
     UnitTestAggregate
     SOURCES UnitTestAggregate.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
-    NUM_MPI_PROCS 1-4
+    NUM_MPI_PROCS 1
     INSTALLABLE
   )
 
   tribits_add_executable_and_test(
     UnitTestReferenceWrapper
     SOURCES UnitTestReferenceWrapper.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
-    NUM_MPI_PROCS 1-4
+    NUM_MPI_PROCS 1
     INSTALLABLE
   )
 
   tribits_add_executable_and_test(
     UnitTestStorage
     SOURCES UnitTestStorage.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
-    NUM_MPI_PROCS 1-4
+    NUM_MPI_PROCS 1
     INSTALLABLE
   )
 
   tribits_add_executable_and_test(
     UnitTestNgpView
     SOURCES UnitTestNgpView.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
-    NUM_MPI_PROCS 1-4
+    NUM_MPI_PROCS 1
     INSTALLABLE
   )
 
   tribits_add_executable_and_test(
     UnitTestNgpPool
     SOURCES UnitTestNgpPool.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
-    NUM_MPI_PROCS 1-4
+    NUM_MPI_PROCS 1
     INSTALLABLE
   )
 else()

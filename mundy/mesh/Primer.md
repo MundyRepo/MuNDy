@@ -1,5 +1,7 @@
 # MundyMesh {#MundyMesh}
 
+\brief MuNDy's extension to Trilinos/STK.
+
 See the \ref mundy/mesh "MundyMesh directory reference".
 
 MundyMesh is the part of Mundy that manages mesh data, mesh-side access patterns, and mesh-side algorithms.

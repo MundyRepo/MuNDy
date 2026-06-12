@@ -21,6 +21,7 @@ set(NOINSTALLHEADERS
     src/mundy_mesh/DeclareEntities.hpp
     src/mundy_mesh/DeclareField.hpp
     src/mundy_mesh/DeclarePart.hpp
+    src/mundy_mesh/EntityIndices.hpp
     src/mundy_mesh/FieldComponent.hpp
     src/mundy_mesh/FieldViews.hpp
     src/mundy_mesh/ForEachEntity.hpp

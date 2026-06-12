@@ -22,159 +22,158 @@
 # as it produces more logical error messages when a test fails.
 if(Mundy_ENABLE_TESTS AND Mundy_ENABLE_GTest)
   message(STATUS "MundyMesh: Setting up unit tests since Mundy_ENABLE_TESTS=ON and Mundy_ENABLE_GTest=ON")
-  tribits_add_executable_and_test(
+  mundy_tribits_add_executable_and_test(
     UnitTestMeshBuilder
     SOURCES UnitTestMeshBuilder.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
-    NUM_MPI_PROCS 1-4
+    MPI_PROC_RANGE 1-4
     INSTALLABLE
   )
 
-  tribits_add_executable_and_test(
+  mundy_tribits_add_executable_and_test(
     UnitTestBulkData
     SOURCES UnitTestBulkData.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
-    NUM_MPI_PROCS 1-4
+    MPI_PROC_RANGE 1
     INSTALLABLE
   )
 
-  tribits_add_executable_and_test(
+  mundy_tribits_add_executable_and_test(
     UnitTestMetaData
     SOURCES UnitTestMetaData.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
-    NUM_MPI_PROCS 1-4
+    MPI_PROC_RANGE 1
     INSTALLABLE
   )
 
-  tribits_add_executable_and_test(
+  mundy_tribits_add_executable_and_test(
     UnitTestClass
     SOURCES UnitTestClass.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
-    NUM_MPI_PROCS 1-4
+    MPI_PROC_RANGE 1-4
     INSTALLABLE
   )
 
-  tribits_add_executable_and_test(
+  mundy_tribits_add_executable_and_test(
     UnitTestAccessorExpr
     SOURCES UnitTestAccessorExpr.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
-    NUM_MPI_PROCS 1-2
+    MPI_PROC_RANGE 1-2
     INSTALLABLE
   )
 
-  tribits_add_executable_and_test(
+  mundy_tribits_add_executable_and_test(
     UnitTestComponent
     SOURCES UnitTestComponent.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
-    NUM_MPI_PROCS 1
+    MPI_PROC_RANGE 1
     INSTALLABLE
   )
 
-  tribits_add_executable_and_test(
+  mundy_tribits_add_executable_and_test(
     UnitTestComponentDeclaration
     SOURCES UnitTestComponentDeclaration.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
-    NUM_MPI_PROCS 1
+    MPI_PROC_RANGE 1
     INSTALLABLE
   )
 
-  tribits_add_executable_and_test(
+  mundy_tribits_add_executable_and_test(
     UnitTestFieldDeclaration
     SOURCES UnitTestFieldDeclaration.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
-    NUM_MPI_PROCS 1
+    MPI_PROC_RANGE 1
     INSTALLABLE
   )
 
-  tribits_add_executable_and_test(
+  mundy_tribits_add_executable_and_test(
     UnitTestRngAccessorExpr
     SOURCES UnitTestRngAccessorExpr.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
-    NUM_MPI_PROCS 1-4
+    MPI_PROC_RANGE 1-2
     INSTALLABLE
   )
 
-  tribits_add_executable_and_test(
+  mundy_tribits_add_executable_and_test(
     UnitTestLinkCSRBucketConn
     SOURCES UnitTestLinkCSRBucketConn.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
-    NUM_MPI_PROCS 1-4
+    MPI_PROC_RANGE 1
     INSTALLABLE
   )
 
-  tribits_add_executable_and_test(
+  mundy_tribits_add_executable_and_test(
     UnitTestLinkCSRPartition
     SOURCES UnitTestLinkCSRPartition.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
-    NUM_MPI_PROCS 1-4
+    MPI_PROC_RANGE 1
     INSTALLABLE
   )
 
-  tribits_add_executable_and_test(
+  mundy_tribits_add_executable_and_test(
     UnitTestLinkCOOData
     SOURCES UnitTestLinkCOOData.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
-    NUM_MPI_PROCS 1-4
+    MPI_PROC_RANGE 1
     INSTALLABLE
   )
 
-  tribits_add_executable_and_test(
+  mundy_tribits_add_executable_and_test(
     UnitTestLinkCSRData
     SOURCES UnitTestLinkCSRData.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
-    NUM_MPI_PROCS 1-4
+    MPI_PROC_RANGE 1
     INSTALLABLE
   )
 
-  tribits_add_executable_and_test(
+  mundy_tribits_add_executable_and_test(
     UnitTestNgpLinkData
     SOURCES UnitTestNgpLinkData.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
-    NUM_MPI_PROCS 1-4
+    MPI_PROC_RANGE 1-4
     INSTALLABLE
   )
 
-  tribits_add_executable_and_test(
+  mundy_tribits_add_executable_and_test(
     UnitTestLinkDataObserver
     SOURCES UnitTestLinkDataObserver.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
-    NUM_MPI_PROCS 1-4
-    ENVIRONMENT OMP_WAIT_POLICY=PASSIVE OMP_PROC_BIND=false
+    MPI_PROC_RANGE 1
     INSTALLABLE
   )
 
-  tribits_add_executable_and_test(
+  mundy_tribits_add_executable_and_test(
     UnitTestStringToSelector
     SOURCES UnitTestStringToSelector.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
-    NUM_MPI_PROCS 1-4
+    MPI_PROC_RANGE 1
     INSTALLABLE
   )
 
-  tribits_add_executable_and_test(
+  mundy_tribits_add_executable_and_test(
     UnitTestNgpModRequests
     SOURCES UnitTestNgpModRequests.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
-    NUM_MPI_PROCS 1-4
+    MPI_PROC_RANGE 1
     INSTALLABLE
   )
 
-  tribits_add_executable_and_test(
+  mundy_tribits_add_executable_and_test(
     UnitTestDeclareEntities
     SOURCES UnitTestDeclareEntities.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
-    NUM_MPI_PROCS 1-4
+    MPI_PROC_RANGE 1
     INSTALLABLE
   )
 
-  tribits_add_executable_and_test(
+  mundy_tribits_add_executable_and_test(
     UnitTestEntityPool
     SOURCES UnitTestEntityPool.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
-    NUM_MPI_PROCS 1-4
+    MPI_PROC_RANGE 1
     INSTALLABLE
   )
 
-  tribits_add_executable_and_test(
+  mundy_tribits_add_executable_and_test(
     UnitTestFieldBLAS
     SOURCES UnitTestFieldBLAS.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
-    NUM_MPI_PROCS 1-4
+    MPI_PROC_RANGE 1-2
     INSTALLABLE
   )
 
-  tribits_add_executable_and_test(
+  mundy_tribits_add_executable_and_test(
     UnitTestAggregate
     SOURCES UnitTestAggregate.cpp ${Mundy_DEFAULT_UNIT_TEST_MAIN}
-    NUM_MPI_PROCS 1
+    MPI_PROC_RANGE 1
   )
 
-# tribits_add_executable_and_test(
+# mundy_tribits_add_executable_and_test(
 # UnitTestGenNeighborLinks
 # SOURCES
 # UnitTestGenNeighborLinks.cpp
 # ${Mundy_DEFAULT_UNIT_TEST_MAIN}
-# NUM_MPI_PROCS 1-4
+# MPI_PROC_RANGE 1-4
 # )
 else()
   message(STATUS "MundyMesh: Skipping unit tests since Mundy_ENABLE_TESTS=OFF or Mundy_ENABLE_GTest=OFF ...")

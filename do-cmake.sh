@@ -45,6 +45,56 @@ KOKKOS_KERNELS_ROOT_DIR=$(spack location -i "${KOKKOS_KERNELS_SPEC}") || {
   exit 1
 }
 
+is_positive_integer() {
+  case "$1" in
+    ''|*[!0-9]*) return 1 ;;
+    0) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+
+# TriBITS uses MPI_EXEC_MAX_NUMPROCS as a hard configure-time cap:
+# tests requesting more ranks are not added to CTest. MPI_EXEC_DEFAULT_NUMPROCS
+# is only used for MPI tests without NUM_MPI_PROCS; TriBITS does not clamp it
+# to the max, so keep the default <= max.
+#
+# Policy: explicit env vars win. Otherwise infer max from Slurm when possible,
+# fall back to 1 inside Slurm with no task count, and use nproc outside Slurm.
+# If default is not set, use min(4, max) to preserve TriBITS' usual default
+# without skipping default-rank MPI tests on small allocations.
+if [ -n "${MPI_EXEC_MAX_NUMPROCS:-}" ]; then
+  if ! is_positive_integer "$MPI_EXEC_MAX_NUMPROCS"; then
+    echo "ERROR: MPI_EXEC_MAX_NUMPROCS must be a positive integer: $MPI_EXEC_MAX_NUMPROCS" >&2
+    exit 1
+  fi
+  MPI_MAX_NUMPROCS="$MPI_EXEC_MAX_NUMPROCS"
+elif [ -n "${SLURM_STEP_NUM_TASKS:-}" ] && is_positive_integer "$SLURM_STEP_NUM_TASKS"; then
+  MPI_MAX_NUMPROCS="$SLURM_STEP_NUM_TASKS"
+elif [ -n "${SLURM_NTASKS:-}" ] && is_positive_integer "$SLURM_NTASKS"; then
+  MPI_MAX_NUMPROCS="$SLURM_NTASKS"
+elif [ -n "${SLURM_NPROCS:-}" ] && is_positive_integer "$SLURM_NPROCS"; then
+  MPI_MAX_NUMPROCS="$SLURM_NPROCS"
+elif [ -n "${SLURM_JOB_ID:-}" ]; then
+  MPI_MAX_NUMPROCS=1
+else
+  MPI_MAX_NUMPROCS=$(nproc 2>/dev/null || echo 1)
+  if ! is_positive_integer "$MPI_MAX_NUMPROCS"; then
+    MPI_MAX_NUMPROCS=1
+  fi
+fi
+
+if [ -n "${MPI_EXEC_DEFAULT_NUMPROCS:-}" ]; then
+  if ! is_positive_integer "$MPI_EXEC_DEFAULT_NUMPROCS"; then
+    echo "ERROR: MPI_EXEC_DEFAULT_NUMPROCS must be a positive integer: $MPI_EXEC_DEFAULT_NUMPROCS" >&2
+    exit 1
+  fi
+  MPI_DEFAULT_NUMPROCS="$MPI_EXEC_DEFAULT_NUMPROCS"
+elif [ "$MPI_MAX_NUMPROCS" -lt 4 ]; then
+  MPI_DEFAULT_NUMPROCS="$MPI_MAX_NUMPROCS"
+else
+  MPI_DEFAULT_NUMPROCS=4
+fi
+
 # Usage:
 #   bash ../do-cmake.sh ~/MuNDyScratch/mundy_tpl_deps ../ ~/MuNDyScratch/mundy_install
 #
@@ -55,6 +105,8 @@ echo "Using Kokkos dir: $KOKKOS_ROOT_DIR"
 echo "Using TPL dir: $TPL_ROOT_DIR"
 echo "Using MuNDy source dir: $MUNDY_SOURCE_DIR"
 echo "Using install dir: $INSTALL_DIR"
+echo "Using MPI max num procs: $MPI_MAX_NUMPROCS"
+echo "Using MPI default num procs: $MPI_DEFAULT_NUMPROCS"
 
 cmake \
 -DCMAKE_BUILD_TYPE=${BUILD_TYPE:-RELEASE} \
@@ -67,7 +119,8 @@ cmake \
 -DBUILD_SHARED_LIBS=ON \
 -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
 -DTPL_ENABLE_MPI=ON \
--DMPI_EXEC_MAX_NUMPROCS=${MPI_EXEC_MAX_NUMPROCS:-1} \
+-DMPI_EXEC_MAX_NUMPROCS:STRING=${MPI_MAX_NUMPROCS} \
+-DMPI_EXEC_DEFAULT_NUMPROCS:STRING=${MPI_DEFAULT_NUMPROCS} \
 -DMundy_ENABLE_MundyCore=ON \
 -DMundy_ENABLE_MundyMath=ON \
 -DMundy_ENABLE_MundyGeom=ON \

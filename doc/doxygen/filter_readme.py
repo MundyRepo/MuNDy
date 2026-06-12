@@ -4,6 +4,27 @@ import sys
 import re
 from pathlib import Path
 
+PUBLIC_DOC_LINK_REPLACEMENTS = {
+    "https://mundyrepo.github.io/MuNDy/": "index.html",
+    "https://mundyrepo.github.io/MuNDy/pages.html": "pages.html",
+    "https://mundyrepo.github.io/MuNDy/classes.html": "classes.html",
+    "https://mundyrepo.github.io/MuNDy/files.html": "files.html",
+    "https://mundyrepo.github.io/MuNDy/namespaces.html": "namespaces.html",
+    "https://mundyrepo.github.io/MuNDy/topics.html": "topics.html",
+    "https://mundyrepo.github.io/MuNDy/MundyUtils.html": "MundyUtils.html",
+    "https://mundyrepo.github.io/MuNDy/MundyMath.html": "MundyMath.html",
+    "https://mundyrepo.github.io/MuNDy/MundyGeom.html": "MundyGeom.html",
+    "https://mundyrepo.github.io/MuNDy/MundyMech.html": "MundyMech.html",
+    "https://mundyrepo.github.io/MuNDy/MundyMesh.html": "MundyMesh.html",
+    "https://mundyrepo.github.io/MuNDy/MundySearch.html": "MundySearch.html",
+}
+
+SORTED_PUBLIC_DOC_LINK_REPLACEMENTS = sorted(
+    PUBLIC_DOC_LINK_REPLACEMENTS.items(),
+    key=lambda item: len(item[0]),
+    reverse=True,
+)
+
 README_REF_REPLACEMENTS = {
     "mundy::aggregate": r'\ref mundy::aggregate "mundy::aggregate"',
     "mundy::minimize(...)": r'\ref MundyMathMinimize "mundy::minimize(...)"',
@@ -33,6 +54,8 @@ GENERATED_REF_BOLD_RE = re.compile(r"\*\*((?:\\ref [^*\n]+?)+)\*\*")
 def replace_outside_inline_code(line: str) -> str:
     parts = line.split("`")
     for i in range(0, len(parts), 2):
+        for source, replacement in SORTED_PUBLIC_DOC_LINK_REPLACEMENTS:
+            parts[i] = parts[i].replace(source, replacement)
         for source, replacement in SORTED_README_REF_REPLACEMENTS:
             parts[i] = parts[i].replace(source, replacement)
         parts[i] = GENERATED_REF_BOLD_RE.sub(r"<b>\1</b>", parts[i])

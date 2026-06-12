@@ -22,7 +22,7 @@
 #define MUNDY_SEARCH_IMPL_ARBORXSEARCHBOXES_HPP_
 
 /// \file impl/ArborXSearchBoxes.hpp
-/// \brief Build-time ArborX search box wrappers and their ArborX::AccessTraits specializations.
+/// \brief ArborX instantiations of the unified search boxes plus their ArborX::AccessTraits specializations.
 
 // Mundy
 #include <MundySearch_config.hpp>  // for HAVE_MUNDYSEARCH_*
@@ -35,12 +35,18 @@
 // Trilinos
 #include <ArborX.hpp>
 #include <Kokkos_Core.hpp>
+#include <stk_mesh/base/BulkData.hpp>
 #include <stk_mesh/base/Entity.hpp>
 #include <stk_mesh/base/Selector.hpp>
+#include <stk_mesh/base/Types.hpp>  // for stk::mesh::EntityRank
 
 // Mundy
-#include <mundy_math/Vector3.hpp>        // for mundy::Vector3
-#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
+#include <mundy_geom/primitives/AABB.hpp>            // for mundy::AABB
+#include <mundy_geom/primitives/Point.hpp>           // for mundy::Point (ArborX box corners)
+#include <mundy_mesh/EntityIndices.hpp>              // for mundy::mesh::get_local_entities, get_local_entity_indices
+#include <mundy_mesh/FieldComponent.hpp>             // for mundy::mesh::get_updated_ngp_component
+#include <mundy_search/impl/PeriodicImageBoxes.hpp>  // for impl::PeriodicImages
+#include <mundy_search/impl/SearchBoxes.hpp>         // for impl::SearchBoxes, impl::PeriodicImageIdentity
 
 namespace mundy {
 
@@ -48,266 +54,86 @@ namespace search {
 
 namespace impl {
 
-/// \class ArborXSearchBoxesT
-/// \brief Build-time ArborX boxes paired with STK entity identities.
-///
-/// This object is an input to ArborX neighbor-list construction. It is not the storage model of the final neighbor
-/// list. The final list stores target/source entities and neighbor indices, while search boxes remain a construction
-/// detail.
-/// \tparam MemorySpace Kokkos memory space in which the boxes and entity view live.
+/// \brief ArborX non-periodic search boxes: one box per entity, identity is the entity itself.
+/// \tparam MemorySpace Kokkos memory space in which the boxes and identities live.
 template <typename MemorySpace>
-class ArborXSearchBoxesT {
- public:
-  //! \name Aliases
-  //@{
+using ArborXSearchBoxesT = SearchBoxes<MemorySpace, ArborX::Box, stk::mesh::Entity>;
 
-  using memory_space = MemorySpace;
-  using size_type = size_t;
-  using box_view_t = Kokkos::View<ArborX::Box*, memory_space>;
-  using entity_view_t = Kokkos::View<stk::mesh::Entity*, memory_space>;
-  //@}
-
-  //! \name Constructors
-  //@{
-
-  /// \brief Default constructor.
-  ArborXSearchBoxesT() = default;
-
-  /// \brief Default copy and move constructors/operators.
-  ArborXSearchBoxesT(const ArborXSearchBoxesT&) = default;
-  ArborXSearchBoxesT(ArborXSearchBoxesT&&) = default;
-  ArborXSearchBoxesT& operator=(const ArborXSearchBoxesT&) = default;
-  ArborXSearchBoxesT& operator=(ArborXSearchBoxesT&&) = default;
-
-  /// \brief Construct ArborX search boxes from a selector, matching box and entity views.
-  /// \param selector [in] Selector used to populate this box set.
-  /// \param boxes [in] ArborX boxes used as primitives or predicates.
-  /// \param entities [in] STK entity associated with each search box.
-  ArborXSearchBoxesT(const stk::mesh::Selector& selector, const box_view_t& boxes, const entity_view_t& entities)
-      : selector_(selector), boxes_(boxes), entities_(entities) {
-    MUNDY_THROW_ASSERT(boxes_.extent(0) == entities_.extent(0), std::invalid_argument,
-                       "ArborXSearchBoxesT: boxes and entities must have the same extent.");
-  }
-  //@}
-
-  //! \name Getters
-  //@{
-
-  /// \brief Get the selector used to populate this box set.
-  const stk::mesh::Selector& selector() const noexcept {
-    return selector_;
-  }
-
-  /// \brief Get the number of search boxes.
-  KOKKOS_INLINE_FUNCTION
-  size_type size() const noexcept {
-    return boxes_.extent(0);
-  }
-
-  /// \brief Get a box by local search ordinal.
-  /// \param index [in] Local search ordinal.
-  KOKKOS_INLINE_FUNCTION
-  ArborX::Box box(size_type index) const {
-    MUNDY_THROW_ASSERT(index < size(), std::out_of_range, "ArborXSearchBoxesT::box index out of range.");
-    return boxes_(index);
-  }
-
-  /// \brief Get an entity by local search ordinal.
-  /// \param index [in] Local search ordinal.
-  KOKKOS_INLINE_FUNCTION
-  stk::mesh::Entity entity(size_type index) const {
-    MUNDY_THROW_ASSERT(index < size(), std::out_of_range, "ArborXSearchBoxesT::entity index out of range.");
-    return entities_(index);
-  }
-
-  /// \brief Get the raw box view.
-  KOKKOS_INLINE_FUNCTION
-  box_view_t boxes() const noexcept {
-    return boxes_;
-  }
-
-  /// \brief Get the raw entity view.
-  KOKKOS_INLINE_FUNCTION
-  entity_view_t entities() const noexcept {
-    return entities_;
-  }
-  //@}
-
- private:
-  //! \name Internal members
-  //@{
-
-  //! Selector used to populate this box set.
-  stk::mesh::Selector selector_;
-  //! ArborX boxes used during construction.
-  box_view_t boxes_;
-  //! STK entities associated one-to-one with `boxes_`.
-  entity_view_t entities_;
-  //@}
-};
-
-/// \class PeriodicArborXSearchBoxesT
-/// \brief Build-time ArborX boxes for periodic images of STK owner entities.
-///
-/// A periodic image is not a mesh entity. Each image box stores an owner ordinal into `owner_entities_` and a shift
-/// vector describing the translation applied to that owner geometry when the box was generated. ArborX sees image boxes
-/// during construction; the final periodic neighbor list collapses matches back to owner ordinals and stores only the
-/// relative image shift needed by pair kernels.
-/// \tparam MemorySpace Kokkos memory space in which the image boxes and metadata live.
+/// \brief ArborX periodic image search boxes: one box per image, identity is the imaged owner entity + lattice shift.
+/// \tparam MemorySpace Kokkos memory space in which the boxes and identities live.
 /// \tparam ImageShiftScalar Scalar type used by image-shift vectors.
 template <typename MemorySpace, typename ImageShiftScalar = float>
-class PeriodicArborXSearchBoxesT {
- public:
-  //! \name Aliases
-  //@{
+using PeriodicArborXSearchBoxesT =
+    SearchBoxes<MemorySpace, ArborX::Box, PeriodicImageIdentity<stk::mesh::Entity, ImageShiftScalar>>;
 
-  using memory_space = MemorySpace;
-  using image_shift_scalar = ImageShiftScalar;
-  using size_type = size_t;
-  using image_shift_type = mundy::Vector3<image_shift_scalar>;
-  using box_view_t = Kokkos::View<ArborX::Box*, memory_space>;
-  using entity_view_t = Kokkos::View<stk::mesh::Entity*, memory_space>;
-  using owner_index_view_t = Kokkos::View<size_type*, memory_space>;
-  using image_shift_view_t = Kokkos::View<image_shift_type*, memory_space>;
-  //@}
+/// \brief Pack a MundyGeom AABB (the component's broad-phase volume) into an `ArborX::Box` (always float).
+template <typename AABBType>
+KOKKOS_INLINE_FUNCTION ArborX::Box pack_arborx_box(const AABBType& aabb) {
+  const auto& lo = aabb.min_corner();
+  const auto& hi = aabb.max_corner();
+  return ArborX::Box{ArborX::Point{static_cast<float>(lo[0]), static_cast<float>(lo[1]), static_cast<float>(lo[2])},
+                     ArborX::Point{static_cast<float>(hi[0]), static_cast<float>(hi[1]), static_cast<float>(hi[2])}};
+}
 
-  //! \name Constructors
-  //@{
+/// \brief Enumerate a `(rank, selector)` chunk and build its broad-phase ArborX boxes from a component.
+///
+/// The component must yield an AABB (the ArborX list's broad-phase volume). Returned views alias reference-counted
+/// device storage (no deep copies).
+/// \return `{entities, boxes}` — device entity view (dense ordinal order) and matching device `ArborX::Box` view. The
+///         entity view doubles as the non-periodic identity view.
+template <typename ExecSpace, typename Component>
+std::pair<Kokkos::View<stk::mesh::Entity*, typename ExecSpace::memory_space>,
+          Kokkos::View<ArborX::Box*, typename ExecSpace::memory_space>>
+make_arborx_search_boxes(const stk::mesh::BulkData& bulk_data, const ExecSpace& exec, stk::mesh::EntityRank rank,
+                         const stk::mesh::Selector& selector, Component& component) {
+  using memory_space = typename ExecSpace::memory_space;
 
-  /// \brief Default constructor.
-  PeriodicArborXSearchBoxesT() = default;
+  // Enumerate entities + local indices in a common, deterministic order; bring the (caller-populated) geometry
+  // field to device and read it through the NGP component.
+  auto entities_ngp = mundy::mesh::get_local_entities(bulk_data, rank, selector, exec);
+  auto indices_ngp = mundy::mesh::get_local_entity_indices(bulk_data, rank, selector, exec);
+  entities_ngp.sync_to_device();
+  indices_ngp.sync_to_device();
+  component.sync_to_device();
+  Kokkos::View<stk::mesh::Entity*, memory_space> entities = entities_ngp.view_device();
+  auto indices = indices_ngp.view_device();
+  auto ngp_component = mundy::mesh::get_updated_ngp_component(component);
+  const size_t num_entities = entities.extent(0);
 
-  /// \brief Default copy and move constructors/operators.
-  PeriodicArborXSearchBoxesT(const PeriodicArborXSearchBoxesT&) = default;
-  PeriodicArborXSearchBoxesT(PeriodicArborXSearchBoxesT&&) = default;
-  PeriodicArborXSearchBoxesT& operator=(const PeriodicArborXSearchBoxesT&) = default;
-  PeriodicArborXSearchBoxesT& operator=(PeriodicArborXSearchBoxesT&&) = default;
+  Kokkos::View<ArborX::Box*, memory_space> boxes(
+      Kokkos::view_alloc(Kokkos::WithoutInitializing, "mundy_arborx_search_boxes"), num_entities);
+  Kokkos::parallel_for(
+      "mundy_make_arborx_search_boxes", Kokkos::RangePolicy<ExecSpace>(exec, 0, num_entities),
+      KOKKOS_LAMBDA(const size_t i) { boxes(i) = pack_arborx_box(ngp_component(indices(i))); });
 
-  /// \brief Construct periodic image search boxes from a selector, owner entities and per-image metadata.
-  /// \param selector [in] Selector used to populate this box set.
-  /// \param boxes [in] Search boxes for each periodic image.
-  /// \param owner_entities [in] STK owner entities indexed by dense owner ordinal.
-  /// \param owner_indices [in] Dense owner ordinal for each image box.
-  /// \param image_shifts [in] Translation applied to the owner geometry for each image box.
-  PeriodicArborXSearchBoxesT(const stk::mesh::Selector& selector, const box_view_t& boxes,
-                             const entity_view_t& owner_entities, const owner_index_view_t& owner_indices,
-                             const image_shift_view_t& image_shifts)
-      : selector_(selector),
-        boxes_(boxes),
-        owner_entities_(owner_entities),
-        owner_indices_(owner_indices),
-        image_shifts_(image_shifts) {
-    MUNDY_THROW_ASSERT(boxes_.extent(0) == owner_indices_.extent(0), std::invalid_argument,
-                       "PeriodicArborXSearchBoxesT: boxes and owner_indices must have the same extent.");
-    MUNDY_THROW_ASSERT(boxes_.extent(0) == image_shifts_.extent(0), std::invalid_argument,
-                       "PeriodicArborXSearchBoxesT: boxes and image_shifts must have the same extent.");
-  }
-  //@}
+  return std::make_pair(entities, boxes);
+}
 
-  //! \name Getters
-  //@{
-
-  /// \brief Get the selector used to populate this box set.
-  const stk::mesh::Selector& selector() const noexcept {
-    return selector_;
-  }
-
-  /// \brief Get the number of periodic image boxes.
-  KOKKOS_INLINE_FUNCTION
-  size_type size() const noexcept {
-    return boxes_.extent(0);
-  }
-
-  /// \brief Get the number of owner entities.
-  KOKKOS_INLINE_FUNCTION
-  size_type num_owners() const noexcept {
-    return owner_entities_.extent(0);
-  }
-
-  /// \brief Get a periodic image box by local image ordinal.
-  /// \param image_index [in] Local periodic-image ordinal.
-  KOKKOS_INLINE_FUNCTION
-  ArborX::Box box(size_type image_index) const {
-    MUNDY_THROW_ASSERT(image_index < size(), std::out_of_range,
-                       "PeriodicArborXSearchBoxesT::box image index out of range.");
-    return boxes_(image_index);
-  }
-
-  /// \brief Get the owner ordinal associated with a periodic image box.
-  /// \param image_index [in] Local periodic-image ordinal.
-  KOKKOS_INLINE_FUNCTION
-  size_type owner_index(size_type image_index) const {
-    MUNDY_THROW_ASSERT(image_index < size(), std::out_of_range,
-                       "PeriodicArborXSearchBoxesT::owner_index image index out of range.");
-    return owner_indices_(image_index);
-  }
-
-  /// \brief Get an owner entity by dense owner ordinal.
-  /// \param owner_index [in] Dense owner ordinal.
-  KOKKOS_INLINE_FUNCTION
-  stk::mesh::Entity owner_entity(size_type owner_index) const {
-    MUNDY_THROW_ASSERT(owner_index < num_owners(), std::out_of_range,
-                       "PeriodicArborXSearchBoxesT::owner_entity owner index out of range.");
-    return owner_entities_(owner_index);
-  }
-
-  /// \brief Get the owner entity associated with a periodic image box.
-  /// \param image_index [in] Local periodic-image ordinal.
-  KOKKOS_INLINE_FUNCTION
-  stk::mesh::Entity image_owner_entity(size_type image_index) const {
-    return owner_entity(owner_index(image_index));
-  }
-
-  /// \brief Get the shift applied to an owner to generate a periodic image box.
-  /// \param image_index [in] Local periodic-image ordinal.
-  KOKKOS_INLINE_FUNCTION
-  image_shift_type image_shift(size_type image_index) const {
-    MUNDY_THROW_ASSERT(image_index < size(), std::out_of_range,
-                       "PeriodicArborXSearchBoxesT::image_shift image index out of range.");
-    return image_shifts_(image_index);
-  }
-
-  /// \brief Get the raw periodic image box view.
-  KOKKOS_INLINE_FUNCTION
-  box_view_t boxes() const noexcept {
-    return boxes_;
-  }
-
-  /// \brief Get the raw owner entity view.
-  KOKKOS_INLINE_FUNCTION
-  entity_view_t owner_entities() const noexcept {
-    return owner_entities_;
-  }
-
-  /// \brief Get the raw image-to-owner ordinal view.
-  KOKKOS_INLINE_FUNCTION
-  owner_index_view_t owner_indices() const noexcept {
-    return owner_indices_;
-  }
-
-  /// \brief Get the raw image-shift view.
-  KOKKOS_INLINE_FUNCTION
-  image_shift_view_t image_shifts() const noexcept {
-    return image_shifts_;
-  }
-  //@}
-
- private:
-  //! \name Internal members
-  //@{
-
-  //! Selector used to populate this box set.
-  stk::mesh::Selector selector_;
-  //! ArborX boxes for periodic images of owner entities.
-  box_view_t boxes_;
-  //! Owner entities indexed by dense owner ordinal.
-  entity_view_t owner_entities_;
-  //! Dense owner ordinal for each image box.
-  owner_index_view_t owner_indices_;
-  //! Translation applied to each owner to generate its image box.
-  image_shift_view_t image_shifts_;
-  //@}
-};
+/// \brief Pack backend-neutral periodic images into ArborX periodic search boxes (boxes + per-image identities).
+///
+/// Each image's identity is the imaged owner entity (`owner_entities(owner_indices(i))`) and its lattice shift. The
+/// dense per-owner `owner_entities`/`owner_indices` from `images` remain the build's inputs for final-list storage and
+/// owner-ordinal recovery; only the encapsulated identity travels into the search.
+template <typename ExecSpace, typename MScalar, typename ShiftScalar, typename MemSpace>
+PeriodicArborXSearchBoxesT<MemSpace, ShiftScalar> pack_periodic_arborx_search_boxes(
+    const ExecSpace& exec, const stk::mesh::Selector& selector,
+    const PeriodicImages<MScalar, ShiftScalar, MemSpace>& images) {
+  using identity_t = PeriodicImageIdentity<stk::mesh::Entity, ShiftScalar>;
+  const size_t n = images.aabbs.extent(0);
+  Kokkos::View<ArborX::Box*, MemSpace> boxes(Kokkos::view_alloc(Kokkos::WithoutInitializing, "per_arborx_boxes"), n);
+  Kokkos::View<identity_t*, MemSpace> identities(Kokkos::view_alloc(Kokkos::WithoutInitializing, "per_arborx_ids"), n);
+  auto aabbs = images.aabbs;
+  auto owner_entities = images.owner_entities;
+  auto owner_indices = images.owner_indices;
+  auto shifts = images.shifts;
+  Kokkos::parallel_for(
+      "mundy_pack_periodic_arborx_search_boxes", Kokkos::RangePolicy<ExecSpace>(exec, 0, n),
+      KOKKOS_LAMBDA(const size_t i) {
+        boxes(i) = pack_arborx_box(aabbs(i));
+        identities(i) = identity_t{owner_entities(owner_indices(i)), shifts(i)};
+      });
+  return PeriodicArborXSearchBoxesT<MemSpace, ShiftScalar>(selector, boxes, identities);
+}
 
 }  // namespace impl
 
@@ -318,123 +144,60 @@ class PeriodicArborXSearchBoxesT {
 namespace ArborX {
 
 #if ARBORX_VERSION < 10799
-/// \struct AccessTraits<mundy::search::impl::ArborXSearchBoxesT<MemorySpace>, PrimitivesTag>
+/// \struct AccessTraits<mundy::search::impl::SearchBoxes<MemorySpace, ArborX::Box, Identity>, PrimitivesTag>
 /// \brief ArborX primitive access traits for Mundy ArborX search boxes (old ArborX API only).
 ///
-/// For ArborX >= 1.7.99 the BVH is constructed via `attach_indices<int>(source_boxes.boxes())` which uses the
-/// built-in Kokkos::View traits; this specialization is not needed and would conflict with the predicate traits.
-/// \tparam MemorySpace Kokkos memory space for the Mundy search boxes.
-template <typename MemorySpace>
-struct AccessTraits<mundy::search::impl::ArborXSearchBoxesT<MemorySpace>, PrimitivesTag> {
-  //! Kokkos memory space for the search boxes.
-  using memory_space = MemorySpace;
-  //! Size type used by the search-box wrapper.
-  using size_type = typename mundy::search::impl::ArborXSearchBoxesT<MemorySpace>::size_type;
-
-  /// \brief Get the number of primitives.
-  static KOKKOS_FUNCTION size_type size(const mundy::search::impl::ArborXSearchBoxesT<MemorySpace>& boxes) {
-    return boxes.size();
-  }
-
-  /// \brief Get the primitive box for a source ordinal.
-  static KOKKOS_FUNCTION ArborX::Box get(const mundy::search::impl::ArborXSearchBoxesT<MemorySpace>& boxes,
-                                         size_type index) {
-    return boxes.box(index);
-  }
-};
-#endif  // ARBORX_VERSION < 10799
-
-/// \struct AccessTraits<mundy::search::impl::ArborXSearchBoxesT<MemorySpace>, PredicatesTag>
-/// \brief ArborX predicate access traits for Mundy ArborX search boxes.
-///
-/// This specialization tells ArborX how many target predicates exist and how to convert each target box into an
-/// intersection predicate. The attached data is the dense target ordinal used during construction.
-/// \tparam MemorySpace Kokkos memory space for the Mundy search boxes.
-template <typename MemorySpace>
-struct AccessTraits<mundy::search::impl::ArborXSearchBoxesT<MemorySpace>
-#if ARBORX_VERSION < 10799
-                    ,
-                    PredicatesTag
-#endif
-                    > {
-  //! Kokkos memory space for the search boxes.
-  using memory_space = MemorySpace;
-  //! Size type used by the search-box wrapper.
-  using size_type = typename mundy::search::impl::ArborXSearchBoxesT<MemorySpace>::size_type;
-
-  /// \brief Get the number of predicates.
-  /// \param boxes [in] Mundy ArborX search boxes.
-  static KOKKOS_FUNCTION size_type size(const mundy::search::impl::ArborXSearchBoxesT<MemorySpace>& boxes) {
-    return boxes.size();
-  }
-
-  /// \brief Get the intersection predicate for a target ordinal.
-  /// \param boxes [in] Mundy ArborX search boxes.
-  /// \param index [in] Target ordinal to attach as predicate data.
-  static KOKKOS_FUNCTION auto get(const mundy::search::impl::ArborXSearchBoxesT<MemorySpace>& boxes, size_type index) {
-    return ArborX::attach(ArborX::intersects(boxes.box(index)), index);
-  }
-};
-
-#if ARBORX_VERSION < 10799
-/// \struct AccessTraits<mundy::search::impl::PeriodicArborXSearchBoxesT<MemorySpace, ImageShiftScalar>, PrimitivesTag>
-/// \brief ArborX primitive access traits for Mundy periodic ArborX image boxes (old ArborX API only).
-///
-/// For ArborX >= 1.7.99 the BVH is constructed via `attach_indices<int>(source_boxes.boxes())`; this specialization
-/// is not needed and would conflict with the predicate traits.
-/// \tparam MemorySpace Kokkos memory space for the Mundy periodic search boxes.
-/// \tparam ImageShiftScalar Scalar type used by image-shift vectors.
-template <typename MemorySpace, typename ImageShiftScalar>
-struct AccessTraits<mundy::search::impl::PeriodicArborXSearchBoxesT<MemorySpace, ImageShiftScalar>, PrimitivesTag> {
-  //! Periodic search-box wrapper type.
-  using boxes_type = mundy::search::impl::PeriodicArborXSearchBoxesT<MemorySpace, ImageShiftScalar>;
+/// Identity-agnostic: only the box view is read. For ArborX >= 1.7.99 the BVH is constructed via
+/// `attach_indices<int>(source_boxes.boxes())` and this specialization is not needed.
+/// \tparam MemorySpace Kokkos memory space for the search boxes.
+/// \tparam Identity Per-element identity payload (unused by the BVH primitives).
+template <typename MemorySpace, typename Identity>
+struct AccessTraits<mundy::search::impl::SearchBoxes<MemorySpace, ArborX::Box, Identity>, PrimitivesTag> {
+  //! Search-box wrapper type.
+  using boxes_type = mundy::search::impl::SearchBoxes<MemorySpace, ArborX::Box, Identity>;
   //! Kokkos memory space for the search boxes.
   using memory_space = MemorySpace;
   //! Size type used by the search-box wrapper.
   using size_type = typename boxes_type::size_type;
 
-  /// \brief Get the number of primitive image boxes.
+  /// \brief Get the number of primitive boxes.
   static KOKKOS_FUNCTION size_type size(const boxes_type& boxes) {
     return boxes.size();
   }
 
-  /// \brief Get the primitive image box for an image ordinal.
+  /// \brief Get the primitive box for a source ordinal.
   static KOKKOS_FUNCTION ArborX::Box get(const boxes_type& boxes, size_type index) {
     return boxes.box(index);
   }
 };
 #endif  // ARBORX_VERSION < 10799
 
-/// \struct AccessTraits<mundy::search::impl::PeriodicArborXSearchBoxesT<MemorySpace, ImageShiftScalar>, PredicatesTag>
-/// \brief ArborX predicate access traits for Mundy periodic ArborX image boxes.
+/// \struct AccessTraits<mundy::search::impl::SearchBoxes<MemorySpace, ArborX::Box, Identity>, PredicatesTag>
+/// \brief ArborX predicate access traits for Mundy ArborX search boxes.
 ///
-/// The attached data is the dense target image ordinal. Builders must translate that image ordinal to a target owner
-/// ordinal and image shift before materializing the final periodic neighbor-list storage.
-/// \tparam MemorySpace Kokkos memory space for the Mundy periodic search boxes.
-/// \tparam ImageShiftScalar Scalar type used by image-shift vectors.
-template <typename MemorySpace, typename ImageShiftScalar>
-struct AccessTraits<mundy::search::impl::PeriodicArborXSearchBoxesT<MemorySpace, ImageShiftScalar>
+/// Identity-agnostic: each target box becomes an intersection predicate with its dense ordinal attached as data.
+/// \tparam MemorySpace Kokkos memory space for the search boxes.
+/// \tparam Identity Per-element identity payload (unused by the predicate boxes).
+template <typename MemorySpace, typename Identity>
+struct AccessTraits<mundy::search::impl::SearchBoxes<MemorySpace, ArborX::Box, Identity>
 #if ARBORX_VERSION < 10799
                     ,
                     PredicatesTag
 #endif
                     > {
-  //! Periodic search-box wrapper type.
-  using boxes_type = mundy::search::impl::PeriodicArborXSearchBoxesT<MemorySpace, ImageShiftScalar>;
+  //! Search-box wrapper type.
+  using boxes_type = mundy::search::impl::SearchBoxes<MemorySpace, ArborX::Box, Identity>;
   //! Kokkos memory space for the search boxes.
   using memory_space = MemorySpace;
   //! Size type used by the search-box wrapper.
   using size_type = typename boxes_type::size_type;
 
-  /// \brief Get the number of predicate image boxes.
-  /// \param boxes [in] Mundy periodic ArborX search boxes.
+  /// \brief Get the number of predicates.
   static KOKKOS_FUNCTION size_type size(const boxes_type& boxes) {
     return boxes.size();
   }
 
-  /// \brief Get the intersection predicate for a target image ordinal.
-  /// \param boxes [in] Mundy periodic ArborX search boxes.
-  /// \param index [in] Target image ordinal to attach as predicate data.
+  /// \brief Get the intersection predicate for a target ordinal.
   static KOKKOS_FUNCTION auto get(const boxes_type& boxes, size_type index) {
     return ArborX::attach(ArborX::intersects(boxes.box(index)), index);
   }

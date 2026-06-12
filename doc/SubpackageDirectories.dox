@@ -37,3 +37,11 @@
  *
  * See the \ref MundyMesh "MundyMesh primer".
  */
+
+/**
+ * \dir mundy/search
+ * \anchor MundySearchDir
+ * \brief Neighbor-list construction and iteration for Mundy.
+ *
+ * See the \ref MundySearch "MundySearch primer".
+ */

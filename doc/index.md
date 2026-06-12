@@ -2,11 +2,13 @@
 
 # MuNDy: Multibody Nonlocal Dynamics
 
-MuNDy is a C++ framework for high-performance simulation of **multibody nonlocal dynamics** on modern CPU and GPU architectures.
-
 ![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg)
 ![Backend-Kokkos](https://img.shields.io/badge/backend-Kokkos-1E88E5.svg)
 ![Mesh-STK](https://img.shields.io/badge/mesh-Trilinos%2FSTK-4CAF50.svg)
+
+MuNDy is C++ infrastructure for building scalable, biologically grounded microscale multibody dynamics software.
+
+MuNDy supports models with evolving mechanical and relational structure: heterogeneous rigid and flexible bodies; constraints, motors, and contact; growth, division, death, and bonds that form, break, and reorganize; and long-range interactions mediated through a shared medium. Rather than a monolithic simulator, MuNDy builds upon Trilinos/STK’s runtime-extensible entity/part/field data model to provide reusable abstractions and data structures for this problem class. It targets research software developers building domain-specific applications across deployment scales, from laptops and workstations to multi-GPU clusters.
 
 ```{toctree}
 :hidden:
@@ -17,8 +19,8 @@ api
 ```
 
 ```{important}
-**Project status (3/18/2026):**  
-MuNDy is under active development. We have chosen to make development public as we move toward a first formal release targeted for **Late June 2026**.
+**Project status (6/12/2026):**  
+MuNDy is under active development and rapidly approaching our first formal release. Currently in the "polishing" phase: we have a complete set of core utilities, mathematical tools, geometric and mechanical primitives, and mesh integration machinery. We are now focused on hardening the API, expanding documentation and examples, and building out the Python interface.
 ```
 
 ---
@@ -36,6 +38,7 @@ MuNDy is under active development. We have chosen to make development public as 
   - [MundyGeom: Geometric primitives and utilities](#mundygeom-geometric-primitives-and-utilities)
   - [MundyMech: Mechanical primitives and utilities](#mundymech-mechanical-primitives-and-utilities-under-construction)
   - [MundyMesh: MuNDy’s extension to Trilinos/STK](#mundymesh-mundys-extension-to-trilinosstk)
+  - [MundySearch: Neighbor-list construction and iteration](#mundysearch-neighbor-list-construction-and-iteration)
   - [Standalone Offshoots](#standalone-offshoots)
 - [Release Roadmap](#release-roadmap)
 
@@ -43,13 +46,18 @@ MuNDy is under active development. We have chosen to make development public as 
 
 ## Documentation
 
-Use the [Primers](primers/index) for user-facing documentation and the [C++ API Reference](api) for generated class, method, function, and file reference pages. The [Wiki](https://github.com/MundyRepo/MuNDy/wiki) remains a living document that we will continue to expand and refine as the library matures. You can also generate the local Doxygen documentation from the source tree with:
+Use the [hosted Doxygen documentation](https://mundyrepo.github.io/MuNDy/) for public user-facing documentation, design notes, primers, and generated API reference pages. This Sphinx build also provides local [Primers](primers/index) and a local [C++ API Reference](api). You can generate the local Doxygen documentation from the source tree with:
 
 ```bash
+python3 -m venv .venv-docs
+source .venv-docs/bin/activate
+
+python -m pip install --upgrade pip setuptools wheel
+python -m pip install -r doc/requirements.txt
+
 module load doxygen
 doxygen doc/Doxyfile
 ```
-
 ## Installation via Spack
 
 If you already have Spack installed, start at `spack repo add`. Otherwise, from the MuNDy source tree:
@@ -86,31 +94,29 @@ MuNDy adopts a **Trilinos-style subpackage stack**:
 
 This structure is intended to keep:
 - **Core utilities** small, reusable, and dependency-light. (utils, math, geom, mech)
-- **Simulation layers** configurable, so applications can opt into only what they need (mesh, mbody)
+- **Simulation layers** configurable, so applications can opt into only what they need (mesh, search, mbody)
 
 ### Code Statistics (via cloc)
 ```text
 cloc-1.96.pl --exclude-dir=TriBITS,ci,doc,scrap ./MuNDy
-     384 text files.
-     345 unique files.                                          
-      52 files ignored.
+     424 text files.
+     384 unique files.                                          
+      46 files ignored.
 
-github.com/AlDanial/cloc v 1.96  T=1.71 s (201.6 files/s, 53673.7 lines/s)
+github.com/AlDanial/cloc v 1.96  T=1.18 s (324.5 files/s, 91526.3 lines/s)
 ------------------------------------------------------------------
 Language            files        blank        comment         code
 ------------------------------------------------------------------
-C/C++ Header          142         7071          12382        30540
-C++                    81         4823           4428        22397
-CMake                  88          620           2046         2824
-Markdown                8          832              0         2220
-Python                  5          119            161          522
-Bourne Shell           15           98             91          329
-Text                    1           25              0          172
+C/C++ Header          181         8542          15906        34395
+C++                    86         5730           6410        26960
+Markdown                9          896              0         2787
+CMake                  79          530           1638         2430
+Python                  5          161            196          659
+Bourne Shell           18          130            142          547
 JSON                    2           10              0          137
-YAML                    2            0              0            6
-CSV                     1            0              0            1
+YAML                    4           21              0           87
 ------------------------------------------------------------------
-SUM:                  345        13598          19108        59148
+SUM:                  384        16020          24292        68002
 ------------------------------------------------------------------
 ```
 
@@ -280,6 +286,17 @@ Helpers and abstractions for integrating MuNDy with Trilinos/STK meshes and fiel
   x(rods) += dt * vel(rods);
   ```
   and have them executed on the device without manual synchronization bookkeeping.
+
+---
+
+### [**MundySearch**](https://mundyrepo.github.io/MuNDy/MundySearch.html): Neighbor-list construction and iteration
+
+MundySearch builds and iterates neighbor lists over STK mesh entities.
+- **Search inputs** pair selectors with geometry components so builders know which entities to search and how to read their detection regions.
+- **NeighborListBuilder** provides a fluent, type-safe interface for constructing backend-specific lists.
+- **Excluders** filter candidate pairs during the build, including self-interaction, symmetric duplicate, and narrow-phase filters.
+- **ManagedNeighborList** caches neighbor lists across time steps and rebuilds them only when selected policies require it.
+- **for_each_neighbor_pair / for_each_target_with_neighbors** expose backend-independent parallel iteration over stored neighbor relationships.
 
 ---
 

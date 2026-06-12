@@ -1,5 +1,7 @@
 # MundyMath {#MundyMath}
 
+\brief `constexpr`, inline mathematics.
+
 See the \ref mundy/core/math "MundyMath directory reference".
 
 This subpackage contains shared functionality for performing small highly-optimized mathematical operations. The core functionality includes

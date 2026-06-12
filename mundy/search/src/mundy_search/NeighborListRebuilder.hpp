@@ -36,11 +36,15 @@
 #include <stk_util/ngp/NgpSpaces.hpp>
 
 // Mundy
-#include <mundy_geom/periodicity.hpp>        // for FreeSpaceMetric (aperiodic default)
-#include <mundy_geom/primitives/OBB.hpp>     // for mundy::OBB, mundy::quaternion_to_rotation_matrix
-#include <mundy_math/Vector3.hpp>            // for mundy::Vector3 (point construction in corners_moved)
+#include <mundy_geom/periodicity.hpp>     // for FreeSpaceMetric
+#include <mundy_geom/primitives/OBB.hpp>  // for mundy::OBB, mundy::quaternion_to_rotation_matrix
+#include <mundy_math/Quaternion.hpp>      // for mundy::Quaternion
+#include <mundy_math/Vector3.hpp>         // for mundy::Vector3
 #include <mundy_math/cmath.hpp>
-#include <mundy_search/impl/STKSearchBoxes.hpp>  // for impl::STKSearchBoxesT (concept representative)
+#include <mundy_mesh/EntityIndices.hpp>   // for mundy::mesh::get_local_entities, get_local_entity_indices
+#include <mundy_mesh/FieldComponent.hpp>  // for mundy::mesh::AABBFieldComponent/OBBFieldComponent, get_updated_ngp_component
+#include <mundy_search/NeighborListBuildTraits.hpp>  // for AABBSearchInputTypeFor
+#include <mundy_search/SearchInput.hpp>              // for SearchInput
 
 namespace mundy {
 
@@ -48,22 +52,14 @@ namespace search {
 
 /// \concept RebuilderType
 /// \brief Specifies a stateful policy that decides when a neighbor list needs to be rebuilt.
-///
-/// Rebuilders are stored in `ManagedNeighborList` and consulted before each `update()` call.
-/// `needs_rebuild(...)` returns true when the list should be discarded and rebuilt.
-/// `snapshot(...)` is called after every successful build so the rebuilder can snapshot
-/// whatever state it uses to detect staleness.
-///
-/// Both methods receive the full target and source input objects (not just selectors) so that
-/// geometry-aware rebuilders can inspect box views directly on whatever memory space they live on.
-/// The concept is checked against `impl::STKSearchBoxesT<stk::ngp::MemSpace, float>` as a
-/// representative input type.
 template <typename T>
-concept RebuilderType = requires(T& rebuilder, const stk::mesh::BulkData& bulk_data,
-                                 const impl::STKSearchBoxesT<stk::ngp::MemSpace, float>& input) {
-  { rebuilder.needs_rebuild(bulk_data, input, input) } -> std::convertible_to<bool>;
-  { rebuilder.snapshot(bulk_data, input, input) } -> std::same_as<void>;
-};
+concept RebuilderType =
+    requires(T& rebuilder, const stk::mesh::BulkData& bulk_data, const stk::mesh::Selector& selector,
+             const SearchInput<mundy::mesh::AABBFieldComponent<double>>& input) {
+      { rebuilder.setup(bulk_data, selector, selector) } -> std::same_as<void>;
+      { rebuilder.needs_rebuild(bulk_data, input, input) } -> std::convertible_to<bool>;
+      { rebuilder.snapshot(bulk_data, input, input) } -> std::same_as<void>;
+    };
 
 /// \class RebuilderChain
 /// \brief Type-level OR chain of two rebuilders.
@@ -96,6 +92,13 @@ class RebuilderChain {
 
   //! \name Rebuild policy
   //@{
+
+  /// \brief Forward per-update setup to both chain members.
+  void setup(const stk::mesh::BulkData& bulk, const stk::mesh::Selector& target_selector,
+             const stk::mesh::Selector& source_selector) {
+    prior_.setup(bulk, target_selector, source_selector);
+    next_.setup(bulk, target_selector, source_selector);
+  }
 
   /// \brief Return true if either rebuilder in the chain signals a rebuild is needed.
   template <typename TargetInput, typename SourceInput>
@@ -161,6 +164,10 @@ struct AlwaysRebuild {
   //! \name Rebuild policy
   //@{
 
+  /// \brief No per-update setup needed.
+  void setup(const stk::mesh::BulkData& /*bulk*/, const stk::mesh::Selector& /*target_selector*/,
+             const stk::mesh::Selector& /*source_selector*/) noexcept {}
+
   /// \brief Always signal that a rebuild is needed.
   template <typename TargetInput, typename SourceInput>
   bool needs_rebuild(const stk::mesh::BulkData& /*bulk*/, const TargetInput& /*targets*/,
@@ -200,6 +207,10 @@ struct AlwaysRebuild {
 struct NeverRebuild {
   //! \name Rebuild policy
   //@{
+
+  /// \brief No per-update setup needed.
+  void setup(const stk::mesh::BulkData& /*bulk*/, const stk::mesh::Selector& /*target_selector*/,
+             const stk::mesh::Selector& /*source_selector*/) noexcept {}
 
   /// \brief Never signal that a rebuild is needed after the first build.
   template <typename TargetInput, typename SourceInput>
@@ -265,21 +276,25 @@ class RebuildOnEntityChange {
   //! \name Rebuild policy
   //@{
 
+  /// \brief No per-update setup needed; entities are enumerated on demand from each input's selector.
+  void setup(const stk::mesh::BulkData& /*bulk*/, const stk::mesh::Selector& /*target_selector*/,
+             const stk::mesh::Selector& /*source_selector*/) noexcept {}
+
   /// \brief Return true if the entity sequence differs from the snapshot at the last build.
   ///
   /// On the first call (no snapshot yet), always returns true.
   template <typename TargetInput, typename SourceInput>
-  bool needs_rebuild(const stk::mesh::BulkData& /*bulk*/, const TargetInput& targets, const SourceInput& sources) {
+  bool needs_rebuild(const stk::mesh::BulkData& bulk, const TargetInput& targets, const SourceInput& sources) {
     if (!has_snapshot_) return true;
-    return entities_changed(targets.entities(), snapshot_target_) ||
-           entities_changed(sources.entities(), snapshot_source_);
+    return entities_changed(current_entities(bulk, targets), snapshot_target_) ||
+           entities_changed(current_entities(bulk, sources), snapshot_source_);
   }
 
   /// \brief Snapshot the current entity sequences into device-resident storage.
   template <typename TargetInput, typename SourceInput>
-  void snapshot(const stk::mesh::BulkData& /*bulk*/, const TargetInput& targets, const SourceInput& sources) {
-    take_snapshot(targets.entities(), snapshot_target_);
-    take_snapshot(sources.entities(), snapshot_source_);
+  void snapshot(const stk::mesh::BulkData& bulk, const TargetInput& targets, const SourceInput& sources) {
+    take_snapshot(current_entities(bulk, targets), snapshot_target_);
+    take_snapshot(current_entities(bulk, sources), snapshot_source_);
     has_snapshot_ = true;
   }
   //@}
@@ -302,6 +317,16 @@ class RebuildOnEntityChange {
  private:
   //! \name Internal helpers
   //@{
+
+  /// \brief Enumerate the current entities of an input's chunk into a device view (selector order).
+  template <typename Input>
+  Kokkos::View<stk::mesh::Entity*, memory_space> current_entities(const stk::mesh::BulkData& bulk,
+                                                                  const Input& input) const {
+    auto ngp_entities = mundy::mesh::get_local_entities(bulk, input.rank(), input.selector(), execution_space{});
+    ngp_entities.sync_to_device();
+    Kokkos::View<stk::mesh::Entity*, memory_space> entities = ngp_entities.view_device();
+    return entities;
+  }
 
   template <typename EntityView>
   bool entities_changed(const EntityView& current, const Kokkos::View<stk::mesh::Entity*, memory_space>& snap) const {
@@ -342,6 +367,18 @@ class RebuildOnEntityChange {
   Kokkos::View<stk::mesh::Entity*, memory_space> snapshot_source_{"mundy_rebuilder_snap_src_ent", 0};
   //@}
 };
+
+namespace impl {
+
+/// \struct ComponentGeometry
+/// \brief A component's on-device geometry readout: the NGP component paired with the index view it is read at.
+template <typename NgpComponent, typename IndexView>
+struct ComponentGeometry {
+  NgpComponent ngp_component;  //!< NGP component; evaluate at an index to read that entity's primitive.
+  IndexView indices;           //!< Device FastMeshIndex view, in selector order.
+};
+
+}  // namespace impl
 
 /// \class RebuildOnAABBDisplacement
 /// \brief Rebuilder that triggers when any box corner moves beyond a displacement threshold.
@@ -423,26 +460,44 @@ class RebuildOnAABBDisplacement {
   //! \name Rebuild policy
   //@{
 
-  /// \brief Return true if any box corner has moved beyond its threshold since the last build.
+  /// \brief No per-update setup needed; geometry is read on demand from each input's AABB component.
+  void setup(const stk::mesh::BulkData& /*bulk*/, const stk::mesh::Selector& /*target_selector*/,
+             const stk::mesh::Selector& /*source_selector*/) noexcept {}
+
+  /// \brief Return true if any AABB corner has moved beyond its threshold since the last build.
   ///
-  /// On the first call (no snapshot yet), always returns true.
+  /// Geometry is read from each input's AABB component over its selector. On the first call (no snapshot yet),
+  /// always returns true.
   template <typename TargetInput, typename SourceInput>
-  bool needs_rebuild(const stk::mesh::BulkData& /*bulk*/, const TargetInput& targets, const SourceInput& sources) {
-    if (!has_snapshot_) return true;
-    // Empty targets or sources → result is always empty regardless of geometry; skip displacement check.
-    if (targets.boxes().extent(0) == 0 || sources.boxes().extent(0) == 0) return false;
-    if (targets.boxes().extent(0) * 6 != snapshot_target_.extent(0) ||
-        sources.boxes().extent(0) * 6 != snapshot_source_.extent(0))
+    requires AABBSearchInputTypeFor<TargetInput, scalar_type> && AABBSearchInputTypeFor<SourceInput, scalar_type>
+  bool needs_rebuild(const stk::mesh::BulkData& bulk, const TargetInput& targets, const SourceInput& sources) {
+    if (!has_snapshot_) {
       return true;
-    return corners_moved(targets.boxes(), snapshot_target_, target_max_displacement_) ||
-           corners_moved(sources.boxes(), snapshot_source_, source_max_displacement_);
+    }
+    auto target_geom = current_geometry(bulk, targets);
+    auto source_geom = current_geometry(bulk, sources);
+    const int nt = static_cast<int>(target_geom.indices.extent(0));
+    const int ns = static_cast<int>(source_geom.indices.extent(0));
+    // Empty targets or sources → result is always empty regardless of geometry; skip displacement check.
+    if (nt == 0 || ns == 0) {
+      return false;
+    }
+    if (nt * 6 != static_cast<int>(snapshot_target_.extent(0)) ||
+        ns * 6 != static_cast<int>(snapshot_source_.extent(0))) {
+      return true;
+    }
+    return corners_moved(target_geom.ngp_component, target_geom.indices, snapshot_target_, target_max_displacement_) ||
+           corners_moved(source_geom.ngp_component, source_geom.indices, snapshot_source_, source_max_displacement_);
   }
 
-  /// \brief Snapshot the current box corners into device-resident storage.
+  /// \brief Snapshot the current AABB corners into device-resident storage.
   template <typename TargetInput, typename SourceInput>
-  void snapshot(const stk::mesh::BulkData& /*bulk*/, const TargetInput& targets, const SourceInput& sources) {
-    take_snapshot(targets.boxes(), snapshot_target_);
-    take_snapshot(sources.boxes(), snapshot_source_);
+    requires AABBSearchInputTypeFor<TargetInput, scalar_type> && AABBSearchInputTypeFor<SourceInput, scalar_type>
+  void snapshot(const stk::mesh::BulkData& bulk, const TargetInput& targets, const SourceInput& sources) {
+    auto target_geom = current_geometry(bulk, targets);
+    auto source_geom = current_geometry(bulk, sources);
+    take_snapshot(target_geom.ngp_component, target_geom.indices, snapshot_target_);
+    take_snapshot(source_geom.ngp_component, source_geom.indices, snapshot_source_);
     has_snapshot_ = true;
   }
   //@}
@@ -466,52 +521,41 @@ class RebuildOnAABBDisplacement {
   //! \name Internal helpers
   //@{
 
-  /// \brief Uniform min-corner accessor for both ArborX::Box (.minCorner()) and STK boxes (.min_corner()).
-  template <typename BoxT>
-  KOKKOS_INLINE_FUNCTION static scalar_type box_min(const BoxT& b, int i) {
-    if constexpr (requires { b.minCorner(); }) {
-      return static_cast<scalar_type>(b.minCorner()[i]);
-    } else {
-      return static_cast<scalar_type>(b.min_corner()[i]);
-    }
+  /// \brief Enumerate an input's chunk and prepare to read its AABB geometry on device.
+  template <typename Input>
+  auto current_geometry(const stk::mesh::BulkData& bulk, const Input& input) const {
+    auto component = input.component();  // copy → non-const, so the field can be synced to device
+    component.sync_to_device();
+    auto ngp_component = mundy::mesh::get_updated_ngp_component(component);
+    auto indices = mundy::mesh::get_local_entity_indices(bulk, input.rank(), input.selector(), execution_space{});
+    indices.sync_to_device();
+    return impl::ComponentGeometry{ngp_component, indices.view_device()};
   }
 
-  /// \brief Uniform max-corner accessor for both ArborX::Box (.maxCorner()) and STK boxes (.max_corner()).
-  template <typename BoxT>
-  KOKKOS_INLINE_FUNCTION static scalar_type box_max(const BoxT& b, int i) {
-    if constexpr (requires { b.maxCorner(); }) {
-      return static_cast<scalar_type>(b.maxCorner()[i]);
-    } else {
-      return static_cast<scalar_type>(b.max_corner()[i]);
-    }
-  }
-
-  /// \brief Return true if any box corner has moved beyond `threshold` under the metric.
+  /// \brief Return true if any AABB corner has moved beyond `threshold` under the metric.
   ///
   /// For `FreeSpaceMetric` this is identical to the raw per-scalar absolute difference.
   /// For periodic metrics the minimum-image displacement is used, so a corner that wraps
   /// across the cell boundary is not counted as having moved by a full cell length.
-  template <typename BoxView>
-  bool corners_moved(const BoxView& current_boxes, const Kokkos::View<scalar_type*, memory_space>& snapshot,
-                     scalar_type threshold) const {
-    int n = static_cast<int>(current_boxes.extent(0));
-    if (n == 0) return false;
+  template <typename NgpComponent, typename IndexView>
+  bool corners_moved(const NgpComponent& ngp_component, const IndexView& indices,
+                     const Kokkos::View<scalar_type*, memory_space>& snapshot, scalar_type threshold) const {
+    int n = static_cast<int>(indices.extent(0));
+    if (n == 0) {
+      return false;
+    }
     auto snap = snapshot;
     auto met = metric_;  // device-capturable by value; all concrete metrics are trivially copyable
     int any_moved = 0;
     Kokkos::parallel_reduce(
         "mundy_aabb_displacement_check", Kokkos::RangePolicy<execution_space>(0, n),
         KOKKOS_LAMBDA(int i, int& lmax) {
+          const auto aabb = ngp_component(indices(i));
           const int base = 6 * i;
-          // Form snapshotted and current min/max corner points in the metric's scalar type.
           const Point<scalar_type> old_min{snap(base + 0), snap(base + 1), snap(base + 2)};
-          const Point<scalar_type> new_min{static_cast<scalar_type>(box_min(current_boxes(i), 0)),
-                                           static_cast<scalar_type>(box_min(current_boxes(i), 1)),
-                                           static_cast<scalar_type>(box_min(current_boxes(i), 2))};
+          const Point<scalar_type> new_min{aabb.min_corner()[0], aabb.min_corner()[1], aabb.min_corner()[2]};
           const Point<scalar_type> old_max{snap(base + 3), snap(base + 4), snap(base + 5)};
-          const Point<scalar_type> new_max{static_cast<scalar_type>(box_max(current_boxes(i), 0)),
-                                           static_cast<scalar_type>(box_max(current_boxes(i), 1)),
-                                           static_cast<scalar_type>(box_max(current_boxes(i), 2))};
+          const Point<scalar_type> new_max{aabb.max_corner()[0], aabb.max_corner()[1], aabb.max_corner()[2]};
           // met.sep gives the minimum-image displacement (identity for FreeSpaceMetric).
           const auto d_min = met.sep(old_min, new_min);
           const auto d_max = met.sep(old_max, new_max);
@@ -525,20 +569,22 @@ class RebuildOnAABBDisplacement {
     return any_moved != 0;
   }
 
-  /// \brief Snapshot box corners into a device-resident view using a Kokkos parallel_for.
-  template <typename BoxView>
-  void take_snapshot(const BoxView& boxes, Kokkos::View<scalar_type*, memory_space>& snapshot) {
-    int n = static_cast<int>(boxes.extent(0));
+  /// \brief Snapshot AABB corners into a device-resident view (6 scalars per entity: min xyz, max xyz).
+  template <typename NgpComponent, typename IndexView>
+  void take_snapshot(const NgpComponent& ngp_component, const IndexView& indices,
+                     Kokkos::View<scalar_type*, memory_space>& snapshot) {
+    int n = static_cast<int>(indices.extent(0));
     Kokkos::resize(snapshot, 6 * n);
     auto snap = snapshot;
     Kokkos::parallel_for(
         "mundy_aabb_snapshot", Kokkos::RangePolicy<execution_space>(0, n), KOKKOS_LAMBDA(int i) {
-          snap(6 * i + 0) = static_cast<scalar_type>(box_min(boxes(i), 0));
-          snap(6 * i + 1) = static_cast<scalar_type>(box_min(boxes(i), 1));
-          snap(6 * i + 2) = static_cast<scalar_type>(box_min(boxes(i), 2));
-          snap(6 * i + 3) = static_cast<scalar_type>(box_max(boxes(i), 0));
-          snap(6 * i + 4) = static_cast<scalar_type>(box_max(boxes(i), 1));
-          snap(6 * i + 5) = static_cast<scalar_type>(box_max(boxes(i), 2));
+          const auto aabb = ngp_component(indices(i));
+          snap(6 * i + 0) = aabb.min_corner()[0];
+          snap(6 * i + 1) = aabb.min_corner()[1];
+          snap(6 * i + 2) = aabb.min_corner()[2];
+          snap(6 * i + 3) = aabb.max_corner()[0];
+          snap(6 * i + 4) = aabb.max_corner()[1];
+          snap(6 * i + 5) = aabb.max_corner()[2];
         });
     Kokkos::fence();
   }
@@ -614,82 +660,82 @@ class RebuildOnOBBDisplacement {
   //! \name Aliases
   //@{
 
-  using memory_space    = MemorySpace;
-  using execution_space = typename MemorySpace::execution_space;
-  using metric_type     = Metric;
-  using scalar_type     = Scalar;
-  using obb_type        = OBB<Scalar>;
-  using obb_view_type   = Kokkos::View<const obb_type*, MemorySpace>;
+  using memory_space       = MemorySpace;
+  using execution_space    = typename MemorySpace::execution_space;
+  using metric_type        = Metric;
+  using scalar_type        = Scalar;
+  using obb_type           = OBB<Scalar>;
+  using obb_component_type = mundy::mesh::OBBFieldComponent<Scalar>;
   //@}
 
   //! \name Constructors
   //@{
 
-  /// \brief Construct with a symmetric OBB view and a single threshold (aperiodic).
+  /// \brief Construct with a symmetric OBB component and a single threshold (aperiodic).
   ///
-  /// Same view is used for both target and source sides.  Available only for the default
-  /// aperiodic `FreeSpaceMetric`; supply a metric explicitly for periodic simulations.
-  /// \param obbs            [in] OBBs indexed by dense entity ordinals, shared by both sides.
+  /// The same OBB component is read for both target and source sides (over each input's selector).  Available
+  /// only for the default aperiodic `FreeSpaceMetric`; supply a metric explicitly for periodic simulations.
+  /// \param obbs             [in] OBB component supplying each entity's OBB; shared by both sides.
   /// \param max_displacement [in] Rebuild when any OBB corner exits its inflated snapshot.
-  explicit RebuildOnOBBDisplacement(obb_view_type obbs, Scalar max_displacement)
+  explicit RebuildOnOBBDisplacement(obb_component_type obbs, Scalar max_displacement)
     requires is_free_space_metric_v<Metric>
-      : target_obbs_(obbs),
-        source_obbs_(obbs),
+      : target_obb_component_(obbs),
+        source_obb_component_(obbs),
         target_max_displacement_(max_displacement),
         source_max_displacement_(max_displacement) {}
 
-  /// \brief Construct with separate target/source views and a single threshold (aperiodic).
+  /// \brief Construct with separate target/source OBB components and a single threshold (aperiodic).
   ///
-  /// \param target_obbs     [in] OBBs for target entities, indexed by dense target ordinals.
-  /// \param source_obbs     [in] OBBs for source entities, indexed by dense source ordinals.
+  /// \param target_obbs     [in] OBB component for target entities.
+  /// \param source_obbs     [in] OBB component for source entities.
   /// \param max_displacement [in] Threshold applied to both targets and sources.
-  RebuildOnOBBDisplacement(obb_view_type target_obbs, obb_view_type source_obbs, Scalar max_displacement)
+  RebuildOnOBBDisplacement(obb_component_type target_obbs, obb_component_type source_obbs, Scalar max_displacement)
     requires is_free_space_metric_v<Metric>
-      : target_obbs_(target_obbs),
-        source_obbs_(source_obbs),
+      : target_obb_component_(target_obbs),
+        source_obb_component_(source_obbs),
         target_max_displacement_(max_displacement),
         source_max_displacement_(max_displacement) {}
 
-  /// \brief Construct with separate target/source views and asymmetric thresholds (aperiodic).
+  /// \brief Construct with separate target/source OBB components and asymmetric thresholds (aperiodic).
   ///
-  /// \param target_obbs              [in] OBBs for target entities.
-  /// \param source_obbs              [in] OBBs for source entities.
+  /// \param target_obbs              [in] OBB component for target entities.
+  /// \param source_obbs              [in] OBB component for source entities.
   /// \param target_max_displacement  [in] Threshold for target OBBs.
   /// \param source_max_displacement  [in] Threshold for source OBBs.
-  RebuildOnOBBDisplacement(obb_view_type target_obbs, obb_view_type source_obbs,
+  RebuildOnOBBDisplacement(obb_component_type target_obbs, obb_component_type source_obbs,
                             Scalar target_max_displacement, Scalar source_max_displacement)
     requires is_free_space_metric_v<Metric>
-      : target_obbs_(target_obbs),
-        source_obbs_(source_obbs),
+      : target_obb_component_(target_obbs),
+        source_obb_component_(source_obbs),
         target_max_displacement_(target_max_displacement),
         source_max_displacement_(source_max_displacement) {}
 
-  /// \brief Construct with a symmetric OBB view, a single threshold, and an explicit metric.
+  /// \brief Construct with a symmetric OBB component, a single threshold, and an explicit metric.
   ///
   /// Use this for periodic simulations where the center-displacement term must respect
   /// the periodic cell geometry.
-  /// \param obbs             [in] OBBs shared by both target and source sides.
+  /// \param obbs             [in] OBB component shared by both target and source sides.
   /// \param max_displacement [in] Threshold applied to both sides.
   /// \param metric           [in] Metric used to compute minimum-image center displacement.
-  RebuildOnOBBDisplacement(obb_view_type obbs, Scalar max_displacement, const Metric& metric)
-      : target_obbs_(obbs),
-        source_obbs_(obbs),
+  RebuildOnOBBDisplacement(obb_component_type obbs, Scalar max_displacement, const Metric& metric)
+      : target_obb_component_(obbs),
+        source_obb_component_(obbs),
         target_max_displacement_(max_displacement),
         source_max_displacement_(max_displacement),
         metric_(metric) {}
 
-  /// \brief Construct with separate target/source views, asymmetric thresholds, and a metric.
+  /// \brief Construct with separate target/source OBB components, asymmetric thresholds, and a metric.
   ///
-  /// \param target_obbs              [in] OBBs for target entities.
-  /// \param source_obbs              [in] OBBs for source entities.
+  /// \param target_obbs              [in] OBB component for target entities.
+  /// \param source_obbs              [in] OBB component for source entities.
   /// \param target_max_displacement  [in] Threshold for target OBBs.
   /// \param source_max_displacement  [in] Threshold for source OBBs.
   /// \param metric                   [in] Metric for minimum-image center displacement.
-  RebuildOnOBBDisplacement(obb_view_type target_obbs, obb_view_type source_obbs,
+  RebuildOnOBBDisplacement(obb_component_type target_obbs, obb_component_type source_obbs,
                             Scalar target_max_displacement, Scalar source_max_displacement,
                             const Metric& metric)
-      : target_obbs_(target_obbs),
-        source_obbs_(source_obbs),
+      : target_obb_component_(target_obbs),
+        source_obb_component_(source_obbs),
         target_max_displacement_(target_max_displacement),
         source_max_displacement_(source_max_displacement),
         metric_(metric) {}
@@ -698,26 +744,35 @@ class RebuildOnOBBDisplacement {
   //! \name Rebuild policy
   //@{
 
+  /// \brief No per-update setup needed; OBBs are read on demand from the stored OBB components.
+  void setup(const stk::mesh::BulkData& /*bulk*/, const stk::mesh::Selector& /*target_selector*/,
+             const stk::mesh::Selector& /*source_selector*/) noexcept {}
+
   /// \brief Return true if any OBB has escaped its inflated snapshot containment region.
   ///
-  /// On the first call (no snapshot yet), always returns true.
+  /// OBBs are read from the stored OBB components over each input's selector. On the first call (no snapshot
+  /// yet), always returns true.
   template <typename TargetInput, typename SourceInput>
-  bool needs_rebuild(const stk::mesh::BulkData& /*bulk*/, const TargetInput& /*targets*/,
-                     const SourceInput& /*sources*/) {
+    requires NeighborListInputType<TargetInput> && NeighborListInputType<SourceInput>
+  bool needs_rebuild(const stk::mesh::BulkData& bulk, const TargetInput& targets, const SourceInput& sources) {
     if (!has_snapshot_) return true;
-    if (target_obbs_.extent(0) != snapshot_target_.extent(0) ||
-        source_obbs_.extent(0) != snapshot_source_.extent(0))
+    auto target_geom = current_geometry(bulk, target_obb_component_, targets);
+    auto source_geom = current_geometry(bulk, source_obb_component_, sources);
+    if (target_geom.indices.extent(0) != snapshot_target_.extent(0) ||
+        source_geom.indices.extent(0) != snapshot_source_.extent(0))
       return true;
-    return obbs_escaped(target_obbs_, snapshot_target_, target_max_displacement_) ||
-           obbs_escaped(source_obbs_, snapshot_source_, source_max_displacement_);
+    return obbs_escaped(target_geom.ngp_component, target_geom.indices, snapshot_target_, target_max_displacement_) ||
+           obbs_escaped(source_geom.ngp_component, source_geom.indices, snapshot_source_, source_max_displacement_);
   }
 
   /// \brief Snapshot the current OBBs into device-resident storage.
   template <typename TargetInput, typename SourceInput>
-  void snapshot(const stk::mesh::BulkData& /*bulk*/, const TargetInput& /*targets*/,
-                const SourceInput& /*sources*/) {
-    take_snapshot(target_obbs_, snapshot_target_);
-    take_snapshot(source_obbs_, snapshot_source_);
+    requires NeighborListInputType<TargetInput> && NeighborListInputType<SourceInput>
+  void snapshot(const stk::mesh::BulkData& bulk, const TargetInput& targets, const SourceInput& sources) {
+    auto target_geom = current_geometry(bulk, target_obb_component_, targets);
+    auto source_geom = current_geometry(bulk, source_obb_component_, sources);
+    take_snapshot(target_geom.ngp_component, target_geom.indices, snapshot_target_);
+    take_snapshot(source_geom.ngp_component, source_geom.indices, snapshot_source_);
     has_snapshot_ = true;
   }
   //@}
@@ -740,15 +795,25 @@ class RebuildOnOBBDisplacement {
   //! \name Internal helpers
   //@{
 
-  /// \brief Return true if any OBB in `current` has escaped its inflated snapshot entry.
+  /// \brief Enumerate an input's chunk and prepare to read its OBB geometry on device.
+  template <typename Input>
+  auto current_geometry(const stk::mesh::BulkData& bulk, obb_component_type component, const Input& input) const {
+    component.sync_to_device();
+    auto ngp_component = mundy::mesh::get_updated_ngp_component(component);
+    auto indices = mundy::mesh::get_local_entity_indices(bulk, input.rank(), input.selector(), execution_space{});
+    indices.sync_to_device();
+    return impl::ComponentGeometry{ngp_component, indices.view_device()};
+  }
+
+  /// \brief Return true if any current OBB has escaped its inflated snapshot entry.
   ///
   /// For each entity i the containment check is (in obb_old's local frame):
   ///   for axis k:  |T[k]| + sum_j |R_rel(k,j)| * h_new[j]  <=  h_old[k] + threshold
   /// where T = R_old^T * sep(c_old, c_new) and R_rel = R_old^T * R_new.
-  bool obbs_escaped(const obb_view_type& current,
-                    const Kokkos::View<obb_type*, MemorySpace>& snap,
-                    Scalar threshold) const {
-    const int n = static_cast<int>(current.extent(0));
+  template <typename NgpComponent, typename IndexView>
+  bool obbs_escaped(const NgpComponent& ngp_component, const IndexView& indices,
+                    const Kokkos::View<obb_type*, MemorySpace>& snap, Scalar threshold) const {
+    const int n = static_cast<int>(indices.extent(0));
     if (n == 0) return false;
     auto met = metric_;
     int any_escaped = 0;
@@ -756,16 +821,13 @@ class RebuildOnOBBDisplacement {
         "mundy_obb_displacement_check", Kokkos::RangePolicy<execution_space>(0, n),
         KOKKOS_LAMBDA(int i, int& lmax) {
           const obb_type& obb_old = snap(i);
-          const obb_type& obb_new = current(i);
+          const auto obb_new = ngp_component(indices(i));
 
           // Center displacement in world frame, minimum-image for periodic metrics.
           const auto T_world = met.sep(obb_old.center(), obb_new.center());
 
           // Express center displacement in obb_old's local frame.
-          const Vector3<Scalar> T = conjugate(obb_old.orientation()) *
-                                    Vector3<Scalar>{static_cast<Scalar>(T_world[0]),
-                                                    static_cast<Scalar>(T_world[1]),
-                                                    static_cast<Scalar>(T_world[2])};
+          const Vector3<Scalar> T = conjugate(obb_old.orientation()) * T_world;
 
           // Relative rotation: R_old^T * R_new.
           const auto R_rel = quaternion_to_rotation_matrix(
@@ -790,14 +852,22 @@ class RebuildOnOBBDisplacement {
     return any_escaped != 0;
   }
 
-  /// \brief Snapshot OBBs into a device-resident view.
-  void take_snapshot(const obb_view_type& obbs, Kokkos::View<obb_type*, MemorySpace>& snap) {
-    const int n = static_cast<int>(obbs.extent(0));
+  /// \brief Snapshot OBBs (read from the component) into a device-resident view.
+  template <typename NgpComponent, typename IndexView>
+  void take_snapshot(const NgpComponent& ngp_component, const IndexView& indices,
+                     Kokkos::View<obb_type*, MemorySpace>& snap) {
+    const int n = static_cast<int>(indices.extent(0));
     Kokkos::resize(snap, n);
     auto s = snap;
     Kokkos::parallel_for(
-        "mundy_obb_snapshot", Kokkos::RangePolicy<execution_space>(0, n),
-        KOKKOS_LAMBDA(int i) { s(i) = obbs(i); });
+        "mundy_obb_snapshot", Kokkos::RangePolicy<execution_space>(0, n), KOKKOS_LAMBDA(int i) {
+          const auto v = ngp_component(indices(i));
+          // Materialize the field-view OBB into an owning OBB<Scalar> (coordinate-wise to avoid cross-type ctors).
+          s(i) = obb_type(Point<Scalar>{v.center()[0], v.center()[1], v.center()[2]},
+                          Quaternion<Scalar>{v.orientation().w(), v.orientation().x(), v.orientation().y(),
+                                             v.orientation().z()},
+                          Vector3<Scalar>{v.half_extents()[0], v.half_extents()[1], v.half_extents()[2]});
+        });
     Kokkos::fence();
   }
   //@}
@@ -807,10 +877,10 @@ class RebuildOnOBBDisplacement {
 
   //! Whether snapshot() has been called at least once.
   bool has_snapshot_ = false;
-  //! Caller-maintained OBB view for target entities.
-  obb_view_type target_obbs_;
-  //! Caller-maintained OBB view for source entities.
-  obb_view_type source_obbs_;
+  //! OBB component supplying target-entity OBBs (read over the target input's selector).
+  obb_component_type target_obb_component_;
+  //! OBB component supplying source-entity OBBs (read over the source input's selector).
+  obb_component_type source_obb_component_;
   //! Per-entity displacement threshold for target OBBs.
   Scalar target_max_displacement_ = 0;
   //! Per-entity displacement threshold for source OBBs.

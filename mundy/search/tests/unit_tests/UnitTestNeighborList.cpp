@@ -63,8 +63,10 @@
 // STK mesh
 #include <stk_mesh/base/BulkData.hpp>
 #include <stk_mesh/base/Entity.hpp>
+#include <stk_mesh/base/Field.hpp>      // for stk::mesh::Field
+#include <stk_mesh/base/FieldBase.hpp>  // for stk::mesh::field_data
 #include <stk_mesh/base/MeshBuilder.hpp>
-#include <stk_mesh/base/MetaData.hpp>
+#include <stk_mesh/base/MetaData.hpp>  // for declare_field, put_field_on_mesh
 #include <stk_mesh/base/Selector.hpp>
 #include <stk_topology/topology.hpp>
 #include <stk_util/parallel/Parallel.hpp>
@@ -84,8 +86,16 @@
 #include <mundy_search/Neighbors.hpp>
 
 // Mundy search — STK (always available)
+#include <mundy_search/SearchInput.hpp>  // for SearchInput (component-backed inputs)
 #include <mundy_search/STKSearchNeighborList.hpp>
 #include <mundy_search/impl/STKSearchBoxes.hpp>
+
+// Mundy mesh / geom
+#include <mundy_geom/primitives/AABB.hpp>  // for mundy::AABB (test geometry + oracle)
+#include <mundy_geom/primitives/OBB.hpp>   // for mundy::OBB (OBB-rebuilder test geometry)
+#include <mundy_math/Quaternion.hpp>       // for mundy::Quaternion
+#include <mundy_math/Vector3.hpp>          // for mundy::Vector3, mundy::Point
+#include <mundy_mesh/FieldComponent.hpp>   // for mundy::mesh::AABBFieldComponent, OBBFieldComponent
 
 // Mundy utils
 #include <mundy_utils/rng.hpp>  // for mundy::make_philox
@@ -127,100 +137,130 @@ static_assert(NeighborListType<List2d>, "ArborX2dNeighborList<HostSpace> must sa
 using PairSet = std::set<std::pair<size_t, size_t>>;
 
 // =============================================================================
-// Box traits
+// Test geometry helpers
 //
-// Each trait bundles the native box type, the matching SearchBoxes container,
-// a box factory, an overlap predicate, and a search-box constructor.  All test
-// helpers are parameterized via these traits so no logic is duplicated between
-// the ArborX and STK paths.
+// The search API consumes components, so all list types (STK, ArborX 1d/2d) take the same component-backed
+// `SearchInput` built from a per-node `aabb` field.  Geometry, the overlap oracle, and field population are
+// therefore backend-agnostic — no per-backend trait is needed.
 // =============================================================================
 
-#ifdef HAVE_MUNDYSEARCH_ARBORX
-/// Trait for ArborX-backed tests (ArborX::Box, impl::ArborXSearchBoxesT).
-struct ArborXBoxTrait {
-  using box_type = ArborX::Box;
-  using search_boxes_type = impl::ArborXSearchBoxesT<TestMemSpace>;
+// Backend-agnostic test geometry: an axis-aligned box per node, stored in an `aabb` field and read through an
+// AABBFieldComponent.  Both the STK and ArborX lists consume the same component input, so a single representation
+// (mundy::AABB<double>) serves both input construction and the overlap oracle.
 
-  static box_type make(float cx, float cy, float cz, float hx, float hy, float hz) {
-    return ArborX::Box{ArborX::Point{cx - hx, cy - hy, cz - hz}, ArborX::Point{cx + hx, cy + hy, cz + hz}};
-  }
-  static box_type make(float cx, float cy, float cz, float h) {
-    return make(cx, cy, cz, h, h, h);
-  }
+using TestAABB = mundy::AABB<double>;
+using TestComponent = mundy::mesh::AABBFieldComponent<double>;
+using TestInput = SearchInput<TestComponent>;
 
-  static bool overlap(const box_type& a, const box_type& b) {
-    for (int d = 0; d < 3; ++d) {
-      if (a.maxCorner()[d] < b.minCorner()[d]) return false;
-      if (b.maxCorner()[d] < a.minCorner()[d]) return false;
-    }
-    return true;
-  }
+/// Build an AABB from a center and (possibly anisotropic) half-extents.
+inline TestAABB make_aabb(double cx, double cy, double cz, double hx, double hy, double hz) {
+  return TestAABB(cx - hx, cy - hy, cz - hz, cx + hx, cy + hy, cz + hz);
+}
+inline TestAABB make_aabb(double cx, double cy, double cz, double h) { return make_aabb(cx, cy, cz, h, h, h); }
 
-  static search_boxes_type make_search_boxes(const stk::mesh::Selector& sel, const std::vector<box_type>& bh,
-                                             const std::vector<stk::mesh::Entity>& eh) {
-    const size_t n = bh.size();
-    EXPECT_EQ(n, eh.size());
-    Kokkos::View<box_type*, TestMemSpace> bv("boxes", n);
-    Kokkos::View<stk::mesh::Entity*, TestMemSpace> ev("entities", n);
-    for (size_t i = 0; i < n; ++i) {
-      bv(i) = bh[i];
-      ev(i) = eh[i];
-    }
-    return search_boxes_type{sel, bv, ev};
+/// AABB overlap predicate (the N^2 oracle's comparison).
+inline bool aabb_overlap(const TestAABB& a, const TestAABB& b) {
+  for (int d = 0; d < 3; ++d) {
+    if (a.max_corner()[d] < b.min_corner()[d]) return false;
+    if (b.max_corner()[d] < a.min_corner()[d]) return false;
   }
-};
-#endif  // HAVE_MUNDYSEARCH_ARBORX
+  return true;
+}
 
-/// Trait for STK-backed tests (impl::STKSearchBoxesT).
-struct STKBoxTrait {
-  using search_boxes_type = impl::STKSearchBoxesT<TestMemSpace>;
-  using box_type = typename search_boxes_type::box_type;
+/// Declare a 6-scalar `aabb` node field (min xyz, max xyz). Must be called before commit.
+inline stk::mesh::Field<double>& declare_aabb_field(stk::mesh::MetaData& meta) {
+  auto& field = meta.declare_field<double>(stk::topology::NODE_RANK, "aabb_test_field");
+  stk::mesh::put_field_on_mesh(field, meta.universal_part(), 6, nullptr);
+  return field;
+}
 
-  static box_type make(float cx, float cy, float cz, float hx, float hy, float hz) {
-    return box_type{cx - hx, cy - hy, cz - hz, cx + hx, cy + hy, cz + hz};
-  }
-  static box_type make(float cx, float cy, float cz, float h) {
-    return make(cx, cy, cz, h, h, h);
-  }
+/// Write one node's AABB into the field (layout: min xyz at 0-2, max xyz at 3-5).
+inline void store_aabb(stk::mesh::Field<double>& field, stk::mesh::Entity node, const TestAABB& box) {
+  double* data = stk::mesh::field_data(field, node);
+  const auto& lo = box.min_corner();
+  const auto& hi = box.max_corner();
+  data[0] = lo[0];
+  data[1] = lo[1];
+  data[2] = lo[2];
+  data[3] = hi[0];
+  data[4] = hi[1];
+  data[5] = hi[2];
+}
 
-  static bool overlap(const box_type& a, const box_type& b) {
-    if (a.get_x_max() < b.get_x_min() || b.get_x_max() < a.get_x_min()) return false;
-    if (a.get_y_max() < b.get_y_min() || b.get_y_max() < a.get_y_min()) return false;
-    if (a.get_z_max() < b.get_z_min() || b.get_z_max() < a.get_z_min()) return false;
-    return true;
-  }
+using TestOBB = mundy::OBB<double>;
+using TestOBBComponent = mundy::mesh::OBBFieldComponent<double>;
 
-  static search_boxes_type make_search_boxes(const stk::mesh::Selector& sel, const std::vector<box_type>& bh,
-                                             const std::vector<stk::mesh::Entity>& eh) {
-    const size_t n = bh.size();
-    EXPECT_EQ(n, eh.size());
-    Kokkos::View<box_type*, TestMemSpace> bv("boxes", n);
-    Kokkos::View<stk::mesh::Entity*, TestMemSpace> ev("entities", n);
-    for (size_t i = 0; i < n; ++i) {
-      bv(i) = bh[i];
-      ev(i) = eh[i];
-    }
-    return search_boxes_type{sel, bv, ev};
-  }
-};
+/// Declare a 10-scalar `obb` node field (center 0-2, quaternion wxyz 3-6, half-extents 7-9). Pre-commit only.
+inline stk::mesh::Field<double>& declare_obb_field(stk::mesh::MetaData& meta) {
+  auto& field = meta.declare_field<double>(stk::topology::NODE_RANK, "obb_test_field");
+  stk::mesh::put_field_on_mesh(field, meta.universal_part(), 10, nullptr);
+  return field;
+}
+
+/// Write one node's OBB into the field (layout: center 0-2, quat wxyz 3-6, half-extents 7-9).
+inline void store_obb(stk::mesh::Field<double>& field, stk::mesh::Entity node, const TestOBB& obb) {
+  double* data = stk::mesh::field_data(field, node);
+  const auto& c = obb.center();
+  const auto& q = obb.orientation();
+  const auto& h = obb.half_extents();
+  data[0] = c[0];
+  data[1] = c[1];
+  data[2] = c[2];
+  data[3] = q.w();
+  data[4] = q.x();
+  data[5] = q.y();
+  data[6] = q.z();
+  data[7] = h[0];
+  data[8] = h[1];
+  data[9] = h[2];
+}
 
 // =============================================================================
 // STK mesh helper
 // =============================================================================
 
-/// Create a minimal node-only mesh with nodes numbered 1..num_nodes.
-std::pair<std::shared_ptr<stk::mesh::MetaData>, std::unique_ptr<stk::mesh::BulkData>> make_node_mesh(int num_nodes) {
+/// A node-only mesh with an `aabb` node field declared (pre-commit) for component-backed search inputs.
+struct NodeMeshWithAABB {
+  std::shared_ptr<stk::mesh::MetaData> meta;
+  std::unique_ptr<stk::mesh::BulkData> bulk;
+  stk::mesh::Field<double>* aabb_field = nullptr;
+};
+
+/// Create a minimal node-only mesh with nodes numbered 1..num_nodes and a 6-scalar `aabb` node field.
+inline NodeMeshWithAABB make_node_mesh_with_aabb(int num_nodes) {
   stk::mesh::MeshBuilder builder(MPI_COMM_WORLD);
   builder.set_spatial_dimension(3);
   builder.set_entity_rank_names({"NODE", "EDGE", "FACE", "ELEMENT", "CONSTRAINT"});
   auto meta_ptr = builder.create_meta_data();
   meta_ptr->use_simple_fields();
+  auto& aabb_field = declare_aabb_field(*meta_ptr);
   auto bulk_ptr = builder.create(meta_ptr);
   meta_ptr->commit();
   bulk_ptr->modification_begin();
   for (int id = 1; id <= num_nodes; ++id) bulk_ptr->declare_node(id);
   bulk_ptr->modification_end();
-  return {std::move(meta_ptr), std::move(bulk_ptr)};
+  return {std::move(meta_ptr), std::move(bulk_ptr), &aabb_field};
+}
+
+/// Distributed node-only mesh: node id `i+1` (global id `i`) is owned by rank `i % nprocs` and declared only there.
+/// Remote nodes are absent locally until the STK build ghosts them — the multi-rank path the cross-rank test exercises.
+inline NodeMeshWithAABB make_distributed_node_mesh_with_aabb(int num_nodes) {
+  stk::mesh::MeshBuilder builder(MPI_COMM_WORLD);
+  builder.set_spatial_dimension(3);
+  builder.set_entity_rank_names({"NODE", "EDGE", "FACE", "ELEMENT", "CONSTRAINT"});
+  auto meta_ptr = builder.create_meta_data();
+  meta_ptr->use_simple_fields();
+  auto& aabb_field = declare_aabb_field(*meta_ptr);
+  auto bulk_ptr = builder.create(meta_ptr);
+  meta_ptr->commit();
+  const int my_rank = bulk_ptr->parallel_rank();
+  const int nprocs = bulk_ptr->parallel_size();
+  bulk_ptr->modification_begin();
+  for (int id = 1; id <= num_nodes; ++id) {
+    if ((id - 1) % nprocs == my_rank) bulk_ptr->declare_node(id);
+  }
+  bulk_ptr->modification_end();
+  return {std::move(meta_ptr), std::move(bulk_ptr), &aabb_field};
 }
 
 // =============================================================================
@@ -236,12 +276,11 @@ PairSet collect_pairs(const ListType& list) {
 }
 
 /// N² oracle: all overlapping pairs with t != s (no self).
-template <typename Trait>
-PairSet oracle_pairs_no_self(const std::vector<typename Trait::box_type>& boxes) {
+inline PairSet oracle_pairs_no_self(const std::vector<TestAABB>& boxes) {
   PairSet pairs;
   for (size_t t = 0; t < boxes.size(); ++t)
     for (size_t s = 0; s < boxes.size(); ++s)
-      if (t != s && Trait::overlap(boxes[t], boxes[s])) pairs.insert({t, s});
+      if (t != s && aabb_overlap(boxes[t], boxes[s])) pairs.insert({t, s});
   return pairs;
 }
 
@@ -347,12 +386,8 @@ void verify_exact_pair_set(const ListType& list, const PairSet& expected) {
 //   IdSubset:    target = {4,5},       source = {4,5}
 // =============================================================================
 
-template <typename Trait>
-class DeterministicFixtureT : public ::testing::Test {
+class DeterministicFixture : public ::testing::Test {
  public:
-  using box_type = typename Trait::box_type;
-  using search_boxes_type = typename Trait::search_boxes_type;
-
   void SetUp() override {
     if (stk::parallel_machine_size(MPI_COMM_WORLD) != 1) GTEST_SKIP();
 
@@ -364,6 +399,8 @@ class DeterministicFixtureT : public ::testing::Test {
     target_part_ = &meta_->declare_part("target_part", stk::topology::NODE_RANK);
     source_part_ = &meta_->declare_part("source_part", stk::topology::NODE_RANK);
     shared_part_ = &meta_->declare_part("shared_part", stk::topology::NODE_RANK);
+    aabb_field_ = &declare_aabb_field(*meta_);  // declared before commit
+    obb_field_ = &declare_obb_field(*meta_);    // declared before commit (for OBB-rebuilder managed test)
     bulk_ = builder.create(meta_);
     meta_->commit();
 
@@ -389,14 +426,30 @@ class DeterministicFixtureT : public ::testing::Test {
       ASSERT_TRUE(bulk_->is_valid(nodes_[id - 1])) << "Node " << id << " not found.";
     }
 
-    all_boxes_ = {
-        Trait::make(0.0f, 0.0f, 0.0f, 2.0f),     // ord 0: [-2, 2]³
-        Trait::make(100.f, 100.f, 100.f, 0.5f),  // ord 1: isolated
-        Trait::make(2.5f, 2.5f, 2.5f, 1.0f),     // ord 2: [1.5, 3.5]³
-        Trait::make(200.f, 200.f, 200.f, 0.5f),  // ord 3: isolated
-        Trait::make(1.0f, 1.0f, 1.0f, 1.5f),     // ord 4: [-0.5, 2.5]³
-        Trait::make(2.0f, 2.0f, 2.0f, 1.5f),     // ord 5: [0.5, 3.5]³
+    // One AABB per node, written into the shared `aabb` field; selectors below pick which subset each input uses.
+    const std::vector<TestAABB> geom = {
+        make_aabb(0.0, 0.0, 0.0, 2.0),     // ord 0: [-2, 2]³
+        make_aabb(100., 100., 100., 0.5),  // ord 1: isolated
+        make_aabb(2.5, 2.5, 2.5, 1.0),     // ord 2: [1.5, 3.5]³
+        make_aabb(200., 200., 200., 0.5),  // ord 3: isolated
+        make_aabb(1.0, 1.0, 1.0, 1.5),     // ord 4: [-0.5, 2.5]³
+        make_aabb(2.0, 2.0, 2.0, 1.5),     // ord 5: [0.5, 3.5]³
     };
+    for (size_t i = 0; i < 6; ++i) store_aabb(*aabb_field_, nodes_[i], geom[i]);
+
+    aabb_component_ = TestComponent(*aabb_field_);
+    aabb_component_.modify_on_host();  // host data is current; the build syncs it to device
+
+    // One OBB per node (axis-aligned unit-ish box at each AABB's center); used by the managed OBB-rebuilder test.
+    for (size_t i = 0; i < 6; ++i) {
+      const auto& lo = geom[i].min_corner();
+      const auto& hi = geom[i].max_corner();
+      const Point<double> center{0.5 * (lo[0] + hi[0]), 0.5 * (lo[1] + hi[1]), 0.5 * (lo[2] + hi[2])};
+      const Vector3<double> half{0.5 * (hi[0] - lo[0]), 0.5 * (hi[1] - lo[1]), 0.5 * (hi[2] - lo[2])};
+      store_obb(*obb_field_, nodes_[i], TestOBB{center, Quaternion<double>::identity(), half[0], half[1], half[2]});
+    }
+    obb_component_ = TestOBBComponent(*obb_field_);
+    obb_component_.modify_on_host();
 
     const stk::mesh::Selector sel_all = meta_->universal_part();
     const stk::mesh::Selector sel_tgt = *target_part_;
@@ -405,19 +458,13 @@ class DeterministicFixtureT : public ::testing::Test {
     const stk::mesh::Selector sel_tgt_shr = *target_part_ | *shared_part_;
     const stk::mesh::Selector sel_src_shr = *source_part_ | *shared_part_;
 
-    universal_boxes_ = Trait::make_search_boxes(sel_all, all_boxes_, nodes_);
-
-    disjoint_target_boxes_ = Trait::make_search_boxes(sel_tgt, {all_boxes_[0], all_boxes_[1]}, {nodes_[0], nodes_[1]});
-    disjoint_source_boxes_ = Trait::make_search_boxes(sel_src, {all_boxes_[2], all_boxes_[3]}, {nodes_[2], nodes_[3]});
-
-    overlapping_target_boxes_ =
-        Trait::make_search_boxes(sel_tgt_shr, {all_boxes_[0], all_boxes_[1], all_boxes_[4], all_boxes_[5]},
-                                 {nodes_[0], nodes_[1], nodes_[4], nodes_[5]});
-    overlapping_source_boxes_ =
-        Trait::make_search_boxes(sel_src_shr, {all_boxes_[2], all_boxes_[3], all_boxes_[4], all_boxes_[5]},
-                                 {nodes_[2], nodes_[3], nodes_[4], nodes_[5]});
-
-    idsubset_boxes_ = Trait::make_search_boxes(sel_shr, {all_boxes_[4], all_boxes_[5]}, {nodes_[4], nodes_[5]});
+    // All inputs share one component; they differ only in selector (which entities, and their ordering).
+    universal_boxes_ = TestInput(sel_all, aabb_component_);
+    disjoint_target_boxes_ = TestInput(sel_tgt, aabb_component_);
+    disjoint_source_boxes_ = TestInput(sel_src, aabb_component_);
+    overlapping_target_boxes_ = TestInput(sel_tgt_shr, aabb_component_);
+    overlapping_source_boxes_ = TestInput(sel_src_shr, aabb_component_);
+    idsubset_boxes_ = TestInput(sel_shr, aabb_component_);
   }
 
   std::shared_ptr<stk::mesh::MetaData> meta_;
@@ -425,21 +472,21 @@ class DeterministicFixtureT : public ::testing::Test {
   stk::mesh::Part* target_part_ = nullptr;
   stk::mesh::Part* source_part_ = nullptr;
   stk::mesh::Part* shared_part_ = nullptr;
+  stk::mesh::Field<double>* aabb_field_ = nullptr;
+  stk::mesh::Field<double>* obb_field_ = nullptr;
   std::vector<stk::mesh::Entity> nodes_;
-  std::vector<box_type> all_boxes_;
-  search_boxes_type universal_boxes_;
-  search_boxes_type disjoint_target_boxes_;
-  search_boxes_type disjoint_source_boxes_;
-  search_boxes_type overlapping_target_boxes_;
-  search_boxes_type overlapping_source_boxes_;
-  search_boxes_type idsubset_boxes_;
+  TestComponent aabb_component_;
+  TestOBBComponent obb_component_;
+  TestInput universal_boxes_;
+  TestInput disjoint_target_boxes_;
+  TestInput disjoint_source_boxes_;
+  TestInput overlapping_target_boxes_;
+  TestInput overlapping_source_boxes_;
+  TestInput idsubset_boxes_;
 };
 
-using STKDeterministicFixture = DeterministicFixtureT<STKBoxTrait>;
-
-#ifdef HAVE_MUNDYSEARCH_ARBORX
-using DeterministicFixture = DeterministicFixtureT<ArborXBoxTrait>;
-#endif
+// Single component-backed fixture serves every list type; these aliases keep the existing test-suite names.
+using STKDeterministicFixture = DeterministicFixture;
 
 // =============================================================================
 // Group 2 test helper implementations (template on ListType + FixtureType)
@@ -788,6 +835,7 @@ void test_universal_broad_symdups_narrow_self(FixtureType& f) {
 // =============================================================================
 
 TEST(STKSearchNeighborList, DefaultConstruct) {
+  if (stk::parallel_machine_size(MPI_COMM_WORLD) != 1) GTEST_SKIP();
   STKList list;
   EXPECT_EQ(list.num_targets(), 0u);
   EXPECT_EQ(list.num_sources(), 0u);
@@ -831,6 +879,7 @@ TEST_F(STKDeterministicFixture, CopyMove_stk) {
 #ifdef HAVE_MUNDYSEARCH_ARBORX
 
 TEST(ArborX1dNeighborList, DefaultConstruct) {
+  if (stk::parallel_machine_size(MPI_COMM_WORLD) != 1) GTEST_SKIP();
   List1d list;
   EXPECT_EQ(list.num_targets(), 0u);
   EXPECT_EQ(list.num_sources(), 0u);
@@ -838,6 +887,7 @@ TEST(ArborX1dNeighborList, DefaultConstruct) {
 }
 
 TEST(ArborX2dNeighborList, DefaultConstruct) {
+  if (stk::parallel_machine_size(MPI_COMM_WORLD) != 1) GTEST_SKIP();
   List2d list;
   EXPECT_EQ(list.num_targets(), 0u);
   EXPECT_EQ(list.num_sources(), 0u);
@@ -942,67 +992,69 @@ MAKE_ALL_DET_TESTS(DeterministicFixture, 2d, List2d)
 // brute-force N² oracle.
 // =============================================================================
 
-template <typename ListType, typename Trait>
-void run_random_n2_validation(stk::mesh::BulkData& bulk, const stk::mesh::Selector& selector, int num_nodes) {
-  using box_type = typename Trait::box_type;
-
+template <typename ListType>
+void run_random_n2_validation(stk::mesh::BulkData& bulk, stk::mesh::Field<double>& aabb_field,
+                              const stk::mesh::Selector& selector, int num_nodes) {
   constexpr size_t kSeed = 42;
   constexpr float kDomainSize = 10.0f;
-  constexpr float kRadius = 0.9f;
+  constexpr double kRadius = 0.9;
 
   std::vector<stk::mesh::Entity> nodes(num_nodes);
+  std::vector<TestAABB> boxes(num_nodes);
   for (int i = 0; i < num_nodes; ++i) {
     nodes[i] = bulk.get_entity(stk::topology::NODE_RANK, i + 1);
     ASSERT_TRUE(bulk.is_valid(nodes[i])) << "Node " << (i + 1) << " not found.";
-  }
-
-  std::vector<box_type> boxes(num_nodes);
-  for (int i = 0; i < num_nodes; ++i) {
     openrand::Philox rng = mundy::make_philox(kSeed, static_cast<uint32_t>(i));
-    const float cx = rng.uniform<float>(0.0f, kDomainSize);
-    const float cy = rng.uniform<float>(0.0f, kDomainSize);
-    const float cz = rng.uniform<float>(0.0f, kDomainSize);
-    boxes[i] = Trait::make(cx, cy, cz, kRadius);
+    const double cx = rng.uniform<float>(0.0f, kDomainSize);
+    const double cy = rng.uniform<float>(0.0f, kDomainSize);
+    const double cz = rng.uniform<float>(0.0f, kDomainSize);
+    boxes[i] = make_aabb(cx, cy, cz, kRadius);
+    store_aabb(aabb_field, nodes[i], boxes[i]);
   }
 
-  auto sb = Trait::make_search_boxes(selector, boxes, nodes);
+  TestComponent component(aabb_field);
+  component.modify_on_host();
+  TestInput input(selector, component);
   auto list = make_neighbor_list_builder<ListType>()
                   .exec_space(TestExecSpace{})
-                  .target_input(sb)
-                  .source_input(sb)
+                  .target_input(input)
+                  .source_input(input)
                   .broad_phase(ExcludeSelfInteraction{})
                   .build(bulk);
 
   for (size_t t = 0; t < list.num_targets(); ++t) {
     for (size_t k = 0; k < list.num_neighbors(t); ++k) {
       const size_t s = list.source_index(t, k);
-      EXPECT_TRUE(Trait::overlap(boxes[t], boxes[s]))
+      EXPECT_TRUE(aabb_overlap(boxes[t], boxes[s]))
           << "Spurious pair (target=" << t << ", source=" << s << "): boxes do not overlap.";
       EXPECT_NE(t, s) << "Self-pair (target==source==" << t << ") despite ExcludeSelfInteraction.";
     }
   }
 
-  EXPECT_EQ(collect_pairs(list), oracle_pairs_no_self<Trait>(boxes))
+  EXPECT_EQ(collect_pairs(list), oracle_pairs_no_self(boxes))
       << "Neighbor list is missing oracle pairs or contains extra pairs.";
 }
 
 TEST(STKSearchNeighborList, RandomN2Validation) {
+  if (stk::parallel_machine_size(MPI_COMM_WORLD) != 1) GTEST_SKIP();
   constexpr int kN = 50;
-  auto [meta, bulk] = make_node_mesh(kN);
-  run_random_n2_validation<STKList, STKBoxTrait>(*bulk, meta->universal_part(), kN);
+  auto mesh = make_node_mesh_with_aabb(kN);
+  run_random_n2_validation<STKList>(*mesh.bulk, *mesh.aabb_field, mesh.meta->universal_part(), kN);
 }
 
 #ifdef HAVE_MUNDYSEARCH_ARBORX
 TEST(ArborX1dNeighborList, RandomN2Validation) {
+  if (stk::parallel_machine_size(MPI_COMM_WORLD) != 1) GTEST_SKIP();
   constexpr int kN = 50;
-  auto [meta, bulk] = make_node_mesh(kN);
-  run_random_n2_validation<List1d, ArborXBoxTrait>(*bulk, meta->universal_part(), kN);
+  auto mesh = make_node_mesh_with_aabb(kN);
+  run_random_n2_validation<List1d>(*mesh.bulk, *mesh.aabb_field, mesh.meta->universal_part(), kN);
 }
 
 TEST(ArborX2dNeighborList, RandomN2Validation) {
+  if (stk::parallel_machine_size(MPI_COMM_WORLD) != 1) GTEST_SKIP();
   constexpr int kN = 50;
-  auto [meta, bulk] = make_node_mesh(kN);
-  run_random_n2_validation<List2d, ArborXBoxTrait>(*bulk, meta->universal_part(), kN);
+  auto mesh = make_node_mesh_with_aabb(kN);
+  run_random_n2_validation<List2d>(*mesh.bulk, *mesh.aabb_field, mesh.meta->universal_part(), kN);
 }
 #endif  // HAVE_MUNDYSEARCH_ARBORX
 
@@ -1014,26 +1066,29 @@ TEST(ArborX2dNeighborList, RandomN2Validation) {
 // zero-neighbor targets; this test guards against that regression.
 // =============================================================================
 
-template <typename ListType, typename Trait>
+template <typename ListType>
 void test_all_isolated_visits_all_targets() {
   constexpr int kN = 3;
-  auto [meta, bulk] = make_node_mesh(kN);
-  const stk::mesh::Selector sel = meta->universal_part();
-
-  std::vector<stk::mesh::Entity> nodes(kN);
-  for (int i = 0; i < kN; ++i) nodes[i] = bulk->get_entity(stk::topology::NODE_RANK, i + 1);
+  auto mesh = make_node_mesh_with_aabb(kN);
+  const stk::mesh::Selector sel = mesh.meta->universal_part();
 
   // Three mutually non-overlapping boxes (isolated).
-  auto sb = Trait::make_search_boxes(
-      sel, {Trait::make(0.f, 0.f, 0.f, 0.1f), Trait::make(1000.f, 0.f, 0.f, 0.1f), Trait::make(0.f, 1000.f, 0.f, 0.1f)},
-      nodes);
+  const TestAABB geom[kN] = {make_aabb(0., 0., 0., 0.1), make_aabb(1000., 0., 0., 0.1), make_aabb(0., 1000., 0., 0.1)};
+  std::vector<stk::mesh::Entity> nodes(kN);
+  for (int i = 0; i < kN; ++i) {
+    nodes[i] = mesh.bulk->get_entity(stk::topology::NODE_RANK, i + 1);
+    store_aabb(*mesh.aabb_field, nodes[i], geom[i]);
+  }
 
+  TestComponent component(*mesh.aabb_field);
+  component.modify_on_host();
+  TestInput input(sel, component);
   const auto list = make_neighbor_list_builder<ListType>()
                         .exec_space(TestExecSpace{})
-                        .target_input(sb)
-                        .source_input(sb)
+                        .target_input(input)
+                        .source_input(input)
                         .broad_phase(ExcludeSelfInteraction{})
-                        .build(*bulk);
+                        .build(*mesh.bulk);
 
   ASSERT_EQ(list.size(), 0u);
 
@@ -1047,16 +1102,19 @@ void test_all_isolated_visits_all_targets() {
 }
 
 TEST(IterationProtocol, AllIsolated_VisitsAllTargets_stk) {
-  test_all_isolated_visits_all_targets<STKList, STKBoxTrait>();
+  if (stk::parallel_machine_size(MPI_COMM_WORLD) != 1) GTEST_SKIP();
+  test_all_isolated_visits_all_targets<STKList>();
 }
 
 #ifdef HAVE_MUNDYSEARCH_ARBORX
 TEST(IterationProtocol, AllIsolated_VisitsAllTargets_1d) {
-  test_all_isolated_visits_all_targets<List1d, ArborXBoxTrait>();
+  if (stk::parallel_machine_size(MPI_COMM_WORLD) != 1) GTEST_SKIP();
+  test_all_isolated_visits_all_targets<List1d>();
 }
 
 TEST(IterationProtocol, AllIsolated_VisitsAllTargets_2d) {
-  test_all_isolated_visits_all_targets<List2d, ArborXBoxTrait>();
+  if (stk::parallel_machine_size(MPI_COMM_WORLD) != 1) GTEST_SKIP();
+  test_all_isolated_visits_all_targets<List2d>();
 }
 #endif  // HAVE_MUNDYSEARCH_ARBORX
 
@@ -1185,25 +1243,28 @@ TEST_F(DeterministicFixture, ReduceFunctions_2d) {
 // for_each_target_with_neighbors_reduce must visit every target even when every
 // target has zero neighbors — regression parallel to Group 4 IterationProtocol.
 
-template <typename ListType, typename Trait>
+template <typename ListType>
 void test_reduce_all_isolated_visits_all_targets() {
   constexpr int kN = 3;
-  auto [meta, bulk] = make_node_mesh(kN);
-  const stk::mesh::Selector sel = meta->universal_part();
+  auto mesh = make_node_mesh_with_aabb(kN);
+  const stk::mesh::Selector sel = mesh.meta->universal_part();
 
+  const TestAABB geom[kN] = {make_aabb(0., 0., 0., 0.1), make_aabb(1000., 0., 0., 0.1), make_aabb(0., 1000., 0., 0.1)};
   std::vector<stk::mesh::Entity> nodes(kN);
-  for (int i = 0; i < kN; ++i) nodes[i] = bulk->get_entity(stk::topology::NODE_RANK, i + 1);
+  for (int i = 0; i < kN; ++i) {
+    nodes[i] = mesh.bulk->get_entity(stk::topology::NODE_RANK, i + 1);
+    store_aabb(*mesh.aabb_field, nodes[i], geom[i]);
+  }
 
-  auto sb = Trait::make_search_boxes(
-      sel, {Trait::make(0.f, 0.f, 0.f, 0.1f), Trait::make(1000.f, 0.f, 0.f, 0.1f), Trait::make(0.f, 1000.f, 0.f, 0.1f)},
-      nodes);
-
+  TestComponent component(*mesh.aabb_field);
+  component.modify_on_host();
+  TestInput input(sel, component);
   const auto list = make_neighbor_list_builder<ListType>()
                         .exec_space(TestExecSpace{})
-                        .target_input(sb)
-                        .source_input(sb)
+                        .target_input(input)
+                        .source_input(input)
                         .broad_phase(ExcludeSelfInteraction{})
-                        .build(*bulk);
+                        .build(*mesh.bulk);
 
   ASSERT_EQ(list.size(), 0u);
 
@@ -1216,16 +1277,19 @@ void test_reduce_all_isolated_visits_all_targets() {
 }
 
 TEST(ReduceProtocol, AllIsolated_VisitsAllTargets_stk) {
-  test_reduce_all_isolated_visits_all_targets<STKList, STKBoxTrait>();
+  if (stk::parallel_machine_size(MPI_COMM_WORLD) != 1) GTEST_SKIP();
+  test_reduce_all_isolated_visits_all_targets<STKList>();
 }
 
 #ifdef HAVE_MUNDYSEARCH_ARBORX
 TEST(ReduceProtocol, AllIsolated_VisitsAllTargets_1d) {
-  test_reduce_all_isolated_visits_all_targets<List1d, ArborXBoxTrait>();
+  if (stk::parallel_machine_size(MPI_COMM_WORLD) != 1) GTEST_SKIP();
+  test_reduce_all_isolated_visits_all_targets<List1d>();
 }
 
 TEST(ReduceProtocol, AllIsolated_VisitsAllTargets_2d) {
-  test_reduce_all_isolated_visits_all_targets<List2d, ArborXBoxTrait>();
+  if (stk::parallel_machine_size(MPI_COMM_WORLD) != 1) GTEST_SKIP();
+  test_reduce_all_isolated_visits_all_targets<List2d>();
 }
 #endif  // HAVE_MUNDYSEARCH_ARBORX
 
@@ -1245,48 +1309,80 @@ static_assert(RebuilderType<AlwaysRebuild>, "AlwaysRebuild must satisfy Rebuilde
 static_assert(RebuilderType<NeverRebuild>, "NeverRebuild must satisfy RebuilderType.");
 static_assert(RebuilderType<RebuildOnEntityChange<TestMemSpace>>,
               "RebuildOnEntityChange<HostSpace> must satisfy RebuilderType.");
-static_assert(RebuilderType<RebuildOnAABBDisplacement<float, TestMemSpace>>,
-              "RebuildOnAABBDisplacement<float, HostSpace> must satisfy RebuilderType.");
+static_assert(RebuilderType<RebuildOnAABBDisplacement<double, TestMemSpace>>,
+              "RebuildOnAABBDisplacement<double, HostSpace> must satisfy RebuilderType.");
 static_assert(RebuilderType<RebuildOnOBBDisplacement<double, TestMemSpace>>,
               "RebuildOnOBBDisplacement<double, HostSpace> must satisfy RebuilderType.");
 static_assert(RebuilderType<RebuilderChain<AlwaysRebuild, NeverRebuild>>,
               "RebuilderChain<AlwaysRebuild,NeverRebuild> must satisfy RebuilderType.");
 
-// 2-box container far from all source boxes — same selector/entities as disjoint_target_boxes_.
-STKBoxTrait::search_boxes_type make_far_target_boxes(const STKDeterministicFixture& f) {
-  Kokkos::View<STKBoxTrait::box_type*, TestMemSpace> bv("far_tgt_boxes", 2);
-  bv(0) = STKBoxTrait::make(500.f, 500.f, 500.f, 0.5f);
-  bv(1) = STKBoxTrait::make(600.f, 600.f, 600.f, 0.5f);
-  return {f.disjoint_target_boxes_.selector(), bv, f.disjoint_target_boxes_.entities()};
+// Move the disjoint-target nodes (1,2) far from all sources by mutating the `aabb` field; returns the target input.
+// Targets {1,2} are disjoint from the disjoint-source nodes {3,4}, so this does not perturb the source geometry.
+TestInput make_far_target_boxes(STKDeterministicFixture& f) {
+  store_aabb(*f.aabb_field_, f.nodes_[0], make_aabb(500., 500., 500., 0.5));
+  store_aabb(*f.aabb_field_, f.nodes_[1], make_aabb(600., 600., 600., 0.5));
+  f.aabb_component_.modify_on_host();
+  return f.disjoint_target_boxes_;
 }
 
-// 6-box container far from all source boxes — same selector/entities as universal_boxes_.
-STKBoxTrait::search_boxes_type make_far_universal_boxes(const STKDeterministicFixture& f) {
-  const size_t n = f.universal_boxes_.entities().extent(0);
-  Kokkos::View<STKBoxTrait::box_type*, TestMemSpace> bv("far_universal_boxes", n);
-  for (size_t i = 0; i < n; ++i) bv(i) = STKBoxTrait::make(500.f + static_cast<float>(i) * 10.f, 500.f, 500.f, 0.5f);
-  return {f.universal_boxes_.selector(), bv, f.universal_boxes_.entities()};
+// Write the disjoint-target nodes' coordinates onto the shared nodes (5,6): same coordinates, different entities.
+// RebuildOnAABBDisplacement sees no movement (target {1,2} → shared {5,6} carry identical coords); RebuildOnEntityChange
+// sees the entity set change.  Both target selectors are disjoint from the source nodes {3,4}.  Returns the shared input.
+TestInput make_swapped_entity_boxes(STKDeterministicFixture& f) {
+  store_aabb(*f.aabb_field_, f.nodes_[4], make_aabb(0.0, 0.0, 0.0, 2.0));     // node5 ← node1's coords
+  store_aabb(*f.aabb_field_, f.nodes_[5], make_aabb(100., 100., 100., 0.5));  // node6 ← node2's coords
+  f.aabb_component_.modify_on_host();
+  return f.idsubset_boxes_;  // shared selector = nodes {5,6}
 }
 
-// Same positions as disjoint_target_boxes_, but using disjoint_source_boxes_.entities().
-// Simulates an add-one/remove-one swap at constant count: the box coordinates are identical
-// so RebuildOnAABBDisplacement returns false, but the entities differ so
-// RebuildOnEntityChange returns true.
-STKBoxTrait::search_boxes_type make_swapped_entity_boxes(const STKDeterministicFixture& f) {
-  const auto orig = f.disjoint_target_boxes_.boxes();
-  Kokkos::View<STKBoxTrait::box_type*, TestMemSpace> bv("swapped_entity_boxes", orig.extent(0));
-  Kokkos::deep_copy(bv, orig);
-  return {f.disjoint_source_boxes_.selector(), bv, f.disjoint_source_boxes_.entities()};
+// A standalone node-only mesh with `aabb` + `obb` fields and target/source parts, for the direct rebuilder tests.
+// node 1 → target part; node 2 (if present) → source part.  Geometry is written per-test via store_aabb/store_obb.
+struct GeomMesh {
+  std::shared_ptr<stk::mesh::MetaData> meta;
+  std::unique_ptr<stk::mesh::BulkData> bulk;
+  stk::mesh::Field<double>* aabb_field = nullptr;
+  stk::mesh::Field<double>* obb_field = nullptr;
+  stk::mesh::Part* target_part = nullptr;
+  stk::mesh::Part* source_part = nullptr;
+  std::vector<stk::mesh::Entity> nodes;
+};
+inline GeomMesh make_geom_mesh(int num_nodes) {
+  stk::mesh::MeshBuilder builder(MPI_COMM_WORLD);
+  builder.set_spatial_dimension(3);
+  builder.set_entity_rank_names({"NODE", "EDGE", "FACE", "ELEMENT", "CONSTRAINT"});
+  auto meta = builder.create_meta_data();
+  meta->use_simple_fields();
+  GeomMesh m;
+  m.target_part = &meta->declare_part("rb_target", stk::topology::NODE_RANK);
+  m.source_part = &meta->declare_part("rb_source", stk::topology::NODE_RANK);
+  m.aabb_field = &declare_aabb_field(*meta);
+  m.obb_field = &declare_obb_field(*meta);
+  m.bulk = builder.create(meta);
+  meta->commit();
+  m.bulk->modification_begin();
+  for (int id = 1; id <= num_nodes; ++id) m.bulk->declare_node(id);
+  m.bulk->change_entity_parts(m.bulk->get_entity(stk::topology::NODE_RANK, 1), stk::mesh::PartVector{m.target_part},
+                              stk::mesh::PartVector{});
+  if (num_nodes >= 2)
+    m.bulk->change_entity_parts(m.bulk->get_entity(stk::topology::NODE_RANK, 2), stk::mesh::PartVector{m.source_part},
+                                stk::mesh::PartVector{});
+  m.bulk->modification_end();
+  m.nodes.resize(num_nodes);
+  for (int id = 1; id <= num_nodes; ++id) m.nodes[id - 1] = m.bulk->get_entity(stk::topology::NODE_RANK, id);
+  m.meta = meta;
+  return m;
 }
 
 // ---- ManagedNeighborList lifecycle ----
 
 TEST(ManagedNeighborList, HasNoValidListBeforeFirstUpdate) {
+  if (stk::parallel_machine_size(MPI_COMM_WORLD) != 1) GTEST_SKIP();
   auto managed = make_neighbor_list_builder<STKList>().exec_space(TestExecSpace{}).manage(NeverRebuild{});
   EXPECT_FALSE(managed.has_valid_list());
 }
 
 TEST(ManagedNeighborList, CurrentBeforeFirstUpdateThrows) {
+  if (stk::parallel_machine_size(MPI_COMM_WORLD) != 1) GTEST_SKIP();
   auto managed = make_neighbor_list_builder<STKList>().exec_space(TestExecSpace{}).manage(NeverRebuild{});
   EXPECT_THROW(managed.current(), std::runtime_error);
 }
@@ -1374,34 +1470,35 @@ TEST_F(STKDeterministicFixture, Rebuilder_EntityChange_NoRebuildOnUnchangedCount
   EXPECT_EQ(collect_pairs(r2.list), (PairSet{{0, 0}}));  // cache: box count unchanged (still 2)
 }
 
-// Box count increases (2 → 6) → rebuild → pair set reflects new geometry.
+// Target entity count increases (2 → 4) → rebuild → pair set reflects the larger target set.
+// Both target selectors are disjoint from the source nodes {3,4}, so the source geometry is untouched.
 TEST_F(STKDeterministicFixture, Rebuilder_EntityChange_RebuildOnIncrease) {
   auto managed =
       make_neighbor_list_builder<STKList>().exec_space(TestExecSpace{}).manage(RebuildOnEntityChange<TestMemSpace>{});
 
+  // 2-entity target {1,2} vs source {3,4}: node1 overlaps node3 → {(0,0)}.
   auto r1 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
   EXPECT_TRUE(r1.rebuilt);
   EXPECT_EQ(collect_pairs(r1.list), (PairSet{{0, 0}}));
 
-  // 6 far-away universal boxes: count 2 → 6 → rebuild → 0 pairs.
-  auto far_uni = make_far_universal_boxes(*this);
-  auto r2 = managed.update(*bulk_, far_uni, disjoint_source_boxes_);
+  // 4-entity target {1,2,5,6} (ords 0,1,2,3) vs source {3,4}: count 2 → 4 → rebuild.
+  // node1(0), node5(2), node6(3) each overlap node3(0); node4 overlaps nothing.
+  auto r2 = managed.update(*bulk_, overlapping_target_boxes_, disjoint_source_boxes_);
   EXPECT_TRUE(r2.rebuilt);
-  EXPECT_EQ(collect_pairs(r2.list), PairSet{});
+  EXPECT_EQ(collect_pairs(r2.list), (PairSet{{0, 0}, {2, 0}, {3, 0}}));
 }
 
-// Box count decreases (6 → 2) → rebuild → pair set reflects new geometry.
+// Target entity count decreases (4 → 2) → rebuild → pair set reflects the smaller target set.
 TEST_F(STKDeterministicFixture, Rebuilder_EntityChange_RebuildOnDecrease) {
   auto managed =
       make_neighbor_list_builder<STKList>().exec_space(TestExecSpace{}).manage(RebuildOnEntityChange<TestMemSpace>{});
 
-  // Initial build: 6 far-away universal boxes → 0 pairs.
-  auto far_uni = make_far_universal_boxes(*this);
-  auto r1 = managed.update(*bulk_, far_uni, disjoint_source_boxes_);
+  // Initial build: 4-entity target {1,2,5,6} vs source {3,4}.
+  auto r1 = managed.update(*bulk_, overlapping_target_boxes_, disjoint_source_boxes_);
   EXPECT_TRUE(r1.rebuilt);
-  EXPECT_EQ(collect_pairs(r1.list), PairSet{});
+  EXPECT_EQ(collect_pairs(r1.list), (PairSet{{0, 0}, {2, 0}, {3, 0}}));
 
-  // 2 nearby disjoint-target boxes: count 6 → 2 → rebuild → pairs restored.
+  // 2-entity target {1,2}: count 4 → 2 → rebuild → pairs reduced.
   auto r2 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
   EXPECT_TRUE(r2.rebuilt);
   EXPECT_EQ(collect_pairs(r2.list), (PairSet{{0, 0}}));
@@ -1419,50 +1516,49 @@ TEST_F(STKDeterministicFixture, Rebuilder_EntityChange_RebuildOnDecrease) {
 //   cx = 0.6: displacement 0.4 < 0.5 → no rebuild.
 //   cx = 0.4: displacement 0.6 > 0.5 → rebuild.
 TEST(RebuildOnAABBDisplacement, ThresholdBehavior) {
-  constexpr int kN = 1;
-  auto [meta, bulk] = make_node_mesh(kN);
-  auto node = bulk->get_entity(stk::topology::NODE_RANK, 1);
-
-  Kokkos::View<stk::mesh::Entity*, TestMemSpace> ev("entities", 1);
-  ev(0) = node;
-  const stk::mesh::Selector sel = meta->universal_part();
+  if (stk::parallel_machine_size(MPI_COMM_WORLD) != 1) GTEST_SKIP();
+  auto mesh = make_geom_mesh(1);
+  auto node = mesh.nodes[0];
+  const stk::mesh::Selector sel = mesh.meta->universal_part();
+  TestComponent component(*mesh.aabb_field);
+  TestInput input(sel, component);
 
   constexpr float kThreshold = 0.5f;
-  RebuildOnAABBDisplacement<float, TestMemSpace> rebuilder(kThreshold);
+  RebuildOnAABBDisplacement<double, TestMemSpace> rebuilder(kThreshold);
 
-  auto make_sb = [&](float cx) {
-    Kokkos::View<STKBoxTrait::box_type*, TestMemSpace> bv("boxes", 1);
-    bv(0) = STKBoxTrait::make(cx, 0.f, 0.f, 1.0f);  // min=(cx-1,-1,-1), max=(cx+1,1,1)
-    return STKBoxTrait::search_boxes_type{sel, bv, ev};
+  // Write the single box centered at (cx,0,0), half-extent 1: min=(cx-1,-1,-1), max=(cx+1,1,1).
+  auto set_cx = [&](double cx) {
+    store_aabb(*mesh.aabb_field, node, make_aabb(cx, 0.0, 0.0, 1.0));
+    component.modify_on_host();
   };
 
-  auto sb0 = make_sb(0.f);
+  set_cx(0.0);
   // No snapshot yet: always needs rebuild.
-  EXPECT_TRUE(rebuilder.needs_rebuild(*bulk, sb0, sb0));
-  rebuilder.snapshot(*bulk, sb0, sb0);
+  EXPECT_TRUE(rebuilder.needs_rebuild(*mesh.bulk, input, input));
+  rebuilder.snapshot(*mesh.bulk, input, input);
 
   // Identical geometry: no rebuild.
-  EXPECT_FALSE(rebuilder.needs_rebuild(*bulk, sb0, sb0));
+  EXPECT_FALSE(rebuilder.needs_rebuild(*mesh.bulk, input, input));
 
   // cx=0.2: corner displacement 0.2 < 0.5 → no rebuild.
-  auto sb_small = make_sb(0.2f);
-  EXPECT_FALSE(rebuilder.needs_rebuild(*bulk, sb_small, sb_small));
+  set_cx(0.2);
+  EXPECT_FALSE(rebuilder.needs_rebuild(*mesh.bulk, input, input));
 
   // cx=1.0: corner displacement 1.0 > 0.5 → rebuild.
-  auto sb_large = make_sb(1.0f);
-  EXPECT_TRUE(rebuilder.needs_rebuild(*bulk, sb_large, sb_large));
+  set_cx(1.0);
+  EXPECT_TRUE(rebuilder.needs_rebuild(*mesh.bulk, input, input));
 
   // Take new snapshot at cx=1.
-  rebuilder.snapshot(*bulk, sb_large, sb_large);
-  EXPECT_FALSE(rebuilder.needs_rebuild(*bulk, sb_large, sb_large));
+  rebuilder.snapshot(*mesh.bulk, input, input);
+  EXPECT_FALSE(rebuilder.needs_rebuild(*mesh.bulk, input, input));
 
   // cx=0.6: displacement from cx=1 is 0.4 < 0.5 → no rebuild.
-  auto sb_near = make_sb(0.6f);
-  EXPECT_FALSE(rebuilder.needs_rebuild(*bulk, sb_near, sb_near));
+  set_cx(0.6);
+  EXPECT_FALSE(rebuilder.needs_rebuild(*mesh.bulk, input, input));
 
   // cx=0.4: displacement from cx=1 is 0.6 > 0.5 → rebuild.
-  auto sb_far = make_sb(0.4f);
-  EXPECT_TRUE(rebuilder.needs_rebuild(*bulk, sb_far, sb_far));
+  set_cx(0.4);
+  EXPECT_TRUE(rebuilder.needs_rebuild(*mesh.bulk, input, input));
 }
 
 // Separate target and source thresholds: the tighter side fires independently.
@@ -1479,55 +1575,64 @@ TEST(RebuildOnAABBDisplacement, ThresholdBehavior) {
 //   Source moves to cx=0.9 (disp 0.9 > 0.8) → source side fires.
 //   Expected: rebuild triggered by source alone.
 TEST(RebuildOnAABBDisplacement, SeparateTargetAndSourceThresholds) {
-  constexpr int kN = 1;
-  auto [meta, bulk] = make_node_mesh(kN);
-  auto node = bulk->get_entity(stk::topology::NODE_RANK, 1);
-
-  Kokkos::View<stk::mesh::Entity*, TestMemSpace> ev("entities", 1);
-  ev(0) = node;
-  const stk::mesh::Selector sel = meta->universal_part();
+  if (stk::parallel_machine_size(MPI_COMM_WORLD) != 1) GTEST_SKIP();
+  // 2-node mesh: node 1 = target (selector target_part), node 2 = source (selector source_part), so target and
+  // source geometry are independently controllable through one shared `aabb` field.
+  auto mesh = make_geom_mesh(2);
+  TestComponent component(*mesh.aabb_field);
+  TestInput tgt_input(*mesh.target_part, component);
+  TestInput src_input(*mesh.source_part, component);
 
   constexpr float kTargetThreshold = 0.3f;
   constexpr float kSourceThreshold = 0.8f;
-  RebuildOnAABBDisplacement<float, TestMemSpace> rebuilder(kTargetThreshold, kSourceThreshold);
+  RebuildOnAABBDisplacement<double, TestMemSpace> rebuilder(kTargetThreshold, kSourceThreshold);
 
-  auto make_sb = [&](float cx) {
-    Kokkos::View<STKBoxTrait::box_type*, TestMemSpace> bv("boxes", 1);
-    bv(0) = STKBoxTrait::make(cx, 0.f, 0.f, 1.0f);
-    return STKBoxTrait::search_boxes_type{sel, bv, ev};
+  auto set_tgt = [&](double cx) {
+    store_aabb(*mesh.aabb_field, mesh.nodes[0], make_aabb(cx, 0.0, 0.0, 1.0));
+    component.modify_on_host();
+  };
+  auto set_src = [&](double cx) {
+    store_aabb(*mesh.aabb_field, mesh.nodes[1], make_aabb(cx, 0.0, 0.0, 1.0));
+    component.modify_on_host();
   };
 
-  auto sb0 = make_sb(0.f);
+  set_tgt(0.0);
+  set_src(0.0);
   // No snapshot yet: always needs rebuild.
-  EXPECT_TRUE(rebuilder.needs_rebuild(*bulk, sb0, sb0));
-  rebuilder.snapshot(*bulk, sb0, sb0);
+  EXPECT_TRUE(rebuilder.needs_rebuild(*mesh.bulk, tgt_input, src_input));
+  rebuilder.snapshot(*mesh.bulk, tgt_input, src_input);
 
   // Both unchanged: no rebuild.
-  EXPECT_FALSE(rebuilder.needs_rebuild(*bulk, sb0, sb0));
+  EXPECT_FALSE(rebuilder.needs_rebuild(*mesh.bulk, tgt_input, src_input));
 
   // Target moves 0.4 > 0.3, source stays: target side fires.
-  auto sb_tgt_moved = make_sb(0.4f);
-  EXPECT_TRUE(rebuilder.needs_rebuild(*bulk, sb_tgt_moved, sb0));
+  set_tgt(0.4);
+  set_src(0.0);
+  EXPECT_TRUE(rebuilder.needs_rebuild(*mesh.bulk, tgt_input, src_input));
 
   // Target moves 0.2 < 0.3, source moves 0.5 < 0.8: neither fires.
-  auto sb_tgt_small = make_sb(0.2f);
-  auto sb_src_small = make_sb(0.5f);
-  EXPECT_FALSE(rebuilder.needs_rebuild(*bulk, sb_tgt_small, sb_src_small));
+  set_tgt(0.2);
+  set_src(0.5);
+  EXPECT_FALSE(rebuilder.needs_rebuild(*mesh.bulk, tgt_input, src_input));
 
-  // Source moves 0.9 > 0.8, target stays: source side fires even though target is quiet.
-  auto sb_src_large = make_sb(0.9f);
-  EXPECT_TRUE(rebuilder.needs_rebuild(*bulk, sb0, sb_src_large));
+  // Source moves 0.9 > 0.8, target stays at 0: source side fires even though target is quiet.
+  set_tgt(0.0);
+  set_src(0.9);
+  EXPECT_TRUE(rebuilder.needs_rebuild(*mesh.bulk, tgt_input, src_input));
 
   // Take snapshot with target at 0.4 and source at 0.
-  rebuilder.snapshot(*bulk, sb_tgt_moved, sb0);
+  set_tgt(0.4);
+  set_src(0.0);
+  rebuilder.snapshot(*mesh.bulk, tgt_input, src_input);
 
-  // Target moves from 0.4 to 0.6 (disp 0.2 < 0.3): quiet.
-  // Source stays at 0 (disp 0): quiet.
-  auto sb_tgt_near = make_sb(0.6f);
-  EXPECT_FALSE(rebuilder.needs_rebuild(*bulk, sb_tgt_near, sb0));
+  // Target moves from 0.4 to 0.6 (disp 0.2 < 0.3): quiet.  Source stays at 0: quiet.
+  set_tgt(0.6);
+  set_src(0.0);
+  EXPECT_FALSE(rebuilder.needs_rebuild(*mesh.bulk, tgt_input, src_input));
 
   // Source now moves 0.9 > 0.8: source fires, target still quiet.
-  EXPECT_TRUE(rebuilder.needs_rebuild(*bulk, sb_tgt_near, sb_src_large));
+  set_src(0.9);
+  EXPECT_TRUE(rebuilder.needs_rebuild(*mesh.bulk, tgt_input, src_input));
 }
 
 // ---- RebuildOnOBBDisplacement ----
@@ -1541,58 +1646,53 @@ TEST(RebuildOnAABBDisplacement, SeparateTargetAndSourceThresholds) {
 //   cx=0.3 → displacement 0.3 < 0.5 → no rebuild.
 //   cx=0.7 → displacement 0.7 > 0.5 → rebuild.
 TEST(RebuildOnOBBDisplacement, ThresholdBehavior_TranslationOnly) {
-  constexpr int kN = 1;
-  auto [meta, bulk] = make_node_mesh(kN);
-  auto node = bulk->get_entity(stk::topology::NODE_RANK, 1);
-  Kokkos::View<stk::mesh::Entity*, TestMemSpace> ev("entities", 1);
-  ev(0) = node;
-  const stk::mesh::Selector sel = meta->universal_part();
+  if (stk::parallel_machine_size(MPI_COMM_WORLD) != 1) GTEST_SKIP();
+  auto mesh = make_geom_mesh(1);
+  auto node = mesh.nodes[0];
+  const stk::mesh::Selector sel = mesh.meta->universal_part();
+  // `input` only supplies the selector/rank; the OBB geometry comes from the rebuilder's own OBB component.
+  TestComponent aabb_component(*mesh.aabb_field);
+  TestInput input(sel, aabb_component);
 
   constexpr double kHalf = 0.5;
   constexpr double kThreshold = 0.5;
-
-  // Mutable view; const alias passed to the rebuilder so updates are seen immediately.
-  Kokkos::View<OBB<double>*, TestMemSpace> obbs("obb_tgt", 1);
-  Kokkos::View<const OBB<double>*, TestMemSpace> const_obbs(obbs);
+  TestOBBComponent obb_component(*mesh.obb_field);
 
   auto set_cx = [&](double cx) {
-    obbs(0) = OBB<double>{Point<double>{cx, 0.0, 0.0}, Quaternion<double>::identity(), kHalf, kHalf, kHalf};
+    store_obb(*mesh.obb_field, node,
+              TestOBB{Point<double>{cx, 0.0, 0.0}, Quaternion<double>::identity(), kHalf, kHalf, kHalf});
+    obb_component.modify_on_host();
   };
   set_cx(0.0);
 
-  RebuildOnOBBDisplacement<double, TestMemSpace> rebuilder(const_obbs, kThreshold);
-
-  // Dummy STK input — the OBB rebuilder ignores TargetInput/SourceInput entirely.
-  Kokkos::View<STKBoxTrait::box_type*, TestMemSpace> bv("boxes", 1);
-  bv(0) = STKBoxTrait::make(0.f, 0.f, 0.f, 1.0f);
-  STKBoxTrait::search_boxes_type sb{sel, bv, ev};
+  RebuildOnOBBDisplacement<double, TestMemSpace> rebuilder(obb_component, kThreshold);
 
   // No snapshot yet: always needs rebuild.
-  EXPECT_TRUE(rebuilder.needs_rebuild(*bulk, sb, sb));
-  rebuilder.snapshot(*bulk, sb, sb);
+  EXPECT_TRUE(rebuilder.needs_rebuild(*mesh.bulk, input, input));
+  rebuilder.snapshot(*mesh.bulk, input, input);
 
   // Unchanged: no rebuild.
-  EXPECT_FALSE(rebuilder.needs_rebuild(*bulk, sb, sb));
+  EXPECT_FALSE(rebuilder.needs_rebuild(*mesh.bulk, input, input));
 
   // Displacement 0.3 < 0.5: no rebuild.
   set_cx(0.3);
-  EXPECT_FALSE(rebuilder.needs_rebuild(*bulk, sb, sb));
+  EXPECT_FALSE(rebuilder.needs_rebuild(*mesh.bulk, input, input));
 
   // Displacement 0.7 > 0.5: rebuild.
   set_cx(0.7);
-  EXPECT_TRUE(rebuilder.needs_rebuild(*bulk, sb, sb));
+  EXPECT_TRUE(rebuilder.needs_rebuild(*mesh.bulk, input, input));
 
   // New snapshot at cx=0.7.
-  rebuilder.snapshot(*bulk, sb, sb);
-  EXPECT_FALSE(rebuilder.needs_rebuild(*bulk, sb, sb));
+  rebuilder.snapshot(*mesh.bulk, input, input);
+  EXPECT_FALSE(rebuilder.needs_rebuild(*mesh.bulk, input, input));
 
   // Displacement from 0.7: |0.7-0.4|=0.3 < 0.5 → no rebuild.
   set_cx(0.4);
-  EXPECT_FALSE(rebuilder.needs_rebuild(*bulk, sb, sb));
+  EXPECT_FALSE(rebuilder.needs_rebuild(*mesh.bulk, input, input));
 
   // Displacement from 0.7: |0.7-0.1|=0.6 > 0.5 → rebuild.
   set_cx(0.1);
-  EXPECT_TRUE(rebuilder.needs_rebuild(*bulk, sb, sb));
+  EXPECT_TRUE(rebuilder.needs_rebuild(*mesh.bulk, input, input));
 }
 
 // Rotation-only threshold test.
@@ -1606,59 +1706,54 @@ TEST(RebuildOnOBBDisplacement, ThresholdBehavior_TranslationOnly) {
 //   Relative θ=5°:  (cos5°+sin5°)*0.5 ≈ 0.542 ≤ 0.6 → no rebuild.
 //   Relative θ=25°: (cos25°+sin25°)*0.5 ≈ 0.664 > 0.6 → rebuild.
 TEST(RebuildOnOBBDisplacement, ThresholdBehavior_RotationOnly) {
-  constexpr int kN = 1;
-  auto [meta, bulk] = make_node_mesh(kN);
-  auto node = bulk->get_entity(stk::topology::NODE_RANK, 1);
-  Kokkos::View<stk::mesh::Entity*, TestMemSpace> ev("entities", 1);
-  ev(0) = node;
-  const stk::mesh::Selector sel = meta->universal_part();
+  if (stk::parallel_machine_size(MPI_COMM_WORLD) != 1) GTEST_SKIP();
+  auto mesh = make_geom_mesh(1);
+  auto node = mesh.nodes[0];
+  const stk::mesh::Selector sel = mesh.meta->universal_part();
+  TestComponent aabb_component(*mesh.aabb_field);
+  TestInput input(sel, aabb_component);  // supplies the selector/rank only
 
   constexpr double kHalf = 0.5;
   constexpr double kThreshold = 0.1;
   const double pi = Kokkos::numbers::pi_v<double>;
-
-  Kokkos::View<OBB<double>*, TestMemSpace> obbs("obb_rot", 1);
-  Kokkos::View<const OBB<double>*, TestMemSpace> const_obbs(obbs);
+  TestOBBComponent obb_component(*mesh.obb_field);
 
   // Rotation by angle theta around z: q = {cos(θ/2), 0, 0, sin(θ/2)}.
   auto set_theta = [&](double theta) {
     const Quaternion<double> q{std::cos(theta / 2.0), 0.0, 0.0, std::sin(theta / 2.0)};
-    obbs(0) = OBB<double>{Point<double>{0.0, 0.0, 0.0}, q, kHalf, kHalf, kHalf};
+    store_obb(*mesh.obb_field, node, TestOBB{Point<double>{0.0, 0.0, 0.0}, q, kHalf, kHalf, kHalf});
+    obb_component.modify_on_host();
   };
   set_theta(0.0);
 
-  RebuildOnOBBDisplacement<double, TestMemSpace> rebuilder(const_obbs, kThreshold);
-
-  Kokkos::View<STKBoxTrait::box_type*, TestMemSpace> bv("boxes", 1);
-  bv(0) = STKBoxTrait::make(0.f, 0.f, 0.f, 1.0f);
-  STKBoxTrait::search_boxes_type sb{sel, bv, ev};
+  RebuildOnOBBDisplacement<double, TestMemSpace> rebuilder(obb_component, kThreshold);
 
   // No snapshot yet: always needs rebuild.
-  EXPECT_TRUE(rebuilder.needs_rebuild(*bulk, sb, sb));
-  rebuilder.snapshot(*bulk, sb, sb);
+  EXPECT_TRUE(rebuilder.needs_rebuild(*mesh.bulk, input, input));
+  rebuilder.snapshot(*mesh.bulk, input, input);
 
   // θ=0 (identity): no rebuild.
-  EXPECT_FALSE(rebuilder.needs_rebuild(*bulk, sb, sb));
+  EXPECT_FALSE(rebuilder.needs_rebuild(*mesh.bulk, input, input));
 
   // Relative θ=5° from snapshot: (cos5°+sin5°)*0.5 ≈ 0.542 ≤ 0.6 → no rebuild.
   set_theta(5.0 * pi / 180.0);
-  EXPECT_FALSE(rebuilder.needs_rebuild(*bulk, sb, sb));
+  EXPECT_FALSE(rebuilder.needs_rebuild(*mesh.bulk, input, input));
 
   // Relative θ=30° from snapshot: (cos30°+sin30°)*0.5 ≈ 0.683 > 0.6 → rebuild.
   set_theta(30.0 * pi / 180.0);
-  EXPECT_TRUE(rebuilder.needs_rebuild(*bulk, sb, sb));
+  EXPECT_TRUE(rebuilder.needs_rebuild(*mesh.bulk, input, input));
 
   // Snapshot at θ=30°; subsequent checks are relative to this orientation.
-  rebuilder.snapshot(*bulk, sb, sb);
-  EXPECT_FALSE(rebuilder.needs_rebuild(*bulk, sb, sb));
+  rebuilder.snapshot(*mesh.bulk, input, input);
+  EXPECT_FALSE(rebuilder.needs_rebuild(*mesh.bulk, input, input));
 
   // Relative rotation from snapshot: 35°−30°=5° → (cos5°+sin5°)*0.5 ≈ 0.542 ≤ 0.6 → no rebuild.
   set_theta(35.0 * pi / 180.0);
-  EXPECT_FALSE(rebuilder.needs_rebuild(*bulk, sb, sb));
+  EXPECT_FALSE(rebuilder.needs_rebuild(*mesh.bulk, input, input));
 
   // Relative rotation from snapshot: 55°−30°=25° → (cos25°+sin25°)*0.5 ≈ 0.664 > 0.6 → rebuild.
   set_theta(55.0 * pi / 180.0);
-  EXPECT_TRUE(rebuilder.needs_rebuild(*bulk, sb, sb));
+  EXPECT_TRUE(rebuilder.needs_rebuild(*mesh.bulk, input, input));
 }
 
 // Separate target/source thresholds: each side fires independently.
@@ -1674,70 +1769,68 @@ TEST(RebuildOnOBBDisplacement, ThresholdBehavior_RotationOnly) {
 //   Target → 0.55 (disp 0.15 < 0.3): quiet.
 //   Source → 0.9 (0.9 > 0.8): source fires.  Expected: rebuild.
 TEST(RebuildOnOBBDisplacement, SeparateTargetAndSourceThresholds) {
-  constexpr int kN = 1;
-  auto [meta, bulk] = make_node_mesh(kN);
-  auto node = bulk->get_entity(stk::topology::NODE_RANK, 1);
-  Kokkos::View<stk::mesh::Entity*, TestMemSpace> ev("entities", 1);
-  ev(0) = node;
-  const stk::mesh::Selector sel = meta->universal_part();
+  if (stk::parallel_machine_size(MPI_COMM_WORLD) != 1) GTEST_SKIP();
+  // 2-node mesh: node 1 = target, node 2 = source; one shared `obb` field, two selectors → independent geometry.
+  auto mesh = make_geom_mesh(2);
+  TestComponent aabb_component(*mesh.aabb_field);
+  TestInput tgt_input(*mesh.target_part, aabb_component);  // supply selectors/rank only
+  TestInput src_input(*mesh.source_part, aabb_component);
 
   constexpr double kHalf = 0.5;
   constexpr double kTargetThreshold = 0.3;
   constexpr double kSourceThreshold = 0.8;
-
-  Kokkos::View<OBB<double>*, TestMemSpace> tgt_obbs("obb_tgt2", 1);
-  Kokkos::View<OBB<double>*, TestMemSpace> src_obbs("obb_src2", 1);
-  Kokkos::View<const OBB<double>*, TestMemSpace> const_tgt(tgt_obbs);
-  Kokkos::View<const OBB<double>*, TestMemSpace> const_src(src_obbs);
+  TestOBBComponent obb_component(*mesh.obb_field);
 
   auto set_tgt = [&](double cx) {
-    tgt_obbs(0) = OBB<double>{Point<double>{cx, 0.0, 0.0}, Quaternion<double>::identity(), kHalf, kHalf, kHalf};
+    store_obb(*mesh.obb_field, mesh.nodes[0],
+              TestOBB{Point<double>{cx, 0.0, 0.0}, Quaternion<double>::identity(), kHalf, kHalf, kHalf});
+    obb_component.modify_on_host();
   };
   auto set_src = [&](double cx) {
-    src_obbs(0) = OBB<double>{Point<double>{cx, 0.0, 0.0}, Quaternion<double>::identity(), kHalf, kHalf, kHalf};
+    store_obb(*mesh.obb_field, mesh.nodes[1],
+              TestOBB{Point<double>{cx, 0.0, 0.0}, Quaternion<double>::identity(), kHalf, kHalf, kHalf});
+    obb_component.modify_on_host();
   };
 
   set_tgt(0.0);
   set_src(0.0);
 
-  RebuildOnOBBDisplacement<double, TestMemSpace> rebuilder(const_tgt, const_src, kTargetThreshold, kSourceThreshold);
-
-  Kokkos::View<STKBoxTrait::box_type*, TestMemSpace> bv("boxes", 1);
-  bv(0) = STKBoxTrait::make(0.f, 0.f, 0.f, 1.0f);
-  STKBoxTrait::search_boxes_type sb{sel, bv, ev};
+  // Same OBB component read over each side's selector: target → node 1, source → node 2.
+  RebuildOnOBBDisplacement<double, TestMemSpace> rebuilder(obb_component, obb_component, kTargetThreshold,
+                                                          kSourceThreshold);
 
   // No snapshot yet: always needs rebuild.
-  EXPECT_TRUE(rebuilder.needs_rebuild(*bulk, sb, sb));
-  rebuilder.snapshot(*bulk, sb, sb);
+  EXPECT_TRUE(rebuilder.needs_rebuild(*mesh.bulk, tgt_input, src_input));
+  rebuilder.snapshot(*mesh.bulk, tgt_input, src_input);
 
   // Both unchanged: no rebuild.
-  EXPECT_FALSE(rebuilder.needs_rebuild(*bulk, sb, sb));
+  EXPECT_FALSE(rebuilder.needs_rebuild(*mesh.bulk, tgt_input, src_input));
 
   // Target moves 0.4 > 0.3, source stays: target fires.
   set_tgt(0.4);
-  EXPECT_TRUE(rebuilder.needs_rebuild(*bulk, sb, sb));
+  EXPECT_TRUE(rebuilder.needs_rebuild(*mesh.bulk, tgt_input, src_input));
 
   // Target 0.2 < 0.3, source 0.5 < 0.8: neither fires.
   set_tgt(0.2);
   set_src(0.5);
-  EXPECT_FALSE(rebuilder.needs_rebuild(*bulk, sb, sb));
+  EXPECT_FALSE(rebuilder.needs_rebuild(*mesh.bulk, tgt_input, src_input));
 
   // Source 0.9 > 0.8, target at 0.2: source fires.
   set_src(0.9);
-  EXPECT_TRUE(rebuilder.needs_rebuild(*bulk, sb, sb));
+  EXPECT_TRUE(rebuilder.needs_rebuild(*mesh.bulk, tgt_input, src_input));
 
   // Snapshot with target=0.4, source=0.
   set_tgt(0.4);
   set_src(0.0);
-  rebuilder.snapshot(*bulk, sb, sb);
+  rebuilder.snapshot(*mesh.bulk, tgt_input, src_input);
 
   // Target to 0.55: disp=|0.55−0.4|=0.15 < 0.3 → quiet.  Source at 0: quiet.
   set_tgt(0.55);
-  EXPECT_FALSE(rebuilder.needs_rebuild(*bulk, sb, sb));
+  EXPECT_FALSE(rebuilder.needs_rebuild(*mesh.bulk, tgt_input, src_input));
 
   // Source to 0.9: disp=0.9 > 0.8 → source fires.
   set_src(0.9);
-  EXPECT_TRUE(rebuilder.needs_rebuild(*bulk, sb, sb));
+  EXPECT_TRUE(rebuilder.needs_rebuild(*mesh.bulk, tgt_input, src_input));
 }
 
 // End-to-end test through ManagedNeighborList: large displacement forces rebuild
@@ -1746,7 +1839,7 @@ TEST_F(STKDeterministicFixture, Rebuilder_AABBDisplacement_EndToEnd) {
   constexpr float kThreshold = 0.3f;
   auto managed = make_neighbor_list_builder<STKList>()
                      .exec_space(TestExecSpace{})
-                     .manage(RebuildOnAABBDisplacement<float, TestMemSpace>{kThreshold});
+                     .manage(RebuildOnAABBDisplacement<double, TestMemSpace>{kThreshold});
 
   // Initial: 1 overlapping pair; snapshot taken.
   auto r1 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
@@ -1763,6 +1856,32 @@ TEST_F(STKDeterministicFixture, Rebuilder_AABBDisplacement_EndToEnd) {
   auto r3 = managed.update(*bulk_, far_tgt, disjoint_source_boxes_);
   EXPECT_FALSE(r3.rebuilt);
   EXPECT_EQ(collect_pairs(r3.list), PairSet{});
+}
+
+// End-to-end through ManagedNeighborList with an OBB-displacement rebuilder.  The OBB rebuilder watches the
+// fixture's `obb_component_` (over the search input's selector) and drives rebuild decisions, even though the
+// search itself runs on the AABB inputs.  This exercises the managed + OBB-rebuilder integration path.
+TEST_F(STKDeterministicFixture, Rebuilder_OBBDisplacement_EndToEnd) {
+  constexpr double kThreshold = 0.5;
+  auto managed = make_neighbor_list_builder<STKList>()
+                     .exec_space(TestExecSpace{})
+                     .manage(RebuildOnOBBDisplacement<double, TestMemSpace>{obb_component_, kThreshold});
+
+  // Initial build: OBB snapshot taken; the AABB geometry yields 1 pair.
+  auto r1 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
+  EXPECT_TRUE(r1.rebuilt);
+  EXPECT_EQ(collect_pairs(r1.list), (PairSet{{0, 0}}));
+
+  // Displace target node 1's OBB far beyond the threshold → OBB rebuilder fires → rebuild.
+  store_obb(*obb_field_, nodes_[0],
+            TestOBB{Point<double>{50.0, 0.0, 0.0}, Quaternion<double>::identity(), 0.5, 0.5, 0.5});
+  obb_component_.modify_on_host();
+  auto r2 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
+  EXPECT_TRUE(r2.rebuilt);
+
+  // No further OBB change → contained within the inflated snapshot → cache reused.
+  auto r3 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
+  EXPECT_FALSE(r3.rebuilt);
 }
 
 // ---- RebuilderChain via operator| ----
@@ -1824,43 +1943,41 @@ TEST_F(STKDeterministicFixture, Rebuilder_Chain_EntityChangeOrAlways_BehavesLike
 // the snapshot view.  The three tests below cover: entity add (2→6), entity remove (6→2),
 // and entity swap (same count, different identity).
 
-// Entity add: target count increases 2→6.  AABB count guard fires and returns true (prior_),
-// so EntityChange is never evaluated.  A rebuild occurs; the new geometry produces 0 pairs.
+// Entity add: target count increases 2→4.  AABB count guard fires and returns true (prior_),
+// so EntityChange is never evaluated.  A rebuild occurs; the pair set reflects the larger target set.
 TEST_F(STKDeterministicFixture, CombinedRebuilder_AABBSafeOnEntityAdd) {
   constexpr float kThreshold = 0.3f;
   auto managed =
       make_neighbor_list_builder<STKList>()
           .exec_space(TestExecSpace{})
-          .manage(RebuildOnAABBDisplacement<float, TestMemSpace>{kThreshold} | RebuildOnEntityChange<TestMemSpace>{});
+          .manage(RebuildOnAABBDisplacement<double, TestMemSpace>{kThreshold} | RebuildOnEntityChange<TestMemSpace>{});
 
-  // Initial build: 2 targets, 2 sources → 1 pair; both snapshots recorded.
+  // Initial build: 2 targets {1,2}, 2 sources {3,4} → 1 pair; both snapshots recorded.
   auto r1 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
   EXPECT_TRUE(r1.rebuilt);
   EXPECT_EQ(collect_pairs(r1.list), (PairSet{{0, 0}}));
 
-  // 6 far-away universal targets: count 2→6 → AABB count guard fires → rebuild → 0 pairs.
-  auto far_uni = make_far_universal_boxes(*this);
-  auto r2 = managed.update(*bulk_, far_uni, disjoint_source_boxes_);
+  // 4-entity target {1,2,5,6}: count 2→4 → AABB count guard fires → rebuild.
+  auto r2 = managed.update(*bulk_, overlapping_target_boxes_, disjoint_source_boxes_);
   EXPECT_TRUE(r2.rebuilt);
-  EXPECT_EQ(collect_pairs(r2.list), PairSet{});
+  EXPECT_EQ(collect_pairs(r2.list), (PairSet{{0, 0}, {2, 0}, {3, 0}}));
 }
 
-// Entity remove: target count decreases 6→2.  AABB count guard fires and returns true,
-// so EntityChange is never evaluated.  A rebuild occurs; the original geometry is restored.
+// Entity remove: target count decreases 4→2.  AABB count guard fires and returns true,
+// so EntityChange is never evaluated.  A rebuild occurs; the pair set shrinks accordingly.
 TEST_F(STKDeterministicFixture, CombinedRebuilder_AABBSafeOnEntityRemove) {
   constexpr float kThreshold = 0.3f;
   auto managed =
       make_neighbor_list_builder<STKList>()
           .exec_space(TestExecSpace{})
-          .manage(RebuildOnAABBDisplacement<float, TestMemSpace>{kThreshold} | RebuildOnEntityChange<TestMemSpace>{});
+          .manage(RebuildOnAABBDisplacement<double, TestMemSpace>{kThreshold} | RebuildOnEntityChange<TestMemSpace>{});
 
-  // Initial build: 6 far-away universal targets → 0 pairs.
-  auto far_uni = make_far_universal_boxes(*this);
-  auto r1 = managed.update(*bulk_, far_uni, disjoint_source_boxes_);
+  // Initial build: 4-entity target {1,2,5,6} vs source {3,4}.
+  auto r1 = managed.update(*bulk_, overlapping_target_boxes_, disjoint_source_boxes_);
   EXPECT_TRUE(r1.rebuilt);
-  EXPECT_EQ(collect_pairs(r1.list), PairSet{});
+  EXPECT_EQ(collect_pairs(r1.list), (PairSet{{0, 0}, {2, 0}, {3, 0}}));
 
-  // 2 nearby disjoint targets: count 6→2 → AABB count guard fires → rebuild → 1 pair.
+  // 2-entity target {1,2}: count 4→2 → AABB count guard fires → rebuild → 1 pair.
   auto r2 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
   EXPECT_TRUE(r2.rebuilt);
   EXPECT_EQ(collect_pairs(r2.list), (PairSet{{0, 0}}));
@@ -1871,7 +1988,7 @@ TEST_F(STKDeterministicFixture, CombinedRebuilder_AABBSafeOnEntityRemove) {
 // that the entity identity changed and returns true, triggering the rebuild.
 TEST_F(STKDeterministicFixture, CombinedRebuilder_EntityChangeFiresOnEntitySwap) {
   constexpr float kThreshold = 0.3f;
-  auto chain = RebuildOnAABBDisplacement<float, TestMemSpace>{kThreshold} | RebuildOnEntityChange<TestMemSpace>{};
+  auto chain = RebuildOnAABBDisplacement<double, TestMemSpace>{kThreshold} | RebuildOnEntityChange<TestMemSpace>{};
 
   // Snapshot the initial state.
   chain.snapshot(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
@@ -1895,11 +2012,9 @@ TEST_F(STKDeterministicFixture, CombinedRebuilder_EntityChangeFiresOnEntitySwap)
 // incorrectly report a change without the explicit n==0 guard).
 // =============================================================================
 
-// Helper: build empty search boxes (no entities, no boxes) using the STK trait.
-static STKBoxTrait::search_boxes_type make_empty_boxes(const STKDeterministicFixture& f) {
-  Kokkos::View<STKBoxTrait::box_type*, TestMemSpace> bv("empty_boxes", 0);
-  Kokkos::View<stk::mesh::Entity*, TestMemSpace> ev("empty_entities", 0);
-  return {f.disjoint_target_boxes_.selector(), bv, ev};
+// Helper: an input over an empty selector (no node is in both target and source parts) → enumerates 0 entities.
+inline TestInput make_empty_boxes(STKDeterministicFixture& f) {
+  return TestInput(*f.target_part_ & *f.source_part_, f.aabb_component_);
 }
 
 // --- RebuildOnEntityChange with zero entities ---
@@ -1938,7 +2053,7 @@ TEST_F(STKDeterministicFixture, EntityChange_TransitionToEmpty_SignalsRebuild) {
 // count-change rebuild; but an empty target set trivially produces an empty list
 // regardless of how far boxes "moved".
 TEST_F(STKDeterministicFixture, AABBDisplacement_EmptyTargets_DoesNotFireAfterSnapshot) {
-  RebuildOnAABBDisplacement<float, TestMemSpace> rebuilder(0.01f);
+  RebuildOnAABBDisplacement<double, TestMemSpace> rebuilder(0.01f);
   auto empty = make_empty_boxes(*this);
 
   // First call always rebuilds (no snapshot yet).
@@ -1958,7 +2073,7 @@ TEST_F(STKDeterministicFixture, AABBDisplacement_EmptyTargets_DoesNotFireAfterSn
 // With zero targets and zero sources from the very start, corners_moved over
 // an empty range must return false (not crash or return garbage from the reducer).
 TEST_F(STKDeterministicFixture, AABBDisplacement_EmptyFromStart_NoRebuildAfterFirstBuild) {
-  RebuildOnAABBDisplacement<float, TestMemSpace> rebuilder(0.01f);
+  RebuildOnAABBDisplacement<double, TestMemSpace> rebuilder(0.01f);
   auto empty = make_empty_boxes(*this);
 
   // First call: no snapshot → rebuilds.
@@ -1980,7 +2095,7 @@ TEST_F(STKDeterministicFixture, ManagedList_ZeroTargets_NeverRebuildsAfterFirstB
   auto empty = make_empty_boxes(*this);
   auto managed = make_neighbor_list_builder<STKList>()
                      .exec_space(TestExecSpace{})
-                     .manage(RebuildOnAABBDisplacement<float, TestMemSpace>{0.01f});
+                     .manage(RebuildOnAABBDisplacement<double, TestMemSpace>{0.01f});
 
   // First update: list doesn't exist yet, must build.
   auto r1 = managed.update(*bulk_, empty, disjoint_source_boxes_);
@@ -2011,6 +2126,81 @@ TEST_F(STKDeterministicFixture, ManagedList_ZeroTargets_EntityChangeDoesNotFire)
   // Entity snapshot is empty; presenting empty targets again → no entity change.
   auto r2 = managed.update(*bulk_, empty, disjoint_source_boxes_);
   EXPECT_FALSE(r2.rebuilt);
+}
+
+// =============================================================================
+// Cross-rank validation of the non-periodic STK multi-rank build (coarse_search + cooperative ghosting).
+//
+// Replicated point set; point i has global id i and is owned by rank i % nprocs, declared only on its owning rank.
+// The build ghosts remote source owners. Each rank checks ONLY its owned target rows against the replicated N²
+// gid-oracle (filtered to targets it owns), mapping the list's entities back to global ids — no cross-rank gather,
+// and the union over ranks is the full global oracle. Runs at any rank count (np=1 degenerate; np=2,4 exercise
+// ghosting).
+// =============================================================================
+void run_multirank_stk_validation(const std::vector<std::array<double, 3>>& positions, double r) {
+  const int N = static_cast<int>(positions.size());
+  auto mesh = make_distributed_node_mesh_with_aabb(N);
+  auto& bulk = *mesh.bulk;
+  const int my_rank = bulk.parallel_rank();
+  const int nprocs = bulk.parallel_size();
+  const stk::mesh::Selector owned = mesh.meta->locally_owned_part();
+
+  // Replicated boxes (index == global id); store on owned nodes only.
+  std::vector<TestAABB> boxes(N);
+  for (int i = 0; i < N; ++i) {
+    boxes[i] = make_aabb(positions[i][0], positions[i][1], positions[i][2], r);
+    if (i % nprocs != my_rank) continue;
+    auto node = bulk.get_entity(stk::topology::NODE_RANK, static_cast<stk::mesh::EntityId>(i + 1));
+    ASSERT_TRUE(bulk.is_valid(node)) << "owned node " << (i + 1) << " missing on rank " << my_rank;
+    store_aabb(*mesh.aabb_field, node, boxes[i]);
+  }
+  TestComponent component(*mesh.aabb_field);
+  component.modify_on_host();
+  TestInput input{owned, component};
+
+  STKList list = make_neighbor_list_builder<STKList>()
+                     .exec_space(TestExecSpace{})
+                     .target_input(input)
+                     .source_input(input)
+                     .broad_phase(ExcludeSelfInteraction{})
+                     .build(bulk);
+
+  // Replicated gid-oracle, kept only for rows this rank owns.
+  const PairSet full = oracle_pairs_no_self(boxes);
+  PairSet expected;
+  for (const auto& p : full)
+    if (static_cast<int>(p.first % static_cast<size_t>(nprocs)) == my_rank) expected.insert(p);
+
+  // The list's rows for this rank's owned targets, mapped to global ids (valid for ghosted sources too).
+  PairSet actual;
+  for (size_t t = 0; t < list.num_targets(); ++t) {
+    const size_t tgid = static_cast<size_t>(bulk.identifier(list.target_entity(t))) - 1;
+    for (size_t k = 0; k < list.num_neighbors(t); ++k) {
+      const size_t sgid = static_cast<size_t>(bulk.identifier(list.get_neighbor(t, k))) - 1;
+      actual.insert({tgid, sgid});
+    }
+  }
+
+  EXPECT_EQ(actual.size(), expected.size())
+      << "rank " << my_rank << ": list=" << actual.size() << " oracle=" << expected.size();
+  for (const auto& p : expected)
+    EXPECT_TRUE(actual.count(p)) << "rank " << my_rank << " MISSING: target=" << p.first << " source=" << p.second;
+  for (const auto& p : actual)
+    EXPECT_TRUE(expected.count(p)) << "rank " << my_rank << " SPURIOUS: target=" << p.first << " source=" << p.second;
+}
+
+TEST(STKSearchNeighborList, MultiRankRandomN2Validation) {
+  constexpr int kN = 60;
+  constexpr size_t kSeed = 11;
+  constexpr double kDomain = 10.0;
+  constexpr double kRadius = 1.0;
+  std::vector<std::array<double, 3>> positions(kN);
+  for (int i = 0; i < kN; ++i) {
+    openrand::Philox rng = mundy::make_philox(kSeed, static_cast<uint32_t>(i));
+    positions[i] = {rng.uniform<double>(0.0, kDomain), rng.uniform<double>(0.0, kDomain),
+                    rng.uniform<double>(0.0, kDomain)};
+  }
+  run_multirank_stk_validation(positions, kRadius);
 }
 
 }  // namespace

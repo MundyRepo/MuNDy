@@ -362,9 +362,12 @@ class UnitTestClassFixture : public ::testing::Test {
 
   std::filesystem::path prepare_output_dir(const std::string& directory_name) const {
     int rank = 0;
+    int size = 1;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-    const std::filesystem::path output_dir = std::filesystem::current_path() / directory_name;
+    const std::filesystem::path output_dir =
+        std::filesystem::current_path() / ("mpi_size_" + std::to_string(size)) / directory_name;
     if (rank == 0) {
       std::filesystem::remove_all(output_dir);
       std::filesystem::create_directories(output_dir);

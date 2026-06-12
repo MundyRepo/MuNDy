@@ -59,16 +59,19 @@
 #include <stk_mesh/base/BulkData.hpp>
 #include <stk_mesh/base/Entity.hpp>
 #include <stk_mesh/base/EntitySorterBase.hpp>
+#include <stk_mesh/base/Field.hpp>      // for stk::mesh::Field
+#include <stk_mesh/base/FieldBase.hpp>  // for stk::mesh::field_data
 #include <stk_mesh/base/MeshBuilder.hpp>
-#include <stk_mesh/base/MetaData.hpp>
+#include <stk_mesh/base/MetaData.hpp>  // for declare_field, put_field_on_mesh
 #include <stk_mesh/base/Selector.hpp>
 #include <stk_search/BoundingBox.hpp>
 #include <stk_topology/topology.hpp>
 #include <stk_util/parallel/Parallel.hpp>
 
-// Mundy math
-#include <mundy_math/Vector3.hpp>  // for mundy::Vector3
-#include <mundy_math/zmort.hpp>    // for mundy::zmorton_less
+// Mundy math / mesh
+#include <mundy_math/Vector3.hpp>         // for mundy::Vector3
+#include <mundy_math/zmort.hpp>           // for mundy::zmorton_less
+#include <mundy_mesh/FieldComponent.hpp>  // for mundy::mesh::AABBFieldComponent
 
 // Mundy search — always available
 #include <MundySearch_config.hpp>  // for HAVE_MUNDYSEARCH_ARBORX
@@ -76,6 +79,7 @@
 #include <mundy_search/ForEach.hpp>
 #include <mundy_search/NeighborListBuilder.hpp>
 #include <mundy_search/Neighbors.hpp>
+#include <mundy_search/SearchInput.hpp>  // for mundy::search::SearchInput (component input)
 #include <mundy_search/STKSearchNeighborList.hpp>
 #include <mundy_search/impl/STKSearchBoxes.hpp>
 
@@ -107,35 +111,44 @@ using HostExec  = Kokkos::DefaultHostExecutionSpace;
 using PosView   = Kokkos::View<float**, HostSpace>;
 using ForceView = Kokkos::View<float**, HostSpace>;
 using STKList   = mundy::search::STKSearchNeighborList<HostSpace>;
-using STKBoxes  = mundy::search::impl::STKSearchBoxesT<HostSpace>;
 
 #ifdef HAVE_MUNDYSEARCH_ARBORX
 using List1d      = mundy::search::ArborX1dNeighborList<HostSpace>;
 using List2d      = mundy::search::ArborX2dNeighborList<HostSpace>;
-using ArborXBoxes = mundy::search::impl::ArborXSearchBoxesT<HostSpace>;
 #endif
 
+// Component-backed search input shared by all backends (STK + ArborX consume the same AABB component).
+using PerfComponent = mundy::mesh::AABBFieldComponent<double>;
+using PerfInput     = mundy::search::SearchInput<PerfComponent>;
+
+// Declare a 6-scalar `aabb` node field (min xyz 0-2, max xyz 3-5). Must be called before commit.
+inline stk::mesh::Field<double>& perf_declare_aabb_field(stk::mesh::MetaData& meta) {
+  auto& field = meta.declare_field<double>(stk::topology::NODE_RANK, "aabb_perf_field");
+  stk::mesh::put_field_on_mesh(field, meta.universal_part(), 6, nullptr);
+  return field;
+}
+
+// Write one node's AABB (center ± half) into the field.
+inline void perf_store_aabb(stk::mesh::Field<double>& field, stk::mesh::Entity node, float cx, float cy, float cz,
+                            float h) {
+  double* d = stk::mesh::field_data(field, node);
+  d[0] = cx - h;
+  d[1] = cy - h;
+  d[2] = cz - h;
+  d[3] = cx + h;
+  d[4] = cy + h;
+  d[5] = cz + h;
+}
+
 // =============================================================================
-// Box traits — parameterize fixture and builders over box type
+// Backend tags — the fixture/benchmarks are still parameterized by a backend tag, but all backends now consume the
+// same component `SearchInput`, so the tag no longer carries box construction.
 // =============================================================================
 
-struct STKBoxTrait {
-  using search_boxes_type = STKBoxes;
-  using box_type          = typename search_boxes_type::box_type;
-  static box_type make(float cx, float cy, float cz, float h) {
-    return box_type{cx - h, cy - h, cz - h, cx + h, cy + h, cz + h};
-  }
-};
+struct STKBoxTrait {};
 
 #ifdef HAVE_MUNDYSEARCH_ARBORX
-struct ArborXBoxTrait {
-  using box_type          = ArborX::Box;
-  using search_boxes_type = ArborXBoxes;
-  static box_type make(float cx, float cy, float cz, float h) {
-    return ArborX::Box{ArborX::Point{cx - h, cy - h, cz - h},
-                       ArborX::Point{cx + h, cy + h, cz + h}};
-  }
-};
+struct ArborXBoxTrait {};
 #endif
 
 // =============================================================================
@@ -144,15 +157,14 @@ struct ArborXBoxTrait {
 
 template <typename Trait>
 struct PerfFixtureT {
-  using box_type          = typename Trait::box_type;
-  using search_boxes_type = typename Trait::search_boxes_type;
   int N;
   float L;
   std::shared_ptr<stk::mesh::MetaData> meta;
   std::unique_ptr<stk::mesh::BulkData> bulk;
   std::vector<stk::mesh::Entity> nodes;
   PosView pos;
-  search_boxes_type boxes;
+  stk::mesh::Field<double>* aabb_field = nullptr;
+  PerfInput boxes;
 };
 
 template <typename Trait>
@@ -166,6 +178,7 @@ static PerfFixtureT<Trait> build_fixture(int N) {
   builder.set_entity_rank_names({"NODE", "EDGE", "FACE", "ELEMENT", "CONSTRAINT"});
   f.meta = builder.create_meta_data();
   f.meta->use_simple_fields();
+  f.aabb_field = &perf_declare_aabb_field(*f.meta);  // declared before commit
   f.meta->commit();
   f.bulk = builder.create(f.meta);
   f.bulk->modification_begin();
@@ -182,16 +195,12 @@ static PerfFixtureT<Trait> build_fixture(int N) {
     f.pos(i, 0) = rng.uniform<float>(0.f, f.L);
     f.pos(i, 1) = rng.uniform<float>(0.f, f.L);
     f.pos(i, 2) = rng.uniform<float>(0.f, f.L);
+    perf_store_aabb(*f.aabb_field, f.nodes[i], f.pos(i, 0), f.pos(i, 1), f.pos(i, 2), kDetectRadius);
   }
 
-  using box_type = typename Trait::box_type;
-  Kokkos::View<box_type*, HostSpace> box_view("box_view", N);
-  Kokkos::View<stk::mesh::Entity*, HostSpace> entity_view("entity_view", N);
-  for (int i = 0; i < N; ++i) {
-    box_view(i) = Trait::make(f.pos(i, 0), f.pos(i, 1), f.pos(i, 2), kDetectRadius);
-    entity_view(i) = f.nodes[i];
-  }
-  f.boxes = typename Trait::search_boxes_type{f.meta->universal_part(), box_view, entity_view};
+  PerfComponent component(*f.aabb_field);
+  component.modify_on_host();
+  f.boxes = PerfInput{f.meta->universal_part(), component};
   return f;
 }
 
@@ -261,14 +270,11 @@ static void sort_fixture_targets_by_morton(PerfFixtureT<Trait>& f) {
   }
   f.pos = new_pos;
 
-  using box_type = typename Trait::box_type;
-  Kokkos::View<box_type*, HostSpace> box_view("box_view", f.N);
-  Kokkos::View<stk::mesh::Entity*, HostSpace> entity_view("entity_view", f.N);
-  for (int i = 0; i < f.N; ++i) {
-    box_view(i) = Trait::make(f.pos(i, 0), f.pos(i, 1), f.pos(i, 2), kDetectRadius);
-    entity_view(i) = f.nodes[i];
-  }
-  f.boxes = typename Trait::search_boxes_type{f.meta->universal_part(), box_view, entity_view};
+  for (int i = 0; i < f.N; ++i)
+    perf_store_aabb(*f.aabb_field, f.nodes[i], f.pos(i, 0), f.pos(i, 1), f.pos(i, 2), kDetectRadius);
+  PerfComponent component(*f.aabb_field);
+  component.modify_on_host();
+  f.boxes = PerfInput{f.meta->universal_part(), component};
 }
 
 static void diagnose_target_ordering(bool sort_targets) {
