@@ -66,7 +66,7 @@ concept NeighborListType = requires {
 /// \brief Lightweight neighbor-range view for one target.
 ///
 /// `Neighbors` stores the concrete list and a dense target ordinal. This deliberately keeps the first-pass interface
-/// simple. Periodic concrete list types can forward relative image shifts without requiring the common range to carry
+/// simple. Periodic concrete list types can forward per-object image shifts without requiring the common range to carry
 /// image state. A future non-contiguous list should introduce its own handle-aware facade when the real use case
 /// appears.
 ///

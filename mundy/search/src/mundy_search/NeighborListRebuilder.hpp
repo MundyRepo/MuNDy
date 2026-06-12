@@ -247,10 +247,9 @@ struct NeverRebuild {
 /// \class RebuildOnEntityChange
 /// \brief Rebuilder that triggers when the target or source entity sequence changes.
 ///
-/// After each build, `snapshot()` stores the ordered entity views for both inputs using a
-/// Kokkos `parallel_for` on device. `needs_rebuild()` checks element-wise identity — same count
-/// AND same entity at every position — using a `parallel_reduce` on device. Any change in count,
-/// entity identity, or entity ordering triggers a rebuild.
+/// After each build, `snapshot()` records the ordered entity sequences for both inputs. `needs_rebuild()`
+/// reports a rebuild when that sequence changes — a different count, a different entity at any position, or a
+/// changed ordering. Both run on device.
 ///
 /// This is stricter than a count-only check: an add-one / remove-one swap at constant count is
 /// detected because the entity at some index will differ.  It is also stricter than an unordered

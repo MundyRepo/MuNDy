@@ -19,7 +19,7 @@ the list.
 
 | **Layer** | **Main types / functions** | **Use when you need** |
 |-----------|-----------------------------|------------------------|
-| Search inputs | `SearchInput<Component>`, `PeriodicSearchInput<Component, Metric>` | A `(selector, geometry component[, metric])` pairing that tells the builder which entities to search and how to read their geometry. Raw box wrappers (`impl::ArborXSearchBoxesT`, `impl::PeriodicArborXSearchBoxesT`, `impl::PeriodicSTKSearchBoxesT`) are internal build buffers, not public inputs. |
+| Search inputs | `SearchInput<Component>`, `PeriodicSearchInput<Component, Metric>` | A `(selector, geometry component[, metric])` pairing that tells the builder which entities to search and how to read their geometry. The builder generates its own internal search-box buffers from the component; those are not public inputs. |
 | Builder | `NeighborListBuilder`, `make_neighbor_list_builder<ListType>()` | A fluent, type-safe way to build a concrete neighbor list. |
 | Build traits | `NeighborListBuildTraits<ListType>`, `NeighborListInputType` | Coupling a concrete list type to its build logic and type-specific parameters. |
 | Excluders | `NoExcluder`, `ExcludeSelfInteraction`, `ExcludeSymmetricDuplicates`, `ExcludeNonIntersectingOBBs`, `ExcluderChain` | Filtering candidate pairs at build time before they enter storage. |
@@ -290,7 +290,7 @@ can read box views directly.
 | `NeverRebuild` | — | Never rebuilds after the first build. |
 | `RebuildOnEntityChange<MemSpace>` | Memory space | Target or source entity count changes. |
 | `RebuildOnAABBDisplacement<Scalar, MemSpace, Metric>` | Scalar type (default `double`), memory space, optional metric | Any AABB corner moves farther than the threshold since the last snapshot. Reads boxes from the search input at snapshot/check time. |
-| `RebuildOnOBBDisplacement<Scalar, MemSpace, Metric>` | Scalar type (default `double`), memory space, optional metric | Any OBB escapes its inflated snapshot containment region. Reads from caller-maintained `Kokkos::View<const OBB<Scalar>*, MemSpace>` views supplied at construction time. |
+| `RebuildOnOBBDisplacement<Scalar, MemSpace, Metric>` | Scalar type (default `double`), memory space, optional metric | Any OBB escapes its inflated snapshot containment region. Reads OBBs from an `OBBFieldComponent` at snapshot/check time. |
 
 #### `RebuildOnAABBDisplacement` constructors
 
@@ -307,15 +307,15 @@ RebuildOnAABBDisplacement<double, MemSpace, OrthorhombicMetric<double>> r(skin, 
 
 #### `RebuildOnOBBDisplacement` constructors
 
-`RebuildOnOBBDisplacement` stores the OBB views at construction time and reads them directly on
-every `needs_rebuild()` / `snapshot()` call; it ignores the `TargetInput` / `SourceInput` arguments
-entirely. The caller must keep the views alive and up to date.
+`RebuildOnOBBDisplacement` reads each entity's OBB from an `OBBFieldComponent` supplied at construction (over each
+input's selector) on every `snapshot()` / `needs_rebuild()` call — the search input's component yields the
+broad-phase volume, so the OBB rebuilder takes its own OBB component.
 
 ```cpp
-using OBBView = Kokkos::View<const OBB<double>*, MemSpace>;
+mundy::mesh::OBBFieldComponent<double> obbs(obb_field);  // each side's OBBs are read from this component
 
-// Symmetric (same view for both sides, aperiodic):
-RebuildOnOBBDisplacement<double, MemSpace> r(obb_view, skin_distance);
+// Symmetric (same component for both sides, aperiodic):
+RebuildOnOBBDisplacement<double, MemSpace> r(obbs, skin_distance);
 
 // Asymmetric, single threshold (aperiodic):
 RebuildOnOBBDisplacement<double, MemSpace> r(target_obbs, source_obbs, skin_distance);

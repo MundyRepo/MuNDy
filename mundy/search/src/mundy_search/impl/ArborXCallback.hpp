@@ -106,8 +106,8 @@ class ArborXSearchCandidateFactory {
 /// \class PeriodicArborXSearchCandidateFactory
 /// \brief Create periodic owner-pair candidates from ArborX image-box matches.
 ///
-/// ArborX reports image ordinals. This factory maps them to target/source owner ordinals and computes the relative
-/// image shift that filters and final periodic neighbor-list storage need.
+/// ArborX reports image ordinals. This factory maps them to target/source owner ordinals and carries each object's
+/// image shift (target and source), which the excluder filter and the final periodic neighbor-list storage consume.
 /// \tparam TargetBoxes Target periodic search-box wrapper type.
 /// \tparam SourceBoxes Source periodic search-box wrapper type.
 template <typename TargetBoxes, typename SourceBoxes>

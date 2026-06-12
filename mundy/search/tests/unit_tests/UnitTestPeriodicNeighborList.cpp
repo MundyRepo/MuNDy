@@ -1045,7 +1045,7 @@ TEST_F(PeriodicFixture, Deterministic_2d) {
 // With a periodic cell far larger than the populated domain, the build behaves non-periodically: each owner's
 // center already lies in [0,L) (no wrap), and its n≠0 lattice images sit ~L away and are pruned, leaving one
 // effective image per owner with zero shift.  The resulting pairs must match the non-periodic oracle, and every
-// stored relative image shift must be zero.
+// relative shift (source − target) must be zero.
 template <typename ListType, typename BuildFn>
 void run_single_image_n2_validation(BuildFn build_fn, NodeMeshWithAABB& mesh, const stk::mesh::Selector& selector,
                                     int num_nodes) {
@@ -1074,7 +1074,7 @@ void run_single_image_n2_validation(BuildFn build_fn, NodeMeshWithAABB& mesh, co
   const auto actual = collect_index_pairs(list);
   EXPECT_EQ(actual, expected) << "Large-cell periodic list does not match non-periodic oracle.";
 
-  // All relative image shifts must be (0,0,0): the only surviving image is the n=0 (unshifted) one.
+  // All relative shifts (source − target) must be (0,0,0): the only surviving image is the n=0 (unshifted) one.
   for (size_t t = 0; t < list.num_targets(); ++t) {
     for (size_t k = 0; k < list.num_neighbors(t); ++k) {
       const ImageShiftType shift = list_relative_shift(list, t, k);
@@ -1259,7 +1259,8 @@ TEST(PeriodicArborX2dNeighborList, RandomFullPeriodicN2Validation) {
       kValidL, kValidR);
 }
 
-// ---- Periodic STK backend: reuse the same validations (single-rank; multi-rank periodic validation deferred). ----
+// ---- Periodic STK backend: reuse the same single-rank validations; multi-rank periodic validation is the
+//      MultiRank*N2Validation tests below. ----
 
 TEST(PeriodicSTKSearchNeighborList, TargetImageShiftReportedPerOwner) {
   run_target_image_shift_test<PerSTKList>();

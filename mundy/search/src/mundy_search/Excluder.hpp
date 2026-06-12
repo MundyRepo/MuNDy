@@ -72,8 +72,8 @@ class ExcluderChain;
 /// \class NoExcluder
 /// \brief Empty excluder used as the starting point for neighbor-list builders.
 ///
-/// Excluders are build-time predicates that reject candidate target/source pairs before those pairs are materialized
-/// in a neighbor list. `NoExcluder` rejects nothing and provides the first `.exclude(...)` step for type-level
+/// Excluders are build-time predicates that reject candidate target/source pairs before those pairs enter the stored
+/// neighbor list. `NoExcluder` rejects nothing and provides the first `.exclude(...)` step for type-level
 /// chaining.
 class NoExcluder {
  public:
@@ -380,16 +380,16 @@ inline void ExcludeSymmetricDuplicates::setup(const stk::mesh::BulkData& bulk_da
 /// \class ExcludeNonIntersectingOBBs
 /// \brief Narrow-phase excluder that keeps only candidates whose OBBs intersect.
 ///
-/// Reads each entity's OBB from an `OBBFieldComponent` (so the geometry survives mid-build ghosting). `setup()`
-/// materializes the OBBs into device storage indexed by the search's dense target/source ordinals; `operator()` calls
-/// `intersects(target_obb, source_obb)` (15-axis SAT) and excludes the pair if the OBBs do not overlap.
+/// Reads each entity's OBB from an `OBBFieldComponent` (so the geometry survives mid-build ghosting). A candidate is
+/// excluded when its target and source OBBs do not intersect (15-axis separating-axis test). `setup()` must be called
+/// before use to read the OBBs over the target/source selectors.
 ///
 /// Intended use: append as a `.narrow_phase(ExcludeNonIntersectingOBBs{...})` filter after an AABB broad phase to
 /// tighten the candidate set for oriented shapes. The OBB component must be on the same entity rank as the search
 /// input, so that enumerating its selector reproduces the search's dense ordinals.
 ///
 /// \tparam Scalar   Floating-point scalar type of the OBBs (default: `double`).
-/// \tparam MemSpace Kokkos memory space for the materialized OBB storage (default: `stk::ngp::MemSpace`).
+/// \tparam MemSpace Kokkos memory space in which the excluder's OBB storage lives (default: `stk::ngp::MemSpace`).
 template <typename Scalar = double, typename MemSpace = stk::ngp::MemSpace>
 class ExcludeNonIntersectingOBBs {
  public:

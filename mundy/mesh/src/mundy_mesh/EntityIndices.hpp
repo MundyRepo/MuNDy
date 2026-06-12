@@ -66,7 +66,7 @@ NgpViewT<stk::mesh::FastMeshIndex*, OurExecSpace> get_local_entity_indices(const
                                                                            const stk::mesh::Selector& selector,
                                                                            const OurExecSpace& /*exec_space*/) {
   std::vector<stk::mesh::Entity> local_entities;
-  stk::mesh::get_entities(bulk_data, rank, selector, local_entities);
+  stk::mesh::get_entities(bulk_data, rank, selector, local_entities, /*sort by global id*/ true);
 
   NgpViewT<stk::mesh::FastMeshIndex*, OurExecSpace> ngp_local_entity_indices("local_entity_indices",
                                                                              local_entities.size());
@@ -94,7 +94,7 @@ NgpViewT<stk::mesh::Entity*, OurExecSpace> get_local_entities(const stk::mesh::B
                                                               const stk::mesh::Selector& selector,
                                                               const OurExecSpace& /*exec_space*/) {
   std::vector<stk::mesh::Entity> local_entities;
-  stk::mesh::get_entities(bulk_data, rank, selector, local_entities);
+  stk::mesh::get_entities(bulk_data, rank, selector, local_entities, /*sort by global id*/ true);
 
   NgpViewT<stk::mesh::Entity*, OurExecSpace> ngp_local_entities("local_entities", local_entities.size());
 

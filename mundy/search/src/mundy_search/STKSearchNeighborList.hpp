@@ -67,8 +67,8 @@ namespace search {
 /// \class STKSearchNeighborList
 /// \brief STK coarse-search neighbor list mapped into Mundy's common access surface.
 ///
-/// This implementation is intended to consume STK coarse-search candidate pairs and materialize the same compressed
-/// target-to-source storage shape as `ArborX1dNeighborList`.
+/// Stores compressed target-to-source neighbor data in the same shape as `ArborX1dNeighborList`, backed by STK's
+/// distributed coarse search.
 /// \tparam MemorySpace Kokkos memory space for owned views.
 template <typename MemorySpace = stk::ngp::MemSpace>
 class STKSearchNeighborList {
@@ -489,7 +489,7 @@ class PeriodicSTKSearchNeighborList {
 /// \brief Build traits for `STKSearchNeighborList`: non-periodic STK coarse-search compressed storage.
 ///
 /// The build runs `stk::search::coarse_search`, applies the builder's excluder chain, groups results by target,
-/// and returns compressed target-to-source storage. Declaration only for this design pass.
+/// and returns compressed target-to-source storage.
 /// \tparam MemorySpace Kokkos memory space for the returned list.
 template <typename MemorySpace>
 struct NeighborListBuildTraits<STKSearchNeighborList<MemorySpace>> {

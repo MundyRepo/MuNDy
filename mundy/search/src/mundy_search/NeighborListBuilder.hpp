@@ -202,7 +202,7 @@ class NeighborListBuilder {
 
   /// \brief Return a new builder type with an appended broad-phase excluder.
   ///
-  /// Broad-phase excluders are applied during the coarse spatial query to quickly prune candidate pairs.
+  /// Broad-phase excluders are applied during the broad phase to reject candidate pairs early.
   ///
   /// \tparam NextExcluder Excluder type to append.
   /// \param next_excluder [in] Excluder to append to the broad-phase chain.
@@ -217,7 +217,7 @@ class NeighborListBuilder {
 
   /// \brief Return a new builder type with an appended narrow-phase excluder.
   ///
-  /// Narrow-phase excluders are applied after the broad spatial query for fine-grained pair filtering.
+  /// Narrow-phase excluders are applied after the broad phase for fine-grained pair filtering.
   ///
   /// \tparam NextExcluder Excluder type to append.
   /// \param next_excluder [in] Excluder to append to the narrow-phase chain.
@@ -232,13 +232,11 @@ class NeighborListBuilder {
 
   /// \brief Return a new builder with the neighbor-sort flag set.
   ///
-  /// When `true`, each target's neighbor row is sorted by ascending source ordinal after the ArborX query
-  /// completes.  Sorting improves spatial locality when kernels access per-source data (positions, radii, …)
-  /// for multiple targets that share neighbors.  The sort uses a per-row in-place insertion sort, which is
-  /// efficient for the small row sizes typical of neighbor lists (~10–20 entries).  Periodic list variants
-  /// keep the associated image-shift array in sync during the sort.
+  /// When `true`, each target's neighbor row is sorted by ascending source ordinal after construction.  Sorting
+  /// improves spatial locality when kernels access per-source data (positions, radii, …) for multiple targets that
+  /// share neighbors.  Periodic list variants keep the associated image-shift data consistent with the sorted order.
   ///
-  /// Default is `false` (ArborX BVH-traversal order is preserved).
+  /// Default is `false` (the order produced by the search is preserved).
   ///
   /// \param sort [in] Whether to sort neighbor rows by source ordinal after construction.
   auto sort_neighbors(bool sort) const {

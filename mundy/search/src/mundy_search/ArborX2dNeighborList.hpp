@@ -457,7 +457,7 @@ class PeriodicArborX2dNeighborList {
     return source_owner_indices_;
   }
 
-  /// \brief Get the raw dense relative-image-shift view.
+  /// \brief Get the raw dense source-image-shift view.
   KOKKOS_INLINE_FUNCTION
   image_shift_view_t source_image_shifts() const noexcept {
     return source_image_shifts_;
@@ -501,7 +501,7 @@ class PeriodicArborX2dNeighborList {
 /// \brief Build traits for `ArborX2dNeighborList`: non-periodic ArborX dense 2D storage.
 ///
 /// The build runs ArborX's two-pass count/fill flow over non-periodic boxes, applies the builder's excluder chain,
-/// and returns dense per-target source rows. Declaration only for this design pass; the definition runs ArborX.
+/// and returns dense per-target source rows.
 /// \tparam MemorySpace Kokkos memory space for the returned list.
 template <typename MemorySpace>
 struct NeighborListBuildTraits<ArborX2dNeighborList<MemorySpace>> {
@@ -509,8 +509,8 @@ struct NeighborListBuildTraits<ArborX2dNeighborList<MemorySpace>> {
   //@{
 
   using list_type = ArborX2dNeighborList<MemorySpace>;
-  /// Internal build-buffer type: search boxes are generated from the component input and wrapped here, then fed to
-  /// the ArborX BVH/AccessTraits/candidate-factory machinery unchanged. Not a public input type.
+  /// Internal build-buffer type: the build generates search boxes from the component input and wraps them here.
+  /// Not a public input type.
   using target_input_type = impl::ArborXSearchBoxesT<MemorySpace>;
   using source_input_type = impl::ArborXSearchBoxesT<MemorySpace>;
   //@}
@@ -543,7 +543,7 @@ struct NeighborListBuildTraits<ArborX2dNeighborList<MemorySpace>> {
 /// \brief Build traits for `PeriodicArborX2dNeighborList`: periodic ArborX dense 2D storage.
 ///
 /// The build runs ArborX's periodic count/fill flow, collapses image matches to owner ordinals, and stores a
-/// relative image shift in the same dense slot as each source owner ordinal. Declaration only for this design pass.
+/// source image shift in the same dense slot as each source owner ordinal.
 /// \tparam MemorySpace Kokkos memory space for the returned list.
 /// \tparam ImageShiftScalar Scalar type used by image-shift vectors.
 template <typename MemorySpace, typename ImageShiftScalar>
@@ -552,8 +552,8 @@ struct NeighborListBuildTraits<PeriodicArborX2dNeighborList<MemorySpace, ImageSh
   //@{
 
   using list_type = PeriodicArborX2dNeighborList<MemorySpace, ImageShiftScalar>;
-  /// Internal build-buffer type: periodic image boxes are generated from the component input and wrapped here, then
-  /// fed to the ArborX BVH / AccessTraits / periodic candidate-factory machinery unchanged. Not a public input type.
+  /// Internal build-buffer type: the build generates periodic image boxes from the component input and wraps them
+  /// here. Not a public input type.
   using target_input_type = impl::PeriodicArborXSearchBoxesT<MemorySpace, ImageShiftScalar>;
   using source_input_type = impl::PeriodicArborXSearchBoxesT<MemorySpace, ImageShiftScalar>;
   //@}
@@ -728,7 +728,7 @@ ArborX2dNeighborList<MemorySpace> NeighborListBuildTraits<ArborX2dNeighborList<M
 ///
 /// ArborX returns image ordinals; the count callback maps each surviving hit to the target owner ordinal.
 /// The maximum per-owner count sizes the dense 2D views. The fill callback writes source owner ordinals and
-/// relative image shifts into the allocated rows.
+/// source image shifts into the allocated rows.
 template <typename MemorySpace, typename ImageShiftScalar>
 template <typename Builder>
   requires PeriodicAABBSearchInputType<typename Builder::target_input_type> &&
@@ -798,7 +798,7 @@ NeighborListBuildTraits<PeriodicArborX2dNeighborList<MemorySpace, ImageShiftScal
   Kokkos::View<size_type*, MemorySpace> write_positions("mundy_search_per2d_wpos", num_target_owners);
   Kokkos::deep_copy(write_positions, size_type(0));
 
-  // Pass 2: fill source owner ordinals and relative image shifts.
+  // Pass 2: fill source owner ordinals and source image shifts.
   bvh.query(exec_sp, target_boxes,
             fill_cb_t(factory, excluder, write_positions, source_owner_indices, source_image_shifts));
 

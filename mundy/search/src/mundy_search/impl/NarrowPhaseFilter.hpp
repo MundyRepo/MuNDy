@@ -229,7 +229,7 @@ std::tuple<IndexView, ShiftView, OffsetView> apply_narrow_phase(
   Kokkos::deep_copy(total_narrow, Kokkos::subview(narrow_offsets, num_targets));
 
   // -------------------------------------------------------------------------
-  // Phase L2: fill surviving source owner ordinals and relative image shifts.
+  // Phase L2: fill surviving source owner ordinals and source image shifts.
   // -------------------------------------------------------------------------
   IndexView narrow_source_owner_indices("mundy_narrow_L2_source_owner_indices", total_narrow);
   ShiftView narrow_source_image_shifts("mundy_narrow_L2_source_image_shifts", total_narrow);

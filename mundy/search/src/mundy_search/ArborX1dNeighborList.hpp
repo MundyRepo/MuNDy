@@ -240,10 +240,10 @@ class ArborX1dNeighborList {
 };
 
 /// \class PeriodicArborX1dNeighborList
-/// \brief ArborX compressed 1D neighbor list whose stored pairs carry relative periodic image shifts.
+/// \brief ArborX compressed 1D neighbor list whose stored pairs carry per-object periodic image shifts.
 ///
 /// Targets and sources are indexed by owner ordinals, not image ordinals. Multiple stored pairs may therefore reference
-/// the same source owner with different relative shifts. Kernels reconstruct shifted source geometry from the source
+/// the same source owner with different image shifts. Kernels reconstruct shifted source geometry from the source
 /// owner fields and the per-object image shifts `target_image_shift(target_index)` and
 /// `source_image_shift(target_index, neighbor_ordinal)`; a kernel that wants the pairwise relative shift computes
 /// `source_image_shift − target_image_shift` itself.
@@ -427,7 +427,7 @@ class PeriodicArborX1dNeighborList {
     return source_owner_indices_;
   }
 
-  /// \brief Get the raw flattened relative-image-shift view.
+  /// \brief Get the raw flattened source-image-shift view.
   KOKKOS_INLINE_FUNCTION
   image_shift_view_t source_image_shifts() const noexcept {
     return source_image_shifts_;
@@ -487,7 +487,7 @@ class PeriodicArborX1dNeighborList {
 /// \brief Build traits for `ArborX1dNeighborList`: non-periodic ArborX compressed 1D storage.
 ///
 /// The build runs ArborX over non-periodic boxes, applies the builder's excluder chain, and returns compressed
-/// 1D target-to-source storage. Declaration only for this design pass; the definition runs ArborX.
+/// 1D target-to-source storage.
 /// \tparam MemorySpace Kokkos memory space for the returned list.
 template <typename MemorySpace>
 struct NeighborListBuildTraits<ArborX1dNeighborList<MemorySpace>> {
@@ -495,8 +495,8 @@ struct NeighborListBuildTraits<ArborX1dNeighborList<MemorySpace>> {
   //@{
 
   using list_type = ArborX1dNeighborList<MemorySpace>;
-  /// Internal build-buffer type: search boxes are generated from the component input and wrapped here, then fed to
-  /// the ArborX BVH/AccessTraits/candidate-factory machinery unchanged. Not a public input type.
+  /// Internal build-buffer type: the build generates search boxes from the component input and wraps them here.
+  /// Not a public input type.
   using target_input_type = impl::ArborXSearchBoxesT<MemorySpace>;
   using source_input_type = impl::ArborXSearchBoxesT<MemorySpace>;
   //@}
@@ -528,8 +528,9 @@ struct NeighborListBuildTraits<ArborX1dNeighborList<MemorySpace>> {
 /// \struct NeighborListBuildTraits<PeriodicArborX1dNeighborList<MemorySpace, ImageShiftScalar>>
 /// \brief Build traits for `PeriodicArborX1dNeighborList`: periodic ArborX compressed 1D storage.
 ///
-/// The build runs ArborX over periodic image boxes, collapses every match back to owner ordinals, and stores
-/// `source_image_shift - target_image_shift` for each retained owner pair. Declaration only for this design pass.
+/// The build runs ArborX over periodic image boxes, collapses every match back to owner ordinals, and stores the
+/// per-object source image shift for each retained owner pair.
+///
 /// \tparam MemorySpace Kokkos memory space for the returned list.
 /// \tparam ImageShiftScalar Scalar type used by image-shift vectors.
 template <typename MemorySpace, typename ImageShiftScalar>
@@ -538,8 +539,8 @@ struct NeighborListBuildTraits<PeriodicArborX1dNeighborList<MemorySpace, ImageSh
   //@{
 
   using list_type = PeriodicArborX1dNeighborList<MemorySpace, ImageShiftScalar>;
-  /// Internal build-buffer type: periodic image boxes are generated from the component input and wrapped here, then
-  /// fed to the ArborX BVH / AccessTraits / periodic candidate-factory machinery unchanged. Not a public input type.
+  /// Internal build-buffer type: the build generates periodic image boxes from the component input and wraps them
+  /// here. Not a public input type.
   using target_input_type = impl::PeriodicArborXSearchBoxesT<MemorySpace, ImageShiftScalar>;
   using source_input_type = impl::PeriodicArborXSearchBoxesT<MemorySpace, ImageShiftScalar>;
   //@}
@@ -676,7 +677,7 @@ ArborX1dNeighborList<MemorySpace> NeighborListBuildTraits<ArborX1dNeighborList<M
 ///
 /// ArborX returns image ordinals; the count callback maps each surviving hit to the target owner ordinal for the
 /// atomic count. A prefix scan converts counts to CSR offsets, and the fill callback writes into flat owner-indexed
-/// pair arrays. The resulting list stores source owner ordinals and relative image shifts.
+/// pair arrays. The resulting list stores source owner ordinals and per-object source image shifts.
 template <typename MemorySpace, typename ImageShiftScalar>
 template <typename Builder>
   requires PeriodicAABBSearchInputType<typename Builder::target_input_type> &&
@@ -748,7 +749,7 @@ NeighborListBuildTraits<PeriodicArborX1dNeighborList<MemorySpace, ImageShiftScal
         update += (i < num_target_owners) ? owner_counts(i) : size_type(0);
       });
 
-  // Pass 2: fill source owner ordinals and relative image shifts.
+  // Pass 2: fill source owner ordinals and source image shifts.
   bvh.query(exec_sp, target_boxes,
             fill_cb_t(factory, excluder, write_positions, offsets, source_owner_indices, source_image_shifts));
 
