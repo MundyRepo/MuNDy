@@ -32,6 +32,8 @@
 #include <Kokkos_Core.hpp>
 #include <stk_mesh/base/BulkData.hpp>
 #include <stk_mesh/base/Entity.hpp>
+#include <stk_mesh/base/GetNgpMesh.hpp>  // for stk::mesh::get_updated_ngp_mesh
+#include <stk_mesh/base/NgpMesh.hpp>     // for stk::mesh::NgpMesh::fast_mesh_index
 #include <stk_mesh/base/Selector.hpp>
 #include <stk_mesh/base/Types.hpp>  // for stk::mesh::EntityRank
 
@@ -41,7 +43,7 @@
 #include <mundy_geom/primitives/Point.hpp>  // for mundy::Point
 #include <mundy_geom/transform.hpp>         // for mundy::translate
 #include <mundy_math/Vector3.hpp>           // for mundy::Vector3
-#include <mundy_mesh/EntityIndices.hpp>     // for mundy::mesh::get_local_entities, get_local_entity_indices
+#include <mundy_mesh/EntityIndices.hpp>     // for mundy::mesh::get_local_entities
 #include <mundy_mesh/FieldComponent.hpp>    // for mundy::mesh::get_updated_ngp_component
 
 namespace mundy {
@@ -104,13 +106,11 @@ PeriodicImages<typename Metric::value_type, ShiftScalar, typename ExecSpace::mem
   using shift_type = mundy::Vector3<ShiftScalar>;
 
   auto entities_ngp = mundy::mesh::get_local_entities(bulk_data, rank, selector, exec);
-  auto indices_ngp = mundy::mesh::get_local_entity_indices(bulk_data, rank, selector, exec);
   entities_ngp.sync_to_device();
-  indices_ngp.sync_to_device();
   component.sync_to_device();
   Kokkos::View<stk::mesh::Entity*, memory_space> owners = entities_ngp.view_device();
-  auto indices = indices_ngp.view_device();
   auto ngp_component = mundy::mesh::get_updated_ngp_component(component);
+  auto ngp_mesh = stk::mesh::get_updated_ngp_mesh(bulk_data);
   const size_t num_owners = owners.extent(0);
 
   Kokkos::View<mundy::AABB<mscalar>*, memory_space> aabbs(  //
@@ -122,7 +122,7 @@ PeriodicImages<typename Metric::value_type, ShiftScalar, typename ExecSpace::mem
   Kokkos::parallel_for(
       "mundy_make_periodic_target_images", Kokkos::RangePolicy<ExecSpace>(exec, 0, num_owners),
       KOKKOS_LAMBDA(const size_t i) {
-        const auto aabb = ngp_component(indices(i)).template cast<mscalar>();
+        const auto aabb = ngp_component(ngp_mesh.fast_mesh_index(owners(i))).template cast<mscalar>();
         const auto k = mundy::image_index(mundy::reference_point(aabb), metric);
         const auto shift = mundy::lattice_displacement(mundy::Vector3<int>{-k[0], -k[1], -k[2]}, metric);
         aabbs(i) = mundy::translate(aabb, shift);
@@ -175,13 +175,11 @@ PeriodicImages<typename Metric::value_type, ShiftScalar, typename ExecSpace::mem
   using shift_type = mundy::Vector3<ShiftScalar>;
 
   auto entities_ngp = mundy::mesh::get_local_entities(bulk_data, rank, selector, exec);
-  auto indices_ngp = mundy::mesh::get_local_entity_indices(bulk_data, rank, selector, exec);
   entities_ngp.sync_to_device();
-  indices_ngp.sync_to_device();
   component.sync_to_device();
   Kokkos::View<stk::mesh::Entity*, memory_space> owners = entities_ngp.view_device();
-  auto indices = indices_ngp.view_device();
   auto ngp_component = mundy::mesh::get_updated_ngp_component(component);
+  auto ngp_mesh = stk::mesh::get_updated_ngp_mesh(bulk_data);
   const size_t num_owners = owners.extent(0);
   const mundy::Vector3<int> nb_bound = lattice_neighbour_bound(metric);
 
@@ -191,7 +189,7 @@ PeriodicImages<typename Metric::value_type, ShiftScalar, typename ExecSpace::mem
   Kokkos::parallel_for(
       "mundy_make_periodic_source_count", Kokkos::RangePolicy<ExecSpace>(exec, 0, num_owners),
       KOKKOS_LAMBDA(const size_t i) {
-        const auto aabb = ngp_component(indices(i)).template cast<mscalar>();
+        const auto aabb = ngp_component(ngp_mesh.fast_mesh_index(owners(i))).template cast<mscalar>();
         const auto k = mundy::image_index(mundy::reference_point(aabb), metric);
         size_t survivors = 0;
         for (int nx = -nb_bound[0]; nx <= nb_bound[0]; ++nx) {
@@ -230,7 +228,7 @@ PeriodicImages<typename Metric::value_type, ShiftScalar, typename ExecSpace::mem
   Kokkos::parallel_for(
       "mundy_make_periodic_source_fill", Kokkos::RangePolicy<ExecSpace>(exec, 0, num_owners),
       KOKKOS_LAMBDA(const size_t i) {
-        const auto aabb = ngp_component(indices(i)).template cast<mscalar>();
+        const auto aabb = ngp_component(ngp_mesh.fast_mesh_index(owners(i))).template cast<mscalar>();
         const auto k = mundy::image_index(mundy::reference_point(aabb), metric);
         size_t w = offsets(i);
         for (int nx = -nb_bound[0]; nx <= nb_bound[0]; ++nx) {

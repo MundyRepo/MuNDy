@@ -687,20 +687,6 @@ STKSearchNeighborList<MemorySpace> NeighborListBuildTraits<STKSearchNeighborList
   auto source_input = builder.source_input();
   const auto exec_sp = builder.exec_space();
 
-  // setup_excluder returns a prepared copy of the builder's excluder chain
-  // (it has already called excluder.setup(bulk_data, target_selector, source_selector)).
-  // The copy is device-capturable because all ExcluderType implementations hold
-  // only Kokkos views or plain scalars.
-  const auto excluder = builder.setup_broad_excluder(bulk_data);
-  // Narrow excluder is only set up when one was actually provided; NoExcluder
-  // compiles away entirely so this branch is zero-cost when has_narrow_phase is false.
-  [[maybe_unused]] const auto narrow_excluder = [&]() {
-    if constexpr (Builder::has_narrow_phase)
-      return builder.setup_narrow_excluder(bulk_data);
-    else
-      return typename Builder::narrow_excluder_type{};
-  }();
-
   const int my_rank = bulk_data.parallel_rank();
   const bool single_rank = bulk_data.parallel_size() == 1;
 
@@ -997,6 +983,17 @@ STKSearchNeighborList<MemorySpace> NeighborListBuildTraits<STKSearchNeighborList
   //      (NgpMesh key mismatch, ghosting failure, etc.).
   //   3. **Excluder**: the builder's prepared excluder chain (e.g., ExcludeSelfInteraction).
 
+  // Prepare the excluder chain immediately before the kernel that evaluates it, so its device geometry and
+  // NgpMesh reflect the current mesh state. setup_broad/narrow_excluder return a prepared, device-capturable
+  // copy (excluder.setup(...) already called); NoExcluder compiles away when there is no narrow phase.
+  const auto excluder = builder.setup_broad_excluder(bulk_data);
+  [[maybe_unused]] const auto narrow_excluder = [&]() {
+    if constexpr (Builder::has_narrow_phase)
+      return builder.setup_narrow_excluder(bulk_data);
+    else
+      return typename Builder::narrow_excluder_type{};
+  }();
+
   constexpr size_type k_invalid_ordinal = std::numeric_limits<size_type>::max();
   Kokkos::View<size_type*, MemorySpace> precomputed_target_ordinals("mundy_stk_nl_precomp_trg", num_results);
   Kokkos::View<size_type*, MemorySpace> precomputed_source_ordinals("mundy_stk_nl_precomp_src", num_results);
@@ -1185,13 +1182,6 @@ NeighborListBuildTraits<PeriodicSTKSearchNeighborList<MemorySpace, ImageShiftSca
   auto target_input = builder.target_input();
   auto source_input = builder.source_input();
   const auto exec_sp = builder.exec_space();
-  const auto excluder = builder.setup_broad_excluder(bulk_data);
-  [[maybe_unused]] const auto narrow_excluder = [&]() {
-    if constexpr (Builder::has_narrow_phase)
-      return builder.setup_narrow_excluder(bulk_data);
-    else
-      return typename Builder::narrow_excluder_type{};
-  }();
   const int my_rank = bulk_data.parallel_rank();
   const bool single_rank = bulk_data.parallel_size() == 1;
 
@@ -1340,6 +1330,15 @@ NeighborListBuildTraits<PeriodicSTKSearchNeighborList<MemorySpace, ImageShiftSca
   Kokkos::fence();
 
   // --- Phase G0: precompute per-result (target owner ordinal, source owner ordinal, source image shift). ---
+  // Prepare the excluder chain immediately before the kernel that evaluates it (current, post-ghost mesh state).
+  const auto excluder = builder.setup_broad_excluder(bulk_data);
+  [[maybe_unused]] const auto narrow_excluder = [&]() {
+    if constexpr (Builder::has_narrow_phase)
+      return builder.setup_narrow_excluder(bulk_data);
+    else
+      return typename Builder::narrow_excluder_type{};
+  }();
+
   constexpr size_type k_invalid_ordinal = std::numeric_limits<size_type>::max();
   Kokkos::View<size_type*, MemorySpace> pre_target("mundy_stk_per_pre_trg", num_results);
   Kokkos::View<size_type*, MemorySpace> pre_source("mundy_stk_per_pre_src", num_results);

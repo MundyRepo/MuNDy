@@ -26,6 +26,7 @@
 
 // C++ core
 #include <concepts>  // for std::same_as, std::convertible_to
+#include <utility>   // for std::declval
 
 // Trilinos
 #include <Kokkos_Core.hpp>
@@ -38,10 +39,9 @@
 
 // Mundy
 #include <mundy_geom/primitives/OBB.hpp>     // for mundy::OBB, mundy::intersects
-#include <mundy_geom/primitives/Point.hpp>   // for mundy::Point (materialized OBB centers)
-#include <mundy_math/Quaternion.hpp>         // for mundy::Quaternion (materialized OBB orientations)
-#include <mundy_math/Vector3.hpp>            // for mundy::Vector3 (materialized OBB half-extents)
-#include <mundy_mesh/EntityIndices.hpp>      // for mundy::mesh::get_local_entity_indices
+#include <mundy_geom/primitives/Point.hpp>   // for mundy::Point (OBB centers)
+#include <mundy_math/Quaternion.hpp>         // for mundy::Quaternion (OBB orientations)
+#include <mundy_math/Vector3.hpp>            // for mundy::Vector3 (OBB half-extents)
 #include <mundy_mesh/FieldComponent.hpp>     // for mundy::mesh::OBBFieldComponent, get_updated_ngp_component
 #include <mundy_search/SearchCandidate.hpp>  // for NeighborSearchCandidate, PeriodicNeighborSearchCandidate
 #include <mundy_utils/throw_assert.hpp>      // for MUNDY_THROW_ASSERT
@@ -381,15 +381,15 @@ inline void ExcludeSymmetricDuplicates::setup(const stk::mesh::BulkData& bulk_da
 /// \brief Narrow-phase excluder that keeps only candidates whose OBBs intersect.
 ///
 /// Reads each entity's OBB from an `OBBFieldComponent` (so the geometry survives mid-build ghosting). A candidate is
-/// excluded when its target and source OBBs do not intersect (15-axis separating-axis test). `setup()` must be called
-/// before use to read the OBBs over the target/source selectors.
+/// excluded when its target and source OBBs do not intersect (15-axis separating-axis test). `operator()` reads each
+/// OBB on demand from the candidate's entity; `setup()` must be called immediately before the evaluation kernel to
+/// refresh the device components and the NgpMesh those reads go through.
 ///
 /// Intended use: append as a `.narrow_phase(ExcludeNonIntersectingOBBs{...})` filter after an AABB broad phase to
-/// tighten the candidate set for oriented shapes. The OBB component must be on the same entity rank as the search
-/// input, so that enumerating its selector reproduces the search's dense ordinals.
+/// tighten the candidate set for oriented shapes. The OBB component must be defined on the searched entities' rank.
 ///
 /// \tparam Scalar   Floating-point scalar type of the OBBs (default: `double`).
-/// \tparam MemSpace Kokkos memory space in which the excluder's OBB storage lives (default: `stk::ngp::MemSpace`).
+/// \tparam MemSpace Kokkos memory space for the device components and execution (default: `stk::ngp::MemSpace`).
 template <typename Scalar = double, typename MemSpace = stk::ngp::MemSpace>
 class ExcludeNonIntersectingOBBs {
  public:
@@ -401,7 +401,7 @@ class ExcludeNonIntersectingOBBs {
   using execution_space = typename MemSpace::execution_space;
   using obb_type = OBB<Scalar>;
   using obb_component_type = mundy::mesh::OBBFieldComponent<Scalar>;
-  using obb_view_type = Kokkos::View<obb_type*, MemSpace>;
+  using ngp_obb_component_type = typename obb_component_type::ngp_component_t;
   //@}
 
   //! \name Constructors
@@ -426,11 +426,17 @@ class ExcludeNonIntersectingOBBs {
   //! \name Setup
   //@{
 
-  /// \brief Materialize each side's OBBs into device storage indexed by the search's dense ordinals.
-  void setup(const stk::mesh::BulkData& bulk_data, const stk::mesh::Selector& target_selector,
-             const stk::mesh::Selector& source_selector) {
-    materialize(bulk_data, target_obb_component_, target_selector, target_obbs_);
-    materialize(bulk_data, source_obb_component_, source_selector, source_obbs_);
+  /// \brief Refresh the device OBB components and the NgpMesh that `operator()` reads.
+  ///
+  /// Call immediately before the kernel that evaluates this excluder, so the device geometry and the
+  /// entity→`FastMeshIndex` mapping reflect the current mesh state.
+  void setup(const stk::mesh::BulkData& bulk_data, const stk::mesh::Selector& /*target_selector*/,
+             const stk::mesh::Selector& /*source_selector*/) {
+    target_obb_component_.sync_to_device();
+    source_obb_component_.sync_to_device();
+    target_obb_ngp_ = mundy::mesh::get_updated_ngp_component(target_obb_component_);
+    source_obb_ngp_ = mundy::mesh::get_updated_ngp_component(source_obb_component_);
+    ngp_mesh_ = stk::mesh::get_updated_ngp_mesh(bulk_data);
   }
   //@}
 
@@ -438,53 +444,31 @@ class ExcludeNonIntersectingOBBs {
   //@{
 
   /// \brief Exclude candidate pairs whose OBBs do not intersect.
-  /// \tparam Candidate Candidate pair type with `target_index()` and `source_index()` accessors.
+  /// \tparam Candidate Candidate pair type with `target_entity()` and `source_entity()` accessors.
   /// \param candidate [in] Candidate pair produced by a search backend.
   template <typename Candidate>
   KOKKOS_INLINE_FUNCTION bool operator()(const Candidate& candidate) const {
-    return !intersects(target_obbs_(candidate.target_index()), source_obbs_(candidate.source_index()));
+    auto t = target_obb_ngp_(ngp_mesh_.fast_mesh_index(candidate.target_entity()));
+    auto s = source_obb_ngp_(ngp_mesh_.fast_mesh_index(candidate.source_entity()));
+    return !intersects(t, s);
   }
   //@}
 
  private:
-  //! \name Internal helpers
-  //@{
-
-  /// \brief Read a component's OBBs over a selector into an owning device view indexed by dense ordinal.
-  static void materialize(const stk::mesh::BulkData& bulk_data, obb_component_type component,
-                          const stk::mesh::Selector& selector, obb_view_type& out) {
-    component.sync_to_device();
-    auto ngp_component = mundy::mesh::get_updated_ngp_component(component);
-    auto indices =
-        mundy::mesh::get_local_entity_indices(bulk_data, component.field().entity_rank(), selector, execution_space{});
-    indices.sync_to_device();
-    auto idx = indices.view_device();
-    const int n = static_cast<int>(idx.extent(0));
-    Kokkos::realloc(out, n);
-    auto out_local = out;
-    Kokkos::parallel_for(
-        "mundy_obb_excluder_materialize", Kokkos::RangePolicy<execution_space>(0, n), KOKKOS_LAMBDA(int i) {
-          const auto v = ngp_component(idx(i));
-          out_local(i) = obb_type(
-              Point<Scalar>{v.center()[0], v.center()[1], v.center()[2]},
-              Quaternion<Scalar>{v.orientation().w(), v.orientation().x(), v.orientation().y(), v.orientation().z()},
-              Vector3<Scalar>{v.half_extents()[0], v.half_extents()[1], v.half_extents()[2]});
-        });
-    Kokkos::fence();
-  }
-  //@}
 
   //! \name Internal members
   //@{
 
-  //! OBB component supplying target-entity OBBs (read over the target selector).
+  //! OBB component supplying target-entity OBBs.
   obb_component_type target_obb_component_;
-  //! OBB component supplying source-entity OBBs (read over the source selector).
+  //! OBB component supplying source-entity OBBs.
   obb_component_type source_obb_component_;
-  //! Materialized target OBBs indexed by dense target ordinal.
-  obb_view_type target_obbs_;
-  //! Materialized source OBBs indexed by dense source ordinal.
-  obb_view_type source_obbs_;
+  //! Device OBB component for target entities (refreshed in `setup()`).
+  ngp_obb_component_type target_obb_ngp_;
+  //! Device OBB component for source entities (refreshed in `setup()`).
+  ngp_obb_component_type source_obb_ngp_;
+  //! NgpMesh resolving entities to `FastMeshIndex` on device (refreshed in `setup()`).
+  stk::mesh::NgpMesh ngp_mesh_;
   //@}
 };
 

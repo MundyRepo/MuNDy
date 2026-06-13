@@ -469,6 +469,19 @@ class DeterministicFixture : public ::testing::Test {
     idsubset_boxes_ = TestInput(sel_shr, aabb_component_);
   }
 
+  // Move `ids` into part `add` (if non-null) and out of part `remove` (if non-null) via a mesh modification.
+  // This advances `synchronized_count()`, mutating the entity set WITHIN a fixed selector — the supported way an
+  // entity set changes (the selector itself, which defines the list's identity, stays fixed).
+  void move_nodes(const std::vector<int>& ids, stk::mesh::Part* add, stk::mesh::Part* remove) {
+    const stk::mesh::PartVector add_parts = add ? stk::mesh::PartVector{add} : stk::mesh::PartVector{};
+    const stk::mesh::PartVector remove_parts = remove ? stk::mesh::PartVector{remove} : stk::mesh::PartVector{};
+    bulk_->modification_begin();
+    for (int id : ids) {
+      bulk_->change_entity_parts(bulk_->get_entity(stk::topology::NODE_RANK, id), add_parts, remove_parts);
+    }
+    bulk_->modification_end();
+  }
+
   std::shared_ptr<stk::mesh::MetaData> meta_;
   std::unique_ptr<stk::mesh::BulkData> bulk_;
   stk::mesh::Part* target_part_ = nullptr;
@@ -1327,17 +1340,6 @@ TestInput make_far_target_boxes(STKDeterministicFixture& f) {
   return f.disjoint_target_boxes_;
 }
 
-// Write the disjoint-target nodes' coordinates onto the shared nodes (5,6): same coordinates, different entities.
-// RebuildOnAABBDisplacement sees no movement (target {1,2} → shared {5,6} carry identical coords);
-// RebuildOnEntityChange sees the entity set change.  Both target selectors are disjoint from the source nodes {3,4}.
-// Returns the shared input.
-TestInput make_swapped_entity_boxes(STKDeterministicFixture& f) {
-  store_aabb(*f.aabb_field_, f.nodes_[4], make_aabb(0.0, 0.0, 0.0, 2.0));     // node5 ← node1's coords
-  store_aabb(*f.aabb_field_, f.nodes_[5], make_aabb(100., 100., 100., 0.5));  // node6 ← node2's coords
-  f.aabb_component_.modify_on_host();
-  return f.idsubset_boxes_;  // shared selector = nodes {5,6}
-}
-
 // A standalone node-only mesh with `aabb` + `obb` fields and target/source parts, for the direct rebuilder tests.
 // node 1 → target part; node 2 (if present) → source part.  Geometry is written per-test via store_aabb/store_obb.
 struct GeomMesh {
@@ -1475,33 +1477,39 @@ TEST_F(STKDeterministicFixture, Rebuilder_EntityChange_NoRebuildOnUnchangedCount
 
 // Target entity count increases (2 → 4) → rebuild → pair set reflects the larger target set.
 // Both target selectors are disjoint from the source nodes {3,4}, so the source geometry is untouched.
+// The list's target selector is FIXED (target_part); the entity count grows from 2 to 4 via a mesh modification
+// (nodes {5,6} move into target_part) → rebuild.
 TEST_F(STKDeterministicFixture, Rebuilder_EntityChange_RebuildOnIncrease) {
   auto managed =
       make_neighbor_list_builder<STKList>().exec_space(TestExecSpace{}).manage(RebuildOnEntityChange<TestMemSpace>{});
 
-  // 2-entity target {1,2} vs source {3,4}: node1 overlaps node3 → {(0,0)}.
+  // 2-entity target_part {1,2} vs source {3,4}: node1 overlaps node3 → {(0,0)}.
   auto r1 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
   EXPECT_TRUE(r1.rebuilt);
   EXPECT_EQ(collect_pairs(r1.list), (PairSet{{0, 0}}));
 
-  // 4-entity target {1,2,5,6} (ords 0,1,2,3) vs source {3,4}: count 2 → 4 → rebuild.
-  // node1(0), node5(2), node6(3) each overlap node3(0); node4 overlaps nothing.
-  auto r2 = managed.update(*bulk_, overlapping_target_boxes_, disjoint_source_boxes_);
+  // Move nodes {5,6} into target_part (mesh modification): target_part now enumerates {1,2,5,6} (ords 0,1,2,3),
+  // count 2 → 4 → rebuild. node1(0), node5(2), node6(3) each overlap node3(0); node4 overlaps nothing.
+  move_nodes({5, 6}, target_part_, shared_part_);
+  auto r2 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
   EXPECT_TRUE(r2.rebuilt);
   EXPECT_EQ(collect_pairs(r2.list), (PairSet{{0, 0}, {2, 0}, {3, 0}}));
 }
 
-// Target entity count decreases (4 → 2) → rebuild → pair set reflects the smaller target set.
+// The list's target selector is FIXED (target_part); the entity count shrinks from 4 to 2 via a mesh modification
+// (nodes {5,6} leave target_part) → rebuild → pair set reflects the smaller target set.
 TEST_F(STKDeterministicFixture, Rebuilder_EntityChange_RebuildOnDecrease) {
   auto managed =
       make_neighbor_list_builder<STKList>().exec_space(TestExecSpace{}).manage(RebuildOnEntityChange<TestMemSpace>{});
 
-  // Initial build: 4-entity target {1,2,5,6} vs source {3,4}.
-  auto r1 = managed.update(*bulk_, overlapping_target_boxes_, disjoint_source_boxes_);
+  // Start with nodes {5,6} in target_part: 4-entity target {1,2,5,6} vs source {3,4}.
+  move_nodes({5, 6}, target_part_, shared_part_);
+  auto r1 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
   EXPECT_TRUE(r1.rebuilt);
   EXPECT_EQ(collect_pairs(r1.list), (PairSet{{0, 0}, {2, 0}, {3, 0}}));
 
-  // 2-entity target {1,2}: count 4 → 2 → rebuild → pairs reduced.
+  // Move {5,6} back out of target_part: count 4 → 2 → rebuild → pairs reduced.
+  move_nodes({5, 6}, shared_part_, target_part_);
   auto r2 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
   EXPECT_TRUE(r2.rebuilt);
   EXPECT_EQ(collect_pairs(r2.list), (PairSet{{0, 0}}));
@@ -1975,34 +1983,45 @@ TEST_F(STKDeterministicFixture, CombinedRebuilder_AABBSafeOnEntityRemove) {
           .exec_space(TestExecSpace{})
           .manage(RebuildOnAABBDisplacement<double, TestMemSpace>{kThreshold} | RebuildOnEntityChange<TestMemSpace>{});
 
-  // Initial build: 4-entity target {1,2,5,6} vs source {3,4}.
-  auto r1 = managed.update(*bulk_, overlapping_target_boxes_, disjoint_source_boxes_);
+  // Start with nodes {5,6} in target_part: 4-entity target {1,2,5,6} vs source {3,4}.
+  move_nodes({5, 6}, target_part_, shared_part_);
+  auto r1 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
   EXPECT_TRUE(r1.rebuilt);
   EXPECT_EQ(collect_pairs(r1.list), (PairSet{{0, 0}, {2, 0}, {3, 0}}));
 
-  // 2-entity target {1,2}: count 4→2 → AABB count guard fires → rebuild → 1 pair.
+  // Remove {5,6} from target_part (mesh modification → synchronized_count advances): count 4→2. Both the
+  // displacement rebuilder (conservatively, on the mesh mod) and EntityChange fire; the rebuilt list has 1 pair
+  // and the displacement check never reads stale geometry for the removed nodes.
+  move_nodes({5, 6}, shared_part_, target_part_);
   auto r2 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
   EXPECT_TRUE(r2.rebuilt);
   EXPECT_EQ(collect_pairs(r2.list), (PairSet{{0, 0}}));
 }
 
-// Entity swap: one entity removed and one added at the same count (2→2).  AABB sees
-// identical box coordinates (displacement 0) and returns false.  EntityChange detects
-// that the entity identity changed and returns true, triggering the rebuild.
+// Entity swap WITHIN the fixed target selector: nodes {1,2} leave target_part and nodes {5,6} enter it, carrying
+// the same coordinates — same count (2→2), same coordinates, different entity identities.  Because a swap is a mesh
+// modification, synchronized_count() advances, so the displacement rebuilder (prior_) conservatively rebuilds, and
+// EntityChange (next_) independently detects the identity change.  Both fire.  (Entity-aligned displacement is
+// defined only on a stable entity set; any entity-set change rides in on a mesh modification, which it treats as
+// rebuild-worthy — so the displacement rebuilder no longer "ignores" identity swaps.)
 TEST_F(STKDeterministicFixture, CombinedRebuilder_EntityChangeFiresOnEntitySwap) {
   constexpr float kThreshold = 0.3f;
   auto chain = RebuildOnAABBDisplacement<double, TestMemSpace>{kThreshold} | RebuildOnEntityChange<TestMemSpace>{};
 
-  // Snapshot the initial state.
+  // Snapshot the initial state (target_part = {1,2}).
   chain.snapshot(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
 
-  // Swapped: same box positions as disjoint_target_boxes_, different entities.
-  auto swapped = make_swapped_entity_boxes(*this);
+  // node5 ← node1's coords, node6 ← node2's coords; then swap {1,2} out of target_part and {5,6} in.
+  store_aabb(*aabb_field_, nodes_[4], make_aabb(0.0, 0.0, 0.0, 2.0));
+  store_aabb(*aabb_field_, nodes_[5], make_aabb(100., 100., 100., 0.5));
+  aabb_component_.modify_on_host();
+  move_nodes({1, 2}, shared_part_, target_part_);
+  move_nodes({5, 6}, target_part_, shared_part_);
 
-  // AABB (prior_) sees unchanged positions → returns false.
-  EXPECT_FALSE(chain.prior().needs_rebuild(*bulk_, swapped, disjoint_source_boxes_));
-  // Full chain: EntityChange (next_) detects the entity identity change → returns true.
-  EXPECT_TRUE(chain.needs_rebuild(*bulk_, swapped, disjoint_source_boxes_));
+  // A mesh modification advances synchronized_count(), so displacement (prior_) conservatively rebuilds...
+  EXPECT_TRUE(chain.prior().needs_rebuild(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_));
+  // ...and the full chain rebuilds (EntityChange also detects the entity identity change).
+  EXPECT_TRUE(chain.needs_rebuild(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_));
 }
 
 // =============================================================================
@@ -2037,15 +2056,15 @@ TEST_F(STKDeterministicFixture, EntityChange_EmptyTargets_DoesNotSignalChange) {
   EXPECT_FALSE(rebuilder.needs_rebuild(*bulk_, empty, empty));
 }
 
-// Snapshot with real entities, then present empty targets → treated as a count
-// change (2→0) and correctly signals a rebuild (the entity sequence did change).
+// Snapshot with real entities, then empty the SAME (fixed) target selector via a mesh modification (its nodes leave
+// target_part) → count drops 2→0 → rebuild (the entity sequence did change).
 TEST_F(STKDeterministicFixture, EntityChange_TransitionToEmpty_SignalsRebuild) {
   RebuildOnEntityChange<TestMemSpace> rebuilder;
-  auto empty = make_empty_boxes(*this);
 
   rebuilder.snapshot(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
-  // Count drops from 2 to 0 → change detected.
-  EXPECT_TRUE(rebuilder.needs_rebuild(*bulk_, empty, disjoint_source_boxes_));
+  // Remove nodes {1,2} from target_part: the target selector now enumerates 0 entities → count 2 → 0.
+  move_nodes({1, 2}, nullptr, target_part_);
+  EXPECT_TRUE(rebuilder.needs_rebuild(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_));
 }
 
 // --- RebuildOnAABBDisplacement with zero targets/sources ---

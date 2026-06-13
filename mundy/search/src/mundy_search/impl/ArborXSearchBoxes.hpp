@@ -37,13 +37,15 @@
 #include <Kokkos_Core.hpp>
 #include <stk_mesh/base/BulkData.hpp>
 #include <stk_mesh/base/Entity.hpp>
+#include <stk_mesh/base/GetNgpMesh.hpp>  // for stk::mesh::get_updated_ngp_mesh
+#include <stk_mesh/base/NgpMesh.hpp>     // for stk::mesh::NgpMesh::fast_mesh_index
 #include <stk_mesh/base/Selector.hpp>
 #include <stk_mesh/base/Types.hpp>  // for stk::mesh::EntityRank
 
 // Mundy
 #include <mundy_geom/primitives/AABB.hpp>            // for mundy::AABB
 #include <mundy_geom/primitives/Point.hpp>           // for mundy::Point (ArborX box corners)
-#include <mundy_mesh/EntityIndices.hpp>              // for mundy::mesh::get_local_entities, get_local_entity_indices
+#include <mundy_mesh/EntityIndices.hpp>              // for mundy::mesh::get_local_entities
 #include <mundy_mesh/FieldComponent.hpp>             // for mundy::mesh::get_updated_ngp_component
 #include <mundy_search/impl/PeriodicImageBoxes.hpp>  // for impl::PeriodicImages
 #include <mundy_search/impl/SearchBoxes.hpp>         // for impl::SearchBoxes, impl::PeriodicImageIdentity
@@ -88,23 +90,23 @@ make_arborx_search_boxes(const stk::mesh::BulkData& bulk_data, const ExecSpace& 
                          const stk::mesh::Selector& selector, Component& component) {
   using memory_space = typename ExecSpace::memory_space;
 
-  // Enumerate entities + local indices in a common, deterministic order; bring the (caller-populated) geometry
-  // field to device and read it through the NGP component.
+  // Enumerate entities in a deterministic order; bring the (caller-populated) geometry field to device. Each box is
+  // read through the NGP component, resolving the entity to its FastMeshIndex on device (no separate index pass).
   auto entities_ngp = mundy::mesh::get_local_entities(bulk_data, rank, selector, exec);
-  auto indices_ngp = mundy::mesh::get_local_entity_indices(bulk_data, rank, selector, exec);
   entities_ngp.sync_to_device();
-  indices_ngp.sync_to_device();
   component.sync_to_device();
   Kokkos::View<stk::mesh::Entity*, memory_space> entities = entities_ngp.view_device();
-  auto indices = indices_ngp.view_device();
   auto ngp_component = mundy::mesh::get_updated_ngp_component(component);
+  auto ngp_mesh = stk::mesh::get_updated_ngp_mesh(bulk_data);
   const size_t num_entities = entities.extent(0);
 
   Kokkos::View<ArborX::Box*, memory_space> boxes(
       Kokkos::view_alloc(Kokkos::WithoutInitializing, "mundy_arborx_search_boxes"), num_entities);
   Kokkos::parallel_for(
       "mundy_make_arborx_search_boxes", Kokkos::RangePolicy<ExecSpace>(exec, 0, num_entities),
-      KOKKOS_LAMBDA(const size_t i) { boxes(i) = pack_arborx_box(ngp_component(indices(i))); });
+      KOKKOS_LAMBDA(const size_t i) {
+        boxes(i) = pack_arborx_box(ngp_component(ngp_mesh.fast_mesh_index(entities(i))));
+      });
 
   return std::make_pair(entities, boxes);
 }
