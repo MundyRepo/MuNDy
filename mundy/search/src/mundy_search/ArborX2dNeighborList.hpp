@@ -49,6 +49,7 @@
 #include <mundy_search/impl/ArborXPeriodicBuildCallbacks.hpp>  // for ArborXPeriodicCountCallback, ArborXPeriodic2dFillCallback
 #include <mundy_search/impl/ArborXSearchBoxes.hpp>  // for impl::ArborXSearchBoxesT, impl::PeriodicArborXSearchBoxesT
 #include <mundy_search/impl/NarrowPhaseFilter.hpp>  // for impl::apply_narrow_phase
+#include <mundy_utils/host_ptr.hpp>                 // for host_ptr
 #include <mundy_utils/throw_assert.hpp>             // for MUNDY_THROW_ASSERT, MUNDY_THROW_REQUIRE
 
 namespace mundy {
@@ -135,12 +136,12 @@ class ArborX2dNeighborList {
 
   /// \brief Get the selector defining the target chunk.
   const stk::mesh::Selector& target_selector() const noexcept {
-    return target_selector_;
+    return *target_selector_;
   }
 
   /// \brief Get the selector defining the source chunk.
   const stk::mesh::Selector& source_selector() const noexcept {
-    return source_selector_;
+    return *source_selector_;
   }
 
   /// \brief Get the total number of stored neighbor pairs.
@@ -230,9 +231,9 @@ class ArborX2dNeighborList {
   //@{
 
   //! Selector defining the target chunk.
-  stk::mesh::Selector target_selector_;
+  host_ptr<stk::mesh::Selector> target_selector_;
   //! Selector defining the source chunk.
-  stk::mesh::Selector source_selector_;
+  host_ptr<stk::mesh::Selector> source_selector_;
   //! Target entities indexed by dense target ordinal.
   entity_view_t target_entities_;
   //! Source entities indexed by dense source ordinal.
@@ -341,12 +342,12 @@ class PeriodicArborX2dNeighborList {
 
   /// \brief Get the selector defining the target owner chunk.
   const stk::mesh::Selector& target_selector() const noexcept {
-    return target_selector_;
+    return *target_selector_;
   }
 
   /// \brief Get the selector defining the source owner chunk.
   const stk::mesh::Selector& source_selector() const noexcept {
-    return source_selector_;
+    return *source_selector_;
   }
 
   /// \brief Get the total number of stored periodic neighbor pairs.
@@ -475,9 +476,9 @@ class PeriodicArborX2dNeighborList {
   //@{
 
   //! Selector defining the target owner chunk.
-  stk::mesh::Selector target_selector_;
+  host_ptr<stk::mesh::Selector> target_selector_;
   //! Selector defining the source owner chunk.
-  stk::mesh::Selector source_selector_;
+  host_ptr<stk::mesh::Selector> source_selector_;
   //! Target owner entities indexed by dense target owner ordinal.
   entity_view_t target_entities_;
   //! Source owner entities indexed by dense source owner ordinal.

@@ -34,10 +34,10 @@
 #include <Kokkos_Core.hpp>
 #include <stk_mesh/base/BulkData.hpp>
 #include <stk_mesh/base/Entity.hpp>
-#include <stk_mesh/base/MetaData.hpp>  // for stk::mesh::MetaData (late-field scoping)
-#include <stk_mesh/base/Selector.hpp>  // for stk::mesh::Selector (fixed-selector enforcement)
+#include <stk_mesh/base/GetEntities.hpp>  // for stk::mesh::count_selected_entities
+#include <stk_mesh/base/MetaData.hpp>     // for stk::mesh::MetaData
+#include <stk_mesh/base/Selector.hpp>     // for stk::mesh::Selector
 #include <stk_util/ngp/NgpSpaces.hpp>
-#include <stk_util/util/ReportHandler.hpp>  // for STK_ThrowAssertMsg
 
 // Mundy
 #include <mundy_geom/periodicity.hpp>     // for FreeSpaceMetric
@@ -51,7 +51,8 @@
 #include <mundy_mesh/impl/DeclareUniqueFieldLike.hpp>  // for mundy::mesh::impl::declare_unique_field_like
 #include <mundy_search/NeighborListBuildTraits.hpp>    // for AABBSearchInputTypeFor
 #include <mundy_search/SearchInput.hpp>                // for SearchInput
-#include <mundy_utils/host_ptr.hpp>                    // for mundy::host_ptr
+#include <mundy_utils/host_ptr.hpp>                    // for host_ptr
+#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
 
 namespace mundy {
 
@@ -97,7 +98,7 @@ class ScopedLateFields {
 /// relies on this to compare snapshots soundly, so misuse is caught here (compiles out in release builds).
 inline void assert_fixed_selectors(const stk::mesh::Selector& target, const stk::mesh::Selector& snapshot_target,
                                    const stk::mesh::Selector& source, const stk::mesh::Selector& snapshot_source) {
-  STK_ThrowAssertMsg(target == snapshot_target && source == snapshot_source,
+  MUNDY_THROW_ASSERT(target == snapshot_target && source == snapshot_source, std::runtime_error,
                      "NeighborListRebuilder was queried with a different selector than it snapshotted. A neighbor "
                      "list's selector defines its identity; changing it requires building a new list (entities may "
                      "change within the selector via mesh modification, but the selector itself must stay fixed).");
@@ -360,8 +361,8 @@ class RebuildOnEntityChange {
   void snapshot(const stk::mesh::BulkData& bulk, const TargetInput& targets, const SourceInput& sources) {
     take_snapshot(current_entities(bulk, targets), snapshot_target_);
     take_snapshot(current_entities(bulk, sources), snapshot_source_);
-    snapshot_target_selector_ = mundy::host_ptr<stk::mesh::Selector>(targets.selector());
-    snapshot_source_selector_ = mundy::host_ptr<stk::mesh::Selector>(sources.selector());
+    snapshot_target_selector_ = host_ptr<stk::mesh::Selector>(targets.selector());
+    snapshot_source_selector_ = host_ptr<stk::mesh::Selector>(sources.selector());
     snapshot_sync_count_ = bulk.synchronized_count();
     has_snapshot_ = true;
   }
@@ -432,8 +433,8 @@ class RebuildOnEntityChange {
   //! `BulkData::synchronized_count()` at the last snapshot; an unchanged count means the entity sequence is unchanged.
   size_t snapshot_sync_count_ = 0;
   //! Selectors captured at the last snapshot; `needs_rebuild` must be queried with these same selectors (fixed-list).
-  mundy::host_ptr<stk::mesh::Selector> snapshot_target_selector_;
-  mundy::host_ptr<stk::mesh::Selector> snapshot_source_selector_;
+  host_ptr<stk::mesh::Selector> snapshot_target_selector_;
+  host_ptr<stk::mesh::Selector> snapshot_source_selector_;
   //! Device-resident snapshot of the target entity sequence.
   Kokkos::View<stk::mesh::Entity*, memory_space> snapshot_target_{"mundy_rebuilder_snap_tgt_ent", 0};
   //! Device-resident snapshot of the source entity sequence.
@@ -545,24 +546,20 @@ class RebuildOnAABBDisplacement {
     }
 
     using TComp = std::remove_cvref_t<decltype(targets.component())>;
+    using SComp = std::remove_cvref_t<decltype(sources.component())>;
 
-    auto target_live = targets.component();
-    target_live.sync_to_device();
-    TComp target_scratch(*scratch_target_field_);
-    target_scratch.sync_to_device();
-    auto ngp_target_live = mundy::mesh::get_updated_ngp_component(target_live);
-    auto ngp_target_scratch = mundy::mesh::get_updated_ngp_component(target_scratch);
-
-    // Empty targets or sources → the list is trivially empty regardless of geometry; no rebuild needed.
-    auto target_indices =
-        mundy::mesh::get_local_entity_indices(bulk, targets.rank(), targets.selector(), execution_space{});
-    auto source_indices =
-        mundy::mesh::get_local_entity_indices(bulk, sources.rank(), sources.selector(), execution_space{});
-    target_indices.sync_to_device();
-    source_indices.sync_to_device();
-    if (target_indices.view_device().extent(0) == 0 || source_indices.view_device().extent(0) == 0) {
+    // Empty targets or sources → the list is trivially empty, so never signal a (spurious) rebuild. A cheap bucket
+    // count (no enumerated index views): the per-side displacement checks below cannot see cross-side emptiness — the
+    // union hides a zero side, and the OR short-circuits on the target — so the whole-list-empty test must happen here.
+    if (stk::mesh::count_selected_entities(targets.selector(), bulk.buckets(targets.rank())) == 0 ||
+        stk::mesh::count_selected_entities(sources.selector(), bulk.buckets(sources.rank())) == 0) {
       return false;
     }
+
+    auto target_live = targets.component();
+    TComp target_scratch(*scratch_target_field_);
+    auto ngp_target_live = mundy::mesh::get_updated_ngp_component(target_live);
+    auto ngp_target_scratch = mundy::mesh::get_updated_ngp_component(target_scratch);
 
     if (fields_coincide_ && target_max_displacement_ == source_max_displacement_) {
       // Same field AND same threshold → check once over the UNION of the two selectors. The union dedups the
@@ -570,21 +567,21 @@ class RebuildOnAABBDisplacement {
       // "escaped over targets OR over sources".
       auto union_indices = mundy::mesh::get_local_entity_indices(
           bulk, targets.rank(), targets.selector() | sources.selector(), execution_space{});
-      union_indices.sync_to_device();
-      return corners_moved(ngp_target_live, ngp_target_scratch, union_indices.view_device(), target_max_displacement_);
+      return corners_moved(ngp_target_live, ngp_target_scratch, union_indices, target_max_displacement_);
+    } else {
+      // Two checks (different fields, or the same field with per-side thresholds). When the fields coincide the source
+      // reads the shared target scratch field — the union snapshot populated it over both selectors.
+      auto target_indices =
+          mundy::mesh::get_local_entity_indices(bulk, targets.rank(), targets.selector(), execution_space{});
+      auto source_indices =
+          mundy::mesh::get_local_entity_indices(bulk, sources.rank(), sources.selector(), execution_space{});
+      auto source_live = sources.component();
+      SComp source_scratch(*scratch_source_field_);
+      auto ngp_source_live = mundy::mesh::get_updated_ngp_component(source_live);
+      auto ngp_source_scratch = mundy::mesh::get_updated_ngp_component(source_scratch);
+      return corners_moved(ngp_target_live, ngp_target_scratch, target_indices, target_max_displacement_) ||
+             corners_moved(ngp_source_live, ngp_source_scratch, source_indices, source_max_displacement_);
     }
-
-    // Two checks (different fields, or the same field with per-side thresholds). When the fields coincide the source
-    // reads the shared target scratch field — the union snapshot populated it over both selectors.
-    using SComp = std::remove_cvref_t<decltype(sources.component())>;
-    auto source_live = sources.component();
-    source_live.sync_to_device();
-    SComp source_scratch(*scratch_source_field_);
-    source_scratch.sync_to_device();
-    auto ngp_source_live = mundy::mesh::get_updated_ngp_component(source_live);
-    auto ngp_source_scratch = mundy::mesh::get_updated_ngp_component(source_scratch);
-    return corners_moved(ngp_target_live, ngp_target_scratch, target_indices.view_device(), target_max_displacement_) ||
-           corners_moved(ngp_source_live, ngp_source_scratch, source_indices.view_device(), source_max_displacement_);
   }
 
   /// \brief Snapshot the current AABB corners into a companion scratch field (declared on first use).
@@ -603,8 +600,8 @@ class RebuildOnAABBDisplacement {
       mundy::mesh::field_copy<scalar_type>(target_live.field(), *scratch_target_field_, targets.selector(), exec);
       mundy::mesh::field_copy<scalar_type>(source_live.field(), *scratch_source_field_, sources.selector(), exec);
     }
-    snapshot_target_selector_ = mundy::host_ptr<stk::mesh::Selector>(targets.selector());
-    snapshot_source_selector_ = mundy::host_ptr<stk::mesh::Selector>(sources.selector());
+    snapshot_target_selector_ = host_ptr<stk::mesh::Selector>(targets.selector());
+    snapshot_source_selector_ = host_ptr<stk::mesh::Selector>(sources.selector());
     snapshot_sync_count_ = bulk.synchronized_count();
     has_snapshot_ = true;
   }
@@ -662,19 +659,22 @@ class RebuildOnAABBDisplacement {
   /// metrics the minimum-image displacement is used, so a corner that wraps across the cell boundary is not counted
   /// as having moved by a full cell length.
   template <typename NgpComponent, typename IndexView>
-  bool corners_moved(const NgpComponent& ngp_live, const NgpComponent& ngp_scratch, const IndexView& indices,
-                     scalar_type threshold) const {
+  bool corners_moved(NgpComponent ngp_live, NgpComponent ngp_scratch, IndexView indices, scalar_type threshold) const {
     int n = static_cast<int>(indices.extent(0));
     if (n == 0) {
       return false;
     }
+    ngp_live.sync_to_device();
+    ngp_scratch.sync_to_device();
+    indices.sync_to_device();
+    auto d_indices = indices.view_device();
     auto met = metric_;  // device-capturable by value; all concrete metrics are trivially copyable
     int any_moved = 0;
     Kokkos::parallel_reduce(
         "mundy_aabb_displacement_check", Kokkos::RangePolicy<execution_space>(0, n),
         KOKKOS_LAMBDA(int i, int& lmax) {
-          const auto aabb = ngp_live(indices(i));
-          const auto aabb_old = ngp_scratch(indices(i));
+          const auto aabb = ngp_live(d_indices(i));
+          const auto aabb_old = ngp_scratch(d_indices(i));
           const Point<scalar_type> old_min{aabb_old.min_corner()[0], aabb_old.min_corner()[1], aabb_old.min_corner()[2]};
           const Point<scalar_type> new_min{aabb.min_corner()[0], aabb.min_corner()[1], aabb.min_corner()[2]};
           const Point<scalar_type> old_max{aabb_old.max_corner()[0], aabb_old.max_corner()[1], aabb_old.max_corner()[2]};
@@ -707,8 +707,8 @@ class RebuildOnAABBDisplacement {
   //! `BulkData::synchronized_count()` at the last snapshot; a changed count invalidates the entity-aligned compare.
   size_t snapshot_sync_count_ = 0;
   //! Selectors captured at the last snapshot; `needs_rebuild` must be queried with these same selectors (fixed-list).
-  mundy::host_ptr<stk::mesh::Selector> snapshot_target_selector_;
-  mundy::host_ptr<stk::mesh::Selector> snapshot_source_selector_;
+  host_ptr<stk::mesh::Selector> snapshot_target_selector_;
+  host_ptr<stk::mesh::Selector> snapshot_source_selector_;
   //! Whether the target and source components read the same field → one shared scratch field, union snapshot/check.
   bool fields_coincide_ = false;
   //! Unique scratch field holding the target corners at the last snapshot (declared on first snapshot).
@@ -878,10 +878,16 @@ class RebuildOnOBBDisplacement {
     // `synchronized_count()`; a changed count therefore invalidates the entity-aligned comparison, so rebuild.
     if (bulk.synchronized_count() != snapshot_sync_count_) return true;
 
+    // Empty targets or sources → the list is trivially empty, so never signal a (spurious) rebuild. A cheap bucket
+    // count (no enumerated index views): the per-side checks below cannot see cross-side emptiness — the union hides a
+    // zero side, and the OR short-circuits on the target — so the whole-list-empty test must happen here.
+    if (stk::mesh::count_selected_entities(targets.selector(), bulk.buckets(targets.rank())) == 0 ||
+        stk::mesh::count_selected_entities(sources.selector(), bulk.buckets(sources.rank())) == 0) {
+      return false;
+    }
+
     auto target_live = target_obb_component_;
-    target_live.sync_to_device();
     obb_component_type target_scratch(*scratch_target_field_);
-    target_scratch.sync_to_device();
     auto ngp_target_live = mundy::mesh::get_updated_ngp_component(target_live);
     auto ngp_target_scratch = mundy::mesh::get_updated_ngp_component(target_scratch);
 
@@ -891,28 +897,20 @@ class RebuildOnOBBDisplacement {
       // "escaped over targets OR over sources".
       auto union_indices = mundy::mesh::get_local_entity_indices(
           bulk, targets.rank(), targets.selector() | sources.selector(), execution_space{});
-      union_indices.sync_to_device();
-      return obbs_escaped(ngp_target_live, ngp_target_scratch, union_indices.view_device(), target_max_displacement_);
+      return obbs_escaped(ngp_target_live, ngp_target_scratch, union_indices, target_max_displacement_);
+    } else {
+      // Two checks (different fields, or the same field with per-side thresholds). When the fields coincide the source
+      // reads the shared target scratch field — the union snapshot populated it over both selectors.
+      auto target_indices =
+          mundy::mesh::get_local_entity_indices(bulk, targets.rank(), targets.selector(), execution_space{});
+      auto source_indices =
+          mundy::mesh::get_local_entity_indices(bulk, sources.rank(), sources.selector(), execution_space{});
+      obb_component_type source_scratch(*scratch_source_field_);
+      auto ngp_source_live = mundy::mesh::get_updated_ngp_component(source_obb_component_);
+      auto ngp_source_scratch = mundy::mesh::get_updated_ngp_component(source_scratch);
+      return obbs_escaped(ngp_target_live, ngp_target_scratch, target_indices, target_max_displacement_) ||
+             obbs_escaped(ngp_source_live, ngp_source_scratch, source_indices, source_max_displacement_);
     }
-
-    // Two checks (different fields, or the same field with per-side thresholds). When the fields coincide the source
-    // reads the shared target scratch field — the union snapshot populated it over both selectors.
-    auto source_live = source_obb_component_;
-    source_live.sync_to_device();
-    obb_component_type source_scratch(*scratch_source_field_);
-    source_scratch.sync_to_device();
-    auto ngp_source_live = mundy::mesh::get_updated_ngp_component(source_live);
-    auto ngp_source_scratch = mundy::mesh::get_updated_ngp_component(source_scratch);
-
-    auto target_indices =
-        mundy::mesh::get_local_entity_indices(bulk, targets.rank(), targets.selector(), execution_space{});
-    auto source_indices =
-        mundy::mesh::get_local_entity_indices(bulk, sources.rank(), sources.selector(), execution_space{});
-    target_indices.sync_to_device();
-    source_indices.sync_to_device();
-
-    return obbs_escaped(ngp_target_live, ngp_target_scratch, target_indices.view_device(), target_max_displacement_) ||
-           obbs_escaped(ngp_source_live, ngp_source_scratch, source_indices.view_device(), source_max_displacement_);
   }
 
   /// \brief Snapshot the current OBBs into the per-side scratch fields.
@@ -930,8 +928,8 @@ class RebuildOnOBBDisplacement {
       mundy::mesh::field_copy<scalar_type>(source_obb_component_.field(), *scratch_source_field_, sources.selector(),
                                            exec);
     }
-    snapshot_target_selector_ = mundy::host_ptr<stk::mesh::Selector>(targets.selector());
-    snapshot_source_selector_ = mundy::host_ptr<stk::mesh::Selector>(sources.selector());
+    snapshot_target_selector_ = host_ptr<stk::mesh::Selector>(targets.selector());
+    snapshot_source_selector_ = host_ptr<stk::mesh::Selector>(sources.selector());
     snapshot_sync_count_ = bulk.synchronized_count();
     has_snapshot_ = true;
   }
@@ -962,17 +960,20 @@ class RebuildOnOBBDisplacement {
   ///   for axis k:  |T[k]| + sum_j |R_rel(k,j)| * h_new[j]  <=  h_old[k] + threshold
   /// where T = R_old^T * sep(c_old, c_new) and R_rel = R_old^T * R_new.
   template <typename NgpComponent, typename IndexView>
-  bool obbs_escaped(const NgpComponent& ngp_live, const NgpComponent& ngp_scratch, const IndexView& indices,
-                    Scalar threshold) const {
+  bool obbs_escaped(NgpComponent ngp_live, NgpComponent ngp_scratch, IndexView indices, Scalar threshold) const {
     const int n = static_cast<int>(indices.extent(0));
     if (n == 0) return false;
+    ngp_live.sync_to_device();
+    ngp_scratch.sync_to_device();
+    indices.sync_to_device();
+    auto d_indices = indices.view_device();
     auto met = metric_;
     int any_escaped = 0;
     Kokkos::parallel_reduce(
         "mundy_obb_displacement_check", Kokkos::RangePolicy<execution_space>(0, n),
         KOKKOS_LAMBDA(int i, int& lmax) {
-          const auto obb_old = ngp_scratch(indices(i));
-          const auto obb_new = ngp_live(indices(i));
+          const auto obb_old = ngp_scratch(d_indices(i));
+          const auto obb_new = ngp_live(d_indices(i));
 
           // Center displacement in world frame, minimum-image for periodic metrics.
           const auto T_world = met.sep(obb_old.center(), obb_new.center());
@@ -1021,8 +1022,8 @@ class RebuildOnOBBDisplacement {
   //! `BulkData::synchronized_count()` at the last snapshot; a changed count invalidates the entity-aligned compare.
   size_t snapshot_sync_count_ = 0;
   //! Selectors captured at the last snapshot; `needs_rebuild` must be queried with these same selectors (fixed-list).
-  mundy::host_ptr<stk::mesh::Selector> snapshot_target_selector_;
-  mundy::host_ptr<stk::mesh::Selector> snapshot_source_selector_;
+  host_ptr<stk::mesh::Selector> snapshot_target_selector_;
+  host_ptr<stk::mesh::Selector> snapshot_source_selector_;
   //! Whether the target and source components read the same field → one shared scratch field, union snapshot/check.
   bool fields_coincide_ = false;
   //! Unique scratch field holding the target OBBs at the last snapshot (declared at construction).

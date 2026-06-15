@@ -72,10 +72,12 @@ class host_ptr {
   //@{
 
   /// \brief Construct an empty handle that owns and points to nothing.
-  host_ptr() = default;
+  ///
+  /// Device-callable so a `host_ptr` member can sit inside a `KOKKOS_DEFAULTED`-constructible, device-capturable class.
+  KOKKOS_DEFAULTED_FUNCTION host_ptr() = default;
 
   /// \brief Construct an empty handle from `nullptr` (mirrors `std::shared_ptr`).
-  host_ptr(std::nullptr_t) noexcept {  // NOLINT(runtime/explicit) — implicit, like std::shared_ptr
+  KOKKOS_FUNCTION host_ptr(std::nullptr_t) noexcept {  // NOLINT(runtime/explicit) — implicit, like std::shared_ptr
   }
 
   /// \brief Take ownership of `ptr`, deleting it with `delete` when the last reference drops.

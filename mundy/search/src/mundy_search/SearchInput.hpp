@@ -27,9 +27,10 @@
 /// A search input binds a `stk::mesh::Selector` to a geometry-yielding component (e.g. an
 /// `OBBFieldComponent` / `AABBFieldComponent`). The pair `(selector, component)` encodes, in one
 /// object: which entities are searched (selector + rank), their dense ordering, and the rule for
-/// reading each entity's geometry (the component). This replaces the older "selector + entity view +
-/// box view" triple, which forced the caller to keep `box[i] == compute_box(entity[i])` consistent by
-/// hand and could not supply geometry for entities ghosted mid-build.
+/// reading each entity's geometry (the component).
+///
+/// In each case, we treat the selector and component as a fixed "identity" for the input whose
+/// underlying entity set is allowed to change over time.
 
 // C++ core
 #include <concepts>  // for std::convertible_to
@@ -55,6 +56,7 @@ concept HasFieldEntityRank = requires(const Component& component) {
 
 /// \class SearchInput
 /// \brief A selector paired with a geometry-yielding component for a non-periodic neighbor-list build.
+///
 /// \tparam Component A component whose `operator()` yields a geom primitive (AABB, OBB, Sphere, ...).
 template <typename Component>
 class SearchInput {

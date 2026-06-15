@@ -44,6 +44,7 @@ namespace search {
 /// Candidate objects are produced during search construction and are not final neighbor-list storage. They expose owner
 /// accessors as aliases of the normal target/source accessors so excluders can use one owner-based vocabulary for both
 /// periodic and non-periodic search.
+///
 /// \tparam SizeType Integral type used for local target/source ordinals.
 template <typename SizeType = size_t>
 class NeighborSearchCandidate {
@@ -155,6 +156,7 @@ class NeighborSearchCandidate {
 /// shifts (rather than only their difference) lets an excluder place either object in any frame it needs: the relative
 /// offset for a pairwise test, or each object's absolute image for a lab-frame test. Images are not entities; excluders
 /// reason in terms of owner identity plus these shifts.
+///
 /// \tparam ImageShiftType Vector type used for image shifts.
 /// \tparam SizeType Integral type used for local owner ordinals.
 template <typename ImageShiftType, typename SizeType = size_t>

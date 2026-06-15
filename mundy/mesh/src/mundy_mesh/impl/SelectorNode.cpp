@@ -24,6 +24,7 @@
 // Mundy
 #include <mundy_mesh/impl/SelectorEval.hpp>
 #include <mundy_mesh/impl/SelectorNode.hpp>
+#include <mundy_utils/throw_assert.hpp>
 
 namespace mundy {
 
@@ -48,7 +49,7 @@ int SelectorNode::get_next_node_index() {
 }
 
 stk::mesh::Selector SelectorNode::get_result() const {
-  STK_ThrowAssertMsg(has_been_evaluated_, "Requesting node result before it has been computed.");
+  MUNDY_THROW_ASSERT(has_been_evaluated_, std::logic_error, "Requesting node result before it has been computed.");
   return owner_ptr_->get_result_buffer_value(result_idx_);
 }
 
@@ -83,7 +84,7 @@ void SelectorNode::eval() {
       break;
     }
     default: {
-      STK_ThrowErrorMsg("Unknown OpCode (" + std::to_string(opcode_) + ")");
+      MUNDY_THROW_ASSERT(false, std::runtime_error, "Unknown OpCode (" + std::to_string(opcode_) + ")");
     }
   }
 

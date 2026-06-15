@@ -33,6 +33,7 @@
 
 // Mundy
 #include <mundy_math/Vector3.hpp>        // for mundy::Vector3
+#include <mundy_utils/host_ptr.hpp>      // for host_ptr
 #include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
 
 namespace mundy {
@@ -130,13 +131,14 @@ class SearchBoxes {
   //@{
 
   /// \brief Default constructor.
-  SearchBoxes() = default;
+  KOKKOS_DEFAULTED_FUNCTION SearchBoxes() = default;
 
-  /// \brief Default copy and move constructors/operators.
-  SearchBoxes(const SearchBoxes&) = default;
-  SearchBoxes(SearchBoxes&&) = default;
-  SearchBoxes& operator=(const SearchBoxes&) = default;
-  SearchBoxes& operator=(SearchBoxes&&) = default;
+  /// \brief Default copy and move constructors/operators. Device-copyable: the box/identity views and the `host_ptr`
+  /// selector are all trivially carried by value into a kernel (the selector is a cheap host-resident handle).
+  KOKKOS_DEFAULTED_FUNCTION SearchBoxes(const SearchBoxes&) = default;
+  KOKKOS_DEFAULTED_FUNCTION SearchBoxes(SearchBoxes&&) = default;
+  KOKKOS_DEFAULTED_FUNCTION SearchBoxes& operator=(const SearchBoxes&) = default;
+  KOKKOS_DEFAULTED_FUNCTION SearchBoxes& operator=(SearchBoxes&&) = default;
 
   /// \brief Construct from a selector and matching box and identity views.
   /// \param selector [in] Selector used to populate this box set.
@@ -154,7 +156,7 @@ class SearchBoxes {
 
   /// \brief Get the selector used to populate this box set.
   const stk::mesh::Selector& selector() const noexcept {
-    return selector_;
+    return *selector_;
   }
 
   /// \brief Get the number of search elements.
@@ -196,8 +198,8 @@ class SearchBoxes {
   //! \name Internal members
   //@{
 
-  //! Selector used to populate this box set.
-  stk::mesh::Selector selector_;
+  //! Selector used to populate this box set. A device-copyable host-resident handle (host-only to dereference).
+  host_ptr<stk::mesh::Selector> selector_;
   //! One box per search element.
   box_view_t boxes_;
   //! Identity of each search element, parallel to `boxes_`.
