@@ -80,9 +80,6 @@ KOKKOS_INLINE_FUNCTION mundy::Vector3<int> lattice_neighbour_bound(const Metric&
 
 /// \struct PeriodicImages
 /// \brief A set of periodic images as imaged geom AABBs plus per-object metadata, ready for a backend to pack.
-/// \tparam MScalar Scalar of the imaged AABBs (the metric scalar).
-/// \tparam ShiftScalar Scalar of the stored image-shift vectors.
-/// \tparam MemSpace Kokkos memory space.
 template <typename MScalar, typename ShiftScalar, typename MemSpace>
 struct PeriodicImages {
   //! Imaged geom AABB per image (owner geometry translated by its image shift).
@@ -96,7 +93,6 @@ struct PeriodicImages {
 };
 
 /// \brief Build periodic *target* images: one per owner, the owner rigidly wrapped into the primary cell.
-/// \tparam ShiftScalar Scalar for the stored image-shift vectors.
 template <typename ShiftScalar, typename ExecSpace, typename Component, typename Metric>
 PeriodicImages<typename Metric::value_type, ShiftScalar, typename ExecSpace::memory_space> make_periodic_target_images(
     const stk::mesh::BulkData& bulk_data, const ExecSpace& exec, stk::mesh::EntityRank rank,
@@ -165,7 +161,6 @@ mundy::AABB<float> periodic_images_bounding_box(const ExecSpace& exec,
 /// \brief Build periodic *source* images: one per periodic lattice neighbour per owner, pruned by `target_bbox`.
 ///
 /// A device count → exclusive scan → fill allocates only the survivors (never the full 3^d·N).
-/// \tparam ShiftScalar Scalar for the stored image-shift vectors.
 template <typename ShiftScalar, typename ExecSpace, typename Component, typename Metric, typename TargetBBox>
 PeriodicImages<typename Metric::value_type, ShiftScalar, typename ExecSpace::memory_space> make_periodic_source_images(
     const stk::mesh::BulkData& bulk_data, const ExecSpace& exec, stk::mesh::EntityRank rank,

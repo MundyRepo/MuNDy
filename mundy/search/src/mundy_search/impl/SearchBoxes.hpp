@@ -49,8 +49,6 @@ namespace impl {
 /// translation applied to that owner's geometry. The owner handle is the template parameter so each backend carries
 /// the owner in its native form — a local `stk::mesh::Entity` for a single-rank ArborX search, a global
 /// `stk::mesh::EntityKey` for a distributed STK coarse search that must survive ghosting.
-/// \tparam Owner Owner handle type (e.g. `stk::mesh::Entity` or `stk::mesh::EntityKey`).
-/// \tparam ShiftScalar Scalar type of the lattice shift vector.
 template <typename Owner, typename ShiftScalar>
 struct PeriodicImageIdentity {
   //! \name Aliases
@@ -110,9 +108,6 @@ struct PeriodicImageIdentity {
 /// It is a construction detail, never the storage model of the final neighbor list (which keeps owner entities and
 /// neighbor indices). The per-owner dense ordinal a final list indexes by is recovered by the build from the
 /// identity, not stored here.
-/// \tparam MemorySpace Kokkos memory space in which the boxes and identities live.
-/// \tparam BoxType Backend box primitive (e.g. `ArborX::Box`, `stk::search::Box<float>`).
-/// \tparam Identity Per-element identity payload (an owner handle, or a `PeriodicImageIdentity`).
 template <typename MemorySpace, typename BoxType, typename Identity>
 class SearchBoxes {
  public:

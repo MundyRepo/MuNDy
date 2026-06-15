@@ -63,16 +63,12 @@ namespace search {
 ///       .exec_space(exec)
 ///       .broad_phase(ExcludeSelfInteraction{});
 ///
-///   // Each time-step — passes fresh box views:
-///   const auto& nl = managed.update(bulk, target_boxes, source_boxes);
+///   // Each time-step:
+///   const auto& nl = managed.update(bulk, targets, sources);
 /// \endcode
 ///
 /// `update()` requires that the execution space has been set (via `exec_space(...)`) at or before
 /// the call; failing to do so produces a compile-time constraint violation.
-///
-/// \tparam BuilderState The `NeighborListBuilder<...>` type captured at the point of `.manage()`.
-///   Further fluent calls produce new `ManagedNeighborList` specializations with updated builder state.
-/// \tparam Rebuilder Stateful policy that decides when to rebuild.
 template <typename BuilderState, RebuilderType Rebuilder>
 class ManagedNeighborList {
  public:
@@ -135,7 +131,7 @@ class ManagedNeighborList {
   //@{
 
   /// \brief Return a new managed list with the execution space supplied.
-  /// \tparam NewExecutionSpace Execution space type.
+  ///
   /// \param es [in] Execution space used by the eventual build.
   template <typename NewExecutionSpace>
   auto exec_space(const NewExecutionSpace& es) const {
@@ -144,7 +140,7 @@ class ManagedNeighborList {
   }
 
   /// \brief Return a new managed list with an appended broad-phase excluder.
-  /// \tparam NextExcluder Excluder type to append.
+  ///
   /// \param ex [in] Excluder to append to the broad-phase chain.
   template <ExcluderType NextExcluder>
   auto broad_phase(const NextExcluder& ex) const {
@@ -153,7 +149,7 @@ class ManagedNeighborList {
   }
 
   /// \brief Return a new managed list with an appended narrow-phase excluder.
-  /// \tparam NextExcluder Excluder type to append.
+  ///
   /// \param ex [in] Excluder to append to the narrow-phase chain.
   template <ExcluderType NextExcluder>
   auto narrow_phase(const NextExcluder& ex) const {
@@ -177,8 +173,6 @@ class ManagedNeighborList {
   /// needed, constructs a fresh list from the stored builder state with the supplied targets and
   /// sources, then calls `snapshot` on the rebuilder. Otherwise returns the cached list.
   ///
-  /// \tparam TargetInput Selected target input type (must satisfy `NeighborListInputType`).
-  /// \tparam SourceInput Selected source input type (must satisfy `NeighborListInputType`).
   /// \param bulk [in] STK bulk data used for excluder setup and build.
   /// \param targets [in] Target input (boxes, selector, …) for this update.
   /// \param sources [in] Source input (boxes, selector, …) for this update.

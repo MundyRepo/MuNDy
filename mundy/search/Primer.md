@@ -487,20 +487,25 @@ auto list = make_neighbor_list_builder<PeriodicArborX1dNeighborList<>>()
 ### Using relative image shifts in kernels
 
 Each stored pair carries the shift that maps the source owner's geometry to the image that actually fell within
-the detection radius. Kernels reconstruct the image position by adding this shift to the source entity's stored
-position:
+the detection radius. Image shifts are periodic-specific, so they live on the concrete periodic list rather than on
+the generic pair payload — reach them through the typed escape hatch: iterate per target with
+`for_each_target_with_neighbors`, recover the concrete list with `Neighbors::list()`, and query its per-object shifts.
+Kernels reconstruct the image position by adding the relative shift to the source entity's stored position:
 
 ```cpp
 using PeriodicList = mundy::search::PeriodicArborX1dNeighborList<>;
 
-mundy::search::for_each_neighbor_pair(list,
-    KOKKOS_LAMBDA(const mundy::search::NeighborPair<PeriodicList>& pair) {
-      stk::mesh::Entity target = pair.target_entity();
-      stk::mesh::Entity source = pair.source_entity();
+mundy::search::for_each_target_with_neighbors(list,
+    KOKKOS_LAMBDA(const mundy::search::Neighbors<PeriodicList>& neighbors) {
+      const PeriodicList& periodic = neighbors.list();      // typed escape hatch to the concrete periodic list
+      const auto target_index = neighbors.target_index();
+      const auto target_shift = periodic.target_image_shift(target_index);
 
-      // the relative shift is source image shift − target image shift (computed from the two per-object accessors)
-      auto shift = pair.source_image_shift() - pair.target_image_shift();
-      // reconstructed source position = ngp_position(source) + shift
+      for (std::size_t k = 0; k < neighbors.size(); ++k) {
+        // the relative shift is source image shift − target image shift
+        auto shift = periodic.source_image_shift(target_index, k) - target_shift;
+        // reconstructed source position = ngp_position(neighbors[k]) + shift
+      }
     });
 ```
 

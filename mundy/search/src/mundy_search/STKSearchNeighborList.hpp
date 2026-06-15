@@ -70,7 +70,6 @@ namespace search {
 ///
 /// Stores compressed target-to-source neighbor data in the same shape as `ArborX1dNeighborList`, backed by STK's
 /// distributed coarse search.
-/// \tparam MemorySpace Kokkos memory space for owned views.
 template <typename MemorySpace = stk::ngp::MemSpace>
 class STKSearchNeighborList {
  public:
@@ -255,8 +254,6 @@ class STKSearchNeighborList {
 /// shifts: a target shift per owner and a source shift per stored pair. `target_image_shift(target_index)` and
 /// `source_image_shift(target_index, neighbor_ordinal)` give the per-object shifts; a kernel that wants the pairwise
 /// relative shift computes `source_image_shift − target_image_shift` itself.
-/// \tparam MemorySpace Kokkos memory space for owned views.
-/// \tparam ImageShiftScalar Scalar type used by image-shift vectors.
 template <typename MemorySpace = stk::ngp::MemSpace, typename ImageShiftScalar = float>
 class PeriodicSTKSearchNeighborList {
  public:
@@ -491,7 +488,6 @@ class PeriodicSTKSearchNeighborList {
 ///
 /// The build runs `stk::search::coarse_search`, applies the builder's excluder chain, groups results by target,
 /// and returns compressed target-to-source storage.
-/// \tparam MemorySpace Kokkos memory space for the returned list.
 template <typename MemorySpace>
 struct NeighborListBuildTraits<STKSearchNeighborList<MemorySpace>> {
   //! \name Aliases
@@ -521,7 +517,6 @@ struct NeighborListBuildTraits<STKSearchNeighborList<MemorySpace>> {
   /// ghosting group `"MUNDY_STK_SEARCH_NL_GHOSTING"` so the ghosted sources carry valid geometry; the group
   /// persists on `bulk_data` after the call returns for any additional fields the caller needs.
   ///
-  /// \tparam Builder Complete `NeighborListBuilder` type carrying exec space, inputs, and excluder.
   /// \param builder [in] Complete builder.
   /// \param bulk_data [in] STK bulk data.
   /// \param args [in] Build-specific parameters (unused).
@@ -538,8 +533,6 @@ struct NeighborListBuildTraits<STKSearchNeighborList<MemorySpace>> {
 /// The build generates periodic image boxes from component inputs, runs distributed `stk::search::coarse_search` over
 /// the images (each image's identity carries its owner key and per-object image shift), ghosts remote source owners to
 /// the target's rank, collapses results to owner ordinals, and stores per-object image shifts for each retained pair.
-/// \tparam MemorySpace Kokkos memory space for the returned list.
-/// \tparam ImageShiftScalar Scalar type used by image-shift vectors.
 template <typename MemorySpace, typename ImageShiftScalar>
 struct NeighborListBuildTraits<PeriodicSTKSearchNeighborList<MemorySpace, ImageShiftScalar>> {
   //! \name Aliases
@@ -559,7 +552,7 @@ struct NeighborListBuildTraits<PeriodicSTKSearchNeighborList<MemorySpace, ImageS
   //@{
 
   /// \brief Build the list from a complete builder and BulkData.
-  /// \tparam Builder Complete `NeighborListBuilder` type; target and source inputs are `PeriodicSearchInput`s.
+  ///
   /// \param builder [in] Complete builder carrying exec space, periodic component inputs, and the excluder chain.
   /// \param bulk_data [in] STK bulk data.
   /// \param args [in] Build-specific parameters (unused).
@@ -640,9 +633,6 @@ inline STKBuildPhaseTimings stk_build_last_timings{};
 /// When cross-process sources are ghosted in, `list.source_entities()` is a *superset* of the locally-owned
 /// source chunk.  Ordinals `0 .. num_owned_sources-1` index the original owned sources (in selector order);
 /// ordinals `num_owned_sources .. list.num_sources()-1` index the ghosted additions.
-///
-/// \tparam MemorySpace Kokkos memory space for all device views.
-/// \tparam Builder     Complete `NeighborListBuilder` type.
 template <typename MemorySpace>
 template <typename Builder>
   requires AABBSearchInputType<typename Builder::target_input_type> &&

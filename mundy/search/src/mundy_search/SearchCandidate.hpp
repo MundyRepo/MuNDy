@@ -39,13 +39,7 @@ namespace mundy {
 namespace search {
 
 /// \class NeighborSearchCandidate
-/// \brief Non-periodic target/source candidate passed to excluders.
-///
-/// Candidate objects are produced during search construction and are not final neighbor-list storage. They expose owner
-/// accessors as aliases of the normal target/source accessors so excluders can use one owner-based vocabulary for both
-/// periodic and non-periodic search.
-///
-/// \tparam SizeType Integral type used for local target/source ordinals.
+/// \brief Non-periodic target/source candidate produced during neighbor-list construction.
 template <typename SizeType = size_t>
 class NeighborSearchCandidate {
  public:
@@ -149,16 +143,7 @@ class NeighborSearchCandidate {
 };
 
 /// \class PeriodicNeighborSearchCandidate
-/// \brief Periodic owner-pair candidate passed to excluders.
-///
-/// The candidate stores owner ordinals/entities and the per-object image shifts — the displacement from each owner's
-/// original reference point to the image of it that participates in this pair. Carrying both the target and source
-/// shifts (rather than only their difference) lets an excluder place either object in any frame it needs: the relative
-/// offset for a pairwise test, or each object's absolute image for a lab-frame test. Images are not entities; excluders
-/// reason in terms of owner identity plus these shifts.
-///
-/// \tparam ImageShiftType Vector type used for image shifts.
-/// \tparam SizeType Integral type used for local owner ordinals.
+/// \brief Periodic owner-pair candidate produced during neighbor-list construction.
 template <typename ImageShiftType, typename SizeType = size_t>
 class PeriodicNeighborSearchCandidate {
  public:

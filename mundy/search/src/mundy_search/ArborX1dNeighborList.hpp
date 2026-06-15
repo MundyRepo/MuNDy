@@ -57,10 +57,6 @@ namespace search {
 
 /// \class ArborX1dNeighborList
 /// \brief ArborX neighbor list with Cabana-style compressed 1D storage.
-///
-/// This implementation stores target entities, source entities, a flattened source-index array, and per-target offsets.
-/// Search boxes are not retained after construction.
-/// \tparam MemorySpace Kokkos memory space for owned views.
 template <typename MemorySpace = stk::ngp::MemSpace>
 class ArborX1dNeighborList {
  public:
@@ -244,13 +240,7 @@ class ArborX1dNeighborList {
 /// \brief ArborX compressed 1D neighbor list whose stored pairs carry per-object periodic image shifts.
 ///
 /// Targets and sources are indexed by owner ordinals, not image ordinals. Multiple stored pairs may therefore reference
-/// the same source owner with different image shifts. Kernels reconstruct shifted source geometry from the source
-/// owner fields and the per-object image shifts `target_image_shift(target_index)` and
-/// `source_image_shift(target_index, neighbor_ordinal)`; a kernel that wants the pairwise relative shift computes
-/// `source_image_shift − target_image_shift` itself.
-///
-/// \tparam MemorySpace Kokkos memory space for owned views.
-/// \tparam ImageShiftScalar Scalar type used by image-shift vectors.
+/// the same source owner with different image shifts.
 template <typename MemorySpace = stk::ngp::MemSpace, typename ImageShiftScalar = float>
 class PeriodicArborX1dNeighborList {
  public:
@@ -489,7 +479,6 @@ class PeriodicArborX1dNeighborList {
 ///
 /// The build runs ArborX over non-periodic boxes, applies the builder's excluder chain, and returns compressed
 /// 1D target-to-source storage.
-/// \tparam MemorySpace Kokkos memory space for the returned list.
 template <typename MemorySpace>
 struct NeighborListBuildTraits<ArborX1dNeighborList<MemorySpace>> {
   //! \name Aliases
@@ -515,7 +504,7 @@ struct NeighborListBuildTraits<ArborX1dNeighborList<MemorySpace>> {
   //@{
 
   /// \brief Build the list from a complete builder and BulkData.
-  /// \tparam Builder Complete `NeighborListBuilder` type carrying exec space, component inputs, and excluder.
+  ///
   /// \param builder [in] Complete builder. Target and source inputs are AABB-yielding component `SearchInput`s.
   /// \param bulk_data [in] STK bulk data for excluder setup.
   /// \param args [in] Build-specific parameters.
@@ -531,9 +520,6 @@ struct NeighborListBuildTraits<ArborX1dNeighborList<MemorySpace>> {
 ///
 /// The build runs ArborX over periodic image boxes, collapses every match back to owner ordinals, and stores the
 /// per-object source image shift for each retained owner pair.
-///
-/// \tparam MemorySpace Kokkos memory space for the returned list.
-/// \tparam ImageShiftScalar Scalar type used by image-shift vectors.
 template <typename MemorySpace, typename ImageShiftScalar>
 struct NeighborListBuildTraits<PeriodicArborX1dNeighborList<MemorySpace, ImageShiftScalar>> {
   //! \name Aliases
@@ -559,7 +545,7 @@ struct NeighborListBuildTraits<PeriodicArborX1dNeighborList<MemorySpace, ImageSh
   //@{
 
   /// \brief Build the list from a complete builder and BulkData.
-  /// \tparam Builder Complete `NeighborListBuilder` type carrying exec space, component inputs, and excluder.
+  ///
   /// \param builder [in] Complete builder. Target and source inputs are AABB-yielding `PeriodicSearchInput`s.
   /// \param bulk_data [in] STK bulk data for excluder setup.
   /// \param args [in] Build-specific parameters.

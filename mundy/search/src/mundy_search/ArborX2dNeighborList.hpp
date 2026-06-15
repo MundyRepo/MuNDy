@@ -59,9 +59,7 @@ namespace search {
 /// \class ArborX2dNeighborList
 /// \brief ArborX neighbor list with Cabana-style dense 2D per-target storage.
 ///
-/// This implementation stores target entities, source entities, per-target neighbor counts, and dense rows of source
-/// ordinals. It does not expose compact pair ids through the generic payload.
-/// \tparam MemorySpace Kokkos memory space for owned views.
+/// The uniform per-target row width suits GPU pair-parallel dispatch.
 template <typename MemorySpace = stk::ngp::MemSpace>
 class ArborX2dNeighborList {
  public:
@@ -250,12 +248,7 @@ class ArborX2dNeighborList {
 /// \class PeriodicArborX2dNeighborList
 /// \brief ArborX dense 2D neighbor list whose stored entries carry per-object periodic image shifts.
 ///
-/// This layout stores a fixed-width row of source owner ordinals and per-pair source image shifts for each target
-/// owner. It is useful when downstream kernels prefer dense per-target neighbor rows over compressed storage.
-/// `target_image_shift(target_index)` and `source_image_shift(target_index, neighbor_ordinal)` give the per-object
-/// shifts; a kernel that wants the pairwise relative shift computes `source_image_shift − target_image_shift` itself.
-/// \tparam MemorySpace Kokkos memory space for owned views.
-/// \tparam ImageShiftScalar Scalar type used by image-shift vectors.
+/// The uniform per-target row width suits GPU pair-parallel dispatch.
 template <typename MemorySpace = stk::ngp::MemSpace, typename ImageShiftScalar = float>
 class PeriodicArborX2dNeighborList {
  public:
@@ -310,7 +303,8 @@ class PeriodicArborX2dNeighborList {
         target_image_shifts_(target_image_shifts),
         neighbor_counts_(neighbor_counts),
         source_owner_indices_(source_owner_indices),
-        source_image_shifts_(source_image_shifts) {
+        source_image_shifts_(source_image_shifts),
+        total_pairs_(0) {
     MUNDY_THROW_ASSERT(target_image_shifts_.extent(0) == target_entities_.extent(0), std::invalid_argument,
                        "PeriodicArborX2dNeighborList: target_image_shifts extent must equal num_targets.");
     MUNDY_THROW_ASSERT(neighbor_counts_.extent(0) == target_entities_.extent(0), std::invalid_argument,
@@ -322,6 +316,11 @@ class PeriodicArborX2dNeighborList {
                        std::invalid_argument,
                        "PeriodicArborX2dNeighborList: source_image_shifts extent must equal source_owner_indices "
                        "extent.");
+    size_type total = 0;
+    Kokkos::parallel_reduce(
+        Kokkos::RangePolicy<execution_space>(0, neighbor_counts_.extent(0)),
+        KOKKOS_LAMBDA(size_type i, size_type & partial_sum) { partial_sum += neighbor_counts_(i); }, total);
+    total_pairs_ = total;
   }
   //@}
 
@@ -351,16 +350,9 @@ class PeriodicArborX2dNeighborList {
   }
 
   /// \brief Get the total number of stored periodic neighbor pairs.
-  ///
-  /// This is intentionally a linear scan for this first-pass dense layout. If callers need this frequently, store the
-  /// total during construction instead of introducing a compact pair-id abstraction.
   KOKKOS_INLINE_FUNCTION
-  size_type size() const {
-    size_type total_neighbors = 0;
-    for (size_type target_index = 0; target_index < num_targets(); ++target_index) {
-      total_neighbors += num_neighbors(target_index);
-    }
-    return total_neighbors;
+  size_type size() const noexcept {
+    return total_pairs_;
   }
 
   /// \brief Get the allocated row width for each target owner.
@@ -491,6 +483,8 @@ class PeriodicArborX2dNeighborList {
   source_index_view_t source_owner_indices_;
   //! Dense per-target source-image shift minus target-image shift values.
   image_shift_view_t source_image_shifts_;
+  //! Total number of stored neighbor pairs, computed once at construction.
+  size_type total_pairs_ = 0;
   //@}
 };
 
@@ -503,7 +497,6 @@ class PeriodicArborX2dNeighborList {
 ///
 /// The build runs ArborX's two-pass count/fill flow over non-periodic boxes, applies the builder's excluder chain,
 /// and returns dense per-target source rows.
-/// \tparam MemorySpace Kokkos memory space for the returned list.
 template <typename MemorySpace>
 struct NeighborListBuildTraits<ArborX2dNeighborList<MemorySpace>> {
   //! \name Aliases
@@ -520,16 +513,17 @@ struct NeighborListBuildTraits<ArborX2dNeighborList<MemorySpace>> {
   //@{
 
   /// \brief Build-specific parameters for `ArborX2dNeighborList`.
-  struct args_type {
-    int buffer_size = 0;  ///< Optional maximum-neighbor preallocation guess.
-  };
+  ///
+  /// TODO(palmerb4): Performance benchmark and test the benefit of supporting a buffer_size guess, as offered by
+  /// Cabana's make2DNeighborList.
+  struct args_type {};
   //@}
 
   //! \name Build
   //@{
 
   /// \brief Build the list from a complete builder and BulkData.
-  /// \tparam Builder Complete `NeighborListBuilder` type carrying exec space, component inputs, and excluder.
+  ///
   /// \param builder [in] Complete builder. Target and source inputs are AABB-yielding component `SearchInput`s.
   /// \param bulk_data [in] STK bulk data for excluder setup.
   /// \param args [in] Build-specific parameters.
@@ -545,8 +539,6 @@ struct NeighborListBuildTraits<ArborX2dNeighborList<MemorySpace>> {
 ///
 /// The build runs ArborX's periodic count/fill flow, collapses image matches to owner ordinals, and stores a
 /// source image shift in the same dense slot as each source owner ordinal.
-/// \tparam MemorySpace Kokkos memory space for the returned list.
-/// \tparam ImageShiftScalar Scalar type used by image-shift vectors.
 template <typename MemorySpace, typename ImageShiftScalar>
 struct NeighborListBuildTraits<PeriodicArborX2dNeighborList<MemorySpace, ImageShiftScalar>> {
   //! \name Aliases
@@ -563,16 +555,17 @@ struct NeighborListBuildTraits<PeriodicArborX2dNeighborList<MemorySpace, ImageSh
   //@{
 
   /// \brief Build-specific parameters for `PeriodicArborX2dNeighborList`.
-  struct args_type {
-    int buffer_size = 0;  ///< Optional maximum-neighbor preallocation guess.
-  };
+  ///
+  /// TODO(palmerb4): Performance benchmark and test the benefit of supporting a buffer_size guess, as offered by
+  /// Cabana's make2DNeighborList.
+  struct args_type {};
   //@}
 
   //! \name Build
   //@{
 
   /// \brief Build the list from a complete builder and BulkData.
-  /// \tparam Builder Complete `NeighborListBuilder` type carrying exec space, component inputs, and excluder.
+  ///
   /// \param builder [in] Complete builder. Target and source inputs are AABB-yielding `PeriodicSearchInput`s.
   /// \param bulk_data [in] STK bulk data for excluder setup.
   /// \param args [in] Build-specific parameters.
@@ -590,8 +583,7 @@ struct NeighborListBuildTraits<PeriodicArborX2dNeighborList<MemorySpace, ImageSh
 /// \brief Build an `ArborX2dNeighborList` using a two-pass count/fill strategy.
 ///
 /// First pass counts surviving neighbors per target and locates the maximum count to size the dense 2D view. The
-/// second pass fills each target's row. `args.buffer_size` is currently not used; callers needing a single-pass
-/// buffer optimization may extend this implementation.
+/// second pass fills each target's row.
 template <typename MemorySpace>
 template <typename Builder>
   requires AABBSearchInputType<typename Builder::target_input_type> &&

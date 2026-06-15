@@ -48,9 +48,6 @@ namespace impl {
 ///
 /// Used as the first pass in the two-pass non-periodic 2D build. Atomically increments a per-target count for every
 /// ArborX hit that survives the excluder. No managed CSR output is produced.
-/// \tparam TargetBoxes Search-box wrapper for target boxes.
-/// \tparam SourceBoxes Search-box wrapper for source boxes.
-/// \tparam Excluder Excluder type applied to each candidate.
 template <typename TargetBoxes, typename SourceBoxes, ExcluderType Excluder>
 class ArborX2dCountCallback {
  public:
@@ -110,9 +107,6 @@ class ArborX2dCountCallback {
 ///
 /// Used as the second pass after counts are known and the 2D view is allocated. Uses `atomic_fetch_add` on a per-target
 /// write-position cursor to claim a row slot for each surviving hit.
-/// \tparam TargetBoxes Search-box wrapper for target boxes.
-/// \tparam SourceBoxes Search-box wrapper for source boxes.
-/// \tparam Excluder Excluder type applied to each candidate.
 template <typename TargetBoxes, typename SourceBoxes, ExcluderType Excluder>
 class ArborX2dFillCallback {
  public:

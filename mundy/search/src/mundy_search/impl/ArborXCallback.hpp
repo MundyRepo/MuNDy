@@ -48,8 +48,6 @@ namespace impl {
 ///
 /// The factory adapts ArborX callback inputs to Mundy's excluder-candidate interface. It is a build-time helper and
 /// does not own final neighbor-list storage.
-/// \tparam TargetBoxes Target search-box wrapper type.
-/// \tparam SourceBoxes Source search-box wrapper type.
 template <typename TargetBoxes, typename SourceBoxes>
 class ArborXSearchCandidateFactory {
  public:
@@ -82,7 +80,7 @@ class ArborXSearchCandidateFactory {
   //@{
 
   /// \brief Create a candidate from an ArborX predicate and source primitive ordinal.
-  /// \tparam Predicate ArborX predicate type with attached target ordinal.
+  ///
   /// \param predicate [in] ArborX predicate.
   /// \param source_index [in] Dense source ordinal reported by ArborX.
   template <typename Predicate>
@@ -108,8 +106,6 @@ class ArborXSearchCandidateFactory {
 ///
 /// ArborX reports image ordinals. This factory maps them to target/source owner ordinals and carries each object's
 /// image shift (target and source), which the excluder filter and the final periodic neighbor-list storage consume.
-/// \tparam TargetBoxes Target periodic search-box wrapper type.
-/// \tparam SourceBoxes Source periodic search-box wrapper type.
 template <typename TargetBoxes, typename SourceBoxes>
 class PeriodicArborXSearchCandidateFactory {
  public:
@@ -150,7 +146,7 @@ class PeriodicArborXSearchCandidateFactory {
   //@{
 
   /// \brief Create a candidate from an ArborX predicate and source image ordinal.
-  /// \tparam Predicate ArborX predicate type with attached target image ordinal.
+  ///
   /// \param predicate [in] ArborX predicate.
   /// \param source_image_index [in] Dense source image ordinal reported by ArborX.
   template <typename Predicate>
@@ -183,8 +179,6 @@ class PeriodicArborXSearchCandidateFactory {
 ///
 /// The callback constructs a Mundy candidate for each ArborX hit and emits the source primitive only when the excluder
 /// keeps the candidate.
-/// \tparam CandidateFactory Factory that converts ArborX hits to Mundy candidates.
-/// \tparam Excluder Excluder applied to each candidate.
 template <typename CandidateFactory, mundy::search::ExcluderType Excluder>
 class ArborXExcluderCallback {
  public:
@@ -217,9 +211,7 @@ class ArborXExcluderCallback {
 
 #if ARBORX_VERSION >= 10799
   /// \brief Filter an ArborX hit for newer ArborX callback signatures.
-  /// \tparam Predicate ArborX predicate type.
-  /// \tparam Geometry ArborX primitive geometry type.
-  /// \tparam OutputFunctor ArborX output functor type.
+  ///
   /// \param predicate [in] ArborX predicate with attached target ordinal.
   /// \param value_pair [in] ArborX primitive geometry/source-index pair.
   /// \param out [in] ArborX output functor.
@@ -235,8 +227,7 @@ class ArborXExcluderCallback {
   }
 #else
   /// \brief Filter an ArborX hit for older ArborX callback signatures.
-  /// \tparam Predicate ArborX predicate type.
-  /// \tparam OutputFunctor ArborX output functor type.
+  ///
   /// \param predicate [in] ArborX predicate with attached target ordinal.
   /// \param source_index [in] ArborX source primitive ordinal.
   /// \param out [in] ArborX output functor.

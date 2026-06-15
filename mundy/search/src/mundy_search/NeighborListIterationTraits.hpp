@@ -26,15 +26,9 @@
 ///
 /// The primary template provides the default target-parallel dispatch strategy: a
 /// RangePolicy over `[0, num_targets)` with an inner serial walk over each target's
-/// neighbor row.  Concrete list types that expose a better decomposition (e.g., the
-/// dense 2D layout, which has a uniform row width) can specialize this struct to
-/// override `dispatch_pair` and `dispatch_pair_reduce` without touching `ForEach.hpp`
-/// or any call site.
-///
-/// Specializations are expected to live alongside their list-type definition headers
-/// (see ArborX2dNeighborList.hpp).  The dispatch_target and dispatch_target_reduce
-/// methods are not specialized here because the Neighbors-callback API is inherently
-/// target-granular; overriding them for a specific list type is possible but unusual.
+/// neighbor row. Concrete list types that expose a better decomposition can specialize 
+/// this struct to override `dispatch_pair` and `dispatch_pair_reduce` without touching 
+/// `ForEach.hpp` or any call site.
 
 // Trilinos
 #include <Kokkos_Core.hpp>
@@ -51,18 +45,16 @@ namespace search {
 ///
 /// The primary template implements the default target-parallel strategy.
 /// Specialize for list types that support a more efficient decomposition.
-/// \tparam ListType Concrete neighbor-list type.
 template <typename ListType>
 struct NeighborListIterationTraits {
   //! Size type used by the list.
   using size_type = typename ListType::size_type;
 
   /// \brief Dispatch a pair callback over all stored pairs.
-  /// \tparam ExecutionSpace Kokkos execution space.
-  /// \tparam Functor Callback callable with `NeighborPair<ListType>`.
+  ///
   /// \param exec [in] Execution space instance.
   /// \param list [in] Concrete neighbor list.
-  /// \param f [in] User callback.
+  /// \param f [in] User callback: f(NeighborPair<ListType>)
   template <typename ExecutionSpace, typename Functor>
   static void dispatch_pair(const ExecutionSpace& exec, const ListType& list, const Functor& f) {
     using range_t = Kokkos::RangePolicy<ExecutionSpace, Kokkos::IndexType<size_type>>;
@@ -71,13 +63,11 @@ struct NeighborListIterationTraits {
   }
 
   /// \brief Dispatch a pair reduction over all stored pairs.
-  /// \tparam ExecutionSpace Kokkos execution space.
-  /// \tparam Functor Callback callable as `f(NeighborPair<ListType>, value_type&)`.
-  /// \tparam ReducerType Kokkos reducer type supplying `value_type`.
+  ///
   /// \param exec [in] Execution space instance.
   /// \param list [in] Concrete neighbor list.
-  /// \param f [in] User callback.
-  /// \param r [in,out] Kokkos reducer.
+  /// \param f [in] User callback: f(NeighborPair<ListType>, value_type&)
+  /// \param r [in,out] Kokkos reducer (e.g. `Kokkos::Sum<double>`) that owns the result and defines join/init.
   template <typename ExecutionSpace, typename Functor, typename ReducerType>
   static void dispatch_pair_reduce(const ExecutionSpace& exec, const ListType& list, const Functor& f, ReducerType& r) {
     using range_t = Kokkos::RangePolicy<ExecutionSpace, Kokkos::IndexType<size_type>>;
@@ -86,11 +76,10 @@ struct NeighborListIterationTraits {
   }
 
   /// \brief Dispatch a target-neighbors callback over all targets.
-  /// \tparam ExecutionSpace Kokkos execution space.
-  /// \tparam Functor Callback callable with `Neighbors<ListType>`.
+  ///
   /// \param exec [in] Execution space instance.
   /// \param list [in] Concrete neighbor list.
-  /// \param f [in] User callback.
+  /// \param f [in] User callback: f(Neighbors<ListType>)
   template <typename ExecutionSpace, typename Functor>
   static void dispatch_target(const ExecutionSpace& exec, const ListType& list, const Functor& f) {
     using range_t = Kokkos::RangePolicy<ExecutionSpace, Kokkos::IndexType<size_type>>;
@@ -99,13 +88,10 @@ struct NeighborListIterationTraits {
   }
 
   /// \brief Dispatch a target-neighbors reduction over all targets.
-  /// \tparam ExecutionSpace Kokkos execution space.
-  /// \tparam Functor Callback callable as `f(Neighbors<ListType>, value_type&)`.
-  /// \tparam ReducerType Kokkos reducer type supplying `value_type`.
   /// \param exec [in] Execution space instance.
   /// \param list [in] Concrete neighbor list.
-  /// \param f [in] User callback.
-  /// \param r [in,out] Kokkos reducer.
+  /// \param f [in] User callback: f(Neighbors<ListType>, value_type&)
+  /// \param r [in,out] Kokkos reducer (e.g. `Kokkos::Sum<double>`) that owns the result and defines join/init.
   template <typename ExecutionSpace, typename Functor, typename ReducerType>
   static void dispatch_target_reduce(const ExecutionSpace& exec, const ListType& list, const Functor& f,
                                      ReducerType& r) {

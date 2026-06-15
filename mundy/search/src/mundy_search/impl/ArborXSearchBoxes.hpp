@@ -57,13 +57,10 @@ namespace search {
 namespace impl {
 
 /// \brief ArborX non-periodic search boxes: one box per entity, identity is the entity itself.
-/// \tparam MemorySpace Kokkos memory space in which the boxes and identities live.
 template <typename MemorySpace>
 using ArborXSearchBoxesT = SearchBoxes<MemorySpace, ArborX::Box, stk::mesh::Entity>;
 
 /// \brief ArborX periodic image search boxes: one box per image, identity is the imaged owner entity + lattice shift.
-/// \tparam MemorySpace Kokkos memory space in which the boxes and identities live.
-/// \tparam ImageShiftScalar Scalar type used by image-shift vectors.
 template <typename MemorySpace, typename ImageShiftScalar = float>
 using PeriodicArborXSearchBoxesT =
     SearchBoxes<MemorySpace, ArborX::Box, PeriodicImageIdentity<stk::mesh::Entity, ImageShiftScalar>>;
@@ -151,8 +148,6 @@ namespace ArborX {
 ///
 /// Identity-agnostic: only the box view is read. For ArborX >= 1.7.99 the BVH is constructed via
 /// `attach_indices<int>(source_boxes.boxes())` and this specialization is not needed.
-/// \tparam MemorySpace Kokkos memory space for the search boxes.
-/// \tparam Identity Per-element identity payload (unused by the BVH primitives).
 template <typename MemorySpace, typename Identity>
 struct AccessTraits<mundy::search::impl::SearchBoxes<MemorySpace, ArborX::Box, Identity>, PrimitivesTag> {
   //! Search-box wrapper type.
@@ -178,8 +173,6 @@ struct AccessTraits<mundy::search::impl::SearchBoxes<MemorySpace, ArborX::Box, I
 /// \brief ArborX predicate access traits for Mundy ArborX search boxes.
 ///
 /// Identity-agnostic: each target box becomes an intersection predicate with its dense ordinal attached as data.
-/// \tparam MemorySpace Kokkos memory space for the search boxes.
-/// \tparam Identity Per-element identity payload (unused by the predicate boxes).
 template <typename MemorySpace, typename Identity>
 struct AccessTraits<mundy::search::impl::SearchBoxes<MemorySpace, ArborX::Box, Identity>
 #if ARBORX_VERSION < 10799

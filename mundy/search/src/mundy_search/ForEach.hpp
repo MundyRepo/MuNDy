@@ -50,10 +50,9 @@ namespace mundy {
 namespace search {
 
 /// \brief Run a callback for every stored neighbor pair using the list's default execution space.
-/// \tparam ListType Concrete neighbor list type satisfying NeighborListType.
-/// \tparam Functor Callback callable with NeighborPair<ListType>.
+///
 /// \param list [in] Concrete neighbor list.
-/// \param functor [in] Callback invoked once per stored neighbor pair.
+/// \param functor [in] Callback invoked once per stored neighbor pair: functor(NeighborPair<ListType>).
 template <NeighborListType ListType, typename Functor>
 void for_each_neighbor_pair(const ListType& list, const Functor& functor) {
   typename ListType::execution_space exec_space{};
@@ -61,22 +60,19 @@ void for_each_neighbor_pair(const ListType& list, const Functor& functor) {
 }
 
 /// \brief Run a callback for every stored neighbor pair using a provided execution space.
-/// \tparam ListType Concrete neighbor list type satisfying NeighborListType.
-/// \tparam ExecutionSpace Kokkos execution space.
-/// \tparam Functor Callback callable with NeighborPair<ListType>.
+///
 /// \param exec_space [in] Execution space for the outer target-parallel loop.
 /// \param list [in] Concrete neighbor list.
-/// \param functor [in] Callback invoked once per stored neighbor pair.
+/// \param functor [in] Callback invoked once per stored neighbor pair: functor(NeighborPair<ListType>).
 template <NeighborListType ListType, typename ExecutionSpace, typename Functor>
 void for_each_neighbor_pair(const ExecutionSpace& exec_space, const ListType& list, const Functor& functor) {
   NeighborListIterationTraits<ListType>::dispatch_pair(exec_space, list, functor);
 }
 
 /// \brief Run a callback for every target and its neighbors using the list's default execution space.
-/// \tparam ListType Concrete neighbor list type satisfying NeighborListType.
-/// \tparam Functor Callback callable with Neighbors<ListType>.
+///
 /// \param list [in] Concrete neighbor list.
-/// \param functor [in] Callback invoked once per target.
+/// \param functor [in] Callback invoked once per target: functor(Neighbors<ListType>).
 template <NeighborListType ListType, typename Functor>
 void for_each_target_with_neighbors(const ListType& list, const Functor& functor) {
   typename ListType::execution_space exec_space{};
@@ -84,24 +80,20 @@ void for_each_target_with_neighbors(const ListType& list, const Functor& functor
 }
 
 /// \brief Run a callback for every target and its neighbors using a provided execution space.
-/// \tparam ListType Concrete neighbor list type satisfying NeighborListType.
-/// \tparam ExecutionSpace Kokkos execution space.
-/// \tparam Functor Callback callable with Neighbors<ListType>.
+///
 /// \param exec_space [in] Execution space for the target-parallel loop.
 /// \param list [in] Concrete neighbor list.
-/// \param functor [in] Callback invoked once per target.
+/// \param functor [in] Callback invoked once per target: functor(Neighbors<ListType>).
 template <NeighborListType ListType, typename ExecutionSpace, typename Functor>
 void for_each_target_with_neighbors(const ExecutionSpace& exec_space, const ListType& list, const Functor& functor) {
   NeighborListIterationTraits<ListType>::dispatch_target(exec_space, list, functor);
 }
 
 /// \brief Run a Kokkos reduction over every stored neighbor pair using the list's default execution space.
-/// \tparam ListType Concrete neighbor list type satisfying NeighborListType.
-/// \tparam Functor Callback callable as `functor(NeighborPair<ListType>, value_type&)`.
-/// \tparam ReducerType Kokkos reducer type (e.g. `Kokkos::Sum<double>`); supplies `value_type`.
+///
 /// \param list [in] Concrete neighbor list.
-/// \param functor [in] Callback invoked once per stored neighbor pair.
-/// \param reducer [in,out] Kokkos reducer that owns the result and defines join/init.
+/// \param functor [in] Callback invoked once per stored neighbor pair: functor(NeighborPair<ListType>, value_type&).
+/// \param reducer [in,out] Kokkos reducer (e.g. `Kokkos::Sum<double>`) that owns the result and defines join/init.
 template <NeighborListType ListType, typename Functor, typename ReducerType>
 void for_each_neighbor_pair_reduce(const ListType& list, const Functor& functor, ReducerType& reducer) {
   typename ListType::execution_space exec_space{};
@@ -109,14 +101,11 @@ void for_each_neighbor_pair_reduce(const ListType& list, const Functor& functor,
 }
 
 /// \brief Run a Kokkos reduction over every stored neighbor pair using a provided execution space.
-/// \tparam ListType Concrete neighbor list type satisfying NeighborListType.
-/// \tparam ExecutionSpace Kokkos execution space.
-/// \tparam Functor Callback callable as `functor(NeighborPair<ListType>, value_type&)`.
-/// \tparam ReducerType Kokkos reducer type (e.g. `Kokkos::Sum<double>`); supplies `value_type`.
+///
 /// \param exec_space [in] Execution space for the outer target-parallel loop.
 /// \param list [in] Concrete neighbor list.
-/// \param functor [in] Callback invoked once per stored neighbor pair.
-/// \param reducer [in,out] Kokkos reducer that owns the result and defines join/init.
+/// \param functor [in] Callback invoked once per stored neighbor pair: functor(NeighborPair<ListType>, value_type&).
+/// \param reducer [in,out] Kokkos reducer (e.g. `Kokkos::Sum<double>`) that owns the result and defines join/init.
 template <NeighborListType ListType, typename ExecutionSpace, typename Functor, typename ReducerType>
 void for_each_neighbor_pair_reduce(const ExecutionSpace& exec_space, const ListType& list, const Functor& functor,
                                    ReducerType& reducer) {
@@ -124,12 +113,10 @@ void for_each_neighbor_pair_reduce(const ExecutionSpace& exec_space, const ListT
 }
 
 /// \brief Run a Kokkos reduction over every target and its neighbors using the list's default execution space.
-/// \tparam ListType Concrete neighbor list type satisfying NeighborListType.
-/// \tparam Functor Callback callable as `functor(Neighbors<ListType>, value_type&)`.
-/// \tparam ReducerType Kokkos reducer type (e.g. `Kokkos::Sum<double>`); supplies `value_type`.
+///
 /// \param list [in] Concrete neighbor list.
-/// \param functor [in] Callback invoked once per target.
-/// \param reducer [in,out] Kokkos reducer that owns the result and defines join/init.
+/// \param functor [in] Callback invoked once per target: functor(Neighbors<ListType>, value_type&).
+/// \param reducer [in,out] Kokkos reducer (e.g. `Kokkos::Sum<double>`) that owns the result and defines join/init.
 template <NeighborListType ListType, typename Functor, typename ReducerType>
 void for_each_target_with_neighbors_reduce(const ListType& list, const Functor& functor, ReducerType& reducer) {
   typename ListType::execution_space exec_space{};
@@ -137,14 +124,11 @@ void for_each_target_with_neighbors_reduce(const ListType& list, const Functor& 
 }
 
 /// \brief Run a Kokkos reduction over every target and its neighbors using a provided execution space.
-/// \tparam ListType Concrete neighbor list type satisfying NeighborListType.
-/// \tparam ExecutionSpace Kokkos execution space.
-/// \tparam Functor Callback callable as `functor(Neighbors<ListType>, value_type&)`.
-/// \tparam ReducerType Kokkos reducer type (e.g. `Kokkos::Sum<double>`); supplies `value_type`.
+///
 /// \param exec_space [in] Execution space for the target-parallel loop.
 /// \param list [in] Concrete neighbor list.
-/// \param functor [in] Callback invoked once per target.
-/// \param reducer [in,out] Kokkos reducer that owns the result and defines join/init.
+/// \param functor [in] Callback invoked once per target: functor(Neighbors<ListType>, value_type&).
+/// \param reducer [in,out] Kokkos reducer (e.g. `Kokkos::Sum<double>`) that owns the result and defines join/init.
 template <NeighborListType ListType, typename ExecutionSpace, typename Functor, typename ReducerType>
 void for_each_target_with_neighbors_reduce(const ExecutionSpace& exec_space, const ListType& list,
                                            const Functor& functor, ReducerType& reducer) {

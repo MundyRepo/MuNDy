@@ -56,8 +56,6 @@ concept HasFieldEntityRank = requires(const Component& component) {
 
 /// \class SearchInput
 /// \brief A selector paired with a geometry-yielding component for a non-periodic neighbor-list build.
-///
-/// \tparam Component A component whose `operator()` yields a geom primitive (AABB, OBB, Sphere, ...).
 template <typename Component>
 class SearchInput {
  public:
@@ -70,9 +68,6 @@ class SearchInput {
   //@{
 
   /// \brief Construct from a selector and a field-backed component; the entity rank is taken from the field.
-  ///
-  /// The component is taken by non-const reference because the build synchronizes it to device before reading
-  /// (it is copied into this input by value; the copy shares the underlying STK field, so the sync is effective).
   SearchInput(const stk::mesh::Selector& selector, Component& component)
     requires impl::HasFieldEntityRank<Component>
       : selector_(selector), component_(component), rank_(component.field().entity_rank()) {
@@ -122,8 +117,6 @@ class SearchInput {
 
 /// \class PeriodicSearchInput
 /// \brief A `SearchInput` augmented with a periodicity metric for periodic neighbor-list builds.
-/// \tparam Component A component whose `operator()` yields a geom primitive.
-/// \tparam Metric    A periodicity metric (e.g. `OrthorhombicMetric`) describing the periodic domain.
 template <typename Component, typename Metric>
 class PeriodicSearchInput {
  public:
@@ -137,8 +130,6 @@ class PeriodicSearchInput {
   //@{
 
   /// \brief Construct from a selector, field-backed component, and metric; rank is taken from the field.
-  ///
-  /// The component is taken by non-const reference because the build synchronizes it to device before reading.
   PeriodicSearchInput(const stk::mesh::Selector& selector, Component& component, const Metric& metric)
     requires impl::HasFieldEntityRank<Component>
       : selector_(selector), component_(component), metric_(metric), rank_(component.field().entity_rank()) {

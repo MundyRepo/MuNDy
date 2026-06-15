@@ -124,9 +124,6 @@ concept RebuilderType =
 /// `snapshot` always fires on both members so that every rebuilder's snapshot stays current.
 ///
 /// Build chains with any rebuilder's `.rebuild_if(next)` or `operator|` method.
-///
-/// \tparam PriorRebuilder Prior rebuilder in the chain.
-/// \tparam Rebuilder Newly appended rebuilder.
 template <typename PriorRebuilder, typename Rebuilder>
 class RebuilderChain {
  public:
@@ -313,9 +310,6 @@ struct NeverRebuild {
 /// detected because the entity at some index will differ.  It is also stricter than an unordered
 /// set check: reordering the same entities triggers a rebuild because the ordinal-to-entity
 /// mapping embedded in the neighbor list has changed.
-///
-/// \tparam MemorySpace Kokkos memory space used for device-resident snapshots and kernels.
-///   Must match the memory space of the entity views supplied to `needs_rebuild` and `snapshot`.
 template <typename MemorySpace = stk::ngp::MemSpace>
 class RebuildOnEntityChange {
  public:
@@ -455,13 +449,6 @@ class RebuildOnEntityChange {
 /// periodic metric from `mundy_geom/periodicity.hpp` (e.g. `OrthorhombicMetric`,
 /// `TriclinicMetric`) applies the minimum-image convention so that a particle crossing a
 /// periodic boundary is not counted as having moved by a full cell length.
-///
-/// \tparam Scalar      Floating-point type for the displacement threshold and snapshot storage.
-///   Defaults to `double`.
-/// \tparam MemorySpace Kokkos memory space for device-resident snapshots and kernels.
-/// \tparam Metric      Distance metric used for corner-displacement measurement.
-///   Defaults to `FreeSpaceMetric<Scalar>` (aperiodic, raw Cartesian difference).
-///   Any concrete metric type from `mundy_geom/periodicity.hpp` is valid.
 template <typename Scalar = double, typename MemorySpace = stk::ngp::MemSpace,
           typename Metric = FreeSpaceMetric<Scalar>>
 class RebuildOnAABBDisplacement {
@@ -757,12 +744,6 @@ class RebuildOnAABBDisplacement {
 /// part of the standard search input and must be supplied as caller-owned Kokkos views at
 /// construction.  The user is responsible for keeping those views up to date before each call.
 ///
-/// \tparam Scalar      Floating-point type of the OBBs and the displacement threshold.
-/// \tparam MemorySpace Kokkos memory space for device-resident OBB views and snapshots.
-/// \tparam Metric      Distance metric for the center-displacement term.
-///   Defaults to `FreeSpaceMetric<double>` (Cartesian, aperiodic).
-///   Any periodic metric from `mundy_geom/periodicity.hpp` applies the minimum-image
-///   convention to the center displacement so that boundary-crossing is handled correctly.
 template <typename Scalar = double, typename MemorySpace = stk::ngp::MemSpace,
           typename Metric = FreeSpaceMetric<Scalar>>
 class RebuildOnOBBDisplacement {

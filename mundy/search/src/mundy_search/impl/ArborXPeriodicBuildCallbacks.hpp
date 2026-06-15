@@ -51,9 +51,6 @@ namespace impl {
 ///
 /// Shared between the periodic 1D and 2D builds. On each surviving hit, atomically increments the count for the
 /// target owner ordinal (not the image ordinal) so the prefix scan and output allocation use owner-indexed storage.
-/// \tparam TargetBoxes Periodic search-box wrapper for target image boxes.
-/// \tparam SourceBoxes Periodic search-box wrapper for source image boxes.
-/// \tparam Excluder Excluder type applied to each candidate.
 template <typename TargetBoxes, typename SourceBoxes, ExcluderType Excluder>
 class ArborXPeriodicCountCallback {
  public:
@@ -114,10 +111,6 @@ class ArborXPeriodicCountCallback {
 /// Writes source owner ordinals and source image shifts into flat CSR storage indexed by the prefix-scan `offsets`
 /// and per-target `write_positions` cursors. `atomic_fetch_add` on `write_positions` serializes writes within each
 /// target owner's row.
-/// \tparam TargetBoxes Periodic search-box wrapper for target image boxes.
-/// \tparam SourceBoxes Periodic search-box wrapper for source image boxes.
-/// \tparam Excluder Excluder type applied to each candidate.
-/// \tparam ImageShiftType Type used for image-shift vectors (e.g., mundy::Vector3<float>).
 template <typename TargetBoxes, typename SourceBoxes, ExcluderType Excluder, typename ImageShiftType>
 class ArborXPeriodic1dFillCallback {
  public:
@@ -198,10 +191,6 @@ class ArborXPeriodic1dFillCallback {
 ///
 /// Writes source owner ordinals and source image shifts into dense 2D storage. Uses `atomic_fetch_add` on a
 /// per-target write-position cursor to assign a column slot within each target owner's dense row.
-/// \tparam TargetBoxes Periodic search-box wrapper for target image boxes.
-/// \tparam SourceBoxes Periodic search-box wrapper for source image boxes.
-/// \tparam Excluder Excluder type applied to each candidate.
-/// \tparam ImageShiftType Type used for image-shift vectors (e.g., mundy::Vector3<float>).
 template <typename TargetBoxes, typename SourceBoxes, ExcluderType Excluder, typename ImageShiftType>
 class ArborXPeriodic2dFillCallback {
  public:

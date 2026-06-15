@@ -103,15 +103,8 @@ struct UnsetNeighborListBuilderField {};
 ///       .exec_space(exec_space);
 ///
 ///   // Each time-step:
-///   const auto& nl = managed.update(bulk_data, target_boxes, source_boxes);
+///   const auto& nl = managed.update(bulk_data, targets, sources);
 /// \endcode
-///
-/// \tparam ListType Concrete neighbor-list type returned by `build()`.
-/// \tparam ExecutionSpace Kokkos execution space used by the eventual build, or an unset marker.
-/// \tparam TargetInput Selected target input type, or an unset marker.
-/// \tparam SourceInput Selected source input type, or an unset marker.
-/// \tparam BroadExcluder Excluder type applied in the broad phase.
-/// \tparam NarrowExcluder Excluder type applied in the narrow phase.
 template <typename ListType, typename ExecutionSpace = impl::UnsetNeighborListBuilderField,
           typename TargetInput = impl::UnsetNeighborListBuilderField,
           typename SourceInput = impl::UnsetNeighborListBuilderField, ExcluderType BroadExcluder = NoExcluder,
@@ -171,7 +164,6 @@ class NeighborListBuilder {
   //@{
 
   /// \brief Return a new builder with the execution space supplied.
-  /// \tparam NewExecutionSpace Execution space type.
   /// \param exec_space [in] Execution space used by the eventual build.
   template <typename NewExecutionSpace>
   auto exec_space(const NewExecutionSpace& exec_space) const {
@@ -181,7 +173,6 @@ class NeighborListBuilder {
   }
 
   /// \brief Return a new builder with the target input supplied.
-  /// \tparam NewTargetInput Selected target input type.
   /// \param target_input [in] Selected target input.
   template <NeighborListInputType NewTargetInput>
   auto target_input(const NewTargetInput& target_input) const {
@@ -191,7 +182,6 @@ class NeighborListBuilder {
   }
 
   /// \brief Return a new builder with the source input supplied.
-  /// \tparam NewSourceInput Selected source input type.
   /// \param source_input [in] Selected source input.
   template <NeighborListInputType NewSourceInput>
   auto source_input(const NewSourceInput& source_input) const {
@@ -204,7 +194,6 @@ class NeighborListBuilder {
   ///
   /// Broad-phase excluders are applied during the broad phase to reject candidate pairs early.
   ///
-  /// \tparam NextExcluder Excluder type to append.
   /// \param next_excluder [in] Excluder to append to the broad-phase chain.
   template <ExcluderType NextExcluder>
   auto broad_phase(const NextExcluder& next_excluder) const {
@@ -219,7 +208,6 @@ class NeighborListBuilder {
   ///
   /// Narrow-phase excluders are applied after the broad phase for fine-grained pair filtering.
   ///
-  /// \tparam NextExcluder Excluder type to append.
   /// \param next_excluder [in] Excluder to append to the narrow-phase chain.
   template <ExcluderType NextExcluder>
   auto narrow_phase(const NextExcluder& next_excluder) const {
@@ -348,11 +336,10 @@ class NeighborListBuilder {
   ///       .exec_space(exec)
   ///       .broad_phase(ExcludeSelfInteraction{});
   ///
-  ///   // Each time-step — passes fresh box views:
-  ///   const auto& nl = managed.update(bulk, target_boxes, source_boxes);
+  ///   // Each time-step:
+  ///   const auto& nl = managed.update(bulk, targets, sources);
   /// \endcode
   ///
-  /// \tparam Rebuilder Stateful rebuilder policy type (must satisfy `RebuilderType`).
   /// \param rebuilder [in] Rebuilder instance moved into the returned `ManagedNeighborList`.
   template <RebuilderType Rebuilder>
   auto manage(Rebuilder rebuilder) const {
@@ -416,7 +403,6 @@ class NeighborListBuilder {
 };
 
 /// \brief Create an empty fluent builder for a concrete neighbor-list type.
-/// \tparam ListType Concrete neighbor-list type returned by `build()`.
 template <typename ListType>
 NeighborListBuilder<ListType> make_neighbor_list_builder() {
   return NeighborListBuilder<ListType>{};

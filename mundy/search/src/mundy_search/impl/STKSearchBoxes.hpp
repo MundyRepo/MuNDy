@@ -53,7 +53,6 @@ namespace search {
 namespace impl {
 
 /// \brief STK non-periodic search boxes: one box per entity, identity is the entity's global key.
-/// \tparam MemorySpace Kokkos memory space in which the boxes and identities live.
 template <typename MemorySpace>
 using STKSearchBoxesT = SearchBoxes<MemorySpace, stk::search::Box<float>, stk::mesh::EntityKey>;
 
@@ -61,8 +60,6 @@ using STKSearchBoxesT = SearchBoxes<MemorySpace, stk::search::Box<float>, stk::m
 ///
 /// The owner is the global `EntityKey` (not a local `Entity`) so the identity survives `coarse_search`'s distributed
 /// communication and drives owner ghosting on the receiving rank.
-/// \tparam MemorySpace Kokkos memory space in which the boxes and identities live.
-/// \tparam ImageShiftScalar Scalar type used by image-shift vectors.
 template <typename MemorySpace, typename ImageShiftScalar = float>
 using PeriodicSTKSearchBoxesT =
     SearchBoxes<MemorySpace, stk::search::Box<float>, PeriodicImageIdentity<stk::mesh::EntityKey, ImageShiftScalar>>;
@@ -80,7 +77,6 @@ KOKKOS_INLINE_FUNCTION stk::search::Box<BoxScalar> pack_search_box(const AABBTyp
 
 /// \brief Enumerate a `(rank, selector)` chunk and build its broad-phase STK search boxes from a component.
 ///
-/// \tparam BoxScalar Scalar used by the returned `stk::search::Box` (the search precision).
 /// \return `{entities, boxes}` — a device entity view (dense ordinal order) and matching device box view. Both
 ///         alias reference-counted device storage (no deep copies). The build derives each box's `EntityKey`
 ///         identity from its entity when it assembles the `BoxIdentProc` views.

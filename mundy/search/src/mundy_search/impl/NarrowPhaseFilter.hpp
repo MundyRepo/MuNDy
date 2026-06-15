@@ -64,12 +64,6 @@ namespace impl {
 /// it, and L2 scatters survivors using the flags — one evaluation at the cost of O(pairs) extra
 /// device memory.  That optimisation is not implemented here.
 ///
-/// \tparam ExecutionSpace Kokkos execution space for all three passes.
-/// \tparam NarrowExcluder Excluder type satisfying `ExcluderType`; must be callable with
-///                        `NeighborSearchCandidate<size_t>`.
-/// \tparam EntityView     Kokkos view of `stk::mesh::Entity*` (rank 1).
-/// \tparam IndexView      Kokkos view of integral source-ordinal values (rank 1).
-/// \tparam OffsetView     Kokkos view of integral offset values (rank 1).
 ///
 /// \param exec                 [in] Execution space instance.
 /// \param narrow_excluder      [in] Excluder applied to every broad-phase candidate.
@@ -157,14 +151,6 @@ std::pair<IndexView, OffsetView> apply_narrow_phase(ExecutionSpace exec, const N
 /// Periodic overload that carries per-object image shifts through the filter: a per-target-owner target shift and a
 /// per-pair source shift. It constructs `PeriodicNeighborSearchCandidate` in L0/L2 from both, and in L2 writes the
 /// surviving source owner ordinal and source shift to the output views.
-///
-/// \tparam ExecutionSpace Kokkos execution space for all three passes.
-/// \tparam NarrowExcluder Excluder type satisfying `ExcluderType`; must be callable with
-///                        `PeriodicNeighborSearchCandidate<shift_type, size_t>`.
-/// \tparam EntityView     Kokkos view of `stk::mesh::Entity*` (rank 1).
-/// \tparam IndexView      Kokkos view of integral source-owner-ordinal values (rank 1).
-/// \tparam ShiftView      Kokkos view of image-shift values (rank 1).
-/// \tparam OffsetView     Kokkos view of integral offset values (rank 1).
 ///
 /// \param exec                       [in] Execution space instance.
 /// \param narrow_excluder            [in] Excluder applied to every broad-phase candidate.
@@ -264,12 +250,6 @@ std::tuple<IndexView, ShiftView, OffsetView> apply_narrow_phase(
 ///  - L0 (count): For each target row, count candidates that survive the excluder.
 ///  - L1 (max):   Find the new maximum column width to size the output 2D view.
 ///  - L2 (fill):  Re-iterate each row and write surviving source ordinals, left-compacted.
-///
-/// \tparam ExecutionSpace  Kokkos execution space.
-/// \tparam NarrowExcluder  Excluder satisfying `ExcluderType`.
-/// \tparam EntityView      Kokkos view of `stk::mesh::Entity*` (rank 1).
-/// \tparam CountView       Kokkos view of per-target count values (rank 1).
-/// \tparam IndexView2D     Kokkos view of source-ordinal values (rank 2, `(target, col)`).
 ///
 /// \returns `{narrow_counts, narrow_src}` — the filtered per-target counts and dense-2D source index view.
 template <typename ExecutionSpace, typename NarrowExcluder, typename EntityView, typename CountView,

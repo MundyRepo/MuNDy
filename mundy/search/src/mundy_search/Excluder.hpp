@@ -101,7 +101,6 @@ class NoExcluder {
   //@{
 
   /// \brief Return whether a candidate pair should be excluded.
-  /// \tparam Candidate Candidate pair type.
   /// \param candidate [in] Candidate pair produced by a search backend.
   template <typename Candidate>
   KOKKOS_INLINE_FUNCTION bool operator()(const Candidate& /*candidate*/) const noexcept {
@@ -109,7 +108,6 @@ class NoExcluder {
   }
 
   /// \brief Return a new excluder chain with one appended excluder.
-  /// \tparam NewExcluder Excluder type to append.
   /// \param excluder [in] Excluder to append to the chain.
   template <ExcluderType NewExcluder>
   ExcluderChain<NoExcluder, NewExcluder> exclude(const NewExcluder& excluder) const {
@@ -123,9 +121,6 @@ class NoExcluder {
 ///
 /// Each `.exclude(...)` call returns a new `ExcluderChain` containing the previous filtering behavior plus the newly
 /// appended excluder.
-///
-/// \tparam PriorExcluder Previous excluder type.
-/// \tparam Excluder Newly appended excluder type.
 template <ExcluderType PriorExcluder, ExcluderType Excluder>
 class ExcluderChain {
  public:
@@ -170,7 +165,6 @@ class ExcluderChain {
   //@{
 
   /// \brief Return whether any excluder in the chain rejects the candidate pair.
-  /// \tparam Candidate Candidate pair type.
   /// \param candidate [in] Candidate pair produced by a search backend.
   template <typename Candidate>
   KOKKOS_INLINE_FUNCTION bool operator()(const Candidate& candidate) const {
@@ -178,7 +172,6 @@ class ExcluderChain {
   }
 
   /// \brief Return a new excluder chain with one additional appended excluder.
-  /// \tparam NextExcluder Excluder type to append.
   /// \param next_excluder [in] Excluder to append to the chain.
   template <ExcluderType NextExcluder>
   ExcluderChain<ExcluderChain, NextExcluder> exclude(const NextExcluder& next_excluder) const {
@@ -318,7 +311,6 @@ class ExcludeSymmetricDuplicates {
   //@{
 
   /// \brief Return whether a candidate pair should be excluded as the suppressed orientation.
-  /// \tparam Candidate Candidate pair type.
   /// \param candidate [in] Candidate pair produced by a search backend.
   template <typename Candidate>
   KOKKOS_INLINE_FUNCTION bool operator()(const Candidate& candidate) const {
@@ -387,9 +379,6 @@ inline void ExcludeSymmetricDuplicates::setup(const stk::mesh::BulkData& bulk_da
 ///
 /// Intended use: append as a `.narrow_phase(ExcludeNonIntersectingOBBs{...})` filter after an AABB broad phase to
 /// tighten the candidate set for oriented shapes. The OBB component must be defined on the searched entities' rank.
-///
-/// \tparam Scalar   Floating-point scalar type of the OBBs (default: `double`).
-/// \tparam MemSpace Kokkos memory space for the device components and execution (default: `stk::ngp::MemSpace`).
 template <typename Scalar = double, typename MemSpace = stk::ngp::MemSpace>
 class ExcludeNonIntersectingOBBs {
  public:
@@ -444,7 +433,6 @@ class ExcludeNonIntersectingOBBs {
   //@{
 
   /// \brief Exclude candidate pairs whose OBBs do not intersect.
-  /// \tparam Candidate Candidate pair type with `target_entity()` and `source_entity()` accessors.
   /// \param candidate [in] Candidate pair produced by a search backend.
   template <typename Candidate>
   KOKKOS_INLINE_FUNCTION bool operator()(const Candidate& candidate) const {
