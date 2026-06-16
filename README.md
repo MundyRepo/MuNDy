@@ -119,12 +119,12 @@ SUM:                  384        16020          24292        68002
 Centralized, Kokkos-friendly building blocks for type-level plumbing, error handling, and device-aware data management.
 - **MUNDY_THROW_ASSERT() / MUNDY_THROW_REQUIRE()**  
   Kokkos-compatible throw/assert helpers with diagnostics and detailed error context 
-  - On-device: abort  |  On-host: throw
-  - Can be called within constexpr contexts
+  * On-device: abort  |  On-host: throw
+  * Can be called within constexpr contexts
 
 - **mundy::tuple / mundy::variant**  
   Reduced, Kokkos-compatible analogs of `std::tuple` / `std::variant` for default-constructible types.  
-  - mundy::tuple is NTTP-compatible and `constexpr`-friendly  
+  * mundy::tuple is NTTP-compatible and `constexpr`-friendly  
 
 - **mundy::reference_wrapper**  
   Kokkos-compatible analog of `std::reference_wrapper` for non-const references.  
@@ -134,21 +134,21 @@ Centralized, Kokkos-friendly building blocks for type-level plumbing, error hand
 
 - **mundy::aggregate**  
   Compile-time extensible “tagged bag of types” (conceptually similar to `boost::hana::map`).  
-  - Kokkos-compatible  
-  - `constexpr` and NTTP-compatible  
+  * Kokkos-compatible  
+  * `constexpr` and NTTP-compatible  
 
 - **mundy::StringLiteral**  
   `constexpr` string literals that are NTTP-compatible.  
-  - Supports `constexpr` concatenation
+  * Supports `constexpr` concatenation
 
 - **mundy::StringSink**  
   A stream-like (`<<`) utility for constructing compile-time and runtime strings.  
-  - Kokkos-compatible/constexpr-friendly
-  - Automatically produces compile-time strings when possible
+  * Kokkos-compatible/constexpr-friendly
+  * Automatically produces compile-time strings when possible
 
 - **mundy::NgpPool / mundy::NgpView**  
   Dual-view abstractions that follow MuNDy’s sync semantics plus a dual-view push/pop pool.  
-  - Designed to integrate cleanly with Kokkos’ NGP (Next Generation Parallelism) model  
+  * Designed to integrate cleanly with Kokkos’ NGP (Next Generation Parallelism) model  
 
 ---
 
@@ -157,22 +157,22 @@ Centralized, Kokkos-friendly building blocks for type-level plumbing, error hand
 Small, composable math utilities with view semantics that integrate naturally into Kokkos-based code.
 - **mundy::Matrix / mundy::Vector / mundy::Quaternion**  
   Kokkos-compatible, `constexpr` inline linear algebra for small matrix/vector sizes.  
-  - NTTP-compatible  
-  - View semantics for arbitrary accessors  
+  * NTTP-compatible  
+  * View semantics for arbitrary accessors  
 
 - **mundy::minimize(...)** 
   Kokkos-compatible analog of dlib’s `minimize` (L-BFGS) with no dynamic memory allocation.  
-  - Callable inside kernels or from host drivers  
+  * Callable inside kernels or from host drivers  
 
 - **mundy::convex**  
   Linear complementarity problem (LCP) and constrained convex quadratic programming (QP) solver.
-  - Kokkos-compatible  
-  - Can run inside a kernel or orchestrate kernel launches
-  - Supports Mixed LCP/QP problems with equality and inequality constraints
+  * Kokkos-compatible  
+  * Can run inside a kernel or orchestrate kernel launches
+  * Supports Mixed LCP/QP problems with equality and inequality constraints
 
 - **mundy::Hilbert / mundy::zmort**  
   Domain decomposition helpers for Hilbert space-filling curves and Z-morton ordering.  
-  - Useful for load balancing and locality-aware particle/domain layout  
+  * Useful for load balancing and locality-aware particle/domain layout  
 
 ---
 
@@ -184,17 +184,17 @@ Foundational geometric abstractions for multibody dynamics and contact mechanics
 
 - **mundy::distance**  
   Utilities for computing:
-  - Euclidean separation distances  
-  - Shared-normal signed separation distances between primitives  
+  * Euclidean separation distances  
+  * Shared-normal signed separation distances between primitives  
 
 - **mundy::compute_aabb / mundy::compute_bounding_radius**  
   Helpers to compute axis-aligned bounding boxes (AABB) and bounding radii for each primitive.
 
 - **mundy::transform / mundy::randomize**  
   Utilities for:
-  - Translation  
-  - Rotation  
-  - Randomization of primitive configurations  
+  * Translation  
+  * Rotation  
+  * Randomization of primitive configurations  
 
 - **mundy::periodicity**  
   Utilities for handling distances and interactions in periodic domains.
@@ -217,20 +217,20 @@ Further mechanical models and integration hooks will be added as the library mat
 Helpers and abstractions for integrating MuNDy with Trilinos/STK meshes and fields.
 - **mundy::mesh::string_to_selector / mundy::mesh::string_to_topology / mundy::mesh::string_to_rank**  
   Map string descriptions like:
-  - Selector expressions: `"(partA | partB) & !partC"`  
-  - Topology: `"HEX_8"`  
-  - Rank: `"ELEM_RANK"`  
+  * Selector expressions: `"(partA | partB) & !partC"`  
+  * Topology: `"HEX_8"`  
+  * Rank: `"ELEM_RANK"`  
   to their corresponding STK objects.
 
 - **mundy::mesh::EntityDeclaration / mundy::mesh::FieldDeclaration mundy::mesh::ComponentDeclaration / mundy::mesh::PartDeclaration / mundy::mesh::ClassDeclaration**  
   Helper functions that streamline common STK mesh setup tasks, such as declaring fields and parts with the correct properties and parallel consistency.
 
-* **mundy::mesh::NgpModRequests**
+- **mundy::mesh::NgpModRequests**
   A ticket-based framework for staging mesh modification requests from the device and processing them on the host.
-    - Requesting new entities (with known or generated Ids)
-    - Requesting new connectivity (e.g. element-to-node relations) involving existing or future entities
-    - Requesting deletion of existing entities or connectivity
-    - Safe and efficient in the face of concurrent requests from multiple threads on the device
+    * Requesting new entities (with known or generated Ids)
+    * Requesting new connectivity (e.g. element-to-node relations) involving existing or future entities
+    * Requesting deletion of existing entities or connectivity
+    * Safe and efficient in the face of concurrent requests from multiple threads on the device
 
 - **mundy::mesh::FieldViews**  
   Helpers for extracting mathematical views into STK field types, both on host and device.  
@@ -245,17 +245,17 @@ Helpers and abstractions for integrating MuNDy with Trilinos/STK meshes and fiel
   ```
   and aggregation of these accessors to avoid function bloat.
 
-* **mundy::mesh::LinkData / mundy::mesh::LinkCOOData / mundy::mesh::LinkCSRData**
+- **mundy::mesh::LinkData / mundy::mesh::LinkCOOData / mundy::mesh::LinkCSRData**
   Kokkos-compatible dynamic connectivity constructs (ghosting contrasts that are themselves entities).
   * Supports dynamically updating COO connectivity
   * Allows on-device sparse updates to CSR structures
   * Follows dual-view-like semantics aligned with STK’s NGP design
   * Automatic synchronization tracking during mesh modification cycles
 
-* **mundy::mesh::NgpFieldBLAS**
+- **mundy::mesh::NgpFieldBLAS**
   Reimplementation of STK’s field BLAS routines with unified host/device syntax.
 
-* **mundy::mesh::NgpAccessorExpr**
+ **mundy::mesh::NgpAccessorExpr**
   MuNDy’s usability layer: a templated expression system with:
   * Automatic pruning of reused branches
   * Automatic synchronization of read fields
@@ -271,12 +271,26 @@ Helpers and abstractions for integrating MuNDy with Trilinos/STK meshes and fiel
 
 ### [**MundySearch**](https://mundyrepo.github.io/MuNDy/MundySearch.html): Neighbor-list construction and iteration
 
-MundySearch builds and iterates neighbor lists over STK mesh entities.
-- **Search inputs** pair selectors with geometry components so builders know which entities to search and how to read their detection regions.
-- **NeighborListBuilder** provides a fluent, type-safe interface for constructing backend-specific lists.
-- **Excluders** filter candidate pairs during the build, including self-interaction, symmetric duplicate, and narrow-phase filters.
-- **ManagedNeighborList** caches neighbor lists across time steps and rebuilds them only when selected policies require it.
-- **for_each_neighbor_pair / for_each_target_with_neighbors** expose backend-independent parallel iteration over stored neighbor relationships.
+Neighbor-list construction and iteration over STK mesh entities, backed by ArborX BVH or STK distributed coarse search.
+
+- **mundy::search::SearchInput / mundy::search::PeriodicSearchInput**  
+  Binds a `stk::mesh::Selector` to a geometry component (AABB or OBB), encoding which class of entities are searched and how to access their geometry.
+
+- **mundy::search::NeighborListBuilder**  
+  The canonical builder for all neighbor lists, allowing for the specification of source/target inputs, broad/narrow-phase refinements, and rebuild policies.
+  * **mundy::search::ArborX1dNeighborList**: Single-rank ArborX BVH, compressed CSR storage; lower memory, suited for sparse neighbor lists.
+  * **mundy::search::ArborX2dNeighborList**: Single-rank ArborX BVH, dense 2D per-target storage; suited for GPU pair-parallel dispatch.
+  * **mundy::search::STKSearchNeighborList**: STK MORTON_LBVH, MPI-distributed
+  * Periodic variants (**mundy::search::PeriodicArborX1dNeighborList**, **mundy::search::PeriodicArborX2dNeighborList**, **mundy::search::PeriodicSTKSearchNeighborList**) carry per-object image shifts alongside stored pairs.
+
+- **Excluders: mundy::search::ExcludeSelfInteraction, mundy::search::ExcludeSymmetricDuplicates, mundy::search::ExcludeConnectedEntities, mundy::search::ExcludeNonIntersectingOBBs**
+  Build-time predicates that reject candidate target/source pairs before they enter the stored list.
+
+- **Rebuilders: mundy::search::RebuildOnEntityChange, mundy::search::RebuildOnAABBDisplacement, mundy::search::RebuildOnOBBDisplacement, mundy::search::AlwaysRebuild, mundy::search::NeverRebuild**
+  Policies that determine when a cached neighbor list should be rebuilt based on changes in the underlying mesh or geometry.
+
+- **mundy::search::for_each_neighbor_pair / mundy::search::for_each_target_with_neighbors / mundy::search::for_each_neighbor_pair_reduce / mundy::search::for_each_target_with_neighbors_reduce**
+  Parallel iteration/reduction over stored pairs or per-target neighbor rows; works with all concrete list types.
 
 ---
 
@@ -285,9 +299,9 @@ MundySearch builds and iterates neighbor lists over STK mesh entities.
 Independent projects that emerged from MuNDy’s infrastructure and are usable on their own.
 - **[OpenRAND](https://github.com/msu-sparta/OpenRAND)**
   Performance-portable, counter-based random number generation that is stupid simple to use.
-  - Designed to easily fit in GPU registers
-  - Makes reproducibility in spite of varied parallelism possible
-  - Now used by HOOMD-Blue
+  * Designed to easily fit in GPU registers
+  * Makes reproducibility in spite of varied parallelism possible
+  * Now used by HOOMD-Blue
   
 - **[alsous_gigantism_2025](https://github.com/flatironinstitute/alsous_gigantism_2025)**
   A discrete elastic rod model implemented using MuNDy. 
@@ -295,8 +309,8 @@ Independent projects that emerged from MuNDy’s infrastructure and are usable o
 - **[mundy_mock_app](https://github.com/MundyRepo/mundy_mock_app)** /
   **[mundy_mock_app_tribits](https://github.com/MundyRepo/mundy_mock_app_tribits)**
   Helper applications for bootstrapping MuNDy-based codes:
-  - CMake-based or TriBITS+CMake templates
-  - Intended as starting points for internal and external applications that depend on MuNDy
+  * CMake-based or TriBITS+CMake templates
+  * Intended as starting points for internal and external applications that depend on MuNDy
 
 ---
 
