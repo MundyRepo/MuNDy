@@ -6,9 +6,9 @@
 ![Backend-Kokkos](https://img.shields.io/badge/backend-Kokkos-1E88E5.svg)
 ![Mesh-STK](https://img.shields.io/badge/mesh-Trilinos%2FSTK-4CAF50.svg)
 
-MuNDy is C++ infrastructure for building scalable, biologically grounded microscale multibody dynamics software.
+MuNDy is a C++ infrastructure for building scalable, biologically grounded microscale multibody dynamics software.
 
-MuNDy supports models with evolving mechanical and relational structure: heterogeneous rigid and flexible bodies; constraints, motors, and contact; growth, division, death, and bonds that form, break, and reorganize; and long-range interactions mediated through a shared medium. Rather than a monolithic simulator, MuNDy builds upon Trilinos/STK’s runtime-extensible entity/part/field data model to provide reusable abstractions and data structures for this problem class. It targets research software developers building domain-specific applications across deployment scales, from laptops and workstations to multi-GPU clusters.
+MuNDy supports models with evolving mechanical and relational structure: heterogeneous rigid and flexible bodies; constraints, motors, and contacts; growth, division, death, and bonds that form, break, and reorganize; and long-range interactions mediated through a shared medium. Rather than a monolithic simulator, MuNDy builds upon Trilinos/STK's runtime-extensible entity/part/field data model to provide reusable abstractions and data structures for this problem class. It is designed for research software developers building domain-specific applications across deployment scales, from laptops and workstations to multi-GPU clusters.
 
 > [!IMPORTANT]
 > **Project status (6/12/2026):**  

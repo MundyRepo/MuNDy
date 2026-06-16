@@ -665,46 +665,9 @@ ArborX2dNeighborList<MemorySpace> NeighborListBuildTraits<ArborX2dNeighborList<M
   // Narrow phase: re-pack the 2D grid after filtering survivors per row.
   if constexpr (Builder::has_narrow_phase) {
     const auto narrow_excluder = builder.setup_narrow_excluder(bulk_data);
-    const auto target_ents = target_boxes.identities();
-    const auto source_ents = source_boxes.identities();
-
-    // L0: count narrow survivors per target row.
-    Kokkos::View<size_type*, MemorySpace> narrow_counts("mundy_2d_narrow_counts", num_targets);
-    Kokkos::parallel_for(
-        "mundy_2d_narrow_L0", Kokkos::RangePolicy<exec_space>(0, num_targets), KOKKOS_LAMBDA(size_type t) {
-          size_type count = 0;
-          for (size_type k = 0; k < neighbor_counts(t); ++k) {
-            const size_type s = source_indices(t, k);
-            if (!narrow_excluder(NeighborSearchCandidate<size_t>(static_cast<size_t>(t), static_cast<size_t>(s),
-                                                                 target_ents(t), source_ents(s)))) {
-              ++count;
-            }
-          }
-          narrow_counts(t) = count;
-        });
-
-    // L1: new max column width.
-    size_type new_max = 0;
-    Kokkos::parallel_reduce(
-        "mundy_2d_narrow_L1_max", Kokkos::RangePolicy<exec_space>(0, num_targets),
-        KOKKOS_LAMBDA(size_type t, size_type & lmax) { lmax = lmax > narrow_counts(t) ? lmax : narrow_counts(t); },
-        Kokkos::Max<size_type>(new_max));
-    Kokkos::fence();
-
-    // L2: fill new 2D grid with surviving pairs compacted to the left.
-    Kokkos::View<size_type**, MemorySpace> narrow_src("mundy_2d_narrow_src", num_targets, new_max);
-    Kokkos::parallel_for(
-        "mundy_2d_narrow_L2", Kokkos::RangePolicy<exec_space>(0, num_targets), KOKKOS_LAMBDA(size_type t) {
-          size_type write_col = 0;
-          for (size_type k = 0; k < neighbor_counts(t); ++k) {
-            const size_type s = source_indices(t, k);
-            if (!narrow_excluder(NeighborSearchCandidate<size_t>(static_cast<size_t>(t), static_cast<size_t>(s),
-                                                                 target_ents(t), source_ents(s)))) {
-              narrow_src(t, write_col++) = s;
-            }
-          }
-        });
-
+    auto [narrow_counts, narrow_src] =
+        impl::apply_narrow_phase_2d(exec_sp, narrow_excluder, target_boxes.identities(),
+                                    source_boxes.identities(), source_indices, neighbor_counts);
     return list_type(builder.target_selector(), builder.source_selector(), target_boxes.identities(),
                      source_boxes.identities(), narrow_counts, narrow_src);
   }
@@ -820,55 +783,9 @@ NeighborListBuildTraits<PeriodicArborX2dNeighborList<MemorySpace, ImageShiftScal
   // Narrow phase: re-pack the periodic 2D grid after filtering survivors per row.
   if constexpr (Builder::has_narrow_phase) {
     const auto narrow_excluder = builder.setup_narrow_excluder(bulk_data);
-    const auto target_ents = target_images.owner_entities;
-    const auto source_ents = source_images.owner_entities;
-    const auto target_shifts = target_images.shifts;
-
-    // L0: count narrow survivors per target row.
-    Kokkos::View<size_type*, MemorySpace> narrow_counts("mundy_2d_per_narrow_counts", num_target_owners);
-    Kokkos::parallel_for(
-        "mundy_2d_per_narrow_L0", Kokkos::RangePolicy<exec_space>(0, num_target_owners), KOKKOS_LAMBDA(size_type t) {
-          size_type count = 0;
-          const auto target_shift = target_shifts(t);
-          for (size_type k = 0; k < owner_counts(t); ++k) {
-            const size_type s = source_owner_indices(t, k);
-            const auto source_shift = source_image_shifts(t, k);
-            if (!narrow_excluder(PeriodicNeighborSearchCandidate<image_shift_type, size_type>(
-                    t, s, target_ents(t), source_ents(s), target_shift, source_shift))) {
-              ++count;
-            }
-          }
-          narrow_counts(t) = count;
-        });
-
-    // L1: new max column width.
-    size_type new_max = 0;
-    Kokkos::parallel_reduce(
-        "mundy_2d_per_narrow_L1_max", Kokkos::RangePolicy<exec_space>(0, num_target_owners),
-        KOKKOS_LAMBDA(size_type t, size_type & lmax) { lmax = lmax > narrow_counts(t) ? lmax : narrow_counts(t); },
-        Kokkos::Max<size_type>(new_max));
-    Kokkos::fence();
-
-    // L2: fill compacted 2D grid.
-    Kokkos::View<size_type**, MemorySpace> narrow_src("mundy_2d_per_narrow_src", num_target_owners, new_max);
-    Kokkos::View<image_shift_type**, MemorySpace> narrow_shifts("mundy_2d_per_narrow_shifts", num_target_owners,
-                                                                new_max);
-    Kokkos::parallel_for(
-        "mundy_2d_per_narrow_L2", Kokkos::RangePolicy<exec_space>(0, num_target_owners), KOKKOS_LAMBDA(size_type t) {
-          size_type write_col = 0;
-          const auto target_shift = target_shifts(t);
-          for (size_type k = 0; k < owner_counts(t); ++k) {
-            const size_type s = source_owner_indices(t, k);
-            const auto source_shift = source_image_shifts(t, k);
-            if (!narrow_excluder(PeriodicNeighborSearchCandidate<image_shift_type, size_type>(
-                    t, s, target_ents(t), source_ents(s), target_shift, source_shift))) {
-              narrow_src(t, write_col) = s;
-              narrow_shifts(t, write_col) = source_shift;
-              ++write_col;
-            }
-          }
-        });
-
+    auto [narrow_counts, narrow_src, narrow_shifts] = impl::apply_narrow_phase_2d(
+        exec_sp, narrow_excluder, target_images.owner_entities, source_images.owner_entities,
+        target_images.shifts, source_owner_indices, source_image_shifts, owner_counts);
     return list_type(builder.target_selector(), builder.source_selector(), target_images.owner_entities,
                      source_images.owner_entities, target_images.shifts, narrow_counts, narrow_src, narrow_shifts);
   }
