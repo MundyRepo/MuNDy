@@ -12,7 +12,8 @@
 # We still call the upstream tribits_project_impl() macro, but we make the
 # override design explicit here:
 # - the same-name TriBITS modules in ${PROJECT_SOURCE_DIR}/cmake are thin shims
-# - those shims delegate into ${PROJECT_SOURCE_DIR}/cmake/tribits_overrides
+# - those shims delegate into the Mundy-named modules alongside them in
+#   ${PROJECT_SOURCE_DIR}/cmake
 # - MundyPackageConfig.cmake and MundyPackage_* are private implementation
 #   details used only to avoid the self-name collision between the Mundy
 #   project and the Mundy package
@@ -21,8 +22,7 @@
 # - find_package(Mundy)
 # - find_package(MundyUtils), find_package(MundyMath), find_package(MundyMesh), ...
 # - link with Mundy_LIBRARIES / Mundy::all_libs / MundyMath_LIBRARIES / ...
-set(MUNDY_TRIBITS_OVERRIDES_DIR
-  "${PROJECT_SOURCE_DIR}/cmake/tribits_overrides")
+set(MUNDY_CMAKE_DIR "${PROJECT_SOURCE_DIR}/cmake")
 
 
 function(mundy_tribits_register_public_config_contract_test)
@@ -44,7 +44,7 @@ function(mundy_tribits_register_public_config_contract_test)
   endif()
 
   set(contractTestScript
-    "${MUNDY_TRIBITS_OVERRIDES_DIR}/tests/VerifyPublicConfigContract.cmake")
+    "${MUNDY_CMAKE_DIR}/MundyPublicConfigContract.cmake")
   if (NOT EXISTS "${contractTestScript}")
     return()
   endif()

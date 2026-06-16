@@ -67,8 +67,9 @@ include(TribitsSetAndIncDirs)
 #     [DIRECTORIES <dir1> <dir2> ...]
 #     [NOINSTALLDIRECTORIES <nidir1> <nidir2> ...]
 #     [FILES_MATCHING]
-#        [[PATTERN <pattern> | REGEX <regex>]
-#         [EXCLUDE] [PERMISSIONS <permission>...]]
+#        [PATTERN <pattern> ... | REGEX <regex> ...]
+#        [EXCLUDE_PATTERN <pattern> ... | EXCLUDE_REGEX <regex> ...]
+#        [PERMISSIONS <permission> ...]
 #     [SOURCES <src0> <src1> ...]
 #     [DEPLIBS <deplib0> <deplib1> ...]
 #     [IMPORTEDLIBS <ideplib0> <ideplib1> ...]
@@ -161,9 +162,13 @@ include(TribitsSetAndIncDirs)
 #     ``REGEX <regex>``
 #       Install only the files that match the regular expression.
 #
-#     ``EXCLUDE``
-#       Excludes files matching the pattern or regex. This must be used after specifying
-#       a PATTERN or REGEX.
+#     ``EXCLUDE_PATTERN <pattern>``
+#       Exclude the files matching the globbing pattern.  Mutually exclusive with
+#       ``REGEX``/``EXCLUDE_REGEX``.
+#
+#     ``EXCLUDE_REGEX <regex>``
+#       Exclude the files matching the regular expression.  Mutually exclusive with
+#       ``PATTERN``/``EXCLUDE_PATTERN``.
 #
 #     ``PERMISSIONS <permissions>...``
 #       Sets the permissions for installed files. This can be a list of permissions such as
@@ -366,7 +371,7 @@ include(TribitsSetAndIncDirs)
 #
 function(mundy_tribits_add_library  LIBRARY_NAME_IN)
 
-  tribits_add_library_assert_correct_call_context()
+  mundy_tribits_add_library_assert_correct_call_context()
 
   # Set library prefix and name
 
@@ -429,8 +434,8 @@ function(mundy_tribits_add_library  LIBRARY_NAME_IN)
   
       # Assert DEPLIBS and IMPORTEDLIBS
   
-      tribits_add_library_assert_deplibs()
-      tribits_add_library_assert_importedlibs()
+      mundy_tribits_add_library_assert_deplibs()
+      mundy_tribits_add_library_assert_importedlibs()
   
       # Add the library and all the dependencies
   
@@ -530,7 +535,7 @@ function(mundy_tribits_add_library  LIBRARY_NAME_IN)
   
       # Add to the install target
   
-      tribits_add_library_determine_install_lib_and_or_headers(
+      mundy_tribits_add_library_determine_install_lib_and_or_headers(
         installLib  installHeaders  appendLibAndHeadersToPackageVars)
   
       if (installLib OR installHeaders)
@@ -559,33 +564,34 @@ function(mundy_tribits_add_library  LIBRARY_NAME_IN)
           )
         
         if (PARSE_DIRECTORIES)
-          # Install the given directories into the install directory
+          # Install the given directories into the install directory.  Forward
+          # the FILES_MATCHING filter arguments verbatim using the same keyword
+          # names that mundy_tribits_install_directories() accepts.  That
+          # function owns the single translation into the corresponding
+          # install() arguments (PATTERN/REGEX vs. their EXCLUDE counterparts)
+          # and the PATTERN-vs-REGEX mutual-exclusion check, so we must not
+          # pre-expand them here.
           set(install_directories_optional_args "")
 
           if (PARSE_FILES_MATCHING)
             list(APPEND install_directories_optional_args FILES_MATCHING)
-          
-            if ((PARSE_PATTERN OR PARSE_EXCLUDE_PATTERN) AND (PARSE_REGEX OR PARSE_EXCLUDE_REGEX))
-              message(FATAL_ERROR "The PATTERN and REGEX tokens of FILES_MATCHING (and their EXCLUDE counterparts) are mutually exclusive. Please specify only patterns OR regexes.")
-            endif()
-    
             if (PARSE_PATTERN)
               list(APPEND install_directories_optional_args PATTERN ${PARSE_PATTERN})
             endif()
             if (PARSE_EXCLUDE_PATTERN)
-              list(APPEND install_directories_optional_args PATTERN ${PARSE_EXCLUDE_PATTERN} EXCLUDE)
+              list(APPEND install_directories_optional_args EXCLUDE_PATTERN ${PARSE_EXCLUDE_PATTERN})
             endif()
             if (PARSE_REGEX)
               list(APPEND install_directories_optional_args REGEX ${PARSE_REGEX})
             endif()
             if (PARSE_EXCLUDE_REGEX)
-              list(APPEND install_directories_optional_args REGEX ${PARSE_EXCLUDE_REGEX} EXCLUDE)
+              list(APPEND install_directories_optional_args EXCLUDE_REGEX ${PARSE_EXCLUDE_REGEX})
             endif()
             if (PARSE_PERMISSIONS)
               list(APPEND install_directories_optional_args PERMISSIONS ${PARSE_PERMISSIONS})
             endif()
           endif()
-            
+
           mundy_tribits_install_directories(
             DIRECTORIES  ${PARSE_DIRECTORIES}
             ${install_directories_optional_args}
@@ -655,7 +661,7 @@ function(mundy_tribits_add_library  LIBRARY_NAME_IN)
   # Function that asserts that mundy_tribits_add_library() is called in the correct
   # context
   #
-  function(tribits_add_library_assert_correct_call_context)
+  function(mundy_tribits_add_library_assert_correct_call_context)
   
     if (CURRENTLY_PROCESSING_SUBPACKAGE)
   
@@ -708,7 +714,7 @@ function(mundy_tribits_add_library  LIBRARY_NAME_IN)
   # ToDo: Turn the below deprecated WARNING messages to FATAL_ERROR once we
   # give enough time for people to clean up their codes.
   #
-  function(tribits_add_library_assert_deplibs)
+  function(mundy_tribits_add_library_assert_deplibs)
   
     foreach(depLib ${PARSE_DEPLIBS})
   
@@ -793,7 +799,7 @@ function(mundy_tribits_add_library  LIBRARY_NAME_IN)
   # ToDo: Turn the below deprecated WARNING messages to FATAL_ERROR once we
   # give enough time for people to clean up their codes.
   #
-  function(tribits_add_library_assert_importedlibs)
+  function(mundy_tribits_add_library_assert_importedlibs)
     foreach(importedLib ${PARSE_IMPORTEDLIBS})
       set(prefixedImportedLib "${LIBRARY_NAME_PREFIX}${importedLib}")
       list(FIND ${PACKAGE_NAME}_LIBRARIES "${PACKAGE_NAME}::${prefixedImportedLib}"
@@ -829,7 +835,7 @@ function(mundy_tribits_add_library  LIBRARY_NAME_IN)
   # NOTE: This reads the parsed arguments (prefixed with ``PARSE_``) from the
   # calling mundy_tribits_add_library() function from the enclosing scope.
   #
-  function(tribits_add_library_determine_install_lib_and_or_headers
+  function(mundy_tribits_add_library_determine_install_lib_and_or_headers
       installLibOut  installHeadersOut  appendLibAndHeadersToPackageVarsOut
     )
   

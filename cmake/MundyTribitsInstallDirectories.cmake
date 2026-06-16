@@ -41,43 +41,71 @@
 include(CMakeParseArguments)
 
 
-# @FUNCTION: mundy_tribits_install_headers()
+# @FUNCTION: mundy_tribits_install_directories()
 #
-# Function used to (optionally) install header files using ``install()``
-# command.
+# Function used to (optionally) install whole directories of files using the
+# ``install(DIRECTORY ...)`` command, preserving their directory structure.
 #
 # Usage::
 #
-#   mundy_tribits_install_headers(
-#     HEADERS <h0> <h1> ...
+#   mundy_tribits_install_directories(
+#     DIRECTORIES <dir0> <dir1> ...
 #     [INSTALL_SUBDIR <subdir>]
 #     [COMPONENT <component>]
+#     [FILES_MATCHING
+#       [PATTERN <pattern> ... | REGEX <regex> ...]
+#       [EXCLUDE_PATTERN <pattern> ... | EXCLUDE_REGEX <regex> ...]
+#       [PERMISSIONS <permission> ...]]
 #     )
 #
 # The formal arguments are:
 #
-#   ``HEADERS <h0> <h1> ...``
+#   ``DIRECTORIES <dir0> <dir1> ...``
 #
-#     List of header files to install.  By default, these header files are
-#     assumed to be in the current source directory.  They can also contain
-#     the relative path or absolute path to the files if they are not in the
-#     current source directory.
+#     List of directories to install.  By default, these directories are
+#     assumed to be in the current source directory.  They can also contain a
+#     relative or absolute path if they are not in the current source
+#     directory.  The directory structure is copied verbatim to the
+#     destination.
 #
 #   ``INSTALL_SUBDIR <subdir>``
 #
-#     Optional subdirectory that the headers will be installed under the
-#     standard installation directory.  If ``<subdir>!=""``, then the headers
-#     will be installed under
-#     ``${PROJECT_NAME}_INSTALL_INCLUDE_DIR}/<subdir>``.  Otherwise, they will
-#     be installed under ``${PROJECT_NAME}_INSTALL_INCLUDE_DIR}/``.
+#     Optional subdirectory that the directories will be installed under the
+#     standard installation directory.  If ``<subdir>!=""``, then they will be
+#     installed under ``${PROJECT_NAME}_INSTALL_INCLUDE_DIR}/<subdir>``.
+#     Otherwise, they will be installed under
+#     ``${PROJECT_NAME}_INSTALL_INCLUDE_DIR}/``.
 #
 #   ``COMPONENT <component>``
 #
 #     If specified, then ``COMPONENT <component>`` will be passed into
 #     ``install()``.  Otherwise, ``COMPONENT ${PROJECT_NAME}`` will get used.
 #
+#   ``FILES_MATCHING``
+#
+#     Enables file-matching filters on the installed directories.  When
+#     present, it may be followed by one or more of:
+#
+#     ``PATTERN <pattern>``
+#       Install only the files matching the globbing pattern.
+#
+#     ``REGEX <regex>``
+#       Install only the files that match the regular expression.
+#
+#     ``EXCLUDE_PATTERN <pattern>``
+#       Exclude the files matching the globbing pattern.
+#
+#     ``EXCLUDE_REGEX <regex>``
+#       Exclude the files matching the regular expression.
+#
+#     ``PERMISSIONS <permissions>...``
+#       Sets the permissions for installed files (e.g. OWNER_READ, GROUP_READ).
+#
+#     The pattern-based (``PATTERN``/``EXCLUDE_PATTERN``) and regex-based
+#     (``REGEX``/``EXCLUDE_REGEX``) tokens are mutually exclusive.
+#
 # If `${PROJECT_NAME}_INSTALL_LIBRARIES_AND_HEADERS`_ is ``FALSE``, then the
-# headers will not get installed.
+# directories will not get installed.
 #
 function(mundy_tribits_install_directories)
 
