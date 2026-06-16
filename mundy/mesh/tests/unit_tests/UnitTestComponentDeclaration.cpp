@@ -79,11 +79,11 @@ template <typename AccessLike, typename ExpectedFieldScalar, typename ExpectedSh
 constexpr bool component_access_shape_matches_v = []() {
   using shape = component_access_shape<canonical_component_access_t<AccessLike>>;
   if constexpr (ExpectedFixedScalars) {
-    return std::is_same_v<typename shape::field_scalar_type, ExpectedFieldScalar> &&
+    return std::is_same_v<typename shape::field_value_typeype, ExpectedFieldScalar> &&
            std::is_same_v<typename shape::shared_value_type, ExpectedSharedValue> && shape::has_fixed_field_scalars &&
            shape::field_scalars == ExpectedFieldScalars;
   } else {
-    return std::is_same_v<typename shape::field_scalar_type, ExpectedFieldScalar> &&
+    return std::is_same_v<typename shape::field_value_typeype, ExpectedFieldScalar> &&
            std::is_same_v<typename shape::shared_value_type, ExpectedSharedValue> && !shape::has_fixed_field_scalars;
   }
 }();
@@ -154,7 +154,7 @@ TEST(UnitTestComponentDeclaration, CanonicalComponentAccessDrivesConcreteDeclara
   stk::mesh::MetaData& meta_data = *meta_data_ptr;
   meta_data.use_simple_fields();
 
-  ComponentDeclarationHelper decl(meta_data);
+  ComponentDeclaration decl(meta_data);
 
   auto scalar =
       decl.rank(ELEM_RANK).name("CANONICAL_SCALAR").field<const double&>().tag<CANONICAL_SCALAR>().declare();
@@ -185,7 +185,7 @@ TEST(UnitTestComponentDeclaration, CanonicalComponentAccessDrivesConcreteDeclara
       std::is_same_v<decltype(quaternion), TaggedComponent<CANONICAL_QUATERNION, QuaternionFieldComponent<double>>>);
   static_assert(std::is_same_v<decltype(aabb), TaggedComponent<CANONICAL_AABB, AABBFieldComponent<double>>>);
 
-  PartDeclarationHelper part_decl(meta_data);
+  PartDeclaration part_decl(meta_data);
   stk::mesh::Part& elem_part = part_decl.name("CANONICAL_COMPONENT_ACCESS_PART")
                                    .topology(stk::topology::PARTICLE)
                                    .put_component(scalar, nullptr)
@@ -211,14 +211,14 @@ TEST(UnitTestComponentDeclaration, CanonicalComponentAccessDrivesConcreteDeclara
   EXPECT_EQ(stk::mesh::field_scalars_per_entity(aabb.component().field(), elem1), 6u);
 
   auto shared_scalar =
-      ComponentDeclarationHelper().shared<const double&>(2.0).rank(ELEM_RANK).tag<CANONICAL_SCALAR>().declare();
-  auto shared_matrix3 = ComponentDeclarationHelper()
+      ComponentDeclaration().shared<const double&>(2.0).rank(ELEM_RANK).tag<CANONICAL_SCALAR>().declare();
+  auto shared_matrix3 = ComponentDeclaration()
                             .shared<Matrix3<double>>(Matrix3<double>{})
                             .rank(ELEM_RANK)
                             .tag<CANONICAL_MATRIX3>()
                             .declare();
   auto shared_matrix23 =
-      ComponentDeclarationHelper().shared<access::matrix23d>(Matrix<double, 2, 3>{}).rank(ELEM_RANK).declare();
+      ComponentDeclaration().shared<access::matrix23d>(Matrix<double, 2, 3>{}).rank(ELEM_RANK).declare();
 
   static_assert(
       std::is_same_v<decltype(shared_scalar), TaggedComponent<CANONICAL_SCALAR, SharedScalarComponent<double>>>);
@@ -243,7 +243,7 @@ TEST(UnitTestComponentDeclaration, CanonicalUse) {
   stk::mesh::MetaData& meta_data = *meta_data_ptr;
   meta_data.use_simple_fields();
 
-  ComponentDeclarationHelper component_decl(meta_data);
+  ComponentDeclaration component_decl(meta_data);
 
   auto coords = component_decl.type<double>()
                     .role(TRANSIENT)
@@ -253,9 +253,9 @@ TEST(UnitTestComponentDeclaration, CanonicalUse) {
                     .tag<DECLARED_COORDS>()
                     .declare();
 
-  auto speed = ComponentDeclarationHelper().shared<double>(2.5).rank(ELEM_RANK).tag<DECLARED_SPEED>().declare();
+  auto speed = ComponentDeclaration().shared<double>(2.5).rank(ELEM_RANK).tag<DECLARED_SPEED>().declare();
 
-  PartDeclarationHelper part_decl(meta_data);
+  PartDeclaration part_decl(meta_data);
   stk::mesh::Part& particle_part =
       part_decl.name("DECLARED_PARTICLES").topology(stk::topology::PARTICLE).put_component(coords, nullptr).declare();
 
@@ -301,7 +301,7 @@ TEST(UnitTestComponentDeclaration, FieldComponentDeclarationIsInvariantToFluentC
   stk::mesh::MetaData& meta_data = *meta_data_ptr;
   meta_data.use_simple_fields();
 
-  ComponentDeclarationHelper component_decl(meta_data);
+  ComponentDeclaration component_decl(meta_data);
   auto field1 = component_decl.type<double>()
                     .role(TRANSIENT)
                     .rank(ELEM_RANK)
@@ -342,7 +342,7 @@ TEST(UnitTestComponentDeclaration, FieldComponentDeclarationIsInvariantToFluentC
                     .role(TRANSIENT)
                     .declare();
 
-  PartDeclarationHelper part_decl(meta_data);
+  PartDeclaration part_decl(meta_data);
   stk::mesh::Part& particle_part = part_decl.name("ORDERED_PARTICLES")
                                        .topology(stk::topology::PARTICLE)
                                        .put_component(field1, nullptr)
@@ -409,7 +409,7 @@ TEST(UnitTestComponentDeclaration, SharedComponentDeclarationViaExplicitAccess) 
     GTEST_SKIP();
   }
 
-  ComponentDeclarationHelper component_decl;
+  ComponentDeclaration component_decl;
   auto speed = component_decl.shared<double>(3.5).tag<DECLARED_SPEED>().rank(stk::topology::ELEM_RANK).declare();
 
   stk::mesh::Entity entity = stk::mesh::Entity();
@@ -430,7 +430,7 @@ TEST(UnitTestComponentDeclaration, FieldComponentDeclarationRejectsOutputTypeMis
   stk::mesh::MetaData& meta_data = *meta_data_ptr;
   meta_data.use_simple_fields();
 
-  ComponentDeclarationHelper component_decl(meta_data);
+  ComponentDeclaration component_decl(meta_data);
 
   EXPECT_THROW((void)component_decl.type<double>()
                    .output_type(stk::io::FieldOutputType::SCALAR)
@@ -456,8 +456,8 @@ TEST(UnitTestComponentDeclaration, ExpectedFailureModes) {
   stk::mesh::MetaData& meta_data = *meta_data_ptr;
   meta_data.use_simple_fields();
 
-  ComponentDeclarationHelper component_decl(meta_data);
-  ComponentDeclarationHelper shared_component_decl;
+  ComponentDeclaration component_decl(meta_data);
+  ComponentDeclaration shared_component_decl;
 
   // Missing name: rank and backend set, name omitted.
   EXPECT_THROW((void)component_decl.type<double>().rank(ELEM_RANK).field<double>().declare(), std::logic_error);
@@ -467,12 +467,12 @@ TEST(UnitTestComponentDeclaration, ExpectedFailureModes) {
   // Missing rank on shared: calling .declare() without .rank() on a shared builder throws.
   EXPECT_THROW((void)shared_component_decl.shared<double>(3.5).tag<DECLARED_SPEED>().declare(), std::logic_error);
   // NOTE: calling .declare() without first calling .field<A>() or .shared<A>(source) is a compile error.
-  // TaggedFieldDeclarationHelperT (.tag() without backend selection) has no .declare() member.
+  // TaggedFieldDeclarationT (.tag() without backend selection) has no .declare() member.
 }
 
-// Tests for the unified ComponentDeclarationHelper(meta_data) constructor.
+// Tests for the unified ComponentDeclaration(meta_data) constructor.
 
-TEST(UnitTestComponentDeclaration, ComponentDeclarationHelperFieldPath) {
+TEST(UnitTestComponentDeclaration, ComponentDeclarationFieldPath) {
   if (stk::parallel_machine_size(MPI_COMM_WORLD) != 1) {
     GTEST_SKIP();
   }
@@ -488,7 +488,7 @@ TEST(UnitTestComponentDeclaration, ComponentDeclarationHelperFieldPath) {
   stk::mesh::MetaData& meta_data = *meta_data_ptr;
   meta_data.use_simple_fields();
 
-  ComponentDeclarationHelper decl(meta_data);
+  ComponentDeclaration decl(meta_data);
 
   // Name-first field path: rank + name set before backend selection.
   auto vel = decl.role(TRANSIENT).rank(NODE_RANK).name("VELOCITY").field<Vector3d>().tag<VELOCITY>().declare();
@@ -501,7 +501,7 @@ TEST(UnitTestComponentDeclaration, ComponentDeclarationHelperFieldPath) {
                  .name("ANGULAR_VELOCITY")
                  .declare();
 
-  PartDeclarationHelper part_decl(meta_data);
+  PartDeclaration part_decl(meta_data);
   stk::mesh::Part& node_part = part_decl.name("SPHERE_NODES")
                                    .rank(NODE_RANK)
                                    .put_component(vel, nullptr)
@@ -521,7 +521,7 @@ TEST(UnitTestComponentDeclaration, ComponentDeclarationHelperFieldPath) {
   EXPECT_EQ(stk::mesh::field_scalars_per_entity(ang.component().field(), node1), 3u);
 }
 
-TEST(UnitTestComponentDeclaration, ComponentDeclarationHelperSharedPath) {
+TEST(UnitTestComponentDeclaration, ComponentDeclarationSharedPath) {
   if (stk::parallel_machine_size(MPI_COMM_WORLD) != 1) {
     GTEST_SKIP();
   }
@@ -536,7 +536,7 @@ TEST(UnitTestComponentDeclaration, ComponentDeclarationHelperSharedPath) {
   stk::mesh::MetaData& meta_data = *meta_data_ptr;
   meta_data.use_simple_fields();
 
-  ComponentDeclarationHelper decl(meta_data);
+  ComponentDeclaration decl(meta_data);
 
   // Backend-first shared path: .shared<A>(v).rank(r).name(n).tag<T>().declare()
   auto drag =
@@ -573,7 +573,7 @@ TEST(UnitTestComponentDeclaration, CompatibleNonDefaultOutputTypeIsAcceptedForFi
   stk::mesh::MetaData& meta_data = *meta_data_ptr;
   meta_data.use_simple_fields();
 
-  ComponentDeclarationHelper decl(meta_data);
+  ComponentDeclaration decl(meta_data);
 
   // FULL_TENSOR_12 has 3 scalars — same as Vector3d — so our scalar-count check accepts it even though
   // it is not the default output type for this access shape. SCALAR (1 scalar) must still be rejected.

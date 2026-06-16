@@ -21,6 +21,10 @@
 #ifndef MUNDY_GEOM_DISTANCE_HPP_
 #define MUNDY_GEOM_DISTANCE_HPP_
 
+/// \file distance.hpp
+/// \defgroup MundyGeomDistance mundy::distance
+/// \brief Distance queries between Mundy geometric primitives.
+
 // All of our headers for computing separation distances between shape primitives
 
 // Point to <shape> distance headers

@@ -39,6 +39,7 @@
 #include <mundy_math/impl/VectorImpl.hpp>
 #include <mundy_utils/requires.hpp>
 #include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
+#include <mundy_math/cmath.hpp>
 
 namespace mundy {
 
@@ -62,11 +63,11 @@ template <typename VectorType>
 concept ValidVectorType =
     is_vector_v<std::decay_t<VectorType>> &&
     requires(std::decay_t<VectorType> vector, const std::decay_t<VectorType> const_vector, size_t i) {
-      typename std::decay_t<VectorType>::scalar_t;
-      { vector[i] } -> std::convertible_to<typename std::decay_t<VectorType>::scalar_t>;
-      { vector(i) } -> std::convertible_to<typename std::decay_t<VectorType>::scalar_t>;
-      { const_vector[i] } -> std::convertible_to<const typename std::decay_t<VectorType>::scalar_t>;
-      { const_vector(i) } -> std::convertible_to<const typename std::decay_t<VectorType>::scalar_t>;
+      typename std::decay_t<VectorType>::value_type;
+      { vector[i] } -> std::convertible_to<typename std::decay_t<VectorType>::value_type>;
+      { vector(i) } -> std::convertible_to<typename std::decay_t<VectorType>::value_type>;
+      { const_vector[i] } -> std::convertible_to<const typename std::decay_t<VectorType>::value_type>;
+      { const_vector(i) } -> std::convertible_to<const typename std::decay_t<VectorType>::value_type>;
     };  // ValidVectorType
 
 /// \brief Class for an Nx1 vector with arithmetic entries
@@ -121,10 +122,10 @@ class AVector {
   //@{
 
   /// \brief The type of the entries
-  using scalar_t = T;
+  using value_type = T;
 
   /// \brief The non-const type of the entries
-  using non_const_scalar_t = std::remove_const_t<T>;
+  using non_const_value_type = std::remove_const_t<T>;
 
   /// \brief Deep copy type
   using deep_copy_t = AVector<T, N>;
@@ -216,7 +217,7 @@ class AVector {
   template <ValidVectorType OtherVectorType>
   KOKKOS_INLINE_FUNCTION constexpr AVector(const OtherVectorType& other)
       MUNDY_REQUIRES((!std::is_same_v<OtherVectorType, AVector<T, N, Accessor>>) && (OtherVectorType::size == N) &&
-                     (std::is_convertible_v<typename OtherVectorType::scalar_t, T>) && HasDefaultConstructor<Accessor>)
+                     (std::is_convertible_v<typename OtherVectorType::value_type, T>) && HasDefaultConstructor<Accessor>)
       : accessor_() {
     impl::deep_copy_impl(std::make_index_sequence<N>{}, *this, other);
   }
@@ -225,7 +226,7 @@ class AVector {
   template <ValidVectorType OtherVectorType>
   KOKKOS_INLINE_FUNCTION constexpr AVector(OtherVectorType&& other)
       MUNDY_REQUIRES((!std::is_same_v<OtherVectorType, AVector<T, N, Accessor>>) && (OtherVectorType::size == N) &&
-                     (std::is_convertible_v<typename OtherVectorType::scalar_t, T>) && HasDefaultConstructor<Accessor>)
+                     (std::is_convertible_v<typename OtherVectorType::value_type, T>) && HasDefaultConstructor<Accessor>)
       : accessor_() {
     impl::deep_copy_impl(std::make_index_sequence<N>{}, *this, std::move(other));
   }
@@ -235,7 +236,7 @@ class AVector {
   template <ValidVectorType OtherVectorType>
   KOKKOS_INLINE_FUNCTION constexpr AVector<T, N, Accessor>& operator=(const OtherVectorType& other)
       MUNDY_REQUIRES((!std::is_same_v<OtherVectorType, AVector<T, N, Accessor>>) && (OtherVectorType::size == N) &&
-                     (std::is_convertible_v<typename OtherVectorType::scalar_t, T>) &&
+                     (std::is_convertible_v<typename OtherVectorType::value_type, T>) &&
                      HasNonConstAccessOperator<Accessor, T>) {
     impl::deep_copy_impl(std::make_index_sequence<N>{}, *this, other);
     return *this;
@@ -246,7 +247,7 @@ class AVector {
   template <ValidVectorType OtherVectorType>
   KOKKOS_INLINE_FUNCTION constexpr AVector<T, N, Accessor>& operator=(OtherVectorType&& other)
       MUNDY_REQUIRES((!std::is_same_v<OtherVectorType, AVector<T, N, Accessor>>) && (OtherVectorType::size == N) &&
-                     (std::is_convertible_v<typename OtherVectorType::scalar_t, T>) &&
+                     (std::is_convertible_v<typename OtherVectorType::value_type, T>) &&
                      HasNonConstAccessOperator<Accessor, T>) {
     impl::deep_copy_impl(std::make_index_sequence<N>{}, *this, std::move(other));
     return *this;
@@ -576,7 +577,7 @@ KOKKOS_INLINE_FUNCTION
                             const decltype(get_comparison_tolerance<T, U>())& tol = get_comparison_tolerance<T, U>()) {
   // Use the tolerance type as the comparison type
   using ComparisonType = std::remove_reference_t<decltype(tol)>;
-  return Kokkos::abs(static_cast<ComparisonType>(scalar1) - static_cast<ComparisonType>(scalar2)) <= tol;
+  return abs(static_cast<ComparisonType>(scalar1) - static_cast<ComparisonType>(scalar2)) <= tol;
 }
 
 /// \brief Scalar-scalar equality (within a relaxed tolerance)
@@ -732,6 +733,12 @@ KOKKOS_INLINE_FUNCTION constexpr auto copy(const VectorType& v) {
   return v.copy();
 }
 
+/// \brief Cast a vector to a different arithmetic type
+template <typename U, ValidVectorType VectorType>
+KOKKOS_INLINE_FUNCTION constexpr auto cast(const VectorType& v) {
+  return v.template cast<U>();
+}
+
 /// \brief Dot product of two vectors
 /// \param[in] a The first vector.
 /// \param[in] b The second vector.
@@ -797,7 +804,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto one_norm(const AVector<T, N, Accessor>& ve
 template <size_t N, typename T, ValidAccessor<T> Accessor,
           typename OutputType = std::conditional_t<std::is_integral_v<T>, double, T>>
 KOKKOS_INLINE_FUNCTION constexpr OutputType two_norm(const AVector<T, N, Accessor>& vec) {
-  return Kokkos::sqrt(static_cast<OutputType>(dot(vec, vec)));
+  return sqrt(static_cast<OutputType>(dot(vec, vec)));
 }
 
 /// \brief AVector 2-norm (Returns a float if T is an integral type, otherwise returns T)
@@ -858,7 +865,7 @@ KOKKOS_INLINE_FUNCTION constexpr OutputType minor_angle(const AVector<U, N, Acce
   } else if (cosine < OutputType(-1)) {
     cosine = OutputType(-1);
   }
-  return Kokkos::acos(cosine);
+  return acos(cosine);
 }
 
 /// \brief Minor angle between two vectors (returns a float if common_type_t<U, T> is integral, otherwise

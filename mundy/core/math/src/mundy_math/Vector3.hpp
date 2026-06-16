@@ -47,34 +47,34 @@ namespace mundy {
 template <typename Vector3Type>
 concept ValidVector3Type = is_vector3_v<std::decay_t<Vector3Type>> &&
                            requires(std::decay_t<Vector3Type> vector3, const std::decay_t<Vector3Type> const_vector3) {
-                             typename std::decay_t<Vector3Type>::scalar_t;
-                             { vector3[0] } -> std::convertible_to<typename std::decay_t<Vector3Type>::scalar_t>;
-                             { vector3[1] } -> std::convertible_to<typename std::decay_t<Vector3Type>::scalar_t>;
-                             { vector3[2] } -> std::convertible_to<typename std::decay_t<Vector3Type>::scalar_t>;
+                             typename std::decay_t<Vector3Type>::value_type;
+                             { vector3[0] } -> std::convertible_to<typename std::decay_t<Vector3Type>::value_type>;
+                             { vector3[1] } -> std::convertible_to<typename std::decay_t<Vector3Type>::value_type>;
+                             { vector3[2] } -> std::convertible_to<typename std::decay_t<Vector3Type>::value_type>;
 
-                             { vector3(0) } -> std::convertible_to<typename std::decay_t<Vector3Type>::scalar_t>;
-                             { vector3(1) } -> std::convertible_to<typename std::decay_t<Vector3Type>::scalar_t>;
-                             { vector3(2) } -> std::convertible_to<typename std::decay_t<Vector3Type>::scalar_t>;
+                             { vector3(0) } -> std::convertible_to<typename std::decay_t<Vector3Type>::value_type>;
+                             { vector3(1) } -> std::convertible_to<typename std::decay_t<Vector3Type>::value_type>;
+                             { vector3(2) } -> std::convertible_to<typename std::decay_t<Vector3Type>::value_type>;
 
                              {
                                const_vector3[0]
-                             } -> std::convertible_to<const typename std::decay_t<Vector3Type>::scalar_t>;
+                             } -> std::convertible_to<const typename std::decay_t<Vector3Type>::value_type>;
                              {
                                const_vector3[1]
-                             } -> std::convertible_to<const typename std::decay_t<Vector3Type>::scalar_t>;
+                             } -> std::convertible_to<const typename std::decay_t<Vector3Type>::value_type>;
                              {
                                const_vector3[2]
-                             } -> std::convertible_to<const typename std::decay_t<Vector3Type>::scalar_t>;
+                             } -> std::convertible_to<const typename std::decay_t<Vector3Type>::value_type>;
 
                              {
                                const_vector3(0)
-                             } -> std::convertible_to<const typename std::decay_t<Vector3Type>::scalar_t>;
+                             } -> std::convertible_to<const typename std::decay_t<Vector3Type>::value_type>;
                              {
                                const_vector3(1)
-                             } -> std::convertible_to<const typename std::decay_t<Vector3Type>::scalar_t>;
+                             } -> std::convertible_to<const typename std::decay_t<Vector3Type>::value_type>;
                              {
                                const_vector3(2)
-                             } -> std::convertible_to<const typename std::decay_t<Vector3Type>::scalar_t>;
+                             } -> std::convertible_to<const typename std::decay_t<Vector3Type>::value_type>;
                            };  // ValidVector3Type
 
 //! \name Non-member functions

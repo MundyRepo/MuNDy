@@ -1,5 +1,7 @@
 # MundyMesh {#MundyMesh}
 
+\brief MuNDy's extension to Trilinos/STK.
+
 See the \ref mundy/mesh "MundyMesh directory reference".
 
 MundyMesh is the part of Mundy that manages mesh data, mesh-side access patterns, and mesh-side algorithms.
@@ -59,7 +61,7 @@ including dynamic GPU-compatible links and ticketed device-side modification req
 | **Layer** | **Main types / functions** | **Use when you need** |
 |-----------|-----------------------------|------------------------|
 | Mesh construction | `MeshBuilder`, `MetaData`, `BulkData` | A Mundy-aware STK mesh object. |
-| Declaration helpers | `FieldDeclarationHelper`, `ComponentDeclarationHelper`, `PartDeclarationHelper`, `ClassDeclarationHelper`, `DeclareEntitiesHelper` | Less boilerplate when setting up a mesh. |
+| Declaration helpers | `FieldDeclaration`, `ComponentDeclaration`, `PartDeclaration`, `ClassDeclaration`, `DeclareEntities` | Less boilerplate when setting up a mesh. |
 | Semantic structure | `Class`, `declare_class(...)` | A flattened class hierarchy on top of parts that also behaves correctly with STK IO. |
 | Field access | `scalar_field_data`, `vector3_field_data`, `quaternion_field_data`, ... | Typed math/geom views into raw field storage. |
 | Components / aggregates | `Component`, `FieldComponent`, `SharedComponent`, `Aggregate`, `NgpAggregate` | Storage-independent data access and logical grouping of many accessors. |
@@ -131,13 +133,13 @@ Use mesh attributes for configuration and provenance, not as a replacement for e
 STK setup code is often repetitive. Mundy's declaration helpers exist to reduce that boilerplate while keeping the
 underlying STK behavior visible.
 
-### `FieldDeclarationHelper`
-Use `FieldDeclarationHelper` when you want to declare a plain STK field through a fluent interface.
+### `FieldDeclaration`
+Use `FieldDeclaration` when you want to declare a plain STK field through a fluent interface.
 
 ```cpp
 using namespace mundy::mesh;
 
-FieldDeclarationHelper field_decl(meta);
+FieldDeclaration field_decl(meta);
 
 stk::mesh::Field<double>& coords =
     field_decl.type<double>()
@@ -174,18 +176,18 @@ The required inputs before `declare()` are `type<T>()`, `rank(...)`, and `name(.
 
 | **Setter** | **Meaning** |
 |------------|-------------|
-| `type<T>()` | Choose the scalar storage type. Returns a typed `FieldDeclarationHelperT<T>`. |
+| `type<T>()` | Choose the scalar storage type. Returns a typed `FieldDeclarationT<T>`. |
 | `rank(rank)` | Choose the entity rank for the field. |
 | `name("...")` | Choose the field name. |
 | `role(role)` | Set the STK IO role such as `Ioss::Field::MESH` or `Ioss::Field::TRANSIENT`. |
 | `output_type(type)` | Control component labeling in IO output. |
 
-`FieldDeclarationHelper` declares raw STK fields only. Use `ComponentDeclarationHelper` when the intent
+`FieldDeclaration` declares raw STK fields only. Use `ComponentDeclaration` when the intent
 is to declare a field-backed or shared component.
 
-### `ComponentDeclarationHelper`
-`ComponentDeclarationHelper` is the preferred entry point when you want to declare a field-backed or
-shared-backed component. It offers the same fluent setters as `FieldDeclarationHelper` but routes the
+### `ComponentDeclaration`
+`ComponentDeclaration` is the preferred entry point when you want to declare a field-backed or
+shared-backed component. It offers the same fluent setters as `FieldDeclaration` but routes the
 declaration through a typed builder chain that produces a `FieldComponent` or `SharedComponent` rather
 than a raw `stk::mesh::Field`.
 
@@ -200,10 +202,10 @@ use `auto` throughout:
 
 | **Builder** | **State** | **Available transitions** |
 |-------------|-----------|---------------------------|
-| `ComponentDeclarationHelper` | Nothing fixed | `.rank()` `.name()` `.role()` `.output_type()` `.type<T>()` `.tag<Tag>()` `.field<A>()` `.shared<A>(source)` |
-| `TaggedFieldDeclarationHelperT` | Tag and/or field scalar fixed | same backend transitions as `ComponentDeclarationHelper` |
-| `TaggedFieldBackedDeclarationHelperT` | Access + field backend | `.rank()` `.name()` `.role()` `.output_type()` `.type<T>()` `.tag<Tag>()` `.declare()` |
-| `TaggedSharedComponentDeclarationHelperT` | Access + shared backend | `.rank()` `.name()` `.tag<Tag>()` `.declare()` |
+| `ComponentDeclaration` | Nothing fixed | `.rank()` `.name()` `.role()` `.output_type()` `.type<T>()` `.tag<Tag>()` `.field<A>()` `.shared<A>(source)` |
+| `TaggedFieldDeclarationT` | Tag and/or field scalar fixed | same backend transitions as `ComponentDeclaration` |
+| `TaggedFieldBackedDeclarationT` | Access + field backend | `.rank()` `.name()` `.role()` `.output_type()` `.type<T>()` `.tag<Tag>()` `.declare()` |
+| `TaggedSharedComponentDeclarationT` | Access + shared backend | `.rank()` `.name()` `.tag<Tag>()` `.declare()` |
 
 `.field<A>()` and `.shared<A>(source)` are the backend commitment steps. The `A` is the access shape.
 
@@ -234,7 +236,7 @@ Call `.field<A>()` to commit to a field-backed component, then `.declare()`:
 ```cpp
 using namespace mundy::mesh;
 
-ComponentDeclarationHelper decl(meta);
+ComponentDeclaration decl(meta);
 
 // Untagged scalar field component
 auto mass =
@@ -272,7 +274,7 @@ Call `.shared<A>(source)` to commit to a shared-backed component. `source` can b
 ```cpp
 using namespace mundy::mesh;
 
-ComponentDeclarationHelper decl(meta);
+ComponentDeclaration decl(meta);
 
 // Shared scalar: one collision radius for all elements in a part
 auto collision_radius =
@@ -305,7 +307,7 @@ multiple components that share common attributes:
 ```cpp
 using namespace mundy::mesh;
 
-ComponentDeclarationHelper decl(meta);
+ComponentDeclaration decl(meta);
 
 // Capture common attributes at the node transient vector3 level.
 // field<access::vector<double, 3>>() and field<Vector3<double>>() are equivalent.
@@ -320,13 +322,13 @@ auto velocity = node_transient_vec3.name("velocity").tag<LIN_VEL>().declare();
 auto force    = node_transient_vec3.name("force").tag<FORCE>().declare();
 ```
 
-### `PartDeclarationHelper`
-Use `PartDeclarationHelper` to declare named, ranked, or topological parts and optionally attach restrictions.
+### `PartDeclaration`
+Use `PartDeclaration` to declare named, ranked, or topological parts and optionally attach restrictions.
 
 ```cpp
 using namespace mundy::mesh;
 
-PartDeclarationHelper part_decl(meta);
+PartDeclaration part_decl(meta);
 
 stk::mesh::Part& spheres =
     part_decl.name("spheres")
@@ -360,7 +362,7 @@ Useful extras include:
 | `put_field(field, ...)` | Attach field restrictions with initial values. |
 | `put_component(component, ...)` | Attach restrictions from field-backed components. |
 
-### `ClassDeclarationHelper` and `declare_class(...)`
+### `ClassDeclaration` and `declare_class(...)`
 Classes are a core MundyMesh abstraction, so they have both direct and helper-based APIs.
 
 ```cpp
@@ -369,7 +371,7 @@ using namespace mundy::mesh;
 Class& spheres = declare_class(meta, "spheres", stk::topology::PARTICLE);
 Class& all_nodes = declare_class(meta, "all_nodes", stk::topology::NODE_RANK);
 
-ClassDeclarationHelper class_decl(meta);
+ClassDeclaration class_decl(meta);
 Class& boundary_nodes = class_decl.name("boundary_nodes").rank(stk::topology::NODE_RANK).declare();
 Class& loading_nodes = class_decl.name("loading_nodes").rank(stk::topology::NODE_RANK).declare();
 Class& special_nodes = class_decl.name("special_nodes")
@@ -387,12 +389,12 @@ As with parts, classes are declared in one of three ways:
 | Ranked class | `name + rank` | Create a rank-specific set class. |
 | Topological class | `name + topology` | Create a primary class with a topology. |
 
-### `DeclareEntitiesHelper`
-`DeclareEntitiesHelper` is a host-side builder for declaring nodes, elements, classes, field data, and link
+### `DeclareEntities`
+`DeclareEntities` is a host-side builder for declaring nodes, elements, classes, field data, and link
 relationships without handling ownership and sharing details in each call.
 
 ```cpp
-mundy::mesh::DeclareEntitiesHelper builder;
+mundy::mesh::DeclareEntities builder;
 
 builder.create_node().owning_proc(0).id(1);
 builder.create_node().owning_proc(0).id(2);
@@ -459,12 +461,13 @@ MundyMesh provides a set of parsing and configuration utilities for turning stri
 
 Supported operators are the usual selector math:
 
-| **Operator** | **Meaning** |
-|--------------|-------------|
-| `|` | union |
-| `&` | intersection |
-| `!` | complement |
-| `(` `)` | grouping |
+<table>
+  <tr><th>Operator</th><th>Meaning</th></tr>
+  <tr><td><code>|</code></td><td>union</td></tr>
+  <tr><td><code>&amp;</code></td><td>intersection</td></tr>
+  <tr><td><code>!</code></td><td>complement</td></tr>
+  <tr><td><code>(</code> <code>)</code></td><td>grouping</td></tr>
+</table>
 
 ```cpp
 auto sel = mundy::mesh::string_to_selector(*bulk, "(rods | spheres) & !ghosted");

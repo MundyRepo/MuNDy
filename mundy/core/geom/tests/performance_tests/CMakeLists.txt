@@ -27,6 +27,12 @@ if(Mundy_ENABLE_TESTS AND Mundy_ENABLE_nanobench)
     INSTALLABLE
     CATEGORIES PERFORMANCE
   )
+  tribits_add_executable(
+    PerfTestOBBRelativeRotation
+    SOURCES PerfTestOBBRelativeRotation.cpp
+    INSTALLABLE
+    CATEGORIES PERFORMANCE
+  )
 else()
   message(STATUS
     "MundyGeom: Skipping performance tests since Mundy_ENABLE_TESTS=OFF or Mundy_ENABLE_nanobench=OFF ...")

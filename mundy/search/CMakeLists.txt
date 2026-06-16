@@ -21,14 +21,18 @@ set(NOINSTALLHEADERS
     src/mundy_search/impl/ArborXCallback.hpp
     src/mundy_search/impl/ArborXPeriodicBuildCallbacks.hpp
     src/mundy_search/impl/ArborXSearchBoxes.hpp
+    src/mundy_search/impl/NarrowPhaseFilter.hpp
     src/mundy_search/impl/NeighborListFunctors.hpp
     src/mundy_search/impl/STKSearchBoxes.hpp
+    src/mundy_search/ManagedNeighborList.hpp
     src/mundy_search/NeighborList.hpp
     src/mundy_search/NeighborListBuilder.hpp
     src/mundy_search/NeighborListBuildTraits.hpp
     src/mundy_search/NeighborListIterationTraits.hpp
+    src/mundy_search/NeighborListRebuilder.hpp
     src/mundy_search/Neighbors.hpp
     src/mundy_search/SearchCandidate.hpp
+    src/mundy_search/SearchInput.hpp
     src/mundy_search/STKSearchNeighborList.hpp
 )
 

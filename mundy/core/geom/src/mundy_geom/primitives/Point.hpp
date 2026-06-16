@@ -30,12 +30,16 @@
 #include <utility>
 
 // Our libs
-#include <mundy_math/Accessor.hpp>       // for mundy::ValidAccessor
-#include <mundy_math/Array.hpp>          // for mundy::Array
-#include <mundy_math/Vector3.hpp>        // for mundy::Vector3
-#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
+#include <mundy_geom/primitives/Traits.hpp>  // for mundy::is_finite
+#include <mundy_math/Accessor.hpp>           // for mundy::ValidAccessor
+#include <mundy_math/Array.hpp>              // for mundy::Array
+#include <mundy_math/Vector3.hpp>            // for mundy::Vector3
+#include <mundy_utils/throw_assert.hpp>      // for MUNDY_THROW_ASSERT
 
 namespace mundy {
+
+/// \addtogroup MundyGeomPrimitives
+/// @{
 
 /// @brief A point in 3D space
 /// @tparam Scalar
@@ -71,6 +75,37 @@ concept ValidPointType = is_point_v<PointType>;
 static_assert(ValidPointType<Point<float>> && ValidPointType<const Point<float>> && ValidPointType<Point<double>> &&
                   ValidPointType<const Point<double>>,
               "Point must satisfy the ValidPointType concept.");
+
+/// @}
+
+//! \name is_finite specialization
+//@{
+
+/// APoint (and therefore Point) represents a finite position in space.
+template <typename Scalar, ValidAccessor<Scalar> Accessor>
+struct is_finite<APoint<Scalar, Accessor>> : std::true_type {};
+
+template <typename Scalar, ValidAccessor<Scalar> Accessor>
+struct is_finite<const APoint<Scalar, Accessor>> : std::true_type {};
+
+//@}
+
+//! \name Point visitation
+//@{
+
+/// \brief Visit each geometric point of a Point (the point itself).
+template <ValidPointType PointT, typename Functor>
+KOKKOS_INLINE_FUNCTION void for_each_point(const PointT& pt, Functor&& f) {
+  f(pt);
+}
+
+/// \brief Visit and mutate each geometric point of a Point.
+template <ValidPointType PointT, typename Functor>
+KOKKOS_INLINE_FUNCTION void for_each_point_mutable(PointT& pt, Functor&& f) {
+  f(pt);
+}
+
+//@}
 
 }  // namespace mundy
 

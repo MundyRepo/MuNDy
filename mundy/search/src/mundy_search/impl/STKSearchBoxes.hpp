@@ -22,20 +22,29 @@
 #define MUNDY_SEARCH_IMPL_STKSEARCHBOXES_HPP_
 
 /// \file impl/STKSearchBoxes.hpp
-/// \brief Build-time STK coarse-search box wrappers.
+/// \brief STK instantiations of the unified search boxes plus their component-driven generators.
 
 // C++ core
 #include <cstddef>  // for size_t
+#include <utility>  // for std::pair, std::make_pair
 
 // Trilinos
 #include <Kokkos_Core.hpp>
+#include <stk_mesh/base/BulkData.hpp>  // for stk::mesh::BulkData
 #include <stk_mesh/base/Entity.hpp>
+#include <stk_mesh/base/EntityKey.hpp>   // for stk::mesh::EntityKey (periodic identity owner)
+#include <stk_mesh/base/GetNgpMesh.hpp>  // for stk::mesh::get_updated_ngp_mesh
+#include <stk_mesh/base/NgpMesh.hpp>     // for stk::mesh::NgpMesh::fast_mesh_index
 #include <stk_mesh/base/Selector.hpp>
+#include <stk_mesh/base/Types.hpp>  // for stk::mesh::EntityRank
 #include <stk_search/BoundingBox.hpp>
 
 // Mundy
-#include <mundy_math/Vector3.hpp>        // for mundy::Vector3
-#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
+#include <mundy_geom/primitives/AABB.hpp>            // for mundy::AABB (periodic prune bbox)
+#include <mundy_mesh/EntityIndices.hpp>              // for mundy::mesh::get_local_entities
+#include <mundy_mesh/FieldComponent.hpp>             // for mundy::mesh::get_updated_ngp_component
+#include <mundy_search/impl/PeriodicImageBoxes.hpp>  // for impl::PeriodicImages
+#include <mundy_search/impl/SearchBoxes.hpp>         // for impl::SearchBoxes, impl::PeriodicImageIdentity
 
 namespace mundy {
 
@@ -43,267 +52,109 @@ namespace search {
 
 namespace impl {
 
-/// \class STKSearchBoxesT
-/// \brief Build-time STK search boxes paired with STK entity identities.
+/// \brief STK non-periodic search boxes: one box per entity, identity is the entity's global key.
+template <typename MemorySpace>
+using STKSearchBoxesT = SearchBoxes<MemorySpace, stk::search::Box<float>, stk::mesh::EntityKey>;
+
+/// \brief STK periodic image search boxes: one box per image, identity is the imaged owner key + lattice shift.
 ///
-/// This is the STK coarse-search counterpart to `ArborXSearchBoxesT`. It is a construction input, not persistent
-/// neighbor-list storage.
-/// \tparam MemorySpace Kokkos memory space in which the boxes and entity view live.
-/// \tparam BoxScalar Scalar type used by the STK search boxes.
-template <typename MemorySpace, typename BoxScalar = float>
-class STKSearchBoxesT {
- public:
-  //! \name Aliases
-  //@{
-
-  using memory_space = MemorySpace;
-  using box_scalar = BoxScalar;
-  using size_type = size_t;
-  using box_type = stk::search::Box<box_scalar>;
-  using box_view_t = Kokkos::View<box_type*, memory_space>;
-  using entity_view_t = Kokkos::View<stk::mesh::Entity*, memory_space>;
-  //@}
-
-  //! \name Constructors
-  //@{
-
-  /// \brief Default constructor.
-  STKSearchBoxesT() = default;
-
-  /// \brief Default copy and move constructors/operators.
-  STKSearchBoxesT(const STKSearchBoxesT&) = default;
-  STKSearchBoxesT(STKSearchBoxesT&&) = default;
-  STKSearchBoxesT& operator=(const STKSearchBoxesT&) = default;
-  STKSearchBoxesT& operator=(STKSearchBoxesT&&) = default;
-
-  /// \brief Construct STK search boxes from a selector, matching box and entity views.
-  /// \param selector [in] Selector used to populate this box set.
-  /// \param boxes [in] STK boxes used for coarse search.
-  /// \param entities [in] STK entity associated with each search box.
-  STKSearchBoxesT(const stk::mesh::Selector& selector, const box_view_t& boxes, const entity_view_t& entities)
-      : selector_(selector), boxes_(boxes), entities_(entities) {
-    MUNDY_THROW_ASSERT(boxes_.extent(0) == entities_.extent(0), std::invalid_argument,
-                       "STKSearchBoxesT: boxes and entities must have the same extent.");
-  }
-  //@}
-
-  //! \name Getters
-  //@{
-
-  /// \brief Get the selector used to populate this box set.
-  const stk::mesh::Selector& selector() const noexcept {
-    return selector_;
-  }
-
-  /// \brief Get the number of search boxes.
-  KOKKOS_INLINE_FUNCTION
-  size_type size() const noexcept {
-    return boxes_.extent(0);
-  }
-
-  /// \brief Get a box by local search ordinal.
-  /// \param index [in] Local search ordinal.
-  KOKKOS_INLINE_FUNCTION
-  box_type box(size_type index) const {
-    MUNDY_THROW_ASSERT(index < size(), std::out_of_range, "STKSearchBoxesT::box index out of range.");
-    return boxes_(index);
-  }
-
-  /// \brief Get an entity by local search ordinal.
-  /// \param index [in] Local search ordinal.
-  KOKKOS_INLINE_FUNCTION
-  stk::mesh::Entity entity(size_type index) const {
-    MUNDY_THROW_ASSERT(index < size(), std::out_of_range, "STKSearchBoxesT::entity index out of range.");
-    return entities_(index);
-  }
-
-  /// \brief Get the raw box view.
-  KOKKOS_INLINE_FUNCTION
-  box_view_t boxes() const noexcept {
-    return boxes_;
-  }
-
-  /// \brief Get the raw entity view.
-  KOKKOS_INLINE_FUNCTION
-  entity_view_t entities() const noexcept {
-    return entities_;
-  }
-  //@}
-
- private:
-  //! \name Internal members
-  //@{
-
-  //! Selector used to populate this box set.
-  stk::mesh::Selector selector_;
-  //! STK boxes used during construction.
-  box_view_t boxes_;
-  //! STK entities associated one-to-one with `boxes_`.
-  entity_view_t entities_;
-  //@}
-};
-
-/// \class PeriodicSTKSearchBoxesT
-/// \brief Build-time STK search boxes for periodic images of STK owner entities.
-///
-/// This is the STK coarse-search counterpart to `PeriodicArborXSearchBoxesT`. It expands owner entities into image
-/// boxes for construction, while preserving the owner mapping needed to collapse search results back to owner entities.
-/// \tparam MemorySpace Kokkos memory space in which the image boxes and metadata live.
-/// \tparam ImageShiftScalar Scalar type used by image-shift vectors.
+/// The owner is the global `EntityKey` (not a local `Entity`) so the identity survives `coarse_search`'s distributed
+/// communication and drives owner ghosting on the receiving rank.
 template <typename MemorySpace, typename ImageShiftScalar = float>
-class PeriodicSTKSearchBoxesT {
- public:
-  //! \name Aliases
-  //@{
+using PeriodicSTKSearchBoxesT =
+    SearchBoxes<MemorySpace, stk::search::Box<float>, PeriodicImageIdentity<stk::mesh::EntityKey, ImageShiftScalar>>;
 
-  using memory_space = MemorySpace;
-  using image_shift_scalar = ImageShiftScalar;
-  using size_type = size_t;
-  using image_shift_type = mundy::Vector3<image_shift_scalar>;
-  using box_type = stk::search::Box<double>;
-  using box_view_t = Kokkos::View<box_type*, memory_space>;
-  using entity_view_t = Kokkos::View<stk::mesh::Entity*, memory_space>;
-  using owner_index_view_t = Kokkos::View<size_type*, memory_space>;
-  using image_shift_view_t = Kokkos::View<image_shift_type*, memory_space>;
-  //@}
+/// \brief Pack a MundyGeom AABB (the component's broad-phase volume) into an `stk::search::Box`, casting corners
+/// to the search scalar.
+template <typename BoxScalar, typename AABBType>
+KOKKOS_INLINE_FUNCTION stk::search::Box<BoxScalar> pack_search_box(const AABBType& aabb) {
+  const auto& lo = aabb.min_corner();
+  const auto& hi = aabb.max_corner();
+  return stk::search::Box<BoxScalar>(static_cast<BoxScalar>(lo[0]), static_cast<BoxScalar>(lo[1]),
+                                     static_cast<BoxScalar>(lo[2]), static_cast<BoxScalar>(hi[0]),
+                                     static_cast<BoxScalar>(hi[1]), static_cast<BoxScalar>(hi[2]));
+}
 
-  //! \name Constructors
-  //@{
+/// \brief Enumerate a `(rank, selector)` chunk and build its broad-phase STK search boxes from a component.
+///
+/// \return `{entities, boxes}` — a device entity view (dense ordinal order) and matching device box view. Both
+///         alias reference-counted device storage (no deep copies). The build derives each box's `EntityKey`
+///         identity from its entity when it assembles the `BoxIdentProc` views.
+template <typename BoxScalar, typename ExecSpace, typename Component>
+std::pair<Kokkos::View<stk::mesh::Entity*, typename ExecSpace::memory_space>,
+          Kokkos::View<stk::search::Box<BoxScalar>*, typename ExecSpace::memory_space>>
+make_stk_search_boxes(const stk::mesh::BulkData& bulk_data, const ExecSpace& exec, stk::mesh::EntityRank rank,
+                      const stk::mesh::Selector& selector, Component& component) {
+  using memory_space = typename ExecSpace::memory_space;
+  using box_type = stk::search::Box<BoxScalar>;
 
-  /// \brief Default constructor.
-  PeriodicSTKSearchBoxesT() = default;
+  // Enumerate entities in a deterministic order; bring the (caller-populated) geometry field to device. Each box is
+  // read through the NGP component, resolving the entity to its FastMeshIndex on device (no separate index pass).
+  auto entities_ngp = mundy::mesh::get_local_entities(bulk_data, rank, selector, exec);
+  entities_ngp.sync_to_device();
+  component.sync_to_device();
+  Kokkos::View<stk::mesh::Entity*, memory_space> entities = entities_ngp.view_device();
+  auto ngp_component = mundy::mesh::get_updated_ngp_component(component);
+  auto ngp_mesh = stk::mesh::get_updated_ngp_mesh(bulk_data);
+  const size_t num_entities = entities.extent(0);
 
-  /// \brief Default copy and move constructors/operators.
-  PeriodicSTKSearchBoxesT(const PeriodicSTKSearchBoxesT&) = default;
-  PeriodicSTKSearchBoxesT(PeriodicSTKSearchBoxesT&&) = default;
-  PeriodicSTKSearchBoxesT& operator=(const PeriodicSTKSearchBoxesT&) = default;
-  PeriodicSTKSearchBoxesT& operator=(PeriodicSTKSearchBoxesT&&) = default;
+  Kokkos::View<box_type*, memory_space> boxes(Kokkos::view_alloc(Kokkos::WithoutInitializing, "mundy_stk_search_boxes"),
+                                              num_entities);
+  Kokkos::parallel_for(
+      "mundy_make_stk_search_boxes", Kokkos::RangePolicy<ExecSpace>(exec, 0, num_entities),
+      KOKKOS_LAMBDA(const size_t i) {
+        boxes(i) = pack_search_box<BoxScalar>(ngp_component(ngp_mesh.fast_mesh_index(entities(i))));
+      });
 
-  /// \brief Construct periodic image search boxes from a selector, owner entities and per-image metadata.
-  /// \param selector [in] Selector used to populate this box set.
-  /// \param boxes [in] STK search boxes for each periodic image.
-  /// \param owner_entities [in] STK owner entities indexed by dense owner ordinal.
-  /// \param owner_indices [in] Dense owner ordinal for each image box.
-  /// \param image_shifts [in] Translation applied to the owner geometry for each image box.
-  PeriodicSTKSearchBoxesT(const stk::mesh::Selector& selector, const box_view_t& boxes,
-                          const entity_view_t& owner_entities, const owner_index_view_t& owner_indices,
-                          const image_shift_view_t& image_shifts)
-      : selector_(selector),
-        boxes_(boxes),
-        owner_entities_(owner_entities),
-        owner_indices_(owner_indices),
-        image_shifts_(image_shifts) {
-    MUNDY_THROW_ASSERT(boxes_.extent(0) == owner_indices_.extent(0), std::invalid_argument,
-                       "PeriodicSTKSearchBoxesT: boxes and owner_indices must have the same extent.");
-    MUNDY_THROW_ASSERT(boxes_.extent(0) == image_shifts_.extent(0), std::invalid_argument,
-                       "PeriodicSTKSearchBoxesT: boxes and image_shifts must have the same extent.");
-  }
-  //@}
+  return std::make_pair(entities, boxes);
+}
 
-  //! \name Getters
-  //@{
+/// \brief Pack enumerated entities + boxes into STK non-periodic search boxes (boxes + per-entity key identities).
+///
+/// Projects each box's local owner `Entity` to the global `EntityKey` identity that `coarse_search` carries across
+/// ranks; reuses the input box view (no copy). The caller keeps the `Entity` view for final-list storage and ghosting.
+template <typename ExecSpace, typename NgpMesh, typename EntityView, typename BoxView>
+STKSearchBoxesT<typename ExecSpace::memory_space> pack_stk_search_boxes(const ExecSpace& exec, const NgpMesh& ngp_mesh,
+                                                                        const stk::mesh::Selector& selector,
+                                                                        const EntityView& entities,
+                                                                        const BoxView& boxes) {
+  using memory_space = typename ExecSpace::memory_space;
+  const size_t n = entities.extent(0);
+  Kokkos::View<stk::mesh::EntityKey*, memory_space> identities(
+      Kokkos::view_alloc(Kokkos::WithoutInitializing, "stk_search_ids"), n);
+  Kokkos::parallel_for(
+      "mundy_pack_stk_search_boxes", Kokkos::RangePolicy<ExecSpace>(exec, 0, n),
+      KOKKOS_LAMBDA(const size_t i) { identities(i) = ngp_mesh.entity_key(entities(i)); });
+  return STKSearchBoxesT<memory_space>(selector, boxes, identities);
+}
 
-  /// \brief Get the selector used to populate this box set.
-  const stk::mesh::Selector& selector() const noexcept {
-    return selector_;
-  }
-
-  /// \brief Get the number of periodic image boxes.
-  KOKKOS_INLINE_FUNCTION
-  size_type size() const noexcept {
-    return boxes_.extent(0);
-  }
-
-  /// \brief Get the number of owner entities.
-  KOKKOS_INLINE_FUNCTION
-  size_type num_owners() const noexcept {
-    return owner_entities_.extent(0);
-  }
-
-  /// \brief Get a periodic image box by local image ordinal.
-  /// \param image_index [in] Local periodic-image ordinal.
-  KOKKOS_INLINE_FUNCTION
-  box_type box(size_type image_index) const {
-    MUNDY_THROW_ASSERT(image_index < size(), std::out_of_range,
-                       "PeriodicSTKSearchBoxesT::box image index out of range.");
-    return boxes_(image_index);
-  }
-
-  /// \brief Get the owner ordinal associated with a periodic image box.
-  /// \param image_index [in] Local periodic-image ordinal.
-  KOKKOS_INLINE_FUNCTION
-  size_type owner_index(size_type image_index) const {
-    MUNDY_THROW_ASSERT(image_index < size(), std::out_of_range,
-                       "PeriodicSTKSearchBoxesT::owner_index image index out of range.");
-    return owner_indices_(image_index);
-  }
-
-  /// \brief Get an owner entity by dense owner ordinal.
-  /// \param owner_index [in] Dense owner ordinal.
-  KOKKOS_INLINE_FUNCTION
-  stk::mesh::Entity owner_entity(size_type owner_index) const {
-    MUNDY_THROW_ASSERT(owner_index < num_owners(), std::out_of_range,
-                       "PeriodicSTKSearchBoxesT::owner_entity owner index out of range.");
-    return owner_entities_(owner_index);
-  }
-
-  /// \brief Get the owner entity associated with a periodic image box.
-  /// \param image_index [in] Local periodic-image ordinal.
-  KOKKOS_INLINE_FUNCTION
-  stk::mesh::Entity image_owner_entity(size_type image_index) const {
-    return owner_entity(owner_index(image_index));
-  }
-
-  /// \brief Get the shift applied to an owner to generate a periodic image box.
-  /// \param image_index [in] Local periodic-image ordinal.
-  KOKKOS_INLINE_FUNCTION
-  image_shift_type image_shift(size_type image_index) const {
-    MUNDY_THROW_ASSERT(image_index < size(), std::out_of_range,
-                       "PeriodicSTKSearchBoxesT::image_shift image index out of range.");
-    return image_shifts_(image_index);
-  }
-
-  /// \brief Get the raw periodic image box view.
-  KOKKOS_INLINE_FUNCTION
-  box_view_t boxes() const noexcept {
-    return boxes_;
-  }
-
-  /// \brief Get the raw owner entity view.
-  KOKKOS_INLINE_FUNCTION
-  entity_view_t owner_entities() const noexcept {
-    return owner_entities_;
-  }
-
-  /// \brief Get the raw image-to-owner ordinal view.
-  KOKKOS_INLINE_FUNCTION
-  owner_index_view_t owner_indices() const noexcept {
-    return owner_indices_;
-  }
-
-  /// \brief Get the raw image-shift view.
-  KOKKOS_INLINE_FUNCTION
-  image_shift_view_t image_shifts() const noexcept {
-    return image_shifts_;
-  }
-  //@}
-
- private:
-  //! \name Internal members
-  //@{
-
-  //! Selector used to populate this box set.
-  stk::mesh::Selector selector_;
-  //! STK search boxes for periodic images of owner entities.
-  box_view_t boxes_;
-  //! Owner entities indexed by dense owner ordinal.
-  entity_view_t owner_entities_;
-  //! Dense owner ordinal for each image box.
-  owner_index_view_t owner_indices_;
-  //! Translation applied to each owner to generate its image box.
-  image_shift_view_t image_shifts_;
-  //@}
-};
+/// \brief Pack backend-neutral periodic images into STK periodic search boxes (boxes + per-image identities).
+///
+/// Each image's identity is the imaged owner's global key (`ngp_mesh.entity_key(owner_entities(owner_indices(i)))`)
+/// and its lattice shift — the projection from the neutral images' local owner `Entity` to the global `EntityKey`
+/// that `coarse_search` carries across ranks. The dense per-owner `owner_entities` from `images` remain the build's
+/// input for final-list storage and owner-ordinal recovery.
+template <typename ExecSpace, typename NgpMesh, typename MScalar, typename ShiftScalar, typename MemSpace>
+PeriodicSTKSearchBoxesT<MemSpace, ShiftScalar> pack_periodic_stk_search_boxes(
+    const ExecSpace& exec, const NgpMesh& ngp_mesh, const stk::mesh::Selector& selector,
+    const PeriodicImages<MScalar, ShiftScalar, MemSpace>& images) {
+  using identity_t = PeriodicImageIdentity<stk::mesh::EntityKey, ShiftScalar>;
+  using box_type = stk::search::Box<float>;
+  const size_t n = images.aabbs.extent(0);
+  Kokkos::View<box_type*, MemSpace> boxes(Kokkos::view_alloc(Kokkos::WithoutInitializing, "per_stk_boxes"), n);
+  Kokkos::View<identity_t*, MemSpace> identities(Kokkos::view_alloc(Kokkos::WithoutInitializing, "per_stk_ids"), n);
+  auto aabbs = images.aabbs;
+  auto owner_entities = images.owner_entities;
+  auto owner_indices = images.owner_indices;
+  auto shifts = images.shifts;
+  Kokkos::parallel_for(
+      "mundy_pack_periodic_stk_search_boxes", Kokkos::RangePolicy<ExecSpace>(exec, 0, n),
+      KOKKOS_LAMBDA(const size_t i) {
+        boxes(i) = pack_search_box<float>(aabbs(i));
+        identities(i) = identity_t{ngp_mesh.entity_key(owner_entities(owner_indices(i))), shifts(i)};
+      });
+  return PeriodicSTKSearchBoxesT<MemSpace, ShiftScalar>(selector, boxes, identities);
+}
 
 }  // namespace impl
 

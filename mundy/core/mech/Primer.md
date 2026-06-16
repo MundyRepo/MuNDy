@@ -1,5 +1,7 @@
 # MundyMech {#MundyMech}
 
+\brief Mechanical primitives and utilities (under construction).
+
 See the \ref mundy/core/mech "MundyMech directory reference".
 
 MundyMech is under construction. It contains mechanical elements and force laws for building multibody models.

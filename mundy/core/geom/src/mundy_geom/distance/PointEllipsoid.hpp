@@ -37,25 +37,29 @@
 #include <mundy_math/Vector3.hpp>               // for mundy::Vector3
 #include <mundy_math/minimize.hpp>              // for mundy::find_min_using_approximate_derivatives
 #include <mundy_utils/requires.hpp>
+#include <mundy_math/cmath.hpp>
 
 namespace mundy {
+
+/// \addtogroup MundyGeomDistance
+/// @{
 
 //! \name Free space distance calculations
 //@{
 
 template <ValidPointType PointType, ValidEllipsoidType EllipsoidType>
-MUNDY_REQUIRES(std::is_same_v<typename PointType::scalar_t, typename EllipsoidType::scalar_t>)
-KOKKOS_FUNCTION typename PointType::scalar_t distance(const PointType& point,  //
+MUNDY_REQUIRES(std::is_same_v<typename PointType::value_type, typename EllipsoidType::value_type>)
+KOKKOS_FUNCTION typename PointType::value_type distance(const PointType& point,  //
                                                       const EllipsoidType& ellipsoid) {
   return distance(SharedNormalSigned{}, point, ellipsoid);
 }
 
 template <ValidPointType PointType, ValidEllipsoidType EllipsoidType>
-MUNDY_REQUIRES(std::is_same_v<typename PointType::scalar_t, typename EllipsoidType::scalar_t>)
-KOKKOS_FUNCTION typename PointType::scalar_t distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
+MUNDY_REQUIRES(std::is_same_v<typename PointType::value_type, typename EllipsoidType::value_type>)
+KOKKOS_FUNCTION typename PointType::value_type distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
                                                       const PointType& point,                                   //
                                                       const EllipsoidType& ellipsoid) {
-  using Scalar = typename PointType::scalar_t;
+  using Scalar = typename PointType::value_type;
   Point<Scalar> closest_point;
   mundy::Vector3<Scalar> ellipsoid_normal;
   return distance(distance_type, point, ellipsoid,  //
@@ -63,10 +67,10 @@ KOKKOS_FUNCTION typename PointType::scalar_t distance([[maybe_unused]] const Sha
 }
 
 template <ValidPointType PointType, ValidEllipsoidType EllipsoidType>
-MUNDY_REQUIRES(std::is_same_v<typename PointType::scalar_t, typename EllipsoidType::scalar_t>)
+MUNDY_REQUIRES(std::is_same_v<typename PointType::value_type, typename EllipsoidType::value_type>)
 class PointEllipsoidObjective {
  public:
-  using Scalar = typename PointType::scalar_t;
+  using Scalar = typename PointType::value_type;
 
   KOKKOS_FUNCTION
   PointEllipsoidObjective(const PointType& point,                 //
@@ -78,10 +82,10 @@ class PointEllipsoidObjective {
 
   KOKKOS_FUNCTION Scalar operator()(const mundy::Vector<Scalar, 2>& theta_phi) const {
     // Map theta and phi to the lab frame normal vector
-    const Scalar sin_theta = std::sin(theta_phi[0]);
-    const Scalar cos_theta = std::cos(theta_phi[0]);
-    const Scalar sin_phi = std::sin(theta_phi[1]);
-    const Scalar cos_phi = std::cos(theta_phi[1]);
+    const Scalar sin_theta = sin(theta_phi[0]);
+    const Scalar cos_theta = cos(theta_phi[0]);
+    const Scalar sin_phi = sin(theta_phi[1]);
+    const Scalar cos_phi = cos(theta_phi[1]);
     shared_normal_.set(sin_theta * cos_phi, sin_theta * sin_phi, cos_theta);
 
     // Map the normal vector to the foot point on the ellipsoid
@@ -99,13 +103,13 @@ class PointEllipsoidObjective {
 };
 
 template <ValidPointType PointType, ValidEllipsoidType EllipsoidType>
-MUNDY_REQUIRES(std::is_same_v<typename PointType::scalar_t, typename EllipsoidType::scalar_t>)
-KOKKOS_FUNCTION typename PointType::scalar_t distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
+MUNDY_REQUIRES(std::is_same_v<typename PointType::value_type, typename EllipsoidType::value_type>)
+KOKKOS_FUNCTION typename PointType::value_type distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
                                                       const PointType& point,                                   //
                                                       const EllipsoidType& ellipsoid,                           //
-                                                      Point<typename PointType::scalar_t>& closest_point,       //
-                                                      mundy::Vector3<typename PointType::scalar_t>& ellipsoid_normal) {
-  using Scalar = typename PointType::scalar_t;
+                                                      Point<typename PointType::value_type>& closest_point,       //
+                                                      mundy::Vector3<typename PointType::value_type>& ellipsoid_normal) {
+  using Scalar = typename PointType::value_type;
 
   // Setup the minimization
   // Note, the actual error is not guaranteed to be less than min_objective_delta due to the use of approximate
@@ -145,6 +149,8 @@ KOKKOS_FUNCTION typename PointType::scalar_t distance([[maybe_unused]] const Sha
   return mundy::dot(point - closest_point, ellipsoid_normal);
 }
 //@}
+
+/// @}
 
 }  // namespace mundy
 

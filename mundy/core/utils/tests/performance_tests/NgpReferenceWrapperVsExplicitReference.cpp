@@ -37,23 +37,23 @@
 // Mundy
 #include <mundy_utils/reference_wrapper.hpp>  // for mundy::reference_wrapper, mundy::ref
 
-using scalar_t = double;
-using View1D = Kokkos::View<scalar_t*, Kokkos::DefaultExecutionSpace>;
+using value_type = double;
+using View1D = Kokkos::View<value_type*, Kokkos::DefaultExecutionSpace>;
 
 struct WorkspaceWrapper {
-  mundy::reference_wrapper<scalar_t> x;
-  mundy::reference_wrapper<scalar_t> y;
-  mundy::reference_wrapper<scalar_t> z;
+  mundy::reference_wrapper<value_type> x;
+  mundy::reference_wrapper<value_type> y;
+  mundy::reference_wrapper<value_type> z;
 
   KOKKOS_INLINE_FUNCTION
-  void step(const scalar_t alpha, const scalar_t beta, const size_t i, const size_t round) {
-    scalar_t& x_ref = x;  // intentionally exercise implicit conversion
-    scalar_t& y_ref = y;
-    scalar_t& z_ref = z;
+  void step(const value_type alpha, const value_type beta, const size_t i, const size_t round) {
+    value_type& x_ref = x;  // intentionally exercise implicit conversion
+    value_type& y_ref = y;
+    value_type& z_ref = z;
 
-    const scalar_t wave = static_cast<scalar_t>((i % 11) + 1) + static_cast<scalar_t>((round % 7) + 1);
-    const scalar_t t0 = x_ref + beta * y_ref;
-    const scalar_t t1 = y_ref - alpha * z_ref + 0.125 * wave;
+    const value_type wave = static_cast<value_type>((i % 11) + 1) + static_cast<value_type>((round % 7) + 1);
+    const value_type t0 = x_ref + beta * y_ref;
+    const value_type t1 = y_ref - alpha * z_ref + 0.125 * wave;
     z_ref = t0 * t1 + 0.01 * x_ref;
     x_ref = z_ref - 0.25 * y_ref + 0.5 * alpha;
     y_ref = y_ref + alpha * x_ref - beta * z_ref + 0.001 * wave;
@@ -61,15 +61,15 @@ struct WorkspaceWrapper {
 };
 
 struct WorkspaceExplicit {
-  scalar_t& x;
-  scalar_t& y;
-  scalar_t& z;
+  value_type& x;
+  value_type& y;
+  value_type& z;
 
   KOKKOS_INLINE_FUNCTION
-  void step(const scalar_t alpha, const scalar_t beta, const size_t i, const size_t round) {
-    const scalar_t wave = static_cast<scalar_t>((i % 11) + 1) + static_cast<scalar_t>((round % 7) + 1);
-    const scalar_t t0 = x + beta * y;
-    const scalar_t t1 = y - alpha * z + 0.125 * wave;
+  void step(const value_type alpha, const value_type beta, const size_t i, const size_t round) {
+    const value_type wave = static_cast<value_type>((i % 11) + 1) + static_cast<value_type>((round % 7) + 1);
+    const value_type t0 = x + beta * y;
+    const value_type t1 = y - alpha * z + 0.125 * wave;
     z = t0 * t1 + 0.01 * x;
     x = z - 0.25 * y + 0.5 * alpha;
     y = y + alpha * x - beta * z + 0.001 * wave;
@@ -80,19 +80,19 @@ void fill_deterministic(View1D x, View1D y, View1D z) {
   const size_t n = x.extent(0);
   Kokkos::parallel_for(
       "fill_deterministic", Kokkos::RangePolicy<>(0, n), KOKKOS_LAMBDA(const size_t i) {
-        x(i) = 0.1 + static_cast<scalar_t>((17 * i + 13) % 1024) / 1024.0;
-        y(i) = 0.2 + static_cast<scalar_t>((31 * i + 7) % 1024) / 1024.0;
-        z(i) = 0.3 + static_cast<scalar_t>((43 * i + 19) % 1024) / 1024.0;
+        x(i) = 0.1 + static_cast<value_type>((17 * i + 13) % 1024) / 1024.0;
+        y(i) = 0.2 + static_cast<value_type>((31 * i + 7) % 1024) / 1024.0;
+        z(i) = 0.3 + static_cast<value_type>((43 * i + 19) % 1024) / 1024.0;
       });
   Kokkos::fence();
 }
 
-scalar_t compute_checksum(const View1D x, const View1D y, const View1D z) {
-  scalar_t checksum = 0.0;
+value_type compute_checksum(const View1D x, const View1D y, const View1D z) {
+  value_type checksum = 0.0;
   const size_t n = x.extent(0);
   Kokkos::parallel_reduce(
       "checksum", Kokkos::RangePolicy<>(0, n),
-      KOKKOS_LAMBDA(const size_t i, scalar_t& local_sum) {
+      KOKKOS_LAMBDA(const size_t i, value_type& local_sum) {
         if ((i % 7) == 0) {
           local_sum += x(i) * 0.5 + y(i) * 0.25 + z(i) * 0.125;
         }
@@ -102,7 +102,7 @@ scalar_t compute_checksum(const View1D x, const View1D y, const View1D z) {
   return checksum;
 }
 
-scalar_t run_with_wrapper(View1D x, View1D y, View1D z, const scalar_t alpha, const scalar_t beta,
+value_type run_with_wrapper(View1D x, View1D y, View1D z, const value_type alpha, const value_type beta,
                           const size_t rounds) {
   const size_t n = x.extent(0);
   for (size_t round = 0; round < rounds; ++round) {
@@ -116,7 +116,7 @@ scalar_t run_with_wrapper(View1D x, View1D y, View1D z, const scalar_t alpha, co
   return compute_checksum(x, y, z);
 }
 
-scalar_t run_with_explicit_ref(View1D x, View1D y, View1D z, const scalar_t alpha, const scalar_t beta,
+value_type run_with_explicit_ref(View1D x, View1D y, View1D z, const value_type alpha, const value_type beta,
                                const size_t rounds) {
   const size_t n = x.extent(0);
   for (size_t round = 0; round < rounds; ++round) {
@@ -130,14 +130,14 @@ scalar_t run_with_explicit_ref(View1D x, View1D y, View1D z, const scalar_t alph
   return compute_checksum(x, y, z);
 }
 
-scalar_t run_direct(View1D x, View1D y, View1D z, const scalar_t alpha, const scalar_t beta, const size_t rounds) {
+value_type run_direct(View1D x, View1D y, View1D z, const value_type alpha, const value_type beta, const size_t rounds) {
   const size_t n = x.extent(0);
   for (size_t round = 0; round < rounds; ++round) {
     Kokkos::parallel_for(
         "run_direct", Kokkos::RangePolicy<>(0, n), KOKKOS_LAMBDA(const size_t i) {
-          const scalar_t wave = static_cast<scalar_t>((i % 11) + 1) + static_cast<scalar_t>((round % 7) + 1);
-          const scalar_t t0 = x(i) + beta * y(i);
-          const scalar_t t1 = y(i) - alpha * z(i) + 0.125 * wave;
+          const value_type wave = static_cast<value_type>((i % 11) + 1) + static_cast<value_type>((round % 7) + 1);
+          const value_type t0 = x(i) + beta * y(i);
+          const value_type t1 = y(i) - alpha * z(i) + 0.125 * wave;
           z(i) = t0 * t1 + 0.01 * x(i);
           x(i) = z(i) - 0.25 * y(i) + 0.5 * alpha;
           y(i) = y(i) + alpha * x(i) - beta * z(i) + 0.001 * wave;
@@ -155,7 +155,7 @@ void run_case(ankerl::nanobench::Bench& bench, const std::string& name, const Vi
     Kokkos::deep_copy(y, y0);
     Kokkos::deep_copy(z, z0);
 
-    const scalar_t checksum = func(x, y, z);
+    const value_type checksum = func(x, y, z);
     ankerl::nanobench::doNotOptimizeAway(checksum);
     ankerl::nanobench::doNotOptimizeAway(x);
     ankerl::nanobench::doNotOptimizeAway(y);
@@ -168,8 +168,8 @@ int main(int argc, char** argv) {
   {
     constexpr size_t num_entries = 200000;
     constexpr size_t rounds = 8;
-    constexpr scalar_t alpha = 1.75;
-    constexpr scalar_t beta = 0.65;
+    constexpr value_type alpha = 1.75;
+    constexpr value_type beta = 0.65;
 
     View1D x0("x0", num_entries);
     View1D y0("y0", num_entries);

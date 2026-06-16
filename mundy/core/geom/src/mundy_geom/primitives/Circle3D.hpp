@@ -38,11 +38,14 @@
 
 namespace mundy {
 
+/// \addtogroup MundyGeomPrimitives
+/// @{
+
 template <typename Scalar, ValidPointType PointType = Point<Scalar>,
           ValidQuaternionType QuaternionType = Quaternion<Scalar>>
 class Circle3D {
-  static_assert(std::is_same_v<typename PointType::scalar_t, Scalar> &&
-                    std::is_same_v<typename QuaternionType::scalar_t, Scalar>,
+  static_assert(std::is_same_v<typename PointType::value_type, Scalar> &&
+                    std::is_same_v<typename QuaternionType::value_type, Scalar>,
                 "The scalar type of the PointType and QuaternionType must match the scalar type of the Circle3D.");
 
  public:
@@ -50,13 +53,15 @@ class Circle3D {
   //@{
 
   /// \brief Our scalar type
-  using scalar_t = Scalar;
+  using value_type = Scalar;
 
   /// \brief Our point type
   using point_t = PointType;
 
   /// \brief Our orientation type
   using orientation_t = QuaternionType;
+
+  static constexpr bool is_finite = true;
 
   //@}
 
@@ -66,7 +71,7 @@ class Circle3D {
   /// \brief Default constructor. Initializes as invalid.
   KOKKOS_FUNCTION
   constexpr Circle3D() MUNDY_REQUIRES(HasDefaultConstructor<point_t>&& HasDefaultConstructor<orientation_t>)
-      : center_(), orientation_(), radius_(static_cast<scalar_t>(-1)) {
+      : center_(), orientation_(), radius_(static_cast<value_type>(-1)) {
   }
 
   /// \brief Constructor to initialize the circle3d.
@@ -75,7 +80,7 @@ class Circle3D {
   /// frame.
   /// \param[in] radius The radius of the circle.
   KOKKOS_FUNCTION
-  constexpr Circle3D(const point_t& center, const orientation_t& orientation, const scalar_t& radius)
+  constexpr Circle3D(const point_t& center, const orientation_t& orientation, const value_type& radius)
       : center_(center), orientation_(orientation), radius_(radius) {
   }
 
@@ -86,7 +91,7 @@ class Circle3D {
   /// \param[in] radius The radius of the circle.
   template <ValidPointType OtherPointType, ValidQuaternionType OtherQuaternionType>
   KOKKOS_FUNCTION constexpr Circle3D(const OtherPointType& center, const OtherQuaternionType& orientation,
-                                     const scalar_t& radius)
+                                     const value_type& radius)
       MUNDY_REQUIRES(!std::is_same_v<OtherPointType, point_t> || !std::is_same_v<OtherQuaternionType, orientation_t>)
       : center_(center), orientation_(orientation), radius_(radius) {
   }
@@ -97,20 +102,20 @@ class Circle3D {
 
   /// \brief Deep copy constructor
   KOKKOS_FUNCTION
-  constexpr Circle3D(const Circle3D<scalar_t, point_t, orientation_t>& other)
+  constexpr Circle3D(const Circle3D<value_type, point_t, orientation_t>& other)
       : center_(other.center_), orientation_(other.orientation_), radius_(other.radius_) {
   }
 
   /// \brief Deep copy constructor with different circle3d type
   template <typename OtherCircle3DType>
   KOKKOS_FUNCTION constexpr Circle3D(const OtherCircle3DType& other)
-      MUNDY_REQUIRES(!std::is_same_v<OtherCircle3DType, Circle3D<scalar_t, point_t, orientation_t>>)
+      MUNDY_REQUIRES(!std::is_same_v<OtherCircle3DType, Circle3D<value_type, point_t, orientation_t>>)
       : center_(other.center_), orientation_(other.orientation_), radius_(other.radius_) {
   }
 
   /// \brief Deep move constructor
   KOKKOS_FUNCTION
-  constexpr Circle3D(Circle3D<scalar_t, point_t, orientation_t>&& other)
+  constexpr Circle3D(Circle3D<value_type, point_t, orientation_t>&& other)
       : center_(std::move(other.center_)),
         orientation_{std::move(other.orientation_)},
         radius_(std::move(other.radius_)) {
@@ -119,7 +124,7 @@ class Circle3D {
   /// \brief Deep move constructor
   template <typename OtherCircle3DType>
   KOKKOS_FUNCTION constexpr Circle3D(OtherCircle3DType&& other)
-      MUNDY_REQUIRES(!std::is_same_v<OtherCircle3DType, Circle3D<scalar_t, point_t, orientation_t>>)
+      MUNDY_REQUIRES(!std::is_same_v<OtherCircle3DType, Circle3D<value_type, point_t, orientation_t>>)
       : center_(std::move(other.center_)),
         orientation_{std::move(other.orientation_)},
         radius_(std::move(other.radius_)) {
@@ -131,8 +136,8 @@ class Circle3D {
 
   /// \brief Copy assignment operator
   KOKKOS_FUNCTION
-  constexpr Circle3D<scalar_t, point_t, orientation_t>& operator=(
-      const Circle3D<scalar_t, point_t, orientation_t>& other) {
+  constexpr Circle3D<value_type, point_t, orientation_t>& operator=(
+      const Circle3D<value_type, point_t, orientation_t>& other) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     center_ = other.center_;
     orientation_ = other.orientation_;
@@ -142,8 +147,8 @@ class Circle3D {
 
   /// \brief Copy assignment operator
   template <typename OtherCircle3DType>
-  KOKKOS_FUNCTION constexpr Circle3D<scalar_t, point_t, orientation_t>& operator=(const OtherCircle3DType& other)
-      MUNDY_REQUIRES(!std::is_same_v<OtherCircle3DType, Circle3D<scalar_t, point_t, orientation_t>>) {
+  KOKKOS_FUNCTION constexpr Circle3D<value_type, point_t, orientation_t>& operator=(const OtherCircle3DType& other)
+      MUNDY_REQUIRES(!std::is_same_v<OtherCircle3DType, Circle3D<value_type, point_t, orientation_t>>) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     center_ = other.center_;
     orientation_ = other.orientation_;
@@ -153,7 +158,7 @@ class Circle3D {
 
   /// \brief Move assignment operator
   KOKKOS_FUNCTION
-  constexpr Circle3D<scalar_t, point_t, orientation_t>& operator=(Circle3D<scalar_t, point_t, orientation_t>&& other) {
+  constexpr Circle3D<value_type, point_t, orientation_t>& operator=(Circle3D<value_type, point_t, orientation_t>&& other) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     center_ = std::move(other.center_);
     orientation_ = std::move(other.orientation_);
@@ -163,8 +168,8 @@ class Circle3D {
 
   /// \brief Move assignment operator
   template <typename OtherCircle3DType>
-  KOKKOS_FUNCTION constexpr Circle3D<scalar_t, point_t, orientation_t>& operator=(OtherCircle3DType&& other)
-      MUNDY_REQUIRES(!std::is_same_v<OtherCircle3DType, Circle3D<scalar_t, point_t, orientation_t>>) {
+  KOKKOS_FUNCTION constexpr Circle3D<value_type, point_t, orientation_t>& operator=(OtherCircle3DType&& other)
+      MUNDY_REQUIRES(!std::is_same_v<OtherCircle3DType, Circle3D<value_type, point_t, orientation_t>>) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     center_ = std::move(other.center_);
     orientation_ = std::move(other.orientation_);
@@ -181,8 +186,8 @@ class Circle3D {
   KOKKOS_FUNCTION constexpr       point_t& center()       { return center_; }
   KOKKOS_FUNCTION constexpr const orientation_t& orientation() const { return orientation_; }
   KOKKOS_FUNCTION constexpr       orientation_t& orientation()       { return orientation_; }
-  KOKKOS_FUNCTION constexpr const scalar_t& radius() const { return radius_; }
-  KOKKOS_FUNCTION constexpr       scalar_t& radius()       { return radius_; }
+  KOKKOS_FUNCTION constexpr const value_type& radius() const { return radius_; }
+  KOKKOS_FUNCTION constexpr       value_type& radius()       { return radius_; }
   // clang-format on
   //@}
 
@@ -201,7 +206,7 @@ class Circle3D {
   /// \param[in] y The y-coordinate.
   /// \param[in] z The z-coordinate.
   KOKKOS_FUNCTION
-  constexpr void set_center(const scalar_t& x, const scalar_t& y, const scalar_t& z) {
+  constexpr void set_center(const value_type& x, const value_type& y, const value_type& z) {
     center_[0] = x;
     center_[1] = y;
     center_[2] = z;
@@ -220,7 +225,7 @@ class Circle3D {
   /// \param[in] qy The y-component of the orientation quaternion.
   /// \param[in] qz The z-component of the orientation quaternion.
   KOKKOS_FUNCTION
-  constexpr void set_orientation(const scalar_t& qw, const scalar_t& qx, const scalar_t& qy, const scalar_t& qz) {
+  constexpr void set_orientation(const value_type& qw, const value_type& qx, const value_type& qy, const value_type& qz) {
     orientation_[0] = qw;
     orientation_[1] = qx;
     orientation_[2] = qy;
@@ -230,7 +235,7 @@ class Circle3D {
   /// \brief Set the major radius
   /// \param[in] radius The new major radius.
   KOKKOS_FUNCTION
-  constexpr void set_radius(const scalar_t& radius) {
+  constexpr void set_radius(const value_type& radius) {
     radius_ = radius;
   }
   //@}
@@ -238,7 +243,7 @@ class Circle3D {
  private:
   point_t center_;
   orientation_t orientation_;
-  scalar_t radius_;
+  value_type radius_;
 };
 
 /// @brief (Implementation) Type trait to determine if a type is a Circle3d
@@ -262,18 +267,21 @@ concept ValidCircle3DType = is_circle3d_v<Circle3DType>;
 //! \name Non-member functions for ValidCircle3DType objects
 //@{
 
-/// \brief Equality operator
-template <ValidCircle3DType Circle3DType1, ValidCircle3DType Circle3DType2>
-KOKKOS_FUNCTION constexpr bool operator==(const Circle3DType1& circle3d1, const Circle3DType2& circle3d2) {
-  return (circle3d1.radius() == circle3d2.radius()) && (circle3d1.center() == circle3d2.center()) &&
-         (circle3d1.orientation() == circle3d2.orientation());
+/// \brief Element-wise approximate equality (within a tolerance)
+template <ValidCircle3DType T1, ValidCircle3DType T2>
+KOKKOS_FUNCTION constexpr bool is_close(
+    const T1& c1, const T2& c2,
+    typename T1::value_type tol = get_comparison_tolerance<typename T1::value_type, typename T2::value_type>()) {
+  return is_close(c1.radius(), c2.radius(), tol) && is_close(c1.center(), c2.center(), tol) &&
+         is_close(c1.orientation(), c2.orientation(), tol);
 }
 
-/// \brief Inequality operator
-template <ValidCircle3DType Circle3DType1, ValidCircle3DType Circle3DType2>
-KOKKOS_FUNCTION constexpr bool operator!=(const Circle3DType1& circle3d1, const Circle3DType2& circle3d2) {
-  return (circle3d1.radius() != circle3d2.radius()) || (circle3d1.center() != circle3d2.center()) ||
-         (circle3d1.orientation() != circle3d2.orientation());
+/// \brief Element-wise approximate equality (within a relaxed tolerance)
+template <ValidCircle3DType T1, ValidCircle3DType T2>
+KOKKOS_FUNCTION constexpr bool is_approx_close(
+    const T1& c1, const T2& c2,
+    typename T1::value_type tol = get_relaxed_comparison_tolerance<typename T1::value_type, typename T2::value_type>()) {
+  return is_close(c1, c2, tol);
 }
 
 /// \brief OStream operator
@@ -283,6 +291,25 @@ std::ostream& operator<<(std::ostream& os, const Circle3DType& circle3d) {
   return os;
 }
 //@}
+
+//! \name Point visitation
+//@{
+
+/// \brief Visit the geometric point of a Circle3D (its center).
+template <ValidCircle3DType T, typename Functor>
+KOKKOS_INLINE_FUNCTION void for_each_point(const T& c, Functor&& f) {
+  f(c.center());
+}
+
+/// \brief Visit and mutate the geometric point of a Circle3D.
+template <ValidCircle3DType T, typename Functor>
+KOKKOS_INLINE_FUNCTION void for_each_point_mutable(T& c, Functor&& f) {
+  f(c.center());
+}
+
+//@}
+
+/// @}
 
 }  // namespace mundy
 

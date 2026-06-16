@@ -65,10 +65,7 @@ class LinkCOODataSynchronizerT : public HostDeviceSynchronizer {
     impl::get_linked_entities_crs_field(lmd).modify_on_host();
     impl::get_linked_entity_ids_field(lmd).modify_on_host();
     impl::get_linked_entity_ranks_field(lmd).modify_on_host();
-    impl::get_linked_entity_bucket_ids_field(lmd).modify_on_host();
-    impl::get_linked_entity_bucket_ords_field(lmd).modify_on_host();
     impl::get_link_crs_needs_updated_field(lmd).modify_on_host();
-    impl::get_link_marked_for_destruction_field(lmd).modify_on_host();
   }
 
   virtual void modify_on_device() override {
@@ -77,10 +74,7 @@ class LinkCOODataSynchronizerT : public HostDeviceSynchronizer {
     impl::get_linked_entities_crs_field(lmd).modify_on_device();
     impl::get_linked_entity_ids_field(lmd).modify_on_device();
     impl::get_linked_entity_ranks_field(lmd).modify_on_device();
-    impl::get_linked_entity_bucket_ids_field(lmd).modify_on_device();
-    impl::get_linked_entity_bucket_ords_field(lmd).modify_on_device();
     impl::get_link_crs_needs_updated_field(lmd).modify_on_device();
-    impl::get_link_marked_for_destruction_field(lmd).modify_on_device();
   }
 
   virtual void sync_to_host() override {
@@ -89,10 +83,7 @@ class LinkCOODataSynchronizerT : public HostDeviceSynchronizer {
     impl::get_linked_entities_crs_field(lmd).sync_to_host();
     impl::get_linked_entity_ids_field(lmd).sync_to_host();
     impl::get_linked_entity_ranks_field(lmd).sync_to_host();
-    impl::get_linked_entity_bucket_ids_field(lmd).sync_to_host();
-    impl::get_linked_entity_bucket_ords_field(lmd).sync_to_host();
     impl::get_link_crs_needs_updated_field(lmd).sync_to_host();
-    impl::get_link_marked_for_destruction_field(lmd).sync_to_host();
   }
 
   virtual void sync_to_device() override {
@@ -101,10 +92,7 @@ class LinkCOODataSynchronizerT : public HostDeviceSynchronizer {
     impl::get_linked_entities_crs_field(lmd).sync_to_device();
     impl::get_linked_entity_ids_field(lmd).sync_to_device();
     impl::get_linked_entity_ranks_field(lmd).sync_to_device();
-    impl::get_linked_entity_bucket_ids_field(lmd).sync_to_device();
-    impl::get_linked_entity_bucket_ords_field(lmd).sync_to_device();
     impl::get_link_crs_needs_updated_field(lmd).sync_to_device();
-    impl::get_link_marked_for_destruction_field(lmd).sync_to_device();
   }
 
   virtual void update_post_mesh_mod() override {
@@ -121,14 +109,8 @@ class LinkCOODataSynchronizerT : public HostDeviceSynchronizer {
         our_get_updated_ngp_field(impl::get_linked_entity_ids_field(link_meta_data));
     ngp_link_meta_data.ngp_linked_entity_ranks_field() =
         our_get_updated_ngp_field(impl::get_linked_entity_ranks_field(link_meta_data));
-    ngp_link_meta_data.ngp_linked_entity_bucket_ids_field() =
-        our_get_updated_ngp_field(impl::get_linked_entity_bucket_ids_field(link_meta_data));
-    ngp_link_meta_data.ngp_linked_entity_bucket_ords_field() =
-        our_get_updated_ngp_field(impl::get_linked_entity_bucket_ords_field(link_meta_data));
     ngp_link_meta_data.ngp_link_crs_needs_updated_field() =
         our_get_updated_ngp_field(impl::get_link_crs_needs_updated_field(link_meta_data));
-    ngp_link_meta_data.ngp_link_marked_for_destruction_field() =
-        our_get_updated_ngp_field(impl::get_link_marked_for_destruction_field(link_meta_data));
   }
 
  private:

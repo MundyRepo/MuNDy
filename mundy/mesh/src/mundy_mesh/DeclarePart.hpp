@@ -22,7 +22,6 @@
 #define MUNDY_MESH_DECLAREPART_HPP_
 
 /// \file DeclarePart.hpp
-/// \defgroup MundyMeshDeclarePart mundy::mesh::DeclarePart
 /// \brief A set of helpers for declaring parts with reduced boilerplate code.
 
 // C++ core
@@ -43,6 +42,7 @@
 #include <mundy_mesh/FieldComponent.hpp>  // for mundy::mesh::impl::component_backing_field
 #include <mundy_utils/requires.hpp>
 #include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_REQUIRE
+#include <Mundy_config.hpp>  // for MUNDY_DEPRECATED_MSG
 
 namespace mundy {
 
@@ -64,7 +64,7 @@ enum class IOPartRole { NONE, IO, ASSEMBLY, EDGE_BLOCK };
 ///
 /// For example, to create an element rank assembly part that contains all beams and spheres:
 /// \code{.cpp}
-///   PartDeclarationHelper part_decl(meta_data);
+///   PartDeclaration part_decl(meta_data);
 ///   stk::mesh::Part &spheres      = part_decl.name("spheres").topology(stk::topology::PARTICLE).role(IO).declare();
 ///   stk::mesh::Part &beams        = part_decl.name("beams").topology(stk::topology::BEAM_2).role(IO).declare();
 ///   stk::mesh::Part &rigid_bodies =
@@ -74,19 +74,19 @@ enum class IOPartRole { NONE, IO, ASSEMBLY, EDGE_BLOCK };
 /// These setters may be called in any order. Role and subparts are optional, but you must call a valid combination of
 /// name, rank, and topology before declare().
 ///
-/// You may also reuse the same PartDeclarationHelper to declare multiple parts with similar properties:
+/// You may also reuse the same PartDeclaration to declare multiple parts with similar properties:
 /// \code{.cpp}
-///   PartDeclarationHelper part_decl(meta_data);
+///   PartDeclaration part_decl(meta_data);
 ///   auto io_particle_part_decl = part_decl.topology(stk::topology::PARTICLE).role(IO).declare();
 ///   stk::mesh::Part &spheres      = io_particle_part_decl.name("spheres").declare();
 ///   stk::mesh::Part &points       = io_particle_part_decl.name("points").declare();
 /// \endcode
-class PartDeclarationHelper {
+class PartDeclaration {
  public:
   //! \name Constructors and Assignment Operators
 
   /// \brief Canonical constructor
-  PartDeclarationHelper(stk::mesh::MetaData& meta_data)
+  PartDeclaration(stk::mesh::MetaData& meta_data)
       : meta_data_(meta_data),
         part_has_name_(false),
         part_has_rank_(false),
@@ -96,45 +96,45 @@ class PartDeclarationHelper {
   }
 
   /// \brief Copy/Move constructors and assignment operators
-  PartDeclarationHelper(const PartDeclarationHelper&) = default;
-  PartDeclarationHelper(PartDeclarationHelper&&) = default;
-  PartDeclarationHelper& operator=(const PartDeclarationHelper&) = default;
-  PartDeclarationHelper& operator=(PartDeclarationHelper&&) = default;
+  PartDeclaration(const PartDeclaration&) = default;
+  PartDeclaration(PartDeclaration&&) = default;
+  PartDeclaration& operator=(const PartDeclaration&) = default;
+  PartDeclaration& operator=(PartDeclaration&&) = default;
   //@}
 
   //! \name Fluent interface
   //@{
 
   /// \brief Set the name of the part (must be called before declare())
-  PartDeclarationHelper name(const std::string& part_name) {
+  PartDeclaration name(const std::string& part_name) {
     part_has_name_ = true;
     part_name_ = part_name;
     return *this;
   }
 
   /// \brief Set the entity rank of the part
-  PartDeclarationHelper rank(stk::mesh::EntityRank part_rank) {
+  PartDeclaration rank(stk::mesh::EntityRank part_rank) {
     part_has_rank_ = true;
     part_rank_ = part_rank;
     return *this;
   }
 
   /// \brief Set the topology of the part
-  PartDeclarationHelper topology(stk::topology::topology_t part_topology) {
+  PartDeclaration topology(stk::topology::topology_t part_topology) {
     part_has_topology_ = true;
     part_topology_ = part_topology;
     return *this;
   }
 
   /// \brief Set the io role of the part (optional)
-  PartDeclarationHelper role(IOPartRole io_part_role) {
+  PartDeclaration role(IOPartRole io_part_role) {
     part_has_role_ = true;
     part_role_ = io_part_role;
     return *this;
   }
 
   /// \brief Add a subpart to the part (i.e, declare the given part as a subset of this part)
-  PartDeclarationHelper subpart(const stk::mesh::Part& subpart) {
+  PartDeclaration subpart(const stk::mesh::Part& subpart) {
     part_has_subparts_ = true;
     subset_part_ids_.push_back(subpart.mesh_meta_data_ordinal());
     return *this;
@@ -142,7 +142,7 @@ class PartDeclarationHelper {
 
   /// \brief Create a scalar-valued field restriction for this part (optional) with the given initial value
   template <typename FieldType>
-  PartDeclarationHelper put_field(FieldType& field, const typename FieldType::value_type* init_value) {
+  PartDeclaration put_field(FieldType& field, const typename FieldType::value_type* init_value) {
     field_restrictions_.push_back(std::make_shared<DeclareScalarFieldRestriction<FieldType>>(field, init_value));
     return *this;
   }
@@ -150,7 +150,7 @@ class PartDeclarationHelper {
   /// \brief Create a vector-valued field restriction for this part (optional) with the given initial value and n1
   /// values per entity
   template <typename FieldType>
-  PartDeclarationHelper put_field(FieldType& field, unsigned n1, const typename FieldType::value_type* init_value) {
+  PartDeclaration put_field(FieldType& field, unsigned n1, const typename FieldType::value_type* init_value) {
     field_restrictions_.push_back(std::make_shared<DeclareVectorFieldRestriction<FieldType>>(field, n1, init_value));
     return *this;
   }
@@ -158,7 +158,7 @@ class PartDeclarationHelper {
   /// \brief Create a tensor-valued field restriction for this part (optional) with the given initial value and n1 x n2
   /// values per entity
   template <typename FieldType>
-  PartDeclarationHelper put_field(FieldType& field, unsigned n1, unsigned n2,
+  PartDeclaration put_field(FieldType& field, unsigned n1, unsigned n2,
                                   const typename FieldType::value_type* init_value) {
     field_restrictions_.push_back(
         std::make_shared<DeclareTensorFieldRestriction<FieldType>>(field, n1, n2, init_value));
@@ -172,7 +172,7 @@ class PartDeclarationHelper {
     typename std::remove_cvref_t<ComponentType>::canonical_access;
     { impl::component_backing_field(component) };
   })
-  PartDeclarationHelper
+  PartDeclaration
       put_component(ComponentType component, const typename BackingFieldType::value_type* init_value) {
     using component_type = std::remove_cvref_t<ComponentType>;
     using access_shape = component_access_shape<typename component_type::canonical_access>;
@@ -217,7 +217,7 @@ class PartDeclarationHelper {
 
   /// \brief Print the part declaration information to the output stream.
   void print(std::ostream& os = std::cout) const {
-    os << "PartDeclarationHelper:" << std::endl;
+    os << "PartDeclaration:" << std::endl;
     if (part_has_name_) {
       os << "  Name: " << part_name_ << std::endl;
     }
@@ -379,6 +379,8 @@ class PartDeclarationHelper {
   IOPartRole part_role_;
   std::vector<std::shared_ptr<DeclareFieldRestrictionBase>> field_restrictions_;
 };
+
+using PartDeclarationHelper MUNDY_DEPRECATED_MSG("use PartDeclaration") = PartDeclaration;
 
 }  // namespace mesh
 

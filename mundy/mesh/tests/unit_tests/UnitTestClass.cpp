@@ -47,7 +47,10 @@
 
 // Mundy
 #include <mundy_mesh/Class.hpp>
+#include <mundy_mesh/Component.hpp>
+#include <mundy_mesh/FieldComponent.hpp>
 #include <mundy_mesh/MeshBuilder.hpp>
+#include <mundy_mesh/SharedComponent.hpp>
 
 namespace mundy {
 
@@ -275,6 +278,8 @@ struct NumberedClass {
   std::vector<size_t> subclasses;
 };
 
+struct CLASS_IO_COMPONENT;
+
 template <typename FieldValueType>
 void set_scalar_field_values(stk::mesh::BulkData& bulk_data, const stk::mesh::EntityRank rank,
                              const std::vector<stk::mesh::Field<FieldValueType>*>& all_fields,
@@ -357,9 +362,12 @@ class UnitTestClassFixture : public ::testing::Test {
 
   std::filesystem::path prepare_output_dir(const std::string& directory_name) const {
     int rank = 0;
+    int size = 1;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-    const std::filesystem::path output_dir = std::filesystem::current_path() / directory_name;
+    const std::filesystem::path output_dir =
+        std::filesystem::current_path() / ("mpi_size_" + std::to_string(size)) / directory_name;
     if (rank == 0) {
       std::filesystem::remove_all(output_dir);
       std::filesystem::create_directories(output_dir);
@@ -588,6 +596,41 @@ TEST_F(UnitTestClassFixture, ClassApiRejectsMismatchedRedeclarationAndPreservesC
   const ConstClassVector& const_classes = get_classes(const_meta_data);
   ASSERT_EQ(const_classes.size(), 1u);
   EXPECT_EQ(const_classes[0], &particle_class);
+}
+
+TEST_F(UnitTestClassFixture, AddClassComponentSupportsFieldBackedComponentsAndSkipsSharedComponents) {
+  MeshBuilder mesh_builder(MPI_COMM_WORLD);
+  initialize_mesh_builder(mesh_builder);
+
+  std::shared_ptr<MetaData> meta_data = mesh_builder.create_meta_data();
+  meta_data->use_simple_fields();
+
+  Class& particle_class = declare_class(*meta_data, "class_component_io_particle", stk::topology::PARTICLE);
+
+  stk::mesh::Field<double>& direct_field =
+      meta_data->declare_field<double>(stk::topology::ELEM_RANK, "class_component_direct_field");
+  stk::io::set_field_role(direct_field, Ioss::Field::TRANSIENT);
+  put_field_on_mesh(direct_field, particle_class, 1, nullptr);
+
+  stk::mesh::Field<double>& tagged_field =
+      meta_data->declare_field<double>(stk::topology::ELEM_RANK, "class_component_tagged_field");
+  stk::io::set_field_role(tagged_field, Ioss::Field::TRANSIENT);
+  put_field_on_mesh(tagged_field, particle_class, 1, nullptr);
+
+  meta_data->commit();
+
+  BulkIoContext writer(MPI_COMM_WORLD, mesh_builder, meta_data);
+  const std::filesystem::path output_dir = prepare_output_dir("unit_test_class_component_io");
+  const size_t output_index =
+      writer.io_broker.create_output_mesh((output_dir / "class_component_io.exo").string(), stk::io::WRITE_RESULTS);
+
+  ScalarFieldComponent<double> direct_component(direct_field);
+  auto tagged_component = make_tagged_component<CLASS_IO_COMPONENT>(ScalarFieldComponent<double>(tagged_field));
+  SharedScalarComponent<double> shared_component(1.0);
+
+  EXPECT_NO_THROW(add_class_component(writer.io_broker, output_index, direct_component, "DIRECT_COMPONENT"));
+  EXPECT_NO_THROW(add_class_component(writer.io_broker, output_index, tagged_component));
+  EXPECT_NO_THROW(add_class_component(writer.io_broker, output_index, shared_component));
 }
 
 TEST_F(UnitTestClassFixture, RestartRoundTripPreservesTreeAssemblyFields) {

@@ -27,8 +27,8 @@
 /// This header provides:
 ///   - Storage type mappings (\c field_component_for, \c shared_component_for) from canonical
 ///     access tags to concrete component types.
-///   - The intermediate fluent builder types (\c TaggedFieldDeclarationHelperT,
-///     \c TaggedFieldBackedDeclarationHelperT, \c TaggedSharedComponentDeclarationHelperT)
+///   - The intermediate fluent builder types (\c TaggedFieldDeclarationT,
+///     \c TaggedFieldBackedDeclarationHelperT, \c TaggedSharedComponentDeclarationT)
 ///     that arise as a result of the expanding-type fluent API.  These types are implementation
 ///     details; callers should use \c auto to hold them.
 ///
@@ -46,7 +46,7 @@
 // Mundy
 #include <mundy_mesh/Component.hpp>         // for make_tagged_component
 #include <mundy_mesh/ComponentAccess.hpp>   // for component_access_shape, canonical_component_access_t
-#include <mundy_mesh/DeclareField.hpp>      // for FieldDeclarationHelper, FieldDeclarationHelperT, impl::FieldDeclarationSnapshot
+#include <mundy_mesh/DeclareField.hpp>      // for FieldDeclaration, FieldDeclarationT, impl::FieldDeclarationSnapshot
 #include <mundy_mesh/FieldComponent.hpp>    // for FieldComponent, ScalarFieldComponent, VectorFieldComponent, ...
 #include <mundy_mesh/SharedComponent.hpp>   // for SharedComponent, SharedScalarComponent, ...
 #include <mundy_utils/throw_assert.hpp>     // for MUNDY_THROW_REQUIRE, sink
@@ -98,6 +98,12 @@ template <typename ScalarType>
 struct field_component_for<access::aabb<ScalarType>> {
   template <typename FieldScalarType>
   using type = AABBFieldComponent<FieldScalarType>;
+};
+
+template <typename ScalarType>
+struct field_component_for<access::obb<ScalarType>> {
+  template <typename FieldScalarType>
+  using type = OBBFieldComponent<FieldScalarType>;
 };
 
 // ======================================================================================================================
@@ -195,6 +201,9 @@ std::string component_access_name(access::quaternion<ScalarType>) { return "quat
 
 template <typename ScalarType>
 std::string component_access_name(access::aabb<ScalarType>) { return "aabb"; }
+
+template <typename ScalarType>
+std::string component_access_name(access::obb<ScalarType>) { return "obb"; }
 
 template <typename CanonicalAccess>
 std::string component_access_name() { return component_access_name(CanonicalAccess{}); }
@@ -300,15 +309,15 @@ template <typename FieldScalarType, typename AccessLike, typename Tag>
 class TaggedFieldBackedDeclarationHelperT;
 
 template <typename SharedSource, typename AccessLike, typename Tag>
-class TaggedSharedComponentDeclarationHelperT;
+class TaggedSharedComponentDeclarationT;
 
-class ComponentDeclarationHelper;
+class ComponentDeclaration;
 
 // ======================================================================================================================
-// TaggedFieldDeclarationHelperT
+// TaggedFieldDeclarationT
 // ======================================================================================================================
 
-/// \class TaggedFieldDeclarationHelperT
+/// \class TaggedFieldDeclarationT
 /// \ingroup MundyMeshDeclareComponent
 /// \brief Intermediate fluent builder: field scalar type and semantic tag are known; access shape is not yet chosen.
 ///
@@ -319,25 +328,25 @@ class ComponentDeclarationHelper;
 /// Users should not name it explicitly; use \c auto to capture the result of \c .tag<Tag>().
 ///
 /// \code{.cpp}
-///   auto c = ComponentDeclarationHelper(meta)
+///   auto c = ComponentDeclaration(meta)
 ///              .rank(NODE_RANK).name("velocity")
 ///              .tag<VelocityTag>()
 ///              .field<mundy::math::Vector3<double>>()
 ///              .declare();
 /// \endcode
 template <typename FieldScalarType, typename Tag>
-class TaggedFieldDeclarationHelperT {
+class TaggedFieldDeclarationT {
  public:
-  using our_t           = TaggedFieldDeclarationHelperT<FieldScalarType, Tag>;
-  using field_scalar_type = std::remove_cvref_t<FieldScalarType>;
+  using our_t           = TaggedFieldDeclarationT<FieldScalarType, Tag>;
+  using field_value_typeype = std::remove_cvref_t<FieldScalarType>;
 
   //! \name Constructors and Assignment Operators
   //@{
 
-  TaggedFieldDeclarationHelperT(const TaggedFieldDeclarationHelperT&) = default;
-  TaggedFieldDeclarationHelperT(TaggedFieldDeclarationHelperT&&)      = default;
-  TaggedFieldDeclarationHelperT& operator=(const TaggedFieldDeclarationHelperT&) = default;
-  TaggedFieldDeclarationHelperT& operator=(TaggedFieldDeclarationHelperT&&)      = default;
+  TaggedFieldDeclarationT(const TaggedFieldDeclarationT&) = default;
+  TaggedFieldDeclarationT(TaggedFieldDeclarationT&&)      = default;
+  TaggedFieldDeclarationT& operator=(const TaggedFieldDeclarationT&) = default;
+  TaggedFieldDeclarationT& operator=(TaggedFieldDeclarationT&&)      = default;
 
   //@}
 
@@ -380,7 +389,7 @@ class TaggedFieldDeclarationHelperT {
   template <typename T>
   auto type() const {
     using new_fst = std::remove_cvref_t<T>;
-    return TaggedFieldDeclarationHelperT<new_fst, Tag>(snapshot_);
+    return TaggedFieldDeclarationT<new_fst, Tag>(snapshot_);
   }
 
   /// \brief Commit to a field-backed component with the given access shape.
@@ -402,28 +411,28 @@ class TaggedFieldDeclarationHelperT {
     using shared_value_t   = impl::shared_component_source_value_t<source_type>;
     static_assert(std::is_same_v<shared_value_t, typename shape::shared_value_type>,
                   "Shared source value type is incompatible with the chosen component access.");
-    return TaggedSharedComponentDeclarationHelperT<source_type, AccessLike, Tag>(
+    return TaggedSharedComponentDeclarationT<source_type, AccessLike, Tag>(
         std::forward<SharedSource>(source), snapshot_);
   }
 
   /// \brief Replace the current tag, returning a new builder with the new tag.
   template <typename NewTag>
   auto tag() const {
-    return TaggedFieldDeclarationHelperT<FieldScalarType, NewTag>(snapshot_);
+    return TaggedFieldDeclarationT<FieldScalarType, NewTag>(snapshot_);
   }
 
   //@}
 
  private:
-  explicit TaggedFieldDeclarationHelperT(impl::FieldDeclarationSnapshot snapshot)
+  explicit TaggedFieldDeclarationT(impl::FieldDeclarationSnapshot snapshot)
       : snapshot_(std::move(snapshot)) {}
 
   impl::FieldDeclarationSnapshot snapshot_;
 
-  friend class ComponentDeclarationHelper;
+  friend class ComponentDeclaration;
   template <typename OtherFST, typename OtherTag>
-  friend class TaggedFieldDeclarationHelperT;
-};  // TaggedFieldDeclarationHelperT
+  friend class TaggedFieldDeclarationT;
+};  // TaggedFieldDeclarationT
 
 // ======================================================================================================================
 // TaggedFieldBackedDeclarationHelperT
@@ -448,12 +457,12 @@ class TaggedFieldBackedDeclarationHelperT {
   using access_like    = AccessLike;
   using canonical_access = canonical_component_access_t<AccessLike>;
   using shape          = component_access_shape<canonical_access>;
-  using field_scalar_type =
-      std::conditional_t<std::is_void_v<FieldScalarType>, typename shape::field_scalar_type,
+  using field_value_typeype =
+      std::conditional_t<std::is_void_v<FieldScalarType>, typename shape::field_value_typeype,
                          std::remove_cvref_t<FieldScalarType>>;
 
   static_assert(std::is_void_v<FieldScalarType> ||
-                    std::is_same_v<std::remove_cvref_t<FieldScalarType>, typename shape::field_scalar_type>,
+                    std::is_same_v<std::remove_cvref_t<FieldScalarType>, typename shape::field_value_typeype>,
                 "The chosen field scalar type is incompatible with the chosen component access.");
 
   //! \name Constructors and Assignment Operators
@@ -505,7 +514,7 @@ class TaggedFieldBackedDeclarationHelperT {
   template <typename T>
   auto type() const {
     using new_fst = std::remove_cvref_t<T>;
-    static_assert(std::is_same_v<new_fst, typename shape::field_scalar_type>,
+    static_assert(std::is_same_v<new_fst, typename shape::field_value_typeype>,
                   "The chosen field scalar type is incompatible with the chosen component access.");
     return TaggedFieldBackedDeclarationHelperT<new_fst, AccessLike, Tag>(snapshot_);
   }
@@ -525,16 +534,16 @@ class TaggedFieldBackedDeclarationHelperT {
   auto declare() const {
     MUNDY_THROW_REQUIRE(snapshot_.meta_data != nullptr, std::logic_error,
                         "Field component declaration requires a MetaData reference. "
-                        "Use ComponentDeclarationHelper(meta_data) or FieldDeclarationHelper(meta_data).");
+                        "Use ComponentDeclaration(meta_data) or FieldDeclaration(meta_data).");
 
     auto snapshot = snapshot_;
     impl::apply_default_output_type_if_needed<canonical_access>(snapshot);
 
-    stk::mesh::Field<field_scalar_type>& field =
-        impl::declare_field_from_snapshot<field_scalar_type>(snapshot);
+    stk::mesh::Field<field_value_typeype>& field =
+        impl::declare_field_from_snapshot<field_value_typeype>(snapshot);
 
     using component_type =
-        typename impl::field_component_for<canonical_access>::template type<field_scalar_type>;
+        typename impl::field_component_for<canonical_access>::template type<field_value_typeype>;
     component_type component(field);
 
     if constexpr (std::is_void_v<Tag>) {
@@ -552,18 +561,18 @@ class TaggedFieldBackedDeclarationHelperT {
 
   impl::FieldDeclarationSnapshot snapshot_;
 
-  friend class ComponentDeclarationHelper;
+  friend class ComponentDeclaration;
   template <typename OtherFST, typename OtherTag>
-  friend class TaggedFieldDeclarationHelperT;
+  friend class TaggedFieldDeclarationT;
   template <typename OtherFST, typename OtherAL, typename OtherTag>
   friend class TaggedFieldBackedDeclarationHelperT;
 };  // TaggedFieldBackedDeclarationHelperT
 
 // ======================================================================================================================
-// TaggedSharedComponentDeclarationHelperT
+// TaggedSharedComponentDeclarationT
 // ======================================================================================================================
 
-/// \class TaggedSharedComponentDeclarationHelperT
+/// \class TaggedSharedComponentDeclarationT
 /// \ingroup MundyMeshDeclareComponent
 /// \brief Intermediate fluent builder: shared source, access shape, and semantic tag are all known.
 ///
@@ -576,9 +585,9 @@ class TaggedFieldBackedDeclarationHelperT {
 ///
 /// \c rank() must be called before \c declare().
 template <typename SharedSource, typename AccessLike, typename Tag = void>
-class TaggedSharedComponentDeclarationHelperT {
+class TaggedSharedComponentDeclarationT {
  public:
-  using our_t            = TaggedSharedComponentDeclarationHelperT<SharedSource, AccessLike, Tag>;
+  using our_t            = TaggedSharedComponentDeclarationT<SharedSource, AccessLike, Tag>;
   using shared_source_type = SharedSource;
   using access_like      = AccessLike;
   using canonical_access = canonical_component_access_t<AccessLike>;
@@ -592,14 +601,14 @@ class TaggedSharedComponentDeclarationHelperT {
   //@{
 
   /// \brief Construct from a shared source value; snapshot carries optional metadata from the builder chain.
-  explicit TaggedSharedComponentDeclarationHelperT(shared_source_type shared_source,
+  explicit TaggedSharedComponentDeclarationT(shared_source_type shared_source,
                                                    impl::FieldDeclarationSnapshot snapshot = {})
       : shared_source_(std::move(shared_source)), snapshot_(std::move(snapshot)) {}
 
-  TaggedSharedComponentDeclarationHelperT(const TaggedSharedComponentDeclarationHelperT&) = default;
-  TaggedSharedComponentDeclarationHelperT(TaggedSharedComponentDeclarationHelperT&&)      = default;
-  TaggedSharedComponentDeclarationHelperT& operator=(const TaggedSharedComponentDeclarationHelperT&) = default;
-  TaggedSharedComponentDeclarationHelperT& operator=(TaggedSharedComponentDeclarationHelperT&&)      = default;
+  TaggedSharedComponentDeclarationT(const TaggedSharedComponentDeclarationT&) = default;
+  TaggedSharedComponentDeclarationT(TaggedSharedComponentDeclarationT&&)      = default;
+  TaggedSharedComponentDeclarationT& operator=(const TaggedSharedComponentDeclarationT&) = default;
+  TaggedSharedComponentDeclarationT& operator=(TaggedSharedComponentDeclarationT&&)      = default;
 
   //@}
 
@@ -625,7 +634,7 @@ class TaggedSharedComponentDeclarationHelperT {
   /// \brief Replace the semantic tag.
   template <typename NewTag>
   auto tag() const {
-    return TaggedSharedComponentDeclarationHelperT<shared_source_type, AccessLike, NewTag>(
+    return TaggedSharedComponentDeclarationT<shared_source_type, AccessLike, NewTag>(
         shared_source_, snapshot_);
   }
 
@@ -667,8 +676,8 @@ class TaggedSharedComponentDeclarationHelperT {
   impl::FieldDeclarationSnapshot  snapshot_;
 
   template <typename OtherSrc, typename OtherAL, typename OtherTag>
-  friend class TaggedSharedComponentDeclarationHelperT;
-};  // TaggedSharedComponentDeclarationHelperT
+  friend class TaggedSharedComponentDeclarationT;
+};  // TaggedSharedComponentDeclarationT
 
 // ======================================================================================================================
 // ======================================================================================================================

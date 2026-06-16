@@ -27,23 +27,51 @@
 /// Include this header when specializing NeighborListBuildTraits for a new concrete list type.
 
 // C++ core
-#include <concepts>  // for std::same_as
+#include <concepts>     // for std::same_as
+#include <type_traits>  // for std::remove_cvref_t
 
 // Trilinos
 #include <stk_mesh/base/Selector.hpp>
+#include <stk_mesh/base/Types.hpp>  // for stk::mesh::EntityRank
+
+// Mundy
+#include <mundy_geom/primitives/AABB.hpp>  // for mundy::is_aabb_v
 
 namespace mundy {
 
 namespace search {
 
 /// \concept NeighborListInputType
-/// \brief Specifies a selected source or target chunk used to build a neighbor list.
+/// \brief The fixed "identity" of a neighbor-list input, encoding which group of entities are searched and how to read their geometry.
 ///
-/// Search boxes, periodic image boxes, and future source/target input types may have different geometry and indexing
-/// APIs, but they must expose the selector that defines the semantic entity chunk being searched.
+/// For the time being, a single input (source/target) must have uniform selector + rank + field-backed component.
 template <typename T>
 concept NeighborListInputType = requires(const T& input) {
   { input.selector() } -> std::same_as<const stk::mesh::Selector&>;
+  input.component();
+  { input.rank() } -> std::same_as<stk::mesh::EntityRank>;
+};
+
+/// \concept AABBSearchInputType
+/// \brief A `NeighborListInputType` whose component yields an AABB — the broad-phase volume expected by the
+/// AABB-based neighbor lists (STK and ArborX).
+template <typename T>
+concept AABBSearchInputType =
+    NeighborListInputType<T> && mundy::is_aabb_v<std::remove_cvref_t<typename T::component_type::view_t>>;
+
+/// \concept AABBSearchInputTypeFor
+/// \brief An `AABBSearchInputType` whose component yields an AABB in `Scalar` precision.
+template <typename T, typename Scalar>
+concept AABBSearchInputTypeFor =
+    AABBSearchInputType<T> &&
+    std::same_as<typename std::remove_cvref_t<typename T::component_type::view_t>::value_type, Scalar>;
+
+/// \concept PeriodicAABBSearchInputType
+/// \brief An `AABBSearchInputType` that also carries a periodicity metric (`PeriodicSearchInput`).
+template <typename T>
+concept PeriodicAABBSearchInputType = AABBSearchInputType<T> && requires(const T& input) {
+  input.periodic_metric();
+  typename T::metric_type;
 };
 
 /// \struct NeighborListBuildTraits
@@ -59,7 +87,6 @@ concept NeighborListInputType = requires(const T& input) {
 /// The primary template leaves `build()` undefined so that accessing it on an unspecialized type is a
 /// compile error. The `struct args_type {}` in the primary allows function signatures in `NeighborListBuilder`
 /// to compile even before a specialization is visible.
-/// \tparam ListType Concrete neighbor-list type being described.
 template <typename ListType>
 struct NeighborListBuildTraits {
   /// \brief Default empty args; specializations override this with build-specific parameters.

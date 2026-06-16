@@ -34,6 +34,7 @@
 
 // Mundy math / geometry
 #include <mundy_geom/primitives/AABB.hpp>  // for mundy::AABB, is_aabb_v
+#include <mundy_geom/primitives/OBB.hpp>   // for mundy::OBB, is_obb_v
 #include <mundy_math/Matrix.hpp>           // for mundy::Matrix, is_matrix_v
 #include <mundy_math/Matrix3.hpp>          // for mundy::Matrix3, is_matrix3_v
 #include <mundy_math/Quaternion.hpp>       // for mundy::Quaternion, is_quaternion_v
@@ -52,19 +53,19 @@ namespace access {
 /// Raw access: exposes entity field data as a flat array / EntityFieldData view.
 template <typename ValueType>
 struct raw {
-  using scalar_type = ValueType;
+  using value_typeype = ValueType;
 };
 
 /// Scalar access: one arithmetic value per entity.
 template <typename ScalarType>
 struct scalar {
-  using scalar_type = ScalarType;
+  using value_typeype = ScalarType;
 };
 
 /// Fixed-size vector access: N scalars per entity.
 template <typename ScalarType, size_t N>
 struct vector {
-  using scalar_type = ScalarType;
+  using value_typeype = ScalarType;
   static constexpr size_t size = N;
 };
 
@@ -105,7 +106,7 @@ using vector6i = vector6<int>;
 /// Fixed-size matrix access: N * M scalars per entity.
 template <typename ScalarType, size_t N, size_t M>
 struct matrix {
-  using scalar_type = ScalarType;
+  using value_typeype = ScalarType;
   static constexpr size_t num_rows = N;
   static constexpr size_t num_cols = M;
 };
@@ -191,13 +192,20 @@ using matrix6i = matrix6<int>;
 /// Quaternion access: 4 scalars per entity.
 template <typename ScalarType>
 struct quaternion {
-  using scalar_type = ScalarType;
+  using value_typeype = ScalarType;
 };
 
 /// Axis-aligned bounding box access: 6 scalars per entity.
 template <typename ScalarType>
 struct aabb {
-  using scalar_type = ScalarType;
+  using value_typeype = ScalarType;
+};
+
+/// Oriented bounding box access: 10 scalars per entity.
+/// Layout: center xyz (0-2), orientation quaternion wxyz (3-6), half-extents xyz (7-9).
+template <typename ScalarType>
+struct obb {
+  using value_typeype = ScalarType;
 };
 
 }  // namespace access
@@ -241,6 +249,11 @@ struct canonical_component_access<access::aabb<ScalarType>, void> {
   using type = access::aabb<std::remove_cvref_t<ScalarType>>;
 };
 
+template <typename ScalarType>
+struct canonical_component_access<access::obb<ScalarType>, void> {
+  using type = access::obb<std::remove_cvref_t<ScalarType>>;
+};
+
 // Arithmetic scalars map to access::scalar
 template <typename ScalarType>
 struct canonical_component_access<ScalarType,
@@ -253,7 +266,7 @@ template <typename VectorType>
 struct canonical_component_access<VectorType,
                                    std::enable_if_t<is_vector_v<std::remove_cvref_t<VectorType>>>> {
   using decayed = std::remove_cvref_t<VectorType>;
-  using type    = access::vector<typename decayed::scalar_t, decayed::size>;
+  using type    = access::vector<typename decayed::value_type, decayed::size>;
 };
 
 // Mundy Matrix3<> types map to access::matrix3
@@ -261,7 +274,7 @@ template <typename Matrix3Type>
 struct canonical_component_access<Matrix3Type,
                                    std::enable_if_t<is_matrix3_v<std::remove_cvref_t<Matrix3Type>>>> {
   using decayed = std::remove_cvref_t<Matrix3Type>;
-  using type    = access::matrix3<typename decayed::scalar_t>;
+  using type    = access::matrix3<typename decayed::value_type>;
 };
 
 // Mundy Matrix<> types map to access::matrix
@@ -270,7 +283,7 @@ struct canonical_component_access<
     MatrixType, std::enable_if_t<is_matrix_v<std::remove_cvref_t<MatrixType>> &&
                                  !is_matrix3_v<std::remove_cvref_t<MatrixType>>>> {
   using decayed = std::remove_cvref_t<MatrixType>;
-  using type    = access::matrix<typename decayed::scalar_t, decayed::num_rows, decayed::num_cols>;
+  using type    = access::matrix<typename decayed::value_type, decayed::num_rows, decayed::num_cols>;
 };
 
 // Mundy Quaternion<> types map to access::quaternion
@@ -278,7 +291,7 @@ template <typename QuaternionType>
 struct canonical_component_access<QuaternionType,
                                    std::enable_if_t<is_quaternion_v<std::remove_cvref_t<QuaternionType>>>> {
   using decayed = std::remove_cvref_t<QuaternionType>;
-  using type    = access::quaternion<typename decayed::scalar_t>;
+  using type    = access::quaternion<typename decayed::value_type>;
 };
 
 // Mundy AABB<> types map to access::aabb
@@ -286,7 +299,15 @@ template <typename AABBType>
 struct canonical_component_access<AABBType,
                                    std::enable_if_t<is_aabb_v<std::remove_cvref_t<AABBType>>>> {
   using decayed = std::remove_cvref_t<AABBType>;
-  using type    = access::aabb<typename decayed::scalar_t>;
+  using type    = access::aabb<typename decayed::value_type>;
+};
+
+// Mundy OBB<> types map to access::obb
+template <typename OBBType>
+struct canonical_component_access<OBBType,
+                                   std::enable_if_t<is_obb_v<std::remove_cvref_t<OBBType>>>> {
+  using decayed = std::remove_cvref_t<OBBType>;
+  using type    = access::obb<typename decayed::value_type>;
 };
 
 template <typename AccessLike>
@@ -296,7 +317,7 @@ using canonical_component_access_t = typename canonical_component_access<AccessL
 // component_access_shape — storage-independent shape facts for a canonical access tag
 //
 // Provides:
-//   field_scalar_type       — the STK field scalar type this access shape uses
+//   field_value_typeype       — the STK field scalar type this access shape uses
 //   shared_value_type       — the C++ value type stored in a shared component
 //   has_fixed_field_scalars — true if the scalar count per entity is statically known
 //   field_scalars           — scalar count per entity (valid only if has_fixed_field_scalars)
@@ -310,7 +331,7 @@ struct component_access_shape;
 
 template <typename ValueType>
 struct component_access_shape<access::raw<ValueType>> {
-  using field_scalar_type  = ValueType;
+  using field_value_typeype  = ValueType;
   using shared_value_type  = ValueType;
   static constexpr bool has_fixed_field_scalars = false;
   static constexpr bool has_default_output_type  = false;
@@ -318,7 +339,7 @@ struct component_access_shape<access::raw<ValueType>> {
 
 template <typename ScalarType>
 struct component_access_shape<access::scalar<ScalarType>> {
-  using field_scalar_type  = ScalarType;
+  using field_value_typeype  = ScalarType;
   using shared_value_type  = ScalarType;
   static constexpr bool     has_fixed_field_scalars = true;
   static constexpr unsigned field_scalars            = 1;
@@ -326,7 +347,7 @@ struct component_access_shape<access::scalar<ScalarType>> {
 
 template <typename ScalarType, size_t N>
 struct component_access_shape<access::vector<ScalarType, N>> {
-  using field_scalar_type  = ScalarType;
+  using field_value_typeype  = ScalarType;
   using shared_value_type  = Vector<ScalarType, N>;
   static constexpr bool     has_fixed_field_scalars = true;
   static constexpr unsigned field_scalars            = static_cast<unsigned>(N);
@@ -334,7 +355,7 @@ struct component_access_shape<access::vector<ScalarType, N>> {
 
 template <typename ScalarType, size_t N, size_t M>
 struct component_access_shape<access::matrix<ScalarType, N, M>> {
-  using field_scalar_type  = ScalarType;
+  using field_value_typeype  = ScalarType;
   using shared_value_type  = Matrix<ScalarType, N, M>;
   static constexpr bool     has_fixed_field_scalars = true;
   static constexpr unsigned field_scalars            = static_cast<unsigned>(N * M);
@@ -342,7 +363,7 @@ struct component_access_shape<access::matrix<ScalarType, N, M>> {
 
 template <typename ScalarType>
 struct component_access_shape<access::quaternion<ScalarType>> {
-  using field_scalar_type  = ScalarType;
+  using field_value_typeype  = ScalarType;
   using shared_value_type  = Quaternion<ScalarType>;
   static constexpr bool     has_fixed_field_scalars = true;
   static constexpr unsigned field_scalars            = 4;
@@ -350,10 +371,19 @@ struct component_access_shape<access::quaternion<ScalarType>> {
 
 template <typename ScalarType>
 struct component_access_shape<access::aabb<ScalarType>> {
-  using field_scalar_type  = ScalarType;
+  using field_value_typeype  = ScalarType;
   using shared_value_type  = AABB<ScalarType>;
   static constexpr bool     has_fixed_field_scalars = true;
   static constexpr unsigned field_scalars            = 6;
+  static constexpr bool     has_default_output_type  = false;
+};
+
+template <typename ScalarType>
+struct component_access_shape<access::obb<ScalarType>> {
+  using field_value_typeype  = ScalarType;
+  using shared_value_type  = OBB<ScalarType>;
+  static constexpr bool     has_fixed_field_scalars = true;
+  static constexpr unsigned field_scalars            = 10;
   static constexpr bool     has_default_output_type  = false;
 };
 

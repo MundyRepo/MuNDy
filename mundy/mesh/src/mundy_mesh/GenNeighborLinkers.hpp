@@ -23,14 +23,14 @@
 
 /// \file GenerateNeighborLinkers.hpp
 
-// C++ core libs
+// C++ core
 #include <memory>       // for std::shared_ptr, std::unique_ptr
 #include <string>       // for std::string
 #include <type_traits>  // for std::enable_if, std::is_base_of
 #include <typeindex>    // for std::type_index
 #include <vector>       // for std::vector
 
-// Trilinos libs
+// Trilinos
 #include <Trilinos_version.h>  // for TRILINOS_MAJOR_MINOR_VERSION
 
 #include <Kokkos_UnorderedMap.hpp>                // for Kokkos::UnorderedMap
@@ -51,9 +51,10 @@
 #include <stk_search/SearchMethod.hpp>            // for stk::search::KDTREE
 #include <stk_util/parallel/Parallel.hpp>         // for stk::parallel_machine_init, stk::parallel_machine_finalize
 
-// Mundy libs
+// Mundy
 #include <mundy_geom/primitives.hpp>             // for mundy::Sphere/mundy::AABB
 #include <mundy_mesh/BulkData.hpp>               // for mundy::mesh::BulkData
+#include <mundy_mesh/EntityIndices.hpp>          // for mundy::mesh::get_local_entity_indices
 #include <mundy_mesh/ForEachEntity.hpp>          // for mundy::mesh::for_each_entity_run
 #include <mundy_mesh/LinkData.hpp>               // for mundy::mesh::LinkData
 #include <mundy_mesh/MetaData.hpp>               // for mundy::mesh::MetaData
@@ -61,32 +62,14 @@
 #include <mundy_mesh/impl/LinkedBucketConn.hpp>  // for mundy::mesh::impl::LinkedBucketConn
 #include <mundy_utils/NgpView.hpp>               // for mundy::NgpView
 #include <mundy_utils/throw_assert.hpp>          // for MUNDY_THROW_ASSERT
+#include <mundy_math/cmath.hpp>
+
 namespace mundy {
 
 namespace mesh {
 
-/// \brief Get the local fast mesh indices for a set of entities as an NgpView.
-template <typename OurExecSpace>
-NgpViewT<stk::mesh::FastMeshIndex*, OurExecSpace> get_local_entity_indices(const stk::mesh::BulkData& bulk_data,
-                                                                           stk::mesh::EntityRank rank,
-                                                                           const stk::mesh::Selector& selector,
-                                                                           const OurExecSpace& /*exec_space*/) {
-  std::vector<stk::mesh::Entity> local_entities;
-  stk::mesh::get_entities(bulk_data, rank, selector, local_entities);
-
-  NgpViewT<stk::mesh::FastMeshIndex*, OurExecSpace> ngp_local_entity_indices("local_entity_indices",
-                                                                             local_entities.size());
-
-  Kokkos::parallel_for(stk::ngp::HostRangePolicy(0, local_entities.size()),
-                       [&bulk_data, &local_entities, &ngp_local_entity_indices](const int i) {
-                         const stk::mesh::MeshIndex& mesh_index = bulk_data.mesh_index(local_entities[i]);
-                         ngp_local_entity_indices.view_host()(i) =
-                             stk::mesh::FastMeshIndex{mesh_index.bucket->bucket_id(), mesh_index.bucket_ordinal};
-                       });
-
-  ngp_local_entity_indices.modify_on_host();
-  return ngp_local_entity_indices;
-}
+// `get_local_entity_indices` now lives in mundy_mesh/EntityIndices.hpp (included above) so it can be shared
+// with the search build; it remains usable here unqualified within namespace mundy::mesh.
 
 Kokkos::UnorderedMap<Kokkos::pair<stk::mesh::Entity, stk::mesh::Entity>, void, stk::ngp::ExecSpace>
 get_linked_neighbors_set(LinkData& link_data, const stk::mesh::Selector& link_selector) {
@@ -611,7 +594,7 @@ class GenNeighborLinks {
             double dx = new_center[0] - old_center[0];
             double dy = new_center[1] - old_center[1];
             double dz = new_center[2] - old_center[2];
-            double disp = Kokkos::sqrt(dx * dx + dy * dy + dz * dz);
+            double disp = sqrt(dx * dx + dy * dy + dz * dz);
             local_result = local_result || (disp > 0.5 * search_buffer);
           },
           Kokkos::LOr<bool>(moved_too_much));

@@ -2,15 +2,17 @@
 
 # MuNDy: Multibody Nonlocal Dynamics
 
-MuNDy is a C++ framework for high-performance simulation of **multibody nonlocal dynamics** on modern CPU and GPU architectures.
-
 ![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg)
 ![Backend-Kokkos](https://img.shields.io/badge/backend-Kokkos-1E88E5.svg)
 ![Mesh-STK](https://img.shields.io/badge/mesh-Trilinos%2FSTK-4CAF50.svg)
 
+MuNDy is a C++ infrastructure for building scalable, biologically grounded microscale multibody dynamics software.
+
+MuNDy supports models with evolving mechanical and relational structure: heterogeneous rigid and flexible bodies; constraints, motors, and contacts; growth, division, death, and bonds that form, break, and reorganize; and long-range interactions mediated through a shared medium. Rather than a monolithic simulator, MuNDy builds upon Trilinos/STK's runtime-extensible entity/part/field data model to provide reusable abstractions and data structures for this problem class. It is designed for research software developers building domain-specific applications across deployment scales, from laptops and workstations to multi-GPU clusters.
+
 > [!IMPORTANT]
-> **Project status (3/18/2026):**  
-> MuNDy is under active development. We have chosen to make development public as we move toward a first formal release targeted for **Late June 2026**.
+> **Project status (6/12/2026):**  
+> MuNDy is under active development and rapidly approaching our first formal release. Currently in the "polishing" phase: we have a complete set of core utilities, mathematical tools, geometric and mechanical primitives, and mesh integration machinery. We are now focused on hardening the API, expanding documentation and examples, and building out the Python interface.
 
 ---
 
@@ -25,6 +27,7 @@ MuNDy is a C++ framework for high-performance simulation of **multibody nonlocal
   - [MundyGeom: Geometric primitives and utilities](#mundygeom-geometric-primitives-and-utilities)
   - [MundyMech: Mechanical primitives and utilities](#mundymech-mechanical-primitives-and-utilities-under-construction)
   - [MundyMesh: MuNDy’s extension to Trilinos/STK](#mundymesh-mundys-extension-to-trilinosstk)
+  - [MundySearch: Neighbor-list construction and iteration](#mundysearch-neighbor-list-construction-and-iteration)
   - [Standalone Offshoots](#standalone-offshoots)
 - [Release Roadmap](#release-roadmap)
 
@@ -32,11 +35,17 @@ MuNDy is a C++ framework for high-performance simulation of **multibody nonlocal
 
 ## Documentation
 
-Check our our [Wiki](https://github.com/MundyRepo/MuNDy/wiki) for user-facing documentation, design notes, and tutorials. The Wiki is a living document that we will continue to expand and refine as the library matures. You can also generate the local Doxygen documentation from the source tree with:
+Use the [hosted Doxygen documentation](https://mundyrepo.github.io/MuNDy/) for user-facing documentation, design notes, primers, and generated API reference pages. Start with the [Primers](https://mundyrepo.github.io/MuNDy/pages.html), then use the generated [class](https://mundyrepo.github.io/MuNDy/classes.html), [file](https://mundyrepo.github.io/MuNDy/files.html), and [namespace](https://mundyrepo.github.io/MuNDy/namespaces.html) indexes as needed. You can also generate the local Doxygen documentation from the source tree with:
 
 ```bash
-module load doxygen
-doxygen doc/Doxyfile
+python3 -m venv .venv-docs
+source .venv-docs/bin/activate
+
+python -m pip install --upgrade pip setuptools wheel
+python -m pip install -r doc/requirements.txt
+
+# Assumes doxygen is in PATH and has version >= 1.9 | version >= 1.11 recommended for best results
+doxygen doc/Doxyfile 
 ```
 
 ## Installation via Spack
@@ -75,31 +84,29 @@ MuNDy adopts a **Trilinos-style subpackage stack**:
 
 This structure is intended to keep:
 - **Core utilities** small, reusable, and dependency-light. (utils, math, geom, mech)
-- **Simulation layers** configurable, so applications can opt into only what they need (mesh, mbody)
+- **Simulation layers** configurable, so applications can opt into only what they need (mesh, search, mbody)
 
 ### Code Statistics (via cloc)
 ```text
 cloc-1.96.pl --exclude-dir=TriBITS,ci,doc,scrap ./MuNDy
-     384 text files.
-     345 unique files.                                          
-      52 files ignored.
+     424 text files.
+     384 unique files.                                          
+      46 files ignored.
 
-github.com/AlDanial/cloc v 1.96  T=1.71 s (201.6 files/s, 53673.7 lines/s)
+github.com/AlDanial/cloc v 1.96  T=1.18 s (324.5 files/s, 91526.3 lines/s)
 ------------------------------------------------------------------
 Language            files        blank        comment         code
 ------------------------------------------------------------------
-C/C++ Header          142         7071          12382        30540
-C++                    81         4823           4428        22397
-CMake                  88          620           2046         2824
-Markdown                8          832              0         2220
-Python                  5          119            161          522
-Bourne Shell           15           98             91          329
-Text                    1           25              0          172
+C/C++ Header          181         8542          15906        34395
+C++                    86         5730           6410        26960
+Markdown                9          896              0         2787
+CMake                  79          530           1638         2430
+Python                  5          161            196          659
+Bourne Shell           18          130            142          547
 JSON                    2           10              0          137
-YAML                    2            0              0            6
-CSV                     1            0              0            1
+YAML                    4           21              0           87
 ------------------------------------------------------------------
-SUM:                  345        13598          19108        59148
+SUM:                  384        16020          24292        68002
 ------------------------------------------------------------------
 ```
 
@@ -107,19 +114,17 @@ SUM:                  345        13598          19108        59148
 
 ## Subpackages
 
-### [**MundyUtils**](https://github.com/MundyRepo/MuNDy/wiki/1.-MundyUtils): Centralized reusable utilities
-
-Doxygen directory reference: \ref mundy/core/utils "MundyUtils".
+### [**MundyUtils**](https://mundyrepo.github.io/MuNDy/MundyUtils.html): Centralized reusable utilities
 
 Centralized, Kokkos-friendly building blocks for type-level plumbing, error handling, and device-aware data management.
 - **MUNDY_THROW_ASSERT() / MUNDY_THROW_REQUIRE()**  
   Kokkos-compatible throw/assert helpers with diagnostics and detailed error context 
-  - On-device: abort  |  On-host: throw
-  - Can be called within constexpr contexts
+  * On-device: abort  |  On-host: throw
+  * Can be called within constexpr contexts
 
 - **mundy::tuple / mundy::variant**  
   Reduced, Kokkos-compatible analogs of `std::tuple` / `std::variant` for default-constructible types.  
-  - mundy::tuple is NTTP-compatible and `constexpr`-friendly  
+  * mundy::tuple is NTTP-compatible and `constexpr`-friendly  
 
 - **mundy::reference_wrapper**  
   Kokkos-compatible analog of `std::reference_wrapper` for non-const references.  
@@ -129,53 +134,49 @@ Centralized, Kokkos-friendly building blocks for type-level plumbing, error hand
 
 - **mundy::aggregate**  
   Compile-time extensible “tagged bag of types” (conceptually similar to `boost::hana::map`).  
-  - Kokkos-compatible  
-  - `constexpr` and NTTP-compatible  
+  * Kokkos-compatible  
+  * `constexpr` and NTTP-compatible  
 
 - **mundy::StringLiteral**  
   `constexpr` string literals that are NTTP-compatible.  
-  - Supports `constexpr` concatenation
+  * Supports `constexpr` concatenation
 
 - **mundy::StringSink**  
   A stream-like (`<<`) utility for constructing compile-time and runtime strings.  
-  - Kokkos-compatible/constexpr-friendly
-  - Automatically produces compile-time strings when possible
+  * Kokkos-compatible/constexpr-friendly
+  * Automatically produces compile-time strings when possible
 
 - **mundy::NgpPool / mundy::NgpView**  
   Dual-view abstractions that follow MuNDy’s sync semantics plus a dual-view push/pop pool.  
-  - Designed to integrate cleanly with Kokkos’ NGP (Next Generation Parallelism) model  
+  * Designed to integrate cleanly with Kokkos’ NGP (Next Generation Parallelism) model  
 
 ---
 
-### [**MundyMath**](https://github.com/MundyRepo/MuNDy/wiki/2.-MundyMath): `constexpr`, inline mathematics
-
-Doxygen directory reference: \ref mundy/core/math "MundyMath".
+### [**MundyMath**](https://mundyrepo.github.io/MuNDy/MundyMath.html): `constexpr`, inline mathematics
 
 Small, composable math utilities with view semantics that integrate naturally into Kokkos-based code.
 - **mundy::Matrix / mundy::Vector / mundy::Quaternion**  
   Kokkos-compatible, `constexpr` inline linear algebra for small matrix/vector sizes.  
-  - NTTP-compatible  
-  - View semantics for arbitrary accessors  
+  * NTTP-compatible  
+  * View semantics for arbitrary accessors  
 
 - **mundy::minimize(...)** 
   Kokkos-compatible analog of dlib’s `minimize` (L-BFGS) with no dynamic memory allocation.  
-  - Callable inside kernels or from host drivers  
+  * Callable inside kernels or from host drivers  
 
 - **mundy::convex**  
-  Linear complementarity problem (LCP) and constrained convex quadratic programming (QP) solver.  
-  - Kokkos-compatible  
-  - Can run inside a kernel or orchestrate kernel launches
-  - Supports Mixed LCP/QP problems with equality and inequality constraints
+  Linear complementarity problem (LCP) and constrained convex quadratic programming (QP) solver.
+  * Kokkos-compatible  
+  * Can run inside a kernel or orchestrate kernel launches
+  * Supports Mixed LCP/QP problems with equality and inequality constraints
 
 - **mundy::Hilbert / mundy::zmort**  
   Domain decomposition helpers for Hilbert space-filling curves and Z-morton ordering.  
-  - Useful for load balancing and locality-aware particle/domain layout  
+  * Useful for load balancing and locality-aware particle/domain layout  
 
 ---
 
-### [**MundyGeom**](https://github.com/MundyRepo/MuNDy/wiki/3.-MundyGeom): Geometric primitives and utilities
-
-Doxygen directory reference: \ref mundy/core/geom "MundyGeom".
+### [**MundyGeom**](https://mundyrepo.github.io/MuNDy/MundyGeom.html): Geometric primitives and utilities
 
 Foundational geometric abstractions for multibody dynamics and contact mechanics.
 - **Primitives**  
@@ -183,26 +184,24 @@ Foundational geometric abstractions for multibody dynamics and contact mechanics
 
 - **mundy::distance**  
   Utilities for computing:
-  - Euclidean separation distances  
-  - Shared-normal signed separation distances between primitives  
+  * Euclidean separation distances  
+  * Shared-normal signed separation distances between primitives  
 
 - **mundy::compute_aabb / mundy::compute_bounding_radius**  
   Helpers to compute axis-aligned bounding boxes (AABB) and bounding radii for each primitive.
 
 - **mundy::transform / mundy::randomize**  
   Utilities for:
-  - Translation  
-  - Rotation  
-  - Randomization of primitive configurations  
+  * Translation  
+  * Rotation  
+  * Randomization of primitive configurations  
 
 - **mundy::periodicity**  
   Utilities for handling distances and interactions in periodic domains.
 
 ---
 
-### [**MundyMech**](https://github.com/MundyRepo/MuNDy/wiki/4.-MundyMech): Mechanical primitives and utilities (under construction)
-
-Doxygen directory reference: \ref mundy/core/mech "MundyMech".
+### [**MundyMech**](https://mundyrepo.github.io/MuNDy/MundyMech.html): Mechanical primitives and utilities (under construction)
 
 Mechanical elements and force laws for building multibody models.
 
@@ -213,27 +212,25 @@ Further mechanical models and integration hooks will be added as the library mat
 
 ---
 
-### [**MundyMesh**](https://github.com/MundyRepo/MuNDy/wiki/4.-MundyMesh): MuNDy’s extension to Trilinos/STK
-
-Doxygen directory reference: \ref mundy/mesh "MundyMesh".
+### [**MundyMesh**](https://mundyrepo.github.io/MuNDy/MundyMesh.html): MuNDy’s extension to Trilinos/STK
 
 Helpers and abstractions for integrating MuNDy with Trilinos/STK meshes and fields.
 - **mundy::mesh::string_to_selector / mundy::mesh::string_to_topology / mundy::mesh::string_to_rank**  
   Map string descriptions like:
-  - Selector expressions: `"(partA | partB) & !partC"`  
-  - Topology: `"HEX_8"`  
-  - Rank: `"ELEM_RANK"`  
+  * Selector expressions: `"(partA | partB) & !partC"`  
+  * Topology: `"HEX_8"`  
+  * Rank: `"ELEM_RANK"`  
   to their corresponding STK objects.
 
-- **mundy::mesh::DeclareEntities / mundy::mesh::DeclareField / mundy::mesh::DeclarePart / mundy::mesh::DeclareClass**  
+- **mundy::mesh::EntityDeclaration / mundy::mesh::FieldDeclaration mundy::mesh::ComponentDeclaration / mundy::mesh::PartDeclaration / mundy::mesh::ClassDeclaration**  
   Helper functions that streamline common STK mesh setup tasks, such as declaring fields and parts with the correct properties and parallel consistency.
 
-* **mundy::mesh::NgpModRequests**
+- **mundy::mesh::NgpModRequests**
   A ticket-based framework for staging mesh modification requests from the device and processing them on the host.
-    - Requesting new entities (with known or generated Ids)
-    - Requesting new connectivity (e.g. element-to-node relations) involving existing or future entities
-    - Requesting deletion of existing entities or connectivity
-    - Safe and efficient in the face of concurrent requests from multiple threads on the device
+    * Requesting new entities (with known or generated Ids)
+    * Requesting new connectivity (e.g. element-to-node relations) involving existing or future entities
+    * Requesting deletion of existing entities or connectivity
+    * Safe and efficient in the face of concurrent requests from multiple threads on the device
 
 - **mundy::mesh::FieldViews**  
   Helpers for extracting mathematical views into STK field types, both on host and device.  
@@ -248,17 +245,17 @@ Helpers and abstractions for integrating MuNDy with Trilinos/STK meshes and fiel
   ```
   and aggregation of these accessors to avoid function bloat.
 
-* **mundy::mesh::LinkData / mundy::mesh::LinkCOOData / mundy::mesh::LinkCSRData**
+- **mundy::mesh::LinkData / mundy::mesh::LinkCOOData / mundy::mesh::LinkCSRData**
   Kokkos-compatible dynamic connectivity constructs (ghosting contrasts that are themselves entities).
   * Supports dynamically updating COO connectivity
   * Allows on-device sparse updates to CSR structures
   * Follows dual-view-like semantics aligned with STK’s NGP design
   * Automatic synchronization tracking during mesh modification cycles
 
-* **mundy::mesh::NgpFieldBLAS**
+- **mundy::mesh::NgpFieldBLAS**
   Reimplementation of STK’s field BLAS routines with unified host/device syntax.
 
-* **mundy::mesh::NgpAccessorExpr**
+ **mundy::mesh::NgpAccessorExpr**
   MuNDy’s usability layer: a templated expression system with:
   * Automatic pruning of reused branches
   * Automatic synchronization of read fields
@@ -272,14 +269,39 @@ Helpers and abstractions for integrating MuNDy with Trilinos/STK meshes and fiel
 
 ---
 
+### [**MundySearch**](https://mundyrepo.github.io/MuNDy/MundySearch.html): Neighbor-list construction and iteration
+
+Neighbor-list construction and iteration over STK mesh entities, backed by ArborX BVH or STK distributed coarse search.
+
+- **mundy::search::SearchInput / mundy::search::PeriodicSearchInput**  
+  Binds a `stk::mesh::Selector` to a geometry component (AABB or OBB), encoding which class of entities are searched and how to access their geometry.
+
+- **mundy::search::NeighborListBuilder**  
+  The canonical builder for all neighbor lists, allowing for the specification of source/target inputs, broad/narrow-phase refinements, and rebuild policies.
+  * **mundy::search::ArborX1dNeighborList**: Single-rank ArborX BVH, compressed CSR storage; lower memory, suited for sparse neighbor lists.
+  * **mundy::search::ArborX2dNeighborList**: Single-rank ArborX BVH, dense 2D per-target storage; suited for GPU pair-parallel dispatch.
+  * **mundy::search::STKSearchNeighborList**: STK MORTON_LBVH, MPI-distributed
+  * Periodic variants (**mundy::search::PeriodicArborX1dNeighborList**, **mundy::search::PeriodicArborX2dNeighborList**, **mundy::search::PeriodicSTKSearchNeighborList**) carry per-object image shifts alongside stored pairs.
+
+- **Excluders: mundy::search::ExcludeSelfInteraction, mundy::search::ExcludeSymmetricDuplicates, mundy::search::ExcludeConnectedEntities, mundy::search::ExcludeNonIntersectingOBBs**
+  Build-time predicates that reject candidate target/source pairs before they enter the stored list.
+
+- **Rebuilders: mundy::search::RebuildOnEntityChange, mundy::search::RebuildOnAABBDisplacement, mundy::search::RebuildOnOBBDisplacement, mundy::search::AlwaysRebuild, mundy::search::NeverRebuild**
+  Policies that determine when a cached neighbor list should be rebuilt based on changes in the underlying mesh or geometry.
+
+- **mundy::search::for_each_neighbor_pair / mundy::search::for_each_target_with_neighbors / mundy::search::for_each_neighbor_pair_reduce / mundy::search::for_each_target_with_neighbors_reduce**
+  Parallel iteration/reduction over stored pairs or per-target neighbor rows; works with all concrete list types.
+
+---
+
 ### Standalone Offshoots
 
 Independent projects that emerged from MuNDy’s infrastructure and are usable on their own.
 - **[OpenRAND](https://github.com/msu-sparta/OpenRAND)**
   Performance-portable, counter-based random number generation that is stupid simple to use.
-  - Designed to easily fit in GPU registers
-  - Makes reproducibility in spite of varied parallelism possible
-  - Now used by HOOMD-Blue
+  * Designed to easily fit in GPU registers
+  * Makes reproducibility in spite of varied parallelism possible
+  * Now used by HOOMD-Blue
   
 - **[alsous_gigantism_2025](https://github.com/flatironinstitute/alsous_gigantism_2025)**
   A discrete elastic rod model implemented using MuNDy. 
@@ -287,8 +309,8 @@ Independent projects that emerged from MuNDy’s infrastructure and are usable o
 - **[mundy_mock_app](https://github.com/MundyRepo/mundy_mock_app)** /
   **[mundy_mock_app_tribits](https://github.com/MundyRepo/mundy_mock_app_tribits)**
   Helper applications for bootstrapping MuNDy-based codes:
-  - CMake-based or TriBITS+CMake templates
-  - Intended as starting points for internal and external applications that depend on MuNDy
+  * CMake-based or TriBITS+CMake templates
+  * Intended as starting points for internal and external applications that depend on MuNDy
 
 ---
 

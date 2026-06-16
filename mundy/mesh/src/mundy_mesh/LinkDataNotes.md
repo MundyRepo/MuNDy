@@ -33,6 +33,66 @@ We'll use type specializations to differentiate between host/device behavior.
 ///////////////////////
 // Some new thoughts //
 
+Request-system consolidation:
+
+The standalone LinkDeclarationRequests and LinkDestructionRequests path should be folded into NgpModRequests.
+Links are ordinary STK entities, so declaring and deleting the link entity itself should use the existing
+NgpModRequests entity ticket helpers:
+
+  request_entities_new_ids(link_parts).request(link_rank)
+  request_entities_known_ids(link_parts).request(link_rank, id)
+  destroy_entities().destroy(link_entity)
+
+The link-specific operation is not entity creation/destruction. It is attaching a link entity to its linked entities by
+writing the LinkData COO fields. Importantly, there is initially no reason to delay this operation when the link entity
+already exists. COO relation declaration/destruction is already cheap, mod-cycle-free, and thread parallel:
+
+  link_data.coo_data().declare_relation(link, linked_entity, ordinal);
+  link_data.coo_data().destroy_relation(link, ordinal);
+
+Using a ticket queue just to perform one of those writes later adds machinery without buying anything. The real use
+case for delayed link-relation requests is narrower: the link relation cannot be written yet because the link entity
+itself does not exist yet. In that case, NgpModRequests can first request the link entity through the ordinary entity
+creation path, then use the resulting FutureEntity as the linker in a delayed COO write.
+
+That suggests a request helper shaped like NgpRequestConnectionsT, but with the link side allowed to be a future:
+
+  auto req_links = reqs.request_links(link_data);
+  auto future_link = req_link_entities.request(ticket, link_rank);
+  req_links.request(ticket, future_link, linked_entity0, 0);
+  req_links.request(ticket + 1, future_link, future_linked_entity1, 1);
+
+or a fixed-dimensional convenience overload:
+
+  req_links.request_link(ticket, future_link, linked_entity0, linked_entity1, ...);
+
+This helper should not replace direct COO calls for existing links. It should be viewed as the bridge from
+"requested entity" to "initialized link relation."
+
+Internally, each delayed link-relation request should store:
+
+  - the link entity as variant<stk::mesh::Entity, FutureEntity>
+  - the linked entity as variant<stk::mesh::Entity, FutureEntity>
+  - the link ordinal
+  - the target LinkData/LinkMetaData identity, managed on the host side
+
+Processing order inside NgpModRequests should then become:
+
+  1) create entities, including link entities
+  2) declare ordinary STK connections
+  3) declare link COO relations
+  4) destroy ordinary STK connections
+  5) destroy link COO relations if an explicit relation-destruction queue is desired
+  6) destroy entities, including link entities
+
+Destroying a link should normally just be destroy_entities().destroy(link). If we need stale-CSR detection before the
+entity disappears, process_requests can clear the link COO slots immediately before destroying the link entity. That is
+still a link-relation concern, not a separate "link destruction request" system.
+
+This removes the need for LinkData::declaration_requests(), LinkData::destruction_requests(), and
+LinkData::process_requests(). LinkData remains the data/cache/synchronization object; NgpModRequests remains the mesh
+modification ticket system.
+
 STK appears to have each FieldBase store a host and device FieldData pointer.
 If a device pointer already exists, then they call update on the device pointer.
 The memory space of the device pointer is the first non-host memory space given to

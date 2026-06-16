@@ -1,5 +1,7 @@
 # MundyUtils {#MundyUtils}
 
+\brief Centralized reusable utilities.
+
 See the \ref mundy/core/utils "MundyUtils directory reference".
 
 This subpackage contains small Kokkos-friendly utilities that fill the gaps left by the standard library and by

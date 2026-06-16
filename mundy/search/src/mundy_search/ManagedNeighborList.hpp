@@ -53,26 +53,22 @@ namespace search {
 ///
 /// A `ManagedNeighborList` is obtained by calling `.manage(rebuilder)` on a `NeighborListBuilder`
 /// at **any point** in the fluent chain. The remaining builder configuration methods — `exec_space`,
-/// `exclude`, and `sort_neighbors` — are also available directly on the returned `ManagedNeighborList`,
-/// so the full chain can be written in any order:
+/// `broad_phase`, `narrow_phase`, and `sort_neighbors` — are also available directly on the returned
+/// `ManagedNeighborList`, so the full chain can be written in any order:
 ///
 /// \code{.cpp}
 ///   // manage() at any position — chain continues after it:
 ///   auto managed = make_neighbor_list_builder<STKSearchNeighborList<>>()
-///       .manage(RebuildOnEntityChange{} | RebuildOnAABBDisplacement<>{skin_distance})
+///       .manage(RebuildOnEntityChange{} | RebuildOnAABBDisplacement<double>{skin_distance})
 ///       .exec_space(exec)
-///       .exclude(ExcludeSelfInteraction{});
+///       .broad_phase(ExcludeSelfInteraction{});
 ///
-///   // Each time-step — passes fresh box views:
-///   const auto& nl = managed.update(bulk, target_boxes, source_boxes);
+///   // Each time-step:
+///   const auto& nl = managed.update(bulk, targets, sources);
 /// \endcode
 ///
 /// `update()` requires that the execution space has been set (via `exec_space(...)`) at or before
 /// the call; failing to do so produces a compile-time constraint violation.
-///
-/// \tparam BuilderState The `NeighborListBuilder<...>` type captured at the point of `.manage()`.
-///   Further fluent calls produce new `ManagedNeighborList` specializations with updated builder state.
-/// \tparam Rebuilder Stateful policy that decides when to rebuild.
 template <typename BuilderState, RebuilderType Rebuilder>
 class ManagedNeighborList {
  public:
@@ -85,6 +81,41 @@ class ManagedNeighborList {
   using build_args_type = typename NeighborListBuildTraits<list_type>::args_type;
   //@}
 
+  //! \name Update result
+  //@{
+
+  /// \brief Return type for update() carrying both the list and a rebuild indicator.
+  ///
+  /// Implicitly converts to `const list_type&` so existing call sites that bind the result
+  /// to a reference compile unchanged (so long as the call site isn't templated). Contextual
+  /// bool conversion is `true` when the list waw rebuilt during this call, `false`
+  /// when the cached copy was returned as-is:
+  ///
+  /// \code{.cpp}
+  ///   // Unchanged existing usage:
+  ///   const auto& nl = managed.update(bulk, targets, sources);
+  ///
+  ///   // New: react only when the list changed:
+  ///   if (managed.update(bulk, targets, sources)) { rehash_bins(); }
+  ///
+  ///   // Capture both at once:
+  ///   auto result = managed.update(bulk, targets, sources);
+  ///   use(result);         // implicit list conversion
+  ///   if (result) { ... }  // bool branch
+  /// \endcode
+  struct UpdateResult {
+    const list_type& list;
+    bool rebuilt;
+
+    operator const list_type&() const noexcept {
+      return list;
+    }
+    explicit operator bool() const noexcept {
+      return rebuilt;
+    }
+  };
+  //@}
+
   //! \name Constructors
   //@{
 
@@ -92,14 +123,15 @@ class ManagedNeighborList {
   ///
   /// Called by `NeighborListBuilder::manage(rebuilder)` — prefer that factory.
   ManagedNeighborList(const BuilderState& builder, rebuilder_type rebuilder)
-      : builder_(builder), rebuilder_(std::move(rebuilder)) {}
+      : builder_(builder), rebuilder_(std::move(rebuilder)) {
+  }
   //@}
 
   //! \name Fluent configuration (mirrors NeighborListBuilder)
   //@{
 
   /// \brief Return a new managed list with the execution space supplied.
-  /// \tparam NewExecutionSpace Execution space type.
+  ///
   /// \param es [in] Execution space used by the eventual build.
   template <typename NewExecutionSpace>
   auto exec_space(const NewExecutionSpace& es) const {
@@ -107,12 +139,21 @@ class ManagedNeighborList {
     return ManagedNeighborList<decltype(new_builder), Rebuilder>(new_builder, rebuilder_);
   }
 
-  /// \brief Return a new managed list with an appended excluder.
-  /// \tparam NextExcluder Excluder type to append.
-  /// \param ex [in] Excluder to append.
+  /// \brief Return a new managed list with an appended broad-phase excluder.
+  ///
+  /// \param ex [in] Excluder to append to the broad-phase chain.
   template <ExcluderType NextExcluder>
-  auto exclude(const NextExcluder& ex) const {
-    auto new_builder = builder_.exclude(ex);
+  auto broad_phase(const NextExcluder& ex) const {
+    auto new_builder = builder_.broad_phase(ex);
+    return ManagedNeighborList<decltype(new_builder), Rebuilder>(new_builder, rebuilder_);
+  }
+
+  /// \brief Return a new managed list with an appended narrow-phase excluder.
+  ///
+  /// \param ex [in] Excluder to append to the narrow-phase chain.
+  template <ExcluderType NextExcluder>
+  auto narrow_phase(const NextExcluder& ex) const {
+    auto new_builder = builder_.narrow_phase(ex);
     return ManagedNeighborList<decltype(new_builder), Rebuilder>(new_builder, rebuilder_);
   }
 
@@ -132,32 +173,33 @@ class ManagedNeighborList {
   /// needed, constructs a fresh list from the stored builder state with the supplied targets and
   /// sources, then calls `snapshot` on the rebuilder. Otherwise returns the cached list.
   ///
-  /// \tparam TargetInput Selected target input type (must satisfy `NeighborListInputType`).
-  /// \tparam SourceInput Selected source input type (must satisfy `NeighborListInputType`).
   /// \param bulk [in] STK bulk data used for excluder setup and build.
   /// \param targets [in] Target input (boxes, selector, …) for this update.
   /// \param sources [in] Source input (boxes, selector, …) for this update.
   /// \param args [in] Backend-specific build parameters; default-constructed when omitted.
   template <NeighborListInputType TargetInput, NeighborListInputType SourceInput>
-  const list_type& update(const stk::mesh::BulkData& bulk, const TargetInput& targets,
-                          const SourceInput& sources, const build_args_type& args = {})
+  UpdateResult update(const stk::mesh::BulkData& bulk, const TargetInput& targets, const SourceInput& sources,
+                      const build_args_type& args = {})
     requires(BuilderState::has_exec_space)
   {
-    if (!cached_list_.has_value() || rebuilder_.needs_rebuild(bulk, targets, sources)) {
-      cached_list_.emplace(builder_
-                               .target_input(targets)
-                               .source_input(sources)
-                               .build(bulk, args));
+    rebuilder_.setup(bulk, targets.selector(), sources.selector());
+    const bool did_rebuild = !cached_list_.has_value() || rebuilder_.needs_rebuild(bulk, targets, sources);
+    if (did_rebuild) {
+      cached_list_.emplace(builder_.target_input(targets).source_input(sources).build(bulk, args));
       rebuilder_.snapshot(bulk, targets, sources);
     }
-    return *cached_list_;
+    return {*cached_list_, did_rebuild};
   }
 
   /// \brief Discard the cached list so that the next `update()` unconditionally rebuilds.
-  void invalidate() noexcept { cached_list_.reset(); }
+  void invalidate() noexcept {
+    cached_list_.reset();
+  }
 
   /// \brief Return whether a valid cached list exists.
-  bool has_valid_list() const noexcept { return cached_list_.has_value(); }
+  bool has_valid_list() const noexcept {
+    return cached_list_.has_value();
+  }
 
   /// \brief Return the cached list without consulting the rebuilder.
   ///
@@ -172,9 +214,15 @@ class ManagedNeighborList {
   //! \name Accessors
   //@{
 
-  const BuilderState& builder() const noexcept { return builder_; }
-  rebuilder_type& rebuilder() noexcept { return rebuilder_; }
-  const rebuilder_type& rebuilder() const noexcept { return rebuilder_; }
+  const BuilderState& builder() const noexcept {
+    return builder_;
+  }
+  rebuilder_type& rebuilder() noexcept {
+    return rebuilder_;
+  }
+  const rebuilder_type& rebuilder() const noexcept {
+    return rebuilder_;
+  }
   //@}
 
  private:

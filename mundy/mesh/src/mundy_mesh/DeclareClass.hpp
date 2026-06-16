@@ -22,7 +22,6 @@
 #define MUNDY_MESH_DECLARECLASS_HPP_
 
 /// \file DeclareClass.hpp
-/// \defgroup MundyMeshDeclareClass mundy::mesh::DeclareClass
 /// \brief A set of helpers for declaring classes with reduced boilerplate code.
 
 // C++ core
@@ -43,6 +42,7 @@
 #include <mundy_mesh/FieldComponent.hpp>  // for mundy::mesh::impl::component_backing_field
 #include <mundy_utils/requires.hpp>
 #include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_REQUIRE
+#include <Mundy_config.hpp>  // for MUNDY_DEPRECATED_MSG
 
 namespace mundy {
 
@@ -62,7 +62,7 @@ namespace mesh {
 ///
 /// For example, to create a node-rank set that contains boundary and loading nodes:
 /// \code{.cpp}
-///   ClassDeclarationHelper class_decl(meta_data);
+///   ClassDeclaration class_decl(meta_data);
 ///   Class& boundary_nodes = class_decl.name("boundary_nodes").rank(NODE_RANK).declare();
 ///   Class& loading_nodes  = class_decl.name("loading_nodes").rank(NODE_RANK).declare();
 ///   Class& all_nodes      =
@@ -72,20 +72,20 @@ namespace mesh {
 /// These setters may be called in any order. Subclasses are optional, but you must call a valid combination of
 /// name, rank, and topology before declare().
 ///
-/// You may also reuse the same ClassDeclarationHelper to declare multiple classes with similar properties:
+/// You may also reuse the same ClassDeclaration to declare multiple classes with similar properties:
 /// \code{.cpp}
-///   ClassDeclarationHelper class_decl(meta_data);
+///   ClassDeclaration class_decl(meta_data);
 ///   auto particle_class_decl = class_decl.topology(stk::topology::PARTICLE).declare();
 ///   Class& spheres = particle_class_decl.name("spheres").declare();
 ///   Class& points  = particle_class_decl.name("points").declare();
 /// \endcode
-class ClassDeclarationHelper {
+class ClassDeclaration {
  public:
   //! \name Constructors and Assignment Operators
   //@{
 
   /// \brief Canonical constructor.
-  explicit ClassDeclarationHelper(stk::mesh::MetaData& meta_data)
+  explicit ClassDeclaration(stk::mesh::MetaData& meta_data)
       : meta_data_(meta_data),
         class_has_name_(false),
         class_has_rank_(false),
@@ -95,45 +95,45 @@ class ClassDeclarationHelper {
   }
 
   /// \brief Copy/Move constructors and assignment operators.
-  ClassDeclarationHelper(const ClassDeclarationHelper&) = default;
-  ClassDeclarationHelper(ClassDeclarationHelper&&) = default;
-  ClassDeclarationHelper& operator=(const ClassDeclarationHelper&) = default;
-  ClassDeclarationHelper& operator=(ClassDeclarationHelper&&) = default;
+  ClassDeclaration(const ClassDeclaration&) = default;
+  ClassDeclaration(ClassDeclaration&&) = default;
+  ClassDeclaration& operator=(const ClassDeclaration&) = default;
+  ClassDeclaration& operator=(ClassDeclaration&&) = default;
   //@}
 
   //! \name Fluent interface
   //@{
 
   /// \brief Set the name of the class (must be called before declare()).
-  ClassDeclarationHelper name(const std::string& class_name) {
+  ClassDeclaration name(const std::string& class_name) {
     class_has_name_ = true;
     class_name_ = class_name;
     return *this;
   }
 
   /// \brief Set the entity rank of the class.
-  ClassDeclarationHelper rank(stk::mesh::EntityRank class_rank) {
+  ClassDeclaration rank(stk::mesh::EntityRank class_rank) {
     class_has_rank_ = true;
     class_rank_ = class_rank;
     return *this;
   }
 
   /// \brief Set the topology of the class.
-  ClassDeclarationHelper topology(stk::topology::topology_t class_topology) {
+  ClassDeclaration topology(stk::topology::topology_t class_topology) {
     class_has_topology_ = true;
     class_topology_ = class_topology;
     return *this;
   }
 
   /// \brief Add a subclass to the class (i.e, declare the given class as a subset of this class).
-  ClassDeclarationHelper subclass(const Class& subclass) {
+  ClassDeclaration subclass(const Class& subclass) {
     class_has_subclasses_ = true;
     subset_class_ids_.push_back(subclass.class_ordinal());
     return *this;
   }
 
   /// \brief Add a superclass to the class (i.e, declare this class as a subset of the given class).
-  ClassDeclarationHelper superclass(const Class& superclass) {
+  ClassDeclaration superclass(const Class& superclass) {
     class_has_superclasses_ = true;
     superset_class_ids_.push_back(superclass.class_ordinal());
     return *this;
@@ -141,21 +141,21 @@ class ClassDeclarationHelper {
 
   /// \brief Create a scalar-valued field restriction for this class (optional) with the given initial value.
   template <typename FieldType>
-  ClassDeclarationHelper put_field(FieldType& field, const typename FieldType::value_type* init_value) {
+  ClassDeclaration put_field(FieldType& field, const typename FieldType::value_type* init_value) {
     field_restrictions_.push_back(std::make_shared<DeclareScalarFieldRestriction<FieldType>>(field, init_value));
     return *this;
   }
 
   /// \brief Create a vector-valued field restriction for this class (optional) with the given initial value.
   template <typename FieldType>
-  ClassDeclarationHelper put_field(FieldType& field, unsigned n1, const typename FieldType::value_type* init_value) {
+  ClassDeclaration put_field(FieldType& field, unsigned n1, const typename FieldType::value_type* init_value) {
     field_restrictions_.push_back(std::make_shared<DeclareVectorFieldRestriction<FieldType>>(field, n1, init_value));
     return *this;
   }
 
   /// \brief Create a tensor-valued field restriction for this class (optional) with the given initial value.
   template <typename FieldType>
-  ClassDeclarationHelper put_field(FieldType& field, unsigned n1, unsigned n2,
+  ClassDeclaration put_field(FieldType& field, unsigned n1, unsigned n2,
                                    const typename FieldType::value_type* init_value) {
     field_restrictions_.push_back(
         std::make_shared<DeclareTensorFieldRestriction<FieldType>>(field, n1, n2, init_value));
@@ -169,7 +169,7 @@ class ClassDeclarationHelper {
     typename std::remove_cvref_t<ComponentType>::canonical_access;
     { impl::component_backing_field(component) };
   })
-  ClassDeclarationHelper
+  ClassDeclaration
       put_component(ComponentType component, const typename BackingFieldType::value_type* init_value) {
     using component_type = std::remove_cvref_t<ComponentType>;
     using access_shape = component_access_shape<typename component_type::canonical_access>;
@@ -213,7 +213,7 @@ class ClassDeclarationHelper {
 
   /// \brief Print the class declaration information to the output stream.
   void print(std::ostream& os = std::cout) const {
-    os << "ClassDeclarationHelper:" << std::endl;
+    os << "ClassDeclaration:" << std::endl;
     if (class_has_name_) {
       os << "  Name: " << class_name_ << std::endl;
     }
@@ -348,6 +348,8 @@ class ClassDeclarationHelper {
   std::vector<Class::class_ordinal_t> superset_class_ids_;
   std::vector<std::shared_ptr<DeclareFieldRestrictionBase>> field_restrictions_;
 };
+
+using ClassDeclarationHelper MUNDY_DEPRECATED_MSG("use ClassDeclaration") = ClassDeclaration;
 
 }  // namespace mesh
 

@@ -738,6 +738,195 @@ TYPED_TEST(QuaternionSingleTypeTest, Views) {
 }
 //@}
 
+//! \name rotate_quaternion tests
+//@{
+
+// All quaternion equality checks in these tests use EXPECT_NEAR with tight tolerance
+// rather than is_close_debug / is_approx_close (~1e-8).  The relaxed tolerance is far too
+// loose: a bug that introduces 1e-9 drift per call would require ~10 million iterations to
+// be detectable, while a tight tolerance catches it on the first call.
+
+TEST(RotateQuaternion, ZeroOmegaIsNoOp) {
+  // When omega == 0, the early-return branch must leave q unchanged exactly.
+  constexpr double tol = 1e-15;
+  const Quaternion<double> q_orig{0.5, 0.5, 0.5, 0.5};
+  Quaternion<double> q = q_orig;
+  rotate_quaternion(q, Vector3<double>{0.0, 0.0, 0.0}, 1.0);
+  EXPECT_NEAR(q.w(), q_orig.w(), tol);
+  EXPECT_NEAR(q.x(), q_orig.x(), tol);
+  EXPECT_NEAR(q.y(), q_orig.y(), tol);
+  EXPECT_NEAR(q.z(), q_orig.z(), tol);
+}
+
+TEST(RotateQuaternion, UnitNormPreserved) {
+  // normalize() is called at the end of every non-trivial path, so ||q|| must stay at 1.
+  // Using tight tolerance (1e-14) rather than is_approx_close (~1e-8): a broken normalize()
+  // would show up after a single call, not only after millions.
+  constexpr double tol = 1e-14;
+  auto q = normalize(Quaternion<double>{1.0, 2.0, 3.0, 4.0});
+  rotate_quaternion(q, Vector3<double>{1.0, -2.0, 3.0}, 0.37);
+  EXPECT_NEAR(norm(q), 1.0, tol);
+
+  // Large rotation angle — worst-case numerics for sin/cos.
+  auto q2 = Quaternion<double>::identity();
+  rotate_quaternion(q2, Vector3<double>{0.0, 0.0, 5.0}, 100.0);
+  EXPECT_NEAR(norm(q2), 1.0, tol);
+}
+
+TEST(RotateQuaternion, FromIdentityAgreesWithAxisAngle) {
+  // Starting from identity, rotating by omega for time dt must give the same quaternion
+  // as axis_angle_to_quaternion(omega_hat, |omega|*dt).  Checked with tight tolerance
+  // because both methods compute the same mathematical object; any deviation signals a bug.
+  constexpr double tol = 1e-13;
+  constexpr double pi = Kokkos::numbers::pi_v<double>;
+
+  auto check = [&](Quaternion<double> q, const Quaternion<double>& expected, const char* label) {
+    EXPECT_NEAR(q.w(), expected.w(), tol) << label;
+    EXPECT_NEAR(q.x(), expected.x(), tol) << label;
+    EXPECT_NEAR(q.y(), expected.y(), tol) << label;
+    EXPECT_NEAR(q.z(), expected.z(), tol) << label;
+  };
+
+  // Case: rotation around z-axis
+  {
+    const double w = 2.0;
+    const double dt = pi / 4.0;
+    Quaternion<double> q = Quaternion<double>::identity();
+    rotate_quaternion(q, Vector3<double>{0.0, 0.0, w}, dt);
+    check(q, axis_angle_to_quaternion(Vector3<double>{0.0, 0.0, 1.0}, w * dt), "z-axis");
+  }
+
+  // Case: rotation around x-axis
+  {
+    const double w = 3.0;
+    const double dt = pi / 6.0;
+    Quaternion<double> q = Quaternion<double>::identity();
+    rotate_quaternion(q, Vector3<double>{w, 0.0, 0.0}, dt);
+    check(q, axis_angle_to_quaternion(Vector3<double>{1.0, 0.0, 0.0}, w * dt), "x-axis");
+  }
+
+  // Case: oblique axis
+  {
+    const Vector3<double> omega{1.0, 1.0, 1.0};
+    const double dt = 0.5;
+    const double w = norm(omega);
+    Quaternion<double> q = Quaternion<double>::identity();
+    rotate_quaternion(q, omega, dt);
+    check(q, axis_angle_to_quaternion(omega / w, w * dt), "oblique axis");
+  }
+}
+
+TEST(RotateQuaternion, TwoHalfStepsEqualOneFullStep) {
+  // The Delong formula is the exact solution to dq/dt = (0,omega)*q/2 for constant omega,
+  // so two half-steps must give the same result as one full step — not merely approximately,
+  // but to floating-point precision.
+  constexpr double tol = 1e-13;
+  const auto q0 = normalize(Quaternion<double>{1.0, 2.0, -1.0, 0.5});
+  const Vector3<double> omega{0.4, -1.2, 0.8};
+  const double dt = 0.6;
+
+  Quaternion<double> q_full = q0;
+  rotate_quaternion(q_full, omega, dt);
+
+  Quaternion<double> q_half = q0;
+  rotate_quaternion(q_half, omega, dt / 2.0);
+  rotate_quaternion(q_half, omega, dt / 2.0);
+
+  EXPECT_NEAR(q_full.w(), q_half.w(), tol);
+  EXPECT_NEAR(q_full.x(), q_half.x(), tol);
+  EXPECT_NEAR(q_full.y(), q_half.y(), tol);
+  EXPECT_NEAR(q_full.z(), q_half.z(), tol);
+}
+
+TEST(RotateQuaternion, Reversibility) {
+  // Rotating by omega for dt then by omega for -dt must return to the original quaternion.
+  constexpr double tol = 1e-13;
+  const auto q0 = normalize(Quaternion<double>{0.6, -0.4, 0.5, 0.1});
+  const Vector3<double> omega{1.0, 0.5, -0.7};
+  const double dt = 0.8;
+
+  Quaternion<double> q = q0;
+  rotate_quaternion(q, omega, dt);
+  rotate_quaternion(q, omega, -dt);
+
+  EXPECT_NEAR(q.w(), q0.w(), tol);
+  EXPECT_NEAR(q.x(), q0.x(), tol);
+  EXPECT_NEAR(q.y(), q0.y(), tol);
+  EXPECT_NEAR(q.z(), q0.z(), tol);
+}
+
+TEST(RotateQuaternion, FullRotationReturnsToCoveredQuaternion) {
+  // Rotating by |omega|*dt = 2π is a full rotation: q must map back to ±q (double cover).
+  constexpr double tol = 1e-13;
+  constexpr double pi = Kokkos::numbers::pi_v<double>;
+
+  const auto q0 = normalize(Quaternion<double>{0.3, 0.7, -0.5, 0.4});
+  const Vector3<double> omega{2.0, 0.0, 0.0};
+  const double dt = 2.0 * pi / norm(omega);  // |omega|*dt = 2pi
+
+  Quaternion<double> q = q0;
+  rotate_quaternion(q, omega, dt);
+
+  // q must equal q0 or -q0 (both represent the same rotation).
+  const bool same = (std::abs(q.w() - q0.w()) < tol && std::abs(q.x() - q0.x()) < tol &&
+                     std::abs(q.y() - q0.y()) < tol && std::abs(q.z() - q0.z()) < tol);
+  const bool neg = (std::abs(q.w() + q0.w()) < tol && std::abs(q.x() + q0.x()) < tol &&
+                    std::abs(q.y() + q0.y()) < tol && std::abs(q.z() + q0.z()) < tol);
+  EXPECT_TRUE(same || neg) << "Full rotation (2π) must return q to ±q0.";
+}
+
+TEST(RotateQuaternion, RotatedVectorAgreesWithComposedRotation) {
+  // Geometric meaning: if q maps body→world, then after rotate_quaternion(q, omega, dt)
+  // any body vector v transforms to (R*q)*v in world frame, which is the same as
+  // first applying q's rotation then applying R's rotation.
+  //
+  // In other words: q_new * v == R * (q * v), where R = axis_angle(omega_hat, |omega|*dt).
+  constexpr double tol = 1e-13;
+  constexpr double pi = Kokkos::numbers::pi_v<double>;
+
+  // Initial orientation: 90° around z
+  const auto q0 = axis_angle_to_quaternion(Vector3<double>{0.0, 0.0, 1.0}, pi / 2.0);
+  // Body vector along x-axis
+  const Vector3<double> v_body{1.0, 0.0, 0.0};
+  // Angular velocity: omega around z
+  const Vector3<double> omega{0.0, 0.0, 2.0};
+  const double dt = pi / 4.0;  // additional 90° rotation
+
+  // Apply rotate_quaternion
+  Quaternion<double> q_new = q0;
+  rotate_quaternion(q_new, omega, dt);
+
+  // Method 1: rotate v via q_new directly
+  const auto v_via_q_new = q_new * v_body;
+
+  // Method 2: rotate via q, then apply R
+  const auto v_via_q = q0 * v_body;
+  const auto R = axis_angle_to_quaternion(Vector3<double>{0.0, 0.0, 1.0}, norm(omega) * dt);
+  const auto v_via_R = R * v_via_q;
+
+  EXPECT_NEAR(v_via_q_new[0], v_via_R[0], tol);
+  EXPECT_NEAR(v_via_q_new[1], v_via_R[1], tol);
+  EXPECT_NEAR(v_via_q_new[2], v_via_R[2], tol);
+}
+
+TEST(RotateQuaternion, WorksWithFloat) {
+  // Ensures rotate_quaternion is not hardcoded to double.
+  // Float tolerance is loose (~1e-5) since float has ~7 significant digits.
+  constexpr float tol = 1e-5f;
+  constexpr float pi = Kokkos::numbers::pi_v<float>;
+
+  Quaternion<float> q = Quaternion<float>::identity();
+  rotate_quaternion(q, Vector3<float>{0.0f, 0.0f, 2.0f}, pi / 4.0f);
+  const auto expected = axis_angle_to_quaternion(Vector3<float>{0.0f, 0.0f, 1.0f}, 2.0f * pi / 4.0f);
+
+  EXPECT_NEAR(q.w(), expected.w(), tol);
+  EXPECT_NEAR(q.x(), expected.x(), tol);
+  EXPECT_NEAR(q.y(), expected.y(), tol);
+  EXPECT_NEAR(q.z(), expected.z(), tol);
+}
+
+//@}
+
 }  // namespace
 
 }  // namespace mundy

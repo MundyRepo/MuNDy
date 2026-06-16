@@ -162,8 +162,6 @@ class NgpCOOToCSRSynchronizerT {
     const auto& linked_entities_field = impl::get_linked_entities_field(link_meta_data);
     const auto& linked_entity_ids_field = impl::get_linked_entity_ids_field(link_meta_data);
     const auto& linked_entity_ranks_field = impl::get_linked_entity_ranks_field(link_meta_data);
-    const auto& linked_entity_bucket_ids_field = impl::get_linked_entity_bucket_ids_field(link_meta_data);
-    const auto& linked_entity_bucket_ords_field = impl::get_linked_entity_bucket_ords_field(link_meta_data);
 
     const stk::mesh::BucketVector& link_buckets =
         bulk_data.get_buckets(link_meta_data.link_rank(), link_subset_selector);
@@ -174,8 +172,6 @@ class NgpCOOToCSRSynchronizerT {
         const auto* linked_entities_data = stk::mesh::field_data(linked_entities_field, link);
         const auto* linked_entity_ids_data = stk::mesh::field_data(linked_entity_ids_field, link);
         const auto* linked_entity_ranks_data = stk::mesh::field_data(linked_entity_ranks_field, link);
-        const auto* linked_entity_bucket_ids_data = stk::mesh::field_data(linked_entity_bucket_ids_field, link);
-        const auto* linked_entity_bucket_ords_data = stk::mesh::field_data(linked_entity_bucket_ords_field, link);
 
         for (unsigned d = 0; d < link_dimensionality; ++d) {
           const stk::mesh::Entity linked_entity(linked_entities_data[d]);
@@ -187,10 +183,7 @@ class NgpCOOToCSRSynchronizerT {
               stored_rank_value == static_cast<LinkMetaData::entity_rank_value_t>(stk::topology::INVALID_RANK);
 
           if (empty_handle || empty_id_rank) {
-            if (!empty_handle || !empty_id_rank || linked_entity_bucket_ids_data[d] != 0u ||
-                linked_entity_bucket_ords_data[d] != 0u) {
-              return true;
-            }
+            if (empty_handle != empty_id_rank) { return true; }
             continue;
           }
 
@@ -211,13 +204,6 @@ class NgpCOOToCSRSynchronizerT {
           }
 
           if (bulk_data.get_entity(stored_rank, stored_id) != linked_entity) {
-            return true;
-          }
-
-          const unsigned current_bucket_id = bulk_data.bucket(linked_entity).bucket_id();
-          const unsigned current_bucket_ord = bulk_data.bucket_ordinal(linked_entity);
-          if (linked_entity_bucket_ids_data[d] != current_bucket_id ||
-              linked_entity_bucket_ords_data[d] != current_bucket_ord) {
             return true;
           }
         }

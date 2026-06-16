@@ -20,6 +20,7 @@
 
 // External libs
 #include <gtest/gtest.h>  // for TEST, ASSERT_NO_THROW, etc
+#include <mpi.h>
 
 // C++ core libs
 #include <algorithm>    // for std::max
@@ -90,11 +91,9 @@ TEST(UnitTestNgpLinkData, LinkMetaDataUsesUniversalClassHierarchy) {
   EXPECT_FALSE(universal_link_class.data_part().contains(link_assembly_part));
 
   const auto& link_dirty_field = impl::get_link_crs_needs_updated_field(link_meta_data);
-  const auto& link_destroy_field = impl::get_link_marked_for_destruction_field(link_meta_data);
   const auto& linked_entity_ids_field = impl::get_linked_entity_ids_field(link_meta_data);
 
   EXPECT_TRUE(link_dirty_field.defined_on(universal_link_class.data_part()));
-  EXPECT_TRUE(link_destroy_field.defined_on(universal_link_class.data_part()));
   EXPECT_FALSE(linked_entity_ids_field.defined_on(universal_link_class.data_part()));
 
   EXPECT_TRUE(linked_entity_ids_field.defined_on(link_class.data_part()));
@@ -527,9 +526,12 @@ struct LinkRestartIoContext {
 
 std::filesystem::path prepare_link_restart_output_dir(const std::string& directory_name) {
   int rank = 0;
+  int size = 1;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-  const std::filesystem::path output_dir = std::filesystem::current_path() / directory_name;
+  const std::filesystem::path output_dir =
+      std::filesystem::current_path() / ("mpi_size_" + std::to_string(size)) / directory_name;
   if (rank == 0) {
     std::filesystem::remove_all(output_dir);
     std::filesystem::create_directories(output_dir);
@@ -842,6 +844,62 @@ TEST(UnitTestNgpLinkData, RestartRoundTripPreservesLinkRelations) {
   EXPECT_NO_THROW(reader_ngp_link_data.update_crs_from_coo());
   EXPECT_NO_THROW(reader_ngp_link_data.check_crs_coo_consistency());
   EXPECT_TRUE(reader_ngp_link_data.is_crs_up_to_date());
+}
+
+// ---------------------------------------------------------------------------
+// Focused invariant tests for LinkData
+// ---------------------------------------------------------------------------
+
+/// Minimal fixture for the focused LinkData API tests below.
+struct LinkDataApiFixture {
+  MeshBuilder builder{MPI_COMM_WORLD};
+  std::shared_ptr<MetaData> meta;
+  std::shared_ptr<BulkData> bulk;
+  LinkMetaData* link_meta{nullptr};
+  static constexpr stk::mesh::EntityRank link_rank = stk::topology::CONSTRAINT_RANK;
+
+  LinkDataApiFixture() {
+    builder.set_spatial_dimension(3);
+    builder.set_entity_rank_names({"NODE", "EDGE", "FACE", "ELEMENT", "CONSTRAINT"});
+    meta = builder.create_meta_data();
+    meta->use_simple_fields();
+    bulk = builder.create_bulk_data(meta);
+    link_meta = &declare_link_meta_data(*meta, "API_TEST_LINKS", link_rank);
+    link_meta->declare_link_part("API_TEST_LINK_PART", 2u);
+    meta->commit();
+  }
+};
+
+// declare_link_data is idempotent: a second call with the same BulkData and
+// LinkMetaData returns the same object, not a new one.
+TEST(UnitTestNgpLinkData, DeclareLinkData_Idempotent) {
+  LinkDataApiFixture f;
+  LinkData& first  = declare_link_data(*f.bulk, *f.link_meta);
+  LinkData& second = declare_link_data(*f.bulk, *f.link_meta);
+  EXPECT_EQ(&first, &second);
+}
+
+// get_link_data returns nullptr when no declare_link_data call has been made yet.
+TEST(UnitTestNgpLinkData, GetLinkData_ReturnsNullBeforeDeclaration) {
+  LinkDataApiFixture f;
+  EXPECT_EQ(get_link_data(*f.bulk, *f.link_meta), nullptr);
+}
+
+// The host-side CSR is a read-only snapshot of the device CSR; attempting to
+// mark it modified always throws.
+TEST(UnitTestNgpLinkData, CrsModifyOnHost_Throws) {
+  LinkDataApiFixture f;
+  LinkData& link_data = declare_link_data(*f.bulk, *f.link_meta);
+  EXPECT_THROW(link_data.crs_modify_on_host(), std::exception);
+}
+
+// Host and device COO modification are mutually exclusive: marking the host as
+// modified and then trying to mark the device as modified throws.
+TEST(UnitTestNgpLinkData, CooModifyOnDevice_ThrowsWhenHostAlreadyModified) {
+  LinkDataApiFixture f;
+  LinkData& link_data = declare_link_data(*f.bulk, *f.link_meta);
+  link_data.coo_modify_on_host();
+  EXPECT_THROW(link_data.coo_modify_on_device(), std::exception);
 }
 
 }  // namespace

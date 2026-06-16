@@ -152,16 +152,11 @@ class LinkCOOData {  // Host only | Valid during mesh modifications
     auto& linked_es_field = impl::get_linked_entities_field(link_meta_data());
     auto& linked_e_ids_field = impl::get_linked_entity_ids_field(link_meta_data());
     auto& linked_e_ranks_field = impl::get_linked_entity_ranks_field(link_meta_data());
-    auto& linked_e_bucket_ids_field = impl::get_linked_entity_bucket_ids_field(link_meta_data());
-    auto& linked_e_bucket_ords_field = impl::get_linked_entity_bucket_ords_field(link_meta_data());
     auto& link_needs_updated_field = impl::get_link_crs_needs_updated_field(link_meta_data());
 
     stk::mesh::field_data(linked_es_field, linker)[link_ordinal] = linked_entity.local_offset();
     stk::mesh::field_data(linked_e_ids_field, linker)[link_ordinal] = bulk_data().identifier(linked_entity);
     stk::mesh::field_data(linked_e_ranks_field, linker)[link_ordinal] = bulk_data().entity_rank(linked_entity);
-    stk::mesh::field_data(linked_e_bucket_ids_field, linker)[link_ordinal] =
-        bulk_data().bucket(linked_entity).bucket_id();
-    stk::mesh::field_data(linked_e_bucket_ords_field, linker)[link_ordinal] = bulk_data().bucket_ordinal(linked_entity);
     stk::mesh::field_data(link_needs_updated_field, linker)[0] = true;
   }
 
@@ -177,8 +172,6 @@ class LinkCOOData {  // Host only | Valid during mesh modifications
     auto& linked_es_field = impl::get_linked_entities_field(link_meta_data());
     auto& linked_e_ids_field = impl::get_linked_entity_ids_field(link_meta_data());
     auto& linked_e_ranks_field = impl::get_linked_entity_ranks_field(link_meta_data());
-    auto& linked_e_bucket_ids_field = impl::get_linked_entity_bucket_ids_field(link_meta_data());
-    auto& linked_e_bucket_ords_field = impl::get_linked_entity_bucket_ords_field(link_meta_data());
     auto& link_needs_updated_field = impl::get_link_crs_needs_updated_field(link_meta_data());
 
     // Intentionally avoids updating the CSR linked entities field so that we can properly detect deletions.
@@ -186,8 +179,6 @@ class LinkCOOData {  // Host only | Valid during mesh modifications
     stk::mesh::field_data(linked_e_ids_field, linker)[link_ordinal] = stk::mesh::EntityId();
     stk::mesh::field_data(linked_e_ranks_field, linker)[link_ordinal] =
         static_cast<LinkMetaData::entity_rank_value_t>(stk::topology::INVALID_RANK);
-    stk::mesh::field_data(linked_e_bucket_ids_field, linker)[link_ordinal] = 0;
-    stk::mesh::field_data(linked_e_bucket_ords_field, linker)[link_ordinal] = 0;
     stk::mesh::field_data(link_needs_updated_field, linker)[0] = true;
   }
 
@@ -214,10 +205,9 @@ class LinkCOOData {  // Host only | Valid during mesh modifications
                        "Linker is not of the correct rank.");
     MUNDY_THROW_ASSERT(bulk_data().is_valid(linker), std::invalid_argument, "Linker is not valid.");
 
-    auto& linked_e_bucket_ids_field = impl::get_linked_entity_bucket_ids_field(link_meta_data());
-    auto& linked_e_bucket_ords_field = impl::get_linked_entity_bucket_ords_field(link_meta_data());
-    return stk::mesh::FastMeshIndex(stk::mesh::field_data(linked_e_bucket_ids_field, linker)[link_ordinal],
-                                    stk::mesh::field_data(linked_e_bucket_ords_field, linker)[link_ordinal]);
+    const stk::mesh::Entity linked_entity = get_linked_entity(linker, link_ordinal);
+    return stk::mesh::FastMeshIndex{bulk_data().bucket(linked_entity).bucket_id(),
+                                    bulk_data().bucket_ordinal(linked_entity)};
   }
 
   /// \brief Get the linked entity id for a given linker and link ordinal.
@@ -262,7 +252,7 @@ class LinkCOOData {  // Host only | Valid during mesh modifications
   /// Link restart IO only persists the portable description of a relation: the linked entity's rank and entity ID.
   /// The other COO fields are local caches:
   ///   - `MUNDY_LINKED_ENTITIES` stores the current process's `stk::mesh::Entity` local offset.
-  ///   - bucket IDs and ordinals store the current bucket location of that entity.
+  ///   - `MUNDY_LINKED_ENTITY_IDS`/`RANKS` store the portable description used by IO.
   ///   - `MUNDY_LINKED_ENTITIES_CSR` stores the relation as last seen by the CSR rebuild.
   ///
   /// After STK reads a restart mesh, those cache fields either contain default values or stale values from another
@@ -275,8 +265,6 @@ class LinkCOOData {  // Host only | Valid during mesh modifications
     auto& linked_entities_crs_field = impl::get_linked_entities_crs_field(link_meta_data());
     auto& linked_entity_ids_field = impl::get_linked_entity_ids_field(link_meta_data());
     auto& linked_entity_ranks_field = impl::get_linked_entity_ranks_field(link_meta_data());
-    auto& linked_entity_bucket_ids_field = impl::get_linked_entity_bucket_ids_field(link_meta_data());
-    auto& linked_entity_bucket_ords_field = impl::get_linked_entity_bucket_ords_field(link_meta_data());
     auto& link_crs_needs_updated_field = impl::get_link_crs_needs_updated_field(link_meta_data());
 
     bool modified_any_link = false;
@@ -290,8 +278,6 @@ class LinkCOOData {  // Host only | Valid during mesh modifications
         auto* linked_entities_crs_data = stk::mesh::field_data(linked_entities_crs_field, link);
         auto* linked_entity_ids_data = stk::mesh::field_data(linked_entity_ids_field, link);
         auto* linked_entity_ranks_data = stk::mesh::field_data(linked_entity_ranks_field, link);
-        auto* linked_entity_bucket_ids_data = stk::mesh::field_data(linked_entity_bucket_ids_field, link);
-        auto* linked_entity_bucket_ords_data = stk::mesh::field_data(linked_entity_bucket_ords_field, link);
         auto* link_dirty_data = stk::mesh::field_data(link_crs_needs_updated_field, link);
 
         bool modified_this_link = false;
@@ -318,18 +304,10 @@ class LinkCOOData {  // Host only | Valid during mesh modifications
           }
 
           const stk::mesh::Entity::entity_value_type linked_entity_value = linked_entity.local_offset();
-          const unsigned linked_entity_bucket_id =
-              bulk_data().is_valid(linked_entity) ? bulk_data().bucket(linked_entity).bucket_id() : 0u;
-          const unsigned linked_entity_bucket_ord =
-              bulk_data().is_valid(linked_entity) ? bulk_data().bucket_ordinal(linked_entity) : 0u;
 
-          if (linked_entities_data[d] != linked_entity_value ||
-              linked_entity_bucket_ids_data[d] != linked_entity_bucket_id ||
-              linked_entity_bucket_ords_data[d] != linked_entity_bucket_ord) {
+          if (linked_entities_data[d] != linked_entity_value) {
             linked_entities_data[d] = linked_entity_value;
             linked_entities_crs_data[d] = stk::mesh::Entity().local_offset();
-            linked_entity_bucket_ids_data[d] = linked_entity_bucket_id;
-            linked_entity_bucket_ords_data[d] = linked_entity_bucket_ord;
             modified_this_link = true;
           }
         }
@@ -344,8 +322,6 @@ class LinkCOOData {  // Host only | Valid during mesh modifications
     if (modified_any_link) {
       linked_entities_field.modify_on_host();
       linked_entities_crs_field.modify_on_host();
-      linked_entity_bucket_ids_field.modify_on_host();
-      linked_entity_bucket_ords_field.modify_on_host();
       link_crs_needs_updated_field.modify_on_host();
     }
 
@@ -381,10 +357,31 @@ class LinkCOOData {  // Host only | Valid during mesh modifications
   //! \name Internal members (host only)
   //@{
 
-  stk::mesh::BulkData* bulk_data_ptr_;
-  LinkMetaData* link_meta_data_ptr_;
+  stk::mesh::BulkData* bulk_data_ptr_ = nullptr;
+  LinkMetaData* link_meta_data_ptr_ = nullptr;
   //@}
 };  // LinkCOOData
+
+namespace impl {
+
+/// Return the CRS-snapshot entity stored for `linker` at `link_ordinal`.
+/// This is the value last written by the CSR synchronizer and is intentionally
+/// NOT cleared by destroy_relation() — the synchronizer uses the stale value
+/// to detect removals.
+inline stk::mesh::Entity get_linked_entity_crs(const LinkCOOData& coo_data,
+                                                const stk::mesh::Entity& linker,
+                                                unsigned link_ordinal) {
+  auto& field = get_linked_entities_crs_field(coo_data.link_meta_data());
+  return stk::mesh::Entity(stk::mesh::field_data(field, linker)[link_ordinal]);
+}
+
+/// Return whether the CSR connectivity for `linker` is marked as needing an update.
+inline bool get_link_crs_needs_updated(const LinkCOOData& coo_data, const stk::mesh::Entity& linker) {
+  auto& field = get_link_crs_needs_updated_field(coo_data.link_meta_data());
+  return static_cast<bool>(stk::mesh::field_data(field, linker)[0]);
+}
+
+}  // namespace impl
 
 template <typename NgpMemSpace>
 class NgpLinkCOODataT;
@@ -516,10 +513,6 @@ class NgpLinkCOODataT {  // Device only | Invalid during mesh modifications | Ca
     ngp_link_meta_data_.ngp_linked_entities_field()(linker_index, link_ordinal) = linked_entity.local_offset();
     ngp_link_meta_data_.ngp_linked_entity_ids_field()(linker_index, link_ordinal) = linked_entity_key.id();
     ngp_link_meta_data_.ngp_linked_entity_ranks_field()(linker_index, link_ordinal) = linked_entity_rank;
-    ngp_link_meta_data_.ngp_linked_entity_bucket_ids_field()(linker_index, link_ordinal) =
-        linked_entity_index.bucket_id;
-    ngp_link_meta_data_.ngp_linked_entity_bucket_ords_field()(linker_index, link_ordinal) =
-        linked_entity_index.bucket_ord;
     ngp_link_meta_data_.ngp_link_crs_needs_updated_field()(linker_index, 0) = true;
   }
   KOKKOS_INLINE_FUNCTION
@@ -540,8 +533,6 @@ class NgpLinkCOODataT {  // Device only | Invalid during mesh modifications | Ca
     ngp_link_meta_data_.ngp_linked_entity_ids_field()(linker_index, link_ordinal) = stk::mesh::EntityId();
     ngp_link_meta_data_.ngp_linked_entity_ranks_field()(linker_index, link_ordinal) =
         static_cast<LinkMetaData::entity_rank_value_t>(stk::topology::INVALID_RANK);
-    ngp_link_meta_data_.ngp_linked_entity_bucket_ids_field()(linker_index, link_ordinal) = 0;
-    ngp_link_meta_data_.ngp_linked_entity_bucket_ords_field()(linker_index, link_ordinal) = 0;
     ngp_link_meta_data_.ngp_link_crs_needs_updated_field()(linker_index, 0) = true;
   }
   KOKKOS_INLINE_FUNCTION
@@ -569,9 +560,7 @@ class NgpLinkCOODataT {  // Device only | Invalid during mesh modifications | Ca
   KOKKOS_INLINE_FUNCTION
   stk::mesh::FastMeshIndex get_linked_entity_index(const stk::mesh::FastMeshIndex& linker_index,
                                                    unsigned link_ordinal) const {
-    return stk::mesh::FastMeshIndex(
-        ngp_link_meta_data_.ngp_linked_entity_bucket_ids_field()(linker_index, link_ordinal),
-        ngp_link_meta_data_.ngp_linked_entity_bucket_ords_field()(linker_index, link_ordinal));
+    return ngp_mesh_.fast_mesh_index(get_linked_entity(linker_index, link_ordinal));
   }
   KOKKOS_INLINE_FUNCTION
   stk::mesh::FastMeshIndex get_linked_entity_index(const stk::mesh::Entity& linker, unsigned link_ordinal) const {
@@ -654,8 +643,8 @@ class NgpLinkCOODataT {  // Device only | Invalid during mesh modifications | Ca
   //! \name Internal members (host only)
   //@{
 
-  stk::mesh::BulkData* bulk_data_ptr_;
-  LinkMetaData* link_meta_data_ptr_;
+  stk::mesh::BulkData* bulk_data_ptr_ = nullptr;
+  LinkMetaData* link_meta_data_ptr_ = nullptr;
   //@}
 
   //! \name Internal members (device compatible)

@@ -203,6 +203,18 @@ struct AABBFieldAccessPolicy {
   }
 };
 
+struct OBBFieldAccessPolicy {
+  template <typename FieldType>
+  static decltype(auto) host_access(FieldType& field, stk::mesh::Entity entity) {
+    return obb_field_data(field, entity);
+  }
+
+  template <typename FieldType>
+  KOKKOS_INLINE_FUNCTION static decltype(auto) ngp_access(FieldType& field, stk::mesh::FastMeshIndex entity_index) {
+    return obb_field_data(field, entity_index);
+  }
+};
+
 template <typename ScalarType, typename AccessPolicy>
 class FieldComponent : public FieldComponentBase {
  public:
@@ -309,13 +321,36 @@ inline decltype(auto) component_backing_field(const TaggedComponent<Tag, Compone
 
 }  // namespace impl
 
+template <typename NgpFieldType>
+class NgpFieldComponent;
+template <typename NgpFieldType>
+class NgpScalarFieldComponent;
+template <typename NgpFieldType, size_t N>
+class NgpVectorFieldComponent;
+template <typename NgpFieldType, size_t N, size_t M>
+class NgpMatrixFieldComponent;
+template <typename NgpFieldType>
+class NgpQuaternionFieldComponent;
+template <typename NgpFieldType>
+class NgpAABBFieldComponent;
+template <typename NgpFieldType>
+class NgpOBBFieldComponent;
+
+/// \brief Raw field-backed component.
+///
+/// `ngp_component_t` is the canonical device-side counterpart for this host component.
+/// `get_updated_ngp_component()` uses that alias to preserve the concrete component
+/// type instead of returning a sliced `impl::NgpFieldComponent`.
 template <typename ValueType>
 class FieldComponent : public impl::FieldComponent<ValueType, impl::FieldDataAccessPolicy> {
  public:
   using our_t = FieldComponent<ValueType>;
   using base_t = impl::FieldComponent<ValueType, impl::FieldDataAccessPolicy>;
+  using field_type = typename base_t::field_type;
+  using ngp_field_type = stk::mesh::NgpField<ValueType>;
   using canonical_access = access::raw<ValueType>;
   using view_t = typename base_t::view_t;
+  using ngp_component_t = NgpFieldComponent<ngp_field_type>;
 
   FieldComponent() = default;
   explicit FieldComponent(stk::mesh::Field<ValueType>& field) : base_t(field) {
@@ -333,7 +368,6 @@ class NgpFieldComponent : public impl::NgpFieldComponent<NgpFieldType, impl::Fie
   using our_t = NgpFieldComponent<NgpFieldType>;
   using base_t = impl::NgpFieldComponent<NgpFieldType, impl::FieldDataAccessPolicy>;
   using canonical_access = access::raw<typename NgpFieldType::value_type>;
-  using view_t = typename base_t::view_t;
 
   NgpFieldComponent() = default;
   explicit NgpFieldComponent(NgpFieldType ngp_field) : base_t(ngp_field) {
@@ -345,8 +379,9 @@ class ScalarFieldComponent : public impl::FieldComponent<ScalarType, impl::Scala
  public:
   using our_t = ScalarFieldComponent<ScalarType>;
   using base_t = impl::FieldComponent<ScalarType, impl::ScalarFieldAccessPolicy>;
+  using ngp_field_type = stk::mesh::NgpField<ScalarType>;
   using canonical_access = access::scalar<ScalarType>;
-  using view_t = typename base_t::view_t;
+  using ngp_component_t = NgpScalarFieldComponent<ngp_field_type>;
 
   ScalarFieldComponent() = default;
   explicit ScalarFieldComponent(stk::mesh::Field<ScalarType>& field) : base_t(field) {
@@ -364,7 +399,6 @@ class NgpScalarFieldComponent : public impl::NgpFieldComponent<NgpFieldType, imp
   using our_t = NgpScalarFieldComponent<NgpFieldType>;
   using base_t = impl::NgpFieldComponent<NgpFieldType, impl::ScalarFieldAccessPolicy>;
   using canonical_access = access::scalar<typename NgpFieldType::value_type>;
-  using view_t = typename base_t::view_t;
 
   NgpScalarFieldComponent() = default;
   explicit NgpScalarFieldComponent(NgpFieldType ngp_field) : base_t(ngp_field) {
@@ -376,8 +410,9 @@ class VectorFieldComponent : public impl::FieldComponent<ScalarType, impl::Vecto
  public:
   using our_t = VectorFieldComponent<ScalarType, N>;
   using base_t = impl::FieldComponent<ScalarType, impl::VectorFieldAccessPolicy<N>>;
+  using ngp_field_type = stk::mesh::NgpField<ScalarType>;
   using canonical_access = access::vector<ScalarType, N>;
-  using view_t = typename base_t::view_t;
+  using ngp_component_t = NgpVectorFieldComponent<ngp_field_type, N>;
 
   VectorFieldComponent() = default;
   explicit VectorFieldComponent(stk::mesh::Field<ScalarType>& field) : base_t(field) {
@@ -408,7 +443,6 @@ class NgpVectorFieldComponent : public impl::NgpFieldComponent<NgpFieldType, imp
   using our_t = NgpVectorFieldComponent<NgpFieldType, N>;
   using base_t = impl::NgpFieldComponent<NgpFieldType, impl::VectorFieldAccessPolicy<N>>;
   using canonical_access = access::vector<typename NgpFieldType::value_type, N>;
-  using view_t = typename base_t::view_t;
 
   NgpVectorFieldComponent() = default;
   explicit NgpVectorFieldComponent(NgpFieldType ngp_field) : base_t(ngp_field) {
@@ -432,8 +466,9 @@ template <typename ScalarType, size_t N, size_t M>
 class MatrixFieldComponent : public impl::FieldComponent<ScalarType, impl::MatrixFieldAccessPolicy<N, M>> {
  public:
   using base_t = impl::FieldComponent<ScalarType, impl::MatrixFieldAccessPolicy<N, M>>;
+  using ngp_field_type = stk::mesh::NgpField<ScalarType>;
   using canonical_access = access::matrix<ScalarType, N, M>;
-  using view_t = typename base_t::view_t;
+  using ngp_component_t = NgpMatrixFieldComponent<ngp_field_type, N, M>;
 
   MatrixFieldComponent() = default;
   explicit MatrixFieldComponent(stk::mesh::Field<ScalarType>& field) : base_t(field) {
@@ -464,7 +499,6 @@ class NgpMatrixFieldComponent : public impl::NgpFieldComponent<NgpFieldType, imp
   using our_t = NgpMatrixFieldComponent<NgpFieldType, N, M>;
   using base_t = impl::NgpFieldComponent<NgpFieldType, impl::MatrixFieldAccessPolicy<N, M>>;
   using canonical_access = access::matrix<typename NgpFieldType::value_type, N, M>;
-  using view_t = typename base_t::view_t;
 
   NgpMatrixFieldComponent() = default;
   explicit NgpMatrixFieldComponent(NgpFieldType ngp_field) : base_t(ngp_field) {
@@ -488,8 +522,9 @@ template <typename ScalarType>
 class QuaternionFieldComponent : public impl::FieldComponent<ScalarType, impl::QuaternionFieldAccessPolicy> {
  public:
   using base_t = impl::FieldComponent<ScalarType, impl::QuaternionFieldAccessPolicy>;
+  using ngp_field_type = stk::mesh::NgpField<ScalarType>;
   using canonical_access = access::quaternion<ScalarType>;
-  using view_t = typename base_t::view_t;
+  using ngp_component_t = NgpQuaternionFieldComponent<ngp_field_type>;
 
   QuaternionFieldComponent() = default;
   explicit QuaternionFieldComponent(stk::mesh::Field<ScalarType>& field) : base_t(field) {
@@ -507,7 +542,6 @@ class NgpQuaternionFieldComponent : public impl::NgpFieldComponent<NgpFieldType,
   using our_t = NgpQuaternionFieldComponent<NgpFieldType>;
   using base_t = impl::NgpFieldComponent<NgpFieldType, impl::QuaternionFieldAccessPolicy>;
   using canonical_access = access::quaternion<typename NgpFieldType::value_type>;
-  using view_t = typename base_t::view_t;
 
   NgpQuaternionFieldComponent() = default;
   explicit NgpQuaternionFieldComponent(NgpFieldType ngp_field) : base_t(ngp_field) {
@@ -518,8 +552,9 @@ template <typename ScalarType>
 class AABBFieldComponent : public impl::FieldComponent<ScalarType, impl::AABBFieldAccessPolicy> {
  public:
   using base_t = impl::FieldComponent<ScalarType, impl::AABBFieldAccessPolicy>;
+  using ngp_field_type = stk::mesh::NgpField<ScalarType>;
   using canonical_access = access::aabb<ScalarType>;
-  using view_t = typename base_t::view_t;
+  using ngp_component_t = NgpAABBFieldComponent<ngp_field_type>;
 
   AABBFieldComponent() = default;
   explicit AABBFieldComponent(stk::mesh::Field<ScalarType>& field) : base_t(field) {
@@ -537,29 +572,64 @@ class NgpAABBFieldComponent : public impl::NgpFieldComponent<NgpFieldType, impl:
   using our_t = NgpAABBFieldComponent<NgpFieldType>;
   using base_t = impl::NgpFieldComponent<NgpFieldType, impl::AABBFieldAccessPolicy>;
   using canonical_access = access::aabb<typename NgpFieldType::value_type>;
-  using view_t = typename base_t::view_t;
 
   NgpAABBFieldComponent() = default;
   explicit NgpAABBFieldComponent(NgpFieldType ngp_field) : base_t(ngp_field) {
   }
 };  // NgpAABBFieldComponent
 
+/// \brief Host-side OBB field-backed component.
+///
+/// Wraps a 10-scalar-per-entity STK field.
+template <typename ScalarType>
+class OBBFieldComponent : public impl::FieldComponent<ScalarType, impl::OBBFieldAccessPolicy> {
+ public:
+  using our_t = OBBFieldComponent<ScalarType>;
+  using base_t = impl::FieldComponent<ScalarType, impl::OBBFieldAccessPolicy>;
+  using ngp_field_type = stk::mesh::NgpField<ScalarType>;
+  using canonical_access = access::obb<ScalarType>;
+  using ngp_component_t = NgpOBBFieldComponent<ngp_field_type>;
+
+  OBBFieldComponent() = default;
+  explicit OBBFieldComponent(stk::mesh::Field<ScalarType>& field) : base_t(field) {
+  }
+
+  OBBFieldComponent(const OBBFieldComponent&) = default;
+  OBBFieldComponent(OBBFieldComponent&&) = default;
+  OBBFieldComponent& operator=(const OBBFieldComponent&) = default;
+  OBBFieldComponent& operator=(OBBFieldComponent&&) = default;
+};  // OBBFieldComponent
+
+/// \brief Device-side OBB NGP field component.
+template <typename NgpFieldType>
+class NgpOBBFieldComponent : public impl::NgpFieldComponent<NgpFieldType, impl::OBBFieldAccessPolicy> {
+ public:
+  using our_t = NgpOBBFieldComponent<NgpFieldType>;
+  using base_t = impl::NgpFieldComponent<NgpFieldType, impl::OBBFieldAccessPolicy>;
+  using canonical_access = access::obb<typename NgpFieldType::value_type>;
+
+  NgpOBBFieldComponent() = default;
+  explicit NgpOBBFieldComponent(NgpFieldType ngp_field) : base_t(ngp_field) {
+  }
+};  // NgpOBBFieldComponent
+
 /// \brief A helper function for getting the NGP component from a regular component.
 ///
 /// Field-backed components simply wrap STK's updated ngp field and return the wrapper by value.
+/// The host component chooses the wrapper type through `ngp_component_t`, which keeps access
+/// policies intact (for example, `AABBFieldComponent<T>` returns `NgpAABBFieldComponent<...>`).
 /// SharedComponent follows the LinkData pattern instead, lazily materializing and caching a
 /// memspace-specific NgpSharedComponent in a std::any owned by the host component state.
-///
-/// TODO(palmerb4): This function has type loss. We want the true object to map to its corresponding NGP counterpart, so
-/// we can't just allow it to slice to its Base and then map to a general NgpFieldComponent. We need one overload per
-/// component type. OR, we need a map from given Component to its NGP counterpart. I prefer that actually. That's
-/// generally useful. Add such a map to Component.hpp itself and specialize it for field and shared components to allow
-/// them to all have a single unified get_updated_ngp_component function.
-template <typename ScalarType, typename AccessPolicy>
-auto get_updated_ngp_component(const impl::FieldComponent<ScalarType, AccessPolicy>& component) {
-  auto& ngp_field = stk::mesh::get_updated_ngp_field<ScalarType>(component.field());
-  using ngp_field_type = std::remove_reference_t<decltype(ngp_field)>;
-  return impl::NgpFieldComponent<ngp_field_type, AccessPolicy>(ngp_field);
+template <typename ComponentType>
+MUNDY_REQUIRES(requires(const ComponentType& component) {
+  component.field();
+  typename ComponentType::ngp_component_t;
+})
+auto get_updated_ngp_component(const ComponentType& component) {
+  using scalar_type = typename ComponentType::field_type::value_type;
+  auto& ngp_field = stk::mesh::get_updated_ngp_field<scalar_type>(component.field());
+  using ngp_component_type = typename ComponentType::ngp_component_t;
+  return ngp_component_type(ngp_field);
 }
 
 }  // namespace mesh

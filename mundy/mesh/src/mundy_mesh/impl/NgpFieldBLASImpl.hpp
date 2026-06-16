@@ -57,6 +57,7 @@
 #include <mundy_mesh/NgpUtils.hpp>  // is_(ngp|device|host)_field, is_(ngp|device|host)_mesh, ngp_ngp_field_and_mesh_compatible
 #include <mundy_utils/rng.hpp>           // for mundy::make_philox
 #include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
+#include <mundy_math/cmath.hpp>
 
 namespace mundy {
 
@@ -470,7 +471,7 @@ struct FieldAbsSumReductionFunctor {
   void operator()(const stk::mesh::FastMeshIndex& f, value_type& value) const {
     const unsigned num_components = field_.get_num_components_per_entity(f);
     for (unsigned j = 0; j < num_components; ++j) {
-      sum_reduction_.join(value, Kokkos::abs(field_.get(f, j)));
+      sum_reduction_.join(value, abs(field_.get(f, j)));
     }
   }
 
@@ -516,7 +517,7 @@ struct FieldAbsMaxReductionFunctor {
   void operator()(const stk::mesh::FastMeshIndex& f, value_type& value) const {
     const unsigned num_components = field_.get_num_components_per_entity(f);
     for (unsigned j = 0; j < num_components; ++j) {
-      max_reduction_.join(value, Kokkos::abs(field_.get(f, j)));
+      max_reduction_.join(value, abs(field_.get(f, j)));
     }
   }
 
@@ -562,7 +563,7 @@ struct FieldAbsMinReductionFunctor {
   void operator()(const stk::mesh::FastMeshIndex& f, value_type& value) const {
     const unsigned num_components = field_.get_num_components_per_entity(f);
     for (unsigned j = 0; j < num_components; ++j) {
-      min_reduction_.join(value, Kokkos::abs(field_.get(f, j)));
+      min_reduction_.join(value, abs(field_.get(f, j)));
     }
   }
 
@@ -887,7 +888,7 @@ template <typename Scalar, typename ExecSpace>
 inline Scalar ngp_field_nrm2(stk::mesh::FieldBase& field_x,                  //
                              const stk::mesh::Selector* const selector_ptr,  //
                              const ExecSpace& exec_space) {
-  return Kokkos::sqrt(ngp_field_dot<Scalar>(field_x, field_x, selector_ptr, exec_space));
+  return sqrt(ngp_field_dot<Scalar>(field_x, field_x, selector_ptr, exec_space));
 }
 
 /// \brief Compute the sum of a field

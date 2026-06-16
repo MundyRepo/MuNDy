@@ -40,6 +40,9 @@
 
 // Mundy
 #include <mundy_mesh/BulkData.hpp>
+#include <mundy_mesh/Class.hpp>         // for mundy::mesh::declare_class, mundy::mesh::Class
+#include <mundy_mesh/LinkData.hpp>      // for mundy::mesh::LinkData, declare_link_data
+#include <mundy_mesh/LinkMetaData.hpp>  // for mundy::mesh::declare_link_meta_data
 #include <mundy_mesh/MeshBuilder.hpp>
 #include <mundy_mesh/MetaData.hpp>
 #include <mundy_mesh/NgpModRequests.hpp>  // for mundy::mesh::NgpModRequests
@@ -298,6 +301,113 @@ TEST(NgpModRequests, HigherLevelCreateEntitiesAndConnectExistingToNew) {
   EXPECT_EQ(bulk.begin_nodes(existing_elem)[0], created_new_node);
 }
 
+// ============================================================
+// Fixture and tests for the Class-based API
+// ============================================================
+
+struct NgpModRequestsClassFixture {
+  MeshBuilder builder{MPI_COMM_WORLD};
+  std::shared_ptr<MetaData> meta_data_ptr;
+  std::shared_ptr<BulkData> bulk_data_ptr;
+  Class* particle_class{nullptr};
+  Class* element_class{nullptr};
+
+  NgpModRequestsClassFixture() {
+    builder.set_spatial_dimension(3);
+    builder.set_entity_rank_names({"NODE", "EDGE", "FACE", "ELEMENT", "CONSTRAINT"});
+    meta_data_ptr = builder.create_meta_data();
+    meta_data_ptr->use_simple_fields();
+
+    // Declare classes before committing meta_data — analogous to declaring parts.
+    particle_class = &declare_class(*meta_data_ptr, "PARTICLE_CLASS", stk::topology::PARTICLE,
+                                    /*disable_io_support=*/true);
+    element_class = &declare_class(*meta_data_ptr, "ELEMENT_CLASS", stk::topology::HEX_8,
+                                   /*disable_io_support=*/true);
+
+    bulk_data_ptr = builder.create_bulk_data(meta_data_ptr);
+    meta_data_ptr->commit();
+  }
+
+  BulkData& bulk() {
+    return *bulk_data_ptr;
+  }
+};
+
+TEST(NgpModRequests, ClassBasedRequestEntitiesNewIds_SingleClass) {
+  // Entities requested via a single Class must be created and reside in that class.
+  NgpModRequestsClassFixture fixture;
+  BulkData& bulk = fixture.bulk();
+
+  NgpModRequests reqs;
+  auto req = reqs.request_entities_new_ids(*fixture.particle_class);
+
+  reqs.activate_host();
+  size_t ticket = req.element_tickets().claim();
+  reqs.finalize_counts();
+  req.request_element(ticket);
+
+  ASSERT_NO_THROW(reqs.process_requests(bulk));
+
+  stk::mesh::Entity entity = req.get_entity(ticket, stk::topology::ELEMENT_RANK);
+  ASSERT_TRUE(bulk.is_valid(entity));
+
+  // Entity must be a member of the class's leaf_part (direct membership) and
+  // assembly_part (membership visible through the class hierarchy).
+  EXPECT_TRUE(bulk.bucket(entity).member(fixture.particle_class->leaf_part()))
+      << "Entity should reside in the class's leaf_part.";
+  EXPECT_TRUE(bulk.bucket(entity).member(fixture.particle_class->assembly_part()))
+      << "Entity should be visible through the class's assembly_part.";
+}
+
+TEST(NgpModRequests, ClassBasedRequestEntitiesNewIds_ClassVector) {
+  // Requesting with a ClassVector must produce the same memoized helper as a single-Class call
+  // for the same set of classes, and entities must land in all specified classes.
+  NgpModRequestsClassFixture fixture;
+  BulkData& bulk = fixture.bulk();
+
+  NgpModRequests reqs;
+  ClassVector classes{fixture.particle_class};
+
+  auto req_vec = reqs.request_entities_new_ids(classes);
+  auto req_single = reqs.request_entities_new_ids(*fixture.particle_class);
+
+  // Same partition key → same memoized helper.
+  EXPECT_EQ(req_vec.id(), req_single.id())
+      << "ClassVector{cls} and single Class& must return the same memoized helper.";
+
+  reqs.activate_host();
+  size_t ticket = req_vec.element_tickets().claim();
+  reqs.finalize_counts();
+  req_vec.request_element(ticket);
+
+  ASSERT_NO_THROW(reqs.process_requests(bulk));
+
+  stk::mesh::Entity entity = req_vec.get_entity(ticket, stk::topology::ELEMENT_RANK);
+  ASSERT_TRUE(bulk.is_valid(entity));
+  EXPECT_TRUE(bulk.bucket(entity).member(fixture.particle_class->leaf_part()));
+}
+
+TEST(NgpModRequests, ClassBasedRequestEntitiesKnownIds) {
+  // The known-ID class overload must create the entity with the specified ID in the class.
+  NgpModRequestsClassFixture fixture;
+  BulkData& bulk = fixture.bulk();
+
+  NgpModRequests reqs;
+  auto req = reqs.request_entities_known_ids(*fixture.particle_class);
+
+  reqs.activate_host();
+  size_t ticket = req.element_tickets().claim();
+  reqs.finalize_counts();
+  req.request_element(ticket, /*id=*/9999);
+
+  ASSERT_NO_THROW(reqs.process_requests(bulk));
+
+  stk::mesh::Entity entity = req.get_entity(ticket, stk::topology::ELEMENT_RANK);
+  ASSERT_TRUE(bulk.is_valid(entity));
+  EXPECT_EQ(bulk.identifier(entity), 9999u);
+  EXPECT_TRUE(bulk.bucket(entity).member(fixture.particle_class->leaf_part()));
+}
+
 TEST(NgpModRequests, HigherLevelDestroyConnectionAndEntity) {
   NgpModRequestsRawFixture fixture;
   BulkData& bulk = *fixture.bulk_data_ptr;
@@ -328,54 +438,198 @@ TEST(NgpModRequests, HigherLevelDestroyConnectionAndEntity) {
   EXPECT_TRUE(bulk.is_valid(node));
 }
 
-/*
-Stuff to test:
+// ============================================================
+// Fixture and tests for request_links / NgpRequestLinkRelationsT
+// ============================================================
 
- Raw functionality:
-  - TicketIssuer functions as desired
-    initialize(activate_device)
-    activate_host()
-    activate_device()
-    reset()
-    finalize_count()
-    claim(N)
-    claim()
-  - NgpModRequests should be a "view"-like class (cheap to copy where modifying a copy modifies the underlying data)
-  - request_entities_new_ids and request_entities_known_ids should memoize their return based on the given key (sorted
-and uniqued set of parts)
+/// Fixture: mesh with a constraint-rank link part (dimensionality 2) and a declared LinkData.
+struct NgpModRequestsLinkFixture {
+  MeshBuilder builder{MPI_COMM_WORLD};
+  std::shared_ptr<MetaData> meta;
+  std::shared_ptr<BulkData> bulk;
+  LinkMetaData* link_meta{nullptr};
+  stk::mesh::Part* link_part{nullptr};
+  LinkData* link_data{nullptr};
+  static constexpr stk::mesh::EntityRank link_rank = stk::topology::CONSTRAINT_RANK;
 
- Higher level functionality:
-  - Can successfully request entities with new ids, request entities with known ids, and request connections between
-existing and new entities, and then fetch the new entities after processing requests
-  - Can successfully destroy entities and connections
-*/
+  NgpModRequestsLinkFixture() {
+    builder.set_spatial_dimension(3);
+    builder.set_entity_rank_names({"NODE", "EDGE", "FACE", "ELEMENT", "CONSTRAINT"});
+    meta = builder.create_meta_data();
+    meta->use_simple_fields();
+    bulk = builder.create_bulk_data(meta);
+    link_meta = &declare_link_meta_data(*meta, "MOD_REQ_LINKS", link_rank);
+    link_part = &link_meta->declare_link_part("MOD_REQ_LINK_PART", 2u);
+    meta->commit();
+    link_data = &declare_link_data(*bulk, *link_meta);
+  }
+};
 
-// TEST(NgpModRequests, BasicUsage) {
-//   // Setup
-//   MeshBuilder builder(MPI_COMM_WORLD);
-//   builder.set_spatial_dimension(3);
-//   builder.set_entity_rank_names({"NODE", "EDGE", "FACE", "ELEMENT", "CONSTRAINT"});
-//   std::shared_ptr<MetaData> meta_data_ptr = builder.create_meta_data();
-//   MetaData& meta_data = *meta_data_ptr;
-//   meta_data.use_simple_fields();
-//   std::shared_ptr<BulkData> bulk_data_ptr = builder.create_bulk_data(meta_data_ptr);
-//   BulkData& bulk_data = *bulk_data_ptr;
-//   stk::mesh::Part& elem_part = meta_data.declare_part("PART_1", stk::topology::ELEM_RANK);
-//   stk::mesh::Part& particle_part = meta_data.declare_part_with_topology("PART_2", stk::topology::PARTICLE);
-//   meta_data.commit();
+// Two calls to request_links for the same LinkData must return the same memoized helper.
+TEST(NgpModRequests, RequestLinks_Memoized) {
+  NgpModRequestsLinkFixture f;
 
-//   // Declare two particles
-//   // bulk_data.modification_begin();
-//   // Entity sphere1 = bulk_data.declare_element(1, stk::mesh::ConstPartVector{&spheres_part});
-//   // Entity sphere2 = bulk_data.declare_element(2, stk::mesh::ConstPartVector{&spheres_part});
-//   // Entity node1 = bulk_data.declare_node(1);
-//   // Entity node2 = bulk_data.declare_node(2);
-//   // bulk_data.declare_relation(sphere1, node1, 0);
-//   // bulk_data.declare_relation(sphere1, node2, 1);
-//   // bulk_data.modification_end();
+  NgpModRequests reqs;
+  auto req_a = reqs.request_links(*f.link_data);
+  auto req_b = reqs.request_links(*f.link_data);
+  EXPECT_EQ(req_a.id(), req_b.id())
+      << "Two request_links() calls for the same LinkData must return the same memoized helper.";
+}
 
-//   // Run the test
-// }
+// Two handles from request_links(same_link_data) share the underlying ticket state.
+TEST(NgpModRequests, RequestLinks_SharedState) {
+  NgpModRequestsLinkFixture f;
+
+  NgpModRequests reqs;
+  auto req_a = reqs.request_links(*f.link_data);
+  auto req_b = reqs.request_links(*f.link_data);
+
+  reqs.activate_host();
+  req_a.tickets().claim(3);
+
+  EXPECT_EQ(req_b.tickets().count(), 3u)
+      << "Claiming through one handle must be visible through any other handle for the same LinkData.";
+}
+
+// request_links with existing (non-future) linker and linked entity writes COO fields directly.
+TEST(NgpModRequests, RequestLinks_WritesRelationForExistingLinker) {
+  NgpModRequestsLinkFixture f;
+
+  f.bulk->modification_begin();
+  stk::mesh::Entity link = f.bulk->declare_entity(f.link_rank, 1u, stk::mesh::PartVector{f.link_part});
+  stk::mesh::Entity node0 = f.bulk->declare_node(1u);
+  stk::mesh::Entity node1 = f.bulk->declare_node(2u);
+  f.bulk->modification_end();
+  ASSERT_TRUE(f.bulk->is_valid(link));
+
+  NgpModRequests reqs;
+  auto req_links = reqs.request_links(*f.link_data);
+
+  reqs.activate_host();
+  size_t t0 = req_links.tickets().claim();
+  size_t t1 = req_links.tickets().claim();
+  reqs.finalize_counts();
+
+  req_links.request(t0, link, node0, 0u);
+  req_links.request(t1, link, node1, 1u);
+
+  ASSERT_NO_THROW(reqs.process_requests(*f.bulk));
+
+  EXPECT_EQ(f.link_data->coo_data().get_linked_entity(link, 0u), node0);
+  EXPECT_EQ(f.link_data->coo_data().get_linked_entity(link, 1u), node1);
+  EXPECT_EQ(f.link_data->coo_data().get_linked_entity_id(link, 0u), f.bulk->identifier(node0));
+}
+
+// Primary use case: request a new link entity and simultaneously request link relations whose
+// linker is the resulting FutureEntity.  After process_requests the link entity must exist and
+// both COO slots must point to the correct nodes.
+TEST(NgpModRequests, RequestLinks_WritesRelationForFutureLinker) {
+  NgpModRequestsLinkFixture f;
+
+  f.bulk->modification_begin();
+  stk::mesh::Entity node0 = f.bulk->declare_node(1u);
+  stk::mesh::Entity node1 = f.bulk->declare_node(2u);
+  f.bulk->modification_end();
+
+  NgpModRequests reqs;
+  auto req_link_entities = reqs.request_entities_new_ids(*f.link_part);
+  auto req_links = reqs.request_links(*f.link_data);
+
+  reqs.activate_host();
+  size_t entity_ticket = req_link_entities.constraint_tickets().claim();
+  size_t rel_ticket_0 = req_links.tickets().claim();
+  size_t rel_ticket_1 = req_links.tickets().claim();
+  reqs.finalize_counts();
+
+  FutureEntity future_link = req_link_entities.request_constraint(entity_ticket);
+  req_links.request(rel_ticket_0, future_link, node0, 0u);
+  req_links.request(rel_ticket_1, future_link, node1, 1u);
+
+  ASSERT_NO_THROW(reqs.process_requests(*f.bulk));
+
+  stk::mesh::Entity created_link = req_link_entities.get_entity(entity_ticket, f.link_rank);
+  ASSERT_TRUE(f.bulk->is_valid(created_link)) << "Link entity must have been created by process_requests.";
+  EXPECT_EQ(f.link_data->coo_data().get_linked_entity(created_link, 0u), node0)
+      << "COO ordinal 0 must point to node0 after process_requests.";
+  EXPECT_EQ(f.link_data->coo_data().get_linked_entity(created_link, 1u), node1)
+      << "COO ordinal 1 must point to node1 after process_requests.";
+}
+
+// Two distinct LinkData objects in a single process_requests call: each gets its own
+// NgpRequestLinkRelationsT (keyed by LinkData*), both COO writes land in the right object,
+// and coo_modify_on_host() is called once for each.
+TEST(NgpModRequests, RequestLinks_TwoLinkDataObjects) {
+  // Build a mesh with two independent link meta-datas at the same rank.
+  MeshBuilder builder{MPI_COMM_WORLD};
+  builder.set_spatial_dimension(3);
+  builder.set_entity_rank_names({"NODE", "EDGE", "FACE", "ELEMENT", "CONSTRAINT"});
+  auto meta = builder.create_meta_data();
+  meta->use_simple_fields();
+  auto bulk = builder.create_bulk_data(meta);
+
+  static constexpr stk::mesh::EntityRank link_rank = stk::topology::CONSTRAINT_RANK;
+
+  LinkMetaData& link_meta_a = declare_link_meta_data(*meta, "LINKS_A", link_rank);
+  stk::mesh::Part* link_part_a = &link_meta_a.declare_link_part("LINK_PART_A", 2u);
+
+  LinkMetaData& link_meta_b = declare_link_meta_data(*meta, "LINKS_B", link_rank);
+  stk::mesh::Part* link_part_b = &link_meta_b.declare_link_part("LINK_PART_B", 2u);
+
+  meta->commit();
+  LinkData& link_data_a = declare_link_data(*bulk, link_meta_a);
+  LinkData& link_data_b = declare_link_data(*bulk, link_meta_b);
+
+  // Declare shared target nodes.
+  bulk->modification_begin();
+  stk::mesh::Entity node0 = bulk->declare_node(1u);
+  stk::mesh::Entity node1 = bulk->declare_node(2u);
+  bulk->modification_end();
+
+  NgpModRequests reqs;
+  auto req_links_a = reqs.request_entities_new_ids(*link_part_a);
+  auto req_links_b = reqs.request_entities_new_ids(*link_part_b);
+  auto req_rel_a   = reqs.request_links(link_data_a);
+  auto req_rel_b   = reqs.request_links(link_data_b);
+
+  // request_links for two different LinkData must return helpers with different ids.
+  EXPECT_NE(req_rel_a.id(), req_rel_b.id());
+
+  reqs.activate_host();
+  size_t ta  = req_links_a.constraint_tickets().claim();
+  size_t tb  = req_links_b.constraint_tickets().claim();
+  size_t ra0 = req_rel_a.tickets().claim();
+  size_t ra1 = req_rel_a.tickets().claim();
+  size_t rb0 = req_rel_b.tickets().claim();
+  size_t rb1 = req_rel_b.tickets().claim();
+  reqs.finalize_counts();
+
+  FutureEntity future_a = req_links_a.request_constraint(ta);
+  FutureEntity future_b = req_links_b.request_constraint(tb);
+  req_rel_a.request(ra0, future_a, node0, 0u);
+  req_rel_a.request(ra1, future_a, node1, 1u);
+  req_rel_b.request(rb0, future_b, node1, 0u);  // reversed: b links to node1 first
+  req_rel_b.request(rb1, future_b, node0, 1u);
+
+  ASSERT_NO_THROW(reqs.process_requests(*bulk));
+
+  stk::mesh::Entity link_a = req_links_a.get_entity(ta, link_rank);
+  stk::mesh::Entity link_b = req_links_b.get_entity(tb, link_rank);
+
+  ASSERT_TRUE(bulk->is_valid(link_a));
+  ASSERT_TRUE(bulk->is_valid(link_b));
+
+  // link_data_a COO must hold node0 at ordinal 0, node1 at ordinal 1.
+  EXPECT_EQ(link_data_a.coo_data().get_linked_entity(link_a, 0u), node0);
+  EXPECT_EQ(link_data_a.coo_data().get_linked_entity(link_a, 1u), node1);
+
+  // link_data_b COO must hold node1 at ordinal 0, node0 at ordinal 1.
+  EXPECT_EQ(link_data_b.coo_data().get_linked_entity(link_b, 0u), node1);
+  EXPECT_EQ(link_data_b.coo_data().get_linked_entity(link_b, 1u), node0);
+
+  // coo_modify_on_host() was called for both — both should need a device sync.
+  EXPECT_TRUE(link_data_a.coo_need_sync_to_device());
+  EXPECT_TRUE(link_data_b.coo_need_sync_to_device());
+}
 
 }  // namespace
 

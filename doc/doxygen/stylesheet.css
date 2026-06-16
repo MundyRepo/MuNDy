@@ -2,8 +2,33 @@
 
 img[src$="mundy_banner_v2_t.png"] {
   display: block;
-  width: 70%;
+  width: 80%;
+  max-width: 900px;
   height: auto;
   margin-left: auto;
   margin-right: auto;
+}
+
+/* Limit normal prose width */
+.contents {
+  max-width: 120ch;
+}
+
+/* Doxygen HTML code blocks: do NOT preserve whitespace on the parent */
+div.fragment {
+  max-width: 120ch;
+  overflow-x: auto;
+  white-space: normal !important;
+}
+
+/* Preserve each actual code line */
+div.fragment div.line {
+  white-space: pre !important;
+}
+
+/* Older / alternate Doxygen code blocks */
+pre.fragment {
+  max-width: 120ch;
+  overflow-x: auto;
+  white-space: pre !important;
 }

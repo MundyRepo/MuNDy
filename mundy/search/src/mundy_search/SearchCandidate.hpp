@@ -39,12 +39,7 @@ namespace mundy {
 namespace search {
 
 /// \class NeighborSearchCandidate
-/// \brief Non-periodic target/source candidate passed to excluders.
-///
-/// Candidate objects are produced during search construction and are not final neighbor-list storage. They expose owner
-/// accessors as aliases of the normal target/source accessors so excluders can use one owner-based vocabulary for both
-/// periodic and non-periodic search.
-/// \tparam SizeType Integral type used for local target/source ordinals.
+/// \brief Non-periodic target/source candidate produced during neighbor-list construction.
 template <typename SizeType = size_t>
 class NeighborSearchCandidate {
  public:
@@ -105,6 +100,33 @@ class NeighborSearchCandidate {
 
   //@}
 
+  //! \name Degenerate check
+  //@{
+
+  /// \brief True if this candidate is a self-interaction.
+  KOKKOS_INLINE_FUNCTION bool is_degenerate() const noexcept {
+    return target_entity_ == source_entity_;
+  }
+  //@}
+
+  //! \name Comparison operators
+  //@{
+
+  KOKKOS_INLINE_FUNCTION bool operator==(const NeighborSearchCandidate& o) const noexcept {
+    return target_entity_ == o.target_entity_ && source_entity_ == o.source_entity_;
+  }
+  KOKKOS_INLINE_FUNCTION bool operator!=(const NeighborSearchCandidate& o) const noexcept {
+    return !(*this == o);
+  }
+  KOKKOS_INLINE_FUNCTION bool operator<(const NeighborSearchCandidate& o) const noexcept {
+    if (target_entity_ != o.target_entity_) return target_entity_ < o.target_entity_;
+    return source_entity_ < o.source_entity_;
+  }
+  KOKKOS_INLINE_FUNCTION bool operator>(const NeighborSearchCandidate& o) const noexcept {
+    return o < *this;
+  }
+  //@}
+
  private:
   //! \name Internal members
   //@{
@@ -121,12 +143,7 @@ class NeighborSearchCandidate {
 };
 
 /// \class PeriodicNeighborSearchCandidate
-/// \brief Periodic owner-pair candidate passed to excluders.
-///
-/// The candidate stores owner ordinals/entities and the source image shift relative to the target image shift. Images
-/// are not entities; excluders should reason in terms of owner identity plus relative shift.
-/// \tparam ImageShiftType Vector type used for relative image shifts.
-/// \tparam SizeType Integral type used for local owner ordinals.
+/// \brief Periodic owner-pair candidate produced during neighbor-list construction.
 template <typename ImageShiftType, typename SizeType = size_t>
 class PeriodicNeighborSearchCandidate {
  public:
@@ -149,16 +166,19 @@ class PeriodicNeighborSearchCandidate {
   /// \param source_owner_index [in] Dense source owner ordinal.
   /// \param target_entity [in] STK target owner entity.
   /// \param source_entity [in] STK source owner entity.
-  /// \param relative_image_shift [in] Source image shift minus target image shift.
+  /// \param target_image_shift [in] Displacement from the target owner's original to its imaged reference point.
+  /// \param source_image_shift [in] Displacement from the source owner's original to its imaged reference point.
   KOKKOS_INLINE_FUNCTION
   PeriodicNeighborSearchCandidate(size_type target_owner_index, size_type source_owner_index,
                                   stk::mesh::Entity target_entity, stk::mesh::Entity source_entity,
-                                  const image_shift_type& relative_image_shift)
+                                  const image_shift_type& target_image_shift,
+                                  const image_shift_type& source_image_shift)
       : target_owner_index_(target_owner_index),
         source_owner_index_(source_owner_index),
         target_entity_(target_entity),
         source_entity_(source_entity),
-        relative_image_shift_(relative_image_shift) {
+        target_image_shift_(target_image_shift),
+        source_image_shift_(source_image_shift) {
   }
   //@}
 
@@ -189,12 +209,59 @@ class PeriodicNeighborSearchCandidate {
     return source_entity_;
   }
 
-  /// \brief Get the source image shift relative to the target image shift.
+  /// \brief Get the target owner's image shift (original → imaged reference point).
   KOKKOS_INLINE_FUNCTION
-  image_shift_type relative_image_shift() const noexcept {
-    return relative_image_shift_;
+  image_shift_type target_image_shift() const noexcept {
+    return target_image_shift_;
   }
 
+  /// \brief Get the source owner's image shift (original → imaged reference point).
+  KOKKOS_INLINE_FUNCTION
+  image_shift_type source_image_shift() const noexcept {
+    return source_image_shift_;
+  }
+
+  //@}
+
+  //! \name Degenerate check
+  //@{
+
+  /// \brief True if this candidate is a self-interaction in the same image.
+  KOKKOS_INLINE_FUNCTION bool is_degenerate() const noexcept {
+    using scalar_t = typename image_shift_type::value_type;
+    const image_shift_type rel = source_image_shift_ - target_image_shift_;
+    return target_entity_ == source_entity_ && rel[0] == scalar_t(0) && rel[1] == scalar_t(0) && rel[2] == scalar_t(0);
+  }
+  //@}
+
+  //! \name Comparison operators
+  //@{
+
+  KOKKOS_INLINE_FUNCTION bool operator==(const PeriodicNeighborSearchCandidate& o) const noexcept {
+    if (target_entity_ != o.target_entity_ || source_entity_ != o.source_entity_) return false;
+    for (int d = 0; d < 3; ++d) {
+      if (target_image_shift_[d] != o.target_image_shift_[d] || source_image_shift_[d] != o.source_image_shift_[d])
+        return false;
+    }
+    return true;
+  }
+  KOKKOS_INLINE_FUNCTION bool operator!=(const PeriodicNeighborSearchCandidate& o) const noexcept {
+    return !(*this == o);
+  }
+  KOKKOS_INLINE_FUNCTION bool operator<(const PeriodicNeighborSearchCandidate& o) const noexcept {
+    if (target_entity_ != o.target_entity_) return target_entity_ < o.target_entity_;
+    if (source_entity_ != o.source_entity_) return source_entity_ < o.source_entity_;
+    for (int d = 0; d < 3; ++d) {
+      if (target_image_shift_[d] != o.target_image_shift_[d]) return target_image_shift_[d] < o.target_image_shift_[d];
+    }
+    for (int d = 0; d < 3; ++d) {
+      if (source_image_shift_[d] != o.source_image_shift_[d]) return source_image_shift_[d] < o.source_image_shift_[d];
+    }
+    return false;
+  }
+  KOKKOS_INLINE_FUNCTION bool operator>(const PeriodicNeighborSearchCandidate& o) const noexcept {
+    return o < *this;
+  }
   //@}
 
  private:
@@ -209,8 +276,10 @@ class PeriodicNeighborSearchCandidate {
   stk::mesh::Entity target_entity_;
   //! STK source owner entity.
   stk::mesh::Entity source_entity_;
-  //! Source image shift minus target image shift.
-  image_shift_type relative_image_shift_;
+  //! Displacement from the target owner's original to its imaged reference point.
+  image_shift_type target_image_shift_;
+  //! Displacement from the source owner's original to its imaged reference point.
+  image_shift_type source_image_shift_;
   //@}
 };
 

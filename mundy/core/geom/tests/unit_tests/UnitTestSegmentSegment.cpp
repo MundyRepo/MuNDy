@@ -401,15 +401,20 @@ TEST(DistanceBetweenLineSegments, PositiveResult) {
     const LineSegment<double> line_segment_a(a1, a2);
     const LineSegment<double> line_segment_b(b1, b2);
     dist_actual = distance(line_segment_a, line_segment_b, a12_actual, b12_actual, u_actual, v_actual, sep_actual);
-    ASSERT_NEAR(dist_expected, dist_actual, TEST_DOUBLE_EPSILON);
+    ASSERT_NEAR(dist_expected, dist_actual, TEST_DOUBLE_EPSILON)
+        << "Failure for lines :" << line_segment_a << " " << line_segment_b;
 
     for (unsigned j = 0; j < 3; j++) {
-      ASSERT_NEAR(a12_expected[j], a12_actual[j], TEST_DOUBLE_EPSILON);
-      ASSERT_NEAR(b12_expected[j], b12_actual[j], TEST_DOUBLE_EPSILON);
+      ASSERT_NEAR(a12_expected[j], a12_actual[j], TEST_DOUBLE_EPSILON)
+          << "Failure for lines :" << line_segment_a << " " << line_segment_b;
+      ASSERT_NEAR(b12_expected[j], b12_actual[j], TEST_DOUBLE_EPSILON)
+          << "Failure for lines :" << line_segment_a << " " << line_segment_b;
     }
 
-    ASSERT_NEAR(u_expected, u_actual, TEST_DOUBLE_EPSILON);
-    ASSERT_NEAR(v_expected, v_actual, TEST_DOUBLE_EPSILON);
+    ASSERT_NEAR(u_expected, u_actual, TEST_DOUBLE_EPSILON)
+        << "Failure for lines :" << line_segment_a << " " << line_segment_b;
+    ASSERT_NEAR(v_expected, v_actual, TEST_DOUBLE_EPSILON)
+        << "Failure for lines :" << line_segment_a << " " << line_segment_b;
   }
 }
 
@@ -485,6 +490,43 @@ TEST(DistanceToLine, PositiveResult) {
       ASSERT_NEAR(a12_expected[j], a12_actual[j], TEST_DOUBLE_EPSILON);
     }
   }
+}
+
+// ============================================================
+// ScaleInvariantParallelThreshold
+//
+// Two perpendicular segments (θ=90°), length L=1e-3, z-gap=1e-4.
+// D = L^4 = 1e-12.
+//
+//   Old sqrt threshold: 1e-12 < sqrt(1e-15) ≈ 3.16e-8 → fires CASE 1,
+//   returns dist ≈ sqrt(L²/4+gap²) ≈ 5e-4 (WRONG, should be gap=1e-4).
+//
+//   New D*D threshold: D²=1e-24 > zero_tol*a*c=1e-15*1e-12=1e-27 →
+//   fires CASE 2, correctly returns dist=gap, arch1=arch2=0.5.
+// ============================================================
+
+TEST(DistanceBetweenLineSegments, ScaleInvariantParallelThreshold) {
+  const double L = 1e-3;
+  const double gap = 1e-4;
+
+  // S1 along x, S2 along y, both centered near the origin, separated by gap.
+  // True closest approach: midpoint of each segment, distance = gap.
+  const Point<double> l0{-L / 2, 0.0, 0.0};
+  const Point<double> l1{L / 2, 0.0, 0.0};
+  const Point<double> m0{0.0, -L / 2, gap};
+  const Point<double> m1{0.0, L / 2, gap};
+
+  const LineSegment<double> S1(l0, l1);
+  const LineSegment<double> S2(m0, m1);
+
+  Point<double> cp1, cp2;
+  double al1, al2;
+  mundy::Vector3d sep;
+  const double dist = distance(S1, S2, cp1, cp2, al1, al2, sep);
+
+  EXPECT_NEAR(dist, gap, 1e-12);
+  EXPECT_NEAR(al1, 0.5, 1e-10);
+  EXPECT_NEAR(al2, 0.5, 1e-10);
 }
 
 }  // namespace

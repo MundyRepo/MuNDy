@@ -38,7 +38,7 @@
 #include <stk_util/parallel/Parallel.hpp>  // for stk::parallel_machine_init, stk::parallel_machine_finalize
 
 // Mundy
-#include <mundy_geom/periodicity.hpp>  // for mundy::PeriodicScaledMetric, mundy::PeriodicMetric
+#include <mundy_geom/periodicity.hpp>  // for mundy::OrthorhombicMetric, mundy::TriclinicMetric
 #include <mundy_math/Array.hpp>        // for mundy::Array
 #include <mundy_math/Matrix.hpp>       // for mundy::Matrix
 #include <mundy_math/Quaternion.hpp>   // for mundy::Quaternion
@@ -65,16 +65,17 @@ void speed_test() {
   mundy::Vector3d point1 = random_vector();
   mundy::Vector3d point2 = random_vector();
 
-  // New constructor
-  auto new_periodic_space_metric = mundy::periodic_metric_from_unit_cell(cell_size);
-  auto new_periodic_scaled_space_metric = mundy::periodic_scaled_metric_from_unit_cell(cell_size);
+  // OrthorhombicMetric uses element-wise multiply/divide (diagonal cell, no matrix ops).
+  // TriclinicMetric uses full matrix multiply (general tilted cell).
+  mundy::OrthorhombicMetric<mundy::AXIS_XYZ, double> ortho_metric{cell_size};
+  mundy::TriclinicMetric<mundy::AXIS_XYZ, double>    tri_metric{mundy::Matrix3<double>::diagonal(cell_size)};
 
-  bench.run("New Periodic Metric | No Loops", [&] {
-    auto sep = new_periodic_space_metric.sep(point1, point2);
+  bench.run("OrthorhombicMetric sep | No Loops", [&] {
+    auto sep = ortho_metric.sep(point1, point2);
     ankerl::nanobench::doNotOptimizeAway(sep);
   });
-  bench.run("New Periodic Metric | No Loops | Scale only", [&] {
-    auto sep = new_periodic_scaled_space_metric.sep(point1, point2);
+  bench.run("TriclinicMetric sep | No Loops (diagonal cell)", [&] {
+    auto sep = tri_metric.sep(point1, point2);
     ankerl::nanobench::doNotOptimizeAway(sep);
   });
 }
@@ -94,16 +95,14 @@ void construction_test() {
   mundy::Vector3d point1 = random_vector();
   mundy::Vector3d point2 = random_vector();
 
-  bench.run("New Periodic Metric | No Loops", [&] {
-    // New constructor
-    auto new_periodic_space_metric = mundy::periodic_metric_from_unit_cell(cell_size);
-    auto sep = new_periodic_space_metric.sep(point1, point2);
+  bench.run("OrthorhombicMetric construct+sep | No Loops", [&] {
+    mundy::OrthorhombicMetric<mundy::AXIS_XYZ, double> m{cell_size};
+    auto sep = m.sep(point1, point2);
     ankerl::nanobench::doNotOptimizeAway(sep);
   });
-  bench.run("New Periodic Metric | No Loops | Scale only", [&] {
-    // New constructor | scale only
-    auto new_periodic_scaled_space_metric = mundy::periodic_scaled_metric_from_unit_cell(cell_size);
-    auto sep = new_periodic_scaled_space_metric.sep(point1, point2);
+  bench.run("TriclinicMetric construct+sep | No Loops (diagonal cell)", [&] {
+    mundy::TriclinicMetric<mundy::AXIS_XYZ, double> m{mundy::Matrix3<double>::diagonal(cell_size)};
+    auto sep = m.sep(point1, point2);
     ankerl::nanobench::doNotOptimizeAway(sep);
   });
 }

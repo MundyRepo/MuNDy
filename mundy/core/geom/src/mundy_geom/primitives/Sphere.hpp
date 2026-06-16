@@ -36,9 +36,12 @@
 
 namespace mundy {
 
+/// \addtogroup MundyGeomPrimitives
+/// @{
+
 template <typename Scalar, ValidPointType PointType = Point<Scalar>>
 class Sphere {
-  static_assert(std::is_same_v<typename PointType::scalar_t, Scalar>,
+  static_assert(std::is_same_v<typename PointType::value_type, Scalar>,
                 "The scalar type of the PointType must match the scalar type of the Sphere.");
 
  public:
@@ -46,10 +49,12 @@ class Sphere {
   //@{
 
   /// \brief Our scalar type
-  using scalar_t = Scalar;
+  using value_type = Scalar;
 
   /// \brief Our point type
   using point_t = PointType;
+
+  static constexpr bool is_finite = true;
 
   //@}
 
@@ -59,22 +64,22 @@ class Sphere {
   /// \brief Default constructor for owning Spheres. Default initializes the center and sets the radius to an invalid
   /// value of -1
   KOKKOS_FUNCTION
-  constexpr Sphere() MUNDY_REQUIRES(HasNArgConstructor<point_t, scalar_t, 3>)
-      : center_(scalar_t(), scalar_t(), scalar_t()), radius_(static_cast<scalar_t>(-1)) {
+  constexpr Sphere() MUNDY_REQUIRES(HasNArgConstructor<point_t, value_type, 3>)
+      : center_(value_type(), value_type(), value_type()), radius_(static_cast<value_type>(-1)) {
   }
 
   /// \brief Constructor to initialize the center and radius.
   /// \param[in] center The center of the Sphere.
   /// \param[in] radius The radius of the Sphere.
   KOKKOS_FUNCTION
-  constexpr Sphere(const point_t& center, const scalar_t& radius) : center_(center), radius_(radius) {
+  constexpr Sphere(const point_t& center, const value_type& radius) : center_(center), radius_(radius) {
   }
 
   /// \brief Constructor to initialize the center and radius.
   /// \param[in] center The center of the Sphere.
   /// \param[in] radius The radius of the Sphere.
   template <ValidPointType OtherPointType>
-  KOKKOS_FUNCTION constexpr Sphere(const OtherPointType& center, const scalar_t& radius)
+  KOKKOS_FUNCTION constexpr Sphere(const OtherPointType& center, const value_type& radius)
       MUNDY_REQUIRES(!std::is_same_v<OtherPointType, point_t>)
       : center_(center), radius_(radius) {
   }
@@ -85,26 +90,26 @@ class Sphere {
 
   /// \brief Deep copy constructor
   KOKKOS_FUNCTION
-  constexpr Sphere(const Sphere<scalar_t, point_t>& other) : center_(other.center_), radius_(other.radius_) {
+  constexpr Sphere(const Sphere<value_type, point_t>& other) : center_(other.center_), radius_(other.radius_) {
   }
 
   /// \brief Deep copy constructor with different sphere type
   template <typename OtherSphereType>
   KOKKOS_FUNCTION constexpr Sphere(const OtherSphereType& other)
-      MUNDY_REQUIRES(!std::is_same_v<OtherSphereType, Sphere<scalar_t, point_t>>)
+      MUNDY_REQUIRES(!std::is_same_v<OtherSphereType, Sphere<value_type, point_t>>)
       : center_(other.center_), radius_(other.radius_) {
   }
 
   /// \brief Deep move constructor
   KOKKOS_FUNCTION
-  constexpr Sphere(Sphere<scalar_t, point_t>&& other)
+  constexpr Sphere(Sphere<value_type, point_t>&& other)
       : center_(std::move(other.center_)), radius_(std::move(other.radius_)) {
   }
 
   /// \brief Deep move constructor
   template <typename OtherSphereType>
   KOKKOS_FUNCTION constexpr Sphere(OtherSphereType&& other)
-      MUNDY_REQUIRES(!std::is_same_v<OtherSphereType, Sphere<scalar_t, point_t>>)
+      MUNDY_REQUIRES(!std::is_same_v<OtherSphereType, Sphere<value_type, point_t>>)
       : center_(std::move(other.center_)), radius_(std::move(other.radius_)) {
   }
   //@}
@@ -114,7 +119,7 @@ class Sphere {
 
   /// \brief Copy assignment operator
   KOKKOS_FUNCTION
-  constexpr Sphere<scalar_t, point_t>& operator=(const Sphere<scalar_t, point_t>& other) {
+  constexpr Sphere<value_type, point_t>& operator=(const Sphere<value_type, point_t>& other) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     center_ = other.center_;
     radius_ = other.radius_;
@@ -123,8 +128,8 @@ class Sphere {
 
   /// \brief Copy assignment operator
   template <typename OtherSphereType>
-  KOKKOS_FUNCTION constexpr Sphere<scalar_t, point_t>& operator=(const OtherSphereType& other)
-      MUNDY_REQUIRES(!std::is_same_v<OtherSphereType, Sphere<scalar_t, point_t>>) {
+  KOKKOS_FUNCTION constexpr Sphere<value_type, point_t>& operator=(const OtherSphereType& other)
+      MUNDY_REQUIRES(!std::is_same_v<OtherSphereType, Sphere<value_type, point_t>>) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     center_ = other.center_;
     radius_ = other.radius_;
@@ -133,7 +138,7 @@ class Sphere {
 
   /// \brief Move assignment operator
   KOKKOS_FUNCTION
-  constexpr Sphere<scalar_t, point_t>& operator=(Sphere<scalar_t, point_t>&& other) {
+  constexpr Sphere<value_type, point_t>& operator=(Sphere<value_type, point_t>&& other) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     center_ = std::move(other.center_);
     radius_ = std::move(other.radius_);
@@ -142,8 +147,8 @@ class Sphere {
 
   /// \brief Move assignment operator
   template <typename OtherSphereType>
-  KOKKOS_FUNCTION constexpr Sphere<scalar_t, point_t>& operator=(OtherSphereType&& other)
-      MUNDY_REQUIRES(!std::is_same_v<OtherSphereType, Sphere<scalar_t, point_t>>) {
+  KOKKOS_FUNCTION constexpr Sphere<value_type, point_t>& operator=(OtherSphereType&& other)
+      MUNDY_REQUIRES(!std::is_same_v<OtherSphereType, Sphere<value_type, point_t>>) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     center_ = std::move(other.center_);
     radius_ = std::move(other.radius_);
@@ -168,13 +173,13 @@ class Sphere {
 
   /// \brief Accessor for the radius
   KOKKOS_FUNCTION
-  constexpr const scalar_t& radius() const {
+  constexpr const value_type& radius() const {
     return radius_;
   }
 
   /// \brief Accessor for the radius
   KOKKOS_FUNCTION
-  constexpr scalar_t& radius() {
+  constexpr value_type& radius() {
     return radius_;
   }
   //@}
@@ -194,7 +199,7 @@ class Sphere {
   /// \param[in] y The y-coordinate.
   /// \param[in] z The z-coordinate.
   KOKKOS_FUNCTION
-  constexpr void set_center(const scalar_t& x, const scalar_t& y, const scalar_t& z) {
+  constexpr void set_center(const value_type& x, const value_type& y, const value_type& z) {
     center_[0] = x;
     center_[1] = y;
     center_[2] = z;
@@ -203,14 +208,14 @@ class Sphere {
   /// \brief Set the radius
   /// \param[in] radius The new radius.
   KOKKOS_FUNCTION
-  constexpr void set_radius(const scalar_t& radius) {
+  constexpr void set_radius(const value_type& radius) {
     radius_ = radius;
   }
   //@}
 
  private:
   point_t center_;
-  scalar_t radius_;
+  value_type radius_;
 };
 
 /// @brief (Implementation) Type trait to determine if a type is a Sphere
@@ -238,16 +243,20 @@ static_assert(ValidSphereType<Sphere<float>> && ValidSphereType<const Sphere<flo
 //! \name Non-member functions for ValidSphereType objects
 //@{
 
-/// \brief Equality operator
-template <ValidSphereType SphereType1, ValidSphereType SphereType2>
-KOKKOS_FUNCTION constexpr bool operator==(const SphereType1& sphere1, const SphereType2& sphere2) {
-  return (sphere1.radius() == sphere2.radius()) && (sphere1.center() == sphere2.center());
+/// \brief Element-wise approximate equality (within a tolerance)
+template <ValidSphereType T1, ValidSphereType T2>
+KOKKOS_FUNCTION constexpr bool is_close(
+    const T1& s1, const T2& s2,
+    typename T1::value_type tol = get_comparison_tolerance<typename T1::value_type, typename T2::value_type>()) {
+  return is_close(s1.radius(), s2.radius(), tol) && is_close(s1.center(), s2.center(), tol);
 }
 
-/// \brief Inequality operator
-template <ValidSphereType SphereType1, ValidSphereType SphereType2>
-KOKKOS_FUNCTION constexpr bool operator!=(const SphereType1& sphere1, const SphereType2& sphere2) {
-  return (sphere1.radius() != sphere2.radius()) || (sphere1.center() != sphere2.center());
+/// \brief Element-wise approximate equality (within a relaxed tolerance)
+template <ValidSphereType T1, ValidSphereType T2>
+KOKKOS_FUNCTION constexpr bool is_approx_close(
+    const T1& s1, const T2& s2,
+    typename T1::value_type tol = get_relaxed_comparison_tolerance<typename T1::value_type, typename T2::value_type>()) {
+  return is_close(s1, s2, tol);
 }
 
 /// \brief OStream operator
@@ -256,6 +265,25 @@ std::ostream& operator<<(std::ostream& os, const SphereType& sphere) {
   os << "{" << sphere.center() << ":" << sphere.radius() << "}";
   return os;
 }
+//@}
+
+/// @}
+
+//! \name Point visitation
+//@{
+
+/// \brief Visit the geometric point of a Sphere (its center).
+template <ValidSphereType T, typename Functor>
+KOKKOS_INLINE_FUNCTION void for_each_point(const T& s, Functor&& f) {
+  f(s.center());
+}
+
+/// \brief Visit and mutate the geometric point of a Sphere.
+template <ValidSphereType T, typename Functor>
+KOKKOS_INLINE_FUNCTION void for_each_point_mutable(T& s, Functor&& f) {
+  f(s.center());
+}
+
 //@}
 
 }  // namespace mundy

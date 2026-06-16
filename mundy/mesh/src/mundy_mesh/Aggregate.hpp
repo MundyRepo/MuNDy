@@ -47,6 +47,7 @@
 #include <mundy_mesh/NgpAccessorExpr.hpp>  // for mundy::mesh::AccessorExpr and EntityExprBase
 #include <mundy_mesh/SharedComponent.hpp>
 #include <mundy_utils/aggregate.hpp>  // for mundy::all_have_tags_v, mundy::all_tags_unique_v, mundy::contains_tag_v
+#include <mundy_utils/host_ptr.hpp>   // for host_ptr
 #include <mundy_utils/requires.hpp>
 #include <mundy_utils/suppress_warnings.hpp>  // for MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_PUSH/POP
 #include <mundy_utils/throw_assert.hpp>       // for MUNDY_THROW_ASSERT
@@ -151,11 +152,11 @@ namespace mesh {
 ///
 /// Our Accessors, the data they access, and the return type of the Accessor's get_view method are as follows:
 ///          Component Name                :              Data it accesses             ->         Return Type
-///   ScalarFieldComponent                 :  Field<scalar_t>                          ->  ScalarView<scalar_t>
-///   VectorNFieldComponent                :  Field<scalar_t>                          ->  VectorView<scalar_t, N>
-///   Matrix3FieldComponent                :  Field<scalar_t>                          ->  Matrix3View<scalar_t>
-///   QuaternionFieldComponent             :  Field<scalar_t>                          ->  QuaternionView<scalar_t>
-///   AABBFieldComponent                   :  Field<scalar_t>                          ->  AABBView<scalar_t>
+///   ScalarFieldComponent                 :  Field<value_type>                          ->  ScalarView<value_type>
+///   VectorNFieldComponent                :  Field<value_type>                          ->  VectorView<value_type, N>
+///   Matrix3FieldComponent                :  Field<value_type>                          ->  Matrix3View<value_type>
+///   QuaternionFieldComponent             :  Field<value_type>                          ->  QuaternionView<value_type>
+///   AABBFieldComponent                   :  Field<value_type>                          ->  AABBView<value_type>
 ///   SharedComponent<SharedType>      :  SharedType                               ->  SharedType&
 ///   PartMappedComponent<OtherComponent>  :  Kokkos::Map<PartOrdinal, OtherComponent> -> OtherComponent's return type
 ///
@@ -503,7 +504,7 @@ class NgpAggregate {
   }
 
   const stk::mesh::Selector& selector() const {
-    return host_selector_;
+    return *host_selector_;
   }
   //@}
 
@@ -519,7 +520,7 @@ class NgpAggregate {
     // Form the new type that has the old components plus the new appended
     // one.
     using NewType = NgpAggregate<NgpComponents..., decltype(new_ngp_tagged_comp)>;
-    return NewType(ngp_mesh_, host_selector_, new_tuple);
+    return NewType(ngp_mesh_, *host_selector_, new_tuple);
   }
   template <typename Tag, typename NewNgpComponent>
   MUNDY_REQUIRES(!all_tags_unique_v<NgpTaggedComponent<Tag, NewNgpComponent>, NgpComponents...>)
@@ -535,7 +536,7 @@ class NgpAggregate {
     using tagged_component_type = std::remove_cvref_t<NewNgpTaggedComponent>;
     auto new_tuple = tuple_cat(ngp_components_, make_tuple(std::move(new_ngp_component)));
     using NewType = NgpAggregate<NgpComponents..., tagged_component_type>;
-    return NewType(ngp_mesh_, host_selector_, new_tuple);
+    return NewType(ngp_mesh_, *host_selector_, new_tuple);
   }
 
   template <typename NewNgpTaggedComponent>
@@ -661,7 +662,7 @@ class NgpAggregate {
   //@{
 
   stk::mesh::NgpMesh ngp_mesh_;
-  stk::mesh::Selector host_selector_;
+  host_ptr<stk::mesh::Selector> host_selector_;
   NgpComponentsTuple ngp_components_;
   //@}
 };  // NgpAggregate

@@ -37,15 +37,14 @@
 #include <KokkosBlas_gesv.hpp>
 #endif
 
-// Mundy core:
+// Mundy
 #include <mundy_utils/reference_wrapper.hpp>
 #include <mundy_utils/throw_assert.hpp>
-
-// Mundy math:
 #include <mundy_math/Tolerance.hpp>  // for mundy::get_zero_tolerance<T>
 #include <mundy_math/Vector.hpp>     // for mundy::Vector
 #include <mundy_utils/requires.hpp>
 #include <mundy_utils/suppress_warnings.hpp>  // for MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_PUSH/POP
+#include <mundy_math/cmath.hpp>
 
 namespace mundy {
 
@@ -58,15 +57,15 @@ namespace space {
 /// \brief Proj(x) = x for all x in R
 template <typename Scalar>
 struct Unconstrained {
-  using scalar_t = Scalar;
+  using value_type = Scalar;
 
   KOKKOS_INLINE_FUNCTION
-  constexpr scalar_t operator()(const scalar_t& x) const {
+  constexpr value_type operator()(const value_type& x) const {
     return project(x);
   }
 
   KOKKOS_INLINE_FUNCTION
-  constexpr scalar_t project(const scalar_t& x) const {
+  constexpr value_type project(const value_type& x) const {
     return x;
   }
 };
@@ -74,65 +73,65 @@ struct Unconstrained {
 /// \brief Proj(x) = max(x, lower_bound) for all x in R
 template <typename Scalar>
 struct LowerBound {
-  using scalar_t = Scalar;
+  using value_type = Scalar;
 
-  scalar_t lower_bound;
+  value_type lower_bound;
 
   KOKKOS_INLINE_FUNCTION
-  constexpr scalar_t operator()(const scalar_t& x) const {
+  constexpr value_type operator()(const value_type& x) const {
     return project(x);
   }
 
   KOKKOS_INLINE_FUNCTION
-  constexpr scalar_t project(const scalar_t& x) const {
-    return Kokkos::max(x, lower_bound);
+  constexpr value_type project(const value_type& x) const {
+    return max(x, lower_bound);
   }
 };
 
 /// \brief Proj(x) = min(x, upper_bound) for all x in R
 template <typename Scalar>
 struct UpperBound {
-  using scalar_t = Scalar;
+  using value_type = Scalar;
 
-  scalar_t upper_bound;
+  value_type upper_bound;
 
   KOKKOS_INLINE_FUNCTION
-  constexpr scalar_t operator()(const scalar_t& x) const {
+  constexpr value_type operator()(const value_type& x) const {
     return project(x);
   }
 
   KOKKOS_INLINE_FUNCTION
-  constexpr scalar_t project(const scalar_t& x) const {
-    return Kokkos::min(x, upper_bound);
+  constexpr value_type project(const value_type& x) const {
+    return min(x, upper_bound);
   }
 };
 
 /// \brief Proj(x) = min(max(x, lower_bound), upper_bound) for all x in R
 template <typename Scalar>
 struct Bounded {
-  using scalar_t = Scalar;
+  using value_type = Scalar;
 
-  scalar_t lower_bound;
-  scalar_t upper_bound;
+  value_type lower_bound;
+  value_type upper_bound;
 
   KOKKOS_INLINE_FUNCTION
-  constexpr scalar_t operator()(const scalar_t& x) const {
+  constexpr value_type operator()(const value_type& x) const {
     return project(x);
   }
 
   KOKKOS_INLINE_FUNCTION
-  constexpr scalar_t project(const scalar_t& x) const {
-    return Kokkos::min(Kokkos::max(x, lower_bound), upper_bound);
+  constexpr value_type project(const value_type& x) const {
+    return min(max(x, lower_bound), upper_bound);
   }
 };
 
 /// \brief Concept for a valid space
 template <class Space>
 concept ValidConvexSpace = requires {
-  typename std::remove_cvref_t<Space>::scalar_t;  // make the nested type check explicit
-} && requires(const std::remove_cvref_t<Space>& s, typename std::remove_cvref_t<Space>::scalar_t x) {
-  { s.project(x) } -> std::same_as<typename std::remove_cvref_t<Space>::scalar_t>;
-  { s(x) } -> std::same_as<typename std::remove_cvref_t<Space>::scalar_t>;
+  typename std::remove_cvref_t<Space>::value_type;  // make the nested type check explicit
+} && requires(const std::remove_cvref_t<Space>& s, typename std::remove_cvref_t<Space>::value_type x) {
+  { s.project(x) } -> std::same_as<typename std::remove_cvref_t<Space>::value_type>;
+  { s(x) } -> std::same_as<typename std::remove_cvref_t<Space>::value_type>;
 };
 
 /// \brief Assert that all of our spaces are valid convex spaces
@@ -292,7 +291,7 @@ template <class LinearOp>
 using workspace_for_t = decltype(make_workspace(std::declval<LinearOp>()));
 
 template <class Vector>
-using vector_scalar_t = std::remove_cvref_t<decltype(std::declval<const std::remove_reference_t<Vector>&>()(size_t{}))>;
+using vector_value_type = std::remove_cvref_t<decltype(std::declval<const std::remove_reference_t<Vector>&>()(size_t{}))>;
 
 /// \brief Convert a value to a storage that can either own or view the value.
 ///
@@ -542,7 +541,7 @@ class MixedReducedOp {
   template <class XVector, class YVector, class WorkspaceType>
   KOKKOS_INLINE_FUNCTION void apply(const XVector& x, YVector& y, WorkspaceType& workspace) const {
     impl::workspace_invalidate(workspace);
-    constexpr auto one = static_cast<impl::vector_scalar_t<XVector>>(1);
+    constexpr auto one = static_cast<impl::vector_value_type<XVector>>(1);
     // workspace.ax = A x
     Backend::apply(A(), x, workspace.ax(), workspace.a_workspace());
 
@@ -734,7 +733,7 @@ class CongruentMixedReducedOp {
   template <class XVector, class YVector, class WorkspaceType>
   KOKKOS_INLINE_FUNCTION void apply(const XVector& x, YVector& y, WorkspaceType& workspace) const {
     impl::workspace_invalidate(workspace);
-    constexpr auto one = static_cast<impl::vector_scalar_t<XVector>>(1);
+    constexpr auto one = static_cast<impl::vector_value_type<XVector>>(1);
     Backend::apply(D(), x, workspace.dx(), workspace.d_workspace());
     Backend::apply(M(), workspace.dx(), workspace.mdx(), workspace.m_workspace());
     Backend::apply(L(), workspace.mdx(), workspace.lmdx(), workspace.l_workspace());
@@ -779,10 +778,10 @@ struct KokkosBackend {
       return op.make_domain_vector();
     } else if constexpr (impl::DenseMatView<LinearOp>) {
       using op_t = std::remove_reference_t<LinearOp>;
-      using scalar_t = typename op_t::non_const_value_type;
+      using value_type = typename op_t::non_const_value_type;
       using mem_space = typename op_t::memory_space;
-      using layout_t = typename Kokkos::View<scalar_t*, mem_space>::array_layout;
-      using vector_t = Kokkos::View<scalar_t*, layout_t, mem_space>;
+      using layout_t = typename Kokkos::View<value_type*, mem_space>::array_layout;
+      using vector_t = Kokkos::View<value_type*, layout_t, mem_space>;
       return vector_t(Kokkos::view_alloc(Kokkos::WithoutInitializing, "domain_vector"), domain_size(op));
     } else {
       static_assert(impl::dependent_false_v<LinearOp>,
@@ -796,10 +795,10 @@ struct KokkosBackend {
       return op.make_range_vector();
     } else if constexpr (impl::DenseMatView<LinearOp>) {
       using op_t = std::remove_reference_t<LinearOp>;
-      using scalar_t = typename op_t::non_const_value_type;
+      using value_type = typename op_t::non_const_value_type;
       using mem_space = typename op_t::memory_space;
-      using layout_t = typename Kokkos::View<scalar_t*, mem_space>::array_layout;
-      using vector_t = Kokkos::View<scalar_t*, layout_t, mem_space>;
+      using layout_t = typename Kokkos::View<value_type*, mem_space>::array_layout;
+      using vector_t = Kokkos::View<value_type*, layout_t, mem_space>;
       return vector_t(Kokkos::view_alloc(Kokkos::WithoutInitializing, "range_vector"), range_size(op));
     } else {
       static_assert(impl::dependent_false_v<LinearOp>,
@@ -876,10 +875,10 @@ struct KokkosBackend {
   template <class LinearOp, class XVector, class YVector>
   MUNDY_REQUIRES(impl::DenseMatView<LinearOp>)
   static void apply(const LinearOp& A, const XVector& x, YVector& y) {
-    using scalar_t = impl::vector_scalar_t<YVector>;
+    using value_type = impl::vector_value_type<YVector>;
     MUNDY_THROW_ASSERT(A.extent(1) == x.extent(0), std::invalid_argument, "gemv: dimension mismatch A(:,1) vs x");
     MUNDY_THROW_ASSERT(A.extent(0) == y.extent(0), std::invalid_argument, "gemv: dimension mismatch A(0,:) vs y");
-    KokkosBlas::gemv(exec_space{}, "N", scalar_t(1), A, x, scalar_t(0), y);
+    KokkosBlas::gemv(exec_space{}, "N", value_type(1), A, x, value_type(0), y);
   }
 
   template <class LinearOp, class XVector, class YVector, class Workspace>
@@ -942,8 +941,8 @@ struct KokkosBackend {
   template <class Scalar, class XVector, class YVector>
   static void axpby(const Scalar alpha, const XVector& x, const Scalar beta, YVector& y) {
     MUNDY_THROW_ASSERT(x.extent(0) == y.extent(0), std::invalid_argument, "x and y must have the same size.");
-    const bool alpha_is_zero = Kokkos::abs(alpha) < get_zero_tolerance<Scalar>();
-    const bool beta_is_zero = Kokkos::abs(beta) < get_zero_tolerance<Scalar>();
+    const bool alpha_is_zero = abs(alpha) < get_zero_tolerance<Scalar>();
+    const bool beta_is_zero = abs(beta) < get_zero_tolerance<Scalar>();
 
     if (!alpha_is_zero && !beta_is_zero) {
       Kokkos::parallel_for(
@@ -967,8 +966,8 @@ struct KokkosBackend {
                              const Wrapper& wrapper) {
     MUNDY_THROW_ASSERT(x.extent(0) == y.extent(0) && x.extent(0) == z.extent(0), std::invalid_argument,
                        "x, y, and z must have the same size.");
-    const bool alpha_is_zero = Kokkos::abs(alpha) < get_zero_tolerance<Scalar>();
-    const bool beta_is_zero = Kokkos::abs(beta) < get_zero_tolerance<Scalar>();
+    const bool alpha_is_zero = abs(alpha) < get_zero_tolerance<Scalar>();
+    const bool beta_is_zero = abs(beta) < get_zero_tolerance<Scalar>();
 
     if (!alpha_is_zero && !beta_is_zero) {
       Kokkos::parallel_for(
@@ -1046,11 +1045,11 @@ struct MundyMathBackend {
     if constexpr (impl::HasMakeDomainVectorMember<LinearOp>) {
       return op.make_domain_vector();
     } else if constexpr (requires {
-                           typename std::remove_reference_t<LinearOp>::scalar_t;
+                           typename std::remove_reference_t<LinearOp>::value_type;
                            std::remove_reference_t<LinearOp>::num_cols;
                          }) {
       using op_t = std::remove_reference_t<LinearOp>;
-      return Vector<typename op_t::scalar_t, op_t::num_cols>{};
+      return Vector<typename op_t::value_type, op_t::num_cols>{};
     } else {
       static_assert(impl::dependent_false_v<LinearOp>,
                     "MundyMathBackend::make_domain_vector requires static matrix metadata or op.make_domain_vector().");
@@ -1062,11 +1061,11 @@ struct MundyMathBackend {
     if constexpr (impl::HasMakeRangeVectorMember<LinearOp>) {
       return op.make_range_vector();
     } else if constexpr (requires {
-                           typename std::remove_reference_t<LinearOp>::scalar_t;
+                           typename std::remove_reference_t<LinearOp>::value_type;
                            std::remove_reference_t<LinearOp>::num_rows;
                          }) {
       using op_t = std::remove_reference_t<LinearOp>;
-      return Vector<typename op_t::scalar_t, op_t::num_rows>{};
+      return Vector<typename op_t::value_type, op_t::num_rows>{};
     } else {
       static_assert(impl::dependent_false_v<LinearOp>,
                     "MundyMathBackend::make_range_vector requires static matrix metadata or op.make_range_vector().");
@@ -1223,7 +1222,7 @@ class CQPPProblem {
   using vector_t = impl::unwrapped_storage_t<vector_storage_t>;
   using space_t = ConvexSpace;
   using workspace_t = Workspace;
-  using scalar_t = impl::vector_scalar_t<vector_t>;
+  using value_type = impl::vector_value_type<vector_t>;
 
   CQPPProblem(Backend, linear_op_storage_t A, vector_storage_t q, const space_t& space)
       : A_(std::move(A)), q_(std::move(q)), space_(space), workspace_(impl::make_workspace(impl::unwrap(A_))) {
@@ -1303,7 +1302,7 @@ class MCQPPProblem {
   using space_t = ConvexSpace;
   using a_workspace_t = WorkspaceA;
   using l_workspace_t = WorkspaceL;
-  using scalar_t = impl::vector_scalar_t<q_vector_t>;
+  using value_type = impl::vector_value_type<q_vector_t>;
 
   MCQPPProblem(Backend, linear_op_storage_a_t A, q_vector_storage_t q, linear_op_storage_l_t L, f_vector_storage_t f_b,
                const space_t& space)
@@ -1371,7 +1370,7 @@ class CongruentMCQPPProblem {
   using m_workspace_t = WorkspaceM;
   using d_workspace_t = WorkspaceD;
   using l_workspace_t = WorkspaceL;
-  using scalar_t = impl::vector_scalar_t<q_vector_t>;
+  using value_type = impl::vector_value_type<q_vector_t>;
 
   CongruentMCQPPProblem(Backend, linear_op_storage_dt_t DT, linear_op_storage_m_t M, linear_op_storage_d_t D,
                         q_vector_storage_t q, linear_op_storage_l_t L, f_vector_storage_t f_b, const space_t& space)
@@ -1456,7 +1455,7 @@ class LCPProblem {
   using linear_op_t = impl::unwrapped_storage_t<linear_op_storage_t>;
   using q_vector_t = impl::unwrapped_storage_t<q_vector_storage_t>;
   using workspace_t = Workspace;
-  using scalar_t = impl::vector_scalar_t<q_vector_t>;
+  using value_type = impl::vector_value_type<q_vector_t>;
 
   LCPProblem(Backend, linear_op_storage_t A, q_vector_storage_t q)
       : A_(std::move(A)), q_(std::move(q)), workspace_(impl::make_workspace(impl::unwrap(A_))) {
@@ -1481,8 +1480,8 @@ class LCPProblem {
 
 template <class Backend, class LinearOp, class QVectorStorage>
 KOKKOS_INLINE_FUNCTION auto to_cqpp(const LCPProblem<Backend, LinearOp, QVectorStorage>& P) {
-  using scalar_t = typename LCPProblem<Backend, LinearOp, QVectorStorage>::scalar_t;
-  static constexpr space::LowerBound Rn_plus{static_cast<scalar_t>(0)};
+  using value_type = typename LCPProblem<Backend, LinearOp, QVectorStorage>::value_type;
+  static constexpr space::LowerBound Rn_plus{static_cast<value_type>(0)};
   return CQPPProblem(P.backend(), P.A(), P.q(), Rn_plus, P.workspace());
 }
 
@@ -1491,7 +1490,7 @@ template <class Backend, class LinearOpAStorage, class QVectorStorage, class Lin
 KOKKOS_INLINE_FUNCTION auto to_cqpp(const MCQPPProblem<Backend, LinearOpAStorage, QVectorStorage, LinearOpLStorage,
                                                        FVectorStorage, ConvexSpace, AWorkspace, LWorkspace>& P) {
   // get the type of P no ref
-  using scalar_t = std::remove_reference_t<decltype(P)>::scalar_t;
+  using value_type = std::remove_reference_t<decltype(P)>::value_type;
 
   auto backend = P.backend();
   using backend_t = decltype(backend);
@@ -1505,7 +1504,7 @@ KOKKOS_INLINE_FUNCTION auto to_cqpp(const MCQPPProblem<Backend, LinearOpAStorage
 
   impl::workspace_invalidate(a_workspace);
   backend_t::apply(P.A(), P.f_b(), g, a_workspace);                                 // g = A f_b
-  backend_t::axpby(static_cast<scalar_t>(1), P.q(), static_cast<scalar_t>(-1), g);  // g = q - A f_b
+  backend_t::axpby(static_cast<value_type>(1), P.q(), static_cast<value_type>(-1), g);  // g = q - A f_b
 
   auto ax = backend_t::make_range_vector(P.A());
   auto lax = backend_t::make_range_vector(P.L());
@@ -1520,7 +1519,7 @@ KOKKOS_INLINE_FUNCTION auto to_cqpp(
     const CongruentMCQPPProblem<Backend, LinearOpDTStorage, LinearOpMStorage, LinearOpDStorage, QVectorStorage,
                                 LinearOpLStorage, FVectorStorage, ConvexSpace, DTWorkspace, MWorkspace, DWorkspace,
                                 LWorkspace>& P) {
-  using scalar_t = std::remove_reference_t<decltype(P)>::scalar_t;
+  using value_type = std::remove_reference_t<decltype(P)>::value_type;
 
   auto backend = P.backend();
   using backend_t = decltype(backend);
@@ -1544,7 +1543,7 @@ KOKKOS_INLINE_FUNCTION auto to_cqpp(
 
   backend_t::apply(P.M(), P.f_b(), m_f_b, m_workspace);
   backend_t::apply(P.DT(), m_f_b, g, dt_workspace);                                 // g = D^T M f_b
-  backend_t::axpby(static_cast<scalar_t>(1), P.q(), static_cast<scalar_t>(-1), g);  // g = q - D^T M f_b
+  backend_t::axpby(static_cast<value_type>(1), P.q(), static_cast<value_type>(-1), g);  // g = q - D^T M f_b
 
   auto dx = backend_t::make_range_vector(P.D());
   auto mdx = backend_t::make_range_vector(P.M());
@@ -1560,7 +1559,7 @@ KOKKOS_INLINE_FUNCTION auto to_cqpp(
 
 struct LinfNormProjectedGradientResidual {  // Lower bound only for non-negativity constraints
   template <typename Backend, typename XVector, typename GradVector,
-            typename ReductionScalar = impl::vector_scalar_t<GradVector>>
+            typename ReductionScalar = impl::vector_value_type<GradVector>>
   KOKKOS_INLINE_FUNCTION ReductionScalar operator()([[maybe_unused]] const Backend& backend,  //
                                                     const XVector& x,                         //
                                                     const GradVector& grad,                   //
@@ -1568,22 +1567,22 @@ struct LinfNormProjectedGradientResidual {  // Lower bound only for non-negativi
     MUNDY_THROW_REQUIRE(convex_space.bound() == static_cast<ReductionScalar>(0), std::invalid_argument,
                         "LinfNormProjectedGradientResidual is only implemented for non-negativity constraints.");
 
-    using scalar_t = ReductionScalar;
+    using value_type = ReductionScalar;
 
     size_t n = Backend::size(x);
-    scalar_t largest_abs_gradient;
-    Backend::template reduce_max<scalar_t>(
+    value_type largest_abs_gradient;
+    Backend::template reduce_max<value_type>(
         x, n,
-        KOKKOS_LAMBDA(const int i, scalar_t& max_val) {
+        KOKKOS_LAMBDA(const int i, value_type& max_val) {
           // perform the projection EQ 2.2 of Dai & Fletcher 2005
-          scalar_t x_i = Backend::vector_data(x, i);
-          scalar_t grad_i = Backend::vector_data(grad, i);
+          value_type x_i = Backend::vector_data(x, i);
+          value_type grad_i = Backend::vector_data(grad, i);
 
-          scalar_t abs_projected_grad;
-          if (x_i < get_zero_tolerance<scalar_t>()) {
-            abs_projected_grad = Kokkos::max(scalar_t(0), grad_i);
+          value_type abs_projected_grad;
+          if (x_i < get_zero_tolerance<value_type>()) {
+            abs_projected_grad = max(value_type(0), grad_i);
           } else {
-            abs_projected_grad = Kokkos::abs(grad_i);
+            abs_projected_grad = abs(grad_i);
           }
 
           if (abs_projected_grad > max_val) {
@@ -1598,25 +1597,25 @@ struct LinfNormProjectedGradientResidual {  // Lower bound only for non-negativi
 
 struct LinfNormProjectedDiffResidual {
   template <typename Backend, typename XVector, typename GradVector, space::ValidConvexSpace ConvexSpace,
-            typename ReductionScalar = impl::vector_scalar_t<GradVector>>
+            typename ReductionScalar = impl::vector_value_type<GradVector>>
   KOKKOS_INLINE_FUNCTION ReductionScalar operator()([[maybe_unused]] const Backend& backend,  //
                                                     const XVector& x,                         //
                                                     const GradVector& grad,                   //
                                                     const ConvexSpace& convex_space) const {
-    using scalar_t = ReductionScalar;
+    using value_type = ReductionScalar;
 
     // This res comes from line 17 and Eq 25 of Mazhar 2015
     // res =  1.0 / (3 * num_unknowns * gd) * norm_inf(xk - proj(xk - gd * gk))
     size_t num_unknowns = Backend::size(x);
-    constexpr scalar_t small_step_size = static_cast<scalar_t>(1e-6);
-    scalar_t largest_abs_diff;
-    Backend::template reduce_max<scalar_t>(
+    constexpr value_type small_step_size = static_cast<value_type>(1e-6);
+    value_type largest_abs_diff;
+    Backend::template reduce_max<value_type>(
         x, num_unknowns,
-        KOKKOS_LAMBDA(const int i, scalar_t& max_val) {
-          scalar_t x_i = Backend::vector_data(x, i);
-          scalar_t grad_i = Backend::vector_data(grad, i);
-          scalar_t x_i_proj = convex_space.project(x_i - small_step_size * grad_i);
-          scalar_t abs_diff = Kokkos::abs(x_i - x_i_proj);
+        KOKKOS_LAMBDA(const int i, value_type& max_val) {
+          value_type x_i = Backend::vector_data(x, i);
+          value_type grad_i = Backend::vector_data(grad, i);
+          value_type x_i_proj = convex_space.project(x_i - small_step_size * grad_i);
+          value_type abs_diff = abs(x_i - x_i_proj);
           if (abs_diff > max_val) {
             max_val = abs_diff;
           }
@@ -1629,20 +1628,20 @@ struct LinfNormProjectedDiffResidual {
 
 struct BBStepStrategy {
   template <typename Backend, typename XOldVector, typename GradOldVector, typename XVector, typename GradVector,
-            typename ReductionScalar = impl::vector_scalar_t<XVector>>
+            typename ReductionScalar = impl::vector_value_type<XVector>>
   KOKKOS_INLINE_FUNCTION ReductionScalar operator()([[maybe_unused]] const Backend& backend,  //
                                                     const XOldVector& x_old,
                                                     const GradOldVector& grad_old,  //
                                                     const XVector& x, const GradVector& grad) const {
-    using scalar_t = ReductionScalar;
+    using value_type = ReductionScalar;
 
-    scalar_t num = Backend::template diff_dot<scalar_t>(x, x_old);  // (x - x_old) dot (x - x_old)
-    scalar_t denom =
-        Backend::template diff_dot<scalar_t>(x, x_old, grad, grad_old);  // (x - x_old) dot (grad - grad_old)
+    value_type num = Backend::template diff_dot<value_type>(x, x_old);  // (x - x_old) dot (x - x_old)
+    value_type denom =
+        Backend::template diff_dot<value_type>(x, x_old, grad, grad_old);  // (x - x_old) dot (grad - grad_old)
 
     // Avoid division by zero
-    constexpr scalar_t eps = get_zero_tolerance<scalar_t>() * static_cast<scalar_t>(10);
-    denom += eps * (Kokkos::abs(denom) < eps);
+    constexpr value_type eps = get_zero_tolerance<value_type>() * static_cast<value_type>(10);
+    denom += eps * (abs(denom) < eps);
 
     return num / denom;
   }
@@ -1651,7 +1650,7 @@ struct BBStepStrategy {
 
 template <typename Scalar>
 struct PGDConfig {
-  using scalar_t = Scalar;
+  using value_type = Scalar;
 
   unsigned max_iters{1000};
   Scalar tol{get_relaxed_zero_tolerance<Scalar>()};
@@ -1659,7 +1658,7 @@ struct PGDConfig {
 
 template <class Scalar>
 struct SolveResult {
-  using scalar_t = Scalar;
+  using value_type = Scalar;
 
   unsigned num_iters{0};
   Scalar residual{0};
@@ -1677,7 +1676,7 @@ template <class Scalar, class XVectorStorage, class GradVectorStorage, class XTm
           class GradTmpVectorStorage>
 class PGDState {
  public:
-  using scalar_t = Scalar;
+  using value_type = Scalar;
   using x_vector_storage_t = XVectorStorage;
   using grad_vector_storage_t = GradVectorStorage;
   using x_tmp_vector_storage_t = XTmpVectorStorage;
@@ -1704,13 +1703,13 @@ class PGDState {
   // clang-format off
   KOKKOS_INLINE_FUNCTION unsigned& iter()         { return iter_; }
   KOKKOS_INLINE_FUNCTION bool&     converged()    { return converged_; }
-  KOKKOS_INLINE_FUNCTION scalar_t& residual()     { return residual_; }
-  KOKKOS_INLINE_FUNCTION scalar_t& step_size()        { return step_size_; }
+  KOKKOS_INLINE_FUNCTION value_type& residual()     { return residual_; }
+  KOKKOS_INLINE_FUNCTION value_type& step_size()        { return step_size_; }
 
   KOKKOS_INLINE_FUNCTION unsigned  iter()    const { return iter_; }
   KOKKOS_INLINE_FUNCTION bool      converged() const { return converged_; }
-  KOKKOS_INLINE_FUNCTION scalar_t  residual() const  { return residual_; }
-  KOKKOS_INLINE_FUNCTION scalar_t  step_size()    const  { return step_size_; }
+  KOKKOS_INLINE_FUNCTION value_type  residual() const  { return residual_; }
+  KOKKOS_INLINE_FUNCTION value_type  step_size()    const  { return step_size_; }
   // clang-format on
 
  private:
@@ -1720,19 +1719,19 @@ class PGDState {
   grad_tmp_vector_storage_t g_tmp_;
   unsigned iter_{0};
   bool converged_{false};
-  scalar_t residual_{0};
-  scalar_t step_size_{1};
+  value_type residual_{0};
+  value_type step_size_{1};
 };
 
 template <class StepPolicy, class ResidualPolicy, class Config>
 class PGDStrategy {
  public:
-  using scalar_t = typename Config::scalar_t;
+  using value_type = typename Config::value_type;
 
   using step_policy_t = StepPolicy;
   using residual_policy_t = ResidualPolicy;
   using config_t = Config;
-  using result_t = SolveResult<scalar_t>;
+  using result_t = SolveResult<value_type>;
 
   KOKKOS_INLINE_FUNCTION
   PGDStrategy(step_policy_t step, residual_policy_t resid, config_t cfg = {}) : step_(step), resid_(resid), cfg_(cfg) {
@@ -1743,7 +1742,7 @@ class PGDStrategy {
     auto backend = prob.backend();
     using backend_t = decltype(backend);
 
-    constexpr scalar_t one = static_cast<scalar_t>(1);
+    constexpr value_type one = static_cast<value_type>(1);
     auto& workspace = prob.workspace();
 
     // x_tmp = x
@@ -1759,7 +1758,7 @@ class PGDStrategy {
 
     // Initialize iteration state (allow for early exit)
     state.iter() = 0;
-    state.converged() = (state.residual() <= static_cast<scalar_t>(cfg_.tol));
+    state.converged() = (state.residual() <= static_cast<value_type>(cfg_.tol));
     if (state.converged()) {
       state.step_size() = one;
       // If already converged, copy grad_tmp to grad
@@ -1775,7 +1774,7 @@ class PGDStrategy {
     auto backend = prob.backend();
     using backend_t = decltype(backend);
 
-    constexpr scalar_t one = static_cast<scalar_t>(1);
+    constexpr value_type one = static_cast<value_type>(1);
     auto& workspace = prob.workspace();
 
     if (state.converged() || state.iter() >= cfg_.max_iters) {
@@ -1792,7 +1791,7 @@ class PGDStrategy {
 
     // residual & test
     state.residual() = resid_(backend, state.x(), state.grad(), prob.space());
-    if (state.residual() <= static_cast<scalar_t>(cfg_.tol)) {
+    if (state.residual() <= static_cast<value_type>(cfg_.tol)) {
       state.converged() = true;
       impl::workspace_commit(workspace);
       return true;
@@ -1886,7 +1885,7 @@ PGDConfig(unsigned, Scalar) -> PGDConfig<Scalar>;
 /// \brief Deduction guide for PGDState
 template <class XVector, class GradVector, class XTmpVector, class GradTmpVector>
 PGDState(XVector&, GradVector&, XTmpVector&, GradTmpVector&)
-    -> PGDState<impl::vector_scalar_t<XVector>, XVector, GradVector, XTmpVector, GradTmpVector>;
+    -> PGDState<impl::vector_value_type<XVector>, XVector, GradVector, XTmpVector, GradTmpVector>;
 
 /// \brief Deduction guide for PGDStrategy
 template <class StepPolicy, class ResidualPolicy, class Config>
@@ -2087,13 +2086,13 @@ KOKKOS_INLINE_FUNCTION auto make_pgd_state(XVector&& x,         //
   auto x_tmp_storage = convex::impl::to_storage(std::forward<XTmpVector>(x_tmp));
   auto grad_tmp_storage = convex::impl::to_storage(std::forward<GradTmpVector>(grad_tmp));
 
-  using scalar_t = convex::impl::vector_scalar_t<XVector>;
+  using value_type = convex::impl::vector_value_type<XVector>;
   using x_storage_t = decltype(x_storage);
   using grad_storage_t = decltype(grad_storage);
   using x_tmp_storage_t = decltype(x_tmp_storage);
   using grad_tmp_storage_t = decltype(grad_tmp_storage);
 
-  return convex::PGDState<scalar_t, x_storage_t, grad_storage_t, x_tmp_storage_t, grad_tmp_storage_t>(
+  return convex::PGDState<value_type, x_storage_t, grad_storage_t, x_tmp_storage_t, grad_tmp_storage_t>(
       std::move(x_storage), std::move(grad_storage), std::move(x_tmp_storage), std::move(grad_tmp_storage));
 }
 

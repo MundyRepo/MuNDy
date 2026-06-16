@@ -161,32 +161,6 @@ void clear_crs_structure_dirty(const LinkData& link_data);
 /// structure. There are some operations that fundamentally require a CSR-like structure such as maintaining parallel
 /// consistency as entities are removed from the mesh or performing operations that require a serial loop over each
 /// linker that connects to a given linked entity.
-///
-/// # Delayed link declaration and destruction
-/// We offer helper functions for delayed destruction and declaration of links. Users call request_destruction(linker)
-/// and request_link(linked_entity0, linked_entity1, ... linked_entityN) to request the destruction of a link and the
-/// creation of a link between the given entities, respectively. These requests may be made in parallel and are
-/// processed in the next process_requests call. These functions streamline the enforcement of the requirement that
-/// "declare/destroy_relation are performed consistently for each process that locally owns or shares the given linker
-/// or linked entity." We do so at two ~levels ~of user investment, each with different costs.
-///
-/// ## FULLY_CONSISTENT: You did all the work
-/// At a fully consistent level, request_link must be called by each process that locally owns or shares any of the
-/// given linked entities and request_destruction must be called by each process that locally owns or shares the given
-/// linker. This is the most user-intensive level, but it requires the least amount of MPI communication. At this level,
-/// our role is to declare the linker on a single process, ghost the linker to all owners and sharers of the linked
-/// entities, and then connect the linker to the linked entities on each process.
-///
-/// ## PARTIALLY_CONSISTENT: You did some of the work
-/// Partial consistency is the default level. It has all of the same requirements as fully consistent, but without
-/// considering sharers of either the linker or the linked entities. It is often quite arduous to ensure consistency
-/// across all sharers, particularly when attempting to link an entity that is ghosted to the current process. This
-/// level is the most user-friendly but does come with a cost. We must perform two pass MPI communication, first
-/// broadcasting information to the owners and then to the sharers. Sometimes this is simply unavoidable.
-///
-/// If using a single process or if only linking element or constraint-rank entities, then partial consistency is the
-/// same as full consistency. The level of consistency is passed to the process_requests function, accepting a bool
-/// stating if the requests are fully consistent or not. This function will enter a modification cycle only if needed.
 class LinkData {
  public:
   //! \name Constructors and destructor
@@ -416,22 +390,6 @@ class LinkData {
   }
   //@}
 
-  //! \name Declaration/destruction requests
-  //@{
-
-  /// \brief Process all requests for creation/destruction made since the last process_requests call.
-  ///
-  /// Note, on a single process or if the entities you wish to link are all of element rank or higher, then partial
-  /// consistency is the same as full consistency.
-  ///
-  /// If the global number of requests is non-zero, this function will enter a modification cycle if not already in one.
-  ///
-  /// \param assume_fully_consistent [in] If we should assume that the requests are fully consistent or not.
-  void process_requests(bool /*assume_fully_consistent*/ = false) {
-    MUNDY_THROW_REQUIRE(false, std::invalid_argument, "Processing requests not implemented yet.");
-  }
-  //@}
-
  protected:
   //! \name MetaData-owned construction
   //@{
@@ -441,7 +399,8 @@ class LinkData {
   /// \param link_meta_data [in] Our meta data manager.
   LinkData(stk::mesh::BulkData& bulk_data,
            LinkMetaData& link_meta_data)  // We do NOT take ownership of the LinkMetaData
-      : bulk_data_ptr_(&bulk_data),
+      : any_ngp_link_data_(),
+        bulk_data_ptr_(&bulk_data),
         mesh_meta_data_ptr_(&bulk_data.mesh_meta_data()),
         link_meta_data_ptr_(&link_meta_data),
         coo_data_(bulk_data, link_meta_data),
@@ -449,7 +408,6 @@ class LinkData {
         crs_structure_dirty_(false),
         coo_synchronizer_(nullptr),
         crs_synchronizer_(nullptr),
-        any_ngp_link_data_(),
         crs_modified_on_host_(false),
         crs_modified_on_device_(false),
         coo_modified_on_host_(false),
@@ -465,13 +423,19 @@ class LinkData {
   }
   //@}
 
+  //! \name Protected impl data
+  //@{
+
+  /// \brief Type-erased storage for the `NgpLinkDataT<NgpMemSpace>` associated with this `LinkData`.
+  ///
+  /// Accessed exclusively through `impl::get_ngp_link_data` and `get_updated_ngp_link_data`, which
+  /// hold the only correct `std::any_cast` call sites.
+  mutable std::any any_ngp_link_data_;
+  //@}
+
  private:
   //! \name Internal methods
   //@{
-
-  std::any& get_ngp_link_data() const {
-    return any_ngp_link_data_;
-  }
 
   void set_coo_synchronizer(std::shared_ptr<impl::HostDeviceSynchronizer> synchronizer) const {
     coo_synchronizer_ = std::move(synchronizer);
@@ -525,7 +489,6 @@ class LinkData {
   mutable bool crs_structure_dirty_;
   mutable std::shared_ptr<impl::HostDeviceSynchronizer> coo_synchronizer_;
   mutable std::shared_ptr<impl::HostDeviceSynchronizer> crs_synchronizer_;
-  mutable std::any any_ngp_link_data_;
   mutable bool crs_modified_on_host_;
   mutable bool crs_modified_on_device_;
   mutable bool coo_modified_on_host_;
@@ -539,7 +502,7 @@ class LinkData {
 
 namespace impl {
 inline std::any& get_ngp_link_data(const LinkData& link_data) {
-  return link_data.get_ngp_link_data();
+  return link_data.any_ngp_link_data_;
 }
 
 inline void set_crs_synchronizer(const LinkData& link_data,

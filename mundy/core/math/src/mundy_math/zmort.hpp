@@ -53,6 +53,7 @@
 
 // Mundy
 #include <mundy_utils/throw_assert.hpp>  // MUNDY_THROW_ASSERT
+#include <mundy_math/cmath.hpp>
 
 namespace zorder_knn {
 
@@ -187,7 +188,7 @@ KOKKOS_INLINE_FUNCTION auto FloatXorMsb(Scalar p, Scalar q) -> decltype(FloatExp
       return p_exp;
   }
 
-  return Kokkos::max(p_exp, q_exp);
+  return mundy::max(p_exp, q_exp);
 }
 
 }  // namespace detail
@@ -228,7 +229,7 @@ namespace mundy {
 
 template <ValidVector3Type Vector3Type1, ValidVector3Type Vector3Type2>
 bool zmorton_less(const Vector3Type1& p, const Vector3Type2& q) {
-  using Scalar = typename Vector3Type1::scalar_t;
+  using Scalar = typename Vector3Type1::value_type;
   constexpr auto zero = Scalar(0.0);
 
   // Signed less then

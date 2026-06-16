@@ -72,13 +72,16 @@
 #include <mundy_mesh/impl/NgpAccessorExprMathBase.hpp>    // MathExprBase
 #include <mundy_mesh/impl/NgpAccessorExprRNG.hpp>  // RandomDistributionExpr, UniformDistributionExpr, CounterBasedRNGExpr
 #include <mundy_mesh/impl/NgpAccessorExprReductions.hpp>  // reduce helpers
-#include <mundy_mesh/impl/NgpAccessorExprSink.hpp>   // SinkArg, ApplySinkExpr, sink_expr_impl, BinarySideEffectExpr
+#include <mundy_mesh/impl/NgpAccessorExprSink.hpp>   // SinkArg, ApplySinkExpr, delayed_sink_expr_impl, BinarySideEffectExpr
 #include <mundy_mesh/impl/NgpAccessorExprTypes.hpp>  // NgpEvalContext, holder types
 #include <mundy_mesh/impl/NgpAccessorExprUtils.hpp>  // is_crtp_base_of, is_crtp_base_of_v
 
 namespace mundy {
 
 namespace mesh {
+
+/// \addtogroup MundyMeshNgpAccessorExpr
+/// @{
 
 //! \name Entity expression factories
 //@{
@@ -132,10 +135,12 @@ KOKKOS_INLINE_FUNCTION auto overwrite_all(const Arg& arg) {
   return impl::make_sink_arg_with_mode<impl::SinkAccessMode::OverwriteAll>(arg);
 }
 
-/// \brief Build a side-effect expression that applies a mutating function object to expression arguments.
+/// \brief Apply a mutating function object to expression arguments, executing immediately.
+/// Builds the sink expression, drives it to completion, and returns void.
 template <typename Func, typename... Args>
-auto sink_expr(Func func, const Args&... args) {
-  return impl::sink_expr_impl(std::move(func), args...);
+void sink_expr(Func func, const Args&... args) {
+  auto expr = impl::delayed_sink_expr_impl(std::move(func), args...);
+  expr.driver()->run(expr);
 }
 
 /// \brief Atomically add rhs to each element of the target expression.
@@ -237,6 +242,8 @@ auto all_reduce_min(Expr&& expr) {
   return impl::all_reduce_min_impl<Scalar>(std::forward<Expr>(expr));
 }
 //@}
+
+/// @}
 
 }  // namespace mesh
 

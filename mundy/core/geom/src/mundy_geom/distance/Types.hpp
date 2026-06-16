@@ -26,6 +26,9 @@
 
 namespace mundy {
 
+/// \addtogroup MundyGeomDistance
+/// @{
+
 /// \brief The distance types
 ///
 /// These types are uses for function overloading of our distance functions.
@@ -35,6 +38,15 @@ namespace mundy {
 /// All of our distance functions default to SharedNormalSigned distance.
 struct Euclidean {};
 struct SharedNormalSigned {};
+
+/// \brief Tag selecting the finite-difference-gradient variant of the shared-normal signed distance.
+///
+/// Uses central-difference approximations for the L-BFGS gradient instead of the analytical
+/// gradient employed by the default \c SharedNormalSigned implementation.  Retained for
+/// benchmarking and regression testing only — prefer \c SharedNormalSigned for all production use.
+struct SharedNormalSignedFiniteDiff {};
+
+/// @}
 
 }  // namespace mundy
 

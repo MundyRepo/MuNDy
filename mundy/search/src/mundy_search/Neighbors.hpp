@@ -64,15 +64,6 @@ concept NeighborListType = requires {
 
 /// \class Neighbors
 /// \brief Lightweight neighbor-range view for one target.
-///
-/// `Neighbors` stores the concrete list and a dense target ordinal. This deliberately keeps the first-pass interface
-/// simple. Periodic concrete list types can forward relative image shifts without requiring the common range to carry
-/// image state. A future non-contiguous list should introduce its own handle-aware facade when the real use case
-/// appears.
-///
-/// The `list()` and `target_index()` accessors serve as typed escape hatches for callers that need type-specific
-/// behavior not expressible through the common surface (e.g., reading image shifts from a periodic list directly).
-/// \tparam NeighborListType Concrete neighbor-list implementation type.
 template <typename NeighborListType>
 class Neighbors {
  public:
@@ -163,12 +154,7 @@ class Neighbors {
 };
 
 /// \class NeighborPair
-/// \brief Payload passed to pair-iteration functors.
-///
-/// The payload carries a dense target ordinal and a neighbor ordinal. It exposes source/target entities and source
-/// ordinals, but does not expose storage internals such as compact pair ids or dense row slots. Periodic concrete list
-/// types may additionally provide a relative image shift through the forwarding `relative_image_shift()` accessor.
-/// \tparam NeighborListType Concrete neighbor-list implementation type.
+/// \brief Lightweight neighbor-pair view.
 template <typename NeighborListType>
 class NeighborPair {
  public:
@@ -222,15 +208,6 @@ class NeighborPair {
   KOKKOS_INLINE_FUNCTION
   stk::mesh::Entity source_entity() const {
     return list_->source_entity(source_index());
-  }
-
-  /// \brief Get the source image shift relative to the target image shift.
-  ///
-  /// This accessor forwards to periodic concrete list types. For non-periodic lists, there is deliberately no neutral
-  /// fake shift value because that would hide whether a kernel is using periodic geometry.
-  KOKKOS_INLINE_FUNCTION
-  auto relative_image_shift() const {
-    return list_->relative_image_shift(target_index_, neighbor_ordinal_);
   }
   //@}
 

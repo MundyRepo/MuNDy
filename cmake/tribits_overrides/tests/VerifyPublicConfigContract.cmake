@@ -40,6 +40,13 @@ if(mundy_math_config_count EQUAL 0)
 endif()
 list(GET mundy_math_install_configs 0 mundy_math_install_config)
 
+# Verify Mundy_config.hpp is scheduled for installation.
+# The Mundy top-level package is processed from the build root, so
+# tribits_install_headers() registers the header in the root cmake_install.cmake.
+# If it is absent the header was never wired into the install tree.
+set(root_cmake_install "${PROJECT_BINARY_DIR}/cmake_install.cmake")
+assert_file_contains("${root_cmake_install}" "Mundy_config.hpp")
+
 assert_file_contains("${project_install_config}" "MundyPackageConfig.cmake")
 assert_file_contains("${project_install_config}" "set(compVarPrefix \"MundyPackage\")")
 assert_file_contains("${project_install_config}" "list(APPEND Mundy_LIBRARIES")

@@ -35,6 +35,9 @@
 
 namespace mundy {
 
+/// \addtogroup MundyGeomDistance
+/// @{
+
 //! \name Free space distance calculations
 //@{
 
@@ -43,8 +46,8 @@ namespace mundy {
 /// \param[in] sphere1 One sphere
 /// \param[in] sphere2 The other sphere
 template <ValidSphereType SphereType1, ValidSphereType SphereType2>
-MUNDY_REQUIRES(std::is_same_v<typename SphereType1::scalar_t, typename SphereType2::scalar_t>)
-KOKKOS_FUNCTION typename SphereType1::scalar_t distance(const SphereType1& sphere1,  //
+MUNDY_REQUIRES(std::is_same_v<typename SphereType1::value_type, typename SphereType2::value_type>)
+KOKKOS_FUNCTION typename SphereType1::value_type distance(const SphereType1& sphere1,  //
                                                         const SphereType2& sphere2) {
   return distance(SharedNormalSigned{}, sphere1, sphere2);
 }
@@ -54,8 +57,8 @@ KOKKOS_FUNCTION typename SphereType1::scalar_t distance(const SphereType1& spher
 /// \param[in] sphere1 One sphere
 /// \param[in] sphere2 The other sphere
 template <ValidSphereType SphereType1, ValidSphereType SphereType2>
-MUNDY_REQUIRES(std::is_same_v<typename SphereType1::scalar_t, typename SphereType2::scalar_t>)
-KOKKOS_FUNCTION typename SphereType1::scalar_t distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
+MUNDY_REQUIRES(std::is_same_v<typename SphereType1::value_type, typename SphereType2::value_type>)
+KOKKOS_FUNCTION typename SphereType1::value_type distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
                                                         const SphereType1& sphere1,                               //
                                                         const SphereType2& sphere2) {
   return distance(sphere1.center(), sphere2.center()) - sphere1.radius() - sphere2.radius();
@@ -67,11 +70,11 @@ KOKKOS_FUNCTION typename SphereType1::scalar_t distance([[maybe_unused]] const S
 /// \param[in] sphere2 The other sphere
 /// \param[out] sep The separation vector (from the surface of sphere1 to the surface of sphere2)
 template <ValidSphereType SphereType1, ValidSphereType SphereType2>
-MUNDY_REQUIRES(std::is_same_v<typename SphereType1::scalar_t, typename SphereType2::scalar_t>)
-KOKKOS_FUNCTION typename SphereType1::scalar_t distance(const SphereType1& sphere1,  //
+MUNDY_REQUIRES(std::is_same_v<typename SphereType1::value_type, typename SphereType2::value_type>)
+KOKKOS_FUNCTION typename SphereType1::value_type distance(const SphereType1& sphere1,  //
                                                         const SphereType2& sphere2,  //
-                                                        mundy::Vector3<typename SphereType1::scalar_t>& sep) {
-  using Scalar = typename SphereType1::scalar_t;
+                                                        mundy::Vector3<typename SphereType1::value_type>& sep) {
+  using Scalar = typename SphereType1::value_type;
   const Scalar center_center_distance = distance(sphere1.center(), sphere2.center(), sep);
 
   // Rescale the separation vector to the surface of the sphere
@@ -80,6 +83,8 @@ KOKKOS_FUNCTION typename SphereType1::scalar_t distance(const SphereType1& spher
   return surface_distance;
 }
 //@}
+
+/// @}
 
 }  // namespace mundy
 

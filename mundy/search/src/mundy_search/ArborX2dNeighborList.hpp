@@ -42,13 +42,15 @@
 #include <stk_util/ngp/NgpSpaces.hpp>
 
 // Mundy
-#include <mundy_math/Vector3.hpp>                              // for mundy::Vector3
-#include <mundy_search/NeighborListBuildTraits.hpp>            // for NeighborListBuildTraits
-#include <mundy_search/impl/ArborX2dBuildCallbacks.hpp>        // for ArborX2dCountCallback, ArborX2dFillCallback
-#include <mundy_search/impl/ArborXCallback.hpp>               // for ArborXSearchCandidateFactory, PeriodicArborXSearchCandidateFactory
+#include <mundy_math/Vector3.hpp>                        // for mundy::Vector3
+#include <mundy_search/NeighborListBuildTraits.hpp>      // for NeighborListBuildTraits
+#include <mundy_search/impl/ArborX2dBuildCallbacks.hpp>  // for ArborX2dCountCallback, ArborX2dFillCallback
+#include <mundy_search/impl/ArborXCallback.hpp>  // for ArborXSearchCandidateFactory, PeriodicArborXSearchCandidateFactory
 #include <mundy_search/impl/ArborXPeriodicBuildCallbacks.hpp>  // for ArborXPeriodicCountCallback, ArborXPeriodic2dFillCallback
-#include <mundy_search/impl/ArborXSearchBoxes.hpp>             // for impl::ArborXSearchBoxesT, impl::PeriodicArborXSearchBoxesT
-#include <mundy_utils/throw_assert.hpp>                        // for MUNDY_THROW_ASSERT, MUNDY_THROW_REQUIRE
+#include <mundy_search/impl/ArborXSearchBoxes.hpp>  // for impl::ArborXSearchBoxesT, impl::PeriodicArborXSearchBoxesT
+#include <mundy_search/impl/NarrowPhaseFilter.hpp>  // for impl::apply_narrow_phase
+#include <mundy_utils/host_ptr.hpp>                 // for host_ptr
+#include <mundy_utils/throw_assert.hpp>             // for MUNDY_THROW_ASSERT, MUNDY_THROW_REQUIRE
 
 namespace mundy {
 
@@ -57,9 +59,7 @@ namespace search {
 /// \class ArborX2dNeighborList
 /// \brief ArborX neighbor list with Cabana-style dense 2D per-target storage.
 ///
-/// This implementation stores target entities, source entities, per-target neighbor counts, and dense rows of source
-/// ordinals. It does not expose compact pair ids through the generic payload.
-/// \tparam MemorySpace Kokkos memory space for owned views.
+/// The uniform per-target row width suits GPU pair-parallel dispatch.
 template <typename MemorySpace = stk::ngp::MemSpace>
 class ArborX2dNeighborList {
  public:
@@ -134,12 +134,12 @@ class ArborX2dNeighborList {
 
   /// \brief Get the selector defining the target chunk.
   const stk::mesh::Selector& target_selector() const noexcept {
-    return target_selector_;
+    return *target_selector_;
   }
 
   /// \brief Get the selector defining the source chunk.
   const stk::mesh::Selector& source_selector() const noexcept {
-    return source_selector_;
+    return *source_selector_;
   }
 
   /// \brief Get the total number of stored neighbor pairs.
@@ -229,9 +229,9 @@ class ArborX2dNeighborList {
   //@{
 
   //! Selector defining the target chunk.
-  stk::mesh::Selector target_selector_;
+  host_ptr<stk::mesh::Selector> target_selector_;
   //! Selector defining the source chunk.
-  stk::mesh::Selector source_selector_;
+  host_ptr<stk::mesh::Selector> source_selector_;
   //! Target entities indexed by dense target ordinal.
   entity_view_t target_entities_;
   //! Source entities indexed by dense source ordinal.
@@ -246,12 +246,9 @@ class ArborX2dNeighborList {
 };
 
 /// \class PeriodicArborX2dNeighborList
-/// \brief ArborX dense 2D neighbor list whose stored entries carry relative periodic image shifts.
+/// \brief ArborX dense 2D neighbor list whose stored entries carry per-object periodic image shifts.
 ///
-/// This layout stores a fixed-width row of source owner ordinals and relative shifts for each target owner. It is
-/// useful when downstream kernels prefer dense per-target neighbor rows over compressed storage.
-/// \tparam MemorySpace Kokkos memory space for owned views.
-/// \tparam ImageShiftScalar Scalar type used by image-shift vectors.
+/// The uniform per-target row width suits GPU pair-parallel dispatch.
 template <typename MemorySpace = stk::ngp::MemSpace, typename ImageShiftScalar = float>
 class PeriodicArborX2dNeighborList {
  public:
@@ -268,6 +265,7 @@ class PeriodicArborX2dNeighborList {
   using count_view_t = Kokkos::View<size_type*, memory_space>;
   using source_index_view_t = Kokkos::View<source_index_type**, memory_space>;
   using image_shift_view_t = Kokkos::View<image_shift_type**, memory_space>;
+  using target_shift_view_t = Kokkos::View<image_shift_type*, memory_space>;
   //@}
 
   //! \name Constructors
@@ -289,28 +287,40 @@ class PeriodicArborX2dNeighborList {
   /// \param target_entities [in] Target owner entities indexed by dense target owner ordinal.
   /// \param source_entities [in] Source owner entities indexed by dense source owner ordinal.
   /// \param neighbor_counts [in] Number of valid entries in each target owner row.
+  /// \param target_image_shifts [in] Per-target-owner image shift (target's original→wrapped reference point).
   /// \param source_owner_indices [in] Dense source owner ordinals in target-by-neighbor rows.
-  /// \param relative_image_shifts [in] Relative image shifts in target-by-neighbor rows.
+  /// \param source_image_shifts [in] Per-pair source owner image shift (original → imaged reference point), in
+  ///        target-by-neighbor rows.
   PeriodicArborX2dNeighborList(const stk::mesh::Selector& target_selector, const stk::mesh::Selector& source_selector,
                                const entity_view_t& target_entities, const entity_view_t& source_entities,
-                               const count_view_t& neighbor_counts, const source_index_view_t& source_owner_indices,
-                               const image_shift_view_t& relative_image_shifts)
+                               const target_shift_view_t& target_image_shifts, const count_view_t& neighbor_counts,
+                               const source_index_view_t& source_owner_indices,
+                               const image_shift_view_t& source_image_shifts)
       : target_selector_(target_selector),
         source_selector_(source_selector),
         target_entities_(target_entities),
         source_entities_(source_entities),
+        target_image_shifts_(target_image_shifts),
         neighbor_counts_(neighbor_counts),
         source_owner_indices_(source_owner_indices),
-        relative_image_shifts_(relative_image_shifts) {
+        source_image_shifts_(source_image_shifts),
+        total_pairs_(0) {
+    MUNDY_THROW_ASSERT(target_image_shifts_.extent(0) == target_entities_.extent(0), std::invalid_argument,
+                       "PeriodicArborX2dNeighborList: target_image_shifts extent must equal num_targets.");
     MUNDY_THROW_ASSERT(neighbor_counts_.extent(0) == target_entities_.extent(0), std::invalid_argument,
                        "PeriodicArborX2dNeighborList: neighbor_counts extent must equal num_targets.");
     MUNDY_THROW_ASSERT(source_owner_indices_.extent(0) == target_entities_.extent(0), std::invalid_argument,
                        "PeriodicArborX2dNeighborList: source_owner_indices row extent must equal num_targets.");
-    MUNDY_THROW_ASSERT(relative_image_shifts_.extent(0) == source_owner_indices_.extent(0) &&
-                           relative_image_shifts_.extent(1) == source_owner_indices_.extent(1),
+    MUNDY_THROW_ASSERT(source_image_shifts_.extent(0) == source_owner_indices_.extent(0) &&
+                           source_image_shifts_.extent(1) == source_owner_indices_.extent(1),
                        std::invalid_argument,
-                       "PeriodicArborX2dNeighborList: relative_image_shifts extent must equal source_owner_indices "
+                       "PeriodicArborX2dNeighborList: source_image_shifts extent must equal source_owner_indices "
                        "extent.");
+    size_type total = 0;
+    Kokkos::parallel_reduce(
+        Kokkos::RangePolicy<execution_space>(0, neighbor_counts_.extent(0)),
+        KOKKOS_LAMBDA(size_type i, size_type & partial_sum) { partial_sum += neighbor_counts_(i); }, total);
+    total_pairs_ = total;
   }
   //@}
 
@@ -331,25 +341,18 @@ class PeriodicArborX2dNeighborList {
 
   /// \brief Get the selector defining the target owner chunk.
   const stk::mesh::Selector& target_selector() const noexcept {
-    return target_selector_;
+    return *target_selector_;
   }
 
   /// \brief Get the selector defining the source owner chunk.
   const stk::mesh::Selector& source_selector() const noexcept {
-    return source_selector_;
+    return *source_selector_;
   }
 
   /// \brief Get the total number of stored periodic neighbor pairs.
-  ///
-  /// This is intentionally a linear scan for this first-pass dense layout. If callers need this frequently, store the
-  /// total during construction instead of introducing a compact pair-id abstraction.
   KOKKOS_INLINE_FUNCTION
-  size_type size() const {
-    size_type total_neighbors = 0;
-    for (size_type target_index = 0; target_index < num_targets(); ++target_index) {
-      total_neighbors += num_neighbors(target_index);
-    }
-    return total_neighbors;
+  size_type size() const noexcept {
+    return total_pairs_;
   }
 
   /// \brief Get the allocated row width for each target owner.
@@ -377,14 +380,24 @@ class PeriodicArborX2dNeighborList {
     return source_owner_indices_(target_index, neighbor_ordinal);
   }
 
-  /// \brief Get the source image shift relative to the target image shift for a stored pair.
+  /// \brief Get the source owner's image shift for a stored pair (displacement from its original to its imaged
+  /// reference point).
   /// \param target_index [in] Dense target owner ordinal.
   /// \param neighbor_ordinal [in] Ordinal in the target's neighbor range.
   KOKKOS_INLINE_FUNCTION
-  image_shift_type relative_image_shift(size_type target_index, size_type neighbor_ordinal) const {
+  image_shift_type source_image_shift(size_type target_index, size_type neighbor_ordinal) const {
     MUNDY_THROW_ASSERT(neighbor_ordinal < num_neighbors(target_index), std::out_of_range,
-                       "PeriodicArborX2dNeighborList::relative_image_shift neighbor ordinal out of range.");
-    return relative_image_shifts_(target_index, neighbor_ordinal);
+                       "PeriodicArborX2dNeighborList::source_image_shift neighbor ordinal out of range.");
+    return source_image_shifts_(target_index, neighbor_ordinal);
+  }
+
+  /// \brief Get a target owner's image shift: the displacement from its original to its imaged reference point.
+  /// \param target_index [in] Dense target owner ordinal.
+  KOKKOS_INLINE_FUNCTION
+  image_shift_type target_image_shift(size_type target_index) const {
+    MUNDY_THROW_ASSERT(target_index < num_targets(), std::out_of_range,
+                       "PeriodicArborX2dNeighborList::target_image_shift target index out of range.");
+    return target_image_shifts_(target_index);
   }
 
   /// \brief Get the neighbor owner entity for a target owner and neighbor ordinal.
@@ -437,10 +450,16 @@ class PeriodicArborX2dNeighborList {
     return source_owner_indices_;
   }
 
-  /// \brief Get the raw dense relative-image-shift view.
+  /// \brief Get the raw dense source-image-shift view.
   KOKKOS_INLINE_FUNCTION
-  image_shift_view_t relative_image_shifts() const noexcept {
-    return relative_image_shifts_;
+  image_shift_view_t source_image_shifts() const noexcept {
+    return source_image_shifts_;
+  }
+
+  /// \brief Get the raw per-target-owner image-shift view.
+  KOKKOS_INLINE_FUNCTION
+  target_shift_view_t target_image_shifts() const noexcept {
+    return target_image_shifts_;
   }
   //@}
 
@@ -449,19 +468,23 @@ class PeriodicArborX2dNeighborList {
   //@{
 
   //! Selector defining the target owner chunk.
-  stk::mesh::Selector target_selector_;
+  host_ptr<stk::mesh::Selector> target_selector_;
   //! Selector defining the source owner chunk.
-  stk::mesh::Selector source_selector_;
+  host_ptr<stk::mesh::Selector> source_selector_;
   //! Target owner entities indexed by dense target owner ordinal.
   entity_view_t target_entities_;
   //! Source owner entities indexed by dense source owner ordinal.
   entity_view_t source_entities_;
+  //! Per-target-owner image shift (original→wrapped reference point), indexed by dense target owner ordinal.
+  target_shift_view_t target_image_shifts_;
   //! Number of valid entries in each dense target-owner row.
   count_view_t neighbor_counts_;
   //! Dense per-target source owner ordinals.
   source_index_view_t source_owner_indices_;
   //! Dense per-target source-image shift minus target-image shift values.
-  image_shift_view_t relative_image_shifts_;
+  image_shift_view_t source_image_shifts_;
+  //! Total number of stored neighbor pairs, computed once at construction.
+  size_type total_pairs_ = 0;
   //@}
 };
 
@@ -473,14 +496,15 @@ class PeriodicArborX2dNeighborList {
 /// \brief Build traits for `ArborX2dNeighborList`: non-periodic ArborX dense 2D storage.
 ///
 /// The build runs ArborX's two-pass count/fill flow over non-periodic boxes, applies the builder's excluder chain,
-/// and returns dense per-target source rows. Declaration only for this design pass; the definition runs ArborX.
-/// \tparam MemorySpace Kokkos memory space for the returned list.
+/// and returns dense per-target source rows.
 template <typename MemorySpace>
 struct NeighborListBuildTraits<ArborX2dNeighborList<MemorySpace>> {
   //! \name Aliases
   //@{
 
   using list_type = ArborX2dNeighborList<MemorySpace>;
+  /// Internal build-buffer type: the build generates search boxes from the component input and wraps them here.
+  /// Not a public input type.
   using target_input_type = impl::ArborXSearchBoxesT<MemorySpace>;
   using source_input_type = impl::ArborXSearchBoxesT<MemorySpace>;
   //@}
@@ -489,22 +513,23 @@ struct NeighborListBuildTraits<ArborX2dNeighborList<MemorySpace>> {
   //@{
 
   /// \brief Build-specific parameters for `ArborX2dNeighborList`.
-  struct args_type {
-    int buffer_size = 0;  ///< Optional maximum-neighbor preallocation guess.
-  };
+  ///
+  /// TODO(palmerb4): Performance benchmark and test the benefit of supporting a buffer_size guess, as offered by
+  /// Cabana's make2DNeighborList.
+  struct args_type {};
   //@}
 
   //! \name Build
   //@{
 
   /// \brief Build the list from a complete builder and BulkData.
-  /// \tparam Builder Complete `NeighborListBuilder` type carrying exec space, inputs, and excluder.
-  /// \param builder [in] Complete builder. Target and source inputs must be `ArborXSearchBoxesT<MemorySpace>`.
+  ///
+  /// \param builder [in] Complete builder. Target and source inputs are AABB-yielding component `SearchInput`s.
   /// \param bulk_data [in] STK bulk data for excluder setup.
   /// \param args [in] Build-specific parameters.
   template <typename Builder>
-    requires std::same_as<typename Builder::target_input_type, target_input_type> &&
-             std::same_as<typename Builder::source_input_type, source_input_type>
+    requires AABBSearchInputType<typename Builder::target_input_type> &&
+             AABBSearchInputType<typename Builder::source_input_type>
   static list_type build(const Builder& builder, const stk::mesh::BulkData& bulk_data, const args_type& args);
   //@}
 };
@@ -513,15 +538,15 @@ struct NeighborListBuildTraits<ArborX2dNeighborList<MemorySpace>> {
 /// \brief Build traits for `PeriodicArborX2dNeighborList`: periodic ArborX dense 2D storage.
 ///
 /// The build runs ArborX's periodic count/fill flow, collapses image matches to owner ordinals, and stores a
-/// relative image shift in the same dense slot as each source owner ordinal. Declaration only for this design pass.
-/// \tparam MemorySpace Kokkos memory space for the returned list.
-/// \tparam ImageShiftScalar Scalar type used by image-shift vectors.
+/// source image shift in the same dense slot as each source owner ordinal.
 template <typename MemorySpace, typename ImageShiftScalar>
 struct NeighborListBuildTraits<PeriodicArborX2dNeighborList<MemorySpace, ImageShiftScalar>> {
   //! \name Aliases
   //@{
 
   using list_type = PeriodicArborX2dNeighborList<MemorySpace, ImageShiftScalar>;
+  /// Internal build-buffer type: the build generates periodic image boxes from the component input and wraps them
+  /// here. Not a public input type.
   using target_input_type = impl::PeriodicArborXSearchBoxesT<MemorySpace, ImageShiftScalar>;
   using source_input_type = impl::PeriodicArborXSearchBoxesT<MemorySpace, ImageShiftScalar>;
   //@}
@@ -530,23 +555,23 @@ struct NeighborListBuildTraits<PeriodicArborX2dNeighborList<MemorySpace, ImageSh
   //@{
 
   /// \brief Build-specific parameters for `PeriodicArborX2dNeighborList`.
-  struct args_type {
-    int buffer_size = 0;  ///< Optional maximum-neighbor preallocation guess.
-  };
+  ///
+  /// TODO(palmerb4): Performance benchmark and test the benefit of supporting a buffer_size guess, as offered by
+  /// Cabana's make2DNeighborList.
+  struct args_type {};
   //@}
 
   //! \name Build
   //@{
 
   /// \brief Build the list from a complete builder and BulkData.
-  /// \tparam Builder Complete `NeighborListBuilder` type carrying exec space, inputs, and excluder.
-  /// \param builder [in] Complete builder. Target and source inputs must be
-  ///                     `PeriodicArborXSearchBoxesT<MemorySpace, ImageShiftScalar>`.
+  ///
+  /// \param builder [in] Complete builder. Target and source inputs are AABB-yielding `PeriodicSearchInput`s.
   /// \param bulk_data [in] STK bulk data for excluder setup.
   /// \param args [in] Build-specific parameters.
   template <typename Builder>
-    requires std::same_as<typename Builder::target_input_type, target_input_type> &&
-             std::same_as<typename Builder::source_input_type, source_input_type>
+    requires PeriodicAABBSearchInputType<typename Builder::target_input_type> &&
+             PeriodicAABBSearchInputType<typename Builder::source_input_type>
   static list_type build(const Builder& builder, const stk::mesh::BulkData& bulk_data, const args_type& args);
   //@}
 };
@@ -558,37 +583,43 @@ struct NeighborListBuildTraits<PeriodicArborX2dNeighborList<MemorySpace, ImageSh
 /// \brief Build an `ArborX2dNeighborList` using a two-pass count/fill strategy.
 ///
 /// First pass counts surviving neighbors per target and locates the maximum count to size the dense 2D view. The
-/// second pass fills each target's row. `args.buffer_size` is currently not used; callers needing a single-pass
-/// buffer optimization may extend this implementation.
+/// second pass fills each target's row.
 template <typename MemorySpace>
 template <typename Builder>
-  requires std::same_as<typename Builder::target_input_type, impl::ArborXSearchBoxesT<MemorySpace>> &&
-           std::same_as<typename Builder::source_input_type, impl::ArborXSearchBoxesT<MemorySpace>>
-ArborX2dNeighborList<MemorySpace>
-NeighborListBuildTraits<ArborX2dNeighborList<MemorySpace>>::build(const Builder& builder,
-                                                                   const stk::mesh::BulkData& bulk_data,
-                                                                   const args_type& args) {
+  requires AABBSearchInputType<typename Builder::target_input_type> &&
+           AABBSearchInputType<typename Builder::source_input_type>
+ArborX2dNeighborList<MemorySpace> NeighborListBuildTraits<ArborX2dNeighborList<MemorySpace>>::build(
+    const Builder& builder, const stk::mesh::BulkData& bulk_data, const args_type& args) {
   MUNDY_THROW_REQUIRE(bulk_data.parallel_size() == 1, std::invalid_argument,
                       "ArborX2dNeighborList build currently supports only single-process runs.");
 
   using exec_space = typename Builder::execution_space;
   using size_type = typename list_type::size_type;
   using factory_type = impl::ArborXSearchCandidateFactory<target_input_type, source_input_type>;
-  using excluder_type = typename Builder::excluder_type;
-  using count_cb_t = impl::ArborX2dCountCallback<target_input_type, source_input_type, excluder_type>;
-  using fill_cb_t = impl::ArborX2dFillCallback<target_input_type, source_input_type, excluder_type>;
+  using broad_excluder_type = typename Builder::broad_excluder_type;
+  using count_cb_t = impl::ArborX2dCountCallback<target_input_type, source_input_type, broad_excluder_type>;
+  using fill_cb_t = impl::ArborX2dFillCallback<target_input_type, source_input_type, broad_excluder_type>;
 
-  const auto& target_boxes = builder.target_input();
-  const auto& source_boxes = builder.source_input();
   const auto exec_sp = builder.exec_space();
-  const auto excluder = builder.setup_excluder(bulk_data);
+
+  // Generate broad-phase ArborX boxes from the component inputs, then wrap them in the internal build-buffer type
+  // (ArborXSearchBoxesT) so the ArborX BVH / AccessTraits / candidate-factory machinery below is unchanged.
+  auto target_in = builder.target_input();
+  auto source_in = builder.source_input();
+  auto target_gen =
+      impl::make_arborx_search_boxes(bulk_data, exec_sp, target_in.rank(), target_in.selector(), target_in.component());
+  auto source_gen =
+      impl::make_arborx_search_boxes(bulk_data, exec_sp, source_in.rank(), source_in.selector(), source_in.component());
+  const target_input_type target_boxes(target_in.selector(), target_gen.second, target_gen.first);
+  const source_input_type source_boxes(source_in.selector(), source_gen.second, source_gen.first);
+
+  const auto excluder = builder.setup_broad_excluder(bulk_data);
   const size_type num_targets = target_boxes.size();
 
   factory_type factory(target_boxes, source_boxes);
 
 #if ARBORX_VERSION >= 10799
-  ArborX::BoundingVolumeHierarchy bvh(exec_sp,
-                                      ArborX::Experimental::attach_indices<int>(source_boxes.boxes()));
+  ArborX::BoundingVolumeHierarchy bvh(exec_sp, ArborX::Experimental::attach_indices<int>(source_boxes.boxes()));
 #else
   ArborX::BVH<MemorySpace> bvh(exec_sp, source_boxes);
 #endif
@@ -600,12 +631,12 @@ NeighborListBuildTraits<ArborX2dNeighborList<MemorySpace>>::build(const Builder&
 
   // Find maximum per-target count to size the dense 2D view.
   size_type max_neighbors = 0;
-  Kokkos::parallel_reduce("mundy_search_2d_max",
-                          Kokkos::RangePolicy<exec_space>(0, num_targets),
-                          KOKKOS_LAMBDA(size_type i, size_type& local_max) {
-                            if (neighbor_counts(i) > local_max) local_max = neighbor_counts(i);
-                          },
-                          Kokkos::Max<size_type>(max_neighbors));
+  Kokkos::parallel_reduce(
+      "mundy_search_2d_max", Kokkos::RangePolicy<exec_space>(0, num_targets),
+      KOKKOS_LAMBDA(size_type i, size_type & local_max) {
+        if (neighbor_counts(i) > local_max) local_max = neighbor_counts(i);
+      },
+      Kokkos::Max<size_type>(max_neighbors));
 
   Kokkos::View<size_type**, MemorySpace> source_indices("mundy_search_2d_src_idx", num_targets, max_neighbors);
   Kokkos::View<size_type*, MemorySpace> write_positions("mundy_search_2d_wpos", num_targets);
@@ -617,8 +648,7 @@ NeighborListBuildTraits<ArborX2dNeighborList<MemorySpace>>::build(const Builder&
   if (builder.sort_neighbors()) {
     // Sort each target's dense neighbor row by ascending source ordinal.
     Kokkos::parallel_for(
-        "mundy_search_2d_sort_rows", Kokkos::RangePolicy<exec_space>(0, num_targets),
-        KOKKOS_LAMBDA(size_type t) {
+        "mundy_search_2d_sort_rows", Kokkos::RangePolicy<exec_space>(0, num_targets), KOKKOS_LAMBDA(size_type t) {
           const size_type n = neighbor_counts(t);
           for (size_type i = 1; i < n; ++i) {
             const size_type key = source_indices(t, i);
@@ -632,8 +662,18 @@ NeighborListBuildTraits<ArborX2dNeighborList<MemorySpace>>::build(const Builder&
         });
   }
 
-  return list_type(builder.target_selector(), builder.source_selector(), target_boxes.entities(),
-                   source_boxes.entities(), neighbor_counts, source_indices);
+  // Narrow phase: re-pack the 2D grid after filtering survivors per row.
+  if constexpr (Builder::has_narrow_phase) {
+    const auto narrow_excluder = builder.setup_narrow_excluder(bulk_data);
+    auto [narrow_counts, narrow_src] =
+        impl::apply_narrow_phase_2d(exec_sp, narrow_excluder, target_boxes.identities(),
+                                    source_boxes.identities(), source_indices, neighbor_counts);
+    return list_type(builder.target_selector(), builder.source_selector(), target_boxes.identities(),
+                     source_boxes.identities(), narrow_counts, narrow_src);
+  }
+
+  return list_type(builder.target_selector(), builder.source_selector(), target_boxes.identities(),
+                   source_boxes.identities(), neighbor_counts, source_indices);
 }
 
 // -----------------------------------------------------------------------
@@ -644,13 +684,11 @@ NeighborListBuildTraits<ArborX2dNeighborList<MemorySpace>>::build(const Builder&
 ///
 /// ArborX returns image ordinals; the count callback maps each surviving hit to the target owner ordinal.
 /// The maximum per-owner count sizes the dense 2D views. The fill callback writes source owner ordinals and
-/// relative image shifts into the allocated rows.
+/// source image shifts into the allocated rows.
 template <typename MemorySpace, typename ImageShiftScalar>
 template <typename Builder>
-  requires std::same_as<typename Builder::target_input_type,
-                        impl::PeriodicArborXSearchBoxesT<MemorySpace, ImageShiftScalar>> &&
-           std::same_as<typename Builder::source_input_type,
-                        impl::PeriodicArborXSearchBoxesT<MemorySpace, ImageShiftScalar>>
+  requires PeriodicAABBSearchInputType<typename Builder::target_input_type> &&
+           PeriodicAABBSearchInputType<typename Builder::source_input_type>
 PeriodicArborX2dNeighborList<MemorySpace, ImageShiftScalar>
 NeighborListBuildTraits<PeriodicArborX2dNeighborList<MemorySpace, ImageShiftScalar>>::build(
     const Builder& builder, const stk::mesh::BulkData& bulk_data, const args_type& args) {
@@ -661,22 +699,36 @@ NeighborListBuildTraits<PeriodicArborX2dNeighborList<MemorySpace, ImageShiftScal
   using size_type = typename list_type::size_type;
   using image_shift_type = typename list_type::image_shift_type;
   using factory_type = impl::PeriodicArborXSearchCandidateFactory<target_input_type, source_input_type>;
-  using excluder_type = typename Builder::excluder_type;
-  using count_cb_t = impl::ArborXPeriodicCountCallback<target_input_type, source_input_type, excluder_type>;
+  using broad_excluder_type = typename Builder::broad_excluder_type;
+  using count_cb_t = impl::ArborXPeriodicCountCallback<target_input_type, source_input_type, broad_excluder_type>;
   using fill_cb_t =
-      impl::ArborXPeriodic2dFillCallback<target_input_type, source_input_type, excluder_type, image_shift_type>;
+      impl::ArborXPeriodic2dFillCallback<target_input_type, source_input_type, broad_excluder_type, image_shift_type>;
 
-  const auto& target_boxes = builder.target_input();
-  const auto& source_boxes = builder.source_input();
   const auto exec_sp = builder.exec_space();
-  const auto excluder = builder.setup_excluder(bulk_data);
-  const size_type num_target_owners = target_boxes.num_owners();
 
-  factory_type factory(target_boxes, source_boxes);
+  // Generate backend-neutral periodic images from the component inputs (targets: 1 image/owner; sources: ≤27 pruned
+  // by the union target bbox), then pack them into ArborX search boxes (boxes + per-image identities). The neutral
+  // images also carry the dense per-owner entities and the source image→owner-ordinal map the final list needs.
+  auto target_in = builder.target_input();
+  auto source_in = builder.source_input();
+  auto target_images = impl::make_periodic_target_images<ImageShiftScalar>(
+      bulk_data, exec_sp, target_in.rank(), target_in.selector(), target_in.component(), target_in.periodic_metric());
+  const auto target_bbox = impl::periodic_images_bounding_box(exec_sp, target_images);
+  auto source_images = impl::make_periodic_source_images<ImageShiftScalar>(bulk_data, exec_sp, source_in.rank(),
+                                                                           source_in.selector(), source_in.component(),
+                                                                           source_in.periodic_metric(), target_bbox);
+  target_input_type target_boxes =
+      impl::pack_periodic_arborx_search_boxes(exec_sp, target_in.selector(), target_images);
+  source_input_type source_boxes =
+      impl::pack_periodic_arborx_search_boxes(exec_sp, source_in.selector(), source_images);
+
+  const auto excluder = builder.setup_broad_excluder(bulk_data);
+  const size_type num_target_owners = target_images.owner_entities.extent(0);
+
+  factory_type factory(target_boxes, source_boxes, source_images.owner_indices);
 
 #if ARBORX_VERSION >= 10799
-  ArborX::BoundingVolumeHierarchy bvh(exec_sp,
-                                      ArborX::Experimental::attach_indices<int>(source_boxes.boxes()));
+  ArborX::BoundingVolumeHierarchy bvh(exec_sp, ArborX::Experimental::attach_indices<int>(source_boxes.boxes()));
 #else
   ArborX::BVH<MemorySpace> bvh(exec_sp, source_boxes);
 #endif
@@ -688,48 +740,59 @@ NeighborListBuildTraits<PeriodicArborX2dNeighborList<MemorySpace, ImageShiftScal
 
   // Find maximum per-owner count to size the dense 2D views.
   size_type max_neighbors = 0;
-  Kokkos::parallel_reduce("mundy_search_per2d_max",
-                          Kokkos::RangePolicy<exec_space>(0, num_target_owners),
-                          KOKKOS_LAMBDA(size_type i, size_type& local_max) {
-                            if (owner_counts(i) > local_max) local_max = owner_counts(i);
-                          },
-                          Kokkos::Max<size_type>(max_neighbors));
+  Kokkos::parallel_reduce(
+      "mundy_search_per2d_max", Kokkos::RangePolicy<exec_space>(0, num_target_owners),
+      KOKKOS_LAMBDA(size_type i, size_type & local_max) {
+        if (owner_counts(i) > local_max) local_max = owner_counts(i);
+      },
+      Kokkos::Max<size_type>(max_neighbors));
 
   Kokkos::View<size_type**, MemorySpace> source_owner_indices("mundy_search_per2d_soi", num_target_owners,
                                                               max_neighbors);
-  Kokkos::View<image_shift_type**, MemorySpace> relative_image_shifts("mundy_search_per2d_ris", num_target_owners,
-                                                                      max_neighbors);
+  Kokkos::View<image_shift_type**, MemorySpace> source_image_shifts("mundy_search_per2d_ris", num_target_owners,
+                                                                    max_neighbors);
   Kokkos::View<size_type*, MemorySpace> write_positions("mundy_search_per2d_wpos", num_target_owners);
   Kokkos::deep_copy(write_positions, size_type(0));
 
-  // Pass 2: fill source owner ordinals and relative image shifts.
+  // Pass 2: fill source owner ordinals and source image shifts.
   bvh.query(exec_sp, target_boxes,
-            fill_cb_t(factory, excluder, write_positions, source_owner_indices, relative_image_shifts));
+            fill_cb_t(factory, excluder, write_positions, source_owner_indices, source_image_shifts));
 
   if (builder.sort_neighbors()) {
     // Sort each target owner's dense neighbor row by ascending source owner ordinal, keeping
-    // relative_image_shifts in sync so each pair's shift stays with its source ordinal.
+    // source_image_shifts in sync so each pair's shift stays with its source ordinal.
     Kokkos::parallel_for(
         "mundy_search_per2d_sort_rows", Kokkos::RangePolicy<exec_space>(0, num_target_owners),
         KOKKOS_LAMBDA(size_type t) {
           const size_type n = owner_counts(t);
           for (size_type i = 1; i < n; ++i) {
-            const size_type        key_idx   = source_owner_indices(t, i);
-            const image_shift_type key_shift = relative_image_shifts(t, i);
+            const size_type key_idx = source_owner_indices(t, i);
+            const image_shift_type key_shift = source_image_shifts(t, i);
             size_type j = i;
             while (j > 0 && source_owner_indices(t, j - 1) > key_idx) {
-              source_owner_indices(t, j)  = source_owner_indices(t, j - 1);
-              relative_image_shifts(t, j) = relative_image_shifts(t, j - 1);
+              source_owner_indices(t, j) = source_owner_indices(t, j - 1);
+              source_image_shifts(t, j) = source_image_shifts(t, j - 1);
               --j;
             }
-            source_owner_indices(t, j)  = key_idx;
-            relative_image_shifts(t, j) = key_shift;
+            source_owner_indices(t, j) = key_idx;
+            source_image_shifts(t, j) = key_shift;
           }
         });
   }
 
-  return list_type(builder.target_selector(), builder.source_selector(), target_boxes.owner_entities(),
-                   source_boxes.owner_entities(), owner_counts, source_owner_indices, relative_image_shifts);
+  // Narrow phase: re-pack the periodic 2D grid after filtering survivors per row.
+  if constexpr (Builder::has_narrow_phase) {
+    const auto narrow_excluder = builder.setup_narrow_excluder(bulk_data);
+    auto [narrow_counts, narrow_src, narrow_shifts] = impl::apply_narrow_phase_2d(
+        exec_sp, narrow_excluder, target_images.owner_entities, source_images.owner_entities,
+        target_images.shifts, source_owner_indices, source_image_shifts, owner_counts);
+    return list_type(builder.target_selector(), builder.source_selector(), target_images.owner_entities,
+                     source_images.owner_entities, target_images.shifts, narrow_counts, narrow_src, narrow_shifts);
+  }
+
+  return list_type(builder.target_selector(), builder.source_selector(), target_images.owner_entities,
+                   source_images.owner_entities, target_images.shifts, owner_counts, source_owner_indices,
+                   source_image_shifts);
 }
 
 }  // namespace search

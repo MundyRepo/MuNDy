@@ -270,7 +270,12 @@ TEST(UnitTestLinkDataObserver, EntireBucketDeleted) {
   }
 }
 
-TEST(UnitTestLinkDataObserver, LinkedEntityBucketOrdinalStaleThrows) {
+// When a linked entity changes parts it moves to a different STK bucket, invalidating the CRS
+// structure.  The observer fires and marks the CRS dirty.  update_crs_from_coo() should then
+// rebuild the CRS successfully: the entity handle and ID/rank are still valid, and
+// get_linked_entity_index() always derives the current FastMeshIndex from the live entity rather
+// than from a stale cached bucket position.
+TEST(UnitTestLinkDataObserver, LinkedEntityChangedParts_CsrRebuildSucceeds) {
   for (bool commit_mesh : {false, true}) {
     LinkDataObserverFixture fixture(default_bucket_capacity, commit_mesh);
     LinkTriple baseline = create_connected_dim2_link(fixture, stk::topology::NODE_RANK, stk::topology::NODE_RANK);
@@ -280,7 +285,7 @@ TEST(UnitTestLinkDataObserver, LinkedEntityBucketOrdinalStaleThrows) {
     fixture.bulk_data->change_entity_parts(linked_entity, stk::mesh::PartVector{fixture.linked_node_part});
     fixture.bulk_data->modification_end();
 
-    expect_rebuild_then_throw(fixture);
+    expect_rebuild_then_update(fixture);
   }
 }
 

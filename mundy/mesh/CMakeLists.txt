@@ -21,10 +21,10 @@ set(NOINSTALLHEADERS
     src/mundy_mesh/DeclareEntities.hpp
     src/mundy_mesh/DeclareField.hpp
     src/mundy_mesh/DeclarePart.hpp
+    src/mundy_mesh/EntityIndices.hpp
     src/mundy_mesh/FieldComponent.hpp
     src/mundy_mesh/FieldViews.hpp
     src/mundy_mesh/ForEachEntity.hpp
-
     # src/mundy_mesh/GenNeighborLinkers.hpp
     src/mundy_mesh/GetNgpLinkData.hpp
     src/mundy_mesh/impl/DeclareFieldImpl.hpp
@@ -65,8 +65,6 @@ set(NOINSTALLHEADERS
     src/mundy_mesh/LinkCSRData.hpp
     src/mundy_mesh/LinkCSRPartition.hpp
     src/mundy_mesh/LinkData.hpp
-    src/mundy_mesh/LinkDeclarationRequests.hpp
-    src/mundy_mesh/LinkDestructionRequests.hpp
     src/mundy_mesh/LinkMetaData.hpp
     src/mundy_mesh/MeshBuilder.hpp
     src/mundy_mesh/MetaData.hpp
@@ -86,6 +84,7 @@ set(NOINSTALLHEADERS
 
 set(SOURCES
     src/mundy_mesh/DeclareEntities.cpp
+    src/mundy_mesh/impl/ClassPartitionKey.cpp
     src/mundy_mesh/impl/PartitionKey.cpp
     src/mundy_mesh/impl/SelectorEval.cpp
     src/mundy_mesh/impl/SelectorLexem.cpp

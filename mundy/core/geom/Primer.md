@@ -1,5 +1,7 @@
 # MundyGeom {#MundyGeom}
 
+\brief Geometric primitives and utilities.
+
 See the \ref mundy/core/geom "MundyGeom directory reference".
 
 This subpackage contains small Kokkos-friendly geometric primitives and the free functions that act on them. The core

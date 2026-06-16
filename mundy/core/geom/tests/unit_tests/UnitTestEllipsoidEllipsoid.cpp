@@ -24,6 +24,7 @@
 
 // C++ core
 #include <algorithm>   // for std::max
+#include <chrono>      // for std::chrono
 #include <concepts>    // for std::convertible_to
 #include <functional>  // for std::hash
 #include <string>      // for std::string
@@ -240,6 +241,79 @@ TEST(SharedNormalDistanceBetweenEllipsoids, AnalyticalEllipsoidTestCases) {
     run_case_4(0.0);
   }
 }
+
+// ============================================================
+//! \name Head-to-head: finite-diff baseline vs. default (FDF)
+//@{
+// ============================================================
+
+/// \brief Generate a random true ellipsoid (not a sphere) within the given bounds.
+static Ellipsoid<double> random_ellipsoid(openrand::Philox& rng, double xyz_range, double r_min, double r_max,
+                                         double min_aspect) {
+  constexpr double pi = Kokkos::numbers::pi_v<double>;
+  Point<double> center{rng.rand<double>() * xyz_range - xyz_range * 0.5,
+                       rng.rand<double>() * xyz_range - xyz_range * 0.5,
+                       rng.rand<double>() * xyz_range - xyz_range * 0.5};
+  const auto orient = mundy::euler_to_quat(rng.rand<double>() * 2.0 * pi, rng.rand<double>() * 2.0 * pi,
+                                           rng.rand<double>() * 2.0 * pi);
+  const double r = rng.rand<double>() * (r_max - r_min) + r_min;
+  const double a1 = r;
+  const double a2 = r * (rng.rand<double>() * (1.0 / min_aspect - min_aspect) + min_aspect);
+  const double a3 = r * (rng.rand<double>() * (1.0 / min_aspect - min_aspect) + min_aspect);
+  return Ellipsoid<double>(center, orient, a1, a2, a3);
+}
+
+TEST(SharedNormalDistanceBetweenEllipsoids_HeadToHead, AccuracyAgreement) {
+  // SharedNormalSigned (FDF default) must agree with SharedNormalSignedFiniteDiff (baseline)
+  // on the signed separation distance for a wide variety of random ellipsoid pairs.
+  openrand::Philox rng = make_philox(generate_test_seed(), 0);
+  constexpr size_t n = MUNDY_GEOM_TESTS_UNIT_TESTS_ELLIPSOID_ELLIPSOID_DISTANCE_NUM_SAMPLES_PER_TEST;
+
+  size_t disagreements = 0;
+  for (size_t i = 0; i < n; ++i) {
+    const auto e0 = random_ellipsoid(rng, 20.0, 0.5, 3.0, 0.3);
+    const auto e1 = random_ellipsoid(rng, 20.0, 0.5, 3.0, 0.3);
+    const double d_fd  = distance(SharedNormalSignedFiniteDiff{}, e0, e1);
+    const double d_fdf = distance(SharedNormalSigned{},           e0, e1);
+    if (std::abs(d_fd - d_fdf) > TEST_DOUBLE_EPSILON) {
+      ++disagreements;
+      EXPECT_NEAR(d_fd, d_fdf, TEST_DOUBLE_EPSILON) << "pair " << i;
+    }
+  }
+  EXPECT_LE(disagreements, n / 1000) << disagreements << " / " << n << " pairs disagreed";
+}
+
+TEST(SharedNormalDistanceBetweenEllipsoids_HeadToHead, TimingComparison) {
+  openrand::Philox rng = make_philox(generate_test_seed(), 0);
+  constexpr size_t n = MUNDY_GEOM_TESTS_UNIT_TESTS_ELLIPSOID_ELLIPSOID_DISTANCE_NUM_SAMPLES_PER_TEST;
+
+  std::vector<std::pair<Ellipsoid<double>, Ellipsoid<double>>> pairs;
+  pairs.reserve(n);
+  for (size_t i = 0; i < n; ++i)
+    pairs.emplace_back(random_ellipsoid(rng, 20.0, 0.5, 3.0, 0.3), random_ellipsoid(rng, 20.0, 0.5, 3.0, 0.3));
+
+  double sink_fd = 0.0, sink_fdf = 0.0;
+
+  const auto t0 = std::chrono::high_resolution_clock::now();
+  for (const auto& [e0, e1] : pairs) sink_fd  += distance(SharedNormalSignedFiniteDiff{}, e0, e1);
+  const auto t1 = std::chrono::high_resolution_clock::now();
+  for (const auto& [e0, e1] : pairs) sink_fdf += distance(SharedNormalSigned{},           e0, e1);
+  const auto t2 = std::chrono::high_resolution_clock::now();
+
+  ASSERT_FALSE(std::isnan(sink_fd));
+  ASSERT_FALSE(std::isnan(sink_fdf));
+
+  const double ms_fd  = std::chrono::duration<double, std::milli>(t1 - t0).count();
+  const double ms_fdf = std::chrono::duration<double, std::milli>(t2 - t1).count();
+
+  std::cout << "  [EllipsoidEllipsoid distance, n=" << n << "]\n"
+            << "    FiniteDiff (baseline): " << ms_fd  << " ms  (1.00x)\n"
+            << "    SharedNormalSigned:    " << ms_fdf << " ms  (" << ms_fd / ms_fdf << "x)\n";
+
+  EXPECT_GT(ms_fd / ms_fdf, 0.8) << "default (FDF) unexpectedly slower than finite-diff baseline";
+}
+
+//@}
 
 }  // namespace
 

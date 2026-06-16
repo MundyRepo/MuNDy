@@ -42,6 +42,7 @@ include("${${PROJECT_NAME}_TRIBITS_DIR}/TriBITS.cmake")
 # Pull in our custom TriBITS functions
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/MundyTribitsInstallDirectories.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/MundyTribitsAddLibrary.cmake")
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/MundyTribitsAddExecutableAndTest.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/MundyTribitsProject.cmake")
 
 # Mundy only has one project so just enable it :-)

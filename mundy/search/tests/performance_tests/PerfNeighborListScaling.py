@@ -28,6 +28,10 @@ Usage
   --search arborx|stk   Which neighbor-list backend to benchmark  (default: arborx)
 """
 
+import numpy as np
+import matplotlib.ticker as ticker
+import matplotlib.patches as mpatches
+import matplotlib.lines as mlines
 import argparse
 import os
 import re
@@ -44,10 +48,6 @@ try:
 except Exception:
     _INTERACTIVE = False
     plt.switch_backend("Agg")
-import matplotlib.lines as mlines
-import matplotlib.patches as mpatches
-import matplotlib.ticker as ticker
-import numpy as np
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Visual style
@@ -57,20 +57,23 @@ import numpy as np
 #   marker shape — "o" (circle) = 1d list, "s" (square) = 2d list, "D" (diamond) = other
 #   fill style   — solid = Full list,  hollow (mfc='none') = Half list
 #   line style   — solid "-" = Full list,  dashed "--" = Half list
+
+
 def _variant_props(name):
     """Return ax.plot / Line2D kwargs encoding dimension and full/half from the variant name."""
     marker = "o" if "1d" in name else ("s" if "2d" in name else "D")
-    half   = "Half" in name
-    props  = dict(
-        linestyle       = "--" if half else "-",
-        marker          = marker,
-        markersize      = 8,
-        linewidth       = 1.8,
-        markeredgewidth = 1.5 if half else 0.5,
+    half = "Half" in name
+    props = dict(
+        linestyle="--" if half else "-",
+        marker=marker,
+        markersize=8,
+        linewidth=1.8,
+        markeredgewidth=1.5 if half else 0.5,
     )
     if half:
         props["markerfacecolor"] = "none"
     return props
+
 
 # Short display titles for each section (keyed to the strings emitted by --simple)
 _SECTION_LABELS = {
@@ -120,8 +123,8 @@ def run_bench(exe, nthreads, omp_bind="spread",
     """Run with nthreads OpenMP threads; return stdout text (stderr discarded)."""
     env = os.environ.copy()
     env["OMP_NUM_THREADS"] = str(nthreads)
-    env["OMP_PROC_BIND"]   = omp_bind
-    env["OMP_PLACES"]      = "cores"
+    env["OMP_PROC_BIND"] = omp_bind
+    env["OMP_PLACES"] = "cores"
     cmd = [exe, "--simple", f"--kokkos-num-threads={nthreads}",
            "--search", search]
     if sort_targets:
@@ -145,10 +148,10 @@ def run_bench(exe, nthreads, omp_bind="spread",
 # ──────────────────────────────────────────────────────────────────────────────
 
 _SECTION_RE = re.compile(r"^\[(.+?)\]\s+\(median .+?\)")
-_N_RE        = re.compile(r"N=(\d+)")
+_N_RE = re.compile(r"N=(\d+)")
 # Matches either a time value ("12.34 us") or the missing-data sentinel ("---")
-_ENTRY_RE    = re.compile(r"(\d+\.\d+)\s+(ns|us|ms)|(---)")
-_SCALE       = {"ns": 1.0, "us": 1e3, "ms": 1e6}
+_ENTRY_RE = re.compile(r"(\d+\.\d+)\s+(ns|us|ms)|(---)")
+_SCALE = {"ns": 1.0, "us": 1e3, "ms": 1e6}
 
 
 def _to_ns(val_str, unit):
@@ -161,9 +164,9 @@ def parse_output(text):
     Missing data points ("---", e.g. the N² baseline at large N) are stored
     as float('nan') so they can be skipped cleanly during plotting.
     """
-    data    = {}
+    data = {}
     current = None
-    n_vals  = []
+    n_vals = []
 
     for line in text.splitlines():
         stripped = line.strip()
@@ -183,7 +186,7 @@ def parse_output(text):
                 and not stripped.startswith("-")):
             colon = stripped.index(":")
             label = stripped[:colon].strip()
-            rest  = stripped[colon + 1:]
+            rest = stripped[colon + 1:]
             times = []
             for val, unit, dash in _ENTRY_RE.findall(rest):
                 if dash:
@@ -226,8 +229,8 @@ def plot_scaling(all_data, thread_counts, out_prefix="neighbor_list", search="ar
     One line per (variant, N) pair.  Colours encode N; line styles encode variant.
     """
     ref_threads = thread_counts[0]
-    ref         = all_data[ref_threads]
-    sects       = [s for s in ref if ref[s]]
+    ref = all_data[ref_threads]
+    sects = [s for s in ref if ref[s]]
 
     nrows, ncols = _make_grid(len(sects))
     fig, axes = plt.subplots(nrows, ncols,
@@ -242,20 +245,22 @@ def plot_scaling(all_data, thread_counts, out_prefix="neighbor_list", search="ar
     )
 
     threads = np.array(thread_counts, dtype=float)
-    global_ymax = float(threads[-1] / threads[0])  # ideal line reaches max_threads / ref_threads
+    # ideal line reaches max_threads / ref_threads
+    global_ymax = float(threads[-1] / threads[0])
 
     # Assign colors by sorted rank of N, not by N value, so the map stays valid
     # when kNValues changes.
-    all_N    = sorted({N for s in ref.values() for v in s.values() for N in v})
-    _n_cmap  = plt.cm.viridis
-    n_colors = {N: _n_cmap(i / max(len(all_N) - 1, 1)) for i, N in enumerate(all_N)}
+    all_N = sorted({N for s in ref.values() for v in s.values() for N in v})
+    _n_cmap = plt.cm.viridis
+    n_colors = {N: _n_cmap(i / max(len(all_N) - 1, 1))
+                for i, N in enumerate(all_N)}
 
     for ai, section in enumerate(sects):
-        ax       = axes[ai // ncols, ai % ncols]
+        ax = axes[ai // ncols, ai % ncols]
         variants = list(ref[section].keys())
 
         for variant in variants:
-            props  = _variant_props(variant)
+            props = _variant_props(variant)
             N_vals = sorted(ref[section][variant])
             for N in N_vals:
                 t1 = ref[section][variant].get(N, float("nan"))
@@ -263,7 +268,8 @@ def plot_scaling(all_data, thread_counts, out_prefix="neighbor_list", search="ar
                     continue
                 xs, ys = [], []
                 for nt in thread_counts:
-                    tN = all_data.get(nt, {}).get(section, {}).get(variant, {}).get(N)
+                    tN = all_data.get(nt, {}).get(
+                        section, {}).get(variant, {}).get(N)
                     if tN is not None and tN > 0 and not np.isnan(tN):
                         xs.append(nt)
                         ys.append(t1 / tN)
@@ -337,7 +343,7 @@ def plot_performance(all_data, thread_counts, out_prefix="neighbor_list", search
     For each section, plot ns/op vs N.  One line per (variant, thread_count) pair.
     Colours encode thread count (plasma); line styles encode variant.
     """
-    ref   = all_data[thread_counts[0]]
+    ref = all_data[thread_counts[0]]
     sects = [s for s in ref if ref[s]]
 
     nrows, ncols = _make_grid(len(sects))
@@ -350,23 +356,23 @@ def plot_performance(all_data, thread_counts, out_prefix="neighbor_list", search
         fontsize=12, y=1.01,
     )
 
-    tc_cmap   = plt.cm.plasma
+    tc_cmap = plt.cm.plasma
     tc_colors = {nt: tc_cmap(i / max(len(thread_counts) - 1, 1))
                  for i, nt in enumerate(thread_counts)}
 
     for ai, section in enumerate(sects):
-        ax       = axes[ai // ncols, ai % ncols]
+        ax = axes[ai // ncols, ai % ncols]
         variants = list(ref[section].keys())
 
         for nt in thread_counts:
             for variant in variants:
-                props  = _variant_props(variant)
+                props = _variant_props(variant)
                 sect_d = all_data.get(nt, {}).get(section, {}).get(variant, {})
                 N_vals = sorted(sect_d)
-                times  = [sect_d[N] for N in N_vals]
+                times = [sect_d[N] for N in N_vals]
                 # Drop NaN entries (e.g. N² baseline skips large N)
-                valid  = [(N, t) for N, t in zip(N_vals, times)
-                          if not np.isnan(t)]
+                valid = [(N, t) for N, t in zip(N_vals, times)
+                         if not np.isnan(t)]
                 if not valid:
                     continue
                 vN, vt = zip(*valid)
@@ -394,8 +400,8 @@ def plot_performance(all_data, thread_counts, out_prefix="neighbor_list", search
                   for nt in thread_counts]
 
     # Shape/fill handles: one per variant (black so color doesn't confuse the encoding)
-    v_handles  = [mlines.Line2D([], [], color="k", label=v, **_variant_props(v))
-                  for v in all_vs]
+    v_handles = [mlines.Line2D([], [], color="k", label=v, **_variant_props(v))
+                 for v in all_vs]
 
     # Reserve bottom margin so legends don't overlap subplot content
     plt.tight_layout(rect=[0, 0.13, 1, 0.97])
@@ -437,15 +443,15 @@ def print_performance_table(all_data, thread_counts):
     Print a single table showing ns/op at the largest available N for every
     section and variant, with one column per thread count.
     """
-    ref   = all_data[thread_counts[0]]
+    ref = all_data[thread_counts[0]]
     sects = [s for s in ref if ref[s]]
 
-    _FMT_W  = 10
-    _COL_W  = _FMT_W + 2
+    _FMT_W = 10
+    _COL_W = _FMT_W + 2
     _LABEL_W = 36   # "  [Section] variant"
 
     tc_header = "".join(f"{'T='+str(nt):>{_COL_W}}" for nt in thread_counts)
-    divider   = "-" * (_LABEL_W + len(tc_header))
+    divider = "-" * (_LABEL_W + len(tc_header))
 
     print(f"\n  {'Benchmark (largest N)':^{_LABEL_W}}{tc_header}")
     print(f"  {divider}")
@@ -502,9 +508,10 @@ def main():
                         help="Neighbor-list backend to benchmark  (default: arborx)")
     args = parser.parse_args()
 
-    exe           = locate_exe(args.exe)
-    thread_counts = sorted(set(args.threads)) if args.threads else _default_threads()
-    out_prefix    = args.out if args.out else f"neighbor_list_{args.search}"
+    exe = locate_exe(args.exe)
+    thread_counts = sorted(
+        set(args.threads)) if args.threads else _default_threads()
+    out_prefix = args.out if args.out else f"neighbor_list_{args.search}"
 
     print("=" * 60)
     print("  Neighbor List — Thread Scaling Study")
@@ -516,7 +523,8 @@ def main():
     if args.sort_targets:
         print("  --sort-targets   : entities pre-sorted by Z-Morton via STK sort_entities")
     if args.sort_neighbors:
-        print("  --sort-neighbors : neighbor rows sorted by source ordinal after construction")
+        print(
+            "  --sort-neighbors : neighbor rows sorted by source ordinal after construction")
     print()
 
     all_data = {}
@@ -533,8 +541,10 @@ def main():
 
     print()
     print("Generating plots...")
-    plot_scaling(all_data, thread_counts, out_prefix=out_prefix, search=args.search)
-    plot_performance(all_data, thread_counts, out_prefix=out_prefix, search=args.search)
+    plot_scaling(all_data, thread_counts,
+                 out_prefix=out_prefix, search=args.search)
+    plot_performance(all_data, thread_counts,
+                     out_prefix=out_prefix, search=args.search)
 
     print()
     print_performance_table(all_data, thread_counts)

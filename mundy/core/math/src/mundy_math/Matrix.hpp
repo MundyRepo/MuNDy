@@ -44,6 +44,7 @@
 #include <mundy_math/impl/MatrixImpl.hpp>
 #include <mundy_utils/requires.hpp>
 #include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
+#include <mundy_math/cmath.hpp>
 
 namespace mundy {
 
@@ -67,13 +68,13 @@ template <typename MatrixType>
 concept ValidMatrixType =
     is_matrix_v<std::decay_t<MatrixType>> &&
     requires(std::decay_t<MatrixType> matrix, const std::decay_t<MatrixType> const_matrix, size_t i) {
-      typename std::decay_t<MatrixType>::scalar_t;
-      { matrix[i] } -> std::convertible_to<typename std::decay_t<MatrixType>::scalar_t>;
-      { matrix(i) } -> std::convertible_to<typename std::decay_t<MatrixType>::scalar_t>;
-      { matrix(i, i) } -> std::convertible_to<typename std::decay_t<MatrixType>::scalar_t>;
-      { const_matrix[i] } -> std::convertible_to<const typename std::decay_t<MatrixType>::scalar_t>;
-      { const_matrix(i) } -> std::convertible_to<const typename std::decay_t<MatrixType>::scalar_t>;
-      { const_matrix(i, i) } -> std::convertible_to<const typename std::decay_t<MatrixType>::scalar_t>;
+      typename std::decay_t<MatrixType>::value_type;
+      { matrix[i] } -> std::convertible_to<typename std::decay_t<MatrixType>::value_type>;
+      { matrix(i) } -> std::convertible_to<typename std::decay_t<MatrixType>::value_type>;
+      { matrix(i, i) } -> std::convertible_to<typename std::decay_t<MatrixType>::value_type>;
+      { const_matrix[i] } -> std::convertible_to<const typename std::decay_t<MatrixType>::value_type>;
+      { const_matrix(i) } -> std::convertible_to<const typename std::decay_t<MatrixType>::value_type>;
+      { const_matrix(i, i) } -> std::convertible_to<const typename std::decay_t<MatrixType>::value_type>;
     };  // ValidMatrixType
 
 /// \brief Class for an NxM (num rows x num columns) matrix with arithmetic entries
@@ -129,10 +130,10 @@ class AMatrix {
   //@{
 
   /// \brief The type of the entries
-  using scalar_t = T;
+  using value_type = T;
 
   /// \brief The non-const type of the entries
-  using non_const_scalar_t = std::remove_const_t<T>;
+  using non_const_value_type = std::remove_const_t<T>;
 
   /// \brief Deep copy type
   using deep_copy_t = AMatrix<T, N, M>;
@@ -206,7 +207,7 @@ class AMatrix {
       KOKKOS_INLINE_FUNCTION constexpr AMatrix(const OtherMatrixType& other)
           MUNDY_REQUIRES(!std::is_same_v<OtherMatrixType, AMatrix<T, N, M, Accessor>>) &&
       (OtherMatrixType::num_rows == N) && (OtherMatrixType::num_cols == M) &&
-      (std::is_convertible_v<typename OtherMatrixType::scalar_t, T>) : accessor_() {
+      (std::is_convertible_v<typename OtherMatrixType::value_type, T>) : accessor_() {
     impl::deep_copy_impl(std::make_index_sequence<N * M>{}, *this, other);
   }
 
@@ -215,7 +216,7 @@ class AMatrix {
       KOKKOS_INLINE_FUNCTION constexpr AMatrix(OtherMatrixType&& other)
           MUNDY_REQUIRES(!std::is_same_v<OtherMatrixType, AMatrix<T, N, M, Accessor>>) &&
       (OtherMatrixType::num_rows == N) && (OtherMatrixType::num_cols == M) &&
-      (std::is_convertible_v<typename OtherMatrixType::scalar_t, T>) : accessor_() {
+      (std::is_convertible_v<typename OtherMatrixType::value_type, T>) : accessor_() {
     impl::deep_copy_impl(std::make_index_sequence<N * M>{}, *this, std::move(other));
   }
 
@@ -225,7 +226,7 @@ class AMatrix {
   KOKKOS_INLINE_FUNCTION constexpr AMatrix<T, N, M, Accessor>& operator=(const OtherMatrixType& other)
       MUNDY_REQUIRES((!std::is_same_v<OtherMatrixType, AMatrix<T, N, M, Accessor>>) &&
                      (OtherMatrixType::num_rows == N) && (OtherMatrixType::num_cols == M) &&
-                     (std::is_convertible_v<typename OtherMatrixType::scalar_t, T>) &&
+                     (std::is_convertible_v<typename OtherMatrixType::value_type, T>) &&
                      HasNonConstAccessOperator<Accessor, T>) {
     impl::deep_copy_impl(std::make_index_sequence<N * M>{}, *this, other);
     return *this;
@@ -237,7 +238,7 @@ class AMatrix {
   KOKKOS_INLINE_FUNCTION constexpr AMatrix<T, N, M, Accessor>& operator=(OtherMatrixType&& other)
       MUNDY_REQUIRES((!std::is_same_v<OtherMatrixType, AMatrix<T, N, M, Accessor>>) &&
                      (OtherMatrixType::num_rows == N) && (OtherMatrixType::num_cols == M) &&
-                     (std::is_convertible_v<typename OtherMatrixType::scalar_t, T>) &&
+                     (std::is_convertible_v<typename OtherMatrixType::value_type, T>) &&
                      HasNonConstAccessOperator<Accessor, T>) {
     impl::deep_copy_impl(std::make_index_sequence<N * M>{}, *this, std::move(other));
     return *this;
@@ -322,17 +323,23 @@ class AMatrix {
     return accessor_.get();
   }
 
+  /// \brief Get a deep copy of the matrix
+  KOKKOS_INLINE_FUNCTION
+  constexpr deep_copy_t copy() const {
+    return *this;
+  }
+
   /// \brief Get a copy of a certain column of the matrix
   /// \param[in] col The column index.
   KOKKOS_INLINE_FUNCTION
-  constexpr Vector<non_const_scalar_t, N> copy_column(size_t col) const {
+  constexpr Vector<non_const_value_type, N> copy_column(size_t col) const {
     return impl::copy_column_impl(std::make_index_sequence<N>{}, *this, col);
   }
 
   /// \brief Get a copy of a certain row of the matrix
   /// \param[in] row The row index.
   KOKKOS_INLINE_FUNCTION
-  constexpr Vector<non_const_scalar_t, M> copy_row(size_t row) const {
+  constexpr Vector<non_const_value_type, M> copy_row(size_t row) const {
     return impl::copy_row_impl(std::make_index_sequence<M>{}, *this, row);
   }
 
@@ -391,7 +398,7 @@ class AMatrix {
     // diagonal.
     constexpr size_t stride = M + 1;
     auto strided_data_accessor = get_strided_view<T, stride>(accessor_);
-    return get_owning_vector<T, Kokkos::min(N, M)>(std::move(strided_data_accessor));
+    return get_owning_vector<T, min(N, M)>(std::move(strided_data_accessor));
   }
 
   /// \brief Get a view into the diagonal of the matrix
@@ -401,7 +408,7 @@ class AMatrix {
     // diagonal.
     constexpr size_t stride = M + 1;
     auto strided_data_accessor = get_strided_view<T, stride>(accessor_);
-    return get_owning_vector<T, Kokkos::min(N, M)>(std::move(strided_data_accessor));
+    return get_owning_vector<T, min(N, M)>(std::move(strided_data_accessor));
   }
 
   /// \brief Get a view into the transpose of the matrix
@@ -976,6 +983,12 @@ KOKKOS_INLINE_FUNCTION constexpr auto copy(const MatrixType& m) {
   return m.copy();
 }
 
+/// \brief Cast a matrix to a different arithmetic type
+template <typename U, ValidMatrixType MatrixType>
+KOKKOS_INLINE_FUNCTION constexpr auto cast(const MatrixType& m) {
+  return m.template cast<U>();
+}
+
 /// \brief AMatrix transpose
 /// \param[in] mat The matrix.
 template <size_t N, size_t M, typename T, ValidAccessor<T> Accessor>
@@ -1089,7 +1102,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto outer_product(const AVector<U, N, Accessor
 /// \brief AMatrix Frobenius norm
 template <size_t N, size_t M, typename T, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto frobenius_norm(const AMatrix<T, N, M, Accessor>& mat) {
-  return Kokkos::sqrt(frobenius_inner_product(mat, mat));
+  return sqrt(frobenius_inner_product(mat, mat));
 }
 
 /// \brief AMatrix infinity norm
@@ -1107,7 +1120,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto one_norm(const AMatrix<T, N, M, Accessor>&
 /// \brief AMatrix 2-norm
 template <size_t N, size_t M, typename T, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto two_norm(const AMatrix<T, N, M, Accessor>& mat) {
-  return Kokkos::sqrt(frobenius_inner_product(mat, mat));
+  return sqrt(frobenius_inner_product(mat, mat));
 }
 //@}
 

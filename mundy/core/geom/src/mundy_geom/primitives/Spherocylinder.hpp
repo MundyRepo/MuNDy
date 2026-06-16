@@ -37,11 +37,14 @@
 
 namespace mundy {
 
+/// \addtogroup MundyGeomPrimitives
+/// @{
+
 template <typename Scalar, ValidPointType PointType = Point<Scalar>,
           ValidQuaternionType QuaternionType = Quaternion<Scalar>>
 class Spherocylinder {
   static_assert(
-      std::is_same_v<typename PointType::scalar_t, Scalar> && std::is_same_v<typename QuaternionType::scalar_t, Scalar>,
+      std::is_same_v<typename PointType::value_type, Scalar> && std::is_same_v<typename QuaternionType::value_type, Scalar>,
       "The scalar type of the PointType and QuaternionType must match the scalar type of the Spherocylinder.");
 
  public:
@@ -49,13 +52,15 @@ class Spherocylinder {
   //@{
 
   /// \brief Our scalar type
-  using scalar_t = Scalar;
+  using value_type = Scalar;
 
   /// \brief Our point type
   using point_t = PointType;
 
   /// \brief Our orientation type
   using orientation_t = QuaternionType;
+
+  static constexpr bool is_finite = true;
 
   //@}
 
@@ -66,12 +71,12 @@ class Spherocylinder {
   /// invalid value of -1
   KOKKOS_FUNCTION
   constexpr Spherocylinder()
-      MUNDY_REQUIRES(HasNArgConstructor<point_t, scalar_t, 3>&& HasNArgConstructor<orientation_t, scalar_t, 4>)
-      : center_(scalar_t(), scalar_t(), scalar_t()),
-        orientation_(static_cast<scalar_t>(1), static_cast<scalar_t>(0), static_cast<scalar_t>(0),
-                     static_cast<scalar_t>(0)),
-        radius_(static_cast<scalar_t>(-1)),
-        length_(static_cast<scalar_t>(-1)) {
+      MUNDY_REQUIRES(HasNArgConstructor<point_t, value_type, 3>&& HasNArgConstructor<orientation_t, value_type, 4>)
+      : center_(value_type(), value_type(), value_type()),
+        orientation_(static_cast<value_type>(1), static_cast<value_type>(0), static_cast<value_type>(0),
+                     static_cast<value_type>(0)),
+        radius_(static_cast<value_type>(-1)),
+        length_(static_cast<value_type>(-1)) {
   }
 
   /// \brief Constructor to initialize the center and radius.
@@ -80,8 +85,8 @@ class Spherocylinder {
   /// \param[in] radius The radius of the Spherocylinder.
   /// \param[in] length The length of the Spherocylinder.
   KOKKOS_FUNCTION
-  constexpr Spherocylinder(const point_t& center, const orientation_t& orientation, const scalar_t& radius,
-                           const scalar_t& length)
+  constexpr Spherocylinder(const point_t& center, const orientation_t& orientation, const value_type& radius,
+                           const value_type& length)
       : center_(center), orientation_(orientation), radius_(radius), length_(length) {
   }
 
@@ -92,7 +97,7 @@ class Spherocylinder {
   /// \param[in] length The length of the Spherocylinder.
   template <ValidPointType OtherPointType, ValidQuaternionType OtherQuaternionType>
   KOKKOS_FUNCTION constexpr Spherocylinder(const OtherPointType& center, const OtherQuaternionType& orientation,
-                                           const scalar_t& radius, const scalar_t& length)
+                                           const value_type& radius, const value_type& length)
       MUNDY_REQUIRES(!std::is_same_v<OtherPointType, point_t> || !std::is_same_v<OtherQuaternionType, orientation_t>)
       : center_(center), orientation_(orientation), radius_(radius), length_(length) {
   }
@@ -103,20 +108,20 @@ class Spherocylinder {
 
   /// \brief Deep copy constructor
   KOKKOS_FUNCTION
-  constexpr Spherocylinder(const Spherocylinder<scalar_t, point_t, orientation_t>& other)
+  constexpr Spherocylinder(const Spherocylinder<value_type, point_t, orientation_t>& other)
       : center_(other.center_), orientation_(other.orientation_), radius_(other.radius_), length_(other.length_) {
   }
 
   /// \brief Deep copy constructor with different spherocylinder type
   template <typename OtherSpherocylinderType>
   KOKKOS_FUNCTION constexpr Spherocylinder(const OtherSpherocylinderType& other)
-      MUNDY_REQUIRES(!std::is_same_v<OtherSpherocylinderType, Spherocylinder<scalar_t, point_t, orientation_t>>)
+      MUNDY_REQUIRES(!std::is_same_v<OtherSpherocylinderType, Spherocylinder<value_type, point_t, orientation_t>>)
       : center_(other.center_), orientation_(other.orientation_), radius_(other.radius_), length_(other.length_) {
   }
 
   /// \brief Deep move constructor
   KOKKOS_FUNCTION
-  constexpr Spherocylinder(Spherocylinder<scalar_t, point_t, orientation_t>&& other)
+  constexpr Spherocylinder(Spherocylinder<value_type, point_t, orientation_t>&& other)
       : center_(std::move(other.center_)),
         orientation_{std::move(other.orientation_)},
         radius_(std::move(other.radius_)),
@@ -126,7 +131,7 @@ class Spherocylinder {
   /// \brief Deep move constructor
   template <typename OtherSpherocylinderType>
   KOKKOS_FUNCTION constexpr Spherocylinder(OtherSpherocylinderType&& other)
-      MUNDY_REQUIRES(!std::is_same_v<OtherSpherocylinderType, Spherocylinder<scalar_t, point_t, orientation_t>>)
+      MUNDY_REQUIRES(!std::is_same_v<OtherSpherocylinderType, Spherocylinder<value_type, point_t, orientation_t>>)
       : center_(std::move(other.center_)),
         orientation_{std::move(other.orientation_)},
         radius_(std::move(other.radius_)),
@@ -139,8 +144,8 @@ class Spherocylinder {
 
   /// \brief Copy assignment operator
   KOKKOS_FUNCTION
-  constexpr Spherocylinder<scalar_t, point_t, orientation_t>& operator=(
-      const Spherocylinder<scalar_t, point_t, orientation_t>& other) {
+  constexpr Spherocylinder<value_type, point_t, orientation_t>& operator=(
+      const Spherocylinder<value_type, point_t, orientation_t>& other) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     center_ = other.center_;
     orientation_ = other.orientation_;
@@ -151,9 +156,9 @@ class Spherocylinder {
 
   /// \brief Copy assignment operator
   template <typename OtherSpherocylinderType>
-  KOKKOS_FUNCTION constexpr Spherocylinder<scalar_t, point_t, orientation_t>& operator=(
+  KOKKOS_FUNCTION constexpr Spherocylinder<value_type, point_t, orientation_t>& operator=(
       const OtherSpherocylinderType& other)
-      MUNDY_REQUIRES(!std::is_same_v<OtherSpherocylinderType, Spherocylinder<scalar_t, point_t, orientation_t>>) {
+      MUNDY_REQUIRES(!std::is_same_v<OtherSpherocylinderType, Spherocylinder<value_type, point_t, orientation_t>>) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     center_ = other.center_;
     orientation_ = other.orientation_;
@@ -164,8 +169,8 @@ class Spherocylinder {
 
   /// \brief Move assignment operator
   KOKKOS_FUNCTION
-  constexpr Spherocylinder<scalar_t, point_t, orientation_t>& operator=(
-      Spherocylinder<scalar_t, point_t, orientation_t>&& other) {
+  constexpr Spherocylinder<value_type, point_t, orientation_t>& operator=(
+      Spherocylinder<value_type, point_t, orientation_t>&& other) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     center_ = std::move(other.center_);
     orientation_ = std::move(other.orientation_);
@@ -176,8 +181,8 @@ class Spherocylinder {
 
   /// \brief Move assignment operator
   template <typename OtherSpherocylinderType>
-  KOKKOS_FUNCTION constexpr Spherocylinder<scalar_t, point_t, orientation_t>& operator=(OtherSpherocylinderType&& other)
-      MUNDY_REQUIRES(!std::is_same_v<OtherSpherocylinderType, Spherocylinder<scalar_t, point_t, orientation_t>>) {
+  KOKKOS_FUNCTION constexpr Spherocylinder<value_type, point_t, orientation_t>& operator=(OtherSpherocylinderType&& other)
+      MUNDY_REQUIRES(!std::is_same_v<OtherSpherocylinderType, Spherocylinder<value_type, point_t, orientation_t>>) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     center_ = std::move(other.center_);
     orientation_ = std::move(other.orientation_);
@@ -216,25 +221,25 @@ class Spherocylinder {
 
   /// \brief Accessor for the radius
   KOKKOS_FUNCTION
-  constexpr const scalar_t& radius() const {
+  constexpr const value_type& radius() const {
     return radius_;
   }
 
   /// \brief Accessor for the radius
   KOKKOS_FUNCTION
-  constexpr scalar_t& radius() {
+  constexpr value_type& radius() {
     return radius_;
   }
 
   /// \brief Accessor for the length
   KOKKOS_FUNCTION
-  constexpr const scalar_t& length() const {
+  constexpr const value_type& length() const {
     return length_;
   }
 
   /// \brief Accessor for the length
   KOKKOS_FUNCTION
-  constexpr scalar_t& length() {
+  constexpr value_type& length() {
     return length_;
   }
   //@}
@@ -254,7 +259,7 @@ class Spherocylinder {
   /// \param[in] y The y-coordinate.
   /// \param[in] z The z-coordinate.
   KOKKOS_FUNCTION
-  constexpr void set_center(const scalar_t& x, const scalar_t& y, const scalar_t& z) {
+  constexpr void set_center(const value_type& x, const value_type& y, const value_type& z) {
     center_[0] = x;
     center_[1] = y;
     center_[2] = z;
@@ -273,7 +278,7 @@ class Spherocylinder {
   /// \param[in] qy The y-component of the orientation quaternion.
   /// \param[in] qz The z-component of the orientation quaternion.
   KOKKOS_FUNCTION
-  constexpr void set_orientation(const scalar_t& qw, const scalar_t& qx, const scalar_t& qy, const scalar_t& qz) {
+  constexpr void set_orientation(const value_type& qw, const value_type& qx, const value_type& qy, const value_type& qz) {
     orientation_[0] = qw;
     orientation_[1] = qx;
     orientation_[2] = qy;
@@ -283,14 +288,14 @@ class Spherocylinder {
   /// \brief Set the radius
   /// \param[in] radius The new radius.
   KOKKOS_FUNCTION
-  constexpr void set_radius(const scalar_t& radius) {
+  constexpr void set_radius(const value_type& radius) {
     radius_ = radius;
   }
 
   /// \brief Set the length
   /// \param[in] length The new length.
   KOKKOS_FUNCTION
-  constexpr void set_length(const scalar_t& length) {
+  constexpr void set_length(const value_type& length) {
     length_ = length;
   }
   //@}
@@ -298,8 +303,8 @@ class Spherocylinder {
  private:
   point_t center_;
   orientation_t orientation_;
-  scalar_t radius_;
-  scalar_t length_;
+  value_type radius_;
+  value_type length_;
 };
 
 /// @brief (Implementation) Type trait to determine if a type is a Spherocylinder
@@ -328,24 +333,21 @@ static_assert(ValidSpherocylinderType<Spherocylinder<float>> && ValidSpherocylin
 //! \name Non-member functions for ValidSpherocylinderType objects
 //@{
 
-/// \brief Equality operator
-template <ValidSpherocylinderType SpherocylinderType1, ValidSpherocylinderType SpherocylinderType2>
-KOKKOS_FUNCTION constexpr bool operator==(const SpherocylinderType1& spherocylinder1,
-                                          const SpherocylinderType2& spherocylinder2) {
-  return (spherocylinder1.radius() == spherocylinder2.radius()) &&
-         (spherocylinder1.length() == spherocylinder2.length()) &&
-         (spherocylinder1.center() == spherocylinder2.center()) &&
-         (spherocylinder1.orientation() == spherocylinder2.orientation());
+/// \brief Element-wise approximate equality (within a tolerance)
+template <ValidSpherocylinderType T1, ValidSpherocylinderType T2>
+KOKKOS_FUNCTION constexpr bool is_close(
+    const T1& sc1, const T2& sc2,
+    typename T1::value_type tol = get_comparison_tolerance<typename T1::value_type, typename T2::value_type>()) {
+  return is_close(sc1.radius(), sc2.radius(), tol) && is_close(sc1.length(), sc2.length(), tol) &&
+         is_close(sc1.center(), sc2.center(), tol) && is_close(sc1.orientation(), sc2.orientation(), tol);
 }
 
-/// \brief Inequality operator
-template <ValidSpherocylinderType SpherocylinderType1, ValidSpherocylinderType SpherocylinderType2>
-KOKKOS_FUNCTION constexpr bool operator!=(const SpherocylinderType1& spherocylinder1,
-                                          const SpherocylinderType2& spherocylinder2) {
-  return (spherocylinder1.radius() != spherocylinder2.radius()) ||
-         (spherocylinder1.length() != spherocylinder2.length()) ||
-         (spherocylinder1.center() != spherocylinder2.center()) ||
-         (spherocylinder1.orientation() != spherocylinder2.orientation());
+/// \brief Element-wise approximate equality (within a relaxed tolerance)
+template <ValidSpherocylinderType T1, ValidSpherocylinderType T2>
+KOKKOS_FUNCTION constexpr bool is_approx_close(
+    const T1& sc1, const T2& sc2,
+    typename T1::value_type tol = get_relaxed_comparison_tolerance<typename T1::value_type, typename T2::value_type>()) {
+  return is_close(sc1, sc2, tol);
 }
 
 /// \brief OStream operator
@@ -355,6 +357,25 @@ std::ostream& operator<<(std::ostream& os, const SpherocylinderType& spherocylin
      << spherocylinder.length() << "}";
   return os;
 }
+//@}
+
+/// @}
+
+//! \name Point visitation
+//@{
+
+/// \brief Visit the geometric point of a Spherocylinder (its center).
+template <ValidSpherocylinderType T, typename Functor>
+KOKKOS_INLINE_FUNCTION void for_each_point(const T& sc, Functor&& f) {
+  f(sc.center());
+}
+
+/// \brief Visit and mutate the geometric point of a Spherocylinder.
+template <ValidSpherocylinderType T, typename Functor>
+KOKKOS_INLINE_FUNCTION void for_each_point_mutable(T& sc, Functor&& f) {
+  f(sc.center());
+}
+
 //@}
 
 }  // namespace mundy

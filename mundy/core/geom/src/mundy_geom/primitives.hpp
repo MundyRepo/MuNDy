@@ -21,6 +21,10 @@
 #ifndef MUNDY_GEOM_PRIMITIVES_HPP_
 #define MUNDY_GEOM_PRIMITIVES_HPP_
 
+/// \file primitives.hpp
+/// \defgroup MundyGeomPrimitives Mundy geometric primitives
+/// \brief Point, line, sphere, ring, ellipsoid, and related primitive geometry types.
+
 // All of our headers for primitive geometric objects
 //
 // The total set of desired shape primatives is:
@@ -37,6 +41,7 @@
 //   - Spherocylinder
 //   - SpherocylinderSegment
 //   - Ring
+#include <mundy_geom/primitives/Traits.hpp>
 #include <mundy_geom/primitives/AABB.hpp>
 #include <mundy_geom/primitives/Circle3D.hpp>
 #include <mundy_geom/primitives/Ellipsoid.hpp>
@@ -47,6 +52,7 @@
 #include <mundy_geom/primitives/Sphere.hpp>
 #include <mundy_geom/primitives/Spherocylinder.hpp>
 #include <mundy_geom/primitives/SpherocylinderSegment.hpp>
+#include <mundy_geom/primitives/OBB.hpp>
 #include <mundy_geom/primitives/VSegment.hpp>
 
 #endif  // MUNDY_GEOM_PRIMITIVES_HPP_

@@ -467,7 +467,7 @@ TYPED_TEST(Matrix3PairwiseTypeTest, AdditionAndSubtractionWithMatrix3) {
   Matrix3<T1> m1(1, 2, 3, 4, 5, 6, -7, -8, -9);
   Matrix3<T2> m2(4, 5, 6, -7, -8, -9, 10, 11, 12);
   auto m3 = m1 + m2;
-  using T3 = decltype(m3)::scalar_t;
+  using T3 = decltype(m3)::value_type;
   is_close_debug(m3, Matrix3<T3>{5, 7, 9, -3, -3, -3, 3, 3, 3}, "Addition failed.");
 
   m1 += m2;
@@ -486,7 +486,7 @@ TYPED_TEST(Matrix3PairwiseTypeTest, AdditionAndSubtractionWithScalars) {
 
   Matrix3<T1> m1(1, 2, 3, 4, 5, 6, -7, -8, -9);
   auto m2 = m1 + T2(1);
-  using T3 = decltype(m2)::scalar_t;
+  using T3 = decltype(m2)::value_type;
   is_close_debug(m2, Matrix3<T3>{2, 3, 4, 5, 6, 7, -6, -7, -8}, "Right addition failed.");
 
   m2 = T2(1) + m1;
@@ -505,7 +505,7 @@ TYPED_TEST(Matrix3PairwiseTypeTest, AdditionAndSubtractionEdgeCases) {
 
   Matrix3<T1> m1(1, 2, 3, 4, 5, 6, -7, -8, -9);
   auto m3 = m1 + Matrix3<T2>{4, 5, 6, -7, -8, -9, 10, 11, 12};
-  using T3 = decltype(m3)::scalar_t;
+  using T3 = decltype(m3)::value_type;
   is_close_debug(m3, Matrix3<T3>{5, 7, 9, -3, -3, -3, 3, 3, 3}, "Addition failed.");
 
   m1 += Matrix3<T2>{4, 5, 6, -7, -8, -9, 10, 11, 12};
@@ -529,7 +529,7 @@ TYPED_TEST(Matrix3PairwiseTypeTest, MultiplicationAndDivisionWithMatrix3) {
   Matrix3<T1> m1(1, 2, 3, 4, 5, 6, -7, -8, -9);
   Matrix3<T2> m2(4, 5, 6, -7, -8, -9, 10, 11, 12);
   auto m3 = m1 * m2;
-  using T3 = decltype(m3)::scalar_t;
+  using T3 = decltype(m3)::value_type;
   is_close_debug(m3, Matrix3<T3>{20, 22, 24, 41, 46, 51, -62, -70, -78}, "Multiplication failed.");
 
   m1 *= m2;
@@ -543,12 +543,12 @@ TYPED_TEST(Matrix3PairwiseTypeTest, MultiplicationAndDivisionWithVector3) {
   Matrix3<T1> m1(1, 2, 3, 4, 5, 6, -7, -8, -9);
   Vector3<T2> v1(4, 5, 6);
   auto v2 = m1 * v1;
-  using T3 = decltype(v2)::scalar_t;
+  using T3 = decltype(v2)::value_type;
   is_close_debug(v2, Vector3<T3>{32, 77, -122}, "Multiplication failed.");
 
   // Left multiplication by a vector: v^T * m
   auto v3 = v1 * m1;
-  using T4 = decltype(v3)::scalar_t;
+  using T4 = decltype(v3)::value_type;
   is_close_debug(v3, Vector3<T4>{-18, -15, -12}, "Left multiplication failed.");
 }
 
@@ -558,7 +558,7 @@ TYPED_TEST(Matrix3PairwiseTypeTest, MultiplicationAndDivisionWithScalars) {
 
   Matrix3<T1> m1(1, 2, 3, 4, 5, 6, -7, -8, -9);
   auto m2 = m1 * T2(2);
-  using T3 = decltype(m2)::scalar_t;
+  using T3 = decltype(m2)::value_type;
   is_close_debug(m2, Matrix3<T3>{2, 4, 6, 8, 10, 12, -14, -16, -18}, "Right multiplication failed.");
 
   m2 /= T2(2);
@@ -581,7 +581,7 @@ TYPED_TEST(Matrix3PairwiseTypeTest, MultiplicationAndDivisionEdgeCases) {
 
   Matrix3<T1> m1(1, 2, 3, 4, 5, 6, -7, -8, -9);
   auto m2 = m1 * Matrix3<T2>(4, 5, 6, -7, -8, -9, 10, 11, 12);
-  using T3 = decltype(m2)::scalar_t;
+  using T3 = decltype(m2)::value_type;
   is_close_debug(m2, Matrix3<T3>{20, 22, 24, 41, 46, 51, -62, -70, -78}, "Right rvalue multiplication failed.");
 
   m1 *= Matrix3<T2>(4, 5, 6, -7, -8, -9, 10, 11, 12);
@@ -612,7 +612,7 @@ TYPED_TEST(Matrix3SingleTypeTest, SpecialOperations) {
   // Test the transpose
   Matrix3<TypeParam> m1(1, 2, 3, 4, 5, 6, -7, -8, -9);
   auto m2 = transpose(m1);
-  using T3 = decltype(m2)::scalar_t;
+  using T3 = decltype(m2)::value_type;
   is_close_debug(m2, Matrix3<T3>{1, 4, -7, 2, 5, -8, 3, 6, -9}, "Transpose failed.");
 
   // Test the inverse of a singular matrix
@@ -624,7 +624,7 @@ TYPED_TEST(Matrix3SingleTypeTest, SpecialOperations) {
   // Test the inverse of a non-singular matrix
   m1 = {1, 2, 3, 0, 1, 4, 5, 6, 0};
   auto m3 = inverse(m1);
-  using T4 = decltype(m3)::scalar_t;
+  using T4 = decltype(m3)::value_type;
   is_close_debug(m3, Matrix3<T4>{-24, 18, 5, 20, -15, -4, -5, 4, 1}, "Inverse failed.");
 
   // Test the frobenius_inner_product
@@ -670,7 +670,7 @@ struct an_vector_external_functor {
   template <typename T>
   KOKKOS_FUNCTION auto operator()(const T& x) const {
     // Set each element of the row or column to the sum of its elements
-    return sum(x) * Vector3<typename T::scalar_t>{1, 1, 1};
+    return sum(x) * Vector3<typename T::value_type>{1, 1, 1};
   }
 };
 
@@ -678,12 +678,12 @@ TYPED_TEST(Matrix3SingleTypeTest, Apply) {
   // Apply to each element of the matrix
   Matrix3<TypeParam> m1(1, 2, 3, 4, 5, 6, -7, -8, -9);
   auto m2 = apply(an_external_functor{}, m1);
-  using T3 = decltype(m2)::scalar_t;
+  using T3 = decltype(m2)::value_type;
   is_close_debug(m2, Matrix3<T3>{2, 3, 4, 5, 6, 7, -6, -7, -8}, "Apply to elements failed.");
 
   // Apply to each row
   auto m3 = apply_row(an_vector_external_functor{}, m1);
-  using T4 = decltype(m3)::scalar_t;
+  using T4 = decltype(m3)::value_type;
   is_close_debug(m3, Matrix3<T4>{6, 6, 6, 15, 15, 15, -24, -24, -24}, "Apply to rows failed.");
 
   // Apply to each column

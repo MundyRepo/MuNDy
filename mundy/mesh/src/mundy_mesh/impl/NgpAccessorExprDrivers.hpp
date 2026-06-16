@@ -124,10 +124,14 @@ class NgpForEachEntityExprDriver {
     NgpEvalContext evaluation_context(ngp_mesh);
     expr.propagate_synchronize(evaluation_context);
 
-    // Perform the evaluation
+    // Perform the evaluation.
+    // Intersect with locally_owned_part so that shared entities (present on this rank
+    // but owned by another) are not double-counted across MPI ranks.
+    const stk::mesh::Selector owned_selector =
+        selector_ & bulk_data().mesh_meta_data().locally_owned_part();
     using value_type = typename ReductionOp::value_type;
     stk::mesh::for_each_entity_reduce(
-        ngp_mesh, rank_, selector_, reduction,
+        ngp_mesh, rank_, owned_selector, reduction,
         KOKKOS_LAMBDA(const stk::mesh::FastMeshIndex& entity_index, value_type& value) {
           // Perform the eval
           auto empty_cache = aggregate();

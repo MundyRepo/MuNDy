@@ -469,7 +469,7 @@ class GenNeighborLinks {
             double dx = new_center[0] - old_center[0];
             double dy = new_center[1] - old_center[1];
             double dz = new_center[2] - old_center[2];
-            double disp = Kokkos::sqrt(dx * dx + dy * dy + dz * dz);
+            double disp = sqrt(dx * dx + dy * dy + dz * dz);
             local_result = local_result || (disp > 0.5 * search_buffer);
           },
           Kokkos::LOr<bool>(moved_too_much));

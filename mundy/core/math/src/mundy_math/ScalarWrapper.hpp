@@ -18,222 +18,35 @@
 // **********************************************************************************************************************
 // @HEADER
 
+// ScalarWrapper.hpp is superseded by Scalar.hpp (AScalar / Scalar).
+// This header exists only for backward compatibility and will be removed in a future release.
+// Please migrate all uses of ScalarWrapper<T, Acc> to AScalar<T, Acc> and include <mundy_math/Scalar.hpp>.
+
 #ifndef MUNDY_MATH_SCALARWRAPPER_HPP_
 #define MUNDY_MATH_SCALARWRAPPER_HPP_
 
-// External
-#include <Kokkos_Core.hpp>
-
-// C++ core
-#include <cmath>
-#include <concepts>
-#include <initializer_list>
-#include <iostream>
-#include <type_traits>  // for std::decay_t
-#include <utility>
-
-// Mundy
-#include <mundy_math/Accessor.hpp>   // for mundy::ValidAccessor
-#include <mundy_math/Array.hpp>      // for mundy::Array
-#include <mundy_math/Tolerance.hpp>  // for mundy::get_zero_tolerance
-#include <mundy_math/Vector.hpp>     // for mundy::Vector
-#include <mundy_utils/requires.hpp>
-#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
+#include <mundy_math/Scalar.hpp>  // full AScalar / Scalar definition
 
 namespace mundy {
 
-/// \brief An owning/viewing scalar type
-///
-/// This scalar type is just a 1D vector with a single entry.
+// ---------------------------------------------------------------------------
+// Deprecated aliases — migrate to AScalar<T, Acc> / Scalar<T>
+// ---------------------------------------------------------------------------
+
 template <typename T, ValidAccessor<T> Accessor = Array<T, 1>>
-MUNDY_REQUIRES(std::is_arithmetic_v<T>)
-using ScalarWrapper = AVector<T, 1, Accessor>;
+using ScalarWrapper = AScalar<T, Accessor>;
 
-/// \brief (Implementation) Type trait to determine if a type is a ScalarWrapper
 template <typename TypeToCheck>
-struct is_scalar_wrapper_impl : std::false_type {};
-//
-template <typename T, typename Accessor>
-struct is_scalar_wrapper_impl<ScalarWrapper<T, Accessor>> : std::true_type {};
+struct is_scalar_wrapper_impl : is_scalar_impl<TypeToCheck> {};
 
-/// \brief Type trait to determine if a type is a ScalarWrapper
 template <typename TypeToCheck>
-struct is_scalar_wrapper : public is_scalar_wrapper_impl<std::decay_t<TypeToCheck>> {};
-//
-template <typename TypeToCheck>
-constexpr bool is_scalar_wrapper_v = is_scalar_wrapper<TypeToCheck>::value;
+struct is_scalar_wrapper : is_scalar<TypeToCheck> {};
 
-/// \brief A temporary concept to check if a type is a valid ScalarWrapper type
-/// TODO(palmerb4): Extend this concept to contain all shared setters and getters for our vectors.
+template <typename TypeToCheck>
+constexpr bool is_scalar_wrapper_v = is_scalar_v<TypeToCheck>;
+
 template <typename ScalarWrapperType>
-concept ValidScalarWrapperType = is_scalar_wrapper_v<std::decay_t<ScalarWrapperType>> &&
-                                 requires(std::decay_t<ScalarWrapperType> scalar_wrapper,
-                                          const std::decay_t<ScalarWrapperType> const_scalar_wrapper) {
-                                   typename std::decay_t<ScalarWrapperType>::scalar_t;
-                                   {
-                                     scalar_wrapper[0]
-                                   } -> std::convertible_to<typename std::decay_t<ScalarWrapperType>::scalar_t>;
-
-                                   {
-                                     scalar_wrapper(0)
-                                   } -> std::convertible_to<typename std::decay_t<ScalarWrapperType>::scalar_t>;
-
-                                   {
-                                     const_scalar_wrapper[0]
-                                   } -> std::convertible_to<const typename std::decay_t<ScalarWrapperType>::scalar_t>;
-
-                                   {
-                                     const_scalar_wrapper(0)
-                                   } -> std::convertible_to<const typename std::decay_t<ScalarWrapperType>::scalar_t>;
-                                 };  // ValidScalarWrapperType
-
-//! \name Special scalar operations
-//@{
-
-/// \brief Scalar-scalar multiplication (not otherwise inherited by the math of Vector)
-template <typename U, typename T, ValidAccessor<U> Accessor1, ValidAccessor<T> Accessor2>
-KOKKOS_INLINE_FUNCTION constexpr auto operator*(const ScalarWrapper<U, Accessor1>& a,
-                                                const ScalarWrapper<T, Accessor2>& b)
-    -> ScalarWrapper<std::common_type_t<T, U>> {
-  return ScalarWrapper<std::common_type_t<T, U>>{a[0] * b[0]};
-}
-//@}
-
-//! \name atomic_load/store. Atomic memory management operations.
-//
-// \note Atomics are covered by Vector naturally, so we're using this space to make our atomic operations on
-// scalars forward to Kokkos atomics. This way, we can always call mundy::atomic_add regardless of whether we're
-// dealing with a scalar or a vector/matrix.
-//
-//@{
-
-/// \brief Atomic s_copy = s.
-template <typename T>
-KOKKOS_INLINE_FUNCTION T atomic_load(T* const s) {
-  return Kokkos::atomic_load(s);
-}
-
-/// \brief Atomic s = value.
-template <typename T, typename U>
-KOKKOS_INLINE_FUNCTION void atomic_store(T* const s, const U& value) {
-  Kokkos::atomic_store(s, static_cast<T>(value));
-}
-//@}
-
-//! \name atomic_[op] Atomic operation which don’t return anything. [op] might be add, sub, mul, div.
-//@{
-
-/// \brief Atomic s += value.
-template <typename T, typename U>
-KOKKOS_INLINE_FUNCTION void atomic_add(T* const s, const U& value) {
-  Kokkos::atomic_add(s, static_cast<T>(value));
-}
-
-/// \brief Atomic s -= value.
-template <typename T, typename U>
-KOKKOS_INLINE_FUNCTION void atomic_sub(T* const s, const U& value) {
-  Kokkos::atomic_sub(s, static_cast<T>(value));
-}
-
-/// \brief Atomic s *= value.
-template <typename T, typename U>
-KOKKOS_INLINE_FUNCTION void atomic_mul(T* const s, const U& value) {
-  Kokkos::atomic_mul(s, static_cast<T>(value));
-}
-
-/// \brief Atomic s /= value.
-template <typename T, typename U>
-KOKKOS_INLINE_FUNCTION void atomic_div(T* const s, const U& value) {
-  Kokkos::atomic_div(s, static_cast<T>(value));
-}
-//@}
-
-//! \name atomic_fetch_[op] Various atomic operations which return the old value. [op] might be add, sub, mul, div.
-//@{
-
-/// \brief Atomic s += value (returns old s)
-template <typename T, typename U>
-KOKKOS_INLINE_FUNCTION T atomic_fetch_add(T* const s, const U& value) {
-  return Kokkos::atomic_fetch_add(s, static_cast<T>(value));
-}
-
-/// \brief Atomic s -= value (returns old s)
-template <typename T, typename U>
-KOKKOS_INLINE_FUNCTION T atomic_fetch_sub(T* const s, const U& value) {
-  return Kokkos::atomic_fetch_sub(s, static_cast<T>(value));
-}
-
-/// \brief Atomic s *= value (returns old s)
-template <typename T, typename U>
-KOKKOS_INLINE_FUNCTION T atomic_fetch_mul(T* const s, const U& value) {
-  return Kokkos::atomic_fetch_mul(s, static_cast<T>(value));
-}
-
-/// \brief Atomic s /= value (returns old s)
-template <typename T, typename U>
-KOKKOS_INLINE_FUNCTION T atomic_fetch_div(T* const s, const U& value) {
-  return Kokkos::atomic_fetch_div(s, static_cast<T>(value));
-}
-//@}
-
-//! \name atomic_[op]_fetch Various atomic operations which return the new value. [op] might be add, sub, mul, div.
-//@{
-
-/// \brief Atomic s += value (returns new s)
-template <typename T, typename U>
-KOKKOS_INLINE_FUNCTION T atomic_add_fetch(T* const s, const U& value) {
-  return Kokkos::atomic_add_fetch(s, static_cast<T>(value));
-}
-
-/// \brief Atomic s -= value (returns new s)
-template <typename T, typename U>
-KOKKOS_INLINE_FUNCTION T atomic_sub_fetch(T* const s, const U& value) {
-  return Kokkos::atomic_sub_fetch(s, static_cast<T>(value));
-}
-
-/// \brief Atomic s *= value (returns new s)
-template <typename T, typename U>
-KOKKOS_INLINE_FUNCTION T atomic_mul_fetch(T* const s, const U& value) {
-  return Kokkos::atomic_mul_fetch(s, static_cast<T>(value));
-}
-
-/// \brief Atomic s /= value (returns new s)
-template <typename T, typename U>
-KOKKOS_INLINE_FUNCTION T atomic_div_fetch(T* const s, const U& value) {
-  return Kokkos::atomic_div_fetch(s, static_cast<T>(value));
-}
-//@}
-
-//! \name ScalarWrapper<T, Accessor> views
-//@{
-
-/// \brief A helper function to create a ScalarWrapper<T, Accessor> based on a given accessor.
-/// \param[in] data The data accessor.
-///
-/// In practice, this function is syntactic sugar to avoid having to specify the template parameters
-/// when creating a ScalarWrapper<T, Accessor> from a data accessor.
-/// Instead of writing
-/// \code
-///   ScalarView<T, Accessor> s(data);
-/// \endcode
-/// you can write
-/// \code
-///   auto vec = get_scalar_view<T>(data);
-/// \endcode
-template <typename T, ValidAccessor<T> Accessor>
-KOKKOS_INLINE_FUNCTION constexpr auto get_scalar_view(Accessor&& data) {
-  auto data_storage = store(impl::unwrap_accessor(std::forward<Accessor>(data)));
-  return ScalarWrapper<T, decltype(data_storage)>(data_storage);
-}
-
-template <typename T, ValidAccessor<T> Accessor>
-KOKKOS_INLINE_FUNCTION constexpr auto get_owning_scalar(Accessor&& data) {
-  auto data_storage = store(impl::unwrap_accessor(std::move(data)));
-  return ScalarWrapper<T, decltype(data_storage)>(data_storage);
-}
-//@}
-
-//@}
+concept ValidScalarWrapperType = ValidScalarType<ScalarWrapperType>;
 
 }  // namespace mundy
 

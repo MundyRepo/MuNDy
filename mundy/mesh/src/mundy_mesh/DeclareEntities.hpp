@@ -22,11 +22,11 @@
 #define MUNDY_MESH_DECLAREENTITIES_HPP_
 
 /// \file DeclareEntities.hpp
-/// \defgroup MundyMeshDeclareEntities mundy::mesh::DeclareEntities
 /// \brief A set of helper methods for declaring entities without worrying about parallel ownership and sharing.
 
 // C++ core
 #include <algorithm>         // for std::find
+#include <deque>             // for std::deque (stable references on push_back)
 #include <initializer_list>  // for std::initializer_list
 #include <iostream>          // for std::ostream
 #include <map>               // for std::map
@@ -34,6 +34,7 @@
 #include <stdexcept>         // for std::runtime_error
 #include <string>            // for std::string
 #include <tuple>             // for std::tuple, std::make_tuple
+#include <type_traits>       // for std::is_arithmetic_v
 #include <typeindex>         // for std::type_index
 #include <unordered_map>     // for std::unordered_map
 #include <unordered_set>     // for std::unordered_set
@@ -45,6 +46,7 @@
 #include <stk_mesh/base/FEMHelpers.hpp>  // for stk::mesh::declare_element
 
 // Mundy
+#include <Mundy_config.hpp>              // for MUNDY_DEPRECATED_MSG
 #include <mundy_mesh/Class.hpp>          // for mundy::mesh::Class, mundy::mesh::ClassVector
 #include <mundy_mesh/LinkData.hpp>       // for mundy::mesh::LinkData
 #include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_REQUIRE
@@ -59,8 +61,8 @@ namespace mesh {
 /// nodes and elements that should be declared in the mesh. Once complete, use it to perform the declaration, sharing,
 /// and setting of field data automatically.
 ///
-/// \note We emphasize that all processes should own exact copies of the same DeclareEntitiesHelper. This choice means
-/// that DeclareEntitiesHelper is not optimally performant but the cost of duplicating entity information is cheap in
+/// \note We emphasize that all processes should own exact copies of the same EntityDeclaration. This choice means
+/// that EntityDeclaration is not optimally performant but the cost of duplicating entity information is cheap in
 /// comparison to the burden of determining parallel ownership and sharing.
 ///
 /// \note The create_* methods within this class are not thread safe. To perform parallel construction of entities, use
@@ -77,7 +79,7 @@ namespace mesh {
 /// \code{.cpp}
 ///   const int num_nodes = 7;
 ///   const int num_edges = 6;
-///   DeclareEntitiesHelper builder;
+///   EntityDeclaration builder;
 ///   for (int i = 0; i < num_nodes; ++i) {
 ///     builder.create_node().owning_proc(0).id(i + 1);
 ///   }
@@ -91,7 +93,7 @@ namespace mesh {
 ///   }
 ///   builder.declare_entities(bulk_data);
 /// \endcode
-class DeclareEntitiesHelper {
+class EntityDeclaration {
  private:
   //! \name Private Helpers
   //@{
@@ -109,6 +111,9 @@ class DeclareEntitiesHelper {
   class FieldData : public FieldDataBase {
    public:
     FieldData(stk::mesh::FieldBase* field, const std::vector<T>& data) : field_(field), data_(data) {
+    }
+
+    FieldData(stk::mesh::FieldBase& field, const std::vector<T>& data) : FieldData(&field, data) {
     }
 
     void set_field_data(const stk::mesh::Entity& entity) override {
@@ -169,6 +174,25 @@ class DeclareEntitiesHelper {
     std::map<std::string, DeclareLinksInfo> link_info_map;
   };
 
+  // Print a named sequence whose elements are converted to strings by name_fn.
+  template <typename Range, typename NameFn>
+  static void print_range(std::ostream& os, const char* label, const Range& range, NameFn name_fn) {
+    os << "  " << label << ": ";
+    if (std::begin(range) == std::end(range)) {
+      os << "None";
+    } else {
+      os << "{";
+      bool first = true;
+      for (const auto& item : range) {
+        if (!first) os << ", ";
+        os << name_fn(item);
+        first = false;
+      }
+      os << "}";
+    }
+    os << "\n";
+  }
+
   // Overload the operator<<
   friend std::ostream& operator<<(std::ostream& os, const DeclareLinksInfo& info) {
     size_t num_links = info.linked_entity_ids.size();
@@ -194,89 +218,17 @@ class DeclareEntitiesHelper {
   friend std::ostream& operator<<(std::ostream& os, const DeclareNodeInfo& info) {
     os << "  Owning Processor: " << info.owning_proc << "\n";
     os << "  Node ID: " << info.id << "\n";
-    os << "  Number of Parts: " << info.parts.size() << "\n";
-
-    // Print Parts
-    os << "  Parts: ";
-    size_t part_counter = 0;
-    size_t num_parts = info.parts.size();
-    if (num_parts == 0) {
-      os << "None";
-    } else {
-      os << "{";
-      for (const auto& part : info.parts) {
-        if (part != nullptr) {
-          os << part->name();
-        } else {
-          os << "nullptr";
-        }
-        if (part_counter < num_parts - 1) {
-          os << ", ";
-        } else {
-          os << "}";
-        }
-        ++part_counter;
-      }
-    }
-    os << "\n";
-
-    os << "  Number of Classes: " << info.classes.size() << "\n";
-    os << "  Classes: ";
-    size_t class_counter = 0;
-    size_t num_classes = info.classes.size();
-    if (num_classes == 0) {
-      os << "None";
-    } else {
-      os << "{";
-      for (const auto& class_instance : info.classes) {
-        if (class_instance != nullptr) {
-          os << class_instance->name();
-        } else {
-          os << "nullptr";
-        }
-        if (class_counter < num_classes - 1) {
-          os << ", ";
-        } else {
-          os << "}";
-        }
-        ++class_counter;
-      }
-    }
-    os << "\n";
-
-    // Print Field Data
-    os << "  Field Data: ";
-    size_t field_data_counter = 0;
-    size_t num_field_data = info.field_data.size();
-    if (num_field_data == 0) {
-      os << "None";
-    } else {
-      os << "{";
-      for (const auto& field_data : info.field_data) {
-        if (field_data != nullptr) {
-          os << field_data->name() << ": " << field_data->type().name();
-        } else {
-          os << "nullptr";
-        }
-        if (field_data_counter < num_field_data - 1) {
-          os << ", ";
-        } else {
-          os << "}";
-        }
-        ++field_data_counter;
-      }
-    }
-    os << "\n";
-
-    // Print the links
+    print_range(os, "Parts", info.parts, [](const stk::mesh::Part* p) { return p ? p->name() : "nullptr"; });
+    print_range(os, "Classes", info.classes, [](const Class* c) { return c ? c->name() : "nullptr"; });
+    print_range(os, "Field Data", info.field_data, [](const std::shared_ptr<FieldDataBase>& f) {
+      return f ? f->name() + ": " + f->type().name() : "nullptr";
+    });
     if (!info.link_info_map.empty()) {
       os << "  Links Info:\n";
-      for (const auto& link_pair : info.link_info_map) {
-        os << "    LinkMetaData Name: " << link_pair.first << "\n";
-        os << link_pair.second;
+      for (const auto& [name, link_info] : info.link_info_map) {
+        os << "    LinkMetaData Name: " << name << "\n" << link_info;
       }
     }
-
     return os;
   }
 
@@ -285,111 +237,18 @@ class DeclareEntitiesHelper {
     os << "  Owning Processor: " << info.owning_proc << "\n";
     os << "  Element ID: " << info.id << "\n";
     os << "  Topology: " << info.topology.name() << "\n";
-
-    // Print Node IDs
-    os << "  Number of Node IDs: " << info.node_ids.size() << "\n";
-    os << "  Node IDs: ";
-    size_t node_id_counter = 0;
-    size_t num_node_ids = info.node_ids.size();
-    if (num_node_ids == 0) {
-      os << "None";
-    } else {
-      os << "{";
-      for (const auto& node_id : info.node_ids) {
-        os << node_id;
-        if (node_id_counter < num_node_ids - 1) {
-          os << ", ";
-        } else {
-          os << "}";
-        }
-        ++node_id_counter;
-      }
-    }
-    os << "\n";
-
-    // Print Parts
-    os << "  Number of Parts: " << info.parts.size() << "\n";
-    os << "  Parts: ";
-    size_t part_counter = 0;
-    size_t num_parts = info.parts.size();
-    if (num_parts == 0) {
-      os << "None";
-    } else {
-      os << "{";
-      for (const auto& part : info.parts) {
-        if (part != nullptr) {
-          os << part->name();
-        } else {
-          os << "nullptr";
-        }
-        if (part_counter < num_parts - 1) {
-          os << ", ";
-        } else {
-          os << "}";
-        }
-        ++part_counter;
-      }
-    }
-    os << "\n";
-
-    os << "  Number of Classes: " << info.classes.size() << "\n";
-    os << "  Classes: ";
-    size_t class_counter = 0;
-    size_t num_classes = info.classes.size();
-    if (num_classes == 0) {
-      os << "None";
-    } else {
-      os << "{";
-      for (const auto& class_instance : info.classes) {
-        if (class_instance != nullptr) {
-          os << class_instance->name();
-        } else {
-          os << "nullptr";
-        }
-        if (class_counter < num_classes - 1) {
-          os << ", ";
-        } else {
-          os << "}";
-        }
-        ++class_counter;
-      }
-    }
-    os << "\n";
-
-    // Print Field Data
-    os << "  Number of Field Data: " << info.field_data.size() << "\n";
-    os << "  Field Data: ";
-    size_t field_data_counter = 0;
-    size_t num_field_data = info.field_data.size();
-    if (num_field_data == 0) {
-      os << "None";
-    } else {
-      os << "{";
-      for (const auto& field_data : info.field_data) {
-        if (field_data != nullptr) {
-          os << field_data->name() << ": " << field_data->type().name();
-        } else {
-          os << "nullptr";
-        }
-        if (field_data_counter < num_field_data - 1) {
-          os << ", ";
-        } else {
-          os << "}";
-        }
-        ++field_data_counter;
-      }
-    }
-
-    // Print the links
+    print_range(os, "Node IDs", info.node_ids, [](stk::mesh::EntityId id) { return std::to_string(id); });
+    print_range(os, "Parts", info.parts, [](const stk::mesh::Part* p) { return p ? p->name() : "nullptr"; });
+    print_range(os, "Classes", info.classes, [](const Class* c) { return c ? c->name() : "nullptr"; });
+    print_range(os, "Field Data", info.field_data, [](const std::shared_ptr<FieldDataBase>& f) {
+      return f ? f->name() + ": " + f->type().name() : "nullptr";
+    });
     if (!info.link_info_map.empty()) {
       os << "  Links Info:\n";
-      for (const auto& link_pair : info.link_info_map) {
-        os << "    LinkMetaData Name: " << link_pair.first << "\n";
-        os << link_pair.second;
+      for (const auto& [name, link_info] : info.link_info_map) {
+        os << "    LinkMetaData Name: " << name << "\n" << link_info;
       }
     }
-
-    os << "\n";
     return os;
   }
   //@}
@@ -477,9 +336,23 @@ class DeclareEntitiesHelper {
     /// \param field The field to set data for
     /// \param data The data to set
     template <typename T>
+    NodeBuilder& add_field_data(stk::mesh::FieldBase& field, const std::vector<T>& data) {
+      return add_field_data(&field, data);
+    }
+
+    /// \brief Add a single scalar value as field data for the node.
+    /// Use the vector overload for multi-component fields.
+    template <typename T>
+      requires std::is_arithmetic_v<T>
     NodeBuilder& add_field_data(stk::mesh::FieldBase* const field, const T& data) {
       node_info_.field_data.push_back(std::make_shared<FieldData<T>>(field, std::vector<T>{data}));
       return *this;
+    }
+
+    template <typename T>
+      requires std::is_arithmetic_v<T>
+    NodeBuilder& add_field_data(stk::mesh::FieldBase& field, const T& data) {
+      return add_field_data(&field, data);
     }
 
     /// \brief This node is a valid linker. Link it to a given entity at the desired ordinal.
@@ -501,8 +374,18 @@ class DeclareEntitiesHelper {
       return *this;
     }
 
+    /// \brief This node is a valid linker. Link it to a given entity at the desired ordinal.
+    /// \param link_data The link data to link under.
+    /// \param linked_entity_id The entity id of the entity to link to.
+    /// \param linked_entity_rank The entity rank of the entity to link to.
+    /// \param ordinal The slot/ordinal to link the entity at.
+    NodeBuilder& links_to(LinkData& link_data, const stk::mesh::EntityId linked_entity_id,
+                          const stk::mesh::EntityRank linked_entity_rank, const unsigned ordinal) {
+      return links_to(&link_data, linked_entity_id, linked_entity_rank, ordinal);
+    }
+
     /// \brief Get the owner of the builder.
-    DeclareEntitiesHelper& owner() {
+    EntityDeclaration& owner() {
       return owner_;
     }
 
@@ -515,15 +398,15 @@ class DeclareEntitiesHelper {
 
    private:
     /// \brief Private constructor for the NodeBuilder.
-    NodeBuilder(DeclareEntitiesHelper& owner, DeclareNodeInfo& node_info) : owner_(owner), node_info_(node_info) {
+    NodeBuilder(EntityDeclaration& owner, DeclareNodeInfo& node_info) : owner_(owner), node_info_(node_info) {
     }
 
     //! \name Internal Data
     //@{
 
-    DeclareEntitiesHelper& owner_;
+    EntityDeclaration& owner_;
     DeclareNodeInfo& node_info_;
-    friend class DeclareEntitiesHelper;
+    friend class EntityDeclaration;
     //@}
   };  // class NodeBuilder
 
@@ -616,13 +499,27 @@ class DeclareEntitiesHelper {
     /// \param field The field to set data for
     /// \param data The data to set
     template <typename T>
+    ElementBuilder& add_field_data(stk::mesh::FieldBase& field, const std::vector<T>& data) {
+      return add_field_data(&field, data);
+    }
+
+    /// \brief Add a single scalar value as field data for the element.
+    /// Use the vector overload for multi-component fields.
+    template <typename T>
+      requires std::is_arithmetic_v<T>
     ElementBuilder& add_field_data(stk::mesh::FieldBase* const field, const T& data) {
       elem_info_.field_data.push_back(std::make_shared<FieldData<T>>(field, std::vector<T>{data}));
       return *this;
     }
 
+    template <typename T>
+      requires std::is_arithmetic_v<T>
+    ElementBuilder& add_field_data(stk::mesh::FieldBase& field, const T& data) {
+      return add_field_data(&field, data);
+    }
+
     /// \brief This element is a valid linker. Link it to a given entity at the desired ordinal.
-    /// \param link_meta_data_name The name of the LinkMetaData to link under.
+    /// \param link_data_ptr The link data to link under.
     /// \param linked_entity_id The entity id of the entity to link to.
     /// \param linked_entity_rank The entity rank of the entity to link to.
     /// \param ordinal The slot/ordinal to link the entity at.
@@ -640,8 +537,18 @@ class DeclareEntitiesHelper {
       return *this;
     }
 
+    /// \brief This element is a valid linker. Link it to a given entity at the desired ordinal.
+    /// \param link_data The link data to link under.
+    /// \param linked_entity_id The entity id of the entity to link to.
+    /// \param linked_entity_rank The entity rank of the entity to link to.
+    /// \param ordinal The slot/ordinal to link the entity at.
+    ElementBuilder& links_to(LinkData& link_data, const stk::mesh::EntityId linked_entity_id,
+                             const stk::mesh::EntityRank linked_entity_rank, const unsigned ordinal) {
+      return links_to(&link_data, linked_entity_id, linked_entity_rank, ordinal);
+    }
+
     /// \brief Get the owner of the builder.
-    DeclareEntitiesHelper& owner() {
+    EntityDeclaration& owner() {
       return owner_;
     }
 
@@ -654,21 +561,21 @@ class DeclareEntitiesHelper {
 
    private:
     /// \brief Private constructor for the ElementBuilder.
-    ElementBuilder(DeclareEntitiesHelper& owner, DeclareElementInfo& element_info)
+    ElementBuilder(EntityDeclaration& owner, DeclareElementInfo& element_info)
         : owner_(owner), elem_info_(element_info) {
     }
 
     //! \name Internal Data
     //@{
 
-    DeclareEntitiesHelper& owner_;
+    EntityDeclaration& owner_;
     DeclareElementInfo& elem_info_;
     //@}
 
     //! \name Friends <3
     //@{
 
-    friend class DeclareEntitiesHelper;
+    friend class EntityDeclaration;
     //@}
   };  // class ElementBuilder
   //@}
@@ -690,10 +597,11 @@ class DeclareEntitiesHelper {
   //! \name Actions
   //@{
 
-  /// \brief Reserve space for nodes and elements to avoid reallocations.
-  void reserve(const size_t num_nodes, const size_t num_elements) {
-    node_info_vec_.reserve(num_nodes);
-    elem_info_vec_.reserve(num_elements);
+  /// \brief No-op: std::deque storage does not support reserve(), but references remain
+  /// stable across push_back regardless of size.
+  MUNDY_DEPRECATED_MSG(
+      "To be removed. We traded reserve speed benefits for reference stability upon pushback resizing.")
+  void reserve(const size_t /*num_nodes*/, const size_t /*num_elements*/) {
   }
 
   /// \brief Create a new NodeBuilder for hierarchical construction of a node (not thread safe).
@@ -751,7 +659,7 @@ class DeclareEntitiesHelper {
   }
 
   /// \brief Print the builder information to the output stream.
-  friend std::ostream& operator<<(std::ostream& os, const DeclareEntitiesHelper& builder) {
+  friend std::ostream& operator<<(std::ostream& os, const EntityDeclaration& builder) {
     os << "Number of Nodes: " << builder.node_info_vec_.size() << "\n";
     size_t node_count = 0;
     for (const auto& node_info : builder.node_info_vec_) {
@@ -782,13 +690,12 @@ class DeclareEntitiesHelper {
   /// This method will declare the entities in the mesh, share them, and set the field data according to the
   /// information already provided to the builder.
   ///
-  /// We will not open a new modification cycle within declare entities and will instead assert that the function
-  /// is called in a mod cycle. This helps with performance, as it avoid repeatedly opening and closing modification
-  /// cycles, but it comes with a higher burden on the user. For example, entity sharing and aura generation will not
-  /// occur until the next call to modification_end.
+  /// \note This method may open and close multiple STK modification cycles internally to handle
+  /// parallel sharing and auto-aura propagation. If the caller has not opened a cycle, one will
+  /// be opened automatically.
   ///
   /// \param bulk_data The bulk data
-  DeclareEntitiesHelper& declare_entities(stk::mesh::BulkData& bulk_data);
+  EntityDeclaration& declare_entities(stk::mesh::BulkData& bulk_data);
   //@}
 
  private:
@@ -865,10 +772,14 @@ class DeclareEntitiesHelper {
   //! \name Internal Data
   //@{
 
-  std::vector<DeclareNodeInfo> node_info_vec_;
-  std::vector<DeclareElementInfo> elem_info_vec_;
+  // std::deque is used instead of std::vector so that push_back (via create_node / create_element)
+  // does not invalidate references held by outstanding NodeBuilder / ElementBuilder instances.
+  std::deque<DeclareNodeInfo> node_info_vec_;
+  std::deque<DeclareElementInfo> elem_info_vec_;
   //@}
 };
+
+using DeclareEntitiesHelper MUNDY_DEPRECATED_MSG("use EntityDeclaration") = EntityDeclaration;
 
 }  // namespace mesh
 

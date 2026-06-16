@@ -41,7 +41,7 @@ namespace {
 
 template <typename Point>
 struct BBox {
-  using Scalar = typename Point::scalar_t;
+  using Scalar = typename Point::value_type;
   BBox(Scalar bound) {
     p_min.fill(-bound);
     p_max.fill(bound);
@@ -160,7 +160,7 @@ template <typename Point>
 void GenerateRandomPoints(std::vector<Point>& points) {
   std::random_device rd;
   std::mt19937 e2(rd());
-  using Scalar = typename Point::scalar_t;
+  using Scalar = typename Point::value_type;
 
   auto bound = static_cast<Scalar>(std::pow(2.0, 3));
   std::uniform_real_distribution<Scalar> dist(-bound, bound);

@@ -38,8 +38,6 @@ namespace impl {
 
 /// \class DeployFunctorOnNeighborPairs
 /// \brief Kokkos functor that expands target-parallel work into neighbor-pair callbacks.
-/// \tparam NeighborListType Concrete neighbor-list implementation type.
-/// \tparam Functor User functor callable with `NeighborPair<NeighborListType>`.
 template <typename NeighborListType, typename Functor>
 class DeployFunctorOnNeighborPairs {
  public:
@@ -76,8 +74,6 @@ class DeployFunctorOnNeighborPairs {
 
 /// \class DeployFunctorOnTargetNeighbors
 /// \brief Kokkos functor that invokes a target-neighbors callback for each target ordinal.
-/// \tparam NeighborListType Concrete neighbor-list implementation type.
-/// \tparam Functor User functor callable with `Neighbors<NeighborListType>`.
 template <typename NeighborListType, typename Functor>
 class DeployFunctorOnTargetNeighbors {
  public:
@@ -117,10 +113,6 @@ class DeployFunctorOnTargetNeighbors {
 /// row serially and calls the user callback with a `NeighborPair` payload and the thread-local
 /// reduction accumulator.  The `value_type` is taken from `ReducerType::value_type` so it matches
 /// whatever Kokkos built-in reducer (Sum, Min, Max, …) the caller passes.
-///
-/// \tparam NeighborListType Concrete neighbor-list implementation type.
-/// \tparam Functor User functor callable as `functor(NeighborPair<NeighborListType>, value_type&)`.
-/// \tparam ReducerType Kokkos reducer type (e.g. `Kokkos::Sum<double>`); supplies `value_type`.
 template <typename NeighborListType, typename Functor, typename ReducerType>
 class DeployReduceFunctorOnNeighborPairs {
  public:
@@ -134,7 +126,8 @@ class DeployReduceFunctorOnNeighborPairs {
   /// \param functor [in] User callback to run for every neighbor pair.
   KOKKOS_INLINE_FUNCTION
   DeployReduceFunctorOnNeighborPairs(const NeighborListType& list, const Functor& functor)
-      : list_(&list), functor_(functor) {}
+      : list_(&list), functor_(functor) {
+  }
 
   /// \brief Accumulate over every neighbor of one target ordinal.
   /// \param target_index [in] Dense target ordinal in `[0, list.num_targets())`.
@@ -159,10 +152,6 @@ class DeployReduceFunctorOnNeighborPairs {
 ///
 /// The outer `parallel_reduce` iterates over targets; this functor constructs a `Neighbors` facade for
 /// each target and calls the user callback with it and the thread-local accumulator.
-///
-/// \tparam NeighborListType Concrete neighbor-list implementation type.
-/// \tparam Functor User functor callable as `functor(Neighbors<NeighborListType>, value_type&)`.
-/// \tparam ReducerType Kokkos reducer type (e.g. `Kokkos::Sum<double>`); supplies `value_type`.
 template <typename NeighborListType, typename Functor, typename ReducerType>
 class DeployReduceFunctorOnTargetNeighbors {
  public:
@@ -176,7 +165,8 @@ class DeployReduceFunctorOnTargetNeighbors {
   /// \param functor [in] User callback to run for every target.
   KOKKOS_INLINE_FUNCTION
   DeployReduceFunctorOnTargetNeighbors(const NeighborListType& list, const Functor& functor)
-      : list_(&list), functor_(functor) {}
+      : list_(&list), functor_(functor) {
+  }
 
   /// \brief Accumulate over one target ordinal.
   /// \param target_index [in] Dense target ordinal in `[0, list.num_targets())`.
@@ -201,9 +191,6 @@ class DeployReduceFunctorOnTargetNeighbors {
 /// `k < list->num_neighbors(t)` and skips padding slots silently.  This exposes
 /// `num_targets * max_neighbors_per_target` parallel work items, removing the serial inner
 /// loop and load-imbalance of the target-parallel strategy when neighbor counts vary.
-///
-/// \tparam NeighborListType Concrete neighbor-list implementation type.
-/// \tparam Functor User functor callable with `NeighborPair<NeighborListType>`.
 template <typename NeighborListType, typename Functor>
 class FlatDeployFunctorOnNeighborPairs {
  public:
@@ -215,7 +202,8 @@ class FlatDeployFunctorOnNeighborPairs {
   /// \param functor [in] User callback to run for every valid neighbor pair.
   KOKKOS_INLINE_FUNCTION
   FlatDeployFunctorOnNeighborPairs(const NeighborListType& list, const Functor& functor)
-      : list_(&list), functor_(functor) {}
+      : list_(&list), functor_(functor) {
+  }
 
   /// \brief Invoke the user callback for cell `(target_index, neighbor_ordinal)` if valid.
   /// \param target_index [in] Dense target ordinal (outer MDRange dimension).
@@ -243,10 +231,6 @@ class FlatDeployFunctorOnNeighborPairs {
 ///
 /// Same cell-guard logic as `FlatDeployFunctorOnNeighborPairs`, but with an accumulator argument
 /// for use inside `parallel_reduce`.
-///
-/// \tparam NeighborListType Concrete neighbor-list implementation type.
-/// \tparam Functor User functor callable as `functor(NeighborPair<NeighborListType>, value_type&)`.
-/// \tparam ReducerType Kokkos reducer type (e.g. `Kokkos::Sum<double>`); supplies `value_type`.
 template <typename NeighborListType, typename Functor, typename ReducerType>
 class FlatDeployReduceFunctorOnNeighborPairs {
  public:
@@ -260,7 +244,8 @@ class FlatDeployReduceFunctorOnNeighborPairs {
   /// \param functor [in] User callback to run for every valid neighbor pair.
   KOKKOS_INLINE_FUNCTION
   FlatDeployReduceFunctorOnNeighborPairs(const NeighborListType& list, const Functor& functor)
-      : list_(&list), functor_(functor) {}
+      : list_(&list), functor_(functor) {
+  }
 
   /// \brief Accumulate over cell `(target_index, neighbor_ordinal)` if valid.
   /// \param target_index [in] Dense target ordinal (outer MDRange dimension).

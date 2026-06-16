@@ -36,8 +36,12 @@
 #include <mundy_geom/primitives/Point.hpp>           // for mundy::Point
 #include <mundy_math/Tolerance.hpp>                  // for mundy::get_zero_tolerance
 #include <mundy_utils/requires.hpp>
+#include <mundy_math/cmath.hpp>
 
 namespace mundy {
+
+/// \addtogroup MundyGeomDistance
+/// @{
 
 //! \name Free space distance calculations
 //@{
@@ -47,8 +51,8 @@ namespace mundy {
 /// \param[in] line_segment1 The first line segment
 /// \param[in] line_segment2 The second line segment
 template <ValidLineSegmentType LineSegmentType1, ValidLineSegmentType LineSegmentType2>
-MUNDY_REQUIRES(std::is_same_v<typename LineSegmentType1::scalar_t, typename LineSegmentType2::scalar_t>)
-KOKKOS_FUNCTION typename LineSegmentType1::scalar_t distance(const LineSegmentType1& line_segment1,  //
+MUNDY_REQUIRES(std::is_same_v<typename LineSegmentType1::value_type, typename LineSegmentType2::value_type>)
+KOKKOS_FUNCTION typename LineSegmentType1::value_type distance(const LineSegmentType1& line_segment1,  //
                                                              const LineSegmentType2& line_segment2) {
   return distance(SharedNormalSigned{}, line_segment1, line_segment2);
 }
@@ -58,8 +62,8 @@ KOKKOS_FUNCTION typename LineSegmentType1::scalar_t distance(const LineSegmentTy
 /// \param[in] line_segment1 The first line segment
 /// \param[in] line_segment2 The second line segment
 template <ValidLineSegmentType LineSegmentType1, ValidLineSegmentType LineSegmentType2>
-MUNDY_REQUIRES(std::is_same_v<typename LineSegmentType1::scalar_t, typename LineSegmentType2::scalar_t>)
-KOKKOS_FUNCTION typename LineSegmentType1::scalar_t distance([[maybe_unused]] const Euclidean distance_type,  //
+MUNDY_REQUIRES(std::is_same_v<typename LineSegmentType1::value_type, typename LineSegmentType2::value_type>)
+KOKKOS_FUNCTION typename LineSegmentType1::value_type distance([[maybe_unused]] const Euclidean distance_type,  //
                                                              const LineSegmentType1& line_segment1,           //
                                                              const LineSegmentType2& line_segment2) {
   // no difference between distance types for line segments
@@ -71,12 +75,12 @@ KOKKOS_FUNCTION typename LineSegmentType1::scalar_t distance([[maybe_unused]] co
 /// \param[in] line_segment1 The first line segment
 /// \param[in] line_segment2 The second line segment
 template <ValidLineSegmentType LineSegmentType1, ValidLineSegmentType LineSegmentType2>
-MUNDY_REQUIRES(std::is_same_v<typename LineSegmentType1::scalar_t, typename LineSegmentType2::scalar_t>)
-KOKKOS_FUNCTION typename LineSegmentType1::scalar_t
+MUNDY_REQUIRES(std::is_same_v<typename LineSegmentType1::value_type, typename LineSegmentType2::value_type>)
+KOKKOS_FUNCTION typename LineSegmentType1::value_type
     distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
              const LineSegmentType1& line_segment1,                    //
              const LineSegmentType2& line_segment2) {
-  using Scalar = typename LineSegmentType1::scalar_t;
+  using Scalar = typename LineSegmentType1::value_type;
 
   // Part of this function was adapted from VTK's vtkLine::DistanceBetweenLineSegments, which, in turn adapted part of
   // it from "GeometryAlgorithms.com"
@@ -95,8 +99,11 @@ KOKKOS_FUNCTION typename LineSegmentType1::scalar_t
   const Scalar e = mundy::dot(v, w);
   const Scalar D = a * c - b * b;  // always >= 0
 
-  // Compute the line parameters of the two closest points
-  if (D < Kokkos::sqrt(mundy::get_zero_tolerance<Scalar>())) {
+  // Compute the line parameters of the two closest points.
+  // D <= 0 catches truly degenerate segments (a=0 or c=0 → D=0) and floating-point noise.
+  // D*D < zero_tol*a*c is scale-invariant: checks sin²(θ) < sqrt(zero_tol/a/c) without sqrt.
+  constexpr Scalar zero_tol = get_zero_tolerance<Scalar>();
+  if (D <= static_cast<Scalar>(0) || D * D < zero_tol * a * c) {
     // CASE 1: The lines are colinear. Therefore, one of the four endpoints is the
     // point of closest approach. We'll directly compute the 4 distances and the closest point on the line.
     const Scalar dist1 = distance(l0, line_segment2);
@@ -105,7 +112,7 @@ KOKKOS_FUNCTION typename LineSegmentType1::scalar_t
     const Scalar dist4 = distance(m1, line_segment1);
 
     // Determine which of the 4 distances is the minimum using exact Scalar comparison.
-    Scalar min_distance = Kokkos::min(Kokkos::min(dist1, dist2), Kokkos::min(dist3, dist4));
+    Scalar min_distance = min(min(dist1, dist2), min(dist3, dist4));
     return min_distance;
   }
 
@@ -152,10 +159,8 @@ KOKKOS_FUNCTION typename LineSegmentType1::scalar_t
   }
 
   // Finally, get the arch-length parameters, the corresponding closest points, and their distance.
-  const Scalar arch_length1 =
-      (Kokkos::fabs(sN) < mundy::get_zero_tolerance<Scalar>()) ? static_cast<Scalar>(0.0) : sN / sD;
-  const Scalar arch_length2 =
-      (Kokkos::fabs(tN) < mundy::get_zero_tolerance<Scalar>()) ? static_cast<Scalar>(0.0) : tN / tD;
+  const Scalar arch_length1 = (fabs(sN) < zero_tol) ? static_cast<Scalar>(0.0) : sN / sD;
+  const Scalar arch_length2 = (fabs(tN) < zero_tol) ? static_cast<Scalar>(0.0) : tN / tD;
   const auto closest_point1 = l0 + arch_length1 * u;
   const auto closest_point2 = m0 + arch_length2 * v;
   return distance(closest_point1, closest_point2);
@@ -171,15 +176,15 @@ KOKKOS_FUNCTION typename LineSegmentType1::scalar_t
 /// \param[out] arch_length2 The arch-length parameter of the closest point on the second line segment
 /// \param[out] sep The separation vector (from line_segment1 to line_segment2)
 template <ValidLineSegmentType LineSegmentType1, ValidLineSegmentType LineSegmentType2>
-MUNDY_REQUIRES(std::is_same_v<typename LineSegmentType1::scalar_t, typename LineSegmentType2::scalar_t>)
-KOKKOS_FUNCTION typename LineSegmentType1::scalar_t
+MUNDY_REQUIRES(std::is_same_v<typename LineSegmentType1::value_type, typename LineSegmentType2::value_type>)
+KOKKOS_FUNCTION typename LineSegmentType1::value_type
     distance(const LineSegmentType1& line_segment1,                       //
              const LineSegmentType2& line_segment2,                       //
-             Point<typename LineSegmentType1::scalar_t>& closest_point1,  //
-             Point<typename LineSegmentType1::scalar_t>& closest_point2,  //
-             typename LineSegmentType1::scalar_t& arch_length1,           //
-             typename LineSegmentType1::scalar_t& arch_length2,           //
-             mundy::Vector3<typename LineSegmentType1::scalar_t>& sep) {
+             Point<typename LineSegmentType1::value_type>& closest_point1,  //
+             Point<typename LineSegmentType1::value_type>& closest_point2,  //
+             typename LineSegmentType1::value_type& arch_length1,           //
+             typename LineSegmentType1::value_type& arch_length2,           //
+             mundy::Vector3<typename LineSegmentType1::value_type>& sep) {
   return distance(SharedNormalSigned{}, line_segment1, line_segment2,  //
                   closest_point1, closest_point2, arch_length1, arch_length2, sep);
 }
@@ -194,17 +199,17 @@ KOKKOS_FUNCTION typename LineSegmentType1::scalar_t
 /// \param[out] arch_length2 The arch-length parameter of the closest point on the second line segment
 /// \param[out] sep The separation vector (from line_segment1 to line_segment2)
 template <ValidLineSegmentType LineSegmentType1, ValidLineSegmentType LineSegmentType2>
-MUNDY_REQUIRES(std::is_same_v<typename LineSegmentType1::scalar_t, typename LineSegmentType2::scalar_t>)
-KOKKOS_FUNCTION typename LineSegmentType1::scalar_t
+MUNDY_REQUIRES(std::is_same_v<typename LineSegmentType1::value_type, typename LineSegmentType2::value_type>)
+KOKKOS_FUNCTION typename LineSegmentType1::value_type
     distance([[maybe_unused]] const SharedNormalSigned distance_type,     //
              const LineSegmentType1& line_segment1,                       //
              const LineSegmentType2& line_segment2,                       //
-             Point<typename LineSegmentType1::scalar_t>& closest_point1,  //
-             Point<typename LineSegmentType1::scalar_t>& closest_point2,  //
-             typename LineSegmentType1::scalar_t& arch_length1,           //
-             typename LineSegmentType1::scalar_t& arch_length2,           //
-             mundy::Vector3<typename LineSegmentType1::scalar_t>& sep) {
-  using Scalar = typename LineSegmentType1::scalar_t;
+             Point<typename LineSegmentType1::value_type>& closest_point1,  //
+             Point<typename LineSegmentType1::value_type>& closest_point2,  //
+             typename LineSegmentType1::value_type& arch_length1,           //
+             typename LineSegmentType1::value_type& arch_length2,           //
+             mundy::Vector3<typename LineSegmentType1::value_type>& sep) {
+  using Scalar = typename LineSegmentType1::value_type;
 
   // Part of this function was adapted from VTK, which, in turn adapted part of it from "GeometryAlgorithms.com"
   const auto& l0 = line_segment1.start();
@@ -222,8 +227,11 @@ KOKKOS_FUNCTION typename LineSegmentType1::scalar_t
   const Scalar e = mundy::dot(v, w);
   const Scalar D = a * c - b * b;  // always >= 0
 
-  // Compute the line parameters of the two closest points
-  if (D < Kokkos::sqrt(mundy::get_zero_tolerance<Scalar>())) {
+  // Compute the line parameters of the two closest points.
+  // D <= 0 catches truly degenerate segments (a=0 or c=0 → D=0) and floating-point noise.
+  // D*D < zero_tol*a*c is scale-invariant: checks sin²(θ) < sqrt(zero_tol/a/c) without sqrt.
+  constexpr Scalar zero_tol = get_zero_tolerance<Scalar>();
+  if (D <= static_cast<Scalar>(0) || D * D < zero_tol * a * c) {
     // CASE 1: The lines are colinear. Therefore, one of the four endpoints is the
     // point of closest approach. We'll directly compute the 4 distances and the closest point on the line.
     Point<Scalar> closest_point_tmp1;
@@ -244,7 +252,7 @@ KOKKOS_FUNCTION typename LineSegmentType1::scalar_t
     const Scalar dist4 = distance(m1, line_segment1, closest_point_tmp4, arch_length_tmp4, sep_tmp4);
 
     // Determine which of the 4 distances is the minimum using exact Scalar comparison.
-    Scalar min_distance = Kokkos::min(Kokkos::min(dist1, dist2), Kokkos::min(dist3, dist4));
+    Scalar min_distance = min(min(dist1, dist2), min(dist3, dist4));
     if (min_distance == dist1) {
       // CASE 1.1: l0 is closest to the line segment m0-m1.
       arch_length1 = static_cast<Scalar>(0.0);
@@ -321,8 +329,8 @@ KOKKOS_FUNCTION typename LineSegmentType1::scalar_t
   }
 
   // Finally, get the arch-length parameters, the corresponding closest points, and their distance.
-  arch_length1 = (Kokkos::fabs(sN) < mundy::get_zero_tolerance<Scalar>()) ? static_cast<Scalar>(0.0) : sN / sD;
-  arch_length2 = (Kokkos::fabs(tN) < mundy::get_zero_tolerance<Scalar>()) ? static_cast<Scalar>(0.0) : tN / tD;
+  arch_length1 = (fabs(sN) < zero_tol) ? static_cast<Scalar>(0.0) : sN / sD;
+  arch_length2 = (fabs(tN) < zero_tol) ? static_cast<Scalar>(0.0) : tN / tD;
   closest_point1 = l0 + arch_length1 * u;
   closest_point2 = m0 + arch_length2 * v;
   return distance(closest_point1, closest_point2, sep);
@@ -338,20 +346,22 @@ KOKKOS_FUNCTION typename LineSegmentType1::scalar_t
 /// \param[out] arch_length2 The arch-length parameter of the closest point on the second line segment
 /// \param[out] sep The separation vector (from line_segment1 to line_segment2)
 template <ValidLineSegmentType LineSegmentType1, ValidLineSegmentType LineSegmentType2>
-MUNDY_REQUIRES(std::is_same_v<typename LineSegmentType1::scalar_t, typename LineSegmentType2::scalar_t>)
-KOKKOS_FUNCTION typename LineSegmentType1::scalar_t
+MUNDY_REQUIRES(std::is_same_v<typename LineSegmentType1::value_type, typename LineSegmentType2::value_type>)
+KOKKOS_FUNCTION typename LineSegmentType1::value_type
     distance([[maybe_unused]] const Euclidean distance_type,              //
              const LineSegmentType1& line_segment1,                       //
              const LineSegmentType2& line_segment2,                       //
-             Point<typename LineSegmentType1::scalar_t>& closest_point1,  //
-             Point<typename LineSegmentType1::scalar_t>& closest_point2,  //
-             typename LineSegmentType1::scalar_t& arch_length1,           //
-             typename LineSegmentType1::scalar_t& arch_length2,           //
-             mundy::Vector3<typename LineSegmentType1::scalar_t>& sep) {
+             Point<typename LineSegmentType1::value_type>& closest_point1,  //
+             Point<typename LineSegmentType1::value_type>& closest_point2,  //
+             typename LineSegmentType1::value_type& arch_length1,           //
+             typename LineSegmentType1::value_type& arch_length2,           //
+             mundy::Vector3<typename LineSegmentType1::value_type>& sep) {
   return distance(SharedNormalSigned{}, line_segment1, line_segment2,  //
                   closest_point1, closest_point2, arch_length1, arch_length2, sep);
 }
 //@}
+
+/// @}
 
 }  // namespace mundy
 

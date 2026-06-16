@@ -23,43 +23,6 @@
 
 /// \file LinkCSRPartition.hpp
 
-/*
-General comments as we go:
-
-- Partitions need to store their selector
-- We need to make sure that we are only updating the CSR for buckets that were marked as needing an update
-- I'm not sure we should call these partitions partitions since all they really do is help manage the CSR connectivity
-  It's just that the CSR connectivity can only be accessed for a given partition.
-
-Can we hide this entire class from the user by making it internal? NgpPartitionedCSRConn
-How would they access the CSR connectivity then? Can we give them a PartitionOrdinal instead of giving them an
-instance of this class? That suggests partition identity should remain stable even if the heavy CSR storage for that
-slot is later retired.
-
-I guess we need to address the underlying question: when should we destroy a partition?
-For v1, the implementation effectively behaves as if the answer is "never except by global rebuild". For v2, a better
-target is likely "never renumber or invalidate partition identity during normal structural churn, but allow a partition
-slot to become empty and release heavy CSR storage at a safe modification boundary". In that fashion, users would still
-interact with CSR connectivity via a stable partition ordinal, while the implementation remains free to reactivate the
-same slot if the key later reappears locally.
-
-update_crs_from_coo should be done for all partitions all at once and should be managed by the NgpLinkData.
-
-We need the vector of partitions to be accessible on the GPU. The only data contained in the NgpPartition is a key,
-rank, dimensionality, and vector of linked buckets per rank. Of these rank and dim come from the owning link data.
-
-What we actually need to store is:
-- [rank][partition_id][linked_bucket_id][entity_offset] -> NgpLinkedBucket
-  Array of Kokkos::View<LinkCSRBucketConnT<MemSpace> **, stk::ngp::UVMMemSpace>
-- [partition_id] -> impl::PartitionKey
-  std::vector<impl::PartitionKey>
-- [partition_key] -> partition_id
-  std::unordered_map<impl::PartitionKey, PartitionOrdinal>
-
-Previously we used a map from key to partition. I don't think we really care about the partition key that much. It would
-be better to use a contiguous vector of partitions indexed by contiguous i
-*/
-
 // C++ core libs
 #include <any>     // for std::any
 #include <vector>  // for std::vector
@@ -78,6 +41,7 @@ be better to use a contiguous vector of partitions indexed by contiguous i
 // Mundy libs
 #include <mundy_mesh/LinkCSRBucketConn.hpp>  // for mundy::mesh::LinkCSRBucketConn
 #include <mundy_mesh/impl/PartitionKey.hpp>  // for mundy::mesh::impl::PartitionKey, mundy::mesh::impl::get_partition_key
+#include <mundy_utils/host_ptr.hpp>          // for host_ptr
 #include <mundy_utils/throw_assert.hpp>      // for MUNDY_THROW_ASSERT
 
 namespace mundy {
@@ -125,9 +89,7 @@ class LinkCSRPartitionT {  // Raw data in any space.
     for (const stk::mesh::PartOrdinal& part_ordinal : key) {
       parts.push_back(&bulk_data.mesh_meta_data().get_part(part_ordinal));
     }
-    // selector_ptr_ = new stk::mesh::Selector();
-    // *selector_ptr_ = stk::mesh::selectIntersection(parts);
-    selector_ = stk::mesh::selectIntersection(parts);
+    selector_ = make_host_ptr<stk::mesh::Selector>(stk::mesh::selectIntersection(parts));
 
     for (stk::mesh::EntityRank rank = stk::topology::NODE_RANK; rank < stk::topology::NUM_RANKS; ++rank) {
       const stk::mesh::BucketVector& buckets = bulk_data.buckets(rank);
@@ -147,7 +109,6 @@ class LinkCSRPartitionT {  // Raw data in any space.
 
   KOKKOS_FUNCTION virtual ~LinkCSRPartitionT() {
     clear_buckets_and_views();
-    // delete selector_ptr_;
   }
   //@}
 
@@ -180,10 +141,9 @@ class LinkCSRPartitionT {  // Raw data in any space.
 
   /// \brief Fetch the selector for this partition.
   stk::mesh::Selector selector() const {
-    // MUNDY_THROW_REQUIRE(selector_ptr_ != nullptr, std::logic_error,
-    //                     "Attempting to access a selector before it has been set.");
-    // return *selector_ptr_;
-    return selector_;
+    MUNDY_THROW_REQUIRE(static_cast<bool>(selector_), std::logic_error,
+                        "Attempting to access a selector before it has been set.");
+    return *selector_;
   }
 
   /// \brief Check if this partition contains a given part
@@ -291,7 +251,8 @@ class LinkCSRPartitionT {  // Raw data in any space.
             }
           }
           linked_buckets_[rank] = LinkCSRBucketConnView();
-        }))
+        } 
+        selector_ = nullptr;))
   }
   //@}
 
@@ -301,8 +262,9 @@ class LinkCSRPartitionT {  // Raw data in any space.
   stk::mesh::Ordinal id_;  ///< Unique identifier for this partition.
   impl::NgpPartitionKey
       ngp_key_;  ///< Sorted view of the part ordinals that this partition contains, in NGP memory space.
-  stk::mesh::Selector selector_;     ///< Selector for this partition, derived from the ngp_key_. Must be default
-                                     ///< constructible, copiable, movable on the device so we use a pointer.
+  /// Selector for this partition, derived from ngp_key_. A device-copyable, reference-counted host-resident handle:
+  /// shallow copies share ownership and the value is destroyed when the last reference drops (host-only to access).
+  host_ptr<stk::mesh::Selector> selector_;
   stk::mesh::EntityRank link_rank_;  ///< Rank of the linkers in this partition.
   unsigned link_dimensionality_;     ///< Maximum dimensionality of the parts contained in this partition.
   LinkCSRBucketConnView linked_buckets_[stk::topology::NUM_RANKS];  ///< Bucketized CSR connectivity for each rank.
@@ -320,9 +282,13 @@ void deep_copy(LinkCSRPartitionT<MemSpace1>& dest, const LinkCSRPartitionT<MemSp
   // Destination must at least be default constructed.
   dest.id_ = src.id_;
   dest.ngp_key_ = src.ngp_key_;
-  dest.selector_ = src.selector_;
   dest.link_rank_ = src.link_rank_;
   dest.link_dimensionality_ = src.link_dimensionality_;
+
+  // Deep-copy the selector into dest's own allocation (an independent host_ptr owning a copy of the value).
+  if (src.selector_) {
+    dest.selector_ = make_host_ptr<stk::mesh::Selector>(*src.selector_);
+  }
 
   for (stk::mesh::EntityRank rank = stk::topology::NODE_RANK; rank < stk::topology::NUM_RANKS; ++rank) {
     if (dest.linked_buckets_[rank].extent(0) != src.linked_buckets_[rank].extent(0)) {

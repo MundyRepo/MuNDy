@@ -48,8 +48,6 @@ namespace impl {
 ///
 /// The factory adapts ArborX callback inputs to Mundy's excluder-candidate interface. It is a build-time helper and
 /// does not own final neighbor-list storage.
-/// \tparam TargetBoxes Target search-box wrapper type.
-/// \tparam SourceBoxes Source search-box wrapper type.
 template <typename TargetBoxes, typename SourceBoxes>
 class ArborXSearchCandidateFactory {
  public:
@@ -82,13 +80,13 @@ class ArborXSearchCandidateFactory {
   //@{
 
   /// \brief Create a candidate from an ArborX predicate and source primitive ordinal.
-  /// \tparam Predicate ArborX predicate type with attached target ordinal.
+  ///
   /// \param predicate [in] ArborX predicate.
   /// \param source_index [in] Dense source ordinal reported by ArborX.
   template <typename Predicate>
   KOKKOS_INLINE_FUNCTION candidate_type operator()(const Predicate& predicate, size_type source_index) const {
     const size_type target_index = ArborX::getData(predicate);
-    return candidate_type(target_index, source_index, targets_.entity(target_index), sources_.entity(source_index));
+    return candidate_type(target_index, source_index, targets_.identity(target_index), sources_.identity(source_index));
   }
   //@}
 
@@ -106,10 +104,8 @@ class ArborXSearchCandidateFactory {
 /// \class PeriodicArborXSearchCandidateFactory
 /// \brief Create periodic owner-pair candidates from ArborX image-box matches.
 ///
-/// ArborX reports image ordinals. This factory maps them to target/source owner ordinals and computes the relative
-/// image shift that filters and final periodic neighbor-list storage need.
-/// \tparam TargetBoxes Target periodic search-box wrapper type.
-/// \tparam SourceBoxes Source periodic search-box wrapper type.
+/// ArborX reports image ordinals. This factory maps them to target/source owner ordinals and carries each object's
+/// image shift (target and source), which the excluder filter and the final periodic neighbor-list storage consume.
 template <typename TargetBoxes, typename SourceBoxes>
 class PeriodicArborXSearchCandidateFactory {
  public:
@@ -118,9 +114,11 @@ class PeriodicArborXSearchCandidateFactory {
 
   using target_boxes_type = TargetBoxes;
   using source_boxes_type = SourceBoxes;
+  using memory_space = typename target_boxes_type::memory_space;
   using size_type = typename target_boxes_type::size_type;
-  using image_shift_type = typename target_boxes_type::image_shift_type;
+  using image_shift_type = typename target_boxes_type::identity_type::shift_type;
   using candidate_type = mundy::search::PeriodicNeighborSearchCandidate<image_shift_type, size_type>;
+  using owner_index_view_t = Kokkos::View<size_type*, memory_space>;
   //@}
 
   //! \name Constructors
@@ -130,12 +128,17 @@ class PeriodicArborXSearchCandidateFactory {
   KOKKOS_DEFAULTED_FUNCTION
   PeriodicArborXSearchCandidateFactory() = default;
 
-  /// \brief Construct from target and source periodic search boxes.
+  /// \brief Construct from target and source periodic search boxes plus the source image→owner-ordinal recovery view.
+  ///
+  /// Targets carry one image per owner, so a target image ordinal is its owner ordinal. Sources carry many images per
+  /// owner, so `source_owner_indices(source_image)` recovers the dense source owner ordinal the final list indexes by.
   /// \param targets [in] Target periodic search boxes.
   /// \param sources [in] Source periodic search boxes.
+  /// \param source_owner_indices [in] Dense source owner ordinal for each source image.
   KOKKOS_INLINE_FUNCTION
-  PeriodicArborXSearchCandidateFactory(const target_boxes_type& targets, const source_boxes_type& sources)
-      : targets_(targets), sources_(sources) {
+  PeriodicArborXSearchCandidateFactory(const target_boxes_type& targets, const source_boxes_type& sources,
+                                       const owner_index_view_t& source_owner_indices)
+      : targets_(targets), sources_(sources), source_owner_indices_(source_owner_indices) {
   }
   //@}
 
@@ -143,18 +146,18 @@ class PeriodicArborXSearchCandidateFactory {
   //@{
 
   /// \brief Create a candidate from an ArborX predicate and source image ordinal.
-  /// \tparam Predicate ArborX predicate type with attached target image ordinal.
+  ///
   /// \param predicate [in] ArborX predicate.
   /// \param source_image_index [in] Dense source image ordinal reported by ArborX.
   template <typename Predicate>
   KOKKOS_INLINE_FUNCTION candidate_type operator()(const Predicate& predicate, size_type source_image_index) const {
     const size_type target_image_index = ArborX::getData(predicate);
-    const size_type target_owner_index = targets_.owner_index(target_image_index);
-    const size_type source_owner_index = sources_.owner_index(source_image_index);
-    const image_shift_type relative_image_shift =
-        sources_.image_shift(source_image_index) - targets_.image_shift(target_image_index);
-    return candidate_type(target_owner_index, source_owner_index, targets_.owner_entity(target_owner_index),
-                          sources_.owner_entity(source_owner_index), relative_image_shift);
+    const auto target_id = targets_.identity(target_image_index);
+    const auto source_id = sources_.identity(source_image_index);
+    const size_type target_owner_index = target_image_index;  // targets: one image per owner
+    const size_type source_owner_index = source_owner_indices_(source_image_index);
+    return candidate_type(target_owner_index, source_owner_index, target_id.owner, source_id.owner, target_id.shift,
+                          source_id.shift);
   }
   //@}
 
@@ -166,6 +169,8 @@ class PeriodicArborXSearchCandidateFactory {
   target_boxes_type targets_;
   //! Source periodic search boxes.
   source_boxes_type sources_;
+  //! Dense source owner ordinal for each source image (image→owner recovery for the final list).
+  owner_index_view_t source_owner_indices_;
   //@}
 };
 
@@ -174,8 +179,6 @@ class PeriodicArborXSearchCandidateFactory {
 ///
 /// The callback constructs a Mundy candidate for each ArborX hit and emits the source primitive only when the excluder
 /// keeps the candidate.
-/// \tparam CandidateFactory Factory that converts ArborX hits to Mundy candidates.
-/// \tparam Excluder Excluder applied to each candidate.
 template <typename CandidateFactory, mundy::search::ExcluderType Excluder>
 class ArborXExcluderCallback {
  public:
@@ -208,9 +211,7 @@ class ArborXExcluderCallback {
 
 #if ARBORX_VERSION >= 10799
   /// \brief Filter an ArborX hit for newer ArborX callback signatures.
-  /// \tparam Predicate ArborX predicate type.
-  /// \tparam Geometry ArborX primitive geometry type.
-  /// \tparam OutputFunctor ArborX output functor type.
+  ///
   /// \param predicate [in] ArborX predicate with attached target ordinal.
   /// \param value_pair [in] ArborX primitive geometry/source-index pair.
   /// \param out [in] ArborX output functor.
@@ -226,8 +227,7 @@ class ArborXExcluderCallback {
   }
 #else
   /// \brief Filter an ArborX hit for older ArborX callback signatures.
-  /// \tparam Predicate ArborX predicate type.
-  /// \tparam OutputFunctor ArborX output functor type.
+  ///
   /// \param predicate [in] ArborX predicate with attached target ordinal.
   /// \param source_index [in] ArborX source primitive ordinal.
   /// \param out [in] ArborX output functor.

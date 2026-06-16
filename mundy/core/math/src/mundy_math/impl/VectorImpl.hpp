@@ -39,6 +39,7 @@
 #include <mundy_utils/requires.hpp>
 #include <mundy_utils/suppress_warnings.hpp>  // for MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_PUSH/POP
 #include <mundy_utils/throw_assert.hpp>       // for MUNDY_THROW_ASSERT
+#include <mundy_math/cmath.hpp>
 
 namespace mundy {
 
@@ -279,16 +280,16 @@ KOKKOS_INLINE_FUNCTION constexpr bool is_close_impl(std::index_sequence<Is...>, 
                                                     const AVector<T, N, OtherAccessor>& vec2, const V& tol) {
   static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");
   // Use the type of the tolerance to determine the comparison type
-  return ((Kokkos::abs(static_cast<V>(vec1[Is]) - static_cast<V>(vec2[Is])) <= tol) && ...);
+  return ((abs(static_cast<V>(vec1[Is]) - static_cast<V>(vec2[Is])) <= tol) && ...);
 }
 
 /// \brief Component-wise absolute value
 template <size_t... Is, size_t N, typename T, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto abs_impl(std::index_sequence<Is...>, const AVector<T, N, Accessor>& vec) {
   static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");
-  using OutputType = std::remove_cv_t<decltype(Kokkos::abs(vec[0]))>;
+  using OutputType = std::remove_cv_t<decltype(abs(vec[0]))>;
   AVector<OutputType, N> result;
-  ((result[Is] = Kokkos::abs(vec[Is])), ...);
+  ((result[Is] = abs(vec[Is])), ...);
   return result;
 }
 
@@ -354,14 +355,14 @@ template <size_t... Is, size_t N, typename T, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto standard_deviation_impl(std::index_sequence<Is...>,
                                                               const AVector<T, N, Accessor>& vec) {
   static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");
-  return Kokkos::sqrt(variance_impl(std::make_index_sequence<N>{}, vec));
+  return sqrt(variance_impl(std::make_index_sequence<N>{}, vec));
 }
 //
 template <size_t... Is, size_t N, typename T, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto standard_deviation_f_impl(std::index_sequence<Is...>,
                                                                 const AVector<T, N, Accessor>& vec) {
   static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");
-  return Kokkos::sqrt(variance_f_impl(std::make_index_sequence<N>{}, vec));
+  return sqrt(variance_f_impl(std::make_index_sequence<N>{}, vec));
 }
 
 /// \brief Dot product of two vectors

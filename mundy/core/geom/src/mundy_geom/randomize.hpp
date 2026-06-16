@@ -25,7 +25,7 @@
 /// \defgroup MundyGeomRandomize mundy::randomize
 /// \brief Random primitive generation helpers for Mundy geometric primitives.
 
-// External libs
+// External
 #include <Kokkos_Core.hpp>
 
 // C++ core
@@ -33,13 +33,18 @@
 #include <stdexcept>
 #include <utility>
 
-// Our libs
+// Mundy
 #include <mundy_geom/primitives.hpp>     // for mundy::Point, mundy::Line, ...
 #include <mundy_math/Quaternion.hpp>     // for mundy::Quaternion
 #include <mundy_math/Vector3.hpp>        // for mundy::Vector3
 #include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
+#include <mundy_math/cmath.hpp>
 
 namespace mundy {
+
+/// \addtogroup MundyGeomRandomize
+/// @{
+
 /*
 Supported shapes:
   - Point
@@ -71,10 +76,10 @@ KOKKOS_INLINE_FUNCTION Point<Scalar> generate_random_unit_vector(RNG& rng) {
   constexpr Scalar two_pi = 2.0 * Kokkos::numbers::pi_v<Scalar>;
 
   const Scalar zrand = static_cast<Scalar>(2) * rng.template rand<Scalar>() - static_cast<Scalar>(1);
-  const Scalar wrand = Kokkos::sqrt(static_cast<Scalar>(1) - zrand * zrand);
+  const Scalar wrand = sqrt(static_cast<Scalar>(1) - zrand * zrand);
   const Scalar trand = two_pi * rng.template rand<Scalar>();
 
-  return Vector3<Scalar>{wrand * Kokkos::cos(trand), wrand * Kokkos::sin(trand), zrand};
+  return Vector3<Scalar>{wrand * cos(trand), wrand * sin(trand), zrand};
 }
 
 /// \brief Generate a random unit quaternion mapping the z-axis to a random unit vector via parallel transport
@@ -176,12 +181,12 @@ KOKKOS_INLINE_FUNCTION AABB<Scalar> generate_random_aabb(const AABB<Scalar>& box
   Point<Scalar> p2 = generate_random_point<Scalar>(box, rng);
 
   // Compute min and max corners
-  Scalar min_x = Kokkos::min(p1[0], p2[0]);
-  Scalar max_x = Kokkos::max(p1[0], p2[0]);
-  Scalar min_y = Kokkos::min(p1[1], p2[1]);
-  Scalar max_y = Kokkos::max(p1[1], p2[1]);
-  Scalar min_z = Kokkos::min(p1[2], p2[2]);
-  Scalar max_z = Kokkos::max(p1[2], p2[2]);
+  Scalar min_x = min(p1[0], p2[0]);
+  Scalar max_x = max(p1[0], p2[0]);
+  Scalar min_y = min(p1[1], p2[1]);
+  Scalar max_y = max(p1[1], p2[1]);
+  Scalar min_z = min(p1[2], p2[2]);
+  Scalar max_z = max(p1[2], p2[2]);
   return AABB<Scalar>(Point<Scalar>(min_x, min_y, min_z), Point<Scalar>(max_x, max_y, max_z));
 }
 
@@ -299,6 +304,8 @@ Ellipsoid<Scalar> generate_random_ellipsoid(const AABB<Scalar>& box, const Vecto
 
   return Ellipsoid<Scalar>(center, random_quaternion, r0, r1, r2);
 }
+
+/// @}
 
 }  // namespace mundy
 

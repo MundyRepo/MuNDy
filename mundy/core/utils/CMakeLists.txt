@@ -18,6 +18,7 @@ set(NOINSTALLHEADERS
   src/mundy_utils/aggregate.hpp
   src/mundy_utils/attribute_unused.hpp
   src/mundy_utils/do_not_optimize_away.hpp
+  src/mundy_utils/host_ptr.hpp
   src/mundy_utils/MakeStringArray.hpp
   src/mundy_utils/NgpPool.hpp
   src/mundy_utils/NgpView.hpp

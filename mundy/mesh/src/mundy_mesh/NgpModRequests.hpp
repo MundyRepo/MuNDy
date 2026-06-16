@@ -40,9 +40,12 @@
 #include <stk_util/ngp/NgpSpaces.hpp>
 
 // Mundy
-#include <mundy_mesh/impl/PartitionKey.hpp>  // for mundy::mesh::impl::PartitionKey, mundy::mesh::impl::get_partition_key
-#include <mundy_utils/NgpView.hpp>           // for mundy::NgpViewT
-#include <mundy_utils/StringLiteral.hpp>     // for mundy::StringLiteral, mundy::make_string_literal
+#include <mundy_mesh/Class.hpp>                   // for mundy::mesh::Class, mundy::mesh::ClassVector
+#include <mundy_mesh/LinkData.hpp>                // for mundy::mesh::LinkData
+#include <mundy_mesh/impl/ClassPartitionKey.hpp>  // for mundy::mesh::impl::ClassPartitionKey
+#include <mundy_mesh/impl/PartitionKey.hpp>       // for mundy::mesh::impl::PartitionKey
+#include <mundy_utils/NgpView.hpp>                // for mundy::NgpViewT
+#include <mundy_utils/StringLiteral.hpp>          // for mundy::StringLiteral, mundy::make_string_literal
 #include <mundy_utils/requires.hpp>
 #include <mundy_utils/throw_assert.hpp>
 #include <mundy_utils/variant.hpp>  // for mundy::variant
@@ -983,6 +986,181 @@ class NgpRequestConnectionsT {
   //@}
 };  // NgpRequestConnectionsT
 
+/// \class NgpRequestLinkRelationsT
+/// \brief Request helper for writing COO link relations, supporting FutureEntity linkers.
+///
+/// This class mirrors NgpRequestConnectionsT but targets LinkData::coo_data().declare_relation()
+/// rather than bulk_data.declare_relation().  The key use case is "I am requesting a new link
+/// entity, and I want to record that its linked-entity slots should be filled once it exists."
+/// Both the linker and the linked entity may be FutureEntity handles.
+///
+/// COO writes do not require an open modification cycle, so these requests are processed after
+/// NgpModRequestsT::process_requests() closes the modification cycle — entities are valid at that
+/// point and the write is mod-cycle-free.
+template <typename NgpMemSpace>
+class NgpRequestLinkRelationsT {
+ public:
+  using memory_space = NgpMemSpace;
+  using ticket_issuer_t = TicketIssuer<NgpMemSpace>;
+  using control_space = Kokkos::SharedSpace;
+
+  //! \name Constructors / Destructors
+  //@{
+
+  KOKKOS_DEFAULTED_FUNCTION NgpRequestLinkRelationsT() = default;
+
+  void initialize() {
+    MUNDY_THROW_ASSERT(!state_.is_allocated(), std::runtime_error,
+                       "NgpRequestLinkRelationsT::initialize() called on already initialized object.");
+    state_ = state_view_t(Kokkos::view_alloc(Kokkos::SequentialHostInit, "NgpRequestLinkRelationsT::state"));
+    state_().active_space_dev_view_ = bool_view_t("NgpRequestLinkRelationsT::active_space_dev_view");
+    state_().active_space_host_view_ = Kokkos::create_mirror_view(state_().active_space_dev_view_);
+    state_().ticket_issuer_ = ticket_issuer_t(/*activate_device*/ true);
+    state_().requests_ = request_view_t("NgpRequestLinkRelationsT::requests", 0);
+    state_().active_space_host_view_() = true;
+    Kokkos::deep_copy(state_().active_space_dev_view_, state_().active_space_host_view_);
+  }
+
+  KOKKOS_DEFAULTED_FUNCTION NgpRequestLinkRelationsT(const NgpRequestLinkRelationsT&) = default;
+  KOKKOS_DEFAULTED_FUNCTION NgpRequestLinkRelationsT& operator=(const NgpRequestLinkRelationsT&) = default;
+  KOKKOS_DEFAULTED_FUNCTION NgpRequestLinkRelationsT(NgpRequestLinkRelationsT&&) = default;
+  KOKKOS_DEFAULTED_FUNCTION NgpRequestLinkRelationsT& operator=(NgpRequestLinkRelationsT&&) = default;
+
+  KOKKOS_DEFAULTED_FUNCTION ~NgpRequestLinkRelationsT() = default;
+  //@}
+
+  //! \name Control plane (HOST only)
+  //@{
+
+  void activate_host() {
+    auto device_is_active = state_().active_space_host_view_();
+    if (device_is_active) {
+      Kokkos::fence();
+      state_().active_space_host_view_() = false;
+      Kokkos::deep_copy(state_().active_space_dev_view_, state_().active_space_host_view_);
+      state_().ticket_issuer_.activate_host();
+    }
+  }
+
+  void activate_device() {
+    auto host_is_active = !state_().active_space_host_view_();
+    if (host_is_active) {
+      Kokkos::fence();
+      state_().active_space_host_view_() = true;
+      Kokkos::deep_copy(state_().active_space_dev_view_, state_().active_space_host_view_);
+      state_().ticket_issuer_.activate_device();
+    }
+  }
+
+  void sync() {
+    Kokkos::fence();
+    bool device_is_active = state_().active_space_host_view_();
+    if (device_is_active) {
+      state_().ticket_issuer_.sync();
+      Kokkos::deep_copy(state_().requests_.view_host(), state_().requests_.view_device());
+    } else {
+      state_().ticket_issuer_.sync();
+      Kokkos::deep_copy(state_().requests_.view_device(), state_().requests_.view_host());
+    }
+  }
+  //@}
+
+  //! \name Actions
+  //@{
+
+  KOKKOS_INLINE_FUNCTION unsigned id() const noexcept { return state_().index_; }
+
+  KOKKOS_INLINE_FUNCTION ticket_issuer_t& tickets() const noexcept { return state_().ticket_issuer_; }
+
+  /// \brief Record a COO link relation request.
+  ///
+  /// \param ticket        Ticket claimed from tickets().claim().
+  /// \param linker        The link entity (real or future).
+  /// \param linked_entity The entity to connect at link_ordinal (real or future).
+  /// \param link_ordinal  COO ordinal slot (0 .. dimensionality-1).
+  KOKKOS_INLINE_FUNCTION
+  void request(size_t ticket, variant<stk::mesh::Entity, FutureEntity> linker,
+               variant<stk::mesh::Entity, FutureEntity> linked_entity, unsigned link_ordinal) const {
+    constexpr auto name = make_string_literal("NgpRequestLinkRelationsT::request");
+    assert_active_space<name>();
+    assert_ticket_out_of_range<name>(ticket);
+
+    KOKKOS_IF_ON_HOST(auto& req = state_().requests_.view_host()(ticket); req.linker = linker;
+                      req.linked_entity = linked_entity; req.link_ordinal = link_ordinal;)
+    KOKKOS_IF_ON_DEVICE(auto& req = state_().requests_.view_device()(ticket); req.linker = linker;
+                        req.linked_entity = linked_entity; req.link_ordinal = link_ordinal;)
+  }
+  //@}
+
+  //! \name Mod cycle management
+  //@{
+
+  void reset() {
+    state_().ticket_issuer_.reset();
+    Kokkos::deep_copy(state_().requests_.view_host(), LinkRelationRequest{});
+    Kokkos::deep_copy(state_().requests_.view_device(), LinkRelationRequest{});
+  }
+
+  size_t finalize_count() {
+    size_t count = state_().ticket_issuer_.finalize_count();
+    if (state_().requests_.extent(0) < count) {
+      Kokkos::resize(state_().requests_, count);
+    }
+    return count;
+  }
+  //@}
+
+ private:
+  template <typename>
+  friend class NgpModRequestsT;
+
+  struct LinkRelationRequest {
+    variant<stk::mesh::Entity, FutureEntity> linker;
+    variant<stk::mesh::Entity, FutureEntity> linked_entity;
+    unsigned link_ordinal{0};
+  };
+
+  KOKKOS_INLINE_FUNCTION LinkRelationRequest get_request(size_t ticket) const {
+    constexpr auto name = make_string_literal("NgpRequestLinkRelationsT::get_request");
+    assert_active_space<name>();
+    assert_ticket_out_of_range<name>(ticket);
+
+    KOKKOS_IF_ON_HOST(return state_().requests_.view_host()(ticket);)
+    KOKKOS_IF_ON_DEVICE(return state_().requests_.view_device()(ticket);)
+  }
+
+  template <StringLiteral name>
+  KOKKOS_INLINE_FUNCTION void assert_active_space() const {
+    constexpr bool has_separate =
+        !Kokkos::SpaceAccessibility<Kokkos::HostSpace, memory_space>::accessible;
+    if constexpr (has_separate) {
+      KOKKOS_IF_ON_HOST(MUNDY_THROW_ASSERT(!state_().active_space_host_view_(), std::runtime_error,
+                                           name + " called from host when device is active.");)
+      KOKKOS_IF_ON_DEVICE(MUNDY_THROW_ASSERT(state_().active_space_dev_view_(), std::runtime_error,
+                                             name + " called from device when host is active.");)
+    }
+  }
+
+  template <StringLiteral name>
+  KOKKOS_INLINE_FUNCTION void assert_ticket_out_of_range(size_t ticket) const {
+    MUNDY_THROW_ASSERT(ticket < state_().ticket_issuer_.count(), std::out_of_range,
+                       name + " called with invalid ticket.");
+  }
+
+  using request_view_t = NgpViewT<LinkRelationRequest*, NgpMemSpace>;
+  using bool_view_t = Kokkos::View<bool, memory_space>;
+  struct State {
+    unsigned index_{0};
+    bool_view_t active_space_dev_view_;
+    bool_view_t::HostMirror active_space_host_view_;
+    ticket_issuer_t ticket_issuer_;
+    request_view_t requests_;
+  };
+
+  using state_view_t = Kokkos::View<State, control_space>;
+  mutable state_view_t state_;
+};  // NgpRequestLinkRelationsT
+
 struct FutureDestroyEntity {
   size_t ticket;
   unsigned request_helper_index;
@@ -1411,6 +1589,16 @@ class NgpModRequestsT {
     part_vec[0] = const_cast<stk::mesh::Part*>(&part);
     return get_or_create_entity_requests_new_ids(part_vec);
   }
+  //
+  /// \brief Class-based overloads: entity membership is determined per rank by
+  /// \c impl::populate_entity_rank_parts, which handles primary classes, sets, and induced sets correctly.
+  NgpRequestEntitiesNewIdsT<NgpMemSpace> request_entities_new_ids(const ClassVector& classes) const {
+    return get_or_create_entity_requests_new_ids_for_classes(classes);
+  }
+  //
+  NgpRequestEntitiesNewIdsT<NgpMemSpace> request_entities_new_ids(const Class& cls) const {
+    return get_or_create_entity_requests_new_ids_for_classes(ClassVector{const_cast<Class*>(&cls)});
+  }
 
   /// \brief Get the entity request class for the given partition key (for requests of entities with known Ids).
   /// Aka you assign the Id at request time instead of it being automatically generated by STK.
@@ -1422,6 +1610,16 @@ class NgpModRequestsT {
     stk::mesh::PartVector part_vec(1);
     part_vec[0] = const_cast<stk::mesh::Part*>(&part);
     return get_or_create_entity_requests_known_ids(part_vec);
+  }
+  //
+  /// \brief Class-based overloads: entity membership is determined per rank by
+  /// \c impl::populate_entity_rank_parts.
+  NgpRequestEntitiesKnownIdsT<NgpMemSpace> request_entities_known_ids(const ClassVector& classes) const {
+    return get_or_create_entity_requests_known_ids_for_classes(classes);
+  }
+  //
+  NgpRequestEntitiesKnownIdsT<NgpMemSpace> request_entities_known_ids(const Class& cls) const {
+    return get_or_create_entity_requests_known_ids_for_classes(ClassVector{const_cast<Class*>(&cls)});
   }
 
   /// \brief Get the destroy entity request class.
@@ -1437,6 +1635,15 @@ class NgpModRequestsT {
   /// \brief Get the destroy connection request class.
   NgpDestroyConnectionsT<NgpMemSpace> destroy_connections() const {
     return shared_state_().destroy_connection_requests_;
+  }
+
+  /// \brief Get or create the link-relation request helper for the given LinkData.
+  ///
+  /// Requests recorded on the returned helper will be processed by process_requests() after
+  /// entity creation — the linker entity is guaranteed to exist at write time.
+  /// Multiple calls with the same LinkData return the same helper (memoized).
+  NgpRequestLinkRelationsT<NgpMemSpace> request_links(LinkData& link_data) const {
+    return get_or_create_link_relation_requests(link_data);
   }
   //@}
 
@@ -1454,6 +1661,9 @@ class NgpModRequestsT {
     shared_state_().destroy_entity_requests_.activate_host();
     shared_state_().connection_requests_.activate_host();
     shared_state_().destroy_connection_requests_.activate_host();
+    for (auto& entry : get_link_relation_entries()) {
+      entry.requests.activate_host();
+    }
   }
 
   /// \brief Sets the active memory space to device for all request helpers and ticket issuers.
@@ -1467,6 +1677,9 @@ class NgpModRequestsT {
     shared_state_().destroy_entity_requests_.activate_device();
     shared_state_().connection_requests_.activate_device();
     shared_state_().destroy_connection_requests_.activate_device();
+    for (auto& entry : get_link_relation_entries()) {
+      entry.requests.activate_device();
+    }
   }
   //@}
 
@@ -1484,6 +1697,9 @@ class NgpModRequestsT {
     shared_state_().destroy_entity_requests_.reset();
     shared_state_().connection_requests_.reset();
     shared_state_().destroy_connection_requests_.reset();
+    for (auto& entry : get_link_relation_entries()) {
+      entry.requests.reset();
+    }
   }
 
   /// \brief Finalize counts for all request classes. Users may no longer claim tickets after this call.
@@ -1497,6 +1713,9 @@ class NgpModRequestsT {
     shared_state_().destroy_entity_requests_.finalize_count();
     shared_state_().connection_requests_.finalize_count();
     shared_state_().destroy_connection_requests_.finalize_count();
+    for (auto& entry : get_link_relation_entries()) {
+      entry.requests.finalize_count();
+    }
   }
 
   /// \brief Process all requests in all request classes.
@@ -1527,6 +1746,9 @@ class NgpModRequestsT {
     total_requests += shared_state_().destroy_entity_requests_.tickets().count();
     total_requests += shared_state_().connection_requests_.tickets().count();
     total_requests += shared_state_().destroy_connection_requests_.tickets().count();
+    for (const auto& entry : get_link_relation_entries()) {
+      total_requests += entry.requests.tickets().count();
+    }
     if (total_requests == 0) {
       return;
     }
@@ -1542,8 +1764,8 @@ class NgpModRequestsT {
     // Entity requests with new ids //
     //////////////////////////////////
     for (auto& entry : get_entity_requests_new_ids_entries()) {
-      stk::mesh::PartVector parts = impl::get_parts_for_partition_key(entry.partition_key, bulk_data.mesh_meta_data());
-      size_t num_actual_ranks = bulk_data.mesh_meta_data().entity_rank_count();
+      // Counting is identical regardless of whether the entry is part- or class-based.
+      const size_t num_actual_ranks = bulk_data.mesh_meta_data().entity_rank_count();
       std::vector<size_t> num_requests_per_rank(num_actual_ranks, 0);
       for (size_t rank = stk::topology::BEGIN_RANK; rank < stk::topology::NUM_RANKS; ++rank) {
         if (rank < num_actual_ranks) {
@@ -1554,16 +1776,24 @@ class NgpModRequestsT {
         }
       }
 
-      std::vector<stk::mesh::EntityVector> requested_entities_per_rank(num_actual_ranks);
-      our_generate_new_entities(bulk_data, num_requests_per_rank, parts, requested_entities_per_rank);
+      // Entity generation: part-based uses one PartVector for every rank; class-based uses
+      // our_generate_new_entities_for_classes which calls populate_entity_rank_parts per rank.
+      std::vector<stk::mesh::EntityVector> requested_entities_per_rank;
+      if (entry.class_partition_key.empty()) {
+        stk::mesh::PartVector parts =
+            impl::get_parts_for_partition_key(entry.partition_key, bulk_data.mesh_meta_data());
+        our_generate_new_entities(bulk_data, num_requests_per_rank, parts, requested_entities_per_rank);
+      } else {
+        ClassVector classes =
+            impl::get_classes_for_class_partition_key(entry.class_partition_key, bulk_data.mesh_meta_data());
+        our_generate_new_entities_for_classes(bulk_data, classes, num_requests_per_rank, requested_entities_per_rank);
+      }
 
+      // Copy generated entities into the per-rank views — identical for both entry types.
       for (size_t rank = stk::topology::BEGIN_RANK; rank < num_actual_ranks; ++rank) {
+        const size_t count = num_requests_per_rank[rank];
+        if (count == 0) continue;
         auto created_entities_view = entry.requests.get_created_entity_view(static_cast<stk::mesh::EntityRank>(rank));
-        size_t count = num_requests_per_rank[rank];
-        if (count == 0) {
-          continue;
-        }
-
         Kokkos::parallel_for(
             "NgpModRequestsT::process_entity_requests::copy_to_view",
             Kokkos::RangePolicy<Kokkos::HostSpace::execution_space>(0, count),
@@ -1576,29 +1806,62 @@ class NgpModRequestsT {
     ////////////////////////////////////
     {
       for (auto& entry : get_entity_requests_known_ids_entries()) {
-        stk::mesh::PartVector parts =
-            impl::get_parts_for_partition_key(entry.partition_key, bulk_data.mesh_meta_data());
-        for (size_t rank = stk::topology::BEGIN_RANK; rank < stk::topology::NUM_RANKS; ++rank) {
-          size_t count = entry.requests.tickets(static_cast<stk::mesh::EntityRank>(rank)).count();
-          if (count == 0) {
-            continue;
-          } else {
-            MUNDY_THROW_ASSERT(rank < static_cast<size_t>(bulk_data.mesh_meta_data().entity_rank_count()),
-                               std::logic_error, "Received requests for invalid entity rank " + std::to_string(rank));
-          }
+        // For part-based entries the same parts apply to every rank; compute once outside the rank loop.
+        // For class-based entries parts are rank-specific; reconstruct the ClassVector and call
+        // populate_entity_rank_parts inside the rank loop.
+        const bool is_class_based = !entry.class_partition_key.empty();
+        const ClassVector class_based_classes =
+            is_class_based
+                ? impl::get_classes_for_class_partition_key(entry.class_partition_key, bulk_data.mesh_meta_data())
+                : ClassVector{};
+        const stk::mesh::PartVector part_based_parts =
+            is_class_based ? stk::mesh::PartVector{}
+                           : impl::get_parts_for_partition_key(entry.partition_key, bulk_data.mesh_meta_data());
 
-          // This simply has to be done in serial since declare_entity is not thread safe.
-          auto created_entities_view = entry.requests.get_created_entity_view(static_cast<stk::mesh::EntityRank>(rank));
-          for (size_t ticket = 0; ticket < count; ++ticket) {
-            stk::mesh::EntityId entity_id =
-                entry.requests.get_entity_id(ticket, static_cast<stk::mesh::EntityRank>(rank));
-            stk::mesh::Entity entity =
-                bulk_data.declare_entity(static_cast<stk::mesh::EntityRank>(rank), entity_id, parts);
-            created_entities_view.view_host()(ticket) = entity;
+        for (size_t rank = stk::topology::BEGIN_RANK; rank < stk::topology::NUM_RANKS; ++rank) {
+          const size_t count = entry.requests.tickets(static_cast<stk::mesh::EntityRank>(rank)).count();
+          if (count == 0) continue;
+          MUNDY_THROW_ASSERT(rank < static_cast<size_t>(bulk_data.mesh_meta_data().entity_rank_count()),
+                             std::logic_error, "Received requests for invalid entity rank " + std::to_string(rank));
+          const stk::mesh::EntityRank entity_rank = static_cast<stk::mesh::EntityRank>(rank);
+
+          // Serial: declare_entity is not thread-safe.
+          // Class-based entries delegate to BulkDataClassInterface::declare_entity, which handles
+          // populate_entity_rank_parts internally.  Part-based entries use bulk_data directly.
+          auto created_entities_view = entry.requests.get_created_entity_view(entity_rank);
+          if (is_class_based) {
+            auto cls_iface = class_interface(bulk_data);
+            for (size_t ticket = 0; ticket < count; ++ticket) {
+              const stk::mesh::EntityId entity_id = entry.requests.get_entity_id(ticket, entity_rank);
+              created_entities_view.view_host()(ticket) =
+                  cls_iface.declare_entity(entity_rank, entity_id, class_based_classes);
+            }
+          } else {
+            for (size_t ticket = 0; ticket < count; ++ticket) {
+              const stk::mesh::EntityId entity_id = entry.requests.get_entity_id(ticket, entity_rank);
+              created_entities_view.view_host()(ticket) =
+                  bulk_data.declare_entity(entity_rank, entity_id, part_based_parts);
+            }
           }
         }
       }
     }
+
+    // Resolve a variant<Entity, FutureEntity> to a concrete Entity.
+    // Valid after entity-creation steps above have populated the created_entities_ views.
+    auto resolve_entity = [&](const variant<stk::mesh::Entity, FutureEntity>& maybe_future) {
+      if (holds_alternative<stk::mesh::Entity>(maybe_future)) {
+        return get<stk::mesh::Entity>(maybe_future);
+      }
+
+      const FutureEntity future = get<FutureEntity>(maybe_future);
+      if (future.has_known_id) {
+        return get_entity_requests_known_ids_by_index(future.request_helper_index)
+            .get_entity(future.ticket, future.entity_rank);
+      }
+      return get_entity_requests_new_ids_by_index(future.request_helper_index)
+          .get_entity(future.ticket, future.entity_rank);
+    };
 
     /////////////////////////
     // Connection requests //
@@ -1606,20 +1869,6 @@ class NgpModRequestsT {
     {
       stk::mesh::Permutation perm = stk::mesh::Permutation::INVALID_PERMUTATION;
       stk::mesh::OrdinalVector scratch1, scratch2, scratch3;
-
-      auto resolve_entity = [&](const variant<stk::mesh::Entity, FutureEntity>& maybe_future) {
-        if (holds_alternative<stk::mesh::Entity>(maybe_future)) {
-          return get<stk::mesh::Entity>(maybe_future);
-        }
-
-        const FutureEntity future = get<FutureEntity>(maybe_future);
-        if (future.has_known_id) {
-          return get_entity_requests_known_ids_by_index(future.request_helper_index)
-              .get_entity(future.ticket, future.entity_rank);
-        }
-        return get_entity_requests_new_ids_by_index(future.request_helper_index)
-            .get_entity(future.ticket, future.entity_rank);
-      };
 
       // Must be done in serial since declare_relation is not thread safe.
       size_t num_connection_requests = shared_state_().connection_requests_.tickets().count();
@@ -1691,17 +1940,42 @@ class NgpModRequestsT {
         bulk_data.modification_end();
       }
     }
+
+    ///////////////////////////
+    // Link relation writes  //
+    ///////////////////////////
+    // COO declare_relation is mod-cycle-free and can be called after the modification cycle
+    // closes.  At this point all FutureEntity linkers and linked entities have been created and
+    // their concrete Entity handles are available through resolve_entity.
+    for (auto& entry : get_link_relation_entries()) {
+      size_t count = entry.requests.tickets().count();
+      if (count == 0) continue;
+      LinkData& link_data = *entry.link_data_ptr;
+      for (size_t ticket = 0; ticket < count; ++ticket) {
+        auto req = entry.requests.get_request(ticket);
+        stk::mesh::Entity linker = resolve_entity(req.linker);
+        stk::mesh::Entity linked_entity = resolve_entity(req.linked_entity);
+        link_data.coo_data().declare_relation(linker, linked_entity, req.link_ordinal);
+      }
+      link_data.coo_modify_on_host();
+    }
   }
   //@}
 
  private:
+  // An entry is either part-based (class_partition_key empty, partition_key populated) or
+  // class-based (class_partition_key non-empty, partition_key unused).  Both live in the same
+  // deque so that the helper index space is unified and FutureEntity resolution works without
+  // changes.
   struct entity_requests_new_ids_entry_t {
-    impl::PartitionKey partition_key;
+    impl::PartitionKey partition_key;             // part-based entries only
+    impl::ClassPartitionKey class_partition_key;  // class-based entries only (empty for part-based)
     NgpRequestEntitiesNewIdsT<NgpMemSpace> requests;
   };
 
   struct entity_requests_known_ids_entry_t {
     impl::PartitionKey partition_key;
+    impl::ClassPartitionKey class_partition_key;
     NgpRequestEntitiesKnownIdsT<NgpMemSpace> requests;
   };
 
@@ -1709,6 +1983,15 @@ class NgpModRequestsT {
   using entity_requests_known_ids_entries_t = std::deque<entity_requests_known_ids_entry_t>;
   using entity_requests_new_ids_index_map_t = std::map<impl::PartitionKey, unsigned>;
   using entity_requests_known_ids_index_map_t = std::map<impl::PartitionKey, unsigned>;
+  using entity_requests_new_ids_class_index_map_t = std::map<impl::ClassPartitionKey, unsigned>;
+  using entity_requests_known_ids_class_index_map_t = std::map<impl::ClassPartitionKey, unsigned>;
+
+  struct link_relations_entry_t {
+    LinkData* link_data_ptr{nullptr};
+    NgpRequestLinkRelationsT<NgpMemSpace> requests;
+  };
+  using link_relations_entries_t = std::deque<link_relations_entry_t>;
+  using link_data_to_index_map_t = std::map<LinkData*, unsigned>;
 
   struct SharedState {
     void initialize() {
@@ -1727,6 +2010,10 @@ class NgpModRequestsT {
     entity_requests_known_ids_entries_t entity_requests_known_ids_entries_;
     entity_requests_new_ids_index_map_t entity_requests_new_ids_index_map_;
     entity_requests_known_ids_index_map_t entity_requests_known_ids_index_map_;
+    entity_requests_new_ids_class_index_map_t entity_requests_new_ids_class_index_map_;
+    entity_requests_known_ids_class_index_map_t entity_requests_known_ids_class_index_map_;
+    link_relations_entries_t link_relation_entries_;
+    link_data_to_index_map_t link_data_to_index_map_;
   };
 
   entity_requests_new_ids_entries_t& get_entity_requests_new_ids_entries() const {
@@ -1743,6 +2030,39 @@ class NgpModRequestsT {
 
   entity_requests_known_ids_index_map_t& get_entity_requests_known_ids_index_map() const {
     return host_state_().entity_requests_known_ids_index_map_;
+  }
+
+  entity_requests_new_ids_class_index_map_t& get_entity_requests_new_ids_class_index_map() const {
+    return host_state_().entity_requests_new_ids_class_index_map_;
+  }
+
+  entity_requests_known_ids_class_index_map_t& get_entity_requests_known_ids_class_index_map() const {
+    return host_state_().entity_requests_known_ids_class_index_map_;
+  }
+
+  link_relations_entries_t& get_link_relation_entries() const {
+    return host_state_().link_relation_entries_;
+  }
+
+  link_data_to_index_map_t& get_link_data_to_index_map() const {
+    return host_state_().link_data_to_index_map_;
+  }
+
+  NgpRequestLinkRelationsT<NgpMemSpace> get_or_create_link_relation_requests(LinkData& link_data) const {
+    auto& entries = get_link_relation_entries();
+    auto& index_map = get_link_data_to_index_map();
+    auto it = index_map.find(&link_data);
+    if (it != index_map.end()) {
+      return entries[it->second].requests;
+    }
+    unsigned new_index = static_cast<unsigned>(entries.size());
+    entries.emplace_back();
+    auto& entry = entries.back();
+    entry.link_data_ptr = &link_data;
+    entry.requests.initialize();
+    entry.requests.state_().index_ = new_index;
+    index_map[&link_data] = new_index;
+    return entry.requests;
   }
 
   NgpRequestEntitiesNewIdsT<NgpMemSpace> get_entity_requests_new_ids_by_index(unsigned index) const {
@@ -1773,7 +2093,7 @@ class NgpModRequestsT {
     // Key doesn't exist, create a new request helper, add it to the entries vector and map, then return it
     auto& entries = get_entity_requests_new_ids_entries();
     const unsigned helper_index = static_cast<unsigned>(entries.size());
-    entries.push_back(entity_requests_new_ids_entry_t{key, NgpRequestEntitiesNewIdsT<NgpMemSpace>(helper_index)});
+    entries.push_back(entity_requests_new_ids_entry_t{key, {}, NgpRequestEntitiesNewIdsT<NgpMemSpace>(helper_index)});
     index_map.emplace(entries.back().partition_key, helper_index);
     return entries.back().requests;
   }
@@ -1794,8 +2114,40 @@ class NgpModRequestsT {
     // Key doesn't exist, create a new request helper, add it to the entries vector and map, then return it
     auto& entries = get_entity_requests_known_ids_entries();
     const unsigned helper_index = static_cast<unsigned>(entries.size());
-    entries.push_back(entity_requests_known_ids_entry_t{key, NgpRequestEntitiesKnownIdsT<NgpMemSpace>(helper_index)});
+    entries.push_back(
+        entity_requests_known_ids_entry_t{key, {}, NgpRequestEntitiesKnownIdsT<NgpMemSpace>(helper_index)});
     index_map.emplace(entries.back().partition_key, helper_index);
+    return entries.back().requests;
+  }
+
+  NgpRequestEntitiesNewIdsT<NgpMemSpace> get_or_create_entity_requests_new_ids_for_classes(
+      const ClassVector& classes) const {
+    impl::ClassPartitionKey key = impl::get_class_partition_key(classes);
+    auto& index_map = get_entity_requests_new_ids_class_index_map();
+    auto map_it = index_map.find(key);
+    if (map_it != index_map.end()) {
+      return get_entity_requests_new_ids_by_index(map_it->second);
+    }
+    auto& entries = get_entity_requests_new_ids_entries();
+    const unsigned helper_index = static_cast<unsigned>(entries.size());
+    entries.push_back(entity_requests_new_ids_entry_t{{}, key, NgpRequestEntitiesNewIdsT<NgpMemSpace>(helper_index)});
+    index_map.emplace(entries.back().class_partition_key, helper_index);
+    return entries.back().requests;
+  }
+
+  NgpRequestEntitiesKnownIdsT<NgpMemSpace> get_or_create_entity_requests_known_ids_for_classes(
+      const ClassVector& classes) const {
+    impl::ClassPartitionKey key = impl::get_class_partition_key(classes);
+    auto& index_map = get_entity_requests_known_ids_class_index_map();
+    auto map_it = index_map.find(key);
+    if (map_it != index_map.end()) {
+      return get_entity_requests_known_ids_by_index(map_it->second);
+    }
+    auto& entries = get_entity_requests_known_ids_entries();
+    const unsigned helper_index = static_cast<unsigned>(entries.size());
+    entries.push_back(
+        entity_requests_known_ids_entry_t{{}, key, NgpRequestEntitiesKnownIdsT<NgpMemSpace>(helper_index)});
+    index_map.emplace(entries.back().class_partition_key, helper_index);
     return entries.back().requests;
   }
 
@@ -1821,6 +2173,50 @@ class NgpModRequestsT {
     }
   }
 
+  /// Class-based counterpart to our_generate_new_entities.
+  ///
+  /// Mirrors the three-pass structure of our_generate_new_entities:
+  ///   1. Resolve rank-specific parts for all ranks (populate_entity_rank_parts per rank).
+  ///   2. Generate new entity IDs for all ranks.
+  ///   3. Declare entities for all ranks using their pre-resolved parts.
+  ///
+  /// Parts are resolved first because, unlike the part-based variant, the correct parts differ
+  /// per rank: populate_entity_rank_parts handles primary class, set, and induced-set membership
+  /// for each entity rank.
+  void our_generate_new_entities_for_classes(stk::mesh::BulkData& bulk_data, const ClassVector& classes,
+                                             const std::vector<size_t>& num_requests_per_rank,
+                                             std::vector<stk::mesh::EntityVector>& requested_entities_per_rank) const {
+    const size_t num_ranks = num_requests_per_rank.size();
+
+    // Pass 1 — map classes to rank-specific parts.
+    std::vector<stk::mesh::PartVector> parts_per_rank(num_ranks);
+    for (size_t i = 0; i < num_ranks; ++i) {
+      if (num_requests_per_rank[i] == 0) continue;
+      stk::mesh::ConstPartVector const_parts = impl::populate_entity_rank_parts(
+          static_cast<stk::mesh::EntityRank>(i), classes, "NgpModRequestsT::our_generate_new_entities_for_classes");
+      parts_per_rank[i].reserve(const_parts.size() + 1);
+      for (const stk::mesh::Part* p : const_parts) {
+        parts_per_rank[i].push_back(const_cast<stk::mesh::Part*>(p));
+      }
+      parts_per_rank[i].push_back(&bulk_data.mesh_meta_data().locally_owned_part());
+    }
+
+    // Pass 2 — generate new IDs for all ranks.
+    std::vector<std::vector<stk::mesh::EntityId>> requested_ids(num_ranks);
+    for (size_t i = 0; i < num_ranks; ++i) {
+      bulk_data.generate_new_ids(static_cast<stk::topology::rank_t>(i), num_requests_per_rank[i], requested_ids[i]);
+    }
+
+    // Pass 3 — declare entities using the pre-resolved rank-specific parts.
+    requested_entities_per_rank.clear();
+    requested_entities_per_rank.resize(num_ranks);
+    for (size_t i = 0; i < num_ranks; ++i) {
+      if (num_requests_per_rank[i] == 0) continue;
+      bulk_data.declare_entities(static_cast<stk::topology::rank_t>(i), requested_ids[i], parts_per_rank[i],
+                                 requested_entities_per_rank[i]);
+    }
+  }
+
   // Entity requests are mapped by the partition key that identifies their collection of parts.
   // We'll always append the locally owned part to the given part list to ensure ownership.
   using shared_state_view_t = Kokkos::View<SharedState, control_space>;
@@ -1835,6 +2231,7 @@ using NgpModRequests = NgpModRequestsT<stk::ngp::MemSpace>;
 using NgpRequestEntitiesKnownIds = NgpRequestEntitiesKnownIdsT<stk::ngp::MemSpace>;
 using NgpRequestEntitiesNewIds = NgpRequestEntitiesNewIdsT<stk::ngp::MemSpace>;
 using NgpRequestConnections = NgpRequestConnectionsT<stk::ngp::MemSpace>;
+using NgpRequestLinkRelations = NgpRequestLinkRelationsT<stk::ngp::MemSpace>;
 using NgpDestroyEntities = NgpDestroyEntitiesT<stk::ngp::MemSpace>;
 using NgpDestroyConnections = NgpDestroyConnectionsT<stk::ngp::MemSpace>;
 

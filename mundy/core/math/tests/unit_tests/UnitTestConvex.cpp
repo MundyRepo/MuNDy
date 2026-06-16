@@ -22,7 +22,7 @@
 #include <gtest/gtest.h>      // for TEST, ASSERT_NO_THROW, etc
 #include <openrand/philox.h>  // for openrand::Philox
 
-#include <Kokkos_Core.hpp>  // for Kokkos::Array
+#include <Kokkos_Core.hpp>
 
 // KokkosKernels
 #include <MundyMath_config.hpp>  // for HAVE_MUNDYMATH_*
@@ -39,6 +39,7 @@
 #include <mundy_math/Vector.hpp>  // for mundy::Vector
 #include <mundy_math/convex.hpp>  // for mundy::solve_lcp/solve_cqpp
 #include <mundy_utils/rng.hpp>    // for mundy::make_philox
+#include <mundy_math/cmath.hpp>
 
 namespace mundy {
 
@@ -50,7 +51,7 @@ namespace {
 namespace math_backend {
 
 struct UnconstrainedSPD1Problem {
-  using scalar_t = double;
+  using value_type = double;
   using vector_t = Vector3d;
   using linear_op_t = Matrix3d;
   using backend_t = convex::MundyMathBackend;
@@ -61,7 +62,7 @@ struct UnconstrainedSPD1Problem {
 
   KOKKOS_INLINE_FUNCTION
   auto get_space() const {
-    return convex::space::Unconstrained<scalar_t>();
+    return convex::space::Unconstrained<value_type>();
   }
 
   KOKKOS_INLINE_FUNCTION
@@ -83,7 +84,7 @@ struct UnconstrainedSPD1Problem {
 };
 
 struct InactiveBoxConstrainedSPDProblem {
-  using scalar_t = double;
+  using value_type = double;
   using vector_t = Vector3d;
   using linear_op_t = Matrix3d;
   using backend_t = convex::MundyMathBackend;
@@ -94,7 +95,7 @@ struct InactiveBoxConstrainedSPDProblem {
 
   KOKKOS_INLINE_FUNCTION
   auto get_space() const {
-    return convex::space::Bounded<scalar_t>(0.0, 2.0);
+    return convex::space::Bounded<value_type>(0.0, 2.0);
   }
 
   KOKKOS_INLINE_FUNCTION
@@ -116,7 +117,7 @@ struct InactiveBoxConstrainedSPDProblem {
 };
 
 struct ActiveBoxConstrainedSPDProblem {
-  using scalar_t = double;
+  using value_type = double;
   using vector_t = Vector3d;
   using linear_op_t = Matrix3d;
   using backend_t = convex::MundyMathBackend;
@@ -127,7 +128,7 @@ struct ActiveBoxConstrainedSPDProblem {
 
   KOKKOS_INLINE_FUNCTION
   auto get_space() const {
-    return convex::space::Bounded<scalar_t>(9.0, 10.0);
+    return convex::space::Bounded<value_type>(9.0, 10.0);
   }
 
   KOKKOS_INLINE_FUNCTION
@@ -150,9 +151,9 @@ struct ActiveBoxConstrainedSPDProblem {
 
 template <size_t N>
 struct RandomLCP {
-  using scalar_t = double;
-  using vector_t = Vector<scalar_t, N>;
-  using linear_op_t = Matrix<scalar_t, N, N>;
+  using value_type = double;
+  using vector_t = Vector<value_type, N>;
+  using linear_op_t = Matrix<value_type, N, N>;
   using backend_t = convex::MundyMathBackend;
 
   std::string name() const {
@@ -183,7 +184,7 @@ struct RandomLCP {
 
   KOKKOS_INLINE_FUNCTION
   auto get_space() const {
-    return convex::space::LowerBound<scalar_t>(0.0);
+    return convex::space::LowerBound<value_type>(0.0);
   }
 
   KOKKOS_INLINE_FUNCTION
@@ -217,9 +218,9 @@ struct RandomLCP {
     // Strictly diagonally dominant with positive diagonal
     linear_op_t mat = gen_random_matrix();
     for (size_t i = 0; i < N; ++i) {
-      scalar_t off_diag_abs_row_sum = 0;
+      value_type off_diag_abs_row_sum = 0;
       for (size_t j = 0; j < N; ++j) {
-        off_diag_abs_row_sum += Kokkos::abs(mat(i, j)) * (i != j);
+        off_diag_abs_row_sum += abs(mat(i, j)) * (i != j);
       }
       mat(i, i) = off_diag_abs_row_sum + 10.0;
     }
@@ -239,7 +240,7 @@ namespace congruent {
 template <class NonCongruentProblem>
 struct CongruentLCPProblemWrapper {
   // D = I
-  using scalar_t = typename NonCongruentProblem::scalar_t;
+  using value_type = typename NonCongruentProblem::value_type;
   using vector_t = typename NonCongruentProblem::vector_t;
   using linear_op_t = typename NonCongruentProblem::linear_op_t;
   using backend_t = typename NonCongruentProblem::backend_t;
@@ -315,19 +316,19 @@ namespace mixed {
 /// NZ: num configurational variables (in the intermediate space)
 template <size_t NX, size_t NY, size_t NZ>
 struct RandomMixedCongruentCCQP {
-  using scalar_t = double;
-  using vecx_t = Vector<scalar_t, NX>;
-  using vecy_t = Vector<scalar_t, NY>;
-  using vecz_t = Vector<scalar_t, NZ>;
-  using matxx_t = Matrix<scalar_t, NX, NX>;
-  using matxy_t = Matrix<scalar_t, NX, NY>;
-  using matxz_t = Matrix<scalar_t, NX, NZ>;
-  using matyx_t = Matrix<scalar_t, NY, NX>;
-  using matyy_t = Matrix<scalar_t, NY, NY>;
-  using matyz_t = Matrix<scalar_t, NY, NZ>;
-  using matzx_t = Matrix<scalar_t, NZ, NX>;
-  using matzy_t = Matrix<scalar_t, NZ, NY>;
-  using matzz_t = Matrix<scalar_t, NZ, NZ>;
+  using value_type = double;
+  using vecx_t = Vector<value_type, NX>;
+  using vecy_t = Vector<value_type, NY>;
+  using vecz_t = Vector<value_type, NZ>;
+  using matxx_t = Matrix<value_type, NX, NX>;
+  using matxy_t = Matrix<value_type, NX, NY>;
+  using matxz_t = Matrix<value_type, NX, NZ>;
+  using matyx_t = Matrix<value_type, NY, NX>;
+  using matyy_t = Matrix<value_type, NY, NY>;
+  using matyz_t = Matrix<value_type, NY, NZ>;
+  using matzx_t = Matrix<value_type, NZ, NX>;
+  using matzy_t = Matrix<value_type, NZ, NY>;
+  using matzz_t = Matrix<value_type, NZ, NZ>;
 
   RandomMixedCongruentCCQP(unsigned seed = 1) {
     srand(seed);
@@ -339,7 +340,7 @@ struct RandomMixedCongruentCCQP {
   }
 
   // clang-format off
-  KOKKOS_INLINE_FUNCTION auto get_space_x() const { return convex::space::LowerBound<scalar_t>(0.0); }
+  KOKKOS_INLINE_FUNCTION auto get_space_x() const { return convex::space::LowerBound<value_type>(0.0); }
   KOKKOS_INLINE_FUNCTION vecx_t get_exact_x() const { return x_star_; }
   KOKKOS_INLINE_FUNCTION vecy_t get_exact_y() const { return y_star_; }
   KOKKOS_INLINE_FUNCTION matxz_t get_DT() const { return transpose(get_D()); }
@@ -353,11 +354,11 @@ struct RandomMixedCongruentCCQP {
   // clang-format on
 
   // Helper: random in [-1,1]
-  static scalar_t urand() {
-    return scalar_t(1.0) - scalar_t(2.0) * (scalar_t(rand()) / RAND_MAX);
+  static value_type urand() {
+    return value_type(1.0) - value_type(2.0) * (value_type(rand()) / RAND_MAX);
   }
 
-  matzz_t gen_spd_zz(scalar_t diag_boost = 5.0) {
+  matzz_t gen_spd_zz(value_type diag_boost = 5.0) {
     matzz_t R;
     for (size_t i = 0; i < NZ; ++i) {
       for (size_t j = 0; j < NZ; ++j) {
@@ -472,10 +473,10 @@ struct UnconstrainedSPD1Problem {
   using exec_space = Kokkos::DefaultExecutionSpace;
   using mem_space = exec_space::memory_space;
 
-  using scalar_t = double;
-  using layout_t = Kokkos::View<scalar_t*, mem_space>::array_layout;
-  using vector_t = Kokkos::View<scalar_t*, layout_t, mem_space>;
-  using linear_op_t = Kokkos::View<scalar_t**, layout_t, mem_space>;
+  using value_type = double;
+  using layout_t = Kokkos::View<value_type*, mem_space>::array_layout;
+  using vector_t = Kokkos::View<value_type*, layout_t, mem_space>;
+  using linear_op_t = Kokkos::View<value_type**, layout_t, mem_space>;
   using backend_t = convex::KokkosBackend<exec_space>;
 
   std::string name() const {
@@ -491,7 +492,7 @@ struct UnconstrainedSPD1Problem {
   }
 
   auto get_space() const {
-    return convex::space::Unconstrained<scalar_t>();
+    return convex::space::Unconstrained<value_type>();
   }
 
   vector_t get_exact_solution() const {
@@ -531,10 +532,10 @@ struct InactiveBoxConstrainedSPDProblem {
   using exec_space = Kokkos::DefaultExecutionSpace;
   using mem_space = exec_space::memory_space;
 
-  using scalar_t = double;
-  using layout_t = Kokkos::View<scalar_t*, mem_space>::array_layout;
-  using vector_t = Kokkos::View<scalar_t*, layout_t, mem_space>;
-  using linear_op_t = Kokkos::View<scalar_t**, layout_t, mem_space>;
+  using value_type = double;
+  using layout_t = Kokkos::View<value_type*, mem_space>::array_layout;
+  using vector_t = Kokkos::View<value_type*, layout_t, mem_space>;
+  using linear_op_t = Kokkos::View<value_type**, layout_t, mem_space>;
   using backend_t = convex::KokkosBackend<exec_space>;
 
   std::string name() const {
@@ -550,7 +551,7 @@ struct InactiveBoxConstrainedSPDProblem {
   }
 
   auto get_space() const {
-    return convex::space::Bounded<scalar_t>(0.0, 2.0);
+    return convex::space::Bounded<value_type>(0.0, 2.0);
   }
 
   vector_t get_exact_solution() const {
@@ -590,10 +591,10 @@ struct ActiveBoxConstrainedSPDProblem {
   using exec_space = Kokkos::DefaultExecutionSpace;
   using mem_space = exec_space::memory_space;
 
-  using scalar_t = double;
-  using layout_t = Kokkos::View<scalar_t*, mem_space>::array_layout;
-  using vector_t = Kokkos::View<scalar_t*, layout_t, mem_space>;
-  using linear_op_t = Kokkos::View<scalar_t**, layout_t, mem_space>;
+  using value_type = double;
+  using layout_t = Kokkos::View<value_type*, mem_space>::array_layout;
+  using vector_t = Kokkos::View<value_type*, layout_t, mem_space>;
+  using linear_op_t = Kokkos::View<value_type**, layout_t, mem_space>;
   using backend_t = convex::KokkosBackend<exec_space>;
 
   std::string name() const {
@@ -609,7 +610,7 @@ struct ActiveBoxConstrainedSPDProblem {
   }
 
   auto get_space() const {
-    return convex::space::Bounded<scalar_t>(9.0, 10.0);
+    return convex::space::Bounded<value_type>(9.0, 10.0);
   }
 
   vector_t get_exact_solution() const {
@@ -649,10 +650,10 @@ struct RandomLCP {
   using exec_space = Kokkos::DefaultExecutionSpace;
   using mem_space = exec_space::memory_space;
 
-  using scalar_t = double;
-  using layout_t = Kokkos::View<scalar_t*, mem_space>::array_layout;
-  using vector_t = Kokkos::View<scalar_t*, layout_t, mem_space>;
-  using linear_op_t = Kokkos::View<scalar_t**, layout_t, mem_space>;
+  using value_type = double;
+  using layout_t = Kokkos::View<value_type*, mem_space>::array_layout;
+  using vector_t = Kokkos::View<value_type*, layout_t, mem_space>;
+  using linear_op_t = Kokkos::View<value_type**, layout_t, mem_space>;
   using backend_t = convex::KokkosBackend<exec_space>;
 
   std::string name() const {
@@ -698,7 +699,7 @@ struct RandomLCP {
   }
 
   auto get_space() const {
-    return convex::space::LowerBound<scalar_t>(0.0);
+    return convex::space::LowerBound<value_type>(0.0);
   }
 
   vector_t get_exact_solution() const {
@@ -737,10 +738,10 @@ struct RandomLCP {
     Kokkos::parallel_for(
         "gen_random_p_matrix", team_policy(size, Kokkos::AUTO()), KOKKOS_LAMBDA(const team_member& team) {
           size_t i = team.league_rank();
-          scalar_t off_diag_abs_row_sum = 0;
+          value_type off_diag_abs_row_sum = 0;
           Kokkos::parallel_reduce(
               Kokkos::TeamThreadRange(team, 0, size),
-              [&](const size_t j, scalar_t& sum) { sum += Kokkos::abs(mat(i, j)) * (j != i); }, off_diag_abs_row_sum);
+              [&](const size_t j, value_type& sum) { sum += abs(mat(i, j)) * (j != i); }, off_diag_abs_row_sum);
           mat(i, i) = off_diag_abs_row_sum + 10.0;
         });
 
@@ -763,7 +764,7 @@ struct CongruentLCPProblemWrapper {
   using exec_space = Kokkos::DefaultExecutionSpace;
   using mem_space = exec_space::memory_space;
 
-  using scalar_t = typename NonCongruentProblem::scalar_t;
+  using value_type = typename NonCongruentProblem::value_type;
   using layout_t = typename NonCongruentProblem::layout_t;
   using vector_t = typename NonCongruentProblem::vector_t;
   using linear_op_t = typename NonCongruentProblem::linear_op_t;
@@ -836,19 +837,19 @@ struct RandomMixedCongruentCCQP {
   using exec_space = Kokkos::DefaultExecutionSpace;
   using mem_space = exec_space::memory_space;
 
-  using scalar_t = double;
-  using layout_t = Kokkos::View<scalar_t*, mem_space>::array_layout;
-  using vecx_t = Kokkos::View<scalar_t*, layout_t, mem_space>;
-  using vecy_t = Kokkos::View<scalar_t*, layout_t, mem_space>;
-  using matxx_t = Kokkos::View<scalar_t**, layout_t, mem_space>;
-  using matxy_t = Kokkos::View<scalar_t**, layout_t, mem_space>;
-  using matxz_t = Kokkos::View<scalar_t**, layout_t, mem_space>;
-  using matyx_t = Kokkos::View<scalar_t**, layout_t, mem_space>;
-  using matyy_t = Kokkos::View<scalar_t**, layout_t, mem_space>;
-  using matyz_t = Kokkos::View<scalar_t**, layout_t, mem_space>;
-  using matzx_t = Kokkos::View<scalar_t**, layout_t, mem_space>;
-  using matzy_t = Kokkos::View<scalar_t**, layout_t, mem_space>;
-  using matzz_t = Kokkos::View<scalar_t**, layout_t, mem_space>;
+  using value_type = double;
+  using layout_t = Kokkos::View<value_type*, mem_space>::array_layout;
+  using vecx_t = Kokkos::View<value_type*, layout_t, mem_space>;
+  using vecy_t = Kokkos::View<value_type*, layout_t, mem_space>;
+  using matxx_t = Kokkos::View<value_type**, layout_t, mem_space>;
+  using matxy_t = Kokkos::View<value_type**, layout_t, mem_space>;
+  using matxz_t = Kokkos::View<value_type**, layout_t, mem_space>;
+  using matyx_t = Kokkos::View<value_type**, layout_t, mem_space>;
+  using matyy_t = Kokkos::View<value_type**, layout_t, mem_space>;
+  using matyz_t = Kokkos::View<value_type**, layout_t, mem_space>;
+  using matzx_t = Kokkos::View<value_type**, layout_t, mem_space>;
+  using matzy_t = Kokkos::View<value_type**, layout_t, mem_space>;
+  using matzz_t = Kokkos::View<value_type**, layout_t, mem_space>;
   using backend_t = convex::KokkosBackend<exec_space>;
 
   RandomMixedCongruentCCQP(unsigned seed = 1) {
@@ -878,7 +879,7 @@ struct RandomMixedCongruentCCQP {
   }
 
   auto get_space_x() const {
-    return convex::space::LowerBound<scalar_t>(0.0);
+    return convex::space::LowerBound<value_type>(0.0);
   }
 
   vecx_t get_exact_x() const {
@@ -922,7 +923,7 @@ struct RandomMixedCongruentCCQP {
   }
 
   KOKKOS_INLINE_FUNCTION
-  static scalar_t urand(uint64_t a, uint64_t b) {
+  static value_type urand(uint64_t a, uint64_t b) {
     openrand::Philox rng = make_philox(a, b);
     return rng.uniform<double>(-1.0, 1.0);
   }
@@ -945,7 +946,7 @@ struct RandomMixedCongruentCCQP {
         KOKKOS_LAMBDA(const size_t i, const size_t j) { dst(i, j) = src(j, i); });
   }
 
-  matzz_t gen_spd_zz(scalar_t diag_boost = 5.0) {
+  matzz_t gen_spd_zz(value_type diag_boost = 5.0) {
     matzz_t R(Kokkos::view_alloc(Kokkos::WithoutInitializing, "R"), NZ, NZ);
     const auto seed = seed_;
     Kokkos::parallel_for(
@@ -1003,7 +1004,7 @@ struct RandomMixedCongruentCCQP {
     Kokkos::deep_copy(Kinv, 0.0);
     Kokkos::parallel_for(
         "init_kinv_diag", Kokkos::RangePolicy<exec_space>(0, NY), KOKKOS_LAMBDA(const size_t i) {
-          Kinv(i, i) = 10.0 + Kokkos::abs(urand(static_cast<uint64_t>(i + seed + 401), static_cast<uint64_t>(911)));
+          Kinv(i, i) = 10.0 + abs(urand(static_cast<uint64_t>(i + seed + 401), static_cast<uint64_t>(911)));
         });
 
     matzy_t MB(Kokkos::view_alloc(Kokkos::WithoutInitializing, "MB"), NZ, NY);
@@ -1451,7 +1452,8 @@ TEST(Convex, MundyMathCongruentAnalyticalSolutions) {
 }
 
 TEST(Convex, MundyMathMixedCongruentAnalyticalSolutions) {
-  auto test_cases = std::make_tuple(math_backend::mixed::RandomMixedCongruentCCQP<5, 4, 3>{},  //
+  // Template params are <NX, NY, NZ>; make_D_full_rank requires NZ >= NX.
+  auto test_cases = std::make_tuple(math_backend::mixed::RandomMixedCongruentCCQP<4, 3, 5>{},  //
                                     math_backend::mixed::RandomMixedCongruentCCQP<3, 4, 5>{});
   std::apply([](auto&&... test_case) { (run_mundy_math_mixed_congruent_test(test_case), ...); }, test_cases);
 }
