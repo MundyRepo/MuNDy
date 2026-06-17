@@ -121,6 +121,15 @@ echo "Using install dir: $INSTALL_DIR"
 echo "Using MPI max num procs: $MPI_MAX_NUMPROCS"
 echo "Using MPI default num procs: $MPI_DEFAULT_NUMPROCS"
 
+# Launch C++ compiles via ccache if present (content-addressed object cache -> faster rebuilds).
+if command -v ccache >/dev/null 2>&1; then
+  ccache_args="-DCMAKE_CXX_COMPILER_LAUNCHER=$(command -v ccache)"
+  echo "Using ccache: $(command -v ccache)"
+else
+  ccache_args=""
+  echo "ccache not found on PATH; building without it"
+fi
+
 cmake \
 -DCMAKE_BUILD_TYPE=${BUILD_TYPE:-RELEASE} \
 -DCMAKE_CXX_COMPILER=mpicxx \
@@ -156,6 +165,4 @@ cmake \
 -DTPL_STK_DIR:PATH=${TRILINOS_ROOT_DIR} \
 -DTPL_Teuchos_DIR:PATH=${TRILINOS_ROOT_DIR} \
 ${ccache_args} \
-${compiler_flags} \
-${extra_args} \
 ${MUNDY_SOURCE_DIR}
