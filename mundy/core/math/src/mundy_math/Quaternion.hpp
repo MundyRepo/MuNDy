@@ -1006,12 +1006,12 @@ KOKKOS_INLINE_FUNCTION
     constexpr AQuaternion<std::remove_const_t<T>> euler_to_quat(const T roll, const T pitch, const T yaw) {
   // Convert Euler angles to quaternion
   AQuaternion<std::remove_const_t<T>> quat;
-  const T cha1 = std::cos(T(0.5) * roll);
-  const T cha2 = std::cos(T(0.5) * pitch);
-  const T cha3 = std::cos(T(0.5) * yaw);
-  const T sha1 = std::sin(T(0.5) * roll);
-  const T sha2 = std::sin(T(0.5) * pitch);
-  const T sha3 = std::sin(T(0.5) * yaw);
+  const T cha1 = Kokkos::cos(T(0.5) * roll);
+  const T cha2 = Kokkos::cos(T(0.5) * pitch);
+  const T cha3 = Kokkos::cos(T(0.5) * yaw);
+  const T sha1 = Kokkos::sin(T(0.5) * roll);
+  const T sha2 = Kokkos::sin(T(0.5) * pitch);
+  const T sha3 = Kokkos::sin(T(0.5) * yaw);
   quat.w() = cha1 * cha2 * cha3 + sha1 * sha2 * sha3;
   quat.x() = sha1 * cha2 * cha3 - cha1 * sha2 * sha3;
   quat.y() = cha1 * sha2 * cha3 + sha1 * cha2 * sha3;
@@ -1019,7 +1019,7 @@ KOKKOS_INLINE_FUNCTION
   return quat;
 }
 
-/// \brief Get the quaternion that perform parallel transport from vector v1 to vector v2
+/// \brief Get the quaternion that perform parallel transport from unit vector v1 to unit vector v2
 /// \param[in] v1 The first vector.
 /// \param[in] v2 The second vector.
 ///
@@ -1033,6 +1033,11 @@ KOKKOS_INLINE_FUNCTION
 /// This equation comes from J. Linn's 2020 "Discrete Cosserat rod kinematics constricted on the basis
 /// of the difference geometry of framed curves," and as shown above, is identical to the equation given in K. Korner's
 /// "Simple deformation measures for discrete elastic rods and ribbons."
+///
+/// \pre v_from, v_to are unit.
+///
+/// \note Antiparallel inputs (v_to == -v_from) are singular: any axis perpendicular to v_from gives a valid 180-deg
+/// rotation. When 1 + v_from . v_to <= tol we pick one arbitrarily: 180 deg about v_from x (least-aligned world axis).
 template <typename U, typename T, ValidAccessor<U> Accessor1, ValidAccessor<T> Accessor2>
 MUNDY_REQUIRES(std::is_arithmetic_v<T>&& std::is_arithmetic_v<U>)
 KOKKOS_INLINE_FUNCTION constexpr auto quat_from_parallel_transport(const AVector3<U, Accessor1>& v_from,
@@ -1042,11 +1047,41 @@ KOKKOS_INLINE_FUNCTION constexpr auto quat_from_parallel_transport(const AVector
   using CommonType = decltype(U() * T());
   AQuaternion<CommonType> quat;
 
-  // Compute the dot product and cross product
   const auto dot_product = dot(v_from, v_to);
+  const CommonType one_plus_dot = CommonType(1) + dot_product;
+
+  // Antiparallel singularity (dot ~= -1): axis undefined.
+  // Arbitrary tie-break: 180 deg about v_from x least-aligned world axis (smallest component, for stability).
+  if (one_plus_dot <= get_comparison_tolerance<U, T>()) {
+    const auto ax = std::abs(v_from[0]);
+    const auto ay = std::abs(v_from[1]);
+    const auto az = std::abs(v_from[2]);
+    CommonType nx, ny, nz;
+    if (ax <= ay && ax <= az) {  // cross(v_from, e_x) = (0, v_z, -v_y)
+      nx = CommonType(0);
+      ny = v_from[2];
+      nz = -v_from[1];
+    } else if (ay <= az) {  // cross(v_from, e_y) = (-v_z, 0, v_x)
+      nx = -v_from[2];
+      ny = CommonType(0);
+      nz = v_from[0];
+    } else {  // cross(v_from, e_z) = (v_y, -v_x, 0)
+      nx = v_from[1];
+      ny = -v_from[0];
+      nz = CommonType(0);
+    }
+    const CommonType inv_len = CommonType(1) / Kokkos::sqrt(nx * nx + ny * ny + nz * nz);
+    quat.w() = CommonType(0);
+    quat.x() = nx * inv_len;
+    quat.y() = ny * inv_len;
+    quat.z() = nz * inv_len;
+    return quat;
+  }
+
+  // Regular case
   const auto cross_product = cross(v_from, v_to);
-  const double sqrt_term = std::sqrt(0.5 * (1.0 + dot_product));
-  const auto vec = 0.5 * cross_product / sqrt_term;
+  const CommonType sqrt_term = Kokkos::sqrt(CommonType(0.5) * one_plus_dot);
+  const auto vec = CommonType(0.5) * cross_product / sqrt_term;
   quat.w() = sqrt_term;
   quat.x() = vec[0];
   quat.y() = vec[1];

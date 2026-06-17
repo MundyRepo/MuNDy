@@ -673,6 +673,26 @@ TYPED_TEST(QuaternionPairwiseTypeTest, SpecialOperations) {
                  Quaternion<C>{static_cast<C>(0.1946219299433149), static_cast<C>(0.4407059160784743),
                                static_cast<C>(0.5581347617390449), static_cast<C>(0.6755636074046377)},
                  "Slerp failed.");
+
+  // quat_from_parallel_transport, regular cases (unit inputs)
+
+  // Onto self -> identity.
+  Vector3<T1> e_z(0, 0, 1);
+  is_close_debug(quat_from_parallel_transport(e_z, Vector3<T2>(0, 0, 1)), Quaternion<C>{1, 0, 0, 0},
+                 "Transport onto self is not identity.");
+
+  // e_z -> e_x: +90 deg about +y.
+  is_close_debug(quat_from_parallel_transport(Vector3<T1>(0, 0, 1), Vector3<T2>(1, 0, 0)), get_quaternion_y_90<C>(),
+                 "Transport e_z -> e_x failed.");
+
+  // General pair: unit norm, maps v_from -> v_to, shortest arc (w = cos(theta/2) >= 0).
+  Vector3<T1> a(1, 0, 0);
+  Vector3<T2> b(0, 1, 0);  // e_x -> e_y, a 90 deg rotation about +z
+  auto q_ab = quat_from_parallel_transport(a, b);
+  is_close_debug(q_ab, get_quaternion_z_90<C>(), "Transport e_x -> e_y failed.");
+  is_close_debug(norm(q_ab), static_cast<C>(1), "Transport result not unit norm.");
+  is_close_debug(q_ab * a, b, "Transport does not map v_from -> v_to.");
+  EXPECT_GE(q_ab.w(), static_cast<C>(0)) << "Transport not shortest arc.";
 }
 
 TYPED_TEST(QuaternionPairwiseTypeTest, SpecialOperationsEdgeCases) {
@@ -707,6 +727,35 @@ TYPED_TEST(QuaternionPairwiseTypeTest, SpecialOperationsEdgeCases) {
                  Quaternion<C>{static_cast<C>(0.1946219299433149), static_cast<C>(0.4407059160784743),
                                static_cast<C>(0.5581347617390449), static_cast<C>(0.6755636074046377)},
                  "Slerp failed.");
+
+  // quat_from_parallel_transport degeneracy (v_to == -v_from). Axis is undefined, so assert only the
+  // choice-independent invariants: w == 0 (180 deg), unit norm, axis perpendicular to v_from, maps v_from -> v_to.
+  const auto antiparallel_invariants = [](const Vector3<T1>& v_from, const Vector3<T2>& v_to) {
+    auto q = quat_from_parallel_transport(v_from, v_to);
+    is_close_debug(q.w(), static_cast<C>(0), "Antiparallel transport not 180 deg.");
+    is_close_debug(norm(q), static_cast<C>(1), "Antiparallel result not unit norm.");
+    Vector3<C> axis(q.x(), q.y(), q.z());
+    is_close_debug(dot(axis, v_from), static_cast<C>(0), "Antiparallel axis not perpendicular to v_from.");
+    is_close_debug(q * v_from, v_to, "Antiparallel transport does not map v_from -> v_to.");
+  };
+  antiparallel_invariants(Vector3<T1>(0, 0, 1), Vector3<T2>(0, 0, -1));  // x e_x
+  antiparallel_invariants(Vector3<T1>(1, 0, 0), Vector3<T2>(-1, 0, 0));  // x e_y
+
+  Vector3<T1> v(2, 3, 1);
+  v /= norm(v);
+  antiparallel_invariants(v, Vector3<T2>(-v[0], -v[1], -v[2]));
+
+  // Pin the tie-break for e_z (x least-aligned e_x -> (0,1,0)): 180 deg about +y. Catches convention drift.
+  is_close_debug(quat_from_parallel_transport(Vector3<T1>(0, 0, 1), Vector3<T2>(0, 0, -1)), Quaternion<C>{0, 0, 1, 0},
+                 "Antiparallel tie-break changed.");
+
+  // Near-antiparallel but outside tol: regular branch, still maps v_from -> v_to.
+  Vector3<T1> nearly_from(0, 0, 1);
+  Vector3<T2> nearly_to(static_cast<T2>(0.05), static_cast<T2>(0.0),
+                        static_cast<T2>(-std::sqrt(1.0 - 0.05 * 0.05)));  // 1 + dot ~= 1.25e-3 >> tol
+  auto q_near = quat_from_parallel_transport(nearly_from, nearly_to);
+  is_close_debug(norm(q_near), static_cast<C>(1), "Near-antiparallel result not unit norm.");
+  is_close_debug(q_near * nearly_from, nearly_to, "Near-antiparallel does not map v_from -> v_to.");
 }
 //@}
 
