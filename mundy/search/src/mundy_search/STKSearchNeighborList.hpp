@@ -290,9 +290,9 @@ class PeriodicSTKSearchNeighborList {
   /// \param source_selector [in] Selector defining the source owner chunk used during the build.
   /// \param target_entities [in] Target owner entities indexed by dense target owner ordinal.
   /// \param source_entities [in] Source owner entities indexed by dense source owner ordinal.
-  /// \param target_image_shifts [in] Per-target-owner image shift (target's original → imaged reference point).
+  /// \param target_image_shifts [in] Per-target-owner image shift (target's original -> imaged reference point).
   /// \param source_owner_indices [in] Dense source owner ordinal for every stored pair.
-  /// \param source_image_shifts [in] Per-pair source owner image shift (original → imaged reference point).
+  /// \param source_image_shifts [in] Per-pair source owner image shift (original -> imaged reference point).
   /// \param offsets [in] Target owner offsets into `source_owner_indices`; extent must be `num_targets + 1`.
   PeriodicSTKSearchNeighborList(const stk::mesh::Selector& target_selector, const stk::mesh::Selector& source_selector,
                                 const entity_view_t& target_entities, const entity_view_t& source_entities,
@@ -366,7 +366,7 @@ class PeriodicSTKSearchNeighborList {
     return source_owner_indices_(pair_index(target_index, neighbor_ordinal));
   }
 
-  /// \brief Get the source owner's image shift for a stored pair (original → imaged reference point).
+  /// \brief Get the source owner's image shift for a stored pair (original -> imaged reference point).
   /// \param target_index [in] Dense target owner ordinal.
   /// \param neighbor_ordinal [in] Ordinal in the target's neighbor range.
   KOKKOS_INLINE_FUNCTION
@@ -458,11 +458,11 @@ class PeriodicSTKSearchNeighborList {
   entity_view_t target_entities_;
   //! Source owner entities indexed by dense source owner ordinal.
   entity_view_t source_entities_;
-  //! Per-target-owner image shift (original → imaged reference point), indexed by dense target owner ordinal.
+  //! Per-target-owner image shift (original -> imaged reference point), indexed by dense target owner ordinal.
   image_shift_view_t target_image_shifts_;
   //! Flattened dense source owner ordinals for each stored periodic pair.
   source_index_view_t source_owner_indices_;
-  //! Flattened per-pair source owner image shift (original → imaged reference point).
+  //! Flattened per-pair source owner image shift (original -> imaged reference point).
   image_shift_view_t source_image_shifts_;
   //! Per-target-owner offsets into `source_owner_indices_`; extent is `num_targets() + 1`.
   offset_view_t offsets_;
@@ -573,11 +573,11 @@ struct NeighborListBuildTraits<PeriodicSTKSearchNeighborList<MemorySpace, ImageS
 /// Per-phase wall-time breakdown for one STKSearchNeighborList build call.
 struct STKBuildPhaseTimings {
   double phase_a_ms{0};   ///< A: build BoxIdentProc search views
-  double phase_b_ms{0};   ///< B: build target EntityKey→ordinal map
+  double phase_b_ms{0};   ///< B: build target EntityKey->ordinal map
   double phase_c_ms{0};   ///< C: stk::search::coarse_search (MORTON_LBVH + MPI)
   double phase_d_ms{0};   ///< D: mirror results to host + ghosting coordination
-  double phase_e_ms{0};   ///< E: build extended source entity view (host→device)
-  double phase_f_ms{0};   ///< F: refresh NgpMesh + build source EntityKey→ordinal map
+  double phase_e_ms{0};   ///< E: build extended source entity view (host->device)
+  double phase_f_ms{0};   ///< F: refresh NgpMesh + build source EntityKey->ordinal map
   double phase_g0_ms{0};  ///< G0: precompute valid target/source ordinal pairs
   double phase_g_ms{0};   ///< G: count pass (atomic per-target increments)
   double phase_h_ms{0};   ///< H: prefix scan + write-position init
@@ -608,12 +608,12 @@ inline STKBuildPhaseTimings stk_build_last_timings{};
 ///
 /// Phases:
 ///   - **A** — Build `BoxIdentProc` search-input views on device (domain = target, range = source).
-///   - **B** — Build a target `EntityKey → dense-ordinal` map on device; targets never need ghosting.
+///   - **B** — Build a target `EntityKey -> dense-ordinal` map on device; targets never need ghosting.
 ///   - **C** — Run `stk::search::coarse_search` (MORTON_LBVH, MPI-distributed, symmetry enabled).
 ///   - **D** — Mirror results to host; for each cross-process pair where this rank owns the source,
 ///             ghost the source to the target's rank.
 ///   - **E** — Build an extended source entity list (owned + newly-ghosted) and transfer to device.
-///   - **F** — Refresh the NGP mesh (includes ghosts); build a source `EntityKey → ordinal` map.
+///   - **F** — Refresh the NGP mesh (includes ghosts); build a source `EntityKey -> ordinal` map.
 ///   - **G0** — Precompute valid target/source ordinal pairs with the excluder filter.
 ///   - **G** — Count pass: atomically increment per-target neighbor counts for all passing pairs.
 ///   - **H** — Exclusive prefix scan: compute CSR offsets, allocate `source_indices` and `write_positions`.
@@ -773,7 +773,7 @@ STKSearchNeighborList<MemorySpace> NeighborListBuildTraits<STKSearchNeighborList
   // can be populated before the search.  The CSR count and fill passes use it
   // to skip symmetric copies where the domain entity belongs to a remote rank.
   //
-  // 2× capacity keeps the load factor ≈50%, making insert failures effectively
+  // 2x capacity keeps the load factor ≈50%, making insert failures effectively
   // impossible for any well-distributed collection of entity keys.
 
   key_map_t target_key_to_ordinal(2 * num_targets);
@@ -827,7 +827,7 @@ STKSearchNeighborList<MemorySpace> NeighborListBuildTraits<STKSearchNeighborList
   //
   // The symmetric result copies (where the domain belongs to a remote rank)
   // appear in `host_results` but produce no action here; they are filtered
-  // by the target-map lookup in the device CSR passes (miss → skip).
+  // by the target-map lookup in the device CSR passes (miss -> skip).
   //
   // Single-process short-circuit: no cross-process pairs exist on one rank;
   // the modification cycle is skipped entirely.
@@ -880,7 +880,7 @@ STKSearchNeighborList<MemorySpace> NeighborListBuildTraits<STKSearchNeighborList
     stk_prof_mark(stk_build_last_timings.phase_d_ms);
 
     // ===========================================================================
-    // Phase E — Build extended source entity view (host → device)
+    // Phase E — Build extended source entity view (host -> device)
     // ===========================================================================
     //
     // After modification_end(), newly-ghosted source entities are locally

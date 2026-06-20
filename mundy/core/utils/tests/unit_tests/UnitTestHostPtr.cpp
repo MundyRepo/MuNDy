@@ -252,13 +252,13 @@ TEST(HostPtr, OwnerBeforeAndContainers) {
   EXPECT_TRUE(a.owner_before(b) || b.owner_before(a));  // distinct owners are strictly ordered
   auto a2 = a;
   EXPECT_FALSE(a.owner_before(a2));
-  EXPECT_FALSE(a2.owner_before(a));  // shared control block → equivalent
+  EXPECT_FALSE(a2.owner_before(a));  // shared control block -> equivalent
 
   std::set<host_ptr<int>> ordered;  // exercises operator<=>
   ordered.insert(a);
   ordered.insert(b);
   ordered.insert(a2);
-  EXPECT_EQ(ordered.size(), 2u);  // a and a2 share get() → one key
+  EXPECT_EQ(ordered.size(), 2u);  // a and a2 share get() -> one key
 
   std::unordered_set<host_ptr<int>> hashed;  // exercises std::hash + operator==
   hashed.insert(a);

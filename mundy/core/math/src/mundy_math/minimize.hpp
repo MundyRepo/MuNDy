@@ -83,9 +83,9 @@ KOKKOS_FUNCTION double find_min_using_approximate_derivatives(
 /// \param min_objective_delta  Convergence tolerance on the change in objective value.
 template <size_t max_size, size_t N, typename FDFType>
 double find_min_with_fdf(const FDFType& fdf, Vector<double, N>& x,
-                         const double min_alowable_cost   = -Kokkos::Experimental::infinity_v<double>,
+                         const double min_alowable_cost = -Kokkos::Experimental::infinity_v<double>,
                          const double min_objective_delta = 1e-7) {
-  auto stop_strategy   = impl::objective_delta_stop_strategy(min_objective_delta);
+  auto stop_strategy = impl::objective_delta_stop_strategy(min_objective_delta);
   auto search_strategy = impl::lbfgs_search_strategy<max_size, N>();
   return impl::find_min_with_fdf<max_size, N>(search_strategy, stop_strategy, fdf, x, min_alowable_cost);
 }
@@ -93,9 +93,9 @@ double find_min_with_fdf(const FDFType& fdf, Vector<double, N>& x,
 template <size_t max_size, size_t N, typename CostFunctionType, typename DerivativeFunctionType>
 KOKKOS_FUNCTION double find_min_with_derivatives(
     const CostFunctionType& cost_func, const DerivativeFunctionType& der_func, Vector<double, N>& x,
-    const double min_alowable_cost  = -Kokkos::Experimental::infinity_v<double>,
+    const double min_alowable_cost = -Kokkos::Experimental::infinity_v<double>,
     const double min_objective_delta = 1e-7) {
-  auto stop_strategy   = impl::objective_delta_stop_strategy(min_objective_delta);
+  auto stop_strategy = impl::objective_delta_stop_strategy(min_objective_delta);
   auto search_strategy = impl::lbfgs_search_strategy<max_size, N>();
   return impl::find_min_with_derivatives<max_size, N>(search_strategy, stop_strategy, cost_func, der_func, x,
                                                       min_alowable_cost);

@@ -30,15 +30,17 @@
 #include <utility>
 
 // Mundy
-#include <mundy_math/Accessor.hpp>   // for mundy::ValidAccessor
-#include <mundy_math/Array.hpp>      // for mundy::Array
-#include <mundy_math/Matrix3.hpp>    // for mundy::Matrix3
-#include <mundy_math/Tolerance.hpp>  // for mundy::get_zero_tolerance
-#include <mundy_math/Vector3.hpp>    // for mundy::Vector3
+#include <mundy_math/Accessor.hpp>              // for mundy::ValidAccessor
+#include <mundy_math/Array.hpp>                 // for mundy::Array
+#include <mundy_math/Matrix3.hpp>               // for mundy::Matrix3
+#include <mundy_math/NumTraits.hpp>             // for mundy::ValidScalarType, mundy::NumTraits
+#include <mundy_math/ScalarBinaryOpTraits.hpp>  // for mundy::scalar_*_result_t
+#include <mundy_math/Tolerance.hpp>             // for mundy::get_zero_tolerance
+#include <mundy_math/Vector3.hpp>               // for mundy::Vector3
+#include <mundy_math/cmath.hpp>
 #include <mundy_math/impl/QuaternionImpl.hpp>
 #include <mundy_utils/requires.hpp>
 #include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
-#include <mundy_math/cmath.hpp>
 
 namespace mundy {
 
@@ -133,7 +135,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto norm(const AQuaternion<T, Accessor>& quat)
 /// should be lightweight such that they can be copied around without much overhead. Furthermore, the lifetime of the
 /// data underlying the accessor should be as long as the AQuaternion that use it.
 template <typename T, ValidAccessor<T> Accessor>
-MUNDY_REQUIRES(std::is_floating_point_v<T>)
+MUNDY_REQUIRES(ValidScalarType<T> && !NumTraits<T>::IsInteger)
 class AQuaternion {
  public:
   //! \name Internal data
@@ -515,7 +517,8 @@ class AQuaternion {
   /// \brief AQuaternion-quaternion addition
   /// \param[in] other The other quaternion.
   template <typename U, ValidAccessor<U> OtherAccessor>
-  KOKKOS_INLINE_FUNCTION constexpr auto operator+(const AQuaternion<U, OtherAccessor>& other) const {
+  KOKKOS_INLINE_FUNCTION constexpr auto operator+(const AQuaternion<U, OtherAccessor>& other) const
+      -> AQuaternion<scalar_sum_result_t<T, U>> {
     return impl::quat_quat_addition_impl(*this, other);
   }
 
@@ -531,7 +534,8 @@ class AQuaternion {
   /// \brief AQuaternion-quaternion subtraction
   /// \param[in] other The other quaternion.
   template <typename U, ValidAccessor<U> OtherAccessor>
-  KOKKOS_INLINE_FUNCTION constexpr auto operator-(const AQuaternion<U, OtherAccessor>& other) const {
+  KOKKOS_INLINE_FUNCTION constexpr auto operator-(const AQuaternion<U, OtherAccessor>& other) const
+      -> AQuaternion<scalar_difference_result_t<T, U>> {
     return impl::quat_quat_subtraction_impl(*this, other);
   }
 
@@ -551,7 +555,8 @@ class AQuaternion {
   /// \brief AQuaternion-quaternion multiplication
   /// \param[in] other The other quaternion.
   template <typename U, ValidAccessor<U> OtherAccessor>
-  KOKKOS_INLINE_FUNCTION constexpr auto operator*(const AQuaternion<U, OtherAccessor>& other) const {
+  KOKKOS_INLINE_FUNCTION constexpr auto operator*(const AQuaternion<U, OtherAccessor>& other) const
+      -> AQuaternion<scalar_product_result_t<T, U>> {
     return impl::quat_quat_multiplication_impl(*this, other);
   }
 
@@ -567,29 +572,31 @@ class AQuaternion {
   /// \brief AQuaternion-vector multiplication (same as R * v)
   /// \param[in] vec The vector.
   template <typename U, ValidAccessor<U> OtherAccessor>
-  KOKKOS_INLINE_FUNCTION constexpr auto operator*(const AVector3<U, OtherAccessor>& vec) const {
+  KOKKOS_INLINE_FUNCTION constexpr auto operator*(const AVector3<U, OtherAccessor>& vec) const
+      -> AVector3<scalar_product_result_t<T, U>> {
     return impl::quat_vec_multiplication_impl(*this, vec);
   }
 
   /// \brief AQuaternion-matrix multiplication
   /// \param[in] other The other matrix.
   template <typename U, ValidAccessor<U> OtherAccessor>
-  KOKKOS_INLINE_FUNCTION constexpr auto operator*(const AMatrix3<U, OtherAccessor>& mat) const {
+  KOKKOS_INLINE_FUNCTION constexpr auto operator*(const AMatrix3<U, OtherAccessor>& mat) const
+      -> AMatrix3<scalar_product_result_t<T, U>> {
     return impl::quat_mat_multiplication_impl(*this, mat);
   }
 
   /// \brief AQuaternion-scalar multiplication
   /// \param[in] scalar The scalar.
   template <typename U>
-  MUNDY_REQUIRES(std::is_arithmetic_v<U>)
-  KOKKOS_INLINE_FUNCTION constexpr auto operator*(const U& scalar) const {
+  MUNDY_REQUIRES(!is_quaternion_v<U> && ValidScalarType<U>)
+  KOKKOS_INLINE_FUNCTION constexpr auto operator*(const U& scalar) const -> AQuaternion<scalar_product_result_t<T, U>> {
     return impl::quat_scalar_multiplication_impl(*this, scalar);
   }
 
   /// \brief Self-scalar multiplication
   /// \param[in] scalar The scalar.
   template <typename U>
-  MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>&& std::is_arithmetic_v<U>)
+  MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T> && !is_quaternion_v<U> && ValidScalarType<U>)
   KOKKOS_INLINE_FUNCTION constexpr AQuaternion<T, Accessor>& operator*=(const U& scalar) {
     impl::self_scalar_multiplication_impl(*this, scalar);
     return *this;
@@ -598,15 +605,16 @@ class AQuaternion {
   /// \brief AQuaternion-scalar division
   /// \param[in] scalar The scalar.
   template <typename U>
-  MUNDY_REQUIRES(std::is_arithmetic_v<U>)
-  KOKKOS_INLINE_FUNCTION constexpr auto operator/(const U& scalar) const {
+  MUNDY_REQUIRES(!is_quaternion_v<U> && ValidScalarType<U>)
+  KOKKOS_INLINE_FUNCTION constexpr auto operator/(const U& scalar) const
+      -> AQuaternion<scalar_quotient_result_t<T, U>> {
     return impl::quat_scalar_division_impl(*this, scalar);
   }
 
   /// \brief Self-scalar division
   /// \param[in] scalar The scalar.
   template <typename U>
-  MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>&& std::is_arithmetic_v<U>)
+  MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T> && !is_quaternion_v<U> && ValidScalarType<U>)
   KOKKOS_INLINE_FUNCTION constexpr AQuaternion<T, Accessor>& operator/=(const U& scalar) {
     impl::self_scalar_division_impl(*this, scalar);
     return *this;
@@ -632,7 +640,7 @@ class AQuaternion {
 
   // We are friends with all Quaternions regardless of their Accessor or type
   template <typename U, ValidAccessor<U> OtherAccessor>
-  MUNDY_REQUIRES(std::is_floating_point_v<U>)
+  MUNDY_REQUIRES(ValidScalarType<U> && !NumTraits<U>::IsInteger)
   friend class AQuaternion;
   //@}
 };  // AQuaternion
@@ -672,11 +680,8 @@ template <typename U, typename T, ValidAccessor<U> Accessor1, ValidAccessor<T> A
 KOKKOS_INLINE_FUNCTION constexpr bool is_close(
     const AQuaternion<U, Accessor1>& quat1, const AQuaternion<T, Accessor2>& quat2,
     const decltype(get_comparison_tolerance<T, U>())& tol = get_comparison_tolerance<T, U>()) {
-  using Tol = decltype(tol);
-  return abs(static_cast<Tol>(quat1.w()) - static_cast<Tol>(quat2.w())) <= tol &&
-         abs(static_cast<Tol>(quat1.x()) - static_cast<Tol>(quat2.x())) <= tol &&
-         abs(static_cast<Tol>(quat1.y()) - static_cast<Tol>(quat2.y())) <= tol &&
-         abs(static_cast<Tol>(quat1.z()) - static_cast<Tol>(quat2.z())) <= tol;
+  return abs(quat1.w() - quat2.w()) <= tol && abs(quat1.x() - quat2.x()) <= tol && abs(quat1.y() - quat2.y()) <= tol &&
+         abs(quat1.z() - quat2.z()) <= tol;
 }
 
 /// \brief AQuaternion-quaternion equality (element-wise within a relaxed tolerance)
@@ -698,9 +703,9 @@ KOKKOS_INLINE_FUNCTION constexpr bool is_approx_close(
 /// \param[in] scalar The scalar.
 /// \param[in] quat The quaternion.
 template <typename U, typename T, ValidAccessor<T> Accessor>
-MUNDY_REQUIRES(std::is_arithmetic_v<U>)
+MUNDY_REQUIRES(!is_quaternion_v<U> && ValidScalarType<U>)
 KOKKOS_INLINE_FUNCTION constexpr auto operator*(const U& scalar, const AQuaternion<T, Accessor>& quat)
-    -> AQuaternion<std::common_type_t<T, U>> {
+    -> AQuaternion<scalar_product_result_t<T, U>> {
   return quat * scalar;
 }
 
@@ -710,7 +715,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto operator*(const U& scalar, const AQuaterni
 template <typename U, typename T, ValidAccessor<U> Accessor1, ValidAccessor<T> Accessor2>
 KOKKOS_INLINE_FUNCTION constexpr auto operator*(const AVector3<U, Accessor1>& vec,
                                                 const AQuaternion<T, Accessor2>& quat)
-    -> Vector3<std::common_type_t<T, U>> {
+    -> Vector3<scalar_product_result_t<T, U>> {
   return impl::vec_quat_multiplication_impl(vec, quat);
 }
 
@@ -719,7 +724,8 @@ KOKKOS_INLINE_FUNCTION constexpr auto operator*(const AVector3<U, Accessor1>& ve
 /// \param[in] quat The quaternion.
 template <typename U, typename T, ValidAccessor<U> Accessor1, ValidAccessor<T> Accessor2>
 KOKKOS_INLINE_FUNCTION constexpr auto operator*(const AMatrix3<U, Accessor1>& mat,
-                                                const AQuaternion<T, Accessor2>& quat) {
+                                                const AQuaternion<T, Accessor2>& quat)
+    -> AMatrix3<scalar_product_result_t<T, U>> {
   return impl::mat_quat_multiplication_impl(mat, quat);
 }
 //@}
@@ -733,7 +739,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto copy(const QuaternionType& q) {
   return q.copy();
 }
 
-/// \brief Cast a quaternion to a different arithmetic type
+/// \brief Cast a quaternion to a different scalar type
 template <typename U, ValidQuaternionType QuaternionType>
 KOKKOS_INLINE_FUNCTION constexpr auto cast(const QuaternionType& q) {
   return q.template cast<U>();
@@ -744,7 +750,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto cast(const QuaternionType& q) {
 /// \param[in] q2 The second quaternion.
 template <typename U, typename T, ValidAccessor<U> Accessor1, ValidAccessor<T> Accessor2>
 KOKKOS_INLINE_FUNCTION constexpr auto dot(const AQuaternion<U, Accessor1>& q1, const AQuaternion<T, Accessor2>& q2) {
-  using CommonType = std::common_type_t<U, T>;
+  using CommonType = scalar_product_result_t<U, T>;
   return static_cast<CommonType>(q1.w()) * static_cast<CommonType>(q2.w()) +
          static_cast<CommonType>(q1.x()) * static_cast<CommonType>(q2.x()) +
          static_cast<CommonType>(q1.y()) * static_cast<CommonType>(q2.y()) +
@@ -797,11 +803,11 @@ KOKKOS_INLINE_FUNCTION constexpr AQuaternion<std::remove_const_t<T>> normalize(c
 /// \param[in] q2 The second quaternion.
 /// \param[in] t The interpolation parameter.
 template <typename U, typename T, typename V, ValidAccessor<U> Accessor1, ValidAccessor<T> Accessor2>
-MUNDY_REQUIRES(std::is_arithmetic_v<V>)
+MUNDY_REQUIRES(ValidScalarType<V>)
 KOKKOS_INLINE_FUNCTION
     constexpr auto slerp(const AQuaternion<U, Accessor1>& q1, const AQuaternion<T, Accessor2>& q2, const V t)
-        -> AQuaternion<std::common_type_t<U, T, V>> {
-  using CommonType = std::common_type_t<U, T, V>;
+        -> AQuaternion<scalar_product_result_t<scalar_product_result_t<U, T>, V>> {
+  using CommonType = scalar_product_result_t<scalar_product_result_t<U, T>, V>;
   const CommonType epsilon = get_relaxed_zero_tolerance<CommonType>();  // Threshold for linear interpolation
 
   // Compute the dot product
@@ -811,7 +817,7 @@ KOKKOS_INLINE_FUNCTION
   // Note, we cannot directly copy from q2 to q2_adjusted because the Accessor type may be different.
   AQuaternion<std::remove_const_t<T>> q2_adjusted;
   q2_adjusted.set(q2);
-  if (dot_q12 < 0) {
+  if (dot_q12 < static_cast<CommonType>(0)) {
     dot_q12 = -dot_q12;
     q2_adjusted *= -1;
   }
@@ -842,8 +848,7 @@ KOKKOS_INLINE_FUNCTION
     MUNDY_THROW_ASSERT(!is_close(sin_theta, CommonType(0)), std::runtime_error,
                        "AQuaternion: slerp undefined for sin(theta) near zero.");
     const CommonType inv_sin_theta = static_cast<CommonType>(1) / sin_theta;
-    const CommonType s1 =
-        sin((static_cast<CommonType>(1) - static_cast<CommonType>(t)) * theta) * inv_sin_theta;
+    const CommonType s1 = sin((static_cast<CommonType>(1) - static_cast<CommonType>(t)) * theta) * inv_sin_theta;
     const CommonType s2 = sin(static_cast<CommonType>(t) * theta) * inv_sin_theta;
 
     return AQuaternion<CommonType>{(static_cast<CommonType>(s1) * static_cast<CommonType>(q1.w())) +
@@ -915,22 +920,21 @@ KOKKOS_INLINE_FUNCTION
 /// \param dt The time
 template <ValidQuaternionType QuaternionType, ValidVectorType VectorType>
 MUNDY_REQUIRES(std::is_same_v<typename QuaternionType::value_type, typename VectorType::value_type>)
-KOKKOS_INLINE_FUNCTION constexpr void rotate_quaternion(
-    QuaternionType& quat, const VectorType& omega,
-    const typename QuaternionType::value_type& dt) {
+KOKKOS_INLINE_FUNCTION constexpr void rotate_quaternion(QuaternionType& quat, const VectorType& omega,
+                                                        const typename QuaternionType::value_type& dt) {
   using Scalar = typename QuaternionType::value_type;
   const Scalar w = norm(omega);
   if (w < get_zero_tolerance<Scalar>()) {
     return;
   }
   const Scalar winv = Scalar(1) / w;
-  const Scalar sw   = sin(Scalar(0.5) * w * dt);
-  const Scalar cw   = cos(Scalar(0.5) * w * dt);
-  const Scalar s    = quat.w();
-  const auto p      = quat.vector();
-  const auto xyz    = s * sw * omega * winv + cw * p + sw * winv * cross(omega, p);
-  quat.w()          = s * cw - dot(omega, p) * sw * winv;
-  quat.vector()     = xyz;
+  const Scalar sw = sin(Scalar(0.5) * w * dt);
+  const Scalar cw = cos(Scalar(0.5) * w * dt);
+  const Scalar s = quat.w();
+  const auto p = quat.vector();
+  const auto xyz = s * sw * omega * winv + cw * p + sw * winv * cross(omega, p);
+  quat.w() = s * cw - dot(omega, p) * sw * winv;
+  quat.vector() = xyz;
   quat.normalize();
 }
 //@}
@@ -942,13 +946,13 @@ KOKKOS_INLINE_FUNCTION constexpr void rotate_quaternion(
 /// \param[in] axis The axis.
 /// \param[in] angle The angle.
 template <typename T, typename U, ValidAccessor<T> Accessor>
-MUNDY_REQUIRES(std::is_arithmetic_v<U>)
+MUNDY_REQUIRES(ValidScalarType<U>)
 KOKKOS_INLINE_FUNCTION constexpr auto axis_angle_to_quaternion(const AVector3<T, Accessor>& axis, const U& angle)
-    -> AQuaternion<std::common_type_t<T, U>> {
-  using CommonType = std::common_type_t<T, U>;
+    -> AQuaternion<scalar_product_result_t<T, U>> {
+  using CommonType = scalar_product_result_t<T, U>;
   const auto half_angle = U(0.5) * angle;
-  const auto sin_half_angle = std::sin(half_angle);
-  const auto cos_half_angle = std::cos(half_angle);
+  const auto sin_half_angle = sin(half_angle);
+  const auto cos_half_angle = cos(half_angle);
   return AQuaternion<CommonType>(static_cast<CommonType>(cos_half_angle),
                                  static_cast<CommonType>(sin_half_angle) * static_cast<CommonType>(axis[0]),
                                  static_cast<CommonType>(sin_half_angle) * static_cast<CommonType>(axis[1]),
@@ -969,9 +973,9 @@ KOKKOS_INLINE_FUNCTION constexpr AQuaternion<T> rotation_matrix_to_quaternion(co
   quat.z() = sqrt(max(T(0), T(1) - rot_mat(0, 0) - rot_mat(1, 1) + rot_mat(2, 2))) / T(2);
 
   // Correcting the signs
-  quat.x() = std::copysign(quat.x(), rot_mat(2, 1) - rot_mat(1, 2));
-  quat.y() = std::copysign(quat.y(), rot_mat(0, 2) - rot_mat(2, 0));
-  quat.z() = std::copysign(quat.z(), rot_mat(1, 0) - rot_mat(0, 1));
+  quat.x() = copysign(quat.x(), rot_mat(2, 1) - rot_mat(1, 2));
+  quat.y() = copysign(quat.y(), rot_mat(0, 2) - rot_mat(2, 0));
+  quat.z() = copysign(quat.z(), rot_mat(1, 0) - rot_mat(0, 1));
 
   return quat;
 }
@@ -1001,17 +1005,17 @@ KOKKOS_INLINE_FUNCTION constexpr Matrix3<std::remove_const_t<T>> quaternion_to_r
 /// \param[in] pitch Pitch angle.
 /// \param[in] yaw Yaw angle.
 template <typename T>
-MUNDY_REQUIRES(std::is_arithmetic_v<T>)
+MUNDY_REQUIRES(ValidScalarType<T>)
 KOKKOS_INLINE_FUNCTION
     constexpr AQuaternion<std::remove_const_t<T>> euler_to_quat(const T roll, const T pitch, const T yaw) {
   // Convert Euler angles to quaternion
   AQuaternion<std::remove_const_t<T>> quat;
-  const T cha1 = std::cos(T(0.5) * roll);
-  const T cha2 = std::cos(T(0.5) * pitch);
-  const T cha3 = std::cos(T(0.5) * yaw);
-  const T sha1 = std::sin(T(0.5) * roll);
-  const T sha2 = std::sin(T(0.5) * pitch);
-  const T sha3 = std::sin(T(0.5) * yaw);
+  const T cha1 = cos(T(0.5) * roll);
+  const T cha2 = cos(T(0.5) * pitch);
+  const T cha3 = cos(T(0.5) * yaw);
+  const T sha1 = sin(T(0.5) * roll);
+  const T sha2 = sin(T(0.5) * pitch);
+  const T sha3 = sin(T(0.5) * yaw);
   quat.w() = cha1 * cha2 * cha3 + sha1 * sha2 * sha3;
   quat.x() = sha1 * cha2 * cha3 - cha1 * sha2 * sha3;
   quat.y() = cha1 * sha2 * cha3 + sha1 * cha2 * sha3;
@@ -1019,7 +1023,7 @@ KOKKOS_INLINE_FUNCTION
   return quat;
 }
 
-/// \brief Get the quaternion that perform parallel transport from vector v1 to vector v2
+/// \brief Get the quaternion that perform parallel transport from unit vector v1 to unit vector v2
 /// \param[in] v1 The first vector.
 /// \param[in] v2 The second vector.
 ///
@@ -1033,8 +1037,13 @@ KOKKOS_INLINE_FUNCTION
 /// This equation comes from J. Linn's 2020 "Discrete Cosserat rod kinematics constricted on the basis
 /// of the difference geometry of framed curves," and as shown above, is identical to the equation given in K. Korner's
 /// "Simple deformation measures for discrete elastic rods and ribbons."
+///
+/// \pre v_from, v_to are unit.
+///
+/// \note Antiparallel inputs (v_to == -v_from) are singular: any axis perpendicular to v_from gives a valid 180-deg
+/// rotation. When 1 + v_from . v_to <= tol we pick one arbitrarily: 180 deg about v_from x (least-aligned world axis).
 template <typename U, typename T, ValidAccessor<U> Accessor1, ValidAccessor<T> Accessor2>
-MUNDY_REQUIRES(std::is_arithmetic_v<T>&& std::is_arithmetic_v<U>)
+MUNDY_REQUIRES(ValidScalarType<T>&& ValidScalarType<U>)
 KOKKOS_INLINE_FUNCTION constexpr auto quat_from_parallel_transport(const AVector3<U, Accessor1>& v_from,
                                                                    const AVector3<T, Accessor2>& v_to)
     -> AQuaternion<decltype(U() * T())> {
@@ -1042,11 +1051,41 @@ KOKKOS_INLINE_FUNCTION constexpr auto quat_from_parallel_transport(const AVector
   using CommonType = decltype(U() * T());
   AQuaternion<CommonType> quat;
 
-  // Compute the dot product and cross product
   const auto dot_product = dot(v_from, v_to);
+  const CommonType one_plus_dot = CommonType(1) + dot_product;
+
+  // Antiparallel singularity (dot ~= -1): axis undefined.
+  // Arbitrary tie-break: 180 deg about v_from x least-aligned world axis (smallest component, for stability).
+  if (one_plus_dot <= get_comparison_tolerance<U, T>()) {
+    const auto ax = abs(v_from[0]);
+    const auto ay = abs(v_from[1]);
+    const auto az = abs(v_from[2]);
+    CommonType nx, ny, nz;
+    if (ax <= ay && ax <= az) {  // cross(v_from, e_x) = (0, v_z, -v_y)
+      nx = CommonType(0);
+      ny = v_from[2];
+      nz = -v_from[1];
+    } else if (ay <= az) {  // cross(v_from, e_y) = (-v_z, 0, v_x)
+      nx = -v_from[2];
+      ny = CommonType(0);
+      nz = v_from[0];
+    } else {  // cross(v_from, e_z) = (v_y, -v_x, 0)
+      nx = v_from[1];
+      ny = -v_from[0];
+      nz = CommonType(0);
+    }
+    const CommonType inv_len = CommonType(1) / Kokkos::sqrt(nx * nx + ny * ny + nz * nz);
+    quat.w() = CommonType(0);
+    quat.x() = nx * inv_len;
+    quat.y() = ny * inv_len;
+    quat.z() = nz * inv_len;
+    return quat;
+  }
+
+  // Regular case
   const auto cross_product = cross(v_from, v_to);
-  const double sqrt_term = std::sqrt(0.5 * (1.0 + dot_product));
-  const auto vec = 0.5 * cross_product / sqrt_term;
+  const CommonType sqrt_term = Kokkos::sqrt(CommonType(0.5) * one_plus_dot);
+  const auto vec = CommonType(0.5) * cross_product / sqrt_term;
   quat.w() = sqrt_term;
   quat.x() = vec[0];
   quat.y() = vec[1];

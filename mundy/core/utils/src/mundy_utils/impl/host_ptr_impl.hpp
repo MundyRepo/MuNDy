@@ -71,7 +71,7 @@ struct host_control_inplace {
   }
 
   static void dispose(host_control_header* h) noexcept {
-    auto* self = reinterpret_cast<host_control_inplace*>(h);  // h is `header`, the first member → interconvertible
+    auto* self = reinterpret_cast<host_control_inplace*>(h);  // h is `header`, the first member -> interconvertible
     self->object()->~Y();
     self->~host_control_inplace();
   }

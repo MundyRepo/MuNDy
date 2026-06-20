@@ -33,12 +33,13 @@
 #include <utility>
 
 // Mundy
-#include <mundy_math/Accessor.hpp>       // for mundy::ValidAccessor
-#include <mundy_math/Array.hpp>          // for mundy::Array
-#include <mundy_math/Matrix3.hpp>        // for mundy::Matrix3
-#include <mundy_math/Tolerance.hpp>      // for mundy::get_zero_tolerance
-#include <mundy_math/Vector.hpp>         // for mundy::Vector
-#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
+#include <mundy_math/Accessor.hpp>              // for mundy::ValidAccessor
+#include <mundy_math/Array.hpp>                 // for mundy::Array
+#include <mundy_math/Matrix3.hpp>               // for mundy::Matrix3
+#include <mundy_math/ScalarBinaryOpTraits.hpp>  // for mundy::scalar_product_result_t
+#include <mundy_math/Tolerance.hpp>             // for mundy::get_zero_tolerance
+#include <mundy_math/Vector.hpp>                // for mundy::Vector
+#include <mundy_utils/throw_assert.hpp>         // for MUNDY_THROW_ASSERT
 
 namespace mundy {
 
@@ -88,15 +89,12 @@ concept ValidVector3Type = is_vector3_v<std::decay_t<Vector3Type>> &&
 /// \param[in] b The second vector.
 template <typename U, typename T, ValidAccessor<U> Accessor1, ValidAccessor<T> Accessor2>
 KOKKOS_INLINE_FUNCTION constexpr auto cross(const AVector3<U, Accessor1>& a, const AVector3<T, Accessor2>& b)
-    -> AVector3<std::common_type_t<T, U>> {
-  using CommonType = std::common_type_t<T, U>;
-  AVector3<CommonType> result;
-  result[0] = static_cast<CommonType>(a[1]) * static_cast<CommonType>(b[2]) -
-              static_cast<CommonType>(a[2]) * static_cast<CommonType>(b[1]);
-  result[1] = static_cast<CommonType>(a[2]) * static_cast<CommonType>(b[0]) -
-              static_cast<CommonType>(a[0]) * static_cast<CommonType>(b[2]);
-  result[2] = static_cast<CommonType>(a[0]) * static_cast<CommonType>(b[1]) -
-              static_cast<CommonType>(a[1]) * static_cast<CommonType>(b[0]);
+    -> AVector3<scalar_product_result_t<U, T>> {
+  using R = scalar_product_result_t<U, T>;
+  AVector3<R> result;
+  result[0] = static_cast<R>(a[1] * b[2] - a[2] * b[1]);
+  result[1] = static_cast<R>(a[2] * b[0] - a[0] * b[2]);
+  result[2] = static_cast<R>(a[0] * b[1] - a[1] * b[0]);
   return result;
 }
 //@}

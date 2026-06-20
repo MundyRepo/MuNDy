@@ -33,23 +33,25 @@
 #include <utility>
 
 // Mundy
-#include <mundy_math/Accessor.hpp>        // for mundy::ValidAccessor
-#include <mundy_math/Array.hpp>           // for mundy::Array
-#include <mundy_math/MaskedView.hpp>      // for mundy::MaskedView
-#include <mundy_math/ShiftedView.hpp>     // for mundy::ShiftedView
-#include <mundy_math/StridedView.hpp>     // for mundy::StridedView
-#include <mundy_math/Tolerance.hpp>       // for mundy::get_zero_tolerance
-#include <mundy_math/TransposedView.hpp>  // for mundy::TransposedView
-#include <mundy_math/Vector.hpp>          // for mundy::Vector
+#include <mundy_math/Accessor.hpp>              // for mundy::ValidAccessor
+#include <mundy_math/Array.hpp>                 // for mundy::Array
+#include <mundy_math/MaskedView.hpp>            // for mundy::MaskedView
+#include <mundy_math/NumTraits.hpp>             // for mundy::ValidScalarType, mundy::NumTraits
+#include <mundy_math/ScalarBinaryOpTraits.hpp>  // for mundy::scalar_*_result_t
+#include <mundy_math/ShiftedView.hpp>           // for mundy::ShiftedView
+#include <mundy_math/StridedView.hpp>           // for mundy::StridedView
+#include <mundy_math/Tolerance.hpp>             // for mundy::get_zero_tolerance
+#include <mundy_math/TransposedView.hpp>        // for mundy::TransposedView
+#include <mundy_math/Vector.hpp>                // for mundy::Vector
+#include <mundy_math/cmath.hpp>
 #include <mundy_utils/requires.hpp>
 #include <mundy_utils/suppress_warnings.hpp>  // for MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_PUSH/POP
 #include <mundy_utils/throw_assert.hpp>       // for MUNDY_THROW_ASSERT
-#include <mundy_math/cmath.hpp>
 
 namespace mundy {
 
 template <typename T, size_t N, size_t M, ValidAccessor<T> Accessor = Array<T, N * M>>
-MUNDY_REQUIRES(std::is_arithmetic_v<T>)
+MUNDY_REQUIRES(ValidScalarType<T>)
 class AMatrix;
 
 namespace impl {
@@ -113,7 +115,7 @@ KOKKOS_INLINE_FUNCTION static constexpr Kokkos::Array<bool, N * M> create_row_an
 
 /// \brief Cast (and copy) the matrix to a different type
 template <typename U, size_t... Is, typename T, size_t N, size_t M, ValidAccessor<T> Accessor>
-KOKKOS_INLINE_FUNCTION auto cast_impl(std::index_sequence<Is...>, const AMatrix<T, N, M, Accessor>& mat) {
+KOKKOS_INLINE_FUNCTION AMatrix<U, N, M> cast_impl(std::index_sequence<Is...>, const AMatrix<T, N, M, Accessor>& mat) {
   static_assert(sizeof...(Is) == N * M, "Number of indices must match number of elements in the matrix.");
   return AMatrix<U, N, M>{static_cast<U>(mat[Is])...};
 }
@@ -205,9 +207,9 @@ template <size_t... Is, typename T, size_t N, size_t M, typename U, ValidAccesso
 KOKKOS_INLINE_FUNCTION auto matrix_matrix_addition_impl(std::index_sequence<Is...>,
                                                         const AMatrix<T, N, M, Accessor>& mat,
                                                         const AMatrix<U, N, M, OtherAccessor>& other)
-    -> AMatrix<std::common_type_t<T, U>, N, M> {
+    -> AMatrix<scalar_sum_result_t<T, U>, N, M> {
   static_assert(sizeof...(Is) == N * M, "Number of indices must match number of elements in the matrix.");
-  using CommonType = std::common_type_t<T, U>;
+  using CommonType = scalar_sum_result_t<T, U>;
   AMatrix<CommonType, N, M> result;
   ((result[Is] = static_cast<CommonType>(mat[Is]) + static_cast<CommonType>(other[Is])), ...);
   return result;
@@ -232,9 +234,9 @@ template <size_t... Is, typename T, size_t N, size_t M, ValidAccessor<T> Accesso
 KOKKOS_INLINE_FUNCTION auto matrix_matrix_subtraction_impl(std::index_sequence<Is...>,
                                                            const AMatrix<T, N, M, Accessor>& mat,
                                                            const AMatrix<U, N, M, OtherAccessor>& other)
-    -> AMatrix<std::common_type_t<T, U>, N, M> {
+    -> AMatrix<scalar_difference_result_t<T, U>, N, M> {
   static_assert(sizeof...(Is) == N * M, "Number of indices must match number of elements in the matrix.");
-  using CommonType = std::common_type_t<T, U>;
+  using CommonType = scalar_difference_result_t<T, U>;
   AMatrix<CommonType, N, M> result;
   ((result[Is] = static_cast<CommonType>(mat[Is]) - static_cast<CommonType>(other[Is])), ...);
   return result;
@@ -255,12 +257,12 @@ KOKKOS_INLINE_FUNCTION void self_matrix_subtraction_impl(std::index_sequence<Is.
 /// \brief AMatrix-scalar addition
 /// \param[in] scalar The scalar.
 template <size_t... Is, typename T, size_t N, size_t M, ValidAccessor<T> Accessor, typename U>
-MUNDY_REQUIRES(std::is_arithmetic_v<U>)
+MUNDY_REQUIRES(ValidScalarType<U>)
 KOKKOS_INLINE_FUNCTION
     auto matrix_scalar_addition_impl(std::index_sequence<Is...>, const AMatrix<T, N, M, Accessor>& mat, const U& scalar)
-        -> AMatrix<std::common_type_t<T, U>, N, M> {
+        -> AMatrix<scalar_sum_result_t<T, U>, N, M> {
   static_assert(sizeof...(Is) == N * M, "Number of indices must match number of elements in the matrix.");
-  using CommonType = std::common_type_t<T, U>;
+  using CommonType = scalar_sum_result_t<T, U>;
   AMatrix<CommonType, N, M> result;
   ((result[Is] = static_cast<CommonType>(mat[Is]) + static_cast<CommonType>(scalar)), ...);
   return result;
@@ -269,7 +271,7 @@ KOKKOS_INLINE_FUNCTION
 /// \brief AMatrix-scalar addition
 /// \param[in] scalar The scalar.
 template <size_t... Is, typename T, size_t N, size_t M, ValidAccessor<T> Accessor, typename U>
-MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>&& std::is_arithmetic_v<U>)
+MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>&& ValidScalarType<U>)
 KOKKOS_INLINE_FUNCTION
     void self_scalar_addition_impl(std::index_sequence<Is...>, AMatrix<T, N, M, Accessor>& mat, const U& scalar) {
   static_assert(sizeof...(Is) == N * M, "Number of indices must match number of elements in the matrix.");
@@ -279,12 +281,12 @@ KOKKOS_INLINE_FUNCTION
 /// \brief AMatrix-scalar subtraction
 /// \param[in] scalar The scalar.
 template <size_t... Is, typename T, size_t N, size_t M, ValidAccessor<T> Accessor, typename U>
-MUNDY_REQUIRES(std::is_arithmetic_v<U>)
+MUNDY_REQUIRES(ValidScalarType<U>)
 KOKKOS_INLINE_FUNCTION auto matrix_scalar_subtraction_impl(std::index_sequence<Is...>,
                                                            const AMatrix<T, N, M, Accessor>& mat, const U& scalar)
-    -> AMatrix<std::common_type_t<T, U>, N, M> {
+    -> AMatrix<scalar_difference_result_t<T, U>, N, M> {
   static_assert(sizeof...(Is) == N * M, "Number of indices must match number of elements in the matrix.");
-  using CommonType = std::common_type_t<T, U>;
+  using CommonType = scalar_difference_result_t<T, U>;
   AMatrix<CommonType, N, M> result;
   ((result[Is] = static_cast<CommonType>(mat[Is]) - static_cast<CommonType>(scalar)), ...);
   return result;
@@ -293,7 +295,7 @@ KOKKOS_INLINE_FUNCTION auto matrix_scalar_subtraction_impl(std::index_sequence<I
 /// \brief Self-scalar subtraction
 /// \param[in] scalar The scalar.
 template <size_t... Is, typename T, size_t N, size_t M, ValidAccessor<T> Accessor, typename U>
-MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>&& std::is_arithmetic_v<U>)
+MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>&& ValidScalarType<U>)
 KOKKOS_INLINE_FUNCTION
     void self_scalar_subtraction_impl(std::index_sequence<Is...>, AMatrix<T, N, M, Accessor>& mat, const U& scalar) {
   static_assert(sizeof...(Is) == N * M, "Number of indices must match number of elements in the matrix.");
@@ -307,15 +309,14 @@ template <size_t... Is, typename T, size_t N, size_t M, ValidAccessor<T> Accesso
 KOKKOS_INLINE_FUNCTION auto matrix_matrix_multiplication_impl(std::index_sequence<Is...>,
                                                               const AMatrix<T, N, M, Accessor>& mat,
                                                               const AMatrix<U, OtherN, OtherM, OtherAccessor>& other)
-    -> AMatrix<std::common_type_t<T, U>, N, OtherM> {
+    -> AMatrix<scalar_product_result_t<T, U>, N, OtherM> {
   static_assert(sizeof...(Is) == N * OtherM, "Number of indices must match the shared dimension of the result matrix.");
   static_assert(M == OtherN,
                 "AMatrix-matrix multiplication requires the number of columns in the first matrix to be equal to the "
                 "number of rows in the second matrix.");
-
-  // We need use a fold expressions to compute the dot product of each row of the first matrix
-  // with each column of the second matrix via view symmantics.
-  using CommonType = std::common_type_t<T, U>;
+  // The fold expression computes the dot product of each row of the first matrix with each column of the second matrix
+  // via view semantics.
+  using CommonType = scalar_product_result_t<T, U>;
   AMatrix<CommonType, N, OtherM> result;
   (..., (result(Is / OtherM, Is % OtherM) =
              dot(mat.template view_row<Is / OtherM>(), other.template view_column<Is % OtherM>())));
@@ -344,13 +345,13 @@ template <size_t... Is, typename T, size_t N, size_t M, ValidAccessor<T> Accesso
 KOKKOS_INLINE_FUNCTION auto matrix_vector_multiplication_impl(std::index_sequence<Is...>,
                                                               const AMatrix<T, N, M, Accessor>& mat,
                                                               const AVector<U, M, OtherAccessor>& other)
-    -> AVector<std::common_type_t<T, U>, N> {
+    -> AVector<scalar_product_result_t<T, U>, N> {
   // The size of the sequence must match the number of rows in the matrix
   static_assert(sizeof...(Is) == N, "Number of indices must match the number of rows in the matrix.");
   static_assert(M == other.size,
                 "AMatrix-vector multiplication requires the number of columns in the matrix to be equal to the size of "
                 "the vector.");
-  using CommonType = std::common_type_t<T, U>;
+  using CommonType = scalar_product_result_t<T, U>;
   AVector<CommonType, N> result;
   (..., (result[Is] = dot(mat.template view_row<Is>(), other)));
   return result;
@@ -359,12 +360,12 @@ KOKKOS_INLINE_FUNCTION auto matrix_vector_multiplication_impl(std::index_sequenc
 /// \brief AMatrix-scalar multiplication
 /// \param[in] scalar The scalar.
 template <size_t... Is, typename T, size_t N, size_t M, ValidAccessor<T> Accessor, typename U>
-MUNDY_REQUIRES(std::is_arithmetic_v<U>)
+MUNDY_REQUIRES(ValidScalarType<U>)
 KOKKOS_INLINE_FUNCTION auto matrix_scalar_multiplication_impl(std::index_sequence<Is...>,
                                                               const AMatrix<T, N, M, Accessor>& mat, const U& scalar)
-    -> AMatrix<std::common_type_t<T, U>, N, M> {
+    -> AMatrix<scalar_product_result_t<T, U>, N, M> {
   static_assert(sizeof...(Is) == N * M, "Number of indices must match number of elements in the matrix.");
-  using CommonType = std::common_type_t<T, U>;
+  using CommonType = scalar_product_result_t<T, U>;
   AMatrix<CommonType, N, M> result;
   ((result[Is] = static_cast<CommonType>(mat[Is]) * static_cast<CommonType>(scalar)), ...);
   return result;
@@ -373,7 +374,7 @@ KOKKOS_INLINE_FUNCTION auto matrix_scalar_multiplication_impl(std::index_sequenc
 /// \brief Self-scalar multiplication
 /// \param[in] scalar The scalar.
 template <size_t... Is, typename T, size_t N, size_t M, ValidAccessor<T> Accessor, typename U>
-MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>&& std::is_arithmetic_v<U>)
+MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>&& ValidScalarType<U>)
 KOKKOS_INLINE_FUNCTION
     void self_scalar_multiplication_impl(std::index_sequence<Is...>, AMatrix<T, N, M, Accessor>& mat, const U& scalar)
         MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>) {
@@ -384,12 +385,12 @@ KOKKOS_INLINE_FUNCTION
 /// \brief AMatrix-scalar division
 /// \param[in] scalar The scalar.
 template <size_t... Is, typename T, size_t N, size_t M, ValidAccessor<T> Accessor, typename U>
-MUNDY_REQUIRES(std::is_arithmetic_v<U>)
+MUNDY_REQUIRES(ValidScalarType<U>)
 KOKKOS_INLINE_FUNCTION
     auto matrix_scalar_division_impl(std::index_sequence<Is...>, const AMatrix<T, N, M, Accessor>& mat, const U& scalar)
-        -> AMatrix<std::common_type_t<T, U>, N, M> {
+        -> AMatrix<scalar_quotient_result_t<T, U>, N, M> {
   static_assert(sizeof...(Is) == N * M, "Number of indices must match number of elements in the matrix.");
-  using CommonType = std::common_type_t<T, U>;
+  using CommonType = scalar_quotient_result_t<T, U>;
   AMatrix<CommonType, N, M> result;
   ((result[Is] = static_cast<CommonType>(mat[Is]) / static_cast<CommonType>(scalar)), ...);
   return result;
@@ -398,7 +399,7 @@ KOKKOS_INLINE_FUNCTION
 /// \brief Self-scalar division
 /// \param[in] scalar The scalar.
 template <size_t... Is, typename T, size_t N, size_t M, ValidAccessor<T> Accessor, typename U>
-MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>&& std::is_arithmetic_v<U>)
+MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>&& ValidScalarType<U>)
 KOKKOS_INLINE_FUNCTION
     void self_scalar_division_impl(std::index_sequence<Is...>, AMatrix<T, N, M, Accessor>& mat, const U& scalar) {
   static_assert(sizeof...(Is) == N * M, "Number of indices must match number of elements in the matrix.");
@@ -455,7 +456,7 @@ KOKKOS_INLINE_FUNCTION T max_impl(std::index_sequence<Is...>, const AMatrix<T, N
 
 /// \brief Variance of all elements
 template <size_t... Is, typename T, size_t N, size_t M, ValidAccessor<T> Accessor,
-          typename OutputType = std::conditional_t<std::is_integral_v<T>, double, T>>
+          typename OutputType = typename NumTraits<T>::NonInteger>
 KOKKOS_INLINE_FUNCTION OutputType variance_impl(std::index_sequence<Is...>, const AMatrix<T, N, M, Accessor>& mat) {
   static_assert(sizeof...(Is) == N * M, "Number of indices must match number of elements in the matrix.");
   OutputType inv_NM = static_cast<OutputType>(1.0) / static_cast<OutputType>(N * M);
@@ -466,17 +467,17 @@ KOKKOS_INLINE_FUNCTION OutputType variance_impl(std::index_sequence<Is...>, cons
 
 /// \brief Standard deviation of all elements
 template <size_t... Is, typename T, size_t N, size_t M, ValidAccessor<T> Accessor,
-          typename OutputType = std::conditional_t<std::is_integral_v<T>, double, T>>
+          typename OutputType = typename NumTraits<T>::NonInteger>
 KOKKOS_INLINE_FUNCTION OutputType standard_deviation_impl(std::index_sequence<Is...>,
                                                           const AMatrix<T, N, M, Accessor>& mat) {
   static_assert(sizeof...(Is) == N * M, "Number of indices must match number of elements in the matrix.");
-  return std::sqrt(variance_impl(std::make_index_sequence<N * M>{}, mat));
+  return sqrt(variance_impl(std::make_index_sequence<N * M>{}, mat));
 }
 
 /// \brief AMatrix determinant (specialized for size 1 matrices)
 template <size_t N, size_t... Is, typename T, ValidAccessor<T> Accessor>
 MUNDY_REQUIRES(N == 1)
-KOKKOS_INLINE_FUNCTION auto determinant_impl(std::index_sequence<Is...>, const AMatrix<T, N, N, Accessor>& mat) {
+KOKKOS_INLINE_FUNCTION T determinant_impl(std::index_sequence<Is...>, const AMatrix<T, N, N, Accessor>& mat) {
   static_assert(sizeof...(Is) == N, "Number of indices must match number of columns in the matrix.");
   return mat(0, 0);
 }
@@ -484,10 +485,10 @@ KOKKOS_INLINE_FUNCTION auto determinant_impl(std::index_sequence<Is...>, const A
 /// \brief AMatrix determinant
 template <size_t N, size_t... Is, typename T, ValidAccessor<T> Accessor>
 MUNDY_REQUIRES(N != 1)
-KOKKOS_INLINE_FUNCTION auto determinant_impl(std::index_sequence<Is...>, const AMatrix<T, N, N, Accessor>& mat) {
+KOKKOS_INLINE_FUNCTION T determinant_impl(std::index_sequence<Is...>, const AMatrix<T, N, N, Accessor>& mat) {
   static_assert(sizeof...(Is) == N, "Number of indices must match number of columns in the matrix.");
   // Recursively compute the determinant using the Laplace expansion
-  // Use views to avoid copying the matrix
+  // Use views to avoid copying the matrix and some neat modulo arithmetic to determine the sign of each term.
   return ((mat(0, Is) * determinant_impl<N - 1>(std::make_index_sequence<N - 1>{}, mat.template view_minor<0, Is>()) *
            ((Is % 2 == 0) ? 1 : -1)) +
           ...);
@@ -495,7 +496,8 @@ KOKKOS_INLINE_FUNCTION auto determinant_impl(std::index_sequence<Is...>, const A
 
 /// \brief AMatrix transpose
 template <size_t... Is, typename T, size_t N, size_t M, ValidAccessor<T> Accessor>
-KOKKOS_INLINE_FUNCTION auto transpose_impl(std::index_sequence<Is...>, const AMatrix<T, N, M, Accessor>& mat) {
+KOKKOS_INLINE_FUNCTION AMatrix<T, M, N> transpose_impl(std::index_sequence<Is...>,
+                                                       const AMatrix<T, N, M, Accessor>& mat) {
   static_assert(sizeof...(Is) == N * M, "Number of indices must match number of elements in the matrix.");
   AMatrix<T, M, N> result;
   ((result(Is % M, Is / M) = mat(Is / M, Is % M)), ...);
@@ -504,10 +506,12 @@ KOKKOS_INLINE_FUNCTION auto transpose_impl(std::index_sequence<Is...>, const AMa
 
 /// \brief AMatrix cofactors (only valid for square matrices)
 template <size_t... Is, typename T, size_t N, ValidAccessor<T> Accessor>
-KOKKOS_INLINE_FUNCTION auto cofactors_impl(std::index_sequence<Is...>, const AMatrix<T, N, N, Accessor>& mat) {
+KOKKOS_INLINE_FUNCTION AMatrix<T, N, N> cofactors_impl(std::index_sequence<Is...>,
+                                                       const AMatrix<T, N, N, Accessor>& mat) {
   static_assert(sizeof...(Is) == N * N, "Number of indices must match number of elements in the matrix.");
   AMatrix<T, N, N> result;
-  ((result[Is] = determinant(mat.template view_minor<Is / N, Is % N>()) * ((Is % 2 == 0) ? 1 : -1)), ...);
+  ((result[Is] = determinant(mat.template view_minor<Is / N, Is % N>()) * (((Is / N + Is % N) % 2 == 0) ? 1 : -1)),
+   ...);
   return result;
 }
 
@@ -516,9 +520,10 @@ template <size_t... Is, typename T, size_t N, size_t M, typename U, ValidAccesso
           ValidAccessor<T> OtherAccessor>
 KOKKOS_INLINE_FUNCTION auto frobenius_inner_product_impl(std::index_sequence<Is...>,
                                                          const AMatrix<U, N, M, Accessor>& mat1,
-                                                         const AMatrix<T, N, M, OtherAccessor>& mat2) {
+                                                         const AMatrix<T, N, M, OtherAccessor>& mat2)
+    -> scalar_product_result_t<T, U> {
   static_assert(sizeof...(Is) == N * M, "Number of indices must match number of elements in the matrix.");
-  using CommonType = std::common_type_t<T, U>;
+  using CommonType = scalar_product_result_t<T, U>;
   return ((static_cast<CommonType>(mat1[Is]) * static_cast<CommonType>(mat2[Is])) + ...);
 }
 
@@ -526,9 +531,10 @@ KOKKOS_INLINE_FUNCTION auto frobenius_inner_product_impl(std::index_sequence<Is.
 template <size_t... Is, typename T, size_t N, size_t M, typename U, ValidAccessor<U> Accessor,
           ValidAccessor<T> OtherAccessor>
 KOKKOS_INLINE_FUNCTION auto outer_product_impl(std::index_sequence<Is...>, const AVector<U, N, Accessor>& vec1,
-                                               const AVector<T, M, OtherAccessor>& vec2) {
+                                               const AVector<T, M, OtherAccessor>& vec2)
+    -> AMatrix<scalar_product_result_t<T, U>, N, M> {
   static_assert(sizeof...(Is) == N * M, "Number of indices must match number of elements in the result matrix.");
-  using CommonType = std::common_type_t<T, U>;
+  using CommonType = scalar_product_result_t<T, U>;
   AMatrix<CommonType, N, M> result;
   ((result(Is / M, Is % M) = static_cast<CommonType>(vec1[Is / M]) * static_cast<CommonType>(vec2[Is % M])), ...);
   return result;
@@ -558,9 +564,10 @@ template <size_t... Is, typename T, size_t N, size_t M, typename U, ValidAccesso
           ValidAccessor<T> OtherAccessor>
 KOKKOS_INLINE_FUNCTION constexpr auto matrix_matrix_elementwise_mul_impl(std::index_sequence<Is...>,
                                                                          const AMatrix<U, N, M, Accessor>& a,
-                                                                         const AMatrix<T, N, M, OtherAccessor>& b) {
+                                                                         const AMatrix<T, N, M, OtherAccessor>& b)
+    -> AMatrix<scalar_product_result_t<T, U>, N, M> {
   static_assert(sizeof...(Is) == N * M, "Number of indices must match number of elements in the matrix.");
-  using CommonType = std::common_type_t<U, T>;
+  using CommonType = scalar_product_result_t<U, T>;
   AMatrix<CommonType, N, M> result;
   ((result[Is] = static_cast<CommonType>(a[Is]) * static_cast<CommonType>(b[Is])), ...);
   return result;
@@ -571,9 +578,10 @@ template <size_t... Is, typename T, size_t N, size_t M, typename U, ValidAccesso
           ValidAccessor<T> OtherAccessor>
 KOKKOS_INLINE_FUNCTION constexpr auto matrix_matrix_elementwise_div_impl(std::index_sequence<Is...>,
                                                                          const AMatrix<U, N, M, Accessor>& a,
-                                                                         const AMatrix<T, N, M, OtherAccessor>& b) {
+                                                                         const AMatrix<T, N, M, OtherAccessor>& b)
+    -> AMatrix<scalar_quotient_result_t<T, U>, N, M> {
   static_assert(sizeof...(Is) == N * M, "Number of indices must match number of elements in the matrix.");
-  using CommonType = std::common_type_t<U, T>;
+  using CommonType = scalar_quotient_result_t<U, T>;
   AMatrix<CommonType, N, M> result;
   ((result[Is] = static_cast<CommonType>(a[Is]) / static_cast<CommonType>(b[Is])), ...);
   return result;
@@ -690,7 +698,7 @@ MUNDY_MATH_MATRIX_MATRIX_ATOMIC_OP_IMPL(elementwise_div, Kokkos::atomic_div)
 #define MUNDY_MATH_MATRIX_SCALAR_ATOMIC_FETCH_OP_IMPL(op_name, atomic_fetch_op)                              \
   template <size_t... Is, size_t N, size_t M, typename T1, ValidAccessor<T1> A1, typename T2>                \
   KOKKOS_INLINE_FUNCTION auto matrix_scalar_atomic_fetch_##op_name##_impl(                                   \
-      std::index_sequence<Is...>, AMatrix<T1, N, M, A1>* const m, const T2& s) {                             \
+      std::index_sequence<Is...>, AMatrix<T1, N, M, A1>* const m, const T2& s) -> AMatrix<T1, N, M> {        \
     static_assert(sizeof...(Is) == N * M, "Number of indices must match number of elements in the matrix."); \
     AMatrix<T1, N, M> result;                                                                                \
     ((result[Is] = atomic_fetch_op(&((*m)[Is]), static_cast<T1>(s))), ...);                                  \
@@ -700,7 +708,8 @@ MUNDY_MATH_MATRIX_MATRIX_ATOMIC_OP_IMPL(elementwise_div, Kokkos::atomic_div)
 #define MUNDY_MATH_MATRIX_MATRIX_ATOMIC_FETCH_OP_IMPL(op_name, atomic_fetch_op)                                     \
   template <size_t... Is, size_t N, size_t M, typename T1, ValidAccessor<T1> A1, typename T2, ValidAccessor<T2> A2> \
   KOKKOS_INLINE_FUNCTION auto matrix_matrix_atomic_fetch_##op_name##_impl(                                          \
-      std::index_sequence<Is...>, AMatrix<T1, N, M, A1>* const m1, const AMatrix<T2, N, M, A2>& m2) {               \
+      std::index_sequence<Is...>, AMatrix<T1, N, M, A1>* const m1, const AMatrix<T2, N, M, A2>& m2)                 \
+      -> AMatrix<T1, N, M> {                                                                                        \
     static_assert(sizeof...(Is) == N * M, "Number of indices must match number of elements in the matrix.");        \
     AMatrix<T1, N, M> result;                                                                                       \
     ((result[Is] = atomic_fetch_op(&((*m1)[Is]), static_cast<T1>(m2[Is]))), ...);                                   \
@@ -710,7 +719,7 @@ MUNDY_MATH_MATRIX_MATRIX_ATOMIC_OP_IMPL(elementwise_div, Kokkos::atomic_div)
 #define MUNDY_MATH_MATRIX_SCALAR_ATOMIC_OP_FETCH_IMPL(op_name, atomic_op_fetch)                              \
   template <size_t... Is, size_t N, size_t M, typename T1, ValidAccessor<T1> A1, typename T2>                \
   KOKKOS_INLINE_FUNCTION auto matrix_scalar_atomic_##op_name##_fetch_impl(                                   \
-      std::index_sequence<Is...>, AMatrix<T1, N, M, A1>* const m, const T2& s) {                             \
+      std::index_sequence<Is...>, AMatrix<T1, N, M, A1>* const m, const T2& s) -> AMatrix<T1, N, M> {        \
     static_assert(sizeof...(Is) == N * M, "Number of indices must match number of elements in the matrix."); \
     AMatrix<T1, N, M> result;                                                                                \
     ((result[Is] = atomic_op_fetch(&((*m)[Is]), static_cast<T1>(s))), ...);                                  \
@@ -720,7 +729,8 @@ MUNDY_MATH_MATRIX_MATRIX_ATOMIC_OP_IMPL(elementwise_div, Kokkos::atomic_div)
 #define MUNDY_MATH_MATRIX_MATRIX_ATOMIC_OP_FETCH_IMPL(op_name, atomic_op_fetch)                                     \
   template <size_t... Is, size_t N, size_t M, typename T1, ValidAccessor<T1> A1, typename T2, ValidAccessor<T2> A2> \
   KOKKOS_INLINE_FUNCTION auto matrix_matrix_atomic_##op_name##_fetch_impl(                                          \
-      std::index_sequence<Is...>, AMatrix<T1, N, M, A1>* const m1, const AMatrix<T2, N, M, A2>& m2) {               \
+      std::index_sequence<Is...>, AMatrix<T1, N, M, A1>* const m1, const AMatrix<T2, N, M, A2>& m2)                 \
+      -> AMatrix<T1, N, M> {                                                                                        \
     static_assert(sizeof...(Is) == N * M, "Number of indices must match number of elements in the matrix.");        \
     AMatrix<T1, N, M> result;                                                                                       \
     ((result[Is] = atomic_op_fetch(&((*m1)[Is]), static_cast<T1>(m2[Is]))), ...);                                   \

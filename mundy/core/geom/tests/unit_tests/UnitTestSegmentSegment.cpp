@@ -498,10 +498,10 @@ TEST(DistanceToLine, PositiveResult) {
 // Two perpendicular segments (θ=90°), length L=1e-3, z-gap=1e-4.
 // D = L^4 = 1e-12.
 //
-//   Old sqrt threshold: 1e-12 < sqrt(1e-15) ≈ 3.16e-8 → fires CASE 1,
+//   Old sqrt threshold: 1e-12 < sqrt(1e-15) ≈ 3.16e-8 -> fires CASE 1,
 //   returns dist ≈ sqrt(L²/4+gap²) ≈ 5e-4 (WRONG, should be gap=1e-4).
 //
-//   New D*D threshold: D²=1e-24 > zero_tol*a*c=1e-15*1e-12=1e-27 →
+//   New D*D threshold: D²=1e-24 > zero_tol*a*c=1e-15*1e-12=1e-27 ->
 //   fires CASE 2, correctly returns dist=gap, arch1=arch2=0.5.
 // ============================================================
 

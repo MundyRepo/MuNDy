@@ -305,10 +305,10 @@ MundySearch provides three concrete list types, differing in search backend, sto
 - *Costs:* builds a bounding-volume hierarchy on each rebuild; the default iteration walks each target's row
   serially rather than parallelizing over pairs.
 - *Limitations:* single rank. It sees only the entities local to its rank, so in a distributed run any pair that
-  straddles a rank boundary is missed. **STKSearchNeighborList** corrects this at the cost of more complex machinery, which can exceed 3× the build time even on a single rank.
+  straddles a rank boundary is missed. **STKSearchNeighborList** corrects this at the cost of more complex machinery, which can exceed 3x the build time even on a single rank.
 
 **`ArborX2dNeighborList`** — ArborX BVH; dense 2D per-target storage.
-- *Benefits:* the dense `num_targets × max_row_width` layout gives every target a constant-width row, which lets
+- *Benefits:* the dense `num_targets x max_row_width` layout gives every target a constant-width row, which lets
   the iteration dispatch use an `MDRangePolicy` to parallelize over pairs directly — higher GPU occupancy than a
   serial per-row walk when neighborhoods are large and uniform.
 - *Costs:* the row width is sized to the largest neighborhood, so every shorter row is padded; for sparse or

@@ -54,6 +54,9 @@ class Sphere {
   /// \brief Our point type
   using point_t = PointType;
 
+  /// \brief Our deep-copy (owning) type
+  using deep_copy_t = Sphere<Scalar>;
+
   static constexpr bool is_finite = true;
 
   //@}
@@ -182,6 +185,12 @@ class Sphere {
   constexpr value_type& radius() {
     return radius_;
   }
+
+  /// \brief Get a deep, owning copy of the Sphere.
+  KOKKOS_FUNCTION
+  constexpr deep_copy_t copy() const {
+    return *this;
+  }
   //@}
 
   //! \name Setters
@@ -257,6 +266,12 @@ KOKKOS_FUNCTION constexpr bool is_approx_close(
     const T1& s1, const T2& s2,
     typename T1::value_type tol = get_relaxed_comparison_tolerance<typename T1::value_type, typename T2::value_type>()) {
   return is_close(s1, s2, tol);
+}
+
+/// \brief Get a deep, owning copy of a Sphere.
+template <ValidSphereType T>
+KOKKOS_FUNCTION constexpr auto copy(const T& sphere) {
+  return sphere.copy();
 }
 
 /// \brief OStream operator

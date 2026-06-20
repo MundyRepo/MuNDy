@@ -58,6 +58,9 @@ class LineSegment {
   /// \brief Our point type for the end point
   using end_point_t = EndPointType;
 
+  /// \brief Our deep-copy (owning) type
+  using deep_copy_t = LineSegment<Scalar>;
+
   static constexpr bool is_finite = true;
 
   //@}
@@ -189,6 +192,12 @@ class LineSegment {
   constexpr end_point_t& end() {
     return end_;
   }
+
+  /// \brief Get a deep, owning copy of the LineSegment.
+  KOKKOS_FUNCTION
+  constexpr deep_copy_t copy() const {
+    return *this;
+  }
   //@}
 
   //! \name Setters
@@ -278,6 +287,12 @@ static_assert(ValidLineSegmentType<LineSegment<double, Point<double>, APoint<dou
 
 //! \name Non-member functions for ValidLineSegmentType objects
 //@{
+
+/// \brief Get a deep, owning copy of a LineSegment.
+template <ValidLineSegmentType T>
+KOKKOS_FUNCTION constexpr auto copy(const T& line_segment) {
+  return line_segment.copy();
+}
 
 /// \brief Element-wise approximate equality (within a tolerance)
 template <ValidLineSegmentType T1, ValidLineSegmentType T2>

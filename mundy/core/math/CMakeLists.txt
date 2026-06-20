@@ -17,6 +17,7 @@ global_set(${PACKAGE_NAME}_ENABLE_ALL_OPTIONAL_PACKAGES ON)
 set(NOINSTALLHEADERS
   src/mundy_math/Accessor.hpp
   src/mundy_math/Array.hpp
+  src/mundy_math/AutoDiffScalar.hpp
   src/mundy_math/convex.hpp
   src/mundy_math/Hilbert.hpp
   src/mundy_math/impl/AccessorImpl.hpp
@@ -29,7 +30,9 @@ set(NOINSTALLHEADERS
   src/mundy_math/Matrix3.hpp
   src/mundy_math/Matrix.hpp
   src/mundy_math/minimize.hpp
+  src/mundy_math/NumTraits.hpp
   src/mundy_math/Quaternion.hpp
+  src/mundy_math/ScalarBinaryOpTraits.hpp
   src/mundy_math/ScalarWrapper.hpp
   src/mundy_math/ShiftedView.hpp
   src/mundy_math/StridedView.hpp

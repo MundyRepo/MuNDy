@@ -32,7 +32,7 @@
 /// and the i-th `Entity` refer to the same entity.
 ///
 /// \par Memoization
-/// Enumerating a selector is host work (`get_entities` + a host fill + a host→device sync) that recurs across phases
+/// Enumerating a selector is host work (`get_entities` + a host fill + a host->device sync) that recurs across phases
 /// and consumers (the neighbor-list build, excluders, rebuilders, …). To avoid redundant re-enumeration, the
 /// results are cached on the `BulkData`'s `MetaData` as an attribute (one cache per execution space), keyed by
 /// `(rank, selector)` using `Selector::operator==`, and tagged with the `BulkData::synchronized_count()` at which

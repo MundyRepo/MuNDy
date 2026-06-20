@@ -27,11 +27,11 @@
 ///
 ///   Strategy B — Unit quaternion storage  (10 scalars per OBB: center 3 + quat 4 + half-extents 3)
 ///     q_rel = conj(q_A) * q_B  (quaternion product, 16 mults + 12 adds = 28 FLOPs)
-///     R     = mat(q_rel)        (quat→matrix, 12 mults + 12 adds ≈ 24 FLOPs)
+///     R     = mat(q_rel)        (quat->matrix, 12 mults + 12 adds ≈ 24 FLOPs)
 ///
 /// The output R is the same in both cases and is used identically in the OBB–OBB SAT test.
 /// This benchmark answers: does the 5-scalar storage saving of quaternions outweigh the extra
-/// computation of the quat→matrix conversion?
+/// computation of the quat->matrix conversion?
 
 #define ANKERL_NANOBENCH_IMPLEMENT
 

@@ -54,8 +54,8 @@
 ///       x = [-2,1] ∩ [-1,2] = [-1,1] — overlap.  Relative shift = 0 - (-10) = +10.
 ///
 ///   Expected result:
-///     Target owner A (idx 0): 1 neighbor → source owner B (idx 1), shift (-10, 0, 0).
-///     Target owner B (idx 1): 1 neighbor → source owner A (idx 0), shift (+10, 0, 0).
+///     Target owner A (idx 0): 1 neighbor -> source owner B (idx 1), shift (-10, 0, 0).
+///     Target owner B (idx 1): 1 neighbor -> source owner A (idx 0), shift (+10, 0, 0).
 
 // Mundy
 #include <MundySearch_config.hpp>  // for HAVE_MUNDYSEARCH_*
@@ -507,7 +507,7 @@ bool shifts_approx_eq(const ImageShiftType& a, const ImageShiftType& b) {
 }
 
 // All valid image shifts for an owner at position p (half-extent r) under the metric — i.e. the owner's possible
-// absolute image shifts (original reference point → each lattice-neighbour image).
+// absolute image shifts (original reference point -> each lattice-neighbour image).
 template <typename Metric>
 std::vector<ImageShiftType> owner_image_shifts(const std::array<float, 3>& p, float r, const Metric& metric) {
   const AABB<float> aabb = make_aabb(p[0], p[1], p[2], r);
@@ -521,7 +521,7 @@ std::vector<ImageShiftType> owner_image_shifts(const std::array<float, 3>& p, fl
 }
 
 // Validate the per-owner target_image_shift interface of a built periodic list:
-//   (1) target_image_shift(t) equals the oracle target shift (original → wrapped reference point) for owner t, and
+//   (1) target_image_shift(t) equals the oracle target shift (original -> wrapped reference point) for owner t, and
 //   (2) for every stored pair, target_image_shift(t) + (source_image_shift(t,k) − target_image_shift(t)) is a valid
 //       image shift of the neighbour source owner — so a kernel can place the source's contacting image.
 // positions[i] is owner ordinal i's position (the build's dense ordinal follows entity-id order for these meshes).
@@ -670,7 +670,7 @@ class PeriodicFixture : public ::testing::Test {
 // deduplication, and set lookup — including the shifts that appear in real
 // boundary-crossing tests (face ±10, edge ±10 in two axes, corner ±10 all).
 TEST(TestInfra, PeriodicPairComparisonAndSetBehavior) {
-  // Equality: same fields → equal, reflexive, not less-than.
+  // Equality: same fields -> equal, reflexive, not less-than.
   PeriodicPair p{1, 2, ImageShiftType{-10.0f, 0.0f, 0.0f}};
   EXPECT_TRUE(p == p);
   EXPECT_FALSE(p < p);
@@ -1052,7 +1052,7 @@ void run_single_image_n2_validation(BuildFn build_fn, NodeMeshWithAABB& mesh, co
   constexpr size_t kSeed = 137;
   constexpr float kDomainSize = 10.0f;
   constexpr float kRadius = 0.9f;
-  constexpr float kHugeL = 1000.0f;  // ≫ domain → no wrap, distant images pruned → non-periodic behavior
+  constexpr float kHugeL = 1000.0f;  // ≫ domain -> no wrap, distant images pruned -> non-periodic behavior
 
   std::vector<stk::mesh::Entity> nodes(num_nodes);
   std::vector<std::array<float, 3>> positions(num_nodes);

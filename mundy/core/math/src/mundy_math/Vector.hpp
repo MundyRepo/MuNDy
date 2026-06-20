@@ -33,13 +33,16 @@
 #include <utility>
 
 // Mundy
-#include <mundy_math/Accessor.hpp>   // for mundy::ValidAccessor
-#include <mundy_math/Array.hpp>      // for mundy::Array
-#include <mundy_math/Tolerance.hpp>  // for mundy::get_zero_tolerance
+#include <mundy_math/Accessor.hpp>              // for mundy::ValidAccessor
+#include <mundy_math/Array.hpp>                 // for mundy::Array
+#include <mundy_math/NumTraits.hpp>             // for mundy::ValidScalarType
+#include <mundy_math/Scalar.hpp>                // for mundy::AScalar (interaction operators)
+#include <mundy_math/ScalarBinaryOpTraits.hpp>  // for mundy::scalar_*_result_t
+#include <mundy_math/Tolerance.hpp>             // for mundy::get_zero_tolerance
+#include <mundy_math/cmath.hpp>
 #include <mundy_math/impl/VectorImpl.hpp>
 #include <mundy_utils/requires.hpp>
 #include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
-#include <mundy_math/cmath.hpp>
 
 namespace mundy {
 
@@ -70,11 +73,11 @@ concept ValidVectorType =
       { const_vector(i) } -> std::convertible_to<const typename std::decay_t<VectorType>::value_type>;
     };  // ValidVectorType
 
-/// \brief Class for an Nx1 vector with arithmetic entries
+/// \brief Class for an Nx1 vector with scalar-like entries
 /// \tparam T The type of the entries.
 /// \tparam Accessor The type of the accessor.
 ///
-/// This class is designed to be used with Kokkos. It is a simple Nx1 vector with arithmetic entries. It is templated
+/// This class is designed to be used with Kokkos. It is a simple Nx1 vector with scalar entries. It is templated
 /// on the type of the entries and Accessor type. See Accessor.hpp for more details on the Accessor type requirements.
 ///
 /// The goal of AVector is to be a lightweight class that can be used with Kokkos to perform mathematical operations on
@@ -108,7 +111,7 @@ concept ValidVectorType =
 /// should be lightweight such that they can be copied around without much overhead. Furthermore, the lifetime of the
 /// data underlying the accessor should be as long as the AVector that use it.
 template <typename T, size_t N, ValidAccessor<T> Accessor>
-MUNDY_REQUIRES(std::is_arithmetic_v<T>)
+MUNDY_REQUIRES(ValidScalarType<T>)
 class AVector {
  public:
   //! \name Internal data
@@ -217,7 +220,8 @@ class AVector {
   template <ValidVectorType OtherVectorType>
   KOKKOS_INLINE_FUNCTION constexpr AVector(const OtherVectorType& other)
       MUNDY_REQUIRES((!std::is_same_v<OtherVectorType, AVector<T, N, Accessor>>) && (OtherVectorType::size == N) &&
-                     (std::is_convertible_v<typename OtherVectorType::value_type, T>) && HasDefaultConstructor<Accessor>)
+                     (std::is_convertible_v<typename OtherVectorType::value_type, T>) &&
+                     HasDefaultConstructor<Accessor>)
       : accessor_() {
     impl::deep_copy_impl(std::make_index_sequence<N>{}, *this, other);
   }
@@ -226,7 +230,8 @@ class AVector {
   template <ValidVectorType OtherVectorType>
   KOKKOS_INLINE_FUNCTION constexpr AVector(OtherVectorType&& other)
       MUNDY_REQUIRES((!std::is_same_v<OtherVectorType, AVector<T, N, Accessor>>) && (OtherVectorType::size == N) &&
-                     (std::is_convertible_v<typename OtherVectorType::value_type, T>) && HasDefaultConstructor<Accessor>)
+                     (std::is_convertible_v<typename OtherVectorType::value_type, T>) &&
+                     HasDefaultConstructor<Accessor>)
       : accessor_() {
     impl::deep_copy_impl(std::make_index_sequence<N>{}, *this, std::move(other));
   }
@@ -369,7 +374,8 @@ class AVector {
   /// \brief AVector-vector addition
   /// \param[in] other The other vector.
   template <typename U, ValidAccessor<U> OtherAccessor>
-  KOKKOS_INLINE_FUNCTION constexpr auto operator+(const AVector<U, N, OtherAccessor>& other) const {
+  KOKKOS_INLINE_FUNCTION constexpr auto operator+(const AVector<U, N, OtherAccessor>& other) const
+      -> AVector<scalar_sum_result_t<T, U>, N> {
     return impl::vector_vector_add_impl(std::make_index_sequence<N>{}, *this, other);
   }
 
@@ -385,7 +391,8 @@ class AVector {
   /// \brief AVector-vector subtraction
   /// \param[in] other The other vector.
   template <typename U, ValidAccessor<U> OtherAccessor>
-  KOKKOS_INLINE_FUNCTION constexpr auto operator-(const AVector<U, N, OtherAccessor>& other) const {
+  KOKKOS_INLINE_FUNCTION constexpr auto operator-(const AVector<U, N, OtherAccessor>& other) const
+      -> AVector<scalar_difference_result_t<T, U>, N> {
     return impl::vector_vector_subtraction_impl(std::make_index_sequence<N>{}, *this, other);
   }
 
@@ -401,15 +408,15 @@ class AVector {
   /// \brief AVector-scalar addition
   /// \param[in] scalar The scalar.
   template <typename U>
-  MUNDY_REQUIRES(std::is_arithmetic_v<U>)
-  KOKKOS_INLINE_FUNCTION constexpr auto operator+(const U& scalar) const {
+  MUNDY_REQUIRES(!is_vector_v<U> && ValidScalarType<U>)
+  KOKKOS_INLINE_FUNCTION constexpr auto operator+(const U& scalar) const -> AVector<scalar_sum_result_t<T, U>, N> {
     return impl::vector_scalar_add_impl(std::make_index_sequence<N>{}, *this, scalar);
   }
 
   /// \brief Self-scalar addition
   /// \param[in] scalar The scalar.
   template <typename U>
-  MUNDY_REQUIRES(std::is_arithmetic_v<U>)
+  MUNDY_REQUIRES(!is_vector_v<U> && ValidScalarType<U>)
   KOKKOS_INLINE_FUNCTION constexpr AVector<T, N, Accessor>& operator+=(const U& scalar)
       MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>) {
     impl::self_scalar_add_impl(std::make_index_sequence<N>{}, *this, scalar);
@@ -419,15 +426,16 @@ class AVector {
   /// \brief AVector-scalar subtraction
   /// \param[in] scalar The scalar.
   template <typename U>
-  MUNDY_REQUIRES(std::is_arithmetic_v<U>)
-  KOKKOS_INLINE_FUNCTION constexpr auto operator-(const U& scalar) const {
+  MUNDY_REQUIRES(!is_vector_v<U> && ValidScalarType<U>)
+  KOKKOS_INLINE_FUNCTION constexpr auto operator-(const U& scalar) const
+      -> AVector<scalar_difference_result_t<T, U>, N> {
     return impl::vector_scalar_subtraction_impl(std::make_index_sequence<N>{}, *this, scalar);
   }
 
   /// \brief AVector-scalar subtraction
   /// \param[in] scalar The scalar.
   template <typename U>
-  MUNDY_REQUIRES(std::is_arithmetic_v<U>)
+  MUNDY_REQUIRES(!is_vector_v<U> && ValidScalarType<U>)
   KOKKOS_INLINE_FUNCTION constexpr AVector<T, N, Accessor>& operator-=(const U& scalar)
       MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>) {
     impl::self_scalar_subtraction_impl(std::make_index_sequence<N>{}, *this, scalar);
@@ -441,15 +449,15 @@ class AVector {
   /// \brief AVector-scalar multiplication
   /// \param[in] scalar The scalar.
   template <typename U>
-  MUNDY_REQUIRES(std::is_arithmetic_v<U>)
-  KOKKOS_INLINE_FUNCTION constexpr auto operator*(const U& scalar) const {
+  MUNDY_REQUIRES(!is_vector_v<U> && ValidScalarType<U>)
+  KOKKOS_INLINE_FUNCTION constexpr auto operator*(const U& scalar) const -> AVector<scalar_product_result_t<T, U>, N> {
     return impl::vector_scalar_multiplication_impl(std::make_index_sequence<N>{}, *this, scalar);
   }
 
   /// \brief Self-scalar multiplication
   /// \param[in] scalar The scalar.
   template <typename U>
-  MUNDY_REQUIRES(std::is_arithmetic_v<U>)
+  MUNDY_REQUIRES(!is_vector_v<U> && ValidScalarType<U>)
   KOKKOS_INLINE_FUNCTION constexpr AVector<T, N, Accessor>& operator*=(const U& scalar)
       MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>) {
     impl::self_scalar_multiplication_impl(std::make_index_sequence<N>{}, *this, scalar);
@@ -459,8 +467,8 @@ class AVector {
   /// \brief AVector-scalar division. (Type promotes the result to a double if both vector and scalar are integral.)
   /// \param[in] scalar The scalar.
   template <typename U>
-  MUNDY_REQUIRES(std::is_arithmetic_v<U>)
-  KOKKOS_INLINE_FUNCTION constexpr auto operator/(const U& scalar) const {
+  MUNDY_REQUIRES(!is_vector_v<U> && ValidScalarType<U>)
+  KOKKOS_INLINE_FUNCTION constexpr auto operator/(const U& scalar) const -> AVector<scalar_quotient_result_t<T, U>, N> {
     return impl::vector_scalar_division_impl(std::make_index_sequence<N>{}, *this, scalar);
   }
 
@@ -468,7 +476,7 @@ class AVector {
   /// \note Because there is no type promotion, this will perform integer division if the scalar is an integer.
   /// \param[in] scalar The scalar.
   template <typename U>
-  MUNDY_REQUIRES(std::is_arithmetic_v<U>)
+  MUNDY_REQUIRES(!is_vector_v<U> && ValidScalarType<U>)
   KOKKOS_INLINE_FUNCTION constexpr AVector<T, N, Accessor>& operator/=(const U& scalar)
       MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>) {
     impl::self_scalar_division_impl(std::make_index_sequence<N>{}, *this, scalar);
@@ -499,7 +507,7 @@ class AVector {
 
   // We are friends with all Vectors regardless of their Accessor, type, or ownership
   template <typename U, size_t M, ValidAccessor<U> OtherAccessor>
-  MUNDY_REQUIRES(std::is_arithmetic_v<U>)
+  MUNDY_REQUIRES(ValidScalarType<U>)
   friend class AVector;
   //@}
 
@@ -571,13 +579,11 @@ std::ostream& operator<<(std::ostream& os, const AVector<T, N, Accessor>& vec) {
 /// \param[in] scalar2 The second scalar.
 /// \param[in] tol The tolerance (default is determined by the given type).
 template <typename U, typename T>
-MUNDY_REQUIRES(std::is_arithmetic_v<U>&& std::is_arithmetic_v<T>)
+MUNDY_REQUIRES(ValidScalarType<U>&& ValidScalarType<T>)
 KOKKOS_INLINE_FUNCTION
     constexpr bool is_close(const U& scalar1, const T& scalar2,
                             const decltype(get_comparison_tolerance<T, U>())& tol = get_comparison_tolerance<T, U>()) {
-  // Use the tolerance type as the comparison type
-  using ComparisonType = std::remove_reference_t<decltype(tol)>;
-  return abs(static_cast<ComparisonType>(scalar1) - static_cast<ComparisonType>(scalar2)) <= tol;
+  return abs(scalar1 - scalar2) <= tol;
 }
 
 /// \brief Scalar-scalar equality (within a relaxed tolerance)
@@ -585,7 +591,7 @@ KOKKOS_INLINE_FUNCTION
 /// \param[in] scalar2 The second scalar.
 /// \param[in] tol The tolerance (default is determined by the given type).
 template <typename U, typename T>
-MUNDY_REQUIRES(std::is_arithmetic_v<U>&& std::is_arithmetic_v<T>)
+MUNDY_REQUIRES(ValidScalarType<U>&& ValidScalarType<T>)
 KOKKOS_INLINE_FUNCTION constexpr bool is_approx_close(
     const U& scalar1, const T& scalar2,
     const decltype(get_relaxed_comparison_tolerance<T, U>())& tol = get_relaxed_comparison_tolerance<T, U>()) {
@@ -622,9 +628,9 @@ KOKKOS_INLINE_FUNCTION constexpr bool is_approx_close(
 /// \param[in] scalar The scalar.
 /// \param[in] vec The vector.
 template <size_t N, typename U, typename T, ValidAccessor<T> Accessor>
-MUNDY_REQUIRES(std::is_arithmetic_v<U>)
+MUNDY_REQUIRES(!is_vector_v<U> && ValidScalarType<U>)
 KOKKOS_INLINE_FUNCTION constexpr auto operator+(const U& scalar, const AVector<T, N, Accessor>& vec)
-    -> AVector<std::common_type_t<T, U>, N> {
+    -> AVector<scalar_sum_result_t<T, U>, N> {
   return vec + scalar;
 }
 
@@ -632,9 +638,9 @@ KOKKOS_INLINE_FUNCTION constexpr auto operator+(const U& scalar, const AVector<T
 /// \param[in] scalar The scalar.
 /// \param[in] vec The vector.
 template <size_t N, typename U, typename T, ValidAccessor<T> Accessor>
-MUNDY_REQUIRES(std::is_arithmetic_v<U>)
+MUNDY_REQUIRES(!is_vector_v<U> && ValidScalarType<U>)
 KOKKOS_INLINE_FUNCTION constexpr auto operator-(const U& scalar, const AVector<T, N, Accessor>& vec)
-    -> AVector<std::common_type_t<T, U>, N> {
+    -> AVector<scalar_difference_result_t<T, U>, N> {
   return -vec + scalar;
 }
 //@}
@@ -646,9 +652,9 @@ KOKKOS_INLINE_FUNCTION constexpr auto operator-(const U& scalar, const AVector<T
 /// \param[in] scalar The scalar.
 /// \param[in] vec The vector.
 template <size_t N, typename U, typename T, ValidAccessor<T> Accessor>
-MUNDY_REQUIRES(std::is_arithmetic_v<U>)
+MUNDY_REQUIRES(!is_vector_v<U> && ValidScalarType<U>)
 KOKKOS_INLINE_FUNCTION constexpr auto operator*(const U& scalar, const AVector<T, N, Accessor>& vec)
-    -> AVector<std::common_type_t<T, U>, N> {
+    -> AVector<scalar_product_result_t<T, U>, N> {
   return vec * scalar;
 }
 //@}
@@ -658,67 +664,64 @@ KOKKOS_INLINE_FUNCTION constexpr auto operator*(const U& scalar, const AVector<T
 
 /// \brief Sum of all elements
 template <size_t N, typename T, ValidAccessor<T> Accessor>
-KOKKOS_INLINE_FUNCTION constexpr auto sum(const AVector<T, N, Accessor>& vec) {
+KOKKOS_INLINE_FUNCTION constexpr T sum(const AVector<T, N, Accessor>& vec) {
   return impl::sum_impl(std::make_index_sequence<N>{}, vec);
 }
 
 /// \brief Product of all elements
 template <size_t N, typename T, ValidAccessor<T> Accessor>
-KOKKOS_INLINE_FUNCTION constexpr auto product(const AVector<T, N, Accessor>& vec) {
+KOKKOS_INLINE_FUNCTION constexpr T product(const AVector<T, N, Accessor>& vec) {
   return impl::product_impl(std::make_index_sequence<N>{}, vec);
 }
 
 /// \brief Minimum element
 template <size_t N, typename T, ValidAccessor<T> Accessor>
-KOKKOS_INLINE_FUNCTION constexpr auto min(const AVector<T, N, Accessor>& vec) {
+KOKKOS_INLINE_FUNCTION constexpr T min(const AVector<T, N, Accessor>& vec) {
   return impl::min_impl(std::make_index_sequence<N>{}, vec);
 }
 
 /// \brief Maximum element
 template <size_t N, typename T, ValidAccessor<T> Accessor>
-KOKKOS_INLINE_FUNCTION constexpr auto max(const AVector<T, N, Accessor>& vec) {
+KOKKOS_INLINE_FUNCTION constexpr T max(const AVector<T, N, Accessor>& vec) {
   return impl::max_impl(std::make_index_sequence<N>{}, vec);
 }
 
 /// \brief Mean of all elements (returns a double if T is an integral type, otherwise returns T)
-template <size_t N, typename T, ValidAccessor<T> Accessor,
-          typename OutputType = std::conditional_t<std::is_integral_v<T>, double, T>>
+template <size_t N, typename T, ValidAccessor<T> Accessor, typename OutputType = typename NumTraits<T>::NonInteger>
 KOKKOS_INLINE_FUNCTION constexpr OutputType mean(const AVector<T, N, Accessor>& vec) {
-  auto vec_sum = sum(vec);
+  T vec_sum = sum(vec);
   return static_cast<OutputType>(vec_sum) / OutputType(N);
 }
 
 /// \brief Mean of all elements (returns a float if T is an integral type, otherwise returns T)
 template <size_t N, typename T, ValidAccessor<T> Accessor,
-          typename OutputType = std::conditional_t<std::is_integral_v<T>, float, T>>
+          typename OutputType = std::conditional_t<NumTraits<T>::IsInteger, float, T>>
 KOKKOS_INLINE_FUNCTION constexpr OutputType mean_f(const AVector<T, N, Accessor>& vec) {
   return mean<N, T, Accessor, OutputType>(vec);
 }
 
 /// \brief Variance of all elements (returns a double if T is an integral type, otherwise returns T)
-template <size_t N, typename T, ValidAccessor<T> Accessor,
-          typename OutputType = std::conditional_t<std::is_integral_v<T>, double, T>>
+template <size_t N, typename T, ValidAccessor<T> Accessor, typename OutputType = typename NumTraits<T>::NonInteger>
 KOKKOS_INLINE_FUNCTION constexpr OutputType variance(const AVector<T, N, Accessor>& vec) {
   return impl::variance_impl(std::make_index_sequence<N>{}, vec);
 }
 
 /// \brief Variance of all elements (returns a float if T is an integral type, otherwise returns T)
 template <size_t N, typename T, ValidAccessor<T> Accessor,
-          typename OutputType = std::conditional_t<std::is_integral_v<T>, float, T>>
+          typename OutputType = std::conditional_t<NumTraits<T>::IsInteger, float, T>>
 KOKKOS_INLINE_FUNCTION constexpr OutputType variance_f(const AVector<T, N, Accessor>& vec) {
   return impl::variance_f_impl(std::make_index_sequence<N>{}, vec);
 }
 
 /// \brief Standard deviation of all elements (returns a double if T is an integral type, otherwise returns T)
-template <size_t N, typename T, ValidAccessor<T> Accessor,
-          typename OutputType = std::conditional_t<std::is_integral_v<T>, double, T>>
+template <size_t N, typename T, ValidAccessor<T> Accessor, typename OutputType = typename NumTraits<T>::NonInteger>
 KOKKOS_INLINE_FUNCTION constexpr OutputType stddev(const AVector<T, N, Accessor>& vec) {
   return impl::standard_deviation_impl(std::make_index_sequence<N>{}, vec);
 }
 
 /// \brief Standard deviation of all elements (returns a float if T is an integral type, otherwise returns T)
 template <size_t N, typename T, ValidAccessor<T> Accessor,
-          typename OutputType = std::conditional_t<std::is_integral_v<T>, float, T>>
+          typename OutputType = std::conditional_t<NumTraits<T>::IsInteger, float, T>>
 KOKKOS_INLINE_FUNCTION constexpr OutputType stddev_f(const AVector<T, N, Accessor>& vec) {
   return impl::standard_deviation_f_impl(std::make_index_sequence<N>{}, vec);
 }
@@ -733,7 +736,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto copy(const VectorType& v) {
   return v.copy();
 }
 
-/// \brief Cast a vector to a different arithmetic type
+/// \brief Cast a vector to a different type
 template <typename U, ValidVectorType VectorType>
 KOKKOS_INLINE_FUNCTION constexpr auto cast(const VectorType& v) {
   return v.template cast<U>();
@@ -743,8 +746,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto cast(const VectorType& v) {
 /// \param[in] a The first vector.
 /// \param[in] b The second vector.
 template <size_t N, typename U, typename T, ValidAccessor<U> Accessor1, ValidAccessor<T> Accessor2>
-KOKKOS_INLINE_FUNCTION constexpr auto dot(const AVector<U, N, Accessor1>& a, const AVector<T, N, Accessor2>& b)
-    -> std::common_type_t<T, U> {
+KOKKOS_INLINE_FUNCTION constexpr auto dot(const AVector<U, N, Accessor1>& a, const AVector<T, N, Accessor2>& b) {
   return impl::dot_product_impl(std::make_index_sequence<N>{}, a, b);
 }
 
@@ -801,8 +803,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto one_norm(const AVector<T, N, Accessor>& ve
 
 /// \brief AVector 2-norm (Returns a double if T is an integral type, otherwise returns T)
 /// \param[in] vec The vector.
-template <size_t N, typename T, ValidAccessor<T> Accessor,
-          typename OutputType = std::conditional_t<std::is_integral_v<T>, double, T>>
+template <size_t N, typename T, ValidAccessor<T> Accessor, typename OutputType = typename NumTraits<T>::NonInteger>
 KOKKOS_INLINE_FUNCTION constexpr OutputType two_norm(const AVector<T, N, Accessor>& vec) {
   return sqrt(static_cast<OutputType>(dot(vec, vec)));
 }
@@ -810,7 +811,7 @@ KOKKOS_INLINE_FUNCTION constexpr OutputType two_norm(const AVector<T, N, Accesso
 /// \brief AVector 2-norm (Returns a float if T is an integral type, otherwise returns T)
 /// \param[in] vec The vector.
 template <size_t N, typename T, ValidAccessor<T> Accessor,
-          typename OutputType = std::conditional_t<std::is_integral_v<T>, float, T>>
+          typename OutputType = std::conditional_t<NumTraits<T>::IsInteger, float, T>>
 KOKKOS_INLINE_FUNCTION constexpr OutputType two_norm_f(const AVector<T, N, Accessor>& vec) {
   return two_norm<N, T, Accessor, OutputType>(vec);
 }
@@ -824,8 +825,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto two_norm_squared(const AVector<T, N, Acces
 
 /// \brief Default vector norm (2-norm, returns a double if T is an integral type, otherwise returns T)
 /// \param[in] vec The vector.
-template <size_t N, typename T, ValidAccessor<T> Accessor,
-          typename OutputType = std::conditional_t<std::is_integral_v<T>, double, T>>
+template <size_t N, typename T, ValidAccessor<T> Accessor, typename OutputType = typename NumTraits<T>::NonInteger>
 KOKKOS_INLINE_FUNCTION constexpr OutputType norm(const AVector<T, N, Accessor>& vec) {
   // Forward the output type to two_norm to ensure consistent type promotion of integral types
   return two_norm<N, T, Accessor, OutputType>(vec);
@@ -834,7 +834,7 @@ KOKKOS_INLINE_FUNCTION constexpr OutputType norm(const AVector<T, N, Accessor>& 
 /// \brief Default vector norm (2-norm, returns a float if T is an integral type, otherwise returns T)
 /// \param[in] vec The vector.
 template <size_t N, typename T, ValidAccessor<T> Accessor,
-          typename OutputType = std::conditional_t<std::is_integral_v<T>, float, T>>
+          typename OutputType = std::conditional_t<NumTraits<T>::IsInteger, float, T>>
 KOKKOS_INLINE_FUNCTION constexpr OutputType norm_f(const AVector<T, N, Accessor>& vec) {
   return norm<N, T, Accessor, OutputType>(vec);
 }
@@ -846,13 +846,11 @@ KOKKOS_INLINE_FUNCTION constexpr auto norm_squared(const AVector<T, N, Accessor>
   return two_norm_squared(vec);
 }
 
-/// \brief Minor angle between two vectors (returns a double if common_type_t<U, T> is integral, otherwise
-/// common_type_t<U, T>)
+/// \brief Minor angle between two vectors, in radians (integral inputs promote to double).
 /// \param[in] a The first vector.
 /// \param[in] b The second vector.
 template <size_t N, typename U, typename T, ValidAccessor<U> Accessor1, ValidAccessor<T> Accessor2,
-          typename OutputType =
-              std::conditional_t<std::is_integral_v<std::common_type_t<U, T>>, double, std::common_type_t<U, T>>>
+          typename OutputType = typename NumTraits<scalar_product_result_t<U, T>>::NonInteger>
 KOKKOS_INLINE_FUNCTION constexpr OutputType minor_angle(const AVector<U, N, Accessor1>& a,
                                                         const AVector<T, N, Accessor2>& b) {
   OutputType norm_product = static_cast<OutputType>(two_norm(a)) * static_cast<OutputType>(two_norm(b));
@@ -868,37 +866,33 @@ KOKKOS_INLINE_FUNCTION constexpr OutputType minor_angle(const AVector<U, N, Acce
   return acos(cosine);
 }
 
-/// \brief Minor angle between two vectors (returns a float if common_type_t<U, T> is integral, otherwise
-/// common_type_t<U, T>)
+/// \brief Minor angle between two vectors, in radians (integral inputs promote to float).
 /// \param[in] a The first vector.
 /// \param[in] b The second vector.
 template <size_t N, typename U, typename T, ValidAccessor<U> Accessor1, ValidAccessor<T> Accessor2,
-          typename OutputType =
-              std::conditional_t<std::is_integral_v<std::common_type_t<U, T>>, float, std::common_type_t<U, T>>>
+          typename OutputType = std::conditional_t<NumTraits<scalar_product_result_t<U, T>>::IsInteger, float,
+                                                   scalar_product_result_t<U, T>>>
 KOKKOS_INLINE_FUNCTION constexpr OutputType minor_angle_f(const AVector<U, N, Accessor1>& a,
                                                           const AVector<T, N, Accessor2>& b) {
   return minor_angle<N, U, T, Accessor1, Accessor2, OutputType>(a, b);
 }
 
-/// \brief Major angle between two vectors (returns a double if common_type_t<U, T> is integral, otherwise
-/// common_type_t<U, T>)
+/// \brief Major angle between two vectors, in radians (integral inputs promote to double).
 /// \param[in] a The first vector.
 /// \param[in] b The second vector.
 template <size_t N, typename U, typename T, ValidAccessor<U> Accessor1, ValidAccessor<T> Accessor2,
-          typename OutputType =
-              std::conditional_t<std::is_integral_v<std::common_type_t<U, T>>, double, std::common_type_t<U, T>>>
+          typename OutputType = typename NumTraits<scalar_product_result_t<U, T>>::NonInteger>
 KOKKOS_INLINE_FUNCTION constexpr OutputType major_angle(const AVector<U, N, Accessor1>& a,
                                                         const AVector<T, N, Accessor2>& b) {
   return Kokkos::numbers::pi_v<OutputType> - minor_angle<N, U, T, Accessor1, Accessor2, OutputType>(a, b);
 }
 
-/// \brief Major angle between two vectors (returns a float if common_type_t<U, T> is integral, otherwise
-/// common_type_t<U, T>)
+/// \brief Major angle between two vectors, in radians (integral inputs promote to float).
 /// \param[in] a The first vector.
 /// \param[in] b The second vector.
 template <size_t N, typename U, typename T, ValidAccessor<U> Accessor1, ValidAccessor<T> Accessor2,
-          typename OutputType =
-              std::conditional_t<std::is_integral_v<std::common_type_t<U, T>>, float, std::common_type_t<U, T>>>
+          typename OutputType = std::conditional_t<NumTraits<scalar_product_result_t<U, T>>::IsInteger, float,
+                                                   scalar_product_result_t<U, T>>>
 KOKKOS_INLINE_FUNCTION constexpr OutputType major_angle_f(const AVector<U, N, Accessor1>& a,
                                                           const AVector<T, N, Accessor2>& b) {
   return major_angle<N, U, T, Accessor1, Accessor2, OutputType>(a, b);
@@ -1064,10 +1058,8 @@ MUNDY_MATH_VECTOR_VECTOR_ATOMIC_OP_FETCH(elementwise_div)
 
 #define MUNDY_MATH_VECTOR_SIZE_SPECIALIZATION(alias, alias_lower, N)                      \
   template <typename T, ValidAccessor<T> Accessor = Array<T, N>>                          \
-  MUNDY_REQUIRES(std::is_arithmetic_v<T>)                                                 \
   using A##alias = AVector<T, N, Accessor>;                                               \
   template <typename T>                                                                   \
-  MUNDY_REQUIRES(std::is_arithmetic_v<T>)                                                 \
   using alias = A##alias<T>;                                                              \
   template <typename TypeToCheck>                                                         \
   struct is_##alias_lower##_impl : std::false_type {};                                    \
@@ -1120,6 +1112,8 @@ MUNDY_MATH_VECTOR_TYPE_AND_SIZE_SPECIALIZATION(Vector5i, vector5i, int, 5)
 MUNDY_MATH_VECTOR_TYPE_AND_SIZE_SPECIALIZATION(Vector6i, vector6i, int, 6)
 //@}
 
+static_assert(!ValidScalarType<AVector<double, 3>>, "An AVector is rank-1, so it must never satisfy ValidScalarType.");
+
 //! \name AVector views
 //@{
 
@@ -1149,6 +1143,32 @@ KOKKOS_INLINE_FUNCTION constexpr auto get_owning_vector(Accessor&& data) {
 }
 //@}
 
+//@}
+
+//! \name Non-member arithmetic: AScalar op AVector / AVector op AScalar
+//
+// These let an AScalar serve as a scalar operand in AVector arithmetic.
+//@{
+
+/// \brief AVector * AScalar
+template <size_t N, typename T, typename U, ValidAccessor<T> Accessor1, ValidAccessor<U> Accessor2>
+KOKKOS_INLINE_FUNCTION constexpr auto operator*(const AVector<T, N, Accessor1>& vec, const AScalar<U, Accessor2>& s)
+    -> AVector<scalar_product_result_t<T, U>, N> {
+  return vec * s.value();
+}
+
+/// \brief AScalar * AVector  (commutative)
+template <size_t N, typename U, typename T, ValidAccessor<U> Accessor1, ValidAccessor<T> Accessor2>
+KOKKOS_INLINE_FUNCTION constexpr auto operator*(const AScalar<U, Accessor1>& s, const AVector<T, N, Accessor2>& vec)
+    -> AVector<scalar_product_result_t<T, U>, N> {
+  return vec * s.value();
+}
+
+/// \brief AVector / AScalar
+template <size_t N, typename T, typename U, ValidAccessor<T> Accessor1, ValidAccessor<U> Accessor2>
+KOKKOS_INLINE_FUNCTION constexpr auto operator/(const AVector<T, N, Accessor1>& vec, const AScalar<U, Accessor2>& s) {
+  return vec / s.value();
+}
 //@}
 
 }  // namespace mundy

@@ -82,7 +82,7 @@ _SECTION_LABELS = {
     "Iteration overhead (pair)":          "Iter overhead\n(pair loop)",
     "Global reduce (target)":             "Global reduce\n(target loop)",
     "Global reduce (pair)":               "Global reduce\n(pair loop)",
-    "Atomic into target (full list)":     "Atomic → target",
+    "Atomic into target (full list)":     "Atomic -> target",
     "Bilateral atomic (half list)":       "Bilateral\natomic",
     "N2 brute force baseline (N<=1000)":  "N² baseline",
 }
@@ -293,7 +293,7 @@ def plot_scaling(all_data, thread_counts, out_prefix="neighbor_list", search="ar
     for col in range(ncols):
         axes[nrows - 1, col].set_xlabel("Thread count")
     for row in range(nrows):
-        axes[row, 0].set_ylabel(f"Speedup  (×{ref_threads}-thread)")
+        axes[row, 0].set_ylabel(f"Speedup  (x{ref_threads}-thread)")
 
     # ── Shared legends ────────────────────────────────────────────────────────
     # all_N and n_colors already computed above

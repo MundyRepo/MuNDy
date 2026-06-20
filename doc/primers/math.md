@@ -62,29 +62,29 @@ The following operations can be performed on a vector to compute various reducti
 
 | **Operation**       | **Description**                                   | **Example** (for `Vector2d v1{1.1, 2.2}`) |
 |----------------------|---------------------------------------------------|-------------------------------------------|
-| `size(v)`           | Number of components in the vector.              | `size(v1)` → `2`                          |
-| `sum(v)`            | Sum of all components.                           | `sum(v1)` → `3.3`                         |
-| `product(v)`        | Product of all components.                       | `product(v1)` → `2.42`                    |
-| `min(v)`            | Minimum component value.                         | `min(v1)` → `1.1`                         |
-| `max(v)`            | Maximum component value.                         | `max(v1)` → `2.2`                         |
-| `mean(v)`           | Mean of all components.                          | `mean(v1)` → `1.65`                       |
-| `variance(v)`       | Variance of the components.                      | `variance(v1)` → `0.3025`                 |
-| `stddev(v)`         | Standard deviation of the components.            | `stddev(v1)` → `0.55`                     |
+| `size(v)`           | Number of components in the vector.              | `size(v1)` -> `2`                          |
+| `sum(v)`            | Sum of all components.                           | `sum(v1)` -> `3.3`                         |
+| `product(v)`        | Product of all components.                       | `product(v1)` -> `2.42`                    |
+| `min(v)`            | Minimum component value.                         | `min(v1)` -> `1.1`                         |
+| `max(v)`            | Maximum component value.                         | `max(v1)` -> `2.2`                         |
+| `mean(v)`           | Mean of all components.                          | `mean(v1)` -> `1.65`                       |
+| `variance(v)`       | Variance of the components.                      | `variance(v1)` -> `0.3025`                 |
+| `stddev(v)`         | Standard deviation of the components.            | `stddev(v1)` -> `0.55`                     |
 
 #### Special operations
 The following operations can be performed on vectors to compute various properties:
 
 | **Operation**          | **Description**                                                                 | **Example** (for `Vector2d v1{1., 2.}, v2{3., 4.}`) |
 |-------------------------|---------------------------------------------------------------------------------|----------------------------------------------------------|
-| `dot(v1, v2)`          | Dot product of two vectors.                                                     | `dot(v1, v2)` → `1. * 3. + 2. * 4. = 11.`          |
-| `infinity_norm(v)`     | Infinity norm (maximum absolute value of components).                           | `infinity_norm(v1)` → `2.`                              |
-| `one_norm(v)`          | 1-norm (sum of absolute values of components).                                  | `one_norm(v1)` → `1. + 2. = 3.`                       |
-| `two_norm(v)`          | 2-norm (Euclidean norm, square root of the sum of squares).                     | `two_norm(v1)` → `sqrt(1.^2 + 2.^2) = sqrt(5.)`       |
-| `two_norm_squared(v)`  | Squared 2-norm (sum of squares of components).                                   | `two_norm_squared(v1)` → `1.^2 + 2.^2 = 5.`           |
-| `norm(v)`              | Default norm (same as `two_norm`).                                              | `norm(v1)` → `sqrt(5.)`                                 |
-| `norm_squared(v)`      | Default squared norm (same as `two_norm_squared`).                              | `norm_squared(v1)` → `5.`                               |
-| `minor_angle(v1, v2)`  | Minor angle between two vectors (angle in radians, between 0 and π).            | `minor_angle(v1, v2)` → `acos(dot(v1, v2) / (norm(v1) * norm(v2)))` |
-| `major_angle(v1, v2)`  | Major angle between two vectors (angle in radians, between 0 and π).           | `major_angle(v1, v2)` → `π - minor_angle(v1, v2)`        |
+| `dot(v1, v2)`          | Dot product of two vectors.                                                     | `dot(v1, v2)` -> `1. * 3. + 2. * 4. = 11.`          |
+| `infinity_norm(v)`     | Infinity norm (maximum absolute value of components).                           | `infinity_norm(v1)` -> `2.`                              |
+| `one_norm(v)`          | 1-norm (sum of absolute values of components).                                  | `one_norm(v1)` -> `1. + 2. = 3.`                       |
+| `two_norm(v)`          | 2-norm (Euclidean norm, square root of the sum of squares).                     | `two_norm(v1)` -> `sqrt(1.^2 + 2.^2) = sqrt(5.)`       |
+| `two_norm_squared(v)`  | Squared 2-norm (sum of squares of components).                                   | `two_norm_squared(v1)` -> `1.^2 + 2.^2 = 5.`           |
+| `norm(v)`              | Default norm (same as `two_norm`).                                              | `norm(v1)` -> `sqrt(5.)`                                 |
+| `norm_squared(v)`      | Default squared norm (same as `two_norm_squared`).                              | `norm_squared(v1)` -> `5.`                               |
+| `minor_angle(v1, v2)`  | Minor angle between two vectors (angle in radians, between 0 and π).            | `minor_angle(v1, v2)` -> `acos(dot(v1, v2) / (norm(v1) * norm(v2)))` |
+| `major_angle(v1, v2)`  | Major angle between two vectors (angle in radians, between 0 and π).           | `major_angle(v1, v2)` -> `π - minor_angle(v1, v2)`        |
 
 #### Operations for vectors of certain sizes
 
@@ -92,7 +92,7 @@ Some operations are only defined for vectors of specific sizes. For example, the
 
 | **Operation**          | **Description**                                   | **Example** (for `Vector3d v1{1., 2., 3.}, v2{4., 5., 6.}`) |
 |-------------------------|---------------------------------------------------|--------------------------------------------------------------------|
-| `cross(v1, v2)`         | Cross product of two 3D vectors.                 | `cross(v1, v2)` → `Vector3d{-3., 6., -3.}`                     |
+| `cross(v1, v2)`         | Cross product of two 3D vectors.                 | `cross(v1, v2)` -> `Vector3d{-3., 6., -3.}`                     |
 
 ## Matrix
 The {ref}`Matrix <exhale_class_classmundy_1_1AMatrix>` class is endowed with the mathematical properties of dense matrices. It supports addition, multiplication, matrix-vector, matrix-scalar arithmetic, norms, etc. It is templated by the matrices's scalar type and sizes so {ref}`Matrix <exhale_class_classmundy_1_1AMatrix>`\<double, 3, 2\> would correspond to a double-typed matrix with 3 rows and 2 columns. Similar to Eigen, we offer shorthand naming for scalar types float/double and sizes 1-6. For example:

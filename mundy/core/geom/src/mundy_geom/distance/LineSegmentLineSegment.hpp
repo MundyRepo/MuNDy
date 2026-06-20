@@ -100,7 +100,7 @@ KOKKOS_FUNCTION typename LineSegmentType1::value_type
   const Scalar D = a * c - b * b;  // always >= 0
 
   // Compute the line parameters of the two closest points.
-  // D <= 0 catches truly degenerate segments (a=0 or c=0 → D=0) and floating-point noise.
+  // D <= 0 catches truly degenerate segments (a=0 or c=0 -> D=0) and floating-point noise.
   // D*D < zero_tol*a*c is scale-invariant: checks sin²(θ) < sqrt(zero_tol/a/c) without sqrt.
   constexpr Scalar zero_tol = get_zero_tolerance<Scalar>();
   if (D <= static_cast<Scalar>(0) || D * D < zero_tol * a * c) {
@@ -228,7 +228,7 @@ KOKKOS_FUNCTION typename LineSegmentType1::value_type
   const Scalar D = a * c - b * b;  // always >= 0
 
   // Compute the line parameters of the two closest points.
-  // D <= 0 catches truly degenerate segments (a=0 or c=0 → D=0) and floating-point noise.
+  // D <= 0 catches truly degenerate segments (a=0 or c=0 -> D=0) and floating-point noise.
   // D*D < zero_tol*a*c is scale-invariant: checks sin²(θ) < sqrt(zero_tol/a/c) without sqrt.
   constexpr Scalar zero_tol = get_zero_tolerance<Scalar>();
   if (D <= static_cast<Scalar>(0) || D * D < zero_tol * a * c) {

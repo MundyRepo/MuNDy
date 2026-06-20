@@ -47,7 +47,7 @@ namespace mundy {
 /// `host_ptr<T>` is, semantically, a `std::shared_ptr<T>` that survives being captured by value into a device kernel:
 /// were device support not a concern, a plain `std::shared_ptr<T>` would be used instead. It mirrors `std::shared_ptr`
 /// in ownership model and interface — owning raw-pointer construction, custom deleters, `unique_ptr` adoption, the
-/// aliasing constructor, `Derived`→`Base` conversions, the pointer casts, ordering/hashing/`owner_before`, and
+/// aliasing constructor, `Derived`->`Base` conversions, the pointer casts, ordering/hashing/`owner_before`, and
 /// `reset` — with the single deliberate omission of `weak_ptr`/`enable_shared_from_this`.
 ///
 /// \par How the device-copyability works

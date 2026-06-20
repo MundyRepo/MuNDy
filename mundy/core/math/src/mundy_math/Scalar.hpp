@@ -33,19 +33,20 @@
 #include <utility>
 
 // Mundy
-#include <mundy_math/Accessor.hpp>   // for mundy::ValidAccessor, impl::access_at
-#include <mundy_math/Array.hpp>      // for mundy::Array
-#include <mundy_math/Matrix.hpp>     // for mundy::AMatrix (interaction operators)
-#include <mundy_math/Tolerance.hpp>  // for mundy::get_comparison_tolerance
-#include <mundy_math/Vector.hpp>     // for mundy::AVector (interaction operators)
+#include <mundy_math/Accessor.hpp>              // for mundy::ValidAccessor, impl::access_at
+#include <mundy_math/Array.hpp>                 // for mundy::Array
+#include <mundy_math/NumTraits.hpp>             // for mundy::ValidScalarType
+#include <mundy_math/ScalarBinaryOpTraits.hpp>  // for mundy::scalar_*_result_t
+#include <mundy_math/Tolerance.hpp>             // for mundy::get_comparison_tolerance
 #include <mundy_utils/requires.hpp>
 #include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
 
 namespace mundy {
 
-/// \brief Class for an owning or viewing arithmetic scalar
+/// \brief Class for an owning or viewing scalar-like value (an arithmetic type, or a custom scalar
+///        such as an autodiff dual)
 ///
-/// AScalar is the scalar analogue of AVector and AMatrix. It holds a single arithmetic value through a
+/// AScalar is the scalar analogue of AVector and AMatrix. It holds a single scalar value through a
 /// templated Accessor, which may be owning (e.g., Array<T,1>) or non-owning (e.g., a pointer or
 /// Kokkos::View slice). This separation of concerns — storage policy vs. value semantics — mirrors the
 /// rest of the Mundy math library and makes AScalar Kokkos-compatible.
@@ -68,7 +69,7 @@ namespace mundy {
 /// \note Accessors may be owning or non-owning; they should be lightweight so they can be copied cheaply.
 ///       The lifetime of the underlying data must exceed the lifetime of any AScalar that views it.
 template <typename T, ValidAccessor<T> Accessor = Array<T, 1>>
-MUNDY_REQUIRES(std::is_arithmetic_v<T>)
+MUNDY_REQUIRES(ValidScalarType<T>)
 class AScalar;
 
 //! \name AScalar type traits
@@ -87,29 +88,6 @@ struct is_scalar : public is_scalar_impl<std::decay_t<TypeToCheck>> {};
 //
 template <typename TypeToCheck>
 constexpr bool is_scalar_v = is_scalar<TypeToCheck>::value;
-
-/// \brief Concept satisfied by any type that behaves as a mathematical scalar.
-///
-/// Accepts fundamental arithmetic types (float, double, int, ...), std::complex,
-/// Sacado FAD types, autodiff duals, Ceres Jets — any type providing scalar arithmetic
-/// operators and constructibility from a numeric literal.
-///
-/// Use this instead of \c std::is_arithmetic_v<T> wherever the intent is
-/// "I need a type I can do math with", not "I specifically need a primitive type".
-/// The broader acceptance enables automatic differentiation without code changes.
-template <typename T>
-concept ValidScalarType = requires(T a, T b) {
-    { a + b } -> std::convertible_to<T>;
-    { a - b } -> std::convertible_to<T>;
-    { a * b } -> std::convertible_to<T>;
-    { a / b } -> std::convertible_to<T>;
-    { -a }    -> std::convertible_to<T>;
-    T(1.0);  // constructible from a double literal
-};
-
-static_assert(ValidScalarType<float>);
-static_assert(ValidScalarType<double>);
-static_assert(ValidScalarType<int>);
 //@}
 
 // =============================================================================
@@ -117,7 +95,7 @@ static_assert(ValidScalarType<int>);
 // =============================================================================
 
 template <typename T, ValidAccessor<T> Accessor>
-MUNDY_REQUIRES(std::is_arithmetic_v<T>)
+MUNDY_REQUIRES(ValidScalarType<T>)
 class AScalar {
  public:
   //! \name Internal data
@@ -195,7 +173,8 @@ class AScalar {
   /// \brief Deep copy constructor from a different AScalar accessor or ownership
   template <typename OtherScalarType>
   KOKKOS_INLINE_FUNCTION constexpr AScalar(const OtherScalarType& other)
-      MUNDY_REQUIRES((!std::is_same_v<OtherScalarType, AScalar<T, Accessor>>) &&
+      MUNDY_REQUIRES(is_scalar_v<std::decay_t<OtherScalarType>> &&
+                     (!std::is_same_v<OtherScalarType, AScalar<T, Accessor>>) &&
                      (std::is_convertible_v<typename OtherScalarType::value_type, T>) &&
                      HasDefaultConstructor<Accessor>)
       : accessor_() {
@@ -205,7 +184,8 @@ class AScalar {
   /// \brief Deep move constructor from a different AScalar accessor or ownership
   template <typename OtherScalarType>
   KOKKOS_INLINE_FUNCTION constexpr AScalar(OtherScalarType&& other)
-      MUNDY_REQUIRES((!std::is_same_v<std::decay_t<OtherScalarType>, AScalar<T, Accessor>>) &&
+      MUNDY_REQUIRES(is_scalar_v<std::decay_t<OtherScalarType>> &&
+                     (!std::is_same_v<std::decay_t<OtherScalarType>, AScalar<T, Accessor>>) &&
                      (std::is_convertible_v<typename std::decay_t<OtherScalarType>::value_type, T>) &&
                      HasDefaultConstructor<Accessor>)
       : accessor_() {
@@ -215,7 +195,8 @@ class AScalar {
   /// \brief Deep copy assignment from a different AScalar accessor or ownership
   template <typename OtherScalarType>
   KOKKOS_INLINE_FUNCTION constexpr AScalar<T, Accessor>& operator=(const OtherScalarType& other)
-      MUNDY_REQUIRES((!std::is_same_v<OtherScalarType, AScalar<T, Accessor>>) &&
+      MUNDY_REQUIRES(is_scalar_v<std::decay_t<OtherScalarType>> &&
+                     (!std::is_same_v<OtherScalarType, AScalar<T, Accessor>>) &&
                      (std::is_convertible_v<typename OtherScalarType::value_type, T>) &&
                      HasNonConstAccessOperator<Accessor, T>) {
     impl::access_at(accessor_, 0) = static_cast<T>(other.value());
@@ -225,25 +206,24 @@ class AScalar {
   /// \brief Deep move assignment from a different AScalar accessor or ownership
   template <typename OtherScalarType>
   KOKKOS_INLINE_FUNCTION constexpr AScalar<T, Accessor>& operator=(OtherScalarType&& other)
-      MUNDY_REQUIRES((!std::is_same_v<std::decay_t<OtherScalarType>, AScalar<T, Accessor>>) &&
+      MUNDY_REQUIRES(is_scalar_v<std::decay_t<OtherScalarType>> &&
+                     (!std::is_same_v<std::decay_t<OtherScalarType>, AScalar<T, Accessor>>) &&
                      (std::is_convertible_v<typename std::decay_t<OtherScalarType>::value_type, T>) &&
                      HasNonConstAccessOperator<Accessor, T>) {
     impl::access_at(accessor_, 0) = static_cast<T>(other.value());
     return *this;
   }
 
-  /// \brief Assignment from a raw arithmetic value
+  /// \brief Assignment from a raw value of type T
   KOKKOS_INLINE_FUNCTION constexpr AScalar<T, Accessor>& operator=(const T val)
       MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>) {
     impl::access_at(accessor_, 0) = val;
     return *this;
   }
 
-  /// \brief Implicit conversion to the underlying arithmetic type
+  /// \brief Implicit conversion to the underlying value type T
   ///
-  /// This allows an AScalar to be passed anywhere a T is expected, and lets existing
-  /// AVector / AMatrix member operators (which require std::is_arithmetic_v<U>) accept
-  /// an AScalar via implicit conversion rather than requiring separate overloads.
+  /// This allows an AScalar to be passed anywhere a T is expected.
   KOKKOS_INLINE_FUNCTION constexpr operator T() const {
     return impl::access_at(accessor_, 0);
   }
@@ -319,7 +299,7 @@ class AScalar {
     return AScalar<T>{static_cast<T>(impl::access_at(accessor_, 0))};
   }
 
-  /// \brief Cast the value to a different arithmetic type and return an owning AScalar
+  /// \brief Cast the value to a different type and return an owning AScalar
   template <typename U>
   KOKKOS_INLINE_FUNCTION constexpr auto cast() const {
     return AScalar<U>{static_cast<U>(impl::access_at(accessor_, 0))};
@@ -345,9 +325,8 @@ class AScalar {
 
   template <typename U, ValidAccessor<U> OtherAccessor>
   KOKKOS_INLINE_FUNCTION constexpr auto operator+(const AScalar<U, OtherAccessor>& other) const {
-    using Common = std::common_type_t<T, U>;
-    return AScalar<Common>{static_cast<Common>(impl::access_at(accessor_, 0)) +
-                           static_cast<Common>(other.value())};
+    using R = scalar_sum_result_t<T, U>;
+    return AScalar<R>{static_cast<R>(impl::access_at(accessor_, 0) + other.value())};
   }
 
   template <typename U, ValidAccessor<U> OtherAccessor>
@@ -359,9 +338,8 @@ class AScalar {
 
   template <typename U, ValidAccessor<U> OtherAccessor>
   KOKKOS_INLINE_FUNCTION constexpr auto operator-(const AScalar<U, OtherAccessor>& other) const {
-    using Common = std::common_type_t<T, U>;
-    return AScalar<Common>{static_cast<Common>(impl::access_at(accessor_, 0)) -
-                           static_cast<Common>(other.value())};
+    using R = scalar_difference_result_t<T, U>;
+    return AScalar<R>{static_cast<R>(impl::access_at(accessor_, 0) - other.value())};
   }
 
   template <typename U, ValidAccessor<U> OtherAccessor>
@@ -377,9 +355,8 @@ class AScalar {
 
   template <typename U, ValidAccessor<U> OtherAccessor>
   KOKKOS_INLINE_FUNCTION constexpr auto operator*(const AScalar<U, OtherAccessor>& other) const {
-    using Common = std::common_type_t<T, U>;
-    return AScalar<Common>{static_cast<Common>(impl::access_at(accessor_, 0)) *
-                           static_cast<Common>(other.value())};
+    using R = scalar_product_result_t<T, U>;
+    return AScalar<R>{static_cast<R>(impl::access_at(accessor_, 0) * other.value())};
   }
 
   template <typename U, ValidAccessor<U> OtherAccessor>
@@ -389,13 +366,11 @@ class AScalar {
     return *this;
   }
 
-  /// \brief Division — promotes integral/integral pairs to double, matching AVector::operator/ semantics.
+  /// \brief Division — integral/integral pairs promote to double.
   template <typename U, ValidAccessor<U> OtherAccessor>
   KOKKOS_INLINE_FUNCTION constexpr auto operator/(const AScalar<U, OtherAccessor>& other) const {
-    using Common = std::common_type_t<T, U>;
-    using Promoted = std::conditional_t<std::is_integral_v<T> && std::is_integral_v<U>, double, Common>;
-    return AScalar<Promoted>{static_cast<Promoted>(impl::access_at(accessor_, 0)) /
-                             static_cast<Promoted>(other.value())};
+    using R = scalar_quotient_result_t<T, U>;
+    return AScalar<R>{static_cast<R>(impl::access_at(accessor_, 0)) / static_cast<R>(other.value())};
   }
 
   /// \brief Self-division — does NOT type-promote (integer division is possible).
@@ -407,18 +382,22 @@ class AScalar {
   }
   //@}
 
-  //! \name Addition and subtraction (AScalar op arithmetic)
+  //! \name Addition and subtraction (AScalar op scalar)
+  //
+  // \c ValidScalarType<U> admits only scalars (double, autodiff duals, ...); it is false for the
+  // indexable containers, including AScalar, whose operands route to the AScalar-op-AScalar overloads
+  // above.
   //@{
 
   template <typename U>
-  MUNDY_REQUIRES(std::is_arithmetic_v<U>)
+  MUNDY_REQUIRES(!is_scalar_v<U> && ValidScalarType<U>)
   KOKKOS_INLINE_FUNCTION constexpr auto operator+(const U& scalar) const {
-    using Common = std::common_type_t<T, U>;
-    return AScalar<Common>{static_cast<Common>(impl::access_at(accessor_, 0)) + static_cast<Common>(scalar)};
+    using R = scalar_sum_result_t<T, U>;
+    return AScalar<R>{static_cast<R>(impl::access_at(accessor_, 0) + scalar)};
   }
 
   template <typename U>
-  MUNDY_REQUIRES(std::is_arithmetic_v<U>)
+  MUNDY_REQUIRES(!is_scalar_v<U> && ValidScalarType<U>)
   KOKKOS_INLINE_FUNCTION constexpr AScalar<T, Accessor>& operator+=(const U& scalar)
       MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>) {
     impl::access_at(accessor_, 0) += static_cast<T>(scalar);
@@ -426,14 +405,14 @@ class AScalar {
   }
 
   template <typename U>
-  MUNDY_REQUIRES(std::is_arithmetic_v<U>)
+  MUNDY_REQUIRES(!is_scalar_v<U> && ValidScalarType<U>)
   KOKKOS_INLINE_FUNCTION constexpr auto operator-(const U& scalar) const {
-    using Common = std::common_type_t<T, U>;
-    return AScalar<Common>{static_cast<Common>(impl::access_at(accessor_, 0)) - static_cast<Common>(scalar)};
+    using R = scalar_difference_result_t<T, U>;
+    return AScalar<R>{static_cast<R>(impl::access_at(accessor_, 0) - scalar)};
   }
 
   template <typename U>
-  MUNDY_REQUIRES(std::is_arithmetic_v<U>)
+  MUNDY_REQUIRES(!is_scalar_v<U> && ValidScalarType<U>)
   KOKKOS_INLINE_FUNCTION constexpr AScalar<T, Accessor>& operator-=(const U& scalar)
       MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>) {
     impl::access_at(accessor_, 0) -= static_cast<T>(scalar);
@@ -441,36 +420,35 @@ class AScalar {
   }
   //@}
 
-  //! \name Multiplication and division (AScalar op arithmetic)
+  //! \name Multiplication and division (AScalar op scalar)
   //@{
 
   template <typename U>
-  MUNDY_REQUIRES(std::is_arithmetic_v<U>)
+  MUNDY_REQUIRES(!is_scalar_v<U> && ValidScalarType<U>)
   KOKKOS_INLINE_FUNCTION constexpr auto operator*(const U& scalar) const {
-    using Common = std::common_type_t<T, U>;
-    return AScalar<Common>{static_cast<Common>(impl::access_at(accessor_, 0)) * static_cast<Common>(scalar)};
+    using R = scalar_product_result_t<T, U>;
+    return AScalar<R>{static_cast<R>(impl::access_at(accessor_, 0) * scalar)};
   }
 
   template <typename U>
-  MUNDY_REQUIRES(std::is_arithmetic_v<U>)
+  MUNDY_REQUIRES(!is_scalar_v<U> && ValidScalarType<U>)
   KOKKOS_INLINE_FUNCTION constexpr AScalar<T, Accessor>& operator*=(const U& scalar)
       MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>) {
     impl::access_at(accessor_, 0) *= static_cast<T>(scalar);
     return *this;
   }
 
-  /// \brief Division by arithmetic scalar — promotes integral/integral pairs to double.
+  /// \brief Division by a scalar — integral/integral pairs promote to double.
   template <typename U>
-  MUNDY_REQUIRES(std::is_arithmetic_v<U>)
+  MUNDY_REQUIRES(!is_scalar_v<U> && ValidScalarType<U>)
   KOKKOS_INLINE_FUNCTION constexpr auto operator/(const U& scalar) const {
-    using Common = std::common_type_t<T, U>;
-    using Promoted = std::conditional_t<std::is_integral_v<T> && std::is_integral_v<U>, double, Common>;
-    return AScalar<Promoted>{static_cast<Promoted>(impl::access_at(accessor_, 0)) / static_cast<Promoted>(scalar)};
+    using R = scalar_quotient_result_t<T, U>;
+    return AScalar<R>{static_cast<R>(impl::access_at(accessor_, 0)) / static_cast<R>(scalar)};
   }
 
-  /// \brief Self-division by arithmetic scalar — does NOT type-promote.
+  /// \brief Self-division by a scalar — does NOT type-promote.
   template <typename U>
-  MUNDY_REQUIRES(std::is_arithmetic_v<U>)
+  MUNDY_REQUIRES(!is_scalar_v<U> && ValidScalarType<U>)
   KOKKOS_INLINE_FUNCTION constexpr AScalar<T, Accessor>& operator/=(const U& scalar)
       MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>) {
     impl::access_at(accessor_, 0) /= static_cast<T>(scalar);
@@ -494,7 +472,7 @@ class AScalar {
   //@{
 
   template <typename U, ValidAccessor<U> OtherAccessor>
-  MUNDY_REQUIRES(std::is_arithmetic_v<U>)
+  MUNDY_REQUIRES(ValidScalarType<U>)
   friend class AScalar;
 
   template <typename U, ValidAccessor<U> OtherAccessor>
@@ -509,7 +487,7 @@ class AScalar {
 static_assert(is_scalar_v<AScalar<int, Array<int, 1>>>, "AScalar<int, Array<int,1>> should satisfy is_scalar.");
 static_assert(!is_scalar_v<int>, "int should not satisfy is_scalar.");
 static_assert(ValidScalarType<AScalar<double>>, "AScalar<double> must satisfy ValidScalarType.");
-static_assert(ValidScalarType<AScalar<float>>,  "AScalar<float> must satisfy ValidScalarType.");
+static_assert(ValidScalarType<AScalar<float>>, "AScalar<float> must satisfy ValidScalarType.");
 
 // =============================================================================
 // Type alias: Scalar<T> — the owning, default-accessor specialisation
@@ -543,8 +521,9 @@ template <typename U, typename T, ValidAccessor<U> Accessor1, ValidAccessor<T> A
 KOKKOS_INLINE_FUNCTION constexpr bool is_close(
     const AScalar<U, Accessor1>& a, const AScalar<T, Accessor2>& b,
     const decltype(get_comparison_tolerance<T, U>())& tol = get_comparison_tolerance<T, U>()) {
-  using ComparisonType = std::remove_reference_t<decltype(tol)>;
-  return abs(static_cast<ComparisonType>(a.value()) - static_cast<ComparisonType>(b.value())) <= tol;
+  // Compares values against a passive-typed tolerance, so a custom scalar (e.g. an autodiff dual)
+  // yields a plain bool.
+  return abs(a.value() - b.value()) <= tol;
 }
 
 template <typename U, typename T, ValidAccessor<U> Accessor1, ValidAccessor<T> Accessor2>
@@ -555,92 +534,34 @@ KOKKOS_INLINE_FUNCTION constexpr bool is_approx_close(
 }
 //@}
 
-//! \name Non-member arithmetic: arithmetic op AScalar
+//! \name Non-member arithmetic: scalar op AScalar
 //@{
 
 template <typename U, typename T, ValidAccessor<T> Accessor>
-MUNDY_REQUIRES(std::is_arithmetic_v<U>)
+MUNDY_REQUIRES(!is_scalar_v<U> && ValidScalarType<U>)
 KOKKOS_INLINE_FUNCTION constexpr auto operator+(const U& scalar, const AScalar<T, Accessor>& s) {
   return s + scalar;
 }
 
 template <typename U, typename T, ValidAccessor<T> Accessor>
-MUNDY_REQUIRES(std::is_arithmetic_v<U>)
+MUNDY_REQUIRES(!is_scalar_v<U> && ValidScalarType<U>)
 KOKKOS_INLINE_FUNCTION constexpr auto operator-(const U& scalar, const AScalar<T, Accessor>& s) {
-  using Common = std::common_type_t<T, U>;
-  return AScalar<Common>{static_cast<Common>(scalar) - static_cast<Common>(s.value())};
+  using R = scalar_difference_result_t<U, T>;
+  return AScalar<R>{static_cast<R>(scalar - s.value())};
 }
 
 template <typename U, typename T, ValidAccessor<T> Accessor>
-MUNDY_REQUIRES(std::is_arithmetic_v<U>)
+MUNDY_REQUIRES(!is_scalar_v<U> && ValidScalarType<U>)
 KOKKOS_INLINE_FUNCTION constexpr auto operator*(const U& scalar, const AScalar<T, Accessor>& s) {
   return s * scalar;
 }
 
-/// \brief arithmetic / AScalar — promotes integral/integral to double
+/// \brief scalar / AScalar — integral/integral pairs promote to double.
 template <typename U, typename T, ValidAccessor<T> Accessor>
-MUNDY_REQUIRES(std::is_arithmetic_v<U>)
+MUNDY_REQUIRES(!is_scalar_v<U> && ValidScalarType<U>)
 KOKKOS_INLINE_FUNCTION constexpr auto operator/(const U& scalar, const AScalar<T, Accessor>& s) {
-  using Common = std::common_type_t<T, U>;
-  using Promoted = std::conditional_t<std::is_integral_v<T> && std::is_integral_v<U>, double, Common>;
-  return AScalar<Promoted>{static_cast<Promoted>(scalar) / static_cast<Promoted>(s.value())};
-}
-//@}
-
-//! \name Non-member arithmetic: AScalar op AVector / AVector op AScalar
-//
-// AVector's member operators require std::is_arithmetic_v<U>, so they do not fire when U is AScalar.
-// These non-member operators bridge the gap by extracting the stored value and delegating.
-//@{
-
-/// \brief AVector * AScalar
-template <size_t N, typename T, typename U, ValidAccessor<T> Accessor1, ValidAccessor<U> Accessor2>
-KOKKOS_INLINE_FUNCTION constexpr auto operator*(const AVector<T, N, Accessor1>& vec,
-                                                const AScalar<U, Accessor2>& s)
-    -> AVector<std::common_type_t<T, U>, N> {
-  return vec * s.value();
-}
-
-/// \brief AScalar * AVector  (commutative)
-template <size_t N, typename U, typename T, ValidAccessor<U> Accessor1, ValidAccessor<T> Accessor2>
-KOKKOS_INLINE_FUNCTION constexpr auto operator*(const AScalar<U, Accessor1>& s,
-                                                const AVector<T, N, Accessor2>& vec)
-    -> AVector<std::common_type_t<T, U>, N> {
-  return vec * s.value();
-}
-
-/// \brief AVector / AScalar — delegates to AVector::operator/, preserving its integer-promotion behaviour
-template <size_t N, typename T, typename U, ValidAccessor<T> Accessor1, ValidAccessor<U> Accessor2>
-KOKKOS_INLINE_FUNCTION constexpr auto operator/(const AVector<T, N, Accessor1>& vec,
-                                                const AScalar<U, Accessor2>& s) {
-  return vec / s.value();
-}
-//@}
-
-//! \name Non-member arithmetic: AScalar op AMatrix / AMatrix op AScalar
-//@{
-
-/// \brief AMatrix * AScalar
-template <size_t N, size_t M, typename T, typename U, ValidAccessor<T> Accessor1, ValidAccessor<U> Accessor2>
-KOKKOS_INLINE_FUNCTION constexpr auto operator*(const AMatrix<T, N, M, Accessor1>& mat,
-                                                const AScalar<U, Accessor2>& s)
-    -> AMatrix<std::common_type_t<T, U>, N, M> {
-  return mat * s.value();
-}
-
-/// \brief AScalar * AMatrix  (commutative)
-template <size_t N, size_t M, typename U, typename T, ValidAccessor<U> Accessor1, ValidAccessor<T> Accessor2>
-KOKKOS_INLINE_FUNCTION constexpr auto operator*(const AScalar<U, Accessor1>& s,
-                                                const AMatrix<T, N, M, Accessor2>& mat)
-    -> AMatrix<std::common_type_t<T, U>, N, M> {
-  return mat * s.value();
-}
-
-/// \brief AMatrix / AScalar — delegates to AMatrix::operator/, preserving its integer-promotion behaviour
-template <size_t N, size_t M, typename T, typename U, ValidAccessor<T> Accessor1, ValidAccessor<U> Accessor2>
-KOKKOS_INLINE_FUNCTION constexpr auto operator/(const AMatrix<T, N, M, Accessor1>& mat,
-                                                const AScalar<U, Accessor2>& s) {
-  return mat / s.value();
+  using R = scalar_quotient_result_t<U, T>;
+  return AScalar<R>{static_cast<R>(scalar) / static_cast<R>(s.value())};
 }
 //@}
 
@@ -659,7 +580,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto copy(const ScalarType& s) {
   return s.copy();
 }
 
-/// \brief Cast a scalar to a different arithmetic type
+/// \brief Cast a scalar to a different type
 template <typename U, ValidScalarType ScalarType>
 KOKKOS_INLINE_FUNCTION constexpr auto cast(const ScalarType& s) {
   return s.template cast<U>();
@@ -670,22 +591,28 @@ KOKKOS_INLINE_FUNCTION constexpr auto cast(const ScalarType& s) {
 //
 // These operate on raw T* pointers rather than on AScalar objects so that the same mundy::atomic_add etc.
 // call works regardless of whether you're dealing with a raw scalar or a vector/matrix element.
+//
+// Constrained to arithmetic T: Kokkos atomics are not defined for custom scalars such as autodiff
+// duals, so this excludes them and makes misuse a compile error.
 //@{
 
 /// \brief Atomic load: s_copy = *s
 template <typename T>
+MUNDY_REQUIRES(std::is_arithmetic_v<T>)
 KOKKOS_INLINE_FUNCTION T atomic_load(T* const s) {
   return Kokkos::atomic_load(s);
 }
 
 /// \brief Atomic store: *s = value
 template <typename T, typename U>
+MUNDY_REQUIRES(std::is_arithmetic_v<T>)
 KOKKOS_INLINE_FUNCTION void atomic_store(T* const s, const U& value) {
   Kokkos::atomic_store(s, static_cast<T>(value));
 }
 
 /// \brief Atomic *s += value
 template <typename T, typename U>
+MUNDY_REQUIRES(std::is_arithmetic_v<T>)
 KOKKOS_INLINE_FUNCTION void atomic_add(T* const s, const U& value) {
   Kokkos::atomic_add(s, static_cast<T>(value));
 }
@@ -693,90 +620,105 @@ KOKKOS_INLINE_FUNCTION void atomic_add(T* const s, const U& value) {
 /// \brief Atomic *s += value — AScalar overload: operates on the underlying scalar, bypassing
 /// AScalar's operator+ (which returns a different storage type incompatible with CAS loops).
 template <typename T, typename Acc, typename U>
+MUNDY_REQUIRES(std::is_arithmetic_v<T>)
 KOKKOS_INLINE_FUNCTION void atomic_add(AScalar<T, Acc>* const s, const U& value) {
   Kokkos::atomic_add(&s->value(), static_cast<T>(value));
 }
 
 /// \brief Atomic *s -= value
 template <typename T, typename U>
+MUNDY_REQUIRES(std::is_arithmetic_v<T>)
 KOKKOS_INLINE_FUNCTION void atomic_sub(T* const s, const U& value) {
   Kokkos::atomic_sub(s, static_cast<T>(value));
 }
 
 /// \brief Atomic *s -= value — AScalar overload.
 template <typename T, typename Acc, typename U>
+MUNDY_REQUIRES(std::is_arithmetic_v<T>)
 KOKKOS_INLINE_FUNCTION void atomic_sub(AScalar<T, Acc>* const s, const U& value) {
   Kokkos::atomic_sub(&s->value(), static_cast<T>(value));
 }
 
 /// \brief Atomic *s *= value
 template <typename T, typename U>
+MUNDY_REQUIRES(std::is_arithmetic_v<T>)
 KOKKOS_INLINE_FUNCTION void atomic_mul(T* const s, const U& value) {
   Kokkos::atomic_mul(s, static_cast<T>(value));
 }
 
 /// \brief Atomic *s *= value — AScalar overload.
 template <typename T, typename Acc, typename U>
+MUNDY_REQUIRES(std::is_arithmetic_v<T>)
 KOKKOS_INLINE_FUNCTION void atomic_mul(AScalar<T, Acc>* const s, const U& value) {
   Kokkos::atomic_mul(&s->value(), static_cast<T>(value));
 }
 
 /// \brief Atomic *s /= value
 template <typename T, typename U>
+MUNDY_REQUIRES(std::is_arithmetic_v<T>)
 KOKKOS_INLINE_FUNCTION void atomic_div(T* const s, const U& value) {
   Kokkos::atomic_div(s, static_cast<T>(value));
 }
 
 /// \brief Atomic *s /= value — AScalar overload.
 template <typename T, typename Acc, typename U>
+MUNDY_REQUIRES(std::is_arithmetic_v<T>)
 KOKKOS_INLINE_FUNCTION void atomic_div(AScalar<T, Acc>* const s, const U& value) {
   Kokkos::atomic_div(&s->value(), static_cast<T>(value));
 }
 
 /// \brief Atomic *s += value; returns old *s
 template <typename T, typename U>
+MUNDY_REQUIRES(std::is_arithmetic_v<T>)
 KOKKOS_INLINE_FUNCTION T atomic_fetch_add(T* const s, const U& value) {
   return Kokkos::atomic_fetch_add(s, static_cast<T>(value));
 }
 
 /// \brief Atomic *s -= value; returns old *s
 template <typename T, typename U>
+MUNDY_REQUIRES(std::is_arithmetic_v<T>)
 KOKKOS_INLINE_FUNCTION T atomic_fetch_sub(T* const s, const U& value) {
   return Kokkos::atomic_fetch_sub(s, static_cast<T>(value));
 }
 
 /// \brief Atomic *s *= value; returns old *s
 template <typename T, typename U>
+MUNDY_REQUIRES(std::is_arithmetic_v<T>)
 KOKKOS_INLINE_FUNCTION T atomic_fetch_mul(T* const s, const U& value) {
   return Kokkos::atomic_fetch_mul(s, static_cast<T>(value));
 }
 
 /// \brief Atomic *s /= value; returns old *s
 template <typename T, typename U>
+MUNDY_REQUIRES(std::is_arithmetic_v<T>)
 KOKKOS_INLINE_FUNCTION T atomic_fetch_div(T* const s, const U& value) {
   return Kokkos::atomic_fetch_div(s, static_cast<T>(value));
 }
 
 /// \brief Atomic *s += value; returns new *s
 template <typename T, typename U>
+MUNDY_REQUIRES(std::is_arithmetic_v<T>)
 KOKKOS_INLINE_FUNCTION T atomic_add_fetch(T* const s, const U& value) {
   return Kokkos::atomic_add_fetch(s, static_cast<T>(value));
 }
 
 /// \brief Atomic *s -= value; returns new *s
 template <typename T, typename U>
+MUNDY_REQUIRES(std::is_arithmetic_v<T>)
 KOKKOS_INLINE_FUNCTION T atomic_sub_fetch(T* const s, const U& value) {
   return Kokkos::atomic_sub_fetch(s, static_cast<T>(value));
 }
 
 /// \brief Atomic *s *= value; returns new *s
 template <typename T, typename U>
+MUNDY_REQUIRES(std::is_arithmetic_v<T>)
 KOKKOS_INLINE_FUNCTION T atomic_mul_fetch(T* const s, const U& value) {
   return Kokkos::atomic_mul_fetch(s, static_cast<T>(value));
 }
 
 /// \brief Atomic *s /= value; returns new *s
 template <typename T, typename U>
+MUNDY_REQUIRES(std::is_arithmetic_v<T>)
 KOKKOS_INLINE_FUNCTION T atomic_div_fetch(T* const s, const U& value) {
   return Kokkos::atomic_div_fetch(s, static_cast<T>(value));
 }

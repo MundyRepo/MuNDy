@@ -209,13 +209,13 @@ class PeriodicNeighborSearchCandidate {
     return source_entity_;
   }
 
-  /// \brief Get the target owner's image shift (original → imaged reference point).
+  /// \brief Get the target owner's image shift (original -> imaged reference point).
   KOKKOS_INLINE_FUNCTION
   image_shift_type target_image_shift() const noexcept {
     return target_image_shift_;
   }
 
-  /// \brief Get the source owner's image shift (original → imaged reference point).
+  /// \brief Get the source owner's image shift (original -> imaged reference point).
   KOKKOS_INLINE_FUNCTION
   image_shift_type source_image_shift() const noexcept {
     return source_image_shift_;
@@ -282,6 +282,13 @@ class PeriodicNeighborSearchCandidate {
   image_shift_type source_image_shift_;
   //@}
 };
+
+/// \brief Trait: `true` when `Candidate` is a periodic candidate that carries image shifts.
+template <typename Candidate>
+inline constexpr bool is_periodic_candidate_v = false;
+//
+template <typename ImageShiftType, typename SizeType>
+inline constexpr bool is_periodic_candidate_v<PeriodicNeighborSearchCandidate<ImageShiftType, SizeType>> = true;
 
 }  // namespace search
 

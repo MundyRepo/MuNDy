@@ -33,18 +33,20 @@
 #include <utility>
 
 // Mundy
-#include <mundy_math/Accessor.hpp>   // for mundy::ValidAccessor
-#include <mundy_math/Array.hpp>      // for mundy::Array
-#include <mundy_math/Tolerance.hpp>  // for mundy::get_zero_tolerance
+#include <mundy_math/Accessor.hpp>              // for mundy::ValidAccessor
+#include <mundy_math/Array.hpp>                 // for mundy::Array
+#include <mundy_math/NumTraits.hpp>             // for mundy::ValidScalarType
+#include <mundy_math/ScalarBinaryOpTraits.hpp>  // for mundy::scalar_*_result_t
+#include <mundy_math/Tolerance.hpp>             // for mundy::get_zero_tolerance
+#include <mundy_math/cmath.hpp>
 #include <mundy_utils/requires.hpp>
 #include <mundy_utils/suppress_warnings.hpp>  // for MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_PUSH/POP
 #include <mundy_utils/throw_assert.hpp>       // for MUNDY_THROW_ASSERT
-#include <mundy_math/cmath.hpp>
 
 namespace mundy {
 
 template <typename T, size_t N, ValidAccessor<T> Accessor = Array<T, N>>
-MUNDY_REQUIRES(std::is_arithmetic_v<T>)
+MUNDY_REQUIRES(ValidScalarType<T>)
 class AVector;
 
 namespace impl {
@@ -103,7 +105,7 @@ KOKKOS_INLINE_FUNCTION
 
 /// \brief Cast (and copy) the vector to a different type
 template <typename U, size_t... Is, typename T, size_t N, ValidAccessor<T> Accessor>
-KOKKOS_INLINE_FUNCTION auto cast_impl(std::index_sequence<Is...>, const AVector<T, N, Accessor>& vec) {
+KOKKOS_INLINE_FUNCTION AVector<U, N> cast_impl(std::index_sequence<Is...>, const AVector<T, N, Accessor>& vec) {
   static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");
   return AVector<U, N>{static_cast<U>(vec[Is])...};
 }
@@ -124,11 +126,11 @@ template <size_t... Is, typename U, typename T, size_t N, ValidAccessor<T> Acces
 KOKKOS_INLINE_FUNCTION constexpr auto vector_vector_add_impl(std::index_sequence<Is...>,
                                                              const AVector<T, N, Accessor>& vec,
                                                              const AVector<U, N, OtherAccessor>& other)
-    -> AVector<std::common_type_t<T, U>, N> {
+    -> AVector<scalar_sum_result_t<T, U>, N> {
   static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");
-  using CommonType = std::common_type_t<T, U>;
-  AVector<CommonType, N> result;
-  ((result[Is] = static_cast<CommonType>(vec[Is]) + static_cast<CommonType>(other[Is])), ...);
+  using R = scalar_sum_result_t<T, U>;
+  AVector<R, N> result;
+  ((result[Is] = static_cast<R>(vec[Is] + other[Is])), ...);
   return result;
 }
 
@@ -148,11 +150,11 @@ template <size_t... Is, typename T, size_t N, typename U, ValidAccessor<T> Acces
 KOKKOS_INLINE_FUNCTION constexpr auto vector_vector_subtraction_impl(std::index_sequence<Is...>,
                                                                      const AVector<T, N, Accessor>& vec,
                                                                      const AVector<U, N, OtherAccessor>& other)
-    -> AVector<std::common_type_t<T, U>, N> {
+    -> AVector<scalar_difference_result_t<T, U>, N> {
   static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");
-  using CommonType = std::common_type_t<T, U>;
-  AVector<CommonType, N> result;
-  ((result[Is] = static_cast<CommonType>(vec[Is]) - static_cast<CommonType>(other[Is])), ...);
+  using R = scalar_difference_result_t<T, U>;
+  AVector<R, N> result;
+  ((result[Is] = static_cast<R>(vec[Is] - other[Is])), ...);
   return result;
 }
 
@@ -172,11 +174,11 @@ KOKKOS_INLINE_FUNCTION constexpr void self_vector_subtraction_impl(std::index_se
 template <size_t... Is, typename T, size_t N, typename U, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto vector_scalar_add_impl(std::index_sequence<Is...>,
                                                              const AVector<T, N, Accessor>& vec, const U& scalar)
-    -> AVector<std::common_type_t<T, U>, N> {
+    -> AVector<scalar_sum_result_t<T, U>, N> {
   static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");
-  using CommonType = std::common_type_t<T, U>;
-  AVector<CommonType, N> result;
-  ((result[Is] = static_cast<CommonType>(vec[Is]) + static_cast<CommonType>(scalar)), ...);
+  using R = scalar_sum_result_t<T, U>;
+  AVector<R, N> result;
+  ((result[Is] = static_cast<R>(vec[Is] + scalar)), ...);
   return result;
 }
 
@@ -196,11 +198,11 @@ template <size_t... Is, typename T, size_t N, typename U, ValidAccessor<T> Acces
 KOKKOS_INLINE_FUNCTION constexpr auto vector_scalar_subtraction_impl(std::index_sequence<Is...>,
                                                                      const AVector<T, N, Accessor>& vec,
                                                                      const U& scalar)
-    -> AVector<std::common_type_t<T, U>, N> {
+    -> AVector<scalar_difference_result_t<T, U>, N> {
   static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");
-  using CommonType = std::common_type_t<T, U>;
-  AVector<CommonType, N> result;
-  ((result[Is] = static_cast<CommonType>(vec[Is]) - static_cast<CommonType>(scalar)), ...);
+  using R = scalar_difference_result_t<T, U>;
+  AVector<R, N> result;
+  ((result[Is] = static_cast<R>(vec[Is] - scalar)), ...);
   return result;
 }
 
@@ -220,11 +222,11 @@ template <size_t... Is, typename T, size_t N, typename U, ValidAccessor<T> Acces
 KOKKOS_INLINE_FUNCTION constexpr auto vector_scalar_multiplication_impl(std::index_sequence<Is...>,
                                                                         const AVector<T, N, Accessor>& vec,
                                                                         const U& scalar)
-    -> AVector<std::common_type_t<T, U>, N> {
+    -> AVector<scalar_product_result_t<T, U>, N> {
   static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");
-  using CommonType = std::common_type_t<T, U>;
-  AVector<CommonType, N> result;
-  ((result[Is] = static_cast<CommonType>(vec[Is]) * static_cast<CommonType>(scalar)), ...);
+  using R = scalar_product_result_t<T, U>;
+  AVector<R, N> result;
+  ((result[Is] = static_cast<R>(vec[Is] * scalar)), ...);
   return result;
 }
 
@@ -242,21 +244,14 @@ KOKKOS_INLINE_FUNCTION constexpr void self_scalar_multiplication_impl(std::index
 /// \param[in] scalar The scalar.
 template <size_t... Is, typename T, size_t N, typename U, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto vector_scalar_division_impl(std::index_sequence<Is...>,
-                                                                  const AVector<T, N, Accessor>& vec, const U& scalar) {
+                                                                  const AVector<T, N, Accessor>& vec, const U& scalar)
+    -> AVector<scalar_quotient_result_t<T, U>, N> {
   static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");
-  if constexpr (std::is_integral_v<T> && std::is_integral_v<U>) {
-    using CommonType = double;
-    AVector<CommonType, N> result;
-    const CommonType scalar_inv = static_cast<CommonType>(1) / static_cast<CommonType>(scalar);
-    ((result[Is] = static_cast<CommonType>(vec[Is]) * scalar_inv), ...);
-    return result;
-  } else {
-    using CommonType = std::common_type_t<T, U>;
-    AVector<CommonType, N> result;
-    const CommonType scalar_inv = static_cast<CommonType>(1) / static_cast<CommonType>(scalar);
-    ((result[Is] = static_cast<CommonType>(vec[Is]) * scalar_inv), ...);
-    return result;
-  }
+  using R = scalar_quotient_result_t<T, U>;  // integral/integral promotes to double
+  AVector<R, N> result;
+  const R scalar_inv = static_cast<R>(1) / static_cast<R>(scalar);
+  ((result[Is] = static_cast<R>(vec[Is]) * scalar_inv), ...);
+  return result;
 }
 
 /// \brief Self-scalar division (no type promotion!!!)
@@ -264,7 +259,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto vector_scalar_division_impl(std::index_seq
 template <size_t... Is, typename T, size_t N, typename U, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr void self_scalar_division_impl(std::index_sequence<Is...>,
                                                                 AVector<T, N, Accessor>& vec, const U& scalar)
-    MUNDY_REQUIRES(HasNonConstAccessOperator<decltype(vec), T>) {
+    MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>) {
   static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");
   ((vec[Is] /= static_cast<T>(scalar)), ...);
 }
@@ -279,8 +274,8 @@ MUNDY_REQUIRES(std::is_arithmetic_v<V>)
 KOKKOS_INLINE_FUNCTION constexpr bool is_close_impl(std::index_sequence<Is...>, const AVector<U, N, Accessor>& vec1,
                                                     const AVector<T, N, OtherAccessor>& vec2, const V& tol) {
   static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");
-  // Use the type of the tolerance to determine the comparison type
-  return ((abs(static_cast<V>(vec1[Is]) - static_cast<V>(vec2[Is])) <= tol) && ...);
+  // Compares values against a passive-typed tolerance, so a custom scalar yields a plain bool.
+  return ((abs(vec1[Is] - vec2[Is]) <= tol) && ...);
 }
 
 /// \brief Component-wise absolute value
@@ -329,7 +324,7 @@ KOKKOS_INLINE_FUNCTION T constexpr max_impl(std::index_sequence<Is...>, const AV
 
 /// \brief Variance of all elements
 template <size_t... Is, size_t N, typename T, ValidAccessor<T> Accessor,
-          typename OutputType = std::conditional_t<std::is_integral_v<T>, double, T>>
+          typename OutputType = typename NumTraits<T>::NonInteger>
 KOKKOS_INLINE_FUNCTION constexpr OutputType variance_impl(std::index_sequence<Is...>,
                                                           const AVector<T, N, Accessor>& vec) {
   static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");
@@ -340,7 +335,7 @@ KOKKOS_INLINE_FUNCTION constexpr OutputType variance_impl(std::index_sequence<Is
 }
 //
 template <size_t... Is, size_t N, typename T, ValidAccessor<T> Accessor,
-          typename OutputType = std::conditional_t<std::is_integral_v<T>, float, T>>
+          typename OutputType = std::conditional_t<NumTraits<T>::IsInteger, float, T>>
 KOKKOS_INLINE_FUNCTION constexpr OutputType variance_f_impl(std::index_sequence<Is...>,
                                                             const AVector<T, N, Accessor>& vec) {
   static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");
@@ -370,19 +365,19 @@ template <size_t... Is, size_t N, typename U, typename T, ValidAccessor<U> Acces
 KOKKOS_INLINE_FUNCTION constexpr auto dot_product_impl(std::index_sequence<Is...>, const AVector<U, N, Accessor>& vec1,
                                                        const AVector<T, N, OtherAccessor>& vec2) {
   static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");
-  using CommonType = std::common_type_t<U, T>;
-  return ((static_cast<CommonType>(vec1[Is]) * static_cast<CommonType>(vec2[Is])) + ...);
+  return ((vec1[Is] * vec2[Is]) + ...);
 }
 
 /// \brief Element-wise multiplication
 template <size_t... Is, size_t N, typename U, typename T, ValidAccessor<U> Accessor1, ValidAccessor<T> Accessor2>
 KOKKOS_INLINE_FUNCTION constexpr auto vector_vector_elementwise_mul_impl(std::index_sequence<Is...>,
                                                                          const AVector<U, N, Accessor1>& a,
-                                                                         const AVector<T, N, Accessor2>& b) {
+                                                                         const AVector<T, N, Accessor2>& b)
+    -> AVector<scalar_product_result_t<U, T>, N> {
   static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");
-  using CommonType = std::common_type_t<U, T>;
-  AVector<CommonType, N> result;
-  ((result[Is] = static_cast<CommonType>(a[Is]) * static_cast<CommonType>(b[Is])), ...);
+  using R = scalar_product_result_t<U, T>;
+  AVector<R, N> result;
+  ((result[Is] = static_cast<R>(a[Is] * b[Is])), ...);
   return result;
 }
 
@@ -390,11 +385,12 @@ KOKKOS_INLINE_FUNCTION constexpr auto vector_vector_elementwise_mul_impl(std::in
 template <size_t... Is, size_t N, typename U, typename T, ValidAccessor<U> Accessor1, ValidAccessor<T> Accessor2>
 KOKKOS_INLINE_FUNCTION constexpr auto vector_vector_elementwise_div_impl(std::index_sequence<Is...>,
                                                                          const AVector<U, N, Accessor1>& a,
-                                                                         const AVector<T, N, Accessor2>& b) {
+                                                                         const AVector<T, N, Accessor2>& b)
+    -> AVector<scalar_quotient_result_t<U, T>, N> {
   static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");
-  using CommonType = std::common_type_t<U, T>;
-  AVector<CommonType, N> result;
-  ((result[Is] = static_cast<CommonType>(a[Is]) / static_cast<CommonType>(b[Is])), ...);
+  using R = scalar_quotient_result_t<U, T>;
+  AVector<R, N> result;
+  ((result[Is] = static_cast<R>(a[Is]) / static_cast<R>(b[Is])), ...);
   return result;
 }
 
@@ -481,44 +477,44 @@ MUNDY_MATH_VECTOR_VECTOR_ATOMIC_OP_IMPL(elementwise_mul, Kokkos::atomic_mul)
 /// \brief Atomic v1[i] /= v2[i]
 MUNDY_MATH_VECTOR_VECTOR_ATOMIC_OP_IMPL(elementwise_div, Kokkos::atomic_div)
 
-#define MUNDY_MATH_VECTOR_SCALAR_ATOMIC_FETCH_OP_IMPL(op_name, atomic_fetch_op)                                       \
-  template <size_t... Is, size_t N, typename T1, ValidAccessor<T1> A1, typename T2>                                   \
-  KOKKOS_INLINE_FUNCTION auto vector_scalar_atomic_fetch_##op_name##_impl(std::index_sequence<Is...>,                 \
-                                                                          AVector<T1, N, A1>* const v, const T2& s) { \
-    static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");              \
-    AVector<T1, N> result;                                                                                            \
-    ((result[Is] = atomic_fetch_op(&((*v)[Is]), static_cast<T1>(s))), ...);                                           \
-    return result;                                                                                                    \
+#define MUNDY_MATH_VECTOR_SCALAR_ATOMIC_FETCH_OP_IMPL(op_name, atomic_fetch_op)                          \
+  template <size_t... Is, size_t N, typename T1, ValidAccessor<T1> A1, typename T2>                      \
+  KOKKOS_INLINE_FUNCTION auto vector_scalar_atomic_fetch_##op_name##_impl(                               \
+      std::index_sequence<Is...>, AVector<T1, N, A1>* const v, const T2& s) -> AVector<T1, N> {          \
+    static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector."); \
+    AVector<T1, N> result;                                                                               \
+    ((result[Is] = atomic_fetch_op(&((*v)[Is]), static_cast<T1>(s))), ...);                              \
+    return result;                                                                                       \
   }
 
-#define MUNDY_MATH_VECTOR_VECTOR_ATOMIC_FETCH_OP_IMPL(op_name, atomic_fetch_op)                           \
-  template <size_t... Is, size_t N, typename T1, ValidAccessor<T1> A1, typename T2, ValidAccessor<T2> A2> \
-  KOKKOS_INLINE_FUNCTION auto vector_vector_atomic_fetch_##op_name##_impl(                                \
-      std::index_sequence<Is...>, AVector<T1, N, A1>* const v1, const AVector<T2, N, A2>& v2) {           \
-    static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");  \
-    AVector<T1, N> result;                                                                                \
-    ((result[Is] = atomic_fetch_op(&((*v1)[Is]), static_cast<T1>(v2[Is]))), ...);                         \
-    return result;                                                                                        \
+#define MUNDY_MATH_VECTOR_VECTOR_ATOMIC_FETCH_OP_IMPL(op_name, atomic_fetch_op)                                   \
+  template <size_t... Is, size_t N, typename T1, ValidAccessor<T1> A1, typename T2, ValidAccessor<T2> A2>         \
+  KOKKOS_INLINE_FUNCTION auto vector_vector_atomic_fetch_##op_name##_impl(                                        \
+      std::index_sequence<Is...>, AVector<T1, N, A1>* const v1, const AVector<T2, N, A2>& v2) -> AVector<T1, N> { \
+    static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");          \
+    AVector<T1, N> result;                                                                                        \
+    ((result[Is] = atomic_fetch_op(&((*v1)[Is]), static_cast<T1>(v2[Is]))), ...);                                 \
+    return result;                                                                                                \
   }
 
-#define MUNDY_MATH_VECTOR_SCALAR_ATOMIC_OP_FETCH_IMPL(op_name, atomic_op_fetch)                                       \
-  template <size_t... Is, size_t N, typename T1, ValidAccessor<T1> A1, typename T2>                                   \
-  KOKKOS_INLINE_FUNCTION auto vector_scalar_atomic_##op_name##_fetch_impl(std::index_sequence<Is...>,                 \
-                                                                          AVector<T1, N, A1>* const v, const T2& s) { \
-    static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");              \
-    AVector<T1, N> result;                                                                                            \
-    ((result[Is] = atomic_op_fetch(&((*v)[Is]), static_cast<T1>(s))), ...);                                           \
-    return result;                                                                                                    \
+#define MUNDY_MATH_VECTOR_SCALAR_ATOMIC_OP_FETCH_IMPL(op_name, atomic_op_fetch)                          \
+  template <size_t... Is, size_t N, typename T1, ValidAccessor<T1> A1, typename T2>                      \
+  KOKKOS_INLINE_FUNCTION auto vector_scalar_atomic_##op_name##_fetch_impl(                               \
+      std::index_sequence<Is...>, AVector<T1, N, A1>* const v, const T2& s) -> AVector<T1, N> {          \
+    static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector."); \
+    AVector<T1, N> result;                                                                               \
+    ((result[Is] = atomic_op_fetch(&((*v)[Is]), static_cast<T1>(s))), ...);                              \
+    return result;                                                                                       \
   }
 
-#define MUNDY_MATH_VECTOR_VECTOR_ATOMIC_OP_FETCH_IMPL(op_name, atomic_op_fetch)                           \
-  template <size_t... Is, size_t N, typename T1, ValidAccessor<T1> A1, typename T2, ValidAccessor<T2> A2> \
-  KOKKOS_INLINE_FUNCTION auto vector_vector_atomic_##op_name##_fetch_impl(                                \
-      std::index_sequence<Is...>, AVector<T1, N, A1>* const v1, const AVector<T2, N, A2>& v2) {           \
-    static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");  \
-    AVector<T1, N> result;                                                                                \
-    ((result[Is] = atomic_op_fetch(&((*v1)[Is]), static_cast<T1>(v2[Is]))), ...);                         \
-    return result;                                                                                        \
+#define MUNDY_MATH_VECTOR_VECTOR_ATOMIC_OP_FETCH_IMPL(op_name, atomic_op_fetch)                                   \
+  template <size_t... Is, size_t N, typename T1, ValidAccessor<T1> A1, typename T2, ValidAccessor<T2> A2>         \
+  KOKKOS_INLINE_FUNCTION auto vector_vector_atomic_##op_name##_fetch_impl(                                        \
+      std::index_sequence<Is...>, AVector<T1, N, A1>* const v1, const AVector<T2, N, A2>& v2) -> AVector<T1, N> { \
+    static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");          \
+    AVector<T1, N> result;                                                                                        \
+    ((result[Is] = atomic_op_fetch(&((*v1)[Is]), static_cast<T1>(v2[Is]))), ...);                                 \
+    return result;                                                                                                \
   }
 
 /// \brief Atomic v[i] += s (returns old/new v)

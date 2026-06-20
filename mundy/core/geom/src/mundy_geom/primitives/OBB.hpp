@@ -91,6 +91,7 @@ class OBB {
   using point_t        = PointType;
   using orientation_t  = QuaternionType;
   using half_extents_t = HalfExtentsType;
+  using deep_copy_t    = OBB<Scalar>;
 
   static constexpr bool is_finite = true;
   //@}
@@ -161,6 +162,14 @@ class OBB {
       : center_(std::move(other.center_)),
         orientation_(std::move(other.orientation_)),
         half_extents_(std::move(other.half_extents_)) {}
+
+  /// \brief Deep copy constructor from a different OBB type (e.g. a field-backed view OBB).
+  ///
+  /// Copies each component element-by-element, so the result owns its storage independently of `other`.
+  template <typename OtherOBBType>
+  KOKKOS_FUNCTION constexpr OBB(const OtherOBBType& other)
+      MUNDY_REQUIRES(!std::is_same_v<OtherOBBType, OBB<value_type, point_t, orientation_t, half_extents_t>>)
+      : center_(other.center_), orientation_(other.orientation_), half_extents_(other.half_extents_) {}
   //@}
 
   //! \name Assignment operators
@@ -198,6 +207,9 @@ class OBB {
   KOKKOS_FUNCTION constexpr const value_type& half_extent(int i) const { return half_extents_[i]; }
   KOKKOS_FUNCTION constexpr       value_type& half_extent(int i)       { return half_extents_[i]; }
   // clang-format on
+
+  /// \brief Get a deep, owning copy of the OBB.
+  KOKKOS_FUNCTION constexpr deep_copy_t copy() const { return *this; }
   //@}
 
   //! \name Setters
@@ -279,13 +291,23 @@ KOKKOS_FUNCTION constexpr bool is_approx_close(
 }
 //@}
 
+//! \name Deep copy
+//@{
+
+/// \brief Get a deep, owning copy of an OBB.
+template <ValidOBBType T>
+KOKKOS_FUNCTION constexpr auto copy(const T& obb) {
+  return obb.copy();
+}
+//@}
+
 //! \name Intersection test
 //@{
 
 /// \brief Test whether two OBBs overlap using the Separating Axis Theorem (SAT).
 ///
 /// Tests 15 candidate separating axes: 3 face normals of A, 3 face normals of B,
-/// and 9 edge cross-products A_i × B_j.  Returns `true` if the boxes overlap on
+/// and 9 edge cross-products A_i x B_j.  Returns `true` if the boxes overlap on
 /// every axis (i.e. no separating axis was found).
 ///
 /// The relative rotation is computed via `mat(conj(q_A)*q_B)` rather than
@@ -302,7 +324,7 @@ KOKKOS_FUNCTION constexpr bool intersects(const OBBType1& a, const OBBType2& b) 
   // true geometry), the test doesn't spuriously report separation.  The noise in
   // R(i,j) from the quaternion product is O(machine_eps), so get_zero_tolerance()
   // is the right scale — NOT sqrt(get_zero_tolerance()) used in squared-quantity
-  // parallel checks (e.g. line-segment D = |u×v|²), and NOT the graphics-derived
+  // parallel checks (e.g. line-segment D = |uxv|²), and NOT the graphics-derived
   // magic number 1e-6, which creates an unacceptable 1e-6-length-unit safety margin.
   const S eps = get_zero_tolerance<S>();
 
@@ -334,16 +356,16 @@ KOKKOS_FUNCTION constexpr bool intersects(const OBBType1& a, const OBBType2& b) 
   if (abs(t0*R(0,1)+t1*R(1,1)+t2*R(2,1)) > ha0*r01+ha1*r11+ha2*r21+hb1) return false;
   if (abs(t0*R(0,2)+t1*R(1,2)+t2*R(2,2)) > ha0*r02+ha1*r12+ha2*r22+hb2) return false;
 
-  // Edge cross-products A_i × B_j (9 tests).
-  if (abs(t2*R(1,0)-t1*R(2,0)) > ha1*r20+ha2*r10+hb1*r02+hb2*r01) return false;  // A0×B0
-  if (abs(t2*R(1,1)-t1*R(2,1)) > ha1*r21+ha2*r11+hb0*r02+hb2*r00) return false;  // A0×B1
-  if (abs(t2*R(1,2)-t1*R(2,2)) > ha1*r22+ha2*r12+hb0*r01+hb1*r00) return false;  // A0×B2
-  if (abs(t0*R(2,0)-t2*R(0,0)) > ha0*r20+ha2*r00+hb1*r12+hb2*r11) return false;  // A1×B0
-  if (abs(t0*R(2,1)-t2*R(0,1)) > ha0*r21+ha2*r01+hb0*r12+hb2*r10) return false;  // A1×B1
-  if (abs(t0*R(2,2)-t2*R(0,2)) > ha0*r22+ha2*r02+hb0*r11+hb1*r10) return false;  // A1×B2
-  if (abs(t1*R(0,0)-t0*R(1,0)) > ha0*r10+ha1*r00+hb1*r22+hb2*r21) return false;  // A2×B0
-  if (abs(t1*R(0,1)-t0*R(1,1)) > ha0*r11+ha1*r01+hb0*r22+hb2*r20) return false;  // A2×B1
-  if (abs(t1*R(0,2)-t0*R(1,2)) > ha0*r12+ha1*r02+hb0*r21+hb1*r20) return false;  // A2×B2
+  // Edge cross-products A_i x B_j (9 tests).
+  if (abs(t2*R(1,0)-t1*R(2,0)) > ha1*r20+ha2*r10+hb1*r02+hb2*r01) return false;  // A0xB0
+  if (abs(t2*R(1,1)-t1*R(2,1)) > ha1*r21+ha2*r11+hb0*r02+hb2*r00) return false;  // A0xB1
+  if (abs(t2*R(1,2)-t1*R(2,2)) > ha1*r22+ha2*r12+hb0*r01+hb1*r00) return false;  // A0xB2
+  if (abs(t0*R(2,0)-t2*R(0,0)) > ha0*r20+ha2*r00+hb1*r12+hb2*r11) return false;  // A1xB0
+  if (abs(t0*R(2,1)-t2*R(0,1)) > ha0*r21+ha2*r01+hb0*r12+hb2*r10) return false;  // A1xB1
+  if (abs(t0*R(2,2)-t2*R(0,2)) > ha0*r22+ha2*r02+hb0*r11+hb1*r10) return false;  // A1xB2
+  if (abs(t1*R(0,0)-t0*R(1,0)) > ha0*r10+ha1*r00+hb1*r22+hb2*r21) return false;  // A2xB0
+  if (abs(t1*R(0,1)-t0*R(1,1)) > ha0*r11+ha1*r01+hb0*r22+hb2*r20) return false;  // A2xB1
+  if (abs(t1*R(0,2)-t0*R(1,2)) > ha0*r12+ha1*r02+hb0*r21+hb1*r20) return false;  // A2xB2
 
   return true;
 }

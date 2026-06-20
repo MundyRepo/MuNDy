@@ -257,7 +257,7 @@ struct MixedAccessSinkFunc {
 //
 // The AccessorExprCoverageFixture manages a fixed five-hex mesh with one field
 // for every data type tested by the coverage matrix.  Tests call for_each_context,
-// which automatically sweeps the Cartesian product of (ExprInputShape × EntityExprShape)
+// which automatically sweeps the Cartesian product of (ExprInputShape x EntityExprShape)
 // and presents each combination to the test body as a (CoverageContext, es) pair.
 //
 // Five-hex mesh layout
@@ -448,7 +448,7 @@ inline Q qout(const double* /*c*/) {
 // =============================================================================
 // Host-side matrix and quaternion helpers
 //
-// All 3×3 matrices use row-major flat storage (9 elements).
+// All 3x3 matrices use row-major flat storage (9 elements).
 // Quaternion layout: {x, y, z, w} — x/y/z imaginary, w real scalar.
 // =============================================================================
 
@@ -726,7 +726,7 @@ inline std::array<double, 4> quat_inverse(const std::array<double, 4>& q) {
 }
 
 // quat_rotate_vec: q * [0,v] * q^{-1}  — rotate v by q
-// Using Rodrigues: v' = 2*(u.v)*u + (w^2 - u.u)*v + 2*w*(u×v)
+// Using Rodrigues: v' = 2*(u.v)*u + (w^2 - u.u)*v + 2*w*(uxv)
 // where u = {q[0],q[1],q[2]}, w = q[3], q need not be unit
 // Implementation: via sandwich with inverse
 inline std::array<double, 3> quat_rotate_vec(const std::array<double, 4>& q, const std::array<double, 3>& v) {
@@ -1616,7 +1616,7 @@ VECTOR_OP_TEST(VectorOp_FieldSubtract,       "vector / field subtract",        (
 #undef VECTOR_OP_TEST
 
 // =============================================================================
-// Section 5 (continued) — Vector × Scalar cross-axis operation coverage
+// Section 5 (continued) — Vector x Scalar cross-axis operation coverage
 //
 // These three operations take one vector expression and one scalar expression
 // as operands.  Both input axes are swept independently via for_each_context<Vector, Scalar>.
@@ -1691,7 +1691,7 @@ VECTOR_SCALAR_OP_TEST(VectorOp_VectorScalarExprDivide,   "vector / vector / scal
 //   two_norm_squared     scalar   two_norm_squared(vtmp)
 //   minor_angle          scalar   minor_angle(vtmp, force(es))
 //   major_angle          scalar   major_angle(vtmp, force(es))
-//   outer_product        matrix   outer_product(vtmp, force(es))  → mout
+//   outer_product        matrix   outer_product(vtmp, force(es))  -> mout
 //
 // Each test sweeps:
 //   vector_shape in {RawAccessor, IntermediateMathExpr}
@@ -1847,8 +1847,8 @@ VECTOR_MATRIX_BUILTIN_TEST(VectorBuiltin_OuterProduct,   "vector / outer_product
 //   vtmp = vel()(es)         vel_val[i] = {1+c0, 2+c1, 3+c2}; used raw (not through vtmp)
 //   mat_b()(es)              second matrix field; also all-positive, diagonally dominant
 //
-// Matrix-vector: mtmp * vtmp → mat·vel → vout   (row · column)
-// Vector-matrix: vtmp * mtmp → mat^T · vel → vout  (mundy convention: vec*mat = mat^T * vec)
+// Matrix-vector: mtmp * vtmp -> mat·vel -> vout   (row · column)
+// Vector-matrix: vtmp * mtmp -> mat^T · vel -> vout  (mundy convention: vec*mat = mat^T * vec)
 // =============================================================================
 
 #define MATRIX_OP_TEST(CaseName, OpNameStr, ExprBody, ExpMat)                                          \
@@ -1937,7 +1937,7 @@ MATRIX_VECTOR_OP_TEST(MatrixOp_VectorMatrixMultiply, "matrix / vector-matrix mul
 //
 // variance/stddev = population statistics (divide by N=9)
 //
-// cofactors[i,j] = (-1)^(i+j) * M_ij  (M_ij = minor = det of 2×2 submatrix)
+// cofactors[i,j] = (-1)^(i+j) * M_ij  (M_ij = minor = det of 2x2 submatrix)
 // adjugate = transpose of cofactors
 // inverse  = adjugate / det
 // =============================================================================
@@ -2034,14 +2034,14 @@ MATRIX_MATRIX_BUILTIN_TEST(MatrixBuiltin_Cofactors,             "matrix / cofact
 //   vel()(es)                  vel_val = {1+c0, 2+c1, 3+c2}
 //   mat()(es)                  as described in Section 7
 //
-// Quaternion layout: {x, y, z, w} → {q[0], q[1], q[2], q[3]}, w is the real scalar.
+// Quaternion layout: {x, y, z, w} -> {q[0], q[1], q[2], q[3]}, w is the real scalar.
 // Constructor order: AQuaternion(w, x, y, z) — first argument is the real part.
 //
 // Rotation conventions (sandwich product with general, possibly non-unit q):
-//   qtmp * vec  =  q * [0,v] * q^{-1}  (rotate v by q)         → vec result
-//   vec * qtmp  =  q^{-1} * [0,v] * q  (rotate v by q^{-1})    → vec result
-//   qtmp * mat  =  rotate each column of mat by q               → mat result
-//   mat * qtmp  =  rotate each row of mat by q^{-1}             → mat result
+//   qtmp * vec  =  q * [0,v] * q^{-1}  (rotate v by q)         -> vec result
+//   vec * qtmp  =  q^{-1} * [0,v] * q  (rotate v by q^{-1})    -> vec result
+//   qtmp * mat  =  rotate each column of mat by q               -> mat result
+//   mat * qtmp  =  rotate each row of mat by q^{-1}             -> mat result
 //
 // Hamilton product {x,y,z,w} convention (used by quat_mul helper):
 //   (q1*q2).x = w1*x2 + x1*w2 + y1*z2 - z1*y2
@@ -2421,9 +2421,9 @@ TEST_F(AccessorExprCoverageFixture, EvalTrigger_FusedSwap) {
 //   named sink wrapper              rotate_quaternion(qout(es), quat(es), omega(es)) ✓
 //
 // Functors are the ones defined in Section 1:
-//   ScalarVariadicApplyFunc  — (x, y, bias) → x + 2*y + bias
-//   VectorBinaryApplyFunc    — (v, w) → 2*v + w
-//   VectorScalarMixedApplyFunc — (v, s) → s * v
+//   ScalarVariadicApplyFunc  — (x, y, bias) -> x + 2*y + bias
+//   VectorBinaryApplyFunc    — (v, w) -> 2*v + w
+//   VectorScalarMixedApplyFunc — (v, s) -> s * v
 //   ReadWriteScaleAddSinkFunc  — y += scale * x
 //   OverwriteAffineSinkFunc    — y = x + bias
 //   ReadOnlySinkFunc           — no-op
@@ -2513,7 +2513,7 @@ TEST_F(AccessorExprCoverageFixture, CustomExpr_VectorScalarMixedApply) {
 }
 
 TEST_F(AccessorExprCoverageFixture, CustomExpr_SinkExprReadWrite) {
-  // ReadWriteScaleAddSinkFunc: y += scale * x  →  out += 2*r
+  // ReadWriteScaleAddSinkFunc: y += scale * x  ->  out += 2*r
   // out is initialized to q before the sink; out_new = q + 2*r.
   for_each_context<>("custom / SinkExprReadWrite", [&](const CoverageContext& ctx, auto es) {
     out()(es) = q()(es);
@@ -2525,7 +2525,7 @@ TEST_F(AccessorExprCoverageFixture, CustomExpr_SinkExprReadWrite) {
 }
 
 TEST_F(AccessorExprCoverageFixture, CustomExpr_SinkExprOverwriteAll) {
-  // OverwriteAffineSinkFunc: y = x + bias  →  out = r + 1
+  // OverwriteAffineSinkFunc: y = x + bias  ->  out = r + 1
   for_each_context<>("custom / SinkExprOverwriteAll", [&](const CoverageContext& ctx, auto es) {
     sink_expr(OverwriteAffineSinkFunc{}, overwrite_all(out()(es)), read_only(r()(es)), 1.0);
     verify_scalar_output(ctx, *fields().out,
@@ -2545,7 +2545,7 @@ TEST_F(AccessorExprCoverageFixture, CustomExpr_SinkExprReadOnly) {
 TEST_F(AccessorExprCoverageFixture, CustomExpr_SinkExprDefaultReadOnly) {
   // Passing r()(es) without any explicit access-mode wrapper exercises the
   // "default read only" path: the framework must treat unwrapped expressions
-  // as read_only.  ReadWriteScaleAddSinkFunc: y += scale * x  →  out = q + 2*r.
+  // as read_only.  ReadWriteScaleAddSinkFunc: y += scale * x  ->  out = q + 2*r.
   // The expected result is the same as CustomExpr_SinkExprReadWrite, which passes
   // read_only(r()(es)) explicitly — confirming that the default matches read_only.
   for_each_context<>("custom / SinkExprDefaultReadOnly", [&](const CoverageContext& ctx, auto es) {
@@ -2598,9 +2598,9 @@ ATOMIC_OP_TEST(CustomExpr_AtomicDiv, atomic_div, out()(es) = q()(es),   {Expecte
 
 TEST_F(AccessorExprCoverageFixture, CustomExpr_RotateQuaternionSink) {
   // rotate_quaternion(qout, omega, dt): integrates angular velocity omega into qout.
-  // omega = {0, 0, 1} (unit z-axis rotation), dt = 0.0 → qout unchanged (sin(0)=0).
+  // omega = {0, 0, 1} (unit z-axis rotation), dt = 0.0 -> qout unchanged (sin(0)=0).
   // Use dt = 0.0 so that the expected output equals the initial qout value (identity).
-  // That is: w = |omega| = 1, dt = 0, sw = sin(0) = 0, cw = cos(0) = 1 → no change.
+  // That is: w = |omega| = 1, dt = 0, sw = sin(0) = 0, cw = cos(0) = 1 -> no change.
   for_each_context<>("custom / RotateQuaternionSink", [&](const CoverageContext& ctx, auto es) {
     // qout starts at identity {0,0,0,1}.
     rotate_quaternion(qout()(es), omega()(es), 0.0);

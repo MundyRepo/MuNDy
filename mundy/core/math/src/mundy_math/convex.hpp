@@ -38,13 +38,13 @@
 #endif
 
 // Mundy
-#include <mundy_utils/reference_wrapper.hpp>
-#include <mundy_utils/throw_assert.hpp>
 #include <mundy_math/Tolerance.hpp>  // for mundy::get_zero_tolerance<T>
 #include <mundy_math/Vector.hpp>     // for mundy::Vector
+#include <mundy_math/cmath.hpp>
+#include <mundy_utils/reference_wrapper.hpp>
 #include <mundy_utils/requires.hpp>
 #include <mundy_utils/suppress_warnings.hpp>  // for MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_PUSH/POP
-#include <mundy_math/cmath.hpp>
+#include <mundy_utils/throw_assert.hpp>
 
 namespace mundy {
 
@@ -291,7 +291,8 @@ template <class LinearOp>
 using workspace_for_t = decltype(make_workspace(std::declval<LinearOp>()));
 
 template <class Vector>
-using vector_value_type = std::remove_cvref_t<decltype(std::declval<const std::remove_reference_t<Vector>&>()(size_t{}))>;
+using vector_value_type =
+    std::remove_cvref_t<decltype(std::declval<const std::remove_reference_t<Vector>&>()(size_t{}))>;
 
 /// \brief Convert a value to a storage that can either own or view the value.
 ///
@@ -1503,7 +1504,7 @@ KOKKOS_INLINE_FUNCTION auto to_cqpp(const MCQPPProblem<Backend, LinearOpAStorage
   auto l_workspace = P.l_workspace();
 
   impl::workspace_invalidate(a_workspace);
-  backend_t::apply(P.A(), P.f_b(), g, a_workspace);                                 // g = A f_b
+  backend_t::apply(P.A(), P.f_b(), g, a_workspace);                                     // g = A f_b
   backend_t::axpby(static_cast<value_type>(1), P.q(), static_cast<value_type>(-1), g);  // g = q - A f_b
 
   auto ax = backend_t::make_range_vector(P.A());
@@ -1542,7 +1543,7 @@ KOKKOS_INLINE_FUNCTION auto to_cqpp(
   impl::workspace_invalidate(l_workspace);
 
   backend_t::apply(P.M(), P.f_b(), m_f_b, m_workspace);
-  backend_t::apply(P.DT(), m_f_b, g, dt_workspace);                                 // g = D^T M f_b
+  backend_t::apply(P.DT(), m_f_b, g, dt_workspace);                                     // g = D^T M f_b
   backend_t::axpby(static_cast<value_type>(1), P.q(), static_cast<value_type>(-1), g);  // g = q - D^T M f_b
 
   auto dx = backend_t::make_range_vector(P.D());

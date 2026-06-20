@@ -54,6 +54,9 @@ class VSegment {
   /// \brief Our point type
   using point_t = PointType;
 
+  /// \brief Our deep-copy (owning) type
+  using deep_copy_t = VSegment<Scalar>;
+
   static constexpr bool is_finite = true;
 
   //@}
@@ -263,6 +266,12 @@ class VSegment {
   }
   //@}
 
+  /// \brief Get a deep, owning copy of the VSegment.
+  KOKKOS_FUNCTION
+  constexpr deep_copy_t copy() const {
+    return *this;
+  }
+
  private:
   point_t start_;
   point_t middle_;
@@ -293,6 +302,12 @@ static_assert(ValidVSegmentType<VSegment<float>> && ValidVSegmentType<const VSeg
 
 //! \name Non-member functions for ValidVSegmentType objects
 //@{
+
+/// \brief Get a deep, owning copy of a VSegment.
+template <ValidVSegmentType T>
+KOKKOS_FUNCTION constexpr auto copy(const T& v_segment) {
+  return v_segment.copy();
+}
 
 /// \brief Element-wise approximate equality (within a tolerance)
 template <ValidVSegmentType T1, ValidVSegmentType T2>

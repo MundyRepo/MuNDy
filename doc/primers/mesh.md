@@ -47,9 +47,9 @@ Two Mundy terms appear frequently because they sit directly beside STK concepts 
 
 Three pairings summarize the relationship:
 
- - `Part` → native STK grouping, {ref}`Class <exhale_class_classmundy_1_1mesh_1_1Class>` → semantic Mundy grouping.
- - `Field` → native STK storage, {ref}`Component <exhale_class_classmundy_1_1mesh_1_1FieldComponent>` → typed Mundy accessor.
- - STK relations/connectivity → native mesh relations, `Link` → dynamic non-topological relation entity.
+ - `Part` -> native STK grouping, {ref}`Class <exhale_class_classmundy_1_1mesh_1_1Class>` -> semantic Mundy grouping.
+ - `Field` -> native STK storage, {ref}`Component <exhale_class_classmundy_1_1mesh_1_1FieldComponent>` -> typed Mundy accessor.
+ - STK relations/connectivity -> native mesh relations, `Link` -> dynamic non-topological relation entity.
 
 Some of these layers exist to reduce STK boilerplate. Others add capabilities that STK does not provide directly,
 including dynamic GPU-compatible links and ticketed device-side modification requests.
@@ -524,7 +524,7 @@ Unlike STK connectivity, links:
  - do not change ownership or sharing rules,
  - may connect entities of arbitrary ranks,
  - are themselves entities, so they may carry fields, parts, classes, and IO behavior,
- - support both **link → linked entity** access and **linked entity → incident links** access.
+ - support both **link -> linked entity** access and **linked entity -> incident links** access.
 
 Those differences matter because many relationships in multibody or particle-style problems are not well modeled as
 permanent mesh connectivity. A contact pair, a point attached to a surface patch, or a temporary neighborhood graph may

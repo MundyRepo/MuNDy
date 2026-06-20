@@ -52,8 +52,8 @@
 #include <Kokkos_Core.hpp>
 
 // Mundy
-#include <mundy_utils/throw_assert.hpp>  // MUNDY_THROW_ASSERT
 #include <mundy_math/cmath.hpp>
+#include <mundy_utils/throw_assert.hpp>  // MUNDY_THROW_ASSERT
 
 namespace zorder_knn {
 

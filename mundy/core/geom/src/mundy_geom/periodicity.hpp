@@ -1039,7 +1039,7 @@ inline constexpr bool is_orthorhombic_metric_v = is_orthorhombic_metric<T>::valu
 /// \brief True when T is any instantiation of `TriclinicMetric`.
 ///
 /// A `TriclinicMetric` represents a general (tilted) periodic cell described
-/// by an arbitrary 3×3 lattice matrix.
+/// by an arbitrary 3x3 lattice matrix.
 template <typename T>
 struct is_triclinic_metric : std::false_type {};
 template <unsigned PeriodicAxes, typename Scalar>

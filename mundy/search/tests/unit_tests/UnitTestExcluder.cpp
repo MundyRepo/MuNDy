@@ -103,7 +103,7 @@ static_assert(!ExcluderType<const ExcludeNonIntersectingOBBs<double>>);
 // Minimal STK mesh factory for excluder tests
 // =============================================================================
 
-// 4 nodes: nodes 1,2 → part_a; nodes 3,4 → part_b.
+// 4 nodes: nodes 1,2 -> part_a; nodes 3,4 -> part_b.
 struct TwoPartMesh {
   std::shared_ptr<stk::mesh::MetaData> meta;
   std::unique_ptr<stk::mesh::BulkData> bulk;
@@ -164,7 +164,7 @@ void store_obb(stk::mesh::Field<double>& field, stk::mesh::Entity node, const OB
 }
 
 // Mesh with an `obb` node field; node id i+1 carries obbs[i] (so the universal-selector enumeration gives dense
-// ordinal i → obbs[i]). The first `split` nodes go to part_a, the rest to part_b, for asymmetric target/source tests.
+// ordinal i -> obbs[i]). The first `split` nodes go to part_a, the rest to part_b, for asymmetric target/source tests.
 struct ObbMesh {
   std::shared_ptr<stk::mesh::MetaData> meta;
   std::unique_ptr<stk::mesh::BulkData> bulk;
@@ -272,22 +272,22 @@ TEST(ExcludeSelfInteractionTest, SetupIsIdempotent) {
   EXPECT_FALSE(ex(make_cand(0, 2, m.node[1], m.node[3])));
 }
 
-// Periodic self: same entity AND zero shift → excluded.
-// Same entity but nonzero shift → retained (genuine periodic image interaction).
+// Periodic self: same entity AND zero shift -> excluded.
+// Same entity but nonzero shift -> retained (genuine periodic image interaction).
 TEST(ExcludeSelfInteractionTest, PeriodicSelfRequiresZeroShift) {
   auto m = make_two_part_mesh();
   ExcludeSelfInteraction ex;
   ex.setup(*m.bulk, m.meta->universal_part(), m.meta->universal_part());
 
-  // zero relative shift (target shift == source shift): self → exclude
+  // zero relative shift (target shift == source shift): self -> exclude
   PeriodicCand self_zero(0, 0, m.node[1], m.node[1], Vec3f{0.f, 0.f, 0.f}, Vec3f{0.f, 0.f, 0.f});
   EXPECT_TRUE(ex(self_zero));
 
-  // nonzero relative shift (source imaged away from target): same entity but different image → retain
+  // nonzero relative shift (source imaged away from target): same entity but different image -> retain
   PeriodicCand self_nonzero(0, 0, m.node[1], m.node[1], Vec3f{0.f, 0.f, 0.f}, Vec3f{1.f, 0.f, 0.f});
   EXPECT_FALSE(ex(self_nonzero));
 
-  // different entity, zero relative shift → not self → retain
+  // different entity, zero relative shift -> not self -> retain
   PeriodicCand cross_zero(0, 1, m.node[1], m.node[2], Vec3f{0.f, 0.f, 0.f}, Vec3f{0.f, 0.f, 0.f});
   EXPECT_FALSE(ex(cross_zero));
 }
@@ -326,7 +326,7 @@ TEST(ExcluderChainTest, ORSemantics_NeitherExcludes) {
 }
 
 TEST(ExcluderChainTest, MultiLevelChaining) {
-  // Three-level chain: NoExcluder → ExcludeSelf → ExcludeSymDup (universal).
+  // Three-level chain: NoExcluder -> ExcludeSelf -> ExcludeSymDup (universal).
   // Self pairs excluded by level 2; directional pairs excluded by level 3.
   auto m = make_two_part_mesh();
   const stk::mesh::Selector universal = m.meta->universal_part();
@@ -335,9 +335,9 @@ TEST(ExcluderChainTest, MultiLevelChaining) {
 
   // Self pair: excluded by ExcludeSelf.
   EXPECT_TRUE(chain(make_cand(0, 0, m.node[1], m.node[1])));
-  // (t=node2, s=node1): src=node1 < trg=node2 and both in intersection → excluded by ExcludeSymDup.
+  // (t=node2, s=node1): src=node1 < trg=node2 and both in intersection -> excluded by ExcludeSymDup.
   EXPECT_TRUE(chain(make_cand(1, 0, m.node[2], m.node[1])));
-  // (t=node1, s=node2): src=node2 > trg=node1 → retained.
+  // (t=node1, s=node2): src=node2 > trg=node1 -> retained.
   EXPECT_FALSE(chain(make_cand(0, 1, m.node[1], m.node[2])));
 }
 
@@ -347,12 +347,12 @@ TEST(ExcluderChainTest, SetupPropagatesIntoChain) {
   auto m = make_two_part_mesh();
   auto chain = NoExcluder{}.exclude(ExcludeSymmetricDuplicates{});
 
-  // Setup 1: disjoint selectors → intersection empty → ExcludeSymDup never fires.
+  // Setup 1: disjoint selectors -> intersection empty -> ExcludeSymDup never fires.
   chain.setup(*m.bulk, *m.part_a, *m.part_b);
-  // (t=node2, s=node1): even though src<trg, neither is in intersection → NOT excluded.
+  // (t=node2, s=node1): even though src<trg, neither is in intersection -> NOT excluded.
   EXPECT_FALSE(chain(make_cand(1, 0, m.node[2], m.node[1])));
 
-  // Setup 2: universal selector → all nodes in intersection.
+  // Setup 2: universal selector -> all nodes in intersection.
   chain.setup(*m.bulk, m.meta->universal_part(), m.meta->universal_part());
   // Same pair now should be excluded.
   EXPECT_TRUE(chain(make_cand(1, 0, m.node[2], m.node[1])));
@@ -376,7 +376,7 @@ TEST(ExcludeSymmetricDuplicatesTest, Universal_SuppressesLowerSrcEntity) {
   auto m = make_two_part_mesh();
   auto ex = make_symdups(*m.bulk, m.meta->universal_part(), m.meta->universal_part());
 
-  // src < trg → suppressed.
+  // src < trg -> suppressed.
   EXPECT_TRUE(ex(make_cand(1, 0, m.node[2], m.node[1])));
   EXPECT_TRUE(ex(make_cand(2, 0, m.node[3], m.node[1])));
   EXPECT_TRUE(ex(make_cand(3, 0, m.node[4], m.node[1])));
@@ -389,7 +389,7 @@ TEST(ExcludeSymmetricDuplicatesTest, Universal_RetainsHigherSrcEntity) {
   auto m = make_two_part_mesh();
   auto ex = make_symdups(*m.bulk, m.meta->universal_part(), m.meta->universal_part());
 
-  // src > trg → retained.
+  // src > trg -> retained.
   EXPECT_FALSE(ex(make_cand(0, 1, m.node[1], m.node[2])));
   EXPECT_FALSE(ex(make_cand(0, 2, m.node[1], m.node[3])));
   EXPECT_FALSE(ex(make_cand(0, 3, m.node[1], m.node[4])));
@@ -409,7 +409,7 @@ TEST(ExcludeSymmetricDuplicatesTest, Universal_RetainsSelfPairs) {
   EXPECT_FALSE(ex(make_cand(3, 3, m.node[4], m.node[4])));
 }
 
-// Disjoint selectors: target=part_a, source=part_b → intersection empty → never suppresses.
+// Disjoint selectors: target=part_a, source=part_b -> intersection empty -> never suppresses.
 TEST(ExcludeSymmetricDuplicatesTest, Disjoint_NeverSuppresses) {
   auto m = make_two_part_mesh();
   auto ex = make_symdups(*m.bulk, *m.part_a, *m.part_b);
@@ -424,7 +424,7 @@ TEST(ExcludeSymmetricDuplicatesTest, Disjoint_NeverSuppresses) {
   EXPECT_FALSE(ex(make_cand(1, 3, m.node[2], m.node[4])));
 }
 
-// Overlapping selectors: target=part_a|part_b, source=part_b → intersection=part_b={node3,node4}.
+// Overlapping selectors: target=part_a|part_b, source=part_b -> intersection=part_b={node3,node4}.
 // Suppresses only when BOTH entities in part_b AND src<trg.
 TEST(ExcludeSymmetricDuplicatesTest, Overlapping_SuppressesOnlyWithinIntersection) {
   auto m = make_two_part_mesh();
@@ -432,19 +432,19 @@ TEST(ExcludeSymmetricDuplicatesTest, Overlapping_SuppressesOnlyWithinIntersectio
   const stk::mesh::Selector src_sel = *m.part_b;
   auto ex = make_symdups(*m.bulk, tgt_sel, src_sel);
 
-  // Both in part_b, src < trg → suppressed.
+  // Both in part_b, src < trg -> suppressed.
   EXPECT_TRUE(ex(make_cand(2, 1, m.node[4], m.node[3])));
 
-  // Both in part_b, src > trg → retained.
+  // Both in part_b, src > trg -> retained.
   EXPECT_FALSE(ex(make_cand(1, 2, m.node[3], m.node[4])));
 
-  // trg in part_a (not in intersection) → not suppressed regardless of direction.
+  // trg in part_a (not in intersection) -> not suppressed regardless of direction.
   EXPECT_FALSE(ex(make_cand(0, 2, m.node[1], m.node[3])));
   EXPECT_FALSE(ex(make_cand(0, 3, m.node[1], m.node[4])));
   EXPECT_FALSE(ex(make_cand(1, 2, m.node[2], m.node[3])));
 }
 
-// Identical-subset selectors: target=part_b, source=part_b → intersection=part_b.
+// Identical-subset selectors: target=part_b, source=part_b -> intersection=part_b.
 // Only pairs involving {node3, node4} considered; suppress src < trg.
 TEST(ExcludeSymmetricDuplicatesTest, IdenticalSubset_SymmetricSuppression) {
   auto m = make_two_part_mesh();
@@ -461,15 +461,15 @@ TEST(ExcludeSymmetricDuplicatesTest, ResetOnSetup) {
   auto m = make_two_part_mesh();
   ExcludeSymmetricDuplicates ex;
 
-  // First setup: universal → all nodes in intersection.
+  // First setup: universal -> all nodes in intersection.
   ex.setup(*m.bulk, m.meta->universal_part(), m.meta->universal_part());
   EXPECT_TRUE(ex(make_cand(1, 0, m.node[2], m.node[1])));
 
-  // Second setup: disjoint → empty intersection → no suppression.
+  // Second setup: disjoint -> empty intersection -> no suppression.
   ex.setup(*m.bulk, *m.part_a, *m.part_b);
   EXPECT_FALSE(ex(make_cand(1, 0, m.node[2], m.node[1])));
 
-  // Third setup: universal again → back to suppressing.
+  // Third setup: universal again -> back to suppressing.
   ex.setup(*m.bulk, m.meta->universal_part(), m.meta->universal_part());
   EXPECT_TRUE(ex(make_cand(1, 0, m.node[2], m.node[1])));
 }
@@ -585,8 +585,8 @@ TEST(ExcludeConnectedEntitiesTest, ReflectsNewConnectivityAfterSetup) {
 //
 // Three axis-aligned unit-cube OBBs:
 //   obb_origin: center=(0,0,0),  half=(0.5,0.5,0.5)
-//   obb_close:  center=(0.8,0,0), half=(0.5,0.5,0.5) → separation=0.8 < 1.0 → intersects obb_origin
-//   obb_far:    center=(2.0,0,0), half=(0.5,0.5,0.5) → separation=2.0 > 1.0 → separated from obb_origin
+//   obb_close:  center=(0.8,0,0), half=(0.5,0.5,0.5) -> separation=0.8 < 1.0 -> intersects obb_origin
+//   obb_far:    center=(2.0,0,0), half=(0.5,0.5,0.5) -> separation=2.0 > 1.0 -> separated from obb_origin
 
 static OBB<double> make_unit_cube(double cx, double cy, double cz) {
   return OBB<double>{Point<double>{cx, cy, cz}, Quaternion<double>::identity(), 0.5, 0.5, 0.5};
@@ -598,7 +598,7 @@ TEST(ExcludeNonIntersectingOBBsTest, SetupMaterializesFromComponent) {
   ExcludeNonIntersectingOBBs<double> ex{m.component()};
 
   ex.setup(*m.bulk, m.meta->universal_part(), m.meta->universal_part());
-  EXPECT_TRUE(ex(make_cand(0, 1, m.node[0], m.node[1])));  // separated → excluded
+  EXPECT_TRUE(ex(make_cand(0, 1, m.node[0], m.node[1])));  // separated -> excluded
   ex.setup(*m.bulk, m.meta->universal_part(), m.meta->universal_part());
   EXPECT_TRUE(ex(make_cand(0, 1, m.node[0], m.node[1])));  // re-materialized, unchanged
 }
@@ -609,8 +609,8 @@ TEST(ExcludeNonIntersectingOBBsTest, ExcludesSeparatedPair) {
   ExcludeNonIntersectingOBBs<double> ex{m.component()};
   ex.setup(*m.bulk, m.meta->universal_part(), m.meta->universal_part());
 
-  EXPECT_TRUE(ex(make_cand(0, 1, m.node[0], m.node[1])));  // origin vs far → excluded
-  EXPECT_TRUE(ex(make_cand(1, 0, m.node[1], m.node[0])));  // far vs origin → excluded (symmetric)
+  EXPECT_TRUE(ex(make_cand(0, 1, m.node[0], m.node[1])));  // origin vs far -> excluded
+  EXPECT_TRUE(ex(make_cand(1, 0, m.node[1], m.node[0])));  // far vs origin -> excluded (symmetric)
 }
 
 TEST(ExcludeNonIntersectingOBBsTest, RetainsIntersectingPair) {
@@ -619,21 +619,21 @@ TEST(ExcludeNonIntersectingOBBsTest, RetainsIntersectingPair) {
   ExcludeNonIntersectingOBBs<double> ex{m.component()};
   ex.setup(*m.bulk, m.meta->universal_part(), m.meta->universal_part());
 
-  EXPECT_FALSE(ex(make_cand(0, 1, m.node[0], m.node[1])));  // origin vs close → retained
-  EXPECT_FALSE(ex(make_cand(1, 0, m.node[1], m.node[0])));  // close vs origin → retained
+  EXPECT_FALSE(ex(make_cand(0, 1, m.node[0], m.node[1])));  // origin vs close -> retained
+  EXPECT_FALSE(ex(make_cand(1, 0, m.node[1], m.node[0])));  // close vs origin -> retained
 }
 
 TEST(ExcludeNonIntersectingOBBsTest, AsymmetricTargetSourceSelectors) {
   // One OBB field, asymmetric via per-side selectors: part_a = {origin}; part_b = {far, close}.
-  auto m = make_obb_mesh({make_unit_cube(0.0, 0.0, 0.0),   // node 1 → part_a, target ordinal 0 — origin
-                          make_unit_cube(2.0, 0.0, 0.0),   // node 2 → part_b, source ordinal 0 — separated
-                          make_unit_cube(0.8, 0.0, 0.0)},  // node 3 → part_b, source ordinal 1 — overlapping
+  auto m = make_obb_mesh({make_unit_cube(0.0, 0.0, 0.0),   // node 1 -> part_a, target ordinal 0 — origin
+                          make_unit_cube(2.0, 0.0, 0.0),   // node 2 -> part_b, source ordinal 0 — separated
+                          make_unit_cube(0.8, 0.0, 0.0)},  // node 3 -> part_b, source ordinal 1 — overlapping
                          /*split=*/1);
   ExcludeNonIntersectingOBBs<double> ex{m.component(), m.component()};
   ex.setup(*m.bulk, *m.part_a, *m.part_b);
 
-  EXPECT_TRUE(ex(make_cand(0, 0, m.node[0], m.node[1])));   // origin vs far   → excluded
-  EXPECT_FALSE(ex(make_cand(0, 1, m.node[0], m.node[2])));  // origin vs close → retained
+  EXPECT_TRUE(ex(make_cand(0, 0, m.node[0], m.node[1])));   // origin vs far   -> excluded
+  EXPECT_FALSE(ex(make_cand(0, 1, m.node[0], m.node[2])));  // origin vs close -> retained
 }
 
 TEST(ExcludeNonIntersectingOBBsTest, SymmetricSingleComponentConstructor) {
@@ -644,9 +644,9 @@ TEST(ExcludeNonIntersectingOBBsTest, SymmetricSingleComponentConstructor) {
   ExcludeNonIntersectingOBBs<double> ex{m.component()};
   ex.setup(*m.bulk, m.meta->universal_part(), m.meta->universal_part());
 
-  EXPECT_FALSE(ex(make_cand(0, 0, m.node[0], m.node[0])));  // origin vs origin → retained
-  EXPECT_FALSE(ex(make_cand(0, 1, m.node[0], m.node[1])));  // origin vs close  → retained
-  EXPECT_TRUE(ex(make_cand(0, 2, m.node[0], m.node[2])));   // origin vs far    → excluded
+  EXPECT_FALSE(ex(make_cand(0, 0, m.node[0], m.node[0])));  // origin vs origin -> retained
+  EXPECT_FALSE(ex(make_cand(0, 1, m.node[0], m.node[1])));  // origin vs close  -> retained
+  EXPECT_TRUE(ex(make_cand(0, 2, m.node[0], m.node[2])));   // origin vs far    -> excluded
 }
 
 TEST(ExcludeNonIntersectingOBBsTest, ChainCompatibility) {
@@ -657,8 +657,40 @@ TEST(ExcludeNonIntersectingOBBsTest, ChainCompatibility) {
   auto chain = NoExcluder{}.exclude(ExcludeNonIntersectingOBBs<double>{m.component()});
   chain.setup(*m.bulk, m.meta->universal_part(), m.meta->universal_part());
 
-  EXPECT_FALSE(chain(make_cand(0, 1, m.node[0], m.node[1])));  // origin vs close → retained
-  EXPECT_TRUE(chain(make_cand(0, 2, m.node[0], m.node[2])));   // origin vs far   → excluded
+  EXPECT_FALSE(chain(make_cand(0, 1, m.node[0], m.node[1])));  // origin vs close -> retained
+  EXPECT_TRUE(chain(make_cand(0, 2, m.node[0], m.node[2])));   // origin vs far   -> excluded
+}
+
+// A periodic candidate carries per-owner image shifts; the excluder must test the source against its
+// shifted image, not its home position. With a zero relative shift it must behave exactly like the
+// non-periodic test.
+TEST(ExcludeNonIntersectingOBBsTest, PeriodicImageShiftIsApplied) {
+  auto m = make_obb_mesh({make_unit_cube(0.0, 0.0, 0.0),    // ordinal 0 — origin
+                          make_unit_cube(2.0, 0.0, 0.0)});  // ordinal 1 — separated at home
+  ExcludeNonIntersectingOBBs<double> ex{m.component()};
+  ex.setup(*m.bulk, m.meta->universal_part(), m.meta->universal_part());
+
+  // Home positions are separated: both the non-periodic and the zero-shift periodic candidate are excluded.
+  EXPECT_TRUE(ex(make_cand(0, 1, m.node[0], m.node[1])));
+  EXPECT_TRUE(ex(PeriodicCand(0, 1, m.node[0], m.node[1], Vec3f{0, 0, 0}, Vec3f{0, 0, 0})));
+
+  // A source image shift of (-2,0,0) maps the source onto the origin: the images intersect -> retained.
+  EXPECT_FALSE(ex(PeriodicCand(0, 1, m.node[0], m.node[1], Vec3f{0, 0, 0}, Vec3f{-2, 0, 0})));
+
+  // Only the *relative* shift matters: equal target and source shifts leave the separation unchanged.
+  EXPECT_TRUE(ex(PeriodicCand(0, 1, m.node[0], m.node[1], Vec3f{-2, 0, 0}, Vec3f{-2, 0, 0})));
+}
+
+// The converse direction: a shift can separate a pair that overlaps at its home position.
+TEST(ExcludeNonIntersectingOBBsTest, PeriodicImageShiftCanSeparateHomeOverlap) {
+  auto m = make_obb_mesh({make_unit_cube(0.0, 0.0, 0.0),    // ordinal 0 — origin
+                          make_unit_cube(0.8, 0.0, 0.0)});  // ordinal 1 — overlaps at home
+  ExcludeNonIntersectingOBBs<double> ex{m.component()};
+  ex.setup(*m.bulk, m.meta->universal_part(), m.meta->universal_part());
+
+  EXPECT_FALSE(ex(make_cand(0, 1, m.node[0], m.node[1])));  // home positions overlap -> retained
+  // A source image shift of (-5,0,0) carries the source far from the origin -> separated -> excluded.
+  EXPECT_TRUE(ex(PeriodicCand(0, 1, m.node[0], m.node[1], Vec3f{0, 0, 0}, Vec3f{-5, 0, 0})));
 }
 
 }  // namespace
