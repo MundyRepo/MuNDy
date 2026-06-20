@@ -257,7 +257,7 @@ struct MixedAccessSinkFunc {
 //
 // The AccessorExprCoverageFixture manages a fixed five-hex mesh with one field
 // for every data type tested by the coverage matrix.  Tests call for_each_context,
-// which automatically sweeps the Cartesian product of (ExprInputShape × EntityExprShape)
+// which automatically sweeps the Cartesian product of (ExprInputShape x EntityExprShape)
 // and presents each combination to the test body as a (CoverageContext, es) pair.
 //
 // Five-hex mesh layout
@@ -448,7 +448,7 @@ inline Q qout(const double* /*c*/) {
 // =============================================================================
 // Host-side matrix and quaternion helpers
 //
-// All 3×3 matrices use row-major flat storage (9 elements).
+// All 3x3 matrices use row-major flat storage (9 elements).
 // Quaternion layout: {x, y, z, w} — x/y/z imaginary, w real scalar.
 // =============================================================================
 
@@ -726,7 +726,7 @@ inline std::array<double, 4> quat_inverse(const std::array<double, 4>& q) {
 }
 
 // quat_rotate_vec: q * [0,v] * q^{-1}  — rotate v by q
-// Using Rodrigues: v' = 2*(u.v)*u + (w^2 - u.u)*v + 2*w*(u×v)
+// Using Rodrigues: v' = 2*(u.v)*u + (w^2 - u.u)*v + 2*w*(uxv)
 // where u = {q[0],q[1],q[2]}, w = q[3], q need not be unit
 // Implementation: via sandwich with inverse
 inline std::array<double, 3> quat_rotate_vec(const std::array<double, 4>& q, const std::array<double, 3>& v) {
@@ -1616,7 +1616,7 @@ VECTOR_OP_TEST(VectorOp_FieldSubtract,       "vector / field subtract",        (
 #undef VECTOR_OP_TEST
 
 // =============================================================================
-// Section 5 (continued) — Vector × Scalar cross-axis operation coverage
+// Section 5 (continued) — Vector x Scalar cross-axis operation coverage
 //
 // These three operations take one vector expression and one scalar expression
 // as operands.  Both input axes are swept independently via for_each_context<Vector, Scalar>.
@@ -1937,7 +1937,7 @@ MATRIX_VECTOR_OP_TEST(MatrixOp_VectorMatrixMultiply, "matrix / vector-matrix mul
 //
 // variance/stddev = population statistics (divide by N=9)
 //
-// cofactors[i,j] = (-1)^(i+j) * M_ij  (M_ij = minor = det of 2×2 submatrix)
+// cofactors[i,j] = (-1)^(i+j) * M_ij  (M_ij = minor = det of 2x2 submatrix)
 // adjugate = transpose of cofactors
 // inverse  = adjugate / det
 // =============================================================================

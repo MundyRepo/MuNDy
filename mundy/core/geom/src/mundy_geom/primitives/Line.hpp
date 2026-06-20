@@ -58,6 +58,9 @@ class Line {
   /// \brief Our vector type
   using vector_t = PointType;
 
+  /// \brief Our deep-copy (owning) type
+  using deep_copy_t = Line<Scalar>;
+
   static constexpr bool is_finite = false;
 
   //@}
@@ -185,6 +188,12 @@ class Line {
   constexpr vector_t& direction() {
     return direction_;
   }
+
+  /// \brief Get a deep, owning copy of the Line.
+  KOKKOS_FUNCTION
+  constexpr deep_copy_t copy() const {
+    return *this;
+  }
   //@}
 
   //! \name Setters
@@ -252,6 +261,12 @@ concept ValidLineType = is_line_v<LineType>;
 
 //! \name Non-member functions for ValidLineType objects
 //@{
+
+/// \brief Get a deep, owning copy of a Line.
+template <ValidLineType T>
+KOKKOS_FUNCTION constexpr auto copy(const T& line) {
+  return line.copy();
+}
 
 /// \brief Element-wise approximate equality (within a tolerance)
 template <ValidLineType T1, ValidLineType T2>

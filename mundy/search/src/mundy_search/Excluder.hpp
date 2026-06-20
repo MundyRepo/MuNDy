@@ -230,7 +230,7 @@ struct ExcludeSelfInteraction {
 /// \class ExcludeConnectedEntities
 /// \brief Exclude candidate pairs that share a connected entity at a given rank.
 ///
-/// Naive O(|target_connected| × |source_connected|) check per candidate.
+/// Naive O(|target_connected| x |source_connected|) check per candidate.
 /// Constructed with the rank of the shared entity to test; for example, pass
 /// NODE_RANK to exclude pairs of elements that share a common node.
 class ExcludeConnectedEntities {
@@ -433,12 +433,20 @@ class ExcludeNonIntersectingOBBs {
   //@{
 
   /// \brief Exclude candidate pairs whose OBBs do not intersect.
+  ///
   /// \param candidate [in] Candidate pair produced by a search backend.
   template <typename Candidate>
   KOKKOS_INLINE_FUNCTION bool operator()(const Candidate& candidate) const {
-    auto t = target_obb_ngp_(ngp_mesh_.fast_mesh_index(candidate.target_entity()));
-    auto s = source_obb_ngp_(ngp_mesh_.fast_mesh_index(candidate.source_entity()));
-    return !intersects(t, s);
+    // The NGP component returns field-backed view OBBs; materialize owning copies before mutating.
+    auto target_obb = target_obb_ngp_(ngp_mesh_.fast_mesh_index(candidate.target_entity())).copy();
+    auto source_obb = source_obb_ngp_(ngp_mesh_.fast_mesh_index(candidate.source_entity())).copy();
+    if constexpr (is_periodic_candidate_v<Candidate>) {
+      const auto rel = candidate.source_image_shift() - candidate.target_image_shift();
+      source_obb.center()[0] += static_cast<scalar_type>(rel[0]);
+      source_obb.center()[1] += static_cast<scalar_type>(rel[1]);
+      source_obb.center()[2] += static_cast<scalar_type>(rel[2]);
+    }
+    return !intersects(target_obb, source_obb);
   }
   //@}
 

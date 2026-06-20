@@ -661,6 +661,38 @@ TEST(ExcludeNonIntersectingOBBsTest, ChainCompatibility) {
   EXPECT_TRUE(chain(make_cand(0, 2, m.node[0], m.node[2])));   // origin vs far   -> excluded
 }
 
+// A periodic candidate carries per-owner image shifts; the excluder must test the source against its
+// shifted image, not its home position. With a zero relative shift it must behave exactly like the
+// non-periodic test.
+TEST(ExcludeNonIntersectingOBBsTest, PeriodicImageShiftIsApplied) {
+  auto m = make_obb_mesh({make_unit_cube(0.0, 0.0, 0.0),    // ordinal 0 — origin
+                          make_unit_cube(2.0, 0.0, 0.0)});  // ordinal 1 — separated at home
+  ExcludeNonIntersectingOBBs<double> ex{m.component()};
+  ex.setup(*m.bulk, m.meta->universal_part(), m.meta->universal_part());
+
+  // Home positions are separated: both the non-periodic and the zero-shift periodic candidate are excluded.
+  EXPECT_TRUE(ex(make_cand(0, 1, m.node[0], m.node[1])));
+  EXPECT_TRUE(ex(PeriodicCand(0, 1, m.node[0], m.node[1], Vec3f{0, 0, 0}, Vec3f{0, 0, 0})));
+
+  // A source image shift of (-2,0,0) maps the source onto the origin: the images intersect -> retained.
+  EXPECT_FALSE(ex(PeriodicCand(0, 1, m.node[0], m.node[1], Vec3f{0, 0, 0}, Vec3f{-2, 0, 0})));
+
+  // Only the *relative* shift matters: equal target and source shifts leave the separation unchanged.
+  EXPECT_TRUE(ex(PeriodicCand(0, 1, m.node[0], m.node[1], Vec3f{-2, 0, 0}, Vec3f{-2, 0, 0})));
+}
+
+// The converse direction: a shift can separate a pair that overlaps at its home position.
+TEST(ExcludeNonIntersectingOBBsTest, PeriodicImageShiftCanSeparateHomeOverlap) {
+  auto m = make_obb_mesh({make_unit_cube(0.0, 0.0, 0.0),    // ordinal 0 — origin
+                          make_unit_cube(0.8, 0.0, 0.0)});  // ordinal 1 — overlaps at home
+  ExcludeNonIntersectingOBBs<double> ex{m.component()};
+  ex.setup(*m.bulk, m.meta->universal_part(), m.meta->universal_part());
+
+  EXPECT_FALSE(ex(make_cand(0, 1, m.node[0], m.node[1])));  // home positions overlap -> retained
+  // A source image shift of (-5,0,0) carries the source far from the origin -> separated -> excluded.
+  EXPECT_TRUE(ex(PeriodicCand(0, 1, m.node[0], m.node[1], Vec3f{0, 0, 0}, Vec3f{-5, 0, 0})));
+}
+
 }  // namespace
 }  // namespace search
 }  // namespace mundy

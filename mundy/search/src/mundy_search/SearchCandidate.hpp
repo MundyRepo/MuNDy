@@ -283,6 +283,13 @@ class PeriodicNeighborSearchCandidate {
   //@}
 };
 
+/// \brief Trait: `true` when `Candidate` is a periodic candidate that carries image shifts.
+template <typename Candidate>
+inline constexpr bool is_periodic_candidate_v = false;
+//
+template <typename ImageShiftType, typename SizeType>
+inline constexpr bool is_periodic_candidate_v<PeriodicNeighborSearchCandidate<ImageShiftType, SizeType>> = true;
+
 }  // namespace search
 
 }  // namespace mundy

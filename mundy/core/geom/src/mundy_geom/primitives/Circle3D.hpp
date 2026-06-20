@@ -61,6 +61,9 @@ class Circle3D {
   /// \brief Our orientation type
   using orientation_t = QuaternionType;
 
+  /// \brief Our deep-copy (owning) type
+  using deep_copy_t = Circle3D<Scalar>;
+
   static constexpr bool is_finite = true;
 
   //@}
@@ -189,6 +192,9 @@ class Circle3D {
   KOKKOS_FUNCTION constexpr const value_type& radius() const { return radius_; }
   KOKKOS_FUNCTION constexpr       value_type& radius()       { return radius_; }
   // clang-format on
+
+  /// \brief Get a deep, owning copy of the Circle3D.
+  KOKKOS_FUNCTION constexpr deep_copy_t copy() const { return *this; }
   //@}
 
   //! \name Setters
@@ -266,6 +272,12 @@ concept ValidCircle3DType = is_circle3d_v<Circle3DType>;
 
 //! \name Non-member functions for ValidCircle3DType objects
 //@{
+
+/// \brief Get a deep, owning copy of a Circle3D.
+template <ValidCircle3DType T>
+KOKKOS_FUNCTION constexpr auto copy(const T& circle3d) {
+  return circle3d.copy();
+}
 
 /// \brief Element-wise approximate equality (within a tolerance)
 template <ValidCircle3DType T1, ValidCircle3DType T2>

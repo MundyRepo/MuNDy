@@ -62,6 +62,9 @@ class Ring {
   /// \brief Our orientation type
   using orientation_t = QuaternionType;
 
+  /// \brief Our deep-copy (owning) type
+  using deep_copy_t = Ring<Scalar>;
+
   static constexpr bool is_finite = true;
 
   //@}
@@ -281,6 +284,12 @@ class Ring {
   }
   //@}
 
+  /// \brief Get a deep, owning copy of the Ring.
+  KOKKOS_FUNCTION
+  constexpr deep_copy_t copy() const {
+    return *this;
+  }
+
  private:
   Circle3D<value_type, point_t, orientation_t> center_circle_;
   value_type minor_radius_;
@@ -310,6 +319,12 @@ static_assert(ValidRingType<Ring<float>> && ValidRingType<const Ring<float>> && 
 
 //! \name Non-member functions for ValidRingType objects
 //@{
+
+/// \brief Get a deep, owning copy of a Ring.
+template <ValidRingType T>
+KOKKOS_FUNCTION constexpr auto copy(const T& ring) {
+  return ring.copy();
+}
 
 /// \brief Element-wise approximate equality (within a tolerance)
 template <ValidRingType T1, ValidRingType T2>

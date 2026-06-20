@@ -58,6 +58,9 @@ class AABB {
   /// \brief Our point type for the max corner
   using max_point_t = MaxPointType;
 
+  /// \brief Our deep-copy (owning) type
+  using deep_copy_t = AABB<Scalar>;
+
   static constexpr bool is_finite = true;
 
   //@}
@@ -291,6 +294,12 @@ class AABB {
   }
   //@}
 
+  /// \brief Get a deep, owning copy of the AABB.
+  KOKKOS_FUNCTION
+  constexpr deep_copy_t copy() const {
+    return *this;
+  }
+
   min_point_t min_corner_;
   max_point_t max_corner_;
 };  // AABB
@@ -330,6 +339,12 @@ concept ValidAABBType = is_aabb_v<AABBType>;
 
 //! \name Non-member functions for ValidAABBType objects
 //@{
+
+/// \brief Get a deep, owning copy of an AABB.
+template <ValidAABBType T>
+KOKKOS_FUNCTION constexpr auto copy(const T& aabb) {
+  return aabb.copy();
+}
 
 /// \brief Element-wise approximate equality (within a tolerance)
 template <ValidAABBType T1, ValidAABBType T2>

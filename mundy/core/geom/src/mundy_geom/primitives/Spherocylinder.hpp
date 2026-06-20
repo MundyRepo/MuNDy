@@ -60,6 +60,9 @@ class Spherocylinder {
   /// \brief Our orientation type
   using orientation_t = QuaternionType;
 
+  /// \brief Our deep-copy (owning) type
+  using deep_copy_t = Spherocylinder<Scalar>;
+
   static constexpr bool is_finite = true;
 
   //@}
@@ -300,6 +303,12 @@ class Spherocylinder {
   }
   //@}
 
+  /// \brief Get a deep, owning copy of the Spherocylinder.
+  KOKKOS_FUNCTION
+  constexpr deep_copy_t copy() const {
+    return *this;
+  }
+
  private:
   point_t center_;
   orientation_t orientation_;
@@ -332,6 +341,12 @@ static_assert(ValidSpherocylinderType<Spherocylinder<float>> && ValidSpherocylin
 
 //! \name Non-member functions for ValidSpherocylinderType objects
 //@{
+
+/// \brief Get a deep, owning copy of a Spherocylinder.
+template <ValidSpherocylinderType T>
+KOKKOS_FUNCTION constexpr auto copy(const T& spherocylinder) {
+  return spherocylinder.copy();
+}
 
 /// \brief Element-wise approximate equality (within a tolerance)
 template <ValidSpherocylinderType T1, ValidSpherocylinderType T2>

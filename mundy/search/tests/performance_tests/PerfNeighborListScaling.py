@@ -293,7 +293,7 @@ def plot_scaling(all_data, thread_counts, out_prefix="neighbor_list", search="ar
     for col in range(ncols):
         axes[nrows - 1, col].set_xlabel("Thread count")
     for row in range(nrows):
-        axes[row, 0].set_ylabel(f"Speedup  (×{ref_threads}-thread)")
+        axes[row, 0].set_ylabel(f"Speedup  (x{ref_threads}-thread)")
 
     # ── Shared legends ────────────────────────────────────────────────────────
     # all_N and n_colors already computed above

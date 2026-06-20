@@ -773,7 +773,7 @@ STKSearchNeighborList<MemorySpace> NeighborListBuildTraits<STKSearchNeighborList
   // can be populated before the search.  The CSR count and fill passes use it
   // to skip symmetric copies where the domain entity belongs to a remote rank.
   //
-  // 2× capacity keeps the load factor ≈50%, making insert failures effectively
+  // 2x capacity keeps the load factor ≈50%, making insert failures effectively
   // impossible for any well-distributed collection of entity keys.
 
   key_map_t target_key_to_ordinal(2 * num_targets);

@@ -175,7 +175,7 @@ class EllipsoidEllipsoidObjectiveFDF {
 /// \brief Ellipsoid–ellipsoid shared-normal signed separation distance.
 ///
 /// Dispatches to \c distance(SharedNormalSigned{}, ...).  The implementation uses a combined
-/// cost-and-gradient (FDF) L-BFGS minimiser over a 3×3 grid of initial guesses.
+/// cost-and-gradient (FDF) L-BFGS minimiser over a 3x3 grid of initial guesses.
 template <ValidEllipsoidType EllipsoidType1, ValidEllipsoidType EllipsoidType2>
 MUNDY_REQUIRES(std::is_same_v<typename EllipsoidType1::value_type, typename EllipsoidType2::value_type>)
 typename EllipsoidType1::value_type distance(const EllipsoidType1& ellipsoid1,

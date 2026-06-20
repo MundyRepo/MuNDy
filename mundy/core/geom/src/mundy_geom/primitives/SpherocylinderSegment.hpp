@@ -54,6 +54,9 @@ class SpherocylinderSegment {
   /// \brief Our point type
   using point_t = PointType;
 
+  /// \brief Our deep-copy (owning) type
+  using deep_copy_t = SpherocylinderSegment<Scalar>;
+
   static constexpr bool is_finite = true;
 
   //@}
@@ -251,6 +254,12 @@ class SpherocylinderSegment {
   }
   //@}
 
+  /// \brief Get a deep, owning copy of the SpherocylinderSegment.
+  KOKKOS_FUNCTION
+  constexpr deep_copy_t copy() const {
+    return *this;
+  }
+
  private:
   point_t start_;
   point_t end_;
@@ -283,6 +292,12 @@ static_assert(ValidSpherocylinderSegmentType<SpherocylinderSegment<float>> &&
 
 //! \name Non-member functions for ValidSpherocylinderSegmentType objects
 //@{
+
+/// \brief Get a deep, owning copy of a SpherocylinderSegment.
+template <ValidSpherocylinderSegmentType T>
+KOKKOS_FUNCTION constexpr auto copy(const T& spherocylinder_segment) {
+  return spherocylinder_segment.copy();
+}
 
 /// \brief Element-wise approximate equality (within a tolerance)
 template <ValidSpherocylinderSegmentType T1, ValidSpherocylinderSegmentType T2>

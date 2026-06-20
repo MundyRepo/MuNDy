@@ -62,6 +62,9 @@ class Ellipsoid {
   /// \brief Our quaternion type
   using orientation_t = OrientationType;
 
+  /// \brief Our deep-copy (owning) type
+  using deep_copy_t = Ellipsoid<Scalar>;
+
   static constexpr bool is_finite = true;
 
   //@}
@@ -349,6 +352,12 @@ class Ellipsoid {
   }
   //@}
 
+  /// \brief Get a deep, owning copy of the Ellipsoid.
+  KOKKOS_FUNCTION
+  constexpr deep_copy_t copy() const {
+    return *this;
+  }
+
  private:
   point_t center_;
   orientation_t orientation_;
@@ -374,8 +383,14 @@ inline constexpr bool is_ellipsoid_v = is_ellipsoid<T>::value;
 template <typename EllipsoidType>
 concept ValidEllipsoidType = is_ellipsoid_v<EllipsoidType>;
 
-//! \name Non-member functions for ValidSphereType objects
+//! \name Non-member functions for ValidEllipsoidType objects
 //@{
+
+/// \brief Get a deep, owning copy of an Ellipsoid.
+template <ValidEllipsoidType T>
+KOKKOS_FUNCTION constexpr auto copy(const T& ellipsoid) {
+  return ellipsoid.copy();
+}
 
 /// \brief Element-wise approximate equality (within a tolerance)
 template <ValidEllipsoidType T1, ValidEllipsoidType T2>

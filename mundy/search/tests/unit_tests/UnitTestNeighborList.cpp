@@ -804,12 +804,12 @@ void test_universal_broad_symdups_narrow_self(FixtureType& f) {
 // Macros for Group 2 test registration
 //
 // MAKE_DET_TEST(FIXTURE, SUFFIX, LIST_TYPE, selector, excluder_tag)
-//   — registers one TEST_F for the given (selector × excluder_tag) combination.
+//   — registers one TEST_F for the given (selector x excluder_tag) combination.
 //
 // MAKE_ALL_DET_TESTS(FIXTURE, SUFFIX, LIST_TYPE)
 //   — registers all combinations at once.
 //
-// Broad-phase-only (4 selectors × 4 tags = 16 tests), plus 3 narrow/mixed tests:
+// Broad-phase-only (4 selectors x 4 tags = 16 tests), plus 3 narrow/mixed tests:
 //   MAKE_ALL_DET_TESTS(DeterministicFixture,    1d,  List1d)  -> 19 ArborX-1d tests
 //   MAKE_ALL_DET_TESTS(DeterministicFixture,    2d,  List2d)  -> 19 ArborX-2d tests
 //   MAKE_ALL_DET_TESTS(STKDeterministicFixture, stk, STKList) -> 19 STK tests
@@ -983,7 +983,7 @@ TEST_F(DeterministicFixture, CopyMove_2d) {
 // =============================================================================
 // Group 2 — Deterministic pair-set tests
 //
-// 16 tests per list type (4 selectors × 4 excluder variants):
+// 16 tests per list type (4 selectors x 4 excluder variants):
 //   ArborX-1d: DeterministicFixture.{selector}_{excluder}_1d   (16 tests)
 //   ArborX-2d: DeterministicFixture.{selector}_{excluder}_2d   (16 tests)
 //   STK:       STKDeterministicFixture.{selector}_{excluder}_stk (16 tests)
