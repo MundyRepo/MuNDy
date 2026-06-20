@@ -43,7 +43,7 @@ namespace mesh {
 namespace impl {
 
 /// \struct UniqueFieldLikeCounter
-/// \brief Per-`MetaData` map: source field ordinal → number of unique fields already derived from it.
+/// \brief Per-`MetaData` map: source field ordinal -> number of unique fields already derived from it.
 ///
 /// Keyed by field *ordinal* (not name) to avoid any name-casing ambiguity, and stored as a `MetaData` attribute so
 /// the counter persists with the mesh.

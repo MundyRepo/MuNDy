@@ -599,11 +599,9 @@ class line_search_funct_der {
 ///                   the exact gradient of \c cost_func at the given point.
 template <size_t max_size, size_t N, typename search_strategy_type, typename stop_strategy_type,
           typename CostFunctionType, typename DerivativeFunctionType>
-KOKKOS_FUNCTION double find_min_with_derivatives(search_strategy_type search_strategy,
-                                                 stop_strategy_type stop_strategy,
+KOKKOS_FUNCTION double find_min_with_derivatives(search_strategy_type search_strategy, stop_strategy_type stop_strategy,
                                                  const CostFunctionType& cost_func,
-                                                 const DerivativeFunctionType& der_func,
-                                                 Vector<double, N>& x,
+                                                 const DerivativeFunctionType& der_func, Vector<double, N>& x,
                                                  const double min_allowable_cost) {
   Vector<double, N> g;
   Vector<double, N> s;
@@ -614,12 +612,9 @@ KOKKOS_FUNCTION double find_min_with_derivatives(search_strategy_type search_str
   while (stop_strategy.should_continue_search(x, cost, g) && cost > min_allowable_cost) {
     s = search_strategy.get_next_direction(x, cost, g);
 
-    double alpha = line_search(
-        line_search_funct(cost_func, x, s), cost,
-        line_search_funct_der(der_func, x, s),
-        dot(g, s),
-        search_strategy.get_wolfe_rho(), search_strategy.get_wolfe_sigma(),
-        min_allowable_cost, search_strategy.get_max_line_search_iterations());
+    double alpha = line_search(line_search_funct(cost_func, x, s), cost, line_search_funct_der(der_func, x, s),
+                               dot(g, s), search_strategy.get_wolfe_rho(), search_strategy.get_wolfe_sigma(),
+                               min_allowable_cost, search_strategy.get_max_line_search_iterations());
 
     x = alpha * s + x;
     g = der_func(x);
@@ -646,39 +641,48 @@ KOKKOS_FUNCTION double find_min_with_derivatives(search_strategy_type search_str
 template <size_t N, typename FDFType>
 class CachingFDFLineAdaptor {
  public:
-  CachingFDFLineAdaptor(const FDFType& fdf, const Vector<double, N>& start,
-                        const Vector<double, N>& direction)
+  CachingFDFLineAdaptor(const FDFType& fdf, const Vector<double, N>& start, const Vector<double, N>& direction)
       : fdf_(fdf), start_(start), direction_(direction) {
   }
 
   void ensure_evaluated(double alpha) const {
     if (valid_ && alpha == last_alpha_) return;
     Vector<double, N> g;
-    cached_f_  = fdf_(start_ + alpha * direction_, g);
+    cached_f_ = fdf_(start_ + alpha * direction_, g);
     cached_df_ = dot(g, direction_);
     last_alpha_ = alpha;
-    valid_      = true;
+    valid_ = true;
   }
 
   // f-only and df-only callable types that share this cacher's state via reference.
   struct FCallable {
     const CachingFDFLineAdaptor& c;
-    double operator()(double a) const { c.ensure_evaluated(a); return c.cached_f_; }
+    double operator()(double a) const {
+      c.ensure_evaluated(a);
+      return c.cached_f_;
+    }
   };
   struct DFCallable {
     const CachingFDFLineAdaptor& c;
-    double operator()(double a) const { c.ensure_evaluated(a); return c.cached_df_; }
+    double operator()(double a) const {
+      c.ensure_evaluated(a);
+      return c.cached_df_;
+    }
   };
 
-  FCallable  f_callable()  const { return FCallable{*this}; }
-  DFCallable df_callable() const { return DFCallable{*this}; }
+  FCallable f_callable() const {
+    return FCallable{*this};
+  }
+  DFCallable df_callable() const {
+    return DFCallable{*this};
+  }
 
  private:
-  const FDFType&             fdf_;
-  const Vector<double, N>&   start_;
-  const Vector<double, N>&   direction_;
+  const FDFType& fdf_;
+  const Vector<double, N>& start_;
+  const Vector<double, N>& direction_;
   mutable double last_alpha_{0.0};
-  mutable bool   valid_{false};
+  mutable bool valid_{false};
   mutable double cached_f_{0.0};
   mutable double cached_df_{0.0};
 };
@@ -699,10 +703,9 @@ class CachingFDFLineAdaptor {
 /// \tparam N         Dimensionality of the parameter space.
 /// \param fdf        Combined callable: \c double(const Vector<double,N>&, Vector<double,N>&).
 ///                   Must fill the second argument with the gradient and return f.
-template <size_t max_size, size_t N, typename search_strategy_type, typename stop_strategy_type,
-          typename FDFType>
-double find_min_with_fdf(search_strategy_type search_strategy, stop_strategy_type stop_strategy,
-                         const FDFType& fdf, Vector<double, N>& x, const double min_allowable_cost) {
+template <size_t max_size, size_t N, typename search_strategy_type, typename stop_strategy_type, typename FDFType>
+double find_min_with_fdf(search_strategy_type search_strategy, stop_strategy_type stop_strategy, const FDFType& fdf,
+                         Vector<double, N>& x, const double min_allowable_cost) {
   Vector<double, N> g;
   Vector<double, N> s;
 
@@ -715,10 +718,10 @@ double find_min_with_fdf(search_strategy_type search_strategy, stop_strategy_typ
     CachingFDFLineAdaptor<N, FDFType> cacher(fdf, x, s);
 
     double alpha = line_search(cacher.f_callable(), cost, cacher.df_callable(), dot(g, s),
-                               search_strategy.get_wolfe_rho(), search_strategy.get_wolfe_sigma(),
-                               min_allowable_cost, search_strategy.get_max_line_search_iterations());
+                               search_strategy.get_wolfe_rho(), search_strategy.get_wolfe_sigma(), min_allowable_cost,
+                               search_strategy.get_max_line_search_iterations());
 
-    x    = alpha * s + x;
+    x = alpha * s + x;
     cost = fdf(x, g);  // ONE call for both f and gradient
   }
 

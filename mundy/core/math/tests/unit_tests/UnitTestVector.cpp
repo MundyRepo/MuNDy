@@ -72,6 +72,18 @@ void is_close_debug(const U& a, const T& b, const std::string& message_if_fail =
   EXPECT_TRUE(is_approx_close(a, b)) << message_if_fail;
 }
 
+/// \brief Comparison type for the type-parameterized tests: the least-precise floating type involved,
+/// promoting a pure-integer pair to double (the type integer inputs promote to under these operations).
+template <typename T1, typename T2>
+MUNDY_REQUIRES(std::is_arithmetic_v<T1>&& std::is_arithmetic_v<T2>)
+constexpr auto get_comparison_tolerance_promote_ints() {
+  if constexpr (std::is_integral_v<T1> && std::is_integral_v<T2>) {
+    return get_comparison_tolerance<double, double>();
+  } else {
+    return get_comparison_tolerance<T1, T2>();
+  }
+}
+
 /// \brief Test that two Vectors are close
 /// \param[in] v1 The first Vector
 /// \param[in] v2 The second Vector

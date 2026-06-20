@@ -61,7 +61,7 @@ namespace impl {
 // stored image shift: the displacement from the owner's *original* reference point to its imaged reference point.
 // Targets get exactly one image (the wrapped owner); sources get one per periodic lattice neighbour (≤3^d for d
 // periodic axes), each pruned against the union target bounding box via mundy::intersects on the geom AABB.  Source
-// generation uses a device count → scan → fill so only the surviving images are allocated (never the full 3^d·N).
+// generation uses a device count -> scan -> fill so only the surviving images are allocated (never the full 3^d·N).
 //
 // This producer is independent of any search backend: it yields imaged geom AABBs plus per-object metadata.  A backend
 // (ArborX, STK) packs `aabbs` into its own box type.  The image shift is `Σ (nbᵢ - kᵢ)·aᵢ`, where `aᵢ` are the lattice
@@ -88,7 +88,7 @@ struct PeriodicImages {
   Kokkos::View<stk::mesh::Entity*, MemSpace> owner_entities;
   //! Owner ordinal for each image.
   Kokkos::View<size_t*, MemSpace> owner_indices;
-  //! Image shift (original → imaged reference point) for each image.
+  //! Image shift (original -> imaged reference point) for each image.
   Kokkos::View<mundy::Vector3<ShiftScalar>*, MemSpace> shifts;
 };
 
@@ -160,7 +160,7 @@ mundy::AABB<float> periodic_images_bounding_box(const ExecSpace& exec,
 
 /// \brief Build periodic *source* images: one per periodic lattice neighbour per owner, pruned by `target_bbox`.
 ///
-/// A device count → exclusive scan → fill allocates only the survivors (never the full 3^d·N).
+/// A device count -> exclusive scan -> fill allocates only the survivors (never the full 3^d·N).
 template <typename ShiftScalar, typename ExecSpace, typename Component, typename Metric, typename TargetBBox>
 PeriodicImages<typename Metric::value_type, ShiftScalar, typename ExecSpace::memory_space> make_periodic_source_images(
     const stk::mesh::BulkData& bulk_data, const ExecSpace& exec, stk::mesh::EntityRank rank,
@@ -201,7 +201,7 @@ PeriodicImages<typename Metric::value_type, ShiftScalar, typename ExecSpace::mem
         counts(i) = survivors;
       });
 
-  // Exclusive prefix scan → per-owner image offsets; offsets(num_owners) = total surviving images.
+  // Exclusive prefix scan -> per-owner image offsets; offsets(num_owners) = total surviving images.
   Kokkos::View<size_t*, memory_space> offsets(Kokkos::view_alloc(Kokkos::WithoutInitializing, "per_src_offsets"),
                                               num_owners + 1);
   Kokkos::parallel_scan(

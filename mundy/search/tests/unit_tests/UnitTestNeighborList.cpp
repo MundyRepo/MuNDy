@@ -525,7 +525,7 @@ using STKDeterministicFixture = DeterministicFixture;
 //
 // Overlapping (target={node1,node2,node5,node6} ords {0,1,2,3},
 //              source={node3,node4,node5,node6} ords {0,1,2,3}):
-//   Intersection = shared_part = {node5,node6} → target ords {2,3} / source ords {2,3}.
+//   Intersection = shared_part = {node5,node6} -> target ords {2,3} / source ords {2,3}.
 //
 // IdSubset (target={node5,node6} ords {0,1}, source={node5,node6} ords {0,1}):
 //   All four nodes mutually overlapping.
@@ -810,9 +810,9 @@ void test_universal_broad_symdups_narrow_self(FixtureType& f) {
 //   — registers all combinations at once.
 //
 // Broad-phase-only (4 selectors × 4 tags = 16 tests), plus 3 narrow/mixed tests:
-//   MAKE_ALL_DET_TESTS(DeterministicFixture,    1d,  List1d)  → 19 ArborX-1d tests
-//   MAKE_ALL_DET_TESTS(DeterministicFixture,    2d,  List2d)  → 19 ArborX-2d tests
-//   MAKE_ALL_DET_TESTS(STKDeterministicFixture, stk, STKList) → 19 STK tests
+//   MAKE_ALL_DET_TESTS(DeterministicFixture,    1d,  List1d)  -> 19 ArborX-1d tests
+//   MAKE_ALL_DET_TESTS(DeterministicFixture,    2d,  List2d)  -> 19 ArborX-2d tests
+//   MAKE_ALL_DET_TESTS(STKDeterministicFixture, stk, STKList) -> 19 STK tests
 // =============================================================================
 
 // clang-format off
@@ -1341,7 +1341,7 @@ TestInput make_far_target_boxes(STKDeterministicFixture& f) {
 }
 
 // A standalone node-only mesh with `aabb` + `obb` fields and target/source parts, for the direct rebuilder tests.
-// node 1 → target part; node 2 (if present) → source part.  Geometry is written per-test via store_aabb/store_obb.
+// node 1 -> target part; node 2 (if present) -> source part.  Geometry is written per-test via store_aabb/store_obb.
 struct GeomMesh {
   std::shared_ptr<stk::mesh::MetaData> meta;
   std::unique_ptr<stk::mesh::BulkData> bulk;
@@ -1434,7 +1434,7 @@ TEST_F(STKDeterministicFixture, Rebuilder_AlwaysRebuild_RebuildsEveryUpdate) {
   EXPECT_TRUE(r1.rebuilt);
   EXPECT_EQ(collect_pairs(r1.list), (PairSet{{0, 0}}));
 
-  // AlwaysRebuild fires on the second call → result reflects the new geometry.
+  // AlwaysRebuild fires on the second call -> result reflects the new geometry.
   auto far_tgt = make_far_target_boxes(*this);
   auto r2 = managed.update(*bulk_, far_tgt, disjoint_source_boxes_);
   EXPECT_TRUE(r2.rebuilt);
@@ -1460,7 +1460,7 @@ TEST_F(STKDeterministicFixture, Rebuilder_NeverRebuild_CachesAfterFirstBuild) {
 
 // ---- RebuildOnEntityChange ----
 
-// Same geometry, same box count → cache is reused even though boxes moved.
+// Same geometry, same box count -> cache is reused even though boxes moved.
 TEST_F(STKDeterministicFixture, Rebuilder_EntityChange_NoRebuildOnUnchangedCount) {
   auto managed =
       make_neighbor_list_builder<STKList>().exec_space(TestExecSpace{}).manage(RebuildOnEntityChange<TestMemSpace>{});
@@ -1475,21 +1475,21 @@ TEST_F(STKDeterministicFixture, Rebuilder_EntityChange_NoRebuildOnUnchangedCount
   EXPECT_EQ(collect_pairs(r2.list), (PairSet{{0, 0}}));  // cache: box count unchanged (still 2)
 }
 
-// Target entity count increases (2 → 4) → rebuild → pair set reflects the larger target set.
+// Target entity count increases (2 -> 4) -> rebuild -> pair set reflects the larger target set.
 // Both target selectors are disjoint from the source nodes {3,4}, so the source geometry is untouched.
 // The list's target selector is FIXED (target_part); the entity count grows from 2 to 4 via a mesh modification
-// (nodes {5,6} move into target_part) → rebuild.
+// (nodes {5,6} move into target_part) -> rebuild.
 TEST_F(STKDeterministicFixture, Rebuilder_EntityChange_RebuildOnIncrease) {
   auto managed =
       make_neighbor_list_builder<STKList>().exec_space(TestExecSpace{}).manage(RebuildOnEntityChange<TestMemSpace>{});
 
-  // 2-entity target_part {1,2} vs source {3,4}: node1 overlaps node3 → {(0,0)}.
+  // 2-entity target_part {1,2} vs source {3,4}: node1 overlaps node3 -> {(0,0)}.
   auto r1 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
   EXPECT_TRUE(r1.rebuilt);
   EXPECT_EQ(collect_pairs(r1.list), (PairSet{{0, 0}}));
 
   // Move nodes {5,6} into target_part (mesh modification): target_part now enumerates {1,2,5,6} (ords 0,1,2,3),
-  // count 2 → 4 → rebuild. node1(0), node5(2), node6(3) each overlap node3(0); node4 overlaps nothing.
+  // count 2 -> 4 -> rebuild. node1(0), node5(2), node6(3) each overlap node3(0); node4 overlaps nothing.
   move_nodes({5, 6}, target_part_, shared_part_);
   auto r2 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
   EXPECT_TRUE(r2.rebuilt);
@@ -1497,7 +1497,7 @@ TEST_F(STKDeterministicFixture, Rebuilder_EntityChange_RebuildOnIncrease) {
 }
 
 // The list's target selector is FIXED (target_part); the entity count shrinks from 4 to 2 via a mesh modification
-// (nodes {5,6} leave target_part) → rebuild → pair set reflects the smaller target set.
+// (nodes {5,6} leave target_part) -> rebuild -> pair set reflects the smaller target set.
 TEST_F(STKDeterministicFixture, Rebuilder_EntityChange_RebuildOnDecrease) {
   auto managed =
       make_neighbor_list_builder<STKList>().exec_space(TestExecSpace{}).manage(RebuildOnEntityChange<TestMemSpace>{});
@@ -1508,7 +1508,7 @@ TEST_F(STKDeterministicFixture, Rebuilder_EntityChange_RebuildOnDecrease) {
   EXPECT_TRUE(r1.rebuilt);
   EXPECT_EQ(collect_pairs(r1.list), (PairSet{{0, 0}, {2, 0}, {3, 0}}));
 
-  // Move {5,6} back out of target_part: count 4 → 2 → rebuild → pairs reduced.
+  // Move {5,6} back out of target_part: count 4 -> 2 -> rebuild -> pairs reduced.
   move_nodes({5, 6}, shared_part_, target_part_);
   auto r2 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
   EXPECT_TRUE(r2.rebuilt);
@@ -1520,12 +1520,12 @@ TEST_F(STKDeterministicFixture, Rebuilder_EntityChange_RebuildOnDecrease) {
 // Directly exercise needs_rebuild / snapshot to verify the threshold without
 // going through ManagedNeighborList.  One box with center shifted along x.
 //
-//   Snapshot at cx = 0 → min_x = -1, max_x = 1.
-//   cx = 0.2: corner displacement 0.2 < threshold 0.5 → no rebuild.
-//   cx = 1.0: corner displacement 1.0 > threshold 0.5 → rebuild.
-//   New snapshot at cx = 1 → min_x = 0, max_x = 2.
-//   cx = 0.6: displacement 0.4 < 0.5 → no rebuild.
-//   cx = 0.4: displacement 0.6 > 0.5 → rebuild.
+//   Snapshot at cx = 0 -> min_x = -1, max_x = 1.
+//   cx = 0.2: corner displacement 0.2 < threshold 0.5 -> no rebuild.
+//   cx = 1.0: corner displacement 1.0 > threshold 0.5 -> rebuild.
+//   New snapshot at cx = 1 -> min_x = 0, max_x = 2.
+//   cx = 0.6: displacement 0.4 < 0.5 -> no rebuild.
+//   cx = 0.4: displacement 0.6 > 0.5 -> rebuild.
 TEST(RebuildOnAABBDisplacement, ThresholdBehavior) {
   if (stk::parallel_machine_size(MPI_COMM_WORLD) != 1) GTEST_SKIP();
   auto mesh = make_geom_mesh(1);
@@ -1551,11 +1551,11 @@ TEST(RebuildOnAABBDisplacement, ThresholdBehavior) {
   // Identical geometry: no rebuild.
   EXPECT_FALSE(rebuilder.needs_rebuild(*mesh.bulk, input, input));
 
-  // cx=0.2: corner displacement 0.2 < 0.5 → no rebuild.
+  // cx=0.2: corner displacement 0.2 < 0.5 -> no rebuild.
   set_cx(0.2);
   EXPECT_FALSE(rebuilder.needs_rebuild(*mesh.bulk, input, input));
 
-  // cx=1.0: corner displacement 1.0 > 0.5 → rebuild.
+  // cx=1.0: corner displacement 1.0 > 0.5 -> rebuild.
   set_cx(1.0);
   EXPECT_TRUE(rebuilder.needs_rebuild(*mesh.bulk, input, input));
 
@@ -1563,11 +1563,11 @@ TEST(RebuildOnAABBDisplacement, ThresholdBehavior) {
   rebuilder.snapshot(*mesh.bulk, input, input);
   EXPECT_FALSE(rebuilder.needs_rebuild(*mesh.bulk, input, input));
 
-  // cx=0.6: displacement from cx=1 is 0.4 < 0.5 → no rebuild.
+  // cx=0.6: displacement from cx=1 is 0.4 < 0.5 -> no rebuild.
   set_cx(0.6);
   EXPECT_FALSE(rebuilder.needs_rebuild(*mesh.bulk, input, input));
 
-  // cx=0.4: displacement from cx=1 is 0.6 > 0.5 → rebuild.
+  // cx=0.4: displacement from cx=1 is 0.6 > 0.5 -> rebuild.
   set_cx(0.4);
   EXPECT_TRUE(rebuilder.needs_rebuild(*mesh.bulk, input, input));
 }
@@ -1577,13 +1577,13 @@ TEST(RebuildOnAABBDisplacement, ThresholdBehavior) {
 //   target threshold = 0.3, source threshold = 0.8
 //   Snapshot at cx=0 for both.
 //
-//   Target moves to cx=0.4 (disp 0.4 > 0.3) → target side fires.
-//   Source stays at cx=0    → source side quiet.
+//   Target moves to cx=0.4 (disp 0.4 > 0.3) -> target side fires.
+//   Source stays at cx=0    -> source side quiet.
 //   Expected: rebuild triggered by target alone.
 //
 //   After new snapshot at cx=0.4 / cx=0:
-//   Target moves to cx=0.6 (disp 0.2 < 0.3) → target quiet.
-//   Source moves to cx=0.9 (disp 0.9 > 0.8) → source side fires.
+//   Target moves to cx=0.6 (disp 0.2 < 0.3) -> target quiet.
+//   Source moves to cx=0.9 (disp 0.9 > 0.8) -> source side fires.
 //   Expected: rebuild triggered by source alone.
 TEST(RebuildOnAABBDisplacement, SeparateTargetAndSourceThresholds) {
   if (stk::parallel_machine_size(MPI_COMM_WORLD) != 1) GTEST_SKIP();
@@ -1654,8 +1654,8 @@ TEST(RebuildOnAABBDisplacement, SeparateTargetAndSourceThresholds) {
 //   With R_rel = I (no rotation change), the escape condition on axis x reduces to
 //     |T[x]| > threshold = 0.5.
 //
-//   cx=0.3 → displacement 0.3 < 0.5 → no rebuild.
-//   cx=0.7 → displacement 0.7 > 0.5 → rebuild.
+//   cx=0.3 -> displacement 0.3 < 0.5 -> no rebuild.
+//   cx=0.7 -> displacement 0.7 > 0.5 -> rebuild.
 TEST(RebuildOnOBBDisplacement, ThresholdBehavior_TranslationOnly) {
   if (stk::parallel_machine_size(MPI_COMM_WORLD) != 1) GTEST_SKIP();
   auto mesh = make_geom_mesh(1);
@@ -1697,11 +1697,11 @@ TEST(RebuildOnOBBDisplacement, ThresholdBehavior_TranslationOnly) {
   rebuilder.snapshot(*mesh.bulk, input, input);
   EXPECT_FALSE(rebuilder.needs_rebuild(*mesh.bulk, input, input));
 
-  // Displacement from 0.7: |0.7-0.4|=0.3 < 0.5 → no rebuild.
+  // Displacement from 0.7: |0.7-0.4|=0.3 < 0.5 -> no rebuild.
   set_cx(0.4);
   EXPECT_FALSE(rebuilder.needs_rebuild(*mesh.bulk, input, input));
 
-  // Displacement from 0.7: |0.7-0.1|=0.6 > 0.5 → rebuild.
+  // Displacement from 0.7: |0.7-0.1|=0.6 > 0.5 -> rebuild.
   set_cx(0.1);
   EXPECT_TRUE(rebuilder.needs_rebuild(*mesh.bulk, input, input));
 }
@@ -1714,8 +1714,8 @@ TEST(RebuildOnOBBDisplacement, ThresholdBehavior_TranslationOnly) {
 //     |cos θ| + |sin θ|          > 1.2
 //   This triggers at θ ≈ 17°; all three axes must pass.
 //
-//   Relative θ=5°:  (cos5°+sin5°)*0.5 ≈ 0.542 ≤ 0.6 → no rebuild.
-//   Relative θ=25°: (cos25°+sin25°)*0.5 ≈ 0.664 > 0.6 → rebuild.
+//   Relative θ=5°:  (cos5°+sin5°)*0.5 ≈ 0.542 ≤ 0.6 -> no rebuild.
+//   Relative θ=25°: (cos25°+sin25°)*0.5 ≈ 0.664 > 0.6 -> rebuild.
 TEST(RebuildOnOBBDisplacement, ThresholdBehavior_RotationOnly) {
   if (stk::parallel_machine_size(MPI_COMM_WORLD) != 1) GTEST_SKIP();
   auto mesh = make_geom_mesh(1);
@@ -1746,11 +1746,11 @@ TEST(RebuildOnOBBDisplacement, ThresholdBehavior_RotationOnly) {
   // θ=0 (identity): no rebuild.
   EXPECT_FALSE(rebuilder.needs_rebuild(*mesh.bulk, input, input));
 
-  // Relative θ=5° from snapshot: (cos5°+sin5°)*0.5 ≈ 0.542 ≤ 0.6 → no rebuild.
+  // Relative θ=5° from snapshot: (cos5°+sin5°)*0.5 ≈ 0.542 ≤ 0.6 -> no rebuild.
   set_theta(5.0 * pi / 180.0);
   EXPECT_FALSE(rebuilder.needs_rebuild(*mesh.bulk, input, input));
 
-  // Relative θ=30° from snapshot: (cos30°+sin30°)*0.5 ≈ 0.683 > 0.6 → rebuild.
+  // Relative θ=30° from snapshot: (cos30°+sin30°)*0.5 ≈ 0.683 > 0.6 -> rebuild.
   set_theta(30.0 * pi / 180.0);
   EXPECT_TRUE(rebuilder.needs_rebuild(*mesh.bulk, input, input));
 
@@ -1758,11 +1758,11 @@ TEST(RebuildOnOBBDisplacement, ThresholdBehavior_RotationOnly) {
   rebuilder.snapshot(*mesh.bulk, input, input);
   EXPECT_FALSE(rebuilder.needs_rebuild(*mesh.bulk, input, input));
 
-  // Relative rotation from snapshot: 35°−30°=5° → (cos5°+sin5°)*0.5 ≈ 0.542 ≤ 0.6 → no rebuild.
+  // Relative rotation from snapshot: 35°−30°=5° -> (cos5°+sin5°)*0.5 ≈ 0.542 ≤ 0.6 -> no rebuild.
   set_theta(35.0 * pi / 180.0);
   EXPECT_FALSE(rebuilder.needs_rebuild(*mesh.bulk, input, input));
 
-  // Relative rotation from snapshot: 55°−30°=25° → (cos25°+sin25°)*0.5 ≈ 0.664 > 0.6 → rebuild.
+  // Relative rotation from snapshot: 55°−30°=25° -> (cos25°+sin25°)*0.5 ≈ 0.664 > 0.6 -> rebuild.
   set_theta(55.0 * pi / 180.0);
   EXPECT_TRUE(rebuilder.needs_rebuild(*mesh.bulk, input, input));
 }
@@ -1772,16 +1772,16 @@ TEST(RebuildOnOBBDisplacement, ThresholdBehavior_RotationOnly) {
 //   target threshold=0.3, source threshold=0.8.
 //   Snapshot both at origin.
 //
-//   Target → 0.4 (0.4 > 0.3): target fires.  Source unchanged: quiet.  Expected: rebuild.
-//   Target → 0.2 (0.2 < 0.3), source → 0.5 (0.5 < 0.8): neither fires.
-//   Source → 0.9 (0.9 > 0.8), target quiet: source fires.  Expected: rebuild.
+//   Target -> 0.4 (0.4 > 0.3): target fires.  Source unchanged: quiet.  Expected: rebuild.
+//   Target -> 0.2 (0.2 < 0.3), source -> 0.5 (0.5 < 0.8): neither fires.
+//   Source -> 0.9 (0.9 > 0.8), target quiet: source fires.  Expected: rebuild.
 //
 //   After snapshot at target=0.4, source=0:
-//   Target → 0.55 (disp 0.15 < 0.3): quiet.
-//   Source → 0.9 (0.9 > 0.8): source fires.  Expected: rebuild.
+//   Target -> 0.55 (disp 0.15 < 0.3): quiet.
+//   Source -> 0.9 (0.9 > 0.8): source fires.  Expected: rebuild.
 TEST(RebuildOnOBBDisplacement, SeparateTargetAndSourceThresholds) {
   if (stk::parallel_machine_size(MPI_COMM_WORLD) != 1) GTEST_SKIP();
-  // 2-node mesh: node 1 = target, node 2 = source; one shared `obb` field, two selectors → independent geometry.
+  // 2-node mesh: node 1 = target, node 2 = source; one shared `obb` field, two selectors -> independent geometry.
   auto mesh = make_geom_mesh(2);
   TestComponent aabb_component(*mesh.aabb_field);
   TestInput tgt_input(*mesh.target_part, aabb_component);  // supply selectors/rank only
@@ -1806,7 +1806,7 @@ TEST(RebuildOnOBBDisplacement, SeparateTargetAndSourceThresholds) {
   set_tgt(0.0);
   set_src(0.0);
 
-  // Same OBB component read over each side's selector: target → node 1, source → node 2.
+  // Same OBB component read over each side's selector: target -> node 1, source -> node 2.
   RebuildOnOBBDisplacement<double, TestMemSpace> rebuilder(obb_component, obb_component, kTargetThreshold,
                                                            kSourceThreshold);
 
@@ -1835,11 +1835,11 @@ TEST(RebuildOnOBBDisplacement, SeparateTargetAndSourceThresholds) {
   set_src(0.0);
   rebuilder.snapshot(*mesh.bulk, tgt_input, src_input);
 
-  // Target to 0.55: disp=|0.55−0.4|=0.15 < 0.3 → quiet.  Source at 0: quiet.
+  // Target to 0.55: disp=|0.55−0.4|=0.15 < 0.3 -> quiet.  Source at 0: quiet.
   set_tgt(0.55);
   EXPECT_FALSE(rebuilder.needs_rebuild(*mesh.bulk, tgt_input, src_input));
 
-  // Source to 0.9: disp=0.9 > 0.8 → source fires.
+  // Source to 0.9: disp=0.9 > 0.8 -> source fires.
   set_src(0.9);
   EXPECT_TRUE(rebuilder.needs_rebuild(*mesh.bulk, tgt_input, src_input));
 }
@@ -1857,13 +1857,13 @@ TEST_F(STKDeterministicFixture, Rebuilder_AABBDisplacement_EndToEnd) {
   EXPECT_TRUE(r1.rebuilt);
   EXPECT_EQ(collect_pairs(r1.list), (PairSet{{0, 0}}));
 
-  // Far-away targets: displacement >> threshold → rebuild → 0 pairs; snapshot updated.
+  // Far-away targets: displacement >> threshold -> rebuild -> 0 pairs; snapshot updated.
   auto far_tgt = make_far_target_boxes(*this);
   auto r2 = managed.update(*bulk_, far_tgt, disjoint_source_boxes_);
   EXPECT_TRUE(r2.rebuilt);
   EXPECT_EQ(collect_pairs(r2.list), PairSet{});
 
-  // Same geometry as r2: displacement == 0 < threshold → cache → still 0 pairs.
+  // Same geometry as r2: displacement == 0 < threshold -> cache -> still 0 pairs.
   auto r3 = managed.update(*bulk_, far_tgt, disjoint_source_boxes_);
   EXPECT_FALSE(r3.rebuilt);
   EXPECT_EQ(collect_pairs(r3.list), PairSet{});
@@ -1883,14 +1883,14 @@ TEST_F(STKDeterministicFixture, Rebuilder_OBBDisplacement_EndToEnd) {
   EXPECT_TRUE(r1.rebuilt);
   EXPECT_EQ(collect_pairs(r1.list), (PairSet{{0, 0}}));
 
-  // Displace target node 1's OBB far beyond the threshold → OBB rebuilder fires → rebuild.
+  // Displace target node 1's OBB far beyond the threshold -> OBB rebuilder fires -> rebuild.
   store_obb(*obb_field_, nodes_[0],
             TestOBB{Point<double>{50.0, 0.0, 0.0}, Quaternion<double>::identity(), 0.5, 0.5, 0.5});
   obb_component_.modify_on_host();
   auto r2 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
   EXPECT_TRUE(r2.rebuilt);
 
-  // No further OBB change → contained within the inflated snapshot → cache reused.
+  // No further OBB change -> contained within the inflated snapshot -> cache reused.
   auto r3 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
   EXPECT_FALSE(r3.rebuilt);
 }
@@ -1898,7 +1898,7 @@ TEST_F(STKDeterministicFixture, Rebuilder_OBBDisplacement_EndToEnd) {
 // ---- RebuilderChain via operator| ----
 
 // (NeverRebuild | AlwaysRebuild): prior returns false, so next is always evaluated
-// and returns true → chain always rebuilds.
+// and returns true -> chain always rebuilds.
 TEST_F(STKDeterministicFixture, Rebuilder_Chain_NeverOrAlways_BehavesLikeAlways) {
   auto managed =
       make_neighbor_list_builder<STKList>().exec_space(TestExecSpace{}).manage(NeverRebuild{} | AlwaysRebuild{});
@@ -1913,7 +1913,7 @@ TEST_F(STKDeterministicFixture, Rebuilder_Chain_NeverOrAlways_BehavesLikeAlways)
   EXPECT_EQ(collect_pairs(r2.list), PairSet{});  // AlwaysRebuild forced rebuild
 }
 
-// (NeverRebuild | NeverRebuild): both return false → chain never rebuilds after first.
+// (NeverRebuild | NeverRebuild): both return false -> chain never rebuilds after first.
 TEST_F(STKDeterministicFixture, Rebuilder_Chain_NeverOrNever_BehavesLikeNever) {
   auto managed =
       make_neighbor_list_builder<STKList>().exec_space(TestExecSpace{}).manage(NeverRebuild{} | NeverRebuild{});
@@ -1930,7 +1930,7 @@ TEST_F(STKDeterministicFixture, Rebuilder_Chain_NeverOrNever_BehavesLikeNever) {
 
 // (RebuildOnEntityChange | AlwaysRebuild): entity count unchanged (static mesh),
 // so RebuildOnEntityChange returns false; AlwaysRebuild is then evaluated and
-// returns true → chain always rebuilds.
+// returns true -> chain always rebuilds.
 TEST_F(STKDeterministicFixture, Rebuilder_Chain_EntityChangeOrAlways_BehavesLikeAlways) {
   auto managed = make_neighbor_list_builder<STKList>()
                      .exec_space(TestExecSpace{})
@@ -1951,10 +1951,10 @@ TEST_F(STKDeterministicFixture, Rebuilder_Chain_EntityChangeOrAlways_BehavesLike
 // AABB is prior_ (evaluated first); EntityChange is next_ (evaluated only when AABB returns
 // false).  The count guard added to RebuildOnAABBDisplacement::needs_rebuild ensures it
 // returns true immediately when the box count changes, without accessing out-of-bounds in
-// the snapshot view.  The three tests below cover: entity add (2→6), entity remove (6→2),
+// the snapshot view.  The three tests below cover: entity add (2->6), entity remove (6->2),
 // and entity swap (same count, different identity).
 
-// Entity add: target count increases 2→4.  AABB count guard fires and returns true (prior_),
+// Entity add: target count increases 2->4.  AABB count guard fires and returns true (prior_),
 // so EntityChange is never evaluated.  A rebuild occurs; the pair set reflects the larger target set.
 TEST_F(STKDeterministicFixture, CombinedRebuilder_AABBSafeOnEntityAdd) {
   constexpr float kThreshold = 0.3f;
@@ -1963,18 +1963,18 @@ TEST_F(STKDeterministicFixture, CombinedRebuilder_AABBSafeOnEntityAdd) {
           .exec_space(TestExecSpace{})
           .manage(RebuildOnAABBDisplacement<double, TestMemSpace>{kThreshold} | RebuildOnEntityChange<TestMemSpace>{});
 
-  // Initial build: 2 targets {1,2}, 2 sources {3,4} → 1 pair; both snapshots recorded.
+  // Initial build: 2 targets {1,2}, 2 sources {3,4} -> 1 pair; both snapshots recorded.
   auto r1 = managed.update(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
   EXPECT_TRUE(r1.rebuilt);
   EXPECT_EQ(collect_pairs(r1.list), (PairSet{{0, 0}}));
 
-  // 4-entity target {1,2,5,6}: count 2→4 → AABB count guard fires → rebuild.
+  // 4-entity target {1,2,5,6}: count 2->4 -> AABB count guard fires -> rebuild.
   auto r2 = managed.update(*bulk_, overlapping_target_boxes_, disjoint_source_boxes_);
   EXPECT_TRUE(r2.rebuilt);
   EXPECT_EQ(collect_pairs(r2.list), (PairSet{{0, 0}, {2, 0}, {3, 0}}));
 }
 
-// Entity remove: target count decreases 4→2.  AABB count guard fires and returns true,
+// Entity remove: target count decreases 4->2.  AABB count guard fires and returns true,
 // so EntityChange is never evaluated.  A rebuild occurs; the pair set shrinks accordingly.
 TEST_F(STKDeterministicFixture, CombinedRebuilder_AABBSafeOnEntityRemove) {
   constexpr float kThreshold = 0.3f;
@@ -1989,7 +1989,7 @@ TEST_F(STKDeterministicFixture, CombinedRebuilder_AABBSafeOnEntityRemove) {
   EXPECT_TRUE(r1.rebuilt);
   EXPECT_EQ(collect_pairs(r1.list), (PairSet{{0, 0}, {2, 0}, {3, 0}}));
 
-  // Remove {5,6} from target_part (mesh modification → synchronized_count advances): count 4→2. Both the
+  // Remove {5,6} from target_part (mesh modification -> synchronized_count advances): count 4->2. Both the
   // displacement rebuilder (conservatively, on the mesh mod) and EntityChange fire; the rebuilt list has 1 pair
   // and the displacement check never reads stale geometry for the removed nodes.
   move_nodes({5, 6}, shared_part_, target_part_);
@@ -1999,7 +1999,7 @@ TEST_F(STKDeterministicFixture, CombinedRebuilder_AABBSafeOnEntityRemove) {
 }
 
 // Entity swap WITHIN the fixed target selector: nodes {1,2} leave target_part and nodes {5,6} enter it, carrying
-// the same coordinates — same count (2→2), same coordinates, different entity identities.  Because a swap is a mesh
+// the same coordinates — same count (2->2), same coordinates, different entity identities.  Because a swap is a mesh
 // modification, synchronized_count() advances, so the displacement rebuilder (prior_) conservatively rebuilds, and
 // EntityChange (next_) independently detects the identity change.  Both fire.  (Entity-aligned displacement is
 // defined only on a stable entity set; any entity-set change rides in on a mesh modification, which it treats as
@@ -2034,7 +2034,7 @@ TEST_F(STKDeterministicFixture, CombinedRebuilder_EntityChangeFiresOnEntitySwap)
 // incorrectly report a change without the explicit n==0 guard).
 // =============================================================================
 
-// Helper: an input over an empty selector (no node is in both target and source parts) → enumerates 0 entities.
+// Helper: an input over an empty selector (no node is in both target and source parts) -> enumerates 0 entities.
 inline TestInput make_empty_boxes(STKDeterministicFixture& f) {
   return TestInput(*f.target_part_ & *f.source_part_, f.aabb_component_);
 }
@@ -2048,21 +2048,21 @@ TEST_F(STKDeterministicFixture, EntityChange_EmptyTargets_DoesNotSignalChange) {
   RebuildOnEntityChange<TestMemSpace> rebuilder;
   auto empty = make_empty_boxes(*this);
 
-  // No snapshot yet → always rebuilds on first call.
+  // No snapshot yet -> always rebuilds on first call.
   EXPECT_TRUE(rebuilder.needs_rebuild(*bulk_, empty, empty));
 
-  // After snapshot of empty inputs, subsequent call with still-empty inputs → no change.
+  // After snapshot of empty inputs, subsequent call with still-empty inputs -> no change.
   rebuilder.snapshot(*bulk_, empty, empty);
   EXPECT_FALSE(rebuilder.needs_rebuild(*bulk_, empty, empty));
 }
 
 // Snapshot with real entities, then empty the SAME (fixed) target selector via a mesh modification (its nodes leave
-// target_part) → count drops 2→0 → rebuild (the entity sequence did change).
+// target_part) -> count drops 2->0 -> rebuild (the entity sequence did change).
 TEST_F(STKDeterministicFixture, EntityChange_TransitionToEmpty_SignalsRebuild) {
   RebuildOnEntityChange<TestMemSpace> rebuilder;
 
   rebuilder.snapshot(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
-  // Remove nodes {1,2} from target_part: the target selector now enumerates 0 entities → count 2 → 0.
+  // Remove nodes {1,2} from target_part: the target selector now enumerates 0 entities -> count 2 -> 0.
   move_nodes({1, 2}, nullptr, target_part_);
   EXPECT_TRUE(rebuilder.needs_rebuild(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_));
 }
@@ -2082,13 +2082,13 @@ TEST_F(STKDeterministicFixture, AABBDisplacement_EmptyTargets_DoesNotFireAfterSn
   EXPECT_TRUE(rebuilder.needs_rebuild(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_));
   rebuilder.snapshot(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_);
 
-  // Empty target set → result is trivially empty; displacement check suppressed.
+  // Empty target set -> result is trivially empty; displacement check suppressed.
   EXPECT_FALSE(rebuilder.needs_rebuild(*bulk_, empty, disjoint_source_boxes_));
 
-  // Symmetric: empty source set → also suppressed.
+  // Symmetric: empty source set -> also suppressed.
   EXPECT_FALSE(rebuilder.needs_rebuild(*bulk_, disjoint_target_boxes_, empty));
 
-  // Both empty → also suppressed.
+  // Both empty -> also suppressed.
   EXPECT_FALSE(rebuilder.needs_rebuild(*bulk_, empty, empty));
 }
 
@@ -2098,14 +2098,14 @@ TEST_F(STKDeterministicFixture, AABBDisplacement_EmptyFromStart_NoRebuildAfterFi
   RebuildOnAABBDisplacement<double, TestMemSpace> rebuilder(0.01f);
   auto empty = make_empty_boxes(*this);
 
-  // First call: no snapshot → rebuilds.
+  // First call: no snapshot -> rebuilds.
   EXPECT_TRUE(rebuilder.needs_rebuild(*bulk_, empty, empty));
   rebuilder.snapshot(*bulk_, empty, empty);
 
-  // Same empty inputs → nothing changed, no rebuild.
+  // Same empty inputs -> nothing changed, no rebuild.
   EXPECT_FALSE(rebuilder.needs_rebuild(*bulk_, empty, empty));
 
-  // Presenting non-empty boxes after an empty snapshot → count change, rebuilds.
+  // Presenting non-empty boxes after an empty snapshot -> count change, rebuilds.
   EXPECT_TRUE(rebuilder.needs_rebuild(*bulk_, disjoint_target_boxes_, disjoint_source_boxes_));
 }
 
@@ -2124,18 +2124,18 @@ TEST_F(STKDeterministicFixture, ManagedList_ZeroTargets_NeverRebuildsAfterFirstB
   EXPECT_TRUE(r1.rebuilt);
   EXPECT_EQ(collect_pairs(r1.list), PairSet{});
 
-  // Second update with same empty targets: displacement check suppressed → no rebuild.
+  // Second update with same empty targets: displacement check suppressed -> no rebuild.
   auto r2 = managed.update(*bulk_, empty, disjoint_source_boxes_);
   EXPECT_FALSE(r2.rebuilt);
   EXPECT_EQ(collect_pairs(r2.list), PairSet{});
 
-  // Even with very different source geometry, zero targets → no rebuild needed.
+  // Even with very different source geometry, zero targets -> no rebuild needed.
   auto r3 = managed.update(*bulk_, empty, overlapping_source_boxes_);
   EXPECT_FALSE(r3.rebuilt);
   EXPECT_EQ(collect_pairs(r3.list), PairSet{});
 }
 
-// EntityChange rebuilder also must not fire for empty→empty transitions inside
+// EntityChange rebuilder also must not fire for empty->empty transitions inside
 // a managed list.
 TEST_F(STKDeterministicFixture, ManagedList_ZeroTargets_EntityChangeDoesNotFire) {
   auto empty = make_empty_boxes(*this);
@@ -2145,7 +2145,7 @@ TEST_F(STKDeterministicFixture, ManagedList_ZeroTargets_EntityChangeDoesNotFire)
   auto r1 = managed.update(*bulk_, empty, disjoint_source_boxes_);
   EXPECT_TRUE(r1.rebuilt);
 
-  // Entity snapshot is empty; presenting empty targets again → no entity change.
+  // Entity snapshot is empty; presenting empty targets again -> no entity change.
   auto r2 = managed.update(*bulk_, empty, disjoint_source_boxes_);
   EXPECT_FALSE(r2.rebuilt);
 }

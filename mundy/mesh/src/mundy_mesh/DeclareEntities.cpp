@@ -221,7 +221,7 @@ EntityDeclaration& EntityDeclaration::declare_entities(stk::mesh::BulkData& bulk
     return bulk_data.declare_entity(stk::topology::ELEM_RANK, element_info.id, element_info.parts);
   };
 
-  // Build a mutable id→info map for node fast-lookup and sharing tracking.
+  // Build a mutable id->info map for node fast-lookup and sharing tracking.
   // The copy of DeclareNodeInfo stored here accumulates non_owning_shared_procs during the element
   // loop so the node loop can see which processes need field data set on shared nodes.
   // A separate set catches duplicate element ids in release builds (check_consistency covers debug).

@@ -113,7 +113,7 @@ std::pair<IndexView, OffsetView> apply_narrow_phase(ExecutionSpace exec, const N
       });
 
   // -------------------------------------------------------------------------
-  // Phase L1: exclusive prefix scan → narrow CSR offsets.
+  // Phase L1: exclusive prefix scan -> narrow CSR offsets.
   // -------------------------------------------------------------------------
   OffsetView narrow_offsets("mundy_narrow_L1_offsets", num_targets + 1);
 
@@ -206,7 +206,7 @@ std::tuple<IndexView, ShiftView, OffsetView> apply_narrow_phase(
       });
 
   // -------------------------------------------------------------------------
-  // Phase L1: exclusive prefix scan → narrow CSR offsets.
+  // Phase L1: exclusive prefix scan -> narrow CSR offsets.
   // -------------------------------------------------------------------------
   OffsetView narrow_offsets("mundy_narrow_L1_offsets", num_targets + 1);
 

@@ -287,9 +287,9 @@ class PeriodicArborX2dNeighborList {
   /// \param target_entities [in] Target owner entities indexed by dense target owner ordinal.
   /// \param source_entities [in] Source owner entities indexed by dense source owner ordinal.
   /// \param neighbor_counts [in] Number of valid entries in each target owner row.
-  /// \param target_image_shifts [in] Per-target-owner image shift (target's original→wrapped reference point).
+  /// \param target_image_shifts [in] Per-target-owner image shift (target's original->wrapped reference point).
   /// \param source_owner_indices [in] Dense source owner ordinals in target-by-neighbor rows.
-  /// \param source_image_shifts [in] Per-pair source owner image shift (original → imaged reference point), in
+  /// \param source_image_shifts [in] Per-pair source owner image shift (original -> imaged reference point), in
   ///        target-by-neighbor rows.
   PeriodicArborX2dNeighborList(const stk::mesh::Selector& target_selector, const stk::mesh::Selector& source_selector,
                                const entity_view_t& target_entities, const entity_view_t& source_entities,
@@ -475,7 +475,7 @@ class PeriodicArborX2dNeighborList {
   entity_view_t target_entities_;
   //! Source owner entities indexed by dense source owner ordinal.
   entity_view_t source_entities_;
-  //! Per-target-owner image shift (original→wrapped reference point), indexed by dense target owner ordinal.
+  //! Per-target-owner image shift (original->wrapped reference point), indexed by dense target owner ordinal.
   target_shift_view_t target_image_shifts_;
   //! Number of valid entries in each dense target-owner row.
   count_view_t neighbor_counts_;
@@ -708,7 +708,7 @@ NeighborListBuildTraits<PeriodicArborX2dNeighborList<MemorySpace, ImageShiftScal
 
   // Generate backend-neutral periodic images from the component inputs (targets: 1 image/owner; sources: ≤27 pruned
   // by the union target bbox), then pack them into ArborX search boxes (boxes + per-image identities). The neutral
-  // images also carry the dense per-owner entities and the source image→owner-ordinal map the final list needs.
+  // images also carry the dense per-owner entities and the source image->owner-ordinal map the final list needs.
   auto target_in = builder.target_input();
   auto source_in = builder.source_input();
   auto target_images = impl::make_periodic_target_images<ImageShiftScalar>(

@@ -82,7 +82,7 @@ _SECTION_LABELS = {
     "Iteration overhead (pair)":          "Iter overhead\n(pair loop)",
     "Global reduce (target)":             "Global reduce\n(target loop)",
     "Global reduce (pair)":               "Global reduce\n(pair loop)",
-    "Atomic into target (full list)":     "Atomic → target",
+    "Atomic into target (full list)":     "Atomic -> target",
     "Bilateral atomic (half list)":       "Bilateral\natomic",
     "N2 brute force baseline (N<=1000)":  "N² baseline",
 }

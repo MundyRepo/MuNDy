@@ -33,7 +33,7 @@
 ///     details; callers should use \c auto to hold them.
 ///
 /// Dependency order:
-///   DeclareFieldImpl.hpp → DeclareField.hpp → DeclareComponentImpl.hpp → DeclareComponent.hpp
+///   DeclareFieldImpl.hpp -> DeclareField.hpp -> DeclareComponentImpl.hpp -> DeclareComponent.hpp
 
 // C++ core
 #include <string>

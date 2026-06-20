@@ -535,7 +535,7 @@ class RebuildOnAABBDisplacement {
     using TComp = std::remove_cvref_t<decltype(targets.component())>;
     using SComp = std::remove_cvref_t<decltype(sources.component())>;
 
-    // Empty targets or sources → the list is trivially empty, so never signal a (spurious) rebuild. A cheap bucket
+    // Empty targets or sources -> the list is trivially empty, so never signal a (spurious) rebuild. A cheap bucket
     // count (no enumerated index views): the per-side displacement checks below cannot see cross-side emptiness — the
     // union hides a zero side, and the OR short-circuits on the target — so the whole-list-empty test must happen here.
     if (stk::mesh::count_selected_entities(targets.selector(), bulk.buckets(targets.rank())) == 0 ||
@@ -549,7 +549,7 @@ class RebuildOnAABBDisplacement {
     auto ngp_target_scratch = mundy::mesh::get_updated_ngp_component(target_scratch);
 
     if (fields_coincide_ && target_max_displacement_ == source_max_displacement_) {
-      // Same field AND same threshold → check once over the UNION of the two selectors. The union dedups the
+      // Same field AND same threshold -> check once over the UNION of the two selectors. The union dedups the
       // intersection and remains valid for disjoint selectors, and "any corner escaped over the union" equals
       // "escaped over targets OR over sources".
       auto union_indices = mundy::mesh::get_local_entity_indices(
@@ -696,7 +696,7 @@ class RebuildOnAABBDisplacement {
   //! Selectors captured at the last snapshot; `needs_rebuild` must be queried with these same selectors (fixed-list).
   host_ptr<stk::mesh::Selector> snapshot_target_selector_;
   host_ptr<stk::mesh::Selector> snapshot_source_selector_;
-  //! Whether the target and source components read the same field → one shared scratch field, union snapshot/check.
+  //! Whether the target and source components read the same field -> one shared scratch field, union snapshot/check.
   bool fields_coincide_ = false;
   //! Unique scratch field holding the target corners at the last snapshot (declared on first snapshot).
   stk::mesh::Field<scalar_type>* scratch_target_field_ = nullptr;
@@ -859,7 +859,7 @@ class RebuildOnOBBDisplacement {
     // `synchronized_count()`; a changed count therefore invalidates the entity-aligned comparison, so rebuild.
     if (bulk.synchronized_count() != snapshot_sync_count_) return true;
 
-    // Empty targets or sources → the list is trivially empty, so never signal a (spurious) rebuild. A cheap bucket
+    // Empty targets or sources -> the list is trivially empty, so never signal a (spurious) rebuild. A cheap bucket
     // count (no enumerated index views): the per-side checks below cannot see cross-side emptiness — the union hides a
     // zero side, and the OR short-circuits on the target — so the whole-list-empty test must happen here.
     if (stk::mesh::count_selected_entities(targets.selector(), bulk.buckets(targets.rank())) == 0 ||
@@ -873,7 +873,7 @@ class RebuildOnOBBDisplacement {
     auto ngp_target_scratch = mundy::mesh::get_updated_ngp_component(target_scratch);
 
     if (fields_coincide_ && target_max_displacement_ == source_max_displacement_) {
-      // Same field AND same threshold → check once over the UNION of the two selectors. The union dedups the
+      // Same field AND same threshold -> check once over the UNION of the two selectors. The union dedups the
       // intersection and remains valid for disjoint selectors, and "any OBB escaped over the union" equals
       // "escaped over targets OR over sources".
       auto union_indices = mundy::mesh::get_local_entity_indices(
@@ -1005,7 +1005,7 @@ class RebuildOnOBBDisplacement {
   //! Selectors captured at the last snapshot; `needs_rebuild` must be queried with these same selectors (fixed-list).
   host_ptr<stk::mesh::Selector> snapshot_target_selector_;
   host_ptr<stk::mesh::Selector> snapshot_source_selector_;
-  //! Whether the target and source components read the same field → one shared scratch field, union snapshot/check.
+  //! Whether the target and source components read the same field -> one shared scratch field, union snapshot/check.
   bool fields_coincide_ = false;
   //! Unique scratch field holding the target OBBs at the last snapshot (declared at construction).
   stk::mesh::Field<scalar_type>* scratch_target_field_ = nullptr;

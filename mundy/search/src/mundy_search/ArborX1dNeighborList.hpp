@@ -282,7 +282,7 @@ class PeriodicArborX1dNeighborList {
   /// \param target_image_shifts [in] Per-target-owner image shift (displacement from the target's original to its
   ///        imaged reference point), indexed by dense target owner ordinal.
   /// \param source_owner_indices [in] Dense source owner ordinal for every stored pair.
-  /// \param source_image_shifts [in] Per-pair source owner image shift (original → imaged reference point).
+  /// \param source_image_shifts [in] Per-pair source owner image shift (original -> imaged reference point).
   /// \param offsets [in] Target owner offsets into `source_owner_indices`; extent must be `num_targets + 1`.
   PeriodicArborX1dNeighborList(const stk::mesh::Selector& target_selector, const stk::mesh::Selector& source_selector,
                                const entity_view_t& target_entities, const entity_view_t& source_entities,
@@ -449,7 +449,7 @@ class PeriodicArborX1dNeighborList {
   entity_view_t target_entities_;
   //! Source owner entities indexed by dense source owner ordinal.
   entity_view_t source_entities_;
-  //! Per-target-owner image shift (original→wrapped reference point), indexed by dense target owner ordinal.
+  //! Per-target-owner image shift (original->wrapped reference point), indexed by dense target owner ordinal.
   image_shift_view_t target_image_shifts_;
   //! Flattened dense source owner ordinals for each stored periodic pair.
   source_index_view_t source_owner_indices_;
@@ -688,7 +688,7 @@ NeighborListBuildTraits<PeriodicArborX1dNeighborList<MemorySpace, ImageShiftScal
 
   // Generate backend-neutral periodic images from the component inputs (targets: 1 image/owner; sources: ≤27 pruned
   // by the union target bbox), then pack them into ArborX search boxes (boxes + per-image identities). The neutral
-  // images also carry the dense per-owner entities and the source image→owner-ordinal map the final list needs.
+  // images also carry the dense per-owner entities and the source image->owner-ordinal map the final list needs.
   auto target_in = builder.target_input();
   auto source_in = builder.source_input();
   auto target_images = impl::make_periodic_target_images<ImageShiftScalar>(
@@ -711,7 +711,7 @@ NeighborListBuildTraits<PeriodicArborX1dNeighborList<MemorySpace, ImageShiftScal
   ArborX::BVH<MemorySpace> bvh(exec_sp, source_boxes);
 #endif
 
-  // Pass 1: count surviving pairs per target owner (image→owner mapping done inside callback).
+  // Pass 1: count surviving pairs per target owner (image->owner mapping done inside callback).
   Kokkos::View<size_type*, MemorySpace> owner_counts("mundy_search_per1d_counts", num_target_owners);
   Kokkos::deep_copy(owner_counts, size_type(0));
   bvh.query(exec_sp, target_boxes, count_cb_t(factory, excluder, owner_counts));

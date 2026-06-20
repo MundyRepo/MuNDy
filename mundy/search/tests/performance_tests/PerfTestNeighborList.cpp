@@ -685,11 +685,11 @@ static void bench_stk_phase_timing(const BenchOptions& opts) {
 
   std::cout << "\n  Phase key:\n"
             << "    A = build BoxIdentProc search views\n"
-            << "    B = build target EntityKey→ordinal map\n"
+            << "    B = build target EntityKey->ordinal map\n"
             << "    C = stk::search::coarse_search (MORTON_LBVH)\n"
             << "    D = mirror results to host + ghosting (multi-rank only)\n"
             << "    E = build extended source entity view\n"
-            << "    F = refresh NgpMesh + build source EntityKey→ordinal map\n"
+            << "    F = refresh NgpMesh + build source EntityKey->ordinal map\n"
             << "    G0 = precompute valid target/source ordinal pairs\n"
             << "    G = count pass (atomic per-target increments)\n"
             << "    H = prefix scan + write-position init\n"

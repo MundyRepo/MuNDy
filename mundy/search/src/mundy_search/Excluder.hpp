@@ -418,7 +418,7 @@ class ExcludeNonIntersectingOBBs {
   /// \brief Refresh the device OBB components and the NgpMesh that `operator()` reads.
   ///
   /// Call immediately before the kernel that evaluates this excluder, so the device geometry and the
-  /// entity→`FastMeshIndex` mapping reflect the current mesh state.
+  /// entity->`FastMeshIndex` mapping reflect the current mesh state.
   void setup(const stk::mesh::BulkData& bulk_data, const stk::mesh::Selector& /*target_selector*/,
              const stk::mesh::Selector& /*source_selector*/) {
     target_obb_component_.sync_to_device();

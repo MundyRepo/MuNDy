@@ -209,13 +209,13 @@ class PeriodicNeighborSearchCandidate {
     return source_entity_;
   }
 
-  /// \brief Get the target owner's image shift (original → imaged reference point).
+  /// \brief Get the target owner's image shift (original -> imaged reference point).
   KOKKOS_INLINE_FUNCTION
   image_shift_type target_image_shift() const noexcept {
     return target_image_shift_;
   }
 
-  /// \brief Get the source owner's image shift (original → imaged reference point).
+  /// \brief Get the source owner's image shift (original -> imaged reference point).
   KOKKOS_INLINE_FUNCTION
   image_shift_type source_image_shift() const noexcept {
     return source_image_shift_;

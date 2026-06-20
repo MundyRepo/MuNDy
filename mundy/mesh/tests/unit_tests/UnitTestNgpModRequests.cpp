@@ -371,7 +371,7 @@ TEST(NgpModRequests, ClassBasedRequestEntitiesNewIds_ClassVector) {
   auto req_vec = reqs.request_entities_new_ids(classes);
   auto req_single = reqs.request_entities_new_ids(*fixture.particle_class);
 
-  // Same partition key → same memoized helper.
+  // Same partition key -> same memoized helper.
   EXPECT_EQ(req_vec.id(), req_single.id())
       << "ClassVector{cls} and single Class& must return the same memoized helper.";
 

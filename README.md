@@ -3,8 +3,9 @@
 # MuNDy: Multibody Nonlocal Dynamics
 
 ![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg)
-![Backend-Kokkos](https://img.shields.io/badge/backend-Kokkos-1E88E5.svg)
-![Mesh-STK](https://img.shields.io/badge/mesh-Trilinos%2FSTK-4CAF50.svg)
+[![Backend-Kokkos](https://img.shields.io/badge/backend-Kokkos-1E88E5.svg)](https://kokkos.org/)
+[![Mesh-STK](https://img.shields.io/badge/mesh-Trilinos%2FSTK-4CAF50.svg)](https://trilinos.github.io/stk.html)
+[![CDash](https://img.shields.io/badge/CDash-Mundy-2EA44F.svg)](https://my.cdash.org/index.php?project=Mundy)
 
 MuNDy is a C++ infrastructure for building scalable, biologically grounded microscale multibody dynamics software.
 

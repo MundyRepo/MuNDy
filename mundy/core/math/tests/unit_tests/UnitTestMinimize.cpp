@@ -270,7 +270,7 @@ TEST(MinimizeWithDerivatives, ComplexFunctions) {
 //! \name find_min_with_derivatives: cost-function evaluation count
 //
 // The approximate-derivative variant computes 2N extra f evaluations per gradient (central
-// differences, N=2 here → 4 extra), plus the line search.  The exact-derivative variant
+// differences, N=2 here -> 4 extra), plus the line search.  The exact-derivative variant
 // avoids that overhead.  We verify that the exact variant uses strictly fewer f evaluations.
 //@{
 // ============================================================
@@ -456,7 +456,8 @@ TEST(MinimizeWithFDF, FewerEvaluationsRosenbrock) {
   }
 
   {
-    CountedFDF<N, decltype(rosenbrock<N>), decltype(rosenbrock_grad<N>)> cfdf(rosenbrock<N>, rosenbrock_grad<N>, fdf_count);
+    CountedFDF<N, decltype(rosenbrock<N>), decltype(rosenbrock_grad<N>)> cfdf(rosenbrock<N>, rosenbrock_grad<N>,
+                                                                              fdf_count);
     Vector<double, N> x = {0.0};
     find_min_with_fdf<lbfgs_max_memory_size>(cfdf, x, min_objective_delta);
   }

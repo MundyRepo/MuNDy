@@ -36,10 +36,13 @@
 #include <mundy_math/Accessor.hpp>        // for mundy::ValidAccessor
 #include <mundy_math/Array.hpp>           // for mundy::Array
 #include <mundy_math/MaskedView.hpp>      // for mundy::MaskedView
+#include <mundy_math/NumTraits.hpp>       // for mundy::ValidScalarType, mundy::NumTraits
+#include <mundy_math/ScalarBinaryOpTraits.hpp>  // for mundy::scalar_*_result_t
 #include <mundy_math/ShiftedView.hpp>     // for mundy::ShiftedView
 #include <mundy_math/StridedView.hpp>     // for mundy::StridedView
 #include <mundy_math/Tolerance.hpp>       // for mundy::get_zero_tolerance
 #include <mundy_math/TransposedView.hpp>  // for mundy::TransposedView
+#include <mundy_math/Scalar.hpp>          // for mundy::AScalar (interaction operators)
 #include <mundy_math/Vector.hpp>          // for mundy::Vector
 #include <mundy_math/impl/MatrixImpl.hpp>
 #include <mundy_utils/requires.hpp>
@@ -116,7 +119,7 @@ concept ValidMatrixType =
 /// should be lightweight such that they can be copied around without much overhead. Furthermore, the lifetime of the
 /// data underlying the accessor should be as long as the AMatrix that use it.
 template <typename T, size_t N, size_t M, ValidAccessor<T> Accessor>
-MUNDY_REQUIRES(std::is_arithmetic_v<T>)
+MUNDY_REQUIRES(ValidScalarType<T>)
 class AMatrix {
  public:
   //! \name Internal data
@@ -550,7 +553,8 @@ class AMatrix {
   /// \brief AMatrix-matrix addition
   /// \param[in] other The other matrix.
   template <typename U, ValidAccessor<U> OtherAccessor>
-  KOKKOS_INLINE_FUNCTION constexpr auto operator+(const AMatrix<U, N, M, OtherAccessor>& other) const {
+  KOKKOS_INLINE_FUNCTION constexpr auto operator+(const AMatrix<U, N, M, OtherAccessor>& other) const 
+  -> AMatrix<scalar_sum_result_t<T, U>, N, M> {
     return impl::matrix_matrix_addition_impl(std::make_index_sequence<N * M>{}, *this, other);
   }
 
@@ -566,7 +570,8 @@ class AMatrix {
   /// \brief AMatrix-matrix subtraction
   /// \param[in] other The other matrix.
   template <typename U, ValidAccessor<U> OtherAccessor>
-  KOKKOS_INLINE_FUNCTION constexpr auto operator-(const AMatrix<U, N, M, OtherAccessor>& other) const {
+  KOKKOS_INLINE_FUNCTION constexpr auto operator-(const AMatrix<U, N, M, OtherAccessor>& other) const 
+  -> AMatrix<scalar_difference_result_t<T, U>, N, M> {
     return impl::matrix_matrix_subtraction_impl(std::make_index_sequence<N * M>{}, *this, other);
   }
 
@@ -582,15 +587,16 @@ class AMatrix {
   /// \brief AMatrix-scalar addition
   /// \param[in] scalar The scalar.
   template <typename U>
-  MUNDY_REQUIRES(std::is_arithmetic_v<U>)
-  KOKKOS_INLINE_FUNCTION constexpr auto operator+(const U& scalar) const {
+  MUNDY_REQUIRES(!is_matrix_v<U> && ValidScalarType<U>)
+  KOKKOS_INLINE_FUNCTION constexpr auto operator+(const U& scalar) const 
+  -> AMatrix<scalar_sum_result_t<T, U>, N, M> {
     return impl::matrix_scalar_addition_impl(std::make_index_sequence<N * M>{}, *this, scalar);
   }
 
   /// \brief Self-scalar addition
   /// \param[in] scalar The scalar.
   template <typename U>
-  MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>&& std::is_arithmetic_v<U>)
+  MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T> && !is_matrix_v<U> && ValidScalarType<U>)
   KOKKOS_INLINE_FUNCTION constexpr AMatrix<T, N, M, Accessor>& operator+=(const U& scalar) {
     impl::self_scalar_addition_impl(std::make_index_sequence<N * M>{}, *this, scalar);
     return *this;
@@ -599,15 +605,16 @@ class AMatrix {
   /// \brief AMatrix-scalar subtraction
   /// \param[in] scalar The scalar.
   template <typename U>
-  MUNDY_REQUIRES(std::is_arithmetic_v<U>)
-  KOKKOS_INLINE_FUNCTION constexpr auto operator-(const U& scalar) const {
+  MUNDY_REQUIRES(!is_matrix_v<U> && ValidScalarType<U>)
+  KOKKOS_INLINE_FUNCTION constexpr auto operator-(const U& scalar) const 
+  -> AMatrix<scalar_difference_result_t<T, U>, N, M> {
     return impl::matrix_scalar_subtraction_impl(std::make_index_sequence<N * M>{}, *this, scalar);
   }
 
   /// \brief Self-scalar subtraction
   /// \param[in] scalar The scalar.
   template <typename U>
-  MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>&& std::is_arithmetic_v<U>)
+  MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T> && !is_matrix_v<U> && ValidScalarType<U>)
   KOKKOS_INLINE_FUNCTION constexpr AMatrix<T, N, M, Accessor>& operator-=(const U& scalar) {
     impl::self_scalar_subtraction_impl(std::make_index_sequence<N * M>{}, *this, scalar);
     return *this;
@@ -620,15 +627,17 @@ class AMatrix {
   /// \brief AMatrix-matrix multiplication
   /// \param[in] other The other matrix.
   template <typename U, typename OtherAccessor, size_t OtherN, size_t OtherM>
-  KOKKOS_INLINE_FUNCTION constexpr auto operator*(const AMatrix<U, OtherN, OtherM, OtherAccessor>& other) const {
+  KOKKOS_INLINE_FUNCTION constexpr auto operator*(const AMatrix<U, OtherN, OtherM, OtherAccessor>& other) const 
+   -> AMatrix<scalar_product_result_t<T, U>, N, OtherM> {
     return impl::matrix_matrix_multiplication_impl(std::make_index_sequence<N * OtherM>{}, *this, other);
   }
 
   /// \brief Self-matrix multiplication
   /// \param[in] other The other matrix.
   template <typename U, typename OtherAccessor, size_t OtherN, size_t OtherM>
+  MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>)
   KOKKOS_INLINE_FUNCTION constexpr AMatrix<T, N, M, Accessor>& operator*=(
-      const AMatrix<U, OtherN, OtherM, OtherAccessor>& other) MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>) {
+      const AMatrix<U, OtherN, OtherM, OtherAccessor>& other) {
     constexpr bool all_sizes_match = (N == OtherM) && (M == OtherN) && (N == M);
     static_assert(all_sizes_match,
                   "Self-matrix multiplication is not supported for non-square matrices of different sizes.");
@@ -638,22 +647,24 @@ class AMatrix {
   /// \brief AMatrix-vector multiplication
   /// \param[in] other The other vector.
   template <typename U, ValidAccessor<U> OtherAccessor>
-  KOKKOS_INLINE_FUNCTION constexpr auto operator*(const AVector<U, M, OtherAccessor>& other) const {
+  KOKKOS_INLINE_FUNCTION constexpr auto operator*(const AVector<U, M, OtherAccessor>& other) const 
+  -> AVector<scalar_product_result_t<T, U>, N> {
     return impl::matrix_vector_multiplication_impl(std::make_index_sequence<N>{}, *this, other);
   }
 
   /// \brief AMatrix-scalar multiplication
   /// \param[in] scalar The scalar.
   template <typename U>
-  MUNDY_REQUIRES(std::is_arithmetic_v<U>)
-  KOKKOS_INLINE_FUNCTION constexpr auto operator*(const U& scalar) const {
+  MUNDY_REQUIRES(!is_matrix_v<U> && ValidScalarType<U>)
+  KOKKOS_INLINE_FUNCTION constexpr auto operator*(const U& scalar) const 
+  -> AMatrix<scalar_product_result_t<T, U>, N, M> {
     return impl::matrix_scalar_multiplication_impl(std::make_index_sequence<N * M>{}, *this, scalar);
   }
 
   /// \brief Self-scalar multiplication
   /// \param[in] scalar The scalar.
   template <typename U>
-  MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>&& std::is_arithmetic_v<U>)
+  MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T> && !is_matrix_v<U> && ValidScalarType<U>)
   KOKKOS_INLINE_FUNCTION constexpr AMatrix<T, N, M, Accessor>& operator*=(const U& scalar) {
     impl::self_scalar_multiplication_impl(std::make_index_sequence<N * M>{}, *this, scalar);
     return *this;
@@ -662,15 +673,16 @@ class AMatrix {
   /// \brief AMatrix-scalar division
   /// \param[in] scalar The scalar.
   template <typename U>
-  MUNDY_REQUIRES(std::is_arithmetic_v<U>)
-  KOKKOS_INLINE_FUNCTION constexpr auto operator/(const U& scalar) const {
+  MUNDY_REQUIRES(!is_matrix_v<U> && ValidScalarType<U>)
+  KOKKOS_INLINE_FUNCTION constexpr auto operator/(const U& scalar) const 
+  -> AMatrix<scalar_quotient_result_t<T, U>, N, M> {
     return impl::matrix_scalar_division_impl(std::make_index_sequence<N * M>{}, *this, scalar);
   }
 
   /// \brief Self-scalar division
   /// \param[in] scalar The scalar.
   template <typename U>
-  MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T>&& std::is_arithmetic_v<U>)
+  MUNDY_REQUIRES(HasNonConstAccessOperator<Accessor, T> && !is_matrix_v<U> && ValidScalarType<U>)
   KOKKOS_INLINE_FUNCTION constexpr AMatrix<T, N, M, Accessor>& operator/=(const U& scalar) {
     impl::self_scalar_division_impl(std::make_index_sequence<N * M>{}, *this, scalar);
     return *this;
@@ -715,7 +727,7 @@ class AMatrix {
 
   // We are friends with all AMatrices regardless of their Accessor or type
   template <typename U, size_t OtherN, size_t OtherM, ValidAccessor<U> OtherAccessor>
-  MUNDY_REQUIRES(std::is_arithmetic_v<U>)
+  MUNDY_REQUIRES(ValidScalarType<U>)
   friend class AMatrix;
   //@}
 
@@ -837,9 +849,9 @@ KOKKOS_INLINE_FUNCTION constexpr bool is_approx_close(
 /// \param[in] scalar The scalar.
 /// \param[in] mat The matrix.
 template <size_t N, size_t M, typename U, typename T, ValidAccessor<T> Accessor>
-MUNDY_REQUIRES(std::is_arithmetic_v<U>)
+MUNDY_REQUIRES(!is_matrix_v<U> && ValidScalarType<U>)
 KOKKOS_INLINE_FUNCTION constexpr auto operator+(const U& scalar, const AMatrix<T, N, M, Accessor>& mat)
-    -> AMatrix<std::common_type_t<T, U>, N, M> {
+    -> AMatrix<scalar_sum_result_t<T, U>, N, M> {
   return mat + scalar;
 }
 
@@ -847,9 +859,9 @@ KOKKOS_INLINE_FUNCTION constexpr auto operator+(const U& scalar, const AMatrix<T
 /// \param[in] scalar The scalar.
 /// \param[in] mat The matrix.
 template <size_t N, size_t M, typename U, typename T, ValidAccessor<T> Accessor>
-MUNDY_REQUIRES(std::is_arithmetic_v<U>)
+MUNDY_REQUIRES(!is_matrix_v<U> && ValidScalarType<U>)
 KOKKOS_INLINE_FUNCTION constexpr auto operator-(const U& scalar, const AMatrix<T, N, M, Accessor>& mat)
-    -> AMatrix<std::common_type_t<T, U>, N, M> {
+    -> AMatrix<scalar_difference_result_t<T, U>, N, M> {
   return -mat + scalar;
 }
 //@}
@@ -861,9 +873,9 @@ KOKKOS_INLINE_FUNCTION constexpr auto operator-(const U& scalar, const AMatrix<T
 /// \param[in] scalar The scalar.
 /// \param[in] mat The matrix.
 template <size_t N, size_t M, typename U, typename T, ValidAccessor<T> Accessor>
-MUNDY_REQUIRES(std::is_arithmetic_v<U>)
+MUNDY_REQUIRES(!is_matrix_v<U> && ValidScalarType<U>)
 KOKKOS_INLINE_FUNCTION constexpr auto operator*(const U& scalar, const AMatrix<T, N, M, Accessor>& mat)
-    -> AMatrix<std::common_type_t<T, U>, N, M> {
+    -> AMatrix<scalar_product_result_t<T, U>, N, M> {
   return mat * scalar;
 }
 
@@ -873,7 +885,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto operator*(const U& scalar, const AMatrix<T
 template <size_t N, size_t M, typename U, typename T, ValidAccessor<T> Accessor1, ValidAccessor<U> Accessor2>
 KOKKOS_INLINE_FUNCTION constexpr auto operator*(const AVector<U, N, Accessor1>& vec,
                                                 const AMatrix<T, N, M, Accessor2>& mat)
-    -> Vector<std::common_type_t<T, U>, M> {
+    -> Vector<scalar_product_result_t<T, U>, M> {
   // Use view symmantics to avoid copying the matrix during the transpose.
   return mat.view_transpose() * vec;
 }
@@ -928,7 +940,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto max(const AMatrix<T, N, M, Accessor>& mat)
 /// \brief Mean of all elements (returns a double if T is an integral type, otherwise returns T)
 /// \param[in] mat The matrix.
 template <size_t N, size_t M, typename T, ValidAccessor<T> Accessor,
-          typename OutputType = std::conditional_t<std::is_integral_v<T>, double, T>>
+          typename OutputType = typename NumTraits<T>::NonInteger>
 KOKKOS_INLINE_FUNCTION constexpr OutputType mean(const AMatrix<T, N, M, Accessor>& mat) {
   return static_cast<OutputType>(sum(mat)) / OutputType(N * M);
 }
@@ -936,7 +948,7 @@ KOKKOS_INLINE_FUNCTION constexpr OutputType mean(const AMatrix<T, N, M, Accessor
 /// \brief Mean of all elements (returns a float if T is an integral type, otherwise returns T)
 /// \param[in] mat The matrix.
 template <size_t N, size_t M, typename T, ValidAccessor<T> Accessor,
-          typename OutputType = std::conditional_t<std::is_integral_v<T>, float, T>>
+          typename OutputType = std::conditional_t<NumTraits<T>::IsInteger, float, T>>
 KOKKOS_INLINE_FUNCTION constexpr OutputType mean_f(const AMatrix<T, N, M, Accessor>& mat) {
   return mean(mat);
 }
@@ -944,7 +956,7 @@ KOKKOS_INLINE_FUNCTION constexpr OutputType mean_f(const AMatrix<T, N, M, Access
 /// \brief Variance of all elements (returns a double if T is an integral type, otherwise returns T)
 /// \param[in] mat The matrix.
 template <size_t N, size_t M, typename T, ValidAccessor<T> Accessor,
-          typename OutputType = std::conditional_t<std::is_integral_v<T>, double, T>>
+          typename OutputType = typename NumTraits<T>::NonInteger>
 KOKKOS_INLINE_FUNCTION constexpr OutputType variance(const AMatrix<T, N, M, Accessor>& mat) {
   return impl::variance_impl(std::make_index_sequence<N * M>{}, mat);
 }
@@ -952,7 +964,7 @@ KOKKOS_INLINE_FUNCTION constexpr OutputType variance(const AMatrix<T, N, M, Acce
 /// \brief Variance of all elements (returns a float if T is an integral type, otherwise returns T)
 /// \param[in] mat The matrix.
 template <size_t N, size_t M, typename T, ValidAccessor<T> Accessor,
-          typename OutputType = std::conditional_t<std::is_integral_v<T>, float, T>>
+          typename OutputType = std::conditional_t<NumTraits<T>::IsInteger, float, T>>
 KOKKOS_INLINE_FUNCTION constexpr OutputType variance_f(const AMatrix<T, N, M, Accessor>& mat) {
   return variance(mat);
 }
@@ -960,7 +972,7 @@ KOKKOS_INLINE_FUNCTION constexpr OutputType variance_f(const AMatrix<T, N, M, Ac
 /// \brief Standard deviation of all elements (returns a double if T is an integral type, otherwise returns T)
 /// \param[in] mat The matrix.
 template <size_t N, size_t M, typename T, ValidAccessor<T> Accessor,
-          typename OutputType = std::conditional_t<std::is_integral_v<T>, double, T>>
+          typename OutputType = typename NumTraits<T>::NonInteger>
 KOKKOS_INLINE_FUNCTION constexpr OutputType stddev(const AMatrix<T, N, M, Accessor>& mat) {
   return impl::standard_deviation_impl(std::make_index_sequence<N * M>{}, mat);
 }
@@ -968,7 +980,7 @@ KOKKOS_INLINE_FUNCTION constexpr OutputType stddev(const AMatrix<T, N, M, Access
 /// \brief Standard deviation of all elements (returns a float if T is an integral type, otherwise returns T)
 /// \param[in] mat The matrix.
 template <size_t N, size_t M, typename T, ValidAccessor<T> Accessor,
-          typename OutputType = std::conditional_t<std::is_integral_v<T>, float, T>>
+          typename OutputType = std::conditional_t<NumTraits<T>::IsInteger, float, T>>
 KOKKOS_INLINE_FUNCTION constexpr OutputType stddev_f(const AMatrix<T, N, M, Accessor>& mat) {
   return stddev(mat);
 }
@@ -983,7 +995,7 @@ KOKKOS_INLINE_FUNCTION constexpr auto copy(const MatrixType& m) {
   return m.copy();
 }
 
-/// \brief Cast a matrix to a different arithmetic type
+/// \brief Cast a matrix to a different scalar type
 template <typename U, ValidMatrixType MatrixType>
 KOKKOS_INLINE_FUNCTION constexpr auto cast(const MatrixType& m) {
   return m.template cast<U>();
@@ -1013,7 +1025,7 @@ KOKKOS_INLINE_FUNCTION AMatrix<T, N, N> constexpr adjugate(const AMatrix<T, N, N
 /// \briuf AMatrix inverse (returns a double if T is an integral type, otherwise returns T)
 /// \param[in] mat The matrix.
 template <size_t N, typename T, ValidAccessor<T> Accessor,
-          typename OutputType = std::conditional_t<std::is_integral_v<T>, double, T>>
+          typename OutputType = typename NumTraits<T>::NonInteger>
 KOKKOS_INLINE_FUNCTION AMatrix<OutputType, N, N> constexpr inverse(const AMatrix<T, N, N, Accessor>& mat) {
   const auto det = determinant(mat);
   MUNDY_THROW_ASSERT(det != T(0), std::runtime_error, "AMatrix<T>: matrix is singular.");
@@ -1026,7 +1038,7 @@ KOKKOS_INLINE_FUNCTION AMatrix<OutputType, N, N> constexpr inverse(const AMatrix
 /// \tparam OutputElementType The output matrix element type, defaults T if T is an integral type (e.g., float or
 /// double) and float otherwise.
 template <size_t N, typename T, ValidAccessor<T> Accessor,
-          typename OutputElementType = std::conditional_t<std::is_integral_v<T>, float, T>>
+          typename OutputElementType = std::conditional_t<NumTraits<T>::IsInteger, float, T>>
 KOKKOS_INLINE_FUNCTION constexpr auto inverse_f(const AMatrix<T, N, N, Accessor>& mat) {
   return inverse(mat);
 }
@@ -1288,10 +1300,10 @@ static_assert(std::is_move_constructible_v<AMatrix<double, 3, 3>>);
 
 #define MUNDY_MATH_MATRIX_SIZE_SPECIALIZATION_IMPL(alias, alias_lower, N, M)              \
   template <typename T, ValidAccessor<T> Accessor = Array<T, N * M>>                      \
-  MUNDY_REQUIRES(std::is_arithmetic_v<T>)                                                 \
+  MUNDY_REQUIRES(ValidScalarType<T>)                                                      \
   using A##alias = AMatrix<T, N, M, Accessor>;                                            \
   template <typename T>                                                                   \
-  MUNDY_REQUIRES(std::is_arithmetic_v<T>)                                                 \
+  MUNDY_REQUIRES(ValidScalarType<T>)                                                      \
   using alias = A##alias<T>;                                                              \
   template <typename TypeToCheck>                                                         \
   struct is_##alias_lower##_impl : std::false_type {};                                    \
@@ -1399,6 +1411,35 @@ template <typename T, size_t N, size_t M, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto get_owning_matrix(Accessor&& data) {
   auto data_storage = store(std::move(data));
   return AMatrix<T, N, M, decltype(data_storage)>(data_storage);
+}
+//@}
+
+//! \name Non-member arithmetic: AScalar op AMatrix / AMatrix op AScalar
+//
+// These let an AScalar serve as a scalar operand in AMatrix arithmetic.
+//@{
+
+/// \brief AMatrix * AScalar
+template <size_t N, size_t M, typename T, typename U, ValidAccessor<T> Accessor1, ValidAccessor<U> Accessor2>
+KOKKOS_INLINE_FUNCTION constexpr auto operator*(const AMatrix<T, N, M, Accessor1>& mat,
+                                                const AScalar<U, Accessor2>& s)
+    -> AMatrix<scalar_product_result_t<T, U>, N, M> {
+  return mat * s.value();
+}
+
+/// \brief AScalar * AMatrix  (commutative)
+template <size_t N, size_t M, typename U, typename T, ValidAccessor<U> Accessor1, ValidAccessor<T> Accessor2>
+KOKKOS_INLINE_FUNCTION constexpr auto operator*(const AScalar<U, Accessor1>& s,
+                                                const AMatrix<T, N, M, Accessor2>& mat)
+    -> AMatrix<scalar_product_result_t<T, U>, N, M> {
+  return mat * s.value();
+}
+
+/// \brief AMatrix / AScalar
+template <size_t N, size_t M, typename T, typename U, ValidAccessor<T> Accessor1, ValidAccessor<U> Accessor2>
+KOKKOS_INLINE_FUNCTION constexpr auto operator/(const AMatrix<T, N, M, Accessor1>& mat,
+                                                const AScalar<U, Accessor2>& s) {
+  return mat / s.value();
 }
 //@}
 

@@ -37,9 +37,9 @@
 // Mundy
 #include <mundy_math/Matrix.hpp>  // for mundy::Matrix
 #include <mundy_math/Vector.hpp>  // for mundy::Vector
+#include <mundy_math/cmath.hpp>
 #include <mundy_math/convex.hpp>  // for mundy::solve_lcp/solve_cqpp
 #include <mundy_utils/rng.hpp>    // for mundy::make_philox
-#include <mundy_math/cmath.hpp>
 
 namespace mundy {
 

@@ -128,7 +128,7 @@ class PeriodicArborXSearchCandidateFactory {
   KOKKOS_DEFAULTED_FUNCTION
   PeriodicArborXSearchCandidateFactory() = default;
 
-  /// \brief Construct from target and source periodic search boxes plus the source image→owner-ordinal recovery view.
+  /// \brief Construct from target and source periodic search boxes plus the source image->owner-ordinal recovery view.
   ///
   /// Targets carry one image per owner, so a target image ordinal is its owner ordinal. Sources carry many images per
   /// owner, so `source_owner_indices(source_image)` recovers the dense source owner ordinal the final list indexes by.
@@ -169,7 +169,7 @@ class PeriodicArborXSearchCandidateFactory {
   target_boxes_type targets_;
   //! Source periodic search boxes.
   source_boxes_type sources_;
-  //! Dense source owner ordinal for each source image (image→owner recovery for the final list).
+  //! Dense source owner ordinal for each source image (image->owner recovery for the final list).
   owner_index_view_t source_owner_indices_;
   //@}
 };

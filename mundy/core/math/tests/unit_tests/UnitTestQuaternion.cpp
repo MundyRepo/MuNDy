@@ -67,6 +67,18 @@ void is_close_debug(const U& a, const T& b, const std::string& message_if_fail =
   EXPECT_TRUE(is_approx_close(a, b)) << message_if_fail;
 }
 
+/// \brief Comparison type for the type-parameterized tests: the least-precise floating type involved,
+/// promoting a pure-integer pair to double (the type integer inputs promote to under these operations).
+template <typename T1, typename T2>
+MUNDY_REQUIRES(std::is_arithmetic_v<T1>&& std::is_arithmetic_v<T2>)
+constexpr auto get_comparison_tolerance_promote_ints() {
+  if constexpr (std::is_integral_v<T1> && std::is_integral_v<T2>) {
+    return get_comparison_tolerance<double, double>();
+  } else {
+    return get_comparison_tolerance<T1, T2>();
+  }
+}
+
 /// \brief Test that two Matrix3s are close
 /// \param[in] m1 The first Matrix3
 /// \param[in] m2 The second Matrix3
@@ -925,7 +937,7 @@ TEST(RotateQuaternion, FullRotationReturnsToCoveredQuaternion) {
 }
 
 TEST(RotateQuaternion, RotatedVectorAgreesWithComposedRotation) {
-  // Geometric meaning: if q maps body→world, then after rotate_quaternion(q, omega, dt)
+  // Geometric meaning: if q maps body->world, then after rotate_quaternion(q, omega, dt)
   // any body vector v transforms to (R*q)*v in world frame, which is the same as
   // first applying q's rotation then applying R's rotation.
   //

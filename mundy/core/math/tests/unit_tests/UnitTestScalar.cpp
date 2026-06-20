@@ -244,7 +244,7 @@ TYPED_TEST(ScalarPairwiseTypeTest, VectorScalarMultiplication) {
   using Common = std::common_type_t<T1, T2>;
 
   Vector3<T1> v{static_cast<T1>(1), static_cast<T1>(2), static_cast<T1>(3)};
-  Scalar<T2>  s{static_cast<T2>(2)};
+  Scalar<T2> s{static_cast<T2>(2)};
   Vector3<Common> expected{static_cast<Common>(2), static_cast<Common>(4), static_cast<Common>(6)};
 
   is_close_debug(v * s, expected, "Vector3 * Scalar failed.");
@@ -261,7 +261,7 @@ TYPED_TEST(ScalarPairwiseTypeTest, VectorScalarDivision) {
   using T2 = typename TypeParam::T2;
 
   Vector3<T1> v{static_cast<T1>(2), static_cast<T1>(4), static_cast<T1>(6)};
-  Scalar<T2>  s{static_cast<T2>(2)};
+  Scalar<T2> s{static_cast<T2>(2)};
   auto result = v / s;
 
   // AVector::operator/ promotes integral/integral to double.
