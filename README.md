@@ -54,11 +54,11 @@ doxygen doc/Doxyfile
 If you already have Spack installed, start at `spack repo add`. Otherwise, from the MuNDy source tree:
 
 ```bash
-git clone --depth=2 --branch=releases/v0.23 https://github.com/spack/spack.git ./spack
+git clone --depth=2 --branch=releases/v1.2.0 https://github.com/spack/spack.git ./spack
 . ./spack/share/spack/setup-env.sh
 
-# Add MuNDy's Spack package repository | Tells Spack where to find the MuNDy package recipes
-spack repo add ./dep/our_spack_packages
+# Add MuNDy's Spack package repository | Tells Spack where to find the MuNDy's dependency recipes
+spack repo add ./dep/mundy_spack_repo
 ```
 
 You only need to add the MuNDy package repository once per Spack installation. After that, install the configuration you want:
@@ -90,24 +90,26 @@ This structure is intended to keep:
 ### Code Statistics (via cloc)
 ```text
 cloc-1.96.pl --exclude-dir=TriBITS,ci,doc,scrap ./MuNDy
-     424 text files.
-     384 unique files.                                          
-      46 files ignored.
+     384 text files.
+     345 unique files.                                          
+      52 files ignored.
 
-github.com/AlDanial/cloc v 1.96  T=1.18 s (324.5 files/s, 91526.3 lines/s)
+github.com/AlDanial/cloc v 1.96  T=1.85 s (186.5 files/s, 49656.7 lines/s)
 ------------------------------------------------------------------
 Language            files        blank        comment         code
 ------------------------------------------------------------------
-C/C++ Header          181         8542          15906        34395
-C++                    86         5730           6410        26960
-Markdown                9          896              0         2787
-CMake                  79          530           1638         2430
-Python                  5          161            196          659
-Bourne Shell           18          130            142          547
+C/C++ Header          142         7071          12382        30540
+C++                    81         4823           4428        22397
+CMake                  88          620           2046         2824
+Markdown                8          832              0         2220
+Python                  5          119            161          522
+Bourne Shell           15           98             91          329
+Text                    1           25              0          172
 JSON                    2           10              0          137
-YAML                    4           21              0           87
+YAML                    2            0              0            6
+CSV                     1            0              0            1
 ------------------------------------------------------------------
-SUM:                  384        16020          24292        68002
+SUM:                  345        13598          19108        59148
 ------------------------------------------------------------------
 ```
 
@@ -228,10 +230,10 @@ Helpers and abstractions for integrating MuNDy with Trilinos/STK meshes and fiel
 
 - **mundy::mesh::NgpModRequests**
   A ticket-based framework for staging mesh modification requests from the device and processing them on the host.
-    * Requesting new entities (with known or generated Ids)
-    * Requesting new connectivity (e.g. element-to-node relations) involving existing or future entities
-    * Requesting deletion of existing entities or connectivity
-    * Safe and efficient in the face of concurrent requests from multiple threads on the device
+  * Requesting new entities (with known or generated Ids)
+  * Requesting new connectivity (e.g. element-to-node relations) involving existing or future entities
+  * Requesting deletion of existing entities or connectivity
+  * Safe and efficient in the face of concurrent requests from multiple threads on the device
 
 - **mundy::mesh::FieldViews**  
   Helpers for extracting mathematical views into STK field types, both on host and device.  
@@ -256,7 +258,7 @@ Helpers and abstractions for integrating MuNDy with Trilinos/STK meshes and fiel
 - **mundy::mesh::NgpFieldBLAS**
   Reimplementation of STK’s field BLAS routines with unified host/device syntax.
 
- **mundy::mesh::NgpAccessorExpr**
+- **mundy::mesh::NgpAccessorExpr**
   MuNDy’s usability layer: a templated expression system with:
   * Automatic pruning of reused branches
   * Automatic synchronization of read fields
@@ -279,19 +281,19 @@ Neighbor-list construction and iteration over STK mesh entities, backed by Arbor
 
 - **mundy::search::NeighborListBuilder**  
   The canonical builder for all neighbor lists, allowing for the specification of source/target inputs, broad/narrow-phase refinements, and rebuild policies.
-  * **mundy::search::ArborX1dNeighborList**: Single-rank ArborX BVH, compressed CSR storage; lower memory, suited for sparse neighbor lists.
-  * **mundy::search::ArborX2dNeighborList**: Single-rank ArborX BVH, dense 2D per-target storage; suited for GPU pair-parallel dispatch.
-  * **mundy::search::STKSearchNeighborList**: STK MORTON_LBVH, MPI-distributed
-  * Periodic variants (**mundy::search::PeriodicArborX1dNeighborList**, **mundy::search::PeriodicArborX2dNeighborList**, **mundy::search::PeriodicSTKSearchNeighborList**) carry per-object image shifts alongside stored pairs.
+  * mundy::search::ArborX1dNeighborList — single-rank ArborX BVH, compressed CSR storage; lower memory, suited for sparse neighbor lists
+  * mundy::search::ArborX2dNeighborList — single-rank ArborX BVH, dense 2D per-target storage; suited for GPU pair-parallel dispatch
+  * mundy::search::STKSearchNeighborList — STK MORTON_LBVH, MPI-distributed
+  * Periodic variants (PeriodicArborX1dNeighborList, PeriodicArborX2dNeighborList, PeriodicSTKSearchNeighborList) carry per-object image shifts alongside stored pairs
 
-- **Excluders: mundy::search::ExcludeSelfInteraction, mundy::search::ExcludeSymmetricDuplicates, mundy::search::ExcludeConnectedEntities, mundy::search::ExcludeNonIntersectingOBBs**
-  Build-time predicates that reject candidate target/source pairs before they enter the stored list.
+- **Excluders**  
+  Build-time predicates that reject candidate target/source pairs before they enter the stored list: mundy::search::ExcludeSelfInteraction, mundy::search::ExcludeSymmetricDuplicates, mundy::search::ExcludeConnectedEntities, mundy::search::ExcludeNonIntersectingOBBs.
 
-- **Rebuilders: mundy::search::RebuildOnEntityChange, mundy::search::RebuildOnAABBDisplacement, mundy::search::RebuildOnOBBDisplacement, mundy::search::AlwaysRebuild, mundy::search::NeverRebuild**
-  Policies that determine when a cached neighbor list should be rebuilt based on changes in the underlying mesh or geometry.
+- **Rebuilders**  
+  Policies that determine when a cached neighbor list should be rebuilt based on changes in the underlying mesh or geometry: mundy::search::RebuildOnEntityChange, mundy::search::RebuildOnAABBDisplacement, mundy::search::RebuildOnOBBDisplacement, mundy::search::AlwaysRebuild, mundy::search::NeverRebuild.
 
-- **mundy::search::for_each_neighbor_pair / mundy::search::for_each_target_with_neighbors / mundy::search::for_each_neighbor_pair_reduce / mundy::search::for_each_target_with_neighbors_reduce**
-  Parallel iteration/reduction over stored pairs or per-target neighbor rows; works with all concrete list types.
+- **Iteration and reduction**  
+  Parallel iteration/reduction over stored pairs or per-target neighbor rows; works with all concrete list types: mundy::search::for_each_neighbor_pair, mundy::search::for_each_target_with_neighbors, mundy::search::for_each_neighbor_pair_reduce, mundy::search::for_each_target_with_neighbors_reduce.
 
 ---
 
