@@ -38,6 +38,7 @@
 #include <mundy_math/minimize.hpp>              // for mundy::find_min_using_approximate_derivatives
 #include <mundy_utils/requires.hpp>
 #include <mundy_math/cmath.hpp>
+#include <mundy_geom/distance/impl/PointEllipsoidImpl.hpp>  // for the cost-only objective functor
 
 namespace mundy {
 
@@ -68,75 +69,49 @@ KOKKOS_FUNCTION typename PointType::value_type distance([[maybe_unused]] const S
 
 template <ValidPointType PointType, ValidEllipsoidType EllipsoidType>
 MUNDY_REQUIRES(std::is_same_v<typename PointType::value_type, typename EllipsoidType::value_type>)
-class PointEllipsoidObjective {
- public:
-  using Scalar = typename PointType::value_type;
-
-  KOKKOS_FUNCTION
-  PointEllipsoidObjective(const PointType& point,                 //
-                          const EllipsoidType& ellipsoid,         //
-                          mundy::Vector3<Scalar>& shared_normal,  //
-                          Point<Scalar>& foot_point)
-      : point_(point), ellipsoid_(ellipsoid), shared_normal_(shared_normal), foot_point_(foot_point) {
-  }
-
-  KOKKOS_FUNCTION Scalar operator()(const mundy::Vector<Scalar, 2>& theta_phi) const {
-    // Map theta and phi to the lab frame normal vector
-    const Scalar sin_theta = sin(theta_phi[0]);
-    const Scalar cos_theta = cos(theta_phi[0]);
-    const Scalar sin_phi = sin(theta_phi[1]);
-    const Scalar cos_phi = cos(theta_phi[1]);
-    shared_normal_.set(sin_theta * cos_phi, sin_theta * sin_phi, cos_theta);
-
-    // Map the normal vector to the foot point on the ellipsoid
-    foot_point_ = map_surface_normal_to_foot_point_on_ellipsoid(shared_normal_, ellipsoid_);
-
-    // The objective is the shared normal euclidean separation distance. NOT the signed separation distance.
-    return distance(foot_point_, point_);
-  }
-
- private:
-  const PointType& point_;
-  const EllipsoidType& ellipsoid_;
-  mundy::Vector3<Scalar>& shared_normal_;
-  Point<Scalar>& foot_point_;
-};
-
-template <ValidPointType PointType, ValidEllipsoidType EllipsoidType>
-MUNDY_REQUIRES(std::is_same_v<typename PointType::value_type, typename EllipsoidType::value_type>)
 KOKKOS_FUNCTION typename PointType::value_type distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
                                                       const PointType& point,                                   //
                                                       const EllipsoidType& ellipsoid,                           //
                                                       Point<typename PointType::value_type>& closest_point,       //
                                                       mundy::Vector3<typename PointType::value_type>& ellipsoid_normal) {
   using Scalar = typename PointType::value_type;
+  using Passive = passive_scalar_t<Scalar>;  // double for an AD scalar; Scalar itself otherwise
+  using PassiveEllipsoid = Ellipsoid<Passive>;
 
-  // Setup the minimization
-  // Note, the actual error is not guaranteed to be less than min_objective_delta due to the use of approximate
-  // derivatives. Instead, we saw that the error was typically less than the square root of min_objective_delta.
-  constexpr Scalar min_objective_delta = mundy::get_relaxed_zero_tolerance<Scalar>();
+  // Envelope theorem: solve for the optimal angles theta* in the passive type (the L-BFGS minimiser is
+  // double-only), then re-evaluate the closest point on the original — possibly AD — ellipsoid with
+  // theta* frozen. Since d(objective)/d(theta) = 0 at the optimum, the returned distance carries the
+  // exact derivative w.r.t. the point/ellipsoid parameters without differentiating through the solve.
+  //
+  // Note, the actual error is not guaranteed to be less than min_objective_delta due to the use of
+  // approximate derivatives. The error is typically less than the square root of min_objective_delta.
+  constexpr Passive min_allowable_cost  = -Kokkos::Experimental::infinity_v<Passive>;    // no early-exit on cost
+  constexpr Passive min_objective_delta = mundy::get_relaxed_zero_tolerance<Passive>();  // L-BFGS convergence tolerance
   constexpr size_t lbfgs_max_memory_size = 10;
 
-  // Reuse the solution space rather than re-allocating it each time
-  PointEllipsoidObjective<PointType, EllipsoidType> shared_normal_objective(point, ellipsoid, ellipsoid_normal,
-                                                                            closest_point);
+  const Point<Passive> point_p(impl::passive_value(point[0]), impl::passive_value(point[1]),
+                               impl::passive_value(point[2]));
+  const PassiveEllipsoid ellipsoid_p = impl::passive_copy(ellipsoid);
+  Point<Passive> foot_p;
+  mundy::Vector3<Passive> normal_p;
+  impl::PointEllipsoidObjective<Point<Passive>, PassiveEllipsoid> objective_p(point_p, ellipsoid_p, normal_p, foot_p);
 
-  constexpr Scalar pi = Kokkos::numbers::pi_v<Scalar>;
-  constexpr Scalar zero = static_cast<Scalar>(0.0);
-  constexpr Scalar half_pi = static_cast<Scalar>(0.5) * pi;
-  constexpr Scalar one_third_pi = pi / static_cast<Scalar>(3.0);
-  constexpr Scalar five_third_pi = static_cast<Scalar>(5.0) * one_third_pi;
-  constexpr mundy::Vector<Scalar, 3> theta_guesses{zero, half_pi, pi};
-  constexpr mundy::Vector<Scalar, 3> phi_guesses{one_third_pi, pi, five_third_pi};
+  constexpr Passive pi = Kokkos::numbers::pi_v<Passive>;
+  constexpr Passive zero = static_cast<Passive>(0.0);
+  constexpr Passive half_pi = static_cast<Passive>(0.5) * pi;
+  constexpr Passive one_third_pi = pi / static_cast<Passive>(3.0);
+  constexpr Passive five_third_pi = static_cast<Passive>(5.0) * one_third_pi;
+  constexpr mundy::Vector<Passive, 3> theta_guesses{zero, half_pi, pi};
+  constexpr mundy::Vector<Passive, 3> phi_guesses{one_third_pi, pi, five_third_pi};
 
-  Scalar global_dist = Kokkos::Experimental::infinity_v<Scalar>;
-  mundy::Vector<Scalar, 2> theta_phi_sol{zero, zero};
-  mundy::Vector<Scalar, 2> global_theta_phi_sol{zero, zero};
+  Passive global_dist = Kokkos::Experimental::infinity_v<Passive>;
+  mundy::Vector<Passive, 2> theta_phi_sol{zero, zero};
+  mundy::Vector<Passive, 2> global_theta_phi_sol{zero, zero};
   for (size_t t_idx = 0; t_idx < 3; ++t_idx) {
     for (size_t p_idx = 0; p_idx < 3; ++p_idx) {
       theta_phi_sol = {theta_guesses[t_idx], phi_guesses[p_idx]};
-      const Scalar dist = mundy::find_min_using_approximate_derivatives<lbfgs_max_memory_size>(
-          shared_normal_objective, theta_phi_sol, min_objective_delta);
+      const Passive dist = mundy::find_min_using_approximate_derivatives<lbfgs_max_memory_size>(
+          objective_p, theta_phi_sol, min_allowable_cost, min_objective_delta);
       if (dist < global_dist) {
         global_dist = dist;
         global_theta_phi_sol = theta_phi_sol;
@@ -144,8 +119,11 @@ KOKKOS_FUNCTION typename PointType::value_type distance([[maybe_unused]] const S
     }
   }
 
-  // Evaluating the objective updates the shared normal and foot points
-  shared_normal_objective(global_theta_phi_sol);
+  // Re-evaluate on the original point/ellipsoid with theta* frozen as a zero-derivative constant.
+  impl::PointEllipsoidObjective<PointType, EllipsoidType> objective_ad(point, ellipsoid, ellipsoid_normal, closest_point);
+  const mundy::Vector<Scalar, 2> theta_star{static_cast<Scalar>(global_theta_phi_sol[0]),
+                                            static_cast<Scalar>(global_theta_phi_sol[1])};
+  objective_ad(theta_star);
   return mundy::dot(point - closest_point, ellipsoid_normal);
 }
 //@}

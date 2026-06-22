@@ -33,6 +33,7 @@
 #include <mundy_geom/primitives/Point.hpp>  // for mundy::Point
 #include <mundy_math/Quaternion.hpp>        // for mundy::Quaternion
 #include <mundy_math/Vector3.hpp>           // for mundy::Vector3
+#include <mundy_math/cmath.hpp>             // for mundy::impl::passive_value
 #include <mundy_utils/requires.hpp>
 #include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
 
@@ -322,6 +323,23 @@ KOKKOS_INLINE_FUNCTION void for_each_point_mutable(T& c, Functor&& f) {
 //@}
 
 /// @}
+
+namespace impl {
+
+/// \brief A copy of the circle in its passive scalar type, with any derivative dropped; an ordinary
+/// owning copy when the scalar is already arithmetic.
+/// \internal
+template <ValidCircle3DType C>
+KOKKOS_FUNCTION Circle3D<passive_scalar_t<typename C::value_type>> passive_copy(const C& c) {
+  using P = passive_scalar_t<typename C::value_type>;
+  return Circle3D<P>(
+      Point<P>(passive_value(c.center()[0]), passive_value(c.center()[1]), passive_value(c.center()[2])),
+      Quaternion<P>(passive_value(c.orientation().w()), passive_value(c.orientation().x()),
+                    passive_value(c.orientation().y()), passive_value(c.orientation().z())),
+      passive_value(c.radius()));
+}
+
+}  // namespace impl
 
 }  // namespace mundy
 

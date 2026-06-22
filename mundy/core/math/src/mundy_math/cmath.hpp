@@ -125,6 +125,65 @@ MUNDY_MATH_DISPATCH_BINARY(max)
 #undef MUNDY_MATH_DISPATCH_UNARY
 #undef MUNDY_MATH_DISPATCH_BINARY
 
+namespace impl {
+
+/// \brief The passive value of a (possibly-AD) scalar: the scalar itself for arithmetic
+/// types, or the underlying value for an AD type. Drops any derivative.
+template <typename Scalar>
+KOKKOS_INLINE_FUNCTION constexpr passive_scalar_t<Scalar> passive_value(const Scalar& s) {
+  if constexpr (std::is_arithmetic_v<Scalar>) {
+    return s;
+  } else {
+    return s.value();
+  }
+}
+
+// ============================================================================
+// Integer snaps on the passive value — deliberately NOT auto-diff
+// ============================================================================
+//
+// floor/round/ceil yield an integer that is constant under differentiation. These snap the passive
+// value and return the passive scalar, dropping any derivative; the `_no_ad` suffix says so at the
+// call site. So `x - floor_no_ad(x)` subtracts a constant and keeps x's derivative intact.
+
+template <typename Scalar>
+KOKKOS_INLINE_FUNCTION constexpr passive_scalar_t<Scalar> floor_no_ad(const Scalar& s) {
+  return floor(passive_value(s));
+}
+
+template <typename Scalar>
+KOKKOS_INLINE_FUNCTION constexpr passive_scalar_t<Scalar> round_no_ad(const Scalar& s) {
+  return round(passive_value(s));
+}
+
+template <typename Scalar>
+KOKKOS_INLINE_FUNCTION constexpr passive_scalar_t<Scalar> ceil_no_ad(const Scalar& s) {
+  return ceil(passive_value(s));
+}
+
+/// \brief sqrt that resolves only the 0/0 derivative at a tangential zero. By the chain rule
+/// d/dx sqrt(u) = u' / (2 sqrt(u)): at u = 0 this is a genuine +/-inf vertical tangent when u' != 0
+/// (e.g. sqrt(x) at 0 — left intact), but the indeterminate 0/0 when u' = 0 (u bottoms out at 0, so
+/// sqrt(u) ~ |.| has a finite corner). A naive sqrt returns 0*inf = NaN for the latter; this returns the
+/// 0 subgradient there instead, while preserving the honest infinity of a true vertical tangent. For
+/// arithmetic types it is the plain sqrt.
+template <typename Scalar>
+KOKKOS_INLINE_FUNCTION Scalar safe_sqrt(const Scalar& x) {
+  if constexpr (std::is_arithmetic_v<Scalar>) {
+    return sqrt(x);
+  } else {
+    using P = passive_scalar_t<Scalar>;
+    if (x.value() <= P(0)) {
+      bool zero_gradient = true;
+      for (size_t i = 0; i < Scalar::num_derivatives; ++i) zero_gradient &= (x.derivatives()[i] == P(0));
+      if (zero_gradient) return Scalar(P(0));  // 0/0 -> finite |.| corner; pick the 0 subgradient
+    }
+    return sqrt(x);  // u > 0 (normal), or u = 0 with u' != 0 (honest +/-inf vertical tangent)
+  }
+}
+
+}  // namespace impl
+
 }  // namespace mundy
 
 #endif  // MUNDY_MATH_CMATH_HPP_

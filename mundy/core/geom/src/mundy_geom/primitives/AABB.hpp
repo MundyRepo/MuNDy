@@ -31,6 +31,7 @@
 
 // Our libs
 #include <mundy_geom/primitives/Point.hpp>  // for mundy::Point
+#include <mundy_math/NumTraits.hpp>         // for mundy::NumTraits
 #include <mundy_utils/requires.hpp>
 #include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
 
@@ -283,14 +284,13 @@ class AABB {
 
   /// \brief Get the maximum possible scalar value
   static KOKKOS_FUNCTION constexpr value_type scalar_max() {
-    return Kokkos::Experimental::finite_max_v<value_type>;
+    return NumTraits<value_type>::highest();
   }
 
   /// \brief Get the minimum possible scalar value
   static KOKKOS_FUNCTION constexpr value_type scalar_min() {
-    // finite_min_v<T> returns the most negative real value (equivalent to numeric_limits<T>::lowest).
-    // it is the 'lowest' value that we want here.
-    return Kokkos::Experimental::finite_min_v<value_type>;
+    // lowest() is the most negative finite value (not the smallest positive).
+    return NumTraits<value_type>::lowest();
   }
   //@}
 

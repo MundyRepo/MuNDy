@@ -448,12 +448,12 @@ KOKKOS_FUNCTION constexpr Point<typename EllipsoidType::value_type> map_body_fra
     alpha2 = zero;
   }
 
-  const Scalar sqrt_alpha1 = sqrt(alpha1);
-  const Scalar sqrt_alpha2 = sqrt(alpha2);
+  const Scalar sqrt_alpha1 = impl::safe_sqrt(alpha1);
+  const Scalar sqrt_alpha2 = impl::safe_sqrt(alpha2);
 
   const Scalar x = half * sign0 * ((one + sign0) * r1 + (one - sign0) * r1) * sqrt_alpha1 * sqrt_alpha2;
-  const Scalar y = half * sign1 * ((one + sign1) * r2 + (one - sign1) * r2) * sqrt(one - alpha1) * sqrt_alpha2;
-  const Scalar z = half * sign2 * ((one + sign2) * r3 + (one - sign2) * r3) * sqrt(one - alpha2);
+  const Scalar y = half * sign1 * ((one + sign1) * r2 + (one - sign1) * r2) * impl::safe_sqrt(one - alpha1) * sqrt_alpha2;
+  const Scalar z = half * sign2 * ((one + sign2) * r3 + (one - sign2) * r3) * impl::safe_sqrt(one - alpha2);
 
   return Point<Scalar>(x, y, z);
 }
@@ -485,6 +485,22 @@ KOKKOS_INLINE_FUNCTION void for_each_point_mutable(T& e, Functor&& f) {
 }
 
 //@}
+
+namespace impl {
+
+/// \brief A copy of the ellipsoid in its passive scalar type, with any derivative dropped; an
+/// ordinary owning copy when the scalar is already arithmetic.
+/// \internal
+template <ValidEllipsoidType E>
+KOKKOS_FUNCTION Ellipsoid<passive_scalar_t<typename E::value_type>> passive_copy(const E& e) {
+  return Ellipsoid<passive_scalar_t<typename E::value_type>>(
+      passive_value(e.center()[0]), passive_value(e.center()[1]), passive_value(e.center()[2]),
+      passive_value(e.orientation().w()), passive_value(e.orientation().x()),
+      passive_value(e.orientation().y()), passive_value(e.orientation().z()),
+      passive_value(e.radius_1()), passive_value(e.radius_2()), passive_value(e.radius_3()));
+}
+
+}  // namespace impl
 
 }  // namespace mundy
 

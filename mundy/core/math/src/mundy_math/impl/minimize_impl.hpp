@@ -632,8 +632,7 @@ KOKKOS_FUNCTION double find_min_with_derivatives(search_strategy_type search_str
 /// (always f) evaluates FDF and stores the result; the second call (der at the same alpha)
 /// returns the cached directional derivative.
 ///
-/// Not \c KOKKOS_FUNCTION — uses \c mutable for caching.  Safe when instances are
-/// stack-allocated inside a single host thread (which \c find_min_with_fdf guarantees).
+/// Instances are stack-allocated per line search, so each invoking thread has its own cache.
 ///
 /// \tparam N         Parameter-space dimension.
 /// \tparam FDFType   Combined callable: \c double(const Vector<double,N>&, Vector<double,N>&)
@@ -641,11 +640,12 @@ KOKKOS_FUNCTION double find_min_with_derivatives(search_strategy_type search_str
 template <size_t N, typename FDFType>
 class CachingFDFLineAdaptor {
  public:
-  CachingFDFLineAdaptor(const FDFType& fdf, const Vector<double, N>& start, const Vector<double, N>& direction)
+  KOKKOS_FUNCTION CachingFDFLineAdaptor(const FDFType& fdf, const Vector<double, N>& start,
+                                        const Vector<double, N>& direction)
       : fdf_(fdf), start_(start), direction_(direction) {
   }
 
-  void ensure_evaluated(double alpha) const {
+  KOKKOS_FUNCTION void ensure_evaluated(double alpha) {
     if (valid_ && alpha == last_alpha_) return;
     Vector<double, N> g;
     cached_f_ = fdf_(start_ + alpha * direction_, g);
@@ -654,26 +654,27 @@ class CachingFDFLineAdaptor {
     valid_ = true;
   }
 
-  // f-only and df-only callable types that share this cacher's state via reference.
+  // f-only and df-only callable types that share this cacher's state via a non-const reference
+  // (so the cache update needs no \c mutable).
   struct FCallable {
-    const CachingFDFLineAdaptor& c;
-    double operator()(double a) const {
+    CachingFDFLineAdaptor& c;
+    KOKKOS_FUNCTION double operator()(double a) const {
       c.ensure_evaluated(a);
       return c.cached_f_;
     }
   };
   struct DFCallable {
-    const CachingFDFLineAdaptor& c;
-    double operator()(double a) const {
+    CachingFDFLineAdaptor& c;
+    KOKKOS_FUNCTION double operator()(double a) const {
       c.ensure_evaluated(a);
       return c.cached_df_;
     }
   };
 
-  FCallable f_callable() const {
+  KOKKOS_FUNCTION FCallable f_callable() {
     return FCallable{*this};
   }
-  DFCallable df_callable() const {
+  KOKKOS_FUNCTION DFCallable df_callable() {
     return DFCallable{*this};
   }
 
@@ -681,10 +682,10 @@ class CachingFDFLineAdaptor {
   const FDFType& fdf_;
   const Vector<double, N>& start_;
   const Vector<double, N>& direction_;
-  mutable double last_alpha_{0.0};
-  mutable bool valid_{false};
-  mutable double cached_f_{0.0};
-  mutable double cached_df_{0.0};
+  double last_alpha_{0.0};
+  bool valid_{false};
+  double cached_f_{0.0};
+  double cached_df_{0.0};
 };
 
 /// \brief L-BFGS minimization using a single combined cost-and-gradient (FDF) callable.
@@ -697,14 +698,12 @@ class CachingFDFLineAdaptor {
 ///   - Line search: 2 foot-point evaluations per step instead of 4 (cached adaptor ensures
 ///     one FDF call covers both f and the directional derivative at the same alpha).
 ///
-/// \note Host-only: uses \c mutable caching inside \c CachingFDFLineAdaptor.
-///
 /// \tparam max_size  L-BFGS history depth.
 /// \tparam N         Dimensionality of the parameter space.
 /// \param fdf        Combined callable: \c double(const Vector<double,N>&, Vector<double,N>&).
 ///                   Must fill the second argument with the gradient and return f.
 template <size_t max_size, size_t N, typename search_strategy_type, typename stop_strategy_type, typename FDFType>
-double find_min_with_fdf(search_strategy_type search_strategy, stop_strategy_type stop_strategy, const FDFType& fdf,
+KOKKOS_FUNCTION double find_min_with_fdf(search_strategy_type search_strategy, stop_strategy_type stop_strategy, const FDFType& fdf,
                          Vector<double, N>& x, const double min_allowable_cost) {
   Vector<double, N> g;
   Vector<double, N> s;

@@ -159,8 +159,8 @@ KOKKOS_FUNCTION typename LineSegmentType1::value_type
   }
 
   // Finally, get the arch-length parameters, the corresponding closest points, and their distance.
-  const Scalar arch_length1 = (fabs(sN) < zero_tol) ? static_cast<Scalar>(0.0) : sN / sD;
-  const Scalar arch_length2 = (fabs(tN) < zero_tol) ? static_cast<Scalar>(0.0) : tN / tD;
+  const Scalar arch_length1 = (mundy::abs(sN) < zero_tol) ? static_cast<Scalar>(0.0) : sN / sD;
+  const Scalar arch_length2 = (mundy::abs(tN) < zero_tol) ? static_cast<Scalar>(0.0) : tN / tD;
   const auto closest_point1 = l0 + arch_length1 * u;
   const auto closest_point2 = m0 + arch_length2 * v;
   return distance(closest_point1, closest_point2);
@@ -329,8 +329,8 @@ KOKKOS_FUNCTION typename LineSegmentType1::value_type
   }
 
   // Finally, get the arch-length parameters, the corresponding closest points, and their distance.
-  arch_length1 = (fabs(sN) < zero_tol) ? static_cast<Scalar>(0.0) : sN / sD;
-  arch_length2 = (fabs(tN) < zero_tol) ? static_cast<Scalar>(0.0) : tN / tD;
+  arch_length1 = (mundy::abs(sN) < zero_tol) ? static_cast<Scalar>(0.0) : sN / sD;
+  arch_length2 = (mundy::abs(tN) < zero_tol) ? static_cast<Scalar>(0.0) : tN / tD;
   closest_point1 = l0 + arch_length1 * u;
   closest_point2 = m0 + arch_length2 * v;
   return distance(closest_point1, closest_point2, sep);

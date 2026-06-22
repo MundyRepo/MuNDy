@@ -25,6 +25,7 @@
 // C++ core
 #include <algorithm>   // for std::max
 #include <chrono>      // for std::chrono
+#include <cmath>       // for std::sqrt, std::isnan
 #include <concepts>    // for std::convertible_to
 #include <functional>  // for std::hash
 #include <string>      // for std::string
@@ -33,9 +34,10 @@
 #include <Kokkos_Core.hpp>  // for Kokkos::numbers::pi
 
 // Mundy
-#include <mundy_geom/distance.hpp>    // for mundy::distance(ellipsoid, ellipsoid)
-#include <mundy_geom/primitives.hpp>  // for mundy::Ellipsoid
-#include <mundy_math/Tolerance.hpp>   // for mundy::get_zero_tolerance
+#include <mundy_geom/distance.hpp>          // for mundy::distance(ellipsoid, ellipsoid)
+#include <mundy_geom/primitives.hpp>        // for mundy::Ellipsoid
+#include <mundy_math/AutoDiffScalar.hpp>    // for mundy::AutoDiffScalar
+#include <mundy_math/Tolerance.hpp>         // for mundy::get_zero_tolerance
 #include <mundy_utils/rng.hpp>        // for make_philox
 
 /// \brief The following global is used to control the number of samples per test.
@@ -311,6 +313,116 @@ TEST(SharedNormalDistanceBetweenEllipsoids_HeadToHead, TimingComparison) {
             << "    SharedNormalSigned:    " << ms_fdf << " ms  (" << ms_fd / ms_fdf << "x)\n";
 
   EXPECT_GT(ms_fd / ms_fdf, 0.8) << "default (FDF) unexpectedly slower than finite-diff baseline";
+}
+
+// The signed distance is differentiable w.r.t. the point and ellipsoid parameters. AD gradient
+// checked analytically and against central finite differences.
+TEST(SharedNormalDistanceBetweenEllipsoidAndPoint, AutoDiffGradients) {
+  using AD = AutoDiffScalar<double, 3>;  // derivatives seeded in slots 0,1,2
+
+  // (1) Point vs unit sphere, off-axis: d(dist)/d(point) = (p - c) / ||p - c||.
+  {
+    const double px = 3.0, py = 1.0, pz = 0.5;
+    const double nrm = std::sqrt(px * px + py * py + pz * pz);
+    const Point<AD> p(AD(px, 0), AD(py, 1), AD(pz, 2));
+    const Ellipsoid<AD> e(Point<AD>(AD(0), AD(0), AD(0)), AD(1), AD(1), AD(1));
+    const AD d = distance(p, e);
+    EXPECT_NEAR(d.value(), nrm - 1.0, TEST_DOUBLE_EPSILON);
+    EXPECT_NEAR(d.derivatives()[0], px / nrm, TEST_DOUBLE_EPSILON);
+    EXPECT_NEAR(d.derivatives()[1], py / nrm, TEST_DOUBLE_EPSILON);
+    EXPECT_NEAR(d.derivatives()[2], pz / nrm, TEST_DOUBLE_EPSILON);
+  }
+
+  // (2) Point vs genuine ellipsoid: AD gradient vs central finite differences of the double distance.
+  {
+    auto dist_of_point = [](double px, double py, double pz) {
+      const Point<double> p(px, py, pz);
+      const Ellipsoid<double> e(Point<double>(0, 0, 0), 1.0, 2.0, 0.5);
+      return distance(p, e);
+    };
+    const double px = 3.0, py = 1.2, pz = 0.4, h = 1.0e-5;
+    const double fx = (dist_of_point(px + h, py, pz) - dist_of_point(px - h, py, pz)) / (2 * h);
+    const double fy = (dist_of_point(px, py + h, pz) - dist_of_point(px, py - h, pz)) / (2 * h);
+    const double fz = (dist_of_point(px, py, pz + h) - dist_of_point(px, py, pz - h)) / (2 * h);
+
+    const Point<AD> p(AD(px, 0), AD(py, 1), AD(pz, 2));
+    const Ellipsoid<AD> e(Point<AD>(AD(0), AD(0), AD(0)), AD(1.0), AD(2.0), AD(0.5));
+    const AD d = distance(p, e);
+    EXPECT_NEAR(d.value(), dist_of_point(px, py, pz), TEST_DOUBLE_EPSILON);
+    EXPECT_NEAR(d.derivatives()[0], fx, 1.0e-3);
+    EXPECT_NEAR(d.derivatives()[1], fy, 1.0e-3);
+    EXPECT_NEAR(d.derivatives()[2], fz, 1.0e-3);
+  }
+}
+
+// The shared-normal signed distance is differentiable w.r.t. the ellipsoid parameters. AD gradient
+// checked analytically, against central finite differences, at a degenerate axis-aligned
+// configuration, and for agreement between the analytical- and finite-difference-gradient variants.
+TEST(SharedNormalDistanceBetweenEllipsoids, AutoDiffGradients) {
+  using AD = AutoDiffScalar<double, 3>;  // derivatives seeded in slots 0,1,2
+
+  // (1) Two unit spheres, off-axis: d(dist)/d(center2) = (c2 - c1) / ||c2 - c1||.
+  {
+    const double cx = 5.0, cy = 1.0, cz = 0.5;
+    const double nrm = std::sqrt(cx * cx + cy * cy + cz * cz);
+    const Ellipsoid<AD> e1(Point<AD>(AD(0), AD(0), AD(0)), AD(1), AD(1), AD(1));
+    const Ellipsoid<AD> e2(Point<AD>(AD(cx, 0), AD(cy, 1), AD(cz, 2)), AD(1), AD(1), AD(1));
+    const AD d = distance(e1, e2);
+    EXPECT_NEAR(d.value(), nrm - 2.0, TEST_DOUBLE_EPSILON);
+    EXPECT_NEAR(d.derivatives()[0], cx / nrm, TEST_DOUBLE_EPSILON);
+    EXPECT_NEAR(d.derivatives()[1], cy / nrm, TEST_DOUBLE_EPSILON);
+    EXPECT_NEAR(d.derivatives()[2], cz / nrm, TEST_DOUBLE_EPSILON);
+  }
+
+  // (2) Genuinely ellipsoidal pair: AD gradient vs central finite differences of the double distance.
+  {
+    auto dist_of_center = [](double cx, double cy, double cz) {
+      const Ellipsoid<double> e1(Point<double>(0, 0, 0), 1.0, 2.0, 0.5);
+      const Ellipsoid<double> e2(Point<double>(cx, cy, cz), 1.5, 0.8, 1.2);
+      return distance(e1, e2);
+    };
+    const double cx = 4.0, cy = 1.0, cz = 0.3, h = 1.0e-5;
+    const double fd_x = (dist_of_center(cx + h, cy, cz) - dist_of_center(cx - h, cy, cz)) / (2 * h);
+    const double fd_y = (dist_of_center(cx, cy + h, cz) - dist_of_center(cx, cy - h, cz)) / (2 * h);
+    const double fd_z = (dist_of_center(cx, cy, cz + h) - dist_of_center(cx, cy, cz - h)) / (2 * h);
+
+    const Ellipsoid<AD> e1(Point<AD>(AD(0), AD(0), AD(0)), AD(1.0), AD(2.0), AD(0.5));
+    const Ellipsoid<AD> e2(Point<AD>(AD(cx, 0), AD(cy, 1), AD(cz, 2)), AD(1.5), AD(0.8), AD(1.2));
+    const AD d = distance(e1, e2);
+    EXPECT_NEAR(d.value(), dist_of_center(cx, cy, cz), TEST_DOUBLE_EPSILON);
+    EXPECT_NEAR(d.derivatives()[0], fd_x, 1.0e-3);
+    EXPECT_NEAR(d.derivatives()[1], fd_y, 1.0e-3);
+    EXPECT_NEAR(d.derivatives()[2], fd_z, 1.0e-3);
+  }
+
+  // (3) Degenerate axis-aligned spheres: the gradient must stay finite and analytic,
+  // d(dist)/d(center2) = (1, 0, 0).
+  {
+    const Ellipsoid<AD> e1(Point<AD>(AD(0), AD(0), AD(0)), AD(1), AD(1), AD(1));
+    const Ellipsoid<AD> e2(Point<AD>(AD(5.0, 0), AD(0.0, 1), AD(0.0, 2)), AD(1), AD(1), AD(1));
+    const AD d = distance(e1, e2);
+    ASSERT_FALSE(std::isnan(d.derivatives()[0]));
+    ASSERT_FALSE(std::isnan(d.derivatives()[1]));
+    ASSERT_FALSE(std::isnan(d.derivatives()[2]));
+    EXPECT_NEAR(d.value(), 3.0, TEST_DOUBLE_EPSILON);
+    EXPECT_NEAR(d.derivatives()[0], 1.0, TEST_DOUBLE_EPSILON);
+    EXPECT_NEAR(d.derivatives()[1], 0.0, TEST_DOUBLE_EPSILON);
+    EXPECT_NEAR(d.derivatives()[2], 0.0, TEST_DOUBLE_EPSILON);
+  }
+
+  // (4) The finite-difference-gradient variant agrees with the analytical-gradient default in both
+  // value and gradient.
+  {
+    const double cx = 4.0, cy = 1.0, cz = 0.3;
+    const Ellipsoid<AD> e1(Point<AD>(AD(0), AD(0), AD(0)), AD(1.0), AD(2.0), AD(0.5));
+    const Ellipsoid<AD> e2(Point<AD>(AD(cx, 0), AD(cy, 1), AD(cz, 2)), AD(1.5), AD(0.8), AD(1.2));
+    const AD d_fd = distance(SharedNormalSignedFiniteDiff{}, e1, e2);
+    const AD d_default = distance(e1, e2);
+    EXPECT_NEAR(d_fd.value(), d_default.value(), TEST_DOUBLE_EPSILON);
+    EXPECT_NEAR(d_fd.derivatives()[0], d_default.derivatives()[0], TEST_DOUBLE_EPSILON);
+    EXPECT_NEAR(d_fd.derivatives()[1], d_default.derivatives()[1], TEST_DOUBLE_EPSILON);
+    EXPECT_NEAR(d_fd.derivatives()[2], d_default.derivatives()[2], TEST_DOUBLE_EPSILON);
+  }
 }
 
 //@}
