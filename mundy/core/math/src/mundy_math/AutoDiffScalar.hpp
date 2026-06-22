@@ -331,6 +331,13 @@ KOKKOS_INLINE_FUNCTION constexpr AutoDiffScalar<T, N> copysign(const AutoDiffSca
   return {copysign(x.value(), s), x.derivatives() * (sign_s * sign_x)};
 }
 
+/// \brief Copy the sign of another AutoDiffScalar onto x; the sign source contributes no derivative.
+template <typename T, size_t N>
+KOKKOS_INLINE_FUNCTION constexpr AutoDiffScalar<T, N> copysign(const AutoDiffScalar<T, N>& x,
+                                                               const AutoDiffScalar<T, N>& s) {
+  return copysign(x, s.value());
+}
+
 // min/max return the selected operand, preserving its derivatives; a passive operand is a constant.
 template <typename T, size_t N>
 KOKKOS_INLINE_FUNCTION constexpr AutoDiffScalar<T, N> min(const AutoDiffScalar<T, N>& a,

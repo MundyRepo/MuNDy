@@ -38,6 +38,7 @@
 #include <mundy_geom/primitives/Point.hpp>     // for mundy::Point
 #include <mundy_utils/requires.hpp>
 #include <mundy_math/cmath.hpp>
+#include <mundy_geom/distance/impl/Circle3DCircle3DImpl.hpp>  // for the cost-only objective functor
 
 namespace mundy {
 
@@ -70,57 +71,6 @@ KOKKOS_FUNCTION typename Circle3DType1::value_type distance([[maybe_unused]] con
 
 template <ValidCircle3DType Circle3DType1, ValidCircle3DType Circle3DType2>
 MUNDY_REQUIRES(std::is_same_v<typename Circle3DType1::value_type, typename Circle3DType2::value_type>)
-class Circle3DCircle3DObjective {
- public:
-  using Scalar = typename Circle3DType1::value_type;
-
-  KOKKOS_FUNCTION
-  Circle3DCircle3DObjective(const Circle3DType1& circle3d0,          //
-                            const Circle3DType2& circle3d1,          //
-                            mundy::Vector3<Scalar>& shared_normal0,  //
-                            mundy::Vector3<Scalar>& shared_normal1,  //
-                            Point<Scalar>& foot_point0,              //
-                            Point<Scalar>& foot_point1)
-      : circle3d0_(circle3d0),
-        circle3d1_(circle3d1),
-        shared_normal0_(shared_normal0),
-        shared_normal1_(shared_normal1),
-        foot_point0_(foot_point0),
-        foot_point1_(foot_point1) {
-  }
-
-  template <ValidCircle3DType Circle3DType>
-  KOKKOS_INLINE_FUNCTION Point<Scalar> theta_to_foot_point_on_circle3d(const Scalar theta,
-                                                                       const Circle3DType& circle3d) const {
-    Point<Scalar> p_local{circle3d.radius() * cos(theta), circle3d.radius() * sin(theta), 0.0};
-    auto p_global = circle3d.orientation() * p_local + circle3d.center();
-    return p_global;
-  }
-
-  KOKKOS_FUNCTION Scalar operator()(const mundy::Vector<Scalar, 2>& theta1_theta2) const {
-    foot_point0_ = theta_to_foot_point_on_circle3d(theta1_theta2[0], circle3d0_);
-    foot_point1_ = theta_to_foot_point_on_circle3d(theta1_theta2[1], circle3d1_);
-
-    shared_normal0_ = foot_point1_ - foot_point0_;
-
-    const double norm = mundy::norm(shared_normal0_);
-    shared_normal0_ /= (norm > mundy::get_zero_tolerance<Scalar>() ? norm : 1.0);
-    shared_normal1_ = -shared_normal0_;
-
-    return norm;
-  }
-
- private:
-  const Circle3DType1& circle3d0_;
-  const Circle3DType2& circle3d1_;
-  mundy::Vector3<Scalar>& shared_normal0_;
-  mundy::Vector3<Scalar>& shared_normal1_;
-  Point<Scalar>& foot_point0_;
-  Point<Scalar>& foot_point1_;
-};
-
-template <ValidCircle3DType Circle3DType1, ValidCircle3DType Circle3DType2>
-MUNDY_REQUIRES(std::is_same_v<typename Circle3DType1::value_type, typename Circle3DType2::value_type>)
 KOKKOS_FUNCTION typename Circle3DType1::value_type
     distance([[maybe_unused]] const Euclidean distance_type,                    //
              const Circle3DType1& circle3d1,                                    //
@@ -130,31 +80,40 @@ KOKKOS_FUNCTION typename Circle3DType1::value_type
              mundy::Vector3<typename Circle3DType1::value_type>& shared_normal1,  //
              mundy::Vector3<typename Circle3DType1::value_type>& shared_normal2) {
   using Scalar = typename Circle3DType1::value_type;
+  using Passive = passive_scalar_t<Scalar>;  // double for an AD scalar; Scalar itself otherwise
+  using PassiveCircle3D = Circle3D<Passive>;
 
-  // Setup the minimization
-  // Note, the actual error is not guaranteed to be less than min_objective_delta due to the use of approximate
-  // derivatives. Instead, we saw that the error was typically less than the square root of min_objective_delta.
-  constexpr Scalar min_objective_delta = mundy::get_relaxed_zero_tolerance<Scalar>();
+  // Envelope theorem: solve for the optimal angles theta* in the passive type (the L-BFGS minimiser is
+  // double-only), then re-evaluate the closest points on the original — possibly AD — circles with
+  // theta* frozen. Since d(objective)/d(theta) = 0 at the optimum, the returned distance carries the
+  // exact derivative w.r.t. the circle parameters without differentiating through the solve.
+  //
+  // Note, the actual error is not guaranteed to be less than min_objective_delta due to the use of
+  // approximate derivatives. The error is typically less than the square root of min_objective_delta.
+  constexpr Passive min_allowable_cost  = -Kokkos::Experimental::infinity_v<Passive>;    // no early-exit on cost
+  constexpr Passive min_objective_delta = mundy::get_relaxed_zero_tolerance<Passive>();  // L-BFGS convergence tolerance
   constexpr size_t lbfgs_max_memory_size = 10;
 
-  // Reuse the solution space rather than re-allocating it each time
-  Circle3DCircle3DObjective<Circle3DType1, Circle3DType2> minimize_euclidean_distance(
-      circle3d1, circle3d2, shared_normal1, shared_normal2, closest_point1, closest_point2);
+  const PassiveCircle3D c0p = impl::passive_copy(circle3d1);
+  const PassiveCircle3D c1p = impl::passive_copy(circle3d2);
+  Point<Passive> cp0p, cp1p;
+  mundy::Vector3<Passive> sn0p, sn1p;
+  impl::Circle3DCircle3DObjective<PassiveCircle3D, PassiveCircle3D> objective_p(c0p, c1p, sn0p, sn1p, cp0p, cp1p);
 
-  constexpr Scalar pi = Kokkos::numbers::pi_v<Scalar>;
-  constexpr Scalar zero = static_cast<Scalar>(0.0);
-  constexpr Scalar one_third_pi = pi / static_cast<Scalar>(3.0);
-  constexpr Scalar five_third_pi = static_cast<Scalar>(5.0) * one_third_pi;
-  constexpr Kokkos::Array<Scalar, 3> theta_guesses{one_third_pi, pi, five_third_pi};
+  constexpr Passive pi = Kokkos::numbers::pi_v<Passive>;
+  constexpr Passive zero = static_cast<Passive>(0.0);
+  constexpr Passive one_third_pi = pi / static_cast<Passive>(3.0);
+  constexpr Passive five_third_pi = static_cast<Passive>(5.0) * one_third_pi;
+  constexpr Kokkos::Array<Passive, 3> theta_guesses{one_third_pi, pi, five_third_pi};
 
-  Scalar global_dist = Kokkos::Experimental::infinity_v<Scalar>;
-  mundy::Vector<Scalar, 2> theta1_theta2_sol{zero, zero};
-  mundy::Vector<Scalar, 2> global_theta1_theta2_sol{zero, zero};
+  Passive global_dist = Kokkos::Experimental::infinity_v<Passive>;
+  mundy::Vector<Passive, 2> theta1_theta2_sol{zero, zero};
+  mundy::Vector<Passive, 2> global_theta1_theta2_sol{zero, zero};
   for (size_t t_idx = 0; t_idx < 3; ++t_idx) {
     for (size_t p_idx = 0; p_idx < 3; ++p_idx) {
       theta1_theta2_sol = {theta_guesses[t_idx], theta_guesses[p_idx]};
-      const Scalar dist = find_min_using_approximate_derivatives<lbfgs_max_memory_size>(
-          minimize_euclidean_distance, theta1_theta2_sol, min_objective_delta);
+      const Passive dist = find_min_using_approximate_derivatives<lbfgs_max_memory_size>(
+          objective_p, theta1_theta2_sol, min_allowable_cost, min_objective_delta);
       if (dist < global_dist) {
         global_dist = dist;
         global_theta1_theta2_sol = theta1_theta2_sol;
@@ -162,9 +121,13 @@ KOKKOS_FUNCTION typename Circle3DType1::value_type
     }
   }
 
-  // Evaluating the objective updates the shared normal and foot points
-  minimize_euclidean_distance(global_theta1_theta2_sol);
-  return global_dist;
+  // Re-evaluate on the original circles with theta* frozen as a zero-derivative constant; the objective
+  // fills the closest points / shared normals and returns the (AD) separation distance.
+  impl::Circle3DCircle3DObjective<Circle3DType1, Circle3DType2> objective_ad(
+      circle3d1, circle3d2, shared_normal1, shared_normal2, closest_point1, closest_point2);
+  const mundy::Vector<Scalar, 2> theta_star{static_cast<Scalar>(global_theta1_theta2_sol[0]),
+                                            static_cast<Scalar>(global_theta1_theta2_sol[1])};
+  return objective_ad(theta_star);
 }
 //@}
 

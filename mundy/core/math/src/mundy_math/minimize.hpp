@@ -72,8 +72,6 @@ KOKKOS_FUNCTION double find_min_using_approximate_derivatives(
 /// callable is invoked exactly once per evaluation point in both the outer loop and the line
 /// search, eliminating all redundant forward passes.
 ///
-/// \note Host-only: relies on mutable caching inside \c CachingFDFLineAdaptor.
-///
 /// \tparam max_size  L-BFGS history depth.
 /// \tparam N         Dimensionality of the parameter space.
 /// \param fdf        Callable: \c double(const Vector<double,N>&, Vector<double,N>&).
@@ -82,7 +80,7 @@ KOKKOS_FUNCTION double find_min_using_approximate_derivatives(
 /// \param min_alowable_cost  Early-exit threshold.
 /// \param min_objective_delta  Convergence tolerance on the change in objective value.
 template <size_t max_size, size_t N, typename FDFType>
-double find_min_with_fdf(const FDFType& fdf, Vector<double, N>& x,
+KOKKOS_FUNCTION double find_min_with_fdf(const FDFType& fdf, Vector<double, N>& x,
                          const double min_alowable_cost = -Kokkos::Experimental::infinity_v<double>,
                          const double min_objective_delta = 1e-7) {
   auto stop_strategy = impl::objective_delta_stop_strategy(min_objective_delta);

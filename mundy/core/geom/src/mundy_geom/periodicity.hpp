@@ -82,7 +82,7 @@ namespace mundy {
 
 namespace impl {
 
-/// Map s into [0, 1). Uses floor() rather than integer truncation to avoid UB
+/// \brief Map s into [0, 1). Uses floor() rather than integer truncation to avoid UB
 /// when |s| exceeds the representable range of any integer type.
 /// The guard is required: for a tiny negative s (e.g. -1e-300), floor(s) = -1
 /// and (s + 1) rounds to exactly 1.0 in IEEE 754, so without the clamp the
@@ -90,8 +90,8 @@ namespace impl {
 template <typename Scalar>
 KOKKOS_INLINE_FUNCTION constexpr Scalar safe_unit_mod1(Scalar s) {
   const Scalar tol = get_zero_tolerance<Scalar>();
-  Scalar t = s - floor(s);
-  if (fabs(t - Scalar(1)) < tol) t = Scalar(0);
+  Scalar t = s - floor_no_ad(s);
+  if (abs(t - Scalar(1)) < tol) t = Scalar(0);
   return t;
 }
 
@@ -278,13 +278,14 @@ class OrthorhombicMetric {
   ///
   /// Maps each periodic component to [-0.5, 0.5) by subtracting round().
   /// Non-periodic components are passed through unchanged.
+  /// Wrapping preserves derivatives but does not itself contribute to AD.
   template <ValidVector3Type Vector3T>
   MUNDY_REQUIRES(std::is_same_v<typename Vector3T::value_type, Scalar>)
   KOKKOS_INLINE_FUNCTION constexpr OurVector3 frac_minimum_image(const Vector3T& fv) const {
     OurVector3 r{fv[0], fv[1], fv[2]};
-    if constexpr (PeriodicAxes & AXIS_X) r[0] -= round(r[0]);
-    if constexpr (PeriodicAxes & AXIS_Y) r[1] -= round(r[1]);
-    if constexpr (PeriodicAxes & AXIS_Z) r[2] -= round(r[2]);
+    if constexpr (PeriodicAxes & AXIS_X) r[0] -= impl::round_no_ad(r[0]);
+    if constexpr (PeriodicAxes & AXIS_Y) r[1] -= impl::round_no_ad(r[1]);
+    if constexpr (PeriodicAxes & AXIS_Z) r[2] -= impl::round_no_ad(r[2]);
     return r;
   }
 
@@ -407,13 +408,14 @@ class TriclinicMetric {
   ///
   /// Maps each periodic fractional component to [-0.5, 0.5) by subtracting round().
   /// Non-periodic fractional components are passed through unchanged.
+  /// Wrapping preserves derivatives but does not itself contribute to AD.
   template <ValidVector3Type Vector3T>
   MUNDY_REQUIRES(std::is_same_v<typename Vector3T::value_type, Scalar>)
   KOKKOS_INLINE_FUNCTION constexpr OurVector3 frac_minimum_image(const Vector3T& fv) const {
     OurVector3 r{fv[0], fv[1], fv[2]};
-    if constexpr (PeriodicAxes & AXIS_X) r[0] -= round(r[0]);
-    if constexpr (PeriodicAxes & AXIS_Y) r[1] -= round(r[1]);
-    if constexpr (PeriodicAxes & AXIS_Z) r[2] -= round(r[2]);
+    if constexpr (PeriodicAxes & AXIS_X) r[0] -= impl::round_no_ad(r[0]);
+    if constexpr (PeriodicAxes & AXIS_Y) r[1] -= impl::round_no_ad(r[1]);
+    if constexpr (PeriodicAxes & AXIS_Z) r[2] -= impl::round_no_ad(r[2]);
     return r;
   }
 
@@ -980,8 +982,8 @@ template <ValidPointType PointT, typename Metric>
 KOKKOS_INLINE_FUNCTION Vector3<int> image_index(const PointT& p, const Metric& metric) {
   const auto f = metric.to_fractional(p);
   const auto fw = metric.frac_wrap_to_unit_cell(f);
-  return Vector3<int>{static_cast<int>(round(f[0] - fw[0])), static_cast<int>(round(f[1] - fw[1])),
-                      static_cast<int>(round(f[2] - fw[2]))};
+  return Vector3<int>{static_cast<int>(impl::round_no_ad(f[0] - fw[0])), static_cast<int>(impl::round_no_ad(f[1] - fw[1])),
+                      static_cast<int>(impl::round_no_ad(f[2] - fw[2]))};
 }
 
 /// \brief The Cartesian displacement of an integer lattice combination `n`, i.e. `Σ nᵢ·aᵢ` over the lattice vectors.
