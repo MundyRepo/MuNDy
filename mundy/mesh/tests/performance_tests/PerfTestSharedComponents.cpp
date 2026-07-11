@@ -404,6 +404,13 @@ static void bench_drag_host(const BenchOptions& opts) {
   else std::cout << out.str();
 }
 
+void eval_drag_velocity_step(auto ngp_mesh, stk::mesh::Selector &selector, auto ngp_force_comp, auto ngp_vel_comp, auto drag) {
+    mundy::mesh::for_each_entity_run(ngp_mesh, stk::topology::NODE_RANK, selector,
+        KOKKOS_LAMBDA(const stk::mesh::FastMeshIndex& idx) {
+            drag_velocity_step(drag(idx), ngp_force_comp(idx), ngp_vel_comp(idx));
+        });
+  }
+
 static void bench_drag_ngp(const BenchOptions& opts) {
   auto f = build_fixture(opts.num_entities);
   FC_v force_comp(*f.force), vel_comp(*f.velocity);
@@ -417,10 +424,8 @@ static void bench_drag_ngp(const BenchOptions& opts) {
   auto ngp_drag_sc    = get_updated_ngp_component(drag_sc);  // by value: NgpSharedScalarComponent
 
   auto run = [&](auto drag) {
-    mundy::mesh::for_each_entity_run(ngp_mesh, stk::topology::NODE_RANK, f.selector,
-        KOKKOS_LAMBDA(const stk::mesh::FastMeshIndex& idx) {
-            drag_velocity_step(drag(idx), ngp_force_comp(idx), ngp_vel_comp(idx));
-        });
+   // Can't have a KOKKOS_LAMBDA inside a generic lambda (CUDA restriction), so we need a separate function for the NGP drag step.
+    eval_drag_velocity_step(ngp_mesh, f.selector, ngp_force_comp, ngp_vel_comp, drag);
   };
   auto run_field = [&] {
     ngp_force_comp.sync_to_device(); ngp_vel_comp.sync_to_device(); ngp_drag_fc.sync_to_device();
@@ -477,6 +482,14 @@ static void bench_mobility_host(const BenchOptions& opts) {
   else std::cout << out.str();
 }
 
+void eval_rigid_body_mobility_step(auto ngp_mesh, stk::mesh::Selector &selector, auto ngp_ambient, auto ngp_mobility, auto ngp_force_comp, auto ngp_orient_comp, auto ngp_vel_comp) {
+    mundy::mesh::for_each_entity_run(ngp_mesh, stk::topology::NODE_RANK, selector,
+        KOKKOS_LAMBDA(const stk::mesh::FastMeshIndex& idx) {
+            rigid_body_mobility_step(ngp_ambient(idx), ngp_mobility(idx),
+                ngp_force_comp(idx), ngp_orient_comp(idx), ngp_vel_comp(idx));
+        });
+  }
+
 static void bench_mobility_ngp(const BenchOptions& opts) {
   auto f = build_fixture(opts.num_entities);
   FC_v force_comp(*f.force), vel_comp(*f.velocity);
@@ -496,11 +509,7 @@ static void bench_mobility_ngp(const BenchOptions& opts) {
   auto& ngp_mobility_sc = get_updated_ngp_component(mobility_sc);
 
   auto run = [&](auto ambient, auto mobility) {
-    mundy::mesh::for_each_entity_run(ngp_mesh, stk::topology::NODE_RANK, f.selector,
-        KOKKOS_LAMBDA(const stk::mesh::FastMeshIndex& idx) {
-            rigid_body_mobility_step(ambient(idx), mobility(idx),
-                ngp_force_comp(idx), ngp_orient_comp(idx), ngp_vel_comp(idx));
-        });
+    eval_rigid_body_mobility_step(ngp_mesh, f.selector, ambient, mobility, ngp_force_comp, ngp_orient_comp, ngp_vel_comp);
   };
   auto run_field = [&] {
     ngp_force_comp.sync_to_device(); ngp_orient_comp.sync_to_device(); ngp_vel_comp.sync_to_device();
@@ -565,6 +574,18 @@ static void bench_complex_host(const BenchOptions& opts) {
   else std::cout << out.str();
 }
 
+void eval_rigid_body_step(auto ngp_mesh, stk::mesh::Selector &selector, auto dt, auto ambient, auto drag, auto target,
+                          auto ngp_force_comp, auto ngp_torque_comp, auto ngp_orient_comp, auto ngp_mobility_comp,
+                          auto ngp_vel_comp, auto ngp_stress_comp, auto ngp_orient_out_comp, auto ngp_energy_comp) {
+    mundy::mesh::for_each_entity_run(ngp_mesh, stk::topology::NODE_RANK, selector,
+        KOKKOS_LAMBDA(const stk::mesh::FastMeshIndex& idx) {
+            rigid_body_step(dt(idx), ambient(idx), drag(idx), target(idx),
+                ngp_force_comp(idx), ngp_torque_comp(idx), ngp_orient_comp(idx),
+                ngp_mobility_comp(idx), ngp_vel_comp(idx), ngp_stress_comp(idx),
+                ngp_orient_out_comp(idx), ngp_energy_comp(idx));
+        });
+  }
+
 static void bench_complex_ngp(const BenchOptions& opts) {
   auto f = build_fixture(opts.num_entities);
   // Per-entity fields
@@ -612,13 +633,9 @@ static void bench_complex_ngp(const BenchOptions& opts) {
   };
 
   auto run = [&](auto dt, auto ambient, auto drag, auto target) {
-    mundy::mesh::for_each_entity_run(ngp_mesh, stk::topology::NODE_RANK, f.selector,
-        KOKKOS_LAMBDA(const stk::mesh::FastMeshIndex& idx) {
-            rigid_body_step(dt(idx), ambient(idx), drag(idx), target(idx),
-                ngp_force_comp(idx), ngp_torque_comp(idx), ngp_orient_comp(idx),
-                ngp_mobility_comp(idx), ngp_vel_comp(idx), ngp_stress_comp(idx),
-                ngp_orient_out_comp(idx), ngp_energy_comp(idx));
-        });
+    eval_rigid_body_step(ngp_mesh, f.selector, dt, ambient, drag, target,
+        ngp_force_comp, ngp_torque_comp, ngp_orient_comp, ngp_mobility_comp,
+        ngp_vel_comp, ngp_stress_comp, ngp_orient_out_comp, ngp_energy_comp);
   };
   auto run_field = [&] {
     sync_per_entity_comps();

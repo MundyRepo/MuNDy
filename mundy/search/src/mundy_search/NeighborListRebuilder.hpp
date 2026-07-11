@@ -377,8 +377,7 @@ class RebuildOnEntityChange {
   }
   //@}
 
- private:
-  //! \name Internal helpers
+  //! \name Internal helpers TODO(palmerb4): Make these private somehow but handle CUDA's complain about device lambdas in private methods.
   //@{
 
   /// \brief Enumerate the current entities of an input's chunk into a device view (selector order).
@@ -418,6 +417,7 @@ class RebuildOnEntityChange {
     Kokkos::fence();
   }
   //@}
+ private:
 
   //! \name Internal members
   //@{

@@ -483,7 +483,11 @@ class NgpRequestEntitiesImplT {
 
   /// \brief Constructor.
   NgpRequestEntitiesImplT(unsigned helper_index)
+  #if KOKKOS_VERSION >= 40401  // SequentialHostInit introduced in Kokkos 4.4.01
       : state_(Kokkos::view_alloc(Kokkos::SequentialHostInit, "NgpRequestEntitiesImplT::state")) {
+        #else
+      : state_(Kokkos::view_alloc(Kokkos::WithoutInitializing, "NgpRequestEntitiesImplT::state")) {
+  #endif
     state_().index_ = helper_index;
     state_().active_space_dev_view_ = bool_view_t("NgpRequestEntitiesImplT::active_space_dev_view");
     state_().active_space_host_view_ = Kokkos::create_mirror_view(state_().active_space_dev_view_);
@@ -799,7 +803,11 @@ class NgpRequestConnectionsT {
   void initialize() {
     MUNDY_THROW_ASSERT(!state_.is_allocated(), std::runtime_error,
                        "NgpRequestConnectionsT::initialize() called on already initialized object.");
+#if KOKKOS_VERSION >= 40401  // SequentialHostInit introduced in Kokkos 4.4.01
     state_ = state_view_t(Kokkos::view_alloc(Kokkos::SequentialHostInit, "NgpRequestConnectionsT::state"));
+#else
+    state_ = state_view_t(Kokkos::view_alloc(Kokkos::WithoutInitializing, "NgpRequestConnectionsT::state"));
+#endif
     state_().active_space_dev_view_ = bool_view_t("NgpRequestConnectionsT::active_space_dev_view");
     state_().active_space_host_view_ = Kokkos::create_mirror_view(state_().active_space_dev_view_);
     state_().ticket_issuer_ = ticket_issuer_t(/*activate_device*/ true);
@@ -1012,7 +1020,11 @@ class NgpRequestLinkRelationsT {
   void initialize() {
     MUNDY_THROW_ASSERT(!state_.is_allocated(), std::runtime_error,
                        "NgpRequestLinkRelationsT::initialize() called on already initialized object.");
+  #if KOKKOS_VERSION >= 40401  // SequentialHostInit introduced in Kokkos 4.4.01
     state_ = state_view_t(Kokkos::view_alloc(Kokkos::SequentialHostInit, "NgpRequestLinkRelationsT::state"));
+  #else
+    state_ = state_view_t(Kokkos::view_alloc(Kokkos::WithoutInitializing, "NgpRequestLinkRelationsT::state"));
+  #endif
     state_().active_space_dev_view_ = bool_view_t("NgpRequestLinkRelationsT::active_space_dev_view");
     state_().active_space_host_view_ = Kokkos::create_mirror_view(state_().active_space_dev_view_);
     state_().ticket_issuer_ = ticket_issuer_t(/*activate_device*/ true);
@@ -1182,7 +1194,11 @@ class NgpDestroyEntitiesT {
   void initialize() {
     MUNDY_THROW_ASSERT(!state_.is_allocated(), std::runtime_error,
                        "NgpDestroyEntitiesT::initialize() called on already initialized object.");
+#if KOKKOS_VERSION >= 40401  // SequentialHostInit introduced in Kokkos 4.4.01
     state_ = state_view_t(Kokkos::view_alloc(Kokkos::SequentialHostInit, "NgpDestroyEntitiesT::state"));
+#else
+    state_ = state_view_t(Kokkos::view_alloc(Kokkos::WithoutInitializing, "NgpDestroyEntitiesT::state"));
+#endif
     state_().active_space_dev_view_ = bool_view_t("NgpDestroyEntitiesT::active_space_dev_view");
     state_().active_space_host_view_ = Kokkos::create_mirror_view(state_().active_space_dev_view_);
     state_().ticket_issuer_ = ticket_issuer_t(/*activate_device*/ true);
@@ -1371,7 +1387,11 @@ class NgpDestroyConnectionsT {
   void initialize() {
     MUNDY_THROW_ASSERT(!state_.is_allocated(), std::runtime_error,
                        "NgpDestroyConnectionsT::initialize() called on already initialized object.");
+#if KOKKOS_VERSION >= 40401  // SequentialHostInit introduced in Kokkos 4.4.01
     state_ = state_view_t(Kokkos::view_alloc(Kokkos::SequentialHostInit, "NgpDestroyConnectionsT::state"));
+#else
+    state_ = state_view_t(Kokkos::view_alloc(Kokkos::WithoutInitializing, "NgpDestroyConnectionsT::state"));
+#endif
     state_().active_space_dev_view_ = bool_view_t("NgpDestroyConnectionsT::active_space_dev_view");
     state_().active_space_host_view_ = Kokkos::create_mirror_view(state_().active_space_dev_view_);
     state_().ticket_issuer_ = ticket_issuer_t(/*activate_device*/ true);
@@ -1563,8 +1583,13 @@ class NgpModRequestsT {
 
   /// \brief Default constructor.
   NgpModRequestsT()
+  #if KOKKOS_VERSION >= 40401  // SequentialHostInit introduced in Kokkos 4.4.01
       : shared_state_(Kokkos::view_alloc(Kokkos::SequentialHostInit, "NgpModRequestsT::shared_state")),
         host_state_(Kokkos::view_alloc(Kokkos::SequentialHostInit, "NgpModRequestsT::host_state")) {
+  #else
+      : shared_state_(Kokkos::view_alloc(Kokkos::WithoutInitializing, "NgpModRequestsT::shared_state")),
+        host_state_(Kokkos::view_alloc(Kokkos::WithoutInitializing, "NgpModRequestsT::host_state")) {
+  #endif
     shared_state_().initialize();
   }
 

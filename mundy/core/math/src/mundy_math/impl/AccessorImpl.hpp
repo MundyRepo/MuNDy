@@ -30,13 +30,13 @@ namespace impl {
 
 // Helper for generating a tuple with T repeated N times
 template <typename T, size_t... Is>
-auto generate_tuple_with_t_repeated_impl(std::index_sequence<Is...>) {
+constexpr auto generate_tuple_with_t_repeated_impl(std::index_sequence<Is...>) {
   return std::tuple<std::conditional_t<true, T, decltype(Is)>...>{};
 }
 
 // Main template to generate a tuple with T repeated N times
 template <typename T, size_t N>
-auto generate_tuple_with_t_repeated_n_times() {
+constexpr auto generate_tuple_with_t_repeated_n_times() {
   return generate_tuple_with_t_repeated_impl<T>(std::make_index_sequence<N>{});
 }
 

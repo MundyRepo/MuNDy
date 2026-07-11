@@ -33,6 +33,7 @@
 
 // C++ core
 #include <cmath>
+#include <cstdint>
 #include <type_traits>
 
 namespace mundy {
@@ -110,8 +111,6 @@ MUNDY_MATH_DISPATCH_UNARY(atan)
 MUNDY_MATH_DISPATCH_UNARY(exp)
 MUNDY_MATH_DISPATCH_UNARY(log)
 MUNDY_MATH_DISPATCH_UNARY(log10)
-MUNDY_MATH_DISPATCH_UNARY(abs)
-MUNDY_MATH_DISPATCH_UNARY(fabs)
 MUNDY_MATH_DISPATCH_UNARY(floor)
 MUNDY_MATH_DISPATCH_UNARY(ceil)
 MUNDY_MATH_DISPATCH_UNARY(round)
@@ -124,6 +123,52 @@ MUNDY_MATH_DISPATCH_BINARY(max)
 
 #undef MUNDY_MATH_DISPATCH_UNARY
 #undef MUNDY_MATH_DISPATCH_BINARY
+
+/// \brief Reinterprets the bits of From as To.
+///
+/// On the host, we can simply call std::bit_cast, but on the device we directly call __builtin_bit_cast, which is constexpr
+/// and used by both CUDA and STD to perform their bit cast. Compiler support for __builtin_bit_cast is checked with __has_builtin,
+/// and a fallback implementation that just calls Kokkos::bit_cast is provided if it doesn't exist.
+///
+/// \param[in] from Value whose bit pattern is reinterpreted.
+template <typename To, typename From>
+KOKKOS_INLINE_FUNCTION constexpr To bit_cast(const From& from) {
+  static_assert(sizeof(To) == sizeof(From), "bit_cast requires equal-size types.");
+  static_assert(std::is_trivially_copyable_v<To> && std::is_trivially_copyable_v<From>,
+               "bit_cast requires trivially copyable types.");
+#if defined(__has_builtin) && __has_builtin(__builtin_bit_cast)
+  return __builtin_bit_cast(To, from);
+#else
+  return Kokkos::bit_cast<To>(from);
+#endif
+}
+
+/// \brief Absolute value (constexpr-compatible for arithmetic types, ADL for others).
+///
+/// Kokkos::abs is not constexpr. For float/double, clearing the sign bit via bit_cast sidesteps the problem entirely.
+/// Other arithmetic types fall back to a plain comparison; non-arithmetic (AD) types use ADL, matching the other dispatch functions above.
+///
+/// \param[in] x Value to take the absolute value of.
+template <typename T>
+KOKKOS_INLINE_FUNCTION constexpr auto abs(const T& x) {
+  if constexpr (std::is_same_v<T, double>) {
+    return bit_cast<double>(static_cast<std::uint64_t>(bit_cast<std::uint64_t>(x) & 0x7FFF'FFFF'FFFF'FFFFULL));
+  } else if constexpr (std::is_same_v<T, float>) {
+    return bit_cast<float>(static_cast<std::uint32_t>(bit_cast<std::uint32_t>(x) & 0x7FFF'FFFFU));
+  } else if constexpr (std::is_arithmetic_v<T>) {
+    return x < T(0) ? -x : x;
+  } else {
+    using std::abs;
+    return abs(x);
+  }
+}
+
+/// \brief Absolute value of a floating-point argument. Equivalent to abs() here.
+/// \param[in] x Value to take the absolute value of.
+template <typename T>
+KOKKOS_INLINE_FUNCTION constexpr auto fabs(const T& x) {
+  return abs(x);
+}
 
 namespace impl {
 

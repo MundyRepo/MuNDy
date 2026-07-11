@@ -39,6 +39,9 @@
 #include <utility>
 #include <vector>
 
+// Trilinos
+#include <Trilinos_version.h>  // for TRILINOS_MAJOR_MINOR_VERSION
+
 // STK
 #include <stk_io/FieldAndName.hpp>
 #include <stk_io/IossBridge.hpp>
@@ -795,10 +798,59 @@ inline Class& declare_class_impl(stk::mesh::MetaData& meta_data, Class::Type cla
   return class_map.append(std::move(class_ptr));
 }
 
+#if TRILINOS_MAJOR_MINOR_VERSION < 160100  // get_defined_output_fields introduced in Trilinos 16.1.0
+
+// Creates a hidden friend that returns a pointer to the selected member.
+template <class Tag, typename Tag::type Member>
+struct PrivateMemberExposer {
+  friend typename Tag::type get_private_member(Tag) noexcept {
+    return Member;
+  }
+};
+
+struct NamedFieldsTag {
+  using type = std::vector<stk::io::FieldAndName> stk::io::impl::OutputFile::*;
+
+  friend type get_private_member(NamedFieldsTag) noexcept;
+};
+
+// Deliberately extracts a pointer to OutputFile::m_namedFields.
+template struct PrivateMemberExposer<NamedFieldsTag, &stk::io::impl::OutputFile::m_namedFields>;
+
+// m_outputFiles is protected, so the ordinary derived-class
+// pointer-to-member technique works for this level.
+struct BrokerAccess : stk::io::StkMeshIoBroker {
+  static const auto& output_files(const stk::io::StkMeshIoBroker& broker) noexcept {
+    return broker.*(&BrokerAccess::m_outputFiles);
+  }
+};
+
+const inline std::vector<stk::io::FieldAndName>& named_fields(const stk::io::impl::OutputFile& outputFile) {
+  const auto member = get_private_member(NamedFieldsTag{});
+  return outputFile.*member;
+}
+#endif
+
+const inline std::vector<stk::io::FieldAndName>& get_defined_output_fields(const stk::io::StkMeshIoBroker& broker,
+                                                                    std::size_t outputFileIndex) {
+#if TRILINOS_MAJOR_MINOR_VERSION >= 160100
+  return broker.get_defined_output_fields(outputFileIndex);
+#else
+  const auto& outputFiles = BrokerAccess::output_files(broker);
+  MUNDY_THROW_REQUIRE(outputFileIndex < outputFiles.size(), std::out_of_range,
+                      "Invalid STK output-file index in get_defined_output_fields().");
+  MUNDY_THROW_REQUIRE(
+      outputFiles[outputFileIndex] != nullptr, std::logic_error,
+      sink() << "STK output file at index " << outputFileIndex << " is null in get_defined_output_fields().");
+  return named_fields(*outputFiles[outputFileIndex]);
+#endif
+}
+
 /// \brief Return whether the broker already has the given field/name pair registered.
 inline bool is_output_field_registered(const stk::io::StkMeshIoBroker& io_broker, size_t output_file_index,
                                        const stk::mesh::FieldBase& field, const std::string& db_name) {
-  const std::vector<stk::io::FieldAndName>& named_fields = io_broker.get_defined_output_fields(output_file_index);
+  const std::vector<stk::io::FieldAndName>& named_fields =
+      get_defined_output_fields(io_broker, output_file_index);
   for (const stk::io::FieldAndName& named_field : named_fields) {
     if (named_field.field() == &field && named_field.db_name() == db_name) {
       return true;
@@ -859,7 +911,8 @@ template <typename ComponentType>
 inline constexpr bool has_direct_field_v = requires(ComponentType& component) { component.field(); };
 
 template <typename ComponentType>
-inline constexpr bool has_nested_component_field_v = requires(ComponentType& component) { component.component().field(); };
+inline constexpr bool has_nested_component_field_v =
+    requires(ComponentType& component) { component.component().field(); };
 
 template <typename ComponentType>
 decltype(auto) class_component_field(ComponentType& component) {
@@ -1237,13 +1290,13 @@ inline void add_class_field(stk::io::StkMeshIoBroker& io_broker, size_t output_f
 
 /// \brief Register a component for output using Class-aware IO rules over an explicit class set.
 ///
-/// Shared components do not currently have an IO representation. Passing a shared component here is a no-op that prints a
-/// warning once.
+/// Shared components do not currently have an IO representation. Passing a shared component here is a no-op that prints
+/// a warning once.
 template <typename ComponentType>
 inline void add_class_component(stk::io::StkMeshIoBroker& io_broker, size_t output_file_index, ComponentType& component,
                                 const ClassVector& classes, const std::string& db_name) {
   static_assert(!std::is_const_v<std::remove_reference_t<ComponentType>>,
-              "add_class_component requires a non-const component.");
+                "add_class_component requires a non-const component.");
   if constexpr (impl::has_class_component_field_v<ComponentType>) {
     add_class_field(io_broker, output_file_index, impl::class_component_field(component), classes, db_name);
   } else {
@@ -1256,7 +1309,7 @@ template <typename ComponentType>
 inline void add_class_component(stk::io::StkMeshIoBroker& io_broker, size_t output_file_index, ComponentType& component,
                                 const ClassVector& classes) {
   static_assert(!std::is_const_v<std::remove_reference_t<ComponentType>>,
-              "add_class_component requires a non-const component.");
+                "add_class_component requires a non-const component.");
   if constexpr (impl::has_class_component_field_v<ComponentType>) {
     stk::mesh::FieldBase& field = impl::class_component_field(component);
     add_class_component(io_broker, output_file_index, component, classes, field.name());
@@ -1272,16 +1325,17 @@ template <typename ComponentType>
 inline void add_class_component(stk::io::StkMeshIoBroker& io_broker, size_t output_file_index, ComponentType& component,
                                 const std::string& db_name) {
   static_assert(!std::is_const_v<std::remove_reference_t<ComponentType>>,
-              "add_class_component requires a non-const component.");
+                "add_class_component requires a non-const component.");
   add_class_component(io_broker, output_file_index, component,
                       impl::filter_io_supported_classes(get_classes(io_broker.bulk_data().mesh_meta_data())), db_name);
 }
 
 /// \brief Register a component for output using Class-aware IO rules.
 template <typename ComponentType>
-inline void add_class_component(stk::io::StkMeshIoBroker& io_broker, size_t output_file_index, ComponentType& component) {
+inline void add_class_component(stk::io::StkMeshIoBroker& io_broker, size_t output_file_index,
+                                ComponentType& component) {
   static_assert(!std::is_const_v<std::remove_reference_t<ComponentType>>,
-              "add_class_component requires a non-const component.");
+                "add_class_component requires a non-const component.");
   if constexpr (impl::has_class_component_field_v<ComponentType>) {
     stk::mesh::FieldBase& field = impl::class_component_field(component);
     add_class_component(io_broker, output_file_index, component, field.name());

@@ -27,7 +27,6 @@
 // C++ core
 #include <cmath>
 #include <concepts>
-#include <initializer_list>
 #include <iostream>
 #include <type_traits>
 
@@ -35,7 +34,6 @@
 #include <mundy_math/Tolerance.hpp>  // for mundy::get_zero_tolerance
 #include <mundy_math/impl/ArrayImpl.hpp>
 #include <mundy_utils/requires.hpp>
-#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
 
 namespace mundy {
 
@@ -67,31 +65,15 @@ class Array {
   /// \brief Constructor to initialize all elements explicitly.
   /// Requires the number of arguments to be N and the type of each to be T.
   template <typename... Args>
-      MUNDY_REQUIRES(sizeof...(Args) == N) && (N != 1) &&
-      (std::is_same_v<std::remove_cv_t<std::remove_reference_t<Args>>, T> && ...) KOKKOS_INLINE_FUNCTION
-      constexpr explicit Array(Args&&... args)
+  MUNDY_REQUIRES((sizeof...(Args) == N) && (N != 1) &&
+                 (std::is_same_v<std::remove_cv_t<std::remove_reference_t<Args>>, T> && ...))  //
+  KOKKOS_INLINE_FUNCTION constexpr Array(Args&&... args)
       : data_{std::forward<Args>(args)...} {
-  }
-
-  /// \brief Constructor to initialize all elements via initializer list
-  KOKKOS_INLINE_FUNCTION
-  constexpr Array(const std::initializer_list<T>& list) MUNDY_REQUIRES(!std::is_const_v<T>) {
-    if (list.size() == N) {
-      size_t i = 0;
-      for (auto it = list.begin(); it != list.end(); ++it) {
-        data_[i] = *it;
-        ++i;
-      }
-    } else if (list.size() == 1) {
-      impl::fill_impl(std::make_index_sequence<N>{}, *this, *list.begin());
-    } else {
-      MUNDY_THROW_ASSERT(false, std::invalid_argument, "Array: Initializer list must have either 1 or N elements.");
-    }
   }
 
   /// \brief Constructor to initialize all elements to a single value
   KOKKOS_INLINE_FUNCTION
-  constexpr Array(const T& value) : Array(value, std::make_index_sequence<N>{}) {
+  constexpr explicit Array(const T& value) : Array(value, std::make_index_sequence<N>{}) {
   }
 
   /// \brief Default destructor

@@ -190,7 +190,7 @@ size_t count_links(const LinkDataObserverFixture& fixture) {
 stk::mesh::Ordinal get_partition_id_for_dimensionality(const NgpLinkData& ngp_link_data, unsigned dimensionality) {
   const auto& partitions = ngp_link_data.crs_data().get_all_crs_partitions();
   for (size_t i = 0; i < partitions.extent(0); ++i) {
-    const LinkCSRPartition& partition = partitions(i);
+    const auto& partition = partitions(i);
     if (partition.link_dimensionality() == dimensionality) {
       return partition.id();
     }

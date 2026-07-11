@@ -105,9 +105,9 @@ KOKKOS_INLINE_FUNCTION
 
 /// \brief Cast (and copy) the vector to a different type
 template <typename U, size_t... Is, typename T, size_t N, ValidAccessor<T> Accessor>
-KOKKOS_INLINE_FUNCTION AVector<U, N> cast_impl(std::index_sequence<Is...>, const AVector<T, N, Accessor>& vec) {
+KOKKOS_INLINE_FUNCTION constexpr AVector<U, N> cast_impl(std::index_sequence<Is...>, const AVector<T, N, Accessor>& vec) {
   static_assert(sizeof...(Is) == N, "Number of indices must match number of elements in the vector.");
-  return AVector<U, N>{static_cast<U>(vec[Is])...};
+  return AVector<U, N>(static_cast<U>(vec[Is])...);
 }
 
 /// \brief Unary minus operator

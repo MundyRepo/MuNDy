@@ -24,7 +24,6 @@
 // C++ core libs
 #include <concepts>
 #include <cstddef>
-#include <initializer_list>
 #include <stdexcept>
 #include <type_traits>
 #include <utility>
@@ -175,10 +174,6 @@ concept HasDefaultConstructor = requires { Accessor{}; };
 template <typename Accessor, typename T, size_t N>
 concept HasNArgConstructor =
     impl::can_construct_from_unpacked_tuple<Accessor, decltype(impl::generate_tuple_with_t_repeated_n_times<T, N>())>();
-
-/// \brief A concept that checks if an Accessor is constructible from an initializer list of type T
-template <typename Accessor, typename T>
-concept HasInitializerListConstructor = requires(std::initializer_list<T> list) { Accessor{list}; };
 
 /// @brief  Literal class enums! These are clearer and easier to work with than bools or explicit enums.
 namespace Ownership {

@@ -1747,6 +1747,7 @@ VECTOR_SCALAR_OP_TEST(VectorOp_VectorScalarExprDivide,   "vector / vector / scal
           const auto vel_val = ExpectedValues::vel(c);                                                              \
           const auto force_val = ExpectedValues::force(c);                                                          \
           const double d = (ctx.vector_shape == ExprInputShape::RawAccessor) ? 1.0 : 2.0;                          \
+          /*maybe consumed by Comp0, Comp1, Comp2*/                                                                \
           [[maybe_unused]] const double tv0 = vel_val[0] / d;                                                       \
           [[maybe_unused]] const double tv1 = vel_val[1] / d;                                                       \
           [[maybe_unused]] const double tv2 = vel_val[2] / d;                                                       \
@@ -1768,6 +1769,7 @@ VECTOR_SCALAR_OP_TEST(VectorOp_VectorScalarExprDivide,   "vector / vector / scal
           const auto vel_val   = ExpectedValues::vel(c);                                               \
           const auto force_val = ExpectedValues::force(c);                                             \
           const double d = (ctx.vector_shape == ExprInputShape::RawAccessor) ? 1.0 : 2.0;             \
+          /*maybe consumed by Comp0, Comp1, Comp2*/                                                   \
           [[maybe_unused]] const double tv0 = vel_val[0] / d;                                         \
           [[maybe_unused]] const double tv1 = vel_val[1] / d;                                         \
           [[maybe_unused]] const double tv2 = vel_val[2] / d;                                         \

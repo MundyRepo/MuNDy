@@ -670,7 +670,12 @@ class NgpAggregate {
 #if !defined(DOXYGEN_SHOULD_SKIP_THIS)
 /// \brief A deduction guide to allow for Aggregate() instead of Aggregate<>()
 template <typename... TaggedComponents>
-Aggregate(TaggedComponents...) -> Aggregate<TaggedComponents...>;
+Aggregate(const stk::mesh::BulkData& bulk_data, stk::mesh::Selector selector, TaggedComponents... components)
+    -> Aggregate<std::decay_t<TaggedComponents>...>;
+/// \brief A deduction guide to allow for Aggregate() instead of Aggregate<>()
+template <typename... TaggedComponents>
+Aggregate(const stk::mesh::BulkData& bulk_data, stk::mesh::Selector selector, tuple<TaggedComponents...> components)
+    -> Aggregate<std::decay_t<TaggedComponents>...>;
 #endif
 
 /// \brief Get a component of the given aggregate (const)
