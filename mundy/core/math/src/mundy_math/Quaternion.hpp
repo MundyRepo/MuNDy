@@ -25,8 +25,7 @@
 #include <Kokkos_Core.hpp>
 
 // C++ core
-#include <initializer_list>  // for std::initializer_list
-#include <type_traits>       // for std::decay_t
+#include <type_traits>  // for std::decay_t
 #include <utility>
 
 // Mundy
@@ -166,20 +165,8 @@ class AQuaternion {
  private:
   KOKKOS_INLINE_FUNCTION
   static constexpr Accessor make_storage_from_semantic_components(const T& w, const T& x, const T& y, const T& z)
-      MUNDY_REQUIRES(HasNArgConstructor<Accessor, T, 4> || HasInitializerListConstructor<Accessor, T>) {
-    return Accessor{x, y, z, w};
-  }
-
-  KOKKOS_INLINE_FUNCTION
-  static constexpr Accessor make_storage_from_semantic_components(const std::initializer_list<T>& list)
-      MUNDY_REQUIRES(HasInitializerListConstructor<Accessor, T>) {
-    MUNDY_THROW_ASSERT(list.size() == 4, std::invalid_argument, "AQuaternion: Initializer list must have 4 elements.");
-    auto it = list.begin();
-    const T w = *it++;
-    const T x = *it++;
-    const T y = *it++;
-    const T z = *it++;
-    return make_storage_from_semantic_components(w, x, y, z);
+      MUNDY_REQUIRES(HasNArgConstructor<Accessor, T, 4>) {
+    return Accessor(x, y, z, w);
   }
 
  public:
@@ -208,14 +195,6 @@ class AQuaternion {
   KOKKOS_INLINE_FUNCTION constexpr AQuaternion(const T& w, const T& x, const T& y, const T& z)
       MUNDY_REQUIRES(HasNArgConstructor<Accessor, T, 4>)
       : accessor_(make_storage_from_semantic_components(w, x, y, z)) {
-  }
-
-  /// \brief Constructor to initialize all elements via initializer list
-  /// \param[in] list The initializer list.
-  /// \note The initializer list is interpreted in `(w, x, y, z)` order.
-  KOKKOS_INLINE_FUNCTION constexpr AQuaternion(const std::initializer_list<T>& list)
-      MUNDY_REQUIRES(HasInitializerListConstructor<Accessor, T>)
-      : accessor_(make_storage_from_semantic_components(list)) {
   }
 
   /// \brief Destructor
@@ -405,7 +384,7 @@ class AQuaternion {
   /// \brief Cast (and copy) the quaternion to a different type
   template <typename U>
   KOKKOS_INLINE_FUNCTION constexpr auto cast() const {
-    return AQuaternion<U>{static_cast<U>(w()), static_cast<U>(x()), static_cast<U>(y()), static_cast<U>(z())};
+    return AQuaternion<U>(static_cast<U>(w()), static_cast<U>(x()), static_cast<U>(y()), static_cast<U>(z()));
   }
   //@}
 

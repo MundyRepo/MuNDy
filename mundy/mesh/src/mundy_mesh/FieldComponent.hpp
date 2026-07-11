@@ -613,6 +613,30 @@ class NgpOBBFieldComponent : public impl::NgpFieldComponent<NgpFieldType, impl::
   }
 };  // NgpOBBFieldComponent
 
+#if !defined(DOXYGEN_SHOULD_SKIP_THIS)
+// Deduction guides!
+template <typename ScalarType>
+FieldComponent(stk::mesh::Field<ScalarType>&) -> FieldComponent<ScalarType>;
+template <typename NgpFieldType>
+NgpFieldComponent(NgpFieldType) -> NgpFieldComponent<NgpFieldType>;
+template <typename ScalarType>
+ScalarFieldComponent(stk::mesh::Field<ScalarType>&) -> ScalarFieldComponent<ScalarType>;
+template <typename NgpFieldType>
+NgpScalarFieldComponent(NgpFieldType) -> NgpScalarFieldComponent<NgpFieldType>;
+template <typename ScalarType>
+QuaternionFieldComponent(stk::mesh::Field<ScalarType>&) -> QuaternionFieldComponent<ScalarType>;
+template <typename NgpFieldType>
+NgpQuaternionFieldComponent(NgpFieldType) -> NgpQuaternionFieldComponent<NgpFieldType>;
+template <typename ScalarType>
+AABBFieldComponent(stk::mesh::Field<ScalarType>&) -> AABBFieldComponent<ScalarType>;
+template <typename NgpFieldType>
+NgpAABBFieldComponent(NgpFieldType) -> NgpAABBFieldComponent<NgpFieldType>;
+template <typename ScalarType>
+OBBFieldComponent(stk::mesh::Field<ScalarType>&) -> OBBFieldComponent<ScalarType>;
+template <typename NgpFieldType>
+NgpOBBFieldComponent(NgpFieldType) -> NgpOBBFieldComponent<NgpFieldType>;
+#endif
+
 /// \brief A helper function for getting the NGP component from a regular component.
 ///
 /// Field-backed components simply wrap STK's updated ngp field and return the wrapper by value.

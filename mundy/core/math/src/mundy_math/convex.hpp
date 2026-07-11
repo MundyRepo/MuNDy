@@ -367,7 +367,6 @@ class QuadraticFormOp {
   KOKKOS_INLINE_FUNCTION const auto& DT() const { return impl::unwrap(DT_storage_); }
   KOKKOS_INLINE_FUNCTION const auto& M() const { return impl::unwrap(M_storage_); }
   KOKKOS_INLINE_FUNCTION const auto& D() const { return impl::unwrap(D_storage_); }
-  KOKKOS_INLINE_FUNCTION
   // clang-format on
 
   size_t domain_size() const {
@@ -404,7 +403,7 @@ class QuadraticFormOp {
   }
 
   template <class XVector, class YVector, class WorkspaceType>
-  KOKKOS_INLINE_FUNCTION void apply(const XVector& x, YVector& y, WorkspaceType& workspace) const {
+  KOKKOS_FUNCTION void apply(const XVector& x, YVector& y, WorkspaceType& workspace) const {
     impl::workspace_invalidate(workspace);
     Backend::apply(impl::unwrap(D_storage_), x, workspace.f());
     Backend::apply(impl::unwrap(M_storage_), workspace.f(), workspace.u());
@@ -412,7 +411,7 @@ class QuadraticFormOp {
   }
 
   template <class XVector, class YVector, class WorkspaceType>
-  KOKKOS_INLINE_FUNCTION void apply(const XVector& x, YVector& y) const {
+  KOKKOS_FUNCTION void apply(const XVector& x, YVector& y) const {
     auto tmp_workspace = make_workspace();
     apply(x, y, tmp_workspace);
   }
@@ -455,19 +454,19 @@ class MixedReducedOp {
     KOKKOS_INLINE_FUNCTION const auto& l_workspace() const { return impl::unwrap(l_workspace_storage_); }
     // clang-format on
 
-    KOKKOS_INLINE_FUNCTION void commit() {
+    KOKKOS_FUNCTION void commit() {
       committed_ = true;
       impl::workspace_commit(a_workspace());
       impl::workspace_commit(l_workspace());
     }
 
-    KOKKOS_INLINE_FUNCTION void invalidate() {
+    KOKKOS_FUNCTION void invalidate() {
       committed_ = false;
       impl::workspace_invalidate(a_workspace());
       impl::workspace_invalidate(l_workspace());
     }
 
-    KOKKOS_INLINE_FUNCTION bool is_committed() const {
+    KOKKOS_FUNCTION bool is_committed() const {
       return committed_ && impl::workspace_is_committed(a_workspace()) && impl::workspace_is_committed(l_workspace());
     }
 
@@ -488,7 +487,6 @@ class MixedReducedOp {
   KOKKOS_INLINE_FUNCTION Backend backend() const { return Backend{}; }
   KOKKOS_INLINE_FUNCTION const auto& A() const { return impl::unwrap(A_storage_); }
   KOKKOS_INLINE_FUNCTION const auto& L() const { return impl::unwrap(L_storage_); }
-  KOKKOS_INLINE_FUNCTION
   // clang-format on
 
   size_t domain_size() const {
@@ -540,7 +538,7 @@ class MixedReducedOp {
   }
 
   template <class XVector, class YVector, class WorkspaceType>
-  KOKKOS_INLINE_FUNCTION void apply(const XVector& x, YVector& y, WorkspaceType& workspace) const {
+  KOKKOS_FUNCTION void apply(const XVector& x, YVector& y, WorkspaceType& workspace) const {
     impl::workspace_invalidate(workspace);
     constexpr auto one = static_cast<impl::vector_value_type<XVector>>(1);
     // workspace.ax = A x
@@ -557,7 +555,7 @@ class MixedReducedOp {
   }
 
   template <class XVector, class YVector, class WorkspaceType>
-  KOKKOS_INLINE_FUNCTION void apply(const XVector& x, YVector& y) const {
+  KOKKOS_FUNCTION void apply(const XVector& x, YVector& y) const {
     auto tmp_workspace = make_workspace();
     apply(x, y, tmp_workspace);
   }
@@ -613,7 +611,7 @@ class CongruentMixedReducedOp {
     KOKKOS_INLINE_FUNCTION const auto& l_workspace() const { return impl::unwrap(l_workspace_storage_); }
     // clang-format on
 
-    KOKKOS_INLINE_FUNCTION void commit() {
+    KOKKOS_FUNCTION void commit() {
       committed_ = true;
       impl::workspace_commit(dt_workspace());
       impl::workspace_commit(m_workspace());
@@ -621,7 +619,7 @@ class CongruentMixedReducedOp {
       impl::workspace_commit(l_workspace());
     }
 
-    KOKKOS_INLINE_FUNCTION void invalidate() {
+    KOKKOS_FUNCTION void invalidate() {
       committed_ = false;
       impl::workspace_invalidate(dt_workspace());
       impl::workspace_invalidate(m_workspace());
@@ -629,7 +627,7 @@ class CongruentMixedReducedOp {
       impl::workspace_invalidate(l_workspace());
     }
 
-    KOKKOS_INLINE_FUNCTION bool is_committed() const {
+    KOKKOS_FUNCTION bool is_committed() const {
       return committed_ && impl::workspace_is_committed(dt_workspace()) &&
              impl::workspace_is_committed(m_workspace()) && impl::workspace_is_committed(d_workspace()) &&
              impl::workspace_is_committed(l_workspace());
@@ -662,7 +660,6 @@ class CongruentMixedReducedOp {
   KOKKOS_INLINE_FUNCTION const auto& M() const { return impl::unwrap(M_storage_); }
   KOKKOS_INLINE_FUNCTION const auto& D() const { return impl::unwrap(D_storage_); }
   KOKKOS_INLINE_FUNCTION const auto& L() const { return impl::unwrap(L_storage_); }
-  KOKKOS_INLINE_FUNCTION
   // clang-format on
 
   size_t domain_size() const {
@@ -732,7 +729,7 @@ class CongruentMixedReducedOp {
   }
 
   template <class XVector, class YVector, class WorkspaceType>
-  KOKKOS_INLINE_FUNCTION void apply(const XVector& x, YVector& y, WorkspaceType& workspace) const {
+  KOKKOS_FUNCTION void apply(const XVector& x, YVector& y, WorkspaceType& workspace) const {
     impl::workspace_invalidate(workspace);
     constexpr auto one = static_cast<impl::vector_value_type<XVector>>(1);
     Backend::apply(D(), x, workspace.dx(), workspace.d_workspace());
@@ -744,7 +741,7 @@ class CongruentMixedReducedOp {
   }
 
   template <class XVector, class YVector>
-  KOKKOS_INLINE_FUNCTION void apply(const XVector& x, YVector& y) const {
+  KOKKOS_FUNCTION void apply(const XVector& x, YVector& y) const {
     auto tmp_workspace = make_workspace();
     apply(x, y, tmp_workspace);
   }
@@ -766,7 +763,9 @@ struct KokkosBackend {
   template <class Vector>
   static auto make_vector_like(const Vector& q) {
     return Vector(
-        q.extent(0));  // assumes Vector has a constructor that takes a size, and that the size is given by extent(0)
+        "make_vector_like",
+        q.extent(0));  // Kokkos::View has no label-less allocating ctor; a size alone resolves to
+                       // the (incompatible) pointer-wrapping overload instead.
   }
 
   // make_domain/range_vector is host only, but may be called from KOKKOS_FUNCTION code being called on the host
@@ -1480,7 +1479,7 @@ class LCPProblem {
 };
 
 template <class Backend, class LinearOp, class QVectorStorage>
-KOKKOS_INLINE_FUNCTION auto to_cqpp(const LCPProblem<Backend, LinearOp, QVectorStorage>& P) {
+KOKKOS_FUNCTION auto to_cqpp(const LCPProblem<Backend, LinearOp, QVectorStorage>& P) {
   using value_type = typename LCPProblem<Backend, LinearOp, QVectorStorage>::value_type;
   static constexpr space::LowerBound Rn_plus{static_cast<value_type>(0)};
   return CQPPProblem(P.backend(), P.A(), P.q(), Rn_plus, P.workspace());
@@ -1488,8 +1487,8 @@ KOKKOS_INLINE_FUNCTION auto to_cqpp(const LCPProblem<Backend, LinearOp, QVectorS
 
 template <class Backend, class LinearOpAStorage, class QVectorStorage, class LinearOpLStorage, class FVectorStorage,
           class ConvexSpace, class AWorkspace, class LWorkspace>
-KOKKOS_INLINE_FUNCTION auto to_cqpp(const MCQPPProblem<Backend, LinearOpAStorage, QVectorStorage, LinearOpLStorage,
-                                                       FVectorStorage, ConvexSpace, AWorkspace, LWorkspace>& P) {
+KOKKOS_FUNCTION auto to_cqpp(const MCQPPProblem<Backend, LinearOpAStorage, QVectorStorage, LinearOpLStorage,
+                                                FVectorStorage, ConvexSpace, AWorkspace, LWorkspace>& P) {
   // get the type of P no ref
   using value_type = std::remove_reference_t<decltype(P)>::value_type;
 
@@ -1516,7 +1515,7 @@ KOKKOS_INLINE_FUNCTION auto to_cqpp(const MCQPPProblem<Backend, LinearOpAStorage
 template <class Backend, class LinearOpDTStorage, class LinearOpMStorage, class LinearOpDStorage, class QVectorStorage,
           class LinearOpLStorage, class FVectorStorage, class ConvexSpace, class DTWorkspace, class MWorkspace,
           class DWorkspace, class LWorkspace>
-KOKKOS_INLINE_FUNCTION auto to_cqpp(
+KOKKOS_FUNCTION auto to_cqpp(
     const CongruentMCQPPProblem<Backend, LinearOpDTStorage, LinearOpMStorage, LinearOpDStorage, QVectorStorage,
                                 LinearOpLStorage, FVectorStorage, ConvexSpace, DTWorkspace, MWorkspace, DWorkspace,
                                 LWorkspace>& P) {
@@ -1561,10 +1560,10 @@ KOKKOS_INLINE_FUNCTION auto to_cqpp(
 struct LinfNormProjectedGradientResidual {  // Lower bound only for non-negativity constraints
   template <typename Backend, typename XVector, typename GradVector,
             typename ReductionScalar = impl::vector_value_type<GradVector>>
-  KOKKOS_INLINE_FUNCTION ReductionScalar operator()([[maybe_unused]] const Backend& backend,  //
-                                                    const XVector& x,                         //
-                                                    const GradVector& grad,                   //
-                                                    const space::LowerBound<ReductionScalar>& convex_space) const {
+  KOKKOS_FUNCTION ReductionScalar operator()([[maybe_unused]] const Backend& backend,  //
+                                             const XVector& x,                         //
+                                             const GradVector& grad,                   //
+                                             const space::LowerBound<ReductionScalar>& convex_space) const {
     MUNDY_THROW_REQUIRE(convex_space.bound() == static_cast<ReductionScalar>(0), std::invalid_argument,
                         "LinfNormProjectedGradientResidual is only implemented for non-negativity constraints.");
 
@@ -1599,10 +1598,10 @@ struct LinfNormProjectedGradientResidual {  // Lower bound only for non-negativi
 struct LinfNormProjectedDiffResidual {
   template <typename Backend, typename XVector, typename GradVector, space::ValidConvexSpace ConvexSpace,
             typename ReductionScalar = impl::vector_value_type<GradVector>>
-  KOKKOS_INLINE_FUNCTION ReductionScalar operator()([[maybe_unused]] const Backend& backend,  //
-                                                    const XVector& x,                         //
-                                                    const GradVector& grad,                   //
-                                                    const ConvexSpace& convex_space) const {
+  KOKKOS_FUNCTION ReductionScalar operator()([[maybe_unused]] const Backend& backend,  //
+                                             const XVector& x,                         //
+                                             const GradVector& grad,                   //
+                                             const ConvexSpace& convex_space) const {
     using value_type = ReductionScalar;
 
     // This res comes from line 17 and Eq 25 of Mazhar 2015
@@ -1630,10 +1629,10 @@ struct LinfNormProjectedDiffResidual {
 struct BBStepStrategy {
   template <typename Backend, typename XOldVector, typename GradOldVector, typename XVector, typename GradVector,
             typename ReductionScalar = impl::vector_value_type<XVector>>
-  KOKKOS_INLINE_FUNCTION ReductionScalar operator()([[maybe_unused]] const Backend& backend,  //
-                                                    const XOldVector& x_old,
-                                                    const GradOldVector& grad_old,  //
-                                                    const XVector& x, const GradVector& grad) const {
+  KOKKOS_FUNCTION ReductionScalar operator()([[maybe_unused]] const Backend& backend,  //
+                                             const XOldVector& x_old,
+                                             const GradOldVector& grad_old,  //
+                                             const XVector& x, const GradVector& grad) const {
     using value_type = ReductionScalar;
 
     value_type num = Backend::template diff_dot<value_type>(x, x_old);  // (x - x_old) dot (x - x_old)
@@ -1739,7 +1738,7 @@ class PGDStrategy {
   }
 
   template <class Problem, class State>
-  KOKKOS_INLINE_FUNCTION void initialize(const Problem& prob, State& state) const {
+  KOKKOS_FUNCTION void initialize(const Problem& prob, State& state) const {
     auto backend = prob.backend();
     using backend_t = decltype(backend);
 
@@ -1771,7 +1770,7 @@ class PGDStrategy {
   }
 
   template <class Problem, class State>
-  KOKKOS_INLINE_FUNCTION bool iterate(const Problem& prob, State& state) const {
+  KOKKOS_FUNCTION bool iterate(const Problem& prob, State& state) const {
     auto backend = prob.backend();
     using backend_t = decltype(backend);
 
@@ -1807,12 +1806,12 @@ class PGDStrategy {
   }
 
   template <class State>
-  KOKKOS_INLINE_FUNCTION bool done(const State& state) const {
+  KOKKOS_FUNCTION bool done(const State& state) const {
     return state.converged() || state.iter() >= cfg_.max_iters;
   }
 
   template <class State>
-  KOKKOS_INLINE_FUNCTION result_t result(const State& state) const {
+  KOKKOS_FUNCTION result_t result(const State& state) const {
     return {state.iter(), state.residual(), state.converged()};
   }
 
@@ -2039,8 +2038,8 @@ KOKKOS_INLINE_FUNCTION auto make_mixed_cqpp(LinearOpDT&& DT, LinearOpM&& M, Line
 template <typename Backend, typename LinearOpDT, typename LinearOpM, typename LinearOpD, typename QVector,
           typename LinearOpB, typename LinearOpS, typename LinearOpBT, typename BVector,
           convex::space::ValidConvexSpace ConvexSpace>
-KOKKOS_INLINE_FUNCTION auto make_mixed_cqpp(LinearOpDT&& DT, LinearOpM&& M, LinearOpD&& D, QVector&& q, LinearOpB&& B,
-                                            LinearOpS&& S, LinearOpBT&& BT, BVector&& b, ConvexSpace&& space) {
+KOKKOS_FUNCTION auto make_mixed_cqpp(LinearOpDT&& DT, LinearOpM&& M, LinearOpD&& D, QVector&& q, LinearOpB&& B,
+                                     LinearOpS&& S, LinearOpBT&& BT, BVector&& b, ConvexSpace&& space) {
   auto DT_storage = convex::impl::to_storage(std::forward<LinearOpDT>(DT));
   auto M_storage = convex::impl::to_storage(std::forward<LinearOpM>(M));
   auto D_storage = convex::impl::to_storage(std::forward<LinearOpD>(D));
@@ -2105,7 +2104,7 @@ KOKKOS_INLINE_FUNCTION auto make_pgd_state(XVector&& x,         //
 /// \return The result of the solve (contents are defined by the strategy).
 template <class Problem, class Strategy, class State>
 MUNDY_REQUIRES(convex::CQPPSolverStrategy<Strategy, Problem, State>)
-KOKKOS_INLINE_FUNCTION auto solve_cqpp(const Problem& prob, const Strategy& strat, State& state) {
+KOKKOS_FUNCTION auto solve_cqpp(const Problem& prob, const Strategy& strat, State& state) {
   strat.initialize(prob, state);
   while (!strat.done(state)) {
     if (strat.iterate(prob, state)) break;
@@ -2157,13 +2156,11 @@ KOKKOS_INLINE_FUNCTION auto solve_cqpp(const Problem& prob, const Strategy& stra
 /// \param strat The solution strategy to use (for the reduced CQPP in x and the linear solve in y).
 /// \param state The state to use for the solution strategy, which will be modified during the solve.
 /// \return The result of the solve (contents are defined by the strategy).
-template <class Problem, class Strategy>
+template <class Problem, class Strategy, class State>
 MUNDY_REQUIRES(requires(const Problem& p) {
   { to_cqpp(p) };
 })
-KOKKOS_INLINE_FUNCTION
-    auto solve_mixed_cqpp(const Problem& prob, const Strategy& strat, typename Strategy::state_t& state) ->
-    typename Strategy::result_t {
+KOKKOS_FUNCTION auto solve_mixed_cqpp(const Problem& prob, const Strategy& strat, State& state) {
   // Convert MCQPP to CQPP
   auto ccpp_prob = to_cqpp(prob);
   return solve_cqpp(ccpp_prob, strat, state);
@@ -2242,7 +2239,7 @@ template <class Problem, class Strategy, class State>
 MUNDY_REQUIRES(requires(const Problem& p) {
   { to_cqpp(p) };
 })
-KOKKOS_INLINE_FUNCTION auto solve_lcp(const Problem& prob, const Strategy& strat, State& state) {
+KOKKOS_FUNCTION auto solve_lcp(const Problem& prob, const Strategy& strat, State& state) {
   // Convert LCP to CQPP
   auto ccpp_prob = to_cqpp(prob);
   return solve_cqpp(ccpp_prob, strat, state);

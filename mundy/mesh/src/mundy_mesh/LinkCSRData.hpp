@@ -437,6 +437,14 @@ class LinkCSRDataT {  // Raw data in any space
   }
   //@}
 
+  //! \name Friends <3
+  //@{
+
+  /// \brief We are not, by-default, a fiend of other memory spaces
+  template <typename OtherMemSpace>
+  friend class LinkCSRDataT;
+  //@}
+
  private:
   //! \name Internal members (host only)
   //@{

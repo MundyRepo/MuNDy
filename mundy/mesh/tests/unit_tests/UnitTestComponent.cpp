@@ -191,11 +191,11 @@ static_assert(has_default_copy_move_assign_v<NgpTaggedComponent<POSITION, NgpSha
 
 TEST_F(UnitTestComponentFixture, FieldComponentExposeTypedViewsAndMutations) {
   FieldComponent<double> raw_accessor(*quaternion_field_ptr_);
-  auto scalar_accessor = ScalarFieldComponent(*scalar_field_ptr_);
-  auto vector3_accessor = Vector3FieldComponent(*vector3_field_ptr_);
-  auto matrix3_accessor = Matrix3FieldComponent(*matrix3_field_ptr_);
-  auto quaternion_accessor = QuaternionFieldComponent(*quaternion_field_ptr_);
-  auto aabb_accessor = AABBFieldComponent(*aabb_field_ptr_);
+  ScalarFieldComponent<double> scalar_accessor(*scalar_field_ptr_);
+  Vector3FieldComponent<double> vector3_accessor(*vector3_field_ptr_);
+  Matrix3FieldComponent<double> matrix3_accessor(*matrix3_field_ptr_);
+  QuaternionFieldComponent<double> quaternion_accessor(*quaternion_field_ptr_);
+  AABBFieldComponent<double> aabb_accessor(*aabb_field_ptr_);
 
   auto scalar1 = scalar_accessor(node1_);
   auto scalar2 = scalar_accessor(node2_);
@@ -245,8 +245,8 @@ TEST_F(UnitTestComponentFixture, FieldComponentExposeTypedViewsAndMutations) {
 }
 
 TEST_F(UnitTestComponentFixture, ShallowCopyAssignment) {
-  auto lhs_accessor = ScalarFieldComponent(*scalar_field_ptr_);
-  auto rhs_accessor = ScalarFieldComponent(*scalar_alt_field_ptr_);
+  ScalarFieldComponent<double> lhs_accessor(*scalar_field_ptr_);
+  ScalarFieldComponent<double> rhs_accessor(*scalar_alt_field_ptr_);
 
   lhs_accessor = rhs_accessor;
 
@@ -261,12 +261,38 @@ TEST_F(UnitTestComponentFixture, ShallowCopyAssignment) {
   EXPECT_DOUBLE_EQ(scalar_field_data(*scalar_field_ptr_, node1_)[0], 1.0);
 }
 
+void mutate_components_on_device(const NgpScalarFieldComponent<stk::mesh::NgpField<double>>& ngp_scalar_accessor,
+                                     const NgpVector3FieldComponent<stk::mesh::NgpField<double>>& ngp_vector3_accessor,
+                                     const NgpMatrix3FieldComponent<stk::mesh::NgpField<double>>& ngp_matrix3_accessor,
+                                     const NgpQuaternionFieldComponent<stk::mesh::NgpField<double>>& ngp_quaternion_accessor,
+                                     const NgpAABBFieldComponent<stk::mesh::NgpField<double>>& ngp_aabb_accessor,
+                                     stk::mesh::FastMeshIndex node1_index) {
+  Kokkos::parallel_for(
+      "mutate_components_on_device", Kokkos::RangePolicy<>(0, 1), KOKKOS_LAMBDA(int) {
+        ngp_scalar_accessor(node1_index)[0] += 2.5;
+
+        auto vector3 = ngp_vector3_accessor(node1_index);
+        vector3.set(7.0, 8.0, 9.0);
+
+        auto matrix3 = ngp_matrix3_accessor(node1_index);
+        matrix3(0, 1) = 222.0;
+        matrix3(2, 2) = 333.0;
+
+        auto quaternion = ngp_quaternion_accessor(node1_index);
+        quaternion.set(4.0, 5.0, 6.0, 7.0);
+
+        auto aabb = ngp_aabb_accessor(node1_index);
+        aabb.x_min() = -1.0;
+        aabb.z_max() = 99.0;
+      });
+}
+
 TEST_F(UnitTestComponentFixture, NgpFieldComponentRoundTripDeviceMutations) {
-  auto scalar_accessor = ScalarFieldComponent(*scalar_field_ptr_);
-  auto vector3_accessor = Vector3FieldComponent(*vector3_field_ptr_);
-  auto matrix3_accessor = Matrix3FieldComponent(*matrix3_field_ptr_);
-  auto quaternion_accessor = QuaternionFieldComponent(*quaternion_field_ptr_);
-  auto aabb_accessor = AABBFieldComponent(*aabb_field_ptr_);
+  ScalarFieldComponent<double> scalar_accessor(*scalar_field_ptr_);
+  Vector3FieldComponent<double> vector3_accessor(*vector3_field_ptr_);
+  Matrix3FieldComponent<double> matrix3_accessor(*matrix3_field_ptr_);
+  QuaternionFieldComponent<double> quaternion_accessor(*quaternion_field_ptr_);
+  AABBFieldComponent<double> aabb_accessor(*aabb_field_ptr_);
 
   auto ngp_scalar_accessor = get_updated_ngp_component(scalar_accessor);
   auto ngp_vector3_accessor = get_updated_ngp_component(vector3_accessor);
@@ -294,24 +320,10 @@ TEST_F(UnitTestComponentFixture, NgpFieldComponentRoundTripDeviceMutations) {
   auto ngp_mesh = stk::mesh::get_updated_ngp_mesh(bulk_data());
   stk::mesh::FastMeshIndex node1_index = ngp_mesh.fast_mesh_index(node1_);
 
-  Kokkos::parallel_for(
-      "mutate_components_on_device", Kokkos::RangePolicy<>(0, 1), KOKKOS_LAMBDA(int) {
-        ngp_scalar_accessor(node1_index)[0] += 2.5;
-
-        auto vector3 = ngp_vector3_accessor(node1_index);
-        vector3.set(7.0, 8.0, 9.0);
-
-        auto matrix3 = ngp_matrix3_accessor(node1_index);
-        matrix3(0, 1) = 222.0;
-        matrix3(2, 2) = 333.0;
-
-        auto quaternion = ngp_quaternion_accessor(node1_index);
-        quaternion.set(4.0, 5.0, 6.0, 7.0);
-
-        auto aabb = ngp_aabb_accessor(node1_index);
-        aabb.x_min() = -1.0;
-        aabb.z_max() = 99.0;
-      });
+  // KOKKOS_LAMBDA cannot be called in a GTEST test body due to CUDA's rule about:
+  // "The enclosing parent function ("TestBody") for an extended __host__ __device__ lambda cannot have private or protected access within its class"
+  mutate_components_on_device(ngp_scalar_accessor, ngp_vector3_accessor, ngp_matrix3_accessor, ngp_quaternion_accessor,
+                                   ngp_aabb_accessor, node1_index);
   Kokkos::fence();
 
   ngp_scalar_accessor.modify_on_device();
@@ -364,7 +376,7 @@ TEST_F(UnitTestComponentFixture, SharedComponentSupportsOwnedAndAliasedConstruct
   Kokkos::View<double*, Kokkos::HostSpace> managed_view("managed_shared_value", 1);
   managed_view(0) = 0.5;
 
-  auto managed_component = SharedScalarComponent(managed_view);
+  SharedScalarComponent<double> managed_component(managed_view);
   EXPECT_EQ(&managed_component.shared_value(), managed_view.data());
   managed_component(node1_)[0] = 1.25;
   EXPECT_DOUBLE_EQ(managed_view(0), 1.25);
@@ -391,7 +403,7 @@ TEST_F(UnitTestComponentFixture, SharedComponentRejectsBadViewsAndEnforcesSyncPr
   Kokkos::View<double*, Kokkos::HostSpace> bad_view("bad_shared_value", 2);
   EXPECT_THROW((void)SharedScalarComponent(bad_view), std::invalid_argument);
 
-  auto shared_component = SharedScalarComponent(2.0);
+  SharedScalarComponent<double> shared_component(2.0);
   auto ngp_shared_component = get_updated_ngp_component(shared_component);
 
   shared_component.modify_on_host();
@@ -406,7 +418,7 @@ TEST_F(UnitTestComponentFixture, SharedComponentAreShallowCopiesAndCacheNgpInsta
   Kokkos::View<double*, Kokkos::HostSpace> managed_view("cached_shared_value", 1);
   managed_view(0) = 0.75;
 
-  auto shared_component = SharedScalarComponent(managed_view);
+  SharedScalarComponent<double> shared_component(managed_view);
   auto copied_component = shared_component;
 
   copied_component(node2_)[0] = 1.75;
@@ -426,8 +438,8 @@ TEST_F(UnitTestComponentFixture, SharedComponentAssignmentRebindsToRhsState) {
   Kokkos::View<double*, Kokkos::HostSpace> rhs_view("assigned_shared_value", 1);
   rhs_view(0) = 2.5;
 
-  auto lhs_component = SharedScalarComponent(1.0);
-  auto rhs_component = SharedScalarComponent(rhs_view);
+  SharedScalarComponent<double> lhs_component(1.0);
+  SharedScalarComponent<double> rhs_component(rhs_view);
 
   lhs_component = rhs_component;
 
@@ -441,11 +453,18 @@ TEST_F(UnitTestComponentFixture, SharedComponentAssignmentRebindsToRhsState) {
   EXPECT_DOUBLE_EQ(rhs_view(0), 4.75);
 }
 
+void mutate_shared_component_on_device(const NgpSharedScalarComponent<double>& ngp_shared_component,
+                                       stk::mesh::FastMeshIndex node1_index) {
+  Kokkos::parallel_for(
+      "mutate_shared_component_on_device", Kokkos::RangePolicy<>(0, 1),
+      KOKKOS_LAMBDA(int) { ngp_shared_component(node1_index) += 0.75; });
+}
+
 TEST_F(UnitTestComponentFixture, NgpSharedComponentRoundTripHostAndDeviceMutations) {
   Kokkos::View<double*, Kokkos::HostSpace> managed_view("roundtrip_shared_value", 1);
   managed_view(0) = 0.5;
 
-  auto shared_component = SharedScalarComponent(managed_view);
+  SharedScalarComponent<double> shared_component(managed_view);
   auto ngp_shared_component = get_updated_ngp_component(shared_component);
 
   shared_component(node1_)[0] = 1.25;
@@ -455,9 +474,7 @@ TEST_F(UnitTestComponentFixture, NgpSharedComponentRoundTripHostAndDeviceMutatio
   auto ngp_mesh = stk::mesh::get_updated_ngp_mesh(bulk_data());
   stk::mesh::FastMeshIndex node1_index = ngp_mesh.fast_mesh_index(node1_);
 
-  Kokkos::parallel_for(
-      "mutate_shared_component_on_device", Kokkos::RangePolicy<>(0, 1),
-      KOKKOS_LAMBDA(int) { ngp_shared_component(node1_index) += 0.75; });
+  mutate_shared_component_on_device(ngp_shared_component, node1_index);
   Kokkos::fence();
 
   ngp_shared_component.modify_on_device();

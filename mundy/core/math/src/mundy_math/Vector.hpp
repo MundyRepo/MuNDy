@@ -27,7 +27,6 @@
 // C++ core
 #include <cmath>
 #include <concepts>
-#include <initializer_list>
 #include <iostream>
 #include <type_traits>  // for std::decay_t
 #include <utility>
@@ -175,15 +174,8 @@ class AVector {
   template <typename... Args>
   MUNDY_REQUIRES((sizeof...(Args) == N) && (N != 1) && (std::is_convertible_v<Args, T> && ...) &&
                  HasNArgConstructor<Accessor, T, N>)
-  KOKKOS_INLINE_FUNCTION constexpr explicit AVector(Args&&... args)
-      : accessor_(Accessor{static_cast<T>(std::forward<Args>(args))...}) {
-  }
-
-  /// \brief Constructor to initialize all elements via initializer list
-  /// \param[in] list The initializer list.
-  KOKKOS_INLINE_FUNCTION constexpr AVector(const std::initializer_list<T>& list)
-      MUNDY_REQUIRES(HasInitializerListConstructor<Accessor, T>)
-      : accessor_(list) {
+  KOKKOS_INLINE_FUNCTION constexpr AVector(Args&&... args)
+      : accessor_(Accessor(static_cast<T>(std::forward<Args>(args))...)) {
   }
 
   /// \brief Destructor

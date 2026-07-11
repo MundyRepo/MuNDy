@@ -262,6 +262,18 @@ TEST(UnitTestLinkCOOData, NgpCOOData_Construction_IsValid) {
 
 // After declaring a relation on the host and syncing to device, a kernel must read
 // back the correct entity and rank.
+
+void cache_result(const NgpLinkCOOData& ngp_coo, stk::mesh::FastMeshIndex link_idx,
+                  Kokkos::View<stk::mesh::Entity*, stk::ngp::MemSpace> entity_result,
+                  Kokkos::View<stk::mesh::EntityRank*, stk::ngp::MemSpace> rank_result) {
+  Kokkos::parallel_for(
+      Kokkos::RangePolicy<stk::ngp::ExecSpace>(0, 1), KOKKOS_LAMBDA(int) {
+        entity_result(0) = ngp_coo.get_linked_entity(link_idx, 0u);
+        rank_result(0) = ngp_coo.get_linked_entity_rank(link_idx, 0u);
+      });
+  Kokkos::fence();
+}
+
 TEST(UnitTestLinkCOOData, NgpCOOData_ReflectsHostRelationsAfterSync) {
   LinkCOODataFixture f;
 
@@ -276,13 +288,7 @@ TEST(UnitTestLinkCOOData, NgpCOOData_ReflectsHostRelationsAfterSync) {
   const stk::mesh::FastMeshIndex link_idx = ngp.ngp_mesh().fast_mesh_index(f.link);
   Kokkos::View<stk::mesh::Entity*, stk::ngp::MemSpace> entity_result("entity_result", 1);
   Kokkos::View<stk::mesh::EntityRank*, stk::ngp::MemSpace> rank_result("rank_result", 1);
-
-  Kokkos::parallel_for(
-      Kokkos::RangePolicy<stk::ngp::ExecSpace>(0, 1), KOKKOS_LAMBDA(int) {
-        entity_result(0) = ngp_coo.get_linked_entity(link_idx, 0u);
-        rank_result(0) = ngp_coo.get_linked_entity_rank(link_idx, 0u);
-      });
-  Kokkos::fence();
+  cache_result(ngp_coo, link_idx, entity_result, rank_result);
 
   auto entity_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, entity_result);
   auto rank_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, rank_result);
@@ -292,6 +298,13 @@ TEST(UnitTestLinkCOOData, NgpCOOData_ReflectsHostRelationsAfterSync) {
 
 // A destroy_relation executed inside a device kernel must be visible on the host
 // after coo_sync_to_host().
+
+void destroy_relation_on_device(const NgpLinkCOOData& ngp_coo, stk::mesh::FastMeshIndex link_idx) {
+  Kokkos::parallel_for(
+      Kokkos::RangePolicy<stk::ngp::ExecSpace>(0, 1), KOKKOS_LAMBDA(int) { ngp_coo.destroy_relation(link_idx, 0u); });
+  Kokkos::fence();
+}
+
 TEST(UnitTestLinkCOOData, NgpCOOData_DestroyRelationOnDevice_ReflectedAfterSyncBack) {
   LinkCOODataFixture f;
 
@@ -305,9 +318,7 @@ TEST(UnitTestLinkCOOData, NgpCOOData_DestroyRelationOnDevice_ReflectedAfterSyncB
   NgpLinkCOOData ngp_coo = ngp.coo_data();
   const stk::mesh::FastMeshIndex link_idx = ngp.ngp_mesh().fast_mesh_index(f.link);
 
-  Kokkos::parallel_for(
-      Kokkos::RangePolicy<stk::ngp::ExecSpace>(0, 1), KOKKOS_LAMBDA(int) { ngp_coo.destroy_relation(link_idx, 0u); });
-  Kokkos::fence();
+  destroy_relation_on_device(ngp_coo, link_idx);
 
   ngp.coo_modify_on_device();
   ngp.coo_sync_to_host();

@@ -27,7 +27,6 @@
 // C++ core libs
 #include <cmath>
 #include <concepts>
-#include <initializer_list>
 #include <iostream>
 #include <type_traits>  // for std::decay_t
 #include <utility>
@@ -45,6 +44,7 @@
 #include <mundy_math/Scalar.hpp>          // for mundy::AScalar (interaction operators)
 #include <mundy_math/Vector.hpp>          // for mundy::Vector
 #include <mundy_math/impl/MatrixImpl.hpp>
+#include <mundy_math/impl/MatrixInverseImpl.hpp>
 #include <mundy_utils/requires.hpp>
 #include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
 #include <mundy_math/cmath.hpp>
@@ -104,7 +104,7 @@ concept ValidMatrixType =
 ///
 /// \code{.cpp}
 ///   // Constructs an AMatrix with the default accessor (Array<int, 9>)
-///   AMatrix<int, 3, 3> mat1({1, 2, 3, 4, 5, 6, 7, 8, 9});
+///   AMatrix<int, 3, 3> mat1{1, 2, 3, 4, 5, 6, 7, 8, 9};
 ///   AMatrix<int, 3, 3> mat2(1, 2, 3, 4, 5, 6, 7, 8, 9);
 ///   AMatrix<int, 3, 3> mat3(Array<int, 9>{1, 2, 3, 4, 5, 6, 7, 8, 9});
 ///   AMatrix<int, 3, 3> mat4;
@@ -162,23 +162,20 @@ class AMatrix {
       : accessor_(accessor) {
   }
 
+  /// \brief Constructor to initialize all elements to a single value.
+  /// Only enabled if the Accessor has a 1-argument constructor.
+  KOKKOS_INLINE_FUNCTION constexpr explicit AMatrix(const T& value) MUNDY_REQUIRES(HasNArgConstructor<Accessor, T, 1>)
+      : accessor_(value) {
+  }
+
   /// \brief Constructor to initialize all elements explicitly.
   /// Requires the number of arguments to be N and the type of each to be T.
   /// Only enabled if the Accessor has a N-argument constructor.
   template <typename... Args>
-  MUNDY_REQUIRES((sizeof...(Args) == N * M) && (std::is_convertible_v<Args, T> && ...) &&
+  MUNDY_REQUIRES((sizeof...(Args) == N * M) && (N * M != 1) && (std::is_convertible_v<Args, T> && ...) &&
                  HasNArgConstructor<Accessor, T, N * M>)
-  KOKKOS_INLINE_FUNCTION explicit constexpr AMatrix(Args&&... args)
-      : accessor_(Accessor{static_cast<T>(std::forward<Args>(args))...}) {
-  }
-
-  /// \brief Constructor to initialize all elements via initializer list
-  /// \param[in] list The initializer list.
-  KOKKOS_INLINE_FUNCTION constexpr AMatrix(const std::initializer_list<T>& list)
-      MUNDY_REQUIRES(HasInitializerListConstructor<Accessor, T>)
-      : accessor_(list) {
-    MUNDY_THROW_ASSERT(list.size() == N * M, std::invalid_argument,
-                       "AMatrix: Initializer list must have N * M elements.");
+  KOKKOS_INLINE_FUNCTION constexpr AMatrix(Args&&... args)
+      : accessor_(Accessor(static_cast<T>(std::forward<Args>(args))...)) {
   }
 
   /// \brief Destructor
@@ -894,14 +891,6 @@ KOKKOS_INLINE_FUNCTION constexpr auto operator*(const AVector<U, N, Accessor1>& 
 //! \name Basic arithmetic reduction operations
 //@{
 
-/// \brief AMatrix determinant
-/// \param[in] mat The matrix.
-template <size_t N, size_t M, typename T, ValidAccessor<T> Accessor>
-KOKKOS_INLINE_FUNCTION constexpr auto determinant(const AMatrix<T, N, M, Accessor>& mat) {
-  static_assert(N == M, "The determinant is only defined for square matrices.");
-  return impl::determinant_impl(std::make_index_sequence<N>{}, mat);
-}
-
 /// \brief AMatrix trace
 /// \param[in] mat The matrix.
 template <size_t N, size_t M, typename T, ValidAccessor<T> Accessor>
@@ -1008,39 +997,56 @@ KOKKOS_INLINE_FUNCTION constexpr AMatrix<T, M, N> transpose(const AMatrix<T, N, 
   return impl::transpose_impl(std::make_index_sequence<N * M>{}, mat);
 }
 
-/// \brief AMatrix cofactors
-/// \param[in] mat The matrix.
-template <size_t N, typename T, ValidAccessor<T> Accessor>
-KOKKOS_INLINE_FUNCTION AMatrix<T, N, N> constexpr cofactors(const AMatrix<T, N, N, Accessor>& mat) {
-  return impl::cofactors_impl(std::make_index_sequence<N * N>{}, mat);
+/// \brief AMatrix determinant.
+/// \param[in] mat Source matrix.
+template <size_t N, typename T, ValidAccessor<T> Accessor, typename OutputType = typename NumTraits<T>::NonInteger>
+KOKKOS_FORCEINLINE_FUNCTION constexpr OutputType determinant(const AMatrix<T, N, N, Accessor>& mat)
+  requires(N <= impl::kMatrixInverseLaplaceToLUCutoff)
+{
+  return static_cast<OutputType>(impl::bitmask_determinant(mat));
 }
 
-/// \brief AMatrix adjugate
-/// \param[in] mat The matrix.
+/// \brief AMatrix determinant.
+/// \param[in] mat Source matrix.
+template <size_t N, typename T, ValidAccessor<T> Accessor, typename OutputType = typename NumTraits<T>::NonInteger>
+KOKKOS_FORCEINLINE_FUNCTION constexpr OutputType determinant(const AMatrix<T, N, N, Accessor>& mat)
+  requires(N > impl::kMatrixInverseLaplaceToLUCutoff)
+{
+  return impl::lu_determinant<N, T, Accessor, OutputType>(mat);
+}
+
+/// \brief AMatrix cofactors.
+/// \param[in] mat Source matrix.
 template <size_t N, typename T, ValidAccessor<T> Accessor>
-KOKKOS_INLINE_FUNCTION AMatrix<T, N, N> constexpr adjugate(const AMatrix<T, N, N, Accessor>& mat) {
+KOKKOS_FORCEINLINE_FUNCTION constexpr Matrix<T, N, N> cofactors(const AMatrix<T, N, N, Accessor>& mat) {
+  return impl::bitmask_cofactors(mat);
+}
+
+/// \brief AMatrix adjugate.
+/// \param[in] mat Source matrix.
+template <size_t N, typename T, ValidAccessor<T> Accessor>
+KOKKOS_FORCEINLINE_FUNCTION constexpr Matrix<T, N, N> adjugate(const AMatrix<T, N, N, Accessor>& mat) {
   return transpose(cofactors(mat));
 }
 
-/// \briuf AMatrix inverse (returns a double if T is an integral type, otherwise returns T)
-/// \param[in] mat The matrix.
-template <size_t N, typename T, ValidAccessor<T> Accessor,
-          typename OutputType = typename NumTraits<T>::NonInteger>
-KOKKOS_INLINE_FUNCTION AMatrix<OutputType, N, N> constexpr inverse(const AMatrix<T, N, N, Accessor>& mat) {
-  const auto det = determinant(mat);
-  MUNDY_THROW_ASSERT(det != T(0), std::runtime_error, "AMatrix<T>: matrix is singular.");
+/// \brief AMatrix inverse.
+/// \param[in] mat Source matrix.
+template <size_t N, typename T, ValidAccessor<T> Accessor, typename OutputType = typename NumTraits<T>::NonInteger>
+KOKKOS_FORCEINLINE_FUNCTION constexpr Matrix<OutputType, N, N> inverse(const AMatrix<T, N, N, Accessor>& mat)
+  requires(N <= impl::kMatrixInverseLaplaceToLUCutoff)
+{
+  const auto det = impl::bitmask_determinant(mat);
+  MUNDY_THROW_ASSERT(det != T(0), std::runtime_error, "inverse: matrix is singular.");
   return adjugate(mat).template cast<OutputType>() / det;
 }
 
-/// \brief AMatrix inverse (returns a float if T is an integral type, otherwise returns T)
-/// \tparam T The input matrix element type.
-/// \tparam Accessor The accessor for the AMatrix, assuming this is part of your implementation.
-/// \tparam OutputElementType The output matrix element type, defaults T if T is an integral type (e.g., float or
-/// double) and float otherwise.
-template <size_t N, typename T, ValidAccessor<T> Accessor,
-          typename OutputElementType = std::conditional_t<NumTraits<T>::IsInteger, float, T>>
-KOKKOS_INLINE_FUNCTION constexpr auto inverse_f(const AMatrix<T, N, N, Accessor>& mat) {
-  return inverse(mat);
+/// \brief AMatrix inverse.
+/// \param[in] mat Source matrix.
+template <size_t N, typename T, ValidAccessor<T> Accessor, typename OutputType = typename NumTraits<T>::NonInteger>
+KOKKOS_FORCEINLINE_FUNCTION constexpr Matrix<OutputType, N, N> inverse(const AMatrix<T, N, N, Accessor>& mat)
+  requires(N > impl::kMatrixInverseLaplaceToLUCutoff)
+{
+  return impl::lu_inverse<N, T, Accessor, OutputType>(mat);
 }
 
 /// \brief AMatrix Frobenius inner product

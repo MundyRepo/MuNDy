@@ -169,7 +169,7 @@ TEST(Minimize, ComplexFunctions) {
   constexpr size_t N = 42;
 
   {
-    Vector<double, N> x = {0.0};
+    Vector<double, N> x(0.0);
     double min_cost =
         find_min_using_approximate_derivatives<lbfgs_max_memory_size>(rosenbrock<N>, x, min_objective_delta);
     EXPECT_NEAR(min_cost, 0.0, test_tolerance);
@@ -254,7 +254,7 @@ TEST(MinimizeWithDerivatives, ComplexFunctions) {
   constexpr size_t N = 42;
 
   {
-    Vector<double, N> x = {0.0};
+    Vector<double, N> x(0.0);
     double min_cost =
         find_min_with_derivatives<lbfgs_max_memory_size>(rosenbrock<N>, rosenbrock_grad<N>, x, min_objective_delta);
     EXPECT_NEAR(min_cost, 0.0, test_tolerance);
@@ -310,14 +310,14 @@ TEST(MinimizeWithDerivatives, FewerFunctionEvaluationsRosenbrock) {
 
   {
     CountedF<N, decltype(rosenbrock<N>)> cf(rosenbrock<N>, f_count_approx);
-    Vector<double, N> x = {0.0};
+    Vector<double, N> x(0.0);
     find_min_using_approximate_derivatives<lbfgs_max_memory_size>(cf, x, min_objective_delta);
   }
 
   {
     CountedF<N, decltype(rosenbrock<N>)> cf(rosenbrock<N>, f_count_exact);
     CountedDF<N, decltype(rosenbrock_grad<N>)> cdf(rosenbrock_grad<N>, g_count_exact);
-    Vector<double, N> x = {0.0};
+    Vector<double, N> x(0.0);
     find_min_with_derivatives<lbfgs_max_memory_size>(cf, cdf, x, min_objective_delta);
   }
 
@@ -342,10 +342,10 @@ TEST(MinimizeWithDerivatives, SolutionMatchesApproximate) {
   const double match_tol = std::sqrt(min_objective_delta);
   constexpr size_t N = 10;
 
-  Vector<double, N> x_approx = {0.0};
+  Vector<double, N> x_approx(0.0);
   find_min_using_approximate_derivatives<lbfgs_max_memory_size>(rosenbrock<N>, x_approx, min_objective_delta);
 
-  Vector<double, N> x_exact = {0.0};
+  Vector<double, N> x_exact(0.0);
   find_min_with_derivatives<lbfgs_max_memory_size>(rosenbrock<N>, rosenbrock_grad<N>, x_exact, min_objective_delta);
 
   for (size_t i = 0; i < N; ++i) {
@@ -399,7 +399,7 @@ TEST(MinimizeWithFDF, ComplexFunctions) {
     g = rosenbrock_grad<N>(x);
     return rosenbrock<N>(x);
   };
-  Vector<double, N> x = {0.0};
+  Vector<double, N> x(0.0);
   double min_cost = find_min_with_fdf<lbfgs_max_memory_size>(fdf, x, min_objective_delta);
   EXPECT_NEAR(min_cost, 0.0, test_tolerance);
   for (size_t i = 0; i < N; ++i) EXPECT_NEAR(x[i], 1.0, test_tolerance);
@@ -451,14 +451,14 @@ TEST(MinimizeWithFDF, FewerEvaluationsRosenbrock) {
   {
     CountedF<N, decltype(rosenbrock<N>)> cf(rosenbrock<N>, f_exact);
     CountedDF<N, decltype(rosenbrock_grad<N>)> cdf(rosenbrock_grad<N>, g_exact);
-    Vector<double, N> x = {0.0};
+    Vector<double, N> x(0.0);
     find_min_with_derivatives<lbfgs_max_memory_size>(cf, cdf, x, min_objective_delta);
   }
 
   {
     CountedFDF<N, decltype(rosenbrock<N>), decltype(rosenbrock_grad<N>)> cfdf(rosenbrock<N>, rosenbrock_grad<N>,
                                                                               fdf_count);
-    Vector<double, N> x = {0.0};
+    Vector<double, N> x(0.0);
     find_min_with_fdf<lbfgs_max_memory_size>(cfdf, x, min_objective_delta);
   }
 
