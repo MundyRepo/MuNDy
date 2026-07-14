@@ -227,7 +227,7 @@ a.get() = 9;  // value -> 9
 ```
 
 `storage<T>::value_type` gives the fully-decayed type `.get()` yields (e.g. `int` for both a `storage<int&>` and a
-`storage<int>`), so callers don't need to `decltype(...).get())` it themselves.
+`storage<int>`), so callers don't need to spell out `std::remove_cvref_t<decltype(storage.get())>` themselves.
 
 This is a small but useful way to write APIs that accept either borrowed or owned data without manual overload sets.
 
