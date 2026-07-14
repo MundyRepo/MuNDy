@@ -1257,24 +1257,20 @@ void run_mundy_math_mixed_congruent_test(const auto& test) {
   ASSERT_EQ(convex::MundyMathBackend::domain_size(DT_op), convex::MundyMathBackend::range_size(M_op))
       << "DT and M should be compatible for DT * M";
 
-  // auto a_workspace = A.make_workspace();
-  // convex::MundyMathBackend::apply(A, f_b, q, a_workspace);
+  // Strategy + state
+  convex::PGDConfig<double> cfg{.max_iters = 1000, .tol = 1e-6};
+  auto pgd = make_pgd_solution_strategy(cfg);
+  auto pgd_state = make_pgd_state(x, grad, x_tmp, grad_tmp);
 
-  // const auto equiv_cqpp = to_cqpp(mixed_cqpp);
-  // // Strategy + state
-  // convex::PGDConfig<double> cfg{.max_iters = 1000, .tol = 1e-6};
-  // auto pgd = make_pgd_solution_strategy(cfg);
-  // auto pgd_state = make_pgd_state(x, grad, x_tmp, grad_tmp);
+  // Solve
+  auto result = solve_mixed_cqpp(mixed_cqpp, pgd, pgd_state);
 
-  // // Solve
-  // auto result = solve_mixed_cqpp(mixed_cqpp, pgd, pgd_state);
-
-  // // Check results
-  // EXPECT_TRUE(result.converged);
-  // EXPECT_LE(result.num_iters, cfg.max_iters);
-  // for (size_t i = 0; i < vector_t::size; ++i) {
-  //   EXPECT_NEAR(x[i], x_exact[i], 10 * cfg.tol);
-  // }
+  // Check results
+  EXPECT_TRUE(result.converged);
+  EXPECT_LE(result.num_iters, cfg.max_iters);
+  for (size_t i = 0; i < vector_t::size; ++i) {
+    EXPECT_NEAR(x[i], x_exact[i], 10 * cfg.tol);
+  }
 }
 
 #ifdef HAVE_MUNDYMATH_KOKKOSKERNELS

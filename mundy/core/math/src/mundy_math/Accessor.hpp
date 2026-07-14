@@ -53,7 +53,7 @@ struct accessor_underlying_type {
 
 template <typename T>
 struct accessor_underlying_type<storage<T>> {
-  using type = std::remove_cvref_t<decltype(std::declval<storage<T>&>().get())>;
+  using type = typename storage<T>::value_type;
 };
 
 template <typename Accessor>

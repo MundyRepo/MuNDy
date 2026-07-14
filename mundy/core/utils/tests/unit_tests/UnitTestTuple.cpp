@@ -111,6 +111,92 @@ TEST(TupleTest, MoveTuple) {
   EXPECT_EQ(::mundy::get<2>(t2), "test");
 }
 
+struct NonCopyConstructibleType {
+  int value = 0;
+  explicit NonCopyConstructibleType(int value_in) : value(value_in) {
+  }
+  NonCopyConstructibleType(const NonCopyConstructibleType&) = delete;
+  NonCopyConstructibleType(NonCopyConstructibleType&&) = default;
+};
+
+struct NonMoveConstructibleType {
+  int value = 0;
+  explicit NonMoveConstructibleType(int value_in) : value(value_in) {
+  }
+  NonMoveConstructibleType(const NonMoveConstructibleType&) = default;
+  NonMoveConstructibleType(NonMoveConstructibleType&&) = delete;
+};
+
+TEST(TupleTest, MoveOnlyElement) {
+  auto t = ::mundy::tuple<NonCopyConstructibleType>(NonCopyConstructibleType(3));
+  EXPECT_EQ(::mundy::get<0>(t).value, 3);
+
+  auto t2 = std::move(t);
+  EXPECT_EQ(::mundy::get<0>(t2).value, 3);
+}
+
+TEST(TupleTest, CopyOnlyElement) {
+  NonMoveConstructibleType source(5);
+  auto t = ::mundy::tuple<NonMoveConstructibleType>(source);
+  EXPECT_EQ(::mundy::get<0>(t).value, 5);
+
+  auto t2 = t;
+  EXPECT_EQ(::mundy::get<0>(t2).value, 5);
+}
+
+TEST(TupleTest, TupleCatSupportsMoveOnlyElements) {
+  auto t1 = ::mundy::tuple<NonCopyConstructibleType>(NonCopyConstructibleType(1));
+  auto t2 = ::mundy::tuple<NonCopyConstructibleType>(NonCopyConstructibleType(2));
+  auto t = ::mundy::tuple_cat(std::move(t1), std::move(t2));
+  EXPECT_EQ(::mundy::get<0>(t).value, 1);
+  EXPECT_EQ(::mundy::get<1>(t).value, 2);
+}
+
+TEST(TupleTest, ForEach) {
+  auto t = ::mundy::make_tuple(1, 2.5, 3);
+  double sum = 0;
+  ::mundy::for_each(t, [&sum](const auto& value) { sum += static_cast<double>(value); });
+  EXPECT_EQ(sum, 6.5);
+
+  const auto const_t = ::mundy::make_tuple(1, 2.5, 3);
+  double const_sum = 0;
+  ::mundy::for_each(const_t, [&const_sum](const auto& value) { const_sum += static_cast<double>(value); });
+  EXPECT_EQ(const_sum, 6.5);
+
+  ::mundy::tuple<> empty_t;
+  int calls = 0;
+  ::mundy::for_each(empty_t, [&calls](const auto&) { ++calls; });
+  EXPECT_EQ(calls, 0);
+}
+
+TEST(TupleTest, AllOf) {
+  auto t = ::mundy::make_tuple(1, 2, 3);
+  EXPECT_TRUE(::mundy::all_of(t, [](const auto& value) { return value > 0; }));
+  EXPECT_FALSE(::mundy::all_of(t, [](const auto& value) { return value > 1; }));
+
+  ::mundy::tuple<> empty_t;
+  EXPECT_TRUE(::mundy::all_of(empty_t, [](const auto&) { return false; }));
+}
+
+TEST(TupleTest, AnyOf) {
+  auto t = ::mundy::make_tuple(1, 2, 3);
+  EXPECT_TRUE(::mundy::any_of(t, [](const auto& value) { return value > 2; }));
+  EXPECT_FALSE(::mundy::any_of(t, [](const auto& value) { return value > 3; }));
+
+  ::mundy::tuple<> empty_t;
+  EXPECT_FALSE(::mundy::any_of(empty_t, [](const auto&) { return true; }));
+}
+
+TEST(TupleTest, Apply) {
+  auto t = ::mundy::make_tuple(1, 2.5, 3);
+  auto sum = ::mundy::apply([](const auto& a, const auto& b, const auto& c) { return a + b + c; }, t);
+  EXPECT_EQ(sum, 6.5);
+
+  const auto const_t = ::mundy::make_tuple(1, 2.5, 3);
+  auto const_sum = ::mundy::apply([](const auto& a, const auto& b, const auto& c) { return a + b + c; }, const_t);
+  EXPECT_EQ(const_sum, 6.5);
+}
+
 }  // namespace
 
 }  // namespace mundy
