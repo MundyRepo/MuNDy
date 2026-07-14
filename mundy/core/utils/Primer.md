@@ -141,13 +141,17 @@ The main supported operations are:
 | `tuple_element_t<I, T>` | Type of the `I`th element. |
 | `make_tuple(...)` | Build a tuple by value. |
 | `tuple_cat(a, b)` | Concatenate two `mundy::tuple`s. |
+| `for_each(t, f)` | Call `f(element)` for every element, in order. |
+| `all_of(t, pred)` | `true` iff `pred(element)` holds for every element. |
+| `any_of(t, pred)` | `true` iff `pred(element)` holds for at least one element. |
+| `apply(f, t)` | Call `f(get<0>(t), get<1>(t), ...)`. |
 
 Compared with `std::tuple`, this is smaller out of time constraints. If you find there is a missing operation you need or would make your life easier, please open an issue or submit a PR. The main differences are:
 
 | **`std::tuple`** | **`mundy::tuple`** |
 |------------------|--------------------|
 | Supports the full standard tuple protocol. | Supports only the tuple operations Mundy uses. |
-| Has `tie`, `forward_as_tuple`, `apply`, variadic `tuple_cat`, and richer conversions. | Omits those helpers. |
+| Has `tie`, `forward_as_tuple`, variadic `tuple_cat`, and richer conversions. | Omits those helpers. |
 | `get` preserves full value category. | `get` returns mutable or const lvalue references. |
 | `tuple_cat` works on tuple-like inputs. | `tuple_cat` joins two `mundy::tuple`s and copies values into the result. |
 
@@ -202,9 +206,8 @@ This makes it especially useful for accessors and functors that need reference-l
 objects.
 
 ### `storage`
-`storage<T>` normalizes owning and non-owning storage.
-
-The `store(...)` helper follows the rule Mundy usually wants:
+`storage<T>` normalizes owning and non-owning storage. Construct it directly via CTAD or with the equivalent
+`store(...)` helper — both apply the same normalization rule Mundy usually wants:
 
 | **Input** | **Stored as** |
 |-----------|---------------|
@@ -216,12 +219,15 @@ The `store(...)` helper follows the rule Mundy usually wants:
 ```cpp
 int value = 4;
 
-auto a = store(value);  // non-owning
-auto b = store(7);      // owning
-auto c = store(&value); // pointer
+auto a = store(value);      // non-owning
+storage b(7);               // owning, via direct CTAD
+auto c = store(&value);     // pointer
 
 a.get() = 9;  // value -> 9
 ```
+
+`storage<T>::value_type` gives the fully-decayed type `.get()` yields (e.g. `int` for both a `storage<int&>` and a
+`storage<int>`), so callers don't need to `decltype(...).get())` it themselves.
 
 This is a small but useful way to write APIs that accept either borrowed or owned data without manual overload sets.
 

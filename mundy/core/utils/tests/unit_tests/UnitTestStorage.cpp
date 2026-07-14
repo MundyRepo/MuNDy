@@ -170,6 +170,44 @@ TEST(StorageTest, StorageTypeNormalizationRules) {
                 "storage<T> input should normalize to storage<T>::stored_type");
 }
 
+TEST(StorageTest, ValueTypeMatchesGetResultStrippedOfCvref) {
+  using wrapper_t = ::mundy::reference_wrapper<int>;
+
+  static_assert(std::is_same_v<::mundy::storage<int>::value_type, int>, "owned storage value_type should be int");
+  static_assert(std::is_same_v<::mundy::storage<int&>::value_type, int>,
+                "reference storage value_type should be int, not int&");
+  static_assert(std::is_same_v<::mundy::storage<const int&>::value_type, int>,
+                "const-reference storage value_type should strip const");
+  static_assert(std::is_same_v<::mundy::storage<int*>::value_type, int*>,
+                "pointer storage value_type should be the pointer type itself");
+  static_assert(std::is_same_v<::mundy::storage<wrapper_t>::value_type, int>,
+                "reference_wrapper storage value_type should unwrap to int");
+}
+
+TEST(StorageTest, DirectCTADAgreesWithStore) {
+  int value = 5;
+
+  auto via_store = ::mundy::store(value);
+  ::mundy::storage via_ctad(value);
+  static_assert(std::is_same_v<decltype(via_store), decltype(via_ctad)>,
+                "storage(value) should deduce the same type as store(value)");
+
+  auto owned_via_store = ::mundy::store(42);
+  ::mundy::storage owned_via_ctad(42);
+  static_assert(std::is_same_v<decltype(owned_via_store), decltype(owned_via_ctad)>,
+                "storage(rvalue) should deduce the same type as store(rvalue)");
+
+  auto restashed_via_store = ::mundy::store(via_store);
+  ::mundy::storage restashed_via_ctad(via_ctad);
+  static_assert(std::is_same_v<decltype(via_store), decltype(restashed_via_store)>,
+                "storage(storage<T>) should deduce storage<T> itself, matching store()");
+  static_assert(std::is_same_v<decltype(via_ctad), decltype(restashed_via_ctad)>,
+                "storage(storage<T>) via direct CTAD should also deduce storage<T> itself");
+
+  via_ctad.get() = 8;
+  EXPECT_EQ(value, 8);
+}
+
 TEST(StorageTest, ConstructibilityContracts) {
   static_assert(can_store<int&>, "store(lvalue) should be callable");
   static_assert(can_store<int>, "store(rvalue) should be callable");

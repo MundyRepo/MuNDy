@@ -90,22 +90,15 @@ if(Mundy_ENABLE_TESTS AND Mundy_ENABLE_nanobench)
     INSTALLABLE
     CATEGORIES PERFORMANCE
   )
+
+  # tribits_add_executable(
+  #   KokkosMbodyTest
+  #   SOURCES KokkosMbody.cpp
+  #   MPI_PROC_RANGE 1
+  #   INSTALLABLE
+  #   CATEGORIES PERFORMANCE
+  # )
 else()
   message(STATUS
     "MundyMesh: Skipping performance tests since Mundy_ENABLE_TESTS=OFF or Mundy_ENABLE_nanobench=OFF ...")
 endif()
-
-# if(Mundy_ENABLE_TESTS AND Mundy_ENABLE_GTest)
-#   message(STATUS "MundyMesh: Setting up KokkosMbody correctness tests since Mundy_ENABLE_TESTS=ON and Mundy_ENABLE_GTest=ON")
-
-#   mundy_tribits_add_executable_and_test(
-#     KokkosMbodyTest
-#     SOURCES KokkosMbody.cpp
-#     MPI_PROC_RANGE 1
-#     INSTALLABLE
-#     CATEGORIES PERFORMANCE
-#   )
-# else()
-#   message(STATUS
-#     "MundyMesh: Skipping KokkosMbody correctness tests since Mundy_ENABLE_TESTS=OFF or Mundy_ENABLE_GTest=OFF ...")
-# endif()

@@ -123,6 +123,9 @@ KOKKOS_FUNCTION constexpr decltype(auto) storage_get(const Stored& value) noexce
   }
 }
 
+template <class T>
+using storage_value_type_t = std::remove_cvref_t<decltype(storage_get(std::declval<storage_type_t<T>&>()))>;
+
 }  // namespace impl
 
 /// \brief Own or view a value using a simple normalized storage policy.
@@ -137,6 +140,7 @@ class storage {
  public:
   using input_type = T;
   using stored_type = impl::storage_type_t<T>;
+  using value_type = impl::storage_value_type_t<T>;
 
   KOKKOS_DEFAULTED_FUNCTION constexpr storage() MUNDY_REQUIRES(std::default_initializable<stored_type>) = default;
 
@@ -164,15 +168,22 @@ class storage {
   stored_type m_storage;
 };
 
+/// \brief The type storage<T> normalizes an input of type T to before deciding its stored_type/value_type. Useful for
+/// a class's own deduction guide when its constructor forwards straight into a storage<...> member, so the guide's
+/// deduced template argument matches what storage(value)/store(value) would produce for that same input.
 template <class T>
-storage(T&&) -> storage<T>;
+using store_input_type_t = impl::store_input_type_t<T>;
 
-/// \brief Create a storage object from a forwarding reference.
+/// \brief CTAD applies the same input normalization as store(), so direct construction (storage(value)) and store()
+/// always agree, including for a storage<U> input, which both resolve to storage<U> itself rather than nesting.
 template <class T>
-KOKKOS_FUNCTION constexpr auto store(T&& value) noexcept(
-    noexcept(storage<impl::store_input_type_t<T>>(std::forward<T>(value)))) -> storage<impl::store_input_type_t<T>> {
-  using input_t = impl::store_input_type_t<T>;
-  return storage<input_t>(std::forward<T>(value));
+storage(T&&) -> storage<store_input_type_t<T>>;
+
+/// \brief Create a storage object from a forwarding reference. Equivalent to direct construction: storage(value).
+template <class T>
+KOKKOS_FUNCTION constexpr auto store(T&& value) noexcept(noexcept(storage(std::forward<T>(value))))
+    -> storage<store_input_type_t<T>> {
+  return storage(std::forward<T>(value));
 }
 
 }  // namespace mundy

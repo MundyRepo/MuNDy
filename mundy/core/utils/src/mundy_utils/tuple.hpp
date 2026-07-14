@@ -50,9 +50,14 @@ struct tuple_member {
   KOKKOS_DEFAULTED_FUNCTION
   constexpr tuple_member() MUNDY_REQUIRES(std::default_initializable<T>) = default;
 
-  /// \brief Constructor that takes a single argument
+  /// \brief Constructor that copies a single argument
   KOKKOS_FUNCTION
   constexpr tuple_member(T const& val) : value(val) {
+  }
+
+  /// \brief Constructor that moves a single argument
+  KOKKOS_FUNCTION
+  constexpr tuple_member(T&& val) : value(std::move(val)) {
   }
 
   /// \brief Get the value
@@ -109,10 +114,10 @@ struct tuple_impl<std::index_sequence<Idx...>, Elements...> : public tuple_membe
   KOKKOS_DEFAULTED_FUNCTION
   constexpr tuple_impl() MUNDY_REQUIRES((std::default_initializable<Elements> && ...)) = default;
 
-  /// \brief Copy constructor from a set of values. Only valid if all elements are copy constructible
+  /// \brief Constructor from a set of values; each is moved into its tuple_member
   KOKKOS_FUNCTION
   constexpr tuple_impl(Elements... vals) MUNDY_REQUIRES(sizeof...(Elements) > 0)
-      : tuple_member<Elements, Idx>{vals}... {
+      : tuple_member<Elements, Idx>{std::move(vals)}... {
   }
 
   /// \brief Default copy/move/assign constructors
@@ -159,19 +164,20 @@ struct tuple_impl<std::index_sequence<Idx...>, Elements...> : public tuple_membe
 }  // namespace impl
 
 /// \brief A simple std::tuple-like class that can be used in device code with similar sementics to std::tuple (e.g.,
-/// get<N>(), get<T>(), tuple_cat, etc.). All elements must be copyable but not necessarily moveable or default
-/// constructible. The tuple itself is copyable, moveable, and default constructible if all of its elements are
-/// copyable, moveable, and default constructible (respectively).
+/// get<N>(), get<T>(), tuple_cat, etc.). Constructing a tuple from a set of values moves each one that supports
+/// moving and copies the rest; the tuple itself is copyable, moveable, and default constructible if all of its
+/// elements are (respectively).
 template <class... Elements>
 struct tuple : public impl::tuple_impl<decltype(std::make_index_sequence<sizeof...(Elements)>()), Elements...> {
   /// \brief Default constructor. Only valid if all elements are default constructible
   KOKKOS_DEFAULTED_FUNCTION
   constexpr tuple() MUNDY_REQUIRES((std::default_initializable<Elements> && ...)) = default;
 
-  /// \brief Constructor that takes a set of values. Only valid if all elements are copy constructible
+  /// \brief Constructor that takes a set of values; each is moved into its element
   KOKKOS_FUNCTION
   constexpr tuple(Elements... vals) MUNDY_REQUIRES(sizeof...(Elements) > 0)
-      : impl::tuple_impl<decltype(std::make_index_sequence<sizeof...(Elements)>()), Elements...>(vals...) {
+      : impl::tuple_impl<decltype(std::make_index_sequence<sizeof...(Elements)>()), Elements...>(
+            std::move(vals)...) {
   }
 
   /// \brief Default copy/move/assign constructors
@@ -287,7 +293,71 @@ using tuple_cat_t = decltype(tuple_cat(std::declval<input_t>()...));
 /// \brief Make a tuple from a list of values.
 template <class... Elements>
 KOKKOS_FUNCTION constexpr auto make_tuple(Elements... vals) {
-  return tuple<Elements...>{vals...};
+  return tuple<Elements...>{std::move(vals)...};
+}
+
+// **********************************************************************************************************************
+// Functional algorithms over tuples
+namespace impl {
+
+template <class Tuple, class F, size_t... Idx>
+KOKKOS_FUNCTION constexpr void for_each_impl(Tuple&& t, F&& f, std::index_sequence<Idx...>) {
+  (f(get<Idx>(t)), ...);
+}
+
+template <class Tuple, class Pred, size_t... Idx>
+KOKKOS_FUNCTION constexpr bool all_of_impl(Tuple&& t, Pred&& pred, std::index_sequence<Idx...>) {
+  bool result = true;
+  ((result = result && pred(get<Idx>(t))), ...);
+  return result;
+}
+
+template <class Tuple, class Pred, size_t... Idx>
+KOKKOS_FUNCTION constexpr bool any_of_impl(Tuple&& t, Pred&& pred, std::index_sequence<Idx...>) {
+  bool result = false;
+  ((result = result || pred(get<Idx>(t))), ...);
+  return result;
+}
+
+template <class F, class Tuple, size_t... Idx>
+KOKKOS_FUNCTION constexpr decltype(auto) apply_impl(F&& f, Tuple&& t, std::index_sequence<Idx...>) {
+  return std::forward<F>(f)(get<Idx>(t)...);
+}
+
+}  // namespace impl
+
+/// \brief Call f(element) for every element of the tuple, in order.
+template <class F, class... Elements>
+KOKKOS_FUNCTION constexpr void for_each(tuple<Elements...>& t, F&& f) {
+  impl::for_each_impl(t, std::forward<F>(f), std::make_index_sequence<sizeof...(Elements)>{});
+}
+//
+template <class F, class... Elements>
+KOKKOS_FUNCTION constexpr void for_each(const tuple<Elements...>& t, F&& f) {
+  impl::for_each_impl(t, std::forward<F>(f), std::make_index_sequence<sizeof...(Elements)>{});
+}
+
+/// \brief True if pred(element) holds for every element of the tuple (vacuously true for an empty tuple).
+template <class Pred, class... Elements>
+KOKKOS_FUNCTION constexpr bool all_of(const tuple<Elements...>& t, Pred&& pred) {
+  return impl::all_of_impl(t, std::forward<Pred>(pred), std::make_index_sequence<sizeof...(Elements)>{});
+}
+
+/// \brief True if pred(element) holds for at least one element of the tuple (vacuously false for an empty tuple).
+template <class Pred, class... Elements>
+KOKKOS_FUNCTION constexpr bool any_of(const tuple<Elements...>& t, Pred&& pred) {
+  return impl::any_of_impl(t, std::forward<Pred>(pred), std::make_index_sequence<sizeof...(Elements)>{});
+}
+
+/// \brief Invoke f with the tuple's elements as positional arguments: f(get<0>(t), get<1>(t), ...).
+template <class F, class... Elements>
+KOKKOS_FUNCTION constexpr decltype(auto) apply(F&& f, tuple<Elements...>& t) {
+  return impl::apply_impl(std::forward<F>(f), t, std::make_index_sequence<sizeof...(Elements)>{});
+}
+//
+template <class F, class... Elements>
+KOKKOS_FUNCTION constexpr decltype(auto) apply(F&& f, const tuple<Elements...>& t) {
+  return impl::apply_impl(std::forward<F>(f), t, std::make_index_sequence<sizeof...(Elements)>{});
 }
 
 }  // namespace mundy

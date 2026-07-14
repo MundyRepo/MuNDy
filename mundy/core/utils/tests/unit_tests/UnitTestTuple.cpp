@@ -111,6 +111,98 @@ TEST(TupleTest, MoveTuple) {
   EXPECT_EQ(::mundy::get<2>(t2), "test");
 }
 
+struct CopyMoveTracked {
+  int copies = 0;
+  int moves = 0;
+
+  CopyMoveTracked() = default;
+  CopyMoveTracked(const CopyMoveTracked& other) : copies(other.copies + 1), moves(other.moves) {
+  }
+  CopyMoveTracked(CopyMoveTracked&& other) noexcept : copies(other.copies), moves(other.moves + 1) {
+  }
+};
+
+TEST(TupleTest, ConstructingFromRvaluesMovesRatherThanCopies) {
+  // tuple's constructor forwards through tuple_impl to tuple_member (2 internal hops), so a single rvalue
+  // argument is moved 3 times total (once per hop) and copied zero times.
+  CopyMoveTracked tracked;
+  auto t = ::mundy::tuple<CopyMoveTracked>(std::move(tracked));
+  EXPECT_EQ(::mundy::get<0>(t).copies, 0);
+  EXPECT_EQ(::mundy::get<0>(t).moves, 3);
+}
+
+TEST(TupleTest, ConstructingFromLvaluesCopiesOnceThenMoves) {
+  // An lvalue argument forces exactly one copy at the outermost layer (into tuple's own by-value parameter);
+  // every hop after that moves the already-local copy, rather than copying again at each layer.
+  CopyMoveTracked tracked;
+  auto t = ::mundy::tuple<CopyMoveTracked>(tracked);
+  EXPECT_EQ(::mundy::get<0>(t).copies, 1);
+  EXPECT_EQ(::mundy::get<0>(t).moves, 2);
+}
+
+TEST(TupleTest, MakeTupleFromRvaluesMovesRatherThanCopies) {
+  // A prvalue argument (CopyMoveTracked{}) materializes directly into make_tuple's by-value parameter (mandatory
+  // copy elision), then gets moved through make_tuple -> tuple -> tuple_impl -> tuple_member (3 hops) -- zero
+  // copies either way.
+  auto t = ::mundy::make_tuple(CopyMoveTracked{});
+  EXPECT_EQ(::mundy::get<0>(t).copies, 0);
+}
+
+TEST(TupleTest, ForEach) {
+  auto t = ::mundy::make_tuple(1, 2.5, 3);
+  double sum = 0;
+  ::mundy::for_each(t, [&sum](const auto& value) { sum += static_cast<double>(value); });
+  EXPECT_EQ(sum, 6.5);
+}
+
+TEST(TupleTest, ForEachConstTuple) {
+  const auto t = ::mundy::make_tuple(1, 2.5, 3);
+  double sum = 0;
+  ::mundy::for_each(t, [&sum](const auto& value) { sum += static_cast<double>(value); });
+  EXPECT_EQ(sum, 6.5);
+}
+
+TEST(TupleTest, ForEachEmptyTuple) {
+  ::mundy::tuple<> t;
+  int calls = 0;
+  ::mundy::for_each(t, [&calls](const auto&) { ++calls; });
+  EXPECT_EQ(calls, 0);
+}
+
+TEST(TupleTest, AllOf) {
+  auto t = ::mundy::make_tuple(1, 2, 3);
+  EXPECT_TRUE(::mundy::all_of(t, [](const auto& value) { return value > 0; }));
+  EXPECT_FALSE(::mundy::all_of(t, [](const auto& value) { return value > 1; }));
+}
+
+TEST(TupleTest, AllOfEmptyTuple) {
+  ::mundy::tuple<> t;
+  EXPECT_TRUE(::mundy::all_of(t, [](const auto&) { return false; }));
+}
+
+TEST(TupleTest, AnyOf) {
+  auto t = ::mundy::make_tuple(1, 2, 3);
+  EXPECT_TRUE(::mundy::any_of(t, [](const auto& value) { return value > 2; }));
+  EXPECT_FALSE(::mundy::any_of(t, [](const auto& value) { return value > 3; }));
+}
+
+TEST(TupleTest, AnyOfEmptyTuple) {
+  ::mundy::tuple<> t;
+  EXPECT_FALSE(::mundy::any_of(t, [](const auto&) { return true; }));
+}
+
+TEST(TupleTest, Apply) {
+  auto t = ::mundy::make_tuple(1, 2.5, 3);
+  auto sum = ::mundy::apply([](const auto& a, const auto& b, const auto& c) { return a + b + c; }, t);
+  EXPECT_EQ(sum, 6.5);
+}
+
+TEST(TupleTest, ApplyConstTuple) {
+  const auto t = ::mundy::make_tuple(1, 2.5, 3);
+  auto sum = ::mundy::apply([](const auto& a, const auto& b, const auto& c) { return a + b + c; }, t);
+  EXPECT_EQ(sum, 6.5);
+}
+
 }  // namespace
 
 }  // namespace mundy
