@@ -40,6 +40,8 @@ namespace mundy {
   - count_type<T, Types...>      : count how many times T appears in Types...
   - index_finder<T, Types...>    : find the index of T in Types... (only valid if all types are unique and the type is
   present)
+  - type_at_index<I, Types...>   : get the I'th type in Types...
+  - dependent_false_v<Types...>  : always false, for static_assert in an otherwise-unreachable constexpr branch
 
 */
 
@@ -102,6 +104,15 @@ struct type_at_index<0, Head, Tail...> {
 template <size_t I, class... Ts>
 MUNDY_REQUIRES(I < sizeof...(Ts))
 using type_at_index_t = typename type_at_index<I, Ts...>::type;
+
+// **********************************************************************************************************************
+/// \brief A constant that is always false, regardless of its template arguments.
+///
+/// Use it to make a static_assert that fires only when an otherwise-unreachable constexpr branch is instantiated:
+/// a bare `static_assert(false, ...)` is ill-formed even if never reached, whereas `dependent_false_v<T>` depends
+/// on the template parameter and so is only evaluated on instantiation of that branch.
+template <class...>
+inline constexpr bool dependent_false_v = false;
 
 }  // namespace mundy
 

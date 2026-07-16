@@ -94,7 +94,6 @@ if(Mundy_ENABLE_TESTS AND Mundy_ENABLE_nanobench)
   # tribits_add_executable(
   #   KokkosMbodyTest
   #   SOURCES KokkosMbody.cpp
-  #   MPI_PROC_RANGE 1
   #   INSTALLABLE
   #   CATEGORIES PERFORMANCE
   # )

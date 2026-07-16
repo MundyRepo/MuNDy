@@ -38,6 +38,9 @@ namespace mesh {
 
 namespace impl {
 
+// TODO(palmerb4): If a link entity was created during the modification process, upon modification end signal
+// we must update the runtime link data from the static data (entity id + rank -> entity)
+
 class LinkDataObserver : public stk::mesh::ModificationObserver {
  public:
   LinkDataObserver(stk::mesh::BulkData& bulk_data, LinkMetaData& link_meta_data, bool& crs_structure_dirty)

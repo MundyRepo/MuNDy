@@ -32,6 +32,7 @@
 #include <mundy_math/impl/AccessorImpl.hpp>
 #include <mundy_utils/storage.hpp>
 #include <mundy_utils/throw_assert.hpp>
+#include <mundy_utils/type_traits.hpp>  // for mundy::dependent_false_v
 
 namespace mundy {
 
@@ -244,9 +245,6 @@ concept CallTakesLongInt = requires { unwrap_accessor(std::declval<Accessor>())(
 
 template <typename Accessor>
 concept CallTakesInt = requires { unwrap_accessor(std::declval<Accessor>())(IntOnly{}); };
-
-template <typename T>
-inline constexpr bool dependent_false_v = false;
 
 template <typename IndexType>
 KOKKOS_INLINE_FUNCTION constexpr IndexType checked_index_cast(const size_t idx) {
