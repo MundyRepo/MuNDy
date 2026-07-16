@@ -38,7 +38,9 @@
 #include <mundy_math/Matrix.hpp>  // for mundy::Matrix
 #include <mundy_math/Vector.hpp>  // for mundy::Vector
 #include <mundy_math/cmath.hpp>
-#include <mundy_math/convex.hpp>  // for mundy::solve_lcp/solve_cqpp
+#include <mundy_math/convex_spaces.hpp>
+#include <mundy_math/cqpp.hpp>
+#include <mundy_math/lcp.hpp>
 #include <mundy_utils/rng.hpp>    // for mundy::make_philox
 
 namespace mundy {
@@ -54,7 +56,7 @@ struct UnconstrainedSPD1Problem {
   using value_type = double;
   using vector_t = Vector3d;
   using linear_op_t = Matrix3d;
-  using backend_t = convex::MundyMathBackend;
+  using backend_t = MundyMathBackend;
 
   std::string name() const {
     return "UnconstrainedSPD1Problem";
@@ -62,7 +64,7 @@ struct UnconstrainedSPD1Problem {
 
   KOKKOS_INLINE_FUNCTION
   auto get_space() const {
-    return convex::space::Unconstrained<value_type>();
+    return UnconstrainedSpace<value_type>();
   }
 
   KOKKOS_INLINE_FUNCTION
@@ -87,7 +89,7 @@ struct InactiveBoxConstrainedSPDProblem {
   using value_type = double;
   using vector_t = Vector3d;
   using linear_op_t = Matrix3d;
-  using backend_t = convex::MundyMathBackend;
+  using backend_t = MundyMathBackend;
 
   std::string name() const {
     return "InactiveBoxConstrainedSPDProblem";
@@ -95,7 +97,7 @@ struct InactiveBoxConstrainedSPDProblem {
 
   KOKKOS_INLINE_FUNCTION
   auto get_space() const {
-    return convex::space::Bounded<value_type>(0.0, 2.0);
+    return BoundedSpace<value_type>(0.0, 2.0);
   }
 
   KOKKOS_INLINE_FUNCTION
@@ -120,7 +122,7 @@ struct ActiveBoxConstrainedSPDProblem {
   using value_type = double;
   using vector_t = Vector3d;
   using linear_op_t = Matrix3d;
-  using backend_t = convex::MundyMathBackend;
+  using backend_t = MundyMathBackend;
 
   std::string name() const {
     return "ActiveBoxConstrainedSPDProblem";
@@ -128,7 +130,7 @@ struct ActiveBoxConstrainedSPDProblem {
 
   KOKKOS_INLINE_FUNCTION
   auto get_space() const {
-    return convex::space::Bounded<value_type>(9.0, 10.0);
+    return BoundedSpace<value_type>(9.0, 10.0);
   }
 
   KOKKOS_INLINE_FUNCTION
@@ -154,7 +156,7 @@ struct RandomLCP {
   using value_type = double;
   using vector_t = Vector<value_type, N>;
   using linear_op_t = Matrix<value_type, N, N>;
-  using backend_t = convex::MundyMathBackend;
+  using backend_t = MundyMathBackend;
 
   std::string name() const {
     return "RandomLCP" + std::to_string(N);
@@ -184,7 +186,7 @@ struct RandomLCP {
 
   KOKKOS_INLINE_FUNCTION
   auto get_space() const {
-    return convex::space::LowerBound<value_type>(0.0);
+    return LowerBoundSpace<value_type>(0.0);
   }
 
   KOKKOS_INLINE_FUNCTION
@@ -238,7 +240,7 @@ struct RandomLCP {
 namespace congruent {
 
 template <class NonCongruentProblem>
-struct CongruentLCPProblemWrapper {
+struct CongruentLCPWrapper {
   // D = I
   using value_type = typename NonCongruentProblem::value_type;
   using vector_t = typename NonCongruentProblem::vector_t;
@@ -246,7 +248,7 @@ struct CongruentLCPProblemWrapper {
   using backend_t = typename NonCongruentProblem::backend_t;
 
   std::string name() const {
-    return "CongruentLCPProblemWrapper<" + cdp.name() + ">";
+    return "CongruentLCPWrapper<" + cdp.name() + ">";
   }
 
   KOKKOS_INLINE_FUNCTION
@@ -340,7 +342,7 @@ struct RandomMixedCongruentCCQP {
   }
 
   // clang-format off
-  KOKKOS_INLINE_FUNCTION auto get_space_x() const { return convex::space::LowerBound<value_type>(0.0); }
+  KOKKOS_INLINE_FUNCTION auto get_space_x() const { return LowerBoundSpace<value_type>(0.0); }
   KOKKOS_INLINE_FUNCTION vecx_t get_exact_x() const { return x_star_; }
   KOKKOS_INLINE_FUNCTION vecy_t get_exact_y() const { return y_star_; }
   KOKKOS_INLINE_FUNCTION matxz_t get_DT() const { return transpose(get_D()); }
@@ -474,10 +476,10 @@ struct UnconstrainedSPD1Problem {
   using mem_space = exec_space::memory_space;
 
   using value_type = double;
-  using layout_t = Kokkos::View<value_type*, mem_space>::array_layout;
+  using layout_t = Kokkos::LayoutLeft;  // For compatibility with KokkosKernels
   using vector_t = Kokkos::View<value_type*, layout_t, mem_space>;
   using linear_op_t = Kokkos::View<value_type**, layout_t, mem_space>;
-  using backend_t = convex::KokkosBackend<exec_space>;
+  using backend_t = KokkosBackend<exec_space>;
 
   std::string name() const {
     return "UnconstrainedSPD1Problem";
@@ -492,7 +494,7 @@ struct UnconstrainedSPD1Problem {
   }
 
   auto get_space() const {
-    return convex::space::Unconstrained<value_type>();
+    return UnconstrainedSpace<value_type>();
   }
 
   vector_t get_exact_solution() const {
@@ -533,10 +535,10 @@ struct InactiveBoxConstrainedSPDProblem {
   using mem_space = exec_space::memory_space;
 
   using value_type = double;
-  using layout_t = Kokkos::View<value_type*, mem_space>::array_layout;
+  using layout_t = Kokkos::LayoutLeft;  // For compatibility with KokkosKernels
   using vector_t = Kokkos::View<value_type*, layout_t, mem_space>;
   using linear_op_t = Kokkos::View<value_type**, layout_t, mem_space>;
-  using backend_t = convex::KokkosBackend<exec_space>;
+  using backend_t = KokkosBackend<exec_space>;
 
   std::string name() const {
     return "InactiveBoxConstrainedSPDProblem";
@@ -551,7 +553,7 @@ struct InactiveBoxConstrainedSPDProblem {
   }
 
   auto get_space() const {
-    return convex::space::Bounded<value_type>(0.0, 2.0);
+    return BoundedSpace<value_type>(0.0, 2.0);
   }
 
   vector_t get_exact_solution() const {
@@ -592,10 +594,10 @@ struct ActiveBoxConstrainedSPDProblem {
   using mem_space = exec_space::memory_space;
 
   using value_type = double;
-  using layout_t = Kokkos::View<value_type*, mem_space>::array_layout;
+  using layout_t = Kokkos::LayoutLeft;  // For compatibility with KokkosKernels
   using vector_t = Kokkos::View<value_type*, layout_t, mem_space>;
   using linear_op_t = Kokkos::View<value_type**, layout_t, mem_space>;
-  using backend_t = convex::KokkosBackend<exec_space>;
+  using backend_t = KokkosBackend<exec_space>;
 
   std::string name() const {
     return "ActiveBoxConstrainedSPDProblem";
@@ -610,7 +612,7 @@ struct ActiveBoxConstrainedSPDProblem {
   }
 
   auto get_space() const {
-    return convex::space::Bounded<value_type>(9.0, 10.0);
+    return BoundedSpace<value_type>(9.0, 10.0);
   }
 
   vector_t get_exact_solution() const {
@@ -651,10 +653,10 @@ struct RandomLCP {
   using mem_space = exec_space::memory_space;
 
   using value_type = double;
-  using layout_t = Kokkos::View<value_type*, mem_space>::array_layout;
+  using layout_t = Kokkos::LayoutLeft;  // For compatibility with KokkosKernels
   using vector_t = Kokkos::View<value_type*, layout_t, mem_space>;
   using linear_op_t = Kokkos::View<value_type**, layout_t, mem_space>;
-  using backend_t = convex::KokkosBackend<exec_space>;
+  using backend_t = KokkosBackend<exec_space>;
 
   std::string name() const {
     return "RandomLCP" + std::to_string(size_);
@@ -699,7 +701,7 @@ struct RandomLCP {
   }
 
   auto get_space() const {
-    return convex::space::LowerBound<value_type>(0.0);
+    return LowerBoundSpace<value_type>(0.0);
   }
 
   vector_t get_exact_solution() const {
@@ -759,19 +761,19 @@ struct RandomLCP {
 namespace congruent {
 
 template <class NonCongruentProblem>
-struct CongruentLCPProblemWrapper {
+struct CongruentLCPWrapper {
   // D = I
   using exec_space = Kokkos::DefaultExecutionSpace;
   using mem_space = exec_space::memory_space;
 
   using value_type = typename NonCongruentProblem::value_type;
-  using layout_t = typename NonCongruentProblem::layout_t;
+  using layout_t = Kokkos::LayoutLeft;  // For compatibility with KokkosKernels
   using vector_t = typename NonCongruentProblem::vector_t;
   using linear_op_t = typename NonCongruentProblem::linear_op_t;
   using backend_t = typename NonCongruentProblem::backend_t;
 
   std::string name() const {
-    return "CongruentLCPProblemWrapper<" + cdp.name() + ">";
+    return "CongruentLCPWrapper<" + cdp.name() + ">";
   }
 
   unsigned size() const {
@@ -838,7 +840,7 @@ struct RandomMixedCongruentCCQP {
   using mem_space = exec_space::memory_space;
 
   using value_type = double;
-  using layout_t = Kokkos::View<value_type*, mem_space>::array_layout;
+  using layout_t = Kokkos::LayoutLeft;  // For compatibility with KokkosKernels
   using vecx_t = Kokkos::View<value_type*, layout_t, mem_space>;
   using vecy_t = Kokkos::View<value_type*, layout_t, mem_space>;
   using matxx_t = Kokkos::View<value_type**, layout_t, mem_space>;
@@ -850,7 +852,7 @@ struct RandomMixedCongruentCCQP {
   using matzx_t = Kokkos::View<value_type**, layout_t, mem_space>;
   using matzy_t = Kokkos::View<value_type**, layout_t, mem_space>;
   using matzz_t = Kokkos::View<value_type**, layout_t, mem_space>;
-  using backend_t = convex::KokkosBackend<exec_space>;
+  using backend_t = KokkosBackend<exec_space>;
 
   RandomMixedCongruentCCQP(unsigned seed = 1) {
     seed_ = seed;
@@ -874,53 +876,20 @@ struct RandomMixedCongruentCCQP {
     return "RandomMixedCongruentCCQP<" + std::to_string(NX) + "," + std::to_string(NY) + "," + std::to_string(NZ) + ">";
   }
 
-  auto get_exec_space() const {
-    return exec_space{};
-  }
-
-  auto get_space_x() const {
-    return convex::space::LowerBound<value_type>(0.0);
-  }
-
-  vecx_t get_exact_x() const {
-    return x_star_;
-  }
-
-  vecy_t get_exact_y() const {
-    return y_star_;
-  }
-
-  matxz_t get_DT() const {
-    return DT_;
-  }
-
-  matzz_t get_M() const {
-    return M_;
-  }
-
-  matzx_t get_D() const {
-    return D_;
-  }
-
-  vecx_t get_q() const {
-    return q_;
-  }
-
-  matyz_t get_BT() const {
-    return BT_;
-  }
-
-  matyy_t get_S() const {
-    return S_;
-  }
-
-  matzy_t get_B() const {
-    return B_;
-  }
-
-  vecy_t get_b() const {
-    return b_;
-  }
+  // clang-format off
+  auto get_exec_space() const { return exec_space{}; }
+  auto get_space_x() const { return LowerBoundSpace<value_type>(0.0); }
+  vecx_t get_exact_x() const { return x_star_; }
+  vecy_t get_exact_y() const { return y_star_; }
+  matxz_t get_DT() const { return DT_; }
+  matzz_t get_M() const { return M_; }
+  matzx_t get_D() const { return D_; }
+  vecx_t get_q() const { return q_; }
+  matyz_t get_BT() const { return BT_; }
+  matyy_t get_S() const { return S_; }
+  matzy_t get_B() const { return B_; }
+  vecy_t get_b() const { return b_; }
+  // clang-format on
 
   KOKKOS_INLINE_FUNCTION
   static value_type urand(uint64_t a, uint64_t b) {
@@ -1112,10 +1081,10 @@ void run_mundy_math_test(const auto& test) {
   x.fill(99.99);  // use a bad initial guess to force more iterations
 
   // Build the problem
-  const auto cqpp = make_cqpp<convex::MundyMathBackend>(A, q, space);
+  const auto cqpp = make_cqpp<MundyMathBackend>(A, q, space);
 
   // Strategy + state
-  convex::PGDConfig<double> cfg{.max_iters = 1000, .tol = 1e-6};
+  PGDConfig<double> cfg{.max_iters = 1000, .tol = 1e-6};
   auto pgd = make_pgd_solution_strategy(cfg);
   auto pgd_state = make_pgd_state(x, grad, x_tmp, grad_tmp);
 
@@ -1152,12 +1121,12 @@ void run_mundy_math_congruent_test(const auto& test) {
     x.fill(99.99);  // use a bad initial guess to force more iterations
 
     // Build quadratic form operator + user-owned workspace, then the problem
-    const auto A = make_quadratic_form<convex::MundyMathBackend>(DT, M, D);
+    const auto A = make_quadratic_form<MundyMathBackend>(DT, M, D);
     auto workspace = A.make_workspace(f, u);  // intermediate variables f = D x, u = M f
-    const auto cqpp = make_cqpp<convex::MundyMathBackend>(A, q, space, workspace);
+    const auto cqpp = make_cqpp<MundyMathBackend>(A, q, space, workspace);
 
     // Strategy + state
-    convex::PGDConfig<double> cfg{.max_iters = 1000, .tol = 1e-6};
+    PGDConfig<double> cfg{.max_iters = 1000, .tol = 1e-6};
     auto pgd = make_pgd_solution_strategy(cfg);
     auto pgd_state = make_pgd_state(x, grad, x_tmp, grad_tmp);
 
@@ -1186,10 +1155,10 @@ void run_mundy_math_congruent_test(const auto& test) {
     // Build the cqpp directly
     // Use f = D x and u = M f as intermediate variables to avoid redundant computations in the PGD iterations
     // The final values of f and u post-solve are guaranteed to be f(x^*) and u(x^*).
-    const auto cqpp = make_cqpp<convex::MundyMathBackend>(DT, M, D, q, f, u, space);
+    const auto cqpp = make_cqpp<MundyMathBackend>(DT, M, D, q, f, u, space);
 
     // Strategy + state
-    convex::PGDConfig<double> cfg{.max_iters = 1000, .tol = 1e-6};
+    PGDConfig<double> cfg{.max_iters = 1000, .tol = 1e-6};
     auto pgd = make_pgd_solution_strategy(cfg);
     auto pgd_state = make_pgd_state(x, grad, x_tmp, grad_tmp);
 
@@ -1246,19 +1215,19 @@ void run_mundy_math_mixed_congruent_test(const auto& test) {
   ASSERT_EQ(b.size, y_exact.size) << "b should be same size as y_exact";
 
   // Build the problem
-  const auto mixed_cqpp = make_mixed_cqpp<convex::MundyMathBackend>(DT, M, D, q, B, S, BT, b, space);
+  const auto mixed_cqpp = make_mixed_cqpp<MundyMathBackend>(DT, M, D, q, B, S, BT, b, space);
 
   auto DT_op = mixed_cqpp.DT();
   auto M_op = mixed_cqpp.M();
   auto f_b = mixed_cqpp.f_b();
 
-  ASSERT_EQ(convex::MundyMathBackend::domain_size(M_op), convex::MundyMathBackend::size(f_b))
+  ASSERT_EQ(MundyMathBackend::domain_size(M_op), MundyMathBackend::size(f_b))
       << "M and f_b should be compatible for multiplication";
-  ASSERT_EQ(convex::MundyMathBackend::domain_size(DT_op), convex::MundyMathBackend::range_size(M_op))
+  ASSERT_EQ(MundyMathBackend::domain_size(DT_op), MundyMathBackend::range_size(M_op))
       << "DT and M should be compatible for DT * M";
 
   // Strategy + state
-  convex::PGDConfig<double> cfg{.max_iters = 1000, .tol = 1e-6};
+  PGDConfig<double> cfg{.max_iters = 1000, .tol = 1e-6};
   auto pgd = make_pgd_solution_strategy(cfg);
   auto pgd_state = make_pgd_state(x, grad, x_tmp, grad_tmp);
 
@@ -1294,10 +1263,10 @@ void run_kokkos_test(const auto& test) {
   Kokkos::deep_copy(x, 99.99);  // use a bad initial guess to force more iterations
 
   // Build the problem
-  const auto cqpp = make_cqpp<convex::KokkosBackend<decltype(exec_space)>>(A, q, space);
+  const auto cqpp = make_cqpp<KokkosBackend<decltype(exec_space)>>(A, q, space);
 
   // Strategy + state
-  convex::PGDConfig<double> cfg{.max_iters = 1000, .tol = 1e-6};
+  PGDConfig<double> cfg{.max_iters = 1000, .tol = 1e-6};
   auto pgd = make_pgd_solution_strategy(cfg);
   auto pgd_state = make_pgd_state(x, grad, x_tmp, grad_tmp);
 
@@ -1344,12 +1313,12 @@ void run_kokkos_congruent_test(const auto& test) {
   Kokkos::deep_copy(x, 99.99);  // use a bad initial guess to force more iterations
 
   // Build quadratic form operator + user-owned workspace, then the problem
-  const auto A = make_quadratic_form<convex::KokkosBackend<decltype(exec_space)>>(DT, M, D);
+  const auto A = make_quadratic_form<KokkosBackend<decltype(exec_space)>>(DT, M, D);
   auto workspace = A.make_workspace(f, u);  // intermediate variables f = D x, u = M f
-  const auto cqpp = make_cqpp<convex::KokkosBackend<decltype(exec_space)>>(A, q, space, workspace);
+  const auto cqpp = make_cqpp<KokkosBackend<decltype(exec_space)>>(A, q, space, workspace);
 
   // Strategy + state
-  convex::PGDConfig<double> cfg{.max_iters = 1000, .tol = 1e-6};
+  PGDConfig<double> cfg{.max_iters = 1000, .tol = 1e-6};
   auto pgd = make_pgd_solution_strategy(cfg);
   auto pgd_state = make_pgd_state(x, grad, x_tmp, grad_tmp);
 
@@ -1416,13 +1385,13 @@ void run_kokkos_mixed_congruent_test(const auto& test) {
   ASSERT_EQ(b.extent(0), y_exact.extent(0)) << "b should be same size as y_exact";
 
   // Build the problem
-  const auto mixed_cqpp = make_mixed_cqpp<convex::KokkosBackend<decltype(exec_space)>>(DT, M, D, q, B, S, BT, b, space);
+  const auto mixed_cqpp = make_mixed_cqpp<KokkosBackend<decltype(exec_space)>>(DT, M, D, q, B, S, BT, b, space);
 
   auto DT_op = mixed_cqpp.DT();
   auto M_op = mixed_cqpp.M();
   auto f_b = mixed_cqpp.f_b();
 
-  using backend_t = convex::KokkosBackend<decltype(exec_space)>;
+  using backend_t = KokkosBackend<decltype(exec_space)>;
   ASSERT_EQ(backend_t::domain_size(M_op), backend_t::size(f_b)) << "M and f_b should be compatible for multiplication";
   ASSERT_EQ(backend_t::domain_size(DT_op), backend_t::range_size(M_op)) << "DT and M should be compatible for DT * M";
 }
@@ -1438,12 +1407,12 @@ TEST(Convex, MundyMathAnalyticalSolutions) {
 }
 
 TEST(Convex, MundyMathCongruentAnalyticalSolutions) {
-  using math_backend::congruent::CongruentLCPProblemWrapper;
-  auto test_cases = std::make_tuple(CongruentLCPProblemWrapper{math_backend::UnconstrainedSPD1Problem{}},          //
-                                    CongruentLCPProblemWrapper{math_backend::InactiveBoxConstrainedSPDProblem{}},  //
-                                    CongruentLCPProblemWrapper{math_backend::ActiveBoxConstrainedSPDProblem{}},    //
-                                    CongruentLCPProblemWrapper{math_backend::RandomLCP<3>{}},                      //
-                                    CongruentLCPProblemWrapper{math_backend::RandomLCP<7>{}});
+  using math_backend::congruent::CongruentLCPWrapper;
+  auto test_cases = std::make_tuple(CongruentLCPWrapper{math_backend::UnconstrainedSPD1Problem{}},          //
+                                    CongruentLCPWrapper{math_backend::InactiveBoxConstrainedSPDProblem{}},  //
+                                    CongruentLCPWrapper{math_backend::ActiveBoxConstrainedSPDProblem{}},    //
+                                    CongruentLCPWrapper{math_backend::RandomLCP<3>{}},                      //
+                                    CongruentLCPWrapper{math_backend::RandomLCP<7>{}});
   std::apply([](auto&&... test_case) { (run_mundy_math_congruent_test(test_case), ...); }, test_cases);
 }
 
@@ -1474,13 +1443,13 @@ TEST(Convex, KokkosCongruentAnalyticalSolutions) {
     !defined(KOKKOSKERNELS_ENABLE_TPL_ROCSOLVER) && !defined(KOKKOSKERNELS_ENABLE_TPL_MAGMA)
   GTEST_SKIP() << "KokkosLapack::gesv requires LAPACK, CUSOLVER, ROCSOLVER, or MAGMA.";
 #endif
-  using kokkos_backend::congruent::CongruentLCPProblemWrapper;
-  auto test_cases = std::make_tuple(CongruentLCPProblemWrapper{kokkos_backend::UnconstrainedSPD1Problem{}},          //
-                                    CongruentLCPProblemWrapper{kokkos_backend::InactiveBoxConstrainedSPDProblem{}},  //
-                                    CongruentLCPProblemWrapper{kokkos_backend::ActiveBoxConstrainedSPDProblem{}},    //
-                                    CongruentLCPProblemWrapper{kokkos_backend::RandomLCP{3}},                        //
-                                    CongruentLCPProblemWrapper{kokkos_backend::RandomLCP{7}},                        //
-                                    CongruentLCPProblemWrapper{kokkos_backend::RandomLCP{200}});
+  using kokkos_backend::congruent::CongruentLCPWrapper;
+  auto test_cases = std::make_tuple(CongruentLCPWrapper{kokkos_backend::UnconstrainedSPD1Problem{}},          //
+                                    CongruentLCPWrapper{kokkos_backend::InactiveBoxConstrainedSPDProblem{}},  //
+                                    CongruentLCPWrapper{kokkos_backend::ActiveBoxConstrainedSPDProblem{}},    //
+                                    CongruentLCPWrapper{kokkos_backend::RandomLCP{3}},                        //
+                                    CongruentLCPWrapper{kokkos_backend::RandomLCP{7}},                        //
+                                    CongruentLCPWrapper{kokkos_backend::RandomLCP{200}});
   std::apply([](auto&&... test_case) { (run_kokkos_congruent_test(test_case), ...); }, test_cases);
 }
 

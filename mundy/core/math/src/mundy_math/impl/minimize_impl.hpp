@@ -703,8 +703,8 @@ class CachingFDFLineAdaptor {
 /// \param fdf        Combined callable: \c double(const Vector<double,N>&, Vector<double,N>&).
 ///                   Must fill the second argument with the gradient and return f.
 template <size_t max_size, size_t N, typename search_strategy_type, typename stop_strategy_type, typename FDFType>
-KOKKOS_FUNCTION double find_min_with_fdf(search_strategy_type search_strategy, stop_strategy_type stop_strategy, const FDFType& fdf,
-                         Vector<double, N>& x, const double min_allowable_cost) {
+KOKKOS_FUNCTION double find_min_with_fdf(search_strategy_type search_strategy, stop_strategy_type stop_strategy,
+                                         const FDFType& fdf, Vector<double, N>& x, const double min_allowable_cost) {
   Vector<double, N> g;
   Vector<double, N> s;
 

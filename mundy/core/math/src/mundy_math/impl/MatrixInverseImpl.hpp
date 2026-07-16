@@ -86,15 +86,15 @@
 #include <cstddef>
 
 // Mundy
-#include <mundy_math/impl/MatrixImpl.hpp>
 #include <mundy_math/NumTraits.hpp>
 #include <mundy_math/cmath.hpp>
+#include <mundy_math/impl/MatrixImpl.hpp>
 #include <mundy_utils/throw_assert.hpp>
 
 namespace mundy {
 
 namespace impl {
-    
+
 /// \brief Largest N for which determinant()/inverse() use the bitmask cofactor expansion instead of LU.
 inline constexpr size_t kMatrixInverseLaplaceToLUCutoff = 6;
 
@@ -147,7 +147,7 @@ KOKKOS_FORCEINLINE_FUNCTION constexpr size_t skip_index(size_t compressed_idx, s
 
 /// \brief One term of the recursion
 ///
-/// top_det[Subset] = sum over c in Subset of (-1)^(row+col) * mat(row, c) * top_det[Subset with c removed], 
+/// top_det[Subset] = sum over c in Subset of (-1)^(row+col) * mat(row, c) * top_det[Subset with c removed],
 ///    where k = |Subset| and (row, col) are c's position within the block
 /// (row is always k-1, its last row; col is c's rank among Subset's members).
 ///
@@ -156,9 +156,9 @@ KOKKOS_FORCEINLINE_FUNCTION constexpr size_t skip_index(size_t compressed_idx, s
 /// \param[in] top_det Table of already-computed smaller-subset determinants.
 template <size_t N, size_t Subset, typename T, ValidAccessor<T> Accessor, size_t... Cols>
 KOKKOS_FORCEINLINE_FUNCTION constexpr T top_row_sum(const AMatrix<T, N, N, Accessor>& mat, const T* top_det,
-                                          std::index_sequence<Cols...>) {
+                                                    std::index_sequence<Cols...>) {
   static_assert(sizeof...(Cols) == N, "Number of columns must match N.");
-  constexpr int k = popcount<N>(Subset);  // |Subset|: rows 0..k-1 make up this block
+  constexpr int k = popcount<N>(Subset);   // |Subset|: rows 0..k-1 make up this block
   return ((((Subset >> Cols) & size_t{1})  // only sum over c = Cols actually in Subset
                ? (((k - 1 + popcount<N>(Subset & ((size_t{1} << Cols) - 1))) % 2 == 0) ? T(1) : T(-1)) *
                      mat(static_cast<size_t>(k - 1), Cols) * top_det[Subset & ~(size_t{1} << Cols)]
@@ -171,7 +171,7 @@ KOKKOS_FORCEINLINE_FUNCTION constexpr T top_row_sum(const AMatrix<T, N, N, Acces
 /// \param[in,out] top_det Table to fill; top_det[0] = 1 must already be set.
 template <size_t N, typename T, ValidAccessor<T> Accessor, size_t... SubsetsMinusOne>
 KOKKOS_FORCEINLINE_FUNCTION constexpr void fill_top_det(const AMatrix<T, N, N, Accessor>& mat, T* top_det,
-                                              std::index_sequence<SubsetsMinusOne...>) {
+                                                        std::index_sequence<SubsetsMinusOne...>) {
   static_assert(sizeof...(SubsetsMinusOne) == (size_t{1} << N) - 1, "Number of subsets must match 2^N - 1.");
   ((top_det[SubsetsMinusOne + 1] = top_row_sum<N, SubsetsMinusOne + 1>(mat, top_det, std::make_index_sequence<N>{})),
    ...);
@@ -188,7 +188,7 @@ KOKKOS_FORCEINLINE_FUNCTION constexpr void fill_top_det(const AMatrix<T, N, N, A
 /// \param[in] bottom_det Table of already-computed smaller-subset determinants.
 template <size_t N, size_t Subset, typename T, ValidAccessor<T> Accessor, size_t... Cols>
 KOKKOS_FORCEINLINE_FUNCTION constexpr T bottom_row_sum(const AMatrix<T, N, N, Accessor>& mat, const T* bottom_det,
-                                             std::index_sequence<Cols...>) {
+                                                       std::index_sequence<Cols...>) {
   static_assert(sizeof...(Cols) == N, "Number of columns must match N.");
   constexpr int k = popcount<N>(Subset);
   constexpr size_t row = N - static_cast<size_t>(k);  // first row of the last-k-rows block
@@ -204,7 +204,7 @@ KOKKOS_FORCEINLINE_FUNCTION constexpr T bottom_row_sum(const AMatrix<T, N, N, Ac
 /// \param[in,out] bottom_det Table to fill; bottom_det[0] = 1 must already be set.
 template <size_t N, typename T, ValidAccessor<T> Accessor, size_t... SubsetsMinusOne>
 KOKKOS_FORCEINLINE_FUNCTION constexpr void fill_bottom_det(const AMatrix<T, N, N, Accessor>& mat, T* bottom_det,
-                                                 std::index_sequence<SubsetsMinusOne...>) {
+                                                           std::index_sequence<SubsetsMinusOne...>) {
   static_assert(sizeof...(SubsetsMinusOne) == (size_t{1} << N) - 1, "Number of subsets must match 2^N - 1.");
   ((bottom_det[SubsetsMinusOne + 1] =
         bottom_row_sum<N, SubsetsMinusOne + 1>(mat, bottom_det, std::make_index_sequence<N>{})),
@@ -225,7 +225,7 @@ KOKKOS_FORCEINLINE_FUNCTION constexpr size_t scatter_impl(std::index_sequence<J.
 template <size_t N, size_t ExcludedCol, size_t Local>
 inline constexpr size_t scattered_v = scatter_impl<N, ExcludedCol, Local>(std::make_index_sequence<N - 1>{});
 
-/// \brief Sign of the (ExcludedCol, Local) cofactor term. 
+/// \brief Sign of the (ExcludedCol, Local) cofactor term.
 ///
 /// cofactor(r, c) is the determinant of the (N-1)x(N-1) minor (row r, col c removed); the generalized Laplace/Cauchy-
 /// Binet expansion splits it into a top r-row block (columns F) and a bottom (N-1-r)-row block (columns G, the rest):
@@ -251,12 +251,12 @@ inline constexpr bool cofactor_term_positive_v = [] {
 /// \param[in] top_det Global top-block determinant table.
 /// \param[in] bottom_det Global bottom-block determinant table.
 template <size_t N, size_t ExcludedCol, typename T, ValidVectorType VectorType, size_t... Local>
-KOKKOS_FORCEINLINE_FUNCTION constexpr void accumulate_column(VectorType&& col_acc, const T* top_det, const T* bottom_det,
-                                                   std::index_sequence<Local...>) {
+KOKKOS_FORCEINLINE_FUNCTION constexpr void accumulate_column(VectorType&& col_acc, const T* top_det,
+                                                             const T* bottom_det, std::index_sequence<Local...>) {
   static_assert(sizeof...(Local) == (size_t{1} << (N - 1)), "Number of local column subsets must match 2^(N-1).");
   constexpr size_t full_mask = (size_t{1} << N) - 1;
-  // Note, ~scattered_v<N, ExcludedCol, Local> is the complement of the scattered column set, which still has ExcludedCol's bit set,
-  // so we clear that via & ~ (1 << ExcludedCol) to get the actual bottom block's column set.
+  // Note, ~scattered_v<N, ExcludedCol, Local> is the complement of the scattered column set, which still has
+  // ExcludedCol's bit set, so we clear that via & ~ (1 << ExcludedCol) to get the actual bottom block's column set.
   ((col_acc[popcount<N - 1>(Local)] +=
     (cofactor_term_positive_v<N, ExcludedCol, Local> ? T(1) : T(-1))  //
     * top_det[scattered_v<N, ExcludedCol, Local>]                     //
@@ -269,8 +269,9 @@ KOKKOS_FORCEINLINE_FUNCTION constexpr void accumulate_column(VectorType&& col_ac
 /// \param[in] top_det Global top-block determinant table.
 /// \param[in] bottom_det Global bottom-block determinant table.
 template <size_t N, typename T, size_t... ExcludedCol>
-KOKKOS_FORCEINLINE_FUNCTION constexpr void combine_all_columns(AMatrix<T, N, N>& result, const T* top_det, const T* bottom_det,
-                                                     std::index_sequence<ExcludedCol...>) {
+KOKKOS_FORCEINLINE_FUNCTION constexpr void combine_all_columns(AMatrix<T, N, N>& result, const T* top_det,
+                                                               const T* bottom_det,
+                                                               std::index_sequence<ExcludedCol...>) {
   static_assert(sizeof...(ExcludedCol) == N, "Number of excluded columns must match N.");
   (accumulate_column<N, ExcludedCol>(result.template view_column<ExcludedCol>(), top_det, bottom_det,
                                      std::make_index_sequence<(size_t{1} << (N - 1))>{}),
@@ -342,7 +343,7 @@ KOKKOS_INLINE_FUNCTION constexpr void init_perm(size_t* perm, std::index_sequenc
 /// \param[in,out] pivot_mag |mat[pivot_row][K]|, the best candidate's magnitude so far.
 template <size_t N, size_t K, typename T, size_t... Offset>
 KOKKOS_INLINE_FUNCTION constexpr void find_pivot(const AMatrix<T, N, N>& mat, size_t& pivot_row, T& pivot_mag,
-                                       std::index_sequence<Offset...>) {
+                                                 std::index_sequence<Offset...>) {
   static_assert(sizeof...(Offset) == N - K - 1, "Number of candidate rows must match N - K - 1.");
   (
       [&] {
@@ -372,7 +373,8 @@ KOKKOS_INLINE_FUNCTION constexpr void swap_rows(AMatrix<T, N, N>& mat, size_t pi
 /// \param[in,out] mat Matrix being factorized in place, row-major layout.
 /// \param[in] pivot_recip 1/mat[K][K].
 template <size_t N, size_t K, size_t Row, typename T, size_t... ColOffset>
-KOKKOS_INLINE_FUNCTION constexpr void eliminate_row(AMatrix<T, N, N>& mat, T pivot_recip, std::index_sequence<ColOffset...>) {
+KOKKOS_INLINE_FUNCTION constexpr void eliminate_row(AMatrix<T, N, N>& mat, T pivot_recip,
+                                                    std::index_sequence<ColOffset...>) {
   static_assert(sizeof...(ColOffset) == N - K - 1, "Number of columns to eliminate must match N - K - 1.");
   const T multiplier = mat[Row * N + K] * pivot_recip;  // L[Row][K] = A[Row][K] / A[K][K]
   mat[Row * N + K] = multiplier;
@@ -416,7 +418,8 @@ KOKKOS_INLINE_FUNCTION constexpr int lu_step(AMatrix<T, N, N>& mat, size_t* perm
 /// \param[out] perm Row permutation, size N.
 /// \return The sign contributed by the permutation (+1 or -1).
 template <size_t N, typename OutputType, size_t... K>
-KOKKOS_INLINE_FUNCTION constexpr int factorize(AMatrix<OutputType, N, N>& mat, size_t* perm, std::index_sequence<K...>) {
+KOKKOS_INLINE_FUNCTION constexpr int factorize(AMatrix<OutputType, N, N>& mat, size_t* perm,
+                                               std::index_sequence<K...>) {
   static_assert(sizeof...(K) == N - 1, "Number of elimination steps must match N - 1.");
   init_perm<N>(perm, std::make_index_sequence<N>{});
   int sign = 1;
@@ -439,7 +442,7 @@ KOKKOS_INLINE_FUNCTION constexpr T diagonal_product(const AMatrix<T, N, N>& mat,
 /// \param[in] perm Row permutation, size N.
 template <size_t N, typename T, size_t... Idx>
 KOKKOS_INLINE_FUNCTION constexpr void init_permuted_rhs_matrix(AMatrix<T, N, N>& Y, const size_t* perm,
-                                                     std::index_sequence<Idx...>) {
+                                                               std::index_sequence<Idx...>) {
   static_assert(sizeof...(Idx) == N * N, "Number of indices must match N*N.");
   ((Y[Idx] = (perm[Idx / N] == Idx % N) ? T(1) : T(0)), ...);
 }
@@ -450,7 +453,7 @@ KOKKOS_INLINE_FUNCTION constexpr void init_permuted_rhs_matrix(AMatrix<T, N, N>&
 /// \param[in] Y Right-hand-side/solution matrix.
 template <size_t N, size_t Row, size_t Col, typename T, size_t... J>
 KOKKOS_INLINE_FUNCTION constexpr T forward_sum_one(const AMatrix<T, N, N>& mat, const AMatrix<T, N, N>& Y,
-                                         std::index_sequence<J...>) {
+                                                   std::index_sequence<J...>) {
   static_assert(sizeof...(J) == Row, "Number of summed terms must match Row.");
   if constexpr (sizeof...(J) == 0) {
     return T(0);
@@ -466,7 +469,7 @@ KOKKOS_INLINE_FUNCTION constexpr T forward_sum_one(const AMatrix<T, N, N>& mat, 
 /// \param[in,out] Y Right-hand-side/solution matrix.
 template <size_t N, size_t Row, typename T, size_t... Col>
 KOKKOS_INLINE_FUNCTION constexpr void forward_row_all_cols(const AMatrix<T, N, N>& mat, AMatrix<T, N, N>& Y,
-                                                 std::index_sequence<Col...>) {
+                                                           std::index_sequence<Col...>) {
   static_assert(sizeof...(Col) == N, "Number of columns must match N.");
   ((Y[Row * N + Col] -= forward_sum_one<N, Row, Col>(mat, Y, std::make_index_sequence<Row>{})), ...);
 }
@@ -478,7 +481,7 @@ KOKKOS_INLINE_FUNCTION constexpr void forward_row_all_cols(const AMatrix<T, N, N
 /// \param[in,out] Y Right-hand-side/solution matrix.
 template <size_t N, typename T, size_t... Row>
 KOKKOS_INLINE_FUNCTION constexpr void forward_substitute_batch(const AMatrix<T, N, N>& mat, AMatrix<T, N, N>& Y,
-                                                     std::index_sequence<Row...>) {
+                                                               std::index_sequence<Row...>) {
   static_assert(sizeof...(Row) == N, "Number of rows must match N.");
   (forward_row_all_cols<N, Row>(mat, Y, std::make_index_sequence<N>{}), ...);
 }
@@ -489,7 +492,7 @@ KOKKOS_INLINE_FUNCTION constexpr void forward_substitute_batch(const AMatrix<T, 
 /// \param[in] Y Right-hand-side/solution matrix.
 template <size_t N, size_t Row, size_t Col, typename T, size_t... ColOffset>
 KOKKOS_INLINE_FUNCTION constexpr T back_sum_one(const AMatrix<T, N, N>& mat, const AMatrix<T, N, N>& Y,
-                                      std::index_sequence<ColOffset...>) {
+                                                std::index_sequence<ColOffset...>) {
   static_assert(sizeof...(ColOffset) == N - 1 - Row, "Number of summed terms must match N - 1 - Row.");
   if constexpr (sizeof...(ColOffset) == 0) {
     return T(0);
@@ -504,11 +507,11 @@ KOKKOS_INLINE_FUNCTION constexpr T back_sum_one(const AMatrix<T, N, N>& mat, con
 /// \param[in] inv_diag_row 1/U[Row][Row], precomputed once for the whole matrix.
 /// \param[in,out] Y Right-hand-side/solution matrix.
 template <size_t N, size_t Row, typename T, size_t... Col>
-KOKKOS_INLINE_FUNCTION constexpr void back_row_all_cols(const AMatrix<T, N, N>& mat, T inv_diag_row, AMatrix<T, N, N>& Y,
-                                              std::index_sequence<Col...>) {
+KOKKOS_INLINE_FUNCTION constexpr void back_row_all_cols(const AMatrix<T, N, N>& mat, T inv_diag_row,
+                                                        AMatrix<T, N, N>& Y, std::index_sequence<Col...>) {
   static_assert(sizeof...(Col) == N, "Number of columns must match N.");
-  ((Y[Row * N + Col] = (Y[Row * N + Col] - back_sum_one<N, Row, Col>(mat, Y, std::make_index_sequence<N - 1 - Row>{})) *
-                        inv_diag_row),
+  ((Y[Row * N + Col] =
+        (Y[Row * N + Col] - back_sum_one<N, Row, Col>(mat, Y, std::make_index_sequence<N - 1 - Row>{})) * inv_diag_row),
    ...);
 }
 

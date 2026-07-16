@@ -126,16 +126,17 @@ MUNDY_MATH_DISPATCH_BINARY(max)
 
 /// \brief Reinterprets the bits of From as To.
 ///
-/// On the host, we can simply call std::bit_cast, but on the device we directly call __builtin_bit_cast, which is constexpr
-/// and used by both CUDA and STD to perform their bit cast. Compiler support for __builtin_bit_cast is checked with __has_builtin,
-/// and a fallback implementation that just calls Kokkos::bit_cast is provided if it doesn't exist.
+/// On the host, we can simply call std::bit_cast, but on the device we directly call __builtin_bit_cast, which is
+/// constexpr and used by both CUDA and STD to perform their bit cast. Compiler support for __builtin_bit_cast is
+/// checked with __has_builtin, and a fallback implementation that just calls Kokkos::bit_cast is provided if it doesn't
+/// exist.
 ///
 /// \param[in] from Value whose bit pattern is reinterpreted.
 template <typename To, typename From>
 KOKKOS_INLINE_FUNCTION constexpr To bit_cast(const From& from) {
   static_assert(sizeof(To) == sizeof(From), "bit_cast requires equal-size types.");
   static_assert(std::is_trivially_copyable_v<To> && std::is_trivially_copyable_v<From>,
-               "bit_cast requires trivially copyable types.");
+                "bit_cast requires trivially copyable types.");
 #if defined(__has_builtin) && __has_builtin(__builtin_bit_cast)
   return __builtin_bit_cast(To, from);
 #else
@@ -146,7 +147,8 @@ KOKKOS_INLINE_FUNCTION constexpr To bit_cast(const From& from) {
 /// \brief Absolute value (constexpr-compatible for arithmetic types, ADL for others).
 ///
 /// Kokkos::abs is not constexpr. For float/double, clearing the sign bit via bit_cast sidesteps the problem entirely.
-/// Other arithmetic types fall back to a plain comparison; non-arithmetic (AD) types use ADL, matching the other dispatch functions above.
+/// Other arithmetic types fall back to a plain comparison; non-arithmetic (AD) types use ADL, matching the other
+/// dispatch functions above.
 ///
 /// \param[in] x Value to take the absolute value of.
 template <typename T>
