@@ -97,7 +97,7 @@ class CQPP {
  private:
   linear_op_storage_t A_;
   vector_storage_t q_;
-  const space_t& space_;
+  space_t space_;
   mutable workspace_t workspace_;
 };
 
@@ -194,7 +194,7 @@ class MCQPP {
   q_vector_storage_t q_;
   linear_op_storage_l_t L_;
   f_vector_storage_t f_b_;
-  const space_t& space_;
+  space_t space_;
   mutable a_workspace_t a_workspace_;
   mutable l_workspace_t l_workspace_;
 };
@@ -278,7 +278,7 @@ class CongruentMCQPP {
   q_vector_storage_t q_;
   linear_op_storage_l_t L_;
   f_vector_storage_t f_b_;
-  const space_t& space_;
+  space_t space_;
   mutable dt_workspace_t dt_workspace_;
   mutable m_workspace_t m_workspace_;
   mutable d_workspace_t d_workspace_;

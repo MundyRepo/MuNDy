@@ -476,7 +476,7 @@ struct MundyMathBackend {
   KOKKOS_INLINE_FUNCTION static size_t domain_size(LinearOp& /*op*/) {
     MUNDY_THROW_REQUIRE(
         false, std::logic_error,
-        "KokkosBackend::domain_size: op must be a rank-2 Kokkos::View or provide size_t domain_size().");
+        "MundyMathBackend::domain_size: op must be a mundy::Matrix or provide size_t domain_size().");
     return 0;
   }
 
@@ -496,7 +496,7 @@ struct MundyMathBackend {
   MUNDY_REQUIRES(!is_matrix_v<LinearOp> && !impl::HasRangeSizeMember<LinearOp>)
   KOKKOS_INLINE_FUNCTION static size_t range_size(LinearOp& /*op*/) {
     MUNDY_THROW_REQUIRE(false, std::logic_error,
-                        "MundyBackend::range_size: op must be a mundy::Matrix or provide size_t range_size().");
+                        "MundyMathBackend::range_size: op must be a mundy::Matrix or provide size_t range_size().");
     return 0;
   }
 
