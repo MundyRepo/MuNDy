@@ -600,8 +600,37 @@ struct NodeRankLinkClassRestartMeta {
   }
 };
 
-TEST(UnitTestNgpLinkData, RestartRoundTripPreservesTopologicalLinkClassRelations) {
-  const std::filesystem::path output_dir = prepare_link_restart_output_dir("unit_test_topological_link_class_restart");
+// The LinkDataObserver reconciles the COO runtime caches whether the link data is declared before or after the restart
+// read, so every restart round-trip below is run in both orderings via this parameter.
+enum class LinkDeclOrder { BeforeRestart, AfterRestart };
+
+const char* link_decl_order_suffix(LinkDeclOrder order) {
+  return order == LinkDeclOrder::BeforeRestart ? "BeforeRestart" : "AfterRestart";
+}
+
+// Perform the restart read and the declare_link_data call in the order under test, returning the (address-stable)
+// LinkData. This relative ordering is the only step that differs between the two parameterizations; the rest of each
+// round-trip is shared.
+LinkData& read_restart_and_declare(LinkDeclOrder order, LinkRestartIoContext& reader,
+                                   const std::filesystem::path& restart_file, LinkMetaData& reader_link_meta_data) {
+  const auto read = [&] {
+    stk::io::fill_mesh_with_fields(restart_file.string(), reader.io_broker, *reader.bulk_data, stk::io::READ_RESTART);
+  };
+  if (order == LinkDeclOrder::BeforeRestart) {
+    LinkData& link_data = declare_link_data(*reader.bulk_data, reader_link_meta_data);
+    read();
+    return link_data;
+  }
+  read();
+  return declare_link_data(*reader.bulk_data, reader_link_meta_data);
+}
+
+class LinkRestartRoundTrip : public ::testing::TestWithParam<LinkDeclOrder> {};
+
+TEST_P(LinkRestartRoundTrip, PreservesTopologicalLinkClassRelations) {
+  const std::string order_suffix = link_decl_order_suffix(GetParam());
+  const std::filesystem::path output_dir =
+      prepare_link_restart_output_dir("unit_test_topological_link_class_restart_" + order_suffix);
   const std::filesystem::path restart_file = output_dir / "topological_link_class_restart.e-s.0";
 
   MeshBuilder mesh_builder(MPI_COMM_WORLD);
@@ -671,9 +700,7 @@ TEST(UnitTestNgpLinkData, RestartRoundTripPreservesTopologicalLinkClassRelations
 
   ASSERT_FALSE(reader_meta_data->is_commit());
   LinkRestartIoContext reader(MPI_COMM_WORLD, mesh_builder, reader_meta_data);
-  stk::io::fill_mesh_with_fields(restart_file.string(), reader.io_broker, *reader.bulk_data, stk::io::READ_RESTART);
-
-  LinkData& reader_link_data = declare_link_data(*reader.bulk_data, reader_link_meta_data);
+  LinkData& reader_link_data = read_restart_and_declare(GetParam(), reader, restart_file, reader_link_meta_data);
   const stk::mesh::Entity reader_target0 = reader.bulk_data->get_entity(stk::topology::ELEM_RANK, 1u);
   const stk::mesh::Entity reader_target1 = reader.bulk_data->get_entity(stk::topology::ELEM_RANK, 2u);
   const stk::mesh::Entity reader_link = reader.bulk_data->get_entity(stk::topology::ELEM_RANK, 100u);
@@ -693,8 +720,10 @@ TEST(UnitTestNgpLinkData, RestartRoundTripPreservesTopologicalLinkClassRelations
   EXPECT_TRUE(reader_ngp_link_data.is_crs_up_to_date());
 }
 
-TEST(UnitTestNgpLinkData, RestartRoundTripPreservesNodeRankLinkClassRelations) {
-  const std::filesystem::path output_dir = prepare_link_restart_output_dir("unit_test_node_rank_link_class_restart");
+TEST_P(LinkRestartRoundTrip, PreservesNodeRankLinkClassRelations) {
+  const std::string order_suffix = link_decl_order_suffix(GetParam());
+  const std::filesystem::path output_dir =
+      prepare_link_restart_output_dir("unit_test_node_rank_link_class_restart_" + order_suffix);
   const std::filesystem::path restart_file = output_dir / "node_rank_link_class_restart.e-s.0";
 
   MeshBuilder mesh_builder(MPI_COMM_WORLD);
@@ -757,9 +786,7 @@ TEST(UnitTestNgpLinkData, RestartRoundTripPreservesNodeRankLinkClassRelations) {
   NodeRankLinkClassRestartMeta reader_meta(mesh_builder, false);
   ASSERT_FALSE(reader_meta.meta_data->is_commit());
   LinkRestartIoContext reader(MPI_COMM_WORLD, mesh_builder, reader_meta.meta_data);
-  stk::io::fill_mesh_with_fields(restart_file.string(), reader.io_broker, *reader.bulk_data, stk::io::READ_RESTART);
-
-  LinkData& reader_link_data = declare_link_data(*reader.bulk_data, *reader_meta.link_meta_data);
+  LinkData& reader_link_data = read_restart_and_declare(GetParam(), reader, restart_file, *reader_meta.link_meta_data);
   const stk::mesh::Entity reader_target0 = reader.bulk_data->get_entity(stk::topology::NODE_RANK, 1u);
   const stk::mesh::Entity reader_target1 = reader.bulk_data->get_entity(stk::topology::NODE_RANK, 2u);
   const stk::mesh::Entity reader_link = reader.bulk_data->get_entity(stk::topology::NODE_RANK, 100u);
@@ -782,8 +809,9 @@ TEST(UnitTestNgpLinkData, RestartRoundTripPreservesNodeRankLinkClassRelations) {
   EXPECT_TRUE(reader_ngp_link_data.is_crs_up_to_date());
 }
 
-TEST(UnitTestNgpLinkData, RestartRoundTripPreservesLinkRelations) {
-  const std::filesystem::path output_dir = prepare_link_restart_output_dir("unit_test_link_restart");
+TEST_P(LinkRestartRoundTrip, PreservesLinkRelations) {
+  const std::string order_suffix = link_decl_order_suffix(GetParam());
+  const std::filesystem::path output_dir = prepare_link_restart_output_dir("unit_test_link_restart_" + order_suffix);
   const std::filesystem::path restart_file = output_dir / "link_restart.e-s.0";
 
   MeshBuilder mesh_builder(MPI_COMM_WORLD);
@@ -823,9 +851,7 @@ TEST(UnitTestNgpLinkData, RestartRoundTripPreservesLinkRelations) {
   LinkRestartMeta reader_meta(mesh_builder, false);
   ASSERT_FALSE(reader_meta.meta_data->is_commit());
   LinkRestartIoContext reader(MPI_COMM_WORLD, mesh_builder, reader_meta.meta_data);
-  stk::io::fill_mesh_with_fields(restart_file.string(), reader.io_broker, *reader.bulk_data, stk::io::READ_RESTART);
-
-  LinkData& reader_link_data = declare_link_data(*reader.bulk_data, *reader_meta.link_meta_data);
+  LinkData& reader_link_data = read_restart_and_declare(GetParam(), reader, restart_file, *reader_meta.link_meta_data);
   const stk::mesh::Entity reader_target0 = reader.bulk_data->get_entity(stk::topology::ELEM_RANK, 1u);
   const stk::mesh::Entity reader_target1 = reader.bulk_data->get_entity(stk::topology::ELEM_RANK, 2u);
   const stk::mesh::Entity reader_link = reader.bulk_data->get_entity(stk::topology::ELEM_RANK, 100u);
@@ -845,6 +871,16 @@ TEST(UnitTestNgpLinkData, RestartRoundTripPreservesLinkRelations) {
   EXPECT_NO_THROW(reader_ngp_link_data.check_crs_coo_consistency());
   EXPECT_TRUE(reader_ngp_link_data.is_crs_up_to_date());
 }
+
+// Only AfterRestart is exercised: the LinkData reconciles its COO runtime caches at construction, so it must be
+// declared after the restart read.
+// TODO(palmerb4): add LinkDeclOrder::BeforeRestart back to the Values list once the COO is reconciled during the read
+// (add LinkDeclOrder::BeforeRestart alongside AfterRestart below).
+INSTANTIATE_TEST_SUITE_P(DeclareOrder, LinkRestartRoundTrip,
+                         ::testing::Values(LinkDeclOrder::AfterRestart),
+                         [](const ::testing::TestParamInfo<LinkDeclOrder>& info) {
+                           return std::string(link_decl_order_suffix(info.param));
+                         });
 
 // ---------------------------------------------------------------------------
 // Focused invariant tests for LinkData

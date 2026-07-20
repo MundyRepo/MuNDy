@@ -12,8 +12,29 @@ MuNDy is a C++ infrastructure for building scalable, biologically grounded micro
 MuNDy supports models with evolving mechanical and relational structure: heterogeneous rigid and flexible bodies; constraints, motors, and contacts; growth, division, death, and bonds that form, break, and reorganize; and long-range interactions mediated through a shared medium. Rather than a monolithic simulator, MuNDy builds upon Trilinos/STK's runtime-extensible entity/part/field data model to provide reusable abstractions and data structures for this problem class. It is designed for research software developers building domain-specific applications across deployment scales, from laptops and workstations to multi-GPU clusters.
 
 > [!IMPORTANT]
-> **Project status (6/12/2026):**  
-> MuNDy is under active development and rapidly approaching our first formal release. Currently in the "polishing" phase: we have a complete set of core utilities, mathematical tools, geometric and mechanical primitives, and mesh integration machinery. We are now focused on hardening the API, expanding documentation and examples, and building out the Python interface.
+> **Project status (7/17/2026):**  
+> MuNDy is under active development and rapidly approaching our first formal release. Most of MuNDy has finished its "polishing" phase and has a mostly stable API + dev-docs in the form of Primers and Doxygen generated documentation. The remaining work is focused on the multibody dynamics solver, Python interface, and mini-apps.
+
+---
+
+## A note from the author
+I'm pleased to see that you're interested in using my library. I treasure Mundy, so if you have questions, suggested improvements, or issues (even something as simple as installation problems), please don't hesitate to make a GitHub issue or pull request.
+
+I built Mundy to be academic infrastructure for the type of wheels I saw repeatedly reinvented across the active/soft/granular matter community and their biological applications. 
+
+Mundy is a different library depending on where in the package hierarchy you enter. 
+  - At the level of MundyMesh and MundySearch, you'll find that Mundy _feels_ like an entity component system library (offering many of the same features as packages like Entt) except with the added flexibility to organize entities into a class hierarchy with data inheritance and polymorphic-like features. This is the "domain model" we inherited from STK, whereby standard class-based polymorphism is replaced with a deconstructed class hierarchy built at runtime. There is no Spheres class--you create a particle topology collection of entities and endow them with a center location and radius. Any such collection that meets the requirements to act like spheres may be used in methods meant to act on spheres.
+  - At the level of MundyCore (utils, math, geom, mech), Mundy _feels_ like a header-only utilities library. 
+    - Utils should _feel_ like STD, containing Kokkos-compatible versions of some core STD structures (tuple, variant, reference_wrapper) while also adding carefully-designed, custom, STD-like structures. Features like aggregate--a tagged bag of types, which should feel like boost::hana::Map. Or host_ptr, which should feel like std::shared_ptr but with a device compatible copy constructor. Or MUNDY_THROW_ASSERT/REQUIRE, which should feel like assert/throw but with more expressive errors and device compatibility.
+    - Math should _feel_ like a Kokkos-based, constexpr-compatible Eigen (only the staticly sized small matrix/vector/quaternion parts but with the same performance and auto-diff support) plus a few extra features. Features like accessor-based views and backend-independent numerics (CG, L-BFGS, convex QP/LCP) that can both drive kernels and be called on device. The same LCP that solves contact problems for N bodies can be used to solve tessellated body-to-body signed separation distance on the device.
+    - Geom should _feel_ like a tiny, auto-differentiable geometry library (nothing close to the breadth of David Eberly's GeometricTools) with view-semantics compatible primitives, MD-like periodicity support, and the requirement that Graphics-community shortcuts/approximations that sacrifice accuracy for speed are not allowed (regular square roots, stable signed distance calculations even under double precision, no hard-coded magic numbers, etc).
+
+What I am working on now is MundyMbody. This is the final piece: a proper multibody dynamics solver with composable mechanical elements, constraints, and contact laws. This is the part of Mundy that will _feel_ like a multibody dynamics library (like Chrono or JADE) but with full device compatibility, custom user-defined types/fields + operators that act on them. Indeed, Mbody is really just a refactored version of Project Chrono's Core with their polymorphic class hierarchy inverted and deconstructed according to Mundy's philosophy. This is the part of Mundy that will be most useful to non-specialists and will be my target for a Python API. For now, I anticipate the Mbody campaign will wrap up late Fall 2026.
+
+(The proper capitalization is MuNDy, but I prefer name-case Mundy. Use either as you see fit.)
+
+Best of luck,
+-Bryce Palmer
 
 ---
 

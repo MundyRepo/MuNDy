@@ -18,11 +18,13 @@ set(NOINSTALLHEADERS
   src/mundy_math/Accessor.hpp
   src/mundy_math/Array.hpp
   src/mundy_math/AutoDiffScalar.hpp
+  src/mundy_math/belos_solver.hpp
   src/mundy_math/convex_spaces.hpp
   src/mundy_math/cqpp.hpp
   src/mundy_math/Hilbert.hpp
   src/mundy_math/impl/AccessorImpl.hpp
   src/mundy_math/impl/ArrayImpl.hpp
+  src/mundy_math/impl/belos_solver_impl.hpp
   src/mundy_math/impl/linear_ops_impl.hpp
   src/mundy_math/impl/MatrixImpl.hpp
   src/mundy_math/impl/minimize_impl.hpp

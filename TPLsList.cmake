@@ -15,6 +15,8 @@ tribits_repository_define_tpls(
   Kokkos         "cmake/TPLs/"                                    PT
   KokkosKernels  "cmake/TPLs/"                                    PT
   Teuchos        "cmake/TPLs/"                                    PT
+  Tpetra         "cmake/TPLs/"                                    ST
+  Belos          "cmake/TPLs/"                                    ST
   STK            "cmake/TPLs/"                                    PT
   ArborX         "cmake/TPLs/"                                    PT
   ParMETIS       "cmake/TPLs/"                                    PT

@@ -345,8 +345,7 @@ TEST(UnitTestLinkDataObserver, NonLinkPartChangeCallbackForcesRebuild) {
     LinkTriple baseline = create_connected_dim2_link(fixture);
     stk::mesh::Entity non_link_entity = baseline[1];
 
-    impl::LinkDataObserver observer(*fixture.bulk_data, *fixture.link_meta_data,
-                                    impl::get_crs_structure_dirty_ref(*fixture.link_data));
+    impl::LinkDataObserver observer(*fixture.link_data);
 
     impl::set_crs_structure_dirty(*fixture.link_data, false);
     fixture.link_data->coo_sync_to_device();
@@ -369,8 +368,7 @@ TEST(UnitTestLinkDataObserver, MoveProcsCallbacksForceRebuild) {
     LinkDataObserverFixture fixture(default_bucket_capacity, commit_mesh);
     create_connected_dim2_link(fixture);
 
-    impl::LinkDataObserver observer(*fixture.bulk_data, *fixture.link_meta_data,
-                                    impl::get_crs_structure_dirty_ref(*fixture.link_data));
+    impl::LinkDataObserver observer(*fixture.link_data);
 
     impl::set_crs_structure_dirty(*fixture.link_data, false);
     observer.modification_begin_notification();
@@ -562,6 +560,34 @@ TEST(UnitTestLinkDataObserver, NoOpModificationCycleDoesNotRequestRebuild) {
     EXPECT_FALSE(impl::get_crs_structure_dirty(*fixture.link_data));
     EXPECT_TRUE(ngp_link_data.is_crs_up_to_date());
   }
+}
+
+// ---------------------------------------------------------------------------
+// COO reconciliation on restart
+//
+// The LinkData reconciles its COO runtime caches (persisted id/rank -> live entity handle) at construction, so the
+// restart pattern is to declare the LinkData after the read.
+// ---------------------------------------------------------------------------
+
+// The runtime handle cache is (re)built only by the LinkData's reconciliation step, which runs at construction. Writing
+// the persisted (id, rank) fields directly on an already-constructed LinkData leaves the runtime handle invalid; it
+// becomes valid once the LinkData is (re)constructed against those fields -- i.e. declared after the restart read.
+TEST(UnitTestLinkDataObserver, PersistedRelationsWrittenAfterModificationEndAreNotReconciled) {
+  LinkDataObserverFixture fixture;
+  auto& linked_entity_ids_field = impl::get_linked_entity_ids_field(*fixture.link_meta_data);
+  auto& linked_entity_ranks_field = impl::get_linked_entity_ranks_field(*fixture.link_meta_data);
+
+  fixture.bulk_data->modification_begin();
+  const stk::mesh::Entity target = fixture.declare_entity(stk::topology::ELEM_RANK, {});
+  const stk::mesh::Entity link =
+      fixture.declare_entity(fixture.link_meta_data->link_rank(), stk::mesh::PartVector{fixture.link_part_dim2});
+  fixture.bulk_data->modification_end();
+
+  // Written after the observer already fired at modification end (as read_defined_input_fields would during restart).
+  stk::mesh::field_data(linked_entity_ids_field, link)[0] = fixture.bulk_data->identifier(target);
+  stk::mesh::field_data(linked_entity_ranks_field, link)[0] = static_cast<int>(stk::topology::ELEM_RANK);
+
+  EXPECT_EQ(fixture.link_data->coo_data().get_linked_entity(link, 0u), stk::mesh::Entity());
 }
 
 }  // namespace
