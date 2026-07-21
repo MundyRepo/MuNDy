@@ -68,15 +68,16 @@ struct CGConfig {
                                                       // reports -- no unit baked in here, that's the policy's job
 };
 
-/// \brief The linear system A x = b for an SPD operator A.
+/// \brief The linear system A x = b for a square operator A.
 ///
-/// Pairs the operator with its right-hand side and a mutable workspace; unconstrained (no convex space).
+/// Pairs the operator with its right-hand side and a mutable workspace; unconstrained (no convex space). A must be
+/// square; CG (this header) additionally requires it to be SPD.
 template <typename Backend, typename LinearOp, typename RhsVector,
           typename Workspace = impl::workspace_for_t<std::remove_cvref_t<LinearOp>>>
 MUNDY_REQUIRES(LinearOperator<Backend, std::remove_cvref_t<LinearOp>, std::remove_cvref_t<RhsVector>,
                               std::remove_cvref_t<RhsVector>> &&
               VectorBackend<Backend, std::remove_cvref_t<RhsVector>>)
-class LinearSystemProblem {
+class LinearSystem {
  public:
   using backend_t = Backend;
   using linear_op_storage_t = ::mundy::storage<LinearOp>;
@@ -86,16 +87,16 @@ class LinearSystemProblem {
   using workspace_t = Workspace;
   using value_type = impl::vector_value_type<rhs_vector_t>;
 
-  LinearSystemProblem(Backend, LinearOp&& A, RhsVector&& b)
+  LinearSystem(Backend, LinearOp&& A, RhsVector&& b)
       : A_(std::forward<LinearOp>(A)), b_(std::forward<RhsVector>(b)), workspace_(impl::make_workspace(A_.get())) {
     MUNDY_THROW_ASSERT(Backend::domain_size(A_.get()) == Backend::range_size(A_.get()), std::invalid_argument,
-                       "LinearSystemProblem: operator must be square.");
+                       "LinearSystem: operator must be square.");
   }
 
-  LinearSystemProblem(Backend, LinearOp&& A, RhsVector&& b, workspace_t workspace)
+  LinearSystem(Backend, LinearOp&& A, RhsVector&& b, workspace_t workspace)
       : A_(std::forward<LinearOp>(A)), b_(std::forward<RhsVector>(b)), workspace_(std::move(workspace)) {
     MUNDY_THROW_ASSERT(Backend::domain_size(A_.get()) == Backend::range_size(A_.get()), std::invalid_argument,
-                       "LinearSystemProblem: operator must be square.");
+                       "LinearSystem: operator must be square.");
   }
 
   // clang-format off
@@ -257,11 +258,11 @@ class CGStrategy {
 //@{
 
 template <class Backend, class LinearOp, class RhsVector>
-LinearSystemProblem(Backend, LinearOp&&, RhsVector&&) -> LinearSystemProblem<Backend, LinearOp, RhsVector>;
+LinearSystem(Backend, LinearOp&&, RhsVector&&) -> LinearSystem<Backend, LinearOp, RhsVector>;
 
 template <class Backend, class LinearOp, class RhsVector, class Workspace>
-LinearSystemProblem(Backend, LinearOp&&, RhsVector&&, const Workspace&)
-    -> LinearSystemProblem<Backend, LinearOp, RhsVector, Workspace>;
+LinearSystem(Backend, LinearOp&&, RhsVector&&, const Workspace&)
+    -> LinearSystem<Backend, LinearOp, RhsVector, Workspace>;
 
 template <class XVector, class RVector, class PVector, class ApVector>
 CGState(XVector&&, RVector&&, PVector&&, ApVector&&)
@@ -277,7 +278,7 @@ CGStrategy(ResidualPolicy, Config = {}) -> CGStrategy<ResidualPolicy, Config>;
 
 template <class Backend, class LinearOp, class RhsVector>
 KOKKOS_INLINE_FUNCTION auto make_linear_system(LinearOp&& A, RhsVector&& b) {
-  return LinearSystemProblem(Backend{}, std::forward<LinearOp>(A), std::forward<RhsVector>(b));
+  return LinearSystem(Backend{}, std::forward<LinearOp>(A), std::forward<RhsVector>(b));
 }
 
 template <class ResidualPolicy, class Scalar>
@@ -328,7 +329,7 @@ KOKKOS_FUNCTION auto solve_linear_system(const Problem& prob, const Strategy& st
 /// \brief Wraps an SPD operator as its inverse: apply(rhs, out) solves op * out = rhs via matrix-free CG.
 ///
 /// x/r/p/Ap and the operator's own workspace are allocated once at construction and reused; only the lightweight
-/// per-call CGState/LinearSystemProblem wrappers are rebuilt in apply(). Warm-starting is an explicit constructor
+/// per-call CGState/LinearSystem wrappers are rebuilt in apply(). Warm-starting is an explicit constructor
 /// flag, not hidden in the algorithm -- solve_linear_system always treats state.x() as the caller's initial guess.
 template <typename Backend, typename Op>
 class CGInvOp {
@@ -370,7 +371,7 @@ class CGInvOp {
     }
     // else: leave x_ at whatever it held after the previous solve (warm start).
 
-    auto prob = LinearSystemProblem(Backend{}, op_storage_.get(), rhs, op_workspace_);
+    auto prob = LinearSystem(Backend{}, op_storage_.get(), rhs, op_workspace_);
     auto state = CGState(x_, r_, p_, ap_);
     auto strat = CGStrategy(L2Residual{}, cfg_);
     last_result_ = solve_linear_system(prob, strat, state);

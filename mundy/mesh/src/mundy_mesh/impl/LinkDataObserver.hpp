@@ -25,97 +25,65 @@
 /// \brief Declares the LinkDataObserver class.
 
 // Trilinos libs
-#include <stk_mesh/base/BulkData.hpp>              // for stk::mesh::BulkData
+#include <stk_mesh/base/Entity.hpp>                // for stk::mesh::Entity
 #include <stk_mesh/base/ModificationObserver.hpp>  // for stk::mesh::ModificationObserver
-
-// Mundy libs
-#include <mundy_mesh/LinkMetaData.hpp>   // for mundy::mesh::LinkMetaData
-#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
+#include <stk_mesh/base/Types.hpp>                 // for stk::mesh::OrdinalVector, EntityProcVec, EntityRank
 
 namespace mundy {
 
 namespace mesh {
 
+class LinkData;
+
 namespace impl {
 
-// TODO(palmerb4): If a link entity was created during the modification process, upon modification end signal
-// we must update the runtime link data from the static data (entity id + rank -> entity)
-
+/// \brief LinkDataObserver translates BulkData mesh-modification signals into LinkData notifications.
+///
+/// The observer is a message interpreter: it filters the stream of BulkData modification signals, decides which of them
+/// are meaningful to the link data, and forwards a *semantic* notification to the LinkData, which then decides how to
+/// react. It deliberately holds only a reference to its LinkData and never reaches into its internals; it speaks in
+/// terms of what happened to the mesh, not in terms of how the link data should react.
+///
+/// It forwards a single notification:
+///   - notify_crs_may_be_invalid: the mesh changed in a way that may invalidate the CSR (entities/parts/buckets moved,
+///   entities created or destroyed, etc.). This can fire many times per modification cycle.
+///
+/// COO runtime caches are reconciled by the LinkData constructor; on restart the LinkData is declared after the read.
+/// TODO(palmerb4): reconcile the COO automatically during the restart read. The trigger must fire only after STK
+/// commits both persisted id/rank transient fields, which happens after the mesh-creation modification cycle closes,
+/// so it cannot be driven from a modification-end callback.
 class LinkDataObserver : public stk::mesh::ModificationObserver {
  public:
-  LinkDataObserver(stk::mesh::BulkData& bulk_data, LinkMetaData& link_meta_data, bool& crs_structure_dirty)
-      : stk::mesh::ModificationObserver(stk::mesh::ModificationObserverPriority::APPLICATION),
-        bulk_data_ptr_(&bulk_data),
-        link_meta_data_ptr_(&link_meta_data),
-        crs_structure_dirty_ptr_(&crs_structure_dirty) {
-  }
+  explicit LinkDataObserver(LinkData& link_data);
 
-  virtual ~LinkDataObserver() = default;
+  ~LinkDataObserver() override;
 
-  void entity_added(stk::mesh::Entity entity) override {
-    if (is_link_rank(entity)) {
-      request_structural_rebuild();
-    }
-  }
+  void entity_added(stk::mesh::Entity entity) override;
 
-  void entity_deleted(stk::mesh::Entity /*entity*/) override {
-    request_structural_rebuild();
-  }
+  void entity_deleted(stk::mesh::Entity entity) override;
 
-  void entity_parts_added(stk::mesh::Entity /*entity*/, const stk::mesh::OrdinalVector& /*parts*/) override {
-    request_structural_rebuild();
-  }
+  void entity_parts_added(stk::mesh::Entity entity, const stk::mesh::OrdinalVector& parts) override;
 
-  void entity_parts_removed(stk::mesh::Entity /*entity*/, const stk::mesh::OrdinalVector& /*parts*/) override {
-    request_structural_rebuild();
-  }
+  void entity_parts_removed(stk::mesh::Entity entity, const stk::mesh::OrdinalVector& parts) override;
 
-  void elements_about_to_move_procs_notification(const stk::mesh::EntityProcVec& /*elemProcPairsToMove*/) override {
-    request_structural_rebuild();
-  }
+  void elements_about_to_move_procs_notification(const stk::mesh::EntityProcVec& elem_proc_pairs_to_move) override;
 
-  void elements_moved_procs_notification(const stk::mesh::EntityProcVec& /*elemProcPairsToMove*/) override {
-    request_structural_rebuild();
-  }
+  void elements_moved_procs_notification(const stk::mesh::EntityProcVec& elem_proc_pairs_to_move) override;
 
-  void local_entities_created_or_deleted_notification(stk::mesh::EntityRank rank) override {
-    request_structural_rebuild_for_rank(rank);
-  }
+  void local_entities_created_or_deleted_notification(stk::mesh::EntityRank rank) override;
 
-  void local_entity_comm_info_changed_notification(stk::mesh::EntityRank rank) override {
-    request_structural_rebuild_for_rank(rank);
-  }
+  void local_entity_comm_info_changed_notification(stk::mesh::EntityRank rank) override;
 
-  void local_buckets_changed_notification(stk::mesh::EntityRank rank) override {
-    request_structural_rebuild_for_rank(rank);
-  }
+  void local_buckets_changed_notification(stk::mesh::EntityRank rank) override;
 
  private:
-  void request_structural_rebuild() {
-    MUNDY_THROW_ASSERT(crs_structure_dirty_ptr_ != nullptr, std::logic_error,
-                       "CSR structure-dirty flag pointer is null.");
-    *crs_structure_dirty_ptr_ = true;
-  }
+  /// \brief Fetch the LinkData we notify.
+  LinkData& link_data() const;
 
-  void request_structural_rebuild_for_rank(stk::mesh::EntityRank rank) {
-    if (rank < stk::topology::NUM_RANKS) {
-      request_structural_rebuild();
-    }
-  }
+  /// \brief Is the given entity of link rank?
+  bool is_link_rank(stk::mesh::Entity entity) const;
 
-  bool is_link_rank(stk::mesh::Entity entity) const {
-    MUNDY_THROW_ASSERT(bulk_data_ptr_ != nullptr, std::logic_error, "BulkData pointer is null.");
-    return bulk_data_ptr_->entity_rank(entity) == link_meta_data().link_rank();
-  }
-
-  const LinkMetaData& link_meta_data() const {
-    MUNDY_THROW_ASSERT(link_meta_data_ptr_ != nullptr, std::logic_error, "LinkMetaData pointer is null.");
-    return *link_meta_data_ptr_;
-  }
-
-  stk::mesh::BulkData* bulk_data_ptr_;
-  LinkMetaData* link_meta_data_ptr_;
-  bool* crs_structure_dirty_ptr_;
+  LinkData* link_data_ptr_;
 };
 
 }  // namespace impl

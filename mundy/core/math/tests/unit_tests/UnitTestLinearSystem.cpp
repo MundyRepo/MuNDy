@@ -51,7 +51,7 @@ TEST(LinearSystem, MundyMathBackendConvergesToKnownSolution) {
   const Matrix3d A = spd_matrix();
   const Vector3d b = spd_rhs();
 
-  auto prob = LinearSystemProblem(mm_backend_t{}, Matrix3d(A), Vector3d(b));
+  auto prob = LinearSystem(mm_backend_t{}, Matrix3d(A), Vector3d(b));
   Vector3d x{0.0, 0.0, 0.0};
   auto state = CGState(Vector3d(x), Vector3d{}, Vector3d{}, Vector3d{});
   auto strat = CGStrategy(L2Residual{}, CGConfig<double>{});
@@ -71,7 +71,7 @@ TEST(LinearSystem, DiagonalSystemConvergesWithinDimensionIterations) {
   const Vector3d x_exact{1.0, -2.0, 0.5};
   const Vector3d b = A * x_exact;
 
-  auto prob = LinearSystemProblem(mm_backend_t{}, Matrix3d(A), Vector3d(b));
+  auto prob = LinearSystem(mm_backend_t{}, Matrix3d(A), Vector3d(b));
   auto state = CGState(Vector3d{0.0, 0.0, 0.0}, Vector3d{}, Vector3d{}, Vector3d{});
   auto strat = CGStrategy(L2Residual{}, CGConfig<double>{});
 
@@ -90,20 +90,20 @@ TEST(LinearSystem, WarmStartFromNearbySolutionConvergesFaster) {
   // (warm start) should need fewer iterations than starting cold (x0 = 0) on the same perturbed system.
   const Vector3d b2 = b1 + Vector3d{1e-6, -1e-6, 1e-6};
 
-  auto prob1 = LinearSystemProblem(mm_backend_t{}, Matrix3d(A), Vector3d(b1));
+  auto prob1 = LinearSystem(mm_backend_t{}, Matrix3d(A), Vector3d(b1));
   auto state1 = CGState(Vector3d{0.0, 0.0, 0.0}, Vector3d{}, Vector3d{}, Vector3d{});
   auto strat = CGStrategy(L2Residual{}, CGConfig<double>{});
   const auto result1 = solve_linear_system(prob1, strat, state1);
   ASSERT_TRUE(result1.converged);
 
   // Warm start: reuse state1.x() (the converged solution to b1) as the initial guess for b2.
-  auto prob_warm = LinearSystemProblem(mm_backend_t{}, Matrix3d(A), Vector3d(b2));
+  auto prob_warm = LinearSystem(mm_backend_t{}, Matrix3d(A), Vector3d(b2));
   auto state_warm = CGState(Vector3d(state1.x()), Vector3d{}, Vector3d{}, Vector3d{});
   const auto result_warm = solve_linear_system(prob_warm, strat, state_warm);
   ASSERT_TRUE(result_warm.converged);
 
   // Cold start: solve the same perturbed system from x0 = 0.
-  auto prob_cold = LinearSystemProblem(mm_backend_t{}, Matrix3d(A), Vector3d(b2));
+  auto prob_cold = LinearSystem(mm_backend_t{}, Matrix3d(A), Vector3d(b2));
   auto state_cold = CGState(Vector3d{0.0, 0.0, 0.0}, Vector3d{}, Vector3d{}, Vector3d{});
   const auto result_cold = solve_linear_system(prob_cold, strat, state_cold);
   ASSERT_TRUE(result_cold.converged);
@@ -120,7 +120,7 @@ TEST(LinearSystem, ResidualPolicyChoiceDoesNotChangeIterates) {
   CGConfig<double> cfg;
 
   auto solve_with = [&](auto residual_policy) {
-    auto prob = LinearSystemProblem(mm_backend_t{}, Matrix3d(A), Vector3d(b));
+    auto prob = LinearSystem(mm_backend_t{}, Matrix3d(A), Vector3d(b));
     auto state = CGState(Vector3d{0.0, 0.0, 0.0}, Vector3d{}, Vector3d{}, Vector3d{});
     auto strat = CGStrategy(residual_policy, cfg);
     const auto result = solve_linear_system(prob, strat, state);
@@ -223,7 +223,7 @@ TEST(LinearSystem, KokkosBackendConvergesToKnownSolution) {
   view_t x0(Kokkos::view_alloc(Kokkos::WithoutInitializing, "x0"), 3);
   Kokkos::deep_copy(x0, 0.0);
 
-  auto prob = LinearSystemProblem(kokkos_backend_t{}, TridiagKokkosOp(A), view_t(b));
+  auto prob = LinearSystem(kokkos_backend_t{}, TridiagKokkosOp(A), view_t(b));
   auto state = CGState(view_t(x0), A.make_range_vector(), A.make_range_vector(), A.make_range_vector());
   auto strat = CGStrategy(L2Residual{}, CGConfig<double>{});
 

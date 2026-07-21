@@ -57,9 +57,10 @@ std::any& get_ngp_link_data(const LinkData& link_data);
 void set_coo_synchronizer(const LinkData& link_data, std::shared_ptr<impl::HostDeviceSynchronizer> synchronizer);
 void set_crs_synchronizer(const LinkData& link_data, std::shared_ptr<impl::HostDeviceSynchronizer> synchronizer);
 bool get_crs_structure_dirty(const LinkData& link_data);
-bool& get_crs_structure_dirty_ref(const LinkData& link_data);
 void set_crs_structure_dirty(const LinkData& link_data, bool structure_dirty);
 void clear_crs_structure_dirty(const LinkData& link_data);
+void notify_crs_may_be_invalid(const LinkData& link_data);
+void notify_coo_may_be_invalid(const LinkData& link_data);
 }  // namespace impl
 
 /// \class LinkData
@@ -416,10 +417,8 @@ class LinkData {
         crs_num_syncs_to_device_(0),
         coo_num_syncs_to_host_(0),
         coo_num_syncs_to_device_(0) {
-    if (coo_data_.rebuild_runtime_fields_from_ids_and_ranks()) {
-      coo_modified_on_host_ = true;
-      set_crs_structure_dirty(true);
-    }
+    // Links may already exist (e.g. read from a restart mesh), so reconcile the COO runtime caches up front.
+    refresh_coo_runtime_caches();
   }
   //@}
 
@@ -446,19 +445,38 @@ class LinkData {
   }
 
   bool get_crs_structure_dirty() const {
-    return get_crs_structure_dirty_ref();
-  }
-
-  bool& get_crs_structure_dirty_ref() const {
     return crs_structure_dirty_;
   }
 
   void set_crs_structure_dirty(bool structure_dirty) const {
-    get_crs_structure_dirty_ref() = structure_dirty;
+    crs_structure_dirty_ = structure_dirty;
   }
 
   void clear_crs_structure_dirty() const {
     set_crs_structure_dirty(false);
+  }
+
+  /// \brief React to a mesh change that may have invalidated the CSR.
+  ///
+  /// The CSR is derived from the COO plus live bucket/entity state, so any structural mesh change may have left it
+  /// stale. Mark it for a full rebuild on the next update_crs_from_coo.
+  void notify_crs_may_be_invalid() const {
+    set_crs_structure_dirty(true);
+  }
+
+  /// \brief Reconcile the COO runtime caches (persisted linked-entity id/rank -> live entity handle) with the mesh.
+  void notify_coo_may_be_invalid() const {
+    refresh_coo_runtime_caches();
+  }
+
+  /// \brief Rebuild the COO runtime caches (persisted id/rank -> live entity handle) and update sync/dirty state.
+  ///
+  /// A no-op when nothing changed. Shared by construction (restart) and the link-created notification.
+  void refresh_coo_runtime_caches() const {
+    if (coo_data_.rebuild_runtime_fields_from_ids_and_ranks()) {
+      coo_modified_on_host_ = true;
+      set_crs_structure_dirty(true);
+    }
   }
   //@}
 
@@ -471,9 +489,10 @@ class LinkData {
   friend void impl::set_crs_synchronizer(const LinkData& link_data,
                                          std::shared_ptr<impl::HostDeviceSynchronizer> synchronizer);
   friend bool impl::get_crs_structure_dirty(const LinkData& link_data);
-  friend bool& impl::get_crs_structure_dirty_ref(const LinkData& link_data);
   friend void impl::set_crs_structure_dirty(const LinkData& link_data, bool structure_dirty);
   friend void impl::clear_crs_structure_dirty(const LinkData& link_data);
+  friend void impl::notify_crs_may_be_invalid(const LinkData& link_data);
+  friend void impl::notify_coo_may_be_invalid(const LinkData& link_data);
   friend LinkData& declare_link_data(stk::mesh::BulkData& bulk_data, LinkMetaData& link_meta_data);
   //@}
 
@@ -519,16 +538,20 @@ inline bool get_crs_structure_dirty(const LinkData& link_data) {
   return link_data.get_crs_structure_dirty();
 }
 
-inline bool& get_crs_structure_dirty_ref(const LinkData& link_data) {
-  return link_data.get_crs_structure_dirty_ref();
-}
-
 inline void set_crs_structure_dirty(const LinkData& link_data, bool structure_dirty) {
   link_data.set_crs_structure_dirty(structure_dirty);
 }
 
 inline void clear_crs_structure_dirty(const LinkData& link_data) {
   link_data.clear_crs_structure_dirty();
+}
+
+inline void notify_crs_may_be_invalid(const LinkData& link_data) {
+  link_data.notify_crs_may_be_invalid();
+}
+
+inline void notify_coo_may_be_invalid(const LinkData& link_data) {
+  link_data.notify_coo_may_be_invalid();
 }
 
 }  // namespace impl
@@ -563,8 +586,7 @@ inline LinkData& declare_link_data(stk::mesh::BulkData& bulk_data, LinkMetaData&
 
   if (link_data_map->observers[link_rank].find(our_name) == link_data_map->observers[link_rank].end()) {
     LinkData& link_data = *link_data_it->second;
-    std::shared_ptr<impl::LinkDataObserver> observer = std::make_shared<impl::LinkDataObserver>(
-        bulk_data, link_meta_data, impl::get_crs_structure_dirty_ref(link_data));
+    std::shared_ptr<impl::LinkDataObserver> observer = std::make_shared<impl::LinkDataObserver>(link_data);
     bulk_data.register_observer(observer);
     link_data_map->observers[link_rank].emplace(our_name, observer);
   }

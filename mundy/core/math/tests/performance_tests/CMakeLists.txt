@@ -41,6 +41,13 @@ if(Mundy_ENABLE_TESTS AND Mundy_ENABLE_nanobench)
     INSTALLABLE
     CATEGORIES PERFORMANCE
   )
+
+  tribits_add_executable(
+    BelosVsMundy
+    SOURCES BelosVsMundy.cpp
+    INSTALLABLE
+    CATEGORIES PERFORMANCE
+  )
 else()
   message(STATUS
     "MundyMath: Skipping performance tests since Mundy_ENABLE_TESTS=OFF or Mundy_ENABLE_nanobench=OFF ...")
