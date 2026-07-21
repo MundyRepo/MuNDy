@@ -195,9 +195,10 @@ auto belos_solve(const Problem& prob, XVector& x, const BelosConfig<typename Pro
 /// \brief Wraps a square operator as its inverse: apply(rhs, out) solves op * out = rhs via matrix-free Belos.
 ///
 /// The Belos solve (Map, vectors, problem, and solver) is built once at construction and reused across apply()
-/// calls, which only swap the right-hand side. Warm-starting is an explicit constructor flag. \p Precond, when not
-/// NoPreconditioner, is applied as a right preconditioner (its apply() computes the approximate-inverse action).
-/// apply() throws std::runtime_error if the inner solve does not converge. Host-only.
+/// calls, which only swap the right-hand side. The solution buffer starts zeroed, so the first apply is a cold
+/// start even when \p warm_start is set; thereafter warm_start reuses the previous solution as the initial guess.
+/// \p Precond, when not NoPreconditioner, is applied as a right preconditioner (its apply() computes the
+/// approximate-inverse action). apply() throws std::runtime_error if the inner solve does not converge. Host-only.
 template <typename Backend, typename Op, typename Precond = impl::NoPreconditioner>
 class BelosInvOp {
  public:
@@ -214,6 +215,7 @@ class BelosInvOp {
                  impl::make_parameter_list(cfg), std::forward<Precond>(precond)) {
     MUNDY_THROW_ASSERT(Backend::domain_size(op_storage_.get()) == Backend::range_size(op_storage_.get()),
                        std::invalid_argument, "BelosInvOp: operator must be square.");
+    Backend::deep_copy(x_, value_type(0));  // defined initial guess, so a warm first apply is a cold start
   }
 
   // clang-format off

@@ -270,6 +270,36 @@ struct KokkosBackend {
     axpby(alpha, tmp, beta, y);
   }
 
+  // Scaled apply with workspace: y := alpha * op(x) + beta * y, threading the operator's workspace so a scaled
+  // apply reaches the same cached scratch as apply(op, x, y, workspace). Mirrors the unworkspaced scaled apply.
+#ifdef HAVE_MUNDYMATH_KOKKOSKERNELS
+  // Path 0: dense rank-2 View -> gemv; a dense view carries no workspace.
+  template <class Scalar, class LinearOp, class XVector, class YVector, class Workspace>
+  MUNDY_REQUIRES(impl::DenseMatView<LinearOp>)
+  static void apply(Scalar alpha, const LinearOp& A, const XVector& x, Scalar beta, YVector& y, Workspace&) {
+    apply(alpha, A, x, beta, y);
+  }
+#endif  // HAVE_MUNDYMATH_KOKKOSKERNELS
+
+  // Path 1: op provides its own fused apply(alpha, x, beta, y); its contract carries no workspace.
+  template <class Scalar, class LinearOp, class XVector, class YVector, class Workspace>
+  MUNDY_REQUIRES(!impl::DenseMatView<LinearOp> && HasScaledApplyMember<LinearOp, Scalar, XVector, YVector>)
+  static void apply(Scalar alpha, const LinearOp& op, const XVector& x, Scalar beta, YVector& y,
+                    Workspace& workspace) {
+    impl::workspace_invalidate(workspace);
+    op.apply(alpha, x, beta, y);
+  }
+
+  // Path 2: no fused member -- realize it from the workspace-threaded plain apply plus axpby.
+  template <class Scalar, class LinearOp, class XVector, class YVector, class Workspace>
+  MUNDY_REQUIRES(!impl::DenseMatView<LinearOp> && !HasScaledApplyMember<LinearOp, Scalar, XVector, YVector>)
+  static void apply(Scalar alpha, const LinearOp& op, const XVector& x, Scalar beta, YVector& y,
+                    Workspace& workspace) {
+    auto tmp = make_range_vector(op);
+    apply(op, x, tmp, workspace);
+    axpby(alpha, tmp, beta, y);
+  }
+
  private:
 #ifdef HAVE_MUNDYMATH_KOKKOSKERNELS
   template <class LinearOp, class XVector, class YVector, class Workspace>
@@ -547,6 +577,26 @@ struct MundyMathBackend {
       static void apply(Scalar alpha, const LinearOp& op, const XVector& x, Scalar beta, YVector& y) {
     auto tmp = make_range_vector(op);
     apply(op, x, tmp);
+    axpby(alpha, tmp, beta, y);
+  }
+
+  // Scaled apply with workspace: y := alpha * op(x) + beta * y, threading the operator's workspace.
+  // Path 1: op provides its own fused apply(alpha, x, beta, y); its contract carries no workspace.
+  template <class Scalar, typename LinearOp, class XVector, class YVector, typename Workspace>
+  MUNDY_REQUIRES(HasScaledApplyMember<LinearOp, Scalar, XVector, YVector>)
+  KOKKOS_INLINE_FUNCTION static void apply(Scalar alpha, const LinearOp& op, const XVector& x, Scalar beta,
+                                           YVector& y, Workspace& workspace) {
+    impl::workspace_invalidate(workspace);
+    op.apply(alpha, x, beta, y);
+  }
+
+  // Path 2: no fused member -- realize it from the workspace-threaded plain apply plus axpby.
+  template <class Scalar, typename LinearOp, class XVector, class YVector, typename Workspace>
+  MUNDY_REQUIRES(!HasScaledApplyMember<LinearOp, Scalar, XVector, YVector>)
+  KOKKOS_INLINE_FUNCTION static void apply(Scalar alpha, const LinearOp& op, const XVector& x, Scalar beta,
+                                           YVector& y, Workspace& workspace) {
+    auto tmp = make_range_vector(op);
+    apply(op, x, tmp, workspace);
     axpby(alpha, tmp, beta, y);
   }
 

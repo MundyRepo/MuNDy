@@ -600,8 +600,7 @@ struct NodeRankLinkClassRestartMeta {
   }
 };
 
-// The LinkDataObserver reconciles the COO runtime caches whether the link data is declared before or after the restart
-// read, so every restart round-trip below is run in both orderings via this parameter.
+// Should the link data be declared before or after restart
 enum class LinkDeclOrder { BeforeRestart, AfterRestart };
 
 const char* link_decl_order_suffix(LinkDeclOrder order) {

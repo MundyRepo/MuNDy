@@ -25,7 +25,9 @@
 /// \brief Declares the LinkDataObserver class.
 
 // Trilinos libs
-#include <stk_mesh/base/ModificationObserver.hpp>  // for stk::mesh::ModificationObserver (+ Entity/Types via includes)
+#include <stk_mesh/base/Entity.hpp>                // for stk::mesh::Entity
+#include <stk_mesh/base/ModificationObserver.hpp>  // for stk::mesh::ModificationObserver
+#include <stk_mesh/base/Types.hpp>                 // for stk::mesh::OrdinalVector, EntityProcVec, EntityRank
 
 namespace mundy {
 
