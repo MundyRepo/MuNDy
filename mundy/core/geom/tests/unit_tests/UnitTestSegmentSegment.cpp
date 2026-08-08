@@ -41,7 +41,7 @@
 /// For unit tests, this number should be kept low to ensure fast test times, but to still give an immediate warning if
 /// something went very wrong. For integration tests, we recommend setting this number to 10,000 or more.
 #ifndef MUNDY_GEOM_TESTS_UNIT_TESTS_SEGMENT_SEGMENT_DISTANCE_NUM_SAMPLES_PER_TEST
-#define MUNDY_GEOM_TESTS_UNIT_TESTS_SEGMENT_SEGMENT_DISTANCE_NUM_SAMPLES_PER_TEST 1000000
+#define MUNDY_GEOM_TESTS_UNIT_TESTS_SEGMENT_SEGMENT_DISTANCE_NUM_SAMPLES_PER_TEST 10000
 #endif
 
 namespace mundy {

@@ -25,6 +25,10 @@
 /// over Tpetra/Kokkos), and a Mundy direct inverse (MundyMathBackend, fixed-size mundy::Matrix). The direct inverse
 /// uses a compile-time size, so it runs for N = 2..12; the View-based Krylov paths run for N > 12 too.
 ///
+/// The direct inverse can also run for larger sizes and is faster than the Krylov paths: N=12 was ~500x faster than
+/// either Belos or CG and N=24 was 30-50x. Both its runtime and compile cost grow steeply with N: N=24 takes
+/// minutes to compile and N=30 exceeds the maximum template instantiation depth of 900.
+///
 /// Usage: BelosVsMundy [--simple]
 ///   --simple   Suppress the per-size nanobench tables and print one compact table (median time per solve).
 
@@ -310,9 +314,10 @@ int main(int argc, char** argv) {
   }
 
   RowMap rows;
-  bench_small_sizes(std::make_integer_sequence<int, 11>{}, opts, rows);
+  bench_small_sizes(std::make_integer_sequence<int, 12>{}, opts, rows);
   // increase by 8s until 128, then by 32s until 512
-  for (size_t n : {16u, 24u, 32u, 40u, 48u, 56u, 64u, 72u, 80u, 88u, 96u, 104u, 112u, 120u, 128u, 160u, 192u, 224u,
+  for (size_t n : {16u, 24u, 32u, 40u, 48u, 56u, 64u, 72u, 80u,        //
+                   88u, 96u, 104u, 112u, 120u, 128u, 160u, 192u, 224u, //
                    256u, 288u, 320u, 352u, 384u, 416u, 448u, 480u, 512u}) {
     bench_large(n, opts, rows);
   }

@@ -35,18 +35,14 @@
 #include <mundy_geom/distance/PointSphere.hpp>
 
 // Line to <shape> distance headers
-#include <mundy_geom/distance/LineEllipsoid.hpp>
 #include <mundy_geom/distance/LineLine.hpp>
-// #include <mundy_geom/distance/LineLineSegment.hpp>  // Not implemented
 #include <mundy_geom/distance/LineSphere.hpp>
 
 // Line segment to <shape> distance headers
-#include <mundy_geom/distance/LineSegmentEllipsoid.hpp>
 #include <mundy_geom/distance/LineSegmentLineSegment.hpp>
 #include <mundy_geom/distance/LineSegmentSphere.hpp>
 
 // Sphere to <shape> distance headers
-#include <mundy_geom/distance/SphereEllipsoid.hpp>
 #include <mundy_geom/distance/SphereSphere.hpp>
 
 // Ellipsoid to <shape> distance headers

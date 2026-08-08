@@ -71,8 +71,8 @@ namespace mundy {
 /// \tparam PointType       Point type for the center; defaults to `Point<Scalar>`.
 /// \tparam QuaternionType  Quaternion type for the orientation; defaults to `Quaternion<Scalar>`.
 /// \tparam HalfExtentsType Vector3 type for the half-extents; defaults to `Vector3<Scalar>`.
-///                        A view variant (e.g. an owning Vector3 aliasing field storage) may be
-///                        substituted here to enable field-backed OBB components.
+///                        A view variant (e.g. a Vector3 aliasing external storage) may be
+///                        substituted here to enable view-backed OBB components.
 template <typename Scalar, //
           ValidPointType      PointType      = Point<Scalar>, //
           ValidQuaternionType QuaternionType = Quaternion<Scalar>, //
@@ -163,13 +163,23 @@ class OBB {
         orientation_(std::move(other.orientation_)),
         half_extents_(std::move(other.half_extents_)) {}
 
-  /// \brief Deep copy constructor from a different OBB type (e.g. a field-backed view OBB).
+  /// \brief Deep copy constructor from a different OBB type (e.g. a view-backed OBB).
   ///
   /// Copies each component element-by-element, so the result owns its storage independently of `other`.
   template <typename OtherOBBType>
   KOKKOS_FUNCTION constexpr OBB(const OtherOBBType& other)
       MUNDY_REQUIRES(!std::is_same_v<OtherOBBType, OBB<value_type, point_t, orientation_t, half_extents_t>>)
       : center_(other.center_), orientation_(other.orientation_), half_extents_(other.half_extents_) {}
+
+  /// \brief Deep move constructor from a different OBB type (e.g. a view-backed OBB).
+  ///
+  /// A cross-type component move deep-copies element-by-element, so the result owns its storage independently
+  /// of `other`.
+  template <typename OtherOBBType>
+  KOKKOS_FUNCTION constexpr OBB(OtherOBBType&& other)
+      MUNDY_REQUIRES(!std::is_same_v<OtherOBBType, OBB<value_type, point_t, orientation_t, half_extents_t>>)
+      : center_(std::move(other.center_)), orientation_(std::move(other.orientation_)),
+        half_extents_(std::move(other.half_extents_)) {}
   //@}
 
   //! \name Assignment operators
@@ -192,14 +202,34 @@ class OBB {
     half_extents_ = std::move(other.half_extents_);
     return *this;
   }
+
+  /// \brief Copy assignment from a different OBB type (e.g. a view-backed OBB).
+  template <typename OtherOBBType>
+  KOKKOS_FUNCTION constexpr OBB& operator=(const OtherOBBType& other)
+      MUNDY_REQUIRES(!std::is_same_v<OtherOBBType, OBB<value_type, point_t, orientation_t, half_extents_t>>) {
+    center_       = other.center_;
+    orientation_  = other.orientation_;
+    half_extents_ = other.half_extents_;
+    return *this;
+  }
+
+  /// \brief Move assignment from a different OBB type (e.g. a view-backed OBB).
+  template <typename OtherOBBType>
+  KOKKOS_FUNCTION constexpr OBB& operator=(OtherOBBType&& other)
+      MUNDY_REQUIRES(!std::is_same_v<OtherOBBType, OBB<value_type, point_t, orientation_t, half_extents_t>>) {
+    center_       = std::move(other.center_);
+    orientation_  = std::move(other.orientation_);
+    half_extents_ = std::move(other.half_extents_);
+    return *this;
+  }
   //@}
 
   //! \name Accessors
   //@{
 
   // clang-format off
-  KOKKOS_FUNCTION constexpr const point_t&       center()       const { return center_; }
-  KOKKOS_FUNCTION constexpr       point_t&       center()             { return center_; }
+  KOKKOS_FUNCTION constexpr const point_t& center()       const { return center_; }
+  KOKKOS_FUNCTION constexpr       point_t& center()             { return center_; }
   KOKKOS_FUNCTION constexpr const orientation_t& orientation()  const { return orientation_; }
   KOKKOS_FUNCTION constexpr       orientation_t& orientation()        { return orientation_; }
   KOKKOS_FUNCTION constexpr const half_extents_t& half_extents() const { return half_extents_; }
@@ -323,9 +353,8 @@ KOKKOS_FUNCTION constexpr bool intersects(const OBBType1& a, const OBBType2& b) 
   // parallel (off-diagonal R entries ≈ 0 from floating-point noise rather than
   // true geometry), the test doesn't spuriously report separation.  The noise in
   // R(i,j) from the quaternion product is O(machine_eps), so get_zero_tolerance()
-  // is the right scale — NOT sqrt(get_zero_tolerance()) used in squared-quantity
-  // parallel checks (e.g. line-segment D = |uxv|²), and NOT the graphics-derived
-  // magic number 1e-6, which creates an unacceptable 1e-6-length-unit safety margin.
+  // is the right scale — not, for example, sqrt(get_zero_tolerance()) or some
+  // scaled quantity.
   const S eps = get_zero_tolerance<S>();
 
   // R(i,j) = dot(a_axis_i, b_axis_j), computed as mat(conj(q_A)*q_B).

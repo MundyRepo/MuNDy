@@ -511,7 +511,92 @@ struct NeighborListBuildTraits<ArborX1dNeighborList<MemorySpace>> {
   template <typename Builder>
     requires AABBSearchInputType<typename Builder::target_input_type> &&
              AABBSearchInputType<typename Builder::source_input_type>
-  static list_type build(const Builder& builder, const stk::mesh::BulkData& bulk_data, const args_type& args);
+  static list_type build(const Builder& builder, const stk::mesh::BulkData& bulk_data, const args_type& args) {
+    MUNDY_THROW_REQUIRE(bulk_data.parallel_size() == 1, std::invalid_argument,
+                        "ArborX1dNeighborList build currently supports only single-process runs.");
+
+    using exec_space = typename Builder::execution_space;
+    using size_type = typename list_type::size_type;
+    using factory_type = impl::ArborXSearchCandidateFactory<target_input_type, source_input_type>;
+    using callback_type = impl::ArborXExcluderCallback<factory_type, typename Builder::broad_excluder_type>;
+
+    const auto exec_sp = builder.exec_space();
+
+    // Generate broad-phase ArborX boxes from the component inputs, then wrap them in the internal build-buffer type
+    // (ArborXSearchBoxesT) so the ArborX BVH / AccessTraits / candidate-factory machinery below is unchanged.
+    auto target_in = builder.target_input();
+    auto source_in = builder.source_input();
+    auto target_gen = impl::make_arborx_search_boxes(bulk_data, exec_sp, target_in.rank(), target_in.selector(),
+                                                     target_in.component());
+    auto source_gen = impl::make_arborx_search_boxes(bulk_data, exec_sp, source_in.rank(), source_in.selector(),
+                                                     source_in.component());
+    const target_input_type target_boxes(target_in.selector(), target_gen.second, target_gen.first);
+    const source_input_type source_boxes(source_in.selector(), source_gen.second, source_gen.first);
+
+    const auto excluder = builder.setup_broad_excluder(bulk_data);
+    const size_type num_targets = target_boxes.size();
+
+    factory_type factory(target_boxes, source_boxes);
+    callback_type callback(factory, excluder);
+
+    // ArborX-allocated int output views; ArborX resizes these during the query call.
+    Kokkos::View<int*, MemorySpace> raw_indices;
+    Kokkos::View<int*, MemorySpace> raw_offsets;
+
+  #if ARBORX_VERSION >= 10799
+    // New API: source primitives passed as a raw Box view with attached ordinals.
+    // ArborX provides built-in AccessTraits for Kokkos::View<Box*, MemSpace>.
+    ArborX::BoundingVolumeHierarchy bvh(exec_sp, ArborX::Experimental::attach_indices<int>(source_boxes.boxes()));
+  #else
+    // Old API: pass the full wrapper; uses AccessTraits<ArborXSearchBoxesT, PrimitivesTag>.
+    ArborX::BVH<MemorySpace> bvh(exec_sp, source_boxes);
+  #endif
+
+    bvh.query(exec_sp, target_boxes, callback, raw_indices, raw_offsets,
+              ArborX::Experimental::TraversalPolicy().setBufferSize(args.buffer_size));
+
+    const size_type num_pairs = static_cast<size_type>(raw_indices.extent(0));
+    Kokkos::View<size_type*, MemorySpace> source_indices("mundy_search_1d_source_idx", num_pairs);
+    Kokkos::View<size_type*, MemorySpace> offsets("mundy_search_1d_offsets", num_targets + 1);
+
+    Kokkos::parallel_for(
+        "mundy_search_1d_cast_idx", Kokkos::RangePolicy<exec_space>(0, num_pairs),
+        KOKKOS_LAMBDA(size_type i) { source_indices(i) = static_cast<size_type>(raw_indices(i)); });
+    Kokkos::parallel_for(
+        "mundy_search_1d_cast_off", Kokkos::RangePolicy<exec_space>(0, num_targets + 1),
+        KOKKOS_LAMBDA(size_type i) { offsets(i) = static_cast<size_type>(raw_offsets(i)); });
+
+    if (builder.sort_neighbors()) {
+      // Sort each target's neighbor row by ascending source ordinal. Insertion sort is used because row
+      // sizes are small (~10-20 entries at typical densities) and it incurs no auxiliary allocation.
+      Kokkos::parallel_for(
+          "mundy_search_1d_sort_rows", Kokkos::RangePolicy<exec_space>(0, num_targets), KOKKOS_LAMBDA(size_type t) {
+            const size_type beg = offsets(t);
+            const size_type end = offsets(t + 1);
+            for (size_type i = beg + 1; i < end; ++i) {
+              const size_type key = source_indices(i);
+              size_type j = i;
+              while (j > beg && source_indices(j - 1) > key) {
+                source_indices(j) = source_indices(j - 1);
+                --j;
+              }
+              source_indices(j) = key;
+            }
+          });
+    }
+
+    // Narrow phase (L0–L2): compacts the broad-phase CSR if a narrow excluder is present.
+    if constexpr (Builder::has_narrow_phase) {
+      const auto narrow_excluder = builder.setup_narrow_excluder(bulk_data);
+      auto [narrow_source_indices, narrow_offsets] = impl::apply_narrow_phase(
+          exec_sp, narrow_excluder, target_boxes.identities(), source_boxes.identities(), source_indices, offsets);
+      return list_type(builder.target_selector(), builder.source_selector(), target_boxes.identities(),
+                       source_boxes.identities(), narrow_source_indices, narrow_offsets);
+    }
+
+    return list_type(builder.target_selector(), builder.source_selector(), target_boxes.identities(),
+                     source_boxes.identities(), source_indices, offsets);
+  }
   //@}
 };
 
@@ -552,232 +637,115 @@ struct NeighborListBuildTraits<PeriodicArborX1dNeighborList<MemorySpace, ImageSh
   template <typename Builder>
     requires PeriodicAABBSearchInputType<typename Builder::target_input_type> &&
              PeriodicAABBSearchInputType<typename Builder::source_input_type>
-  static list_type build(const Builder& builder, const stk::mesh::BulkData& bulk_data, const args_type& args);
+  static list_type build(const Builder& builder, const stk::mesh::BulkData& bulk_data, const args_type& args) {
+    MUNDY_THROW_REQUIRE(bulk_data.parallel_size() == 1, std::invalid_argument,
+                        "PeriodicArborX1dNeighborList build currently supports only single-process runs.");
+
+    using exec_space = typename Builder::execution_space;
+    using size_type = typename list_type::size_type;
+    using image_shift_type = typename list_type::image_shift_type;
+    using factory_type = impl::PeriodicArborXSearchCandidateFactory<target_input_type, source_input_type>;
+    using broad_excluder_type = typename Builder::broad_excluder_type;
+    using count_cb_t = impl::ArborXPeriodicCountCallback<target_input_type, source_input_type, broad_excluder_type>;
+    using fill_cb_t =
+        impl::ArborXPeriodic1dFillCallback<target_input_type, source_input_type, broad_excluder_type, image_shift_type>;
+
+    const auto exec_sp = builder.exec_space();
+
+    // Generate backend-neutral periodic images from the component inputs (targets: 1 image/owner; sources: ≤27 pruned
+    // by the union target bbox), then pack them into ArborX search boxes (boxes + per-image identities). The neutral
+    // images also carry the dense per-owner entities and the source image->owner-ordinal map the final list needs.
+    auto target_in = builder.target_input();
+    auto source_in = builder.source_input();
+    auto target_images = impl::make_periodic_target_images<ImageShiftScalar>(
+        bulk_data, exec_sp, target_in.rank(), target_in.selector(), target_in.component(), target_in.periodic_metric());
+    const auto target_bbox = impl::periodic_images_bounding_box(exec_sp, target_images);
+    auto source_images =
+        impl::make_periodic_source_images<ImageShiftScalar>(bulk_data, exec_sp, source_in.rank(), source_in.selector(),
+                                                            source_in.component(), source_in.periodic_metric(), target_bbox);
+    target_input_type target_boxes = impl::pack_periodic_arborx_search_boxes(exec_sp, target_in.selector(), target_images);
+    source_input_type source_boxes = impl::pack_periodic_arborx_search_boxes(exec_sp, source_in.selector(), source_images);
+
+    const auto excluder = builder.setup_broad_excluder(bulk_data);
+    const size_type num_target_owners = target_images.owner_entities.extent(0);
+
+    factory_type factory(target_boxes, source_boxes, source_images.owner_indices);
+
+  #if ARBORX_VERSION >= 10799
+    ArborX::BoundingVolumeHierarchy bvh(exec_sp, ArborX::Experimental::attach_indices<int>(source_boxes.boxes()));
+  #else
+    ArborX::BVH<MemorySpace> bvh(exec_sp, source_boxes);
+  #endif
+
+    // Pass 1: count surviving pairs per target owner (image->owner mapping done inside callback).
+    Kokkos::View<size_type*, MemorySpace> owner_counts("mundy_search_per1d_counts", num_target_owners);
+    Kokkos::deep_copy(owner_counts, size_type(0));
+    bvh.query(exec_sp, target_boxes, count_cb_t(factory, excluder, owner_counts));
+
+    // Compute total pairs so output views can be pre-allocated.
+    size_type total_pairs = 0;
+    Kokkos::parallel_reduce(
+        "mundy_search_per1d_total", Kokkos::RangePolicy<exec_space>(0, num_target_owners),
+        KOKKOS_LAMBDA(size_type i, size_type & partial) { partial += owner_counts(i); }, total_pairs);
+
+    Kokkos::View<size_type*, MemorySpace> offsets("mundy_search_per1d_offsets", num_target_owners + 1);
+    Kokkos::View<size_type*, MemorySpace> write_positions("mundy_search_per1d_wpos", num_target_owners);
+    Kokkos::View<size_type*, MemorySpace> source_owner_indices("mundy_search_per1d_soi", total_pairs);
+    Kokkos::View<image_shift_type*, MemorySpace> source_image_shifts("mundy_search_per1d_ris", total_pairs);
+    Kokkos::deep_copy(write_positions, size_type(0));
+
+    // Exclusive prefix scan: offsets[i] = sum(owner_counts[0..i)), offsets[N] = total_pairs.
+    Kokkos::parallel_scan(
+        "mundy_search_per1d_scan", Kokkos::RangePolicy<exec_space>(0, num_target_owners + 1),
+        KOKKOS_LAMBDA(size_type i, size_type & update, bool final) {
+          if (final) offsets(i) = update;
+          update += (i < num_target_owners) ? owner_counts(i) : size_type(0);
+        });
+
+    // Pass 2: fill source owner ordinals and source image shifts.
+    bvh.query(exec_sp, target_boxes,
+              fill_cb_t(factory, excluder, write_positions, offsets, source_owner_indices, source_image_shifts));
+
+    if (builder.sort_neighbors()) {
+      // Sort each target owner's neighbor row by ascending source owner ordinal, keeping
+      // source_image_shifts in sync so each pair's shift stays with its source ordinal.
+      Kokkos::parallel_for(
+          "mundy_search_per1d_sort_rows", Kokkos::RangePolicy<exec_space>(0, num_target_owners),
+          KOKKOS_LAMBDA(size_type t) {
+            const size_type beg = offsets(t);
+            const size_type end = offsets(t + 1);
+            for (size_type i = beg + 1; i < end; ++i) {
+              const size_type key_idx = source_owner_indices(i);
+              const image_shift_type key_shift = source_image_shifts(i);
+              size_type j = i;
+              while (j > beg && source_owner_indices(j - 1) > key_idx) {
+                source_owner_indices(j) = source_owner_indices(j - 1);
+                source_image_shifts(j) = source_image_shifts(j - 1);
+                --j;
+              }
+              source_owner_indices(j) = key_idx;
+              source_image_shifts(j) = key_shift;
+            }
+          });
+    }
+
+    // Narrow phase (L0–L2): compacts the broad-phase periodic CSR if a narrow excluder is present.
+    if constexpr (Builder::has_narrow_phase) {
+      const auto narrow_excluder = builder.setup_narrow_excluder(bulk_data);
+      auto [narrow_source_indices, narrow_shifts, narrow_offsets] = impl::apply_narrow_phase(
+          exec_sp, narrow_excluder, target_images.owner_entities, source_images.owner_entities, target_images.shifts,
+          source_owner_indices, source_image_shifts, offsets);
+      return list_type(builder.target_selector(), builder.source_selector(), target_images.owner_entities,
+                       source_images.owner_entities, target_images.shifts, narrow_source_indices, narrow_shifts,
+                       narrow_offsets);
+    }
+
+    return list_type(builder.target_selector(), builder.source_selector(), target_images.owner_entities,
+                     source_images.owner_entities, target_images.shifts, source_owner_indices, source_image_shifts,
+                     offsets);
+  }
   //@}
 };
-
-// -----------------------------------------------------------------------
-// NeighborListBuildTraits::build() definitions — non-periodic 1D
-// -----------------------------------------------------------------------
-
-/// \brief Build an `ArborX1dNeighborList` using ArborX managed-CSR output.
-///
-/// Builds a BVH over source boxes, runs a single ArborX query pass with the excluder-filtering callback, and
-/// casts the resulting `int`-typed ArborX output views to the `size_t`-typed views expected by the list constructor.
-template <typename MemorySpace>
-template <typename Builder>
-  requires AABBSearchInputType<typename Builder::target_input_type> &&
-           AABBSearchInputType<typename Builder::source_input_type>
-ArborX1dNeighborList<MemorySpace> NeighborListBuildTraits<ArborX1dNeighborList<MemorySpace>>::build(
-    const Builder& builder, const stk::mesh::BulkData& bulk_data, const args_type& args) {
-  MUNDY_THROW_REQUIRE(bulk_data.parallel_size() == 1, std::invalid_argument,
-                      "ArborX1dNeighborList build currently supports only single-process runs.");
-
-  using exec_space = typename Builder::execution_space;
-  using size_type = typename list_type::size_type;
-  using factory_type = impl::ArborXSearchCandidateFactory<target_input_type, source_input_type>;
-  using callback_type = impl::ArborXExcluderCallback<factory_type, typename Builder::broad_excluder_type>;
-
-  const auto exec_sp = builder.exec_space();
-
-  // Generate broad-phase ArborX boxes from the component inputs, then wrap them in the internal build-buffer type
-  // (ArborXSearchBoxesT) so the ArborX BVH / AccessTraits / candidate-factory machinery below is unchanged.
-  auto target_in = builder.target_input();
-  auto source_in = builder.source_input();
-  auto target_gen = impl::make_arborx_search_boxes(bulk_data, exec_sp, target_in.rank(), target_in.selector(),
-                                                   target_in.component());
-  auto source_gen = impl::make_arborx_search_boxes(bulk_data, exec_sp, source_in.rank(), source_in.selector(),
-                                                   source_in.component());
-  const target_input_type target_boxes(target_in.selector(), target_gen.second, target_gen.first);
-  const source_input_type source_boxes(source_in.selector(), source_gen.second, source_gen.first);
-
-  const auto excluder = builder.setup_broad_excluder(bulk_data);
-  const size_type num_targets = target_boxes.size();
-
-  factory_type factory(target_boxes, source_boxes);
-  callback_type callback(factory, excluder);
-
-  // ArborX-allocated int output views; ArborX resizes these during the query call.
-  Kokkos::View<int*, MemorySpace> raw_indices;
-  Kokkos::View<int*, MemorySpace> raw_offsets;
-
-#if ARBORX_VERSION >= 10799
-  // New API: source primitives passed as a raw Box view with attached ordinals.
-  // ArborX provides built-in AccessTraits for Kokkos::View<Box*, MemSpace>.
-  ArborX::BoundingVolumeHierarchy bvh(exec_sp, ArborX::Experimental::attach_indices<int>(source_boxes.boxes()));
-#else
-  // Old API: pass the full wrapper; uses AccessTraits<ArborXSearchBoxesT, PrimitivesTag>.
-  ArborX::BVH<MemorySpace> bvh(exec_sp, source_boxes);
-#endif
-
-  bvh.query(exec_sp, target_boxes, callback, raw_indices, raw_offsets,
-            ArborX::Experimental::TraversalPolicy().setBufferSize(args.buffer_size));
-
-  const size_type num_pairs = static_cast<size_type>(raw_indices.extent(0));
-  Kokkos::View<size_type*, MemorySpace> source_indices("mundy_search_1d_source_idx", num_pairs);
-  Kokkos::View<size_type*, MemorySpace> offsets("mundy_search_1d_offsets", num_targets + 1);
-
-  Kokkos::parallel_for(
-      "mundy_search_1d_cast_idx", Kokkos::RangePolicy<exec_space>(0, num_pairs),
-      KOKKOS_LAMBDA(size_type i) { source_indices(i) = static_cast<size_type>(raw_indices(i)); });
-  Kokkos::parallel_for(
-      "mundy_search_1d_cast_off", Kokkos::RangePolicy<exec_space>(0, num_targets + 1),
-      KOKKOS_LAMBDA(size_type i) { offsets(i) = static_cast<size_type>(raw_offsets(i)); });
-
-  if (builder.sort_neighbors()) {
-    // Sort each target's neighbor row by ascending source ordinal. Insertion sort is used because row
-    // sizes are small (~10-20 entries at typical densities) and it incurs no auxiliary allocation.
-    Kokkos::parallel_for(
-        "mundy_search_1d_sort_rows", Kokkos::RangePolicy<exec_space>(0, num_targets), KOKKOS_LAMBDA(size_type t) {
-          const size_type beg = offsets(t);
-          const size_type end = offsets(t + 1);
-          for (size_type i = beg + 1; i < end; ++i) {
-            const size_type key = source_indices(i);
-            size_type j = i;
-            while (j > beg && source_indices(j - 1) > key) {
-              source_indices(j) = source_indices(j - 1);
-              --j;
-            }
-            source_indices(j) = key;
-          }
-        });
-  }
-
-  // Narrow phase (L0–L2): compacts the broad-phase CSR if a narrow excluder is present.
-  if constexpr (Builder::has_narrow_phase) {
-    const auto narrow_excluder = builder.setup_narrow_excluder(bulk_data);
-    auto [narrow_source_indices, narrow_offsets] = impl::apply_narrow_phase(
-        exec_sp, narrow_excluder, target_boxes.identities(), source_boxes.identities(), source_indices, offsets);
-    return list_type(builder.target_selector(), builder.source_selector(), target_boxes.identities(),
-                     source_boxes.identities(), narrow_source_indices, narrow_offsets);
-  }
-
-  return list_type(builder.target_selector(), builder.source_selector(), target_boxes.identities(),
-                   source_boxes.identities(), source_indices, offsets);
-}
-
-// -----------------------------------------------------------------------
-// NeighborListBuildTraits::build() definitions — periodic 1D
-// -----------------------------------------------------------------------
-
-/// \brief Build a `PeriodicArborX1dNeighborList` using a two-pass owner-indexed count/fill strategy.
-///
-/// ArborX returns image ordinals; the count callback maps each surviving hit to the target owner ordinal for the
-/// atomic count. A prefix scan converts counts to CSR offsets, and the fill callback writes into flat owner-indexed
-/// pair arrays. The resulting list stores source owner ordinals and per-object source image shifts.
-template <typename MemorySpace, typename ImageShiftScalar>
-template <typename Builder>
-  requires PeriodicAABBSearchInputType<typename Builder::target_input_type> &&
-           PeriodicAABBSearchInputType<typename Builder::source_input_type>
-PeriodicArborX1dNeighborList<MemorySpace, ImageShiftScalar>
-NeighborListBuildTraits<PeriodicArborX1dNeighborList<MemorySpace, ImageShiftScalar>>::build(
-    const Builder& builder, const stk::mesh::BulkData& bulk_data, const args_type& args) {
-  MUNDY_THROW_REQUIRE(bulk_data.parallel_size() == 1, std::invalid_argument,
-                      "PeriodicArborX1dNeighborList build currently supports only single-process runs.");
-
-  using exec_space = typename Builder::execution_space;
-  using size_type = typename list_type::size_type;
-  using image_shift_type = typename list_type::image_shift_type;
-  using factory_type = impl::PeriodicArborXSearchCandidateFactory<target_input_type, source_input_type>;
-  using broad_excluder_type = typename Builder::broad_excluder_type;
-  using count_cb_t = impl::ArborXPeriodicCountCallback<target_input_type, source_input_type, broad_excluder_type>;
-  using fill_cb_t =
-      impl::ArborXPeriodic1dFillCallback<target_input_type, source_input_type, broad_excluder_type, image_shift_type>;
-
-  const auto exec_sp = builder.exec_space();
-
-  // Generate backend-neutral periodic images from the component inputs (targets: 1 image/owner; sources: ≤27 pruned
-  // by the union target bbox), then pack them into ArborX search boxes (boxes + per-image identities). The neutral
-  // images also carry the dense per-owner entities and the source image->owner-ordinal map the final list needs.
-  auto target_in = builder.target_input();
-  auto source_in = builder.source_input();
-  auto target_images = impl::make_periodic_target_images<ImageShiftScalar>(
-      bulk_data, exec_sp, target_in.rank(), target_in.selector(), target_in.component(), target_in.periodic_metric());
-  const auto target_bbox = impl::periodic_images_bounding_box(exec_sp, target_images);
-  auto source_images =
-      impl::make_periodic_source_images<ImageShiftScalar>(bulk_data, exec_sp, source_in.rank(), source_in.selector(),
-                                                          source_in.component(), source_in.periodic_metric(), target_bbox);
-  target_input_type target_boxes = impl::pack_periodic_arborx_search_boxes(exec_sp, target_in.selector(), target_images);
-  source_input_type source_boxes = impl::pack_periodic_arborx_search_boxes(exec_sp, source_in.selector(), source_images);
-
-  const auto excluder = builder.setup_broad_excluder(bulk_data);
-  const size_type num_target_owners = target_images.owner_entities.extent(0);
-
-  factory_type factory(target_boxes, source_boxes, source_images.owner_indices);
-
-#if ARBORX_VERSION >= 10799
-  ArborX::BoundingVolumeHierarchy bvh(exec_sp, ArborX::Experimental::attach_indices<int>(source_boxes.boxes()));
-#else
-  ArborX::BVH<MemorySpace> bvh(exec_sp, source_boxes);
-#endif
-
-  // Pass 1: count surviving pairs per target owner (image->owner mapping done inside callback).
-  Kokkos::View<size_type*, MemorySpace> owner_counts("mundy_search_per1d_counts", num_target_owners);
-  Kokkos::deep_copy(owner_counts, size_type(0));
-  bvh.query(exec_sp, target_boxes, count_cb_t(factory, excluder, owner_counts));
-
-  // Compute total pairs so output views can be pre-allocated.
-  size_type total_pairs = 0;
-  Kokkos::parallel_reduce(
-      "mundy_search_per1d_total", Kokkos::RangePolicy<exec_space>(0, num_target_owners),
-      KOKKOS_LAMBDA(size_type i, size_type & partial) { partial += owner_counts(i); }, total_pairs);
-
-  Kokkos::View<size_type*, MemorySpace> offsets("mundy_search_per1d_offsets", num_target_owners + 1);
-  Kokkos::View<size_type*, MemorySpace> write_positions("mundy_search_per1d_wpos", num_target_owners);
-  Kokkos::View<size_type*, MemorySpace> source_owner_indices("mundy_search_per1d_soi", total_pairs);
-  Kokkos::View<image_shift_type*, MemorySpace> source_image_shifts("mundy_search_per1d_ris", total_pairs);
-  Kokkos::deep_copy(write_positions, size_type(0));
-
-  // Exclusive prefix scan: offsets[i] = sum(owner_counts[0..i)), offsets[N] = total_pairs.
-  Kokkos::parallel_scan(
-      "mundy_search_per1d_scan", Kokkos::RangePolicy<exec_space>(0, num_target_owners + 1),
-      KOKKOS_LAMBDA(size_type i, size_type & update, bool final) {
-        if (final) offsets(i) = update;
-        update += (i < num_target_owners) ? owner_counts(i) : size_type(0);
-      });
-
-  // Pass 2: fill source owner ordinals and source image shifts.
-  bvh.query(exec_sp, target_boxes,
-            fill_cb_t(factory, excluder, write_positions, offsets, source_owner_indices, source_image_shifts));
-
-  if (builder.sort_neighbors()) {
-    // Sort each target owner's neighbor row by ascending source owner ordinal, keeping
-    // source_image_shifts in sync so each pair's shift stays with its source ordinal.
-    Kokkos::parallel_for(
-        "mundy_search_per1d_sort_rows", Kokkos::RangePolicy<exec_space>(0, num_target_owners),
-        KOKKOS_LAMBDA(size_type t) {
-          const size_type beg = offsets(t);
-          const size_type end = offsets(t + 1);
-          for (size_type i = beg + 1; i < end; ++i) {
-            const size_type key_idx = source_owner_indices(i);
-            const image_shift_type key_shift = source_image_shifts(i);
-            size_type j = i;
-            while (j > beg && source_owner_indices(j - 1) > key_idx) {
-              source_owner_indices(j) = source_owner_indices(j - 1);
-              source_image_shifts(j) = source_image_shifts(j - 1);
-              --j;
-            }
-            source_owner_indices(j) = key_idx;
-            source_image_shifts(j) = key_shift;
-          }
-        });
-  }
-
-  // Narrow phase (L0–L2): compacts the broad-phase periodic CSR if a narrow excluder is present.
-  if constexpr (Builder::has_narrow_phase) {
-    const auto narrow_excluder = builder.setup_narrow_excluder(bulk_data);
-    auto [narrow_source_indices, narrow_shifts, narrow_offsets] = impl::apply_narrow_phase(
-        exec_sp, narrow_excluder, target_images.owner_entities, source_images.owner_entities, target_images.shifts,
-        source_owner_indices, source_image_shifts, offsets);
-    return list_type(builder.target_selector(), builder.source_selector(), target_images.owner_entities,
-                     source_images.owner_entities, target_images.shifts, narrow_source_indices, narrow_shifts,
-                     narrow_offsets);
-  }
-
-  return list_type(builder.target_selector(), builder.source_selector(), target_images.owner_entities,
-                   source_images.owner_entities, target_images.shifts, source_owner_indices, source_image_shifts,
-                   offsets);
-}
 
 }  // namespace search
 

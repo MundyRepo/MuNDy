@@ -404,7 +404,9 @@ static void bench_drag_host(const BenchOptions& opts) {
   else std::cout << out.str();
 }
 
-void eval_drag_velocity_step(auto ngp_mesh, stk::mesh::Selector &selector, auto ngp_force_comp, auto ngp_vel_comp, auto drag) {
+template <typename NgpMesh, typename ForceComp, typename VelComp, typename DragT>
+void eval_drag_velocity_step(NgpMesh ngp_mesh, stk::mesh::Selector &selector, ForceComp ngp_force_comp,
+                             VelComp ngp_vel_comp, DragT drag) {
     mundy::mesh::for_each_entity_run(ngp_mesh, stk::topology::NODE_RANK, selector,
         KOKKOS_LAMBDA(const stk::mesh::FastMeshIndex& idx) {
             drag_velocity_step(drag(idx), ngp_force_comp(idx), ngp_vel_comp(idx));
@@ -482,7 +484,11 @@ static void bench_mobility_host(const BenchOptions& opts) {
   else std::cout << out.str();
 }
 
-void eval_rigid_body_mobility_step(auto ngp_mesh, stk::mesh::Selector &selector, auto ngp_ambient, auto ngp_mobility, auto ngp_force_comp, auto ngp_orient_comp, auto ngp_vel_comp) {
+template <typename NgpMesh, typename AmbientT, typename MobilityT, typename ForceComp, typename OrientComp,
+          typename VelComp>
+void eval_rigid_body_mobility_step(NgpMesh ngp_mesh, stk::mesh::Selector &selector, AmbientT ngp_ambient,
+                                   MobilityT ngp_mobility, ForceComp ngp_force_comp, OrientComp ngp_orient_comp,
+                                   VelComp ngp_vel_comp) {
     mundy::mesh::for_each_entity_run(ngp_mesh, stk::topology::NODE_RANK, selector,
         KOKKOS_LAMBDA(const stk::mesh::FastMeshIndex& idx) {
             rigid_body_mobility_step(ngp_ambient(idx), ngp_mobility(idx),
@@ -574,9 +580,13 @@ static void bench_complex_host(const BenchOptions& opts) {
   else std::cout << out.str();
 }
 
-void eval_rigid_body_step(auto ngp_mesh, stk::mesh::Selector &selector, auto dt, auto ambient, auto drag, auto target,
-                          auto ngp_force_comp, auto ngp_torque_comp, auto ngp_orient_comp, auto ngp_mobility_comp,
-                          auto ngp_vel_comp, auto ngp_stress_comp, auto ngp_orient_out_comp, auto ngp_energy_comp) {
+template <typename NgpMesh, typename DtT, typename AmbientT, typename DragT, typename TargetT, typename ForceComp,
+          typename TorqueComp, typename OrientComp, typename MobilityComp, typename VelComp, typename StressComp,
+          typename OrientOutComp, typename EnergyComp>
+void eval_rigid_body_step(NgpMesh ngp_mesh, stk::mesh::Selector &selector, DtT dt, AmbientT ambient, DragT drag,
+                          TargetT target, ForceComp ngp_force_comp, TorqueComp ngp_torque_comp,
+                          OrientComp ngp_orient_comp, MobilityComp ngp_mobility_comp, VelComp ngp_vel_comp,
+                          StressComp ngp_stress_comp, OrientOutComp ngp_orient_out_comp, EnergyComp ngp_energy_comp) {
     mundy::mesh::for_each_entity_run(ngp_mesh, stk::topology::NODE_RANK, selector,
         KOKKOS_LAMBDA(const stk::mesh::FastMeshIndex& idx) {
             rigid_body_step(dt(idx), ambient(idx), drag(idx), target(idx),

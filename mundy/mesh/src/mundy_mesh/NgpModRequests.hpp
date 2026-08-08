@@ -755,10 +755,12 @@ class NgpRequestEntitiesImplT {
 
   struct no_requests_t {};
 
+ public:
   struct known_id_request_t {
     stk::mesh::EntityId entity_id = stk::mesh::InvalidEntityId;
   };
 
+ private:
   using bool_view_t = Kokkos::View<bool, memory_space>;
   using request_view_t = NgpViewT<known_id_request_t*, NgpMemSpace>;
   using requests_storage_t = std::conditional_t<HasKnownEntityId, request_view_t, no_requests_t>;
@@ -964,12 +966,14 @@ class NgpRequestConnectionsT {
   /// @brief Internal struct representing a single connection request.
   /// Requests must specify a pair of entities to connect. These may either be a real entity or a future entity (by
   /// ticket and request helper).
+ public:
   struct ConnectionRequest {
     variant<stk::mesh::Entity, FutureEntity> from_entity;
     variant<stk::mesh::Entity, FutureEntity> to_entity;
     stk::mesh::RelationIdentifier ordinal;
   };
 
+ private:
   KOKKOS_INLINE_FUNCTION ConnectionRequest get_request(size_t ticket) const {
     constexpr auto name = make_string_literal("NgpRequestConnectionsT::get_request");
     assert_active_space<name>();
@@ -1126,12 +1130,14 @@ class NgpRequestLinkRelationsT {
   template <typename>
   friend class NgpModRequestsT;
 
+ public:
   struct LinkRelationRequest {
     variant<stk::mesh::Entity, FutureEntity> linker;
     variant<stk::mesh::Entity, FutureEntity> linked_entity;
     unsigned link_ordinal{0};
   };
 
+ private:
   KOKKOS_INLINE_FUNCTION LinkRelationRequest get_request(size_t ticket) const {
     constexpr auto name = make_string_literal("NgpRequestLinkRelationsT::get_request");
     assert_active_space<name>();
@@ -1539,12 +1545,14 @@ class NgpDestroyConnectionsT {
 
   /// @brief Internal struct representing a single connection destruction request.
   /// Requests must specify a pair of entities to destroy the connection between. Both entities must be real entities.
+ public:
   struct DestroyConnectionRequest {
     stk::mesh::Entity from_entity;
     stk::mesh::Entity to_entity;
     stk::mesh::RelationIdentifier ordinal;
   };
 
+ private:
   KOKKOS_INLINE_FUNCTION DestroyConnectionRequest get_request(size_t ticket) const {
     constexpr auto name = make_string_literal("NgpDestroyConnectionsT::get_request");
     assert_active_space<name>();

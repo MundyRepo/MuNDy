@@ -119,8 +119,8 @@ void run_test() {
 
   // Create the accessors
   auto scalar_accessor = ScalarFieldComponent(scalar_field);
-  auto vector3_accessor = Vector3FieldComponent(vector3_field);
-  auto matrix3_accessor = Matrix3FieldComponent(matrix3_field);
+  auto vector3_accessor = Vector3FieldComponent<double>(vector3_field);
+  auto matrix3_accessor = Matrix3FieldComponent<double>(matrix3_field);
   auto quaternion_accessor = QuaternionFieldComponent(quaternion_field);
   auto aabb_accessor = AABBFieldComponent(aabb_field);
 

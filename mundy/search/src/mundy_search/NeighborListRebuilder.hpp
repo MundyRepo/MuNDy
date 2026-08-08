@@ -639,6 +639,7 @@ class RebuildOnAABBDisplacement {
     }
   }
 
+ public:
   /// \brief Return true if any AABB corner has moved beyond `threshold` under the metric.
   ///
   /// `ngp_live` holds the current corners and `ngp_scratch` the snapshot corners; both are read at the same
@@ -680,6 +681,7 @@ class RebuildOnAABBDisplacement {
   }
   //@}
 
+ private:
   //! \name Internal members
   //@{
 
@@ -934,6 +936,7 @@ class RebuildOnOBBDisplacement {
   //! \name Internal helpers
   //@{
 
+ public:
   /// \brief Return true if any current OBB has escaped its inflated snapshot entry.
   ///
   /// `ngp_live` holds the current OBBs and `ngp_scratch` the snapshot OBBs; both are read at the same FastMeshIndex
@@ -985,6 +988,7 @@ class RebuildOnOBBDisplacement {
   }
   //@}
 
+ private:
   //! \name Internal members
   //@{
 

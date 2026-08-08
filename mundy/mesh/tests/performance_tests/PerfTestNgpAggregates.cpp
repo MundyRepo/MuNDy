@@ -122,9 +122,9 @@ void test_aggregate(const stk::mesh::BulkData& bulk_data, stk::mesh::Part& spher
   const double one_over_6pi_mu = one_over_6pi / viscosity;
 
   // Create the accessors
-  auto center_accessor = Vector3FieldComponent(node_center_field);
-  auto force_accessor = Vector3FieldComponent(node_force_field);
-  auto velocity_accessor = Vector3FieldComponent(node_velocity_field);
+  auto center_accessor = Vector3FieldComponent<double>(node_center_field);
+  auto force_accessor = Vector3FieldComponent<double>(node_force_field);
+  auto velocity_accessor = Vector3FieldComponent<double>(node_velocity_field);
   auto radius_accessor = ScalarFieldComponent(elem_radius_field);
 
   // Create an aggregate for the spheres
