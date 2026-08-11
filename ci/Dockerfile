@@ -69,10 +69,11 @@ RUN git clone --depth=2 --branch ${SPACK_TAG} https://github.com/spack/spack.git
 # CPU Build
 ###############################################################
 ENV SPACK_ENV_NAME_CPU=tril1610_cpu
-# Concretize first in case there are errors
+# Concretize first in case there are errors.
 RUN . ${SPACK_ROOT}/share/spack/setup-env.sh && \
     spack env create ${SPACK_ENV_NAME_CPU} && \
     spack env activate ${SPACK_ENV_NAME_CPU} && \
+    spack config add "packages:all:target:[broadwell]" && \
     spack external find autoconf \
         automake \
         bzip2 \
@@ -129,10 +130,11 @@ RUN . ${SPACK_ROOT}/share/spack/setup-env.sh && \
 # GPU Build
 ###############################################################
 ENV SPACK_ENV_NAME_GPU=tril1610_sm80_cuda1263
-# Concretize first in case there are errors
+# Concretize first in case there are errors.
 RUN . ${SPACK_ROOT}/share/spack/setup-env.sh && \
     spack env create ${SPACK_ENV_NAME_GPU} && \
     spack env activate ${SPACK_ENV_NAME_GPU} && \
+    spack config add "packages:all:target:[broadwell]" && \
     spack external find autoconf \
         automake \
         bzip2 \
