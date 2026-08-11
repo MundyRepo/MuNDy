@@ -70,14 +70,18 @@ struct storage_type {
   using bare_t = std::remove_cv_t<no_ref_t>;
   using no_cvref_t = std::remove_cvref_t<T>;
   using storage_unwrapped_t = storage_underlying_type_t<no_cvref_t>;
+  // An array cannot be stored by value, so it decays to a pointer to its first element, element cv intact.
+  using decayed_array_t = std::remove_extent_t<no_ref_t>*;
 
  public:
   using type = std::conditional_t<
       is_storage_v<no_cvref_t>, storage_unwrapped_t,
-      std::conditional_t<is_reference_wrapper_v<no_cvref_t>, bare_t,
-                         std::conditional_t<std::is_pointer_v<no_ref_t>, bare_t,
-                                            std::conditional_t<std::is_lvalue_reference_v<T>,
-                                                               reference_wrapper<no_ref_t>, no_cvref_t>>>>;
+      std::conditional_t<
+          is_reference_wrapper_v<no_cvref_t>, bare_t,
+          std::conditional_t<std::is_pointer_v<no_ref_t>, bare_t,
+                             std::conditional_t<std::is_array_v<no_ref_t>, decayed_array_t,
+                                                std::conditional_t<std::is_lvalue_reference_v<T>,
+                                                                   reference_wrapper<no_ref_t>, no_cvref_t>>>>>;
 };
 
 template <class T>
@@ -97,29 +101,22 @@ using storage_type_t = typename storage_type<T>::type;
 template <class T>
 using store_input_type_t = typename store_input_type<T>::type;
 
+/// \brief Reach the value behind a stored object: unwrap a nested storage or reference_wrapper, hand back a pointer by
+/// value, and otherwise yield the object itself.
+///
+/// The argument's value category is preserved, so an rvalue yields an rvalue and the stored value can be move
+/// constructed rather than copied.
 template <class Stored>
-KOKKOS_FUNCTION constexpr decltype(auto) storage_get(Stored& value) noexcept {
-  if constexpr (is_storage_v<Stored>) {
+KOKKOS_FUNCTION constexpr decltype(auto) storage_get(Stored&& value) noexcept {
+  using bare_t = std::remove_cvref_t<Stored>;
+  if constexpr (is_storage_v<bare_t>) {
     return value.get();
-  } else if constexpr (is_reference_wrapper_v<Stored>) {
+  } else if constexpr (is_reference_wrapper_v<bare_t>) {
     return value.get();
-  } else if constexpr (std::is_pointer_v<Stored>) {
-    return static_cast<std::remove_cv_t<Stored>>(value);
+  } else if constexpr (std::is_pointer_v<bare_t>) {
+    return static_cast<std::remove_cv_t<bare_t>>(value);
   } else {
-    return (value);
-  }
-}
-
-template <class Stored>
-KOKKOS_FUNCTION constexpr decltype(auto) storage_get(const Stored& value) noexcept {
-  if constexpr (is_storage_v<Stored>) {
-    return value.get();
-  } else if constexpr (is_reference_wrapper_v<Stored>) {
-    return value.get();
-  } else if constexpr (std::is_pointer_v<Stored>) {
-    return static_cast<std::remove_cv_t<Stored>>(value);
-  } else {
-    return (value);
+    return std::forward<Stored>(value);
   }
 }
 
@@ -133,6 +130,7 @@ using storage_value_type_t = std::remove_cvref_t<decltype(storage_get(std::declv
 /// Storage policy for `T`:
 ///  - if `T` is (or refers to) `reference_wrapper<U>`, store `reference_wrapper<U>`
 ///  - else if `T` is (or refers to) a pointer type `U*`, store `U*`
+///  - else if `T` is (or refers to) an array `U[N]`, store `U*`
 ///  - else if `T` is an lvalue reference `U&`, store `reference_wrapper<U>`
 ///  - otherwise, store `std::remove_cvref_t<T>` by value
 template <class T>

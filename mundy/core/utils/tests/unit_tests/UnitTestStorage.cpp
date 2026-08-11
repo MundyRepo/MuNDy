@@ -18,12 +18,26 @@
 // **********************************************************************************************************************
 // @HEADER
 
+/// \file UnitTestStorage.cpp
+/// \brief Unit tests for mundy::storage and mundy::store.
+///
+/// Test structure:
+///   Group 0 — Compile-time contracts. The normalization policy, stored_type/value_type, get() return types
+///     including const propagation, store()/CTAD agreement, and constructibility. These are type-level facts, so
+///     they are file-scope static_asserts rather than tests.
+///   Group 1 — Aliasing: every storage that refers to something must write through to the referent.
+///   Group 2 — Ownership: a by-value storage must keep its value alive past the source's scope.
+///   Group 3 — Construction cost: a by-value storage moves from an rvalue and copies from an lvalue or const rvalue.
+///   Group 4 — Move-only values: owned from an rvalue, referenced from an lvalue.
+
 // External
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 // C++ core
+#include <concepts>
 #include <type_traits>
+#include <utility>
 
 // Mundy
 #include <mundy_utils/reference_wrapper.hpp>
@@ -33,217 +47,244 @@ namespace mundy {
 
 namespace {
 
-template <class T>
-concept can_store = requires(T&& t) { ::mundy::store(static_cast<T&&>(t)); };
+// =============================================================================
+// Test types
+// =============================================================================
 
-struct LifetimeTracked {
-  static inline int live_count = 0;
+/// \brief Counts construction traffic and live instances so cost and lifetime are both observable.
+struct Tracked {
+  static inline int live = 0;
+  static inline int copies = 0;
+  static inline int moves = 0;
 
   int value = 0;
 
-  explicit LifetimeTracked(int value_in) : value(value_in) {
-    ++live_count;
+  explicit Tracked(int value_in) : value(value_in) {
+    ++live;
   }
 
-  LifetimeTracked(const LifetimeTracked& other) : value(other.value) {
-    ++live_count;
+  Tracked(const Tracked& other) : value(other.value) {
+    ++live;
+    ++copies;
   }
 
-  LifetimeTracked(LifetimeTracked&& other) noexcept : value(other.value) {
-    ++live_count;
+  Tracked(Tracked&& other) noexcept : value(other.value) {
+    ++live;
+    ++moves;
     other.value = -1;
   }
 
-  ~LifetimeTracked() {
-    --live_count;
+  ~Tracked() {
+    --live;
+  }
+
+  static void reset() {
+    copies = 0;
+    moves = 0;
   }
 };
 
-auto make_owned_tracked_storage(int value) {
-  LifetimeTracked local(value);
-  return ::mundy::store(std::move(local));
-}
+struct MoveOnly {
+  int value = 0;
 
-TEST(StorageTest, StoreLvalueUsesReferenceWrapperStorage) {
+  explicit MoveOnly(int value_in) : value(value_in) {
+  }
+
+  MoveOnly(const MoveOnly&) = delete;
+  MoveOnly& operator=(const MoveOnly&) = delete;
+  MoveOnly(MoveOnly&&) = default;
+  MoveOnly& operator=(MoveOnly&&) = default;
+};
+
+template <class T>
+concept can_store = requires(T&& t) { ::mundy::store(static_cast<T&&>(t)); };
+
+using wrapper_t = ::mundy::reference_wrapper<int>;
+
+// =============================================================================
+// Compile-time tests
+// =============================================================================
+
+// Normalization policy: what an input type is stored as.
+static_assert(std::is_same_v<impl::storage_type_t<int>, int>, "A value should be stored by value.");
+static_assert(std::is_same_v<impl::storage_type_t<int&>, wrapper_t>,
+              "An lvalue reference should be stored as reference_wrapper<T>.");
+static_assert(std::is_same_v<impl::storage_type_t<int*>, int*>, "A pointer should be stored as a pointer.");
+static_assert(std::is_same_v<impl::storage_type_t<int*&>, int*>,
+              "A pointer lvalue should be stored as a pointer, not as a reference to one.");
+static_assert(std::is_same_v<impl::storage_type_t<const int* const&>, const int*>,
+              "Pointer cv/ref should normalize away while pointee const survives.");
+static_assert(std::is_same_v<impl::storage_type_t<int[4]>, int*>,
+              "An array cannot be stored by value, so it should decay to a pointer.");
+static_assert(std::is_same_v<impl::storage_type_t<int (&)[4]>, int*>,
+              "An array lvalue should decay rather than become a reference to an array.");
+static_assert(std::is_same_v<impl::storage_type_t<const int (&)[4]>, const int*>,
+              "Array decay should keep element const.");
+static_assert(std::is_same_v<impl::storage_type_t<wrapper_t&>, wrapper_t>,
+              "A reference_wrapper should be stored as the wrapper itself.");
+static_assert(std::is_same_v<impl::storage_type_t<storage<int&>&>, typename storage<int&>::stored_type>,
+              "A storage input should collapse to that storage's stored_type rather than nesting.");
+
+// The normalization is idempotent, so the stored types above are exactly its fixed points.
+static_assert(std::is_same_v<impl::storage_type_t<wrapper_t>, wrapper_t>, "reference_wrapper<T> is a fixed point.");
+static_assert(std::is_same_v<impl::storage_type_t<int*>, int*>, "T* is a fixed point.");
+static_assert(std::is_same_v<impl::storage_type_t<int>, int>, "A by-value type is a fixed point.");
+
+// value_type names the element behind the storage, with cv/ref stripped.
+static_assert(std::is_same_v<storage<int>::value_type, int>, "An owned int should have value_type int.");
+static_assert(std::is_same_v<storage<int&>::value_type, int>, "A referenced int should have value_type int, not int&.");
+static_assert(std::is_same_v<storage<const int&>::value_type, int>, "value_type should strip const.");
+static_assert(std::is_same_v<storage<int*>::value_type, int*>, "A pointer's value_type is the pointer itself.");
+static_assert(std::is_same_v<storage<wrapper_t>::value_type, int>, "A wrapper's value_type should unwrap to int.");
+
+// get() hands back the referent, and const propagates only into owned values -- a view stays shallow-const.
+static_assert(std::is_same_v<decltype(std::declval<storage<int>&>().get()), int&>, "Owned get() should be int&.");
+static_assert(std::is_same_v<decltype(std::declval<const storage<int>&>().get()), const int&>,
+              "Owned const get() should be const int&.");
+static_assert(std::is_same_v<decltype(std::declval<storage<int&>&>().get()), int&>, "Referenced get() should be int&.");
+static_assert(std::is_same_v<decltype(std::declval<const storage<int&>&>().get()), int&>,
+              "A const reference storage is shallow-const, so get() stays int&.");
+static_assert(std::is_same_v<decltype(std::declval<const storage<const int&>&>().get()), const int&>,
+              "A reference to const must stay const.");
+static_assert(std::is_same_v<decltype(std::declval<storage<int*>&>().get()), int*>,
+              "A pointer storage should hand back the pointer by value.");
+static_assert(std::is_same_v<decltype(std::declval<const storage<int*>&>().get()), int*>,
+              "A const pointer storage is shallow-const, so get() stays int*.");
+static_assert(std::is_same_v<decltype(std::declval<const storage<const int*>&>().get()), const int*>,
+              "Pointee const must survive.");
+
+// store() and CTAD must agree, including on a storage input.
+static_assert(std::is_same_v<decltype(store(std::declval<int&>())), storage<int&>>, "store(lvalue) -> storage<T&>.");
+static_assert(std::is_same_v<decltype(store(std::declval<int>())), storage<int>>, "store(rvalue) -> storage<T>.");
+static_assert(std::is_same_v<decltype(storage(std::declval<int&>())), decltype(store(std::declval<int&>()))>,
+              "CTAD should deduce what store() deduces for an lvalue.");
+static_assert(std::is_same_v<decltype(storage(std::declval<int>())), decltype(store(std::declval<int>()))>,
+              "CTAD should deduce what store() deduces for an rvalue.");
+static_assert(std::is_same_v<decltype(store(std::declval<storage<int&>&>())), storage<int&>>,
+              "store(storage<T>) should return that same storage type.");
+static_assert(std::is_same_v<decltype(storage(std::declval<storage<int&>&>())), storage<int&>>,
+              "CTAD on a storage input should not nest.");
+
+// Constructibility. A by-value storage needs a copy from an lvalue but only a move from an rvalue, so a move-only
+// value is storable by value only from an rvalue -- and is always referenceable.
+static_assert(can_store<int&> && can_store<int> && can_store<int*&>, "store() should accept these.");
+static_assert(std::constructible_from<storage<Tracked>, Tracked&>, "A copyable value may be stored from an lvalue.");
+static_assert(std::constructible_from<storage<MoveOnly>, MoveOnly&&>,
+              "A move-only value should be storable by value from an rvalue.");
+static_assert(!std::constructible_from<storage<MoveOnly>, MoveOnly&>,
+              "A move-only value must not be storable by value from an lvalue, which would need a copy.");
+static_assert(std::is_same_v<typename decltype(store(std::declval<MoveOnly&>()))::stored_type,
+                             ::mundy::reference_wrapper<MoveOnly>>,
+              "A move-only lvalue should be referenced rather than copied.");
+static_assert(!std::constructible_from<storage<int&>, int&&>,
+              "A reference storage must not bind a temporary.");
+
+// =============================================================================
+// Runtime tests
+// =============================================================================
+
+TEST(Storage, Aliasing) {
   int value = 7;
-  auto stash = ::mundy::store(value);
 
-  static_assert(std::is_same_v<decltype(stash), ::mundy::storage<int&>>, "store(lvalue) should produce storage<T&>");
-  static_assert(std::is_same_v<typename decltype(stash)::stored_type, ::mundy::reference_wrapper<int>>,
-                "storage<int&> should store reference_wrapper<int>");
-  static_assert(std::is_same_v<decltype(stash.get()), int&>, "get() should return int& for lvalue storage");
+  auto from_lvalue = store(value);
+  from_lvalue.get() = 19;
+  EXPECT_EQ(value, 19) << "Storage of an lvalue should write through.";
 
-  stash.get() = 19;
-  EXPECT_EQ(value, 19);
+  auto from_wrapper = store(ref(value));
+  from_wrapper.get() = 14;
+  EXPECT_EQ(value, 14) << "Storage of a reference_wrapper should write through.";
+
+  auto from_pointer = store(&value);
+  EXPECT_EQ(from_pointer.get(), &value) << "Storage of a pointer should hand back that pointer.";
+  *from_pointer.get() = 21;
+  EXPECT_EQ(value, 21);
+
+  auto nested = store(store(value));
+  nested.get() = 33;
+  EXPECT_EQ(value, 33) << "Storage of a storage should alias the original referent, not a copy.";
+
+  const int const_value = 11;
+  auto from_const_lvalue = store(const_value);
+  EXPECT_EQ(&from_const_lvalue.get(), &const_value) << "Storage of a const lvalue should refer to it.";
+
+  // Mutations of the referent must be visible after the fact, which is what makes this a view.
+  value = 44;
+  EXPECT_EQ(from_lvalue.get(), 44);
+  EXPECT_EQ(nested.get(), 44);
 }
 
-TEST(StorageTest, StoreConstLvalueKeepsConstReferenceSemantics) {
-  const int value = 11;
-  auto stash = ::mundy::store(value);
+TEST(Storage, Ownership) {
+  const int live_before = Tracked::live;
 
-  static_assert(std::is_same_v<decltype(stash), ::mundy::storage<const int&>>,
-                "store(const lvalue) should produce storage<const T&>");
-  static_assert(std::is_same_v<typename decltype(stash)::stored_type, ::mundy::reference_wrapper<const int>>,
-                "const lvalue should store reference_wrapper<const T>");
-  static_assert(std::is_same_v<decltype(stash.get()), const int&>, "get() should return const int&");
-
-  EXPECT_EQ(stash.get(), 11);
-}
-
-TEST(StorageTest, StoreRvalueOwnsValue) {
-  auto stash = ::mundy::store(42);
-
-  static_assert(std::is_same_v<decltype(stash), ::mundy::storage<int>>, "store(rvalue) should produce storage<T>");
-  static_assert(std::is_same_v<typename decltype(stash)::stored_type, int>, "storage<int> should store int");
-  static_assert(std::is_same_v<decltype(stash.get()), int&>, "mutable get() should return int&");
-
-  EXPECT_EQ(stash.get(), 42);
-  stash.get() = 55;
-  EXPECT_EQ(stash.get(), 55);
-}
-
-TEST(StorageTest, StorePointerStoresPointerAndGetReturnsPointer) {
-  int value = 9;
-  int* pointer = &value;
-  const int* const_pointer = &value;
-
-  auto stash = ::mundy::store(pointer);
-  auto const_stash = ::mundy::store(const_pointer);
-
-  static_assert(std::is_same_v<decltype(stash), ::mundy::storage<int*&>>,
-                "store(pointer lvalue) should produce storage<T*&>");
-  static_assert(std::is_same_v<typename decltype(stash)::stored_type, int*>,
-                "pointer storage should store raw pointer");
-  static_assert(std::is_same_v<decltype(stash.get()), int*>, "get() should return int* for pointer storage");
-
-  static_assert(std::is_same_v<typename decltype(const_stash)::stored_type, const int*>,
-                "const pointee pointer should preserve pointee const");
-  static_assert(std::is_same_v<decltype(const_stash.get()), const int*>, "get() should return const int*");
-
-  EXPECT_EQ(stash.get(), &value);
-  EXPECT_EQ(const_stash.get(), &value);
-}
-
-TEST(StorageTest, StoreReferenceWrapperKeepsWrapperTypeAndReference) {
-  int value = 3;
-  auto wrapped = ::mundy::ref(value);
-  auto stash = ::mundy::store(wrapped);
-
-  static_assert(std::is_same_v<decltype(stash), ::mundy::storage<::mundy::reference_wrapper<int>&>>,
-                "store(reference_wrapper lvalue) should preserve wrapper semantics");
-  static_assert(std::is_same_v<typename decltype(stash)::stored_type, ::mundy::reference_wrapper<int>>,
-                "wrapper storage should directly store reference_wrapper<T>");
-  static_assert(std::is_same_v<decltype(stash.get()), int&>, "get() should unwrap to T&");
-
-  stash.get() = 14;
-  EXPECT_EQ(value, 14);
-}
-
-TEST(StorageTest, StoreStorageReturnsSameType) {
-  int value = 100;
-  auto stash = ::mundy::store(value);
-  auto again = ::mundy::store(stash);
-
-  using stash_t = decltype(stash);
-  using again_t = decltype(again);
-  static_assert(std::is_same_v<stash_t, again_t>, "store(storage<T>) should return the same storage type");
-  static_assert(std::is_same_v<typename stash_t::stored_type, typename again_t::stored_type>,
-                "storage type should have the same stored_type");
-
-  again.get() = 101;
-  EXPECT_EQ(value, 101);
-}
-
-TEST(StorageTest, StorageTypeNormalizationRules) {
-  using wrapper_t = ::mundy::reference_wrapper<int>;
-  using storage_ref_t = ::mundy::storage<int&>;
-
-  static_assert(std::is_same_v<::mundy::impl::storage_type_t<int>, int>, "value type should store as value");
-  static_assert(std::is_same_v<::mundy::impl::storage_type_t<int&>, wrapper_t>,
-                "lvalue reference should store as reference_wrapper<T>");
-  static_assert(std::is_same_v<::mundy::impl::storage_type_t<int*>, int*>, "pointer should store as pointer");
-  static_assert(std::is_same_v<::mundy::impl::storage_type_t<const int* const&>, const int*>,
-                "pointer cv/ref should normalize to pointer with pointee cv preserved");
-  static_assert(std::is_same_v<::mundy::impl::storage_type_t<wrapper_t&>, wrapper_t>,
-                "reference_wrapper should store as the wrapper type itself");
-  static_assert(std::is_same_v<::mundy::impl::storage_type_t<storage_ref_t&>, typename storage_ref_t::stored_type>,
-                "storage<T> input should normalize to storage<T>::stored_type");
-}
-
-TEST(StorageTest, ValueTypeMatchesGetResultStrippedOfCvref) {
-  using wrapper_t = ::mundy::reference_wrapper<int>;
-
-  static_assert(std::is_same_v<::mundy::storage<int>::value_type, int>, "owned storage value_type should be int");
-  static_assert(std::is_same_v<::mundy::storage<int&>::value_type, int>,
-                "reference storage value_type should be int, not int&");
-  static_assert(std::is_same_v<::mundy::storage<const int&>::value_type, int>,
-                "const-reference storage value_type should strip const");
-  static_assert(std::is_same_v<::mundy::storage<int*>::value_type, int*>,
-                "pointer storage value_type should be the pointer type itself");
-  static_assert(std::is_same_v<::mundy::storage<wrapper_t>::value_type, int>,
-                "reference_wrapper storage value_type should unwrap to int");
-}
-
-TEST(StorageTest, DirectCTADAgreesWithStore) {
-  int value = 5;
-
-  auto via_store = ::mundy::store(value);
-  ::mundy::storage via_ctad(value);
-  static_assert(std::is_same_v<decltype(via_store), decltype(via_ctad)>,
-                "storage(value) should deduce the same type as store(value)");
-
-  auto owned_via_store = ::mundy::store(42);
-  ::mundy::storage owned_via_ctad(42);
-  static_assert(std::is_same_v<decltype(owned_via_store), decltype(owned_via_ctad)>,
-                "storage(rvalue) should deduce the same type as store(rvalue)");
-
-  auto restashed_via_store = ::mundy::store(via_store);
-  ::mundy::storage restashed_via_ctad(via_ctad);
-  static_assert(std::is_same_v<decltype(via_store), decltype(restashed_via_store)>,
-                "storage(storage<T>) should deduce storage<T> itself, matching store()");
-  static_assert(std::is_same_v<decltype(via_ctad), decltype(restashed_via_ctad)>,
-                "storage(storage<T>) via direct CTAD should also deduce storage<T> itself");
-
-  via_ctad.get() = 8;
-  EXPECT_EQ(value, 8);
-}
-
-TEST(StorageTest, ConstructibilityContracts) {
-  static_assert(can_store<int&>, "store(lvalue) should be callable");
-  static_assert(can_store<int>, "store(rvalue) should be callable");
-  static_assert(can_store<int*&>, "store(pointer lvalue) should be callable");
-}
-
-TEST(StorageTest, RvalueStorageOwnsObjectAcrossSourceScopeExit) {
-  EXPECT_EQ(LifetimeTracked::live_count, 0);
+  auto make_owned = [](int value) {
+    Tracked local(value);
+    return store(std::move(local));
+  };
 
   {
-    auto stash = make_owned_tracked_storage(33);
+    auto owned = make_owned(33);
+    static_assert(std::is_same_v<decltype(owned), storage<Tracked>>, "store(std::move(local)) should own by value.");
 
-    static_assert(std::is_same_v<decltype(stash), ::mundy::storage<LifetimeTracked>>,
-                  "store(std::move(local)) should own LifetimeTracked by value");
-    EXPECT_EQ(LifetimeTracked::live_count, 1);
-    EXPECT_EQ(stash.get().value, 33);
+    EXPECT_EQ(Tracked::live, live_before + 1) << "The owned value must outlive the local it came from.";
+    EXPECT_EQ(owned.get().value, 33);
 
-    stash.get().value = 44;
-    EXPECT_EQ(stash.get().value, 44);
+    owned.get().value = 44;
+    EXPECT_EQ(owned.get().value, 44);
   }
 
-  EXPECT_EQ(LifetimeTracked::live_count, 0);
+  EXPECT_EQ(Tracked::live, live_before) << "Destroying the storage must destroy the owned value.";
 }
 
-TEST(StorageTest, ReferenceStorageIsSafeWhenReferentOutlivesStorage) {
-  int owner = 10;
-  ::mundy::storage<int&> stash = ::mundy::store(owner);
+TEST(Storage, ConstructionCost) {
+  Tracked::reset();
+  Tracked lvalue_source(7);
+  storage<Tracked> from_lvalue(lvalue_source);
+  EXPECT_EQ(Tracked::copies, 1) << "An lvalue can only be copied.";
+  EXPECT_EQ(Tracked::moves, 0) << "An lvalue must never be moved out of.";
+  EXPECT_EQ(lvalue_source.value, 7) << "The source must be left intact.";
+  EXPECT_EQ(from_lvalue.get().value, 7);
 
-  {
-    int& alias = stash.get();
-    alias = 17;
-  }
+  Tracked::reset();
+  storage<Tracked> from_rvalue(Tracked(8));
+  EXPECT_EQ(Tracked::moves, 1) << "An rvalue should be moved.";
+  EXPECT_EQ(Tracked::copies, 0) << "An rvalue should not be copied.";
+  EXPECT_EQ(from_rvalue.get().value, 8);
 
-  EXPECT_EQ(owner, 17);
-  owner = 22;
-  EXPECT_EQ(stash.get(), 22);
+  Tracked::reset();
+  const Tracked const_source(9);
+  storage<Tracked> from_const_rvalue(std::move(const_source));
+  EXPECT_EQ(Tracked::copies, 1) << "A const rvalue is not move eligible, so it should be copied.";
+  EXPECT_EQ(Tracked::moves, 0) << "A const rvalue must not be moved out of.";
+  EXPECT_EQ(from_const_rvalue.get().value, 9);
+
+  Tracked::reset();
+  Tracked store_source(5);
+  auto via_store = store(std::move(store_source));
+  EXPECT_EQ(Tracked::moves, 1) << "store(rvalue) should move exactly once.";
+  EXPECT_EQ(Tracked::copies, 0) << "store(rvalue) should not copy.";
+  EXPECT_EQ(via_store.get().value, 5);
+
+  Tracked::reset();
+  Tracked ref_source(6);
+  auto referenced = store(ref_source);
+  EXPECT_EQ(Tracked::copies, 0) << "Referencing an lvalue should not construct anything.";
+  EXPECT_EQ(Tracked::moves, 0);
+  EXPECT_EQ(&referenced.get(), &ref_source);
+}
+
+TEST(Storage, MoveOnly) {
+  auto owned = store(MoveOnly(21));
+  static_assert(std::is_same_v<typename decltype(owned)::stored_type, MoveOnly>,
+                "A move-only rvalue should be owned by value.");
+  EXPECT_EQ(owned.get().value, 21);
+
+  MoveOnly source(33);
+  auto referenced = store(source);
+  EXPECT_EQ(&referenced.get(), &source) << "A move-only lvalue should be referenced.";
+  EXPECT_EQ(referenced.get().value, 33);
+
+  referenced.get().value = 34;
+  EXPECT_EQ(source.value, 34) << "The reference should write through.";
 }
 
 }  // namespace

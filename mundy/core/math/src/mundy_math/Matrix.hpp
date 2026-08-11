@@ -1408,15 +1408,79 @@ MUNDY_MATH_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(Matrix6i, matrix6i, int, 6, 
 /// \endcode
 template <typename T, size_t N, size_t M, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto get_matrix_view(Accessor&& data) {
-  auto data_storage = store(std::forward<Accessor>(data));
-  return AMatrix<T, N, M, decltype(data_storage)>(data_storage);
+  using accessor_t = typename storage<Accessor>::stored_type;
+  return AMatrix<T, N, M, accessor_t>(accessor_t(std::forward<Accessor>(data)));
 }
 
 template <typename T, size_t N, size_t M, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto get_owning_matrix(Accessor&& data) {
-  auto data_storage = store(std::move(data));
-  return AMatrix<T, N, M, decltype(data_storage)>(data_storage);
+  using accessor_t = typename storage<std::remove_reference_t<Accessor>>::stored_type;
+  return AMatrix<T, N, M, accessor_t>(accessor_t(std::forward<Accessor>(data)));
 }
+
+#define MUNDY_MATH_GET_MATRIX_SIZE_SPECIALIZATION_IMPL(alias, alias_lower, N, M)     \
+  template <typename T, ValidAccessor<T> Accessor>                                   \
+  KOKKOS_INLINE_FUNCTION constexpr auto get_##alias_lower##_view(Accessor&& data) {  \
+    return get_matrix_view<T, N, M>(std::forward<Accessor>(data));                   \
+  }                                                                                  \
+                                                                                     \
+  template <typename T, ValidAccessor<T> Accessor>                                   \
+  KOKKOS_INLINE_FUNCTION constexpr auto get_owning_##alias_lower(Accessor&& data) {  \
+    return get_owning_matrix<T, N, M>(std::forward<Accessor>(data));                 \
+  }
+
+#define MUNDY_MATH_GET_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(alias, alias_lower, T, N, M) \
+  template <ValidAccessor<T> Accessor>                                               \
+  KOKKOS_INLINE_FUNCTION constexpr auto get_##alias_lower##_view(Accessor&& data) {  \
+    return get_matrix_view<T, N, M>(std::forward<Accessor>(data));                   \
+  }                                                                                  \
+                                                                                     \
+  template <ValidAccessor<T> Accessor>                                               \
+  KOKKOS_INLINE_FUNCTION constexpr auto get_owning_##alias_lower(Accessor&& data) {  \
+    return get_owning_matrix<T, N, M>(std::forward<Accessor>(data));                 \
+  }
+
+#define MUNDY_MATH_GET_MATRIX_SIZE_SPECIALIZATION(N, M) \
+  MUNDY_MATH_GET_MATRIX_SIZE_SPECIALIZATION_IMPL(AMatrix##N##M, matrix##N##M, N, M)
+
+#define MUNDY_MATH_GET_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_FLOAT_DOUBLE(N, M)                                       \
+  MUNDY_MATH_GET_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(AMatrix##N##M##f, matrix##N##M##f, float, N, M)            \
+  MUNDY_MATH_GET_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(AMatrix##N##M##d, matrix##N##M##d, double, N, M)
+
+/// \brief Accessor helpers for each AMatrix specialization, mirroring the type specializations above.
+MUNDY_MATH_MATRIX_EXPAND_1_TO_6_2D(
+    MUNDY_MATH_GET_MATRIX_SIZE_SPECIALIZATION)  // This is what creates get_matrix11_view, get_matrix12_view, etc.
+MUNDY_MATH_MATRIX_EXPAND_1_TO_6_2D(
+    MUNDY_MATH_GET_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_FLOAT_DOUBLE)  // ... and get_matrix11d_view, etc.
+
+// Special diagonals overloads
+MUNDY_MATH_GET_MATRIX_SIZE_SPECIALIZATION_IMPL(Matrix1, matrix1, 1, 1)
+MUNDY_MATH_GET_MATRIX_SIZE_SPECIALIZATION_IMPL(Matrix2, matrix2, 2, 2)
+MUNDY_MATH_GET_MATRIX_SIZE_SPECIALIZATION_IMPL(Matrix3, matrix3, 3, 3)
+MUNDY_MATH_GET_MATRIX_SIZE_SPECIALIZATION_IMPL(Matrix4, matrix4, 4, 4)
+MUNDY_MATH_GET_MATRIX_SIZE_SPECIALIZATION_IMPL(Matrix5, matrix5, 5, 5)
+MUNDY_MATH_GET_MATRIX_SIZE_SPECIALIZATION_IMPL(Matrix6, matrix6, 6, 6)
+
+MUNDY_MATH_GET_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(Matrix1f, matrix1f, float, 1, 1)
+MUNDY_MATH_GET_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(Matrix2f, matrix2f, float, 2, 2)
+MUNDY_MATH_GET_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(Matrix3f, matrix3f, float, 3, 3)
+MUNDY_MATH_GET_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(Matrix4f, matrix4f, float, 4, 4)
+MUNDY_MATH_GET_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(Matrix5f, matrix5f, float, 5, 5)
+MUNDY_MATH_GET_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(Matrix6f, matrix6f, float, 6, 6)
+
+MUNDY_MATH_GET_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(Matrix1d, matrix1d, double, 1, 1)
+MUNDY_MATH_GET_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(Matrix2d, matrix2d, double, 2, 2)
+MUNDY_MATH_GET_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(Matrix3d, matrix3d, double, 3, 3)
+MUNDY_MATH_GET_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(Matrix4d, matrix4d, double, 4, 4)
+MUNDY_MATH_GET_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(Matrix5d, matrix5d, double, 5, 5)
+MUNDY_MATH_GET_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(Matrix6d, matrix6d, double, 6, 6)
+
+MUNDY_MATH_GET_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(Matrix1i, matrix1i, int, 1, 1)
+MUNDY_MATH_GET_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(Matrix2i, matrix2i, int, 2, 2)
+MUNDY_MATH_GET_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(Matrix3i, matrix3i, int, 3, 3)
+MUNDY_MATH_GET_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(Matrix4i, matrix4i, int, 4, 4)
+MUNDY_MATH_GET_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(Matrix5i, matrix5i, int, 5, 5)
+MUNDY_MATH_GET_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(Matrix6i, matrix6i, int, 6, 6)
 //@}
 
 //! \name Non-member arithmetic: AScalar op AMatrix / AMatrix op AScalar

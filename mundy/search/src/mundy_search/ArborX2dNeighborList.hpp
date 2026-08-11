@@ -533,7 +533,7 @@ struct NeighborListBuildTraits<ArborX2dNeighborList<MemorySpace>> {
   template <typename Builder>
     requires AABBSearchInputType<typename Builder::target_input_type> &&
              AABBSearchInputType<typename Builder::source_input_type>
-  static list_type build(const Builder& builder, const stk::mesh::BulkData& bulk_data, const args_type& args) {
+  static list_type build(const Builder& builder, const stk::mesh::BulkData& bulk_data, const args_type& /*args*/) {
     MUNDY_THROW_REQUIRE(bulk_data.parallel_size() == 1, std::invalid_argument,
                         "ArborX2dNeighborList build currently supports only single-process runs.");
 
@@ -660,7 +660,7 @@ struct NeighborListBuildTraits<PeriodicArborX2dNeighborList<MemorySpace, ImageSh
   template <typename Builder>
     requires PeriodicAABBSearchInputType<typename Builder::target_input_type> &&
              PeriodicAABBSearchInputType<typename Builder::source_input_type>
-  static list_type build(const Builder& builder, const stk::mesh::BulkData& bulk_data, const args_type& args) {
+  static list_type build(const Builder& builder, const stk::mesh::BulkData& bulk_data, const args_type& /*args*/) {
     MUNDY_THROW_REQUIRE(bulk_data.parallel_size() == 1, std::invalid_argument,
                         "PeriodicArborX2dNeighborList build currently supports only single-process runs.");
 

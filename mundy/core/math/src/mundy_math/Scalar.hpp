@@ -735,15 +735,15 @@ KOKKOS_INLINE_FUNCTION T atomic_div_fetch(T* const s, const U& value) {
 /// \endcode
 template <typename T, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto get_scalar_view(Accessor&& data) {
-  auto data_storage = store(impl::unwrap_accessor(std::forward<Accessor>(data)));
-  return AScalar<T, decltype(data_storage)>(data_storage);
+  using accessor_t = typename storage<Accessor>::stored_type;
+  return AScalar<T, accessor_t>(accessor_t(std::forward<Accessor>(data)));
 }
 
 /// \brief Create an owning AScalar by moving the accessor.
 template <typename T, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto get_owning_scalar(Accessor&& data) {
-  auto data_storage = store(impl::unwrap_accessor(std::move(data)));
-  return AScalar<T, decltype(data_storage)>(data_storage);
+  using accessor_t = typename storage<std::remove_reference_t<Accessor>>::stored_type;
+  return AScalar<T, accessor_t>(accessor_t(std::forward<Accessor>(data)));
 }
 //@}
 

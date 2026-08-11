@@ -44,29 +44,31 @@ KOKKOS_INLINE_FUNCTION constexpr T* addressof(T& value) noexcept {
   return __builtin_addressof(value);
 }
 
+/// \brief Is invocable concept
+template <class F, class... Args>
+concept invocable = requires(F&& f, Args&&... args) { std::forward<F>(f)(std::forward<Args>(args)...); };
+
+/// \brief Is subscriptable concept
+template <class T, class Index>
+concept subscriptable = requires(T&& t, Index&& idx) { std::forward<T>(t)[std::forward<Index>(idx)]; };
+
 MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_PUSH
 
 template <class F, class... Args>
+MUNDY_REQUIRES(invocable<F, Args...>)
 KOKKOS_INLINE_FUNCTION constexpr decltype(auto) invoke(F&& f, Args&&... args) noexcept(
     noexcept(std::forward<F>(f)(std::forward<Args>(args)...))) {
   return std::forward<F>(f)(std::forward<Args>(args)...);
 }
 
 template <class T, class Index>
+MUNDY_REQUIRES(subscriptable<T, Index>)
 KOKKOS_INLINE_FUNCTION constexpr decltype(auto) subscript(T&& t, Index&& idx) noexcept(
     noexcept(std::forward<T>(t)[std::forward<Index>(idx)])) {
   return std::forward<T>(t)[std::forward<Index>(idx)];
 }
 
 MUNDY_SUPPRESS_GPU_CALL_FROM_HOST_WARNINGS_POP
-
-/// \brief Is invocable concept
-template <class F, class... Args>
-concept invocable = requires(F&& f, Args&&... args) { invoke(std::forward<F>(f), std::forward<Args>(args)...); };
-
-/// \brief Is subscriptable concept
-template <class T, class Index>
-concept subscriptable = requires(T&& t, Index&& idx) { subscript(std::forward<T>(t), std::forward<Index>(idx)); };
 
 }  // namespace impl
 

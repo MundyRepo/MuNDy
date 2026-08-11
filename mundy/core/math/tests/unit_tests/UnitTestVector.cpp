@@ -42,6 +42,7 @@
 #include <mundy_math/Vector.hpp>              // for mundy::Vector
 #include <mundy_utils/reference_wrapper.hpp>  // for mundy::reference_wrapper
 #include <mundy_utils/requires.hpp>
+#include <mundy_utils/storage.hpp>  // for mundy::storage
 
 // Note, these tests are meant to look like real use cases for the Vector class. As a result, we use implicit type
 // conversions rather than being explicit about types. This is to ensure that the Vector class can be used in a
@@ -1521,6 +1522,104 @@ TYPED_TEST(VectorSingleTypeTest, ViewsWithCallableOnlyAccessor) {
   is_close_debug(const_view[0], 7, "Const callable-only accessor view failed.");
   is_close_debug(const_view[1], 8, "Const callable-only accessor view failed.");
   is_close_debug(const_view(2), 9, "Const callable-only accessor view failed.");
+}
+
+TYPED_TEST(VectorSingleTypeTest, ConstructCopyMoveAssignViews) {
+  using ViewType1 = AVector<TypeParam, 3, TypeParam*>;
+  using ViewType2 = AVector<TypeParam, 3, CallableOnlyAccessor<TypeParam>>;
+  
+  // Accessors
+  std::vector<TypeParam> backing{0, 0, 1, 2, 3, 0, 0};
+  TypeParam* accessor1 = backing.data() + 2;
+  CallableOnlyAccessor<TypeParam> accessor2(backing.data() + 2);
+
+  // Construct from accessor
+  ViewType1 view1(accessor1);
+  ViewType2 view2(accessor2);
+  is_close_debug(view1[0], 1, "View construction from accessor failed.");
+  is_close_debug(view1[1], 2, "View construction from accessor failed.");
+  is_close_debug(view1[2], 3, "View construction from accessor failed.");
+  is_close_debug(view2[0], 1, "View construction from accessor failed.");
+  is_close_debug(view2[1], 2, "View construction from accessor failed.");
+  is_close_debug(view2[2], 3, "View construction from accessor failed.");
+
+  // Copy from same
+  ViewType1 view1_copy(view1); // default constructs the accessor and then copies into it.
+  ViewType2 view2_copy(view2);
+  is_close_debug(view1_copy[0], 1, "View copy from same failed.");
+  is_close_debug(view1_copy[1], 2, "View copy from same failed.");
+  is_close_debug(view1_copy[2], 3, "View copy from same failed.");
+  is_close_debug(view2_copy[0], 1, "View copy from same failed.");
+  is_close_debug(view2_copy[1], 2, "View copy from same failed.");
+  is_close_debug(view2_copy[2], 3, "View copy from same failed.");
+
+  // Move from same | view1_copy and view2_copy are now dead, so we cannot use them after this point
+  // view1 and view2 are still valid
+  ViewType1 view1_move(std::move(view1_copy));
+  ViewType2 view2_move(std::move(view2_copy));  
+  is_close_debug(view1_move[0], 1, "View move from same failed.");
+  is_close_debug(view1_move[1], 2, "View move from same failed.");
+  is_close_debug(view1_move[2], 3, "View move from same failed.");
+  is_close_debug(view2_move[0], 1, "View move from same failed.");
+  is_close_debug(view2_move[1], 2, "View move from same failed.");
+  is_close_debug(view2_move[2], 3, "View move from same failed.");
+
+  // Copy from different (view)
+  // 
+  Vector3<TypeParam> owning1_copy_from_view(view1);
+  Vector3<TypeParam> owning2_copy_from_view(view2);
+  is_close_debug(owning1_copy_from_view[0], 1, "View copy from different failed.");
+  is_close_debug(owning1_copy_from_view[1], 2, "View copy from different failed.");
+  is_close_debug(owning1_copy_from_view[2], 3, "View copy from different failed.");
+  is_close_debug(owning2_copy_from_view[0], 1, "View copy from different failed.");
+  is_close_debug(owning2_copy_from_view[1], 2, "View copy from different failed.");
+  is_close_debug(owning2_copy_from_view[2], 3, "View copy from different failed.");
+
+  // Move from different
+  Vector3<TypeParam> owning1_move_from_view(std::move(view2));
+  Vector3<TypeParam> owning2_move_from_view(std::move(view1));
+  is_close_debug(owning1_move_from_view[0], 1, "View move from different failed.");
+  is_close_debug(owning1_move_from_view[1], 2, "View move from different failed.");
+  is_close_debug(owning1_move_from_view[2], 3, "View move from different failed.");
+  is_close_debug(owning2_move_from_view[0], 1, "View move from different failed.");
+  is_close_debug(owning2_move_from_view[1], 2, "View move from different failed.");
+  is_close_debug(owning2_move_from_view[2], 3, "View move from different failed.");
+}
+
+// The factories produce intuitive return types
+TYPED_TEST(VectorSingleTypeTest, ViewFactoryReturnTypeContract) {
+  using T = TypeParam;
+  using Arr = Array<T, 3>;
+
+  // A pointer accessor stays a bare pointer.
+  static_assert(std::is_same_v<decltype(get_vector_view<T, 3>(std::declval<T*>())), AVector<T, 3, T*>>,
+                "A view of a pointer must be the hand-written pointer view.");
+
+  // An lvalue accessor is referenced, and its constness carries into the wrapper.
+  static_assert(std::is_same_v<decltype(get_vector_view<T, 3>(std::declval<Arr&>())),  //
+                               AVector<T, 3, reference_wrapper<Arr>>>,
+                "A view of an lvalue accessor must reference it.");
+  static_assert(std::is_same_v<decltype(get_vector_view<T, 3>(std::declval<const Arr&>())),
+                               AVector<T, 3, reference_wrapper<const Arr>>>,
+                "A view of a const lvalue accessor must reference it as const.");
+
+  // An rvalue accessor has no caller-side object left to reference, so it is owned and the factories coincide.
+  static_assert(std::is_same_v<decltype(get_vector_view<T, 3>(std::declval<Arr>())), Vector3<T>>,
+                "A view of an rvalue accessor must own it.");
+  static_assert(std::is_same_v<decltype(get_vector_view<T, 3>(std::declval<Arr>())),
+                               decltype(get_owning_vector<T, 3>(std::declval<Arr>()))>,
+                "The two factories may only differ for lvalue accessors.");
+
+  // Owning copies the accessor, landing on the default vector type whatever the source constness.
+  static_assert(std::is_same_v<decltype(get_owning_vector<T, 3>(std::declval<Arr&>())), Vector3<T>>,
+                "An owning vector over the default accessor must be the default vector type.");
+  static_assert(std::is_same_v<decltype(get_owning_vector<T, 3>(std::declval<const Arr&>())), Vector3<T>>,
+                "Owning from a const accessor must yield a mutable owner.");
+
+  // These three spellings are the whole codomain, and each is a fixed point of the normalization that produced it.
+  static_assert(std::is_same_v<typename storage<T*>::stored_type, T*>);
+  static_assert(std::is_same_v<typename storage<reference_wrapper<Arr>>::stored_type, reference_wrapper<Arr>>);
+  static_assert(std::is_same_v<typename storage<Arr>::stored_type, Arr>);
 }
 //@}
 

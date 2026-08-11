@@ -34,7 +34,7 @@ namespace mundy {
 namespace {
 
 // A view-backed AABB: its corners alias external storage rather than owning it.
-using Vec3View = AVector<double, 3, double*>;
+using Vec3View = AVector3<double, double*>;
 using ViewAABB = mundy::AABB<double, Vec3View, Vec3View>;
 
 // Compile-time guards for the cross-type operations AABB offers.
@@ -97,10 +97,15 @@ TEST(AABBTest, CrossScalarConstructionAndAssignment) {
 
 // View-backed -> owning assignment deep-copies: mutating the view's storage must not change the owning copy.
 TEST(AABBTest, ViewToOwningAssignmentDeepCopies) {
-  double min_store[3] = {1.0, 2.0, 3.0};
-  double max_store[3] = {4.0, 5.0, 6.0};
-  const ViewAABB view_aabb(mundy::get_vector3_view<double>(&min_store[0]),
-                           mundy::get_vector3_view<double>(&max_store[0]));
+  std::array<double, 3> min_store = {1.0, 2.0, 3.0};
+  std::array<double, 3> max_store = {4.0, 5.0, 6.0};
+
+  Vec3View min_vec = mundy::get_vector3_view<double>(min_store.data());
+  Vec3View max_vec = mundy::get_vector3_view<double>(max_store.data());
+
+  const ViewAABB view_aabb(min_vec, max_vec);
+  ASSERT_DOUBLE_EQ(view_aabb.x_min(), 1.0);
+  ASSERT_DOUBLE_EQ(view_aabb.z_max(), 6.0);
 
   mundy::AABB<double> owning;
   owning = view_aabb;

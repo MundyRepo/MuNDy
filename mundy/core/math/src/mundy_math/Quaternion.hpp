@@ -1117,17 +1117,32 @@ MUNDY_MATH_QUATERNION_TYPE_SPECIALIZATION(Quaternionf, quaternionf, float)
 /// \code
 ///   auto quat = get_quaternion_view<T>(data);
 /// \endcode
-template <typename T, typename Accessor>
+template <typename T, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto get_quaternion_view(Accessor&& data) {
-  auto data_storage = store(std::forward<Accessor>(data));
-  return AQuaternion<T, decltype(data_storage)>(data_storage);
+  using accessor_t = typename storage<Accessor>::stored_type;
+  return AQuaternion<T, accessor_t>(accessor_t(std::forward<Accessor>(data)));
 }
 
-template <typename T, typename Accessor>
+template <typename T, ValidAccessor<T> Accessor>
 KOKKOS_INLINE_FUNCTION constexpr auto get_owning_quaternion(Accessor&& data) {
-  auto data_storage = store(std::move(data));
-  return AQuaternion<T, decltype(data_storage)>(data_storage);
+  using accessor_t = typename storage<std::remove_reference_t<Accessor>>::stored_type;
+  return AQuaternion<T, accessor_t>(accessor_t(std::forward<Accessor>(data)));
 }
+
+#define MUNDY_MATH_GET_QUATERNION_TYPE_SPECIALIZATION(alias, alias_lower, T)         \
+  template <ValidAccessor<T> Accessor>                                               \
+  KOKKOS_INLINE_FUNCTION constexpr auto get_##alias_lower##_view(Accessor&& data) {  \
+    return get_quaternion_view<T>(std::forward<Accessor>(data));                     \
+  }                                                                                  \
+                                                                                     \
+  template <ValidAccessor<T> Accessor>                                               \
+  KOKKOS_INLINE_FUNCTION constexpr auto get_owning_##alias_lower(Accessor&& data) {  \
+    return get_owning_quaternion<T>(std::forward<Accessor>(data));                   \
+  }
+
+/// \brief Accessor helpers for each AQuaternion specialization, mirroring the type specializations above.
+MUNDY_MATH_GET_QUATERNION_TYPE_SPECIALIZATION(Quaterniond, quaterniond, double)
+MUNDY_MATH_GET_QUATERNION_TYPE_SPECIALIZATION(Quaternionf, quaternionf, float)
 //@}
 
 //@}
