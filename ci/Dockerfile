@@ -1,6 +1,6 @@
-FROM docker.io/nvidia/cuda:12.3.2-cudnn9-devel-ubuntu22.04
+FROM docker.io/nvidia/cuda:12.6.3-devel-ubuntu24.04
 
-# Reset the nvidia/cuda base image ENTRYPOINT so Jenkins' `docker run ... cat`
+# Reset the ubuntu base image ENTRYPOINT so Jenkins' `docker run ... cat`
 # keep-alive pattern works without triggering the
 # "container started but didn't run the expected command" error.
 ENTRYPOINT []
@@ -14,27 +14,34 @@ RUN apt-get -y update && \
         curl \
         gpg \
         software-properties-common && \
-    curl -s https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB | gpg --dearmor > /usr/share/keyrings/oneapi-archive-keyring.gpg && \
-    echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main" > /etc/apt/sources.list.d/oneAPI.list && \
     apt-add-repository -y multiverse && \
     apt-add-repository -y universe && \
     apt-get -y update && \
     apt-get -y install --no-install-recommends \
-        intel-oneapi-mkl-devel \
         build-essential \
-        g++ \
-        gfortran \
-        make \
+        autoconf \
+        automake \
         bzip2 \
-        tar \
-        patch \
+        ccache \
         cmake \
-        libeigen3-dev \
-        ninja-build \
+        g++ \
+        gdb \
+        gfortran \
         git \
+        libeigen3-dev \
+        libncurses-dev \
+        libnuma-dev \
+        libtool \
+        make \
+        ninja-build \
+        numactl \
+        openssh-server \
+        patch \
+        perl \
+        pkg-config \
         python3-pip \
         vim \
-        gdb && \
+        tar && \
     apt-get -y autoclean && \
     rm -rf /var/cache/apt/* /var/lib/apt/lists/*
 
@@ -45,7 +52,6 @@ RUN useradd -m -s /bin/bash testuser && \
     chmod 755 /home/testuser
 
 ENV SPACK_ROOT=/home/testuser/spack
-ENV SPACK_ENV_NAME=tril161_cpu
 
 # Make spack available in interactive shells for any user (must be done as root).
 RUN echo "source ${SPACK_ROOT}/share/spack/setup-env.sh" >> /etc/bash.bashrc
@@ -56,16 +62,142 @@ SHELL ["/bin/bash", "-c"]
 USER testuser
 WORKDIR /home/testuser
 
-ARG SPACK_TAG=v1.1.1
+ARG SPACK_TAG=v1.2.2
 RUN git clone --depth=2 --branch ${SPACK_TAG} https://github.com/spack/spack.git ${SPACK_ROOT}
 
+###############################################################
+# CPU Build
+###############################################################
+ENV SPACK_ENV_NAME_CPU=tril1610_cpu
+# Concretize first in case there are errors
 RUN . ${SPACK_ROOT}/share/spack/setup-env.sh && \
-    spack env create ${SPACK_ENV_NAME} && \
-    spack env activate ${SPACK_ENV_NAME} && \
-    spack add trilinos@16.1.0+belos~boost+exodus+hdf5+kokkos+openmp+shared+stk+zoltan+zoltan2 cxxstd=17 %gcc@11.4.0 ^kokkos@4.5.01+hwloc+openmp+serial+shared ^openmpi@4.1.2 target=broadwell && \
-    spack add cmake@3.27.9 target=broadwell && \
-    spack concretize && \
+    spack env create ${SPACK_ENV_NAME_CPU} && \
+    spack env activate ${SPACK_ENV_NAME_CPU} && \
+    spack external find autoconf \
+        automake \
+        bzip2 \
+        cmake \
+        diffutils \
+        gcc \
+        gmake \
+        findutils \
+        libtool \
+        m4 \
+        ncurses \
+        numactl \
+        openssh \
+        perl \
+        pkgconf \
+        python \
+        tar \
+        xz && \
+    spack add trilinos@16.1.0 \
+            +belos \
+            ~boost \
+            +exodus \
+            +hdf5 \
+            +kokkos \
+            +mpi \
+            +openmp \
+            +shared \
+            +stk \
+            +zoltan \
+            +zoltan2 \
+            cxxstd=17 %gcc@13 \
+        ^kokkos@4.5.01 \
+            +hwloc \
+            +openmp \
+            +serial \
+            +shared \
+        ^kokkos-kernels@4.5.01 \
+            +blas \
+            +lapack \
+            +openmp \
+            +serial \
+            +shared \
+        ^openmpi@4.1.8 && \
+    spack concretize -f
+
+# Build in the image only if the concretize succeeded
+RUN . ${SPACK_ROOT}/share/spack/setup-env.sh && \
+    spack env activate ${SPACK_ENV_NAME_CPU} && \
     spack install && \
-    spack load cmake@3.27.9 && \
+    spack gc -y && \
+    chmod -R a+rX ${SPACK_ROOT}
+
+###############################################################
+# GPU Build
+###############################################################
+ENV SPACK_ENV_NAME_GPU=tril1610_sm80_cuda1263
+# Concretize first in case there are errors
+RUN . ${SPACK_ROOT}/share/spack/setup-env.sh && \
+    spack env create ${SPACK_ENV_NAME_GPU} && \
+    spack env activate ${SPACK_ENV_NAME_GPU} && \
+    spack external find autoconf \
+        automake \
+        bzip2 \
+        cmake \
+        cuda \
+        diffutils \
+        gcc \
+        gmake \
+        findutils \
+        libtool \
+        m4 \
+        ncurses \
+        numactl \
+        openssh \
+        perl \
+        pkgconf \
+        python \
+        tar \
+        xz && \
+    spack add trilinos@16.1.0 \
+            +belos \
+            ~boost \
+            +cuda \
+            +cuda_constexpr \
+            +cuda_rdc \
+            +exodus \
+            +hdf5 \
+            +kokkos \
+            +mpi \
+            +openmp \
+            ~shared \
+            +stk \
+            ~uvm \
+            +wrapper \
+            +zoltan \
+            +zoltan2 \
+            cuda_arch=80 cxxstd=17 %gcc@13 \
+        ^kokkos@4.5.01 \
+            +cuda \
+            +cuda_constexpr \
+            +cuda_lambda \
+            +cuda_relocatable_device_code \
+            ~cuda_uvm \
+            +openmp \
+            +serial \
+            ~shared \
+            +wrapper \
+            cuda_arch=80 \
+        ^kokkos-kernels@4.5.01 \
+            +cublas \
+            +cuda \
+            +cusolver \
+            +openmp \
+            +serial \
+            ~shared \
+            cuda_arch=80 \
+        ^openmpi@4.1.8 \
+            +atomics \
+            +cuda \
+            cuda_arch=80 && \
+    spack concretize -f
+
+# Build in the image only if the concretize succeeded
+RUN . ${SPACK_ROOT}/share/spack/setup-env.sh && \
+    spack env activate ${SPACK_ENV_NAME_GPU} && \
+    spack install && \
     spack gc -y && \
     chmod -R a+rX ${SPACK_ROOT}
