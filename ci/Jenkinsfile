@@ -14,6 +14,7 @@ try {
           "MUNDY_DEPS=${WORKSPACE}/mundy_deps_cpu",
           "MUNDY_INSTALL=${WORKSPACE}/mundy_install_cpu",
           "CTEST_BUILD_NAME=jenkins-cpu-release",
+          "SPACK_TRILINOS=tril1610_cpu",
           "OMPI_MCA_rmaps_base_oversubscribe=1"
         ]) {
           stage('cpu deps') {
@@ -37,6 +38,7 @@ try {
           "MUNDY_DEPS=${WORKSPACE}/mundy_deps_gpu",
           "MUNDY_INSTALL=${WORKSPACE}/mundy_install_gpu",
           "CTEST_BUILD_NAME=jenkins-gpu-release-sm80",
+          "SPACK_TRILINOS=tril1610_sm80_cuda1263",
           "OMPI_MCA_rmaps_base_oversubscribe=1"
         ]) {
           stage('gpu deps') {
