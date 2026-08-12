@@ -166,7 +166,7 @@ class SharedScalarComponent : public SharedComponent<ScalarType> {
   using our_t = SharedScalarComponent<ScalarType>;
   using base_t = SharedComponent<ScalarType>;
   using canonical_access = access::scalar<ScalarType>;
-  using view_t = decltype(get_scalar_view<ScalarType>(std::declval<ScalarType*>()));
+  using view_t = decltype(get_scalar<ScalarType>(std::declval<ScalarType*>()));
 
   SharedScalarComponent() = default;
   explicit SharedScalarComponent(ScalarType shared_value) : base_t(std::move(shared_value)) {
@@ -184,7 +184,7 @@ class SharedScalarComponent : public SharedComponent<ScalarType> {
 
   inline decltype(auto) operator()(stk::mesh::Entity entity) const {
     ScalarType& value = base_t::operator()(entity);
-    return get_scalar_view<ScalarType>(&value);
+    return get_scalar<ScalarType>(&value);
   }
 };  // SharedScalarComponent
 
@@ -396,7 +396,7 @@ class NgpSharedScalarComponent : public NgpSharedComponent<ScalarType, NgpMemSpa
   using base_t = NgpSharedComponent<ScalarType, NgpMemSpace>;
   using canonical_access = access::scalar<ScalarType>;
   using view_t =
-      decltype(get_scalar_view<ScalarType>(std::declval<decltype(std::declval<base_t&>().ngp_view().data())>()));
+      decltype(get_scalar<ScalarType>(std::declval<decltype(std::declval<base_t&>().ngp_view().data())>()));
 
   NgpSharedScalarComponent() = default;
   explicit NgpSharedScalarComponent(base_t base_component) : base_t(std::move(base_component)) {
@@ -404,7 +404,7 @@ class NgpSharedScalarComponent : public NgpSharedComponent<ScalarType, NgpMemSpa
 
   KOKKOS_INLINE_FUNCTION
   decltype(auto) operator()(stk::mesh::FastMeshIndex /*entity_index*/) const {
-    return get_scalar_view<ScalarType>(this->ngp_view().data());
+    return get_scalar<ScalarType>(this->ngp_view().data());
   }
 };
 

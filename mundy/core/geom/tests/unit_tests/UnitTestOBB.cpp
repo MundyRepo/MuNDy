@@ -27,16 +27,16 @@
 
 // Mundy
 #include <mundy_geom/primitives.hpp>  // for mundy::OBB, mundy::Point
-#include <mundy_math/Quaternion.hpp>  // for mundy::Quaternion, mundy::get_quaternion_view
-#include <mundy_math/Vector3.hpp>     // for mundy::Vector3, mundy::get_vector3_view
+#include <mundy_math/Quaternion.hpp>  // for mundy::Quaternion, mundy::get_quaternion
+#include <mundy_math/Vector3.hpp>     // for mundy::Vector3, mundy::get_vector3
 
 namespace mundy {
 
 namespace {
 
 // A view-backed OBB: center, orientation, and half-extents alias external storage rather than owning it.
-using ViewVec = decltype(mundy::get_vector3_view<double>(std::declval<double*>()));
-using ViewQuat = decltype(mundy::get_quaternion_view<double>(std::declval<double*>()));
+using ViewVec = decltype(mundy::get_vector3<double>(std::declval<double*>()));
+using ViewQuat = decltype(mundy::get_quaternion<double>(std::declval<double*>()));
 using ViewOBB = mundy::OBB<double, ViewVec, ViewQuat, ViewVec>;
 
 // Compile-time guards for the cross-type operations OBB offers.
@@ -119,9 +119,9 @@ TEST(OBBTest, ViewToOwningAssignmentDeepCopies) {
   double center_store[3] = {1.0, 2.0, 3.0};
   double orient_store[4] = {0.5, 0.5, 0.5, 0.5};
   double he_store[3] = {4.0, 5.0, 6.0};
-  const ViewOBB view_obb(mundy::get_vector3_view<double>(&center_store[0]),
-                         mundy::get_quaternion_view<double>(&orient_store[0]),
-                         mundy::get_vector3_view<double>(&he_store[0]));
+  const ViewOBB view_obb(mundy::get_vector3<double>(&center_store[0]),
+                         mundy::get_quaternion<double>(&orient_store[0]),
+                         mundy::get_vector3<double>(&he_store[0]));
 
   mundy::OBB<double> owning;
   owning = view_obb;
@@ -152,9 +152,9 @@ TEST(OBBTest, CrossTypeMoveConstruction) {
   double center_store[3] = {1.0, 2.0, 3.0};
   double orient_store[4] = {0.5, 0.5, 0.5, 0.5};
   double he_store[3] = {4.0, 5.0, 6.0};
-  const mundy::OBB<double> owning(ViewOBB(mundy::get_vector3_view<double>(&center_store[0]),
-                                          mundy::get_quaternion_view<double>(&orient_store[0]),
-                                          mundy::get_vector3_view<double>(&he_store[0])));
+  const mundy::OBB<double> owning(ViewOBB(mundy::get_vector3<double>(&center_store[0]),
+                                          mundy::get_quaternion<double>(&orient_store[0]),
+                                          mundy::get_vector3<double>(&he_store[0])));
   center_store[1] = 999.0;
   orient_store[1] = -999.0;
   he_store[2] = -999.0;

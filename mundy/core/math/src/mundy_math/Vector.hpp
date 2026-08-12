@@ -230,9 +230,9 @@ class AVector {
         "destination vectors.\n"
         "For example:\n"
         "  SomeAccessor<double> a(/*stuff*/);\n"
-        "  AVector<double, 3, double*> vec2 = get_vector_view<double>(a);\n"
+        "  AVector<double, 3, double*> vec2 = get_vector<double>(a);\n"
         "\n"
-        "This code fails because get_vector_view returns AVector<double, 3, SomeAccessor<double>> and the destination "
+        "This code fails because get_vector returns AVector<double, 3, SomeAccessor<double>> and the destination "
         "is AVector<double, 3, double*>.\n"
         "Often, the solution is to just use `auto` to avoid this type mismatch.");
 
@@ -257,9 +257,9 @@ class AVector {
         "destination vectors.\n"
         "For example:\n"
         "  SomeAccessor<double> a(/*stuff*/);\n"
-        "  AVector<double, 3, double*> vec2 = get_vector_view<double>(a);\n"
+        "  AVector<double, 3, double*> vec2 = get_vector<double>(a);\n"
         "\n"
-        "This code fails because get_vector_view returns AVector<double, 3, SomeAccessor<double>> and the destination "
+        "This code fails because get_vector returns AVector<double, 3, SomeAccessor<double>> and the destination "
         "is AVector<double, 3, double*>.\n"
         "Often, the solution is to just use `auto` to avoid this type mismatch.");
 
@@ -1158,40 +1158,27 @@ static_assert(!ValidScalarType<AVector<double, 3>>, "An AVector is rank-1, so it
 /// \endcode
 /// you can write
 /// \code
-///   auto vec = get_vector_view<T>(data);
+///   auto vec = get_vector<T>(data);
 /// \endcode
+/// \note How the accessor is held follows the argument's value category: an lvalue is referenced, so the referent must
+/// outlive the result; `std::move(x)` or `own(x)` hands it over by value instead. Whether the result views or owns the
+/// underlying data remains a property of the accessor, not of this function.
 template <typename T, size_t N, ValidAccessor<T> Accessor>
-KOKKOS_INLINE_FUNCTION constexpr auto get_vector_view(Accessor&& data) {
-  using accessor_t = typename storage<Accessor>::stored_type;
-  return AVector<T, N, accessor_t>(accessor_t(std::forward<Accessor>(data)));
-}
-
-template <typename T, size_t N, ValidAccessor<T> Accessor>
-KOKKOS_INLINE_FUNCTION constexpr auto get_owning_vector(Accessor&& data) {
-  using accessor_t = typename storage<std::remove_reference_t<Accessor>>::stored_type;
-  return AVector<T, N, accessor_t>(accessor_t(std::forward<Accessor>(data)));
+KOKKOS_INLINE_FUNCTION constexpr auto get_vector(Accessor&& data) {
+  using accessor_t = impl::stored_accessor_t<Accessor>;
+  return AVector<T, N, accessor_t>(accessor_t(impl::unwrap_accessor(std::forward<Accessor>(data))));
 }
 
 #define MUNDY_MATH_GET_VECTOR_SIZE_SPECIALIZATION(alias, alias_lower, N)            \
   template <typename T, ValidAccessor<T> Accessor>                                  \
-  KOKKOS_INLINE_FUNCTION constexpr auto get_##alias_lower##_view(Accessor&& data) { \
-    return get_vector_view<T, N>(std::forward<Accessor>(data));                     \
-  }                                                                                 \
-                                                                                    \
-  template <typename T, ValidAccessor<T> Accessor>                                  \
-  KOKKOS_INLINE_FUNCTION constexpr auto get_owning_##alias_lower(Accessor&& data) { \
-    return get_owning_vector<T, N>(std::forward<Accessor>(data));                   \
+  KOKKOS_INLINE_FUNCTION constexpr auto get_##alias_lower(Accessor&& data) { \
+    return get_vector<T, N>(std::forward<Accessor>(data));                     \
   }
 
 #define MUNDY_MATH_GET_VECTOR_SIZE_AND_TYPE_SPECIALIZATION(alias, alias_lower, T, N) \
   template <ValidAccessor<T> Accessor>                                               \
-  KOKKOS_INLINE_FUNCTION constexpr auto get_##alias_lower##_view(Accessor&& data) {  \
-    return get_vector_view<T, N>(std::forward<Accessor>(data));                      \
-  }                                                                                  \
-                                                                                     \
-  template <ValidAccessor<T> Accessor>                                               \
-  KOKKOS_INLINE_FUNCTION constexpr auto get_owning_##alias_lower(Accessor&& data) {  \
-    return get_owning_vector<T, N>(std::forward<Accessor>(data));                    \
+  KOKKOS_INLINE_FUNCTION constexpr auto get_##alias_lower(Accessor&& data) {  \
+    return get_vector<T, N>(std::forward<Accessor>(data));                      \
   }
 
 MUNDY_MATH_GET_VECTOR_SIZE_SPECIALIZATION(Vector1, vector1, 1)

@@ -731,20 +731,17 @@ KOKKOS_INLINE_FUNCTION T atomic_div_fetch(T* const s, const U& value) {
 ///
 /// \code
 ///   double x = 3.14;
-///   auto s = get_scalar_view<double>(&x);  // views x, does not copy
+///   auto s = get_scalar<double>(&x);  // views x, does not copy
 /// \endcode
+/// \note How the accessor is held follows the argument's value category: an lvalue is referenced, so the referent must
+/// outlive the result; `std::move(x)` or `own(x)` hands it over by value instead. Whether the result views or owns the
+/// underlying data remains a property of the accessor, not of this function.
 template <typename T, ValidAccessor<T> Accessor>
-KOKKOS_INLINE_FUNCTION constexpr auto get_scalar_view(Accessor&& data) {
-  using accessor_t = typename storage<Accessor>::stored_type;
-  return AScalar<T, accessor_t>(accessor_t(std::forward<Accessor>(data)));
+KOKKOS_INLINE_FUNCTION constexpr auto get_scalar(Accessor&& data) {
+  using accessor_t = impl::stored_accessor_t<Accessor>;
+  return AScalar<T, accessor_t>(accessor_t(impl::unwrap_accessor(std::forward<Accessor>(data))));
 }
 
-/// \brief Create an owning AScalar by moving the accessor.
-template <typename T, ValidAccessor<T> Accessor>
-KOKKOS_INLINE_FUNCTION constexpr auto get_owning_scalar(Accessor&& data) {
-  using accessor_t = typename storage<std::remove_reference_t<Accessor>>::stored_type;
-  return AScalar<T, accessor_t>(accessor_t(std::forward<Accessor>(data)));
-}
 //@}
 
 }  // namespace mundy

@@ -777,14 +777,14 @@ TYPED_TEST(QuaternionPairwiseTypeTest, SpecialOperationsEdgeCases) {
 TYPED_TEST(QuaternionSingleTypeTest, Views) {
   // Create a view from a subset of an std::vector<TypeParam>
   std::vector<TypeParam> q1{0, 0, 2, 3, 4, 1, 0, 0};
-  auto q2 = get_quaternion_view<TypeParam>(q1.data() + 2);
+  auto q2 = get_quaternion<TypeParam>(q1.data() + 2);
   is_close_debug(q2, Quaternion<TypeParam>{1, 2, 3, 4}, "View failed.");
   q1 = {1, 2, 10, 11, 12, 4, 13, 14};
   is_close_debug(q2, Quaternion<TypeParam>{4, 10, 11, 12}, "View isn't shallow.");
 
   // Create a view from a TypeParam*
   TypeParam q3[4] = {2, 3, 4, 1};
-  auto q4 = get_quaternion_view<TypeParam>(&q3[0]);
+  auto q4 = get_quaternion<TypeParam>(&q3[0]);
   is_close_debug(q4, Quaternion<TypeParam>{1, 2, 3, 4}, "View failed.");
   q3[0] = 10;
   q3[1] = 11;
@@ -794,7 +794,7 @@ TYPED_TEST(QuaternionSingleTypeTest, Views) {
 
   // Create a const view from an std::vector<TypeParam>
   const std::vector<TypeParam> q5{2, 3, 4, 1};
-  auto q6 = get_quaternion_view<TypeParam>(q5.data());
+  auto q6 = get_quaternion<TypeParam>(q5.data());
   is_close_debug(q6, Quaternion<TypeParam>{1, 2, 3, 4}, "Const view failed.");
 }
 //@}

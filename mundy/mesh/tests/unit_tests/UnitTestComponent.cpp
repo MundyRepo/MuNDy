@@ -369,7 +369,7 @@ static_assert(std::is_same_v<decltype(SharedScalarComponent(Kokkos::View<double*
               "SharedScalarComponent CTAD failed for host view.");
 
 static_assert(std::is_same_v<decltype(SharedScalarComponent(Kokkos::View<double*, Kokkos::HostSpace>("", 1)))::view_t,
-                             decltype(get_scalar_view<double>(std::declval<double*>()))>,
+                             decltype(get_scalar<double>(std::declval<double*>()))>,
               "SharedScalarComponent type CTAD failed for host view.");
 
 TEST_F(UnitTestComponentFixture, SharedComponentSupportsOwnedAndAliasedConstruction) {

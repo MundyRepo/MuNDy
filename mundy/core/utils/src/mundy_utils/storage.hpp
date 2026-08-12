@@ -184,6 +184,17 @@ KOKKOS_FUNCTION constexpr auto store(T&& value) noexcept(noexcept(storage(std::f
   return storage(std::forward<T>(value));
 }
 
+/// \brief Copy a value into a prvalue, leaving the source intact.
+///
+/// Hands a value off by value without declaring the source spent, which is what `std::move` would do. Reach for this
+/// when an interface takes ownership of whatever it is given but the caller still needs its own copy.
+template <class T>
+KOKKOS_FUNCTION constexpr auto own(T&& value) noexcept(
+    std::is_nothrow_constructible_v<std::remove_cvref_t<T>, T&&>)
+    -> std::remove_cvref_t<T> MUNDY_REQUIRES(std::constructible_from<std::remove_cvref_t<T>, T&&>) {
+  return std::forward<T>(value);
+}
+
 }  // namespace mundy
 
 #endif  // MUNDY_UTILS_STORAGE_HPP_

@@ -48,17 +48,17 @@ TEST(DistanceViews, AcceptsViewBackedPointLineSegmentAndSphere) {
   double sphere_center_data[3] = {3.0, 0.0, 0.0};
   double sphere2_center_data[3] = {5.0, 0.0, 0.0};
 
-  auto origin = get_vector3_view<double>(origin_data);
-  auto point_x = get_vector3_view<double>(point_x_data);
-  auto point_above_segment = get_vector3_view<double>(point_above_segment_data);
-  auto dir_y = get_vector3_view<double>(dir_y_data);
-  auto dir_z = get_vector3_view<double>(dir_z_data);
-  auto line2_center = get_vector3_view<double>(line2_center_data);
-  auto segment_end = get_vector3_view<double>(segment_end_data);
-  auto segment2_start = get_vector3_view<double>(segment2_start_data);
-  auto segment2_end = get_vector3_view<double>(segment2_end_data);
-  auto sphere_center = get_vector3_view<double>(sphere_center_data);
-  auto sphere2_center = get_vector3_view<double>(sphere2_center_data);
+  auto origin = get_vector3<double>(origin_data);
+  auto point_x = get_vector3<double>(point_x_data);
+  auto point_above_segment = get_vector3<double>(point_above_segment_data);
+  auto dir_y = get_vector3<double>(dir_y_data);
+  auto dir_z = get_vector3<double>(dir_z_data);
+  auto line2_center = get_vector3<double>(line2_center_data);
+  auto segment_end = get_vector3<double>(segment_end_data);
+  auto segment2_start = get_vector3<double>(segment2_start_data);
+  auto segment2_end = get_vector3<double>(segment2_end_data);
+  auto sphere_center = get_vector3<double>(sphere_center_data);
+  auto sphere2_center = get_vector3<double>(sphere2_center_data);
 
   Line<double, decltype(origin)> line_y{origin, dir_y};
   Line<double, decltype(line2_center)> line_z{line2_center, dir_z};
@@ -96,8 +96,8 @@ TEST(DistanceViews, AcceptsViewBackedPointLineSegmentAndSphere) {
   OrthorhombicMetric<AXIS_XYZ, double> periodic_metric{Vector3d{10.0, 10.0, 10.0}};
   double near_right_data[3] = {9.8, 0.0, 0.0};
   double near_left_data[3] = {0.2, 0.0, 0.0};
-  auto near_right = get_vector3_view<double>(near_right_data);
-  auto near_left = get_vector3_view<double>(near_left_data);
+  auto near_right = get_vector3<double>(near_right_data);
+  auto near_left = get_vector3<double>(near_left_data);
   const auto periodic_sep = periodic_metric.sep(near_right, near_left);
   EXPECT_NEAR(periodic_sep[0], 0.4, tol);
 }
@@ -113,13 +113,13 @@ TEST(DistanceViews, AcceptsViewBackedEllipsoidAndCircle) {
   double quat0_data[4] = {0.0, 0.0, 0.0, 1.0};
   double quat1_data[4] = {0.0, 0.0, 0.0, 1.0};
 
-  auto point = get_vector3_view<double>(point_data);
-  auto center0 = get_vector3_view<double>(center0_data);
-  auto center1 = get_vector3_view<double>(center1_data);
-  auto radii0 = get_vector3_view<double>(radii0_data);
-  auto radii1 = get_vector3_view<double>(radii1_data);
-  auto quat0 = get_quaternion_view<double>(quat0_data);
-  auto quat1 = get_quaternion_view<double>(quat1_data);
+  auto point = get_vector3<double>(point_data);
+  auto center0 = get_vector3<double>(center0_data);
+  auto center1 = get_vector3<double>(center1_data);
+  auto radii0 = get_vector3<double>(radii0_data);
+  auto radii1 = get_vector3<double>(radii1_data);
+  auto quat0 = get_quaternion<double>(quat0_data);
+  auto quat1 = get_quaternion<double>(quat1_data);
 
   Ellipsoid<double, decltype(center0), decltype(quat0)> ellipsoid0{center0, quat0, radii0};
   Ellipsoid<double, decltype(center1), decltype(quat1)> ellipsoid1{center1, quat1, radii1};

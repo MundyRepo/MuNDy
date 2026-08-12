@@ -72,8 +72,8 @@ void test_vector3_blas(const double alpha, const View1D& x, const double beta, V
   const size_t num_entities = x.extent(0) / 3;
   Kokkos::parallel_for(
       "test_vector3_blas", Kokkos::RangePolicy<>(0, num_entities), KOKKOS_LAMBDA(const size_t i) {
-        const auto x_view = mundy::get_vector_view<double, 3>(x.data() + 3 * i);
-        auto y_view = mundy::get_vector_view<double, 3>(y.data() + 3 * i);
+        const auto x_view = mundy::get_vector<double, 3>(x.data() + 3 * i);
+        auto y_view = mundy::get_vector<double, 3>(y.data() + 3 * i);
         y_view = alpha * x_view + beta * y_view;
       });
   Kokkos::fence();                          // Ensure all operations are complete before returning
@@ -123,8 +123,8 @@ void test_matrix3_blas(const double alpha, const View1D& x, const double beta, V
   const size_t num_entities = x.extent(0) / 9;
   Kokkos::parallel_for(
       "test_matrix3_blas", Kokkos::RangePolicy<>(0, num_entities), KOKKOS_LAMBDA(const size_t i) {
-        const auto x_view = mundy::get_matrix_view<double, 3, 3>(x.data() + 9 * i);
-        auto y_view = mundy::get_matrix_view<double, 3, 3>(y.data() + 9 * i);
+        const auto x_view = mundy::get_matrix<double, 3, 3>(x.data() + 9 * i);
+        auto y_view = mundy::get_matrix<double, 3, 3>(y.data() + 9 * i);
         y_view = alpha * x_view + beta * y_view;
       });
   Kokkos::fence();                          // Ensure all operations are complete before returning
@@ -200,8 +200,8 @@ void test_quaternion_blas(const double alpha, const View1D& x, const double beta
   const size_t num_entities = x.extent(0) / 4;
   Kokkos::parallel_for(
       "test_quaternion_blas", Kokkos::RangePolicy<>(0, num_entities), KOKKOS_LAMBDA(const size_t i) {
-        const auto x_view = mundy::get_quaternion_view<double>(x.data() + 4 * i);
-        auto y_view = mundy::get_quaternion_view<double>(y.data() + 4 * i);
+        const auto x_view = mundy::get_quaternion<double>(x.data() + 4 * i);
+        auto y_view = mundy::get_quaternion<double>(y.data() + 4 * i);
         y_view = alpha * x_view + beta * y_view;
       });
   Kokkos::fence();                          // Ensure all operations are complete before returning
@@ -255,9 +255,9 @@ void test_mat_vec(const View1D& m, const View1D& v, View1D& result) {
   const size_t num_entities = m.extent(0) / 9;
   Kokkos::parallel_for(
       "test_mat_vec", Kokkos::RangePolicy<>(0, num_entities), KOKKOS_LAMBDA(const size_t i) {
-        const auto m_view = mundy::get_matrix_view<double, 3, 3>(m.data() + 9 * i);
-        const auto v_view = mundy::get_vector_view<double, 3>(v.data() + 3 * i);
-        auto result_view = mundy::get_vector_view<double, 3>(result.data() + 3 * i);
+        const auto m_view = mundy::get_matrix<double, 3, 3>(m.data() + 9 * i);
+        const auto v_view = mundy::get_vector<double, 3>(v.data() + 3 * i);
+        auto result_view = mundy::get_vector<double, 3>(result.data() + 3 * i);
         result_view = m_view * v_view;
       });
   Kokkos::fence();                               // Ensure all operations are complete before returning
@@ -313,9 +313,9 @@ void test_complex_vector_ops(const View1D& v1, const View1D& v2, View1D& v3) {
   const size_t num_entities = v1.extent(0) / 3;
   Kokkos::parallel_for(
       "test_complex_vector_ops", Kokkos::RangePolicy<>(0, num_entities), KOKKOS_LAMBDA(const size_t i) {
-        const auto v1_view = mundy::get_vector_view<double, 3>(v1.data() + 3 * i);
-        const auto v2_view = mundy::get_vector_view<double, 3>(v2.data() + 3 * i);
-        auto v3_view = mundy::get_vector_view<double, 3>(v3.data() + 3 * i);
+        const auto v1_view = mundy::get_vector<double, 3>(v1.data() + 3 * i);
+        const auto v2_view = mundy::get_vector<double, 3>(v2.data() + 3 * i);
+        auto v3_view = mundy::get_vector<double, 3>(v3.data() + 3 * i);
         v3_view = mundy::cross(v2_view, mundy::dot(v1_view, v2_view) * v1_view);
       });
   Kokkos::fence();                           // Ensure all operations are complete before returning
@@ -369,9 +369,9 @@ void test_quaternion_rotation(const View1D& q1, const View1D& q2, View1D& q3) {
   const size_t num_entities = q1.extent(0) / 4;
   Kokkos::parallel_for(
       "test_quaternion_rotation", Kokkos::RangePolicy<>(0, num_entities), KOKKOS_LAMBDA(const size_t i) {
-        const auto q1_view = mundy::get_quaternion_view<double>(q1.data() + 4 * i);
-        const auto q2_view = mundy::get_quaternion_view<double>(q2.data() + 4 * i);
-        auto q3_view = mundy::get_quaternion_view<double>(q3.data() + 4 * i);
+        const auto q1_view = mundy::get_quaternion<double>(q1.data() + 4 * i);
+        const auto q2_view = mundy::get_quaternion<double>(q2.data() + 4 * i);
+        auto q3_view = mundy::get_quaternion<double>(q3.data() + 4 * i);
         q3_view = q1_view * q2_view;
       });
   Kokkos::fence();                           // Ensure all operations are complete before returning

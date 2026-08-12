@@ -184,8 +184,8 @@ void bench_view_methods(ankerl::nanobench::Bench& bench, const std::vector<doubl
 template <int N>
 void bench_mundymath_method(ankerl::nanobench::Bench& bench, const std::vector<double>& a,
                             const std::vector<double>& b) {
-  std::vector<double> a_local(a);  // get_matrix_view aliases mutable storage
-  auto A = mundy::get_matrix_view<double, N, N>(a_local.data());
+  std::vector<double> a_local(a);  // get_matrix aliases mutable storage
+  auto A = mundy::get_matrix<double, N, N>(a_local.data());
   mundy::Vector<double, N> bvec;
   for (int i = 0; i < N; ++i) {
     bvec[i] = b[static_cast<size_t>(i)];

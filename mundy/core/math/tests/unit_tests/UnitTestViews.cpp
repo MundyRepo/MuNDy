@@ -33,17 +33,17 @@
 
 // Mundy libs
 #include <mundy_math/Array.hpp>           // for mundy::Array
-#include <mundy_math/MaskedView.hpp>      // for mundy::MaskedView
-#include <mundy_math/ShiftedView.hpp>     // for mundy::ShiftedView
-#include <mundy_math/StridedView.hpp>     // for mundy::StridedView
+#include <mundy_math/MaskedAccessor.hpp>      // for mundy::MaskedAccessor
+#include <mundy_math/ShiftedAccessor.hpp>     // for mundy::ShiftedAccessor
+#include <mundy_math/StridedAccessor.hpp>     // for mundy::StridedAccessor
 #include <mundy_math/Tolerance.hpp>       // for mundy::get_relaxed_tolerance
-#include <mundy_math/TransposedView.hpp>  // for mundy::TransposedView
+#include <mundy_math/TransposedAccessor.hpp>  // for mundy::TransposedAccessor
 
 namespace mundy {
 
 namespace {
 
-TEST(Views, ShiftedView) {
+TEST(Views, ShiftedAccessor) {
   auto run_test_nonconst_size_3 = [](auto& shifted_data, const auto& original_data) {
     ASSERT_EQ(shifted_data[0], original_data[1]);
     ASSERT_EQ(shifted_data[1], original_data[2]);
@@ -63,22 +63,22 @@ TEST(Views, ShiftedView) {
   // Reference view
   mundy::Array<double, 3> data1{1.0, 2.0, 3.0};
   constexpr size_t shift = 1;
-  auto shifted_data = mundy::get_shifted_view<double, shift>(data1);
+  auto shifted_data = mundy::get_shifted_accessor<double, shift>(data1);
   run_test_nonconst_size_3(shifted_data, data1);
 
   // Pointer view
   mundy::Array<double, 3> data2{1.0, 2.0, 3.0};
-  auto shifted_data_ptr = mundy::get_shifted_view<double, shift>(data2.data());
+  auto shifted_data_ptr = mundy::get_shifted_accessor<double, shift>(data2.data());
   run_test_nonconst_size_3(shifted_data_ptr, data2);
 
   // Const reference view
   const mundy::Array<double, 3> data3{1.0, 2.0, 3.0};
-  auto shifted_data_const = mundy::get_shifted_view<double, shift>(data3);
+  auto shifted_data_const = mundy::get_shifted_accessor<double, shift>(data3);
   run_test_const_size_3(shifted_data_const, data3.data());
 
   // Const pointer view
   const mundy::Array<double, 3> data4{1.0, 2.0, 3.0};
-  auto shifted_data_const_ptr = mundy::get_shifted_view<double, shift>(data4.data());
+  auto shifted_data_const_ptr = mundy::get_shifted_accessor<double, shift>(data4.data());
   run_test_const_size_3(shifted_data_const_ptr, data4.data());
 }
 
@@ -86,20 +86,20 @@ TEST(Views, OwningShiftedAccessor) {
   auto create_owning_shifted_accessor_delete_original_data = []() {
     mundy::Array<double, 3> data{1.0, 2.0, 3.0};
     constexpr size_t shift = 1;
-    return mundy::get_owning_shifted_accessor<double, shift>(data);
+    return mundy::get_shifted_accessor<double, shift>(std::move(data));
   };
 
   auto create_owning_shifted_accessor_delete_original_data_const = []() {
     mundy::Array<double, 3> data{1.0, 2.0, 3.0};
     constexpr size_t shift = 1;
-    return mundy::get_owning_shifted_accessor<double, shift>(data);
+    return mundy::get_shifted_accessor<double, shift>(std::move(data));
   };
 
   auto create_owning_shifted_accessor_of_a_shifted_accessor_delete_original = []() {
     static mundy::Array<double, 3> data{1.0, 2.0, 3.0};
     constexpr size_t shift = 1;
-    auto shifted_view = mundy::get_shifted_view<double, shift>(data);
-    auto shifted_shifted_accessor = mundy::get_owning_shifted_accessor<double, shift>(shifted_view);
+    auto shifted_accessor = mundy::get_shifted_accessor<double, shift>(data);
+    auto shifted_shifted_accessor = mundy::get_shifted_accessor<double, shift>(std::move(shifted_accessor));
     return shifted_shifted_accessor;
   };
 
@@ -118,7 +118,7 @@ TEST(Views, OwningShiftedAccessor) {
   EXPECT_EQ(shifted_shifted_data[0], 3.0);
 }
 
-TEST(Views, StridedView) {
+TEST(Views, StridedAccessor) {
   auto run_test_nonconst_size_6 = [](auto& strided_data, const auto& original_data) {
     ASSERT_EQ(strided_data[0], original_data[0]);
     ASSERT_EQ(strided_data[1], original_data[2]);
@@ -142,22 +142,22 @@ TEST(Views, StridedView) {
   // Reference view
   mundy::Array<double, 6> data1{1.0, 2.0, 3.0, 4.0, 5.0, 6.0};
   constexpr size_t stride = 2;
-  auto strided_data = mundy::get_strided_view<double, stride>(data1);
+  auto strided_data = mundy::get_strided_accessor<double, stride>(data1);
   run_test_nonconst_size_6(strided_data, data1);
 
   // Pointer view
   mundy::Array<double, 6> data2{1.0, 2.0, 3.0, 4.0, 5.0, 6.0};
-  auto strided_data_ptr = mundy::get_strided_view<double, stride>(data2.data());
+  auto strided_data_ptr = mundy::get_strided_accessor<double, stride>(data2.data());
   run_test_nonconst_size_6(strided_data_ptr, data2);
 
   // Const reference view
   const mundy::Array<double, 6> data3{1.0, 2.0, 3.0, 4.0, 5.0, 6.0};
-  auto strided_data_const = mundy::get_strided_view<double, stride>(data3);
+  auto strided_data_const = mundy::get_strided_accessor<double, stride>(data3);
   run_test_const_size_6(strided_data_const, data3.data());
 
   // Const pointer view
   const mundy::Array<double, 6> data4{1.0, 2.0, 3.0, 4.0, 5.0, 6.0};
-  auto strided_data_const_ptr = mundy::get_strided_view<double, stride>(data4.data());
+  auto strided_data_const_ptr = mundy::get_strided_accessor<double, stride>(data4.data());
   run_test_const_size_6(strided_data_const_ptr, data4.data());
 }
 
@@ -165,13 +165,13 @@ TEST(Views, OwningStridedAccessor) {
   auto create_owning_strided_accessor_delete_original_data = []() {
     mundy::Array<double, 6> data{1.0, 2.0, 3.0, 4.0, 5.0, 6.0};
     constexpr size_t stride = 2;
-    return mundy::get_owning_strided_accessor<double, stride>(data);
+    return mundy::get_strided_accessor<double, stride>(std::move(data));
   };
 
   auto create_owning_strided_accessor_delete_original_data_const = []() {
     mundy::Array<double, 6> data{1.0, 2.0, 3.0, 4.0, 5.0, 6.0};
     constexpr size_t stride = 2;
-    return mundy::get_owning_strided_accessor<double, stride>(data);
+    return mundy::get_strided_accessor<double, stride>(std::move(data));
   };
 
   // Reference view
@@ -187,7 +187,7 @@ TEST(Views, OwningStridedAccessor) {
   EXPECT_EQ(strided_data_const[2], 5.0);
 }
 
-TEST(Views, TransposedView) {
+TEST(Views, TransposedAccessor) {
   auto run_test_nonconst_size_3x3 = [](auto& transposed_data, const auto& original_data) {
     ASSERT_EQ(transposed_data[0], original_data[0]);
     ASSERT_EQ(transposed_data[1], original_data[3]);
@@ -235,34 +235,34 @@ TEST(Views, TransposedView) {
 
   // Reference view
   mundy::Array<double, 9> data1{1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0};
-  auto transposed_data = mundy::get_transposed_view<double, 3, 3>(data1);
+  auto transposed_data = mundy::get_transposed_accessor<double, 3, 3>(data1);
   run_test_nonconst_size_3x3(transposed_data, data1);
 
   // Pointer view
   mundy::Array<double, 9> data2{1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0};
-  auto transposed_data_ptr = mundy::get_transposed_view<double, 3, 3>(data2.data());
+  auto transposed_data_ptr = mundy::get_transposed_accessor<double, 3, 3>(data2.data());
   run_test_nonconst_size_3x3(transposed_data_ptr, data2);
 
   // Const reference view
   const mundy::Array<double, 9> data3{1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0};
-  auto transposed_data_const = mundy::get_transposed_view<double, 3, 3>(data3);
+  auto transposed_data_const = mundy::get_transposed_accessor<double, 3, 3>(data3);
   run_test_const_size_3x3(transposed_data_const, data3.data());
 
   // Const pointer view
   const mundy::Array<double, 9> data4{1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0};
-  auto transposed_data_const_ptr = mundy::get_transposed_view<double, 3, 3>(data4.data());
+  auto transposed_data_const_ptr = mundy::get_transposed_accessor<double, 3, 3>(data4.data());
   run_test_const_size_3x3(transposed_data_const_ptr, data4.data());
 }
 
 TEST(Views, OwningTransposedAccessor) {
   auto create_owning_transposed_accessor_delete_original_data = []() {
     mundy::Array<double, 9> data{1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0};
-    return mundy::get_owning_transposed_accessor<double, 3, 3>(data);
+    return mundy::get_transposed_accessor<double, 3, 3>(std::move(data));
   };
 
   auto create_owning_transposed_accessor_delete_original_data_const = []() {
     mundy::Array<double, 9> data{1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0};
-    return mundy::get_owning_transposed_accessor<double, 3, 3>(data);
+    return mundy::get_transposed_accessor<double, 3, 3>(std::move(data));
   };
 
   // Reference view
@@ -294,17 +294,17 @@ TEST(Views, MixedViews) {
   auto create_owning_shifted_accessor_of_a_shifted_accessor_delete_original = []() {
     static mundy::Array<double, 3> data{1.0, 2.0, 3.0};
     constexpr size_t shift = 1;
-    auto shifted_view = mundy::get_shifted_view<double, shift>(data);
-    auto shifted_shifted_accessor = mundy::get_owning_shifted_accessor<double, shift>(shifted_view);
+    auto shifted_accessor = mundy::get_shifted_accessor<double, shift>(data);
+    auto shifted_shifted_accessor = mundy::get_shifted_accessor<double, shift>(std::move(shifted_accessor));
     return shifted_shifted_accessor;
   };
 
   auto create_owning_stided_accessor_of_a_shifted_accessor_delete_original = []() {
     static mundy::Array<double, 9> data{1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0};
     constexpr size_t shift = 1;
-    auto shifted_view = mundy::get_shifted_view<double, shift>(data);
+    auto shifted_accessor = mundy::get_shifted_accessor<double, shift>(data);
     constexpr size_t stride = 3;
-    auto strided_shifted_accessor = mundy::get_owning_strided_accessor<double, stride>(shifted_view);
+    auto strided_shifted_accessor = mundy::get_strided_accessor<double, stride>(std::move(shifted_accessor));
     return strided_shifted_accessor;
   };
 

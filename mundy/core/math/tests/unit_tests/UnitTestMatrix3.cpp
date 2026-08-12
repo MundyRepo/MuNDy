@@ -375,7 +375,7 @@ TYPED_TEST(Matrix3SingleTypeTest, ColumnViewAccessors) {
 
 // Tranposed view
 
-TYPED_TEST(Matrix3SingleTypeTest, TransposedView) {
+TYPED_TEST(Matrix3SingleTypeTest, TransposedAccessor) {
   Matrix3<TypeParam> m(1, 2, 3, 4, 5, 6, -7, -8, -9);
 
   // Transposed view
@@ -1103,7 +1103,7 @@ TYPED_TEST(Matrix3SingleTypeTest, AtomicFetchOpTestAddSubMulDiv1D) {
 TYPED_TEST(Matrix3SingleTypeTest, Views) {
   // Create a view from a subset of an std::vector<TypeParam>
   std::vector<TypeParam> m1{0, 0, 1, 2, 3, 4, 5, 6, -7, -8, -9, 0, 0};
-  auto m2 = get_matrix3_view<TypeParam>(m1.data() + 2);
+  auto m2 = get_matrix3<TypeParam>(m1.data() + 2);
   is_close_debug(m2, Matrix3<TypeParam>{1, 2, 3, 4, 5, 6, -7, -8, -9}, "View failed.");
   auto ptr_before = m1.data();
   m1 = {1, 2, 4, 5, 6, -7, -8, -9, 10, 11, 12, 13, 14};
@@ -1113,7 +1113,7 @@ TYPED_TEST(Matrix3SingleTypeTest, Views) {
 
   // Create a view from a TypeParam*
   TypeParam m3[9] = {1, 2, 3, 4, 5, 6, -7, -8, -9};
-  auto m4 = get_matrix3_view<TypeParam>(&m3[0]);
+  auto m4 = get_matrix3<TypeParam>(&m3[0]);
   is_close_debug(m4, Matrix3<TypeParam>{1, 2, 3, 4, 5, 6, -7, -8, -9}, "View failed.");
   m3[0] = 4;
   m3[1] = 5;
@@ -1128,7 +1128,7 @@ TYPED_TEST(Matrix3SingleTypeTest, Views) {
 
   // Create a const view from an std::vector<TypeParam>
   const std::vector<TypeParam> m5{1, 2, 3, 4, 5, 6, -7, -8, -9};
-  auto m6 = get_matrix3_view<TypeParam>(m5.data());
+  auto m6 = get_matrix3<TypeParam>(m5.data());
   is_close_debug(m6, Matrix3<TypeParam>{1, 2, 3, 4, 5, 6, -7, -8, -9}, "Const view failed.");
 }
 //@}

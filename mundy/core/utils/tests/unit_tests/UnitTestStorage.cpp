@@ -99,6 +99,9 @@ struct MoveOnly {
 template <class T>
 concept can_store = requires(T&& t) { ::mundy::store(static_cast<T&&>(t)); };
 
+template <class T>
+concept can_own = requires(T&& t) { ::mundy::own(static_cast<T&&>(t)); };
+
 using wrapper_t = ::mundy::reference_wrapper<int>;
 
 // =============================================================================
@@ -178,6 +181,22 @@ static_assert(std::is_same_v<typename decltype(store(std::declval<MoveOnly&>()))
               "A move-only lvalue should be referenced rather than copied.");
 static_assert(!std::constructible_from<storage<int&>, int&&>,
               "A reference storage must not bind a temporary.");
+
+// own() decays its argument to a prvalue of the value type, whatever the argument's reference-ness or constness.
+static_assert(std::is_same_v<decltype(own(std::declval<int&>())), int>, "own(lvalue) should yield a prvalue.");
+static_assert(std::is_same_v<decltype(own(std::declval<const int&>())), int>, "own should strip const.");
+static_assert(std::is_same_v<decltype(own(std::declval<int>())), int>, "own of an rvalue is still a value.");
+static_assert(std::is_same_v<decltype(own(std::declval<Tracked&>())), Tracked>,
+              "own of a class lvalue should yield that class by value.");
+static_assert(std::is_same_v<decltype(own(std::declval<const Tracked&>())), Tracked>,
+              "own of a const class lvalue should yield a mutable value.");
+static_assert(can_own<Tracked&> && can_own<Tracked>, "own should accept a copyable class either way.");
+static_assert(can_own<MoveOnly>, "own of a move-only rvalue should move.");
+static_assert(!can_own<MoveOnly&>, "own must reject a move-only lvalue rather than fail inside its body.");
+
+// Consequently a by-value storage sees own(lvalue) exactly as it sees an rvalue.
+static_assert(std::is_same_v<decltype(store(own(std::declval<Tracked&>()))), storage<Tracked>>,
+              "store(own(lvalue)) should own by value, exactly as store(rvalue) does.");
 
 // =============================================================================
 // Runtime tests
@@ -270,6 +289,23 @@ TEST(Storage, ConstructionCost) {
   EXPECT_EQ(Tracked::copies, 0) << "Referencing an lvalue should not construct anything.";
   EXPECT_EQ(Tracked::moves, 0);
   EXPECT_EQ(&referenced.get(), &ref_source);
+
+  // own() buys a by-value storage from an lvalue without spending the source: one copy out to the prvalue, then one
+  // move into the storage.
+  Tracked::reset();
+  Tracked own_source(11);
+  auto from_own = store(own(own_source));
+  EXPECT_EQ(Tracked::copies, 1) << "own(lvalue) should copy exactly once.";
+  EXPECT_EQ(Tracked::moves, 1) << "The resulting prvalue should be moved into the storage.";
+  EXPECT_EQ(own_source.value, 11) << "own must leave the source intact.";
+  EXPECT_EQ(from_own.get().value, 11);
+
+  Tracked::reset();
+  Tracked own_move_source(12);
+  auto from_own_move = store(own(std::move(own_move_source)));
+  EXPECT_EQ(Tracked::copies, 0) << "own(rvalue) should not copy.";
+  EXPECT_EQ(Tracked::moves, 2) << "own(rvalue) should move out and then into the storage.";
+  EXPECT_EQ(from_own_move.get().value, 12);
 }
 
 TEST(Storage, MoveOnly) {

@@ -27,7 +27,7 @@
 
 // Mundy
 #include <mundy_geom/primitives.hpp>  // for mundy::AABB, mundy::Point
-#include <mundy_math/Vector3.hpp>     // for mundy::Vector3, mundy::get_vector3_view
+#include <mundy_math/Vector3.hpp>     // for mundy::Vector3, mundy::get_vector3
 
 namespace mundy {
 
@@ -100,8 +100,8 @@ TEST(AABBTest, ViewToOwningAssignmentDeepCopies) {
   std::array<double, 3> min_store = {1.0, 2.0, 3.0};
   std::array<double, 3> max_store = {4.0, 5.0, 6.0};
 
-  Vec3View min_vec = mundy::get_vector3_view<double>(min_store.data());
-  Vec3View max_vec = mundy::get_vector3_view<double>(max_store.data());
+  Vec3View min_vec = mundy::get_vector3<double>(min_store.data());
+  Vec3View max_vec = mundy::get_vector3<double>(max_store.data());
 
   const ViewAABB view_aabb(min_vec, max_vec);
   ASSERT_DOUBLE_EQ(view_aabb.x_min(), 1.0);

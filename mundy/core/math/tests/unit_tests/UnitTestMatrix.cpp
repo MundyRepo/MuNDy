@@ -300,7 +300,7 @@ TYPED_TEST(NonSquareMatrixShapeTest, SettersViewsMinorAndHelperOwnership) {
   for (size_t i = 0; i < data.size(); ++i) {
     data[i] = static_cast<T>(i + 1);
   }
-  auto view = get_matrix_view<T, R, C>(data.data());
+  auto view = get_matrix<T, R, C>(data.data());
   auto owning = Matrix<T, R, C>(view);
   data[0] = T(777);
   EXPECT_TRUE(is_approx_close(view(0, 0), T(777)));
