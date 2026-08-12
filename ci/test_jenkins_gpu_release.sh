@@ -42,6 +42,7 @@ echo "NVCC_WRAPPER_DEFAULT_COMPILER ${NVCC_WRAPPER_DEFAULT_COMPILER}"
 # capture the driver's exit code and propagate it at the very end. errexit stays
 # off for the rest of the script so a failure in the conversion step cannot mask
 # the driver's real exit code.
+# Chris bumped the file here
 set +e
 ctest -V -S cmake/ctest/general_gcc/ctest_mpi_openmp_gpu_release.cmake
 ctest_rc=$?
