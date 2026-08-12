@@ -62,8 +62,24 @@ SHELL ["/bin/bash", "-c"]
 USER testuser
 WORKDIR /home/testuser
 
-ARG SPACK_TAG=v1.2.2
-RUN git clone --depth=2 --branch ${SPACK_TAG} https://github.com/spack/spack.git ${SPACK_ROOT}
+# ARG SPACK_TAG=v1.2.2
+# RUN git clone --depth=2 --branch ${SPACK_TAG} https://github.com/spack/spack.git ${SPACK_ROOT}
+RUN mkdir -p ${SPACK_ROOT} && cd ${SPACK_ROOT} && \
+    git init -q && \
+    git remote add origin https://github.com/spack/spack.git && \
+    git fetch --depth=1 origin 24ecb489befa7d8ddf4ac6163c3d30819ad85915 && \
+    git checkout -q FETCH_HEAD
+
+# Pin the package recipes
+RUN printf '%s\n' \
+      'repos:' \
+      '  builtin:' \
+      '    git: https://github.com/spack/spack-packages.git' \
+      '    commit: 1a79dd1ae9ff26bd0dda5a6fdc10d95df46c6ff0' \
+      "    destination: ${SPACK_ROOT}/spack-packages" \
+      > ${SPACK_ROOT}/etc/spack/repos.yaml && \
+    . ${SPACK_ROOT}/share/spack/setup-env.sh && \
+    spack repo list
 
 ###############################################################
 # CPU Build
@@ -98,6 +114,7 @@ RUN . ${SPACK_ROOT}/share/spack/setup-env.sh && \
             +exodus \
             +hdf5 \
             +kokkos \
+            ~gtest \
             +mpi \
             +openmp \
             +shared \
@@ -162,6 +179,7 @@ RUN . ${SPACK_ROOT}/share/spack/setup-env.sh && \
             +cuda_rdc \
             +exodus \
             +hdf5 \
+            ~gtest \
             +kokkos \
             +mpi \
             +openmp \
