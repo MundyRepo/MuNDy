@@ -1,8 +1,8 @@
 #!/bin/bash
-# Prepare the dependencies for the CPU release build.
+# Prepare the dependencies for the GPU release build.
 #
 # The actual configure/build/test/submit-to-CDash is driven by the TriBITS
-# CTest -S script in ci/test_jenkins_cpu_release.sh, so this stage only needs
+# CTest -S script in ci/test_jenkins_gpu_release.sh, so this stage only needs
 # to install the Mundy dependency TPLs and check out the submodules.
 set -euo pipefail
 . ${SPACK_ROOT}/share/spack/setup-env.sh
