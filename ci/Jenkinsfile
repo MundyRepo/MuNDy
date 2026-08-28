@@ -1,33 +1,55 @@
 properties([
-  disableConcurrentBuilds(),
+  disableConcurrentBuilds(abortPrevious: true),
   buildDiscarder(logRotator(numToKeepStr: '10', daysToKeepStr: '30'))
 ])
 
 try {
   timeout(time: 6, unit: 'HOURS') {
-    buildPod(context: 'ci') {
-      withEnv([
-        "HOME=${WORKSPACE}",
-        "MUNDY_DEPS=${WORKSPACE}/mundy_deps",
-        "MUNDY_INSTALL=${WORKSPACE}/mundy_install",
-        "SPACK_ROOT=/home/testuser/spack",
-        "SPACK_TRILINOS=tril161_cpu",
-        "OMPI_MCA_rmaps_base_oversubscribe=1"
-      ]) {
-        stage('Dependencies') {
-            echo 'Installing dependencies inside the container'
+    buildImage(context: 'ci')
+    parallel cpu: {
+      runPod(context: 'ci', cpus: 8) {
+        withEnv([
+          "HOME=${WORKSPACE}",
+          "LC_ALL=C",
+          "MUNDY_DEPS=${WORKSPACE}/mundy_deps_cpu",
+          "MUNDY_INSTALL=${WORKSPACE}/mundy_install_cpu",
+          "CTEST_BUILD_NAME=jenkins-cpu-release",
+          "SPACK_TRILINOS=tril1610_cpu",
+          "OMPI_MCA_rmaps_base_oversubscribe=1"
+        ]) {
+          stage('cpu deps') {
             sh './ci/build_jenkins_cpu_release.sh'
+          }
+          stage('cpu test') {
+            try {
+              sh './ci/test_jenkins_cpu_release.sh'
+            } finally {
+              junit allowEmptyResults: true, testResults: 'build/ctest_results.xml'
+            }
+          }
         }
-        stage('Test') {
-          // Drives the TriBITS CTest -S script: configures, builds, tests, and
-          // submits per-package results to CDash (https://my.cdash.org/index.php?project=Mundy).
-          // The script also converts CTest's Test.xml to JUnit so Jenkins keeps
-          // its own test report alongside CDash.
-          try {
-            echo 'Configuring, building, testing, and submitting to CDash'
-            sh './ci/test_jenkins_cpu_release.sh'
-          } finally {
-            junit allowEmptyResults: true, testResults: 'build/ctest_results.xml'
+      }
+    },
+    gpu: {
+      runPod(context: 'ci', cpus: 8, gpus: 1, gpuType: 'a100') {
+        withEnv([
+          "HOME=${WORKSPACE}",
+          "LC_ALL=C",
+          "MUNDY_DEPS=${WORKSPACE}/mundy_deps_gpu",
+          "MUNDY_INSTALL=${WORKSPACE}/mundy_install_gpu",
+          "CTEST_BUILD_NAME=jenkins-gpu-release-sm80",
+          "SPACK_TRILINOS=tril1610_sm80_cuda1263",
+          "OMPI_MCA_rmaps_base_oversubscribe=1"
+        ]) {
+          stage('gpu deps') {
+            sh './ci/build_jenkins_gpu_release.sh'
+          }
+          stage('gpu test') {
+            try {
+              sh './ci/test_jenkins_gpu_release.sh'
+            } finally {
+              junit allowEmptyResults: true, testResults: 'build/ctest_results.xml'
+            }
           }
         }
       }
