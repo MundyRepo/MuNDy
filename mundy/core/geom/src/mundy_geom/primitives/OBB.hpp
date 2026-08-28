@@ -52,12 +52,12 @@
 #include <utility>
 
 // Mundy
-#include <mundy_geom/primitives/Point.hpp>   // for mundy::Point, ValidPointType
-#include <mundy_math/Quaternion.hpp>         // for mundy::Quaternion, ValidQuaternionType, conjugate, quaternion_to_rotation_matrix
-#include <mundy_math/Vector3.hpp>            // for mundy::Vector3, ValidVector3Type
-#include <mundy_math/cmath.hpp>              // for mundy::abs
+#include <mundy_geom/primitives/Point.hpp>  // for mundy::Point, ValidPointType
+#include <mundy_math/Quaternion.hpp>  // for mundy::Quaternion, ValidQuaternionType, conjugate, quaternion_to_rotation_matrix
+#include <mundy_math/Vector3.hpp>  // for mundy::Vector3, ValidVector3Type
+#include <mundy_math/cmath.hpp>    // for mundy::abs
 #include <mundy_utils/requires.hpp>
-#include <mundy_utils/throw_assert.hpp>      // for MUNDY_THROW_ASSERT
+#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
 
 namespace mundy {
 
@@ -73,25 +73,25 @@ namespace mundy {
 /// \tparam HalfExtentsType Vector3 type for the half-extents; defaults to `Vector3<Scalar>`.
 ///                        A view variant (e.g. a Vector3 aliasing external storage) may be
 ///                        substituted here to enable view-backed OBB components.
-template <typename Scalar, //
-          ValidPointType      PointType      = Point<Scalar>, //
-          ValidQuaternionType QuaternionType = Quaternion<Scalar>, //
-          ValidVector3Type    HalfExtentsType = Vector3<Scalar>> //
+template <typename Scalar,                                          //
+          ValidPointType PointType = Point<Scalar>,                 //
+          ValidQuaternionType QuaternionType = Quaternion<Scalar>,  //
+          ValidVector3Type HalfExtentsType = Vector3<Scalar>>       //
 class OBB {
-  static_assert(std::is_same_v<typename PointType::value_type,      Scalar> &&
-                std::is_same_v<typename QuaternionType::value_type,  Scalar> &&
-                std::is_same_v<typename HalfExtentsType::value_type, Scalar>,
+  static_assert(std::is_same_v<typename PointType::value_type, Scalar> &&
+                    std::is_same_v<typename QuaternionType::value_type, Scalar> &&
+                    std::is_same_v<typename HalfExtentsType::value_type, Scalar>,
                 "The value_type of PointType, QuaternionType, and HalfExtentsType must match Scalar.");
 
  public:
   //! \name Type aliases
   //@{
 
-  using value_type     = Scalar;
-  using point_t        = PointType;
-  using orientation_t  = QuaternionType;
+  using value_type = Scalar;
+  using point_t = PointType;
+  using orientation_t = QuaternionType;
   using half_extents_t = HalfExtentsType;
-  using deep_copy_t    = OBB<Scalar>;
+  using deep_copy_t = OBB<Scalar>;
 
   static constexpr bool is_finite = true;
   //@}
@@ -103,15 +103,12 @@ class OBB {
   /// the identity quaternion; half-extents are set to the invalid sentinel -1.
   KOKKOS_FUNCTION
   constexpr OBB()
-      MUNDY_REQUIRES(HasNArgConstructor<point_t, value_type, 3> && HasNArgConstructor<orientation_t, value_type, 4>)
+      MUNDY_REQUIRES(HasNArgConstructor<point_t, value_type, 3>&& HasNArgConstructor<orientation_t, value_type, 4>)
       : center_(value_type(), value_type(), value_type()),
-        orientation_(static_cast<value_type>(1),
-                     static_cast<value_type>(0),
-                     static_cast<value_type>(0),
+        orientation_(static_cast<value_type>(1), static_cast<value_type>(0), static_cast<value_type>(0),
                      static_cast<value_type>(0)),
-        half_extents_(static_cast<value_type>(-1),
-                      static_cast<value_type>(-1),
-                      static_cast<value_type>(-1)) {}
+        half_extents_(static_cast<value_type>(-1), static_cast<value_type>(-1), static_cast<value_type>(-1)) {
+  }
 
   /// \brief Construct from a center, identity orientation, and uniform half-extent.
   /// \param[in] center      Centroid of the box in world space.
@@ -120,21 +117,19 @@ class OBB {
   constexpr OBB(const point_t& center, const value_type& half_extent)
       MUNDY_REQUIRES(HasNArgConstructor<orientation_t, value_type, 4>)
       : center_(center),
-        orientation_(static_cast<value_type>(1),
-                     static_cast<value_type>(0),
-                     static_cast<value_type>(0),
+        orientation_(static_cast<value_type>(1), static_cast<value_type>(0), static_cast<value_type>(0),
                      static_cast<value_type>(0)),
-        half_extents_(half_extent, half_extent, half_extent) {}
+        half_extents_(half_extent, half_extent, half_extent) {
+  }
 
   /// \brief Construct from a center, orientation, and per-axis half-extents.
   /// \param[in] center       Centroid of the box in world space.
   /// \param[in] orientation  Unit quaternion mapping local axes to world space.
   /// \param[in] half_extents Half-lengths along each local axis (must be non-negative).
   KOKKOS_FUNCTION
-  constexpr OBB(const point_t&       center,
-                const orientation_t& orientation,
-                const half_extents_t& half_extents)
-      : center_(center), orientation_(orientation), half_extents_(half_extents) {}
+  constexpr OBB(const point_t& center, const orientation_t& orientation, const half_extents_t& half_extents)
+      : center_(center), orientation_(orientation), half_extents_(half_extents) {
+  }
 
   /// \brief Construct from a center, orientation, and per-axis half-extents given as scalars.
   /// \param[in] center       Centroid of the box in world space.
@@ -143,9 +138,10 @@ class OBB {
   /// \param[in] hy           Half-length along local y-axis.
   /// \param[in] hz           Half-length along local z-axis.
   KOKKOS_FUNCTION
-  constexpr OBB(const point_t& center, const orientation_t& orientation,
-                const value_type& hx, const value_type& hy, const value_type& hz)
-      : center_(center), orientation_(orientation), half_extents_(hx, hy, hz) {}
+  constexpr OBB(const point_t& center, const orientation_t& orientation, const value_type& hx, const value_type& hy,
+                const value_type& hz)
+      : center_(center), orientation_(orientation), half_extents_(hx, hy, hz) {
+  }
 
   /// \brief Destructor.
   KOKKOS_DEFAULTED_FUNCTION
@@ -154,14 +150,16 @@ class OBB {
   /// \brief Copy constructor.
   KOKKOS_FUNCTION
   constexpr OBB(const OBB& other)
-      : center_(other.center_), orientation_(other.orientation_), half_extents_(other.half_extents_) {}
+      : center_(other.center_), orientation_(other.orientation_), half_extents_(other.half_extents_) {
+  }
 
   /// \brief Move constructor.
   KOKKOS_FUNCTION
   constexpr OBB(OBB&& other)
       : center_(std::move(other.center_)),
         orientation_(std::move(other.orientation_)),
-        half_extents_(std::move(other.half_extents_)) {}
+        half_extents_(std::move(other.half_extents_)) {
+  }
 
   /// \brief Deep copy constructor from a different OBB type (e.g. a view-backed OBB).
   ///
@@ -169,7 +167,8 @@ class OBB {
   template <typename OtherOBBType>
   KOKKOS_FUNCTION constexpr OBB(const OtherOBBType& other)
       MUNDY_REQUIRES(!std::is_same_v<OtherOBBType, OBB<value_type, point_t, orientation_t, half_extents_t>>)
-      : center_(other.center_), orientation_(other.orientation_), half_extents_(other.half_extents_) {}
+      : center_(other.center_), orientation_(other.orientation_), half_extents_(other.half_extents_) {
+  }
 
   /// \brief Deep move constructor from a different OBB type (e.g. a view-backed OBB).
   ///
@@ -178,8 +177,10 @@ class OBB {
   template <typename OtherOBBType>
   KOKKOS_FUNCTION constexpr OBB(OtherOBBType&& other)
       MUNDY_REQUIRES(!std::is_same_v<OtherOBBType, OBB<value_type, point_t, orientation_t, half_extents_t>>)
-      : center_(std::move(other.center_)), orientation_(std::move(other.orientation_)),
-        half_extents_(std::move(other.half_extents_)) {}
+      : center_(std::move(other.center_)),
+        orientation_(std::move(other.orientation_)),
+        half_extents_(std::move(other.half_extents_)) {
+  }
   //@}
 
   //! \name Assignment operators
@@ -188,8 +189,8 @@ class OBB {
   KOKKOS_FUNCTION
   constexpr OBB& operator=(const OBB& other) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign OBB to itself.");
-    center_       = other.center_;
-    orientation_  = other.orientation_;
+    center_ = other.center_;
+    orientation_ = other.orientation_;
     half_extents_ = other.half_extents_;
     return *this;
   }
@@ -197,8 +198,8 @@ class OBB {
   KOKKOS_FUNCTION
   constexpr OBB& operator=(OBB&& other) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign OBB to itself.");
-    center_       = std::move(other.center_);
-    orientation_  = std::move(other.orientation_);
+    center_ = std::move(other.center_);
+    orientation_ = std::move(other.orientation_);
     half_extents_ = std::move(other.half_extents_);
     return *this;
   }
@@ -207,8 +208,8 @@ class OBB {
   template <typename OtherOBBType>
   KOKKOS_FUNCTION constexpr OBB& operator=(const OtherOBBType& other)
       MUNDY_REQUIRES(!std::is_same_v<OtherOBBType, OBB<value_type, point_t, orientation_t, half_extents_t>>) {
-    center_       = other.center_;
-    orientation_  = other.orientation_;
+    center_ = other.center_;
+    orientation_ = other.orientation_;
     half_extents_ = other.half_extents_;
     return *this;
   }
@@ -217,8 +218,8 @@ class OBB {
   template <typename OtherOBBType>
   KOKKOS_FUNCTION constexpr OBB& operator=(OtherOBBType&& other)
       MUNDY_REQUIRES(!std::is_same_v<OtherOBBType, OBB<value_type, point_t, orientation_t, half_extents_t>>) {
-    center_       = std::move(other.center_);
-    orientation_  = std::move(other.orientation_);
+    center_ = std::move(other.center_);
+    orientation_ = std::move(other.orientation_);
     half_extents_ = std::move(other.half_extents_);
     return *this;
   }
@@ -239,20 +240,28 @@ class OBB {
   // clang-format on
 
   /// \brief Get a deep, owning copy of the OBB.
-  KOKKOS_FUNCTION constexpr deep_copy_t copy() const { return *this; }
+  KOKKOS_FUNCTION constexpr deep_copy_t copy() const {
+    return *this;
+  }
   //@}
 
   //! \name Setters
   //@{
 
   template <ValidPointType OtherPointType>
-  KOKKOS_FUNCTION constexpr void set_center(const OtherPointType& c) { center_ = c; }
+  KOKKOS_FUNCTION constexpr void set_center(const OtherPointType& c) {
+    center_ = c;
+  }
 
   template <ValidQuaternionType OtherQuatType>
-  KOKKOS_FUNCTION constexpr void set_orientation(const OtherQuatType& q) { orientation_ = q; }
+  KOKKOS_FUNCTION constexpr void set_orientation(const OtherQuatType& q) {
+    orientation_ = q;
+  }
 
   template <ValidVector3Type OtherVecType>
-  KOKKOS_FUNCTION constexpr void set_half_extents(const OtherVecType& he) { half_extents_ = he; }
+  KOKKOS_FUNCTION constexpr void set_half_extents(const OtherVecType& he) {
+    half_extents_ = he;
+  }
 
   KOKKOS_FUNCTION
   constexpr void set_half_extents(const value_type& hx, const value_type& hy, const value_type& hz) {
@@ -266,8 +275,8 @@ class OBB {
   template <typename, ValidPointType, ValidQuaternionType, ValidVector3Type>
   friend class OBB;
 
-  point_t        center_;
-  orientation_t  orientation_;
+  point_t center_;
+  orientation_t orientation_;
   half_extents_t half_extents_;
 };
 
@@ -308,15 +317,15 @@ template <ValidOBBType T1, ValidOBBType T2>
 KOKKOS_FUNCTION constexpr bool is_close(
     const T1& a, const T2& b,
     typename T1::value_type tol = get_comparison_tolerance<typename T1::value_type, typename T2::value_type>()) {
-  return is_close(a.center(),       b.center(),       tol) &&
-         is_close(a.orientation(),  b.orientation(),  tol) &&
+  return is_close(a.center(), b.center(), tol) && is_close(a.orientation(), b.orientation(), tol) &&
          is_close(a.half_extents(), b.half_extents(), tol);
 }
 
 template <ValidOBBType T1, ValidOBBType T2>
 KOKKOS_FUNCTION constexpr bool is_approx_close(
     const T1& a, const T2& b,
-    typename T1::value_type tol = get_relaxed_comparison_tolerance<typename T1::value_type, typename T2::value_type>()) {
+    typename T1::value_type tol =
+        get_relaxed_comparison_tolerance<typename T1::value_type, typename T2::value_type>()) {
   return is_close(a, b, tol);
 }
 //@}
@@ -361,40 +370,38 @@ KOKKOS_FUNCTION constexpr bool intersects(const OBBType1& a, const OBBType2& b) 
   const Matrix3<S> R = quaternion_to_rotation_matrix(conjugate(a.orientation()) * b.orientation());
 
   // Translation in A's local frame.
-  const Vector3<S> T_world{b.center()[0] - a.center()[0],
-                             b.center()[1] - a.center()[1],
-                             b.center()[2] - a.center()[2]};
-  const auto T  = conjugate(a.orientation()) * T_world;
-  const S    t0 = T[0], t1 = T[1], t2 = T[2];
+  const Vector3<S> T_world{b.center()[0] - a.center()[0], b.center()[1] - a.center()[1], b.center()[2] - a.center()[2]};
+  const auto T = conjugate(a.orientation()) * T_world;
+  const S t0 = T[0], t1 = T[1], t2 = T[2];
 
   // Absolute rotation entries (with epsilon for numerical robustness).
-  const S r00 = abs(R(0,0))+eps, r01 = abs(R(0,1))+eps, r02 = abs(R(0,2))+eps;
-  const S r10 = abs(R(1,0))+eps, r11 = abs(R(1,1))+eps, r12 = abs(R(1,2))+eps;
-  const S r20 = abs(R(2,0))+eps, r21 = abs(R(2,1))+eps, r22 = abs(R(2,2))+eps;
+  const S r00 = abs(R(0, 0)) + eps, r01 = abs(R(0, 1)) + eps, r02 = abs(R(0, 2)) + eps;
+  const S r10 = abs(R(1, 0)) + eps, r11 = abs(R(1, 1)) + eps, r12 = abs(R(1, 2)) + eps;
+  const S r20 = abs(R(2, 0)) + eps, r21 = abs(R(2, 1)) + eps, r22 = abs(R(2, 2)) + eps;
 
   const S ha0 = a.half_extent(0), ha1 = a.half_extent(1), ha2 = a.half_extent(2);
   const S hb0 = b.half_extent(0), hb1 = b.half_extent(1), hb2 = b.half_extent(2);
 
   // Face normals of A (axes A0, A1, A2).
-  if (abs(t0) > ha0 + hb0*r00 + hb1*r01 + hb2*r02) return false;
-  if (abs(t1) > ha1 + hb0*r10 + hb1*r11 + hb2*r12) return false;
-  if (abs(t2) > ha2 + hb0*r20 + hb1*r21 + hb2*r22) return false;
+  if (abs(t0) > ha0 + hb0 * r00 + hb1 * r01 + hb2 * r02) return false;
+  if (abs(t1) > ha1 + hb0 * r10 + hb1 * r11 + hb2 * r12) return false;
+  if (abs(t2) > ha2 + hb0 * r20 + hb1 * r21 + hb2 * r22) return false;
 
   // Face normals of B (axes B0, B1, B2).
-  if (abs(t0*R(0,0)+t1*R(1,0)+t2*R(2,0)) > ha0*r00+ha1*r10+ha2*r20+hb0) return false;
-  if (abs(t0*R(0,1)+t1*R(1,1)+t2*R(2,1)) > ha0*r01+ha1*r11+ha2*r21+hb1) return false;
-  if (abs(t0*R(0,2)+t1*R(1,2)+t2*R(2,2)) > ha0*r02+ha1*r12+ha2*r22+hb2) return false;
+  if (abs(t0 * R(0, 0) + t1 * R(1, 0) + t2 * R(2, 0)) > ha0 * r00 + ha1 * r10 + ha2 * r20 + hb0) return false;
+  if (abs(t0 * R(0, 1) + t1 * R(1, 1) + t2 * R(2, 1)) > ha0 * r01 + ha1 * r11 + ha2 * r21 + hb1) return false;
+  if (abs(t0 * R(0, 2) + t1 * R(1, 2) + t2 * R(2, 2)) > ha0 * r02 + ha1 * r12 + ha2 * r22 + hb2) return false;
 
   // Edge cross-products A_i x B_j (9 tests).
-  if (abs(t2*R(1,0)-t1*R(2,0)) > ha1*r20+ha2*r10+hb1*r02+hb2*r01) return false;  // A0xB0
-  if (abs(t2*R(1,1)-t1*R(2,1)) > ha1*r21+ha2*r11+hb0*r02+hb2*r00) return false;  // A0xB1
-  if (abs(t2*R(1,2)-t1*R(2,2)) > ha1*r22+ha2*r12+hb0*r01+hb1*r00) return false;  // A0xB2
-  if (abs(t0*R(2,0)-t2*R(0,0)) > ha0*r20+ha2*r00+hb1*r12+hb2*r11) return false;  // A1xB0
-  if (abs(t0*R(2,1)-t2*R(0,1)) > ha0*r21+ha2*r01+hb0*r12+hb2*r10) return false;  // A1xB1
-  if (abs(t0*R(2,2)-t2*R(0,2)) > ha0*r22+ha2*r02+hb0*r11+hb1*r10) return false;  // A1xB2
-  if (abs(t1*R(0,0)-t0*R(1,0)) > ha0*r10+ha1*r00+hb1*r22+hb2*r21) return false;  // A2xB0
-  if (abs(t1*R(0,1)-t0*R(1,1)) > ha0*r11+ha1*r01+hb0*r22+hb2*r20) return false;  // A2xB1
-  if (abs(t1*R(0,2)-t0*R(1,2)) > ha0*r12+ha1*r02+hb0*r21+hb1*r20) return false;  // A2xB2
+  if (abs(t2 * R(1, 0) - t1 * R(2, 0)) > ha1 * r20 + ha2 * r10 + hb1 * r02 + hb2 * r01) return false;  // A0xB0
+  if (abs(t2 * R(1, 1) - t1 * R(2, 1)) > ha1 * r21 + ha2 * r11 + hb0 * r02 + hb2 * r00) return false;  // A0xB1
+  if (abs(t2 * R(1, 2) - t1 * R(2, 2)) > ha1 * r22 + ha2 * r12 + hb0 * r01 + hb1 * r00) return false;  // A0xB2
+  if (abs(t0 * R(2, 0) - t2 * R(0, 0)) > ha0 * r20 + ha2 * r00 + hb1 * r12 + hb2 * r11) return false;  // A1xB0
+  if (abs(t0 * R(2, 1) - t2 * R(0, 1)) > ha0 * r21 + ha2 * r01 + hb0 * r12 + hb2 * r10) return false;  // A1xB1
+  if (abs(t0 * R(2, 2) - t2 * R(0, 2)) > ha0 * r22 + ha2 * r02 + hb0 * r11 + hb1 * r10) return false;  // A1xB2
+  if (abs(t1 * R(0, 0) - t0 * R(1, 0)) > ha0 * r10 + ha1 * r00 + hb1 * r22 + hb2 * r21) return false;  // A2xB0
+  if (abs(t1 * R(0, 1) - t0 * R(1, 1)) > ha0 * r11 + ha1 * r01 + hb0 * r22 + hb2 * r20) return false;  // A2xB1
+  if (abs(t1 * R(0, 2) - t0 * R(1, 2)) > ha0 * r12 + ha1 * r02 + hb0 * r21 + hb1 * r20) return false;  // A2xB2
 
   return true;
 }
@@ -405,9 +412,8 @@ KOKKOS_FUNCTION constexpr bool intersects(const OBBType1& a, const OBBType2& b) 
 
 template <ValidOBBType T>
 std::ostream& operator<<(std::ostream& os, const T& obb) {
-  os << "{center=" << obb.center()
-     << " orientation=" << obb.orientation()
-     << " half_extents=" << obb.half_extents() << "}";
+  os << "{center=" << obb.center() << " orientation=" << obb.orientation() << " half_extents=" << obb.half_extents()
+     << "}";
   return os;
 }
 //@}

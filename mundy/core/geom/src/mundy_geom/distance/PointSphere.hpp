@@ -49,7 +49,7 @@ namespace mundy {
 template <ValidPointType PointType, ValidSphereType SphereType>
 MUNDY_REQUIRES(std::is_same_v<typename PointType::value_type, typename SphereType::value_type>)
 KOKKOS_FUNCTION typename PointType::value_type distance(const PointType& point,  //
-                                                      const SphereType& sphere) {
+                                                        const SphereType& sphere) {
   return distance(SharedNormalSigned{}, point, sphere);
 }
 
@@ -60,8 +60,8 @@ KOKKOS_FUNCTION typename PointType::value_type distance(const PointType& point, 
 template <ValidPointType PointType, ValidSphereType SphereType>
 MUNDY_REQUIRES(std::is_same_v<typename PointType::value_type, typename SphereType::value_type>)
 KOKKOS_FUNCTION typename PointType::value_type distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
-                                                      const PointType& point,                                   //
-                                                      const SphereType& sphere) {
+                                                        const PointType& point,                                   //
+                                                        const SphereType& sphere) {
   return distance(point, sphere.center()) - sphere.radius();
 }
 

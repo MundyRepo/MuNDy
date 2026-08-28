@@ -50,7 +50,7 @@ namespace mundy {
 template <ValidLineType LineType1, ValidLineType LineType2>
 MUNDY_REQUIRES(std::is_same_v<typename LineType1::value_type, typename LineType2::value_type>)
 KOKKOS_FUNCTION typename LineType1::value_type distance(const LineType1& line1,  //
-                                                      const LineType2& line2) {
+                                                        const LineType2& line2) {
   return distance(SharedNormalSigned{}, line1, line2);
 }
 
@@ -62,8 +62,8 @@ KOKKOS_FUNCTION typename LineType1::value_type distance(const LineType1& line1, 
 template <ValidLineType LineType1, ValidLineType LineType2>
 MUNDY_REQUIRES(std::is_same_v<typename LineType1::value_type, typename LineType2::value_type>)
 KOKKOS_FUNCTION typename LineType1::value_type distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
-                                                      const LineType1& line1,                                   //
-                                                      const LineType2& line2) {
+                                                        const LineType1& line1,                                   //
+                                                        const LineType2& line2) {
   using Scalar = typename LineType1::value_type;
 
   // Part of this function was adapted from VTK, which, in turn adapted part of it from "GeometryAlgorithms.com"
@@ -96,8 +96,8 @@ KOKKOS_FUNCTION typename LineType1::value_type distance([[maybe_unused]] const S
 template <ValidLineType LineType1, ValidLineType LineType2>
 MUNDY_REQUIRES(std::is_same_v<typename LineType1::value_type, typename LineType2::value_type>)
 KOKKOS_FUNCTION typename LineType1::value_type distance([[maybe_unused]] const Euclidean distance_type,  //
-                                                      const LineType1& line1,                          //
-                                                      const LineType2& line2) {
+                                                        const LineType1& line1,                          //
+                                                        const LineType2& line2) {
   return distance(SharedNormalSigned{}, line1, line2);  // no difference between distance types for lines
 }
 
@@ -112,13 +112,13 @@ KOKKOS_FUNCTION typename LineType1::value_type distance([[maybe_unused]] const E
 /// \param[out] sep The separation vector (from line1 to line2)
 template <ValidLineType LineType1, ValidLineType LineType2>
 MUNDY_REQUIRES(std::is_same_v<typename LineType1::value_type, typename LineType2::value_type>)
-KOKKOS_FUNCTION typename LineType1::value_type distance(const LineType1& line1,                               //
-                                                      const LineType2& line2,                               //
-                                                      Point<typename LineType1::value_type>& closest_point1,  //
-                                                      Point<typename LineType1::value_type>& closest_point2,  //
-                                                      typename LineType1::value_type& arch_length1,           //
-                                                      typename LineType1::value_type& arch_length2,           //
-                                                      mundy::Vector3<typename LineType1::value_type>& sep) {
+KOKKOS_FUNCTION typename LineType1::value_type distance(const LineType1& line1,                                 //
+                                                        const LineType2& line2,                                 //
+                                                        Point<typename LineType1::value_type>& closest_point1,  //
+                                                        Point<typename LineType1::value_type>& closest_point2,  //
+                                                        typename LineType1::value_type& arch_length1,           //
+                                                        typename LineType1::value_type& arch_length2,           //
+                                                        mundy::Vector3<typename LineType1::value_type>& sep) {
   return distance(SharedNormalSigned{}, line1, line2,  //
                   closest_point1, closest_point2, arch_length1, arch_length2, sep);
 }
@@ -136,13 +136,13 @@ KOKKOS_FUNCTION typename LineType1::value_type distance(const LineType1& line1, 
 template <ValidLineType LineType1, ValidLineType LineType2>
 MUNDY_REQUIRES(std::is_same_v<typename LineType1::value_type, typename LineType2::value_type>)
 KOKKOS_FUNCTION typename LineType1::value_type distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
-                                                      const LineType1& line1,                                   //
-                                                      const LineType2& line2,                                   //
-                                                      Point<typename LineType1::value_type>& closest_point1,      //
-                                                      Point<typename LineType1::value_type>& closest_point2,      //
-                                                      typename LineType1::value_type& arch_length1,               //
-                                                      typename LineType1::value_type& arch_length2,               //
-                                                      mundy::Vector3<typename LineType1::value_type>& sep) {
+                                                        const LineType1& line1,                                   //
+                                                        const LineType2& line2,                                   //
+                                                        Point<typename LineType1::value_type>& closest_point1,    //
+                                                        Point<typename LineType1::value_type>& closest_point2,    //
+                                                        typename LineType1::value_type& arch_length1,             //
+                                                        typename LineType1::value_type& arch_length2,             //
+                                                        mundy::Vector3<typename LineType1::value_type>& sep) {
   using Scalar = typename LineType1::value_type;
 
   // Part of this function was adapted from VTK, which, in turn adapted part of it from "GeometryAlgorithms.com"

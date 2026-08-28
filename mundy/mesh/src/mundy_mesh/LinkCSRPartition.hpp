@@ -251,8 +251,7 @@ class LinkCSRPartitionT {  // Raw data in any space.
             }
           }
           linked_buckets_[rank] = LinkCSRBucketConnView();
-        } 
-        selector_ = nullptr;))
+        } selector_ = nullptr;))
   }
   //@}
 

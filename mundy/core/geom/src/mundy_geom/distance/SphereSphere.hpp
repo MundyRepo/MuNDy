@@ -48,7 +48,7 @@ namespace mundy {
 template <ValidSphereType SphereType1, ValidSphereType SphereType2>
 MUNDY_REQUIRES(std::is_same_v<typename SphereType1::value_type, typename SphereType2::value_type>)
 KOKKOS_FUNCTION typename SphereType1::value_type distance(const SphereType1& sphere1,  //
-                                                        const SphereType2& sphere2) {
+                                                          const SphereType2& sphere2) {
   return distance(SharedNormalSigned{}, sphere1, sphere2);
 }
 
@@ -59,8 +59,8 @@ KOKKOS_FUNCTION typename SphereType1::value_type distance(const SphereType1& sph
 template <ValidSphereType SphereType1, ValidSphereType SphereType2>
 MUNDY_REQUIRES(std::is_same_v<typename SphereType1::value_type, typename SphereType2::value_type>)
 KOKKOS_FUNCTION typename SphereType1::value_type distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
-                                                        const SphereType1& sphere1,                               //
-                                                        const SphereType2& sphere2) {
+                                                          const SphereType1& sphere1,                               //
+                                                          const SphereType2& sphere2) {
   return distance(sphere1.center(), sphere2.center()) - sphere1.radius() - sphere2.radius();
 }
 
@@ -72,8 +72,8 @@ KOKKOS_FUNCTION typename SphereType1::value_type distance([[maybe_unused]] const
 template <ValidSphereType SphereType1, ValidSphereType SphereType2>
 MUNDY_REQUIRES(std::is_same_v<typename SphereType1::value_type, typename SphereType2::value_type>)
 KOKKOS_FUNCTION typename SphereType1::value_type distance(const SphereType1& sphere1,  //
-                                                        const SphereType2& sphere2,  //
-                                                        mundy::Vector3<typename SphereType1::value_type>& sep) {
+                                                          const SphereType2& sphere2,  //
+                                                          mundy::Vector3<typename SphereType1::value_type>& sep) {
   using Scalar = typename SphereType1::value_type;
   const Scalar center_center_distance = distance(sphere1.center(), sphere2.center(), sep);
 

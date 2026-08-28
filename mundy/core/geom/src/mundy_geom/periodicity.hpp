@@ -74,9 +74,9 @@
 #include <mundy_math/Matrix3.hpp>     // for mundy::Matrix3
 #include <mundy_math/Tolerance.hpp>   // for mundy::get_zero_tolerance
 #include <mundy_math/Vector3.hpp>     // for mundy::Vector3
+#include <mundy_math/cmath.hpp>
 #include <mundy_utils/requires.hpp>
 #include <mundy_utils/throw_assert.hpp>
-#include <mundy_math/cmath.hpp>
 
 namespace mundy {
 
@@ -982,7 +982,8 @@ template <ValidPointType PointT, typename Metric>
 KOKKOS_INLINE_FUNCTION Vector3<int> image_index(const PointT& p, const Metric& metric) {
   const auto f = metric.to_fractional(p);
   const auto fw = metric.frac_wrap_to_unit_cell(f);
-  return Vector3<int>{static_cast<int>(impl::round_no_ad(f[0] - fw[0])), static_cast<int>(impl::round_no_ad(f[1] - fw[1])),
+  return Vector3<int>{static_cast<int>(impl::round_no_ad(f[0] - fw[0])),
+                      static_cast<int>(impl::round_no_ad(f[1] - fw[1])),
                       static_cast<int>(impl::round_no_ad(f[2] - fw[2]))};
 }
 
@@ -1054,8 +1055,7 @@ inline constexpr bool is_triclinic_metric_v = is_triclinic_metric<T>::value;
 /// Evaluates to true for any `OrthorhombicMetric` or `TriclinicMetric`
 /// instantiation, regardless of which axes are marked periodic.
 template <typename T>
-struct is_periodic_metric
-    : std::bool_constant<is_orthorhombic_metric_v<T> || is_triclinic_metric_v<T>> {};
+struct is_periodic_metric : std::bool_constant<is_orthorhombic_metric_v<T> || is_triclinic_metric_v<T>> {};
 template <typename T>
 inline constexpr bool is_periodic_metric_v = is_periodic_metric<T>::value;
 

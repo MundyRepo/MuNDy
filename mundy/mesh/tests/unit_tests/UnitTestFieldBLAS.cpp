@@ -49,8 +49,8 @@
 #include <stk_topology/topology.hpp>
 
 // Mundy
-#include <mundy_mesh/NgpFieldBLAS.hpp>  // for mundy::mesh::field_fill, mundy::mesh::field_copy, etc
 #include <mundy_math/cmath.hpp>
+#include <mundy_mesh/NgpFieldBLAS.hpp>  // for mundy::mesh::field_fill, mundy::mesh::field_copy, etc
 
 namespace mundy {
 
@@ -661,7 +661,7 @@ double host_direct_field_dot(const stk::mesh::BulkData& bulk_data, const stk::me
       bulk_data, field1.entity_rank(), selector,
       [&]([[maybe_unused]] const stk::mesh::BulkData& bulk, const stk::mesh::Entity entity) {
         int num_components = min(stk::mesh::field_scalars_per_entity(field1, entity),
-                                         stk::mesh::field_scalars_per_entity(field2, entity));
+                                 stk::mesh::field_scalars_per_entity(field2, entity));
         const double* raw_field1_data = reinterpret_cast<const double*>(stk::mesh::field_data(field1, entity));
         const double* raw_field2_data = reinterpret_cast<const double*>(stk::mesh::field_data(field2, entity));
         for (int i = 0; i < num_components; ++i) {

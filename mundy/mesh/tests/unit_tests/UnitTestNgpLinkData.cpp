@@ -908,7 +908,7 @@ struct LinkDataApiFixture {
 // LinkMetaData returns the same object, not a new one.
 TEST(UnitTestNgpLinkData, DeclareLinkData_Idempotent) {
   LinkDataApiFixture f;
-  LinkData& first  = declare_link_data(*f.bulk, *f.link_meta);
+  LinkData& first = declare_link_data(*f.bulk, *f.link_meta);
   LinkData& second = declare_link_data(*f.bulk, *f.link_meta);
   EXPECT_EQ(&first, &second);
 }

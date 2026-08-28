@@ -70,7 +70,8 @@ class Line {
 
   /// \brief Default constructor for owning Lines. Default initialize the
   KOKKOS_FUNCTION
-  constexpr Line() MUNDY_REQUIRES(HasNArgConstructor<point_t, value_type, 3>&& HasNArgConstructor<vector_t, value_type, 3>)
+  constexpr Line()
+      MUNDY_REQUIRES(HasNArgConstructor<point_t, value_type, 3>&& HasNArgConstructor<vector_t, value_type, 3>)
       : center_(value_type(), value_type(), value_type()), direction_(value_type(), value_type(), value_type()) {
   }
 
@@ -280,7 +281,8 @@ KOKKOS_FUNCTION constexpr bool is_close(
 template <ValidLineType T1, ValidLineType T2>
 KOKKOS_FUNCTION constexpr bool is_approx_close(
     const T1& l1, const T2& l2,
-    typename T1::value_type tol = get_relaxed_comparison_tolerance<typename T1::value_type, typename T2::value_type>()) {
+    typename T1::value_type tol =
+        get_relaxed_comparison_tolerance<typename T1::value_type, typename T2::value_type>()) {
   return is_close(l1, l2, tol);
 }
 

@@ -240,8 +240,8 @@ auto apply_expr_impl(Func func, const Args&... args) {
                 "apply_expr(func, args...): at least one argument must be a math expression so Mundy knows which "
                 "entity driver should evaluate the expression. Scalars are allowed, but they cannot be the only "
                 "arguments.");
-  return ApplyValueExpr<std::decay_t<Func>, decltype(make_apply_expr_arg(args))...>(
-      std::move(func), make_apply_expr_arg(args)...);
+  return ApplyValueExpr<std::decay_t<Func>, decltype(make_apply_expr_arg(args))...>(std::move(func),
+                                                                                    make_apply_expr_arg(args)...);
 }
 
 // Apply value operator overloads for ApplyValueExpr op MathExprBase

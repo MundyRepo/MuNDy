@@ -44,8 +44,8 @@ using value_type = double;
 using vec_t = std::vector<value_type>;
 
 KOKKOS_INLINE_FUNCTION
-constexpr void workspace_step(value_type& x, value_type& y, value_type& z, const value_type alpha, const value_type beta,
-                              const size_t i, const size_t round) {
+constexpr void workspace_step(value_type& x, value_type& y, value_type& z, const value_type alpha,
+                              const value_type beta, const size_t i, const size_t round) {
   const value_type wave = static_cast<value_type>((i % 11) + 1) + static_cast<value_type>((round % 7) + 1);
   const value_type t0 = x + beta * y;
   const value_type t1 = y - alpha * z + 0.125 * wave;
@@ -135,7 +135,7 @@ value_type compute_checksum(const vec_t& x, const vec_t& y, const vec_t& z) {
 }
 
 value_type run_explicit_owned(vec_t& x, vec_t& y, vec_t& z, const value_type alpha, const value_type beta,
-                            const size_t rounds) {
+                              const size_t rounds) {
   for (size_t round = 0; round < rounds; ++round) {
     for (size_t i = 0; i < x.size(); ++i) {
       WorkspaceExplicitOwned workspace{x[i], y[i], z[i]};
@@ -149,7 +149,7 @@ value_type run_explicit_owned(vec_t& x, vec_t& y, vec_t& z, const value_type alp
 }
 
 value_type run_storage_owned(vec_t& x, vec_t& y, vec_t& z, const value_type alpha, const value_type beta,
-                           const size_t rounds) {
+                             const size_t rounds) {
   for (size_t round = 0; round < rounds; ++round) {
     for (size_t i = 0; i < x.size(); ++i) {
       WorkspaceStorage workspace{mundy::store(value_type{x[i]}), mundy::store(value_type{y[i]}),
@@ -164,7 +164,7 @@ value_type run_storage_owned(vec_t& x, vec_t& y, vec_t& z, const value_type alph
 }
 
 value_type run_explicit_pointer(vec_t& x, vec_t& y, vec_t& z, const value_type alpha, const value_type beta,
-                              const size_t rounds) {
+                                const size_t rounds) {
   for (size_t round = 0; round < rounds; ++round) {
     for (size_t i = 0; i < x.size(); ++i) {
       WorkspaceExplicitPointer workspace{&x[i], &y[i], &z[i]};
@@ -175,7 +175,7 @@ value_type run_explicit_pointer(vec_t& x, vec_t& y, vec_t& z, const value_type a
 }
 
 value_type run_storage_pointer(vec_t& x, vec_t& y, vec_t& z, const value_type alpha, const value_type beta,
-                             const size_t rounds) {
+                               const size_t rounds) {
   for (size_t round = 0; round < rounds; ++round) {
     for (size_t i = 0; i < x.size(); ++i) {
       WorkspaceStorage workspace{mundy::store(&x[i]), mundy::store(&y[i]), mundy::store(&z[i])};
@@ -186,7 +186,7 @@ value_type run_storage_pointer(vec_t& x, vec_t& y, vec_t& z, const value_type al
 }
 
 value_type run_explicit_reference(vec_t& x, vec_t& y, vec_t& z, const value_type alpha, const value_type beta,
-                                const size_t rounds) {
+                                  const size_t rounds) {
   for (size_t round = 0; round < rounds; ++round) {
     for (size_t i = 0; i < x.size(); ++i) {
       WorkspaceExplicitReference workspace{x[i], y[i], z[i]};
@@ -197,7 +197,7 @@ value_type run_explicit_reference(vec_t& x, vec_t& y, vec_t& z, const value_type
 }
 
 value_type run_storage_reference(vec_t& x, vec_t& y, vec_t& z, const value_type alpha, const value_type beta,
-                               const size_t rounds) {
+                                 const size_t rounds) {
   for (size_t round = 0; round < rounds; ++round) {
     for (size_t i = 0; i < x.size(); ++i) {
       WorkspaceStorage workspace{mundy::store(x[i]), mundy::store(y[i]), mundy::store(z[i])};

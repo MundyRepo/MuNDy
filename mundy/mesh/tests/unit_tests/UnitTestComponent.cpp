@@ -261,12 +261,12 @@ TEST_F(UnitTestComponentFixture, ShallowCopyAssignment) {
   EXPECT_DOUBLE_EQ(scalar_field_data(*scalar_field_ptr_, node1_)[0], 1.0);
 }
 
-void mutate_components_on_device(const NgpScalarFieldComponent<stk::mesh::NgpField<double>>& ngp_scalar_accessor,
-                                     const NgpVector3FieldComponent<stk::mesh::NgpField<double>>& ngp_vector3_accessor,
-                                     const NgpMatrix3FieldComponent<stk::mesh::NgpField<double>>& ngp_matrix3_accessor,
-                                     const NgpQuaternionFieldComponent<stk::mesh::NgpField<double>>& ngp_quaternion_accessor,
-                                     const NgpAABBFieldComponent<stk::mesh::NgpField<double>>& ngp_aabb_accessor,
-                                     stk::mesh::FastMeshIndex node1_index) {
+void mutate_components_on_device(
+    const NgpScalarFieldComponent<stk::mesh::NgpField<double>>& ngp_scalar_accessor,
+    const NgpVector3FieldComponent<stk::mesh::NgpField<double>>& ngp_vector3_accessor,
+    const NgpMatrix3FieldComponent<stk::mesh::NgpField<double>>& ngp_matrix3_accessor,
+    const NgpQuaternionFieldComponent<stk::mesh::NgpField<double>>& ngp_quaternion_accessor,
+    const NgpAABBFieldComponent<stk::mesh::NgpField<double>>& ngp_aabb_accessor, stk::mesh::FastMeshIndex node1_index) {
   Kokkos::parallel_for(
       "mutate_components_on_device", Kokkos::RangePolicy<>(0, 1), KOKKOS_LAMBDA(int) {
         ngp_scalar_accessor(node1_index)[0] += 2.5;
@@ -300,16 +300,12 @@ TEST_F(UnitTestComponentFixture, NgpFieldComponentRoundTripDeviceMutations) {
   auto ngp_quaternion_accessor = get_updated_ngp_component(quaternion_accessor);
   auto ngp_aabb_accessor = get_updated_ngp_component(aabb_accessor);
 
-  static_assert(std::is_same_v<decltype(ngp_scalar_accessor),
-                               NgpScalarFieldComponent<stk::mesh::NgpField<double>>>);
-  static_assert(std::is_same_v<decltype(ngp_vector3_accessor),
-                               NgpVector3FieldComponent<stk::mesh::NgpField<double>>>);
-  static_assert(std::is_same_v<decltype(ngp_matrix3_accessor),
-                               NgpMatrix3FieldComponent<stk::mesh::NgpField<double>>>);
-  static_assert(std::is_same_v<decltype(ngp_quaternion_accessor),
-                               NgpQuaternionFieldComponent<stk::mesh::NgpField<double>>>);
-  static_assert(std::is_same_v<decltype(ngp_aabb_accessor),
-                               NgpAABBFieldComponent<stk::mesh::NgpField<double>>>);
+  static_assert(std::is_same_v<decltype(ngp_scalar_accessor), NgpScalarFieldComponent<stk::mesh::NgpField<double>>>);
+  static_assert(std::is_same_v<decltype(ngp_vector3_accessor), NgpVector3FieldComponent<stk::mesh::NgpField<double>>>);
+  static_assert(std::is_same_v<decltype(ngp_matrix3_accessor), NgpMatrix3FieldComponent<stk::mesh::NgpField<double>>>);
+  static_assert(
+      std::is_same_v<decltype(ngp_quaternion_accessor), NgpQuaternionFieldComponent<stk::mesh::NgpField<double>>>);
+  static_assert(std::is_same_v<decltype(ngp_aabb_accessor), NgpAABBFieldComponent<stk::mesh::NgpField<double>>>);
 
   ngp_scalar_accessor.sync_to_device();
   ngp_vector3_accessor.sync_to_device();
@@ -321,9 +317,10 @@ TEST_F(UnitTestComponentFixture, NgpFieldComponentRoundTripDeviceMutations) {
   stk::mesh::FastMeshIndex node1_index = ngp_mesh.fast_mesh_index(node1_);
 
   // KOKKOS_LAMBDA cannot be called in a GTEST test body due to CUDA's rule about:
-  // "The enclosing parent function ("TestBody") for an extended __host__ __device__ lambda cannot have private or protected access within its class"
+  // "The enclosing parent function ("TestBody") for an extended __host__ __device__ lambda cannot have private or
+  // protected access within its class"
   mutate_components_on_device(ngp_scalar_accessor, ngp_vector3_accessor, ngp_matrix3_accessor, ngp_quaternion_accessor,
-                                   ngp_aabb_accessor, node1_index);
+                              ngp_aabb_accessor, node1_index);
   Kokkos::fence();
 
   ngp_scalar_accessor.modify_on_device();

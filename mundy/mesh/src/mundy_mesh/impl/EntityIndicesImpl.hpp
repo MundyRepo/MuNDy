@@ -52,8 +52,8 @@ namespace impl {
 /// \brief Enumerate a (rank, selector) chunk into a host-modified `FastMeshIndex` view (no caching).
 template <typename OurExecSpace>
 NgpViewT<stk::mesh::FastMeshIndex*, OurExecSpace> build_local_entity_indices(const stk::mesh::BulkData& bulk_data,
-                                                                            stk::mesh::EntityRank rank,
-                                                                            const stk::mesh::Selector& selector) {
+                                                                             stk::mesh::EntityRank rank,
+                                                                             const stk::mesh::Selector& selector) {
   std::vector<stk::mesh::Entity> local_entities;
   stk::mesh::get_entities(bulk_data, rank, selector, local_entities, /*sort by global id*/ true);
 
@@ -72,16 +72,15 @@ NgpViewT<stk::mesh::FastMeshIndex*, OurExecSpace> build_local_entity_indices(con
 /// \brief Enumerate a (rank, selector) chunk into a host-modified `Entity` view (no caching).
 template <typename OurExecSpace>
 NgpViewT<stk::mesh::Entity*, OurExecSpace> build_local_entities(const stk::mesh::BulkData& bulk_data,
-                                                               stk::mesh::EntityRank rank,
-                                                               const stk::mesh::Selector& selector) {
+                                                                stk::mesh::EntityRank rank,
+                                                                const stk::mesh::Selector& selector) {
   std::vector<stk::mesh::Entity> local_entities;
   stk::mesh::get_entities(bulk_data, rank, selector, local_entities, /*sort by global id*/ true);
 
   NgpViewT<stk::mesh::Entity*, OurExecSpace> ngp_local_entities("local_entities", local_entities.size());
-  Kokkos::parallel_for(stk::ngp::HostRangePolicy(0, local_entities.size()),
-                       [&local_entities, &ngp_local_entities](const int i) {
-                         ngp_local_entities.view_host()(i) = local_entities[i];
-                       });
+  Kokkos::parallel_for(
+      stk::ngp::HostRangePolicy(0, local_entities.size()),
+      [&local_entities, &ngp_local_entities](const int i) { ngp_local_entities.view_host()(i) = local_entities[i]; });
   ngp_local_entities.modify_on_host();
   return ngp_local_entities;
 }

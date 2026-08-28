@@ -44,7 +44,8 @@ template <typename Scalar, ValidPointType PointType = Point<Scalar>,
           ValidQuaternionType QuaternionType = Quaternion<Scalar>>
 class Spherocylinder {
   static_assert(
-      std::is_same_v<typename PointType::value_type, Scalar> && std::is_same_v<typename QuaternionType::value_type, Scalar>,
+      std::is_same_v<typename PointType::value_type, Scalar> &&
+          std::is_same_v<typename QuaternionType::value_type, Scalar>,
       "The scalar type of the PointType and QuaternionType must match the scalar type of the Spherocylinder.");
 
  public:
@@ -184,7 +185,8 @@ class Spherocylinder {
 
   /// \brief Move assignment operator
   template <typename OtherSpherocylinderType>
-  KOKKOS_FUNCTION constexpr Spherocylinder<value_type, point_t, orientation_t>& operator=(OtherSpherocylinderType&& other)
+  KOKKOS_FUNCTION constexpr Spherocylinder<value_type, point_t, orientation_t>& operator=(
+      OtherSpherocylinderType&& other)
       MUNDY_REQUIRES(!std::is_same_v<OtherSpherocylinderType, Spherocylinder<value_type, point_t, orientation_t>>) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     center_ = std::move(other.center_);
@@ -281,7 +283,8 @@ class Spherocylinder {
   /// \param[in] qy The y-component of the orientation quaternion.
   /// \param[in] qz The z-component of the orientation quaternion.
   KOKKOS_FUNCTION
-  constexpr void set_orientation(const value_type& qw, const value_type& qx, const value_type& qy, const value_type& qz) {
+  constexpr void set_orientation(const value_type& qw, const value_type& qx, const value_type& qy,
+                                 const value_type& qz) {
     orientation_[0] = qw;
     orientation_[1] = qx;
     orientation_[2] = qy;
@@ -361,7 +364,8 @@ KOKKOS_FUNCTION constexpr bool is_close(
 template <ValidSpherocylinderType T1, ValidSpherocylinderType T2>
 KOKKOS_FUNCTION constexpr bool is_approx_close(
     const T1& sc1, const T2& sc2,
-    typename T1::value_type tol = get_relaxed_comparison_tolerance<typename T1::value_type, typename T2::value_type>()) {
+    typename T1::value_type tol =
+        get_relaxed_comparison_tolerance<typename T1::value_type, typename T2::value_type>()) {
   return is_close(sc1, sc2, tol);
 }
 

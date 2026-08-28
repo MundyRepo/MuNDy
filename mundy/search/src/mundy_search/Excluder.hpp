@@ -451,7 +451,6 @@ class ExcludeNonIntersectingOBBs {
   //@}
 
  private:
-
   //! \name Internal members
   //@{
 

@@ -65,7 +65,8 @@ class StridedAccessor {
   }
 
   /// \brief Shallow move constructor.
-  KOKKOS_INLINE_FUNCTION constexpr StridedAccessor(StridedAccessor<T, stride, Accessor>&& other) : accessor_(other.accessor_) {
+  KOKKOS_INLINE_FUNCTION constexpr StridedAccessor(StridedAccessor<T, stride, Accessor>&& other)
+      : accessor_(other.accessor_) {
   }
 
   /// \brief Element access operator

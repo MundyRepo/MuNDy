@@ -248,7 +248,7 @@ struct MixedAccessSinkFunc {
   template <typename Y, typename X, typename Z>
   KOKKOS_INLINE_FUNCTION void operator()(Y& y, const X& x, Z& z) const {
     y += x;
-    z  = x;
+    z = x;
   }
 };
 
@@ -661,8 +661,7 @@ inline double mat3_one_norm(const std::array<double, 9>& A) {
   double max_col = 0.0;
   for (int j = 0; j < 3; ++j) {
     double col_sum = 0.0;
-    for (int i = 0; i < 3; ++i)
-      col_sum += std::abs(A[static_cast<size_t>(i * 3 + j)]);
+    for (int i = 0; i < 3; ++i) col_sum += std::abs(A[static_cast<size_t>(i * 3 + j)]);
     max_col = std::max(max_col, col_sum);
   }
   return max_col;
@@ -673,8 +672,7 @@ inline double mat3_inf_norm(const std::array<double, 9>& A) {
   double max_row = 0.0;
   for (int i = 0; i < 3; ++i) {
     double row_sum = 0.0;
-    for (int j = 0; j < 3; ++j)
-      row_sum += std::abs(A[static_cast<size_t>(i * 3 + j)]);
+    for (int j = 0; j < 3; ++j) row_sum += std::abs(A[static_cast<size_t>(i * 3 + j)]);
     max_row = std::max(max_row, row_sum);
   }
   return max_row;
@@ -754,8 +752,7 @@ inline std::array<double, 9> quat_rotate_mat(const std::array<double, 4>& q, con
     const std::array<double, 3> col = {A[static_cast<size_t>(0 * 3 + j)], A[static_cast<size_t>(1 * 3 + j)],
                                        A[static_cast<size_t>(2 * 3 + j)]};
     const auto rotated = quat_rotate_vec(q, col);
-    for (int i = 0; i < 3; ++i)
-      R[static_cast<size_t>(i * 3 + j)] = rotated[static_cast<size_t>(i)];
+    for (int i = 0; i < 3; ++i) R[static_cast<size_t>(i * 3 + j)] = rotated[static_cast<size_t>(i)];
   }
   return R;
 }
@@ -767,8 +764,7 @@ inline std::array<double, 9> mat_rotate_quat(const std::array<double, 9>& A, con
     const std::array<double, 3> row = {A[static_cast<size_t>(i * 3 + 0)], A[static_cast<size_t>(i * 3 + 1)],
                                        A[static_cast<size_t>(i * 3 + 2)]};
     const auto rotated = vec_rotate_quat(row, q);
-    for (int j = 0; j < 3; ++j)
-      R[static_cast<size_t>(i * 3 + j)] = rotated[static_cast<size_t>(j)];
+    for (int j = 0; j < 3; ++j) R[static_cast<size_t>(i * 3 + j)] = rotated[static_cast<size_t>(j)];
   }
   return R;
 }
@@ -780,8 +776,7 @@ inline std::array<double, 4> quat_copy(const std::array<double, 4>& q) {
 
 // quat_slerp: matches mundy's slerp implementation exactly
 // Layout {x,y,z,w}. dot uses all 4 components.
-inline std::array<double, 4> quat_slerp(const std::array<double, 4>& q1, const std::array<double, 4>& q2_in,
-                                         double t) {
+inline std::array<double, 4> quat_slerp(const std::array<double, 4>& q1, const std::array<double, 4>& q2_in, double t) {
   constexpr double epsilon = 1.0e-8;  // matches get_relaxed_zero_tolerance<double>()
   double dot_q12 = q1[0] * q2_in[0] + q1[1] * q2_in[1] + q1[2] * q2_in[2] + q1[3] * q2_in[3];
   std::array<double, 4> q2 = q2_in;
@@ -800,10 +795,8 @@ inline std::array<double, 4> quat_slerp(const std::array<double, 4>& q1, const s
   const double inv_sin_theta = 1.0 / sin_theta;
   const double s1 = std::sin((1.0 - t) * theta) * inv_sin_theta;
   const double s2 = std::sin(t * theta) * inv_sin_theta;
-  return {s1 * q1[0] + s2 * q2[0], s1 * q1[1] + s2 * q2[1], s1 * q1[2] + s2 * q2[2],
-          s1 * q1[3] + s2 * q2[3]};
+  return {s1 * q1[0] + s2 * q2[0], s1 * q1[1] + s2 * q2[1], s1 * q1[2] + s2 * q2[2], s1 * q1[3] + s2 * q2[3]};
 }
-
 
 // ---- Coverage context and enumerations ----
 
@@ -1143,16 +1136,15 @@ class AccessorExprCoverageFixture : public ::testing::Test {
         [&](const stk::mesh::BulkData& mesh, const stk::mesh::Entity element) {
           const stk::mesh::Entity first_node = mesh.begin_nodes(element)[0];
           ASSERT_TRUE(stk::mesh::field_is_allocated_for_bucket(field, mesh.bucket(first_node)))
-              << "case=" << case_name << ": field '" << field.name()
-              << "' not allocated for bucket of first_node " << mesh.entity_key(first_node);
-          const double* coords =
-              static_cast<const double*>(stk::mesh::field_data(*coordinate_field_, first_node));
+              << "case=" << case_name << ": field '" << field.name() << "' not allocated for bucket of first_node "
+              << mesh.entity_key(first_node);
+          const double* coords = static_cast<const double*>(stk::mesh::field_data(*coordinate_field_, first_node));
           const std::array<double, N> expected = fn(coords);
           const double* actual = static_cast<const double*>(stk::mesh::field_data(field, first_node));
           for (size_t i = 0; i < N; ++i) {
             EXPECT_NEAR(actual[i], expected[i], kTolerance)
-                << "case=" << case_name << ", field=" << field.name()
-                << ", first_node=" << mesh.entity_key(first_node) << ", component=" << i;
+                << "case=" << case_name << ", field=" << field.name() << ", first_node=" << mesh.entity_key(first_node)
+                << ", component=" << i;
           }
         });
   }
@@ -1441,20 +1433,20 @@ class AccessorExprCoverageFixture : public ::testing::Test {
 //   q_val   — host-side double: ExpectedValues::q(c)[0]  (may be unused for non-field ops)
 // =============================================================================
 
-#define SCALAR_OP_TEST(CaseName, OpNameStr, ExprBody, ExpVal)                                               \
-  TEST_F(AccessorExprCoverageFixture, CaseName) {                                                           \
-    for_each_context<Scalar>(OpNameStr, [&](const CoverageContext& ctx, auto es) {                          \
-      with_scalar_input(ctx, es, [&](auto tmp) {                                                            \
-        out()(es) = ExprBody;                                                                               \
-        verify_scalar_output(ctx, *fields().out, [&](const double* c) -> std::array<double, 1> {           \
-          const double r_val = ExpectedValues::r(c)[0];                                                     \
-          const double divisor = (ctx.scalar_shape == ExprInputShape::RawAccessor) ? 1.0 : 2.0;             \
-          const double t = r_val / divisor;                                                                 \
-          [[maybe_unused]] const double q_val = ExpectedValues::q(c)[0];                                    \
-          return {ExpVal};                                                                                  \
-        });                                                                                                 \
-      });                                                                                                   \
-    });                                                                                                     \
+#define SCALAR_OP_TEST(CaseName, OpNameStr, ExprBody, ExpVal)                                    \
+  TEST_F(AccessorExprCoverageFixture, CaseName) {                                                \
+    for_each_context<Scalar>(OpNameStr, [&](const CoverageContext& ctx, auto es) {               \
+      with_scalar_input(ctx, es, [&](auto tmp) {                                                 \
+        out()(es) = ExprBody;                                                                    \
+        verify_scalar_output(ctx, *fields().out, [&](const double* c) -> std::array<double, 1> { \
+          const double r_val = ExpectedValues::r(c)[0];                                          \
+          const double divisor = (ctx.scalar_shape == ExprInputShape::RawAccessor) ? 1.0 : 2.0;  \
+          const double t = r_val / divisor;                                                      \
+          [[maybe_unused]] const double q_val = ExpectedValues::q(c)[0];                         \
+          return {ExpVal};                                                                       \
+        });                                                                                      \
+      });                                                                                        \
+    });                                                                                          \
   }
 
 // ---- Left- and right-hand scalar arithmetic ----
@@ -1492,37 +1484,37 @@ SCALAR_OP_TEST(ScalarOp_FieldDivide,   "scalar / field divide",   tmp / q()(es),
 //               giving t ∈ (0.30, 0.73) ⊂ [-1, 1]
 // =============================================================================
 
-#define SCALAR_BUILTIN_TEST(CaseName, OpNameStr, ExprBody, ExpVal)                                          \
-  TEST_F(AccessorExprCoverageFixture, CaseName) {                                                           \
-    for_each_context<Scalar>(OpNameStr, [&](const CoverageContext& ctx, auto es) {                          \
-      with_scalar_input(ctx, es, [&](auto tmp) {                                                            \
-        out()(es) = ExprBody;                                                                               \
-        verify_scalar_output(ctx, *fields().out, [&](const double* c) -> std::array<double, 1> {           \
-          const double r_val = ExpectedValues::r(c)[0];                                                     \
-          const double divisor = (ctx.scalar_shape == ExprInputShape::RawAccessor) ? 1.0 : 2.0;             \
-          const double t = r_val / divisor;                                                                 \
-          return {ExpVal};                                                                                  \
-        });                                                                                                 \
-      });                                                                                                   \
-    });                                                                                                     \
+#define SCALAR_BUILTIN_TEST(CaseName, OpNameStr, ExprBody, ExpVal)                               \
+  TEST_F(AccessorExprCoverageFixture, CaseName) {                                                \
+    for_each_context<Scalar>(OpNameStr, [&](const CoverageContext& ctx, auto es) {               \
+      with_scalar_input(ctx, es, [&](auto tmp) {                                                 \
+        out()(es) = ExprBody;                                                                    \
+        verify_scalar_output(ctx, *fields().out, [&](const double* c) -> std::array<double, 1> { \
+          const double r_val = ExpectedValues::r(c)[0];                                          \
+          const double divisor = (ctx.scalar_shape == ExprInputShape::RawAccessor) ? 1.0 : 2.0;  \
+          const double t = r_val / divisor;                                                      \
+          return {ExpVal};                                                                       \
+        });                                                                                      \
+      });                                                                                        \
+    });                                                                                          \
   }
 
 // asin/acos require inputs in [-1,1]; our r field has values > 2, so a raw accessor
 // cannot be passed to these functions.  Both shape variants use a DivExpr with a
 // domain-safe divisor (3.5 raw / 7.0 intermediate) — the raw-vs-intermediate axis
 // here exercises different scaling rather than different expression types.
-#define SCALAR_BUILTIN_DOMAIN_SAFE_TEST(CaseName, OpNameStr, ExprBody, ExpVal)               \
-  TEST_F(AccessorExprCoverageFixture, CaseName) {                                            \
-    for_each_context<Scalar>(OpNameStr, [&](const CoverageContext& ctx, auto es) {           \
-      const double d_safe = (ctx.scalar_shape == ExprInputShape::RawAccessor) ? 3.5 : 7.0;  \
-      auto tmp = r()(es) / d_safe;                                                           \
-      out()(es) = ExprBody;                                                                  \
+#define SCALAR_BUILTIN_DOMAIN_SAFE_TEST(CaseName, OpNameStr, ExprBody, ExpVal)                 \
+  TEST_F(AccessorExprCoverageFixture, CaseName) {                                              \
+    for_each_context<Scalar>(OpNameStr, [&](const CoverageContext& ctx, auto es) {             \
+      const double d_safe = (ctx.scalar_shape == ExprInputShape::RawAccessor) ? 3.5 : 7.0;     \
+      auto tmp = r()(es) / d_safe;                                                             \
+      out()(es) = ExprBody;                                                                    \
       verify_scalar_output(ctx, *fields().out, [&](const double* c) -> std::array<double, 1> { \
-        const double r_val = ExpectedValues::r(c)[0];                                         \
-        const double t = r_val / d_safe;                                                      \
-        return {ExpVal};                                                                      \
-      });                                                                                     \
-    });                                                                                       \
+        const double r_val = ExpectedValues::r(c)[0];                                          \
+        const double t = r_val / d_safe;                                                       \
+        return {ExpVal};                                                                       \
+      });                                                                                      \
+    });                                                                                        \
   }
 
 // clang-format on
@@ -1634,25 +1626,25 @@ VECTOR_OP_TEST(VectorOp_FieldSubtract,       "vector / field subtract",        (
 //   ts          — r_val / sd
 // =============================================================================
 
-#define VECTOR_SCALAR_OP_TEST(CaseName, OpNameStr, ExprBody, Comp0, Comp1, Comp2)                                \
-  TEST_F(AccessorExprCoverageFixture, CaseName) {                                                                \
-    for_each_context<Vector, Scalar>(OpNameStr, [&](const CoverageContext& ctx, auto es) {                       \
-      with_vector_input(ctx, es, [&](auto tmp_v) {                                                               \
-        with_scalar_input(ctx, es, [&](auto tmp_s) {                                                             \
-          vout()(es) = ExprBody;                                                                                 \
-          verify_vector3_output(ctx, *fields().vout, [&](const double* c) -> std::array<double, 3> {             \
-            const auto vel_val = ExpectedValues::vel(c);                                                         \
-            const double vd = (ctx.vector_shape == ExprInputShape::RawAccessor) ? 1.0 : 2.0;                    \
-            const double sd = (ctx.scalar_shape == ExprInputShape::RawAccessor) ? 1.0 : 2.0;                    \
-            const double tv0 = vel_val[0] / vd;                                                                 \
-            const double tv1 = vel_val[1] / vd;                                                                 \
-            const double tv2 = vel_val[2] / vd;                                                                 \
-            const double ts = ExpectedValues::r(c)[0] / sd;                                                     \
-            return {Comp0, Comp1, Comp2};                                                                        \
-          });                                                                                                    \
-        });                                                                                                      \
-      });                                                                                                        \
-    });                                                                                                          \
+#define VECTOR_SCALAR_OP_TEST(CaseName, OpNameStr, ExprBody, Comp0, Comp1, Comp2)                    \
+  TEST_F(AccessorExprCoverageFixture, CaseName) {                                                    \
+    for_each_context<Vector, Scalar>(OpNameStr, [&](const CoverageContext& ctx, auto es) {           \
+      with_vector_input(ctx, es, [&](auto tmp_v) {                                                   \
+        with_scalar_input(ctx, es, [&](auto tmp_s) {                                                 \
+          vout()(es) = ExprBody;                                                                     \
+          verify_vector3_output(ctx, *fields().vout, [&](const double* c) -> std::array<double, 3> { \
+            const auto vel_val = ExpectedValues::vel(c);                                             \
+            const double vd = (ctx.vector_shape == ExprInputShape::RawAccessor) ? 1.0 : 2.0;         \
+            const double sd = (ctx.scalar_shape == ExprInputShape::RawAccessor) ? 1.0 : 2.0;         \
+            const double tv0 = vel_val[0] / vd;                                                      \
+            const double tv1 = vel_val[1] / vd;                                                      \
+            const double tv2 = vel_val[2] / vd;                                                      \
+            const double ts = ExpectedValues::r(c)[0] / sd;                                          \
+            return {Comp0, Comp1, Comp2};                                                            \
+          });                                                                                        \
+        });                                                                                          \
+      });                                                                                            \
+    });                                                                                              \
   }
 
 // clang-format off
@@ -1717,69 +1709,69 @@ VECTOR_SCALAR_OP_TEST(VectorOp_VectorScalarExprDivide,   "vector / vector / scal
 // cross(u,v) = {u1*v2 - u2*v1, u2*v0 - u0*v2, u0*v1 - u1*v0}
 // =============================================================================
 
-#define VECTOR_SCALAR_BUILTIN_TEST(CaseName, OpNameStr, ExprBody, ExpVal)                                          \
-  TEST_F(AccessorExprCoverageFixture, CaseName) {                                                                  \
-    for_each_context<Vector>(OpNameStr, [&](const CoverageContext& ctx, auto es) {                                 \
-      with_vector_input(ctx, es, [&](auto tmp_v) {                                                                 \
-        out()(es) = ExprBody;                                                                                      \
-        verify_scalar_output(ctx, *fields().out, [&](const double* c) -> std::array<double, 1> {                  \
-          const auto vel_val = ExpectedValues::vel(c);                                                             \
-          const auto force_val = ExpectedValues::force(c);                                                         \
-          const double d = (ctx.vector_shape == ExprInputShape::RawAccessor) ? 1.0 : 2.0;                         \
-          [[maybe_unused]] const double tv0 = vel_val[0] / d;                                                      \
-          [[maybe_unused]] const double tv1 = vel_val[1] / d;                                                      \
-          [[maybe_unused]] const double tv2 = vel_val[2] / d;                                                      \
-          [[maybe_unused]] const double fv0 = force_val[0];                                                        \
-          [[maybe_unused]] const double fv1 = force_val[1];                                                        \
-          [[maybe_unused]] const double fv2 = force_val[2];                                                        \
-          return {ExpVal};                                                                                          \
-        });                                                                                                         \
-      });                                                                                                           \
-    });                                                                                                             \
+#define VECTOR_SCALAR_BUILTIN_TEST(CaseName, OpNameStr, ExprBody, ExpVal)                        \
+  TEST_F(AccessorExprCoverageFixture, CaseName) {                                                \
+    for_each_context<Vector>(OpNameStr, [&](const CoverageContext& ctx, auto es) {               \
+      with_vector_input(ctx, es, [&](auto tmp_v) {                                               \
+        out()(es) = ExprBody;                                                                    \
+        verify_scalar_output(ctx, *fields().out, [&](const double* c) -> std::array<double, 1> { \
+          const auto vel_val = ExpectedValues::vel(c);                                           \
+          const auto force_val = ExpectedValues::force(c);                                       \
+          const double d = (ctx.vector_shape == ExprInputShape::RawAccessor) ? 1.0 : 2.0;        \
+          [[maybe_unused]] const double tv0 = vel_val[0] / d;                                    \
+          [[maybe_unused]] const double tv1 = vel_val[1] / d;                                    \
+          [[maybe_unused]] const double tv2 = vel_val[2] / d;                                    \
+          [[maybe_unused]] const double fv0 = force_val[0];                                      \
+          [[maybe_unused]] const double fv1 = force_val[1];                                      \
+          [[maybe_unused]] const double fv2 = force_val[2];                                      \
+          return {ExpVal};                                                                       \
+        });                                                                                      \
+      });                                                                                        \
+    });                                                                                          \
   }
 
-#define VECTOR_VECTOR_BUILTIN_TEST(CaseName, OpNameStr, ExprBody, Comp0, Comp1, Comp2)                             \
-  TEST_F(AccessorExprCoverageFixture, CaseName) {                                                                   \
-    for_each_context<Vector>(OpNameStr, [&](const CoverageContext& ctx, auto es) {                                  \
-      with_vector_input(ctx, es, [&](auto tmp_v) {                                                                  \
-        vout()(es) = ExprBody;                                                                                      \
-        verify_vector3_output(ctx, *fields().vout, [&](const double* c) -> std::array<double, 3> {                 \
-          const auto vel_val = ExpectedValues::vel(c);                                                              \
-          const auto force_val = ExpectedValues::force(c);                                                          \
-          const double d = (ctx.vector_shape == ExprInputShape::RawAccessor) ? 1.0 : 2.0;                          \
-          /*maybe consumed by Comp0, Comp1, Comp2*/                                                                \
-          [[maybe_unused]] const double tv0 = vel_val[0] / d;                                                       \
-          [[maybe_unused]] const double tv1 = vel_val[1] / d;                                                       \
-          [[maybe_unused]] const double tv2 = vel_val[2] / d;                                                       \
-          [[maybe_unused]] const double fv0 = force_val[0];                                                         \
-          [[maybe_unused]] const double fv1 = force_val[1];                                                         \
-          [[maybe_unused]] const double fv2 = force_val[2];                                                         \
-          return {Comp0, Comp1, Comp2};                                                                             \
-        });                                                                                                         \
-      });                                                                                                           \
-    });                                                                                                             \
+#define VECTOR_VECTOR_BUILTIN_TEST(CaseName, OpNameStr, ExprBody, Comp0, Comp1, Comp2)             \
+  TEST_F(AccessorExprCoverageFixture, CaseName) {                                                  \
+    for_each_context<Vector>(OpNameStr, [&](const CoverageContext& ctx, auto es) {                 \
+      with_vector_input(ctx, es, [&](auto tmp_v) {                                                 \
+        vout()(es) = ExprBody;                                                                     \
+        verify_vector3_output(ctx, *fields().vout, [&](const double* c) -> std::array<double, 3> { \
+          const auto vel_val = ExpectedValues::vel(c);                                             \
+          const auto force_val = ExpectedValues::force(c);                                         \
+          const double d = (ctx.vector_shape == ExprInputShape::RawAccessor) ? 1.0 : 2.0;          \
+          /*maybe consumed by Comp0, Comp1, Comp2*/                                                \
+          [[maybe_unused]] const double tv0 = vel_val[0] / d;                                      \
+          [[maybe_unused]] const double tv1 = vel_val[1] / d;                                      \
+          [[maybe_unused]] const double tv2 = vel_val[2] / d;                                      \
+          [[maybe_unused]] const double fv0 = force_val[0];                                        \
+          [[maybe_unused]] const double fv1 = force_val[1];                                        \
+          [[maybe_unused]] const double fv2 = force_val[2];                                        \
+          return {Comp0, Comp1, Comp2};                                                            \
+        });                                                                                        \
+      });                                                                                          \
+    });                                                                                            \
   }
 
-#define VECTOR_MATRIX_BUILTIN_TEST(CaseName, OpNameStr, ExprBody, ExpMat)                             \
-  TEST_F(AccessorExprCoverageFixture, CaseName) {                                                      \
-    for_each_context<Vector>(OpNameStr, [&](const CoverageContext& ctx, auto es) {                     \
-      with_vector_input(ctx, es, [&](auto tmp_v) {                                                     \
-        mout()(es) = ExprBody;                                                                         \
-        verify_matrix3_output(ctx, *fields().mout, [&](const double* c) -> std::array<double, 9> {    \
-          const auto vel_val   = ExpectedValues::vel(c);                                               \
-          const auto force_val = ExpectedValues::force(c);                                             \
-          const double d = (ctx.vector_shape == ExprInputShape::RawAccessor) ? 1.0 : 2.0;             \
-          /*maybe consumed by Comp0, Comp1, Comp2*/                                                   \
-          [[maybe_unused]] const double tv0 = vel_val[0] / d;                                         \
-          [[maybe_unused]] const double tv1 = vel_val[1] / d;                                         \
-          [[maybe_unused]] const double tv2 = vel_val[2] / d;                                         \
-          [[maybe_unused]] const double fv0 = force_val[0];                                           \
-          [[maybe_unused]] const double fv1 = force_val[1];                                           \
-          [[maybe_unused]] const double fv2 = force_val[2];                                           \
-          return ExpMat;                                                                               \
-        });                                                                                            \
-      });                                                                                              \
-    });                                                                                                \
+#define VECTOR_MATRIX_BUILTIN_TEST(CaseName, OpNameStr, ExprBody, ExpMat)                          \
+  TEST_F(AccessorExprCoverageFixture, CaseName) {                                                  \
+    for_each_context<Vector>(OpNameStr, [&](const CoverageContext& ctx, auto es) {                 \
+      with_vector_input(ctx, es, [&](auto tmp_v) {                                                 \
+        mout()(es) = ExprBody;                                                                     \
+        verify_matrix3_output(ctx, *fields().mout, [&](const double* c) -> std::array<double, 9> { \
+          const auto vel_val = ExpectedValues::vel(c);                                             \
+          const auto force_val = ExpectedValues::force(c);                                         \
+          const double d = (ctx.vector_shape == ExprInputShape::RawAccessor) ? 1.0 : 2.0;          \
+          /*maybe consumed by Comp0, Comp1, Comp2*/                                                \
+          [[maybe_unused]] const double tv0 = vel_val[0] / d;                                      \
+          [[maybe_unused]] const double tv1 = vel_val[1] / d;                                      \
+          [[maybe_unused]] const double tv2 = vel_val[2] / d;                                      \
+          [[maybe_unused]] const double fv0 = force_val[0];                                        \
+          [[maybe_unused]] const double fv1 = force_val[1];                                        \
+          [[maybe_unused]] const double fv2 = force_val[2];                                        \
+          return ExpMat;                                                                           \
+        });                                                                                        \
+      });                                                                                          \
+    });                                                                                            \
   }
 
 // ---- Scalar-output builtins ----
@@ -1853,34 +1845,34 @@ VECTOR_MATRIX_BUILTIN_TEST(VectorBuiltin_OuterProduct,   "vector / outer_product
 // Vector-matrix: vtmp * mtmp -> mat^T · vel -> vout  (mundy convention: vec*mat = mat^T * vec)
 // =============================================================================
 
-#define MATRIX_OP_TEST(CaseName, OpNameStr, ExprBody, ExpMat)                                          \
-  TEST_F(AccessorExprCoverageFixture, CaseName) {                                                      \
-    for_each_context<Matrix>(OpNameStr, [&](const CoverageContext& ctx, auto es) {                     \
-      with_matrix_input(ctx, es, [&](auto tmp_m) {                                                     \
-        mout()(es) = ExprBody;                                                                         \
-        verify_matrix3_output(ctx, *fields().mout, [&](const double* c) -> std::array<double, 9> {    \
-          const double d = (ctx.matrix_shape == ExprInputShape::RawAccessor) ? 1.0 : 2.0;             \
-          const auto tm = mat3_scale(ExpectedValues::mat(c), 1.0 / d);                                \
-          [[maybe_unused]] const auto mb = ExpectedValues::mat_b(c);                                  \
-          return ExpMat;                                                                               \
-        });                                                                                            \
-      });                                                                                              \
-    });                                                                                                \
+#define MATRIX_OP_TEST(CaseName, OpNameStr, ExprBody, ExpMat)                                      \
+  TEST_F(AccessorExprCoverageFixture, CaseName) {                                                  \
+    for_each_context<Matrix>(OpNameStr, [&](const CoverageContext& ctx, auto es) {                 \
+      with_matrix_input(ctx, es, [&](auto tmp_m) {                                                 \
+        mout()(es) = ExprBody;                                                                     \
+        verify_matrix3_output(ctx, *fields().mout, [&](const double* c) -> std::array<double, 9> { \
+          const double d = (ctx.matrix_shape == ExprInputShape::RawAccessor) ? 1.0 : 2.0;          \
+          const auto tm = mat3_scale(ExpectedValues::mat(c), 1.0 / d);                             \
+          [[maybe_unused]] const auto mb = ExpectedValues::mat_b(c);                               \
+          return ExpMat;                                                                           \
+        });                                                                                        \
+      });                                                                                          \
+    });                                                                                            \
   }
 
-#define MATRIX_VECTOR_OP_TEST(CaseName, OpNameStr, ExprBody, ExpVec)                                   \
-  TEST_F(AccessorExprCoverageFixture, CaseName) {                                                      \
-    for_each_context<Matrix>(OpNameStr, [&](const CoverageContext& ctx, auto es) {                     \
-      with_matrix_input(ctx, es, [&](auto tmp_m) {                                                     \
-        vout()(es) = ExprBody;                                                                         \
-        verify_vector3_output(ctx, *fields().vout, [&](const double* c) -> std::array<double, 3> {    \
-          const double d = (ctx.matrix_shape == ExprInputShape::RawAccessor) ? 1.0 : 2.0;             \
-          const auto tm = mat3_scale(ExpectedValues::mat(c), 1.0 / d);                                \
-          const auto vel_val = ExpectedValues::vel(c);                                                 \
-          return ExpVec;                                                                               \
-        });                                                                                            \
-      });                                                                                              \
-    });                                                                                                \
+#define MATRIX_VECTOR_OP_TEST(CaseName, OpNameStr, ExprBody, ExpVec)                               \
+  TEST_F(AccessorExprCoverageFixture, CaseName) {                                                  \
+    for_each_context<Matrix>(OpNameStr, [&](const CoverageContext& ctx, auto es) {                 \
+      with_matrix_input(ctx, es, [&](auto tmp_m) {                                                 \
+        vout()(es) = ExprBody;                                                                     \
+        verify_vector3_output(ctx, *fields().vout, [&](const double* c) -> std::array<double, 3> { \
+          const double d = (ctx.matrix_shape == ExprInputShape::RawAccessor) ? 1.0 : 2.0;          \
+          const auto tm = mat3_scale(ExpectedValues::mat(c), 1.0 / d);                             \
+          const auto vel_val = ExpectedValues::vel(c);                                             \
+          return ExpVec;                                                                           \
+        });                                                                                        \
+      });                                                                                          \
+    });                                                                                            \
   }
 
 // clang-format off
@@ -1944,34 +1936,34 @@ MATRIX_VECTOR_OP_TEST(MatrixOp_VectorMatrixMultiply, "matrix / vector-matrix mul
 // inverse  = adjugate / det
 // =============================================================================
 
-#define MATRIX_SCALAR_BUILTIN_TEST(CaseName, OpNameStr, ExprBody, ExpScalar)                           \
-  TEST_F(AccessorExprCoverageFixture, CaseName) {                                                      \
-    for_each_context<Matrix>(OpNameStr, [&](const CoverageContext& ctx, auto es) {                     \
-      with_matrix_input(ctx, es, [&](auto tmp_m) {                                                     \
-        out()(es) = ExprBody;                                                                          \
-        verify_scalar_output(ctx, *fields().out, [&](const double* c) -> std::array<double, 1> {      \
-          const double d = (ctx.matrix_shape == ExprInputShape::RawAccessor) ? 1.0 : 2.0;             \
-          const auto tm = mat3_scale(ExpectedValues::mat(c), 1.0 / d);                                \
-          [[maybe_unused]] const auto mb = ExpectedValues::mat_b(c);                                  \
-          return {ExpScalar};                                                                          \
-        });                                                                                            \
-      });                                                                                              \
-    });                                                                                                \
+#define MATRIX_SCALAR_BUILTIN_TEST(CaseName, OpNameStr, ExprBody, ExpScalar)                     \
+  TEST_F(AccessorExprCoverageFixture, CaseName) {                                                \
+    for_each_context<Matrix>(OpNameStr, [&](const CoverageContext& ctx, auto es) {               \
+      with_matrix_input(ctx, es, [&](auto tmp_m) {                                               \
+        out()(es) = ExprBody;                                                                    \
+        verify_scalar_output(ctx, *fields().out, [&](const double* c) -> std::array<double, 1> { \
+          const double d = (ctx.matrix_shape == ExprInputShape::RawAccessor) ? 1.0 : 2.0;        \
+          const auto tm = mat3_scale(ExpectedValues::mat(c), 1.0 / d);                           \
+          [[maybe_unused]] const auto mb = ExpectedValues::mat_b(c);                             \
+          return {ExpScalar};                                                                    \
+        });                                                                                      \
+      });                                                                                        \
+    });                                                                                          \
   }
 
-#define MATRIX_MATRIX_BUILTIN_TEST(CaseName, OpNameStr, ExprBody, ExpMat)                              \
-  TEST_F(AccessorExprCoverageFixture, CaseName) {                                                      \
-    for_each_context<Matrix>(OpNameStr, [&](const CoverageContext& ctx, auto es) {                     \
-      with_matrix_input(ctx, es, [&](auto tmp_m) {                                                     \
-        mout()(es) = ExprBody;                                                                         \
-        verify_matrix3_output(ctx, *fields().mout, [&](const double* c) -> std::array<double, 9> {    \
-          const double d = (ctx.matrix_shape == ExprInputShape::RawAccessor) ? 1.0 : 2.0;             \
-          const auto tm = mat3_scale(ExpectedValues::mat(c), 1.0 / d);                                \
-          [[maybe_unused]] const auto mb = ExpectedValues::mat_b(c);                                  \
-          return ExpMat;                                                                               \
-        });                                                                                            \
-      });                                                                                              \
-    });                                                                                                \
+#define MATRIX_MATRIX_BUILTIN_TEST(CaseName, OpNameStr, ExprBody, ExpMat)                          \
+  TEST_F(AccessorExprCoverageFixture, CaseName) {                                                  \
+    for_each_context<Matrix>(OpNameStr, [&](const CoverageContext& ctx, auto es) {                 \
+      with_matrix_input(ctx, es, [&](auto tmp_m) {                                                 \
+        mout()(es) = ExprBody;                                                                     \
+        verify_matrix3_output(ctx, *fields().mout, [&](const double* c) -> std::array<double, 9> { \
+          const double d = (ctx.matrix_shape == ExprInputShape::RawAccessor) ? 1.0 : 2.0;          \
+          const auto tm = mat3_scale(ExpectedValues::mat(c), 1.0 / d);                             \
+          [[maybe_unused]] const auto mb = ExpectedValues::mat_b(c);                               \
+          return ExpMat;                                                                           \
+        });                                                                                        \
+      });                                                                                          \
+    });                                                                                            \
   }
 
 // ---- Scalar-output builtins ----
@@ -2052,49 +2044,49 @@ MATRIX_MATRIX_BUILTIN_TEST(MatrixBuiltin_Cofactors,             "matrix / cofact
 //   (q1*q2).w = w1*w2 - x1*x2 - y1*y2 - z1*z2
 // =============================================================================
 
-#define QUATERNION_OP_TEST(CaseName, OpNameStr, ExprBody, ExpQuat)                                      \
-  TEST_F(AccessorExprCoverageFixture, CaseName) {                                                      \
-    for_each_context<Quaternion>(OpNameStr, [&](const CoverageContext& ctx, auto es) {                 \
-      with_quaternion_input(ctx, es, [&](auto tmp_q) {                                                 \
-        qout()(es) = ExprBody;                                                                         \
+#define QUATERNION_OP_TEST(CaseName, OpNameStr, ExprBody, ExpQuat)                                    \
+  TEST_F(AccessorExprCoverageFixture, CaseName) {                                                     \
+    for_each_context<Quaternion>(OpNameStr, [&](const CoverageContext& ctx, auto es) {                \
+      with_quaternion_input(ctx, es, [&](auto tmp_q) {                                                \
+        qout()(es) = ExprBody;                                                                        \
         verify_quaternion_output(ctx, *fields().qout, [&](const double* c) -> std::array<double, 4> { \
           const double d = (ctx.quaternion_shape == ExprInputShape::RawAccessor) ? 1.0 : 2.0;         \
           const auto tq = quat_scale(ExpectedValues::quat(c), 1.0 / d);                               \
           [[maybe_unused]] const auto qb = ExpectedValues::quat_b(c);                                 \
-          return ExpQuat;                                                                              \
-        });                                                                                            \
-      });                                                                                              \
-    });                                                                                                \
+          return ExpQuat;                                                                             \
+        });                                                                                           \
+      });                                                                                             \
+    });                                                                                               \
   }
 
-#define QUATERNION_VECTOR_OP_TEST(CaseName, OpNameStr, ExprBody, ExpVec)                               \
-  TEST_F(AccessorExprCoverageFixture, CaseName) {                                                      \
-    for_each_context<Quaternion>(OpNameStr, [&](const CoverageContext& ctx, auto es) {                 \
-      with_quaternion_input(ctx, es, [&](auto tmp_q) {                                                 \
-        vout()(es) = ExprBody;                                                                         \
-        verify_vector3_output(ctx, *fields().vout, [&](const double* c) -> std::array<double, 3> {    \
-          const double d = (ctx.quaternion_shape == ExprInputShape::RawAccessor) ? 1.0 : 2.0;         \
-          const auto tq = quat_scale(ExpectedValues::quat(c), 1.0 / d);                               \
-          const auto vel_val = ExpectedValues::vel(c);                                                 \
-          return ExpVec;                                                                               \
-        });                                                                                            \
-      });                                                                                              \
-    });                                                                                                \
+#define QUATERNION_VECTOR_OP_TEST(CaseName, OpNameStr, ExprBody, ExpVec)                           \
+  TEST_F(AccessorExprCoverageFixture, CaseName) {                                                  \
+    for_each_context<Quaternion>(OpNameStr, [&](const CoverageContext& ctx, auto es) {             \
+      with_quaternion_input(ctx, es, [&](auto tmp_q) {                                             \
+        vout()(es) = ExprBody;                                                                     \
+        verify_vector3_output(ctx, *fields().vout, [&](const double* c) -> std::array<double, 3> { \
+          const double d = (ctx.quaternion_shape == ExprInputShape::RawAccessor) ? 1.0 : 2.0;      \
+          const auto tq = quat_scale(ExpectedValues::quat(c), 1.0 / d);                            \
+          const auto vel_val = ExpectedValues::vel(c);                                             \
+          return ExpVec;                                                                           \
+        });                                                                                        \
+      });                                                                                          \
+    });                                                                                            \
   }
 
-#define QUATERNION_MATRIX_OP_TEST(CaseName, OpNameStr, ExprBody, ExpMat)                               \
-  TEST_F(AccessorExprCoverageFixture, CaseName) {                                                      \
-    for_each_context<Quaternion>(OpNameStr, [&](const CoverageContext& ctx, auto es) {                 \
-      with_quaternion_input(ctx, es, [&](auto tmp_q) {                                                 \
-        mout()(es) = ExprBody;                                                                         \
-        verify_matrix3_output(ctx, *fields().mout, [&](const double* c) -> std::array<double, 9> {    \
-          const double d = (ctx.quaternion_shape == ExprInputShape::RawAccessor) ? 1.0 : 2.0;         \
-          const auto tq = quat_scale(ExpectedValues::quat(c), 1.0 / d);                               \
-          const auto mat_val = ExpectedValues::mat(c);                                                 \
-          return ExpMat;                                                                               \
-        });                                                                                            \
-      });                                                                                              \
-    });                                                                                                \
+#define QUATERNION_MATRIX_OP_TEST(CaseName, OpNameStr, ExprBody, ExpMat)                           \
+  TEST_F(AccessorExprCoverageFixture, CaseName) {                                                  \
+    for_each_context<Quaternion>(OpNameStr, [&](const CoverageContext& ctx, auto es) {             \
+      with_quaternion_input(ctx, es, [&](auto tmp_q) {                                             \
+        mout()(es) = ExprBody;                                                                     \
+        verify_matrix3_output(ctx, *fields().mout, [&](const double* c) -> std::array<double, 9> { \
+          const double d = (ctx.quaternion_shape == ExprInputShape::RawAccessor) ? 1.0 : 2.0;      \
+          const auto tq = quat_scale(ExpectedValues::quat(c), 1.0 / d);                            \
+          const auto mat_val = ExpectedValues::mat(c);                                             \
+          return ExpMat;                                                                           \
+        });                                                                                        \
+      });                                                                                          \
+    });                                                                                            \
   }
 
 // clang-format off
@@ -2145,34 +2137,34 @@ QUATERNION_MATRIX_OP_TEST(QuaternionOp_MatrixQuaternionRotate, "quaternion / mat
 //   threshold; our test quaternions have dot ≈ 0.91 so slerp is active.
 // =============================================================================
 
-#define QUATERNION_SCALAR_BUILTIN_TEST(CaseName, OpNameStr, ExprBody, ExpScalar)                        \
-  TEST_F(AccessorExprCoverageFixture, CaseName) {                                                      \
-    for_each_context<Quaternion>(OpNameStr, [&](const CoverageContext& ctx, auto es) {                 \
-      with_quaternion_input(ctx, es, [&](auto tmp_q) {                                                 \
-        out()(es) = ExprBody;                                                                          \
-        verify_scalar_output(ctx, *fields().out, [&](const double* c) -> std::array<double, 1> {      \
-          const double d = (ctx.quaternion_shape == ExprInputShape::RawAccessor) ? 1.0 : 2.0;         \
-          const auto tq = quat_scale(ExpectedValues::quat(c), 1.0 / d);                               \
-          [[maybe_unused]] const auto qb = ExpectedValues::quat_b(c);                                 \
-          return {ExpScalar};                                                                          \
-        });                                                                                            \
-      });                                                                                              \
-    });                                                                                                \
+#define QUATERNION_SCALAR_BUILTIN_TEST(CaseName, OpNameStr, ExprBody, ExpScalar)                 \
+  TEST_F(AccessorExprCoverageFixture, CaseName) {                                                \
+    for_each_context<Quaternion>(OpNameStr, [&](const CoverageContext& ctx, auto es) {           \
+      with_quaternion_input(ctx, es, [&](auto tmp_q) {                                           \
+        out()(es) = ExprBody;                                                                    \
+        verify_scalar_output(ctx, *fields().out, [&](const double* c) -> std::array<double, 1> { \
+          const double d = (ctx.quaternion_shape == ExprInputShape::RawAccessor) ? 1.0 : 2.0;    \
+          const auto tq = quat_scale(ExpectedValues::quat(c), 1.0 / d);                          \
+          [[maybe_unused]] const auto qb = ExpectedValues::quat_b(c);                            \
+          return {ExpScalar};                                                                    \
+        });                                                                                      \
+      });                                                                                        \
+    });                                                                                          \
   }
 
-#define QUATERNION_QUATERNION_BUILTIN_TEST(CaseName, OpNameStr, ExprBody, ExpQuat)                     \
-  TEST_F(AccessorExprCoverageFixture, CaseName) {                                                      \
-    for_each_context<Quaternion>(OpNameStr, [&](const CoverageContext& ctx, auto es) {                 \
-      with_quaternion_input(ctx, es, [&](auto tmp_q) {                                                 \
-        qout()(es) = ExprBody;                                                                         \
+#define QUATERNION_QUATERNION_BUILTIN_TEST(CaseName, OpNameStr, ExprBody, ExpQuat)                    \
+  TEST_F(AccessorExprCoverageFixture, CaseName) {                                                     \
+    for_each_context<Quaternion>(OpNameStr, [&](const CoverageContext& ctx, auto es) {                \
+      with_quaternion_input(ctx, es, [&](auto tmp_q) {                                                \
+        qout()(es) = ExprBody;                                                                        \
         verify_quaternion_output(ctx, *fields().qout, [&](const double* c) -> std::array<double, 4> { \
           const double d = (ctx.quaternion_shape == ExprInputShape::RawAccessor) ? 1.0 : 2.0;         \
           const auto tq = quat_scale(ExpectedValues::quat(c), 1.0 / d);                               \
           [[maybe_unused]] const auto qb = ExpectedValues::quat_b(c);                                 \
-          return ExpQuat;                                                                              \
-        });                                                                                            \
-      });                                                                                              \
-    });                                                                                                \
+          return ExpQuat;                                                                             \
+        });                                                                                           \
+      });                                                                                             \
+    });                                                                                               \
   }
 
 // ---- Scalar-output builtins ----
@@ -2287,12 +2279,10 @@ TEST_F(AccessorExprCoverageFixture, EvalTrigger_ReduceLocalSum) {
   // Expected sum: accumulate r(c) over locally-owned selected nodes on the host.
   // r(c) = 2.0 + c[0] + 0.25*c[1]; nodes in block_1 – block_2 are IDs {1..8, 10..12}.
   fields().r->sync_to_host();
-  const stk::mesh::Selector owned_selected =
-      parts().selected & bulk().mesh_meta_data().locally_owned_part();
+  const stk::mesh::Selector owned_selected = parts().selected & bulk().mesh_meta_data().locally_owned_part();
   double expected = 0.0;
   for (const stk::mesh::Bucket* b : bulk().get_buckets(stk::topology::NODE_RANK, owned_selected))
-    for (stk::mesh::Entity e : *b)
-      expected += stk::mesh::field_data(*fields().r, e)[0];
+    for (stk::mesh::Entity e : *b) expected += stk::mesh::field_data(*fields().r, e)[0];
   auto es = make_node_entities();
   const double result = reduce_local_sum<double>(r()(es));
   EXPECT_NEAR(result, expected, kTolerance * std::abs(expected) + kTolerance);
@@ -2301,12 +2291,10 @@ TEST_F(AccessorExprCoverageFixture, EvalTrigger_ReduceLocalSum) {
 TEST_F(AccessorExprCoverageFixture, EvalTrigger_ReduceLocalMax) {
   // Expected max: maximum r(c) over locally-owned selected nodes on the host.
   fields().r->sync_to_host();
-  const stk::mesh::Selector owned_selected =
-      parts().selected & bulk().mesh_meta_data().locally_owned_part();
+  const stk::mesh::Selector owned_selected = parts().selected & bulk().mesh_meta_data().locally_owned_part();
   double expected = 0.0;  // r > 2 always; sentinel 0 is safely below any r value
   for (const stk::mesh::Bucket* b : bulk().get_buckets(stk::topology::NODE_RANK, owned_selected))
-    for (stk::mesh::Entity e : *b)
-      expected = std::max(expected, stk::mesh::field_data(*fields().r, e)[0]);
+    for (stk::mesh::Entity e : *b) expected = std::max(expected, stk::mesh::field_data(*fields().r, e)[0]);
   auto es = make_node_entities();
   const double result = reduce_local_max<double>(r()(es));
   EXPECT_NEAR(result, expected, kTolerance);
@@ -2315,12 +2303,10 @@ TEST_F(AccessorExprCoverageFixture, EvalTrigger_ReduceLocalMax) {
 TEST_F(AccessorExprCoverageFixture, EvalTrigger_ReduceLocalMin) {
   // Expected min: minimum r(c) over locally-owned selected nodes on the host.
   fields().r->sync_to_host();
-  const stk::mesh::Selector owned_selected =
-      parts().selected & bulk().mesh_meta_data().locally_owned_part();
+  const stk::mesh::Selector owned_selected = parts().selected & bulk().mesh_meta_data().locally_owned_part();
   double expected = 1.0e10;  // r < 3 always; sentinel 1e10 is safely above any r value
   for (const stk::mesh::Bucket* b : bulk().get_buckets(stk::topology::NODE_RANK, owned_selected))
-    for (stk::mesh::Entity e : *b)
-      expected = std::min(expected, stk::mesh::field_data(*fields().r, e)[0]);
+    for (stk::mesh::Entity e : *b) expected = std::min(expected, stk::mesh::field_data(*fields().r, e)[0]);
   auto es = make_node_entities();
   const double result = reduce_local_min<double>(r()(es));
   EXPECT_NEAR(result, expected, kTolerance);
@@ -2331,14 +2317,12 @@ TEST_F(AccessorExprCoverageFixture, EvalTrigger_AllReduceSum) {
   // local contribution and must account for all ranks (1-rank: equal; 2-rank: larger).
   // Also verify the local reduction result exactly, which tests both code paths.
   fields().r->sync_to_host();
-  const stk::mesh::Selector owned_selected =
-      parts().selected & bulk().mesh_meta_data().locally_owned_part();
+  const stk::mesh::Selector owned_selected = parts().selected & bulk().mesh_meta_data().locally_owned_part();
   double local_expected = 0.0;
   for (const stk::mesh::Bucket* b : bulk().get_buckets(stk::topology::NODE_RANK, owned_selected))
-    for (stk::mesh::Entity e : *b)
-      local_expected += stk::mesh::field_data(*fields().r, e)[0];
+    for (stk::mesh::Entity e : *b) local_expected += stk::mesh::field_data(*fields().r, e)[0];
   auto es = make_node_entities();
-  const double local_result  = reduce_local_sum<double>(r()(es));
+  const double local_result = reduce_local_sum<double>(r()(es));
   const double global_result = all_reduce_sum<double>(r()(es));
   EXPECT_NEAR(local_result, local_expected, kTolerance * std::abs(local_expected) + kTolerance);
   EXPECT_GE(global_result, local_expected);  // global >= local on every rank
@@ -2348,14 +2332,12 @@ TEST_F(AccessorExprCoverageFixture, EvalTrigger_AllReduceSum) {
 TEST_F(AccessorExprCoverageFixture, EvalTrigger_AllReduceMax) {
   // all_reduce_max must be >= the local maximum on every rank.
   fields().r->sync_to_host();
-  const stk::mesh::Selector owned_selected =
-      parts().selected & bulk().mesh_meta_data().locally_owned_part();
+  const stk::mesh::Selector owned_selected = parts().selected & bulk().mesh_meta_data().locally_owned_part();
   double local_expected = 0.0;  // r > 2 always; sentinel 0 is safely below any r value
   for (const stk::mesh::Bucket* b : bulk().get_buckets(stk::topology::NODE_RANK, owned_selected))
-    for (stk::mesh::Entity e : *b)
-      local_expected = std::max(local_expected, stk::mesh::field_data(*fields().r, e)[0]);
+    for (stk::mesh::Entity e : *b) local_expected = std::max(local_expected, stk::mesh::field_data(*fields().r, e)[0]);
   auto es = make_node_entities();
-  const double local_result  = reduce_local_max<double>(r()(es));
+  const double local_result = reduce_local_max<double>(r()(es));
   const double global_result = all_reduce_max<double>(r()(es));
   EXPECT_NEAR(local_result, local_expected, kTolerance);
   EXPECT_GE(global_result, local_expected);  // global max >= local max
@@ -2365,14 +2347,12 @@ TEST_F(AccessorExprCoverageFixture, EvalTrigger_AllReduceMax) {
 TEST_F(AccessorExprCoverageFixture, EvalTrigger_AllReduceMin) {
   // all_reduce_min must be <= the local minimum on every rank.
   fields().r->sync_to_host();
-  const stk::mesh::Selector owned_selected =
-      parts().selected & bulk().mesh_meta_data().locally_owned_part();
+  const stk::mesh::Selector owned_selected = parts().selected & bulk().mesh_meta_data().locally_owned_part();
   double local_expected = 1.0e10;  // r < 3 always; sentinel 1e10 is safely above any r value
   for (const stk::mesh::Bucket* b : bulk().get_buckets(stk::topology::NODE_RANK, owned_selected))
-    for (stk::mesh::Entity e : *b)
-      local_expected = std::min(local_expected, stk::mesh::field_data(*fields().r, e)[0]);
+    for (stk::mesh::Entity e : *b) local_expected = std::min(local_expected, stk::mesh::field_data(*fields().r, e)[0]);
   auto es = make_node_entities();
-  const double local_result  = reduce_local_min<double>(r()(es));
+  const double local_result = reduce_local_min<double>(r()(es));
   const double global_result = all_reduce_min<double>(r()(es));
   EXPECT_NEAR(local_result, local_expected, kTolerance);
   EXPECT_LE(global_result, local_expected);  // global min <= local min
@@ -2384,17 +2364,15 @@ TEST_F(AccessorExprCoverageFixture, EvalTrigger_FusedSwap) {
   //   out_new = q,  aux_new = r
   // Initialize out = r, aux = q, then fused-assign swaps them.
   auto es = make_node_entities();
-  out()(es) = r()(es);   // out = r
-  aux()(es) = q()(es);   // aux = q (note: aux field already holds its own init value,
-                          //         but we write q here as "initial out-value for swap")
+  out()(es) = r()(es);  // out = r
+  aux()(es) = q()(es);  // aux = q (note: aux field already holds its own init value,
+                        //         but we write q here as "initial out-value for swap")
   // fused_assign: out ← q()(es),  aux ← r()(es)
   fused_assign(out()(es), q()(es), aux()(es), r()(es));
-  expect_scalar_field_near(
-      "EvalTrigger_FusedSwap_out", *fields().out, parts().selected,
-      [](const double* c) -> std::array<double, 1> { return {ExpectedValues::q(c)[0]}; });
-  expect_scalar_field_near(
-      "EvalTrigger_FusedSwap_aux", *fields().aux, parts().selected,
-      [](const double* c) -> std::array<double, 1> { return {ExpectedValues::r(c)[0]}; });
+  expect_scalar_field_near("EvalTrigger_FusedSwap_out", *fields().out, parts().selected,
+                           [](const double* c) -> std::array<double, 1> { return {ExpectedValues::q(c)[0]}; });
+  expect_scalar_field_near("EvalTrigger_FusedSwap_aux", *fields().aux, parts().selected,
+                           [](const double* c) -> std::array<double, 1> { return {ExpectedValues::r(c)[0]}; });
 }
 
 // =============================================================================
@@ -2577,15 +2555,14 @@ TEST_F(AccessorExprCoverageFixture, CustomExpr_SinkExprMixedAccess) {
 // All atomic tests: init out (or no-op), apply atomic_fn(out, r), verify out.
 // r > 2 on all nodes so AtomicDiv is safe.
 // Each test sweeps entity_shape in {OrdinaryEntity, ConnectedEntities}.
-#define ATOMIC_OP_TEST(CaseName, AtomicFn, InitStmt, ExpVal)                                    \
-  TEST_F(AccessorExprCoverageFixture, CaseName) {                                               \
-    for_each_context<>("custom / " #CaseName, [&](const CoverageContext& ctx, auto es) {        \
-      InitStmt;                                                                                 \
-      auto expr = AtomicFn(out()(es), r()(es));                                                 \
-      expr.driver()->run(expr);                                                                 \
-      verify_scalar_output(ctx, *fields().out,                                                  \
-                           [](const double* c) -> std::array<double, 1> { return ExpVal; });   \
-    });                                                                                         \
+#define ATOMIC_OP_TEST(CaseName, AtomicFn, InitStmt, ExpVal)                                                     \
+  TEST_F(AccessorExprCoverageFixture, CaseName) {                                                                \
+    for_each_context<>("custom / " #CaseName, [&](const CoverageContext& ctx, auto es) {                         \
+      InitStmt;                                                                                                  \
+      auto expr = AtomicFn(out()(es), r()(es));                                                                  \
+      expr.driver()->run(expr);                                                                                  \
+      verify_scalar_output(ctx, *fields().out, [](const double* c) -> std::array<double, 1> { return ExpVal; }); \
+    });                                                                                                          \
   }
 
 // clang-format off
@@ -2657,22 +2634,19 @@ TEST_F(AccessorExprCoverageFixture, CustomExpr_RotateQuaternionSink) {
 // bare integer literals because the framework expects expression nodes.
 // =============================================================================
 
-
 TEST_F(AccessorExprCoverageFixture, RNG_SingleDraw) {
-  auto es   = make_node_entities();
+  auto es = make_node_entities();
   auto rng_ = rng(seed()(es), counter()(es));
   first_draw()(es) = rng_.template rand<double>();
   fields().first_draw->sync_to_host();
   stk::mesh::for_each_entity_run(
       static_cast<const stk::mesh::BulkData&>(bulk()), stk::topology::NODE_RANK, parts().selected,
       [&](const stk::mesh::BulkData& /*mesh*/, const stk::mesh::Entity entity) {
-        const double seed_val    = stk::mesh::field_data(*fields().seed,       entity)[0];
-        const double counter_val = stk::mesh::field_data(*fields().counter,    entity)[0];
-        const double actual      = stk::mesh::field_data(*fields().first_draw, entity)[0];
-        auto expected_rng        = ::mundy::make_philox(static_cast<size_t>(seed_val),
-                                                      static_cast<size_t>(counter_val));
-        EXPECT_DOUBLE_EQ(actual, expected_rng.template rand<double>())
-            << "RNG_SingleDraw: value mismatch";
+        const double seed_val = stk::mesh::field_data(*fields().seed, entity)[0];
+        const double counter_val = stk::mesh::field_data(*fields().counter, entity)[0];
+        const double actual = stk::mesh::field_data(*fields().first_draw, entity)[0];
+        auto expected_rng = ::mundy::make_philox(static_cast<size_t>(seed_val), static_cast<size_t>(counter_val));
+        EXPECT_DOUBLE_EQ(actual, expected_rng.template rand<double>()) << "RNG_SingleDraw: value mismatch";
       });
 }
 
@@ -2680,44 +2654,40 @@ TEST_F(AccessorExprCoverageFixture, RNG_FusedAssignTwoDraws) {
   // CounterBasedRNGExpr has supports_runtime_reuse=true, so both draw expressions
   // in the fused kernel share one cached Philox object; successive rand() calls
   // advance its internal counter, producing two distinct values.
-  auto es   = make_node_entities();
+  auto es = make_node_entities();
   auto rng_ = rng(seed()(es), counter()(es));
-  fused_assign(first_draw()(es), rng_.template rand<double>(),
-               second_draw()(es), rng_.template rand<double>());
+  fused_assign(first_draw()(es), rng_.template rand<double>(), second_draw()(es), rng_.template rand<double>());
   fields().first_draw->sync_to_host();
   fields().second_draw->sync_to_host();
   stk::mesh::for_each_entity_run(
       static_cast<const stk::mesh::BulkData&>(bulk()), stk::topology::NODE_RANK, parts().selected,
       [&](const stk::mesh::BulkData& /*mesh*/, const stk::mesh::Entity entity) {
-        const double seed_val    = stk::mesh::field_data(*fields().seed,        entity)[0];
-        const double counter_val = stk::mesh::field_data(*fields().counter,     entity)[0];
-        const double actual_fd   = stk::mesh::field_data(*fields().first_draw,  entity)[0];
-        const double actual_sd   = stk::mesh::field_data(*fields().second_draw, entity)[0];
-        auto expected_rng        = ::mundy::make_philox(static_cast<size_t>(seed_val),
-                                                      static_cast<size_t>(counter_val));
+        const double seed_val = stk::mesh::field_data(*fields().seed, entity)[0];
+        const double counter_val = stk::mesh::field_data(*fields().counter, entity)[0];
+        const double actual_fd = stk::mesh::field_data(*fields().first_draw, entity)[0];
+        const double actual_sd = stk::mesh::field_data(*fields().second_draw, entity)[0];
+        auto expected_rng = ::mundy::make_philox(static_cast<size_t>(seed_val), static_cast<size_t>(counter_val));
         const double expected_fd = expected_rng.template rand<double>();
         const double expected_sd = expected_rng.template rand<double>();
         EXPECT_DOUBLE_EQ(actual_fd, expected_fd) << "RNG_FusedAssignTwoDraws: first draw mismatch";
         EXPECT_DOUBLE_EQ(actual_sd, expected_sd) << "RNG_FusedAssignTwoDraws: second draw mismatch";
-        EXPECT_NE(actual_fd, actual_sd)           << "RNG_FusedAssignTwoDraws: both draws are equal";
+        EXPECT_NE(actual_fd, actual_sd) << "RNG_FusedAssignTwoDraws: both draws are equal";
       });
 }
 
 TEST_F(AccessorExprCoverageFixture, RNG_UniformDraw) {
-  auto es   = make_node_entities();
+  auto es = make_node_entities();
   auto rng_ = rng(seed()(es), counter()(es));
   first_draw()(es) = rng_.template uniform<double>(0.0, 1.0);
   fields().first_draw->sync_to_host();
   stk::mesh::for_each_entity_run(
       static_cast<const stk::mesh::BulkData&>(bulk()), stk::topology::NODE_RANK, parts().selected,
       [&](const stk::mesh::BulkData& /*mesh*/, const stk::mesh::Entity entity) {
-        const double seed_val    = stk::mesh::field_data(*fields().seed,       entity)[0];
-        const double counter_val = stk::mesh::field_data(*fields().counter,    entity)[0];
-        const double actual      = stk::mesh::field_data(*fields().first_draw, entity)[0];
-        auto expected_rng        = ::mundy::make_philox(static_cast<size_t>(seed_val),
-                                                      static_cast<size_t>(counter_val));
-        EXPECT_DOUBLE_EQ(actual, expected_rng.template uniform<double>(0.0, 1.0))
-            << "RNG_UniformDraw: value mismatch";
+        const double seed_val = stk::mesh::field_data(*fields().seed, entity)[0];
+        const double counter_val = stk::mesh::field_data(*fields().counter, entity)[0];
+        const double actual = stk::mesh::field_data(*fields().first_draw, entity)[0];
+        auto expected_rng = ::mundy::make_philox(static_cast<size_t>(seed_val), static_cast<size_t>(counter_val));
+        EXPECT_DOUBLE_EQ(actual, expected_rng.template uniform<double>(0.0, 1.0)) << "RNG_UniformDraw: value mismatch";
       });
 }
 
@@ -2725,38 +2695,35 @@ TEST_F(AccessorExprCoverageFixture, RNG_ExpressionSeed) {
   // seed(es)+0.0 wraps the accessor in a BinaryValueExpr.  The numeric result is
   // identical to seed(es) (adding 0.0 is exact in IEEE 754), so the draw must
   // match make_philox(seed_val, counter_val).rand<double>() exactly.
-  auto es   = make_node_entities();
+  auto es = make_node_entities();
   auto rng_ = rng(seed()(es) + 0.0, counter()(es));
   first_draw()(es) = rng_.template rand<double>();
   fields().first_draw->sync_to_host();
   stk::mesh::for_each_entity_run(
       static_cast<const stk::mesh::BulkData&>(bulk()), stk::topology::NODE_RANK, parts().selected,
       [&](const stk::mesh::BulkData& /*mesh*/, const stk::mesh::Entity entity) {
-        const double seed_val    = stk::mesh::field_data(*fields().seed,       entity)[0];
-        const double counter_val = stk::mesh::field_data(*fields().counter,    entity)[0];
-        const double actual      = stk::mesh::field_data(*fields().first_draw, entity)[0];
-        auto expected_rng        = ::mundy::make_philox(static_cast<size_t>(seed_val + 0.0),
-                                                      static_cast<size_t>(counter_val));
-        EXPECT_DOUBLE_EQ(actual, expected_rng.template rand<double>())
-            << "RNG_ExpressionSeed: value mismatch";
+        const double seed_val = stk::mesh::field_data(*fields().seed, entity)[0];
+        const double counter_val = stk::mesh::field_data(*fields().counter, entity)[0];
+        const double actual = stk::mesh::field_data(*fields().first_draw, entity)[0];
+        auto expected_rng = ::mundy::make_philox(static_cast<size_t>(seed_val + 0.0), static_cast<size_t>(counter_val));
+        EXPECT_DOUBLE_EQ(actual, expected_rng.template rand<double>()) << "RNG_ExpressionSeed: value mismatch";
       });
 }
 
 TEST_F(AccessorExprCoverageFixture, RNG_UniformExprBounds) {
-  auto es   = make_node_entities();
+  auto es = make_node_entities();
   auto rng_ = rng(seed()(es), counter()(es));
   first_draw()(es) = rng_.template uniform<double>(r()(es), q()(es));
   fields().first_draw->sync_to_host();
   stk::mesh::for_each_entity_run(
       static_cast<const stk::mesh::BulkData&>(bulk()), stk::topology::NODE_RANK, parts().selected,
       [&](const stk::mesh::BulkData& /*mesh*/, const stk::mesh::Entity entity) {
-        const double seed_val    = stk::mesh::field_data(*fields().seed,       entity)[0];
-        const double counter_val = stk::mesh::field_data(*fields().counter,    entity)[0];
-        const double r_val       = stk::mesh::field_data(*fields().r,          entity)[0];
-        const double q_val       = stk::mesh::field_data(*fields().q,          entity)[0];
-        const double actual      = stk::mesh::field_data(*fields().first_draw, entity)[0];
-        auto expected_rng        = ::mundy::make_philox(static_cast<size_t>(seed_val),
-                                                      static_cast<size_t>(counter_val));
+        const double seed_val = stk::mesh::field_data(*fields().seed, entity)[0];
+        const double counter_val = stk::mesh::field_data(*fields().counter, entity)[0];
+        const double r_val = stk::mesh::field_data(*fields().r, entity)[0];
+        const double q_val = stk::mesh::field_data(*fields().q, entity)[0];
+        const double actual = stk::mesh::field_data(*fields().first_draw, entity)[0];
+        auto expected_rng = ::mundy::make_philox(static_cast<size_t>(seed_val), static_cast<size_t>(counter_val));
         EXPECT_DOUBLE_EQ(actual, expected_rng.template uniform<double>(r_val, q_val))
             << "RNG_UniformExprBounds: value mismatch";
       });
@@ -2765,15 +2732,15 @@ TEST_F(AccessorExprCoverageFixture, RNG_UniformExprBounds) {
 TEST_F(AccessorExprCoverageFixture, RNG_ConstantCounter) {
   // counter(es)*0.0 evaluates to 0.0 for every entity: exercises the path where the
   // counter expression is a constant (BinaryValueExpr), not a raw accessor.
-  auto es   = make_node_entities();
+  auto es = make_node_entities();
   auto rng_ = rng(seed()(es), counter()(es) * 0.0);
   first_draw()(es) = rng_.template rand<double>();
   fields().first_draw->sync_to_host();
   stk::mesh::for_each_entity_run(
       static_cast<const stk::mesh::BulkData&>(bulk()), stk::topology::NODE_RANK, parts().selected,
       [&](const stk::mesh::BulkData& /*mesh*/, const stk::mesh::Entity entity) {
-        const double seed_val = stk::mesh::field_data(*fields().seed,       entity)[0];
-        const double actual   = stk::mesh::field_data(*fields().first_draw, entity)[0];
+        const double seed_val = stk::mesh::field_data(*fields().seed, entity)[0];
+        const double actual = stk::mesh::field_data(*fields().first_draw, entity)[0];
         // Effective counter = counter_field * 0.0 = 0.0 for all entities.
         auto expected_rng = ::mundy::make_philox(static_cast<size_t>(seed_val), static_cast<size_t>(0.0));
         EXPECT_DOUBLE_EQ(actual, expected_rng.template rand<double>()) << "RNG_ConstantCounter: value mismatch";
@@ -2783,18 +2750,17 @@ TEST_F(AccessorExprCoverageFixture, RNG_ConstantCounter) {
 TEST_F(AccessorExprCoverageFixture, RNG_ConstantSeed) {
   // seed(es)*0.0+42.0 evaluates to 42.0 for every entity: exercises the path where the
   // seed expression is a constant (BinaryValueExpr), not a raw accessor.
-  auto es   = make_node_entities();
+  auto es = make_node_entities();
   auto rng_ = rng(seed()(es) * 0.0 + 42.0, counter()(es));
   first_draw()(es) = rng_.template rand<double>();
   fields().first_draw->sync_to_host();
   stk::mesh::for_each_entity_run(
       static_cast<const stk::mesh::BulkData&>(bulk()), stk::topology::NODE_RANK, parts().selected,
       [&](const stk::mesh::BulkData& /*mesh*/, const stk::mesh::Entity entity) {
-        const double counter_val = stk::mesh::field_data(*fields().counter,    entity)[0];
-        const double actual      = stk::mesh::field_data(*fields().first_draw, entity)[0];
+        const double counter_val = stk::mesh::field_data(*fields().counter, entity)[0];
+        const double actual = stk::mesh::field_data(*fields().first_draw, entity)[0];
         // Effective seed = seed_field*0.0 + 42.0 = 42.0 for all entities.
-        auto expected_rng = ::mundy::make_philox(static_cast<size_t>(42.0),
-                                               static_cast<size_t>(counter_val));
+        auto expected_rng = ::mundy::make_philox(static_cast<size_t>(42.0), static_cast<size_t>(counter_val));
         EXPECT_DOUBLE_EQ(actual, expected_rng.template rand<double>()) << "RNG_ConstantSeed: value mismatch";
       });
 }
@@ -2802,36 +2768,35 @@ TEST_F(AccessorExprCoverageFixture, RNG_ConstantSeed) {
 TEST_F(AccessorExprCoverageFixture, RNG_IntermediateCounter) {
   // counter(es)+1.0 wraps the accessor in a BinaryValueExpr.  The effective counter
   // passed to make_philox is counter_field + 1.0.
-  auto es   = make_node_entities();
+  auto es = make_node_entities();
   auto rng_ = rng(seed()(es), counter()(es) + 1.0);
   first_draw()(es) = rng_.template rand<double>();
   fields().first_draw->sync_to_host();
   stk::mesh::for_each_entity_run(
       static_cast<const stk::mesh::BulkData&>(bulk()), stk::topology::NODE_RANK, parts().selected,
       [&](const stk::mesh::BulkData& /*mesh*/, const stk::mesh::Entity entity) {
-        const double seed_val    = stk::mesh::field_data(*fields().seed,       entity)[0];
-        const double counter_val = stk::mesh::field_data(*fields().counter,    entity)[0];
-        const double actual      = stk::mesh::field_data(*fields().first_draw, entity)[0];
-        auto expected_rng        = ::mundy::make_philox(static_cast<size_t>(seed_val),
-                                                      static_cast<size_t>(counter_val + 1.0));
+        const double seed_val = stk::mesh::field_data(*fields().seed, entity)[0];
+        const double counter_val = stk::mesh::field_data(*fields().counter, entity)[0];
+        const double actual = stk::mesh::field_data(*fields().first_draw, entity)[0];
+        auto expected_rng = ::mundy::make_philox(static_cast<size_t>(seed_val), static_cast<size_t>(counter_val + 1.0));
         EXPECT_DOUBLE_EQ(actual, expected_rng.template rand<double>()) << "RNG_IntermediateCounter: value mismatch";
       });
 }
 
 TEST_F(AccessorExprCoverageFixture, RNG_IntermediateSeedAndCounter) {
   // Both seed and counter are BinaryValueExpr nodes (each shifted by +1.0).
-  auto es   = make_node_entities();
+  auto es = make_node_entities();
   auto rng_ = rng(seed()(es) + 1.0, counter()(es) + 1.0);
   first_draw()(es) = rng_.template rand<double>();
   fields().first_draw->sync_to_host();
   stk::mesh::for_each_entity_run(
       static_cast<const stk::mesh::BulkData&>(bulk()), stk::topology::NODE_RANK, parts().selected,
       [&](const stk::mesh::BulkData& /*mesh*/, const stk::mesh::Entity entity) {
-        const double seed_val    = stk::mesh::field_data(*fields().seed,       entity)[0];
-        const double counter_val = stk::mesh::field_data(*fields().counter,    entity)[0];
-        const double actual      = stk::mesh::field_data(*fields().first_draw, entity)[0];
-        auto expected_rng        = ::mundy::make_philox(static_cast<size_t>(seed_val    + 1.0),
-                                                      static_cast<size_t>(counter_val + 1.0));
+        const double seed_val = stk::mesh::field_data(*fields().seed, entity)[0];
+        const double counter_val = stk::mesh::field_data(*fields().counter, entity)[0];
+        const double actual = stk::mesh::field_data(*fields().first_draw, entity)[0];
+        auto expected_rng =
+            ::mundy::make_philox(static_cast<size_t>(seed_val + 1.0), static_cast<size_t>(counter_val + 1.0));
         EXPECT_DOUBLE_EQ(actual, expected_rng.template rand<double>())
             << "RNG_IntermediateSeedAndCounter: value mismatch";
       });
@@ -2839,19 +2804,18 @@ TEST_F(AccessorExprCoverageFixture, RNG_IntermediateSeedAndCounter) {
 
 TEST_F(AccessorExprCoverageFixture, RNG_UniformExprLower) {
   // uniform<double>(r/4.0, 1.0): lower bound is a per-entity expression.
-  auto es   = make_node_entities();
+  auto es = make_node_entities();
   auto rng_ = rng(seed()(es), counter()(es));
   first_draw()(es) = rng_.template uniform<double>(r()(es) / 4.0, 1.0);
   fields().first_draw->sync_to_host();
   stk::mesh::for_each_entity_run(
       static_cast<const stk::mesh::BulkData&>(bulk()), stk::topology::NODE_RANK, parts().selected,
       [&](const stk::mesh::BulkData& /*mesh*/, const stk::mesh::Entity entity) {
-        const double seed_val    = stk::mesh::field_data(*fields().seed,       entity)[0];
-        const double counter_val = stk::mesh::field_data(*fields().counter,    entity)[0];
-        const double r_val       = stk::mesh::field_data(*fields().r,          entity)[0];
-        const double actual      = stk::mesh::field_data(*fields().first_draw, entity)[0];
-        auto expected_rng        = ::mundy::make_philox(static_cast<size_t>(seed_val),
-                                                      static_cast<size_t>(counter_val));
+        const double seed_val = stk::mesh::field_data(*fields().seed, entity)[0];
+        const double counter_val = stk::mesh::field_data(*fields().counter, entity)[0];
+        const double r_val = stk::mesh::field_data(*fields().r, entity)[0];
+        const double actual = stk::mesh::field_data(*fields().first_draw, entity)[0];
+        auto expected_rng = ::mundy::make_philox(static_cast<size_t>(seed_val), static_cast<size_t>(counter_val));
         EXPECT_DOUBLE_EQ(actual, expected_rng.template uniform<double>(r_val / 4.0, 1.0))
             << "RNG_UniformExprLower: value mismatch";
       });
@@ -2859,19 +2823,18 @@ TEST_F(AccessorExprCoverageFixture, RNG_UniformExprLower) {
 
 TEST_F(AccessorExprCoverageFixture, RNG_UniformExprUpper) {
   // uniform<double>(0.0, q/5.0): upper bound is a per-entity expression.
-  auto es   = make_node_entities();
+  auto es = make_node_entities();
   auto rng_ = rng(seed()(es), counter()(es));
   first_draw()(es) = rng_.template uniform<double>(0.0, q()(es) / 5.0);
   fields().first_draw->sync_to_host();
   stk::mesh::for_each_entity_run(
       static_cast<const stk::mesh::BulkData&>(bulk()), stk::topology::NODE_RANK, parts().selected,
       [&](const stk::mesh::BulkData& /*mesh*/, const stk::mesh::Entity entity) {
-        const double seed_val    = stk::mesh::field_data(*fields().seed,       entity)[0];
-        const double counter_val = stk::mesh::field_data(*fields().counter,    entity)[0];
-        const double q_val       = stk::mesh::field_data(*fields().q,          entity)[0];
-        const double actual      = stk::mesh::field_data(*fields().first_draw, entity)[0];
-        auto expected_rng        = ::mundy::make_philox(static_cast<size_t>(seed_val),
-                                                      static_cast<size_t>(counter_val));
+        const double seed_val = stk::mesh::field_data(*fields().seed, entity)[0];
+        const double counter_val = stk::mesh::field_data(*fields().counter, entity)[0];
+        const double q_val = stk::mesh::field_data(*fields().q, entity)[0];
+        const double actual = stk::mesh::field_data(*fields().first_draw, entity)[0];
+        auto expected_rng = ::mundy::make_philox(static_cast<size_t>(seed_val), static_cast<size_t>(counter_val));
         EXPECT_DOUBLE_EQ(actual, expected_rng.template uniform<double>(0.0, q_val / 5.0))
             << "RNG_UniformExprUpper: value mismatch";
       });
@@ -2880,44 +2843,42 @@ TEST_F(AccessorExprCoverageFixture, RNG_UniformExprUpper) {
 TEST_F(AccessorExprCoverageFixture, RNG_FusedUniformDraws) {
   // Two sequential uniform draws sharing one cached Philox; the second draw gets a
   // different state because the internal counter has advanced after the first draw.
-  auto es   = make_node_entities();
+  auto es = make_node_entities();
   auto rng_ = rng(seed()(es), counter()(es));
-  fused_assign(first_draw()(es),  rng_.template uniform<double>(0.0, 1.0),
-               second_draw()(es), rng_.template uniform<double>(0.0, 1.0));
+  fused_assign(first_draw()(es), rng_.template uniform<double>(0.0, 1.0), second_draw()(es),
+               rng_.template uniform<double>(0.0, 1.0));
   fields().first_draw->sync_to_host();
   fields().second_draw->sync_to_host();
   stk::mesh::for_each_entity_run(
       static_cast<const stk::mesh::BulkData&>(bulk()), stk::topology::NODE_RANK, parts().selected,
       [&](const stk::mesh::BulkData& /*mesh*/, const stk::mesh::Entity entity) {
-        const double seed_val    = stk::mesh::field_data(*fields().seed,        entity)[0];
-        const double counter_val = stk::mesh::field_data(*fields().counter,     entity)[0];
-        const double actual_fd   = stk::mesh::field_data(*fields().first_draw,  entity)[0];
-        const double actual_sd   = stk::mesh::field_data(*fields().second_draw, entity)[0];
-        auto expected_rng        = ::mundy::make_philox(static_cast<size_t>(seed_val),
-                                                      static_cast<size_t>(counter_val));
+        const double seed_val = stk::mesh::field_data(*fields().seed, entity)[0];
+        const double counter_val = stk::mesh::field_data(*fields().counter, entity)[0];
+        const double actual_fd = stk::mesh::field_data(*fields().first_draw, entity)[0];
+        const double actual_sd = stk::mesh::field_data(*fields().second_draw, entity)[0];
+        auto expected_rng = ::mundy::make_philox(static_cast<size_t>(seed_val), static_cast<size_t>(counter_val));
         const double expected_fd = expected_rng.template uniform<double>(0.0, 1.0);
         const double expected_sd = expected_rng.template uniform<double>(0.0, 1.0);
         EXPECT_DOUBLE_EQ(actual_fd, expected_fd) << "RNG_FusedUniformDraws: first draw mismatch";
         EXPECT_DOUBLE_EQ(actual_sd, expected_sd) << "RNG_FusedUniformDraws: second draw mismatch";
-        EXPECT_NE(actual_fd, actual_sd)           << "RNG_FusedUniformDraws: both draws are equal";
+        EXPECT_NE(actual_fd, actual_sd) << "RNG_FusedUniformDraws: both draws are equal";
       });
 }
 
 TEST_F(AccessorExprCoverageFixture, RNG_ComposedResult) {
   // 2.0 * rng.rand<double>() + 1.0: verifies arithmetic composition with a random draw.
   // The composed expression is deterministic: expected = 2.0*make_philox(s,c).rand() + 1.0.
-  auto es   = make_node_entities();
+  auto es = make_node_entities();
   auto rng_ = rng(seed()(es), counter()(es));
   first_draw()(es) = 2.0 * rng_.template rand<double>() + 1.0;
   fields().first_draw->sync_to_host();
   stk::mesh::for_each_entity_run(
       static_cast<const stk::mesh::BulkData&>(bulk()), stk::topology::NODE_RANK, parts().selected,
       [&](const stk::mesh::BulkData& /*mesh*/, const stk::mesh::Entity entity) {
-        const double seed_val    = stk::mesh::field_data(*fields().seed,       entity)[0];
-        const double counter_val = stk::mesh::field_data(*fields().counter,    entity)[0];
-        const double actual      = stk::mesh::field_data(*fields().first_draw, entity)[0];
-        auto expected_rng        = ::mundy::make_philox(static_cast<size_t>(seed_val),
-                                                      static_cast<size_t>(counter_val));
+        const double seed_val = stk::mesh::field_data(*fields().seed, entity)[0];
+        const double counter_val = stk::mesh::field_data(*fields().counter, entity)[0];
+        const double actual = stk::mesh::field_data(*fields().first_draw, entity)[0];
+        auto expected_rng = ::mundy::make_philox(static_cast<size_t>(seed_val), static_cast<size_t>(counter_val));
         EXPECT_DOUBLE_EQ(actual, 2.0 * expected_rng.template rand<double>() + 1.0)
             << "RNG_ComposedResult: value mismatch";
       });

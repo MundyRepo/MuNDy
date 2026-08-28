@@ -35,8 +35,8 @@
 #include <stk_mesh/base/MetaData.hpp>  // for stk::mesh::MetaData
 
 // Mundy
+#include <Mundy_config.hpp>                          // for MUNDY_DEPRECATED_MSG
 #include <mundy_mesh/impl/DeclareComponentImpl.hpp>  // for impl::FieldDeclarationSnapshot, tagged builder types
-#include <Mundy_config.hpp>  // for MUNDY_DEPRECATED_MSG
 
 namespace mundy {
 
@@ -102,15 +102,17 @@ class ComponentDeclaration {
   //@{
 
   /// \brief Construct with a MetaData reference (required for field-backed declarations; optional for shared).
-  explicit ComponentDeclaration(stk::mesh::MetaData& meta_data) : meta_data_(&meta_data) {}
+  explicit ComponentDeclaration(stk::mesh::MetaData& meta_data) : meta_data_(&meta_data) {
+  }
 
   /// \brief Default constructor for shared-backed declarations that do not require MetaData.
-  ComponentDeclaration() : meta_data_(nullptr) {}
+  ComponentDeclaration() : meta_data_(nullptr) {
+  }
 
   ComponentDeclaration(const ComponentDeclaration&) = default;
-  ComponentDeclaration(ComponentDeclaration&&)      = default;
+  ComponentDeclaration(ComponentDeclaration&&) = default;
   ComponentDeclaration& operator=(const ComponentDeclaration&) = default;
-  ComponentDeclaration& operator=(ComponentDeclaration&&)      = default;
+  ComponentDeclaration& operator=(ComponentDeclaration&&) = default;
 
   //@}
 
@@ -121,14 +123,14 @@ class ComponentDeclaration {
   ComponentDeclaration rank(stk::mesh::EntityRank rank) const {
     ComponentDeclaration copy = *this;
     copy.snapshot_.has_rank = true;
-    copy.snapshot_.rank     = rank;
+    copy.snapshot_.rank = rank;
     return copy;
   }
 
   /// \brief Set the name of the component.
   ComponentDeclaration name(const std::string& component_name) const {
     ComponentDeclaration copy = *this;
-    copy.snapshot_.has_name   = true;
+    copy.snapshot_.has_name = true;
     copy.snapshot_.field_name = component_name;
     return copy;
   }
@@ -138,7 +140,7 @@ class ComponentDeclaration {
   /// The typical Mundy application will label fields as \c TRANSIENT or \c MESH.
   ComponentDeclaration role(Ioss::Field::RoleType field_role) const {
     ComponentDeclaration copy = *this;
-    copy.snapshot_.has_role   = true;
+    copy.snapshot_.has_role = true;
     copy.snapshot_.field_role = field_role;
     return copy;
   }
@@ -147,7 +149,7 @@ class ComponentDeclaration {
   ComponentDeclaration output_type(stk::io::FieldOutputType output_type) const {
     ComponentDeclaration copy = *this;
     copy.snapshot_.has_output_type = true;
-    copy.snapshot_.output_type     = output_type;
+    copy.snapshot_.output_type = output_type;
     return copy;
   }
 
@@ -160,7 +162,7 @@ class ComponentDeclaration {
   template <typename T>
   auto type() const {
     impl::FieldDeclarationSnapshot snap = snapshot_;
-    snap.meta_data                      = meta_data_;
+    snap.meta_data = meta_data_;
     return TaggedFieldDeclarationT<std::remove_cvref_t<T>, void>(snap);
   }
 
@@ -170,7 +172,7 @@ class ComponentDeclaration {
   template <typename AccessLike>
   auto field() const {
     impl::FieldDeclarationSnapshot snap = snapshot_;
-    snap.meta_data                      = meta_data_;
+    snap.meta_data = meta_data_;
     return TaggedFieldBackedDeclarationHelperT<void, AccessLike, void>(snap);
   }
 
@@ -178,16 +180,15 @@ class ComponentDeclaration {
   template <typename AccessLike, typename SharedSource>
   auto shared(SharedSource&& source) const {
     using canonical_access = canonical_component_access_t<AccessLike>;
-    using shape            = component_access_shape<canonical_access>;
-    using source_type      = std::decay_t<SharedSource>;
-    using shared_value_t   = impl::shared_component_source_value_t<source_type>;
+    using shape = component_access_shape<canonical_access>;
+    using source_type = std::decay_t<SharedSource>;
+    using shared_value_t = impl::shared_component_source_value_t<source_type>;
     static_assert(std::is_same_v<shared_value_t, typename shape::shared_value_type>,
                   "Shared source value type is incompatible with the chosen component access.");
 
     impl::FieldDeclarationSnapshot snap = snapshot_;
-    snap.meta_data                      = meta_data_;
-    return TaggedSharedComponentDeclarationT<source_type, AccessLike, void>(
-        std::forward<SharedSource>(source), snap);
+    snap.meta_data = meta_data_;
+    return TaggedSharedComponentDeclarationT<source_type, AccessLike, void>(std::forward<SharedSource>(source), snap);
   }
 
   /// \brief Attach a semantic tag before choosing a component backend.
@@ -196,14 +197,14 @@ class ComponentDeclaration {
   template <typename Tag>
   auto tag() const {
     impl::FieldDeclarationSnapshot snap = snapshot_;
-    snap.meta_data                      = meta_data_;
+    snap.meta_data = meta_data_;
     return TaggedFieldDeclarationT<void, Tag>(snap);
   }
 
   //@}
 
  private:
-  stk::mesh::MetaData*           meta_data_ = nullptr;
+  stk::mesh::MetaData* meta_data_ = nullptr;
   impl::FieldDeclarationSnapshot snapshot_;
 };  // ComponentDeclaration
 

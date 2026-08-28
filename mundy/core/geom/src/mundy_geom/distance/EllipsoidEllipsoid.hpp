@@ -28,17 +28,17 @@
 #include <type_traits>
 
 // Mundy
-#include <mundy_geom/distance/PointPoint.hpp>   // for mundy::distance(Point, Point)
-#include <mundy_geom/distance/Types.hpp>        // for mundy::SharedNormalSigned
-#include <mundy_geom/primitives/Ellipsoid.hpp>  // for mundy::Ellipsoid
-#include <mundy_geom/primitives/Point.hpp>      // for mundy::Point
-#include <mundy_math/Quaternion.hpp>            // for mundy::Quaternion
-#include <mundy_math/Tolerance.hpp>             // for mundy::get_zero_tolerance
-#include <mundy_math/Vector3.hpp>               // for mundy::Vector3
-#include <mundy_math/minimize.hpp>              // for mundy::find_min_with_fdf, find_min_using_approximate_derivatives
-#include <mundy_utils/requires.hpp>
-#include <mundy_math/cmath.hpp>
+#include <mundy_geom/distance/PointPoint.hpp>                   // for mundy::distance(Point, Point)
+#include <mundy_geom/distance/Types.hpp>                        // for mundy::SharedNormalSigned
 #include <mundy_geom/distance/impl/EllipsoidEllipsoidImpl.hpp>  // for the cost-only and FDF objective functors
+#include <mundy_geom/primitives/Ellipsoid.hpp>                  // for mundy::Ellipsoid
+#include <mundy_geom/primitives/Point.hpp>                      // for mundy::Point
+#include <mundy_math/Quaternion.hpp>                            // for mundy::Quaternion
+#include <mundy_math/Tolerance.hpp>                             // for mundy::get_zero_tolerance
+#include <mundy_math/Vector3.hpp>                               // for mundy::Vector3
+#include <mundy_math/cmath.hpp>
+#include <mundy_math/minimize.hpp>  // for mundy::find_min_with_fdf, find_min_using_approximate_derivatives
+#include <mundy_utils/requires.hpp>
 
 namespace mundy {
 
@@ -53,17 +53,17 @@ namespace mundy {
 /// For an autodiff scalar the result is differentiable with respect to the ellipsoid parameters.
 template <ValidEllipsoidType EllipsoidType1, ValidEllipsoidType EllipsoidType2>
 MUNDY_REQUIRES(std::is_same_v<typename EllipsoidType1::value_type, typename EllipsoidType2::value_type>)
-KOKKOS_FUNCTION typename EllipsoidType1::value_type distance(const EllipsoidType1& ellipsoid1,
-                                                            const EllipsoidType2& ellipsoid2) {
+KOKKOS_FUNCTION typename EllipsoidType1::value_type
+    distance(const EllipsoidType1& ellipsoid1, const EllipsoidType2& ellipsoid2) {
   return distance(SharedNormalSigned{}, ellipsoid1, ellipsoid2);
 }
 
 /// \brief Convenience overload returning only the distance (discards the closest points and normals).
 template <ValidEllipsoidType EllipsoidType1, ValidEllipsoidType EllipsoidType2>
 MUNDY_REQUIRES(std::is_same_v<typename EllipsoidType1::value_type, typename EllipsoidType2::value_type>)
-KOKKOS_FUNCTION typename EllipsoidType1::value_type distance([[maybe_unused]] const SharedNormalSigned tag,
-                                                            const EllipsoidType1& ellipsoid1,
-                                                            const EllipsoidType2& ellipsoid2) {
+KOKKOS_FUNCTION typename EllipsoidType1::value_type
+    distance([[maybe_unused]] const SharedNormalSigned tag, const EllipsoidType1& ellipsoid1,
+             const EllipsoidType2& ellipsoid2) {
   using Scalar = typename EllipsoidType1::value_type;
   Point<Scalar> cp1, cp2;
   mundy::Vector3<Scalar> sn1, sn2;
@@ -76,18 +76,16 @@ KOKKOS_FUNCTION typename EllipsoidType1::value_type distance([[maybe_unused]] co
 template <ValidEllipsoidType EllipsoidType1, ValidEllipsoidType EllipsoidType2>
 MUNDY_REQUIRES(std::is_same_v<typename EllipsoidType1::value_type, typename EllipsoidType2::value_type>)
 KOKKOS_FUNCTION typename EllipsoidType1::value_type
-    distance([[maybe_unused]] const SharedNormalSigned,
-             const EllipsoidType1& ellipsoid1,
-             const EllipsoidType2& ellipsoid2,
-             Point<typename EllipsoidType1::value_type>& closest_point1,
+    distance([[maybe_unused]] const SharedNormalSigned, const EllipsoidType1& ellipsoid1,
+             const EllipsoidType2& ellipsoid2, Point<typename EllipsoidType1::value_type>& closest_point1,
              Point<typename EllipsoidType1::value_type>& closest_point2,
              mundy::Vector3<typename EllipsoidType1::value_type>& shared_normal1,
              mundy::Vector3<typename EllipsoidType1::value_type>& shared_normal2) {
-  using Scalar          = typename EllipsoidType1::value_type;
-  using Passive         = passive_scalar_t<Scalar>;  // double for an AD scalar; Scalar itself otherwise
+  using Scalar = typename EllipsoidType1::value_type;
+  using Passive = passive_scalar_t<Scalar>;  // double for an AD scalar; Scalar itself otherwise
   using PassiveEllipsoid = Ellipsoid<Passive>;
   constexpr size_t lbfgs_max_memory_size = 10;
-  constexpr Passive min_allowable_cost  = -Kokkos::Experimental::infinity_v<Passive>;    // no minimum cost early-exit
+  constexpr Passive min_allowable_cost = -Kokkos::Experimental::infinity_v<Passive>;     // no minimum cost early-exit
   constexpr Passive min_objective_delta = mundy::get_relaxed_zero_tolerance<Passive>();  // L-BFGS convergence tolerance
 
   // Envelope theorem: solve for the optimal angles theta* in the passive type (the L-BFGS solver is
@@ -99,13 +97,12 @@ KOKKOS_FUNCTION typename EllipsoidType1::value_type
 
   Point<Passive> cp0p, cp1p;
   mundy::Vector3<Passive> sn0p, sn1p;
-  impl::EllipsoidEllipsoidObjectiveFDF<PassiveEllipsoid, PassiveEllipsoid> fdf(
-      e0p, e1p, sn0p, sn1p, cp0p, cp1p);
+  impl::EllipsoidEllipsoidObjectiveFDF<PassiveEllipsoid, PassiveEllipsoid> fdf(e0p, e1p, sn0p, sn1p, cp0p, cp1p);
 
-  constexpr Passive pi            = Kokkos::numbers::pi_v<Passive>;
-  constexpr Passive zero          = static_cast<Passive>(0.0);
-  constexpr Passive half_pi       = static_cast<Passive>(0.5) * pi;
-  constexpr Passive one_third_pi  = pi / static_cast<Passive>(3.0);
+  constexpr Passive pi = Kokkos::numbers::pi_v<Passive>;
+  constexpr Passive zero = static_cast<Passive>(0.0);
+  constexpr Passive half_pi = static_cast<Passive>(0.5) * pi;
+  constexpr Passive one_third_pi = pi / static_cast<Passive>(3.0);
   constexpr Passive five_third_pi = static_cast<Passive>(5.0) * one_third_pi;
   constexpr Kokkos::Array<Passive, 3> theta_guesses{zero, half_pi, pi};
   constexpr Kokkos::Array<Passive, 3> phi_guesses{one_third_pi, pi, five_third_pi};
@@ -115,11 +112,11 @@ KOKKOS_FUNCTION typename EllipsoidType1::value_type
   mundy::Vector<Passive, 2> global_theta_phi_sol{zero, zero};
   for (size_t t_idx = 0; t_idx < 3; ++t_idx) {
     for (size_t p_idx = 0; p_idx < 3; ++p_idx) {
-      theta_phi_sol      = {theta_guesses[t_idx], phi_guesses[p_idx]};
-      const Passive dist = find_min_with_fdf<lbfgs_max_memory_size>(
-          fdf, theta_phi_sol, min_allowable_cost, min_objective_delta);
+      theta_phi_sol = {theta_guesses[t_idx], phi_guesses[p_idx]};
+      const Passive dist =
+          find_min_with_fdf<lbfgs_max_memory_size>(fdf, theta_phi_sol, min_allowable_cost, min_objective_delta);
       if (dist < global_dist) {
-        global_dist          = dist;
+        global_dist = dist;
         global_theta_phi_sol = theta_phi_sol;
       }
     }
@@ -128,7 +125,7 @@ KOKKOS_FUNCTION typename EllipsoidType1::value_type
   // theta* frozen as a zero-derivative constant: the shared normal n is constant; the foot points
   // carry the ellipsoids' derivatives through map_surface_normal_to_foot_point_on_ellipsoid.
   const Scalar theta = static_cast<Scalar>(global_theta_phi_sol[0]);
-  const Scalar phi   = static_cast<Scalar>(global_theta_phi_sol[1]);
+  const Scalar phi = static_cast<Scalar>(global_theta_phi_sol[1]);
   const Scalar sth = sin(theta), cth = cos(theta);
   const Scalar sph = sin(phi), cph = cos(phi);
   const mundy::Vector3<Scalar> n{sth * cph, sth * sph, cth};
@@ -147,10 +144,9 @@ KOKKOS_FUNCTION typename EllipsoidType1::value_type
 /// remain reproducible.  Not intended for production use.
 template <ValidEllipsoidType EllipsoidType1, ValidEllipsoidType EllipsoidType2>
 MUNDY_REQUIRES(std::is_same_v<typename EllipsoidType1::value_type, typename EllipsoidType2::value_type>)
-KOKKOS_FUNCTION typename EllipsoidType1::value_type distance(
-    [[maybe_unused]] const SharedNormalSignedFiniteDiff tag,
-    const EllipsoidType1& ellipsoid1,
-    const EllipsoidType2& ellipsoid2) {
+KOKKOS_FUNCTION typename EllipsoidType1::value_type
+    distance([[maybe_unused]] const SharedNormalSignedFiniteDiff tag, const EllipsoidType1& ellipsoid1,
+             const EllipsoidType2& ellipsoid2) {
   using Scalar = typename EllipsoidType1::value_type;
   Point<Scalar> cp1, cp2;
   mundy::Vector3<Scalar> sn1, sn2;
@@ -160,18 +156,16 @@ KOKKOS_FUNCTION typename EllipsoidType1::value_type distance(
 template <ValidEllipsoidType EllipsoidType1, ValidEllipsoidType EllipsoidType2>
 MUNDY_REQUIRES(std::is_same_v<typename EllipsoidType1::value_type, typename EllipsoidType2::value_type>)
 KOKKOS_FUNCTION typename EllipsoidType1::value_type
-    distance([[maybe_unused]] const SharedNormalSignedFiniteDiff,
-             const EllipsoidType1& ellipsoid1,
-             const EllipsoidType2& ellipsoid2,
-             Point<typename EllipsoidType1::value_type>& closest_point1,
+    distance([[maybe_unused]] const SharedNormalSignedFiniteDiff, const EllipsoidType1& ellipsoid1,
+             const EllipsoidType2& ellipsoid2, Point<typename EllipsoidType1::value_type>& closest_point1,
              Point<typename EllipsoidType1::value_type>& closest_point2,
              mundy::Vector3<typename EllipsoidType1::value_type>& shared_normal1,
              mundy::Vector3<typename EllipsoidType1::value_type>& shared_normal2) {
-  using Scalar          = typename EllipsoidType1::value_type;
-  using Passive         = passive_scalar_t<Scalar>;  // double for an AD scalar; Scalar itself otherwise
+  using Scalar = typename EllipsoidType1::value_type;
+  using Passive = passive_scalar_t<Scalar>;  // double for an AD scalar; Scalar itself otherwise
   using PassiveEllipsoid = Ellipsoid<Passive>;
   constexpr size_t lbfgs_max_memory_size = 10;
-  constexpr Passive min_allowable_cost  = -Kokkos::Experimental::infinity_v<Passive>;    // no minimum cost early-exit
+  constexpr Passive min_allowable_cost = -Kokkos::Experimental::infinity_v<Passive>;     // no minimum cost early-exit
   constexpr Passive min_objective_delta = mundy::get_relaxed_zero_tolerance<Passive>();  // L-BFGS convergence tolerance
 
   // Same envelope as the default path (solve theta* in the passive type, re-evaluate at frozen theta*),
@@ -182,10 +176,10 @@ KOKKOS_FUNCTION typename EllipsoidType1::value_type
   mundy::Vector3<Passive> sn0p, sn1p;
   impl::EllipsoidEllipsoidObjective<PassiveEllipsoid, PassiveEllipsoid> objective_p(e0p, e1p, sn0p, sn1p, cp0p, cp1p);
 
-  constexpr Passive pi            = Kokkos::numbers::pi_v<Passive>;
-  constexpr Passive zero          = static_cast<Passive>(0.0);
-  constexpr Passive half_pi       = static_cast<Passive>(0.5) * pi;
-  constexpr Passive one_third_pi  = pi / static_cast<Passive>(3.0);
+  constexpr Passive pi = Kokkos::numbers::pi_v<Passive>;
+  constexpr Passive zero = static_cast<Passive>(0.0);
+  constexpr Passive half_pi = static_cast<Passive>(0.5) * pi;
+  constexpr Passive one_third_pi = pi / static_cast<Passive>(3.0);
   constexpr Passive five_third_pi = static_cast<Passive>(5.0) * one_third_pi;
   constexpr Kokkos::Array<Passive, 3> theta_guesses{zero, half_pi, pi};
   constexpr Kokkos::Array<Passive, 3> phi_guesses{one_third_pi, pi, five_third_pi};
@@ -195,11 +189,11 @@ KOKKOS_FUNCTION typename EllipsoidType1::value_type
   mundy::Vector<Passive, 2> global_theta_phi_sol{zero, zero};
   for (size_t t_idx = 0; t_idx < 3; ++t_idx) {
     for (size_t p_idx = 0; p_idx < 3; ++p_idx) {
-      theta_phi_sol      = {theta_guesses[t_idx], phi_guesses[p_idx]};
+      theta_phi_sol = {theta_guesses[t_idx], phi_guesses[p_idx]};
       const Passive dist = find_min_using_approximate_derivatives<lbfgs_max_memory_size>(
           objective_p, theta_phi_sol, min_allowable_cost, min_objective_delta);
       if (dist < global_dist) {
-        global_dist          = dist;
+        global_dist = dist;
         global_theta_phi_sol = theta_phi_sol;
       }
     }

@@ -73,8 +73,9 @@ KOKKOS_INLINE_FUNCTION constexpr decltype(auto) unwrap_accessor(Accessor&& acces
 /// argument of type Accessor.
 ///
 /// Reaches through a stored accessor to the accessor it holds, then applies the storage normalization, so the result is
-/// always one of that normalization's fixed points: a value, a pointer, or a reference_wrapper. Passing `Accessor` names
-/// the accessor the argument refers to; passing `std::remove_reference_t<Accessor>` names one taken by value instead.
+/// always one of that normalization's fixed points: a value, a pointer, or a reference_wrapper. Passing `Accessor`
+/// names the accessor the argument refers to; passing `std::remove_reference_t<Accessor>` names one taken by value
+/// instead.
 template <typename Accessor>
 using stored_accessor_t = typename decltype(store(unwrap_accessor(std::declval<Accessor&&>())))::stored_type;
 

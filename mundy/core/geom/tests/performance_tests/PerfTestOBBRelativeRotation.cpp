@@ -36,7 +36,7 @@
 #define ANKERL_NANOBENCH_IMPLEMENT
 
 // C++ core
-#include <cstdlib>    // for rand, RAND_MAX
+#include <cstdlib>  // for rand, RAND_MAX
 #include <iostream>
 
 // External
@@ -92,8 +92,8 @@ void bench_relative_rotation() {
   // Generate random orientations for two OBBs.
   const mundy::Quaternion<double> q_a = random_unit_quat();
   const mundy::Quaternion<double> q_b = random_unit_quat();
-  const mundy::Matrix3<double>    R_a = quat_to_mat(q_a);
-  const mundy::Matrix3<double>    R_b = quat_to_mat(q_b);
+  const mundy::Matrix3<double> R_a = quat_to_mat(q_a);
+  const mundy::Matrix3<double> R_b = quat_to_mat(q_b);
 
   // ---------------------------------------------------------------
   // Strategy A: rotation matrix storage — R = Q_A^T * Q_B
@@ -111,7 +111,7 @@ void bench_relative_rotation() {
   // ---------------------------------------------------------------
   bench.run("B: quat storage    R = mat(conj(q_A)*q_B)", [&] {
     const auto q_rel = conjugate(q_a) * q_b;
-    const auto R     = quaternion_to_rotation_matrix(q_rel);
+    const auto R = quaternion_to_rotation_matrix(q_rel);
     ankerl::nanobench::doNotOptimizeAway(R);
   });
 

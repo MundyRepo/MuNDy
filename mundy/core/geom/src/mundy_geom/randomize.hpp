@@ -34,11 +34,11 @@
 #include <utility>
 
 // Mundy
-#include <mundy_geom/primitives.hpp>     // for mundy::Point, mundy::Line, ...
-#include <mundy_math/Quaternion.hpp>     // for mundy::Quaternion
-#include <mundy_math/Vector3.hpp>        // for mundy::Vector3
-#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
+#include <mundy_geom/primitives.hpp>  // for mundy::Point, mundy::Line, ...
+#include <mundy_math/Quaternion.hpp>  // for mundy::Quaternion
+#include <mundy_math/Vector3.hpp>     // for mundy::Vector3
 #include <mundy_math/cmath.hpp>
+#include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
 
 namespace mundy {
 

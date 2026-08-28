@@ -33,9 +33,9 @@
 #include <mundy_geom/primitives/Point.hpp>  // for mundy::Point
 #include <mundy_math/Quaternion.hpp>        // for mundy::Quaternion
 #include <mundy_math/Tolerance.hpp>         // for mundy::get_zero_tolerance
+#include <mundy_math/cmath.hpp>
 #include <mundy_utils/requires.hpp>
 #include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
-#include <mundy_math/cmath.hpp>
 
 namespace mundy {
 
@@ -108,9 +108,9 @@ class Ellipsoid {
   /// \param[in] radius_2 The second axis length of the Ellipsoid.
   /// \param[in] radius_3 The third axis length of the Ellipsoid.
   KOKKOS_FUNCTION
-  constexpr Ellipsoid(const value_type& x, const value_type& y, const value_type& z, const value_type& qw, const value_type& qx,
-                      const value_type& qy, const value_type& qz, const value_type& radius_1, const value_type& radius_2,
-                      const value_type& radius_3)
+  constexpr Ellipsoid(const value_type& x, const value_type& y, const value_type& z, const value_type& qw,
+                      const value_type& qx, const value_type& qy, const value_type& qz, const value_type& radius_1,
+                      const value_type& radius_2, const value_type& radius_3)
       MUNDY_REQUIRES(HasNArgConstructor<point_t, value_type, 3>&& HasNArgConstructor<orientation_t, value_type, 4>)
       : center_(x, y, z), orientation_(qw, qx, qy, qz), radii_{radius_1, radius_2, radius_3} {
   }
@@ -326,7 +326,8 @@ class Ellipsoid {
   /// \param[in] qy The y-component of the orientation quaternion.
   /// \param[in] qz The z-component of the orientation quaternion.
   KOKKOS_FUNCTION
-  constexpr void set_orientation(const value_type& qw, const value_type& qx, const value_type& qy, const value_type& qz) {
+  constexpr void set_orientation(const value_type& qw, const value_type& qx, const value_type& qy,
+                                 const value_type& qz) {
     orientation_[0] = qw;
     orientation_[1] = qx;
     orientation_[2] = qy;
@@ -405,7 +406,8 @@ KOKKOS_FUNCTION constexpr bool is_close(
 template <ValidEllipsoidType T1, ValidEllipsoidType T2>
 KOKKOS_FUNCTION constexpr bool is_approx_close(
     const T1& e1, const T2& e2,
-    typename T1::value_type tol = get_relaxed_comparison_tolerance<typename T1::value_type, typename T2::value_type>()) {
+    typename T1::value_type tol =
+        get_relaxed_comparison_tolerance<typename T1::value_type, typename T2::value_type>()) {
   return is_close(e1, e2, tol);
 }
 
@@ -452,7 +454,8 @@ KOKKOS_FUNCTION constexpr Point<typename EllipsoidType::value_type> map_body_fra
   const Scalar sqrt_alpha2 = impl::safe_sqrt(alpha2);
 
   const Scalar x = half * sign0 * ((one + sign0) * r1 + (one - sign0) * r1) * sqrt_alpha1 * sqrt_alpha2;
-  const Scalar y = half * sign1 * ((one + sign1) * r2 + (one - sign1) * r2) * impl::safe_sqrt(one - alpha1) * sqrt_alpha2;
+  const Scalar y =
+      half * sign1 * ((one + sign1) * r2 + (one - sign1) * r2) * impl::safe_sqrt(one - alpha1) * sqrt_alpha2;
   const Scalar z = half * sign2 * ((one + sign2) * r3 + (one - sign2) * r3) * impl::safe_sqrt(one - alpha2);
 
   return Point<Scalar>(x, y, z);
@@ -495,9 +498,9 @@ template <ValidEllipsoidType E>
 KOKKOS_FUNCTION Ellipsoid<passive_scalar_t<typename E::value_type>> passive_copy(const E& e) {
   return Ellipsoid<passive_scalar_t<typename E::value_type>>(
       passive_value(e.center()[0]), passive_value(e.center()[1]), passive_value(e.center()[2]),
-      passive_value(e.orientation().w()), passive_value(e.orientation().x()),
-      passive_value(e.orientation().y()), passive_value(e.orientation().z()),
-      passive_value(e.radius_1()), passive_value(e.radius_2()), passive_value(e.radius_3()));
+      passive_value(e.orientation().w()), passive_value(e.orientation().x()), passive_value(e.orientation().y()),
+      passive_value(e.orientation().z()), passive_value(e.radius_1()), passive_value(e.radius_2()),
+      passive_value(e.radius_3()));
 }
 
 }  // namespace impl

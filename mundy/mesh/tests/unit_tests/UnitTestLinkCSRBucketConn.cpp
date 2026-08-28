@@ -32,8 +32,8 @@
 #include <gtest/gtest.h>
 
 // C++ core libs
-#include <memory>    // for std::shared_ptr
-#include <sstream>   // for std::ostringstream (dump() smoke test)
+#include <memory>   // for std::shared_ptr
+#include <sstream>  // for std::ostringstream (dump() smoke test)
 
 // Trilinos libs
 #include <stk_mesh/base/BulkData.hpp>

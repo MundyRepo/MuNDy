@@ -69,8 +69,7 @@ void LinkDataObserver::elements_about_to_move_procs_notification(
   notify_crs_may_be_invalid(link_data());
 }
 
-void LinkDataObserver::elements_moved_procs_notification(
-    const stk::mesh::EntityProcVec& /*elem_proc_pairs_to_move*/) {
+void LinkDataObserver::elements_moved_procs_notification(const stk::mesh::EntityProcVec& /*elem_proc_pairs_to_move*/) {
   notify_crs_may_be_invalid(link_data());
 }
 

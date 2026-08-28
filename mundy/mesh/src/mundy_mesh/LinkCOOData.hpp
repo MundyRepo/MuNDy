@@ -368,9 +368,8 @@ namespace impl {
 /// This is the value last written by the CSR synchronizer and is intentionally
 /// NOT cleared by destroy_relation() — the synchronizer uses the stale value
 /// to detect removals.
-inline stk::mesh::Entity get_linked_entity_crs(const LinkCOOData& coo_data,
-                                                const stk::mesh::Entity& linker,
-                                                unsigned link_ordinal) {
+inline stk::mesh::Entity get_linked_entity_crs(const LinkCOOData& coo_data, const stk::mesh::Entity& linker,
+                                               unsigned link_ordinal) {
   auto& field = get_linked_entities_crs_field(coo_data.link_meta_data());
   return stk::mesh::Entity(stk::mesh::field_data(field, linker)[link_ordinal]);
 }

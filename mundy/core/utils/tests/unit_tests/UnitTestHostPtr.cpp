@@ -222,7 +222,7 @@ TEST(HostPtr, AliasingConstructor) {
   host_ptr<int> alias(owner, &owner->second);  // shares owner's lifetime, points at the member
   EXPECT_EQ(*alias, 4);
   EXPECT_EQ(alias.use_count(), 2);
-  owner.reset();          // owner released, but the pair stays alive via the alias
+  owner.reset();  // owner released, but the pair stays alive via the alias
   EXPECT_EQ(*alias, 4);
 }
 

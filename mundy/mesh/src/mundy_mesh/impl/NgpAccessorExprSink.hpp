@@ -74,12 +74,10 @@ template <typename T>
 static constexpr bool is_sink_arg_v = is_sink_arg<std::decay_t<T>>::value;
 
 template <typename T>
-struct sink_arg_has_nonconstant_expr
-    : std::bool_constant<is_math_expr_arg_v<T> && !is_constant_math_expr_v<T>> {};
+struct sink_arg_has_nonconstant_expr : std::bool_constant<is_math_expr_arg_v<T> && !is_constant_math_expr_v<T>> {};
 
 template <SinkAccessMode Mode, typename Expr>
-struct sink_arg_has_nonconstant_expr<SinkArg<Mode, Expr>>
-    : std::bool_constant<!is_constant_math_expr_v<Expr>> {};
+struct sink_arg_has_nonconstant_expr<SinkArg<Mode, Expr>> : std::bool_constant<!is_constant_math_expr_v<Expr>> {};
 
 template <typename T>
 static constexpr bool sink_arg_has_nonconstant_expr_v = sink_arg_has_nonconstant_expr<std::decay_t<T>>::value;
@@ -134,8 +132,8 @@ class ApplySinkExpr : public MathExprBase<ApplySinkExpr<Func, SinkArgs...>> {
                                           OldCacheType&& old_cache, const NgpEvalContext& context) const {
     static_assert(!aggregate_has_v<our_tag, std::remove_reference_t<OldCacheType>>,
                   "The cache somehow contains our tag, but our eval returns void and should never cache anything.");
-    auto [value_handles, final_cache] = cached_arg_chain<EvalCountsType, eval_counts>(
-        fmis, std::forward<OldCacheType>(old_cache), context);
+    auto [value_handles, final_cache] =
+        cached_arg_chain<EvalCountsType, eval_counts>(fmis, std::forward<OldCacheType>(old_cache), context);
     apply_cached_values(value_handles, final_cache, std::make_index_sequence<num_args>{});
   }
 
@@ -192,8 +190,10 @@ class ApplySinkExpr : public MathExprBase<ApplySinkExpr<Func, SinkArgs...>> {
     if constexpr (I == num_args) {
       return Kokkos::make_pair(tuple<>{}, std::forward<CacheType>(cache));
     } else {
-      auto result_i = get<I>(sink_args_).expr().template cached_eval<EvalCountsType, eval_counts>(
-          fmis, std::forward<CacheType>(cache), context);
+      auto result_i =
+          get<I>(sink_args_)
+              .expr()
+              .template cached_eval<EvalCountsType, eval_counts>(fmis, std::forward<CacheType>(cache), context);
       auto value_handle_i = std::move(result_i.first);
       auto next_cache = std::move(result_i.second);
       auto [vals_tail, final_cache] =
@@ -343,8 +343,8 @@ auto delayed_sink_expr_impl(Func func, const Args&... args) {
                 "sink_expr(func, args...): at least one argument must be a non-constant math expression so Mundy "
                 "knows which entity driver should evaluate the expression. Scalars are allowed, but they cannot be "
                 "the only arguments.");
-  return ApplySinkExpr<std::decay_t<Func>, decltype(make_sink_expr_arg(args))...>(
-      std::move(func), make_sink_expr_arg(args)...);
+  return ApplySinkExpr<std::decay_t<Func>, decltype(make_sink_expr_arg(args))...>(std::move(func),
+                                                                                  make_sink_expr_arg(args)...);
 }
 
 template <SinkAccessMode... Modes>

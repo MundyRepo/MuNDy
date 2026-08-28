@@ -543,14 +543,14 @@ struct NeighborListBuildTraits<ArborX1dNeighborList<MemorySpace>> {
     Kokkos::View<int*, MemorySpace> raw_indices;
     Kokkos::View<int*, MemorySpace> raw_offsets;
 
-  #if ARBORX_VERSION >= 10799
+#if ARBORX_VERSION >= 10799
     // New API: source primitives passed as a raw Box view with attached ordinals.
     // ArborX provides built-in AccessTraits for Kokkos::View<Box*, MemSpace>.
     ArborX::BoundingVolumeHierarchy bvh(exec_sp, ArborX::Experimental::attach_indices<int>(source_boxes.boxes()));
-  #else
+#else
     // Old API: pass the full wrapper; uses AccessTraits<ArborXSearchBoxesT, PrimitivesTag>.
     ArborX::BVH<MemorySpace> bvh(exec_sp, source_boxes);
-  #endif
+#endif
 
     bvh.query(exec_sp, target_boxes, callback, raw_indices, raw_offsets,
               ArborX::Experimental::TraversalPolicy().setBufferSize(args.buffer_size));
@@ -660,22 +660,24 @@ struct NeighborListBuildTraits<PeriodicArborX1dNeighborList<MemorySpace, ImageSh
     auto target_images = impl::make_periodic_target_images<ImageShiftScalar>(
         bulk_data, exec_sp, target_in.rank(), target_in.selector(), target_in.component(), target_in.periodic_metric());
     const auto target_bbox = impl::periodic_images_bounding_box(exec_sp, target_images);
-    auto source_images =
-        impl::make_periodic_source_images<ImageShiftScalar>(bulk_data, exec_sp, source_in.rank(), source_in.selector(),
-                                                            source_in.component(), source_in.periodic_metric(), target_bbox);
-    target_input_type target_boxes = impl::pack_periodic_arborx_search_boxes(exec_sp, target_in.selector(), target_images);
-    source_input_type source_boxes = impl::pack_periodic_arborx_search_boxes(exec_sp, source_in.selector(), source_images);
+    auto source_images = impl::make_periodic_source_images<ImageShiftScalar>(
+        bulk_data, exec_sp, source_in.rank(), source_in.selector(), source_in.component(), source_in.periodic_metric(),
+        target_bbox);
+    target_input_type target_boxes =
+        impl::pack_periodic_arborx_search_boxes(exec_sp, target_in.selector(), target_images);
+    source_input_type source_boxes =
+        impl::pack_periodic_arborx_search_boxes(exec_sp, source_in.selector(), source_images);
 
     const auto excluder = builder.setup_broad_excluder(bulk_data);
     const size_type num_target_owners = target_images.owner_entities.extent(0);
 
     factory_type factory(target_boxes, source_boxes, source_images.owner_indices);
 
-  #if ARBORX_VERSION >= 10799
+#if ARBORX_VERSION >= 10799
     ArborX::BoundingVolumeHierarchy bvh(exec_sp, ArborX::Experimental::attach_indices<int>(source_boxes.boxes()));
-  #else
+#else
     ArborX::BVH<MemorySpace> bvh(exec_sp, source_boxes);
-  #endif
+#endif
 
     // Pass 1: count surviving pairs per target owner (image->owner mapping done inside callback).
     Kokkos::View<size_type*, MemorySpace> owner_counts("mundy_search_per1d_counts", num_target_owners);
@@ -732,9 +734,9 @@ struct NeighborListBuildTraits<PeriodicArborX1dNeighborList<MemorySpace, ImageSh
     // Narrow phase (L0–L2): compacts the broad-phase periodic CSR if a narrow excluder is present.
     if constexpr (Builder::has_narrow_phase) {
       const auto narrow_excluder = builder.setup_narrow_excluder(bulk_data);
-      auto [narrow_source_indices, narrow_shifts, narrow_offsets] = impl::apply_narrow_phase(
-          exec_sp, narrow_excluder, target_images.owner_entities, source_images.owner_entities, target_images.shifts,
-          source_owner_indices, source_image_shifts, offsets);
+      auto [narrow_source_indices, narrow_shifts, narrow_offsets] =
+          impl::apply_narrow_phase(exec_sp, narrow_excluder, target_images.owner_entities, source_images.owner_entities,
+                                   target_images.shifts, source_owner_indices, source_image_shifts, offsets);
       return list_type(builder.target_selector(), builder.source_selector(), target_images.owner_entities,
                        source_images.owner_entities, target_images.shifts, narrow_source_indices, narrow_shifts,
                        narrow_offsets);

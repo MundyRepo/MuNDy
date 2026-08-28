@@ -51,22 +51,20 @@
 
 #if defined(HAVE_MUNDYMATH_BELOS) && defined(HAVE_MUNDYMATH_TPETRA) && defined(HAVE_MUNDYMATH_KOKKOSKERNELS)
 
+#include <Tpetra_Map.hpp>
 #include <algorithm>
 #include <array>
 #include <cstdio>
 #include <iomanip>
 #include <map>
-#include <random>
-#include <utility>
-#include <vector>
-
-#include <Tpetra_Map.hpp>
-
 #include <mundy_math/Matrix.hpp>
 #include <mundy_math/Vector.hpp>
 #include <mundy_math/belos_solver.hpp>
 #include <mundy_math/linear_system.hpp>
 #include <mundy_math/solver_backends.hpp>
+#include <random>
+#include <utility>
+#include <vector>
 
 namespace {
 
@@ -316,8 +314,8 @@ int main(int argc, char** argv) {
   RowMap rows;
   bench_small_sizes(std::make_integer_sequence<int, 12>{}, opts, rows);
   // increase by 8s until 128, then by 32s until 512
-  for (size_t n : {16u, 24u, 32u, 40u, 48u, 56u, 64u, 72u, 80u,        //
-                   88u, 96u, 104u, 112u, 120u, 128u, 160u, 192u, 224u, //
+  for (size_t n : {16u,  24u,  32u,  40u,  48u,  56u,  64u,  72u,  80u,   //
+                   88u,  96u,  104u, 112u, 120u, 128u, 160u, 192u, 224u,  //
                    256u, 288u, 320u, 352u, 384u, 416u, 448u, 480u, 512u}) {
     bench_large(n, opts, rows);
   }

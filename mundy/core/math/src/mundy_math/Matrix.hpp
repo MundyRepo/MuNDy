@@ -1415,23 +1415,23 @@ KOKKOS_INLINE_FUNCTION constexpr auto get_matrix(Accessor&& data) {
   return AMatrix<T, N, M, accessor_t>(accessor_t(impl::unwrap_accessor(std::forward<Accessor>(data))));
 }
 
-#define MUNDY_MATH_GET_MATRIX_SIZE_SPECIALIZATION_IMPL(alias, alias_lower, N, M)     \
-  template <typename T, ValidAccessor<T> Accessor>                                   \
-  KOKKOS_INLINE_FUNCTION constexpr auto get_##alias_lower(Accessor&& data) {  \
-    return get_matrix<T, N, M>(std::forward<Accessor>(data));                   \
+#define MUNDY_MATH_GET_MATRIX_SIZE_SPECIALIZATION_IMPL(alias, alias_lower, N, M) \
+  template <typename T, ValidAccessor<T> Accessor>                               \
+  KOKKOS_INLINE_FUNCTION constexpr auto get_##alias_lower(Accessor&& data) {     \
+    return get_matrix<T, N, M>(std::forward<Accessor>(data));                    \
   }
 
 #define MUNDY_MATH_GET_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(alias, alias_lower, T, N, M) \
-  template <ValidAccessor<T> Accessor>                                               \
-  KOKKOS_INLINE_FUNCTION constexpr auto get_##alias_lower(Accessor&& data) {  \
-    return get_matrix<T, N, M>(std::forward<Accessor>(data));                   \
+  template <ValidAccessor<T> Accessor>                                                       \
+  KOKKOS_INLINE_FUNCTION constexpr auto get_##alias_lower(Accessor&& data) {                 \
+    return get_matrix<T, N, M>(std::forward<Accessor>(data));                                \
   }
 
 #define MUNDY_MATH_GET_MATRIX_SIZE_SPECIALIZATION(N, M) \
   MUNDY_MATH_GET_MATRIX_SIZE_SPECIALIZATION_IMPL(AMatrix##N##M, matrix##N##M, N, M)
 
-#define MUNDY_MATH_GET_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_FLOAT_DOUBLE(N, M)                                       \
-  MUNDY_MATH_GET_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(AMatrix##N##M##f, matrix##N##M##f, float, N, M)            \
+#define MUNDY_MATH_GET_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_FLOAT_DOUBLE(N, M)                             \
+  MUNDY_MATH_GET_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(AMatrix##N##M##f, matrix##N##M##f, float, N, M) \
   MUNDY_MATH_GET_MATRIX_TYPE_AND_SIZE_SPECIALIZATION_IMPL(AMatrix##N##M##d, matrix##N##M##d, double, N, M)
 
 /// \brief Accessor helpers for each AMatrix specialization, mirroring the type specializations above.

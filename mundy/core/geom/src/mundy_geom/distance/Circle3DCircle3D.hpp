@@ -28,17 +28,17 @@
 #include <type_traits>
 
 // Mundy
-#include <mundy_math/Quaternion.hpp>  // for mundy::Quaternion
-#include <mundy_math/Tolerance.hpp>   // for mundy::get_zero_tolerance
-#include <mundy_math/Vector3.hpp>     // for mundy::Vector3
-#include <mundy_math/minimize.hpp>    // for mundy::find_min_using_approximate_derivatives
-#include <mundy_geom/distance/PointPoint.hpp>  // for mundy::distance(Point, Point)
-#include <mundy_geom/distance/Types.hpp>       // for mundy::SharedNormalSigned
-#include <mundy_geom/primitives/Circle3D.hpp>  // for mundy::Circle3D
-#include <mundy_geom/primitives/Point.hpp>     // for mundy::Point
-#include <mundy_utils/requires.hpp>
-#include <mundy_math/cmath.hpp>
+#include <mundy_geom/distance/PointPoint.hpp>                 // for mundy::distance(Point, Point)
+#include <mundy_geom/distance/Types.hpp>                      // for mundy::SharedNormalSigned
 #include <mundy_geom/distance/impl/Circle3DCircle3DImpl.hpp>  // for the cost-only objective functor
+#include <mundy_geom/primitives/Circle3D.hpp>                 // for mundy::Circle3D
+#include <mundy_geom/primitives/Point.hpp>                    // for mundy::Point
+#include <mundy_math/Quaternion.hpp>                          // for mundy::Quaternion
+#include <mundy_math/Tolerance.hpp>                           // for mundy::get_zero_tolerance
+#include <mundy_math/Vector3.hpp>                             // for mundy::Vector3
+#include <mundy_math/cmath.hpp>
+#include <mundy_math/minimize.hpp>  // for mundy::find_min_using_approximate_derivatives
+#include <mundy_utils/requires.hpp>
 
 namespace mundy {
 
@@ -51,15 +51,15 @@ namespace mundy {
 template <ValidCircle3DType Circle3DType1, ValidCircle3DType Circle3DType2>
 MUNDY_REQUIRES(std::is_same_v<typename Circle3DType1::value_type, typename Circle3DType2::value_type>)
 KOKKOS_FUNCTION typename Circle3DType1::value_type distance(const Circle3DType1& circle3d1,  //
-                                                          const Circle3DType2& circle3d2) {
+                                                            const Circle3DType2& circle3d2) {
   return distance(Euclidean{}, circle3d1, circle3d2);
 }
 
 template <ValidCircle3DType Circle3DType1, ValidCircle3DType Circle3DType2>
 MUNDY_REQUIRES(std::is_same_v<typename Circle3DType1::value_type, typename Circle3DType2::value_type>)
 KOKKOS_FUNCTION typename Circle3DType1::value_type distance([[maybe_unused]] const Euclidean distance_type,  //
-                                                          const Circle3DType1& circle3d1,                  //
-                                                          const Circle3DType2& circle3d2) {
+                                                            const Circle3DType1& circle3d1,                  //
+                                                            const Circle3DType2& circle3d2) {
   using Scalar = typename Circle3DType1::value_type;
   Point<Scalar> closest_point1;
   Point<Scalar> closest_point2;
@@ -72,9 +72,9 @@ KOKKOS_FUNCTION typename Circle3DType1::value_type distance([[maybe_unused]] con
 template <ValidCircle3DType Circle3DType1, ValidCircle3DType Circle3DType2>
 MUNDY_REQUIRES(std::is_same_v<typename Circle3DType1::value_type, typename Circle3DType2::value_type>)
 KOKKOS_FUNCTION typename Circle3DType1::value_type
-    distance([[maybe_unused]] const Euclidean distance_type,                    //
-             const Circle3DType1& circle3d1,                                    //
-             const Circle3DType2& circle3d2,                                    //
+    distance([[maybe_unused]] const Euclidean distance_type,                      //
+             const Circle3DType1& circle3d1,                                      //
+             const Circle3DType2& circle3d2,                                      //
              Point<typename Circle3DType1::value_type>& closest_point1,           //
              Point<typename Circle3DType1::value_type>& closest_point2,           //
              mundy::Vector3<typename Circle3DType1::value_type>& shared_normal1,  //
@@ -90,7 +90,7 @@ KOKKOS_FUNCTION typename Circle3DType1::value_type
   //
   // Note, the actual error is not guaranteed to be less than min_objective_delta due to the use of
   // approximate derivatives. The error is typically less than the square root of min_objective_delta.
-  constexpr Passive min_allowable_cost  = -Kokkos::Experimental::infinity_v<Passive>;    // no early-exit on cost
+  constexpr Passive min_allowable_cost = -Kokkos::Experimental::infinity_v<Passive>;     // no early-exit on cost
   constexpr Passive min_objective_delta = mundy::get_relaxed_zero_tolerance<Passive>();  // L-BFGS convergence tolerance
   constexpr size_t lbfgs_max_memory_size = 10;
 

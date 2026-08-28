@@ -104,7 +104,8 @@ class BallJoint {
 
   /// \brief Deep move constructor
   KOKKOS_FUNCTION
-  BallJoint(BallJoint<value_type, line_segment_t, ownership_t>&& other) : line_segment_(std::move(other.line_segment_)) {
+  BallJoint(BallJoint<value_type, line_segment_t, ownership_t>&& other)
+      : line_segment_(std::move(other.line_segment_)) {
   }
 
   /// \brief Deep move constructor

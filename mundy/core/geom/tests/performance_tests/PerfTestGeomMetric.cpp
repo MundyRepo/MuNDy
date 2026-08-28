@@ -68,7 +68,7 @@ void speed_test() {
   // OrthorhombicMetric uses element-wise multiply/divide (diagonal cell, no matrix ops).
   // TriclinicMetric uses full matrix multiply (general tilted cell).
   mundy::OrthorhombicMetric<mundy::AXIS_XYZ, double> ortho_metric{cell_size};
-  mundy::TriclinicMetric<mundy::AXIS_XYZ, double>    tri_metric{mundy::Matrix3<double>::diagonal(cell_size)};
+  mundy::TriclinicMetric<mundy::AXIS_XYZ, double> tri_metric{mundy::Matrix3<double>::diagonal(cell_size)};
 
   bench.run("OrthorhombicMetric sep | No Loops", [&] {
     auto sep = ortho_metric.sep(point1, point2);

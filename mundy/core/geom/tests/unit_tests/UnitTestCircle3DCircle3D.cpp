@@ -62,8 +62,7 @@ TEST(EuclideanDistanceBetweenCircles, AutoDiffGradients) {
   const double fz = (dist_of_center2(cx, cy, cz + h) - dist_of_center2(cx, cy, cz - h)) / (2 * h);
 
   const Circle3D<AD> c1(Point<AD>(AD(0), AD(0), AD(0)), Quaternion<AD>(AD(1), AD(0), AD(0), AD(0)), AD(1));
-  const Circle3D<AD> c2(Point<AD>(AD(cx, 0), AD(cy, 1), AD(cz, 2)), Quaternion<AD>(AD(1), AD(0), AD(0), AD(0)),
-                        AD(1));
+  const Circle3D<AD> c2(Point<AD>(AD(cx, 0), AD(cy, 1), AD(cz, 2)), Quaternion<AD>(AD(1), AD(0), AD(0), AD(0)), AD(1));
   const AD d = distance(c1, c2);
   EXPECT_NEAR(d.value(), dist_of_center2(cx, cy, cz), TEST_DOUBLE_EPSILON);
   EXPECT_NEAR(d.derivatives()[0], fx, 1.0e-3);

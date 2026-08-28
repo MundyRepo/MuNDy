@@ -47,8 +47,8 @@ namespace mundy {
 template <ValidPointType PointType1, ValidPointType PointType2>
 MUNDY_REQUIRES(std::is_same_v<typename PointType1::value_type, typename PointType2::value_type>)
 KOKKOS_FUNCTION typename PointType1::value_type distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
-                                                       const PointType1& point1,                                 //
-                                                       const PointType2& point2) {
+                                                         const PointType1& point1,                                 //
+                                                         const PointType2& point2) {
   return mundy::norm(point2 - point1);
 }
 
@@ -60,9 +60,9 @@ KOKKOS_FUNCTION typename PointType1::value_type distance([[maybe_unused]] const 
 template <ValidPointType PointType1, ValidPointType PointType2>
 MUNDY_REQUIRES(std::is_same_v<typename PointType1::value_type, typename PointType2::value_type>)
 KOKKOS_FUNCTION typename PointType1::value_type distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
-                                                       const PointType1& point1,                                 //
-                                                       const PointType2& point2,                                 //
-                                                       mundy::Vector3<typename PointType1::value_type>& sep) {
+                                                         const PointType1& point1,                                 //
+                                                         const PointType2& point2,                                 //
+                                                         mundy::Vector3<typename PointType1::value_type>& sep) {
   sep = point2 - point1;
   return mundy::norm(sep);
 }
@@ -74,8 +74,8 @@ KOKKOS_FUNCTION typename PointType1::value_type distance([[maybe_unused]] const 
 template <ValidPointType PointType1, ValidPointType PointType2>
 MUNDY_REQUIRES(std::is_same_v<typename PointType1::value_type, typename PointType2::value_type>)
 KOKKOS_FUNCTION typename PointType1::value_type distance([[maybe_unused]] const Euclidean distance_type,  //
-                                                       const PointType1& point1,                        //
-                                                       const PointType2& point2) {
+                                                         const PointType1& point1,                        //
+                                                         const PointType2& point2) {
   return distance(SharedNormalSigned{}, point1, point2);
 }
 
@@ -87,9 +87,9 @@ KOKKOS_FUNCTION typename PointType1::value_type distance([[maybe_unused]] const 
 template <ValidPointType PointType1, ValidPointType PointType2>
 MUNDY_REQUIRES(std::is_same_v<typename PointType1::value_type, typename PointType2::value_type>)
 KOKKOS_FUNCTION typename PointType1::value_type distance([[maybe_unused]] const Euclidean distance_type,  //
-                                                       const PointType1& point1,                        //
-                                                       const PointType2& point2,                        //
-                                                       mundy::Vector3<typename PointType1::value_type>& sep) {
+                                                         const PointType1& point1,                        //
+                                                         const PointType2& point2,                        //
+                                                         mundy::Vector3<typename PointType1::value_type>& sep) {
   return distance(SharedNormalSigned{}, point1, point2, sep);
 }
 
@@ -100,7 +100,7 @@ KOKKOS_FUNCTION typename PointType1::value_type distance([[maybe_unused]] const 
 template <ValidPointType PointType1, ValidPointType PointType2>
 MUNDY_REQUIRES(std::is_same_v<typename PointType1::value_type, typename PointType2::value_type>)
 KOKKOS_FUNCTION typename PointType1::value_type distance(const PointType1& point1,  //
-                                                       const PointType2& point2) {
+                                                         const PointType2& point2) {
   return distance(SharedNormalSigned{}, point1, point2);
 }
 
@@ -112,8 +112,8 @@ KOKKOS_FUNCTION typename PointType1::value_type distance(const PointType1& point
 template <ValidPointType PointType1, ValidPointType PointType2>
 MUNDY_REQUIRES(std::is_same_v<typename PointType1::value_type, typename PointType2::value_type>)
 KOKKOS_FUNCTION typename PointType1::value_type distance(const PointType1& point1,  //
-                                                       const PointType2& point2,  //
-                                                       mundy::Vector3<typename PointType1::value_type>& sep) {
+                                                         const PointType2& point2,  //
+                                                         mundy::Vector3<typename PointType1::value_type>& sep) {
   return distance(SharedNormalSigned{}, point1, point2, sep);
 }
 //@}

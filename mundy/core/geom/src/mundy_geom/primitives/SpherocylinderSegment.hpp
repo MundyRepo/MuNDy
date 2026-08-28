@@ -125,7 +125,8 @@ class SpherocylinderSegment {
 
   /// \brief Copy assignment operator
   KOKKOS_FUNCTION
-  constexpr SpherocylinderSegment<value_type, point_t>& operator=(const SpherocylinderSegment<value_type, point_t>& other) {
+  constexpr SpherocylinderSegment<value_type, point_t>& operator=(
+      const SpherocylinderSegment<value_type, point_t>& other) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     start_ = other.start_;
     end_ = other.end_;
@@ -157,7 +158,8 @@ class SpherocylinderSegment {
 
   /// \brief Move assignment operator
   template <typename OtherSpherocylinderSegmentType>
-  KOKKOS_FUNCTION constexpr SpherocylinderSegment<value_type, point_t>& operator=(OtherSpherocylinderSegmentType&& other)
+  KOKKOS_FUNCTION constexpr SpherocylinderSegment<value_type, point_t>& operator=(
+      OtherSpherocylinderSegmentType&& other)
       MUNDY_REQUIRES(!std::is_same_v<OtherSpherocylinderSegmentType, SpherocylinderSegment<value_type, point_t>>) {
     MUNDY_THROW_ASSERT(this != &other, std::invalid_argument, "Cannot assign to self");
     start_ = std::move(other.start_);
@@ -312,7 +314,8 @@ KOKKOS_FUNCTION constexpr bool is_close(
 template <ValidSpherocylinderSegmentType T1, ValidSpherocylinderSegmentType T2>
 KOKKOS_FUNCTION constexpr bool is_approx_close(
     const T1& scs1, const T2& scs2,
-    typename T1::value_type tol = get_relaxed_comparison_tolerance<typename T1::value_type, typename T2::value_type>()) {
+    typename T1::value_type tol =
+        get_relaxed_comparison_tolerance<typename T1::value_type, typename T2::value_type>()) {
   return is_close(scs1, scs2, tol);
 }
 

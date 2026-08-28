@@ -550,10 +550,10 @@ struct NeighborListBuildTraits<ArborX2dNeighborList<MemorySpace>> {
     // (ArborXSearchBoxesT) so the ArborX BVH / AccessTraits / candidate-factory machinery below is unchanged.
     auto target_in = builder.target_input();
     auto source_in = builder.source_input();
-    auto target_gen =
-        impl::make_arborx_search_boxes(bulk_data, exec_sp, target_in.rank(), target_in.selector(), target_in.component());
-    auto source_gen =
-        impl::make_arborx_search_boxes(bulk_data, exec_sp, source_in.rank(), source_in.selector(), source_in.component());
+    auto target_gen = impl::make_arborx_search_boxes(bulk_data, exec_sp, target_in.rank(), target_in.selector(),
+                                                     target_in.component());
+    auto source_gen = impl::make_arborx_search_boxes(bulk_data, exec_sp, source_in.rank(), source_in.selector(),
+                                                     source_in.component());
     const target_input_type target_boxes(target_in.selector(), target_gen.second, target_gen.first);
     const source_input_type source_boxes(source_in.selector(), source_gen.second, source_gen.first);
 
@@ -562,11 +562,11 @@ struct NeighborListBuildTraits<ArborX2dNeighborList<MemorySpace>> {
 
     factory_type factory(target_boxes, source_boxes);
 
-  #if ARBORX_VERSION >= 10799
+#if ARBORX_VERSION >= 10799
     ArborX::BoundingVolumeHierarchy bvh(exec_sp, ArborX::Experimental::attach_indices<int>(source_boxes.boxes()));
-  #else
+#else
     ArborX::BVH<MemorySpace> bvh(exec_sp, source_boxes);
-  #endif
+#endif
 
     // Pass 1: count surviving neighbors per target.
     Kokkos::View<size_type*, MemorySpace> neighbor_counts("mundy_search_2d_counts", num_targets);
@@ -610,8 +610,8 @@ struct NeighborListBuildTraits<ArborX2dNeighborList<MemorySpace>> {
     if constexpr (Builder::has_narrow_phase) {
       const auto narrow_excluder = builder.setup_narrow_excluder(bulk_data);
       auto [narrow_counts, narrow_src] =
-          impl::apply_narrow_phase_2d(exec_sp, narrow_excluder, target_boxes.identities(),
-                                      source_boxes.identities(), source_indices, neighbor_counts);
+          impl::apply_narrow_phase_2d(exec_sp, narrow_excluder, target_boxes.identities(), source_boxes.identities(),
+                                      source_indices, neighbor_counts);
       return list_type(builder.target_selector(), builder.source_selector(), target_boxes.identities(),
                        source_boxes.identities(), narrow_counts, narrow_src);
     }
@@ -683,9 +683,9 @@ struct NeighborListBuildTraits<PeriodicArborX2dNeighborList<MemorySpace, ImageSh
     auto target_images = impl::make_periodic_target_images<ImageShiftScalar>(
         bulk_data, exec_sp, target_in.rank(), target_in.selector(), target_in.component(), target_in.periodic_metric());
     const auto target_bbox = impl::periodic_images_bounding_box(exec_sp, target_images);
-    auto source_images = impl::make_periodic_source_images<ImageShiftScalar>(bulk_data, exec_sp, source_in.rank(),
-                                                                             source_in.selector(), source_in.component(),
-                                                                             source_in.periodic_metric(), target_bbox);
+    auto source_images = impl::make_periodic_source_images<ImageShiftScalar>(
+        bulk_data, exec_sp, source_in.rank(), source_in.selector(), source_in.component(), source_in.periodic_metric(),
+        target_bbox);
     target_input_type target_boxes =
         impl::pack_periodic_arborx_search_boxes(exec_sp, target_in.selector(), target_images);
     source_input_type source_boxes =
@@ -696,11 +696,11 @@ struct NeighborListBuildTraits<PeriodicArborX2dNeighborList<MemorySpace, ImageSh
 
     factory_type factory(target_boxes, source_boxes, source_images.owner_indices);
 
-  #if ARBORX_VERSION >= 10799
+#if ARBORX_VERSION >= 10799
     ArborX::BoundingVolumeHierarchy bvh(exec_sp, ArborX::Experimental::attach_indices<int>(source_boxes.boxes()));
-  #else
+#else
     ArborX::BVH<MemorySpace> bvh(exec_sp, source_boxes);
-  #endif
+#endif
 
     // Pass 1: count surviving pairs per target owner.
     Kokkos::View<size_type*, MemorySpace> owner_counts("mundy_search_per2d_counts", num_target_owners);
@@ -753,8 +753,8 @@ struct NeighborListBuildTraits<PeriodicArborX2dNeighborList<MemorySpace, ImageSh
     if constexpr (Builder::has_narrow_phase) {
       const auto narrow_excluder = builder.setup_narrow_excluder(bulk_data);
       auto [narrow_counts, narrow_src, narrow_shifts] = impl::apply_narrow_phase_2d(
-          exec_sp, narrow_excluder, target_images.owner_entities, source_images.owner_entities,
-          target_images.shifts, source_owner_indices, source_image_shifts, owner_counts);
+          exec_sp, narrow_excluder, target_images.owner_entities, source_images.owner_entities, target_images.shifts,
+          source_owner_indices, source_image_shifts, owner_counts);
       return list_type(builder.target_selector(), builder.source_selector(), target_images.owner_entities,
                        source_images.owner_entities, target_images.shifts, narrow_counts, narrow_src, narrow_shifts);
     }

@@ -45,8 +45,8 @@
 #include <mundy_math/Matrix3.hpp>          // for mundy::get_matrix3 and mundy::Matrix3
 #include <mundy_math/Quaternion.hpp>       // for mundy::get_quaternion and mundy::Quaternion
 #include <mundy_math/ScalarWrapper.hpp>    // for mundy::get_scalar and mundy::ScalarView
+#include <mundy_math/ShiftedAccessor.hpp>  // for mundy::get_shifted_accessor and mundy::get_shifted_accessor
 #include <mundy_math/Vector3.hpp>          // for mundy::get_vector3 and mundy::Vector3
-#include <mundy_math/ShiftedAccessor.hpp>      // for mundy::get_shifted_accessor and mundy::get_shifted_accessor
 
 namespace mundy {
 
@@ -71,17 +71,15 @@ template <size_t N, class FieldType, typename StkDebugger = stk::mesh::DefaultSt
 inline auto vector_field_data(const FieldType& f, stk::mesh::Entity e,
                               stk::mesh::DummyOverload dummyArg = stk::mesh::DummyOverload(),
                               const char* fileName = HOST_DEBUG_FILE_NAME, int lineNumber = HOST_DEBUG_LINE_NUMBER) {
-  return get_vector<typename FieldType::value_type, N>(
-      stk::mesh::field_data(f, e, dummyArg, fileName, lineNumber));
+  return get_vector<typename FieldType::value_type, N>(stk::mesh::field_data(f, e, dummyArg, fileName, lineNumber));
 }
 
-#define MUNDY_IMPL_VECTOR_FIELD_DATA_N(N)                                                                      \
-  template <class FieldType, typename StkDebugger = stk::mesh::DefaultStkFieldSyncDebugger>                    \
-  inline auto vector##N##_field_data(                                                                          \
-      const FieldType& f, stk::mesh::Entity e, stk::mesh::DummyOverload dummyArg = stk::mesh::DummyOverload(), \
-      const char* fileName = HOST_DEBUG_FILE_NAME, int lineNumber = HOST_DEBUG_LINE_NUMBER) {                  \
-    return get_vector<typename FieldType::value_type, N>(                                                 \
-        stk::mesh::field_data(f, e, dummyArg, fileName, lineNumber));                                          \
+#define MUNDY_IMPL_VECTOR_FIELD_DATA_N(N)                                                                              \
+  template <class FieldType, typename StkDebugger = stk::mesh::DefaultStkFieldSyncDebugger>                            \
+  inline auto vector##N##_field_data(                                                                                  \
+      const FieldType& f, stk::mesh::Entity e, stk::mesh::DummyOverload dummyArg = stk::mesh::DummyOverload(),         \
+      const char* fileName = HOST_DEBUG_FILE_NAME, int lineNumber = HOST_DEBUG_LINE_NUMBER) {                          \
+    return get_vector<typename FieldType::value_type, N>(stk::mesh::field_data(f, e, dummyArg, fileName, lineNumber)); \
   }
 
 MUNDY_IMPL_VECTOR_FIELD_DATA_N(1)  // vector1_field_data
@@ -97,8 +95,7 @@ template <size_t N, size_t M, class FieldType, typename StkDebugger = stk::mesh:
 inline auto matrix_field_data(const FieldType& f, stk::mesh::Entity e,
                               stk::mesh::DummyOverload dummyArg = stk::mesh::DummyOverload(),
                               const char* fileName = HOST_DEBUG_FILE_NAME, int lineNumber = HOST_DEBUG_LINE_NUMBER) {
-  return get_matrix<typename FieldType::value_type, N, M>(
-      stk::mesh::field_data(f, e, dummyArg, fileName, lineNumber));
+  return get_matrix<typename FieldType::value_type, N, M>(stk::mesh::field_data(f, e, dummyArg, fileName, lineNumber));
 }
 
 /// \brief Get a view of a field's data as a Matrix<N, M>. N * M scalars per entity. (explicit naming)
@@ -107,7 +104,7 @@ inline auto matrix_field_data(const FieldType& f, stk::mesh::Entity e,
   inline auto matrix##N####M##_field_data(                                                                     \
       const FieldType& f, stk::mesh::Entity e, stk::mesh::DummyOverload dummyArg = stk::mesh::DummyOverload(), \
       const char* fileName = HOST_DEBUG_FILE_NAME, int lineNumber = HOST_DEBUG_LINE_NUMBER) {                  \
-    return get_matrix<typename FieldType::value_type, N, M>(                                              \
+    return get_matrix<typename FieldType::value_type, N, M>(                                                   \
         stk::mesh::field_data(f, e, dummyArg, fileName, lineNumber));                                          \
   }
 
@@ -155,7 +152,7 @@ MUNDY_IMPL_MATRIX_FIELD_DATA_NM(6, 6)  // matrix66_field_data
   inline auto matrix##N##_field_data(                                                                          \
       const FieldType& f, stk::mesh::Entity e, stk::mesh::DummyOverload dummyArg = stk::mesh::DummyOverload(), \
       const char* fileName = HOST_DEBUG_FILE_NAME, int lineNumber = HOST_DEBUG_LINE_NUMBER) {                  \
-    return get_matrix<typename FieldType::value_type, N, N>(                                              \
+    return get_matrix<typename FieldType::value_type, N, N>(                                                   \
         stk::mesh::field_data(f, e, dummyArg, fileName, lineNumber));                                          \
   }
 
@@ -174,8 +171,7 @@ inline auto quaternion_field_data(const FieldType& f, stk::mesh::Entity e,
                                   stk::mesh::DummyOverload dummyArg = stk::mesh::DummyOverload(),
                                   const char* fileName = HOST_DEBUG_FILE_NAME,
                                   int lineNumber = HOST_DEBUG_LINE_NUMBER) {
-  return get_quaternion<typename FieldType::value_type>(
-      stk::mesh::field_data(f, e, dummyArg, fileName, lineNumber));
+  return get_quaternion<typename FieldType::value_type>(stk::mesh::field_data(f, e, dummyArg, fileName, lineNumber));
 }
 
 /// \brief Get a view of a field's data as an AABB. 6 scalars per entity.
@@ -202,14 +198,14 @@ template <class FieldType, typename StkDebugger = stk::mesh::DefaultStkFieldSync
 inline auto obb_field_data(const FieldType& f, stk::mesh::Entity e,
                            stk::mesh::DummyOverload dummyArg = stk::mesh::DummyOverload(),
                            const char* fileName = HOST_DEBUG_FILE_NAME, int lineNumber = HOST_DEBUG_LINE_NUMBER) {
-  using value_type  = typename FieldType::value_type;
-  value_type* base  = stk::mesh::field_data(f, e, dummyArg, fileName, lineNumber);
-  auto center       = get_vector3<value_type>(base);
-  auto orientation  = get_quaternion<value_type>(get_shifted_accessor<value_type, 3>(base));
+  using value_type = typename FieldType::value_type;
+  value_type* base = stk::mesh::field_data(f, e, dummyArg, fileName, lineNumber);
+  auto center = get_vector3<value_type>(base);
+  auto orientation = get_quaternion<value_type>(get_shifted_accessor<value_type, 3>(base));
   auto half_extents = get_vector3<value_type>(get_shifted_accessor<value_type, 7>(base));
-  using center_t    = decltype(center);
-  using orient_t    = decltype(orientation);
-  using he_t        = decltype(half_extents);
+  using center_t = decltype(center);
+  using orient_t = decltype(orientation);
+  using he_t = decltype(half_extents);
   return OBB<value_type, center_t, orient_t, he_t>(center, orientation, half_extents);
 }
 //@}
@@ -232,7 +228,7 @@ KOKKOS_INLINE_FUNCTION auto vector_field_data(FieldType& f, const stk::mesh::Fas
 #define MUNDY_IMPL_VECTOR_FIELD_DATA_N(N)                                                               \
   template <class FieldType>                                                                            \
   KOKKOS_INLINE_FUNCTION auto vector##N##_field_data(FieldType& f, const stk::mesh::FastMeshIndex& i) { \
-    return get_vector<typename FieldType::value_type, N>(f(i));                                  \
+    return get_vector<typename FieldType::value_type, N>(f(i));                                         \
   }
 
 MUNDY_IMPL_VECTOR_FIELD_DATA_N(1)  // vector1_field_data
@@ -252,7 +248,7 @@ KOKKOS_INLINE_FUNCTION auto matrix_field_data(FieldType& f, const stk::mesh::Fas
 #define MUNDY_IMPL_MATRIX_FIELD_DATA_NM(N, M)                                                                \
   template <class FieldType>                                                                                 \
   KOKKOS_INLINE_FUNCTION auto matrix##N####M##_field_data(FieldType& f, const stk::mesh::FastMeshIndex& i) { \
-    return get_matrix<typename FieldType::value_type, N, M>(f(i));                                    \
+    return get_matrix<typename FieldType::value_type, N, M>(f(i));                                           \
   }
 
 MUNDY_IMPL_MATRIX_FIELD_DATA_NM(1, 1)  // matrix11_field_data
@@ -296,7 +292,7 @@ MUNDY_IMPL_MATRIX_FIELD_DATA_NM(6, 6)  // matrix66_field_data
 #define MUNDY_IMPL_MATRIX_FIELD_DATA_NN(N)                                                              \
   template <class FieldType>                                                                            \
   KOKKOS_INLINE_FUNCTION auto matrix##N##_field_data(FieldType& f, const stk::mesh::FastMeshIndex& i) { \
-    return get_matrix<typename FieldType::value_type, N, N>(f(i));                               \
+    return get_matrix<typename FieldType::value_type, N, N>(f(i));                                      \
   }
 
 MUNDY_IMPL_MATRIX_FIELD_DATA_NN(1)  // matrix1_field_data
@@ -332,13 +328,13 @@ KOKKOS_INLINE_FUNCTION auto aabb_field_data(FieldType& f, const stk::mesh::FastM
 /// Layout: center xyz (0-2), orientation quaternion wxyz (3-6), half-extents xyz (7-9).
 template <class FieldType>
 KOKKOS_INLINE_FUNCTION auto obb_field_data(FieldType& f, const stk::mesh::FastMeshIndex& i) {
-  using value_type  = typename FieldType::value_type;
-  auto center       = get_vector3<value_type>(f(i));
-  auto orientation  = get_quaternion<value_type>(get_shifted_accessor<value_type, 3>(f(i)));
+  using value_type = typename FieldType::value_type;
+  auto center = get_vector3<value_type>(f(i));
+  auto orientation = get_quaternion<value_type>(get_shifted_accessor<value_type, 3>(f(i)));
   auto half_extents = get_vector3<value_type>(get_shifted_accessor<value_type, 7>(f(i)));
-  using center_t    = decltype(center);
-  using orient_t    = decltype(orientation);
-  using he_t        = decltype(half_extents);
+  using center_t = decltype(center);
+  using orient_t = decltype(orientation);
+  using he_t = decltype(half_extents);
   return OBB<value_type, center_t, orient_t, he_t>(center, orientation, half_extents);
 }
 //@}

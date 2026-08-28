@@ -60,7 +60,8 @@ TEST(ComputeOBB, AABB) {
 TEST(ComputeOBB, Ellipsoid) {
   const double s = 1.0 / std::sqrt(2.0);
   const Quaternion<double> orient{s, s, 0.0, 0.0};  // 90 deg about x
-  const auto obb = compute_obb(Ellipsoid<double>{Point<double>{1.0, -2.0, 3.0}, orient, Vector3<double>{4.0, 5.0, 6.0}});
+  const auto obb =
+      compute_obb(Ellipsoid<double>{Point<double>{1.0, -2.0, 3.0}, orient, Vector3<double>{4.0, 5.0, 6.0}});
   const OBB<double> expected{Point<double>{1.0, -2.0, 3.0}, orient, 4.0, 5.0, 6.0};
   EXPECT_TRUE(is_close(obb, expected, get_relaxed_zero_tolerance<double>()));
 }
@@ -78,7 +79,8 @@ TEST(ComputeOBB, Spherocylinder) {
 // A degenerate spherocylinder segment (start == end) falls back to the identity orientation and a sphere-like box
 // of half-extent = radius.
 TEST(ComputeOBB, SpherocylinderSegmentDegenerate) {
-  const auto obb = compute_obb(SpherocylinderSegment<double>{Point<double>{1.0, -2.0, 3.0}, Point<double>{1.0, -2.0, 3.0}, 2.0});
+  const auto obb =
+      compute_obb(SpherocylinderSegment<double>{Point<double>{1.0, -2.0, 3.0}, Point<double>{1.0, -2.0, 3.0}, 2.0});
   const OBB<double> expected{Point<double>{1.0, -2.0, 3.0}, Quaternion<double>::identity(), 2.0, 2.0, 2.0};
   EXPECT_TRUE(is_close(obb, expected, get_relaxed_zero_tolerance<double>()));
 }
@@ -87,7 +89,8 @@ TEST(ComputeOBB, SpherocylinderSegmentDegenerate) {
 // long (local-z) axis points start -> end. Radial axes are a gauge freedom, so only the long axis is asserted.
 TEST(ComputeOBB, SpherocylinderSegmentAlongX) {
   const double tol = get_relaxed_zero_tolerance<double>();
-  const auto obb = compute_obb(SpherocylinderSegment<double>{Point<double>{0.0, 0.0, 0.0}, Point<double>{4.0, 0.0, 0.0}, 1.0});
+  const auto obb =
+      compute_obb(SpherocylinderSegment<double>{Point<double>{0.0, 0.0, 0.0}, Point<double>{4.0, 0.0, 0.0}, 1.0});
   EXPECT_LT(norm(obb.center() - Vector3<double>{2.0, 0.0, 0.0}), tol);
   EXPECT_LT(norm(obb.half_extents() - Vector3<double>{1.0, 1.0, 3.0}), tol);
   EXPECT_LT(norm(obb.orientation() * Vector3<double>{0.0, 0.0, 1.0} - Vector3<double>{1.0, 0.0, 0.0}), tol);

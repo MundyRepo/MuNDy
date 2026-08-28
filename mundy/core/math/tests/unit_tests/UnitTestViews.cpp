@@ -32,11 +32,11 @@
 #include <vector>       // for std::vector
 
 // Mundy libs
-#include <mundy_math/Array.hpp>           // for mundy::Array
+#include <mundy_math/Array.hpp>               // for mundy::Array
 #include <mundy_math/MaskedAccessor.hpp>      // for mundy::MaskedAccessor
 #include <mundy_math/ShiftedAccessor.hpp>     // for mundy::ShiftedAccessor
 #include <mundy_math/StridedAccessor.hpp>     // for mundy::StridedAccessor
-#include <mundy_math/Tolerance.hpp>       // for mundy::get_relaxed_tolerance
+#include <mundy_math/Tolerance.hpp>           // for mundy::get_relaxed_tolerance
 #include <mundy_math/TransposedAccessor.hpp>  // for mundy::TransposedAccessor
 
 namespace mundy {

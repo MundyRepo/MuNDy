@@ -47,13 +47,12 @@ namespace mundy {
 
 /// @brief Bounding radius of a point: zero.
 template <ValidPointType PointType>
-KOKKOS_FUNCTION typename PointType::value_type compute_bounding_radius(
-    [[maybe_unused]] const PointType& point) {
+KOKKOS_FUNCTION typename PointType::value_type compute_bounding_radius([[maybe_unused]] const PointType& point) {
   return static_cast<typename PointType::value_type>(0);
 }
 template <ValidPointType PointType, typename Metric>
-KOKKOS_FUNCTION typename PointType::value_type compute_bounding_radius(
-    [[maybe_unused]] const PointType& point, const Metric& /*metric*/) {
+KOKKOS_FUNCTION typename PointType::value_type compute_bounding_radius([[maybe_unused]] const PointType& point,
+                                                                       const Metric& /*metric*/) {
   return static_cast<typename PointType::value_type>(0);
 }
 
@@ -63,15 +62,14 @@ KOKKOS_FUNCTION typename PointType::value_type compute_bounding_radius(
 
 /// @brief Bounding radius of a line segment: half the segment length.
 template <ValidLineSegmentType LineSegmentType>
-KOKKOS_FUNCTION typename LineSegmentType::value_type compute_bounding_radius(
-    const LineSegmentType& line_segment) {
+KOKKOS_FUNCTION typename LineSegmentType::value_type compute_bounding_radius(const LineSegmentType& line_segment) {
   using value_type = typename LineSegmentType::value_type;
   const value_type length = mundy::norm(line_segment.end() - line_segment.start());
   return static_cast<value_type>(0.5) * length;
 }
 template <ValidLineSegmentType LineSegmentType, typename Metric>
-KOKKOS_FUNCTION typename LineSegmentType::value_type compute_bounding_radius(
-    const LineSegmentType& line_segment, const Metric& metric) {
+KOKKOS_FUNCTION typename LineSegmentType::value_type compute_bounding_radius(const LineSegmentType& line_segment,
+                                                                             const Metric& metric) {
   return compute_bounding_radius(unwrap_points_to_ref(line_segment, metric, reference_point(line_segment)));
 }
 
@@ -86,7 +84,7 @@ KOKKOS_FUNCTION typename SphereType::value_type compute_bounding_radius(const Sp
 }
 template <ValidSphereType SphereType, typename Metric>
 KOKKOS_FUNCTION typename SphereType::value_type compute_bounding_radius(const SphereType& sphere,
-                                                                         const Metric& /*metric*/) {
+                                                                        const Metric& /*metric*/) {
   return compute_bounding_radius(sphere);
 }
 
@@ -101,7 +99,7 @@ KOKKOS_FUNCTION EllipsoidType::value_type compute_bounding_radius(const Ellipsoi
 }
 template <ValidEllipsoidType EllipsoidType, typename Metric>
 KOKKOS_FUNCTION EllipsoidType::value_type compute_bounding_radius(const EllipsoidType& ellipsoid,
-                                                                   const Metric& /*metric*/) {
+                                                                  const Metric& /*metric*/) {
   return compute_bounding_radius(ellipsoid);
 }
 
@@ -135,7 +133,7 @@ KOKKOS_FUNCTION typename SegmentType::value_type compute_bounding_radius(const S
 }
 template <ValidSpherocylinderSegmentType SegmentType, typename Metric>
 KOKKOS_FUNCTION typename SegmentType::value_type compute_bounding_radius(const SegmentType& segment,
-                                                                          const Metric& metric) {
+                                                                         const Metric& metric) {
   return compute_bounding_radius(unwrap_points_to_ref(segment, metric, reference_point(segment)));
 }
 

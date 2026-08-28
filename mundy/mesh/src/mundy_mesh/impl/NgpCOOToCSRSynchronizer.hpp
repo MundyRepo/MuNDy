@@ -183,7 +183,9 @@ class NgpCOOToCSRSynchronizerT {
               stored_rank_value == static_cast<LinkMetaData::entity_rank_value_t>(stk::topology::INVALID_RANK);
 
           if (empty_handle || empty_id_rank) {
-            if (empty_handle != empty_id_rank) { return true; }
+            if (empty_handle != empty_id_rank) {
+              return true;
+            }
             continue;
           }
 

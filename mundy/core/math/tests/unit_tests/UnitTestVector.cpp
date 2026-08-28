@@ -1527,7 +1527,7 @@ TYPED_TEST(VectorSingleTypeTest, ViewsWithCallableOnlyAccessor) {
 TYPED_TEST(VectorSingleTypeTest, ConstructCopyMoveAssignViews) {
   using ViewType1 = AVector<TypeParam, 3, TypeParam*>;
   using ViewType2 = AVector<TypeParam, 3, CallableOnlyAccessor<TypeParam>>;
-  
+
   // Accessors
   std::vector<TypeParam> backing{0, 0, 1, 2, 3, 0, 0};
   TypeParam* accessor1 = backing.data() + 2;
@@ -1544,7 +1544,7 @@ TYPED_TEST(VectorSingleTypeTest, ConstructCopyMoveAssignViews) {
   is_close_debug(view2[2], 3, "View construction from accessor failed.");
 
   // Copy from same
-  ViewType1 view1_copy(view1); // default constructs the accessor and then copies into it.
+  ViewType1 view1_copy(view1);  // default constructs the accessor and then copies into it.
   ViewType2 view2_copy(view2);
   is_close_debug(view1_copy[0], 1, "View copy from same failed.");
   is_close_debug(view1_copy[1], 2, "View copy from same failed.");
@@ -1556,7 +1556,7 @@ TYPED_TEST(VectorSingleTypeTest, ConstructCopyMoveAssignViews) {
   // Move from same | view1_copy and view2_copy are now dead, so we cannot use them after this point
   // view1 and view2 are still valid
   ViewType1 view1_move(std::move(view1_copy));
-  ViewType2 view2_move(std::move(view2_copy));  
+  ViewType2 view2_move(std::move(view2_copy));
   is_close_debug(view1_move[0], 1, "View move from same failed.");
   is_close_debug(view1_move[1], 2, "View move from same failed.");
   is_close_debug(view1_move[2], 3, "View move from same failed.");
@@ -1565,7 +1565,7 @@ TYPED_TEST(VectorSingleTypeTest, ConstructCopyMoveAssignViews) {
   is_close_debug(view2_move[2], 3, "View move from same failed.");
 
   // Copy from different (view)
-  // 
+  //
   Vector3<TypeParam> owning1_copy_from_view(view1);
   Vector3<TypeParam> owning2_copy_from_view(view2);
   is_close_debug(owning1_copy_from_view[0], 1, "View copy from different failed.");

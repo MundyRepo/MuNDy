@@ -41,7 +41,7 @@
 #include <mundy_math/convex_spaces.hpp>
 #include <mundy_math/cqpp.hpp>
 #include <mundy_math/lcp.hpp>
-#include <mundy_utils/rng.hpp>    // for mundy::make_philox
+#include <mundy_utils/rng.hpp>  // for mundy::make_philox
 
 namespace mundy {
 

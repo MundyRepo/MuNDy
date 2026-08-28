@@ -30,13 +30,11 @@
 
 #if defined(HAVE_MUNDYMATH_BELOS) && defined(HAVE_MUNDYMATH_TPETRA)
 
+#include <Tpetra_Map.hpp>
 #include <cmath>
 #include <initializer_list>
-#include <stdexcept>
-
-#include <Tpetra_Map.hpp>
-
 #include <mundy_math/belos_solver.hpp>
+#include <stdexcept>
 
 namespace mundy {
 

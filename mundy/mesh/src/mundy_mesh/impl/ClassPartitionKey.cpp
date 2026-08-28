@@ -46,8 +46,7 @@ ClassPartitionKey get_class_partition_key(const ClassVector& classes) {
   return key;
 }
 
-ClassVector get_classes_for_class_partition_key(const ClassPartitionKey& key,
-                                                stk::mesh::MetaData&    meta_data) {
+ClassVector get_classes_for_class_partition_key(const ClassPartitionKey& key, stk::mesh::MetaData& meta_data) {
   // Build a map from ordinal to Class* for all registered classes.
   const ClassVector& all_classes = get_classes(meta_data);
   std::map<Class::class_ordinal_t, Class*> ordinal_map;
@@ -60,8 +59,8 @@ ClassVector get_classes_for_class_partition_key(const ClassPartitionKey& key,
   for (Class::class_ordinal_t ordinal : key) {
     auto it = ordinal_map.find(ordinal);
     MUNDY_THROW_REQUIRE(it != ordinal_map.end(), std::logic_error,
-                        sink() << "get_classes_for_class_partition_key: class ordinal " << ordinal <<
-                            " not found in MetaData — the class may not have been declared on this MetaData.");
+                        sink() << "get_classes_for_class_partition_key: class ordinal " << ordinal
+                               << " not found in MetaData — the class may not have been declared on this MetaData.");
     result.push_back(it->second);
   }
   return result;

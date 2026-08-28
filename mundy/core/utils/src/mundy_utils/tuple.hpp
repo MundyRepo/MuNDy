@@ -23,11 +23,11 @@
 
 // C++ core
 #include <array>
+#include <concepts>
 #include <cstddef>
 #include <iostream>
 #include <type_traits>
 #include <utility>
-#include <concepts>
 
 // Kokkos
 #include <Kokkos_Core.hpp>

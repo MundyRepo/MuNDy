@@ -103,7 +103,7 @@ value_type compute_checksum(const View1D x, const View1D y, const View1D z) {
 }
 
 value_type run_with_wrapper(View1D x, View1D y, View1D z, const value_type alpha, const value_type beta,
-                          const size_t rounds) {
+                            const size_t rounds) {
   const size_t n = x.extent(0);
   for (size_t round = 0; round < rounds; ++round) {
     Kokkos::parallel_for(
@@ -117,7 +117,7 @@ value_type run_with_wrapper(View1D x, View1D y, View1D z, const value_type alpha
 }
 
 value_type run_with_explicit_ref(View1D x, View1D y, View1D z, const value_type alpha, const value_type beta,
-                               const size_t rounds) {
+                                 const size_t rounds) {
   const size_t n = x.extent(0);
   for (size_t round = 0; round < rounds; ++round) {
     Kokkos::parallel_for(
@@ -130,7 +130,8 @@ value_type run_with_explicit_ref(View1D x, View1D y, View1D z, const value_type 
   return compute_checksum(x, y, z);
 }
 
-value_type run_direct(View1D x, View1D y, View1D z, const value_type alpha, const value_type beta, const size_t rounds) {
+value_type run_direct(View1D x, View1D y, View1D z, const value_type alpha, const value_type beta,
+                      const size_t rounds) {
   const size_t n = x.extent(0);
   for (size_t round = 0; round < rounds; ++round) {
     Kokkos::parallel_for(

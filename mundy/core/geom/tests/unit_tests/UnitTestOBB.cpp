@@ -85,8 +85,8 @@ TEST(OBBTest, ComponentConstruction) {
 }
 
 TEST(OBBTest, SameTypeCopyAndMoveAssignment) {
-  const mundy::OBB<double> src(mundy::Point<double>{1.0, 2.0, 3.0},
-                               mundy::Quaternion<double>{0.5, 0.5, 0.5, 0.5}, 4.0, 5.0, 6.0);
+  const mundy::OBB<double> src(mundy::Point<double>{1.0, 2.0, 3.0}, mundy::Quaternion<double>{0.5, 0.5, 0.5, 0.5}, 4.0,
+                               5.0, 6.0);
 
   mundy::OBB<double> copy_dst;
   copy_dst = src;
@@ -100,8 +100,8 @@ TEST(OBBTest, SameTypeCopyAndMoveAssignment) {
 
 // float -> double is exact for these values (0.5 and small integers are representable in both).
 TEST(OBBTest, CrossScalarConstructionAndAssignment) {
-  const mundy::OBB<float> src(mundy::Point<float>{1.0f, 2.0f, 3.0f},
-                              mundy::Quaternion<float>{0.5f, 0.5f, 0.5f, 0.5f}, 4.0f, 5.0f, 6.0f);
+  const mundy::OBB<float> src(mundy::Point<float>{1.0f, 2.0f, 3.0f}, mundy::Quaternion<float>{0.5f, 0.5f, 0.5f, 0.5f},
+                              4.0f, 5.0f, 6.0f);
 
   const mundy::OBB<double> constructed(src);
   EXPECT_DOUBLE_EQ(constructed.center()[0], 1.0);
@@ -119,8 +119,7 @@ TEST(OBBTest, ViewToOwningAssignmentDeepCopies) {
   double center_store[3] = {1.0, 2.0, 3.0};
   double orient_store[4] = {0.5, 0.5, 0.5, 0.5};
   double he_store[3] = {4.0, 5.0, 6.0};
-  const ViewOBB view_obb(mundy::get_vector3<double>(&center_store[0]),
-                         mundy::get_quaternion<double>(&orient_store[0]),
+  const ViewOBB view_obb(mundy::get_vector3<double>(&center_store[0]), mundy::get_quaternion<double>(&orient_store[0]),
                          mundy::get_vector3<double>(&he_store[0]));
 
   mundy::OBB<double> owning;
@@ -141,9 +140,8 @@ TEST(OBBTest, ViewToOwningAssignmentDeepCopies) {
 // Cross-type move construction deep-copies: moving a view-backed OBB yields an independent owning OBB.
 TEST(OBBTest, CrossTypeMoveConstruction) {
   // From an rvalue OBB<float> (cross-scalar).
-  const mundy::OBB<double> from_scalar(mundy::OBB<float>{mundy::Point<float>{1.0f, 2.0f, 3.0f},
-                                                         mundy::Quaternion<float>{0.5f, 0.5f, 0.5f, 0.5f},
-                                                         4.0f, 5.0f, 6.0f});
+  const mundy::OBB<double> from_scalar(mundy::OBB<float>{
+      mundy::Point<float>{1.0f, 2.0f, 3.0f}, mundy::Quaternion<float>{0.5f, 0.5f, 0.5f, 0.5f}, 4.0f, 5.0f, 6.0f});
   EXPECT_DOUBLE_EQ(from_scalar.center()[0], 1.0);
   EXPECT_DOUBLE_EQ(from_scalar.orientation().w(), 0.5);
   EXPECT_DOUBLE_EQ(from_scalar.half_extent(2), 6.0);
@@ -164,11 +162,11 @@ TEST(OBBTest, CrossTypeMoveConstruction) {
 }
 
 TEST(OBBTest, IsClose) {
-  const mundy::OBB<double> a(mundy::Point<double>{1.0, 2.0, 3.0},
-                             mundy::Quaternion<double>{0.5, 0.5, 0.5, 0.5}, 4.0, 5.0, 6.0);
+  const mundy::OBB<double> a(mundy::Point<double>{1.0, 2.0, 3.0}, mundy::Quaternion<double>{0.5, 0.5, 0.5, 0.5}, 4.0,
+                             5.0, 6.0);
   const mundy::OBB<double> same = a;
-  const mundy::OBB<double> different(mundy::Point<double>{1.0, 2.0, 3.5},
-                                     mundy::Quaternion<double>{0.5, 0.5, 0.5, 0.5}, 4.0, 5.0, 6.0);
+  const mundy::OBB<double> different(mundy::Point<double>{1.0, 2.0, 3.5}, mundy::Quaternion<double>{0.5, 0.5, 0.5, 0.5},
+                                     4.0, 5.0, 6.0);
   EXPECT_TRUE(is_close(a, same));
   EXPECT_FALSE(is_close(a, different));
 }

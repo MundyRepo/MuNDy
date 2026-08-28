@@ -28,11 +28,11 @@
 #include <type_traits>
 
 // Mundy
-#include <mundy_geom/distance/PointPoint.hpp>    // for mundy::distance(Point, Point)
-#include <mundy_geom/primitives/Ellipsoid.hpp>   // for mundy::Ellipsoid, map_surface_normal_to_foot_point_on_ellipsoid
-#include <mundy_geom/primitives/Point.hpp>       // for mundy::Point
-#include <mundy_math/Vector3.hpp>                // for mundy::Vector3
-#include <mundy_math/cmath.hpp>                  // for mundy::sin, mundy::cos
+#include <mundy_geom/distance/PointPoint.hpp>   // for mundy::distance(Point, Point)
+#include <mundy_geom/primitives/Ellipsoid.hpp>  // for mundy::Ellipsoid, map_surface_normal_to_foot_point_on_ellipsoid
+#include <mundy_geom/primitives/Point.hpp>      // for mundy::Point
+#include <mundy_math/Vector3.hpp>               // for mundy::Vector3
+#include <mundy_math/cmath.hpp>                 // for mundy::sin, mundy::cos
 #include <mundy_utils/requires.hpp>
 
 namespace mundy {

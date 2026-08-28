@@ -57,8 +57,7 @@ inline void fill_mesh(const std::string& mesh_spec, BulkData& bulk_data) {
 /// \param mesh_spec [in] The mesh to read.
 /// \param bulk_data [in] The mesh to populate.
 /// \param io_broker [in] The IO broker to read through.
-inline void fill_mesh(const std::string& mesh_spec, BulkData& bulk_data,
-                      stk::io::StkMeshIoBroker& io_broker) {
+inline void fill_mesh(const std::string& mesh_spec, BulkData& bulk_data, stk::io::StkMeshIoBroker& io_broker) {
   stk::io::fill_mesh(mesh_spec, bulk_data, io_broker);
   reconcile_links_after_read(bulk_data);
 }
@@ -78,7 +77,7 @@ inline void fill_mesh_with_auto_decomp(const std::string& mesh_spec, BulkData& b
 /// \param bulk_data [in] The mesh to populate.
 /// \param io_broker [in] The IO broker to read through.
 inline void fill_mesh_with_auto_decomp(const std::string& mesh_spec, BulkData& bulk_data,
-                                        stk::io::StkMeshIoBroker& io_broker) {
+                                       stk::io::StkMeshIoBroker& io_broker) {
   stk::io::fill_mesh_with_auto_decomp(mesh_spec, bulk_data, io_broker);
   reconcile_links_after_read(bulk_data);
 }
@@ -91,8 +90,7 @@ inline void fill_mesh_with_auto_decomp(const std::string& mesh_spec, BulkData& b
 /// \param bulk_data [in] The mesh to populate.
 /// \param purpose [in] Whether the database is read as a mesh or as a restart.
 inline void fill_mesh_preexisting(stk::io::StkMeshIoBroker& io_broker, const std::string& mesh_spec,
-                                  BulkData& bulk_data,
-                                  stk::io::DatabasePurpose purpose = stk::io::READ_MESH) {
+                                  BulkData& bulk_data, stk::io::DatabasePurpose purpose = stk::io::READ_MESH) {
   stk::io::fill_mesh_preexisting(io_broker, mesh_spec, bulk_data, purpose);
   reconcile_links_after_read(bulk_data);
 }
@@ -102,8 +100,7 @@ inline void fill_mesh_preexisting(stk::io::StkMeshIoBroker& io_broker, const std
 /// \param in_bulk [in] The mesh to populate.
 /// \param num_steps [out] The number of time steps on the database.
 /// \param max_time [out] The largest time value on the database.
-inline void fill_mesh_save_step_info(const std::string& in_file, BulkData& in_bulk, int& num_steps,
-                                     double& max_time) {
+inline void fill_mesh_save_step_info(const std::string& in_file, BulkData& in_bulk, int& num_steps, double& max_time) {
   stk::io::fill_mesh_save_step_info(in_file, in_bulk, num_steps, max_time);
   reconcile_links_after_read(in_bulk);
 }
@@ -125,8 +122,7 @@ inline void fill_mesh_with_fields(const std::string& in_file, BulkData& bulk_dat
 /// \param io_broker [in] The IO broker to read through.
 /// \param bulk_data [in] The mesh to populate.
 /// \param purpose [in] Whether the database is read as a mesh or as a restart.
-inline void fill_mesh_with_fields(const std::string& in_file, stk::io::StkMeshIoBroker& io_broker,
-                                  BulkData& bulk_data,
+inline void fill_mesh_with_fields(const std::string& in_file, stk::io::StkMeshIoBroker& io_broker, BulkData& bulk_data,
                                   stk::io::DatabasePurpose purpose = stk::io::READ_MESH) {
   stk::io::fill_mesh_with_fields(in_file, io_broker, bulk_data, purpose);
   reconcile_links_after_read(bulk_data);

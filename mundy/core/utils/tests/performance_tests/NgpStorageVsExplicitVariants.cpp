@@ -42,8 +42,8 @@ using value_type = double;
 using View1D = Kokkos::View<value_type*, Kokkos::DefaultExecutionSpace>;
 
 KOKKOS_INLINE_FUNCTION
-void workspace_step(value_type& x, value_type& y, value_type& z, const value_type alpha, const value_type beta, const size_t i,
-                    const size_t round) {
+void workspace_step(value_type& x, value_type& y, value_type& z, const value_type alpha, const value_type beta,
+                    const size_t i, const size_t round) {
   const value_type wave = static_cast<value_type>((i % 11) + 1) + static_cast<value_type>((round % 7) + 1);
   const value_type t0 = x + beta * y;
   const value_type t1 = y - alpha * z + 0.125 * wave;
@@ -137,7 +137,7 @@ value_type compute_checksum(const View1D x, const View1D y, const View1D z) {
 }
 
 value_type run_explicit_owned(View1D x, View1D y, View1D z, const value_type alpha, const value_type beta,
-                            const size_t rounds) {
+                              const size_t rounds) {
   const size_t n = x.extent(0);
   for (size_t round = 0; round < rounds; ++round) {
     Kokkos::parallel_for(
@@ -154,7 +154,7 @@ value_type run_explicit_owned(View1D x, View1D y, View1D z, const value_type alp
 }
 
 value_type run_storage_owned(View1D x, View1D y, View1D z, const value_type alpha, const value_type beta,
-                           const size_t rounds) {
+                             const size_t rounds) {
   const size_t n = x.extent(0);
   for (size_t round = 0; round < rounds; ++round) {
     Kokkos::parallel_for(
@@ -172,7 +172,7 @@ value_type run_storage_owned(View1D x, View1D y, View1D z, const value_type alph
 }
 
 value_type run_explicit_pointer(View1D x, View1D y, View1D z, const value_type alpha, const value_type beta,
-                              const size_t rounds) {
+                                const size_t rounds) {
   const size_t n = x.extent(0);
   auto x_data = x.data();
   auto y_data = y.data();
@@ -189,7 +189,7 @@ value_type run_explicit_pointer(View1D x, View1D y, View1D z, const value_type a
 }
 
 value_type run_storage_pointer(View1D x, View1D y, View1D z, const value_type alpha, const value_type beta,
-                             const size_t rounds) {
+                               const size_t rounds) {
   const size_t n = x.extent(0);
   auto x_data = x.data();
   auto y_data = y.data();
@@ -206,7 +206,7 @@ value_type run_storage_pointer(View1D x, View1D y, View1D z, const value_type al
 }
 
 value_type run_explicit_reference(View1D x, View1D y, View1D z, const value_type alpha, const value_type beta,
-                                const size_t rounds) {
+                                  const size_t rounds) {
   const size_t n = x.extent(0);
   for (size_t round = 0; round < rounds; ++round) {
     Kokkos::parallel_for(
@@ -220,7 +220,7 @@ value_type run_explicit_reference(View1D x, View1D y, View1D z, const value_type
 }
 
 value_type run_storage_reference(View1D x, View1D y, View1D z, const value_type alpha, const value_type beta,
-                               const size_t rounds) {
+                                 const size_t rounds) {
   const size_t n = x.extent(0);
   for (size_t round = 0; round < rounds; ++round) {
     Kokkos::parallel_for(

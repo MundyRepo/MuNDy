@@ -179,8 +179,7 @@ static_assert(!std::constructible_from<storage<MoveOnly>, MoveOnly&>,
 static_assert(std::is_same_v<typename decltype(store(std::declval<MoveOnly&>()))::stored_type,
                              ::mundy::reference_wrapper<MoveOnly>>,
               "A move-only lvalue should be referenced rather than copied.");
-static_assert(!std::constructible_from<storage<int&>, int&&>,
-              "A reference storage must not bind a temporary.");
+static_assert(!std::constructible_from<storage<int&>, int&&>, "A reference storage must not bind a temporary.");
 
 // own() decays its argument to a prvalue of the value type, whatever the argument's reference-ness or constness.
 static_assert(std::is_same_v<decltype(own(std::declval<int&>())), int>, "own(lvalue) should yield a prvalue.");

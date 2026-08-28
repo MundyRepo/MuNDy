@@ -112,7 +112,7 @@ class MundyTpetraOperator : public Tpetra::Operator<Scalar, LO, GO, NO> {
       auto xj = Kokkos::subview(x2d, Kokkos::ALL(), j);
       auto yj = Kokkos::subview(y2d, Kokkos::ALL(), j);
       if (alpha == one && beta == zero) {
-        Backend::apply(op_, xj, yj, workspace_);               // Y = A x
+        Backend::apply(op_, xj, yj, workspace_);  // Y = A x
       } else {
         Backend::apply(alpha, op_, xj, beta, yj, workspace_);  // Y = alpha (A x) + beta Y
       }

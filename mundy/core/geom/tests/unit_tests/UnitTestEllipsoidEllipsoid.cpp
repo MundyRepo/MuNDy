@@ -34,11 +34,11 @@
 #include <Kokkos_Core.hpp>  // for Kokkos::numbers::pi
 
 // Mundy
-#include <mundy_geom/distance.hpp>          // for mundy::distance(ellipsoid, ellipsoid)
-#include <mundy_geom/primitives.hpp>        // for mundy::Ellipsoid
-#include <mundy_math/AutoDiffScalar.hpp>    // for mundy::AutoDiffScalar
-#include <mundy_math/Tolerance.hpp>         // for mundy::get_zero_tolerance
-#include <mundy_utils/rng.hpp>        // for make_philox
+#include <mundy_geom/distance.hpp>        // for mundy::distance(ellipsoid, ellipsoid)
+#include <mundy_geom/primitives.hpp>      // for mundy::Ellipsoid
+#include <mundy_math/AutoDiffScalar.hpp>  // for mundy::AutoDiffScalar
+#include <mundy_math/Tolerance.hpp>       // for mundy::get_zero_tolerance
+#include <mundy_utils/rng.hpp>            // for make_philox
 
 /// \brief The following global is used to control the number of samples per test.
 /// For unit tests, this number should be kept low to ensure fast test times, but to still give an immediate warning if
@@ -251,13 +251,13 @@ TEST(SharedNormalDistanceBetweenEllipsoids, AnalyticalEllipsoidTestCases) {
 
 /// \brief Generate a random true ellipsoid (not a sphere) within the given bounds.
 static Ellipsoid<double> random_ellipsoid(openrand::Philox& rng, double xyz_range, double r_min, double r_max,
-                                         double min_aspect) {
+                                          double min_aspect) {
   constexpr double pi = Kokkos::numbers::pi_v<double>;
   Point<double> center{rng.rand<double>() * xyz_range - xyz_range * 0.5,
                        rng.rand<double>() * xyz_range - xyz_range * 0.5,
                        rng.rand<double>() * xyz_range - xyz_range * 0.5};
-  const auto orient = mundy::euler_to_quat(rng.rand<double>() * 2.0 * pi, rng.rand<double>() * 2.0 * pi,
-                                           rng.rand<double>() * 2.0 * pi);
+  const auto orient =
+      mundy::euler_to_quat(rng.rand<double>() * 2.0 * pi, rng.rand<double>() * 2.0 * pi, rng.rand<double>() * 2.0 * pi);
   const double r = rng.rand<double>() * (r_max - r_min) + r_min;
   const double a1 = r;
   const double a2 = r * (rng.rand<double>() * (1.0 / min_aspect - min_aspect) + min_aspect);
@@ -275,8 +275,8 @@ TEST(SharedNormalDistanceBetweenEllipsoids_HeadToHead, AccuracyAgreement) {
   for (size_t i = 0; i < n; ++i) {
     const auto e0 = random_ellipsoid(rng, 20.0, 0.5, 3.0, 0.3);
     const auto e1 = random_ellipsoid(rng, 20.0, 0.5, 3.0, 0.3);
-    const double d_fd  = distance(SharedNormalSignedFiniteDiff{}, e0, e1);
-    const double d_fdf = distance(SharedNormalSigned{},           e0, e1);
+    const double d_fd = distance(SharedNormalSignedFiniteDiff{}, e0, e1);
+    const double d_fdf = distance(SharedNormalSigned{}, e0, e1);
     if (std::abs(d_fd - d_fdf) > TEST_DOUBLE_EPSILON) {
       ++disagreements;
       EXPECT_NEAR(d_fd, d_fdf, TEST_DOUBLE_EPSILON) << "pair " << i;
@@ -297,19 +297,19 @@ TEST(SharedNormalDistanceBetweenEllipsoids_HeadToHead, TimingComparison) {
   double sink_fd = 0.0, sink_fdf = 0.0;
 
   const auto t0 = std::chrono::high_resolution_clock::now();
-  for (const auto& [e0, e1] : pairs) sink_fd  += distance(SharedNormalSignedFiniteDiff{}, e0, e1);
+  for (const auto& [e0, e1] : pairs) sink_fd += distance(SharedNormalSignedFiniteDiff{}, e0, e1);
   const auto t1 = std::chrono::high_resolution_clock::now();
-  for (const auto& [e0, e1] : pairs) sink_fdf += distance(SharedNormalSigned{},           e0, e1);
+  for (const auto& [e0, e1] : pairs) sink_fdf += distance(SharedNormalSigned{}, e0, e1);
   const auto t2 = std::chrono::high_resolution_clock::now();
 
   ASSERT_FALSE(std::isnan(sink_fd));
   ASSERT_FALSE(std::isnan(sink_fdf));
 
-  const double ms_fd  = std::chrono::duration<double, std::milli>(t1 - t0).count();
+  const double ms_fd = std::chrono::duration<double, std::milli>(t1 - t0).count();
   const double ms_fdf = std::chrono::duration<double, std::milli>(t2 - t1).count();
 
   std::cout << "  [EllipsoidEllipsoid distance, n=" << n << "]\n"
-            << "    FiniteDiff (baseline): " << ms_fd  << " ms  (1.00x)\n"
+            << "    FiniteDiff (baseline): " << ms_fd << " ms  (1.00x)\n"
             << "    SharedNormalSigned:    " << ms_fdf << " ms  (" << ms_fd / ms_fdf << "x)\n";
 
   EXPECT_GT(ms_fd / ms_fdf, 0.8) << "default (FDF) unexpectedly slower than finite-diff baseline";

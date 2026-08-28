@@ -219,7 +219,8 @@ class AVector {
                      (std::is_convertible_v<typename OtherVectorType::value_type, T>) &&
                      HasDefaultConstructor<Accessor>)
       : accessor_() {
-    // Well-known user error: trying to copy or move construct a pointer-based view from a different accessor is illegal.
+    // Well-known user error: trying to copy or move construct a pointer-based view from a different accessor is
+    // illegal.
     static_assert(
         std::is_pointer_v<Accessor> == false,
         "Vector: Deep copy or move constructing a Vector view with a pointer-based accessor is illegal.\n"
@@ -246,7 +247,8 @@ class AVector {
                      (std::is_convertible_v<typename OtherVectorType::value_type, T>) &&
                      HasDefaultConstructor<Accessor>)
       : accessor_() {
-    // Well-known user error: trying to copy or move construct a pointer-based view from a different accessor is illegal.
+    // Well-known user error: trying to copy or move construct a pointer-based view from a different accessor is
+    // illegal.
     static_assert(
         std::is_pointer_v<Accessor> == false,
         "Vector: Deep copy or move constructing a Vector view with a pointer-based accessor is illegal.\n"
@@ -1169,16 +1171,16 @@ KOKKOS_INLINE_FUNCTION constexpr auto get_vector(Accessor&& data) {
   return AVector<T, N, accessor_t>(accessor_t(impl::unwrap_accessor(std::forward<Accessor>(data))));
 }
 
-#define MUNDY_MATH_GET_VECTOR_SIZE_SPECIALIZATION(alias, alias_lower, N)            \
-  template <typename T, ValidAccessor<T> Accessor>                                  \
+#define MUNDY_MATH_GET_VECTOR_SIZE_SPECIALIZATION(alias, alias_lower, N)     \
+  template <typename T, ValidAccessor<T> Accessor>                           \
   KOKKOS_INLINE_FUNCTION constexpr auto get_##alias_lower(Accessor&& data) { \
-    return get_vector<T, N>(std::forward<Accessor>(data));                     \
+    return get_vector<T, N>(std::forward<Accessor>(data));                   \
   }
 
 #define MUNDY_MATH_GET_VECTOR_SIZE_AND_TYPE_SPECIALIZATION(alias, alias_lower, T, N) \
   template <ValidAccessor<T> Accessor>                                               \
-  KOKKOS_INLINE_FUNCTION constexpr auto get_##alias_lower(Accessor&& data) {  \
-    return get_vector<T, N>(std::forward<Accessor>(data));                      \
+  KOKKOS_INLINE_FUNCTION constexpr auto get_##alias_lower(Accessor&& data) {         \
+    return get_vector<T, N>(std::forward<Accessor>(data));                           \
   }
 
 MUNDY_MATH_GET_VECTOR_SIZE_SPECIALIZATION(Vector1, vector1, 1)

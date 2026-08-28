@@ -53,11 +53,11 @@
 #include <stk_mesh/base/Selector.hpp>
 
 // Mundy
+#include <mundy_math/cmath.hpp>
 #include <mundy_mesh/BulkData.hpp>  // for mundy::mesh::BulkData
 #include <mundy_mesh/NgpUtils.hpp>  // is_(ngp|device|host)_field, is_(ngp|device|host)_mesh, ngp_ngp_field_and_mesh_compatible
 #include <mundy_utils/rng.hpp>           // for mundy::make_philox
 #include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_ASSERT
-#include <mundy_math/cmath.hpp>
 
 namespace mundy {
 

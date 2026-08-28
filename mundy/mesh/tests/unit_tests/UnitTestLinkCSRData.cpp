@@ -315,10 +315,8 @@ TEST(UnitTestLinkCSRData, SynchronizeWith_ReplicatesStructure) {
 
   const stk::mesh::Bucket& dim2_bucket = f.bulk->bucket(f.link_dim2);
   const stk::mesh::Bucket& dim3_bucket = f.bulk->bucket(f.link_dim3);
-  EXPECT_TRUE(dst.all_selector()(dim2_bucket))
-      << "dst must cover the dim2 selector after synchronize_with";
-  EXPECT_TRUE(dst.all_selector()(dim3_bucket))
-      << "dst must cover the dim3 selector after synchronize_with";
+  EXPECT_TRUE(dst.all_selector()(dim2_bucket)) << "dst must cover the dim2 selector after synchronize_with";
+  EXPECT_TRUE(dst.all_selector()(dim3_bucket)) << "dst must cover the dim3 selector after synchronize_with";
 }
 
 // For the same-space path, synchronize_with is a shallow copy: the underlying
@@ -379,7 +377,7 @@ TEST(UnitTestLinkCSRData, SynchronizeWith_GetOrCreateIsMemoizedAfterSync) {
   dst.synchronize_with(src);
 
   // Calling get_or_create on dst for the same selector must return the already-synced view
-  const auto& dst_dim2_first  = dst.get_or_create_crs_partitions(f.selector_dim2);
+  const auto& dst_dim2_first = dst.get_or_create_crs_partitions(f.selector_dim2);
   const auto& dst_dim2_second = dst.get_or_create_crs_partitions(f.selector_dim2);
 
   EXPECT_EQ(dst_dim2_first.data(), dst_dim2_second.data())

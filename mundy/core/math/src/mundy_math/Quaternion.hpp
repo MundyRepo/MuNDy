@@ -1126,10 +1126,10 @@ KOKKOS_INLINE_FUNCTION constexpr auto get_quaternion(Accessor&& data) {
   return AQuaternion<T, accessor_t>(accessor_t(impl::unwrap_accessor(std::forward<Accessor>(data))));
 }
 
-#define MUNDY_MATH_GET_QUATERNION_TYPE_SPECIALIZATION(alias, alias_lower, T)         \
-  template <ValidAccessor<T> Accessor>                                               \
-  KOKKOS_INLINE_FUNCTION constexpr auto get_##alias_lower(Accessor&& data) {  \
-    return get_quaternion<T>(std::forward<Accessor>(data));                     \
+#define MUNDY_MATH_GET_QUATERNION_TYPE_SPECIALIZATION(alias, alias_lower, T) \
+  template <ValidAccessor<T> Accessor>                                       \
+  KOKKOS_INLINE_FUNCTION constexpr auto get_##alias_lower(Accessor&& data) { \
+    return get_quaternion<T>(std::forward<Accessor>(data));                  \
   }
 
 /// \brief Accessor helpers for each AQuaternion specialization, mirroring the type specializations above.

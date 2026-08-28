@@ -50,7 +50,7 @@ namespace mundy {
 template <ValidLineSegmentType LineSegmentType, ValidSphereType SphereType>
 MUNDY_REQUIRES(std::is_same_v<typename LineSegmentType::value_type, typename SphereType::value_type>)
 KOKKOS_FUNCTION typename LineSegmentType::value_type distance(const LineSegmentType& line_segment,  //
-                                                            const SphereType& sphere) {
+                                                              const SphereType& sphere) {
   return distance(SharedNormalSigned{}, line_segment, sphere);
 }
 
@@ -60,9 +60,10 @@ KOKKOS_FUNCTION typename LineSegmentType::value_type distance(const LineSegmentT
 /// \param[in] sphere The sphere
 template <ValidLineSegmentType LineSegmentType, ValidSphereType SphereType>
 MUNDY_REQUIRES(std::is_same_v<typename LineSegmentType::value_type, typename SphereType::value_type>)
-KOKKOS_FUNCTION typename LineSegmentType::value_type distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
-                                                            const LineSegmentType& line_segment,                      //
-                                                            const SphereType& sphere) {
+KOKKOS_FUNCTION typename LineSegmentType::value_type
+    distance([[maybe_unused]] const SharedNormalSigned distance_type,  //
+             const LineSegmentType& line_segment,                      //
+             const SphereType& sphere) {
   return distance(sphere.center(), line_segment) - sphere.radius();
 }
 
@@ -76,8 +77,8 @@ KOKKOS_FUNCTION typename LineSegmentType::value_type distance([[maybe_unused]] c
 template <ValidLineSegmentType LineSegmentType, ValidSphereType SphereType>
 MUNDY_REQUIRES(std::is_same_v<typename LineSegmentType::value_type, typename SphereType::value_type>)
 KOKKOS_FUNCTION typename LineSegmentType::value_type
-    distance(const LineSegmentType& line_segment,                       //
-             const SphereType& sphere,                                  //
+    distance(const LineSegmentType& line_segment,                         //
+             const SphereType& sphere,                                    //
              Point<typename LineSegmentType::value_type>& closest_point,  //
              typename LineSegmentType::value_type& arch_length,           //
              mundy::Vector3<typename LineSegmentType::value_type>& sep) {
@@ -94,9 +95,9 @@ KOKKOS_FUNCTION typename LineSegmentType::value_type
 template <ValidLineSegmentType LineSegmentType, ValidSphereType SphereType>
 MUNDY_REQUIRES(std::is_same_v<typename LineSegmentType::value_type, typename SphereType::value_type>)
 KOKKOS_FUNCTION typename LineSegmentType::value_type
-    distance([[maybe_unused]] const SharedNormalSigned distance_type,   //
-             const LineSegmentType& line_segment,                       //
-             const SphereType& sphere,                                  //
+    distance([[maybe_unused]] const SharedNormalSigned distance_type,     //
+             const LineSegmentType& line_segment,                         //
+             const SphereType& sphere,                                    //
              Point<typename LineSegmentType::value_type>& closest_point,  //
              typename LineSegmentType::value_type& arch_length,           //
              mundy::Vector3<typename LineSegmentType::value_type>& sep) {

@@ -38,11 +38,11 @@
 #include <stk_mesh/base/MetaData.hpp>  // for stk::mesh::MetaData
 
 // Mundy
+#include <Mundy_config.hpp>  // for MUNDY_DEPRECATED_MSG
 #include <mundy_mesh/Component.hpp>
 #include <mundy_mesh/FieldComponent.hpp>  // for mundy::mesh::impl::component_backing_field
 #include <mundy_utils/requires.hpp>
 #include <mundy_utils/throw_assert.hpp>  // for MUNDY_THROW_REQUIRE
-#include <Mundy_config.hpp>  // for MUNDY_DEPRECATED_MSG
 
 namespace mundy {
 
@@ -159,7 +159,7 @@ class PartDeclaration {
   /// values per entity
   template <typename FieldType>
   PartDeclaration put_field(FieldType& field, unsigned n1, unsigned n2,
-                                  const typename FieldType::value_type* init_value) {
+                            const typename FieldType::value_type* init_value) {
     field_restrictions_.push_back(
         std::make_shared<DeclareTensorFieldRestriction<FieldType>>(field, n1, n2, init_value));
     return *this;
@@ -172,8 +172,7 @@ class PartDeclaration {
     typename std::remove_cvref_t<ComponentType>::canonical_access;
     { impl::component_backing_field(component) };
   })
-  PartDeclaration
-      put_component(ComponentType component, const typename BackingFieldType::value_type* init_value) {
+  PartDeclaration put_component(ComponentType component, const typename BackingFieldType::value_type* init_value) {
     using component_type = std::remove_cvref_t<ComponentType>;
     using access_shape = component_access_shape<typename component_type::canonical_access>;
     auto& field = impl::component_backing_field(component);

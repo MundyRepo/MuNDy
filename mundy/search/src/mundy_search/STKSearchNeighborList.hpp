@@ -818,7 +818,8 @@ struct NeighborListBuildTraits<STKSearchNeighborList<MemorySpace>> {
       }
 
       // Start the extended list with all owned sources in original order.
-      std::vector<stk::mesh::Entity> extended_src_vec(host_owned_sources.data(), host_owned_sources.data() + num_sources);
+      std::vector<stk::mesh::Entity> extended_src_vec(host_owned_sources.data(),
+                                                      host_owned_sources.data() + num_sources);
 
       // Append ghosted sources not yet in the owned set.
       std::unordered_set<stk::mesh::EntityKey, std::hash<stk::mesh::EntityKey>> newly_added_keys;
@@ -932,7 +933,8 @@ struct NeighborListBuildTraits<STKSearchNeighborList<MemorySpace>> {
           const stk::mesh::Entity src_ent = extended_source_entities(src_ord);
           const NeighborSearchCandidate<size_type> candidate(trg_ord, src_ord, trg_ent, src_ent);
           if (excluder(candidate)) return;
-          // odr-use narrow_excluder so it is captured outside the constexpr-if below (nvcc rejects first-capture there).
+          // odr-use narrow_excluder so it is captured outside the constexpr-if below (nvcc rejects first-capture
+          // there).
           static_cast<void>(narrow_excluder);
           if constexpr (Builder::has_narrow_phase) {
             if (narrow_excluder(candidate)) return;
@@ -1291,7 +1293,8 @@ struct NeighborListBuildTraits<PeriodicSTKSearchNeighborList<MemorySpace, ImageS
           const PeriodicNeighborSearchCandidate<image_shift_type, size_type> candidate(
               t_ord, s_ord, target_owner_entities(t_ord), extended_source_owners(s_ord), target_shift, source_shift);
           if (excluder(candidate)) return;
-          // odr-use narrow_excluder so it is captured outside the constexpr-if below (nvcc rejects first-capture there).
+          // odr-use narrow_excluder so it is captured outside the constexpr-if below (nvcc rejects first-capture
+          // there).
           static_cast<void>(narrow_excluder);
           if constexpr (Builder::has_narrow_phase) {
             if (narrow_excluder(candidate)) return;
@@ -1340,7 +1343,8 @@ struct NeighborListBuildTraits<PeriodicSTKSearchNeighborList<MemorySpace, ImageS
     // --- Phase J: optional per-row sort by source owner ordinal (carry the matching source shift). ---
     if (builder.sort_neighbors()) {
       Kokkos::parallel_for(
-          "mundy_stk_per_sort", Kokkos::RangePolicy<exec_space>(0, num_target_owners), KOKKOS_LAMBDA(const size_type t) {
+          "mundy_stk_per_sort", Kokkos::RangePolicy<exec_space>(0, num_target_owners),
+          KOKKOS_LAMBDA(const size_type t) {
             const size_type beg = offsets(t);
             const size_type end = offsets(t + 1);
             for (size_type i = beg + 1; i < end; ++i) {
@@ -1359,8 +1363,8 @@ struct NeighborListBuildTraits<PeriodicSTKSearchNeighborList<MemorySpace, ImageS
     }
 
     // --- Phase K: construct. target_image_shifts is per target owner (1 image/owner). ---
-    return list_type(builder.target_selector(), builder.source_selector(), target_owner_entities, extended_source_owners,
-                     target_image_shifts, out_source_indices, out_source_shifts, offsets);
+    return list_type(builder.target_selector(), builder.source_selector(), target_owner_entities,
+                     extended_source_owners, target_image_shifts, out_source_indices, out_source_shifts, offsets);
   }
   //@}
 };

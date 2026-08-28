@@ -26,8 +26,8 @@
 ///
 /// The primary template provides the default target-parallel dispatch strategy: a
 /// RangePolicy over `[0, num_targets)` with an inner serial walk over each target's
-/// neighbor row. Concrete list types that expose a better decomposition can specialize 
-/// this struct to override `dispatch_pair` and `dispatch_pair_reduce` without touching 
+/// neighbor row. Concrete list types that expose a better decomposition can specialize
+/// this struct to override `dispatch_pair` and `dispatch_pair_reduce` without touching
 /// `ForEach.hpp` or any call site.
 
 // Trilinos

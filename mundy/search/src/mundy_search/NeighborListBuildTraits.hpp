@@ -42,7 +42,8 @@ namespace mundy {
 namespace search {
 
 /// \concept NeighborListInputType
-/// \brief The fixed "identity" of a neighbor-list input, encoding which group of entities are searched and how to read their geometry.
+/// \brief The fixed "identity" of a neighbor-list input, encoding which group of entities are searched and how to read
+/// their geometry.
 ///
 /// For the time being, a single input (source/target) must have uniform selector + rank + field-backed component.
 template <typename T>

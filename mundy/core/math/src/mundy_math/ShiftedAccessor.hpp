@@ -65,7 +65,8 @@ class ShiftedAccessor {
   }
 
   /// \brief Shallow move constructor.
-  KOKKOS_INLINE_FUNCTION constexpr ShiftedAccessor(ShiftedAccessor<T, shift, Accessor>&& other) : accessor_(other.accessor_) {
+  KOKKOS_INLINE_FUNCTION constexpr ShiftedAccessor(ShiftedAccessor<T, shift, Accessor>&& other)
+      : accessor_(other.accessor_) {
   }
 
   /// \brief Element access operator

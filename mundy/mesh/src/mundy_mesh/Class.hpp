@@ -832,7 +832,7 @@ const inline std::vector<stk::io::FieldAndName>& named_fields(const stk::io::imp
 #endif
 
 const inline std::vector<stk::io::FieldAndName>& get_defined_output_fields(const stk::io::StkMeshIoBroker& broker,
-                                                                    std::size_t outputFileIndex) {
+                                                                           std::size_t outputFileIndex) {
 #if TRILINOS_MAJOR_MINOR_VERSION >= 160100
   return broker.get_defined_output_fields(outputFileIndex);
 #else
@@ -849,8 +849,7 @@ const inline std::vector<stk::io::FieldAndName>& get_defined_output_fields(const
 /// \brief Return whether the broker already has the given field/name pair registered.
 inline bool is_output_field_registered(const stk::io::StkMeshIoBroker& io_broker, size_t output_file_index,
                                        const stk::mesh::FieldBase& field, const std::string& db_name) {
-  const std::vector<stk::io::FieldAndName>& named_fields =
-      get_defined_output_fields(io_broker, output_file_index);
+  const std::vector<stk::io::FieldAndName>& named_fields = get_defined_output_fields(io_broker, output_file_index);
   for (const stk::io::FieldAndName& named_field : named_fields) {
     if (named_field.field() == &field && named_field.db_name() == db_name) {
       return true;
